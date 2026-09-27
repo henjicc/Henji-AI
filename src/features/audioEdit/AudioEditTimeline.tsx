@@ -99,12 +99,15 @@ export const AudioEditTimeline = memo(function AudioEditTimeline({ project, peak
     const observer = new ResizeObserver(([entry]) => setWidth(entry.contentRect.width))
     observer.observe(element)
     const wheel = (event: WheelEvent) => {
-      if (!event.ctrlKey) return
       event.preventDefault()
       followAfter.current = Date.now() + 3000
       const rect = element.getBoundingClientRect()
-      const delta = event.deltaY * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? rect.height : 1)
-      setView((current) => zoomViewport(current, (event.clientX - rect.left) / Math.max(1, rect.width), Math.exp(Math.max(-1, Math.min(1, delta * 0.002))), duration, rate * 2))
+      const zooming = event.ctrlKey || event.altKey
+      const movement = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY
+      const delta = movement * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? (zooming ? rect.height : rect.width) : 1)
+      setView((current) => zooming
+        ? zoomViewport(current, (event.clientX - rect.left) / Math.max(1, rect.width), Math.exp(Math.max(-1, Math.min(1, delta * 0.002))), duration, rate * 2)
+        : clampViewport(current.start + delta / Math.max(1, rect.width) * (current.end - current.start), current.end - current.start, duration))
     }
     element.addEventListener('wheel', wheel, { passive: false })
     return () => { observer.disconnect(); element.removeEventListener('wheel', wheel) }
@@ -199,7 +202,7 @@ export const AudioEditTimeline = memo(function AudioEditTimeline({ project, peak
         {!peaks.length && <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-sm text-text-muted">正在准备波形…</div>}
       </div>
       <div className={`mt-1 flex flex-wrap items-center justify-between gap-3 ${UI_TEXT_META_CLASS}`}>
-        <span>拖动选区 · Delete 删除 · M 静音 · 右键更多 · 中键平移 · Ctrl + 滚轮缩放时间轴</span>
+        <span>拖动选区 · Delete 删除 · M 静音 · 右键更多 · 滚轮或中键平移 · Ctrl / Alt + 滚轮缩放</span>
         <span aria-live="polite">{previewError || (previewPending ? '正在更新停顿预览…' : '黄色：待处理 · 红色：已删除 · 灰色：已静音')}</span>
         <UiIconButton appearance="hover-only" showBorder={false} title="界面设置" onClick={onSettings}><SettingsIcon size={16} /></UiIconButton>
       </div>

@@ -11,7 +11,7 @@ export function AudioEditViewSettings({ open, onClose, value, onChange }: { open
       <label className="block space-y-2"><span>文字左右留白 · {value.sidePadding}</span><UiRangeInput aria-label="文字左右留白" min={16} max={240} step={8} value={value.sidePadding} onChange={(event) => onChange({ ...value, sidePadding: Number(event.target.value) })} /></label>
       <label className="flex items-center justify-between gap-3">波形上方显示字幕<UiSwitch aria-label="波形上方显示字幕" checked={value.timelineCaptions} onCheckedChange={(timelineCaptions) => onChange({ ...value, timelineCaptions })} /></label>
       <label className="block space-y-2"><span>整个界面缩放</span><UiSelect aria-label="整个界面缩放" value={scale} onChange={(event) => useSettingsStore.getState().setUiScaleMode(event.target.value as UiScaleMode)}>{UI_SCALE_MODES.map((mode) => <option key={mode} value={mode}>{mode === 'auto' ? '自动' : `${mode}%`}</option>)}</UiSelect></label>
-      <p>Ctrl + 滚轮缩放界面；在波形上使用 Ctrl + 滚轮缩放时间轴。</p>
+      <p>Ctrl + 滚轮缩放界面；在波形上滚轮平移，Ctrl 或 Alt + 滚轮缩放时间轴。</p>
     </div>
   </UiModal>
 }
