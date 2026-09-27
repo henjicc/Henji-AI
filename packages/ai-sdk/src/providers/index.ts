@@ -29,6 +29,7 @@ export {
 } from './metadata'
 export { testProviderConnection } from './connection'
 export { fetchProvider } from './provider-fetch'
+export { listTtsVoices, type TtsVoice } from './tts-voices'
 export {
   buildApiMartEndpoints,
   markApiMartEndpointReachable,

@@ -10,7 +10,7 @@ export const bailianQwenAudio31TtsFlashModel = defineModel({
   },
   inputLimits: { images: { max: 0 }, videos: { max: 0 } },
   params: [
-    { id: 'bailianQwenTtsVoice', type: 'dropdown', order: 1, default: 'longanhuan_v3.1', options: ['longanhuan_v3.1', 'longanlingxin_v3.1', 'longanfengyue_v3.1', 'xunanchuan_v3.1'].map(value => ({ value })) },
+    { id: 'bailianQwenTtsVoice', type: 'composite', valueType: 'string', order: 1, default: 'longanhuan_v3.1' },
     { id: 'bailianQwenTtsInstruction', type: 'text', order: 2, default: '' },
     { id: 'bailianQwenTtsSpeed', type: 'number', order: 3, default: 1, min: 0.5, max: 2, step: 0.1 },
   ],

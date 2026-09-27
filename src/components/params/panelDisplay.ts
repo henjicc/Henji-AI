@@ -8,6 +8,7 @@ import { formatAspectRatioDisplayLabel } from '@/core/params/ratioResolution'
 import { getI18nText, type I18nText } from '@/core/types/I18nText'
 import { getModelscopeCustomModel } from '@henjicc/ai-sdk'
 import { voiceLibraryService } from '@/services/voiceLibrary/VoiceLibraryService'
+import { getTtsVoiceName } from '@/services/voiceLibrary/ttsVoiceNameCache'
 
 export function resolvePanelWidth(config: DynamicValue, fallbackWidth: number): number {
   if (!config || typeof config !== 'object') {
@@ -78,6 +79,11 @@ export function formatPanelDisplayValue(
       }
     }
     const voiceLibrary = configRecord?.voiceLibrary
+    const remoteModelId = configRecord?.remoteModelId
+    if (typeof remoteModelId === 'string') {
+      const remoteName = getTtsVoiceName(remoteModelId, value)
+      if (remoteName) return remoteName
+    }
     if (voiceLibrary && typeof voiceLibrary === 'object') {
       const libraryRecord = voiceLibrary as DynamicValueMap
       const providerId = typeof libraryRecord.providerId === 'string' ? libraryRecord.providerId : undefined

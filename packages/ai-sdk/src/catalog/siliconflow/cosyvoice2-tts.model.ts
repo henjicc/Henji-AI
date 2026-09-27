@@ -9,7 +9,7 @@ export const siliconflowCosyVoice2TtsModel = defineModel({
   },
   inputLimits: { images: { max: 0 }, videos: { max: 0 } },
   params: [
-    { id: 'siliconflowCosyVoice', type: 'text', order: 1, default: 'FunAudioLLM/CosyVoice2-0.5B:alex' },
+    { id: 'siliconflowCosyVoice', type: 'composite', valueType: 'string', order: 1, default: 'FunAudioLLM/CosyVoice2-0.5B:alex' },
     { id: 'siliconflowCosySpeed', type: 'number', order: 2, default: 1, min: 0.25, max: 4, step: 0.05 },
     { id: 'siliconflowCosyFormat', type: 'dropdown', order: 3, default: 'mp3', options: ['mp3', 'opus', 'wav', 'pcm'].map(value => ({ value })) },
   ],

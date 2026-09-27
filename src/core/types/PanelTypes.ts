@@ -57,6 +57,9 @@ export interface VoiceSelectorConfig {
   }>
   showPreview?: boolean
   allowSearch?: boolean
+  remoteModelId?: string
+  allowCustomId?: boolean
+  customIdHint?: string
   voiceLibrary?: {
     providerId: string
     modelId?: string

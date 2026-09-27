@@ -1,5 +1,5 @@
 import type { AiRuntimeTrace } from '@/core/types'
-import type { StructuredGenerationOutput } from '@henjicc/ai-sdk'
+import type { StructuredGenerationOutput, TtsVoice } from '@henjicc/ai-sdk'
 import { getPlatform, isDesktopRuntime } from '@/platform/runtime'
 
 export interface ProviderKeyStatusDto {
@@ -96,6 +96,11 @@ export async function aiTestProviderConnection(
 ): Promise<import('@/platform/contracts/aiRuntime').ProviderConnectionTestResultDto> {
   ensureDesktopRuntime()
   return await getPlatform().aiRuntime.testProviderConnection(providerId)
+}
+
+export async function aiListTtsVoices(modelId: string): Promise<TtsVoice[]> {
+  ensureDesktopRuntime()
+  return await getPlatform().aiRuntime.listTtsVoices(modelId)
 }
 
 export async function aiGenerate(request: AiGenerateRequestDto): Promise<AiGenerateResponseDto> {

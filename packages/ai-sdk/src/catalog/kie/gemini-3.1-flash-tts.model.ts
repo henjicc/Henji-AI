@@ -10,7 +10,7 @@ export const kieGemini31FlashTtsModel = defineModel({
   },
   inputLimits: { images: { max: 0 }, videos: { max: 0 } },
   params: [
-    { id: 'kieGeminiTtsVoice', type: 'text', order: 1, default: 'Fenrir' },
+    { id: 'kieGeminiTtsVoice', type: 'composite', valueType: 'string', order: 1, default: 'Fenrir' },
     { id: 'kieGeminiTtsScene', type: 'text', order: 2, default: '' },
     { id: 'kieGeminiTtsTemperature', type: 'number', order: 3, default: 1, min: 0, max: 2, step: 0.1 },
   ],

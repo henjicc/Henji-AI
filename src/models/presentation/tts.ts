@@ -1,4 +1,5 @@
 import type { ModelPresentation, ParamPresentationEntry } from '@/core/types/ModelPresentation'
+import { TTS_VOICE_SELECTORS } from './ttsVoiceCatalog'
 
 type Label = { zh: string; en: string }
 
@@ -49,7 +50,7 @@ export const ttsPresentation: Record<string, ModelPresentation> = {
     { zh: 'CosyVoice 3.5', en: 'CosyVoice 3.5' },
     {
       bailianCosyVoiceSpec: version,
-      bailianCosyVoiceId: { zh: '已创建的复刻或设计音色 ID', en: 'Existing cloned or designed voice ID' },
+      bailianCosyVoiceId: voice,
       bailianCosyVoiceInstruction: instruction,
       bailianCosyVoiceSpeed: speed,
     },
@@ -88,7 +89,7 @@ export const ttsPresentation: Record<string, ModelPresentation> = {
   ),
   'volcengine-seed-icl-2.0': speechModel(
     { zh: 'Seed-ICL 2.0', en: 'Seed-ICL 2.0' },
-    { volcSeedIclSpeaker: { zh: '已创建的复刻音色 ID', en: 'Existing cloned voice ID' } },
+    { volcSeedIclSpeaker: voice },
   ),
 }
 
@@ -101,4 +102,25 @@ for (const [modelId, paramId] of [
 for (const model of [ttsPresentation['fal-minimax-speech-2.8'], ttsPresentation['bailian-minimax-speech-2.8']]) {
   const id = Object.keys(model.params).find((key) => key.endsWith('Emotion'))!
   model.params[id].optionLabels = { '': { label: { zh: '自动', en: 'Auto' } } }
+}
+
+const ttsVoiceFields: Record<keyof typeof TTS_VOICE_SELECTORS, string> = {
+  'fal-minimax-speech-2.8': 'falMinimaxSpeechVoice',
+  'fal-eleven-v3-tts': 'falElevenV3Voice',
+  'bailian-minimax-speech-2.8': 'bailianMinimaxSpeechVoice',
+  'bailian-qwen-audio-3.1-tts-flash': 'bailianQwenTtsVoice',
+  'bailian-cosyvoice-v3.5': 'bailianCosyVoiceId',
+  'kie-eleven-turbo-2.5-tts': 'kieElevenTurboVoice',
+  'kie-eleven-v3-dialogue': 'kieElevenDialogueVoice',
+  'kie-gemini-3.1-flash-tts': 'kieGeminiTtsVoice',
+  'siliconflow-cosyvoice2-tts': 'siliconflowCosyVoice',
+  'siliconflow-moss-ttsd-0.5': 'siliconflowMossVoice',
+  'volcengine-seed-tts-2.0': 'volcSeedTtsSpeaker',
+  'volcengine-seed-icl-2.0': 'volcSeedIclSpeaker',
+}
+
+for (const [modelId, config] of Object.entries(TTS_VOICE_SELECTORS)) {
+  const voiceParam = ttsPresentation[modelId].params[ttsVoiceFields[modelId]]
+  voiceParam.panel = 'voice-selector'
+  voiceParam.config = { ...config, width: 720 }
 }

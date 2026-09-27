@@ -9,7 +9,7 @@ export const siliconflowMossTtsd05Model = defineModel({
   },
   inputLimits: { images: { max: 0 }, videos: { max: 0 } },
   params: [
-    { id: 'siliconflowMossVoice', type: 'text', order: 1, default: 'fnlp/MOSS-TTSD-v0.5:alex' },
+    { id: 'siliconflowMossVoice', type: 'composite', valueType: 'string', order: 1, default: 'fnlp/MOSS-TTSD-v0.5:alex' },
     { id: 'siliconflowMossFormat', type: 'dropdown', order: 2, default: 'mp3', options: ['mp3', 'opus', 'wav', 'pcm'].map(value => ({ value })) },
   ],
   endpoints: '/v1/audio/speech',

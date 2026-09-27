@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.8.0 - 2026-09-27
+
+- TTS 音色参数统一支持选择器；公开 `listTtsVoices` 查询百炼 MiniMax、Qwen Audio 3.1、CosyVoice 3.5 和硅基流动 CosyVoice2 的账号音色。
+- Henji-AI 首发宿主加入 Qwen Audio 3.1 与火山 Seed-TTS 2.0 的官方预置音色目录，并为其他 TTS 模型展示已核实的预置或示例音色。无法查询完整音色目录的渠道保留手填 ID 兜底。
+- 迁移：上述 TTS 音色参数在目录中改为 `composite` 字符串字段；依赖旧 `dropdown.options` 渲染 Qwen 3.1 音色的 SDK 消费方需改用自己的音色选择器。原参数 ID、字符串值和请求构建保持不变。
+
 ## 0.7.0 - 2026-09-27
 
 - 新增 Fal、百炼、KIE、硅基流动和火山语音的 13 个 TTS 模型入口；保留派欧云 MiniMax Speech 2.8，并按平台契约隐藏未证实的情感参数。
