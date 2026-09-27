@@ -277,3 +277,40 @@ describe('百炼非实时 ASR 按需模块', () => {
     })).rejects.toMatchObject({ code: 'invalid_media_url' })
   })
 })
+
+
+describe('文件转写恢复查询', () => {
+  it('复用官方成功 fixture，恢复不上传、不提交、不读取媒体', async () => {
+    const fetch = vi.fn<RuntimeContext['transport']['fetch']>()
+      .mockResolvedValueOnce(json(fixture<unknown>('asr-file-succeeded.json').payload))
+      .mockResolvedValueOnce(json(fixture<unknown>('asr-file-result.json').payload))
+    const host = runtime(fetch)
+    host.media.read = vi.fn(async () => { throw new Error('must not read') })
+    const client = createCapabilityClient({ runtime: host, modules: [createBailianAsrModule(bailianFunAsr)] })
+    await expect(client.execute(bailianFunAsr.id, { ...bytesInput, options: { resumeTaskId: 'fixture_task_001' } })).resolves.toHaveProperty('text')
+    expect(fetch.mock.calls[0][0]).toContain('/tasks/fixture_task_001')
+    expect(fetch.mock.calls.every(([, init]) => !init?.method || init.method === 'GET')).toBe(true)
+    expect(host.media.read).not.toHaveBeenCalled()
+  })
+  it('官方失败终态不重新提交，非法恢复输入在网络前拒绝', async () => {
+    const fetch = vi.fn<RuntimeContext['transport']['fetch']>().mockResolvedValue(json(fixture<unknown>('asr-file-failed.json').payload))
+    const client = createCapabilityClient({ runtime: runtime(fetch), modules: [createBailianAsrModule(bailianFunAsr)] })
+    await expect(client.execute(bailianFunAsr.id, { ...bytesInput, options: { resumeTaskId: 'fixture_task_001' } })).rejects.toThrow()
+    expect(fetch).toHaveBeenCalledTimes(1)
+    await expect(client.execute(bailianFunAsr.id, { ...bytesInput, options: { resumeTaskId: '' } })).rejects.toThrow('Invalid')
+    expect(fetch).toHaveBeenCalledTimes(1)
+  })
+  it('恢复查询中的进行态可取消，且不重新上传或提交', async () => {
+    const fetch = vi.fn<RuntimeContext['transport']['fetch']>().mockImplementation(async (_url, init) => {
+      if (fetch.mock.calls.length === 1) return json(fixture<unknown>('asr-file-submit.json').payload)
+      return new Promise<Response>((_resolve, reject) => { init?.signal?.addEventListener('abort', () => reject(new Error('aborted')), { once: true }) })
+    })
+    const client = createCapabilityClient({ runtime: runtime(fetch), modules: [createBailianAsrModule(bailianFunAsr, { pollIntervalMs: 0 })] })
+    const pending = client.execute(bailianFunAsr.id, { ...bytesInput, options: { resumeTaskId: 'fixture_task_001' } }, { requestId: 'resume-cancel' })
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(2))
+    client.cancel('resume-cancel')
+    await expect(pending).rejects.toMatchObject({ code: 'cancelled' })
+    expect(fetch.mock.calls.every(([, init]) => !init?.method || init.method === 'GET')).toBe(true)
+  })
+
+})

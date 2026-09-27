@@ -195,6 +195,15 @@ async function executeFile(
   config: Required<Pick<BailianAsrModuleOptions, 'pollIntervalMs' | 'maxPollingMs'>>,
   context: Context
 ): Promise<SpeechRecognitionOutput> {
+  const resumeTaskId = providerOptions(input).resumeTaskId
+  let submitted: ReturnType<typeof parseTaskState>
+  if (resumeTaskId !== undefined) {
+    if (typeof resumeTaskId !== 'string' || !/^[a-zA-Z0-9_-]{1,256}$/.test(resumeTaskId)) throw new AiRuntimeError('invalid_parameter', 'Invalid ASR resume task ID')
+    const response = await context.runtime.transport.fetch(`${apiBaseUrl}/tasks/${encodeURIComponent(resumeTaskId)}`, { headers: { Authorization: `Bearer ${apiKey}` }, signal: context.signal })
+    submitted = parseTaskState(await responseJson(response, 'file ASR resume'))
+    if (submitted.taskId && submitted.taskId !== resumeTaskId) throw new AiRuntimeError('invalid_response', 'ASR resume returned a different task')
+    submitted = { ...submitted, taskId: resumeTaskId }
+  } else {
   const audio = await resolveAsyncAudioUrl(input.audio, preset.modelId, apiKey, uploadBaseUrl, context)
   const asyncInput = preset.asyncInputField === 'file_urls' ? { file_urls: [audio.url] } : { file_url: audio.url }
   const headers: Record<string, string> = {
@@ -206,7 +215,8 @@ async function executeFile(
     body: JSON.stringify({ model: preset.modelId, input: asyncInput, parameters: asyncParameters(preset, input, providerOptions(input)) }),
     signal: context.signal,
   })
-  const submitted = parseTaskState(await responseJson(submitResponse, 'file ASR submit'))
+  submitted = parseTaskState(await responseJson(submitResponse, 'file ASR submit'))
+  }
   const taskId = submitted.taskId
   if (!taskId) throw new AiRuntimeError('invalid_response', 'Bailian file ASR submit response has no task_id')
   await context.emit({ type: 'started', sessionId: taskId })
@@ -247,9 +257,10 @@ export function createBailianAsrModule(
     maxPollingMs: options.maxPollingMs ?? 30 * 60_000,
   }
   return {
-    descriptor: preset.descriptor,
+    descriptor: preset.protocol === 'fun-short-sse' || preset.protocol === 'qwen-short' ? preset.descriptor : { ...preset.descriptor, features: [...preset.descriptor.features ?? [], 'resume-task'] },
     execute: async (input, context) => {
       checkAbort(context)
+      if (providerOptions(input).resumeTaskId !== undefined && (preset.protocol === 'fun-short-sse' || preset.protocol === 'qwen-short')) throw new AiRuntimeError('unsupported_operation', 'Short ASR cannot resume a file task')
       const apiKey = await credential(context)
       if (preset.protocol === 'fun-short-sse') {
         return await executeFunShort(preset, input, apiKey, apiBaseUrl, context)
