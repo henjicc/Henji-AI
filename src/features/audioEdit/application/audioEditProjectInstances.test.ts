@@ -39,3 +39,20 @@ it('one instance survives reloads and protects locked speech from text and inter
   expect(instance.document.cuts).toBeUndefined()
   expect(instance.document.referenceScript).toBe('真实修改')
 })
+
+it('display preferences persist without consuming edit history or clearing redo', async () => {
+  const instance = await loadAudioEditProject('instance-test')
+  const id = instance.document.id
+  editAudioEditProject(id, (document) => ({ ...document, cuts: [{ id: 'mute', startFrame: 2500, endFrame: 3500, mode: 'mute', enabled: true, reason: 'manual' }] }))
+  editAudioEditProject(id, (document) => ({ ...document, viewSettings: { textSize: 28, sidePadding: 80, timelineCaptions: true } }))
+  expect(instance.past).toHaveLength(1)
+  undoAudioEditProject(id)
+  expect(instance.document.cuts).toBeUndefined()
+  expect(instance.document.viewSettings?.textSize).toBe(28)
+  editAudioEditProject(id, (document) => ({ ...document, viewSettings: { ...document.viewSettings!, textSize: 32 } }))
+  undoAudioEditProject(id, true)
+  expect(instance.document.cuts?.[0].mode).toBe('mute')
+  expect(instance.document.viewSettings?.textSize).toBe(32)
+  await flushAudioEditProject(id)
+  expect((await getPlatform().audioEdit.getProject(id))?.viewSettings?.textSize).toBe(32)
+})

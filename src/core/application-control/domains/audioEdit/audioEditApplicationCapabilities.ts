@@ -8,6 +8,7 @@ const projectRef = applicationRefSchema.extend({ kind: z.literal('audio_edit.pro
 export const audioEditOperationInput = z.object({ projectRef, range: audioEditRangeSchema.optional(), modelId: z.string().optional(), taskId: z.string().optional(), format: z.enum(['xml', 'wav']).optional(), includeProcessing: z.boolean().optional(), includeSrt: z.boolean().optional(), destination: canvasDownloadDestinationSchema.optional() }).strict()
 const output = z.object({ resultRef: projectRef, message: z.string(), count: z.number().nonnegative().optional(), shortenedMs: z.number().nonnegative().optional(), durationFrames: z.number().nonnegative().optional(), tasks: z.array(z.object({ requestId: z.string(), projectId: z.string(), kind: z.string(), state: z.enum(['queued', 'running', 'completed', 'failed', 'cancelled']), progress: z.number().optional(), errorMessage: z.string().optional() })).optional() }).strict()
 export const AUDIO_EDIT_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinition[] = [
+  ['quick_process_audio_edit', '快速处理口播', '一次压缩实际音频停顿并清理已选语气词，形成一个撤销步骤；不提交付费转写。', 'R1'],
   ['compress_audio_edit_silence', '压缩口播停顿', '本地检测实际音频，将合格停顿压缩为工程设置的保留长度，尊重锁定与选区。', 'R1'],
   ['clean_audio_edit_fillers', '清理口播语气词', '按工程中选择的词类清理有逐词时间戳的语气词，不删除锁定内容。', 'R1'],
   ['transcribe_audio_edit', '转写口播素材', '通过已配置语音模型识别原素材，可能计费；参考稿仅辅助内容对齐。', 'R2'],

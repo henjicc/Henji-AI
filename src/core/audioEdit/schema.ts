@@ -5,7 +5,8 @@ export const audioEditFrameRateSchema = z.object({ numerator: z.number().int().p
 export const audioEditRangeSchema = z.object({ startFrame: frame, endFrame: frame }).strict().refine((range) => range.endFrame > range.startFrame, '结束位置必须晚于开始位置')
 export const audioEditSettingsSchema = z.object({ silenceThresholdMs: z.number().min(100).max(10000), retainedSilenceMs: z.number().min(0).max(10000), noiseDb: z.number().min(-80).max(-10), trimEdges: z.boolean(), fillers: z.array(z.string().min(1).max(30)).max(100) }).strict().refine((value) => value.retainedSilenceMs < value.silenceThresholdMs, '保留时长必须小于检测时长')
 export const audioEditProcessorChainSchema = z.array(z.object({ id: z.string().min(1), enabled: z.boolean(), parameters: z.record(z.string(), z.number().min(0).max(1)) }).strict()).max(20)
-export const audioEditCutsSchema = z.array(z.object({ id: z.string().min(1), startFrame: frame, endFrame: frame, reason: z.enum(['silence', 'manual']), enabled: z.boolean() }).strict()).max(100000)
+export const audioEditCutsSchema = z.array(z.object({ id: z.string().min(1), startFrame: frame, endFrame: frame, reason: z.enum(['silence', 'manual']), enabled: z.boolean(), mode: z.enum(['delete', 'mute']).optional() }).strict()).max(100000)
+export const audioEditViewSettingsSchema = z.object({ textSize: z.number().int().min(14).max(36), sidePadding: z.number().int().min(16).max(240), timelineCaptions: z.boolean() }).strict()
 export const audioEditProjectSchema = z.object({
   id: z.string().regex(/^[\w-]+$/), name: z.string().trim().min(1).max(200),
   source: z.object({ mediaType: z.enum(['audio', 'video']), sourcePath: z.string().min(1), audioPath: z.string().min(1), durationFrames: frame, sampleRate: z.number().int().positive().max(768000), channels: z.number().int().min(1).max(32),
@@ -16,6 +17,7 @@ export const audioEditProjectSchema = z.object({
   referenceScript: z.string().max(200000), transcript: z.array(z.object({ id: z.string().min(1), text: z.string().max(20000), startFrame: frame, endFrame: frame, confidence: z.number().finite().optional(), included: z.boolean(), locked: z.boolean(), granularity: z.enum(['word', 'segment']) }).strict()),
   suggestions: z.array(z.object({ id: z.string().min(1), kind: z.enum(['long_silence', 'filler', 'retake']), evidence: z.literal('audio').optional(), title: z.string(), detail: z.string(), startFrame: frame, endFrame: frame, blockIds: z.array(z.string()), confidence: z.enum(['high', 'medium', 'low']), status: z.enum(['pending', 'applied', 'dismissed']) }).strict()),
   cuts: audioEditCutsSchema.optional(),
+  viewSettings: audioEditViewSettingsSchema.optional(),
   batchSettings: audioEditSettingsSchema.optional(), processorChain: audioEditProcessorChainSchema.optional(), xmlFrameRate: audioEditFrameRateSchema.optional(),
   vstEnabled: z.boolean(), selectedAsrModelId: z.string().optional(), createdAt: frame, updatedAt: frame, revision: frame,
 }).strict().superRefine((project, context) => {

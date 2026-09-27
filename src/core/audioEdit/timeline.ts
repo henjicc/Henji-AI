@@ -23,7 +23,7 @@ export function buildAudioEditTimeline(
   const duration = Math.max(0, Math.round(durationFrames))
   if (duration === 0) return []
 
-  const candidates = [...blocks.filter((block) => !block.included && !block.locked), ...cuts.filter((cut) => cut.enabled)]
+  const candidates = [...blocks.filter((block) => !block.included && !block.locked), ...cuts.filter((cut) => cut.enabled && cut.mode !== 'mute')]
   const removed = subtractRanges(candidates, blocks.filter((block) => block.locked))
     .map((block) => ({
       start: clampFrame(Math.min(block.startFrame, block.endFrame), duration),
@@ -71,7 +71,20 @@ export function buildAudioEditTimeline(
 }
 
 export function buildProjectAudioEditTimeline(project: AudioEditProjectDocument): AudioEditTimelineSpan[] {
-  return buildAudioEditTimeline(project.source.durationFrames, project.transcript, project.cuts)
+  const spans = buildAudioEditTimeline(project.source.durationFrames, project.transcript, project.cuts)
+  const muted = subtractRanges((project.cuts ?? []).filter((cut) => cut.enabled && cut.mode === 'mute'), project.transcript.filter((block) => block.locked))
+  return splitAudioEditMutedSpans(spans, muted)
+}
+
+/** Split without removing time; every consumer receives identical mute boundaries. */
+export function splitAudioEditMutedSpans(spans: readonly AudioEditTimelineSpan[], muted: readonly { startFrame: number; endFrame: number }[]): AudioEditTimelineSpan[] {
+  return spans.flatMap((span) => {
+    const ranges = muted.filter((range) => range.startFrame < span.sourceEndFrame && range.endFrame > span.sourceStartFrame)
+    if (!ranges.length) return [span]
+    const points = [...new Set([span.sourceStartFrame, span.sourceEndFrame, ...ranges.flatMap((range) => [Math.max(span.sourceStartFrame, range.startFrame), Math.min(span.sourceEndFrame, range.endFrame)])])].sort((a, b) => a - b)
+    return points.slice(0, -1).map((start, index) => ({ sourceStartFrame: start, sourceEndFrame: points[index + 1], outputStartFrame: span.outputStartFrame + start - span.sourceStartFrame, outputEndFrame: span.outputStartFrame + points[index + 1] - span.sourceStartFrame,
+      ...(ranges.some((range) => range.startFrame <= start && range.endFrame >= points[index + 1]) ? { muted: true } : {}) }))
+  })
 }
 
 export function editedDurationFrames(spans: readonly AudioEditTimelineSpan[]): number {

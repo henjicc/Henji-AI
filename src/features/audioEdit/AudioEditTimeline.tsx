@@ -1,9 +1,13 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
-import { Pause, Play } from 'lucide-react'
+import { Pause, Play, Trash2, VolumeX, RotateCcw } from 'lucide-react'
+import { createPortal } from 'react-dom'
+import ContextMenu from '@/components/ContextMenu'
+import { useContextMenu } from '@/hooks/useContextMenu'
+import { ICON_SETTINGS as SettingsIcon } from '@/core/theme/icons'
 import { UiButton, UiIconButton, UiRangeInput, UiSwitch, UI_TEXT_META_CLASS } from '@/components/ui'
 import { buildProjectAudioEditTimeline, editedDurationFrames } from '@/core/audioEdit/timeline'
 import { compileAudioEditXmlTimeline } from '@/core/audioEdit/xml'
-import type { AudioEditProjectDocument } from '@/core/audioEdit/types'
+import type { AudioEditProjectDocument, AudioEditRange } from '@/core/audioEdit/types'
 import { useAudioEditPlaybackStore } from './store/audioEditPlaybackStore'
 import { clampViewport, sampleWaveform, waveformReference, zoomViewport } from './waveformViewport'
 
@@ -12,11 +16,19 @@ function time(frame: number, rate: number) {
   return `${Math.floor(seconds / 60)}:${(seconds % 60).toFixed(1).padStart(4, '0')}`
 }
 
-export const AudioEditTimeline = memo(function AudioEditTimeline({ project, peaks, onSeek, onToggle }: {
+export const AudioEditTimeline = memo(function AudioEditTimeline({ project, peaks, onSeek, onToggle, selection, onSelection, onEditSelection, previewRanges, previewPending, previewError, disabled, onSettings }: {
   project: AudioEditProjectDocument
   peaks: number[]
   onSeek: (frame: number) => void
   onToggle: () => Promise<void>
+  selection: AudioEditRange | null
+  onSelection: (range: AudioEditRange | null) => void
+  onEditSelection: (mode: 'delete' | 'mute' | 'restore') => void
+  previewRanges: AudioEditRange[]
+  previewPending: boolean
+  previewError?: string
+  disabled: boolean
+  onSettings: () => void
 }) {
   const { durationFrames: duration, sampleRate: rate } = project.source
   const sourceFrame = useAudioEditPlaybackStore((state) => state.sourceFrame)
@@ -34,7 +46,8 @@ export const AudioEditTimeline = memo(function AudioEditTimeline({ project, peak
   const [view, setView] = useState({ start: 0, end: duration })
   const [width, setWidth] = useState(800)
   const container = useRef<HTMLDivElement>(null)
-  const drag = useRef<{ pointer: number; x: number; start: number; length: number } | null>(null)
+  const drag = useRef<{ pointer: number; x: number; start: number; length: number; anchor: number; kind: 'pan' | 'select'; moved: boolean } | null>(null)
+  const menu = useContextMenu()
   const followAfter = useRef(0)
   const spans = useMemo(() => buildProjectAudioEditTimeline(project), [project])
   const delivery = useMemo(() => {
@@ -61,6 +74,22 @@ export const AudioEditTimeline = memo(function AudioEditTimeline({ project, peak
   }), [bars, removed, view])
   const length = Math.max(1, view.end - view.start)
   const position = (frame: number) => (frame - view.start) / length * 100
+  const frameAt = (clientX: number, element: HTMLDivElement) => {
+    const rect = element.getBoundingClientRect()
+    return Math.max(0, Math.min(duration, Math.round(view.start + Math.max(0, Math.min(1, (clientX - rect.left) / rect.width)) * length)))
+  }
+  const captions = useMemo(() => {
+    const groups: Array<{ startFrame: number; endFrame: number; text: string }> = []
+    for (const block of project.transcript) {
+      if (block.endFrame <= view.start || block.startFrame >= view.end) continue
+      const previous = groups.at(-1)
+      if (previous && (previous.endFrame - previous.startFrame) / length * width < 90 && !/[。！？!?]$/.test(previous.text)) {
+        previous.endFrame = block.endFrame; previous.text += block.text
+      } else groups.push({ startFrame: block.startFrame, endFrame: block.endFrame, text: block.text })
+    }
+    return groups
+  }, [project.transcript, view, length, width])
+  const showCaptions = project.viewSettings?.timelineCaptions ?? true
   const pauseFollow = () => { followAfter.current = Date.now() + 3000 }
 
   useEffect(() => { setView({ start: 0, end: duration }) }, [duration, project.id])
@@ -88,9 +117,9 @@ export const AudioEditTimeline = memo(function AudioEditTimeline({ project, peak
   return (
     <div className="shrink-0 border-t border-border-dark p-3">
       <div className="mb-2 flex flex-wrap items-center gap-3">
-        <UiIconButton className="h-9 w-9" disabled={!ready || playDuration === 0} onClick={() => void onToggle()} title={playing ? '暂停' : '播放'}>{playing ? <Pause size={16} /> : <Play size={16} />}</UiIconButton>
+        <UiIconButton appearance="hover-only" showBorder={false} className="h-9 w-9" disabled={!ready || playDuration === 0} onClick={() => void onToggle()} title={playing ? '暂停' : '播放'}>{playing ? <Pause size={16} /> : <Play size={16} />}</UiIconButton>
         <span className="text-sm tabular-nums text-text-dark" data-audio-edit-time>{time(outputFrame, rate)} / {time(playDuration, rate)}</span>
-        {(['source', 'edited', 'delivery'] as const).map((value) => <UiButton key={value} variant={mode === value ? 'muted' : 'ghost'} size="sm" disabled={value === 'delivery' && !delivery.timeline} title={value === 'delivery' ? delivery.error || '按 XML 帧网格试听原声，关闭声音处理和自动增益' : undefined} onClick={() => setMode(value)}>{value === 'source' ? '原始' : value === 'edited' ? '剪后' : 'XML 交付'}</UiButton>)}
+        {(['source', 'edited', 'delivery'] as const).map((value) => <UiButton key={value} variant="plain" aria-pressed={mode === value} className={mode === value ? 'underline underline-offset-4' : ''} size="sm" disabled={value === 'delivery' && !delivery.timeline} title={value === 'delivery' ? delivery.error || '按 XML 帧网格试听原声，关闭声音处理和自动增益' : undefined} onClick={() => setMode(value)}>{value === 'source' ? '原始' : value === 'edited' ? '剪后' : 'XML 交付'}</UiButton>)}
         <span className={UI_TEXT_META_CLASS}>素材 {time(sourceFrame, rate)}</span>
         {preparing && <span className={UI_TEXT_META_CLASS}>正在准备预览…</span>}
         {error && <span className="text-sm text-red-400">{error}</span>}
@@ -102,8 +131,15 @@ export const AudioEditTimeline = memo(function AudioEditTimeline({ project, peak
           <UiRangeInput className="!w-24 shrink-0" aria-label="试听音量" min={0} max={100} step={1} value={Math.round(volume * 100)} onChange={(event) => setVolume(Number(event.target.value) / 100)} />
           <span className="w-9 tabular-nums">{Math.round(volume * 100)}%</span>
         </label>
-        <UiButton variant="ghost" size="sm" onClick={() => { pauseFollow(); setView({ start: 0, end: duration }) }}>显示全部</UiButton>
+        <UiButton variant="plain" size="sm" onClick={() => { pauseFollow(); setView({ start: 0, end: duration }) }}>显示全部</UiButton>
       </div>
+      {selection && <div className="mb-2 flex flex-wrap items-center gap-2 text-sm text-text-muted" aria-label="波形选区操作">
+        <span>选区 {time(selection.startFrame, rate)} – {time(selection.endFrame, rate)}</span>
+        <UiButton variant="plain" size="sm" disabled={disabled} onClick={() => onEditSelection('delete')}>删除 · Delete</UiButton>
+        <UiButton variant="plain" size="sm" disabled={disabled} onClick={() => onEditSelection('mute')}>静音 · M</UiButton>
+        <UiButton variant="plain" size="sm" disabled={disabled} onClick={() => onEditSelection('restore')}>恢复选区</UiButton>
+        <UiButton variant="plain" size="sm" onClick={() => onSelection(null)}>取消选区</UiButton>
+      </div>}
       <div ref={container} role="slider" tabIndex={0} aria-label="口播波形定位" aria-valuemin={0} aria-valuemax={duration} aria-valuenow={sourceFrame} aria-valuetext={time(sourceFrame, rate)}
         data-view-start={view.start} data-view-end={view.end}
         className="relative h-[clamp(8rem,18vh,14rem)] touch-none select-none overflow-hidden bg-bg-dark outline-none focus-visible:ring-1 focus-visible:ring-accent"
@@ -113,42 +149,61 @@ export const AudioEditTimeline = memo(function AudioEditTimeline({ project, peak
           event.preventDefault()
           event.currentTarget.focus()
           pauseFollow()
-          if (event.button === 1) {
-            drag.current = { pointer: event.pointerId, x: event.clientX, start: view.start, length }
-            event.currentTarget.setPointerCapture(event.pointerId)
-          } else {
-            const rect = event.currentTarget.getBoundingClientRect()
-            onSeek(Math.round(view.start + Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)) * length))
-          }
+          drag.current = { pointer: event.pointerId, x: event.clientX, start: view.start, length, anchor: frameAt(event.clientX, event.currentTarget), kind: event.button === 1 ? 'pan' : 'select', moved: false }
+          event.currentTarget.setPointerCapture(event.pointerId)
         }}
         onPointerMove={(event) => {
           if (!drag.current || drag.current.pointer !== event.pointerId) return
           pauseFollow()
-          setView(clampViewport(drag.current.start - (event.clientX - drag.current.x) / Math.max(1, width) * drag.current.length, drag.current.length, duration))
+          if (Math.abs(event.clientX - drag.current.x) > 3) drag.current.moved = true
+          if (drag.current.kind === 'pan') setView(clampViewport(drag.current.start - (event.clientX - drag.current.x) / Math.max(1, width) * drag.current.length, drag.current.length, duration))
+          else if (drag.current.moved) {
+            const target = frameAt(event.clientX, event.currentTarget)
+            onSelection(target === drag.current.anchor ? null : { startFrame: Math.min(target, drag.current.anchor), endFrame: Math.max(target, drag.current.anchor) })
+          }
         }}
-        onPointerUp={(event) => { if (drag.current?.pointer === event.pointerId) { drag.current = null; event.currentTarget.releasePointerCapture(event.pointerId) } }}
+        onPointerUp={(event) => { if (drag.current?.pointer === event.pointerId) {
+          if (drag.current.kind === 'select' && !drag.current.moved) { onSelection(null); onSeek(drag.current.anchor) }
+          drag.current = null; event.currentTarget.releasePointerCapture(event.pointerId)
+        } }}
         onLostPointerCapture={() => { drag.current = null }}
         onPointerCancel={() => { drag.current = null }}
         onKeyDown={(event) => {
+          if (event.key === 'Escape') { onSelection(null); menu.hideMenu(); return }
+          if (selection && !disabled && (event.key === 'Delete' || event.key.toLowerCase() === 'm') && !event.ctrlKey && !event.metaKey && !event.altKey) {
+            event.preventDefault(); onEditSelection(event.key === 'Delete' ? 'delete' : 'mute'); return
+          }
           if (event.key === ' ' || event.key === 'ArrowLeft' || event.key === 'ArrowRight' || event.key === 'Home' || event.key === 'End') {
             event.preventDefault()
             if (event.key === ' ') void onToggle()
             else onSeek(event.key === 'Home' ? 0 : event.key === 'End' ? duration : Math.max(0, Math.min(duration, sourceFrame + (event.key === 'ArrowLeft' ? -1 : 1) * rate)))
           }
-        }}>
+        }}
+        onContextMenu={(event) => menu.showMenu(event, [
+          { id: 'delete', label: '删除选区 · Delete', icon: <Trash2 size={16} />, disabled: !selection || disabled, onClick: () => onEditSelection('delete') },
+          { id: 'mute', label: '静音选区 · M', icon: <VolumeX size={16} />, disabled: !selection || disabled, onClick: () => onEditSelection('mute') },
+          { id: 'restore', label: '恢复选区', icon: <RotateCcw size={16} />, disabled: !selection || disabled, onClick: () => onEditSelection('restore') },
+        ])}>
         <div className="pointer-events-none absolute inset-x-0 top-0 flex justify-between px-1 text-xs tabular-nums text-text-muted">
           {Array.from({ length: 6 }, (_, index) => <span key={index}>{time(view.start + length * index / 5, rate)}</span>)}
         </div>
-        <svg className="pointer-events-none absolute inset-x-0 bottom-2 top-6 h-[calc(100%-2rem)] w-full text-accent" viewBox={`0 0 ${Math.max(1, bars.length)} 100`} preserveAspectRatio="none" aria-hidden="true">
+        {showCaptions && <div className="pointer-events-none absolute inset-x-0 top-6 h-7 overflow-hidden" data-audio-captions>{captions.map((block) => <div key={block.startFrame} title={block.text} className="absolute h-7 truncate border-l border-border-dark bg-layer/40 px-1 text-sm leading-7 text-text-dark" style={{ left: `${position(Math.max(view.start, block.startFrame))}%`, width: `${(Math.min(view.end, block.endFrame) - Math.max(view.start, block.startFrame)) / length * 100}%` }}>{block.text}</div>)}</div>}
+        <svg className={`pointer-events-none absolute inset-x-0 bottom-2 w-full text-accent ${showCaptions ? 'top-14 h-[calc(100%-4rem)]' : 'top-6 h-[calc(100%-2rem)]'}`} viewBox={`0 0 ${Math.max(1, bars.length)} 100`} preserveAspectRatio="none" aria-hidden="true">
           {barElements}
         </svg>
         {removed.filter((range) => range.end > view.start && range.start < view.end).map((range) => (
           <div key={range.start} data-audio-deleted className="pointer-events-none absolute inset-y-5 border-x border-red-400 bg-red-500/25" style={{ left: `${position(Math.max(view.start, range.start))}%`, width: `${(Math.min(view.end, range.end) - Math.max(view.start, range.start)) / length * 100}%` }} />
         ))}
+        {[...spans.filter((span) => span.muted).map((span) => ({ startFrame: span.sourceStartFrame, endFrame: span.sourceEndFrame, kind: 'mute' })), ...previewRanges.map((range) => ({ ...range, kind: 'preview' })), ...(selection ? [{ ...selection, kind: 'selection' }] : [])].filter((range) => range.endFrame > view.start && range.startFrame < view.end).map((range, index) => <div key={`${range.kind}:${index}`} data-audio-overlay={range.kind} className={`pointer-events-none absolute inset-y-5 border-x ${range.kind === 'preview' ? 'border-warning bg-warning/20' : range.kind === 'mute' ? 'border-text-muted bg-text-muted/20' : 'border-accent bg-accent/25'}`} style={{ left: `${position(Math.max(view.start, range.startFrame))}%`, width: `${(Math.min(view.end, range.endFrame) - Math.max(view.start, range.startFrame)) / length * 100}%` }} />)}
         {sourceFrame >= view.start && sourceFrame <= view.end && <div className="pointer-events-none absolute inset-y-0 w-px bg-text-dark" style={{ left: `${Math.min(99.95, position(sourceFrame))}%` }} />}
         {!peaks.length && <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-sm text-text-muted">正在准备波形…</div>}
       </div>
-      <div className={`mt-1 flex justify-between gap-3 ${UI_TEXT_META_CLASS}`}><span>点击定位 · 中键拖动平移 · Ctrl + 滚轮缩放 · 空格播放 / 暂停</span><span className="shrink-0 text-red-400">红色区域已删除，播放时跳过</span></div>
+      <div className={`mt-1 flex flex-wrap items-center justify-between gap-3 ${UI_TEXT_META_CLASS}`}>
+        <span>拖动选区 · Delete 删除 · M 静音 · 右键更多 · 中键平移 · Ctrl + 滚轮缩放时间轴</span>
+        <span aria-live="polite">{previewError || (previewPending ? '正在更新停顿预览…' : '黄色：待处理 · 红色：已删除 · 灰色：已静音')}</span>
+        <UiIconButton appearance="hover-only" showBorder={false} title="界面设置" onClick={onSettings}><SettingsIcon size={16} /></UiIconButton>
+      </div>
+      {createPortal(<ContextMenu visible={menu.menuVisible} position={menu.menuPosition} items={menu.menuItems} onClose={menu.hideMenu} />, document.body)}
     </div>
   )
 })

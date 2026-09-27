@@ -4,7 +4,7 @@ import { buildProjectAudioEditTimeline, editedDurationFrames } from '@/core/audi
 import { getPlatform } from '@/platform/runtime'
 import { acceptAudioEditNativeResult, editAudioEditProject, flushAudioEditProject, loadAudioEditProject, releaseAudioEditProject, withAudioEditProjectOperation } from './audioEditProjectInstances'
 
-export async function compressAudioEditSilence(projectId: string, range?: AudioEditRange, requestId: string = crypto.randomUUID()): Promise<{ count: number; shortenedMs: number }> {
+export async function compressAudioEditSilence(projectId: string, range?: AudioEditRange, requestId: string = crypto.randomUUID(), includeFillers = false): Promise<{ count: number; shortenedMs: number }> {
   return withAudioEditProjectOperation(projectId, async (instance, commit) => {
     const settings = instance.document.batchSettings ?? DEFAULT_AUDIO_EDIT_SETTINGS
     const before = editedDurationFrames(buildProjectAudioEditTimeline(instance.document))
@@ -16,12 +16,17 @@ export async function compressAudioEditSilence(projectId: string, range?: AudioE
       const suggestions = detected.suggestions.filter((item) => !existing.has(item.id))
       let draft: AudioEditProjectDocument = { ...document, batchSettings: settings, suggestions: [...document.suggestions.filter((item) => item.kind !== 'long_silence' || item.status !== 'pending'), ...suggestions] }
       for (const suggestion of suggestions) draft = applyAudioEditSuggestion(draft, suggestion.id)
+      if (includeFillers) draft = cleanAudioEditFillers(draft, settings.fillers, range)
       return draft
     })
     await flushAudioEditProject(projectId)
     return { count: detected.suggestions.filter((item) => !appliedIds.has(item.id) && next.suggestions.some((entry) => entry.id === item.id && entry.status === 'applied')).length,
       shortenedMs: Math.round((before - editedDurationFrames(buildProjectAudioEditTimeline(next))) * 1000 / next.source.sampleRate) }
   })
+}
+
+export async function quickProcessAudioEdit(projectId: string, range?: AudioEditRange, requestId: string = crypto.randomUUID()) {
+  return compressAudioEditSilence(projectId, range, requestId, true)
 }
 
 export async function cleanProjectAudioEditFillers(projectId: string, range?: AudioEditRange): Promise<number> {

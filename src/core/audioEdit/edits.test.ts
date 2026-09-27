@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest'
-import { applyAudioEditSuggestion, cleanAudioEditFillers } from './edits'
+import { applyAudioEditSuggestion, cleanAudioEditFillers, editAudioEditRange } from './edits'
 import { buildProjectAudioEditTimeline, editedDurationFrames } from './timeline'
 import { buildAudioEditXml, compileAudioEditXmlTimeline } from './xml'
 import type { AudioEditProjectDocument } from './types'
@@ -12,6 +12,33 @@ function project(): AudioEditProjectDocument {
 }
 
 describe('audio edit shared decisions and interchange', () => {
+  it('mutes without shortening, subtracts locked speech and restores partial intervals', () => {
+    const original = project()
+    original.transcript[0].locked = true
+    const muted = editAudioEditRange(original, { startFrame: 500, endFrame: 2500 }, 'mute')
+    expect(muted.cuts).toEqual([expect.objectContaining({ startFrame: 1000, endFrame: 2500, mode: 'mute' })])
+    expect(editedDurationFrames(buildProjectAudioEditTimeline(muted))).toBe(4000)
+    expect(buildProjectAudioEditTimeline(muted).filter((span) => span.muted)).toEqual([{ sourceStartFrame: 1000, sourceEndFrame: 2500, outputStartFrame: 1000, outputEndFrame: 2500, muted: true }])
+    expect(editAudioEditRange(muted, { startFrame: 500, endFrame: 2500 }, 'mute')).toBe(muted)
+    const restored = editAudioEditRange(muted, { startFrame: 1500, endFrame: 2000 }, 'restore')
+    expect(restored.cuts?.map((cut) => [cut.startFrame, cut.endFrame])).toEqual([[1000, 1500], [2000, 2500]])
+    expect(new Set(restored.cuts?.map((cut) => cut.id)).size).toBe(2)
+    const deleted = editAudioEditRange(restored, { startFrame: 1800, endFrame: 2300 }, 'delete')
+    expect(editedDurationFrames(buildProjectAudioEditTimeline(deleted))).toBe(3500)
+  })
+  it('XML mutes only audio tracks and preserves linked video and continuous duration', () => {
+    const original = project()
+    original.source.mediaType = 'video'
+    original.source.video = { frameRate: { numerator: 25, denominator: 1 }, width: 1920, height: 1080, startSeconds: 0, durationSeconds: 4, variableFrameRate: false }
+    const muted = editAudioEditRange(original, { startFrame: 1001, endFrame: 1999 }, 'mute')
+    const timeline = compileAudioEditXmlTimeline(muted)
+    expect(timeline.duration).toBe(100)
+    expect(timeline.clips.filter((clip) => clip.muted)).toEqual([{ sourceIn: 26, sourceOut: 49, start: 26, end: 49, muted: true }])
+    const xml = new DOMParser().parseFromString(buildAudioEditXml(muted, timeline, 'file:///D:/source.mov'), 'application/xml')
+    expect(xml.querySelector('parsererror')).toBeNull()
+    expect([...xml.querySelectorAll('sequence > media > video > track > clipitem > enabled')].every((node) => node.textContent === 'TRUE')).toBe(true)
+    expect([...xml.querySelectorAll('sequence > media > audio > track > clipitem > enabled')].filter((node) => node.textContent === 'FALSE')).toHaveLength(2)
+  })
   it('actually shortens silence once and preserves locked regions in every timeline', () => {
     const first = applyAudioEditSuggestion(project(), 'silence')
     expect(editedDurationFrames(buildProjectAudioEditTimeline(first))).toBe(2350)

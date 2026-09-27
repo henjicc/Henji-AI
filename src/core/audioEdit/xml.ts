@@ -1,7 +1,8 @@
-import { buildProjectAudioEditTimeline } from './timeline'
+import { buildProjectAudioEditTimeline, splitAudioEditMutedSpans } from './timeline'
 import type { AudioEditFrameRate, AudioEditProjectDocument, AudioEditTimelineSpan } from './types'
 
 export interface AudioEditXmlClip {
+  muted?: boolean
   sourceIn: number
   sourceOut: number
   start: number
@@ -46,13 +47,19 @@ export function compileAudioEditXmlTimeline(project: AudioEditProjectDocument, r
     if (previous && start <= previous.end) previous.end = Math.max(previous.end, end)
     else ranges.push({ start, end })
   }
+  const muted = buildProjectAudioEditTimeline(project).filter((span) => span.muted).map((span) => ({
+    startFrame: Math.ceil((span.sourceStartFrame / sampleRate + offset) * fps - 1e-7),
+    endFrame: Math.floor((span.sourceEndFrame / sampleRate + offset) * fps + 1e-7),
+  })).filter((range) => range.endFrame > range.startFrame)
+  const aligned = splitAudioEditMutedSpans(ranges.map((range) => ({ sourceStartFrame: range.start, sourceEndFrame: range.end, outputStartFrame: 0, outputEndFrame: range.end - range.start })), muted)
   let cursor = 0
-  const clips = ranges.map((range) => {
-    const clip = { sourceIn: range.start, sourceOut: range.end, start: cursor, end: cursor + range.end - range.start }
+  const clips = aligned.map((range) => {
+    const clip = { sourceIn: range.sourceStartFrame, sourceOut: range.sourceEndFrame, start: cursor, end: cursor + range.sourceEndFrame - range.sourceStartFrame, ...(range.muted ? { muted: true } : {}) }
     cursor = clip.end
     return clip
   })
   const spans = clips.map((clip) => ({
+    ...(clip.muted ? { muted: true } : {}),
     sourceStartFrame: Math.round((clip.sourceIn / fps - offset) * sampleRate),
     sourceEndFrame: Math.round((clip.sourceOut / fps - offset) * sampleRate),
     outputStartFrame: Math.round(clip.start / fps * sampleRate),
@@ -95,7 +102,7 @@ export function buildAudioEditXml(project: AudioEditProjectDocument, timeline: A
   const clips = (track: number): string => timeline.clips.map((clip, index) => {
     const processed = track > 0 && Boolean(processedAudioUrl)
     const shift = processed && video ? Math.round(((project.source.audioStartSeconds ?? 0) - video.startSeconds) * fps) : 0
-    return `<clipitem id="${id(index, track)}"><name>${name}</name><enabled>TRUE</enabled><duration>${sourceDuration}</duration>${rate}<start>${clip.start}</start><end>${clip.end}</end><in>${clip.sourceIn - shift}</in><out>${clip.sourceOut - shift}</out>${file(processed)}<sourcetrack><mediatype>${track === 0 ? 'video' : 'audio'}</mediatype><trackindex>${track || 1}</trackindex></sourcetrack>${links(index)}</clipitem>`
+    return `<clipitem id="${id(index, track)}"><name>${name}</name><enabled>${track > 0 && clip.muted ? 'FALSE' : 'TRUE'}</enabled><duration>${sourceDuration}</duration>${rate}<start>${clip.start}</start><end>${clip.end}</end><in>${clip.sourceIn - shift}</in><out>${clip.sourceOut - shift}</out>${file(processed)}<sourcetrack><mediatype>${track === 0 ? 'video' : 'audio'}</mediatype><trackindex>${track || 1}</trackindex></sourcetrack>${links(index)}</clipitem>`
   }).join('')
   return `<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE xmeml>\n<xmeml version="5"><sequence id="henji-audio-edit"><name>${name}</name><duration>${timeline.duration}</duration>${rate}<timecode>${rate}<string>00:00:00:00</string><frame>0</frame><displayformat>NDF</displayformat></timecode><media>${video ? `<video><format>${videoCharacteristics}</format><track>${clips(0)}</track></video>` : ''}<audio><format>${audioCharacteristics}</format>${Array.from({ length: channels }, (_, channel) => `<track>${clips(channel + 1)}</track>`).join('')}</audio></media></sequence></xmeml>\n`
 }

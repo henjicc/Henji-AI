@@ -4,7 +4,7 @@ import type { AudioEditTask } from '../../../../src/core/audioEdit/types'
 import { createMainLogger } from '../logging'
 
 const logger = createMainLogger('main.audio_edit.tasks')
-const active = new Map<string, { controller: AbortController; projectId: string; progress?: number }>()
+const active = new Map<string, { controller: AbortController; projectId: string; progress?: number; readOnly: boolean }>()
 
 export type AudioEditTaskState = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
 
@@ -22,13 +22,13 @@ export function createAudioEditTask(input: {
   `).run(input.requestId, input.projectId, input.kind, 'queued', null, input.inputDigest, null, null, now, now)
 }
 
-export function registerAudioEditTaskController(requestId: string, projectId: string, controller: AbortController): () => void {
-  active.set(requestId, { controller, projectId })
+export function registerAudioEditTaskController(requestId: string, projectId: string, controller: AbortController, readOnly = false): () => void {
+  active.set(requestId, { controller, projectId, readOnly })
   return () => { active.delete(requestId) }
 }
 
 export function assertAudioEditProjectIdle(projectId: string): void {
-  if ([...active.values()].some((task) => task.projectId === projectId)) throw new Error('工程还有处理任务，请先取消或等待完成。')
+  if ([...active.values()].some((task) => task.projectId === projectId && !task.readOnly)) throw new Error('工程还有处理任务，请先取消或等待完成。')
 }
 
 export function cancelAudioEditTask(requestId: string): void { active.get(requestId)?.controller.abort() }
@@ -43,7 +43,7 @@ export function listAudioEditTasks(projectId: string): AudioEditTask[] {
   })
 }
 
-export async function runAudioEditTask<T>(projectId: string, kind: string, operation: (signal: AbortSignal, progress: (value: number) => void) => Promise<T>, requestId: string = crypto.randomUUID(), input: string = ''): Promise<T> {
+export async function runAudioEditTask<T>(projectId: string, kind: string, operation: (signal: AbortSignal, progress: (value: number) => void) => Promise<T>, requestId: string = crypto.randomUUID(), input: string = '', readOnly = false): Promise<T> {
   const inputDigest = crypto.createHash('sha256').update(input).digest('hex')
   const existing = getDb().prepare('SELECT project_id,kind,state,result_json,input_digest FROM audio_edit_tasks WHERE request_id = ?').get(requestId) as { project_id: string; kind: string; state: string; result_json: string | null; input_digest: string } | undefined
   if (existing) {
@@ -51,9 +51,9 @@ export async function runAudioEditTask<T>(projectId: string, kind: string, opera
     if (existing.state === 'completed' && existing.result_json) return JSON.parse(existing.result_json) as T
     throw new Error('该任务已提交，请查询原任务状态。')
   }
-  assertAudioEditProjectIdle(projectId)
+  if (!readOnly) assertAudioEditProjectIdle(projectId)
   const controller = new AbortController()
-  const release = registerAudioEditTaskController(requestId, projectId, controller)
+  const release = registerAudioEditTaskController(requestId, projectId, controller, readOnly)
   try {
     createAudioEditTask({ requestId, projectId, kind, inputDigest })
     updateAudioEditTask(requestId, { state: 'running' })
@@ -69,7 +69,8 @@ export async function runAudioEditTask<T>(projectId: string, kind: string, opera
     return result
   } catch (error) {
     updateAudioEditTask(requestId, { state: controller.signal.aborted ? 'cancelled' : 'failed', errorMessage: error instanceof Error ? error.message : String(error) })
-    logger.error('口播处理失败', { event: `audio_edit.${kind}.failed`, requestId, context: { projectId }, error })
+    if (controller.signal.aborted) logger.info('口播处理已取消', { event: `audio_edit.${kind}.cancelled`, requestId, context: { projectId } })
+    else logger.error('口播处理失败', { event: `audio_edit.${kind}.failed`, requestId, context: { projectId }, error })
     throw error
   } finally { release() }
 }

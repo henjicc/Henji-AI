@@ -2,7 +2,7 @@ import { editAudioEditProject, loadAudioEditProject, undoAudioEditProject, flush
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it } from 'vitest'
 
-import { editedDurationFrames, buildAudioEditTimeline } from '@/core/audioEdit/timeline'
+import { editedDurationFrames, buildAudioEditTimeline, buildProjectAudioEditTimeline } from '@/core/audioEdit/timeline'
 import type { AudioEditProjectDocument } from '@/core/audioEdit/types'
 import { createApplicationHarness } from '@/tests/applicationHarness'
 import {
@@ -39,6 +39,29 @@ it('通过通用 change 修改工程名并从正式口播工程状态读回', as
   } finally {
     app.dispose()
   }
+})
+
+it('通用属性静音与界面设置保存可回读，静音不缩短成片且可以撤销', async () => {
+  const app = createApplicationHarness()
+  try {
+    const ref = { kind: 'audio_edit.project', id: 'audio-result' }
+    const view = { textSize: 28, sidePadding: 80, timelineCaptions: false }
+    expect((await app.change(ref, {
+      'audio_edit.project.cuts': [{ id: 'mute', startFrame: 12000, endFrame: 36000, reason: 'manual', enabled: true, mode: 'mute' }],
+      'audio_edit.project.view_settings': view,
+    })).ok).toBe(true)
+    expect((await app.read(ref, ['audio_edit.project.view_settings'])).properties).toMatchObject({ 'audio_edit.project.view_settings': view })
+    const instance = await loadAudioEditProject('audio-result')
+    const spans = buildProjectAudioEditTimeline(instance.document)
+    expect(editedDurationFrames(spans)).toBe(96000)
+    expect(spans.some((span) => span.muted)).toBe(true)
+    expect((await app.change(ref, { 'audio_edit.project.view_settings': { ...view, textSize: 32 } })).ok).toBe(true)
+    expect(instance.past).toHaveLength(1)
+    undoAudioEditProject('audio-result')
+    expect(instance.document.cuts).toBeUndefined()
+    expect(instance.document.viewSettings?.textSize).toBe(32)
+    await flushAudioEditProject('audio-result')
+  } finally { app.dispose() }
 })
 
 it('通过通用 change 删除词块并让成片映射同步缩短', async () => {

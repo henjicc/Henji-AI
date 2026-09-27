@@ -56,6 +56,10 @@ function schedule(instance: AudioEditProjectInstance): void {
   if (instance.batchDepth) return
   instance.timer = setTimeout(() => { void flushAudioEditProject(instance.document.id).catch(() => undefined) }, 350)
 }
+function hasUndoableChanges(before: AudioEditProjectDocument, after: AudioEditProjectDocument): boolean {
+  const content = (document: AudioEditProjectDocument) => JSON.stringify({ ...document, viewSettings: undefined, revision: 0, updatedAt: 0 })
+  return content(before) !== content(after)
+}
 export function editAudioEditProject(id: string, update: (document: AudioEditProjectDocument) => AudioEditProjectDocument): AudioEditProjectDocument {
   assertApplicationWritesAllowed()
   const instance = instances.get(id)
@@ -65,8 +69,10 @@ export function editAudioEditProject(id: string, update: (document: AudioEditPro
   if (next === instance.document || JSON.stringify(next) === JSON.stringify(instance.document)) return instance.document
   audioEditProjectSchema.parse(next)
   assertAudioEditLocks(instance.document, next)
-  if (!instance.batchDepth) instance.past = [...instance.past.slice(-49), instance.document]
-  instance.future = []
+  if (hasUndoableChanges(instance.document, next)) {
+    if (!instance.batchDepth) instance.past = [...instance.past.slice(-49), instance.document]
+    instance.future = []
+  }
   instance.document = { ...next, revision: instance.document.revision + 1 }
   catalogRevision += 1
   instance.version += 1
@@ -85,7 +91,7 @@ export function undoAudioEditProject(id: string, redo = false): void {
   if (!previous) return
   if (redo) { instance.future = from.slice(1); instance.past = [...instance.past.slice(-49), instance.document] }
   else { instance.past = from.slice(0, -1); instance.future = [instance.document, ...instance.future.slice(0, 49)] }
-  instance.document = { ...previous, source: instance.document.source, revision: instance.document.revision + 1 }
+  instance.document = { ...previous, source: instance.document.source, viewSettings: instance.document.viewSettings, revision: instance.document.revision + 1 }
   catalogRevision += 1
   instance.version += 1
   instance.dirty = true
@@ -175,7 +181,7 @@ export const resolveAudioEditPersistenceParticipants: ApplicationPersistenceReso
       } },
       release() {
         instance.batchDepth -= 1
-        if (instance.version !== initialVersion && !instance.batchDepth) { instance.past = [...instance.past.slice(-49), initial]; publish(instance) }
+        if (instance.version !== initialVersion && !instance.batchDepth && hasUndoableChanges(initial, instance.document)) { instance.past = [...instance.past.slice(-49), initial]; publish(instance) }
       },
     }
     } }

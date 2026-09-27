@@ -1,7 +1,8 @@
 export type AudioEditPreviewMode = 'edited' | 'source' | 'delivery'
 
 export interface AudioEditRange { startFrame: number; endFrame: number }
-export interface AudioEditCut extends AudioEditRange { id: string; reason: 'silence' | 'manual'; enabled: boolean }
+export interface AudioEditCut extends AudioEditRange { id: string; reason: 'silence' | 'manual'; enabled: boolean; mode?: 'delete' | 'mute' }
+export interface AudioEditViewSettings { textSize: number; sidePadding: number; timelineCaptions: boolean }
 export interface AudioEditFrameRate { numerator: number; denominator: number }
 export interface AudioEditSourceIdentity { size: number; mtimeMs: number; digest: string }
 export interface AudioEditProcessorSetting { id: string; enabled: boolean; parameters: Record<string, number> }
@@ -33,6 +34,7 @@ export interface AudioEditTranscriptBlock {
 }
 
 export interface AudioEditTimelineSpan {
+  muted?: boolean
   sourceStartFrame: number
   sourceEndFrame: number
   outputStartFrame: number
@@ -82,6 +84,7 @@ export interface AudioEditProjectDocument {
   batchSettings?: AudioEditBatchSettings
   processorChain?: AudioEditProcessorSetting[]
   xmlFrameRate?: AudioEditFrameRate
+  viewSettings?: AudioEditViewSettings
 }
 
 export interface AudioEditProjectSummary {

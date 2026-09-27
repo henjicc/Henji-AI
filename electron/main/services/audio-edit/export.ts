@@ -80,7 +80,7 @@ export async function exportAudioEditProject(request: AudioEditExportRequest): P
         const filter = `${temporary}.filter`
         temporaryPaths.push(filter)
         const inputStream = processedPath || project.source.ownership !== 'external' ? '0:a:0' : `0:${project.source.audioStreamIndex ?? 0}`
-        const chains = spans.map((span, index) => `[${inputStream}]atrim=start_sample=${span.sourceStartFrame}:end_sample=${span.sourceEndFrame},asetpts=PTS-STARTPTS[a${index}]`)
+        const chains = spans.map((span, index) => `[${inputStream}]atrim=start_sample=${span.sourceStartFrame}:end_sample=${span.sourceEndFrame},asetpts=PTS-STARTPTS${span.muted ? ',volume=0' : ''}[a${index}]`)
         chains.push(`${spans.map((_span, index) => `[a${index}]`).join('')}concat=n=${spans.length}:v=0:a=1[out]`)
         await fs.writeFile(filter, chains.join(';\n'), 'utf8')
         await runAudioEditProcess(await loadFfmpegPath(), ['-v', 'error', '-y', '-i', processedPath ?? project.source.audioPath, '-filter_complex_script', filter, '-map', '[out]', '-c:a', 'pcm_s24le', temporary], signal)

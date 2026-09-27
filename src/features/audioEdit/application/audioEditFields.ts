@@ -2,7 +2,8 @@ import { type ApplicationFieldDefinition, type ApplicationPropertyDescriptor, ty
 import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/application-control/applicationCapabilities'
 import type { AudioEditProjectDocument, AudioEditProcessorDescriptor } from '@/core/audioEdit/types'
 import { applyAudioEditSuggestion, setAudioEditBlocks } from '@/core/audioEdit/edits'
-import { audioEditCutsSchema, audioEditSettingsSchema, audioEditFrameRateSchema, audioEditProcessorChainSchema } from '@/core/audioEdit/schema'
+import { audioEditCutsSchema, audioEditSettingsSchema, audioEditFrameRateSchema, audioEditProcessorChainSchema, audioEditViewSettingsSchema } from '@/core/audioEdit/schema'
+import { DEFAULT_AUDIO_EDIT_VIEW_SETTINGS } from '@/core/audioEdit/edits'
 import { buildProjectAudioEditTimeline, editedDurationFrames } from '@/core/audioEdit/timeline'
 
 export const AUDIO_EDIT_ENTITY_TYPES = { project: 'audio_edit.project', transcriptBlock: 'audio_edit.transcript_block', suggestion: 'audio_edit.suggestion', processorChain: 'audio_edit.processor_chain', render: 'audio_edit.render' } as const
@@ -31,7 +32,8 @@ export const AUDIO_EDIT_FIELDS: Record<AudioEditEntityType, ApplicationFieldDefi
     field(E.project, 'name', '工程名', { kind: 'string', minLength: 1, maxLength: 200 }, (s) => s.document.name, (s, v) => { const name = string(v).trim(); if (!name) throw new Error('工程名不能为空'); s.document.name = name }),
     field(E.project, 'reference_script', '参考逐字稿', TEXT, (s) => s.document.referenceScript, (s, v) => { s.document.referenceScript = string(v) }, ['setReferenceScript']),
     field(E.project, 'batch_settings', '批量剪辑设置', objectValue('audio_edit.batch_settings'), (s) => json(s.document.batchSettings ?? {}), (s, v) => { s.document.batchSettings = audioEditSettingsSchema.parse(v) }),
-    field(E.project, 'cuts', '独立裁切区间', objectValue('audio_edit.cuts'), (s) => json(s.document.cuts ?? []), (s, v) => { s.document.cuts = audioEditCutsSchema.parse(v) }),
+    field(E.project, 'cuts', '声音编辑区间（mode 为 delete 删除或 mute 静音，省略时删除）', objectValue('audio_edit.cuts'), (s) => json(s.document.cuts ?? []), (s, v) => { s.document.cuts = audioEditCutsSchema.parse(v) }),
+    field(E.project, 'view_settings', '文字大小、左右留白与时间轴字幕', objectValue('audio_edit.view_settings'), (s) => json(s.document.viewSettings ?? DEFAULT_AUDIO_EDIT_VIEW_SETTINGS), (s, v) => { s.document.viewSettings = audioEditViewSettingsSchema.parse(v) }),
     field(E.project, 'xml_frame_rate', '音频 XML 帧率', objectValue('audio_edit.frame_rate'), (s) => json(s.document.xmlFrameRate ?? { numerator: 25, denominator: 1 }), (s, v) => { s.document.xmlFrameRate = audioEditFrameRateSchema.parse(v) }),
     field(E.project, 'selected_asr_model_id', '语音识别模型', TEXT, (s) => s.document.selectedAsrModelId ?? ''),
     field(E.project, 'duration_frames', '源时长帧数', INT, (s) => s.document.source.durationFrames),

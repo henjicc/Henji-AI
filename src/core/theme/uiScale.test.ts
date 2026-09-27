@@ -17,6 +17,8 @@ describe('uiScale', () => {
     expect(resolveUiScaleFactor('90', { width: 3000, height: 2000 })).toBe(0.9)
     expect(resolveUiScaleFactor('100', { width: 960, height: 640 })).toBe(1)
     expect(resolveUiScaleFactor('110', { width: 960, height: 640 })).toBe(1.1)
+    expect(resolveUiScaleFactor('125', { width: 960, height: 640 })).toBe(1.25)
+    expect(resolveUiScaleFactor('150', { width: 3840, height: 2100 })).toBe(1.5)
   })
 
   it('非法模式和不可用尺寸安全回退', () => {
@@ -29,5 +31,7 @@ describe('uiScale', () => {
     expect(uiScaleFactorPercent(0.9)).toBe(90)
     expect(uiScaleFactorPercent(1)).toBe(100)
     expect(uiScaleFactorPercent(1.1)).toBe(110)
+    expect(uiScaleFactorPercent(1.25)).toBe(125)
+    expect(uiScaleFactorPercent(1.5)).toBe(150)
   })
 })

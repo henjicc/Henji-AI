@@ -3,6 +3,20 @@ import type { AudioEditBatchSettings, AudioEditProjectDocument, AudioEditRange }
 export const DEFAULT_AUDIO_EDIT_SETTINGS: AudioEditBatchSettings = {
   silenceThresholdMs: 800, retainedSilenceMs: 350, noiseDb: -40, trimEdges: false, fillers: ['嗯', '呃', '额'],
 }
+export const DEFAULT_AUDIO_EDIT_VIEW_SETTINGS = { textSize: 20, sidePadding: 48, timelineCaptions: true }
+
+export function editAudioEditRange(project: AudioEditProjectDocument, range: AudioEditRange, mode: 'delete' | 'mute' | 'restore'): AudioEditProjectDocument {
+  const startFrame = Math.max(0, Math.round(Math.min(range.startFrame, range.endFrame)))
+  const endFrame = Math.min(project.source.durationFrames, Math.round(Math.max(range.startFrame, range.endFrame)))
+  if (!Number.isFinite(startFrame + endFrame) || endFrame <= startFrame) return project
+  const parts = subtractRanges([{ startFrame, endFrame }], project.transcript.filter((block) => block.locked))
+  if (mode === 'restore') {
+    return { ...project, cuts: (project.cuts ?? []).flatMap((cut) => !cut.enabled ? [cut] : subtractRanges([cut], parts).map((part, index) => ({ ...cut, ...part, id: index ? `${cut.id}:${part.startFrame}` : cut.id }))),
+      transcript: project.transcript.map((block) => !block.locked && block.startFrame >= startFrame && block.endFrame <= endFrame ? { ...block, included: true } : block) }
+  }
+  const fresh = subtractRanges(parts, (project.cuts ?? []).filter((cut) => cut.enabled && (cut.mode ?? 'delete') === mode))
+  return fresh.length ? { ...project, cuts: [...(project.cuts ?? []), ...fresh.map((part) => ({ ...part, id: crypto.randomUUID(), enabled: true, reason: 'manual' as const, mode }))] } : project
+}
 
 /** All edits, including assistant mutations, respect the same protected ranges. */
 export function subtractRanges(ranges: readonly AudioEditRange[], protectedRanges: readonly AudioEditRange[]): AudioEditRange[] {

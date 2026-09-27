@@ -47,6 +47,20 @@ beforeEach(() => {
 })
 afterEach(() => { vi.unstubAllGlobals() })
 
+it('emits zero PCM for muted spans and restores original audio in source mode', async () => {
+  const fixture = project()
+  fixture.cuts = [{ id: 'mute', reason: 'manual', enabled: true, mode: 'mute', startFrame: 0, endFrame: 48000 }]
+  prepare.mockImplementation(async (request) => ({ ...chunk(request), pcm: new Float32Array(request.frameCount).fill(0.5).buffer }))
+  const hook = renderHook(() => useAudioEditPreview(fixture))
+  await waitFor(() => expect(node.port.postMessage.mock.calls.some(([message]) => message.type === 'chunk')).toBe(true))
+  const muted = node.port.postMessage.mock.calls.find(([message]) => message.type === 'chunk' && message.sourceStartFrame === 0)![0]
+  expect(new Float32Array(muted.pcm).every((sample) => sample === 0)).toBe(true)
+  expect(prepare.mock.calls.every(([request]) => request.sourceStartFrame >= 48000)).toBe(true)
+  act(() => useAudioEditPlaybackStore.getState().setMode('source'))
+  await waitFor(() => expect(prepare.mock.calls.some(([request]) => request.sourceStartFrame === 0)).toBe(true))
+  hook.unmount()
+})
+
 it('replaces an in-flight old seek with the latest seek and ignores stale positions', async () => {
   let resolve!: (value: ReturnType<typeof chunk>) => void
   prepare.mockImplementationOnce(() => new Promise((done) => { resolve = done }))

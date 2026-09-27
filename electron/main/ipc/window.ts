@@ -22,7 +22,7 @@ interface WindowStatePayload {
 export function parseZoomFactor(input: unknown): UiScaleFactor {
   const factor = parseRecord(input)['factor']
   if (!isUiScaleFactor(factor)) {
-    throw new Error('Expected zoom factor to be one of 0.9, 1, or 1.1')
+    throw new Error('Expected zoom factor to be one of 0.9, 1, 1.1, 1.25, or 1.5')
   }
   return factor
 }

@@ -25,7 +25,7 @@ export interface HenjiWindowApi {
   close(): Promise<void>
   isMaximized(): Promise<boolean>
   getContentSize(): Promise<HenjiWindowContentSize>
-  setZoomFactor(factor: 0.9 | 1 | 1.1): Promise<void>
+  setZoomFactor(factor: import('../../src/core/theme/uiScale').UiScaleFactor): Promise<void>
   toggleDevTools(): Promise<void>
   onStateChanged(handler: (payload: HenjiWindowStatePayload) => void): () => void
   onCloseRequested(handler: () => void): () => void

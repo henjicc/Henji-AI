@@ -83,7 +83,7 @@ export function useAudioEditPreview(project: AudioEditProjectDocument | null, no
           }
           const startFrame = Math.max(cursor, span.sourceStartFrame)
           const frameCount = Math.min(project.source.sampleRate * CHUNK_SECONDS, span.sourceEndFrame - startFrame)
-          const silenceFrames = startFrame < 0 ? Math.min(frameCount, -startFrame) : startFrame >= project.source.durationFrames ? frameCount : 0
+          const silenceFrames = span.muted ? frameCount : startFrame < 0 ? Math.min(frameCount, -startFrame) : startFrame >= project.source.durationFrames ? frameCount : 0
           const chunk = silenceFrames ? { sourceStartFrame: startFrame, sourceEndFrame: startFrame + silenceFrames, channels: project.source.channels, pcm: new Float32Array(silenceFrames * project.source.channels).buffer } : await getPlatform().audioEdit.preparePreviewChunk({ projectId: project.id, sourceStartFrame: startFrame, frameCount: Math.min(frameCount, project.source.durationFrames - startFrame), processing: mode === 'edited' && project.vstEnabled })
           if (generation !== generationRef.current) break
           const decodedFrames = chunk.sourceEndFrame - chunk.sourceStartFrame

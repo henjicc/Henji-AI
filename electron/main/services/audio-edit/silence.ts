@@ -39,5 +39,5 @@ export async function detectAudioEditSilence(request: AudioEditSilenceRequest): 
     signal.throwIfAborted()
     await verifyAudioEditSource(project)
     return { revision: project.revision, suggestions }
-  }, request.requestId, JSON.stringify([project.revision, project.source.identity, settings, request.range]))
+  }, request.requestId, JSON.stringify([project.revision, project.source.identity, settings, request.range]), true)
 }

@@ -4,7 +4,7 @@ import { resolveConfiguredDestination } from '@/features/canvas/application/canv
 import { getPlatform } from '@/platform/runtime'
 import { join } from '@/platform/desktopApi'
 import { loadAudioEditProject, flushAudioEditProject } from './audioEditProjectInstances'
-import { compressAudioEditSilence, cleanProjectAudioEditFillers, transcribeAudioEdit, exportAudioEdit, prepareAudioEditProcessing } from './audioEditApplicationService'
+import { compressAudioEditSilence, cleanProjectAudioEditFillers, transcribeAudioEdit, exportAudioEdit, prepareAudioEditProcessing, quickProcessAudioEdit } from './audioEditApplicationService'
 
 export function registerAudioEditCapabilityHandlers(registrar: ApplicationCapabilityHandlerRegistrar): void {
   for (const definition of AUDIO_EDIT_APPLICATION_CAPABILITIES) registrar.registerHandler(definition.id, async (raw, context) => {
@@ -22,6 +22,7 @@ export function registerAudioEditCapabilityHandlers(registrar: ApplicationCapabi
     try {
       const result: Record<string, unknown> = { resultRef: { kind: 'audio_edit.project', id }, message: '' }
       switch (definition.id) {
+        case 'quick_process_audio_edit': Object.assign(result, await quickProcessAudioEdit(id, input.range, requestId)); result.message = `已压缩停顿并清理所选语气词，缩短 ${result.shortenedMs} 毫秒，可整批撤销。`; break
         case 'compress_audio_edit_silence': Object.assign(result, await compressAudioEditSilence(id, input.range, requestId)); result.message = `处理 ${result.count} 处停顿，缩短 ${result.shortenedMs} 毫秒。`; break
         case 'clean_audio_edit_fillers': result.count = await cleanProjectAudioEditFillers(id, input.range); result.message = `清理 ${result.count} 处语气词。`; break
         case 'transcribe_audio_edit': await transcribeAudioEdit({ projectId: id, modelId: input.modelId, requestId }); result.message = '转写已保存，按实际时间戳粒度剪辑。'; break
