@@ -17,11 +17,11 @@ const instruction: Label = { zh: '演绎指令', en: 'Delivery instruction' }
 
 export const ttsPresentation: Record<string, ModelPresentation> = {
   'fal-minimax-speech-2.8': speechModel(
-    { zh: 'MiniMax Speech 2.8 · Fal', en: 'MiniMax Speech 2.8 · Fal' },
+    { zh: 'MiniMax Speech 2.8', en: 'MiniMax Speech 2.8' },
     { falMinimaxSpeechSpec: version, falMinimaxSpeechVoice: voice, falMinimaxSpeechSpeed: speed, falMinimaxSpeechEmotion: emotion },
   ),
   'fal-qwen3-tts-1.7b': speechModel(
-    { zh: 'Qwen3 TTS 1.7B · Fal', en: 'Qwen3 TTS 1.7B · Fal' },
+    { zh: 'Qwen3 TTS 1.7B', en: 'Qwen3 TTS 1.7B' },
     {
       falQwen3TtsVoice: voice,
       falQwen3TtsLanguage: { zh: '语言', en: 'Language' },
@@ -30,7 +30,7 @@ export const ttsPresentation: Record<string, ModelPresentation> = {
     },
   ),
   'fal-eleven-v3-tts': speechModel(
-    { zh: 'Eleven v3 · Fal', en: 'Eleven v3 · Fal' },
+    { zh: 'Eleven v3', en: 'Eleven v3' },
     {
       falElevenV3Voice: voice,
       falElevenV3Stability: { zh: '稳定度', en: 'Stability' },
@@ -38,15 +38,15 @@ export const ttsPresentation: Record<string, ModelPresentation> = {
     },
   ),
   'bailian-minimax-speech-2.8': speechModel(
-    { zh: 'MiniMax Speech 2.8 · 百炼', en: 'MiniMax Speech 2.8 · Bailian' },
+    { zh: 'MiniMax Speech 2.8', en: 'MiniMax Speech 2.8' },
     { bailianMinimaxSpeechSpec: version, bailianMinimaxSpeechVoice: voice, bailianMinimaxSpeechSpeed: speed, bailianMinimaxSpeechEmotion: emotion },
   ),
   'bailian-qwen-audio-3.1-tts-flash': speechModel(
-    { zh: 'Qwen Audio 3.1 TTS Flash · 百炼', en: 'Qwen Audio 3.1 TTS Flash · Bailian' },
+    { zh: 'Qwen Audio 3.1 TTS Flash', en: 'Qwen Audio 3.1 TTS Flash' },
     { bailianQwenTtsVoice: voice, bailianQwenTtsInstruction: instruction, bailianQwenTtsSpeed: speed },
   ),
   'bailian-cosyvoice-v3.5': speechModel(
-    { zh: 'CosyVoice 3.5 · 百炼', en: 'CosyVoice 3.5 · Bailian' },
+    { zh: 'CosyVoice 3.5', en: 'CosyVoice 3.5' },
     {
       bailianCosyVoiceSpec: version,
       bailianCosyVoiceId: { zh: '已创建的复刻或设计音色 ID', en: 'Existing cloned or designed voice ID' },
@@ -55,7 +55,7 @@ export const ttsPresentation: Record<string, ModelPresentation> = {
     },
   ),
   'kie-eleven-turbo-2.5-tts': speechModel(
-    { zh: 'Eleven Turbo 2.5 · KIE', en: 'Eleven Turbo 2.5 · KIE' },
+    { zh: 'Eleven Turbo 2.5', en: 'Eleven Turbo 2.5' },
     {
       kieElevenTurboVoice: voice,
       kieElevenTurboStability: { zh: '稳定度', en: 'Stability' },
@@ -63,11 +63,11 @@ export const ttsPresentation: Record<string, ModelPresentation> = {
     },
   ),
   'kie-eleven-v3-dialogue': speechModel(
-    { zh: 'Eleven v3 对话语音 · KIE', en: 'Eleven v3 Dialogue · KIE' },
+    { zh: 'Eleven v3 对话语音', en: 'Eleven v3 Dialogue' },
     { kieElevenDialogueVoice: voice },
   ),
   'kie-gemini-3.1-flash-tts': speechModel(
-    { zh: 'Gemini 3.1 Flash TTS · KIE', en: 'Gemini 3.1 Flash TTS · KIE' },
+    { zh: 'Gemini 3.1 Flash TTS', en: 'Gemini 3.1 Flash TTS' },
     {
       kieGeminiTtsVoice: voice,
       kieGeminiTtsScene: { zh: '场景描述', en: 'Scene' },
@@ -75,19 +75,19 @@ export const ttsPresentation: Record<string, ModelPresentation> = {
     },
   ),
   'siliconflow-cosyvoice2-tts': speechModel(
-    { zh: 'CosyVoice2 · 硅基流动', en: 'CosyVoice2 · SiliconFlow' },
+    { zh: 'CosyVoice2', en: 'CosyVoice2' },
     { siliconflowCosyVoice: voice, siliconflowCosySpeed: speed, siliconflowCosyFormat: format },
   ),
   'siliconflow-moss-ttsd-0.5': speechModel(
-    { zh: 'MOSS TTSD 0.5 · 硅基流动', en: 'MOSS TTSD 0.5 · SiliconFlow' },
+    { zh: 'MOSS TTSD 0.5', en: 'MOSS TTSD 0.5' },
     { siliconflowMossVoice: voice, siliconflowMossFormat: format },
   ),
   'volcengine-seed-tts-2.0': speechModel(
-    { zh: '豆包 Seed-TTS 2.0', en: 'Doubao Seed-TTS 2.0' },
+    { zh: 'Seed-TTS 2.0', en: 'Seed-TTS 2.0' },
     { volcSeedTtsSpeaker: voice },
   ),
   'volcengine-seed-icl-2.0': speechModel(
-    { zh: '豆包 Seed-ICL 2.0', en: 'Doubao Seed-ICL 2.0' },
+    { zh: 'Seed-ICL 2.0', en: 'Seed-ICL 2.0' },
     { volcSeedIclSpeaker: { zh: '已创建的复刻音色 ID', en: 'Existing cloned voice ID' } },
   ),
 }
