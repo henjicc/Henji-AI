@@ -1,6 +1,11 @@
 import { findProviderMetadata, type ProviderMetadata } from '@henjicc/ai-sdk'
 
-export type ApiKeyProvider = 'ppio' | 'fal' | 'modelscope' | 'kie' | 'apimart' | 'bailian' | 'volcengine' | 'grsai'
+export const API_KEY_PROVIDER_IDS = [
+  'ppio', 'fal', 'modelscope', 'kie', 'apimart', 'bailian', 'volcengine', 'grsai',
+  'siliconflow', 'volcengine-speech',
+] as const
+
+export type ApiKeyProvider = typeof API_KEY_PROVIDER_IDS[number]
 export type UploadProvider = 'fal' | 'kie'
 
 export type ApiKeyProviderMeta = {
@@ -12,10 +17,6 @@ export type ApiKeyProviderMeta = {
 export type UploadProviderMeta = {
   id: UploadProvider
 }
-
-const API_KEY_PROVIDER_IDS: readonly ApiKeyProvider[] = [
-  'ppio', 'fal', 'modelscope', 'kie', 'apimart', 'bailian', 'volcengine', 'grsai',
-]
 
 export const API_KEY_PROVIDERS: ApiKeyProviderMeta[] = API_KEY_PROVIDER_IDS.map((id) => {
   const metadata = findProviderMetadata(id)

@@ -145,6 +145,14 @@ export const PROVIDER_METADATA: readonly ProviderMetadata[] = [
     websiteUrlKind: 'official',
     docs: 'docs/model-adaptation/供应商/火山引擎.md',
   },
+  {
+    providerId: 'volcengine-speech',
+    displayName: '火山引擎（豆包语音）',
+    websiteUrl: 'https://www.volcengine.com/product/voice-tech',
+    apiKeyUrl: 'https://console.volcengine.com/speech/new/setting/apikeys?projectName=default',
+    websiteUrlKind: 'official',
+    docs: 'docs/model-adaptation/TTS-多供应商-2026-09.md',
+  },
 ]
 
 /**

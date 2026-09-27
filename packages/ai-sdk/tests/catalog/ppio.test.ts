@@ -115,6 +115,10 @@ describe('派欧云按真实输入时长计价', () => {
 })
 
 describe('MiniMax Speech 单次请求向上取整到分', () => {
+  it('派欧云 2.8 未声明支持的情感参数不进入请求', () => {
+    const body = minimaxSpeechModel.request?.builder?.({ prompt: '你好', minimaxVoiceId: 'male-qn-qingse', minimaxAudioEmotion: 'happy' }) as JsonObject
+    expect(body.voice_setting).not.toHaveProperty('emotion')
+  })
   it('HD 与 Turbo 都按官方规则向上取整', () => {
     expect(minimaxSpeechModel.pricing.calculator?.({ text: '甲'.repeat(100), minimaxAudioSpec: 'hd' }))
       .toBe(0.04)

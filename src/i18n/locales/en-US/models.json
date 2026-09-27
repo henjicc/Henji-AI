@@ -31,7 +31,9 @@
     "apimart": "APIMart",
     "bailian": "Alibaba Cloud Model Studio",
     "volcengine": "Volcengine Ark",
-    "grsai": "Grsai"
+    "grsai": "Grsai",
+    "siliconflow": "SiliconFlow",
+    "volcengine-speech": "Volcengine Speech"
   },
   "tags": {
     "text-to-image": "Image Generation",

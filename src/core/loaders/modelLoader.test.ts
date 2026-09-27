@@ -12,7 +12,6 @@ const migratedStructureDigests = {
   'volcengine-seedream-5.0-lite': '5b060b0992c57ff55750651ec2c8cc138dd952f2c466ab291a489e765d73501f',
   'bailian-qwen-image-3.0': '55fa864900323f9f66ee4fba37e60fe3e364af06c8192c9d0d3e4140ac029ccf',
   'grsai-nano-banana-pro': 'e52830a6cb080856d94df10c4a533a0af900aa7a18b625d68d9a16080fbfecf8',
-  'ppio-minimax-speech': '8b98a790fb20c82001858fcf767e6888925176afcbc870f8f99a3449942f9147',
   'modelscope-custom': '86170711fc0071d456c669aa62cf02b5adb69d891561975402c549bd8c5dd487',
   'apimart-midjourney': 'd9bf786e99f81885a6d8a3a108368cf2a62578a35a4fa4b7e24f69ae70a7c422',
   'apimart-midjourney-video': 'c93fe905c5c068a4861127084cd1cdaa92bdc856cb7cca09377b04bf96f87370',
@@ -54,13 +53,13 @@ describe('SDK catalog 应用侧加载入口', () => {
     registry.clear()
   })
 
-  it('注册 111 个可选模型与受控执行模型，同时保持普通目录不变', async () => {
+  it('注册 124 个可选模型与受控执行模型，同时保持普通目录不变', async () => {
     await expect(loadAllModels()).resolves.toMatchObject({
-      total: 111 + CONTROLLED_EXECUTION_MODELS.length,
-      success: 111 + CONTROLLED_EXECUTION_MODELS.length,
+      total: 124 + CONTROLLED_EXECUTION_MODELS.length,
+      success: 124 + CONTROLLED_EXECUTION_MODELS.length,
       failed: 0,
     })
-    expect(registry.listAllModels()).toHaveLength(111)
+    expect(registry.listAllModels()).toHaveLength(124)
     for (const model of CONTROLLED_EXECUTION_MODELS) {
       expect(registry.getModel(model.meta.id), model.meta.id).toBeTruthy()
       expect(registry.getDiscoverableModel(model.meta.id), model.meta.id).toBeUndefined()
@@ -85,7 +84,7 @@ describe('SDK catalog 应用侧加载入口', () => {
     expect(modelscopeCustom?.meta.name).toBeTruthy()
   })
 
-  it('ModelRegistry 的十类查询在 111 个合成模型上保持完整行为', () => {
+  it('ModelRegistry 的十类查询在 124 个合成模型上保持完整行为', () => {
     const allModels = registry.listAllModels()
     const firstModel = allModels[0]
     expect(firstModel).toBeTruthy()
@@ -145,12 +144,12 @@ describe('SDK catalog 应用侧加载入口', () => {
     })
 
     const stats = registry.getStats()
-    expect(stats.totalModels).toBe(111)
-    expect(Object.values(stats.providerCounts as Record<string, number>).reduce((sum, count) => sum + count, 0)).toBe(111)
-    expect(Number(stats.imageModels) + Number(stats.videoModels) + Number(stats.audioModels)).toBe(111)
+    expect(stats.totalModels).toBe(124)
+    expect(Object.values(stats.providerCounts as Record<string, number>).reduce((sum, count) => sum + count, 0)).toBe(124)
+    expect(Number(stats.imageModels) + Number(stats.videoModels) + Number(stats.audioModels)).toBe(124)
   })
 
-  it('十个迁移代表模型与迁移前结构摘要逐项一致', () => {
+  it('九个未改动的迁移代表模型与迁移前结构摘要逐项一致', () => {
     for (const [modelId, expectedDigest] of Object.entries(migratedStructureDigests)) {
       const model = registry.getModel(modelId)
       expect(model, modelId).toBeTruthy()

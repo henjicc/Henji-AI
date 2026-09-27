@@ -15,6 +15,8 @@ import {
 } from '../image/managed-media-leases'
 import { releaseManagedGenerationMediaPaths } from '../image/path-utils'
 
+const nativeFetch = globalThis.fetch
+
 describe('AI Runtime 受管媒体所有权', () => {
   beforeEach(async () => {
     mocks.dataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'henji-ai-media-store-'))
@@ -39,6 +41,13 @@ describe('AI Runtime 受管媒体所有权', () => {
     await expect(fs.readFile(result?.filePath ?? '')).resolves.toEqual(
       Buffer.from([137, 80, 78, 71, 1, 2, 3]),
     )
+  })
+
+  it('SDK 返回的内嵌 MP3 音频经宿主边界落成可播放文件', async () => {
+    vi.stubGlobal('fetch', nativeFetch)
+    const result = await saveMediaFromUrlTracked('data:audio/mpeg;base64,SUQz')
+    expect(result?.filePath).toMatch(/[/\\]Media[/\\]ai_[a-f0-9]{16}\.mp3$/)
+    await expect(fs.readFile(result?.filePath ?? '')).resolves.toEqual(Buffer.from('ID3'))
   })
 
   it('进程启动前已存在的相同内容不冒充本次调用的临时所有权', async () => {

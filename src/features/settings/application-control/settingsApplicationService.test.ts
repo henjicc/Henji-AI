@@ -66,7 +66,7 @@ describe('assistant settings registry', () => {
 
   it('默认供应商通过通用设置能力读写默认项真相源', () => {
     const before = modelDefaultsManager.getSnapshot().providerId
-    const next = before === 'fal' ? 'kie' : 'fal'
+    const next = before === 'siliconflow' ? 'volcengine-speech' : 'siliconflow'
     const plan = planApplicationSettingsChange([
       { id: 'general.primary_provider', value: next },
     ])

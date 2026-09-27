@@ -110,6 +110,17 @@ describe('keystore', () => {
     expect(getAiProviderApiKey('bailian')).toBe('shared-from-llm')
   })
 
+  it('新语音供应商的凭据进入生成密钥状态', () => {
+    setAiProviderApiKey('siliconflow', 'siliconflow-secret')
+    setAiProviderApiKey('volcengine-speech', 'speech-secret')
+
+    const status = new Map(getAiProviderKeyStatus().map(item => [item.providerId, item.configured]))
+    expect(status.get('siliconflow')).toBe(true)
+    expect(status.get('volcengine-speech')).toBe(true)
+    expect(getAiProviderApiKey('siliconflow')).toBe('siliconflow-secret')
+    expect(getAiProviderApiKey('volcengine-speech')).toBe('speech-secret')
+  })
+
   it('旧生成与 LLM 密钥首次读取时迁入统一供应商槽', () => {
     writeRawKeystore({
       'ai:ppio': Buffer.from('enc:legacy-ppio').toString('base64'),

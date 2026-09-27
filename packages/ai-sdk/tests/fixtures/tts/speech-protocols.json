@@ -1,0 +1,28 @@
+{
+  "capturedAt": "2026-09-27",
+  "provenance": "constructed-from-official-field-tables",
+  "note": "官方字段表确定结构；ID3 三字节是稳定化占位音频，不代表真实生成。URL 使用不可联网域名。负例由测试独立构造。",
+  "sources": {
+    "bailianMinimax": "https://help.aliyun.com/zh/model-studio/minimax-synchronous-speech-synthesis-api",
+    "bailianQwenCosy": "https://help.aliyun.com/zh/model-studio/cosyvoice-tts-http-api",
+    "siliconflow": "https://docs.siliconflow.cn/docs/api/audio-speech-post",
+    "volcengine": "https://docs.volcengine.com/docs/DoubaoVoice/unidirectional-streaming-text-to-speech-http?lang=zh"
+  },
+  "bailianMinimax": {
+    "output": {
+      "data": { "audio": "494433", "status": 2 },
+      "base_resp": { "status_code": 0, "status_msg": "success" }
+    }
+  },
+  "bailianQwenCosy": {
+    "output": {
+      "finish_reason": "stop",
+      "audio": { "url": "https://media.invalid/tts.mp3" }
+    }
+  },
+  "volcengineFrames": [
+    { "code": 0, "message": "OK", "data": "SUQ=", "usage": { "text_words": 3 } },
+    { "code": 0, "message": "OK", "data": "Mw==" }
+  ],
+  "siliconflowAudioBytes": [73, 68, 51]
+}

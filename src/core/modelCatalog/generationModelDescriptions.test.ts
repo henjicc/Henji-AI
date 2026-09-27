@@ -9,7 +9,7 @@ import {
 
 describe('generationModelDescriptions', () => {
   it('所有供应商模型都引用已登记的通用模型标识', () => {
-    expect(catalog).toHaveLength(111)
+    expect(catalog).toHaveLength(124)
     for (const model of catalog) {
       expect(model.meta.canonicalModelId, model.meta.id).toBeTruthy()
       expect(hasGenerationModelDescription(model.meta.canonicalModelId), model.meta.id).toBe(true)

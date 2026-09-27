@@ -76,7 +76,7 @@ const expectedToolModelPacks = new Set([
   'qwen-image-edit-2511-multiple-angles.ts',
   'relighting.ts',
 ])
-if (modelFiles.length !== 111 || generatedModelPacks.length !== 111) {
+if (modelFiles.length !== 124 || generatedModelPacks.length !== 124) {
   fail(`单模型导出不完整：catalog=${modelFiles.length}, packs=${generatedModelPacks.length}`)
 }
 if (generatedProviderAdapters.length !== providerDirectories.length || generatedProviderPacks.length !== providerDirectories.length) {
@@ -120,9 +120,9 @@ for (const provider of providerDirectories) {
   }
 }
 
-const builtinsPattern = /\/src\/(?:catalog\/[^/]+\/[^/]+\.model\.ts|providers\/(?:apimart|bailian|fal|grsai|kie|modelscope|ppio|volcengine)\.ts)$/
+const builtinsPattern = /\/src\/(?:catalog\/[^/]+\/[^/]+\.model\.ts|providers\/(?:apimart|bailian|fal|grsai|kie|modelscope|ppio|siliconflow|volcengine|volcengine-speech)\.ts)$/
 const modelPattern = /\/src\/catalog\/([^/]+)\/[^/]+\.model\.ts$/
-const providerPattern = /\/src\/providers\/(apimart|bailian|fal|grsai|kie|modelscope|ppio|volcengine)\.ts$/
+const providerPattern = /\/src\/providers\/(apimart|bailian|fal|grsai|kie|modelscope|ppio|siliconflow|volcengine|volcengine-speech)\.ts$/
 const toolModelPattern = /\/src\/tool-packs\/fal-erase\/models\/[^/]+\.model\.ts$/
 const utilityModelPattern = /\/src\/tool-packs\/fal-image-utilities\/models\/[^/]+\.model\.ts$/
 const multiAngleModelPattern = /\/src\/tool-packs\/fal-multi-angle\/models\/[^/]+\.model\.ts$/
@@ -158,7 +158,7 @@ const kiePack = bundle('KieProviderPack', [
 ].join('\n'), (inputs) => {
   const models = inputs.filter((input) => modelPattern.test(`/${input}`))
   const providers = inputs.filter((input) => providerPattern.test(`/${input}`))
-  if (models.length !== 29 || models.some((input) => !input.includes('/catalog/kie/'))) {
+  if (models.length !== 32 || models.some((input) => !input.includes('/catalog/kie/'))) {
     fail(`KIE provider pack 模型图异常：count=${models.length}`)
   }
   if (providers.length !== 1 || !providers[0].endsWith('/providers/kie.ts')) {
@@ -282,8 +282,8 @@ const defaultGeneration = bundle('DefaultGeneration', [
 ].join('\n'), (inputs) => {
   const models = inputs.filter((input) => modelPattern.test(`/${input}`))
   const tools = inputs.filter((input) => anyToolModelPattern.test(`/${input}`))
-  if (models.length !== 111 || tools.length !== 0) {
-    fail(`默认generation目录不再严格111或误入工具：models=${models.length}, tools=${tools.length}`)
+  if (models.length !== 124 || tools.length !== 0) {
+    fail(`默认generation目录不再严格124或误入工具：models=${models.length}, tools=${tools.length}`)
   }
 })
 
