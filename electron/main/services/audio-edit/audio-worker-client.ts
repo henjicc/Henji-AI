@@ -24,13 +24,14 @@ function executablePath(): string | null {
   return candidates.find((candidate) => fs.existsSync(candidate)) ?? null
 }
 
-export async function invokeAudioWorker<T>(command: Record<string, unknown>, timeoutMs = 20_000): Promise<T> {
+export async function invokeAudioWorker<T>(command: Record<string, unknown>, timeoutMs = 20_000, signal?: AbortSignal): Promise<T> {
+  signal?.throwIfAborted()
   const binary = executablePath()
   if (!binary) throw new Error('AUDIO_WORKER_UNAVAILABLE：音频 Worker 尚未安装。')
   const id = crypto.randomUUID()
   const child = spawn(binary, [], { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true })
-  const stderr: Buffer[] = []
-  child.stderr.on('data', (chunk: Buffer) => stderr.push(chunk))
+  let stderr = ''
+  child.stderr.on('data', (chunk: Buffer) => { stderr = (stderr + chunk.toString('utf8')).slice(-16384) })
   try {
     return await new Promise<T>((resolve, reject) => {
       let settled = false
@@ -38,8 +39,14 @@ export async function invokeAudioWorker<T>(command: Record<string, unknown>, tim
         if (settled) return
         settled = true
         clearTimeout(timer)
+        signal?.removeEventListener('abort', cancel)
         callback()
       }
+      const cancel = () => {
+        child.kill()
+        finish(() => reject(new Error('声音处理已取消')))
+      }
+      signal?.addEventListener('abort', cancel, { once: true })
       const timer = setTimeout(() => {
         child.kill()
         finish(() => reject(new Error('AUDIO_WORKER_TIMEOUT：音频 Worker 响应超时。')))
@@ -60,7 +67,7 @@ export async function invokeAudioWorker<T>(command: Record<string, unknown>, tim
       })
       child.once('exit', (code) => {
         if (code && code !== 0) {
-          finish(() => reject(new Error(`音频 Worker 异常退出（${code}）：${Buffer.concat(stderr).toString('utf8')}`)))
+          finish(() => reject(new Error(`音频 Worker 异常退出（${code}）：${stderr}`)))
         } else {
           finish(() => reject(new Error('音频 Worker 未返回处理结果。')))
         }

@@ -1,3 +1,4 @@
+import { getAudioEditRevision } from '@/features/audioEdit/application/audioEditProjectInstances'
 import {
   APPLICATION_HOST_CONTRACT_VERSION,
   hostContextSnapshotSchema,
@@ -78,7 +79,7 @@ function syncPulledRevisions(): void {
   scopeRevisions.models = getGenerationModelsRevision()
   scopeRevisions.image_mark = imageMarkRevision()
   scopeRevisions.image_edit = getImageEditDocumentCatalogRevisionV3()
-  scopeRevisions.audio_edit = useAudioEditStore.getState().project?.revision ?? 0
+  scopeRevisions.audio_edit = getAudioEditRevision()
 }
 
 /**

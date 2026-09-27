@@ -19,9 +19,15 @@ export function createPreviewOutput(context: AudioContext) {
   boost.connect(protection)
   protection.connect(volume)
   volume.connect(context.destination)
+  let bypassed = false
   return {
     input: boost,
-    setLevels(gain: number, level: number) {
+    setLevels(gain: number, level: number, bypass = false) {
+      if (bypass !== bypassed) {
+        boost.disconnect()
+        boost.connect(bypass ? volume : protection)
+        bypassed = bypass
+      }
       boost.gain.setTargetAtTime(gain, context.currentTime, 0.03)
       volume.gain.setTargetAtTime(level, context.currentTime, 0.03)
     },

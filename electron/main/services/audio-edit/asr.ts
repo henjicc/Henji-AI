@@ -28,7 +28,8 @@ import { getAiProviderApiKey } from '../keystore'
 import { createMainLogger } from '../logging'
 import { sdkRuntimeContext } from '../ai-runtime/sdk-runtime'
 import { requireAudioEditProject, saveAudioEditProject } from './project-store'
-import { createAudioEditTask, findActiveAudioEditTask, updateAudioEditTask } from './task-store'
+import { assertAudioEditProjectIdle, createAudioEditTask, findAudioEditTranscription, isAudioEditTaskActive, updateAudioEditTask, registerAudioEditTaskController } from './task-store'
+import { prepareAudioEditAudio, verifyAudioEditSource } from './media'
 
 const logger = createMainLogger('main.audio_edit.asr')
 const controllers = new Map<string, AbortController>()
@@ -125,31 +126,40 @@ export async function transcribeAudioEditProject(
   request: AudioEditTranscriptionRequest,
 ): Promise<AudioEditTranscriptionResult> {
   const project = requireAudioEditProject(request.projectId)
-  const modelId = await chooseModel(project.source.audioPath, request.modelId)
-  const inputDigest = crypto.createHash('sha256').update(JSON.stringify({
-    projectId: project.id,
-    audioPath: project.source.audioPath,
-    modelId,
-    language: request.language ?? 'zh',
-  })).digest('hex')
-  const active = findActiveAudioEditTask(project.id, 'transcription', inputDigest)
-  if (active) throw new Error(`TASK_ALREADY_RUNNING：该工程正在转写（${active.requestId}）。`)
-  const requestId = crypto.randomUUID()
+  if (project.transcript.length) throw new Error('工程已有转写，请保留当前编辑；需要重新识别时另建工程。')
+  await verifyAudioEditSource(project)
+  const previous = findAudioEditTranscription(project.id)
+  if (previous && isAudioEditTaskActive(previous.request_id)) throw new Error('该工程正在转写，请等待或取消。')
+  const priorInput = previous?.result_json ? JSON.parse(previous.result_json) as { modelId?: string; sourceDigest?: string; language?: string } : undefined
+  if (previous && (!previous.provider_task_id || !priorInput?.modelId)) throw new Error('上次转写的提交结果无法确认，已阻止重复付费。请核对供应商任务后另建工程识别。')
+  const modelId = priorInput?.modelId ?? await chooseModel(project.source.sourcePath, request.modelId)
+  if (previous && !client.get(modelId)?.descriptor.features?.includes('resume-task')) throw new Error('此模型不支持恢复查询，已阻止自动重复提交。')
+  const sourceDigest = project.source.identity?.digest ?? project.source.sourcePath
+  if (previous && priorInput?.sourceDigest !== sourceDigest) throw new Error('素材已变化，旧转写任务不能覆盖当前工程。')
+  const language = priorInput?.language ?? request.language ?? 'zh'
+  const inputDigest = crypto.createHash('sha256').update(JSON.stringify({ projectId: project.id, sourceDigest, modelId, language })).digest('hex')
+  const requestId = previous?.request_id ?? request.requestId ?? crypto.randomUUID()
+  assertAudioEditProjectIdle(project.id)
   const controller = new AbortController()
+  const release = registerAudioEditTaskController(requestId, project.id, controller)
   controllers.set(requestId, controller)
-  createAudioEditTask({ requestId, projectId: project.id, kind: 'transcription', inputDigest })
-  updateAudioEditTask(requestId, { state: 'running' })
+  try {
+    if (!previous) createAudioEditTask({ requestId, projectId: project.id, kind: 'transcription', inputDigest })
+    updateAudioEditTask(requestId, { state: 'running', result: { modelId, sourceDigest, language } })
+  } catch (error) { release(); controllers.delete(requestId); throw error }
   logger.info('口播转写开始', {
     event: 'audio_edit.transcription.start', requestId, modelId,
     context: { projectId: project.id },
   })
   try {
+    const audioPath = previous ? project.source.audioPath : await prepareAudioEditAudio(project, controller.signal)
+    controller.signal.throwIfAborted()
     const output = await client.execute<unknown, SpeechRecognitionOutput, SpeechRecognitionEvent>(modelId, {
-      audio: { kind: 'media-ref', ref: project.source.audioPath },
-      language: request.language ?? 'zh',
+      audio: { kind: 'media-ref', ref: audioPath },
+      language,
       punctuation: true,
       timestamps: true,
-      ...(modelId.startsWith('groq.') ? { options: { timestampGranularities: ['word', 'segment'] } } : {}),
+      options: previous ? { resumeTaskId: previous.provider_task_id } : modelId.startsWith('groq.') ? { timestampGranularities: ['word', 'segment'] } : {},
     }, {
       requestId,
       signal: controller.signal,
@@ -161,7 +171,10 @@ export async function transcribeAudioEditProject(
         }
       },
     })
-    const transcript = toBlocks(output, project.source.sampleRate)
+    controller.signal.throwIfAborted()
+    await verifyAudioEditSource(project)
+    const transcript = toBlocks(output, project.source.sampleRate).map((block) => ({ ...block, endFrame: Math.min(project.source.durationFrames, block.endFrame) })).filter((block) => block.endFrame > block.startFrame)
+    if (!transcript.length) throw new Error('识别结果没有可用时间戳，请选择支持时间戳的模型重试。')
     const granularity = transcript.some((block) => block.granularity === 'word')
       ? 'word'
       : transcript.length > 0
@@ -191,6 +204,7 @@ export async function transcribeAudioEditProject(
     throw error
   } finally {
     controllers.delete(requestId)
+    release()
   }
 }
 

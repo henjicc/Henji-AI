@@ -1,7 +1,8 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { Pause, Play } from 'lucide-react'
 import { UiButton, UiIconButton, UiRangeInput, UiSwitch, UI_TEXT_META_CLASS } from '@/components/ui'
-import { buildAudioEditTimeline, editedDurationFrames } from '@/core/audioEdit/timeline'
+import { buildProjectAudioEditTimeline, editedDurationFrames } from '@/core/audioEdit/timeline'
+import { compileAudioEditXmlTimeline } from '@/core/audioEdit/xml'
 import type { AudioEditProjectDocument } from '@/core/audioEdit/types'
 import { useAudioEditPlaybackStore } from './store/audioEditPlaybackStore'
 import { clampViewport, sampleWaveform, waveformReference, zoomViewport } from './waveformViewport'
@@ -26,6 +27,8 @@ export const AudioEditTimeline = memo(function AudioEditTimeline({ project, peak
   const error = useAudioEditPlaybackStore((state) => state.error)
   const autoGain = useAudioEditPlaybackStore((state) => state.autoGain)
   const volume = useAudioEditPlaybackStore((state) => state.volume)
+  const mode = useAudioEditPlaybackStore((state) => state.mode)
+  const setMode = useAudioEditPlaybackStore((state) => state.setMode)
   const setAutoGain = useAudioEditPlaybackStore((state) => state.setAutoGain)
   const setVolume = useAudioEditPlaybackStore((state) => state.setVolume)
   const [view, setView] = useState({ start: 0, end: duration })
@@ -33,7 +36,12 @@ export const AudioEditTimeline = memo(function AudioEditTimeline({ project, peak
   const container = useRef<HTMLDivElement>(null)
   const drag = useRef<{ pointer: number; x: number; start: number; length: number } | null>(null)
   const followAfter = useRef(0)
-  const spans = useMemo(() => buildAudioEditTimeline(duration, project.transcript), [duration, project.transcript])
+  const spans = useMemo(() => buildProjectAudioEditTimeline(project), [project])
+  const delivery = useMemo(() => {
+    try { return { timeline: compileAudioEditXmlTimeline(project), error: '' } }
+    catch (error) { return { timeline: null, error: error instanceof Error ? error.message : '无法交付 XML' } }
+  }, [project])
+  const playDuration = mode === 'source' ? duration : mode === 'delivery' ? editedDurationFrames(delivery.timeline?.spans ?? []) : editedDurationFrames(spans)
   const removed = useMemo(() => {
     const ranges: Array<{ start: number; end: number }> = []
     let cursor = 0
@@ -80,13 +88,14 @@ export const AudioEditTimeline = memo(function AudioEditTimeline({ project, peak
   return (
     <div className="shrink-0 border-t border-border-dark p-3">
       <div className="mb-2 flex flex-wrap items-center gap-3">
-        <UiIconButton className="h-9 w-9" disabled={!ready || editedDurationFrames(spans) === 0} onClick={() => void onToggle()} title={playing ? '暂停' : '播放'}>{playing ? <Pause size={16} /> : <Play size={16} />}</UiIconButton>
-        <span className="text-sm tabular-nums text-text-dark" data-audio-edit-time>成片 {time(outputFrame, rate)} / {time(editedDurationFrames(spans), rate)}</span>
+        <UiIconButton className="h-9 w-9" disabled={!ready || playDuration === 0} onClick={() => void onToggle()} title={playing ? '暂停' : '播放'}>{playing ? <Pause size={16} /> : <Play size={16} />}</UiIconButton>
+        <span className="text-sm tabular-nums text-text-dark" data-audio-edit-time>{time(outputFrame, rate)} / {time(playDuration, rate)}</span>
+        {(['source', 'edited', 'delivery'] as const).map((value) => <UiButton key={value} variant={mode === value ? 'muted' : 'ghost'} size="sm" disabled={value === 'delivery' && !delivery.timeline} title={value === 'delivery' ? delivery.error || '按 XML 帧网格试听原声，关闭声音处理和自动增益' : undefined} onClick={() => setMode(value)}>{value === 'source' ? '原始' : value === 'edited' ? '剪后' : 'XML 交付'}</UiButton>)}
         <span className={UI_TEXT_META_CLASS}>素材 {time(sourceFrame, rate)}</span>
         {preparing && <span className={UI_TEXT_META_CLASS}>正在准备预览…</span>}
         {error && <span className="text-sm text-red-400">{error}</span>}
         <label className={`ml-auto flex shrink-0 items-center gap-2 whitespace-nowrap ${UI_TEXT_META_CLASS}`} title="自动放大小声录音，仅影响试听，不改变导出音量">
-          <UiSwitch checked={autoGain} onCheckedChange={setAutoGain} aria-label="试听自动增益" />自动增益
+          <UiSwitch checked={mode !== 'delivery' && autoGain} disabled={mode === 'delivery'} onCheckedChange={setAutoGain} aria-label="试听自动增益" />自动增益
         </label>
         <label className={`flex shrink-0 items-center gap-2 whitespace-nowrap ${UI_TEXT_META_CLASS}`}>
           试听音量

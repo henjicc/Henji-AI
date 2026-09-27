@@ -1,3 +1,4 @@
+import { flushAllAudioEditProjects } from '@/features/audioEdit/application/audioEditProjectInstances'
 import { runApplicationCloseGuards } from '@/core/applicationLifecycle/applicationCloseGuards'
 import { freezeApplicationWrites } from '@/core/applicationLifecycle/applicationWriteBarrier'
 import { hasActiveCanvasProjectWork, listCanvasProjectInstances } from '@/features/canvas/application/canvasProjectInstances'
@@ -48,6 +49,7 @@ export function closeApplication(confirmClose: () => Promise<void>): Promise<voi
       }
       for (const instance of listCanvasProjectInstances()) await flushCanvasProjectSnapshot(instance.id)
       for (const instance of listCameraStageProjectInstances()) await saveCameraStageProjectRuntime(instance.id)
+      await flushAllAudioEditProjects()
       await confirmClose()
     } finally { unfreeze() }
   })()

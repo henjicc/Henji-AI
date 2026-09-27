@@ -1,7 +1,10 @@
 import type {
+  AudioEditCut,
+  AudioEditProjectDocument,
   AudioEditTimelineSpan,
   AudioEditTranscriptBlock,
 } from './types'
+import { subtractRanges } from './edits'
 
 function clampFrame(frame: number, durationFrames: number): number {
   if (!Number.isFinite(frame)) return 0
@@ -15,12 +18,13 @@ function clampFrame(frame: number, durationFrames: number): number {
 export function buildAudioEditTimeline(
   durationFrames: number,
   blocks: readonly AudioEditTranscriptBlock[],
+  cuts: readonly AudioEditCut[] = [],
 ): AudioEditTimelineSpan[] {
   const duration = Math.max(0, Math.round(durationFrames))
   if (duration === 0) return []
 
-  const removed = blocks
-    .filter((block) => !block.included)
+  const candidates = [...blocks.filter((block) => !block.included && !block.locked), ...cuts.filter((cut) => cut.enabled)]
+  const removed = subtractRanges(candidates, blocks.filter((block) => block.locked))
     .map((block) => ({
       start: clampFrame(Math.min(block.startFrame, block.endFrame), duration),
       end: clampFrame(Math.max(block.startFrame, block.endFrame), duration),
@@ -66,6 +70,10 @@ export function buildAudioEditTimeline(
   return spans
 }
 
+export function buildProjectAudioEditTimeline(project: AudioEditProjectDocument): AudioEditTimelineSpan[] {
+  return buildAudioEditTimeline(project.source.durationFrames, project.transcript, project.cuts)
+}
+
 export function editedDurationFrames(spans: readonly AudioEditTimelineSpan[]): number {
   return spans.at(-1)?.outputEndFrame ?? 0
 }
@@ -89,7 +97,7 @@ export function sourceFrameToOutputFrame(
   sourceFrame: number,
   spans: readonly AudioEditTimelineSpan[],
 ): number | null {
-  const target = Math.max(0, Math.round(sourceFrame))
+  const target = Math.round(sourceFrame)
   const span = spans.find((candidate) => target >= candidate.sourceStartFrame && target < candidate.sourceEndFrame)
     ?? (target === spans.at(-1)?.sourceEndFrame ? spans.at(-1) : undefined)
   if (!span) return null

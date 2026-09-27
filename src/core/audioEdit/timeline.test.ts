@@ -46,14 +46,13 @@ describe('audio edit timeline', () => {
     expect(findTranscriptBlockForPlayback(150, blocks, false, 20)).toBeNull()
   })
 
-  it('detects fillers and long gaps without applying them', () => {
+  it('suggests fillers but does not mistake timestamp gaps for silence', () => {
     const suggestions = analyzeAudioEditTranscript([
       block('a', 0, 100, true, '嗯'),
       block('b', 1_000, 1_100, true, '那个'),
     ], { sampleRate: 1_000 })
     expect(suggestions.map((item) => [item.kind, item.confidence, item.status])).toEqual([
       ['filler', 'high', 'pending'],
-      ['long_silence', 'high', 'pending'],
       ['filler', 'low', 'pending'],
     ])
   })
@@ -62,8 +61,8 @@ describe('audio edit timeline', () => {
     const blocks = [block('保留', 0, 1_000), block('删除', 1_000, 2_000, false), block('继续', 2_000, 3_000)]
     const spans = buildAudioEditTimeline(3_000, blocks)
     const srt = buildAudioEditSrt(blocks, spans, 1_000)
-    expect(srt).toContain('00:00:00,000 --> 00:00:01,000')
-    expect(srt).toContain('00:00:01,000 --> 00:00:02,000')
+    expect(srt).toContain('00:00:00,000 --> 00:00:02,000')
+    expect(srt).toContain('保留继续')
     expect(srt).not.toContain('删除')
   })
 })

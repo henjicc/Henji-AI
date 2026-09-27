@@ -1,4 +1,25 @@
-export type AudioEditPreviewMode = 'edited' | 'source'
+export type AudioEditPreviewMode = 'edited' | 'source' | 'delivery'
+
+export interface AudioEditRange { startFrame: number; endFrame: number }
+export interface AudioEditCut extends AudioEditRange { id: string; reason: 'silence' | 'manual'; enabled: boolean }
+export interface AudioEditFrameRate { numerator: number; denominator: number }
+export interface AudioEditSourceIdentity { size: number; mtimeMs: number; digest: string }
+export interface AudioEditProcessorSetting { id: string; enabled: boolean; parameters: Record<string, number> }
+export interface AudioEditBatchSettings {
+  silenceThresholdMs: number
+  retainedSilenceMs: number
+  noiseDb: number
+  trimEdges: boolean
+  fillers: string[]
+}
+export interface AudioEditVideoMetadata {
+  frameRate: AudioEditFrameRate
+  width: number
+  height: number
+  startSeconds: number
+  durationSeconds: number
+  variableFrameRate: boolean
+}
 
 export interface AudioEditTranscriptBlock {
   id: string
@@ -20,6 +41,7 @@ export interface AudioEditTimelineSpan {
 
 export interface AudioEditSuggestion {
   id: string
+  evidence?: 'audio'
   kind: 'long_silence' | 'filler' | 'retake'
   title: string
   detail: string
@@ -37,6 +59,11 @@ export interface AudioEditSourceMetadata {
   durationFrames: number
   sampleRate: number
   channels: number
+  ownership?: 'external' | 'managed'
+  identity?: AudioEditSourceIdentity
+  audioStreamIndex?: number
+  audioStartSeconds?: number
+  video?: AudioEditVideoMetadata
 }
 
 export interface AudioEditProjectDocument {
@@ -51,6 +78,10 @@ export interface AudioEditProjectDocument {
   createdAt: number
   updatedAt: number
   revision: number
+  cuts?: AudioEditCut[]
+  batchSettings?: AudioEditBatchSettings
+  processorChain?: AudioEditProcessorSetting[]
+  xmlFrameRate?: AudioEditFrameRate
 }
 
 export interface AudioEditProjectSummary {
@@ -72,6 +103,7 @@ export interface AudioEditTranscriptionRequest {
   projectId: string
   modelId?: string
   language?: string
+  requestId?: string
 }
 
 export interface AudioEditTranscriptionResult {
@@ -82,12 +114,18 @@ export interface AudioEditTranscriptionResult {
 
 export interface AudioEditExportRequest {
   projectId: string
-  audioTargetPath: string
+  audioTargetPath?: string
+  targetPath?: string
+  format?: 'xml' | 'wav'
+  includeProcessing?: boolean
+  frameRate?: AudioEditFrameRate
   subtitleTargetPath?: string
+  requestId?: string
 }
 
 export interface AudioEditExportResult {
   audioPath: string
+  xmlPath?: string
   subtitlePath?: string
   durationFrames: number
 }
@@ -113,6 +151,23 @@ export interface AudioEditPreviewChunkRequest {
   projectId: string
   sourceStartFrame: number
   frameCount: number
+  processing?: boolean
+}
+
+export interface AudioEditSilenceRequest {
+  projectId: string
+  settings: AudioEditBatchSettings
+  range?: AudioEditRange
+  requestId?: string
+}
+
+export interface AudioEditTask {
+  requestId: string
+  projectId: string
+  kind: string
+  state: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
+  progress?: number
+  errorMessage?: string
 }
 
 export interface AudioEditPreviewChunk {

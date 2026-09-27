@@ -1,79 +1,98 @@
-import { execFile } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import fs from 'node:fs/promises'
 import path from 'node:path'
-
-import { buildAudioEditTimeline, editedDurationFrames } from '../../../../src/core/audioEdit/timeline'
+import { pathToFileURL } from 'node:url'
+import { buildProjectAudioEditTimeline, editedDurationFrames } from '../../../../src/core/audioEdit/timeline'
 import { buildAudioEditSrt } from '../../../../src/core/audioEdit/subtitles'
+import { buildAudioEditXml, compileAudioEditXmlTimeline } from '../../../../src/core/audioEdit/xml'
 import type { AudioEditExportRequest, AudioEditExportResult } from '../../../../src/core/audioEdit/types'
 import { loadFfmpegPath } from '../video/ffmpeg-loader'
-import { createMainLogger } from '../logging'
 import { requireAudioEditProject } from './project-store'
-import { processAudioEditVstChain } from './processors'
+import { prepareAudioEditProcessedAudio } from './processors'
+import { verifyAudioEditSource, validateAudioEditAudio } from './media'
+import { runAudioEditProcess } from './process'
+import { runAudioEditTask } from './task-store'
 
-const logger = createMainLogger('main.audio_edit.export')
-
-function run(binary: string, args: string[]): Promise<void> {
-  return new Promise((resolve, reject) => {
-    execFile(binary, args, { maxBuffer: 8 * 1024 * 1024 }, (error, _stdout, stderr) => {
-      if (error) reject(new Error(`${path.basename(binary)} failed: ${error.message}\n${stderr}`))
-      else resolve()
-    })
-  })
+interface StagedOutput { temporary: string; target: string; backup?: string; published?: boolean }
+async function publishOutputs(outputs: StagedOutput[]): Promise<void> {
+  try {
+    for (const output of outputs) {
+      if (await fs.stat(output.target).then(() => true, () => false)) {
+        output.backup = `${output.target}.${randomUUID()}.backup`
+        await fs.rename(output.target, output.backup)
+      }
+      await fs.rename(output.temporary, output.target)
+      output.published = true
+    }
+  } catch (error) {
+    for (const output of [...outputs].reverse()) {
+      if (output.published) await fs.rm(output.target, { force: true })
+      if (output.backup) await fs.rename(output.backup, output.target)
+    }
+    throw error
+  }
+  await Promise.all(outputs.map((output) => output.backup ? fs.rm(output.backup, { force: true }) : Promise.resolve()))
 }
 
 export async function exportAudioEditProject(request: AudioEditExportRequest): Promise<AudioEditExportResult> {
   const project = requireAudioEditProject(request.projectId)
-  const spans = buildAudioEditTimeline(project.source.durationFrames, project.transcript)
-  if (spans.length === 0) throw new Error('EXPORT_EMPTY：当前编辑计划没有可导出的声音。')
-  const ffmpeg = await loadFfmpegPath()
-  const exportRunId = randomUUID()
-  const filterPath = path.join(path.dirname(project.source.audioPath), `export-filter-${exportRunId}.txt`)
-  const rawOutputPath = project.vstEnabled
-    ? path.join(path.dirname(project.source.audioPath), `export-vst-input-${exportRunId}.wav`)
-    : request.audioTargetPath
-  const temporaryPaths = project.vstEnabled ? [filterPath, rawOutputPath] : [filterPath]
-  const chains = spans.map((span, index) => {
-    const duration = (span.sourceEndFrame - span.sourceStartFrame) / project.source.sampleRate
-    const fade = Math.min(0.01, duration / 4)
-    return `[0:a]atrim=start_sample=${span.sourceStartFrame}:end_sample=${span.sourceEndFrame},asetpts=PTS-STARTPTS,afade=t=in:st=0:d=${fade},afade=t=out:st=${Math.max(0, duration - fade)}:d=${fade}[a${index}]`
-  })
-  chains.push(`${spans.map((_span, index) => `[a${index}]`).join('')}concat=n=${spans.length}:v=0:a=1[out]`)
-  await fs.writeFile(filterPath, chains.join(';\n'), 'utf8')
-  logger.info('口播成片导出开始', {
-    event: 'audio_edit.export.start', context: { projectId: project.id, spanCount: spans.length },
-  })
-  try {
-    await fs.mkdir(path.dirname(request.audioTargetPath), { recursive: true })
-    await run(ffmpeg, [
-      '-y', '-i', project.source.audioPath,
-      '-filter_complex_script', filterPath,
-      '-map', '[out]', rawOutputPath,
-    ])
-    if (project.vstEnabled) {
-      const processed = await processAudioEditVstChain(rawOutputPath, path.dirname(project.source.audioPath))
-      temporaryPaths.push(...processed.temporaryPaths)
-      await fs.copyFile(processed.outputPath, request.audioTargetPath)
-    }
-    if (request.subtitleTargetPath) {
-      const srt = buildAudioEditSrt(project.transcript, spans, project.source.sampleRate)
-      await fs.writeFile(request.subtitleTargetPath, srt, 'utf8')
-    }
-    logger.info('口播成片导出完成', {
-      event: 'audio_edit.export.completed',
-      context: { projectId: project.id, outputDurationFrames: editedDurationFrames(spans) },
-    })
-    return {
-      audioPath: request.audioTargetPath,
-      ...(request.subtitleTargetPath ? { subtitlePath: request.subtitleTargetPath } : {}),
-      durationFrames: editedDurationFrames(spans),
-    }
-  } catch (error) {
-    logger.error('口播成片导出失败', {
-      event: 'audio_edit.export.failed', context: { projectId: project.id }, error,
-    })
-    throw error
-  } finally {
-    await Promise.all(temporaryPaths.map((temporaryPath) => fs.rm(temporaryPath, { force: true }).catch(() => undefined)))
+  await verifyAudioEditSource(project)
+  const format = request.format ?? 'wav'
+  const target = path.resolve(request.targetPath ?? request.audioTargetPath ?? '')
+  if (!request.targetPath && !request.audioTargetPath) throw new Error('请选择导出位置。')
+  const subtitleTarget = request.subtitleTargetPath ? path.resolve(request.subtitleTargetPath) : undefined
+  const forbidden = new Set([project.source.sourcePath, project.source.audioPath].map((file) => path.resolve(file).toLowerCase()))
+  for (const file of [target, subtitleTarget].filter((file): file is string => Boolean(file))) {
+    if (forbidden.has(file.toLowerCase())) throw new Error('导出不能覆盖原素材。')
+    const existing = await fs.stat(file).catch(() => null)
+    const source = await fs.stat(project.source.sourcePath)
+    if (existing && existing.dev === source.dev && existing.ino === source.ino) throw new Error('导出不能覆盖原素材的链接。')
   }
+  if (subtitleTarget?.toLowerCase() === target.toLowerCase()) throw new Error('字幕和媒体必须使用不同文件名。')
+  const timeline = format === 'xml' ? compileAudioEditXmlTimeline(project, request.frameRate) : undefined
+  const spans = timeline?.spans ?? buildProjectAudioEditTimeline(project)
+  if (!spans.length) throw new Error('当前没有可导出的声音。')
+  return runAudioEditTask(project.id, 'export', async (signal, progress) => {
+    const outputs: StagedOutput[] = []
+    const temporaryPaths: string[] = []
+    const stage = async (file: string): Promise<string> => {
+      await fs.mkdir(path.dirname(file), { recursive: true })
+      const temporary = path.join(path.dirname(file), `.${randomUUID()}${path.extname(file)}`)
+      outputs.push({ target: file, temporary })
+      temporaryPaths.push(temporary)
+      return temporary
+    }
+    try {
+      const processing = request.includeProcessing ?? (format === 'wav' && project.vstEnabled)
+      let processedPath: string | undefined
+      if (processing) processedPath = await prepareAudioEditProcessedAudio(project, signal, (value) => progress(value * 0.8))
+      let exportedAudioPath = ''
+      if (format === 'xml' && processedPath) {
+        exportedAudioPath = path.join(path.dirname(target), `${path.basename(target, path.extname(target))}-RX-${randomUUID().slice(0, 8)}.wav`)
+        await fs.copyFile(processedPath, await stage(exportedAudioPath))
+      }
+      if (subtitleTarget) await fs.writeFile(await stage(subtitleTarget), buildAudioEditSrt(project.transcript, spans, project.source.sampleRate), 'utf8')
+      // The XML is published last, after every referenced derivative is durable.
+      const temporary = await stage(target)
+      if (format === 'xml' && timeline) {
+        await fs.writeFile(temporary, buildAudioEditXml(project, timeline, pathToFileURL(project.source.sourcePath).href, exportedAudioPath ? pathToFileURL(exportedAudioPath).href : undefined), 'utf8')
+      } else {
+        const filter = `${temporary}.filter`
+        temporaryPaths.push(filter)
+        const inputStream = processedPath || project.source.ownership !== 'external' ? '0:a:0' : `0:${project.source.audioStreamIndex ?? 0}`
+        const chains = spans.map((span, index) => `[${inputStream}]atrim=start_sample=${span.sourceStartFrame}:end_sample=${span.sourceEndFrame},asetpts=PTS-STARTPTS[a${index}]`)
+        chains.push(`${spans.map((_span, index) => `[a${index}]`).join('')}concat=n=${spans.length}:v=0:a=1[out]`)
+        await fs.writeFile(filter, chains.join(';\n'), 'utf8')
+        await runAudioEditProcess(await loadFfmpegPath(), ['-v', 'error', '-y', '-i', processedPath ?? project.source.audioPath, '-filter_complex_script', filter, '-map', '[out]', '-c:a', 'pcm_s24le', temporary], signal)
+        await validateAudioEditAudio(temporary, project.source.sampleRate, project.source.channels, editedDurationFrames(spans), signal)
+        exportedAudioPath = target
+      }
+      signal.throwIfAborted()
+      await verifyAudioEditSource(project)
+      for (const output of outputs) if (!(await fs.stat(output.temporary)).size && output.target !== subtitleTarget) throw new Error('生成的交付文件为空，未提交导出。')
+      await publishOutputs(outputs)
+      progress(1)
+      return { audioPath: exportedAudioPath, ...(timeline ? { xmlPath: target } : {}), ...(subtitleTarget ? { subtitlePath: subtitleTarget } : {}), durationFrames: editedDurationFrames(spans) }
+    } finally { await Promise.all(temporaryPaths.map((file) => fs.rm(file, { force: true }))) }
+  }, request.requestId, JSON.stringify([project.revision, project.source.identity, request]))
 }

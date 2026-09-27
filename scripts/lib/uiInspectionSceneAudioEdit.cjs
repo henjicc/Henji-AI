@@ -29,9 +29,10 @@ function createAudioEditScene({ setupToolbox, clickNamedButton }) {
           ].map(([id, text, start, end, included]) => ({ id, text, startFrame: start * rate, endFrame: end * rate, included, locked: false, granularity: 'segment' }))
           return audio.saveEditProject(project)
         }, { sourcePath: file, rate })
-      } finally {
+      } catch (error) {
         fs.unlinkSync(file)
         fs.rmdirSync(directory)
+        throw error
       }
       await setupToolbox(page)
       await clickNamedButton(page, /^(口播剪辑)/)
@@ -117,7 +118,63 @@ function createAudioEditScene({ setupToolbox, clickNamedButton }) {
       await seek(5)
       await page.getByText('正在准备预览…', { exact: true }).waitFor({ state: 'hidden' })
       await page.waitForTimeout(250)
+      await verifyDelivery(page)
     },
   }
 }
 module.exports = { createAudioEditScene }
+
+async function verifyDelivery(page) {
+  const directory = path.resolve('.ui-tour', 'audio-edit-fixtures')
+  fs.mkdirSync(directory, { recursive: true })
+  const cases = [
+    { name: '音频 44.1k 单声道 10分钟', rate: 44100, channels: 1, seconds: 600 },
+    { name: '音频 48k 双声道 60分钟', rate: 48000, channels: 2, seconds: 3600 },
+    ...['25', '30', '30000/1001'].map((fps) => ({ name: `视频 ${fps.replace('/', '-')}`, rate: 48000, channels: 2, seconds: 8, fps })),
+  ]
+  for (const item of cases) {
+    const sourcePath = path.join(directory, `${item.name} & 原素材.${item.fps ? 'mov' : 'flac'}`)
+    await (async () => {
+      const { spawn } = require('node:child_process')
+      const { ffmpegPath } = require('ffmpeg-ffprobe-static')
+      const args = ['-v', 'error', '-y']
+      if (item.fps) args.push('-f', 'lavfi', '-i', `color=c=blue:s=320x180:r=${item.fps}:d=${item.seconds}`)
+      args.push('-f', 'lavfi', '-i', `sine=frequency=440:sample_rate=${item.rate}:duration=${item.seconds}`, '-af', "volume='if(lt(mod(t,4),2),0.5,0)':eval=frame", '-ac', String(item.channels))
+      if (item.fps) args.push('-c:v', 'mpeg4', '-q:v', '5', '-c:a', 'pcm_s16le')
+      else args.push('-c:a', 'flac')
+      args.push(sourcePath)
+      await new Promise((resolve, reject) => {
+        const child = spawn(ffmpegPath, args, { windowsHide: true, stdio: ['ignore', 'ignore', 'pipe'] })
+        let error = ''; child.stderr.on('data', (chunk) => { error = (error + chunk).slice(-4000) })
+        child.once('error', reject); child.once('close', (code) => code ? reject(new Error(error)) : resolve())
+      })
+    })()
+    const targetPath = path.join(directory, `${item.name}.xml`)
+    const result = await page.evaluate(async ({ sourcePath, targetPath }) => {
+      const api = window.henjiNative.audio
+      const document = await api.createEditProject({ sourcePath })
+      const detected = await api.detectEditSilence({ projectId: document.id, settings: { silenceThresholdMs: 800, retainedSilenceMs: 350, noiseDb: -40, trimEdges: false, fillers: ['嗯'] } })
+      if (!detected.suggestions.length) throw new Error('真实音频未检测到停顿')
+      document.cuts = detected.suggestions.map((range) => ({ id: range.id, reason: 'silence', enabled: true, startFrame: range.startFrame + Math.floor(document.source.sampleRate * 0.175), endFrame: range.endFrame - Math.ceil(document.source.sampleRate * 0.175) }))
+      const saved = await api.saveEditProject(document)
+      const exported = await api.exportEditProject({ projectId: saved.id, targetPath, format: 'xml', includeProcessing: false })
+      await api.deleteEditProject(saved.id)
+      return { source: document.source, exported, count: detected.suggestions.length }
+    }, { sourcePath, targetPath })
+    assert.equal(result.source.sourcePath, sourcePath)
+    assert.equal(result.source.audioPath, sourcePath)
+    assert.equal(result.source.durationFrames, item.rate * item.seconds)
+    assert.ok(result.exported.durationFrames < result.source.durationFrames)
+    assert.ok(fs.existsSync(sourcePath), '删除工程后原素材仍在')
+    const xml = fs.readFileSync(targetPath, 'utf8')
+    const parsed = await page.evaluate((xml) => {
+      const doc = new DOMParser().parseFromString(xml, 'application/xml')
+      return { valid: !doc.querySelector('parsererror'), clips: doc.querySelectorAll('clipitem').length, tracks: doc.querySelectorAll('sequence > media > audio > track').length, pathurl: doc.querySelector('file pathurl')?.textContent }
+    }, xml)
+    assert.ok(parsed.valid)
+    assert.equal(parsed.tracks, item.channels)
+    assert.ok(parsed.clips > 1)
+    assert.equal(parsed.pathurl, require('node:url').pathToFileURL(sourcePath).href)
+    console.log(`口播交付样例：${item.name}；停顿 ${result.count}；XML ${targetPath}`)
+  }
+}

@@ -27,8 +27,13 @@ it('routes boost through peak protection and independent monitor volume, with sm
   output.setLevels(1, 0)
   expect(boost.gain.setTargetAtTime).toHaveBeenLastCalledWith(1, 10, 0.03)
   expect(volume.gain.setTargetAtTime).toHaveBeenLastCalledWith(0, 10, 0.03)
+  output.setLevels(1, 0.8, true)
+  expect(boost.connect).toHaveBeenLastCalledWith(volume)
+  output.setLevels(8, 0.8, false)
+  expect(boost.connect).toHaveBeenLastCalledWith(protection)
   output.dispose()
-  for (const node of [boost, volume, protection]) expect(node.disconnect).toHaveBeenCalledOnce()
+  expect(boost.disconnect).toHaveBeenCalledTimes(3)
+  for (const node of [volume, protection]) expect(node.disconnect).toHaveBeenCalledOnce()
 })
 
 it('clamps monitor volume to a finite valid range', () => {

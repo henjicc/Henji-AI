@@ -1,121 +1,51 @@
 import { create } from 'zustand'
-
 import type { AudioEditProjectDocument } from '@/core/audioEdit/types'
-
-interface EditableSnapshot {
-  transcript: AudioEditProjectDocument['transcript']
-  suggestions: AudioEditProjectDocument['suggestions']
-  referenceScript: string
-  vstEnabled: boolean
-}
+import { applyAudioEditSuggestion, setAudioEditBlocks } from '@/core/audioEdit/edits'
+import { attachAudioEditProject, editAudioEditProject, subscribeAudioEditInstances, undoAudioEditProject } from '../application/audioEditProjectInstances'
 
 interface AudioEditState {
   project: AudioEditProjectDocument | null
-  past: EditableSnapshot[]
-  future: EditableSnapshot[]
+  past: AudioEditProjectDocument[]
+  future: AudioEditProjectDocument[]
   selectedBlockIds: string[]
+  saveError: string | null
+  busy: boolean
   setProject: (project: AudioEditProjectDocument | null) => void
-  acceptSavedRevision: (projectId: string, revision: number) => void
   toggleBlock: (blockId: string) => void
   setBlocksIncluded: (blockIds: string[], included: boolean) => void
   setReferenceScript: (referenceScript: string) => void
   setVstEnabled: (vstEnabled: boolean) => void
   applySuggestion: (suggestionId: string) => void
   dismissSuggestion: (suggestionId: string) => void
-  setSelectedBlockIds: (blockIds: string[]) => void
+  setSelectedBlockIds: (ids: string[]) => void
   undo: () => void
   redo: () => void
 }
 
-function snapshot(project: AudioEditProjectDocument): EditableSnapshot {
-  return {
-    transcript: project.transcript,
-    suggestions: project.suggestions,
-    referenceScript: project.referenceScript,
-    vstEnabled: project.vstEnabled,
-  }
-}
-
-function restore(project: AudioEditProjectDocument, value: EditableSnapshot): AudioEditProjectDocument {
-  return { ...project, ...value }
-}
-
-export const useAudioEditStore = create<AudioEditState>((set) => {
+export const useAudioEditStore = create<AudioEditState>((set, get) => {
   const mutate = (update: (project: AudioEditProjectDocument) => AudioEditProjectDocument): void => {
-    set((state) => {
-      if (!state.project) return state
-      return {
-        project: update(state.project),
-        past: [...state.past.slice(-49), snapshot(state.project)],
-        future: [],
-      }
-    })
+    const project = get().project
+    if (project) editAudioEditProject(project.id, update)
   }
-
   return {
-    project: null,
-    past: [],
-    future: [],
-    selectedBlockIds: [],
-    setProject: (project) => set({ project, past: [], future: [], selectedBlockIds: [] }),
-    acceptSavedRevision: (projectId, revision) => set((state) => state.project?.id === projectId
-      ? { project: { ...state.project, revision } }
-      : state),
-    toggleBlock: (blockId) => mutate((project) => ({
-      ...project,
-      transcript: project.transcript.map((block) => block.id === blockId && !block.locked
-        ? { ...block, included: !block.included }
-        : block),
-    })),
-    setBlocksIncluded: (blockIds, included) => {
-      const selected = new Set(blockIds)
-      mutate((project) => ({
-        ...project,
-        transcript: project.transcript.map((block) => selected.has(block.id) && !block.locked
-          ? { ...block, included }
-          : block),
-      }))
+    project: null, past: [], future: [], selectedBlockIds: [], saveError: null, busy: false,
+    setProject: (project) => {
+      const instance = project ? attachAudioEditProject(project) : null
+      set({ project: instance?.document ?? null, past: instance?.past ?? [], future: instance?.future ?? [], selectedBlockIds: [], saveError: instance?.error ?? null, busy: Boolean(instance?.busy) })
     },
+    toggleBlock: (id) => mutate((project) => setAudioEditBlocks(project, [id], !project.transcript.find((block) => block.id === id)?.included)),
+    setBlocksIncluded: (ids, included) => mutate((project) => setAudioEditBlocks(project, ids, included)),
     setReferenceScript: (referenceScript) => mutate((project) => ({ ...project, referenceScript })),
     setVstEnabled: (vstEnabled) => mutate((project) => ({ ...project, vstEnabled })),
-    applySuggestion: (suggestionId) => mutate((project) => {
-      const target = project.suggestions.find((suggestion) => suggestion.id === suggestionId)
-      if (!target) return project
-      const blockIds = new Set(target.blockIds)
-      return {
-        ...project,
-        transcript: project.transcript.map((block) => blockIds.has(block.id) && !block.locked
-          ? { ...block, included: false }
-          : block),
-        suggestions: project.suggestions.map((suggestion) => suggestion.id === suggestionId
-          ? { ...suggestion, status: 'applied' }
-          : suggestion),
-      }
-    }),
-    dismissSuggestion: (suggestionId) => mutate((project) => ({
-      ...project,
-      suggestions: project.suggestions.map((suggestion) => suggestion.id === suggestionId
-        ? { ...suggestion, status: 'dismissed' }
-        : suggestion),
-    })),
+    applySuggestion: (id) => mutate((project) => applyAudioEditSuggestion(project, id)),
+    dismissSuggestion: (id) => mutate((project) => ({ ...project, suggestions: project.suggestions.map((suggestion) => suggestion.id === id ? { ...suggestion, status: 'dismissed' } : suggestion) })),
     setSelectedBlockIds: (selectedBlockIds) => set({ selectedBlockIds }),
-    undo: () => set((state) => {
-      if (!state.project || state.past.length === 0) return state
-      const previous = state.past.at(-1)!
-      return {
-        project: restore(state.project, previous),
-        past: state.past.slice(0, -1),
-        future: [snapshot(state.project), ...state.future.slice(0, 49)],
-      }
-    }),
-    redo: () => set((state) => {
-      if (!state.project || state.future.length === 0) return state
-      const next = state.future[0]
-      return {
-        project: restore(state.project, next),
-        past: [...state.past.slice(-49), snapshot(state.project)],
-        future: state.future.slice(1),
-      }
-    }),
+    undo: () => { const project = get().project; if (project) undoAudioEditProject(project.id) },
+    redo: () => { const project = get().project; if (project) undoAudioEditProject(project.id, true) },
   }
+})
+
+subscribeAudioEditInstances((instance) => {
+  if (useAudioEditStore.getState().project?.id !== instance.document.id) return
+  useAudioEditStore.setState({ project: instance.document, past: instance.past, future: instance.future, saveError: instance.error, busy: Boolean(instance.busy) })
 })

@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 
-import { buildAudioEditTimeline, editedDurationFrames, findTranscriptBlockForPlayback, nextRetainedSourceFrame, sourceFrameToOutputFrame } from '@/core/audioEdit/timeline'
-import type { AudioEditProjectDocument, AudioEditTimelineSpan } from '@/core/audioEdit/types'
+import { buildProjectAudioEditTimeline, editedDurationFrames, findTranscriptBlockForPlayback, nextRetainedSourceFrame, sourceFrameToOutputFrame } from '@/core/audioEdit/timeline'
+import { compileAudioEditXmlTimeline } from '@/core/audioEdit/xml'
+import type { AudioEditPreviewMode, AudioEditProjectDocument, AudioEditTimelineSpan } from '@/core/audioEdit/types'
 import { getPlatform } from '@/platform/runtime'
 import { createLogger } from '@/core/logging'
 import { useAudioEditPlaybackStore } from '../store/audioEditPlaybackStore'
@@ -18,10 +19,13 @@ interface WorkletMessage {
   consumedFrames?: number
 }
 
-function playbackSpans(project: AudioEditProjectDocument, mode: 'edited' | 'source'): AudioEditTimelineSpan[] {
+function playbackSpans(project: AudioEditProjectDocument, mode: AudioEditPreviewMode): AudioEditTimelineSpan[] {
+  if (mode === 'delivery') {
+    try { return compileAudioEditXmlTimeline(project).spans } catch { return [] }
+  }
   return mode === 'source'
     ? [{ sourceStartFrame: 0, sourceEndFrame: project.source.durationFrames, outputStartFrame: 0, outputEndFrame: project.source.durationFrames }]
-    : buildAudioEditTimeline(project.source.durationFrames, project.transcript)
+    : buildProjectAudioEditTimeline(project)
 }
 
 export function useAudioEditPreview(project: AudioEditProjectDocument | null, normalizationGain = 1) {
@@ -29,10 +33,11 @@ export function useAudioEditPreview(project: AudioEditProjectDocument | null, no
   const nodeRef = useRef<AudioWorkletNode | null>(null)
   const outputRef = useRef<ReturnType<typeof createPreviewOutput> | null>(null)
   const autoGain = useAudioEditPlaybackStore((state) => state.autoGain)
+  const mode = useAudioEditPlaybackStore((state) => state.mode)
   const volume = useAudioEditPlaybackStore((state) => state.volume)
-  const levelsRef = useRef({ gain: 1, volume })
-  levelsRef.current = { gain: autoGain ? normalizationGain : 1, volume }
-  useEffect(() => { outputRef.current?.setLevels(levelsRef.current.gain, volume) }, [autoGain, normalizationGain, volume])
+  const levelsRef = useRef({ gain: 1, volume, bypass: false })
+  levelsRef.current = { gain: autoGain && mode !== 'delivery' ? normalizationGain : 1, volume, bypass: mode === 'delivery' }
+  useEffect(() => { outputRef.current?.setLevels(levelsRef.current.gain, volume, mode === 'delivery') }, [autoGain, normalizationGain, volume, mode])
   const generationRef = useRef(0)
   const nextSourceFrameRef = useRef(0)
   const fillingPromiseRef = useRef<Promise<void> | null>(null)
@@ -43,11 +48,8 @@ export function useAudioEditPreview(project: AudioEditProjectDocument | null, no
   const enqueuedFramesRef = useRef(0)
   const endedRef = useRef(false)
   const playingRef = useRef(false)
-  const mode = useAudioEditPlaybackStore((state) => state.mode)
-  const durationFrames = project?.source.durationFrames ?? 0
-  const transcript = project?.transcript
-  const timeline = useMemo(() => buildAudioEditTimeline(durationFrames, transcript ?? []), [durationFrames, transcript])
   const activeSpans = useMemo(() => project ? playbackSpans(project, mode) : [], [mode, project])
+  const timeline = activeSpans
   const spansRef = useRef(activeSpans)
   spansRef.current = activeSpans
 
@@ -81,14 +83,15 @@ export function useAudioEditPreview(project: AudioEditProjectDocument | null, no
           }
           const startFrame = Math.max(cursor, span.sourceStartFrame)
           const frameCount = Math.min(project.source.sampleRate * CHUNK_SECONDS, span.sourceEndFrame - startFrame)
-          const chunk = await getPlatform().audioEdit.preparePreviewChunk({ projectId: project.id, sourceStartFrame: startFrame, frameCount })
+          const silenceFrames = startFrame < 0 ? Math.min(frameCount, -startFrame) : startFrame >= project.source.durationFrames ? frameCount : 0
+          const chunk = silenceFrames ? { sourceStartFrame: startFrame, sourceEndFrame: startFrame + silenceFrames, channels: project.source.channels, pcm: new Float32Array(silenceFrames * project.source.channels).buffer } : await getPlatform().audioEdit.preparePreviewChunk({ projectId: project.id, sourceStartFrame: startFrame, frameCount: Math.min(frameCount, project.source.durationFrames - startFrame), processing: mode === 'edited' && project.vstEnabled })
           if (generation !== generationRef.current) break
           const decodedFrames = chunk.sourceEndFrame - chunk.sourceStartFrame
           if (decodedFrames <= 0) throw new Error('此位置无法读取音频，请重新定位后重试')
           queuedFramesRef.current += decodedFrames
           enqueuedFramesRef.current += decodedFrames
           nextSourceFrameRef.current = chunk.sourceEndFrame >= span.sourceEndFrame
-            ? spansRef.current.find((candidate) => candidate.sourceStartFrame >= span.sourceEndFrame)?.sourceStartFrame ?? project.source.durationFrames
+            ? spansRef.current.find((candidate) => candidate.sourceStartFrame >= span.sourceEndFrame)?.sourceStartFrame ?? span.sourceEndFrame
             : chunk.sourceEndFrame
           node.port.postMessage({ type: 'chunk', generation, pcm: chunk.pcm, channels: chunk.channels, sourceStartFrame: chunk.sourceStartFrame, frameCount: decodedFrames }, [chunk.pcm])
           useAudioEditPlaybackStore.getState().setPreparing(false)
@@ -108,7 +111,7 @@ export function useAudioEditPreview(project: AudioEditProjectDocument | null, no
       if (fillingPromiseRef.current === filling) fillingPromiseRef.current = null
       if (generation !== generationRef.current && nodeRef.current) void fillBufferRef.current()
     })
-  }, [project])
+  }, [project, mode])
   fillBufferRef.current = fillBuffer
 
   const resetAt = useCallback((requestedFrame: number) => {
@@ -116,7 +119,7 @@ export function useAudioEditPreview(project: AudioEditProjectDocument | null, no
     const next = mode === 'source'
       ? Math.max(0, Math.min(project.source.durationFrames, requestedFrame))
       : nextRetainedSourceFrame(requestedFrame, timeline)
-    const target = next ?? project.source.durationFrames
+    const target = requestedFrame === 0 && mode === 'delivery' ? timeline[0]?.sourceStartFrame ?? 0 : next ?? timeline.at(-1)?.sourceEndFrame ?? project.source.durationFrames
     generationRef.current += 1
     queuedFramesRef.current = 0
     enqueuedFramesRef.current = 0
@@ -148,7 +151,7 @@ export function useAudioEditPreview(project: AudioEditProjectDocument | null, no
         if (disposed) return void context.close()
         const node = new AudioWorkletNode(context, 'henji-audio-edit-preview', { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [Math.min(2, channelCount)] })
         const output = createPreviewOutput(context)
-        output.setLevels(levelsRef.current.gain, levelsRef.current.volume)
+        output.setLevels(levelsRef.current.gain, levelsRef.current.volume, levelsRef.current.bypass)
         node.connect(output.input)
         outputRef.current = output
         contextRef.current = context
@@ -189,7 +192,7 @@ export function useAudioEditPreview(project: AudioEditProjectDocument | null, no
     }
   }, [channelCount, projectId, sampleRate])
 
-  const planKey = JSON.stringify([projectId, mode, project?.vstEnabled, activeSpans])
+  const planKey = JSON.stringify([projectId, mode, project?.vstEnabled, project?.processorChain, activeSpans])
   useEffect(() => {
     if (!nodeRef.current) return
     resetAtRef.current(useAudioEditPlaybackStore.getState().sourceFrame)

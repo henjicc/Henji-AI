@@ -9,6 +9,9 @@ import type {
   AudioEditProjectSummary,
   AudioEditTranscriptionRequest,
   AudioEditTranscriptionResult,
+  AudioEditSilenceRequest,
+  AudioEditSuggestion,
+  AudioEditTask,
 } from '@/core/audioEdit/types'
 
 export interface AudioEditAsrModel {
@@ -24,6 +27,13 @@ export interface AudioEditPlatform {
   createProject(request: AudioEditProjectCreateRequest): Promise<AudioEditProjectDocument>
   getProject(projectId: string): Promise<AudioEditProjectDocument | null>
   saveProject(project: AudioEditProjectDocument): Promise<AudioEditProjectDocument>
+  verifySource(projectId: string): Promise<void>
+  relinkSource(projectId: string, sourcePath: string): Promise<AudioEditProjectDocument>
+  deleteProject(projectId: string): Promise<void>
+  detectSilence(request: AudioEditSilenceRequest): Promise<{ revision: number; suggestions: AudioEditSuggestion[] }>
+  listTasks(projectId: string): Promise<AudioEditTask[]>
+  cancelTask(requestId: string): Promise<void>
+  prepareProcessing(projectId: string, requestId: string): Promise<void>
   listAsrModels(): Promise<AudioEditAsrModel[]>
   transcribe(request: AudioEditTranscriptionRequest): Promise<AudioEditTranscriptionResult>
   exportProject(request: AudioEditExportRequest): Promise<AudioEditExportResult>
