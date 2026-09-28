@@ -5,10 +5,10 @@
 
 最后核对日期：2026-09-28
 
-`0.9.0` 候选：新增 Seed-ICL 2.0 V3 声音复刻、可恢复音色查询及首次正式合成费用确认，更新火山 TTS 公开字符价。SDK 86 文件 / 1050 项测试、可移植性、构建、固定候选包仓外 Node ESM／严格 TypeScript／56 个 Vite 入口和受限宿主通过；Henji-AI 相关 11 文件 / 45 项测试、类型、能力与界面静态检查通过。训练失败校验临时撤销时定向测试失败，恢复后通过。尚未执行真实付费训练或激活；发布还需对应提交 CI 和 npm 认证（本机身份查询返回 401）。
+`0.9.0` 候选（发布源码 `9e52c4df`）：新增 Seed-ICL 2.0 V3 声音复刻、可恢复音色查询及首次正式合成费用确认，更新火山 TTS 公开字符价。SDK 86 文件 / 1050 项测试、可移植性、构建、固定候选包仓外 Node ESM／严格 TypeScript／56 个 Vite 入口和受限宿主通过；Henji-AI 相关 11 文件 / 45 项测试、类型、能力与界面静态检查通过。训练失败校验临时撤销时定向测试失败，恢复后通过。[发布源码必需 CI 36360451658](https://github.com/henjicc/Henji-AI/actions/runs/36360451658) 全部成功，普通测试 859 文件通过，另 1 文件按显式分层跳过。尚未执行真实付费训练或激活；公共发布仅待 npm 认证（本机身份查询再次返回 401），不能声称已公开安装。
 
-- 候选 shasum：`dd8065ec4fbaedbf492e8fbcebd29ff70248b862`
-- 候选 integrity：`sha512-rkSzF2c14KzE5R4LuUeAPfAVHa3FBtLJizUgkmvXcYjCy96h87bzMfNIhI7t8M80H5ACakqiuss3C/CC1+QFEQ==`
+- 最终候选 shasum：`f415cd32b1a650e2da550ea851fb8bb3cda06ccc`
+- 最终候选 integrity：`sha512-Amr2o5Yjz+W/lC6ZKWDBQhObpZ9nGhwY1vFTwmQJfQThorJ5dLQN/REU7Wpj1ETrsB8FrwKt/1yeGp9OxosqHw==`
 - Henji-AI workspace 已升级 `0.9.0`。说吧仓库经模型调用入口检查仅使用 ASR／翻译／LLM；三个示例不使用本次克隆能力，保持现有版本。Photoshop 不在本机，其已有清单只登记图片模型，未声称本轮实际验证或升级。
 - 迁移约束：非 `S_` 音色正式合成需 `volcIclActivationConsent: true`；克隆成功可以没有试听 URL，使用 `metadata.clonedVoice` 保存音色，不能把它误报为音频生成失败。
 - 首发界面：正式 `test:reality --suite ui --only generation-voice-clone --size 1440x900 --build` 通过，实际 Electron 完成模型选择、模式切换、录音上传和更多设置开关，截图已目视检查；应用错误、警告和浏览器错误均为零。仅使用隔离资料与合成录音夹具，未提交生成。
