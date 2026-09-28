@@ -5,7 +5,7 @@
 
 最后核对日期：2026-09-28
 
-`0.9.0` 候选（发布源码 `9e52c4df`）：新增 Seed-ICL 2.0 V3 声音复刻、可恢复音色查询及首次正式合成费用确认，更新火山 TTS 公开字符价。SDK 86 文件 / 1050 项测试、可移植性、构建、固定候选包仓外 Node ESM／严格 TypeScript／56 个 Vite 入口和受限宿主通过；Henji-AI 相关 11 文件 / 45 项测试、类型、能力与界面静态检查通过。训练失败校验临时撤销时定向测试失败，恢复后通过。[发布源码必需 CI 36360451658](https://github.com/henjicc/Henji-AI/actions/runs/36360451658) 全部成功，普通测试 859 文件通过，另 1 文件按显式分层跳过。尚未执行真实付费训练或激活；公共发布仅待 npm 认证（本机身份查询再次返回 401），不能声称已公开安装。
+`0.9.0` 候选（发布源码 `9e52c4df`）：新增 Seed-ICL 2.0 V3 声音复刻、可恢复音色查询及首次正式合成费用确认，更新火山 TTS 公开字符价。SDK 86 文件 / 1050 项测试、可移植性、构建、固定候选包仓外 Node ESM／严格 TypeScript／56 个 Vite 入口和受限宿主通过；Henji-AI 相关 11 文件 / 45 项测试、类型、能力与界面静态检查通过。训练失败校验临时撤销时定向测试失败，恢复后通过。[发布源码必需 CI 36360451658](https://github.com/henjicc/Henji-AI/actions/runs/36360451658) 全部成功，普通测试 859 文件通过，另 1 文件按显式分层跳过。尚未执行真实付费训练或激活。按用户 2026-09-28 的新要求，本版本保持已接入痕迹AI、待用户测试状态；用户测试确认没问题并明确要求发版后才发布。此前 npm 401 仅为历史鉴权记录，恢复登录也不触发自动发布，不能声称已公开安装。
 
 - 最终候选 shasum：`f415cd32b1a650e2da550ea851fb8bb3cda06ccc`
 - 最终候选 integrity：`sha512-Amr2o5Yjz+W/lC6ZKWDBQhObpZ9nGhwY1vFTwmQJfQThorJ5dLQN/REU7Wpj1ETrsB8FrwKt/1yeGp9OxosqHw==`
@@ -114,7 +114,7 @@ Henji-AI workspace 与三个仓内示例 manifest 均锁定 `0.4.0`；下表原�
 
 | 仓库 / 开发路径 | 宿主类型 | 当前精确版本 | SDK 入口与构建方式 | 凭据 / transport 责任 | 需同步的变更类型 | 验证命令 | 同步证据与边界 | 最后核对 |
 |---|---|---|---|---|---|---|---|---|
-| `Henji-AI`<br>`D:/VibeCode/Henji-AI` | Electron 42 主进程 + React/Vite；SDK 主开发、首发验证宿主 | workspace `0.9.0` 候选；公共 npm `0.8.0` | 包根、`provider-packs/*`、`tool-packs/*`；根构建先执行 `build:sdk`，再构建 Electron | Electron 主进程注入 HTTP transport、凭据、媒体读取、日志、trace、取消与落盘；渲染层不直接持有密钥 | 公共类型/目录、provider preset、凭据坐标、transport、媒体、包导出、LLM/生成执行协议与音色查询 | SDK 发布门禁、相关宿主 Vitest、渲染层/主进程类型检查与模型 i18n | 本轮 1050 项 SDK、45 项宿主、类型与 Electron bundle 通过；固定候选包及克隆公开入口回装通过；新版本公共发布待认证与 CI | 2026-09-28 |
+| `Henji-AI`<br>`D:/VibeCode/Henji-AI` | Electron 42 主进程 + React/Vite；SDK 主开发、首发验证宿主 | workspace `0.9.0` 候选；公共 npm `0.8.0` | 包根、`provider-packs/*`、`tool-packs/*`；根构建先执行 `build:sdk`，再构建 Electron | Electron 主进程注入 HTTP transport、凭据、媒体读取、日志、trace、取消与落盘；渲染层不直接持有密钥 | 公共类型/目录、provider preset、凭据坐标、transport、媒体、包导出、LLM/生成执行协议与音色查询 | SDK 发布门禁、相关宿主 Vitest、渲染层/主进程类型检查与模型 i18n | 本轮 1050 项 SDK、45 项宿主、类型与 Electron bundle 通过；固定候选包及克隆公开入口回装通过；新版本已通过功能提交 CI，公共发布待用户测试与明确发版指令 | 2026-09-28 |
 | `henji-ai-ps`<br>`/Users/henji/Documents/VibeCode/henji-ai-ps` | Photoshop UXP 插件 + React/Vite IIFE（pnpm） | manifest/lock 均精确锁定公共 npm `0.2.8`；lock integrity 与上方正式产物一致 | `generation/core`、单模型/供应商 pack、LLM streaming；Vite 构建与 UXP smoke bundle | UXP 宿主注入受限 `fetch`、provider 凭据、媒体编码读取和脱敏日志；SDK 不读取 Node/文件系统 | 生成 pack/exports、受限环境可移植性、RuntimeContext、凭据 scope、媒体与流式 LLM；不因版本同步自动引入 GLM | `pnpm typecheck:uxp-smoke && pnpm check:uxp-sdk && pnpm smoke:uxp:build && pnpm check:uxp-smoke`；完整 `pnpm check` | `e509716`；无用户 npm 凭据的 frozen lock 安装通过；Node 22 下四项门禁通过，正式产品仍仅 39 个 generation/erase packs，网络调用与受限环境风险均为 0 | 2026-08-31 |
 | `say-it`<br>`D:/VibeCode/说吧` | Tauri 2 + Rust 管理 QuickJS；WebView 不运行 SDK | manifest/lock 精确锁定公共 npm `0.6.1`；bundle 版本、resolved、shasum、integrity 一致 | 按需打包 capability、Bailian/火山实时 ASR、SiliconFlow/Groq 文件 ASR、translation、LLM modules 为相互隔离 IIFE；Rust 加载 bundle | Rust Host API 注入 HTTP 字节流、WS、media-ref、CredentialStore、日志/trace、Abort/timeout/cancel；QuickJS/插件/WebView 不直取密钥 | capability/LLM 协议、按需 exports、descriptor source/坐标、QuickJS 可移植性、bundle 隔离；不因版本同步自动增加未采用模型 | `npm run sdk-runtime:typecheck && npm run sdk-runtime:build`；`npm run test:ui`；Rust 定向/全量测试；`npm run ui:build` | `18bad6d`；QuickJS/WS 空中间帧回归及 35 项 SDK 宿主本地测试通过，runtime 类型检查通过；听写/历史/UI 定向回归与前端类型构建通过，桌面开发应用已重启，实际麦克风交互待用户验证 | 2026-09-24 |
 
