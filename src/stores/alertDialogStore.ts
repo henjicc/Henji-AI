@@ -15,6 +15,8 @@ export interface AlertDialogRequest {
   title: string
   message: string
   type?: AlertDialogType
+  /** 只有用户点击明确的确认按钮才接受；关闭、Escape、取消均拒绝。 */
+  confirmation?: { label: string; resolve: (confirmed: boolean) => void }
   /** 有值时渲染设置动作并定位到该分节；API 密钥分节会显示「去配置」 */
   settingsTarget?: SettingsNavigationTarget
   /** 有值时渲染「复制错误详情」按钮；放完整技术信息（堆栈、响应体等） */
@@ -34,15 +36,44 @@ interface AlertDialogState {
   queue: AlertDialogRequest[]
   show: (request: AlertDialogRequest) => void
   dismissCurrent: () => void
+  confirmCurrent: () => void
 }
 
-export const useAlertDialogStore = create<AlertDialogState>((set) => ({
+export const useAlertDialogStore = create<AlertDialogState>((set, get) => ({
   queue: [],
   show: (request) => set((state) => ({ queue: [...state.queue, request] })),
-  dismissCurrent: () => set((state) => ({ queue: state.queue.slice(1) })),
+  dismissCurrent: () => {
+    const current = get().queue[0]
+    if (current?.confirmation) current.confirmation.resolve(false)
+    else set((state) => ({ queue: state.queue.slice(1) }))
+  },
+  confirmCurrent: () => get().queue[0]?.confirmation?.resolve(true),
 }))
 
 /** 全局弹出一个提示/错误弹窗；可在非 React 环境调用 */
 export function showAlertDialog(request: AlertDialogRequest): void {
   useAlertDialogStore.getState().show(request)
+}
+
+/** 一次性的人机确认；任务中止时精确移除自己的弹窗，不影响其他排队提示。 */
+export function requestAlertConfirmation(
+  request: Omit<AlertDialogRequest, 'confirmation'> & { confirmLabel: string },
+  signal?: AbortSignal,
+): Promise<boolean> {
+  if (signal?.aborted) return Promise.resolve(false)
+  return new Promise(resolve => {
+    let settled = false
+    const finish = (confirmed: boolean): void => {
+      if (settled) return
+      settled = true
+      signal?.removeEventListener('abort', abort)
+      useAlertDialogStore.setState(state => ({ queue: state.queue.filter(item => item !== entry) }))
+      resolve(confirmed && !signal?.aborted)
+    }
+    const abort = (): void => finish(false)
+    const entry: AlertDialogRequest = { ...request, confirmation: { label: request.confirmLabel, resolve: finish } }
+    signal?.addEventListener('abort', abort, { once: true })
+    showAlertDialog(entry)
+    if (signal?.aborted) abort()
+  })
 }

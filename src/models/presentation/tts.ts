@@ -88,7 +88,7 @@ export const ttsPresentation: Record<string, ModelPresentation> = {
     { volcSeedTtsSpeaker: voice },
   ),
   'volcengine-seed-icl-2.0': speechModel(
-    { zh: '豆包声音复刻 2.0', en: 'Doubao Voice Clone 2.0' },
+    { zh: '豆包语音 2.0', en: 'Doubao Voice 2.0' },
     {
       volcIclMode: { zh: '模式', en: 'Mode' }, volcSeedIclSpeaker: voice,
       volcIclActivationConsent: { zh: '确认首次合成另收 138 元并锁定音色', en: 'Accept ¥138 first-use fee and voice lock' },
@@ -105,6 +105,15 @@ export const ttsPresentation: Record<string, ModelPresentation> = {
 }
 
 const cloneParams = ttsPresentation['volcengine-seed-icl-2.0'].params
+ttsPresentation['volcengine-seed-icl-2.0'].submissionConfirmation = {
+  condition: params => params.volcIclMode === 'clone',
+  title: { zh: '确认克隆声音及费用', en: 'Confirm voice cloning and charges' },
+  message: {
+    zh: '训练试听按 3 元/万字符计费。\n\n新建后付费音色在首次正式语音合成时另收 138 元/音色，并锁定音色；仅训练、播放试听不会触发这笔 138 元费用。7 天内未正式使用的音色会被删除。\n\n如果使用已有预付费音色，本次训练会覆盖旧效果并消耗训练次数。\n\n确认后将上传声音样本并提交训练。',
+    en: 'Training preview costs ¥3 per 10,000 characters.\n\nA new postpaid voice incurs a ¥138 fee and becomes locked on its first regular synthesis. Training and playing the preview alone do not trigger this fee. Voices not used within 7 days are deleted.\n\nRetraining an existing prepaid voice replaces its previous result and consumes a training attempt.\n\nConfirm to upload the sample and submit training.',
+  },
+  confirmLabel: { zh: '确认费用，开始克隆', en: 'Accept charges and clone' },
+}
 ttsPresentation['volcengine-seed-icl-2.0'].paramPresentation = {
   groups: [{
     id: 'voice-clone-options', name: { zh: '更多克隆设置', en: 'More clone settings' }, order: 7, panelWidth: 460,

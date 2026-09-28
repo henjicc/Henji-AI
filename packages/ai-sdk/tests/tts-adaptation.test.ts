@@ -67,7 +67,7 @@ describe('TTS model catalog', () => {
     expect(build('siliconflow-cosyvoice2-tts')).toMatchObject({ model: 'FunAudioLLM/CosyVoice2-0.5B', stream: false })
     expect(build('siliconflow-moss-ttsd-0.5')).toMatchObject({ model: 'fnlp/MOSS-TTSD-v0.5', input: '[S1]你好' })
     expect(build('volcengine-seed-tts-2.0')).toMatchObject({ resource_id: 'seed-tts-2.0', req_params: { text: '你好' } })
-    expect(() => build('volcengine-seed-icl-2.0')).toThrow('复刻音色 ID')
+    expect(build('volcengine-seed-icl-2.0')).toMatchObject({ resource_id: 'seed-tts-2.0', req_params: { speaker: 'zh_female_vv_uranus_bigtts' } })
     expect(build('volcengine-seed-icl-2.0', { volcSeedIclSpeaker: 'clone-id', volcIclActivationConsent: true })).toMatchObject({
       resource_id: 'seed-icl-2.0', req_params: { model: 'seed-tts-2.0-standard', speaker: 'clone-id' },
     })

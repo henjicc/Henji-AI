@@ -1,6 +1,7 @@
 import type { TFunction } from 'i18next'
 
 import { createLogger } from '@/core/logging'
+import { GenerationSubmissionCancelledError } from '@/core/services/generationSubmissionConfirmation'
 import { toModelPromptText } from '@/core/inputs/promptDocument'
 import { registry } from '@/core/ModelRegistry'
 import { GenerationService } from '@/core/services/GenerationService'
@@ -377,7 +378,7 @@ export function createGenerationNodeExecutor(readOptions: (store?: typeof useCan
           return { status: 'completed', resultNodeIds: committed.resultNodeIds }
         } catch (error) {
           if (resultNodeId) {
-            target.store.getState().updateNodeData(resultNodeId, current.signal?.aborted
+            target.store.getState().updateNodeData(resultNodeId, current.signal?.aborted || error instanceof GenerationSubmissionCancelledError
               ? createCanvasGenerationCancelledPatch()
               : createCanvasGenerationFailurePatch(error, current.capability?.outputPolicy.resultKind))
             await target.persist()

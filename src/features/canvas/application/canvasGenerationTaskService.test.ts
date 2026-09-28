@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { registry } from '@/core/ModelRegistry'
 import { GenerationService } from '@/core/services/GenerationService'
+import { GenerationSubmissionCancelledError } from '@/core/services/generationSubmissionConfirmation'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { databaseService } from '@/services/database/DatabaseService'
 import type { HistoryRecord } from '@/services/database'
@@ -56,6 +57,16 @@ beforeEach(async () => {
   useCanvasStore.getState().setCanvasData([{ id: 'reference', type: CANVAS_NODE_TYPES.upload, position: { x: 10, y: 10 }, data: { imageUrl: 'C:/reference.png' } }], [])
 })
 afterEach(() => { replaceGenerationTaskStatusSnapshots([]); resetCanvasExecutionServiceForTests(); registry.unregister('canvas-task-fixture'); vi.restoreAllMocks(); uninstallHarnessNativeStorage() })
+
+it('用户拒绝提交确认后，画布节点和任务都进入取消状态', async () => {
+  vi.mocked(GenerationService.getInstance().generate).mockRejectedValue(new GenerationSubmissionCancelledError())
+  const taskId = crypto.randomUUID()
+  await submitCanvasGenerationTask({ modelId: 'canvas-task-fixture', mediaType: 'image', prompt: '取消测试', options: {} },
+    { mode: 'canvas', projectId, sourceNodeIds: [] }, taskId)
+  await vi.waitFor(() => expect(records.get(taskId)?.status).toBe('cancelled'))
+  const saved = await readPersistedCanvasProjectSnapshot(projectId)
+  expect(saved.nodes.some(node => node.data.generationTaskId === taskId && node.data.generationCancelled === true)).toBe(true)
+})
 
 it('A 页面准备和提交 B 的生成，打开 B 不重复提交，结果保存到同一实例', async () => {
   const targetId = projectId

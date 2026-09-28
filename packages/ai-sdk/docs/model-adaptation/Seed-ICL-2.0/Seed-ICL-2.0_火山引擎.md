@@ -40,6 +40,12 @@
 
 ## 音色列表
 
+2026-09-28 复核：产品入口命名为“豆包语音 2.0”，语音合成模式同时提供系统音色和本地克隆音色。官方在线音色表的两个“豆包语音合成模型2.0”章节共 431 个去重音色（包含 `ICL_uranus_*` 命名的官方系统音色）；不采集后续 S2S 专用与 1.0 章节。旧清单 230 个漏掉了大小写不同的 ID，本次补齐。系统音色必须使用 `seed-tts-2.0` 资源；用户克隆音色使用 `seed-icl-2.0`，不能根据 ID 是否以 ICL 开头推断为收费克隆音色。
+
+官方确有控制面 `ListSpeakers`（2025-05-20）接口，`ResourceIDs: ["seed-tts-2.0"]`、Page、Limit；响应 Speakers 包含 VoiceType、Name 等。官方示例要求 `Authorization: HMAC-SHA256` AK/SK 签名，并非当前配置的语音 `X-Api-Key`。因此本次使用官方文档内置列表，不要求用户为音色选择额外配置控制面凭据。
+
+克隆提交前宿主必须弹出费用二次确认：训练试听 3 元/万字符，新建后付费音色首次正式合成另收 138 元且锁定，7 天未正式使用会删除；使用已有预付费音色会覆盖旧效果并消耗训练次数。取消、关闭或任务中止均不上传样本、不发训练请求；确认仅对本次提交有效。
+
 新版按 ID 查询不提供目录。控制面分页接口 `BatchListMegaTTSTrainStatus`（2025-05-21）要求 ProjectName，官方示例使用 HMAC AK/SK；本次不假定语音 Key 能代替控制面签名。已有槽位可导入一次，应用自动保存之后无需重复输入；新建后付费音色自动产生 ID。本地记录与语音密钥的 provider 隔离，不能混入方舟或派欧云音色。
 
 ## Fixture
@@ -48,6 +54,8 @@
 
 ## 原始链接
 
+- [系统音色表](https://docs.volcengine.com/docs/DoubaoVoice/Tonelist-1?lang=zh)：2.0 中文与外语章节；公开。
+- [ListSpeakers](https://www.volcengine.com/docs/6561/2160690)：系统音色分页、资源筛选、HMAC 签名示例；公开。
 - [V3 训练](https://docs.volcengine.com/docs/DoubaoVoice/tone-training-http?lang=zh)：请求、状态、后付费 ID 规则；公开。
 - [V3 查询](https://docs.volcengine.com/docs/DoubaoVoice/tone-query-http?lang=zh)：状态、试听有效期；公开。
 - [合成](https://docs.volcengine.com/docs/DoubaoVoice/unidirectional-streaming-text-to-speech-http?lang=zh)：合成请求；公开。

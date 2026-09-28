@@ -4,6 +4,8 @@ import { registry } from '@/core/ModelRegistry'
 import { aiCancelTask, aiContinuePolling, aiGenerate } from '@/commands/aiRuntime'
 import { GenerationService } from './GenerationService'
 import { voiceLibraryService } from '@/services/voiceLibrary/VoiceLibraryService'
+import { useAlertDialogStore, showAlertDialog } from '@/stores/alertDialogStore'
+import { ttsPresentation } from '@/models/presentation/tts'
 
 vi.mock('@/commands/aiRuntime', () => ({
   aiCancelTask: vi.fn(async () => undefined), aiGenerate: vi.fn(), aiContinuePolling: vi.fn(),
@@ -12,11 +14,55 @@ vi.mock('@/commands/aiRuntime', () => ({
 const service = GenerationService.getInstance()
 beforeEach(() => {
   vi.clearAllMocks()
+  useAlertDialogStore.setState({ queue: [] })
   vi.spyOn(service, 'getProgressEstimate').mockResolvedValue(null)
   registry.register({ meta: { id: 'cancel-fixture', canonicalModelId: 'nano-banana', provider: 'fixture', type: 'image', name: { zh: '测试', en: 'Test' } },
     params: [], endpoints: '/fixture', pricing: { currency: '$', fixed: 0.01 }, request: { builder: params => params } })
 })
-afterEach(() => { registry.unregister('cancel-fixture'); vi.restoreAllMocks() })
+afterEach(() => { registry.unregister('cancel-fixture'); vi.restoreAllMocks(); useAlertDialogStore.setState({ queue: [] }) })
+
+function enableConfirmation(): void {
+  registry.getModel('cancel-fixture')!.submissionConfirmation = ttsPresentation['volcengine-seed-icl-2.0'].submissionConfirmation
+}
+
+it.each(['dialog', 'signal', 'task'] as const)('克隆等待 %s 取消时不上传或提交供应商请求，也不取消其他弹窗', async mode => {
+  enableConfirmation()
+  showAlertDialog({ title: '已有提示', message: '保留' })
+  const controller = new AbortController()
+  const run = service.generate('cancel-fixture', { volcIclMode: 'clone' }, undefined, { requestId: 'confirmation', signal: controller.signal })
+  const assertion = expect(run).rejects.toMatchObject({ name: 'GenerationSubmissionCancelledError' })
+  await vi.waitFor(() => expect(useAlertDialogStore.getState().queue).toHaveLength(2))
+  expect(service.getProgressEstimate).not.toHaveBeenCalled()
+  if (mode === 'dialog') useAlertDialogStore.getState().queue[1].confirmation!.resolve(false)
+  if (mode === 'signal') controller.abort()
+  if (mode === 'task') await service.cancelTask('confirmation')
+  await assertion
+  expect(aiGenerate).not.toHaveBeenCalled()
+  expect(aiCancelTask).not.toHaveBeenCalled()
+  expect(useAlertDialogStore.getState().queue.map(item => item.title)).toEqual(['已有提示'])
+})
+
+it('确认后只提交当时的参数，每次重试克隆都重新确认，语音合成不弹克隆确认', async () => {
+  enableConfirmation()
+  vi.mocked(aiGenerate).mockResolvedValue({ status: 'completed', url: 'C:/result.mp3' })
+  const params = { volcIclMode: 'clone', volcCloneAudio: ['original.wav'] }
+  const run = service.generate('cancel-fixture', params)
+  await vi.waitFor(() => expect(useAlertDialogStore.getState().queue).toHaveLength(1))
+  params.volcCloneAudio[0] = 'changed.wav'
+  expect(aiGenerate).not.toHaveBeenCalled()
+  useAlertDialogStore.getState().confirmCurrent()
+  await run
+  expect(aiGenerate).toHaveBeenCalledTimes(1)
+  expect(aiGenerate).toHaveBeenCalledWith(expect.objectContaining({ params: expect.objectContaining({ volcCloneAudio: ['original.wav'] }) }))
+  const retry = service.generate('cancel-fixture', params)
+  const rejected = expect(retry).rejects.toMatchObject({ name: 'GenerationSubmissionCancelledError' })
+  await vi.waitFor(() => expect(useAlertDialogStore.getState().queue).toHaveLength(1))
+  useAlertDialogStore.getState().dismissCurrent()
+  await rejected
+  await service.generate('cancel-fixture', { volcIclMode: 'speech' })
+  expect(aiGenerate).toHaveBeenCalledTimes(2)
+  expect(useAlertDialogStore.getState().queue).toHaveLength(0)
+})
 
 it('媒体准备期间取消不会提交供应商请求', async () => {
   let release!: () => void

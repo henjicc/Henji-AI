@@ -438,6 +438,14 @@ export interface ModelDefinition {
    */
   paramPresentation?: ModelParamPresentation
 
+  /** 宿主提交前的费用/不可逆操作确认，每次提交单独询问。 */
+  submissionConfirmation?: {
+    condition: (params: DynamicValueMap) => boolean
+    title: I18nText
+    message: I18nText
+    confirmLabel: I18nText
+  }
+
   /** 单图处理的产品策略：按源图匹配该比例参数并最小裁剪，用户无需选择输出画幅。 */
   sourceImageFraming?: { aspectParamId: string }
 

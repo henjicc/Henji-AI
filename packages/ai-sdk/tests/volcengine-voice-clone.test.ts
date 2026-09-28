@@ -13,6 +13,17 @@ function input(fetch: ReturnType<typeof vi.fn>, body = build()): ProviderExecuti
 afterEach(() => vi.useRealTimers())
 
 describe('Seed-ICL V3 voice training', () => {
+  it.each(['zh_female_vv_uranus_bigtts', 'ICL_uranus_en_female_charlie_tob'])('routes official system voice %s to TTS without clone activation', speaker => {
+    const params = { volcIclMode: 'speech', volcSeedIclSpeaker: speaker }
+    expect(build(params)).toEqual({ resource_id: 'seed-tts-2.0', req_params: { text: '你好，欢迎试听。', speaker, audio_params: { format: 'mp3', sample_rate: 24000 } } })
+    const consent = model.params.find(param => param.id === 'volcIclActivationConsent')!
+    expect(consent.visible?.condition?.(params)).toBe(false)
+  })
+
+  it('uses the system voice for new and previously empty selections, without weakening clone fee consent', () => {
+    expect(build({ volcIclMode: 'speech', volcSeedIclSpeaker: '' })).toMatchObject({ resource_id: 'seed-tts-2.0' })
+    expect(() => build({ volcIclMode: 'speech', volcSeedIclSpeaker: 'ICL_custom_voice' })).toThrow('138')
+  })
   it('accepts the official code-less response and sends raw base64 using the speech key', async () => {
     const fetch = vi.fn().mockResolvedValueOnce(response({ speaker_id: 'S_fixture', status: 0 }))
       .mockResolvedValueOnce(response(fixture.response))

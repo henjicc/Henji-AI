@@ -1,4 +1,5 @@
 import { createLogger } from '@/core/logging'
+import { GenerationSubmissionCancelledError } from '@/core/services/generationSubmissionConfirmation'
 import { registry } from '@/core/ModelRegistry'
 import { databaseService } from '@/services/database/DatabaseService'
 import type { GenerationPreparationInput } from '@/features/generation/application/generationPreparationService'
@@ -86,11 +87,12 @@ export async function createCanvasGenerationTaskRecord(input: GenerationPreparat
           return { status: 'completed', resultNodeIds: (persisted?.nodes ?? []).filter(node => node.data.generationTaskId === taskId).map(node => node.id) }
         }
         const canResume = persisted?.nodes.some(node => node.data.generationTaskId === taskId && readResumableServerTask(node.data as DynamicValueMap))
-        const status = controller.signal.aborted ? 'cancelled' : canResume ? 'pending' : 'error'
-        const message = controller.signal.aborted ? CANVAS_GENERATION_CANCELLED_MESSAGE : error instanceof Error ? error.message : '画布生成失败'
+        const cancelled = controller.signal.aborted || error instanceof GenerationSubmissionCancelledError
+        const status = cancelled ? 'cancelled' : canResume ? 'pending' : 'error'
+        const message = cancelled ? CANVAS_GENERATION_CANCELLED_MESSAGE : error instanceof Error ? error.message : '画布生成失败'
         await databaseService.updateHistory(taskId, { status, errorMessage: message })
         publish(status, false, message)
-        if (controller.signal.aborted) logger.info('原画布任务已停止本地执行', { event: 'canvas.generationTask.cancelled', requestId: taskId, taskId })
+        if (cancelled) logger.info('原画布任务已停止本地执行', { event: 'canvas.generationTask.cancelled', requestId: taskId, taskId })
         else logger.error('画布生成失败', error, { event: 'canvas.generationTask.failed', requestId: taskId, taskId })
         throw error
       } finally {

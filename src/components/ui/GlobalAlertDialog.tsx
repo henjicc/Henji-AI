@@ -22,14 +22,17 @@ interface GlobalAlertDialogProps {
 export const GlobalAlertDialog: React.FC<GlobalAlertDialogProps> = ({ onAskAssistant }) => {
   const { t } = useI18n('common')
   const current = useAlertDialogStore((state) => state.queue[0] ?? null)
+  const dialogKey = useMemo(() => current ? crypto.randomUUID() : undefined, [current])
   const dismissCurrent = useAlertDialogStore((state) => state.dismissCurrent)
+  const confirmCurrent = useAlertDialogStore((state) => state.confirmCurrent)
   const openSettings = useUiStore((state) => state.openSettings)
   const [copied, setCopied] = useState(false)
 
   const handleClose = useCallback((): void => {
+    if (useAlertDialogStore.getState().queue[0] !== current) return
     setCopied(false)
     dismissCurrent()
-  }, [dismissCurrent])
+  }, [current, dismissCurrent])
 
   const handleCopyDetail = useCallback(async (detail: string): Promise<void> => {
     try {
@@ -45,6 +48,12 @@ export const GlobalAlertDialog: React.FC<GlobalAlertDialogProps> = ({ onAskAssis
       return []
     }
     const result: AlertDialogAction[] = []
+
+    if (current.confirmation) {
+      return [{ label: current.confirmation.label, variant: 'primary', onClick: () => {
+        if (useAlertDialogStore.getState().queue[0] === current) confirmCurrent()
+      } }]
+    }
 
     if (current.detail) {
       const detail = current.detail
@@ -83,7 +92,7 @@ export const GlobalAlertDialog: React.FC<GlobalAlertDialogProps> = ({ onAskAssis
     }
 
     return result
-  }, [copied, current, handleClose, handleCopyDetail, onAskAssistant, openSettings, t])
+  }, [copied, current, confirmCurrent, handleClose, handleCopyDetail, onAskAssistant, openSettings, t])
 
   if (!current) {
     return null
@@ -91,11 +100,14 @@ export const GlobalAlertDialog: React.FC<GlobalAlertDialogProps> = ({ onAskAssis
 
   return (
     <AlertDialog
+      key={dialogKey}
       isOpen
       title={current.title}
       message={current.message}
       type={current.type ?? 'error'}
       actions={actions}
+      closeLabel={current.confirmation ? t('cancel') : undefined}
+      closeImmediately={Boolean(current.confirmation)}
       onClose={handleClose}
     />
   )

@@ -5,12 +5,16 @@
 
 最后核对日期：2026-09-28
 
+同日后续修正：豆包入口改名“豆包语音 2.0”，补全 431 个官方系统音色并按系统/克隆音色选择 TTS/ICL 资源；克隆提交在宿主共享生成入口要求用户二次确认。仍为 0.9.0 未发布开发候选。下方 `9e52c4df` 的包哈希与全量门禁仅证明此前候选，不能作为本次修订包的发布证据；待用户测试并明确要求发布后重新执行适用发布门禁与打包。
+
+本次修正定向证据：9 个测试文件共 111 项通过，SDK/渲染层类型、SDK 可移植性、能力目录、模型 i18n 与局部 lint 通过；系统音色误路由到 ICL 的临时变异被测试拦截。正式 Electron `generation-voice-clone` 场景验证了系统音色列表、双模式、克隆提交确认和取消后零请求，已目视清晰截图，场景错误/警告为零。供应商调用仅在 IPC 边界使用受控替身，没有真实付费训练或激活。
+
 `0.9.0` 候选（发布源码 `9e52c4df`）：新增 Seed-ICL 2.0 V3 声音复刻、可恢复音色查询及首次正式合成费用确认，更新火山 TTS 公开字符价。SDK 86 文件 / 1050 项测试、可移植性、构建、固定候选包仓外 Node ESM／严格 TypeScript／56 个 Vite 入口和受限宿主通过；Henji-AI 相关 11 文件 / 45 项测试、类型、能力与界面静态检查通过。训练失败校验临时撤销时定向测试失败，恢复后通过。[发布源码必需 CI 36360451658](https://github.com/henjicc/Henji-AI/actions/runs/36360451658) 全部成功，普通测试 859 文件通过，另 1 文件按显式分层跳过。尚未执行真实付费训练或激活。按用户 2026-09-28 的新要求，本版本保持已接入痕迹AI、待用户测试状态；用户测试确认没问题并明确要求发版后才发布。此前 npm 401 仅为历史鉴权记录，恢复登录也不触发自动发布，不能声称已公开安装。
 
 - 最终候选 shasum：`f415cd32b1a650e2da550ea851fb8bb3cda06ccc`
 - 最终候选 integrity：`sha512-Amr2o5Yjz+W/lC6ZKWDBQhObpZ9nGhwY1vFTwmQJfQThorJ5dLQN/REU7Wpj1ETrsB8FrwKt/1yeGp9OxosqHw==`
 - Henji-AI workspace 已升级 `0.9.0`。说吧仓库经模型调用入口检查仅使用 ASR／翻译／LLM；三个示例不使用本次克隆能力，保持现有版本。Photoshop 不在本机，其已有清单只登记图片模型，未声称本轮实际验证或升级。
-- 迁移约束：非 `S_` 音色正式合成需 `volcIclActivationConsent: true`；克隆成功可以没有试听 URL，使用 `metadata.clonedVoice` 保存音色，不能把它误报为音频生成失败。
+- 迁移约束：非官方系统音色且非 `S_` 的后付费克隆音色正式合成需 `volcIclActivationConsent: true`；克隆成功可以没有试听 URL，使用 `metadata.clonedVoice` 保存音色，不能把它误报为音频生成失败。
 - 首发界面：正式 `test:reality --suite ui --only generation-voice-clone --size 1440x900 --build` 通过，实际 Electron 完成模型选择、模式切换、录音上传和更多设置开关，截图已目视检查；应用错误、警告和浏览器错误均为零。仅使用隔离资料与合成录音夹具，未提交生成。
 
 `0.8.0` 已发布：TTS 音色参数支持选择器，SDK 新增百炼 MiniMax / Qwen Audio / CosyVoice 与硅基流动 CosyVoice2 的账号音色查询。发布源码 `add89fea` 的必需 CI [36329516045](https://github.com/henjicc/Henji-AI/actions/runs/36329516045) 全部成功；SDK 85 文件 / 1036 项测试、可移植性、构建、56 个仓外 Vite 入口、受限宿主、Henji-AI Electron bundle 与宿主精确测试通过。MiniMax 错误码校验临时撤销后定向测试失败，恢复后通过；未执行付费生成。公共 npm 版本经隔离配置、缓存和令牌的仓外匿名安装，确认公开 `listTtsVoices` 与 registry integrity。Henji-AI 使用仓内 workspace `0.8.0`；现有外部消费者与三个示例未使用本次 TTS 音色查询，不机械升级。

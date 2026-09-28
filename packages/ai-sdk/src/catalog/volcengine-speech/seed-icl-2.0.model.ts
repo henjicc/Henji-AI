@@ -1,6 +1,7 @@
 import { defineModel } from '../defineModel'
 import type { JsonObject } from '../../types/runtime'
 import { speechCharacterPrice, speechString, speechText } from '../audio/tts-common'
+import { DEFAULT_SEED_TTS_20_VOICE, isSeedTts20SystemVoice } from './seed-tts-2.0-voices'
 
 const cloning = (params: JsonObject): boolean => params.volcIclMode === 'clone'
 const synth = (params: JsonObject): boolean => !cloning(params)
@@ -15,8 +16,8 @@ export const volcengineSeedIcl20Model = defineModel({
   inputLimits: { images: { max: 0 }, videos: { max: 0 } },
   params: [
     { id: 'volcIclMode', type: 'dropdown', order: 1, default: 'speech', options: [{ value: 'speech' }, { value: 'clone' }] },
-    { id: 'volcSeedIclSpeaker', type: 'composite', valueType: 'string', required: true, order: 2, default: '', visible: { condition: synth } },
-    { id: 'volcIclActivationConsent', type: 'switch', order: 3, default: false, visible: { condition: p => synth(p) && Boolean(p.volcSeedIclSpeaker) && !/^S_/i.test(String(p.volcSeedIclSpeaker)) } },
+    { id: 'volcSeedIclSpeaker', type: 'composite', valueType: 'string', required: true, order: 2, default: DEFAULT_SEED_TTS_20_VOICE, visible: { condition: synth } },
+    { id: 'volcIclActivationConsent', type: 'switch', order: 3, default: false, visible: { condition: p => synth(p) && Boolean(p.volcSeedIclSpeaker) && !isSeedTts20SystemVoice(String(p.volcSeedIclSpeaker)) && !/^S_/i.test(String(p.volcSeedIclSpeaker)) } },
     { id: 'volcCloneName', type: 'text', order: 4, default: '', maxLength: 80, required: true, visible: { condition: cloning } },
     { id: 'volcCloneAudio', type: 'file-upload', order: 5, default: [], maxCount: 1, maxSize: 10_000_000, accept: ['audio/wav', 'audio/x-wav', 'audio/mpeg', 'audio/ogg', 'audio/mp4', 'audio/x-m4a', 'audio/aac'], required: true, visible: { condition: cloning } },
     { id: 'volcCloneLanguage', type: 'dropdown', order: 6, default: 0, options: VOLC_CLONE_LANGUAGES.map(value => ({ value })), visible: { condition: cloning } },
@@ -50,12 +51,12 @@ export const volcengineSeedIcl20Model = defineModel({
           extra_params: { demo_text: demo, enable_audio_denoise: params.volcCloneDenoise === true, disable_volume_normalization: params.volcClonePreserveVolume === true },
         }
       }
-      const speaker = speechString(params.volcSeedIclSpeaker)
-      if (!speaker) throw new Error('Seed-ICL 2.0 需要已创建的复刻音色 ID')
-      if (!/^S_/i.test(speaker) && params.volcIclActivationConsent !== true) throw new Error('后付费音色首次正式合成将收取 138 元槽位费并锁定音色，请先确认费用')
+      const speaker = speechString(params.volcSeedIclSpeaker) ?? DEFAULT_SEED_TTS_20_VOICE
+      const systemVoice = isSeedTts20SystemVoice(speaker)
+      if (!systemVoice && !/^S_/i.test(speaker) && params.volcIclActivationConsent !== true) throw new Error('后付费音色首次正式合成将收取 138 元槽位费并锁定音色，请先确认费用')
       return {
-        resource_id: 'seed-icl-2.0',
-        req_params: { text: speechText(params), model: 'seed-tts-2.0-standard', speaker, audio_params: { format: 'mp3', sample_rate: 24000 } },
+        resource_id: systemVoice ? 'seed-tts-2.0' : 'seed-icl-2.0',
+        req_params: { text: speechText(params), ...(!systemVoice ? { model: 'seed-tts-2.0-standard' } : {}), speaker, audio_params: { format: 'mp3', sample_rate: 24000 } },
       }
     },
   },

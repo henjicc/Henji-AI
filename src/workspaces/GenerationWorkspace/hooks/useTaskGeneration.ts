@@ -3,6 +3,7 @@ import { createLogger } from '@/core/logging'
 import { clonedVoiceCompletion } from '@/services/voiceLibrary/clonedVoiceResult'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { GenerationService } from '@/core/services/GenerationService'
+import { GenerationSubmissionCancelledError } from '@/core/services/generationSubmissionConfirmation'
 import { showAlertDialog } from '@/stores/alertDialogStore'
 import { toAudioDisplayUrl } from '@/utils/audioPreview'
 import { getMediaDimensions, getMediaDurationFormatted } from '@/utils/mediaDimensions'
@@ -184,6 +185,7 @@ export function useTaskGeneration({
     try {
       return await generationService.generate(modelId, params, onProgress, { requestId })
     } catch (error) {
+      if (error instanceof GenerationSubmissionCancelledError) throw error
       throw new Error(maybeToUserMessage(error))
     }
   }, [])
@@ -315,6 +317,11 @@ export function useTaskGeneration({
         },
       })
     } catch (error) {
+      if (error instanceof GenerationSubmissionCancelledError) {
+        markVisibleGenerationTaskCancelled(taskId, error.message)
+        await saveUpdate({ status: 'error', error: error.message })
+        return
+      }
       logger.error('[Workspace] 生成失败', error)
       const rawErrorMessage = maybeToUserMessage(error) || messages.genericGenerateFailed
       const providerKeyMissing = isProviderKeyMissingError(rawErrorMessage)
