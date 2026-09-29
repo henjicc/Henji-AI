@@ -3,7 +3,7 @@
 import { cleanup, fireEvent, render, screen, act } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import i18n from '@/i18n/config'
-import { aiListTtsVoices } from '@/commands/aiRuntime'
+import { aiGetCachedTtsVoices, aiListTtsVoices } from '@/commands/aiRuntime'
 import { VoiceSelectorPanel } from './VoiceSelectorPanel'
 import { voiceLibraryService } from '@/services/voiceLibrary/VoiceLibraryService'
 
@@ -11,7 +11,7 @@ vi.mock('@/services/voiceLibrary/VoiceLibraryService', () => ({ voiceLibraryServ
 vi.mock('@/core/services/GenerationService', () => ({ GenerationService: { getInstance: vi.fn() } }))
 vi.mock('@/components/AudioPlayer', () => ({ default: () => null }))
 
-vi.mock('@/commands/aiRuntime', () => ({ aiListTtsVoices: vi.fn() }))
+vi.mock('@/commands/aiRuntime', () => ({ aiListTtsVoices: vi.fn(), aiGetCachedTtsVoices: vi.fn() }))
 
 afterEach(() => {
   cleanup()
@@ -46,9 +46,17 @@ describe('TTS voice selector', () => {
     }} />)
 
     expect(await screen.findByText('我的声音')).toBeTruthy()
-    expect(aiListTtsVoices).toHaveBeenCalledWith('bailian-cosyvoice-v3.5')
+    expect(aiListTtsVoices).toHaveBeenCalledWith('bailian-cosyvoice-v3.5', false)
     expect(screen.queryByPlaceholderText('输入列表中没有的音色 ID')).toBeNull()
     fireEvent.click(screen.getByText('我的声音'))
     expect(onChange).toHaveBeenCalledWith('cosyvoice-v3.5-flash-myvoice-123')
   })
+})
+
+it('直接展示缓存，后台刷新不插入加载提示', async () => {
+  vi.mocked(aiGetCachedTtsVoices).mockReturnValue([{ id: 'cached', name: '缓存声音', source: 'clone' }])
+  vi.mocked(aiListTtsVoices).mockImplementation(() => new Promise(() => undefined))
+  render(<VoiceSelectorPanel value="" onChange={vi.fn()} config={{ voices: [], remoteModelId: 'cached-model' }} />)
+  expect(screen.getByText('缓存声音')).toBeTruthy()
+  expect(screen.queryByText('正在读取账号音色…')).toBeNull()
 })

@@ -74,11 +74,13 @@ function ensureDesktopRuntime(): void {
 export async function aiSetProviderApiKey(providerId: string, apiKey: string): Promise<void> {
   ensureDesktopRuntime()
   await getPlatform().aiRuntime.setProviderApiKey(providerId, apiKey)
+  ttsVoiceCache.clear()
 }
 
 export async function aiRemoveProviderApiKey(providerId: string): Promise<void> {
   ensureDesktopRuntime()
   await getPlatform().aiRuntime.removeProviderApiKey(providerId)
+  ttsVoiceCache.clear()
 }
 
 export async function aiGetProviderApiKey(providerId: string): Promise<string | null> {
@@ -98,9 +100,27 @@ export async function aiTestProviderConnection(
   return await getPlatform().aiRuntime.testProviderConnection(providerId)
 }
 
-export async function aiListTtsVoices(modelId: string): Promise<TtsVoice[]> {
+const TTS_VOICE_CACHE_MS = 5 * 60 * 1000
+const ttsVoiceCache = new Map<string, { voices?: TtsVoice[]; expiresAt: number; pending?: Promise<TtsVoice[]> }>()
+
+/** 已获取的列表可直接展示；过期后由读取入口后台更新。 */
+export function aiGetCachedTtsVoices(modelId: string): TtsVoice[] | undefined {
+  return ttsVoiceCache.get(modelId)?.voices
+}
+
+export async function aiListTtsVoices(modelId: string, force = false): Promise<TtsVoice[]> {
   ensureDesktopRuntime()
-  return await getPlatform().aiRuntime.listTtsVoices(modelId)
+  const cached = ttsVoiceCache.get(modelId)
+  if (cached?.pending) return cached.pending
+  if (!force && cached?.voices && cached.expiresAt > Date.now()) return cached.voices
+  const entry = { voices: cached?.voices, expiresAt: cached?.expiresAt ?? 0, pending: undefined as Promise<TtsVoice[]> | undefined }
+  ttsVoiceCache.set(modelId, entry)
+  entry.pending = getPlatform().aiRuntime.listTtsVoices(modelId).then(voices => {
+    entry.voices = voices
+    entry.expiresAt = Date.now() + TTS_VOICE_CACHE_MS
+    return voices
+  }).finally(() => { entry.pending = undefined })
+  return entry.pending
 }
 
 export async function aiGenerate(request: AiGenerateRequestDto): Promise<AiGenerateResponseDto> {

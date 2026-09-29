@@ -5,7 +5,7 @@ const SAFE_LOCAL_WAVEFORM_HOSTS = new Set(['localhost', '127.0.0.1', 'asset.loca
 // v5：新增主进程 ffmpeg 分桶路径，与渲染层 Web Audio 全量解码数值不完全一致，
 // bump 版本号避免新旧算法结果在缓存里混用导致同一音频刷新前后波形跳变。
 const WAVEFORM_ALGO_VERSION = '2026-07-01-v5'
-const waveformMemoryCache = new Map<string, number[]>()
+const waveformMemoryCache = new Map<string, UseAudioWaveformResult>()
 
 function isCrossOriginWaveformRestricted(source: string): boolean {
   if (!source || typeof window === 'undefined') {
@@ -26,23 +26,6 @@ function isCrossOriginWaveformRestricted(source: string): boolean {
   } catch {
     return false
   }
-}
-
-function buildFallbackWaveform(seed: string, bars = 256): number[] {
-  let state = 2166136261
-  for (let index = 0; index < seed.length; index += 1) {
-    state ^= seed.charCodeAt(index)
-    state = Math.imul(state, 16777619) >>> 0
-  }
-  const result: number[] = []
-  for (let index = 0; index < bars; index += 1) {
-    state = (Math.imul(state, 1664525) + 1013904223) >>> 0
-    const noise = (state & 0xffff) / 0xffff
-    const envelope = Math.sin((index / Math.max(1, bars - 1)) * Math.PI)
-    const value = 0.12 + envelope * 0.46 + noise * 0.22
-    result.push(Math.max(0.06, Math.min(1, value)))
-  }
-  return result
 }
 
 /**
@@ -118,14 +101,13 @@ export interface UseAudioWaveformResult {
   waveDuration: number | null
 }
 
-/** 拉取音频并解码为波形采样点，按来源+精度+算法版本缓存，解码失败时回退到确定性伪波形 */
+/** 拉取音频并解码为波形采样点，按来源+精度+算法版本缓存，仅展示真实采样，解码失败时保留空状态 */
 export function useAudioWaveform(
   src: string,
   filePath: string | undefined,
   { width, compact = false, duration }: UseAudioWaveformOptions
 ): UseAudioWaveformResult {
-  const [waveform, setWaveform] = useState<number[] | null>(null)
-  const [waveDuration, setWaveDuration] = useState<number | null>(null)
+  const [resolved, setResolved] = useState<{ key: string; result: UseAudioWaveformResult } | null>(null)
   const targetBars = useMemo(
     () => Math.max(96, Math.min(320, Math.floor(width * (compact ? 0.72 : 0.62)))),
     [width, compact]
@@ -137,25 +119,15 @@ export function useAudioWaveform(
   )
 
   useEffect(() => {
-    if (!src) {
-      setWaveform(null)
-      setWaveDuration(null)
-      return
-    }
+    if (!src) return
     let aborted = false
+    const save = (waveform: number[], waveDuration: number | null): void => {
+      const result = { waveform, waveDuration }
+      waveformMemoryCache.set(cacheKey, result)
+      if (!aborted) setResolved({ key: cacheKey, result })
+    }
     const run = async () => {
-      const cachedWaveform = waveformMemoryCache.get(cacheKey)
-      if (cachedWaveform) {
-        if (!aborted) {
-          setWaveform(cachedWaveform)
-          setWaveDuration((prev) => prev || duration || null)
-        }
-        return
-      }
-      if (!aborted) {
-        setWaveDuration(null)
-      }
-
+      if (waveformMemoryCache.has(cacheKey)) return
       const nativeSource = filePath?.trim() || src
       const native = window.henjiNative
       if (native && nativeSource) {
@@ -165,11 +137,7 @@ export function useAudioWaveform(
           const peakList = result.peak as number[]
           const arr = rmsList.map((rmsValue, index) => Math.max(rmsValue * 1.2, (peakList[index] ?? 0) * 0.65))
           const smooth = postProcessWaveform(arr, compact)
-          if (!aborted) {
-            waveformMemoryCache.set(cacheKey, smooth)
-            setWaveform(smooth)
-            setWaveDuration(result.durationSeconds || null)
-          }
+          save(smooth, result.durationSeconds || null)
           return
         } catch {
           // 主进程处理失败（如无本地路径可解析、无音轨等），走下面的渲染层 Web Audio 后备
@@ -179,16 +147,9 @@ export function useAudioWaveform(
       try {
         const buf = await fetchAudioArrayBuffer(src, filePath)
         const Ctx = window.AudioContext ?? ((window as DynamicValue as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext)
-        if (!Ctx) {
-          if (!aborted) {
-            const fallback = buildFallbackWaveform(cacheKey)
-            waveformMemoryCache.set(cacheKey, fallback)
-            setWaveform(fallback)
-          }
-          return
-        }
+        if (!Ctx) return
         const ctx = new Ctx()
-        const audioBuf = await ctx.decodeAudioData(buf)
+        const audioBuf = await ctx.decodeAudioData(buf).finally(() => { void ctx.close() })
         const ch0 = audioBuf.getChannelData(0)
         const ch1 = audioBuf.numberOfChannels > 1 ? audioBuf.getChannelData(1) : null
         const bars = targetBars
@@ -212,22 +173,15 @@ export function useAudioWaveform(
           arr.push(Math.max(rms * 1.2, peak * 0.65))
         }
         const smooth = postProcessWaveform(arr, compact)
-        if (!aborted) {
-          waveformMemoryCache.set(cacheKey, smooth)
-          setWaveform(smooth)
-          setWaveDuration(audioBuf.duration || null)
-        }
+        save(smooth, audioBuf.duration || null)
       } catch {
-        if (!aborted) {
-          const fallback = buildFallbackWaveform(cacheKey)
-          waveformMemoryCache.set(cacheKey, fallback)
-          setWaveform(fallback)
-        }
+        // 无法读取真实采样时不伪造音频内容，播放器仍可正常播放。
       }
     }
     run()
     return () => { aborted = true }
   }, [cacheKey, src, filePath, targetBars, compact, duration])
 
-  return { waveform, waveDuration }
+  const result = src ? waveformMemoryCache.get(cacheKey) ?? (resolved?.key === cacheKey ? resolved.result : null) : null
+  return result ?? { waveform: null, waveDuration: duration || null }
 }

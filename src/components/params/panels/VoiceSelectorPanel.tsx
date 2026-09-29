@@ -16,7 +16,7 @@ import { createLogger } from '@/core/logging'
 import type { VoiceSelectorConfig } from '@/core/types/PanelTypes'
 import { voiceLibraryService, type VoiceLibraryRecord } from '@/services/voiceLibrary/VoiceLibraryService'
 import { rememberTtsVoiceNames } from '@/services/voiceLibrary/ttsVoiceNameCache'
-import { aiListTtsVoices } from '@/commands/aiRuntime'
+import { aiGetCachedTtsVoices, aiListTtsVoices } from '@/commands/aiRuntime'
 
 const logger = createLogger('components.params.panels.VoiceSelectorPanel')
 
@@ -182,6 +182,20 @@ const HoverScrollText: React.FC<HoverScrollTextProps> = ({ text, active }) => {
   )
 }
 
+function mapRemoteVoices(records: Awaited<ReturnType<typeof aiListTtsVoices>>): VoiceSelectorConfig['voices'] {
+  return records.map((item) => ({
+    id: item.id,
+    name: item.name,
+    description: item.description,
+    tags: buildVoiceFeatureTags({
+      voiceId: item.id,
+      voiceName: item.name,
+      description: item.description,
+      source: item.source ?? 'clone',
+    }),
+  }))
+}
+
 export const VoiceSelectorPanel: React.FC<VoiceSelectorPanelProps> = ({
   value,
   onChange,
@@ -200,7 +214,8 @@ export const VoiceSelectorPanel: React.FC<VoiceSelectorPanelProps> = ({
   const [refreshingVoiceId, setRefreshingVoiceId] = useState<string | null>(null)
   const [previewVoiceId, setPreviewVoiceId] = useState<string | null>(null)
   const refreshController = useRef<AbortController | null>(null)
-  const [remoteVoices, setRemoteVoices] = useState<VoiceSelectorConfig['voices']>([])
+  const [remoteVoices, setRemoteVoices] = useState<VoiceSelectorConfig['voices']>(() => mapRemoteVoices(config?.remoteModelId ? aiGetCachedTtsVoices(config.remoteModelId) ?? [] : []))
+  const [showRemoteLoading, setShowRemoteLoading] = useState(false)
   const remoteRequestRef = useRef(0)
   const [remoteStatus, setRemoteStatus] = useState<'idle' | 'loading' | 'ready' | 'failed'>('idle')
   const [remoteError, setRemoteError] = useState('')
@@ -211,26 +226,16 @@ export const VoiceSelectorPanel: React.FC<VoiceSelectorPanelProps> = ({
   const voiceLibraryScope = config?.voiceLibrary
   const remoteModelId = config?.remoteModelId
 
-  const loadRemoteVoices = useCallback(async (): Promise<void> => {
+  const loadRemoteVoices = useCallback(async (force = false): Promise<void> => {
     if (!remoteModelId) return
     const requestId = ++remoteRequestRef.current
     setRemoteStatus('loading')
     setRemoteError('')
     try {
-      const records = await aiListTtsVoices(remoteModelId)
+      const records = await aiListTtsVoices(remoteModelId, force)
       if (requestId !== remoteRequestRef.current) return
       rememberTtsVoiceNames(remoteModelId, records)
-      setRemoteVoices(records.map((item) => ({
-        id: item.id,
-        name: item.name,
-        description: item.description,
-        tags: buildVoiceFeatureTags({
-          voiceId: item.id,
-          voiceName: item.name,
-          description: item.description,
-          source: item.source ?? 'clone',
-        }),
-      })))
+      setRemoteVoices(mapRemoteVoices(records))
       setRemoteStatus('ready')
     } catch (error) {
       if (requestId !== remoteRequestRef.current) return
@@ -241,11 +246,11 @@ export const VoiceSelectorPanel: React.FC<VoiceSelectorPanelProps> = ({
   }, [remoteModelId])
 
   useEffect(() => {
-    setRemoteVoices([])
+    setRemoteVoices(mapRemoteVoices(remoteModelId ? aiGetCachedTtsVoices(remoteModelId) ?? [] : []))
     setRemoteStatus('idle')
     void loadRemoteVoices()
     return () => { remoteRequestRef.current += 1 }
-  }, [loadRemoteVoices])
+  }, [loadRemoteVoices, remoteModelId])
 
   useEffect(() => {
     let cancelled = false
@@ -307,6 +312,13 @@ export const VoiceSelectorPanel: React.FC<VoiceSelectorPanelProps> = ({
     }
     return Array.from(merged.values())
   }, [configuredVoices, customVoices, remoteVoices])
+
+  useEffect(() => {
+    setShowRemoteLoading(false)
+    if (remoteStatus !== 'loading' || voices.length > 0) return
+    const timer = window.setTimeout(() => setShowRemoteLoading(true), 300)
+    return () => window.clearTimeout(timer)
+  }, [remoteStatus, voices.length])
 
   const voiceItems = useMemo((): VoiceViewItem[] => {
     return voices.map((voice) => {
@@ -516,15 +528,15 @@ export const VoiceSelectorPanel: React.FC<VoiceSelectorPanelProps> = ({
             className={`${UI_FIELD_CONTROL_HEIGHT_SM_CLASS} min-w-0 flex-1`}
           />
           {remoteModelId && (
-            <UiButton type="button" variant="ghost" size="sm" disabled={remoteStatus === 'loading'} onClick={() => void loadRemoteVoices()}>
+            <UiButton type="button" variant="ghost" size="sm" disabled={remoteStatus === 'loading'} onClick={() => void loadRemoteVoices(true)}>
               刷新音色
             </UiButton>
           )}
         </div>
       )}
 
-      {remoteStatus === 'loading' && <UiLoading size="xs" message="正在读取账号音色…" />}
-      {remoteStatus === 'failed' && <UiError size="xs" message={remoteError} onRetry={() => void loadRemoteVoices()} />}
+      {showRemoteLoading && remoteStatus === 'loading' && voices.length === 0 && <UiLoading size="xs" message="正在读取账号音色…" />}
+      {remoteStatus === 'failed' && <UiError size="xs" message={remoteError} onRetry={() => void loadRemoteVoices(true)} />}
       {libraryError && <UiError size="xs" message={libraryError} />}
       {config?.customIdHint && voices.length === 0 && remoteStatus !== 'loading' && (
         <p className="mb-2 text-xs text-text-muted">{config.customIdHint}</p>

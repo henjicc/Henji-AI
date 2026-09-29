@@ -339,7 +339,9 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
             }}
           />
         ) : (
-          <div className="w-full h-full rounded-md bg-layer" />
+          <div className="flex h-full w-full items-center" aria-hidden="true">
+            <div className="h-px w-full bg-layer" />
+          </div>
         )}
       </div>
       <div className={`${compact ? 'mt-2' : 'mt-3'} flex items-center justify-between`}>

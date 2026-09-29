@@ -284,7 +284,7 @@ export const AudioNode = memo(({ id, data, selected, type, width, height }: Audi
                   onSeekEnd={handleWaveformSeekEnd}
                 />
               ) : (
-                <div className="h-full w-full rounded bg-layer/50" />
+                <div className="relative top-1/2 h-px w-full bg-layer/50" />
               )}
             </div>
             <div className="flex h-7 min-w-0 items-center gap-1">
