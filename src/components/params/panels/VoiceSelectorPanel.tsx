@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { UI_FIELD_CONTROL_HEIGHT_SM_CLASS, UiButton, UiEmpty, UiError, UiLoading, UiInput, UiOptionButton } from '@/components/ui'
+import Dropdown from '@/components/ui/Dropdown'
 import AudioPlayer from '@/components/AudioPlayer'
 import { toFetchableMediaUrl, isLikelyLocalImagePath } from '@/services/imageSource'
 import { GenerationService } from '@/core/services/GenerationService'
@@ -47,11 +48,6 @@ interface VoiceViewItem {
   languages: string[]
 }
 
-interface HoverScrollTextProps {
-  text: string
-  active: boolean
-}
-
 const SOURCE_FILTER_OPTIONS: Array<FilterOption<VoiceSourceFilter>> = [
   { value: 'all', label: '全部来源' },
   { value: 'system', label: '系统音色' },
@@ -69,12 +65,23 @@ const AGE_FILTER_OPTIONS: Array<FilterOption<VoiceAgeFilter>> = [
   { value: 'child', label: '童声' },
   { value: 'youth', label: '青年' },
   { value: 'mature', label: '成熟' },
+  { value: 'senior', label: '老年' },
 ]
 
-const FILTER_BUTTON_CLASS = '!h-8 !px-3 !py-1 justify-center text-xs leading-tight whitespace-nowrap'
-
 const LANGUAGE_LABELS: Record<string, string> = {
-  zh: '中文 (普通话)',
+  zh: '普通话',
+  'zh-sichuan': '四川话',
+  'zh-chongqing': '重庆话',
+  'zh-shanghai': '上海话',
+  'zh-dongbei': '东北话',
+  'zh-shaanxi': '陕西话',
+  'zh-henan': '河南话',
+  'zh-beijing': '北京话',
+  'zh-tianjin': '天津话',
+  'zh-ningbo': '宁波话',
+  'zh-yunnan': '云南话',
+  'zh-gansu': '甘肃话',
+  'nan': '闽南语',
   yue: '中文 (粤语)',
   en: '英语',
   ja: '日语',
@@ -134,54 +141,6 @@ function resolveDescriptionText(description: DynamicValue, language: string): st
   return getI18nText(description as I18nText, language).trim()
 }
 
-const HoverScrollText: React.FC<HoverScrollTextProps> = ({ text, active }) => {
-  const containerRef = useRef<HTMLDivElement | null>(null)
-  const cycleRef = useRef<HTMLSpanElement | null>(null)
-
-  useEffect(() => {
-    const container = containerRef.current
-    const cycle = cycleRef.current
-    if (!container || !cycle) {
-      return
-    }
-    container.scrollLeft = 0
-    if (!active) {
-      return
-    }
-    const cycleWidth = cycle.offsetWidth
-    if (cycleWidth <= container.clientWidth + 1) {
-      return
-    }
-
-    let rafId = 0
-    const run = (): void => {
-      const current = containerRef.current
-      if (!current) {
-        return
-      }
-      const next = current.scrollLeft + 0.45
-      current.scrollLeft = next >= cycleWidth ? next - cycleWidth : next
-      rafId = requestAnimationFrame(run)
-    }
-    rafId = requestAnimationFrame(run)
-    return () => {
-      cancelAnimationFrame(rafId)
-    }
-  }, [active, text])
-
-  return (
-    <div
-      ref={containerRef}
-      className="w-full overflow-hidden whitespace-nowrap text-left text-2xs leading-tight text-text-muted"
-    >
-      <div className="inline-flex items-center">
-        <span ref={cycleRef} className="inline-block pr-8">{text}</span>
-        <span className="inline-block pr-8" aria-hidden="true">{text}</span>
-      </div>
-    </div>
-  )
-}
-
 function mapRemoteVoices(records: Awaited<ReturnType<typeof aiListTtsVoices>>): VoiceSelectorConfig['voices'] {
   return records.map((item) => ({
     id: item.id,
@@ -207,7 +166,6 @@ export const VoiceSelectorPanel: React.FC<VoiceSelectorPanelProps> = ({
   const [selectedAge, setSelectedAge] = useState<VoiceAgeFilter>('all')
   const [selectedLanguage, setSelectedLanguage] = useState<VoiceLanguageFilter>('all')
   const [keyword, setKeyword] = useState('')
-  const [hoveredVoiceId, setHoveredVoiceId] = useState<string | null>(null)
   const [customVoices, setCustomVoices] = useState<VoiceSelectorConfig['voices']>([])
   const [libraryRecords, setLibraryRecords] = useState<VoiceLibraryRecord[]>([])
   const [libraryError, setLibraryError] = useState('')
@@ -342,6 +300,13 @@ export const VoiceSelectorPanel: React.FC<VoiceSelectorPanelProps> = ({
     })
   }, [i18n.language, voices])
 
+  const sourceFilterOptions = useMemo(() => SOURCE_FILTER_OPTIONS.filter(option =>
+    option.value === 'all' || voiceItems.some(voice => voice.source === option.value)), [voiceItems])
+  const genderFilterOptions = useMemo(() => GENDER_FILTER_OPTIONS.filter(option =>
+    option.value === 'all' || voiceItems.some(voice => voice.gender === option.value)), [voiceItems])
+  const ageFilterOptions = useMemo(() => AGE_FILTER_OPTIONS.filter(option =>
+    option.value === 'all' || voiceItems.some(voice => voice.age === option.value)), [voiceItems])
+
   const languageFilterOptions = useMemo((): Array<FilterOption<VoiceLanguageFilter>> => {
     const discovered = new Set<string>()
     for (const voice of voiceItems) {
@@ -375,6 +340,14 @@ export const VoiceSelectorPanel: React.FC<VoiceSelectorPanelProps> = ({
       setSelectedLanguage('all')
     }
   }, [languageFilterOptions, selectedLanguage])
+
+  useEffect(() => {
+    if (!sourceFilterOptions.some(option => option.value === selectedSource)) setSelectedSource('all')
+    if (!genderFilterOptions.some(option => option.value === selectedGender)) setSelectedGender('all')
+    if (!ageFilterOptions.some(option => option.value === selectedAge)) setSelectedAge('all')
+  }, [sourceFilterOptions, genderFilterOptions, ageFilterOptions, selectedSource, selectedGender, selectedAge])
+
+  const hasFilters = selectedSource !== 'all' || selectedGender !== 'all' || selectedAge !== 'all' || selectedLanguage !== 'all'
 
   const normalizedKeyword = keyword.trim().toLowerCase()
 
@@ -455,85 +428,34 @@ export const VoiceSelectorPanel: React.FC<VoiceSelectorPanelProps> = ({
   return (
     <div
       className="flex h-[460px] w-full min-w-[520px] max-w-[720px] flex-col overflow-hidden overscroll-contain p-4"
+      data-voice-selector-panel
       onWheelCapture={handleWheelCapture}
     >
-      <div className="mb-3 shrink-0 space-y-2">
-        <div className="flex flex-wrap items-center gap-2">
-          {SOURCE_FILTER_OPTIONS.map((option) => (
-            <UiOptionButton
-              key={option.value}
-              type="button"
-              variant="flat"
-              active={selectedSource === option.value}
-              className={FILTER_BUTTON_CLASS}
-              onClick={() => setSelectedSource(option.value)}
-            >
-              {option.label}
-            </UiOptionButton>
-          ))}
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          {GENDER_FILTER_OPTIONS.map((option) => (
-            <UiOptionButton
-              key={option.value}
-              type="button"
-              variant="flat"
-              active={selectedGender === option.value}
-              className={FILTER_BUTTON_CLASS}
-              onClick={() => setSelectedGender(option.value)}
-            >
-              {option.label}
-            </UiOptionButton>
-          ))}
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          {AGE_FILTER_OPTIONS.map((option) => (
-            <UiOptionButton
-              key={option.value}
-              type="button"
-              variant="flat"
-              active={selectedAge === option.value}
-              className={FILTER_BUTTON_CLASS}
-              onClick={() => setSelectedAge(option.value)}
-            >
-              {option.label}
-            </UiOptionButton>
-          ))}
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          {languageFilterOptions.map((option) => (
-            <UiOptionButton
-              key={option.value}
-              type="button"
-              variant="flat"
-              active={selectedLanguage === option.value}
-              className={FILTER_BUTTON_CLASS}
-              onClick={() => setSelectedLanguage(option.value)}
-            >
-              {option.label}
-            </UiOptionButton>
-          ))}
-        </div>
-      </div>
-
-      {config?.allowSearch !== false && (
-        <div className="mb-3 flex shrink-0 items-center gap-2">
-          <UiInput
+      <div className="mb-3 shrink-0 space-y-2" data-voice-toolbar>
+        <div className="flex items-center gap-2">
+          {config?.allowSearch !== false && <UiInput
             value={keyword}
             onChange={(event) => setKeyword(event.target.value)}
             placeholder="搜索音色名称或描述"
+            aria-label="搜索音色"
             className={`${UI_FIELD_CONTROL_HEIGHT_SM_CLASS} min-w-0 flex-1`}
-          />
-          {remoteModelId && (
-            <UiButton type="button" variant="ghost" size="sm" disabled={remoteStatus === 'loading'} onClick={() => void loadRemoteVoices(true)}>
-              刷新音色
-            </UiButton>
-          )}
+          />}
+          {remoteModelId && <UiButton type="button" variant="ghost" size="field-sm" disabled={remoteStatus === 'loading'} onClick={() => void loadRemoteVoices(true)}>
+            刷新音色
+          </UiButton>}
         </div>
-      )}
+        <div className="flex items-center gap-2">
+          <div className="grid min-w-0 flex-1 grid-cols-4 gap-2">
+            <Dropdown ariaLabel="音色来源" value={selectedSource} options={sourceFilterOptions} onSelect={setSelectedSource} disabled={sourceFilterOptions.length < 2} minWidthStrategy="none" panelWidthStrategy="options" />
+            <Dropdown ariaLabel="音色性别" value={selectedGender} options={genderFilterOptions} onSelect={setSelectedGender} disabled={genderFilterOptions.length < 2} minWidthStrategy="none" panelWidthStrategy="options" />
+            <Dropdown ariaLabel="音色年龄" value={selectedAge} options={ageFilterOptions} onSelect={setSelectedAge} disabled={ageFilterOptions.length < 2} minWidthStrategy="none" panelWidthStrategy="options" />
+            <Dropdown ariaLabel="音色语言" value={selectedLanguage} options={languageFilterOptions} onSelect={setSelectedLanguage} disabled={languageFilterOptions.length < 2} minWidthStrategy="none" panelWidthStrategy="options" />
+          </div>
+          {hasFilters && <UiButton type="button" variant="plain" size="field-sm" onClick={() => {
+            setSelectedSource('all'); setSelectedGender('all'); setSelectedAge('all'); setSelectedLanguage('all')
+          }}>清除筛选</UiButton>}
+        </div>
+      </div>
 
       {showRemoteLoading && remoteStatus === 'loading' && voices.length === 0 && <UiLoading size="xs" message="正在读取账号音色…" />}
       {remoteStatus === 'failed' && <UiError size="xs" message={remoteError} onRetry={() => void loadRemoteVoices(true)} />}
@@ -561,8 +483,7 @@ export const VoiceSelectorPanel: React.FC<VoiceSelectorPanelProps> = ({
                     active={active}
                     disabled={training || failed || expired}
                     onClick={() => onChange(voice.id)}
-                    onMouseEnter={() => setHoveredVoiceId(voice.id)}
-                    onMouseLeave={() => setHoveredVoiceId(null)}
+                    title={voice.description || voice.name}
                     // 二维网格：静息态留一层极淡底色撑出格子形状，不再叠边框
                     className={`${active ? '' : 'bg-veil-faint'} ${
                       hasDescription
@@ -573,10 +494,7 @@ export const VoiceSelectorPanel: React.FC<VoiceSelectorPanelProps> = ({
                     <span className="w-full truncate text-left text-sm leading-tight">{voice.name}</span>
                     {(training || failed || expired) && <span className="text-xs text-text-muted">{failed ? '训练失败或音色已失效' : expired ? '有效期已过，请刷新确认' : '等待训练结果'}</span>}
                     {hasDescription && (
-                      <HoverScrollText
-                        text={voice.description}
-                        active={hoveredVoiceId === voice.id}
-                      />
+                      <span className="w-full truncate text-left text-xs text-text-muted">{voice.description}</span>
                     )}
                   </UiOptionButton>
                   {canDelete && (
@@ -629,7 +547,7 @@ export const VoiceSelectorPanel: React.FC<VoiceSelectorPanelProps> = ({
                 placeholder="输入列表中没有的音色 ID"
                 className={`${UI_FIELD_CONTROL_HEIGHT_SM_CLASS} min-w-0 flex-1`}
               />
-              <UiButton type="button" variant="primary" size="sm" disabled={!customId.trim()} onClick={() => onChange(customId.trim())}>
+              <UiButton type="button" variant="primary" size="field-sm" disabled={!customId.trim()} onClick={() => onChange(customId.trim())}>
                 使用 ID
               </UiButton>
             </div>

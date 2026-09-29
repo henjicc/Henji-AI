@@ -15,6 +15,44 @@ function createGenerationSettingsScenes(context) {
 
   return [
     {
+      id: 'generation-voice-selector', surface: '生成', name: '生成-音色筛选面板', writesUserData: true,
+      setup: async (page, app, { capture }) => {
+        await app.evaluate(({ ipcMain }) => {
+          const channel = 'ai:listTtsVoices'
+          globalThis.__voiceListHandler = ipcMain._invokeHandlers.get(channel)
+          ipcMain.removeHandler(channel)
+          ipcMain.handle(channel, () => ({ ok: true, data: [] }))
+        })
+        try {
+          await context.selectGenerationModel(page, 'Qwen Audio', 'bailian-qwen-audio-3.1-tts-flash', 'bailian')
+          await paramFieldFromLabel(page, /^(音色|Voice)\s*\*?$/i).locator('[data-panel-trigger-button]').click()
+          const panel = page.locator('[data-voice-selector-panel]:visible')
+          await panel.getByText('龙安欢_v3.1', { exact: true }).waitFor()
+          await settlePage(page)
+          const searchBox = await panel.getByRole('textbox', { name: '搜索音色' }).boundingBox()
+          const refreshBox = await panel.getByRole('button', { name: '刷新音色' }).boundingBox()
+          assert.ok(searchBox && refreshBox)
+          assert.ok(Math.abs(searchBox.height - refreshBox.height) < 1, '搜索框和刷新按钮必须等高')
+          const toolbarBox = await panel.locator('[data-voice-toolbar]').boundingBox()
+          const panelBox = await panel.boundingBox()
+          assert.ok(toolbarBox.height < panelBox.height / 4, '筛选工具栏最多占面板四分之一高度')
+          if (capture) await capture('compact-voices')
+          await panel.getByRole('button', { name: '音色语言' }).click()
+          await page.getByRole('option', { name: '重庆话', exact: true }).click()
+          await panel.getByText('龙安欢_v3.1', { exact: true }).waitFor()
+          assert.equal(await panel.getByText('龙安灵心_v3.1', { exact: true }).count(), 0)
+          await panel.getByRole('button', { name: '清除筛选' }).click()
+          await panel.getByText('龙安灵心_v3.1', { exact: true }).waitFor()
+        } finally {
+          await app.evaluate(({ ipcMain }) => {
+            ipcMain.removeHandler('ai:listTtsVoices')
+            if (globalThis.__voiceListHandler) ipcMain.handle('ai:listTtsVoices', globalThis.__voiceListHandler)
+            delete globalThis.__voiceListHandler
+          })
+        }
+      },
+    },
+    {
       id: 'generation-voice-clone',
       surface: '生成',
       name: '生成-豆包语音',

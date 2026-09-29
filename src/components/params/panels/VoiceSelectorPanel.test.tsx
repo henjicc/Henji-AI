@@ -60,3 +60,23 @@ it('直接展示缓存，后台刷新不插入加载提示', async () => {
   expect(screen.getByText('缓存声音')).toBeTruthy()
   expect(screen.queryByText('正在读取账号音色…')).toBeNull()
 })
+
+it('筛选值来自音色列表，组合筛选有效，切换列表清除失效筛选', async () => {
+  const config = { voices: [
+    { id: 'a', name: '声音甲', description: '女 · 青年 英语 重庆话', tags: ['source:system'] },
+    { id: 'b', name: '声音乙', description: '男 · 老年 日语', tags: ['source:system'] },
+  ] }
+  const view = render(<VoiceSelectorPanel value="" onChange={vi.fn()} config={config} />)
+  fireEvent.click(screen.getByRole('button', { name: '音色年龄' }))
+  expect(screen.queryByRole('option', { name: '童声' })).toBeNull()
+  fireEvent.click(screen.getByRole('option', { name: '青年' }))
+  expect(screen.getByText('声音甲')).toBeTruthy()
+  expect(screen.queryByText('声音乙')).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: '音色语言' }))
+  expect(screen.getByRole('option', { name: '重庆话' })).toBeTruthy()
+  fireEvent.click(screen.getByRole('option', { name: '英语' }))
+  expect(screen.getByText('声音甲')).toBeTruthy()
+  view.rerender(<VoiceSelectorPanel value="" onChange={vi.fn()} config={{ voices: [config.voices[1]] }} />)
+  expect(screen.getByText('声音乙')).toBeTruthy()
+  expect(screen.queryByRole('button', { name: '清除筛选' })).toBeNull()
+})
