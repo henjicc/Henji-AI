@@ -14,6 +14,7 @@ export function AudioEditUndoButton({ project, canUndo, disabled, onUndo, onRest
   onUndo: () => void; onRestored: () => void; onError: (error: unknown) => void
 }) {
   const menu = useContextMenu()
+  const hideMenu = menu.hideMenu
   const timer = useRef<ReturnType<typeof setTimeout>>()
   const longPressed = useRef(false)
   const restoring = useRef(false)
@@ -21,7 +22,7 @@ export function AudioEditUndoButton({ project, canUndo, disabled, onUndo, onRest
   const canReset = useMemo(() => hasAudioEditModifications(project), [project])
   const cancelPress = () => clearTimeout(timer.current)
   useEffect(() => () => clearTimeout(timer.current), [])
-  useEffect(() => { setConfirmation(null); menu.hideMenu(); clearTimeout(timer.current) }, [project.id, menu.hideMenu])
+  useEffect(() => { setConfirmation(null); hideMenu(); clearTimeout(timer.current) }, [project.id, hideMenu])
   const showMenu = (event: React.MouseEvent) => menu.showMenu(event, [{
     id: 'reset', label: '撤销所有修改', icon: <RotateCcw size={16} />, disabled: disabled || !canReset,
     onClick: () => {

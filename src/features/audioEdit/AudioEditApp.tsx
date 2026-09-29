@@ -234,13 +234,14 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
   }, [])
   useEffect(() => { void refreshHome().catch(notifyError) }, [refreshHome, notifyError])
   const projectId = project?.id
+  const setSelectedBlockIds = state.setSelectedBlockIds
   useEffect(() => { setWaveSelection(null); setSelectionOnly(false); setEditingBlockId(null); setNavigationTarget(null) }, [projectId])
   useEffect(() => {
     const match = textSearch.currentMatch
     if (!match) return
     const block = project?.transcript.find((item) => item.id === match.blockIds[0])
-    if (block) { setNavigationTarget({ frame: block.startFrame }); state.setSelectedBlockIds(match.blockIds) }
-  }, [textSearch.currentMatch, textSearch.navigationKey, project?.transcript, state.setSelectedBlockIds])
+    if (block) { setNavigationTarget({ frame: block.startFrame }); setSelectedBlockIds(match.blockIds) }
+  }, [textSearch.currentMatch, textSearch.navigationKey, project?.transcript, setSelectedBlockIds])
   useEffect(() => {
     const element = editorRoot.current
     if (!element) return
