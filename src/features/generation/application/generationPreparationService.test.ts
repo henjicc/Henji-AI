@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { catalog } from '@henjicc/ai-sdk'
+import { volcengineSeedIcl20Model } from '../../../../packages/ai-sdk/src/catalog/volcengine-speech/seed-icl-2.0.model'
 
 import {
   applicationSchemaRefSchema,
@@ -250,5 +251,15 @@ describe('generationPreparation', () => {
       ? aspectRatio.options.map((option) => option.value)
       : []
     expect(values).toEqual(['smart', '1:1', '4:3', '3:4', '16:9', '9:16'])
+  })
+
+  it('exposes and prepares voice cloning through the shared assistant and UI model contract', () => {
+    registry.register(composeModelDefinition(volcengineSeedIcl20Model, modelPresentations['volcengine-seed-icl-2.0']))
+    const modelId = volcengineSeedIcl20Model.meta.id
+    expect(getGenerationModelSchema(modelId)).toMatchObject({ meta: { tags: expect.arrayContaining(['voice-clone']) } })
+    expect(prepareGenerationTask({ modelId, prompt: '你好，欢迎试听。', mediaType: 'audio', options: {
+      volcIclMode: 'clone', volcCloneName: '我的声音', volcCloneAudio: ['data:audio/wav;base64,UklGRg=='],
+    } })).toMatchObject({ prepared: true, options: { volcIclMode: 'clone' } })
+    expect(() => prepareGenerationTask({ modelId, prompt: '你好，欢迎试听。', mediaType: 'audio', options: { volcIclMode: 'clone' } })).toThrow()
   })
 })

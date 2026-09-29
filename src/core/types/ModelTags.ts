@@ -24,6 +24,7 @@ export type KnownModelTag =
   | 'text-to-image'              // 文生图
   | 'text-to-video'              // 文生视频
   | 'text-to-audio'              // 文生音频
+  | 'voice-clone'                // 克隆声音
   | 'image-to-image'             // 图生图（图片编辑）
   | 'image-to-video'             // 图生视频
   | 'video-to-video'             // 视频编辑
@@ -132,7 +133,8 @@ export const FILTERABLE_TAGS: ModelTag[] = [
   'motion-control',            // 动作控制
   'video-to-video',            // 视频编辑
   'video-extension',           // 视频延长
-  'text-to-audio'              // 语音合成
+  'text-to-audio',             // 语音合成
+  'voice-clone'                // 克隆声音
 ]
 
 /**
@@ -140,6 +142,7 @@ export const FILTERABLE_TAGS: ModelTag[] = [
  * @deprecated 请使用 i18n 替代：t('models.tags.tag-id')
  */
 export const TAG_DESCRIPTIONS: Record<ModelTag, string> = {
+  'voice-clone': '语音克隆',
   // 基础能力
   'text-to-image': '支持文本生成图片',
   'text-to-video': '支持文本生成视频',

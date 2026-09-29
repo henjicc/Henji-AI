@@ -257,6 +257,9 @@ const TaskCard = React.memo(function TaskCard({
       )
     }
 
+    if (task.status === 'success' && typeof task.options?.__completionMessage === 'string') {
+      return <UiEmpty size="sm" title="音色已保存" description={task.options.__completionMessage} />
+    }
     if (task.status !== "success" || !task.result) return null
 
     if (task.result.type === "image") {

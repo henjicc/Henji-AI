@@ -20,15 +20,24 @@ export interface VoiceLibraryRecord {
   createdAt: string
   updatedAt: string
   expiresAt?: string
+  previewPath?: string
+  taskId?: string
+  status?: 'training' | 'ready' | 'failed'
+  activated?: boolean
 }
 
 export interface UpsertVoiceLibraryInput {
+  createdAt?: string
   voiceId: string
   voiceName: string
   description?: string
   providerId: string
   modelId?: string
   expiresAt?: string
+  previewPath?: string
+  taskId?: string
+  status?: 'training' | 'ready' | 'failed'
+  activated?: boolean
 }
 
 function isRecord(value: DynamicValue): value is DynamicValueMap {
@@ -67,6 +76,10 @@ function normalizeRecord(value: DynamicValue): VoiceLibraryRecord | null {
     createdAt,
     updatedAt,
     expiresAt: normalizeString(value.expiresAt),
+    previewPath: normalizeString(value.previewPath),
+    taskId: normalizeString(value.taskId),
+    status: value.status === 'training' || value.status === 'failed' ? value.status : 'ready',
+    activated: value.activated === true,
   }
 }
 
@@ -132,16 +145,21 @@ function writeLocalCache(records: VoiceLibraryRecord[]): void {
 }
 
 class VoiceLibraryService {
+  private listeners = new Set<() => void>()
+  private writes: Promise<unknown> = Promise.resolve()
+
+  subscribe = (listener: () => void): (() => void) => {
+    this.listeners.add(listener)
+    return () => { this.listeners.delete(listener) }
+  }
   private cache: VoiceLibraryRecord[] | null = null
   private loadingPromise: Promise<VoiceLibraryRecord[]> | null = null
 
   private async ensureLoaded(): Promise<VoiceLibraryRecord[]> {
-    if (this.cache) {
-      return this.cache
-    }
     if (this.loadingPromise) {
       return this.loadingPromise
     }
+    if (this.cache) return this.cache
 
     const localCache = readLocalCache()
     if (localCache.length > 0) {
@@ -154,9 +172,8 @@ class VoiceLibraryService {
       const records = parseVoiceRecords(raw)
       this.cache = records
       writeLocalCache(records)
-      this.loadingPromise = null
       return records
-    })()
+    })().finally(() => { this.loadingPromise = null })
 
     return this.loadingPromise
   }
@@ -170,6 +187,7 @@ class VoiceLibraryService {
     )
     this.cache = records
     writeLocalCache(records)
+    this.listeners.forEach(listener => listener())
   }
 
   async listVoices(scope?: VoiceLibraryScope): Promise<VoiceLibraryRecord[]> {
@@ -182,7 +200,18 @@ class VoiceLibraryService {
     })
   }
 
-  async upsertVoice(input: UpsertVoiceLibraryInput): Promise<VoiceLibraryRecord> {
+  upsertVoice(input: UpsertVoiceLibraryInput): Promise<VoiceLibraryRecord> {
+    const write = this.writes.then(() => this.upsert(input))
+    this.writes = write.catch(() => undefined)
+    return write
+  }
+
+  async markTaskFailed(taskId: string): Promise<void> {
+    const records = await this.listVoices()
+    for (const record of records.filter(item => item.taskId === taskId)) await this.upsertVoice({ ...record, status: 'failed' })
+  }
+
+  private async upsert(input: UpsertVoiceLibraryInput): Promise<VoiceLibraryRecord> {
     const voiceId = normalizeString(input.voiceId)
     const voiceName = normalizeString(input.voiceName)
     const providerId = normalizeString(input.providerId)
@@ -212,8 +241,12 @@ class VoiceLibraryService {
         voiceName,
         description: description ?? existed.description,
         modelId: modelId ?? existed.modelId,
-        expiresAt: expiresAt ?? existed.expiresAt,
+        expiresAt: input.activated === true ? undefined : expiresAt ?? existed.expiresAt,
+        activated: input.activated ?? existed.activated,
         updatedAt: now,
+        previewPath: input.previewPath ?? existed.previewPath,
+        taskId: input.taskId ?? existed.taskId,
+        status: input.status ?? existed.status,
       }
       records[existedIndex] = next
       await this.persist(records)
@@ -226,16 +259,26 @@ class VoiceLibraryService {
       providerId,
       modelId,
       description,
-      createdAt: now,
+      createdAt: normalizeString(input.createdAt) ?? now,
       updatedAt: now,
       expiresAt,
+      previewPath: input.previewPath,
+      taskId: input.taskId,
+      status: input.status,
+      activated: input.activated,
     }
     records.push(created)
     await this.persist(records)
     return created
   }
 
-  async deleteVoice(voiceId: string, scope?: VoiceLibraryScope): Promise<void> {
+  deleteVoice(voiceId: string, scope?: VoiceLibraryScope): Promise<void> {
+    const write = this.writes.then(() => this.remove(voiceId, scope))
+    this.writes = write.catch(() => undefined)
+    return write
+  }
+
+  private async remove(voiceId: string, scope?: VoiceLibraryScope): Promise<void> {
     const normalizedVoiceId = normalizeString(voiceId)
     if (!normalizedVoiceId) {
       return

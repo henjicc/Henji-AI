@@ -30,7 +30,7 @@
     "kie": "KIE",
     "apimart": "APIMart",
     "bailian": "Alibaba Cloud Model Studio",
-    "volcengine": "Volcengine Ark",
+    "volcengine": "Volcengine",
     "grsai": "Grsai",
     "siliconflow": "SiliconFlow",
     "volcengine-speech": "Volcengine Speech"
@@ -45,6 +45,7 @@
     "motion-control": "Motion Control",
     "video-to-video": "Video Editing",
     "video-extension": "Video Extension",
-    "text-to-audio": "Audio Synthesis"
+    "text-to-audio": "Audio Synthesis",
+    "voice-clone": "Voice Cloning"
   }
 }

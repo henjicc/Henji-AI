@@ -465,6 +465,1011 @@
     "description": "有声阅读 · 中文、支持30+语种识别"
   },
   {
+    "id": "ICL_uranus_en_female_charlie_tob",
+    "name": "Charlie 2.0",
+    "description": "外语音色 · 美式英语"
+  },
+  {
+    "id": "ICL_uranus_en_male_ethan_tob",
+    "name": "Ethan 2.0",
+    "description": "外语音色 · 澳洲英语"
+  },
+  {
+    "id": "ICL_uranus_en_male_alastor_tob",
+    "name": "Alastor 2.0",
+    "description": "外语音色 · 英式英语"
+  },
+  {
+    "id": "ICL_uranus_en_male_chucky_tob",
+    "name": "Chucky 2.0",
+    "description": "外语音色 · 美式英语"
+  },
+  {
+    "id": "ICL_uranus_en_male_noah_tob",
+    "name": "Noah 2.0",
+    "description": "外语音色 · 美式英语"
+  },
+  {
+    "id": "ICL_uranus_en_male_jigsaw_tob",
+    "name": "Jigsaw 2.0",
+    "description": "外语音色 · 美式英语"
+  },
+  {
+    "id": "ICL_uranus_en_male_clown_man_tob",
+    "name": "Clown Man 2.0",
+    "description": "外语音色 · 美式英语"
+  },
+  {
+    "id": "ICL_uranus_en_male_cartoon_chef_tob",
+    "name": "Cartoon Chef 2.0",
+    "description": "外语音色 · 美式英语"
+  },
+  {
+    "id": "ICL_uranus_en_male_frosty_man_tob",
+    "name": "Frosty Man 2.0",
+    "description": "外语音色 · 美式英语"
+  },
+  {
+    "id": "ICL_uranus_en_male_the_grinch_tob",
+    "name": "The Grinch 2.0",
+    "description": "外语音色 · 美式英语"
+  },
+  {
+    "id": "ICL_uranus_en_male_kevin_mccallister_tob",
+    "name": "Kevin McCallister 2.0",
+    "description": "外语音色 · 美式英语"
+  },
+  {
+    "id": "ICL_uranus_en_male_michael_tob",
+    "name": "Michael 2.0",
+    "description": "外语音色 · 美式英语"
+  },
+  {
+    "id": "ICL_uranus_en_male_big_boogie_tob",
+    "name": "Big Boogie 2.0",
+    "description": "外语音色 · 美式英语"
+  },
+  {
+    "id": "ICL_uranus_en_male_xavier_tob",
+    "name": "Xavier 2.0",
+    "description": "外语音色 · 美式英语"
+  },
+  {
+    "id": "ICL_uranus_en_male_zayne_tob",
+    "name": "Zayne 2.0",
+    "description": "外语音色 · 美式英语"
+  },
+  {
+    "id": "ICL_uranus_zh_female_kefuwanjun_tob",
+    "name": "客服婉君 2.0",
+    "description": "客服场景 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_female_yingxiaokefu_v2_tob",
+    "name": "营销小楠 2.0",
+    "description": "客服场景 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_female_aojiaonvyou_tob",
+    "name": "傲娇女友 2.0",
+    "description": "角色扮演,S2S\\-SC · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_female_aomanjiaosheng_tob",
+    "name": "傲慢娇声 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_female_xiemeinvwang_tob",
+    "name": "邪魅女王 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_female_bingjiaojiejie_tob",
+    "name": "病娇姐姐 2.0",
+    "description": "角色扮演,S2S\\-SC · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_female_bingjiaomengmei_tob",
+    "name": "病娇萌妹 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_female_bingruoshaonv_tob",
+    "name": "病弱少女 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_female_chengshuwenrou_tob",
+    "name": "成熟温柔 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_female_chengshujiejie_tob",
+    "name": "成熟姐姐 2.0",
+    "description": "角色扮演,S2S\\-SC · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_female_chunzhenshaonv_tob",
+    "name": "纯真少女 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_female_chunchenvsheng_tob",
+    "name": "纯澈女生 2.0",
+    "description": "通用场景 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_female_wumeikeren_tob",
+    "name": "妩媚可人 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_female_guaiqiaokeer_tob",
+    "name": "乖巧可儿 2.0",
+    "description": "客服场景 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_female_heainainai_tob",
+    "name": "和蔼奶奶 2.0",
+    "description": "视频配音 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_female_huopodiaoman_tob",
+    "name": "活泼刁蛮 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_female_huoponvhai_tob",
+    "name": "活泼女孩 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_female_jiaohannvwang_tob",
+    "name": "娇憨女王 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_female_jiaoruoluoli_tob",
+    "name": "娇弱萝莉 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_female_jiaxiaozi_tob",
+    "name": "假小子 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_female_jinglingxiangdao_tob",
+    "name": "精灵向导 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_female_kailangtingting_tob",
+    "name": "开朗婷婷 2.0",
+    "description": "客服场景 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_female_kefunvshengwenhecuishou_tob",
+    "name": "外呼凌凌 2.0",
+    "description": "客服场景 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_female_kaixinxiaohong_tob",
+    "name": "开心小鸿 2.0",
+    "description": "客服场景 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_female_keainvsheng_tob",
+    "name": "可爱女生 2.0",
+    "description": "角色扮演,S2S\\-SC · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_female_lingdongxinxin_tob",
+    "name": "灵动欣欣 2.0",
+    "description": "客服场景 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_female_linjuayi_tob",
+    "name": "邻居阿姨 2.0",
+    "description": "视频配音 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_female_tianmeijiaoqiao_tob",
+    "name": "甜美娇俏 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_female_qinglenggaoya_tob",
+    "name": "清冷高雅 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_female_lixingyuanzi_tob",
+    "name": "理性圆子 2.0",
+    "description": "客服场景 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_female_xingganmeihuo_tob",
+    "name": "性感魅惑 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_female_nuanxinqianqian_tob",
+    "name": "暖心茜茜 2.0",
+    "description": "客服场景 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_female_nuanxinxuejie_tob",
+    "name": "暖心学姐 2.0",
+    "description": "角色扮演,S2S\\-SC · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_female_qingtianmeimei_tob",
+    "name": "清甜莓莓 2.0",
+    "description": "客服场景 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_female_qingtiantaotao_tob",
+    "name": "清甜桃桃 2.0",
+    "description": "客服场景 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_female_qingxixiaoxue_tob",
+    "name": "清晰小雪 2.0",
+    "description": "客服场景 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_female_qingxinshaonv_tob",
+    "name": "倾心少女 2.0",
+    "description": "视频配音 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_female_rouguhunshi_tob",
+    "name": "柔骨魂师 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_female_ruanmengtangtang_tob",
+    "name": "软萌糖糖 2.0",
+    "description": "客服场景 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_female_ruanmengtuanzi_tob",
+    "name": "软萌团子 2.0",
+    "description": "客服场景 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_female_tianmeihuopo_tob",
+    "name": "甜美活泼 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_female_tianmeixiaoju_tob",
+    "name": "甜美小橘 2.0",
+    "description": "客服场景 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_female_tianmeixiaoyu_tob",
+    "name": "甜美小雨 2.0",
+    "description": "客服场景 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_female_tiaopigongzhu_tob",
+    "name": "调皮公主 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_female_tiexinnvyou_tob",
+    "name": "贴心女友 2.0",
+    "description": "角色扮演,S2S\\-SC · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_female_wenrounvshen_tob",
+    "name": "温柔女神 2.0",
+    "description": "通用场景 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_female_wenrouwenya_tob",
+    "name": "温柔文雅 2.0",
+    "description": "通用场景,S2S\\-SC · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_female_zhixinjiejie_tob",
+    "name": "知心姐姐 2.0",
+    "description": "通用场景 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_female_wumeiyujie_tob",
+    "name": "妩媚御姐 2.0",
+    "description": "角色扮演,S2S\\-SC · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_female_yuanqitianmei_tob",
+    "name": "元气甜妹 2.0",
+    "description": "通用场景 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_female_xiemeiyujie_tob",
+    "name": "邪魅御姐 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_female_xingganyujie_tob",
+    "name": "性感御姐 2.0",
+    "description": "角色扮演,S2S\\-SC · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_female_xiuliqianqian_tob",
+    "name": "秀丽倩倩 2.0",
+    "description": "客服场景 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_female_tiexinguimi_tob",
+    "name": "贴心闺蜜 2.0",
+    "description": "通用场景 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_female_tiexinmeimei_tob",
+    "name": "贴心妹妹 2.0",
+    "description": "通用场景 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_female_wenroubaiyueguang_tob",
+    "name": "温柔白月光 2.0",
+    "description": "通用场景 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_female_chuliannvyou_tob",
+    "name": "初恋女友 2.0",
+    "description": "通用场景 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_female_zhixingwenwan_tob",
+    "name": "知性温婉 2.0",
+    "description": "通用场景 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_aoqilingren_tob",
+    "name": "傲气凌人 2.0",
+    "description": "角色扮演,S2S\\-SC · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_anrenqinzhu_tob",
+    "name": "黯刃秦主 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_aojiaogongzi_tob",
+    "name": "傲娇公子 2.0",
+    "description": "角色扮演,S2S\\-SC · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_aojiaojingying_tob",
+    "name": "傲娇精英 2.0",
+    "description": "角色扮演,S2S\\-SC · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_aomanqingnian_tob",
+    "name": "傲慢青年 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_aomanshaoye_tob",
+    "name": "傲慢少爷 2.0",
+    "description": "角色扮演,S2S\\-SC · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_zhenbiandiyu_tob",
+    "name": "枕边低语 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_badaoshaoye_tob",
+    "name": "霸道少爷 2.0",
+    "description": "角色扮演,S2S\\-SC · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_badaozongcai_tob",
+    "name": "霸道总裁 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_bingjiaobailian_tob",
+    "name": "病娇白莲 2.0",
+    "description": "角色扮演,S2S\\-SC · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_bingjiaodidi_tob",
+    "name": "病娇弟弟 2.0",
+    "description": "角色扮演,S2S\\-SC · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_bingjiaogege_tob",
+    "name": "病娇哥哥 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_bingjiaonanyou_tob",
+    "name": "病娇男友 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_bingjiaoshaonian_tob",
+    "name": "病娇少年 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_bingruogongzi_tob",
+    "name": "病弱公子 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_bingruoshaonian_tob",
+    "name": "病弱少年 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_bujiqingnian_tob",
+    "name": "不羁青年 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_chunhoudiyin_tob",
+    "name": "醇厚低音 2.0",
+    "description": "视频配音 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_paoxiaoxiaoge_tob",
+    "name": "咆哮小哥 2.0",
+    "description": "视频配音 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_yangyang_tob",
+    "name": "炀炀 2.0",
+    "description": "通用场景 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_chanruoshaoye_tob",
+    "name": "孱弱少爷 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_chengshuzongcai_tob",
+    "name": "成熟总裁 2.0",
+    "description": "角色扮演,S2S\\-SC · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_chenwenmingzai_tob",
+    "name": "沉稳明仔 2.0",
+    "description": "客服场景 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_qingyisugan_tob",
+    "name": "清逸苏感 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_chunzhenxuedi_tob",
+    "name": "纯真学弟 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_cixingnansang_tob",
+    "name": "磁性男嗓 2.0",
+    "description": "角色扮演,S2S\\-SC · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_cujingnansheng_tob",
+    "name": "醋精男生 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_cujingnanyou_tob",
+    "name": "醋精男友 2.0",
+    "description": "角色扮演,S2S\\-SC · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_diyinchenyu_tob",
+    "name": "低音沉郁 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_fengfashaonian_tob",
+    "name": "风发少年 2.0",
+    "description": "角色扮演,S2S\\-SC · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_ruyagongzi_tob",
+    "name": "儒雅公子 2.0",
+    "description": "有声阅读 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_fuheigongzi_tob",
+    "name": "腹黑公子 2.0",
+    "description": "角色扮演,S2S\\-SC · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_ganjingshaonian_tob",
+    "name": "干净少年 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_gaolengzongcai_tob",
+    "name": "高冷总裁 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_guaogongzi_tob",
+    "name": "孤傲公子 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_gugaogongzi_tob",
+    "name": "孤高公子 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_guiyishenmi_tob",
+    "name": "诡异神秘 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_guzhibingjiao_tob",
+    "name": "固执病娇 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_hanhoudunshi_tob",
+    "name": "憨厚敦实 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_huoliqingnian_tob",
+    "name": "活力青年 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_huoponanyou_tob",
+    "name": "活泼男友 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_huoposhuanglang_tob",
+    "name": "活泼爽朗 2.0",
+    "description": "通用场景 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_huzishushu_tob",
+    "name": "胡子叔叔 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_jijiazhineng_tob",
+    "name": "机甲智能 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_jingyingqingnian_tob",
+    "name": "精英青年 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_junyigongzi_tob",
+    "name": "俊逸公子 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_kailangqingkuai_tob",
+    "name": "开朗轻快 2.0",
+    "description": "通用场景 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_kailangqingnian_tob",
+    "name": "开朗青年 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_lanyincaohunshi_tob",
+    "name": "蓝银草魂师 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_lengaozongcai_tob",
+    "name": "冷傲总裁 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_lengdanshuli_tob",
+    "name": "冷淡疏离 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_lengjungaozhi_tob",
+    "name": "冷峻高智 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_lengjunshangsi_tob",
+    "name": "冷峻上司 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_lengkugege_tob",
+    "name": "冷酷哥哥 2.0",
+    "description": "通用场景 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_lenglianxiongzhang_tob",
+    "name": "冷脸兄长 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_lenglianxueba_tob",
+    "name": "冷脸学霸 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_lengmonanyou_tob",
+    "name": "冷漠男友 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_lengmoxiongzhang_tob",
+    "name": "冷漠兄长 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_lingyunqingnian_tob",
+    "name": "凌云青年 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_qinglengjingui_tob",
+    "name": "清冷矜贵 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_lvchaxiaoge_tob",
+    "name": "绿茶小哥 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_mengdongqingnian_tob",
+    "name": "懵懂青年 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_menyoupingxiaoge_tob",
+    "name": "闷油瓶小哥 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_xiaozhangxiaoge_tob",
+    "name": "嚣张小哥 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_nianrennanyou_tob",
+    "name": "粘人男友 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_neiliancaijun_tob",
+    "name": "内敛才俊 2.0",
+    "description": "有声阅读 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_nuanxintitie_tob",
+    "name": "暖心体贴 2.0",
+    "description": "通用场景 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_pianpiangongzi_tob",
+    "name": "翩翩公子 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_chenwenyouya_tob",
+    "name": "沉稳优雅 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_qingsexiaosheng_tob",
+    "name": "青涩小生 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_qingseqingnian_tob",
+    "name": "青涩青年 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_qingshuangshaonian_tob",
+    "name": "清爽少年 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_qingxinbobo_tob",
+    "name": "清新波波 2.0",
+    "description": "客服场景 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_qinqieqingnian_tob",
+    "name": "亲切青年 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_qinqiexiaozhuo_tob",
+    "name": "亲切小卓 2.0",
+    "description": "客服场景 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_qinglangwenrun_tob",
+    "name": "清朗温润 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_rexueshaonian_tob",
+    "name": "热血少年 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_ruyacaijun_tob",
+    "name": "儒雅才俊 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_ruyajunzi_tob",
+    "name": "儒雅君子 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_ruyazongcai_tob",
+    "name": "儒雅总裁 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_sajiaonansheng_tob",
+    "name": "撒娇男生 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_sajiaonanyou_tob",
+    "name": "撒娇男友 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_sajiaonianren_tob",
+    "name": "撒娇粘人 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_satuoqingnian_tob",
+    "name": "洒脱青年 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_shaonianjiangjun_tob",
+    "name": "少年将军 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_shenchenzongcai_tob",
+    "name": "深沉总裁 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_jilingxiaohuo_tob",
+    "name": "机灵小伙 2.0",
+    "description": "通用场景 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_shenmifashi_tob",
+    "name": "神秘法师 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_shuaizhenxiaohuo_tob",
+    "name": "率真小伙 2.0",
+    "description": "通用场景 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_shuanglangxiaoyang_tob",
+    "name": "爽朗小阳 2.0",
+    "description": "客服场景 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_dichenqianquan_tob",
+    "name": "低沉缱绻 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_siwenqingnian_tob",
+    "name": "斯文青年 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_tianxinanyou_tob",
+    "name": "甜系男友 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_tiexinnanyou_tob",
+    "name": "贴心男友 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_wenrounantongzhuo_tob",
+    "name": "温柔男同桌 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_wenrounanyou_tob",
+    "name": "温柔男友 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_wenrouxuezhang_tob",
+    "name": "温柔学长 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_wenrunxuezhe_tob",
+    "name": "温润学者 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_wenshunshaonian_tob",
+    "name": "温顺少年 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_guayanxiaoge_tob",
+    "name": "寡言小哥 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_xiaohouye_tob",
+    "name": "小侯爷 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_naiqixiaosheng_tob",
+    "name": "奶气小生 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_xiaosasuixing_tob",
+    "name": "潇洒随性 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_wenrouneilian_tob",
+    "name": "温柔内敛 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_xuebanantongzhuo_tob",
+    "name": "学霸男同桌 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_xuebatongzhuo_tob",
+    "name": "学霸同桌 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_yangguangyangyang_tob",
+    "name": "阳光洋洋 2.0",
+    "description": "客服场景 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_wennuanshaonian_tob",
+    "name": "温暖少年 2.0",
+    "description": "有声阅读 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_yiqishaonian_tob",
+    "name": "意气少年 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_younidashu_tob",
+    "name": "油腻大叔 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_youmodaye_tob",
+    "name": "幽默大爷 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_youmoshushu_tob",
+    "name": "幽默叔叔 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_youroubangzhu_tob",
+    "name": "优柔帮主 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_yourougongzi_tob",
+    "name": "优柔公子 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_yuanqishaonian_tob",
+    "name": "元气少年 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_zhangjianjunzi_tob",
+    "name": "仗剑君子 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_zhangjianxiake_tob",
+    "name": "仗剑侠客 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_zhengzhiqingnian_tob",
+    "name": "正直青年 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_zhishuaiqingnian_tob",
+    "name": "直率青年 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_zhongerqingnian_tob",
+    "name": "中二青年 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_zifuqingnian_tob",
+    "name": "自负青年 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_zixinqingnian_tob",
+    "name": "自信青年 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_tiancaitongzhuo_tob",
+    "name": "天才同桌 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_qingxinmumu_tob",
+    "name": "清新沐沐 2.0",
+    "description": "客服场景 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_female_wenwanshanshan_tob",
+    "name": "温婉珊珊 2.0",
+    "description": "客服场景 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_female_reqingaina_tob",
+    "name": "热情艾娜 2.0",
+    "description": "客服场景 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_male_shuanglangshaonian_tob",
+    "name": "爽朗少年 2.0",
+    "description": "角色扮演 · 中文"
+  },
+  {
+    "id": "ICL_uranus_zh_female_qingyingduoduo_tob",
+    "name": "轻盈朵朵 2.0",
+    "description": "客服场景 · 中文"
+  },
+  {
     "id": "ar_female_dina_uranus_bigtts",
     "name": "Dina",
     "description": "通用场景, 视频配音,外语音色,阿拉伯语 · 阿拉伯语（埃及口音）"

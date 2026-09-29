@@ -288,6 +288,7 @@ export function composeModelDefinition(
     meta,
     params,
     paramPresentation: presentation.paramPresentation,
+    submissionConfirmation: presentation.submissionConfirmation,
     sourceImageFraming: presentation.sourceImageFraming,
     linkages: presentation.linkages,
     requirements: runtime.requirements as GenerationRequirement[] | undefined,

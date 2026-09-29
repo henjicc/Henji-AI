@@ -82,9 +82,10 @@ export const TTS_VOICE_SELECTORS: Record<string, VoiceSelectorConfig> = {
   },
   'volcengine-seed-tts-2.0': { voices: volcSystemVoices, allowSearch: true },
   'volcengine-seed-icl-2.0': {
-    voices: [],
+    voices: volcSystemVoices,
     allowSearch: true,
     allowCustomId: true,
-    customIdHint: '请先在火山引擎创建复刻音色；当前新版接口只支持按已知 ID 查询状态',
+    customIdHint: '可直接选择系统音色；“克隆声音”完成后也会自动加入此列表',
+    voiceLibrary: { providerId: 'volcengine-speech', modelId: 'volcengine-seed-icl-2.0', allowDelete: true },
   },
 }

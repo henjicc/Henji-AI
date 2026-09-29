@@ -104,15 +104,15 @@ describe('catalog consumer contract', () => {
     }]))).toEqual({
       composite: {
         count: 16,
-        fields: ['default', 'id', 'order', 'required', 'type', 'valueType'],
+        fields: ['default', 'id', 'order', 'required', 'type', 'valueType', 'visible'],
       },
       dropdown: {
-        count: 334,
+        count: 336,
         fields: ['apiField', 'default', 'id', 'options', 'order', 'required', 'transferKey', 'type', 'valueType', 'visible'],
       },
       'file-upload': {
-        count: 1,
-        fields: ['accept', 'default', 'id', 'maxCount', 'maxSize', 'order', 'type', 'valueType'],
+        count: 2,
+        fields: ['accept', 'default', 'id', 'maxCount', 'maxSize', 'order', 'required', 'type', 'valueType', 'visible'],
       },
       'image-upload': {
         count: 6,
@@ -123,16 +123,16 @@ describe('catalog consumer contract', () => {
         fields: ['apiField', 'default', 'id', 'max', 'min', 'order', 'step', 'transferKey', 'type', 'valueType', 'visible'],
       },
       switch: {
-        count: 93,
+        count: 96,
         fields: ['apiField', 'default', 'id', 'order', 'transferKey', 'type', 'valueType', 'visible'],
       },
       text: {
-        count: 12,
-        fields: ['default', 'id', 'order', 'type', 'visible'],
+        count: 15,
+        fields: ['default', 'id', 'maxLength', 'order', 'required', 'type', 'visible'],
       },
       textarea: {
-        count: 3,
-        fields: ['default', 'id', 'order', 'type'],
+        count: 4,
+        fields: ['default', 'id', 'order', 'type', 'visible'],
       },
     })
   })
@@ -165,14 +165,14 @@ describe('catalog consumer contract', () => {
     }
   })
 
-  it('编译并执行真实 catalog 的全部 179 条显隐/inputLimits/requirement 条件', () => {
+  it('编译并执行真实 catalog 的全部 189 条显隐/inputLimits/requirement 条件', () => {
     const conditions = collectCatalogConditions()
     const stringConditions = conditions.filter((item) => typeof item.condition === 'string')
     const functionConditions = conditions.filter((item) => typeof item.condition === 'function')
 
-    expect(conditions).toHaveLength(179)
+    expect(conditions).toHaveLength(189)
     expect(stringConditions).toHaveLength(126)
-    expect(functionConditions).toHaveLength(53)
+    expect(functionConditions).toHaveLength(63)
 
     for (const { modelId, condition } of conditions) {
       if (typeof condition === 'string') expect(() => compileRuntimeCondition(condition)).not.toThrow()

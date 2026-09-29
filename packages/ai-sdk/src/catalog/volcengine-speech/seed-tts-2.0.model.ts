@@ -1,6 +1,6 @@
 import { defineModel } from '../defineModel'
 import type { JsonObject } from '../../types/runtime'
-import { speechString, speechText } from '../audio/tts-common'
+import { speechCharacterPrice, speechString, speechText } from '../audio/tts-common'
 
 export const volcengineSeedTts20Model = defineModel({
   meta: {
@@ -22,7 +22,7 @@ export const volcengineSeedTts20Model = defineModel({
       },
     }),
   },
-  pricing: { currency: '¥', calculator: () => Number.NaN, description: '火山语音按量计费单价未核实；不显示费用预估' },
+  pricing: { currency: '¥', calculator: params => speechCharacterPrice(params, 0.3), description: '3 元/万字符（公开后付费刊例价）' },
 })
 
 export default volcengineSeedTts20Model

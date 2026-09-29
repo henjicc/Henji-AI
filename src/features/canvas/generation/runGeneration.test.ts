@@ -76,6 +76,12 @@ describe('runCanvasGeneration 付费请求门禁', () => {
     )
   })
 
+  it('音色已保存但没有试听时说明实际结果，不把它当成未训练成功', async () => {
+    generate.mockResolvedValue({ status: 'completed', metadata: { clonedVoice: { id: 'mine', name: '解说声音', status: 'ready' } } })
+    await expect(runCanvasGeneration({ modelId: 'test-model', params: {} })).rejects.toThrow('已保存到音色库')
+    expect(generate).toHaveBeenCalledTimes(1)
+  })
+
   it('供应商任务号保存完成后才开始轮询，保存失败不继续轮询', async () => {
     generate.mockResolvedValue({ status: 'pending', taskId: 'task-persist' })
     continuePolling.mockResolvedValue({ status: 'completed', filePath: '/managed/result.png' })

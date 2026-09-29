@@ -27,6 +27,8 @@ interface AlertDialogProps {
    */
   actions?: AlertDialogAction[]
   closeLabel?: string
+  /** 费用确认取消后立即撤销操作，避免退出动画期间仍能确认。 */
+  closeImmediately?: boolean
 }
 
 /**
@@ -42,6 +44,7 @@ export default function AlertDialog({
   scope = 'viewport',
   actions,
   closeLabel,
+  closeImmediately = false,
 }: AlertDialogProps): JSX.Element | null {
   const { t } = useI18n('common')
   const [opacity, setOpacity] = useState(0)
@@ -57,7 +60,8 @@ export default function AlertDialog({
 
   const handleClose = () => {
     setOpacity(0)
-    setTimeout(() => onClose(), UI_DIALOG_TRANSITION_MS)
+    if (closeImmediately) onClose()
+    else setTimeout(() => onClose(), UI_DIALOG_TRANSITION_MS)
   }
   useDialogFocusTrap({
     active: isOpen,

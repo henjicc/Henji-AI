@@ -6,6 +6,7 @@
 
 import type { ParamDef } from '../types'
 import { getI18nText } from '../types/I18nText'
+import { evaluateCondition } from '../validation/conditionEvaluator'
 
 /**
  * 验证错误接口
@@ -53,6 +54,8 @@ export function validateParams(
   const errors: ValidationError[] = []
 
   for (const paramDef of schema) {
+    // Parameters belonging to another mode must not block this mode's request.
+    if (paramDef.visible && !evaluateCondition(paramDef.visible.condition, params)) continue
     const value = params[paramDef.id]
 
     // 1. 检查必需参数

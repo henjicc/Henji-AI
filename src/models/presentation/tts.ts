@@ -88,10 +88,51 @@ export const ttsPresentation: Record<string, ModelPresentation> = {
     { volcSeedTtsSpeaker: voice },
   ),
   'volcengine-seed-icl-2.0': speechModel(
-    { zh: 'Seed-ICL 2.0', en: 'Seed-ICL 2.0' },
-    { volcSeedIclSpeaker: voice },
+    { zh: '豆包语音 2.0', en: 'Doubao Voice 2.0' },
+    {
+      volcIclMode: { zh: '模式', en: 'Mode' }, volcSeedIclSpeaker: voice,
+      volcIclActivationConsent: { zh: '确认首次合成另收 138 元并锁定音色', en: 'Accept ¥138 first-use fee and voice lock' },
+      volcCloneName: { zh: '音色名称', en: 'Voice name' },
+      volcCloneAudio: { zh: '声音样本', en: 'Voice sample' },
+      volcCloneLanguage: { zh: '录音语言', en: 'Recording language' },
+      volcCloneTranscript: { zh: '录音原文（可选）', en: 'Transcript (optional)' },
+      volcCloneDenoise: { zh: '去除背景噪声', en: 'Reduce background noise' },
+      volcClonePreserveVolume: { zh: '保留原声音量', en: 'Preserve original volume' },
+      volcCloneExistingSlot: { zh: '已有预付费音色（可选）', en: 'Existing prepaid voice (optional)' },
+      volcCloneCustomId: { zh: '自定义音色代号', en: 'Custom voice identifier' },
+    },
   ),
 }
+
+const cloneParams = ttsPresentation['volcengine-seed-icl-2.0'].params
+ttsPresentation['volcengine-seed-icl-2.0'].submissionConfirmation = {
+  condition: params => params.volcIclMode === 'clone',
+  title: { zh: '确认克隆声音及费用', en: 'Confirm voice cloning and charges' },
+  message: {
+    zh: '训练试听按 3 元/万字符计费。\n\n新建后付费音色在首次正式语音合成时另收 138 元/音色，并锁定音色；仅训练、播放试听不会触发这笔 138 元费用。7 天内未正式使用的音色会被删除。\n\n如果使用已有预付费音色，本次训练会覆盖旧效果并消耗训练次数。\n\n确认后将上传声音样本并提交训练。',
+    en: 'Training preview costs ¥3 per 10,000 characters.\n\nA new postpaid voice incurs a ¥138 fee and becomes locked on its first regular synthesis. Training and playing the preview alone do not trigger this fee. Voices not used within 7 days are deleted.\n\nRetraining an existing prepaid voice replaces its previous result and consumes a training attempt.\n\nConfirm to upload the sample and submit training.',
+  },
+  confirmLabel: { zh: '确认费用，开始克隆', en: 'Accept charges and clone' },
+}
+ttsPresentation['volcengine-seed-icl-2.0'].paramPresentation = {
+  groups: [{
+    id: 'voice-clone-options', name: { zh: '更多克隆设置', en: 'More clone settings' }, order: 7, panelWidth: 460,
+    sections: [
+      { id: 'recording', name: { zh: '录音处理', en: 'Recording' }, paramIds: ['volcCloneTranscript', 'volcCloneDenoise', 'volcClonePreserveVolume'] },
+      { id: 'existing', name: { zh: '使用已有音色', en: 'Reuse an existing voice' }, paramIds: ['volcCloneExistingSlot'] },
+    ],
+  }],
+}
+cloneParams.volcCloneAudio.uploadButtonText = { zh: '上传录音', en: 'Upload recording' }
+cloneParams.volcIclMode.role = 'mode'
+cloneParams.volcIclMode.optionLabels = { speech: { label: { zh: '语音合成', en: 'Text to speech' } }, clone: { label: { zh: '克隆声音', en: 'Clone voice' } } }
+cloneParams.volcIclMode.tooltip = { zh: '克隆时，下方文本用于试听（4–300 字）。克隆完成后，切回语音合成即可在音色列表选用。训练试听按 3 元/万字符计费。', en: 'When cloning, use 4–300 characters below for the preview. The new voice appears in the voice list. Preview costs ¥3 per 10,000 characters.' }
+cloneParams.volcCloneAudio.tooltip = { zh: '上传单人清晰说话的 WAV、MP3、OGG、M4A 或 AAC 文件，最大 10 MB。', en: 'Upload clear single-speaker audio: WAV, MP3, OGG, M4A or AAC, up to 10 MB.' }
+cloneParams.volcCloneExistingSlot.tooltip = { zh: '留空自动新建后付费音色，无需填写 ID。已有预付费槽位可从火山控制台复制一次；重新训练会覆盖原效果。', en: 'Leave blank to create a pay-as-you-go voice automatically. To reuse a prepaid slot, enter its ID once. Retraining replaces its voice.' }
+cloneParams.volcIclActivationConsent.tooltip = { zh: '仅播放克隆返回的试听不会激活音色。后付费音色首次正式合成会收取 138 元并锁定；7 天未正式使用会被火山删除。已激活音色不会重复收槽位费。', en: 'Playing the returned preview does not activate the voice. First synthesis costs ¥138 and locks it. Unused voices expire after 7 days. Activated voices are not charged again.' }
+const cloneLanguages = ['中文', '英语', '日语', '西班牙语', '印尼语', '葡萄牙语', '德语', '法语', '韩语', '意大利语', '泰语', '越南语', '俄语', '菲律宾语', '马来语', '阿拉伯语', '墨西哥西班牙语', '巴西葡萄牙语', '', '波兰语', '土耳其语', '瑞典语']
+const cloneLanguagesEn = ['Chinese', 'English', 'Japanese', 'Spanish', 'Indonesian', 'Portuguese', 'German', 'French', 'Korean', 'Italian', 'Thai', 'Vietnamese', 'Russian', 'Filipino', 'Malay', 'Arabic', 'Mexican Spanish', 'Brazilian Portuguese', '', 'Polish', 'Turkish', 'Swedish']
+cloneParams.volcCloneLanguage.optionLabels = Object.fromEntries(cloneLanguages.flatMap((zh, index) => zh ? [[String(index), { label: { zh, en: cloneLanguagesEn[index] } }]] : []))
 
 for (const [modelId, paramId] of [
   ['fal-minimax-speech-2.8', 'falMinimaxSpeechSpec'],

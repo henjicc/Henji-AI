@@ -67,14 +67,17 @@ describe('TTS model catalog', () => {
     expect(build('siliconflow-cosyvoice2-tts')).toMatchObject({ model: 'FunAudioLLM/CosyVoice2-0.5B', stream: false })
     expect(build('siliconflow-moss-ttsd-0.5')).toMatchObject({ model: 'fnlp/MOSS-TTSD-v0.5', input: '[S1]你好' })
     expect(build('volcengine-seed-tts-2.0')).toMatchObject({ resource_id: 'seed-tts-2.0', req_params: { text: '你好' } })
-    expect(() => build('volcengine-seed-icl-2.0')).toThrow('复刻音色 ID')
-    expect(build('volcengine-seed-icl-2.0', { volcSeedIclSpeaker: 'clone-id' })).toMatchObject({
+    expect(build('volcengine-seed-icl-2.0')).toMatchObject({ resource_id: 'seed-tts-2.0', req_params: { speaker: 'zh_female_vv_uranus_bigtts' } })
+    expect(build('volcengine-seed-icl-2.0', { volcSeedIclSpeaker: 'clone-id', volcIclActivationConsent: true })).toMatchObject({
       resource_id: 'seed-icl-2.0', req_params: { model: 'seed-tts-2.0-standard', speaker: 'clone-id' },
     })
     expect(catalogIndex.get('fal-minimax-speech-2.8')?.pricing.calculator?.({ prompt: '你好', falMinimaxSpeechSpec: 'turbo' })).toBeCloseTo(0.00012)
     expect(catalogIndex.get('bailian-cosyvoice-v3.5')?.pricing.calculator?.({ prompt: '你好', bailianCosyVoiceSpec: 'plus' })).toBeCloseTo(0.0003)
-    for (const id of ['bailian-qwen-audio-3.1-tts-flash', 'kie-gemini-3.1-flash-tts', 'volcengine-seed-tts-2.0', 'volcengine-seed-icl-2.0']) {
+    for (const id of ['bailian-qwen-audio-3.1-tts-flash', 'kie-gemini-3.1-flash-tts']) {
       expect(catalogIndex.get(id)?.pricing.calculator?.({ prompt: '你好' }), id).toBeNaN()
+    }
+    for (const id of ['volcengine-seed-tts-2.0', 'volcengine-seed-icl-2.0']) {
+      expect(catalogIndex.get(id)?.pricing.calculator?.({ prompt: '你好' }), id).toBeCloseTo(0.0006)
     }
   })
 })

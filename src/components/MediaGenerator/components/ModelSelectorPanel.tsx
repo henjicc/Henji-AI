@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useRef, useCallback, useLayoutEffe
 import { useTranslation } from 'react-i18next'
 import { FILTERABLE_TAGS } from '@/core/types/ModelTags'
 import { getAvailableProviders } from '@/utils/modelHelpers'
+import { providerBrandId } from '@/core/config/providerBrands'
 import { getHiddenProviders, getHiddenTypes, getHiddenModels, getVisibleProviders } from '@/config/providers'
 import {
   UiIconButton,
@@ -139,13 +140,14 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
     return () => clearTimeout(timer)
   }, [])
   const allProviders = getAvailableProviders()
+  const providerBrands = [...new Map(allProviders.map(provider => [providerBrandId(provider.id), { ...provider, id: providerBrandId(provider.id) }])).values()]
   const visibleProviders = useMemo(() => {
     return getVisibleProviders(hiddenProviders, hiddenTypes, hiddenModels, allProviders)
   }, [hiddenProviders, hiddenTypes, hiddenModels, allProviders])
   const filteredAndSortedModels = useMemo(() => {
     const items = visibleProviders
       .flatMap(p => p.models.map(m => ({ p, m })))
-      .filter(item => (modelFilterProvider === 'all' ? true : item.p.id === modelFilterProvider))
+      .filter(item => modelFilterProvider === 'all' || providerBrandId(item.p.id) === providerBrandId(modelFilterProvider))
       .filter(item => {
         if (modelFilterType === 'favorite') {
           return favoriteModels.has(`${item.p.id}-${item.m.id}`)
@@ -287,13 +289,13 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
             >
               {t('all')}
             </UiOptionButton>
-            {allProviders.map(p => (
+            {providerBrands.map(p => (
               <UiOptionButton
                 key={p.id}
                 type="button"
-                active={modelFilterProvider === p.id}
+                active={providerBrandId(modelFilterProvider) === p.id}
                 onClick={() => onFilterProviderChange(p.id)}
-                className={getFilterChipClass(modelFilterProvider === p.id)}
+                className={getFilterChipClass(providerBrandId(modelFilterProvider) === p.id)}
               >
                 {p.name}
               </UiOptionButton>

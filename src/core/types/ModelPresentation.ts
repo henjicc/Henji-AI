@@ -12,7 +12,7 @@
 
 import type { I18nText } from './I18nText'
 import type { Linkage } from './Linkage'
-import type { ModelParamPresentation } from './ModelDefinition'
+import type { ModelDefinition, ModelParamPresentation } from './ModelDefinition'
 import type { DerivedMediaAuthoring, TextParamEditorConfig } from './ParamDef'
 import type { SocketType } from './SocketType'
 import type {
@@ -120,6 +120,7 @@ export interface ModelPresentation {
 
   /** 参数的纯展示编排（可选），只重排已有扁平参数，不改变参数 ID/值结构/请求字段 */
   paramPresentation?: ModelParamPresentation
+  submissionConfirmation?: ModelDefinition['submissionConfirmation']
 
   /** 宿主单图处理策略；比例候选仍取 SDK schema，不在展示层复制。 */
   sourceImageFraming?: { aspectParamId: string }

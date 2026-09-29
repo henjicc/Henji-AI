@@ -14,7 +14,10 @@ import { createProgressTracker, resolveProgressSpec } from '@/core/progress/prog
 import type { GenerateResult, ProgressStatus } from '@/core/providers/base'
 import type { ProviderId } from '@/core/types'
 import { stripDerivedMediaState } from '@/core/params/derivedMediaState'
+import { captureClonedVoice } from '@/services/voiceLibrary/captureClonedVoice'
+import { voiceLibraryService } from '@/services/voiceLibrary/VoiceLibraryService'
 import { attachVideoDurations } from './generationVideoDurations'
+import { confirmGenerationSubmission, GenerationSubmissionCancelledError } from './generationSubmissionConfirmation'
 import {
   buildGeneratePreflightSummary,
   buildProgressTimingContext,
@@ -68,6 +71,7 @@ export class GenerationService {
 
   private keyStatusCache: Map<string, boolean>
   private pendingProgressSamples: Map<string, PendingProgressSampleContext>
+  private pendingConfirmations = new Map<string, AbortController>()
 
   private constructor() {
     this.keyStatusCache = new Map()
@@ -113,6 +117,24 @@ export class GenerationService {
       }
       sourceParams = stripDerivedMediaState(sourceParams)
 
+      if (model.submissionConfirmation?.condition(sourceParams)) {
+        // 等待确认期间界面可以继续编辑；只提交用户确认的这份快照。
+        sourceParams = structuredClone(sourceParams)
+        const controller = new AbortController()
+        const abort = (): void => controller.abort()
+        options.signal?.addEventListener('abort', abort, { once: true })
+        this.pendingConfirmations.set(requestId, controller)
+        if (options.signal?.aborted) abort()
+        logger.info('等待用户确认提交', { event: 'generation.confirmation.requested', requestId, modelId })
+        try {
+          await confirmGenerationSubmission(model, sourceParams, controller.signal)
+          logger.info('用户已确认提交', { event: 'generation.confirmation.accepted', requestId, modelId })
+        } finally {
+          options.signal?.removeEventListener('abort', abort)
+          this.pendingConfirmations.delete(requestId)
+        }
+      }
+
       const estimate = await this.getProgressEstimate(modelId, sourceParams).catch((error) => {
         logger.warn('[GenerationService] 获取进度估算失败，回退本地默认', error)
         return null
@@ -148,6 +170,7 @@ export class GenerationService {
         requestId,
       }))
       recordRuntimeTrace(modelId, runtimeParams, response.trace)
+      await captureClonedVoice(modelId, model.meta.provider, response)
 
       if (response.status === 'pending') {
         if (response.taskId) {
@@ -216,6 +239,7 @@ export class GenerationService {
 
       return {
         status: response.status,
+        taskId: response.taskId,
         url: response.url,
         filePath: response.filePath,
         createdFilePaths: response.createdFilePaths,
@@ -225,7 +249,7 @@ export class GenerationService {
       }
     } catch (error) {
       const message = getErrorMessage(error)
-      if (options.signal?.aborted) {
+      if (options.signal?.aborted || error instanceof GenerationSubmissionCancelledError) {
         logger.info('[GenerationService] 本地生成已停止', { event: 'generation.generate.cancelled', requestId, modelId })
         progressTracker?.stop()
         throw error
@@ -310,6 +334,7 @@ export class GenerationService {
         requestId,
       }))
       recordRuntimeTrace(modelId, runtimeParams, response.trace)
+      if (model) await captureClonedVoice(modelId, model.meta.provider, response)
 
       if (response.status !== 'completed') {
         logger.error('[GenerationService] 继续轮询返回非完成状态', {
@@ -377,6 +402,10 @@ export class GenerationService {
         progressTracker?.stop()
         throw error
       }
+      if (/\[(voice_training_failed|voice_not_found)\]/.test(message)) {
+        try { await voiceLibraryService.markTaskFailed(taskId) }
+        catch (storageError) { logger.warn('保存音色失败状态失败', storageError, { event: 'generation.voice_status.save_failed', taskId, modelId }) }
+      }
       logger.error('[GenerationService] 继续轮询异常', error, {
         event: 'generation.continue_polling.failed',
         requestId,
@@ -421,6 +450,11 @@ export class GenerationService {
   }
 
   async cancelTask(taskId: string): Promise<void> {
+    const confirmation = this.pendingConfirmations.get(taskId)
+    if (confirmation) {
+      confirmation.abort()
+      return
+    }
     logger.info('[GenerationService] 请求取消任务', {
       event: 'generation.cancel.start',
       taskId,

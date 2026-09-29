@@ -17,5 +17,6 @@ export const ALERT_DIALOG_STORE_LEDGER: ApplicationStoreActionLedger<ActionName>
   entries: {
     show: { kind: 'excluded', category: 'internal', reason: REASON },
     dismissCurrent: { kind: 'excluded', category: 'internal', reason: REASON },
+    confirmCurrent: { kind: 'excluded', category: 'internal', reason: '费用或不可逆操作的二次确认只能由用户在弹窗中操作，助手不得代替用户接受。' },
   },
 }

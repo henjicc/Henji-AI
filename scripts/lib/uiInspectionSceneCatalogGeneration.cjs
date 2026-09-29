@@ -1,3 +1,5 @@
+const assert = require('node:assert/strict')
+
 function createGenerationSettingsScenes(context) {
   const {
     settlePage,
@@ -12,6 +14,67 @@ function createGenerationSettingsScenes(context) {
   } = context
 
   return [
+    {
+      id: 'generation-voice-clone',
+      surface: '生成',
+      name: '生成-豆包语音',
+      writesUserData: true,
+      setup: async (page, app, { capture }) => {
+        // 仅替换 IPC 边界：真实表单、任务与确认链路照常执行，不使用真实密钥或付费请求。
+        await app.evaluate(({ ipcMain }) => {
+          const channels = ['ai:getRuntimeProviderKeyStatus', 'ai:generate']
+          globalThis.__voiceConfirmationFixture = { submitted: 0, handlers: channels.map(channel => [channel, ipcMain._invokeHandlers.get(channel)]) }
+          ipcMain.removeHandler(channels[0])
+          ipcMain.handle(channels[0], () => ({ ok: true, data: [{ providerId: 'volcengine-speech', configured: true }] }))
+          ipcMain.removeHandler(channels[1])
+          ipcMain.handle(channels[1], () => {
+            globalThis.__voiceConfirmationFixture.submitted++
+            return { ok: false, error: { code: 'FIXTURE_UNEXPECTED_SUBMISSION', message: '确认前不得提交' } }
+          })
+        })
+        try {
+          await page.reload()
+          await context.selectGenerationModel(page, '豆包语音', 'volcengine-seed-icl-2.0', 'volcengine-speech')
+          await paramFieldFromLabel(page, /^(音色|Voice)\s*\*?$/i).locator('[data-panel-trigger-button]').click()
+          await page.getByText('云舟 2.0', { exact: true }).waitFor({ state: 'visible' })
+          await settlePage(page)
+          if (capture) await capture('system-voices')
+          await page.keyboard.press('Escape')
+          const mode = paramFieldFromLabel(page, /^(模式|Mode)$/i)
+          await mode.locator('[data-dropdown-button]').click()
+          await page.getByRole('option', { name: /^(克隆声音|Clone voice)$/i }).click()
+          const name = page.getByText(/^(音色名称|Voice name)\s*\*?$/i).filter({ visible: true }).first().locator('xpath=ancestor::div[.//input][1]')
+          await name.locator('input').fill('我的解说声音')
+          const audio = page.getByText(/^(声音样本|Voice sample)\s*\*?$/i).filter({ visible: true }).first().locator('xpath=ancestor::div[.//input[@type="file"]][1]')
+          await audio.locator('input[type="file"]').setInputFiles({ name: 'voice-sample.wav', mimeType: 'audio/wav', buffer: Buffer.from('RIFFfixture') })
+          await page.getByText('voice-sample.wav', { exact: true }).or(page.getByText('文件 1', { exact: true })).waitFor({ state: 'visible', timeout: 8000 })
+          await page.locator('[data-param-group-id="voice-clone-options"] [data-panel-trigger-button]').click()
+          await page.getByText(/^(录音原文（可选）|Transcript \(optional\))$/i).first().waitFor({ state: 'visible', timeout: 8000 })
+          await page.keyboard.press('Escape')
+          await settlePage(page)
+          await page.locator('[contenteditable="true"]').first().fill('你好，这是我的声音克隆试听。')
+          await page.locator('[data-onboarding-target="generate"]').click()
+          const dialog = page.getByRole('alertdialog')
+          await dialog.getByText('确认克隆声音及费用', { exact: true }).waitFor()
+          assert.match(await dialog.innerText(), /138/)
+          assert.equal(await app.evaluate(() => globalThis.__voiceConfirmationFixture.submitted), 0)
+          await settlePage(page)
+          if (capture) await capture('clone-confirmation')
+          await dialog.getByRole('button', { name: '取消', exact: true }).click()
+          await dialog.waitFor({ state: 'hidden' })
+          await page.getByText('已取消提交，未发送生成请求', { exact: true }).first().waitFor()
+          assert.equal(await app.evaluate(() => globalThis.__voiceConfirmationFixture.submitted), 0)
+        } finally {
+          await app.evaluate(({ ipcMain }) => {
+            for (const [channel, handler] of globalThis.__voiceConfirmationFixture.handlers) {
+              ipcMain.removeHandler(channel)
+              if (handler) ipcMain.handle(channel, handler)
+            }
+            delete globalThis.__voiceConfirmationFixture
+          })
+        }
+      },
+    },
     { id: 'generation-empty', surface: '生成', name: '生成-空态', setup: setupGeneration },
     {
       id: 'generation-model-panel',

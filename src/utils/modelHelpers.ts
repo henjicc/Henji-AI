@@ -5,6 +5,7 @@ import { getI18nText } from '@/core/types/I18nText'
 import type { ModelDefinition, ModelType } from '@/core/types'
 import { PROVIDER_ORDER, compareModelsBySeries, getModelTypeOrder } from '@/core/modelSortOrder'
 import { getModelAlias } from '@/config/modelAliases'
+import { providerBrandId } from '@/core/config/providerBrands'
 
 /**
  * 供应商 ID 到显示名称的映射
@@ -34,7 +35,7 @@ export function resolveModelName(model: Pick<ModelDefinition, 'meta'>, locale?: 
  * @returns 供应商显示名称
  */
 export function getProviderDisplayName(providerId: string, locale?: string): string {
-  const normalizedProviderId = providerId.trim().toLowerCase()
+  const normalizedProviderId = providerBrandId(providerId)
   if (!normalizedProviderId) return providerId
   const key = `models:providers.${normalizedProviderId}`
   const translated = i18n.t(key, { lng: locale || getCurrentLocale(), defaultValue: providerId })
