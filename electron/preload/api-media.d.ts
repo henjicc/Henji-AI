@@ -327,4 +327,41 @@ export interface HenjiAudioExtractSamplesResult {
 
 export interface HenjiAudioApi {
   extractSamples(payload: { source: string; bucketCount: number }): Promise<HenjiAudioExtractSamplesResult>
+  listEditProjects(): Promise<AudioEditProjectSummary[]>
+  createEditProject(payload: AudioEditProjectCreateRequest): Promise<AudioEditProjectDocument>
+  getEditProject(projectId: string): Promise<AudioEditProjectDocument | null>
+  saveEditProject(project: AudioEditProjectDocument): Promise<AudioEditProjectDocument>
+  listAsrModels(): Promise<Array<{
+    id: string
+    providerId: string
+    configured: boolean
+    timestamps: boolean
+    longAudio: boolean
+  }>>
+  transcribeEditProject(payload: AudioEditTranscriptionRequest): Promise<AudioEditTranscriptionResult>
+  verifyEditSource(projectId: string): Promise<void>
+  relinkEditSource(projectId: string, sourcePath: string): Promise<AudioEditProjectDocument>
+  deleteEditProject(projectId: string): Promise<void>
+  detectEditSilence(payload: AudioEditSilenceRequest): Promise<{ revision: number; suggestions: AudioEditSuggestion[] }>
+  listEditTasks(projectId: string): Promise<AudioEditTask[]>
+  cancelEditTask(requestId: string): Promise<void>
+  prepareEditProcessing(projectId: string, requestId: string): Promise<void>
+  exportEditProject(payload: AudioEditExportRequest): Promise<AudioEditExportResult>
+  listEditProcessors(): Promise<AudioEditProcessorDescriptor[]>
+  prepareEditPreviewChunk(payload: AudioEditPreviewChunkRequest): Promise<AudioEditPreviewChunk>
 }
+import type {
+  AudioEditExportRequest,
+  AudioEditSilenceRequest,
+  AudioEditSuggestion,
+  AudioEditTask,
+  AudioEditExportResult,
+  AudioEditProcessorDescriptor,
+  AudioEditPreviewChunk,
+  AudioEditPreviewChunkRequest,
+  AudioEditProjectCreateRequest,
+  AudioEditProjectDocument,
+  AudioEditProjectSummary,
+  AudioEditTranscriptionRequest,
+  AudioEditTranscriptionResult,
+} from '../../src/core/audioEdit/types'

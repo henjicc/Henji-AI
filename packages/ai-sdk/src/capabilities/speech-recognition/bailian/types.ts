@@ -1,4 +1,6 @@
 export interface BailianAsrOptions {
+  /** Resume polling an existing file task without reading/uploading/submitting audio. */
+  resumeTaskId?: string
   format?: string
   sampleRateHz?: number
   enableItn?: boolean

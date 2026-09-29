@@ -387,6 +387,22 @@ const cameraStageRenderApi: HenjiCameraStageRenderApi = {
 
 const audioApi: HenjiAudioApi = {
   extractSamples: (payload) => nativeInvoke('audio:extractSamples', payload),
+  listEditProjects: () => nativeInvoke('audioEdit:projects:list'),
+  createEditProject: (payload) => nativeInvoke('audioEdit:projects:create', payload),
+  getEditProject: (projectId) => nativeInvoke('audioEdit:projects:get', { projectId }),
+  saveEditProject: (project) => nativeInvoke('audioEdit:projects:save', { project }),
+  verifyEditSource: (projectId) => nativeInvoke('audioEdit:source:verify', { projectId }),
+  relinkEditSource: (projectId, sourcePath) => nativeInvoke('audioEdit:source:relink', { projectId, sourcePath }),
+  deleteEditProject: (projectId) => nativeInvoke('audioEdit:projects:delete', { projectId }),
+  detectEditSilence: (payload) => nativeInvoke('audioEdit:silence', payload),
+  listEditTasks: (projectId) => nativeInvoke('audioEdit:tasks:list', { projectId }),
+  cancelEditTask: (requestId) => nativeInvoke('audioEdit:tasks:cancel', { requestId }),
+  prepareEditProcessing: (projectId, requestId) => nativeInvoke('audioEdit:processing', { projectId, requestId }),
+  listAsrModels: () => nativeInvoke('audioEdit:asr:list'),
+  transcribeEditProject: (payload) => nativeInvoke('audioEdit:asr:transcribe', payload),
+  exportEditProject: (payload) => nativeInvoke('audioEdit:export', payload),
+  listEditProcessors: () => nativeInvoke('audioEdit:processors:list'),
+  prepareEditPreviewChunk: (payload) => nativeInvoke('audioEdit:preview:chunk', payload),
 }
 
 const loggingApi: HenjiLoggingApi = {

@@ -13,6 +13,8 @@ import {
   createImageEditEffectLayerV3,
 } from '@/core/imageEdit/v3/documentFactory'
 import { useImageEditSessionStore } from '@/features/imageEdit/store/imageEditSessionStore'
+import { useAudioEditStore } from '@/features/audioEdit/store/audioEditStore'
+import type { AudioEditProjectDocument } from '@/core/audioEdit/types'
 import { ImageEditCommandBusV3 } from '@/features/imageEdit/v3/application/imageEditCommandBus'
 import { adoptImageEditDocumentInstanceForTestsV3 } from '@/features/imageEdit/v3/application/imageEditDocumentInstances'
 
@@ -37,6 +39,7 @@ describe('宿主作用域 revision', () => {
     release?.()
     release = undefined
     useNavigationStore.setState({ activeToolId: null })
+    useAudioEditStore.getState().setProject(null)
     useImageEditSessionStore.setState({ sessions: {}, revision: 0 })
   })
 
@@ -55,6 +58,26 @@ describe('宿主作用域 revision', () => {
     useNavigationStore.setState({ activeToolId: null })
 
     expect(getHostScopeRevisions().toolbox).toBe(before.toolbox)
+  })
+
+  it('口播剪辑页面向助手暴露当前工程和选中的词块', () => {
+    const project: AudioEditProjectDocument = {
+      id: 'audio-project', name: '测试口播', referenceScript: '', vstEnabled: false,
+      source: { mediaType: 'audio', sourcePath: 'C:/source.wav', audioPath: 'C:/source.wav', durationFrames: 48_000, sampleRate: 48_000, channels: 1 },
+      transcript: [{ id: 'word-1', text: '测试', startFrame: 0, endFrame: 12_000, included: true, locked: false, granularity: 'word' }],
+      suggestions: [], createdAt: 1, updatedAt: 1, revision: 7,
+    }
+    useNavigationStore.setState({ activeWorkspace: 'tools', activeToolId: 'audioEdit' })
+    useAudioEditStore.getState().setProject(project)
+    useAudioEditStore.getState().setSelectedBlockIds(['word-1'])
+
+    const snapshot = createHostContextSnapshot()
+    expect(snapshot.surface).toMatchObject({
+      id: 'tool.audio_edit',
+      focusedRef: 'audio_edit.project:audio-project',
+      selectedRefs: ['audio_edit.transcript_block:audio-project:word-1'],
+    })
+    expect(snapshot.scopeRevisions.audio_edit).toBe(7)
   })
 
   it('画布选中与素材库开合不推进各自的数据作用域', () => {

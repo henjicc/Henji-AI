@@ -39,6 +39,7 @@ import type {
   StoryboardProjectPlatformWrite,
 } from '@/platform/contracts/storyboardProjects'
 import type { ImageEditorV3Platform } from '@/platform/contracts/imageEditorV3'
+import type { AudioEditProjectDocument } from '@/core/audioEdit/types'
 
 const FIX_HINT = '替身只负责存储：要用到新方法，就在 src/tests/harnessNativeStorage.ts 里补一段'
   + '**只存不判断**的实现，不要返回空值糊过去——那等于伪造业务结果。'
@@ -203,6 +204,30 @@ const storyboardProjectsStorage = {
   },
 }
 
+/* ── 口播剪辑工程存储 ──────────────────────────────────────────────────── */
+
+const audioEditProjects = new Map<string, AudioEditProjectDocument>()
+
+const audioEditStorage = {
+  async listEditProjects() {
+    return [...audioEditProjects.values()].sort((left, right) => right.updatedAt - left.updatedAt).map((project) => wire({
+      id: project.id, name: project.name, mediaType: project.source.mediaType,
+      durationFrames: project.source.durationFrames, sampleRate: project.source.sampleRate, updatedAt: project.updatedAt,
+    }))
+  },
+  async getEditProject(projectId: string) {
+    const project = audioEditProjects.get(projectId)
+    return project ? wire(project) : null
+  },
+  async saveEditProject(project: AudioEditProjectDocument) {
+    const current = audioEditProjects.get(project.id)
+    if (!current || current.revision !== project.revision) throw new Error('REVISION_CONFLICT')
+    const saved = wire({ ...project, revision: project.revision + 1, updatedAt: Date.now() })
+    audioEditProjects.set(saved.id, saved)
+    return wire(saved)
+  },
+}
+
 /* ── 装配与安装 ─────────────────────────────────────────────────────────── */
 
 const NAMESPACES: Record<string, object> = {
@@ -210,6 +235,7 @@ const NAMESPACES: Record<string, object> = {
   assetLibrary: assetLibraryStorage,
   cameraStageProjects: cameraStageProjectsStorage,
   storyboardProjects: storyboardProjectsStorage,
+  audio: audioEditStorage,
   imageEditorV3: {
     async listDocuments(request: Parameters<ImageEditorV3Platform['listDocuments']>[0]) {
       const refs = [...imageDocuments.keys()].sort().map((id) => `image-edit-v3:${id}` as const)
@@ -233,6 +259,10 @@ const imageDocuments = new Map<string, Parameters<ImageEditorV3Platform['saveDoc
 export function readHarnessImageEditDocument(documentId: string) {
   const value = imageDocuments.get(documentId)
   return value ? wire(value) : null
+}
+
+export function registerHarnessAudioEditProject(project: AudioEditProjectDocument): void {
+  audioEditProjects.set(project.id, wire(project))
 }
 
 /**
@@ -298,6 +328,7 @@ export function resetHarnessNativeStorage(): void {
   libraries.clear()
   cameraStageProjects.clear()
   storyboardProjects.clear()
+  audioEditProjects.clear()
 }
 
 export function uninstallHarnessNativeStorage(): void {

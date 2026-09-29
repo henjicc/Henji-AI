@@ -1,3 +1,7 @@
+const { createAudioEditScene } = require('./uiInspectionSceneAudioEdit.cjs')
+const { createAudioEditHomeScene } = require('./uiInspectionSceneAudioEditHome.cjs')
+const { createAudioEditInteractionScene } = require('./uiInspectionSceneAudioEditInteraction.cjs')
+
 function createToolboxScenes(context) {
   const {
     settlePage,
@@ -8,6 +12,9 @@ function createToolboxScenes(context) {
   } = context
 
   return [
+    createAudioEditInteractionScene(context),
+    createAudioEditHomeScene(context),
+    createAudioEditScene(context),
     { id: 'toolbox-home', surface: '工具箱', name: '工具箱-首页', setup: setupToolbox },
     {
       id: 'toolbox-hover',

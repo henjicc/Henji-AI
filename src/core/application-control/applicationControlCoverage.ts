@@ -41,6 +41,7 @@ const domainPlans: Readonly<Record<string, DomainPlan>> = {
   assets: domainPlan('assets', '5.3', 'src/features/assets/application/', ['asset', 'asset.library'], ['src/features/assets/application/assetReflection.ts'], 'assetApplicationCapabilities.ts', 'application.observe', ['asset.update', 'asset.delete'], 'operation'),
   canvas: domainPlan('canvas', '5.2', 'src/features/canvas/application/', ['canvas.project', 'canvas.node', 'canvas.edge'], ['src/features/canvas/domain/nodeRegistry.ts'], 'canvas*ApplicationCapabilities.ts', 'application.observe', ['application.plan', 'application.commit'], 'property'),
   camera_stage: domainPlan('camera_stage', '5.1', 'src/features/cameraStage/application/ 与 projects/cameraStageProjectService.ts', ['camera_stage.project', 'camera_stage.scene', 'camera_stage.object', 'camera_stage.camera', 'camera_stage.state_keyframe', 'camera_stage.trajectory'], ['src/features/cameraStage/application/cameraStageReflection.ts', 'src/features/cameraStage/domain/animatableProps.ts'], 'cameraStage*ApplicationCapabilities.ts', 'observe_camera_stage_scene', ['application.plan', 'application.commit', 'place_camera_stage_object', 'apply_camera_stage_camera_move'], 'operation'),
+  audio_edit: domainPlan('audio_edit', '7.1', 'src/features/audioEdit/application/ 与 electron/main/services/audio-edit/', ['audio_edit.project', 'audio_edit.transcript_block', 'audio_edit.suggestion', 'audio_edit.processor_chain', 'audio_edit.render'], ['src/features/audioEdit/application/audioEditReflection.ts'], '通用实体读改与 audioEdit 平台服务', 'application.observe', ['application.plan', 'application.commit'], 'property'),
   toolbox: domainPlan('toolbox', '5.3', 'src/features/toolbox/application/', ['toolbox.tool'], ['src/features/imageEdit/tools/registry.ts'], 'toolboxApplicationCapabilities.ts', 'application.observe', ['toolbox.select'], 'operation'),
   storyboard: domainPlan('storyboard', '5.3', 'src/features/canvas/application/storyboardProjectService.ts', ['storyboard.project', 'storyboard.card'], ['src/features/canvas/application/storyboardReflection.ts'], 'toolboxApplicationCapabilities.ts', 'application.observe', ['storyboard.update'], 'operation'),
 }
@@ -85,6 +86,7 @@ function surfacesForDomain(domain: string): string[] {
     assets: ['workspace.assets', 'overlay.assets'],
     canvas: ['workspace.canvas'],
     camera_stage: ['tool.camera_stage'],
+    audio_edit: ['tool.audio_edit'],
     toolbox: ['workspace.tools'],
   }
   return mappings[domain] ?? []

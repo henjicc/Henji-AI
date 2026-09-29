@@ -24,6 +24,7 @@ import { createElectronAssetLibrary } from './assetLibrary'
 import { createElectronAssistant } from './assistant'
 import { createElectronEmbeddedAgent } from './embeddedAgent'
 import { createElectronMcp } from './mcp'
+import { createElectronAudioEdit } from './audioEdit'
 
 export function createElectronPlatform(): PlatformRuntime {
   return {
@@ -52,5 +53,6 @@ export function createElectronPlatform(): PlatformRuntime {
     updater: createElectronUpdater(),
     assetLibrary: createElectronAssetLibrary(),
     assistant: createElectronAssistant(),
+    audioEdit: createElectronAudioEdit(),
   }
 }

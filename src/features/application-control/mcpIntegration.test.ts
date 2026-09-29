@@ -50,7 +50,7 @@ it('真实 MCP → 中立桥 → Session → 领域注册表读取正式设置�
     expect(contract.isError, JSON.stringify(contract)).toBe(false)
     const discovered = (contract.structuredContent as { data: { domains: Array<{ id: string; writable: boolean }> } }).data.domains
     expect(discovered.filter((domain) => domain.writable).map((domain) => domain.id).sort())
-      .toEqual(['assets', 'camera_stage', 'canvas', 'generation', 'image_edit', 'image_mark', 'memory', 'models', 'settings'])
+      .toEqual(['assets', 'audio_edit', 'camera_stage', 'canvas', 'generation', 'image_edit', 'image_mark', 'memory', 'models', 'settings'])
     expect(discovered.map((domain) => domain.id)).not.toContain('assistant_runtime')
     expect(discovered.every((domain) => !('entities' in domain))).toBe(true)
     const expanded = await client.callTool({ name: 'describe_application_contract', arguments: { domains: ['toolbox'] } })

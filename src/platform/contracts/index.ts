@@ -22,6 +22,7 @@ import type { AssetLibraryPlatform } from './assetLibrary'
 import type { AssistantPlatform } from './assistant'
 import type { EmbeddedAgentPlatform } from '@/core/assistant/embeddedAgent'
 import type { ApplicationHostPlatform, McpPlatform } from '@/core/application-control/localHostContracts'
+import type { AudioEditPlatform } from './audioEdit'
 
 export interface PlatformRuntime {
   embeddedAgent: EmbeddedAgentPlatform
@@ -49,6 +50,7 @@ export interface PlatformRuntime {
   updater: UpdaterPlatform
   assetLibrary: AssetLibraryPlatform
   assistant: AssistantPlatform
+  audioEdit: AudioEditPlatform
 }
 
 export type {
@@ -74,6 +76,7 @@ export type {
   UpdaterPlatform,
   AssetLibraryPlatform,
   AssistantPlatform,
+  AudioEditPlatform,
 }
 export * from './aiRuntime'
 export * from './llmRuntime'
@@ -97,3 +100,4 @@ export * from './logging'
 export * from './updater'
 export * from './assetLibrary'
 export * from './assistant'
+export * from './audioEdit'

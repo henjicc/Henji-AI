@@ -23,7 +23,7 @@ async function loadProjectNodes(projectId: string) {
   return decodeProjectRecord(record).nodes
 }
 
-function resolveConfiguredDestination(destination: CanvasDownloadDestination): string {
+export function resolveConfiguredDestination(destination: CanvasDownloadDestination): string {
   if (destination.mode === 'quick') {
     const settings = readLocalStorageSettings(QUICK_DOWNLOAD_SETTING_SPECS)
     const targetDir = settings.quickDownloadPath.trim()

@@ -4,6 +4,7 @@ import { useNavigationStore } from '@/stores/navigationStore'
 
 export function listToolboxTools(): Record<string, unknown>[] {
   return [
+    { id: 'audioEdit', name: '口播剪辑', capabilities: ['project', 'transcript', 'suggestion', 'preview', 'export', 'vst3'] },
     { id: 'cameraStage', name: '3D 镜头参考', capabilities: ['project', 'object', 'state_keyframe', 'camera_move', 'render'] },
     ...listImageEditorToolControls().map((tool) => ({
       id: tool.id,

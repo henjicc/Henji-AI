@@ -1,7 +1,7 @@
-export const UI_SCALE_MODES = ['auto', '90', '100', '110'] as const
+export const UI_SCALE_MODES = ['auto', '90', '100', '110', '125', '150'] as const
 
 export type UiScaleMode = (typeof UI_SCALE_MODES)[number]
-export type UiScaleFactor = 0.9 | 1 | 1.1
+export type UiScaleFactor = 0.9 | 1 | 1.1 | 1.25 | 1.5
 
 export interface WindowContentSize {
   width: number
@@ -20,7 +20,7 @@ export function normalizeUiScaleMode(value: unknown): UiScaleMode {
 }
 
 export function isUiScaleFactor(value: unknown): value is UiScaleFactor {
-  return value === 0.9 || value === 1 || value === 1.1
+  return value === 0.9 || value === 1 || value === 1.1 || value === 1.25 || value === 1.5
 }
 
 export function resolveUiScaleFactor(
@@ -31,6 +31,8 @@ export function resolveUiScaleFactor(
   if (normalizedMode === '90') return 0.9
   if (normalizedMode === '100') return 1
   if (normalizedMode === '110') return 1.1
+  if (normalizedMode === '125') return 1.25
+  if (normalizedMode === '150') return 1.5
 
   const { width, height } = contentSize
   if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
@@ -40,8 +42,6 @@ export function resolveUiScaleFactor(
   return width <= AUTO_COMPACT_MAX_WIDTH || height <= AUTO_COMPACT_MAX_HEIGHT ? 0.9 : 1
 }
 
-export function uiScaleFactorPercent(factor: UiScaleFactor): 90 | 100 | 110 {
-  if (factor === 0.9) return 90
-  if (factor === 1.1) return 110
-  return 100
+export function uiScaleFactorPercent(factor: UiScaleFactor): number {
+  return Math.round(factor * 100)
 }

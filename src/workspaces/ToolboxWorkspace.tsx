@@ -1,5 +1,5 @@
 import React, { Suspense, lazy } from 'react'
-import { ICON_TOOL_CAMERA_STAGE, ICON_TOOL_IMAGE_EDIT } from '@/core/theme/icons'
+import { ICON_TOOL_AUDIO_EDIT, ICON_TOOL_CAMERA_STAGE, ICON_TOOL_IMAGE_EDIT } from '@/core/theme/icons'
 import type { LucideIcon } from 'lucide-react'
 import { UI_TEXT_LABEL_CLASS, UI_TEXT_META_CLASS, UiLoading, UiOptionButton, UiPageHeader, UiRegion } from '@/components/ui'
 import type { ToolboxToolId } from '@/core/types/workspace'
@@ -9,6 +9,7 @@ import { selectToolboxTool, useNavigationStore } from '@/stores/navigationStore'
 // 两个工具改为进入时才加载（TabContainer 会在空闲时预取，正常点进去感知不到等待）。
 const CameraStageApp = lazy(() => import('@/features/cameraStage/CameraStageApp'))
 const ImageMarkTool = lazy(() => import('@/features/imageMark/standalone/ImageMarkTool'))
+const AudioEditApp = lazy(() => import('@/features/audioEdit/AudioEditApp'))
 
 /**
  * 工具箱工作区：多工具入口首页 + 各工具的打开/返回导航。
@@ -29,6 +30,12 @@ interface ToolboxToolMeta {
 
 const TOOLS: ToolboxToolMeta[] = [
   {
+    id: 'audioEdit',
+    name: '口播剪辑',
+    description: '把音频或视频转成带时间戳的文字，通过删改文字完成口播剪辑、实时试听并导出音频与字幕',
+    icon: ICON_TOOL_AUDIO_EDIT,
+  },
+  {
     id: 'imageMark',
     name: '图片编辑',
     description: '打开或粘贴图片，快速打序号、框选、画箭头、加文字、打码，支持裁剪与旋转，一键复制或保存',
@@ -44,6 +51,8 @@ const TOOLS: ToolboxToolMeta[] = [
 
 function renderTool(id: ToolboxToolId, onBack: () => void): React.ReactNode {
   switch (id) {
+    case 'audioEdit':
+      return <AudioEditApp onBack={onBack} />
     case 'cameraStage':
       return <CameraStageApp onBackToToolbox={onBack} />
     case 'imageMark':
@@ -60,7 +69,11 @@ const ToolboxWorkspace: React.FC = () => {
   if (activeTool) {
     return (
       <div
-        data-application-surface-id={activeTool.id === 'cameraStage' ? 'tool.camera_stage' : 'tool.image_edit'}
+        data-application-surface-id={activeTool.id === 'cameraStage'
+          ? 'tool.camera_stage'
+          : activeTool.id === 'audioEdit'
+            ? 'tool.audio_edit'
+            : 'tool.image_edit'}
         className="flex h-full flex-col bg-app"
       >
         <div className="min-h-0 flex-1">

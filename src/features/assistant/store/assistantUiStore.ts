@@ -5,6 +5,11 @@ import type { EmbeddedAgentPrompt } from '@/core/assistant/embeddedAgent'
 
 export type AssistantDockMode = 'left' | 'right' | 'floating'
 
+export interface AssistantGoalOptions {
+  autoSend?: boolean
+  context?: string
+}
+
 export interface AssistantPanelPosition {
   x: number
   y: number
@@ -21,6 +26,7 @@ interface AssistantUiState {
   floatingPosition: AssistantPanelPosition
   size: AssistantPanelSize
   pendingGoal: string | null
+  pendingGoalOptions: AssistantGoalOptions | null
   embeddedAccess: EmbeddedAgentPrompt['access']
   setEmbeddedAccess: (access: EmbeddedAgentPrompt['access']) => void
   setOpen: (open: boolean) => void
@@ -28,7 +34,7 @@ interface AssistantUiState {
   setMode: (mode: AssistantDockMode) => void
   setFloatingPosition: (position: AssistantPanelPosition) => void
   setSize: (size: AssistantPanelSize) => void
-  setPendingGoal: (goal: string | null) => void
+  setPendingGoal: (goal: string | null, options?: AssistantGoalOptions) => void
 }
 
 
@@ -40,6 +46,7 @@ export const useAssistantUiStore = create<AssistantUiState>()(
       floatingPosition: { x: 720, y: 72 },
       size: { width: 420, height: 680 },
       pendingGoal: null,
+      pendingGoalOptions: null,
       embeddedAccess: 'full',
       setEmbeddedAccess: (embeddedAccess) => set({ embeddedAccess }),
       setOpen: (open) => set({ open }),
@@ -47,9 +54,9 @@ export const useAssistantUiStore = create<AssistantUiState>()(
       setMode: (mode) => set({ mode }),
       setFloatingPosition: (floatingPosition) => set({ floatingPosition }),
       setSize: (size) => set({ size }),
-      setPendingGoal: (pendingGoal) => set(pendingGoal
-        ? { pendingGoal, open: true }
-        : { pendingGoal: null }),
+      setPendingGoal: (pendingGoal, options) => set(pendingGoal
+        ? { pendingGoal, pendingGoalOptions: options ?? null, open: true }
+        : { pendingGoal: null, pendingGoalOptions: null }),
     }),
     {
       name: 'henji-assistant-ui',
@@ -65,10 +72,10 @@ export const useAssistantUiStore = create<AssistantUiState>()(
   )
 )
 
-export function openAssistant(goal?: string): void {
+export function openAssistant(goal?: string, options?: AssistantGoalOptions): void {
   const state = useAssistantUiStore.getState()
   state.setOpen(true)
-  if (goal?.trim()) state.setPendingGoal(goal.trim())
+  if (goal?.trim()) state.setPendingGoal(goal.trim(), options)
 }
 
 export function closeAssistant(): void {

@@ -20,10 +20,12 @@ export function registerToolboxCapabilityHandlers(registrar: ApplicationCapabili
   registrar.registerHandler('select_toolbox_tool', (input, context) => {
     throwIfCapabilityAborted(context.signal)
     const parsed = parseCapabilityInput<{
-      toolId: 'cameraStage' | 'imageMark' | null
+      toolId: 'audioEdit' | 'cameraStage' | 'imageMark' | null
     }>('select_toolbox_tool', input)
     if (parsed.toolId) {
-      const surfaceId = parsed.toolId === 'cameraStage' ? 'tool.camera_stage' : 'tool.image_edit'
+      const surfaceId = parsed.toolId === 'cameraStage'
+        ? 'tool.camera_stage'
+        : parsed.toolId === 'audioEdit' ? 'tool.audio_edit' : 'tool.image_edit'
       return { toolId: parsed.toolId, ...openApplicationSurface(surfaceId, context) }
     }
     // 关闭工具只回工具箱首页，不抢占用户当前所在工作区。

@@ -8,6 +8,10 @@ import { ASSET_STORE_LEDGER } from '@/features/assets/application/assetStoreLedg
 import { useAssetLibraryStore } from '@/features/assets/store/assetLibraryStore'
 import { ASSISTANT_UI_STORE_LEDGER } from '@/features/assistant/application/assistantUiStoreLedger'
 import { useAssistantUiStore } from '@/features/assistant/store/assistantUiStore'
+import { AUDIO_EDIT_PLAYBACK_STORE_LEDGER } from '@/features/audioEdit/application/audioEditPlaybackStoreLedger'
+import { AUDIO_EDIT_STORE_LEDGER } from '@/features/audioEdit/application/audioEditStoreLedger'
+import { useAudioEditPlaybackStore } from '@/features/audioEdit/store/audioEditPlaybackStore'
+import { useAudioEditStore } from '@/features/audioEdit/store/audioEditStore'
 import { CAMERA_STAGE_SESSION_STORE_LEDGER } from '@/features/cameraStage/application/cameraStageSessionStoreLedger'
 import { CAMERA_STAGE_STORE_LEDGER } from '@/features/cameraStage/application/cameraStageStoreLedger'
 import { CAMERA_STAGE_TOOL_STORE_LEDGER } from '@/features/cameraStage/application/cameraStageToolStoreLedger'
@@ -80,6 +84,8 @@ interface LedgerCase {
 }
 
 const LEDGERS: LedgerCase[] = [
+  { ledger: AUDIO_EDIT_STORE_LEDGER, state: () => useAudioEditStore.getState() },
+  { ledger: AUDIO_EDIT_PLAYBACK_STORE_LEDGER, state: () => useAudioEditPlaybackStore.getState() },
   { ledger: CAMERA_STAGE_STORE_LEDGER, state: () => useCameraStageStore.getState() },
   { ledger: CAMERA_STAGE_TOOL_STORE_LEDGER, state: () => useCameraStageToolStore.getState() },
   { ledger: CAMERA_STAGE_VIEWPORT_STORE_LEDGER, state: () => useCameraStageViewportStore.getState() },

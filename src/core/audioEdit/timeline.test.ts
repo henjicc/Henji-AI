@@ -1,0 +1,75 @@
+import { describe, expect, it } from 'vitest'
+import {
+  buildAudioEditTimeline,
+  editedDurationFrames,
+  findTranscriptBlockAtSourceFrame,
+  findTranscriptBlockForPlayback,
+  nextRetainedSourceFrame,
+  outputFrameToSourceFrame,
+  sourceFrameToOutputFrame,
+} from './timeline'
+import { analyzeAudioEditTranscript } from './analysis'
+import { buildAudioEditSrt } from './subtitles'
+import type { AudioEditTranscriptBlock } from './types'
+
+function block(id: string, startFrame: number, endFrame: number, included = true, text = id): AudioEditTranscriptBlock {
+  return { id, text, startFrame, endFrame, included, locked: false, granularity: 'word' }
+}
+
+describe('audio edit timeline', () => {
+  it('merges removed intervals and preserves source/output mapping', () => {
+    const blocks = [block('a', 10, 20, false), block('b', 18, 30, false), block('c', 50, 60, false)]
+    const spans = buildAudioEditTimeline(100, blocks)
+    expect(spans).toEqual([
+      { sourceStartFrame: 0, sourceEndFrame: 10, outputStartFrame: 0, outputEndFrame: 10 },
+      { sourceStartFrame: 30, sourceEndFrame: 50, outputStartFrame: 10, outputEndFrame: 30 },
+      { sourceStartFrame: 60, sourceEndFrame: 100, outputStartFrame: 30, outputEndFrame: 70 },
+    ])
+    expect(editedDurationFrames(spans)).toBe(70)
+    expect(outputFrameToSourceFrame(15, spans)).toBe(35)
+    expect(sourceFrameToOutputFrame(35, spans)).toBe(15)
+    expect(sourceFrameToOutputFrame(20, spans)).toBeNull()
+    expect(nextRetainedSourceFrame(20, spans)).toBe(30)
+  })
+
+  it('does not highlight removed blocks in edited mode', () => {
+    const blocks = [block('kept', 0, 10), block('removed', 10, 20, false)]
+    expect(findTranscriptBlockAtSourceFrame(15, blocks, false)).toBeNull()
+    expect(findTranscriptBlockAtSourceFrame(15, blocks, true)?.id).toBe('removed')
+  })
+
+  it('keeps playback highlighting stable across short timestamp gaps only', () => {
+    const blocks = [block('first', 0, 100), block('removed', 110, 180, false), block('next', 200, 300)]
+    expect(findTranscriptBlockForPlayback(105, blocks, false, 20)?.id).toBe('first')
+    expect(findTranscriptBlockForPlayback(185, blocks, false, 20)).toBeNull()
+    expect(findTranscriptBlockForPlayback(185, blocks, true, 20)?.id).toBe('removed')
+    expect(findTranscriptBlockForPlayback(150, blocks, false, 20)).toBeNull()
+  })
+
+  it('suggests fillers but does not mistake timestamp gaps for silence', () => {
+    const suggestions = analyzeAudioEditTranscript([
+      block('a', 0, 100, true, '嗯'),
+      block('b', 1_000, 1_100, true, '那个'),
+    ], { sampleRate: 1_000 })
+    expect(suggestions.map((item) => [item.kind, item.confidence, item.status])).toEqual([
+      ['filler', 'high', 'pending'],
+      ['filler', 'low', 'pending'],
+    ])
+  })
+
+  it('preserves caption groups while mapping them onto the edited timeline', () => {
+    const blocks = [block('保留', 0, 1_000), block('删除', 1_000, 2_000, false), block('继续', 2_000, 3_000)]
+    const spans = buildAudioEditTimeline(3_000, blocks)
+    const srt = buildAudioEditSrt(blocks, spans, 1_000)
+    expect(srt).toBe('1\n00:00:00,000 --> 00:00:01,000\n保留\n\n2\n00:00:01,000 --> 00:00:02,000\n继续\n')
+  })
+
+  it('exports explicit caption splits and merges without changing word timing', () => {
+    const blocks = [block('一句', 0, 1_000), block('继续', 1_000, 2_000)]
+    const spans = buildAudioEditTimeline(2_000, blocks)
+    blocks[0].captionBreakAfter = true
+    expect(buildAudioEditSrt(blocks, spans, 1_000)).toBe('1\n00:00:00,000 --> 00:00:01,000\n一句\n\n2\n00:00:01,000 --> 00:00:02,000\n继续\n')
+    blocks[0].captionBreakAfter = false
+    expect(buildAudioEditSrt(blocks, spans, 1_000)).toBe('1\n00:00:00,000 --> 00:00:02,000\n一句继续\n')
+  })
+})

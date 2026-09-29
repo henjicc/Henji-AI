@@ -88,11 +88,11 @@ const selectToolboxTool = defineApplicationCapability({
   successEvidence: ['打开工具时返回实际 Surface ID，关闭工具时返回 surfaceId=null，且宿主工具选择与请求一致。'],
   failureRecovery: ['工具 Surface 无法打开时停止并说明，不得声称已切换；关闭失败时重新读取工具箱状态。'],
   inputSchema: z.object({
-    toolId: z.enum(['cameraStage', 'imageMark']).nullable(),
+    toolId: z.enum(['audioEdit', 'cameraStage', 'imageMark']).nullable(),
   }).strict(),
   outputSchema: capabilityOutputSchema({
-    toolId: z.enum(['cameraStage', 'imageMark']).nullable(),
-    surfaceId: z.enum(['tool.camera_stage', 'tool.image_edit']).nullable(),
+    toolId: z.enum(['audioEdit', 'cameraStage', 'imageMark']).nullable(),
+    surfaceId: z.enum(['tool.audio_edit', 'tool.camera_stage', 'tool.image_edit']).nullable(),
   }),
   concurrencyKey: 'toolbox_selection',
   resolveTargetIds: (input) => ({ toolId: input.toolId ?? '' }),

@@ -11,7 +11,7 @@ export default function UiScaleSection(): JSX.Element {
   const setUiScaleMode = useSettingsStore((state) => state.setUiScaleMode)
   const options = UI_SCALE_MODES.map((value) => ({
     value,
-    label: t(`sections.interface.uiScaleOptions.${value}`),
+    label: value === 'auto' ? t('sections.interface.uiScaleOptions.auto') : `${value}%`,
   }))
 
   return (
