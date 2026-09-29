@@ -6,6 +6,7 @@ import { TaskList, type TaskListProps } from './TaskList'
 import { TaskListRetentionContext, type TaskListRetention } from '../hooks/useTaskListRetention'
 import type { GenerationTask } from '../types'
 import { revealGenerationTask } from '../application/generationTaskNavigation'
+import { useGenerationAutoScroll } from '../hooks/useGenerationAutoScroll'
 
 vi.mock('@/hooks/useI18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }))
 vi.mock('@/components/ui', () => ({
@@ -58,6 +59,22 @@ function Fixture({ items }: { items: GenerationTask[] }) {
 }
 const card = (root: HTMLElement, id: string) => root.querySelector<HTMLElement>(`[data-generation-task-id="${id}"]`)
 function scroll(element: HTMLElement, top: number) { act(() => { element.scrollTop = top; fireEvent.scroll(element) }) }
+
+it.each([false, true])('历史首屏定位不会被虚拟列表重置，异步载入=%s', asyncLoad => {
+  function InitialHistory({ loaded }: { loaded: boolean }) {
+    const items = loaded ? tasks(1000) : []
+    const { listContainerRef, contentRef } = useGenerationAutoScroll(loaded, items.length)
+    return <div ref={listContainerRef} data-testid="scroll"><div ref={contentRef}>
+      <TaskList {...callbacks} scrollContainerRef={listContainerRef} tasks={items} totalCount={items.length} matchedCount={items.length} hasActiveFilters={false} />
+    </div></div>
+  }
+  const view = render(<InitialHistory loaded={!asyncLoad} />)
+  if (asyncLoad) view.rerender(<InitialHistory loaded />)
+  expect(view.getByTestId('scroll').scrollTop).toBeGreaterThan(0)
+  scroll(view.getByTestId('scroll'), 30000)
+  view.rerender(<InitialHistory loaded />)
+  expect(view.getByTestId('scroll').scrollTop).toBe(30000)
+})
 
 it('万条任务只挂载视口及少量预读卡片，滚动更换内容而非累积挂载', () => {
   const view = render(<Fixture items={tasks(10000)} />)

@@ -22,6 +22,8 @@ it('用户离开底部后同帧的尺寸回调不拉回；回到底部后继续�
   Object.defineProperty(scroller, 'scrollHeight', { get: () => height })
   Object.defineProperty(scroller, 'clientHeight', { value: 600 })
   act(() => {
+    scroller.scrollTop = 9400
+    fireEvent.scroll(scroller)
     scroller.scrollTop = 4000
     fireEvent.scroll(scroller)
     resized?.()
@@ -34,4 +36,10 @@ it('用户离开底部后同帧的尺寸回调不拉回；回到底部后继续�
     resized?.()
   })
   expect(scroller.scrollTop).toBe(11000)
+  act(() => {
+    height = 12000
+    fireEvent.scroll(scroller)
+    resized?.()
+  })
+  expect(scroller.scrollTop).toBe(12000)
 })

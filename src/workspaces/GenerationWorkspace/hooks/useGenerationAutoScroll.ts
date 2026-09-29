@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, type RefObject } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, type RefObject } from 'react'
 
 import { useAutoScrollOnResize } from './useAutoScrollOnResize'
 
@@ -8,11 +8,13 @@ export function useGenerationAutoScroll(isTasksLoaded: boolean, taskCount: numbe
 } {
   const listContainerRef = useRef<HTMLDivElement>(null)
   const isUserAtBottom = useRef(true)
+  const lastPosition = useRef({ top: 0, height: 0 })
   const shouldAutoScroll = useCallback(() => isUserAtBottom.current, [])
   const scrollToBottom = useCallback((): void => {
     const element = listContainerRef.current
     if (!element) return
     element.scrollTop = element.scrollHeight
+    lastPosition.current = { top: element.scrollTop, height: element.scrollHeight }
   }, [])
   const contentRef = useAutoScrollOnResize(shouldAutoScroll, scrollToBottom)
 
@@ -21,15 +23,22 @@ export function useGenerationAutoScroll(isTasksLoaded: boolean, taskCount: numbe
     if (!element) return
     const update = () => {
       const threshold = 8
-      // ResizeObserver 可能先于 React effect 清理执行，读取即时位置，避免把用户拉回底部。
-      isUserAtBottom.current = element.scrollHeight - element.clientHeight - element.scrollTop <= threshold
+      const { scrollTop: top, scrollHeight: height, clientHeight } = element
+      if (height - clientHeight - top <= threshold) isUserAtBottom.current = true
+      // 虚拟卡片测量/媒体载入也会触发 scroll；内容变高不代表用户离开底部。
+      // 只有尺寸不变时真正向上滚动才解除跟随，避免首屏测量后停在倒数几条。
+      else if (height === lastPosition.current.height && top < lastPosition.current.top) isUserAtBottom.current = false
+      lastPosition.current = { top, height }
     }
     update()
     element.addEventListener('scroll', update)
     return () => element.removeEventListener('scroll', update)
   }, [])
-  useEffect(() => {
-    if (isTasksLoaded) scrollToBottom()
+  useLayoutEffect(() => {
+    if (isTasksLoaded) {
+      isUserAtBottom.current = true
+      scrollToBottom()
+    }
   }, [isTasksLoaded, scrollToBottom])
   useEffect(() => {
     if (isTasksLoaded && isUserAtBottom.current) scrollToBottom()

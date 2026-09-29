@@ -37,6 +37,15 @@ function createGenerationVirtualizationScenes(context) {
       await page.reload({ waitUntil: 'domcontentloaded' })
       const last = page.locator('[data-generation-task-id="__virtual_check_999"]')
       await last.waitFor({ timeout: 30000 })
+      await context.settlePage(page)
+      const initial = await page.evaluate(() => {
+        const scroller = document.querySelector('.app-scroll-container')
+        return { remaining: scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop,
+          oldestMounted: Boolean(scroller.querySelector('[data-generation-task-id="__virtual_check_0"]')) }
+      })
+      assert.ok(initial.remaining <= 8, `打开历史未定位最新记录：距底部 ${initial.remaining}`)
+      assert.equal(initial.oldestMounted, false, '首屏不应加载最旧的卡片')
+      await inspection.capture('initial-latest')
       const scroll = async fraction => {
         await page.evaluate(fraction => {
           document.activeElement?.blur?.()

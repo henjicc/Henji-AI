@@ -53,6 +53,9 @@ export function useVirtualTaskList(tasks: GenerationTask[], scrollContainerRef: 
   }, [hasTasks, scrollElement])
   const getItemKey = useCallback((index: number) => ids[index], [ids])
   const virtualizer = useVirtualizer<HTMLDivElement, HTMLDivElement>({
+    // 容器绑定前不缓存默认的 0；绑定时沿用父级已经完成的首屏定位。
+    enabled: scrollElement !== null,
+    initialOffset: () => scrollElement?.scrollTop ?? 0,
     count: tasks.length,
     getScrollElement: () => scrollElement,
     getItemKey,
