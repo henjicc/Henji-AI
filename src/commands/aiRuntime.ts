@@ -100,7 +100,7 @@ export async function aiTestProviderConnection(
   return await getPlatform().aiRuntime.testProviderConnection(providerId)
 }
 
-const TTS_VOICE_CACHE_MS = 5 * 60 * 1000
+const TTS_VOICE_CACHE_MS = 24 * 60 * 60 * 1000
 const ttsVoiceCache = new Map<string, { voices?: TtsVoice[]; expiresAt: number; pending?: Promise<TtsVoice[]> }>()
 
 /** 已获取的列表可直接展示；过期后由读取入口后台更新。 */
