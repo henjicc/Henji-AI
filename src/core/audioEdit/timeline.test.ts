@@ -57,12 +57,19 @@ describe('audio edit timeline', () => {
     ])
   })
 
-  it('builds subtitles from the edited timeline', () => {
+  it('preserves caption groups while mapping them onto the edited timeline', () => {
     const blocks = [block('保留', 0, 1_000), block('删除', 1_000, 2_000, false), block('继续', 2_000, 3_000)]
     const spans = buildAudioEditTimeline(3_000, blocks)
     const srt = buildAudioEditSrt(blocks, spans, 1_000)
-    expect(srt).toContain('00:00:00,000 --> 00:00:02,000')
-    expect(srt).toContain('保留继续')
-    expect(srt).not.toContain('删除')
+    expect(srt).toBe('1\n00:00:00,000 --> 00:00:01,000\n保留\n\n2\n00:00:01,000 --> 00:00:02,000\n继续\n')
+  })
+
+  it('exports explicit caption splits and merges without changing word timing', () => {
+    const blocks = [block('一句', 0, 1_000), block('继续', 1_000, 2_000)]
+    const spans = buildAudioEditTimeline(2_000, blocks)
+    blocks[0].captionBreakAfter = true
+    expect(buildAudioEditSrt(blocks, spans, 1_000)).toBe('1\n00:00:00,000 --> 00:00:01,000\n一句\n\n2\n00:00:01,000 --> 00:00:02,000\n继续\n')
+    blocks[0].captionBreakAfter = false
+    expect(buildAudioEditSrt(blocks, spans, 1_000)).toBe('1\n00:00:00,000 --> 00:00:02,000\n一句继续\n')
   })
 })
