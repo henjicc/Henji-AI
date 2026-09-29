@@ -57,6 +57,7 @@ import {
 export const ICON_WORKSPACE_GENERATE: LucideIcon = MessageCircle
 /** 画布（节点式工作区） */
 export const ICON_WORKSPACE_CANVAS: LucideIcon = LayoutGrid
+export const ICON_WORKSPACE_VIDEO_EDIT: LucideIcon = Clapperboard
 /** 工具箱。刻意不用齿轮：齿轮是「设置」的图形，两者同屏出现过一次撞车。 */
 export const ICON_WORKSPACE_TOOLBOX: LucideIcon = Wrench
 /** 资产库（顶部入口、加入资产库动作、资产库侧栏共用） */

@@ -1,4 +1,5 @@
 import { AUDIO_EDIT_APPLICATION_CAPABILITIES } from './domains/audioEdit/audioEditApplicationCapabilities'
+import { VIDEO_EDIT_APPLICATION_CAPABILITIES } from './domains/videoEdit/videoEditApplicationCapabilities'
 import {
   ApplicationCapabilityRegistry,
   type ApplicationCapabilityDefinition,
@@ -50,6 +51,7 @@ export const BUILTIN_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinition[]
   ...APPLICATION_REFLECTION_APPLICATION_CAPABILITIES,
   ...TOOLBOX_APPLICATION_CAPABILITIES,
   ...AUDIO_EDIT_APPLICATION_CAPABILITIES,
+  ...VIDEO_EDIT_APPLICATION_CAPABILITIES,
   ...ASSISTANT_SKILL_APPLICATION_CAPABILITIES,
 ]
 

@@ -181,6 +181,8 @@ for (const file of walk(path.join(root, 'src', 'core', 'application-control'))) 
  * 能做的事"的量化终点。条目要说清楚拦路的是什么、归到哪一期。
  */
 const ASSISTANT_BLIND_FEATURES = {
+  videoEdit: '剪辑工程由 videoEditService 的文件实例持有，没有 Zustand store；'
+    + 'videoEditReflection、字段定义、事务执行器与领域保存参与者覆盖可编辑内容，公共回环由 videoEditService.test.ts 验证。',
   'application-control': '调用方中立的能力会话与根宿主协调层，没有独立业务实体或 Store；'
     + '反射、写入与账本复用各正式领域注册源，MCP 权限不依赖助手运行。',
   logs: '日志面板是独立窗口里的内存环形缓冲，只有暂停与清空两个动作，且不进任何持久化状态；'

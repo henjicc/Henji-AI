@@ -10,6 +10,7 @@ import {
   ICON_ASSET_LIBRARY,
   ICON_SETTINGS,
   ICON_WORKSPACE_CANVAS,
+  ICON_WORKSPACE_VIDEO_EDIT,
   ICON_WORKSPACE_GENERATE,
   ICON_WORKSPACE_TOOLBOX,
 } from '@/core/theme/icons'
@@ -52,6 +53,7 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
   const tabs: TabConfig[] = [
     { id: 'generation', label: t('tabs.generation'), icon: ICON_WORKSPACE_GENERATE },
     { id: 'nodes', label: t('tabs.canvas'), icon: ICON_WORKSPACE_CANVAS },
+    { id: 'videoEdit', label: '剪辑', icon: ICON_WORKSPACE_VIDEO_EDIT },
     { id: 'tools', label: t('tabs.tools'), icon: ICON_WORKSPACE_TOOLBOX },
     { id: 'assets', label: t('tabs.assets'), icon: ICON_ASSET_LIBRARY },
   ]

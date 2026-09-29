@@ -27,7 +27,7 @@ export const hostContextSnapshotSchema = z.object({
     selectedRefs: z.array(z.string().min(1).max(500)).max(32),
   }).strict().optional(),
   workspace: z.object({
-    id: z.enum(['generation', 'nodes', 'tools', 'assets']),
+    id: z.enum(['generation', 'nodes', 'videoEdit', 'tools', 'assets']),
     activeToolId: z.enum(['audioEdit', 'cameraStage', 'imageMark']).nullable(),
   }),
   project: z.object({

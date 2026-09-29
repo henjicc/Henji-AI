@@ -30,7 +30,7 @@ export interface HenjiDialogOpenOptions {
 export interface HenjiFsApi {
   readFile(path: string): Promise<Uint8Array>
   readTextFile(path: string): Promise<string>
-  writeFile(path: string, data: Uint8Array, options?: { exclusive?: boolean }): Promise<void>
+  writeFile(path: string, data: Uint8Array, options?: { exclusive?: boolean; position?: number }): Promise<void>
   writeTextFile(path: string, data: string): Promise<void>
   exists(path: string): Promise<boolean>
   mkdir(path: string, options?: { recursive?: boolean }): Promise<void>

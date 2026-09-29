@@ -2,6 +2,7 @@ import { app, dialog, shell } from 'electron'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
+import { writeBufferAtomically } from './image-editor-v3/atomic-file'
 
 const APP_IDENTIFIER = 'com.henji.ai'
 
@@ -71,17 +72,29 @@ export async function readTextFile(targetPath: string): Promise<string> {
 export async function writeFileBytes(
   targetPath: string,
   data: Uint8Array,
-  options?: { exclusive?: boolean },
+  options?: { exclusive?: boolean; position?: number },
 ): Promise<void> {
   ensureValidPath(targetPath)
+  if (options?.position !== undefined) {
+    if (!Number.isSafeInteger(options.position) || options.position < 0 || options.exclusive) throw new Error('Invalid file write position')
+    const handle = await fs.open(targetPath, 'r+')
+    try {
+      let offset = 0
+      while (offset < data.byteLength) {
+        const { bytesWritten } = await handle.write(data, offset, data.byteLength - offset, options.position + offset)
+        if (!bytesWritten) throw new Error('File write made no progress')
+        offset += bytesWritten
+      }
+    } finally { await handle.close() }
+    return
+  }
   await fs.mkdir(path.dirname(targetPath), { recursive: true })
   await fs.writeFile(targetPath, data, options?.exclusive ? { flag: 'wx' } : undefined)
 }
 
 export async function writeTextFile(targetPath: string, data: string): Promise<void> {
   ensureValidPath(targetPath)
-  await fs.mkdir(path.dirname(targetPath), { recursive: true })
-  await fs.writeFile(targetPath, data, 'utf8')
+  await writeBufferAtomically(targetPath, Buffer.from(data, 'utf8'))
 }
 
 export async function pathExists(targetPath: string): Promise<boolean> {

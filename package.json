@@ -109,6 +109,7 @@
     "i18next-browser-languagedetector": "^7.2.0",
     "konva": "^10.2.0",
     "lucide-react": "^0.562.0",
+    "mediabunny": "1.61.0",
     "pica": "^9.0.1",
     "pinyin-match": "^1.2.10",
     "pinyin-pro": "^3.29.3",

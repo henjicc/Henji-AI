@@ -1,5 +1,5 @@
 export const APPLICATION_SURFACE_IDS = [
-  'workspace.generation', 'workspace.canvas', 'workspace.tools', 'workspace.assets',
+  'workspace.generation', 'workspace.canvas', 'workspace.video_edit', 'workspace.tools', 'workspace.assets',
   'tool.image_edit', 'tool.camera_stage', 'tool.audio_edit',
   'settings.general', 'settings.general.basic', 'settings.general.onboarding', 'settings.storage', 'settings.providers_models', 'settings.upload',
   'settings.general.behavior', 'settings.general.maintenance', 'settings.general.mcp',

@@ -6,6 +6,8 @@ import { focusCanvasNode, openCanvasProject } from '@/features/canvas/applicatio
 import { closeApplicationSurface as closeSurface, listApplicationSurfaces, openApplicationSurface as openSurface } from '@/features/navigation/application/index'
 
 import { assetApplicationService } from '@/features/assets/application/assetApplicationService'
+import { focusVideoEdit, setVideoEditView, requireVideoEditInstance } from '@/features/videoEdit/application/videoEditService'
+import { splitVideoEditRef } from '@/features/videoEdit/application/videoEditReflection'
 import type { CapabilityExecutionContext } from '@/features/application-control/capabilities/handlerTypes'
 
 export type { ApplicationSurfaceDefinition } from '@/features/navigation/application/index'
@@ -38,6 +40,17 @@ export async function focusApplicationEntity(
   signal: AbortSignal,
   correlation: SurfaceLogContext = {}
 ): Promise<Record<string, unknown>> {
+  if (ref.kind.startsWith('video_edit.')) {
+    const { projectId, childId } = splitVideoEditRef(ref)
+    focusVideoEdit(projectId)
+    if (ref.kind === 'video_edit.clip') setVideoEditView(projectId, { selection: childId })
+    if (ref.kind === 'video_edit.annotation') {
+      const mark = requireVideoEditInstance(projectId).document.annotations.find(item => item.id === childId)
+      if (!mark) throw new Error('NOT_FOUND')
+      setVideoEditView(projectId, { selection: mark.clipId, frame: mark.frame, playing: false })
+    }
+    return { ref, ...openApplicationSurface('workspace.video_edit', correlation) }
+  }
   if (ref.kind === 'generation.record' || ref.kind === 'generation.result') {
     return { ref, ...openApplicationSurface('workspace.generation', correlation) }
   }

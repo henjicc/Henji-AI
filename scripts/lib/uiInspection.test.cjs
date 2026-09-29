@@ -362,6 +362,7 @@ test('场景覆盖应用界面和原生窗口且规则数固定为十一条', ()
   // 界面名是固定词汇表：新增界面要在这里登记，拼错或漏登记必须红。
   assert.deepEqual([...new Set(UI_INSPECTION_SCENES.map((scene) => scene.surface))].sort(), [
     '剪贴板',
+    '剪辑',
     '助手',
     '工具箱',
     '生成',

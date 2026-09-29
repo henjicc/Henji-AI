@@ -51,7 +51,7 @@ const switchWorkspace = defineApplicationCapability({
   requiredScopes: ['navigation'],
   producesRefs: ['application.surface'],
   inputSchema: z.object({
-    workspaceId: z.enum(['generation', 'nodes', 'tools', 'assets']),
+    workspaceId: z.enum(['generation', 'nodes', 'videoEdit', 'tools', 'assets']),
   }).strict(),
   outputSchema: capabilityOutputSchema({ workspace: z.string() }),
   concurrencyKey: 'navigation',

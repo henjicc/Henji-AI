@@ -65,6 +65,7 @@ const surfaceDefinitions = [
     openPolicy: 'after_target_resolved',
   },
   { id: 'workspace.tools', kind: 'workspace', workspace: 'tools', ...immediate },
+  { id: 'workspace.video_edit', kind: 'workspace', workspace: 'videoEdit', ...immediate, acceptedRefKinds: ['video_edit.project', 'video_edit.clip', 'video_edit.annotation'] },
   {
     id: 'workspace.assets', kind: 'workspace', workspace: 'assets', ...immediate,
     acceptedRefKinds: ['asset', 'asset.library'],

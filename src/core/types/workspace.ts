@@ -1,4 +1,4 @@
-export type WorkspaceId = 'generation' | 'nodes' | 'tools' | 'assets'
+export type WorkspaceId = 'generation' | 'nodes' | 'videoEdit' | 'tools' | 'assets'
 
 export type ToolboxToolId = 'audioEdit' | 'cameraStage' | 'imageMark'
 

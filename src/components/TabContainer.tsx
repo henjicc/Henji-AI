@@ -9,6 +9,7 @@ import { listPrefetchOrder, workspaceLoaders } from '../workspaces/workspaceLoad
 // 懒加载工作区组件（loader 复用 workspaceLoaders，保证与空闲预取命中同一份模块缓存）
 const GenerationWorkspace = lazy(workspaceLoaders.generation)
 const CanvasWorkspace = lazy(workspaceLoaders.nodes)
+const VideoEditWorkspace = lazy(workspaceLoaders.videoEdit)
 const ToolboxWorkspace = lazy(workspaceLoaders.tools)
 const AssetLibraryWorkspace = lazy(workspaceLoaders.assets)
 
@@ -77,6 +78,11 @@ const TabContainer: React.FC<TabContainerProps> = ({ containerRef, activeTab, in
                     <Suspense fallback={<LoadingPlaceholder />}>
                         <ToolboxWorkspace />
                     </Suspense>
+                </div>
+            )}
+            {activeTab === 'videoEdit' && (
+                <div data-application-surface-id="workspace.video_edit" className="h-full">
+                    <Suspense fallback={<LoadingPlaceholder />}><VideoEditWorkspace /></Suspense>
                 </div>
             )}
             {visitedTabs.has('assets') && (

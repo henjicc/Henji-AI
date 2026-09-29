@@ -1,4 +1,5 @@
 import { getAudioEditRevision } from '@/features/audioEdit/application/audioEditProjectInstances'
+import { activeVideoEditInstance, videoEditDomainRevision, subscribeVideoEditDomain } from '@/features/videoEdit/application/videoEditService'
 import {
   APPLICATION_HOST_CONTRACT_VERSION,
   hostContextSnapshotSchema,
@@ -47,6 +48,7 @@ const scopeRevisions: HostScopeRevisions = {
   image_mark: 0,
   image_edit: 0,
   audio_edit: 0,
+  video_edit: 0,
 }
 
 const listeners = new Set<() => void>()
@@ -80,6 +82,7 @@ function syncPulledRevisions(): void {
   scopeRevisions.image_mark = imageMarkRevision()
   scopeRevisions.image_edit = getImageEditDocumentCatalogRevisionV3()
   scopeRevisions.audio_edit = getAudioEditRevision()
+  scopeRevisions.video_edit = videoEditDomainRevision()
 }
 
 /**
@@ -179,6 +182,7 @@ function startTracking(): () => void {
       revision += 1
       for (const listener of listeners) listener()
     }),
+    subscribeVideoEditDomain(() => { revision += 1; for (const listener of listeners) listener() }),
   ]
   return () => {
     for (const unsubscribe of unsubscribers) unsubscribe()
@@ -218,11 +222,13 @@ export function createHostContextSnapshot(uiReady = true): HostContextSnapshot {
   const generationReady = isVisibleGenerationTaskHandlerReady()
   const ui = useUiStore.getState()
   const audioEdit = useAudioEditStore.getState()
+  const videoEdit = navigation.activeWorkspace === 'videoEdit' ? activeVideoEditInstance() : undefined
   const isAudioEditSurface = navigation.activeWorkspace === 'tools' && navigation.activeToolId === 'audioEdit'
   const activeAudioProjectRef = isAudioEditSurface && audioEdit.project
     ? `audio_edit.project:${audioEdit.project.id}`
     : null
   const selectedRefs = [
+    videoEdit?.selection ? `video_edit.clip:${videoEdit.document.id}:${videoEdit.selection}` : null,
     assets.selectedAsset ? `asset:${assets.selectedAsset.id}` : null,
     project.currentProjectId && canvas.selectedNodeId
       ? `canvas.node:${project.currentProjectId}:${canvas.selectedNodeId}`
@@ -241,6 +247,8 @@ export function createHostContextSnapshot(uiReady = true): HostContextSnapshot {
         focusedRef: null,
         selectedRefs,
       }
+    : navigation.activeWorkspace === 'videoEdit'
+      ? { id: 'workspace.video_edit', kind: 'workspace' as const, focusedRef: videoEdit ? `video_edit.project:${videoEdit.document.id}` : null, selectedRefs }
     : navigation.activeWorkspace === 'tools' && navigation.activeToolId
       ? {
           id: navigation.activeToolId === 'imageMark'

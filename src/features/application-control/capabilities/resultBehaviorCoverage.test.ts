@@ -12,6 +12,10 @@ type Scenario = { file: string; title: string }
 
 /** 每条登记都必须在对应测试里从正式状态源断言结果，不能只看 completed/evidence。 */
 const RESULT_SCENARIOS: Record<string, Scenario[]> = {
+  video_edit: [
+    { file: 'src/features/videoEdit/application/videoEditService.test.ts', title: '公共修改与手动编辑共用历史并可保存重开' },
+    { file: 'src/features/videoEdit/application/videoEditService.test.ts', title: '保存失败保留助手修改且恢复不会重放编辑' },
+  ],
   settings: [
     { file: 'src/features/settings/application-control/settingsReflectionResult.test.ts', title: '通过 describe 与 change 切换 general.language，正式读取值随之变化' },
     { file: 'src/features/settings/application-control/settingsReflectionResult.test.ts', title: '通过通用 change 修改 interface.theme_tone，zustand 真相源与反射读回一致' },
@@ -55,6 +59,7 @@ const RESULT_SCENARIOS: Record<string, Scenario[]> = {
 }
 
 const RESULT_SCENARIO_BASELINE: Record<keyof typeof RESULT_SCENARIOS, number> = {
+  video_edit: 2,
   memory: 2,
   settings: 2,
   assets: 3,

@@ -16,7 +16,7 @@ export const navigationApplicationDomain: ApplicationDomainModule = {
   registrar.registerHandler('switch_workspace', (input, context) => {
     throwIfCapabilityAborted(context.signal)
     const parsed = parseCapabilityInput<{
-      workspaceId: 'generation' | 'nodes' | 'tools' | 'assets'
+      workspaceId: 'generation' | 'nodes' | 'videoEdit' | 'tools' | 'assets'
     }>('switch_workspace', input)
     switchWorkspace(parsed.workspaceId)
     return { workspace: parsed.workspaceId }

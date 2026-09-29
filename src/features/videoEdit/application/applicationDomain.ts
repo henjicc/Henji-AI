@@ -1,0 +1,70 @@
+import type { ApplicationDomainModule } from '@/features/application-control/domainModule'
+import { ApplicationPersistenceFailure, type ApplicationPersistenceParticipant } from '@/core/application-control/execution/persistence'
+import { createVideoEditRegistrations } from './videoEditReflection'
+import { VideoEditCollectionExecutor, VideoEditMutationExecutor } from './videoEditExecutors'
+import { requireVideoEditInstance, saveVideoEdit, type VideoEditInstance } from './videoEditService'
+import { editVideoProject, undoVideoEdit } from './videoEditService'
+import { splitVideoEditClip } from '@/core/videoEdit/document'
+import { VIDEO_EDIT_APPLICATION_CAPABILITIES } from '@/core/application-control/domains/videoEdit/videoEditApplicationCapabilities'
+import { exportVideoEdit, cancelVideoEditExport, videoEditExportTask } from './videoEditExport'
+import { importVideoEditPaths } from './videoEditMedia'
+import { assetApplicationService } from '@/features/assets/application/assetApplicationService'
+import { getPlatform } from '@/platform/runtime'
+
+const persistenceOwners = new WeakMap<VideoEditInstance, ApplicationPersistenceParticipant>()
+
+export const videoEditApplicationDomain: ApplicationDomainModule = {
+  id: 'videoEdit', entities: createVideoEditRegistrations,
+  registerExecutors(engine) {
+    for (const entityType of ['video_edit.project', 'video_edit.clip', 'video_edit.annotation'] as const) engine.registerMutationExecutor(new VideoEditMutationExecutor(entityType))
+    for (const entityType of ['video_edit.clip', 'video_edit.annotation'] as const) engine.registerCollectionExecutor(new VideoEditCollectionExecutor(entityType))
+  },
+  registerCapabilities(registrar) {
+    for (const definition of VIDEO_EDIT_APPLICATION_CAPABILITIES) registrar.registerHandler(definition.id, async raw => {
+      const input = definition.inputSchema.parse(raw) as { projectRef: { kind: 'video_edit.project'; id: string }; clipRef?: { id: string }; frame?: number; assetRef?: { id: string } }
+      const id = input.projectRef.id; requireVideoEditInstance(id)
+      switch (definition.id) {
+        case 'undo_video_edit': undoVideoEdit(id); await saveVideoEdit(id); break
+        case 'redo_video_edit': undoVideoEdit(id, true); await saveVideoEdit(id); break
+        case 'save_video_edit': await saveVideoEdit(id); break
+        case 'split_video_edit': {
+          if (!input.clipRef?.id.startsWith(`${id}:`) || input.frame === undefined) throw new Error('拆分需要本工程 clipRef 与整数 frame。')
+          editVideoProject(id, document => splitVideoEditClip(document, input.clipRef!.id.slice(id.length + 1), input.frame!)); await saveVideoEdit(id); break
+        }
+        case 'import_video_edit_asset': {
+          if (!input.assetRef) throw new Error('请提供素材库 assetRef。')
+          const asset = await assetApplicationService.inspect(input.assetRef.id)
+          await importVideoEditPaths(id, [asset.filePath]); await saveVideoEdit(id); break
+        }
+        case 'export_video_edit': await exportVideoEdit(id, undefined, true); break
+        case 'cancel_video_edit_export': cancelVideoEditExport(id); break
+      }
+      const task = videoEditExportTask(id)
+      const instance = requireVideoEditInstance(id)
+      const verified = definition.id.includes('export') ? Boolean(task) : JSON.stringify(JSON.parse(await getPlatform().system.fs.readTextFile(instance.path))) === JSON.stringify(instance.document)
+      return { resultRef: input.projectRef, verification: { verified, target: input.projectRef, condition: definition.id.includes('export') ? '已回读原工程的导出任务状态；请求提交不等于视频导出完成。' : '已从本地工程文件回读并核对编辑内容。' }, message: definition.id.includes('export') ? task ? `导出状态：${task.state}。请查询导出状态确认完成。` : '尚无导出任务或已取消文件选择。' : '操作已完成，请回读工程核对结果。', ...(task ? { task: { id: task.id, state: task.state, progress: task.progress, revision: task.revision } } : {}) }
+    })
+  },
+  resolvePersistenceParticipants(steps) {
+    const ids = new Set(steps.flatMap(step => step.kind === 'mutation' && step.target.kind.startsWith('video_edit.') ? [step.target.id.split(':')[0]] : step.kind === 'collection' && step.parent.kind === 'video_edit.project' ? [step.parent.id] : []))
+    return [...ids].map(id => {
+      const owner = requireVideoEditInstance(id)
+      const existing = persistenceOwners.get(owner)
+      if (existing) return existing
+      const participant: ApplicationPersistenceParticipant = { key: `video_edit:${id}`, begin() {
+      const instance = requireVideoEditInstance(id)
+      const initial = instance.document; const past = instance.past.slice(); const future = instance.future.slice()
+      return {
+        async confirm() { try { await saveVideoEdit(id) } catch (error) { throw new ApplicationPersistenceFailure('修改已保留但未保存。请重试保存，不要再次执行剪辑。', { memoryState: 'modified', persistenceState: 'unconfirmed', stage: 'document', recovery: { capabilityId: 'save_video_edit', target: { kind: 'video_edit.project', id }, replayMutation: false } }, error) } },
+        release() {
+          const changed = JSON.stringify({ ...initial, revision: 0 }) !== JSON.stringify({ ...instance.document, revision: 0 })
+          instance.past = changed ? [...past.slice(-49), initial] : past
+          instance.future = changed ? [] : future
+        },
+      }
+      } }
+      persistenceOwners.set(owner, participant)
+      return participant
+    })
+  },
+}

@@ -13,6 +13,7 @@ type WorkspaceLoader = () => Promise<WorkspaceModule>
 export const workspaceLoaders: Record<WorkspaceId, WorkspaceLoader> = {
   generation: () => import('./GenerationWorkspace'),
   nodes: () => import('./CanvasWorkspace'),
+  videoEdit: () => import('./VideoEditWorkspace'),
   tools: () => import('./ToolboxWorkspace'),
   assets: () => import('./AssetLibraryWorkspace'),
 }
