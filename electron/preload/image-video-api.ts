@@ -49,8 +49,6 @@ export function createImageVideoApis(nativeInvoke: NativeInvoke): {
   }
 
   const videoApi: HenjiVideoApi = {
-    preparePreview: payload => nativeInvoke('video:preparePreview', payload),
-    cancelPreview: requestId => nativeInvoke('video:cancelPreview', { requestId }),
     readVideoInfo: (source) => nativeInvoke('video:readVideoInfo', { source }),
     trimVideoSource: (payload) => nativeInvoke('video:trimVideoSource', payload),
     compressVideoToFit: (payload) => nativeInvoke('video:compressVideoToFit', payload),

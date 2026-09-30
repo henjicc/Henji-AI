@@ -307,8 +307,6 @@ export interface HenjiVideoFrameExportProgress {
 }
 
 export interface HenjiVideoApi {
-  preparePreview(payload: import('../../src/core/videoEdit/preview').VideoPreviewProxyRequest): Promise<import('../../src/core/videoEdit/preview').VideoPreviewProxyResult>
-  cancelPreview(requestId: string): Promise<void>
   readVideoInfo(source: string): Promise<HenjiVideoInfoResult>
   trimVideoSource(payload: HenjiVideoTrimVideoSourcePayload): Promise<HenjiVideoTrimVideoSourceResult>
   compressVideoToFit(payload: HenjiVideoCompressVideoToFitPayload): Promise<HenjiVideoCompressVideoToFitResult>

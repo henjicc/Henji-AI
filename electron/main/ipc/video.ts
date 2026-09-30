@@ -21,22 +21,10 @@ import type {
   VideoInfoResultDto,
 } from '../services/video/types'
 import { parseRecord, parseStringField, registerIpcHandler } from './registry'
-import { cancelVideoPreview, prepareVideoPreview, releaseVideoPreviewOwner, validateVideoPreviewRequest } from '../services/video/preview-proxy'
-
-const previewOwners = new WeakSet<object>()
+import { clearLegacyVideoPreviewCache } from '../services/video/preview-cache'
 
 export function registerVideoIpc(): void {
-  registerIpcHandler('video:preparePreview', validateVideoPreviewRequest, (payload, event) => {
-    const sender = event.sender
-    if (!previewOwners.has(sender)) {
-      previewOwners.add(sender)
-      const owner = sender.id
-      sender.once('destroyed', () => releaseVideoPreviewOwner(owner))
-      sender.on('render-process-gone', () => releaseVideoPreviewOwner(owner))
-    }
-    return prepareVideoPreview(payload, sender.id)
-  })
-  registerIpcHandler('video:cancelPreview', input => parseStringField(input, 'requestId'), (requestId, event) => cancelVideoPreview(requestId, event.sender.id))
+  void clearLegacyVideoPreviewCache()
   registerIpcHandler<string, VideoInfoResultDto>('video:readVideoInfo', (input) => parseStringField(input, 'source'), (source) => {
     return readVideoInfo(source)
   })

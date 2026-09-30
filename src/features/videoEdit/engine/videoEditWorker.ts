@@ -1,10 +1,8 @@
 import { VideoEditRenderer } from './videoEditRenderer'
 import type { VideoEditDocument } from '@/core/videoEdit/document'
-import type { VideoEditPreviewSource } from '@/core/videoEdit/preview'
 
 export type RenderRequest = { id: number } & (
   { kind: 'init'; document: VideoEditDocument; previewWidth?: number; surface?: OffscreenCanvas } | { kind: 'update'; document: VideoEditDocument }
-  | { kind: 'preview'; sources: VideoEditPreviewSource[] }
   | { kind: 'invalidate'; revision: number }
   | { kind: 'dispose' }
   | { kind: 'render'; frame: number; sequential: boolean; scrubbing?: boolean; deadline?: number }
@@ -27,9 +25,6 @@ self.onmessage = (event: MessageEvent<RenderRequest>) => {
       } else if (request.kind === 'init') {
         await renderer?.dispose(); renderer = new VideoEditRenderer(request.document, request.previewWidth, request.surface); direct = !!request.surface
         self.postMessage({ id: request.id } satisfies RenderResponse)
-      } else if (request.kind === 'preview') {
-        if (!renderer) throw new Error('剪辑渲染器尚未就绪。')
-        await renderer.setPreviewSources(request.sources); self.postMessage({ id: request.id } satisfies RenderResponse)
       } else if (request.kind === 'update') {
         if (!renderer) throw new Error('剪辑渲染器尚未就绪。')
         await renderer.updateDocument(request.document); self.postMessage({ id: request.id } satisfies RenderResponse)

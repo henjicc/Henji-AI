@@ -10,18 +10,30 @@ function createVideoEditScrubScene() {
   return {
     id: 'video-edit-4k60-scrub', surface: '剪辑', name: '剪辑-4K60连续拖动实际画面更新', writesUserData: true,
     setup: async (page, app, { capture }) => {
-      const root = path.resolve('node_modules/.cache/video-edit-scrub'); fs.mkdirSync(root, { recursive: true })
+      const suppliedSource = process.env.HENJI_VIDEO_EDIT_SCRUB_SOURCE
+      const root = path.resolve(`node_modules/.cache/video-edit-scrub${suppliedSource ? '-original' : ''}`); fs.mkdirSync(root, { recursive: true })
       const { ffmpegPath, ffprobePath } = require('ffmpeg-ffprobe-static')
-      const source = path.join(root, '4k60-gop120-b2.mp4')
+      const source = suppliedSource ? path.resolve(suppliedSource) : path.join(root, '4k60-gop120-b2.mp4')
+      if (suppliedSource) assert.ok(fs.existsSync(source), '指定的原素材必须存在，不生成替代文件')
       if (!fs.existsSync(source)) execFileSync(ffmpegPath, ['-v', 'error', '-y', '-f', 'lavfi', '-i', 'testsrc2=size=3840x2160:rate=60', '-t', '8', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-g', '120', '-keyint_min', '120', '-sc_threshold', '0', '-bf', '2', '-pix_fmt', 'yuv420p', source], { windowsHide: true })
+      const mediaProbe = JSON.parse(execFileSync(ffprobePath, ['-v', 'error', '-show_streams', '-of', 'json', source], { windowsHide: true, encoding: 'utf8' }))
+      const videoTrack = mediaProbe.streams.find(stream => stream.codec_type === 'video')
+      assert.equal(videoTrack.width, 3840); assert.equal(videoTrack.height, 2160); assert.equal(videoTrack.avg_frame_rate, '60/1')
       const clip = { id: 'base', mediaId: 'source', name: '4K60 主画面', kind: 'video', track: 1, start: 0, duration: 360, sourceInUs: 0, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 0, brightness: 1, text: '' }
-      const project = { format: 'henji-video-project', version: 1, id: 'scrub-4k60', name: '4K60 连续拖动验证', revision: 0, width: 3840, height: 2160, fps: 60, media: [{ id: 'source', name: '4k60-gop120-b2.mp4', path: source, kind: 'video', durationSeconds: 8, width: 3840, height: 2160 }], clips: [clip, { ...clip, id: 'overlay', name: '4K60 叠加', track: 2, sourceInUs: 1000000, x: .3, y: .3, scale: .3 }, { ...clip, id: 'text', mediaId: undefined, name: '文字', kind: 'text', track: 3, text: '4K60', y: -.35, scale: .5 }], annotations: [] }
+      const project = { format: 'henji-video-project', version: 1, id: 'scrub-4k60', name: '4K60 连续拖动验证', revision: 0, width: 3840, height: 2160, fps: 60, media: [{ id: 'source', name: path.basename(source), path: source, kind: 'video', durationSeconds: Number(videoTrack.duration), width: 3840, height: 2160 }], clips: [clip, { ...clip, id: 'overlay', name: '4K60 叠加', track: 2, sourceInUs: 1000000, x: .3, y: .3, scale: .3 }, { ...clip, id: 'text', mediaId: undefined, name: '文字', kind: 'text', track: 3, text: '4K60', y: -.35, scale: .5 }], annotations: [] }
       const file = path.join(root, 'scrub.henji-video'); fs.writeFileSync(file, JSON.stringify(project))
       await app.evaluate(({ dialog }, file) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] }) }, file)
-      await button(page, '剪辑').click(); await button(page, '打开工程').click()
+      await button(page, '剪辑').click(); const openedAt = performance.now(); await button(page, '打开工程').click()
       const canvas = page.getByLabel('剪辑画面', { exact: true })
-      await page.waitForFunction(() => document.querySelector('canvas[aria-label="剪辑画面"]')?.dataset.presentedFrame === '0', null, { timeout: 90000 })
-      const evidence = { machine: { cpu: os.cpus()[0].model, memoryBytes: os.totalmem() }, runtime: await app.evaluate(({ app }) => ({ versions: process.versions, gpu: app.getGPUFeatureStatus(), memory: app.getAppMetrics() })), media: JSON.parse(execFileSync(ffprobePath, ['-v', 'error', '-show_streams', '-of', 'json', source], { windowsHide: true, encoding: 'utf8' })), layers: 3, cases: [] }
+      try {
+        await page.waitForFunction(() => document.querySelector('canvas[aria-label="剪辑画面"]')?.dataset.presentedFrame === '0', null, { timeout: 90000 })
+      } catch (error) {
+        await capture('first-frame-failed'); console.error((await page.locator('body').innerText()).slice(-2500)); throw error
+      }
+      const firstFrameMs = performance.now() - openedAt
+      const evidence = { machine: { cpu: os.cpus()[0].model, memoryBytes: os.totalmem() }, runtime: await app.evaluate(({ app }) => ({ versions: process.versions, gpu: app.getGPUFeatureStatus(), memory: app.getAppMetrics() })), media: mediaProbe, layers: 3, cases: [] }
+      evidence.firstFrameMs = firstFrameMs
+      evidence.cacheDirectory = path.join(await app.evaluate(({ app }) => app.getPath('userData')), 'cache', 'video-edit-preview')
       evidence.gpuReadings = []
       let sampling = false
       const gpuTimer = setInterval(() => {
@@ -30,20 +42,24 @@ function createVideoEditScrubScene() {
       }, 500)
       try {
       const ruler = page.getByRole('slider', { name: '剪辑时间定位' })
+      const waitPresented = async (frame, label) => {
+        try { await page.waitForFunction(frame => document.querySelector('canvas[aria-label="剪辑画面"]')?.dataset.presentedFrame === String(frame), frame, { timeout: 90000 }) }
+        catch (error) { console.error(label, await canvas.evaluate(canvas => ({ ...canvas.dataset })), (await page.locator('body').innerText()).slice(-1200)); await capture(label); throw error }
+      }
       let pixels = 1
       for (const [name, from, to, duration] of [['cold-reverse', 359, 1, 6000], ['forward', 1, 359, 6000], ['reverse', 359, 1, 6000], ['fast-forward', 1, 359, 2000], ['warm-reverse', 359, 1, 2000], ['segment-forward', 26 * 60, 34 * 60, 6000], ['segment-reverse', 34 * 60, 26 * 60, 6000]]) {
         if (name === 'segment-forward') {
           const longSource = path.join(root, '4k60-40s.mp4')
-          if (!fs.existsSync(longSource)) execFileSync(ffmpegPath, ['-v', 'error', '-y', '-stream_loop', '4', '-i', source, '-t', '40', '-c', 'copy', longSource], { windowsHide: true })
+          if (!fs.existsSync(longSource)) execFileSync(ffmpegPath, ['-v', 'error', '-y', '-stream_loop', '-1', '-i', source, '-t', '40', '-c', 'copy', longSource], { windowsHide: true })
           const longProject = structuredClone(project); longProject.id = 'scrub-boundary'; longProject.media[0].path = longSource; longProject.media[0].durationSeconds = 40; longProject.clips.forEach(clip => { clip.duration = 36 * 60 })
           const longFile = path.join(root, 'boundary.henji-video'); fs.writeFileSync(longFile, JSON.stringify(longProject))
           await button(page, '关闭工程').click()
           await app.evaluate(({ dialog }, file) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] }) }, longFile)
-          await button(page, '打开工程').click(); await page.waitForFunction(() => document.querySelector('canvas[aria-label="剪辑画面"]')?.dataset.presentedFrame === '0', null, { timeout: 90000 })
+          await button(page, '打开工程').click(); await waitPresented(0, 'segment-start-failed')
           await page.getByLabel('时间线缩放', { exact: true }).focus(); await page.getByLabel('时间线缩放', { exact: true }).press('Home'); pixels = .25
         }
         const box = await ruler.boundingBox()
-        await ruler.click({ position: { x: from * pixels + .1, y: 12 } }); await page.waitForFunction(frame => document.querySelector('canvas[aria-label="剪辑画面"]')?.dataset.presentedFrame === String(frame), from, { timeout: 90000 })
+        await ruler.click({ position: { x: from * pixels + .1, y: 12 } }); await waitPresented(from, `${name}-position-failed`)
         await canvas.evaluate(canvas => {
           window.__scrub = { targets: [], frames: [], start: performance.now() }
           const ruler = document.querySelector('[aria-label="剪辑时间定位"]')
@@ -74,6 +90,9 @@ function createVideoEditScrubScene() {
       await capture('4k60-scrub')
       evidence.canvas = await canvas.evaluate(canvas => ({ width: canvas.width, height: canvas.height, cacheBytes: Number(canvas.dataset.cacheBytes), proxyPreparationMs: Number(canvas.dataset.proxyPreparationMs), proxyBytes: Number(canvas.dataset.proxyBytes), bounds: { width: canvas.getBoundingClientRect().width, height: canvas.getBoundingClientRect().height } }))
       assert.equal(evidence.canvas.width, 3840); assert.equal(evidence.canvas.height, 2160)
+      evidence.diskPreviewFiles = fs.existsSync(evidence.cacheDirectory) ? fs.readdirSync(evidence.cacheDirectory) : []
+      assert.deepEqual(evidence.diskPreviewFiles, [], '普通原素材预览不得生成磁盘转码缓存')
+      assert.ok(evidence.canvas.cacheBytes <= 8 * 1024 ** 3, '临时帧工作集不能超过总预算')
       // Playback measures completed video frames, never animation callback counts.
       await button(page, '关闭工程').click()
       await app.evaluate(({ dialog }, file) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] }) }, file)
@@ -91,6 +110,19 @@ function createVideoEditScrubScene() {
       evidence.playback.clockStartAt = await canvas.evaluate(canvas => Number(canvas.dataset.playClockStartAt))
       evidence.playback.videoDurationMs = evidence.playback.frames.at(-1).at - evidence.playback.clockStartAt
       evidence.playback.missing = Array.from({ length: 359 }, (_, i) => i + 1).filter(frame => !evidence.playback.frames.some(item => item.frame === frame))
+      // Compare a colorful interior frame before/after cache reuse, independently
+      // of encoder loss. This catches chroma, range, crop and orientation errors.
+      await ruler.click({ position: { x: 120.1, y: 12 } }); await waitPresented(120, 'native-color-frame-failed')
+      const nativePixels = await canvas.evaluate(canvas => canvas.toDataURL('image/png').split(',')[1])
+      await ruler.click({ position: { x: 121.1, y: 12 } }); await waitPresented(121, 'cache-color-frame-failed')
+      await ruler.click({ position: { x: 120.1, y: 12 } }); await waitPresented(120, 'cache-color-return-failed')
+      assert.equal(await canvas.evaluate(canvas => Number(canvas.dataset.cacheHits)), 2, '比较画面必须使用两层原素材的缓存帧')
+      const cachedPixels = await canvas.evaluate(canvas => canvas.toDataURL('image/png').split(',')[1])
+      const sharp = require('sharp')
+      const [nativeRgb, cachedRgb] = await Promise.all([sharp(Buffer.from(nativePixels, 'base64')).removeAlpha().raw().toBuffer(), sharp(Buffer.from(cachedPixels, 'base64')).removeAlpha().raw().toBuffer()])
+      let difference = 0; for (let i = 0; i < nativeRgb.length; i++) difference += (nativeRgb[i] - cachedRgb[i]) ** 2
+      evidence.cacheColorPsnr = 10 * Math.log10(255 ** 2 / (difference / nativeRgb.length))
+      assert.ok(evidence.cacheColorPsnr > 40, `缓存画面改变颜色或细节：PSNR ${evidence.cacheColorPsnr}`)
       evidence.afterMemory = await app.evaluate(({ app }) => app.getAppMetrics())
       fs.writeFileSync(path.join(root, 'evidence.json'), JSON.stringify(evidence, null, 2))
       assert.deepEqual(evidence.playback.missing, [], '4K60 全帧率预览不能跳过时间线视频帧')

@@ -12,7 +12,11 @@ async function dialogs(app, openPaths, savePath) {
   }, { openPaths, savePath })
 }
 async function presented(page, frame) {
-  await page.waitForFunction(frame => { const canvas = document.querySelector('canvas[aria-label="剪辑画面"]'); return canvas?.dataset.presentedFrame === String(frame) && canvas.dataset.scrubbing === 'false' }, frame, { timeout: 20000 })
+  try { await page.waitForFunction(frame => { const canvas = document.querySelector('canvas[aria-label="剪辑画面"]'); return canvas?.dataset.presentedFrame === String(frame) && canvas.dataset.scrubbing === 'false' }, frame, { timeout: 20000 }) }
+  catch (error) {
+    console.error('等待剪辑帧失败', frame, await page.getByLabel('剪辑画面', { exact: true }).evaluate(canvas => ({ ...canvas.dataset })), await page.getByRole('slider', { name: '剪辑时间定位' }).getAttribute('aria-valuenow'), (await page.locator('body').innerText()).slice(-1200))
+    throw error
+  }
 }
 async function seek(page, frame, fps) {
   await page.getByRole('slider', { name: '剪辑时间定位' }).click({ position: { x: frame * 60 / fps + 0.1, y: 12 } })

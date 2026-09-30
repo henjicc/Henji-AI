@@ -1,4 +1,5 @@
 import { VideoSample } from 'mediabunny'
+import { VideoEditGpuFrame } from './videoEditGpuFrame'
 import type { VideoEditClip, VideoEditDocument } from '@/core/videoEdit/document'
 import { ImageEditWebGpuDeviceManager } from '@/core/imageEdit/webgpu/deviceManager'
 import { getWebGpuContext, type GpuDevice, type GpuTexture, type GpuBuffer, type GpuRenderPipeline } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
@@ -32,6 +33,10 @@ export class VideoEditGpuCompositor {
   private device!: VideoGpuDevice
   private video!: GpuRenderPipeline
   private image!: GpuRenderPipeline
+  private copyY!: GpuRenderPipeline
+  private copyUv!: GpuRenderPipeline
+  private copyRgba!: GpuRenderPipeline
+  private cachedVideo!: GpuRenderPipeline
   private sampler: unknown
   private readonly uniforms = new Map<string, GpuBuffer>()
   private readonly textures = new Map<string, { texture: GpuTexture; key: string }>()
@@ -41,6 +46,8 @@ export class VideoEditGpuCompositor {
   private readonly ready: Promise<void>
   private readonly waits = new Set<() => void>()
   private readonly uploads = new Set<Promise<void>>()
+  private disposed = false
+  private readonly pool: Array<{ width: number; height: number; texture: GpuTexture; chroma?: GpuTexture; bytes: number }> = []
   constructor(readonly canvas: OffscreenCanvas) {
     this.context = getWebGpuContext(canvas)
     this.manager.onDeviceLost(reason => { this.lost = reason })
@@ -64,10 +71,75 @@ export class VideoEditGpuCompositor {
       return this.device.createRenderPipeline({ layout: 'auto', vertex: { module: shader, entryPoint: 'vs' }, fragment: { module: shader, entryPoint: 'fs', targets: [{ format, blend: { color: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' }, alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' } } }] }, primitive: { topology: 'triangle-list' } })
     }
     this.video = pipeline(true); this.image = pipeline(false)
+    const cachedShader = this.device.createShaderModule({ code: vertex + `
+@group(0) @binding(0) var y: texture_2d<f32>;
+@group(0) @binding(3) var uv: texture_2d<f32>;
+@fragment fn fs(v: Vertex) -> @location(0) vec4f {
+ let luma = textureSample(y, s, v.uv).r;
+ let chroma = textureSample(uv, s, v.uv).rg - 0.5;
+ let rgb = vec3f(luma + 1.5748 * chroma.y, luma - 0.187324 * chroma.x - 0.468124 * chroma.y, luma + 1.8556 * chroma.x);
+ return vec4f(clamp(rgb * p.brightness, vec3f(0), vec3f(1)) * p.opacity, p.opacity);
+}` })
+    this.cachedVideo = this.device.createRenderPipeline({ layout: 'auto', vertex: { module: cachedShader, entryPoint: 'vs' }, fragment: { module: cachedShader, entryPoint: 'fs', targets: [{ format, blend: { color: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' }, alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' } } }] }, primitive: { topology: 'triangle-list' } })
+    const copyShader = this.device.createShaderModule({ code: `
+struct Vertex { @builtin(position) position: vec4f, @location(0) uv: vec2f }
+@vertex fn vs(@builtin(vertex_index) i: u32) -> Vertex {
+ let uv = array<vec2f, 3>(vec2f(0,0), vec2f(0,2), vec2f(2,0))[i];
+ return Vertex(vec4f(uv.x * 2 - 1, 1 - uv.y * 2, 0, 1), uv);
+}
+@group(0) @binding(0) var t: texture_external;
+@fragment fn rgba(v: Vertex) -> @location(0) vec4f { return textureLoad(t, vec2u(v.position.xy)); }
+@fragment fn y(v: Vertex) -> @location(0) vec4f {
+ let c = textureLoad(t, vec2u(v.position.xy)).rgb;
+ return vec4f(dot(c, vec3f(0.2126, 0.7152, 0.0722)), 0, 0, 1);
+}
+@fragment fn uv(v: Vertex) -> @location(0) vec4f {
+ let point = vec2u(v.position.xy) * 2u;
+ let edge = textureDimensions(t) - 1u;
+ let c = (textureLoad(t, min(point, edge)).rgb + textureLoad(t, min(point + vec2u(1,0), edge)).rgb + textureLoad(t, min(point + vec2u(0,1), edge)).rgb + textureLoad(t, min(point + vec2u(1,1), edge)).rgb) * 0.25;
+ let luma = dot(c, vec3f(0.2126, 0.7152, 0.0722));
+ return vec4f((c.b - luma) / 1.8556 + 0.5, (c.r - luma) / 1.5748 + 0.5, 0, 1);
+}
+` })
+    const copy = (entryPoint: string, format: string): GpuRenderPipeline => this.device.createRenderPipeline({ layout: 'auto', vertex: { module: copyShader, entryPoint: 'vs' }, fragment: { module: copyShader, entryPoint, targets: [{ format }] }, primitive: { topology: 'triangle-list' } })
+    this.copyY = copy('y', 'r8unorm'); this.copyUv = copy('uv', 'rg8unorm')
+    this.copyRgba = copy('rgba', 'rgba8unorm')
     const error = await this.device.popErrorScope()
     if (error) throw new Error(`无法初始化剪辑 GPU 合成：${error.message}`)
   }
-  async draw(document: VideoEditDocument, clips: VideoEditClip[], pictures: Array<VideoSample | ImageBitmap | null>, shouldPresent: () => boolean, deadline?: number): Promise<{ presented: boolean; completion: Promise<void> }> {
+  async snapshot(sample: VideoSample, compact: boolean): Promise<VideoEditGpuFrame> {
+    await this.ready
+    if (this.lost) throw new Error(`剪辑 GPU 已中断，请重新加载预览：${this.lost}`)
+    // Copy on the compositor's device; no Skia canvas or cross-context fences.
+    const frame = sample.toVideoFrame()
+    const width = frame.visibleRect?.width ?? sample.codedWidth; const height = frame.visibleRect?.height ?? sample.codedHeight
+    const uvWidth = Math.ceil(width / 2); const uvHeight = Math.ceil(height / 2)
+    const index = this.pool.findIndex(entry => entry.width === width && entry.height === height && !!entry.chroma === compact)
+    const recycled = index >= 0 ? this.pool.splice(index, 1)[0] : undefined
+    const texture = recycled?.texture ?? this.device.createTexture({ size: [width, height], format: compact ? 'r8unorm' : 'rgba8unorm', usage: 0x04 | 0x10 })
+    const chroma = compact ? recycled?.chroma ?? this.device.createTexture({ size: [uvWidth, uvHeight], format: 'rg8unorm', usage: 0x04 | 0x10 }) : undefined
+    const bytes = compact ? width * height + uvWidth * uvHeight * 2 : width * height * 4
+    try {
+      const encoder = this.device.createCommandEncoder()
+      const resource = this.device.importExternalTexture({ source: frame })
+      const planes: Array<readonly [GpuTexture, GpuRenderPipeline]> = chroma ? [[texture, this.copyY], [chroma, this.copyUv]] : [[texture, this.copyRgba]]
+      for (const [target, pipeline] of planes) {
+        const pass = encoder.beginRenderPass({ colorAttachments: [{ view: target.createView(), loadOp: 'clear', storeOp: 'store', clearValue: { r: 0, g: 0, b: 0, a: 0 } }] })
+        pass.setPipeline(pipeline)
+        pass.setBindGroup(0, this.device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries: [{ binding: 0, resource }] }))
+        pass.draw(3); pass.end()
+      }
+      this.device.queue.submit([encoder.finish()])
+      await this.device.queue.onSubmittedWorkDone()
+      return new VideoEditGpuFrame(sample, texture, chroma, bytes, () => {
+        // Reuse evicted allocations instead of stalling the driver at every
+        // working-set boundary. Idle pool has a separate hard 64 MiB ceiling.
+        if (!this.disposed && this.pool.length < 4 && this.pool.reduce((sum, entry) => sum + entry.bytes, 0) + bytes <= 64 * 1024 ** 2) this.pool.push({ width, height, texture, chroma, bytes })
+        else { texture.destroy(); chroma?.destroy() }
+      })
+    } catch (error) { texture.destroy(); chroma?.destroy(); throw error } finally { frame.close() }
+  }
+  async draw(document: VideoEditDocument, clips: VideoEditClip[], pictures: Array<VideoSample | VideoEditGpuFrame | ImageBitmap | null>, shouldPresent: () => boolean, deadline?: number): Promise<{ presented: boolean; completion: Promise<void> }> {
     await this.ready
     if (!shouldPresent()) return { presented: false, completion: Promise.resolve() }
     if (deadline !== undefined) await new Promise<void>(resolve => {
@@ -88,10 +160,13 @@ export class VideoEditGpuCompositor {
         const picture = pictures[index]
         let resource: unknown
         const external = picture instanceof VideoSample
+        const cachedVideo = picture instanceof VideoEditGpuFrame
         let width = document.width; let height = document.height
         if (external) {
           const frame = picture.toVideoFrame(); frames.push(frame)
           resource = device.importExternalTexture({ source: frame }); width = picture.displayWidth; height = picture.displayHeight
+        } else if (cachedVideo) {
+          resource = picture.texture.createView(); width = picture.displayWidth; height = picture.displayHeight
         } else {
           if (picture && !this.imageIds.has(picture)) this.imageIds.set(picture, ++this.nextImageId)
           const key = picture ? String(this.imageIds.get(picture)) : `${document.width}:${document.height}:${clip.text}`
@@ -117,10 +192,10 @@ export class VideoEditGpuCompositor {
         if (!uniform) { uniform = device.createBuffer({ size: 48, usage: 0x08 | 0x40 }); this.uniforms.set(clip.id, uniform) }
         const fit = Math.min(document.width / width, document.height / height) * clip.scale
         const rotation = clip.rotation * Math.PI / 180
-        device.queue.writeBuffer(uniform, 0, new Float32Array([width * fit / document.width, height * fit / document.height, Math.cos(rotation), Math.sin(rotation), clip.x * 2, clip.y * 2, clip.brightness, clip.opacity, document.height / document.width, document.width / document.height, external ? picture.rotation : 0, external && picture.flip ? 1 : 0]))
-        const pipeline = external ? this.video : this.image
+        device.queue.writeBuffer(uniform, 0, new Float32Array([width * fit / document.width, height * fit / document.height, Math.cos(rotation), Math.sin(rotation), clip.x * 2, clip.y * 2, clip.brightness, clip.opacity, document.height / document.width, document.width / document.height, external || cachedVideo ? picture.rotation : 0, (external || cachedVideo) && picture.flip ? 1 : 0]))
+        const pipeline = external ? this.video : cachedVideo && picture.chroma ? this.cachedVideo : this.image
         pass.setPipeline(pipeline)
-        pass.setBindGroup(0, device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries: [{ binding: 0, resource }, { binding: 1, resource: this.sampler }, { binding: 2, resource: { buffer: uniform } }] }))
+        pass.setBindGroup(0, device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries: [{ binding: 0, resource }, { binding: 1, resource: this.sampler }, { binding: 2, resource: { buffer: uniform } }, ...(cachedVideo && picture.chroma ? [{ binding: 3, resource: picture.chroma.createView() }] : [])] }))
         pass.draw(6)
       })
       pass.end(); device.queue.submit([encoder.finish()])
@@ -133,11 +208,14 @@ export class VideoEditGpuCompositor {
     } catch (error) { frames.forEach(frame => frame.close()); throw error }
   }
   async dispose(): Promise<void> {
+    this.disposed = true
     this.cancelPresentation()
     await this.ready.catch(() => {})
     await Promise.allSettled(this.uploads)
     for (const value of this.textures.values()) value.texture.destroy()
     for (const value of this.uniforms.values()) value.destroy()
+    for (const value of this.pool) { value.texture.destroy(); value.chroma?.destroy() }
+    this.pool.length = 0
     this.textures.clear(); this.uniforms.clear(); this.manager.destroy()
   }
   cancelPresentation(): void { for (const finish of this.waits) finish() }

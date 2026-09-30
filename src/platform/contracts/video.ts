@@ -67,8 +67,6 @@ export interface VideoFrameExportProgress {
  * 视频本地处理原生命令（ffmpeg/ffprobe）。
  */
 export interface VideoPlatform {
-  preparePreview(payload: import('@/core/videoEdit/preview').VideoPreviewProxyRequest): Promise<import('@/core/videoEdit/preview').VideoPreviewProxyResult>
-  cancelPreview(requestId: string): Promise<void>
   readVideoInfo(source: string): Promise<VideoInfoResult>
   trimVideoSource(payload: TrimVideoSourcePayload): Promise<TrimVideoSourceResult>
   compressVideoToFit(payload: CompressVideoToFitPayload): Promise<CompressVideoToFitResult>
