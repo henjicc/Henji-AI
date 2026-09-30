@@ -3,11 +3,12 @@ import { UiButton, UiInput, UiError } from '@/components/ui'
 import { videoEditDuration } from '@/core/videoEdit/document'
 import { VideoEditRenderSession } from './engine/videoEditRenderSession'
 import { acceptsVideoEditDrop, dropVideoEditPaths, videoEditDropPaths } from './application/videoEditDrop'
-import { editVideoProject, requireVideoEditInstance, setVideoEditView, subscribeVideoEditView, videoEditViewRevision, type VideoEditInstance } from './application/videoEditService'
+import { editVideoProject, requireVideoEditInstance, setVideoEditView, subscribeVideoEditDomain, subscribeVideoEditView, videoEditViewRevision, type VideoEditInstance } from './application/videoEditService'
 
 export function VideoEditPreview({ instance, onError }: { instance: VideoEditInstance; onError: (error: unknown) => void }): React.ReactElement {
   useSyncExternalStore(subscribeVideoEditView, videoEditViewRevision)
-  const canvas = useRef<HTMLCanvasElement>(null)
+  const host = useRef<HTMLDivElement>(null)
+  const canvas = useRef<HTMLCanvasElement | null>(null)
   const [mode, setMode] = useState<'select' | 'point' | 'region'>('select')
   const [label, setLabel] = useState('')
   const pointer = useRef<{ x: number; y: number } | null>(null)
@@ -18,74 +19,102 @@ export function VideoEditPreview({ instance, onError }: { instance: VideoEditIns
   const { document } = instance
   useEffect(() => {
     const initialDocument = instance.document
-    if (canvas.current) delete canvas.current.dataset.presentedFrame
+    const surface = window.document.createElement('canvas')
+    surface.width = initialDocument.width; surface.height = initialDocument.height
+    surface.setAttribute('aria-label', '剪辑画面'); surface.className = 'h-full w-full object-contain'
+    host.current?.replaceChildren(surface); canvas.current = surface
     let stopped = false
-    const renderer = new VideoEditRenderSession(initialDocument, 1280, active => { if (!stopped) setPreparing(active) }); session.current = renderer
+    const renderer = new VideoEditRenderSession(initialDocument, initialDocument.width, active => { if (!stopped) setPreparing(active) }, surface.transferControlToOffscreen()); session.current = renderer
+    const unsubscribe = subscribeVideoEditDomain(() => renderer.invalidateDocument(instance.document.revision))
+    let audioRenderer: VideoEditRenderSession | undefined
+    let audioPending = false
+    let audioGeneration = 0
     let appliedDocument = initialDocument
     let timer: ReturnType<typeof setTimeout>
     let audio: AudioContext | undefined
+    let lastRequested = -1
     let lastFrame = -1
     let lastScrubbing = false
     let clockStart = 0
+    let clockPerformanceStart = 0
     let startFrame = 0
     let wasPlaying = false
     let nextAudio = 0
     const nodes = new Set<AudioBufferSourceNode>()
-    const stopAudio = (): void => { for (const node of nodes) { try { node.stop() } catch { /* already ended */ } node.disconnect() } nodes.clear() }
+    const stopAudio = (): void => { audioGeneration++; for (const node of nodes) { try { node.stop() } catch { /* already ended */ } node.disconnect() } nodes.clear() }
     const loop = async (): Promise<void> => {
+      let scheduled = false
       try {
         const current = requireVideoEditInstance(instance.document.id)
         const document = current.document
-        if (appliedDocument !== document) { await renderer.updateDocument(document); appliedDocument = document; lastFrame = -1; stopAudio(); wasPlaying = false }
+        if (appliedDocument !== document) { await renderer.updateDocument(document); await audioRenderer?.updateDocument(document); appliedDocument = document; lastFrame = -1; lastRequested = -1; stopAudio(); wasPlaying = false }
         if (current.playing && !wasPlaying) {
-          audio ??= new AudioContext({ sampleRate: 48000 }); await audio.resume()
-          clockStart = audio.currentTime + 0.1; startFrame = current.frame; nextAudio = current.frame / document.fps
+          await renderer.present(current.frame, true)
+          lastFrame = current.frame; lastRequested = current.frame
+          if (document.clips.some(clip => clip.volume > 0 && (clip.kind === 'video' || clip.kind === 'audio'))) {
+            audio ??= new AudioContext({ sampleRate: 48000 }); await audio.resume()
+            const before = audio.currentTime; const waiting = performance.now()
+            while (audio.currentTime === before && performance.now() - waiting < 1000 && !stopped) await new Promise(resolve => setTimeout(resolve, 2))
+          }
+          if (stopped) return
+          clockStart = (audio?.currentTime ?? 0) + 0.1; startFrame = current.frame; nextAudio = current.frame / document.fps
+          clockPerformanceStart = performance.now() + 100
+          surface.dataset.playClockStartAt = String(clockPerformanceStart)
+          surface.dataset.playStartFrame = String(startFrame)
         }
         if (!current.playing && wasPlaying) stopAudio()
         wasPlaying = current.playing
-        if (current.playing && audio) {
-          const frame = startFrame + Math.max(0, Math.floor((audio.currentTime - clockStart) * document.fps))
-          if (frame >= videoEditDuration(document)) { setVideoEditView(document.id, { playing: false }); stopAudio() }
-          else if (frame !== current.frame) setVideoEditView(document.id, { frame })
-          const timelineTime = startFrame / document.fps + audio.currentTime - clockStart
-          if (nextAudio < timelineTime + 0.4 && nextAudio < videoEditDuration(document) / document.fps) {
+        if (current.playing) {
+          const timelineTime = startFrame / document.fps + (performance.now() - clockPerformanceStart) / 1000
+          if (timelineTime >= videoEditDuration(document) / document.fps && lastFrame >= videoEditDuration(document) - 1) { setVideoEditView(document.id, { playing: false }); stopAudio() }
+          if (audio && !audioPending && nextAudio < timelineTime + 0.4 && nextAudio < videoEditDuration(document) / document.fps && document.clips.some(clip => clip.volume > 0 && (clip.kind === 'audio' || clip.kind === 'video'))) {
+            audioRenderer ??= new VideoEditRenderSession(document)
             const duration = Math.min(0.5, videoEditDuration(document) / document.fps - nextAudio)
-            const buffer = await renderer.mixAudio(nextAudio, duration)
-            if (stopped) return
-            const node = audio.createBufferSource(); node.buffer = buffer; node.connect(audio.destination)
-            const when = clockStart + nextAudio - startFrame / document.fps
-            const offset = Math.max(0, audio.currentTime - when)
-            if (offset < buffer.duration) { node.start(Math.max(when, audio.currentTime), offset); nodes.add(node); node.onended = () => { nodes.delete(node); node.disconnect() } }
-            nextAudio += duration
+            const from = nextAudio; nextAudio += duration; audioPending = true
+            const generation = audioGeneration; const context = audio
+            void audioRenderer.mixAudio(from, duration).then(buffer => {
+              if (stopped || generation !== audioGeneration) return
+              const node = context.createBufferSource(); node.buffer = buffer; node.connect(context.destination)
+              const when = clockStart + from - startFrame / document.fps
+              const offset = Math.max(0, context.currentTime - when)
+              if (offset < buffer.duration) { node.start(Math.max(when, context.currentTime), offset); nodes.add(node); node.onended = () => { nodes.delete(node); node.disconnect() } }
+              else node.disconnect()
+            }).catch(error => { if (!stopped && generation === audioGeneration) { setVideoEditView(document.id, { playing: false }); onError(error) } }).finally(() => { audioPending = false })
           }
         }
-        const target = current.frame
-        if (target !== lastFrame || (!!current.scrubbing !== lastScrubbing && !current.scrubbing)) {
+        const playing = current.playing
+        const target = playing ? Math.max(startFrame, Math.min(videoEditDuration(document) - 1, lastFrame + 1)) : current.frame
+        if (target !== lastRequested || (!!current.scrubbing !== lastScrubbing && !current.scrubbing)) {
           const scrubbing = !!current.scrubbing
           const requestedAt = performance.now()
-          const result = await renderer.renderBitmap(target, current.playing, scrubbing)
-          try {
+          const deadline = playing ? performance.timeOrigin + clockPerformanceStart + (target - startFrame) / document.fps * 1000 : undefined
+          lastRequested = target
+          const result = await renderer.present(target, playing, scrubbing, deadline, scrubbing ? () => {
+            if (!stopped) { scheduled = true; timer = setTimeout(() => { void loop() }, 0) }
+          } : undefined)
+          {
             // A completed seek is useful while the pointer keeps moving. Only a different
             // document/lifetime invalidates it; the next iteration reads the latest target.
             if (stopped) return
-            if (current.document !== document) { timer = setTimeout(() => { void loop() }, 0); return }
+            if (current.document !== document) { if (!scheduled) timer = setTimeout(() => { void loop() }, 0); return }
+            if (result.presented === false) { lastFrame = -1; lastRequested = -1; if (!scheduled) timer = setTimeout(() => { void loop() }, 0); return }
             const surface = canvas.current
             if (surface) {
-              if (surface.width !== result.bitmap.width || surface.height !== result.bitmap.height) { surface.width = result.bitmap.width; surface.height = result.bitmap.height }
-              surface.getContext('2d')?.drawImage(result.bitmap, 0, 0)
               surface.dataset.requestedAt = String(requestedAt); surface.dataset.renderMs = String(performance.now() - requestedAt)
+              surface.dataset.decodeMs = String(result.decodeMs ?? 0); surface.dataset.gpuMs = String(result.gpuMs ?? 0)
               surface.dataset.sourceTimestamps = (result.sourceTimestamps ?? []).join(','); surface.dataset.cacheHits = String(result.cacheHits ?? 0); surface.dataset.cacheBytes = String(result.cacheBytes ?? 0)
               surface.dataset.proxyPreparationMs = String(renderer.previewPreparationMs); surface.dataset.proxyBytes = String(renderer.previewBytes)
               surface.dataset.scrubbing = String(scrubbing)
               surface.dataset.presentedFrame = String(target)
             }
             lastFrame = target; lastScrubbing = scrubbing
-          } finally { result.bitmap.close() }
+            if (playing && current.playing) setVideoEditView(document.id, { frame: target })
+          }
         }
-        if (!stopped) timer = setTimeout(() => { void loop() }, 5)
+        if (!stopped && !scheduled) timer = setTimeout(() => { void loop() }, current.playing ? 0 : 2)
       } catch (error) { if (!stopped) { setVideoEditView(initialDocument.id, { playing: false }); onError(error) } }
     }
-    const stop = (): void => { stopped = true; clearTimeout(timer); instance.playing = false; stopAudio(); void audio?.close(); void renderer.dispose() }
+    const stop = (): void => { stopped = true; unsubscribe(); clearTimeout(timer); instance.playing = false; stopAudio(); void audio?.close(); void renderer.dispose(); void audioRenderer?.dispose(); surface.remove(); if (canvas.current === surface) canvas.current = null }
     stopPreview.current = stop
     void loop()
     return stop
@@ -100,7 +129,7 @@ export function VideoEditPreview({ instance, onError }: { instance: VideoEditIns
         try { void dropVideoEditPaths(document.id, videoEditDropPaths(event.dataTransfer), { frame: instance.frame, track }).catch(onError) } catch (error) { onError(error) }
       }}>
       <div className="relative max-h-full max-w-full" style={{ aspectRatio: `${document.width}/${document.height}`, height: '100%' }}>
-        <canvas ref={canvas} width={document.width} height={document.height} aria-label="剪辑画面" className="h-full w-full object-contain"
+        <div ref={host} className="h-full w-full"
           onPointerDown={event => { if (mode === 'select') return; const rect = event.currentTarget.getBoundingClientRect(); pointer.current = { x: (event.clientX - rect.left) / rect.width, y: (event.clientY - rect.top) / rect.height }; event.currentTarget.setPointerCapture(event.pointerId) }}
           onPointerUp={event => {
             const start = pointer.current; pointer.current = null

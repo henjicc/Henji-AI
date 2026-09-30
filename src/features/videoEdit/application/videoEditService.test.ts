@@ -10,6 +10,30 @@ import { importVideoEditPaths, sameVideoEditMediaPath } from './videoEditMedia'
 
 const files = new Map<string, string>()
 let failSave = false
+it('编辑与撤销在页面外静默自动保存，播放和定位不写工程', async () => {
+  const instance = (await createVideoEditProject())!
+  appendVideoEditClip(instance.document.id)
+  await vi.waitFor(() => expect(JSON.parse(files.get(instance.path)!).clips).toHaveLength(1))
+  undoVideoEdit(instance.document.id)
+  await vi.waitFor(() => expect(JSON.parse(files.get(instance.path)!).clips).toHaveLength(0))
+  const write = vi.spyOn(getPlatform().system.fs, 'writeTextFile')
+  setVideoEditView(instance.document.id, { frame: 15, playing: false })
+  await new Promise(resolve => setTimeout(resolve, 10))
+  expect(write).not.toHaveBeenCalled()
+})
+it('自动保存失败保留修改并在磁盘恢复后只重试保存，不重放编辑', async () => {
+  vi.useFakeTimers()
+  try {
+    const instance = (await createVideoEditProject())!
+    failSave = true; appendVideoEditClip(instance.document.id)
+    await vi.advanceTimersByTimeAsync(1)
+    expect(instance.dirty).toBe(true); expect(instance.error).toContain('disk full')
+    const history = instance.past.length
+    failSave = false; await vi.advanceTimersByTimeAsync(2000)
+    expect(JSON.parse(files.get(instance.path)!).clips).toHaveLength(1)
+    expect(instance.dirty).toBe(false); expect(instance.past).toHaveLength(history)
+  } finally { vi.useRealTimers() }
+})
 it('素材库规范化的 Windows 路径与原引用是同一素材，拖放不增加导入历史', async () => {
   const instance = (await createVideoEditProject())!
   const media = { id: 'picture', name: 'Card.png', path: 'D:/Media/Card.png', kind: 'image' as const, width: 320, height: 180, durationSeconds: 0 }

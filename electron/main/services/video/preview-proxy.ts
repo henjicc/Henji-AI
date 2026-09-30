@@ -11,6 +11,14 @@ const logger = createMainLogger('main.video_preview')
 const jobs = new Map<string, { owner: number; abort: AbortController }>()
 const leases = new Map<string, { owner: number; path: string }>()
 let tail = Promise.resolve()
+let encoder: Promise<string[]> | undefined
+function previewEncoder(binary: string): Promise<string[]> {
+  return encoder ??= new Promise(resolve => {
+    execFile(binary, ['-v', 'error', '-f', 'lavfi', '-i', 'color=size=128x72:rate=60', '-frames:v', '1', '-c:v', 'h264_nvenc', '-f', 'null', '-'], { windowsHide: true, maxBuffer: 1024 * 1024 }, error => resolve(error
+      ? ['-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '18']
+      : ['-c:v', 'h264_nvenc', '-preset', 'p1', '-tune', 'ull', '-rc', 'constqp', '-qp', '18']))
+  })
+}
 export function releaseVideoPreviewOwner(owner: number): void {
   for (const job of jobs.values()) if (job.owner === owner) job.abort.abort()
   for (const [id, lease] of leases) if (lease.owner === owner) leases.delete(id)
@@ -34,7 +42,7 @@ async function trimCache(directory: string, keep: string): Promise<void> {
   const entries = await Promise.all((await fs.readdir(directory)).filter(name => /^[\da-f]{64}\.mp4$/.test(name)).map(async name => { const file = path.join(directory, name); const stat = await fs.stat(file); return { file, ...stat } }))
   let bytes = entries.reduce((sum, entry) => sum + entry.size, 0)
   for (const entry of entries.sort((a, b) => a.mtimeMs - b.mtimeMs)) {
-    if (bytes <= 2 * 1024 ** 3) break
+    if (bytes <= 8 * 1024 ** 3) break
     if (entry.file === keep || [...leases.values()].some(lease => lease.path === entry.file)) continue
     await fs.unlink(entry.file); bytes -= entry.size
   }
@@ -52,13 +60,14 @@ export async function prepareVideoPreview(request: VideoPreviewProxyRequest, own
     const source = await fs.realpath(request.source); const original = await fs.stat(source)
     if (!original.isFile()) throw new Error('预览源必须是本地文件。')
     const directory = path.join(app.getPath('userData'), 'cache', 'video-edit-preview'); await fs.mkdir(directory, { recursive: true })
-    const digest = crypto.createHash('sha256').update(JSON.stringify([source, original.size, original.mtimeMs, request.startSeconds, request.durationSeconds, '1280-all-i-source-timebase-v2'])).digest('hex')
+    const digest = crypto.createHash('sha256').update(JSON.stringify([source, original.size, original.mtimeMs, request.startSeconds, request.durationSeconds, 'full-resolution-all-i-source-timebase-v3'])).digest('hex')
     const output = path.join(directory, `${digest}.mp4`)
     let cacheHit = true
     try { await fs.access(output) } catch {
       cacheHit = false; temporary = path.join(directory, `${digest}-${request.requestId}.partial.mp4`)
       const binary = await loadFfmpegPath(); abort.signal.throwIfAborted()
-      const args = ['-v', 'error', '-y', '-threads', '6', '-copyts', '-ss', String(request.startSeconds), '-i', source, '-t', String(request.durationSeconds), '-map', '0:v:0', '-an', '-vf', `scale=w=1280:h=720:force_original_aspect_ratio=decrease:force_divisible_by=2,setpts=PTS-${request.startSeconds}/TB`, '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '20', '-g', '1', '-bf', '0', '-pix_fmt', 'yuv420p', '-fps_mode', 'passthrough', '-enc_time_base', 'demux', '-avoid_negative_ts', 'disabled', '-movflags', '+faststart', temporary]
+      const codec = await previewEncoder(binary); abort.signal.throwIfAborted()
+      const args = ['-v', 'error', '-y', '-threads', '6', '-copyts', '-ss', String(request.startSeconds), '-i', source, '-t', String(request.durationSeconds), '-map', '0:v:0', '-an', '-vf', `setpts=PTS-${request.startSeconds}/TB`, ...codec, '-g', '1', '-bf', '0', '-pix_fmt', 'yuv420p', '-fps_mode', 'passthrough', '-enc_time_base', 'demux', '-avoid_negative_ts', 'disabled', '-movflags', '+faststart', temporary]
       await new Promise<void>((resolve, reject) => { execFile(binary, args, { windowsHide: true, maxBuffer: 1024 * 1024, signal: abort.signal }, error => error ? reject(error) : resolve()) })
       abort.signal.throwIfAborted(); await fs.rename(temporary, output); temporary = undefined
     }

@@ -28,6 +28,21 @@ let viewRevision = 0
 let revision = 0
 let domainRevision = 0
 let activeId: string | null = null
+const autosaves = new Map<string, ReturnType<typeof setTimeout>>()
+const retryDelays = new Map<string, number>()
+function scheduleVideoEditSave(id: string, delay = 0): void {
+  const existing = autosaves.get(id)
+  if (existing !== undefined) clearTimeout(existing)
+  autosaves.set(id, setTimeout(() => {
+    autosaves.delete(id)
+    if (!instances.get(id)?.dirty) return
+    void saveVideoEdit(id).then(() => retryDelays.delete(id)).catch(() => {
+      if (!instances.get(id)?.dirty) return
+      const retry = Math.min(30000, (retryDelays.get(id) ?? 1000) * 2)
+      retryDelays.set(id, retry); scheduleVideoEditSave(id, retry)
+    })
+  }, delay))
+}
 export function subscribeVideoEdit(listener: () => void): () => void { listeners.add(listener); return () => { listeners.delete(listener) } }
 export function videoEditRevision(): number { return revision }
 export function subscribeVideoEditView(listener: () => void): () => void { viewListeners.add(listener); return () => { viewListeners.delete(listener) } }
@@ -48,6 +63,7 @@ export function editVideoProject(id: string, update: (document: VideoEditDocumen
   instance.past = [...instance.past.slice(-49), instance.document]; instance.future = []
   instance.document = { ...next, revision: instance.document.revision + 1 }
   instance.dirty = true; instance.error = null; instance.version++; publishVideoEdit(true)
+  scheduleVideoEditSave(id)
   return instance.document
 }
 export function undoVideoEdit(id: string, redo = false): void {
@@ -59,6 +75,7 @@ export function undoVideoEdit(id: string, redo = false): void {
   instance.document = { ...target, revision: instance.document.revision + 1 }; instance.version++; instance.dirty = true
   if (!instance.document.clips.some(clip => clip.id === instance.selection)) instance.selection = null
   publishVideoEdit(true)
+  scheduleVideoEditSave(id)
 }
 export function setVideoEditView(id: string, values: Partial<Pick<VideoEditInstance, 'selection' | 'frame' | 'playing' | 'scrubbing'>>): void {
   const instance = requireVideoEditInstance(id)
@@ -114,6 +131,8 @@ export async function closeVideoEditProject(id: string): Promise<void> {
   if (instance.busy) throw new Error('请等待导出完成或取消导出。')
   instance.playing = false
   await saveVideoEdit(id)
+  const timer = autosaves.get(id); if (timer !== undefined) clearTimeout(timer)
+  autosaves.delete(id); retryDelays.delete(id)
   instances.delete(id); if (activeId === id) activeId = instances.keys().next().value ?? null; publishVideoEdit(true)
 }
 export function appendVideoEditMedia(id: string, media: VideoEditMedia): void {

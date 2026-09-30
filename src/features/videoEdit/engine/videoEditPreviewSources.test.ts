@@ -21,9 +21,9 @@ it('同素材的不同时段绑定各自片段，保留源时间和原路径，�
   const first = await cache.resolve(document, 0)
   expect(first).toMatchObject([{ clipId: 'a', mediaId: 'source', startSeconds: 0, endSeconds: 32 }, { clipId: 'b', mediaId: 'source', startSeconds: 59, endSeconds: 91 }])
   preparing.mockClear(); await cache.resolve(document, 1)
-  expect(native.prepare).toHaveBeenCalledTimes(3); expect(preparing).not.toHaveBeenCalled(); expect(document).toEqual(original)
-  expect(native.prepare.mock.calls.map(([request]) => request.startSeconds)).toEqual([0, 59, 29])
-  await cache.dispose(); expect(native.cancel).toHaveBeenCalledTimes(3)
+  expect(native.prepare).toHaveBeenCalledTimes(4); expect(preparing).not.toHaveBeenCalled(); expect(document).toEqual(original)
+  expect(native.prepare.mock.calls.map(([request]) => request.startSeconds)).toEqual([0, 29, 59, 89])
+  await cache.dispose(); expect(native.cancel).toHaveBeenCalledTimes(4)
 })
 it('连续正反拖跨段前预取相邻段，实际源入点与映射保持一致', async () => {
   const document = project(); document.clips = [{ ...document.clips[0], duration: 60 * 90 }]
@@ -32,7 +32,7 @@ it('连续正反拖跨段前预取相邻段，实际源入点与映射保持一�
   await new Promise(resolve => setTimeout(resolve, 0)); state.mockClear()
   expect((await cache.resolve(document, 30 * 60))[0]).toMatchObject({ startSeconds: 29, endSeconds: 61 })
   expect(state).not.toHaveBeenCalled()
-  expect(native.prepare.mock.calls.map(([request]) => request.startSeconds)).toEqual([0, 29])
+  expect(native.prepare.mock.calls.map(([request]) => request.startSeconds)).toEqual([0, 29, 59])
   await cache.dispose()
 })
 it('下一段准备未完成时使用重叠的已就绪段，保持实时取帧而不等待转码', async () => {

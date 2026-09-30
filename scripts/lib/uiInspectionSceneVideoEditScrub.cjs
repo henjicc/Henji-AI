@@ -20,7 +20,7 @@ function createVideoEditScrubScene() {
       await app.evaluate(({ dialog }, file) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] }) }, file)
       await button(page, '剪辑').click(); await button(page, '打开工程').click()
       const canvas = page.getByLabel('剪辑画面', { exact: true })
-      await page.waitForFunction(() => document.querySelector('canvas[aria-label="剪辑画面"]')?.dataset.presentedFrame === '0', null, { timeout: 30000 })
+      await page.waitForFunction(() => document.querySelector('canvas[aria-label="剪辑画面"]')?.dataset.presentedFrame === '0', null, { timeout: 90000 })
       const evidence = { machine: { cpu: os.cpus()[0].model, memoryBytes: os.totalmem() }, runtime: await app.evaluate(({ app }) => ({ versions: process.versions, gpu: app.getGPUFeatureStatus(), memory: app.getAppMetrics() })), media: JSON.parse(execFileSync(ffprobePath, ['-v', 'error', '-show_streams', '-of', 'json', source], { windowsHide: true, encoding: 'utf8' })), layers: 3, cases: [] }
       evidence.gpuReadings = []
       let sampling = false
@@ -39,17 +39,17 @@ function createVideoEditScrubScene() {
           const longFile = path.join(root, 'boundary.henji-video'); fs.writeFileSync(longFile, JSON.stringify(longProject))
           await button(page, '关闭工程').click()
           await app.evaluate(({ dialog }, file) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] }) }, longFile)
-          await button(page, '打开工程').click(); await page.waitForFunction(() => document.querySelector('canvas[aria-label="剪辑画面"]')?.dataset.presentedFrame === '0', null, { timeout: 30000 })
+          await button(page, '打开工程').click(); await page.waitForFunction(() => document.querySelector('canvas[aria-label="剪辑画面"]')?.dataset.presentedFrame === '0', null, { timeout: 90000 })
           await page.getByLabel('时间线缩放', { exact: true }).focus(); await page.getByLabel('时间线缩放', { exact: true }).press('Home'); pixels = .25
         }
         const box = await ruler.boundingBox()
-        await ruler.click({ position: { x: from * pixels + .1, y: 12 } }); await page.waitForFunction(frame => document.querySelector('canvas[aria-label="剪辑画面"]')?.dataset.presentedFrame === String(frame), from, { timeout: 30000 })
+        await ruler.click({ position: { x: from * pixels + .1, y: 12 } }); await page.waitForFunction(frame => document.querySelector('canvas[aria-label="剪辑画面"]')?.dataset.presentedFrame === String(frame), from, { timeout: 90000 })
         await canvas.evaluate(canvas => {
           window.__scrub = { targets: [], frames: [], start: performance.now() }
           const ruler = document.querySelector('[aria-label="剪辑时间定位"]')
           window.__scrubTarget = new MutationObserver(() => window.__scrub.targets.push({ at: performance.now(), frame: Number(ruler.getAttribute('aria-valuenow')) }))
           window.__scrubTarget.observe(ruler, { attributes: true, attributeFilter: ['aria-valuenow'] })
-          window.__scrubFrame = new MutationObserver(() => window.__scrub.frames.push({ at: performance.now(), frame: Number(canvas.dataset.presentedFrame), timestamps: canvas.dataset.sourceTimestamps, requestedAt: Number(canvas.dataset.requestedAt), renderMs: Number(canvas.dataset.renderMs), cacheHits: Number(canvas.dataset.cacheHits) }))
+          window.__scrubFrame = new MutationObserver(() => window.__scrub.frames.push({ at: performance.now(), frame: Number(canvas.dataset.presentedFrame), timestamps: canvas.dataset.sourceTimestamps, requestedAt: Number(canvas.dataset.requestedAt), renderMs: Number(canvas.dataset.renderMs), cacheHits: Number(canvas.dataset.cacheHits), decodeMs: Number(canvas.dataset.decodeMs), gpuMs: Number(canvas.dataset.gpuMs) }))
           window.__scrubFrame.observe(canvas, { attributes: true, attributeFilter: ['data-presented-frame'] })
         })
         await page.mouse.move(box.x + from * pixels + .1, box.y + 12); await page.mouse.down()
@@ -61,24 +61,44 @@ function createVideoEditScrubScene() {
           if (delay > 0) await page.waitForTimeout(delay)
         }
         const ended = await page.evaluate(() => performance.now()); await page.mouse.up()
-        await page.waitForFunction(frame => { const canvas = document.querySelector('canvas[aria-label="剪辑画面"]'); return canvas?.dataset.presentedFrame === String(frame) && canvas.dataset.scrubbing === 'false' }, to, { timeout: 30000 })
+        await page.waitForFunction(frame => { const canvas = document.querySelector('canvas[aria-label="剪辑画面"]'); return canvas?.dataset.presentedFrame === String(frame) && canvas.dataset.scrubbing === 'false' }, to, { timeout: 90000 })
         const data = await page.evaluate(() => { window.__scrubTarget.disconnect(); window.__scrubFrame.disconnect(); return window.__scrub })
         const during = data.frames.filter(frame => frame.at <= ended)
         const gaps = during.map((frame, index) => frame.at - (index ? during[index - 1].at : data.start))
         const lags = during.map(frame => { const target = [...data.targets].reverse().find(target => target.at <= frame.at); return target ? Math.abs(frame.frame - target.frame) * duration / Math.abs(to - from) : 0 })
         for (const frame of during) { const times = frame.timestamps.split(',').map(Number).sort((a, b) => a - b); assert.ok(Math.abs(times[0] - frame.frame / 60) < 1e-5); assert.ok(Math.abs(times[1] - (1 + frame.frame / 60)) < 1e-5) }
-        const result = { name, durationMs: ended - data.start, inputs: data.targets.length, presentationsDuringDrag: during.length, submittedFramesPerSecond: during.length * 1000 / (ended - data.start), gapP95Ms: quantile(gaps, .95), gapMaxMs: Math.max(...gaps, ended - (during.at(-1)?.at ?? data.start)), pointerLagP95Ms: quantile(lags, .95), settleMs: Math.max(0, data.frames.at(-1).at - ended), renderP95Ms: quantile(during.map(frame => frame.renderMs), .95), cacheHits: during.reduce((sum, frame) => sum + (frame.cacheHits || 0), 0), samples: data }
+        const result = { name, durationMs: ended - data.start, inputs: data.targets.length, presentationsDuringDrag: during.length, submittedFramesPerSecond: during.length * 1000 / (ended - data.start), gapP95Ms: quantile(gaps, .95), gapMaxMs: Math.max(...gaps, ended - (during.at(-1)?.at ?? data.start)), pointerLagP95Ms: quantile(lags, .95), settleMs: Math.max(0, data.frames.at(-1).at - ended), renderP95Ms: quantile(during.map(frame => frame.renderMs), .95), decodeP95Ms: quantile(during.map(frame => frame.decodeMs), .95), gpuP95Ms: quantile(during.map(frame => frame.gpuMs), .95), cacheHits: during.reduce((sum, frame) => sum + (frame.cacheHits || 0), 0), samples: data }
         evidence.cases.push(result)
         fs.writeFileSync(path.join(root, 'evidence.json'), JSON.stringify(evidence, null, 2))
       }
       await capture('4k60-scrub')
-      evidence.canvas = await canvas.evaluate(canvas => ({ width: canvas.width, height: canvas.height, cacheBytes: Number(canvas.dataset.cacheBytes), proxyPreparationMs: Number(canvas.dataset.proxyPreparationMs), proxyBytes: Number(canvas.dataset.proxyBytes), bounds: { width: canvas.getBoundingClientRect().width, height: canvas.getBoundingClientRect().height }, pixel: [...canvas.getContext('2d').getImageData(Math.floor(canvas.width * .2), Math.floor(canvas.height * .5), 1, 1).data] }))
+      evidence.canvas = await canvas.evaluate(canvas => ({ width: canvas.width, height: canvas.height, cacheBytes: Number(canvas.dataset.cacheBytes), proxyPreparationMs: Number(canvas.dataset.proxyPreparationMs), proxyBytes: Number(canvas.dataset.proxyBytes), bounds: { width: canvas.getBoundingClientRect().width, height: canvas.getBoundingClientRect().height } }))
+      assert.equal(evidence.canvas.width, 3840); assert.equal(evidence.canvas.height, 2160)
+      // Playback measures completed video frames, never animation callback counts.
+      await button(page, '关闭工程').click()
+      await app.evaluate(({ dialog }, file) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] }) }, file)
+      await button(page, '打开工程').click()
+      await page.waitForFunction(() => document.querySelector('canvas[aria-label="剪辑画面"]')?.dataset.presentedFrame === '0', null, { timeout: 90000 })
+      await canvas.evaluate(canvas => {
+        window.__playFrames = []
+        window.__playObserver = new MutationObserver(() => window.__playFrames.push({ at: performance.now(), frame: Number(canvas.dataset.presentedFrame), renderMs: Number(canvas.dataset.renderMs), timestamps: canvas.dataset.sourceTimestamps }))
+        window.__playObserver.observe(canvas, { attributes: true, attributeFilter: ['data-presented-frame'] })
+      })
+      const beganPlayback = performance.now()
+      await button(page, '播放').click(); await button(page, '播放').waitFor({ timeout: 10000 })
+      await page.waitForFunction(() => document.querySelector('canvas[aria-label="剪辑画面"]')?.dataset.presentedFrame === '359')
+      evidence.playback = { wallMs: performance.now() - beganPlayback, frames: await page.evaluate(() => { window.__playObserver.disconnect(); return window.__playFrames }) }
+      evidence.playback.clockStartAt = await canvas.evaluate(canvas => Number(canvas.dataset.playClockStartAt))
+      evidence.playback.videoDurationMs = evidence.playback.frames.at(-1).at - evidence.playback.clockStartAt
+      evidence.playback.missing = Array.from({ length: 359 }, (_, i) => i + 1).filter(frame => !evidence.playback.frames.some(item => item.frame === frame))
       evidence.afterMemory = await app.evaluate(({ app }) => app.getAppMetrics())
       fs.writeFileSync(path.join(root, 'evidence.json'), JSON.stringify(evidence, null, 2))
+      assert.deepEqual(evidence.playback.missing, [], '4K60 全帧率预览不能跳过时间线视频帧')
+      assert.ok(evidence.playback.videoDurationMs < 6100, '4K60 不能通过减慢时钟实现全帧率')
       for (const result of evidence.cases) {
-        assert.ok(result.submittedFramesPerSecond >= 15, `${result.name} 拖动期间只有 ${result.submittedFramesPerSecond.toFixed(1)} 次画面更新/秒`)
+        assert.ok(result.submittedFramesPerSecond >= (['fast-forward', 'warm-reverse'].includes(result.name) ? 57 : 27), `${result.name} 拖动期间只有 ${result.submittedFramesPerSecond.toFixed(1)} 次画面更新/秒`)
         assert.ok(result.gapMaxMs < 500, `${result.name} 拖动期间停顿 ${result.gapMaxMs.toFixed(0)}ms`)
-        assert.ok(result.settleMs < 350, `${result.name} 松手后定位耗时 ${result.settleMs.toFixed(0)}ms`)
+        assert.ok(result.settleMs < 100, `${result.name} 松手后定位耗时 ${result.settleMs.toFixed(0)}ms`)
       }
       } finally { clearInterval(gpuTimer); fs.writeFileSync(path.join(root, 'evidence.json'), JSON.stringify(evidence, null, 2)) }
     },

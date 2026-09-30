@@ -1,6 +1,6 @@
 import { useCallback, useState, useSyncExternalStore } from 'react'
 import { UiButton, UiEmpty, UiError, UiGroup, UiInput, UiPageHeader, UiRegion } from '@/components/ui'
-import { Download, Save, Undo2, Redo2, Scissors, Trash2, Type } from 'lucide-react'
+import { Download, Undo2, Redo2, Scissors, Trash2, Type } from 'lucide-react'
 import type { AssetRecord } from '@/platform/contracts/assetLibrary'
 import { getPlatform } from '@/platform/runtime'
 import type { VideoEditClip } from '@/core/videoEdit/document'
@@ -44,8 +44,7 @@ export default function VideoEditApp(): React.ReactElement {
     {instance ? <>
       <div className="flex h-11 shrink-0 items-center gap-1 border-b border-border-dark bg-surface-dark px-3">
         <UiButton variant="plain" onClick={() => run(() => closeVideoEditProject(instance.document.id))}>关闭工程</UiButton>
-        <span className="max-w-40 truncate text-sm" data-observation-sensitive>{instance.document.name}{instance.dirty ? ' *' : ''}</span>
-        <UiButton variant="plain" className="gap-1.5" onClick={() => run(() => saveVideoEdit(instance.document.id))}><Save size={15} />保存</UiButton>
+        <span className="max-w-40 truncate text-sm" data-observation-sensitive>{instance.document.name}</span>
         <UiButton variant="plain" className="gap-1.5" disabled={!instance.past.length} onClick={() => run(() => undoVideoEdit(instance.document.id))}><Undo2 size={15} />撤销</UiButton>
         <UiButton variant="plain" className="gap-1.5" disabled={!instance.future.length} onClick={() => run(() => undoVideoEdit(instance.document.id, true))}><Redo2 size={15} />重做</UiButton>
         <UiButton variant="plain" className="gap-1.5" disabled={!selected} onClick={() => run(() => splitSelectedVideoEdit(instance.document.id))}><Scissors size={15} />拆分</UiButton>

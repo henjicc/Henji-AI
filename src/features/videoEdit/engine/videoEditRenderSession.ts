@@ -6,7 +6,7 @@ import { VideoEditPreviewSources } from './videoEditPreviewSources'
 /** A bounded request stream owned by a view/export, independent from the project lifetime. */
 export class VideoEditRenderSession {
   private readonly worker = new Worker(new URL('./videoEditWorker.ts', import.meta.url), { type: 'module' })
-  private readonly pending = new Map<number, { resolve: (value: RenderResponse) => void; reject: (error: Error) => void }>()
+  private readonly pending = new Map<number, { resolve: (value: RenderResponse) => void; reject: (error: Error) => void; submitted?: () => void }>()
   private nextId = 0
   private disposed = false
   private readonly ready: Promise<RenderResponse>
@@ -17,34 +17,40 @@ export class VideoEditRenderSession {
   get previewPreparationMs(): number { return this.previews?.preparationMs ?? 0 }
   get previewBytes(): number { return this.previews?.bytes ?? 0 }
   private mediaDocument(document: VideoEditDocument): VideoEditDocument { return { ...document, media: document.media.map(media => ({ ...media, path: toFetchableMediaUrl(media.path) })) } }
-  constructor(document: VideoEditDocument, previewWidth?: number, preparing?: (active: boolean) => void) {
+  constructor(document: VideoEditDocument, previewWidth?: number, preparing?: (active: boolean) => void, surface?: OffscreenCanvas) {
     this.document = document
     if (previewWidth) this.previews = new VideoEditPreviewSources(preparing)
-    // Preview consumes transferred bitmaps directly; reserve the export scratch lazily.
+    // Preview owns the transferred full-size surface; reserve the export scratch lazily.
     this.canvas = new OffscreenCanvas(previewWidth ? 1 : document.width, previewWidth ? 1 : document.height)
     this.worker.onmessage = (event: MessageEvent<RenderResponse>) => {
-      const value = event.data; const pending = this.pending.get(value.id); this.pending.delete(value.id)
+      const value = event.data; const pending = this.pending.get(value.id)
+      if (value.phase === 'submitted') { pending?.submitted?.(); return }
+      this.pending.delete(value.id)
       if (!pending) { value.bitmap?.close(); return }
       if (value.error) pending.reject(new Error(value.error)); else pending.resolve(value)
     }
     this.worker.onerror = event => { for (const pending of this.pending.values()) pending.reject(new Error(event.message)); this.pending.clear() }
-    this.ready = this.request({ kind: 'init', document: this.mediaDocument(document), previewWidth })
+    this.ready = this.request({ kind: 'init', document: this.mediaDocument(document), previewWidth, surface }, surface ? [surface] : [])
   }
-  private request(request: RenderRequest extends infer T ? T extends RenderRequest ? Omit<T, 'id'> : never : never): Promise<RenderResponse> {
+  private request(request: RenderRequest extends infer T ? T extends RenderRequest ? Omit<T, 'id'> : never : never, transfer: Transferable[] = [], submitted?: () => void): Promise<RenderResponse> {
     if (this.disposed) return Promise.reject(new Error('剪辑渲染已关闭。'))
     if (this.pending.size >= 3) return Promise.reject(new Error('剪辑渲染请求过多。'))
     const id = ++this.nextId
-    return new Promise((resolve, reject) => { this.pending.set(id, { resolve, reject }); this.worker.postMessage({ ...request, id }) })
+    return new Promise((resolve, reject) => { this.pending.set(id, { resolve, reject, submitted }); this.worker.postMessage({ ...request, id }, transfer) })
   }
   async updateDocument(document: VideoEditDocument): Promise<void> { await this.ready; await this.request({ kind: 'update', document: this.mediaDocument(document) }); this.document = document }
-  async renderBitmap(frame: number, sequential = false, scrubbing = false): Promise<RenderResponse & { bitmap: ImageBitmap }> {
+  invalidateDocument(revision: number): void { if (!this.disposed) this.worker.postMessage({ kind: 'invalidate', revision, id: 0 } satisfies RenderRequest) }
+  async present(frame: number, sequential = false, scrubbing = false, deadline?: number, submitted?: () => void): Promise<RenderResponse> {
     await this.ready
     if (this.previews) {
       const sources = await this.previews.resolve(this.document, frame)
       const signature = JSON.stringify(sources)
       if (signature !== this.previewSignature) { await this.request({ kind: 'preview', sources }); this.previewSignature = signature }
     }
-    const result = await this.request({ kind: 'render', frame, sequential, scrubbing })
+    return this.request({ kind: 'render', frame, sequential, scrubbing, deadline }, [], submitted)
+  }
+  async renderBitmap(frame: number, sequential = false, scrubbing = false): Promise<RenderResponse & { bitmap: ImageBitmap }> {
+    const result = await this.present(frame, sequential, scrubbing)
     if (!result.bitmap) throw new Error('剪辑渲染没有返回画面。')
     return { ...result, bitmap: result.bitmap }
   }
@@ -63,9 +69,14 @@ export class VideoEditRenderSession {
   }
   async dispose(): Promise<void> {
     if (this.disposed) return
-    this.disposed = true; this.worker.terminate()
+    this.disposed = true
     for (const pending of this.pending.values()) pending.reject(new Error('剪辑渲染已关闭。'))
-    this.pending.clear(); this.canvas.width = 1; this.canvas.height = 1
-    await this.previews?.dispose()
+    this.pending.clear()
+    const id = ++this.nextId
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const closed = new Promise<RenderResponse>((resolve, reject) => { this.pending.set(id, { resolve, reject }); this.worker.postMessage({ kind: 'dispose', id } satisfies RenderRequest) })
+    const limit = new Promise<void>(resolve => { timer = setTimeout(resolve, 2000) })
+    await Promise.allSettled([Promise.race([closed, limit]), this.previews?.dispose()])
+    clearTimeout(timer); this.worker.terminate(); this.pending.clear(); this.canvas.width = 1; this.canvas.height = 1
   }
 }

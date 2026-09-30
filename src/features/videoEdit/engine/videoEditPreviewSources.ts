@@ -48,8 +48,9 @@ export class VideoEditPreviewSources {
         const result = reusable ? previous.result : await segment.ready
         this.selected.set(clip.id, { source: media.path, result })
         results.push({ clipId: clip.id, mediaId: media.id, path: toFetchableMediaUrl(result.path), startSeconds: result.startSeconds, endSeconds: result.startSeconds + result.durationSeconds })
-        // Prepare the adjacent segment before continuous playback reaches its edge.
-        if (result.startSeconds + result.durationSeconds - time < 8 && result.startSeconds + result.durationSeconds < media.durationSeconds) {
+        // Start the next bounded segment as soon as this one is usable. Waiting
+        // until the last seconds leaves too little time for full-resolution encoding.
+        if (result.startSeconds + result.durationSeconds < media.durationSeconds) {
           void this.segment(media.path, result.startSeconds + result.durationSeconds, media.durationSeconds).ready.catch(() => { /* surfaced if the segment becomes required */ })
         }
         if (time - result.startSeconds < 8 && result.startSeconds > 0) {

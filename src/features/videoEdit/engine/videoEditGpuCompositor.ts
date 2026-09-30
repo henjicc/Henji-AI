@@ -1,0 +1,144 @@
+import { VideoSample } from 'mediabunny'
+import type { VideoEditClip, VideoEditDocument } from '@/core/videoEdit/document'
+import { ImageEditWebGpuDeviceManager } from '@/core/imageEdit/webgpu/deviceManager'
+import { getWebGpuContext, type GpuDevice, type GpuTexture, type GpuBuffer, type GpuRenderPipeline } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
+
+interface VideoGpuDevice extends GpuDevice {
+  importExternalTexture(descriptor: { source: VideoFrame }): unknown
+}
+const vertex = `
+struct Params { size: vec2f, rotation: vec2f, position: vec2f, brightness: f32, opacity: f32, aspect: vec2f, padding: vec2f }
+@group(0) @binding(2) var<uniform> p: Params;
+struct Vertex { @builtin(position) position: vec4f, @location(0) uv: vec2f }
+@vertex fn vs(@builtin(vertex_index) i: u32) -> Vertex {
+  let uv = array<vec2f, 6>(vec2f(0,0),vec2f(0,1),vec2f(1,0),vec2f(1,0),vec2f(0,1),vec2f(1,1))[i];
+  let point = (uv * 2 - 1) * p.size;
+  let rotated = vec2f(point.x * p.rotation.x - point.y * p.rotation.y * p.aspect.x,
+                      point.x * p.rotation.y * p.aspect.y + point.y * p.rotation.x);
+  var sampleUv = uv;
+  if (p.padding.y == 1) { sampleUv.x = 1 - sampleUv.x; }
+  if (p.padding.x == 90) { sampleUv = vec2f(sampleUv.y, 1 - sampleUv.x); }
+  if (p.padding.x == 180) { sampleUv = 1 - sampleUv; }
+  if (p.padding.x == 270) { sampleUv = vec2f(1 - sampleUv.y, sampleUv.x); }
+  return Vertex(vec4f(rotated.x + p.position.x, -rotated.y - p.position.y, 0, 1), sampleUv);
+}
+@group(0) @binding(1) var s: sampler;
+`
+/** Full resolution composition, shared by preview and export. VideoFrames stay on
+ * the GPU import path; no CPU pixels or thumbnail-sized intermediate surfaces. */
+export class VideoEditGpuCompositor {
+  private readonly manager = new ImageEditWebGpuDeviceManager()
+  private readonly context
+  private device!: VideoGpuDevice
+  private video!: GpuRenderPipeline
+  private image!: GpuRenderPipeline
+  private sampler: unknown
+  private readonly uniforms = new Map<string, GpuBuffer>()
+  private readonly textures = new Map<string, { texture: GpuTexture; key: string }>()
+  private readonly imageIds = new WeakMap<ImageBitmap, number>()
+  private nextImageId = 0
+  private lost: string | undefined
+  private readonly ready: Promise<void>
+  private readonly waits = new Set<() => void>()
+  private readonly uploads = new Set<Promise<void>>()
+  constructor(readonly canvas: OffscreenCanvas) {
+    this.context = getWebGpuContext(canvas)
+    this.manager.onDeviceLost(reason => { this.lost = reason })
+    this.ready = this.initialize()
+  }
+  private async initialize(): Promise<void> {
+    const managed = await this.manager.acquire()
+    this.device = managed.device as VideoGpuDevice
+    const format = managed.provider.getPreferredCanvasFormat()
+    this.context.configure({ device: this.device, format, alphaMode: 'premultiplied' })
+    this.sampler = this.device.createSampler({ magFilter: 'linear', minFilter: 'linear' })
+    this.device.pushErrorScope('validation')
+    const pipeline = (external: boolean): GpuRenderPipeline => {
+      const sample = external ? 'textureSampleBaseClampToEdge(t, s, v.uv)' : 'textureSample(t, s, v.uv)'
+      const shader = this.device.createShaderModule({ code: vertex + `
+@group(0) @binding(0) var t: ${external ? 'texture_external' : 'texture_2d<f32>'};
+@fragment fn fs(v: Vertex) -> @location(0) vec4f {
+ let c = ${sample}; let alpha = c.a * p.opacity;
+ return vec4f(clamp(c.rgb * p.brightness, vec3f(0), vec3f(1)) * alpha, alpha);
+}` })
+      return this.device.createRenderPipeline({ layout: 'auto', vertex: { module: shader, entryPoint: 'vs' }, fragment: { module: shader, entryPoint: 'fs', targets: [{ format, blend: { color: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' }, alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' } } }] }, primitive: { topology: 'triangle-list' } })
+    }
+    this.video = pipeline(true); this.image = pipeline(false)
+    const error = await this.device.popErrorScope()
+    if (error) throw new Error(`无法初始化剪辑 GPU 合成：${error.message}`)
+  }
+  async draw(document: VideoEditDocument, clips: VideoEditClip[], pictures: Array<VideoSample | ImageBitmap | null>, shouldPresent: () => boolean, deadline?: number): Promise<{ presented: boolean; completion: Promise<void> }> {
+    await this.ready
+    if (!shouldPresent()) return { presented: false, completion: Promise.resolve() }
+    if (deadline !== undefined) await new Promise<void>(resolve => {
+      let request = 0
+      const finish = (): void => { self.cancelAnimationFrame(request); this.waits.delete(finish); resolve() }
+      const tick = (at: number): void => { if (!shouldPresent() || performance.timeOrigin + at >= deadline - 0.8) finish(); else request = self.requestAnimationFrame(tick) }
+      this.waits.add(finish); request = self.requestAnimationFrame(tick)
+    })
+    if (!shouldPresent()) return { presented: false, completion: Promise.resolve() }
+    if (this.lost) throw new Error(`剪辑 GPU 已中断，请重新加载预览：${this.lost}`)
+    if (this.uploads.size >= 2) await Promise.race(this.uploads)
+    const device = this.device
+    const frames: VideoFrame[] = []
+    try {
+      const encoder = device.createCommandEncoder()
+      const pass = encoder.beginRenderPass({ colorAttachments: [{ view: this.context.getCurrentTexture().createView(), clearValue: { r: 0, g: 0, b: 0, a: 1 }, loadOp: 'clear', storeOp: 'store' }] })
+      clips.forEach((clip, index) => {
+        const picture = pictures[index]
+        let resource: unknown
+        const external = picture instanceof VideoSample
+        let width = document.width; let height = document.height
+        if (external) {
+          const frame = picture.toVideoFrame(); frames.push(frame)
+          resource = device.importExternalTexture({ source: frame }); width = picture.displayWidth; height = picture.displayHeight
+        } else {
+          if (picture && !this.imageIds.has(picture)) this.imageIds.set(picture, ++this.nextImageId)
+          const key = picture ? String(this.imageIds.get(picture)) : `${document.width}:${document.height}:${clip.text}`
+          let cached = this.textures.get(clip.id)
+          if (cached?.key !== key) {
+            cached?.texture.destroy()
+            let source: ImageBitmap | OffscreenCanvas
+            if (picture) source = picture
+            else {
+              source = new OffscreenCanvas(document.width, document.height)
+              const text = source.getContext('2d')!
+              text.fillStyle = 'white'; text.textAlign = 'center'; text.textBaseline = 'middle'; text.font = `${Math.round(document.height / 15)}px sans-serif`
+              clip.text.split('\n').forEach((line, row) => text.fillText(line, document.width / 2, document.height / 2 + row * document.height / 12))
+            }
+            const texture = device.createTexture({ size: [source.width, source.height], format: 'rgba8unorm', usage: 0x02 | 0x04 | 0x10 })
+            device.queue.copyExternalImageToTexture({ source }, { texture }, [source.width, source.height])
+            cached = { texture, key }; this.textures.set(clip.id, cached)
+          }
+          resource = cached.texture.createView()
+          if (picture) { width = picture.width; height = picture.height }
+        }
+        let uniform = this.uniforms.get(clip.id)
+        if (!uniform) { uniform = device.createBuffer({ size: 48, usage: 0x08 | 0x40 }); this.uniforms.set(clip.id, uniform) }
+        const fit = Math.min(document.width / width, document.height / height) * clip.scale
+        const rotation = clip.rotation * Math.PI / 180
+        device.queue.writeBuffer(uniform, 0, new Float32Array([width * fit / document.width, height * fit / document.height, Math.cos(rotation), Math.sin(rotation), clip.x * 2, clip.y * 2, clip.brightness, clip.opacity, document.height / document.width, document.width / document.height, external ? picture.rotation : 0, external && picture.flip ? 1 : 0]))
+        const pipeline = external ? this.video : this.image
+        pass.setPipeline(pipeline)
+        pass.setBindGroup(0, device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries: [{ binding: 0, resource }, { binding: 1, resource: this.sampler }, { binding: 2, resource: { buffer: uniform } }] }))
+        pass.draw(6)
+      })
+      pass.end(); device.queue.submit([encoder.finish()])
+      const completion = device.queue.onSubmittedWorkDone().finally(() => { frames.forEach(frame => frame.close()); this.uploads.delete(completion) })
+      this.uploads.add(completion)
+      const ids = new Set(clips.map(clip => clip.id))
+      for (const [id, value] of this.textures) if (!ids.has(id)) { value.texture.destroy(); this.textures.delete(id) }
+      for (const [id, value] of this.uniforms) if (!ids.has(id)) { value.destroy(); this.uniforms.delete(id) }
+      return { presented: true, completion }
+    } catch (error) { frames.forEach(frame => frame.close()); throw error }
+  }
+  async dispose(): Promise<void> {
+    this.cancelPresentation()
+    await this.ready.catch(() => {})
+    await Promise.allSettled(this.uploads)
+    for (const value of this.textures.values()) value.texture.destroy()
+    for (const value of this.uniforms.values()) value.destroy()
+    this.textures.clear(); this.uniforms.clear(); this.manager.destroy()
+  }
+  cancelPresentation(): void { for (const finish of this.waits) finish() }
+}
