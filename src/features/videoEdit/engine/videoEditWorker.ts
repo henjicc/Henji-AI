@@ -1,8 +1,8 @@
 import { VideoEditRenderer } from './videoEditRenderer'
-import type { VideoEditDocument } from '@/core/videoEdit/document'
+import type { VideoEditComposition } from '@/core/videoEdit/document'
 
 export type RenderRequest = { id: number } & (
-  { kind: 'init'; document: VideoEditDocument; previewWidth?: number; surface?: OffscreenCanvas } | { kind: 'update'; document: VideoEditDocument }
+  { kind: 'init'; document: VideoEditComposition; previewWidth?: number; surface?: OffscreenCanvas } | { kind: 'update'; document: VideoEditComposition }
   | { kind: 'invalidate'; revision: number }
   | { kind: 'dispose' }
   | { kind: 'render'; frame: number; sequential: boolean; scrubbing?: boolean; deadline?: number }

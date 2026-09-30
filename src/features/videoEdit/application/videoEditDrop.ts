@@ -15,6 +15,7 @@ export function videoEditDropPaths(transfer: DataTransfer): string[] {
 }
 /** Placement is captured before metadata I/O; switching projects cannot redirect a drop. */
 export async function dropVideoEditPaths(projectId: string, paths: string[], placement?: { frame: number; track: number }): Promise<void> {
+  const sequenceId = requireVideoEditInstance(projectId).activeSequenceId
   await importVideoEditPaths(projectId, paths)
   if (!placement) return
   let frame = placement.frame
@@ -22,8 +23,8 @@ export async function dropVideoEditPaths(projectId: string, paths: string[], pla
     const instance = requireVideoEditInstance(projectId)
     const media = instance.document.media.find(item => sameVideoEditMediaPath(item.path, path))
     if (!media) throw new Error('无法找到已导入的素材。')
-    appendVideoEditClip(projectId, media.id, { frame, track: placement.track })
-    const selected = instance.document.clips.find(clip => clip.id === instance.selection)
+    appendVideoEditClip(projectId, media.id, { frame, track: placement.track }, sequenceId)
+    const selected = instance.document.sequences.find(sequence => sequence.id === sequenceId)?.clips.at(-1)
     frame += selected?.duration ?? 0
   }
 }

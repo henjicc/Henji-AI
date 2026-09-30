@@ -3,7 +3,7 @@ import { UiButton, UiInput, UiError } from '@/components/ui'
 import { videoEditDuration } from '@/core/videoEdit/document'
 import { VideoEditRenderSession } from './engine/videoEditRenderSession'
 import { acceptsVideoEditDrop, dropVideoEditPaths, videoEditDropPaths } from './application/videoEditDrop'
-import { editVideoProject, requireVideoEditInstance, setVideoEditView, subscribeVideoEditDomain, subscribeVideoEditView, videoEditViewRevision, type VideoEditInstance } from './application/videoEditService'
+import { editVideoSequence, getActiveVideoEditSequence, requireVideoEditInstance, setVideoEditView, subscribeVideoEditDomain, subscribeVideoEditView, videoEditViewRevision, type VideoEditInstance } from './application/videoEditService'
 
 export function VideoEditPreview({ instance, onError }: { instance: VideoEditInstance; onError: (error: unknown) => void }): React.ReactElement {
   useSyncExternalStore(subscribeVideoEditView, videoEditViewRevision)
@@ -16,9 +16,9 @@ export function VideoEditPreview({ instance, onError }: { instance: VideoEditIns
   const [retry, setRetry] = useState(0)
   const session = useRef<VideoEditRenderSession | null>(null)
   const stopPreview = useRef<() => void>(() => {})
-  const { document } = instance
+  const document = getActiveVideoEditSequence(instance)
   useEffect(() => {
-    const initialDocument = instance.document
+    const initialDocument = getActiveVideoEditSequence(instance)
     const surface = window.document.createElement('canvas')
     surface.width = initialDocument.width; surface.height = initialDocument.height
     surface.setAttribute('aria-label', '剪辑画面'); surface.className = 'h-full w-full object-contain'
@@ -46,13 +46,13 @@ export function VideoEditPreview({ instance, onError }: { instance: VideoEditIns
       let scheduled = false
       try {
         const current = requireVideoEditInstance(instance.document.id)
-        const document = current.document
+        const document = getActiveVideoEditSequence(current)
         if (appliedDocument !== document) { await renderer.updateDocument(document); await audioRenderer?.updateDocument(document); appliedDocument = document; lastFrame = -1; lastRequested = -1; stopAudio(); wasPlaying = false }
         if (current.playing && !wasPlaying) {
           await renderer.present(current.frame, true)
           lastFrame = current.frame; lastRequested = current.frame
           if (document.clips.some(clip => clip.volume > 0 && (clip.kind === 'video' || clip.kind === 'audio'))) {
-            audio ??= new AudioContext({ sampleRate: 48000 }); await audio.resume()
+            audio ??= new AudioContext({ sampleRate: document.sampleRate }); await audio.resume()
             const before = audio.currentTime; const waiting = performance.now()
             while (audio.currentTime === before && performance.now() - waiting < 1000 && !stopped) await new Promise(resolve => setTimeout(resolve, 2))
           }
@@ -66,7 +66,7 @@ export function VideoEditPreview({ instance, onError }: { instance: VideoEditIns
         wasPlaying = current.playing
         if (current.playing) {
           const timelineTime = startFrame / document.fps + (performance.now() - clockPerformanceStart) / 1000
-          if (timelineTime >= videoEditDuration(document) / document.fps && lastFrame >= videoEditDuration(document) - 1) { setVideoEditView(document.id, { playing: false }); stopAudio() }
+          if (timelineTime >= videoEditDuration(document) / document.fps && lastFrame >= videoEditDuration(document) - 1) { setVideoEditView(instance.document.id, { playing: false }); stopAudio() }
           if (audio && !audioPending && nextAudio < timelineTime + 0.4 && nextAudio < videoEditDuration(document) / document.fps && document.clips.some(clip => clip.volume > 0 && (clip.kind === 'audio' || clip.kind === 'video'))) {
             audioRenderer ??= new VideoEditRenderSession(document)
             const duration = Math.min(0.5, videoEditDuration(document) / document.fps - nextAudio)
@@ -79,7 +79,7 @@ export function VideoEditPreview({ instance, onError }: { instance: VideoEditIns
               const offset = Math.max(0, context.currentTime - when)
               if (offset < buffer.duration) { node.start(Math.max(when, context.currentTime), offset); nodes.add(node); node.onended = () => { nodes.delete(node); node.disconnect() } }
               else node.disconnect()
-            }).catch(error => { if (!stopped && generation === audioGeneration) { setVideoEditView(document.id, { playing: false }); onError(error) } }).finally(() => { audioPending = false })
+            }).catch(error => { if (!stopped && generation === audioGeneration) { setVideoEditView(instance.document.id, { playing: false }); onError(error) } }).finally(() => { audioPending = false })
           }
         }
         const playing = current.playing
@@ -96,7 +96,7 @@ export function VideoEditPreview({ instance, onError }: { instance: VideoEditIns
             // A completed seek is useful while the pointer keeps moving. Only a different
             // document/lifetime invalidates it; the next iteration reads the latest target.
             if (stopped) return
-            if (current.document !== document) { if (!scheduled) timer = setTimeout(() => { void loop() }, 0); return }
+            if (getActiveVideoEditSequence(current) !== document) { if (!scheduled) timer = setTimeout(() => { void loop() }, 0); return }
             if (result.presented === false) { lastFrame = -1; lastRequested = -1; if (!scheduled) timer = setTimeout(() => { void loop() }, 0); return }
             const surface = canvas.current
             if (surface) {
@@ -108,17 +108,17 @@ export function VideoEditPreview({ instance, onError }: { instance: VideoEditIns
               surface.dataset.presentedFrame = String(target)
             }
             lastFrame = target; lastScrubbing = scrubbing
-            if (playing && current.playing) setVideoEditView(document.id, { frame: target })
+            if (playing && current.playing) setVideoEditView(instance.document.id, { frame: target })
           }
         }
         if (!stopped && !scheduled) timer = setTimeout(() => { void loop() }, current.playing ? 0 : 2)
-      } catch (error) { if (!stopped) { setVideoEditView(initialDocument.id, { playing: false }); onError(error) } }
+      } catch (error) { if (!stopped) { setVideoEditView(instance.document.id, { playing: false }); onError(error) } }
     }
     const stop = (): void => { stopped = true; unsubscribe(); clearTimeout(timer); instance.playing = false; stopAudio(); void audio?.close(); void renderer.dispose(); void audioRenderer?.dispose(); surface.remove(); if (canvas.current === surface) canvas.current = null }
     stopPreview.current = stop
     void loop()
     return stop
-  }, [instance, onError, retry])
+  }, [instance, instance.activeSequenceId, onError, retry])
   return <div className="flex min-h-0 flex-1 flex-col bg-app">
     <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden p-3"
       onDragOver={event => { if (acceptsVideoEditDrop(event.dataTransfer)) { event.preventDefault(); event.dataTransfer.dropEffect = 'copy' } }}
@@ -126,7 +126,7 @@ export function VideoEditPreview({ instance, onError }: { instance: VideoEditIns
         if (!acceptsVideoEditDrop(event.dataTransfer)) return
         event.preventDefault(); event.stopPropagation()
         const track = Math.min(7, Math.max(1, ...document.clips.filter(clip => clip.kind !== 'audio').map(clip => clip.track + 1)))
-        try { void dropVideoEditPaths(document.id, videoEditDropPaths(event.dataTransfer), { frame: instance.frame, track }).catch(onError) } catch (error) { onError(error) }
+        try { void dropVideoEditPaths(instance.document.id, videoEditDropPaths(event.dataTransfer), { frame: instance.frame, track }).catch(onError) } catch (error) { onError(error) }
       }}>
       <div className="relative max-h-full max-w-full" style={{ aspectRatio: `${document.width}/${document.height}`, height: '100%' }}>
         <div ref={host} className="h-full w-full"
@@ -135,12 +135,12 @@ export function VideoEditPreview({ instance, onError }: { instance: VideoEditIns
             const start = pointer.current; pointer.current = null
             if (!start || !instance.selection) return
             const rect = event.currentTarget.getBoundingClientRect(); const x = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width)); const y = Math.min(1, Math.max(0, (event.clientY - rect.top) / rect.height))
-            try { editVideoProject(document.id, draft => ({ ...draft, annotations: [...draft.annotations, { id: crypto.randomUUID(), clipId: instance.selection!, frame: instance.frame, space: 'composition-normalized', kind: mode === 'region' ? 'region' : 'point', x: Math.min(start.x, x), y: Math.min(start.y, y), width: mode === 'region' ? Math.abs(x - start.x) : 0, height: mode === 'region' ? Math.abs(y - start.y) : 0, text: label }] })) } catch (error) { onError(error) }
+            try { editVideoSequence(instance.document.id, instance.activeSequenceId, draft => ({ ...draft, annotations: [...draft.annotations, { id: crypto.randomUUID(), clipId: instance.selection!, frame: instance.frame, space: 'composition-normalized', kind: mode === 'region' ? 'region' : 'point', x: Math.min(start.x, x), y: Math.min(start.y, y), width: mode === 'region' ? Math.abs(x - start.x) : 0, height: mode === 'region' ? Math.abs(y - start.y) : 0, text: label }] })) } catch (error) { onError(error) }
           }} />
         {document.annotations.filter(mark => mark.frame === instance.frame).map(mark => <div key={mark.id} className="pointer-events-none absolute border border-white text-xs text-white" style={{ left: `${mark.x * 100}%`, top: `${mark.y * 100}%`, width: mark.kind === 'point' ? 8 : `${mark.width * 100}%`, height: mark.kind === 'point' ? 8 : `${mark.height * 100}%` }}><span className="absolute bottom-full whitespace-nowrap bg-black/60 px-1">{mark.text}</span></div>)}
       </div>
     </div>
-    <div className="flex items-center justify-center gap-2 px-3 py-1">
+    <div className="flex flex-wrap items-center justify-center gap-2 px-3 py-1 [&_button]:shrink-0 [&_button]:whitespace-nowrap">
       {preparing && <><span className="text-xs text-text-muted">正在准备流畅预览…</span><UiButton variant="plain" onClick={() => { stopPreview.current(); setPreparing(false) }}>取消准备</UiButton></>}
       {!preparing && <UiButton variant="plain" onClick={() => setRetry(value => value + 1)}>重新加载预览</UiButton>}
       {(['select', 'point', 'region'] as const).map((value, index) => <UiButton key={value} variant="plain" aria-pressed={mode === value} onClick={() => setMode(value)}>{['选择', '点标注', '区域标注'][index]}</UiButton>)}

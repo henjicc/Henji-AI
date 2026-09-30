@@ -10,7 +10,8 @@
  *   4. 未知原请求换标识仍不能重放，独立追加可以继续；
  *   5. 重启后可区分待续查、未知和已保存结果；仅注入存储样本，不调用供应商。
  *
- * 用法：node scripts/mcp-restart-check.cjs [--out .mcp-restart]
+ * 用法：node scripts/mcp-restart-check.cjs [--out .mcp-restart] [--only mcp|video-edit-layout]
+ * 默认仍核对 MCP；剪辑布局目标复用下面同一启动器与两次启动的隔离资料。
  */
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
@@ -19,22 +20,12 @@ const { randomUUID } = require('node:crypto')
 const { once } = require('node:events')
 const { launchElectronApp, waitForApp, createIsolatedUserDataDir, cleanupIsolatedUserDataDir } = require('./lib/electronLaunch.cjs')
 const { authorizeMcpConnection, callTool, connectMcpClient, expectToolRefusal, operationEnvelope, waitMcpReady } = require('./lib/uiInspectionMcpClient.cjs')
+const { parseRestartCheckArgs } = require('./lib/realityTestPlan.cjs')
 
 const ROOT = path.resolve(__dirname, '..')
 const MAIN_ENTRY = path.join(ROOT, 'out/main/index.cjs')
 const FIXTURE_PROJECT_ID = '__mcp_restart_canvas_fixture__'
 const CREATIVE_PROJECT_ID = '__mcp_restart_creative_fixture__'
-
-function parseArgs(argv) {
-  const options = { outDir: '.mcp-restart' }
-  for (let index = 0; index < argv.length; index += 1) {
-    const token = argv[index]
-    if (token === '--out') { options.outDir = argv[index + 1]; index += 1 }
-    else if (token.startsWith('--out=')) options.outDir = token.slice('--out='.length)
-    else throw new Error(`未知参数：${token}`)
-  }
-  return options
-}
 
 async function launch(userDataDir) {
   const app = await launchElectronApp({
@@ -84,10 +75,16 @@ const readHistoryCount = (page) => page.evaluate(async () => (await window.henji
 const readProjectName = (page) => page.evaluate((id) => window.henjiNative.storyboardProjects.getProjectRecord(id).then((record) => record?.name ?? null), FIXTURE_PROJECT_ID)
 
 async function main() {
-  const options = parseArgs(process.argv.slice(2))
+  const options = parseRestartCheckArgs(process.argv.slice(2))
   const outDir = path.isAbsolute(options.outDir) ? options.outDir : path.resolve(ROOT, options.outDir)
   fs.mkdirSync(outDir, { recursive: true })
   const userDataDir = createIsolatedUserDataDir()
+  if (options.target === 'video-edit-layout') {
+    const { runVideoEditLayoutRestart } = require('./lib/videoEditLayoutRestart.cjs')
+    try { await runVideoEditLayoutRestart({ launch, userDataDir, outDir }) }
+    finally { await cleanupIsolatedUserDataDir(userDataDir) }
+    return
+  }
   const port = 43860 + Math.floor(Math.random() * 30)
   const evidence = { userDataDir, port, firstRun: {}, secondRun: {} }
   const nonce = `n${Math.random().toString(36).slice(2, 8)}`

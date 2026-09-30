@@ -3,7 +3,8 @@ import { ApplicationPersistenceFailure, type ApplicationPersistenceParticipant }
 import { createVideoEditRegistrations } from './videoEditReflection'
 import { VideoEditCollectionExecutor, VideoEditMutationExecutor } from './videoEditExecutors'
 import { requireVideoEditInstance, saveVideoEdit, type VideoEditInstance } from './videoEditService'
-import { editVideoProject, undoVideoEdit } from './videoEditService'
+import { editVideoSequence, undoVideoEdit } from './videoEditService'
+import { splitVideoEditRef } from './videoEditReflection'
 import { splitVideoEditClip } from '@/core/videoEdit/document'
 import { VIDEO_EDIT_APPLICATION_CAPABILITIES } from '@/core/application-control/domains/videoEdit/videoEditApplicationCapabilities'
 import { exportVideoEdit, cancelVideoEditExport, videoEditExportTask } from './videoEditExport'
@@ -16,8 +17,8 @@ const persistenceOwners = new WeakMap<VideoEditInstance, ApplicationPersistenceP
 export const videoEditApplicationDomain: ApplicationDomainModule = {
   id: 'videoEdit', entities: createVideoEditRegistrations,
   registerExecutors(engine) {
-    for (const entityType of ['video_edit.project', 'video_edit.clip', 'video_edit.annotation'] as const) engine.registerMutationExecutor(new VideoEditMutationExecutor(entityType))
-    for (const entityType of ['video_edit.clip', 'video_edit.annotation'] as const) engine.registerCollectionExecutor(new VideoEditCollectionExecutor(entityType))
+    for (const entityType of ['video_edit.project', 'video_edit.sequence', 'video_edit.bin', 'video_edit.item', 'video_edit.track', 'video_edit.clip', 'video_edit.annotation'] as const) engine.registerMutationExecutor(new VideoEditMutationExecutor(entityType))
+    for (const entityType of ['video_edit.sequence', 'video_edit.bin', 'video_edit.item', 'video_edit.clip', 'video_edit.annotation'] as const) engine.registerCollectionExecutor(new VideoEditCollectionExecutor(entityType))
   },
   registerCapabilities(registrar) {
     for (const definition of VIDEO_EDIT_APPLICATION_CAPABILITIES) registrar.registerHandler(definition.id, async raw => {
@@ -29,7 +30,10 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
         case 'save_video_edit': await saveVideoEdit(id); break
         case 'split_video_edit': {
           if (!input.clipRef?.id.startsWith(`${id}:`) || input.frame === undefined) throw new Error('拆分需要本工程 clipRef 与整数 frame。')
-          editVideoProject(id, document => splitVideoEditClip(document, input.clipRef!.id.slice(id.length + 1), input.frame!)); await saveVideoEdit(id); break
+          const clipId = input.clipRef.id.slice(id.length + 1)
+          const sequence = requireVideoEditInstance(id).document.sequences.find(sequence => sequence.clips.some(clip => clip.id === clipId))
+          if (!sequence) throw new Error('目标片段不存在。')
+          editVideoSequence(id, sequence.id, sequence => splitVideoEditClip(sequence, clipId, input.frame!)); await saveVideoEdit(id); break
         }
         case 'import_video_edit_asset': {
           if (!input.assetRef) throw new Error('请提供素材库 assetRef。')
@@ -46,7 +50,7 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
     })
   },
   resolvePersistenceParticipants(steps) {
-    const ids = new Set(steps.flatMap(step => step.kind === 'mutation' && step.target.kind.startsWith('video_edit.') ? [step.target.id.split(':')[0]] : step.kind === 'collection' && step.parent.kind === 'video_edit.project' ? [step.parent.id] : []))
+    const ids = new Set(steps.flatMap(step => step.kind === 'mutation' && step.target.kind.startsWith('video_edit.') ? [splitVideoEditRef(step.target).projectId] : step.kind === 'collection' && step.parent.kind.startsWith('video_edit.') ? [splitVideoEditRef(step.parent).projectId] : []))
     return [...ids].map(id => {
       const owner = requireVideoEditInstance(id)
       const existing = persistenceOwners.get(owner)

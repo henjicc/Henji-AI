@@ -6,8 +6,8 @@ import { focusCanvasNode, openCanvasProject } from '@/features/canvas/applicatio
 import { closeApplicationSurface as closeSurface, listApplicationSurfaces, openApplicationSurface as openSurface } from '@/features/navigation/application/index'
 
 import { assetApplicationService } from '@/features/assets/application/assetApplicationService'
-import { focusVideoEdit, setVideoEditView, requireVideoEditInstance } from '@/features/videoEdit/application/videoEditService'
-import { splitVideoEditRef } from '@/features/videoEdit/application/videoEditReflection'
+import { focusVideoEdit, switchVideoEditSequence, setVideoEditView, requireVideoEditInstance } from '@/features/videoEdit/application/videoEditService'
+import { readVideoEditData, splitVideoEditRef } from '@/features/videoEdit/application/videoEditReflection'
 import type { CapabilityExecutionContext } from '@/features/application-control/capabilities/handlerTypes'
 
 export type { ApplicationSurfaceDefinition } from '@/features/navigation/application/index'
@@ -41,11 +41,15 @@ export async function focusApplicationEntity(
   correlation: SurfaceLogContext = {}
 ): Promise<Record<string, unknown>> {
   if (ref.kind.startsWith('video_edit.')) {
+    readVideoEditData(ref)
     const { projectId, childId } = splitVideoEditRef(ref)
     focusVideoEdit(projectId)
+    const instance = requireVideoEditInstance(projectId)
+    const sequence = instance.document.sequences.find(sequence => sequence.id === childId || sequence.clips.some(clip => clip.id === childId) || sequence.annotations.some(mark => mark.id === childId) || sequence.tracks.some(track => track.id === childId))
+    if (sequence) switchVideoEditSequence(projectId, sequence.id)
     if (ref.kind === 'video_edit.clip') setVideoEditView(projectId, { selection: childId })
     if (ref.kind === 'video_edit.annotation') {
-      const mark = requireVideoEditInstance(projectId).document.annotations.find(item => item.id === childId)
+      const mark = sequence?.annotations.find(item => item.id === childId)
       if (!mark) throw new Error('NOT_FOUND')
       setVideoEditView(projectId, { selection: mark.clipId, frame: mark.frame, playing: false })
     }

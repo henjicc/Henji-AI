@@ -2,15 +2,15 @@ import { useState, useSyncExternalStore, type ReactNode } from 'react'
 import { UiButton, UiInput } from '@/components/ui'
 import { acceptsVideoEditDrop, dropVideoEditPaths, videoEditDropPaths } from './application/videoEditDrop'
 import { adjustVideoEditClip, videoEditDuration, type VideoEditClip } from '@/core/videoEdit/document'
-import { editVideoProject, setVideoEditView, subscribeVideoEditView, videoEditViewRevision, type VideoEditInstance } from './application/videoEditService'
+import { editVideoSequence, getActiveVideoEditSequence, setVideoEditView, subscribeVideoEditView, videoEditViewRevision, type VideoEditInstance } from './application/videoEditService'
 
 function VideoEditTransport({ instance }: { instance: VideoEditInstance }): React.ReactElement {
   useSyncExternalStore(subscribeVideoEditView, videoEditViewRevision)
-  const { document } = instance
+  const document = getActiveVideoEditSequence(instance)
   return <>
-    <UiButton variant="plain" onClick={() => setVideoEditView(document.id, { playing: false, frame: Math.max(0, instance.frame - 1) })}>上一帧</UiButton>
-    <UiButton variant="plain" onClick={() => setVideoEditView(document.id, { playing: !instance.playing })}>{instance.playing ? '暂停' : '播放'}</UiButton>
-    <UiButton variant="plain" onClick={() => setVideoEditView(document.id, { playing: false, frame: Math.min(videoEditDuration(document) - 1, instance.frame + 1) })}>下一帧</UiButton>
+    <UiButton variant="plain" onClick={() => setVideoEditView(instance.document.id, { playing: false, frame: Math.max(0, instance.frame - 1) })}>上一帧</UiButton>
+    <UiButton variant="plain" onClick={() => setVideoEditView(instance.document.id, { playing: !instance.playing })}>{instance.playing ? '暂停' : '播放'}</UiButton>
+    <UiButton variant="plain" onClick={() => setVideoEditView(instance.document.id, { playing: false, frame: Math.min(videoEditDuration(document) - 1, instance.frame + 1) })}>下一帧</UiButton>
     <span className="text-xs tabular-nums text-text-muted">{(instance.frame / document.fps).toFixed(3)}s / {(videoEditDuration(document) / document.fps).toFixed(3)}s</span>
   </>
 }
@@ -20,17 +20,17 @@ function VideoEditPlayhead({ instance, pixels }: { instance: VideoEditInstance; 
 }
 function VideoEditRuler({ instance, pixels, children }: { instance: VideoEditInstance; pixels: number; children: ReactNode }): React.ReactElement {
   useSyncExternalStore(subscribeVideoEditView, videoEditViewRevision)
-  const { document } = instance
+  const document = getActiveVideoEditSequence(instance)
   const seek = (event: React.PointerEvent<HTMLDivElement>): void => {
     const rect = event.currentTarget.getBoundingClientRect()
-    setVideoEditView(document.id, { playing: false, frame: Math.max(0, Math.min(videoEditDuration(document) - 1, Math.round((event.clientX - rect.left) / pixels))) })
+    setVideoEditView(instance.document.id, { playing: false, frame: Math.max(0, Math.min(videoEditDuration(document) - 1, Math.round((event.clientX - rect.left) / pixels))) })
   }
   return <div role="slider" tabIndex={0} aria-label="剪辑时间定位" aria-valuenow={instance.frame} aria-valuemin={0} aria-valuemax={videoEditDuration(document) - 1} className="h-7 cursor-crosshair bg-surface-dark"
-    onKeyDown={event => { if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { event.preventDefault(); setVideoEditView(document.id, { playing: false, frame: Math.max(0, Math.min(videoEditDuration(document) - 1, instance.frame + (event.key === 'ArrowLeft' ? -1 : 1))) }) } }}
+    onKeyDown={event => { if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { event.preventDefault(); setVideoEditView(instance.document.id, { playing: false, frame: Math.max(0, Math.min(videoEditDuration(document) - 1, instance.frame + (event.key === 'ArrowLeft' ? -1 : 1))) }) } }}
     onPointerMove={event => { if (event.currentTarget.hasPointerCapture(event.pointerId)) seek(event) }}
-    onPointerDown={event => { event.currentTarget.setPointerCapture(event.pointerId); setVideoEditView(document.id, { scrubbing: true }); seek(event) }}
-    onPointerUp={event => { seek(event); setVideoEditView(document.id, { scrubbing: false }); event.currentTarget.releasePointerCapture(event.pointerId) }}
-    onLostPointerCapture={() => setVideoEditView(document.id, { scrubbing: false })}>
+    onPointerDown={event => { event.currentTarget.setPointerCapture(event.pointerId); setVideoEditView(instance.document.id, { scrubbing: true }); seek(event) }}
+    onPointerUp={event => { seek(event); setVideoEditView(instance.document.id, { scrubbing: false }); event.currentTarget.releasePointerCapture(event.pointerId) }}
+    onLostPointerCapture={() => setVideoEditView(instance.document.id, { scrubbing: false })}>
     {children}
   </div>
 }
@@ -40,12 +40,12 @@ export function VideoEditTimeline({ instance, onError }: { instance: VideoEditIn
   const [snap, setSnap] = useState(true)
   const [dropHint, setDropHint] = useState<{ frame: number; track: number } | null>(null)
   const [drag, setDrag] = useState<{ clip: VideoEditClip; x: number; y: number; mode: 'move' | 'in' | 'out'; delta: number; track: number } | null>(null)
-  const { document } = instance
+  const document = getActiveVideoEditSequence(instance)
   const pixels = zoom / document.fps
   const tickSeconds = Math.max(1, Math.ceil(48 / zoom))
   const width = Math.max(900, (videoEditDuration(document) + document.fps * 5) * pixels)
   const adjustment = drag ? { mode: drag.mode, delta: drag.delta, track: drag.track, snapThreshold: snap && drag.mode === 'move' ? 8 / pixels : undefined } : undefined
-  return <div className="flex h-80 shrink-0 select-none flex-col bg-panel" aria-label="剪辑时间线">
+  return <div className="flex h-full min-h-0 select-none flex-col bg-panel" aria-label="剪辑时间线">
     <div className="flex shrink-0 items-center gap-3 whitespace-nowrap px-3 py-1">
       <VideoEditTransport instance={instance} />
       <UiButton variant="plain" aria-pressed={snap} onClick={() => setSnap(!snap)}>吸附{snap ? '开' : '关'}</UiButton>
@@ -65,14 +65,14 @@ export function VideoEditTimeline({ instance, onError }: { instance: VideoEditIn
           const rect = event.currentTarget.getBoundingClientRect()
           const frame = Math.max(0, Math.round((event.clientX - rect.left) / pixels))
           const track = Math.max(0, Math.min(7, Math.floor((event.clientY - rect.top - 28) / 32)))
-          try { void dropVideoEditPaths(document.id, videoEditDropPaths(event.dataTransfer), { frame, track }).catch(onError) } catch (error) { onError(error) }
+          try { void dropVideoEditPaths(instance.document.id, videoEditDropPaths(event.dataTransfer), { frame, track }).catch(onError) } catch (error) { onError(error) }
         }}
         onPointerMove={event => { if (!drag) return; setDrag({ ...drag, delta: Math.round((event.clientX - drag.x) / pixels), track: Math.max(0, Math.min(7, drag.clip.track + Math.round((event.clientY - drag.y) / 32))) }) }}
         onPointerUp={() => {
           if (!drag) return
           const { clip } = drag; setDrag(null)
-          try { editVideoProject(document.id, draft => ({ ...draft, clips: draft.clips.map(item => {
-            return item.id === clip.id && adjustment ? adjustVideoEditClip(draft, item, adjustment) : item
+          try { editVideoSequence(instance.document.id, instance.activeSequenceId, draft => ({ ...draft, clips: draft.clips.map(item => {
+            return item.id === clip.id && adjustment ? adjustVideoEditClip(document, item, adjustment) : item
           }) })) } catch (error) { onError(error) }
         }} onPointerCancel={() => setDrag(null)}>
         <VideoEditRuler instance={instance} pixels={pixels}>
@@ -82,8 +82,8 @@ export function VideoEditTimeline({ instance, onError }: { instance: VideoEditIn
         {document.clips.map(clip => {
           const displayed = drag?.clip.id === clip.id && adjustment ? adjustVideoEditClip(document, clip, adjustment) : clip
           return <div key={clip.id} data-video-edit-clip={clip.id} className={`absolute flex h-7 items-center overflow-hidden rounded-md ${instance.selection === clip.id ? 'bg-accent/30 ring-1 ring-accent' : clip.kind === 'audio' ? 'bg-accent/10' : 'bg-surface-dark'}`} style={{ top: 29 + displayed.track * 32, left: displayed.start * pixels, width: Math.max(18, displayed.duration * pixels) }}>
-          {(['in', 'move', 'out'] as const).map(mode => <UiButton key={mode} variant="plain" className={`!h-full !rounded-none ${mode === 'move' ? 'min-w-0 flex-1 truncate !px-1 text-xs' : 'w-3 shrink-0 !px-0 cursor-ew-resize'}`} title={mode === 'in' ? '裁剪入点' : mode === 'out' ? '裁剪出点' : clip.name} onClick={() => setVideoEditView(document.id, { selection: clip.id })}
-            onPointerDown={event => { event.stopPropagation(); event.currentTarget.setPointerCapture(event.pointerId); setVideoEditView(document.id, { selection: clip.id, playing: false }); setDrag({ clip, x: event.clientX, y: event.clientY, delta: 0, mode, track: clip.track }) }}>{mode === 'move' ? clip.name : '│'}</UiButton>)}
+          {(['in', 'move', 'out'] as const).map(mode => <UiButton key={mode} variant="plain" className={`!h-full !rounded-none ${mode === 'move' ? 'min-w-0 flex-1 truncate !px-1 text-xs' : 'w-3 shrink-0 !px-0 cursor-ew-resize'}`} title={mode === 'in' ? '裁剪入点' : mode === 'out' ? '裁剪出点' : clip.name} onClick={() => setVideoEditView(instance.document.id, { selection: clip.id })}
+            onPointerDown={event => { event.stopPropagation(); event.currentTarget.setPointerCapture(event.pointerId); setVideoEditView(instance.document.id, { selection: clip.id, playing: false }); setDrag({ clip, x: event.clientX, y: event.clientY, delta: 0, mode, track: clip.track }) }}>{mode === 'move' ? clip.name : '│'}</UiButton>)}
         </div>})}
         {dropHint && <div className="pointer-events-none absolute h-7 w-36 border-l-2 border-accent bg-accent/20 px-2 text-2xs text-text-dark" style={{ top: 29 + dropHint.track * 32, left: dropHint.frame * pixels }}>释放以添加素材</div>}
         <VideoEditPlayhead instance={instance} pixels={pixels} />

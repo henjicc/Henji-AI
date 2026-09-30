@@ -1,4 +1,4 @@
-import type { VideoEditDocument } from '@/core/videoEdit/document'
+import type { VideoEditComposition } from '@/core/videoEdit/document'
 import { toFetchableMediaUrl } from '@/services/imageSource'
 import type { RenderRequest, RenderResponse } from './videoEditWorker'
 
@@ -12,8 +12,8 @@ export class VideoEditRenderSession {
   readonly canvas: OffscreenCanvas
   get previewPreparationMs(): number { return 0 }
   get previewBytes(): number { return 0 }
-  private mediaDocument(document: VideoEditDocument): VideoEditDocument { return { ...document, media: document.media.map(media => ({ ...media, path: toFetchableMediaUrl(media.path) })) } }
-  constructor(document: VideoEditDocument, previewWidth?: number, _preparing?: (active: boolean) => void, surface?: OffscreenCanvas) {
+  private mediaDocument(document: VideoEditComposition): VideoEditComposition { return { ...document, media: document.media.map(media => ({ ...media, path: toFetchableMediaUrl(media.path) })) } }
+  constructor(private document: VideoEditComposition, previewWidth?: number, _preparing?: (active: boolean) => void, surface?: OffscreenCanvas) {
     // Preview owns the transferred full-size surface; reserve the export scratch lazily.
     this.canvas = new OffscreenCanvas(previewWidth ? 1 : document.width, previewWidth ? 1 : document.height)
     this.worker.onmessage = (event: MessageEvent<RenderResponse>) => {
@@ -32,7 +32,7 @@ export class VideoEditRenderSession {
     const id = ++this.nextId
     return new Promise((resolve, reject) => { this.pending.set(id, { resolve, reject, submitted }); this.worker.postMessage({ ...request, id }, transfer) })
   }
-  async updateDocument(document: VideoEditDocument): Promise<void> { await this.ready; await this.request({ kind: 'update', document: this.mediaDocument(document) }) }
+  async updateDocument(document: VideoEditComposition): Promise<void> { await this.ready; await this.request({ kind: 'update', document: this.mediaDocument(document) }); this.document = document }
   invalidateDocument(revision: number): void { if (!this.disposed) this.worker.postMessage({ kind: 'invalidate', revision, id: 0 } satisfies RenderRequest) }
   async present(frame: number, sequential = false, scrubbing = false, deadline?: number, submitted?: () => void): Promise<RenderResponse> {
     await this.ready
@@ -52,7 +52,7 @@ export class VideoEditRenderSession {
     await this.ready
     const { channels } = await this.request({ kind: 'audio', start, duration })
     if (!channels?.length) throw new Error('剪辑混音没有返回声音。')
-    const buffer = new AudioBuffer({ numberOfChannels: channels.length, sampleRate: 48000, length: channels[0].length })
+    const buffer = new AudioBuffer({ numberOfChannels: channels.length, sampleRate: this.document.sampleRate, length: channels[0].length })
     channels.forEach((channel, index) => buffer.getChannelData(index).set(channel))
     return buffer
   }

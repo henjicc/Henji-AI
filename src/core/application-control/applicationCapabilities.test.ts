@@ -53,6 +53,15 @@ function capability(
 }
 
 describe('ApplicationCapabilityRegistry', () => {
+  it('跨领域定位注册全部剪辑引用，描述元数据仍保持有界', () => {
+    const focus = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get('focus_application_entity')!
+    expect(focus.acceptsRefs).toContain('video_edit.sequence')
+    expect(focus.acceptsRefs).toContain('video_edit.track')
+    expect(focus.acceptsRefs).toContain('video_edit.annotation')
+    const registry = new ApplicationCapabilityRegistry()
+    expect(() => registry.register(focus)).not.toThrow()
+    expect(() => new ApplicationCapabilityRegistry().register({ ...capability('excessive_refs'), acceptsRefs: Array.from({ length: 33 }, (_, index) => `sample.type_${index}`) })).toThrow()
+  })
   it('付费准备声明只属于写能力，且必须同时声明执行前置', () => {
     expect(() => new ApplicationCapabilityRegistry().register({ ...capability('bad_paid'), paidGenerationPreparation: 'prepare_test' }))
       .toThrow('付费生成必须声明正式准备前置能力')

@@ -1,5 +1,6 @@
 import { ALL_FORMATS, AudioSampleSink, VideoSampleSink, VideoSample, Input, UrlSource } from 'mediabunny'
-import { activeVideoEditClips, clipSourceSeconds, type VideoEditDocument, type VideoEditMedia } from '@/core/videoEdit/document'
+import { videoEditClipMedia, activeVideoEditClips, clipSourceSeconds, type VideoEditComposition, type VideoEditMedia } from '@/core/videoEdit/document'
+import { videoEditSourceSeconds } from '@/core/videoEdit/time'
 import { VideoEditGpuCompositor } from './videoEditGpuCompositor'
 import { VideoEditFrameCache } from './videoEditFrameCache'
 import { VideoEditSeekDecoder } from './videoEditSeekDecoder'
@@ -23,7 +24,7 @@ export class VideoEditRenderer {
   private readonly seekers = new Map<string, VideoEditSeekDecoder>()
   readonly canvas: OffscreenCanvas
   private compositor?: VideoEditGpuCompositor
-  constructor(public document: VideoEditDocument, private readonly previewWidth?: number, surface?: OffscreenCanvas) {
+  constructor(public document: VideoEditComposition, private readonly previewWidth?: number, surface?: OffscreenCanvas) {
     this.canvas = surface ?? new OffscreenCanvas(document.width, document.height)
     this.canvas.width = document.width; this.canvas.height = document.height
   }
@@ -55,7 +56,7 @@ export class VideoEditRenderer {
     }
     return image
   }
-  async updateDocument(document: VideoEditDocument): Promise<void> {
+  async updateDocument(document: VideoEditComposition): Promise<void> {
     if (document.id !== this.document.id) throw new Error('渲染目标工程已经改变。')
     for (const [path, seeker] of this.seekers) if (!document.media.some(media => media.path === path)) { this.seekers.delete(path); await seeker.dispose() }
     for (const media of this.document.media) if (!document.media.some(item => item.id === media.id && item.path === media.path)) {
@@ -63,7 +64,9 @@ export class VideoEditRenderer {
     }
     for (const [key, pending] of this.sources) {
       const source = await pending
-      if (!document.media.some(item => item.id === source.media.id && item.path === source.media.path)) {
+      const clip = document.clips.find(clip => clip.id === (key.startsWith('audio:') ? key.slice(6) : key))
+      const media = clip ? videoEditClipMedia(document, clip) : undefined
+      if (!media || media.id !== source.media.id || media.path !== source.media.path) {
         this.sources.delete(key); source.current?.close(); await source.iterator?.return(); source.input.dispose()
       }
     }
@@ -78,12 +81,12 @@ export class VideoEditRenderer {
     this.compositor ??= new VideoEditGpuCompositor(this.canvas)
     const decodeStart = performance.now()
     this.frameCache.setHotFrames(active.flatMap(clip => {
-      const media = this.document.media.find(media => media.id === clip.mediaId)
+      const media = videoEditClipMedia(this.document, clip)
       return clip.kind === 'video' && media ? [{ mediaId: media.path, time: clipSourceSeconds(clip, frame, this.document.fps) }] : []
     }))
     let cacheHits = 0
     const settled = await Promise.allSettled(active.map(async clip => {
-      const media = this.document.media.find(item => item.id === clip.mediaId)
+      const media = videoEditClipMedia(this.document, clip)
       if (clip.kind === 'text') return null
       if (!media) throw new Error(`找不到素材 ${clip.name}`)
       if (media.kind === 'image') return this.image(media)
@@ -129,44 +132,53 @@ export class VideoEditRenderer {
     for (const [key, pending] of this.sources) if (!activeIds.has(key) && !key.startsWith('audio:')) {
       this.sources.delete(key); const source = await pending; source.current?.close(); await source.iterator?.return(); source.input.dispose()
     }
-    const activeImages = new Set(active.filter(clip => clip.kind === 'image').map(clip => clip.mediaId))
+    const activeImages = new Set(active.filter(clip => clip.kind === 'image').map(clip => videoEditClipMedia(this.document, clip)?.id))
     for (const [key, pending] of this.images) if (!activeImages.has(key)) {
       this.images.delete(key); (await pending).close()
     }
-    const activePaths = new Set(active.map(clip => this.document.media.find(media => media.id === clip.mediaId)?.path))
+    const activePaths = new Set(active.map(clip => videoEditClipMedia(this.document, clip)?.path))
     for (const [path, seeker] of this.seekers) if (!activePaths.has(path)) { this.seekers.delete(path); await seeker.dispose() }
     return { canvas: this.canvas, sourceTimestamps: timestamps, cacheHits, cacheBytes: this.frameCache.bytes, presented, decodeMs, gpuMs, completion }
   }
   /** Bounded one-second mix. Source timestamp alignment also handles VFR video audio. */
   async mixAudio(startSeconds: number, durationSeconds: number): Promise<Float32Array[]> {
-    const rate = 48000
-    const length = Math.max(1, Math.round(durationSeconds * rate))
-    const result = [new Float32Array(length), new Float32Array(length)]
+    const rate = this.document.sampleRate
+    const firstSample = Math.ceil(startSeconds * rate - 1e-7)
+    const length = Math.max(1, Math.ceil((startSeconds + durationSeconds) * rate - 1e-7) - firstSample)
+    const sampleStartSeconds = firstSample / rate
+    const result = Array.from({ length: this.document.channels }, () => new Float32Array(length))
     const finish = startSeconds + durationSeconds
     const activeAudio = new Set<string>()
     for (const clip of this.document.clips) {
       if (!['audio', 'video'].includes(clip.kind) || clip.volume === 0) continue
+      const track = this.document.tracks.find(track => track.index === clip.track)
+      if (!track?.enabled || track.muted || (this.document.tracks.some(track => track.solo) && !track.solo)) continue
       const clipStart = clip.start / this.document.fps
       const from = Math.max(startSeconds, clipStart)
       const to = Math.min(finish, (clip.start + clip.duration) / this.document.fps)
       if (from >= to) continue
-      const media = this.document.media.find(item => item.id === clip.mediaId)
+      const media = videoEditClipMedia(this.document, clip)
       if (!media) continue
       activeAudio.add(`audio:${clip.id}`)
       const source = await this.source(`audio:${clip.id}`, media)
       if (!source.audio) continue
-      const sourceStart = clip.sourceInUs / 1e6 + from - clipStart
+      const sourceStart = videoEditSourceSeconds(clip) + from - clipStart
       const sourceEnd = sourceStart + to - from
       for await (const wrapped of source.audio.samples(sourceStart, sourceEnd)) {
         try {
-        const outputStart = Math.max(0, Math.ceil((from - startSeconds) * rate), Math.ceil((from + wrapped.timestamp - sourceStart - startSeconds) * rate))
-        const outputEnd = Math.min(length, Math.ceil((to - startSeconds) * rate), Math.ceil((from + wrapped.timestamp + wrapped.duration - sourceStart - startSeconds) * rate))
-        for (let channel = 0; channel < 2; channel++) {
+        const outputStart = Math.max(0, Math.ceil((from - sampleStartSeconds) * rate - 1e-7), Math.ceil((from + wrapped.timestamp - sourceStart - sampleStartSeconds) * rate - 1e-7))
+        const outputEnd = Math.min(length, Math.ceil((to - sampleStartSeconds) * rate - 1e-7), Math.ceil((from + wrapped.timestamp + wrapped.duration - sourceStart - sampleStartSeconds) * rate - 1e-7))
+        for (let channel = 0; channel < this.document.channels; channel++) {
           const data = new Float32Array(wrapped.numberOfFrames)
-          wrapped.copyTo(data, { planeIndex: Math.min(channel, wrapped.numberOfChannels - 1), format: 'f32-planar' })
+          const inputChannels = this.document.channels === 1 ? wrapped.numberOfChannels : 1
+          for (let inputChannel = 0; inputChannel < inputChannels; inputChannel++) {
+            const plane = new Float32Array(wrapped.numberOfFrames)
+            wrapped.copyTo(plane, { planeIndex: this.document.channels === 1 ? inputChannel : Math.min(channel, wrapped.numberOfChannels - 1), format: 'f32-planar' })
+            for (let sample = 0; sample < data.length; sample++) data[sample] += plane[sample] / inputChannels
+          }
           const output = result[channel]
           for (let sample = outputStart; sample < outputEnd; sample++) {
-            const sourceTime = startSeconds + sample / rate - from + sourceStart - wrapped.timestamp
+            const sourceTime = sampleStartSeconds + sample / rate - from + sourceStart - wrapped.timestamp
             const position = sourceTime * wrapped.sampleRate
             const left = Math.floor(position); const alpha = position - left
             if (left >= 0 && left < data.length) output[sample] += (data[left] * (1 - alpha) + data[Math.min(left + 1, data.length - 1)] * alpha) * clip.volume

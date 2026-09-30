@@ -1,5 +1,5 @@
 import { getAudioEditRevision } from '@/features/audioEdit/application/audioEditProjectInstances'
-import { activeVideoEditInstance, videoEditDomainRevision, subscribeVideoEditDomain } from '@/features/videoEdit/application/videoEditService'
+import { activeVideoEditInstance, videoEditDomainRevision, subscribeVideoEdit } from '@/features/videoEdit/application/videoEditService'
 import {
   APPLICATION_HOST_CONTRACT_VERSION,
   hostContextSnapshotSchema,
@@ -182,7 +182,8 @@ function startTracking(): () => void {
       revision += 1
       for (const listener of listeners) listener()
     }),
-    subscribeVideoEditDomain(() => { revision += 1; for (const listener of listeners) listener() }),
+    // 编辑、选区和序列切换更新宿主上下文；逐帧播放只发布 view，不触发助手快照。
+    subscribeVideoEdit(() => { revision += 1; for (const listener of listeners) listener() }),
   ]
   return () => {
     for (const unsubscribe of unsubscribers) unsubscribe()
@@ -248,7 +249,7 @@ export function createHostContextSnapshot(uiReady = true): HostContextSnapshot {
         selectedRefs,
       }
     : navigation.activeWorkspace === 'videoEdit'
-      ? { id: 'workspace.video_edit', kind: 'workspace' as const, focusedRef: videoEdit ? `video_edit.project:${videoEdit.document.id}` : null, selectedRefs }
+      ? { id: 'workspace.video_edit', kind: 'workspace' as const, focusedRef: videoEdit ? `video_edit.sequence:${videoEdit.document.id}:${videoEdit.activeSequenceId}` : null, selectedRefs }
     : navigation.activeWorkspace === 'tools' && navigation.activeToolId
       ? {
           id: navigation.activeToolId === 'imageMark'

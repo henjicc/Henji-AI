@@ -49,7 +49,8 @@ export const applicationCapabilityDescriptorSchema = z.object({
   requiredScopes: z.array(z.string().min(1).max(120)).max(16),
   availability: z.array(z.string().min(1).max(300)).max(12),
   prerequisites: z.array(z.string().min(1).max(500)).max(12),
-  acceptsRefs: z.array(z.string().min(1).max(80)).max(12),
+  // 跨领域定位需要完整列出支持的实体类型；这是目录元数据，授权仍由 permission / Gateway 控制。
+  acceptsRefs: z.array(z.string().min(1).max(80)).max(32),
   producesRefs: z.array(z.string().min(1).max(80)).max(12),
   successEvidence: z.array(z.string().min(1).max(500)).min(1).max(12),
   failureRecovery: z.array(z.string().min(1).max(500)).min(1).max(12),

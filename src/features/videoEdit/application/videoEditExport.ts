@@ -3,7 +3,7 @@ import { getPlatform } from '@/platform/runtime'
 import { createLogger } from '@/core/logging'
 import { videoEditDuration } from '@/core/videoEdit/document'
 import { VideoEditRenderSession } from '../engine/videoEditRenderSession'
-import { publishVideoEdit, requireVideoEditInstance, saveVideoEdit } from './videoEditService'
+import { getActiveVideoEditSequence, publishVideoEdit, requireVideoEditInstance, saveVideoEdit } from './videoEditService'
 
 const logger = createLogger('features.videoEdit.export')
 export interface VideoEditExportTask { id: string; projectId: string; revision: number; progress: number; state: 'running' | 'completed' | 'cancelled' | 'failed'; error?: string; controller: AbortController }
@@ -12,6 +12,7 @@ export function videoEditExportTask(projectId: string): VideoEditExportTask | un
 export function cancelVideoEditExport(projectId: string): void { tasks.get(projectId)?.controller.abort() }
 export async function exportVideoEdit(projectId: string, requestedPath?: string, background = false): Promise<string | null> {
   const instance = requireVideoEditInstance(projectId)
+  const snapshot = structuredClone(getActiveVideoEditSequence(instance))
   if (instance.busy) throw new Error('该工程已有导出任务。')
   const platform = getPlatform()
   const path = requestedPath ?? await platform.system.dialog.save({ defaultPath: `${instance.document.name}.mp4`, filters: [{ name: 'MP4 视频', extensions: ['mp4'] }] })
@@ -19,7 +20,7 @@ export async function exportVideoEdit(projectId: string, requestedPath?: string,
   if (await platform.system.fs.exists(path)) throw new Error('请选择新的文件名导出，避免覆盖已有文件。')
   await saveVideoEdit(projectId)
   if (instance.busy) throw new Error('该工程已有导出任务。')
-  const document = structuredClone(instance.document)
+  const document = snapshot
   const task: VideoEditExportTask = { id: crypto.randomUUID(), projectId, revision: document.revision, state: 'running', progress: 0, controller: new AbortController() }
   tasks.set(projectId, task); instance.busy = true; publishVideoEdit()
   const render = async (): Promise<string | null> => {
@@ -34,9 +35,13 @@ export async function exportVideoEdit(projectId: string, requestedPath?: string,
     output.addVideoTrack(video, { frameRate: document.fps }); output.addAudioTrack(audio)
     await output.start()
     const frames = videoEditDuration(document)
+    let nextAudioFrame = 0
     for (let frame = 0; frame < frames; frame++) {
       task.controller.signal.throwIfAborted()
-      if (frame % document.fps === 0) await audio.add(await renderer.mixAudio(frame / document.fps, Math.min(1, (frames - frame) / document.fps)))
+      if (frame === nextAudioFrame) {
+        const end = Math.min(frames, frame + Math.max(1, Math.round(document.fps)))
+        await audio.add(await renderer.mixAudio(frame / document.fps, (end - frame) / document.fps)); nextAudioFrame = end
+      }
       await renderer.render(frame, true); await video.add(frame / document.fps, 1 / document.fps)
       task.progress = (frame + 1) / frames
       if (frame % 5 === 0) { publishVideoEdit(); await new Promise(resolve => setTimeout(resolve, 0)) }

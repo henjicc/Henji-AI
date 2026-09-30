@@ -3,6 +3,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const os = require('node:os')
 const { execFileSync, execFile } = require('node:child_process')
+const { observeWorkers, workerSnapshot, waitReleased } = require('./uiInspectionSceneVideoEditLayout.cjs')
 const button = (page, name) => page.getByRole('button', { name, exact: true })
 const quantile = (values, q) => [...values].sort((a, b) => a - b)[Math.min(values.length - 1, Math.floor(values.length * q))] ?? 0
 
@@ -20,9 +21,11 @@ function createVideoEditScrubScene() {
       const videoTrack = mediaProbe.streams.find(stream => stream.codec_type === 'video')
       assert.equal(videoTrack.width, 3840); assert.equal(videoTrack.height, 2160); assert.equal(videoTrack.avg_frame_rate, '60/1')
       const clip = { id: 'base', mediaId: 'source', name: '4K60 主画面', kind: 'video', track: 1, start: 0, duration: 360, sourceInUs: 0, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 0, brightness: 1, text: '' }
-      const project = { format: 'henji-video-project', version: 1, id: 'scrub-4k60', name: '4K60 连续拖动验证', revision: 0, width: 3840, height: 2160, fps: 60, media: [{ id: 'source', name: path.basename(source), path: source, kind: 'video', durationSeconds: Number(videoTrack.duration), width: 3840, height: 2160 }], clips: [clip, { ...clip, id: 'overlay', name: '4K60 叠加', track: 2, sourceInUs: 1000000, x: .3, y: .3, scale: .3 }, { ...clip, id: 'text', mediaId: undefined, name: '文字', kind: 'text', track: 3, text: '4K60', y: -.35, scale: .5 }], annotations: [] }
+      const fixture = { format: 'henji-video-project', version: 1, id: 'scrub-4k60', name: '4K60 连续拖动验证', revision: 0, width: 3840, height: 2160, fps: 60, media: [{ id: 'source', name: path.basename(source), path: source, kind: 'video', durationSeconds: Number(videoTrack.duration), width: 3840, height: 2160 }], clips: [clip, { ...clip, id: 'overlay', name: '4K60 叠加', track: 2, sourceInUs: 1000000, x: .3, y: .3, scale: .3 }, { ...clip, id: 'text', mediaId: undefined, name: '文字', kind: 'text', track: 3, text: '4K60', y: -.35, scale: .5 }], annotations: [] }
+      const project = require('./uiInspectionSceneVideoEditProbe.cjs').videoEditFixtureProject(fixture)
       const file = path.join(root, 'scrub.henji-video'); fs.writeFileSync(file, JSON.stringify(project))
       await app.evaluate(({ dialog }, file) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] }) }, file)
+      await observeWorkers(page)
       await button(page, '剪辑').click(); const openedAt = performance.now(); await button(page, '打开工程').click()
       const canvas = page.getByLabel('剪辑画面', { exact: true })
       try {
@@ -33,6 +36,7 @@ function createVideoEditScrubScene() {
       const firstFrameMs = performance.now() - openedAt
       const evidence = { machine: { cpu: os.cpus()[0].model, memoryBytes: os.totalmem() }, runtime: await app.evaluate(({ app }) => ({ versions: process.versions, gpu: app.getGPUFeatureStatus(), memory: app.getAppMetrics() })), media: mediaProbe, layers: 3, cases: [] }
       evidence.firstFrameMs = firstFrameMs
+      evidence.firstFrame = await canvas.evaluate(canvas => ({ renderMs: Number(canvas.dataset.renderMs), decodeMs: Number(canvas.dataset.decodeMs), gpuMs: Number(canvas.dataset.gpuMs), cacheHits: Number(canvas.dataset.cacheHits), cacheBytes: Number(canvas.dataset.cacheBytes), timestamps: canvas.dataset.sourceTimestamps }))
       evidence.cacheDirectory = path.join(await app.evaluate(({ app }) => app.getPath('userData')), 'cache', 'video-edit-preview')
       evidence.gpuReadings = []
       let sampling = false
@@ -51,7 +55,7 @@ function createVideoEditScrubScene() {
         if (name === 'segment-forward') {
           const longSource = path.join(root, '4k60-40s.mp4')
           if (!fs.existsSync(longSource)) execFileSync(ffmpegPath, ['-v', 'error', '-y', '-stream_loop', '-1', '-i', source, '-t', '40', '-c', 'copy', longSource], { windowsHide: true })
-          const longProject = structuredClone(project); longProject.id = 'scrub-boundary'; longProject.media[0].path = longSource; longProject.media[0].durationSeconds = 40; longProject.clips.forEach(clip => { clip.duration = 36 * 60 })
+          const longProject = structuredClone(project); longProject.id = 'scrub-boundary'; longProject.media[0].path = longSource; longProject.media[0].durationSeconds = 40; longProject.sequences[0].clips.forEach(clip => { clip.duration = 36 * 60 })
           const longFile = path.join(root, 'boundary.henji-video'); fs.writeFileSync(longFile, JSON.stringify(longProject))
           await button(page, '关闭工程').click()
           await app.evaluate(({ dialog }, file) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] }) }, longFile)
@@ -59,7 +63,20 @@ function createVideoEditScrubScene() {
           await page.getByLabel('时间线缩放', { exact: true }).focus(); await page.getByLabel('时间线缩放', { exact: true }).press('Home'); pixels = .25
         }
         const box = await ruler.boundingBox()
-        await ruler.click({ position: { x: from * pixels + .1, y: 12 } }); await waitPresented(from, `${name}-position-failed`)
+        const safeStart = Math.max(6, from * pixels + .1)
+        await ruler.click({ position: { x: safeStart, y: 12 } })
+        let positioned = Number(await ruler.getAttribute('aria-valuenow'))
+        for (let left = Math.ceil(6 / pixels) + 1; positioned !== from && left > 0; left--) {
+          await ruler.press(positioned > from ? 'ArrowLeft' : 'ArrowRight')
+          positioned = Number(await ruler.getAttribute('aria-valuenow'))
+        }
+        assert.equal(positioned, from)
+        await waitPresented(from, `${name}-position-failed`)
+        // Capture on the ruler body before moving to boundary frames, where the
+        // dock separator overlaps the edge. Measurement starts at the same source frame.
+        await page.mouse.move(box.x + safeStart, box.y + 12); await page.mouse.down()
+        await page.mouse.move(box.x + from * pixels + .1, box.y + 12)
+        await waitPresented(from, `${name}-captured-position-failed`)
         await canvas.evaluate(canvas => {
           window.__scrub = { targets: [], frames: [], start: performance.now() }
           const ruler = document.querySelector('[aria-label="剪辑时间定位"]')
@@ -68,7 +85,6 @@ function createVideoEditScrubScene() {
           window.__scrubFrame = new MutationObserver(() => window.__scrub.frames.push({ at: performance.now(), frame: Number(canvas.dataset.presentedFrame), timestamps: canvas.dataset.sourceTimestamps, requestedAt: Number(canvas.dataset.requestedAt), renderMs: Number(canvas.dataset.renderMs), cacheHits: Number(canvas.dataset.cacheHits), decodeMs: Number(canvas.dataset.decodeMs), gpuMs: Number(canvas.dataset.gpuMs) }))
           window.__scrubFrame.observe(canvas, { attributes: true, attributeFilter: ['data-presented-frame'] })
         })
-        await page.mouse.move(box.x + from * pixels + .1, box.y + 12); await page.mouse.down()
         const began = performance.now()
         for (let index = 1; index <= 180; index++) {
           const frame = Math.round(from + (to - from) * index / 180)
@@ -132,7 +148,17 @@ function createVideoEditScrubScene() {
         assert.ok(result.gapMaxMs < 500, `${result.name} 拖动期间停顿 ${result.gapMaxMs.toFixed(0)}ms`)
         assert.ok(result.settleMs < 100, `${result.name} 松手后定位耗时 ${result.settleMs.toFixed(0)}ms`)
       }
-      } finally { clearInterval(gpuTimer); fs.writeFileSync(path.join(root, 'evidence.json'), JSON.stringify(evidence, null, 2)) }
+      await button(page, '关闭工程').click(); await waitReleased(page)
+      evidence.resources = await workerSnapshot(page)
+      assert.equal(evidence.resources.live, 0); assert.equal(evidence.resources.peakLive, 1)
+      assert.ok(evidence.resources.workers.every(worker => worker.disposedAt && worker.terminatedAt), '原视频预览资源必须完成释放并终止')
+      evidence.completed = true
+      } finally {
+        clearInterval(gpuTimer)
+        evidence.resources = await workerSnapshot(page).catch(() => evidence.resources)
+        fs.writeFileSync(path.join(root, 'evidence.json'), JSON.stringify(evidence, null, 2))
+        await page.evaluate(() => { window.__videoLayoutObservers.forEach(observer => observer.disconnect()); window.Worker = window.__videoLayoutNativeWorker }).catch(() => {})
+      }
     },
   }
 }

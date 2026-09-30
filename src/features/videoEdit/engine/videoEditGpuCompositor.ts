@@ -1,6 +1,6 @@
 import { VideoSample } from 'mediabunny'
 import { VideoEditGpuFrame } from './videoEditGpuFrame'
-import type { VideoEditClip, VideoEditDocument } from '@/core/videoEdit/document'
+import type { VideoEditClip, VideoEditComposition } from '@/core/videoEdit/document'
 import { ImageEditWebGpuDeviceManager } from '@/core/imageEdit/webgpu/deviceManager'
 import { getWebGpuContext, type GpuDevice, type GpuTexture, type GpuBuffer, type GpuRenderPipeline } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 
@@ -139,7 +139,7 @@ struct Vertex { @builtin(position) position: vec4f, @location(0) uv: vec2f }
       })
     } catch (error) { texture.destroy(); chroma?.destroy(); throw error } finally { frame.close() }
   }
-  async draw(document: VideoEditDocument, clips: VideoEditClip[], pictures: Array<VideoSample | VideoEditGpuFrame | ImageBitmap | null>, shouldPresent: () => boolean, deadline?: number): Promise<{ presented: boolean; completion: Promise<void> }> {
+  async draw(document: VideoEditComposition, clips: VideoEditClip[], pictures: Array<VideoSample | VideoEditGpuFrame | ImageBitmap | null>, shouldPresent: () => boolean, deadline?: number): Promise<{ presented: boolean; completion: Promise<void> }> {
     await this.ready
     if (!shouldPresent()) return { presented: false, completion: Promise.resolve() }
     if (deadline !== undefined) await new Promise<void>(resolve => {

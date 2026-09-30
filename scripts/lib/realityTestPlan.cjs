@@ -7,11 +7,37 @@ const path = require('node:path')
  * 两者都不产生付费请求，也不碰用户真实资料目录。
  */
 const SUITES = Object.freeze(['unit', 'integration', 'ui', 'ui-audit', 'restart', 'clients'])
+const RESTART_TARGETS = Object.freeze(['mcp', 'video-edit-layout'])
 
 function readValue(argv, index, option) {
   const value = argv[index + 1]
   if (!value || value.startsWith('--')) throw new Error(`${option} 缺少参数值`)
   return value
+}
+
+/** A restart filter selects one complete two-launch scenario, never an ignored UI filter. */
+function resolveRestartTarget(only = []) {
+  const targets = [...new Set(only.flatMap(value => value.split(',')).filter(Boolean))]
+  if (targets.length === 0) return 'mcp'
+  const unknown = targets.filter(target => !RESTART_TARGETS.includes(target))
+  if (unknown.length) throw new Error(`未知退出重启验收目标：${unknown.join('、')}`)
+  if (targets.length !== 1) throw new Error('退出重启验收每次只能选择一个 --only 目标')
+  return targets[0]
+}
+
+function parseRestartCheckArgs(argv) {
+  const options = { outDir: '.mcp-restart', only: [] }
+  for (let index = 0; index < argv.length; index += 1) {
+    const token = argv[index]
+    if (token === '--out') { options.outDir = readValue(argv, index, token); index += 1 }
+    else if (token.startsWith('--out=')) options.outDir = token.slice('--out='.length)
+    else if (token === '--only') { options.only.push(readValue(argv, index, token)); index += 1 }
+    else if (token.startsWith('--only=')) options.only.push(token.slice('--only='.length))
+    else throw new Error(`未知参数：${token}`)
+  }
+  if (!options.outDir) throw new Error('--out 缺少参数值')
+  if (options.only.some(value => !value)) throw new Error('--only 缺少参数值')
+  return { outDir: options.outDir, target: resolveRestartTarget(options.only) }
 }
 
 function parseRealityTestArgs(argv) {
@@ -92,9 +118,11 @@ function buildRealityTestPlan(options, root) {
         args: [path.join(root, 'scripts', suite === 'ui' ? 'ui-tour.cjs' : 'ui-visual-audit.cjs'), ...uiArgs(options)],
       })
     } else if (suite === 'restart') {
+      const target = resolveRestartTarget(options.only)
       const args = [path.join(root, 'scripts/mcp-restart-check.cjs')]
+      if (options.only.length) args.push('--only', target)
       if (options.outDir) args.push('--out', options.outDir)
-      plans.push({ label: '应用完整退出重启后的外部连接事实核对', command: process.execPath, args })
+      plans.push({ label: target === 'video-edit-layout' ? '剪辑布局完整退出重启恢复验收' : '应用完整退出重启后的外部连接事实核对', command: process.execPath, args })
     } else if (suite === 'clients') {
       const args = [path.join(root, 'scripts/mcp-external-client-check.cjs')]
       for (const value of options.only) args.push('--client', value)
@@ -106,4 +134,4 @@ function buildRealityTestPlan(options, root) {
   return plans
 }
 
-module.exports = { SUITES, buildRealityTestPlan, parseRealityTestArgs }
+module.exports = { SUITES, buildRealityTestPlan, parseRealityTestArgs, parseRestartCheckArgs, resolveRestartTarget }

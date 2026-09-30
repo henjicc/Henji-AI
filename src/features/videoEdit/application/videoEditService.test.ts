@@ -3,19 +3,45 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { createApplicationHarness } from '@/tests/applicationHarness'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { getPlatform } from '@/platform/runtime'
-import { createVideoEditProject, appendVideoEditClip, appendVideoEditMedia, closeVideoEditProject, editVideoProject, listVideoEditInstances, openVideoEditProject, saveVideoEdit, undoVideoEdit, videoEditDomainRevision, setVideoEditView, subscribeVideoEdit, subscribeVideoEditView } from './videoEditService'
+import { appendVideoEditSequence, duplicateVideoEditSequence, deleteVideoEditSequence, switchVideoEditSequence, updateVideoEditSequenceSettings, getActiveVideoEditSequence, editVideoSequence, createVideoEditProject, appendVideoEditClip, appendVideoEditMedia, closeVideoEditProject, editVideoProject, listVideoEditInstances, openVideoEditProject, saveVideoEdit, undoVideoEdit, videoEditDomainRevision, setVideoEditView, subscribeVideoEdit, subscribeVideoEditView } from './videoEditService'
 import { splitVideoEditClip, clipSourceSeconds, adjustVideoEditClip } from '@/core/videoEdit/document'
 import { dropVideoEditPaths, videoEditDropPaths } from './videoEditDrop'
 import { importVideoEditPaths, sameVideoEditMediaPath } from './videoEditMedia'
+import { getApplicationControlExecutionEngine } from '@/features/application-control/capabilities/applicationControlRegistry'
+import type { ApplicationExecutionContext } from '@/core/application-control'
+import { createHostContextSnapshot, retainHostContextTracking } from '@/features/application-control/hostContext/hostContext'
+import { useNavigationStore } from '@/stores/navigationStore'
 
 const files = new Map<string, string>()
 let failSave = false
+it('序列切换和选区刷新助手上下文，逐帧定位不推进宿主或领域基线', async () => {
+  const navigation = useNavigationStore.getState()
+  const release = retainHostContextTracking()
+  try {
+    const instance = (await createVideoEditProject())!
+    const projectId = instance.document.id
+    const sequenceId = appendVideoEditSequence(projectId)
+    useNavigationStore.setState({ activeWorkspace: 'videoEdit' })
+    const before = createHostContextSnapshot()
+    switchVideoEditSequence(projectId, sequenceId)
+    const switched = createHostContextSnapshot()
+    expect(switched.surface?.focusedRef).toBe(`video_edit.sequence:${projectId}:${sequenceId}`)
+    expect(switched.revision).toBeGreaterThan(before.revision)
+    expect(switched.scopeRevisions.video_edit).toBe(before.scopeRevisions.video_edit)
+    setVideoEditView(projectId, { frame: 60 })
+    expect(createHostContextSnapshot().revision).toBe(switched.revision)
+    appendVideoEditClip(projectId)
+    const edited = createHostContextSnapshot()
+    expect(edited.surface?.selectedRefs).toContain(`video_edit.clip:${projectId}:${instance.selection}`)
+    expect(edited.scopeRevisions.video_edit).toBeGreaterThan(switched.scopeRevisions.video_edit)
+  } finally { release(); useNavigationStore.setState(navigation) }
+})
 it('编辑与撤销在页面外静默自动保存，播放和定位不写工程', async () => {
   const instance = (await createVideoEditProject())!
   appendVideoEditClip(instance.document.id)
-  await vi.waitFor(() => expect(JSON.parse(files.get(instance.path)!).clips).toHaveLength(1))
+  await vi.waitFor(() => expect(JSON.parse(files.get(instance.path)!).sequences[0].clips).toHaveLength(1))
   undoVideoEdit(instance.document.id)
-  await vi.waitFor(() => expect(JSON.parse(files.get(instance.path)!).clips).toHaveLength(0))
+  await vi.waitFor(() => expect(JSON.parse(files.get(instance.path)!).sequences[0].clips).toHaveLength(0))
   const write = vi.spyOn(getPlatform().system.fs, 'writeTextFile')
   setVideoEditView(instance.document.id, { frame: 15, playing: false })
   await new Promise(resolve => setTimeout(resolve, 10))
@@ -30,7 +56,7 @@ it('自动保存失败保留修改并在磁盘恢复后只重试保存，不重�
     expect(instance.dirty).toBe(true); expect(instance.error).toContain('disk full')
     const history = instance.past.length
     failSave = false; await vi.advanceTimersByTimeAsync(2000)
-    expect(JSON.parse(files.get(instance.path)!).clips).toHaveLength(1)
+    expect(JSON.parse(files.get(instance.path)!).sequences[0].clips).toHaveLength(1)
     expect(instance.dirty).toBe(false); expect(instance.past).toHaveLength(history)
   } finally { vi.useRealTimers() }
 })
@@ -42,14 +68,16 @@ it('素材库规范化的 Windows 路径与原引用是同一素材，拖放不�
   await importVideoEditPaths(instance.document.id, ['d:\\media\\card.png'])
   await dropVideoEditPaths(instance.document.id, ['d:/media/card.png'], { frame: 12, track: 2 })
   expect(instance.document.media).toEqual([media])
-  expect(instance.document.clips[0]).toMatchObject({ mediaId: media.id, start: 12, track: 2 })
+  expect(getActiveVideoEditSequence(instance).clips[0]).toMatchObject({ itemId: instance.document.items[0].id, start: 12, track: 2 })
   expect(instance.past.length).toBe(before + 1)
-  undoVideoEdit(instance.document.id); expect(instance.document.clips).toHaveLength(0)
+  undoVideoEdit(instance.document.id); expect(getActiveVideoEditSequence(instance).clips).toHaveLength(0)
   expect(sameVideoEditMediaPath('/media/Card.png', '/media/card.png')).toBe(false)
 })
 beforeEach(() => {
   installHarnessNativeStorage(); files.clear(); failSave = false
   const platform = getPlatform()
+  vi.spyOn(platform.system.paths, 'dirname').mockImplementation(async path => path.replace(/[\\/][^\\/]+$/, ''))
+  vi.spyOn(platform.media, 'allowRoot').mockResolvedValue(undefined)
   vi.spyOn(platform.system.dialog, 'save').mockResolvedValue('D:/fixture/test.henji-video')
   vi.spyOn(platform.system.fs, 'writeTextFile').mockImplementation(async (path, value) => { if (failSave) throw new Error('disk full'); files.set(path, value) })
   vi.spyOn(platform.system.fs, 'readTextFile').mockImplementation(async path => { const value = files.get(path); if (!value) throw new Error('missing'); return value })
@@ -59,7 +87,7 @@ afterEach(async () => { failSave = false; for (const instance of listVideoEditIn
 it('公共修改与手动编辑共用历史并可保存重开', async () => {
   const instance = (await createVideoEditProject())!
   appendVideoEditClip(instance.document.id)
-  const clip = instance.document.clips[0]
+  const clip = getActiveVideoEditSequence(instance).clips[0]
   const app = createApplicationHarness()
   try {
     const ref = { kind: 'video_edit.clip', id: `${instance.document.id}:${clip.id}` }
@@ -68,12 +96,12 @@ it('公共修改与手动编辑共用历史并可保存重开', async () => {
     expect((await app.read(ref, ['video_edit.clip.text', 'video_edit.clip.brightness'])).properties).toMatchObject({ 'video_edit.clip.text': '助手修改', 'video_edit.clip.brightness': 0.7 })
     expect(instance.past).toHaveLength(2)
     undoVideoEdit(instance.document.id)
-    expect(instance.document.clips[0].text).toBe('输入文字')
+    expect(getActiveVideoEditSequence(instance).clips[0].text).toBe('输入文字')
     await saveVideoEdit(instance.document.id)
     await closeVideoEditProject(instance.document.id)
     const restored = (await openVideoEditProject('D:/fixture/test.henji-video'))!
-    expect(restored.document.clips).toHaveLength(1)
-    expect(restored.document.clips[0].text).toBe('输入文字')
+    expect(getActiveVideoEditSequence(restored).clips).toHaveLength(1)
+    expect(getActiveVideoEditSequence(restored).clips[0].text).toBe('输入文字')
   } finally { app.dispose() }
 })
 it('保存失败保留助手修改且恢复不会重放编辑', async () => {
@@ -94,14 +122,14 @@ it('公共集合新增标注并拒绝跨工程引用', async () => {
   const instance = (await createVideoEditProject())!; appendVideoEditClip(instance.document.id)
   const app = createApplicationHarness()
   try {
-    const ref = { kind: 'video_edit.project', id: instance.document.id }
+    const ref = { kind: 'video_edit.sequence', id: `${instance.document.id}:${instance.activeSequenceId}` }
     const baseline = await app.read(ref)
-    const result = await app.call('change_application_entities', { summary: '添加时间标注', changes: [{ kind: 'create_items', entityType: 'video_edit.annotation', parent: ref, items: [{ properties: { 'video_edit.annotation.clip_id': instance.document.clips[0].id, 'video_edit.annotation.text': '检查此处' } }] }] }, baseline.revisions as Record<string, number>)
-    expect(result).toMatchObject({ ok: true }); expect(instance.document.annotations[0].text).toBe('检查此处')
-    const mark = instance.document.annotations[0]
+    const result = await app.call('change_application_entities', { summary: '添加时间标注', changes: [{ kind: 'create_items', entityType: 'video_edit.annotation', parent: ref, items: [{ properties: { 'video_edit.annotation.clip_id': getActiveVideoEditSequence(instance).clips[0].id, 'video_edit.annotation.text': '检查此处' } }] }] }, baseline.revisions as Record<string, number>)
+    expect(result).toMatchObject({ ok: true }); expect(getActiveVideoEditSequence(instance).annotations[0].text).toBe('检查此处')
+    const mark = getActiveVideoEditSequence(instance).annotations[0]
     const rejected = await app.change({ kind: 'video_edit.annotation', id: `${instance.document.id}:${mark.id}` }, { 'video_edit.annotation.clip_id': 'another-project-clip' })
     expect(rejected.ok).toBe(false)
-    expect(instance.document.annotations[0].clipId).toBe(instance.document.clips[0].id)
+    expect(getActiveVideoEditSequence(instance).annotations[0].clipId).toBe(getActiveVideoEditSequence(instance).clips[0].id)
   } finally { app.dispose() }
 })
 it('保存中发生新修改时继续写入最新版本而不提前清除脏状态', async () => {
@@ -122,20 +150,20 @@ it('播放位置不推进编辑并发版本，拆分保持源时间连续', asyn
   const revision = videoEditDomainRevision()
   setVideoEditView(instance.document.id, { frame: 30 })
   expect(videoEditDomainRevision()).toBe(revision)
-  const original = instance.document.clips[0]
-  editVideoProject(instance.document.id, document => splitVideoEditClip(document, original.id, 30))
-  const right = instance.document.clips[1]
+  const original = getActiveVideoEditSequence(instance).clips[0]
+  editVideoSequence(instance.document.id, instance.activeSequenceId, sequence => splitVideoEditClip(sequence, original.id, 30))
+  const right = getActiveVideoEditSequence(instance).clips[1]
   expect(clipSourceSeconds(right, right.start, 30)).toBe(clipSourceSeconds(original, 30, 30))
-  expect(instance.document.clips.reduce((sum, clip) => sum + clip.duration, 0)).toBe(original.duration)
+  expect(getActiveVideoEditSequence(instance).clips.reduce((sum, clip) => sum + clip.duration, 0)).toBe(original.duration)
 })
 it('公共拆分从磁盘回读核实片段边界', async () => {
   const instance = (await createVideoEditProject())!; appendVideoEditClip(instance.document.id)
   const app = createApplicationHarness()
   try {
-    const result = await app.requireResult('split_video_edit', { projectRef: { kind: 'video_edit.project', id: instance.document.id }, clipRef: { kind: 'video_edit.clip', id: `${instance.document.id}:${instance.document.clips[0].id}` }, frame: 30 })
+    const result = await app.requireResult('split_video_edit', { projectRef: { kind: 'video_edit.project', id: instance.document.id }, clipRef: { kind: 'video_edit.clip', id: `${instance.document.id}:${getActiveVideoEditSequence(instance).clips[0].id}` }, frame: 30 })
     expect(result.verification).toMatchObject({ verified: true })
     const saved = JSON.parse(files.get(instance.path)!)
-    expect(saved.clips.map((clip: { start: number; duration: number }) => [clip.start, clip.duration])).toEqual([[0, 30], [30, 60]])
+    expect(saved.sequences[0].clips.map((clip: { start: number; duration: number }) => [clip.start, clip.duration])).toEqual([[0, 30], [30, 60]])
   } finally { app.dispose() }
 })
 
@@ -157,10 +185,10 @@ it('拖放固定到原工程与轨道，直接引用源路径，并复用撤销�
   appendVideoEditMedia(a.document.id, media)
   const b = (await createVideoEditProject())!
   await dropVideoEditPaths(a.document.id, [media.path], { frame: 90, track: 4 })
-  expect(a.document.clips[0]).toMatchObject({ mediaId: media.id, start: 90, track: 4 })
-  expect(b.document.clips).toHaveLength(0); expect(a.document.media).toHaveLength(1)
+  expect(getActiveVideoEditSequence(a).clips[0]).toMatchObject({ itemId: a.document.items[0].id, start: 90, track: 4 })
+  expect(getActiveVideoEditSequence(b).clips).toHaveLength(0); expect(a.document.media).toHaveLength(1)
   await saveVideoEdit(a.document.id); expect(JSON.parse(files.get(a.path)!).media[0].path).toBe(media.path)
-  undoVideoEdit(a.document.id); expect(a.document.clips).toHaveLength(0); expect(a.document.media[0]).toEqual(media)
+  undoVideoEdit(a.document.id); expect(getActiveVideoEditSequence(a).clips).toHaveLength(0); expect(a.document.media[0]).toEqual(media)
 })
 it('磁盘文件拖入只取 PAL 原始路径，禁止没有本地路径的内存文件', () => {
   const file = new File(['test'], 'video.mp4', { type: 'video/mp4' })
@@ -173,10 +201,104 @@ it('裁剪即时预览和提交限制在源范围内，保持源时间与工程�
   const instance = (await createVideoEditProject())!
   appendVideoEditMedia(instance.document.id, { id: 'v', kind: 'video', path: 'E:/v.mp4', name: 'video', durationSeconds: 4, width: 3840, height: 2160 })
   appendVideoEditClip(instance.document.id, 'v', { frame: 30, track: 2 })
-  const clip = { ...instance.document.clips[0], duration: 60, sourceInUs: 1000000 }
-  const trimmed = adjustVideoEditClip(instance.document, clip, { mode: 'in', delta: -100, track: 2 })
+  const clip = { ...getActiveVideoEditSequence(instance).clips[0], duration: 60, sourceInUs: 1000000 }
+  const trimmed = adjustVideoEditClip(getActiveVideoEditSequence(instance), clip, { mode: 'in', delta: -100, track: 2 })
   expect(trimmed).toMatchObject({ start: 0, duration: 90, sourceInUs: 0 })
-  const extended = adjustVideoEditClip(instance.document, clip, { mode: 'out', delta: 1000, track: 2 })
+  const extended = adjustVideoEditClip(getActiveVideoEditSequence(instance), clip, { mode: 'out', delta: 1000, track: 2 })
   expect(extended.duration).toBe(90)
   expect(clipSourceSeconds(clip, 40, 30)).toBeCloseTo(clipSourceSeconds(trimmed, 40, 30))
+})
+
+it('两个不同设置的序列保存冷重开，切换只保留会话，不写工程或历史', async () => {
+  const instance = (await createVideoEditProject())!; const id = instance.document.id
+  const first = instance.activeSequenceId
+  appendVideoEditMedia(id, { id: 'shared', kind: 'image', path: 'E:/original/image.png', name: '原素材', durationSeconds: 0, width: 1920, height: 1080 })
+  appendVideoEditClip(id, 'shared'); const firstClip = getActiveVideoEditSequence(instance).clips[0].id
+  setVideoEditView(id, { frame: 23, selection: firstClip })
+  const second = appendVideoEditSequence(id, { name: '竖屏', width: 2160, height: 3840, frameRate: { numerator: 30000, denominator: 1001 }, sampleRate: 44100, channels: 1 })
+  switchVideoEditSequence(id, second); appendVideoEditClip(id, 'shared'); setVideoEditView(id, { frame: 47 })
+  await saveVideoEdit(id)
+  const before = instance.document; const history = instance.past.length; const revision = videoEditDomainRevision()
+  switchVideoEditSequence(id, first); expect(instance.frame).toBe(23); expect(instance.selection).toBe(firstClip)
+  switchVideoEditSequence(id, second); expect(instance.frame).toBe(47)
+  expect(instance.document).toBe(before); expect(instance.past).toHaveLength(history); expect(videoEditDomainRevision()).toBe(revision); expect(instance.dirty).toBe(false)
+  await closeVideoEditProject(id)
+  const reopened = (await openVideoEditProject('D:/fixture/test.henji-video'))!
+  expect(reopened.document.sequences).toHaveLength(2)
+  expect(reopened.document.sequences[1]).toMatchObject({ name: '竖屏', width: 2160, height: 3840, sampleRate: 44100, channels: 1, frameRate: { numerator: 30000, denominator: 1001 } })
+  expect(reopened.document.media[0].path).toBe('E:/original/image.png')
+  expect(reopened.document.sequences.flatMap(sequence => sequence.clips.map(clip => clip.itemId))).toEqual([reopened.document.items[0].id, reopened.document.items[0].id])
+})
+it('复制序列重建实例标识但复用项目项，删除和设置变更共用历史', async () => {
+  const instance = (await createVideoEditProject())!; const id = instance.document.id; const first = instance.activeSequenceId
+  appendVideoEditClip(id); setVideoEditView(id, { frame: 30 })
+  const duplicate = duplicateVideoEditSequence(id, first)
+  const [source, copy] = instance.document.sequences
+  expect(copy.clips[0].id).not.toBe(source.clips[0].id); expect(copy.clips[0].itemId).toBe(source.clips[0].itemId)
+  expect(copy.tracks[0].id).not.toBe(source.tracks[0].id)
+  updateVideoEditSequenceSettings(id, first, { frameRate: { numerator: 60, denominator: 1 }, pixelAspectRatio: { numerator: 2, denominator: 1 } })
+  expect(instance.frame).toBe(60); expect(getActiveVideoEditSequence(instance).width).toBe(3840)
+  undoVideoEdit(id); expect(instance.frame).toBe(30); expect(getActiveVideoEditSequence(instance).width).toBe(1920)
+  switchVideoEditSequence(id, duplicate); deleteVideoEditSequence(id, duplicate)
+  expect(instance.activeSequenceId).toBe(first); undoVideoEdit(id); expect(instance.document.sequences).toHaveLength(2)
+})
+it('公共事务修改后台序列设置与片段为一步撤销，前台选区和原目标不变', async () => {
+  const instance = (await createVideoEditProject())!; const id = instance.document.id; const first = instance.activeSequenceId
+  appendVideoEditClip(id)
+  const second = duplicateVideoEditSequence(id, first)
+  setVideoEditView(id, { frame: 17 })
+  const seqRef = { kind: 'video_edit.sequence', id: `${id}:${second}` }
+  const clipRef = { kind: 'video_edit.clip', id: `${id}:${instance.document.sequences[1].clips[0].id}` }
+  const app = createApplicationHarness()
+  try {
+    const baseline = await app.read(seqRef); const history = instance.past.length
+    const result = await app.call('change_application_entities', { summary: '修改后台竖屏序列', changes: [
+      { kind: 'set_properties', entityType: 'video_edit.sequence', target: seqRef, properties: { 'video_edit.sequence.width': 2160, 'video_edit.sequence.height': 3840, 'video_edit.sequence.frame_rate': { numerator: 30000, denominator: 1001 }, 'video_edit.sequence.sample_rate': 44100, 'video_edit.sequence.channels': 1 } },
+      { kind: 'set_properties', entityType: 'video_edit.clip', target: clipRef, properties: { 'video_edit.clip.text': '后台修改' } },
+    ] }, baseline.revisions as Record<string, number>)
+    expect(result, JSON.stringify(result)).toMatchObject({ ok: true })
+    expect(instance.activeSequenceId).toBe(first); expect(instance.frame).toBe(17); expect(instance.past).toHaveLength(history + 1)
+    expect(instance.document.sequences[1]).toMatchObject({ width: 2160, height: 3840, channels: 1, sampleRate: 44100 })
+    expect(instance.document.sequences[1].clips[0].text).toBe('后台修改')
+    undoVideoEdit(id); expect(instance.document.sequences[1].width).toBe(1920); expect(instance.document.sequences[1].clips[0].text).toBe('输入文字')
+  } finally { app.dispose() }
+})
+
+it('正式事务撤销保留实体引用，帧率写入回执包含实际片段级联', async () => {
+  const instance = (await createVideoEditProject())!; const id = instance.document.id
+  appendVideoEditClip(id); const clipId = getActiveVideoEditSequence(instance).clips[0].id
+  const engine = getApplicationControlExecutionEngine()
+  const context: ApplicationExecutionContext = { requestId: crypto.randomUUID(), exposure: 'assistant', permissions: new Set(['video_edit:read', 'video_edit:write']), acceptedDataClasses: new Set(['C1']) }
+  for (const [target, propertyId, value] of [
+    [{ kind: 'video_edit.clip', id: `${id}:${clipId}` }, 'video_edit.clip.text', '正式撤销'],
+    [{ kind: 'video_edit.sequence', id: `${id}:${instance.activeSequenceId}` }, 'video_edit.sequence.frame_rate', { numerator: 60, denominator: 1 }],
+  ] as const) {
+    const revisions = { video_edit: videoEditDomainRevision() }
+    const plan = await engine.plan({ summary: '实体修改与撤销', transactionMode: 'atomic', steps: [{ kind: 'mutation', entityType: target.kind, target, expectedRevisions: revisions, mutations: [{ propertyId, operation: 'set', value }] }] }, context)
+    const result = await engine.commit({ planRef: plan.planRef, expectedRevisions: revisions, idempotencyKey: crypto.randomUUID() }, context)
+    expect(result.status, JSON.stringify(result)).toBe('completed')
+    if (result.status !== 'completed' || !result.undoRef) throw new Error('没有可撤销回执')
+    if (target.kind === 'video_edit.sequence') expect(result.effects).toEqual(expect.arrayContaining([expect.objectContaining({ entityType: 'video_edit.clip', origin: { kind: 'cascade', declarationId: 'video_edit.sequence_clip_time' } })]))
+    const undone = await engine.undo({ undoRef: result.undoRef, expectedRevisions: result.resultingRevisions, idempotencyKey: crypto.randomUUID() }, context)
+    expect(undone.status, JSON.stringify(undone)).toBe('completed')
+    expect(getActiveVideoEditSequence(instance).clips[0]).toMatchObject({ duration: 90, text: '输入文字' })
+  }
+})
+it('移除未使用的项目项后再次添加原媒体，在一次编辑内恢复引用', async () => {
+  const instance = (await createVideoEditProject())!; const id = instance.document.id
+  appendVideoEditMedia(id, { id: 'unused', kind: 'image', path: 'E:/unused.png', name: '未使用', durationSeconds: 0, width: 320, height: 180 })
+  editVideoProject(id, document => ({ ...document, items: [] }))
+  const history = instance.past.length
+  appendVideoEditClip(id, 'unused')
+  expect(instance.document.items).toHaveLength(1); expect(getActiveVideoEditSequence(instance).clips[0].itemId).toBe(instance.document.items[0].id)
+  expect(instance.past).toHaveLength(history + 1)
+})
+it('异步拖放开始后切换序列，片段仍落在开始时序列', async () => {
+  const instance = (await createVideoEditProject())!; const id = instance.document.id; const first = instance.activeSequenceId
+  appendVideoEditMedia(id, { id: 'drop', kind: 'image', path: 'E:/drop.png', name: '拖放', durationSeconds: 0, width: 320, height: 180 })
+  const second = appendVideoEditSequence(id)
+  const dropping = dropVideoEditPaths(id, ['E:/drop.png'], { frame: 30, track: 1 })
+  switchVideoEditSequence(id, second); await dropping
+  expect(instance.document.sequences.find(sequence => sequence.id === first)!.clips).toHaveLength(1)
+  expect(getActiveVideoEditSequence(instance).clips).toHaveLength(0)
 })
