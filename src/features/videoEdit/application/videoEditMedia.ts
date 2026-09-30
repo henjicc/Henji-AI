@@ -4,6 +4,13 @@ import { toFetchableMediaUrl } from '@/services/imageSource'
 import { appendVideoEditMedia, editVideoProject, requireVideoEditInstance } from './videoEditService'
 import type { VideoEditMedia } from '@/core/videoEdit/document'
 
+export function sameVideoEditMediaPath(left: string, right: string): boolean {
+  const normalize = (value: string): string => {
+    const path = value.replaceAll('\\', '/')
+    return /^[a-z]:\//i.test(path) || path.startsWith('//') ? path.toLowerCase() : path
+  }
+  return normalize(left) === normalize(right)
+}
 export async function inspectVideoEditMedia(path: string): Promise<VideoEditMedia> {
   const platform = getPlatform()
   if (!await platform.system.fs.exists(path)) throw new Error('源文件已移动或丢失，请重新定位素材。')
@@ -26,7 +33,7 @@ export async function inspectVideoEditMedia(path: string): Promise<VideoEditMedi
 }
 export async function importVideoEditPaths(projectId: string, paths: string[]): Promise<void> {
   for (const path of paths) {
-    if (requireVideoEditInstance(projectId).document.media.some(media => media.path === path)) continue
+    if (requireVideoEditInstance(projectId).document.media.some(media => sameVideoEditMediaPath(media.path, path))) continue
     appendVideoEditMedia(projectId, await inspectVideoEditMedia(path))
   }
 }

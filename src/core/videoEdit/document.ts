@@ -45,6 +45,22 @@ export type VideoEditClip = z.infer<typeof videoEditClipSchema>
 export type VideoEditMedia = z.infer<typeof videoEditMediaSchema>
 export type VideoEditAnnotation = z.infer<typeof videoEditAnnotationSchema>
 
+/** Both the drag outline and the committed edit use this frame-based evaluation. */
+export function adjustVideoEditClip(document: VideoEditDocument, clip: VideoEditClip, adjustment: { mode: 'move' | 'in' | 'out'; delta: number; track: number; snapThreshold?: number }): VideoEditClip {
+  if (adjustment.mode === 'move') {
+    const start = adjustment.snapThreshold === undefined ? Math.max(0, clip.start + adjustment.delta) : snapVideoEditFrame(document, clip.start + adjustment.delta, clip.id, adjustment.snapThreshold)
+    return { ...clip, start: Math.min(document.fps * 1800 - clip.duration, start), track: adjustment.track }
+  }
+  const media = document.media.find(item => item.id === clip.mediaId)
+  const timed = clip.kind === 'video' || clip.kind === 'audio'
+  if (adjustment.mode === 'out') {
+    const limit = Math.min(document.fps * 1800 - clip.start, timed && media ? Math.floor((media.durationSeconds - clip.sourceInUs / 1e6) * document.fps + 1e-6) : Infinity)
+    return { ...clip, duration: Math.max(1, Math.min(limit, clip.duration + adjustment.delta)) }
+  }
+  const shift = Math.max(-clip.start, timed ? -Math.floor(clip.sourceInUs * document.fps / 1e6) : -clip.start, Math.min(clip.duration - 1, adjustment.delta))
+  return { ...clip, start: clip.start + shift, duration: clip.duration - shift, sourceInUs: timed ? clip.sourceInUs + Math.round(shift * 1e6 / document.fps) : clip.sourceInUs }
+}
+
 export function createVideoEditDocument(name: string): VideoEditDocument {
   return { format: 'henji-video-project', version: 1, id: crypto.randomUUID(), name, revision: 0, width: 1920, height: 1080, fps: 30, media: [], clips: [], annotations: [] }
 }

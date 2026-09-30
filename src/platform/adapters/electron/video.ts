@@ -12,6 +12,8 @@ function getNativeVideo(): NonNullable<typeof window.henjiNative>['video'] {
 
 export function createElectronVideo(): VideoPlatform {
   return {
+    preparePreview: payload => getNativeVideo().preparePreview(payload),
+    cancelPreview: requestId => getNativeVideo().cancelPreview(requestId),
     readVideoInfo: (source) => getNativeVideo().readVideoInfo(source),
     trimVideoSource: (payload) => getNativeVideo().trimVideoSource(payload),
     compressVideoToFit: (payload) => getNativeVideo().compressVideoToFit(payload),

@@ -12,7 +12,7 @@ async function dialogs(app, openPaths, savePath) {
   }, { openPaths, savePath })
 }
 async function presented(page, frame) {
-  await page.waitForFunction(frame => document.querySelector('canvas[aria-label="剪辑画面"]')?.dataset.presentedFrame === String(frame), frame, { timeout: 20000 })
+  await page.waitForFunction(frame => { const canvas = document.querySelector('canvas[aria-label="剪辑画面"]'); return canvas?.dataset.presentedFrame === String(frame) && canvas.dataset.scrubbing === 'false' }, frame, { timeout: 20000 })
 }
 async function seek(page, frame, fps) {
   await page.getByRole('slider', { name: '剪辑时间定位' }).click({ position: { x: frame * 60 / fps + 0.1, y: 12 } })
@@ -26,7 +26,7 @@ function createVideoEditProbeScene() {
       const { ffmpegPath, ffprobePath } = require('ffmpeg-ffprobe-static')
       const ffmpeg = args => execFileSync(ffmpegPath, ['-v', 'error', '-y', ...args], { windowsHide: true, stdio: 'pipe' })
       const probe = file => JSON.parse(execFileSync(ffprobePath, ['-v', 'error', '-show_streams', '-show_format', '-of', 'json', file], { windowsHide: true, encoding: 'utf8' }))
-      const specs = [{ width: 1920, height: 1080, fps: 30 }, { width: 1920, height: 1080, fps: 60 }, { width: 3840, height: 2160, fps: 30 }]
+      const specs = [{ width: 1920, height: 1080, fps: 30 }, { width: 1920, height: 1080, fps: 60 }, { width: 3840, height: 2160, fps: 30 }, { width: 3840, height: 2160, fps: 60 }]
       for (const spec of specs) {
         spec.source = path.join(root, `${spec.width}-${spec.fps}.mp4`)
         if (!fs.existsSync(spec.source)) ffmpeg(['-f', 'lavfi', '-i', `testsrc2=size=${spec.width}x${spec.height}:rate=${spec.fps}`, '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000', '-t', '3', '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '20', '-g', String(spec.fps), '-pix_fmt', 'yuv420p', '-c:a', 'aac', spec.source])
@@ -49,6 +49,26 @@ function createVideoEditProbeScene() {
       await button(page, '保存').click(); await page.waitForTimeout(300)
       const original = JSON.parse(fs.readFileSync(projectPath, 'utf8'))
       assert.deepEqual(original.media.map(item => item.path.toLowerCase()).sort(), [specs[0].source, picture, sound].map(value => value.toLowerCase()).sort()); assert.equal(original.clips.length, 5)
+      const timeline = page.getByRole('slider', { name: '剪辑时间定位' }).locator('..')
+      const drops = [
+        { name: '1920-30.mp4', path: specs[0].source, kind: 'video', x: 120, track: 2 },
+        { name: 'tone.wav', path: sound, kind: 'audio', x: 180, track: 0 },
+        { name: '素材库图片', path: picture, kind: 'image', x: 240, track: 1 },
+      ]
+      for (const drop of drops) {
+        if (drop.name === '素材库图片') await button(page, '素材库').click()
+        await page.locator('aside').getByRole('button', { name: drop.name, exact: true }).dragTo(timeline, { targetPosition: { x: drop.x, y: 28 + drop.track * 32 + 16 } })
+        await page.waitForTimeout(150); await button(page, '保存').click(); await page.waitForTimeout(150)
+        const after = JSON.parse(fs.readFileSync(projectPath, 'utf8')); const last = after.clips.at(-1)
+        assert.equal(after.clips.length, original.clips.length + 1)
+        assert.equal(last.kind, drop.kind); assert.equal(last.start, drop.x / 2); assert.equal(last.track, drop.track)
+        assert.equal(after.media.find(item => item.id === last.mediaId).path.toLowerCase(), drop.path.toLowerCase())
+        assert.equal(after.media.length, original.media.length, '同一路径的大小写差异不应创建第二份素材')
+        await button(page, '撤销').click(); await button(page, '保存').click(); await page.waitForTimeout(150)
+        assert.equal(JSON.parse(fs.readFileSync(projectPath, 'utf8')).clips.length, original.clips.length)
+      }
+      await button(page, '收起素材库').click()
+      evidence.materialDrag = drops.map(({ kind, track }) => ({ kind, track, originalPathPreserved: true, undoVerified: true }))
       const identity = await authorizeMcpConnection(page, { name: '剪辑真实回环', allowWrites: true, allowDestructive: true })
       const client = await connectMcpClient(identity.config, 'Henji video edit Reality')
       try {
@@ -65,7 +85,7 @@ function createVideoEditProbeScene() {
         assert.equal(JSON.parse(fs.readFileSync(projectPath, 'utf8')).clips[1].scale, 1)
         await button(page, '重做').click(); await button(page, '保存').click(); await page.waitForTimeout(150)
         assert.equal(JSON.parse(fs.readFileSync(projectPath, 'utf8')).clips[1].scale, 0.35)
-        await seek(page, 30, 30); await button(page, '点标注').click()
+        await seek(page, 30, 30); await page.getByTitle('1920-30.mp4', { exact: true }).first().click(); await button(page, '点标注').click()
         await page.getByLabel('标注文字', { exact: true }).fill('检查叠加边缘')
         await page.getByLabel('剪辑画面', { exact: true }).click({ position: { x: 100, y: 100 } })
         await button(page, '保存').click(); await page.waitForTimeout(150)
@@ -141,7 +161,8 @@ function createVideoEditProbeScene() {
           for (const [frame, preview] of Object.entries(previewFrames)) {
             const png = path.join(root, `export-${spec.width}-${spec.fps}-${frame}.png`)
             ffmpeg(['-i', output, '-vf', `select=eq(n\\,${frame})`, '-frames:v', '1', png])
-            const [a, b] = await Promise.all([sharp(preview).removeAlpha().raw().toBuffer(), sharp(png).removeAlpha().raw().toBuffer()])
+            const previewSize = await sharp(preview).metadata()
+            const [a, b] = await Promise.all([sharp(preview).removeAlpha().raw().toBuffer(), sharp(png).resize(previewSize.width, previewSize.height).removeAlpha().raw().toBuffer()])
             let square = 0; for (let index = 0; index < a.length; index++) square += (a[index] - b[index]) ** 2
             const psnr = 10 * Math.log10(255 ** 2 / (square / a.length)); comparisons.push({ frame: Number(frame), psnr }); assert.ok(psnr > 24, `预览导出画面不一致：${psnr}`)
           }
@@ -167,11 +188,11 @@ function createVideoEditProbeScene() {
         evidence.pageCycles = []
         for (let index = 0; index < 4; index++) {
           await button(page, '画布').click(); await page.waitForTimeout(400); evidence.pageCycles.push(await app.evaluate(({ app }) => app.getAppMetrics()))
-          await button(page, '剪辑').click(); await presented(page, 59)
+          await button(page, '剪辑').click(); await presented(page, 2 * specs.at(-1).fps - 1)
         }
         await capture('video-edit-final'); evidence.afterMemory = await app.evaluate(({ app }) => app.getAppMetrics())
         evidence.afterGpu = await app.evaluate(({ app }) => app.getGPUInfo('basic'))
-        const lastRef = { kind: 'video_edit.project', id: 'reality-3840-30' }
+        const lastRef = { kind: 'video_edit.project', id: `reality-${specs.at(-1).width}-${specs.at(-1).fps}` }
         const cancellationPath = path.join(root, `cancel-${Date.now()}.mp4`)
         await dialogs(app, [], cancellationPath)
         const cancellationBaseline = await callTool(client, 'read_application_entity', { ref: lastRef, propertyIds: ['video_edit.project.name'] })

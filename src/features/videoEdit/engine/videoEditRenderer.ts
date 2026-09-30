@@ -1,23 +1,30 @@
-import { ALL_FORMATS, AudioSampleSink, CanvasSink, Input, UrlSource, type WrappedCanvas } from 'mediabunny'
+import { ALL_FORMATS, AudioSampleSink, VideoSampleSink, VideoSample, Input, UrlSource } from 'mediabunny'
 import { activeVideoEditClips, clipSourceSeconds, type VideoEditDocument, type VideoEditMedia } from '@/core/videoEdit/document'
+import { VideoEditFrameCache, type CachedVideoEditFrame } from './videoEditFrameCache'
+import type { VideoEditPreviewSource } from '@/core/videoEdit/preview'
 
 interface VideoSource {
   input: Input
-  video?: CanvasSink
+  media: VideoEditMedia
+  video?: VideoSampleSink
   audio?: AudioSampleSink
-  iterator?: AsyncGenerator<WrappedCanvas, void, unknown>
-  current?: WrappedCanvas
+  iterator?: AsyncGenerator<VideoSample, void, unknown>
+  current?: VideoSample
   previousTime: number
 }
 /** One bounded decoder per visible clip; all inputs close when the view detaches. */
 export class VideoEditRenderer {
   private readonly sources = new Map<string, Promise<VideoSource>>()
   private readonly images = new Map<string, Promise<ImageBitmap>>()
+  private readonly previews = new Map<string, VideoEditPreviewSource>()
   private disposed = false
+  private readonly cache = new VideoEditFrameCache(384 * 1024 * 1024)
+  private readonly cacheCanvas = new OffscreenCanvas(640, 360)
   readonly canvas: OffscreenCanvas
   readonly context: OffscreenCanvasRenderingContext2D
-  constructor(readonly document: VideoEditDocument) {
-    this.canvas = new OffscreenCanvas(document.width, document.height)
+  constructor(public document: VideoEditDocument, private readonly previewWidth?: number) {
+    const scale = previewWidth ? Math.min(1, previewWidth / document.width) : 1
+    this.canvas = new OffscreenCanvas(Math.round(document.width * scale), Math.round(document.height * scale))
     const context = this.canvas.getContext('2d')
     if (!context) throw new Error('无法创建剪辑预览。')
     this.context = context
@@ -30,7 +37,10 @@ export class VideoEditRenderer {
         try {
           const [video, audio] = await Promise.all([input.getPrimaryVideoTrack(), input.getPrimaryAudioTrack()])
           if (this.disposed) throw new Error('预览已关闭。')
-          return { input, video: video ? new CanvasSink(video, { poolSize: 2 }) : undefined, audio: audio ? new AudioSampleSink(audio) : undefined, previousTime: -1 }
+          const config = video ? await video.getDecoderConfig() : null
+          const preference = 'no-preference'
+          const supported = config && (await VideoDecoder.isConfigSupported({ ...config, hardwareAcceleration: preference, optimizeForLatency: true })).supported
+          return { input, media, video: video ? new VideoSampleSink(video, { hardwareAcceleration: supported ? preference : 'no-preference', optimizeForLatency: true }) : undefined, audio: audio ? new AudioSampleSink(audio) : undefined, previousTime: -1 }
         } catch (error) { input.dispose(); throw error }
       })()
       this.sources.set(key, source)
@@ -45,30 +55,88 @@ export class VideoEditRenderer {
     }
     return image
   }
-  async render(frame: number, sequential = false): Promise<{ canvas: OffscreenCanvas; sourceTimestamps: number[] }> {
+  async setPreviewSources(sources: VideoEditPreviewSource[]): Promise<void> {
+    for (const source of sources) this.previews.set(source.clipId, source)
+    for (const [key, pending] of this.sources) if (!key.startsWith('audio:')) {
+      const source = await pending; const preview = this.previews.get(key)
+      if (preview && preview.path !== source.media.path) { this.sources.delete(key); source.current?.close(); await source.iterator?.return(); source.input.dispose() }
+    }
+  }
+  async updateDocument(document: VideoEditDocument): Promise<void> {
+    if (document.id !== this.document.id) throw new Error('渲染目标工程已经改变。')
+    for (const media of this.document.media) if (!document.media.some(item => item.id === media.id && item.path === media.path)) {
+      this.cache.deleteMedia(media.id)
+      const image = this.images.get(media.id); if (image) { this.images.delete(media.id); (await image).close() }
+    }
+    for (const [key, pending] of this.sources) {
+      const source = await pending
+      if (!document.media.some(item => item.id === source.media.id && (item.path === source.media.path || this.previews.get(key)?.path === source.media.path))) {
+        this.sources.delete(key); source.current?.close(); await source.iterator?.return(); source.input.dispose()
+      }
+    }
+    this.document = document
+    const scale = this.previewWidth ? Math.min(1, this.previewWidth / document.width) : 1
+    const width = Math.round(document.width * scale); const height = Math.round(document.height * scale)
+    if (this.canvas.width !== width || this.canvas.height !== height) { this.canvas.width = width; this.canvas.height = height }
+  }
+  private cacheSample(mediaId: string, sample: VideoSample, pinned: ReadonlySet<CachedVideoEditFrame>, offset = 0): void {
+    if (!this.previewWidth || this.cache.get(mediaId, sample.timestamp + offset)) return
+    const width = Math.min(640, sample.displayWidth)
+    const height = Math.max(1, Math.round(width * sample.displayHeight / sample.displayWidth))
+    if (this.cacheCanvas.width !== width || this.cacheCanvas.height !== height) { this.cacheCanvas.width = width; this.cacheCanvas.height = height }
+    sample.draw(this.cacheCanvas.getContext('2d')!, 0, 0, width, height)
+    this.cache.put(mediaId, { bitmap: this.cacheCanvas.transferToImageBitmap(), timestamp: sample.timestamp + offset, duration: sample.duration }, pinned)
+  }
+  async render(frame: number, sequential = false, scrubbing = false): Promise<{ canvas: OffscreenCanvas; sourceTimestamps: number[]; cacheHits: number; cacheBytes: number }> {
     if (this.disposed) throw new Error('预览已关闭。')
     const active = activeVideoEditClips(this.document, frame).filter(clip => clip.kind !== 'audio')
     const timestamps: number[] = []
+    const pinned = new Set<CachedVideoEditFrame>()
+    let cacheHits = 0
     const pictures = await Promise.all(active.map(async clip => {
       const media = this.document.media.find(item => item.id === clip.mediaId)
       if (clip.kind === 'text') return null
       if (!media) throw new Error(`找不到素材 ${clip.name}`)
       if (media.kind === 'image') return this.image(media)
-      const source = await this.source(clip.id, media)
+      const originalTime = clipSourceSeconds(clip, frame, this.document.fps)
+      const preview = this.previews.get(clip.id)
+      const offset = preview?.startSeconds ?? 0
+      const time = originalTime - offset
+      const cached = scrubbing ? this.cache.get(media.id, originalTime) : undefined
+      if (cached) { pinned.add(cached); timestamps.push(cached.timestamp); cacheHits++; return cached.bitmap }
+      const source = await this.source(clip.id, preview ? { ...media, path: preview.path } : media)
       if (!source.video) throw new Error(`素材 ${media.name} 没有可解码的视频轨。`)
-      const time = clipSourceSeconds(clip, frame, this.document.fps)
-      if (sequential) {
-        if (!source.iterator || time < source.previousTime || time - source.previousTime > 1) {
-          await source.iterator?.return(); source.iterator = source.video.canvases(time); source.current = undefined
+      if (sequential || (this.previewWidth && !preview && time >= source.previousTime && time - source.previousTime <= 2)) {
+        if (!source.iterator || time < source.previousTime || time - source.previousTime > 2) {
+          source.current?.close(); await source.iterator?.return(); source.iterator = source.video.samples(time); source.current = undefined
         }
         while (!source.current || source.current.timestamp + source.current.duration <= time + 1e-7) {
-          const next = await source.iterator.next(); if (next.done) break; source.current = next.value
+          const next = await source.iterator.next(); if (next.done) break
+          source.current?.close(); source.current = next.value
+          this.cacheSample(media.id, next.value, pinned, offset)
         }
-      } else { await source.iterator?.return(); source.iterator = undefined; source.current = await source.video.getCanvas(time) ?? undefined }
+      } else {
+        source.current?.close(); await source.iterator?.return()
+        source.iterator = undefined
+        if (this.previewWidth && scrubbing && !preview) {
+          // A backward cache miss decodes a bounded preceding window once. The
+          // following reverse seeks reuse those timestamped frames, not the GOP.
+          source.iterator = source.video.samples(Math.max(0, time - 1))
+          source.current = undefined
+          while (!source.current || source.current.timestamp + source.current.duration <= time + 1e-7) {
+            const next = await source.iterator.next(); if (next.done) break
+            source.current?.close(); source.current = next.value
+            this.cacheSample(media.id, next.value, pinned, offset)
+          }
+        } else {
+          source.current = await source.video.getSample(time) ?? undefined
+          if (source.current) this.cacheSample(media.id, source.current, pinned, offset)
+        }
+      }
       source.previousTime = time
       if (!source.current) throw new Error(`素材 ${media.name} 在此时间没有画面。`)
-      timestamps.push(source.current.timestamp)
-      return source.current.canvas
+      timestamps.push(source.current.timestamp + offset)
+      return source.current
     }))
     if (this.disposed) throw new Error('预览已关闭。')
     const context = this.context
@@ -78,12 +146,15 @@ export class VideoEditRenderer {
       context.globalAlpha = clip.opacity
       context.translate(this.canvas.width * (0.5 + clip.x), this.canvas.height * (0.5 + clip.y))
       context.rotate(clip.rotation * Math.PI / 180); context.scale(clip.scale, clip.scale)
-      context.filter = `brightness(${clip.brightness})`
+      context.filter = clip.brightness === 1 ? 'none' : `brightness(${clip.brightness})`
       const picture = pictures[index]
       if (picture) {
-        const fit = Math.min(this.canvas.width / picture.width, this.canvas.height / picture.height)
-        const width = picture.width * fit; const height = picture.height * fit
-        context.drawImage(picture, -width / 2, -height / 2, width, height)
+        const pictureWidth = picture instanceof VideoSample ? picture.displayWidth : picture.width
+        const pictureHeight = picture instanceof VideoSample ? picture.displayHeight : picture.height
+        const fit = Math.min(this.canvas.width / pictureWidth, this.canvas.height / pictureHeight)
+        const width = pictureWidth * fit; const height = pictureHeight * fit
+        if (picture instanceof VideoSample) picture.draw(context, -width / 2, -height / 2, width, height)
+        else context.drawImage(picture, -width / 2, -height / 2, width, height)
       } else {
         context.fillStyle = 'white'; context.textAlign = 'center'; context.textBaseline = 'middle'
         context.font = `${Math.round(this.canvas.height / 15)}px sans-serif`
@@ -93,13 +164,13 @@ export class VideoEditRenderer {
     })
     const activeIds = new Set(active.map(clip => clip.id))
     for (const [key, pending] of this.sources) if (!activeIds.has(key) && !key.startsWith('audio:')) {
-      this.sources.delete(key); const source = await pending; await source.iterator?.return(); source.input.dispose()
+      this.sources.delete(key); const source = await pending; source.current?.close(); await source.iterator?.return(); source.input.dispose()
     }
     const activeImages = new Set(active.filter(clip => clip.kind === 'image').map(clip => clip.mediaId))
     for (const [key, pending] of this.images) if (!activeImages.has(key)) {
       this.images.delete(key); (await pending).close()
     }
-    return { canvas: this.canvas, sourceTimestamps: timestamps }
+    return { canvas: this.canvas, sourceTimestamps: timestamps, cacheHits, cacheBytes: this.cache.bytes }
   }
   /** Bounded one-second mix. Source timestamp alignment also handles VFR video audio. */
   async mixAudio(startSeconds: number, durationSeconds: number): Promise<Float32Array[]> {
@@ -147,8 +218,8 @@ export class VideoEditRenderer {
   async dispose(): Promise<void> {
     if (this.disposed) return
     this.disposed = true
-    await Promise.allSettled([...this.sources.values()].map(async pending => { const source = await pending; await source.iterator?.return(); source.input.dispose() }))
+    await Promise.allSettled([...this.sources.values()].map(async pending => { const source = await pending; source.current?.close(); await source.iterator?.return(); source.input.dispose() }))
     await Promise.allSettled([...this.images.values()].map(async pending => (await pending).close()))
-    this.sources.clear(); this.images.clear(); this.canvas.width = 1; this.canvas.height = 1
+    this.sources.clear(); this.images.clear(); this.cache.clear(); this.cacheCanvas.width = 1; this.cacheCanvas.height = 1; this.canvas.width = 1; this.canvas.height = 1
   }
 }

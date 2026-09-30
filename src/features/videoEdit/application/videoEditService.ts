@@ -15,6 +15,7 @@ export interface VideoEditInstance {
   selection: string | null
   frame: number
   playing: boolean
+  scrubbing?: boolean
   busy: boolean
   version: number
   saving?: Promise<void>
@@ -22,17 +23,22 @@ export interface VideoEditInstance {
 const instances = new Map<string, VideoEditInstance>()
 const listeners = new Set<() => void>()
 const domainListeners = new Set<() => void>()
+const viewListeners = new Set<() => void>()
+let viewRevision = 0
 let revision = 0
 let domainRevision = 0
 let activeId: string | null = null
 export function subscribeVideoEdit(listener: () => void): () => void { listeners.add(listener); return () => { listeners.delete(listener) } }
 export function videoEditRevision(): number { return revision }
+export function subscribeVideoEditView(listener: () => void): () => void { viewListeners.add(listener); return () => { viewListeners.delete(listener) } }
+export function videoEditViewRevision(): number { return viewRevision }
+function publishView(): void { viewRevision++; for (const listener of viewListeners) listener() }
 export function videoEditDomainRevision(): number { return domainRevision }
 export function subscribeVideoEditDomain(listener: () => void): () => void { domainListeners.add(listener); return () => { domainListeners.delete(listener) } }
 export function listVideoEditInstances(): VideoEditInstance[] { return [...instances.values()] }
 export function activeVideoEditInstance(): VideoEditInstance | undefined { return activeId ? instances.get(activeId) : undefined }
 export function requireVideoEditInstance(id: string): VideoEditInstance { const instance = instances.get(id); if (!instance) throw new Error('请先从本地打开目标剪辑工程。'); return instance }
-export function publishVideoEdit(changed = false): void { revision++; if (changed) { domainRevision++; for (const listener of domainListeners) listener() } for (const listener of listeners) listener() }
+export function publishVideoEdit(changed = false): void { revision++; if (changed) { domainRevision++; for (const listener of domainListeners) listener() } for (const listener of listeners) listener(); publishView() }
 export function focusVideoEdit(id: string): void { requireVideoEditInstance(id); activeId = id; publishVideoEdit() }
 export function editVideoProject(id: string, update: (document: VideoEditDocument) => VideoEditDocument): VideoEditDocument {
   assertApplicationWritesAllowed()
@@ -54,10 +60,13 @@ export function undoVideoEdit(id: string, redo = false): void {
   if (!instance.document.clips.some(clip => clip.id === instance.selection)) instance.selection = null
   publishVideoEdit(true)
 }
-export function setVideoEditView(id: string, values: Partial<Pick<VideoEditInstance, 'selection' | 'frame' | 'playing'>>): void {
+export function setVideoEditView(id: string, values: Partial<Pick<VideoEditInstance, 'selection' | 'frame' | 'playing' | 'scrubbing'>>): void {
   const instance = requireVideoEditInstance(id)
   if (values.frame !== undefined && (!Number.isSafeInteger(values.frame) || values.frame < 0)) throw new Error('播放位置必须为非负整数帧。')
-  Object.assign(instance, values); publishVideoEdit()
+  if (Object.entries(values).every(([key, value]) => instance[key as keyof VideoEditInstance] === value)) return
+  const selectionChanged = values.selection !== undefined && values.selection !== instance.selection
+  Object.assign(instance, values)
+  if (selectionChanged) publishVideoEdit(); else publishView()
 }
 export async function saveVideoEdit(id: string): Promise<void> {
   const instance = requireVideoEditInstance(id)
@@ -110,11 +119,12 @@ export async function closeVideoEditProject(id: string): Promise<void> {
 export function appendVideoEditMedia(id: string, media: VideoEditMedia): void {
   editVideoProject(id, document => ({ ...document, media: [...document.media, media] }))
 }
-export function appendVideoEditClip(id: string, mediaId?: string): void {
+export function appendVideoEditClip(id: string, mediaId?: string, placement?: { frame: number; track: number }): void {
   const instance = requireVideoEditInstance(id)
   const media = instance.document.media.find(item => item.id === mediaId)
   if (mediaId && !media) throw new Error('素材不存在。')
   const clip: VideoEditClip = { id: crypto.randomUUID(), mediaId, name: media?.name ?? '文字', kind: media?.kind ?? 'text', track: media?.kind === 'audio' ? 0 : 1, start: instance.frame, duration: media && media.kind !== 'image' ? Math.max(1, Math.floor(media.durationSeconds * instance.document.fps)) : instance.document.fps * 3, sourceInUs: 0, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, brightness: 1, text: media ? '' : '输入文字' }
+  if (placement) { clip.start = placement.frame; clip.track = placement.track }
   editVideoProject(id, document => ({ ...document, clips: [...document.clips, clip] })); setVideoEditView(id, { selection: clip.id })
 }
 export function splitSelectedVideoEdit(id: string): void { const instance = requireVideoEditInstance(id); if (instance.selection) editVideoProject(id, document => splitVideoEditClip(document, instance.selection!, instance.frame)) }
