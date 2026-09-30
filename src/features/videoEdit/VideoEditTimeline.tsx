@@ -1,8 +1,10 @@
 import { useState, useSyncExternalStore, type ReactNode } from 'react'
 import { UiButton, UiInput } from '@/components/ui'
-import { acceptsVideoEditDrop, dropVideoEditPaths, videoEditDropPaths } from './application/videoEditDrop'
+import { acceptsVideoEditDrop, dropVideoEditInput, readVideoEditDrop, type VideoEditDropInput } from './application/videoEditDrop'
+import { VideoEditSequenceFrameRateRequired, type VideoEditSequenceSettings } from '@/core/videoEdit/projectItems'
+import { VideoEditSequenceDialog } from './panels/VideoEditSequenceDialog'
 import { adjustVideoEditClip, videoEditDuration, type VideoEditClip } from '@/core/videoEdit/document'
-import { editVideoSequence, getActiveVideoEditSequence, setVideoEditView, subscribeVideoEditView, videoEditViewRevision, type VideoEditInstance } from './application/videoEditService'
+import { editVideoSequence, getActiveVideoEditSequence, requireVideoEditInstance, setVideoEditView, subscribeVideoEditView, videoEditViewRevision, type VideoEditInstance } from './application/videoEditService'
 
 function VideoEditTransport({ instance }: { instance: VideoEditInstance }): React.ReactElement {
   useSyncExternalStore(subscribeVideoEditView, videoEditViewRevision)
@@ -40,6 +42,7 @@ export function VideoEditTimeline({ instance, onError }: { instance: VideoEditIn
   const [snap, setSnap] = useState(true)
   const [dropHint, setDropHint] = useState<{ frame: number; track: number } | null>(null)
   const [drag, setDrag] = useState<{ clip: VideoEditClip; x: number; y: number; mode: 'move' | 'in' | 'out'; delta: number; track: number } | null>(null)
+  const [pendingSequence, setPendingSequence] = useState<{ owner: VideoEditInstance; input: VideoEditDropInput; placement: { frame: number; track: number }; sequenceId: string; settings: VideoEditSequenceSettings } | null>(null)
   const document = getActiveVideoEditSequence(instance)
   const pixels = zoom / document.fps
   const tickSeconds = Math.max(1, Math.ceil(48 / zoom))
@@ -65,7 +68,13 @@ export function VideoEditTimeline({ instance, onError }: { instance: VideoEditIn
           const rect = event.currentTarget.getBoundingClientRect()
           const frame = Math.max(0, Math.round((event.clientX - rect.left) / pixels))
           const track = Math.max(0, Math.min(7, Math.floor((event.clientY - rect.top - 28) / 32)))
-          try { void dropVideoEditPaths(instance.document.id, videoEditDropPaths(event.dataTransfer), { frame, track }).catch(onError) } catch (error) { onError(error) }
+          try {
+            const input = readVideoEditDrop(event.dataTransfer); const placement = { frame, track }; const sequenceId = instance.activeSequenceId
+            void dropVideoEditInput(instance.document.id, input, placement, undefined, { sequenceId, createSequenceWhenEmpty: !document.clips.length }).catch(error => {
+              if (error instanceof VideoEditSequenceFrameRateRequired) setPendingSequence({ owner: instance, input, placement, sequenceId, settings: error.settings })
+              else onError(error)
+            })
+          } catch (error) { onError(error) }
         }}
         onPointerMove={event => { if (!drag) return; setDrag({ ...drag, delta: Math.round((event.clientX - drag.x) / pixels), track: Math.max(0, Math.min(7, drag.clip.track + Math.round((event.clientY - drag.y) / 32))) }) }}
         onPointerUp={() => {
@@ -89,5 +98,10 @@ export function VideoEditTimeline({ instance, onError }: { instance: VideoEditIn
         <VideoEditPlayhead instance={instance} pixels={pixels} />
       </div>
     </div>
+    {pendingSequence && <VideoEditSequenceDialog title="按素材新建序列" requireFrameRate initial={pendingSequence.settings} bins={pendingSequence.owner.document.bins} onClose={() => setPendingSequence(null)} onSubmit={async settings => {
+      const { owner, input, placement, sequenceId } = pendingSequence
+      if (requireVideoEditInstance(owner.document.id) !== owner) throw new Error('原工程已关闭，请重新拖入。')
+      await dropVideoEditInput(owner.document.id, input, placement, undefined, { sequenceId, createSequenceWhenEmpty: true, sequenceSettings: settings })
+    }} />}
   </div>
 }

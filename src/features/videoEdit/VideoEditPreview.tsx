@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { UiButton, UiInput, UiError } from '@/components/ui'
 import { videoEditDuration } from '@/core/videoEdit/document'
 import { VideoEditRenderSession } from './engine/videoEditRenderSession'
-import { acceptsVideoEditDrop, dropVideoEditPaths, videoEditDropPaths } from './application/videoEditDrop'
+import { acceptsVideoEditDrop, dropVideoEditInput, readVideoEditDrop } from './application/videoEditDrop'
 import { editVideoSequence, getActiveVideoEditSequence, requireVideoEditInstance, setVideoEditView, subscribeVideoEditDomain, subscribeVideoEditView, videoEditViewRevision, type VideoEditInstance } from './application/videoEditService'
 
 export function VideoEditPreview({ instance, onError }: { instance: VideoEditInstance; onError: (error: unknown) => void }): React.ReactElement {
@@ -15,15 +15,24 @@ export function VideoEditPreview({ instance, onError }: { instance: VideoEditIns
   const [preparing, setPreparing] = useState(false)
   const [retry, setRetry] = useState(0)
   const session = useRef<VideoEditRenderSession | null>(null)
+  const released = useRef<Promise<unknown>>(Promise.resolve())
   const stopPreview = useRef<() => void>(() => {})
   const document = getActiveVideoEditSequence(instance)
   useEffect(() => {
+    const previousRelease = released.current
+    let stopped = false
+    let stopCurrent: () => void = () => {}
+    const stop = (): void => { stopped = true; stopCurrent() }
+    stopPreview.current = stop
+    const initialize = async (): Promise<void> => {
+    // A new sequence has its own renderer target; release the previous GPU/cache owner first.
+    await previousRelease
+    if (stopped) return
     const initialDocument = getActiveVideoEditSequence(instance)
     const surface = window.document.createElement('canvas')
     surface.width = initialDocument.width; surface.height = initialDocument.height
     surface.setAttribute('aria-label', '剪辑画面'); surface.className = 'h-full w-full object-contain'
     host.current?.replaceChildren(surface); canvas.current = surface
-    let stopped = false
     const renderer = new VideoEditRenderSession(initialDocument, initialDocument.width, active => { if (!stopped) setPreparing(active) }, surface.transferControlToOffscreen()); session.current = renderer
     const unsubscribe = subscribeVideoEditDomain(() => renderer.invalidateDocument(instance.document.revision))
     let audioRenderer: VideoEditRenderSession | undefined
@@ -114,9 +123,16 @@ export function VideoEditPreview({ instance, onError }: { instance: VideoEditIns
         if (!stopped && !scheduled) timer = setTimeout(() => { void loop() }, current.playing ? 0 : 2)
       } catch (error) { if (!stopped) { setVideoEditView(instance.document.id, { playing: false }); onError(error) } }
     }
-    const stop = (): void => { stopped = true; unsubscribe(); clearTimeout(timer); instance.playing = false; stopAudio(); void audio?.close(); void renderer.dispose(); void audioRenderer?.dispose(); surface.remove(); if (canvas.current === surface) canvas.current = null }
-    stopPreview.current = stop
+    let retired = false
+    stopCurrent = (): void => {
+      if (retired) return
+      retired = true; unsubscribe(); clearTimeout(timer); instance.playing = false; stopAudio()
+      released.current = Promise.allSettled([audio?.close(), renderer.dispose(), audioRenderer?.dispose()])
+      surface.remove(); if (canvas.current === surface) canvas.current = null
+    }
     void loop()
+    }
+    void initialize().catch(error => { if (!stopped) onError(error) })
     return stop
   }, [instance, instance.activeSequenceId, onError, retry])
   return <div className="flex min-h-0 flex-1 flex-col bg-app">
@@ -126,7 +142,7 @@ export function VideoEditPreview({ instance, onError }: { instance: VideoEditIns
         if (!acceptsVideoEditDrop(event.dataTransfer)) return
         event.preventDefault(); event.stopPropagation()
         const track = Math.min(7, Math.max(1, ...document.clips.filter(clip => clip.kind !== 'audio').map(clip => clip.track + 1)))
-        try { void dropVideoEditPaths(instance.document.id, videoEditDropPaths(event.dataTransfer), { frame: instance.frame, track }).catch(onError) } catch (error) { onError(error) }
+        try { void dropVideoEditInput(instance.document.id, readVideoEditDrop(event.dataTransfer), { frame: instance.frame, track }).catch(onError) } catch (error) { onError(error) }
       }}>
       <div className="relative max-h-full max-w-full" style={{ aspectRatio: `${document.width}/${document.height}`, height: '100%' }}>
         <div ref={host} className="h-full w-full"

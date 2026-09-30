@@ -32,7 +32,7 @@ afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals() })
 
 it('真实 Dockview React 移动、隐藏标签、缩放和重置不卸载节目；关闭释放，重开只有一个视图', () => {
   const document = createVideoEditDocument('布局验收')
-  const instance: VideoEditInstance = { document, activeSequenceId: document.sequences[0].id, sequenceViews: new Map(), path: 'D:/layout.henji-video', dirty: false, error: null, past: [], future: [], selection: null, frame: 17, playing: false, busy: false, version: 0 }
+  const instance: VideoEditInstance = { document, activeSequenceId: document.sequences[0].id, sequenceViews: new Map(), selectedItemIds: [], selectedBinId: '', openSequenceIds: [document.sequences[0].id], path: 'D:/layout.henji-video', dirty: false, error: null, past: [], future: [], selection: null, frame: 17, playing: false, busy: false, version: 0 }
   let api: DockviewApi | null = null
   const onApiChange = (value: DockviewApi | null): void => { api = value }
   const onError = vi.fn()

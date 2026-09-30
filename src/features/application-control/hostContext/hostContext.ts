@@ -229,6 +229,7 @@ export function createHostContextSnapshot(uiReady = true): HostContextSnapshot {
     ? `audio_edit.project:${audioEdit.project.id}`
     : null
   const selectedRefs = [
+    ...(videoEdit?.selectedItemIds ?? []).slice(0, 48).map(id => `video_edit.item:${videoEdit!.document.id}:${id}`),
     videoEdit?.selection ? `video_edit.clip:${videoEdit.document.id}:${videoEdit.selection}` : null,
     assets.selectedAsset ? `asset:${assets.selectedAsset.id}` : null,
     project.currentProjectId && canvas.selectedNodeId

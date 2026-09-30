@@ -2,6 +2,7 @@ import { fieldDescriptors, fieldReadValues, unrestrictedCollectionAvailability, 
 import type { VideoEditDocument } from '@/core/videoEdit/document'
 import { listVideoEditInstances, requireVideoEditInstance, videoEditDomainRevision as videoEditRevision } from './videoEditService'
 import { VIDEO_EDIT_FIELDS, VIDEO_EDIT_TYPES, videoEditSchemaDocuments, videoEditSchemaRef, type VideoEditEntityType, type VideoEditFieldData } from './videoEditFields'
+import { readVideoEditSource } from './videoEditSource'
 
 export function splitVideoEditRef(ref: ApplicationRef): { projectId: string; childId: string } {
   if (ref.kind === 'video_edit.project') return { projectId: ref.id, childId: '' }
@@ -11,6 +12,7 @@ export function splitVideoEditRef(ref: ApplicationRef): { projectId: string; chi
 export function videoEditEntityItems(document: VideoEditDocument, type: VideoEditEntityType): Array<{ id: string; name?: string; text?: string }> {
   switch (type) {
     case 'video_edit.project': return [document]
+    case 'video_edit.source': return [{ id: 'source', name: '源素材预览' }]
     case 'video_edit.sequence': return document.sequences
     case 'video_edit.bin': return document.bins
     case 'video_edit.item': return document.items
@@ -22,7 +24,8 @@ export function videoEditEntityItems(document: VideoEditDocument, type: VideoEdi
 }
 export function readVideoEditData(ref: ApplicationRef): VideoEditFieldData {
   const { projectId, childId } = splitVideoEditRef(ref); const instance = requireVideoEditInstance(projectId)
-  if (ref.kind === 'video_edit.project') return { name: instance.document.name, frame: instance.frame, selection: instance.selection ?? '', activeSequenceId: instance.activeSequenceId, dirty: instance.dirty }
+  if (ref.kind === 'video_edit.project') return { name: instance.document.name, frame: instance.frame, selection: instance.selection ?? '', activeSequenceId: instance.activeSequenceId, dirty: instance.dirty, selectedItemIds: [...instance.selectedItemIds], selectedBinId: instance.selectedBinId, openSequenceIds: [...instance.openSequenceIds] }
+  if (ref.kind === 'video_edit.source') { if (childId !== 'source') throw new Error('NOT_FOUND：源预览引用无效。'); return { ...readVideoEditSource(projectId) } }
   if (!VIDEO_EDIT_TYPES.includes(ref.kind as VideoEditEntityType)) throw new Error('未知剪辑实体类型。')
   const found = videoEditEntityItems(instance.document, ref.kind as VideoEditEntityType).find(item => item.id === childId)
   if (!found) throw new Error('NOT_FOUND：目标不属于此工程或已删除。')
@@ -49,7 +52,7 @@ class VideoEditProvider implements ApplicationEntityProvider {
   }
   async getCollectionAvailability(parent: ApplicationRef) { readVideoEditData(parent); return unrestrictedCollectionAvailability(this.entityType, parent, { video_edit: videoEditRevision() }, ['video_edit:write']) }
 }
-const titles: Record<VideoEditEntityType, string> = { 'video_edit.project': '剪辑工程', 'video_edit.sequence': '剪辑序列', 'video_edit.bin': '素材箱', 'video_edit.item': '项目项', 'video_edit.track': '序列轨道', 'video_edit.clip': '剪辑片段', 'video_edit.annotation': '画面标注', 'video_edit.media': '原路径素材' }
+const titles: Record<VideoEditEntityType, string> = { 'video_edit.project': '剪辑工程', 'video_edit.sequence': '剪辑序列', 'video_edit.bin': '素材箱', 'video_edit.item': '项目项', 'video_edit.track': '序列轨道', 'video_edit.clip': '剪辑片段', 'video_edit.annotation': '画面标注', 'video_edit.media': '原路径素材', 'video_edit.source': '源素材预览' }
 const sequenceChildren = ['video_edit.clip', 'video_edit.annotation', 'video_edit.track']
 const required: Partial<Record<VideoEditEntityType, string[]>> = {
   'video_edit.sequence': ['video_edit.sequence.name'], 'video_edit.bin': ['video_edit.bin.name'], 'video_edit.item': ['video_edit.item.name', 'video_edit.item.kind'],
@@ -57,7 +60,7 @@ const required: Partial<Record<VideoEditEntityType, string[]>> = {
 }
 export function createVideoEditRegistrations(): ApplicationEntityRegistration[] {
   return VIDEO_EDIT_TYPES.map(entityType => ({
-    entity: { id: entityType, domain: 'video_edit', version: 2, title: titles[entityType], description: '本地剪辑工程中的稳定实体，手动与助手共用编辑历史。', refKind: entityType, dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], parentTypes: entityType === 'video_edit.project' ? [] : sequenceChildren.includes(entityType) ? ['video_edit.sequence'] : ['video_edit.project'], revisionScopes: ['video_edit'], queryCapabilityIds: ['read_application_entity'], schemaRef: videoEditSchemaRef('entity', entityType),
+    entity: { id: entityType, domain: 'video_edit', version: 2, title: titles[entityType], description: entityType === 'video_edit.source' ? '独立源预览会话；定位、播放写入等待真实媒体响应，逐帧观察不改工程或剪辑撤销历史。' : '本地剪辑工程中的稳定实体，手动与助手共用编辑历史。', refKind: entityType, dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], parentTypes: entityType === 'video_edit.project' ? [] : sequenceChildren.includes(entityType) ? ['video_edit.sequence'] : ['video_edit.project'], revisionScopes: ['video_edit'], queryCapabilityIds: ['read_application_entity'], schemaRef: videoEditSchemaRef('entity', entityType),
       ...(entityType === 'video_edit.media' ? { writeExclusion: { reason: '素材由正式本地导入或素材库引用服务检测；路径选择由用户本地文件对话框授权。' } } : {}),
       ...(required[entityType] ? { collectionWrite: { creatable: true, removable: true, requiredPropertyIds: required[entityType]!, maxItemsPerChange: 32 } } : {}),
     }, properties: fieldDescriptors(VIDEO_EDIT_FIELDS[entityType]), provider: new VideoEditProvider(entityType), schemaDocuments: videoEditSchemaDocuments(entityType),

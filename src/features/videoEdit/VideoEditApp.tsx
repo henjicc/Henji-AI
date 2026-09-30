@@ -36,7 +36,7 @@ export default function VideoEditApp(): React.ReactElement {
         <UiButton variant="plain" className="gap-1.5" onClick={() => run(() => appendVideoEditClip(instance.document.id))}><Type size={15} />文字</UiButton>
         <VideoEditLayoutMenu api={dockApi} />
         <div className="ml-auto" />
-        <span className="mr-2 text-2xs tabular-nums text-text-faint">{sequence.width} × {sequence.height} · {sequence.fps}fps</span>
+        <span className="mr-2 text-2xs tabular-nums text-text-faint">{sequence.width} × {sequence.height} · {Number(sequence.fps.toFixed(3))}fps</span>
         {task?.state === 'running' ? <UiButton variant="plain" onClick={() => cancelVideoEditExport(instance.document.id)}>取消导出 {Math.round(task.progress * 100)}%</UiButton> : <UiButton variant="primary" className="gap-2" disabled={!sequence.clips.length} onClick={() => run(() => exportVideoEdit(instance.document.id))}><Download size={16} />导出视频</UiButton>}
       </div>
       <div className="min-h-0 flex-1" aria-label="剪辑面板工作区"><VideoEditDock instance={instance} onError={onError} onApiChange={setDockApi} /></div>

@@ -6,6 +6,7 @@ import path from 'node:path'
 import { getUploadsDir } from '../image/path-utils'
 import { execFileAsyncBuffer, resolveLocalMediaPath } from '../media/shared'
 import { loadFfmpegPath, loadFfprobePath } from './ffmpeg-loader'
+import { withMediaHeavyTask } from '../media-import/concurrency'
 import {
   getPreferredEncoder,
   invalidateEncoderCache,
@@ -229,10 +230,12 @@ export async function generateVideoThumbnail(
  * 200px 约束的 webp 缩略图，供缩略图缓存场景使用（区别于 generateVideoThumbnail 的
  * 480px PNG poster 场景，两者用途/格式不同，不合并成一个通用函数）。
  */
-export async function generateVideoThumbnailBytes(source: string, maxSize = 200): Promise<Buffer> {
+export async function generateVideoThumbnailBytes(source: string, maxSize = 200, signal?: AbortSignal): Promise<Buffer> {
+  if (!Number.isSafeInteger(maxSize) || maxSize < 16 || maxSize > 1024) throw new Error('缩略图尺寸超出范围。')
+  return withMediaHeavyTask(async () => {
   const ffmpegPath = await loadFfmpegPath()
-  const localPath = await resolveLocalMediaPath(source)
-
+  const localPath = await resolveLocalMediaPath(source, signal)
+  signal?.throwIfAborted()
   const { stdout } = await execFileAsyncBuffer(ffmpegPath, [
     '-ss', '0.1',
     '-i', localPath,
@@ -241,7 +244,8 @@ export async function generateVideoThumbnailBytes(source: string, maxSize = 200)
     '-c:v', 'libwebp',
     '-f', 'webp',
     'pipe:1',
-  ])
+  ], { signal, timeout: 15000 })
 
   return stdout
+  }, signal)
 }

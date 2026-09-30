@@ -239,7 +239,7 @@ export const focusApplicationEntityCapability = defineCapability({
   supportsUndo: false,
   requiredScopes: ['navigation'],
   prerequisites: ['必须提供由应用能力返回的稳定引用。'],
-  acceptsRefs: ['generation.record', 'generation.result', 'asset', 'canvas.project', 'canvas.node', 'video_edit.project', 'video_edit.sequence', 'video_edit.bin', 'video_edit.item', 'video_edit.media', 'video_edit.track', 'video_edit.clip', 'video_edit.annotation'],
+  acceptsRefs: ['generation.record', 'generation.result', 'asset', 'canvas.project', 'canvas.node', 'video_edit.project', 'video_edit.sequence', 'video_edit.bin', 'video_edit.item', 'video_edit.media', 'video_edit.track', 'video_edit.clip', 'video_edit.annotation', 'video_edit.source'],
   producesRefs: ['application.entity'],
   successEvidence: ['返回实际定位的引用与 Surface。'],
   failureRecovery: ['引用失效时重新读取来源模块，不根据名称猜测对象。'],

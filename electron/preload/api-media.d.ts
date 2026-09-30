@@ -311,7 +311,8 @@ export interface HenjiVideoApi {
   trimVideoSource(payload: HenjiVideoTrimVideoSourcePayload): Promise<HenjiVideoTrimVideoSourceResult>
   compressVideoToFit(payload: HenjiVideoCompressVideoToFitPayload): Promise<HenjiVideoCompressVideoToFitResult>
   generateThumbnail(payload: { source: string; timeOffsetSeconds?: number; knownDurationSeconds?: number }): Promise<{ dataUrl: string }>
-  generateThumbnailBytes(payload: { source: string; maxSize?: number }): Promise<{ bytes: Uint8Array }>
+  generateThumbnailBytes(payload: { source: string; maxSize?: number; cache?: boolean; requestId?: string }): Promise<{ bytes: Uint8Array; cachePath?: string }>
+  cancelThumbnail(requestId: string): Promise<void>
   startFrameExport(payload: HenjiVideoStartFrameExportPayload): Promise<{ sessionId: string }>
   appendFrameExport(payload: HenjiVideoAppendFrameExportPayload): Promise<{ frameIndex: number }>
   finishFrameExport(payload: HenjiVideoFinishFrameExportPayload): Promise<HenjiVideoFrameExportResult>

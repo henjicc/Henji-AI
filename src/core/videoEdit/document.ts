@@ -9,9 +9,10 @@ export const videoEditMediaSchema = z.object({
   id: identifier, name, path: z.string().min(1).max(32768).regex(/^(?:[A-Za-z]:[\\/]|\\\\|\/)/, '素材必须引用本地绝对路径。'),
   kind: z.enum(['video', 'audio', 'image']), durationSeconds: z.number().finite().nonnegative(),
   width: z.number().int().nonnegative(), height: z.number().int().nonnegative(),
+  assetId: identifier.optional(), frameRate: videoEditRatioSchema.optional(), frameRateMode: z.enum(['sampled-constant', 'variable', 'unknown']).optional(),
 }).strict()
 export const videoEditBinSchema = z.object({ id: identifier, name, parentId: identifier.optional() }).strict()
-export const videoEditItemSchema = z.object({ id: identifier, name, binId: identifier.optional(), kind: z.enum(['video', 'audio', 'image', 'text']), mediaId: identifier.optional() }).strict()
+export const videoEditItemSchema = z.object({ id: identifier, name, binId: identifier.optional(), tags: z.array(z.string().trim().min(1).max(80)).max(32).optional(), kind: z.enum(['video', 'audio', 'image', 'text']), mediaId: identifier.optional() }).strict()
 export const videoEditTrackSchema = z.object({ id: identifier, name, index: z.number().int().min(0).max(31), kind: z.enum(['video', 'audio']), locked: z.boolean(), enabled: z.boolean(), muted: z.boolean(), solo: z.boolean() }).strict()
 export const videoEditClipSchema = z.object({
   id: identifier, itemId: identifier, name, kind: z.enum(['video', 'audio', 'image', 'text']), track: z.number().int().min(0).max(31),
@@ -25,7 +26,7 @@ export const videoEditAnnotationSchema = z.object({
   x: z.number().min(0).max(1), y: z.number().min(0).max(1), width: z.number().min(0).max(1), height: z.number().min(0).max(1), text: z.string().max(2000),
 }).strict()
 export const videoEditSequenceSchema = z.object({
-  id: identifier, name, width: z.number().int().min(16).max(4096), height: z.number().int().min(16).max(4096),
+  id: identifier, name, binId: identifier.optional(), width: z.number().int().min(16).max(4096), height: z.number().int().min(16).max(4096),
   frameRate: videoEditRatioSchema.refine(rate => VIDEO_EDIT_FRAME_RATES.some(value => value.numerator * rate.denominator === rate.numerator * value.denominator), '请选择支持的序列帧率。'),
   pixelAspectRatio: videoEditRatioSchema.refine(ratio => ratio.numerator / ratio.denominator >= 0.25 && ratio.numerator / ratio.denominator <= 4, '像素长宽比超出范围。'),
   sampleRate: z.union([z.literal(44100), z.literal(48000)]), channels: z.union([z.literal(1), z.literal(2)]),
@@ -56,6 +57,7 @@ export const videoEditDocumentSchema = z.object({
     if (item.kind === 'text' && item.mediaId) issue('文字项目项不能引用媒体文件。')
   }
   for (const sequence of document.sequences) {
+    if (sequence.binId && !document.bins.some(bin => bin.id === sequence.binId)) issue('序列的素材箱不存在。')
     const fps = videoEditFps(sequence.frameRate)
     if (Math.round(sequence.width * sequence.pixelAspectRatio.numerator / sequence.pixelAspectRatio.denominator) > 8192) issue('等效画面宽度超出导出范围。')
     if (new Set(sequence.tracks.map(track => track.index)).size !== sequence.tracks.length) issue('序列轨道编号重复。')
@@ -75,6 +77,8 @@ export type VideoEditDocument = z.infer<typeof videoEditDocumentSchema>
 export type VideoEditSequence = z.infer<typeof videoEditSequenceSchema>
 export type VideoEditClip = z.infer<typeof videoEditClipSchema>
 export type VideoEditMedia = z.infer<typeof videoEditMediaSchema>
+export type VideoEditItem = z.infer<typeof videoEditItemSchema>
+export type VideoEditBin = z.infer<typeof videoEditBinSchema>
 export type VideoEditAnnotation = z.infer<typeof videoEditAnnotationSchema>
 export type VideoEditComposition = VideoEditSequence & Pick<VideoEditDocument, 'media' | 'items' | 'revision'> & { fps: number }
 export function createVideoEditSequence(name = '序列 1'): VideoEditSequence {

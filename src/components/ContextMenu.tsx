@@ -1,5 +1,6 @@
 import { createLogger } from '@/core/logging'
 import React, { useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { MenuItem } from '../hooks/useContextMenu'
 
 const logger = createLogger('components.ContextMenu')
@@ -38,9 +39,10 @@ const ContextMenu: React.FC<ContextMenuProps> = ({ items, position, onClose, vis
 
     if (!visible) return null
 
-    return (
+    return createPortal(
         <div
             ref={menuRef}
+            role="menu"
             data-context-menu
             data-asset-context-menu={owner === 'assets' ? 'true' : undefined}
             className="ui-glass context-menu animate-scale-in"
@@ -52,7 +54,11 @@ const ContextMenu: React.FC<ContextMenuProps> = ({ items, position, onClose, vis
             {items.map((item, index) => (
                 <React.Fragment key={item.id}>
                     <div
+                        role="menuitem"
+                        aria-disabled={item.disabled === true}
+                        tabIndex={item.disabled ? -1 : 0}
                         className={`context-menu-item ${item.disabled ? 'disabled' : ''}`}
+                        onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.currentTarget.click() } }}
                         onClick={async (e) => {
                             const t0 = performance.now()
                             logger.info('[ContextMenu] 点击菜单项', { label: item.label, t0 })
@@ -85,7 +91,7 @@ const ContextMenu: React.FC<ContextMenuProps> = ({ items, position, onClose, vis
                     )}
                 </React.Fragment>
             ))}
-        </div>
+        </div>, document.body
     )
 }
 

@@ -1,0 +1,128 @@
+import { createLogger } from '@/core/logging'
+import { requireVideoEditInstance, listVideoEditInstances, subscribeVideoEdit, publishVideoEdit } from './videoEditService'
+
+const logger = createLogger('features.videoEdit.source')
+export interface VideoEditSourceState {
+  itemId: string
+  timeUs: number
+  presentedTimeUs: number
+  playing: boolean
+  volume: number
+  status: 'closed' | 'loading' | 'ready' | 'error'
+  error: string
+}
+export interface VideoEditSourceRequest { itemId: string; timeUs: number; playing: boolean; volume: number }
+export interface VideoEditSourceObservation { timeUs: number; presentedTimeUs: number; playing: boolean; volume: number }
+export type VideoEditSourcePresenter = (request: VideoEditSourceRequest, signal: AbortSignal) => Promise<VideoEditSourceObservation>
+interface SourceSession { state: VideoEditSourceState; presenter?: VideoEditSourcePresenter; wake?: () => void; pending?: AbortController; epoch: number; command: object; mediaPath?: string }
+export interface VideoEditSourceCommandIdentity { readonly owner: object; readonly command: object }
+const sessions = new Map<string, SourceSession>()
+const listeners = new Set<() => void>()
+let revision = 0
+function publish(): void { revision++; for (const listener of listeners) listener() }
+export function subscribeVideoEditSource(listener: () => void): () => void { listeners.add(listener); return () => { listeners.delete(listener) } }
+export function videoEditSourceRevision(): number { return revision }
+function session(projectId: string): SourceSession {
+  requireVideoEditInstance(projectId)
+  let current = sessions.get(projectId)
+  if (!current) { current = { state: { itemId: '', timeUs: 0, presentedTimeUs: 0, playing: false, volume: 1, status: 'closed', error: '' }, epoch: 0, command: {} }; sessions.set(projectId, current) }
+  return current
+}
+export function readVideoEditSource(projectId: string): VideoEditSourceState { return { ...session(projectId).state } }
+export function registerVideoEditSourcePresenter(projectId: string, presenter: VideoEditSourcePresenter): () => void {
+  const current = session(projectId)
+  if (current.presenter && current.presenter !== presenter) throw new Error('此工程已有源预览宿主。')
+  current.presenter = presenter; current.wake?.()
+  return () => { if (sessions.get(projectId) !== current || current.presenter !== presenter) return; current.presenter = undefined; closeVideoEditSource(projectId) }
+}
+function validateRequest(projectId: string, request: VideoEditSourceRequest): void {
+  if (!Number.isSafeInteger(request.timeUs) || request.timeUs < 0) throw new Error('源定位必须使用非负整数微秒。')
+  if (!Number.isFinite(request.volume) || request.volume < 0 || request.volume > 1) throw new Error('源预览音量必须在 0 到 1 之间。')
+  if (!request.itemId) { if (request.playing || request.timeUs) throw new Error('请先打开一个源素材。'); return }
+  const document = requireVideoEditInstance(projectId).document
+  const item = document.items.find(item => item.id === request.itemId)
+  const media = document.media.find(media => media.id === item?.mediaId)
+  if (!item || !media) throw new Error('请打开一个有效的视频、图片或音频项目项。')
+  if (media.kind === 'image' && (request.timeUs || request.playing)) throw new Error('静态图片不支持源播放或定位。')
+  if (media.kind !== 'image' && request.timeUs > Math.round(media.durationSeconds * 1e6)) throw new Error('定位超出源素材时长。')
+}
+/** Commands finish only after the real preview acknowledges them; ticks never alter edit history. */
+export async function updateVideoEditSource(projectId: string, values: Partial<VideoEditSourceRequest>, externalSignal?: AbortSignal): Promise<VideoEditSourceState> {
+  externalSignal?.throwIfAborted()
+  const current = session(projectId)
+  const request = { itemId: current.state.itemId, timeUs: current.state.timeUs, playing: current.state.playing, volume: current.state.volume, ...values }
+  if (values.itemId !== undefined && values.itemId !== current.state.itemId) { request.timeUs = values.timeUs ?? 0; request.playing = values.playing ?? false }
+  validateRequest(projectId, request)
+  if (!request.itemId && !current.presenter) { current.state.volume = request.volume; closeVideoEditSource(projectId); publishVideoEdit(true); return readVideoEditSource(projectId) }
+  current.pending?.abort(new Error('源预览请求已被更新。'))
+  const controller = new AbortController(); current.pending = controller
+  const cancel = (): void => controller.abort(externalSignal?.reason ?? new Error('源预览请求已取消。'))
+  externalSignal?.addEventListener('abort', cancel, { once: true })
+  const epoch = ++current.epoch
+  current.command = {}
+  const timeout = setTimeout(() => controller.abort(new Error('源预览未能及时响应，请打开源面板后重试。')), 10000)
+  current.state = { ...current.state, itemId: request.itemId, ...(request.itemId !== current.state.itemId ? { timeUs: request.timeUs, presentedTimeUs: 0 } : {}), playing: false, status: request.itemId ? 'loading' : 'closed', error: '' }
+  const document = requireVideoEditInstance(projectId).document
+  current.mediaPath = document.media.find(media => media.id === document.items.find(item => item.id === request.itemId)?.mediaId)?.path
+  publish()
+  logger.debug('源预览请求开始', { event: 'video_edit.source.request.start', context: { projectId, itemId: request.itemId } })
+  try {
+    if (!current.presenter) await new Promise<void>((resolve, reject) => {
+      const onAbort = (): void => { current.wake = undefined; reject(controller.signal.reason) }
+      current.wake = () => { current.wake = undefined; controller.signal.removeEventListener('abort', onAbort); resolve() }
+      controller.signal.addEventListener('abort', onAbort, { once: true })
+    })
+    controller.signal.throwIfAborted()
+    const observation = await Promise.race([
+      current.presenter!(request, controller.signal),
+      new Promise<never>((_, reject) => controller.signal.addEventListener('abort', () => reject(controller.signal.reason), { once: true })),
+    ])
+    controller.signal.throwIfAborted()
+    if (epoch !== current.epoch) throw new Error('源预览请求已被更新。')
+    validateRequest(projectId, { ...request, timeUs: observation.timeUs, playing: observation.playing, volume: observation.volume })
+    if ((!request.playing && Math.abs(request.timeUs - observation.timeUs) > 1000) || request.playing !== observation.playing) throw new Error('源预览未能确认所请求的播放或定位状态。')
+    if (!Number.isSafeInteger(observation.presentedTimeUs) || observation.presentedTimeUs < 0) throw new Error('源预览未返回有效画面位置。')
+    if (Math.abs(request.volume - observation.volume) > 1e-6) throw new Error('源预览未能确认所请求的音量。')
+    current.state = { itemId: request.itemId, ...observation, status: request.itemId ? 'ready' : 'closed', error: '' }
+    publish(); publishVideoEdit(true)
+    logger.debug('源预览请求完成', { event: 'video_edit.source.request.completed', context: { projectId, itemId: request.itemId } })
+    return readVideoEditSource(projectId)
+  } catch (error) {
+    if (epoch === current.epoch) { current.state = { ...current.state, playing: false, status: 'error', error: error instanceof Error ? error.message : String(error) }; publish() }
+    if (!controller.signal.aborted) logger.warn('源预览请求未完成', { event: 'video_edit.source.request.failed', error, context: { projectId } }); throw error
+  } finally { clearTimeout(timeout); externalSignal?.removeEventListener('abort', cancel); if (current.pending === controller) current.pending = undefined }
+}
+export function observeVideoEditSource(projectId: string, itemId: string, observation: VideoEditSourceObservation): void {
+  const current = sessions.get(projectId)
+  if (!current || current.pending || current.state.itemId !== itemId || current.state.status !== 'ready') return
+  if (![observation.timeUs, observation.presentedTimeUs].every(value => Number.isSafeInteger(value) && value >= 0)) return
+  if (!Number.isFinite(observation.volume) || observation.volume < 0 || observation.volume > 1) return
+  current.state = { ...current.state, ...observation }; publish()
+}
+export function closeVideoEditSource(projectId: string): void {
+  const current = sessions.get(projectId)
+  if (!current) return
+  current.epoch++; current.command = {}; current.pending?.abort(new Error('源预览已关闭。')); current.pending = undefined
+  current.state = { itemId: '', timeUs: 0, presentedTimeUs: 0, playing: false, volume: current.state.volume, status: 'closed', error: '' }; publish()
+}
+export function videoEditSourceCommandIdentity(projectId: string): VideoEditSourceCommandIdentity {
+  const current = session(projectId)
+  return { owner: current, command: current.command }
+}
+export function matchesVideoEditSourceCommand(projectId: string, identity: VideoEditSourceCommandIdentity): boolean {
+  const current = sessions.get(projectId)
+  return current === identity.owner && current.command === identity.command
+}
+/** Rejoin the logical command chain after a verified inverse; playback observations do not change it. */
+export function restoreVideoEditSourceCommandIdentity(projectId: string, expected: VideoEditSourceCommandIdentity, previous: VideoEditSourceCommandIdentity): void {
+  if (!matchesVideoEditSourceCommand(projectId, expected) || expected.owner !== previous.owner) throw new Error('源预览已有后续操作，无法恢复旧操作记录。')
+  sessions.get(projectId)!.command = previous.command
+}
+subscribeVideoEdit(() => {
+  const opened = listVideoEditInstances()
+  for (const [id, current] of sessions) {
+    const instance = opened.find(instance => instance.document.id === id)
+    if (!instance) { closeVideoEditSource(id); sessions.delete(id) }
+    else if (current.state.itemId && (!instance.document.items.some(item => item.id === current.state.itemId) || instance.document.media.find(media => media.id === instance.document.items.find(item => item.id === current.state.itemId)?.mediaId)?.path !== current.mediaPath)) closeVideoEditSource(id)
+  }
+})

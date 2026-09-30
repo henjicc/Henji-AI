@@ -8,9 +8,10 @@ import { splitVideoEditRef } from './videoEditReflection'
 import { splitVideoEditClip } from '@/core/videoEdit/document'
 import { VIDEO_EDIT_APPLICATION_CAPABILITIES } from '@/core/application-control/domains/videoEdit/videoEditApplicationCapabilities'
 import { exportVideoEdit, cancelVideoEditExport, videoEditExportTask } from './videoEditExport'
-import { importVideoEditPaths } from './videoEditMedia'
 import { assetApplicationService } from '@/features/assets/application/assetApplicationService'
 import { getPlatform } from '@/platform/runtime'
+import { VideoEditSourceExecutor } from './videoEditSourceExecutor'
+import { importVideoEditSources } from './videoEditMedia'
 
 const persistenceOwners = new WeakMap<VideoEditInstance, ApplicationPersistenceParticipant>()
 
@@ -18,12 +19,13 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
   id: 'videoEdit', entities: createVideoEditRegistrations,
   registerExecutors(engine) {
     for (const entityType of ['video_edit.project', 'video_edit.sequence', 'video_edit.bin', 'video_edit.item', 'video_edit.track', 'video_edit.clip', 'video_edit.annotation'] as const) engine.registerMutationExecutor(new VideoEditMutationExecutor(entityType))
+    engine.registerMutationExecutor(new VideoEditSourceExecutor())
     for (const entityType of ['video_edit.sequence', 'video_edit.bin', 'video_edit.item', 'video_edit.clip', 'video_edit.annotation'] as const) engine.registerCollectionExecutor(new VideoEditCollectionExecutor(entityType))
   },
   registerCapabilities(registrar) {
     for (const definition of VIDEO_EDIT_APPLICATION_CAPABILITIES) registrar.registerHandler(definition.id, async raw => {
       const input = definition.inputSchema.parse(raw) as { projectRef: { kind: 'video_edit.project'; id: string }; clipRef?: { id: string }; frame?: number; assetRef?: { id: string } }
-      const id = input.projectRef.id; requireVideoEditInstance(id)
+      const id = input.projectRef.id; const owner = requireVideoEditInstance(id)
       switch (definition.id) {
         case 'undo_video_edit': undoVideoEdit(id); await saveVideoEdit(id); break
         case 'redo_video_edit': undoVideoEdit(id, true); await saveVideoEdit(id); break
@@ -38,11 +40,13 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
         case 'import_video_edit_asset': {
           if (!input.assetRef) throw new Error('请提供素材库 assetRef。')
           const asset = await assetApplicationService.inspect(input.assetRef.id)
-          await importVideoEditPaths(id, [asset.filePath]); await saveVideoEdit(id); break
+          if (requireVideoEditInstance(id) !== owner) throw new Error('原工程已关闭，请重新引用素材库素材。')
+          await importVideoEditSources(id, [{ path: asset.filePath, assetId: input.assetRef.id }]); await saveVideoEdit(id); break
         }
         case 'export_video_edit': await exportVideoEdit(id, undefined, true); break
         case 'cancel_video_edit_export': cancelVideoEditExport(id); break
       }
+      if (requireVideoEditInstance(id) !== owner) throw new Error('原工程已关闭，操作回执不会写入重新打开的工程。')
       const task = videoEditExportTask(id)
       const instance = requireVideoEditInstance(id)
       const verified = definition.id.includes('export') ? Boolean(task) : JSON.stringify(JSON.parse(await getPlatform().system.fs.readTextFile(instance.path))) === JSON.stringify(instance.document)
@@ -50,7 +54,7 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
     })
   },
   resolvePersistenceParticipants(steps) {
-    const ids = new Set(steps.flatMap(step => step.kind === 'mutation' && step.target.kind.startsWith('video_edit.') ? [splitVideoEditRef(step.target).projectId] : step.kind === 'collection' && step.parent.kind.startsWith('video_edit.') ? [splitVideoEditRef(step.parent).projectId] : []))
+    const ids = new Set(steps.flatMap(step => step.kind === 'mutation' && step.target.kind.startsWith('video_edit.') && step.target.kind !== 'video_edit.source' ? [splitVideoEditRef(step.target).projectId] : step.kind === 'collection' && step.parent.kind.startsWith('video_edit.') ? [splitVideoEditRef(step.parent).projectId] : []))
     return [...ids].map(id => {
       const owner = requireVideoEditInstance(id)
       const existing = persistenceOwners.get(owner)

@@ -67,6 +67,7 @@ export interface VideoFrameExportProgress {
  * 视频本地处理原生命令（ffmpeg/ffprobe）。
  */
 export interface VideoPlatform {
+  getCachedThumbnail(source: string, signal?: AbortSignal): Promise<{ path: string }>
   readVideoInfo(source: string): Promise<VideoInfoResult>
   trimVideoSource(payload: TrimVideoSourcePayload): Promise<TrimVideoSourceResult>
   compressVideoToFit(payload: CompressVideoToFitPayload): Promise<CompressVideoToFitResult>

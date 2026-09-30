@@ -54,6 +54,7 @@ export function createImageVideoApis(nativeInvoke: NativeInvoke): {
     compressVideoToFit: (payload) => nativeInvoke('video:compressVideoToFit', payload),
     generateThumbnail: (payload) => nativeInvoke('video:generateThumbnail', payload),
     generateThumbnailBytes: (payload) => nativeInvoke('video:generateThumbnailBytes', payload),
+    cancelThumbnail: (requestId) => nativeInvoke('video:cancelThumbnail', { requestId }),
     startFrameExport: (payload) => nativeInvoke('video:startFrameExport', payload),
     appendFrameExport: (payload) => nativeInvoke('video:appendFrameExport', payload),
     finishFrameExport: (payload) => nativeInvoke('video:finishFrameExport', payload),

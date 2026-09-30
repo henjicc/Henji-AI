@@ -12,6 +12,15 @@ function getNativeVideo(): NonNullable<typeof window.henjiNative>['video'] {
 
 export function createElectronVideo(): VideoPlatform {
   return {
+    async getCachedThumbnail(source, signal) {
+      signal?.throwIfAborted()
+      const requestId = crypto.randomUUID()
+      const native = getNativeVideo()
+      const pending = native.generateThumbnailBytes({ source, maxSize: 320, cache: true, requestId })
+      const cancel = (): void => { void native.cancelThumbnail(requestId).catch(() => {}) }
+      signal?.addEventListener('abort', cancel, { once: true })
+      try { const result = await pending; signal?.throwIfAborted(); if (!result.cachePath) throw new Error('视频缩略图未返回缓存位置。'); return { path: result.cachePath } } finally { signal?.removeEventListener('abort', cancel) }
+    },
     readVideoInfo: (source) => getNativeVideo().readVideoInfo(source),
     trimVideoSource: (payload) => getNativeVideo().trimVideoSource(payload),
     compressVideoToFit: (payload) => getNativeVideo().compressVideoToFit(payload),

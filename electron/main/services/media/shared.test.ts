@@ -1,0 +1,21 @@
+import { beforeEach, afterEach, expect, it, vi } from 'vitest'
+const mock = vi.hoisted(() => ({ access: vi.fn(), writeFile: vi.fn(), rm: vi.fn() }))
+vi.mock('node:fs', () => ({ default: { constants: { R_OK: 4 }, promises: mock } }))
+vi.mock('../image/path-utils', () => ({ getUploadsDir: () => 'D:/test-uploads' }))
+vi.mock('../image/source', () => ({ normalizeLocalSource: (path: string) => path }))
+import { resolveLocalMediaPath } from './shared'
+beforeEach(() => { vi.resetAllMocks() })
+afterEach(() => { vi.unstubAllGlobals() })
+it('远程下载取消立即中断请求，取消写入清理部分文件；本地默认调用兼容', async () => {
+  const cancel = new AbortController()
+  vi.stubGlobal('fetch', vi.fn((_url: string, options: { signal: AbortSignal }) => new Promise((_resolve, reject) => options.signal.addEventListener('abort', () => reject(options.signal.reason), { once: true }))))
+  const download = resolveLocalMediaPath('https://example.test/paused.mp4', cancel.signal)
+  cancel.abort(new Error('关闭来源')); await expect(download).rejects.toThrow('关闭来源')
+  expect(mock.writeFile).not.toHaveBeenCalled()
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, arrayBuffer: async () => new Uint8Array([1]).buffer }))
+  mock.writeFile.mockRejectedValue(new Error('写入已取消'))
+  await expect(resolveLocalMediaPath('https://example.test/file.mp4', new AbortController().signal)).rejects.toThrow('写入已取消')
+  expect(mock.rm).toHaveBeenCalledWith(expect.stringMatching(/\.mp4$/), { force: true })
+  expect(await resolveLocalMediaPath('D:/original.mp4')).toBe('D:/original.mp4')
+  expect(mock.access).toHaveBeenCalledWith('D:/original.mp4', 4)
+})

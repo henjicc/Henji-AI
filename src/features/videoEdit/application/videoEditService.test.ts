@@ -239,7 +239,8 @@ it('复制序列重建实例标识但复用项目项，删除和设置变更共�
   updateVideoEditSequenceSettings(id, first, { frameRate: { numerator: 60, denominator: 1 }, pixelAspectRatio: { numerator: 2, denominator: 1 } })
   expect(instance.frame).toBe(60); expect(getActiveVideoEditSequence(instance).width).toBe(3840)
   undoVideoEdit(id); expect(instance.frame).toBe(30); expect(getActiveVideoEditSequence(instance).width).toBe(1920)
-  switchVideoEditSequence(id, duplicate); deleteVideoEditSequence(id, duplicate)
+  switchVideoEditSequence(id, duplicate); expect(() => deleteVideoEditSequence(id, duplicate)).toThrow('请先移除')
+  editVideoSequence(id, duplicate, sequence => ({ ...sequence, clips: [], annotations: [] })); deleteVideoEditSequence(id, duplicate)
   expect(instance.activeSequenceId).toBe(first); undoVideoEdit(id); expect(instance.document.sequences).toHaveLength(2)
 })
 it('公共事务修改后台序列设置与片段为一步撤销，前台选区和原目标不变', async () => {

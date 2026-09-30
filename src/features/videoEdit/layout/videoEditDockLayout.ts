@@ -8,12 +8,13 @@ export const VIDEO_EDIT_PANELS = [
   { id: 'program', title: '节目画面' },
   { id: 'effects', title: '效果控件' },
   { id: 'timeline', title: '时间线' },
+  { id: 'source', title: '源监视器' },
 ] as const
 export type VideoEditPanelId = typeof VIDEO_EDIT_PANELS[number]['id']
 
 /** A view-only layout: no project content, selection or transport state is serialized. */
 export function defaultVideoEditLayout(): SerializedDockview {
-  const panels = Object.fromEntries(VIDEO_EDIT_PANELS.map(({ id, title }) => [id, { id, contentComponent: id, title, renderer: 'always' as const }]))
+  const panels = Object.fromEntries(VIDEO_EDIT_PANELS.filter(panel => panel.id !== 'source').map(({ id, title }) => [id, { id, contentComponent: id, title, renderer: 'always' as const }]))
   return {
     grid: {
       width: 1440, height: 860, orientation: Orientation.HORIZONTAL,
@@ -104,7 +105,7 @@ export function showVideoEditPanel(api: DockviewApi, id: VideoEditPanelId): IDoc
   const definition = VIDEO_EDIT_PANELS.find(panel => panel.id === id)!
   const reference = api.getPanel('program') ?? api.panels.find(panel => panel.api.location.type === 'grid')
   return api.addPanel({ id, component: id, title: definition.title, renderer: 'always',
-    ...(reference ? { position: { referencePanel: reference, direction: id === 'timeline' ? 'below' : id === 'project' ? 'left' : 'right' } } : {}),
+    ...(reference ? { position: { referencePanel: reference, direction: id === 'timeline' ? 'below' : id === 'project' || id === 'source' ? 'left' : 'right' } } : {}),
     ...(id === 'timeline' ? { initialHeight: 320 } : id === 'program' ? {} : { initialWidth: 280 }),
   })
 }

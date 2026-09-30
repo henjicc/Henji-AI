@@ -3,9 +3,10 @@ import React from 'react'
 import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import AudioPlayer from './AudioPlayer'
+import { useAudioWaveform } from '@/hooks/useAudioWaveform'
 
 vi.mock('@/hooks/useI18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }))
-vi.mock('@/hooks/useAudioWaveform', () => ({ useAudioWaveform: () => ({ waveform: null, waveDuration: undefined }) }))
+vi.mock('@/hooks/useAudioWaveform', () => ({ useAudioWaveform: vi.fn(() => ({ waveform: null, waveDuration: undefined })) }))
 vi.mock('@/utils/save', () => ({ downloadAudioFile: vi.fn(), saveAudioFromUrl: vi.fn() }))
 vi.mock('@/components/ui', () => ({
   UI_PANEL_SURFACE_CLASS: '',
@@ -68,4 +69,37 @@ it('未提供恢复状态的现有消费者仍从零开始、默认音量不变'
   expect(audio.currentTime).toBe(0)
   expect(audio.volume).toBe(1)
   expect(audio.play).not.toHaveBeenCalled()
+})
+
+it('宿主受控模式只发送播放、定位和音量命令，无第二媒体元素、全音频分析或乐观播放状态', async () => {
+  const onTogglePlay = vi.fn(); const onSeek = vi.fn(); const onVolume = vi.fn()
+  const controlled = { currentTime: 12, duration: 120, playing: false, volume: 0.4, onTogglePlay, onSeek, onVolume }
+  const view = render(<AudioPlayer src="media:source" filePath="D:/source.wav" compact controlledPlayback={controlled} />)
+  expect(view.container.querySelector('audio')).toBeNull()
+  expect(useAudioWaveform).toHaveBeenLastCalledWith('', undefined, expect.objectContaining({ duration: 120 }))
+  expect(view.getByText('0:12')).toBeTruthy(); expect(view.getByText('2:00')).toBeTruthy()
+  await act(async () => fireEvent.click(view.getByTitle('ui:audioPlayer.playPause')))
+  expect(onTogglePlay).toHaveBeenCalledTimes(1); expect(HTMLMediaElement.prototype.play).not.toHaveBeenCalled()
+  fireEvent.change(view.getByLabelText('音频播放位置'), { target: { value: '31.5' } })
+  expect(onSeek).toHaveBeenLastCalledWith(31.5)
+  expect(view.getByText('0:12')).toBeTruthy()
+  fireEvent.click(view.getByTitle('ui:audioPlayer.volume'))
+  const volume = view.container.querySelector('input[max="1"]')!
+  fireEvent.change(volume, { target: { value: '0.65' } })
+  expect(onVolume).toHaveBeenLastCalledWith(0.65)
+  expect((volume as HTMLInputElement).value).toBe('0.4')
+  view.rerender(<AudioPlayer src="media:source" compact controlledPlayback={{ ...controlled, currentTime: 31.5, playing: true, volume: 0.65 }} />)
+  expect(view.getByText('0:31')).toBeTruthy(); expect(view.container.querySelector('audio')).toBeNull()
+})
+
+it('宿主尚未确认或面板隐藏时，受控控件不发出新播放命令', () => {
+  const onTogglePlay = vi.fn()
+  const controlled = { currentTime: 0, duration: 3, playing: false, volume: 1, disabled: true, onTogglePlay, onSeek: vi.fn(), onVolume: vi.fn() }
+  const view = render(<AudioPlayer src="media:source" controlledPlayback={controlled} />)
+  fireEvent.keyDown(view.container.firstChild!, { key: ' ' })
+  fireEvent.click(view.getByTitle('ui:audioPlayer.playPause'))
+  expect(onTogglePlay).not.toHaveBeenCalled()
+  view.rerender(<AudioPlayer src="media:source" active={false} controlledPlayback={{ ...controlled, disabled: false }} />)
+  fireEvent.keyDown(view.container.firstChild!, { key: ' ' })
+  expect(onTogglePlay).not.toHaveBeenCalled()
 })

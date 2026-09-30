@@ -11,6 +11,17 @@ export interface AudioPlaybackState {
   volume: number
 }
 
+export interface ControlledAudioPlayback {
+  currentTime: number
+  duration: number
+  playing: boolean
+  volume: number
+  disabled?: boolean
+  onTogglePlay: () => void
+  onSeek: (seconds: number) => void
+  onVolume: (volume: number) => void
+}
+
 interface AudioPlayerProps {
   src: string
   filePath?: string
@@ -25,6 +36,8 @@ interface AudioPlayerProps {
   /** 虚拟列表重新挂载暂停的播放器时恢复位置和音量。 */
   initialPlaybackState?: AudioPlaybackState
   onActivityChange?: (active: boolean) => void
+  /** Host-owned playback: controls project confirmed state, without creating another decoder or waveform analysis. */
+  controlledPlayback?: ControlledAudioPlayback
   /**
    * 外壳表面由**宿主**决定，而不是播放器自己硬定：
    * - `card`（默认）：完整卡片表面，用于播放器是主体内容的场景（如音频查看器弹窗）
@@ -48,6 +61,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
   active = true,
   initialPlaybackState,
   onActivityChange,
+  controlledPlayback,
   surface = 'card',
 }) => {
   const { t } = useI18n()
@@ -56,17 +70,22 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
   const visibleRef = useRef(true)
   const [isVisible, setIsVisible] = useState(true)
   const restoreRef = useRef({ src, state: initialPlaybackState })
-  const [isPlaying, setIsPlaying] = useState(false)
-  const [currentTime, setCurrentTime] = useState(initialPlaybackState?.currentTime ?? 0)
-  const [duration, setDuration] = useState(0)
-  const [volume, setVolume] = useState(initialPlaybackState?.volume ?? 1)
+  const [internalPlaying, setIsPlaying] = useState(false)
+  const [internalTime, setCurrentTime] = useState(initialPlaybackState?.currentTime ?? 0)
+  const [internalDuration, setDuration] = useState(0)
+  const [internalVolume, setVolume] = useState(initialPlaybackState?.volume ?? 1)
+  const isPlaying = controlledPlayback?.playing ?? internalPlaying
+  const currentTime = controlledPlayback?.currentTime ?? internalTime
+  const duration = controlledPlayback?.duration ?? internalDuration
+  const volume = controlledPlayback?.volume ?? internalVolume
+  const controlled = controlledPlayback !== undefined
   const [showVolumeSlider, setShowVolumeSlider] = useState(false)
   const [isAdjustingVolume, setIsAdjustingVolume] = useState(false)
   const [showVolumeValueTip, setShowVolumeValueTip] = useState(false)
   const [isDownloading, setIsDownloading] = useState(false)
   const resolvedWaveformWidth = waveformWidth ?? (compact ? 300 : 576)
   const resolvedWaveformHeight = waveformHeight ?? (compact ? 60 : 72)
-  const { waveform, waveDuration } = useAudioWaveform(src, filePath, {
+  const { waveform, waveDuration } = useAudioWaveform(controlled ? '' : src, controlled ? undefined : filePath, {
     width: resolvedWaveformWidth,
     compact,
     duration,
@@ -84,13 +103,14 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
     const observer = new IntersectionObserver(([entry]) => {
       visibleRef.current = entry.isIntersecting
       setIsVisible(entry.isIntersecting)
-      if (entry.isIntersecting) setCurrentTime(audioRef.current?.currentTime ?? 0)
+      if (entry.isIntersecting && !controlled) setCurrentTime(audioRef.current?.currentTime ?? 0)
     })
     observer.observe(playerRef.current)
     return () => observer.disconnect()
-  }, [])
+  }, [controlled])
 
   useEffect(() => {
+    if (controlled) return
     const a = audioRef.current
     if (!a) return
     a.pause()
@@ -124,17 +144,18 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
       a.removeEventListener('timeupdate', onTime)
       a.removeEventListener('ended', onEnd)
     }
-  }, [autoPlay, src])
+  }, [autoPlay, src, controlled])
 
   useEffect(() => {
-    if (active) return
+    if (active || controlled) return
     const audio = audioRef.current
     audio?.pause()
     setIsPlaying(false)
-  }, [active])
+  }, [active, controlled])
 
   const rafRef = useRef<number | null>(null)
   useEffect(() => {
+    if (controlled) return
     const a = audioRef.current
     if (!a) return
     if (isPlaying && isVisible) {
@@ -152,13 +173,14 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
       if (rafRef.current) cancelAnimationFrame(rafRef.current)
       rafRef.current = null
     }
-  }, [isPlaying, isVisible, src])
+  }, [isPlaying, isVisible, src, controlled])
 
   useEffect(() => {
+    if (controlled) return
     const a = audioRef.current
     if (!a) return
     a.volume = volume
-  }, [volume])
+  }, [volume, controlled])
 
   useEffect(() => {
     if (!showVolumeSlider) {
@@ -214,6 +236,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
   }, [isAdjustingVolume])
 
   const togglePlay = async () => {
+    if (controlledPlayback) { if (active && !controlledPlayback.disabled) controlledPlayback.onTogglePlay(); return }
     const a = audioRef.current
     if (!a) return
     if (isPlaying) {
@@ -238,6 +261,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
 
   const applyVolume = (nextVolume: number): void => {
     const clampedVolume = Math.max(0, Math.min(1, Number.isFinite(nextVolume) ? nextVolume : 1))
+    if (controlledPlayback) { if (active && !controlledPlayback.disabled) controlledPlayback.onVolume(clampedVolume); return }
     setVolume(clampedVolume)
   }
 
@@ -318,8 +342,8 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
         <span>{format(currentTime)}</span>
         <span>{format(waveDuration ?? duration)}</span>
       </div>
-      <div className={`${compact ? 'mb-2 h-[48px]' : 'mb-3 h-[72px]'}`}>
-        {waveform ? (
+      <div className={controlled ? 'mb-2' : `${compact ? 'mb-2 h-[48px]' : 'mb-3 h-[72px]'}`}>
+        {controlledPlayback ? <UiRangeInput aria-label="音频播放位置" className="w-full" min={0} max={duration} step={0.001} value={currentTime} disabled={!active || controlledPlayback.disabled} onChange={event => controlledPlayback.onSeek(Number(event.target.value))} /> : waveform ? (
           <Waveform
             samples={waveform}
             width={resolvedWaveformWidth}
@@ -349,6 +373,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
           <UiIconButton
             className={`${compact ? '!h-7 !w-7' : '!h-8 !w-8'} border-0 bg-transparent text-text-soft hover:opacity-70`}
             title={t('ui:audioPlayer.volume')}
+            disabled={!active || controlledPlayback?.disabled}
             onClick={() => setShowVolumeSlider((value) => !value)}
           >
             {volume <= 0 ? <VolumeX className="h-[18px] w-[18px]" /> : <Volume2 className="h-[18px] w-[18px]" />}
@@ -365,6 +390,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
                 </div>
               )}
               <UiRangeInput
+                disabled={!active || controlledPlayback?.disabled}
                 min={0}
                 max={1}
                 step={0.01}
@@ -384,7 +410,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
           )}
         </div>
         <div className="flex items-center">
-          <UiIconButton onClick={togglePlay} className={`${compact ? '!h-7 !w-7' : '!h-8 !w-8'} border-0 bg-transparent text-text-soft hover:opacity-70`} title={t('ui:audioPlayer.playPause')}>
+          <UiIconButton disabled={!active || controlledPlayback?.disabled} onClick={togglePlay} className={`${compact ? '!h-7 !w-7' : '!h-8 !w-8'} border-0 bg-transparent text-text-soft hover:opacity-70`} title={t('ui:audioPlayer.playPause')}>
             {isPlaying ? (
               <Pause className={`${compact ? 'h-[18px] w-[18px]' : 'h-5 w-5'}`} />
             ) : (
@@ -394,17 +420,17 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
         </div>
         <div className="flex items-center gap-1">
           {rightActions}
-          <UiIconButton
+          {!controlled && <UiIconButton
             onClick={() => { void handleDownload() }}
             disabled={isDownloading}
             className={`${compact ? '!h-7 !w-7' : '!h-8 !w-8'} border-0 bg-transparent ${isDownloading ? 'text-text-faint opacity-40 cursor-not-allowed' : 'text-text-soft hover:opacity-70'} transition-opacity`}
             title={t('common:actions.download')}
           >
             <Download className={`${compact ? 'h-[18px] w-[18px]' : 'h-5 w-5'}`} />
-          </UiIconButton>
+          </UiIconButton>}
         </div>
       </div>
-      <audio ref={audioRef} src={src} preload="metadata" className="hidden" />
+      {!controlled && <audio ref={audioRef} src={src} preload="metadata" className="hidden" />}
     </div>
   )
 }
