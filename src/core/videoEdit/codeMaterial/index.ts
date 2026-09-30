@@ -1,0 +1,5 @@
+export { compileCodeMaterial } from './compiler'
+export { evaluateCodeMaterial, codeMaterialRandom } from './evaluate'
+export { validateCodeMaterialParameters, checkCodeMaterialParameterCompatibility } from './parameters'
+export { CODE_MATERIAL_LIMITS, CodeMaterialError } from './contract'
+export type { CodeMaterialProgram, CodeMaterialContext, CodeExpression, CodeColor, CodeDrawCommand, CodeParameterDeclaration, CodeParameterValue, CodeParameterValues } from './contract'

@@ -3,6 +3,7 @@ import { VideoEditGpuFrame } from './videoEditGpuFrame'
 import type { VideoEditClip, VideoEditComposition } from '@/core/videoEdit/document'
 import { ImageEditWebGpuDeviceManager } from '@/core/imageEdit/webgpu/deviceManager'
 import { getWebGpuContext, type GpuDevice, type GpuTexture, type GpuBuffer, type GpuRenderPipeline } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
+import { VideoEditCodeGpu, VideoEditCodePicture } from './videoEditCodeGpu'
 
 interface VideoGpuDevice extends GpuDevice {
   importExternalTexture(descriptor: { source: VideoFrame }): unknown
@@ -33,6 +34,8 @@ export class VideoEditGpuCompositor {
   private device!: VideoGpuDevice
   private video!: GpuRenderPipeline
   private image!: GpuRenderPipeline
+  private codeImage!: GpuRenderPipeline
+  private codeRuntime?: VideoEditCodeGpu
   private copyY!: GpuRenderPipeline
   private copyUv!: GpuRenderPipeline
   private copyRgba!: GpuRenderPipeline
@@ -60,17 +63,18 @@ export class VideoEditGpuCompositor {
     this.context.configure({ device: this.device, format, alphaMode: 'premultiplied' })
     this.sampler = this.device.createSampler({ magFilter: 'linear', minFilter: 'linear' })
     this.device.pushErrorScope('validation')
-    const pipeline = (external: boolean): GpuRenderPipeline => {
+    const pipeline = (external: boolean, premultiplied = false): GpuRenderPipeline => {
       const sample = external ? 'textureSampleBaseClampToEdge(t, s, v.uv)' : 'textureSample(t, s, v.uv)'
       const shader = this.device.createShaderModule({ code: vertex + `
 @group(0) @binding(0) var t: ${external ? 'texture_external' : 'texture_2d<f32>'};
 @fragment fn fs(v: Vertex) -> @location(0) vec4f {
  let c = ${sample}; let alpha = c.a * p.opacity;
- return vec4f(clamp(c.rgb * p.brightness, vec3f(0), vec3f(1)) * alpha, alpha);
+ return vec4f(${premultiplied ? 'clamp(c.rgb * p.brightness, vec3f(0), vec3f(c.a)) * p.opacity' : 'clamp(c.rgb * p.brightness, vec3f(0), vec3f(1)) * alpha'}, alpha);
 }` })
       return this.device.createRenderPipeline({ layout: 'auto', vertex: { module: shader, entryPoint: 'vs' }, fragment: { module: shader, entryPoint: 'fs', targets: [{ format, blend: { color: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' }, alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' } } }] }, primitive: { topology: 'triangle-list' } })
     }
     this.video = pipeline(true); this.image = pipeline(false)
+    this.codeImage = pipeline(false, true)
     const cachedShader = this.device.createShaderModule({ code: vertex + `
 @group(0) @binding(0) var y: texture_2d<f32>;
 @group(0) @binding(3) var uv: texture_2d<f32>;
@@ -139,7 +143,13 @@ struct Vertex { @builtin(position) position: vec4f, @location(0) uv: vec2f }
       })
     } catch (error) { texture.destroy(); chroma?.destroy(); throw error } finally { frame.close() }
   }
-  async draw(document: VideoEditComposition, clips: VideoEditClip[], pictures: Array<VideoSample | VideoEditGpuFrame | ImageBitmap | null>, shouldPresent: () => boolean, deadline?: number): Promise<{ presented: boolean; completion: Promise<void> }> {
+  async code(): Promise<VideoEditCodeGpu> {
+    await this.ready
+    if (this.disposed || this.lost) throw new Error('剪辑GPU会话不可用，请重新加载预览。')
+    this.codeRuntime ??= new VideoEditCodeGpu(this.device)
+    return this.codeRuntime
+  }
+  async draw(document: VideoEditComposition, clips: VideoEditClip[], pictures: Array<VideoSample | VideoEditGpuFrame | VideoEditCodePicture | ImageBitmap | null>, shouldPresent: () => boolean, deadline?: number): Promise<{ presented: boolean; completion: Promise<void> }> {
     await this.ready
     if (!shouldPresent()) return { presented: false, completion: Promise.resolve() }
     if (deadline !== undefined) await new Promise<void>(resolve => {
@@ -161,10 +171,14 @@ struct Vertex { @builtin(position) position: vec4f, @location(0) uv: vec2f }
         let resource: unknown
         const external = picture instanceof VideoSample
         const cachedVideo = picture instanceof VideoEditGpuFrame
+        const code = picture instanceof VideoEditCodePicture
         let width = document.width; let height = document.height
         if (external) {
           const frame = picture.toVideoFrame(); frames.push(frame)
           resource = device.importExternalTexture({ source: frame }); width = picture.displayWidth; height = picture.displayHeight
+        } else if (code) {
+          if (picture.owner !== device) throw new Error('代码画面不属于当前剪辑GPU设备。')
+          resource = picture.texture.createView(); width = picture.width; height = picture.height
         } else if (cachedVideo) {
           resource = picture.texture.createView(); width = picture.displayWidth; height = picture.displayHeight
         } else {
@@ -172,7 +186,6 @@ struct Vertex { @builtin(position) position: vec4f, @location(0) uv: vec2f }
           const key = picture ? String(this.imageIds.get(picture)) : `${document.width}:${document.height}:${clip.text}`
           let cached = this.textures.get(clip.id)
           if (cached?.key !== key) {
-            cached?.texture.destroy()
             let source: ImageBitmap | OffscreenCanvas
             if (picture) source = picture
             else {
@@ -182,7 +195,9 @@ struct Vertex { @builtin(position) position: vec4f, @location(0) uv: vec2f }
               clip.text.split('\n').forEach((line, row) => text.fillText(line, document.width / 2, document.height / 2 + row * document.height / 12))
             }
             const texture = device.createTexture({ size: [source.width, source.height], format: 'rgba8unorm', usage: 0x02 | 0x04 | 0x10 })
-            device.queue.copyExternalImageToTexture({ source }, { texture }, [source.width, source.height])
+            try { device.queue.copyExternalImageToTexture({ source }, { texture }, [source.width, source.height]) }
+            catch (error) { texture.destroy(); throw error }
+            cached?.texture.destroy()
             cached = { texture, key }; this.textures.set(clip.id, cached)
           }
           resource = cached.texture.createView()
@@ -193,7 +208,7 @@ struct Vertex { @builtin(position) position: vec4f, @location(0) uv: vec2f }
         const fit = Math.min(document.width / width, document.height / height) * clip.scale
         const rotation = clip.rotation * Math.PI / 180
         device.queue.writeBuffer(uniform, 0, new Float32Array([width * fit / document.width, height * fit / document.height, Math.cos(rotation), Math.sin(rotation), clip.x * 2, clip.y * 2, clip.brightness, clip.opacity, document.height / document.width, document.width / document.height, external || cachedVideo ? picture.rotation : 0, (external || cachedVideo) && picture.flip ? 1 : 0]))
-        const pipeline = external ? this.video : cachedVideo && picture.chroma ? this.cachedVideo : this.image
+        const pipeline = code ? this.codeImage : external ? this.video : cachedVideo && picture.chroma ? this.cachedVideo : this.image
         pass.setPipeline(pipeline)
         pass.setBindGroup(0, device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries: [{ binding: 0, resource }, { binding: 1, resource: this.sampler }, { binding: 2, resource: { buffer: uniform } }, ...(cachedVideo && picture.chroma ? [{ binding: 3, resource: picture.chroma.createView() }] : [])] }))
         pass.draw(6)
@@ -212,6 +227,7 @@ struct Vertex { @builtin(position) position: vec4f, @location(0) uv: vec2f }
     this.cancelPresentation()
     await this.ready.catch(() => {})
     await Promise.allSettled(this.uploads)
+    await this.codeRuntime?.dispose()
     for (const value of this.textures.values()) value.texture.destroy()
     for (const value of this.uniforms.values()) value.destroy()
     for (const value of this.pool) { value.texture.destroy(); value.chroma?.destroy() }

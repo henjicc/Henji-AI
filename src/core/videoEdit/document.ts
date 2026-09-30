@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { offsetVideoEditSource, rescaleVideoEditFrame, videoEditFps, videoEditRatioSchema, videoEditSourceSeconds, VIDEO_EDIT_FRAME_RATES } from './time'
+import { codeMaterialDefinitionsSchema } from './codeMaterialPersistence'
 
 const frame = z.number().int().min(0).max(108_000)
 const identifier = z.string().min(1).max(100)
@@ -35,10 +36,11 @@ export const videoEditSequenceSchema = z.object({
 export const videoEditDocumentSchema = z.object({
   format: z.literal('henji-video-project'), version: z.literal(2), id: identifier, name, revision: z.number().int().nonnegative(),
   media: z.array(videoEditMediaSchema).max(200), bins: z.array(videoEditBinSchema).max(200), items: z.array(videoEditItemSchema).max(500), sequences: z.array(videoEditSequenceSchema).min(1).max(32),
+  codeMaterials: codeMaterialDefinitionsSchema.optional(),
 }).strict().superRefine((document, ctx) => {
   const issue = (message: string): void => { ctx.addIssue({ code: 'custom', message }) }
   const ids = new Set<string>()
-  for (const item of [...document.media, ...document.bins, ...document.items, ...document.sequences, ...document.sequences.flatMap(sequence => [...sequence.tracks, ...sequence.clips, ...sequence.annotations])]) {
+  for (const item of [...document.media, ...document.bins, ...document.items, ...(document.codeMaterials ?? []), ...(document.codeMaterials ?? []).flatMap(definition => definition.versions), ...document.sequences, ...document.sequences.flatMap(sequence => [...sequence.tracks, ...sequence.clips, ...sequence.annotations])]) {
     if (ids.has(item.id)) issue('工程包含重复标识。')
     ids.add(item.id)
   }

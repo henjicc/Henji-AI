@@ -1,4 +1,4 @@
-import { useCallback, useState, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import { UiButton, UiError, UiPageHeader, UiRegion } from '@/components/ui'
 import { Download, Undo2, Redo2, Scissors, Trash2, Type } from 'lucide-react'
 import type { DockviewApi } from 'dockview-react'
@@ -6,8 +6,10 @@ import { activeVideoEditInstance, appendVideoEditClip, closeVideoEditProject, cr
 import { cancelVideoEditExport, exportVideoEdit, videoEditExportTask } from './application/videoEditExport'
 import { VideoEditDock } from './layout/VideoEditDock'
 import { VideoEditLayoutMenu } from './layout/VideoEditDockChrome'
+import { isUiInspectionActive } from '@/platform/runtime'
 
 export default function VideoEditApp(): React.ReactElement {
+  useEffect(() => { if (isUiInspectionActive()) void import('./engine/videoEditCodeProbe') }, [])
   useSyncExternalStore(subscribeVideoEdit, videoEditRevision)
   const instance = activeVideoEditInstance()
   const [error, setError] = useState<string | null>(null)
