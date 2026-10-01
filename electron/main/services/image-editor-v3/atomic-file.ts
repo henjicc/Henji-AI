@@ -98,6 +98,7 @@ export async function writeBufferAtomically(
   targetPath: string,
   content: Uint8Array,
   operations: AtomicFileOperations = DEFAULT_OPERATIONS,
+  options: { exclusive?: boolean } = {},
 ): Promise<void> {
   await fs.mkdir(path.dirname(targetPath), { recursive: true })
   const stagedPath = path.join(
@@ -112,7 +113,13 @@ export async function writeBufferAtomically(
     } finally {
       await handle.close()
     }
-    await replaceFileAtomically(stagedPath, targetPath, operations)
+    if (options.exclusive) {
+      // A same-directory hard link publishes the complete closed file without
+      // overwriting a racing target. Failed writes only ever touch our staging.
+      await fs.link(stagedPath, targetPath)
+      await operations.remove(stagedPath).catch(error => logger.warn('文件已发布，暂存文件清理失败', { event: 'image_editor_v3.atomic_file.staging_cleanup_failed', error, context: { targetPath } }))
+      await syncPublishedDirectory(targetPath, operations)
+    } else await replaceFileAtomically(stagedPath, targetPath, operations)
   } catch (error) {
     await fs.rm(stagedPath, { force: true }).catch(() => undefined)
     throw error

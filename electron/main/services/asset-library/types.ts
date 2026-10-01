@@ -1,5 +1,5 @@
 export type AssetMediaType = 'image' | 'video' | 'audio'
-export type AssetSource = 'generated' | 'canvas' | 'camera-stage' | 'imported' | 'external'
+export type AssetSource = 'generated' | 'canvas' | 'camera-stage' | 'imported' | 'external' | 'video-edit'
 export type AssetInspectionStatus = 'pending' | 'ready' | 'missing' | 'failed'
 export interface AssetFileContent { sizeBytes: number; fileModifiedAt: number; contentIdentity: string }
 

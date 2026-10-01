@@ -5,6 +5,7 @@ import Database from 'better-sqlite3'
 import { initializeAssistantMemorySchema } from './assistant/storageSchema'
 import { initializeApplicationOperationSchema } from './application-runtime/operationStore'
 import { initializeAudioEditSchema } from './audio-edit/schema'
+import { upgradeAssetSources } from './asset-library/schema'
 
 export type SqlBindValue = string | number | boolean | null | Uint8Array
 
@@ -183,7 +184,7 @@ export function initializeSchema(conn: Database.Database): void {
       media_type TEXT NOT NULL CHECK (media_type IN ('image', 'video', 'audio')),
       display_name TEXT NOT NULL,
       file_path TEXT NOT NULL UNIQUE,
-      source TEXT NOT NULL CHECK (source IN ('generated', 'canvas', 'camera-stage', 'imported', 'external')),
+      source TEXT NOT NULL CHECK (source IN ('generated', 'canvas', 'camera-stage', 'imported', 'external', 'video-edit')),
       mime_type TEXT,
       size_bytes INTEGER,
       width INTEGER,
@@ -235,6 +236,7 @@ export function initializeSchema(conn: Database.Database): void {
   ensureColumn(conn, 'storyboard_projects', 'cover_path', 'TEXT')
   ensureColumn(conn, 'camera_stage_projects', 'cover_path', 'TEXT')
   ensureColumn(conn, 'assets', 'content_identity', 'TEXT')
+  upgradeAssetSources(conn)
   initializeAssistantMemorySchema(conn)
   initializeApplicationOperationSchema(conn)
   initializeAudioEditSchema(conn)

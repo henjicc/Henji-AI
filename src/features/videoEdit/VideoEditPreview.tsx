@@ -3,12 +3,16 @@ import { UiButton, UiInput, UiError } from '@/components/ui'
 import { audibleVideoEditClips, videoEditDuration } from '@/core/videoEdit/document'
 import { VideoEditRenderSession } from './engine/videoEditRenderSession'
 import { acceptsVideoEditDrop, dropVideoEditInput, readVideoEditDrop } from './application/videoEditDrop'
-import { editVideoSequence, getActiveVideoEditSequence, requireVideoEditInstance, listVideoEditInstances, setVideoEditView, subscribeVideoEditDomain, subscribeVideoEditView, videoEditViewRevision, videoEditProgramCommandIdentity, type VideoEditInstance } from './application/videoEditService'
+import { activeVideoEditInstance, editVideoSequence, getActiveVideoEditSequence, requireVideoEditInstance, listVideoEditInstances, setVideoEditView, subscribeVideoEditDomain, subscribeVideoEditView, videoEditViewRevision, videoEditProgramCommandIdentity, type VideoEditInstance } from './application/videoEditService'
 import { yieldVideoEditSource } from './application/videoEditSource'
 import { createVideoEditAudioMeter, type VideoEditAudioLevel } from './engine/videoEditAudioMeter'
 import { VideoEditLevelMeter } from './panels/VideoEditLevelMeter'
 import { useVideoEditPictureGesture } from './panels/useVideoEditPictureGesture'
 import { timelineTimecode } from './timeline/timelineGeometry'
+import { captureVideoEditProgramFrame, registerVideoEditProgramCapture } from './application/videoEditProgramCapture'
+import { collectVideoEditOutput } from './application/videoEditOutputs'
+import { useAssetLibraryStore } from '@/features/assets/store/assetLibraryStore'
+import { openAssetLibrary } from '@/stores/navigationStore'
 
 export function VideoEditPreview({ instance, onError, visible = true }: { instance: VideoEditInstance; onError: (error: unknown) => void; visible?: boolean }): React.ReactElement {
   useSyncExternalStore(subscribeVideoEditView, videoEditViewRevision)
@@ -22,6 +26,8 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
   const pointer = useRef<{ x: number; y: number; document: VideoEditInstance['document']; sequenceId: string; clipId: string; frame: number; command: object; selection: string[] } | null>(null)
   const [preparing, setPreparing] = useState(false)
   const [retry, setRetry] = useState(0)
+  const [collecting, setCollecting] = useState(false)
+  const libraryId = useAssetLibraryStore(state => state.libraryId)
   const session = useRef<VideoEditRenderSession | null>(null)
   const released = useRef<Promise<unknown>>(Promise.resolve())
   const stopPreview = useRef<() => void>(() => {})
@@ -84,6 +90,23 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
       surface.dataset.presentedRevision = String(revision)
       return true
     }
+    const unregisterCapture = registerVideoEditProgramCapture(instance, initialDocument.id, async (request, signal) => {
+      const current = (): void => {
+        signal?.throwIfAborted(); request.assertCurrent()
+        if (stopped || session.current !== renderer || canvas.current !== surface || !surface.isConnected) throw new Error('节目面板已关闭，请重新打开后选帧。')
+      }
+      const start = performance.now()
+      while (appliedDocument !== request.document || lastFrame !== request.frame || surface.dataset.presentedRevision !== String(request.document.revision) || surface.dataset.scrubbing === 'true') {
+        current()
+        if (performance.now() - start > 10000) throw new Error('节目画面尚未就绪，请等待画面更新后重试选帧。')
+        await new Promise(resolve => setTimeout(resolve, 5))
+      }
+      current()
+      if (surface.width !== request.document.width || surface.height !== request.document.height) throw new Error('节目画幅尚未就绪，请重新加载预览。')
+      const blob = await new Promise<Blob>((resolve, reject) => surface.toBlob(value => value ? resolve(value) : reject(new Error('节目图片保存失败，请重试。')), 'image/png'))
+      current()
+      return blob
+    })
     const loop = async (): Promise<void> => {
       let scheduled = false
       let requestCommand: object | undefined
@@ -185,7 +208,7 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
     let retired = false
     stopCurrent = (): void => {
       if (retired) return
-      retired = true; unsubscribe(); unsubscribeView(); clearTimeout(timer); clearInterval(meterTimer); instance.playing = false; stopAudio(); meter?.dispose()
+      retired = true; unregisterCapture(); unsubscribe(); unsubscribeView(); clearTimeout(timer); clearInterval(meterTimer); instance.playing = false; stopAudio(); meter?.dispose()
       released.current = Promise.allSettled([audio?.close(), renderer.dispose(), audioRenderer?.dispose()])
       surface.remove(); if (canvas.current === surface) canvas.current = null
     }
@@ -222,6 +245,15 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
       <UiButton variant="plain" aria-pressed={display === 'fit'} onClick={() => setDisplay('fit')}>适合窗口</UiButton><UiButton variant="plain" aria-pressed={display === 'actual'} onClick={() => setDisplay('actual')}>100%</UiButton>
       {preparing && <><span className="text-xs text-text-muted">正在准备流畅预览…</span><UiButton variant="plain" onClick={() => { stopPreview.current(); setPreparing(false) }}>取消准备</UiButton></>}
       {!preparing && <UiButton variant="plain" onClick={() => setRetry(value => value + 1)}>重新加载预览</UiButton>}
+      <UiButton variant="plain" disabled={collecting || preparing} onClick={() => {
+        setCollecting(true)
+        setVideoEditView(instance.document.id, { playing: false })
+        void captureVideoEditProgramFrame(instance.document.id).then(async output => {
+          if (!output) return
+          const asset = await collectVideoEditOutput(output, libraryId ? { libraryId } : {})
+          if (activeVideoEditInstance() === instance) { useAssetLibraryStore.getState().setSelectedAsset(asset); openAssetLibrary('floating') }
+        }).catch(onError).finally(() => setCollecting(false))
+      }}>{collecting ? '正在收录选帧…' : '选帧加入资产库'}</UiButton>
       {(['select', 'move', 'point', 'region'] as const).map((value, index) => <UiButton key={value} variant="plain" aria-pressed={mode === value} onClick={() => setMode(value)}>{['选择', '移动画面', '点标注', '区域标注'][index]}</UiButton>)}
       {(mode === 'point' || mode === 'region') && <UiInput aria-label="标注文字" value={label} onChange={event => setLabel(event.target.value)} placeholder="标注文字" />}
       {mode !== 'select' && !instance.selection && <UiError message="请先选择要编辑的片段" />}

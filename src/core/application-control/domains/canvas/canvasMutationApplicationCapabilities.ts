@@ -200,12 +200,16 @@ const addAssetToCanvas = defineApplicationCapability({
     mediaType: z.enum(['image', 'video', 'audio']),
     nodeId: z.string(),
     nodeType: z.string(),
+    nodeRef: z.object({ kind: z.literal('canvas.node'), id: z.string() }).strict(),
+    verification: z.object({ verified: z.boolean(), condition: z.string() }).strict(),
     undoRef: z.string(),
   }),
   concurrencyKey: 'canvas',
   resolveConcurrencyKey: (input) => `canvas:${input.projectId}`,
   resolveTargetIds: (input) => target(input.projectId, { assetId: input.assetId }),
   summarize: (output) => `已将素材 ${output.assetId} 放入画布节点 ${output.nodeId}。`,
+  verificationContract: { kind: 'effect_receipt', requireEffects: true, requireVerifiedEffects: true },
+  resolveObservedEffects: (_input, output) => [{ effect: 'create', entityTypes: ['canvas.node'], propertyIds: [], targetRefs: [output.nodeRef], count: 1, verified: output.verification.verified, evidence: output.verification.verified ? [output.verification.condition] : [] }],
   createUndo: (output) => ({ kind: 'canvas_history', token: output.undoRef }),
 })
 
@@ -249,6 +253,7 @@ const addGenerationResultToCanvas = defineApplicationCapability({
     nodeType: z.string(),
     nodeRef: z.object({ kind: z.literal('canvas.node'), id: z.string() }).strict(),
     undoRef: z.string(),
+    verification: z.object({ verified: z.boolean(), condition: z.string() }).strict(),
   }),
   concurrencyKey: 'canvas',
   resolveConcurrencyKey: (input) => `canvas:${input.projectId}`,
@@ -259,8 +264,8 @@ const addGenerationResultToCanvas = defineApplicationCapability({
   failureRecovery: ['结果尚未完成时等待原生成任务；引用失效时重新读取生成任务，禁止改用素材 ID 猜测。'],
   resolveObservedEffects: (_input, output) => [{
     effect: 'create', entityTypes: ['canvas.node'], propertyIds: [],
-    targetRefs: [output.nodeRef], count: 1, verified: false,
-    evidence: [`node:${output.nodeRef.id}`],
+    targetRefs: [output.nodeRef], count: 1, verified: output.verification.verified,
+    evidence: output.verification.verified ? [output.verification.condition] : [],
   }],
 })
 

@@ -12,11 +12,16 @@ import { captureVideoEditCommandContext, executeVideoEditCommand, videoEditComma
 import { videoEditKeyboardCommand } from './application/videoEditKeyboard'
 import { VideoEditShortcutSettings } from './panels/VideoEditShortcutSettings'
 import type { VideoEditCommandId } from '@/core/videoEdit/commands'
+import { collectVideoEditOutput } from './application/videoEditOutputs'
+import { useAssetLibraryStore } from '@/features/assets/store/assetLibraryStore'
+import { openAssetLibrary } from '@/stores/navigationStore'
 
 function VideoEditToolbar({ instance, api, run }: { instance: VideoEditInstance; api: DockviewApi | null; run: (operation: () => unknown | Promise<unknown>) => void }): React.ReactElement {
   useSyncExternalStore(subscribeVideoEditView, videoEditViewRevision)
   const sequence = getActiveVideoEditSequence(instance); const projectId = instance.document.id
   const task = videoEditExportTask(projectId)
+  const [collecting, setCollecting] = useState(false)
+  const libraryId = useAssetLibraryStore(state => state.libraryId)
   const context = captureVideoEditCommandContext(projectId, 'timeline', { includeClipboard: false })
   const enabled = (id: VideoEditCommandId): boolean => videoEditCommandState(context, id).enabled
   const command = (id: VideoEditCommandId): void => { const current = captureVideoEditCommandContext(projectId, 'timeline'); run(() => executeVideoEditCommand(current, id)) }
@@ -30,6 +35,13 @@ function VideoEditToolbar({ instance, api, run }: { instance: VideoEditInstance;
     <UiButton variant="plain" className="gap-1.5" onClick={() => run(() => appendVideoEditClip(projectId))}><Type size={15} />文字</UiButton>
     <VideoEditLayoutMenu api={api} /><VideoEditShortcutSettings /><div className="ml-auto" />
     <span className="mr-2 text-2xs tabular-nums text-text-faint">{sequence.width} × {sequence.height} · {Number(sequence.fps.toFixed(3))}fps</span>
+    {task?.state === 'completed' && task.output && <UiButton variant="plain" disabled={collecting} onClick={() => run(async () => {
+      setCollecting(true)
+      try {
+        const asset = await collectVideoEditOutput(task.output!, libraryId ? { libraryId } : {})
+        if (activeVideoEditInstance() === instance) { useAssetLibraryStore.getState().setSelectedAsset(asset); openAssetLibrary('floating') }
+      } finally { setCollecting(false) }
+    })}>{collecting ? '正在收录成片…' : '成片加入资产库'}</UiButton>}
     {task?.state === 'running' ? <UiButton variant="plain" onClick={() => cancelVideoEditExport(projectId)}>取消导出 {Math.round(task.progress * 100)}%</UiButton> : <UiButton variant="primary" className="gap-2" disabled={!enabled('export')} onClick={() => command('export')}><Download size={16} />导出视频</UiButton>}
   </div>
 }

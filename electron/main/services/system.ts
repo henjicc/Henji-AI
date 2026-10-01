@@ -88,8 +88,8 @@ export async function writeFileBytes(
     } finally { await handle.close() }
     return
   }
-  await fs.mkdir(path.dirname(targetPath), { recursive: true })
-  await fs.writeFile(targetPath, data, options?.exclusive ? { flag: 'wx' } : undefined)
+  if (options?.exclusive) await writeBufferAtomically(targetPath, data, undefined, { exclusive: true })
+  else { await fs.mkdir(path.dirname(targetPath), { recursive: true }); await fs.writeFile(targetPath, data) }
 }
 
 export async function writeTextFile(targetPath: string, data: string): Promise<void> {

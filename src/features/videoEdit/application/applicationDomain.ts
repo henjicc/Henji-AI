@@ -7,12 +7,14 @@ import { requireVideoEditInstance, saveVideoEdit, type VideoEditInstance } from 
 import { editVideoSequence, undoVideoEdit } from './videoEditService'
 import { splitVideoEditRef } from './videoEditReflection'
 import { splitVideoEditClip } from '@/core/videoEdit/document'
-import { VIDEO_EDIT_APPLICATION_CAPABILITIES } from '@/core/application-control/domains/videoEdit/videoEditApplicationCapabilities'
+import { VIDEO_EDIT_APPLICATION_CAPABILITIES, collectVideoEditOutputCapability } from '@/core/application-control/domains/videoEdit/videoEditApplicationCapabilities'
 import { exportVideoEdit, cancelVideoEditExport, videoEditExportTask } from './videoEditExport'
 import { getPlatform } from '@/platform/runtime'
 import { VideoEditSourceExecutor } from './videoEditSourceExecutor'
 import { importVideoEditSources } from './videoEditMedia'
 import { exportVideoEditSubtitles } from './videoEditTimedContent'
+import { collectVideoEditOutput } from './videoEditOutputs'
+import { captureVideoEditProgramFrame } from './videoEditProgramCapture'
 
 const persistenceOwners = new WeakMap<VideoEditInstance, ApplicationPersistenceParticipant>()
 
@@ -24,7 +26,17 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
     for (const entityType of ['video_edit.sequence', 'video_edit.bin', 'video_edit.item', 'video_edit.clip', 'video_edit.annotation', 'video_edit.code_material', 'video_edit.code_version', 'video_edit.marker', 'video_edit.caption', ...VIDEO_EDIT_COMPOSITE_TYPES] as const) engine.registerCollectionExecutor(new VideoEditCollectionExecutor(entityType))
   },
   registerCapabilities(registrar) {
-    for (const definition of VIDEO_EDIT_APPLICATION_CAPABILITIES) registrar.registerHandler(definition.id, async raw => {
+    for (const definition of VIDEO_EDIT_APPLICATION_CAPABILITIES) registrar.registerHandler(definition.id, async (raw, context) => {
+      if (definition.id === collectVideoEditOutputCapability.id) {
+        const input = collectVideoEditOutputCapability.inputSchema.parse(raw)
+        const task = input.kind === 'export' ? videoEditExportTask(input.projectRef.id) : undefined
+        if (input.kind === 'export' && (!task || task.id !== input.taskId || task.state !== 'completed' || !task.output)) throw new Error('请提供原工程已完成且可收录的导出taskId；先查询导出状态。')
+        const receipt = input.kind === 'export' ? task!.output! : await captureVideoEditProgramFrame(input.projectRef.id, input.frame, undefined, context.signal)
+        if (!receipt) throw new Error('用户取消选帧，没有保存文件或收录素材。')
+        const asset = await collectVideoEditOutput(receipt, input.libraryRef ? { libraryId: input.libraryRef.id } : {}, context.signal)
+        const resultRef = { kind: 'asset' as const, id: asset.id }
+        return { resultRef, projectRef: input.projectRef, message: '输出已加入资产库，可通过此素材引用加入画布。', verification: { verified: true, target: resultRef, condition: '正式资产检查已核对已发布输出的固定原路径与内容身份。' } }
+      }
       const input = definition.inputSchema.parse(raw) as { projectRef: { kind: 'video_edit.project'; id: string }; clipRef?: { id: string }; frame?: number; assetRef?: { id: string }; format?: 'mp4' | 'srt' | 'vtt' }
       const id = input.projectRef.id; const owner = requireVideoEditInstance(id)
       if (definition.id === 'export_video_edit' && input.format && input.format !== 'mp4') {
@@ -47,7 +59,7 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
           if (!input.assetRef) throw new Error('请提供素材库 assetRef。')
           await importVideoEditSources(id, [{ assetId: input.assetRef.id }]); await saveVideoEdit(id); break
         }
-        case 'export_video_edit': await exportVideoEdit(id, undefined, true); break
+        case 'export_video_edit': await exportVideoEdit(id, undefined, true, context.signal); break
         case 'cancel_video_edit_export': cancelVideoEditExport(id); break
       }
       if (requireVideoEditInstance(id) !== owner) throw new Error('原工程已关闭，操作回执不会写入重新打开的工程。')

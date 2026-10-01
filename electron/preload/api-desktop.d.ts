@@ -269,7 +269,7 @@ export interface HenjiUpdaterApi {
 
 export type HenjiAssetMediaType = 'image' | 'video' | 'audio'
 export interface HenjiAssetFileContent { sizeBytes: number; fileModifiedAt: number; contentIdentity: string }
-export type HenjiAssetSource = 'generated' | 'canvas' | 'camera-stage' | 'imported' | 'external'
+export type HenjiAssetSource = 'generated' | 'canvas' | 'camera-stage' | 'imported' | 'external' | 'video-edit'
 export interface HenjiAssetRecord { id: string; wasExisting?: boolean; mediaType: HenjiAssetMediaType; displayName: string; filePath: string; displayUrl: string; source: HenjiAssetSource; mimeType: string | null; sizeBytes: number | null; width: number | null; height: number | null; durationSeconds: number | null; thumbnailPath: string | null; thumbnailUrl: string | null; inspectionStatus: 'pending' | 'ready' | 'missing' | 'failed'; inspectionError: string | null; fileModifiedAt: number | null; contentIdentity?: string | null; lastUsedAt: number | null; createdAt: number; updatedAt: number; tags: string[]; libraryIds: string[] }
 export interface HenjiAssetLibraryRecord { id: string; name: string; createdAt: number; updatedAt: number }
 export interface HenjiAssetLibrarySnapshot extends HenjiAssetLibraryRecord { assetIds: string[] }

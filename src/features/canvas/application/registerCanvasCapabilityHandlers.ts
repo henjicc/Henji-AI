@@ -158,7 +158,7 @@ export function registerCanvasCapabilityHandlers(
       assetId: string
       placement: CanvasNodePlacement
     }>('add_asset_to_canvas', input)
-    return await addAssetToCanvas(parsed)
+    return await addAssetToCanvas(parsed, context.signal)
   })
 
   registrar.registerHandler('add_generation_result_to_canvas', (input, context) => {
