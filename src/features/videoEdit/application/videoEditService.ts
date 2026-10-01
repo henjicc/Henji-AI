@@ -359,6 +359,7 @@ export function setVideoEditProjectView(id: string, values: Partial<VideoEditPro
   if (!next.openSequenceIds.includes(instance.activeSequenceId)) switchVideoEditSequence(id, next.openSequenceIds.at(-1)!)
   publishVideoEdit(true)
 }
+const VIDEO_EDIT_SAVE_FAILED = '工程未能保存到磁盘：修改仍保留在当前工程，并会自动重试。请检查工程文件是否只读、被其他程序占用或磁盘空间不足。'
 export async function saveVideoEdit(id: string): Promise<void> {
   const instance = requireVideoEditInstance(id)
   if (instance.saving) return instance.saving
@@ -376,8 +377,9 @@ export async function saveVideoEdit(id: string): Promise<void> {
   })()
   instance.saving = saving
   try { await saving } catch (error) {
-    instance.error = error instanceof Error ? error.message : '保存失败，修改仍保留在当前工程。'
-    logger.error('剪辑工程保存失败', error, { event: 'video_edit.save.failed', context: { projectId: id } }); throw error
+    // The raw file-system reason goes to the log; the user learns what is kept and what to check.
+    instance.error = VIDEO_EDIT_SAVE_FAILED
+    logger.error('剪辑工程保存失败', error, { event: 'video_edit.save.failed', context: { projectId: id } }); throw new Error(VIDEO_EDIT_SAVE_FAILED, { cause: error })
   } finally { instance.saving = undefined; publishVideoEdit() }
 }
 function attach(document: VideoEditDocument, path: string, dirty: boolean, codeMetadata: VideoEditCodeMetadata = new Map()): VideoEditInstance {

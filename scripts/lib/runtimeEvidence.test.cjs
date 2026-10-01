@@ -68,3 +68,17 @@ test('场景 setup 失败时 evidence 不得伪报通过', () => {
   assert.equal(evidence.setupError, '夹具节点未准备完成')
   assert.equal(evidence.passed, false)
 })
+
+test('场景声明的故障注入日志单独记录，不掩盖其他错误', async () => {
+  const page = new FakePage()
+  const collector = createRuntimeEvidenceCollector(page)
+  collector.begin('保存失败注入')
+  const evidence = await collector.finish({ expectedLogEvents: ['render.failed'] })
+  collector.dispose()
+  assert.equal(evidence.passed, true)
+  assert.deepEqual(evidence.logErrors, [])
+  assert.equal(evidence.expectedLogErrors[0].event, 'render.failed')
+  collector.begin('其他错误')
+  const other = await collector.finish({ expectedLogEvents: ['video_edit.save.failed'] })
+  assert.equal(other.passed, false); assert.equal(other.logErrors[0].event, 'render.failed')
+})

@@ -8,6 +8,7 @@ import { VideoEditSeekDecoder } from './videoEditSeekDecoder'
 import { VideoEditGpuFrame, videoEditGpuFrameUsesChroma } from './videoEditGpuFrame'
 import { VideoEditCodeSources } from './videoEditCodeSources'
 import { codeMaterialImageIds } from '@/core/videoEdit/codeMaterialResources'
+import { videoEditSourceReadError } from './videoEditSourceErrors'
 import { videoEditTransitionsAt } from '@/core/videoEdit/transitions'
 import { activeVideoEditEffects, buildVideoEditCompositePlan } from '@/core/videoEdit/compositing'
 import { renderVideoEditCompositeScene, videoEditCompositeSurfaceKeys } from './videoEditCompositeScene'
@@ -79,13 +80,16 @@ export class VideoEditRenderer {
     if (!entry) {
       const input = new Input({ source: new UrlSource(media.path, { maxCacheSize: 32 * 1024 * 1024, getRetryDelay: () => null }), formats: ALL_FORMATS })
       const ready = (async (): Promise<SharedDemux> => {
-        const [video, audio] = await Promise.all([input.getPrimaryVideoTrack(), input.getPrimaryAudioTrack()])
+        const [video, audio] = await Promise.all([input.getPrimaryVideoTrack(), input.getPrimaryAudioTrack()]).catch(error => { throw videoEditSourceReadError(media.name, error) })
         const config = video ? await video.getDecoderConfig() : null
         const preference = 'prefer-hardware'
         const supported = config && (await VideoDecoder.isConfigSupported({ ...config, hardwareAcceleration: preference, optimizeForLatency: true })).supported
         return { input, video, audio, options: { hardwareAcceleration: supported ? preference : 'no-preference', optimizeForLatency: true }, codec: config?.codec }
       })()
-      entry = { users: 0, input, ready }
+      const created = { users: 0, input, ready }
+      // A failed open is not cached: a restored or relinked file must be read again.
+      ready.catch(() => { if (this.demuxers.get(key) === created) { this.demuxers.delete(key); input.dispose() } })
+      entry = created
       this.demuxers.set(key, entry)
     }
     entry.users++
@@ -106,7 +110,7 @@ export class VideoEditRenderer {
           if (this.disposed) throw new Error('预览已关闭。')
           // Sequential playback decodes the original compressed stream.
           return { demux: demux.key, media, video: shared.video ? new VideoSampleSink(shared.video, shared.options) : undefined, audio: shared.audio ? new AudioSampleSink(shared.audio) : undefined, previousTime: -1, codec: shared.codec }
-        } catch (error) { this.release({ demux: demux.key }); throw error }
+        } catch (error) { this.release({ demux: demux.key }); if (this.sources.get(key) === source) this.sources.delete(key); throw error }
       })()
       this.sources.set(key, source)
     }
@@ -117,7 +121,7 @@ export class VideoEditRenderer {
     if (!image) {
       const controller = new AbortController()
       const native = this.boundedImageLoad(controller.signal, async () => {
-        const response = await fetch(media.path, { signal: controller.signal }); if (!response.ok) throw new Error(`无法读取素材 ${media.name}`)
+        const response = await fetch(media.path, { signal: controller.signal }); if (!response.ok) throw videoEditSourceReadError(media.name, new Error(String(response.status)))
         return createImageBitmap(await response.blob())
       }).then(bitmap => {
         if (this.disposed || controller.signal.aborted || this.images.get(media.id)?.pending !== pending) { bitmap.close(); throw new DOMException('原图片已取消。', 'AbortError') }
@@ -167,7 +171,8 @@ export class VideoEditRenderer {
       this.frameCache.deleteMedia(media.path)
     }
     for (const [key, pending] of this.sources) {
-      const source = await pending
+      const source = await pending.catch(() => undefined)
+      if (!source) { this.sources.delete(key); continue }
       const clip = document.clips.find(clip => clip.id === (key.startsWith('audio:') ? key.slice(6) : key))
       const media = clip ? videoEditClipMedia(document, clip) : undefined
       if (!media || media.id !== source.media.id || media.path !== source.media.path || media.sourceRevision !== source.media.sourceRevision) {

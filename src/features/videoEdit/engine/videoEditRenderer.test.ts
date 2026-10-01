@@ -20,7 +20,7 @@ vi.mock('mediabunny', async () => {
     Input: class {
       readonly path: string
       constructor(options: { source: { path: string } }) { this.path = options.source.path }
-      async getPrimaryVideoTrack() { return { path: this.path, getDecoderConfig: async () => ({ codec: 'avc1' }) } }
+      async getPrimaryVideoTrack() { if (this.path.includes('missing')) throw new Error('Error fetching henji-media://local/missing.mp4: 404 Not Found'); return { path: this.path, getDecoderConfig: async () => ({ codec: 'avc1' }) } }
       async getPrimaryAudioTrack() { return { path: this.path } }
       dispose(): void { boundary.disposed.push(this.path) }
     },
@@ -321,5 +321,18 @@ it('正向播放按文件建立一条解码计划：同文件剪辑点复用同�
     expect(internals.playback).toBeUndefined()
     await (await renderer.render(40, true)).completion
     expect(internals.playback).toBeUndefined(); expect(boundary.scheduled).toHaveLength(1)
+  } finally { await renderer.dispose() }
+})
+it('源文件缺失时给出可操作的提示，失败不缓存；重新定位到同一素材后立即恢复画面', async () => {
+  const base = fixture()
+  const missing = { ...base, media: base.media.map(media => media.id === 'A' ? { ...media, path: 'D:/missing.mp4' } : media) }
+  const renderer = new VideoEditRenderer(missing)
+  try {
+    const failure = await renderer.render(0).then(() => undefined, (error: Error) => error)
+    expect(failure?.message).toBe('找不到素材「A」的源文件，请在项目素材中右键该素材，选择“重新定位源文件”。')
+    expect(failure?.message).not.toContain('henji-media')
+    expect(boundary.disposed).toContain('D:/missing.mp4')
+    await renderer.updateDocument(base)
+    await renderer.render(0); expect(boundary.pictures).toEqual([1])
   } finally { await renderer.dispose() }
 })

@@ -79,7 +79,7 @@ it('关闭保存期间拒绝新的手势和写入，合并并发关闭，失败�
   expect(listVideoEditInstances()).toEqual([]); expect(JSON.parse(files.get(owner.path)!).sequences[0].clips[0].x).toBe(.6)
   const reopened = (await openVideoEditProject(owner.path))!; editVideoProject(id, position(.7))
   write.mockRejectedValueOnce(new Error('disk denied'))
-  await expect(closeVideoEditProject(id)).rejects.toThrow('disk denied')
+  await expect(closeVideoEditProject(id)).rejects.toThrow('工程未能保存到磁盘')
   const handle = beginVideoEditGesture(id); finishVideoEditGesture(handle)
   expect(listVideoEditInstances()).toContain(reopened)
 })

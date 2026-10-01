@@ -55,7 +55,8 @@ export default function VideoEditApp(): React.ReactElement {
   const instance = activeVideoEditInstance()
   const [error, setError] = useState<string | null>(null)
   const [dockApi, setDockApi] = useState<DockviewApi | null>(null)
-  const onError = useCallback((reason: unknown): void => { setError(reason instanceof Error ? reason.message : String(reason)) }, [])
+  // The project's own save status is shown once and clears itself when the retry succeeds.
+  const onError = useCallback((reason: unknown): void => { const message = reason instanceof Error ? reason.message : String(reason); setError(message === activeVideoEditInstance()?.error ? null : message) }, [])
   const run = (operation: () => unknown | Promise<unknown>): void => { setError(null); void Promise.resolve().then(operation).catch(onError) }
   const projectId = instance?.document.id
   const sequence = instance ? getActiveVideoEditSequence(instance) : undefined

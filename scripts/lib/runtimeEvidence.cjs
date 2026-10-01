@@ -91,7 +91,8 @@ function createRuntimeEvidenceCollector(page) {
       if (active) throw new Error(`运行时证据场景尚未结束：${active.key}`)
       active = { key, startedAt: new Date().toISOString(), browserErrorOffset: browserErrors.length }
     },
-    async finish() {
+    /** `expectedLogEvents`: event names a scene injects on purpose (fault injection); recorded, not failed. */
+    async finish({ expectedLogEvents = [] } = {}) {
       if (!active) throw new Error('运行时证据场景尚未开始')
       const current = active
       active = null
@@ -101,17 +102,20 @@ function createRuntimeEvidenceCollector(page) {
         queryApplicationLogs(page, { afterTimestamp: current.startedAt, endTimestamp: finishedAt, level: 'warn' }),
       ])
       const browser = browserErrors.slice(current.browserErrorOffset)
+      const expected = new Set(expectedLogEvents)
+      const unexpected = errors.events.filter(event => !expected.has(event.event))
       return {
         startedAt: current.startedAt,
         finishedAt,
         browserErrors: browser,
-        logErrors: errors.events,
+        logErrors: unexpected,
+        expectedLogErrors: errors.events.filter(event => expected.has(event.event)),
         logWarnings: warnings.events,
         logQuery: {
           truncated: errors.truncated || warnings.truncated,
           corruptedLines: errors.corruptedLines + warnings.corruptedLines,
         },
-        passed: browser.length === 0 && errors.events.length === 0 && !errors.truncated,
+        passed: browser.length === 0 && unexpected.length === 0 && !errors.truncated,
       }
     },
     cancel() {

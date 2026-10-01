@@ -161,7 +161,7 @@ async function main() {
           console.error(`\n✗ ${resultKey}：${message}`)
         }
         try {
-          runtimeEvidence[resultKey] = finalizeSceneEvidence(await collector.finish(), sceneError)
+          runtimeEvidence[resultKey] = finalizeSceneEvidence(await collector.finish({ expectedLogEvents: scene.expectedLogEvents }), sceneError)
           runtimeEvidence[resultKey].window = windowEvidence
           if (!sceneFailed && !runtimeEvidence[resultKey].passed) {
             const runtimeErrorCount = runtimeEvidence[resultKey].browserErrors.length

@@ -159,7 +159,7 @@ async function main() {
           console.error(`✗ ${sizeLabel} / ${scene.name}：${message}`)
         }
         try {
-          evidence[evidenceKey] = finalizeSceneEvidence(await collector.finish(), sceneError)
+          evidence[evidenceKey] = finalizeSceneEvidence(await collector.finish({ expectedLogEvents: scene.expectedLogEvents }), sceneError)
           evidence[evidenceKey].window = windowEvidence
           if (!sceneFailed && !evidence[evidenceKey].passed) {
             const runtimeErrorCount = evidence[evidenceKey].browserErrors.length + evidence[evidenceKey].logErrors.length

@@ -14,6 +14,10 @@ import { collectVideoEditOutput } from './application/videoEditOutputs'
 import { editVideoEditProgramFrame } from './application/videoEditFrameEdit'
 import { useAssetLibraryStore } from '@/features/assets/store/assetLibraryStore'
 import { openAssetLibrary } from '@/stores/navigationStore'
+import { createLogger } from '@/core/logging'
+import type { VideoEditComposition } from '@/core/videoEdit/document'
+
+const logger = createLogger('features.videoEdit.preview')
 
 /** The Program GPU surface belongs to the project: a remount (dock ↔ popout window) waits until the previous session actually retired. */
 const programReleases = new WeakMap<VideoEditInstance, Promise<unknown>>()
@@ -29,6 +33,7 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
   const pointer = useRef<{ x: number; y: number; document: VideoEditInstance['document']; sequenceId: string; clipId: string; frame: number; command: object; selection: string[] } | null>(null)
   const [preparing, setPreparing] = useState(false)
   const [retry, setRetry] = useState(0)
+  const [renderFailure, setRenderFailure] = useState<string | null>(null)
   const [collecting, setCollecting] = useState(false)
   const libraryId = useAssetLibraryStore(state => state.libraryId)
   const session = useRef<VideoEditRenderSession | null>(null)
@@ -37,6 +42,7 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
   useEffect(() => {
     if (!visible) { setVideoEditView(instance.document.id, { playing: false }, true); setPreparing(false); setLevels([]); return }
     const previousRelease = programReleases.get(instance) ?? Promise.resolve()
+    setRenderFailure(null)
     let stopped = false
     let stopCurrent: () => void = () => {}
     const stop = (): void => { stopped = true; stopCurrent() }
@@ -81,6 +87,9 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
     const stopAudio = (): void => { audioGeneration++; for (const node of nodes) { try { node.stop() } catch { /* already ended */ } node.disconnect() } nodes.clear() }
     const meterTimer = setInterval(() => { if (!stopped && meter) setLevels(instance.playing && instance.playbackDirection === 1 ? meter.read() : Array.from({ length: appliedDocument.channels }, () => ({ peak: 0, rms: 0 }))) }, 50)
     let lastPresentation = -Infinity
+    // A failure is retried once the sequence changes (relink, removal, undo) or the user moves the playhead.
+    let failedDocument: VideoEditComposition | undefined
+    let failedFrame = -1
     const recordPresentation = (target: number, result: Awaited<ReturnType<VideoEditRenderSession['present']>>, requestedAt: number, scrubbing: boolean, revision: number): boolean => {
       if (stopped || !listVideoEditInstances().includes(instance) || instance.activeSequenceId !== initialDocument.id || session.current !== renderer || canvas.current !== surface || requestedAt < lastPresentation) return false
       lastPresentation = requestedAt
@@ -90,6 +99,7 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
       surface.dataset.proxyPreparationMs = String(renderer.previewPreparationMs); surface.dataset.proxyBytes = String(renderer.previewBytes)
       surface.dataset.scrubbing = String(scrubbing); surface.dataset.presentedFrame = String(target)
       surface.dataset.presentedRevision = String(revision)
+      if (failedDocument === undefined) setRenderFailure(null)
       return true
     }
     const unregisterCapture = registerVideoEditProgramCapture(instance, initialDocument.id, async (request, signal) => {
@@ -118,6 +128,10 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
         const command = videoEditProgramCommandIdentity(instance.document.id)
         const document = getActiveVideoEditSequence(current)
         requestCommand = command; requestDocument = document
+        if (failedDocument) {
+          if (failedDocument === document && failedFrame === current.frame) { timer = setTimeout(() => { void loop() }, 250); return }
+          failedDocument = undefined
+        }
         if (appliedDocument !== document) {
           stopAudio(); wasPlaying = false
           if (appliedDocument.sampleRate !== document.sampleRate || appliedDocument.channels !== document.channels) { meter?.dispose(); meter = undefined; await audio?.close(); audio = undefined; if (!stopped) setLevels([]) }
@@ -204,7 +218,12 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
       } catch (error) {
         if (stopped || !listVideoEditInstances().includes(instance)) return
         if (getActiveVideoEditSequence(instance) !== requestDocument || videoEditProgramCommandIdentity(instance.document.id) !== requestCommand) { timer = setTimeout(() => { void loop() }, 0); return }
-        setVideoEditView(instance.document.id, { playing: false }, true); onError(error)
+        setVideoEditView(instance.document.id, { playing: false }, true)
+        // Shown on the program monitor itself and cleared by the next presented frame.
+        logger.warn('节目画面渲染失败', { event: 'video_edit.preview.render_failed', error, context: { projectId: instance.document.id, revision: requestDocument.revision, cause: error instanceof Error && error.cause instanceof Error ? error.cause.message : undefined } })
+        failedDocument = requestDocument; failedFrame = instance.frame; lastFrame = -1; lastRequested = -1
+        setRenderFailure(error instanceof Error ? error.message : String(error))
+        timer = setTimeout(() => { void loop() }, 250)
       }
     }
     let retired = false
@@ -264,6 +283,7 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
       {(['select', 'move', 'point', 'region'] as const).map((value, index) => <UiButton key={value} variant="plain" aria-pressed={mode === value} onClick={() => setMode(value)}>{['选择', '移动画面', '点标注', '区域标注'][index]}</UiButton>)}
       {(mode === 'point' || mode === 'region') && <UiInput aria-label="标注文字" value={label} onChange={event => setLabel(event.target.value)} placeholder="标注文字" />}
       {mode !== 'select' && !instance.selection && <UiError message="请先选择要编辑的片段" />}
+      {renderFailure && <UiError title="节目画面无法显示" message={renderFailure} />}
     </div>
     <div className="shrink-0 px-3 py-1"><VideoEditLevelMeter levels={levels.length ? levels : Array.from({ length: document.channels }, () => ({ peak: 0, rms: 0 }))} title="节目播放电平" /></div>
   </div>

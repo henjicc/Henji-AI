@@ -19,9 +19,9 @@ export async function verifyVideoEditMediaContent(media: VideoEditMedia, signal?
     })]).finally(() => { if (abort) signal.removeEventListener('abort', abort) }) : operation)
     signal?.throwIfAborted()
     if (current.contentIdentity !== expected.contentIdentity || current.sizeBytes !== expected.sizeBytes || current.fileModifiedAt !== expected.fileModifiedAt) throw new Error('源文件内容已改变')
-  } catch {
+  } catch (error) {
     signal?.throwIfAborted()
-    throw new Error(`素材“${media.name}”的源文件已改变或丢失，请重新定位源素材。`)
+    throw new Error(`素材“${media.name}”的源文件已改变或丢失，请重新定位源素材。`, { cause: error })
   }
 }
 
