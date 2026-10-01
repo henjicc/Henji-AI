@@ -7,7 +7,6 @@ import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { rescaleVideoEditFrame } from '@/core/videoEdit/time'
 import { assertVideoEditLockedTracks, assertVideoEditClipsEditable } from '@/core/videoEdit/lockedTracks'
 import { expandVideoEditSelection, type VideoEditTimelineTool } from '@/core/videoEdit/timelineSelection'
-import { applyVideoEditTimelineEdit } from '@/core/videoEdit/timelineEdits'
 import { getPlatform } from '@/platform/runtime'
 import { validateCodeMaterialDocument } from '@/core/videoEdit/codeMaterialDocument'
 import { installVideoEditCodeMetadata, prepareVideoEditCodeMetadata, readVideoEditCodeMetadata, releaseVideoEditCodeCompiler } from './videoEditCodeState'
@@ -431,14 +430,6 @@ export function appendVideoEditClip(id: string, mediaId?: string, placement?: { 
   const clip = makeVideoEditItemClip(candidate, item.id, targetSequenceId, placement ?? { frame: instance.activeSequenceId === targetSequenceId ? instance.frame : instance.sequenceViews.get(targetSequenceId)?.frame ?? 0 }, readVideoEditCodeMetadata(instance, candidate))
   editVideoProject(id, document => ({ ...document, items: existingItem ? document.items : [...document.items, item], sequences: document.sequences.map(sequence => sequence.id === targetSequenceId ? { ...sequence, clips: [...sequence.clips, clip] } : sequence) }))
   if (instance.activeSequenceId === targetSequenceId) setVideoEditView(id, { selection: clip.id })
-}
-export function splitSelectedVideoEdit(id: string): void { const instance = requireVideoEditInstance(id); if (instance.selectedClipIds.length) editVideoSequence(id, instance.activeSequenceId, () => applyVideoEditTimelineEdit(instance.document, instance.activeSequenceId, { kind: 'split', clipIds: instance.selectedClipIds, frame: instance.frame })) }
-export function deleteVideoEditClip(id: string, clipId: string): void {
-  const instance = requireVideoEditInstance(id)
-  const sequence = instance.document.sequences.find(sequence => sequence.clips.some(clip => clip.id === clipId))
-  if (!sequence) throw new Error('片段不存在。')
-  editVideoSequence(id, sequence.id, () => applyVideoEditTimelineEdit(instance.document, sequence.id, { kind: 'delete', clipIds: [clipId] }))
-  if (requireVideoEditInstance(id).selection === clipId) setVideoEditView(id, { selection: null })
 }
 registerApplicationCloseGuard(async () => {
   for (const instance of instances.values()) { if (instance.busy) throw new Error('剪辑工程正在导出，请等待或取消。'); cancelVideoEditGesture(instance); instance.playing = false; await saveVideoEdit(instance.document.id) }

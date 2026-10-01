@@ -1,9 +1,7 @@
-import { codeMaterialDefinitionSchema, codeMaterialDefinitionsSchema, codeMaterialInstanceSchema } from './codeMaterialPersistence'
-import type { CodeMaterialDefinition, CodeMaterialInstance, CodeMaterialVersion } from './codeMaterialPersistence'
+import { codeMaterialDefinitionSchema, codeMaterialDefinitionsSchema } from './codeMaterialPersistence'
+import type { CodeMaterialDefinition, CodeMaterialVersion } from './codeMaterialPersistence'
 import { CodeMaterialError } from './codeMaterial/contract'
 import type { CodeMaterialProgram } from './codeMaterial/contract'
-import { checkCodeMaterialParameterCompatibility, validateCodeMaterialParameters } from './codeMaterial/parameters'
-import { prepareCodeMaterialParameters } from './codeMaterialAnimation'
 
 export type CodeSourceCompiler = (source: string) => Promise<CodeMaterialProgram>
 const version = (definition: CodeMaterialDefinition, id: string): CodeMaterialVersion => {
@@ -37,17 +35,4 @@ export async function appendCodeMaterialVersion(definition: CodeMaterialDefiniti
   const candidate = codeMaterialDefinitionSchema.parse({ ...definition, versions: [...definition.versions, sourceVersion] })
   codeMaterialDefinitionsSchema.parse([candidate])
   return { definition: candidate, versionId: sourceVersion.id, program }
-}
-export async function bindCodeMaterialInstance(definition: CodeMaterialDefinition, versionId: string, parameters: Readonly<Record<string, unknown>>, compile: CodeSourceCompiler): Promise<CodeMaterialInstance> {
-  const program = await checkedVersion(definition, versionId, compile)
-  return codeMaterialInstanceSchema.parse({ definitionId: definition.id, versionId, parameters: validateCodeMaterialParameters(program, parameters) })
-}
-export async function changeCodeMaterialInstanceVersion(definition: CodeMaterialDefinition, instance: CodeMaterialInstance, versionId: string, compile: CodeSourceCompiler): Promise<CodeMaterialInstance> {
-  if (instance.definitionId !== definition.id) throw new CodeMaterialError('COMPATIBILITY', '代码实例不属于此定义。')
-  const old = await checkedVersion(definition, instance.versionId, compile)
-  const next = await checkedVersion(definition, versionId, compile)
-  prepareCodeMaterialParameters(old, instance)
-  const result = codeMaterialInstanceSchema.parse({ ...instance, versionId, parameters: checkCodeMaterialParameterCompatibility(old, next, instance.parameters) })
-  prepareCodeMaterialParameters(next, result)
-  return result
 }

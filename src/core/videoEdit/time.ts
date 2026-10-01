@@ -15,9 +15,6 @@ export function rescaleVideoEditFrame(frame: number, from: VideoEditRatio, to: V
   const denominator = BigInt(from.numerator) * BigInt(to.denominator)
   return Number((numerator * 2n + denominator) / (denominator * 2n))
 }
-export function videoEditFrameSample(frame: number, rate: VideoEditRatio, sampleRate: number): number {
-  return Number(BigInt(frame) * BigInt(rate.denominator) * BigInt(sampleRate) / BigInt(rate.numerator))
-}
 export interface VideoEditSourceTime { sourceInUs: number; sourceRemainder: VideoEditRatio }
 function gcd(left: bigint, right: bigint): bigint { while (right) { const remainder = left % right; left = right; right = remainder } return left }
 /** Fractional microseconds survive trims/splits, including repeated NTSC boundaries. */

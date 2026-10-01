@@ -5,7 +5,7 @@ import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/te
 import { getPlatform } from '@/platform/runtime'
 import { appendVideoEditSequence, duplicateVideoEditSequence, deleteVideoEditSequence, switchVideoEditSequence, updateVideoEditSequenceSettings, getActiveVideoEditSequence, editVideoSequence, createVideoEditProject, appendVideoEditClip, appendVideoEditMedia, closeVideoEditProject, editVideoProject, listVideoEditInstances, openVideoEditProject, saveVideoEdit, undoVideoEdit, videoEditDomainRevision, setVideoEditView, subscribeVideoEdit, subscribeVideoEditView } from './videoEditService'
 import { splitVideoEditClip, clipSourceSeconds, adjustVideoEditClip } from '@/core/videoEdit/document'
-import { dropVideoEditPaths, videoEditDropPaths } from './videoEditDrop'
+import { dropVideoEditInput, videoEditDropPaths } from './videoEditDrop'
 import { importVideoEditPaths, sameVideoEditMediaPath } from './videoEditMedia'
 import { getApplicationControlExecutionEngine } from '@/features/application-control/capabilities/applicationControlRegistry'
 import type { ApplicationExecutionContext } from '@/core/application-control'
@@ -152,7 +152,7 @@ it('素材库规范化的 Windows 路径与原引用是同一素材，拖放不�
   appendVideoEditMedia(instance.document.id, media)
   const before = instance.past.length
   await importVideoEditPaths(instance.document.id, ['d:\\media\\card.png'])
-  await dropVideoEditPaths(instance.document.id, ['d:/media/card.png'], { frame: 12, track: 2 })
+  await dropVideoEditInput(instance.document.id, { kind: 'sources', sources: [{ path: 'd:/media/card.png' }] }, { frame: 12, track: 2 })
   expect(instance.document.media).toEqual([media])
   expect(getActiveVideoEditSequence(instance).clips[0]).toMatchObject({ itemId: instance.document.items[0].id, start: 12, track: 2 })
   expect(instance.past.length).toBe(before + 1)
@@ -275,7 +275,7 @@ it('拖放固定到原工程与轨道，直接引用源路径，并复用撤销�
   const media = { id: 'original', name: 'image.png', kind: 'image' as const, path: 'E:/outside/image.png', durationSeconds: 0, width: 800, height: 600 }
   appendVideoEditMedia(a.document.id, media)
   const b = (await createVideoEditProject())!
-  await dropVideoEditPaths(a.document.id, [media.path], { frame: 90, track: 4 })
+  await dropVideoEditInput(a.document.id, { kind: 'sources', sources: [{ path: media.path }] }, { frame: 90, track: 4 })
   expect(getActiveVideoEditSequence(a).clips[0]).toMatchObject({ itemId: a.document.items[0].id, start: 90, track: 4 })
   expect(getActiveVideoEditSequence(b).clips).toHaveLength(0); expect(a.document.media).toHaveLength(1)
   await saveVideoEdit(a.document.id); expect(JSON.parse(files.get(a.path)!).media[0].path).toBe(media.path)
@@ -389,7 +389,7 @@ it('异步拖放开始后切换序列，片段仍落在开始时序列', async (
   const instance = (await createVideoEditProject())!; const id = instance.document.id; const first = instance.activeSequenceId
   appendVideoEditMedia(id, { id: 'drop', kind: 'image', path: 'E:/drop.png', name: '拖放', durationSeconds: 0, width: 320, height: 180 })
   const second = appendVideoEditSequence(id)
-  const dropping = dropVideoEditPaths(id, ['E:/drop.png'], { frame: 30, track: 1 })
+  const dropping = dropVideoEditInput(id, { kind: 'sources', sources: [{ path: 'E:/drop.png' }] }, { frame: 30, track: 1 })
   switchVideoEditSequence(id, second); await dropping
   expect(instance.document.sequences.find(sequence => sequence.id === first)!.clips).toHaveLength(1)
   expect(getActiveVideoEditSequence(instance).clips).toHaveLength(0)

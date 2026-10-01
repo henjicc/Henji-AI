@@ -40,9 +40,6 @@ export function videoEditDropPaths(transfer: DataTransfer): string[] {
   return paths
 }
 /** Placement is captured before metadata I/O; switching projects cannot redirect a drop. */
-export async function dropVideoEditPaths(projectId: string, paths: string[], placement?: { frame: number; track?: number }): Promise<void> {
-  await dropVideoEditInput(projectId, { kind: 'sources', sources: paths.map(path => ({ path })) }, placement)
-}
 export async function dropVideoEditInput(projectId: string, input: VideoEditDropInput, placement?: { frame: number; track?: number }, binId?: string, options: { sequenceId?: string; createSequenceWhenEmpty?: boolean; sequenceSettings?: VideoEditSequenceSettings } = {}): Promise<string[]> {
   const owner = requireVideoEditInstance(projectId)
   const targetTrackIds = owner.targetTrackIds.slice()

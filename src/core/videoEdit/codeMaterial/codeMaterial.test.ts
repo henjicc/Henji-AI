@@ -3,7 +3,7 @@ import { compileCodeMaterial } from './compiler'
 import { CodeMaterialError } from './contract'
 import type { CodeMaterialContext } from './contract'
 import { codeMaterialRandom, evaluateCodeMaterial } from './evaluate'
-import { checkCodeMaterialParameterCompatibility, validateCodeMaterialParameters } from './parameters'
+import { validateCodeMaterialParameters } from './parameters'
 
 const context: CodeMaterialContext = { time: 1, localTime: .5, sequenceTime: 6, width: 3840, height: 2160, frame: 60, fps: 60 }
 function source(body: string, options: { kind?: 'generator' | 'filter'; mode?: 'static' | 'dynamic'; parameters?: string; seed?: number } = {}): string {
@@ -164,17 +164,11 @@ describe('默认拒绝与资源边界', () => {
   })
 })
 
-describe('源码版本参数兼容', () => {
+describe('源码参数实例', () => {
   it('实例不静默丢弃、转换或裁剪，默认值也是唯一声明的一部分', () => {
     const previous = compileCodeMaterial(source(`return [${rect}];`, { parameters: numberParameter }))
     expect(validateCodeMaterialParameters(previous, {})).toEqual({ amount: .5 })
     for (const values of [{ amount: 2 }, { amount: '1' }, { amount: null }, { unknown: .1 }, { amount: Number.NaN }]) expect(() => validateCodeMaterialParameters(previous, values)).toThrow(CodeMaterialError)
-    const wider = compileCodeMaterial(source(`return [${rect}];`, { parameters: numberParameter.replace('max:1', 'max:2').replace('default:.5', 'default:.8') }))
-    expect(checkCodeMaterialParameterCompatibility(previous, wider, {})).toEqual({ amount: .5 })
-    const deleted = compileCodeMaterial(source(`return [${rect}];`))
-    const narrowed = compileCodeMaterial(source(`return [${rect}];`, { parameters: numberParameter.replace('max:1', 'max:.75') }))
-    const changed = compileCodeMaterial(source(`return [${rect}];`, { parameters: '{amount:{type:"boolean",title:"强度",default:true}}' }))
-    for (const next of [deleted, narrowed, changed]) expect(() => checkCodeMaterialParameterCompatibility(previous, next, { amount: .5 })).toThrow('显式迁移')
     const color = compileCodeMaterial(source(`return [${rect}];`, { parameters: '{ink:{type:"color",title:"颜色",default:[0,0,0,1]}}' }))
     expect(() => validateCodeMaterialParameters(color, { ink: [0, 0, 0, 2] })).toThrow(CodeMaterialError)
     const sparse = new Array<number>(4)
@@ -182,14 +176,5 @@ describe('源码版本参数兼容', () => {
     expect(() => validateCodeMaterialParameters(color, { ink: structuredClone(sparse) })).toThrow(CodeMaterialError)
     sparse[0] = 0; sparse[1] = .5; sparse[3] = 1
     expect(() => validateCodeMaterialParameters(color, { ink: sparse })).toThrow(CodeMaterialError)
-  })
-  it('新增参数保留旧实例，选项与文本上限缩小必须显式迁移', () => {
-    const declarations = '{title:{type:"text",title:"标题",default:"旧标题",maxLength:80},choice:{type:"choice",title:"样式",default:"A",options:["A","B"]}}'
-    const previous = compileCodeMaterial(source('return [];', { parameters: declarations }))
-    const added = compileCodeMaterial(source('return [];', { parameters: declarations.replace(/}$/, ',flag:{type:"boolean",title:"显示",default:true}}') }))
-    expect(checkCodeMaterialParameterCompatibility(previous, added, { title: '保存的标题', choice: 'B' })).toEqual({ title: '保存的标题', choice: 'B', flag: true })
-    for (const changed of [declarations.replace('maxLength:80', 'maxLength:40'), declarations.replace('["A","B"]', '["A"]')]) expect(() => checkCodeMaterialParameterCompatibility(previous, compileCodeMaterial(source('return [];', { parameters: changed })), { title: 'x', choice: 'A' })).toThrow('显式迁移')
-    expect(() => validateCodeMaterialParameters(previous, { title: 'x'.repeat(81) })).toThrow(CodeMaterialError)
-    expect(() => validateCodeMaterialParameters(previous, { choice: 'C' })).toThrow(CodeMaterialError)
   })
 })

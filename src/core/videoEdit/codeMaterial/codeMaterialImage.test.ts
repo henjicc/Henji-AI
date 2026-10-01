@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { compileCodeMaterial } from './compiler'
 import { CodeMaterialError } from './contract'
 import { evaluateCodeMaterial } from './evaluate'
-import { checkCodeMaterialParameterCompatibility, validateCodeMaterialParameterValue, validateCodeMaterialParameters } from './parameters'
+import { validateCodeMaterialParameterValue, validateCodeMaterialParameters } from './parameters'
 
 const context = { time: 1, localTime: 1, sequenceTime: 1, width: 3840, height: 2160, frame: 60, fps: 60 }
 const parameters = '{logo:{type:"image",title:"图片",default:null,animatable:false}}'
@@ -63,13 +63,9 @@ describe('受控图片作者语言', () => {
     for (const body of invalid) expect(() => compileCodeMaterial(source(body))).toThrow(CodeMaterialError)
   })
 
-  it('版本固定与参数演进保留绑定，删除/改类型显式拒绝', () => {
+  it('固定语言版本不一致拒绝求值，非图片参数不接受空引用', () => {
     const previous = compileCodeMaterial(source(`return [${image}];`))
     const values = { logo: { kind: 'image', mediaId: 'logo' } }
-    const next = compileCodeMaterial(source(`return [${image}];`, parameters.replace('图片', '标志')))
-    expect(checkCodeMaterialParameterCompatibility(previous, next, values)).toEqual(values)
-    expect(() => checkCodeMaterialParameterCompatibility(previous, compileCodeMaterial(source('return [];', '{}')), values)).toThrow('显式迁移')
-    expect(() => checkCodeMaterialParameterCompatibility(previous, compileCodeMaterial(source('return [];', '{logo:{type:"text",title:"图片",default:"",maxLength:10}}')), values)).toThrow('显式迁移')
     expect(() => evaluateCodeMaterial({ ...previous, languageVersion: 1 }, context, values)).toThrow('作者语言版本不一致')
     expect(() => validateCodeMaterialParameterValue(compileCodeMaterial(source('return [];', '{x:{type:"number",title:"x",default:1,min:0,max:2,step:1}}')).parameters[0], null)).toThrow(CodeMaterialError)
   })

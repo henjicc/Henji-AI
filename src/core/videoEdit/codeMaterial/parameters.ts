@@ -64,14 +64,3 @@ export function validateCodeMaterialParameters(program: Pick<CodeMaterialProgram
   for (const key of Object.keys(values)) { assertCodeMaterialKey(key); if (!declared.has(key)) throw new CodeMaterialError('PARAMETERS', `实例包含未声明参数：${key}`) }
   return Object.fromEntries(program.parameters.map(declaration => [declaration.key, validateCodeMaterialParameterValue(declaration, Object.prototype.hasOwnProperty.call(values, declaration.key) ? values[declaration.key] : declaration.default)]))
 }
-/** Refuse destructive source evolution rather than dropping or coercing saved instance values. */
-export function checkCodeMaterialParameterCompatibility(previous: Pick<CodeMaterialProgram, 'parameters'>, next: Pick<CodeMaterialProgram, 'parameters'>, values: Readonly<Record<string, unknown>>): CodeParameterValues {
-  for (const old of previous.parameters) {
-    const current = next.parameters.find(item => item.key === old.key)
-    if (!current || current.type !== old.type) throw new CodeMaterialError('COMPATIBILITY', `参数 ${old.key} 被删除或改变类型，需要显式迁移。`)
-    if (old.type === 'number' && current.type === 'number' && (current.min > old.min || current.max < old.max)) throw new CodeMaterialError('COMPATIBILITY', `参数 ${old.key} 的范围缩小，需要显式迁移。`)
-    if (old.type === 'text' && current.type === 'text' && current.maxLength < old.maxLength) throw new CodeMaterialError('COMPATIBILITY', `参数 ${old.key} 的文本上限缩小，需要显式迁移。`)
-    if (old.type === 'choice' && current.type === 'choice' && old.options.some(option => !current.options.includes(option))) throw new CodeMaterialError('COMPATIBILITY', `参数 ${old.key} 的选项被删除，需要显式迁移。`)
-  }
-  return validateCodeMaterialParameters(next, validateCodeMaterialParameters(previous, values))
-}

@@ -43,6 +43,7 @@ it('菜单启用状态与领域锁定、目标占用、波纹冲突一致，不�
   expect(videoEditCommandState(context, 'overwrite').enabled).toBe(true)
   updateVideoEditTrack(id, sequence.id, sequence.tracks[1].id, { locked: true })
   const locked = captureVideoEditCommandContext(id, 'timeline'); const history = owner.past.length
+  expect(videoEditCommandState(locked, 'delete').enabled).toBe(false); expect(videoEditCommandState(locked, 'copy').enabled).toBe(true)
   await expect(executeVideoEditCommand(locked, 'delete')).rejects.toThrow('锁定')
   expect(owner.past.length).toBe(history); expect(getActiveVideoEditSequence(owner).clips.map(clip => clip.id)).toEqual([first, second])
 })

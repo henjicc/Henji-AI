@@ -4,7 +4,7 @@ import { applyVideoEditTimelineEdit, applyVideoEditTimelineEditResult, copyVideo
 import { expandVideoEditSelection } from '@/core/videoEdit/timelineSelection'
 import { readVideoEditCodeMetadata } from './videoEditCodeState'
 import { inspectVideoEditMedia } from './videoEditMedia'
-import { editVideoProject, getActiveVideoEditSequence, requireVideoEditInstance, setVideoEditTimelineView, type VideoEditInstance } from './videoEditService'
+import { editVideoProject, requireVideoEditInstance, setVideoEditTimelineView, type VideoEditInstance } from './videoEditService'
 
 const logger = createLogger('features.videoEdit.timeline')
 const clipboards = new WeakMap<VideoEditInstance, VideoEditClipboard>()
@@ -88,8 +88,4 @@ export function updateVideoEditTrack(projectId: string, sequenceId: string, trac
     if (!sequence?.tracks.some(track => track.id === trackId)) throw new Error('目标轨道不存在。')
     return { ...document, sequences: document.sequences.map(value => value.id === sequenceId ? { ...value, tracks: value.tracks.map(track => track.id === trackId ? { ...track, ...patch } : track) } : value) }
   })
-}
-export function targetVideoEditTracks(projectId: string): number[] {
-  const owner = requireVideoEditInstance(projectId)
-  return getActiveVideoEditSequence(owner).tracks.filter(track => owner.targetTrackIds.includes(track.id)).map(track => track.index)
 }

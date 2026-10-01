@@ -57,8 +57,3 @@ export function createVideoEditSequenceFromItems(projectId: string, itemIds: str
   editVideoProject(projectId, document => ({ ...document, sequences: [...document.sequences, sequence] }))
   switchVideoEditSequence(projectId, sequence.id); setVideoEditView(projectId, { selection: sequence.clips[0].id }); return sequence.id
 }
-export function requireVideoEditItem(projectId: string, itemId: string): VideoEditItem {
-  const item = requireVideoEditInstance(projectId).document.items.find(item => item.id === itemId)
-  if (!item) throw new Error('项目项不存在。')
-  return item
-}
