@@ -4,7 +4,7 @@ import { capabilityControl, defineApplicationCapability } from '../shared/define
 
 const projectRef = applicationRefSchema.extend({ kind: z.literal('video_edit.project') }).strict()
 const input = z.object({ projectRef, clipRef: applicationRefSchema.extend({ kind: z.literal('video_edit.clip') }).strict().optional(), frame: z.number().int().nonnegative().optional(), assetRef: applicationRefSchema.extend({ kind: z.literal('asset') }).strict().optional() }).strict()
-const output = z.object({ resultRef: projectRef, message: z.string(), verification: z.object({ verified: z.boolean(), condition: z.string(), target: projectRef }), task: z.object({ id: z.string(), state: z.enum(['running', 'completed', 'cancelled', 'failed']), progress: z.number(), revision: z.number() }).optional() }).strict()
+const output = z.object({ resultRef: projectRef, message: z.string(), verification: z.object({ verified: z.boolean(), condition: z.string(), target: projectRef }), task: z.object({ id: z.string(), state: z.enum(['running', 'completed', 'cancelled', 'failed']), progress: z.number(), revision: z.number(), startFrame: z.number().int().nonnegative().optional(), endFrame: z.number().int().positive().optional() }).optional() }).strict()
 const libraryRef = applicationRefSchema.extend({ kind: z.literal('asset.library') }).strict()
 const assetRef = applicationRefSchema.extend({ kind: z.literal('asset') }).strict()
 const collectInput = z.object({ projectRef, libraryRef: libraryRef.optional(), kind: z.enum(['export', 'frame']), taskId: z.string().min(1).optional(), frame: z.number().int().nonnegative().optional() }).strict().superRefine((value, context) => {
@@ -85,7 +85,7 @@ export const VIDEO_EDIT_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinitio
   ['redo_video_edit', '重做剪辑修改', '恢复目标工程刚撤销的一步修改。'],
   ['split_video_edit', '拆分剪辑片段', '在指定工程帧拆分片段，正确换算源时间并迁移后半段标注。'],
   ['import_video_edit_asset', '引用素材库素材', '从现有素材库引用原媒体或可编辑代码到剪辑工程，不复制原文件。代码生成器保留参数、关键帧和原图片依赖；代码滤镜需要明确目标clipRef并应用到该原片段。'],
-  ['export_video_edit', '导出剪辑成片或字幕', '将当前序列快照导出到用户通过本地对话框选择的新MP4（含音轨与烧录字幕），或SRT/WebVTT字幕文件。字幕文件写完即核实，视频须查询导出任务。'],
+  ['export_video_edit', '导出剪辑成片或字幕', '将当前序列快照导出到用户通过本地对话框选择的新MP4（含音轨与烧录字幕），或SRT/WebVTT字幕文件。设置了序列入出点时只导出该半开范围，成片与字幕从入点计时；未设置则导出整条序列。字幕文件写完即核实，视频须查询导出任务。'],
   ['query_video_edit_export', '查询剪辑导出', '查询目标工程导出进度和最终状态。'],
   ['cancel_video_edit_export', '取消剪辑导出', '取消目标工程正在进行的导出，清理未完成输出。'],
 ].map(([id, title, description]) => defineApplicationCapability({

@@ -10,18 +10,19 @@ import { createApplicationCapabilitySession } from '@/features/application-contr
 import { createCanvasProject } from '@/features/canvas/application/canvasProjectService'
 import { readPersistedCanvasProjectSnapshot } from '@/features/canvas/application/canvasQueryService'
 import { resetCanvasApplicationStateForTests } from '@/features/canvas/application/canvasApplicationService'
-import { closeVideoEditProject, createVideoEditProject, editVideoSequence, listVideoEditInstances, openVideoEditProject, setVideoEditView } from './videoEditService'
+import { closeVideoEditProject, createVideoEditProject, editVideoSequence, listVideoEditInstances, openVideoEditProject, setVideoEditTimelineView, setVideoEditView } from './videoEditService'
+import { appendVideoEditCaptionText, exportVideoEditSubtitles } from './videoEditTimedContent'
 import { captureVideoEditProgramFrame, registerVideoEditProgramCapture } from './videoEditProgramCapture'
 import { collectVideoEditOutput, publishVideoEditOutput } from './videoEditOutputs'
 import { cancelVideoEditExport, exportVideoEdit, videoEditExportTask } from './videoEditExport'
 
 // Only codec/pixel and native I/O boundaries are replaced. Services, ownership,
 // capability permission/registration, collection and project persistence are real.
-const encoder = vi.hoisted(() => ({ finalize: vi.fn(), cancel: vi.fn(), render: vi.fn(), dispose: vi.fn(), failConstructor: false }))
+const encoder = vi.hoisted(() => ({ finalize: vi.fn(), cancel: vi.fn(), render: vi.fn(), dispose: vi.fn(), failConstructor: false, videoTimestamps: [] as number[] }))
 vi.mock('mediabunny', () => ({
   ALL_FORMATS: [], UrlSource: class {}, Input: class {}, Mp4OutputFormat: class {}, StreamTarget: class {},
   Output: class { addVideoTrack() {} addAudioTrack() {} async start() {} finalize = encoder.finalize; cancel = encoder.cancel },
-  CanvasSource: class { async add() {} }, AudioBufferSource: class { async add() {} },
+  CanvasSource: class { async add(timestamp: number) { encoder.videoTimestamps.push(timestamp) } }, AudioBufferSource: class { async add() {} },
 }))
 vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: class {
   canvas = {}; constructor() { if (encoder.failConstructor) throw new Error('GPU unavailable') }
@@ -36,7 +37,7 @@ function record(path: string, kind: 'image' | 'video'): AssetRecord {
   return { id: 'published-output', filePath: path, mediaType: kind, displayName: '输出', displayUrl: 'henji-media://local/output', source: 'video-edit', mimeType: kind === 'image' ? 'image/png' : 'video/mp4', ...content, width: 3840, height: 2160, durationSeconds: kind === 'video' ? 1 : 0, thumbnailPath: null, thumbnailUrl: null, inspectionStatus: 'ready', inspectionError: null, createdAt: 1, updatedAt: 2, lastUsedAt: null, tags: [], libraryIds: [] }
 }
 beforeEach(() => {
-  installHarnessNativeStorage(); resetCanvasApplicationStateForTests(); vi.stubGlobal('Blob', NativeBlob); files.clear(); media.clear(); assets.clear(); encoder.failConstructor = false
+  installHarnessNativeStorage(); resetCanvasApplicationStateForTests(); vi.stubGlobal('Blob', NativeBlob); files.clear(); media.clear(); assets.clear(); encoder.failConstructor = false; encoder.videoTimestamps = []
   encoder.finalize.mockReset().mockResolvedValue(undefined); encoder.cancel.mockReset().mockResolvedValue(undefined); encoder.render.mockReset().mockResolvedValue(undefined); encoder.dispose.mockReset().mockResolvedValue(undefined)
   const platform = getPlatform()
   vi.spyOn(platform.system.dialog, 'save').mockResolvedValue('D:/output.henji-video')
@@ -207,4 +208,19 @@ it.each(['constructor', 'render', 'cancel-last-frame'] as const)('完成前%s失
   expect(owner.busy).toBe(false); expect(media.has('D:/unfinished.mp4')).toBe(false); expect(encoder.finalize).not.toHaveBeenCalled()
   expect(videoEditExportTask(id)?.state).toBe(failure === 'cancel-last-frame' ? 'cancelled' : 'failed')
   expect(getPlatform().system.fs.remove).toHaveBeenCalledTimes(failure === 'constructor' ? 0 : 1)
+})
+
+it('序列入出点选定导出半开范围：成片与字幕文件从入点计时，范围外内容不导出', async () => {
+  const owner = (await createVideoEditProject())!; const id = owner.document.id; const fps = owner.document.sequences[0].frameRate.numerator / owner.document.sequences[0].frameRate.denominator
+  appendVideoEditCaptionText(id, owner.activeSequenceId, '1\n00:00:00,000 --> 00:00:01,000\n范围前\n\n2\n00:00:01,000 --> 00:00:03,000\n跨入点\n\n3\n00:00:03,000 --> 00:00:04,000\n范围后')
+  setVideoEditTimelineView(id, { inFrame: 2 * fps, outFrame: 3 * fps })
+  await exportVideoEdit(id, 'D:/range.mp4')
+  expect(videoEditExportTask(id)).toMatchObject({ state: 'completed', startFrame: 2 * fps, endFrame: 3 * fps, progress: 1 })
+  expect(encoder.render.mock.calls.map(([frame]) => frame)).toEqual(Array.from({ length: fps }, (_, index) => 2 * fps + index))
+  expect(encoder.videoTimestamps[0]).toBe(0); expect(encoder.videoTimestamps.at(-1)).toBeCloseTo((fps - 1) / fps)
+  vi.mocked(getPlatform().system.dialog.save).mockResolvedValueOnce('D:/range.srt')
+  expect(await exportVideoEditSubtitles(id, 'srt')).toEqual({ saved: true, verified: true })
+  expect(files.get('D:/range.srt')).toBe('1\n00:00:00,000 --> 00:00:01,000\n跨入点\n')
+  setVideoEditTimelineView(id, { inFrame: 5 * fps, outFrame: null })
+  await expect(exportVideoEdit(id, 'D:/empty.mp4')).rejects.toThrow('入点之后没有可导出的内容'); expect(media.has('D:/empty.mp4')).toBe(false)
 })

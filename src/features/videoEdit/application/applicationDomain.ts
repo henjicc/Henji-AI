@@ -113,7 +113,7 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
       const task = videoEditExportTask(id)
       const instance = requireVideoEditInstance(id)
       const verified = definition.id.includes('export') ? Boolean(task) : JSON.stringify(JSON.parse(await getPlatform().system.fs.readTextFile(instance.path))) === JSON.stringify(instance.document)
-      return { resultRef: input.projectRef, verification: { verified, target: input.projectRef, condition: definition.id.includes('export') ? '已回读原工程的导出任务状态；请求提交不等于视频导出完成。' : '已从本地工程文件回读并核对编辑内容。' }, message: definition.id.includes('export') ? task ? `导出状态：${task.state}。请查询导出状态确认完成。` : '尚无导出任务或已取消文件选择。' : '操作已完成，请回读工程核对结果。', ...(task ? { task: { id: task.id, state: task.state, progress: task.progress, revision: task.revision } } : {}) }
+      return { resultRef: input.projectRef, verification: { verified, target: input.projectRef, condition: definition.id.includes('export') ? '已回读原工程的导出任务状态；请求提交不等于视频导出完成。' : '已从本地工程文件回读并核对编辑内容。' }, message: definition.id.includes('export') ? task ? `导出状态：${task.state}。请查询导出状态确认完成。` : '尚无导出任务或已取消文件选择。' : '操作已完成，请回读工程核对结果。', ...(task ? { task: { id: task.id, state: task.state, progress: task.progress, revision: task.revision, startFrame: task.startFrame, endFrame: task.endFrame } } : {}) }
     })
   },
   resolvePersistenceParticipants(steps) {

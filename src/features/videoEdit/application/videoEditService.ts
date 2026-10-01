@@ -2,7 +2,7 @@ import { createLogger } from '@/core/logging'
 import { reconcileVideoEditTimedContent } from '@/core/videoEdit/timedContent'
 import { assertApplicationWritesAllowed } from '@/core/applicationLifecycle/applicationWriteBarrier'
 import { registerApplicationCloseGuard } from '@/core/applicationLifecycle/applicationCloseGuards'
-import { createVideoEditDocument, createVideoEditSequence, changeVideoEditSequenceSettings, videoEditComposition, videoEditDocumentSchema, videoEditClipSchema, type VideoEditClip, type VideoEditComposition, type VideoEditDocument, type VideoEditSequence, type VideoEditMedia } from '@/core/videoEdit/document'
+import { createVideoEditDocument, createVideoEditSequence, changeVideoEditSequenceSettings, videoEditComposition, videoEditDuration, videoEditDocumentSchema, videoEditClipSchema, type VideoEditClip, type VideoEditComposition, type VideoEditDocument, type VideoEditSequence, type VideoEditMedia } from '@/core/videoEdit/document'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { rescaleVideoEditFrame } from '@/core/videoEdit/time'
 import { assertVideoEditLockedTracks, assertVideoEditClipsEditable } from '@/core/videoEdit/lockedTracks'
@@ -299,6 +299,18 @@ export function setVideoEditView(id: string, values: Partial<Pick<VideoEditInsta
   if (selectionChanged) publishVideoEdit(programCommand)
   else { if (programCommand) domainRevision++; publishView() }
   return command
+}
+/**
+ * Sequence In/Out marks select the half-open exported range (Out is exclusive, as marked by the O command);
+ * without marks the whole sequence is exported. MP4 and subtitle files use the same range.
+ */
+export function videoEditExportRange(instance: VideoEditInstance, sequenceId = instance.activeSequenceId): { startFrame: number; endFrame: number } {
+  const sequence = instance.document.sequences.find(value => value.id === sequenceId)
+  if (!sequence) throw new Error('序列不存在。')
+  const marks = sequenceId === instance.activeSequenceId ? instance : instance.sequenceViews.get(sequenceId)
+  const startFrame = marks?.inFrame ?? 0; const endFrame = marks?.outFrame ?? videoEditDuration(sequence)
+  if (endFrame <= startFrame) throw new Error('入点之后没有可导出的内容，请调整序列入出点。')
+  return { startFrame, endFrame }
 }
 export function getVideoEditTimelineView(id: string): VideoEditTimelineView {
   const instance = requireVideoEditInstance(id)

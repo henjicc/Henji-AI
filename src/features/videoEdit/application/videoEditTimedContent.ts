@@ -1,7 +1,7 @@
 import { createLogger } from '@/core/logging'
 import { videoEditCaptionSchema, videoEditMarkerSchema, importVideoEditCaptions, exportVideoEditCaptions, type VideoEditCaption, type VideoEditMarker } from '@/core/videoEdit/timedContent'
 import { getPlatform } from '@/platform/runtime'
-import { editVideoSequence, requireVideoEditInstance } from './videoEditService'
+import { editVideoSequence, requireVideoEditInstance, videoEditExportRange } from './videoEditService'
 
 const logger = createLogger('features.videoEdit.timedContent')
 export function createVideoEditMarker(projectId: string, sequenceId: string, values: Omit<VideoEditMarker, 'id'>): string {
@@ -61,7 +61,9 @@ export async function exportVideoEditSubtitles(projectId: string, format: 'srt' 
   signal?.throwIfAborted()
   const owner = requireVideoEditInstance(projectId); const sequence = owner.document.sequences.find(value => value.id === sequenceId)
   if (!sequence || !sequence.captions?.length) throw new Error('此序列没有可导出的字幕。')
-  const text = exportVideoEditCaptions(sequence, format)
+  const range = videoEditExportRange(owner, sequenceId)
+  const text = exportVideoEditCaptions(sequence, format, range)
+  if (!text.replace(/^WEBVTT\s*/, '').trim()) throw new Error('序列入出点范围内没有字幕。')
   const path = await getPlatform().system.dialog.save({ defaultPath: `${sequence.name}.${format}`, filters: [{ name: format.toUpperCase(), extensions: [format] }] })
   signal?.throwIfAborted()
   if (!path) return { saved: false, verified: false }

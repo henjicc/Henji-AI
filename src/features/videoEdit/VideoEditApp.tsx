@@ -2,7 +2,8 @@ import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import { UiButton, UiError, UiPageHeader, UiRegion } from '@/components/ui'
 import { Download, Undo2, Redo2, Scissors, Trash2, Type } from 'lucide-react'
 import type { DockviewApi } from 'dockview-react'
-import { activeVideoEditInstance, appendVideoEditClip, closeVideoEditProject, createVideoEditProject, getActiveVideoEditSequence, listVideoEditInstances, openVideoEditProject, subscribeVideoEdit, subscribeVideoEditView, videoEditViewRevision, videoEditRevision, focusVideoEdit, focusVideoEditPanel, type VideoEditInstance } from './application/videoEditService'
+import { activeVideoEditInstance, appendVideoEditClip, closeVideoEditProject, createVideoEditProject, getActiveVideoEditSequence, listVideoEditInstances, openVideoEditProject, subscribeVideoEdit, subscribeVideoEditView, videoEditViewRevision, videoEditRevision, focusVideoEdit, focusVideoEditPanel, videoEditExportRange, type VideoEditInstance } from './application/videoEditService'
+import { videoEditFrameTimecode } from '@/core/videoEdit/timecode'
 import { cancelVideoEditExport, videoEditExportTask } from './application/videoEditExport'
 import { VideoEditDock } from './layout/VideoEditDock'
 import { VideoEditLayoutMenu } from './layout/VideoEditDockChrome'
@@ -20,6 +21,7 @@ function VideoEditToolbar({ instance, api, run }: { instance: VideoEditInstance;
   useSyncExternalStore(subscribeVideoEditView, videoEditViewRevision)
   const sequence = getActiveVideoEditSequence(instance); const projectId = instance.document.id
   const task = videoEditExportTask(projectId)
+  const marked = instance.inFrame !== null || instance.outFrame !== null ? (() => { try { return videoEditExportRange(instance) } catch { return undefined } })() : undefined
   const [collecting, setCollecting] = useState(false)
   const libraryId = useAssetLibraryStore(state => state.libraryId)
   const context = captureVideoEditCommandContext(projectId, 'timeline', { includeClipboard: false })
@@ -35,6 +37,7 @@ function VideoEditToolbar({ instance, api, run }: { instance: VideoEditInstance;
     <UiButton variant="plain" className="gap-1.5" onClick={() => run(() => appendVideoEditClip(projectId))}><Type size={15} />文字</UiButton>
     <VideoEditLayoutMenu api={api} /><VideoEditShortcutSettings /><div className="ml-auto" />
     <span className="mr-2 text-2xs tabular-nums text-text-faint">{sequence.width} × {sequence.height} · {Number(sequence.fps.toFixed(3))}fps</span>
+    {marked && <span className="mr-2 text-2xs tabular-nums text-text-muted" data-video-edit-export-range>导出范围 {videoEditFrameTimecode(marked.startFrame, sequence.fps)}–{videoEditFrameTimecode(marked.endFrame - 1, sequence.fps)}</span>}
     {task?.state === 'completed' && task.output && <UiButton variant="plain" disabled={collecting} onClick={() => run(async () => {
       setCollecting(true)
       try {

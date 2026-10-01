@@ -93,6 +93,12 @@ describe('SRT/WebVTT真实交换', () => {
     expect(sequence.captions[0]).toMatchObject({ start: 30, duration: 30 })
     for (const format of ['srt', 'vtt'] as const) expect(importVideoEditCaptions(exportVideoEditCaptions(sequence, format), sequence.frameRate)[0]).toMatchObject({ start: 30, duration: 30, text: '原创字幕' })
   })
+  it('导出范围裁切字幕端点并从入点计时，范围外字幕不输出', () => {
+    const { sequence } = fixture(); sequence.frameRate = { numerator: 30, denominator: 1 }
+    sequence.captions = importVideoEditCaptions('1\n00:00:00,000 --> 00:00:01,000\n前\n\n2\n00:00:01,500 --> 00:00:03,000\n跨', sequence.frameRate)
+    expect(exportVideoEditCaptions(sequence, 'srt', { startFrame: 30, endFrame: 60 })).toBe('1\n00:00:00,500 --> 00:00:01,000\n跨\n')
+    expect(exportVideoEditCaptions(sequence, 'vtt', { startFrame: 90, endFrame: 120 })).toBe('WEBVTT\n\n')
+  })
   it('无效/零长/空文件和小于一帧及超范围字幕拒绝，不静默丢内容', () => {
     expect(() => parseSubtitleText('')).toThrow('没有')
     expect(() => parseSubtitleText('1\n00:99:01,000 --> 00:00:02,000\n非法')).toThrow('时间无效')

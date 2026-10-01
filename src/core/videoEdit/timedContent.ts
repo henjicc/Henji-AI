@@ -65,9 +65,12 @@ export function importVideoEditCaptions(source: string, rate: VideoEditRatio, op
     return { id: crypto.randomUUID(), ...(options.clip ? { clipId: options.clip.id } : {}), start, duration: end - start, text: cue.text }
   })
 }
-export function exportVideoEditCaptions(sequence: VideoEditSequence, format: 'srt' | 'vtt' = 'srt'): string {
-  const us = (frame: number): number => Math.round(frame * sequence.frameRate.denominator * 1e6 / sequence.frameRate.numerator)
-  return buildSubtitleText([...(sequence.captions ?? [])].sort((a, b) => a.start - b.start || a.id.localeCompare(b.id)).map(caption => ({ startUs: us(caption.start), endUs: us(caption.start + caption.duration), text: caption.text })), format)
+/** `range` is the exported half-open frame range; cues are clipped to it and timed from its start. */
+export function exportVideoEditCaptions(sequence: VideoEditSequence, format: 'srt' | 'vtt' = 'srt', range?: { startFrame: number; endFrame: number }): string {
+  const from = range?.startFrame ?? 0; const to = range?.endFrame ?? Infinity
+  const us = (frame: number): number => Math.round((frame - from) * sequence.frameRate.denominator * 1e6 / sequence.frameRate.numerator)
+  return buildSubtitleText([...(sequence.captions ?? [])].filter(caption => caption.start < to && caption.start + caption.duration > from).sort((a, b) => a.start - b.start || a.id.localeCompare(b.id))
+    .map(caption => ({ startUs: us(Math.max(from, caption.start)), endUs: us(Math.min(to, caption.start + caption.duration)), text: caption.text })), format)
 }
 
 /** Burned-in captions use the existing full-resolution text compositor, above video tracks. */
