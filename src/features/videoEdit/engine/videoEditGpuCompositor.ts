@@ -4,6 +4,7 @@ import type { VideoEditClip, VideoEditComposition } from '@/core/videoEdit/docum
 import { ImageEditWebGpuDeviceManager } from '@/core/imageEdit/webgpu/deviceManager'
 import { getWebGpuContext, type GpuDevice, type GpuTexture, type GpuBuffer, type GpuRenderPipeline } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 import { VideoEditCodeGpu, VideoEditCodePicture } from './videoEditCodeGpu'
+import type { VideoEditCodeImageInput } from './videoEditCodeGpu'
 
 interface VideoGpuDevice extends GpuDevice {
   importExternalTexture(descriptor: { source: VideoFrame }): unknown
@@ -42,7 +43,9 @@ export class VideoEditGpuCompositor {
   private cachedVideo!: GpuRenderPipeline
   private sampler: unknown
   private readonly uniforms = new Map<string, GpuBuffer>()
-  private readonly textures = new Map<string, { texture: GpuTexture; key: string }>()
+  private readonly textures = new Map<string, { texture: GpuTexture; key: string; bytes: number }>()
+  private protectedImages = new Set<string>()
+  private imageUploads = 0
   private readonly imageIds = new WeakMap<ImageBitmap, number>()
   private nextImageId = 0
   private lost: string | undefined
@@ -164,6 +167,40 @@ struct Vertex { @builtin(position) position: vec4f, @location(0) uv: vec2f }
     return this.codeRuntime
   }
   codeDiagnostics(): ReturnType<VideoEditCodeGpu['diagnostics']> | undefined { return this.codeRuntime?.diagnostics() }
+  imageDiagnostics() { return { textures: this.textures.size, bytes: [...this.textures.values()].reduce((total, entry) => total + entry.bytes, 0), uploads: this.imageUploads } }
+  private imageKey(picture: ImageBitmap): string {
+    if (!this.imageIds.has(picture)) this.imageIds.set(picture, ++this.nextImageId)
+    return `image:${this.imageIds.get(picture)}`
+  }
+  private texture(id: string, key: string, source: ImageBitmap | OffscreenCanvas): GpuTexture {
+    const cached = this.textures.get(id)
+    if (cached?.key === key) return cached.texture
+    const bytes = source.width * source.height * 4
+    const retained = [...this.textures.values()].reduce((total, entry) => total + entry.bytes, 0) - (cached?.bytes ?? 0)
+    if (source.width < 1 || source.height < 1 || source.width > 8192 || source.height > 8192 || retained + bytes > 256 * 1024 ** 2 || !cached && this.textures.size >= 32) throw new Error('可见图片与文字超过32份或256MiB预算，请减少同时显示的素材。')
+    const texture = this.device.createTexture({ size: [source.width, source.height], format: 'rgba8unorm', usage: 0x02 | 0x04 | 0x10 })
+    try { this.device.queue.copyExternalImageToTexture({ source }, { texture, premultipliedAlpha: false }, [source.width, source.height]) }
+    catch (error) { texture.destroy(); throw error }
+    cached?.texture.destroy(); this.textures.set(id, { texture, key, bytes }); this.imageUploads++
+    return texture
+  }
+  private retainTextures(keys: ReadonlySet<string>): void {
+    for (const [key, value] of this.textures) if (!keys.has(key)) { value.texture.destroy(); this.textures.delete(key) }
+  }
+  /** Ordinary image clips and code references borrow the same full-size upload. */
+  async prepareImages(pictures: ReadonlyMap<string, ImageBitmap>, shouldPresent: () => boolean, visibleText: ReadonlySet<string> = new Set()): Promise<ReadonlyMap<string, VideoEditCodeImageInput>> {
+    await this.ready
+    if (!shouldPresent() || this.disposed) throw new DOMException('图片画面已取消。', 'AbortError')
+    if (this.lost) throw new Error(`剪辑 GPU 已中断：${this.lost}`)
+    const unique = new Set(pictures.values()); const bytes = [...unique].reduce((sum, image) => sum + image.width * image.height * 4, 0)
+    if (unique.size + visibleText.size > 32 || bytes + visibleText.size * this.canvas.width * this.canvas.height * 4 > 256 * 1024 ** 2) throw new Error('可见图片与文字超过32份或256MiB预算，请减少同时显示的素材。')
+    this.protectedImages = new Set([...unique].map(image => this.imageKey(image)))
+    this.retainTextures(new Set([...this.protectedImages, ...[...visibleText].map(id => `text:${id}`)]))
+    return new Map([...pictures].map(([mediaId, picture]) => {
+      const key = this.imageKey(picture)
+      return [mediaId, { texture: this.texture(key, key, picture), width: picture.width, height: picture.height, owner: this.device, premultiplied: false }]
+    }))
+  }
   async draw(document: VideoEditComposition, clips: VideoEditClip[], pictures: Array<VideoSample | VideoEditGpuFrame | VideoEditCodePicture | ImageBitmap | null>, shouldPresent: () => boolean, deadline?: number): Promise<{ presented: boolean; completion: Promise<void> }> {
     await this.ready
     if (!shouldPresent()) return { presented: false, completion: Promise.resolve() }
@@ -175,7 +212,8 @@ struct Vertex { @builtin(position) position: vec4f, @location(0) uv: vec2f }
     })
     if (!shouldPresent()) return { presented: false, completion: Promise.resolve() }
     if (this.lost) throw new Error(`剪辑 GPU 已中断，请重新加载预览：${this.lost}`)
-    if (this.uploads.size >= 2) await Promise.race(this.uploads)
+    while (this.uploads.size >= 2) await Promise.race(this.uploads)
+    if (this.disposed || !shouldPresent()) return { presented: false, completion: Promise.resolve() }
     const device = this.device
     const frames: VideoFrame[] = []
     try {
@@ -197,9 +235,9 @@ struct Vertex { @builtin(position) position: vec4f, @location(0) uv: vec2f }
         } else if (cachedVideo) {
           resource = picture.texture.createView(); width = picture.displayWidth; height = picture.displayHeight
         } else {
-          if (picture && !this.imageIds.has(picture)) this.imageIds.set(picture, ++this.nextImageId)
-          const key = picture ? String(this.imageIds.get(picture)) : `${document.width}:${document.height}:${clip.text}`
-          let cached = this.textures.get(clip.id)
+          const id = picture ? this.imageKey(picture) : `text:${clip.id}`
+          const key = picture ? id : `${document.width}:${document.height}:${clip.text}`
+          let cached = this.textures.get(id)
           if (cached?.key !== key) {
             let source: ImageBitmap | OffscreenCanvas
             if (picture) source = picture
@@ -209,11 +247,7 @@ struct Vertex { @builtin(position) position: vec4f, @location(0) uv: vec2f }
               text.fillStyle = 'white'; text.textAlign = 'center'; text.textBaseline = 'middle'; text.font = `${Math.round(document.height / 15)}px sans-serif`
               clip.text.split('\n').forEach((line, row) => text.fillText(line, document.width / 2, document.height / 2 + row * document.height / 12))
             }
-            const texture = device.createTexture({ size: [source.width, source.height], format: 'rgba8unorm', usage: 0x02 | 0x04 | 0x10 })
-            try { device.queue.copyExternalImageToTexture({ source }, { texture }, [source.width, source.height]) }
-            catch (error) { texture.destroy(); throw error }
-            cached?.texture.destroy()
-            cached = { texture, key }; this.textures.set(clip.id, cached)
+            this.texture(id, key, source); cached = this.textures.get(id)!
           }
           resource = cached.texture.createView()
           if (picture) { width = picture.width; height = picture.height }
@@ -232,7 +266,7 @@ struct Vertex { @builtin(position) position: vec4f, @location(0) uv: vec2f }
       const completion = device.queue.onSubmittedWorkDone().finally(() => { frames.forEach(frame => frame.close()); this.uploads.delete(completion) })
       this.uploads.add(completion)
       const ids = new Set(clips.map(clip => clip.id))
-      for (const [id, value] of this.textures) if (!ids.has(id)) { value.texture.destroy(); this.textures.delete(id) }
+      this.retainTextures(new Set([...this.protectedImages, ...pictures.flatMap((picture, index) => picture instanceof VideoSample || picture instanceof VideoEditGpuFrame || picture instanceof VideoEditCodePicture ? [] : [picture ? this.imageKey(picture) : `text:${clips[index].id}`])]))
       for (const [id, value] of this.uniforms) if (!ids.has(id)) { value.destroy(); this.uniforms.delete(id) }
       return { presented: true, completion }
     } catch (error) { frames.forEach(frame => frame.close()); throw error }

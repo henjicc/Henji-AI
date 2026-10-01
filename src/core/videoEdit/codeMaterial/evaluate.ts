@@ -1,4 +1,4 @@
-import { CODE_MATERIAL_LIMITS, CodeMaterialError, codeBinaryCost, codeBuiltinCost, codeColor, codeConditionalCost, finiteCodeNumber } from './contract'
+import { CODE_MATERIAL_LIMITS, CodeMaterialError, codeBinaryCost, codeBuiltinCost, codeColor, codeConditionalCost, codeImageReference, finiteCodeNumber } from './contract'
 import type { CodeColor, CodeDrawCommand, CodeExpression, CodeMaterialContext, CodeMaterialProgram, CodeParameterValue } from './contract'
 import { validateCodeMaterialParameters } from './parameters'
 
@@ -16,7 +16,8 @@ function validateContext(context: CodeMaterialContext): void {
 }
 /** Evaluate generator IR once at an explicit source time. Filter IR stays on the trusted GPU path. */
 export function evaluateCodeMaterial(program: CodeMaterialProgram, context: CodeMaterialContext, values: Readonly<Record<string, unknown>> = {}): CodeDrawCommand[] {
-  if (program.kind !== 'generator' || program.apiVersion !== 1 || program.languageVersion !== 1) throw new CodeMaterialError('TYPE', 'CPU 求值仅支持版本 1 的生成器；滤镜由可信 GPU emitter 消费。')
+  if (program.kind !== 'generator' || program.apiVersion !== 1 || ![1, 2].includes(program.languageVersion)) throw new CodeMaterialError('TYPE', 'CPU 求值仅支持版本 1 或 2 的生成器；滤镜由可信 GPU emitter 消费。')
+  if (program.languageVersion !== (program.parameters.some(parameter => parameter.type === 'image') ? 2 : 1)) throw new CodeMaterialError('TYPE', '图片参数与作者语言版本不一致。')
   validateContext(context)
   const parameters = validateCodeMaterialParameters(program, values)
   const seed = context.seed ?? program.seed; codeMaterialRandom(seed, 0)
@@ -74,6 +75,11 @@ export function evaluateCodeMaterial(program: CodeMaterialProgram, context: Code
         const fields = Object.fromEntries(Object.entries(expression.properties).map(([key, value]) => [key, next(value)]))
         const coordinate = (key: string): number => bounded(fields[key], -32768, 32768, key)
         const size = (key: string, max = 32768): number => bounded(fields[key], 0, max, key)
+        if (expression.shape === 'image') {
+          const x = coordinate('x'); const y = coordinate('y'); const width = size('width'); const height = size('height'); const opacity = bounded(fields.opacity ?? 1, 0, 1, 'opacity')
+          if (fields.source === null) return null
+          return { kind: 'image', source: codeImageReference(fields.source, '图片来源'), x, y, width, height, opacity }
+        }
         if (expression.shape === 'rect') return { kind: 'rect', x: coordinate('x'), y: coordinate('y'), width: size('width'), height: size('height'), fill: color(fields.fill), radius: 'radius' in fields ? size('radius') : 0 }
         if (expression.shape === 'ellipse') return { kind: 'ellipse', x: coordinate('x'), y: coordinate('y'), width: size('width'), height: size('height'), fill: color(fields.fill) }
         if (expression.shape === 'line') return { kind: 'line', x1: coordinate('x1'), y1: coordinate('y1'), x2: coordinate('x2'), y2: coordinate('y2'), width: size('width', 1024), color: color(fields.color) }
@@ -82,7 +88,7 @@ export function evaluateCodeMaterial(program: CodeMaterialProgram, context: Code
         if (!['sans-serif', 'serif', 'monospace'].includes(String(fontFamily)) || !['left', 'center', 'right'].includes(String(align))) throw new CodeMaterialError('TYPE', '字体或文本对齐不在白名单。')
         return { kind: 'text', x: coordinate('x'), y: coordinate('y'), text: fields.text, fontSize: bounded(fields.fontSize, 1, 1024, 'fontSize'), color: color(fields.color), fontFamily: fontFamily as 'sans-serif' | 'serif' | 'monospace', align: align as 'left' | 'center' | 'right' }
       }
-      case 'draws': { if (expression.values.length > CODE_MATERIAL_LIMITS.draws) throw new CodeMaterialError('BUDGET', '图形最多 256 项。'); return expression.values.map(value => { const result = next(value); if (typeof result !== 'object' || Array.isArray(result) || !('kind' in result)) throw new CodeMaterialError('TYPE', '输出必须是图形命令。'); return result }) }
+      case 'draws': { if (expression.values.length > CODE_MATERIAL_LIMITS.draws) throw new CodeMaterialError('BUDGET', '图形最多 256 项。'); return expression.values.flatMap(value => { const result = next(value); if (result === null && value.type === 'draw') return []; if (typeof result !== 'object' || result === null || Array.isArray(result) || !('kind' in result) || result.kind === 'image' && !('source' in result)) throw new CodeMaterialError('TYPE', '输出必须是图形命令。'); return [result as CodeDrawCommand] }) }
     }
     throw new CodeMaterialError('TYPE', 'IR 节点不在白名单。')
   }

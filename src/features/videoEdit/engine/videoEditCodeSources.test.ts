@@ -97,6 +97,44 @@ describe('可见代码源与固定内容复用', () => {
 })
 
 describe('失效、身份与资源上限', () => {
+  it('图片准备失败或取消同步回收静态索引，恢复原参数不命中已销毁目标', async () => {
+    for (const failure of ['reject', 'cancel'] as const) {
+      const document = fixture(); const boundary = boundaries(document)
+      try {
+        const first = await boundary.sources.prepare(document, document.clips, 0, () => true)
+        const next = { ...document, revision: 1, clips: document.clips.map(clip => ({ ...clip, code: { ...clip.code!, parameters: { amount: .8 } } })) }
+        boundary.sources.updateDocument(next)
+        let reject!: (reason: Error) => void
+        const images = new Promise<undefined>((_resolve, fail) => { reject = fail })
+        const pending = boundary.sources.prepare(next, next.clips, 0, () => true, images)
+        const refused = expect(pending).rejects.toThrow()
+        await vi.waitFor(() => expect(boundary.sources.diagnostics().staticPictures).toBe(1))
+        if (failure === 'cancel') boundary.sources.cancel()
+        reject(new Error('图片读取失败')); await refused
+        expect(boundary.sources.diagnostics().staticPictures).toBe(0); expect(boundary.pictures.size).toBe(0)
+        boundary.sources.updateDocument(document)
+        const restored = await boundary.sources.prepare(document, document.clips, 0, () => true)
+        expect(restored.cacheHits).toBe(0); expect(restored.pictures.get('clip')).not.toBe(first.pictures.get('clip'))
+        expect(boundary.generator).toHaveBeenCalledTimes(2)
+      } finally { await boundary.sources.dispose() }
+    }
+  })
+  it('同路径显式资源刷新只失效静态图片结果，标量外的版本变换复用源码', async () => {
+    const code = 'export default {apiVersion:1,name:"图片",kind:"generator",mode:"static",width:3840,height:2160,durationSeconds:10,seed:1,parameters:{logo:{type:"image",title:"徽标",default:null}},render(ctx){return [image({source:ctx.params.logo,x:0,y:0,width:100,height:100})];}}'
+    const document = fixture(code)
+    document.codeMaterials![0].versions[0].languageVersion = 2
+    document.media = [{ id: 'image', path: 'D:/original.png', name: '原图', kind: 'image', width: 100, height: 100, durationSeconds: 0 }]
+    document.clips[0].code!.parameters = { logo: { kind: 'image', mediaId: 'image' } }
+    const boundary = boundaries(document)
+    try {
+      const first = await boundary.sources.prepare(document, document.clips, 0, () => true)
+      const transformed = { ...document, revision: 1, clips: document.clips.map(clip => ({ ...clip, scale: 2 })) }
+      boundary.sources.updateDocument(transformed); expect((await boundary.sources.prepare(transformed, transformed.clips, 1, () => true)).cacheHits).toBe(1)
+      const refreshed = { ...transformed, revision: 2, media: transformed.media.map(media => ({ ...media, sourceRevision: 'explicit-relink' })) }
+      boundary.sources.updateDocument(refreshed); const fresh = await boundary.sources.prepare(refreshed, refreshed.clips, 1, () => true)
+      expect(fresh.cacheHits).toBe(0); expect(fresh.pictures.get('clip')).not.toBe(first.pictures.get('clip')); expect(boundary.compiler.compile).toHaveBeenCalledOnce()
+    } finally { await boundary.sources.dispose() }
+  })
   it('晚到GPU生成串行回收，旧批次失败不破坏新批次完整保护集合', async () => {
     const document = fixture(); const boundary = boundaries(document)
     let finishOld!: () => void; let started!: () => void

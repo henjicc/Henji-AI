@@ -37,4 +37,16 @@ describe('工程内嵌源码与固定实例契约', () => {
     await expect(bindCodeMaterialInstance(definition, '丢失版本', {}, compile)).rejects.toThrow('固定代码版本')
     expect(definition.versions).toHaveLength(1)
   })
+  it('版本切换检查原曲线与候选动画范围，拒绝伪造语言标签', async () => {
+    const animated = source().replace('step:.01', 'step:.01,animatable:true')
+    const { definition } = await makeCodeMaterialDefinition(animated, compile)
+    const instance = { ...await bindCodeMaterialInstance(definition, definition.defaultVersionId, {}, compile), curves: { amount: [{ id: 'end', sourceInUs: 8_000_000, sourceRemainder: { numerator: 0, denominator: 1 }, value: .8, interpolation: 'linear' as const }] } }
+    const shorter = await appendCodeMaterialVersion(definition, animated.replace('durationSeconds:10', 'durationSeconds:5'), compile)
+    await expect(changeCodeMaterialInstanceVersion(shorter.definition, instance, shorter.versionId, compile)).rejects.toThrow()
+    const disabled = await appendCodeMaterialVersion(definition, animated.replace('animatable:true', 'animatable:false'), compile)
+    await expect(changeCodeMaterialInstanceVersion(disabled.definition, instance, disabled.versionId, compile)).rejects.toThrow()
+    const forged = { ...definition, versions: definition.versions.map(version => ({ ...version, languageVersion: 2 as const })) }
+    await expect(bindCodeMaterialInstance(forged, definition.defaultVersionId, {}, compile)).rejects.toThrow('语言版本')
+    await expect(appendCodeMaterialVersion(forged, animated, compile)).rejects.toThrow('语言版本')
+  })
 })

@@ -54,7 +54,7 @@ async function inspectMedia(path: string, signal?: AbortSignal): Promise<VideoEd
     return { ...base, kind: video ? 'video' : 'audio', width: video?.displayWidth ?? 0, height: video?.displayHeight ?? 0, durationSeconds, ...(video ? { ...(rate ? { frameRate: rate } : {}), frameRateMode: metrics && metrics.probedPacketCount >= 2 ? metrics.frameRateIsConstant ? 'sampled-constant' as const : 'variable' as const : 'unknown' as const } : {}) }
   } finally { signal?.removeEventListener('abort', cancel); input.dispose() }
 }
-export async function importVideoEditSources(projectId: string, sources: VideoEditImportSource[], binId?: string, signal?: AbortSignal, afterImport?: (document: VideoEditDocument, itemIds: string[]) => VideoEditDocument): Promise<string[]> {
+export async function importVideoEditSources(projectId: string, sources: VideoEditImportSource[], binId?: string, signal?: AbortSignal, afterImport?: (document: VideoEditDocument, itemIds: string[]) => VideoEditDocument | Promise<VideoEditDocument>): Promise<string[]> {
   const owner = requireVideoEditInstance(projectId)
   logger.info('导入剪辑素材开始', { event: 'video_edit.media.import.start', context: { projectId, count: sources.length } })
   try {
@@ -68,7 +68,8 @@ export async function importVideoEditSources(projectId: string, sources: VideoEd
   signal?.throwIfAborted()
   if (requireVideoEditInstance(projectId) !== owner) throw new Error('原工程已关闭，导入不会写入重新打开的工程。')
   const ids: string[] = []
-  editVideoProject(projectId, document => {
+  const baseline = owner.document
+  const document = structuredClone(baseline)
     if (binId && !document.bins.some(bin => bin.id === binId)) throw new Error('导入期间目标素材箱已移除，请重新选择导入位置。')
     for (const { source, media: inspectedMedia } of inspected) {
       let media = document.media.find(media => sameVideoEditMediaPath(media.path, source.path))
@@ -78,8 +79,10 @@ export async function importVideoEditSources(projectId: string, sources: VideoEd
       if (!item) { item = { id: crypto.randomUUID(), name: media.name, kind: media.kind, mediaId: media.id, ...(binId ? { binId } : {}) }; document.items.push(item) }
       ids.push(item.id)
     }
-    return afterImport ? afterImport(document, ids) : document
-  })
+  const next = afterImport ? await afterImport(document, ids) : document
+  signal?.throwIfAborted()
+  if (requireVideoEditInstance(projectId) !== owner || owner.document !== baseline) throw new Error('导入检查期间原工程已改变，请重新导入。')
+  editVideoProject(projectId, () => next)
   logger.info('导入剪辑素材完成', { event: 'video_edit.media.import.completed', context: { projectId, count: ids.length } })
   return ids
   } catch (error) {
@@ -104,5 +107,5 @@ export async function relinkVideoEditMedia(projectId: string, mediaId: string): 
   const media = await inspectVideoEditMedia(path)
   if (requireVideoEditInstance(projectId) !== owner) throw new Error('原工程已关闭，请重新定位素材。')
   if (media.kind !== previous.kind) throw new Error('重新定位的文件类型必须与原素材一致。')
-  editVideoProject(projectId, document => { if (!document.media.some(item => item.id === mediaId && item.path === previous.path)) throw new Error('素材已被重新定位，请重新选择。'); return { ...document, media: document.media.map(item => item.id === mediaId ? { ...media, id: mediaId, ...(sameVideoEditMediaPath(previous.path, path) && previous.assetId ? { assetId: previous.assetId } : {}) } : item) } })
+  editVideoProject(projectId, document => { if (!document.media.some(item => item.id === mediaId && item.path === previous.path && item.sourceRevision === previous.sourceRevision)) throw new Error('素材已被重新定位，请重新选择。'); return { ...document, media: document.media.map(item => item.id === mediaId ? { ...media, id: mediaId, sourceRevision: media.id, ...(sameVideoEditMediaPath(previous.path, path) && previous.assetId ? { assetId: previous.assetId } : {}) } : item) } })
 }

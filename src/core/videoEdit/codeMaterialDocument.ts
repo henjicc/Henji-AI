@@ -2,7 +2,8 @@ import type { VideoEditDocument } from './document'
 import type { CodeMaterialInstance, CodeMaterialVersion } from './codeMaterialPersistence'
 import type { CodeMaterialProgram } from './codeMaterial/contract'
 import { CodeMaterialError } from './codeMaterial/contract'
-import { validateCodeMaterialParameters } from './codeMaterial/parameters'
+import { prepareCodeMaterialParameters } from './codeMaterialAnimation'
+import { codeMaterialImageIds } from './codeMaterialResources'
 import { codeMaterialContextForFrame } from './codeMaterialTiming'
 
 export type CodeMaterialMetadata = Pick<CodeMaterialProgram, 'name' | 'kind' | 'mode' | 'width' | 'height' | 'durationSeconds' | 'seed' | 'parameters'>
@@ -14,16 +15,21 @@ export function codeMaterialSource(document: Pick<VideoEditDocument, 'codeMateri
 }
 /** Metadata is checked against source by the host Worker, never trusted from the file. */
 export function validateCodeMaterialDocument(document: VideoEditDocument, read: CodeMaterialMetadataReader): void {
+  const images = new Set(document.media.filter(media => media.kind === 'image').map(media => media.id))
+  const validate = (instance: CodeMaterialInstance, program: CodeMaterialMetadata): void => {
+    prepareCodeMaterialParameters(program, instance)
+    for (const mediaId of codeMaterialImageIds(instance)) if (!images.has(mediaId)) throw new CodeMaterialError('PARAMETERS', '图片参数引用不属于此工程，或引用的素材不是图片。')
+  }
   for (const definition of document.codeMaterials ?? []) read({ definitionId: definition.id, versionId: definition.defaultVersionId, parameters: {} })
   for (const item of document.items) if (item.code) {
     const program = read(item.code)
     if (program.kind !== 'generator') throw new CodeMaterialError('TYPE', '单输入滤镜应作为附加效果使用，不能直接创建生成项目项。')
-    validateCodeMaterialParameters(program, item.code.parameters)
+    validate(item.code, program)
   }
   for (const sequence of document.sequences) for (const clip of sequence.clips) if (clip.code) {
     const program = read(clip.code)
     if (program.kind !== 'generator') throw new CodeMaterialError('TYPE', '代码片段需要生成素材。')
-    validateCodeMaterialParameters(program, clip.code.parameters)
+    validate(clip.code, program)
     codeMaterialContextForFrame(clip, clip.start + clip.duration - 1, sequence.frameRate, program)
   }
 }

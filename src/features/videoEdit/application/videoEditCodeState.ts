@@ -6,7 +6,7 @@ import type { CodeMaterialMetadata, CodeMaterialMetadataReader } from '@/core/vi
 import type { VideoEditDocument } from '@/core/videoEdit/document'
 import type { CodeMaterialInstance, CodeMaterialVersion } from '@/core/videoEdit/codeMaterialPersistence'
 
-interface Checked { definitionId: string; source: string; metadata: CodeMaterialMetadata; bytes: number }
+interface Checked { definitionId: string; source: string; apiVersion: number; languageVersion: number; metadata: CodeMaterialMetadata; bytes: number }
 export type VideoEditCodeMetadata = Map<string, Checked>
 const states = new WeakMap<object, VideoEditCodeMetadata>()
 let compiler: VideoEditCodeCompiler | undefined
@@ -19,12 +19,12 @@ export function installVideoEditCodeMetadata(owner: object, metadata: VideoEditC
 export function readVideoEditCodeMetadata(owner: object, document: VideoEditDocument): CodeMaterialMetadataReader {
   for (const definition of document.codeMaterials ?? []) for (const version of definition.versions) {
     const known = states.get(owner)?.get(version.id)
-    if (known && (known.definitionId !== definition.id || known.source !== version.source)) throw new CodeMaterialError('COMPATIBILITY', '已检查的不可变源码版本被替换，请创建新版本。')
+    if (known && (known.definitionId !== definition.id || known.source !== version.source || known.apiVersion !== version.apiVersion || known.languageVersion !== version.languageVersion)) throw new CodeMaterialError('COMPATIBILITY', '已检查的不可变源码版本被替换，请创建新版本。')
   }
   return instance => {
     const version = codeMaterialSource(document, instance)
     const entry = states.get(owner)?.get(version.id)
-    if (!entry || entry.definitionId !== instance.definitionId || entry.source !== version.source) throw new CodeMaterialError('COMPATIBILITY', '源码版本尚未检查或被替换，请重新打开原工程或提交新版本。')
+    if (!entry || entry.definitionId !== instance.definitionId || entry.source !== version.source || entry.apiVersion !== version.apiVersion || entry.languageVersion !== version.languageVersion) throw new CodeMaterialError('COMPATIBILITY', '源码版本尚未检查或被替换，请重新打开原工程或提交新版本。')
     return entry.metadata
   }
 }
@@ -34,15 +34,29 @@ export function rememberVideoEditCodeMetadata(owner: object, definitionId: strin
   put(metadata, definitionId, version, program)
 }
 export function forgetVideoEditCodeMetadata(owner: object, versionId: string): void { states.get(owner)?.delete(versionId) }
+export async function ensureVideoEditCodeDocumentMetadata(owner: object, document: VideoEditDocument, signal?: AbortSignal): Promise<void> {
+  const references: CodeMaterialInstance[] = [
+    ...(document.codeMaterials ?? []).map(definition => ({ definitionId: definition.id, versionId: definition.defaultVersionId, parameters: {} })),
+    ...document.items.flatMap(item => item.code ? [item.code] : []),
+    ...document.sequences.flatMap(sequence => sequence.clips.flatMap(clip => clip.code ? [clip.code] : [])),
+  ]
+  for (const instance of references) if (!states.get(owner)?.has(instance.versionId)) {
+    const version = codeMaterialSource(document, instance)
+    const program = await compileVideoEditCode(version.source, signal); signal?.throwIfAborted()
+    rememberVideoEditCodeMetadata(owner, instance.definitionId, version, program)
+  }
+  validateCodeMaterialDocument(document, readVideoEditCodeMetadata(owner, document))
+}
 function put(entries: VideoEditCodeMetadata, definitionId: string, version: CodeMaterialVersion, program: CodeMaterialProgram): void {
+  if (program.apiVersion !== version.apiVersion || program.languageVersion !== version.languageVersion) throw new CodeMaterialError('COMPATIBILITY', '源码语言版本与检查结果不一致，请保留原源码并重新提交版本。')
   const existing = entries.get(version.id)
-  if (existing && (existing.source !== version.source || existing.definitionId !== definitionId)) throw new CodeMaterialError('COMPATIBILITY', '不可变源码版本不能原位替换。')
+  if (existing && (existing.source !== version.source || existing.definitionId !== definitionId || existing.apiVersion !== version.apiVersion || existing.languageVersion !== version.languageVersion)) throw new CodeMaterialError('COMPATIBILITY', '不可变源码版本不能原位替换。')
   if (existing) return
   const { name, kind, mode, width, height, durationSeconds, seed, parameters } = program
   const metadata = { name, kind, mode, width, height, durationSeconds, seed, parameters }
   const bytes = new TextEncoder().encode(JSON.stringify(metadata)).byteLength + new TextEncoder().encode(version.source).byteLength
   if (entries.size >= 4096 || [...entries.values()].reduce((sum, entry) => sum + entry.bytes, 0) + bytes > 32 * 1024 ** 2) throw new CodeMaterialError('BUDGET', '工程已检查的代码版本超出会话预算；保存并重新打开工程可释放历史版本。')
-  entries.set(version.id, { definitionId, source: version.source, metadata, bytes })
+  entries.set(version.id, { definitionId, source: version.source, apiVersion: version.apiVersion, languageVersion: version.languageVersion, metadata, bytes })
 }
 /** Rebuild only default/referenced declarations. Unused historical source is
  * checked when explicitly requested; it is never executed or trusted as IR. */

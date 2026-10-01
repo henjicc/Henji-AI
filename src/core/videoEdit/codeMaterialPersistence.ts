@@ -1,8 +1,9 @@
 import { z } from 'zod'
 import { CODE_MATERIAL_LIMITS } from './codeMaterial/contract'
+import { codeMaterialCurvesSchema } from './codeMaterialAnimation'
 
 const id = z.string().min(1).max(100)
-export const codeMaterialVersionSchema = z.object({ id, apiVersion: z.literal(1), languageVersion: z.literal(1), source: z.string().max(CODE_MATERIAL_LIMITS.sourceBytes) }).strict()
+export const codeMaterialVersionSchema = z.object({ id, apiVersion: z.literal(1), languageVersion: z.union([z.literal(1), z.literal(2)]), source: z.string().max(CODE_MATERIAL_LIMITS.sourceBytes) }).strict()
 export const codeMaterialDefinitionSchema = z.object({ id, name: z.string().trim().min(1).max(200), defaultVersionId: id, versions: z.array(codeMaterialVersionSchema).min(1).max(64) }).strict().superRefine((value, context) => {
   if (new Set(value.versions.map(version => version.id)).size !== value.versions.length || !value.versions.some(version => version.id === value.defaultVersionId)) context.addIssue({ code: 'custom', message: '代码版本重复或默认版本不存在。' })
 })
@@ -18,8 +19,9 @@ export const codeMaterialDefinitionsSchema = z.array(codeMaterialDefinitionSchem
     }
   }
 })
-const parameter = z.union([z.number().finite(), z.boolean(), z.string().max(4096), z.tuple([z.number().min(0).max(1), z.number().min(0).max(1), z.number().min(0).max(1), z.number().min(0).max(1)])])
-export const codeMaterialInstanceSchema = z.object({ definitionId: id, versionId: id, parameters: z.record(z.string().regex(/^[A-Za-z][A-Za-z0-9_]{0,63}$/), parameter).refine(value => Object.keys(value).length <= 32, '代码参数最多32个。') }).strict()
+export const codeMaterialImageReferenceSchema = z.object({ kind: z.literal('image'), mediaId: id }).strict()
+const parameter = z.union([z.number().finite(), z.boolean(), z.string().max(4096), z.tuple([z.number().min(0).max(1), z.number().min(0).max(1), z.number().min(0).max(1), z.number().min(0).max(1)]), codeMaterialImageReferenceSchema, z.null()])
+export const codeMaterialInstanceSchema = z.object({ definitionId: id, versionId: id, parameters: z.record(z.string().regex(/^[A-Za-z][A-Za-z0-9_]{0,63}$/), parameter).refine(value => Object.keys(value).length <= 32, '代码参数最多32个。'), curves: codeMaterialCurvesSchema.optional() }).strict()
 export type CodeMaterialVersion = z.infer<typeof codeMaterialVersionSchema>
 export type CodeMaterialDefinition = z.infer<typeof codeMaterialDefinitionSchema>
 export type CodeMaterialInstance = z.infer<typeof codeMaterialInstanceSchema>

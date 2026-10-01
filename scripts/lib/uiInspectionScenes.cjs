@@ -79,6 +79,7 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
     createVideoEditProjectSourceScene(),
     createVideoEditCodeScene(),
     createVideoEditCodeProjectScene(),
+    createVideoEditCodeProjectScene({ controls: true }),
     ...createGenerationPerformanceScenes(context),
     ...createGenerationVirtualizationScenes(context),
     ...createCanvasScalePerformanceScenes(context),

@@ -23,7 +23,11 @@ function Project({ api }: IDockviewPanelProps): React.ReactElement {
   useEffect(() => { const event = api.onDidVisibilityChange(value => setVisible(value.isVisible)); return () => event.dispose() }, [api])
   return <VideoEditProjectPanel {...useDock()} visible={visible} />
 }
-function Effects(): React.ReactElement { return <VideoEditEffectsPanel {...useDock()} /> }
+function Effects({ api }: IDockviewPanelProps): React.ReactElement {
+  const [visible, setVisible] = useState(api.isVisible)
+  useEffect(() => { const event = api.onDidVisibilityChange(value => setVisible(value.isVisible)); return () => event.dispose() }, [api])
+  return <VideoEditEffectsPanel {...useDock()} visible={visible} />
+}
 function Program(): React.ReactElement { return <div className="flex h-full min-h-0 flex-col" data-video-edit-panel="program"><VideoEditPreview {...useDock()} /></div> }
 function Timeline(): React.ReactElement { const context = useDock(); return <div className="flex h-full min-h-0 flex-col" data-video-edit-panel="timeline"><VideoEditSequenceTabs {...context} /><VideoEditTimeline {...context} /></div> }
 function Source({ api }: IDockviewPanelProps): React.ReactElement {

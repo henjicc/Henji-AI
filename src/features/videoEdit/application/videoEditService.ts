@@ -40,6 +40,47 @@ let domainRevision = 0
 let activeId: string | null = null
 const autosaves = new Map<string, ReturnType<typeof setTimeout>>()
 const retryDelays = new Map<string, number>()
+export interface VideoEditGesture { readonly projectId: string; readonly token: string }
+interface GestureState { handle: VideoEditGesture; before: VideoEditDocument; dirty: boolean; finished: Promise<void>; release: () => void }
+const gestures = new WeakMap<VideoEditInstance, GestureState>()
+const closing = new WeakMap<VideoEditInstance, Promise<void>>()
+function assertVideoEditWritable(owner: VideoEditInstance): void { if (closing.has(owner)) throw new Error('工程正在关闭，请等待保存完成。') }
+export function videoEditGestureActive(projectId: string): boolean { return gestures.has(requireVideoEditInstance(projectId)) }
+export function beginVideoEditGesture(projectId: string): VideoEditGesture {
+  assertApplicationWritesAllowed()
+  const owner = requireVideoEditInstance(projectId)
+  assertVideoEditWritable(owner)
+  if (gestures.has(owner)) throw new Error('请先完成当前参数调整。')
+  const handle = Object.freeze({ projectId, token: crypto.randomUUID() })
+  let release!: () => void
+  const finished = new Promise<void>(resolve => { release = resolve })
+  gestures.set(owner, { handle, before: owner.document, dirty: owner.dirty, finished, release })
+  return handle
+}
+function sameDocumentContent(left: VideoEditDocument, right: VideoEditDocument): boolean { return JSON.stringify({ ...left, revision: 0 }) === JSON.stringify({ ...right, revision: 0 }) }
+export function updateVideoEditGesture(handle: VideoEditGesture, update: (document: VideoEditDocument) => VideoEditDocument): VideoEditDocument {
+  assertApplicationWritesAllowed()
+  const owner = requireVideoEditInstance(handle.projectId)
+  assertVideoEditWritable(owner)
+  if (gestures.get(owner)?.handle !== handle) throw new Error('原参数调整已结束，请重新编辑。')
+  return applyVideoEditDocument(owner, update, false)
+}
+export function finishVideoEditGesture(handle: VideoEditGesture, commit = true): void {
+  const owner = instances.get(handle.projectId); const state = owner && gestures.get(owner)
+  if (!owner || !state || state.handle !== handle) return
+  if (commit) assertApplicationWritesAllowed()
+  gestures.delete(owner)
+  if (commit && !sameDocumentContent(owner.document, state.before)) {
+    owner.past = [...owner.past.slice(-49), state.before]; owner.future = []
+  } else {
+    const before = owner.document
+    owner.document = { ...state.before, revision: before.revision + 1 }; owner.version++; owner.dirty = state.dirty
+    rescaleSequenceViews(owner, before); reconcileSequenceView(owner)
+  }
+  state.release(); publishVideoEdit(true)
+  if (owner.dirty) scheduleVideoEditSave(handle.projectId)
+}
+function cancelVideoEditGesture(owner: VideoEditInstance): void { const state = gestures.get(owner); if (state) finishVideoEditGesture(state.handle, false) }
 function scheduleVideoEditSave(id: string, delay = 0): void {
   const existing = autosaves.get(id)
   if (existing !== undefined) clearTimeout(existing)
@@ -64,7 +105,7 @@ export function listVideoEditInstances(): VideoEditInstance[] { return [...insta
 export function activeVideoEditInstance(): VideoEditInstance | undefined { return activeId ? instances.get(activeId) : undefined }
 export function requireVideoEditInstance(id: string): VideoEditInstance { const instance = instances.get(id); if (!instance) throw new Error('请先从本地打开目标剪辑工程。'); return instance }
 export function publishVideoEdit(changed = false): void { revision++; if (changed) { domainRevision++; for (const listener of domainListeners) listener() } for (const listener of listeners) listener(); publishView() }
-export function focusVideoEdit(id: string): void { requireVideoEditInstance(id); activeId = id; publishVideoEdit() }
+export function focusVideoEdit(id: string): void { requireVideoEditInstance(id); if (activeId && activeId !== id) { const previous = instances.get(activeId); if (previous) cancelVideoEditGesture(previous) } activeId = id; publishVideoEdit() }
 const compositions = new WeakMap<VideoEditDocument, Map<string, VideoEditComposition>>()
 export function getActiveVideoEditSequence(instance: VideoEditInstance): VideoEditComposition {
   let cache = compositions.get(instance.document)
@@ -98,6 +139,7 @@ export function switchVideoEditSequence(projectId: string, sequenceId: string): 
   const instance = requireVideoEditInstance(projectId)
   if (!instance.document.sequences.some(sequence => sequence.id === sequenceId)) throw new Error('目标序列不存在。')
   if (instance.activeSequenceId === sequenceId) return
+  cancelVideoEditGesture(instance)
   instance.sequenceViews.set(instance.activeSequenceId, { selection: instance.selection, frame: instance.frame })
   instance.activeSequenceId = sequenceId
   if (!instance.openSequenceIds.includes(sequenceId)) instance.openSequenceIds.push(sequenceId)
@@ -135,21 +177,28 @@ export function updateVideoEditSequenceSettings(projectId: string, sequenceId: s
 export function editVideoProject(id: string, update: (document: VideoEditDocument) => VideoEditDocument): VideoEditDocument {
   assertApplicationWritesAllowed()
   const instance = requireVideoEditInstance(id)
+  assertVideoEditWritable(instance)
+  if (gestures.has(instance)) throw new Error('请先完成当前参数调整。')
+  return applyVideoEditDocument(instance, update, true)
+}
+function applyVideoEditDocument(instance: VideoEditInstance, update: (document: VideoEditDocument) => VideoEditDocument, recordHistory: boolean): VideoEditDocument {
   const next = videoEditDocumentSchema.parse(update(structuredClone(instance.document)))
   validateCodeMaterialDocument(next, readVideoEditCodeMetadata(instance, next))
   if (JSON.stringify(next) === JSON.stringify(instance.document)) return instance.document
-  instance.past = [...instance.past.slice(-49), instance.document]; instance.future = []
+  if (recordHistory) { instance.past = [...instance.past.slice(-49), instance.document]; instance.future = [] }
   const before = instance.document
   instance.document = { ...next, revision: instance.document.revision + 1 }
   rescaleSequenceViews(instance, before)
   reconcileSequenceView(instance)
   instance.dirty = true; instance.error = null; instance.version++; publishVideoEdit(true)
-  scheduleVideoEditSave(id)
+  if (recordHistory) scheduleVideoEditSave(instance.document.id)
   return instance.document
 }
 export function undoVideoEdit(id: string, redo = false): void {
   assertApplicationWritesAllowed()
   const instance = requireVideoEditInstance(id)
+  assertVideoEditWritable(instance)
+  if (gestures.has(instance)) { cancelVideoEditGesture(instance); return }
   const target = redo ? instance.future.shift() : instance.past.pop()
   if (!target) return
   if (redo) instance.past.push(instance.document); else instance.future.unshift(instance.document)
@@ -165,6 +214,7 @@ export function setVideoEditView(id: string, values: Partial<Pick<VideoEditInsta
   if (values.frame !== undefined && (!Number.isSafeInteger(values.frame) || values.frame < 0)) throw new Error('播放位置必须为非负整数帧。')
   if (Object.entries(values).every(([key, value]) => instance[key as keyof VideoEditInstance] === value)) return
   const selectionChanged = values.selection !== undefined && values.selection !== instance.selection
+  if (selectionChanged) cancelVideoEditGesture(instance)
   Object.assign(instance, values)
   if (selectionChanged) publishVideoEdit(); else publishView()
 }
@@ -191,6 +241,8 @@ export async function saveVideoEdit(id: string): Promise<void> {
   logger.info('保存剪辑工程', { event: 'video_edit.save.start', context: { projectId: id } })
   const saving = (async () => {
     while (instance.dirty) {
+      const gesture = gestures.get(instance)
+      if (gesture) { await gesture.finished; continue }
       const version = instance.version
       await getPlatform().system.fs.writeTextFile(instance.path, JSON.stringify(instance.document))
       instance.dirty = version !== instance.version
@@ -237,13 +289,19 @@ export async function openVideoEditProject(path?: string): Promise<VideoEditInst
 }
 export async function closeVideoEditProject(id: string): Promise<void> {
   const instance = requireVideoEditInstance(id)
+  const previous = closing.get(instance)
+  if (previous) return previous
   if (instance.busy) throw new Error('请等待导出完成或取消导出。')
-  instance.playing = false
-  await saveVideoEdit(id)
-  const timer = autosaves.get(id); if (timer !== undefined) clearTimeout(timer)
-  autosaves.delete(id); retryDelays.delete(id)
-  instances.delete(id); if (activeId === id) activeId = instances.keys().next().value ?? null; publishVideoEdit(true)
-  if (!instances.size) releaseVideoEditCodeCompiler()
+  const operation = Promise.resolve().then(async () => {
+    cancelVideoEditGesture(instance); instance.playing = false
+    await saveVideoEdit(id)
+    const timer = autosaves.get(id); if (timer !== undefined) clearTimeout(timer)
+    autosaves.delete(id); retryDelays.delete(id)
+    instances.delete(id); if (activeId === id) activeId = instances.keys().next().value ?? null; publishVideoEdit(true)
+    if (!instances.size) releaseVideoEditCodeCompiler()
+  }).finally(() => { closing.delete(instance) })
+  closing.set(instance, operation)
+  return operation
 }
 export function appendVideoEditMedia(id: string, media: VideoEditMedia): void {
   editVideoProject(id, document => ({ ...document, media: [...document.media, media], items: [...document.items, { id: crypto.randomUUID(), name: media.name, kind: media.kind, mediaId: media.id }] }))
@@ -269,5 +327,5 @@ export function deleteVideoEditClip(id: string, clipId: string): void {
   if (requireVideoEditInstance(id).selection === clipId) setVideoEditView(id, { selection: null })
 }
 registerApplicationCloseGuard(async () => {
-  for (const instance of instances.values()) { if (instance.busy) throw new Error('剪辑工程正在导出，请等待或取消。'); instance.playing = false; await saveVideoEdit(instance.document.id) }
+  for (const instance of instances.values()) { if (instance.busy) throw new Error('剪辑工程正在导出，请等待或取消。'); cancelVideoEditGesture(instance); instance.playing = false; await saveVideoEdit(instance.document.id) }
 })

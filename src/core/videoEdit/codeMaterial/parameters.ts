@@ -1,4 +1,4 @@
-import { CODE_MATERIAL_LIMITS, CodeMaterialError, assertCodeMaterialKey, codeColor, finiteCodeNumber } from './contract'
+import { CODE_MATERIAL_LIMITS, CodeMaterialError, assertCodeMaterialKey, codeColor, codeImageReference, finiteCodeNumber } from './contract'
 import type { CodeMaterialProgram, CodeParameterDeclaration, CodeParameterValue, CodeParameterValues } from './contract'
 
 function object(value: unknown, label: string): Record<string, unknown> {
@@ -25,7 +25,7 @@ export function parseCodeMaterialParameters(value: unknown): CodeParameterDeclar
       const min = finiteCodeNumber(item.min, `${key}.min`); const max = finiteCodeNumber(item.max, `${key}.max`); const step = finiteCodeNumber(item.step, `${key}.step`)
       if (min > max || step <= 0 || Math.max(Math.abs(min), Math.abs(max), step) > 1e9) throw new CodeMaterialError('PARAMETERS', `${key} 的数值范围或步长无效。`)
       const declaration: CodeParameterDeclaration = { ...base, type: 'number', min, max, step, unit: text(item.unit ?? '', `${key}.unit`, 32, true), default: finiteCodeNumber(item.default, `${key}.default`) }
-      validateValue(declaration, declaration.default); return declaration
+      validateCodeMaterialParameterValue(declaration, declaration.default); return declaration
     }
     if (item.type === 'color') return { ...base, type: 'color', default: codeColor(item.default, `${key}.default`) }
     if (item.type === 'boolean' && typeof item.default === 'boolean') return { ...base, type: 'boolean', default: item.default }
@@ -34,30 +34,35 @@ export function parseCodeMaterialParameters(value: unknown): CodeParameterDeclar
       const options = item.options.map(value => text(value, `${key}.options`, 128))
       if (new Set(options).size !== options.length) throw new CodeMaterialError('PARAMETERS', `${key}.options 有重复项。`)
       const declaration: CodeParameterDeclaration = { ...base, type: 'choice', options, default: text(item.default, `${key}.default`, 128) }
-      validateValue(declaration, declaration.default); return declaration
+      validateCodeMaterialParameterValue(declaration, declaration.default); return declaration
     }
     if (item.type === 'text') {
       const maxLength = finiteCodeNumber(item.maxLength, `${key}.maxLength`)
       if (!Number.isInteger(maxLength) || maxLength < 1 || maxLength > CODE_MATERIAL_LIMITS.stringLength) throw new CodeMaterialError('PARAMETERS', `${key}.maxLength 超出范围。`)
       return { ...base, type: 'text', maxLength, default: text(item.default, `${key}.default`, maxLength, true) }
     }
+    if (item.type === 'image') {
+      if (item.default !== null || animatable) throw new CodeMaterialError('PARAMETERS', `${key} 的图片默认值必须为 null，且不可动画。`)
+      return { ...base, type: 'image', default: null, animatable: false }
+    }
     throw new CodeMaterialError('PARAMETERS', `${key} 的参数类型或默认值无效。`)
   })
 }
-function validateValue(declaration: CodeParameterDeclaration, value: unknown): CodeParameterValue {
+export function validateCodeMaterialParameterValue(declaration: CodeParameterDeclaration, value: unknown): CodeParameterValue {
   const { key } = declaration
   if (declaration.type === 'number') { const number = finiteCodeNumber(value, key); if (number < declaration.min || number > declaration.max) throw new CodeMaterialError('PARAMETERS', `${key} 超出声明范围。`); return number }
   if (declaration.type === 'color') return codeColor(value, key)
   if (declaration.type === 'boolean' && typeof value === 'boolean') return value
   if (declaration.type === 'choice' && typeof value === 'string' && declaration.options.includes(value)) return value
   if (declaration.type === 'text') return text(value, key, declaration.maxLength, true)
+  if (declaration.type === 'image') return value === null ? null : codeImageReference(value, key)
   throw new CodeMaterialError('PARAMETERS', `${key} 的实例值不符合声明。`)
 }
 export function validateCodeMaterialParameters(program: Pick<CodeMaterialProgram, 'parameters'>, values: Readonly<Record<string, unknown>> = {}): CodeParameterValues {
   object(values, '参数实例')
   const declared = new Set(program.parameters.map(parameter => parameter.key))
   for (const key of Object.keys(values)) { assertCodeMaterialKey(key); if (!declared.has(key)) throw new CodeMaterialError('PARAMETERS', `实例包含未声明参数：${key}`) }
-  return Object.fromEntries(program.parameters.map(declaration => [declaration.key, validateValue(declaration, Object.prototype.hasOwnProperty.call(values, declaration.key) ? values[declaration.key] : declaration.default)]))
+  return Object.fromEntries(program.parameters.map(declaration => [declaration.key, validateCodeMaterialParameterValue(declaration, Object.prototype.hasOwnProperty.call(values, declaration.key) ? values[declaration.key] : declaration.default)]))
 }
 /** Refuse destructive source evolution rather than dropping or coercing saved instance values. */
 export function checkCodeMaterialParameterCompatibility(previous: Pick<CodeMaterialProgram, 'parameters'>, next: Pick<CodeMaterialProgram, 'parameters'>, values: Readonly<Record<string, unknown>>): CodeParameterValues {

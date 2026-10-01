@@ -1,6 +1,7 @@
 import { UiButton, UiEmpty, UiGroup, UiInput } from '@/components/ui'
 import type { VideoEditClip } from '@/core/videoEdit/document'
 import { editVideoSequence, getActiveVideoEditSequence, type VideoEditInstance } from '../application/videoEditService'
+import { CodeParameterPanel } from './CodeParameterPanel'
 
 const clipNumbers: Array<{ key: keyof Pick<VideoEditClip, 'start' | 'duration' | 'sourceInUs' | 'track' | 'x' | 'y' | 'scale' | 'rotation' | 'opacity' | 'volume' | 'brightness'>; label: string; step: number }> = [
   { key: 'start', label: '开始帧', step: 1 }, { key: 'duration', label: '时长帧', step: 1 }, { key: 'sourceInUs', label: '源入点（秒）', step: 0.001 }, { key: 'track', label: '轨道', step: 1 },
@@ -8,7 +9,7 @@ const clipNumbers: Array<{ key: keyof Pick<VideoEditClip, 'start' | 'duration' |
   { key: 'opacity', label: '不透明度', step: 0.05 }, { key: 'volume', label: '音量', step: 0.05 }, { key: 'brightness', label: '亮度效果', step: 0.05 },
 ]
 
-export function VideoEditEffectsPanel({ instance, onError }: { instance: VideoEditInstance; onError: (reason: unknown) => void }): React.ReactElement {
+export function VideoEditEffectsPanel({ instance, onError, visible = true }: { instance: VideoEditInstance; onError: (reason: unknown) => void; visible?: boolean }): React.ReactElement {
   const sequence = getActiveVideoEditSequence(instance)
   const selected = sequence.clips.find(clip => clip.id === instance.selection)
   const run = (operation: () => unknown): void => { try { operation() } catch (error) { onError(error) } }
@@ -24,6 +25,7 @@ export function VideoEditEffectsPanel({ instance, onError }: { instance: VideoEd
         return numbers.length ? <UiGroup key={group} title={group}><div className="grid grid-cols-2 gap-2">{numbers.map(({ key, label, step }) => <label key={key} className="flex min-w-0 flex-col gap-1 text-2xs text-text-muted"><span>{label}</span><UiInput aria-label={label} type="number" className="min-w-0 tabular-nums" step={step} value={key === 'sourceInUs' ? selected[key] / 1e6 : selected[key]} onChange={event => { if (event.target.value !== '') updateClip(key, key === 'sourceInUs' ? Math.round(Number(event.target.value) * 1e6) : Number(event.target.value)) }} /></label>)}</div></UiGroup> : null
       })}
     </UiGroup> : <UiEmpty title="选择片段以编辑" />}
+    {visible && selected?.kind === 'code' && selected.code && <CodeParameterPanel key={JSON.stringify([instance.document.id, sequence.id, selected.id])} projectId={instance.document.id} sequenceId={sequence.id} clipId={selected.id} onError={onError} />}
     {sequence.annotations.length > 0 && <UiGroup title="标注">
       {sequence.annotations.map(mark => <div key={mark.id} className="py-1 text-xs"><UiInput aria-label="编辑标注文字" value={mark.text} onChange={event => run(() => editVideoSequence(instance.document.id, sequence.id, draft => ({ ...draft, annotations: draft.annotations.map(item => item.id === mark.id ? { ...item, text: event.target.value } : item) })))} /><UiButton variant="plain" onClick={() => run(() => editVideoSequence(instance.document.id, sequence.id, draft => ({ ...draft, annotations: draft.annotations.filter(item => item.id !== mark.id) })))}>删除标注</UiButton></div>)}
     </UiGroup>}

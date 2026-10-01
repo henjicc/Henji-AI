@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { GpuDevice } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 import { createVideoEditDocument, videoEditComposition } from '@/core/videoEdit/document'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
@@ -6,6 +6,7 @@ import { VideoEditGpuCompositor } from './videoEditGpuCompositor'
 import type { VideoSample } from 'mediabunny'
 
 const state = vi.hoisted(() => ({ device: undefined as GpuDevice | undefined }))
+afterEach(() => { vi.unstubAllGlobals() })
 vi.mock('@/core/imageEdit/webgpu/deviceManager', () => ({ ImageEditWebGpuDeviceManager: class {
   onDeviceLost() {}
   async acquire() { return { device: state.device!, provider: { getPreferredCanvasFormat: () => 'rgba8unorm' } } }
@@ -21,7 +22,7 @@ function copyFixture(fence: () => Promise<void>) {
     createBindGroup: vi.fn(), createCommandEncoder: () => ({ beginRenderPass: () => pass, finish: () => ({}) }), pushErrorScope: vi.fn(), popErrorScope: async () => null, destroy: vi.fn(), importExternalTexture: vi.fn(),
   }
   state.device = device
-  const output = { getContext: () => ({ configure: vi.fn(), getCurrentTexture: () => ({ createView: () => ({}) }) }) } as unknown as OffscreenCanvas
+  const output = { width: 3840, height: 2160, getContext: () => ({ configure: vi.fn(), getCurrentTexture: () => ({ createView: () => ({}) }) }) } as unknown as OffscreenCanvas
   const compositor = new VideoEditGpuCompositor(output)
   const sample = { timestamp: 0, duration: 1 / 60, displayWidth: 3840, displayHeight: 2160, rotation: 0, flip: false, toVideoFrame: () => ({ visibleRect: { width: 3840, height: 2160 }, close: closed }) } as unknown as VideoSample
   return { compositor, sample, device, closed, destroyed }
@@ -55,6 +56,30 @@ it('多源同时等待复制名额时逐次重查，单个完成不能唤醒后�
   copies.forEach(copy => copy.close()); await compositor.dispose()
 })
 describe('合成器共享图片候选生命周期', () => {
+  it('代码与普通片段共享一次上传，满文字工作集切换图片先回收，不因旧预算阻塞', async () => {
+    vi.stubGlobal('OffscreenCanvas', class { constructor(public width: number, public height: number) {} getContext() { return { fillText() {} } } })
+    for (const [width, height, count] of [[3840, 2160, 8], [16, 16, 32]]) {
+      const { compositor, device, destroyed } = copyFixture(async () => {})
+      compositor.canvas.width = width; compositor.canvas.height = height
+      const document = createVideoEditDocument('满工作集'); document.sequences[0].width = width; document.sequences[0].height = height
+      document.items = [{ id: 'text', kind: 'text', name: '文字' }]
+      const composition = videoEditComposition(document, document.sequences[0].id)
+      const base = makeVideoEditItemClip(document, 'text', document.sequences[0].id, { frame: 0 })
+      const clips = Array.from({ length: count }, (_, index) => ({ ...base, id: `text-${index}` }))
+      await compositor.prepareImages(new Map(), () => true, new Set(clips.map(clip => clip.id)))
+      await (await compositor.draw(composition, clips, clips.map(() => null), () => true)).completion
+      expect(compositor.imageDiagnostics().textures).toBe(count)
+      const picture = { width, height } as ImageBitmap
+      const inputs = await compositor.prepareImages(new Map([['original', picture], ['same-original', picture]]), () => true)
+      expect(inputs.get('original')!.texture).toBe(inputs.get('same-original')!.texture)
+      expect(destroyed).toHaveBeenCalledTimes(count)
+      await (await compositor.draw(composition, [base, { ...base, id: 'copy' }], [picture, picture], () => true)).completion
+      expect(device.queue.copyExternalImageToTexture).toHaveBeenCalledTimes(count + 1)
+      expect(compositor.imageDiagnostics()).toMatchObject({ textures: 1, bytes: width * height * 4, uploads: count + 1 })
+      await expect(compositor.prepareImages(new Map(Array.from({ length: 33 }, (_, index) => [`image-${index}`, { width: 1, height: 1 } as ImageBitmap])), () => true)).rejects.toThrow('32')
+      await compositor.dispose(); expect(compositor.imageDiagnostics().textures).toBe(0)
+    }
+  })
   it('新图上传异常清理候选并保留最后有效纹理，重试不读取被销毁纹理', async () => {
     const textures: Array<{ createView: () => object; destroy: ReturnType<typeof vi.fn> }> = []
     const copy = vi.fn(); const pass = { setPipeline: vi.fn(), setBindGroup: vi.fn(), draw: vi.fn(), end: vi.fn() }

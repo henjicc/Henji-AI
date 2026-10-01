@@ -8,8 +8,9 @@ const shapeFields: Record<CodeDrawKind, Record<string, CodeValueType>> = {
   ellipse: { x: 'number', y: 'number', width: 'number', height: 'number', fill: 'color' },
   line: { x1: 'number', y1: 'number', x2: 'number', y2: 'number', width: 'number', color: 'color' },
   text: { x: 'number', y: 'number', text: 'string', fontSize: 'number', color: 'color', fontFamily: 'string', align: 'string' },
+  image: { source: 'image', x: 'number', y: 'number', width: 'number', height: 'number', opacity: 'number' },
 }
-const optionalShapeFields = new Set(['radius', 'fontFamily', 'align'])
+const optionalShapeFields = new Set(['radius', 'fontFamily', 'align', 'opacity'])
 const binaryOperators = new Map<ts.SyntaxKind, CodeBinaryOperator>([
   [ts.SyntaxKind.PlusToken, '+'], [ts.SyntaxKind.MinusToken, '-'], [ts.SyntaxKind.AsteriskToken, '*'], [ts.SyntaxKind.SlashToken, '/'], [ts.SyntaxKind.PercentToken, '%'],
   [ts.SyntaxKind.LessThanToken, '<'], [ts.SyntaxKind.LessThanEqualsToken, '<='], [ts.SyntaxKind.GreaterThanToken, '>'], [ts.SyntaxKind.GreaterThanEqualsToken, '>='],
@@ -34,6 +35,7 @@ function objectProperties(node: ts.ObjectLiteralExpression): Map<string, ts.Expr
   return result
 }
 function staticValue(node: ts.Expression): unknown {
+  if (node.kind === ts.SyntaxKind.NullKeyword) return null
   if (ts.isStringLiteral(node)) { if (node.text.length > CODE_MATERIAL_LIMITS.stringLength) fail(node, '静态文本超出长度限制。'); return node.text }
   if (ts.isNumericLiteral(node)) return finiteCodeNumber(Number(node.text), '源码数字')
   if (node.kind === ts.SyntaxKind.TrueKeyword || node.kind === ts.SyntaxKind.FalseKeyword) return node.kind === ts.SyntaxKind.TrueKeyword
@@ -68,7 +70,10 @@ export function compileCodeMaterial(source: string): CodeMaterialProgram {
   let file: ts.SourceFile
   try { file = ts.createSourceFile('material.ts', source, ts.ScriptTarget.ES2020, true, ts.ScriptKind.TS) } catch { throw new CodeMaterialError('SYNTAX', '源码无法解析或嵌套过深。') }
   const diagnostics = (file as ts.SourceFile & { parseDiagnostics: readonly ts.Diagnostic[] }).parseDiagnostics
-  if (diagnostics.length) throw new CodeMaterialError('SYNTAX', `源码语法无效：${ts.flattenDiagnosticMessageText(diagnostics[0].messageText, ' ')}`)
+  if (diagnostics.length) {
+    const diagnostic = diagnostics[0]; const position = file.getLineAndCharacterOfPosition(diagnostic.start ?? 0)
+    throw new CodeMaterialError('SYNTAX', `源码语法无效：${ts.flattenDiagnosticMessageText(diagnostic.messageText, ' ')}（${position.line + 1}:${position.character + 1}）`)
+  }
   const ast = astBudget(file)
   if (file.statements.length !== 1 || !ts.isExportAssignment(file.statements[0]) || file.statements[0].isExportEquals || !ts.isObjectLiteralExpression(file.statements[0].expression)) fail(file, '源码只能包含一个 export default 静态对象。')
   const definition = file.statements[0].expression
@@ -86,14 +91,16 @@ export function compileCodeMaterial(source: string): CodeMaterialProgram {
   if (kind !== 'generator' && kind !== 'filter') throw new CodeMaterialError('SYNTAX', 'kind 必须为 generator 或 filter。')
   if (mode !== 'static' && mode !== 'dynamic') throw new CodeMaterialError('SYNTAX', 'mode 必须为 static 或 dynamic。')
   const parameters = parseCodeMaterialParameters(value('parameters'))
-  const program: CodeMaterialProgram = { apiVersion: 1, languageVersion: 1, name: staticString(value('name'), 'name', 160), kind, mode,
+  const imageParameters = parameters.some(parameter => parameter.type === 'image')
+  if (imageParameters && kind !== 'generator') throw new CodeMaterialError('TYPE', '图片资源参数仅用于生成器，滤镜仍只采样当前输入。')
+  const program: CodeMaterialProgram = { apiVersion: 1, languageVersion: imageParameters ? 2 : 1, name: staticString(value('name'), 'name', 160), kind, mode,
     width: staticNumber(value('width'), 'width', 1, 8192, true), height: staticNumber(value('height'), 'height', 1, 8192, true), durationSeconds: staticNumber(value('durationSeconds'), 'durationSeconds', 0.000001, 1800), seed: staticNumber(value('seed'), 'seed', 0, 4294967295, true),
     parameters, bindings: [], result: { kind: 'literal', type: 'boolean', value: false }, metrics: { ...ast, cpuOperations: 0, scalarOperations: 0, samples: 0 } }
   if (!render?.body || render.modifiers?.length || render.asteriskToken || render.questionToken || render.type || render.typeParameters?.length || render.parameters.length !== 1) fail(render ?? definition, '需要纯 render(ctx) 方法。')
   const argument = render.parameters[0]
   if (!ts.isIdentifier(argument.name) || argument.name.text !== 'ctx' || argument.type || argument.initializer || argument.questionToken || argument.dotDotDotToken || argument.modifiers?.length) fail(argument, 'render 仅允许未注解的 ctx 参数。')
   const bindings = new Map<string, number>()
-  const parameterTypes = new Map(parameters.map(item => [item.key, item.type === 'number' ? 'number' : item.type === 'boolean' ? 'boolean' : item.type === 'color' ? 'color' : 'string'] as const))
+  const parameterTypes = new Map(parameters.map(item => [item.key, item.type === 'number' ? 'number' : item.type === 'boolean' ? 'boolean' : item.type === 'color' ? 'color' : item.type === 'image' ? 'image' : 'string'] as const))
   const compile = (node: ts.Expression, arrayOutput = false): CodeExpression => {
     program.metrics.cpuOperations++
     if (ts.isParenthesizedExpression(node)) return compile(node.expression, arrayOutput)
@@ -138,6 +145,7 @@ export function compileCodeMaterial(source: string): CodeMaterialProgram {
       const condition = compile(node.condition); ensureType(node, condition, 'boolean')
       const yes = compile(node.whenTrue, arrayOutput); const no = compile(node.whenFalse, arrayOutput)
       if (yes.type !== no.type) fail(node, '条件分支必须返回相同类型。', 'TYPE')
+      if (yes.type === 'image') fail(node, '图片引用不能用于条件表达式。', 'TYPE')
       const cost = codeConditionalCost(yes.type); program.metrics.scalarOperations += cost; program.metrics.cpuOperations += cost - 1
       return { kind: 'conditional', condition, yes, no, type: yes.type }
     }
@@ -178,7 +186,7 @@ export function compileCodeMaterial(source: string): CodeMaterialProgram {
     for (const item of statement.declarationList.declarations) {
       if (!ts.isIdentifier(item.name) || !item.initializer || item.type || item.exclamationToken) fail(item, 'const 必须是未注解的名称和纯表达式。')
       const name = item.name.text; assertCodeMaterialKey(name)
-      if (name === 'ctx' || CODE_BUILTINS.includes(name as CodeBuiltin) || Object.prototype.hasOwnProperty.call(shapeFields, name) || bindings.has(name)) fail(item, `重复或保留的局部名称：${name}`)
+      if (name === 'ctx' || CODE_BUILTINS.includes(name as CodeBuiltin) || Object.prototype.hasOwnProperty.call(shapeFields, name) && (name !== 'image' || program.languageVersion === 2) || bindings.has(name)) fail(item, `重复或保留的局部名称：${name}`)
       const expression = compile(item.initializer); bindings.set(name, program.bindings.length); program.bindings.push({ name, expression })
     }
   }

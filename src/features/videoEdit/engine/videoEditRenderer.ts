@@ -6,6 +6,7 @@ import { VideoEditFrameCache } from './videoEditFrameCache'
 import { VideoEditSeekDecoder } from './videoEditSeekDecoder'
 import { VideoEditGpuFrame, videoEditGpuFrameUsesChroma } from './videoEditGpuFrame'
 import { VideoEditCodeSources } from './videoEditCodeSources'
+import { codeMaterialImageIds } from '@/core/videoEdit/codeMaterialResources'
 
 interface VideoSource {
   input: Input
@@ -20,7 +21,9 @@ interface VideoSource {
 /** One bounded decoder per visible clip; all inputs close when the view detaches. */
 export class VideoEditRenderer {
   private readonly sources = new Map<string, Promise<VideoSource>>()
-  private readonly images = new Map<string, Promise<ImageBitmap>>()
+  private readonly images = new Map<string, { path: string; controller: AbortController; pending: Promise<ImageBitmap>; bytes: number; ready: boolean }>()
+  private imageLoads = 0
+  private readonly imageQueue: Array<() => void> = []
   private disposed = false
   private readonly frameCache = new VideoEditFrameCache(8 * 1024 ** 3)
   private readonly seekers = new Map<string, VideoEditSeekDecoder>()
@@ -28,7 +31,7 @@ export class VideoEditRenderer {
   private compositor?: VideoEditGpuCompositor
   private codeSources?: VideoEditCodeSources
   private presentationEpoch = 0
-  codeDiagnostics() { return { sources: this.codeSources?.diagnostics(), gpu: this.compositor?.codeDiagnostics() } }
+  codeDiagnostics() { return { sources: this.codeSources?.diagnostics(), gpu: this.compositor?.codeDiagnostics(), images: this.compositor?.imageDiagnostics(), decodedImages: this.images.size, decodedImageBytes: [...this.images.values()].reduce((sum, entry) => sum + entry.bytes, 0), imageDecodes: this.imageLoads } }
   constructor(public document: VideoEditComposition, private readonly previewWidth?: number, surface?: OffscreenCanvas) {
     this.canvas = surface ?? new OffscreenCanvas(document.width, document.height)
     this.canvas.width = document.width; this.canvas.height = document.height
@@ -56,31 +59,72 @@ export class VideoEditRenderer {
   private image(media: VideoEditMedia): Promise<ImageBitmap> {
     let image = this.images.get(media.id)
     if (!image) {
-      image = fetch(media.path).then(response => { if (!response.ok) throw new Error(`无法读取素材 ${media.name}`); return response.blob() }).then(blob => createImageBitmap(blob)).then(bitmap => { if (this.disposed) { bitmap.close(); throw new Error('预览已关闭。') } return bitmap })
+      const controller = new AbortController()
+      const native = this.boundedImageLoad(controller.signal, async () => {
+        const response = await fetch(media.path, { signal: controller.signal }); if (!response.ok) throw new Error(`无法读取素材 ${media.name}`)
+        return createImageBitmap(await response.blob())
+      }).then(bitmap => {
+        if (this.disposed || controller.signal.aborted || this.images.get(media.id)?.pending !== pending) { bitmap.close(); throw new DOMException('原图片已取消。', 'AbortError') }
+        if (bitmap.width < 1 || bitmap.height < 1 || bitmap.width > 8192 || bitmap.height > 8192) { bitmap.close(); throw new Error('图片边长须在1到8192像素之间。') }
+        const bytes = bitmap.width * bitmap.height * 4
+        const others = [...this.images].reduce((sum, [id, image]) => sum + (id === media.id ? 0 : image.bytes), 0)
+        if (others + bytes > 256 * 1024 ** 2) { bitmap.close(); throw new Error('解码图片超过256MiB预算，请减少同时显示的图片。') }
+        const entry = this.images.get(media.id)!; entry.bytes = bytes; entry.ready = true
+        return bitmap
+      })
+      let abort!: () => void
+      const cancelled = new Promise<never>((_, reject) => { abort = () => reject(controller.signal.reason ?? new DOMException('原图片已取消。', 'AbortError')); controller.signal.addEventListener('abort', abort, { once: true }) })
+      const pending = Promise.race([native, cancelled]).catch(error => { if (this.images.get(media.id)?.pending === pending) this.images.delete(media.id); throw error }).finally(() => controller.signal.removeEventListener('abort', abort))
+      // A detached asynchronous decoder may finish after the worker closes.
+      void pending.catch(() => {})
+      image = { path: media.path, controller, pending, bytes: media.width * media.height * 4, ready: false }
       this.images.set(media.id, image)
     }
-    return image
+    return image.pending
+  }
+  private async boundedImageLoad<T>(signal: AbortSignal, operation: () => Promise<T>): Promise<T> {
+    if (this.imageLoads >= 2) await new Promise<void>((resolve, reject) => {
+      const next = (): void => { signal.removeEventListener('abort', cancel); resolve() }
+      const cancel = (): void => { const index = this.imageQueue.indexOf(next); if (index >= 0) { this.imageQueue.splice(index, 1); signal.removeEventListener('abort', cancel); reject(signal.reason) } }
+      this.imageQueue.push(next); signal.addEventListener('abort', cancel, { once: true })
+    })
+    else this.imageLoads++
+    // A native bitmap decode retains its permit even after consumer cancellation.
+    try { signal.throwIfAborted(); return await operation() }
+    finally { const next = this.imageQueue.shift(); if (next) next(); else this.imageLoads-- }
+  }
+  private releaseImage(id: string): void {
+    const image = this.images.get(id); if (!image) return
+    this.images.delete(id); image.controller.abort()
+    // Successful cached bitmaps close here; a late decoder closes in image().
+    void image.pending.then(bitmap => bitmap.close(), () => {})
   }
   async updateDocument(document: VideoEditComposition): Promise<void> {
     if (document.id !== this.document.id) throw new Error('渲染目标工程已经改变。')
     this.codeSources?.updateDocument(document)
     this.cancelPresentation()
     for (const [path, seeker] of this.seekers) if (!document.media.some(media => media.path === path)) { this.seekers.delete(path); await seeker.dispose() }
-    for (const media of this.document.media) if (!document.media.some(item => item.id === media.id && item.path === media.path)) {
-      const image = this.images.get(media.id); if (image) { this.images.delete(media.id); (await image).close() }
+    for (const media of this.document.media) if (!document.media.some(item => item.id === media.id && item.path === media.path && item.sourceRevision === media.sourceRevision && item.width === media.width && item.height === media.height)) {
+      this.releaseImage(media.id)
+      const seeker = this.seekers.get(media.path)
+      if (seeker) { this.seekers.delete(media.path); await seeker.dispose() }
+      this.frameCache.deleteMedia(media.path)
     }
     for (const [key, pending] of this.sources) {
       const source = await pending
       const clip = document.clips.find(clip => clip.id === (key.startsWith('audio:') ? key.slice(6) : key))
       const media = clip ? videoEditClipMedia(document, clip) : undefined
-      if (!media || media.id !== source.media.id || media.path !== source.media.path) {
+      if (!media || media.id !== source.media.id || media.path !== source.media.path || media.sourceRevision !== source.media.sourceRevision) {
         this.sources.delete(key); source.current?.close(); await source.iterator?.return(); source.input.dispose()
       }
     }
     this.document = document
     if (this.canvas.width !== document.width || this.canvas.height !== document.height) { this.canvas.width = document.width; this.canvas.height = document.height }
   }
-  cancelPresentation(): void { this.presentationEpoch++; this.codeSources?.cancel(); this.compositor?.cancelPresentation() }
+  cancelPresentation(): void {
+    this.presentationEpoch++; this.codeSources?.cancel(); this.compositor?.cancelPresentation()
+    for (const [id, image] of this.images) if (!image.ready) this.releaseImage(id)
+  }
   async render(frame: number, sequential = false, _scrubbing = false, shouldPresent: () => boolean = () => true, deadline?: number): Promise<{ canvas: OffscreenCanvas; sourceTimestamps: number[]; cacheHits: number; cacheBytes: number; presented: boolean; decodeMs: number; gpuMs: number; completion: Promise<void> }> {
     if (this.disposed) throw new Error('预览已关闭。')
     const document = this.document; const epoch = this.presentationEpoch
@@ -91,7 +135,17 @@ export class VideoEditRenderer {
     const decodeStart = performance.now()
     const codeClips = active.filter(clip => clip.kind === 'code')
     if (codeClips.length) this.codeSources ??= new VideoEditCodeSources(document, () => this.compositor!.code())
-    const codeReady = this.codeSources?.prepare(document, codeClips, frame, canPresent)
+    const imageIds = new Set(active.flatMap(clip => [...codeMaterialImageIds(clip.code), ...(clip.kind === 'image' ? [videoEditClipMedia(document, clip)?.id ?? ''] : [])]))
+    const imageMedia = [...imageIds].map(id => {
+      const media = document.media.find(media => media.id === id && media.kind === 'image')
+      if (!media) throw new Error('代码图片引用或图片片段的源素材不存在。')
+      return media
+    })
+    if (imageMedia.length > 32 || imageMedia.reduce((sum, media) => sum + media.width * media.height * 4, 0) > 256 * 1024 ** 2) throw new Error('可见图片超过32份或256MiB预算，请减少同时显示的图片。')
+    for (const id of this.images.keys()) if (!imageIds.has(id)) this.releaseImage(id)
+    const imagesReady = Promise.all(imageMedia.map(async media => [media.id, await this.image(media)] as const)).then(images => this.compositor!.prepareImages(new Map(images), canPresent, new Set(active.filter(clip => clip.kind === 'text').map(clip => clip.id))))
+    const imagesSettled = Promise.allSettled([imagesReady])
+    const codeReady = this.codeSources?.prepare(document, codeClips, frame, canPresent, imagesReady)
     const codeSettled = codeReady ? Promise.allSettled([codeReady]) : Promise.resolve([])
     this.frameCache.setHotFrames(active.flatMap(clip => {
       const media = videoEditClipMedia(document, clip)
@@ -147,6 +201,7 @@ export class VideoEditRenderer {
       return source.current
     })
     const settled = await Promise.allSettled(picturesPending)
+    const imageResults = await imagesSettled
     const preparedCode = await codeSettled
     if (!canPresent()) return { canvas: this.canvas, sourceTimestamps: [], cacheHits, cacheBytes: this.frameCache.bytes, presented: false, decodeMs: performance.now() - decodeStart, gpuMs: 0, completion: Promise.resolve() }
     const codeFailure = preparedCode.find(result => result.status === 'rejected')
@@ -154,6 +209,7 @@ export class VideoEditRenderer {
     if (preparedCode[0]?.status === 'fulfilled') { cacheHits += preparedCode[0].value.cacheHits; timestamps.push(...preparedCode[0].value.sourceTimestamps) }
     const failure = settled.find(result => result.status === 'rejected')
     if (failure?.status === 'rejected') throw failure.reason
+    if (imageResults[0].status === 'rejected') throw imageResults[0].reason
     const pictures = settled.map(result => { if (result.status !== 'fulfilled') throw new Error('剪辑画面准备失败。'); return result.value })
     if (this.disposed) throw new Error('预览已关闭。')
     const decodeMs = performance.now() - decodeStart
@@ -164,10 +220,8 @@ export class VideoEditRenderer {
     for (const [key, pending] of this.sources) if (!activeIds.has(key) && !key.startsWith('audio:')) {
       this.sources.delete(key); const source = await pending; source.current?.close(); await source.iterator?.return(); source.input.dispose()
     }
-    const activeImages = new Set(canPresent() ? active.filter(clip => clip.kind === 'image').map(clip => videoEditClipMedia(document, clip)?.id) : this.images.keys())
-    for (const [key, pending] of this.images) if (!activeImages.has(key)) {
-      this.images.delete(key); (await pending).close()
-    }
+    const activeImages = new Set(canPresent() ? imageIds : this.images.keys())
+    for (const key of this.images.keys()) if (!activeImages.has(key)) this.releaseImage(key)
     const activePaths = new Set(canPresent() ? active.map(clip => videoEditClipMedia(document, clip)?.path) : this.seekers.keys())
     for (const [path, seeker] of this.seekers) if (!activePaths.has(path)) { this.seekers.delete(path); await seeker.dispose() }
     return { canvas: this.canvas, sourceTimestamps: timestamps, cacheHits, cacheBytes: this.frameCache.bytes, presented, decodeMs, gpuMs, completion }
@@ -230,7 +284,7 @@ export class VideoEditRenderer {
     this.cancelPresentation(); await Promise.allSettled([this.codeSources?.dispose()])
     await Promise.allSettled([...this.seekers.values()].map(seeker => seeker.dispose())); this.seekers.clear(); this.frameCache.clear()
     await Promise.allSettled([...this.sources.values()].map(async pending => { const source = await pending; source.current?.close(); await source.iterator?.return(); source.input.dispose() }))
-    await Promise.allSettled([...this.images.values()].map(async pending => (await pending).close()))
+    for (const key of this.images.keys()) this.releaseImage(key)
     this.sources.clear(); this.images.clear(); await this.compositor?.dispose(); this.canvas.width = 1; this.canvas.height = 1
   }
 }

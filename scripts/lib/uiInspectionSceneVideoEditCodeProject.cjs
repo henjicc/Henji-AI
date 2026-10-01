@@ -19,7 +19,7 @@ async function saved(page, file, condition) {
     if (condition(document)) return document
     await page.waitForTimeout(50)
   }
-  assert.fail('工程未静默保存预期代码素材内容')
+  assert.fail(`工程未静默保存预期代码素材内容：${condition.toString()}`)
 }
 async function presented(page, frame) {
   await page.waitForFunction(frame => {
@@ -50,7 +50,7 @@ async function comparePng(actual, expected) {
   }
   return { equal: a.equals(b), actualHash: createHash('sha256').update(a).digest('hex'), expectedHash: createHash('sha256').update(b).digest('hex'), differentChannels: different, channels, maximumDelta: max, rms: Math.sqrt(square / a.length) }
 }
-const dynamicSource = `export default {
+const baseDynamicSource = `export default {
   apiVersion:1,name:"原创轨道标题",kind:"generator",mode:"dynamic",
   width:3840,height:2160,durationSeconds:10,seed:91,
   parameters:{speed:{type:"number",title:"移动速度",default:80,min:0,max:400,step:1},ink:{type:"color",title:"标题颜色",default:[0.2,1,1,0.8]}},
@@ -59,14 +59,16 @@ const dynamicSource = `export default {
       line({x1:x,y1:1420,x2:x+1800,y2:1420,width:14,color:ctx.params.ink}),
       text({x:x+150,y:1600,text:"原创代码 · 混合剪辑",fontSize:130,color:[1,1,1,1]})];}
 }`
-const staticSource = `export default {apiVersion:1,name:"透明静态卡片",kind:"generator",mode:"static",width:3840,height:2160,durationSeconds:3,seed:12,parameters:{ink:{type:"color",title:"底色",default:[0.1,0.25,1,0.5]}},render(ctx){return [rect({x:130,y:130,width:980,height:600,radius:48,fill:ctx.params.ink}),text({x:210,y:420,text:"静态画面复用",fontSize:115,color:[1,1,1,1]})];}}`
+const baseStaticSource = `export default {apiVersion:1,name:"透明静态卡片",kind:"generator",mode:"static",width:3840,height:2160,durationSeconds:3,seed:12,parameters:{ink:{type:"color",title:"底色",default:[0.1,0.25,1,0.5]}},render(ctx){return [rect({x:130,y:130,width:980,height:600,radius:48,fill:ctx.params.ink}),text({x:210,y:420,text:"静态画面复用",fontSize:115,color:[1,1,1,1]})];}}`
 
-function createVideoEditCodeProjectScene() {
-  return { id: 'video-edit-code-project', surface: '剪辑', name: '剪辑-原创代码素材混合保存与4K60导出', writesUserData: true,
+function createVideoEditCodeProjectScene({ controls = false } = {}) {
+  const control = controls ? require('./uiInspectionVideoEditCodeControls.cjs') : undefined
+  const dynamicSource = control?.dynamicSource ?? baseDynamicSource; const staticSource = control?.staticSource ?? baseStaticSource
+  return { id: controls ? 'video-edit-code-controls' : 'video-edit-code-project', surface: '剪辑', name: controls ? '剪辑-参数曲线源码与透明图片4K60回环' : '剪辑-原创代码素材混合保存与4K60导出', writesUserData: true,
     setup: async (page, app, { capture }) => {
-      const root = path.resolve('node_modules/.cache/video-edit-code-project'); fs.mkdirSync(root, { recursive: true })
+      const root = path.resolve(`node_modules/.cache/video-edit-code-${controls ? 'controls' : 'project'}`); fs.mkdirSync(root, { recursive: true })
       const video = path.resolve('node_modules/.cache/video-edit-probe/3840-60.mp4')
-      const picture = path.resolve('node_modules/.cache/video-edit-project-source/picture.png')
+      const picture = control ? await control.makePicture(root) : path.resolve('node_modules/.cache/video-edit-project-source/picture.png')
       const audio = path.resolve('node_modules/.cache/video-edit-project-source/audio.wav')
       for (const source of [video, picture, audio]) assert.ok(fs.existsSync(source), `复用真实前置媒体：${source}`)
       const originals = [video, picture, audio].map(file => ({ file, size: fs.statSync(file).size, mtime: fs.statSync(file).mtimeMs }))
@@ -139,6 +141,7 @@ function createVideoEditCodeProjectScene() {
           snapshots[frame] = png
         }
         evidence.seeks = seeks
+        if (control) await control.inspectCodeControls({ page, app, capture, evidence, change, file, root, document, dynamicClip, staticClip, dynamicSource, snapshots, saved, seek, comparePng })
         const beforeSource = document.codeMaterials.map(definition => definition.versions)
         const parameterAt = performance.now()
         await change([{ kind: 'set_properties', entityType: 'video_edit.clip', target: dynamicRef, properties: { 'video_edit.clip.code_parameters': { speed: 200, ink: [.9, .2, .1, .7] } } }])
@@ -236,6 +239,7 @@ function createVideoEditCodeProjectScene() {
           const { gpu, sources } = release.codeResources
           assert.equal(gpu.residentBytes, 0); assert.equal(gpu.surfaces, 0); assert.equal(gpu.glyphs, 0); assert.equal(gpu.pipelines, 0)
           assert.equal(sources.programs, 0); assert.equal(sources.compiler.activeWorkers, 0); assert.equal(sources.compiler.pending, 0)
+          if (release.codeResources.images) { assert.equal(release.codeResources.images.textures, 0); assert.equal(release.codeResources.images.bytes, 0); assert.equal(release.codeResources.decodedImages, 0) }
         }
         const hot = evidence.playback.resources.filter(event => event.kind === 'render.completed' && event.presented && event.codeResources?.gpu && event.frame > 2 && event.frame < 89)
         const byWorker = new Map(); for (const event of hot) { const items = byWorker.get(event.worker) ?? []; items.push(event); byWorker.set(event.worker, items) }
@@ -243,6 +247,7 @@ function createVideoEditCodeProjectScene() {
         const first = largest[0].codeResources; const last = largest.at(-1).codeResources
         assert.equal(first.sources.compiler.workerStarts, last.sources.compiler.workerStarts); assert.equal(first.gpu.pipelineCompiles, last.gpu.pipelineCompiles)
         assert.equal(first.gpu.externalCopies, last.gpu.externalCopies, '热帧不能重复上传字形'); assert.equal(first.gpu.textureAllocations, last.gpu.textureAllocations)
+        if (control) { assert.equal(first.images.uploads, last.images.uploads, '同图代码/普通片段热帧不能重复上传'); assert.equal(first.decodedImages, 1); assert.equal(last.decodedImages, 1) }
         evidence.codeHotResources = { first, last }
         await dialogs(app, [file], output); await button(page, '打开工程').click(); await presented(page, 0); await seek(page, 120)
         const reopened = JSON.parse(fs.readFileSync(file, 'utf8')); assert.deepEqual(reopened, savedContent)

@@ -1,5 +1,5 @@
 import { createLogger } from '@/core/logging'
-import { makeCodeMaterialDefinition } from '@/core/videoEdit/codeMaterialVersions'
+import { appendCodeMaterialVersion, makeCodeMaterialDefinition } from '@/core/videoEdit/codeMaterialVersions'
 import { validateCodeMaterialParameters } from '@/core/videoEdit/codeMaterial/parameters'
 import { createVideoEditSequence, videoEditComposition, videoEditDocumentSchema } from '@/core/videoEdit/document'
 import type { CodeMaterialMetadataReader } from '@/core/videoEdit/codeMaterialDocument'
@@ -9,54 +9,25 @@ import { compileVideoEditCode, forgetVideoEditCodeMetadata, rememberVideoEditCod
 import { editVideoProject, requireVideoEditInstance, listVideoEditInstances, subscribeVideoEditDomain } from './videoEditService'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { readVideoEditCodeMetadata } from './videoEditCodeState'
-import { VideoEditRenderSession } from '../engine/videoEditRenderSession'
+import { trialVideoEditCodeFrames } from './videoEditCodeTrial'
 
 const logger = createLogger('features.videoEdit.code')
 export interface VideoEditCodeInput { source: string; name?: string; binId?: string }
+export interface VideoEditCodeVersionInput { source: string; definitionId: string }
 interface Candidate { definition: CodeMaterialDefinition; item: VideoEditItem }
-let trialTail: Promise<void> = Promise.resolve()
-let trials = 0
 /** Trial uses the same full-resolution source/compiler/GPU path as preview and
  * export. Its bounded temporary session is always released before publication. */
 async function trialCandidates(candidates: Candidate[], read: CodeMaterialMetadataReader, signal: AbortSignal): Promise<void> {
-  if (trials >= 4) throw new Error('代码素材试渲染队列已满，请等待当前检查完成。')
-  trials++
-  const previous = trialTail
-  let release!: () => void
-  trialTail = new Promise<void>(resolve => { release = resolve })
-  await previous
-  let renderer: VideoEditRenderSession | undefined
-  let expired = false
-  let timer: ReturnType<typeof setTimeout> | undefined
-  let abort: (() => void) | undefined
-  try {
-    signal.throwIfAborted()
-    const deadline = new Promise<never>((_, reject) => {
-      timer = setTimeout(() => { expired = true; reject(new Error('源码试渲染超过30秒，已释放候选；请重新检查。')) }, 30_000)
-      abort = () => { expired = true; reject(signal.reason) }
-      signal.addEventListener('abort', abort, { once: true })
-    })
-    const sequence = createVideoEditSequence('源码候选检查')
-    const document: VideoEditDocument = { format: 'henji-video-project', version: 2, id: crypto.randomUUID(), name: sequence.name, revision: 0, media: [], bins: [], items: candidates.map(candidate => ({ ...candidate.item, binId: undefined })), codeMaterials: candidates.map(candidate => candidate.definition), sequences: [sequence] }
-    for (const candidate of candidates) {
-      const program = read(candidate.item.code!)
-      sequence.width = program.width; sequence.height = program.height
-      sequence.clips = [makeVideoEditItemClip(document, candidate.item.id, sequence.id, { frame: 0 }, read)]
-      document.revision++
-      const composition = videoEditComposition(document, sequence.id)
-      if (!renderer) renderer = new VideoEditRenderSession(composition)
-      else await Promise.race([renderer.updateDocument(composition), deadline])
-      const frame = await Promise.race([renderer.present(0).then(frame => {
-        if (expired || signal.aborted) { frame.bitmap?.close(); throw signal.reason ?? new Error('源码候选已失效。') }
-        return frame
-      }), deadline])
-      try { if (!frame.presented || !frame.bitmap) throw new Error('源码候选没有生成可用画面。') }
-      finally { frame.bitmap?.close() }
-    }
-  } finally {
-    clearTimeout(timer); if (abort) signal.removeEventListener('abort', abort)
-    try { await renderer?.dispose() } finally { trials--; release() }
-  }
+  const sequence = createVideoEditSequence('源码候选检查')
+  const document: VideoEditDocument = { format: 'henji-video-project', version: 2, id: crypto.randomUUID(), name: sequence.name, revision: 0, media: [], bins: [], items: candidates.map(candidate => ({ ...candidate.item, binId: undefined })), codeMaterials: candidates.map(candidate => candidate.definition), sequences: [sequence] }
+  const frames = candidates.map(candidate => {
+    const program = read(candidate.item.code!)
+    sequence.width = program.width; sequence.height = program.height
+    sequence.clips = [makeVideoEditItemClip(document, candidate.item.id, sequence.id, { frame: 0 }, read)]
+    document.revision++
+    return { document: videoEditComposition(structuredClone(document), sequence.id), frame: 0 }
+  })
+  await trialVideoEditCodeFrames(frames, signal)
 }
 /** Creation is an algorithmic collection operation: raw source is checked,
  * trial-rendered, then becomes one atomic domain edit. It never executes JS. */
@@ -99,4 +70,39 @@ export async function createVideoEditCodeItems(projectId: string, inputs: VideoE
     logger.debug('代码素材检查未完成', { event: 'video_edit.code.create.failed', error, context: { projectId } })
     throw error
   } finally { unsubscribe(); signal?.removeEventListener('abort', cancel) }
+}
+
+/** Append checked immutable versions. Existing defaults, items and clips keep
+ * their fixed bindings; an explicit domain property edit binds a new version. */
+export async function createVideoEditCodeVersions(projectId: string, inputs: VideoEditCodeVersionInput[], signal?: AbortSignal): Promise<string[]> {
+  signal?.throwIfAborted()
+  if (!inputs.length || inputs.length > 32) throw new Error('每次创建1到32个源码版本。')
+  const owner = requireVideoEditInstance(projectId); const baseline = owner.document
+  const controller = new AbortController(); const cancel = (): void => controller.abort(signal?.reason ?? new Error('源码版本创建已取消。'))
+  signal?.addEventListener('abort', cancel, { once: true })
+  const off = subscribeVideoEditDomain(() => { if (!listVideoEditInstances().includes(owner) || owner.document !== baseline) controller.abort(new Error('原工程已关闭或内容已改变，候选已取消。')) })
+  const definitions = new Map((baseline.codeMaterials ?? []).map(definition => [definition.id, definition])); const added: string[] = []; const trials: Candidate[] = []
+  try {
+    for (const input of inputs) {
+      const definition = definitions.get(input.definitionId)
+      if (!definition) throw new Error('代码素材定义不属于此工程。')
+      const result = await appendCodeMaterialVersion(definition, input.source, source => compileVideoEditCode(source, controller.signal))
+      controller.signal.throwIfAborted()
+      if (result.program.kind !== 'generator') throw new Error('当前代码版本仅支持生成素材。')
+      if (definition.versions.some(version => version.id === result.versionId)) throw new Error('相同源码版本已存在，请直接使用原版本。')
+      definitions.set(definition.id, result.definition); added.push(result.versionId)
+      rememberVideoEditCodeMetadata(owner, definition.id, result.definition.versions.find(version => version.id === result.versionId)!, result.program)
+      trials.push({ definition: { ...result.definition, defaultVersionId: result.versionId }, item: { id: crypto.randomUUID(), kind: 'code', name: result.program.name, code: { definitionId: definition.id, versionId: result.versionId, parameters: validateCodeMaterialParameters(result.program) } } })
+    }
+    const document = videoEditDocumentSchema.parse({ ...baseline, codeMaterials: [...definitions.values()] })
+    const read = readVideoEditCodeMetadata(owner, document)
+    // Separate candidates may append to the same definition; each isolated
+    // source trial avoids duplicate definitions while retaining one queue.
+    for (const trial of trials) await trialCandidates([trial], read, controller.signal)
+    controller.signal.throwIfAborted()
+    if (requireVideoEditInstance(projectId) !== owner || owner.document !== baseline) throw new Error('源码版本检查期间原工程已改变。')
+    editVideoProject(projectId, () => document)
+    return added
+  } catch (error) { added.forEach(version => forgetVideoEditCodeMetadata(owner, version)); throw error }
+  finally { off(); signal?.removeEventListener('abort', cancel) }
 }

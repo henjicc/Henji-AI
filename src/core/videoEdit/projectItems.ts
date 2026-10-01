@@ -1,6 +1,7 @@
 import { createVideoEditSequence, videoEditComposition, type VideoEditClip, type VideoEditDocument, type VideoEditSequence } from './document'
 import { VIDEO_EDIT_FRAME_RATES, videoEditFps } from './time'
 import type { CodeMaterialMetadataReader } from './codeMaterialDocument'
+import { codeMaterialImageIds } from './codeMaterialResources'
 
 export type VideoEditSequenceSettings = Partial<Pick<VideoEditSequence, 'name' | 'width' | 'height' | 'frameRate' | 'pixelAspectRatio' | 'sampleRate' | 'channels'>> & { binId?: string | null }
 export class VideoEditSequenceFrameRateRequired extends Error {
@@ -17,8 +18,9 @@ export function removeVideoEditItems(document: VideoEditDocument, ids: string[])
     if (used.length) throw new Error(`“${item.name}”仍被序列“${used[0].sequenceName}”等 ${used.length} 个片段引用。请先移除这些片段。`)
   }
   const items = document.items.filter(item => !ids.includes(item.id))
-  const removedMedia = new Set(document.items.filter(item => ids.includes(item.id)).map(item => item.mediaId))
-  return { ...document, items, media: document.media.filter(media => !removedMedia.has(media.id) || items.some(item => item.mediaId === media.id)) }
+  const removedMedia = new Set(document.items.filter(item => ids.includes(item.id)).flatMap(item => [item.mediaId, ...codeMaterialImageIds(item.code)]))
+  const codeImages = new Set([...items.flatMap(item => [...codeMaterialImageIds(item.code)]), ...document.sequences.flatMap(sequence => sequence.clips.flatMap(clip => [...codeMaterialImageIds(clip.code)]))])
+  return { ...document, items, media: document.media.filter(media => !removedMedia.has(media.id) || items.some(item => item.mediaId === media.id) || codeImages.has(media.id)) }
 }
 export function removeVideoEditBins(document: VideoEditDocument, ids: string[]): VideoEditDocument {
   for (const id of ids) {

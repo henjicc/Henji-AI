@@ -61,7 +61,7 @@ class VideoEditProvider implements ApplicationEntityProvider {
     return propertyIds.map(propertyId => {
       const field = VIDEO_EDIT_FIELDS[this.entityType].find(item => item.propertyId === propertyId)
       if (!field) throw new Error(`未知属性 ${propertyId}，可用属性：${VIDEO_EDIT_FIELDS[this.entityType].map(item => item.propertyId).join('、')}`)
-      const absent = propertyId === 'video_edit.clip.code_parameters' && !data.code
+      const absent = ['video_edit.clip.code_parameters', 'video_edit.clip.code_curves', 'video_edit.clip.code_version_id'].includes(propertyId) && !data.code
       return { propertyId, readable: true, writable: Boolean(field.writer) && !absent, reasons: absent ? ['此片段没有代码实例参数。'] : field.writer ? [] : [field.descriptor.readOnlyReason!], requiredPermissions: ['video_edit:read'], revisions: { video_edit: videoEditRevision() } }
     })
   }
@@ -73,12 +73,13 @@ const required: Partial<Record<VideoEditEntityType, string[]>> = {
   'video_edit.sequence': ['video_edit.sequence.name'], 'video_edit.bin': ['video_edit.bin.name'], 'video_edit.item': ['video_edit.item.name', 'video_edit.item.kind'],
   'video_edit.clip': ['video_edit.clip.item_id', 'video_edit.clip.kind', 'video_edit.clip.name'], 'video_edit.annotation': ['video_edit.annotation.clip_id', 'video_edit.annotation.text'],
   'video_edit.code_material': ['video_edit.code_material.source'],
+  'video_edit.code_version': ['video_edit.code_version.source', 'video_edit.code_version.definition_id'],
 }
 export function createVideoEditRegistrations(): ApplicationEntityRegistration[] {
   return VIDEO_EDIT_TYPES.map(entityType => ({
     entity: { id: entityType, domain: 'video_edit', version: 2, title: titles[entityType], description: entityType === 'video_edit.source' ? '独立源预览会话；定位、播放写入等待真实媒体响应，逐帧观察不改工程或剪辑撤销历史。' : '本地剪辑工程中的稳定实体，手动与助手共用编辑历史。', refKind: entityType, dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], parentTypes: entityType === 'video_edit.project' ? [] : sequenceChildren.includes(entityType) ? ['video_edit.sequence'] : ['video_edit.project'], revisionScopes: ['video_edit'], queryCapabilityIds: ['read_application_entity'], schemaRef: videoEditSchemaRef('entity', entityType),
-      ...(entityType === 'video_edit.media' || entityType === 'video_edit.code_version' ? { writeExclusion: { reason: entityType === 'video_edit.code_version' ? '源码版本不可变，需检查和试渲染新候选后显式提交。' : '素材由正式本地导入或素材库引用服务检测；路径选择由用户本地文件对话框授权。' } } : {}),
-      ...(required[entityType] ? { collectionWrite: { creatable: true, removable: true, requiredPropertyIds: required[entityType]!, maxItemsPerChange: 32 } } : {}),
+      ...(entityType === 'video_edit.media' ? { writeExclusion: { reason: '素材由正式本地导入或素材库引用服务检测；路径选择由用户本地文件对话框授权。' } } : {}),
+      ...(required[entityType] ? { collectionWrite: { creatable: true, removable: entityType !== 'video_edit.code_version', requiredPropertyIds: required[entityType]!, maxItemsPerChange: 32 } } : {}),
     }, properties: fieldDescriptors(VIDEO_EDIT_FIELDS[entityType]), provider: new VideoEditProvider(entityType), schemaDocuments: videoEditSchemaDocuments(entityType),
   }))
 }

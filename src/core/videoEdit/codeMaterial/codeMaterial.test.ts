@@ -16,6 +16,9 @@ function rejects(code: string, expectedCode?: string): void {
 }
 
 describe('可创作的唯一作者接口', () => {
+  it('原始解析诊断定位缺少表达式的行列，便于编辑后恢复', () => {
+    expect(() => compileCodeMaterial('export default {\napiVersion:\n}')).toThrow('（3:1）')
+  })
   it('静态透明图形可结构化克隆，包含新矩形、椭圆与线段', () => {
     const program = compileCodeMaterial(source(`return [${rect}, ellipse({x:420,y:100,width:120,height:80,fill:[0,1,0,.25]}),line({x1:0,y1:0,x2:100,y2:100,width:6,color:[1,1,1,.75]})];`, { mode: 'static' }))
     const cloned = structuredClone(program)

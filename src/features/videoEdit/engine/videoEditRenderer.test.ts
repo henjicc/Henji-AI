@@ -4,7 +4,7 @@ import { VideoEditRenderer } from './videoEditRenderer'
 import type { CodeMaterialProgram } from '@/core/videoEdit/codeMaterial/contract'
 import { compileCodeMaterial } from '@/core/videoEdit/codeMaterial/compiler'
 
-const boundary = vi.hoisted(() => ({ disposed: [] as string[], pictures: [] as number[], generatorCalls: 0, compilerCalls: 0, compilerDisposed: 0, released: [] as string[][], pendingCode: undefined as Promise<CodeMaterialProgram> | undefined, snapshotCalls: [] as boolean[], normalizedReleased: 0, pendingSnapshot: undefined as Promise<void> | undefined }))
+const boundary = vi.hoisted(() => ({ disposed: [] as string[], pictures: [] as number[], generatorCalls: 0, compilerCalls: 0, compilerDisposed: 0, failGenerator: false, released: [] as string[][], pendingCode: undefined as Promise<CodeMaterialProgram> | undefined, snapshotCalls: [] as boolean[], normalizedReleased: 0, pendingSnapshot: undefined as Promise<void> | undefined }))
 vi.mock('@/core/logging', () => ({ createLogger: () => ({ debug: vi.fn(), warn: vi.fn() }) }))
 vi.mock('./videoEditCodeCompiler', async () => {
   const { compileCodeMaterial } = await import('@/core/videoEdit/codeMaterial/compiler')
@@ -43,14 +43,17 @@ vi.mock('./videoEditGpuCompositor', async () => {
     boundary.snapshotCalls.push(compact); await boundary.pendingSnapshot
     return new VideoEditGpuFrame({ ...sample, displayWidth: 3840, displayHeight: 2160, rotation: 0, flip: false }, { createView: () => ({}), destroy: vi.fn() }, undefined, 100, () => { boundary.normalizedReleased++ })
   }
-  async code() { return { generator: async (_key: string, _program: CodeMaterialProgram, context: { time: number }) => { boundary.generatorCalls++; return { timestamp: context.time } }, releaseUnused: (keys: ReadonlySet<string>) => { boundary.released.push([...keys]) } } }
+  async code() { return { generator: async (_key: string, _program: CodeMaterialProgram, context: { time: number }) => { boundary.generatorCalls++; if (boundary.failGenerator) throw new Error('代码画面失败'); return { timestamp: context.time } }, releaseUnused: (keys: ReadonlySet<string>) => { boundary.released.push([...keys]) } } }
+  async prepareImages() { return new Map() }
+  imageDiagnostics() { return { textures: 0, bytes: 0, uploads: 0 } }
+  codeDiagnostics() { return undefined }
   async draw(_document: unknown, _clips: unknown, pictures: Array<{ timestamp: number }>) { boundary.pictures = pictures.map(picture => picture.timestamp); return { presented: true, completion: Promise.resolve() } }
   async dispose(): Promise<void> {}
   cancelPresentation(): void {}
 } } })
 beforeEach(() => {
   boundary.disposed = []; boundary.pictures = []
-  boundary.generatorCalls = 0; boundary.compilerCalls = 0; boundary.compilerDisposed = 0; boundary.released = []; boundary.pendingCode = undefined
+  boundary.generatorCalls = 0; boundary.compilerCalls = 0; boundary.compilerDisposed = 0; boundary.failGenerator = false; boundary.released = []; boundary.pendingCode = undefined
   boundary.snapshotCalls = []; boundary.normalizedReleased = 0; boundary.pendingSnapshot = undefined
   vi.stubGlobal('OffscreenCanvas', class { constructor(public width: number, public height: number) {} })
   vi.stubGlobal('VideoDecoder', { isConfigSupported: async () => ({ supported: true }) })
@@ -123,6 +126,67 @@ function mixedFixture(): ReturnType<typeof videoEditComposition> {
   document.clips.push({ ...document.clips[0], id: 'code-clip', itemId: 'code-item', name: '原创图形', kind: 'code', track: 2, code: instance })
   return document
 }
+function imageFixture(count = 1): ReturnType<typeof videoEditComposition> {
+  const document = fixture(); document.clips = []
+  document.media = Array.from({ length: count }, (_, index) => ({ id: `image-${index}`, name: '图片', kind: 'image', path: `D:/original-${index}.png`, width: 32, height: 32, durationSeconds: 0 }))
+  document.items = document.media.map(media => ({ id: `item-${media.id}`, name: media.name, kind: media.kind, mediaId: media.id }))
+  document.clips = document.items.map((item, index) => ({ ...fixture().clips[0], id: `image-clip-${index}`, itemId: item.id, kind: 'image', track: index + 1 }))
+  return document
+}
+it('失败跨帧图片工作集有界，离开不再引用的成功解码图片及时释放', async () => {
+  const document = mixedFixture(); const base = imageFixture(4)
+  document.media = base.media; document.items.push(...base.items)
+  document.clips = [document.clips[1], { ...base.clips[0], track: 1 }]
+  const closed = Array.from({ length: 4 }, () => vi.fn())
+  let decoded = 0
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, blob: async () => new Blob() }))
+  vi.stubGlobal('createImageBitmap', vi.fn(async () => ({ width: 32, height: 32, close: closed[decoded++] })))
+  boundary.failGenerator = true
+  const renderer = new VideoEditRenderer(document)
+  try {
+    for (let index = 0; index < 4; index++) {
+      const current = { ...document, revision: index, clips: [document.clips[0], { ...base.clips[index], track: 1 }] }
+      await renderer.updateDocument(current)
+      await expect(renderer.render(0)).rejects.toThrow('代码画面失败')
+      expect(renderer.codeDiagnostics().decodedImages).toBe(1); expect(renderer.codeDiagnostics().decodedImageBytes).toBe(4096)
+    }
+    expect(closed.slice(0, 3).every(close => close.mock.calls.length === 1)).toBe(true)
+  } finally { await renderer.dispose() }
+  await Promise.resolve(); expect(closed.every(close => close.mock.calls.length === 1)).toBe(true)
+})
+it('取消图片消费者不等待原生解码，迟到旧图关闭且不能删除同路径重新定位的新图', async () => {
+  const document = imageFixture(); const renderer = new VideoEditRenderer(document)
+  const oldClose = vi.fn(); const newClose = vi.fn(); let finish!: (value: { width: number; height: number; close: () => void }) => void
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, blob: async () => new Blob() }))
+  const decode = vi.fn().mockImplementationOnce(() => new Promise(resolve => { finish = resolve })).mockResolvedValue({ width: 32, height: 32, close: newClose })
+  vi.stubGlobal('createImageBitmap', decode)
+  const old = renderer.render(0)
+  await vi.waitFor(() => expect(decode).toHaveBeenCalledOnce())
+  renderer.cancelPresentation(); expect((await old).presented).toBe(false)
+  const refreshed = { ...document, revision: 1, media: document.media.map(media => ({ ...media, sourceRevision: 'explicit-relink' })) }
+  await renderer.updateDocument(refreshed); await renderer.render(0)
+  finish({ width: 32, height: 32, close: oldClose }); await vi.waitFor(() => expect(oldClose).toHaveBeenCalledOnce())
+  expect(renderer.codeDiagnostics().decodedImages).toBe(1)
+  await renderer.render(1); expect(decode).toHaveBeenCalledTimes(2)
+  await renderer.dispose(); await Promise.resolve(); expect(newClose).toHaveBeenCalledOnce()
+})
+it('图片原生解码最多两份，低报元数据仍按实际驻留像素拒绝超预算', async () => {
+  const document = imageFixture(3); const renderer = new VideoEditRenderer(document)
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, blob: async () => new Blob() }))
+  const finish: Array<(value: { width: number; height: number; close: () => void }) => void> = []
+  const close = vi.fn(); const decode = vi.fn(() => new Promise(resolve => { finish.push(resolve) })); vi.stubGlobal('createImageBitmap', decode)
+  const rendering = renderer.render(0)
+  await vi.waitFor(() => expect(decode).toHaveBeenCalledTimes(2))
+  expect(renderer.codeDiagnostics().imageDecodes).toBe(2)
+  finish[0]({ width: 32, height: 32, close }); await vi.waitFor(() => expect(decode).toHaveBeenCalledTimes(3))
+  finish[1]({ width: 32, height: 32, close }); finish[2]({ width: 32, height: 32, close }); await rendering
+  expect(renderer.codeDiagnostics().imageDecodes).toBe(0); await renderer.dispose(); await Promise.resolve(); expect(close).toHaveBeenCalledTimes(3)
+  const sized = new VideoEditRenderer(imageFixture(2)); const oversizeClose = vi.fn()
+  vi.stubGlobal('createImageBitmap', vi.fn(async () => ({ width: 6144, height: 6144, close: oversizeClose })))
+  await expect(sized.render(0)).rejects.toThrow('256MiB')
+  expect(sized.codeDiagnostics().decodedImageBytes).toBeLessThanOrEqual(256 * 1024 ** 2); expect(oversizeClose).toHaveBeenCalledOnce()
+  await sized.dispose(); await Promise.resolve(); expect(oversizeClose).toHaveBeenCalledTimes(2)
+})
 it('可见原视频和代码画面走同一合成，静态变换修改复用纹理且离开释放', async () => {
   const document = mixedFixture(); const renderer = new VideoEditRenderer(document)
   try {
