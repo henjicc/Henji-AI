@@ -1,8 +1,13 @@
 import { describe, expect, it } from 'vitest'
 
 import { assistantAttachmentDraftReducer, assetToAgentAttachment, inferAssistantAttachmentModality, validateAssistantAttachmentFile } from './assistantAttachments'
+import type { AssetRecord } from '@/platform/contracts/assetLibrary'
 
 describe('assistantAttachments', () => {
+  it('代码清单不能伪装成模型图片附件', () => {
+    expect(inferAssistantAttachmentModality({ type: 'application/x-henji-code', name: 'source.henji-code' })).toBeNull()
+    expect(() => assetToAgentAttachment({ mediaType: 'code' } as AssetRecord)).toThrow()
+  })
   it('按模型模态和文件格式、大小拦截；已有素材的名称不必带扩展名', () => {
     const image = { name: '已重命名图片', type: 'image/png', size: 1024 }
     expect(() => validateAssistantAttachmentFile(image, ['image'])).not.toThrow()

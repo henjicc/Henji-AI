@@ -19,8 +19,8 @@ function getNative(): NonNullable<typeof window.henjiNative> {
 
 function createFs(): FsPlatform {
   return {
-    readFile: async (path) => {
-      return await getNative().fs.readFile(path)
+    readFile: async (path, options) => {
+      return await getNative().fs.readFile(path, options)
     },
     readTextFile: async (path) => {
       return await getNative().fs.readTextFile(path)

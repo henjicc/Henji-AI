@@ -14,6 +14,7 @@ export async function addAssetToCanvas(input: {
   signal?.throwIfAborted()
   const asset = await assetApplicationService.inspect(input.assetId)
   signal?.throwIfAborted()
+  if (asset.mediaType === 'code') throw new Error('可编辑代码素材需要导入剪辑工程；画布媒体节点仅接受图片、视频或音频。')
   const payload: AssetDragPayload = {
     assetId: asset.id,
     type: asset.mediaType,

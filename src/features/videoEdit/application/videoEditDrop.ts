@@ -6,13 +6,16 @@ import { makeVideoEditItemClip, makeVideoEditItemSequence, type VideoEditSequenc
 import type { VideoEditDocument } from '@/core/videoEdit/document'
 import { readVideoEditCodeMetadata } from './videoEditCodeState'
 import { VIDEO_EDIT_SOURCE_DRAG_MIME, videoEditSourceRangeSchema, placeVideoEditSourceRange, type VideoEditSourceRange } from './videoEditSourceRange'
+import { CODE_ASSET_DRAG_MIME, readCodeAssetDrag } from '@/features/assets/drag/assetDragPayload'
+import { importVideoEditCodeAsset } from './videoEditCodeAssets'
 
 export const VIDEO_EDIT_ITEM_DRAG_MIME = 'application/x-henji-video-edit-items'
-export type VideoEditDropInput = { kind: 'items'; projectId: string; itemIds: string[] } | { kind: 'sources'; sources: VideoEditImportSource[] } | VideoEditSourceRange
+export type VideoEditDropInput = { kind: 'items'; projectId: string; itemIds: string[] } | { kind: 'sources'; sources: VideoEditImportSource[] } | { kind: 'code_asset'; assetId: string } | VideoEditSourceRange
 export function writeVideoEditItemDrag(transfer: DataTransfer, projectId: string, itemIds: string[]): void {
   transfer.setData(VIDEO_EDIT_ITEM_DRAG_MIME, JSON.stringify({ projectId, itemIds }))
 }
 export function readVideoEditDrop(transfer: DataTransfer): VideoEditDropInput {
+  if (transfer.types.includes(CODE_ASSET_DRAG_MIME)) { const assetId = readCodeAssetDrag(transfer); if (!assetId) throw new Error('代码资产引用无效。'); return { kind: 'code_asset', assetId } }
   if (transfer.types.includes(VIDEO_EDIT_SOURCE_DRAG_MIME)) return videoEditSourceRangeSchema.parse(JSON.parse(transfer.getData(VIDEO_EDIT_SOURCE_DRAG_MIME)))
   if (transfer.types.includes(VIDEO_EDIT_ITEM_DRAG_MIME)) {
     const raw: unknown = JSON.parse(transfer.getData(VIDEO_EDIT_ITEM_DRAG_MIME))
@@ -26,7 +29,7 @@ export function readVideoEditDrop(transfer: DataTransfer): VideoEditDropInput {
 }
 
 export function acceptsVideoEditDrop(transfer: DataTransfer): boolean {
-  return transfer.types.includes(VIDEO_EDIT_SOURCE_DRAG_MIME) || transfer.types.includes(VIDEO_EDIT_ITEM_DRAG_MIME) || transfer.types.includes(HENJI_DRAG_DATA_MIME) || transfer.types.includes('Files')
+  return transfer.types.includes(CODE_ASSET_DRAG_MIME) || transfer.types.includes(VIDEO_EDIT_SOURCE_DRAG_MIME) || transfer.types.includes(VIDEO_EDIT_ITEM_DRAG_MIME) || transfer.types.includes(HENJI_DRAG_DATA_MIME) || transfer.types.includes('Files')
 }
 export function videoEditDropPaths(transfer: DataTransfer): string[] {
   const payload = readHenjiDragData(transfer)
@@ -44,6 +47,7 @@ export async function dropVideoEditInput(projectId: string, input: VideoEditDrop
   const owner = requireVideoEditInstance(projectId)
   const targetTrackIds = owner.targetTrackIds.slice()
   const sequenceId = options.sequenceId ?? owner.activeSequenceId
+  const filterTarget = owner.selection ? { sequenceId, clipId: owner.selection } : undefined
   if (input.kind === 'source_range') {
     if (!placement) throw new Error('请把源范围拖入时间线或节目监视器。')
     return placeVideoEditSourceRange(projectId, input, sequenceId, placement)
@@ -69,7 +73,10 @@ export async function dropVideoEditInput(projectId: string, input: VideoEditDrop
     selectedClip = clips.at(-1)?.id
     return { ...document, sequences: document.sequences.map(item => item.id === sequenceId ? { ...item, clips: [...item.clips, ...clips] } : item) }
   }
-  const ids = input.kind === 'items' ? input.itemIds : await importVideoEditSources(projectId, input.sources, binId, undefined, apply)
+  let ids: string[]
+  if (input.kind === 'items') ids = input.itemIds
+  else if (input.kind === 'code_asset') { const result = await importVideoEditCodeAsset(projectId, input.assetId, { binId, filterTarget, afterImport: apply }); ids = result.itemId ? [result.itemId] : [] }
+  else ids = await importVideoEditSources(projectId, input.sources, binId, undefined, apply)
   if (input.kind === 'items') editVideoProject(projectId, document => apply(document, ids))
   if (createdId && owner.activeSequenceId === sequenceId) switchVideoEditSequence(projectId, createdId)
   if (selectedClip && owner.activeSequenceId === (createdId ?? sequenceId)) setVideoEditView(projectId, { selection: selectedClip })

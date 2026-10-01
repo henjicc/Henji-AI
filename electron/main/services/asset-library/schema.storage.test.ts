@@ -25,11 +25,11 @@ it('旧资产库幂等补内容身份列，保留原资产、标签和集合；�
     expect((db.prepare('PRAGMA table_info(assets)').all() as Array<{ name: string }>).filter(column => column.name === 'content_identity')).toHaveLength(1)
   } finally { db.close() }
 })
-it('增加剪辑输出来源时保留真实旧表附加列、库/标签关系、索引、触发器和依赖视图，并恢复外键约束', () => {
+it.each(['source', 'media_type'] as const)('升级旧%s约束保留真实附加列、库/标签关系、索引、触发器和依赖视图，并恢复外键约束', missing => {
   const db = new Database(':memory:')
   try {
     initializeSchema(db)
-    const sql = (db.prepare("SELECT sql FROM sqlite_schema WHERE name='assets' AND type='table'").get() as { sql: string }).sql.replace(", 'video-edit'", '')
+    const sql = (db.prepare("SELECT sql FROM sqlite_schema WHERE name='assets' AND type='table'").get() as { sql: string }).sql.replace(missing === 'source' ? ", 'video-edit'" : ", 'code'", '')
     db.exec('DROP TABLE assets'); db.exec(sql); db.pragma('foreign_keys=ON')
     db.exec('ALTER TABLE assets ADD COLUMN retained_note TEXT; CREATE INDEX idx_retained_note ON assets(retained_note); CREATE TABLE asset_audit (asset_id TEXT); CREATE TRIGGER asset_insert_audit AFTER INSERT ON assets BEGIN INSERT INTO asset_audit VALUES (NEW.id); END; CREATE VIEW asset_names AS SELECT id,display_name,retained_note FROM assets; CREATE VIEW asset_names_outer AS SELECT * FROM asset_names')
     db.exec('CREATE TRIGGER asset_view_update INSTEAD OF UPDATE ON asset_names BEGIN UPDATE assets SET display_name=NEW.display_name WHERE id=OLD.id; END')
@@ -47,6 +47,8 @@ it('增加剪辑输出来源时保留真实旧表附加列、库/标签关系、
     expect(db.prepare("SELECT name FROM sqlite_schema WHERE name='idx_retained_note'").get()).toEqual({ name: 'idx_retained_note' })
     db.prepare('INSERT INTO assets (id,media_type,display_name,file_path,source,created_at,updated_at) VALUES (?,?,?,?,?,?,?)').run('output', 'image', '选帧', 'D:/frame.png', 'video-edit', 3, 4)
     expect(db.prepare('SELECT * FROM asset_audit').all()).toHaveLength(2)
+    db.prepare('INSERT INTO assets (id,media_type,display_name,file_path,source,created_at,updated_at) VALUES (?,?,?,?,?,?,?)').run('editable-code', 'code', '原创源码', 'D:/original.henji-code', 'video-edit', 3, 4)
+    expect(db.prepare('SELECT * FROM asset_audit').all()).toHaveLength(3)
     expect(db.pragma('foreign_keys', { simple: true })).toBe(1); expect(db.pragma('foreign_key_check')).toEqual([])
     const after = db.prepare('SELECT * FROM assets').all(); initializeSchema(db); expect(db.prepare('SELECT * FROM assets').all()).toEqual(after)
     db.prepare('UPDATE asset_names SET display_name=? WHERE id=?').run('通过原视图改名', 'original')

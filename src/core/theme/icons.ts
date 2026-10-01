@@ -3,6 +3,7 @@ import {
   AudioWaveform,
   CheckSquare,
   Clapperboard,
+  Code2,
   FileAudio,
   FileText,
   FileVideo,
@@ -64,6 +65,7 @@ export const ICON_WORKSPACE_VIDEO_EDIT: LucideIcon = Clapperboard
 export const ICON_WORKSPACE_TOOLBOX: LucideIcon = Wrench
 /** 资产库（顶部入口、加入资产库动作、资产库侧栏共用） */
 export const ICON_ASSET_LIBRARY: LucideIcon = Library
+export const ICON_ASSET_CODE: LucideIcon = Code2
 /** 应用设置 */
 export const ICON_SETTINGS: LucideIcon = Settings
 

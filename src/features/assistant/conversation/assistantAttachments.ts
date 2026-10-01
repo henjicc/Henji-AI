@@ -5,7 +5,7 @@ import {
   type AgentAttachment,
 } from '@/core/assistant/attachments'
 import { addMediaReferenceToLibrary } from '@/features/assets/services/assetCollectionService'
-import type { AssetMediaType, AssetRecord } from '@/platform/contracts/assetLibrary'
+import type { AssetRecord } from '@/platform/contracts/assetLibrary'
 import { saveUploadAudio, saveUploadImage, saveUploadVideo } from '@/utils/save/uploads'
 import type { HenjiDragTransferData } from '@/contexts/dragDataTransfer'
 import { resolveLocalAssetPath } from '@/features/assets/services/assetCollectionService'
@@ -53,7 +53,7 @@ export function assistantAttachmentDraftReducer(
   return [...byRef.values()].slice(0, AGENT_ATTACHMENT_MAX_COUNT)
 }
 
-export function inferAssistantAttachmentModality(file: Pick<File, 'type' | 'name'>): AssetMediaType | null {
+export function inferAssistantAttachmentModality(file: Pick<File, 'type' | 'name'>): AgentAttachment['modality'] | null {
   if (file.type.startsWith('image/')) return 'image'
   if (file.type.startsWith('video/')) return 'video'
   if (file.type.startsWith('audio/')) return 'audio'
@@ -65,6 +65,7 @@ export function inferAssistantAttachmentModality(file: Pick<File, 'type' | 'name
 }
 
 export function assetToAgentAttachment(asset: AssetRecord): AgentAttachment {
+  if (asset.mediaType === 'code') throw new Error('可编辑代码素材请通过剪辑资产引用读取，不能作为图片、视频或音频附件发送。')
   return {
     schemaVersion: AGENT_ATTACHMENT_SCHEMA_VERSION,
     mediaRef: `asset:${asset.id}`,

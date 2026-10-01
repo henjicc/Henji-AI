@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { Check, Clock3, FileAudio, Film, Folder, Image as ImageIcon, Pencil, Plus, Trash2, X } from 'lucide-react'
-import { ICON_ASSET_LIBRARY } from '@/core/theme/icons'
+import { ICON_ASSET_CODE, ICON_ASSET_LIBRARY } from '@/core/theme/icons'
 import { UI_GLASS_ADAPTIVE_DIVIDER_CLASS, UI_GLASS_ADAPTIVE_SURFACE_CLASS, UI_TEXT_LABEL_CLASS, UiIconButton, UiInput, UiNavButton } from '@/components/ui'
 import type { AssetLibraryRecord, AssetMediaType } from '@/platform/contracts/assetLibrary'
 
@@ -10,6 +10,7 @@ interface SidebarLabels {
   image: string
   video: string
   audio: string
+  code: string
   categories: string
   create: string
   placeholder: string
@@ -83,6 +84,7 @@ export const AssetLibrarySidebar: React.FC<Props> = ({
           ['image', ImageIcon, labels.image],
           ['video', Film, labels.video],
           ['audio', FileAudio, labels.audio],
+          ['code', ICON_ASSET_CODE, labels.code],
         ] as const).map(([type, Icon, label]) => (
           <UiNavButton key={type} active={activeId === null && activeMediaType === type && activeSort === 'created'} onClick={() => onShowMediaType(type)} className="!h-9 !rounded-lg !px-3">
             <Icon className="h-4 w-4" />{label}

@@ -21,7 +21,7 @@ async function requireThumbnailIdentity(filePath: string, identity: ThumbnailIde
 
 export async function ensureAssetThumbnail(filePath: string, mediaType: AssetMediaType, modifiedAt: number, signal?: AbortSignal): Promise<string | null> {
   signal?.throwIfAborted()
-  if (mediaType === 'audio') return null
+  if (mediaType === 'audio' || mediaType === 'code') return null
   const identity = await thumbnailIdentity(filePath)
   signal?.throwIfAborted()
   if (identity[1] !== modifiedAt) throw new Error('源文件已更新，请重新检查后生成缩略图。')

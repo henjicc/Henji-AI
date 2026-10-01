@@ -69,7 +69,7 @@ const properties: Record<AssetEntityType, ApplicationPropertyDescriptor[]> = {
   ],
   [ASSET_ENTITY_TYPES.asset]: [
     ...fieldDescriptors(ASSET_FIELDS),
-    property(ASSET_ENTITY_TYPES.asset, 'media_type', '媒体类型', { kind: 'enum', values: ['image', 'video', 'audio'].map((value) => ({ value, label: value })) }, READ_ONLY),
+    property(ASSET_ENTITY_TYPES.asset, 'media_type', '媒体类型', { kind: 'enum', values: ['image', 'video', 'audio', 'code'].map((value) => ({ value, label: value })) }, READ_ONLY),
     property(ASSET_ENTITY_TYPES.asset, 'inspection_status', '检查状态', { kind: 'string', maxLength: 40 }, READ_ONLY),
     property(ASSET_ENTITY_TYPES.asset, 'media_ref', '媒体引用', { kind: 'string', maxLength: 4096 }, READ_ONLY),
   ],

@@ -28,7 +28,7 @@ export interface HenjiDialogOpenOptions {
 }
 
 export interface HenjiFsApi {
-  readFile(path: string): Promise<Uint8Array>
+  readFile(path: string, options?: { maxBytes: number }): Promise<Uint8Array>
   readTextFile(path: string): Promise<string>
   writeFile(path: string, data: Uint8Array, options?: { exclusive?: boolean; position?: number }): Promise<void>
   writeTextFile(path: string, data: string): Promise<void>
@@ -267,7 +267,7 @@ export interface HenjiUpdaterApi {
   onEvent(handler: (event: HenjiUpdaterEvent) => void): () => void
 }
 
-export type HenjiAssetMediaType = 'image' | 'video' | 'audio'
+export type HenjiAssetMediaType = 'image' | 'video' | 'audio' | 'code'
 export interface HenjiAssetFileContent { sizeBytes: number; fileModifiedAt: number; contentIdentity: string }
 export type HenjiAssetSource = 'generated' | 'canvas' | 'camera-stage' | 'imported' | 'external' | 'video-edit'
 export interface HenjiAssetRecord { id: string; wasExisting?: boolean; mediaType: HenjiAssetMediaType; displayName: string; filePath: string; displayUrl: string; source: HenjiAssetSource; mimeType: string | null; sizeBytes: number | null; width: number | null; height: number | null; durationSeconds: number | null; thumbnailPath: string | null; thumbnailUrl: string | null; inspectionStatus: 'pending' | 'ready' | 'missing' | 'failed'; inspectionError: string | null; fileModifiedAt: number | null; contentIdentity?: string | null; lastUsedAt: number | null; createdAt: number; updatedAt: number; tags: string[]; libraryIds: string[] }

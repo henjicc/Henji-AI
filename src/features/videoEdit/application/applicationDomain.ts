@@ -7,7 +7,7 @@ import { requireVideoEditInstance, saveVideoEdit, type VideoEditInstance } from 
 import { editVideoSequence, undoVideoEdit } from './videoEditService'
 import { splitVideoEditRef } from './videoEditReflection'
 import { splitVideoEditClip } from '@/core/videoEdit/document'
-import { VIDEO_EDIT_APPLICATION_CAPABILITIES, collectVideoEditOutputCapability } from '@/core/application-control/domains/videoEdit/videoEditApplicationCapabilities'
+import { VIDEO_EDIT_APPLICATION_CAPABILITIES, collectVideoEditOutputCapability, collectVideoEditCodeAssetCapability } from '@/core/application-control/domains/videoEdit/videoEditApplicationCapabilities'
 import { exportVideoEdit, cancelVideoEditExport, videoEditExportTask } from './videoEditExport'
 import { getPlatform } from '@/platform/runtime'
 import { VideoEditSourceExecutor } from './videoEditSourceExecutor'
@@ -15,6 +15,8 @@ import { importVideoEditSources } from './videoEditMedia'
 import { exportVideoEditSubtitles } from './videoEditTimedContent'
 import { collectVideoEditOutput } from './videoEditOutputs'
 import { captureVideoEditProgramFrame } from './videoEditProgramCapture'
+import { collectVideoEditCodeAsset, importVideoEditCodeAsset, type VideoEditCodeAssetTarget } from './videoEditCodeAssets'
+import { assetApplicationService } from '@/features/assets/application/assetApplicationService'
 
 const persistenceOwners = new WeakMap<VideoEditInstance, ApplicationPersistenceParticipant>()
 
@@ -27,6 +29,25 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
   },
   registerCapabilities(registrar) {
     for (const definition of VIDEO_EDIT_APPLICATION_CAPABILITIES) registrar.registerHandler(definition.id, async (raw, context) => {
+      if (definition.id === collectVideoEditCodeAssetCapability.id) {
+        const input = collectVideoEditCodeAssetCapability.inputSchema.parse(raw)
+        const ref = splitVideoEditRef(input.targetRef)
+        if (ref.projectId !== input.projectRef.id) throw new Error('代码素材目标必须属于明确的原工程。')
+        const owner = requireVideoEditInstance(ref.projectId)
+        let target: VideoEditCodeAssetTarget
+        if (input.targetRef.kind === 'video_edit.item') target = { kind: 'item', itemId: ref.childId }
+        else if (input.targetRef.kind === 'video_edit.code_material') target = { kind: 'definition', definitionId: ref.childId }
+        else {
+          const sequence = owner.document.sequences.find(sequence => sequence.clips.some(clip => input.targetRef.kind === 'video_edit.clip' ? clip.id === ref.childId : clip.effects?.some(effect => effect.id === ref.childId)))
+          const clip = sequence?.clips.find(clip => input.targetRef.kind === 'video_edit.clip' ? clip.id === ref.childId : clip.effects?.some(effect => effect.id === ref.childId))
+          if (!sequence || !clip) throw new Error('原代码片段或效果已不存在。')
+          target = { kind: 'clip', sequenceId: sequence.id, clipId: clip.id, ...(input.targetRef.kind === 'video_edit.effect' ? { effectId: ref.childId } : {}) }
+        }
+        const asset = await collectVideoEditCodeAsset(ref.projectId, target, input.libraryRef ? { libraryId: input.libraryRef.id } : {}, context.signal)
+        if (!asset) throw new Error('用户取消代码素材保存，没有收录资产。')
+        const resultRef = { kind: 'asset' as const, id: asset.id }
+        return { resultRef, projectRef: input.projectRef, message: '可编辑代码素材已加入资产库，可在另一剪辑工程引用并重新调参。', verification: { verified: true, target: resultRef, condition: '正式资产检查已核对代码清单的固定路径、结构与内容身份。' } }
+      }
       if (definition.id === collectVideoEditOutputCapability.id) {
         const input = collectVideoEditOutputCapability.inputSchema.parse(raw)
         const task = input.kind === 'export' ? videoEditExportTask(input.projectRef.id) : undefined
@@ -57,7 +78,21 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
         }
         case 'import_video_edit_asset': {
           if (!input.assetRef) throw new Error('请提供素材库 assetRef。')
-          await importVideoEditSources(id, [{ assetId: input.assetRef.id }]); await saveVideoEdit(id); break
+          const importBaseline = owner.document
+          const asset = await assetApplicationService.inspect(input.assetRef.id)
+          context.signal?.throwIfAborted()
+          if (requireVideoEditInstance(id) !== owner || owner.document !== importBaseline) throw new Error('原工程已关闭或导入期间已有修改，请重新引用素材。')
+          if (asset.mediaType === 'code') {
+            let filterTarget: { sequenceId: string; clipId: string } | undefined
+            if (input.clipRef) {
+              const ref = splitVideoEditRef({ kind: 'video_edit.clip', id: input.clipRef.id })
+              const sequence = owner.document.sequences.find(sequence => sequence.clips.some(clip => clip.id === ref.childId))
+              if (ref.projectId !== id || !sequence) throw new Error('代码效果目标必须属于原工程。')
+              filterTarget = { sequenceId: sequence.id, clipId: ref.childId }
+            }
+            await importVideoEditCodeAsset(id, asset.id, { filterTarget }, context.signal)
+          } else await importVideoEditSources(id, [{ assetId: asset.id }], undefined, context.signal)
+          await saveVideoEdit(id); break
         }
         case 'export_video_edit': await exportVideoEdit(id, undefined, true, context.signal); break
         case 'cancel_video_edit_export': cancelVideoEditExport(id); break

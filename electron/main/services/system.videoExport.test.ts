@@ -4,7 +4,7 @@ import path from 'node:path'
 import { afterEach, expect, it, vi } from 'vitest'
 vi.mock('electron', () => ({ app: {}, dialog: {}, shell: {} }))
 vi.mock('./logging', () => ({ createMainLogger: () => ({ warn: vi.fn(), error: vi.fn(), info: vi.fn() }) }))
-import { writeFileBytes, writeTextFile } from './system'
+import { readFileBytes, writeFileBytes, writeTextFile } from './system'
 const directories: string[] = []
 afterEach(async () => { vi.restoreAllMocks(); for (const directory of directories.splice(0)) await fs.rm(directory, { recursive: true, force: true }) })
 it('流式导出按位置写入且不会截断前后内容或覆盖已有目标', async () => {
@@ -62,4 +62,25 @@ it('文件系统不支持排他发布时明确失败，只清理暂存且不降�
   vi.spyOn(fs, 'link').mockRejectedValueOnce(Object.assign(new Error('hard links unsupported'), { code: 'ENOTSUP' }))
   await expect(writeFileBytes(target, new Uint8Array([1]), { exclusive: true })).rejects.toThrow('hard links unsupported')
   expect(await fs.readdir(directory)).toEqual([])
+})
+
+it('有界文件读取完整保留允许字节，拒绝过大文件及非法预算，默认读取不受影响', async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'henji-code-read-')); directories.push(directory)
+  const target = path.join(directory, 'asset.henji-code'); await fs.writeFile(target, new Uint8Array([1, 2, 3]))
+  expect([...await readFileBytes(target, { maxBytes: 3 })]).toEqual([1, 2, 3])
+  expect([...await readFileBytes(target)]).toEqual([1, 2, 3])
+  for (const maxBytes of [0, -1, 1.5, 16 * 1024 * 1024 + 1, 2]) await expect(readFileBytes(target, { maxBytes })).rejects.toThrow()
+})
+it('有界读取期间文件膨胀仍拒绝，关闭原句柄且不截断原文件', async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'henji-code-read-grow-')); directories.push(directory)
+  const target = path.join(directory, 'asset.henji-code'); await fs.writeFile(target, new Uint8Array([1, 2]))
+  const open = fs.open.bind(fs); const closed = vi.fn()
+  vi.spyOn(fs, 'open').mockImplementationOnce(async (file, flags, mode) => {
+    const handle = await open(file, flags, mode); const stat = handle.stat.bind(handle); const close = handle.close.bind(handle)
+    vi.spyOn(handle, 'stat').mockImplementationOnce(async () => { const initial = await stat(); await fs.appendFile(target, new Uint8Array([3, 4, 5])); return initial })
+    vi.spyOn(handle, 'close').mockImplementationOnce(async () => { await close(); closed() })
+    return handle
+  })
+  await expect(readFileBytes(target, { maxBytes: 4 })).rejects.toThrow('超出预算')
+  expect(closed).toHaveBeenCalledOnce(); expect([...await fs.readFile(target)]).toEqual([1, 2, 3, 4, 5])
 })

@@ -41,6 +41,7 @@ it('已有缩略图直接命中缓存；音频不触发图像或视频解码', a
   mock.access.mockResolvedValue(undefined)
   expect(await ensureAssetThumbnail('D:/cached.mp4', 'video', 42)).toMatch(/\.webp$/)
   expect(await ensureAssetThumbnail('D:/audio.wav', 'audio', 42)).toBeNull()
+  expect(await ensureAssetThumbnail('D:/source.henji-code', 'code', 42)).toBeNull()
   expect(mock.video).not.toHaveBeenCalled(); expect(mock.image).not.toHaveBeenCalled(); expect(mock.writeFile).not.toHaveBeenCalled()
 })
 

@@ -5,6 +5,8 @@ import { readImageInfo } from '../image/ops'
 import { loadFfprobePath } from '../video/ffmpeg-loader'
 import { readVideoInfo } from '../video/ops'
 import type { AssetMediaType } from './types'
+import { CODE_ASSET_LIMITS, CODE_ASSET_MIME, decodeCodeAsset } from '../../../../src/core/videoEdit/codeAsset'
+import { readFileBytes } from '../system'
 
 export interface MediaInspectionResult {
   mimeType: string
@@ -45,7 +47,9 @@ export async function inspectMedia(filePath: string, mediaType: AssetMediaType):
   let width: number | null = null
   let height: number | null = null
   let durationSeconds: number | null = null
-  if (mediaType === 'image') {
+  if (mediaType === 'code') {
+    decodeCodeAsset(await readFileBytes(filePath, { maxBytes: CODE_ASSET_LIMITS.bytes }))
+  } else if (mediaType === 'image') {
     const info = await readImageInfo(filePath)
     width = info.width
     height = info.height
@@ -57,5 +61,5 @@ export async function inspectMedia(filePath: string, mediaType: AssetMediaType):
   } else {
     durationSeconds = await readAudioDuration(filePath)
   }
-  return { mimeType: MIME_BY_EXTENSION[path.extname(filePath).toLowerCase()] ?? 'application/octet-stream', sizeBytes: stat.size, width, height, durationSeconds, fileModifiedAt: stat.mtimeMs }
+  return { mimeType: mediaType === 'code' ? CODE_ASSET_MIME : MIME_BY_EXTENSION[path.extname(filePath).toLowerCase()] ?? 'application/octet-stream', sizeBytes: stat.size, width, height, durationSeconds, fileModifiedAt: stat.mtimeMs }
 }

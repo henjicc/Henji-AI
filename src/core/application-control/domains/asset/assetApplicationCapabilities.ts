@@ -27,7 +27,7 @@ const queryAssets = defineApplicationCapability({
   requiredScopes: [],
   producesRefs: ['asset'],
   inputSchema: z.object({
-    mediaType: z.enum(['image', 'video', 'audio']).optional(),
+    mediaType: z.enum(['image', 'video', 'audio', 'code']).optional(),
     libraryId: z.string().min(1).optional(),
     tag: z.string().min(1).optional(),
     keyword: z.string().max(200).optional(),

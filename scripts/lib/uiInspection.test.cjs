@@ -2,6 +2,14 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
 const test = require('node:test')
+
+test('可编辑代码资产场景只在显式写入验收下登记且可独立选择', () => {
+  const { createVideoEditCodeAssetsScene } = require('./uiInspectionSceneVideoEditCodeAssets.cjs')
+  const scene = createVideoEditCodeAssetsScene()
+  assert.equal(scene.id, 'video-edit-code-assets')
+  assert.equal(scene.writesUserData, true)
+  assert.equal(UI_INSPECTION_SCENES.filter(candidate => candidate.id === scene.id).length, 1)
+})
 const { attachUiInspectionCommon } = require('./uiInspectionSceneCommon.cjs')
 const { UI_AUDIT_RULES } = require('./uiAuditDom.cjs')
 const {

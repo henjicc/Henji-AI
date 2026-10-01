@@ -4,7 +4,7 @@ import { createApplicationHarness } from '@/tests/applicationHarness'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { getPlatform } from '@/platform/runtime'
 import { createVideoEditProject, closeVideoEditProject, listVideoEditInstances, openVideoEditProject, saveVideoEdit, undoVideoEdit, editVideoProject, getActiveVideoEditSequence, appendVideoEditMedia } from './videoEditService'
-import { createVideoEditCodeItems, createVideoEditCodeMaterials, createVideoEditCodeVersions, createVideoEditFilterMaterials } from './videoEditCodeService'
+import { createVideoEditCodeItems, createVideoEditCodeMaterials, createVideoEditCodeVersions, createVideoEditFilterMaterials, createVideoEditCodeAssetInstance } from './videoEditCodeService'
 import { appendVideoEditItems, createVideoEditGraphicItem, createVideoEditAdjustmentItem } from './videoEditProjectItems'
 import { readVideoEditCodeMetadata } from './videoEditCodeState'
 import { VideoEditCollectionExecutor } from './videoEditExecutors'
@@ -19,6 +19,12 @@ import { createVideoEditEffect, updateVideoEditEffect, reorderVideoEditEffects, 
 import { readVideoEditCodeEditor } from './videoEditCodeParameters'
 import { videoEditGraphicObjectId } from './videoEditCompositeEntities'
 import type { VideoEditComposition } from '@/core/videoEdit/document'
+import type { CodeAsset } from '@/core/videoEdit/codeAsset'
+import { decodeCodeAsset, encodeCodeAsset } from '@/core/videoEdit/codeAsset'
+import { collectVideoEditCodeAsset, importVideoEditCodeAsset } from './videoEditCodeAssets'
+import { assetApplicationService } from '@/features/assets/application/assetApplicationService'
+import type { AssetRecord } from '@/platform/contracts/assetLibrary'
+import * as mediaService from './videoEditMedia'
 
 const boundary = vi.hoisted(() => ({ compileGate: undefined as Promise<void> | undefined, trialGate: undefined as Promise<void> | undefined, compileCalls: 0, trialCalls: 0, failTrial: false, proveFilters: false, filterProofs: 0, activeRenderers: 0, disposedCompilers: 0, dimensions: [] as number[][], presentedFrames: [] as number[] }))
 // Only thread/pixel boundaries are replaced. AST language checks, domain
@@ -57,6 +63,23 @@ vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: cla
 const source = `export default {apiVersion:1,name:"原创移动圆",kind:"generator",mode:"dynamic",width:3840,height:2160,durationSeconds:4,seed:7,parameters:{amount:{type:"number",title:"透明度",default:.5,min:0,max:1,step:.01,animatable:true}},render(ctx){return [ellipse({x:100+ctx.time*20,y:100,width:500,height:500,fill:[0,1,1,ctx.params.amount]})];}}`
 const files = new Map<string, string>()
 const filterSource = 'export default {apiVersion:1,name:"原创滤镜",kind:"filter",mode:"static",width:3840,height:2160,durationSeconds:10,seed:1,parameters:{gain:{type:"number",title:"强度",default:.5,min:0,max:1,step:.01}},render(ctx){const c=sample(ctx.u,ctx.v);return rgba(c.r*ctx.params.gain,c.g,c.b,c.a);}}'
+const codeAssetFixture = (codeSource = source): CodeAsset => ({ format: 'henji-code-asset', version: 1, name: '可编辑资产', sourceVersion: { apiVersion: 1, languageVersion: codeSource.includes('type:"image"') ? 2 : 1, source: codeSource }, parameters: { amount: .7 }, curves: { amount: [{ id: 'asset-key', sourceInUs: 1_000_000, sourceRemainder: { numerator: 1, denominator: 3 }, value: .9, interpolation: 'ease' }] }, images: [] })
+const importPublication = (asset = codeAssetFixture()) => ({ asset, media: [], mediaIds: new Map<string, string>(), origin: { assetId: 'fixed-asset', contentIdentity: 'a'.repeat(64) }, beforePublish: async () => undefined })
+function collectionBoundary() {
+  const bytes = new Map<string, Uint8Array>(); const assets = new Map<string, AssetRecord>(); const platform = getPlatform()
+  vi.spyOn(platform.system.fs, 'exists').mockImplementation(async path => bytes.has(path))
+  vi.spyOn(platform.system.fs, 'writeFile').mockImplementation(async (path, value, options) => { if (options?.exclusive && bytes.has(path)) throw new Error('exists'); bytes.set(path, value) })
+  vi.spyOn(platform.system.fs, 'readFile').mockImplementation(async path => bytes.get(path)!)
+  vi.spyOn(platform.system.paths, 'dirname').mockResolvedValue('D:/')
+  vi.spyOn(platform.media, 'allowRoot').mockResolvedValue(undefined)
+  vi.spyOn(platform.assetLibrary, 'inspectFileContent').mockImplementation(async path => ({ sizeBytes: bytes.get(path)?.length ?? 10, fileModifiedAt: 20, contentIdentity: 'a'.repeat(64) }))
+  vi.spyOn(platform.assetLibrary, 'createAsset').mockImplementation(async input => {
+    const asset: AssetRecord = { id: `asset-${assets.size}`, mediaType: input.mediaType, filePath: input.filePath, displayName: input.displayName ?? '代码素材', displayUrl: 'henji-media://local/code', thumbnailUrl: null, thumbnailPath: null, source: input.source, mimeType: 'application/x-henji-code', sizeBytes: bytes.get(input.filePath)!.length, fileModifiedAt: 20, contentIdentity: 'a'.repeat(64), inspectionStatus: 'ready', inspectionError: null, width: null, height: null, durationSeconds: null, tags: [], libraryIds: [], createdAt: 1, updatedAt: 2, lastUsedAt: null }
+    assets.set(asset.id, asset); return asset
+  })
+  vi.spyOn(platform.assetLibrary, 'inspectAsset').mockImplementation(async id => assets.get(id)!)
+  return { bytes, platform }
+}
 it('公共图形效果转场实体原子增改删、精确回执、锁定与保存重开均消费正式状态', async () => {
   const owner = (await createVideoEditProject())!; const id = owner.document.id; const seq = owner.activeSequenceId; const app = createApplicationHarness()
   const project = { kind: 'video_edit.project', id }; const sequenceRef = { kind: 'video_edit.sequence', id: `${id}:${seq}` }
@@ -557,4 +580,152 @@ it('批量候选绑定已有源码版本只检查选定原版本集合，不重�
   const candidate = await prepareVideoEditCodeCandidate({ projectId: id, sequenceId: owner.activeSequenceId, clipId: first.id, versionId: first.code!.versionId }, nextSource, 'matching')
   expect(candidate.clipCount).toBe(2); expect(candidate.versionId).toBe(newVersion); expect(boundary.trialCalls - count).toBe(5)
   disposeVideoEditCodeCandidate(candidate)
+})
+
+it('代码资产原始参数和有理源曲线一次发布、保存重开、单次撤销，固定源码不依赖源工程', async () => {
+  const owner = (await createVideoEditProject())!; const id = owner.document.id; const before = owner.past.length
+  const result = await createVideoEditCodeAssetInstance(id, importPublication())
+  expect(owner.past).toHaveLength(before + 1); expect(boundary.activeRenderers).toBe(0)
+  const code = owner.document.items.find(item => item.id === result.itemId)!.code!
+  expect(code.parameters).toEqual({ amount: .7 }); expect(code.curves).toEqual(codeAssetFixture().curves)
+  expect(owner.document.codeMaterials![0].versions[0].assetOrigin).toEqual(importPublication().origin)
+  await saveVideoEdit(id); const path = owner.path!; await closeVideoEditProject(id); const reopened = (await openVideoEditProject(path))!
+  expect(reopened.document.items[0].code).toEqual(code); expect(reopened.document.codeMaterials![0].versions[0].source).toBe(source)
+  const next = await createVideoEditCodeAssetInstance(id, importPublication())
+  expect(reopened.document.items).toHaveLength(2); undoVideoEdit(id)
+  expect(reopened.document.items.some(item => item.id === next.itemId)).toBe(false); expect(reopened.document.items[0].code).toEqual(code)
+})
+it('代码资产图片局部ID重映射和依赖媒体在同一次历史提交中发布', async () => {
+  const owner = (await createVideoEditProject())!; const id = owner.document.id
+  const imageSource = 'export default {apiVersion:1,name:"图片资产",kind:"generator",mode:"static",width:3840,height:2160,durationSeconds:4,seed:1,parameters:{logo:{type:"image",title:"徽标",default:null,animatable:false}},render(ctx){return [image({source:ctx.params.logo,x:0,y:0,width:100,height:100})];}}'
+  const publication = importPublication({ ...codeAssetFixture(imageSource), parameters: { logo: { kind: 'image', mediaId: 'old-image' } }, curves: undefined, images: [{ id: 'old-image', path: 'D:/original.png', content: { sizeBytes: 10, fileModifiedAt: 20, contentIdentity: 'b'.repeat(64) } }] })
+  const media = { id: 'new-image', kind: 'image' as const, name: '原图片', path: 'D:/original.png', width: 100, height: 100, durationSeconds: 0, assetContent: publication.asset.images[0].content, sourceRevision: 'fixed-source' }
+  const before = owner.past.length
+  await createVideoEditCodeAssetInstance(id, { ...publication, media: [media], mediaIds: new Map([['old-image', media.id]]) })
+  expect(owner.past).toHaveLength(before + 1); expect(owner.document.media).toEqual([media]); expect(owner.document.items[0].code!.parameters.logo).toEqual({ kind: 'image', mediaId: 'new-image' })
+  undoVideoEdit(id); expect(owner.document.media).toEqual([]); expect(owner.document.items).toEqual([]); expect(owner.document.codeMaterials ?? []).toEqual([])
+})
+it('代码资产不匹配语言、参数或图片映射均拒绝且不发布部分定义', async () => {
+  const owner = (await createVideoEditProject())!; const id = owner.document.id; const baseline = owner.document
+  for (const asset of [{ ...codeAssetFixture(), sourceVersion: { ...codeAssetFixture().sourceVersion, languageVersion: 2 as const } }, { ...codeAssetFixture(), parameters: { amount: 100 } }, { ...codeAssetFixture(), parameters: { amount: { kind: 'image' as const, mediaId: 'not-mapped' } } }]) {
+    await expect(createVideoEditCodeAssetInstance(id, importPublication(asset))).rejects.toThrow()
+    expect(owner.document).toBe(baseline); expect(owner.past).toHaveLength(0); expect(boundary.activeRenderers).toBe(0)
+  }
+})
+it('代码资产filter强制检查隐藏真实目标并保留参数，不制造项目项；动态源时长和锁定拒绝', async () => {
+  const owner = (await createVideoEditProject())!; const id = owner.document.id; const [item] = await createVideoEditCodeItems(id, [{ source }]); const [clipId] = appendVideoEditItems(id, [item], owner.activeSequenceId)
+  editVideoSequence(id, owner.activeSequenceId, sequence => ({ ...sequence, clips: sequence.clips.map(clip => ({ ...clip, opacity: 0 })), tracks: sequence.tracks.map(track => ({ ...track, enabled: false })) }))
+  const filterTarget = { sequenceId: owner.activeSequenceId, clipId }; const asset = { ...codeAssetFixture(filterSource), parameters: { gain: .8 }, curves: undefined }; const before = owner.past.length
+  boundary.proveFilters = true
+  await createVideoEditCodeAssetInstance(id, { ...importPublication(asset), filterTarget }, 'selected-bin-is-not-a-filter-location')
+  expect(boundary.filterProofs).toBeGreaterThan(0); expect(owner.past).toHaveLength(before + 1); expect(owner.document.items).toHaveLength(1)
+  const clip = getActiveVideoEditSequence(owner).clips[0]; expect(clip.opacity).toBe(0); expect(clip.effects![0].code.parameters.gain).toBe(.8)
+  const baseline = owner.document
+  await expect(createVideoEditCodeAssetInstance(id, { ...importPublication({ ...asset, sourceVersion: { ...asset.sourceVersion, source: filterSource.replace('mode:"static"', 'mode:"dynamic"').replace('durationSeconds:10', 'durationSeconds:1') } }), filterTarget })).rejects.toThrow()
+  expect(owner.document).toBe(baseline)
+  editVideoSequence(id, owner.activeSequenceId, sequence => ({ ...sequence, tracks: sequence.tracks.map(track => ({ ...track, locked: true })) }))
+  const locked = owner.document; await expect(createVideoEditCodeAssetInstance(id, { ...importPublication(asset), filterTarget })).rejects.toThrow('锁定'); expect(owner.document).toBe(locked)
+})
+it.each(['cancel', 'edit', 'identity'] as const)('代码资产最终%s检查不发布旧候选或泄漏资源', async action => {
+  const owner = (await createVideoEditProject())!; const id = owner.document.id; const baseline = owner.document; const controller = new AbortController()
+  await expect(createVideoEditCodeAssetInstance(id, { ...importPublication(), beforePublish: async () => {
+    if (action === 'cancel') controller.abort(new Error('已取消'))
+    if (action === 'edit') editVideoProject(id, document => ({ ...document, name: '后续手工修改' }))
+    if (action === 'identity') throw new Error('原文件身份已变')
+  } }, undefined, controller.signal)).rejects.toThrow()
+  expect(owner.document.items).toHaveLength(0); expect(owner.document.codeMaterials ?? []).toHaveLength(0); expect(boundary.activeRenderers).toBe(0)
+  if (action !== 'edit') { expect(owner.document).toBe(baseline); expect(owner.past).toHaveLength(0) } else expect(owner.document.name).toBe('后续手工修改')
+})
+it('代码资产未授权图片在任何媒体探测之前被拒绝，原目标零改动', async () => {
+  const owner = (await createVideoEditProject())!; const baseline = owner.document
+  const imageSource = 'export default {apiVersion:1,name:"图片资产",kind:"generator",mode:"static",width:3840,height:2160,durationSeconds:4,seed:1,parameters:{logo:{type:"image",title:"徽标",default:null,animatable:false}},render(ctx){return [image({source:ctx.params.logo,x:0,y:0,width:100,height:100})];}}'
+  const manifest = { ...codeAssetFixture(imageSource), parameters: { logo: { kind: 'image' as const, mediaId: 'original' } }, curves: undefined, images: [{ id: 'original', path: 'D:/unauthorized/original.png', content: { sizeBytes: 10, fileModifiedAt: 20, contentIdentity: 'b'.repeat(64) } }] }
+  const bytes = encodeCodeAsset(manifest)
+  vi.spyOn(assetApplicationService, 'inspect').mockResolvedValue({ id: 'code-asset', mediaType: 'code', filePath: 'D:/asset.henji-code', inspectionStatus: 'ready', sizeBytes: bytes.length, fileModifiedAt: 20, contentIdentity: 'a'.repeat(64) } as AssetRecord)
+  vi.spyOn(getPlatform().system.fs, 'readFile').mockResolvedValue(bytes)
+  vi.spyOn(getPlatform().assetLibrary, 'inspectFileContent').mockRejectedValue(new Error('未获得读取权限'))
+  const probe = vi.spyOn(mediaService, 'inspectVideoEditMedia'); const allow = vi.spyOn(getPlatform().media, 'allowRoot')
+  await expect(importVideoEditCodeAsset(owner.document.id, 'code-asset')).rejects.toThrow('读取权限')
+  expect(probe).not.toHaveBeenCalled(); expect(allow).not.toHaveBeenCalled(); expect(owner.document).toBe(baseline); expect(owner.past).toHaveLength(0)
+})
+
+it('代码资产收录失败保留清单；重试不再选路径、写文件、编译或生成历史，保存的是原参数与曲线', async () => {
+  const owner = (await createVideoEditProject())!; const id = owner.document.id
+  const created = await createVideoEditCodeAssetInstance(id, importPublication()); const baseline = owner.document; const history = owner.past.length
+  const { bytes, platform } = collectionBoundary(); const compiled = boundary.compileCalls; const rendered = boundary.trialCalls
+  vi.mocked(platform.system.dialog.save).mockClear()
+  vi.mocked(platform.system.dialog.save).mockResolvedValue('D:/original.henji-code')
+  vi.mocked(platform.assetLibrary.createAsset).mockRejectedValueOnce(new Error('暂不可收录'))
+  const target = { kind: 'item' as const, itemId: created.itemId! }
+  await expect(collectVideoEditCodeAsset(id, target)).rejects.toThrow('暂不可收录')
+  expect(bytes.has('D:/original.henji-code')).toBe(true)
+  const manifest = decodeCodeAsset(bytes.get('D:/original.henji-code')!)
+  expect(manifest.parameters.amount).toBe(.7); expect(manifest.curves).toEqual(codeAssetFixture().curves)
+  expect(manifest.sourceVersion).toEqual(codeAssetFixture().sourceVersion); expect('assetOrigin' in manifest.sourceVersion).toBe(false)
+  expect(await collectVideoEditCodeAsset(id, target)).toMatchObject({ mediaType: 'code', filePath: 'D:/original.henji-code', source: 'video-edit' })
+  expect(platform.system.fs.writeFile).toHaveBeenCalledOnce(); expect(platform.system.dialog.save).toHaveBeenCalledOnce()
+  expect(boundary.compileCalls).toBe(compiled); expect(boundary.trialCalls).toBe(rendered); expect(owner.document).toBe(baseline); expect(owner.past).toHaveLength(history)
+})
+
+it('公共收录引用确切附加效果，清单不包含选中片段的生成器；跨工程目标拒绝', async () => {
+  const owner = (await createVideoEditProject())!; const id = owner.document.id; const [item] = await createVideoEditCodeItems(id, [{ source }]); const [clipId] = appendVideoEditItems(id, [item], owner.activeSequenceId)
+  const asset = { ...codeAssetFixture(filterSource), parameters: { gain: .8 }, curves: undefined }
+  await createVideoEditCodeAssetInstance(id, { ...importPublication(asset), filterTarget: { sequenceId: owner.activeSequenceId, clipId } })
+  const effect = getActiveVideoEditSequence(owner).clips[0].effects![0]; const { bytes, platform } = collectionBoundary()
+  vi.mocked(platform.system.dialog.save).mockResolvedValue('D:/filter.henji-code')
+  const app = createApplicationHarness()
+  try {
+    const input = { projectRef: { kind: 'video_edit.project', id }, targetRef: { kind: 'video_edit.effect', id: `${id}:${effect.id}` } }
+    const result = await app.call('collect_video_edit_code_asset', input)
+    expect(result, JSON.stringify(result)).toMatchObject({ ok: true, data: { resultRef: { kind: 'asset' }, verification: { verified: true } } })
+    expect(decodeCodeAsset(bytes.get('D:/filter.henji-code')!)).toMatchObject({ sourceVersion: { source: filterSource }, parameters: { gain: .8 } })
+    expect((await app.call('collect_video_edit_code_asset', { ...input, projectRef: { kind: 'video_edit.project', id: 'other-project' } })).ok).toBe(false)
+    expect(platform.system.fs.writeFile).toHaveBeenCalledOnce()
+  } finally { app.dispose() }
+})
+
+it('代码清单选择路径期间工程修改或取消不写文件、不收录资产', async () => {
+  const owner = (await createVideoEditProject())!; const id = owner.document.id; const created = await createVideoEditCodeAssetInstance(id, importPublication())
+  const { platform } = collectionBoundary(); const target = { kind: 'item' as const, itemId: created.itemId! }
+  vi.mocked(platform.system.dialog.save).mockImplementationOnce(async () => { editVideoProject(id, document => ({ ...document, name: '保存期间的新名称' })); return 'D:/late.henji-code' })
+  await expect(collectVideoEditCodeAsset(id, target)).rejects.toThrow('已有修改')
+  vi.mocked(platform.system.dialog.save).mockResolvedValueOnce(null)
+  expect(await collectVideoEditCodeAsset(id, target)).toBeNull()
+  expect(platform.system.fs.writeFile).not.toHaveBeenCalled(); expect(platform.assetLibrary.createAsset).not.toHaveBeenCalled(); expect(owner.document.name).toBe('保存期间的新名称')
+})
+
+it.each([false, true])('旧无身份图片正式重探测：尺寸变化%s；同尺寸刷新原会话版本，保留正式资产绑定', async resized => {
+  const owner = (await createVideoEditProject())!; const id = owner.document.id
+  editVideoProject(id, document => ({ ...document, media: [{ id: 'existing-image', name: '原图片', kind: 'image', path: 'D:/original.png', width: 100, height: 100, durationSeconds: 0, sourceRevision: 'cached-original', assetId: 'current-real-asset' }] }))
+  const baseline = owner.document
+  const imageSource = 'export default {apiVersion:1,name:"图片资产",kind:"generator",mode:"static",width:3840,height:2160,durationSeconds:4,seed:1,parameters:{logo:{type:"image",title:"徽标",default:null,animatable:false}},render(ctx){return [image({source:ctx.params.logo,x:0,y:0,width:100,height:100})];}}'
+  const manifest: CodeAsset = { ...codeAssetFixture(imageSource), parameters: { logo: { kind: 'image', mediaId: 'local-image' } }, curves: undefined, images: [{ id: 'local-image', path: 'D:/original.png', assetId: 'deleted-source-asset', content: { sizeBytes: 10, fileModifiedAt: 20, contentIdentity: 'a'.repeat(64) } }] }
+  const { bytes } = collectionBoundary(); bytes.set('D:/source.henji-code', encodeCodeAsset(manifest))
+  vi.spyOn(assetApplicationService, 'inspect').mockResolvedValue({ id: 'code-asset', mediaType: 'code', filePath: 'D:/source.henji-code', inspectionStatus: 'ready', sizeBytes: bytes.get('D:/source.henji-code')!.length, fileModifiedAt: 20, contentIdentity: 'a'.repeat(64) } as AssetRecord)
+  const probe = vi.spyOn(mediaService, 'inspectVideoEditMedia').mockResolvedValue({ id: 'temporary-probe-id', name: '探测图', kind: 'image', path: 'D:/original.png', width: resized ? 200 : 100, height: 100, durationSeconds: 0 })
+  if (resized) { await expect(importVideoEditCodeAsset(id, 'code-asset')).rejects.toThrow('重新定位'); expect(owner.document).toBe(baseline) }
+  else {
+    await importVideoEditCodeAsset(id, 'code-asset')
+    expect(owner.document.media).toHaveLength(1)
+    expect(owner.document.media[0]).toMatchObject({ id: 'existing-image', assetId: 'current-real-asset', assetContent: manifest.images[0].content })
+    expect(owner.document.media[0].sourceRevision).not.toBe('cached-original')
+    expect(owner.document.items[0].code!.parameters.logo).toEqual({ kind: 'image', mediaId: 'existing-image' })
+  }
+  expect(probe).toHaveBeenCalledOnce(); expect(boundary.activeRenderers).toBe(0)
+})
+
+it('真正新原图片依赖经正式导入 facade 固定身份、保存重开与一次撤销，不伪造库记录', async () => {
+  const owner = (await createVideoEditProject())!; const id = owner.document.id
+  const imageSource = 'export default {apiVersion:1,name:"图片资产",kind:"generator",mode:"static",width:3840,height:2160,durationSeconds:4,seed:1,parameters:{logo:{type:"image",title:"徽标",default:null,animatable:false}},render(ctx){return [image({source:ctx.params.logo,x:0,y:0,width:100,height:100})];}}'
+  const manifest: CodeAsset = { ...codeAssetFixture(imageSource), parameters: { logo: { kind: 'image', mediaId: 'local-image' } }, curves: undefined, images: [{ id: 'local-image', path: 'D:/original.png', assetId: 'deleted-source-asset', content: { sizeBytes: 10, fileModifiedAt: 20, contentIdentity: 'a'.repeat(64) } }] }
+  const { bytes } = collectionBoundary(); bytes.set('D:/source.henji-code', encodeCodeAsset(manifest))
+  vi.spyOn(assetApplicationService, 'inspect').mockResolvedValue({ id: 'code-asset', mediaType: 'code', filePath: 'D:/source.henji-code', inspectionStatus: 'ready', sizeBytes: bytes.get('D:/source.henji-code')!.length, fileModifiedAt: 20, contentIdentity: 'a'.repeat(64) } as AssetRecord)
+  vi.spyOn(mediaService, 'inspectVideoEditMedia').mockResolvedValue({ id: 'fresh-image', name: '原图', kind: 'image', path: 'D:/original.png', width: 100, height: 100, durationSeconds: 0 })
+  await importVideoEditCodeAsset(id, 'code-asset')
+  expect(owner.past).toHaveLength(1); expect(owner.document.media[0]).toMatchObject({ id: 'fresh-image', assetContent: manifest.images[0].content }); expect(owner.document.media[0].assetId).toBeUndefined()
+  expect(owner.document.items[0].code!.parameters.logo).toEqual({ kind: 'image', mediaId: 'fresh-image' })
+  undoVideoEdit(id); expect(owner.document.media).toHaveLength(0); expect(owner.document.items).toHaveLength(0)
+  await importVideoEditCodeAsset(id, 'code-asset'); await saveVideoEdit(id); const path = owner.path!; await closeVideoEditProject(id)
+  const reopened = (await openVideoEditProject(path))!
+  expect(reopened.document.media[0].assetContent).toEqual(manifest.images[0].content); expect(reopened.document.media[0].assetId).toBeUndefined(); expect(reopened.document.items[0].code!.parameters.logo).toEqual({ kind: 'image', mediaId: 'fresh-image' })
 })

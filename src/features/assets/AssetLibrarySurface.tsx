@@ -71,6 +71,7 @@ export const AssetLibrarySurface: React.FC<Props> = ({ mode, active = true, onCl
   const { width: sidebarWidth, startResize: startSidebarResize, resizeByKeyboard: resizeSidebarByKeyboard } = useAssetSidebarResize()
   const { menuVisible: blankMenuVisible, menuPosition: blankMenuPosition, menuItems: blankMenuItems, showMenu: showBlankMenu, hideMenu: hideBlankMenu } = useContextMenu()
   const workspaceBatchMode = mode === 'workspace' && batchMode
+  useEffect(() => { if (!active) setPreviewAsset(null) }, [active])
   const selectedBatchAssets = page.items.filter((asset) => batchSelectedIds.includes(asset.id))
 
   const refreshLibraries = useCallback(async (): Promise<void> => {
@@ -228,7 +229,7 @@ export const AssetLibrarySurface: React.FC<Props> = ({ mode, active = true, onCl
           activeMediaType={mediaType}
           activeSort={sort}
           labels={{
-            all: t('assetLibrary.all'), recent: t('assetLibrary.recent'), image: t('assetLibrary.image'), video: t('assetLibrary.video'), audio: t('assetLibrary.audio'),
+            all: t('assetLibrary.all'), recent: t('assetLibrary.recent'), image: t('assetLibrary.image'), video: t('assetLibrary.video'), audio: t('assetLibrary.audio'), code: t('assetLibrary.code'),
             categories: t('assetLibrary.categories'), create: t('assetLibrary.createLibrary'), placeholder: t('assetLibrary.libraryName'), confirmDelete: t('assetLibrary.confirmDeleteLibrary'),
           }}
           onShowAll={() => selectSystemView(null, 'created')}
@@ -268,7 +269,7 @@ export const AssetLibrarySurface: React.FC<Props> = ({ mode, active = true, onCl
             <>
               {mode === 'workspace' && <span className={`hidden shrink-0 min-[1200px]:inline ${UI_TEXT_META_CLASS}`}>{t('assetLibrary.count', { count: page.total })}</span>}
               <div className="relative min-w-[150px] flex-1"><Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" /><UiInput className="!h-10 pl-9" value={keyword} onChange={(event) => setKeyword(event.target.value)} placeholder={t('assetLibrary.search')} /></div>
-              <Dropdown<'all' | AssetMediaType> value={mediaType ?? 'all'} options={[{ value: 'all', label: t('assetLibrary.allTypes') }, { value: 'image', label: t('assetLibrary.image') }, { value: 'video', label: t('assetLibrary.video') }, { value: 'audio', label: t('assetLibrary.audio') }]} onSelect={(value) => setMediaType(value === 'all' ? null : value)} className="shrink-0" buttonClassName="!h-10 !px-3" minWidthStrategy="options" panelWidthStrategy="button" />
+              <Dropdown<'all' | AssetMediaType> value={mediaType ?? 'all'} options={[{ value: 'all', label: t('assetLibrary.allTypes') }, { value: 'image', label: t('assetLibrary.image') }, { value: 'video', label: t('assetLibrary.video') }, { value: 'audio', label: t('assetLibrary.audio') }, { value: 'code', label: t('assetLibrary.code') }]} onSelect={(value) => setMediaType(value === 'all' ? null : value)} className="shrink-0" buttonClassName="!h-10 !px-3" minWidthStrategy="options" panelWidthStrategy="button" />
               <Dropdown<'created' | 'recent'> value={sort} options={[{ value: 'created', label: t('assetLibrary.newest') }, { value: 'recent', label: t('assetLibrary.recent') }]} onSelect={setSort} className="shrink-0" buttonClassName="!h-10 !px-3" minWidthStrategy="options" panelWidthStrategy="button" />
               <Dropdown<string> value={selectedTag ?? ''} options={[{ value: '', label: t('assetLibrary.allTags') }, ...availableTags.map((tag) => ({ value: tag, label: tag }))]} onSelect={(value) => setSelectedTag(value || null)} className="shrink-0" buttonClassName="!h-10 !px-3" minWidthStrategy="options" panelWidthStrategy="button" />
               {mode === 'floating' && <UiButton variant="primary" className="!h-10 shrink-0 px-4" onClick={onOpenWorkspace}>{t('assetLibrary.manage')}</UiButton>}
@@ -355,7 +356,7 @@ export const AssetLibrarySurface: React.FC<Props> = ({ mode, active = true, onCl
           />
         )}
       </div>
-      <AssetPreviewOverlay asset={previewAsset} onClose={() => setPreviewAsset(null)} />
+      <AssetPreviewOverlay asset={active ? previewAsset : null} onClose={() => setPreviewAsset(null)} />
       <ContextMenu owner="assets" items={blankMenuItems} position={blankMenuPosition} onClose={hideBlankMenu} visible={blankMenuVisible} />
       {menuState && <AssetCardMenu key={menuState.asset.id} asset={menuState.asset} anchor={menuState.anchor} libraries={libraries} availableTags={availableTags} onClose={() => setMenuState(null)} onToggleLibrary={async (nextLibraryId, included) => { await (included ? addAssetToLibrary(nextLibraryId, menuState.asset.id) : removeAssetFromLibrary(nextLibraryId, menuState.asset.id)); await loadAssets(1, true) }} onSetTags={async (tags) => { await setAssetTags(menuState.asset.id, tags); await refreshLibraries(); await loadAssets(1, true) }} onRename={async (name) => { await rename(menuState.asset, name) }} onDelete={async () => { const assetId = menuState.asset.id; await deleteAsset(assetId); if (selected?.id === assetId) setSelected(null); await loadAssets(1, true) }} onOpenBatchManagement={() => startBatchManagement([menuState.asset.id])} />}
     </div>

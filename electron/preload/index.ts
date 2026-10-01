@@ -255,7 +255,7 @@ async function waitForOptionalTerminalEvent(terminalEvent: Promise<void>): Promi
 }
 
 const fsApi: HenjiFsApi = {
-  readFile: (path) => nativeInvoke('fs:readFile', { path }),
+  readFile: (path, options) => nativeInvoke('fs:readFile', { path, ...(options ? { maxBytes: options.maxBytes } : {}) }),
   readTextFile: (path) => nativeInvoke('fs:readTextFile', { path }),
   writeFile: (path, data, options) => nativeInvoke('fs:writeFile', { path, data, exclusive: options?.exclusive, position: options?.position }),
   writeTextFile: (path, data) => nativeInvoke('fs:writeTextFile', { path, data }),

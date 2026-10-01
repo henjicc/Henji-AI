@@ -3,7 +3,7 @@ import { appendCodeMaterialVersion, makeCodeMaterialDefinition } from '@/core/vi
 import { validateCodeMaterialParameters } from '@/core/videoEdit/codeMaterial/parameters'
 import { createVideoEditSequence, videoEditComposition, videoEditDocumentSchema } from '@/core/videoEdit/document'
 import type { CodeMaterialMetadataReader } from '@/core/videoEdit/codeMaterialDocument'
-import type { VideoEditDocument, VideoEditItem, VideoEditComposition } from '@/core/videoEdit/document'
+import type { VideoEditDocument, VideoEditItem, VideoEditComposition, VideoEditMedia } from '@/core/videoEdit/document'
 import type { CodeMaterialDefinition, CodeMaterialInstance } from '@/core/videoEdit/codeMaterialPersistence'
 import type { CodeMaterialProgram } from '@/core/videoEdit/codeMaterial/contract'
 import { createVideoEditGraphic } from '@/core/videoEdit/graphics'
@@ -11,14 +11,26 @@ import { compileVideoEditCode, forgetVideoEditCodeMetadata, rememberVideoEditCod
 import { editVideoProject, requireVideoEditInstance, listVideoEditInstances, subscribeVideoEditDomain } from './videoEditService'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { readVideoEditCodeMetadata } from './videoEditCodeState'
-import { trialVideoEditCodeFrames } from './videoEditCodeTrial'
+import { trialVideoEditCodeFrames, videoEditCodeValidationFrames } from './videoEditCodeTrial'
+import { validateCodeMaterialDocument } from '@/core/videoEdit/codeMaterialDocument'
+import { codeMaterialInstanceSchema } from '@/core/videoEdit/codeMaterialPersistence'
+import { prepareCodeMaterialParameters } from '@/core/videoEdit/codeMaterialAnimation'
+import type { CodeAsset } from '@/core/videoEdit/codeAsset'
+import { assertVideoEditClipsEditable } from '@/core/videoEdit/lockedTracks'
 
 const logger = createLogger('features.videoEdit.code')
 export interface VideoEditCodeInput { source: string; name?: string; binId?: string }
 export interface VideoEditCodeVersionInput { source: string; definitionId: string }
 interface Candidate { definition: CodeMaterialDefinition; item: VideoEditItem; filter?: CodeMaterialInstance }
-function candidate(definition: CodeMaterialDefinition, program: CodeMaterialProgram, input: { name?: string; binId?: string }): Candidate {
-  const code = { definitionId: definition.id, versionId: definition.defaultVersionId, parameters: validateCodeMaterialParameters(program) }
+interface CodeAssetPublication {
+  asset: CodeAsset; media: VideoEditMedia[]; mediaIds: ReadonlyMap<string, string>; origin: { assetId: string; contentIdentity: string }
+  filterTarget?: { sequenceId: string; clipId: string }
+  afterImport?: (document: VideoEditDocument, itemIds: string[]) => VideoEditDocument
+  beforePublish(): Promise<void>
+}
+function candidate(definition: CodeMaterialDefinition, program: CodeMaterialProgram, input: { name?: string; binId?: string }, initial?: Pick<CodeMaterialInstance, 'parameters' | 'curves'>): Candidate {
+  const code = codeMaterialInstanceSchema.parse({ definitionId: definition.id, versionId: definition.defaultVersionId, parameters: validateCodeMaterialParameters(program, initial?.parameters), ...(initial?.curves ? { curves: initial.curves } : {}) })
+  prepareCodeMaterialParameters(program, code)
   const name = input.name ?? program.name
   if (program.kind === 'generator') return { definition, item: { id: crypto.randomUUID(), name, kind: 'code', ...(input.binId ? { binId: input.binId } : {}), code } }
   if (input.binId) throw new Error('滤镜从效果控件使用，不属于素材箱。')
@@ -29,10 +41,10 @@ function candidate(definition: CodeMaterialDefinition, program: CodeMaterialProg
 }
 /** Trial uses the same full-resolution source/compiler/GPU path as preview and
  * export. Its bounded temporary session is always released before publication. */
-function candidateFrames(candidates: Candidate[], read: CodeMaterialMetadataReader): Array<{ document: VideoEditComposition; frame: number }> {
+function candidateFrames(candidates: Candidate[], read: CodeMaterialMetadataReader, media: VideoEditMedia[] = [], endpoints = false): Array<{ document: VideoEditComposition; frame: number }> {
   const sequence = createVideoEditSequence('源码候选检查')
-  const document: VideoEditDocument = { format: 'henji-video-project', version: 2, id: crypto.randomUUID(), name: sequence.name, revision: 0, media: [], bins: [], items: candidates.map(candidate => ({ ...candidate.item, binId: undefined })), codeMaterials: candidates.map(candidate => candidate.definition), sequences: [sequence] }
-  const frames = candidates.map(candidate => {
+  const document: VideoEditDocument = { format: 'henji-video-project', version: 2, id: crypto.randomUUID(), name: sequence.name, revision: 0, media, bins: [], items: candidates.map(candidate => ({ ...candidate.item, binId: undefined })), codeMaterials: candidates.map(candidate => candidate.definition), sequences: [sequence] }
+  const frames = candidates.flatMap(candidate => {
     const program = read(candidate.filter ?? candidate.item.code!)
     sequence.width = program.width; sequence.height = program.height
     const clip = makeVideoEditItemClip(document, candidate.item.id, sequence.id, { frame: 0 }, read)
@@ -42,13 +54,14 @@ function candidateFrames(candidates: Candidate[], read: CodeMaterialMetadataRead
     }
     sequence.clips = [clip]
     document.revision++
-    return { document: videoEditComposition(structuredClone(document), sequence.id), frame: 0 }
+    const composition = videoEditComposition(structuredClone(document), sequence.id)
+    return endpoints && clip.duration > 1 ? [{ document: composition, frame: 0 }, { document: composition, frame: clip.duration - 1 }] : [{ document: composition, frame: 0 }]
   })
   return frames
 }
 /** Creation is an algorithmic collection operation: raw source is checked,
  * trial-rendered, then becomes one atomic domain edit. It never executes JS. */
-async function createCheckedMaterials(projectId: string, inputs: VideoEditCodeInput[], expectedKind: 'generator' | 'filter' | undefined, signal?: AbortSignal): Promise<Candidate[]> {
+async function createCheckedMaterials(projectId: string, inputs: VideoEditCodeInput[], expectedKind: 'generator' | 'filter' | undefined, signal?: AbortSignal, publication?: CodeAssetPublication): Promise<Candidate[]> {
   signal?.throwIfAborted()
   if (!inputs.length || inputs.length > 32) throw new Error('每次创建1到32个代码素材。')
   const owner = requireVideoEditInstance(projectId)
@@ -70,17 +83,49 @@ async function createCheckedMaterials(projectId: string, inputs: VideoEditCodeIn
       if (expectedKind === 'filter' && program.kind !== 'filter') throw new Error('效果源码需要声明为输入滤镜。')
       if (requireVideoEditInstance(projectId) !== owner) throw new Error('原工程已关闭，源码检查不会写入新会话。')
       if (input.name !== undefined) definition.name = input.name
-      candidates.push(candidate(definition, program, input))
+      let initial: Pick<CodeMaterialInstance, 'parameters' | 'curves'> | undefined
+      if (publication) {
+        if (inputs.length !== 1 || program.apiVersion !== publication.asset.sourceVersion.apiVersion || program.languageVersion !== publication.asset.sourceVersion.languageVersion) throw new Error('代码资产固定源码与语言版本不一致。')
+        definition.versions[0].assetOrigin = publication.origin
+        const parameters = structuredClone(publication.asset.parameters)
+        for (const [key, value] of Object.entries(parameters)) if (value && typeof value === 'object' && !Array.isArray(value) && value.kind === 'image') {
+          const mediaId = publication.mediaIds.get(value.mediaId)
+          if (!mediaId) throw new Error('代码资产图片依赖未完成映射。')
+          parameters[key] = { kind: 'image', mediaId }
+        }
+        initial = { parameters, ...(publication.asset.curves ? { curves: structuredClone(publication.asset.curves) } : {}) }
+      }
+      candidates.push(candidate(definition, program, publication && program.kind === 'filter' ? { name: input.name } : input, initial))
       rememberVideoEditCodeMetadata(owner, definition.id, definition.versions[0], program)
     }
     if (owner.document !== baseline) throw new Error('源码检查期间工程已修改，请重新检查候选。')
     const items = candidates.filter(candidate => !candidate.filter).map(candidate => candidate.item)
-    const candidateDocument = videoEditDocumentSchema.parse({ ...baseline, codeMaterials: [...(baseline.codeMaterials ?? []), ...candidates.map(candidate => candidate.definition)], items: [...baseline.items, ...items] })
-    await trialVideoEditCodeFrames(candidateFrames(candidates, readVideoEditCodeMetadata(owner, candidateDocument)), controller.signal)
+    let candidateDocument = videoEditDocumentSchema.parse({ ...baseline, media: [...baseline.media.map(media => publication?.media.find(incoming => incoming.id === media.id) ?? media), ...(publication?.media ?? []).filter(media => !baseline.media.some(existing => existing.id === media.id))], codeMaterials: [...(baseline.codeMaterials ?? []), ...candidates.map(candidate => candidate.definition)], items: [...baseline.items, ...items] })
+    const filter = candidates.find(candidate => candidate.filter)
+    let filterTrial: Array<{ document: VideoEditComposition; frame: number }> | undefined
+    if (publication && filter) {
+      const target = publication.filterTarget
+      if (!target) throw new Error('请选择要应用此代码效果的片段。')
+      const sequence = candidateDocument.sequences.find(sequence => sequence.id === target.sequenceId)
+      const clip = sequence?.clips.find(clip => clip.id === target.clipId)
+      if (!sequence || !clip || clip.kind === 'audio') throw new Error('代码效果需要原序列中的画面片段。')
+      assertVideoEditClipsEditable(videoEditComposition(baseline, sequence.id), [clip.id])
+      const effect = { id: crypto.randomUUID(), name: filter.definition.name, enabled: true, amount: 1, code: filter.filter! }
+      clip.effects = [...(clip.effects ?? []), effect]
+      validateCodeMaterialDocument(candidateDocument, readVideoEditCodeMetadata(owner, candidateDocument))
+      filterTrial = videoEditCodeValidationFrames(candidateDocument, [{ ...target, effectIds: [effect.id] }], { sequenceId: sequence.id, frame: Math.max(clip.start, Math.min(clip.start + clip.duration - 1, owner.frame)) })
+    }
+    if (publication?.afterImport) candidateDocument = videoEditDocumentSchema.parse(publication.afterImport(candidateDocument, items.map(item => item.id)))
+    const read = readVideoEditCodeMetadata(owner, candidateDocument)
+    validateCodeMaterialDocument(candidateDocument, read)
+    const placements = publication ? candidateDocument.sequences.flatMap(sequence => sequence.clips.filter(clip => items.some(item => item.id === clip.itemId)).map(clip => ({ sequenceId: sequence.id, clipId: clip.id }))) : []
+    const frames = placements.length ? videoEditCodeValidationFrames(candidateDocument, placements, { sequenceId: placements[0].sequenceId, frame: candidateDocument.sequences.find(sequence => sequence.id === placements[0].sequenceId)!.clips.find(clip => clip.id === placements[0].clipId)!.start }) : candidateFrames(candidates, read, candidateDocument.media, Boolean(publication))
+    await trialVideoEditCodeFrames(filterTrial ?? frames, controller.signal)
+    if (publication) await publication.beforePublish()
     controller.signal.throwIfAborted()
     if (requireVideoEditInstance(projectId) !== owner) throw new Error('原工程已关闭，候选不会写入新会话。')
     if (owner.document !== baseline) throw new Error('试渲染期间工程已修改，请重新检查候选。')
-    editVideoProject(projectId, document => ({ ...document, codeMaterials: [...(document.codeMaterials ?? []), ...candidates.map(candidate => candidate.definition)], items: [...document.items, ...items] }))
+    editVideoProject(projectId, () => candidateDocument)
     logger.info('代码素材已创建', { event: 'video_edit.code.create.completed', context: { projectId, count: candidates.length } })
     return candidates
   } catch (error) {
@@ -99,6 +144,12 @@ export async function createVideoEditCodeMaterials(projectId: string, inputs: Vi
 /** Effect authoring refuses a generator before any project publication. */
 export async function createVideoEditFilterMaterials(projectId: string, inputs: VideoEditCodeInput[], signal?: AbortSignal): Promise<string[]> {
   return (await createCheckedMaterials(projectId, inputs, 'filter', signal)).map(candidate => candidate.definition.id)
+}
+
+/** Asset imports reuse the source creation transaction with a complete instance. */
+export async function createVideoEditCodeAssetInstance(projectId: string, publication: CodeAssetPublication, binId?: string, signal?: AbortSignal): Promise<{ definitionId: string; itemId?: string }> {
+  const created = (await createCheckedMaterials(projectId, [{ source: publication.asset.sourceVersion.source, name: publication.asset.name, ...(binId ? { binId } : {}) }], undefined, signal, publication))[0]
+  return { definitionId: created.definition.id, ...(!created.filter ? { itemId: created.item.id } : {}) }
 }
 
 /** Append checked immutable versions. Existing defaults, items and clips keep

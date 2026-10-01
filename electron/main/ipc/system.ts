@@ -29,6 +29,13 @@ interface PathPayload {
   path: string
 }
 
+interface ReadFilePayload extends PathPayload { maxBytes?: number }
+function parseReadFilePayload(input: unknown): ReadFilePayload {
+  const record = parseRecord(input)
+  if (record.maxBytes !== undefined && (!Number.isSafeInteger(record.maxBytes) || Number(record.maxBytes) < 1 || Number(record.maxBytes) > 16 * 1024 * 1024)) throw new Error('maxBytes必须为1至16MiB的整数。')
+  return { ...parsePathPayload(input), ...(record.maxBytes !== undefined ? { maxBytes: Number(record.maxBytes) } : {}) }
+}
+
 interface WriteFilePayload extends PathPayload {
   data: Uint8Array
   exclusive?: boolean
@@ -205,7 +212,7 @@ function parseNativeFetchRequest(input: unknown): NativeFetchRequestDto {
 export function registerSystemIpc(): void {
   registerIpcHandler<WriteFilePayload, void>('fs:writeFile', parseWriteFilePayload, ({ path, data, exclusive, position }) => writeFileBytes(path, data, { exclusive, position }))
   registerIpcHandler<WriteTextFilePayload, void>('fs:writeTextFile', parseWriteTextFilePayload, ({ path, data }) => writeTextFile(path, data))
-  registerIpcHandler<PathPayload, Uint8Array>('fs:readFile', parsePathPayload, ({ path }) => readFileBytes(path))
+  registerIpcHandler<ReadFilePayload, Uint8Array>('fs:readFile', parseReadFilePayload, ({ path, maxBytes }) => readFileBytes(path, maxBytes === undefined ? undefined : { maxBytes }))
   registerIpcHandler<PathPayload, string>('fs:readTextFile', parsePathPayload, ({ path }) => readTextFile(path))
   registerIpcHandler<PathPayload, boolean>('fs:exists', parsePathPayload, ({ path }) => pathExists(path))
   registerIpcHandler<MkdirPayload, void>('fs:mkdir', parseMkdirPayload, ({ path, recursive }) => makeDir(path, recursive))

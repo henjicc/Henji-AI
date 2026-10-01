@@ -6,7 +6,7 @@ import { getHostScopeRevisions } from '@/features/application-control/hostContex
 import { configureAssetMutationDependencies } from '@/features/assets/application/applicationDomain'
 
 interface AssetQueryInput {
-  mediaType?: 'image' | 'video' | 'audio'
+  mediaType?: 'image' | 'video' | 'audio' | 'code'
   libraryId?: string
   tag?: string
   keyword?: string

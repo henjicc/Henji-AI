@@ -6,7 +6,7 @@ import { assertTrustedApplicationSender } from './application-control'
 
 const logger = createMainLogger('main.asset_library')
 
-const MEDIA_TYPES = new Set<AssetMediaType>(['image', 'video', 'audio'])
+const MEDIA_TYPES = new Set<AssetMediaType>(['image', 'video', 'audio', 'code'])
 const SOURCES = new Set<AssetSource>(['generated', 'canvas', 'camera-stage', 'imported', 'external', 'video-edit'])
 function requiredString(record: Record<string, unknown>, key: string): string { const value = record[key]; if (typeof value !== 'string' || !value.trim()) throw new Error(`${key} must be a non-empty string`); return value }
 function parseCreate(input: unknown): CreateAssetRequest { const record = parseRecord(input); const mediaType = requiredString(record, 'mediaType') as AssetMediaType; const source = requiredString(record, 'source') as AssetSource; if (!MEDIA_TYPES.has(mediaType) || !SOURCES.has(source)) throw new Error('Invalid asset type or source'); const displayName = typeof record.displayName === 'string' ? record.displayName : undefined; const libraryIds = Array.isArray(record.libraryIds) ? record.libraryIds.map((value) => { if (typeof value !== 'string') throw new Error('libraryIds must contain strings'); return value }) : undefined; return { filePath: requiredString(record, 'filePath'), mediaType, source, displayName, libraryIds } }

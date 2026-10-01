@@ -23,12 +23,23 @@ export const collectVideoEditOutputCapability = defineApplicationCapability({
   verificationContract: { kind: 'effect_receipt', requireEffects: true, requireVerifiedEffects: true },
   resolveObservedEffects: (_input: z.infer<typeof collectInput>, result: z.infer<typeof collectOutput>) => [{ effect: 'execute', entityTypes: ['asset'], propertyIds: [], targetRefs: [result.resultRef], count: 1, verified: result.verification.verified, evidence: result.verification.verified ? [result.verification.condition] : [] }],
 })
+export const collectVideoEditCodeAssetCapability = defineApplicationCapability({
+  id: 'collect_video_edit_code_asset', title: '收录可编辑代码素材', description: '将明确代码项目项、代码片段或附加效果的固定源码、原始参数、关键帧和原图片依赖保存为可编辑资产，可在另一剪辑工程调参。失败保留已完成文件，重试只收录。',
+  version: 1, domain: 'video_edit', aliases: ['代码素材加入资产库'], readOnly: false, risk: 'R1', dataClasses: ['C1'], permission: 'assets:write', idempotent: true, destructive: false, timeoutMs: 60000, supportsPreview: false, supportsUndo: false,
+  requiredScopes: ['video_edit', 'assets'], acceptsRefs: ['video_edit.project', 'video_edit.item', 'video_edit.clip', 'video_edit.effect', 'video_edit.code_material', 'asset.library'], producesRefs: ['asset'],
+  inputSchema: z.object({ projectRef, targetRef: applicationRefSchema.extend({ kind: z.enum(['video_edit.item', 'video_edit.clip', 'video_edit.effect', 'video_edit.code_material']) }).strict(), libraryRef: libraryRef.optional() }).strict(), outputSchema: collectOutput,
+  concurrencyKey: 'video_edit_output', resolveConcurrencyKey: parsed => `video_edit:${parsed.projectRef.id}`,
+  resolveOperationTargets: parsed => [parsed.projectRef, parsed.targetRef, ...(parsed.libraryRef ? [parsed.libraryRef] : [])], resolveOperationWriteTargets: parsed => [parsed.libraryRef ?? parsed.projectRef],
+  control: capabilityControl('execute', ['asset'], { cancelable: true, revisionScopes: ['video_edit', 'assets'] }), summarize: result => result.message,
+  verificationContract: { kind: 'effect_receipt', requireEffects: true, requireVerifiedEffects: true },
+  resolveObservedEffects: (_input, result) => [{ effect: 'execute', entityTypes: ['asset'], propertyIds: [], targetRefs: [result.resultRef], count: 1, verified: result.verification.verified, evidence: result.verification.verified ? [result.verification.condition] : [] }],
+})
 export const VIDEO_EDIT_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinition[] = [...[
   ['save_video_edit', '保存剪辑工程', '将当前修改保存到用户为工程选择的本地文件。失败后只重试保存，不重复修改。'],
   ['undo_video_edit', '撤销剪辑修改', '撤销目标工程的一步手动或助手修改。'],
   ['redo_video_edit', '重做剪辑修改', '恢复目标工程刚撤销的一步修改。'],
   ['split_video_edit', '拆分剪辑片段', '在指定工程帧拆分片段，正确换算源时间并迁移后半段标注。'],
-  ['import_video_edit_asset', '引用素材库素材', '从现有素材库引用原文件到剪辑工程，不复制文件。'],
+  ['import_video_edit_asset', '引用素材库素材', '从现有素材库引用原媒体或可编辑代码到剪辑工程，不复制原文件。代码生成器保留参数、关键帧和原图片依赖；代码滤镜需要明确目标clipRef并应用到该原片段。'],
   ['export_video_edit', '导出剪辑成片或字幕', '将当前序列快照导出到用户通过本地对话框选择的新MP4（含音轨与烧录字幕），或SRT/WebVTT字幕文件。字幕文件写完即核实，视频须查询导出任务。'],
   ['query_video_edit_export', '查询剪辑导出', '查询目标工程导出进度和最终状态。'],
   ['cancel_video_edit_export', '取消剪辑导出', '取消目标工程正在进行的导出，清理未完成输出。'],
@@ -40,4 +51,4 @@ export const VIDEO_EDIT_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinitio
     entityTypes: ['video_edit.project'], propertyIds: [], targetRefs: [result.resultRef], count: 1,
     verified: result.verification.verified, evidence: result.verification.verified ? [result.verification.condition] : [],
   }],
-})), collectVideoEditOutputCapability]
+})), collectVideoEditOutputCapability, collectVideoEditCodeAssetCapability]

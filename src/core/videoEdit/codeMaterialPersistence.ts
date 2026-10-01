@@ -3,7 +3,7 @@ import { CODE_MATERIAL_LIMITS } from './codeMaterial/contract'
 import { codeMaterialCurvesSchema } from './codeMaterialAnimation'
 
 const id = z.string().min(1).max(100)
-export const codeMaterialVersionSchema = z.object({ id, apiVersion: z.literal(1), languageVersion: z.union([z.literal(1), z.literal(2)]), source: z.string().max(CODE_MATERIAL_LIMITS.sourceBytes) }).strict()
+export const codeMaterialVersionSchema = z.object({ id, apiVersion: z.literal(1), languageVersion: z.union([z.literal(1), z.literal(2)]), source: z.string().max(CODE_MATERIAL_LIMITS.sourceBytes), assetOrigin: z.object({ assetId: id, contentIdentity: z.string().regex(/^[a-f0-9]{64}$/) }).strict().optional() }).strict()
 export const codeMaterialDefinitionSchema = z.object({ id, name: z.string().trim().min(1).max(200), defaultVersionId: id, versions: z.array(codeMaterialVersionSchema).min(1).max(64) }).strict().superRefine((value, context) => {
   if (new Set(value.versions.map(version => version.id)).size !== value.versions.length || !value.versions.some(version => version.id === value.defaultVersionId)) context.addIssue({ code: 'custom', message: '代码版本重复或默认版本不存在。' })
 })

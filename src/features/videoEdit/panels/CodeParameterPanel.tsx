@@ -1,11 +1,15 @@
-import { useRef, useSyncExternalStore } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { RotateCcw } from 'lucide-react'
-import { Dropdown, UiColorInput, UiError, UiFormRow, UiGroup, UiIconButton, UiRangeInput, UiSwitch, UiTextAreaField } from '@/components/ui'
+import { Dropdown, UiButton, UiColorInput, UiError, UiFormRow, UiGroup, UiIconButton, UiRangeInput, UiSwitch, UiTextAreaField } from '@/components/ui'
+import { ICON_ASSET_LIBRARY } from '@/core/theme/icons'
+import { useAssetLibraryStore } from '@/features/assets/store/assetLibraryStore'
+import { openAssetLibrary } from '@/stores/navigationStore'
+import { collectVideoEditCodeAsset } from '../application/videoEditCodeAssets'
 import NumberInput from '@/components/ui/NumberInput'
 import type { CodeColor, CodeImageReference, CodeParameterDeclaration, CodeParameterValue } from '@/core/videoEdit/codeMaterial/contract'
 import type { VideoEditSourceTime } from '@/core/videoEdit/time'
 import { readVideoEditCodeEditor, resetVideoEditCodeParameter, setVideoEditCodeParameter, updateVideoEditCodeKeyframe, type VideoEditParameterTarget, type VideoEditCodeEditorState, type VideoEditParameterEditorState } from '../application/videoEditCodeParameters'
-import { subscribeVideoEditView, videoEditViewRevision, type VideoEditGesture } from '../application/videoEditService'
+import { activeVideoEditInstance, requireVideoEditInstance, subscribeVideoEditView, videoEditViewRevision, type VideoEditGesture } from '../application/videoEditService'
 import { CodeKeyframePanel } from './CodeKeyframePanel'
 import { useCodeParameterGesture, videoEditParameterTargetIdentity } from './useCodeParameterGesture'
 import { CodeImageParameterControl } from './CodeImageParameterControl'
@@ -81,9 +85,31 @@ export function VideoEditParameterFields({ editor, onError }: { editor: VideoEdi
   </UiGroup>
 }
 
+function CollectCodeAsset({ editor, onError }: { editor: VideoEditCodeEditorState; onError: (reason: unknown) => void }): React.ReactElement {
+  const pending = useRef<AbortController>()
+  const [busy, setBusy] = useState(false)
+  useEffect(() => () => { pending.current?.abort(); pending.current = undefined }, [])
+  const collect = async (): Promise<void> => {
+    if (pending.current) return
+    const controller = new AbortController(); pending.current = controller; setBusy(true)
+    try {
+      const target = editor.target
+      const owner = requireVideoEditInstance(target.projectId)
+      const libraryId = useAssetLibraryStore.getState().libraryId
+      const asset = await collectVideoEditCodeAsset(target.projectId, { kind: 'clip', sequenceId: target.sequenceId, clipId: target.clipId, ...(target.effectId ? { effectId: target.effectId } : {}) }, libraryId ? { libraryId } : {}, controller.signal)
+      if (asset && !controller.signal.aborted && activeVideoEditInstance() === owner) {
+        useAssetLibraryStore.getState().setSelectedAsset(asset); openAssetLibrary('floating')
+      }
+    } catch (error) { if (!controller.signal.aborted) onError(error) }
+    finally { if (pending.current === controller) { pending.current = undefined; setBusy(false) } }
+  }
+  const AssetIcon = ICON_ASSET_LIBRARY
+  return <UiButton variant="ghost" size="sm" disabled={busy} onClick={() => { void collect() }}><AssetIcon className="h-3.5 w-3.5" />{busy ? '正在加入资产库' : '代码素材加入资产库'}</UiButton>
+}
+
 export function CodeParameterPanel({ projectId, sequenceId, clipId, effectId, onError }: { projectId: string; sequenceId: string; clipId: string; effectId?: string; onError: (reason: unknown) => void }): React.ReactElement {
   useSyncExternalStore(subscribeVideoEditView, videoEditViewRevision)
   let editor: VideoEditCodeEditorState
   try { editor = readVideoEditCodeEditor(projectId, sequenceId, clipId, effectId) } catch (error) { return <UiError title="代码参数暂不可用" message={error instanceof Error ? error.message : '请重新选择代码片段。'} /> }
-  return <div key={videoEditParameterTargetIdentity(editor.target)}><VideoEditParameterFields editor={editor} onError={onError} /><CodeSourceEditor editor={editor} /></div>
+  return <div key={videoEditParameterTargetIdentity(editor.target)}><VideoEditParameterFields editor={editor} onError={onError} /><CodeSourceEditor editor={editor} /><CollectCodeAsset editor={editor} onError={onError} /></div>
 }

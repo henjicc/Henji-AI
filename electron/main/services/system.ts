@@ -59,9 +59,25 @@ function ensureValidPath(targetPath: string): void {
   }
 }
 
-export async function readFileBytes(targetPath: string): Promise<Uint8Array> {
+export async function readFileBytes(targetPath: string, options?: { maxBytes: number }): Promise<Uint8Array> {
   ensureValidPath(targetPath)
-  return await fs.readFile(targetPath)
+  if (!options) return await fs.readFile(targetPath)
+  const { maxBytes } = options
+  if (!Number.isSafeInteger(maxBytes) || maxBytes < 1 || maxBytes > 16 * 1024 * 1024) throw new Error('maxBytes必须为1至16MiB的整数。')
+  const handle = await fs.open(targetPath, 'r')
+  try {
+    const stat = await handle.stat()
+    if (!stat.isFile() || stat.size > maxBytes) throw new Error('文件超出读取预算或不是普通文件。')
+    const bytes = Buffer.alloc(maxBytes + 1)
+    let offset = 0
+    while (offset < bytes.byteLength) {
+      const read = await handle.read(bytes, offset, bytes.byteLength - offset, offset)
+      if (!read.bytesRead) return bytes.subarray(0, offset)
+      offset += read.bytesRead
+      if (offset > maxBytes) throw new Error('文件在读取期间超出预算。')
+    }
+    throw new Error('文件在读取期间超出预算。')
+  } finally { await handle.close() }
 }
 
 export async function readTextFile(targetPath: string): Promise<string> {

@@ -181,7 +181,7 @@ export function initializeSchema(conn: Database.Database): void {
 
     CREATE TABLE IF NOT EXISTS assets (
       id TEXT PRIMARY KEY,
-      media_type TEXT NOT NULL CHECK (media_type IN ('image', 'video', 'audio')),
+      media_type TEXT NOT NULL CHECK (media_type IN ('image', 'video', 'audio', 'code')),
       display_name TEXT NOT NULL,
       file_path TEXT NOT NULL UNIQUE,
       source TEXT NOT NULL CHECK (source IN ('generated', 'canvas', 'camera-stage', 'imported', 'external', 'video-edit')),
