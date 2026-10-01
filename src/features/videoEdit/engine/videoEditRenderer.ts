@@ -4,7 +4,8 @@ import { videoEditSourceSeconds } from '@/core/videoEdit/time'
 import { VideoEditGpuCompositor } from './videoEditGpuCompositor'
 import { VideoEditFrameCache } from './videoEditFrameCache'
 import { VideoEditSeekDecoder } from './videoEditSeekDecoder'
-import { VideoEditGpuFrame } from './videoEditGpuFrame'
+import { VideoEditGpuFrame, videoEditGpuFrameUsesChroma } from './videoEditGpuFrame'
+import { VideoEditCodeSources } from './videoEditCodeSources'
 
 interface VideoSource {
   input: Input
@@ -14,6 +15,7 @@ interface VideoSource {
   iterator?: AsyncGenerator<VideoSample, void, unknown>
   current?: VideoSample | VideoEditGpuFrame
   previousTime: number
+  codec?: string
 }
 /** One bounded decoder per visible clip; all inputs close when the view detaches. */
 export class VideoEditRenderer {
@@ -24,6 +26,9 @@ export class VideoEditRenderer {
   private readonly seekers = new Map<string, VideoEditSeekDecoder>()
   readonly canvas: OffscreenCanvas
   private compositor?: VideoEditGpuCompositor
+  private codeSources?: VideoEditCodeSources
+  private presentationEpoch = 0
+  codeDiagnostics() { return { sources: this.codeSources?.diagnostics(), gpu: this.compositor?.codeDiagnostics() } }
   constructor(public document: VideoEditComposition, private readonly previewWidth?: number, surface?: OffscreenCanvas) {
     this.canvas = surface ?? new OffscreenCanvas(document.width, document.height)
     this.canvas.width = document.width; this.canvas.height = document.height
@@ -41,7 +46,7 @@ export class VideoEditRenderer {
           const supported = config && (await VideoDecoder.isConfigSupported({ ...config, hardwareAcceleration: preference, optimizeForLatency: true })).supported
           const options = { hardwareAcceleration: supported ? preference : 'no-preference', optimizeForLatency: true } as const
           // Sequential playback decodes the original compressed stream.
-          return { input, media, video: video ? new VideoSampleSink(video, options) : undefined, audio: audio ? new AudioSampleSink(audio) : undefined, previousTime: -1 }
+          return { input, media, video: video ? new VideoSampleSink(video, options) : undefined, audio: audio ? new AudioSampleSink(audio) : undefined, previousTime: -1, codec: config?.codec }
         } catch (error) { input.dispose(); throw error }
       })()
       this.sources.set(key, source)
@@ -58,6 +63,8 @@ export class VideoEditRenderer {
   }
   async updateDocument(document: VideoEditComposition): Promise<void> {
     if (document.id !== this.document.id) throw new Error('渲染目标工程已经改变。')
+    this.codeSources?.updateDocument(document)
+    this.cancelPresentation()
     for (const [path, seeker] of this.seekers) if (!document.media.some(media => media.path === path)) { this.seekers.delete(path); await seeker.dispose() }
     for (const media of this.document.media) if (!document.media.some(item => item.id === media.id && item.path === media.path)) {
       const image = this.images.get(media.id); if (image) { this.images.delete(media.id); (await image).close() }
@@ -73,26 +80,38 @@ export class VideoEditRenderer {
     this.document = document
     if (this.canvas.width !== document.width || this.canvas.height !== document.height) { this.canvas.width = document.width; this.canvas.height = document.height }
   }
-  cancelPresentation(): void { this.compositor?.cancelPresentation() }
+  cancelPresentation(): void { this.presentationEpoch++; this.codeSources?.cancel(); this.compositor?.cancelPresentation() }
   async render(frame: number, sequential = false, _scrubbing = false, shouldPresent: () => boolean = () => true, deadline?: number): Promise<{ canvas: OffscreenCanvas; sourceTimestamps: number[]; cacheHits: number; cacheBytes: number; presented: boolean; decodeMs: number; gpuMs: number; completion: Promise<void> }> {
     if (this.disposed) throw new Error('预览已关闭。')
-    const active = activeVideoEditClips(this.document, frame).filter(clip => clip.kind !== 'audio')
+    const document = this.document; const epoch = this.presentationEpoch
+    const canPresent = (): boolean => !this.disposed && this.document === document && this.presentationEpoch === epoch && shouldPresent()
+    const active = activeVideoEditClips(document, frame).filter(clip => clip.kind !== 'audio' && (clip.kind !== 'code' || clip.opacity > 0))
     const timestamps: number[] = []
     this.compositor ??= new VideoEditGpuCompositor(this.canvas)
     const decodeStart = performance.now()
+    const codeClips = active.filter(clip => clip.kind === 'code')
+    if (codeClips.length) this.codeSources ??= new VideoEditCodeSources(document, () => this.compositor!.code())
+    const codeReady = this.codeSources?.prepare(document, codeClips, frame, canPresent)
+    const codeSettled = codeReady ? Promise.allSettled([codeReady]) : Promise.resolve([])
     this.frameCache.setHotFrames(active.flatMap(clip => {
-      const media = videoEditClipMedia(this.document, clip)
-      return clip.kind === 'video' && media ? [{ mediaId: media.path, time: clipSourceSeconds(clip, frame, this.document.fps) }] : []
+      const media = videoEditClipMedia(document, clip)
+      return clip.kind === 'video' && media ? [{ mediaId: media.path, time: clipSourceSeconds(clip, frame, document.fps) }] : []
     }))
     let cacheHits = 0
-    const settled = await Promise.allSettled(active.map(async clip => {
-      const media = videoEditClipMedia(this.document, clip)
+    const picturesPending = active.map(async clip => {
+      const media = videoEditClipMedia(document, clip)
       if (clip.kind === 'text') return null
+      if (clip.kind === 'code') {
+        const picture = (await codeReady)?.pictures.get(clip.id)
+        if (!picture) throw new Error(`代码素材 ${clip.name} 没有返回画面。`)
+        return picture
+      }
       if (!media) throw new Error(`找不到素材 ${clip.name}`)
       if (media.kind === 'image') return this.image(media)
-      const originalTime = clipSourceSeconds(clip, frame, this.document.fps)
+      const originalTime = clipSourceSeconds(clip, frame, document.fps)
       const time = originalTime
-      const source = await this.source(clip.id, media)
+      const pendingSource = this.source(clip.id, media)
+      const source = await pendingSource
       if (!source.video) throw new Error(`素材 ${media.name} 没有可解码的视频轨。`)
       if (this.previewWidth && !sequential) {
         await source.iterator?.return(); source.iterator = undefined
@@ -117,26 +136,39 @@ export class VideoEditRenderer {
       }
       source.previousTime = time
       if (!source.current) throw new Error(`素材 ${media.name} 在此时间没有画面。`)
+      if (!(source.current instanceof VideoEditGpuFrame)) {
+        const decoded = source.current
+        const normalized = await this.compositor!.snapshot(decoded, videoEditGpuFrameUsesChroma(decoded, source.codec), true)
+        if (this.disposed || this.sources.get(clip.id) !== pendingSource) { normalized.close(); decoded.close(); return null }
+        source.current = normalized
+        decoded.close()
+      }
       timestamps.push(source.current.timestamp)
       return source.current
-    }))
+    })
+    const settled = await Promise.allSettled(picturesPending)
+    const preparedCode = await codeSettled
+    if (!canPresent()) return { canvas: this.canvas, sourceTimestamps: [], cacheHits, cacheBytes: this.frameCache.bytes, presented: false, decodeMs: performance.now() - decodeStart, gpuMs: 0, completion: Promise.resolve() }
+    const codeFailure = preparedCode.find(result => result.status === 'rejected')
+    if (codeFailure?.status === 'rejected') throw codeFailure.reason
+    if (preparedCode[0]?.status === 'fulfilled') { cacheHits += preparedCode[0].value.cacheHits; timestamps.push(...preparedCode[0].value.sourceTimestamps) }
     const failure = settled.find(result => result.status === 'rejected')
     if (failure?.status === 'rejected') throw failure.reason
     const pictures = settled.map(result => { if (result.status !== 'fulfilled') throw new Error('剪辑画面准备失败。'); return result.value })
     if (this.disposed) throw new Error('预览已关闭。')
     const decodeMs = performance.now() - decodeStart
     const gpuStart = performance.now()
-    const { presented, completion } = await this.compositor.draw(this.document, active, pictures, shouldPresent, deadline)
+    const { presented, completion } = await this.compositor.draw(document, active, pictures, canPresent, deadline)
     const gpuMs = performance.now() - gpuStart
-    const activeIds = new Set(active.map(clip => clip.id))
+    const activeIds = new Set(canPresent() ? active.map(clip => clip.id) : [...this.sources.keys()].filter(key => !key.startsWith('audio:')))
     for (const [key, pending] of this.sources) if (!activeIds.has(key) && !key.startsWith('audio:')) {
       this.sources.delete(key); const source = await pending; source.current?.close(); await source.iterator?.return(); source.input.dispose()
     }
-    const activeImages = new Set(active.filter(clip => clip.kind === 'image').map(clip => videoEditClipMedia(this.document, clip)?.id))
+    const activeImages = new Set(canPresent() ? active.filter(clip => clip.kind === 'image').map(clip => videoEditClipMedia(document, clip)?.id) : this.images.keys())
     for (const [key, pending] of this.images) if (!activeImages.has(key)) {
       this.images.delete(key); (await pending).close()
     }
-    const activePaths = new Set(active.map(clip => videoEditClipMedia(this.document, clip)?.path))
+    const activePaths = new Set(canPresent() ? active.map(clip => videoEditClipMedia(document, clip)?.path) : this.seekers.keys())
     for (const [path, seeker] of this.seekers) if (!activePaths.has(path)) { this.seekers.delete(path); await seeker.dispose() }
     return { canvas: this.canvas, sourceTimestamps: timestamps, cacheHits, cacheBytes: this.frameCache.bytes, presented, decodeMs, gpuMs, completion }
   }
@@ -195,6 +227,7 @@ export class VideoEditRenderer {
   async dispose(): Promise<void> {
     if (this.disposed) return
     this.disposed = true
+    this.cancelPresentation(); await Promise.allSettled([this.codeSources?.dispose()])
     await Promise.allSettled([...this.seekers.values()].map(seeker => seeker.dispose())); this.seekers.clear(); this.frameCache.clear()
     await Promise.allSettled([...this.sources.values()].map(async pending => { const source = await pending; source.current?.close(); await source.iterator?.return(); source.input.dispose() }))
     await Promise.allSettled([...this.images.values()].map(async pending => (await pending).close()))

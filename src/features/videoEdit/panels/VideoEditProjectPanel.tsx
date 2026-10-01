@@ -1,6 +1,6 @@
 import { forwardRef, useMemo, useRef, useState } from 'react'
 import { Virtuoso, VirtuosoGrid } from 'react-virtuoso'
-import { ChevronDown, ChevronRight, Folder, FolderPlus, Import, List, Grid2X2, Plus, Pencil, Trash2, RefreshCw, Play, Settings2 } from 'lucide-react'
+import { ChevronDown, ChevronRight, Folder, FolderPlus, Import, List, Grid2X2, Plus, Pencil, Trash2, RefreshCw, Play, Settings2, Code2 } from 'lucide-react'
 import { ICON_WORKSPACE_VIDEO_EDIT as SequenceIcon, ICON_ASSET_LIBRARY as AssetLibraryIcon } from '@/core/theme/icons'
 import ContextMenu from '@/components/ContextMenu'
 import { UiButton, UiChipButton, UiEmpty, UiIconButton, UiInput, UiOptionButton, UiSelect, UI_MULTISELECT_ITEM_ACTIVE_OVERRIDE_CLASS } from '@/components/ui'
@@ -16,6 +16,8 @@ import { updateVideoEditSource } from '../application/videoEditSource'
 import { VideoEditSequenceDialog } from './VideoEditSequenceDialog'
 import { VideoEditProjectEditDialog, type ProjectEditDialog } from './VideoEditProjectEditDialog'
 import { VideoEditProjectThumbnail } from './VideoEditProjectThumbnail'
+import { VideoEditCodeCreateDialog } from './VideoEditCodeCreateDialog'
+import { readVideoEditCodeMetadata } from '../application/videoEditCodeState'
 import { selectVideoEditProjectItems, videoEditBinRows, videoEditProjectEntries, type VideoEditProjectEntry } from './videoEditProjectModel'
 
 const GridList = forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>((props, ref) => <div {...props} ref={ref} className="grid grid-cols-[repeat(auto-fill,minmax(112px,1fr))] gap-1 p-1" />)
@@ -33,6 +35,7 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
   const [edit, setEdit] = useState<ProjectEditDialog | null>(null)
   const [sequenceDialog, setSequenceDialog] = useState<SequenceDialog | null>(null)
   const [selectedSequence, setSelectedSequence] = useState<string | null>(null)
+  const [creatingCode, setCreatingCode] = useState(false)
   const anchor = useRef<string | null>(null)
   const menu = useContextMenu()
   const projectId = instance.document.id
@@ -52,7 +55,7 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
       const item = instance.document.items.find(item => item.id === id)!
       const source = media.get(item.mediaId ?? '')
       const requireFrameRate = source?.kind === 'video' && (!source.frameRate || source.frameRateMode !== 'sampled-constant')
-      const settings = requireFrameRate ? { name: item.name, binId: item.binId, width: source.width >= 16 ? source.width : 1920, height: source.height >= 16 ? source.height : 1080 } : videoEditSequenceFromItem(instance.document, id)
+      const settings = requireFrameRate ? { name: item.name, binId: item.binId, width: source.width >= 16 ? source.width : 1920, height: source.height >= 16 ? source.height : 1080 } : videoEditSequenceFromItem(instance.document, id, {}, readVideoEditCodeMetadata(instance, instance.document))
       setSequenceDialog({ kind: 'fromItem', id, settings, requireFrameRate })
     } catch (error) { onError(error) }
   }
@@ -61,6 +64,7 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
     { id: 'assets', label: '从资产库拖入', icon: <AssetLibraryIcon size={16} />, onClick: () => openAssetLibrary('floating') },
     { id: 'bin', label: '新建素材箱', icon: <FolderPlus size={16} />, onClick: () => setEdit({ kind: 'createBin', parentId: binId }) },
     { id: 'sequence', label: '新建项目项 → 序列', icon: <SequenceIcon size={16} />, onClick: newSequence },
+    { id: 'code', label: '新建代码素材', icon: <Code2 size={16} />, onClick: () => setCreatingCode(true) },
   ]
   const itemMenu = (entry: VideoEditProjectEntry): MenuItem[] => {
     if (entry.kind === 'sequence') return [
@@ -97,7 +101,7 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
     const itemMedia = entry.kind === 'item' ? media.get(entry.value.mediaId ?? '') : undefined
     const selected = entry.kind === 'item' ? instance.selectedItemIds.includes(entry.value.id) : selectedSequence === entry.value.id
     const kind = entry.kind === 'sequence' ? 'sequence' : entry.value.kind
-    const detail = entry.kind === 'sequence' ? `${entry.value.width} × ${entry.value.height} · ${Number((entry.value.frameRate.numerator / entry.value.frameRate.denominator).toFixed(3))} fps` : itemMedia ? `${itemMedia.kind === 'audio' ? '音频' : `${itemMedia.width} × ${itemMedia.height}`}${itemMedia.durationSeconds ? ` · ${itemMedia.durationSeconds.toFixed(1)} 秒` : ''}${itemMedia.assetId ? ' · 来自资产库' : ''}` : '文字'
+    const detail = entry.kind === 'sequence' ? `${entry.value.width} × ${entry.value.height} · ${Number((entry.value.frameRate.numerator / entry.value.frameRate.denominator).toFixed(3))} fps` : itemMedia ? `${itemMedia.kind === 'audio' ? '音频' : `${itemMedia.width} × ${itemMedia.height}`}${itemMedia.durationSeconds ? ` · ${itemMedia.durationSeconds.toFixed(1)} 秒` : ''}${itemMedia.assetId ? ' · 来自资产库' : ''}` : kind === 'code' ? '原生代码素材' : '文字'
     return <UiOptionButton variant="menu" active={selected} className={`w-full min-w-0 gap-2 text-xs ${selected && entry.kind === 'item' ? UI_MULTISELECT_ITEM_ACTIVE_OVERRIDE_CLASS : ''} ${view === 'grid' ? 'flex-col !p-2' : '!px-2 !py-1.5'}`} data-video-edit-project-entry={entry.value.id} data-entry-kind={kind} aria-label={entry.value.name} aria-pressed={selected} draggable={entry.kind === 'item'}
       onClick={event => {
         if (entry.kind === 'sequence') { setSelectedSequence(entry.value.id); run(() => setVideoEditProjectView(projectId, { selectedItemIds: [] })); return }
@@ -130,6 +134,7 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
     <div className="flex shrink-0 flex-wrap items-center gap-1 px-2 py-2">
       <UiButton variant="ghost" className="text-xs" onClick={choose}>导入</UiButton><UiButton variant="ghost" className="text-xs" onClick={() => openAssetLibrary('floating')}>资产库</UiButton>
       <UiIconButton appearance="hover-only" title="新建素材箱" onClick={() => setEdit({ kind: 'createBin', parentId: binId })}><FolderPlus size={15} /></UiIconButton><UiIconButton appearance="hover-only" title="新建序列" onClick={newSequence}><Plus size={15} /></UiIconButton>
+      <UiIconButton appearance="hover-only" title="新建代码素材" onClick={() => setCreatingCode(true)}><Code2 size={15} /></UiIconButton>
       <UiInput aria-label="搜索项目素材" placeholder="搜索名称或标签" className="min-w-20 flex-1 text-xs" value={keyword} onChange={event => setKeyword(event.target.value)} />
       <UiSelect aria-label="项目素材排序" className="max-w-24 text-xs" value={sort} onChange={event => setSort(event.target.value as typeof sort)}><option value="name">名称</option><option value="kind">类型</option><option value="duration">时长</option></UiSelect>
       <UiIconButton appearance="hover-only" active={view === 'list'} title="列表视图" onClick={() => setView('list')}><List size={15} /></UiIconButton><UiIconButton appearance="hover-only" active={view === 'grid'} title="缩略图视图" onClick={() => setView('grid')}><Grid2X2 size={15} /></UiIconButton>
@@ -147,6 +152,7 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
       </div>
     </div>
     <ContextMenu items={menu.menuItems} position={menu.menuPosition} visible={menu.menuVisible} onClose={menu.hideMenu} />
+    {creatingCode && <VideoEditCodeCreateDialog projectId={projectId} binId={binId || undefined} onClose={() => setCreatingCode(false)} onCreated={ids => setVideoEditProjectView(projectId, { selectedItemIds: ids })} />}
     {edit && <VideoEditProjectEditDialog value={edit} bins={instance.document.bins} onClose={() => setEdit(null)} onSubmit={values => {
       if (edit.kind === 'createBin') { const id = createVideoEditBin(projectId, values.name!, values.binId || undefined); selectBin(id) }
       else if (edit.kind === 'bin') updateVideoEditBin(projectId, edit.bin.id, { name: values.name, parentId: values.binId || null })

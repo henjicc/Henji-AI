@@ -5,6 +5,9 @@ import { createVideoEditDocument, createVideoEditSequence, changeVideoEditSequen
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { rescaleVideoEditFrame } from '@/core/videoEdit/time'
 import { getPlatform } from '@/platform/runtime'
+import { validateCodeMaterialDocument } from '@/core/videoEdit/codeMaterialDocument'
+import { installVideoEditCodeMetadata, prepareVideoEditCodeMetadata, readVideoEditCodeMetadata, releaseVideoEditCodeCompiler } from './videoEditCodeState'
+import type { VideoEditCodeMetadata } from './videoEditCodeState'
 
 const logger = createLogger('features.videoEdit')
 export interface VideoEditInstance {
@@ -133,6 +136,7 @@ export function editVideoProject(id: string, update: (document: VideoEditDocumen
   assertApplicationWritesAllowed()
   const instance = requireVideoEditInstance(id)
   const next = videoEditDocumentSchema.parse(update(structuredClone(instance.document)))
+  validateCodeMaterialDocument(next, readVideoEditCodeMetadata(instance, next))
   if (JSON.stringify(next) === JSON.stringify(instance.document)) return instance.document
   instance.past = [...instance.past.slice(-49), instance.document]; instance.future = []
   const before = instance.document
@@ -200,10 +204,11 @@ export async function saveVideoEdit(id: string): Promise<void> {
     logger.error('剪辑工程保存失败', error, { event: 'video_edit.save.failed', context: { projectId: id } }); throw error
   } finally { instance.saving = undefined; publishVideoEdit() }
 }
-function attach(document: VideoEditDocument, path: string, dirty: boolean): VideoEditInstance {
+function attach(document: VideoEditDocument, path: string, dirty: boolean, codeMetadata: VideoEditCodeMetadata = new Map()): VideoEditInstance {
   const existing = instances.get(document.id)
   if (existing) { if (existing.path !== path) throw new Error('此工程已从另一位置打开，请先关闭后再打开副本。'); focusVideoEdit(document.id); return existing }
   const instance: VideoEditInstance = { document, activeSequenceId: document.sequences[0].id, sequenceViews: new Map(), selectedItemIds: [], selectedBinId: '', openSequenceIds: [document.sequences[0].id], path, dirty, error: null, past: [], future: [], selection: null, frame: 0, playing: false, busy: false, version: 0 }
+  installVideoEditCodeMetadata(instance, codeMetadata)
   instances.set(document.id, instance); activeId = document.id; publishVideoEdit(true); return instance
 }
 export async function createVideoEditProject(): Promise<VideoEditInstance | null> {
@@ -221,8 +226,14 @@ export async function openVideoEditProject(path?: string): Promise<VideoEditInst
   const raw: unknown = JSON.parse(await getPlatform().system.fs.readTextFile(chosen))
   if (typeof raw === 'object' && raw !== null && 'version' in raw && raw.version !== 2) throw new Error('此工程使用不支持的旧格式。请保留原文件并新建工程。')
   const document = videoEditDocumentSchema.parse(raw)
-  for (const media of document.media) await getPlatform().media.allowRoot(await getPlatform().system.paths.dirname(media.path))
-  return attach(document, chosen, false)
+  try {
+    const codeMetadata = await prepareVideoEditCodeMetadata(document)
+    for (const media of document.media) await getPlatform().media.allowRoot(await getPlatform().system.paths.dirname(media.path))
+    return attach(document, chosen, false, codeMetadata)
+  } catch (error) {
+    if (!instances.size) releaseVideoEditCodeCompiler()
+    throw error
+  }
 }
 export async function closeVideoEditProject(id: string): Promise<void> {
   const instance = requireVideoEditInstance(id)
@@ -232,6 +243,7 @@ export async function closeVideoEditProject(id: string): Promise<void> {
   const timer = autosaves.get(id); if (timer !== undefined) clearTimeout(timer)
   autosaves.delete(id); retryDelays.delete(id)
   instances.delete(id); if (activeId === id) activeId = instances.keys().next().value ?? null; publishVideoEdit(true)
+  if (!instances.size) releaseVideoEditCodeCompiler()
 }
 export function appendVideoEditMedia(id: string, media: VideoEditMedia): void {
   editVideoProject(id, document => ({ ...document, media: [...document.media, media], items: [...document.items, { id: crypto.randomUUID(), name: media.name, kind: media.kind, mediaId: media.id }] }))
@@ -244,7 +256,7 @@ export function appendVideoEditClip(id: string, mediaId?: string, placement?: { 
   const existingItem = media ? instance.document.items.find(item => item.mediaId === media.id) : undefined
   const item = existingItem ?? { id: crypto.randomUUID(), name: media?.name ?? '文字', kind: media?.kind ?? 'text' as const, ...(media ? { mediaId: media.id } : {}) }
   const candidate = { ...instance.document, items: existingItem ? instance.document.items : [...instance.document.items, item] }
-  const clip = makeVideoEditItemClip(candidate, item.id, targetSequenceId, placement ?? { frame: instance.activeSequenceId === targetSequenceId ? instance.frame : instance.sequenceViews.get(targetSequenceId)?.frame ?? 0 })
+  const clip = makeVideoEditItemClip(candidate, item.id, targetSequenceId, placement ?? { frame: instance.activeSequenceId === targetSequenceId ? instance.frame : instance.sequenceViews.get(targetSequenceId)?.frame ?? 0 }, readVideoEditCodeMetadata(instance, candidate))
   editVideoProject(id, document => ({ ...document, items: existingItem ? document.items : [...document.items, item], sequences: document.sequences.map(sequence => sequence.id === targetSequenceId ? { ...sequence, clips: [...sequence.clips, clip] } : sequence) }))
   if (instance.activeSequenceId === targetSequenceId) setVideoEditView(id, { selection: clip.id })
 }

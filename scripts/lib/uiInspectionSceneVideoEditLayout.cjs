@@ -85,7 +85,7 @@ async function observeWorkers(page) {
           if (request.kind === 'init') record.initialized = true
           if (request.kind === 'dispose') record.disposedAt = receivedAt
           evidence.events.push({ worker: record.id, kind: `${request.kind}.completed`, frame: request.frame, at: receivedAt, elapsedMs: receivedAt - request.at, error: event.data.error,
-            presented: event.data.presented, decodeMs: event.data.decodeMs, gpuMs: event.data.gpuMs, cacheHits: event.data.cacheHits })
+            presented: event.data.presented, decodeMs: event.data.decodeMs, gpuMs: event.data.gpuMs, cacheHits: event.data.cacheHits, codeResources: event.data.codeResources })
         })
       }
       postMessage(message, transfer) {

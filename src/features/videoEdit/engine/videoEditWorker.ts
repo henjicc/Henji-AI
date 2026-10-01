@@ -7,7 +7,7 @@ export type RenderRequest = { id: number } & (
   | { kind: 'dispose' }
   | { kind: 'render'; frame: number; sequential: boolean; scrubbing?: boolean; deadline?: number }
   | { kind: 'audio'; start: number; duration: number })
-export type RenderResponse = { id: number; phase?: 'submitted'; error?: string; bitmap?: ImageBitmap; sourceTimestamps?: number[]; channels?: Float32Array[]; cacheHits?: number; cacheBytes?: number; presented?: boolean; decodeMs?: number; gpuMs?: number }
+export type RenderResponse = { id: number; phase?: 'submitted'; error?: string; bitmap?: ImageBitmap; sourceTimestamps?: number[]; channels?: Float32Array[]; cacheHits?: number; cacheBytes?: number; presented?: boolean; decodeMs?: number; gpuMs?: number; codeResources?: ReturnType<VideoEditRenderer['codeDiagnostics']> }
 let renderer: VideoEditRenderer | undefined
 let direct = false
 let revision = 0
@@ -21,7 +21,7 @@ self.onmessage = (event: MessageEvent<RenderRequest>) => {
   queue = queue.then(async () => {
     try {
       if (request.kind === 'dispose') {
-        await renderer?.dispose(); renderer = undefined; self.postMessage({ id: request.id } satisfies RenderResponse)
+        await renderer?.dispose(); const codeResources = renderer?.codeDiagnostics(); renderer = undefined; self.postMessage({ id: request.id, codeResources } satisfies RenderResponse)
       } else if (request.kind === 'init') {
         await renderer?.dispose(); renderer = new VideoEditRenderer(request.document, request.previewWidth, request.surface); direct = !!request.surface
         self.postMessage({ id: request.id } satisfies RenderResponse)
@@ -35,7 +35,7 @@ self.onmessage = (event: MessageEvent<RenderRequest>) => {
           const start = performance.now()
           await result.completion
           const bitmap = direct || !result.presented ? undefined : result.canvas.transferToImageBitmap()
-          self.postMessage({ id: request.id, bitmap, sourceTimestamps: result.sourceTimestamps, cacheHits: result.cacheHits, cacheBytes: result.cacheBytes, presented: result.presented, decodeMs: result.decodeMs, gpuMs: result.gpuMs + performance.now() - start } satisfies RenderResponse, { transfer: bitmap ? [bitmap] : [] })
+          self.postMessage({ id: request.id, bitmap, sourceTimestamps: result.sourceTimestamps, cacheHits: result.cacheHits, cacheBytes: result.cacheBytes, presented: result.presented, decodeMs: result.decodeMs, gpuMs: result.gpuMs + performance.now() - start, codeResources: renderer?.codeDiagnostics() } satisfies RenderResponse, { transfer: bitmap ? [bitmap] : [] })
         }
         if (direct && request.scrubbing) {
           self.postMessage({ id: request.id, phase: 'submitted' } satisfies RenderResponse)

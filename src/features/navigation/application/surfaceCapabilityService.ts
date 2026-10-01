@@ -53,6 +53,16 @@ export async function focusApplicationEntity(
       const item = instance.document.items.find(item => item.id === childId)!
       setVideoEditProjectView(projectId, { selectedBinId: item.binId ?? '', selectedItemIds: [childId] })
     }
+    if (ref.kind === 'video_edit.code_material' || ref.kind === 'video_edit.code_version') {
+      const item = instance.document.items.find(item => ref.kind === 'video_edit.code_material' ? item.code?.definitionId === childId : item.code?.versionId === childId)
+      const clipSequence = instance.document.sequences.find(sequence => sequence.clips.some(clip => ref.kind === 'video_edit.code_material' ? clip.code?.definitionId === childId : clip.code?.versionId === childId))
+      if (item) setVideoEditProjectView(projectId, { selectedBinId: item.binId ?? '', selectedItemIds: [item.id] })
+      if (clipSequence) {
+        switchVideoEditSequence(projectId, clipSequence.id)
+        const clip = clipSequence.clips.find(clip => ref.kind === 'video_edit.code_material' ? clip.code?.definitionId === childId : clip.code?.versionId === childId)!
+        setVideoEditView(projectId, { selection: clip.id })
+      }
+    }
     if (ref.kind === 'video_edit.annotation') {
       const mark = sequence?.annotations.find(item => item.id === childId)
       if (!mark) throw new Error('NOT_FOUND')

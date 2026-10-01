@@ -63,6 +63,27 @@ it('首帧不等完整 GOP，原素材的正反定位复用同一解码范围并
   expect(fixture.ranges).toHaveBeenCalledOnce(); expect(fixture.copied).toHaveBeenCalledTimes(3)
   await decoder.dispose(); expect(cache.bytes).toBe(0); expect(fixture.inputClosed).toHaveBeenCalledOnce()
 })
+it('首次定位与缓存命中呈现同一已完成GPU纹理，不混用原解码颜色路径', async () => {
+  const cache = new VideoEditFrameCache(2400); const decoder = new VideoEditSeekDecoder('media:original', cache, snapshot)
+  const first = await decoder.sample(0, 0)
+  expect(first.sample).toBeInstanceOf(VideoEditGpuFrame); expect(first.hit).toBe(false)
+  const next = await decoder.sample(0, 0)
+  expect(next.sample).toBeInstanceOf(VideoEditGpuFrame); expect(next.hit).toBe(true)
+  expect((first.sample as VideoEditGpuFrame).texture).toBe((next.sample as VideoEditGpuFrame).texture)
+  first.sample?.close(); next.sample?.close(); await decoder.dispose()
+  expect(cache.bytes).toBe(0)
+})
+it('单帧超出缓存预算仍交付独立借用，调用方关闭后只释放一次', async () => {
+  let release!: () => void; fixture.gate = new Promise(resolve => { release = resolve })
+  const destroyed = vi.fn(); const cache = new VideoEditFrameCache(1)
+  const decoder = new VideoEditSeekDecoder('media:original', cache, async sample => new VideoEditGpuFrame(sample, { createView: () => ({}), destroy: destroyed }, undefined, 400))
+  const first = await decoder.sample(0, 0)
+  expect(cache.bytes).toBe(0); expect(destroyed).not.toHaveBeenCalled()
+  expect((first.sample as VideoEditGpuFrame).texture).toBeDefined()
+  first.sample?.close(); first.sample?.close(); expect(destroyed).toHaveBeenCalledOnce()
+  const closed = decoder.dispose(); release(); await closed
+  expect(destroyed).toHaveBeenCalledOnce()
+})
 it('同一时间的不同原文件隔离，销毁一个输入不能删除其他素材的帧', async () => {
   const cache = new VideoEditFrameCache(4800); const a = new VideoEditSeekDecoder('media:a', cache, snapshot); const b = new VideoEditSeekDecoder('media:b', cache, snapshot)
   const initial = await Promise.all([a.sample(0, 0), b.sample(0, 0)]); initial.forEach(result => result.sample?.close()); await tick()
@@ -120,9 +141,9 @@ it('同一帧复制期间收到工程刷新请求，仍返回该帧而非等待�
   let release!: () => void; const gate = new Promise<void>(resolve => { release = resolve })
   const cache = new VideoEditFrameCache(2400)
   const decoder = new VideoEditSeekDecoder('media:original', cache, async sample => { if (sample.timestamp === 0) await gate; return snapshot(sample) })
-  const first = await decoder.sample(0, 0); first.sample?.close()
+  const first = decoder.sample(0, 0); await tick()
   const refreshed = decoder.sample(0, 0); await tick()
-  release(); const result = await refreshed
+  release(); const initial = await first; initial.sample?.close(); const result = await refreshed
   expect(result.sample?.timestamp).toBe(0); result.sample?.close()
   await decoder.dispose(); expect(cache.bytes).toBe(0)
 })

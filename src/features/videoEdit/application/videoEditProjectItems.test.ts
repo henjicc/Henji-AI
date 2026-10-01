@@ -7,10 +7,21 @@ import { createVideoEditProject, appendVideoEditMedia, listVideoEditInstances, c
 import { createVideoEditBin, updateVideoEditItems, appendVideoEditItems, createVideoEditSequenceFromItem, deleteVideoEditItems, deleteVideoEditBins } from './videoEditProjectItems'
 import { importVideoEditSources, relinkVideoEditMedia } from './videoEditMedia'
 import { dropVideoEditInput } from './videoEditDrop'
-import { VideoEditMutationExecutor } from './videoEditExecutors'
+import { VideoEditMutationExecutor, VideoEditCollectionExecutor } from './videoEditExecutors'
 import type { ApplicationPlannedStep } from '@/core/application-control'
 import { readVideoEditSource, updateVideoEditSource, registerVideoEditSourcePresenter } from './videoEditSource'
 const files = new Map<string, string>()
+it('公共移除项目项与手动删除同样清除孤儿媒体，并以声明级联撤销恢复', async () => {
+  const instance = (await createVideoEditProject())!; const id = instance.document.id
+  appendVideoEditMedia(id, { id: 'unused-media', name: '原图', path: 'D:/media/original.png', kind: 'image', width: 10, height: 10, durationSeconds: 0 })
+  const executor = new VideoEditCollectionExecutor('video_edit.item')
+  const result = await executor.apply({ kind: 'collection', entityType: executor.entityType, parent: { kind: 'video_edit.project', id }, expectedRevisions: {}, operation: { kind: 'remove', targets: [{ kind: 'video_edit.item', id: `${id}:${instance.document.items[0].id}` }] } })
+  expect(instance.document.items).toEqual([]); expect(instance.document.media).toEqual([])
+  expect(result.cascadeEffects).toEqual(expect.arrayContaining([expect.objectContaining({ entityType: 'video_edit.media', effect: 'delete', origin: { kind: 'cascade', declarationId: 'video_edit.item_media_delete' } })]))
+  const restored = await executor.undo(result.undoToken!)
+  expect(instance.document.media).toHaveLength(1); expect(instance.document.items).toHaveLength(1)
+  expect(restored.cascadeEffects).toEqual(expect.arrayContaining([expect.objectContaining({ entityType: 'video_edit.media', effect: 'create', origin: { kind: 'cascade', declarationId: 'video_edit.item_media_create' } })]))
+})
 beforeEach(() => {
   installHarnessNativeStorage(); files.clear()
   vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/project-items.henji-video')

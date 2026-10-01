@@ -1,6 +1,12 @@
 import type { VideoSample } from 'mediabunny'
 import type { GpuTexture } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 
+/** One format policy for seek, playback and export. Opaque 8-bit AVC frames
+ * retain the existing full-resolution luma / original 4:2:0 chroma budget. */
+export function videoEditGpuFrameUsesChroma(sample: Pick<VideoSample, 'format'>, codec?: string): boolean {
+  return sample.format === 'I420' || sample.format === 'NV12' || (sample.format === null && !!codec && /^avc[13]\.(42|4d|58|64)/i.test(codec))
+}
+
 /** Independent texture ownership: cached frames never pin decoder surfaces. */
 export class VideoEditGpuFrame {
   private closed = false

@@ -1,10 +1,12 @@
-import { fieldEffectContract, fieldWriterTable, type ApplicationCollectionExecutor, type ApplicationCompletedStepResult, type ApplicationEffectReceipt, type ApplicationEvidence, type ApplicationMutationExecutor, type ApplicationPlannedStep, type ApplicationRef, type JsonValue } from '@/core/application-control'
+import { fieldEffectContract, fieldWriterTable, type ApplicationCollectionExecutor, type ApplicationCompletedStepResult, type ApplicationEffectReceipt, type ApplicationEvidence, type ApplicationExecutionContext, type ApplicationMutationExecutor, type ApplicationPlannedStep, type ApplicationRef, type JsonValue } from '@/core/application-control'
 import { applyWriterTable, propertyOperations, writableProperties } from '@/core/application-control/execution/writerTable'
 import { videoEditAnnotationSchema, videoEditClipSchema, videoEditBinSchema, videoEditItemSchema, videoEditTrackSchema, createVideoEditSequence, changeVideoEditSequenceSettings, type VideoEditDocument } from '@/core/videoEdit/document'
 import { editVideoProject, requireVideoEditInstance, getVideoEditProjectView, setVideoEditProjectView, switchVideoEditSequence, videoEditDomainRevision as videoEditRevision, type VideoEditProjectView } from './videoEditService'
 import { VIDEO_EDIT_FIELDS, videoEditDataKey, type VideoEditEntityType } from './videoEditFields'
 import { readVideoEditData, splitVideoEditRef } from './videoEditReflection'
 import { removeVideoEditItems, removeVideoEditBins, makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
+import { createVideoEditCodeItems } from './videoEditCodeService'
+import { readVideoEditCodeMetadata } from './videoEditCodeState'
 
 interface ProjectViewSnapshot { view: VideoEditProjectView; activeSequenceId: string }
 function projectViewSnapshot(projectId: string): ProjectViewSnapshot { return { view: getVideoEditProjectView(projectId), activeSequenceId: requireVideoEditInstance(projectId).activeSequenceId } }
@@ -26,6 +28,16 @@ function cascades(before: VideoEditDocument, after: VideoEditDocument): Applicat
     const oldTracks = new Set(from.sequences.flatMap(sequence => sequence.tracks.map(track => track.id)))
     const tracks = to.sequences.flatMap(sequence => sequence.tracks).filter(track => !oldTracks.has(track.id))
     for (let offset = 0; offset < tracks.length; offset += 256) effects.push({ effect, entityType: 'video_edit.track', propertyIds: [], refs: tracks.slice(offset, offset + 256).map(track => ({ kind: 'video_edit.track', id: `${after.id}:${track.id}` })), origin: { kind: 'cascade', declarationId: `video_edit.sequence_tracks_${effect}` } })
+    const oldDefinitions = new Set(from.codeMaterials?.map(definition => definition.id))
+    const definitions = (to.codeMaterials ?? []).filter(definition => !oldDefinitions.has(definition.id))
+    const definitionIds = new Set(definitions.map(definition => definition.id))
+    const oldItems = new Set(from.items.map(item => item.id))
+    for (const [items, entityType] of [[definitions.flatMap(definition => definition.versions), 'video_edit.code_version'], [to.items.filter(item => item.code && definitionIds.has(item.code.definitionId) && !oldItems.has(item.id)), 'video_edit.item']] as const) {
+      for (let offset = 0; offset < items.length; offset += 256) effects.push({ effect, entityType, propertyIds: [], refs: items.slice(offset, offset + 256).map(item => ({ kind: entityType, id: `${after.id}:${item.id}` })), origin: { kind: 'cascade', declarationId: `video_edit.code_${entityType.split('.').at(-1)}_${effect}` } })
+    }
+    const oldMedia = new Set(from.media.map(media => media.id))
+    const media = to.media.filter(media => !oldMedia.has(media.id))
+    for (let offset = 0; offset < media.length; offset += 256) effects.push({ effect, entityType: 'video_edit.media', propertyIds: [], refs: media.slice(offset, offset + 256).map(media => ({ kind: 'video_edit.media', id: `${after.id}:${media.id}` })), origin: { kind: 'cascade', declarationId: `video_edit.item_media_${effect}` } })
   }
   return effects
 }
@@ -68,6 +80,7 @@ export class VideoEditMutationExecutor implements ApplicationMutationExecutor {
       if (this.entityType === 'video_edit.project') return { ...document, name: String(data.name) }
       if (this.entityType === 'video_edit.bin') return { ...document, bins: document.bins.map(item => item.id === childId ? videoEditBinSchema.parse(data) : item) }
       if (this.entityType === 'video_edit.item') return { ...document, items: document.items.map(item => item.id === childId ? videoEditItemSchema.parse(data) : item) }
+      if (this.entityType === 'video_edit.code_material') return { ...document, codeMaterials: document.codeMaterials?.map(definition => definition.id === childId ? { ...definition, name: String(data.name) } : definition) }
       return { ...document, sequences: document.sequences.map(sequence => {
         if (this.entityType === 'video_edit.sequence' && sequence.id === childId) {
           const next = changeVideoEditSequenceSettings(sequence, { width: Number(data.width), height: Number(data.height), frameRate: data.frameRate as typeof sequence.frameRate, pixelAspectRatio: data.pixelAspectRatio as typeof sequence.pixelAspectRatio, sampleRate: data.sampleRate as typeof sequence.sampleRate, channels: data.channels as typeof sequence.channels })
@@ -87,15 +100,29 @@ export class VideoEditMutationExecutor implements ApplicationMutationExecutor {
 }
 export class VideoEditCollectionExecutor implements ApplicationCollectionExecutor {
   readonly effectContract
-  constructor(readonly entityType: 'video_edit.sequence' | 'video_edit.bin' | 'video_edit.item' | 'video_edit.clip' | 'video_edit.annotation') {
-    this.effectContract = { direct: [], cascades: entityType === 'video_edit.sequence' ? (['create', 'delete'] as const).map(effect => ({ declarationId: `video_edit.sequence_tracks_${effect}`, effect, entityType: 'video_edit.track', propertyIds: [], revisionScopes: ['video_edit'] })) : [] }
+  constructor(readonly entityType: 'video_edit.sequence' | 'video_edit.bin' | 'video_edit.item' | 'video_edit.clip' | 'video_edit.annotation' | 'video_edit.code_material') {
+    this.effectContract = { direct: [], cascades: entityType === 'video_edit.sequence' ? (['create', 'delete'] as const).map(effect => ({ declarationId: `video_edit.sequence_tracks_${effect}`, effect, entityType: 'video_edit.track', propertyIds: [], revisionScopes: ['video_edit'] })) : entityType === 'video_edit.code_material' ? (['create', 'delete'] as const).flatMap(effect => (['video_edit.item', 'video_edit.code_version'] as const).map(type => ({ declarationId: `video_edit.code_${type.split('.').at(-1)}_${effect}`, effect, entityType: type, propertyIds: [], revisionScopes: ['video_edit'] }))) : entityType === 'video_edit.item' ? (['create', 'delete'] as const).map(effect => ({ declarationId: `video_edit.item_media_${effect}`, effect, entityType: 'video_edit.media', propertyIds: [], revisionScopes: ['video_edit'] })) : [] }
   }
-  async apply(step: Extract<ApplicationPlannedStep, { kind: 'collection' }>): Promise<ApplicationCompletedStepResult> {
+  async apply(step: Extract<ApplicationPlannedStep, { kind: 'collection' }>, context?: ApplicationExecutionContext): Promise<ApplicationCompletedStepResult> {
     const nested = this.entityType === 'video_edit.clip' || this.entityType === 'video_edit.annotation'
     if (step.parent.kind !== (nested ? 'video_edit.sequence' : 'video_edit.project')) throw new Error(nested ? '请使用所属剪辑序列作为父实体。' : '请使用所属剪辑工程作为父实体。')
     const parsed = splitVideoEditRef(step.parent)
     const instance = requireVideoEditInstance(parsed.projectId); const before = instance.document
     const refs: ApplicationRef[] = []
+    if (this.entityType === 'video_edit.code_material' && step.operation.kind === 'create') {
+      const inputs = step.operation.items.map(item => {
+        const values = item.properties
+        if (Object.keys(values).some(key => !['video_edit.code_material.source', 'video_edit.code_material.name', 'video_edit.code_material.bin_id'].includes(key))) throw new Error('创建代码素材仅接受作者源码、名称与素材箱；版本和运行产物由检查服务维护。')
+        if (typeof values['video_edit.code_material.source'] !== 'string') throw new Error('请提供作者源码。')
+        const name = values['video_edit.code_material.name']; const binId = values['video_edit.code_material.bin_id']
+        if (name !== undefined && typeof name !== 'string' || binId !== undefined && typeof binId !== 'string') throw new Error('名称和素材箱引用必须为字符串。')
+        return { source: values['video_edit.code_material.source'], ...(name !== undefined ? { name } : {}), ...(binId ? { binId } : {}) }
+      })
+      const ids = await createVideoEditCodeItems(before.id, inputs, context?.signal)
+      const after = requireVideoEditInstance(before.id).document
+      for (const id of ids) refs.push({ kind: this.entityType, id: `${before.id}:${after.items.find(item => item.id === id)!.code!.definitionId}` })
+      return completed(before, after, refs)
+    }
     const after = editVideoProject(before.id, document => {
       const sequence = document.sequences.find(sequence => sequence.id === parsed.childId)
       if (nested && !sequence) throw new Error('目标序列不存在。')
@@ -108,7 +135,15 @@ export class VideoEditCollectionExecutor implements ApplicationCollectionExecuto
             case 'video_edit.sequence': document.sequences.push({ ...createVideoEditSequence(), ...values, id } as ReturnType<typeof createVideoEditSequence>); break
             case 'video_edit.bin': document.bins.push(videoEditBinSchema.parse({ id, ...values })); break
             case 'video_edit.item': document.items.push(videoEditItemSchema.parse({ id, ...values })); break
-            case 'video_edit.clip': sequence!.clips.push(videoEditClipSchema.parse({ ...makeVideoEditItemClip(document, String(values.itemId), sequence!.id, { frame: Number(values.start ?? 0), ...(values.track !== undefined ? { track: Number(values.track) } : {}) }), ...values, id })); break
+            case 'video_edit.clip': {
+              const clip = makeVideoEditItemClip(document, String(values.itemId), sequence!.id, { frame: Number(values.start ?? 0), ...(values.track !== undefined ? { track: Number(values.track) } : {}) }, readVideoEditCodeMetadata(instance, document))
+              const parameters = values.codeParameters; delete values.codeParameters
+              if (parameters !== undefined) {
+                if (!clip.code) throw new Error('此片段没有代码实例参数。')
+                values.code = { ...clip.code, parameters }
+              }
+              sequence!.clips.push(videoEditClipSchema.parse({ ...clip, ...values, id })); break
+            }
             case 'video_edit.annotation': sequence!.annotations.push(videoEditAnnotationSchema.parse({ id, frame: 0, kind: 'point', space: 'composition-normalized', x: 0.5, y: 0.5, width: 0, height: 0, ...values })); break
           }
           refs.push({ kind: this.entityType, id: `${before.id}:${id}` })
@@ -120,7 +155,10 @@ export class VideoEditCollectionExecutor implements ApplicationCollectionExecuto
             if (document.sequences.some(sequence => ids.includes(sequence.id) && (sequence.clips.length || sequence.annotations.length))) throw new Error('请先移除序列内的片段和标注，再移除序列。')
             document.sequences = document.sequences.filter(sequence => !ids.includes(sequence.id)); break
           case 'video_edit.bin': document.bins = removeVideoEditBins(document, ids).bins; break
-          case 'video_edit.item': document.items = removeVideoEditItems(document, ids).items; break
+          case 'video_edit.item': { const next = removeVideoEditItems(document, ids); document.items = next.items; document.media = next.media; break }
+          case 'video_edit.code_material':
+            if (document.items.some(item => item.code && ids.includes(item.code.definitionId)) || document.sequences.some(sequence => sequence.clips.some(clip => clip.code && ids.includes(clip.code.definitionId)))) throw new Error('代码素材仍被项目项或片段引用，请先移除引用，再移除源码定义。')
+            document.codeMaterials = document.codeMaterials?.filter(definition => !ids.includes(definition.id)); break
           case 'video_edit.clip':
             if (ids.some(id => !sequence!.clips.some(clip => clip.id === id))) throw new Error('片段不属于目标序列。')
             if (sequence!.annotations.some(mark => ids.includes(mark.clipId))) throw new Error('片段仍有标注，请先移除标注，再删除片段。')

@@ -1,6 +1,7 @@
 import { videoEditBinSchema, videoEditItemSchema, type VideoEditItem } from '@/core/videoEdit/document'
 import { makeVideoEditItemClip, makeVideoEditItemSequence, removeVideoEditBins, removeVideoEditItems, videoEditItemUsage, type VideoEditSequenceSettings } from '@/core/videoEdit/projectItems'
 import { editVideoProject, requireVideoEditInstance, setVideoEditView, switchVideoEditSequence } from './videoEditService'
+import { readVideoEditCodeMetadata } from './videoEditCodeState'
 
 export { videoEditItemUsage }
 export type { VideoEditSequenceSettings }
@@ -26,7 +27,7 @@ export function deleteVideoEditBins(projectId: string, ids: string[]): void { ed
 export function appendVideoEditItems(projectId: string, itemIds: string[], sequenceId: string, placement?: { frame: number; track?: number }): string[] {
   const instance = requireVideoEditInstance(projectId)
   let frame = placement?.frame ?? (instance.activeSequenceId === sequenceId ? instance.frame : instance.sequenceViews.get(sequenceId)?.frame ?? 0)
-  const clips = itemIds.map(itemId => { const clip = makeVideoEditItemClip(instance.document, itemId, sequenceId, { frame, track: placement?.track }); frame += clip.duration; return clip })
+  const clips = itemIds.map(itemId => { const clip = makeVideoEditItemClip(instance.document, itemId, sequenceId, { frame, track: placement?.track }, readVideoEditCodeMetadata(instance, instance.document)); frame += clip.duration; return clip })
   editVideoProject(projectId, document => ({ ...document, sequences: document.sequences.map(sequence => sequence.id === sequenceId ? { ...sequence, clips: [...sequence.clips, ...clips] } : sequence) }))
   if (instance.activeSequenceId === sequenceId && clips.length) setVideoEditView(projectId, { selection: clips.at(-1)!.id })
   return clips.map(clip => clip.id)
@@ -36,7 +37,7 @@ export function createVideoEditSequenceFromItem(projectId: string, itemId: strin
 }
 export function createVideoEditSequenceFromItems(projectId: string, itemIds: string[], settings: VideoEditSequenceSettings = {}): string {
   const instance = requireVideoEditInstance(projectId)
-  const sequence = makeVideoEditItemSequence(instance.document, itemIds, settings)
+  const sequence = makeVideoEditItemSequence(instance.document, itemIds, settings, readVideoEditCodeMetadata(instance, instance.document))
   editVideoProject(projectId, document => ({ ...document, sequences: [...document.sequences, sequence] }))
   switchVideoEditSequence(projectId, sequence.id); setVideoEditView(projectId, { selection: sequence.clips[0].id }); return sequence.id
 }

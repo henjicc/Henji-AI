@@ -4,6 +4,7 @@ import { importVideoEditSources, type VideoEditImportSource } from './videoEditM
 import { editVideoProject, requireVideoEditInstance, setVideoEditView, switchVideoEditSequence } from './videoEditService'
 import { makeVideoEditItemClip, makeVideoEditItemSequence, type VideoEditSequenceSettings } from '@/core/videoEdit/projectItems'
 import type { VideoEditDocument } from '@/core/videoEdit/document'
+import { readVideoEditCodeMetadata } from './videoEditCodeState'
 
 export const VIDEO_EDIT_ITEM_DRAG_MIME = 'application/x-henji-video-edit-items'
 export type VideoEditDropInput = { kind: 'items'; projectId: string; itemIds: string[] } | { kind: 'sources'; sources: VideoEditImportSource[] }
@@ -46,12 +47,12 @@ export async function dropVideoEditInput(projectId: string, input: VideoEditDrop
     if (!sequence) throw new Error('原落点序列已移除，请重新拖入。')
     if (options.createSequenceWhenEmpty) {
       if (sequence.clips.length) throw new Error('原空序列已有新的剪辑，请重新拖入并选择落点。')
-      const created = makeVideoEditItemSequence(document, ids, options.sequenceSettings)
+      const created = makeVideoEditItemSequence(document, ids, options.sequenceSettings, readVideoEditCodeMetadata(owner, document))
       createdId = created.id; selectedClip = created.clips.at(-1)?.id
       return { ...document, sequences: [...document.sequences, created] }
     }
     let frame = placement.frame
-    const clips = ids.map(itemId => { const clip = makeVideoEditItemClip(document, itemId, sequenceId, { frame, track: placement.track }); frame += clip.duration; return clip })
+    const clips = ids.map(itemId => { const clip = makeVideoEditItemClip(document, itemId, sequenceId, { frame, track: placement.track }, readVideoEditCodeMetadata(owner, document)); frame += clip.duration; return clip })
     selectedClip = clips.at(-1)?.id
     return { ...document, sequences: document.sequences.map(item => item.id === sequenceId ? { ...item, clips: [...item.clips, ...clips] } : item) }
   }

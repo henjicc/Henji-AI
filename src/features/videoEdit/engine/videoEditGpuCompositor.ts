@@ -49,6 +49,7 @@ export class VideoEditGpuCompositor {
   private readonly ready: Promise<void>
   private readonly waits = new Set<() => void>()
   private readonly uploads = new Set<Promise<void>>()
+  private readonly copies = new Set<Promise<void>>()
   private disposed = false
   private readonly pool: Array<{ width: number; height: number; texture: GpuTexture; chroma?: GpuTexture; bytes: number }> = []
   constructor(readonly canvas: OffscreenCanvas) {
@@ -111,9 +112,18 @@ struct Vertex { @builtin(position) position: vec4f, @location(0) uv: vec2f }
     const error = await this.device.popErrorScope()
     if (error) throw new Error(`无法初始化剪辑 GPU 合成：${error.message}`)
   }
-  async snapshot(sample: VideoSample, compact: boolean): Promise<VideoEditGpuFrame> {
+  /** Deferred copies may only be consumed on this device/queue. The final draw
+   * completion covers earlier copies; retain decoder frames until their fence. */
+  async snapshot(sample: VideoSample, compact: boolean, deferCompletion = false): Promise<VideoEditGpuFrame> {
     await this.ready
+    if (this.disposed) throw new Error('剪辑预览已关闭。')
     if (this.lost) throw new Error(`剪辑 GPU 已中断，请重新加载预览：${this.lost}`)
+    while (this.copies.size >= 2) {
+      await Promise.race(this.copies)
+      if (this.disposed) throw new Error('剪辑预览已关闭。')
+      if (this.lost) throw new Error(`剪辑 GPU 已中断，请重新加载预览：${this.lost}`)
+    }
+    if (this.disposed) throw new Error('剪辑预览已关闭。')
     // Copy on the compositor's device; no Skia canvas or cross-context fences.
     const frame = sample.toVideoFrame()
     const width = frame.visibleRect?.width ?? sample.codedWidth; const height = frame.visibleRect?.height ?? sample.codedHeight
@@ -123,6 +133,7 @@ struct Vertex { @builtin(position) position: vec4f, @location(0) uv: vec2f }
     const texture = recycled?.texture ?? this.device.createTexture({ size: [width, height], format: compact ? 'r8unorm' : 'rgba8unorm', usage: 0x04 | 0x10 })
     const chroma = compact ? recycled?.chroma ?? this.device.createTexture({ size: [uvWidth, uvHeight], format: 'rg8unorm', usage: 0x04 | 0x10 }) : undefined
     const bytes = compact ? width * height + uvWidth * uvHeight * 2 : width * height * 4
+    let retained = false
     try {
       const encoder = this.device.createCommandEncoder()
       const resource = this.device.importExternalTexture({ source: frame })
@@ -134,14 +145,17 @@ struct Vertex { @builtin(position) position: vec4f, @location(0) uv: vec2f }
         pass.draw(3); pass.end()
       }
       this.device.queue.submit([encoder.finish()])
-      await this.device.queue.onSubmittedWorkDone()
+      const completion = this.device.queue.onSubmittedWorkDone().finally(() => { frame.close(); this.copies.delete(completion) })
+      this.copies.add(completion); retained = true
+      void completion.catch(() => {})
+      if (!deferCompletion) await completion
       return new VideoEditGpuFrame(sample, texture, chroma, bytes, () => {
         // Reuse evicted allocations instead of stalling the driver at every
         // working-set boundary. Idle pool has a separate hard 64 MiB ceiling.
         if (!this.disposed && this.pool.length < 4 && this.pool.reduce((sum, entry) => sum + entry.bytes, 0) + bytes <= 64 * 1024 ** 2) this.pool.push({ width, height, texture, chroma, bytes })
         else { texture.destroy(); chroma?.destroy() }
       })
-    } catch (error) { texture.destroy(); chroma?.destroy(); throw error } finally { frame.close() }
+    } catch (error) { texture.destroy(); chroma?.destroy(); throw error } finally { if (!retained) frame.close() }
   }
   async code(): Promise<VideoEditCodeGpu> {
     await this.ready
@@ -149,6 +163,7 @@ struct Vertex { @builtin(position) position: vec4f, @location(0) uv: vec2f }
     this.codeRuntime ??= new VideoEditCodeGpu(this.device)
     return this.codeRuntime
   }
+  codeDiagnostics(): ReturnType<VideoEditCodeGpu['diagnostics']> | undefined { return this.codeRuntime?.diagnostics() }
   async draw(document: VideoEditComposition, clips: VideoEditClip[], pictures: Array<VideoSample | VideoEditGpuFrame | VideoEditCodePicture | ImageBitmap | null>, shouldPresent: () => boolean, deadline?: number): Promise<{ presented: boolean; completion: Promise<void> }> {
     await this.ready
     if (!shouldPresent()) return { presented: false, completion: Promise.resolve() }
@@ -226,7 +241,7 @@ struct Vertex { @builtin(position) position: vec4f, @location(0) uv: vec2f }
     this.disposed = true
     this.cancelPresentation()
     await this.ready.catch(() => {})
-    await Promise.allSettled(this.uploads)
+    await Promise.allSettled([...this.uploads, ...this.copies])
     await this.codeRuntime?.dispose()
     for (const value of this.textures.values()) value.texture.destroy()
     for (const value of this.uniforms.values()) value.destroy()

@@ -4,6 +4,7 @@ const { createVideoEditScrubScene } = require('./uiInspectionSceneVideoEditScrub
 const { createVideoEditLayoutScene } = require('./uiInspectionSceneVideoEditLayout.cjs')
 const { createVideoEditProjectSourceScene } = require('./uiInspectionSceneVideoEditProjectSource.cjs')
 const { createVideoEditCodeScene } = require('./uiInspectionSceneVideoEditCode.cjs')
+const { createVideoEditCodeProjectScene } = require('./uiInspectionSceneVideoEditCodeProject.cjs')
 const { attachUiInspectionCommon } = require('./uiInspectionSceneCommon.cjs')
 const { attachUiInspectionGeneration } = require('./uiInspectionSceneGeneration.cjs')
 const { attachUiInspectionCanvasWorkspace } = require('./uiInspectionSceneCanvasWorkspace.cjs')
@@ -77,6 +78,7 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
     createVideoEditLayoutScene(),
     createVideoEditProjectSourceScene(),
     createVideoEditCodeScene(),
+    createVideoEditCodeProjectScene(),
     ...createGenerationPerformanceScenes(context),
     ...createGenerationVirtualizationScenes(context),
     ...createCanvasScalePerformanceScenes(context),

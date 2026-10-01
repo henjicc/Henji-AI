@@ -5,6 +5,7 @@ import { VideoEditSequenceFrameRateRequired, type VideoEditSequenceSettings } fr
 import { VideoEditSequenceDialog } from './panels/VideoEditSequenceDialog'
 import { adjustVideoEditClip, videoEditDuration, type VideoEditClip } from '@/core/videoEdit/document'
 import { editVideoSequence, getActiveVideoEditSequence, requireVideoEditInstance, setVideoEditView, subscribeVideoEditView, videoEditViewRevision, type VideoEditInstance } from './application/videoEditService'
+import { readVideoEditCodeMetadata } from './application/videoEditCodeState'
 
 function VideoEditTransport({ instance }: { instance: VideoEditInstance }): React.ReactElement {
   useSyncExternalStore(subscribeVideoEditView, videoEditViewRevision)
@@ -45,6 +46,7 @@ export function VideoEditTimeline({ instance, onError }: { instance: VideoEditIn
   const [pendingSequence, setPendingSequence] = useState<{ owner: VideoEditInstance; input: VideoEditDropInput; placement: { frame: number; track: number }; sequenceId: string; settings: VideoEditSequenceSettings } | null>(null)
   const document = getActiveVideoEditSequence(instance)
   const pixels = zoom / document.fps
+  const codeMetadata = readVideoEditCodeMetadata(instance, instance.document)
   const tickSeconds = Math.max(1, Math.ceil(48 / zoom))
   const width = Math.max(900, (videoEditDuration(document) + document.fps * 5) * pixels)
   const adjustment = drag ? { mode: drag.mode, delta: drag.delta, track: drag.track, snapThreshold: snap && drag.mode === 'move' ? 8 / pixels : undefined } : undefined
@@ -81,7 +83,7 @@ export function VideoEditTimeline({ instance, onError }: { instance: VideoEditIn
           if (!drag) return
           const { clip } = drag; setDrag(null)
           try { editVideoSequence(instance.document.id, instance.activeSequenceId, draft => ({ ...draft, clips: draft.clips.map(item => {
-            return item.id === clip.id && adjustment ? adjustVideoEditClip(document, item, adjustment) : item
+            return item.id === clip.id && adjustment ? adjustVideoEditClip(document, item, adjustment, codeMetadata) : item
           }) })) } catch (error) { onError(error) }
         }} onPointerCancel={() => setDrag(null)}>
         <VideoEditRuler instance={instance} pixels={pixels}>
@@ -89,7 +91,7 @@ export function VideoEditTimeline({ instance, onError }: { instance: VideoEditIn
         </VideoEditRuler>
         {Array.from({ length: 8 }, (_, track) => <div key={track} className="h-8 border-b border-border-dark"><span className="pointer-events-none absolute right-2 text-2xs text-text-faint">轨道 {track + 1}</span></div>)}
         {document.clips.map(clip => {
-          const displayed = drag?.clip.id === clip.id && adjustment ? adjustVideoEditClip(document, clip, adjustment) : clip
+          const displayed = drag?.clip.id === clip.id && adjustment ? adjustVideoEditClip(document, clip, adjustment, codeMetadata) : clip
           return <div key={clip.id} data-video-edit-clip={clip.id} className={`absolute flex h-7 items-center overflow-hidden rounded-md ${instance.selection === clip.id ? 'bg-accent/30 ring-1 ring-accent' : clip.kind === 'audio' ? 'bg-accent/10' : 'bg-surface-dark'}`} style={{ top: 29 + displayed.track * 32, left: displayed.start * pixels, width: Math.max(18, displayed.duration * pixels) }}>
           {(['in', 'move', 'out'] as const).map(mode => <UiButton key={mode} variant="plain" className={`!h-full !rounded-none ${mode === 'move' ? 'min-w-0 flex-1 truncate !px-1 text-xs' : 'w-3 shrink-0 !px-0 cursor-ew-resize'}`} title={mode === 'in' ? '裁剪入点' : mode === 'out' ? '裁剪出点' : clip.name} onClick={() => setVideoEditView(instance.document.id, { selection: clip.id })}
             onPointerDown={event => { event.stopPropagation(); event.currentTarget.setPointerCapture(event.pointerId); setVideoEditView(instance.document.id, { selection: clip.id, playing: false }); setDrag({ clip, x: event.clientX, y: event.clientY, delta: 0, mode, track: clip.track }) }}>{mode === 'move' ? clip.name : '│'}</UiButton>)}

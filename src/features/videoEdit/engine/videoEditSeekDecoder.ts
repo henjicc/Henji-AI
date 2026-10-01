@@ -1,8 +1,8 @@
 import { ALL_FORMATS, EncodedPacketSink, Input, UrlSource, VideoSample, VideoSampleSink, type EncodedPacket } from 'mediabunny'
 import { VideoEditFrameCache } from './videoEditFrameCache'
-import { VideoEditGpuFrame } from './videoEditGpuFrame'
+import { VideoEditGpuFrame, videoEditGpuFrameUsesChroma } from './videoEditGpuFrame'
 
-interface SeekWaiter { time: number; resolve: (sample: VideoSample | undefined) => void; reject: (error: Error) => void }
+interface SeekWaiter { time: number; resolve: (sample: VideoEditGpuFrame | undefined) => void; reject: (error: Error) => void }
 interface DecodeRange { start: number; end: number; iterator: AsyncGenerator<VideoSample, void, unknown>; waiters: Set<SeekWaiter>; cancelled: boolean; completed: boolean; prefetch: boolean }
 /** Decode original GOPs once while nearby seeks reuse full-size owned GPU frames.
  * Owns its input independently from clip/page selection; never writes to disk. */
@@ -13,7 +13,7 @@ export class VideoEditSeekDecoder {
   private readonly jobs = new Set<Promise<void>>()
   private disposed = false
   private failure?: Error
-  private compactOpaque = false
+  private codec?: string
   private prefetchGeneration = 0
   private prefetchDirection = 0
   private readonly prefetched = new Map<number, ReturnType<typeof setTimeout>>()
@@ -28,7 +28,7 @@ export class VideoEditSeekDecoder {
     const config = await track.getDecoderConfig()
     const supported = config && (await VideoDecoder.isConfigSupported({ ...config, hardwareAcceleration: 'prefer-hardware', optimizeForLatency: true })).supported
     if (this.disposed) throw new Error('预览解码已关闭。')
-    this.compactOpaque = !!config && /^avc[13]\.(42|4d|58|64)/i.test(config.codec)
+    this.codec = config?.codec
     return { packets: new EncodedPacketSink(track), video: new VideoSampleSink(track, { hardwareAcceleration: supported ? 'prefer-hardware' : 'no-preference', optimizeForLatency: true }) }
   }
   private frame(time: number): VideoEditGpuFrame | undefined { return (this.cache.get(this.source, time) as VideoEditGpuFrame | undefined)?.clone() }
@@ -53,16 +53,16 @@ export class VideoEditSeekDecoder {
     try {
       for await (const sample of range.iterator) {
         if (this.disposed || range.cancelled) { sample.close(); break }
-        this.deliver(range, sample)
         try {
-          const copy = await this.snapshot(sample, sample.format === 'I420' || sample.format === 'NV12' || (sample.format === null && this.compactOpaque))
+          const copy = await this.snapshot(sample, videoEditGpuFrameUsesChroma(sample, this.codec))
           if (this.disposed || range.cancelled) copy.close()
           else {
+            // Cold and cached seeks must use the same owned pixel format. A
+            // raw external frame and the compact cached reconstruction differ.
+            // Clone before the cache can evict an over-budget copy; a foreground
+            // waiter owns its frame independently from the working set.
+            this.deliver(range, copy)
             this.cache.put(this.source, copy, new Set())
-            // Another render can request this frame while its GPU copy is in
-            // flight. Deliver it before advancing; it will never arrive again
-            // later in the GOP, even if the project changed in the meantime.
-            this.deliver(range, sample)
           }
         } finally { sample.close() }
       }
@@ -78,7 +78,7 @@ export class VideoEditSeekDecoder {
       if (this.ranges.get(range.start) === range) this.ranges.delete(range.start)
     }
   }
-  private deliver(range: DecodeRange, sample: VideoSample): void {
+  private deliver(range: DecodeRange, sample: VideoEditGpuFrame): void {
     for (const waiter of range.waiters) if (waiter.time >= sample.timestamp - 1e-7 && waiter.time < sample.timestamp + sample.duration - 1e-7) {
       range.waiters.delete(waiter); waiter.resolve(sample.clone())
     }
@@ -137,7 +137,7 @@ export class VideoEditSeekDecoder {
     const already = this.frame(time)
     if (already) return { sample: already, hit: true }
     if (range.completed) return { hit: false }
-    return { sample: await new Promise<VideoSample | undefined>((resolve, reject) => range.waiters.add({ time, resolve, reject })), hit: false }
+    return { sample: await new Promise<VideoEditGpuFrame | undefined>((resolve, reject) => range.waiters.add({ time, resolve, reject })), hit: false }
   }
   async dispose(): Promise<void> {
     this.disposed = true
