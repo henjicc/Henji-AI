@@ -9,6 +9,7 @@ import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '../../../../src/core/app
 import { APPLICATION_READABLE_MEDIA_KINDS } from '../../../../src/core/application-control/mediaReferenceKinds'
 import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '../../../../src/core/application-control/builtinApplicationCapabilityRegistry'
 import { GENERATION_BUDGET } from './generationBudget'
+import { loadAssistantSkillCapability } from '../../../../src/core/application-control/domains/assistantSkill/assistantSkillApplicationCapabilities'
 
 /**
  * 对外目录的唯一投影处。
@@ -136,6 +137,23 @@ function capabilityTool(tool: LocalTool): Tool {
   }
 }
 
+/**
+ * 外部连接的技能读取入口。技能是领域操作说明，不是业务能力：只读、不绑定任何实体，
+ * 内置 Pi 已通过 skills_index 层拿到同一工具，所以只在外部目录里投影一次。
+ * 参数与输出直接取正式能力声明，不在协议层另写 schema；可用技能清单在契约的 skills 中。
+ */
+export function assistantSkillTool(): Tool {
+  const definition = loadAssistantSkillCapability
+  return {
+    name: definition.id, title: definition.title,
+    description: `${definition.description} 外部连接先从 describe_application_contract 的 skills 取得可用技能名和适用条件；不支持读取 references/ 以外的文件。`,
+    inputSchema: { ...z.toJSONSchema(definition.inputSchema, { io: 'input' }), type: 'object' } as Tool['inputSchema'],
+    // 技能名与路径的 NFC 归一化是输入变换，输出侧按普通字符串描述。
+    outputSchema: z.toJSONSchema(z.object({ ok: z.literal(true), data: definition.outputSchema }).passthrough(), { io: 'output', unrepresentable: 'any' }) as Tool['inputSchema'],
+    annotations: { readOnlyHint: true, openWorldHint: false },
+  }
+}
+
 export interface ApplicationToolCatalog {
   tools: Tool[]
   hidden: Array<{ name: string; tier: ToolTier; requires: string }>
@@ -147,7 +165,7 @@ export interface ApplicationToolCatalog {
  * 每次 `tools/list` 都按当前注册重新计算，所以渲染层重载、重新注册或撤销后再次列举就是最新目录；
  * MCP 适配器负责变更通知；Pi 与其他调用面直接消费同一目录。
  */
-export function buildApplicationToolCatalog(input: { tools: readonly LocalTool[]; access: ApplicationAccess; operationsEnabled: boolean }): ApplicationToolCatalog {
+export function buildApplicationToolCatalog(input: { tools: readonly LocalTool[]; access: ApplicationAccess; operationsEnabled: boolean; includeSkillTool?: boolean }): ApplicationToolCatalog {
   const tools: Tool[] = []
   const hidden: ApplicationToolCatalog['hidden'] = []
   // 缺席永远带理由：静默消失会让调用方把"本次没授权"读成"应用没有这个能力"。
@@ -168,6 +186,7 @@ export function buildApplicationToolCatalog(input: { tools: readonly LocalTool[]
       annotations: { readOnlyHint: spec.readOnly, ...(spec.readOnly ? { openWorldHint: false } : { destructiveHint: false }) },
     }))
   }
+  if (input.includeSkillTool) consider(loadAssistantSkillCapability.id, 'read', false, assistantSkillTool)
   return { tools: tools.sort((a, b) => a.name.localeCompare(b.name, 'en')), hidden }
 }
 
@@ -190,6 +209,8 @@ export function buildApplicationContract(input: {
   catalog: ApplicationToolCatalog
   port: number
   requestedDomains: readonly string[]
+  /** 外部连接可读的技能索引（只含名称与适用条件）；内置 Pi 走 skills_index 层，不在契约里重复。 */
+  skills?: ReadonlyArray<{ name: string; description: string }>
 }): Record<string, unknown> {
   const requested = new Set(input.requestedDomains)
   return {
@@ -225,6 +246,11 @@ export function buildApplicationContract(input: {
       envelope: APPLICATION_WRITE_CAPABILITY_IDS.some((id) => id === tool.name) ? 'operationId+baselineIds' : 'none',
       ...(APPLICATION_WRITE_CAPABILITY_IDS.some((id) => id === tool.name) ? { baselinePolicy: '普通操作可省略 baselineIds，破坏性操作必填。' } : {}),
     })),
-    workflows: WORKFLOWS,
+    ...(input.skills ? { skills: {
+      tool: loadAssistantSkillCapability.id,
+      usage: '任务匹配某个技能的适用条件时，先不带 path 读取主文件，再按主文件里的表格只读当前步骤需要的一份 references/ 文件；不要预读全部。技能只是操作说明，不改变授权与工具范围。',
+      index: input.skills.map(skill => ({ name: skill.name, description: skill.description })),
+    } } : {}),
+    workflows: input.skills?.length ? [...WORKFLOWS, '技能：部分专业流程有操作说明，见 skills；任务匹配时用 load_assistant_skill 按需读取，不预读全部。'] : WORKFLOWS,
   }
 }

@@ -8,6 +8,8 @@ import type { ApplicationOperationCoordinator } from './operationCoordinator'
 import { reserveGenerationBudget } from './generationBudget'
 import { createMainLogger } from '../logging'
 import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '../../../../src/core/application-control/builtinApplicationCapabilityRegistry'
+import { isAssistantSkillError } from '../../../../src/core/assistant/skills'
+import { agentSkillIndex, loadAgentSkill } from '../assistant/skills/agentSkills'
 const MAX_RESULT = EXTERNAL_LIMITS.resultBytes
 const logger = createMainLogger('main.application_runtime')
 
@@ -18,7 +20,8 @@ export class ApplicationToolDispatcher {
     private readonly port = 0, private readonly callerKind: 'external' | 'embedded' = 'external') {}
   catalog(callerId: string) {
     this.connections.assertActive(callerId)
-    return buildApplicationToolCatalog({ tools: this.host.tools(), access: this.connections.access(callerId), operationsEnabled: Boolean(this.operations) })
+    // 内置 Pi 的技能工具随 skills_index 层注入；外部连接在同一目录里得到唯一只读技能入口。
+    return buildApplicationToolCatalog({ tools: this.host.tools(), access: this.connections.access(callerId), operationsEnabled: Boolean(this.operations), includeSkillTool: this.callerKind === 'external' })
   }
   /** Resources 与分块工具使用相同的领域授权和引用解析。 */
   async readMedia(callerId: string, args: Record<string, unknown> | undefined, signal: AbortSignal, metadataOnly = false): Promise<ApplicationResult> {
@@ -42,7 +45,9 @@ export class ApplicationToolDispatcher {
       if (name === 'describe_application_contract') {
         try {
           const { domains } = describeContractInputSchema.parse(args ?? {})
-          const data = buildApplicationContract({ domains: this.host.domains(), access: this.connections.access(callerId), catalog: this.catalog(callerId), port: this.port, requestedDomains: domains, callerKind: this.callerKind })
+          const skills = this.callerKind === 'external' ? await agentSkillIndex() : undefined
+          this.connections.assertActive(callerId)
+          const data = buildApplicationContract({ domains: this.host.domains(), access: this.connections.access(callerId), catalog: this.catalog(callerId), port: this.port, requestedDomains: domains, callerKind: this.callerKind, skills })
           const result = { ok: true, data }
           return result
         } catch (error) {
@@ -51,6 +56,17 @@ export class ApplicationToolDispatcher {
       }
       if (name === 'read_application_media') {
         return this.readMedia(callerId, args, signal)
+      }
+      if (name === 'load_assistant_skill' && this.callerKind === 'external') {
+        // 与内置 Pi 同一准入名单与注册表：停用、未准入、越界路径都在这里拒绝，不经渲染宿主。
+        let result: ApplicationResult
+        try { result = await loadAgentSkill(args ?? {}, signal, 'external') } catch (error) {
+          if (signal.aborted) return applicationFailure('ABORTED:技能读取已取消。')
+          result = applicationFailure(invalidInputMessage(error) ?? (isAssistantSkillError(error) ? `${error.code}:${error.message}` : '技能读取失败，请稍后重试。'))
+        }
+        // 读取期间连接被撤销时不交付内容。
+        this.connections.assertActive(callerId)
+        return result
       }
       if (name === 'get_application_operation' && this.operations) {
         const parsed = z.object({ operationId: z.string().uuid() }).strict().safeParse(args)

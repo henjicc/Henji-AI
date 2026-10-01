@@ -46,7 +46,7 @@ describe('内置提示词技能使用正式文件注册与读取', () => {
     }
   })
   it('关闭设置后清单消失，旧工具调用也不能读取；恢复立即可用', async () => {
-    state.disabled = ['prompt-optimization', 'cinematic-director', 'short-drama']
+    state.disabled = ['prompt-optimization', 'cinematic-director', 'short-drama', 'video-edit-code-creation']
     expect(await embeddedSkillCatalog()).toEqual({ tools: [], instructions: '' })
     await expect(callEmbeddedSkill({ name: 'prompt-optimization', reason: '旧调用' }, signal)).rejects.toThrow('停用')
     state.disabled = []
@@ -73,5 +73,27 @@ describe('内置提示词技能使用正式文件注册与读取', () => {
     expect((await embeddedSkillCatalog()).instructions).not.toContain('cinematic-director')
     expect((await embeddedSkillCatalog()).instructions).toContain('prompt-optimization')
     await expect(callEmbeddedSkill({ name: 'cinematic-director', reason: '旧调用' }, signal)).rejects.toThrow('停用')
+  })
+
+  it('剪辑代码素材技能进入索引，正文只路由，参考按需读取，停用后不可用且其他技能不受影响', async () => {
+    const catalog = await embeddedSkillCatalog()
+    expect(catalog.instructions).toContain('video-edit-code-creation')
+    expect(catalog.instructions).not.toContain('smoothstep')
+    const main = (await callEmbeddedSkill({ name: 'video-edit-code-creation', reason: '写新的代码素材' }, signal)).data
+    expect(main.bytes).toBeLessThan(5000)
+    expect(main.content).toContain('trust=builtin')
+    expect(main.content).not.toContain('smoothstep')
+    const links = [...main.content.matchAll(/\]\((references\/[^)]+)\)/g)].map(match => match[1])
+    expect(new Set(links)).toEqual(new Set(main.referencePaths))
+    for (const reference of links) {
+      const result = (await callEmbeddedSkill({ name: 'video-edit-code-creation', path: reference, reason: '当前步骤' }, signal)).data
+      expect(result.path).toBe(reference)
+      expect(result.bytes).toBeLessThan(4500)
+    }
+    await expect(callEmbeddedSkill({ name: 'video-edit-code-creation', path: 'references/missing.md', reason: '猜测' }, signal)).rejects.toThrow('references/author-api.md')
+    state.disabled = ['video-edit-code-creation']
+    expect((await embeddedSkillCatalog()).instructions).not.toContain('video-edit-code-creation')
+    expect((await embeddedSkillCatalog()).instructions).toContain('cinematic-director')
+    await expect(callEmbeddedSkill({ name: 'video-edit-code-creation', reason: '旧调用' }, signal)).rejects.toThrow('停用')
   })
 })
