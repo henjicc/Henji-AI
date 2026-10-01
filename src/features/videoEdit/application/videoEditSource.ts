@@ -1,5 +1,6 @@
 import { createLogger } from '@/core/logging'
 import { requireVideoEditInstance, listVideoEditInstances, subscribeVideoEdit, subscribeVideoEditView, publishVideoEdit, setVideoEditView, videoEditProgramCommandIdentity, restoreVideoEditProgramCommandIdentity, type VideoEditInstance } from './videoEditService'
+import { verifyVideoEditMediaContent, videoEditMediaContentKey } from '../videoEditMediaContent'
 
 const logger = createLogger('features.videoEdit.source')
 export interface VideoEditSourceState {
@@ -18,7 +19,7 @@ export interface VideoEditSourceRequest { itemId: string; timeUs: number; playin
 export interface VideoEditSourceObservation { timeUs: number; presentedTimeUs: number; playing: boolean; volume: number; playbackDirection?: 1 | -1; error?: string }
 export type VideoEditSourcePresenter = (request: VideoEditSourceRequest, signal: AbortSignal) => Promise<VideoEditSourceObservation>
 interface PendingProgramPause { owner: VideoEditInstance; sequenceId: string; before: { frame: number; playing: boolean; playbackDirection: 1 | -1 }; beforeCommand: object; afterCommand: object }
-interface SourceSession { state: VideoEditSourceState; presenter?: VideoEditSourcePresenter; retire?: () => Promise<void>; released?: Promise<void>; wake?: () => void; pending?: AbortController; requestedPlaying?: boolean; pendingProgramPause?: PendingProgramPause; epoch: number; command: object; mediaIdentity?: string }
+interface SourceSession { state: VideoEditSourceState; presenter?: VideoEditSourcePresenter; retire?: () => Promise<void>; released?: Promise<void>; wake?: () => void; pending?: AbortController; requestedPlaying?: boolean; pendingProgramPause?: PendingProgramPause; epoch: number; command: object; mediaIdentity?: string; verifiedContent?: string }
 export interface VideoEditSourceCommandIdentity { readonly owner: object; readonly command: object }
 const sessions = new Map<string, SourceSession>()
 const listeners = new Set<() => void>()
@@ -91,6 +92,16 @@ export async function updateVideoEditSource(projectId: string, values: Partial<V
   publish()
   logger.debug('源预览请求开始', { event: 'video_edit.source.request.start', context: { projectId, itemId: request.itemId } })
   try {
+    const item = owner.document.items.find(item => item.id === request.itemId)
+    const media = owner.document.media.find(media => media.id === item?.mediaId)
+    const contentKey = media ? videoEditMediaContentKey(media) : undefined
+    if (current.verifiedContent !== contentKey) current.verifiedContent = undefined
+    if (media?.assetContent?.contentIdentity && current.verifiedContent !== contentKey) {
+      await verifyVideoEditMediaContent(media, controller.signal)
+      controller.signal.throwIfAborted()
+      if (epoch !== current.epoch || requireVideoEditInstance(projectId) !== owner) throw new Error('源预览请求已被更新。')
+      current.verifiedContent = contentKey
+    }
     if (!current.presenter) await new Promise<void>((resolve, reject) => {
       const onAbort = (): void => { current.wake = undefined; reject(controller.signal.reason) }
       current.wake = () => { current.wake = undefined; controller.signal.removeEventListener('abort', onAbort); resolve() }
@@ -117,6 +128,7 @@ export async function updateVideoEditSource(projectId: string, values: Partial<V
     const canceled = controller.signal.aborted
     if (epoch === current.epoch && sessions.get(projectId) === current) {
       controller.abort(error)
+      current.verifiedContent = undefined
       const released = current.retire?.()
       current.released = released ?? current.released
       current.state = { ...current.state, playing: false, status: 'error', error: error instanceof Error ? error.message : String(error) }; publish()
@@ -186,6 +198,7 @@ export function closeVideoEditSource(projectId: string): void {
   const current = sessions.get(projectId)
   if (!current) return
   const pause = current.pendingProgramPause
+  current.verifiedContent = undefined
   current.epoch++; current.command = {}; current.pending?.abort(new Error('源预览已关闭。')); current.pending = undefined; current.requestedPlaying = undefined; current.pendingProgramPause = undefined
   current.released = current.retire?.() ?? current.released
   current.state = { itemId: '', timeUs: 0, presentedTimeUs: 0, playing: false, volume: current.state.volume, inUs: null, outUs: null, playbackDirection: 1, status: 'closed', error: '' }

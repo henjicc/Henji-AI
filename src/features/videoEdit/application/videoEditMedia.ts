@@ -5,8 +5,11 @@ import { editVideoProject, requireVideoEditInstance } from './videoEditService'
 import type { VideoEditMedia, VideoEditDocument } from '@/core/videoEdit/document'
 import { createLogger } from '@/core/logging'
 import { VIDEO_EDIT_FRAME_RATES, videoEditFps } from '@/core/videoEdit/time'
+import type { AssetRecord } from '@/platform/contracts/assetLibrary'
+import { resolveVideoEditAssetReference, sameVideoEditAssetContent, videoEditAssetContentSnapshot } from './videoEditAssetReferences'
+import { verifyVideoEditMediaContent } from '../videoEditMediaContent'
 
-export interface VideoEditImportSource { path: string; assetId?: string }
+export type VideoEditImportSource = { path: string; assetId?: string } | { assetId: string; path?: string }
 const logger = createLogger('features.videoEdit.media')
 let metadataActive = 0
 const metadataQueue: Array<() => void> = []
@@ -54,17 +57,55 @@ async function inspectMedia(path: string, signal?: AbortSignal): Promise<VideoEd
     return { ...base, kind: video ? 'video' : 'audio', hasAudio: Boolean(audio), width: video?.displayWidth ?? 0, height: video?.displayHeight ?? 0, durationSeconds, ...(video ? { ...(rate ? { frameRate: rate } : {}), frameRateMode: metrics && metrics.probedPacketCount >= 2 ? metrics.frameRateIsConstant ? 'sampled-constant' as const : 'variable' as const : 'unknown' as const } : {}) }
   } finally { signal?.removeEventListener('abort', cancel); input.dispose() }
 }
+function validateAssetMedia(media: VideoEditMedia, asset: AssetRecord): void {
+  if (media.assetId && media.assetId !== asset.id || media.assetContent && (media.assetContent.sizeBytes !== asset.sizeBytes || media.assetContent.fileModifiedAt !== asset.fileModifiedAt || media.assetContent.contentIdentity && media.assetContent.contentIdentity !== asset.contentIdentity)) throw new Error('此工程引用的素材内容已改变，请先重新定位源素材。')
+  if (media.kind !== asset.mediaType || asset.width !== null && asset.width !== media.width || asset.height !== null && asset.height !== media.height) throw new Error('素材库与工程的源文件信息不一致，请重新定位源素材。')
+}
 export async function importVideoEditSources(projectId: string, sources: VideoEditImportSource[], binId?: string, signal?: AbortSignal, afterImport?: (document: VideoEditDocument, itemIds: string[]) => VideoEditDocument | Promise<VideoEditDocument>): Promise<string[]> {
   const owner = requireVideoEditInstance(projectId)
   logger.info('导入剪辑素材开始', { event: 'video_edit.media.import.start', context: { projectId, count: sources.length } })
   try {
   if (binId && !owner.document.bins.some(bin => bin.id === binId)) throw new Error('目标素材箱不存在。')
-  const unique = sources.filter((source, index) => sources.findIndex(other => sameVideoEditMediaPath(other.path, source.path)) === index)
+  if (sources.some(source => !source.assetId && !source.path)) throw new Error('请引用素材库素材或本地源文件。')
+  const unique = sources.filter((source, index) => sources.findIndex(other => source.assetId ? other.assetId === source.assetId : !other.assetId && typeof source.path === 'string' && typeof other.path === 'string' && sameVideoEditMediaPath(other.path, source.path)) === index)
   if (unique.length > 200) throw new Error('工程最多引用 200 个源文件，请分批导入。')
-  const results = await Promise.allSettled(unique.map(async source => ({ source, media: owner.document.media.find(media => sameVideoEditMediaPath(media.path, source.path)) ?? await inspectVideoEditMedia(source.path, signal) })))
+  const results = await Promise.allSettled(unique.map(async input => {
+    signal?.throwIfAborted()
+    const fixed = !input.assetId && input.path ? owner.document.media.find(media => sameVideoEditMediaPath(media.path, input.path!) && media.assetContent?.contentIdentity) : undefined
+    if (fixed) await boundedMetadata(() => verifyVideoEditMediaContent(fixed, signal))
+    const asset = input.assetId ? await boundedMetadata(() => resolveVideoEditAssetReference(input.assetId!)) : undefined
+    const path = asset?.filePath ?? input.path
+    if (!path) throw new Error('请引用素材库素材或本地源文件。')
+    return { path, ...(asset ? { asset } : {}), ...(fixed ? { fixed } : {}) }
+  }))
   const failed = results.find(result => result.status === 'rejected')
   if (failed?.status === 'rejected') throw failed.reason
-  const inspected = results.flatMap(result => result.status === 'fulfilled' ? [result.value] : [])
+  const resolved: Array<{ path: string; asset?: AssetRecord; fixed?: VideoEditMedia }> = []
+  for (const result of results) if (result.status === 'fulfilled') {
+    const previous = resolved.find(source => sameVideoEditMediaPath(source.path, result.value.path))
+    if (previous?.asset && result.value.asset && previous.asset.id !== result.value.asset.id) throw new Error('同一源文件包含冲突的素材库引用，请重新引用。')
+    if (!previous) resolved.push(result.value)
+    else if (result.value.asset) previous.asset = result.value.asset
+  }
+  signal?.throwIfAborted()
+  if (requireVideoEditInstance(projectId) !== owner) throw new Error('原工程已关闭，导入不会写入重新打开的工程。')
+  const metadata = await Promise.allSettled(resolved.map(async source => {
+    signal?.throwIfAborted()
+    const existing = owner.document.media.find(media => sameVideoEditMediaPath(media.path, source.path))
+    if (existing && source.asset) validateAssetMedia(existing, source.asset)
+    const media = existing ?? (source.asset?.mediaType === 'image' && source.asset.width && source.asset.height && /\.(png|jpe?g|webp|bmp|avif)$/i.test(source.path)
+      ? { id: crypto.randomUUID(), path: source.path, name: source.asset.displayName, kind: 'image' as const, width: source.asset.width, height: source.asset.height, durationSeconds: 0 }
+      : await inspectVideoEditMedia(source.path, signal))
+    if (existing && source.asset && !existing.assetContent?.contentIdentity && existing.kind !== 'image') {
+      const current = await inspectVideoEditMedia(source.path, signal)
+      if (current.durationSeconds !== existing.durationSeconds || Boolean(current.hasAudio) !== Boolean(existing.hasAudio) || JSON.stringify(current.frameRate) !== JSON.stringify(existing.frameRate) || current.frameRateMode !== existing.frameRateMode) throw new Error('旧引用的时长、帧率或音轨尚未核验，请先重新定位源素材。')
+    }
+    if (source.asset) validateAssetMedia(media, source.asset)
+    return { source, media }
+  }))
+  const metadataFailure = metadata.find(result => result.status === 'rejected')
+  if (metadataFailure?.status === 'rejected') throw metadataFailure.reason
+  const inspected = metadata.flatMap(result => result.status === 'fulfilled' ? [result.value] : [])
   signal?.throwIfAborted()
   if (requireVideoEditInstance(projectId) !== owner) throw new Error('原工程已关闭，导入不会写入重新打开的工程。')
   const ids: string[] = []
@@ -73,13 +114,23 @@ export async function importVideoEditSources(projectId: string, sources: VideoEd
     if (binId && !document.bins.some(bin => bin.id === binId)) throw new Error('导入期间目标素材箱已移除，请重新选择导入位置。')
     for (const { source, media: inspectedMedia } of inspected) {
       let media = document.media.find(media => sameVideoEditMediaPath(media.path, source.path))
-      if (!media) { media = { ...inspectedMedia, ...(source.assetId ? { assetId: source.assetId } : {}) }; document.media.push(media) }
-      else if (!media.assetId && source.assetId) media.assetId = source.assetId
+      if (!media) { media = { ...inspectedMedia }; document.media.push(media) }
+      if (source.asset) {
+        validateAssetMedia(media, source.asset)
+        const content = videoEditAssetContentSnapshot(source.asset)
+        if (!media.assetContent?.contentIdentity || media.path !== source.path) media.sourceRevision = crypto.randomUUID()
+        media.path = source.path
+        media.assetId = source.asset.id; media.assetContent = content
+      }
       let item = document.items.find(item => item.mediaId === media!.id && item.binId === binId)
       if (!item) { item = { id: crypto.randomUUID(), name: media.name, kind: media.kind, mediaId: media.id, ...(binId ? { binId } : {}) }; document.items.push(item) }
       ids.push(item.id)
     }
   const next = afterImport ? await afterImport(document, ids) : document
+  await Promise.all(inspected.map(({ source }) => source.asset ? boundedMetadata(async () => {
+    signal?.throwIfAborted()
+    if (!sameVideoEditAssetContent(source.asset!, await resolveVideoEditAssetReference(source.asset!.id))) throw new Error('素材库源文件在导入期间已改变，请重新引用该素材。')
+  }) : source.fixed ? boundedMetadata(() => verifyVideoEditMediaContent(source.fixed!, signal)) : undefined))
   signal?.throwIfAborted()
   if (requireVideoEditInstance(projectId) !== owner || owner.document !== baseline) throw new Error('导入检查期间原工程已改变，请重新导入。')
   editVideoProject(projectId, () => next)
@@ -104,8 +155,16 @@ export async function relinkVideoEditMedia(projectId: string, mediaId: string): 
   if (!previous) throw new Error('源素材不存在。')
   const path = await getPlatform().system.dialog.open()
   if (!path || Array.isArray(path)) return
+  const linked = sameVideoEditMediaPath(previous.path, path) && previous.assetId
+  const content = linked ? await getPlatform().assetLibrary.inspectFileContent(path, previous.kind) : undefined
   const media = await inspectVideoEditMedia(path)
   if (requireVideoEditInstance(projectId) !== owner) throw new Error('原工程已关闭，请重新定位素材。')
   if (media.kind !== previous.kind) throw new Error('重新定位的文件类型必须与原素材一致。')
-  editVideoProject(projectId, document => { if (!document.media.some(item => item.id === mediaId && item.path === previous.path && item.sourceRevision === previous.sourceRevision)) throw new Error('素材已被重新定位，请重新选择。'); return { ...document, media: document.media.map(item => item.id === mediaId ? { ...media, id: mediaId, sourceRevision: media.id, ...(sameVideoEditMediaPath(previous.path, path) && previous.assetId ? { assetId: previous.assetId } : {}) } : item) } })
+  if (content) {
+    const current = await getPlatform().assetLibrary.inspectFileContent(path, media.kind)
+    if (current.contentIdentity !== content.contentIdentity || current.sizeBytes !== content.sizeBytes || current.fileModifiedAt !== content.fileModifiedAt) throw new Error('源文件在重新定位期间已改变，请重新选择。')
+  }
+  if (requireVideoEditInstance(projectId) !== owner) throw new Error('原工程已关闭，请重新定位素材。')
+  if (owner.document.media.find(item => item.id === mediaId) !== previous) throw new Error('源素材在重新定位期间已改变，请重新选择。')
+  editVideoProject(projectId, document => ({ ...document, media: document.media.map(item => item.id === mediaId ? { ...media, id: mediaId, sourceRevision: media.id, ...(content ? { assetId: previous.assetId, assetContent: content } : {}) } : item) }))
 }

@@ -9,7 +9,6 @@ import { splitVideoEditRef } from './videoEditReflection'
 import { splitVideoEditClip } from '@/core/videoEdit/document'
 import { VIDEO_EDIT_APPLICATION_CAPABILITIES } from '@/core/application-control/domains/videoEdit/videoEditApplicationCapabilities'
 import { exportVideoEdit, cancelVideoEditExport, videoEditExportTask } from './videoEditExport'
-import { assetApplicationService } from '@/features/assets/application/assetApplicationService'
 import { getPlatform } from '@/platform/runtime'
 import { VideoEditSourceExecutor } from './videoEditSourceExecutor'
 import { importVideoEditSources } from './videoEditMedia'
@@ -46,9 +45,7 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
         }
         case 'import_video_edit_asset': {
           if (!input.assetRef) throw new Error('请提供素材库 assetRef。')
-          const asset = await assetApplicationService.inspect(input.assetRef.id)
-          if (requireVideoEditInstance(id) !== owner) throw new Error('原工程已关闭，请重新引用素材库素材。')
-          await importVideoEditSources(id, [{ path: asset.filePath, assetId: input.assetRef.id }]); await saveVideoEdit(id); break
+          await importVideoEditSources(id, [{ assetId: input.assetRef.id }]); await saveVideoEdit(id); break
         }
         case 'export_video_edit': await exportVideoEdit(id, undefined, true); break
         case 'cancel_video_edit_export': cancelVideoEditExport(id); break

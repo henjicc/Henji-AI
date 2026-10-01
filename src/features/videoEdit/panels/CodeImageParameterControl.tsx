@@ -49,7 +49,9 @@ export function CodeImageParameterControl({ target, parameterKey, title, value }
         if (input.sources.length !== 1) throw new Error('请一次拖入一张图片。')
         const source = input.sources[0]
         // Asset identity is authoritative; a drag payload cannot substitute its original path.
-        bind(source.assetId ? { kind: 'asset', assetId: source.assetId } : { kind: 'file', path: source.path })
+        if (source.assetId) bind({ kind: 'asset', assetId: source.assetId })
+        else if (source.path) bind({ kind: 'file', path: source.path })
+        else throw new Error('请引用素材库图片或本地图片文件。')
       } else throw new Error('此参数只接受图片，不能绑定音视频选区。')
     } catch (reason) { setError(reason instanceof Error ? reason.message : '无法识别拖入的图片。') }
   }

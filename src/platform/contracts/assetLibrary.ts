@@ -1,7 +1,8 @@
 export type AssetMediaType = 'image' | 'video' | 'audio'
 export type AssetSource = 'generated' | 'canvas' | 'camera-stage' | 'imported' | 'external'
 export type AssetInspectionStatus = 'pending' | 'ready' | 'missing' | 'failed'
-export interface AssetRecord { id: string; wasExisting?: boolean; mediaType: AssetMediaType; displayName: string; filePath: string; displayUrl: string; source: AssetSource; mimeType: string | null; sizeBytes: number | null; width: number | null; height: number | null; durationSeconds: number | null; thumbnailPath: string | null; thumbnailUrl: string | null; inspectionStatus: AssetInspectionStatus; inspectionError: string | null; fileModifiedAt: number | null; lastUsedAt: number | null; createdAt: number; updatedAt: number; tags: string[]; libraryIds: string[] }
+export interface AssetFileContent { sizeBytes: number; fileModifiedAt: number; contentIdentity: string }
+export interface AssetRecord { id: string; wasExisting?: boolean; mediaType: AssetMediaType; displayName: string; filePath: string; displayUrl: string; source: AssetSource; mimeType: string | null; sizeBytes: number | null; width: number | null; height: number | null; durationSeconds: number | null; thumbnailPath: string | null; thumbnailUrl: string | null; inspectionStatus: AssetInspectionStatus; inspectionError: string | null; fileModifiedAt: number | null; contentIdentity?: string | null; lastUsedAt: number | null; createdAt: number; updatedAt: number; tags: string[]; libraryIds: string[] }
 export interface AssetLibraryRecord { id: string; name: string; createdAt: number; updatedAt: number }
 export interface AssetLibrarySnapshot extends AssetLibraryRecord { assetIds: string[] }
 export interface CreateAssetInput { filePath: string; mediaType: AssetMediaType; displayName?: string; source: AssetSource; libraryIds?: string[] }
@@ -15,6 +16,7 @@ export interface AssetLibraryPlatform {
   touchAsset(id: string): Promise<void>
   checkPaths(filePaths: string[]): Promise<boolean[]>
   inspectAsset(id: string): Promise<AssetRecord>
+  inspectFileContent(filePath: string, mediaType: AssetMediaType): Promise<AssetFileContent>
   inspectAssets(ids: string[]): Promise<AssetRecord[]>
   relocateAsset(id: string, filePath: string): Promise<AssetRecord>
   listLibraries(): Promise<AssetLibraryRecord[]>

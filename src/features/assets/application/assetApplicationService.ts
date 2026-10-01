@@ -19,7 +19,7 @@ import type { AssetQueryInput, AssetRecord } from '@/platform/contracts/assetLib
 import type { AssetLibrarySnapshot } from '@/platform/contracts/assetLibrary'
 
 function publicAsset(asset: AssetRecord): Record<string, unknown> {
-  const { filePath: _filePath, thumbnailPath: _thumbnailPath, ...safe } = asset
+  const { filePath: _filePath, thumbnailPath: _thumbnailPath, contentIdentity: _contentIdentity, ...safe } = asset
   return safe
 }
 

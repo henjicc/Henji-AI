@@ -1,6 +1,5 @@
 import { validateCodeMaterialParameterValue } from '@/core/videoEdit/codeMaterial/parameters'
 import type { VideoEditDocument } from '@/core/videoEdit/document'
-import { assetApplicationService } from '@/features/assets/application/assetApplicationService'
 import { getPlatform } from '@/platform/runtime'
 import type { VideoEditCodeTarget } from './videoEditCodeParameters'
 import { readVideoEditCodeMetadata } from './videoEditCodeState'
@@ -27,18 +26,13 @@ export async function bindVideoEditCodeImage(target: VideoEditCodeTarget, key: s
   }
   if (!input || input.kind === 'media') {
     const document = await bind(structuredClone(baseline), input?.mediaId ?? null)
+    signal?.throwIfAborted()
+    if (requireVideoEditInstance(target.projectId) !== owner || owner.document !== baseline) throw new Error('原工程已关闭或内容已改变，请重新选择图片。')
     editVideoProject(target.projectId, () => document); return
   }
-  let path: string; let assetId: string | undefined
-  if (input.kind === 'asset') {
-    const asset = await assetApplicationService.inspect(input.assetId)
-    if (asset.mediaType !== 'image') throw new Error('此参数只接受图片资产。')
-    if (asset.inspectionStatus !== 'ready') throw new Error('此图片资产尚不可用，请先在素材库恢复源文件。')
-    path = asset.filePath; assetId = input.assetId
-  } else path = input.path
   signal?.throwIfAborted()
   if (requireVideoEditInstance(target.projectId) !== owner || owner.document !== baseline) throw new Error('原工程已关闭或内容已改变，请重新选择图片。')
-  await importVideoEditSources(target.projectId, [{ path, ...(assetId ? { assetId } : {}) }], undefined, signal, async (document, ids) => {
+  await importVideoEditSources(target.projectId, [input.kind === 'asset' ? { assetId: input.assetId } : { path: input.path }], undefined, signal, async (document, ids) => {
     const item = document.items.find(item => item.id === ids[0])
     if (!item?.mediaId || item.kind !== 'image') throw new Error('此参数只接受图片文件。')
     return bind(document, item.mediaId)

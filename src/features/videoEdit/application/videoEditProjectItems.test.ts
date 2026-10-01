@@ -10,7 +10,7 @@ import { dropVideoEditInput } from './videoEditDrop'
 import { VideoEditMutationExecutor, VideoEditCollectionExecutor } from './videoEditExecutors'
 import type { ApplicationPlannedStep } from '@/core/application-control'
 import { readVideoEditSource, updateVideoEditSource, registerVideoEditSourcePresenter } from './videoEditSource'
-import { editVideoSequence } from './videoEditService'
+import { editVideoSequence, editVideoProject } from './videoEditService'
 const files = new Map<string, string>()
 it('原生项目项使用真实图形、素材箱与历史，调整层默认选择有下方画面的轨道', async () => {
   const owner = (await createVideoEditProject())!; const id = owner.document.id; const sequenceId = owner.activeSequenceId
@@ -64,6 +64,8 @@ async function fixture() {
 }
 it('同路径在不同箱内保留不同项目项及资产身份，拖入按指定项目项引用', async () => {
   const instance = await fixture(); const id = instance.document.id
+  vi.spyOn(getPlatform().assetLibrary, 'inspectAsset').mockResolvedValue({ id: 'asset-original', mediaType: 'video', displayName: '原片', filePath: 'D:/media/original.mp4', displayUrl: '', source: 'imported', mimeType: 'video/mp4', sizeBytes: 4096, width: 3840, height: 2160, durationSeconds: 3, thumbnailPath: null, thumbnailUrl: null, inspectionStatus: 'ready', inspectionError: null, fileModifiedAt: 1000, contentIdentity: 'a'.repeat(64), lastUsedAt: null, createdAt: 1, updatedAt: 1, tags: [], libraryIds: [] })
+  editVideoProject(id, document => ({ ...document, media: document.media.map(media => ({ ...media, assetId: 'asset-original', assetContent: { sizeBytes: 4096, fileModifiedAt: 1000, contentIdentity: 'a'.repeat(64) } })) }))
   const bin = createVideoEditBin(id, '第二个素材箱')
   const ids = await importVideoEditSources(id, [{ path: 'd:\\media\\original.mp4', assetId: 'asset-original' }], bin)
   expect(instance.document.media).toHaveLength(1); expect(instance.document.media[0].assetId).toBe('asset-original')

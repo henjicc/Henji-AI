@@ -20,7 +20,8 @@ export function readVideoEditDrop(transfer: DataTransfer): VideoEditDropInput {
     return { kind: 'items', projectId: raw.projectId, itemIds: raw.itemIds as string[] }
   }
   const payload = readHenjiDragData(transfer)
-  if (payload?.filePath) return { kind: 'sources', sources: [{ path: payload.filePath, ...(payload.assetId ? { assetId: payload.assetId } : {}) }] }
+  if (payload?.assetId) return { kind: 'sources', sources: [{ assetId: payload.assetId }] }
+  if (payload?.filePath) return { kind: 'sources', sources: [{ path: payload.filePath }] }
   return { kind: 'sources', sources: videoEditDropPaths(transfer).map(path => ({ path })) }
 }
 
@@ -29,6 +30,7 @@ export function acceptsVideoEditDrop(transfer: DataTransfer): boolean {
 }
 export function videoEditDropPaths(transfer: DataTransfer): string[] {
   const payload = readHenjiDragData(transfer)
+  if (payload?.assetId) throw new Error('素材库拖入须通过正式素材引用解析。')
   if (payload?.filePath) return [payload.filePath]
   const paths = Array.from(transfer.files).map(file => getPlatform().media.getPathForFile(file)).filter(Boolean)
   if (!paths.length) throw new Error('请拖入本地文件，或先将生成素材保存到磁盘。')

@@ -1,7 +1,8 @@
 import { parseRecord, parseStringField, parseVoid, registerIpcHandler } from './registry'
-import { addAssetToLibrary, checkAssetPaths, createAsset, createLibrary, deleteAsset, deleteLibrary, inspectAsset, inspectAssets, inspectLibrary, listLibraries, listTags, queryAssets, rebaseAssetDataRoot, relocateAsset, removeAssetFromLibrary, renameLibrary, restoreLibrary, setAssetTags, touchAsset, updateAsset } from '../services/asset-library'
+import { addAssetToLibrary, checkAssetPaths, createAsset, createLibrary, deleteAsset, deleteLibrary, inspectAsset, inspectAssetFileContent, inspectAssets, inspectLibrary, listLibraries, listTags, queryAssets, rebaseAssetDataRoot, relocateAsset, removeAssetFromLibrary, renameLibrary, restoreLibrary, setAssetTags, touchAsset, updateAsset } from '../services/asset-library'
 import type { AssetLibrarySnapshotDto, AssetMediaType, AssetQuery, AssetSource, CreateAssetRequest } from '../services/asset-library/types'
 import { createMainLogger } from '../services/logging'
+import { assertTrustedApplicationSender } from './application-control'
 
 const logger = createMainLogger('main.asset_library')
 
@@ -37,6 +38,11 @@ function parseLibrarySnapshot(input: unknown): AssetLibrarySnapshotDto {
 export function registerAssetLibraryIpc(): void {
   logger.info('开始注册资产库 IPC', { event: 'asset_library.ipc.register.start' })
   registerIpcHandler('assetLibrary:createAsset', parseCreate, createAsset)
+  registerIpcHandler('assetLibrary:inspectFileContent', input => {
+    const record = parseRecord(input); const mediaType = requiredString(record, 'mediaType') as AssetMediaType
+    if (!MEDIA_TYPES.has(mediaType)) throw new Error('Invalid asset media type')
+    return { filePath: requiredString(record, 'filePath'), mediaType }
+  }, ({ filePath, mediaType }) => inspectAssetFileContent(filePath, mediaType), assertTrustedApplicationSender)
   registerIpcHandler('assetLibrary:updateAsset', parseName, ({ id, name }) => updateAsset({ id, displayName: name }))
   registerIpcHandler('assetLibrary:deleteAsset', (input) => parseStringField(input, 'id'), deleteAsset)
   registerIpcHandler('assetLibrary:queryAssets', parseQuery, queryAssets)

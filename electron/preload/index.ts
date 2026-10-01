@@ -339,6 +339,7 @@ const assetLibraryApi: HenjiAssetLibraryApi = {
   touchAsset: (id) => nativeInvoke('assetLibrary:touchAsset', { id }),
   checkPaths: (filePaths) => nativeInvoke('assetLibrary:checkPaths', { filePaths }),
   inspectAsset: (id) => nativeInvoke('assetLibrary:inspectAsset', { id }),
+  inspectFileContent: (filePath, mediaType) => nativeInvoke('assetLibrary:inspectFileContent', { filePath, mediaType }),
   inspectAssets: (ids) => nativeInvoke('assetLibrary:inspectAssets', { ids }),
   relocateAsset: (id, filePath) => nativeInvoke('assetLibrary:relocateAsset', { id, filePath }),
   listLibraries: () => nativeInvoke('assetLibrary:listLibraries'),

@@ -498,6 +498,27 @@ it('图片参数引用原媒体，经同一候选检查后写入；失败无半�
   } finally { app.dispose(); vi.unstubAllGlobals() }
 })
 
+it.each(['cancel', 'edit'] as const)('图片候选试渲染已结束后发生%s，发布瞬间守卫拒绝旧草稿', async action => {
+  const owner = (await createVideoEditProject())!; const id = owner.document.id
+  const imageSource = 'export default {apiVersion:1,name:"图片守卫",kind:"generator",mode:"static",width:3840,height:2160,durationSeconds:4,seed:1,parameters:{logo:{type:"image",title:"徽标",default:null,animatable:false}},render(ctx){return [image({source:ctx.params.logo,x:0,y:0,width:100,height:100})];}}'
+  const [item] = await createVideoEditCodeItems(id, [{ source: imageSource }]); appendVideoEditItems(id, [item], owner.activeSequenceId)
+  appendVideoEditMedia(id, { id: 'guard-image', name: '原图', kind: 'image', path: 'D:/guard.png', width: 100, height: 100, durationSeconds: 0 })
+  const clip = getActiveVideoEditSequence(owner).clips[0]
+  const target = { projectId: id, sequenceId: owner.activeSequenceId, clipId: clip.id, versionId: clip.code!.versionId }
+  const controller = new AbortController(); const detach = controller.signal.removeEventListener.bind(controller.signal)
+  let baseline = owner.document; let scheduled = false
+  vi.spyOn(controller.signal, 'removeEventListener').mockImplementation((type, callback, options) => {
+    detach(type, callback, options)
+    if (type === 'abort' && !scheduled) { scheduled = true; queueMicrotask(() => {
+      if (action === 'cancel') controller.abort(new Error('候选完成后取消'))
+      else { editVideoProject(id, document => ({ ...document, name: '候选完成后的手动修改' })); baseline = owner.document }
+    }) }
+  })
+  await expect(bindVideoEditCodeImage(target, 'logo', { kind: 'media', mediaId: 'guard-image' }, controller.signal)).rejects.toThrow(action === 'cancel' ? '候选完成后取消' : '内容已改变')
+  expect(scheduled).toBe(true); expect(owner.document).toBe(baseline)
+  expect(getActiveVideoEditSequence(owner).clips[0].code!.parameters.logo).toBeNull()
+})
+
 it('滤镜维持单输入边界，不能声明图片资源或把其它参数当作图片绑定', async () => {
   const owner = (await createVideoEditProject())!; const id = owner.document.id; const app = createApplicationHarness()
   const imageFilter = filterSource.replace('parameters:{', 'parameters:{logo:{type:"image",title:"徽标",default:null,animatable:false},')

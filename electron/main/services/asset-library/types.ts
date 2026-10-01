@@ -1,6 +1,7 @@
 export type AssetMediaType = 'image' | 'video' | 'audio'
 export type AssetSource = 'generated' | 'canvas' | 'camera-stage' | 'imported' | 'external'
 export type AssetInspectionStatus = 'pending' | 'ready' | 'missing' | 'failed'
+export interface AssetFileContent { sizeBytes: number; fileModifiedAt: number; contentIdentity: string }
 
 export interface AssetDto {
   id: string
@@ -20,6 +21,7 @@ export interface AssetDto {
   inspectionStatus: AssetInspectionStatus
   inspectionError: string | null
   fileModifiedAt: number | null
+  contentIdentity?: string | null
   lastUsedAt: number | null
   createdAt: number
   updatedAt: number

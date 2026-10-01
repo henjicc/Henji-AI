@@ -15,7 +15,7 @@ export const videoEditMediaSchema = z.object({
   id: identifier, name, path: z.string().min(1).max(32768).regex(/^(?:[A-Za-z]:[\\/]|\\\\|\/)/, '素材必须引用本地绝对路径。'),
   kind: z.enum(['video', 'audio', 'image']), durationSeconds: z.number().finite().nonnegative(),
   width: z.number().int().nonnegative(), height: z.number().int().nonnegative(),
-  assetId: identifier.optional(), sourceRevision: identifier.optional(), hasAudio: z.boolean().optional(), frameRate: videoEditRatioSchema.optional(), frameRateMode: z.enum(['sampled-constant', 'variable', 'unknown']).optional(),
+  assetId: identifier.optional(), assetContent: z.object({ sizeBytes: z.number().int().nonnegative(), fileModifiedAt: z.number().finite().nonnegative(), contentIdentity: identifier.optional() }).strict().optional(), sourceRevision: identifier.optional(), hasAudio: z.boolean().optional(), frameRate: videoEditRatioSchema.optional(), frameRateMode: z.enum(['sampled-constant', 'variable', 'unknown']).optional(),
 }).strict()
 export const videoEditBinSchema = z.object({ id: identifier, name, parentId: identifier.optional() }).strict()
 export const videoEditItemSchema = z.object({ id: identifier, name, binId: identifier.optional(), tags: z.array(z.string().trim().min(1).max(80)).max(32).optional(), kind: z.enum(['video', 'audio', 'image', 'text', 'code', 'graphic', 'adjustment']), mediaId: identifier.optional(), code: codeMaterialInstanceSchema.optional(), graphic: videoEditGraphicSchema.optional() }).strict()
@@ -48,6 +48,7 @@ export const videoEditDocumentSchema = z.object({
   codeMaterials: codeMaterialDefinitionsSchema.optional(),
 }).strict().superRefine((document, ctx) => {
   const issue = (message: string): void => { ctx.addIssue({ code: 'custom', message }) }
+  for (const media of document.media) if (media.assetContent && !media.assetId) issue('资产内容快照必须绑定素材库来源。')
   const ids = new Set<string>()
   for (const item of [...document.media, ...document.bins, ...document.items, ...(document.codeMaterials ?? []), ...(document.codeMaterials ?? []).flatMap(definition => definition.versions), ...document.sequences, ...document.sequences.flatMap(sequence => [...sequence.tracks, ...sequence.clips, ...sequence.annotations, ...(sequence.markers ?? []), ...(sequence.captions ?? []), ...(sequence.transitions ?? []), ...sequence.clips.flatMap(clip => clip.effects ?? [])])]) {
     if (ids.has(item.id)) issue('工程包含重复标识。')

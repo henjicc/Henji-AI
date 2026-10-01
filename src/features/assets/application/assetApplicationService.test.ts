@@ -36,6 +36,7 @@ const asset = {
   inspectionStatus: 'ready' as const,
   inspectionError: null,
   fileModifiedAt: 1,
+  contentIdentity: 'a'.repeat(64),
   lastUsedAt: 1,
   createdAt: 1,
   updatedAt: 2,
@@ -58,6 +59,8 @@ describe('asset application service', () => {
 
     expect(JSON.stringify(page)).not.toContain('C:\\private')
     expect(JSON.stringify(detail)).not.toContain('C:\\private')
+    expect(JSON.stringify(page)).not.toContain('contentIdentity')
+    expect(detail).not.toHaveProperty('contentIdentity')
     expect(detail).toMatchObject({ id: asset.id, displayUrl: 'henji-media://local/asset-1' })
   })
 

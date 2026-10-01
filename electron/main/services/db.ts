@@ -193,6 +193,7 @@ export function initializeSchema(conn: Database.Database): void {
       inspection_status TEXT NOT NULL DEFAULT 'pending' CHECK (inspection_status IN ('pending', 'ready', 'missing', 'failed')),
       inspection_error TEXT,
       file_modified_at INTEGER,
+      content_identity TEXT,
       last_used_at INTEGER,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
@@ -233,6 +234,7 @@ export function initializeSchema(conn: Database.Database): void {
   `)
   ensureColumn(conn, 'storyboard_projects', 'cover_path', 'TEXT')
   ensureColumn(conn, 'camera_stage_projects', 'cover_path', 'TEXT')
+  ensureColumn(conn, 'assets', 'content_identity', 'TEXT')
   initializeAssistantMemorySchema(conn)
   initializeApplicationOperationSchema(conn)
   initializeAudioEditSchema(conn)

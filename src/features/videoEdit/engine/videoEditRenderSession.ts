@@ -1,6 +1,7 @@
 import type { VideoEditComposition } from '@/core/videoEdit/document'
 import { toFetchableMediaUrl } from '@/services/imageSource'
 import type { RenderRequest, RenderResponse } from './videoEditWorker'
+import { VideoEditMediaContentVerifier } from '../videoEditMediaContent'
 
 /** A bounded request stream owned by a view/export, independent from the project lifetime. */
 export class VideoEditRenderSession {
@@ -9,6 +10,7 @@ export class VideoEditRenderSession {
   private nextId = 0
   private disposed = false
   private readonly ready: Promise<RenderResponse>
+  private readonly content = new VideoEditMediaContentVerifier()
   readonly canvas: OffscreenCanvas
   get previewPreparationMs(): number { return 0 }
   get previewBytes(): number { return 0 }
@@ -24,7 +26,8 @@ export class VideoEditRenderSession {
       if (value.error) pending.reject(new Error(value.error)); else pending.resolve(value)
     }
     this.worker.onerror = event => { for (const pending of this.pending.values()) pending.reject(new Error(event.message)); this.pending.clear() }
-    this.ready = this.request({ kind: 'init', document: this.mediaDocument(document), previewWidth, surface, cacheBudgetBytes }, surface ? [surface] : [])
+    this.ready = this.content.check(document).then(() => this.request({ kind: 'init', document: this.mediaDocument(document), previewWidth, surface, cacheBudgetBytes }, surface ? [surface] : []))
+    void this.ready.catch(() => undefined)
   }
   private request(request: RenderRequest extends infer T ? T extends RenderRequest ? Omit<T, 'id'> : never : never, transfer: Transferable[] = [], submitted?: () => void): Promise<RenderResponse> {
     if (this.disposed) return Promise.reject(new Error('剪辑渲染已关闭。'))
@@ -32,7 +35,7 @@ export class VideoEditRenderSession {
     const id = ++this.nextId
     return new Promise((resolve, reject) => { this.pending.set(id, { resolve, reject, submitted }); this.worker.postMessage({ ...request, id }, transfer) })
   }
-  async updateDocument(document: VideoEditComposition): Promise<void> { await this.ready; await this.request({ kind: 'update', document: this.mediaDocument(document) }); this.document = document }
+  async updateDocument(document: VideoEditComposition): Promise<void> { await this.ready; await this.content.check(document); await this.request({ kind: 'update', document: this.mediaDocument(document) }); this.document = document }
   invalidateDocument(revision: number): void { if (!this.disposed) this.worker.postMessage({ kind: 'invalidate', revision, id: 0 } satisfies RenderRequest) }
   async present(frame: number, sequential = false, scrubbing = false, deadline?: number, submitted?: () => void): Promise<RenderResponse> {
     await this.ready
@@ -59,6 +62,7 @@ export class VideoEditRenderSession {
   async dispose(): Promise<void> {
     if (this.disposed) return
     this.disposed = true
+    this.content.dispose()
     for (const pending of this.pending.values()) pending.reject(new Error('剪辑渲染已关闭。'))
     this.pending.clear()
     const id = ++this.nextId
