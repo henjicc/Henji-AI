@@ -5,13 +5,15 @@ import { editVideoProject, requireVideoEditInstance, setVideoEditView, switchVid
 import { makeVideoEditItemClip, makeVideoEditItemSequence, type VideoEditSequenceSettings } from '@/core/videoEdit/projectItems'
 import type { VideoEditDocument } from '@/core/videoEdit/document'
 import { readVideoEditCodeMetadata } from './videoEditCodeState'
+import { VIDEO_EDIT_SOURCE_DRAG_MIME, videoEditSourceRangeSchema, placeVideoEditSourceRange, type VideoEditSourceRange } from './videoEditSourceRange'
 
 export const VIDEO_EDIT_ITEM_DRAG_MIME = 'application/x-henji-video-edit-items'
-export type VideoEditDropInput = { kind: 'items'; projectId: string; itemIds: string[] } | { kind: 'sources'; sources: VideoEditImportSource[] }
+export type VideoEditDropInput = { kind: 'items'; projectId: string; itemIds: string[] } | { kind: 'sources'; sources: VideoEditImportSource[] } | VideoEditSourceRange
 export function writeVideoEditItemDrag(transfer: DataTransfer, projectId: string, itemIds: string[]): void {
   transfer.setData(VIDEO_EDIT_ITEM_DRAG_MIME, JSON.stringify({ projectId, itemIds }))
 }
 export function readVideoEditDrop(transfer: DataTransfer): VideoEditDropInput {
+  if (transfer.types.includes(VIDEO_EDIT_SOURCE_DRAG_MIME)) return videoEditSourceRangeSchema.parse(JSON.parse(transfer.getData(VIDEO_EDIT_SOURCE_DRAG_MIME)))
   if (transfer.types.includes(VIDEO_EDIT_ITEM_DRAG_MIME)) {
     const raw: unknown = JSON.parse(transfer.getData(VIDEO_EDIT_ITEM_DRAG_MIME))
     if (typeof raw !== 'object' || raw === null || !('projectId' in raw) || typeof raw.projectId !== 'string' || !('itemIds' in raw) || !Array.isArray(raw.itemIds) || !raw.itemIds.length || raw.itemIds.length > 500 || !raw.itemIds.every(id => typeof id === 'string' && id.length > 0 && id.length <= 100)) throw new Error('项目项拖拽数据无效。')
@@ -23,7 +25,7 @@ export function readVideoEditDrop(transfer: DataTransfer): VideoEditDropInput {
 }
 
 export function acceptsVideoEditDrop(transfer: DataTransfer): boolean {
-  return transfer.types.includes(VIDEO_EDIT_ITEM_DRAG_MIME) || transfer.types.includes(HENJI_DRAG_DATA_MIME) || transfer.types.includes('Files')
+  return transfer.types.includes(VIDEO_EDIT_SOURCE_DRAG_MIME) || transfer.types.includes(VIDEO_EDIT_ITEM_DRAG_MIME) || transfer.types.includes(HENJI_DRAG_DATA_MIME) || transfer.types.includes('Files')
 }
 export function videoEditDropPaths(transfer: DataTransfer): string[] {
   const payload = readHenjiDragData(transfer)
@@ -40,6 +42,10 @@ export async function dropVideoEditInput(projectId: string, input: VideoEditDrop
   const owner = requireVideoEditInstance(projectId)
   const targetTrackIds = owner.targetTrackIds.slice()
   const sequenceId = options.sequenceId ?? owner.activeSequenceId
+  if (input.kind === 'source_range') {
+    if (!placement) throw new Error('请把源范围拖入时间线或节目监视器。')
+    return placeVideoEditSourceRange(projectId, input, sequenceId, placement)
+  }
   let createdId: string | undefined; let selectedClip: string | undefined
   if (input.kind === 'items' && input.projectId !== projectId) throw new Error('请先将源文件导入当前工程，不能跨工程引用项目项。')
   const apply = (document: VideoEditDocument, ids: string[]): VideoEditDocument => {

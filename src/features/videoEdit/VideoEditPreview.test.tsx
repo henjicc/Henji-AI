@@ -3,16 +3,17 @@ import { act, render, cleanup, fireEvent } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { getPlatform } from '@/platform/runtime'
-import { appendVideoEditClip, appendVideoEditMedia, appendVideoEditSequence, switchVideoEditSequence, closeVideoEditProject, createVideoEditProject, editVideoSequence, getActiveVideoEditSequence, listVideoEditInstances, setVideoEditView } from './application/videoEditService'
+import { appendVideoEditClip, appendVideoEditMedia, appendVideoEditSequence, switchVideoEditSequence, closeVideoEditProject, createVideoEditProject, editVideoSequence, getActiveVideoEditSequence, listVideoEditInstances, setVideoEditView, setVideoEditTimelineView, undoVideoEdit } from './application/videoEditService'
 import { VideoEditPreview } from './VideoEditPreview'
-const pixel = vi.hoisted(() => ({ requests: [] as Array<{ frame: number; sequential?: boolean; submitted?: () => void; resolve: (value: { sourceTimestamps: number[] }) => void }>, sessions: 0, update: vi.fn(), dispose: vi.fn(), mixAudio: vi.fn() }))
+import { registerVideoEditSourcePresenter, updateVideoEditSource } from './application/videoEditSource'
+const pixel = vi.hoisted(() => ({ requests: [] as Array<{ frame: number; sequential?: boolean; submitted?: () => void; resolve: (value: { sourceTimestamps: number[]; presented?: boolean }) => void; reject: (error: Error) => void }>, sessions: 0, update: vi.fn(), dispose: vi.fn(), mixAudio: vi.fn() }))
 vi.mock('./engine/videoEditRenderSession', () => ({ VideoEditRenderSession: class {
   constructor() { pixel.sessions++ }
   updateDocument = pixel.update
   invalidateDocument = vi.fn()
   dispose = pixel.dispose
   mixAudio = pixel.mixAudio
-  present(frame: number, sequential?: boolean, _scrubbing?: boolean, _deadline?: number, submitted?: () => void) { return new Promise(resolve => pixel.requests.push({ frame, sequential, resolve, submitted })) }
+  present(frame: number, sequential?: boolean, _scrubbing?: boolean, _deadline?: number, submitted?: () => void) { return new Promise((resolve, reject) => pixel.requests.push({ frame, sequential, resolve, reject, submitted })) }
 } }))
 beforeEach(() => {
   vi.useFakeTimers(); installHarnessNativeStorage(); pixel.requests = []; pixel.sessions = 0; pixel.update.mockResolvedValue(undefined); pixel.dispose.mockResolvedValue(undefined)
@@ -42,7 +43,8 @@ it('同向播放中定位重建时钟，旧取帧回执不能覆盖新目标', a
   const instance = (await createVideoEditProject())!; appendVideoEditClip(instance.document.id)
   setVideoEditView(instance.document.id, { frame: 5, playing: true })
   const view = render(<VideoEditPreview instance={instance} onError={vi.fn()} />)
-  await act(async () => { await Promise.resolve(); pixel.requests[0].resolve({ sourceTimestamps: [5 / 30] }) })
+  await act(async () => {})
+  await act(async () => { pixel.requests[0].resolve({ sourceTimestamps: [5 / 30] }) })
   expect(pixel.requests[1].frame).toBe(6)
   act(() => setVideoEditView(instance.document.id, { frame: 60 }))
   await act(async () => { pixel.requests[1].resolve({ sourceTimestamps: [6 / 30] }); await vi.advanceTimersByTimeAsync(1) })
@@ -73,7 +75,8 @@ it('等待音频启动期间切反向，不排旧方向声音或画面', async (
   pixel.mixAudio.mockClear()
   setVideoEditView(instance.document.id, { frame: 5, playing: true })
   const view = render(<VideoEditPreview instance={instance} onError={vi.fn()} />)
-  await act(async () => { await Promise.resolve(); pixel.requests[0].resolve({ sourceTimestamps: [5 / 30] }) })
+  await act(async () => {})
+  await act(async () => { pixel.requests[0].resolve({ sourceTimestamps: [5 / 30] }) })
   act(() => setVideoEditView(instance.document.id, { playbackDirection: -1 }))
   await act(async () => { resume(); await vi.advanceTimersByTimeAsync(1) })
   expect(pixel.mixAudio).not.toHaveBeenCalled(); expect(pixel.requests.map(request => request.frame)).toEqual([5, 5])
@@ -113,12 +116,46 @@ it('参数修改更新同一渲染会话，旧文档结果不覆盖新内容且�
   await act(async () => { await Promise.resolve() })
   const canvas = view.getByLabelText('剪辑画面') as HTMLCanvasElement
   act(() => { editVideoSequence(instance.document.id, instance.activeSequenceId, document => ({ ...document, clips: document.clips.map(clip => ({ ...clip, brightness: .5 })) })) })
-  await act(async () => { pixel.requests[0].resolve({ sourceTimestamps: [0] }) })
+  await act(async () => { pixel.requests[0].resolve({ sourceTimestamps: [0], presented: false }) })
   expect(canvas.dataset.presentedFrame).toBeUndefined()
   await act(async () => { await vi.advanceTimersByTimeAsync(1) })
   expect(pixel.sessions).toBe(1); expect(pixel.update).toHaveBeenCalledWith(getActiveVideoEditSequence(instance))
   await act(async () => { pixel.requests[1].resolve({ sourceTimestamps: [0] }) })
   expect(canvas.dataset.presentedFrame).toBe('0')
+})
+
+it.each([false, true])('同序列参数更新期间已提交画面记录真实回执，不推进新文档播放位置（播放=%s）', async playing => {
+  const owner = (await createVideoEditProject())!; appendVideoEditClip(owner.document.id)
+  setVideoEditView(owner.document.id, { playing })
+  const view = render(<VideoEditPreview instance={owner} onError={vi.fn()} />)
+  await act(async () => {})
+  const canvas = view.getByLabelText('剪辑画面') as HTMLCanvasElement
+  const presentedRevision = owner.document.revision
+  act(() => {
+    editVideoSequence(owner.document.id, owner.activeSequenceId, sequence => ({ ...sequence, clips: sequence.clips.map(clip => ({ ...clip, x: .2 })) }))
+    setVideoEditView(owner.document.id, { frame: 5 })
+  })
+  await act(async () => { pixel.requests[0].resolve({ sourceTimestamps: [0], presented: true }) })
+  expect(canvas.dataset).toMatchObject({ presentedFrame: '0', presentedRevision: String(presentedRevision) })
+  expect(owner.frame).toBe(5)
+  await act(async () => { await vi.advanceTimersByTimeAsync(1) })
+  expect(pixel.sessions).toBe(1); expect(pixel.requests[1].frame).toBe(5)
+  await act(async () => { pixel.requests[1].resolve({ sourceTimestamps: [5 / 30], presented: true }) })
+  expect(canvas.dataset).toMatchObject({ presentedFrame: '5', presentedRevision: String(owner.document.revision) })
+})
+
+it('较旧拖动画面的完成回执不倒写当前显示面或调度位置', async () => {
+  const owner = (await createVideoEditProject())!; appendVideoEditClip(owner.document.id)
+  const view = render(<VideoEditPreview instance={owner} onError={vi.fn()} />)
+  await act(async () => {})
+  const canvas = view.getByLabelText('剪辑画面') as HTMLCanvasElement
+  await act(async () => { pixel.requests[0].resolve({ sourceTimestamps: [0], presented: true }); setVideoEditView(owner.document.id, { frame: 4, scrubbing: true }); await vi.advanceTimersByTimeAsync(2) })
+  act(() => { pixel.requests[1].submitted?.(); setVideoEditView(owner.document.id, { frame: 11 }) })
+  await act(async () => { await vi.advanceTimersByTimeAsync(1); pixel.requests[2].resolve({ sourceTimestamps: [11 / 30], presented: true }) })
+  const requestedAt = canvas.dataset.requestedAt
+  await act(async () => { pixel.requests[1].resolve({ sourceTimestamps: [4 / 30], presented: true }) })
+  expect(canvas.dataset).toMatchObject({ presentedFrame: '11', sourceTimestamps: String(11 / 30), requestedAt })
+  expect(owner.frame).toBe(11)
 })
 
 it('拖动在 GPU 合成期间准备最新帧，完成回执才公布画面，松手后精确定位', async () => {
@@ -153,4 +190,122 @@ it('快速切序列等待旧GPU所有者释放，只初始化最新序列', asyn
   await act(async () => { finish() }); expect(pixel.sessions).toBe(2)
   expect(pixel.dispose).toHaveBeenCalledTimes(1)
   expect(onError).not.toHaveBeenCalled()
+})
+
+it('隐藏节目停止取帧并释放会话，显示后等待退休完成且迟到画面不发布', async () => {
+  const owner = (await createVideoEditProject())!; const onError = vi.fn()
+  const view = render(<VideoEditPreview instance={owner} onError={onError} />)
+  await act(async () => { await Promise.resolve() }); const oldCanvas = view.getByLabelText('剪辑画面') as HTMLCanvasElement
+  let retire!: () => void; pixel.dispose.mockImplementationOnce(() => new Promise<void>(resolve => { retire = resolve }))
+  act(() => view.rerender(<VideoEditPreview instance={owner} onError={onError} visible={false} />))
+  expect(pixel.dispose).toHaveBeenCalledOnce(); expect(view.queryByLabelText('剪辑画面')).toBeNull()
+  act(() => view.rerender(<VideoEditPreview instance={owner} onError={onError} />))
+  await act(async () => { pixel.requests[0].resolve({ sourceTimestamps: [0] }) }); expect(oldCanvas.dataset.presentedFrame).toBeUndefined(); expect(pixel.sessions).toBe(1)
+  await act(async () => { retire() }); expect(pixel.sessions).toBe(2); expect(onError).not.toHaveBeenCalled()
+})
+
+it('真实画面移动连续更新只写一次历史，改选区和Escape取消原手势', async () => {
+  const owner = (await createVideoEditProject())!; appendVideoEditClip(owner.document.id); const clipId = owner.selection!; const onError = vi.fn()
+  const view = render(<VideoEditPreview instance={owner} onError={onError} />)
+  await act(async () => { await Promise.resolve() }); const host = view.getByLabelText('剪辑画面').parentElement!
+  Object.defineProperty(host, 'setPointerCapture', { value: vi.fn() })
+  vi.spyOn(host, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 320, 180))
+  fireEvent.click(view.getByRole('button', { name: '移动画面' }))
+  const send = (type: string, x: number, y: number) => fireEvent(host, new MouseEvent(type, { clientX: x, clientY: y, button: 0, bubbles: true }))
+  const history = owner.past.length
+  send('pointerdown', 32, 18); send('pointermove', 64, 36); send('pointermove', 96, 54)
+  expect(getActiveVideoEditSequence(owner).clips[0]).toMatchObject({ x: .2, y: .2 }); expect(owner.past).toHaveLength(history)
+  send('pointerup', 96, 54); expect(owner.past).toHaveLength(history + 1)
+  act(() => undoVideoEdit(owner.document.id)); expect(getActiveVideoEditSequence(owner).clips[0].x).toBe(0)
+  send('pointerdown', 0, 0); send('pointermove', 32, 18); fireEvent.keyDown(window, { key: 'Escape' }); expect(getActiveVideoEditSequence(owner).clips[0].x).toBe(0)
+  send('pointerdown', 0, 0); send('pointermove', 32, 18); act(() => setVideoEditTimelineView(owner.document.id, { selectedClipIds: [] })); send('pointerup', 32, 18)
+  expect(getActiveVideoEditSequence(owner).clips[0].x).toBe(0); expect(owner.selection).not.toBe(clipId); expect(onError).not.toHaveBeenCalled()
+})
+
+function installAudioGraph(resume: () => Promise<void> = async () => {}) {
+  const nodes: Array<{ start: ReturnType<typeof vi.fn>; stop: ReturnType<typeof vi.fn> }> = []
+  const node = () => ({ connect: vi.fn(), disconnect: vi.fn() })
+  const createGain = vi.fn(() => ({ ...node(), gain: { value: 1 } }))
+  const createSource = vi.fn(() => { const source = { ...node(), buffer: null, start: vi.fn(), stop: vi.fn(), onended: undefined }; nodes.push(source); return source })
+  const close = vi.fn().mockResolvedValue(undefined)
+  vi.stubGlobal('AudioContext', class {
+    private clock = 1; get currentTime() { this.clock += .001; return this.clock }
+    destination = node(); resume = resume; close = close; createGain = createGain; createBufferSource = createSource
+    createChannelSplitter = node; createAnalyser = () => ({ ...node(), fftSize: 1024, smoothingTimeConstant: 0, getFloatTimeDomainData: (data: Float32Array) => data.fill(.25) })
+  })
+  return { createGain, createSource, close, nodes }
+}
+async function audioPreviewFixture() {
+  const owner = (await createVideoEditProject())!
+  appendVideoEditMedia(owner.document.id, { id: 'audio-actual', name: '音画', path: 'D:/audio.mp4', kind: 'video', width: 320, height: 180, durationSeconds: 3, hasAudio: true }); appendVideoEditClip(owner.document.id, 'audio-actual')
+  setVideoEditView(owner.document.id, { frame: 0, playing: true }); return owner
+}
+it('音频启动等待后隐藏，晚到resume不新建退役节点', async () => {
+  let resume!: () => void; const graph = installAudioGraph(() => new Promise<void>(resolve => { resume = resolve }))
+  const owner = await audioPreviewFixture(); const onError = vi.fn(); const view = render(<VideoEditPreview instance={owner} onError={onError} />)
+  await act(async () => {})
+  await act(async () => { pixel.requests[0].resolve({ sourceTimestamps: [0] }) }); expect(resume).toBeTypeOf('function')
+  act(() => view.rerender(<VideoEditPreview instance={owner} onError={onError} visible={false} />))
+  await act(async () => { resume() }); expect(graph.close).toHaveBeenCalledOnce(); expect(graph.createGain).not.toHaveBeenCalled(); expect(onError).not.toHaveBeenCalled()
+})
+it('节目首帧已呈现后等待声音启动，立即暂停仍保留真实画面回执', async () => {
+  let resume!: () => void; installAudioGraph(() => new Promise<void>(resolve => { resume = resolve }))
+  const owner = await audioPreviewFixture(); const onError = vi.fn(); const view = render(<VideoEditPreview instance={owner} onError={onError} />)
+  await act(async () => {})
+  await act(async () => { pixel.requests[0].resolve({ sourceTimestamps: [0] }) })
+  act(() => setVideoEditView(owner.document.id, { frame: 0, playing: false }))
+  await act(async () => { resume(); await vi.advanceTimersByTimeAsync(1) })
+  expect(pixel.requests).toHaveLength(1)
+  const surface = view.getByLabelText('剪辑画面') as HTMLCanvasElement
+  expect(surface.dataset).toMatchObject({ presentedFrame: '0', sourceTimestamps: '0', scrubbing: 'false' })
+  expect(owner).toMatchObject({ frame: 0, playing: false }); expect(onError).not.toHaveBeenCalled(); view.unmount()
+})
+it('未呈现的播放首帧重新请求，不发布画面或启动旧时钟', async () => {
+  const graph = installAudioGraph(); const owner = await audioPreviewFixture(); const onError = vi.fn()
+  const view = render(<VideoEditPreview instance={owner} onError={onError} />); await act(async () => {})
+  await act(async () => { pixel.requests[0].resolve({ sourceTimestamps: [], presented: false }); await vi.advanceTimersByTimeAsync(1) })
+  expect(pixel.requests[1].frame).toBe(0); expect(graph.createGain).not.toHaveBeenCalled()
+  expect((view.getByLabelText('剪辑画面') as HTMLCanvasElement).dataset.presentedFrame).toBeUndefined()
+  expect(onError).not.toHaveBeenCalled(); view.unmount()
+})
+it('GPU等待时静音使晚到旧混音不再播放', async () => {
+  const graph = installAudioGraph(); let mixed!: (buffer: { duration: number }) => void
+  pixel.mixAudio.mockImplementationOnce(() => new Promise(resolve => { mixed = resolve }))
+  const owner = await audioPreviewFixture(); const onError = vi.fn(); const view = render(<VideoEditPreview instance={owner} onError={onError} />)
+  await act(async () => {})
+  await act(async () => { pixel.requests[0].resolve({ sourceTimestamps: [0] }) }); expect(mixed).toBeTypeOf('function')
+  act(() => editVideoSequence(owner.document.id, owner.activeSequenceId, sequence => ({ ...sequence, tracks: sequence.tracks.map(track => ({ ...track, muted: true })) })))
+  await act(async () => { mixed({ duration: .5 }) }); expect(graph.createSource).not.toHaveBeenCalled(); expect(onError).not.toHaveBeenCalled(); view.unmount()
+})
+it('已有音频节点在GPU等待时静音立即停止，不等待下次取帧', async () => {
+  const graph = installAudioGraph(); pixel.mixAudio.mockResolvedValueOnce({ duration: .5 })
+  const owner = await audioPreviewFixture(); const onError = vi.fn(); const view = render(<VideoEditPreview instance={owner} onError={onError} />)
+  await act(async () => {})
+  await act(async () => { pixel.requests[0].resolve({ sourceTimestamps: [0] }) })
+  expect(graph.nodes).toHaveLength(1); expect(graph.nodes[0].start).toHaveBeenCalledOnce()
+  expect(pixel.requests[1].frame).toBe(1)
+  act(() => editVideoSequence(owner.document.id, owner.activeSequenceId, sequence => ({ ...sequence, tracks: sequence.tracks.map(track => ({ ...track, muted: true })) })))
+  expect(graph.nodes[0].stop).toHaveBeenCalledOnce(); expect(onError).not.toHaveBeenCalled(); view.unmount()
+})
+it('源前台播放在GPU等待时立即停止节目声音', async () => {
+  const graph = installAudioGraph(); pixel.mixAudio.mockResolvedValueOnce({ duration: .5 })
+  const owner = await audioPreviewFixture(); const onError = vi.fn(); const view = render(<VideoEditPreview instance={owner} onError={onError} />)
+  await act(async () => {})
+  await act(async () => { pixel.requests[0].resolve({ sourceTimestamps: [0] }) })
+  expect(graph.nodes[0].start).toHaveBeenCalledOnce()
+  const off = registerVideoEditSourcePresenter(owner.document.id, async request => ({ ...request, presentedTimeUs: request.timeUs }))
+  await act(async () => {
+    const pending = updateVideoEditSource(owner.document.id, { itemId: owner.document.items[0].id, playing: true })
+    expect(graph.nodes[0].stop).toHaveBeenCalledOnce(); expect(owner.playing).toBe(false)
+    await pending
+  })
+  expect(onError).not.toHaveBeenCalled(); off(); view.unmount()
+})
+it('旧取帧失败不暂停后续节目命令', async () => {
+  const owner = (await createVideoEditProject())!; appendVideoEditClip(owner.document.id)
+  setVideoEditView(owner.document.id, { frame: 5, playing: true }); const onError = vi.fn()
+  const view = render(<VideoEditPreview instance={owner} onError={onError} />); await act(async () => {})
+  act(() => setVideoEditView(owner.document.id, { frame: 40, playing: true }))
+  await act(async () => { pixel.requests[0].reject(new Error('旧解码失败')); await vi.advanceTimersByTimeAsync(1) })
+  expect(owner).toMatchObject({ frame: 40, playing: true }); expect(pixel.requests[1].frame).toBe(40); expect(onError).not.toHaveBeenCalled(); view.unmount()
 })

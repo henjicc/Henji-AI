@@ -46,7 +46,7 @@ export default function VideoEditApp(): React.ReactElement {
   const sequence = instance ? getActiveVideoEditSequence(instance) : undefined
   const focusPanel = (target: EventTarget | null): void => {
     const panel = target instanceof HTMLElement ? target.closest<HTMLElement>('[data-video-edit-panel]')?.dataset.videoEditPanel : undefined
-    if (projectId && panel && ['timeline', 'program', 'source', 'project', 'effects'].includes(panel) && panel !== instance?.activePanel) focusVideoEditPanel(projectId, panel as NonNullable<typeof instance>['activePanel'])
+    if (projectId && panel && ['timeline', 'program', 'source', 'project', 'effects', 'content'].includes(panel) && panel !== instance?.activePanel) focusVideoEditPanel(projectId, panel as NonNullable<typeof instance>['activePanel'])
   }
   const shortcuts = useSettingsStore(state => state.videoEditShortcuts)
   return <div className="flex h-full min-h-0 flex-col bg-app text-text-dark" onFocusCapture={event => focusPanel(event.target)} onPointerDownCapture={event => focusPanel(event.target)} onKeyDown={event => {

@@ -1,10 +1,11 @@
 import { createLogger } from '@/core/logging'
+import { reconcileVideoEditTimedContent } from '@/core/videoEdit/timedContent'
 import { assertApplicationWritesAllowed } from '@/core/applicationLifecycle/applicationWriteBarrier'
 import { registerApplicationCloseGuard } from '@/core/applicationLifecycle/applicationCloseGuards'
-import { createVideoEditDocument, createVideoEditSequence, changeVideoEditSequenceSettings, videoEditComposition, videoEditDocumentSchema, type VideoEditComposition, type VideoEditDocument, type VideoEditSequence, type VideoEditMedia } from '@/core/videoEdit/document'
+import { createVideoEditDocument, createVideoEditSequence, changeVideoEditSequenceSettings, videoEditComposition, videoEditDocumentSchema, videoEditClipSchema, type VideoEditClip, type VideoEditComposition, type VideoEditDocument, type VideoEditSequence, type VideoEditMedia } from '@/core/videoEdit/document'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { rescaleVideoEditFrame } from '@/core/videoEdit/time'
-import { assertVideoEditLockedTracks } from '@/core/videoEdit/lockedTracks'
+import { assertVideoEditLockedTracks, assertVideoEditClipsEditable } from '@/core/videoEdit/lockedTracks'
 import { expandVideoEditSelection, type VideoEditTimelineTool } from '@/core/videoEdit/timelineSelection'
 import { applyVideoEditTimelineEdit } from '@/core/videoEdit/timelineEdits'
 import { getPlatform } from '@/platform/runtime'
@@ -40,7 +41,7 @@ export interface VideoEditInstance extends VideoEditTimelineView {
   playbackDirection: 1 | -1
   scrubbing?: boolean
   busy: boolean
-  activePanel: 'project' | 'source' | 'program' | 'timeline' | 'effects'
+  activePanel: 'project' | 'source' | 'program' | 'timeline' | 'effects' | 'content'
   panelFocusVersion?: number
   version: number
   saving?: Promise<void>
@@ -89,6 +90,21 @@ export function updateVideoEditGesture(handle: VideoEditGesture, update: (docume
   assertVideoEditWritable(owner)
   if (gestures.get(owner)?.handle !== handle) throw new Error('原参数调整已结束，请重新编辑。')
   return applyVideoEditDocument(owner, update, false)
+}
+const picturePositionSchema = videoEditClipSchema.pick({ x: true, y: true }).strict()
+/** Only these two bounded scalars change: timing, references, code and anchored content stay valid. */
+export function updateVideoEditPicturePosition(handle: VideoEditGesture, sequenceId: string, clipId: string, position: Pick<VideoEditClip, 'x' | 'y'>): VideoEditDocument {
+  assertApplicationWritesAllowed()
+  const owner = requireVideoEditInstance(handle.projectId); assertVideoEditWritable(owner)
+  if (gestures.get(owner)?.handle !== handle) throw new Error('原参数调整已结束，请重新编辑。')
+  const sequence = owner.document.sequences.find(sequence => sequence.id === sequenceId)
+  const clip = sequence?.clips.find(clip => clip.id === clipId)
+  if (!sequence || !clip || clip.kind === 'audio') throw new Error('目标画面片段不存在。')
+  assertVideoEditClipsEditable(sequence, [clipId])
+  const values = picturePositionSchema.parse(position)
+  if (clip.x === values.x && clip.y === values.y) return owner.document
+  const nextSequence = { ...sequence, clips: sequence.clips.map(value => value === clip ? { ...clip, ...values } : value) }
+  return publishVideoEditDocument(owner, { ...owner.document, sequences: owner.document.sequences.map(value => value === sequence ? nextSequence : value) }, false)
 }
 export function finishVideoEditGesture(handle: VideoEditGesture, commit = true): void {
   const owner = instances.get(handle.projectId); const state = owner && gestures.get(owner)
@@ -199,10 +215,12 @@ export function duplicateVideoEditSequence(projectId: string, sequenceId: string
   sequence.tracks = sequence.tracks.map(track => ({ ...track, id: crypto.randomUUID() }))
   sequence.clips = sequence.clips.map(clip => ({ ...clip, id: clips.get(clip.id)!, ...(clip.linkId ? { linkId: links.get(clip.linkId) } : {}), ...(clip.groupId ? { groupId: groups.get(clip.groupId) } : {}) }))
   sequence.annotations = sequence.annotations.map(mark => ({ ...mark, id: crypto.randomUUID(), clipId: clips.get(mark.clipId)! }))
+  if (sequence.markers) sequence.markers = sequence.markers.map(mark => ({ ...mark, id: crypto.randomUUID(), ...(mark.clipId ? { clipId: clips.get(mark.clipId)! } : {}) }))
+  if (sequence.captions) sequence.captions = sequence.captions.map(caption => ({ ...caption, id: crypto.randomUUID(), ...(caption.clipId ? { clipId: clips.get(caption.clipId)! } : {}) }))
   editVideoProject(projectId, document => ({ ...document, sequences: [...document.sequences, sequence] })); return sequence.id
 }
 export function deleteVideoEditSequence(projectId: string, sequenceId: string): void {
-  editVideoProject(projectId, document => { if (document.sequences.length === 1) throw new Error('工程至少保留一个序列。'); const sequence = document.sequences.find(sequence => sequence.id === sequenceId); if (!sequence) throw new Error('目标序列不存在。'); if (sequence.clips.length || sequence.annotations.length) throw new Error('请先移除序列内的片段和标注，再移除序列。'); return { ...document, sequences: document.sequences.filter(sequence => sequence.id !== sequenceId) } })
+  editVideoProject(projectId, document => { if (document.sequences.length === 1) throw new Error('工程至少保留一个序列。'); const sequence = document.sequences.find(sequence => sequence.id === sequenceId); if (!sequence) throw new Error('目标序列不存在。'); if (sequence.clips.length || sequence.annotations.length || sequence.markers?.length || sequence.captions?.length) throw new Error('请先移除序列内的片段和标注，再移除序列。'); return { ...document, sequences: document.sequences.filter(sequence => sequence.id !== sequenceId) } })
 }
 export function updateVideoEditSequenceSettings(projectId: string, sequenceId: string, settings: Parameters<typeof changeVideoEditSequenceSettings>[1] & { name?: string; binId?: string | null }): void {
   const { name, binId, ...timing } = settings
@@ -223,10 +241,14 @@ export function restoreVideoEditSnapshot(id: string, expected: VideoEditDocument
   return applyVideoEditDocument(instance, () => snapshot, true, true)
 }
 function applyVideoEditDocument(instance: VideoEditInstance, update: (document: VideoEditDocument) => VideoEditDocument, recordHistory: boolean, restoring = false): VideoEditDocument {
-  const next = videoEditDocumentSchema.parse(update(structuredClone(instance.document)))
+  const requested = update(structuredClone(instance.document))
+  const next = videoEditDocumentSchema.parse(restoring ? requested : reconcileVideoEditTimedContent(instance.document, requested))
   if (!restoring) assertVideoEditLockedTracks(instance.document, next)
   validateCodeMaterialDocument(next, readVideoEditCodeMetadata(instance, next))
   if (JSON.stringify(next) === JSON.stringify(instance.document)) return instance.document
+  return publishVideoEditDocument(instance, next, recordHistory)
+}
+function publishVideoEditDocument(instance: VideoEditInstance, next: VideoEditDocument, recordHistory: boolean): VideoEditDocument {
   if (recordHistory) { instance.past = [...instance.past.slice(-49), instance.document]; instance.future = [] }
   const before = instance.document
   instance.document = { ...next, revision: instance.document.revision + 1 }
@@ -302,7 +324,7 @@ export function setVideoEditTimelineView(id: string, values: Partial<VideoEditTi
 }
 export function focusVideoEditPanel(id: string, panel: VideoEditInstance['activePanel']): void {
   const instance = requireVideoEditInstance(id)
-  if (!['project', 'source', 'program', 'timeline', 'effects'].includes(panel)) throw new Error('剪辑面板不存在。')
+  if (!['project', 'source', 'program', 'timeline', 'effects', 'content'].includes(panel)) throw new Error('剪辑面板不存在。')
   instance.activePanel = panel; instance.panelFocusVersion = (instance.panelFocusVersion ?? 0) + 1; publishView()
 }
 export type VideoEditProjectView = Pick<VideoEditInstance, 'selectedItemIds' | 'selectedBinId' | 'openSequenceIds'>

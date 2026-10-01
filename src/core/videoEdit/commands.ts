@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-export type VideoEditCommandScope = 'global' | 'timeline' | 'program' | 'source' | 'project' | 'effects'
+export type VideoEditCommandScope = 'global' | 'timeline' | 'program' | 'source' | 'project' | 'effects' | 'content'
 export interface VideoEditShortcut { code: string; ctrl: boolean; alt: boolean; shift: boolean; meta: boolean }
 const key = (code: string, ctrl = false, shift = false, alt = false): VideoEditShortcut => ({ code, ctrl, shift, alt, meta: false })
 const editScopes: VideoEditCommandScope[] = ['timeline', 'program']

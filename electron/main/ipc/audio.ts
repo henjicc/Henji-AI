@@ -1,7 +1,6 @@
 import { isDeepStrictEqual } from 'node:util'
 import { assertAudioEditLocks } from '../../../src/core/audioEdit/edits'
-import { extractAudioSamples } from '../services/audio/ops'
-import type { ExtractAudioSamplesResultDto } from '../services/audio/types'
+import { registerAudioSampleHandlers } from './audio-samples'
 import { parseRecord, parseStringField, parseVoid, registerIpcHandler } from './registry'
 import { createAudioEditProject, deleteAudioEditProject, relinkAudioEditSource, verifyAudioEditSource } from '../services/audio-edit/media'
 import { detectAudioEditSilence } from '../services/audio-edit/silence'
@@ -26,17 +25,8 @@ import type {
   AudioEditTranscriptionRequest,
 } from '../../../src/core/audioEdit/types'
 
-interface ExtractAudioSamplesPayload {
-  source: string
-  bucketCount: number
-}
-
 export function registerAudioIpc(): void {
-  registerIpcHandler<ExtractAudioSamplesPayload, ExtractAudioSamplesResultDto>(
-    'audio:extractSamples',
-    parseExtractAudioSamplesPayload,
-    ({ source, bucketCount }) => extractAudioSamples(source, bucketCount)
-  )
+  registerAudioSampleHandlers()
 
   registerIpcHandler('audioEdit:projects:list', parseVoid, () => listAudioEditProjects())
   registerIpcHandler<AudioEditProjectCreateRequest, AudioEditProjectDocument>(
@@ -143,14 +133,6 @@ function readBoolean(record: Record<string, unknown>, field: string): boolean {
   const value = record[field]
   if (typeof value !== 'boolean') throw new Error(`Expected boolean field "${field}"`)
   return value
-}
-
-function parseExtractAudioSamplesPayload(input: unknown): ExtractAudioSamplesPayload {
-  const record = parseRecord(input)
-  return {
-    source: readString(record, 'source'),
-    bucketCount: readNumber(record, 'bucketCount'),
-  }
 }
 
 function readString(record: Record<string, unknown>, field: string): string {

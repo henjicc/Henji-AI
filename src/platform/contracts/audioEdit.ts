@@ -13,6 +13,7 @@ import type {
   AudioEditSuggestion,
   AudioEditTask,
 } from '@/core/audioEdit/types'
+import type { AudioWaveformRangeRequest, AudioWaveformRangeResult } from './audioWaveform'
 
 export interface AudioEditAsrModel {
   id: string
@@ -40,4 +41,5 @@ export interface AudioEditPlatform {
   listProcessors(): Promise<AudioEditProcessorDescriptor[]>
   preparePreviewChunk(request: AudioEditPreviewChunkRequest): Promise<AudioEditPreviewChunk>
   extractWaveform(source: string, bucketCount: number): Promise<{ rms: number[]; peak: number[]; durationSeconds: number }>
+  extractWaveformRange(request: AudioWaveformRangeRequest, signal?: AbortSignal): Promise<AudioWaveformRangeResult>
 }

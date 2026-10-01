@@ -6,7 +6,7 @@ import { focusCanvasNode, openCanvasProject } from '@/features/canvas/applicatio
 import { closeApplicationSurface as closeSurface, listApplicationSurfaces, openApplicationSurface as openSurface } from '@/features/navigation/application/index'
 
 import { assetApplicationService } from '@/features/assets/application/assetApplicationService'
-import { focusVideoEdit, switchVideoEditSequence, setVideoEditView, setVideoEditProjectView, requireVideoEditInstance } from '@/features/videoEdit/application/videoEditService'
+import { focusVideoEdit, focusVideoEditPanel, switchVideoEditSequence, setVideoEditView, setVideoEditProjectView, requireVideoEditInstance } from '@/features/videoEdit/application/videoEditService'
 import { readVideoEditData, splitVideoEditRef } from '@/features/videoEdit/application/videoEditReflection'
 import type { CapabilityExecutionContext } from '@/features/application-control/capabilities/handlerTypes'
 
@@ -45,7 +45,7 @@ export async function focusApplicationEntity(
     const { projectId, childId } = splitVideoEditRef(ref)
     focusVideoEdit(projectId)
     const instance = requireVideoEditInstance(projectId)
-    const sequence = instance.document.sequences.find(sequence => sequence.id === childId || sequence.clips.some(clip => clip.id === childId) || sequence.annotations.some(mark => mark.id === childId) || sequence.tracks.some(track => track.id === childId))
+    const sequence = instance.document.sequences.find(sequence => sequence.id === childId || sequence.clips.some(clip => clip.id === childId) || sequence.annotations.some(mark => mark.id === childId) || sequence.tracks.some(track => track.id === childId) || sequence.markers?.some(mark => mark.id === childId) || sequence.captions?.some(caption => caption.id === childId))
     if (sequence) switchVideoEditSequence(projectId, sequence.id)
     if (ref.kind === 'video_edit.clip') setVideoEditView(projectId, { selection: childId })
     if (ref.kind === 'video_edit.bin') setVideoEditProjectView(projectId, { selectedBinId: childId, selectedItemIds: [] })
@@ -67,6 +67,12 @@ export async function focusApplicationEntity(
       const mark = sequence?.annotations.find(item => item.id === childId)
       if (!mark) throw new Error('NOT_FOUND')
       setVideoEditView(projectId, { selection: mark.clipId, frame: mark.frame, playing: false })
+    }
+    if (ref.kind === 'video_edit.marker' || ref.kind === 'video_edit.caption') {
+      const content = ref.kind === 'video_edit.marker' ? sequence?.markers?.find(mark => mark.id === childId) : sequence?.captions?.find(caption => caption.id === childId)
+      if (!content) throw new Error('NOT_FOUND')
+      setVideoEditView(projectId, { selection: content.clipId ?? null, frame: 'frame' in content ? content.frame : content.start, playing: false })
+      focusVideoEditPanel(projectId, 'content')
     }
     return { ref, ...openApplicationSurface('workspace.video_edit', correlation) }
   }

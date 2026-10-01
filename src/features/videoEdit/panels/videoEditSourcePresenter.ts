@@ -2,10 +2,11 @@ import type { VideoEditMedia } from '@/core/videoEdit/document'
 import type { VideoEditSourceObservation, VideoEditSourcePresenter } from '../application/videoEditSource'
 import { resolveImageDisplayUrl } from '@/services/imageSource'
 import { VideoEditSourceFrames } from '../engine/videoEditSourceFrames'
+import { createVideoEditAudioMeter, type VideoEditAudioLevel } from '../engine/videoEditAudioMeter'
 
 // A Dock hide/show may create a different presenter/host before the old worker
 // has closed. New reverse owners wait for every retiring source worker.
-let sourceFramesReleased: Promise<unknown> = Promise.resolve()
+let sourceFramesReleased: Promise<void> = Promise.resolve()
 
 function cancelled(signal: AbortSignal): unknown { return signal.reason ?? new DOMException('源预览已取消。', 'AbortError') }
 function waitEvent(element: HTMLElement, event: string, signal: AbortSignal): Promise<void> {
@@ -30,7 +31,7 @@ function abortable<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
 
 /** Native forward playback and cached reverse frames share one source owner. */
 export function createVideoEditSourcePresenter(host: HTMLElement, resolveMedia: (itemId: string) => VideoEditMedia,
-  observe: (itemId: string, observation: VideoEditSourceObservation) => void): { present: VideoEditSourcePresenter; release: () => void; dispose: () => void } {
+  observe: (itemId: string, observation: VideoEditSourceObservation) => void, observeLevel?: (levels: VideoEditAudioLevel[]) => void): { present: VideoEditSourcePresenter; release: () => Promise<void>; dispose: () => Promise<void> } {
   let element: HTMLVideoElement | HTMLAudioElement | HTMLImageElement | undefined
   let currentItem = ''
   let currentPath = ''
@@ -50,6 +51,10 @@ export function createVideoEditSourcePresenter(host: HTMLElement, resolveMedia: 
   let frames: VideoEditSourceFrames | undefined
   let frameCanvas: HTMLCanvasElement | undefined
   let frameClockUs = 0
+  let audio: AudioContext | undefined
+  let audioSource: MediaElementAudioSourceNode | undefined
+  let meter: ReturnType<typeof createVideoEditAudioMeter> | undefined
+  let meterTimer: ReturnType<typeof setInterval> | undefined
   const stopReverse = (): void => { clearTimeout(reverseTimer); reverseTimer = undefined; reversePlaying = false; reverse?.abort(new Error('反向源播放已停止。')); reverse = undefined; frames?.invalidate() }
   const releaseFrames = (): void => {
     const previous = frames; frames = undefined; frameCanvas?.remove(); frameCanvas = undefined
@@ -61,6 +66,9 @@ export function createVideoEditSourcePresenter(host: HTMLElement, resolveMedia: 
     releaseFrames()
     generation++
     const media = element
+    clearInterval(meterTimer); meterTimer = undefined; audioSource?.disconnect(); audioSource = undefined; meter?.dispose(); meter = undefined
+    if (audio) { const retired = audio; audio = undefined; sourceFramesReleased = Promise.allSettled([sourceFramesReleased, retired.close()]).then(() => undefined) }
+    observeLevel?.([])
     element = undefined; currentItem = ''; currentPath = ''; currentRevision = undefined; presentedTimeUs = 0; nativePresentedTimeUs = undefined; nativePresentedSeconds = undefined
     if (media instanceof HTMLMediaElement) {
       media.pause()
@@ -179,6 +187,7 @@ export function createVideoEditSourcePresenter(host: HTMLElement, resolveMedia: 
         element.className = media.kind === 'audio' ? 'hidden' : 'h-full w-full object-contain'
         if (element instanceof HTMLMediaElement) {
           element.preload = 'metadata'
+          if (observeLevel) element.crossOrigin = 'anonymous'
           if (element instanceof HTMLVideoElement) element.playsInline = true
           const expected = generation
           element.addEventListener('timeupdate', () => { if (generation === expected) { if (element instanceof HTMLAudioElement) presentedTimeUs = Math.round(element.currentTime * 1e6); publish() } })
@@ -199,6 +208,7 @@ export function createVideoEditSourcePresenter(host: HTMLElement, resolveMedia: 
       target.volume = request.volume
       target.muted = request.playbackDirection === -1
       target.pause()
+      if (!request.playing || request.playbackDirection === -1) { clearInterval(meterTimer); meterTimer = undefined; observeLevel?.([]) }
       if (target instanceof HTMLVideoElement && videoFrame !== undefined) target.cancelVideoFrameCallback(videoFrame)
       videoFrame = undefined
       const previousGpuFrame = frames ? presentedTimeUs : undefined
@@ -206,6 +216,7 @@ export function createVideoEditSourcePresenter(host: HTMLElement, resolveMedia: 
       await seek(target, request.timeUs / 1e6, operation.signal)
       if (sameGpuClock && previousGpuFrame !== undefined && Math.abs(presentedTimeUs - previousGpuFrame) > 1) throw new Error('源画面交接未能确认同一帧，请重新定位。')
       releaseFrames()
+      await abortable(sourceFramesReleased, operation.signal)
       if (request.playing && request.playbackDirection === -1 && target instanceof HTMLVideoElement) {
         const expected = generation; const anchorTimeUs = presentedTimeUs
         const started = performance.now()
@@ -227,7 +238,15 @@ export function createVideoEditSourcePresenter(host: HTMLElement, resolveMedia: 
         canvas.dataset.preparationMs = String(performance.now() - started); canvas.dataset.cacheBytes = String(result.cacheBytes); canvas.dataset.presentedTimeUs = String(result.presentedTimeUs)
         target.className = 'hidden'; host.append(canvas)
       }
-      if (request.playing && request.playbackDirection !== -1) await abortable(target.play(), operation.signal)
+      if (request.playing && request.playbackDirection !== -1) {
+        if (observeLevel && (media.kind === 'audio' || media.hasAudio === true)) {
+          audio ??= new AudioContext()
+          if (!meter) { meter = createVideoEditAudioMeter(audio, 2); audioSource = audio.createMediaElementSource(target); audioSource.connect(meter.input) }
+          await abortable(audio.resume(), operation.signal)
+          meterTimer ??= setInterval(() => observeLevel(!target.paused && !target.muted && !target.ended ? meter!.read() : [{ peak: 0, rms: 0 }, { peak: 0, rms: 0 }]), 50)
+        }
+        await abortable(target.play(), operation.signal)
+      }
       operation.signal.throwIfAborted()
       if (request.playing && request.playbackDirection === -1) startReverse(target, media)
       else if (target instanceof HTMLVideoElement && request.playing) watchVideo(target, generation)
@@ -235,5 +254,5 @@ export function createVideoEditSourcePresenter(host: HTMLElement, resolveMedia: 
     } catch (error) { if (pending === operation) release(); throw error }
     finally { signal.removeEventListener('abort', abort); if (pending === operation) pending = undefined }
   }
-  return { present, release: () => { pending?.abort(new Error('源预览已关闭。')); release() }, dispose: () => { disposed = true; pending?.abort(new Error('源预览面板已关闭。')); pending = undefined; release() } }
+  return { present, release: () => { pending?.abort(new Error('源预览已关闭。')); release(); return sourceFramesReleased }, dispose: () => { disposed = true; pending?.abort(new Error('源预览面板已关闭。')); pending = undefined; release(); return sourceFramesReleased } }
 }

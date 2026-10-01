@@ -204,7 +204,7 @@ struct Vertex { @builtin(position) position: vec4f, @location(0) uv: vec2f }
   async draw(document: VideoEditComposition, clips: VideoEditClip[], pictures: Array<VideoSample | VideoEditGpuFrame | VideoEditCodePicture | ImageBitmap | null>, shouldPresent: () => boolean, deadline?: number): Promise<{ presented: boolean; completion: Promise<void> }> {
     await this.ready
     if (!shouldPresent()) return { presented: false, completion: Promise.resolve() }
-    if (deadline !== undefined) await new Promise<void>(resolve => {
+    if (deadline !== undefined && performance.timeOrigin + performance.now() < deadline - 0.8) await new Promise<void>(resolve => {
       let request = 0
       const finish = (): void => { self.cancelAnimationFrame(request); this.waits.delete(finish); resolve() }
       const tick = (at: number): void => { if (!shouldPresent() || performance.timeOrigin + at >= deadline - 0.8) finish(); else request = self.requestAnimationFrame(tick) }

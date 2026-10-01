@@ -3,12 +3,15 @@ import type { CodeMaterialMetadataReader } from './codeMaterialDocument'
 import { assertVideoEditClipsEditable } from './lockedTracks'
 import { expandVideoEditSelection } from './timelineSelection'
 import { offsetVideoEditSource, rescaleVideoEditFrame, type VideoEditRatio } from './time'
+import { retimeVideoEditContent, type VideoEditMarker, type VideoEditCaption, type VideoEditContentOrigin } from './timedContent'
 
 export interface VideoEditClipboard {
   projectId: string
   frameRate: VideoEditRatio
   clips: VideoEditClip[]
   annotations: VideoEditAnnotation[]
+  markers?: VideoEditMarker[]
+  captions?: VideoEditCaption[]
   tracks?: Array<{ index: number; kind: 'video' | 'audio' }>
 }
 export type VideoEditTimelineEdit =
@@ -100,7 +103,7 @@ function intervals(clips: readonly VideoEditClip[]): Array<{ from: number; to: n
 export function copyVideoEditClips(document: VideoEditDocument, sequenceId: string, clipIds: string[]): VideoEditClipboard {
   const sequence = sequenceOf(document, sequenceId); const ids = new Set(expandVideoEditSelection(sequence, clipIds))
   if (!ids.size) throw new Error('请先选择要复制的片段。')
-  return structuredClone({ projectId: document.id, frameRate: sequence.frameRate, clips: sequence.clips.filter(clip => ids.has(clip.id)), annotations: sequence.annotations.filter(mark => ids.has(mark.clipId)), tracks: sequence.tracks.map(track => ({ index: track.index, kind: track.kind })) })
+  return structuredClone({ projectId: document.id, frameRate: sequence.frameRate, clips: sequence.clips.filter(clip => ids.has(clip.id)), annotations: sequence.annotations.filter(mark => ids.has(mark.clipId)), markers: (sequence.markers ?? []).filter(mark => mark.clipId && ids.has(mark.clipId)), captions: (sequence.captions ?? []).filter(caption => caption.clipId && ids.has(caption.clipId)), tracks: sequence.tracks.map(track => ({ index: track.index, kind: track.kind })) })
 }
 
 /** Vertical dragging moves the selected lanes of the primary kind; linked audio keeps its lane. */
@@ -126,7 +129,7 @@ export function applyVideoEditTimelineEdit(document: VideoEditDocument, sequence
 }
 export function applyVideoEditTimelineEditResult(document: VideoEditDocument, sequenceId: string, edit: VideoEditTimelineEdit, metadata?: CodeMaterialMetadataReader): { sequence: VideoEditSequence; selectedClipIds?: string[] } {
   const result = edit.kind === 'place' ? placeClips(document, sequenceOf(document, sequenceId), edit) : { sequence: applyClipEdit(document, sequenceId, edit, metadata) }
-  if (result.sequence.clips.length > 500 || result.sequence.annotations.length > 500 || result.sequence.clips.some(clip => clip.start < 0 || clip.duration < 1 || clip.start + clip.duration > Math.floor(result.sequence.frameRate.numerator / result.sequence.frameRate.denominator * 1800))) throw new Error('编辑结果超出序列片段、标记数量或时间边界。')
+  if (result.sequence.clips.length > 500 || result.sequence.annotations.length > 500 || (result.sequence.markers?.length ?? 0) > 500 || (result.sequence.captions?.length ?? 0) > 500 || result.sequence.clips.some(clip => clip.start < 0 || clip.duration < 1 || clip.start + clip.duration > Math.floor(result.sequence.frameRate.numerator / result.sequence.frameRate.denominator * 1800))) throw new Error('编辑结果超出序列片段、标记数量或时间边界。')
   return result
 }
 function applyClipEdit(document: VideoEditDocument, sequenceId: string, edit: Exclude<VideoEditTimelineEdit, { kind: 'place' }>, metadata?: CodeMaterialMetadataReader): VideoEditSequence {
@@ -146,7 +149,7 @@ function applyClipEdit(document: VideoEditDocument, sequenceId: string, edit: Ex
       if (edit.snapThreshold !== undefined) {
         const threshold = edit.snapThreshold
         if (!Number.isFinite(threshold) || threshold < 0) throw new Error('吸附距离无效。')
-        const candidates = [0, ...(edit.snapFrames ?? []), ...sequence.annotations.map(mark => mark.frame), ...sequence.clips.filter(clip => !selected.has(clip.id)).flatMap(clip => [clip.start, clip.start + clip.duration])]
+        const candidates = [0, ...(edit.snapFrames ?? []), ...(sequence.markers ?? []).map(mark => mark.frame), ...sequence.annotations.map(mark => mark.frame), ...sequence.clips.filter(clip => !selected.has(clip.id)).flatMap(clip => [clip.start, clip.start + clip.duration])]
         let offset = threshold + 1
         for (const edge of clips.flatMap(clip => [clip.start, clip.start + clip.duration])) for (const candidate of candidates) {
           const difference = candidate - edge - delta
@@ -165,7 +168,7 @@ function applyClipEdit(document: VideoEditDocument, sequenceId: string, edit: Ex
       delta = clamp(delta)
       if (edit.snapThreshold !== undefined) {
         if (!Number.isFinite(edit.snapThreshold) || edit.snapThreshold < 0) throw new Error('吸附距离无效。')
-        const candidates = [0, ...(edit.snapFrames ?? []), ...sequence.annotations.map(mark => mark.frame), ...sequence.clips.filter(clip => !selected.has(clip.id)).flatMap(clip => [clip.start, clip.start + clip.duration])]
+        const candidates = [0, ...(edit.snapFrames ?? []), ...(sequence.markers ?? []).map(mark => mark.frame), ...sequence.annotations.map(mark => mark.frame), ...sequence.clips.filter(clip => !selected.has(clip.id)).flatMap(clip => [clip.start, clip.start + clip.duration])]
         let offset = edit.snapThreshold + 1
         for (const edge of clips.map(clip => edit.mode === 'in' ? clip.start : clip.start + clip.duration)) for (const candidate of candidates) {
           const difference = candidate - edge - delta
@@ -179,7 +182,8 @@ function applyClipEdit(document: VideoEditDocument, sequenceId: string, edit: Ex
     assertTargets(sequence, adjusted); assertNoOverlap(sequence.clips.filter(clip => !selected.has(clip.id)), adjusted)
     const byId = new Map(adjusted.map(clip => [clip.id, clip])); const next = sequence.clips.map(clip => byId.get(clip.id) ?? clip)
     const annotations = edit.mode === 'move' ? shiftAnnotations(sequence, next) : sequence.annotations.filter(mark => { const clip = byId.get(mark.clipId); return !clip || (mark.frame >= clip.start && mark.frame < clip.start + clip.duration) })
-    return { ...sequence, clips: next, annotations }
+    const origins = new Map(adjusted.map(clip => [clip.id, { originalId: clip.id, shift: edit.mode === 'move' ? clip.start - sequence.clips.find(value => value.id === clip.id)!.start : 0 }]))
+    return retimeVideoEditContent(sequence, { ...sequence, clips: next, annotations }, origins)
   }
   if (edit.kind === 'delete') {
     let kept = sequence.clips.filter(clip => !selected.has(clip.id))
@@ -194,7 +198,7 @@ function applyClipEdit(document: VideoEditDocument, sequenceId: string, edit: Ex
       })
       assertRelatedShifts(sequence, kept)
     }
-    return { ...sequence, clips: kept, annotations: shiftAnnotations(sequence, kept) }
+    return retimeVideoEditContent(sequence, { ...sequence, clips: kept, annotations: shiftAnnotations(sequence, kept) })
   }
   if (edit.kind === 'separate_audio') {
     const audioTrack = sequence.tracks.find(track => track.index === edit.audioTrack)
@@ -235,7 +239,7 @@ function placeClips(document: VideoEditDocument, sequence: VideoEditSequence, ed
     assertRelatedCoverage(sequence, changing); assertVideoEditClipsEditable(sequence, changing)
     if (crossing.length) kept = splitClips(sequence, crossing.map(clip => clip.id), edit.frame)
     const shifted = kept.clips.map(clip => affected.has(clip.track) && clip.start >= edit.frame ? { ...clip, start: clip.start + length } : clip)
-    kept = { ...kept, clips: shifted, annotations: shiftAnnotations(kept, shifted) }
+    kept = retimeVideoEditContent(kept, { ...kept, clips: shifted, annotations: shiftAnnotations(kept, shifted) })
   }
   if (edit.mode === 'overwrite') {
     const end = edit.frame + length
@@ -243,22 +247,26 @@ function placeClips(document: VideoEditDocument, sequence: VideoEditSequence, ed
     assertRelatedCoverage(sequence, overlapping.map(clip => clip.id))
     assertVideoEditClipsEditable(sequence, overlapping.map(clip => clip.id))
     const fragments = new Map<string, VideoEditClip[]>()
+    const origins = new Map<string, VideoEditContentOrigin>()
     for (const clip of overlapping) {
       const pieces: VideoEditClip[] = []
       if (clip.start < edit.frame) pieces.push({ ...clip, duration: edit.frame - clip.start })
       if (clip.start + clip.duration > end) pieces.push({ ...structuredClone(clip), id: pieces.length ? crypto.randomUUID() : clip.id, start: end, duration: clip.start + clip.duration - end, ...offsetVideoEditSource(clip, end - clip.start, sequence.frameRate) })
       fragments.set(clip.id, pieces)
+      for (const piece of pieces) origins.set(piece.id, { originalId: clip.id, shift: 0 })
     }
     const rightPieces = remapRelations([...fragments.values()].flatMap(pieces => pieces.filter(clip => clip.start === end)))
     const rightById = new Map(rightPieces.map(clip => [clip.id, clip]))
     for (const [id, pieces] of fragments) fragments.set(id, pieces.map(clip => rightById.get(clip.id) ?? clip))
-    kept = { ...sequence, clips: sequence.clips.flatMap(clip => fragments.get(clip.id) ?? [clip]), annotations: sequence.annotations.flatMap(mark => {
+    kept = retimeVideoEditContent(sequence, { ...sequence, clips: sequence.clips.flatMap(clip => fragments.get(clip.id) ?? [clip]), annotations: sequence.annotations.flatMap(mark => {
       const pieces = fragments.get(mark.clipId)
       if (!pieces) return [mark]
       const piece = pieces.find(clip => mark.frame >= clip.start && mark.frame < clip.start + clip.duration)
       return piece ? [{ ...mark, clipId: piece.id }] : []
-    }) }
+    }) }, origins)
   }
   const annotations = edit.clipboard.annotations.map(mark => ({ ...mark, id: crypto.randomUUID(), clipId: ids.get(mark.clipId)!, frame: edit.frame + convert(mark.frame) }))
-  return { sequence: { ...kept, clips: [...kept.clips, ...incoming], annotations: [...kept.annotations, ...annotations] }, selectedClipIds: incoming.map(clip => clip.id) }
+  const markers = (edit.clipboard.markers ?? []).map(mark => ({ ...mark, id: crypto.randomUUID(), clipId: ids.get(mark.clipId!)!, frame: edit.frame + convert(mark.frame) }))
+  const captions = (edit.clipboard.captions ?? []).map(caption => ({ ...caption, id: crypto.randomUUID(), clipId: ids.get(caption.clipId!)!, start: edit.frame + convert(caption.start), duration: convert(caption.start + caption.duration) - convert(caption.start) }))
+  return { sequence: { ...kept, clips: [...kept.clips, ...incoming], annotations: [...kept.annotations, ...annotations], ...(kept.markers || markers.length ? { markers: [...(kept.markers ?? []), ...markers] } : {}), ...(kept.captions || captions.length ? { captions: [...(kept.captions ?? []), ...captions] } : {}) }, selectedClipIds: incoming.map(clip => clip.id) }
 }

@@ -11,7 +11,9 @@ export function assertVideoEditLockedTracks(before: VideoEditDocument, after: Vi
         const clips = value.clips.filter(clip => clip.track === track.index).sort((a, b) => a.id.localeCompare(b.id))
         const ids = new Set(clips.map(clip => clip.id))
         const annotations = value.annotations.filter(mark => ids.has(mark.clipId)).sort((a, b) => a.id.localeCompare(b.id))
-        return JSON.stringify({ clips, annotations })
+        const markers = (value.markers ?? []).filter(mark => mark.clipId && ids.has(mark.clipId)).sort((a, b) => a.id.localeCompare(b.id))
+        const captions = (value.captions ?? []).filter(caption => caption.clipId && ids.has(caption.clipId)).sort((a, b) => a.id.localeCompare(b.id))
+        return JSON.stringify({ clips, annotations, markers, captions })
       }
       if (content(sequence) !== content(target)) throw new Error(`轨道“${track.name}”已锁定，请先解锁再编辑。`)
     }

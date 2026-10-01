@@ -1,61 +1,211 @@
-import { execFile, spawn } from 'node:child_process'
-
+import { spawn } from 'node:child_process'
+import { createHash, randomUUID } from 'node:crypto'
+import fs from 'node:fs/promises'
+import path from 'node:path'
+import { normalizeLocalSource } from '../image/source'
 import { resolveLocalMediaPath } from '../media/shared'
+import { withMediaHeavyTask } from '../media-import/concurrency'
 import { loadFfmpegPath, loadFfprobePath } from '../video/ffmpeg-loader'
-import type { ExtractAudioSamplesResultDto } from './types'
+import { createMainLogger } from '../logging'
+import { AudioWaveformQueue } from './queue'
+import { AudioWaveformWorker } from './worker-client'
+import type { AudioWaveformAggregationOptions, AudioWaveformRangeRequest, AudioWaveformRangeResult, ExtractAudioSamplesResultDto } from './types'
 
-const PCM_SAMPLE_RATE = 8000
-const PCM_MAX_AMPLITUDE = 32768
-
-function probeDuration(binary: string, source: string): Promise<number> {
-  return new Promise((resolve, reject) => {
-    execFile(binary, ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=nw=1:nk=1', source], { maxBuffer: 1024 * 1024 }, (error, stdout, stderr) => {
-      if (error) return reject(new Error(`ffprobe failed: ${error.message}\n${stderr}`))
-      const duration = Number(stdout.trim())
-      if (!Number.isFinite(duration) || duration <= 0) return reject(new Error('Audio source duration is unavailable'))
-      resolve(duration)
-    })
-  })
+const logger = createMainLogger('main.audio.waveform')
+const MICROSECONDS = 1_000_000
+const MAX_RANGE_US = 30 * 60 * MICROSECONDS
+interface AudioMetadata { sampleRate: number; channels: number; durationSeconds: number }
+interface SourceIdentity { path: string; identity: string }
+interface AggregationWorker {
+  start(options: AudioWaveformAggregationOptions): Promise<void>
+  push(bytes: Uint8Array): Promise<void>
+  finish(): Promise<AudioWaveformRangeResult['channels']>
+  dispose(): Promise<void>
+}
+export interface AudioWaveformServiceDependencies {
+  ffmpegPath?: () => Promise<string>
+  ffprobePath?: () => Promise<string>
+  resolvePath?: (source: string, signal?: AbortSignal) => Promise<string>
+  identity?: (source: string) => Promise<SourceIdentity>
+  createWorker?: () => AggregationWorker
+  cacheBudgetBytes?: number
 }
 
-/** 流式降采样并直接聚合固定数量的峰值桶；一小时素材不会在主进程保留整段 PCM。 */
-export async function extractAudioSamples(source: string, bucketCount: number): Promise<ExtractAudioSamplesResultDto> {
-  const [ffmpegPath, ffprobePath, localPath] = await Promise.all([
-    loadFfmpegPath(), loadFfprobePath(), resolveLocalMediaPath(source),
-  ])
-  const durationSeconds = await probeDuration(ffprobePath, localPath)
-  const bucketCountSafe = Math.max(1, Math.floor(bucketCount))
-  const expectedSamples = Math.max(1, Math.round(durationSeconds * PCM_SAMPLE_RATE))
-  const sumSquares = new Float64Array(bucketCountSafe)
-  const peaks = new Float64Array(bucketCountSafe)
-  const counts = new Uint32Array(bucketCountSafe)
+async function identifySource(source: string): Promise<SourceIdentity> {
+  const canonical = await fs.realpath(source)
+  const stat = await fs.stat(canonical, { bigint: true })
+  if (!stat.isFile()) throw new Error('波形来源必须为可读取的媒体文件。')
+  const identity = createHash('sha256').update([canonical, stat.dev, stat.ino, stat.size, stat.mtimeNs, stat.ctimeNs].join('|')).digest('hex')
+  return { path: canonical, identity }
+}
 
-  await new Promise<void>((resolve, reject) => {
-    const child = spawn(ffmpegPath, ['-i', localPath, '-f', 's16le', '-acodec', 'pcm_s16le', '-ar', String(PCM_SAMPLE_RATE), '-ac', '1', '-v', 'quiet', 'pipe:1'], { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true })
-    let sampleIndex = 0
-    let remainder: Buffer | null = null
-    const stderr: Buffer[] = []
-    child.stderr.on('data', (chunk: Buffer) => stderr.push(chunk))
-    child.stdout.on('data', (chunk: Buffer) => {
-      const data = remainder ? Buffer.concat([remainder, chunk]) : chunk
-      const byteLength = data.byteLength - data.byteLength % 2
-      for (let offset = 0; offset < byteLength; offset += 2) {
-        const value = Math.abs(data.readInt16LE(offset)) / PCM_MAX_AMPLITUDE
-        const bucket = Math.min(bucketCountSafe - 1, Math.floor(sampleIndex * bucketCountSafe / expectedSamples))
-        sumSquares[bucket] += value * value
-        counts[bucket] += 1
-        if (value > peaks[bucket]) peaks[bucket] = value
-        sampleIndex += 1
-      }
-      remainder = byteLength < data.byteLength ? data.subarray(byteLength) : null
+/** ceil(timeUs * sampleRate / 1e6), with no accumulated floating-point rounding. */
+export function audioWaveformSampleIndex(timeUs: number, sampleRate: number): number {
+  return Number((BigInt(timeUs) * BigInt(sampleRate) + 999_999n) / 1_000_000n)
+}
+export function validateAudioWaveformRange(request: AudioWaveformRangeRequest): void {
+  if (typeof request.source !== 'string' || !request.source.trim() || request.source.length > 8192 || request.source.includes('\0')) throw new Error('无效的音频素材路径。')
+  if (!path.isAbsolute(normalizeLocalSource(request.source))) throw new Error('范围波形只允许已导入的本地素材。')
+  if (request.sourceRevision !== undefined && (typeof request.sourceRevision !== 'string' || !request.sourceRevision.length || request.sourceRevision.length > 256)) throw new Error('无效的音频素材修订。')
+  if (!Number.isSafeInteger(request.startUs) || !Number.isSafeInteger(request.endUs) || request.startUs < 0 || request.endUs <= request.startUs || request.endUs - request.startUs > MAX_RANGE_US) throw new Error('波形范围必须为非负整数微秒，且不超过30分钟。')
+  if (!Number.isInteger(request.bucketCount) || request.bucketCount < 16 || request.bucketCount > 4096 || (request.channels !== 1 && request.channels !== 2)) throw new Error('无效的波形采样规格。')
+}
+
+/** Close, rather than error/exit, is the subprocess and stdio ownership barrier. */
+async function runProcess(binary: string, args: string[], signal: AbortSignal, onChunk?: (chunk: Uint8Array) => Promise<void>): Promise<string> {
+  signal.throwIfAborted()
+  const child = spawn(binary, args, { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true })
+  let failure: unknown
+  let errors = ''
+  let output = ''
+  let closed = false
+  let killTimer: ReturnType<typeof setTimeout> | undefined
+  const kill = (): void => {
+    if (closed) return
+    child.kill()
+    if (!killTimer) { killTimer = setTimeout(() => { child.kill('SIGKILL') }, 2000); killTimer.unref() }
+  }
+  signal.addEventListener('abort', kill, { once: true })
+  const close = new Promise<void>((resolve, reject) => {
+    child.on('error', error => { failure ??= error })
+    child.once('close', code => {
+      closed = true
+      if (killTimer) clearTimeout(killTimer)
+      signal.removeEventListener('abort', kill)
+      if (signal.aborted) reject(signal.reason)
+      else if (failure) reject(failure)
+      else if (code !== 0) reject(new Error(`音频处理失败：${errors || `退出码 ${code}`}`))
+      else resolve()
     })
-    child.once('error', reject)
-    child.once('close', (code) => code === 0 ? resolve() : reject(new Error(`ffmpeg failed (${code}): ${Buffer.concat(stderr).toString('utf8')}`)))
   })
+  void close.catch(() => undefined)
+  child.stderr.on('data', (chunk: Buffer) => { errors = (errors + chunk.toString('utf8')).slice(-16_384) })
+  child.stderr.on('error', error => { failure ??= error; kill() })
+  try {
+    for await (const raw of child.stdout) {
+      signal.throwIfAborted()
+      const chunk = raw as Buffer
+      if (onChunk) {
+        for (let offset = 0; offset < chunk.length; offset += 1024 * 1024) {
+          signal.throwIfAborted()
+          await onChunk(chunk.subarray(offset, offset + 1024 * 1024))
+        }
+      } else {
+        output += chunk.toString('utf8')
+        if (output.length > 1024 * 1024) throw new Error('音频元数据超过资源上限。')
+      }
+    }
+  } catch (error) { failure ??= error; kill() }
+  await close
+  // A final Worker reply can arrive after child close. It must still reject the job.
+  if (failure) throw failure
+  signal.throwIfAborted()
+  return output
+}
 
+async function probeAudio(binary: string, source: string, signal: AbortSignal): Promise<AudioMetadata> {
+  const text = await runProcess(binary, ['-v', 'error', '-show_entries', 'format=duration,start_time:stream=index,codec_type,sample_rate,channels,start_time,duration', '-of', 'json', source], signal)
+  const raw = JSON.parse(text) as { format?: { duration?: string; start_time?: string }; streams?: Array<{ codec_type?: string; sample_rate?: string; channels?: number; start_time?: string; duration?: string }> }
+  const stream = raw.streams?.find(item => item.codec_type === 'audio')
+  const sampleRate = Number(stream?.sample_rate)
+  const channels = stream?.channels ?? 0
+  const durationSeconds = Number(raw.format?.duration ?? stream?.duration)
+  if (!Number.isInteger(sampleRate) || sampleRate < 1 || sampleRate > 768_000 || !Number.isInteger(channels) || channels < 1 || channels > 64 || !Number.isFinite(durationSeconds) || durationSeconds <= 0) throw new Error('音频采样率或时长不可用。')
+  return { sampleRate, channels, durationSeconds }
+}
+
+export function createAudioWaveformService(dependencies: AudioWaveformServiceDependencies = {}): {
+  extractSamples(source: string, bucketCount: number, signal?: AbortSignal): Promise<ExtractAudioSamplesResultDto>
+  extractRange(request: AudioWaveformRangeRequest, signal?: AbortSignal): Promise<AudioWaveformRangeResult>
+  dispose(): Promise<void>
+  statistics(): { active: number; queued: number; cacheBytes: number; cacheEntries: number }
+} {
+  const queue = new AudioWaveformQueue(dependencies.cacheBudgetBytes)
+  const resolvePath = dependencies.resolvePath ?? resolveLocalMediaPath
+  const identity = dependencies.identity ?? identifySource
+  async function extract(source: string, bucketCount: number, request: AudioWaveformRangeRequest | undefined, signal?: AbortSignal): Promise<ExtractAudioSamplesResultDto | AudioWaveformRangeResult> {
+    signal?.throwIfAborted()
+    if (!Number.isFinite(bucketCount) || bucketCount < 1 || bucketCount > 360_000) throw new Error('无效的波形采样数量。')
+    const remote = !request && (source.startsWith('http://') || source.startsWith('https://'))
+    // Remote legacy resolution is itself media work: it must own a queue permit.
+    const localPath = remote ? undefined : await resolvePath(source, signal)
+    const knownIdentity = localPath ? await identity(localPath) : undefined
+    signal?.throwIfAborted()
+    const key = JSON.stringify([knownIdentity?.path ?? createHash('sha256').update(source).digest('hex'), knownIdentity?.identity ?? null, request?.sourceRevision ?? null, request ? 'range-f32-v1' : 'legacy-s16-v1', request?.startUs, request?.endUs, Math.floor(bucketCount), request?.channels ?? 1])
+    const result = await queue.run(key, jobSignal => withMediaHeavyTask(async () => {
+      const requestId = randomUUID()
+      const startedAt = performance.now()
+      const controller = new AbortController()
+      const timer = setTimeout(() => controller.abort(new DOMException('音频分析超时，请缩小范围后重试。', 'TimeoutError')), 120_000)
+      timer.unref()
+      const cancel = (): void => controller.abort(jobSignal.reason)
+      jobSignal.addEventListener('abort', cancel, { once: true })
+      if (jobSignal.aborted) cancel()
+      let worker: AggregationWorker | undefined
+      let temporaryPath: string | undefined
+      const workerCancel = (): void => { void worker?.dispose().catch(() => undefined) }
+      controller.signal.addEventListener('abort', workerCancel, { once: true })
+      logger.debug('开始分析音频波形', { event: 'audio.waveform.start', requestId, context: { mode: request ? 'range' : 'legacy', bucketCount } })
+      try {
+        const resolved = localPath ?? await resolvePath(source, controller.signal)
+        if (remote) temporaryPath = resolved
+        const original = knownIdentity ?? await identity(resolved)
+        const before = await identity(resolved)
+        if (before.identity !== original.identity) throw new Error('音频素材已变化，请重新分析。')
+        const [ffmpeg, ffprobe] = await Promise.all([(dependencies.ffmpegPath ?? loadFfmpegPath)(), (dependencies.ffprobePath ?? loadFfprobePath)()])
+        const metadata = await probeAudio(ffprobe, original.path, controller.signal)
+        const sampleRate = request ? metadata.sampleRate : 8000
+        const channelCount = request?.channels === 2 && metadata.channels >= 2 ? 2 : 1
+        const startUs = request?.startUs ?? 0
+        const endUs = request?.endUs ?? Math.round(metadata.durationSeconds * MICROSECONDS)
+        if (request && endUs > Math.round(metadata.durationSeconds * MICROSECONDS)) throw new Error('波形范围超出素材时长。')
+        const first = audioWaveformSampleIndex(startUs, sampleRate)
+        const expectedFrames = request ? audioWaveformSampleIndex(endUs, sampleRate) - first : Math.max(1, Math.round(metadata.durationSeconds * sampleRate))
+        if (expectedFrames < 1) throw new Error('波形范围内没有完整采样时刻。')
+        worker = (dependencies.createWorker ?? (() => new AudioWaveformWorker()))()
+        controller.signal.throwIfAborted()
+        await worker.start({ format: request ? 'f32le' : 's16le', channels: channelCount, bucketCount: Math.floor(bucketCount), expectedFrames })
+        const seekUs = Math.max(0, startUs - 100_000)
+        // Preserve container timestamps through accurate seek. first_pts trims preroll
+        // and inserts source-clock silence before delayed audio, without reducing sample rate.
+        const args = request
+          ? ['-nostdin', '-v', 'error', '-copyts', '-start_at_zero', '-ss', String(seekUs / MICROSECONDS), '-t', String((endUs - seekUs) / MICROSECONDS + 2 / sampleRate), '-i', original.path, '-map', '0:a:0', '-vn', '-sn', '-dn', '-af', `aresample=${sampleRate}:async=1:first_pts=${first},atrim=end_sample=${expectedFrames},asetpts=PTS-STARTPTS`, '-ar', String(sampleRate), '-ac', String(channelCount), '-f', 'f32le', 'pipe:1']
+          : ['-nostdin', '-v', 'error', '-i', original.path, '-map', '0:a:0', '-vn', '-sn', '-dn', '-ar', '8000', '-ac', '1', '-f', 's16le', 'pipe:1']
+        await runProcess(ffmpeg, args, controller.signal, chunk => worker!.push(chunk))
+        const channels = await worker.finish()
+        controller.signal.throwIfAborted()
+        const after = await identity(resolved)
+        if (after.identity !== original.identity) throw new Error('音频素材在分析期间变化，请重新分析。')
+        logger.debug('音频波形分析完成', { event: 'audio.waveform.completed', requestId, context: { sampleRate, channelCount, elapsedMs: performance.now() - startedAt } })
+        return request
+          ? { startUs, endUs, durationSeconds: metadata.durationSeconds, sampleRate, channelCount, channels, fileIdentity: original.identity, ...(request.sourceRevision !== undefined ? { sourceRevision: request.sourceRevision } : {}) }
+          : { peak: channels[0].peak, rms: channels[0].rms, durationSeconds: metadata.durationSeconds }
+      } catch (error) {
+        if (controller.signal.aborted) logger.debug('音频波形分析取消', { event: 'audio.waveform.cancelled', requestId })
+        else logger.error('音频波形分析失败', { event: 'audio.waveform.failed', requestId, error })
+        throw error
+      } finally {
+        clearTimeout(timer)
+        jobSignal.removeEventListener('abort', cancel)
+        controller.signal.removeEventListener('abort', workerCancel)
+        await worker?.dispose()
+        if (temporaryPath) await fs.rm(temporaryPath, { force: true })
+      }
+    }, jobSignal), signal, !remote)
+    signal?.throwIfAborted()
+    if (localPath && (await identity(localPath)).identity !== knownIdentity?.identity) throw new Error('音频素材已变化，请重新分析。')
+    signal?.throwIfAborted()
+    return result
+  }
   return {
-    rms: Array.from(sumSquares, (sum, index) => counts[index] > 0 ? Math.sqrt(sum / counts[index]) : 0),
-    peak: Array.from(peaks),
-    durationSeconds,
+    extractSamples: (source, bucketCount, signal) => extract(source, bucketCount, undefined, signal) as Promise<ExtractAudioSamplesResultDto>,
+    extractRange: (request, signal) => { validateAudioWaveformRange(request); return extract(request.source, request.bucketCount, request, signal) as Promise<AudioWaveformRangeResult> },
+    dispose: () => queue.dispose(),
+    statistics: () => queue.statistics,
   }
 }
+
+const service = createAudioWaveformService()
+export function extractAudioSamples(source: string, bucketCount: number, signal?: AbortSignal): Promise<ExtractAudioSamplesResultDto> { return service.extractSamples(source, bucketCount, signal) }
+export function extractAudioWaveformRange(request: AudioWaveformRangeRequest, signal?: AbortSignal): Promise<AudioWaveformRangeResult> { return service.extractRange(request, signal) }
+export function disposeAudioWaveformService(): Promise<void> { return service.dispose() }

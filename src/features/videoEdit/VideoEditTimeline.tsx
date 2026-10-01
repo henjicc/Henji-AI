@@ -7,7 +7,7 @@ import { VideoEditTimelineCanvas } from './timeline/VideoEditTimelineCanvas'
 import { VideoEditTimelineTransport } from './timeline/VideoEditTimelineTransport'
 import { timelineCommandPresentation } from './timeline/timelineCommandPresentation'
 
-export function VideoEditTimeline({ instance, onError }: { instance: VideoEditInstance; onError: (error: unknown) => void }): React.ReactElement {
+export function VideoEditTimeline({ instance, onError, visible = true }: { instance: VideoEditInstance; onError: (error: unknown) => void; visible?: boolean }): React.ReactElement {
   const sequence = getActiveVideoEditSequence(instance)
   const shortcuts = useSettingsStore(state => state.videoEditShortcuts)
   const context = captureVideoEditCommandContext(instance.document.id, 'timeline')
@@ -25,6 +25,6 @@ export function VideoEditTimeline({ instance, onError }: { instance: VideoEditIn
       <UiButton variant="plain" size="sm" className="!h-7" aria-pressed={snapping.checked} disabled={!snapping.enabled} title={snapping.tooltip} onClick={() => { void executeVideoEditCommand(captureVideoEditCommandContext(instance.document.id, 'timeline'), 'toggle_snapping').catch(onError) }}>{snapping.title}</UiButton>
       <div className="ml-auto flex w-28 shrink-0 items-center"><UiRangeInput aria-label="时间线缩放" min={0.1} max={20} step={0.1} value={instance.zoom} onChange={event => run(() => setVideoEditTimelineView(instance.document.id, { zoom: Number(event.target.value) }))} /></div>
     </div>
-    <VideoEditTimelineCanvas key={JSON.stringify([instance.document.id, sequence.id])} instance={instance} sequence={sequence} pixels={60 * instance.zoom / sequence.fps} onError={onError} />
+    <VideoEditTimelineCanvas key={JSON.stringify([instance.document.id, sequence.id])} instance={instance} sequence={sequence} pixels={60 * instance.zoom / sequence.fps} onError={onError} visible={visible} />
   </div>
 }

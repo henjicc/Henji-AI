@@ -12,20 +12,26 @@ import { assetApplicationService } from '@/features/assets/application/assetAppl
 import { getPlatform } from '@/platform/runtime'
 import { VideoEditSourceExecutor } from './videoEditSourceExecutor'
 import { importVideoEditSources } from './videoEditMedia'
+import { exportVideoEditSubtitles } from './videoEditTimedContent'
 
 const persistenceOwners = new WeakMap<VideoEditInstance, ApplicationPersistenceParticipant>()
 
 export const videoEditApplicationDomain: ApplicationDomainModule = {
   id: 'videoEdit', entities: createVideoEditRegistrations,
   registerExecutors(engine) {
-    for (const entityType of ['video_edit.project', 'video_edit.sequence', 'video_edit.bin', 'video_edit.item', 'video_edit.track', 'video_edit.clip', 'video_edit.annotation', 'video_edit.code_material'] as const) engine.registerMutationExecutor(new VideoEditMutationExecutor(entityType))
+    for (const entityType of ['video_edit.project', 'video_edit.sequence', 'video_edit.bin', 'video_edit.item', 'video_edit.track', 'video_edit.clip', 'video_edit.annotation', 'video_edit.code_material', 'video_edit.marker', 'video_edit.caption'] as const) engine.registerMutationExecutor(new VideoEditMutationExecutor(entityType))
     engine.registerMutationExecutor(new VideoEditSourceExecutor())
-    for (const entityType of ['video_edit.sequence', 'video_edit.bin', 'video_edit.item', 'video_edit.clip', 'video_edit.annotation', 'video_edit.code_material', 'video_edit.code_version'] as const) engine.registerCollectionExecutor(new VideoEditCollectionExecutor(entityType))
+    for (const entityType of ['video_edit.sequence', 'video_edit.bin', 'video_edit.item', 'video_edit.clip', 'video_edit.annotation', 'video_edit.code_material', 'video_edit.code_version', 'video_edit.marker', 'video_edit.caption'] as const) engine.registerCollectionExecutor(new VideoEditCollectionExecutor(entityType))
   },
   registerCapabilities(registrar) {
     for (const definition of VIDEO_EDIT_APPLICATION_CAPABILITIES) registrar.registerHandler(definition.id, async raw => {
-      const input = definition.inputSchema.parse(raw) as { projectRef: { kind: 'video_edit.project'; id: string }; clipRef?: { id: string }; frame?: number; assetRef?: { id: string } }
+      const input = definition.inputSchema.parse(raw) as { projectRef: { kind: 'video_edit.project'; id: string }; clipRef?: { id: string }; frame?: number; assetRef?: { id: string }; format?: 'mp4' | 'srt' | 'vtt' }
       const id = input.projectRef.id; const owner = requireVideoEditInstance(id)
+      if (definition.id === 'export_video_edit' && input.format && input.format !== 'mp4') {
+        const result = await exportVideoEditSubtitles(id, input.format)
+        if (requireVideoEditInstance(id) !== owner) throw new Error('原工程已关闭，操作回执不会写入重新打开的工程。')
+        return { resultRef: input.projectRef, verification: { verified: result.verified, target: input.projectRef, condition: result.verified ? '已从所选字幕文件回读并核对序列快照。' : '用户取消文件选择，未写出字幕。' }, message: result.saved ? '字幕已导出并核实。' : '已取消字幕导出。' }
+      }
       switch (definition.id) {
         case 'undo_video_edit': undoVideoEdit(id); await saveVideoEdit(id); break
         case 'redo_video_edit': undoVideoEdit(id, true); await saveVideoEdit(id); break

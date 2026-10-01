@@ -29,7 +29,7 @@ export function removeVideoEditBins(document: VideoEditDocument, ids: string[]):
   }
   return { ...document, bins: document.bins.filter(bin => !ids.includes(bin.id)) }
 }
-export function makeVideoEditItemClip(document: VideoEditDocument, itemId: string, sequenceId: string, placement: { frame: number; track?: number; sourceComponent?: 'video' | 'audio' }, codeMetadata?: CodeMaterialMetadataReader): VideoEditClip {
+export function makeVideoEditItemClip(document: VideoEditDocument, itemId: string, sequenceId: string, placement: { frame: number; track?: number; duration?: number; sourceComponent?: 'video' | 'audio'; sourceInUs?: number; sourceOutUs?: number }, codeMetadata?: CodeMaterialMetadataReader): VideoEditClip {
   const item = document.items.find(item => item.id === itemId)
   if (!item) throw new Error('项目项不存在。')
   const sequence = videoEditComposition(document, sequenceId)
@@ -43,9 +43,17 @@ export function makeVideoEditItemClip(document: VideoEditDocument, itemId: strin
   if (target.locked) throw new Error('目标轨道已锁定。')
   const program = item.code ? codeMetadata?.(item.code) : undefined
   if (item.kind === 'code' && (!program || !item.code)) throw new Error('代码素材尚未完成源码检查，不能添加占位片段。')
-  const duration = program?.mode === 'dynamic' ? Math.max(1, Math.floor(program.durationSeconds * sequence.fps + 1e-6)) : media && media.kind !== 'image' ? Math.max(1, Math.floor(media.durationSeconds * sequence.fps + 1e-6)) : Math.round(sequence.fps * 3)
+  const sourceInUs = placement.sourceInUs ?? 0
+  const sourceOutUs = placement.sourceOutUs ?? (media && media.kind !== 'image' ? Math.round(media.durationSeconds * 1e6) : undefined)
+  const ranged = placement.sourceInUs !== undefined || placement.sourceOutUs !== undefined
+  if (ranged && (!media || media.kind === 'image' || !Number.isSafeInteger(sourceInUs) || sourceInUs < 0 || !Number.isSafeInteger(sourceOutUs) || sourceOutUs! <= sourceInUs || sourceOutUs! > Math.round(media.durationSeconds * 1e6))) throw new Error('源范围须为原音视频素材内的正向整数微秒区间。')
+  const availableDuration = ranged ? Math.floor((sourceOutUs! - sourceInUs) / 1e6 * sequence.fps + 1e-6) : program?.mode === 'dynamic' ? Math.max(1, Math.floor(program.durationSeconds * sequence.fps + 1e-6)) : media && media.kind !== 'image' ? Math.max(1, Math.floor(media.durationSeconds * sequence.fps + 1e-6)) : Math.round(sequence.fps * 3)
+  const duration = placement.duration ?? availableDuration
+  if (availableDuration < 1) throw new Error('源选区短于一个序列帧。')
+  if (!Number.isSafeInteger(duration) || duration < 1 || (media && media.kind !== 'image' || program?.mode === 'dynamic') && duration > availableDuration) throw new Error('片段时长必须为源范围内的正整数帧。')
+  if (duration < 1) throw new Error('源选区短于一个序列帧。')
   if (!Number.isSafeInteger(placement.frame) || placement.frame < 0 || placement.frame + duration > Math.floor(sequence.fps * 1800)) throw new Error('素材落点或长度超出序列的 30 分钟范围，请先裁剪素材。')
-  return { id: crypto.randomUUID(), itemId, name: item.name, kind, ...(placement.sourceComponent ? { sourceComponent: placement.sourceComponent } : {}), ...(item.code ? { code: structuredClone(item.code) } : {}), track, start: placement.frame, duration, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, brightness: 1, text: item.kind === 'text' ? '输入文字' : '' }
+  return { id: crypto.randomUUID(), itemId, name: item.name, kind, ...(placement.sourceComponent ? { sourceComponent: placement.sourceComponent } : {}), ...(item.code ? { code: structuredClone(item.code) } : {}), track, start: placement.frame, duration, sourceInUs, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, brightness: 1, text: item.kind === 'text' ? '输入文字' : '' }
 }
 export function videoEditSequenceFromItem(document: VideoEditDocument, itemId: string, settings: VideoEditSequenceSettings = {}, codeMetadata?: CodeMaterialMetadataReader): VideoEditSequence {
   const { binId, ...sequenceSettings } = settings

@@ -176,6 +176,18 @@ it('关联清除与声音分量通过同源属性/集合创建回读，保存重
     expect(reopened.document.media).toHaveLength(1); expect(reopened.document.items).toHaveLength(1); expect(getActiveVideoEditSequence(reopened).clips[0].sourceComponent).toBe('audio')
   } finally { app.dispose() }
 })
+it('公共创建按显式源入点和短时长引用长视频，不把整段源时长当作节目边界', async () => {
+  const owner = (await createVideoEditProject())!; const id = owner.document.id
+  appendVideoEditMedia(id, { id: 'long-media', name: '长原视频', path: 'D:/original-long.mp4', kind: 'video', width: 3840, height: 2160, durationSeconds: 3600 })
+  const item = owner.document.items[0]; const app = createApplicationHarness()
+  try {
+    const parent = { kind: 'video_edit.sequence', id: `${id}:${owner.activeSequenceId}` }; const baseline = await app.read(parent)
+    const created = await app.call('change_application_entities', { summary: '长源短片段', changes: [{ kind: 'create_items', entityType: 'video_edit.clip', parent, items: [{ properties: { 'video_edit.clip.item_id': item.id, 'video_edit.clip.kind': 'video', 'video_edit.clip.name': '长源短片段', 'video_edit.clip.start': 53900, 'video_edit.clip.duration': 30, 'video_edit.clip.source_in_us': 3_500_000_000, 'video_edit.clip.track': 1 } }] }] }, baseline.revisions as Record<string, number>)
+    expect(created, JSON.stringify(created)).toMatchObject({ ok: true })
+    expect(getActiveVideoEditSequence(owner).clips[0]).toMatchObject({ itemId: item.id, start: 53900, duration: 30, sourceInUs: 3_500_000_000 })
+    expect(owner.document.media[0].path).toBe('D:/original-long.mp4')
+  } finally { app.dispose() }
+})
 it('旧工程拆音先检测真实音轨，检查期间文档变化/无音轨均不产生半个编辑', async () => {
   const owner = (await createVideoEditProject())!; const id = owner.document.id
   appendVideoEditMedia(id, { id: 'media', name: '视频', path: 'D:/original.mp4', kind: 'video', width: 320, height: 180, durationSeconds: 3 })

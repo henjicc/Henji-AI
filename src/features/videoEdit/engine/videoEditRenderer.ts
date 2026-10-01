@@ -1,6 +1,7 @@
 import { ALL_FORMATS, AudioSampleSink, VideoSampleSink, VideoSample, Input, UrlSource } from 'mediabunny'
 import { videoEditClipMedia, activeVideoEditClips, audibleVideoEditClips, clipSourceSeconds, type VideoEditComposition, type VideoEditMedia } from '@/core/videoEdit/document'
 import { videoEditSourceSeconds } from '@/core/videoEdit/time'
+import { videoEditCaptionClips } from '@/core/videoEdit/timedContent'
 import { VideoEditGpuCompositor } from './videoEditGpuCompositor'
 import { VideoEditFrameCache } from './videoEditFrameCache'
 import { VideoEditSeekDecoder } from './videoEditSeekDecoder'
@@ -131,7 +132,7 @@ export class VideoEditRenderer {
     if (this.disposed) throw new Error('预览已关闭。')
     const document = this.document; const epoch = this.presentationEpoch
     const canPresent = (): boolean => !this.disposed && this.document === document && this.presentationEpoch === epoch && shouldPresent()
-    const active = activeVideoEditClips(document, frame).filter(clip => clip.kind !== 'audio' && (clip.kind !== 'code' || clip.opacity > 0))
+    const active = [...activeVideoEditClips(document, frame).filter(clip => clip.kind !== 'audio' && (clip.kind !== 'code' || clip.opacity > 0)), ...videoEditCaptionClips(document, frame)]
     const timestamps: number[] = []
     this.compositor ??= new VideoEditGpuCompositor(this.canvas)
     const decodeStart = performance.now()

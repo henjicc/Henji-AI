@@ -4,10 +4,10 @@ import { videoEditDuration } from '@/core/videoEdit/document'
 import { assertVideoEditClipsEditable } from '@/core/videoEdit/lockedTracks'
 import { expandVideoEditSelection } from '@/core/videoEdit/timelineSelection'
 import { applyVideoEditTimelineEdit, type VideoEditClipboard, type VideoEditTimelineEdit } from '@/core/videoEdit/timelineEdits'
-import { appendVideoEditSequence, createVideoEditProject, focusVideoEditPanel, getActiveVideoEditSequence, requireVideoEditInstance, saveVideoEdit, setVideoEditProjectView, setVideoEditTimelineView, setVideoEditView, switchVideoEditSequence, undoVideoEdit, type VideoEditInstance } from './videoEditService'
+import { appendVideoEditSequence, createVideoEditProject, focusVideoEditPanel, getActiveVideoEditSequence, requireVideoEditInstance, listVideoEditInstances, saveVideoEdit, setVideoEditProjectView, setVideoEditTimelineView, setVideoEditView, videoEditProgramCommandIdentity, switchVideoEditSequence, undoVideoEdit, type VideoEditInstance } from './videoEditService'
 import { chooseVideoEditMedia } from './videoEditMedia'
 import { exportVideoEdit } from './videoEditExport'
-import { readVideoEditSource, updateVideoEditSource, videoEditSourceCommandIdentity, matchesVideoEditSourceCommand, type VideoEditSourceCommandIdentity, type VideoEditSourceState } from './videoEditSource'
+import { readVideoEditSource, updateVideoEditSource, pauseVideoEditSourceForProgram, restoreVideoEditSourcePause, videoEditSourceCommandIdentity, matchesVideoEditSourceCommand, type VideoEditSourceCommandIdentity, type VideoEditSourceState } from './videoEditSource'
 import { readVideoEditCodeMetadata } from './videoEditCodeState'
 import { copyVideoEditTimeline, executeVideoEditTimelineEdit, readVideoEditClipboard, separateVideoEditAudio } from './videoEditTimeline'
 
@@ -48,14 +48,7 @@ function placeClipboard(context: VideoEditCommandContext): VideoEditClipboard {
     const item = owner.document.items.find(item => item.id === itemId)
     const target = sequence.tracks.find(track => stateOf(context).targetTrackIds.includes(track.id) && track.kind === (item?.kind === 'audio' ? 'audio' : 'video'))
     if (!target) throw new Error('请选择对应的目标轨道。')
-    let clip = makeVideoEditItemClip(owner.document, itemId, sequence.id, { frame, track: target.index }, readVideoEditCodeMetadata(owner, owner.document))
-    if (context.scope === 'source' && item?.kind !== 'image' && source) {
-      const media = owner.document.media.find(media => media.id === item?.mediaId)!
-      const from = source.inUs ?? 0; const to = source.outUs ?? Math.round(media.durationSeconds * 1e6)
-      const duration = Math.floor((to - from) / 1e6 * sequence.fps + 1e-6)
-      if (duration < 1) throw new Error('源选区短于一个序列帧。')
-      clip = { ...clip, sourceInUs: from, sourceRemainder: { numerator: 0, denominator: 1 }, duration }
-    }
+    const clip = makeVideoEditItemClip(owner.document, itemId, sequence.id, { frame, track: target.index, ...(context.scope === 'source' && item?.kind !== 'image' && source ? { sourceInUs: source.inUs ?? 0, ...(source.outUs !== null ? { sourceOutUs: source.outUs } : {}) } : {}) }, readVideoEditCodeMetadata(owner, owner.document))
     frame += clip.duration; return clip
   })
   return { projectId: owner.document.id, frameRate: sequence.frameRate, clips, annotations: [], tracks: sequence.tracks.map(track => ({ index: track.index, kind: track.kind })) }
@@ -171,7 +164,20 @@ export async function executeVideoEditCommand(context: VideoEditCommandContext, 
     case 'play_pause': case 'play_stop': case 'play_forward': case 'play_reverse': {
       const playing = id === 'play_pause' ? !(context.scope === 'source' ? source!.playing : owner!.playing) : id !== 'play_stop'
       const playbackDirection = id === 'play_reverse' ? -1 : 1
-      if (context.scope === 'source') await updateVideoEditSource(projectId, { playing, playbackDirection }); else setVideoEditView(projectId, { playing, playbackDirection })
+      if (context.scope === 'source') await updateVideoEditSource(projectId, { playing, playbackDirection })
+      else {
+        const command = videoEditProgramCommandIdentity(projectId)
+        const wasPlaying = owner!.playing
+        const pause = playing ? await pauseVideoEditSourceForProgram(projectId) : undefined
+        try {
+          stateOf(context)
+          if (videoEditProgramCommandIdentity(projectId) !== command) throw new Error('节目已有后续控制，请重试当前命令。')
+          setVideoEditView(projectId, { playing, playbackDirection })
+        } catch (error) {
+          if (pause && !wasPlaying && listVideoEditInstances().includes(owner!) && videoEditProgramCommandIdentity(projectId) === command && matchesVideoEditSourceCommand(projectId, pause.afterCommand)) await restoreVideoEditSourcePause(projectId, pause)
+          throw error
+        }
+      }
       return
     }
     case 'step_back': case 'step_forward': {

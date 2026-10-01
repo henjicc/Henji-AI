@@ -9,12 +9,13 @@ export const VIDEO_EDIT_PANELS = [
   { id: 'effects', title: '效果控件' },
   { id: 'timeline', title: '时间线' },
   { id: 'source', title: '源监视器' },
+  { id: 'content', title: '字幕与标记' },
 ] as const
 export type VideoEditPanelId = typeof VIDEO_EDIT_PANELS[number]['id']
 
 /** A view-only layout: no project content, selection or transport state is serialized. */
 export function defaultVideoEditLayout(): SerializedDockview {
-  const panels = Object.fromEntries(VIDEO_EDIT_PANELS.filter(panel => panel.id !== 'source').map(({ id, title }) => [id, { id, contentComponent: id, title, renderer: 'always' as const }]))
+  const panels = Object.fromEntries(VIDEO_EDIT_PANELS.filter(panel => panel.id !== 'source' && panel.id !== 'content').map(({ id, title }) => [id, { id, contentComponent: id, title, renderer: 'always' as const }]))
   return {
     grid: {
       width: 1440, height: 860, orientation: Orientation.HORIZONTAL,

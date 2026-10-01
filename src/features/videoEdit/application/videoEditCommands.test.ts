@@ -106,3 +106,24 @@ it('源 I/O 为半开范围，插入保留原路径和范围；J/K/L 与步进�
     expect(readVideoEditSource(id).inUs).toBe(2_016_667)
   } finally { dispose() }
 })
+it('手动节目穿梭与公共入口相同，等待源暂停确认后才开始且不覆盖后续定位', async () => {
+  const { owner, id } = await fixture()
+  appendVideoEditMedia(id, { id: 'source', name: '原视频', path: 'D:/source.mp4', kind: 'video', width: 3840, height: 2160, durationSeconds: 3 })
+  const itemId = owner.document.items.find(item => item.mediaId === 'source')!.id
+  let pause!: () => void; let defer = false
+  const off = registerVideoEditSourcePresenter(id, request => {
+    const result = { ...request, presentedTimeUs: request.timeUs }
+    return defer && !request.playing ? new Promise(resolve => { pause = () => resolve(result) }) : Promise.resolve(result)
+  })
+  try {
+    await updateVideoEditSource(id, { itemId, playing: true }); defer = true
+    const pending = executeVideoEditCommand(captureVideoEditCommandContext(id, 'program'), 'play_forward')
+    await vi.waitFor(() => expect(pause).toBeTypeOf('function')); expect(owner.playing).toBe(false)
+    pause(); await pending; expect(owner.playing).toBe(true); expect(readVideoEditSource(id).playing).toBe(false)
+    defer = false; await updateVideoEditSource(id, { playing: true }); defer = true
+    const rejected = expect(executeVideoEditCommand(captureVideoEditCommandContext(id, 'program'), 'play_forward')).rejects.toThrow('后续控制')
+    await vi.waitFor(() => expect(readVideoEditSource(id).status).toBe('loading'))
+    setVideoEditView(id, { frame: 70, playing: false }); pause(); await rejected
+    expect(owner).toMatchObject({ frame: 70, playing: false })
+  } finally { off() }
+})

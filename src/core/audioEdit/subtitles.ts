@@ -1,14 +1,10 @@
 import { sourceFrameToOutputFrame } from './timeline'
 import { buildAudioEditCaptionGroups, joinAudioEditText } from './captions'
 import type { AudioEditTimelineSpan, AudioEditTranscriptBlock } from './types'
+import { formatSubtitleTimestampUs } from '../media/subtitleFormat'
 
 function formatSrtTimestamp(frame: number, sampleRate: number): string {
-  const totalMs = Math.max(0, Math.round(frame * 1_000 / Math.max(1, sampleRate)))
-  const hours = Math.floor(totalMs / 3_600_000)
-  const minutes = Math.floor((totalMs % 3_600_000) / 60_000)
-  const seconds = Math.floor((totalMs % 60_000) / 1_000)
-  const milliseconds = totalMs % 1_000
-  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')},${String(milliseconds).padStart(3, '0')}`
+  return formatSubtitleTimestampUs(frame * 1e6 / Math.max(1, sampleRate))
 }
 
 export function buildAudioEditSrt(

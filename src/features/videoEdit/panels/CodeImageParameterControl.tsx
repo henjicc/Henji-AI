@@ -45,12 +45,12 @@ export function CodeImageParameterControl({ target, parameterKey, title, value }
         const item = document.items.find(item => item.id === input.itemIds[0])
         if (item?.kind !== 'image' || !item.mediaId || !images.some(media => media.id === item.mediaId)) throw new Error('此参数只接受图片。')
         bind({ kind: 'media', mediaId: item.mediaId })
-      } else {
+      } else if (input.kind === 'sources') {
         if (input.sources.length !== 1) throw new Error('请一次拖入一张图片。')
         const source = input.sources[0]
         // Asset identity is authoritative; a drag payload cannot substitute its original path.
         bind(source.assetId ? { kind: 'asset', assetId: source.assetId } : { kind: 'file', path: source.path })
-      }
+      } else throw new Error('此参数只接受图片，不能绑定音视频选区。')
     } catch (reason) { setError(reason instanceof Error ? reason.message : '无法识别拖入的图片。') }
   }
   return <div className="flex flex-col gap-2" aria-label={`${title}图片拖放区`} data-video-edit-code-image={parameterKey} onDrop={drop} onDragOver={event => { if (acceptsVideoEditDrop(event.dataTransfer)) { event.preventDefault(); event.stopPropagation(); event.dataTransfer.dropEffect = 'copy' } }}>

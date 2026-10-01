@@ -3,11 +3,129 @@ import { beforeEach, afterEach, expect, it, vi } from 'vitest'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { getPlatform } from '@/platform/runtime'
 import { createApplicationHarness } from '@/tests/applicationHarness'
-import { createVideoEditProject, appendVideoEditMedia, editVideoProject, listVideoEditInstances, closeVideoEditProject, openVideoEditProject, setVideoEditView, videoEditDomainRevision } from './videoEditService'
-import { readVideoEditSource, updateVideoEditSource, registerVideoEditSourcePresenter, observeVideoEditSource, closeVideoEditSource, subscribeVideoEditSource, videoEditSourceCommandIdentity, matchesVideoEditSourceCommand, type VideoEditSourceObservation, type VideoEditSourceRequest } from './videoEditSource'
+import { createVideoEditProject, appendVideoEditMedia, editVideoProject, listVideoEditInstances, closeVideoEditProject, openVideoEditProject, setVideoEditView, setVideoEditProjectView, videoEditProgramCommandIdentity, videoEditDomainRevision } from './videoEditService'
+import { readVideoEditSource, updateVideoEditSource, registerVideoEditSourcePresenter, pauseVideoEditSourceForProgram, observeVideoEditSource, closeVideoEditSource, subscribeVideoEditSource, videoEditSourceCommandIdentity, matchesVideoEditSourceCommand, type VideoEditSourceObservation, type VideoEditSourceRequest } from './videoEditSource'
 import { VideoEditSourceExecutor } from './videoEditSourceExecutor'
+import { VideoEditMutationExecutor } from './videoEditExecutors'
 import type { ApplicationExecutionContext, ApplicationPlannedStep } from '@/core/application-control'
 const files = new Map<string, string>()
+it('失败发布中的立即重试先退役旧请求，不被旧catch释放新宿主', async () => {
+  const owner = await fixture(); const id = owner.document.id; const events: string[] = []; let attempt = 0
+  const retire = vi.fn(async () => { events.push('retire') })
+  const off = registerVideoEditSourcePresenter(id, async request => { if (++attempt === 1) throw new Error('首次失败'); return { ...request, presentedTimeUs: request.timeUs } }, retire)
+  let retry: ReturnType<typeof updateVideoEditSource> | undefined
+  const unsubscribe = subscribeVideoEditSource(() => { if (readVideoEditSource(id).status === 'error' && !retry) { events.push('retry'); retry = updateVideoEditSource(id, { playing: true }) } })
+  try {
+    await expect(updateVideoEditSource(id, { itemId: owner.document.items[0].id, playing: true })).rejects.toThrow('首次失败')
+    await retry; expect(events).toEqual(['retire', 'retry']); expect(retire).toHaveBeenCalledOnce(); expect(readVideoEditSource(id)).toMatchObject({ status: 'ready', playing: true })
+  } finally { unsubscribe(); off() }
+})
+it('显式关闭已注册源同步登记退役，节目不越过未释放的反向资源', async () => {
+  const owner = await fixture(); const id = owner.document.id; let released!: () => void
+  const retire = vi.fn(() => new Promise<void>(resolve => { released = resolve }))
+  const off = registerVideoEditSourcePresenter(id, async request => ({ ...request, presentedTimeUs: request.timeUs }), retire)
+  try {
+    await updateVideoEditSource(id, { itemId: owner.document.items[0].id })
+    closeVideoEditSource(id); expect(retire).toHaveBeenCalledOnce(); expect(readVideoEditSource(id).status).toBe('closed')
+    let ready = false; const waiting = pauseVideoEditSourceForProgram(id).then(() => { ready = true })
+    await Promise.resolve(); expect(ready).toBe(false); released(); await waiting; expect(ready).toBe(true)
+  } finally { off(); released() }
+})
+it('失败确认先实际释放源，再恢复节目；隐藏源后节目等待退役预算', async () => {
+  const owner = await fixture(); const id = owner.document.id; let released!: () => void
+  const retire = vi.fn(() => new Promise<void>(resolve => { released = resolve }))
+  const off = registerVideoEditSourcePresenter(id, async request => ({ timeUs: request.timeUs, presentedTimeUs: request.timeUs, playing: request.playing, volume: .25 }), retire)
+  try {
+    setVideoEditView(id, { frame: 30, playing: true })
+    const rejected = expect(updateVideoEditSource(id, { itemId: owner.document.items[0].id, playing: true })).rejects.toThrow('音量')
+    await vi.waitFor(() => expect(retire).toHaveBeenCalledOnce()); expect(owner.playing).toBe(false)
+    released(); await rejected; expect(owner.playing).toBe(true)
+    off(); let ready = false
+    const waiting = pauseVideoEditSourceForProgram(id).then(() => { ready = true })
+    await Promise.resolve(); expect(ready).toBe(false); released(); await waiting; expect(ready).toBe(true)
+  } finally { off() }
+})
+it('源开播失败恢复原节目命令；新节目定位和被替换的源请求不被旧失败覆盖', async () => {
+  const owner = await fixture(); const id = owner.document.id
+  const requests: Array<{ request: VideoEditSourceRequest; reject: (error: Error) => void }> = []
+  const off = registerVideoEditSourcePresenter(id, request => new Promise((_resolve, reject) => requests.push({ request, reject })))
+  try {
+    setVideoEditView(id, { frame: 30, playing: true }); const original = videoEditProgramCommandIdentity(id)
+    const failed = updateVideoEditSource(id, { itemId: owner.document.items[0].id, playing: true }).catch(error => error)
+    expect(owner.playing).toBe(false); requests[0].reject(new Error('无法播放')); await failed
+    expect(owner).toMatchObject({ frame: 30, playing: true }); expect(videoEditProgramCommandIdentity(id)).toBe(original)
+    const older = updateVideoEditSource(id, { playing: true }).catch(error => error)
+    const newer = updateVideoEditSource(id, { timeUs: 1_000_000, playing: true }).catch(error => error)
+    await older; expect(owner.playing).toBe(false)
+    requests[2].reject(new Error('新请求也失败')); await newer
+    expect(owner.playing).toBe(true); expect(videoEditProgramCommandIdentity(id)).toBe(original)
+    const stale = updateVideoEditSource(id, { playing: true }).catch(error => error)
+    setVideoEditView(id, { frame: 60, playing: false }); const manual = videoEditProgramCommandIdentity(id)
+    requests[3].reject(new Error('迟到失败')); await stale
+    expect(owner).toMatchObject({ frame: 60, playing: false }); expect(videoEditProgramCommandIdentity(id)).toBe(manual)
+  } finally { off() }
+})
+it('节目开播等源真实暂停后声明级联；撤销恢复源播放与命令，后续源操作拒绝旧撤销', async () => {
+  const owner = await fixture(); const id = owner.document.id
+  let pause!: () => void; let defer = false
+  const off = registerVideoEditSourcePresenter(id, request => {
+    const result = { timeUs: request.timeUs, presentedTimeUs: request.timeUs, playing: request.playing, volume: request.volume }
+    return defer && !request.playing ? new Promise(resolve => { pause = () => resolve(result) }) : Promise.resolve(result)
+  })
+  try {
+    await updateVideoEditSource(id, { itemId: owner.document.items[0].id, playing: true }); const original = videoEditSourceCommandIdentity(id)
+    const executor = new VideoEditMutationExecutor('video_edit.project')
+    const step: Extract<ApplicationPlannedStep, { kind: 'mutation' }> = { kind: 'mutation', entityType: executor.entityType, target: { kind: executor.entityType, id }, expectedRevisions: {}, mutations: [{ propertyId: 'video_edit.project.program_playback', operation: 'set', value: { frame: 30, playing: true, playbackDirection: 1 } }] }
+    defer = true; let completed = false
+    const pending = executor.apply(step, sourceContext()).then(result => { completed = true; return result })
+    await vi.waitFor(() => expect(pause).toBeTypeOf('function')); expect(completed).toBe(false); expect(owner.playing).toBe(false)
+    pause(); const result = await pending; defer = false
+    expect(owner).toMatchObject({ frame: 30, playing: true }); expect(readVideoEditSource(id).playing).toBe(false)
+    expect(result.cascadeEffects).toMatchObject([{ entityType: 'video_edit.source', propertyIds: ['video_edit.source.playing'] }])
+    await executor.undo(result.undoToken!)
+    expect(owner).toMatchObject({ frame: 0, playing: false }); expect(readVideoEditSource(id).playing).toBe(true); expect(matchesVideoEditSourceCommand(id, original)).toBe(true)
+    const second = await executor.apply(step, sourceContext()); await updateVideoEditSource(id, { timeUs: 2_000_000, playing: false })
+    await expect(executor.undo(second.undoToken!)).rejects.toThrow('源预览已有后续'); expect(owner.frame).toBe(30)
+  } finally { off() }
+})
+it('在途源暂停拒绝并行节目开播，原请求因工程修改失败时恢复已归属源播放', async () => {
+  const owner = await fixture(); const id = owner.document.id; let pause!: () => void
+  const off = registerVideoEditSourcePresenter(id, request => {
+    const result = { timeUs: request.timeUs, presentedTimeUs: request.timeUs, playing: request.playing, volume: request.volume }
+    return request.playing ? Promise.resolve(result) : new Promise(resolve => { pause = () => resolve(result) })
+  })
+  try {
+    await updateVideoEditSource(id, { itemId: owner.document.items[0].id, playing: true }); const original = videoEditSourceCommandIdentity(id)
+    const executor = new VideoEditMutationExecutor('video_edit.project')
+    const step: Extract<ApplicationPlannedStep, { kind: 'mutation' }> = { kind: 'mutation', entityType: executor.entityType, target: { kind: executor.entityType, id }, expectedRevisions: {}, mutations: [{ propertyId: 'video_edit.project.program_playback', operation: 'set', value: { frame: 30, playing: true, playbackDirection: 1 } }] }
+    const rejected = expect(executor.apply(step, sourceContext())).rejects.toThrow('已有后续修改')
+    await vi.waitFor(() => expect(pause).toBeTypeOf('function'))
+    await expect(executor.apply(step, sourceContext())).rejects.toThrow('仍在确认')
+    expect(owner.playing).toBe(false)
+    editVideoProject(id, document => ({ ...document, name: '新名称' })); pause(); await rejected
+    expect(owner.document.name).toBe('新名称'); expect(readVideoEditSource(id).playing).toBe(true); expect(matchesVideoEditSourceCommand(id, original)).toBe(true)
+  } finally { off() }
+})
+it('节目撤销恢复源期间改选区会取消旧恢复并保持单路播放', async () => {
+  const owner = await fixture(); const id = owner.document.id
+  let defer = false; let resume!: () => void; let signal!: AbortSignal
+  const off = registerVideoEditSourcePresenter(id, (request, incoming) => {
+    const result = { timeUs: request.timeUs, presentedTimeUs: request.timeUs, playing: request.playing, volume: request.volume }
+    return defer && request.playing ? new Promise(resolve => { resume = () => resolve(result); signal = incoming }) : Promise.resolve(result)
+  })
+  try {
+    await updateVideoEditSource(id, { itemId: owner.document.items[0].id, playing: true })
+    const executor = new VideoEditMutationExecutor('video_edit.project')
+    const step: Extract<ApplicationPlannedStep, { kind: 'mutation' }> = { kind: 'mutation', entityType: executor.entityType, target: { kind: executor.entityType, id }, expectedRevisions: {}, mutations: [{ propertyId: 'video_edit.project.program_playback', operation: 'set', value: { frame: 30, playing: true, playbackDirection: 1 } }] }
+    const result = await executor.apply(step, sourceContext()); defer = true
+    const rejected = expect(executor.undo(result.undoToken!)).rejects.toThrow('已有后续操作')
+    await vi.waitFor(() => expect(resume).toBeTypeOf('function'))
+    setVideoEditProjectView(id, { selectedItemIds: [owner.document.items[0].id] })
+    expect(signal.aborted).toBe(true); await rejected; resume(); await Promise.resolve()
+    expect(owner).toMatchObject({ frame: 30, playing: true }); expect(readVideoEditSource(id).playing).toBe(false)
+    expect(owner.selectedItemIds).toEqual([owner.document.items[0].id])
+  } finally { off() }
+})
 it('公共源范围与播放方向由实际宿主确认，撤销保留空范围且越界不改状态', async () => {
   const instance = await fixture(); const id = instance.document.id; const app = createApplicationHarness()
   const off = registerVideoEditSourcePresenter(id, async request => ({ timeUs: request.timeUs, presentedTimeUs: request.timeUs, playing: request.playing, volume: request.volume, playbackDirection: request.playbackDirection ?? 1 }))
@@ -22,6 +140,21 @@ it('公共源范围与播放方向由实际宿主确认，撤销保留空范围�
     expect((await app.change(ref, { 'video_edit.source.in_us': null, 'video_edit.source.out_us': null, 'video_edit.source.playing': false })).ok).toBe(true)
     expect(readVideoEditSource(id)).toMatchObject({ inUs: null, outUs: null, playing: false }); expect(instance.past.length).toBe(history)
   } finally { off(); app.dispose() }
+})
+it('源前台播放声明节目暂停级联，逆操作恢复原命令且不覆盖后续节目定位', async () => {
+  const owner = await fixture(); const id = owner.document.id
+  const off = registerVideoEditSourcePresenter(id, async request => ({ timeUs: request.timeUs, presentedTimeUs: request.timeUs, playing: request.playing, volume: request.volume }))
+  try {
+    await updateVideoEditSource(id, { itemId: owner.document.items[0].id })
+    setVideoEditView(id, { frame: 30, playing: true })
+    const executor = new VideoEditSourceExecutor()
+    const step: Extract<ApplicationPlannedStep, { kind: 'mutation' }> = { kind: 'mutation', entityType: 'video_edit.source', target: { kind: 'video_edit.source', id: `${id}:source` }, expectedRevisions: {}, mutations: [{ propertyId: 'video_edit.source.playing', operation: 'set', value: true }] }
+    const completed = await executor.apply(step, sourceContext()); expect(owner.playing).toBe(false)
+    expect(completed.cascadeEffects).toMatchObject([{ entityType: 'video_edit.project', propertyIds: ['video_edit.project.program_playback'] }])
+    await executor.undo(completed.undoToken!); expect(owner).toMatchObject({ frame: 30, playing: true }); expect(readVideoEditSource(id).playing).toBe(false)
+    const second = await executor.apply(step, sourceContext()); setVideoEditView(id, { frame: 60 })
+    await expect(executor.undo(second.undoToken!)).rejects.toThrow('节目播放已有后续'); expect(owner.frame).toBe(60)
+  } finally { off() }
 })
 beforeEach(() => {
   installHarnessNativeStorage()

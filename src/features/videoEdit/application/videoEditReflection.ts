@@ -19,6 +19,8 @@ export function videoEditEntityItems(document: VideoEditDocument, type: VideoEdi
     case 'video_edit.media': return document.media
     case 'video_edit.clip': return document.sequences.flatMap(sequence => sequence.clips)
     case 'video_edit.annotation': return document.sequences.flatMap(sequence => sequence.annotations)
+    case 'video_edit.marker': return document.sequences.flatMap(sequence => sequence.markers ?? [])
+    case 'video_edit.caption': return document.sequences.flatMap(sequence => sequence.captions ?? [])
     case 'video_edit.track': return document.sequences.flatMap(sequence => sequence.tracks)
     case 'video_edit.code_material': return document.codeMaterials ?? []
     case 'video_edit.code_version': return (document.codeMaterials ?? []).flatMap(definition => definition.versions.map(version => ({ ...version, name: definition.name })))
@@ -67,11 +69,12 @@ class VideoEditProvider implements ApplicationEntityProvider {
   }
   async getCollectionAvailability(parent: ApplicationRef) { readVideoEditData(parent); return unrestrictedCollectionAvailability(this.entityType, parent, { video_edit: videoEditRevision() }, ['video_edit:write']) }
 }
-const titles: Record<VideoEditEntityType, string> = { 'video_edit.project': '剪辑工程', 'video_edit.sequence': '剪辑序列', 'video_edit.bin': '素材箱', 'video_edit.item': '项目项', 'video_edit.track': '序列轨道', 'video_edit.clip': '剪辑片段', 'video_edit.annotation': '画面标注', 'video_edit.media': '原路径素材', 'video_edit.source': '源素材预览', 'video_edit.code_material': '原生代码素材', 'video_edit.code_version': '固定源码版本' }
-const sequenceChildren = ['video_edit.clip', 'video_edit.annotation', 'video_edit.track']
+const titles: Record<VideoEditEntityType, string> = { 'video_edit.project': '剪辑工程', 'video_edit.sequence': '剪辑序列', 'video_edit.bin': '素材箱', 'video_edit.item': '项目项', 'video_edit.track': '序列轨道', 'video_edit.clip': '剪辑片段', 'video_edit.annotation': '画面标注', 'video_edit.media': '原路径素材', 'video_edit.source': '源素材预览', 'video_edit.code_material': '原生代码素材', 'video_edit.code_version': '固定源码版本', 'video_edit.marker': '时间标记', 'video_edit.caption': '导出字幕' }
+const sequenceChildren = ['video_edit.clip', 'video_edit.annotation', 'video_edit.track', 'video_edit.marker', 'video_edit.caption']
 const required: Partial<Record<VideoEditEntityType, string[]>> = {
   'video_edit.sequence': ['video_edit.sequence.name'], 'video_edit.bin': ['video_edit.bin.name'], 'video_edit.item': ['video_edit.item.name', 'video_edit.item.kind'],
   'video_edit.clip': ['video_edit.clip.item_id', 'video_edit.clip.kind', 'video_edit.clip.name'], 'video_edit.annotation': ['video_edit.annotation.clip_id', 'video_edit.annotation.text'],
+  'video_edit.marker': ['video_edit.marker.frame', 'video_edit.marker.name'], 'video_edit.caption': ['video_edit.caption.start', 'video_edit.caption.duration', 'video_edit.caption.text'],
   'video_edit.code_material': ['video_edit.code_material.source'],
   'video_edit.code_version': ['video_edit.code_version.source', 'video_edit.code_version.definition_id'],
 }

@@ -9,6 +9,7 @@ import { VideoEditTimeline } from '../VideoEditTimeline'
 import { VideoEditProjectPanel } from '../panels/VideoEditProjectPanel'
 import { VideoEditEffectsPanel } from '../panels/VideoEditEffectsPanel'
 import { VideoEditSourcePanel } from '../panels/VideoEditSourcePanel'
+import { VideoEditTimedContentPanel } from '../panels/VideoEditTimedContentPanel'
 import { VideoEditSequenceTabs } from '../panels/VideoEditSequenceTabs'
 import { readVideoEditSource, subscribeVideoEditSource } from '../application/videoEditSource'
 import { VideoEditDockHeaderActions, VideoEditDockTab } from './VideoEditDockChrome'
@@ -28,14 +29,27 @@ function Effects({ api }: IDockviewPanelProps): React.ReactElement {
   useEffect(() => { const event = api.onDidVisibilityChange(value => setVisible(value.isVisible)); return () => event.dispose() }, [api])
   return <div className="h-full min-h-0" data-video-edit-panel="effects"><VideoEditEffectsPanel {...useDock()} visible={visible} /></div>
 }
-function Program(): React.ReactElement { return <div className="flex h-full min-h-0 flex-col" data-video-edit-panel="program"><VideoEditPreview {...useDock()} /></div> }
-function Timeline(): React.ReactElement { const context = useDock(); return <div className="flex h-full min-h-0 flex-col" data-video-edit-panel="timeline"><VideoEditSequenceTabs {...context} /><VideoEditTimeline {...context} /></div> }
+function Program({ api }: IDockviewPanelProps): React.ReactElement {
+  const [visible, setVisible] = useState(api.isVisible)
+  useEffect(() => { const event = api.onDidVisibilityChange(value => setVisible(value.isVisible)); return () => event.dispose() }, [api])
+  return <div className="flex h-full min-h-0 flex-col" data-video-edit-panel="program"><VideoEditPreview {...useDock()} visible={visible} /></div>
+}
+function Timeline({ api }: IDockviewPanelProps): React.ReactElement {
+  const [visible, setVisible] = useState(api.isVisible)
+  useEffect(() => { const event = api.onDidVisibilityChange(value => setVisible(value.isVisible)); return () => event.dispose() }, [api])
+  const context = useDock(); return <div className="flex h-full min-h-0 flex-col" data-video-edit-panel="timeline"><VideoEditSequenceTabs {...context} /><VideoEditTimeline {...context} visible={visible} /></div>
+}
+function Content({ api }: IDockviewPanelProps): React.ReactElement {
+  const [visible, setVisible] = useState(api.isVisible)
+  useEffect(() => { const event = api.onDidVisibilityChange(value => setVisible(value.isVisible)); return () => event.dispose() }, [api])
+  return <div className="h-full min-h-0" data-video-edit-panel="content"><VideoEditTimedContentPanel {...useDock()} visible={visible} /></div>
+}
 function Source({ api }: IDockviewPanelProps): React.ReactElement {
   const [visible, setVisible] = useState(api.isVisible)
   useEffect(() => { const event = api.onDidVisibilityChange(value => setVisible(value.isVisible)); return () => event.dispose() }, [api])
   return <div className="h-full min-h-0" data-video-edit-panel="source"><VideoEditSourcePanel {...useDock()} visible={visible} /></div>
 }
-const COMPONENTS = { project: Project, program: Program, effects: Effects, timeline: Timeline, source: Source }
+const COMPONENTS = { project: Project, program: Program, effects: Effects, timeline: Timeline, source: Source, content: Content }
 function EmptyLayout({ containerApi }: IWatermarkPanelProps): React.ReactElement {
   return <UiEmpty className="h-full" title="选择需要的面板" description="在顶部面板菜单中恢复视图。" action={<UiButton variant="ghost" onClick={() => resetVideoEditLayout(containerApi)}>重置布局</UiButton>} />
 }
@@ -74,7 +88,7 @@ export function VideoEditDock({ instance, onError, onApiChange }: DockContext & 
     const event = api.onDidLayoutChange(() => { clearTimeout(timer); timer = setTimeout(save, 200) })
     const focus = api.onDidActivePanelChange(value => {
       const panel = value.panel?.id
-      if (panel && ['project', 'source', 'program', 'timeline', 'effects'].includes(panel) && instance.activePanel !== panel && listVideoEditInstances().includes(instance)) focusVideoEditPanel(instance.document.id, panel as VideoEditInstance['activePanel'])
+      if (panel && ['project', 'source', 'program', 'timeline', 'effects', 'content'].includes(panel) && instance.activePanel !== panel && listVideoEditInstances().includes(instance)) focusVideoEditPanel(instance.document.id, panel as VideoEditInstance['activePanel'])
     })
     disposeRef.current = () => { event.dispose(); focus.dispose(); if (timer !== undefined) save() }
   }, [onApiChange, onError, instance])

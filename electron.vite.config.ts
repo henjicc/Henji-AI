@@ -15,6 +15,7 @@ export default defineConfig({
           index: resolve(__dirname, 'electron/main/index.ts'),
           'pi-agent-utility': resolve(__dirname, 'electron/main/pi-agent-utility.ts'),
           'image-registration-worker': resolve(__dirname, 'electron/main/image-registration-worker.ts'),
+          'audio-waveform-worker': resolve(__dirname, 'electron/main/services/audio/waveform-worker.ts'),
         },
         output: {
           format: 'cjs',

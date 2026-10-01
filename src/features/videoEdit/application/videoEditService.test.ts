@@ -11,9 +11,57 @@ import { getApplicationControlExecutionEngine } from '@/features/application-con
 import type { ApplicationExecutionContext } from '@/core/application-control'
 import { createHostContextSnapshot, retainHostContextTracking } from '@/features/application-control/hostContext/hostContext'
 import { useNavigationStore } from '@/stores/navigationStore'
+import { freezeApplicationWrites } from '@/core/applicationLifecycle/applicationWriteBarrier'
+import { beginVideoEditGesture, finishVideoEditGesture, updateVideoEditPicturePosition } from './videoEditService'
 
 const files = new Map<string, string>()
 let failSave = false
+it('受限画面位置草稿保留时间及锚定对象，保存等待释放并只记录一笔历史', async () => {
+  const owner = (await createVideoEditProject())!; const id = owner.document.id; const sequenceId = owner.activeSequenceId
+  appendVideoEditClip(id); const clipId = owner.selection!; appendVideoEditClip(id)
+  editVideoSequence(id, sequenceId, sequence => ({ ...sequence, captions: [{ id: 'position-caption', clipId, start: 1, duration: 3, text: '跟随' }], markers: [{ id: 'position-marker', clipId, frame: 2, name: '时刻' }] }))
+  await saveVideoEdit(id)
+  const before = owner.document; const sequence = getActiveVideoEditSequence(owner); const history = owner.past.length
+  const write = vi.spyOn(getPlatform().system.fs, 'writeTextFile'); write.mockClear()
+  const gesture = beginVideoEditGesture(id)
+  for (let step = 1; step <= 60; step++) updateVideoEditPicturePosition(gesture, sequenceId, clipId, { x: step / 120, y: -step / 120 })
+  const moved = getActiveVideoEditSequence(owner)
+  expect(moved.clips[0]).toEqual({ ...sequence.clips[0], x: .5, y: -.5 })
+  expect(moved.clips[1]).toBe(sequence.clips[1]); expect(moved.captions).toBe(sequence.captions); expect(moved.markers).toBe(sequence.markers)
+  expect(owner.document.media).toBe(before.media); expect(owner.document.items).toBe(before.items); expect(owner.past).toHaveLength(history)
+  let resolved = false
+  const saving = saveVideoEdit(id).then(() => { resolved = true })
+  await new Promise(resolve => setTimeout(resolve, 10)); expect(resolved).toBe(false); expect(write).not.toHaveBeenCalled()
+  const current = owner.document
+  updateVideoEditPicturePosition(gesture, sequenceId, clipId, { x: .5, y: -.5 }); expect(owner.document).toBe(current)
+  finishVideoEditGesture(gesture); await saving
+  expect(write).toHaveBeenCalledTimes(1); expect(owner.past).toHaveLength(history + 1)
+  expect(owner.past.at(-1)).toBe(before); expect(before.sequences[0].clips[0].x).toBe(0)
+  expect(JSON.parse(files.get(owner.path)!).sequences[0].clips).toEqual(moved.clips)
+  editVideoSequence(id, sequenceId, draft => { draft.captions![0].text = '普通编辑'; return draft })
+  expect(moved.captions![0].text).toBe('跟随'); expect(sequence.captions![0].text).toBe('跟随')
+  undoVideoEdit(id); expect(getActiveVideoEditSequence(owner).clips).toEqual(moved.clips)
+  undoVideoEdit(id); expect(getActiveVideoEditSequence(owner).clips).toEqual(sequence.clips)
+})
+it('受限位置写入拒绝越界、额外属性、锁定和旧手势，应用关闭屏障同样生效', async () => {
+  const owner = (await createVideoEditProject())!; const id = owner.document.id; const sequenceId = owner.activeSequenceId
+  appendVideoEditClip(id); const clipId = owner.selection!
+  editVideoSequence(id, sequenceId, sequence => ({ ...sequence, tracks: sequence.tracks.map(track => ({ ...track, locked: true })) }))
+  let gesture = beginVideoEditGesture(id)
+  expect(() => updateVideoEditPicturePosition(gesture, sequenceId, clipId, { x: .1, y: .2 })).toThrow('锁定')
+  finishVideoEditGesture(gesture, false)
+  editVideoSequence(id, sequenceId, sequence => ({ ...sequence, tracks: sequence.tracks.map(track => ({ ...track, locked: false })) }))
+  gesture = beginVideoEditGesture(id); const before = owner.document
+  expect(() => updateVideoEditPicturePosition({ ...gesture }, sequenceId, clipId, { x: .1, y: .2 })).toThrow('已结束')
+  for (const position of [{ x: 3, y: 0 }, { x: NaN, y: 0 }, { x: 0, y: Infinity }, { x: .1, y: .2, text: '越权' }]) expect(() => updateVideoEditPicturePosition(gesture, sequenceId, clipId, position)).toThrow()
+  expect(() => updateVideoEditPicturePosition(gesture, 'foreign-sequence', clipId, { x: .1, y: .2 })).toThrow('不存在')
+  expect(owner.document).toBe(before)
+  const release = freezeApplicationWrites()
+  try { expect(() => updateVideoEditPicturePosition(gesture, sequenceId, clipId, { x: .1, y: .2 })).toThrow('APPLICATION_CLOSING') } finally { release() }
+  updateVideoEditPicturePosition(gesture, sequenceId, clipId, { x: .1, y: .2 }); finishVideoEditGesture(gesture, false)
+  expect(getActiveVideoEditSequence(owner).clips[0].x).toBe(0)
+  expect(() => updateVideoEditPicturePosition(gesture, sequenceId, clipId, { x: .3, y: .2 })).toThrow('已结束')
+})
 it('序列切换和选区刷新助手上下文，控制改变并发基线而逐帧观察保持稳定', async () => {
   const navigation = useNavigationStore.getState()
   const release = retainHostContextTracking()

@@ -1,5 +1,5 @@
 import { createLogger } from '@/core/logging'
-import { requireVideoEditInstance, listVideoEditInstances, subscribeVideoEdit, publishVideoEdit } from './videoEditService'
+import { requireVideoEditInstance, listVideoEditInstances, subscribeVideoEdit, subscribeVideoEditView, publishVideoEdit, setVideoEditView, videoEditProgramCommandIdentity, restoreVideoEditProgramCommandIdentity, type VideoEditInstance } from './videoEditService'
 
 const logger = createLogger('features.videoEdit.source')
 export interface VideoEditSourceState {
@@ -17,7 +17,8 @@ export interface VideoEditSourceState {
 export interface VideoEditSourceRequest { itemId: string; timeUs: number; playing: boolean; volume: number; inUs?: number | null; outUs?: number | null; playbackDirection?: 1 | -1 }
 export interface VideoEditSourceObservation { timeUs: number; presentedTimeUs: number; playing: boolean; volume: number; playbackDirection?: 1 | -1; error?: string }
 export type VideoEditSourcePresenter = (request: VideoEditSourceRequest, signal: AbortSignal) => Promise<VideoEditSourceObservation>
-interface SourceSession { state: VideoEditSourceState; presenter?: VideoEditSourcePresenter; wake?: () => void; pending?: AbortController; epoch: number; command: object; mediaIdentity?: string }
+interface PendingProgramPause { owner: VideoEditInstance; sequenceId: string; before: { frame: number; playing: boolean; playbackDirection: 1 | -1 }; beforeCommand: object; afterCommand: object }
+interface SourceSession { state: VideoEditSourceState; presenter?: VideoEditSourcePresenter; retire?: () => Promise<void>; released?: Promise<void>; wake?: () => void; pending?: AbortController; requestedPlaying?: boolean; pendingProgramPause?: PendingProgramPause; epoch: number; command: object; mediaIdentity?: string }
 export interface VideoEditSourceCommandIdentity { readonly owner: object; readonly command: object }
 const sessions = new Map<string, SourceSession>()
 const listeners = new Set<() => void>()
@@ -38,11 +39,11 @@ function mediaIdentity(projectId: string, itemId: string): string | undefined {
   return media ? JSON.stringify([media.id, media.path, media.sourceRevision ?? null, media.width, media.height, media.frameRate ?? null]) : undefined
 }
 export function readVideoEditSource(projectId: string): VideoEditSourceState { return { ...session(projectId).state } }
-export function registerVideoEditSourcePresenter(projectId: string, presenter: VideoEditSourcePresenter): () => void {
+export function registerVideoEditSourcePresenter(projectId: string, presenter: VideoEditSourcePresenter, retire?: () => Promise<void>): () => void {
   const current = session(projectId)
   if (current.presenter && current.presenter !== presenter) throw new Error('此工程已有源预览宿主。')
-  current.presenter = presenter; current.wake?.()
-  return () => { if (sessions.get(projectId) !== current || current.presenter !== presenter) return; current.presenter = undefined; closeVideoEditSource(projectId) }
+  current.presenter = presenter; current.retire = retire; current.wake?.()
+  return () => { if (sessions.get(projectId) !== current || current.presenter !== presenter) return; closeVideoEditSource(projectId); current.presenter = undefined; current.retire = undefined }
 }
 function validateRequest(projectId: string, request: VideoEditSourceRequest): void {
   if (!Number.isSafeInteger(request.timeUs) || request.timeUs < 0) throw new Error('源定位必须使用非负整数微秒。')
@@ -65,11 +66,23 @@ export async function updateVideoEditSource(projectId: string, values: Partial<V
   const request = { itemId: current.state.itemId, timeUs: current.state.timeUs, playing: current.state.playing, volume: current.state.volume, inUs: current.state.inUs, outUs: current.state.outUs, playbackDirection: current.state.playbackDirection, ...values }
   if (values.itemId !== undefined && values.itemId !== current.state.itemId) { request.timeUs = values.timeUs ?? 0; request.playing = values.playing ?? false; request.inUs = values.inUs ?? null; request.outUs = values.outUs ?? null; request.playbackDirection = values.playbackDirection ?? 1 }
   validateRequest(projectId, request)
+  const owner = requireVideoEditInstance(projectId)
+  const inheritedPause = current.pendingProgramPause
+  let programPause = inheritedPause?.owner === owner && inheritedPause.sequenceId === owner.activeSequenceId && inheritedPause.afterCommand === videoEditProgramCommandIdentity(projectId) ? inheritedPause : undefined
+  if (request.playing && owner.playing) {
+    const before = { frame: owner.frame, playing: owner.playing, playbackDirection: owner.playbackDirection }
+    const beforeCommand = videoEditProgramCommandIdentity(projectId)
+    const afterCommand = setVideoEditView(projectId, { playing: false })
+    programPause = { owner, sequenceId: owner.activeSequenceId, before, beforeCommand, afterCommand }
+  }
   if (!request.itemId && !current.presenter) { current.state.volume = request.volume; closeVideoEditSource(projectId); publishVideoEdit(true); return readVideoEditSource(projectId) }
   current.pending?.abort(new Error('源预览请求已被更新。'))
   const controller = new AbortController(); current.pending = controller
+  current.requestedPlaying = request.playing
+  current.pendingProgramPause = programPause
   const cancel = (): void => controller.abort(externalSignal?.reason ?? new Error('源预览请求已取消。'))
   externalSignal?.addEventListener('abort', cancel, { once: true })
+  const unsubscribeProgram = request.playing ? subscribeVideoEditView(() => { if (!listVideoEditInstances().includes(owner) || owner.playing) controller.abort(new Error('节目已有后续播放操作，源请求已取消。')) }) : () => {}
   const epoch = ++current.epoch
   current.command = {}
   const timeout = setTimeout(() => controller.abort(new Error('源预览未能及时响应，请打开源面板后重试。')), 10000)
@@ -97,12 +110,70 @@ export async function updateVideoEditSource(projectId: string, values: Partial<V
     if (Math.abs(request.volume - observation.volume) > 1e-6) throw new Error('源预览未能确认所请求的音量。')
     current.state = { itemId: request.itemId, ...observation, inUs: request.inUs, outUs: request.outUs, playbackDirection: request.playbackDirection, status: request.itemId ? 'ready' : 'closed', error: '' }
     publish(); publishVideoEdit(true)
+    controller.signal.throwIfAborted()
     logger.debug('源预览请求完成', { event: 'video_edit.source.request.completed', context: { projectId, itemId: request.itemId } })
     return readVideoEditSource(projectId)
   } catch (error) {
-    if (epoch === current.epoch) { current.state = { ...current.state, playing: false, status: 'error', error: error instanceof Error ? error.message : String(error) }; publish() }
-    if (!controller.signal.aborted) logger.warn('源预览请求未完成', { event: 'video_edit.source.request.failed', error, context: { projectId } }); throw error
-  } finally { clearTimeout(timeout); externalSignal?.removeEventListener('abort', cancel); if (current.pending === controller) current.pending = undefined }
+    const canceled = controller.signal.aborted
+    if (epoch === current.epoch && sessions.get(projectId) === current) {
+      controller.abort(error)
+      const released = current.retire?.()
+      current.released = released ?? current.released
+      current.state = { ...current.state, playing: false, status: 'error', error: error instanceof Error ? error.message : String(error) }; publish()
+      await released
+    }
+    if (programPause && sessions.get(projectId) === current && epoch === current.epoch && listVideoEditInstances().includes(owner) && owner.activeSequenceId === programPause.sequenceId && videoEditProgramCommandIdentity(projectId) === programPause.afterCommand) {
+      const restored = setVideoEditView(projectId, programPause.before)
+      restoreVideoEditProgramCommandIdentity(projectId, restored, programPause.beforeCommand)
+    }
+    if (canceled) logger.debug('源预览请求已取消并释放', { event: 'video_edit.source.request.cancelled', context: { projectId } })
+    else logger.warn('源预览请求未完成并释放', { event: 'video_edit.source.request.failed', error, context: { projectId } })
+    throw error
+  } finally { clearTimeout(timeout); unsubscribeProgram(); externalSignal?.removeEventListener('abort', cancel); if (current.pending === controller) { current.pending = undefined; current.requestedPlaying = undefined; current.pendingProgramPause = undefined } }
+}
+/** Foreground program playback waits until the source has paused and retired its reverse cache. */
+export async function yieldVideoEditSource(projectId: string): Promise<void> {
+  await pauseVideoEditSourceForProgram(projectId)
+}
+export interface VideoEditSourcePause {
+  readonly before: VideoEditSourceRequest
+  readonly after: VideoEditSourceRequest
+  readonly beforeCommand: VideoEditSourceCommandIdentity
+  readonly afterCommand: VideoEditSourceCommandIdentity
+}
+/** Domain callers record the same pause acknowledged by the physical source presenter. */
+export async function pauseVideoEditSourceForProgram(projectId: string, signal?: AbortSignal): Promise<VideoEditSourcePause | undefined> {
+  const current = session(projectId)
+  await current.released
+  if (sessions.get(projectId) !== current) throw new Error('原源预览会话已关闭，请重新选择节目操作。')
+  if (current.pending && !current.requestedPlaying) throw new Error('源预览仍在确认定位或暂停，请稍后重试节目播放。')
+  if (!current.state.playing && !current.requestedPlaying) return undefined
+  const { itemId, timeUs, playing, volume, inUs, outUs, playbackDirection } = current.state
+  const before = { itemId, timeUs, playing, volume, inUs, outUs, playbackDirection }
+  const beforeCommand = videoEditSourceCommandIdentity(projectId)
+  const pending = updateVideoEditSource(projectId, { playing: false }, signal)
+  const afterCommand = videoEditSourceCommandIdentity(projectId)
+  await pending
+  if (!matchesVideoEditSourceCommand(projectId, afterCommand)) throw new Error('源预览已有后续操作，节目尚未开始。')
+  const after = readVideoEditSource(projectId)
+  return { before, after, beforeCommand, afterCommand }
+}
+export async function restoreVideoEditSourcePause(projectId: string, pause: VideoEditSourcePause, signal?: AbortSignal): Promise<void> {
+  if (!matchesVideoEditSourceCommand(projectId, pause.afterCommand)) throw new Error('源预览已有后续操作，无法恢复旧节目操作。')
+  const pending = updateVideoEditSource(projectId, pause.before, signal)
+  const restoring = videoEditSourceCommandIdentity(projectId)
+  await pending
+  signal?.throwIfAborted()
+  restoreVideoEditSourceCommandIdentity(projectId, restoring, pause.beforeCommand)
+}
+/** A rejected inverse restores the confirmed paused source only while it still owns the request. */
+export async function revertVideoEditSourcePause(projectId: string, pause: VideoEditSourcePause, expected: VideoEditSourceCommandIdentity): Promise<void> {
+  if (!matchesVideoEditSourceCommand(projectId, expected)) throw new Error('源预览已有后续操作，未覆盖新源状态。')
+  const { itemId, timeUs, playing, volume, inUs, outUs, playbackDirection } = pause.after
+  const pending = updateVideoEditSource(projectId, { itemId, timeUs, playing, volume, inUs, outUs, playbackDirection })
+  const restoring = videoEditSourceCommandIdentity(projectId)
+  await pending
+  restoreVideoEditSourceCommandIdentity(projectId, restoring, pause.afterCommand)
 }
 export function observeVideoEditSource(projectId: string, itemId: string, observation: VideoEditSourceObservation): void {
   const current = sessions.get(projectId)
@@ -114,8 +185,15 @@ export function observeVideoEditSource(projectId: string, itemId: string, observ
 export function closeVideoEditSource(projectId: string): void {
   const current = sessions.get(projectId)
   if (!current) return
-  current.epoch++; current.command = {}; current.pending?.abort(new Error('源预览已关闭。')); current.pending = undefined
-  current.state = { itemId: '', timeUs: 0, presentedTimeUs: 0, playing: false, volume: current.state.volume, inUs: null, outUs: null, playbackDirection: 1, status: 'closed', error: '' }; publish()
+  const pause = current.pendingProgramPause
+  current.epoch++; current.command = {}; current.pending?.abort(new Error('源预览已关闭。')); current.pending = undefined; current.requestedPlaying = undefined; current.pendingProgramPause = undefined
+  current.released = current.retire?.() ?? current.released
+  current.state = { itemId: '', timeUs: 0, presentedTimeUs: 0, playing: false, volume: current.state.volume, inUs: null, outUs: null, playbackDirection: 1, status: 'closed', error: '' }
+  if (pause && listVideoEditInstances().includes(pause.owner) && pause.owner.activeSequenceId === pause.sequenceId && videoEditProgramCommandIdentity(projectId) === pause.afterCommand) {
+    const restored = setVideoEditView(projectId, pause.before)
+    restoreVideoEditProgramCommandIdentity(projectId, restored, pause.beforeCommand)
+  }
+  publish()
 }
 export function videoEditSourceCommandIdentity(projectId: string): VideoEditSourceCommandIdentity {
   const current = session(projectId)
