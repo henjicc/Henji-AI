@@ -17,6 +17,13 @@ test('创作结果回填验收场景只登记一次并声明写入用户数据',
   assert.equal(scene.writesUserData, true)
   assert.equal(UI_INSPECTION_SCENES.filter(candidate => candidate.id === scene.id).length, 1)
 })
+test('独立浮窗验收场景只登记一次并声明写入用户数据', () => {
+  const { createVideoEditPopoutScene } = require('./uiInspectionSceneVideoEditPopout.cjs')
+  const scene = createVideoEditPopoutScene()
+  assert.equal(scene.id, 'video-edit-popout')
+  assert.equal(scene.writesUserData, true)
+  assert.equal(UI_INSPECTION_SCENES.filter(candidate => candidate.id === scene.id).length, 1)
+})
 const { attachUiInspectionCommon } = require('./uiInspectionSceneCommon.cjs')
 const { UI_AUDIT_RULES } = require('./uiAuditDom.cjs')
 const {

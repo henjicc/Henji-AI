@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { elementOfEventTarget } from '@/utils/crossRealmDom'
 import { RotateCcw } from 'lucide-react'
 import { Dropdown, UiButton, UiColorInput, UiError, UiFormRow, UiGroup, UiIconButton, UiRangeInput, UiSwitch, UiTextAreaField } from '@/components/ui'
 import { ICON_ASSET_LIBRARY } from '@/core/theme/icons'
@@ -37,7 +38,7 @@ function CodeScalarControl({ target, parameter, value, label, time, onError, onW
   const numeric = (current: number, min: number, max: number, step: number, ariaLabel: string, change: (next: number) => void): React.ReactElement => <div
     onFocusCapture={() => { touched.current = false; gesture.begin() }}
     onChangeCapture={() => { touched.current = true }}
-    onClickCapture={event => { if (event.target instanceof Element && event.target.closest('[data-ui-compact-stepper-button]')) touched.current = true }}
+    onClickCapture={event => { if (elementOfEventTarget(event.target)?.closest('[data-ui-compact-stepper-button]')) touched.current = true }}
     onKeyDownCapture={event => { if (['ArrowUp', 'ArrowDown'].includes(event.key)) touched.current = true }}
     onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) gesture.finish() }}
   ><NumberInput key={gesture.epoch} value={current} min={min} max={max} step={step} ariaLabel={ariaLabel} widthClassName="w-full" commitOnChange onChange={next => {

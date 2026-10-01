@@ -13,6 +13,7 @@ import { UiButton, UiOptionButton } from './primitives'
 import { resolveDropdownDisplay } from './dropdownUtils'
 import { measureElementTextWidth } from './textMeasurement'
 import { ChevronDown } from 'lucide-react'
+import { isDomNode, ownerDocumentOf, ownerWindowOf } from '@/utils/crossRealmDom'
 
 const DROPDOWN_PANEL_GAP_PX = 8
 
@@ -169,7 +170,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
     return (source || []).map((option) => String(option.label))
   }, [])
   const measureTextMinWidth = (targetButton: HTMLElement, labels: string[]): number | null => {
-    const computedStyle = window.getComputedStyle(targetButton)
+    const computedStyle = ownerWindowOf(targetButton).getComputedStyle(targetButton)
     const paddingLeft = parseFloat(computedStyle.paddingLeft || '12')
     const paddingRight = parseFloat(computedStyle.paddingRight || '12')
     const arrowSpace = 24
@@ -183,8 +184,8 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (!ref.current) return
-      const target = e.target as Node
+      if (!ref.current || !isDomNode(e.target)) return
+      const target = e.target
       const inTrigger = ref.current.contains(target)
       const inPanel = panelRef.current?.contains(target) ?? false
       if (!inTrigger && !inPanel) {
@@ -196,8 +197,10 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
     }
     // 捕获阶段监听：画布内多处控件会在冒泡阶段 stopPropagation（避免触发节点拖拽），
     // 用捕获阶段确保点击节点内其它空白处也能正常关闭下拉
-    document.addEventListener('mousedown', handler, true)
-    return () => document.removeEventListener('mousedown', handler, true)
+    // 按触发器所在文档监听，系统浮窗中的下拉在浮窗内关闭；主窗口行为不变。
+    const ownerDocument = ownerDocumentOf(ref.current)
+    ownerDocument.addEventListener('mousedown', handler, true)
+    return () => ownerDocument.removeEventListener('mousedown', handler, true)
   }, [open])
 
   useLayoutEffect(() => {
@@ -252,25 +255,27 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
         ? Math.max(rect.width, panelMinWidthPx)
         : rect.width
       const viewportPadding = 8
-      const spaceBelow = window.innerHeight - rect.bottom - viewportPadding
+      const viewport = ownerWindowOf(ref.current)
+      const spaceBelow = viewport.innerHeight - rect.bottom - viewportPadding
       const placement = panelHeight > spaceBelow ? 'above' : 'below'
       const top = placement === 'above'
         ? Math.max(viewportPadding, rect.top - panelHeight - DROPDOWN_PANEL_GAP_PX)
-        : Math.min(rect.bottom + DROPDOWN_PANEL_GAP_PX, window.innerHeight - viewportPadding)
+        : Math.min(rect.bottom + DROPDOWN_PANEL_GAP_PX, viewport.innerHeight - viewportPadding)
       const left = Math.min(
         Math.max(viewportPadding, rect.left),
-        Math.max(viewportPadding, window.innerWidth - panelWidth - viewportPadding)
+        Math.max(viewportPadding, viewport.innerWidth - panelWidth - viewportPadding)
       )
       setFixedPos({ top, left, width: rect.width, placement })
     }
     if (open) {
       updatePos()
       const onScrollOrResize = () => updatePos()
-      window.addEventListener('scroll', onScrollOrResize, true)
-      window.addEventListener('resize', onScrollOrResize)
+      const ownerWindow = ownerWindowOf(ref.current)
+      ownerWindow.addEventListener('scroll', onScrollOrResize, true)
+      ownerWindow.addEventListener('resize', onScrollOrResize)
       return () => {
-        window.removeEventListener('scroll', onScrollOrResize, true)
-        window.removeEventListener('resize', onScrollOrResize)
+        ownerWindow.removeEventListener('scroll', onScrollOrResize, true)
+        ownerWindow.removeEventListener('resize', onScrollOrResize)
       }
     }
   }, [open, panelMinWidthPx, panelWidthStrategy])
@@ -373,7 +378,8 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
             >
               {menuContent}
             </div>,
-            document.body
+            // 挂到触发器所在文档：系统浮窗里的下拉留在浮窗内。
+            ownerDocumentOf(ref.current).body
           )
         ) : (
           <div

@@ -10,6 +10,7 @@ import { useVideoEditWaveformRanges } from '../panels/useVideoEditWaveformRanges
 import { acceptsVideoEditDrop, dropVideoEditInput, readVideoEditDrop, type VideoEditDropInput } from '../application/videoEditDrop'
 import { listVideoEditInstances, requireVideoEditInstance, setVideoEditTimelineView, setVideoEditView, focusVideoEditPanel, type VideoEditInstance } from '../application/videoEditService'
 import { updateVideoEditTrack } from '../application/videoEditTimeline'
+import { isDomNode, ownerWindowOf } from '@/utils/crossRealmDom'
 import { VideoEditSequenceDialog } from '../panels/VideoEditSequenceDialog'
 import { VideoEditTrackHeader } from './VideoEditTrackHeader'
 import { VideoEditTimelinePlayhead, VideoEditTimelinePosition } from './VideoEditTimelineTransport'
@@ -61,9 +62,9 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
     setView(previous => Object.keys(next).every(key => previous[key as keyof TimelineViewport] === next[key as keyof TimelineViewport]) ? previous : next)
   }, [pointer.viewport])
   const cancelInitialFrame = useCallback((): void => {
-    if (settlementFrame.current !== undefined) cancelAnimationFrame(settlementFrame.current)
+    if (settlementFrame.current !== undefined) ownerWindowOf(pointer.viewport.current).cancelAnimationFrame(settlementFrame.current)
     settlementFrame.current = undefined
-  }, [])
+  }, [pointer.viewport])
   const stopInitialPosition = useCallback((): void => {
     initialViewport.current.settled = true
     programScroll.current = undefined
@@ -87,7 +88,7 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
             programScroll.current = { top: host.scrollTop, left: host.scrollLeft }
           }
         }
-        if (settlementFrame.current === undefined) settlementFrame.current = requestAnimationFrame(() => {
+        if (settlementFrame.current === undefined) settlementFrame.current = ownerWindowOf(host).requestAnimationFrame(() => {
           settlementFrame.current = undefined
           const current = initialViewport.current; const measuredHost = pointer.viewport.current
           if (!measuredHost || !current.visible || current.settled) return
@@ -112,7 +113,9 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
   useLayoutEffect(() => {
     const host = pointer.viewport.current
     if (!host) return
-    const observer = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(measureViewport)
+    // 用时间线实际所在窗口（可能是系统浮窗）的观察器与帧调度。
+    const Observer = ownerWindowOf(host).ResizeObserver
+    const observer = typeof Observer === 'undefined' ? undefined : new Observer(measureViewport)
     observer?.observe(host)
     return () => { observer?.disconnect(); cancelInitialFrame() }
   }, [pointer.viewport, measureViewport, cancelInitialFrame])
@@ -135,7 +138,7 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
       onPointerDown={pointer.down} onPointerMove={pointer.move} onPointerUp={pointer.up} onPointerCancel={pointer.cancel} onLostPointerCapture={pointer.cancel} onContextMenu={menu.show}
       onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); pointer.cancel() } }}
       onDragOver={event => { stopInitialPosition(); if (!acceptsVideoEditDrop(event.dataTransfer)) return; const at = placement(event); if (!at) { setHint(null); return } event.preventDefault(); event.dataTransfer.dropEffect = 'copy'; setHint(at) }}
-      onDragLeave={event => { if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) setHint(null) }}
+      onDragLeave={event => { if (!isDomNode(event.relatedTarget) || !event.currentTarget.contains(event.relatedTarget)) setHint(null) }}
       onDrop={event => {
         stopInitialPosition()
         if (!acceptsVideoEditDrop(event.dataTransfer)) return

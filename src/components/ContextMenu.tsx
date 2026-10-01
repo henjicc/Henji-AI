@@ -1,7 +1,8 @@
 import { createLogger } from '@/core/logging'
-import React, { useEffect, useRef } from 'react'
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { MenuItem } from '../hooks/useContextMenu'
+import { isDomNode, ownerDocumentOf } from '@/utils/crossRealmDom'
 
 const logger = createLogger('components.ContextMenu')
 
@@ -16,30 +17,41 @@ interface ContextMenuProps {
 
 const ContextMenu: React.FC<ContextMenuProps> = ({ items, position, onClose, visible, owner }) => {
     const menuRef = useRef<HTMLDivElement>(null)
+    // 菜单没有触发元素：可见期间在原位放一个隐藏锚点，得知自己处在主窗口还是剪辑系统浮窗，
+    // 再挂到该文档的 body 并在该文档监听外部点击。
+    const anchorRef = useRef<HTMLSpanElement>(null)
+    const [host, setHost] = useState<Document | null>(null)
+    useLayoutEffect(() => {
+        if (!visible || !anchorRef.current) return
+        const next = ownerDocumentOf(anchorRef.current)
+        setHost(previous => previous === next ? previous : next)
+    }, [visible])
 
     useEffect(() => {
-        if (!visible) return
+        if (!visible || !host) return
 
         const handleClickOutside = (e: MouseEvent) => {
-            if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+            if (menuRef.current && (!isDomNode(e.target) || !menuRef.current.contains(e.target))) {
                 onClose()
             }
         }
 
         // 延迟添加监听器，避免立即触发
         const timer = setTimeout(() => {
-            document.addEventListener('mousedown', handleClickOutside)
+            host.addEventListener('mousedown', handleClickOutside)
         }, 0)
 
         return () => {
             clearTimeout(timer)
-            document.removeEventListener('mousedown', handleClickOutside)
+            host.removeEventListener('mousedown', handleClickOutside)
         }
-    }, [visible, onClose])
+    }, [visible, onClose, host])
 
     if (!visible) return null
 
-    return createPortal(
+    return <>
+        <span ref={anchorRef} hidden />
+        {host && createPortal(
         <div
             ref={menuRef}
             role="menu"
@@ -94,8 +106,9 @@ const ContextMenu: React.FC<ContextMenuProps> = ({ items, position, onClose, vis
                     )}
                 </React.Fragment>
             ))}
-        </div>, document.body
-    )
+        </div>, host.body
+    )}
+    </>
 }
 
 export default ContextMenu

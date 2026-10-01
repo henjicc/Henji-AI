@@ -309,3 +309,17 @@ it('旧取帧失败不暂停后续节目命令', async () => {
   await act(async () => { pixel.requests[0].reject(new Error('旧解码失败')); await vi.advanceTimersByTimeAsync(1) })
   expect(owner).toMatchObject({ frame: 40, playing: true }); expect(pixel.requests[1].frame).toBe(40); expect(onError).not.toHaveBeenCalled(); view.unmount()
 })
+it('节目面板重挂载（停靠与浮窗间迁移）必须等旧渲染会话实际退场后才接入新显示面', async () => {
+  const instance = (await createVideoEditProject())!; appendVideoEditClip(instance.document.id)
+  let finishDispose!: () => void
+  pixel.dispose.mockImplementationOnce(() => new Promise<void>(resolve => { finishDispose = resolve }))
+  const first = render(<VideoEditPreview instance={instance} onError={vi.fn()} />)
+  await act(async () => { await Promise.resolve() }); expect(pixel.sessions).toBe(1)
+  first.unmount()
+  const moved = render(<VideoEditPreview instance={instance} onError={vi.fn()} />)
+  await act(async () => { await Promise.resolve(); await Promise.resolve() })
+  expect(pixel.sessions).toBe(1); expect(moved.queryByLabelText('剪辑画面')).toBeNull()
+  await act(async () => { finishDispose(); await Promise.resolve(); await Promise.resolve() })
+  expect(pixel.sessions).toBe(2); expect(moved.getByLabelText('剪辑画面')).toBeTruthy()
+  moved.unmount()
+})

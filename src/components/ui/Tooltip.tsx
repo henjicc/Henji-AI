@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
+import { ownerDocumentOf, ownerWindowOf } from '@/utils/crossRealmDom'
 
 type TooltipProps = {
     children: React.ReactElement
@@ -98,12 +99,14 @@ export default function Tooltip({
             }
         }
 
-        window.addEventListener('scroll', handleScrollOrResize, true)
-        window.addEventListener('resize', handleScrollOrResize)
+        // 触发器可能挂在系统浮窗里：滚动与缩放按它所在的窗口监听。
+        const ownerWindow = ownerWindowOf(triggerRef.current)
+        ownerWindow.addEventListener('scroll', handleScrollOrResize, true)
+        ownerWindow.addEventListener('resize', handleScrollOrResize)
 
         return () => {
-            window.removeEventListener('scroll', handleScrollOrResize, true)
-            window.removeEventListener('resize', handleScrollOrResize)
+            ownerWindow.removeEventListener('scroll', handleScrollOrResize, true)
+            ownerWindow.removeEventListener('resize', handleScrollOrResize)
             if (timerRef.current) {
                 window.clearTimeout(timerRef.current)
             }
@@ -143,7 +146,8 @@ export default function Tooltip({
             >
                 {children}
             </span>
-            {createPortal(tooltipContent, document.body)}
+            {/* 挂到触发器所在文档；首次渲染尚未挂载时落在主文档，悬停时随重渲染迁到浮窗。 */}
+            {createPortal(tooltipContent, ownerDocumentOf(triggerRef.current).body)}
         </>
     )
 }

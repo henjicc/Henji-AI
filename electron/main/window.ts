@@ -5,6 +5,7 @@ import { bindWindowStateEvents } from './ipc/window'
 import { createMainLogger } from './services/logging/main-logger'
 import { cleanupAllVideoFrameExports } from './services/video/frame-export'
 import { closeLogWindow } from './windows/log-window'
+import { createVideoEditPopoutHost } from './windows/video-edit-popout'
 import { closeCameraStageRenderWindow } from './services/camera-stage-render'
 import { APP_WINDOW_BACKGROUND_HEX } from '../../src/core/theme/colorTokens'
 import { warmupMediaImportPipeline } from './services/media-import'
@@ -62,7 +63,9 @@ export function createWindow(options: CreateWindowOptions = {}): BrowserWindow {
   mainWindow = win
 
   bindWindowStateEvents(win)
-  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+  // 只有剪辑系统浮窗的受控 about:blank 请求放行，其余开窗一律拒绝。
+  const videoEditPopouts = createVideoEditPopoutHost(win)
+  win.webContents.setWindowOpenHandler(details => videoEditPopouts.handleWindowOpen(details) ?? { action: 'deny' })
   win.webContents.on('will-navigate', (event, url) => {
     if (isTrustedMainRendererUrl(url)) return
     event.preventDefault()

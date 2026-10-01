@@ -15,6 +15,8 @@ import { editVideoEditProgramFrame } from './application/videoEditFrameEdit'
 import { useAssetLibraryStore } from '@/features/assets/store/assetLibraryStore'
 import { openAssetLibrary } from '@/stores/navigationStore'
 
+/** The Program GPU surface belongs to the project: a remount (dock ↔ popout window) waits until the previous session actually retired. */
+const programReleases = new WeakMap<VideoEditInstance, Promise<unknown>>()
 export function VideoEditPreview({ instance, onError, visible = true }: { instance: VideoEditInstance; onError: (error: unknown) => void; visible?: boolean }): React.ReactElement {
   useSyncExternalStore(subscribeVideoEditView, videoEditViewRevision)
   const host = useRef<HTMLDivElement>(null)
@@ -30,12 +32,11 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
   const [collecting, setCollecting] = useState(false)
   const libraryId = useAssetLibraryStore(state => state.libraryId)
   const session = useRef<VideoEditRenderSession | null>(null)
-  const released = useRef<Promise<unknown>>(Promise.resolve())
   const stopPreview = useRef<() => void>(() => {})
   const document = getActiveVideoEditSequence(instance)
   useEffect(() => {
     if (!visible) { setVideoEditView(instance.document.id, { playing: false }, true); setPreparing(false); setLevels([]); return }
-    const previousRelease = released.current
+    const previousRelease = programReleases.get(instance) ?? Promise.resolve()
     let stopped = false
     let stopCurrent: () => void = () => {}
     const stop = (): void => { stopped = true; stopCurrent() }
@@ -210,7 +211,7 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
     stopCurrent = (): void => {
       if (retired) return
       retired = true; unregisterCapture(); unsubscribe(); unsubscribeView(); clearTimeout(timer); clearInterval(meterTimer); instance.playing = false; stopAudio(); meter?.dispose()
-      released.current = Promise.allSettled([audio?.close(), renderer.dispose(), audioRenderer?.dispose()])
+      programReleases.set(instance, Promise.allSettled([audio?.close(), renderer.dispose(), audioRenderer?.dispose()]))
       surface.remove(); if (canvas.current === surface) canvas.current = null
     }
     void loop()

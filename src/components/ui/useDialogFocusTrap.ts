@@ -1,4 +1,5 @@
 import { useEffect, useRef, type RefObject } from 'react';
+import { isHtmlElementNode, ownerWindowOf } from '@/utils/crossRealmDom';
 
 const FOCUSABLE_SELECTOR = [
   'a[href]',
@@ -49,7 +50,7 @@ export function useDialogFocusTrap({
   const focusBeforeActivationRef = useRef<HTMLElement | null>(null);
 
   if (active && !wasActiveRef.current) {
-    focusBeforeActivationRef.current = document.activeElement instanceof HTMLElement
+    focusBeforeActivationRef.current = isHtmlElementNode(document.activeElement)
       ? document.activeElement
       : null;
   }
@@ -69,10 +70,14 @@ export function useDialogFocusTrap({
       return;
     }
 
-    const previouslyFocused = focusBeforeActivationRef.current;
+    // 弹窗可能挂在剪辑系统浮窗里：键盘、焦点和帧调度都按它所在的文档/窗口处理。
+    const ownerDocument = dialog.ownerDocument;
+    const ownerWindow = ownerWindowOf(dialog);
+    const capturedFocus = ownerDocument === document ? focusBeforeActivationRef.current : ownerDocument.activeElement;
+    const previouslyFocused = isHtmlElementNode(capturedFocus) && !dialog.contains(capturedFocus) ? capturedFocus : null;
     dialogStack.push(dialog);
 
-    const focusFrame = window.requestAnimationFrame(() => {
+    const focusFrame = ownerWindow.requestAnimationFrame(() => {
       if (dialogStack[dialogStack.length - 1] === dialog) {
         dialog.focus({ preventScroll: true });
       }
@@ -103,7 +108,7 @@ export function useDialogFocusTrap({
 
       const first = focusableElements[0];
       const last = focusableElements[focusableElements.length - 1];
-      const activeElement = document.activeElement;
+      const activeElement = ownerDocument.activeElement;
 
       if (event.shiftKey && (activeElement === dialog || activeElement === first || !dialog.contains(activeElement))) {
         event.preventDefault();
@@ -114,11 +119,11 @@ export function useDialogFocusTrap({
       }
     };
 
-    document.addEventListener('keydown', handleKeyDown);
+    ownerDocument.addEventListener('keydown', handleKeyDown);
 
     return () => {
-      window.cancelAnimationFrame(focusFrame);
-      document.removeEventListener('keydown', handleKeyDown);
+      ownerWindow.cancelAnimationFrame(focusFrame);
+      ownerDocument.removeEventListener('keydown', handleKeyDown);
       const wasTopmost = removeFromDialogStack(dialog);
       if (wasTopmost && previouslyFocused?.isConnected) {
         previouslyFocused.focus({ preventScroll: true });

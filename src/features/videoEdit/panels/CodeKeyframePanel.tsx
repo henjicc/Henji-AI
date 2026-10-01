@@ -1,4 +1,5 @@
 import { useRef, useState, type ReactNode } from 'react'
+import { elementOfEventTarget } from '@/utils/crossRealmDom'
 import { Plus, Trash2 } from 'lucide-react'
 import { Dropdown, UiButton, UiFormRow, UiGroup, UiIconButton } from '@/components/ui'
 import NumberInput from '@/components/ui/NumberInput'
@@ -24,7 +25,7 @@ function KeyframeTime({ editor, parameter, point, index, onError }: Omit<Props, 
   return <div
     onFocusCapture={() => { touched.current = false; gesture.begin() }}
     onChangeCapture={() => { touched.current = true }}
-    onClickCapture={event => { if (event.target instanceof Element && event.target.closest('[data-ui-compact-stepper-button]')) touched.current = true }}
+    onClickCapture={event => { if (elementOfEventTarget(event.target)?.closest('[data-ui-compact-stepper-button]')) touched.current = true }}
     onKeyDownCapture={event => {
       if (['ArrowUp', 'ArrowDown'].includes(event.key)) touched.current = true
       if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); touched.current = false; gesture.cancel() }

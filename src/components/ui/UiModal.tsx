@@ -1,4 +1,4 @@
-import { useId, useRef, type ReactNode } from 'react';
+import { useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 
@@ -6,6 +6,7 @@ import { UI_CONTENT_OVERLAY_INSET_CLASS, UI_DIALOG_TRANSITION_MS } from './motio
 import { UiIconButton, UiPanel } from './primitives';
 import { useDialogFocusTrap } from './useDialogFocusTrap';
 import { useDialogTransition } from './useDialogTransition';
+import { ownerDocumentOf } from '@/utils/crossRealmDom';
 import {
   UI_MODAL_SIZE_CLASS,
   UI_TEXT_TITLE_CLASS,
@@ -60,10 +61,19 @@ export function UiModal({
   const isGlass = surface === 'glass';
   const { shouldRender, isVisible } = useDialogTransition(isOpen, UI_DIALOG_TRANSITION_MS);
   const dialogRef = useRef<HTMLDivElement>(null);
+  // 弹窗没有触发元素：用原位的隐藏锚点得知自己处在哪个文档（主窗口或剪辑系统浮窗），
+  // 再挂到该文档的 body。锚点只在弹窗渲染期间存在。
+  const anchorRef = useRef<HTMLSpanElement>(null);
+  const [host, setHost] = useState<Document | null>(null);
+  useLayoutEffect(() => {
+    if (!shouldRender || !anchorRef.current) return;
+    const next = ownerDocumentOf(anchorRef.current);
+    setHost(previous => previous === next ? previous : next);
+  }, [shouldRender]);
   const titleId = useId();
   const resolvedAriaLabel = hideHeader || ariaLabel ? ariaLabel ?? title : undefined;
   useDialogFocusTrap({
-    active: isOpen && shouldRender,
+    active: isOpen && shouldRender && host !== null,
     dialogRef,
     onClose,
   });
@@ -72,9 +82,11 @@ export function UiModal({
     return null;
   }
 
-  // 挂到 document.body：祖先链上任何一个带 transform/filter 的面板都会给 fixed 定位
+  // 挂到所在文档的 body：祖先链上任何一个带 transform/filter 的面板都会给 fixed 定位
   // 重新建立包含块，导致弹窗被错误地约束在那个祖先容器内而不是真正居中于整个窗口。
-  return createPortal(
+  return <>
+    <span ref={anchorRef} hidden />
+    {host && createPortal(
     // data-dialog：资产库边缘触发器靠它判断"当前有弹窗打开，别弹出侧栏"。
     // 放在 UiModal 上，所有走 UiModal 的弹窗自动获得该行为，
     // 不必再指望每个业务弹窗自己记得加这个属性。
@@ -123,6 +135,7 @@ export function UiModal({
         )}
       </UiPanel>
     </div>,
-    document.body
-  );
+    host.body
+  )}
+  </>;
 }

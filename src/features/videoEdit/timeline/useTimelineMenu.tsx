@@ -5,6 +5,7 @@ import type { VideoEditCommandId } from '@/core/videoEdit/commands'
 import { captureVideoEditCommandContext, executeVideoEditCommand, videoEditCommandState } from '../application/videoEditCommands'
 import { setVideoEditTimelineView, type VideoEditInstance } from '../application/videoEditService'
 import { timelineCommandPresentation } from './timelineCommandPresentation'
+import { elementOfEventTarget } from '@/utils/crossRealmDom'
 
 const actionIcons = { copy: Copy, paste: Clipboard, insert: ArrowRightToLine, overwrite: Clipboard, split: Scissors, split_tracks: Scissors, delete: Trash2, ripple_delete: Trash2, link: Link2, unlink: Unlink, group: Group, ungroup: Ungroup, separate_audio: AudioLines, locate_source: Play, locate_project: Locate, locate_effects: SlidersHorizontal, select_all: ListChecks } as const
 type MenuCommand = keyof typeof actionIcons
@@ -13,10 +14,12 @@ export function useTimelineMenu(instance: VideoEditInstance, onError: (error: un
   const menu = useContextMenu()
   const shortcuts = useSettingsStore(state => state.videoEditShortcuts)
   const show = (event: React.MouseEvent): void => {
-    if (!(event.target instanceof Element) || event.target.closest('[data-video-edit-track-header]')) return
+    // 浮窗中的目标属于子窗口 realm，不能用 instanceof Element 判定。
+    const target = elementOfEventTarget(event.target)
+    if (!target || target.closest('[data-video-edit-track-header]')) return
     cancelPointer()
     try {
-      const clipId = event.target.closest('[data-video-edit-clip]')?.getAttribute('data-video-edit-clip')
+      const clipId = target.closest('[data-video-edit-clip]')?.getAttribute('data-video-edit-clip')
       const ids = clipId ? instance.selectedClipIds.includes(clipId) ? [clipId, ...instance.selectedClipIds.filter(id => id !== clipId)] : [clipId] : []
       if (clipId) setVideoEditTimelineView(instance.document.id, { selectedClipIds: ids }, clipId)
       // Freeze at menu opening. The shared menu executes its callback after closing, not at this event.

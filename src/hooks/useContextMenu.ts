@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { elementOfEventTarget, ownerDocumentOf, ownerWindowOf } from '@/utils/crossRealmDom'
 
 export interface MenuItem {
     id: string
@@ -27,22 +28,27 @@ export const useContextMenu = (): UseContextMenuReturn => {
     const [menuPosition, setMenuPosition] = useState<Position>({ x: 0, y: 0 })
     const [menuItems, setMenuItems] = useState<MenuItem[]>([])
     const menuRef = useRef<{ width: number; height: number }>({ width: 200, height: 0 })
+    /** 打开菜单的文档：剪辑系统浮窗中右键时，关闭监听与视口都取浮窗本身。 */
+    const ownerRef = useRef<Document>(document)
 
     const showMenu = useCallback((e: React.MouseEvent, items: MenuItem[]) => {
         e.preventDefault()
         e.stopPropagation()
 
         setMenuItems(items)
+        const target = elementOfEventTarget(e.target)
+        ownerRef.current = ownerDocumentOf(target)
+        const viewport = ownerWindowOf(target)
 
         // 计算菜单高度（估算）
         const itemHeight = 40 // 每个菜单项的大概高度
         const padding = 8 // 菜单的上下 padding
-        const estimatedHeight = Math.min(items.length * itemHeight + padding, Math.max(0, window.innerHeight - 20))
+        const estimatedHeight = Math.min(items.length * itemHeight + padding, Math.max(0, viewport.innerHeight - 20))
         const menuWidth = menuRef.current.width
 
         // 获取视口尺寸
-        const viewportWidth = window.innerWidth
-        const viewportHeight = window.innerHeight
+        const viewportWidth = viewport.innerWidth
+        const viewportHeight = viewport.innerHeight
 
         // 使用 clientX/clientY（相对于视口的坐标）
         let x = e.clientX
@@ -75,31 +81,32 @@ export const useContextMenu = (): UseContextMenuReturn => {
         if (!menuVisible) return
 
         const handleClick = (e: MouseEvent) => {
-            const target = e.target as HTMLElement
+            const target = elementOfEventTarget(e.target)
             // 如果点击的不是菜单内部，关闭菜单
-            if (!target.closest('[data-context-menu]')) {
+            if (!target?.closest('[data-context-menu]')) {
                 hideMenu()
             }
         }
 
         const handleContextMenu = (e: MouseEvent) => {
-            const target = e.target as HTMLElement
+            const target = elementOfEventTarget(e.target)
             // 如果右键点击的不是菜单本身，关闭菜单
-            if (!target.closest('[data-context-menu]')) {
+            if (!target?.closest('[data-context-menu]')) {
                 hideMenu()
             }
         }
 
         // 延迟添加事件监听器，避免立即触发
+        const owner = ownerRef.current
         const timer = setTimeout(() => {
-            document.addEventListener('mousedown', handleClick)
-            document.addEventListener('contextmenu', handleContextMenu)
+            owner.addEventListener('mousedown', handleClick)
+            owner.addEventListener('contextmenu', handleContextMenu)
         }, 10)
 
         return () => {
             clearTimeout(timer)
-            document.removeEventListener('mousedown', handleClick)
-            document.removeEventListener('contextmenu', handleContextMenu)
+            owner.removeEventListener('mousedown', handleClick)
+            owner.removeEventListener('contextmenu', handleContextMenu)
         }
     }, [menuVisible, hideMenu])
 

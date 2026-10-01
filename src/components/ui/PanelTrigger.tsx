@@ -12,6 +12,7 @@ import { UI_FIELD_CONTROL_HEIGHT_SM_CLASS, UI_FIELD_LABEL_CLASS, UI_TRIGGER_BUTT
 import { measureElementTextWidth } from './textMeasurement'
 import { UiButton } from './primitives'
 import { ChevronDown } from 'lucide-react'
+import { elementOfEventTarget, isDomNode, ownerDocumentOf, ownerWindowOf } from '@/utils/crossRealmDom'
 
 type PanelTriggerProps = {
   label?: string
@@ -128,8 +129,8 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
       boundary: boundarySelector ? ref.current?.closest(boundarySelector)?.getBoundingClientRect() : undefined,
       panelWidth: resolvedPanelWidth ?? rect.width,
       panelHeight: measuredPanelHeight,
-      viewportWidth: window.innerWidth,
-      viewportHeight: window.innerHeight,
+      viewportWidth: ownerWindowOf(ref.current).innerWidth,
+      viewportHeight: ownerWindowOf(ref.current).innerHeight,
       preferredPlacement: alignment === 'aboveCenter' ? 'above' : 'below',
       horizontalAlign: alignment === 'aboveCenter' ? 'center' : 'left',
       gap: alignment === 'aboveCenter' ? gapProp : 4,
@@ -177,8 +178,10 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      const target = e.target as Node
-      const targetElement = target instanceof Element ? target : target.parentElement
+      if (!isDomNode(e.target)) return
+      const target = e.target
+      // 触发器可能挂在系统浮窗（另一 realm）里，不能用 instanceof 判定。
+      const targetElement = elementOfEventTarget(target)
       const inTrigger = !!ref.current && ref.current.contains(target)
       const inPanel = !!panelRef.current && panelRef.current.contains(target)
       const inPortaledPanelControl = isPanelInteractionPortalTarget(targetElement)
@@ -194,8 +197,10 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
         closePanel()
       }
     }
-    document.addEventListener('mousedown', handler, true)
-    return () => document.removeEventListener('mousedown', handler, true)
+    // 按触发器所在文档监听：浮窗中的面板在浮窗内打开与关闭，主窗口行为不变。
+    const ownerDocument = ownerDocumentOf(ref.current)
+    ownerDocument.addEventListener('mousedown', handler, true)
+    return () => ownerDocument.removeEventListener('mousedown', handler, true)
   }, [closePanel, open, closeOnPanelClick])
 
   useEffect(() => {
@@ -204,8 +209,9 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
       if (event.key !== 'Escape') return
       closePanel()
     }
-    document.addEventListener('keydown', handler)
-    return () => document.removeEventListener('keydown', handler)
+    const ownerDocument = ownerDocumentOf(ref.current)
+    ownerDocument.addEventListener('keydown', handler)
+    return () => ownerDocument.removeEventListener('keydown', handler)
   }, [closePanel, open])
 
   useEffect(() => {
@@ -226,14 +232,15 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
         updateAnchor(true)
       }
       const boundary = boundarySelector ? ref.current?.closest(boundarySelector) : null
-      const boundaryObserver = boundary ? new ResizeObserver(onScrollOrResize) : null
+      const ownerWindow = ownerWindowOf(ref.current)
+      const boundaryObserver = boundary ? new ownerWindow.ResizeObserver(onScrollOrResize) : null
       if (boundary) boundaryObserver?.observe(boundary)
-      window.addEventListener('scroll', onScrollOrResize, true)
-      window.addEventListener('resize', onScrollOrResize)
+      ownerWindow.addEventListener('scroll', onScrollOrResize, true)
+      ownerWindow.addEventListener('resize', onScrollOrResize)
       return () => {
         boundaryObserver?.disconnect()
-        window.removeEventListener('scroll', onScrollOrResize, true)
-        window.removeEventListener('resize', onScrollOrResize)
+        ownerWindow.removeEventListener('scroll', onScrollOrResize, true)
+        ownerWindow.removeEventListener('resize', onScrollOrResize)
       }
     }
   }, [boundarySelector, freezePositionOnOpen, open, updatePanelPosition])
@@ -246,7 +253,7 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
 
   useEffect(() => {
     if (!open || !panelRef.current) return
-    const obs = new ResizeObserver(() => {
+    const obs = new (ownerWindowOf(panelRef.current).ResizeObserver)(() => {
       if (panelRef.current && stableHeight) {
         const h = panelRef.current.offsetHeight
         if (h > maxHeightRef.current) {
@@ -304,7 +311,8 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
             {renderPanel()}
           </div>
         </div>,
-        document.body
+        // 面板挂到触发器所在文档：系统浮窗里的菜单留在浮窗内。
+        ownerDocumentOf(ref.current).body
       )}
     </div>
   )

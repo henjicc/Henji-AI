@@ -6,6 +6,7 @@ import { videoEditMoveTrackMap } from '@/core/videoEdit/timelineEdits'
 import { beginVideoEditTimelineDrag, finishVideoEditTimelineDrag, previewVideoEditTimelineDrag, updateVideoEditTrack, type VideoEditTimelineAdjustment, type VideoEditTimelineDrag } from '../application/videoEditTimeline'
 import { captureVideoEditCommandContext, executeVideoEditCommand } from '../application/videoEditCommands'
 import { requireVideoEditInstance, setVideoEditTimelineView, setVideoEditView, type VideoEditInstance } from '../application/videoEditService'
+import { elementOfEventTarget, ownerDocumentOf, ownerWindowOf } from '@/utils/crossRealmDom'
 import { TIMELINE_HEADER_WIDTH, TIMELINE_RULER_HEIGHT, timelineEdgeVelocity, timelineTrackAt, type TimelineTrackRow } from './timelineGeometry'
 
 interface Point { x: number; y: number }
@@ -43,7 +44,7 @@ export function useTimelinePointer(options: Options) {
   }
   const detach = (): PointerGesture | undefined => {
     const previous = pointer.current; pointer.current = undefined
-    if (animation.current !== undefined) cancelAnimationFrame(animation.current)
+    if (animation.current !== undefined) ownerWindowOf(viewport.current).cancelAnimationFrame(animation.current)
     animation.current = undefined
     if (previous && viewport.current?.hasPointerCapture?.(previous.pointerId)) viewport.current.releasePointerCapture(previous.pointerId)
     return previous
@@ -92,7 +93,7 @@ export function useTimelinePointer(options: Options) {
       if (gesture.kind !== 'seek') host.scrollTop = Math.max(0, host.scrollTop + timelineEdgeVelocity(gesture.client.y, rect.top + TIMELINE_RULER_HEIGHT, rect.bottom))
       if (host.scrollLeft !== beforeX || host.scrollTop !== beforeY) {
         applyPointer(gesture)
-        if (pointer.current) animation.current = requestAnimationFrame(tick)
+        if (pointer.current) animation.current = ownerWindowOf(host).requestAnimationFrame(tick)
       }
     }
   }
@@ -100,7 +101,7 @@ export function useTimelinePointer(options: Options) {
     const gesture = pointer.current; const host = viewport.current
     if (animation.current !== undefined || !gesture || !host || !['clip', 'box', 'seek'].includes(gesture.kind)) return
     const rect = host.getBoundingClientRect()
-    if (timelineEdgeVelocity(gesture.client.x, rect.left + TIMELINE_HEADER_WIDTH, rect.right) || (gesture.kind !== 'seek' && timelineEdgeVelocity(gesture.client.y, rect.top + TIMELINE_RULER_HEIGHT, rect.bottom))) animation.current = requestAnimationFrame(tick)
+    if (timelineEdgeVelocity(gesture.client.x, rect.left + TIMELINE_HEADER_WIDTH, rect.right) || (gesture.kind !== 'seek' && timelineEdgeVelocity(gesture.client.y, rect.top + TIMELINE_RULER_HEIGHT, rect.bottom))) animation.current = ownerWindowOf(host).requestAnimationFrame(tick)
   }
   const capture = (gesture: PointerGesture): void => {
     cancel(); pointer.current = gesture
@@ -120,17 +121,19 @@ export function useTimelinePointer(options: Options) {
     setVideoEditTimelineView(instance.document.id, { selectedClipIds: selected }, selected.includes(ids[0]) ? ids[0] : undefined)
   }
   const down = (event: React.PointerEvent<HTMLDivElement>): void => {
-    if (event.button !== 0 || !(event.target instanceof Element)) return
+    // 浮窗中的目标属于子窗口 realm，不能用 instanceof Element 判定。
+    const target = elementOfEventTarget(event.target)
+    if (event.button !== 0 || !target) return
     const { instance, sequence, rows, pixels, onError } = current.current
-    if (event.target.closest('[data-video-edit-track-header]')) return
+    if (target.closest('[data-video-edit-track-header]')) return
     event.preventDefault(); event.stopPropagation()
     viewport.current?.focus({ preventScroll: true })
     const at = point({ x: event.clientX, y: event.clientY }); const row = timelineTrackAt(rows, at.y)
-    const clipId = event.target.closest('[data-video-edit-clip]')?.getAttribute('data-video-edit-clip')
+    const clipId = target.closest('[data-video-edit-clip]')?.getAttribute('data-video-edit-clip')
     const clip = sequence.clips.find(value => value.id === clipId)
     try {
       if (instance.tool === 'hand') { const host = viewport.current!; capture({ ...base(event), kind: 'hand', origin: { x: event.clientX, y: event.clientY }, left: host.scrollLeft, top: host.scrollTop }); return }
-      if (event.target.closest('[data-video-edit-ruler]')) { const gesture: PointerGesture = { ...base(event), kind: 'seek' }; capture(gesture); setVideoEditView(instance.document.id, { scrubbing: true }); applyPointer(gesture); return }
+      if (target.closest('[data-video-edit-ruler]')) { const gesture: PointerGesture = { ...base(event), kind: 'seek' }; capture(gesture); setVideoEditView(instance.document.id, { scrubbing: true }); applyPointer(gesture); return }
       if (instance.tool === 'track') { if (row) select(selectVideoEditTrackFrom(sequence, row.track.index, Math.max(0, Math.round(at.x / pixels)), event.shiftKey), false, event.ctrlKey || event.metaKey); return }
       if (instance.tool === 'razor') {
         if (clip) capture({ ...base(event), kind: 'razor', clipId: clip.id })
@@ -141,7 +144,7 @@ export function useTimelinePointer(options: Options) {
       if (!instance.selectedClipIds.includes(clip.id)) select([clip.id], false, false)
       else setVideoEditTimelineView(instance.document.id, { selectedClipIds: [...instance.selectedClipIds] }, clip.id)
       const ids = [...instance.selectedClipIds]
-      const mode = event.target.closest('[data-video-edit-trim]')?.getAttribute('data-video-edit-trim') === 'in' ? 'in' : event.target.closest('[data-video-edit-trim]')?.getAttribute('data-video-edit-trim') === 'out' ? 'out' : 'move'
+      const mode = target.closest('[data-video-edit-trim]')?.getAttribute('data-video-edit-trim') === 'in' ? 'in' : target.closest('[data-video-edit-trim]')?.getAttribute('data-video-edit-trim') === 'out' ? 'out' : 'move'
       // Validate even a stationary gesture so locked related clips cannot enter edit preview.
       const handle = beginVideoEditTimelineDrag(instance.document.id, sequence.id, ids)
       try { previewVideoEditTimelineDrag(handle, { mode, delta: 0 }) } catch (error) { finishVideoEditTimelineDrag(handle); throw error }
@@ -189,10 +192,12 @@ export function useTimelinePointer(options: Options) {
     if (pointer.current && !valid(pointer.current)) cancel()
   })
   useLayoutEffect(() => {
+    // 时间线可能挂在系统浮窗里：失焦与隐藏按它实际所在的窗口判断。
+    const ownerDocument = ownerDocumentOf(viewport.current); const ownerWindow = ownerWindowOf(viewport.current)
     const blur = (): void => cancel()
-    const hidden = (): void => { if (document.hidden) cancel() }
-    window.addEventListener('blur', blur); document.addEventListener('visibilitychange', hidden)
-    return () => { const previous = detach(); if (previous?.kind === 'clip') finishVideoEditTimelineDrag(previous.handle); if (previous?.kind === 'seek' && valid(previous)) setVideoEditView(previous.owner.document.id, { scrubbing: false }); window.removeEventListener('blur', blur); document.removeEventListener('visibilitychange', hidden) }
+    const hidden = (): void => { if (ownerDocument.hidden) cancel() }
+    ownerWindow.addEventListener('blur', blur); ownerDocument.addEventListener('visibilitychange', hidden)
+    return () => { const previous = detach(); if (previous?.kind === 'clip') finishVideoEditTimelineDrag(previous.handle); if (previous?.kind === 'seek' && valid(previous)) setVideoEditView(previous.owner.document.id, { scrubbing: false }); ownerWindow.removeEventListener('blur', blur); ownerDocument.removeEventListener('visibilitychange', hidden) }
     // All listeners read the fixed gesture/current refs, never a former selection closure.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])

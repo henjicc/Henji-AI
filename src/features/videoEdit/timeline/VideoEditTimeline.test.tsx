@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import React, { useSyncExternalStore } from 'react'
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
+import { createPortal } from 'react-dom'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { compileCodeMaterial } from '@/core/videoEdit/codeMaterial/compiler'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
@@ -124,6 +125,42 @@ it('切序列后的晚到释放、Escape、丢捕获、窗口失焦与卸载均�
   act(() => switchVideoEditSequence(owner.document.id, original)); host = view.getByRole('region', { name: '时间线编辑区域' })
   fireEvent.pointerDown(view.getByRole('button', { name: '选择片段 视频' }), event(header + 20)); fireEvent.pointerMove(host, event(header + 40)); view.unmount()
   expect(current().clips[0].start).toBe(0); expect(onError).not.toHaveBeenCalled()
+})
+
+it('时间线浮出到系统窗口（另一 realm 文档）后仍可点选、拖动并按浮窗窗口失焦取消', () => {
+  const frame = document.createElement('iframe'); document.body.append(frame)
+  const popout = frame.contentWindow as Window & typeof globalThis
+  // 复制主 realm 的测试桩：浮窗元素使用子窗口自己的原型与事件构造器。
+  const captures = new WeakMap<Element, number>()
+  Object.defineProperties(popout.HTMLElement.prototype, {
+    getBoundingClientRect: { configurable: true, value: () => ({ left: 0, top: 0, right: 900, bottom: 300, width: 900, height: 300, x: 0, y: 0, toJSON: () => ({}) }) },
+    clientHeight: { configurable: true, get: () => viewportHeight },
+    clientWidth: { configurable: true, get: () => 900 },
+    setPointerCapture: { configurable: true, value(this: HTMLElement, id: number) { captures.set(this, id) } },
+    hasPointerCapture: { configurable: true, value(this: HTMLElement, id: number) { return captures.get(this) === id } },
+    releasePointerCapture: { configurable: true, value(this: HTMLElement) { captures.delete(this) } },
+  })
+  Object.assign(popout, { PointerEvent: class extends popout.MouseEvent { readonly pointerId: number; constructor(type: string, init: PointerEventInit = {}) { super(type, init); this.pointerId = init.pointerId ?? 1 } } })
+  const view = render(<>{createPortal(<View />, popout.document.body)}</>)
+  const within = (selector: string): HTMLElement => popout.document.querySelector<HTMLElement>(selector)!
+  const host = within('[data-video-edit-timeline-viewport]'); const video = within('[aria-label="选择片段 视频"]')
+  expect(video instanceof HTMLElement).toBe(false)
+  fireEvent.pointerDown(video, event(header + 20)); fireEvent.pointerUp(host, event(header + 20))
+  expect(owner.selectedClipIds).toEqual([ids[0]])
+  // 主窗口失焦（焦点移到浮窗）不取消浮窗中的拖动；释放提交一次历史。
+  let history = owner.past.length
+  fireEvent.pointerDown(video, event(header + 20)); fireEvent.pointerMove(host, event(header + 40))
+  fireEvent(window, new Event('blur'))
+  fireEvent.pointerUp(host, event(header + 40))
+  expect(current().clips[0].start).toBe(10); expect(owner.past).toHaveLength(history + 1)
+  // 浮窗自身失焦取消拖动。
+  const baseline = owner.document; history = owner.past.length
+  fireEvent.pointerDown(within('[aria-label="选择片段 视频"]'), event(header + 40)); fireEvent.pointerMove(host, event(header + 60))
+  fireEvent(popout, new popout.Event('blur'))
+  fireEvent.pointerUp(host, event(header + 60))
+  expect(owner.document).toBe(baseline); expect(owner.past).toHaveLength(history)
+  view.unmount(); frame.remove()
+  expect(onError).not.toHaveBeenCalled()
 })
 
 it('高度只在释放提交一次，实际32轨道与高度用于纵向命中', () => {

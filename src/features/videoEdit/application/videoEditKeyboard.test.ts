@@ -25,3 +25,18 @@ it('当前真实面板限定命令；输入、原生按钮和弹窗保留自己�
   expect(videoEditKeyboardCommand(event(oldFocus, 'KeyZ', true), 'timeline', {})).toBeUndefined()
   activeModal.remove()
 })
+
+it('系统浮窗（另一 realm 文档）中的输入框与面板范围同样生效，浮窗内模态框也让出键盘', () => {
+  const frame = document.createElement('iframe'); document.body.append(frame)
+  const popout = frame.contentDocument!
+  const panel = popout.createElement('div'); panel.dataset.videoEditPanel = 'source'; popout.body.append(panel)
+  const input = popout.createElement('input'); panel.append(input)
+  const plain = popout.createElement('div'); panel.append(plain)
+  expect(input instanceof HTMLElement).toBe(false)
+  expect(videoEditKeyboardCommand(event(input, 'KeyI'), 'timeline', {})).toBeUndefined()
+  expect(videoEditKeyboardCommand(event(input, 'Delete'), 'timeline', {})).toBeUndefined()
+  expect(videoEditKeyboardCommand(event(plain, 'KeyI'), 'timeline', {})).toEqual({ id: 'mark_in', scope: 'source' })
+  const modal = popout.createElement('div'); modal.setAttribute('role', 'dialog'); modal.setAttribute('aria-modal', 'true'); popout.body.append(modal)
+  expect(videoEditKeyboardCommand(event(plain, 'KeyI'), 'timeline', {})).toBeUndefined()
+  frame.remove()
+})
