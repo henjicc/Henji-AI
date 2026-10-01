@@ -58,6 +58,18 @@ export const hostContextSnapshotSchema = z.object({
       }).strict()).max(300),
     }).strict().optional(),
   }),
+  /** Present only while the edit workspace is in front; refs use the public catalog format. */
+  videoEdit: z.object({
+    projectRef: z.string().min(1).max(500),
+    sequenceRef: z.string().min(1).max(500),
+    frame: z.number().int().nonnegative(),
+    playing: z.boolean(),
+    inFrame: z.number().int().nonnegative().nullable(),
+    outFrame: z.number().int().nonnegative().nullable(),
+    focusedPanel: z.enum(['project', 'source', 'program', 'timeline', 'effects', 'content']),
+    selectedClipRefs: z.array(z.string().min(1).max(500)).max(48),
+    targetTrackRefs: z.array(z.string().min(1).max(500)).max(32),
+  }).strict().optional(),
   assets: z.object({
     view: z.enum(['closed', 'floating', 'workspace']),
     selectedAssetId: z.string().min(1).nullable(),

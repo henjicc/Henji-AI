@@ -119,6 +119,11 @@ it('序列切换和选区刷新助手上下文，控制改变并发基线而逐�
     appendVideoEditClip(projectId)
     const edited = createHostContextSnapshot()
     expect(edited.surface?.selectedRefs).toContain(`video_edit.clip:${projectId}:${instance.selection}`)
+    // The edit block carries what an agent needs to aim: owner, sequence, time, range, focus, multi-select, targets.
+    expect(edited.videoEdit).toMatchObject({ projectRef: `video_edit.project:${projectId}`, sequenceRef: `video_edit.sequence:${projectId}:${sequenceId}`, frame: 61, playing: false, focusedPanel: instance.activePanel,
+      selectedClipRefs: [`video_edit.clip:${projectId}:${instance.selection}`], targetTrackRefs: instance.targetTrackIds.map(track => `video_edit.track:${projectId}:${track}`) })
+    for (let index = 0; index < 40; index++) instance.selectedItemIds.push(`bulk-${index}`)
+    expect(createHostContextSnapshot().surface?.selectedRefs[0]).toBe(`video_edit.clip:${projectId}:${instance.selection}`)
     expect(edited.scopeRevisions.video_edit).toBeGreaterThan(switched.scopeRevisions.video_edit)
   } finally { release(); useNavigationStore.setState(navigation) }
 })

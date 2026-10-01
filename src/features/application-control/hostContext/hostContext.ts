@@ -229,8 +229,9 @@ export function createHostContextSnapshot(uiReady = true): HostContextSnapshot {
     ? `audio_edit.project:${audioEdit.project.id}`
     : null
   const selectedRefs = [
-    ...(videoEdit?.selectedItemIds ?? []).slice(0, 48).map(id => `video_edit.item:${videoEdit!.document.id}:${id}`),
+    // The primary clip comes first so a long item selection never hides it.
     videoEdit?.selection ? `video_edit.clip:${videoEdit.document.id}:${videoEdit.selection}` : null,
+    ...(videoEdit?.selectedItemIds ?? []).slice(0, 16).map(id => `video_edit.item:${videoEdit!.document.id}:${id}`),
     assets.selectedAsset ? `asset:${assets.selectedAsset.id}` : null,
     project.currentProjectId && canvas.selectedNodeId
       ? `canvas.node:${project.currentProjectId}:${canvas.selectedNodeId}`
@@ -238,7 +239,7 @@ export function createHostContextSnapshot(uiReady = true): HostContextSnapshot {
     ...isAudioEditSurface && audioEdit.project
       ? audioEdit.selectedBlockIds.map((blockId) => `audio_edit.transcript_block:${audioEdit.project!.id}:${blockId}`)
       : [],
-  ].filter((value): value is string => typeof value === 'string')
+  ].filter((value): value is string => typeof value === 'string').slice(0, 32)
   const settingsSurface = ui.settingsTarget
     ? `settings.${ui.settingsTarget.tab}.${ui.settingsTarget.sectionId ?? 'root'}`
     : 'settings.general'
@@ -312,6 +313,13 @@ export function createHostContextSnapshot(uiReady = true): HostContextSnapshot {
         ? { viewportNodePosition: resolveNodePosition({ mode: 'viewport_center' }) } : {}),
     },
     generation: { commandReady: generationReady },
+    ...(videoEdit ? { videoEdit: {
+      projectRef: `video_edit.project:${videoEdit.document.id}`,
+      sequenceRef: `video_edit.sequence:${videoEdit.document.id}:${videoEdit.activeSequenceId}`,
+      frame: videoEdit.frame, playing: videoEdit.playing, inFrame: videoEdit.inFrame, outFrame: videoEdit.outFrame, focusedPanel: videoEdit.activePanel,
+      selectedClipRefs: videoEdit.selectedClipIds.slice(0, 48).map(id => `video_edit.clip:${videoEdit.document.id}:${id}`),
+      targetTrackRefs: videoEdit.targetTrackIds.slice(0, 32).map(id => `video_edit.track:${videoEdit.document.id}:${id}`),
+    } } : {}),
     assets: {
       view: assets.view,
       selectedAssetId: assets.selectedAsset?.id ?? null,

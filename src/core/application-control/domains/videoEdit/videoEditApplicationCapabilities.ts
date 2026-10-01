@@ -60,6 +60,25 @@ export const placeVideoEditCreativeResultCapability = defineApplicationCapabilit
   verificationContract: { kind: 'effect_receipt', requireEffects: true, requireVerifiedEffects: true },
   resolveObservedEffects: (_input, result) => [{ effect: 'execute', entityTypes: ['video_edit.clip'], propertyIds: [], targetRefs: [result.resultRef], count: 1, verified: result.verification.verified, evidence: result.verification.verified ? [result.verification.condition] : [] }],
 })
+const observeTarget = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('program'), sequenceRef: ref('video_edit.sequence').optional(), frame: z.number().int().nonnegative() }).strict(),
+  z.object({ kind: z.literal('source'), itemRef: ref('video_edit.item'), timeUs: z.number().int().nonnegative() }).strict(),
+])
+const observeOutput = z.object({ resultRef: assetRef, projectRef, target: observeTarget, width: z.number().int().positive(), height: z.number().int().positive(), sourceWidth: z.number().int().positive(), sourceHeight: z.number().int().positive(), documentRevision: z.number().int().nonnegative(), message: z.string(),
+  verification: z.object({ verified: z.boolean(), condition: z.string(), target: assetRef }) }).strict()
+export const observeVideoEditFrameCapability = defineApplicationCapability({
+  id: 'observe_video_edit_frame', title: '观察剪辑指定画面', description: '按当前工程版本离屏渲染序列指定整数帧的最终合成画面（含代码素材、滤镜、转场与字幕），或项目项源素材指定微秒时间的原始画面，保存为资产库图片并返回assetRef；用 read_application_media 读取图片内容。不改变用户的播放头、选区和节目画面。默认宽度1920，可设256到3840。',
+  version: 1, domain: 'video_edit', aliases: ['查看剪辑帧', '取合成帧', '取源帧', '检查画面'], readOnly: true, risk: 'R0', dataClasses: ['C1'], permission: 'video_edit:read', idempotent: true, destructive: false, timeoutMs: 60000, supportsPreview: false, supportsUndo: false,
+  requiredScopes: ['video_edit'], acceptsRefs: ['video_edit.project', 'video_edit.sequence', 'video_edit.item'], producesRefs: ['asset'],
+  successEvidence: ['返回固定工程版本渲染的资产图片；画面内容需经模型读取后才能判断是否符合预期。'],
+  failureRecovery: ['帧超出范围或项目项没有画面时按提示修正；渲染队列已满时稍后重试。'],
+  inputSchema: z.object({ projectRef, target: observeTarget, maxWidth: z.number().int().min(256).max(3840).optional() }).strict(), outputSchema: observeOutput,
+  concurrencyKey: 'video_edit_observe', resolveConcurrencyKey: parsed => `video_edit_observe:${parsed.projectRef.id}`,
+  resolveOperationTargets: parsed => [parsed.projectRef], resolveOperationWriteTargets: () => [],
+  control: capabilityControl('observe', ['video_edit.project', 'asset'], { cancelable: true, revisionScopes: ['video_edit'] }), summarize: result => result.message,
+  verificationContract: { kind: 'effect_receipt', requireEffects: true, requireVerifiedEffects: true },
+  resolveObservedEffects: (_input, result) => [{ effect: 'observe', entityTypes: ['asset'], propertyIds: [], targetRefs: [result.resultRef], count: 1, verified: result.verification.verified, evidence: result.verification.verified ? [result.verification.condition] : [] }],
+})
 export const VIDEO_EDIT_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinition[] = [...[
   ['save_video_edit', '保存剪辑工程', '将当前修改保存到用户为工程选择的本地文件。失败后只重试保存，不重复修改。'],
   ['undo_video_edit', '撤销剪辑修改', '撤销目标工程的一步手动或助手修改。'],
@@ -77,4 +96,4 @@ export const VIDEO_EDIT_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinitio
     entityTypes: ['video_edit.project'], propertyIds: [], targetRefs: [result.resultRef], count: 1,
     verified: result.verification.verified, evidence: result.verification.verified ? [result.verification.condition] : [],
   }],
-})), collectVideoEditOutputCapability, collectVideoEditCodeAssetCapability, placeVideoEditCreativeResultCapability]
+})), collectVideoEditOutputCapability, collectVideoEditCodeAssetCapability, placeVideoEditCreativeResultCapability, observeVideoEditFrameCapability]

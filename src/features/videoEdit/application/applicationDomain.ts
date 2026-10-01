@@ -7,7 +7,7 @@ import { requireVideoEditInstance, saveVideoEdit, type VideoEditInstance } from 
 import { editVideoSequence, undoVideoEdit } from './videoEditService'
 import { splitVideoEditRef } from './videoEditReflection'
 import { splitVideoEditClip } from '@/core/videoEdit/document'
-import { VIDEO_EDIT_APPLICATION_CAPABILITIES, collectVideoEditOutputCapability, collectVideoEditCodeAssetCapability, placeVideoEditCreativeResultCapability } from '@/core/application-control/domains/videoEdit/videoEditApplicationCapabilities'
+import { VIDEO_EDIT_APPLICATION_CAPABILITIES, collectVideoEditOutputCapability, collectVideoEditCodeAssetCapability, placeVideoEditCreativeResultCapability, observeVideoEditFrameCapability } from '@/core/application-control/domains/videoEdit/videoEditApplicationCapabilities'
 import { exportVideoEdit, cancelVideoEditExport, videoEditExportTask } from './videoEditExport'
 import { getPlatform } from '@/platform/runtime'
 import { VideoEditSourceExecutor } from './videoEditSourceExecutor'
@@ -18,6 +18,7 @@ import { captureVideoEditProgramFrame } from './videoEditProgramCapture'
 import { collectVideoEditCodeAsset, importVideoEditCodeAsset, type VideoEditCodeAssetTarget } from './videoEditCodeAssets'
 import { assetApplicationService } from '@/features/assets/application/assetApplicationService'
 import { placeVideoEditCreativeResultFromCapability } from './videoEditResultCapability'
+import { observeVideoEditFrame } from './videoEditFrameObservation'
 
 const persistenceOwners = new WeakMap<VideoEditInstance, ApplicationPersistenceParticipant>()
 
@@ -30,6 +31,15 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
   },
   registerCapabilities(registrar) {
     for (const definition of VIDEO_EDIT_APPLICATION_CAPABILITIES) registrar.registerHandler(definition.id, async (raw, context) => {
+      if (definition.id === observeVideoEditFrameCapability.id) {
+        const input = observeVideoEditFrameCapability.inputSchema.parse(raw); const id = input.projectRef.id
+        const child = (ref: { kind: string; id: string }): string => { const value = splitVideoEditRef(ref); if (value.projectId !== id || !value.childId) throw new Error(`${ref.kind} 必须属于目标剪辑工程。`); return value.childId }
+        const observed = await observeVideoEditFrame(id, input.target.kind === 'program' ? { kind: 'program', frame: input.target.frame, ...(input.target.sequenceRef ? { sequenceId: child(input.target.sequenceRef) } : {}) } : { kind: 'source', itemId: child(input.target.itemRef), timeUs: input.target.timeUs }, input.maxWidth, context.signal)
+        const resultRef = { kind: 'asset' as const, id: observed.asset.id }
+        return { resultRef, projectRef: input.projectRef, target: input.target, width: observed.width, height: observed.height, sourceWidth: observed.sourceWidth, sourceHeight: observed.sourceHeight, documentRevision: observed.documentRevision,
+          message: `已按工程版本 ${observed.documentRevision} 渲染${input.target.kind === 'program' ? `序列帧 ${input.target.frame}` : '源素材画面'}（${observed.width}×${observed.height}），用 read_application_media 读取该资产查看画面。`,
+          verification: { verified: true, target: resultRef, condition: '已用正式渲染器生成固定版本画面，并通过资产检查核对尺寸。' } }
+      }
       if (definition.id === placeVideoEditCreativeResultCapability.id) return await placeVideoEditCreativeResultFromCapability(placeVideoEditCreativeResultCapability.inputSchema.parse(raw), context.signal)
       if (definition.id === collectVideoEditCodeAssetCapability.id) {
         const input = collectVideoEditCodeAssetCapability.inputSchema.parse(raw)
