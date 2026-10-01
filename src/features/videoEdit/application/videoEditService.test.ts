@@ -14,7 +14,7 @@ import { useNavigationStore } from '@/stores/navigationStore'
 
 const files = new Map<string, string>()
 let failSave = false
-it('序列切换和选区刷新助手上下文，逐帧定位不推进宿主或领域基线', async () => {
+it('序列切换和选区刷新助手上下文，控制改变并发基线而逐帧观察保持稳定', async () => {
   const navigation = useNavigationStore.getState()
   const release = retainHostContextTracking()
   try {
@@ -27,9 +27,13 @@ it('序列切换和选区刷新助手上下文，逐帧定位不推进宿主或�
     const switched = createHostContextSnapshot()
     expect(switched.surface?.focusedRef).toBe(`video_edit.sequence:${projectId}:${sequenceId}`)
     expect(switched.revision).toBeGreaterThan(before.revision)
-    expect(switched.scopeRevisions.video_edit).toBe(before.scopeRevisions.video_edit)
+    expect(switched.scopeRevisions.video_edit).toBeGreaterThan(before.scopeRevisions.video_edit)
     setVideoEditView(projectId, { frame: 60 })
     expect(createHostContextSnapshot().revision).toBe(switched.revision)
+    const controlled = createHostContextSnapshot()
+    expect(controlled.scopeRevisions.video_edit).toBeGreaterThan(switched.scopeRevisions.video_edit)
+    setVideoEditView(projectId, { frame: 61 }, true)
+    expect(createHostContextSnapshot().scopeRevisions.video_edit).toBe(controlled.scopeRevisions.video_edit)
     appendVideoEditClip(projectId)
     const edited = createHostContextSnapshot()
     expect(edited.surface?.selectedRefs).toContain(`video_edit.clip:${projectId}:${instance.selection}`)
@@ -145,11 +149,13 @@ it('保存中发生新修改时继续写入最新版本而不提前清除脏状�
   expect(instance.dirty).toBe(false)
   expect(JSON.parse(files.get(instance.path)!).name).toBe('保存期间的修改')
 })
-it('播放位置不推进编辑并发版本，拆分保持源时间连续', async () => {
+it('手动定位推进并发版本，播放观察不推进版本，拆分保持源时间连续', async () => {
   const instance = (await createVideoEditProject())!; appendVideoEditClip(instance.document.id)
   const revision = videoEditDomainRevision()
   setVideoEditView(instance.document.id, { frame: 30 })
-  expect(videoEditDomainRevision()).toBe(revision)
+  expect(videoEditDomainRevision()).toBe(revision + 1)
+  setVideoEditView(instance.document.id, { frame: 31 }, true)
+  expect(videoEditDomainRevision()).toBe(revision + 1)
   const original = getActiveVideoEditSequence(instance).clips[0]
   editVideoSequence(instance.document.id, instance.activeSequenceId, sequence => splitVideoEditClip(sequence, original.id, 30))
   const right = getActiveVideoEditSequence(instance).clips[1]
@@ -174,9 +180,12 @@ it('播放与拖动只通知瞬态叶子，相等写入不通知，也不污染�
   try {
     setVideoEditView(id, { frame: 15, scrubbing: true }); setVideoEditView(id, { frame: 15, scrubbing: true }); setVideoEditView(id, { scrubbing: false })
     expect(editor).not.toHaveBeenCalled(); expect(view).toHaveBeenCalledTimes(2)
-    expect(videoEditDomainRevision()).toBe(revision); expect(instance.dirty).toBe(false); expect(instance.past).toHaveLength(0)
+    expect(videoEditDomainRevision()).toBe(revision + 1); expect(instance.dirty).toBe(false); expect(instance.past).toHaveLength(0)
+    setVideoEditView(id, { frame: 16 }, true)
+    expect(videoEditDomainRevision()).toBe(revision + 1); expect(editor).not.toHaveBeenCalled()
     await saveVideoEdit(id); expect(JSON.parse(files.get(instance.path)!)).not.toHaveProperty('scrubbing')
-    editor.mockClear(); setVideoEditView(id, { selection: 'selected' }); expect(editor).toHaveBeenCalledOnce()
+    appendVideoEditClip(id); setVideoEditView(id, { selection: null })
+    editor.mockClear(); setVideoEditView(id, { selection: getActiveVideoEditSequence(instance).clips[0].id }); expect(editor).toHaveBeenCalledOnce()
   } finally { offEditor(); offView() }
 })
 it('拖放固定到原工程与轨道，直接引用源路径，并复用撤销和磁盘保存', async () => {
@@ -221,7 +230,7 @@ it('两个不同设置的序列保存冷重开，切换只保留会话，不写�
   const before = instance.document; const history = instance.past.length; const revision = videoEditDomainRevision()
   switchVideoEditSequence(id, first); expect(instance.frame).toBe(23); expect(instance.selection).toBe(firstClip)
   switchVideoEditSequence(id, second); expect(instance.frame).toBe(47)
-  expect(instance.document).toBe(before); expect(instance.past).toHaveLength(history); expect(videoEditDomainRevision()).toBe(revision); expect(instance.dirty).toBe(false)
+  expect(instance.document).toBe(before); expect(instance.past).toHaveLength(history); expect(videoEditDomainRevision()).toBe(revision + 2); expect(instance.dirty).toBe(false)
   await closeVideoEditProject(id)
   const reopened = (await openVideoEditProject('D:/fixture/test.henji-video'))!
   expect(reopened.document.sequences).toHaveLength(2)

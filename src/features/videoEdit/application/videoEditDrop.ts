@@ -33,11 +33,12 @@ export function videoEditDropPaths(transfer: DataTransfer): string[] {
   return paths
 }
 /** Placement is captured before metadata I/O; switching projects cannot redirect a drop. */
-export async function dropVideoEditPaths(projectId: string, paths: string[], placement?: { frame: number; track: number }): Promise<void> {
+export async function dropVideoEditPaths(projectId: string, paths: string[], placement?: { frame: number; track?: number }): Promise<void> {
   await dropVideoEditInput(projectId, { kind: 'sources', sources: paths.map(path => ({ path })) }, placement)
 }
-export async function dropVideoEditInput(projectId: string, input: VideoEditDropInput, placement?: { frame: number; track: number }, binId?: string, options: { sequenceId?: string; createSequenceWhenEmpty?: boolean; sequenceSettings?: VideoEditSequenceSettings } = {}): Promise<string[]> {
+export async function dropVideoEditInput(projectId: string, input: VideoEditDropInput, placement?: { frame: number; track?: number }, binId?: string, options: { sequenceId?: string; createSequenceWhenEmpty?: boolean; sequenceSettings?: VideoEditSequenceSettings } = {}): Promise<string[]> {
   const owner = requireVideoEditInstance(projectId)
+  const targetTrackIds = owner.targetTrackIds.slice()
   const sequenceId = options.sequenceId ?? owner.activeSequenceId
   let createdId: string | undefined; let selectedClip: string | undefined
   if (input.kind === 'items' && input.projectId !== projectId) throw new Error('请先将源文件导入当前工程，不能跨工程引用项目项。')
@@ -52,7 +53,11 @@ export async function dropVideoEditInput(projectId: string, input: VideoEditDrop
       return { ...document, sequences: [...document.sequences, created] }
     }
     let frame = placement.frame
-    const clips = ids.map(itemId => { const clip = makeVideoEditItemClip(document, itemId, sequenceId, { frame, track: placement.track }, readVideoEditCodeMetadata(owner, document)); frame += clip.duration; return clip })
+    const clips = ids.map(itemId => {
+      const kind = document.items.find(item => item.id === itemId)?.kind === 'audio' ? 'audio' : 'video'
+      const track = placement.track ?? sequence.tracks.find(track => targetTrackIds.includes(track.id) && track.kind === kind)?.index
+      const clip = makeVideoEditItemClip(document, itemId, sequenceId, { frame, track }, readVideoEditCodeMetadata(owner, document)); frame += clip.duration; return clip
+    })
     selectedClip = clips.at(-1)?.id
     return { ...document, sequences: document.sequences.map(item => item.id === sequenceId ? { ...item, clips: [...item.clips, ...clips] } : item) }
   }

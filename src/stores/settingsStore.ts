@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { parseVideoEditShortcutOverrides, type VideoEditShortcutOverrides } from '@/core/videoEdit/commands';
 
 /** 下载预设路径的条数上限：菜单里超过这个数就要滚动，反而比「另存为」更慢 */
 export const DOWNLOAD_PRESET_PATH_LIMIT = 8;
@@ -81,6 +82,7 @@ interface SettingsState {
   assetDragEdgeDelayMs: number;
   assetCardSize: number;
   assetThumbnailFit: AssetThumbnailFit;
+  videoEditShortcuts: VideoEditShortcutOverrides;
   setProviderApiKey: (providerId: string, key: string) => void;
   setProviderKeyStatus: (providerId: string, configured: boolean) => void;
   setProviderKeyStatuses: (status: ProviderKeyStatusMap) => void;
@@ -115,6 +117,7 @@ interface SettingsState {
   setAssetEdgeDelayMs: (delay: number) => void;
   setAssetCardSize: (size: number) => void;
   setAssetThumbnailFit: (fit: AssetThumbnailFit) => void;
+  setVideoEditShortcuts: (shortcuts: VideoEditShortcutOverrides) => void;
 }
 
 const HEX_COLOR_PATTERN = /^#?[0-9a-fA-F]{6}$/;
@@ -241,6 +244,7 @@ export const useSettingsStore = create<SettingsState>()(
       assetDragEdgeDelayMs: 180,
       assetCardSize: 180,
       assetThumbnailFit: 'cover',
+      videoEditShortcuts: {},
       setProviderApiKey: (providerId, key) => {
         const normalizedKey = normalizeApiKey(key);
         set((state) => ({
@@ -319,6 +323,7 @@ export const useSettingsStore = create<SettingsState>()(
       setAssetEdgeDelayMs: (assetEdgeDelayMs) => set({ assetEdgeDelayMs: Math.min(2000, Math.max(100, assetEdgeDelayMs)) }),
       setAssetCardSize: (assetCardSize) => set({ assetCardSize: Math.min(280, Math.max(112, assetCardSize)) }),
       setAssetThumbnailFit: (assetThumbnailFit) => set({ assetThumbnailFit }),
+      setVideoEditShortcuts: (shortcuts) => set({ videoEditShortcuts: parseVideoEditShortcutOverrides(shortcuts) }),
     }),
     {
       name: 'settings-storage',

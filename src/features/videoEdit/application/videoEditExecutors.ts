@@ -1,7 +1,7 @@
 import { fieldEffectContract, fieldWriterTable, type ApplicationCollectionExecutor, type ApplicationCompletedStepResult, type ApplicationEffectReceipt, type ApplicationEvidence, type ApplicationExecutionContext, type ApplicationMutationExecutor, type ApplicationPlannedStep, type ApplicationRef, type JsonValue } from '@/core/application-control'
 import { applyWriterTable, propertyOperations, writableProperties } from '@/core/application-control/execution/writerTable'
 import { videoEditAnnotationSchema, videoEditClipSchema, videoEditDocumentSchema, videoEditBinSchema, videoEditItemSchema, videoEditTrackSchema, createVideoEditSequence, changeVideoEditSequenceSettings, type VideoEditDocument } from '@/core/videoEdit/document'
-import { editVideoProject, requireVideoEditInstance, getVideoEditProjectView, setVideoEditProjectView, switchVideoEditSequence, videoEditDomainRevision as videoEditRevision, type VideoEditProjectView } from './videoEditService'
+import { editVideoProject, restoreVideoEditSnapshot, requireVideoEditInstance, getVideoEditProjectView, setVideoEditProjectView, switchVideoEditSequence, getVideoEditTimelineView, setVideoEditTimelineView, validateVideoEditTimelineView, validateVideoEditProgramControl, setVideoEditView, videoEditProgramCommandIdentity, restoreVideoEditProgramCommandIdentity, videoEditDomainRevision as videoEditRevision, type VideoEditProjectView, type VideoEditTimelineView } from './videoEditService'
 import { VIDEO_EDIT_FIELDS, videoEditDataKey, type VideoEditEntityType } from './videoEditFields'
 import { readVideoEditData, splitVideoEditRef } from './videoEditReflection'
 import { removeVideoEditItems, removeVideoEditBins, makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
@@ -10,8 +10,15 @@ import { readVideoEditCodeMetadata } from './videoEditCodeState'
 import { trialVideoEditCodeDocument } from './videoEditCodeTrial'
 import { codeMaterialImageIds } from '@/core/videoEdit/codeMaterialResources'
 
-interface ProjectViewSnapshot { view: VideoEditProjectView; activeSequenceId: string }
-function projectViewSnapshot(projectId: string): ProjectViewSnapshot { return { view: getVideoEditProjectView(projectId), activeSequenceId: requireVideoEditInstance(projectId).activeSequenceId } }
+interface ProjectViewSnapshot { view: VideoEditProjectView; activeSequenceId: string; timeline: VideoEditTimelineView; primary: string | null; program: { frame: number; playing: boolean; playbackDirection: 1 | -1 }; programCommand: object }
+function projectViewSnapshot(projectId: string): ProjectViewSnapshot {
+  const owner = requireVideoEditInstance(projectId)
+  return { view: getVideoEditProjectView(projectId), activeSequenceId: owner.activeSequenceId, timeline: getVideoEditTimelineView(projectId), primary: owner.selection, program: { frame: owner.frame, playing: owner.playing, playbackDirection: owner.playbackDirection }, programCommand: videoEditProgramCommandIdentity(projectId) }
+}
+function sameProjectView(current: ProjectViewSnapshot, expected: ProjectViewSnapshot): boolean {
+  const comparable = (value: ProjectViewSnapshot): unknown => ({ view: value.view, activeSequenceId: value.activeSequenceId, timeline: value.timeline, primary: value.primary })
+  return current.programCommand === expected.programCommand && JSON.stringify(comparable(current)) === JSON.stringify(comparable(expected))
+}
 const undo = new Map<string, { owner: object; before: VideoEditDocument; after: VideoEditDocument; refs: ApplicationRef[]; viewBefore?: ProjectViewSnapshot; viewAfter?: ProjectViewSnapshot }>()
 function cascades(before: VideoEditDocument, after: VideoEditDocument): ApplicationEffectReceipt[] {
   const effects: ApplicationEffectReceipt[] = []
@@ -54,9 +61,14 @@ async function restore(token: string): Promise<ApplicationCompletedStepResult> {
   const instance = requireVideoEditInstance(record.before.id)
   if (instance !== record.owner) throw new Error('原工程会话已关闭，请使用当前工程历史。')
   if (content(instance.document) !== content(record.after)) throw new Error('工程已有后续修改，请逐步撤销。')
-  if (record.viewAfter && JSON.stringify(projectViewSnapshot(record.before.id)) !== JSON.stringify(record.viewAfter)) throw new Error('项目浏览会话已有后续修改，请按当前状态操作。')
-  editVideoProject(record.before.id, () => record.before); undo.delete(token)
-  if (record.viewBefore) { setVideoEditProjectView(record.before.id, record.viewBefore.view); switchVideoEditSequence(record.before.id, record.viewBefore.activeSequenceId) }
+  if (record.viewAfter && !sameProjectView(projectViewSnapshot(record.before.id), record.viewAfter)) throw new Error('项目浏览会话已有后续修改，请按当前状态操作。')
+  restoreVideoEditSnapshot(record.before.id, record.after, record.before); undo.delete(token)
+  if (record.viewBefore) {
+    setVideoEditProjectView(record.before.id, record.viewBefore.view); switchVideoEditSequence(record.before.id, record.viewBefore.activeSequenceId)
+    setVideoEditTimelineView(record.before.id, record.viewBefore.timeline, record.viewBefore.primary ?? undefined)
+    const restoredCommand = setVideoEditView(record.before.id, record.viewBefore.program)
+    restoreVideoEditProgramCommandIdentity(record.before.id, restoredCommand, record.viewBefore.programCommand)
+  }
   return { status: 'completed', resultingRevisions: { video_edit: videoEditRevision() }, directRefs: record.refs, cascadeEffects: cascades(record.after, record.before), evidence: [{ kind: 'entity_state', fact: '已恢复修改前工程内容。', capturedAt: new Date().toISOString() }] }
 }
 export class VideoEditMutationExecutor implements ApplicationMutationExecutor {
@@ -66,17 +78,27 @@ export class VideoEditMutationExecutor implements ApplicationMutationExecutor {
   constructor(readonly entityType: VideoEditEntityType) { const table = fieldWriterTable(VIDEO_EDIT_FIELDS[entityType]); this.writableProperties = writableProperties(table); this.propertyOperations = propertyOperations(table); this.effectContract = fieldEffectContract(VIDEO_EDIT_FIELDS[entityType]) }
   async apply(step: Extract<ApplicationPlannedStep, { kind: 'mutation' }>, context?: ApplicationExecutionContext): Promise<ApplicationCompletedStepResult> {
     const { projectId, childId } = splitVideoEditRef(step.target)
-    const before = requireVideoEditInstance(projectId).document
-    const writesView = this.entityType === 'video_edit.project' && step.mutations.some(mutation => ['video_edit.project.selected_item_ids', 'video_edit.project.selected_bin_id', 'video_edit.project.open_sequence_ids'].includes(mutation.propertyId))
+    const owner = requireVideoEditInstance(projectId); const before = owner.document
+    const keys = step.mutations.map(mutation => mutation.propertyId)
+    const writesView = this.entityType === 'video_edit.project' && keys.some(key => ['video_edit.project.selected_item_ids', 'video_edit.project.selected_bin_id', 'video_edit.project.open_sequence_ids', 'video_edit.project.timeline_view', 'video_edit.project.program_playback'].includes(key))
     const viewBefore = writesView ? projectViewSnapshot(projectId) : undefined
     const data = readVideoEditData(step.target)
     await applyWriterTable(fieldWriterTable(VIDEO_EDIT_FIELDS[this.entityType]), data, step.mutations)
+    if (requireVideoEditInstance(projectId) !== owner || owner.document !== before || (viewBefore && !sameProjectView(projectViewSnapshot(projectId), viewBefore))) throw new Error('工程或浏览会话已有后续修改，请重读当前状态。')
     if (this.entityType === 'video_edit.clip' && step.mutations.some(mutation => mutation.propertyId === 'video_edit.clip.source_in_us')) data.sourceRemainder = { numerator: 0, denominator: 1 }
     if (this.entityType === 'video_edit.project') {
       // Validate view writes before any persistent rename; a failed transaction cannot leave half an edit.
       const instance = requireVideoEditInstance(projectId)
       const selectedItemIds = data.selectedItemIds as string[]; const selectedBinId = String(data.selectedBinId); const openSequenceIds = data.openSequenceIds as string[]
       if (selectedItemIds.some(id => !instance.document.items.some(item => item.id === id)) || (selectedBinId && !instance.document.bins.some(bin => bin.id === selectedBinId)) || !openSequenceIds.length || openSequenceIds.some(id => !instance.document.sequences.some(sequence => sequence.id === id))) throw new Error('项目选区、素材箱或序列标签引用无效。')
+      if (keys.includes('video_edit.project.timeline_view')) {
+        if (!openSequenceIds.includes(instance.activeSequenceId)) throw new Error('请先切换序列，再修改该序列时间线视图。')
+        validateVideoEditTimelineView(projectId, data.timelineView as unknown as VideoEditTimelineView)
+      }
+      if (keys.includes('video_edit.project.program_playback')) {
+        if (!openSequenceIds.includes(instance.activeSequenceId)) throw new Error('请先切换序列，再修改该序列节目播放。')
+        validateVideoEditProgramControl(projectId, data.programPlayback as ProjectViewSnapshot['program'])
+      }
     }
     const update = (document: VideoEditDocument): VideoEditDocument => {
       if (this.entityType === 'video_edit.project') return { ...document, name: String(data.name) }
@@ -108,6 +130,8 @@ export class VideoEditMutationExecutor implements ApplicationMutationExecutor {
     }
     const after = editVideoProject(projectId, update)
     if (writesView) setVideoEditProjectView(projectId, { selectedItemIds: data.selectedItemIds as string[], selectedBinId: String(data.selectedBinId), openSequenceIds: data.openSequenceIds as string[] })
+    if (this.entityType === 'video_edit.project' && keys.includes('video_edit.project.timeline_view')) setVideoEditTimelineView(projectId, data.timelineView as unknown as VideoEditTimelineView)
+    if (this.entityType === 'video_edit.project' && keys.includes('video_edit.project.program_playback')) setVideoEditView(projectId, data.programPlayback as ProjectViewSnapshot['program'])
     return completed(before, after, [step.target], viewBefore)
   }
   async compensate(_step: Extract<ApplicationPlannedStep, { kind: 'mutation' }>, result: ApplicationCompletedStepResult): Promise<ApplicationEvidence[]> { return result.undoToken ? (await restore(result.undoToken)).evidence : [] }
@@ -156,14 +180,17 @@ export class VideoEditCollectionExecutor implements ApplicationCollectionExecuto
           const allowed = new Set(VIDEO_EDIT_FIELDS[this.entityType].filter(field => !field.propertyId.endsWith('.code')).map(field => field.propertyId))
           if (Object.keys(item.properties).some(key => !allowed.has(key))) throw new Error('创建仅接受已公开的实体字段；代码实例由正式源码检查或已有项目项维护。')
           const values: Record<string, JsonValue> = Object.fromEntries(Object.entries(item.properties).map(([key, value]) => [videoEditDataKey(key.slice(this.entityType.length + 1)), value]))
-          for (const key of ['binId', 'parentId']) if (values[key] === '') delete values[key]
+          for (const key of ['binId', 'parentId', 'linkId', 'groupId']) if (values[key] === '') delete values[key]
+          if (values.sourceComponent === 'all') delete values.sourceComponent
           const id = crypto.randomUUID()
           switch (this.entityType) {
             case 'video_edit.sequence': document.sequences.push({ ...createVideoEditSequence(), ...values, id } as ReturnType<typeof createVideoEditSequence>); break
             case 'video_edit.bin': document.bins.push(videoEditBinSchema.parse({ id, ...values })); break
             case 'video_edit.item': document.items.push(videoEditItemSchema.parse({ id, ...values })); break
             case 'video_edit.clip': {
-              const clip = makeVideoEditItemClip(document, String(values.itemId), sequence!.id, { frame: Number(values.start ?? 0), ...(values.track !== undefined ? { track: Number(values.track) } : {}) }, readVideoEditCodeMetadata(instance, document))
+              const component = values.sourceComponent
+              if (component !== undefined && component !== 'video' && component !== 'audio') throw new Error('source_component 必须为 all、video 或 audio。')
+              const clip = makeVideoEditItemClip(document, String(values.itemId), sequence!.id, { frame: Number(values.start ?? 0), ...(values.track !== undefined ? { track: Number(values.track) } : {}), ...(component ? { sourceComponent: component } : {}) }, readVideoEditCodeMetadata(instance, document))
               const parameters = values.codeParameters; const curves = values.codeCurves; const versionId = values.codeVersionId
               delete values.codeParameters; delete values.codeCurves; delete values.codeVersionId
               if (parameters !== undefined || curves !== undefined || versionId !== undefined) {

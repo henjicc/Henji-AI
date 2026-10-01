@@ -10,6 +10,7 @@ import StartupSection from '../sections/StartupSection'
 import ThemeSection from '../sections/ThemeSection'
 import AssetLibrarySection from '../sections/AssetLibrarySection'
 import UiScaleSection from '../sections/UiScaleSection'
+import { VideoEditShortcutSettings } from '@/features/videoEdit/panels/VideoEditShortcutSettings'
 import { useSettingsStore } from '@/stores/settingsStore'
 import {
 
@@ -82,6 +83,7 @@ const InterfaceTab: React.FC = () => {
       <SettingsSection id="interface-layout">
         <UiScaleSection />
         <StartupSection />
+        <VideoEditShortcutSettings />
         <BottomPanelSection
           enableAutoCollapse={settings.enableAutoCollapse}
           collapseDelay={settings.collapseDelay}

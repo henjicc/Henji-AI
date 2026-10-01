@@ -48,7 +48,10 @@ const ContextMenu: React.FC<ContextMenuProps> = ({ items, position, onClose, vis
             className="ui-glass context-menu animate-scale-in"
             style={{
                 left: `${position.x}px`,
-                top: `${position.y}px`
+                top: `${position.y}px`,
+                maxHeight: 'calc(100vh - 20px)',
+                maxWidth: 'calc(100vw - 20px)',
+                overflowY: 'auto'
             }}
         >
             {items.map((item, index) => (

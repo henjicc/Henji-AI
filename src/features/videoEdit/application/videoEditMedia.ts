@@ -51,7 +51,7 @@ async function inspectMedia(path: string, signal?: AbortSignal): Promise<VideoEd
     const rate = metrics && metrics.probedPacketCount >= 2 && Number.isFinite(metrics.bestGuessFrameRate) ? VIDEO_EDIT_FRAME_RATES.find(rate => Math.abs(videoEditFps(rate) / metrics.bestGuessFrameRate - 1) < 0.001) : undefined
     const durationSeconds = await input.computeDuration()
     signal?.throwIfAborted()
-    return { ...base, kind: video ? 'video' : 'audio', width: video?.displayWidth ?? 0, height: video?.displayHeight ?? 0, durationSeconds, ...(video ? { ...(rate ? { frameRate: rate } : {}), frameRateMode: metrics && metrics.probedPacketCount >= 2 ? metrics.frameRateIsConstant ? 'sampled-constant' as const : 'variable' as const : 'unknown' as const } : {}) }
+    return { ...base, kind: video ? 'video' : 'audio', hasAudio: Boolean(audio), width: video?.displayWidth ?? 0, height: video?.displayHeight ?? 0, durationSeconds, ...(video ? { ...(rate ? { frameRate: rate } : {}), frameRateMode: metrics && metrics.probedPacketCount >= 2 ? metrics.frameRateIsConstant ? 'sampled-constant' as const : 'variable' as const : 'unknown' as const } : {}) }
   } finally { signal?.removeEventListener('abort', cancel); input.dispose() }
 }
 export async function importVideoEditSources(projectId: string, sources: VideoEditImportSource[], binId?: string, signal?: AbortSignal, afterImport?: (document: VideoEditDocument, itemIds: string[]) => VideoEditDocument | Promise<VideoEditDocument>): Promise<string[]> {

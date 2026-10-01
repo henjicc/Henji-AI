@@ -51,6 +51,11 @@ vi.mock('./videoEditGpuCompositor', async () => {
   async dispose(): Promise<void> {}
   cancelPresentation(): void {}
 } } })
+vi.mock('./videoEditSeekDecoder', () => ({ VideoEditSeekDecoder: class {
+  constructor(private readonly path: string, private readonly cache: import('./videoEditFrameCache').VideoEditFrameCache) {}
+  async sample(time: number) { const frame = this.cache.get(this.path, time) as import('./videoEditGpuFrame').VideoEditGpuFrame | undefined; return { sample: frame?.clone(), hit: !!frame } }
+  async dispose() { this.cache.deleteMedia(this.path) }
+} }))
 beforeEach(() => {
   boundary.disposed = []; boundary.pictures = []
   boundary.generatorCalls = 0; boundary.compilerCalls = 0; boundary.compilerDisposed = 0; boundary.failGenerator = false; boundary.released = []; boundary.pendingCode = undefined
@@ -70,6 +75,17 @@ it('顺序播放和导出使用定位同一GPU格式，每个实际解码帧只�
     expect(boundary.snapshotCalls).toEqual([true, true, true])
   } finally { await renderer.dispose() }
   expect(boundary.normalizedReleased).toBe(3)
+})
+it('正向预览的已呈现帧留在同一有界缓存，倒退不重新解码且关闭释放全部引用', async () => {
+  const document = { ...fixture(), fps: 60, frameRate: { numerator: 60, denominator: 1 } }
+  const renderer = new VideoEditRenderer(document, 3840, undefined, 200)
+  const first = await renderer.render(0, true); const next = await renderer.render(1, true)
+  expect(first.cacheBytes).toBe(100); expect(next.cacheBytes).toBe(200); expect(boundary.normalizedReleased).toBe(0)
+  // Also protect continuous-playback callers that accidentally retain true.
+  const reverse = await renderer.render(0, true)
+  expect(reverse.cacheHits).toBe(1); expect(boundary.pictures).toEqual([0]); expect(boundary.snapshotCalls).toHaveLength(2)
+  await renderer.dispose(); expect(boundary.normalizedReleased).toBe(2)
+  expect(() => new VideoEditRenderer(document, 3840, undefined, 9 * 1024 ** 3)).toThrow('预算')
 })
 it('关闭或替换媒体期间晚到GPU复制不能挂回已释放源或遗留纹理', async () => {
   for (const action of ['dispose', 'replace'] as const) {
@@ -114,6 +130,20 @@ it('44.1kHz 单声道实际混音包含两源声道，NTSC 分块样本边界连
     expect(first).toHaveLength(1); expect(first[0][0]).toBe(.375)
     expect(first[0].length + second[0].length).toBe(Math.ceil(2 * duration * 44100 - 1e-7))
     await renderer.updateDocument({ ...document, tracks: document.tracks.map(track => ({ ...track, muted: true })) })
+    expect((await renderer.mixAudio(0, .01))[0].every(sample => sample === 0)).toBe(true)
+  } finally { await renderer.dispose() }
+})
+it('拆出的音画共用原引用且混音逐样本不增倍，纯画面独奏不误静音独立声音', async () => {
+  const document = fixture(); const renderer = new VideoEditRenderer(document)
+  try {
+    const original = await renderer.mixAudio(0, .01)
+    const video = { ...document.clips[0], sourceComponent: 'video' as const }
+    const audio = { ...document.clips[0], id: 'audio-component', kind: 'audio' as const, track: 0, sourceComponent: 'audio' as const }
+    await renderer.updateDocument({ ...document, clips: [video, audio], tracks: document.tracks.map(track => ({ ...track, solo: track.index === 1 })) })
+    const split = await renderer.mixAudio(0, .01)
+    expect(split).toEqual(original)
+    await renderer.render(0); expect(boundary.pictures).toEqual([1])
+    await renderer.updateDocument({ ...document, clips: [video] })
     expect((await renderer.mixAudio(0, .01))[0].every(sample => sample === 0)).toBe(true)
   } finally { await renderer.dispose() }
 })

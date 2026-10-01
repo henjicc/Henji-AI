@@ -4,19 +4,34 @@ import type { VideoEditMedia } from '@/core/videoEdit/document'
 import { createVideoEditSourcePresenter } from './videoEditSourcePresenter'
 
 vi.mock('@/services/imageSource', () => ({ resolveImageDisplayUrl: (path: string) => `media:${path}` }))
-const media: VideoEditMedia = { id: 'media', kind: 'video', name: '原视频', path: 'D:/source.mp4', durationSeconds: 7, width: 3840, height: 2160 }
+const gpu = vi.hoisted(() => ({ blocked: false, calls: [] as number[], requests: [] as Array<() => void>, invalidates: vi.fn(), closes: vi.fn(), created: 0, closing: undefined as Promise<void> | undefined, timestamp: undefined as ((timeUs: number) => number) | undefined }))
+vi.mock('../engine/videoEditSourceFrames', () => ({ VideoEditSourceFrames: class {
+  private revision = 0
+  constructor(private readonly media: VideoEditMedia) { gpu.created++ }
+  async present(timeUs: number) {
+    const revision = this.revision; gpu.calls.push(timeUs)
+    if (gpu.blocked) await new Promise<void>(resolve => gpu.requests.push(resolve))
+    if (revision !== this.revision) throw new Error('旧GPU请求已取消')
+    const fps = this.media.frameRate ? this.media.frameRate.numerator / this.media.frameRate.denominator : 30
+    return { timeUs, presentedTimeUs: gpu.timestamp?.(timeUs) ?? Math.round(Math.floor(timeUs / 1e6 * fps) / fps * 1e6), decodeMs: 1, gpuMs: 2, cacheHits: 1, cacheBytes: 100 }
+  }
+  invalidate() { this.revision++; gpu.invalidates() }
+  async dispose() { this.invalidate(); gpu.closes(); await gpu.closing }
+} }))
+const media: VideoEditMedia = { id: 'media', kind: 'video', name: '原视频', path: 'D:/source.mp4', durationSeconds: 7, width: 3840, height: 2160, frameRateMode: 'sampled-constant' }
 let host: HTMLDivElement
 let frameCallbacks: Map<number, VideoFrameRequestCallback>
 let nextFrame: number
 beforeEach(() => {
   host = document.createElement('div'); document.body.append(host); frameCallbacks = new Map(); nextFrame = 0
+  gpu.blocked = false; gpu.calls = []; gpu.requests = []; gpu.invalidates.mockClear(); gpu.closes.mockClear(); gpu.created = 0; gpu.closing = undefined; gpu.timestamp = undefined
   vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(function (this: HTMLMediaElement) { Object.defineProperty(this, 'paused', { value: true, configurable: true }) })
   vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => {})
   vi.spyOn(HTMLMediaElement.prototype, 'play').mockImplementation(function (this: HTMLMediaElement) { Object.defineProperty(this, 'paused', { value: false, configurable: true }); return Promise.resolve() })
   Object.defineProperty(HTMLVideoElement.prototype, 'requestVideoFrameCallback', { configurable: true, value: vi.fn((callback: VideoFrameRequestCallback) => { frameCallbacks.set(++nextFrame, callback); return nextFrame }) })
   Object.defineProperty(HTMLVideoElement.prototype, 'cancelVideoFrameCallback', { configurable: true, value: vi.fn((id: number) => frameCallbacks.delete(id)) })
 })
-afterEach(() => { host.remove(); vi.restoreAllMocks(); delete (HTMLVideoElement.prototype as Partial<HTMLVideoElement>).requestVideoFrameCallback; delete (HTMLVideoElement.prototype as Partial<HTMLVideoElement>).cancelVideoFrameCallback })
+afterEach(() => { host.remove(); vi.useRealTimers(); vi.restoreAllMocks(); delete (HTMLVideoElement.prototype as Partial<HTMLVideoElement>).requestVideoFrameCallback; delete (HTMLVideoElement.prototype as Partial<HTMLVideoElement>).cancelVideoFrameCallback })
 
 async function loadVideo(): Promise<HTMLVideoElement> {
   const video = host.querySelector('video')!
@@ -28,6 +43,191 @@ function presentFrame(time: number): void {
   frameCallbacks.delete(id)
   callback(0, { mediaTime: time } as VideoFrameCallbackMetadata)
 }
+function presentRequestedPicture(video: HTMLVideoElement, fps: number): void {
+  expect(frameCallbacks.size).toBe(1)
+  // A paused seek inside a frame returns its start timestamp, not the seek clock.
+  presentFrame(Math.floor(video.currentTime * fps) / fps)
+}
+it('反向静音逐帧等待同源GPU完成，停止确认原生同帧并取消在途合成', async () => {
+  vi.useFakeTimers()
+  vi.spyOn(performance, 'now').mockImplementation(() => Date.now())
+  const observe = vi.fn(); const presenter = createVideoEditSourcePresenter(host, () => ({ ...media, frameRate: { numerator: 60, denominator: 1 } }), observe)
+  const reverse = presenter.present({ itemId: 'item', timeUs: 2_000_000, playing: true, volume: .7, playbackDirection: -1 }, new AbortController().signal)
+  const video = await loadVideo(); presentFrame(2)
+  expect(await reverse).toMatchObject({ playing: true, playbackDirection: -1 }); expect(video.paused).toBe(true); expect(video.muted).toBe(true)
+  expect(host.querySelector('canvas')?.width).toBe(3840); expect(video.className).toBe('hidden')
+  gpu.blocked = true
+  await vi.advanceTimersByTimeAsync(17)
+  expect(gpu.calls.at(-1)).toBe(Math.round(119.5 / 60 * 1e6)); expect(observe.mock.calls.filter(([, observation]) => observation.playing)).toHaveLength(0)
+  gpu.requests.shift()!(); await vi.advanceTimersByTimeAsync(0)
+  expect(observe).toHaveBeenLastCalledWith('item', expect.objectContaining({ presentedTimeUs: 1_983_333, playing: true, playbackDirection: -1 }))
+  await vi.advanceTimersByTimeAsync(17); expect(gpu.requests).toHaveLength(1); expect(frameCallbacks.size).toBe(0)
+  const stopped = presenter.present({ itemId: 'item', timeUs: Math.round(119.5 / 60 * 1e6), playing: false, volume: .7, playbackDirection: 1 }, new AbortController().signal)
+  await Promise.resolve(); expect(frameCallbacks.size).toBe(1); presentRequestedPicture(video, 60)
+  expect(await stopped).toMatchObject({ playing: false, presentedTimeUs: 1_983_333 }); expect(video.muted).toBe(false)
+  gpu.requests.shift()!(); await vi.advanceTimersByTimeAsync(0)
+  expect(gpu.closes).toHaveBeenCalledOnce(); expect(host.querySelector('canvas')).toBeNull()
+  const count = observe.mock.calls.filter(([, observation]) => observation.playing).length; await vi.advanceTimersByTimeAsync(500)
+  expect(observe.mock.calls.filter(([, observation]) => observation.playing)).toHaveLength(count); expect(frameCallbacks.size).toBe(0)
+  presenter.dispose(); expect(host.children).toHaveLength(0); expect(video.getAttribute('src')).toBeNull(); expect(vi.getTimerCount()).toBe(0)
+})
+
+it.each([{ numerator: 60, denominator: 1 }, { numerator: 60000, denominator: 1001 }])('反向第一步从实际呈现帧后退，不重复较晚的媒体时钟帧（%j）', async frameRate => {
+  vi.useFakeTimers()
+  vi.spyOn(performance, 'now').mockImplementation(() => Date.now())
+  const fps = frameRate.numerator / frameRate.denominator; const observe = vi.fn()
+  const presenter = createVideoEditSourcePresenter(host, () => ({ ...media, frameRate }), observe)
+  try {
+    const request = presenter.present({ itemId: 'item', timeUs: 2_000_000, playing: true, volume: .7, playbackDirection: -1 }, new AbortController().signal)
+    const video = await loadVideo(); presentFrame(119 / fps)
+    const actualUs = Math.round(119 / fps * 1e6)
+    expect(await request).toMatchObject({ timeUs: 2_000_000, presentedTimeUs: actualUs, playing: true, playbackDirection: -1 })
+    expect(gpu.calls).toEqual([Math.round(actualUs - 500_000 / fps), actualUs + 1])
+    gpu.blocked = true
+    await vi.advanceTimersByTimeAsync(17)
+    expect(gpu.calls.at(-1)).toBe(Math.round(118.5 / fps * 1e6)); expect(frameCallbacks.size).toBe(0)
+    expect(observe.mock.calls.filter(([, observation]) => observation.playing)).toHaveLength(0)
+    gpu.requests.shift()!(); await vi.advanceTimersByTimeAsync(0)
+    expect(observe).toHaveBeenLastCalledWith('item', expect.objectContaining({ presentedTimeUs: Math.round(118 / fps * 1e6), playing: true, playbackDirection: -1 }))
+    expect(video.paused).toBe(true); expect(video.muted).toBe(true)
+  } finally { presenter.dispose() }
+  expect(host.children).toHaveLength(0); expect(frameCallbacks.size).toBe(0); expect(vi.getTimerCount()).toBe(0)
+})
+it('反向帧中心开始后立即停止可复用同一真实native帧，不等待不会出现的回调', async () => {
+  vi.useFakeTimers()
+  const presenter = createVideoEditSourcePresenter(host, () => ({ ...media, frameRate: { numerator: 60, denominator: 1 } }), vi.fn())
+  const timeUs = Math.round(120.5 / 60 * 1e6)
+  const started = presenter.present({ itemId: 'item', timeUs, playing: true, playbackDirection: -1, volume: 1 }, new AbortController().signal)
+  await loadVideo(); presentFrame(2); await started
+  const stopped = await presenter.present({ itemId: 'item', timeUs, playing: false, volume: 1 }, new AbortController().signal)
+  expect(stopped).toMatchObject({ timeUs, presentedTimeUs: 2_000_000, playing: false })
+  expect(frameCallbacks.size).toBe(0); expect(gpu.closes).toHaveBeenCalledOnce()
+  presenter.dispose(); expect(vi.getTimerCount()).toBe(0)
+})
+it('同元素正向旧帧回调被取消后不能污染GPU确认和停止交接', async () => {
+  vi.useFakeTimers()
+  const presenter = createVideoEditSourcePresenter(host, () => ({ ...media, frameRate: { numerator: 60, denominator: 1 } }), vi.fn())
+  const timeUs = Math.round(120.5 / 60 * 1e6)
+  const initial = presenter.present({ itemId: 'item', timeUs, playing: true, volume: 1 }, new AbortController().signal)
+  await loadVideo(); presentFrame(2); await initial
+  const stale = [...frameCallbacks.values()][0]
+  const reverse = await presenter.present({ itemId: 'item', timeUs, playing: true, playbackDirection: -1, volume: 1 }, new AbortController().signal)
+  expect(reverse.presentedTimeUs).toBe(2_000_000)
+  stale(0, { mediaTime: 5 } as VideoFrameCallbackMetadata)
+  expect(await presenter.present({ itemId: 'item', timeUs, playing: false, volume: 1 }, new AbortController().signal)).toMatchObject({ presentedTimeUs: 2_000_000 })
+  presenter.dispose(); expect(vi.getTimerCount()).toBe(0)
+})
+it('面板销毁重建等待旧GPU释放屏障，不能叠加反向缓存owner', async () => {
+  vi.useFakeTimers()
+  const oldHost = host; const resolver = () => ({ ...media, frameRate: { numerator: 60, denominator: 1 } })
+  const old = createVideoEditSourcePresenter(oldHost, resolver, vi.fn())
+  const first = old.present({ itemId: 'item', timeUs: 2_000_000, playing: true, playbackDirection: -1, volume: 1 }, new AbortController().signal)
+  await loadVideo(); presentFrame(2); await first
+  let finish!: () => void; gpu.closing = new Promise(resolve => { finish = resolve })
+  old.dispose()
+  host = document.createElement('div'); document.body.append(host)
+  const fresh = createVideoEditSourcePresenter(host, resolver, vi.fn())
+  try {
+    const next = fresh.present({ itemId: 'item', timeUs: 2_000_000, playing: true, playbackDirection: -1, volume: 1 }, new AbortController().signal)
+    await loadVideo(); presentFrame(2)
+    for (let turn = 0; turn < 8; turn++) await Promise.resolve()
+    expect(gpu.created).toBe(1)
+    finish(); expect((await next).playing).toBe(true); expect(gpu.created).toBe(2)
+  } finally { finish(); gpu.closing = undefined; fresh.dispose(); oldHost.remove() }
+  expect(vi.getTimerCount()).toBe(0)
+})
+it('VFR定位不能按标称帧率复用邻近帧，切GPU保留精确实际PTS', async () => {
+  vi.useFakeTimers()
+  vi.spyOn(performance, 'now').mockImplementation(() => Date.now())
+  const observe = vi.fn()
+  const presenter = createVideoEditSourcePresenter(host, () => ({ ...media, frameRate: { numerator: 30, denominator: 1 }, frameRateMode: 'variable' }), observe)
+  const initial = presenter.present({ itemId: 'item', timeUs: 1_005_000, playing: false, volume: 1 }, new AbortController().signal)
+  await loadVideo(); presentFrame(1); await initial
+  let completed = false
+  const next = presenter.present({ itemId: 'item', timeUs: 1_020_000, playing: false, volume: 1 }, new AbortController().signal).then(value => { completed = true; return value })
+  host.querySelector('video')!.dispatchEvent(new Event('seeked')); await Promise.resolve()
+  expect(completed).toBe(false); expect(frameCallbacks.size).toBe(1)
+  presentFrame(1.01); expect((await next).presentedTimeUs).toBe(1_010_000)
+  gpu.timestamp = timeUs => timeUs >= 1_010_000 ? 1_010_000 : 1_000_000
+  const reverse = await presenter.present({ itemId: 'item', timeUs: 1_020_000, playing: true, playbackDirection: -1, volume: 1 }, new AbortController().signal)
+  expect(reverse.presentedTimeUs).toBe(1_010_000); expect(gpu.calls.at(-1)).toBe(1_010_001)
+  gpu.blocked = true; await vi.advanceTimersByTimeAsync(34)
+  expect(gpu.calls.at(-1)).toBe(1_009_999)
+  gpu.requests.shift()!(); await vi.advanceTimersByTimeAsync(0)
+  expect(observe).toHaveBeenLastCalledWith('item', expect.objectContaining({ presentedTimeUs: 1_000_000, playing: true }))
+  presenter.dispose(); expect(vi.getTimerCount()).toBe(0)
+})
+it('真实帧边界前十微秒仍须确认前一画面，不能用浮点填充吞掉定位差', async () => {
+  vi.useFakeTimers()
+  const presenter = createVideoEditSourcePresenter(host, () => ({ ...media, frameRate: { numerator: 60, denominator: 1 } }), vi.fn())
+  const initial = presenter.present({ itemId: 'item', timeUs: 2_000_000, playing: false, volume: 1 }, new AbortController().signal)
+  await loadVideo(); presentFrame(2); await initial
+  const previous = presenter.present({ itemId: 'item', timeUs: 1_999_990, playing: false, volume: 1 }, new AbortController().signal)
+  expect(frameCallbacks.size).toBe(1); presentFrame(119 / 60)
+  expect((await previous).presentedTimeUs).toBe(1_983_333)
+  presenter.dispose(); expect(vi.getTimerCount()).toBe(0)
+})
+it('恒定帧率的非零PTS相位按真实帧区间判断，不能套零起点网格', async () => {
+  vi.useFakeTimers()
+  const presenter = createVideoEditSourcePresenter(host, () => ({ ...media, frameRate: { numerator: 60, denominator: 1 } }), vi.fn())
+  const initial = presenter.present({ itemId: 'item', timeUs: 1_010_000, playing: false, volume: 1 }, new AbortController().signal)
+  await loadVideo(); presentFrame(1.005); await initial
+  const previous = presenter.present({ itemId: 'item', timeUs: 1_004_000, playing: false, volume: 1 }, new AbortController().signal)
+  expect(frameCallbacks.size).toBe(1); presentFrame(1.005 - 1 / 60)
+  expect((await previous).presentedTimeUs).toBe(988_333)
+  presenter.dispose(); expect(vi.getTimerCount()).toBe(0)
+})
+
+it.each([{ numerator: 60, denominator: 1 }, { numerator: 60000, denominator: 1001 }])('同一已呈现帧内定位只确认时钟，跨帧仍等待新画面（%j）', async frameRate => {
+  vi.useFakeTimers()
+  const fps = frameRate.numerator / frameRate.denominator
+  const presenter = createVideoEditSourcePresenter(host, () => ({ ...media, frameRate }), vi.fn())
+  try {
+    const initial = presenter.present({ itemId: 'item', timeUs: Math.round(119.5 / fps * 1e6), playing: false, volume: 1 }, new AbortController().signal)
+    const video = await loadVideo(); presentRequestedPicture(video, fps)
+    expect(await initial).toMatchObject({ presentedTimeUs: Math.round(119 / fps * 1e6) })
+    let complete = false
+    const sameTimeUs = Math.round(119.75 / fps * 1e6)
+    const same = presenter.present({ itemId: 'item', timeUs: sameTimeUs, playing: false, volume: 1 }, new AbortController().signal).then(value => { complete = true; return value })
+    await Promise.resolve()
+    expect(complete).toBe(false); expect(frameCallbacks.size).toBe(0)
+    expect(HTMLVideoElement.prototype.requestVideoFrameCallback).toHaveBeenCalledTimes(1)
+    video.dispatchEvent(new Event('seeked'))
+    expect(await same).toMatchObject({ timeUs: sameTimeUs, presentedTimeUs: Math.round(119 / fps * 1e6) })
+    complete = false
+    const next = presenter.present({ itemId: 'item', timeUs: Math.round(120.5 / fps * 1e6), playing: false, volume: 1 }, new AbortController().signal).then(value => { complete = true; return value })
+    video.dispatchEvent(new Event('seeked')); await Promise.resolve(); await Promise.resolve()
+    expect(complete).toBe(false); expect(frameCallbacks.size).toBe(1)
+    presentRequestedPicture(video, fps)
+    expect(await next).toMatchObject({ presentedTimeUs: Math.round(120 / fps * 1e6) })
+  } finally { presenter.dispose() }
+  expect(host.children).toHaveLength(0); expect(frameCallbacks.size).toBe(0); expect(vi.getTimerCount()).toBe(0)
+})
+
+it('取消同一画面内的时钟定位会清理等待，旧媒体事件不完成新源请求', async () => {
+  vi.useFakeTimers()
+  const observe = vi.fn()
+  const presenter = createVideoEditSourcePresenter(host, () => ({ ...media, frameRate: { numerator: 60, denominator: 1 } }), observe)
+  try {
+    const initial = presenter.present({ itemId: 'old', timeUs: Math.round(120.5 / 60 * 1e6), playing: false, volume: 1 }, new AbortController().signal)
+    const oldVideo = await loadVideo(); presentRequestedPicture(oldVideo, 60); await initial
+    const abort = new AbortController()
+    const cancelled = presenter.present({ itemId: 'old', timeUs: Math.round(120.75 / 60 * 1e6), playing: false, volume: 1 }, abort.signal)
+    const rejected = expect(cancelled).rejects.toThrow('取消定位')
+    expect(frameCallbacks.size).toBe(0)
+    abort.abort(new Error('取消定位')); await rejected
+    expect(host.children).toHaveLength(0); expect(oldVideo.getAttribute('src')).toBeNull(); expect(vi.getTimerCount()).toBe(0)
+    observe.mockClear()
+    let complete = false
+    const next = presenter.present({ itemId: 'new', timeUs: Math.round(180.5 / 60 * 1e6), playing: false, volume: 1 }, new AbortController().signal).then(value => { complete = true; return value })
+    const newVideo = await loadVideo()
+    oldVideo.dispatchEvent(new Event('seeked')); oldVideo.dispatchEvent(new Event('timeupdate')); await Promise.resolve(); await Promise.resolve()
+    expect(complete).toBe(false); expect(observe).not.toHaveBeenCalled(); expect(frameCallbacks.size).toBe(1)
+    presentRequestedPicture(newVideo, 60)
+    expect(await next).toMatchObject({ presentedTimeUs: 3_000_000 })
+  } finally { presenter.dispose() }
+  expect(host.children).toHaveLength(0); expect(frameCallbacks.size).toBe(0); expect(vi.getTimerCount()).toBe(0)
+})
 
 it('指定时刻必须等真实视频帧确认，停止和关闭释放原路径媒体', async () => {
   const observe = vi.fn()

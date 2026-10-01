@@ -22,14 +22,20 @@ export class VideoEditSourceExecutor implements ApplicationMutationExecutor {
     const data = readVideoEditData(step.target)
     await applyWriterTable(fieldWriterTable(VIDEO_EDIT_FIELDS[this.entityType]), data, step.mutations)
     const keys = step.mutations.map(mutation => mutation.propertyId)
-    await updateVideoEditSource(projectId, {
+    if (!matchesVideoEditSourceCommand(projectId, beforeCommand)) throw new Error('源预览已有后续操作，请重新读取。')
+    const pending = updateVideoEditSource(projectId, {
       ...(keys.includes('video_edit.source.item_id') ? { itemId: String(data.itemId) } : {}),
       ...(keys.includes('video_edit.source.time_us') ? { timeUs: Number(data.timeUs) } : {}),
       ...(keys.includes('video_edit.source.playing') ? { playing: Boolean(data.playing) } : {}),
       ...(keys.includes('video_edit.source.volume') ? { volume: Number(data.volume) } : {}),
+      ...(keys.includes('video_edit.source.in_us') ? { inUs: data.inUs as number | null } : {}),
+      ...(keys.includes('video_edit.source.out_us') ? { outUs: data.outUs as number | null } : {}),
+      ...(keys.includes('video_edit.source.playback_direction') ? { playbackDirection: data.playbackDirection as 1 | -1 } : {}),
     }, context.signal)
-    if (requireVideoEditInstance(projectId) !== owner) throw new Error('原工程会话已关闭。')
-    const token = crypto.randomUUID(); records.set(token, { target: step.target, owner, before, beforeCommand, afterCommand: videoEditSourceCommandIdentity(projectId) })
+    const afterCommand = videoEditSourceCommandIdentity(projectId)
+    await pending
+    if (requireVideoEditInstance(projectId) !== owner || !matchesVideoEditSourceCommand(projectId, afterCommand)) throw new Error('原工程已关闭或源预览已有后续操作。')
+    const token = crypto.randomUUID(); records.set(token, { target: step.target, owner, before, beforeCommand, afterCommand })
     while (records.size > 32) records.delete(records.keys().next().value!)
     return complete(step.target, token)
   }
@@ -38,8 +44,10 @@ export class VideoEditSourceExecutor implements ApplicationMutationExecutor {
     if (!record) throw new Error('源预览撤销记录已过期。')
     const { projectId } = splitVideoEditRef(record.target)
     if (requireVideoEditInstance(projectId) !== record.owner || !matchesVideoEditSourceCommand(projectId, record.afterCommand)) throw new Error('源预览已有后续操作或工程已重开，请按当前状态操作。')
-    await updateVideoEditSource(projectId, { itemId: record.before.itemId, timeUs: record.before.timeUs, playing: record.before.playing, volume: record.before.volume })
-    restoreVideoEditSourceCommandIdentity(projectId, videoEditSourceCommandIdentity(projectId), record.beforeCommand)
+    const pending = updateVideoEditSource(projectId, { itemId: record.before.itemId, timeUs: record.before.timeUs, playing: record.before.playing, volume: record.before.volume, inUs: record.before.inUs, outUs: record.before.outUs, playbackDirection: record.before.playbackDirection })
+    const restoringCommand = videoEditSourceCommandIdentity(projectId)
+    await pending
+    restoreVideoEditSourceCommandIdentity(projectId, restoringCommand, record.beforeCommand)
     records.delete(token); return complete(record.target)
   }
   async compensate(_step: Extract<ApplicationPlannedStep, { kind: 'mutation' }>, result: ApplicationCompletedStepResult): Promise<ApplicationEvidence[]> { return result.undoToken ? (await this.undo(result.undoToken)).evidence : [] }

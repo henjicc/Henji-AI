@@ -8,13 +8,16 @@ export interface VideoEditSourceState {
   presentedTimeUs: number
   playing: boolean
   volume: number
+  inUs: number | null
+  outUs: number | null
+  playbackDirection: 1 | -1
   status: 'closed' | 'loading' | 'ready' | 'error'
   error: string
 }
-export interface VideoEditSourceRequest { itemId: string; timeUs: number; playing: boolean; volume: number }
-export interface VideoEditSourceObservation { timeUs: number; presentedTimeUs: number; playing: boolean; volume: number }
+export interface VideoEditSourceRequest { itemId: string; timeUs: number; playing: boolean; volume: number; inUs?: number | null; outUs?: number | null; playbackDirection?: 1 | -1 }
+export interface VideoEditSourceObservation { timeUs: number; presentedTimeUs: number; playing: boolean; volume: number; playbackDirection?: 1 | -1; error?: string }
 export type VideoEditSourcePresenter = (request: VideoEditSourceRequest, signal: AbortSignal) => Promise<VideoEditSourceObservation>
-interface SourceSession { state: VideoEditSourceState; presenter?: VideoEditSourcePresenter; wake?: () => void; pending?: AbortController; epoch: number; command: object; mediaPath?: string }
+interface SourceSession { state: VideoEditSourceState; presenter?: VideoEditSourcePresenter; wake?: () => void; pending?: AbortController; epoch: number; command: object; mediaIdentity?: string }
 export interface VideoEditSourceCommandIdentity { readonly owner: object; readonly command: object }
 const sessions = new Map<string, SourceSession>()
 const listeners = new Set<() => void>()
@@ -25,8 +28,14 @@ export function videoEditSourceRevision(): number { return revision }
 function session(projectId: string): SourceSession {
   requireVideoEditInstance(projectId)
   let current = sessions.get(projectId)
-  if (!current) { current = { state: { itemId: '', timeUs: 0, presentedTimeUs: 0, playing: false, volume: 1, status: 'closed', error: '' }, epoch: 0, command: {} }; sessions.set(projectId, current) }
+  if (!current) { current = { state: { itemId: '', timeUs: 0, presentedTimeUs: 0, playing: false, volume: 1, inUs: null, outUs: null, playbackDirection: 1, status: 'closed', error: '' }, epoch: 0, command: {} }; sessions.set(projectId, current) }
   return current
+}
+function mediaIdentity(projectId: string, itemId: string): string | undefined {
+  const document = requireVideoEditInstance(projectId).document
+  const item = document.items.find(item => item.id === itemId)
+  const media = document.media.find(media => media.id === item?.mediaId)
+  return media ? JSON.stringify([media.id, media.path, media.sourceRevision ?? null, media.width, media.height, media.frameRate ?? null]) : undefined
 }
 export function readVideoEditSource(projectId: string): VideoEditSourceState { return { ...session(projectId).state } }
 export function registerVideoEditSourcePresenter(projectId: string, presenter: VideoEditSourcePresenter): () => void {
@@ -38,20 +47,23 @@ export function registerVideoEditSourcePresenter(projectId: string, presenter: V
 function validateRequest(projectId: string, request: VideoEditSourceRequest): void {
   if (!Number.isSafeInteger(request.timeUs) || request.timeUs < 0) throw new Error('源定位必须使用非负整数微秒。')
   if (!Number.isFinite(request.volume) || request.volume < 0 || request.volume > 1) throw new Error('源预览音量必须在 0 到 1 之间。')
-  if (!request.itemId) { if (request.playing || request.timeUs) throw new Error('请先打开一个源素材。'); return }
+  if (request.playbackDirection !== undefined && request.playbackDirection !== 1 && request.playbackDirection !== -1) throw new Error('源预览播放方向无效。')
+  if (!request.itemId) { if (request.playing || request.timeUs || request.inUs != null || request.outUs != null) throw new Error('请先打开一个源素材。'); return }
   const document = requireVideoEditInstance(projectId).document
   const item = document.items.find(item => item.id === request.itemId)
   const media = document.media.find(media => media.id === item?.mediaId)
   if (!item || !media) throw new Error('请打开一个有效的视频、图片或音频项目项。')
   if (media.kind === 'image' && (request.timeUs || request.playing)) throw new Error('静态图片不支持源播放或定位。')
   if (media.kind !== 'image' && request.timeUs > Math.round(media.durationSeconds * 1e6)) throw new Error('定位超出源素材时长。')
+  for (const time of [request.inUs, request.outUs]) if (time !== null && time !== undefined && (!Number.isSafeInteger(time) || time < 0 || time > Math.round(media.durationSeconds * 1e6))) throw new Error('源入出点超出素材范围。')
+  if (request.inUs != null && request.outUs != null && request.outUs <= request.inUs) throw new Error('源出点必须晚于入点。')
 }
 /** Commands finish only after the real preview acknowledges them; ticks never alter edit history. */
 export async function updateVideoEditSource(projectId: string, values: Partial<VideoEditSourceRequest>, externalSignal?: AbortSignal): Promise<VideoEditSourceState> {
   externalSignal?.throwIfAborted()
   const current = session(projectId)
-  const request = { itemId: current.state.itemId, timeUs: current.state.timeUs, playing: current.state.playing, volume: current.state.volume, ...values }
-  if (values.itemId !== undefined && values.itemId !== current.state.itemId) { request.timeUs = values.timeUs ?? 0; request.playing = values.playing ?? false }
+  const request = { itemId: current.state.itemId, timeUs: current.state.timeUs, playing: current.state.playing, volume: current.state.volume, inUs: current.state.inUs, outUs: current.state.outUs, playbackDirection: current.state.playbackDirection, ...values }
+  if (values.itemId !== undefined && values.itemId !== current.state.itemId) { request.timeUs = values.timeUs ?? 0; request.playing = values.playing ?? false; request.inUs = values.inUs ?? null; request.outUs = values.outUs ?? null; request.playbackDirection = values.playbackDirection ?? 1 }
   validateRequest(projectId, request)
   if (!request.itemId && !current.presenter) { current.state.volume = request.volume; closeVideoEditSource(projectId); publishVideoEdit(true); return readVideoEditSource(projectId) }
   current.pending?.abort(new Error('源预览请求已被更新。'))
@@ -62,8 +74,7 @@ export async function updateVideoEditSource(projectId: string, values: Partial<V
   current.command = {}
   const timeout = setTimeout(() => controller.abort(new Error('源预览未能及时响应，请打开源面板后重试。')), 10000)
   current.state = { ...current.state, itemId: request.itemId, ...(request.itemId !== current.state.itemId ? { timeUs: request.timeUs, presentedTimeUs: 0 } : {}), playing: false, status: request.itemId ? 'loading' : 'closed', error: '' }
-  const document = requireVideoEditInstance(projectId).document
-  current.mediaPath = document.media.find(media => media.id === document.items.find(item => item.id === request.itemId)?.mediaId)?.path
+  current.mediaIdentity = mediaIdentity(projectId, request.itemId)
   publish()
   logger.debug('源预览请求开始', { event: 'video_edit.source.request.start', context: { projectId, itemId: request.itemId } })
   try {
@@ -81,9 +92,10 @@ export async function updateVideoEditSource(projectId: string, values: Partial<V
     if (epoch !== current.epoch) throw new Error('源预览请求已被更新。')
     validateRequest(projectId, { ...request, timeUs: observation.timeUs, playing: observation.playing, volume: observation.volume })
     if ((!request.playing && Math.abs(request.timeUs - observation.timeUs) > 1000) || request.playing !== observation.playing) throw new Error('源预览未能确认所请求的播放或定位状态。')
+    if ((observation.playbackDirection ?? 1) !== request.playbackDirection && request.playing) throw new Error('源预览未能确认所请求的播放方向。')
     if (!Number.isSafeInteger(observation.presentedTimeUs) || observation.presentedTimeUs < 0) throw new Error('源预览未返回有效画面位置。')
     if (Math.abs(request.volume - observation.volume) > 1e-6) throw new Error('源预览未能确认所请求的音量。')
-    current.state = { itemId: request.itemId, ...observation, status: request.itemId ? 'ready' : 'closed', error: '' }
+    current.state = { itemId: request.itemId, ...observation, inUs: request.inUs, outUs: request.outUs, playbackDirection: request.playbackDirection, status: request.itemId ? 'ready' : 'closed', error: '' }
     publish(); publishVideoEdit(true)
     logger.debug('源预览请求完成', { event: 'video_edit.source.request.completed', context: { projectId, itemId: request.itemId } })
     return readVideoEditSource(projectId)
@@ -97,13 +109,13 @@ export function observeVideoEditSource(projectId: string, itemId: string, observ
   if (!current || current.pending || current.state.itemId !== itemId || current.state.status !== 'ready') return
   if (![observation.timeUs, observation.presentedTimeUs].every(value => Number.isSafeInteger(value) && value >= 0)) return
   if (!Number.isFinite(observation.volume) || observation.volume < 0 || observation.volume > 1) return
-  current.state = { ...current.state, ...observation }; publish()
+  current.state = { ...current.state, ...observation, ...(observation.error ? { status: 'error', error: observation.error } : {}) }; publish()
 }
 export function closeVideoEditSource(projectId: string): void {
   const current = sessions.get(projectId)
   if (!current) return
   current.epoch++; current.command = {}; current.pending?.abort(new Error('源预览已关闭。')); current.pending = undefined
-  current.state = { itemId: '', timeUs: 0, presentedTimeUs: 0, playing: false, volume: current.state.volume, status: 'closed', error: '' }; publish()
+  current.state = { itemId: '', timeUs: 0, presentedTimeUs: 0, playing: false, volume: current.state.volume, inUs: null, outUs: null, playbackDirection: 1, status: 'closed', error: '' }; publish()
 }
 export function videoEditSourceCommandIdentity(projectId: string): VideoEditSourceCommandIdentity {
   const current = session(projectId)
@@ -123,6 +135,6 @@ subscribeVideoEdit(() => {
   for (const [id, current] of sessions) {
     const instance = opened.find(instance => instance.document.id === id)
     if (!instance) { closeVideoEditSource(id); sessions.delete(id) }
-    else if (current.state.itemId && (!instance.document.items.some(item => item.id === current.state.itemId) || instance.document.media.find(media => media.id === instance.document.items.find(item => item.id === current.state.itemId)?.mediaId)?.path !== current.mediaPath)) closeVideoEditSource(id)
+    else if (current.state.itemId && mediaIdentity(id, current.state.itemId) !== current.mediaIdentity) closeVideoEditSource(id)
   }
 })

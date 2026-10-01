@@ -2,7 +2,7 @@ import { VideoEditRenderer } from './videoEditRenderer'
 import type { VideoEditComposition } from '@/core/videoEdit/document'
 
 export type RenderRequest = { id: number } & (
-  { kind: 'init'; document: VideoEditComposition; previewWidth?: number; surface?: OffscreenCanvas } | { kind: 'update'; document: VideoEditComposition }
+  { kind: 'init'; document: VideoEditComposition; previewWidth?: number; surface?: OffscreenCanvas; cacheBudgetBytes?: number } | { kind: 'update'; document: VideoEditComposition }
   | { kind: 'invalidate'; revision: number }
   | { kind: 'dispose' }
   | { kind: 'render'; frame: number; sequential: boolean; scrubbing?: boolean; deadline?: number }
@@ -23,7 +23,7 @@ self.onmessage = (event: MessageEvent<RenderRequest>) => {
       if (request.kind === 'dispose') {
         await renderer?.dispose(); const codeResources = renderer?.codeDiagnostics(); renderer = undefined; self.postMessage({ id: request.id, codeResources } satisfies RenderResponse)
       } else if (request.kind === 'init') {
-        await renderer?.dispose(); renderer = new VideoEditRenderer(request.document, request.previewWidth, request.surface); direct = !!request.surface
+        await renderer?.dispose(); renderer = new VideoEditRenderer(request.document, request.previewWidth, request.surface, request.cacheBudgetBytes); direct = !!request.surface
         self.postMessage({ id: request.id } satisfies RenderResponse)
       } else if (request.kind === 'update') {
         if (!renderer) throw new Error('剪辑渲染器尚未就绪。')

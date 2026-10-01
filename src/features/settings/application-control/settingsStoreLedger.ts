@@ -103,5 +103,6 @@ export const SETTINGS_STORE_LEDGER: ApplicationStoreActionLedger<ActionName> = {
     setAssetEdgeDelayMs: property('assets.edge_delay_ms'),
     setAssetCardSize: property('assets.card_size'),
     setAssetThumbnailFit: property('assets.thumbnail_fit'),
+    setVideoEditShortcuts: property('video_edit.shortcuts'),
   },
 }

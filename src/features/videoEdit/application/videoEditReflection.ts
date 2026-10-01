@@ -1,6 +1,6 @@
 import { fieldDescriptors, fieldReadValues, unrestrictedCollectionAvailability, type ApplicationEntityProvider, type ApplicationEntityRegistration, type ApplicationRef } from '@/core/application-control'
 import type { VideoEditDocument } from '@/core/videoEdit/document'
-import { listVideoEditInstances, requireVideoEditInstance, videoEditDomainRevision as videoEditRevision } from './videoEditService'
+import { listVideoEditInstances, requireVideoEditInstance, getVideoEditTimelineView, videoEditDomainRevision as videoEditRevision } from './videoEditService'
 import { VIDEO_EDIT_FIELDS, VIDEO_EDIT_TYPES, videoEditSchemaDocuments, videoEditSchemaRef, type VideoEditEntityType, type VideoEditFieldData } from './videoEditFields'
 import { readVideoEditSource } from './videoEditSource'
 
@@ -26,7 +26,7 @@ export function videoEditEntityItems(document: VideoEditDocument, type: VideoEdi
 }
 export function readVideoEditData(ref: ApplicationRef): VideoEditFieldData {
   const { projectId, childId } = splitVideoEditRef(ref); const instance = requireVideoEditInstance(projectId)
-  if (ref.kind === 'video_edit.project') return { name: instance.document.name, frame: instance.frame, selection: instance.selection ?? '', activeSequenceId: instance.activeSequenceId, dirty: instance.dirty, selectedItemIds: [...instance.selectedItemIds], selectedBinId: instance.selectedBinId, openSequenceIds: [...instance.openSequenceIds] }
+  if (ref.kind === 'video_edit.project') return { name: instance.document.name, frame: instance.frame, selection: instance.selection ?? '', activeSequenceId: instance.activeSequenceId, dirty: instance.dirty, selectedItemIds: [...instance.selectedItemIds], selectedBinId: instance.selectedBinId, openSequenceIds: [...instance.openSequenceIds], timelineView: { ...getVideoEditTimelineView(projectId) }, programPlayback: { frame: instance.frame, playing: instance.playing, playbackDirection: instance.playbackDirection } }
   if (ref.kind === 'video_edit.source') { if (childId !== 'source') throw new Error('NOT_FOUND：源预览引用无效。'); return { ...readVideoEditSource(projectId) } }
   if (ref.kind === 'video_edit.code_material') {
     const definition = instance.document.codeMaterials?.find(value => value.id === childId)

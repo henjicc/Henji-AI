@@ -1,7 +1,8 @@
 import type { SettingsNavigationTarget } from '@/core/types/settingsNavigation'
 import type { z } from 'zod'
+import type { JsonValue } from '@/core/application-control'
 
-export type SettingValue = string | number | boolean
+export type SettingValue = JsonValue
 
 export interface ApplicationSettingDefinition {
   id: string

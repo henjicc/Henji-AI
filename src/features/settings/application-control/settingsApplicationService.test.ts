@@ -26,8 +26,20 @@ const defaultImageModel: ModelDefinition = {
 
 describe('assistant settings registry', () => {
   beforeEach(() => {
+    useSettingsStore.getState().setVideoEditShortcuts({})
     useSettingsStore.getState().setUiBlurEnabled(true)
     useSettingsStore.getState().setThemeTonePreset('neutral')
+  })
+  it('剪辑键位封闭对象由正式设置提交，冲突不写入，空配置恢复默认', () => {
+    const config = { select_tool: { code: 'KeyQ', ctrl: false, alt: false, shift: false, meta: false } }
+    const plan = planApplicationSettingsChange([{ id: 'video_edit.shortcuts', value: config }])
+    applyApplicationSettingsChange(plan.planRef)
+    expect(useSettingsStore.getState().videoEditShortcuts).toEqual(config)
+    expect(getApplicationSettings(['video_edit.shortcuts']).settings[0]).toMatchObject({ value: config })
+    expect(() => planApplicationSettingsChange([{ id: 'video_edit.shortcuts', value: { select_tool: { ...config.select_tool, code: 'KeyC' } } }])).toThrow('INVALID_INPUT')
+    expect(useSettingsStore.getState().videoEditShortcuts).toEqual(config)
+    applyApplicationSettingsChange(planApplicationSettingsChange([{ id: 'video_edit.shortcuts', value: {} }]).planRef)
+    expect(useSettingsStore.getState().videoEditShortcuts).toEqual({})
   })
 
   it('搜索、规划并应用可逆设置', () => {

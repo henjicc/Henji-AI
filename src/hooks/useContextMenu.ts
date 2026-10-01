@@ -37,7 +37,7 @@ export const useContextMenu = (): UseContextMenuReturn => {
         // 计算菜单高度（估算）
         const itemHeight = 40 // 每个菜单项的大概高度
         const padding = 8 // 菜单的上下 padding
-        const estimatedHeight = items.length * itemHeight + padding
+        const estimatedHeight = Math.min(items.length * itemHeight + padding, Math.max(0, window.innerHeight - 20))
         const menuWidth = menuRef.current.width
 
         // 获取视口尺寸
@@ -55,7 +55,7 @@ export const useContextMenu = (): UseContextMenuReturn => {
 
         // 如果菜单会超出底部边界，向上显示
         if (y + estimatedHeight > viewportHeight - 10) {
-            y = y - estimatedHeight
+            y = viewportHeight - estimatedHeight - 10
         }
 
         // 确保不会超出左边界和顶部

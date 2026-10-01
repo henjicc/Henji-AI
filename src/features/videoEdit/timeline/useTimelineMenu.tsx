@@ -1,0 +1,34 @@
+import { Copy, Clipboard, Scissors, Trash2, Link2, Unlink, Group, Ungroup, Locate, Play, SlidersHorizontal, AudioLines, ArrowRightToLine, ListChecks } from 'lucide-react'
+import { useContextMenu, type MenuItem } from '@/hooks/useContextMenu'
+import { useSettingsStore } from '@/stores/settingsStore'
+import type { VideoEditCommandId } from '@/core/videoEdit/commands'
+import { captureVideoEditCommandContext, executeVideoEditCommand, videoEditCommandState } from '../application/videoEditCommands'
+import { setVideoEditTimelineView, type VideoEditInstance } from '../application/videoEditService'
+import { timelineCommandPresentation } from './timelineCommandPresentation'
+
+const actionIcons = { copy: Copy, paste: Clipboard, insert: ArrowRightToLine, overwrite: Clipboard, split: Scissors, split_tracks: Scissors, delete: Trash2, ripple_delete: Trash2, link: Link2, unlink: Unlink, group: Group, ungroup: Ungroup, separate_audio: AudioLines, locate_source: Play, locate_project: Locate, locate_effects: SlidersHorizontal, select_all: ListChecks } as const
+type MenuCommand = keyof typeof actionIcons
+
+export function useTimelineMenu(instance: VideoEditInstance, onError: (error: unknown) => void, cancelPointer: () => void) {
+  const menu = useContextMenu()
+  const shortcuts = useSettingsStore(state => state.videoEditShortcuts)
+  const show = (event: React.MouseEvent): void => {
+    if (!(event.target instanceof Element) || event.target.closest('[data-video-edit-track-header]')) return
+    cancelPointer()
+    try {
+      const clipId = event.target.closest('[data-video-edit-clip]')?.getAttribute('data-video-edit-clip')
+      const ids = clipId ? instance.selectedClipIds.includes(clipId) ? [clipId, ...instance.selectedClipIds.filter(id => id !== clipId)] : [clipId] : []
+      if (clipId) setVideoEditTimelineView(instance.document.id, { selectedClipIds: ids }, clipId)
+      // Freeze at menu opening. The shared menu executes its callback after closing, not at this event.
+      const context = captureVideoEditCommandContext(instance.document.id, 'timeline', { clipIds: ids })
+      const commands: MenuCommand[] = clipId ? ['locate_source', 'locate_project', 'locate_effects', 'copy', 'paste', 'split', 'split_tracks', 'delete', 'ripple_delete', 'link', ...(videoEditCommandState(context, 'unlink').enabled ? ['unlink' as const] : []), 'group', ...(videoEditCommandState(context, 'ungroup').enabled ? ['ungroup' as const] : []), 'separate_audio'] : ['paste', 'insert', 'overwrite', 'select_all']
+      const dividers = new Set<VideoEditCommandId>(['locate_effects', 'paste', 'split_tracks', 'ripple_delete', 'ungroup'])
+      const items: MenuItem[] = commands.map(id => {
+        const presentation = timelineCommandPresentation(context, id, shortcuts); const Icon = actionIcons[id]
+        return { id, label: presentation.label, icon: <Icon size={16} />, disabled: !presentation.enabled, divider: dividers.has(id), onClick: () => executeVideoEditCommand(context, id).catch(onError) }
+      })
+      menu.showMenu(event, items)
+    } catch (error) { onError(error) }
+  }
+  return { ...menu, show }
+}

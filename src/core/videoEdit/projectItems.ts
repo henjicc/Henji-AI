@@ -29,12 +29,14 @@ export function removeVideoEditBins(document: VideoEditDocument, ids: string[]):
   }
   return { ...document, bins: document.bins.filter(bin => !ids.includes(bin.id)) }
 }
-export function makeVideoEditItemClip(document: VideoEditDocument, itemId: string, sequenceId: string, placement: { frame: number; track?: number }, codeMetadata?: CodeMaterialMetadataReader): VideoEditClip {
+export function makeVideoEditItemClip(document: VideoEditDocument, itemId: string, sequenceId: string, placement: { frame: number; track?: number; sourceComponent?: 'video' | 'audio' }, codeMetadata?: CodeMaterialMetadataReader): VideoEditClip {
   const item = document.items.find(item => item.id === itemId)
   if (!item) throw new Error('项目项不存在。')
   const sequence = videoEditComposition(document, sequenceId)
   const media = document.media.find(media => media.id === item.mediaId)
-  const trackKind = item.kind === 'audio' ? 'audio' : 'video'
+  if (placement.sourceComponent && (item.kind !== 'video' || placement.sourceComponent === 'audio' && media?.hasAudio !== true)) throw new Error('此素材没有已确认可引用的音画分量。')
+  const kind = placement.sourceComponent === 'audio' ? 'audio' : item.kind
+  const trackKind = kind === 'audio' ? 'audio' : 'video'
   const track = placement.track ?? sequence.tracks.find(track => track.kind === trackKind && !track.locked && track.enabled)?.index ?? -1
   const target = sequence.tracks.find(value => value.index === track)
   if (!target || target.kind !== trackKind) throw new Error('请将素材放入对应的视频或音频轨道。')
@@ -43,7 +45,7 @@ export function makeVideoEditItemClip(document: VideoEditDocument, itemId: strin
   if (item.kind === 'code' && (!program || !item.code)) throw new Error('代码素材尚未完成源码检查，不能添加占位片段。')
   const duration = program?.mode === 'dynamic' ? Math.max(1, Math.floor(program.durationSeconds * sequence.fps + 1e-6)) : media && media.kind !== 'image' ? Math.max(1, Math.floor(media.durationSeconds * sequence.fps + 1e-6)) : Math.round(sequence.fps * 3)
   if (!Number.isSafeInteger(placement.frame) || placement.frame < 0 || placement.frame + duration > Math.floor(sequence.fps * 1800)) throw new Error('素材落点或长度超出序列的 30 分钟范围，请先裁剪素材。')
-  return { id: crypto.randomUUID(), itemId, name: item.name, kind: item.kind, ...(item.code ? { code: structuredClone(item.code) } : {}), track, start: placement.frame, duration, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, brightness: 1, text: item.kind === 'text' ? '输入文字' : '' }
+  return { id: crypto.randomUUID(), itemId, name: item.name, kind, ...(placement.sourceComponent ? { sourceComponent: placement.sourceComponent } : {}), ...(item.code ? { code: structuredClone(item.code) } : {}), track, start: placement.frame, duration, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, brightness: 1, text: item.kind === 'text' ? '输入文字' : '' }
 }
 export function videoEditSequenceFromItem(document: VideoEditDocument, itemId: string, settings: VideoEditSequenceSettings = {}, codeMetadata?: CodeMaterialMetadataReader): VideoEditSequence {
   const { binId, ...sequenceSettings } = settings

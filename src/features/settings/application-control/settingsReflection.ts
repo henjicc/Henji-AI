@@ -4,6 +4,7 @@ import { z } from 'zod'
 
 import { getSettingsRegistryRevision, listApplicationSettingDefinitions } from './settingsApplicationService'
 import type { ApplicationSettingDefinition } from './types'
+import type { SettingValue } from './types'
 
 export const SETTINGS_ENTITY_TYPE = 'settings.registry'
 const SETTINGS_REF = { kind: SETTINGS_ENTITY_TYPE, id: 'singleton', label: '应用设置' } as const
@@ -11,6 +12,7 @@ const ENTITY_SCHEMA_DIGEST = 'sha256:c2e0e7dde1d76e45dc9b677a28bfbe26d6dede8cda2
 const PROPERTY_SCHEMA_DIGEST = 'sha256:d485e2d1d841de1f3d0cfaa52b66119fb6dd9c936fb648335b95ef1c4f73e0c1'
 
 function settingValueDescriptor(definition: ApplicationSettingDefinition): ApplicationPropertyValue {
+  if (definition.defaultValue !== null && typeof definition.defaultValue === 'object') return { kind: 'json', schemaRef: propertySchemaRef(`${definition.id}.value`) }
   if (definition.schema instanceof z.ZodBoolean) return { kind: 'boolean' }
   if (definition.schema instanceof z.ZodNumber) {
     return definition.schema.isInt ? { kind: 'integer' } : { kind: 'number' }
@@ -69,7 +71,7 @@ class SettingsReflectionProvider implements ApplicationEntityProvider {
     ref: typeof SETTINGS_REF
     entityType: string
     revisions: Record<string, number>
-    properties: Record<string, string | number | boolean>
+    properties: Record<string, SettingValue>
     capturedAt: string
   }> {
     if (ref.kind !== SETTINGS_ENTITY_TYPE || ref.id !== SETTINGS_REF.id) throw new Error('NOT_FOUND')
@@ -135,6 +137,7 @@ export function createSettingsReflectionRegistration(): ApplicationEntityRegistr
       },
     },
     properties: listApplicationSettingDefinitions().map(settingProperty),
+    schemaDocuments: listApplicationSettingDefinitions().filter(definition => definition.defaultValue !== null && typeof definition.defaultValue === 'object').map(definition => ({ ref: propertySchemaRef(`${definition.id}.value`), value: z.toJSONSchema(definition.schema) as SettingValue })),
     provider: new SettingsReflectionProvider(),
   }
 }

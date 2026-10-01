@@ -11,13 +11,14 @@ export const videoEditMediaSchema = z.object({
   id: identifier, name, path: z.string().min(1).max(32768).regex(/^(?:[A-Za-z]:[\\/]|\\\\|\/)/, '素材必须引用本地绝对路径。'),
   kind: z.enum(['video', 'audio', 'image']), durationSeconds: z.number().finite().nonnegative(),
   width: z.number().int().nonnegative(), height: z.number().int().nonnegative(),
-  assetId: identifier.optional(), sourceRevision: identifier.optional(), frameRate: videoEditRatioSchema.optional(), frameRateMode: z.enum(['sampled-constant', 'variable', 'unknown']).optional(),
+  assetId: identifier.optional(), sourceRevision: identifier.optional(), hasAudio: z.boolean().optional(), frameRate: videoEditRatioSchema.optional(), frameRateMode: z.enum(['sampled-constant', 'variable', 'unknown']).optional(),
 }).strict()
 export const videoEditBinSchema = z.object({ id: identifier, name, parentId: identifier.optional() }).strict()
 export const videoEditItemSchema = z.object({ id: identifier, name, binId: identifier.optional(), tags: z.array(z.string().trim().min(1).max(80)).max(32).optional(), kind: z.enum(['video', 'audio', 'image', 'text', 'code']), mediaId: identifier.optional(), code: codeMaterialInstanceSchema.optional() }).strict()
-export const videoEditTrackSchema = z.object({ id: identifier, name, index: z.number().int().min(0).max(31), kind: z.enum(['video', 'audio']), locked: z.boolean(), enabled: z.boolean(), muted: z.boolean(), solo: z.boolean() }).strict()
+export const videoEditTrackSchema = z.object({ id: identifier, name, index: z.number().int().min(0).max(31), kind: z.enum(['video', 'audio']), locked: z.boolean(), enabled: z.boolean(), muted: z.boolean(), solo: z.boolean(), height: z.number().int().min(24).max(160).optional(), syncLocked: z.boolean().optional() }).strict()
 export const videoEditClipSchema = z.object({
   id: identifier, itemId: identifier, name, kind: z.enum(['video', 'audio', 'image', 'text', 'code']), track: z.number().int().min(0).max(31), code: codeMaterialInstanceSchema.optional(),
+  linkId: identifier.optional(), groupId: identifier.optional(), sourceComponent: z.enum(['video', 'audio']).optional(),
   start: frame, duration: frame.min(1), sourceInUs: z.number().int().nonnegative(), sourceRemainder,
   x: z.number().finite().min(-2).max(2), y: z.number().finite().min(-2).max(2),
   scale: z.number().min(0.01).max(4), rotation: z.number().min(-360).max(360),
@@ -73,7 +74,10 @@ export const videoEditDocumentSchema = z.object({
       const item = document.items.find(item => item.id === clip.itemId)
       const media = document.media.find(media => media.id === item?.mediaId)
       const track = sequence.tracks.find(track => track.index === clip.track)
-      if (!item || item.kind !== clip.kind) issue(`片段 ${clip.name} 的项目项引用无效。`)
+      const extractedAudio = item?.kind === 'video' && clip.kind === 'audio' && clip.sourceComponent === 'audio'
+      if (!item || (item.kind !== clip.kind && !extractedAudio)) issue(`片段 ${clip.name} 的项目项引用无效。`)
+      if (clip.sourceComponent && !(item?.kind === 'video' && ((clip.kind === 'video' && clip.sourceComponent === 'video') || extractedAudio))) issue('只有视频素材可以拆开引用画面或声音。')
+      if (extractedAudio && media?.hasAudio !== true) issue('拆出的声音必须引用已确认具有音轨的视频素材。')
       if (clip.kind === 'code') {
         if (!clip.code || clip.code.definitionId !== item?.code?.definitionId || !document.codeMaterials?.find(value => value.id === clip.code?.definitionId)?.versions.some(version => version.id === clip.code?.versionId)) issue('代码片段必须引用所属定义的固定源码版本。')
       } else if (clip.code) issue('普通片段不能附带代码生成实例。')
@@ -111,7 +115,14 @@ export function videoEditClipMedia(document: Pick<VideoEditComposition, 'media' 
 export function videoEditDuration(document: Pick<VideoEditSequence, 'clips'>): number { return Math.max(1, ...document.clips.map(clip => clip.start + clip.duration)) }
 export function clipSourceSeconds(clip: VideoEditClip, timelineFrame: number, fps: number): number { return videoEditSourceSeconds(clip) + (timelineFrame - clip.start) / fps }
 export function activeVideoEditClips(document: VideoEditComposition, at: number): VideoEditClip[] {
-  return document.clips.filter(clip => at >= clip.start && at < clip.start + clip.duration && document.tracks.some(track => track.index === clip.track && track.enabled)).sort((a, b) => a.track - b.track)
+  const solo = document.tracks.some(track => track.kind === 'video' && track.enabled && track.solo)
+  return document.clips.filter(clip => at >= clip.start && at < clip.start + clip.duration && document.tracks.some(track => track.index === clip.track && track.enabled && (clip.kind === 'audio' || !solo || track.solo))).sort((a, b) => a.track - b.track)
+}
+export function audibleVideoEditClips(document: VideoEditComposition): VideoEditClip[] {
+  const candidates = document.clips.filter(clip => (clip.kind === 'video' || clip.kind === 'audio') && clip.sourceComponent !== 'video' && clip.volume > 0)
+  const tracks = new Map(document.tracks.map(track => [track.index, track]))
+  const solo = candidates.some(clip => { const track = tracks.get(clip.track); return track?.enabled && track.solo })
+  return candidates.filter(clip => { const track = tracks.get(clip.track); return track?.enabled && !track.muted && (!solo || track.solo) })
 }
 export function snapVideoEditFrame(document: Pick<VideoEditSequence, 'clips'>, value: number, excludedId: string, threshold: number): number {
   const candidates = [0, ...document.clips.filter(clip => clip.id !== excludedId).flatMap(clip => [clip.start, clip.start + clip.duration])]

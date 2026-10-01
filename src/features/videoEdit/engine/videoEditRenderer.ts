@@ -1,5 +1,5 @@
 import { ALL_FORMATS, AudioSampleSink, VideoSampleSink, VideoSample, Input, UrlSource } from 'mediabunny'
-import { videoEditClipMedia, activeVideoEditClips, clipSourceSeconds, type VideoEditComposition, type VideoEditMedia } from '@/core/videoEdit/document'
+import { videoEditClipMedia, activeVideoEditClips, audibleVideoEditClips, clipSourceSeconds, type VideoEditComposition, type VideoEditMedia } from '@/core/videoEdit/document'
 import { videoEditSourceSeconds } from '@/core/videoEdit/time'
 import { VideoEditGpuCompositor } from './videoEditGpuCompositor'
 import { VideoEditFrameCache } from './videoEditFrameCache'
@@ -25,14 +25,16 @@ export class VideoEditRenderer {
   private imageLoads = 0
   private readonly imageQueue: Array<() => void> = []
   private disposed = false
-  private readonly frameCache = new VideoEditFrameCache(8 * 1024 ** 3)
+  private readonly frameCache: VideoEditFrameCache
   private readonly seekers = new Map<string, VideoEditSeekDecoder>()
   readonly canvas: OffscreenCanvas
   private compositor?: VideoEditGpuCompositor
   private codeSources?: VideoEditCodeSources
   private presentationEpoch = 0
   codeDiagnostics() { return { sources: this.codeSources?.diagnostics(), gpu: this.compositor?.codeDiagnostics(), images: this.compositor?.imageDiagnostics(), decodedImages: this.images.size, decodedImageBytes: [...this.images.values()].reduce((sum, entry) => sum + entry.bytes, 0), imageDecodes: this.imageLoads } }
-  constructor(public document: VideoEditComposition, private readonly previewWidth?: number, surface?: OffscreenCanvas) {
+  constructor(public document: VideoEditComposition, private readonly previewWidth?: number, surface?: OffscreenCanvas, cacheBudgetBytes = 8 * 1024 ** 3) {
+    if (!Number.isSafeInteger(cacheBudgetBytes) || cacheBudgetBytes < 1 || cacheBudgetBytes > 8 * 1024 ** 3) throw new Error('预览缓存预算无效。')
+    this.frameCache = new VideoEditFrameCache(cacheBudgetBytes)
     this.canvas = surface ?? new OffscreenCanvas(document.width, document.height)
     this.canvas.width = document.width; this.canvas.height = document.height
   }
@@ -167,7 +169,10 @@ export class VideoEditRenderer {
       const pendingSource = this.source(clip.id, media)
       const source = await pendingSource
       if (!source.video) throw new Error(`素材 ${media.name} 没有可解码的视频轨。`)
-      if (this.previewWidth && !sequential) {
+      // A backwards source clock must use the shared GOP cache even when the
+      // caller requests continuous playback; a forward iterator would re-decode
+      // the whole GOP for every preceding picture.
+      if (this.previewWidth && (!sequential || time < source.previousTime)) {
         await source.iterator?.return(); source.iterator = undefined
         let seeker = this.seekers.get(media.path)
         if (!seeker) { seeker = new VideoEditSeekDecoder(media.path, this.frameCache, (sample, compact) => this.compositor!.snapshot(sample, compact)); this.seekers.set(media.path, seeker) }
@@ -195,6 +200,10 @@ export class VideoEditRenderer {
         const normalized = await this.compositor!.snapshot(decoded, videoEditGpuFrameUsesChroma(decoded, source.codec), true)
         if (this.disposed || this.sources.get(clip.id) !== pendingSource) { normalized.close(); decoded.close(); return null }
         source.current = normalized
+        // Forward pictures already have the same owned format as seeks. Retain
+        // a reference in the existing bounded cache so reversing a played range
+        // never starts competing background GOP decodes for those pictures.
+        if (this.previewWidth && sequential) this.frameCache.put(media.path, normalized.clone(), new Set())
         decoded.close()
       }
       timestamps.push(source.current.timestamp)
@@ -235,10 +244,7 @@ export class VideoEditRenderer {
     const result = Array.from({ length: this.document.channels }, () => new Float32Array(length))
     const finish = startSeconds + durationSeconds
     const activeAudio = new Set<string>()
-    for (const clip of this.document.clips) {
-      if (!['audio', 'video'].includes(clip.kind) || clip.volume === 0) continue
-      const track = this.document.tracks.find(track => track.index === clip.track)
-      if (!track?.enabled || track.muted || (this.document.tracks.some(track => track.solo) && !track.solo)) continue
+    for (const clip of audibleVideoEditClips(this.document)) {
       const clipStart = clip.start / this.document.fps
       const from = Math.max(startSeconds, clipStart)
       const to = Math.min(finish, (clip.start + clip.duration) / this.document.fps)

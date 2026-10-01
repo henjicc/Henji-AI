@@ -74,9 +74,8 @@ export const GENERAL_APPLICATION_SETTING_DEFINITIONS: ApplicationSettingDefiniti
   (value) => useSettingsStore.getState().setLogCaptureMode(value)),
   /*
    * 原本注册在 protectedSettingDefinitions.ts 的 updates.configuration 占位符（4.4 松绑）。
-   * 拆成两条标量设置而不是保留一个组合 id：本注册表里每条设置都是单一标量值
-   * （SettingValue = string | number | boolean），没有先例注册组合对象；enabled/frequency
-   * 是用户与助手真正会独立调整的两个维度，lastCheckTime/ignoredVersions 是自动写回的派生态
+   * 拆成两条标量设置：enabled/frequency 是用户与助手会独立调整的两个维度，
+   * lastCheckTime/ignoredVersions 是自动写回的派生态
    * 或增长中的列表，本来就不是「配置」，不在这次松绑范围内。
    */
   storeSetting({
