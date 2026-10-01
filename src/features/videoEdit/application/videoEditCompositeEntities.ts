@@ -128,5 +128,6 @@ export function updateVideoEditClipStructure(clip: VideoEditClip, data: Data, ke
     clip.adjustment = { fromTrack: videoEditAdjustmentSchema.shape.fromTrack.parse(data.adjustmentFromTrack) }
   }
   const plain = Object.fromEntries(Object.entries(data).filter(([key]) => !['graphicObjectIds', 'effectIds', 'adjustmentFromTrack'].includes(key)))
-  return videoEditClipSchema.parse({ ...clip, ...plain, graphic: clip.graphic, effects: clip.effects, adjustment: clip.adjustment })
+  // `data` is the full readback copy; a cleared optional reference (link/group/source component) is absent here and must stay absent.
+  return videoEditClipSchema.parse({ ...plain, graphic: clip.graphic, effects: clip.effects, adjustment: clip.adjustment })
 }
