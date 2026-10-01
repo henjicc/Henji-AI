@@ -4,7 +4,7 @@ import { VideoEditRenderer } from './videoEditRenderer'
 import type { CodeMaterialProgram } from '@/core/videoEdit/codeMaterial/contract'
 import { compileCodeMaterial } from '@/core/videoEdit/codeMaterial/compiler'
 
-const boundary = vi.hoisted(() => ({ disposed: [] as string[], pictures: [] as number[], generatorCalls: 0, compilerCalls: 0, compilerDisposed: 0, failGenerator: false, released: [] as string[][], pendingCode: undefined as Promise<CodeMaterialProgram> | undefined, snapshotCalls: [] as boolean[], normalizedReleased: 0, pendingSnapshot: undefined as Promise<void> | undefined, draws: [] as Array<{ ids: string[]; timestamps: number[]; offscreen: boolean }>, mixes: [] as number[] }))
+const boundary = vi.hoisted(() => ({ scheduled: [] as Array<{ path: string; timestamps: number[] }>, disposed: [] as string[], pictures: [] as number[], generatorCalls: 0, compilerCalls: 0, compilerDisposed: 0, failGenerator: false, released: [] as string[][], pendingCode: undefined as Promise<CodeMaterialProgram> | undefined, snapshotCalls: [] as boolean[], normalizedReleased: 0, pendingSnapshot: undefined as Promise<void> | undefined, draws: [] as Array<{ ids: string[]; timestamps: number[]; offscreen: boolean }>, mixes: [] as number[] }))
 vi.mock('@/core/logging', () => ({ createLogger: () => ({ debug: vi.fn(), warn: vi.fn() }) }))
 vi.mock('./videoEditCodeCompiler', async () => {
   const { compileCodeMaterial } = await import('@/core/videoEdit/codeMaterial/compiler')
@@ -28,6 +28,7 @@ vi.mock('mediabunny', async () => {
       constructor(readonly track: { path: string }) {}
       async getSample(time: number) { return { timestamp: time || (this.track.path.includes('B') ? 2 : 1), duration: 1 / 60, format: 'NV12', close: vi.fn() } }
       async *samples(start: number) { for (let frame = 0; frame < 4; frame++) yield { timestamp: start + frame / 60, duration: 1 / 60, format: 'NV12', close: vi.fn() } }
+      async *samplesAtTimestamps(timestamps: number[]) { boundary.scheduled.push({ path: this.track.path, timestamps: [...timestamps] }); for (const timestamp of timestamps) yield { timestamp, duration: 1 / 60, format: 'NV12', close: vi.fn() } }
     },
     AudioSampleSink: class {
       constructor(readonly track: { path: string }) {}
@@ -151,11 +152,12 @@ it('修改项目项引用后画面与声音共同使用新素材，关闭旧解�
     await renderer.render(0); expect(boundary.pictures).toEqual([1])
     expect((await renderer.mixAudio(0, .01))[0][0]).toBe(.25)
     await renderer.updateDocument({ ...document, clips: document.clips.map(clip => ({ ...clip, itemId: 'item-B' })) })
-    expect(boundary.disposed).toEqual(['D:/A.mp4', 'D:/A.mp4'])
+    // Picture and sound of one file share a single parsed input, closed once when no clip uses it.
+    expect(boundary.disposed).toEqual(['D:/A.mp4'])
     await renderer.render(0); expect(boundary.pictures).toEqual([2])
     expect((await renderer.mixAudio(0, .01))[0][0]).toBe(.75)
   } finally { await renderer.dispose() }
-  expect(boundary.disposed).toEqual(['D:/A.mp4', 'D:/A.mp4', 'D:/B.mp4', 'D:/B.mp4'])
+  expect(boundary.disposed).toEqual(['D:/A.mp4', 'D:/B.mp4'])
 })
 it('44.1kHz 单声道实际混音包含两源声道，NTSC 分块样本边界连续', async () => {
   const document = { ...fixture(), sampleRate: 44100 as const, channels: 1 as const, frameRate: { numerator: 30000, denominator: 1001 }, fps: 30000 / 1001 }
@@ -295,4 +297,29 @@ it('晚到代码检查在更新、取消或关闭后不能呈现旧画面', asyn
     expect(boundary.generatorCalls).toBe(0)
     await renderer.dispose(); boundary.compilerCalls = 0; boundary.pendingCode = undefined
   }
+})
+it('正向播放按文件建立一条解码计划：同文件剪辑点复用同一解码器且逐帧时间准确，暂停或倒放即释放', async () => {
+  boundary.scheduled = []
+  const document = { ...fixture(), fps: 60, frameRate: { numerator: 60, denominator: 1 } }
+  document.media = document.media.map(media => ({ ...media, durationSeconds: 3 }))
+  const base = document.clips[0]
+  document.clips = [{ ...base, duration: 60, sourceInUs: 1_000_000 }, { ...base, id: 'repeat', start: 60, duration: 60, sourceInUs: 0 }]
+  const renderer = new VideoEditRenderer(document, 3840)
+  try {
+    await (await renderer.render(50, true)).completion
+    expect(boundary.scheduled).toHaveLength(0)
+    for (let frame = 51; frame <= 61; frame++) {
+      const result = await renderer.render(frame, true); await result.completion
+      expect(result.sourceTimestamps).toEqual([frame < 60 ? 1 + frame / 60 : (frame - 60) / 60])
+    }
+    // Both clips of D:/A.mp4 came from one generator (one decoder); the cut jumped back inside it.
+    expect(boundary.scheduled.map(entry => entry.path)).toEqual(['D:/A.mp4'])
+    expect(boundary.scheduled[0].timestamps.slice(0, 10)).toEqual(Array.from({ length: 9 }, (_, index) => 1 + (51 + index) / 60).concat([0]))
+    const internals = renderer as unknown as { playback?: unknown }
+    expect(internals.playback).toBeDefined()
+    await (await renderer.render(61, false)).completion
+    expect(internals.playback).toBeUndefined()
+    await (await renderer.render(40, true)).completion
+    expect(internals.playback).toBeUndefined(); expect(boundary.scheduled).toHaveLength(1)
+  } finally { await renderer.dispose() }
 })

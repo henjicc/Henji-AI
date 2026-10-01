@@ -60,10 +60,12 @@ function createVideoEditScrubScene() {
           await button(page, '关闭工程').click()
           await app.evaluate(({ dialog }, file) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] }) }, longFile)
           await button(page, '打开工程').click(); await waitPresented(0, 'segment-start-failed')
-          await page.getByLabel('时间线缩放', { exact: true }).focus(); await page.getByLabel('时间线缩放', { exact: true }).press('Home'); pixels = .25
+          await page.getByLabel('时间线缩放', { exact: true }).focus(); await page.getByLabel('时间线缩放', { exact: true }).press('Home')
+          // The timeline draws 60 x zoom / fps pixels per frame; read the zoom the control actually reached.
+          pixels = 60 * Number(await page.getByLabel('时间线缩放', { exact: true }).inputValue()) / 60
         }
         const box = await ruler.boundingBox()
-        const safeStart = Math.max(6, from * pixels + .1)
+        const safeStart = Math.max(6, from * pixels + pixels / 4)
         await ruler.click({ position: { x: safeStart, y: 12 } })
         let positioned = Number(await ruler.getAttribute('aria-valuenow'))
         for (let left = Math.ceil(6 / pixels) + 1; positioned !== from && left > 0; left--) {
@@ -75,7 +77,7 @@ function createVideoEditScrubScene() {
         // Capture on the ruler body before moving to boundary frames, where the
         // dock separator overlaps the edge. Measurement starts at the same source frame.
         await page.mouse.move(box.x + safeStart, box.y + 12); await page.mouse.down()
-        await page.mouse.move(box.x + from * pixels + .1, box.y + 12)
+        await page.mouse.move(box.x + from * pixels + pixels / 4, box.y + 12)
         await waitPresented(from, `${name}-captured-position-failed`)
         await canvas.evaluate(canvas => {
           window.__scrub = { targets: [], frames: [], start: performance.now() }
@@ -88,12 +90,13 @@ function createVideoEditScrubScene() {
         const began = performance.now()
         for (let index = 1; index <= 180; index++) {
           const frame = Math.round(from + (to - from) * index / 180)
-          await page.mouse.move(box.x + frame * pixels + .1, box.y + 12)
+          await page.mouse.move(box.x + frame * pixels + pixels / 4, box.y + 12)
           const delay = began + duration * index / 180 - performance.now()
           if (delay > 0) await page.waitForTimeout(delay)
         }
         const ended = await page.evaluate(() => performance.now()); await page.mouse.up()
-        await page.waitForFunction(frame => { const canvas = document.querySelector('canvas[aria-label="剪辑画面"]'); return canvas?.dataset.presentedFrame === String(frame) && canvas.dataset.scrubbing === 'false' }, to, { timeout: 90000 })
+        try { await page.waitForFunction(frame => { const canvas = document.querySelector('canvas[aria-label="剪辑画面"]'); return canvas?.dataset.presentedFrame === String(frame) && canvas.dataset.scrubbing === 'false' }, to, { timeout: 90000 }) }
+        catch (error) { console.error(`${name}-settle-failed`, { pixels, to, ruler: await ruler.getAttribute('aria-valuenow'), box }, await canvas.evaluate(canvas => ({ ...canvas.dataset }))); await capture(`${name}-settle-failed`); throw error }
         const data = await page.evaluate(() => { window.__scrubTarget.disconnect(); window.__scrubFrame.disconnect(); return window.__scrub })
         const during = data.frames.filter(frame => frame.at <= ended)
         const gaps = during.map((frame, index) => frame.at - (index ? during[index - 1].at : data.start))
@@ -120,7 +123,7 @@ function createVideoEditScrubScene() {
         window.__playObserver.observe(canvas, { attributes: true, attributeFilter: ['data-presented-frame'] })
       })
       const beganPlayback = performance.now()
-      await button(page, '播放').click(); await button(page, '播放').waitFor({ timeout: 10000 })
+      await button(page, '播放／暂停').click()
       await page.waitForFunction(() => document.querySelector('canvas[aria-label="剪辑画面"]')?.dataset.presentedFrame === '359')
       evidence.playback = { wallMs: performance.now() - beganPlayback, frames: await page.evaluate(() => { window.__playObserver.disconnect(); return window.__playFrames }) }
       evidence.playback.clockStartAt = await canvas.evaluate(canvas => Number(canvas.dataset.playClockStartAt))

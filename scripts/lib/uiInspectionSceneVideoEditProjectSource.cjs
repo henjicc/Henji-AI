@@ -147,8 +147,9 @@ function createVideoEditProjectSourceScene() {
         await saved(page, file, value => value.sequences.find(item => item.id === sequence.id)?.sampleRate === 44100)
         await capture('video-project-matched-sequence')
         await page.getByRole('tab', { name: '序列 1', exact: true }).click()
-        const timeline = page.getByRole('slider', { name: '剪辑时间定位' }).locator('..')
-        await entry(page, videoId).dragTo(timeline, { targetPosition: { x: 120, y: 28 + 32 + 16 } })
+        // Timeline content: ruler row (28px) above track rows; lanes start after the 208px track header.
+        const timeline = page.locator('[data-video-edit-timeline-content]')
+        await entry(page, videoId).dragTo(timeline, { targetPosition: { x: 208 + 6, y: 28 + 32 + 16 } })
         document = await saved(page, file, value => value.sequences.length === 3)
         const dropped = document.sequences.at(-1)
         assert.equal(dropped.width, 3840); assert.deepEqual(dropped.frameRate, { numerator: 60, denominator: 1 }); assert.equal(dropped.clips[0].start, 0)

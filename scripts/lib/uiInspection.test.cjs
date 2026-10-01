@@ -31,6 +31,13 @@ test('智能体剪辑回环验收场景只登记一次并声明写入用户数�
   assert.equal(scene.writesUserData, true)
   assert.equal(UI_INSPECTION_SCENES.filter(candidate => candidate.id === scene.id).length, 1)
 })
+test('标准4K60性能验收场景只登记一次并声明写入用户数据', () => {
+  const { createVideoEditPerformanceScene } = require('./uiInspectionSceneVideoEditPerformance.cjs')
+  const scene = createVideoEditPerformanceScene()
+  assert.equal(scene.id, 'video-edit-performance')
+  assert.equal(scene.writesUserData, true)
+  assert.equal(UI_INSPECTION_SCENES.filter(candidate => candidate.id === scene.id).length, 1)
+})
 const { attachUiInspectionCommon } = require('./uiInspectionSceneCommon.cjs')
 const { UI_AUDIT_RULES } = require('./uiAuditDom.cjs')
 const {

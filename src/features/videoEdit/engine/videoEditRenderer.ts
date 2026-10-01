@@ -1,5 +1,5 @@
 import { ALL_FORMATS, AudioSampleSink, VideoSampleSink, VideoSample, Input, UrlSource } from 'mediabunny'
-import { videoEditClipMedia, activeVideoEditClips, audibleVideoEditClips, clipSourceSeconds, videoEditVisibleTracks, type VideoEditComposition, type VideoEditMedia } from '@/core/videoEdit/document'
+import { videoEditClipMedia, activeVideoEditClips, audibleVideoEditClips, clipSourceSeconds, videoEditVisibleTracks, type VideoEditClip, type VideoEditComposition, type VideoEditMedia } from '@/core/videoEdit/document'
 import { videoEditSourceSeconds } from '@/core/videoEdit/time'
 import { videoEditCaptionClips } from '@/core/videoEdit/timedContent'
 import { VideoEditGpuCompositor } from './videoEditGpuCompositor'
@@ -12,8 +12,30 @@ import { videoEditTransitionsAt } from '@/core/videoEdit/transitions'
 import { activeVideoEditEffects, buildVideoEditCompositePlan } from '@/core/videoEdit/compositing'
 import { renderVideoEditCompositeScene, videoEditCompositeSurfaceKeys } from './videoEditCompositeScene'
 
-interface VideoSource {
+interface SharedDemux {
   input: Input
+  video: Awaited<ReturnType<Input['getPrimaryVideoTrack']>>
+  audio: Awaited<ReturnType<Input['getPrimaryAudioTrack']>>
+  options: { hardwareAcceleration: 'prefer-hardware' | 'no-preference'; optimizeForLatency: true }
+  codec?: string
+}
+interface PlaybackStream {
+  demux: string
+  entries: Array<{ frame: number; clipId: string }>
+  cursor: number
+  samples: AsyncGenerator<VideoSample | null, void, unknown>
+  /** The first pull is started at build time so every scheduled decoder is created before mid-playback cuts. */
+  primed?: Promise<IteratorResult<VideoSample | null, void>>
+  /** Serializes pulls; one file never serves two clips at the same frame. */
+  tail: Promise<unknown>
+}
+interface PlaybackSchedule { document: VideoEditComposition; endFrame: number; streams: PlaybackStream[]; byClip: Map<string, PlaybackStream> }
+/** Files decoded through one long-lived decoder each during forward playback. */
+const PLAYBACK_SCHEDULE_FILES = 4
+const PLAYBACK_SCHEDULE_SECONDS = 120
+interface VideoSource {
+  /** Key of the shared parsed container this clip's own sinks read from. */
+  demux: string
   media: VideoEditMedia
   video?: VideoSampleSink
   audio?: AudioSampleSink
@@ -21,10 +43,15 @@ interface VideoSource {
   current?: VideoSample | VideoEditGpuFrame
   previousTime: number
   codec?: string
+  /** First picture of an upcoming cut, decoded before the boundary frame is requested. */
+  prerolled?: Promise<void>
 }
 /** One bounded decoder per visible clip; all inputs close when the view detaches. */
 export class VideoEditRenderer {
+  private readonly demuxers = new Map<string, { users: number; input: Input; ready: Promise<SharedDemux> }>()
   private readonly sources = new Map<string, Promise<VideoSource>>()
+  private playback?: PlaybackSchedule
+  private lastForwardFrame?: number
   private readonly images = new Map<string, { path: string; controller: AbortController; pending: Promise<ImageBitmap>; bytes: number; ready: boolean }>()
   private imageLoads = 0
   private readonly imageQueue: Array<() => void> = []
@@ -42,21 +69,44 @@ export class VideoEditRenderer {
     this.canvas = surface ?? new OffscreenCanvas(document.width, document.height)
     this.canvas.width = document.width; this.canvas.height = document.height
   }
+  /**
+   * One parsed container per source file and revision. Clips of the same file (cuts, repeats) only create
+   * their own sinks/decoder iterators, so a cut never re-opens and re-parses the file on the playback path.
+   */
+  private acquireDemux(media: VideoEditMedia): { key: string; ready: Promise<SharedDemux> } {
+    const key = `${media.path}\u0000${media.sourceRevision ?? ''}`
+    let entry = this.demuxers.get(key)
+    if (!entry) {
+      const input = new Input({ source: new UrlSource(media.path, { maxCacheSize: 32 * 1024 * 1024, getRetryDelay: () => null }), formats: ALL_FORMATS })
+      const ready = (async (): Promise<SharedDemux> => {
+        const [video, audio] = await Promise.all([input.getPrimaryVideoTrack(), input.getPrimaryAudioTrack()])
+        const config = video ? await video.getDecoderConfig() : null
+        const preference = 'prefer-hardware'
+        const supported = config && (await VideoDecoder.isConfigSupported({ ...config, hardwareAcceleration: preference, optimizeForLatency: true })).supported
+        return { input, video, audio, options: { hardwareAcceleration: supported ? preference : 'no-preference', optimizeForLatency: true }, codec: config?.codec }
+      })()
+      entry = { users: 0, input, ready }
+      this.demuxers.set(key, entry)
+    }
+    entry.users++
+    return { key, ready: entry.ready }
+  }
+  private release(source: Pick<VideoSource, 'demux'>): void {
+    const entry = this.demuxers.get(source.demux)
+    if (!entry || --entry.users > 0) return
+    this.demuxers.delete(source.demux); entry.input.dispose()
+  }
   private source(key: string, media: VideoEditMedia): Promise<VideoSource> {
     let source = this.sources.get(key)
     if (!source) {
+      const demux = this.acquireDemux(media)
       source = (async () => {
-        const input = new Input({ source: new UrlSource(media.path, { maxCacheSize: 32 * 1024 * 1024, getRetryDelay: () => null }), formats: ALL_FORMATS })
         try {
-          const [video, audio] = await Promise.all([input.getPrimaryVideoTrack(), input.getPrimaryAudioTrack()])
+          const shared = await demux.ready
           if (this.disposed) throw new Error('预览已关闭。')
-          const config = video ? await video.getDecoderConfig() : null
-          const preference = 'prefer-hardware'
-          const supported = config && (await VideoDecoder.isConfigSupported({ ...config, hardwareAcceleration: preference, optimizeForLatency: true })).supported
-          const options = { hardwareAcceleration: supported ? preference : 'no-preference', optimizeForLatency: true } as const
           // Sequential playback decodes the original compressed stream.
-          return { input, media, video: video ? new VideoSampleSink(video, options) : undefined, audio: audio ? new AudioSampleSink(audio) : undefined, previousTime: -1, codec: config?.codec }
-        } catch (error) { input.dispose(); throw error }
+          return { demux: demux.key, media, video: shared.video ? new VideoSampleSink(shared.video, shared.options) : undefined, audio: shared.audio ? new AudioSampleSink(shared.audio) : undefined, previousTime: -1, codec: shared.codec }
+        } catch (error) { this.release({ demux: demux.key }); throw error }
       })()
       this.sources.set(key, source)
     }
@@ -121,7 +171,7 @@ export class VideoEditRenderer {
       const clip = document.clips.find(clip => clip.id === (key.startsWith('audio:') ? key.slice(6) : key))
       const media = clip ? videoEditClipMedia(document, clip) : undefined
       if (!media || media.id !== source.media.id || media.path !== source.media.path || media.sourceRevision !== source.media.sourceRevision) {
-        this.sources.delete(key); source.current?.close(); await source.iterator?.return(); source.input.dispose()
+        this.sources.delete(key); source.current?.close(); await source.iterator?.return(); this.release(source)
       }
     }
     this.document = document
@@ -131,11 +181,101 @@ export class VideoEditRenderer {
     this.presentationEpoch++; this.codeSources?.cancel(); this.compositor?.cancelPresentation()
     for (const [id, image] of this.images) if (!image.ready) this.releaseImage(id)
   }
+  /**
+   * Forward playback reads every frame of a file through one `samplesAtTimestamps` decoder: a cut back into the
+   * same file flushes and re-seeks that decoder instead of allocating a new hardware decoder mid-playback
+   * (a new D3D11 decoder blocks the GPU main thread for tens of milliseconds while it creates picture buffers).
+   */
+  private buildPlayback(document: VideoEditComposition, frame: number, visible: Set<number>): void {
+    const endFrame = frame + Math.ceil(document.fps * PLAYBACK_SCHEDULE_SECONDS)
+    const groups = new Map<string, { media: VideoEditMedia; clips: VideoEditClip[] }>()
+    for (const clip of document.clips) {
+      if (clip.kind !== 'video' || !visible.has(clip.track) || clip.start + clip.duration <= frame || clip.start >= endFrame) continue
+      const media = videoEditClipMedia(document, clip)
+      if (!media || media.kind !== 'video') continue
+      const key = `${media.path}\u0000${media.sourceRevision ?? ''}`
+      const group = groups.get(key) ?? { media, clips: [] }; group.clips.push(clip); groups.set(key, group)
+    }
+    const streams: PlaybackStream[] = []; const byClip = new Map<string, PlaybackStream>()
+    const ordered = [...groups.values()].map(group => ({ ...group, clips: group.clips.sort((a, b) => a.start - b.start) }))
+      .filter(group => group.clips.every((clip, index) => index === 0 || group.clips[index - 1].start + group.clips[index - 1].duration <= clip.start))
+      .sort((a, b) => a.clips[0].start - b.clips[0].start).slice(0, PLAYBACK_SCHEDULE_FILES)
+    for (const group of ordered) {
+      const entries: PlaybackStream['entries'] = []; const timestamps: number[] = []
+      for (const clip of group.clips) for (let at = Math.max(frame, clip.start); at < Math.min(endFrame, clip.start + clip.duration); at++) {
+        entries.push({ frame: at, clipId: clip.id }); timestamps.push(clipSourceSeconds(clip, at, document.fps))
+      }
+      const demux = this.acquireDemux(group.media)
+      const samples = (async function* (ready: Promise<SharedDemux>) {
+        const shared = await ready
+        if (!shared.video) return
+        yield* new VideoSampleSink(shared.video, shared.options).samplesAtTimestamps(timestamps)
+      })(demux.ready)
+      const primed = samples.next(); primed.catch(() => undefined)
+      const stream: PlaybackStream = { demux: demux.key, entries, cursor: 0, samples, primed, tail: Promise.resolve() }
+      streams.push(stream); for (const clip of group.clips) byClip.set(clip.id, stream)
+    }
+    this.playback = { document, endFrame, streams, byClip }
+  }
+  private async disposePlayback(): Promise<void> {
+    const playback = this.playback; this.playback = undefined
+    if (!playback) return
+    await Promise.allSettled(playback.streams.map(async stream => {
+      await stream.tail.catch(() => undefined)
+      const primed = stream.primed; stream.primed = undefined
+      if (primed) (await primed.catch(() => undefined))?.value?.close()
+      await stream.samples.return(); this.release(stream)
+    }))
+  }
+  /** The scheduled picture for exactly this frame and clip, or undefined to use the regular path. */
+  private takeScheduled(stream: PlaybackStream, frame: number, clipId: string): Promise<VideoSample | undefined> {
+    const pull = (): Promise<IteratorResult<VideoSample | null, void>> => { const primed = stream.primed; stream.primed = undefined; return primed ?? stream.samples.next() }
+    const next = stream.tail.catch(() => undefined).then(async () => {
+      while (stream.cursor < stream.entries.length && stream.entries[stream.cursor].frame < frame) {
+        stream.cursor++; const skipped = await pull(); skipped.value?.close()
+      }
+      const entry = stream.entries[stream.cursor]
+      if (!entry || entry.frame !== frame || entry.clipId !== clipId) return undefined
+      stream.cursor++
+      const result = await pull()
+      return result.done || !result.value ? undefined : result.value
+    })
+    stream.tail = next
+    return next
+  }
+  private upcomingVideoClips(document: VideoEditComposition, frame: number, visible: Set<number>): VideoEditClip[] {
+    const horizon = frame + Math.ceil(document.fps / 2)
+    return document.clips.filter(clip => clip.kind === 'video' && visible.has(clip.track) && clip.start > frame && clip.start <= horizon).slice(0, 2)
+  }
+  private preroll(clip: VideoEditClip, document: VideoEditComposition): void {
+    if (this.sources.has(clip.id) || this.playback?.byClip.has(clip.id)) return
+    const media = videoEditClipMedia(document, clip)
+    if (!media || media.kind !== 'video') return
+    const time = clipSourceSeconds(clip, clip.start, document.fps)
+    const pending = this.source(clip.id, media)
+    void pending.then(source => {
+      if (!source.video || source.iterator || source.prerolled) return
+      const iterator = source.video.samples(time)
+      source.iterator = iterator
+      source.prerolled = (async () => {
+        const next = await iterator.next()
+        if (this.disposed || this.sources.get(clip.id) !== pending || source.iterator !== iterator) { if (!next.done) next.value.close(); return }
+        if (!next.done) { source.current?.close(); source.current = next.value; source.previousTime = time }
+      })().catch(() => undefined).finally(() => { source.prerolled = undefined })
+    }, () => undefined)
+  }
   async render(frame: number, sequential = false, _scrubbing = false, shouldPresent: () => boolean = () => true, deadline?: number): Promise<{ canvas: OffscreenCanvas; sourceTimestamps: number[]; cacheHits: number; cacheBytes: number; presented: boolean; decodeMs: number; gpuMs: number; completion: Promise<void> }> {
     if (this.disposed) throw new Error('预览已关闭。')
     const document = this.document; const epoch = this.presentationEpoch
     const canPresent = (): boolean => !this.disposed && this.document === document && this.presentationEpoch === epoch && shouldPresent()
     const visible = videoEditVisibleTracks(document)
+    if (this.previewWidth && sequential) {
+      const forward = this.lastForwardFrame === frame - 1
+      if (this.playback && (this.playback.document !== document || frame >= this.playback.endFrame || !forward)) await this.disposePlayback()
+      // Only a confirmed forward run builds schedules; reverse play and single steps keep the seek path.
+      if (!this.playback && forward) this.buildPlayback(document, frame, visible)
+      this.lastForwardFrame = frame
+    } else { this.lastForwardFrame = undefined; if (this.playback) await this.disposePlayback() }
     const transitions = videoEditTransitionsAt(document, frame).filter(window => visible.has(window.left.track))
     const active = activeVideoEditClips(document, frame).filter(clip => clip.kind !== 'audio' && (!['code', 'graphic'].includes(clip.kind) || clip.opacity > 0 || activeVideoEditEffects(clip).length))
     const ids = new Set(active.map(clip => clip.id))
@@ -162,6 +302,10 @@ export class VideoEditRenderer {
       const media = videoEditClipMedia(document, clip)
       return clip.kind === 'video' && media ? [{ mediaId: media.path, time: clipSourceSeconds(clip, frame, document.fps) }] : []
     }))
+    // A cut opens a new demuxer/decoder; doing that on the boundary frame stalls playback.
+    // Open and decode the first picture of clips starting within half a second ahead of time.
+    const upcoming = sequential && this.previewWidth ? this.upcomingVideoClips(document, frame, visible) : []
+    for (const clip of upcoming) this.preroll(clip, document)
     let cacheHits = 0
     const picturesPending = active.map(async clip => {
       const media = videoEditClipMedia(document, clip)
@@ -177,11 +321,18 @@ export class VideoEditRenderer {
       const time = originalTime
       const pendingSource = this.source(clip.id, media)
       const source = await pendingSource
+      // Never race a pre-roll on the shared iterator: it would hand this frame the second picture.
+      await source.prerolled
       if (!source.video) throw new Error(`素材 ${media.name} 没有可解码的视频轨。`)
+      const scheduledStream = sequential && this.previewWidth ? this.playback?.byClip.get(clip.id) : undefined
+      const scheduled = scheduledStream ? await this.takeScheduled(scheduledStream, frame, clip.id) : undefined
       // A backwards source clock must use the shared GOP cache even when the
       // caller requests continuous playback; a forward iterator would re-decode
       // the whole GOP for every preceding picture.
-      if (this.previewWidth && (!sequential || time < source.previousTime)) {
+      if (scheduled) {
+        await source.iterator?.return(); source.iterator = undefined
+        source.current?.close(); source.current = scheduled
+      } else if (this.previewWidth && (!sequential || time < source.previousTime)) {
         await source.iterator?.return(); source.iterator = undefined
         let seeker = this.seekers.get(media.path)
         if (!seeker) { seeker = new VideoEditSeekDecoder(media.path, this.frameCache, (sample, compact) => this.compositor!.snapshot(sample, compact)); this.seekers.set(media.path, seeker) }
@@ -241,9 +392,9 @@ export class VideoEditRenderer {
     }
     const { presented, completion } = result
     const gpuMs = performance.now() - gpuStart
-    const activeIds = new Set(canPresent() ? active.map(clip => clip.id) : [...this.sources.keys()].filter(key => !key.startsWith('audio:')))
+    const activeIds = new Set(canPresent() ? [...active, ...upcoming].map(clip => clip.id) : [...this.sources.keys()].filter(key => !key.startsWith('audio:')))
     for (const [key, pending] of this.sources) if (!activeIds.has(key) && !key.startsWith('audio:')) {
-      this.sources.delete(key); const source = await pending; source.current?.close(); await source.iterator?.return(); source.input.dispose()
+      this.sources.delete(key); const source = await pending; source.current?.close(); await source.iterator?.return(); this.release(source)
     }
     const activeImages = new Set(canPresent() ? imageIds : this.images.keys())
     for (const key of this.images.keys()) if (!activeImages.has(key)) this.releaseImage(key)
@@ -296,16 +447,16 @@ export class VideoEditRenderer {
       }
     }
     for (const [key, pending] of this.sources) if (key.startsWith('audio:') && !activeAudio.has(key)) {
-      this.sources.delete(key); (await pending).input.dispose()
+      this.sources.delete(key); this.release(await pending)
     }
     return result
   }
   async dispose(): Promise<void> {
     if (this.disposed) return
     this.disposed = true
-    this.cancelPresentation(); await Promise.allSettled([this.codeSources?.dispose()])
+    this.cancelPresentation(); await Promise.allSettled([this.codeSources?.dispose(), this.disposePlayback()])
     await Promise.allSettled([...this.seekers.values()].map(seeker => seeker.dispose())); this.seekers.clear(); this.frameCache.clear()
-    await Promise.allSettled([...this.sources.values()].map(async pending => { const source = await pending; source.current?.close(); await source.iterator?.return(); source.input.dispose() }))
+    await Promise.allSettled([...this.sources.values()].map(async pending => { const source = await pending; source.current?.close(); await source.iterator?.return(); this.release(source) }))
     for (const key of this.images.keys()) this.releaseImage(key)
     this.sources.clear(); this.images.clear(); await this.compositor?.dispose(); this.canvas.width = 1; this.canvas.height = 1
   }

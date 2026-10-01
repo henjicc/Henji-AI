@@ -119,8 +119,9 @@ function createVideoEditCodeProjectScene({ controls = false } = {}) {
         document = await saved(page, file, value => value.sequences[0].clips.length === 4)
         // An empty timeline deliberately creates a matching new sequence (1.3).
         // Drag onto the populated 4K60 sequence to verify insertion into this target.
-        const timeline = page.getByRole('slider', { name: '剪辑时间定位' }).locator('..')
-        await page.locator(`[data-video-edit-project-entry="${staticItem.id}"]`).dragTo(timeline, { targetPosition: { x: 6, y: 28 + 3 * 32 + 16 } })
+        // Free video track 3 (code clips occupy 4; the monitor scene reuses this project and keeps 6/7 free).
+        const freeTrack = page.locator('[data-track-kind="video"][data-track-index="3"]')
+        await page.locator(`[data-video-edit-project-entry="${staticItem.id}"]`).dragTo(freeTrack, { targetPosition: { x: 208 + 6, y: 16 } })
         document = await saved(page, file, value => value.sequences[0].clips.length === 5)
         const staticClip = document.sequences[0].clips.find(clip => clip.itemId === staticItem.id)
         await change([{ kind: 'set_properties', entityType: 'video_edit.clip', target: { kind: 'video_edit.clip', id: `${document.id}:${staticClip.id}` }, properties: { 'video_edit.clip.start': 0, 'video_edit.clip.duration': 180 } }])
@@ -174,7 +175,8 @@ function createVideoEditCodeProjectScene({ controls = false } = {}) {
           window.__codePlayObserver = new MutationObserver(() => window.__codePlayFrames.push({ at: performance.now(), frame: Number(canvas.dataset.presentedFrame), decodeMs: Number(canvas.dataset.decodeMs), gpuMs: Number(canvas.dataset.gpuMs), renderMs: Number(canvas.dataset.renderMs) }))
           window.__codePlayObserver.observe(canvas, { attributes: true, attributeFilter: ['data-presented-frame'] })
         })
-        await button(page, '播放').click(); await button(page, '暂停').waitFor({ state: 'visible' }); await button(page, '播放').waitFor({ state: 'visible', timeout: 20000 })
+        // The timeline transport toggles play; playback stops on the last frame.
+        await button(page, '播放／暂停').click(); await page.waitForFunction(() => document.querySelector('canvas[aria-label="剪辑画面"]')?.dataset.presentedFrame === '179', null, { timeout: 20000 })
         const frames = await page.evaluate(() => { window.__codePlayObserver.disconnect(); return window.__codePlayFrames })
         const unique = [...new Map(frames.filter(frame => frame.frame > 0).map(frame => [frame.frame, frame])).values()]
         assert.deepEqual(Array.from({ length: 179 }, (_, index) => index + 1).filter(frame => !unique.some(value => value.frame === frame)), [], '混合预览不能省略视频帧')
