@@ -24,6 +24,13 @@ test('独立浮窗验收场景只登记一次并声明写入用户数据', () =>
   assert.equal(scene.writesUserData, true)
   assert.equal(UI_INSPECTION_SCENES.filter(candidate => candidate.id === scene.id).length, 1)
 })
+test('智能体剪辑回环验收场景只登记一次并声明写入用户数据', () => {
+  const { createVideoEditAgentLoopScene } = require('./uiInspectionSceneVideoEditAgentLoop.cjs')
+  const scene = createVideoEditAgentLoopScene()
+  assert.equal(scene.id, 'video-edit-agent-loop')
+  assert.equal(scene.writesUserData, true)
+  assert.equal(UI_INSPECTION_SCENES.filter(candidate => candidate.id === scene.id).length, 1)
+})
 const { attachUiInspectionCommon } = require('./uiInspectionSceneCommon.cjs')
 const { UI_AUDIT_RULES } = require('./uiAuditDom.cjs')
 const {

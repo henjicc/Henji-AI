@@ -35,6 +35,8 @@ export function surfaceProfile(surface: string): { tools: string[]; guidance: st
   if (surface === 'workspace.generation') return { tools: ['search_models'], guidance: '当前为生成页。生成任务加载 task=generation；模型参数按所选模型读取。' }
   if (surface === 'tool.camera_stage') return { tools: ['get_camera_stage_project'], guidance: '当前为三维场景。普通属性走通用实体，场景算法与渲染按需加载 camera_stage 领域。' }
   if (surface === 'tool.image_edit') return { tools: [], guidance: '当前为图片编辑。图层普通读写走通用实体，编辑算法、预览及保存按需加载 image_edit 领域。' }
+  if (surface === 'workspace.video_edit') return { tools: ['observe_video_edit_frame', 'read_application_media'],
+    guidance: '当前为剪辑。宿主上下文的 videoEdit 给出工程、序列、播放头、入出点与选区；工程、序列、项目项、片段、代码素材与参数关键帧走通用实体读改增删。修改后用 observe_video_edit_frame 取指定合成帧或源帧，再用 read_application_media 读取画面核对。保存、撤销、拆分、导出、收录与创作结果回填按需加载 video_edit 领域。' }
   if (surface === 'tool.audio_edit') return { tools: [], guidance: '当前为口播剪辑。工程、词块与建议走通用实体，转写、分析、预览和导出按需加载 audio_edit 领域。' }
   if (surface.startsWith('settings.')) return { tools: ['search_application_settings'], guidance: '当前为设置。先定位需要的设置属性，再通过通用实体读取和修改。' }
   return { tools: [], guidance: '按当前界面与用户任务使用通用实体；缺少专用操作时再按领域或工具名加载。' }

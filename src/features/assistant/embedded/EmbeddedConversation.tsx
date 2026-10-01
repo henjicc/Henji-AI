@@ -61,7 +61,7 @@ export function EmbeddedConversation(): JSX.Element {
     if (!request) { setDocument(createEmptyPromptDocument()); setAttachments([]) }
     const context = createHostContextSnapshot()
     void getPlatform().embeddedAgent.prompt({ text, clientMessageId, model: { providerId: selectedModel.providerId, modelId: selectedModel.modelId }, access,
-      context: request?.context ?? JSON.stringify({ workspace: context.workspace, project: context.project, surface: context.surface }), attachments: submittedAttachments, delivery: request ? 'wait' : delivery })
+      context: request?.context ?? JSON.stringify({ workspace: context.workspace, project: context.project, surface: context.surface, ...(context.videoEdit ? { videoEdit: context.videoEdit } : {}) }), attachments: submittedAttachments, delivery: request ? 'wait' : delivery })
       .catch(error => {
         if (!request) { setDocument(sentDocument); setAttachments(sentAttachments) }
         reportEmbeddedAgentError(error)

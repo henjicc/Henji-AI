@@ -254,6 +254,10 @@ describe('Pi official SDK engine', () => {
     expect(logs[0].requestMetrics!.toolBytes).toBeLessThan(fullBytes * 0.3)
     if (process.env.HENJI_PI_MEASURE === '1') process.stdout.write(`${JSON.stringify({ initialToolBytes: logs[0].requestMetrics!.toolBytes,
       fullToolBytes: fullBytes, initialToolCount: initialTools.length, contextCount: logs[1].requestMetrics!.contextCount })}\n`)
+    await f.engine.command({ action: 'prompt', input: { text: '检查剪辑画面', context: JSON.stringify({ surface: { id: 'workspace.video_edit' } }) } })
+    const editNames = (f.requests.at(-1)!.tools as unknown as Array<{ name: string }>).map(tool => tool.name)
+    expect(editNames).toEqual(expect.arrayContaining(['observe_video_edit_frame', 'read_application_media', 'change_application_entities', 'load_application_tools']))
+    expect(editNames).not.toContain('export_video_edit'); expect(editNames).not.toContain('get_canvas_project')
     for (const [surface, basic] of [['tool.camera_stage', 'get_camera_stage_project'], ['workspace.generation', 'search_models'], ['settings.general', 'search_application_settings']]) {
       await f.engine.command({ action: 'prompt', input: { text: '当前页面', context: JSON.stringify({ surface: { id: surface } }) } })
       const names = (f.requests.at(-1)!.tools as unknown as Array<{ name: string }>).map(tool => tool.name)

@@ -56,3 +56,14 @@ it('公共观察按固定工程版本取指定合成帧与源时间画面，不�
     expect(render.calls).toHaveLength(2)
   } finally { app.dispose() }
 })
+
+it('轨道公开只读轨道号与类型，供按整数轨道号落片段；公共写入拒绝修改', async () => {
+  const owner = (await createVideoEditProject())!; const id = owner.document.id; const track = owner.document.sequences[0].tracks.find(value => value.kind === 'video')!
+  const app = createApplicationHarness()
+  try {
+    const ref = { kind: 'video_edit.track', id: `${id}:${track.id}` }
+    expect((await app.read(ref, ['video_edit.track.index', 'video_edit.track.kind'])).properties).toEqual({ 'video_edit.track.index': track.index, 'video_edit.track.kind': 'video' })
+    expect((await app.change(ref, { 'video_edit.track.index': 5 })).ok).toBe(false)
+    expect(owner.document.sequences[0].tracks.find(value => value.id === track.id)!.index).toBe(track.index)
+  } finally { app.dispose() }
+})
