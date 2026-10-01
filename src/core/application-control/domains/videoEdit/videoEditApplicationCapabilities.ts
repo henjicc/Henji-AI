@@ -34,6 +34,32 @@ export const collectVideoEditCodeAssetCapability = defineApplicationCapability({
   verificationContract: { kind: 'effect_receipt', requireEffects: true, requireVerifiedEffects: true },
   resolveObservedEffects: (_input, result) => [{ effect: 'execute', entityTypes: ['asset'], propertyIds: [], targetRefs: [result.resultRef], count: 1, verified: result.verification.verified, evidence: result.verification.verified ? [result.verification.condition] : [] }],
 })
+const ref = <K extends string>(kind: K) => applicationRefSchema.extend({ kind: z.literal(kind) }).strict()
+const creativeResult = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('generation.result'), resultRef: ref('generation.result'), outputIndex: z.number().int().nonnegative().max(199) }).strict(),
+  z.object({ kind: z.literal('canvas.node'), canvasProjectRef: ref('canvas.project'), nodeRef: ref('canvas.node') }).strict(),
+  z.object({ kind: z.literal('image_edit.document'), documentRef: ref('image_edit.document'), revision: z.number().int().nonnegative() }).strict(),
+  z.object({ kind: z.literal('audio_edit.project'), audioProjectRef: ref('audio_edit.project'), includeProcessing: z.boolean().optional() }).strict(),
+  z.object({ kind: z.literal('camera_stage.render_task'), taskRef: ref('camera_stage.render_task') }).strict(),
+])
+const placementInput = z.discriminatedUnion('mode', [
+  z.object({ mode: z.literal('add'), frame: z.number().int().nonnegative(), trackRef: ref('video_edit.track'), durationFrames: z.number().int().positive().optional() }).strict(),
+  z.object({ mode: z.literal('replace'), clipRef: ref('video_edit.clip') }).strict(),
+])
+const clipResultRef = ref('video_edit.clip')
+const placeOutput = z.object({ resultRef: clipResultRef, projectRef, assetRef, message: z.string(), verification: z.object({ verified: z.boolean(), condition: z.string(), target: clipResultRef }) }).strict()
+export const placeVideoEditCreativeResultCapability = defineApplicationCapability({
+  id: 'place_video_edit_creative_result', title: '把创作结果放入剪辑', description: '把已正式完成的生成结果、画布节点输出、图片编辑文档版本、口播剪辑工程（导出新WAV与SRT）或三维渲染任务结果，加入指定序列轨道的整数帧，或替换明确片段。目标在开始前固定，期间原工程被修改、关闭或取消则不回填；结果先收录到现有资产库并保留原路径，一次撤销即可移除。不会发起新的付费生成。',
+  version: 1, domain: 'video_edit', aliases: ['生成结果加入剪辑', '替换剪辑片段', '图片编辑结果回填剪辑', '口播加入剪辑', '三维渲染加入剪辑'], readOnly: false, risk: 'R1', dataClasses: ['C1'], permission: 'video_edit:write', idempotent: false, destructive: false, timeoutMs: 600000, supportsPreview: false, supportsUndo: false,
+  requiredScopes: ['video_edit', 'assets'], acceptsRefs: ['video_edit.project', 'video_edit.sequence', 'video_edit.track', 'video_edit.clip', 'generation.result', 'canvas.project', 'canvas.node', 'image_edit.document', 'audio_edit.project', 'camera_stage.render_task'], producesRefs: ['video_edit.clip', 'asset'],
+  prerequisites: ['来源必须已经完成并保存为本地文件；口播来源会请用户选择新的 WAV 文件名（同名 SRT 一并写出）。'],
+  inputSchema: z.object({ projectRef, sequenceRef: ref('video_edit.sequence'), placement: placementInput, result: creativeResult }).strict(), outputSchema: placeOutput,
+  concurrencyKey: 'video_edit', resolveConcurrencyKey: parsed => `video_edit:${parsed.projectRef.id}`,
+  resolveOperationTargets: parsed => [parsed.projectRef], resolveOperationWriteTargets: parsed => [parsed.projectRef],
+  control: capabilityControl('execute', ['video_edit.clip', 'asset'], { cancelable: true, revisionScopes: ['video_edit', 'assets'] }), summarize: result => result.message,
+  verificationContract: { kind: 'effect_receipt', requireEffects: true, requireVerifiedEffects: true },
+  resolveObservedEffects: (_input, result) => [{ effect: 'execute', entityTypes: ['video_edit.clip'], propertyIds: [], targetRefs: [result.resultRef], count: 1, verified: result.verification.verified, evidence: result.verification.verified ? [result.verification.condition] : [] }],
+})
 export const VIDEO_EDIT_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinition[] = [...[
   ['save_video_edit', '保存剪辑工程', '将当前修改保存到用户为工程选择的本地文件。失败后只重试保存，不重复修改。'],
   ['undo_video_edit', '撤销剪辑修改', '撤销目标工程的一步手动或助手修改。'],
@@ -51,4 +77,4 @@ export const VIDEO_EDIT_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinitio
     entityTypes: ['video_edit.project'], propertyIds: [], targetRefs: [result.resultRef], count: 1,
     verified: result.verification.verified, evidence: result.verification.verified ? [result.verification.condition] : [],
   }],
-})), collectVideoEditOutputCapability, collectVideoEditCodeAssetCapability]
+})), collectVideoEditOutputCapability, collectVideoEditCodeAssetCapability, placeVideoEditCreativeResultCapability]

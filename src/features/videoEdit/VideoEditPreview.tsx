@@ -11,6 +11,7 @@ import { useVideoEditPictureGesture } from './panels/useVideoEditPictureGesture'
 import { timelineTimecode } from './timeline/timelineGeometry'
 import { captureVideoEditProgramFrame, registerVideoEditProgramCapture } from './application/videoEditProgramCapture'
 import { collectVideoEditOutput } from './application/videoEditOutputs'
+import { editVideoEditProgramFrame } from './application/videoEditFrameEdit'
 import { useAssetLibraryStore } from '@/features/assets/store/assetLibraryStore'
 import { openAssetLibrary } from '@/stores/navigationStore'
 
@@ -254,6 +255,11 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
           if (activeVideoEditInstance() === instance) { useAssetLibraryStore.getState().setSelectedAsset(asset); openAssetLibrary('floating') }
         }).catch(onError).finally(() => setCollecting(false))
       }}>{collecting ? '正在收录选帧…' : '选帧加入资产库'}</UiButton>
+      <UiButton variant="plain" disabled={collecting || preparing} title="在图片编辑中修改当前帧，完成后可回填到此帧上方的空画面轨道" onClick={() => {
+        setCollecting(true)
+        setVideoEditView(instance.document.id, { playing: false })
+        void editVideoEditProgramFrame(instance.document.id).catch(onError).finally(() => setCollecting(false))
+      }}>编辑当前帧</UiButton>
       {(['select', 'move', 'point', 'region'] as const).map((value, index) => <UiButton key={value} variant="plain" aria-pressed={mode === value} onClick={() => setMode(value)}>{['选择', '移动画面', '点标注', '区域标注'][index]}</UiButton>)}
       {(mode === 'point' || mode === 'region') && <UiInput aria-label="标注文字" value={label} onChange={event => setLabel(event.target.value)} placeholder="标注文字" />}
       {mode !== 'select' && !instance.selection && <UiError message="请先选择要编辑的片段" />}

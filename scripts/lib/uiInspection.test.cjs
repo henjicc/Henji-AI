@@ -10,6 +10,13 @@ test('可编辑代码资产场景只在显式写入验收下登记且可独立�
   assert.equal(scene.writesUserData, true)
   assert.equal(UI_INSPECTION_SCENES.filter(candidate => candidate.id === scene.id).length, 1)
 })
+test('创作结果回填验收场景只登记一次并声明写入用户数据', () => {
+  const { createVideoEditCreativeResultsScene } = require('./uiInspectionSceneVideoEditCreativeResults.cjs')
+  const scene = createVideoEditCreativeResultsScene({})
+  assert.equal(scene.id, 'video-edit-creative-results')
+  assert.equal(scene.writesUserData, true)
+  assert.equal(UI_INSPECTION_SCENES.filter(candidate => candidate.id === scene.id).length, 1)
+})
 const { attachUiInspectionCommon } = require('./uiInspectionSceneCommon.cjs')
 const { UI_AUDIT_RULES } = require('./uiAuditDom.cjs')
 const {

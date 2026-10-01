@@ -103,6 +103,7 @@ export function ImageMarkToolV3Host(props: ImageMarkToolV3HostProps): JSX.Elemen
           onOpenFile={onOpenFile}
           onPasteFromClipboard={onPasteFromClipboard}
           onCreateBlank={onCreateBlank}
+          videoEditReturn={props.videoEditReturn}
         />
       )}
       className="min-h-0 flex-1"

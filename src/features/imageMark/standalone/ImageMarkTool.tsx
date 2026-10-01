@@ -81,7 +81,8 @@ export function ImageMarkTool({ onBack }: ImageMarkToolProps = {}): JSX.Element 
     url: string,
     name: string,
     document: ImageEditDocument = createEmptyImageEditDocument(),
-    dpi?: number
+    dpi?: number,
+    returnTo?: string
   ) => {
     documentRef.current = document;
     // 打开/拖入的本地图片可能在媒体协议默认白名单之外,先授权其所在目录,
@@ -102,6 +103,7 @@ export function ImageMarkTool({ onBack }: ImageMarkToolProps = {}): JSX.Element 
       sessionKey: sourceSequenceRef.current,
       initialDocument: document,
       ...(dpi ? { dpi } : {}),
+      ...(returnTo ? { returnTo } : {}),
     };
     setSource(nextSource);
     if (isImageEditorV3Enabled()) rememberImageMarkToolWorkspaceSourceV3(nextSource);
@@ -134,7 +136,9 @@ export function ImageMarkTool({ onBack }: ImageMarkToolProps = {}): JSX.Element 
     void acceptSource(
       pendingHandoff.sourceUrl,
       pendingHandoff.sourceName,
-      pendingHandoff.document
+      pendingHandoff.document,
+      undefined,
+      pendingHandoff.sessionRef
     )
       .then(() => consumeHandoff(pendingHandoff.sessionRef))
       .catch((error) => {
@@ -394,6 +398,7 @@ export function ImageMarkTool({ onBack }: ImageMarkToolProps = {}): JSX.Element 
               sourceSessionKey={source.sessionKey}
               initialDocument={source.initialDocument}
               initialSession={source.session}
+              videoEditReturn={source.returnTo}
               onSessionReferenceChange={(session) => {
                 rememberV3Session(source.sessionKey, session);
               }}

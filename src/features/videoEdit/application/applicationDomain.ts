@@ -7,7 +7,7 @@ import { requireVideoEditInstance, saveVideoEdit, type VideoEditInstance } from 
 import { editVideoSequence, undoVideoEdit } from './videoEditService'
 import { splitVideoEditRef } from './videoEditReflection'
 import { splitVideoEditClip } from '@/core/videoEdit/document'
-import { VIDEO_EDIT_APPLICATION_CAPABILITIES, collectVideoEditOutputCapability, collectVideoEditCodeAssetCapability } from '@/core/application-control/domains/videoEdit/videoEditApplicationCapabilities'
+import { VIDEO_EDIT_APPLICATION_CAPABILITIES, collectVideoEditOutputCapability, collectVideoEditCodeAssetCapability, placeVideoEditCreativeResultCapability } from '@/core/application-control/domains/videoEdit/videoEditApplicationCapabilities'
 import { exportVideoEdit, cancelVideoEditExport, videoEditExportTask } from './videoEditExport'
 import { getPlatform } from '@/platform/runtime'
 import { VideoEditSourceExecutor } from './videoEditSourceExecutor'
@@ -17,6 +17,7 @@ import { collectVideoEditOutput } from './videoEditOutputs'
 import { captureVideoEditProgramFrame } from './videoEditProgramCapture'
 import { collectVideoEditCodeAsset, importVideoEditCodeAsset, type VideoEditCodeAssetTarget } from './videoEditCodeAssets'
 import { assetApplicationService } from '@/features/assets/application/assetApplicationService'
+import { placeVideoEditCreativeResultFromCapability } from './videoEditResultCapability'
 
 const persistenceOwners = new WeakMap<VideoEditInstance, ApplicationPersistenceParticipant>()
 
@@ -29,6 +30,7 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
   },
   registerCapabilities(registrar) {
     for (const definition of VIDEO_EDIT_APPLICATION_CAPABILITIES) registrar.registerHandler(definition.id, async (raw, context) => {
+      if (definition.id === placeVideoEditCreativeResultCapability.id) return await placeVideoEditCreativeResultFromCapability(placeVideoEditCreativeResultCapability.inputSchema.parse(raw), context.signal)
       if (definition.id === collectVideoEditCodeAssetCapability.id) {
         const input = collectVideoEditCodeAssetCapability.inputSchema.parse(raw)
         const ref = splitVideoEditRef(input.targetRef)

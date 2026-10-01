@@ -11,6 +11,8 @@ export interface ImageMarkToolWorkspaceSourceV3 {
   initialDocument: ImageEditDocument
   dpi?: number
   session?: ImageEditSessionReferenceV3
+  /** Handoff session of a video-edit program frame that should return to its original slot. */
+  returnTo?: string
 }
 
 let rememberedSource: ImageMarkToolWorkspaceSourceV3 | null = null

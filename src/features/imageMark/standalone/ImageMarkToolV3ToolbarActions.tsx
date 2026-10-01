@@ -5,6 +5,9 @@ import { PanelTrigger, UI_TEXT_META_CLASS, UiButton, UiOptionButton } from '@/co
 import { resolveImageEditorReadinessReasonV3 } from '@/features/imageEdit/v3/editor/readinessPresentationV3'
 import type { ImageEditorV3RasterExportFormat } from '@/platform/contracts/imageEditorV3'
 import { ImageMarkSourceMenu } from './ImageMarkSourceMenu'
+import { useNotification } from '@/contexts/NotificationContext'
+import { VideoEditSendMenu } from '@/features/videoEdit/panels/VideoEditSendMenu'
+import { readVideoEditImageReturn } from '@/features/videoEdit/application/videoEditFrameEdit'
 import type {
   ImageMarkToolV3HostController,
   ImageMarkToolV3HostProps,
@@ -18,7 +21,7 @@ const RELEASE_EXPORT_FORMATS = new Set<ImageEditorV3RasterExportFormat>([
 
 interface ImageMarkToolV3ToolbarActionsProps extends Pick<
   ImageMarkToolV3HostProps,
-  'onOpenFile' | 'onPasteFromClipboard' | 'onCreateBlank'
+  'onOpenFile' | 'onPasteFromClipboard' | 'onCreateBlank' | 'videoEditReturn'
 > {
   host: ImageMarkToolV3HostController
 }
@@ -45,8 +48,11 @@ export function ImageMarkToolV3ToolbarActions({
   onOpenFile,
   onPasteFromClipboard,
   onCreateBlank,
+  videoEditReturn,
 }: ImageMarkToolV3ToolbarActionsProps): JSX.Element {
   const { t } = useTranslation('ui')
+  const { showNotification } = useNotification()
+  const boundReturn = readVideoEditImageReturn(videoEditReturn)
   const saveFailed = host.persistenceStatus?.kind === 'failed'
   const exportUnavailable = host.rasterExportReadiness.state !== 'ready'
   const exportReason = exportUnavailable
@@ -72,6 +78,17 @@ export function ImageMarkToolV3ToolbarActions({
           {t('imageEditor.v3.host.toolbar.retrySave')}
         </UiButton>
       ) : null}
+      <VideoEditSendMenu
+        mediaKind="image"
+        disabled={host.isHostBusy || saveFailed}
+        notify={showNotification}
+        boundTarget={boundReturn}
+        resolveSource={async () => {
+          // The edit lands from the saved revision; later strokes need a new send.
+          const reference = await host.flushPending()
+          return { kind: 'image_edit.document', documentRef: `image-edit-v3:${reference.documentId}`, revision: reference.revision }
+        }}
+      />
       {host.rasterExport ? (
         <>
           <span className={UI_TEXT_META_CLASS}>

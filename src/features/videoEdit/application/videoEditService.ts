@@ -228,12 +228,12 @@ export function updateVideoEditSequenceSettings(projectId: string, sequenceId: s
   const { name, binId, ...timing } = settings
   editVideoSequence(projectId, sequenceId, sequence => ({ ...changeVideoEditSequenceSettings(sequence, timing), ...(name !== undefined ? { name } : {}), ...(binId !== undefined ? { binId: binId || undefined } : {}) }))
 }
-export function editVideoProject(id: string, update: (document: VideoEditDocument) => VideoEditDocument): VideoEditDocument {
+export function editVideoProject(id: string, update: (document: VideoEditDocument) => VideoEditDocument, preserveProgramAnchors: readonly string[] = []): VideoEditDocument {
   assertApplicationWritesAllowed()
   const instance = requireVideoEditInstance(id)
   assertVideoEditWritable(instance)
   if (gestures.has(instance)) throw new Error('请先完成当前参数调整。')
-  return applyVideoEditDocument(instance, update, true)
+  return applyVideoEditDocument(instance, update, true, false, preserveProgramAnchors)
 }
 /** Used only by verified transaction receipts; a rollback restores the whole edit, including locks. */
 export function restoreVideoEditSnapshot(id: string, expected: VideoEditDocument, snapshot: VideoEditDocument): VideoEditDocument {
@@ -242,9 +242,9 @@ export function restoreVideoEditSnapshot(id: string, expected: VideoEditDocument
   if (gestures.has(instance) || !sameDocumentContent(instance.document, expected)) throw new Error('工程已有后续修改，请逐步撤销。')
   return applyVideoEditDocument(instance, () => snapshot, true, true)
 }
-function applyVideoEditDocument(instance: VideoEditInstance, update: (document: VideoEditDocument) => VideoEditDocument, recordHistory: boolean, restoring = false): VideoEditDocument {
+function applyVideoEditDocument(instance: VideoEditInstance, update: (document: VideoEditDocument) => VideoEditDocument, recordHistory: boolean, restoring = false, preserveProgramAnchors: readonly string[] = []): VideoEditDocument {
   const requested = update(structuredClone(instance.document))
-  const next = videoEditDocumentSchema.parse(restoring ? requested : reconcileVideoEditTimedContent(instance.document, requested))
+  const next = videoEditDocumentSchema.parse(restoring ? requested : reconcileVideoEditTimedContent(instance.document, requested, preserveProgramAnchors))
   if (!restoring) assertVideoEditLockedTracks(instance.document, next)
   validateCodeMaterialDocument(next, readVideoEditCodeMetadata(instance, next))
   if (JSON.stringify(next) === JSON.stringify(instance.document)) return instance.document
@@ -387,9 +387,20 @@ export async function openVideoEditProject(path?: string): Promise<VideoEditInst
   if (!chosen || Array.isArray(chosen)) return null
   const existing = listVideoEditInstances().find(instance => instance.path === chosen)
   if (existing) { focusVideoEdit(existing.document.id); return existing }
-  const raw: unknown = JSON.parse(await getPlatform().system.fs.readTextFile(chosen))
+  const text = await getPlatform().system.fs.readTextFile(chosen)
+  let raw: unknown
+  try { raw = JSON.parse(text) } catch (error) {
+    logger.warn('剪辑工程文件不是有效 JSON', { event: 'video_edit.project.open.invalid_json', error })
+    throw new Error('工程文件已损坏，无法打开；原文件未被修改。')
+  }
   if (typeof raw === 'object' && raw !== null && 'version' in raw && raw.version !== 2) throw new Error('此工程使用不支持的旧格式。请保留原文件并新建工程。')
-  const document = videoEditDocumentSchema.parse(raw)
+  const parsed = videoEditDocumentSchema.safeParse(raw)
+  // Schema paths are diagnostics, not user language; they go to the log only.
+  if (!parsed.success) {
+    logger.warn('剪辑工程文件内容不完整', { event: 'video_edit.project.open.invalid_document', context: { issues: parsed.error.issues.slice(0, 10).map(issue => ({ path: issue.path.join('.'), message: issue.message })) } })
+    throw new Error('工程文件内容不完整或已损坏，无法打开；原文件未被修改。')
+  }
+  const document = parsed.data
   try {
     validateVideoEditGraphicTextBudget(document)
     const codeMetadata = await prepareVideoEditCodeMetadata(document)

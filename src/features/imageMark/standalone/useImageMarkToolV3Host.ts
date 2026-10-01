@@ -52,6 +52,8 @@ export interface ImageMarkToolV3HostProps {
   initialDocument: ImageEditDocument
   /** 工具箱切走再返回时只凭稳定引用恢复，不重新导入来源。 */
   initialSession?: ImageEditSessionReferenceV3
+  /** Present when the image came from a video-edit program frame. */
+  videoEditReturn?: string
   onSessionReferenceChange?: (session: ImageEditSessionReferenceV3) => void
   onBack?: () => void
   onOpenFile: () => void | Promise<void>

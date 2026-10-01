@@ -244,6 +244,12 @@
     "tools": "Toolbox",
     "assets": "Assets"
   },
+  "videoEditSend": {
+    "short": "Add to edit",
+    "addToPlayhead": "Add at the playhead of the open edit project",
+    "added": "Added to the edit and saved; undo it in the editor",
+    "failed": "Could not add to the edit"
+  },
   "assetLibrary": {
     "collect": "Add to asset library",
     "assetShort": "Asset",

@@ -34,6 +34,8 @@ import { useAddToAssetLibrary } from '@/features/assets/hooks/useAddToAssetLibra
 import { checkAssetPaths } from '@/commands/assetLibrary'
 import { openAssistantForDiagnosis } from '@/features/assistant/diagnostics/openAssistantDiagnosis'
 import { TaskListRetentionContext } from '../hooks/useTaskListRetention'
+import { videoEditSendMenuItems } from '@/features/videoEdit/panels/videoEditSendActions'
+import { ICON_WORKSPACE_VIDEO_EDIT } from '@/core/theme/icons'
 export interface TaskCardProps {
   task: GenerationTask
   onDownload: (filePath: string, fromButton?: boolean) => Promise<void>
@@ -124,6 +126,10 @@ const TaskCard = React.memo(function TaskCard({
       retention?.setActive(task.id, 'collect', false)
     }
   }
+  // Only saved local outputs can enter an edit; each output keeps its own index.
+  const videoEditItems = (mediaKind: 'image' | 'video' | 'audio', outputIndex: number, filePath: string | undefined): MenuItem[] => filePath
+    ? videoEditSendMenuItems(mediaKind, () => ({ kind: 'generation.result', id: task.id, outputIndex }), notify, <ICON_WORKSPACE_VIDEO_EDIT className="w-4 h-4" />)
+    : []
   const {
     startImageDrag,
     startVideoDrag,
@@ -274,6 +280,7 @@ const TaskCard = React.memo(function TaskCard({
             return (
               <div
                 key={`${task.id}-img-${index}`}
+                data-generation-result={task.id}
                 className={`relative w-64 overflow-hidden rounded-lg ${UI_INSET_SURFACE_CLASS}`}
                 onClick={() => handleImageClick(url, urls, filePaths)}
                 onContextMenu={(e) =>
@@ -299,6 +306,7 @@ const TaskCard = React.memo(function TaskCard({
                       onClick: async () => { if (filePath) await onDownload(filePath, false) },
                       disabled: !filePath,
                     },
+                    ...videoEditItems('image', index, filePath),
                   ])
                 }
                 onMouseDown={(e) => {
@@ -363,6 +371,7 @@ const TaskCard = React.memo(function TaskCard({
                 onClick: async () => { if (filePath) await onDownload(filePath, false) },
                 disabled: !filePath,
               },
+              ...videoEditItems('video', 0, filePath),
             ])
           }
           onMouseDown={(e) => {
@@ -411,6 +420,7 @@ const TaskCard = React.memo(function TaskCard({
                 onClick: async () => { if (filePath) await onDownload(filePath, false) },
                 disabled: !filePath,
               },
+              ...videoEditItems('audio', 0, filePath),
             ])
           }
        />

@@ -45,11 +45,13 @@ export function retimeVideoEditContent(before: VideoEditSequence, after: VideoEd
 }
 
 /** Raw property writes receive the same clip anchoring as manual timeline commands. */
-export function reconcileVideoEditTimedContent(before: VideoEditDocument, requested: VideoEditDocument): VideoEditDocument {
+export function reconcileVideoEditTimedContent(before: VideoEditDocument, requested: VideoEditDocument, preserveProgramAnchors: readonly string[] = []): VideoEditDocument {
   return { ...requested, sequences: requested.sequences.map(sequence => {
     const previous = before.sequences.find(value => value.id === sequence.id)
     if (!previous || previous.frameRate.numerator * sequence.frameRate.denominator !== sequence.frameRate.numerator * previous.frameRate.denominator || JSON.stringify(previous.clips) === JSON.stringify(sequence.clips)) return sequence
-    const mapped = retimeVideoEditContent(previous, sequence)
+    // Replacing a clip's source preserves its program anchors; it is not an in-trim.
+    const replacementOrigins = new Map(sequence.clips.filter(clip => preserveProgramAnchors.includes(clip.id) || previous.clips.some(prior => prior.id === clip.id && prior.itemId !== clip.itemId)).map(clip => [clip.id, { originalId: clip.id, shift: 0 }]))
+    const mapped = retimeVideoEditContent(previous, sequence, replacementOrigins)
     return { ...sequence, ...(JSON.stringify(previous.markers) === JSON.stringify(sequence.markers) && mapped.markers ? { markers: mapped.markers } : {}), ...(JSON.stringify(previous.captions) === JSON.stringify(sequence.captions) && mapped.captions ? { captions: mapped.captions } : {}), ...(JSON.stringify(previous.transitions) === JSON.stringify(sequence.transitions) && mapped.transitions ? { transitions: mapped.transitions } : {}) }
   }) }
 }

@@ -264,7 +264,7 @@ export class VideoEditCollectionExecutor implements ApplicationCollectionExecuto
       if (nested && !sequence) throw new Error('目标序列不存在。')
       if (step.operation.kind === 'create') {
         for (const item of step.operation.items) {
-          const allowed = new Set(VIDEO_EDIT_FIELDS[this.entityType].filter(field => !VIDEO_EDIT_CONTROLLED_AGGREGATES.some(key => field.propertyId.endsWith(`.${key}`)) && !(VIDEO_EDIT_COMPOSITE_TYPES.some(type => type === this.entityType) && ['sequence_id', 'clip_id'].some(key => field.propertyId.endsWith(`.${key}`)))).map(field => field.propertyId))
+          const allowed = new Set(VIDEO_EDIT_FIELDS[this.entityType].filter(field => !VIDEO_EDIT_CONTROLLED_AGGREGATES.some(key => videoEditDataKey(field.propertyId.split('.').at(-1)!) === key) && !(VIDEO_EDIT_COMPOSITE_TYPES.some(type => type === this.entityType) && ['sequence_id', 'clip_id'].some(key => field.propertyId.endsWith(`.${key}`)))).map(field => field.propertyId))
           if (Object.keys(item.properties).some(key => !allowed.has(key))) throw new Error('创建仅接受已公开的实体字段；代码实例由正式源码检查或已有项目项维护。')
           const values = videoEditCollectionValues(this.entityType, item.properties)
           for (const key of ['binId', 'parentId', 'linkId', 'groupId', 'clipId']) if (values[key] === '') delete values[key]

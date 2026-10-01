@@ -56,7 +56,7 @@ describe('工具栏复制结果反馈', () => {
   })
 })
 
-vi.mock('@/commands/assetLibrary', () => ({ checkAssetPaths: vi.fn(async () => [false]) }))
+vi.mock('@/commands/assetLibrary', async (importOriginal) => ({ ...await importOriginal<Record<string, unknown>>(), checkAssetPaths: vi.fn(async () => [false]) }))
 import { checkAssetPaths } from '@/commands/assetLibrary'
 it('位置、选中和无关数据变化不重复查询资产，媒体变化才查询', async () => {
   const node = { id: 'drag-media', type: 'uploadNode', position: { x: 0, y: 0 }, data: { imageUrl: 'D:/fixture/a.jpg', aspectRatio: '2:3' } } as CanvasNode

@@ -57,6 +57,10 @@ import { NodeDownloadMenu } from './NodeDownloadMenu';
 import { useAddToAssetLibrary } from '@/features/assets/hooks/useAddToAssetLibrary';
 import { resolveLocalAssetPath } from '@/features/assets/services/assetCollectionService';
 import { checkAssetPaths } from '@/commands/assetLibrary';
+import { ICON_WORKSPACE_VIDEO_EDIT } from '@/core/theme/icons';
+import { createCameraStageRenderTaskRef } from '@/features/cameraStage/application/cameraStageRenderCapabilityAdapter';
+import { sendCreativeResultToVideoEdit } from '@/features/videoEdit/application/videoEditResultSend';
+import type { VideoEditCreativeSourceRequest } from '@/core/videoEdit/creativeResult';
 import { useNodeDownload } from '@/features/canvas/hooks/useNodeDownload';
 import { runCanvasNode } from '@/features/canvas/application/canvasExecutionService';
 import { dissolveAssetGroup } from '@/features/canvas/application/assetGroupApplicationService';
@@ -168,6 +172,29 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
       });
     }
   }, [addMedia, assetMedia, collecting, node.data.displayName, node.id, t]);
+
+  // Only persisted completions enter an edit; 3D results keep their render-task provenance.
+  const videoEditSource = useMemo((): { source: VideoEditCreativeSourceRequest; mediaKind: 'image' | 'video' | 'audio' } | null => {
+    const descriptor = node.data.generationOutputDescriptor;
+    if (!projectId || !assetMedia || !node.data.generationOutputCommitId || descriptor?.version !== 1 || node.data.isGenerating) return null;
+    const receipt = node.data.cameraStageRenderReceipt;
+    const source: VideoEditCreativeSourceRequest = receipt
+      ? { kind: 'camera_stage.render_task', taskRef: createCameraStageRenderTaskRef(receipt).id }
+      : { kind: 'canvas.node', projectId, nodeId: node.id, completionId: node.data.generationOutputCommitId, outputId: descriptor.outputId };
+    return { source, mediaKind: descriptor.mediaType };
+  }, [assetMedia, node.data.cameraStageRenderReceipt, node.data.generationOutputCommitId, node.data.generationOutputDescriptor, node.data.isGenerating, node.id, projectId]);
+  const [sendingToVideoEdit, setSendingToVideoEdit] = useState(false);
+  const handleSendToVideoEdit = useCallback(async (): Promise<void> => {
+    if (!videoEditSource || sendingToVideoEdit) return;
+    setSendingToVideoEdit(true);
+    try {
+      await sendCreativeResultToVideoEdit(videoEditSource.source, { mediaKind: videoEditSource.mediaKind, mode: 'add' });
+      canvasEventBus.publish('canvas/toast', { message: t('ui:videoEditSend.added'), type: 'success' });
+    } catch (error) {
+      canvasEventBus.publish('canvas/toast', { message: error instanceof Error ? error.message : t('ui:videoEditSend.failed') });
+      logger.warn('画布结果加入剪辑失败', { event: 'canvas.video_edit_send.failed', error, context: { nodeId: node.id } });
+    } finally { setSendingToVideoEdit(false); }
+  }, [node.id, sendingToVideoEdit, t, videoEditSource]);
 
   useEffect(() => {
     return () => {
@@ -392,6 +419,21 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
           >
             {assetCollected ? <FolderCheck className="h-3.5 w-3.5" /> : <FolderPlus className="h-3.5 w-3.5" />}
             {t('ui:assetLibrary.assetShort')}
+          </UiChipButton>
+        )}
+        {videoEditSource && (
+          <UiChipButton
+            key="video-edit-send"
+            disabled={sendingToVideoEdit}
+            title={t('ui:videoEditSend.addToPlayhead')}
+            className={`h-8 ${NODE_TOOLBAR_BUTTON_RADIUS_CLASS} px-2.5 text-xs ${NODE_TOOLBAR_NEUTRAL_BUTTON_CLASS}`}
+            onClick={(event) => {
+              event.stopPropagation();
+              void handleSendToVideoEdit();
+            }}
+          >
+            <ICON_WORKSPACE_VIDEO_EDIT className="h-3.5 w-3.5" />
+            {t('ui:videoEditSend.short')}
           </UiChipButton>
         )}
         {!isImageEdit && canCopyStoryboardText && (

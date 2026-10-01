@@ -244,6 +244,12 @@
     "tools": "工具箱",
     "assets": "资产"
   },
+  "videoEditSend": {
+    "short": "加入剪辑",
+    "addToPlayhead": "加入当前剪辑工程的播放头位置",
+    "added": "已加入剪辑并保存，可在剪辑中撤销。",
+    "failed": "未能加入剪辑。"
+  },
   "assetLibrary": {
     "collect": "添加到资产库",
     "assetShort": "资产",
