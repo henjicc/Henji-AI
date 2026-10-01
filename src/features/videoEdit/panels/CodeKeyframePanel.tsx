@@ -5,12 +5,12 @@ import NumberInput from '@/components/ui/NumberInput'
 import type { CodeParameterDeclaration } from '@/core/videoEdit/codeMaterial/contract'
 import type { CodeMaterialKeyframe } from '@/core/videoEdit/codeMaterialAnimation'
 import { videoEditSourceSeconds } from '@/core/videoEdit/time'
-import { addVideoEditCodeKeyframe, deleteVideoEditCodeKeyframe, updateVideoEditCodeKeyframe, type VideoEditCodeEditorState } from '../application/videoEditCodeParameters'
+import { addVideoEditCodeKeyframe, deleteVideoEditCodeKeyframe, updateVideoEditCodeKeyframe, type VideoEditParameterEditorState } from '../application/videoEditCodeParameters'
 import { useCodeParameterGesture } from './useCodeParameterGesture'
 
 type ScalarParameter = Exclude<CodeParameterDeclaration, { type: 'image' }>
 interface Props {
-  editor: VideoEditCodeEditorState
+  editor: VideoEditParameterEditorState
   parameter: ScalarParameter
   onError: (reason: unknown) => void
   renderValue: (point: CodeMaterialKeyframe, label: string) => ReactNode

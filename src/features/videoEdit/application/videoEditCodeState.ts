@@ -1,10 +1,10 @@
 import { VideoEditCodeCompiler } from '../engine/videoEditCodeCompiler'
 import { CodeMaterialError } from '@/core/videoEdit/codeMaterial/contract'
 import type { CodeMaterialProgram } from '@/core/videoEdit/codeMaterial/contract'
-import { codeMaterialSource, validateCodeMaterialDocument } from '@/core/videoEdit/codeMaterialDocument'
+import { codeMaterialSource, validateCodeMaterialDocument, videoEditCodeReferences } from '@/core/videoEdit/codeMaterialDocument'
 import type { CodeMaterialMetadata, CodeMaterialMetadataReader } from '@/core/videoEdit/codeMaterialDocument'
 import type { VideoEditDocument } from '@/core/videoEdit/document'
-import type { CodeMaterialInstance, CodeMaterialVersion } from '@/core/videoEdit/codeMaterialPersistence'
+import type { CodeMaterialVersion } from '@/core/videoEdit/codeMaterialPersistence'
 
 interface Checked { definitionId: string; source: string; apiVersion: number; languageVersion: number; metadata: CodeMaterialMetadata; bytes: number }
 export type VideoEditCodeMetadata = Map<string, Checked>
@@ -35,11 +35,7 @@ export function rememberVideoEditCodeMetadata(owner: object, definitionId: strin
 }
 export function forgetVideoEditCodeMetadata(owner: object, versionId: string): void { states.get(owner)?.delete(versionId) }
 export async function ensureVideoEditCodeDocumentMetadata(owner: object, document: VideoEditDocument, signal?: AbortSignal): Promise<void> {
-  const references: CodeMaterialInstance[] = [
-    ...(document.codeMaterials ?? []).map(definition => ({ definitionId: definition.id, versionId: definition.defaultVersionId, parameters: {} })),
-    ...document.items.flatMap(item => item.code ? [item.code] : []),
-    ...document.sequences.flatMap(sequence => sequence.clips.flatMap(clip => clip.code ? [clip.code] : [])),
-  ]
+  const references = videoEditCodeReferences(document)
   for (const instance of references) if (!states.get(owner)?.has(instance.versionId)) {
     const version = codeMaterialSource(document, instance)
     const program = await compileVideoEditCode(version.source, signal); signal?.throwIfAborted()
@@ -62,11 +58,7 @@ function put(entries: VideoEditCodeMetadata, definitionId: string, version: Code
  * checked when explicitly requested; it is never executed or trusted as IR. */
 export async function prepareVideoEditCodeMetadata(document: VideoEditDocument): Promise<VideoEditCodeMetadata> {
   const metadata: VideoEditCodeMetadata = new Map()
-  const references: CodeMaterialInstance[] = [
-    ...(document.codeMaterials ?? []).map(definition => ({ definitionId: definition.id, versionId: definition.defaultVersionId, parameters: {} })),
-    ...document.items.flatMap(item => item.code ? [item.code] : []),
-    ...document.sequences.flatMap(sequence => sequence.clips.flatMap(clip => clip.code ? [clip.code] : [])),
-  ]
+  const references = videoEditCodeReferences(document)
   for (const instance of references) if (!metadata.has(instance.versionId)) {
     const version = codeMaterialSource(document, instance)
     put(metadata, instance.definitionId, version, await compileVideoEditCode(version.source))

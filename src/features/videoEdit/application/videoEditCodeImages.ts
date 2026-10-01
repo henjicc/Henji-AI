@@ -15,13 +15,14 @@ export async function bindVideoEditCodeImage(target: VideoEditCodeTarget, key: s
   const bind = async (document: VideoEditDocument, mediaId: string | null): Promise<VideoEditDocument> => {
     const sequence = document.sequences.find(sequence => sequence.id === target.sequenceId)
     const clip = sequence?.clips.find(clip => clip.id === target.clipId)
-    if (!clip?.code || !sequence || clip.code.versionId !== target.versionId) throw new Error('原代码片段或源码版本已改变，请重新选择。')
-    const declaration = readVideoEditCodeMetadata(owner, document)(clip.code).parameters.find(parameter => parameter.key === key)
+    const code = target.effectId ? clip?.effects?.find(effect => effect.id === target.effectId)?.code : clip?.code
+    if (!code || !clip || !sequence || code.versionId !== target.versionId) throw new Error('原代码片段或源码版本已改变，请重新选择。')
+    const declaration = readVideoEditCodeMetadata(owner, document)(code).parameters.find(parameter => parameter.key === key)
     if (!declaration || declaration.type !== 'image') throw new Error('此参数不是图片引用。')
     if (mediaId && !document.media.some(media => media.id === mediaId && media.kind === 'image')) throw new Error('请选择此工程中的图片。')
-    clip.code.parameters[key] = validateCodeMaterialParameterValue(declaration, mediaId ? { kind: 'image', mediaId } : null)
+    code.parameters[key] = validateCodeMaterialParameterValue(declaration, mediaId ? { kind: 'image', mediaId } : null)
     const frame = Math.max(clip.start, Math.min(clip.start + clip.duration - 1, owner.activeSequenceId === target.sequenceId ? owner.frame : owner.sequenceViews.get(target.sequenceId)?.frame ?? clip.start))
-    await trialVideoEditCodeDocument(owner, baseline, document, sequence.id, frame, signal)
+    await trialVideoEditCodeDocument(owner, baseline, document, sequence.id, frame, signal, [{ sequenceId: sequence.id, clipId: clip.id, ...(target.effectId ? { effectIds: [target.effectId] } : {}) }])
     return document
   }
   if (!input || input.kind === 'media') {

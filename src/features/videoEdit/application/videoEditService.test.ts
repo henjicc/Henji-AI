@@ -13,9 +13,43 @@ import { createHostContextSnapshot, retainHostContextTracking } from '@/features
 import { useNavigationStore } from '@/stores/navigationStore'
 import { freezeApplicationWrites } from '@/core/applicationLifecycle/applicationWriteBarrier'
 import { beginVideoEditGesture, finishVideoEditGesture, updateVideoEditPicturePosition } from './videoEditService'
+import { createVideoEditGraphic } from '@/core/videoEdit/graphics'
+import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 
 const files = new Map<string, string>()
 let failSave = false
+it('原生图形和调整范围独立持久，复制序列重映射转场，错误草稿不改变历史', async () => {
+  const owner = (await createVideoEditProject())!; const id = owner.document.id; const sequenceId = owner.activeSequenceId
+  editVideoProject(id, document => {
+    const sequence = document.sequences[0]
+    document.items.push({ id: 'native-graphic', name: '图形', kind: 'graphic', graphic: createVideoEditGraphic('rect', 3840, 2160) }, { id: 'native-adjustment', name: '调整层', kind: 'adjustment' })
+    const left = makeVideoEditItemClip(document, 'native-graphic', sequenceId, { frame: 0, duration: 30 })
+    const right = makeVideoEditItemClip(document, 'native-graphic', sequenceId, { frame: 30, duration: 30 })
+    const adjustment = makeVideoEditItemClip(document, 'native-adjustment', sequenceId, { frame: 0, duration: 60, track: 2 })
+    sequence.clips = [left, right, adjustment]
+    sequence.transitions = [{ id: 'native-transition', kind: 'cross_dissolve', leftClipId: left.id, rightClipId: right.id, durationFrames: 10 }]
+    return document
+  })
+  const original = owner.document; const past = owner.past.length
+  const adjustment = getActiveVideoEditSequence(owner).clips[2]
+  const gesture = beginVideoEditGesture(id)
+  expect(() => updateVideoEditPicturePosition(gesture, sequenceId, adjustment.id, { x: .1, y: 0 })).toThrow('作用范围')
+  expect(owner.document).toBe(original); finishVideoEditGesture(gesture, false)
+  expect(owner.past).toHaveLength(past)
+  const duplicateId = duplicateVideoEditSequence(id, sequenceId)
+  const duplicate = owner.document.sequences.find(sequence => sequence.id === duplicateId)!
+  expect(duplicate.transitions![0].id).not.toBe('native-transition')
+  expect(duplicate.transitions![0].leftClipId).toBe(duplicate.clips[0].id)
+  editVideoSequence(id, duplicateId, sequence => { sequence.clips[0].graphic!.objects[0].parameters.x = 123; return sequence })
+  expect(owner.document.items[0].graphic!.objects[0].parameters.x).not.toBe(123)
+  expect(owner.document.sequences[0].clips[0].graphic!.objects[0].parameters.x).not.toBe(123)
+  const beforeReject = owner.document; const history = owner.past.length
+  expect(() => editVideoSequence(id, duplicateId, sequence => { sequence.clips[0].duration--; return sequence })).toThrow('紧邻')
+  expect(owner.document).toBe(beforeReject); expect(owner.past).toHaveLength(history)
+  await saveVideoEdit(id); const saved = structuredClone(owner.document)
+  await closeVideoEditProject(id); const reopened = (await openVideoEditProject(owner.path))!
+  expect(reopened.document).toEqual(saved)
+})
 it('受限画面位置草稿保留时间及锚定对象，保存等待释放并只记录一笔历史', async () => {
   const owner = (await createVideoEditProject())!; const id = owner.document.id; const sequenceId = owner.activeSequenceId
   appendVideoEditClip(id); const clipId = owner.selection!; appendVideoEditClip(id)

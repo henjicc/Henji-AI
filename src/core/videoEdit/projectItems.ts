@@ -19,7 +19,7 @@ export function removeVideoEditItems(document: VideoEditDocument, ids: string[])
   }
   const items = document.items.filter(item => !ids.includes(item.id))
   const removedMedia = new Set(document.items.filter(item => ids.includes(item.id)).flatMap(item => [item.mediaId, ...codeMaterialImageIds(item.code)]))
-  const codeImages = new Set([...items.flatMap(item => [...codeMaterialImageIds(item.code)]), ...document.sequences.flatMap(sequence => sequence.clips.flatMap(clip => [...codeMaterialImageIds(clip.code)]))])
+  const codeImages = new Set([...items.flatMap(item => [...codeMaterialImageIds(item.code)]), ...document.sequences.flatMap(sequence => sequence.clips.flatMap(clip => [...codeMaterialImageIds(clip.code), ...(clip.effects ?? []).flatMap(effect => [...codeMaterialImageIds(effect.code)])]))])
   return { ...document, items, media: document.media.filter(media => !removedMedia.has(media.id) || items.some(item => item.mediaId === media.id) || codeImages.has(media.id)) }
 }
 export function removeVideoEditBins(document: VideoEditDocument, ids: string[]): VideoEditDocument {
@@ -37,7 +37,9 @@ export function makeVideoEditItemClip(document: VideoEditDocument, itemId: strin
   if (placement.sourceComponent && (item.kind !== 'video' || placement.sourceComponent === 'audio' && media?.hasAudio !== true)) throw new Error('此素材没有已确认可引用的音画分量。')
   const kind = placement.sourceComponent === 'audio' ? 'audio' : item.kind
   const trackKind = kind === 'audio' ? 'audio' : 'video'
-  const track = placement.track ?? sequence.tracks.find(track => track.kind === trackKind && !track.locked && track.enabled)?.index ?? -1
+  const lowerVisualTracks = (index: number) => sequence.tracks.filter(track => track.kind === 'video' && track.index < index)
+  const track = placement.track ?? sequence.tracks.find(track => track.kind === trackKind && !track.locked && track.enabled && (kind !== 'adjustment' || lowerVisualTracks(track.index).length > 0))?.index ?? -1
+  if (kind === 'adjustment' && !lowerVisualTracks(track).length) throw new Error('调整图层需要位于画面上方的视频轨道，请先添加上方轨道。')
   const target = sequence.tracks.find(value => value.index === track)
   if (!target || target.kind !== trackKind) throw new Error('请将素材放入对应的视频或音频轨道。')
   if (target.locked) throw new Error('目标轨道已锁定。')
@@ -53,7 +55,7 @@ export function makeVideoEditItemClip(document: VideoEditDocument, itemId: strin
   if (!Number.isSafeInteger(duration) || duration < 1 || (media && media.kind !== 'image' || program?.mode === 'dynamic') && duration > availableDuration) throw new Error('片段时长必须为源范围内的正整数帧。')
   if (duration < 1) throw new Error('源选区短于一个序列帧。')
   if (!Number.isSafeInteger(placement.frame) || placement.frame < 0 || placement.frame + duration > Math.floor(sequence.fps * 1800)) throw new Error('素材落点或长度超出序列的 30 分钟范围，请先裁剪素材。')
-  return { id: crypto.randomUUID(), itemId, name: item.name, kind, ...(placement.sourceComponent ? { sourceComponent: placement.sourceComponent } : {}), ...(item.code ? { code: structuredClone(item.code) } : {}), track, start: placement.frame, duration, sourceInUs, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, brightness: 1, text: item.kind === 'text' ? '输入文字' : '' }
+  return { id: crypto.randomUUID(), itemId, name: item.name, kind, ...(placement.sourceComponent ? { sourceComponent: placement.sourceComponent } : {}), ...(item.code ? { code: structuredClone(item.code) } : {}), ...(item.graphic ? { graphic: structuredClone(item.graphic) } : {}), ...(kind === 'adjustment' ? { adjustment: { fromTrack: Math.min(...lowerVisualTracks(track).map(track => track.index)) } } : {}), track, start: placement.frame, duration, sourceInUs, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: kind === 'adjustment' ? 0 : 1, brightness: 1, text: item.kind === 'text' ? '输入文字' : '' }
 }
 export function videoEditSequenceFromItem(document: VideoEditDocument, itemId: string, settings: VideoEditSequenceSettings = {}, codeMetadata?: CodeMaterialMetadataReader): VideoEditSequence {
   const { binId, ...sequenceSettings } = settings
@@ -65,7 +67,7 @@ export function videoEditSequenceFromItem(document: VideoEditDocument, itemId: s
   const sourceRate = media?.frameRate
   const supportedRate = sourceRate && VIDEO_EDIT_FRAME_RATES.find(rate => Math.abs(videoEditFps(rate) - videoEditFps(sourceRate)) < 0.01)
   if (media?.kind === 'video' && (!supportedRate || media.frameRateMode !== 'sampled-constant') && !settings.frameRate) throw new VideoEditSequenceFrameRateRequired({ name: item.name, width: media.width, height: media.height, ...(item.binId ? { binId: item.binId } : {}) })
-  return { ...createVideoEditSequence(item.name), ...(program ? { width: Math.max(16, program.width), height: Math.max(16, program.height) } : media && media.width >= 16 && media.height >= 16 ? { width: media.width, height: media.height } : {}), ...(supportedRate ? { frameRate: supportedRate } : {}), ...(item.binId ? { binId: item.binId } : {}), ...sequenceSettings, ...(binId !== undefined ? { binId: binId || undefined } : {}) }
+  return { ...createVideoEditSequence(item.name), ...(program ? { width: Math.max(16, program.width), height: Math.max(16, program.height) } : item.graphic ? { width: item.graphic.width, height: item.graphic.height } : media && media.width >= 16 && media.height >= 16 ? { width: media.width, height: media.height } : {}), ...(supportedRate ? { frameRate: supportedRate } : {}), ...(item.binId ? { binId: item.binId } : {}), ...sequenceSettings, ...(binId !== undefined ? { binId: binId || undefined } : {}) }
 }
 export function makeVideoEditItemSequence(document: VideoEditDocument, itemIds: string[], settings: VideoEditSequenceSettings = {}, codeMetadata?: CodeMaterialMetadataReader): VideoEditSequence {
   if (!itemIds.length) throw new Error('请选择至少一个项目项。')

@@ -4,6 +4,13 @@ import { emitCodeMaterialFilter } from './codeGpuFilter'
 
 function filter(body: string, parameters = '{}'): string { return `export default {apiVersion:1,name:"滤镜",kind:"filter",mode:"dynamic",width:3840,height:2160,durationSeconds:10,seed:42,parameters:${parameters},render(ctx){${body}}}` }
 describe('可信GPU滤镜白名单与预算', () => {
+  it('普通非负局部时钟证明不能用于转场负时钟，安全限制范围后可继续', () => {
+    const ordinary = compileCodeMaterial(filter('return rgba(clamp(1/(ctx.localTime+.5),0,1),0,0,1);'))
+    expect(() => emitCodeMaterialFilter(ordinary)).not.toThrow()
+    expect(() => emitCodeMaterialFilter(ordinary, true)).toThrow('除数')
+    const recovered = compileCodeMaterial(filter('return rgba(clamp(1/(max(ctx.localTime,0)+.5),0,1),0,0,1);'))
+    expect(() => emitCodeMaterialFilter(recovered, true)).not.toThrow()
+  })
   it('参数投影和局部采样保持一次求值，不把参数写入管线源码', () => {
     const program = compileCodeMaterial(filter('const pixel=sample(ctx.u,ctx.v);return rgba(clamp(pixel.r*ctx.params.amount,0,1),pixel.g,pixel.b,pixel.a);', '{amount:{type:"number",title:"强度",default:.5,min:0,max:2,step:.01}}'))
     const shader = emitCodeMaterialFilter(program)

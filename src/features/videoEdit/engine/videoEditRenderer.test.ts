@@ -4,7 +4,7 @@ import { VideoEditRenderer } from './videoEditRenderer'
 import type { CodeMaterialProgram } from '@/core/videoEdit/codeMaterial/contract'
 import { compileCodeMaterial } from '@/core/videoEdit/codeMaterial/compiler'
 
-const boundary = vi.hoisted(() => ({ disposed: [] as string[], pictures: [] as number[], generatorCalls: 0, compilerCalls: 0, compilerDisposed: 0, failGenerator: false, released: [] as string[][], pendingCode: undefined as Promise<CodeMaterialProgram> | undefined, snapshotCalls: [] as boolean[], normalizedReleased: 0, pendingSnapshot: undefined as Promise<void> | undefined }))
+const boundary = vi.hoisted(() => ({ disposed: [] as string[], pictures: [] as number[], generatorCalls: 0, compilerCalls: 0, compilerDisposed: 0, failGenerator: false, released: [] as string[][], pendingCode: undefined as Promise<CodeMaterialProgram> | undefined, snapshotCalls: [] as boolean[], normalizedReleased: 0, pendingSnapshot: undefined as Promise<void> | undefined, draws: [] as Array<{ ids: string[]; timestamps: number[]; offscreen: boolean }>, mixes: [] as number[] }))
 vi.mock('@/core/logging', () => ({ createLogger: () => ({ debug: vi.fn(), warn: vi.fn() }) }))
 vi.mock('./videoEditCodeCompiler', async () => {
   const { compileCodeMaterial } = await import('@/core/videoEdit/codeMaterial/compiler')
@@ -38,16 +38,22 @@ vi.mock('mediabunny', async () => {
 })
 vi.mock('./videoEditGpuCompositor', async () => {
   const { VideoEditGpuFrame } = await import('./videoEditGpuFrame')
+  const { VideoEditCodePicture } = await import('./videoEditCodeGpu')
+  const owner = {} as import('@/core/imageEdit/worker/webgpuRuntimeSupport').GpuDevice
+  const target = (width: number, height: number) => new VideoEditCodePicture({ createView: () => ({}), destroy: vi.fn() }, width, height, owner)
   return { VideoEditGpuCompositor: class {
   async snapshot(sample: { timestamp: number; duration: number }, compact: boolean) {
     boundary.snapshotCalls.push(compact); await boundary.pendingSnapshot
     return new VideoEditGpuFrame({ ...sample, displayWidth: 3840, displayHeight: 2160, rotation: 0, flip: false }, { createView: () => ({}), destroy: vi.fn() }, undefined, 100, () => { boundary.normalizedReleased++ })
   }
-  async code() { return { generator: async (_key: string, _program: CodeMaterialProgram, context: { time: number }) => { boundary.generatorCalls++; if (boundary.failGenerator) throw new Error('代码画面失败'); return { timestamp: context.time } }, releaseUnused: (keys: ReadonlySet<string>) => { boundary.released.push([...keys]) } } }
+  async code() { return { generator: async (_key: string, _program: CodeMaterialProgram, context: { time: number }) => { boundary.generatorCalls++; if (boundary.failGenerator) throw new Error('代码画面失败'); return { timestamp: context.time } }, releaseUnused: (keys: ReadonlySet<string>) => { boundary.released.push([...keys]) },
+    target: async (_key: string, width: number, height: number) => target(width, height),
+    mix: async (_key: string, left: InstanceType<typeof VideoEditCodePicture>, _right: InstanceType<typeof VideoEditCodePicture>, amount: number) => { boundary.mixes.push(amount); return target(left.width, left.height) },
+  } }
   async prepareImages() { return new Map() }
   imageDiagnostics() { return { textures: 0, bytes: 0, uploads: 0 } }
   codeDiagnostics() { return undefined }
-  async draw(_document: unknown, _clips: unknown, pictures: Array<{ timestamp: number }>) { boundary.pictures = pictures.map(picture => picture.timestamp); return { presented: true, completion: Promise.resolve() } }
+  async draw(_document: unknown, clips: VideoEditClip[], pictures: Array<{ timestamp?: number }>, _shouldPresent: unknown, _deadline: unknown, destination?: unknown) { boundary.pictures = pictures.map(picture => picture.timestamp!); boundary.draws.push({ ids: clips.map(clip => clip.id), timestamps: [...boundary.pictures], offscreen: Boolean(destination) }); return { presented: true, completion: Promise.resolve() } }
   async dispose(): Promise<void> {}
   cancelPresentation(): void {}
 } } })
@@ -60,8 +66,38 @@ beforeEach(() => {
   boundary.disposed = []; boundary.pictures = []
   boundary.generatorCalls = 0; boundary.compilerCalls = 0; boundary.compilerDisposed = 0; boundary.failGenerator = false; boundary.released = []; boundary.pendingCode = undefined
   boundary.snapshotCalls = []; boundary.normalizedReleased = 0; boundary.pendingSnapshot = undefined
+  boundary.draws = []; boundary.mixes = []
   vi.stubGlobal('OffscreenCanvas', class { constructor(public width: number, public height: number) {} })
   vi.stubGlobal('VideoDecoder', { isConfigSupported: async () => ({ supported: true }) })
+})
+it('真实转场窗口准备两端原视频余量，不改片段时钟，禁用轨道不产生转场或额外解码', async () => {
+  const document = { ...fixture(), fps: 60, frameRate: { numerator: 60, denominator: 1 } }
+  document.media = document.media.map(media => ({ ...media, durationSeconds: 3 }))
+  const base = document.clips[0]
+  document.clips = [{ ...base, sourceInUs: 1_000_000 }, { ...base, id: 'right', itemId: 'item-B', start: 60, sourceInUs: 1_000_000 }]
+  document.transitions = [{ id: 'cross', kind: 'cross_dissolve', leftClipId: base.id, rightClipId: 'right', durationFrames: 10 }]
+  const renderer = new VideoEditRenderer(document)
+  try {
+    for (const frame of [55, 60, 64]) {
+      boundary.draws = []
+      const result = await renderer.render(frame); await result.completion
+      expect(result.presented).toBe(true)
+      expect(result.sourceTimestamps).toEqual(expect.arrayContaining([1 + frame / 60, 1 + (frame - 60) / 60])); expect(result.sourceTimestamps).toHaveLength(2)
+      expect(boundary.draws).toEqual([
+        { ids: [base.id], timestamps: [1 + frame / 60], offscreen: true },
+        { ids: ['right'], timestamps: [1 + (frame - 60) / 60], offscreen: true },
+        { ids: [base.id], timestamps: [undefined], offscreen: false },
+      ])
+    }
+    expect(boundary.mixes).toEqual([0, 5 / 9, 1]); expect(boundary.compilerCalls).toBe(0)
+    boundary.draws = []; await renderer.render(65)
+    expect(boundary.draws).toEqual([{ ids: ['right'], timestamps: [1 + 5 / 60], offscreen: false }])
+    const decodes = boundary.snapshotCalls.length
+    await renderer.updateDocument({ ...document, tracks: document.tracks.map(track => track.index === 1 ? { ...track, enabled: false } : track) })
+    boundary.draws = []; const hidden = await renderer.render(55)
+    expect(hidden.sourceTimestamps).toEqual([]); expect(boundary.snapshotCalls).toHaveLength(decodes)
+    expect(boundary.draws).toEqual([{ ids: [], timestamps: [], offscreen: false }]); expect(boundary.mixes).toHaveLength(3)
+  } finally { await renderer.dispose() }
 })
 it('顺序播放和导出使用定位同一GPU格式，每个实际解码帧只复制一次', async () => {
   const document = { ...fixture(), fps: 60, frameRate: { numerator: 60, denominator: 1 } }; const renderer = new VideoEditRenderer(document)

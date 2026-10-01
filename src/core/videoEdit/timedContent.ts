@@ -2,6 +2,7 @@ import { z } from 'zod'
 import type { VideoEditClip, VideoEditSequence, VideoEditDocument } from './document'
 import { videoEditFps, videoEditSourceSeconds, type VideoEditRatio } from './time'
 import { buildSubtitleText, parseSubtitleText } from '../media/subtitleFormat'
+import { retimeVideoEditTransitions } from './transitions'
 
 const id = z.string().min(1).max(100)
 const frame = z.number().int().nonnegative().max(108000)
@@ -12,14 +13,14 @@ export type VideoEditCaption = z.infer<typeof videoEditCaptionSchema>
 export interface VideoEditContentOrigin { originalId: string; shift: number }
 
 /** Sequence anchors stay at their program clock. Clip anchors follow only their owner. */
-export function retimeVideoEditContent(before: VideoEditSequence, after: VideoEditSequence, origins: ReadonlyMap<string, VideoEditContentOrigin> = new Map()): VideoEditSequence {
+export function retimeVideoEditContent(before: VideoEditSequence, after: VideoEditSequence, origins: ReadonlyMap<string, VideoEditContentOrigin> = new Map(), dropLostTransitionBoundary = false): VideoEditSequence {
   const prior = new Map(before.clips.map(clip => [clip.id, clip]))
   const descendants = new Map<string, Array<{ clip: VideoEditClip; shift: number }>>()
   for (const clip of after.clips) {
     const origin = origins.get(clip.id)
     const previous = prior.get(origin?.originalId ?? clip.id)
     if (!previous) continue
-    const staticInTrim = (clip.kind === 'text' || clip.kind === 'image') && clip.start !== previous.start && clip.start + clip.duration === previous.start + previous.duration
+    const staticInTrim = (clip.kind === 'text' || clip.kind === 'image') && !clip.effects?.length && clip.start !== previous.start && clip.start + clip.duration === previous.start + previous.duration
     const shift = origin?.shift ?? (staticInTrim ? 0 : clip.start - previous.start - Math.round((videoEditSourceSeconds(clip) - videoEditSourceSeconds(previous)) * videoEditFps(before.frameRate)))
     const values = descendants.get(previous.id) ?? []; values.push({ clip, shift }); descendants.set(previous.id, values)
   }
@@ -40,7 +41,7 @@ export function retimeVideoEditContent(before: VideoEditSequence, after: VideoEd
       const value = { ...caption, id: retained ? crypto.randomUUID() : caption.id, clipId: clip.id, start, duration: end - start }; retained = true; return [value]
     })
   })
-  return { ...after, ...(markers ? { markers } : {}), ...(captions ? { captions } : {}) }
+  return retimeVideoEditTransitions(before, { ...after, ...(markers ? { markers } : {}), ...(captions ? { captions } : {}) }, origins, dropLostTransitionBoundary)
 }
 
 /** Raw property writes receive the same clip anchoring as manual timeline commands. */
@@ -49,7 +50,7 @@ export function reconcileVideoEditTimedContent(before: VideoEditDocument, reques
     const previous = before.sequences.find(value => value.id === sequence.id)
     if (!previous || previous.frameRate.numerator * sequence.frameRate.denominator !== sequence.frameRate.numerator * previous.frameRate.denominator || JSON.stringify(previous.clips) === JSON.stringify(sequence.clips)) return sequence
     const mapped = retimeVideoEditContent(previous, sequence)
-    return { ...sequence, ...(JSON.stringify(previous.markers) === JSON.stringify(sequence.markers) && mapped.markers ? { markers: mapped.markers } : {}), ...(JSON.stringify(previous.captions) === JSON.stringify(sequence.captions) && mapped.captions ? { captions: mapped.captions } : {}) }
+    return { ...sequence, ...(JSON.stringify(previous.markers) === JSON.stringify(sequence.markers) && mapped.markers ? { markers: mapped.markers } : {}), ...(JSON.stringify(previous.captions) === JSON.stringify(sequence.captions) && mapped.captions ? { captions: mapped.captions } : {}), ...(JSON.stringify(previous.transitions) === JSON.stringify(sequence.transitions) && mapped.transitions ? { transitions: mapped.transitions } : {}) }
   }) }
 }
 

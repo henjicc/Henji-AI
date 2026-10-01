@@ -9,6 +9,8 @@ import type { VideoEditCodeImageInput } from './videoEditCodeGpu'
 interface VideoGpuDevice extends GpuDevice {
   importExternalTexture(descriptor: { source: VideoFrame }): unknown
 }
+export type VideoEditPicture = VideoSample | VideoEditGpuFrame | VideoEditCodePicture | ImageBitmap | null
+interface LayerPipelines { video: GpuRenderPipeline; image: GpuRenderPipeline; codeImage: GpuRenderPipeline; cachedVideo: GpuRenderPipeline }
 const vertex = `
 struct Params { size: vec2f, rotation: vec2f, position: vec2f, brightness: f32, opacity: f32, aspect: vec2f, padding: vec2f }
 @group(0) @binding(2) var<uniform> p: Params;
@@ -41,10 +43,12 @@ export class VideoEditGpuCompositor {
   private copyUv!: GpuRenderPipeline
   private copyRgba!: GpuRenderPipeline
   private cachedVideo!: GpuRenderPipeline
+  private rgbaReady?: Promise<LayerPipelines>
   private sampler: unknown
   private readonly uniforms = new Map<string, GpuBuffer>()
   private readonly textures = new Map<string, { texture: GpuTexture; key: string; bytes: number }>()
   private protectedImages = new Set<string>()
+  private protectedUniforms = new Set<string>()
   private imageUploads = 0
   private readonly imageIds = new WeakMap<ImageBitmap, number>()
   private nextImageId = 0
@@ -67,28 +71,7 @@ export class VideoEditGpuCompositor {
     this.context.configure({ device: this.device, format, alphaMode: 'premultiplied' })
     this.sampler = this.device.createSampler({ magFilter: 'linear', minFilter: 'linear' })
     this.device.pushErrorScope('validation')
-    const pipeline = (external: boolean, premultiplied = false): GpuRenderPipeline => {
-      const sample = external ? 'textureSampleBaseClampToEdge(t, s, v.uv)' : 'textureSample(t, s, v.uv)'
-      const shader = this.device.createShaderModule({ code: vertex + `
-@group(0) @binding(0) var t: ${external ? 'texture_external' : 'texture_2d<f32>'};
-@fragment fn fs(v: Vertex) -> @location(0) vec4f {
- let c = ${sample}; let alpha = c.a * p.opacity;
- return vec4f(${premultiplied ? 'clamp(c.rgb * p.brightness, vec3f(0), vec3f(c.a)) * p.opacity' : 'clamp(c.rgb * p.brightness, vec3f(0), vec3f(1)) * alpha'}, alpha);
-}` })
-      return this.device.createRenderPipeline({ layout: 'auto', vertex: { module: shader, entryPoint: 'vs' }, fragment: { module: shader, entryPoint: 'fs', targets: [{ format, blend: { color: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' }, alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' } } }] }, primitive: { topology: 'triangle-list' } })
-    }
-    this.video = pipeline(true); this.image = pipeline(false)
-    this.codeImage = pipeline(false, true)
-    const cachedShader = this.device.createShaderModule({ code: vertex + `
-@group(0) @binding(0) var y: texture_2d<f32>;
-@group(0) @binding(3) var uv: texture_2d<f32>;
-@fragment fn fs(v: Vertex) -> @location(0) vec4f {
- let luma = textureSample(y, s, v.uv).r;
- let chroma = textureSample(uv, s, v.uv).rg - 0.5;
- let rgb = vec3f(luma + 1.5748 * chroma.y, luma - 0.187324 * chroma.x - 0.468124 * chroma.y, luma + 1.8556 * chroma.x);
- return vec4f(clamp(rgb * p.brightness, vec3f(0), vec3f(1)) * p.opacity, p.opacity);
-}` })
-    this.cachedVideo = this.device.createRenderPipeline({ layout: 'auto', vertex: { module: cachedShader, entryPoint: 'vs' }, fragment: { module: cachedShader, entryPoint: 'fs', targets: [{ format, blend: { color: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' }, alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' } } }] }, primitive: { topology: 'triangle-list' } })
+    Object.assign(this, this.layerPipelines(format))
     const copyShader = this.device.createShaderModule({ code: `
 struct Vertex { @builtin(position) position: vec4f, @location(0) uv: vec2f }
 @vertex fn vs(@builtin(vertex_index) i: u32) -> Vertex {
@@ -114,6 +97,44 @@ struct Vertex { @builtin(position) position: vec4f, @location(0) uv: vec2f }
     this.copyRgba = copy('rgba', 'rgba8unorm')
     const error = await this.device.popErrorScope()
     if (error) throw new Error(`无法初始化剪辑 GPU 合成：${error.message}`)
+  }
+  private layerPipelines(format: string): LayerPipelines {
+    const pipeline = (external: boolean, premultiplied = false): GpuRenderPipeline => {
+      const sample = external ? 'textureSampleBaseClampToEdge(t, s, v.uv)' : 'textureSample(t, s, v.uv)'
+      const shader = this.device.createShaderModule({ code: vertex + `
+@group(0) @binding(0) var t: ${external ? 'texture_external' : 'texture_2d<f32>'};
+@fragment fn fs(v: Vertex) -> @location(0) vec4f {
+ let c = ${sample}; let alpha = c.a * p.opacity;
+ return vec4f(${premultiplied ? 'clamp(c.rgb * p.brightness, vec3f(0), vec3f(c.a)) * p.opacity' : 'clamp(c.rgb * p.brightness, vec3f(0), vec3f(1)) * alpha'}, alpha);
+}` })
+      return this.device.createRenderPipeline({ layout: 'auto', vertex: { module: shader, entryPoint: 'vs' }, fragment: { module: shader, entryPoint: 'fs', targets: [{ format, blend: { color: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' }, alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' } } }] }, primitive: { topology: 'triangle-list' } })
+    }
+    const video = pipeline(true); const image = pipeline(false); const codeImage = pipeline(false, true)
+    const cachedShader = this.device.createShaderModule({ code: vertex + `
+@group(0) @binding(0) var y: texture_2d<f32>;
+@group(0) @binding(3) var uv: texture_2d<f32>;
+@fragment fn fs(v: Vertex) -> @location(0) vec4f {
+ let luma = textureSample(y, s, v.uv).r;
+ let chroma = textureSample(uv, s, v.uv).rg - 0.5;
+ let rgb = vec3f(luma + 1.5748 * chroma.y, luma - 0.187324 * chroma.x - 0.468124 * chroma.y, luma + 1.8556 * chroma.x);
+ return vec4f(clamp(rgb * p.brightness, vec3f(0), vec3f(1)) * p.opacity, p.opacity);
+}` })
+    const cachedVideo = this.device.createRenderPipeline({ layout: 'auto', vertex: { module: cachedShader, entryPoint: 'vs' }, fragment: { module: cachedShader, entryPoint: 'fs', targets: [{ format, blend: { color: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' }, alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' } } }] }, primitive: { topology: 'triangle-list' } })
+    return { video, image, codeImage, cachedVideo }
+  }
+  private async rgbaPipelines(): Promise<LayerPipelines> {
+    return this.rgbaReady ??= (async () => {
+      await this.ready
+      if (this.disposed || this.lost) throw new Error('剪辑GPU会话不可用。')
+      this.device.pushErrorScope('validation')
+      let pipelines: LayerPipelines
+      try { pipelines = this.layerPipelines('rgba8unorm') }
+      catch (error) { await this.device.popErrorScope().catch(() => null); throw error }
+      const error = await this.device.popErrorScope()
+      if (error) throw new Error(`离屏合成管线初始化失败：${error.message}`)
+      if (this.disposed || this.lost) throw new Error('剪辑GPU会话不可用。')
+      return pipelines
+    })()
   }
   /** Deferred copies may only be consumed on this device/queue. The final draw
    * completion covers earlier copies; retain decoder frames until their fence. */
@@ -188,21 +209,24 @@ struct Vertex { @builtin(position) position: vec4f, @location(0) uv: vec2f }
     for (const [key, value] of this.textures) if (!keys.has(key)) { value.texture.destroy(); this.textures.delete(key) }
   }
   /** Ordinary image clips and code references borrow the same full-size upload. */
-  async prepareImages(pictures: ReadonlyMap<string, ImageBitmap>, shouldPresent: () => boolean, visibleText: ReadonlySet<string> = new Set()): Promise<ReadonlyMap<string, VideoEditCodeImageInput>> {
+  async prepareImages(pictures: ReadonlyMap<string, ImageBitmap>, shouldPresent: () => boolean, visibleText: ReadonlySet<string> = new Set(), visibleClips: ReadonlySet<string> = new Set()): Promise<ReadonlyMap<string, VideoEditCodeImageInput>> {
     await this.ready
     if (!shouldPresent() || this.disposed) throw new DOMException('图片画面已取消。', 'AbortError')
     if (this.lost) throw new Error(`剪辑 GPU 已中断：${this.lost}`)
     const unique = new Set(pictures.values()); const bytes = [...unique].reduce((sum, image) => sum + image.width * image.height * 4, 0)
     if (unique.size + visibleText.size > 32 || bytes + visibleText.size * this.canvas.width * this.canvas.height * 4 > 256 * 1024 ** 2) throw new Error('可见图片与文字超过32份或256MiB预算，请减少同时显示的素材。')
-    this.protectedImages = new Set([...unique].map(image => this.imageKey(image)))
+    this.protectedImages = new Set([...unique].map(image => this.imageKey(image)).concat([...visibleText].map(id => `text:${id}`)))
+    this.protectedUniforms = new Set(visibleClips)
     this.retainTextures(new Set([...this.protectedImages, ...[...visibleText].map(id => `text:${id}`)]))
     return new Map([...pictures].map(([mediaId, picture]) => {
       const key = this.imageKey(picture)
       return [mediaId, { texture: this.texture(key, key, picture), width: picture.width, height: picture.height, owner: this.device, premultiplied: false }]
     }))
   }
-  async draw(document: VideoEditComposition, clips: VideoEditClip[], pictures: Array<VideoSample | VideoEditGpuFrame | VideoEditCodePicture | ImageBitmap | null>, shouldPresent: () => boolean, deadline?: number): Promise<{ presented: boolean; completion: Promise<void> }> {
+  async draw(document: VideoEditComposition, clips: VideoEditClip[], pictures: VideoEditPicture[], shouldPresent: () => boolean, deadline?: number, target?: VideoEditCodePicture): Promise<{ presented: boolean; completion: Promise<void> }> {
     await this.ready
+    if (this.disposed || !shouldPresent()) return { presented: false, completion: Promise.resolve() }
+    const pipelines = target ? await this.rgbaPipelines() : undefined
     if (!shouldPresent()) return { presented: false, completion: Promise.resolve() }
     if (deadline !== undefined && performance.timeOrigin + performance.now() < deadline - 0.8) await new Promise<void>(resolve => {
       let request = 0
@@ -214,11 +238,16 @@ struct Vertex { @builtin(position) position: vec4f, @location(0) uv: vec2f }
     if (this.lost) throw new Error(`剪辑 GPU 已中断，请重新加载预览：${this.lost}`)
     while (this.uploads.size >= 2) await Promise.race(this.uploads)
     if (this.disposed || !shouldPresent()) return { presented: false, completion: Promise.resolve() }
+    if (target) {
+      if (target.width !== document.width || target.height !== document.height) throw new Error('离屏合成需要序列全尺寸目标。')
+      this.codeRuntime?.assertPictureLive(target)
+      if (target.owner !== this.device || pictures.some(picture => picture instanceof VideoEditCodePicture && picture.texture === target.texture)) throw new Error('离屏合成输入输出不能跨设备或引用同一纹理。')
+    }
     const device = this.device
     const frames: VideoFrame[] = []
     try {
       const encoder = device.createCommandEncoder()
-      const pass = encoder.beginRenderPass({ colorAttachments: [{ view: this.context.getCurrentTexture().createView(), clearValue: { r: 0, g: 0, b: 0, a: 1 }, loadOp: 'clear', storeOp: 'store' }] })
+      const pass = encoder.beginRenderPass({ colorAttachments: [{ view: (target?.texture ?? this.context.getCurrentTexture()).createView(), clearValue: { r: 0, g: 0, b: 0, a: target ? 0 : 1 }, loadOp: 'clear', storeOp: 'store' }] })
       clips.forEach((clip, index) => {
         const picture = pictures[index]
         let resource: unknown
@@ -231,6 +260,7 @@ struct Vertex { @builtin(position) position: vec4f, @location(0) uv: vec2f }
           resource = device.importExternalTexture({ source: frame }); width = picture.displayWidth; height = picture.displayHeight
         } else if (code) {
           if (picture.owner !== device) throw new Error('代码画面不属于当前剪辑GPU设备。')
+          this.codeRuntime?.assertPictureLive(picture)
           resource = picture.texture.createView(); width = picture.width; height = picture.height
         } else if (cachedVideo) {
           resource = picture.texture.createView(); width = picture.displayWidth; height = picture.displayHeight
@@ -257,7 +287,7 @@ struct Vertex { @builtin(position) position: vec4f, @location(0) uv: vec2f }
         const fit = Math.min(document.width / width, document.height / height) * clip.scale
         const rotation = clip.rotation * Math.PI / 180
         device.queue.writeBuffer(uniform, 0, new Float32Array([width * fit / document.width, height * fit / document.height, Math.cos(rotation), Math.sin(rotation), clip.x * 2, clip.y * 2, clip.brightness, clip.opacity, document.height / document.width, document.width / document.height, external || cachedVideo ? picture.rotation : 0, (external || cachedVideo) && picture.flip ? 1 : 0]))
-        const pipeline = code ? this.codeImage : external ? this.video : cachedVideo && picture.chroma ? this.cachedVideo : this.image
+        const pipeline = code ? pipelines?.codeImage ?? this.codeImage : external ? pipelines?.video ?? this.video : cachedVideo && picture.chroma ? pipelines?.cachedVideo ?? this.cachedVideo : pipelines?.image ?? this.image
         pass.setPipeline(pipeline)
         pass.setBindGroup(0, device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries: [{ binding: 0, resource }, { binding: 1, resource: this.sampler }, { binding: 2, resource: { buffer: uniform } }, ...(cachedVideo && picture.chroma ? [{ binding: 3, resource: picture.chroma.createView() }] : [])] }))
         pass.draw(6)
@@ -267,7 +297,7 @@ struct Vertex { @builtin(position) position: vec4f, @location(0) uv: vec2f }
       this.uploads.add(completion)
       const ids = new Set(clips.map(clip => clip.id))
       this.retainTextures(new Set([...this.protectedImages, ...pictures.flatMap((picture, index) => picture instanceof VideoSample || picture instanceof VideoEditGpuFrame || picture instanceof VideoEditCodePicture ? [] : [picture ? this.imageKey(picture) : `text:${clips[index].id}`])]))
-      for (const [id, value] of this.uniforms) if (!ids.has(id)) { value.destroy(); this.uniforms.delete(id) }
+      for (const [id, value] of this.uniforms) if (!ids.has(id) && !this.protectedUniforms.has(id)) { value.destroy(); this.uniforms.delete(id) }
       return { presented: true, completion }
     } catch (error) { frames.forEach(frame => frame.close()); throw error }
   }
@@ -275,6 +305,7 @@ struct Vertex { @builtin(position) position: vec4f, @location(0) uv: vec2f }
     this.disposed = true
     this.cancelPresentation()
     await this.ready.catch(() => {})
+    await this.rgbaReady?.catch(() => {})
     await Promise.allSettled([...this.uploads, ...this.copies])
     await this.codeRuntime?.dispose()
     for (const value of this.textures.values()) value.texture.destroy()

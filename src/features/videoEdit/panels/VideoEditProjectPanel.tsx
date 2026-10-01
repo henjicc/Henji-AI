@@ -1,7 +1,7 @@
 import { forwardRef, useMemo, useRef, useState } from 'react'
 import { Virtuoso, VirtuosoGrid } from 'react-virtuoso'
 import { ChevronDown, ChevronRight, Folder, FolderPlus, Import, List, Grid2X2, Plus, Pencil, Trash2, RefreshCw, Play, Settings2, Code2 } from 'lucide-react'
-import { ICON_WORKSPACE_VIDEO_EDIT as SequenceIcon, ICON_ASSET_LIBRARY as AssetLibraryIcon } from '@/core/theme/icons'
+import { ICON_WORKSPACE_VIDEO_EDIT as SequenceIcon, ICON_ASSET_LIBRARY as AssetLibraryIcon, ICON_VIDEO_EDIT_GRAPHIC as GraphicIcon } from '@/core/theme/icons'
 import ContextMenu from '@/components/ContextMenu'
 import { UiButton, UiChipButton, UiEmpty, UiIconButton, UiInput, UiOptionButton, UiSelect, UI_MULTISELECT_ITEM_ACTIVE_OVERRIDE_CLASS } from '@/components/ui'
 import { useContextMenu, type MenuItem } from '@/hooks/useContextMenu'
@@ -11,7 +11,7 @@ import type { VideoEditBin } from '@/core/videoEdit/document'
 import { acceptsVideoEditDrop, dropVideoEditInput, readVideoEditDrop, writeVideoEditItemDrag } from '../application/videoEditDrop'
 import { appendVideoEditSequence, deleteVideoEditSequence, setVideoEditProjectView, switchVideoEditSequence, updateVideoEditSequenceSettings, type VideoEditInstance } from '../application/videoEditService'
 import { chooseVideoEditMedia, relinkVideoEditMedia } from '../application/videoEditMedia'
-import { appendVideoEditItems, createVideoEditBin, createVideoEditSequenceFromItem, deleteVideoEditBins, deleteVideoEditItems, updateVideoEditBin, updateVideoEditItems } from '../application/videoEditProjectItems'
+import { appendVideoEditItems, createVideoEditAdjustmentItem, createVideoEditBin, createVideoEditGraphicItem, createVideoEditSequenceFromItem, deleteVideoEditBins, deleteVideoEditItems, updateVideoEditBin, updateVideoEditItems, type VideoEditGraphicItemInput } from '../application/videoEditProjectItems'
 import { updateVideoEditSource } from '../application/videoEditSource'
 import { VideoEditSequenceDialog } from './VideoEditSequenceDialog'
 import { VideoEditProjectEditDialog, type ProjectEditDialog } from './VideoEditProjectEditDialog'
@@ -50,6 +50,21 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
   }) }
   const choose = (): void => run(() => chooseVideoEditMedia(projectId, binId || undefined))
   const newSequence = (): void => setSequenceDialog({ kind: 'create', settings: { name: `序列 ${instance.document.sequences.length + 1}`, binId: binId || undefined } })
+  const selectCreatedItem = (id: string): void => {
+    setKeyword('')
+    setSelectedSequence(null)
+    anchor.current = id
+    setVideoEditProjectView(projectId, { selectedBinId: binId, selectedItemIds: [id] })
+  }
+  const createGraphic = (kind: VideoEditGraphicItemInput['kind']): void => run(() => selectCreatedItem(createVideoEditGraphicItem(projectId, { kind, binId: binId || undefined })))
+  const createAdjustment = (): void => run(() => selectCreatedItem(createVideoEditAdjustmentItem(projectId, { binId: binId || undefined })))
+  const graphicMenu = (): MenuItem[] => [
+    { id: 'solid', label: '新建纯色', icon: <Plus size={16} />, onClick: () => createGraphic('solid') },
+    { id: 'rect', label: '新建矩形', icon: <Plus size={16} />, onClick: () => createGraphic('rect') },
+    { id: 'ellipse', label: '新建椭圆', icon: <Plus size={16} />, onClick: () => createGraphic('ellipse') },
+    { id: 'text', label: '新建原生文字', icon: <Plus size={16} />, onClick: () => createGraphic('text') },
+    { id: 'adjustment', label: '新建调整图层', icon: <Plus size={16} />, onClick: createAdjustment },
+  ]
   const createFromItem = (id: string): void => {
     try {
       const item = instance.document.items.find(item => item.id === id)!
@@ -65,6 +80,7 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
     { id: 'bin', label: '新建素材箱', icon: <FolderPlus size={16} />, onClick: () => setEdit({ kind: 'createBin', parentId: binId }) },
     { id: 'sequence', label: '新建项目项 → 序列', icon: <SequenceIcon size={16} />, onClick: newSequence },
     { id: 'code', label: '新建代码素材', icon: <Code2 size={16} />, onClick: () => setCreatingCode(true) },
+    ...graphicMenu(),
   ]
   const itemMenu = (entry: VideoEditProjectEntry): MenuItem[] => {
     if (entry.kind === 'sequence') return [
@@ -78,7 +94,7 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
     return [
       { id: 'preview', label: '打开源素材', icon: <Play size={16} />, disabled: !item.mediaId, onClick: () => run(() => updateVideoEditSource(projectId, { itemId: item.id })) },
       { id: 'append', label: `添加${ids.length > 1 ? ` ${ids.length} 项` : ''}到当前序列`, icon: <Plus size={16} />, onClick: () => run(() => appendVideoEditItems(projectId, ids, instance.activeSequenceId)) },
-      { id: 'sequence', label: '按此素材新建序列', icon: <SequenceIcon size={16} />, disabled: ids.length !== 1, onClick: () => createFromItem(item.id) },
+      { id: 'sequence', label: item.kind === 'adjustment' ? '调整图层请添加到现有序列' : '按此素材新建序列', icon: <SequenceIcon size={16} />, disabled: ids.length !== 1 || item.kind === 'adjustment', onClick: () => createFromItem(item.id) },
       { id: 'edit', label: '重命名、标签与移动', icon: <Pencil size={16} />, onClick: () => setEdit({ kind: 'items', items }) },
       { id: 'relink', label: '重新定位源文件', icon: <RefreshCw size={16} />, disabled: !item.mediaId || ids.length !== 1, onClick: () => run(() => relinkVideoEditMedia(projectId, item.mediaId!)) },
       { id: 'remove', label: `从工程移除${ids.length > 1 ? ` ${ids.length} 项` : ''}`, icon: <Trash2 size={16} />, onClick: () => run(() => deleteVideoEditItems(projectId, ids)) },
@@ -101,7 +117,8 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
     const itemMedia = entry.kind === 'item' ? media.get(entry.value.mediaId ?? '') : undefined
     const selected = entry.kind === 'item' ? instance.selectedItemIds.includes(entry.value.id) : selectedSequence === entry.value.id
     const kind = entry.kind === 'sequence' ? 'sequence' : entry.value.kind
-    const detail = entry.kind === 'sequence' ? `${entry.value.width} × ${entry.value.height} · ${Number((entry.value.frameRate.numerator / entry.value.frameRate.denominator).toFixed(3))} fps` : itemMedia ? `${itemMedia.kind === 'audio' ? '音频' : `${itemMedia.width} × ${itemMedia.height}`}${itemMedia.durationSeconds ? ` · ${itemMedia.durationSeconds.toFixed(1)} 秒` : ''}${itemMedia.assetId ? ' · 来自资产库' : ''}` : kind === 'code' ? '原生代码素材' : '文字'
+    const graphic = entry.kind === 'item' && kind === 'graphic' ? entry.value.graphic : undefined
+    const detail = entry.kind === 'sequence' ? `${entry.value.width} × ${entry.value.height} · ${Number((entry.value.frameRate.numerator / entry.value.frameRate.denominator).toFixed(3))} fps` : itemMedia ? `${itemMedia.kind === 'audio' ? '音频' : `${itemMedia.width} × ${itemMedia.height}`}${itemMedia.durationSeconds ? ` · ${itemMedia.durationSeconds.toFixed(1)} 秒` : ''}${itemMedia.assetId ? ' · 来自资产库' : ''}` : graphic ? `可编辑图形 · ${graphic.width} × ${graphic.height}` : kind === 'adjustment' ? '调整图层 · 添加到现有序列上方画面轨道' : kind === 'code' ? '原生代码素材' : '文字'
     return <UiOptionButton variant="menu" active={selected} className={`w-full min-w-0 gap-2 text-xs ${selected && entry.kind === 'item' ? UI_MULTISELECT_ITEM_ACTIVE_OVERRIDE_CLASS : ''} ${view === 'grid' ? 'flex-col !p-2' : '!px-2 !py-1.5'}`} data-video-edit-project-entry={entry.value.id} data-entry-kind={kind} aria-label={entry.value.name} aria-pressed={selected} draggable={entry.kind === 'item'}
       onClick={event => {
         if (entry.kind === 'sequence') { setSelectedSequence(entry.value.id); run(() => setVideoEditProjectView(projectId, { selectedItemIds: [] })); return }
@@ -135,6 +152,7 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
       <UiButton variant="ghost" className="text-xs" onClick={choose}>导入</UiButton><UiButton variant="ghost" className="text-xs" onClick={() => openAssetLibrary('floating')}>资产库</UiButton>
       <UiIconButton appearance="hover-only" title="新建素材箱" onClick={() => setEdit({ kind: 'createBin', parentId: binId })}><FolderPlus size={15} /></UiIconButton><UiIconButton appearance="hover-only" title="新建序列" onClick={newSequence}><Plus size={15} /></UiIconButton>
       <UiIconButton appearance="hover-only" title="新建代码素材" onClick={() => setCreatingCode(true)}><Code2 size={15} /></UiIconButton>
+      <UiIconButton appearance="hover-only" title="新建图形与调整图层" onClick={event => menu.showMenu(event, graphicMenu())}><GraphicIcon size={15} /></UiIconButton>
       <UiInput aria-label="搜索项目素材" placeholder="搜索名称或标签" className="min-w-20 flex-1 text-xs" value={keyword} onChange={event => setKeyword(event.target.value)} />
       <UiSelect aria-label="项目素材排序" className="max-w-24 text-xs" value={sort} onChange={event => setSort(event.target.value as typeof sort)}><option value="name">名称</option><option value="kind">类型</option><option value="duration">时长</option></UiSelect>
       <UiIconButton appearance="hover-only" active={view === 'list'} title="列表视图" onClick={() => setView('list')}><List size={15} /></UiIconButton><UiIconButton appearance="hover-only" active={view === 'grid'} title="缩略图视图" onClick={() => setView('grid')}><Grid2X2 size={15} /></UiIconButton>

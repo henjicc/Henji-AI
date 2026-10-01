@@ -4,13 +4,38 @@ import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/te
 import { getPlatform } from '@/platform/runtime'
 import { createApplicationHarness } from '@/tests/applicationHarness'
 import { createVideoEditProject, appendVideoEditMedia, listVideoEditInstances, closeVideoEditProject, getActiveVideoEditSequence, undoVideoEdit, saveVideoEdit, openVideoEditProject, setVideoEditView, getVideoEditProjectView, setVideoEditProjectView, appendVideoEditSequence } from './videoEditService'
-import { createVideoEditBin, updateVideoEditItems, appendVideoEditItems, createVideoEditSequenceFromItem, deleteVideoEditItems, deleteVideoEditBins } from './videoEditProjectItems'
+import { createVideoEditBin, updateVideoEditItems, appendVideoEditItems, createVideoEditSequenceFromItem, deleteVideoEditItems, deleteVideoEditBins, createVideoEditGraphicItem, createVideoEditAdjustmentItem } from './videoEditProjectItems'
 import { importVideoEditSources, relinkVideoEditMedia } from './videoEditMedia'
 import { dropVideoEditInput } from './videoEditDrop'
 import { VideoEditMutationExecutor, VideoEditCollectionExecutor } from './videoEditExecutors'
 import type { ApplicationPlannedStep } from '@/core/application-control'
 import { readVideoEditSource, updateVideoEditSource, registerVideoEditSourcePresenter } from './videoEditSource'
+import { editVideoSequence } from './videoEditService'
 const files = new Map<string, string>()
+it('原生项目项使用真实图形、素材箱与历史，调整层默认选择有下方画面的轨道', async () => {
+  const owner = (await createVideoEditProject())!; const id = owner.document.id; const sequenceId = owner.activeSequenceId
+  editVideoSequence(id, sequenceId, sequence => ({ ...sequence, tracks: sequence.tracks.filter(track => track.index <= 1) }))
+  const { width, height } = getActiveVideoEditSequence(owner)
+  const binId = createVideoEditBin(id, '图形'); const history = owner.past.length
+  const graphicId = createVideoEditGraphicItem(id, { kind: 'solid', name: '背景', binId })
+  expect(owner.past).toHaveLength(history + 1)
+  const item = owner.document.items.find(item => item.id === graphicId)!
+  expect(item).toMatchObject({ kind: 'graphic', binId, graphic: { width, height, objects: [{ kind: 'rect', parameters: { x: 0, y: 0, width, height } }] } })
+  const [clipId] = appendVideoEditItems(id, [graphicId], sequenceId, { frame: 0 })
+  const clip = getActiveVideoEditSequence(owner).clips.find(clip => clip.id === clipId)!
+  expect(clip.graphic).toEqual(item.graphic); expect(clip.graphic).not.toBe(item.graphic)
+  const adjustmentId = createVideoEditAdjustmentItem(id, { binId }); const stable = owner.document; const past = owner.past.length
+  expect(() => appendVideoEditItems(id, [adjustmentId], sequenceId)).toThrow('上方')
+  expect(() => createVideoEditGraphicItem(id, { kind: 'rect', width: 0 })).toThrow()
+  expect(() => createVideoEditGraphicItem(id, { kind: 'rect', binId: 'missing' })).toThrow()
+  expect(owner.document).toBe(stable); expect(owner.past).toHaveLength(past)
+  editVideoSequence(id, sequenceId, sequence => ({ ...sequence, tracks: [...sequence.tracks, { ...sequence.tracks.find(track => track.kind === 'video')!, id: 'upper', index: 2, name: '上方画面' }] }))
+  appendVideoEditItems(id, [adjustmentId], sequenceId, { frame: 0 })
+  expect(getActiveVideoEditSequence(owner).clips.at(-1)).toMatchObject({ kind: 'adjustment', track: 2, adjustment: { fromTrack: 1 }, volume: 0 })
+  undoVideoEdit(id); expect(getActiveVideoEditSequence(owner).clips.map(clip => clip.id)).toEqual([clipId])
+  await saveVideoEdit(id); const reopened = (await openVideoEditProject(owner.path))!
+  expect(reopened.document.items.find(item => item.id === graphicId)?.graphic).toEqual(item.graphic)
+})
 it('公共移除项目项与手动删除同样清除孤儿媒体，并以声明级联撤销恢复', async () => {
   const instance = (await createVideoEditProject())!; const id = instance.document.id
   appendVideoEditMedia(id, { id: 'unused-media', name: '原图', path: 'D:/media/original.png', kind: 'image', width: 10, height: 10, durationSeconds: 0 })
@@ -23,6 +48,7 @@ it('公共移除项目项与手动删除同样清除孤儿媒体，并以声明�
   expect(restored.cascadeEffects).toEqual(expect.arrayContaining([expect.objectContaining({ entityType: 'video_edit.media', effect: 'create', origin: { kind: 'cascade', declarationId: 'video_edit.item_media_create' } })]))
 })
 beforeEach(() => {
+  vi.stubGlobal('OffscreenCanvas', class { getContext() { return { font: '', measureText(text: string) { const width = text.length * Number.parseFloat(this.font); return { width, actualBoundingBoxLeft: 0, actualBoundingBoxRight: width } } } } })
   installHarnessNativeStorage(); files.clear()
   vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/project-items.henji-video')
   vi.spyOn(getPlatform().system.fs, 'writeTextFile').mockImplementation(async (path, value) => { files.set(path, value) })

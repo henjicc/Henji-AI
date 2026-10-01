@@ -2,9 +2,25 @@ import { videoEditBinSchema, videoEditItemSchema, type VideoEditItem } from '@/c
 import { makeVideoEditItemClip, makeVideoEditItemSequence, removeVideoEditBins, removeVideoEditItems, videoEditItemUsage, type VideoEditSequenceSettings } from '@/core/videoEdit/projectItems'
 import { editVideoProject, requireVideoEditInstance, setVideoEditView, switchVideoEditSequence } from './videoEditService'
 import { readVideoEditCodeMetadata } from './videoEditCodeState'
+import { createVideoEditGraphic } from '@/core/videoEdit/graphics'
 
 export { videoEditItemUsage }
 export type { VideoEditSequenceSettings }
+export interface VideoEditGraphicItemInput { kind: 'solid' | 'rect' | 'ellipse' | 'text'; width?: number; height?: number; name?: string; binId?: string }
+export function makeVideoEditGraphicItem(input: VideoEditGraphicItemInput, dimensions: { width: number; height: number }): VideoEditItem {
+  const graphic = createVideoEditGraphic(input.kind, input.width ?? dimensions.width, input.height ?? dimensions.height)
+  return videoEditItemSchema.parse({ id: crypto.randomUUID(), kind: 'graphic', name: input.name ?? graphic.objects[0].name, graphic, ...(input.binId ? { binId: input.binId } : {}) })
+}
+export function createVideoEditGraphicItem(projectId: string, input: VideoEditGraphicItemInput): string {
+  const owner = requireVideoEditInstance(projectId)
+  const sequence = owner.document.sequences.find(sequence => sequence.id === owner.activeSequenceId)!
+  const item = makeVideoEditGraphicItem(input, sequence)
+  editVideoProject(projectId, document => ({ ...document, items: [...document.items, item] })); return item.id
+}
+export function createVideoEditAdjustmentItem(projectId: string, input: { name?: string; binId?: string } = {}): string {
+  const item = videoEditItemSchema.parse({ id: crypto.randomUUID(), kind: 'adjustment', name: input.name ?? '调整图层', ...(input.binId ? { binId: input.binId } : {}) })
+  editVideoProject(projectId, document => ({ ...document, items: [...document.items, item] })); return item.id
+}
 export function createVideoEditBin(projectId: string, name: string, parentId?: string): string {
   const bin = videoEditBinSchema.parse({ id: crypto.randomUUID(), name, ...(parentId ? { parentId } : {}) })
   editVideoProject(projectId, document => ({ ...document, bins: [...document.bins, bin] })); return bin.id

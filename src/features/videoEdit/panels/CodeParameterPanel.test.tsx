@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import React, { useSyncExternalStore } from 'react'
-import { act, cleanup, fireEvent, render } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, within } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { compileCodeMaterial } from '@/core/videoEdit/codeMaterial/compiler'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
@@ -10,6 +10,8 @@ import { addVideoEditCodeKeyframe, readVideoEditCodeEditor, updateVideoEditCodeK
 import { readVideoEditCodeMetadata, rememberVideoEditCodeMetadata } from '../application/videoEditCodeState'
 import { appendVideoEditSequence, closeVideoEditProject, createVideoEditProject, editVideoProject, getActiveVideoEditSequence, listVideoEditInstances, saveVideoEdit, setVideoEditView, subscribeVideoEdit, switchVideoEditSequence, undoVideoEdit, videoEditGestureActive, videoEditRevision, type VideoEditInstance } from '../application/videoEditService'
 import { VideoEditEffectsPanel } from './VideoEditEffectsPanel'
+import { appendVideoEditItems, createVideoEditGraphicItem, createVideoEditAdjustmentItem } from '../application/videoEditProjectItems'
+import { createVideoEditGraphicObject } from '../application/videoEditGraphics'
 
 vi.mock('@/hooks/useI18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }))
 vi.mock('@/components/ui/textMeasurement', () => ({ measureElementTextWidth: () => 30 }))
@@ -23,7 +25,40 @@ function View({ visible = true }: { visible?: boolean }): React.ReactElement { u
 const editor = (index = 0) => readVideoEditCodeEditor(owner.document.id, sequenceId, clipIds[index])
 const time = (sourceInUs: number) => ({ sourceInUs, sourceRemainder: { numerator: 0, denominator: 1 } })
 
+it('原生对象切换取消参数草稿，层序与删除空态消费同一对象树，NTSC关键帧保留余数', () => {
+  const id = owner.document.id; const item = createVideoEditGraphicItem(id, { kind: 'rect' }); const [clipId] = appendVideoEditItems(id, [item], sequenceId, { frame: 0 })
+  const first = getActiveVideoEditSequence(owner).clips.find(clip => clip.id === clipId)!.graphic!.objects[0].id
+  const second = createVideoEditGraphicObject({ projectId: id, sequenceId, clipId }, { kind: 'ellipse', name: '顶层圆' })
+  editVideoProject(id, document => { document.sequences[0].frameRate = { numerator: 30000, denominator: 1001 }; return document })
+  setVideoEditView(id, { selection: clipId, frame: 1 })
+  const view = render(<View />); const clip = () => getActiveVideoEditSequence(owner).clips.find(clip => clip.id === clipId)!
+  const number = within(view.container.querySelector('[data-video-edit-code-parameter="x"]') as HTMLElement).getByRole('spinbutton', { name: '水平位置' })
+  const baseline = clip().graphic!.objects[1].parameters.x; const history = owner.past.length
+  fireEvent.focus(number); fireEvent.change(number, { target: { value: '777' } })
+  fireEvent.click(view.getByRole('button', { name: '选择图形对象矩形' }))
+  expect(clip().graphic!.objects.find(object => object.id === second)!.parameters.x).toBe(baseline); expect(owner.past).toHaveLength(history)
+  fireEvent.blur(number); expect(clip().graphic!.objects[0].parameters.x).toBe(baseline)
+  fireEvent.click(view.getByRole('button', { name: '为水平位置添加关键帧' }))
+  expect(clip().graphic!.objects.find(object => object.id === first)!.curves!.x[0]).toMatchObject({ sourceInUs: 33366, sourceRemainder: { numerator: 2, denominator: 3 } })
+  fireEvent.click(view.getByRole('button', { name: '上移图形对象' })); expect(clip().graphic!.objects.map(object => object.id)).toEqual([second, first])
+  expect([...view.container.querySelectorAll('[data-video-edit-graphic-object]')].map(row => row.getAttribute('data-video-edit-graphic-object'))).toEqual([first, second])
+  fireEvent.click(view.getByRole('button', { name: '删除图形对象' })); fireEvent.click(view.getByRole('button', { name: '删除图形对象' }))
+  expect(clip().graphic!.objects).toEqual([]); expect(view.getByText('此图形暂无对象')).toBeTruthy(); expect(view.queryByRole('button', { name: '为水平位置添加关键帧' })).toBeNull(); expect(onError).not.toHaveBeenCalled()
+})
+it('原生参数隐藏时回滚草稿，调整图层只呈现合法画面属性', () => {
+  const id = owner.document.id; const item = createVideoEditGraphicItem(id, { kind: 'text' }); const [clipId] = appendVideoEditItems(id, [item], sequenceId, { frame: 0 }); setVideoEditView(id, { selection: clipId })
+  const view = render(<View />); const number = within(view.container.querySelector('[data-video-edit-code-parameter="fontSize"]') as HTMLElement).getByRole('spinbutton', { name: '字号' })
+  const original = getActiveVideoEditSequence(owner).clips.find(clip => clip.id === clipId)!.graphic!.objects[0].parameters.fontSize
+  const history = owner.past.length; fireEvent.focus(number); fireEvent.change(number, { target: { value: '200' } }); view.rerender(<View visible={false} />); fireEvent.blur(number)
+  expect(getActiveVideoEditSequence(owner).clips.find(clip => clip.id === clipId)!.graphic!.objects[0].parameters.fontSize).toBe(original); expect(owner.past).toHaveLength(history)
+  const adjustment = createVideoEditAdjustmentItem(id); const [adjustmentClip] = appendVideoEditItems(id, [adjustment], sequenceId, { frame: 0, track: 2 })
+  act(() => setVideoEditView(id, { selection: adjustmentClip })); view.rerender(<View />)
+  for (const label of ['水平位置', '垂直位置', '缩放', '旋转', '亮度效果', '音量']) expect(view.queryByRole('spinbutton', { name: label })).toBeNull()
+  expect(view.getByRole('spinbutton', { name: '不透明度' })).toBeTruthy(); expect(onError).not.toHaveBeenCalled()
+})
+
 beforeEach(async () => {
+  vi.stubGlobal('OffscreenCanvas', class { getContext() { return { font: '', measureText(text: string) { const width = text.length * Number.parseFloat(this.font); return { width, actualBoundingBoxLeft: 0, actualBoundingBoxRight: width } } } } })
   installHarnessNativeStorage(); onError = vi.fn()
   vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/code-controls.henji-video')
   vi.spyOn(getPlatform().system.fs, 'writeTextFile').mockResolvedValue(undefined)
@@ -41,7 +76,7 @@ beforeEach(async () => {
   sequenceId = owner.activeSequenceId; clipIds = getActiveVideoEditSequence(owner).clips.map(clip => clip.id)
   setVideoEditView(owner.document.id, { selection: clipIds[0] })
 })
-afterEach(async () => { cleanup(); for (const instance of listVideoEditInstances()) await closeVideoEditProject(instance.document.id); vi.restoreAllMocks(); uninstallHarnessNativeStorage() })
+afterEach(async () => { cleanup(); for (const instance of listVideoEditInstances()) await closeVideoEditProject(instance.document.id); vi.restoreAllMocks(); vi.unstubAllGlobals(); uninstallHarnessNativeStorage() })
 
 it('五种标量控件消费源码声明，并按原实例写入、重置，保留通用片段属性', () => {
   const view = render(<View />)

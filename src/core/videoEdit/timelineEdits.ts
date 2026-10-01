@@ -4,6 +4,8 @@ import { assertVideoEditClipsEditable } from './lockedTracks'
 import { expandVideoEditSelection } from './timelineSelection'
 import { offsetVideoEditSource, rescaleVideoEditFrame, type VideoEditRatio } from './time'
 import { retimeVideoEditContent, type VideoEditMarker, type VideoEditCaption, type VideoEditContentOrigin } from './timedContent'
+import { validateVideoEditTransitions, type VideoEditTransition } from './transitions'
+import { validateVideoEditAdjustmentRanges } from './compositing'
 
 export interface VideoEditClipboard {
   projectId: string
@@ -12,6 +14,7 @@ export interface VideoEditClipboard {
   annotations: VideoEditAnnotation[]
   markers?: VideoEditMarker[]
   captions?: VideoEditCaption[]
+  transitions?: VideoEditTransition[]
   tracks?: Array<{ index: number; kind: 'video' | 'audio' }>
 }
 export type VideoEditTimelineEdit =
@@ -103,7 +106,7 @@ function intervals(clips: readonly VideoEditClip[]): Array<{ from: number; to: n
 export function copyVideoEditClips(document: VideoEditDocument, sequenceId: string, clipIds: string[]): VideoEditClipboard {
   const sequence = sequenceOf(document, sequenceId); const ids = new Set(expandVideoEditSelection(sequence, clipIds))
   if (!ids.size) throw new Error('请先选择要复制的片段。')
-  return structuredClone({ projectId: document.id, frameRate: sequence.frameRate, clips: sequence.clips.filter(clip => ids.has(clip.id)), annotations: sequence.annotations.filter(mark => ids.has(mark.clipId)), markers: (sequence.markers ?? []).filter(mark => mark.clipId && ids.has(mark.clipId)), captions: (sequence.captions ?? []).filter(caption => caption.clipId && ids.has(caption.clipId)), tracks: sequence.tracks.map(track => ({ index: track.index, kind: track.kind })) })
+  return structuredClone({ projectId: document.id, frameRate: sequence.frameRate, clips: sequence.clips.filter(clip => ids.has(clip.id)), annotations: sequence.annotations.filter(mark => ids.has(mark.clipId)), markers: (sequence.markers ?? []).filter(mark => mark.clipId && ids.has(mark.clipId)), captions: (sequence.captions ?? []).filter(caption => caption.clipId && ids.has(caption.clipId)), transitions: (sequence.transitions ?? []).filter(transition => ids.has(transition.leftClipId) && ids.has(transition.rightClipId)), tracks: sequence.tracks.map(track => ({ index: track.index, kind: track.kind })) })
 }
 
 /** Vertical dragging moves the selected lanes of the primary kind; linked audio keeps its lane. */
@@ -130,6 +133,9 @@ export function applyVideoEditTimelineEdit(document: VideoEditDocument, sequence
 export function applyVideoEditTimelineEditResult(document: VideoEditDocument, sequenceId: string, edit: VideoEditTimelineEdit, metadata?: CodeMaterialMetadataReader): { sequence: VideoEditSequence; selectedClipIds?: string[] } {
   const result = edit.kind === 'place' ? placeClips(document, sequenceOf(document, sequenceId), edit) : { sequence: applyClipEdit(document, sequenceId, edit, metadata) }
   if (result.sequence.clips.length > 500 || result.sequence.annotations.length > 500 || (result.sequence.markers?.length ?? 0) > 500 || (result.sequence.captions?.length ?? 0) > 500 || result.sequence.clips.some(clip => clip.start < 0 || clip.duration < 1 || clip.start + clip.duration > Math.floor(result.sequence.frameRate.numerator / result.sequence.frameRate.denominator * 1800))) throw new Error('编辑结果超出序列片段、标记数量或时间边界。')
+  if ((result.sequence.transitions?.length ?? 0) > 500) throw new Error('序列最多500项转场。')
+  validateVideoEditAdjustmentRanges(result.sequence)
+  validateVideoEditTransitions({ ...document, sequences: document.sequences.map(sequence => sequence.id === sequenceId ? result.sequence : sequence) }, metadata)
   return result
 }
 function applyClipEdit(document: VideoEditDocument, sequenceId: string, edit: Exclude<VideoEditTimelineEdit, { kind: 'place' }>, metadata?: CodeMaterialMetadataReader): VideoEditSequence {
@@ -206,7 +212,7 @@ function applyClipEdit(document: VideoEditDocument, sequenceId: string, edit: Ex
     if (clips.some(clip => clip.kind !== 'video' || clip.sourceComponent)) throw new Error('请选择尚未拆开音画的视频片段。')
     if (clips.some(clip => { const item = document.items.find(item => item.id === clip.itemId); return document.media.find(media => media.id === item?.mediaId)?.hasAudio !== true })) throw new Error('请先确认原视频具有可解码的音轨。')
     const pairs = new Map(clips.map(clip => [clip.id, { audioId: crypto.randomUUID(), linkId: clip.linkId ?? crypto.randomUUID() }]))
-    const audio = clips.map(clip => ({ ...clip, id: pairs.get(clip.id)!.audioId, kind: 'audio' as const, sourceComponent: 'audio' as const, track: edit.audioTrack, linkId: pairs.get(clip.id)!.linkId }))
+    const audio = clips.map(clip => { const next = { ...clip, id: pairs.get(clip.id)!.audioId, kind: 'audio' as const, sourceComponent: 'audio' as const, track: edit.audioTrack, linkId: pairs.get(clip.id)!.linkId }; delete next.effects; return next })
     assertNoOverlap(sequence.clips, audio)
     return { ...sequence, clips: sequence.clips.flatMap(clip => selected.has(clip.id) ? [{ ...clip, sourceComponent: 'video' as const, linkId: pairs.get(clip.id)!.linkId }, audio.find(value => value.id === pairs.get(clip.id)!.audioId)!] : [clip]) }
   }
@@ -224,7 +230,7 @@ function placeClips(document: VideoEditDocument, sequence: VideoEditSequence, ed
   const from = Math.min(...edit.clipboard.clips.map(clip => clip.start))
   const convert = (frame: number): number => rescaleVideoEditFrame(frame - from, edit.clipboard.frameRate, sequence.frameRate)
   const ids = new Map(edit.clipboard.clips.map(clip => [clip.id, crypto.randomUUID()]))
-  const incoming = remapRelations(edit.clipboard.clips.map(clip => ({ ...structuredClone(clip), id: ids.get(clip.id)!, track: edit.trackMap?.[clip.track] ?? clip.track, start: edit.frame + convert(clip.start), duration: convert(clip.start + clip.duration) - convert(clip.start) })))
+  const incoming = remapRelations(edit.clipboard.clips.map(clip => ({ ...structuredClone(clip), ...(clip.effects ? { effects: clip.effects.map(effect => ({ ...structuredClone(effect), id: crypto.randomUUID() })) } : {}), id: ids.get(clip.id)!, track: edit.trackMap?.[clip.track] ?? clip.track, start: edit.frame + convert(clip.start), duration: convert(clip.start + clip.duration) - convert(clip.start) })))
   assertTargets(sequence, incoming)
   assertNewInternalOverlap(edit.clipboard.clips, incoming)
   if (incoming.some(clip => !document.items.some(item => item.id === clip.itemId) || clip.duration < 1 || clip.start < 0 || clip.start + clip.duration > Math.floor(sequence.frameRate.numerator / sequence.frameRate.denominator * 1800))) throw new Error('剪贴板引用已移除，或粘贴范围超出序列边界。')
@@ -251,7 +257,7 @@ function placeClips(document: VideoEditDocument, sequence: VideoEditSequence, ed
     for (const clip of overlapping) {
       const pieces: VideoEditClip[] = []
       if (clip.start < edit.frame) pieces.push({ ...clip, duration: edit.frame - clip.start })
-      if (clip.start + clip.duration > end) pieces.push({ ...structuredClone(clip), id: pieces.length ? crypto.randomUUID() : clip.id, start: end, duration: clip.start + clip.duration - end, ...offsetVideoEditSource(clip, end - clip.start, sequence.frameRate) })
+      if (clip.start + clip.duration > end) pieces.push({ ...structuredClone(clip), ...(pieces.length && clip.effects ? { effects: clip.effects.map(effect => ({ ...structuredClone(effect), id: crypto.randomUUID() })) } : {}), id: pieces.length ? crypto.randomUUID() : clip.id, start: end, duration: clip.start + clip.duration - end, ...offsetVideoEditSource(clip, end - clip.start, sequence.frameRate) })
       fragments.set(clip.id, pieces)
       for (const piece of pieces) origins.set(piece.id, { originalId: clip.id, shift: 0 })
     }
@@ -263,10 +269,15 @@ function placeClips(document: VideoEditDocument, sequence: VideoEditSequence, ed
       if (!pieces) return [mark]
       const piece = pieces.find(clip => mark.frame >= clip.start && mark.frame < clip.start + clip.duration)
       return piece ? [{ ...mark, clipId: piece.id }] : []
-    }) }, origins)
+    }) }, origins, true)
   }
   const annotations = edit.clipboard.annotations.map(mark => ({ ...mark, id: crypto.randomUUID(), clipId: ids.get(mark.clipId)!, frame: edit.frame + convert(mark.frame) }))
   const markers = (edit.clipboard.markers ?? []).map(mark => ({ ...mark, id: crypto.randomUUID(), clipId: ids.get(mark.clipId!)!, frame: edit.frame + convert(mark.frame) }))
   const captions = (edit.clipboard.captions ?? []).map(caption => ({ ...caption, id: crypto.randomUUID(), clipId: ids.get(caption.clipId!)!, start: edit.frame + convert(caption.start), duration: convert(caption.start + caption.duration) - convert(caption.start) }))
-  return { sequence: { ...kept, clips: [...kept.clips, ...incoming], annotations: [...kept.annotations, ...annotations], ...(kept.markers || markers.length ? { markers: [...(kept.markers ?? []), ...markers] } : {}), ...(kept.captions || captions.length ? { captions: [...(kept.captions ?? []), ...captions] } : {}) }, selectedClipIds: incoming.map(clip => clip.id) }
+  const transitions = (edit.clipboard.transitions ?? []).map(transition => {
+    const leftClipId = ids.get(transition.leftClipId); const rightClipId = ids.get(transition.rightClipId)
+    if (!leftClipId || !rightClipId) throw new Error('复制转场必须同时包含两端片段。')
+    return { ...transition, id: crypto.randomUUID(), leftClipId, rightClipId, durationFrames: rescaleVideoEditFrame(transition.durationFrames, edit.clipboard.frameRate, sequence.frameRate) }
+  })
+  return { sequence: { ...kept, clips: [...kept.clips, ...incoming], annotations: [...kept.annotations, ...annotations], ...(kept.markers || markers.length ? { markers: [...(kept.markers ?? []), ...markers] } : {}), ...(kept.captions || captions.length ? { captions: [...(kept.captions ?? []), ...captions] } : {}), ...(kept.transitions || transitions.length ? { transitions: [...(kept.transitions ?? []), ...transitions] } : {}) }, selectedClipIds: incoming.map(clip => clip.id) }
 }

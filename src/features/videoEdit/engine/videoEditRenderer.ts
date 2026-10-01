@@ -1,5 +1,5 @@
 import { ALL_FORMATS, AudioSampleSink, VideoSampleSink, VideoSample, Input, UrlSource } from 'mediabunny'
-import { videoEditClipMedia, activeVideoEditClips, audibleVideoEditClips, clipSourceSeconds, type VideoEditComposition, type VideoEditMedia } from '@/core/videoEdit/document'
+import { videoEditClipMedia, activeVideoEditClips, audibleVideoEditClips, clipSourceSeconds, videoEditVisibleTracks, type VideoEditComposition, type VideoEditMedia } from '@/core/videoEdit/document'
 import { videoEditSourceSeconds } from '@/core/videoEdit/time'
 import { videoEditCaptionClips } from '@/core/videoEdit/timedContent'
 import { VideoEditGpuCompositor } from './videoEditGpuCompositor'
@@ -8,6 +8,9 @@ import { VideoEditSeekDecoder } from './videoEditSeekDecoder'
 import { VideoEditGpuFrame, videoEditGpuFrameUsesChroma } from './videoEditGpuFrame'
 import { VideoEditCodeSources } from './videoEditCodeSources'
 import { codeMaterialImageIds } from '@/core/videoEdit/codeMaterialResources'
+import { videoEditTransitionsAt } from '@/core/videoEdit/transitions'
+import { activeVideoEditEffects, buildVideoEditCompositePlan } from '@/core/videoEdit/compositing'
+import { renderVideoEditCompositeScene, videoEditCompositeSurfaceKeys } from './videoEditCompositeScene'
 
 interface VideoSource {
   input: Input
@@ -132,13 +135,18 @@ export class VideoEditRenderer {
     if (this.disposed) throw new Error('预览已关闭。')
     const document = this.document; const epoch = this.presentationEpoch
     const canPresent = (): boolean => !this.disposed && this.document === document && this.presentationEpoch === epoch && shouldPresent()
-    const active = [...activeVideoEditClips(document, frame).filter(clip => clip.kind !== 'audio' && (clip.kind !== 'code' || clip.opacity > 0)), ...videoEditCaptionClips(document, frame)]
+    const visible = videoEditVisibleTracks(document)
+    const transitions = videoEditTransitionsAt(document, frame).filter(window => visible.has(window.left.track))
+    const active = activeVideoEditClips(document, frame).filter(clip => clip.kind !== 'audio' && (!['code', 'graphic'].includes(clip.kind) || clip.opacity > 0 || activeVideoEditEffects(clip).length))
+    const ids = new Set(active.map(clip => clip.id))
+    for (const window of transitions) for (const clip of [window.left, window.right]) if (!ids.has(clip.id)) { active.push(clip); ids.add(clip.id) }
+    active.push(...videoEditCaptionClips(document, frame))
+    const composite = transitions.length || active.some(clip => clip.kind === 'adjustment' || activeVideoEditEffects(clip).length) ? buildVideoEditCompositePlan(active, transitions) : undefined
     const timestamps: number[] = []
     this.compositor ??= new VideoEditGpuCompositor(this.canvas)
     const decodeStart = performance.now()
-    const codeClips = active.filter(clip => clip.kind === 'code')
-    if (codeClips.length) this.codeSources ??= new VideoEditCodeSources(document, () => this.compositor!.code())
-    const imageIds = new Set(active.flatMap(clip => [...codeMaterialImageIds(clip.code), ...(clip.kind === 'image' ? [videoEditClipMedia(document, clip)?.id ?? ''] : [])]))
+    if (composite || active.some(clip => ['code', 'graphic'].includes(clip.kind) || activeVideoEditEffects(clip).length)) this.codeSources ??= new VideoEditCodeSources(document, () => this.compositor!.code())
+    const imageIds = new Set(active.flatMap(clip => [...codeMaterialImageIds(clip.code), ...activeVideoEditEffects(clip).flatMap(effect => [...codeMaterialImageIds(effect.code)]), ...(clip.kind === 'image' ? [videoEditClipMedia(document, clip)?.id ?? ''] : [])]))
     const imageMedia = [...imageIds].map(id => {
       const media = document.media.find(media => media.id === id && media.kind === 'image')
       if (!media) throw new Error('代码图片引用或图片片段的源素材不存在。')
@@ -146,9 +154,9 @@ export class VideoEditRenderer {
     })
     if (imageMedia.length > 32 || imageMedia.reduce((sum, media) => sum + media.width * media.height * 4, 0) > 256 * 1024 ** 2) throw new Error('可见图片超过32份或256MiB预算，请减少同时显示的图片。')
     for (const id of this.images.keys()) if (!imageIds.has(id)) this.releaseImage(id)
-    const imagesReady = Promise.all(imageMedia.map(async media => [media.id, await this.image(media)] as const)).then(images => this.compositor!.prepareImages(new Map(images), canPresent, new Set(active.filter(clip => clip.kind === 'text').map(clip => clip.id))))
+    const imagesReady = Promise.all(imageMedia.map(async media => [media.id, await this.image(media)] as const)).then(images => this.compositor!.prepareImages(new Map(images), canPresent, new Set(active.filter(clip => clip.kind === 'text').map(clip => clip.id)), new Set(active.map(clip => clip.id))))
     const imagesSettled = Promise.allSettled([imagesReady])
-    const codeReady = this.codeSources?.prepare(document, codeClips, frame, canPresent, imagesReady)
+    const codeReady = this.codeSources?.prepare(document, active, frame, canPresent, imagesReady, { transitions, surfaceKeys: composite ? videoEditCompositeSurfaceKeys(composite) : undefined })
     const codeSettled = codeReady ? Promise.allSettled([codeReady]) : Promise.resolve([])
     this.frameCache.setHotFrames(active.flatMap(clip => {
       const media = videoEditClipMedia(document, clip)
@@ -157,8 +165,8 @@ export class VideoEditRenderer {
     let cacheHits = 0
     const picturesPending = active.map(async clip => {
       const media = videoEditClipMedia(document, clip)
-      if (clip.kind === 'text') return null
-      if (clip.kind === 'code') {
+      if (clip.kind === 'text' || clip.kind === 'adjustment') return null
+      if (clip.kind === 'code' || clip.kind === 'graphic') {
         const picture = (await codeReady)?.pictures.get(clip.id)
         if (!picture) throw new Error(`代码素材 ${clip.name} 没有返回画面。`)
         return picture
@@ -224,7 +232,14 @@ export class VideoEditRenderer {
     if (this.disposed) throw new Error('预览已关闭。')
     const decodeMs = performance.now() - decodeStart
     const gpuStart = performance.now()
-    const { presented, completion } = await this.compositor.draw(document, active, pictures, canPresent, deadline)
+    let result: { presented: boolean; completion: Promise<void> }
+    try {
+      result = composite ? await renderVideoEditCompositeScene(document, composite, new Map(active.map((clip, index) => [clip.id, pictures[index]])), preparedCode[0]?.status === 'fulfilled' ? preparedCode[0].value.effects : new Map(), this.compositor, frame, canPresent, deadline) : await this.compositor.draw(document, active, pictures, canPresent, deadline)
+    } catch (error) {
+      if (canPresent()) throw error
+      result = { presented: false, completion: Promise.resolve() }
+    }
+    const { presented, completion } = result
     const gpuMs = performance.now() - gpuStart
     const activeIds = new Set(canPresent() ? active.map(clip => clip.id) : [...this.sources.keys()].filter(key => !key.startsWith('audio:')))
     for (const [key, pending] of this.sources) if (!activeIds.has(key) && !key.startsWith('audio:')) {

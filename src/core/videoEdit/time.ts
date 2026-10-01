@@ -21,10 +21,14 @@ export function videoEditFrameSample(frame: number, rate: VideoEditRatio, sample
 export interface VideoEditSourceTime { sourceInUs: number; sourceRemainder: VideoEditRatio }
 function gcd(left: bigint, right: bigint): bigint { while (right) { const remainder = left % right; left = right; right = remainder } return left }
 /** Fractional microseconds survive trims/splits, including repeated NTSC boundaries. */
-export function offsetVideoEditSource(time: VideoEditSourceTime, frames: number, rate: VideoEditRatio): VideoEditSourceTime {
+export function offsetVideoEditSource(time: VideoEditSourceTime, frames: number, rate: VideoEditRatio, holdBeforeZero = false): VideoEditSourceTime {
   const denominator = BigInt(time.sourceRemainder.denominator) * BigInt(rate.numerator)
   const numerator = (BigInt(time.sourceInUs) * BigInt(time.sourceRemainder.denominator) + BigInt(time.sourceRemainder.numerator)) * BigInt(rate.numerator) + BigInt(frames) * 1_000_000n * BigInt(rate.denominator) * BigInt(time.sourceRemainder.denominator)
-  if (numerator < 0n) throw new Error('源入点不能早于素材开始。')
+  if (numerator < 0n) {
+    // Only timeless drawings use first-point hold in a validated transition handle.
+    if (holdBeforeZero) return { sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 } }
+    throw new Error('源入点不能早于素材开始。')
+  }
   const whole = numerator / denominator
   const remainder = numerator % denominator
   const divisor = gcd(remainder, denominator)

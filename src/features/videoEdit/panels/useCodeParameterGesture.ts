@@ -1,10 +1,17 @@
 import { useLayoutEffect, useRef, useState } from 'react'
 import type { VideoEditSourceTime } from '@/core/videoEdit/time'
-import type { VideoEditCodeTarget } from '../application/videoEditCodeParameters'
-import { beginVideoEditGesture, finishVideoEditGesture, type VideoEditGesture } from '../application/videoEditService'
+import type { VideoEditParameterTarget } from '../application/videoEditCodeParameters'
+import { beginVideoEditGesture, finishVideoEditGesture, requireVideoEditInstance, type VideoEditGesture } from '../application/videoEditService'
+
+export function videoEditParameterTargetIdentity(target: VideoEditParameterTarget): string {
+  return JSON.stringify('objectId' in target
+    ? ['graphic', target.projectId, target.sequenceId, target.clipId, target.objectId]
+    : ['code', target.projectId, target.sequenceId, target.clipId, target.versionId, target.effectId ?? null])
+}
 
 /** A mounted control owns one fixed-target edit; its draft never follows the selection. */
-export function useCodeParameterGesture(target: VideoEditCodeTarget, onError: (reason: unknown) => void, time?: VideoEditSourceTime) {
+export function useCodeParameterGesture(target: VideoEditParameterTarget, onError: (reason: unknown) => void, time?: VideoEditSourceTime) {
+  const owner = requireVideoEditInstance(target.projectId)
   const handle = useRef<VideoEditGesture>()
   const armed = useRef(false)
   const mounted = useRef(true)
@@ -13,13 +20,21 @@ export function useCodeParameterGesture(target: VideoEditCodeTarget, onError: (r
   const gestureTime = useRef<VideoEditSourceTime>()
   const errorHandler = useRef(onError)
   const [epoch, setEpoch] = useState(0)
+  const previousOwner = useRef(owner)
   currentTime.current = time
   errorHandler.current = onError
-  const scope = JSON.stringify([target.projectId, target.sequenceId, target.clipId, target.versionId])
+  const scope = videoEditParameterTargetIdentity(target)
+  const currentScope = useRef(scope)
+  currentScope.current = scope
+  const ownsTarget = (): boolean => {
+    if (!mounted.current || currentScope.current !== scope) return false
+    try { return requireVideoEditInstance(target.projectId) === owner } catch { return false }
+  }
 
   useLayoutEffect(() => {
     mounted.current = true
     cancelled.current = false
+    if (previousOwner.current !== owner) { previousOwner.current = owner; setEpoch(value => value + 1) }
     return () => {
       mounted.current = false
       const previous = handle.current
@@ -28,9 +43,10 @@ export function useCodeParameterGesture(target: VideoEditCodeTarget, onError: (r
       gestureTime.current = undefined
       if (previous) finishVideoEditGesture(previous, false)
     }
-  }, [scope])
+  }, [scope, owner])
 
   const cancel = (): void => {
+    if (!ownsTarget()) return
     const previous = handle.current
     handle.current = undefined
     armed.current = false
@@ -40,12 +56,13 @@ export function useCodeParameterGesture(target: VideoEditCodeTarget, onError: (r
     if (mounted.current) setEpoch(value => value + 1)
   }
   const begin = (): void => {
-    if (!mounted.current || armed.current) return
+    if (!ownsTarget() || armed.current) return
     cancelled.current = false
     armed.current = true
     gestureTime.current = currentTime.current && structuredClone(currentTime.current)
   }
   const finish = (): void => {
+    if (!ownsTarget()) return
     const previous = handle.current
     handle.current = undefined
     armed.current = false
@@ -57,7 +74,7 @@ export function useCodeParameterGesture(target: VideoEditCodeTarget, onError: (r
     }
   }
   const write = (operation: (gesture: VideoEditGesture | undefined, at: VideoEditSourceTime | undefined) => void): void => {
-    if (!mounted.current || cancelled.current) return
+    if (!ownsTarget() || cancelled.current) return
     try {
       // Focus/pointer-down only capture the target time. Untouched controls must not gate autosave.
       if (!armed.current) begin()

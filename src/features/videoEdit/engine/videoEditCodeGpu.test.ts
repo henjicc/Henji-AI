@@ -1,17 +1,20 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { GpuDevice } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 import { compileCodeMaterial } from '@/core/videoEdit/codeMaterial/compiler'
+import { createVideoEditGraphic, evaluateVideoEditGraphic, prepareVideoEditGraphic } from '@/core/videoEdit/graphics'
 import { VideoEditCodeGpu } from './videoEditCodeGpu'
 import type { VideoEditCodeImageInput } from './videoEditCodeGpu'
 
 const context = { time: 1, localTime: 1, sequenceTime: 1, width: 3840, height: 2160, frame: 60, fps: 60 }
 const source = (body: string, kind = 'generator', parameters = '{}'): string => `export default {apiVersion:1,name:"实验",kind:"${kind}",mode:"dynamic",width:3840,height:2160,durationSeconds:10,seed:42,parameters:${parameters},render(ctx){${body}}}`
 function gpu() {
-  const destroyed = vi.fn(); const compiled = vi.fn(() => ({ getBindGroupLayout: () => ({}) }))
+  const destroyed = vi.fn(); const compiled = vi.fn((_descriptor: unknown) => ({ getBindGroupLayout: () => ({}) }))
   const pass = { setPipeline: vi.fn(), setBindGroup: vi.fn(), draw: vi.fn(), end: vi.fn() }
-  const device: GpuDevice = {
+  const bindGroupLayout = vi.fn(() => ({ bindings: 'filter' })); const pipelineLayout = vi.fn(() => ({ layout: 'filter' }))
+  const device: GpuDevice & { createBindGroupLayout: typeof bindGroupLayout; createPipelineLayout: typeof pipelineLayout } = {
     queue: { copyExternalImageToTexture: vi.fn(), writeBuffer: vi.fn(), submit: vi.fn(), onSubmittedWorkDone: vi.fn(async () => {}) },
     lost: new Promise(() => {}), createShaderModule: vi.fn(), createRenderPipeline: compiled,
+    createBindGroupLayout: bindGroupLayout, createPipelineLayout: pipelineLayout,
     createSampler: vi.fn(), createTexture: () => ({ createView: () => ({}), destroy: destroyed }), createBuffer: () => ({ destroy: destroyed }),
     createBindGroup: vi.fn(), createCommandEncoder: () => ({ beginRenderPass: () => pass, finish: () => ({}) }), pushErrorScope: vi.fn(), popErrorScope: vi.fn(async (): Promise<{ message?: string } | null> => null), destroy: vi.fn(),
   }
@@ -24,6 +27,152 @@ function mockTextCanvas(): void {
   })
 }
 describe('代码GPU会话复用与资源边界', () => {
+  it('常量和仅参数滤镜复用完整固定绑定，作者不采样也不缩减宿主layout', async () => {
+    const { device, compiled } = gpu(); const runtime = new VideoEditCodeGpu(device)
+    const input = await runtime.target('input', 3840, 2160)
+    await runtime.filter('constant', 'constant', compileCodeMaterial(source('return rgba(0,1,0,.5);', 'filter')), context, {}, input)
+    await runtime.filter('parameter', 'parameter', compileCodeMaterial(source('return rgba(ctx.params.gain,0,0,1);', 'filter', '{gain:{type:"number",title:"强度",default:.5,min:0,max:1,step:.01}}')), context, {}, input)
+    expect(device.createBindGroupLayout).toHaveBeenCalledOnce()
+    expect(device.createBindGroupLayout).toHaveBeenCalledWith({ entries: [
+      { binding: 0, visibility: 2, texture: { sampleType: 'float' } },
+      { binding: 1, visibility: 2, sampler: { type: 'filtering' } },
+      { binding: 2, visibility: 2, buffer: { type: 'uniform', minBindingSize: 560 } },
+    ] })
+    expect(device.createPipelineLayout).toHaveBeenCalledOnce()
+    expect(compiled.mock.calls.slice(-2).every(([descriptor]) => (descriptor as { layout: unknown }).layout === device.createPipelineLayout.mock.results[0].value)).toBe(true)
+    expect(runtime.diagnostics().filterFrames).toBe(2)
+    await runtime.dispose()
+  })
+  it('静态滤镜规范不可依赖的shader源时钟，长原视频入点不扩张证明范围', async () => {
+    const { device } = gpu(); const runtime = new VideoEditCodeGpu(device)
+    const input = await runtime.target('input', 3840, 2160)
+    const fixed = compileCodeMaterial(source('return sample(ctx.u,ctx.v);', 'filter').replace('mode:"dynamic"', 'mode:"static"'))
+    await runtime.filter('out', 'static', fixed, { ...context, time: 3600 }, {}, input)
+    const packed = vi.mocked(device.queue.writeBuffer).mock.lastCall![2] as Float32Array
+    expect([...packed.slice(0, 3)]).toEqual([0, 1, 1])
+    await expect(runtime.filter('bad', 'dynamic', compileCodeMaterial(source('return sample(ctx.u,ctx.v);', 'filter')), { ...context, time: 3600 }, {}, input)).rejects.toThrow('时间')
+    await expect(runtime.filter('bad', 'static', fixed, { ...context, time: NaN }, {}, input)).rejects.toThrow('时间')
+    await expect(runtime.filter('bad', 'static', fixed, { ...context, time: -1 }, {}, input)).rejects.toThrow('时间')
+    expect(runtime.diagnostics().filterFrames).toBe(1)
+    await runtime.dispose()
+  })
+  it('并发普通滤镜编译完成后，等待相同版本的转场调用仍重证负时钟且不额外提交', async () => {
+    const { device } = gpu(); const runtime = new VideoEditCodeGpu(device)
+    const input = await runtime.target('input', 3840, 2160)
+    const program = compileCodeMaterial(source('return rgba(clamp(1/(ctx.localTime+.5),0,1),0,0,1);', 'filter'))
+    let finish!: () => void
+    vi.mocked(device.popErrorScope).mockReturnValueOnce(new Promise(resolve => { finish = () => resolve(null) }))
+    const ordinary = runtime.filter('ordinary', 'v1', program, context, {}, input)
+    const flagged = runtime.filter('transition', 'v1', program, { ...context, localTime: -.5 }, {}, input, true)
+    const rejected = expect(flagged).rejects.toThrow('除数')
+    for (let index = 0; index < 10; index++) await Promise.resolve()
+    expect(device.queue.submit).not.toHaveBeenCalled()
+    finish(); await ordinary; await rejected
+    expect(device.queue.submit).toHaveBeenCalledOnce()
+    expect(runtime.diagnostics()).toMatchObject({ surfaces: 2, textureAllocations: 2, filterFrames: 1, pipelineCompiles: 3 })
+    await runtime.dispose()
+  })
+  it('普通滤镜管线复用前重证负时钟安全，失败零新分配/提交，修正后同管线认证复用', async () => {
+    const { device } = gpu(); const runtime = new VideoEditCodeGpu(device)
+    const input = await runtime.target('input', 3840, 2160)
+    const unsafe = compileCodeMaterial(source('return rgba(clamp(1/(ctx.localTime+.5),0,1),0,0,1);', 'filter'))
+    await runtime.filter('ordinary', 'v1', unsafe, context, {}, input)
+    const before = runtime.diagnostics(); const submits = vi.mocked(device.queue.submit).mock.calls.length
+    await expect(runtime.filter('bad', 'v1', unsafe, { ...context, localTime: -.5 }, {}, input, true)).rejects.toThrow('除数')
+    expect(runtime.diagnostics()).toEqual(before); expect(device.queue.submit).toHaveBeenCalledTimes(submits)
+    const recovered = compileCodeMaterial(source('return rgba(clamp(1/(max(ctx.localTime,0)+.5),0,1),0,0,1);', 'filter'))
+    await runtime.filter('recovered', 'v2', recovered, context, {}, input)
+    const compiles = runtime.diagnostics().pipelineCompiles
+    await runtime.filter('recovered', 'v2', recovered, { ...context, localTime: -.5 }, {}, input, true)
+    await runtime.filter('recovered', 'v2', recovered, { ...context, localTime: -.25 }, {}, input, true)
+    expect(runtime.diagnostics().pipelineCompiles).toBe(compiles)
+    await runtime.dispose()
+  })
+  it('结构化形状复用原绘制目标，独立旋转中心和透明度进入同一管线', async () => {
+    const { device } = gpu(); const runtime = new VideoEditCodeGpu(device)
+    const graphic = createVideoEditGraphic('rect', 3840, 2160)
+    Object.assign(graphic.objects[0].parameters, { x: 100, y: 200, width: 300, height: 100, rotation: 90, opacity: .25, fill: [1, .5, 0, .5] })
+    const draws = evaluateVideoEditGraphic(prepareVideoEditGraphic(graphic), { sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 } })
+    const original = await runtime.draw('graphic', 3840, 2160, draws)
+    const packed = vi.mocked(device.queue.writeBuffer).mock.lastCall?.[2] as Float32Array
+    expect([...packed.slice(0, 8)]).toEqual([100, 200, 300, 100, 1, .5, 0, .125])
+    expect(packed[16]).toBeCloseTo(0); expect([...packed.slice(17)]).toEqual([1, 250, 250])
+    expect(await runtime.draw('graphic', 3840, 2160, draws)).toBe(original)
+    expect(runtime.diagnostics()).toMatchObject({ surfaces: 1, textureAllocations: 1, externalCopies: 0, generatorFrames: 2 })
+    await expect(runtime.draw('bad', 3840, 2160, [{ ...draws[0], rotation: NaN }])).rejects.toThrow('范围')
+    await runtime.dispose(); expect(runtime.diagnostics().residentBytes).toBe(0)
+  })
+  it('预乘透明混合只写一个RGBA目标，复用管线且拒绝跨设备、尺寸、强度和别名', async () => {
+    const { device, compiled } = gpu(); const runtime = new VideoEditCodeGpu(device)
+    const left = await runtime.target('left', 3840, 2160); const right = await runtime.target('right', 3840, 2160)
+    const mixed = await runtime.mix('mix', left, right, .5)
+    const shader = vi.mocked(device.createShaderModule).mock.lastCall?.[0] as { code: string }
+    expect(shader.code).toContain('return mix(textureSample(left,s,v.uv),textureSample(right,s,v.uv),amount.x)')
+    const pipeline = compiled.mock.lastCall?.[0] as unknown as { fragment: { targets: Array<{ format: string; blend?: unknown }> } }
+    expect(pipeline.fragment.targets).toEqual([{ format: 'rgba8unorm' }])
+    expect(await runtime.mix('mix', left, right, .75)).toBe(mixed)
+    expect(runtime.diagnostics()).toMatchObject({ surfaces: 3, residentBytes: 3 * 3840 * 2160 * 4, pipelineCompiles: 3, mixFrames: 2 })
+    for (const amount of [-.1, 1.1, NaN, Infinity]) await expect(runtime.mix('bad', left, right, amount)).rejects.toThrow('强度')
+    await expect(runtime.mix('bad', left, { ...right, owner: gpu().device }, .5)).rejects.toThrow('同设备')
+    await expect(runtime.mix('bad', left, { ...right, width: 1920 }, .5)).rejects.toThrow('同尺寸')
+    await expect(runtime.mix('left', left, right, .5)).rejects.toThrow('同一纹理')
+    expect(runtime.diagnostics().surfaces).toBe(3)
+    runtime.releaseUnused(new Set(['left'])); expect(runtime.diagnostics().surfaces).toBe(1)
+    await runtime.dispose(); expect(runtime.diagnostics()).toMatchObject({ surfaces: 0, residentBytes: 0, pipelines: 0 })
+  })
+  it('混合管线失败不分配候选目标，关闭等待迟到编译并禁止迟到分配', async () => {
+    const { device } = gpu(); const runtime = new VideoEditCodeGpu(device)
+    const left = await runtime.target('left', 3840, 2160); const right = await runtime.target('right', 3840, 2160)
+    vi.mocked(device.popErrorScope).mockResolvedValueOnce({ message: '混合编译失败' })
+    await expect(runtime.mix('bad', left, right, .5)).rejects.toThrow('混合编译失败')
+    expect(runtime.diagnostics().surfaces).toBe(2)
+    let finish!: () => void
+    vi.mocked(device.popErrorScope).mockReturnValueOnce(new Promise(resolve => { finish = () => resolve(null) }))
+    const mixing = runtime.mix('late', left, right, .5); const rejected = expect(mixing).rejects.toThrow('关闭')
+    await Promise.resolve(); await Promise.resolve(); await Promise.resolve()
+    let closed = false; const disposing = runtime.dispose().then(() => { closed = true })
+    await Promise.resolve(); expect(closed).toBe(false)
+    finish(); await rejected; await disposing
+    expect(runtime.diagnostics()).toMatchObject({ surfaces: 0, residentBytes: 0, pipelines: 0 })
+  })
+  it('滤镜关闭屏障等待编译，固定版本并发只编译一次并关闭异常scope', async () => {
+    const { device } = gpu(); const runtime = new VideoEditCodeGpu(device)
+    const input = await runtime.target('input', 3840, 2160)
+    const program = compileCodeMaterial(source('return sample(ctx.u,ctx.v);', 'filter'))
+    let finish!: () => void
+    vi.mocked(device.popErrorScope).mockReturnValueOnce(new Promise(resolve => { finish = () => resolve(null) }))
+    const first = runtime.filter('first', 'v1', program, context, {}, input)
+    const second = runtime.filter('second', 'v1', program, context, {}, input)
+    const rejected = [expect(first).rejects.toThrow('关闭'), expect(second).rejects.toThrow('关闭')]
+    await Promise.resolve(); await Promise.resolve(); await Promise.resolve()
+    expect(vi.mocked(device.popErrorScope)).toHaveBeenCalledTimes(2)
+    let closed = false; const disposing = runtime.dispose().then(() => { closed = true })
+    await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); await Promise.resolve()
+    expect(closed).toBe(false)
+    finish(); await Promise.all(rejected); await disposing
+    expect(device.queue.submit).not.toHaveBeenCalled()
+    expect(runtime.diagnostics()).toMatchObject({ surfaces: 0, residentBytes: 0, pipelines: 0 })
+    const other = gpu(); const retry = new VideoEditCodeGpu(other.device)
+    const retryInput = await retry.target('input', 3840, 2160)
+    vi.mocked(other.device.createRenderPipeline).mockImplementationOnce(() => { throw new Error('管线创建失败') })
+    await expect(retry.filter('out', 'v1', program, context, {}, retryInput)).rejects.toThrow('管线创建失败')
+    expect(other.device.pushErrorScope).toHaveBeenCalledTimes(2)
+    expect(other.device.popErrorScope).toHaveBeenCalledTimes(2)
+    await retry.dispose()
+  })
+  it.each(['mix', 'filter'] as const)('%s 编译等待期间输入退役后拒绝提交和迟到目标分配', async operation => {
+    const { device } = gpu(); const runtime = new VideoEditCodeGpu(device)
+    const left = await runtime.target('left', 3840, 2160); const right = await runtime.target('right', 3840, 2160)
+    let finish!: () => void
+    vi.mocked(device.popErrorScope).mockReturnValueOnce(new Promise(resolve => { finish = () => resolve(null) }))
+    const pending = operation === 'mix' ? runtime.mix('out', left, right, .5) : runtime.filter('out', 'v1', compileCodeMaterial(source('return sample(ctx.u,ctx.v);', 'filter')), context, {}, left)
+    const rejected = expect(pending).rejects.toThrow('退役')
+    await Promise.resolve(); await Promise.resolve(); await Promise.resolve()
+    runtime.releaseUnused(new Set()); finish(); await rejected
+    expect(device.queue.submit).not.toHaveBeenCalled()
+    expect(runtime.diagnostics()).toMatchObject({ surfaces: 0, residentBytes: 0, textureAllocations: 2 })
+    await runtime.dispose()
+  })
   it('图片仅借用当前设备纹理，alpha模式与opacity进入可信管线且只懒编译一次', async () => {
     const { device, compiled, pass } = gpu(); const runtime = new VideoEditCodeGpu(device)
     const destroy = vi.fn(); const view = {}; const texture = { createView: () => view, destroy }
@@ -35,7 +184,7 @@ describe('代码GPU会话复用与资源边界', () => {
     expect(compiled).toHaveBeenCalledTimes(2); expect(pass.draw).not.toHaveBeenCalled()
     const picture = await runtime.generator('clip', program, context, values, new Map([['logo', input]]))
     expect(compiled).toHaveBeenCalledTimes(3)
-    expect(vi.mocked(device.queue.writeBuffer).mock.lastCall?.[2]).toEqual(new Float32Array([5, 6, 100, 80, 1, 1, 1, .25, 0, 0, 0, 0, 3840, 2160, 0, 0]))
+    expect(vi.mocked(device.queue.writeBuffer).mock.lastCall?.[2]).toEqual(new Float32Array([5, 6, 100, 80, 1, 1, 1, .25, 0, 0, 0, 0, 3840, 2160, 0, 0, 1, 0, 0, 0]))
     expect(vi.mocked(device.createBindGroup).mock.lastCall?.[0]).toMatchObject({ entries: [{ binding: 0 }, { binding: 1, resource: view }, { binding: 2 }] })
     const imageModule = vi.mocked(device.createShaderModule).mock.lastCall?.[0] as { code: string }
     expect(imageModule.code).toContain('select(color.rgb*color.a,color.rgb,p.canvas.z==1.0)')

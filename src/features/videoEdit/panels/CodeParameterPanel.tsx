@@ -4,16 +4,16 @@ import { Dropdown, UiColorInput, UiError, UiFormRow, UiGroup, UiIconButton, UiRa
 import NumberInput from '@/components/ui/NumberInput'
 import type { CodeColor, CodeImageReference, CodeParameterDeclaration, CodeParameterValue } from '@/core/videoEdit/codeMaterial/contract'
 import type { VideoEditSourceTime } from '@/core/videoEdit/time'
-import { readVideoEditCodeEditor, resetVideoEditCodeParameter, setVideoEditCodeParameter, updateVideoEditCodeKeyframe, type VideoEditCodeTarget, type VideoEditCodeEditorState } from '../application/videoEditCodeParameters'
+import { readVideoEditCodeEditor, resetVideoEditCodeParameter, setVideoEditCodeParameter, updateVideoEditCodeKeyframe, type VideoEditParameterTarget, type VideoEditCodeEditorState, type VideoEditParameterEditorState } from '../application/videoEditCodeParameters'
 import { subscribeVideoEditView, videoEditViewRevision, type VideoEditGesture } from '../application/videoEditService'
 import { CodeKeyframePanel } from './CodeKeyframePanel'
-import { useCodeParameterGesture } from './useCodeParameterGesture'
+import { useCodeParameterGesture, videoEditParameterTargetIdentity } from './useCodeParameterGesture'
 import { CodeImageParameterControl } from './CodeImageParameterControl'
 import { CodeSourceEditor } from './CodeSourceEditor'
 
 type ScalarParameter = Exclude<CodeParameterDeclaration, { type: 'image' }>
 interface ScalarProps {
-  target: VideoEditCodeTarget
+  target: VideoEditParameterTarget
   parameter: ScalarParameter
   value: CodeParameterValue
   label: string
@@ -68,9 +68,11 @@ function CodeScalarControl({ target, parameter, value, label, time, onError, onW
   return <div onKeyDownCapture={event => { if (event.key === 'Escape' && gesture.active()) { event.preventDefault(); event.stopPropagation(); touched.current = false; gesture.cancel() } }}>{control}</div>
 }
 
-function ParameterFields({ editor, onError }: { editor: VideoEditCodeEditorState; onError: (reason: unknown) => void }): React.ReactElement {
-  return <UiGroup title="代码参数" divided data-video-edit-code-parameters={editor.target.clipId}>
-    {editor.metadata.parameters.map(parameter => parameter.type === 'image' ? <UiFormRow key={parameter.key} label={parameter.title} info={parameter.description || undefined} data-video-edit-code-parameter={parameter.key}><CodeImageParameterControl target={editor.target} parameterKey={parameter.key} title={parameter.title} value={editor.parameters[parameter.key] as CodeImageReference | null} /></UiFormRow> : <UiGroup key={parameter.key} gap="row" data-video-edit-code-parameter={parameter.key}>
+export function VideoEditParameterFields({ editor, onError }: { editor: VideoEditParameterEditorState; onError: (reason: unknown) => void }): React.ReactElement {
+  const identity = videoEditParameterTargetIdentity(editor.target)
+  const title = 'code' in editor ? editor.target.effectId ? '效果参数' : '代码参数' : '对象参数'
+  return <UiGroup title={title} divided data-video-edit-code-parameters={editor.target.clipId}>
+    {editor.metadata.parameters.map(parameter => parameter.type === 'image' ? 'code' in editor ? <UiFormRow key={`${identity}:${parameter.key}`} label={parameter.title} info={parameter.description || undefined} data-video-edit-code-parameter={parameter.key}><CodeImageParameterControl target={editor.target} parameterKey={parameter.key} title={parameter.title} value={editor.parameters[parameter.key] as CodeImageReference | null} /></UiFormRow> : null : <UiGroup key={`${identity}:${parameter.key}`} gap="row" data-video-edit-code-parameter={parameter.key}>
       <UiFormRow label={<span className="flex items-center gap-2"><span>{parameter.title}</span><UiIconButton appearance="hover-only" showBorder={false} title={`重置${parameter.title}${editor.curves[parameter.key]?.length ? '（含关键帧）' : ''}`} aria-label={`重置${parameter.title}`} onClick={() => { try { resetVideoEditCodeParameter(editor.target, parameter.key) } catch (error) { onError(error) } }}><RotateCcw className="h-3.5 w-3.5" /></UiIconButton></span>} info={parameter.description || undefined}>
         <CodeScalarControl target={editor.target} parameter={parameter} value={editor.parameters[parameter.key]} label={parameter.title} time={editor.sourceTime} onError={onError} onWrite={(value, gesture, at) => setVideoEditCodeParameter(editor.target, parameter.key, value, { gesture, time: at })} />
       </UiFormRow>
@@ -79,9 +81,9 @@ function ParameterFields({ editor, onError }: { editor: VideoEditCodeEditorState
   </UiGroup>
 }
 
-export function CodeParameterPanel({ projectId, sequenceId, clipId, onError }: { projectId: string; sequenceId: string; clipId: string; onError: (reason: unknown) => void }): React.ReactElement {
+export function CodeParameterPanel({ projectId, sequenceId, clipId, effectId, onError }: { projectId: string; sequenceId: string; clipId: string; effectId?: string; onError: (reason: unknown) => void }): React.ReactElement {
   useSyncExternalStore(subscribeVideoEditView, videoEditViewRevision)
   let editor: VideoEditCodeEditorState
-  try { editor = readVideoEditCodeEditor(projectId, sequenceId, clipId) } catch (error) { return <UiError title="代码参数暂不可用" message={error instanceof Error ? error.message : '请重新选择代码片段。'} /> }
-  return <div key={JSON.stringify([projectId, sequenceId, clipId, editor.target.versionId])}><ParameterFields editor={editor} onError={onError} /><CodeSourceEditor editor={editor} /></div>
+  try { editor = readVideoEditCodeEditor(projectId, sequenceId, clipId, effectId) } catch (error) { return <UiError title="代码参数暂不可用" message={error instanceof Error ? error.message : '请重新选择代码片段。'} /> }
+  return <div key={videoEditParameterTargetIdentity(editor.target)}><VideoEditParameterFields editor={editor} onError={onError} /><CodeSourceEditor editor={editor} /></div>
 }

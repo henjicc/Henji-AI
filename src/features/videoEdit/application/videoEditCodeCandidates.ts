@@ -5,7 +5,8 @@ import { videoEditComposition, videoEditDocumentSchema, type VideoEditDocument }
 import type { VideoEditCodeTarget } from './videoEditCodeParameters'
 import { compileVideoEditCode, forgetVideoEditCodeMetadata, readVideoEditCodeMetadata, rememberVideoEditCodeMetadata } from './videoEditCodeState'
 import { editVideoProject, listVideoEditInstances, requireVideoEditInstance, subscribeVideoEditDomain, type VideoEditInstance } from './videoEditService'
-import { trialVideoEditCodeFrames } from './videoEditCodeTrial'
+import { trialVideoEditCodeFrames, videoEditCodeValidationFrames } from './videoEditCodeTrial'
+import { videoEditTransitionsAt } from '@/core/videoEdit/transitions'
 import { createLogger } from '@/core/logging'
 
 const logger = createLogger('features.videoEdit.codeCandidates')
@@ -32,9 +33,10 @@ export async function prepareVideoEditCodeCandidate(target: VideoEditCodeTarget,
   if ((active.get(owner)?.size ?? 0) + (preparing.get(owner) ?? 0) >= 2) throw new Error('请先关闭或提交现有源码候选。')
   const sequence = baseline.sequences.find(sequence => sequence.id === target.sequenceId)
   const original = sequence?.clips.find(clip => clip.id === target.clipId)
-  if (!sequence || !original?.code || original.code.versionId !== target.versionId) throw new Error('原代码片段或源码版本已改变，请重新选择。')
+  const originalCode = target.effectId ? original?.effects?.find(effect => effect.id === target.effectId)?.code : original?.kind === 'code' ? original.code : undefined
+  if (!sequence || !original || !originalCode || originalCode.versionId !== target.versionId) throw new Error('原代码片段或源码版本已改变，请重新选择。')
   if (!['single', 'matching'].includes(scope)) throw new Error('请选择此片段或相同原版本的所有片段。')
-  const definition = baseline.codeMaterials!.find(definition => definition.id === original.code!.definitionId)!
+  const definition = baseline.codeMaterials!.find(definition => definition.id === originalCode.definitionId)!
   preparing.set(owner, (preparing.get(owner) ?? 0) + 1)
   const controller = new AbortController()
   const cancel = (): void => { controller.abort(signal?.reason ?? new Error('源码候选已取消。')); if (candidate) disposeVideoEditCodeCandidate(candidate) }
@@ -62,7 +64,18 @@ export async function prepareVideoEditCodeCandidate(target: VideoEditCodeTarget,
     const read = readVideoEditCodeMetadata(owner, baseline)
     const impacts: VideoEditCodeCandidate['impacts'][number][] = []; let count = 0
     const selectedIds = new Set<string>()
+    const selectedEffects = new Map<string, string[]>()
     const document = videoEditDocumentSchema.parse({ ...baseline, codeMaterials: baseline.codeMaterials!.map(value => value.id === definition.id ? appended.definition : value), sequences: baseline.sequences.map(value => ({ ...value, clips: value.clips.map(clip => {
+      if (target.effectId) {
+        return { ...clip, effects: clip.effects?.map(effect => {
+          const selected = scope === 'single' ? value.id === target.sequenceId && clip.id === target.clipId && effect.id === target.effectId : effect.code.definitionId === definition.id && effect.code.versionId === target.versionId
+          if (!selected) return effect
+          const migration = proposeCodeMaterialMigration(read(effect.code), appended.program, effect.code, appended.versionId)
+          count++; selectedIds.add(clip.id); impacts.push(...migration.impacts.map(impact => ({ ...impact, sequenceName: value.name, clipName: `${clip.name} · ${effect.name}` })))
+          selectedEffects.set(clip.id, [...(selectedEffects.get(clip.id) ?? []), effect.id])
+          return { ...effect, code: migration.instance }
+        }) }
+      }
       const selected = scope === 'single' ? value.id === target.sequenceId && clip.id === target.clipId : clip.code?.definitionId === definition.id && clip.code.versionId === target.versionId
       if (!selected || !clip.code) return clip
       const migration = proposeCodeMaterialMigration(read(clip.code), appended.program, clip.code, appended.versionId)
@@ -70,12 +83,10 @@ export async function prepareVideoEditCodeCandidate(target: VideoEditCodeTarget,
       return { ...clip, code: migration.instance }
     }) })) })
     validateCodeMaterialDocument(document, readVideoEditCodeMetadata(owner, document))
-    const frame = Math.max(original.start, Math.min(original.start + original.duration - 1, owner.activeSequenceId === target.sequenceId ? owner.frame : owner.sequenceViews.get(target.sequenceId)?.frame ?? original.start))
-    const frames = document.sequences.flatMap(sequence => sequence.clips.filter(clip => selectedIds.has(clip.id)).map(clip => ({ document: videoEditComposition(document, sequence.id), frame: clip.id === target.clipId ? frame : clip.start })))
+    const requested = owner.activeSequenceId === target.sequenceId ? owner.frame : owner.sequenceViews.get(target.sequenceId)?.frame ?? original.start
+    const frame = videoEditTransitionsAt(videoEditComposition(document, target.sequenceId), requested).some(window => window.left.id === original.id || window.right.id === original.id) ? requested : Math.max(original.start, Math.min(original.start + original.duration - 1, requested))
     if (count > 32) throw new Error('批量源码更新最多32个片段，请缩小应用范围。')
-    const uniqueFrames = frames.filter((entry, index) => frames.findIndex(other => other.document.id === entry.document.id && other.frame === entry.frame) === index)
-    // Show the originally selected frame last, even when checking a batch.
-    uniqueFrames.sort((left, right) => Number(left.document.id === target.sequenceId && left.frame === frame) - Number(right.document.id === target.sequenceId && right.frame === frame))
+    const uniqueFrames = videoEditCodeValidationFrames(document, document.sequences.flatMap(sequence => sequence.clips.filter(clip => selectedIds.has(clip.id)).map(clip => ({ sequenceId: sequence.id, clipId: clip.id, ...(target.effectId ? { effectIds: selectedEffects.get(clip.id) } : {}) }))), { sequenceId: target.sequenceId, frame })
     bitmap = await trialVideoEditCodeFrames(uniqueFrames, controller.signal, true)
     controller.signal.throwIfAborted()
     if (!bitmap || requireVideoEditInstance(target.projectId) !== owner || owner.document !== baseline) throw new Error('源码候选的原工程已改变。')

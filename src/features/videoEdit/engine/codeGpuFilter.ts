@@ -58,7 +58,7 @@ const contextCode: Record<string, string> = { time: 'p.context0.x', localTime: '
 
 /** Emit only checked scalar/color IR. Conservative range analysis rejects unsafe
  * denominators and overflow before a pipeline reaches the GPU; no author WGSL. */
-export function emitCodeMaterialFilter(program: CodeMaterialProgram): string {
+export function emitCodeMaterialFilter(program: CodeMaterialProgram, transitionHandles = false): string {
   if (program.kind !== 'filter' || program.languageVersion !== 1 || program.parameters.length > 32 || program.metrics.samples > 4 || program.metrics.scalarOperations > 128) throw new CodeMaterialError('BUDGET', '滤镜版本或资源预算无效。')
   const bindings: Value[] = []; let nodes = 0
   const emit = (expression: CodeExpression, depth = 0): Value => {
@@ -76,7 +76,7 @@ export function emitCodeMaterialFilter(program: CodeMaterialProgram): string {
       case 'color': { const values = expression.values.map(next); return { code: `vec4f(${values.map(value => value.code).join(',')})`, bounds: values.map(scalar) } }
       case 'context': {
         if (!contextRanges[expression.key]) throw new CodeMaterialError('TYPE', '未知滤镜时间字段。')
-        return { code: contextCode[expression.key], bounds: contextRanges[expression.key] }
+        return { code: contextCode[expression.key], bounds: expression.key === 'localTime' && transitionHandles ? range(-1800, 1800, false) : contextRanges[expression.key] }
       }
       case 'parameter': {
         const index = program.parameters.findIndex(item => item.key === expression.key); const parameter = program.parameters[index]

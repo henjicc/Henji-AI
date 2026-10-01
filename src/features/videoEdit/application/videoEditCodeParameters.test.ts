@@ -6,7 +6,9 @@ import { getPlatform } from '@/platform/runtime'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { appendVideoEditSequence, beginVideoEditGesture, closeVideoEditProject, createVideoEditProject, editVideoProject, finishVideoEditGesture, getActiveVideoEditSequence, listVideoEditInstances, saveVideoEdit, setVideoEditView, switchVideoEditSequence, undoVideoEdit } from './videoEditService'
 import { rememberVideoEditCodeMetadata, readVideoEditCodeMetadata } from './videoEditCodeState'
-import { addVideoEditCodeKeyframe, deleteVideoEditCodeKeyframe, readVideoEditCodeEditor, resetVideoEditCodeParameter, setVideoEditCodeParameter, updateVideoEditCodeKeyframe } from './videoEditCodeParameters'
+import { addVideoEditCodeKeyframe, deleteVideoEditCodeKeyframe, readVideoEditCodeEditor, readVideoEditGraphicEditor, resetVideoEditCodeParameter, setVideoEditCodeParameter, updateVideoEditCodeKeyframe } from './videoEditCodeParameters'
+import { createVideoEditGraphicItem, appendVideoEditItems } from './videoEditProjectItems'
+import { createVideoEditGraphicObject, deleteVideoEditGraphicObjects, renameVideoEditGraphicObject, reorderVideoEditGraphicObjects } from './videoEditGraphics'
 
 const source = `export default {apiVersion:1,name:"参数",kind:"generator",mode:"dynamic",width:3840,height:2160,durationSeconds:10,seed:1,parameters:{amount:{type:"number",title:"强度",default:5,min:0,max:10,step:1,animatable:true},other:{type:"boolean",title:"开关",default:false}},render(ctx){return [rect({x:ctx.params.amount,y:0,width:100,height:100,fill:[1,0,0,1]})];}}`
 const files = new Map<string, string>()
@@ -28,6 +30,83 @@ async function setup() {
   return { owner, target: readVideoEditCodeEditor(owner.document.id, owner.activeSequenceId, getActiveVideoEditSequence(owner).clips[0].id).target }
 }
 const time = (sourceInUs: number) => ({ sourceInUs, sourceRemainder: { numerator: 0, denominator: 1 } })
+it('对象树的增删命名排序同源持久，稳定引用不跟随顺序并拒绝越界或锁定', async () => {
+  const owner = (await createVideoEditProject())!; const projectId = owner.document.id; const sequenceId = owner.activeSequenceId
+  const [clipId] = appendVideoEditItems(projectId, [createVideoEditGraphicItem(projectId, { kind: 'rect' })], sequenceId)
+  const target = { projectId, sequenceId, clipId }; const firstId = getActiveVideoEditSequence(owner).clips[0].graphic!.objects[0].id
+  const secondId = createVideoEditGraphicObject(target, { kind: 'ellipse', name: '装饰圆' })
+  reorderVideoEditGraphicObjects(target, [secondId, firstId]); renameVideoEditGraphicObject({ ...target, objectId: firstId }, '背景矩形')
+  setVideoEditCodeParameter({ ...target, objectId: firstId }, 'width', 100)
+  expect(getActiveVideoEditSequence(owner).clips[0].graphic!.objects.map(object => [object.id, object.name])).toEqual([[secondId, '装饰圆'], [firstId, '背景矩形']])
+  const baseline = owner.document; const history = owner.past.length
+  expect(() => reorderVideoEditGraphicObjects(target, [firstId, firstId])).toThrow('顺序')
+  expect(() => renameVideoEditGraphicObject({ ...target, objectId: firstId }, '')).toThrow()
+  expect(() => deleteVideoEditGraphicObjects(target, ['missing'])).toThrow('已移除')
+  expect(owner.document).toBe(baseline); expect(owner.past).toHaveLength(history)
+  deleteVideoEditGraphicObjects(target, [firstId]); expect(() => setVideoEditCodeParameter({ ...target, objectId: firstId }, 'width', 20)).toThrow('已改变')
+  undoVideoEdit(projectId); expect(readVideoEditGraphicEditor(projectId, sequenceId, clipId, firstId).parameters.width).toBe(100)
+  editVideoProject(projectId, document => { document.sequences[0].tracks.find(track => track.index === 1)!.locked = true; return document })
+  expect(() => createVideoEditGraphicObject(target, { kind: 'text' })).toThrow('锁定')
+})
+
+it('命名图形对象复用参数曲线和单笔手势，不伪造代码版本并保持项目项独立', async () => {
+  const owner = (await createVideoEditProject())!; const id = owner.document.id; const sequenceId = owner.activeSequenceId
+  const itemId = createVideoEditGraphicItem(id, { kind: 'rect' }); const [clipId] = appendVideoEditItems(id, [itemId], sequenceId)
+  const objectId = getActiveVideoEditSequence(owner).clips[0].graphic!.objects[0].id
+  const target = readVideoEditGraphicEditor(id, sequenceId, clipId, objectId).target
+  expect(target).not.toHaveProperty('versionId')
+  const history = owner.past.length; const gesture = beginVideoEditGesture(id)
+  setVideoEditCodeParameter(target, 'width', 100, { gesture }); setVideoEditCodeParameter(target, 'width', 200, { gesture }); finishVideoEditGesture(gesture)
+  expect(owner.past).toHaveLength(history + 1); expect(readVideoEditGraphicEditor(id, sequenceId, clipId, objectId).parameters.width).toBe(200)
+  expect(owner.document.items.find(item => item.id === itemId)!.graphic!.objects[0].parameters.width).toBe(960)
+  addVideoEditCodeKeyframe(target, 'width', time(0)); addVideoEditCodeKeyframe(target, 'width', time(1e6))
+  let editor = readVideoEditGraphicEditor(id, sequenceId, clipId, objectId)
+  updateVideoEditCodeKeyframe(target, 'width', editor.curves.width[1].id, { value: 400 })
+  setVideoEditView(id, { frame: 15 }); editor = readVideoEditGraphicEditor(id, sequenceId, clipId, objectId)
+  expect(editor.parameters.width).toBe(300)
+  setVideoEditCodeParameter(target, 'width', 350, { time: editor.sourceTime })
+  expect(readVideoEditGraphicEditor(id, sequenceId, clipId, objectId).curves.width).toHaveLength(3)
+  expect(() => setVideoEditCodeParameter({ ...target, objectId: 'missing' }, 'width', 1)).toThrow('图形对象')
+  expect(() => setVideoEditCodeParameter(target, 'versionId', 'fake')).toThrow('没有声明')
+  await saveVideoEdit(id); expect(JSON.parse(files.get(owner.path)!).sequences[0].clips[0].graphic.objects[0].curves.width).toHaveLength(3)
+})
+it('同片段多个效果按稳定id分别调参、动画和撤销，静态效果保留长源入点', async () => {
+  const owner = (await createVideoEditProject())!; const id = owner.document.id; const sequenceId = owner.activeSequenceId
+  const text = 'export default {apiVersion:1,name:"滤镜",kind:"filter",mode:"static",width:1920,height:1080,durationSeconds:10,seed:1,parameters:{gain:{type:"number",title:"强度",default:.5,min:0,max:1,step:.01,animatable:true}},render(ctx){const c=sample(ctx.u,ctx.v);return rgba(c.r*ctx.params.gain,c.g,c.b,c.a);}}'
+  const program = compileCodeMaterial(text); const version = { id: 'filter-v', source: text, apiVersion: 1 as const, languageVersion: 1 as const }
+  rememberVideoEditCodeMetadata(owner, 'filter-d', version, program)
+  const itemId = createVideoEditGraphicItem(id, { kind: 'solid' }); const [clipId] = appendVideoEditItems(id, [itemId], sequenceId)
+  editVideoProject(id, document => {
+    document.codeMaterials = [{ id: 'filter-d', name: '滤镜', defaultVersionId: 'filter-v', versions: [version] }]
+    const clip = document.sequences[0].clips[0]; clip.sourceInUs = 3_600_000_000
+    clip.effects = ['first', 'second'].map(id => ({ id, name: id, enabled: true, amount: 1, code: { definitionId: 'filter-d', versionId: 'filter-v', parameters: {} } })); return document
+  })
+  const target = readVideoEditCodeEditor(id, sequenceId, clipId, 'second').target
+  expect(readVideoEditCodeEditor(id, sequenceId, clipId, 'second').sourceTime).toEqual(time(3_600_000_000))
+  const history = owner.past.length; const gesture = beginVideoEditGesture(id)
+  setVideoEditCodeParameter(target, 'gain', .7, { gesture }); setVideoEditCodeParameter(target, 'gain', .8, { gesture }); finishVideoEditGesture(gesture)
+  expect(owner.past).toHaveLength(history + 1); expect(readVideoEditCodeEditor(id, sequenceId, clipId, 'first').parameters.gain).toBe(.5)
+  expect(readVideoEditCodeEditor(id, sequenceId, clipId, 'second').parameters.gain).toBe(.8)
+  undoVideoEdit(id); expect(readVideoEditCodeEditor(id, sequenceId, clipId, 'second').parameters.gain).toBe(.5)
+  addVideoEditCodeKeyframe(target, 'gain', time(3_600_000_000)); addVideoEditCodeKeyframe(target, 'gain', time(3_601_000_000))
+  const editor = readVideoEditCodeEditor(id, sequenceId, clipId, 'second')
+  updateVideoEditCodeKeyframe(target, 'gain', editor.curves.gain[1].id, { value: 1 })
+  setVideoEditView(id, { frame: 15 }); expect(readVideoEditCodeEditor(id, sequenceId, clipId, 'second').parameters.gain).toBe(.75)
+  expect(() => setVideoEditCodeParameter({ ...target, effectId: 'missing' }, 'gain', 1)).toThrow('已改变')
+})
+it('转场中的对象编辑沿实际序列帧和原源时钟，切点前不钳制到片段入点', async () => {
+  const owner = (await createVideoEditProject())!; const id = owner.document.id; const sequenceId = owner.activeSequenceId
+  const itemId = createVideoEditGraphicItem(id, { kind: 'rect' }); const [leftId, rightId] = appendVideoEditItems(id, [itemId, itemId], sequenceId, { frame: 0 })
+  editVideoProject(id, document => {
+    const sequence = document.sequences[0]; sequence.clips[0].duration = 30; sequence.clips[1].start = 30; sequence.clips[1].sourceInUs = 1e6
+    sequence.transitions = [{ id: 'dissolve', kind: 'cross_dissolve', leftClipId: leftId, rightClipId: rightId, durationFrames: 10 }]; return document
+  })
+  const objectId = getActiveVideoEditSequence(owner).clips[1].graphic!.objects[0].id
+  setVideoEditView(id, { frame: 25 })
+  const editor = readVideoEditGraphicEditor(id, sequenceId, rightId, objectId)
+  expect(editor.frame).toBe(25); expect(editor.sourceTime).toEqual({ sourceInUs: 833333, sourceRemainder: { numerator: 1, denominator: 3 } })
+  setVideoEditView(id, { frame: 24 }); expect(readVideoEditGraphicEditor(id, sequenceId, rightId, objectId).frame).toBe(30)
+})
 
 it('参数按原对象合并，连续手势一笔撤销，默认实例和无关参数保持独立', async () => {
   const { owner, target } = await setup(); const history = owner.past.length

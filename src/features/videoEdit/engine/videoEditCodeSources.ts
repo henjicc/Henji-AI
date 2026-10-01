@@ -6,23 +6,30 @@ import { evaluateCodeMaterialParameters, prepareCodeMaterialParameters } from '@
 import type { PreparedCodeMaterialParameters } from '@/core/videoEdit/codeMaterialAnimation'
 import type { CodeMaterialInstance } from '@/core/videoEdit/codeMaterialPersistence'
 import { offsetVideoEditSource } from '@/core/videoEdit/time'
-import { codeMaterialContextForFrame } from '@/core/videoEdit/codeMaterialTiming'
+import { codeMaterialContextForFrame, codeMaterialContextForTransitionFrame } from '@/core/videoEdit/codeMaterialTiming'
 import type { CodeMaterialVersion } from '@/core/videoEdit/codeMaterialPersistence'
 import type { VideoEditClip, VideoEditComposition } from '@/core/videoEdit/document'
 import { VideoEditCodeCompiler } from './videoEditCodeCompiler'
 import type { VideoEditCodeGpu, VideoEditCodePicture } from './videoEditCodeGpu'
 import type { VideoEditCodeImageInput } from './videoEditCodeGpu'
 import { codeMaterialImageIds } from '@/core/videoEdit/codeMaterialResources'
+import { evaluateVideoEditGraphic, prepareVideoEditGraphic } from '@/core/videoEdit/graphics'
+import type { PreparedVideoEditGraphic, VideoEditGraphic, VideoEditGraphicDraw } from '@/core/videoEdit/graphics'
+import type { VideoEditEffect } from '@/core/videoEdit/compositing'
+import { activeVideoEditEffects } from '@/core/videoEdit/compositing'
+import type { VideoEditTransitionWindow } from '@/core/videoEdit/transitions'
 
 const logger = createLogger('features.videoEdit.codeSources')
 const MAX_PROGRAMS = 32; const MAX_PROGRAM_BYTES = 16 * 1024 ** 2
 const MAX_SEEN_VERSIONS = 4096; const MAX_SEEN_SOURCE_BYTES = 8 * 1024 ** 2
-type CodeRuntime = Pick<VideoEditCodeGpu, 'generator' | 'releaseUnused'>
+type CodeRuntime = Pick<VideoEditCodeGpu, 'generator' | 'releaseUnused'> & Partial<Pick<VideoEditCodeGpu, 'draw' | 'retainProgramVersions'>>
 type Compiler = Pick<VideoEditCodeCompiler, 'compile' | 'dispose'> & Partial<Pick<VideoEditCodeCompiler, 'diagnostics'>>
 interface KnownVersion { source: string; apiVersion: number; languageVersion: number; bytes: number }
 interface CachedProgram { source: string; program: CodeMaterialProgram; bytes: number }
-interface Plan { clip: VideoEditClip; key: string; program: CodeMaterialProgram; parameters: CodeParameterValues; context: ReturnType<typeof codeMaterialContextForFrame> }
-export interface PreparedCodeSources { pictures: Map<string, VideoEditCodePicture>; sourceTimestamps: number[]; cacheHits: number }
+interface Plan { clip: VideoEditClip; key: string; static: boolean; program?: CodeMaterialProgram; draws?: VideoEditGraphicDraw[]; parameters: CodeParameterValues; context: ReturnType<typeof codeMaterialContextForFrame>; transitionHandles: boolean }
+export interface PreparedVideoEditEffect { effect: VideoEditEffect; version: string; program: CodeMaterialProgram; parameters: CodeParameterValues; context: ReturnType<typeof codeMaterialContextForFrame>; transitionHandles: boolean }
+export interface PreparedCodeSources { pictures: Map<string, VideoEditCodePicture>; effects: Map<string, PreparedVideoEditEffect[]>; sourceTimestamps: number[]; cacheHits: number }
+export interface VideoEditCodePrepareOptions { transitions?: readonly VideoEditTransitionWindow[]; surfaceKeys?: ReadonlySet<string> }
 function identity(definitionId: string, versionId: string): string { return JSON.stringify([definitionId, versionId]) }
 function freezeProgram(program: CodeMaterialProgram): CodeMaterialProgram {
   const seen = new WeakSet<object>()
@@ -40,6 +47,7 @@ export class VideoEditCodeSources {
   private programBytes = 0
   private readonly staticPictures = new Map<string, VideoEditCodePicture>()
   private readonly parameters = new WeakMap<CodeMaterialInstance, { program: CodeMaterialProgram; prepared: PreparedCodeMaterialParameters }>()
+  private readonly graphics = new WeakMap<VideoEditGraphic, PreparedVideoEditGraphic>()
   private runtime?: CodeRuntime
   private controller?: AbortController
   private epoch = 0
@@ -99,49 +107,80 @@ export class VideoEditCodeSources {
       throw error
     }
   }
-  async prepare(document: VideoEditComposition, clips: VideoEditClip[], frame: number, shouldPresent: () => boolean, images?: Promise<ReadonlyMap<string, VideoEditCodeImageInput> | undefined>): Promise<PreparedCodeSources> {
+  async prepare(document: VideoEditComposition, clips: VideoEditClip[], frame: number, shouldPresent: () => boolean, images?: Promise<ReadonlyMap<string, VideoEditCodeImageInput> | undefined>, options: VideoEditCodePrepareOptions = {}): Promise<PreparedCodeSources> {
     this.cancel(); const epoch = this.epoch; const controller = new AbortController(); this.controller = controller
     // A decode can reject while source compilation is still pending.
     const imageOutcome = images ? Promise.allSettled([images]) : undefined
     const assertCurrent = (): void => { if (this.disposed || controller.signal.aborted || this.epoch !== epoch || this.document !== document || !shouldPresent()) throw new DOMException('旧代码画面已取消。', 'AbortError') }
-    const plans: Plan[] = []; const keys = new Set<string>()
-    const pinned = new Set(clips.flatMap(clip => clip.code ? [identity(clip.code.definitionId, clip.code.versionId)] : []))
+    const plans: Plan[] = []; const keys = new Set<string>(options.surfaceKeys)
+    const effects = new Map<string, PreparedVideoEditEffect[]>()
+    const pinned = new Set(clips.flatMap(clip => [...(clip.code ? [clip.code] : []), ...activeVideoEditEffects(clip).map(effect => effect.code)].map(instance => identity(instance.definitionId, instance.versionId))))
+    const transitionByClip = new Map(options.transitions?.flatMap(window => [[window.left.id, window], [window.right.id, window]] as const))
+    const animated = (clip: VideoEditClip, instance: CodeMaterialInstance, program: CodeMaterialProgram): Pick<Plan, 'context' | 'parameters' | 'transitionHandles'> => {
+      let animation = this.parameters.get(instance)
+      if (!animation || animation.program !== program) { animation = { program, prepared: prepareCodeMaterialParameters(program, instance) }; this.parameters.set(instance, animation) }
+      const window = transitionByClip.get(clip.id)
+      const context = window ? codeMaterialContextForTransitionFrame(clip, frame, document.frameRate, program, window) : codeMaterialContextForFrame(clip, frame, document.frameRate, program)
+      const parameters = evaluateCodeMaterialParameters(animation.prepared, offsetVideoEditSource(clip, frame - clip.start, document.frameRate, Boolean(window) && program.mode === 'static'))
+      return { context, parameters, transitionHandles: Boolean(window) }
+    }
     try {
       for (const clip of clips) {
         assertCurrent()
-        if (clip.kind !== 'code' || !clip.code) throw new CodeMaterialError('COMPATIBILITY', '代码片段缺少固定源码实例。')
+        const chain: PreparedVideoEditEffect[] = []
+        for (const effect of activeVideoEditEffects(clip)) {
+          const key = identity(effect.code.definitionId, effect.code.versionId)
+          const program = await this.program(key, codeMaterialSource(document, effect.code), controller.signal, pinned); assertCurrent()
+          if (program.kind !== 'filter') throw new CodeMaterialError('TYPE', '附加效果必须使用单输入滤镜源码。')
+          chain.push({ effect, version: key, program, ...animated(clip, effect.code, program) })
+        }
+        if (chain.length) effects.set(clip.id, chain)
+        if (clip.kind === 'graphic') {
+          if (!clip.graphic) throw new CodeMaterialError('COMPATIBILITY', '图形片段缺少结构化对象。')
+          let prepared = this.graphics.get(clip.graphic)
+          if (!prepared) { prepared = prepareVideoEditGraphic(clip.graphic); this.graphics.set(clip.graphic, prepared) }
+          const time = offsetVideoEditSource(clip, frame - clip.start, document.frameRate, transitionByClip.has(clip.id))
+          const draws = evaluateVideoEditGraphic(prepared, time)
+          const target = `graphic:static:${JSON.stringify([prepared.width, prepared.height, draws])}`
+          keys.add(target)
+          plans.push({ clip, key: target, static: true, draws, parameters: {}, transitionHandles: transitionByClip.has(clip.id), context: { width: prepared.width, height: prepared.height, time: time.sourceInUs / 1e6 + time.sourceRemainder.numerator / time.sourceRemainder.denominator / 1e6, localTime: (frame - clip.start) / document.fps, sequenceTime: frame / document.fps, frame, fps: document.fps } })
+          continue
+        }
+        if (clip.kind !== 'code') continue
+        if (!clip.code) throw new CodeMaterialError('COMPATIBILITY', '代码片段缺少固定源码实例。')
         const version = codeMaterialSource(document, clip.code)
         const key = identity(clip.code.definitionId, clip.code.versionId)
         const program = await this.program(key, version, controller.signal, pinned); assertCurrent()
         if (program.kind !== 'generator') throw new CodeMaterialError('TYPE', '单输入滤镜不能作为生成片段渲染。')
-        let animation = this.parameters.get(clip.code)
-        if (!animation || animation.program !== program) { animation = { program, prepared: prepareCodeMaterialParameters(program, clip.code) }; this.parameters.set(clip.code, animation) }
-        const parameters = evaluateCodeMaterialParameters(animation.prepared, offsetVideoEditSource(clip, frame - clip.start, document.frameRate))
-        const context = codeMaterialContextForFrame(clip, frame, document.frameRate, program)
+        const { parameters, context, transitionHandles } = animated(clip, clip.code, program)
         const imageSources = [...codeMaterialImageIds(clip.code)].map(id => { const media = document.media.find(media => media.id === id && media.kind === 'image'); if (!media) throw new Error('代码图片引用不存在。'); return [id, media.path, media.sourceRevision, media.width, media.height] })
         const target = program.mode === 'static' ? `code:static:${JSON.stringify([key, parameters, imageSources])}` : `code:dynamic:${clip.id}`
         keys.add(target)
-        if (keys.size > 16) throw new CodeMaterialError('BUDGET', '代码素材同时最多16个渲染目标。')
-        plans.push({ clip, key: target, program, parameters, context })
+        plans.push({ clip, key: target, static: program.mode === 'static', program, parameters, context, transitionHandles })
       }
+      if (keys.size > 16) throw new CodeMaterialError('BUDGET', '代码素材同时最多16个渲染目标。')
       assertCurrent(); this.protectedKeys = keys
-      const result: PreparedCodeSources = { pictures: new Map(), sourceTimestamps: plans.map(plan => plan.context.time), cacheHits: 0 }
+      const result: PreparedCodeSources = { pictures: new Map(), effects, sourceTimestamps: plans.map(plan => plan.context.time), cacheHits: 0 }
       // Serialize GPU mutations, including a generator whose readiness resolves after cancellation.
       const work = this.gpuWork.then(async () => {
         assertCurrent()
-        if (plans.length) { this.runtime ??= await this.acquireRuntime(); assertCurrent() }
+        if (plans.length || effects.size || keys.size) { this.runtime ??= await this.acquireRuntime(); assertCurrent() }
+        this.runtime?.retainProgramVersions?.(new Set(this.programs.keys()))
         const outcome = (await imageOutcome)?.[0]
         if (outcome?.status === 'rejected') throw outcome.reason
         const inputs = outcome?.status === 'fulfilled' ? outcome.value : undefined; assertCurrent()
         this.releaseUnused(keys)
         for (const plan of plans) {
           assertCurrent()
-          let picture = plan.program.mode === 'static' ? this.staticPictures.get(plan.key) : undefined
+          let picture = plan.static ? this.staticPictures.get(plan.key) : undefined
           if (picture) result.cacheHits++
           else {
-            picture = await this.runtime!.generator(plan.key, plan.program, plan.context, plan.parameters, inputs)
+            if (plan.draws) {
+              if (!this.runtime!.draw) throw new Error('当前GPU会话不支持结构化图形绘制。')
+              picture = await this.runtime!.draw(plan.key, plan.context.width, plan.context.height, plan.draws)
+            } else picture = await this.runtime!.generator(plan.key, plan.program!, plan.context, plan.parameters, inputs, plan.transitionHandles)
             assertCurrent()
-            if (plan.program.mode === 'static') this.staticPictures.set(plan.key, picture)
+            if (plan.static) this.staticPictures.set(plan.key, picture)
           }
           result.pictures.set(plan.clip.id, picture)
         }

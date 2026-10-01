@@ -5,11 +5,11 @@ import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { VideoEditGpuCompositor } from './videoEditGpuCompositor'
 import type { VideoSample } from 'mediabunny'
 
-const state = vi.hoisted(() => ({ device: undefined as GpuDevice | undefined }))
-afterEach(() => { vi.unstubAllGlobals() })
+const state = vi.hoisted(() => ({ device: undefined as GpuDevice | undefined, format: 'rgba8unorm' }))
+afterEach(() => { vi.unstubAllGlobals(); state.format = 'rgba8unorm' })
 vi.mock('@/core/imageEdit/webgpu/deviceManager', () => ({ ImageEditWebGpuDeviceManager: class {
   onDeviceLost() {}
-  async acquire() { return { device: state.device!, provider: { getPreferredCanvasFormat: () => 'rgba8unorm' } } }
+  async acquire() { return { device: state.device!, provider: { getPreferredCanvasFormat: () => state.format } } }
   destroy() {}
 } }))
 function copyFixture(fence: () => Promise<void>) {
@@ -17,9 +17,9 @@ function copyFixture(fence: () => Promise<void>) {
   const pass = { setPipeline: vi.fn(), setBindGroup: vi.fn(), draw: vi.fn(), end: vi.fn() }
   const device = {
     queue: { copyExternalImageToTexture: vi.fn(), writeBuffer: vi.fn(), submit: vi.fn(), onSubmittedWorkDone: fence },
-    lost: new Promise<{ reason?: string; message?: string }>(() => {}), createShaderModule: vi.fn(), createRenderPipeline: () => ({ getBindGroupLayout: () => ({}) }), createSampler: vi.fn(),
+    lost: new Promise<{ reason?: string; message?: string }>(() => {}), createShaderModule: vi.fn(), createRenderPipeline: vi.fn((_descriptor: unknown) => ({ getBindGroupLayout: () => ({}) })), createSampler: vi.fn(),
     createTexture: () => ({ createView: () => ({}), destroy: destroyed }), createBuffer: () => ({ destroy: vi.fn() }),
-    createBindGroup: vi.fn(), createCommandEncoder: () => ({ beginRenderPass: () => pass, finish: () => ({}) }), pushErrorScope: vi.fn(), popErrorScope: async () => null, destroy: vi.fn(), importExternalTexture: vi.fn(),
+    createBindGroup: vi.fn(), createCommandEncoder: vi.fn(() => ({ beginRenderPass: vi.fn((_descriptor: unknown) => pass), finish: () => ({}) })), pushErrorScope: vi.fn(), popErrorScope: vi.fn(async (): Promise<{ message?: string } | null> => null), destroy: vi.fn(), importExternalTexture: vi.fn(),
   }
   state.device = device
   const output = { width: 3840, height: 2160, getContext: () => ({ configure: vi.fn(), getCurrentTexture: () => ({ createView: () => ({}) }) }) } as unknown as OffscreenCanvas
@@ -36,6 +36,68 @@ it('已经到时的画面直接提交，不再等待额外一次垂直同步', a
   await result.completion
   expect(result.presented).toBe(true); expect(device.queue.submit).toHaveBeenCalledOnce(); expect(request).not.toHaveBeenCalled()
   await compositor.dispose()
+})
+describe('全尺寸离屏合成与迟到校验', () => {
+  function composition() {
+    const document = createVideoEditDocument('RGBA合成')
+    document.sequences[0].width = 3840; document.sequences[0].height = 2160
+    document.items.push({ id: 'image', kind: 'image', name: '输入' })
+    const clip = makeVideoEditItemClip(document, 'image', document.sequences[0].id, { frame: 0 })
+    return { document: videoEditComposition(document, document.sequences[0].id), clip }
+  }
+  it('BGRA画布和RGBA中间目标分用匹配管线，透明清屏，几何和opacity只归一化一次', async () => {
+    state.format = 'bgra8unorm'
+    const { compositor, device } = copyFixture(async () => {}); const { document, clip } = composition()
+    const code = await compositor.code(); const input = await code.target('input', 3840, 2160); const target = await code.target('target', 3840, 2160)
+    const before = device.createRenderPipeline.mock.calls.length
+    const transformed = { ...clip, x: .1, y: -.2, scale: .5, rotation: 90, brightness: .8, opacity: .25 }
+    await (await compositor.draw(document, [transformed], [input], () => true, undefined, target)).completion
+    const rgba = device.createRenderPipeline.mock.calls.slice(before).map(([descriptor]) => (descriptor as { fragment: { targets: Array<{ format: string }> } }).fragment.targets[0].format)
+    expect(rgba).toEqual(['rgba8unorm', 'rgba8unorm', 'rgba8unorm', 'rgba8unorm'])
+    const initial = device.createRenderPipeline.mock.calls.slice(0, 4).map(([descriptor]) => (descriptor as { fragment: { targets: Array<{ format: string }> } }).fragment.targets[0].format)
+    expect(initial).toEqual(['bgra8unorm', 'bgra8unorm', 'bgra8unorm', 'bgra8unorm'])
+    expect(device.createCommandEncoder.mock.results.at(-1)!.value.beginRenderPass).toHaveBeenCalledWith(expect.objectContaining({ colorAttachments: [expect.objectContaining({ clearValue: { r: 0, g: 0, b: 0, a: 0 } })] }))
+    const values = device.queue.writeBuffer.mock.lastCall?.[2] as Float32Array
+    expect(values[0]).toBe(.5); expect(values[2]).toBeCloseTo(0); expect(values[3]).toBe(1)
+    expect([...values.slice(4, 8)]).toEqual([Math.fround(.2), Math.fround(-.4), Math.fround(.8), .25])
+    const compiles = device.createRenderPipeline.mock.calls.length
+    await (await compositor.draw(document, [clip], [input], () => true, undefined, target)).completion
+    expect(device.createRenderPipeline).toHaveBeenCalledTimes(compiles)
+    await (await compositor.draw(document, [{ ...clip, x: 0, y: 0, scale: 1, rotation: 0, brightness: 1, opacity: 1 }], [target], () => true)).completion
+    expect([...device.queue.writeBuffer.mock.lastCall![2] as Float32Array].slice(0, 8)).toEqual([1, 1, 1, 0, 0, 0, 1, 1])
+    expect(device.createCommandEncoder.mock.results.at(-1)!.value.beginRenderPass).toHaveBeenCalledWith(expect.objectContaining({ colorAttachments: [expect.objectContaining({ clearValue: { r: 0, g: 0, b: 0, a: 1 } })] }))
+    await expect(compositor.draw(document, [clip], [target], () => true, undefined, target)).rejects.toThrow('同一纹理')
+    await compositor.dispose(); expect(code.diagnostics()).toMatchObject({ surfaces: 0, residentBytes: 0 })
+  })
+  it('取消的首帧不启动离屏编译，关闭屏障等待已启动校验且没有迟到提交', async () => {
+    const { compositor, device } = copyFixture(async () => {}); const { document, clip } = composition()
+    const code = await compositor.code(); const input = await code.target('input', 3840, 2160); const target = await code.target('target', 3840, 2160)
+    const before = device.createRenderPipeline.mock.calls.length
+    expect((await compositor.draw(document, [clip], [input], () => false, undefined, target)).presented).toBe(false)
+    expect(device.createRenderPipeline).toHaveBeenCalledTimes(before)
+    let finish!: () => void
+    device.popErrorScope.mockReturnValueOnce(new Promise(resolve => { finish = () => resolve(null) }))
+    const pending = compositor.draw(document, [clip], [input], () => true, undefined, target)
+    const rejected = expect(pending).rejects.toThrow('不可用')
+    for (let index = 0; index < 10; index++) await Promise.resolve()
+    let closed = false; const closing = compositor.dispose().then(() => { closed = true })
+    await Promise.resolve(); expect(closed).toBe(false)
+    finish(); await rejected; await closing
+    expect(device.queue.submit).not.toHaveBeenCalled(); expect(code.diagnostics()).toMatchObject({ surfaces: 0, residentBytes: 0 })
+  })
+  it.each(['input', 'target'] as const)('离屏编译等待期间%s退役，校验完成后不提交已释放纹理', async retired => {
+    const { compositor, device } = copyFixture(async () => {}); const { document, clip } = composition()
+    const code = await compositor.code(); const input = await code.target('input', 3840, 2160); const target = await code.target('target', 3840, 2160)
+    let finish!: () => void
+    device.popErrorScope.mockReturnValueOnce(new Promise(resolve => { finish = () => resolve(null) }))
+    const pending = compositor.draw(document, [clip], [input], () => true, undefined, target)
+    const rejected = expect(pending).rejects.toThrow('退役')
+    for (let index = 0; index < 10; index++) await Promise.resolve()
+    code.releaseUnused(new Set([retired === 'input' ? 'target' : 'input']))
+    finish(); await rejected
+    expect(device.queue.submit).not.toHaveBeenCalled(); expect(code.diagnostics()).toMatchObject({ surfaces: 1, textureAllocations: 2 })
+    await compositor.dispose()
+  })
 })
 it('未来帧仍等指定时刻，取消等待不能提交已失效画面', async () => {
   const callbacks = new Map<number, FrameRequestCallback>(); let token = 0

@@ -2,6 +2,7 @@ import type { ApplicationDomainModule } from '@/features/application-control/dom
 import { ApplicationPersistenceFailure, type ApplicationPersistenceParticipant } from '@/core/application-control/execution/persistence'
 import { createVideoEditRegistrations } from './videoEditReflection'
 import { VideoEditCollectionExecutor, VideoEditMutationExecutor } from './videoEditExecutors'
+import { VIDEO_EDIT_COMPOSITE_TYPES } from './videoEditCompositeEntities'
 import { requireVideoEditInstance, saveVideoEdit, type VideoEditInstance } from './videoEditService'
 import { editVideoSequence, undoVideoEdit } from './videoEditService'
 import { splitVideoEditRef } from './videoEditReflection'
@@ -19,9 +20,9 @@ const persistenceOwners = new WeakMap<VideoEditInstance, ApplicationPersistenceP
 export const videoEditApplicationDomain: ApplicationDomainModule = {
   id: 'videoEdit', entities: createVideoEditRegistrations,
   registerExecutors(engine) {
-    for (const entityType of ['video_edit.project', 'video_edit.sequence', 'video_edit.bin', 'video_edit.item', 'video_edit.track', 'video_edit.clip', 'video_edit.annotation', 'video_edit.code_material', 'video_edit.marker', 'video_edit.caption'] as const) engine.registerMutationExecutor(new VideoEditMutationExecutor(entityType))
+    for (const entityType of ['video_edit.project', 'video_edit.sequence', 'video_edit.bin', 'video_edit.item', 'video_edit.track', 'video_edit.clip', 'video_edit.annotation', 'video_edit.code_material', 'video_edit.marker', 'video_edit.caption', ...VIDEO_EDIT_COMPOSITE_TYPES] as const) engine.registerMutationExecutor(new VideoEditMutationExecutor(entityType))
     engine.registerMutationExecutor(new VideoEditSourceExecutor())
-    for (const entityType of ['video_edit.sequence', 'video_edit.bin', 'video_edit.item', 'video_edit.clip', 'video_edit.annotation', 'video_edit.code_material', 'video_edit.code_version', 'video_edit.marker', 'video_edit.caption'] as const) engine.registerCollectionExecutor(new VideoEditCollectionExecutor(entityType))
+    for (const entityType of ['video_edit.sequence', 'video_edit.bin', 'video_edit.item', 'video_edit.clip', 'video_edit.annotation', 'video_edit.code_material', 'video_edit.code_version', 'video_edit.marker', 'video_edit.caption', ...VIDEO_EDIT_COMPOSITE_TYPES] as const) engine.registerCollectionExecutor(new VideoEditCollectionExecutor(entityType))
   },
   registerCapabilities(registrar) {
     for (const definition of VIDEO_EDIT_APPLICATION_CAPABILITIES) registrar.registerHandler(definition.id, async raw => {

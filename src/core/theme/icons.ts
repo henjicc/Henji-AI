@@ -21,6 +21,8 @@ import {
   Music,
   Orbit,
   ScanSearch,
+  Shapes,
+  SlidersHorizontal,
   Sigma,
   Settings,
   SquarePen,
@@ -81,6 +83,10 @@ export const ICON_IMAGE_GLOW_PRO: LucideIcon = SunMedium
 export const ICON_MEDIA_IMAGE: LucideIcon = ImageIcon
 export const ICON_MEDIA_VIDEO: LucideIcon = Video
 export const ICON_MEDIA_AUDIO: LucideIcon = Music
+/** 剪辑中的结构化原生图形。 */
+export const ICON_VIDEO_EDIT_GRAPHIC: LucideIcon = Shapes
+/** 处理下方画面范围的调整图层。 */
+export const ICON_VIDEO_EDIT_ADJUSTMENT: LucideIcon = SlidersHorizontal
 
 /* 其他跨界面概念 ----------------------------------------------------------- */
 

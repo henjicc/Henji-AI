@@ -10,15 +10,15 @@ export function codeMaterialRandom(seed: number, index: number): number {
   value = Math.imul(value ^ (value >>> 15), 0x846ca68b) >>> 0
   return ((value ^ (value >>> 16)) >>> 0) / 4294967296
 }
-function validateContext(context: CodeMaterialContext): void {
+function validateContext(context: CodeMaterialContext, transitionHandles: boolean): void {
   for (const key of ['time', 'localTime', 'sequenceTime', 'width', 'height', 'frame', 'fps'] as const) finiteCodeNumber(context[key], `ctx.${key}`)
-  if (context.time < 0 || context.localTime < 0 || context.sequenceTime < 0 || !Number.isSafeInteger(context.frame) || context.frame < 0 || context.fps <= 0 || context.fps > 240 || ![context.width, context.height].every(value => Number.isInteger(value) && value > 0 && value <= 8192)) throw new CodeMaterialError('CONTEXT', '时间、尺寸、帧或帧率无效。')
+  if (context.time < 0 || context.localTime < (transitionHandles ? -1800 : 0) || context.localTime > 1800 || context.sequenceTime < 0 || !Number.isSafeInteger(context.frame) || context.frame < 0 || context.fps <= 0 || context.fps > 240 || ![context.width, context.height].every(value => Number.isInteger(value) && value > 0 && value <= 8192)) throw new CodeMaterialError('CONTEXT', '时间、尺寸、帧或帧率无效。')
 }
 /** Evaluate generator IR once at an explicit source time. Filter IR stays on the trusted GPU path. */
-export function evaluateCodeMaterial(program: CodeMaterialProgram, context: CodeMaterialContext, values: Readonly<Record<string, unknown>> = {}): CodeDrawCommand[] {
+export function evaluateCodeMaterial(program: CodeMaterialProgram, context: CodeMaterialContext, values: Readonly<Record<string, unknown>> = {}, options: { transitionHandles?: boolean } = {}): CodeDrawCommand[] {
   if (program.kind !== 'generator' || program.apiVersion !== 1 || ![1, 2].includes(program.languageVersion)) throw new CodeMaterialError('TYPE', 'CPU 求值仅支持版本 1 或 2 的生成器；滤镜由可信 GPU emitter 消费。')
   if (program.languageVersion !== (program.parameters.some(parameter => parameter.type === 'image') ? 2 : 1)) throw new CodeMaterialError('TYPE', '图片参数与作者语言版本不一致。')
-  validateContext(context)
+  validateContext(context, options.transitionHandles === true)
   const parameters = validateCodeMaterialParameters(program, values)
   const seed = context.seed ?? program.seed; codeMaterialRandom(seed, 0)
   const bindings: EvaluatedValue[] = []; let operations = 0

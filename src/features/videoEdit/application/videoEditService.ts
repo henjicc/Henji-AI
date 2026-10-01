@@ -12,6 +12,7 @@ import { getPlatform } from '@/platform/runtime'
 import { validateCodeMaterialDocument } from '@/core/videoEdit/codeMaterialDocument'
 import { installVideoEditCodeMetadata, prepareVideoEditCodeMetadata, readVideoEditCodeMetadata, releaseVideoEditCodeCompiler } from './videoEditCodeState'
 import type { VideoEditCodeMetadata } from './videoEditCodeState'
+import { validateVideoEditGraphicTextBudget } from './videoEditGraphicTextBudget'
 
 const logger = createLogger('features.videoEdit')
 export interface VideoEditTimelineView {
@@ -100,6 +101,7 @@ export function updateVideoEditPicturePosition(handle: VideoEditGesture, sequenc
   const sequence = owner.document.sequences.find(sequence => sequence.id === sequenceId)
   const clip = sequence?.clips.find(clip => clip.id === clipId)
   if (!sequence || !clip || clip.kind === 'audio') throw new Error('目标画面片段不存在。')
+  if (clip.kind === 'adjustment') throw new Error('调整图层请修改作用范围和效果，不能移动画面位置。')
   assertVideoEditClipsEditable(sequence, [clipId])
   const values = picturePositionSchema.parse(position)
   if (clip.x === values.x && clip.y === values.y) return owner.document
@@ -213,14 +215,15 @@ export function duplicateVideoEditSequence(projectId: string, sequenceId: string
   const links = new Map(source.clips.filter(clip => clip.linkId).map(clip => [clip.linkId!, crypto.randomUUID()]))
   const groups = new Map(source.clips.filter(clip => clip.groupId).map(clip => [clip.groupId!, crypto.randomUUID()]))
   sequence.tracks = sequence.tracks.map(track => ({ ...track, id: crypto.randomUUID() }))
-  sequence.clips = sequence.clips.map(clip => ({ ...clip, id: clips.get(clip.id)!, ...(clip.linkId ? { linkId: links.get(clip.linkId) } : {}), ...(clip.groupId ? { groupId: groups.get(clip.groupId) } : {}) }))
+  sequence.clips = sequence.clips.map(clip => ({ ...clip, id: clips.get(clip.id)!, ...(clip.effects ? { effects: clip.effects.map(effect => ({ ...effect, id: crypto.randomUUID() })) } : {}), ...(clip.linkId ? { linkId: links.get(clip.linkId) } : {}), ...(clip.groupId ? { groupId: groups.get(clip.groupId) } : {}) }))
   sequence.annotations = sequence.annotations.map(mark => ({ ...mark, id: crypto.randomUUID(), clipId: clips.get(mark.clipId)! }))
   if (sequence.markers) sequence.markers = sequence.markers.map(mark => ({ ...mark, id: crypto.randomUUID(), ...(mark.clipId ? { clipId: clips.get(mark.clipId)! } : {}) }))
   if (sequence.captions) sequence.captions = sequence.captions.map(caption => ({ ...caption, id: crypto.randomUUID(), ...(caption.clipId ? { clipId: clips.get(caption.clipId)! } : {}) }))
+  if (sequence.transitions) sequence.transitions = sequence.transitions.map(transition => ({ ...transition, id: crypto.randomUUID(), leftClipId: clips.get(transition.leftClipId)!, rightClipId: clips.get(transition.rightClipId)! }))
   editVideoProject(projectId, document => ({ ...document, sequences: [...document.sequences, sequence] })); return sequence.id
 }
 export function deleteVideoEditSequence(projectId: string, sequenceId: string): void {
-  editVideoProject(projectId, document => { if (document.sequences.length === 1) throw new Error('工程至少保留一个序列。'); const sequence = document.sequences.find(sequence => sequence.id === sequenceId); if (!sequence) throw new Error('目标序列不存在。'); if (sequence.clips.length || sequence.annotations.length || sequence.markers?.length || sequence.captions?.length) throw new Error('请先移除序列内的片段和标注，再移除序列。'); return { ...document, sequences: document.sequences.filter(sequence => sequence.id !== sequenceId) } })
+  editVideoProject(projectId, document => { if (document.sequences.length === 1) throw new Error('工程至少保留一个序列。'); const sequence = document.sequences.find(sequence => sequence.id === sequenceId); if (!sequence) throw new Error('目标序列不存在。'); if (sequence.clips.length || sequence.annotations.length || sequence.markers?.length || sequence.captions?.length || sequence.transitions?.length) throw new Error('请先移除序列内的片段和标注，再移除序列。'); return { ...document, sequences: document.sequences.filter(sequence => sequence.id !== sequenceId) } })
 }
 export function updateVideoEditSequenceSettings(projectId: string, sequenceId: string, settings: Parameters<typeof changeVideoEditSequenceSettings>[1] & { name?: string; binId?: string | null }): void {
   const { name, binId, ...timing } = settings
@@ -249,6 +252,7 @@ function applyVideoEditDocument(instance: VideoEditInstance, update: (document: 
   return publishVideoEditDocument(instance, next, recordHistory)
 }
 function publishVideoEditDocument(instance: VideoEditInstance, next: VideoEditDocument, recordHistory: boolean): VideoEditDocument {
+  validateVideoEditGraphicTextBudget(next, instance.document)
   if (recordHistory) { instance.past = [...instance.past.slice(-49), instance.document]; instance.future = [] }
   const before = instance.document
   instance.document = { ...next, revision: instance.document.revision + 1 }
@@ -388,6 +392,7 @@ export async function openVideoEditProject(path?: string): Promise<VideoEditInst
   if (typeof raw === 'object' && raw !== null && 'version' in raw && raw.version !== 2) throw new Error('此工程使用不支持的旧格式。请保留原文件并新建工程。')
   const document = videoEditDocumentSchema.parse(raw)
   try {
+    validateVideoEditGraphicTextBudget(document)
     const codeMetadata = await prepareVideoEditCodeMetadata(document)
     for (const media of document.media) await getPlatform().media.allowRoot(await getPlatform().system.paths.dirname(media.path))
     return attach(document, chosen, false, codeMetadata)

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { Type, Code2 } from 'lucide-react'
-import { ICON_MEDIA_AUDIO, ICON_MEDIA_IMAGE, ICON_MEDIA_VIDEO, ICON_WORKSPACE_VIDEO_EDIT } from '@/core/theme/icons'
+import { Code2 } from 'lucide-react'
+import { ICON_MEDIA_AUDIO, ICON_MEDIA_IMAGE, ICON_MEDIA_VIDEO, ICON_NODE_TEXT, ICON_VIDEO_EDIT_GRAPHIC, ICON_VIDEO_EDIT_ADJUSTMENT, ICON_WORKSPACE_VIDEO_EDIT } from '@/core/theme/icons'
 import type { VideoEditMedia } from '@/core/videoEdit/document'
 import { getPlatform } from '@/platform/runtime'
 import { resolveImageDisplayUrl } from '@/services/imageSource'
@@ -27,7 +27,7 @@ export function VideoEditProjectThumbnail({ media, kind, active }: { media?: Vid
     return () => controller.abort()
   }, [active, visible, media?.kind, media?.path])
   const url = active && visible && media && failedPath !== media.path ? media.kind === 'image' ? resolveImageDisplayUrl(media.path) : preview?.path === media.path ? preview.url : null : null
-  const Icon = kind === 'audio' ? ICON_MEDIA_AUDIO : kind === 'image' ? ICON_MEDIA_IMAGE : kind === 'video' ? ICON_MEDIA_VIDEO : kind === 'text' ? Type : kind === 'code' ? Code2 : ICON_WORKSPACE_VIDEO_EDIT
+  const Icon = kind === 'audio' ? ICON_MEDIA_AUDIO : kind === 'image' ? ICON_MEDIA_IMAGE : kind === 'video' ? ICON_MEDIA_VIDEO : kind === 'text' ? ICON_NODE_TEXT : kind === 'code' ? Code2 : kind === 'graphic' ? ICON_VIDEO_EDIT_GRAPHIC : kind === 'adjustment' ? ICON_VIDEO_EDIT_ADJUSTMENT : ICON_WORKSPACE_VIDEO_EDIT
   return <div ref={host} className="flex h-full w-full items-center justify-center overflow-hidden text-text-muted" title={media && failedPath === media.path ? '预览图不可用，双击打开源素材或重新定位文件。' : undefined}>
     {url ? <img src={url} alt="" draggable={false} className="h-full w-full object-contain" onError={() => { if (media) setFailedPath(media.path) }} /> : <Icon size={20} />}
   </div>

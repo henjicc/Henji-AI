@@ -39,7 +39,7 @@ function intervalFraction(time: VideoEditSourceTime, left: VideoEditSourceTime, 
 }
 /** Curves are source-anchored. Prepare once per immutable instance/document;
  * playback only binary-searches points and interpolates bounded values. */
-export function prepareCodeMaterialParameters(program: CodeMaterialMetadata, instance: CodeMaterialInstance): PreparedCodeMaterialParameters {
+export function prepareCodeMaterialParameters(program: CodeMaterialMetadata, instance: Pick<CodeMaterialInstance, 'parameters' | 'curves'>): PreparedCodeMaterialParameters {
   const values = validateCodeMaterialParameters(program, instance.parameters)
   const curves = new Map<string, PreparedCurve>()
   for (const [key, raw] of Object.entries(codeMaterialCurvesSchema.parse(instance.curves ?? {}))) {

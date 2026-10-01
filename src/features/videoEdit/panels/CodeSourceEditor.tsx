@@ -3,6 +3,7 @@ import { Dropdown, UiButton, UiCheckbox, UiError, UiFormRow, UiGroup, UiLoading,
 import { commitVideoEditCodeCandidate, disposeVideoEditCodeCandidate, prepareVideoEditCodeCandidate, type VideoEditCodeApplyScope, type VideoEditCodeCandidate } from '../application/videoEditCodeCandidates'
 import type { VideoEditCodeEditorState } from '../application/videoEditCodeParameters'
 import { requireVideoEditInstance } from '../application/videoEditService'
+import { videoEditParameterTargetIdentity } from './useCodeParameterGesture'
 
 function CandidatePreview({ candidate, onError }: { candidate: VideoEditCodeCandidate; onError: (reason: unknown) => void }): React.ReactElement {
   const host = useRef<HTMLCanvasElement>(null)
@@ -99,6 +100,6 @@ function SourceDraft({ editor }: { editor: VideoEditCodeEditorState }): React.Re
 export function CodeSourceEditor({ editor }: { editor: VideoEditCodeEditorState }): React.ReactElement {
   const [expanded, setExpanded] = useState(false)
   return <UiGroup divided title={<UiButton variant="plain" size="sm" className="!p-0" aria-expanded={expanded} onClick={() => setExpanded(value => !value)}>{expanded ? '收起源码编辑' : '查看与编辑源码'}</UiButton>}>
-    {expanded && <SourceDraft key={JSON.stringify(editor.target)} editor={editor} />}
+    {expanded && <SourceDraft key={videoEditParameterTargetIdentity(editor.target)} editor={editor} />}
   </UiGroup>
 }

@@ -449,4 +449,4 @@ function createVideoEditMonitorScene() {
     },
   }
 }
-module.exports = { createVideoEditMonitorScene }
+module.exports = { createVideoEditMonitorScene, dialogs, saved, presented, png, pixelDifference, mediaProbe, trackBanks, quantile }
