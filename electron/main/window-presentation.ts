@@ -1,4 +1,4 @@
-import type { BrowserWindow, Point, Rectangle, Size } from 'electron'
+import type { BrowserWindow, Display, Point, Rectangle, Size } from 'electron'
 
 export const BACKGROUND_WINDOW_SWITCH = '--background'
 
@@ -12,6 +12,15 @@ export function resolveInitialWindowPosition(size: Size, workArea: Rectangle): P
     x: workArea.x + Math.max(0, Math.floor((workArea.width - size.width) / 2)),
     y: workArea.y + Math.max(0, Math.floor((workArea.height - size.height) / 2)),
   }
+}
+
+/** Temporary development/test placement; Windows monitor numbers are not Electron IDs. */
+export function resolveDevelopmentWindowPosition(value: string | undefined, size: Size, displays: readonly Pick<Display, 'bounds' | 'workArea'>[]): Point | undefined {
+  if (!value || !/^-?\d+,-?\d+$/.test(value)) return undefined
+  const [x, y] = value.split(',').map(Number)
+  if (!Number.isSafeInteger(x) || !Number.isSafeInteger(y)) return undefined
+  const display = displays.find(({ bounds }) => x >= bounds.x && x < bounds.x + bounds.width && y >= bounds.y && y < bounds.y + bounds.height)
+  return display ? resolveInitialWindowPosition(size, display.workArea) : undefined
 }
 
 export function resolveWindowPresentationMode(

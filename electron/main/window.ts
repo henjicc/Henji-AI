@@ -12,6 +12,7 @@ import {
   presentWindow,
   resolveBackgroundThrottling,
   resolveInitialWindowPosition,
+  resolveDevelopmentWindowPosition,
   type WindowPresentationMode,
 } from './window-presentation'
 import { isTrustedMainRendererUrl } from './security/main-renderer-url'
@@ -35,11 +36,12 @@ export function createWindow(options: CreateWindowOptions = {}): BrowserWindow {
   const allowOversizeForInspection = process.env['HENJI_UI_INSPECTION_ALLOW_OVERSIZE'] === '1'
   const iconPath = resolveAppIconPath()
   const initialSize = { width: 1200, height: 800 }
+  const developmentPosition = resolveDevelopmentWindowPosition(process.env['HENJI_DEV_DISPLAY_POINT'], initialSize, screen.getAllDisplays())
   const win = new BrowserWindow({
     ...initialSize,
-    ...(process.platform === 'darwin'
+    ...(developmentPosition ?? (process.platform === 'darwin'
       ? resolveInitialWindowPosition(initialSize, screen.getPrimaryDisplay().workArea)
-      : {}),
+      : {})),
     minWidth: 960,
     minHeight: 640,
     enableLargerThanScreen: allowOversizeForInspection,

@@ -3,6 +3,7 @@ import {
   presentWindow,
   resolveBackgroundThrottling,
   resolveInitialWindowPosition,
+  resolveDevelopmentWindowPosition,
   resolveWindowPresentationMode,
 } from './window-presentation'
 
@@ -26,6 +27,24 @@ describe('resolveInitialWindowPosition', () => {
       { width: 960, height: 640 },
       { x: 80, y: 33, width: 900, height: 600 },
     )).toEqual({ x: 80, y: 33 })
+  })
+})
+
+describe('resolveDevelopmentWindowPosition', () => {
+  const displays = [
+    { bounds: { x: 0, y: 0, width: 2560, height: 1440 }, workArea: { x: 0, y: 0, width: 2560, height: 1400 } },
+    { bounds: { x: 2560, y: 0, width: 2560, height: 1440 }, workArea: { x: 2560, y: 0, width: 2560, height: 1400 } },
+  ]
+  const size = { width: 1200, height: 800 }
+  it('selects the right display by desktop coordinates before first presentation', () => {
+    expect(resolveDevelopmentWindowPosition('2561,1', size, displays)).toEqual({ x: 3240, y: 300 })
+    expect(resolveDevelopmentWindowPosition('2560,0', size, displays)).toEqual({ x: 3240, y: 300 })
+  })
+  it('supports offset displays and keeps an oversized window accessible', () => {
+    expect(resolveDevelopmentWindowPosition('-2,-2', size, [{ bounds: { x: -900, y: -600, width: 900, height: 600 }, workArea: { x: -900, y: -580, width: 900, height: 580 } }])).toEqual({ x: -900, y: -580 })
+  })
+  it.each([undefined, '', '1', 'NaN,0', '1.5,0', '1,2,3', '9007199254740993,0', '9000,0'])('leaves normal placement intact for absent or unavailable point %s', value => {
+    expect(resolveDevelopmentWindowPosition(value, size, displays)).toBeUndefined()
   })
 })
 
