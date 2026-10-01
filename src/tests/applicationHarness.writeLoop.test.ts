@@ -1,7 +1,7 @@
 import { setCanvasTestProjectState } from '@/tests/canvasProjectFixture';
 // @vitest-environment jsdom
 // @vitest-environment jsdom
-import { afterAll, beforeAll, expect, it } from 'vitest';
+import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import type { ApplicationMutationExecutor, ApplicationRef } from '@/core/application-control';
 import { getApplicationControlExecutionEngine, getApplicationReflectionRegistry } from '@/features/application-control/capabilities/applicationControlRegistry';
 import { createEmptyImageEditDocument, imageEditDocumentToMarkDoc } from '@/core/imageEdit';
@@ -17,6 +17,7 @@ import { registerPersistedImageEditTestSession } from './imageEditPersistenceTes
 import { loadRealModelsIntoRegistry } from './loadRealModels';
 import { installHarnessNativeStorage, registerHarnessAudioEditProject, uninstallHarnessNativeStorage } from './harnessNativeStorage';
 import { createApplicationHarness } from './applicationHarness';
+import { closeVideoEditProject, createVideoEditProject } from '@/features/videoEdit/application/videoEditService';
 
 beforeAll(async () => { installHarnessNativeStorage(); await loadRealModelsIntoRegistry() })
 afterAll(() => uninstallHarnessNativeStorage())
@@ -42,6 +43,12 @@ it('所有已登记写域均经公共授权入口修改、正式读回并核对�
       source: { mediaType: 'audio', sourcePath: 'fixture.wav', audioPath: 'fixture.wav', durationFrames: 48_000, sampleRate: 48_000, channels: 1 },
       createdAt: 1, updatedAt: 1, revision: 1,
     })
+    // 剪辑工程保存在用户选择的本地文件；这里只替换文件 I/O 边界。
+    const videoFiles = new Map<string, string>()
+    vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/write-loop.henji-video')
+    vi.spyOn(getPlatform().system.fs, 'writeTextFile').mockImplementation(async (path, text) => { videoFiles.set(path, text) })
+    vi.spyOn(getPlatform().system.fs, 'readTextFile').mockImplementation(async path => videoFiles.get(path)!)
+    const video = (await createVideoEditProject())!
     const first = async (entityType: string): Promise<ApplicationRef> => {
       const result = await app.requireResult('list_application_entities', { entityType })
       const refs = result.refs as ApplicationRef[]
@@ -58,6 +65,7 @@ it('所有已登记写域均经公共授权入口修改、正式读回并核对�
       { domain: 'image_edit', ref: { kind: 'image_edit.layer', id: `v3:${document.id}:effect` }, property: 'image_edit.layer.opacity', value: 0.42 },
       { domain: 'assets', ref: (library.resultRefs as ApplicationRef[])[0], property: 'asset.library.name', value: '公共素材已改名' },
       { domain: 'audio_edit', ref: { kind: 'audio_edit.project', id: 'audio-loop' }, property: 'audio_edit.project.name', value: '公共口播已改名' },
+      { domain: 'video_edit', ref: { kind: 'video_edit.project', id: video.document.id }, property: 'video_edit.project.name', value: '公共剪辑已改名' },
     ]
     const registry = getApplicationReflectionRegistry()
     const engine = getApplicationControlExecutionEngine() as unknown as {
@@ -83,5 +91,7 @@ it('所有已登记写域均经公共授权入口修改、正式读回并核对�
     expect((await getPlatform().storyboardProjects.listProjectSummaries()).map(project => project.name)).toContain('公共画布已改名')
     expect((await getPlatform().cameraStageProjects.listProjectSummaries()).map(project => project.name)).toContain('公共三维已改名')
     expect(useCameraStageStore.getState().currentProjectName).not.toBe('公共三维已改名')
-  } finally { dispose(); app.dispose(); useSettingsStore.getState().setThemeTonePreset(originalTone) }
+    expect(JSON.parse(videoFiles.get('D:/write-loop.henji-video')!).name).toBe('公共剪辑已改名')
+    await closeVideoEditProject(video.document.id)
+  } finally { vi.restoreAllMocks(); dispose(); app.dispose(); useSettingsStore.getState().setThemeTonePreset(originalTone) }
 })

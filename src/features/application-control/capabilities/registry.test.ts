@@ -275,11 +275,13 @@ describe('application capability handler coverage', () => {
         mediaType: 'image', nodeId: 'node-1', nodeType: 'uploadNode',
         nodeRef: { kind: 'canvas.node', id: 'node-1' }, undoRef: 'undo-1',
         revision: 2, scopeRevisions: { canvas: 2 },
+        verification: { verified: true, condition: '已回读持久节点媒体字段' },
       },
     ) ?? []
+    // Effects settle from the persisted read-back verification, never a fixed flag.
     expect(effects).toEqual([expect.objectContaining({
       effect: 'create', entityTypes: ['canvas.node'],
-      targetRefs: [{ kind: 'canvas.node', id: 'node-1' }],
+      targetRefs: [{ kind: 'canvas.node', id: 'node-1' }], verified: true,
     })])
   })
 })
