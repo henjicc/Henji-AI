@@ -7,11 +7,11 @@ import { beginVideoEditTimelineDrag, finishVideoEditTimelineDrag, previewVideoEd
 import { captureVideoEditCommandContext, executeVideoEditCommand } from '../application/videoEditCommands'
 import { requireVideoEditInstance, setVideoEditTimelineView, setVideoEditView, type VideoEditInstance } from '../application/videoEditService'
 import { elementOfEventTarget, ownerDocumentOf, ownerWindowOf } from '@/utils/crossRealmDom'
-import { TIMELINE_HEADER_WIDTH, TIMELINE_RULER_HEIGHT, timelineEdgeVelocity, timelineTrackAt, type TimelineTrackRow } from './timelineGeometry'
+import { TIMELINE_HEADER_WIDTH, TIMELINE_RULER_HEIGHT, timelineArmedEdgeVelocity, timelineEdgeAxis, timelineTrackAt, type TimelineEdgeAxis, type TimelineTrackRow } from './timelineGeometry'
 
 interface Point { x: number; y: number }
 export interface TimelineBox { from: Point; to: Point }
-interface BaseGesture { owner: VideoEditInstance; baseline: VideoEditInstance['document']; sequenceId: string; pointerId: number; origin: Point; client: Point; tool: VideoEditInstance['tool']; zoom: number; pixels: number }
+interface BaseGesture { owner: VideoEditInstance; baseline: VideoEditInstance['document']; sequenceId: string; pointerId: number; origin: Point; client: Point; edge: { x: TimelineEdgeAxis; y: TimelineEdgeAxis }; tool: VideoEditInstance['tool']; zoom: number; pixels: number }
 type PointerGesture = BaseGesture & (
   | { kind: 'clip'; handle: VideoEditTimelineDrag; ids: string[]; primary: string; mode: VideoEditTimelineAdjustment['mode']; moved: boolean; adjustment?: VideoEditTimelineAdjustment; error?: Error }
   | { kind: 'box'; initial: string[]; additive: boolean; linked: VideoEditRelations }
@@ -83,25 +83,32 @@ export function useTimelinePointer(options: Options) {
       viewport.current.scrollTop = gesture.top + gesture.origin.y - gesture.client.y
     }
   }
+  /** Clip/box/seek drags scroll at the edges only after the pointer actually moved toward them. */
+  const edgeVelocity = (gesture: PointerGesture, host: HTMLDivElement): Point => {
+    if ((gesture.kind !== 'clip' && gesture.kind !== 'box' && gesture.kind !== 'seek') || (gesture.kind === 'clip' && !gesture.moved)) return { x: 0, y: 0 }
+    const rect = host.getBoundingClientRect()
+    return {
+      x: timelineArmedEdgeVelocity(gesture.edge.x, gesture.client.x, rect.left + TIMELINE_HEADER_WIDTH, rect.right),
+      y: gesture.kind === 'seek' ? 0 : timelineArmedEdgeVelocity(gesture.edge.y, gesture.client.y, rect.top + TIMELINE_RULER_HEIGHT, rect.bottom),
+    }
+  }
   const tick = (): void => {
     animation.current = undefined
     const gesture = pointer.current; const host = viewport.current
-    if (!gesture || !host) { animation.current = undefined; return }
-    if (gesture.kind === 'clip' || gesture.kind === 'box' || gesture.kind === 'seek') {
-      const rect = host.getBoundingClientRect(); const beforeX = host.scrollLeft; const beforeY = host.scrollTop
-      host.scrollLeft = Math.max(0, host.scrollLeft + timelineEdgeVelocity(gesture.client.x, rect.left + TIMELINE_HEADER_WIDTH, rect.right))
-      if (gesture.kind !== 'seek') host.scrollTop = Math.max(0, host.scrollTop + timelineEdgeVelocity(gesture.client.y, rect.top + TIMELINE_RULER_HEIGHT, rect.bottom))
-      if (host.scrollLeft !== beforeX || host.scrollTop !== beforeY) {
-        applyPointer(gesture)
-        if (pointer.current) animation.current = ownerWindowOf(host).requestAnimationFrame(tick)
-      }
+    if (!gesture || !host) return
+    const velocity = edgeVelocity(gesture, host); const beforeX = host.scrollLeft; const beforeY = host.scrollTop
+    if (velocity.x) host.scrollLeft = Math.max(0, host.scrollLeft + velocity.x)
+    if (velocity.y) host.scrollTop = Math.max(0, host.scrollTop + velocity.y)
+    if (host.scrollLeft !== beforeX || host.scrollTop !== beforeY) {
+      applyPointer(gesture)
+      if (pointer.current) animation.current = ownerWindowOf(host).requestAnimationFrame(tick)
     }
   }
   const animateEdge = (): void => {
     const gesture = pointer.current; const host = viewport.current
-    if (animation.current !== undefined || !gesture || !host || !['clip', 'box', 'seek'].includes(gesture.kind)) return
-    const rect = host.getBoundingClientRect()
-    if (timelineEdgeVelocity(gesture.client.x, rect.left + TIMELINE_HEADER_WIDTH, rect.right) || (gesture.kind !== 'seek' && timelineEdgeVelocity(gesture.client.y, rect.top + TIMELINE_RULER_HEIGHT, rect.bottom))) animation.current = ownerWindowOf(host).requestAnimationFrame(tick)
+    if (animation.current !== undefined || !gesture || !host) return
+    const velocity = edgeVelocity(gesture, host)
+    if (velocity.x || velocity.y) animation.current = ownerWindowOf(host).requestAnimationFrame(tick)
   }
   const capture = (gesture: PointerGesture): void => {
     cancel(); pointer.current = gesture
@@ -112,7 +119,7 @@ export function useTimelinePointer(options: Options) {
   const base = (event: React.PointerEvent): BaseGesture => {
     const { instance, sequence } = current.current
     const client = { x: event.clientX, y: event.clientY }
-    return { owner: instance, baseline: instance.document, sequenceId: sequence.id, pointerId: event.pointerId, origin: point(client), client, tool: instance.tool, zoom: instance.zoom, pixels: current.current.pixels }
+    return { owner: instance, baseline: instance.document, sequenceId: sequence.id, pointerId: event.pointerId, origin: point(client), client, edge: { x: timelineEdgeAxis(client.x), y: timelineEdgeAxis(client.y) }, tool: instance.tool, zoom: instance.zoom, pixels: current.current.pixels }
   }
   /** `linked`: links follow Linked Selection, groups always; Alt inverts the former and singles out of groups (Premiere). */
   const select = (ids: string[], toggle: boolean, additive: boolean, linked: VideoEditRelations = videoEditPickRelations(current.current.instance.linkedSelection !== false)): void => {

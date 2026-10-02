@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest'
 import { createVideoEditDocument, type VideoEditSequence } from '@/core/videoEdit/document'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
-import { TIMELINE_RULER_HEIGHT, TIMELINE_TRACK_SECTION_GAP, timelineInitialScrollTop, timelineTrackAt, timelineTrackDivider, timelineTrackRows, timelineVisibleClips } from './timelineGeometry'
+import { TIMELINE_RULER_HEIGHT, TIMELINE_TRACK_SECTION_GAP, timelineArmedEdgeVelocity, timelineEdgeAxis, timelineInitialScrollTop, timelineTrackAt, timelineTrackDivider, timelineTrackRows, timelineVisibleClips } from './timelineGeometry'
 
 function fixture(): VideoEditSequence {
   const document = createVideoEditDocument('轨道几何')
@@ -81,4 +81,19 @@ it('初次混合32轨道定位分界，既见底层画面也见首批声音；�
     expect(timelineInitialScrollTop(singleRows, 300)).toBe(0)
     expect(singleRows.map(row => row.track.index)).toEqual(kind === 'video' ? Array.from({ length: 32 }, (_, index) => 31 - index) : Array.from({ length: 32 }, (_, index) => index))
   }
+})
+
+it('边缘自动滚动只在指针朝该边移动后生效，曾离开边缘区后再进入也生效', () => {
+  const top = timelineEdgeAxis(40) // 按下点已在起始边缘区 [28, 60)
+  expect(timelineArmedEdgeVelocity(top, 40, 28, 300)).toBe(0)
+  expect(timelineArmedEdgeVelocity(top, 42, 28, 300)).toBe(0) // 背离边缘不触发
+  expect(timelineArmedEdgeVelocity(top, 37, 28, 300)).toBeLessThan(0)
+  expect(timelineArmedEdgeVelocity(top, 70, 28, 300)).toBe(0) // 离开边缘区即停
+  const bottom = timelineEdgeAxis(290)
+  expect(timelineArmedEdgeVelocity(bottom, 290, 28, 300)).toBe(0)
+  expect(timelineArmedEdgeVelocity(bottom, 200, 28, 300)).toBe(0)
+  expect(timelineArmedEdgeVelocity(bottom, 280, 28, 300)).toBeGreaterThan(0) // 曾离开，回到边缘区即滚动
+  const outside = timelineEdgeAxis(150)
+  expect(timelineArmedEdgeVelocity(outside, 150, 28, 300)).toBe(0)
+  expect(timelineArmedEdgeVelocity(outside, 30, 28, 300)).toBeLessThan(0)
 })

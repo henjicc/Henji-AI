@@ -38,11 +38,27 @@ export function timelineVisibleClips(clips: readonly VideoEditClip[], rows: read
   const to = Math.max(0, (viewport.left + viewport.width - TIMELINE_HEADER_WIDTH + 32) / pixels)
   return clips.filter(clip => tracks.has(clip.track) && clip.start < to && clip.start + clip.duration > from)
 }
+const TIMELINE_EDGE_ZONE = 32
+/** Pointer travel toward an edge that counts as intent; matches the clip drag threshold. */
+const TIMELINE_EDGE_ARM = 3
 export function timelineEdgeVelocity(position: number, from: number, to: number): number {
-  const edge = 32
+  const edge = TIMELINE_EDGE_ZONE
   if (position < from + edge) return -Math.ceil(18 * Math.min(1, (from + edge - position) / edge))
   if (position > to - edge) return Math.ceil(18 * Math.min(1, (position - to + edge) / edge))
   return 0
+}
+/** Per-axis gate: `start`/`end` latch once the gesture has shown intent toward that edge. */
+export interface TimelineEdgeAxis { origin: number; start: boolean; end: boolean }
+export function timelineEdgeAxis(origin: number): TimelineEdgeAxis { return { origin, start: false, end: false } }
+/**
+ * Edge auto-scroll only after the pointer moved toward that edge (or was ever outside its zone),
+ * so a press that lands inside a short panel's edge zone stays still (Premiere behaviour).
+ */
+export function timelineArmedEdgeVelocity(axis: TimelineEdgeAxis, position: number, from: number, to: number): number {
+  if (position >= from + TIMELINE_EDGE_ZONE || position <= axis.origin - TIMELINE_EDGE_ARM) axis.start = true
+  if (position <= to - TIMELINE_EDGE_ZONE || position >= axis.origin + TIMELINE_EDGE_ARM) axis.end = true
+  const velocity = timelineEdgeVelocity(position, from, to)
+  return (velocity < 0 && axis.start) || (velocity > 0 && axis.end) ? velocity : 0
 }
 /** Non-drop frame numbering; the underlying frame remains the authoritative integer. */
 export function timelineTimecode(frame: number, fps: number): string {

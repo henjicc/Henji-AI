@@ -28,19 +28,16 @@ async function saved(page, file, matches, message) {
   assert.fail(message)
 }
 /**
- * Place the clip row in the middle of the band the timeline does not edge-scroll (below the 28px sticky
- * ruler and outside the 32px auto-scroll edges), so a short 960x640 panel does not scroll the drag onto
- * another track; then prove the pointer really lands on the clip.
+ * Centre the clip row in the timeline viewport (the original press point). In a short 960x640 panel this
+ * lands inside the 32px top auto-scroll edge, which must stay still until the pointer moves toward it (2.8);
+ * then prove the pointer really lands on the clip.
  */
 async function pointOn(page, id, offsetX) {
   const node = clipNode(page, id)
-  const band = await node.evaluate(element => {
+  await node.evaluate(element => {
     const host = element.closest('[data-video-edit-timeline-viewport]'); const rect = host.getBoundingClientRect(); const box = element.getBoundingClientRect()
-    const top = rect.top + 28 + 32; const bottom = rect.bottom - 32
-    host.scrollTop += box.top + box.height / 2 - (top + bottom) / 2
-    return { top, bottom }
+    host.scrollTop += box.top + box.height / 2 - (rect.top + rect.bottom) / 2
   })
-  assert.ok(band.bottom > band.top, '时间线面板过矮，没有不触发边缘滚动的拖动区域')
   await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
   const box = await node.boundingBox()
   const point = { x: box.x + (offsetX ?? box.width / 2), y: box.y + box.height / 2 }
@@ -102,6 +99,11 @@ function createVideoEditLinksScene() {
           const start = await pointOn(page, sound)
           evidence.dragGeometry = { start, viewport: await page.locator('[data-video-edit-timeline-viewport]').evaluate(host => { const rect = host.getBoundingClientRect(); return { top: rect.top, bottom: rect.bottom, left: rect.left, right: rect.right, scrollTop: host.scrollTop, scrollLeft: host.scrollLeft } }), rows: await page.locator('[data-video-edit-track]').evaluateAll(rows => rows.map(row => { const rect = row.getBoundingClientRect(); return { index: row.getAttribute('data-track-index'), kind: row.getAttribute('data-track-kind'), top: rect.top, bottom: rect.bottom } })) }
           await page.mouse.move(start.x, start.y); await page.mouse.down()
+          // 按下不动：即使按下点落在边缘自动滚动区，也不得纵向/横向滚动。
+          const still = () => page.locator('[data-video-edit-timeline-viewport]').evaluate(host => ({ scrollTop: host.scrollTop, scrollLeft: host.scrollLeft }))
+          const pressed = await still(); await page.waitForTimeout(400)
+          evidence.dragGeometry.stationary = { pressed, held: await still(), pressInEdgeZone: start.y < evidence.dragGeometry.viewport.top + 28 + 32 || start.y > evidence.dragGeometry.viewport.bottom - 32 }
+          assert.deepEqual(evidence.dragGeometry.stationary.held, pressed, '按住片段不动时时间线发生了自动滚动')
           await page.mouse.move(start.x + 30, start.y, { steps: 12 })
           evidence.dragPreviewBadges = await badges(page)
           evidence.dragPreviewStart = await clipNode(page, sound).getAttribute('data-clip-start')

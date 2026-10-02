@@ -223,6 +223,36 @@ it('边缘持续滚动使用同一命中坐标，取消释放动画资源且无�
   fireEvent.pointerUp(host, event(895)); expect(owner.document).toBe(baseline); expect(onError).not.toHaveBeenCalled()
 })
 
+it('矮时间线在边缘区按住片段不动不滚动，拖向边缘才滚动、离开即停；框选与标尺横向一致', () => {
+  vi.mocked(HTMLElement.prototype.getBoundingClientRect).mockImplementation(() => ({ left: 0, top: 0, right: 900, bottom: 118, width: 900, height: 118, x: 0, y: 0, toJSON: () => ({}) }))
+  viewportHeight = 118
+  const clock = layoutClock()
+  const view = render(<View />); const host = view.getByRole('region', { name: '时间线编辑区域' }); const baseline = owner.document
+  fireEvent.wheel(host, { deltaY: 10 }); for (let frame = 0; frame < 8 && clock.callbacks.size; frame++) clock.step()
+  const row = timelineTrackRows(current()).find(value => value.track.index === 1)!
+  host.scrollTop = row.top + row.height / 2 - 44; fireEvent.scroll(host)
+  const scrolled = host.scrollTop; const y = trackClientY()
+  expect(y).toBeGreaterThanOrEqual(28); expect(y).toBeLessThan(60) // 落在顶部 32px 自动滚动区
+  fireEvent.pointerDown(view.getByRole('button', { name: '选择片段 视频' }), event(header + 20, y))
+  fireEvent.pointerMove(host, event(header + 20, y)); fireEvent.pointerMove(host, event(header + 21, y + 1))
+  expect(clock.callbacks.size).toBe(0); expect(host.scrollTop).toBe(scrolled)
+  fireEvent.pointerMove(host, event(header + 20, y - 10))
+  expect(clock.callbacks.size).toBe(1); clock.step(); expect(host.scrollTop).toBeLessThan(scrolled)
+  fireEvent.pointerMove(host, event(header + 20, 74)); const held = host.scrollTop
+  clock.step(); expect(host.scrollTop).toBe(held); expect(clock.callbacks.size).toBe(0)
+  fireEvent.pointerCancel(host, event(header + 20, 74)); expect(owner.document).toBe(baseline)
+  for (const [pressY, label] of [[74, 'box'], [14, 'ruler']] as const) {
+    const target = label === 'ruler' ? view.getByRole('slider', { name: '剪辑时间定位' }) : host
+    fireEvent.pointerDown(target, event(890, pressY)); fireEvent.pointerMove(host, event(890, pressY))
+    expect(clock.callbacks.size).toBe(0); expect(host.scrollLeft).toBe(0)
+    fireEvent.pointerMove(host, event(896, pressY)); expect(clock.callbacks.size).toBe(1)
+    clock.step(); expect(host.scrollLeft).toBeGreaterThan(0)
+    fireEvent.pointerCancel(host, event(896, pressY)); expect(clock.callbacks.size).toBe(0)
+    host.scrollLeft = 0; fireEvent.scroll(host)
+  }
+  expect(owner.document).toBe(baseline); expect(onError).not.toHaveBeenCalled()
+})
+
 it('正式运输/工具按钮共用命令与自定义键位；实时读数使用当前上下文', async () => {
   const view = render(<View />)
   const previous = useSettingsStore.getState().videoEditShortcuts
