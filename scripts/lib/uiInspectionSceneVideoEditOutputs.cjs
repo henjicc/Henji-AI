@@ -66,7 +66,7 @@ function createVideoEditOutputsScene({ canvasFixtureProjectId }) {
         let task
         for (let attempt = 0; attempt < 2400; attempt++) { task = await callTool(client, 'query_video_edit_export', { projectRef }); if (['completed', 'failed', 'cancelled'].includes(task.data.task?.state)) break; await page.waitForTimeout(50) }
         assert.equal(task.data.task?.state, 'completed', JSON.stringify(task))
-        const { ffmpegPath, ffprobePath } = require('ffmpeg-ffprobe-static'); const metadata = mediaProbe(ffprobePath, exportPath)
+        const { ffmpegPath, ffprobePath } = require('./mediaBinaries.cjs'); const metadata = mediaProbe(ffprobePath, exportPath)
         const video = metadata.streams.find(stream => stream.codec_type === 'video'); const audio = metadata.streams.find(stream => stream.codec_type === 'audio')
         assert.equal(video.width, 3840); assert.equal(video.height, 2160); assert.equal(video.avg_frame_rate, '60/1'); assert.equal(Number(video.nb_frames), 180); assert.equal(Number(audio.sample_rate), 48000); assert.equal(audio.channels, 2)
         const decoded = path.join(root, 'export-90.png'); execFileSync(ffmpegPath, ['-v', 'error', '-y', '-i', exportPath, '-vf', 'select=eq(n\\,90)', '-frames:v', '1', decoded], { windowsHide: true, timeout: 60000 })

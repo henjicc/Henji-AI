@@ -39,7 +39,7 @@ function createVideoEditCreativeResultsScene(context) {
   return { id: 'video-edit-creative-results', surface: '剪辑', name: '剪辑-生成/画布/图片编辑/口播/三维结果固定回填与4K60导出', writesUserData: true,
     setup: async (page, app, { capture }) => {
       const root = path.resolve('node_modules/.cache/video-edit-creative-results'); fs.rmSync(root, { recursive: true, force: true }); fs.mkdirSync(root, { recursive: true })
-      const { ffmpegPath, ffprobePath } = require('ffmpeg-ffprobe-static')
+      const { ffmpegPath, ffprobePath } = require('./mediaBinaries.cjs')
       const ffmpeg = args => execFileSync(ffmpegPath, ['-v', 'error', '-y', ...args], { windowsHide: true, timeout: 120000 })
       const generatedA = path.join(root, 'generated-a.png'); const generatedB = path.join(root, 'generated-b.png'); const voice = path.join(root, 'voice-source.wav')
       ffmpeg(['-f', 'lavfi', '-i', 'testsrc2=size=3840x2160:rate=1', '-frames:v', '1', generatedA])

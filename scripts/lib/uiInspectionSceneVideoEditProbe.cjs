@@ -53,7 +53,7 @@ function createVideoEditProbeScene() {
     expectedLogEvents: ['video_edit.save.failed'],
     setup: async (page, app, { capture }) => {
       const root = path.resolve('node_modules/.cache/video-edit-probe'); fs.mkdirSync(root, { recursive: true })
-      const { ffmpegPath, ffprobePath } = require('ffmpeg-ffprobe-static')
+      const { ffmpegPath, ffprobePath } = require('./mediaBinaries.cjs')
       const ffmpeg = args => execFileSync(ffmpegPath, ['-v', 'error', '-y', ...args], { windowsHide: true, stdio: 'pipe' })
       const probe = file => JSON.parse(execFileSync(ffprobePath, ['-v', 'error', '-show_streams', '-show_format', '-of', 'json', file], { windowsHide: true, encoding: 'utf8' }))
       const specs = [{ width: 1920, height: 1080, fps: 30 }, { width: 1920, height: 1080, fps: 60 }, { width: 3840, height: 2160, fps: 30 }, { width: 3840, height: 2160, fps: 60 }]

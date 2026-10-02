@@ -111,7 +111,7 @@ function createVideoEditMonitorScene() {
       const shot = async name => { const result = await capture(name); evidence.captures.push({ name, ...(result ? { result } : {}) }); store() }
       let client; let nativeObserved = false; let renderObserved = false; let previousLayout
       try {
-        const { ffmpegPath, ffprobePath } = require('ffmpeg-ffprobe-static')
+        const { ffmpegPath, ffprobePath } = require('./mediaBinaries.cjs')
         evidence.currentPhase = '生成并探测独立音视频控制样本'; store()
         const controls = generatedControls(root, ffmpegPath, ffprobePath); evidence.controls = controls
         const project = readProject(path.resolve('node_modules/.cache/video-edit-code-controls/code-project.henji-video'))

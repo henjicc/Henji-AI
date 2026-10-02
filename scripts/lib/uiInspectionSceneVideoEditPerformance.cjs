@@ -52,7 +52,7 @@ function createVideoEditPerformanceScene() {
   return { id: 'video-edit-performance', surface: '剪辑', name: '剪辑-标准4K60负载60秒持续播放定位参数与资源释放', writesUserData: true,
     setup: async (page, app, { capture }) => {
       const root = path.resolve('node_modules/.cache/video-edit-performance'); fs.rmSync(root, { recursive: true, force: true }); fs.mkdirSync(root, { recursive: true })
-      const { ffmpegPath } = require('ffmpeg-ffprobe-static')
+      const { ffmpegPath } = require('./mediaBinaries.cjs')
       const audio = path.join(root, 'music-63s.wav')
       execFileSync(ffmpegPath, ['-v', 'error', '-y', '-f', 'lavfi', '-i', 'aevalsrc=0.2*sin(2*PI*330*t)|0.15*sin(2*PI*550*t):s=48000:d=63', '-c:a', 'pcm_s16le', audio], { windowsHide: true, timeout: 60000 })
       const file = path.join(root, 'performance.henji-video'); fs.writeFileSync(file, JSON.stringify(fixture(audio)))

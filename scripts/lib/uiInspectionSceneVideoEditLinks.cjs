@@ -54,7 +54,7 @@ function fixture() {
   fs.mkdirSync(ROOT, { recursive: true })
   const source = path.join(ROOT, 'links-av.mp4')
   if (!fs.existsSync(source)) {
-    const { ffmpegPath } = require('ffmpeg-ffprobe-static')
+    const { ffmpegPath } = require('./mediaBinaries.cjs')
     execFileSync(ffmpegPath, ['-v', 'error', '-y', '-f', 'lavfi', '-i', `testsrc2=size=1280x720:rate=${FPS}`, '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000', '-t', '6', '-c:v', 'libx264', '-preset', 'veryfast', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-shortest', source], { windowsHide: true })
   }
   const base = { start: 0, duration: 120, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, brightness: 1, text: '', itemId: 'links-item', linkId: 'links-take' }

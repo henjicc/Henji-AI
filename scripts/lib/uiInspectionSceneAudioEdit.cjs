@@ -136,7 +136,7 @@ async function verifyDelivery(page) {
     const sourcePath = path.join(directory, `${item.name} & 原素材.${item.fps ? 'mov' : 'flac'}`)
     await (async () => {
       const { spawn } = require('node:child_process')
-      const { ffmpegPath } = require('ffmpeg-ffprobe-static')
+      const { ffmpegPath } = require('./mediaBinaries.cjs')
       const args = ['-v', 'error', '-y']
       if (item.fps) args.push('-f', 'lavfi', '-i', `color=c=blue:s=320x180:r=${item.fps}:d=${item.seconds}`)
       args.push('-f', 'lavfi', '-i', `sine=frequency=440:sample_rate=${item.rate}:duration=${item.seconds}`, '-af', "volume='if(lt(mod(t,4),2),0.5,0)':eval=frame", '-ac', String(item.channels))

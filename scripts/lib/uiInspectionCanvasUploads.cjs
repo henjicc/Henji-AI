@@ -17,7 +17,7 @@ function createCanvasUploadsScene(context) {
       const audio = path.join(fixtureDir, 'audio.wav')
       await sharp(panoramaSource).resize(1600, 900).toFile(landscape)
       await sharp(panoramaSource).resize(900, 1600).toFile(portrait)
-      const { ffmpegPath } = require('ffmpeg-ffprobe-static')
+      const { ffmpegPath } = require('./mediaBinaries.cjs')
       execFileSync(ffmpegPath, ['-y', '-f', 'lavfi', '-i', 'testsrc2=size=640x360:rate=12', '-t', '2', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', video], { windowsHide: true, stdio: 'pipe' })
       execFileSync(ffmpegPath, ['-y', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=3', '-af', 'afade=t=in:d=0.5,afade=t=out:st=2:d=1', audio], { windowsHide: true, stdio: 'pipe' })
       await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()

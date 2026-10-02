@@ -305,7 +305,7 @@ mod tests {
         assert_eq!(choose_decoder(ff::AVCodecID::AV_CODEC_ID_VP9, true, false, &profiles), None);
         assert_eq!(choose_decoder(ff::AVCodecID::AV_CODEC_ID_PRORES, true, true, &profiles), None);
         for name in ["av1", "libdav1d", "libvpx-vp9", "libvpx"] {
-            assert!(!find_decoder(name).is_null(), "{name} 应在 LGPL 构建中");
+            assert!(!find_decoder(name).is_null(), "{name} 应在链接的 FFmpeg 构建中");
         }
     }
 }

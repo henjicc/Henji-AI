@@ -6,8 +6,9 @@ use std::ptr;
 
 use ffmpeg_sys_next as ff;
 
-/// 1.1 验收要求必须存在的解码器；缺失时握手仍成功，但列入 missingRequiredDecoders 由主进程记录。
-pub const REQUIRED_DECODERS: &[&str] = &["h264", "hevc", "av1", "libdav1d", "vp9", "prores", "dnxhd", "cfhd", "mpeg2video"];
+/// 解码会话依赖的解码器（1.1 清单 + 1.3 透明 VP9 用的 libvpx-vp9）；缺失时握手仍成功，
+/// 但列入 missingRequiredDecoders 由主进程记录。
+pub const REQUIRED_DECODERS: &[&str] = &["h264", "hevc", "av1", "libdav1d", "vp9", "libvpx-vp9", "prores", "dnxhd", "cfhd", "mpeg2video"];
 
 pub(crate) fn c_text(pointer: *const std::ffi::c_char) -> Option<String> {
     if pointer.is_null() {
@@ -102,14 +103,18 @@ mod tests {
     }
 
     #[test]
-    fn linked_build_is_lgpl_and_has_required_decoders() {
+    fn linked_build_is_gpl_9_0_and_has_required_decoders() {
         let decoders = decoders();
         assert!(decoders.len() > 100, "解码器数量异常：{}", decoders.len());
         assert!(missing_required(&decoders).is_empty(), "缺少解码器：{:?}", missing_required(&decoders));
         let info = ffmpeg_info();
-        assert_eq!(info["gplEnabled"], json!(false));
+        // 重要记录 014：Windows 统一使用 BtbN win64-gpl-shared 9.0（GPL v3，不含 nonfree）。
+        assert_eq!(info["gplEnabled"], json!(true));
         assert_eq!(info["nonfreeEnabled"], json!(false));
-        assert!(info["license"].as_str().unwrap_or_default().contains("LGPL"));
+        let license = info["license"].as_str().unwrap_or_default();
+        assert!(license.starts_with("GPL version 3"), "许可：{license}");
+        assert!(info["version"].as_str().unwrap_or_default().starts_with("n9.0."), "版本：{}", info["version"]);
+        assert!(info["libavcodec"].as_str().unwrap_or_default().starts_with("63."), "libavcodec：{}", info["libavcodec"]);
         assert!(info["hwDeviceTypes"].as_array().unwrap().iter().any(|value| value == "d3d11va"));
     }
 }

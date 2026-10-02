@@ -93,7 +93,7 @@ function createAudioEditInteractionScene({ setupToolbox, clickNamedButton }) {
       }, { id, targetPath })
       assert.ok(fs.readFileSync(targetPath + '.xml', 'utf8').includes('<enabled>FALSE</enabled>'))
       const { execFileSync } = require('node:child_process')
-      const { ffmpegPath } = require('ffmpeg-ffprobe-static')
+      const { ffmpegPath } = require('./mediaBinaries.cjs')
       const pcm = execFileSync(ffmpegPath, ['-v', 'error', '-ss', '2.15', '-i', targetPath, '-t', '0.6', '-f', 'f32le', '-'], { windowsHide: true })
       assert.ok(pcm.length > 0 && pcm.every((byte) => byte === 0), '导出的静音段必须是零采样')
       await select(2, 3)

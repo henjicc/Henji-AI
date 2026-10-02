@@ -215,7 +215,7 @@ function createVideoEditCodeProjectScene({ controls = false } = {}) {
         }
         await dialogs(app, [file], output); const exportAt = performance.now(); await button(page, '导出视频').click()
         await page.getByRole('button', { name: /^取消导出/ }).waitFor({ state: 'visible', timeout: 10000 }); await button(page, '导出视频').waitFor({ state: 'visible', timeout: 120000 })
-        const { ffprobePath, ffmpegPath } = require('ffmpeg-ffprobe-static')
+        const { ffprobePath, ffmpegPath } = require('./mediaBinaries.cjs')
         const metadata = JSON.parse(execFileSync(ffprobePath, ['-v', 'error', '-show_streams', '-show_format', '-of', 'json', output], { encoding: 'utf8', windowsHide: true }))
         const videoStream = metadata.streams.find(stream => stream.codec_type === 'video')
         assert.equal(videoStream.width, 3840); assert.equal(videoStream.height, 2160); assert.equal(videoStream.nb_frames, '180'); assert.equal(videoStream.avg_frame_rate, '60/1')

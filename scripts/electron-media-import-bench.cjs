@@ -88,7 +88,7 @@ async function main() {
     const videoPath = path.join(process.cwd(), 'scripts', 'fixtures', 'plain_video.mp4')
     await Promise.all([fsp.writeFile(imagePath, makeSvg()), fsp.writeFile(audioPath, makeWav())])
 
-    const { ffmpegPath, ffprobePath } = require('ffmpeg-ffprobe-static')
+    const { ffmpegPath, ffprobePath } = require('./lib/mediaBinaries.cjs')
     if (!ffmpegPath || !ffprobePath) throw new Error('当前平台没有可用的 ffmpeg / ffprobe 二进制')
     const sharp = require('sharp')
     if (mode === 'prewarmed') {

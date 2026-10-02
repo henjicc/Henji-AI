@@ -105,7 +105,8 @@ interface HwaccelCacheFile {
   detectedAt: number
 }
 
-const HWACCEL_PROBE_VERSION = 2
+// 3：Windows FFmpeg 换为与原生解码服务同一份 9.0 GPL 构建（重要记录 014），可用编码器随构建变化，重新探测。
+const HWACCEL_PROBE_VERSION = 3
 
 function getCacheFilePath(): string {
   return path.join(getDataRootDir(), 'hwaccel-cache.json')

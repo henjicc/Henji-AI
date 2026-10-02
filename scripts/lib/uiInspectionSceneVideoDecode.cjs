@@ -11,7 +11,7 @@ const { videoFramesHarness } = require('./uiInspectionSceneVideoFrames.cjs')
  * 阶段（HENJI_VIDEO_DECODE_PHASES 逗号分隔，缺省全部）：
  * - experiment：传输特性标注实验（重要记录 007）——同一帧以 nv12/rgbaf16、bt709/srgb 标注导入，与浏览器后端
  *   （mediabunny + WebCodecs）同一帧、FFmpeg 参考 R'G'B' 逐点比较；
- * - pixels：每种样本取首帧、关键帧前后、B 帧、末帧，Worker 读回与同版本 FFmpeg（BtbN 8.1）参考帧比较，
+ * - pixels：每种样本取首帧、关键帧前后、B 帧、末帧，Worker 读回与同版本 FFmpeg（与服务链接的同一份 BtbN 构建，重要记录 014）参考帧比较，
  *   并以“目标帧比相邻帧更接近参考”确认取到的是目标帧；
  * - seek：按时间随机取帧的 PTS 正确性与冷/热耗时（IPC 到 Worker 收到帧）；
  * - schedule：带剪辑点的连续计划，逐项核对 PTS；
@@ -23,7 +23,7 @@ const { videoFramesHarness } = require('./uiInspectionSceneVideoFrames.cjs')
 
 const ROOT = path.resolve('node_modules/.cache/video-decode')
 const SAMPLES = path.resolve('node_modules/.cache/native-decode')
-const FFMPEG_BIN = path.resolve('native/video-decoder/ffmpeg/ffmpeg-n8.1.2-50-g1a748fe2cd-win64-lgpl-shared-8.1/bin')
+const FFMPEG_BIN = require('./mediaBinaries.cjs').binDir
 const FFMPEG = path.join(FFMPEG_BIN, 'ffmpeg.exe')
 const FFPROBE = path.join(FFMPEG_BIN, 'ffprobe.exe')
 const INTRO = 'D:/视频制作/0A0片头片尾和素材/2021片头V2 4K 60FPS.mp4'
@@ -75,7 +75,8 @@ const round = (value, digits = 4) => Math.round(value * 10 ** digits) / 10 ** di
 const { quantile, processResources, totalGpuMemoryMiB, cpuSample, cpuCores, installHarness } = videoFramesHarness
 
 function probeFrames(file) {
-  const tb = execFileSync(FFPROBE, ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=time_base', '-of', 'csv=p=0', file], { encoding: 'utf8', windowsHide: true }).trim().replace(/,$/, '')
+  // 用 JSON 顶层 streams：ffprobe 9.0 的 -show_entries stream=… 还会输出 stream_groups 内的同一流，csv 会重复。
+  const tb = JSON.parse(execFileSync(FFPROBE, ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=time_base', '-of', 'json', file], { encoding: 'utf8', windowsHide: true })).streams[0].time_base
   const [num, den] = tb.split('/').map(Number)
   // JSON 输出带字段名（csv 的列序是 ffprobe 内部顺序，不是请求顺序）。
   const data = JSON.parse(execFileSync(FFPROBE, ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'frame=pts,best_effort_timestamp,key_frame', '-of', 'json', file], { encoding: 'utf8', windowsHide: true, maxBuffer: 2 ** 30 }))

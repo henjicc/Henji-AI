@@ -128,7 +128,7 @@ function createVideoEditLayoutScene() {
       const originalSource = process.env.HENJI_VIDEO_EDIT_LAYOUT_SOURCE
       if (originalSource) {
         const source = path.resolve(originalSource); assert.ok(fs.existsSync(source))
-        const { ffprobePath } = require('ffmpeg-ffprobe-static')
+        const { ffprobePath } = require('./mediaBinaries.cjs')
         const metadata = JSON.parse(execFileSync(ffprobePath, ['-v', 'error', '-show_streams', '-of', 'json', source], { windowsHide: true, encoding: 'utf8' }))
         const video = metadata.streams.find(stream => stream.codec_type === 'video')
         assert.equal(video.width, 3840); assert.equal(video.height, 2160); assert.equal(video.avg_frame_rate, '60/1')

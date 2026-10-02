@@ -16,7 +16,7 @@ const { dialogs, presented } = require('./uiInspectionSceneVideoEditMonitor.cjs'
 const button = (page, name) => page.getByRole('button', { name, exact: true })
 const ROOT = path.resolve('node_modules/.cache/video-edit-media-probe')
 const SAMPLES = path.resolve('node_modules/.cache/native-decode')
-const FFPROBE = path.resolve('native/video-decoder/ffmpeg/ffmpeg-n8.1.2-50-g1a748fe2cd-win64-lgpl-shared-8.1/bin/ffprobe.exe')
+const FFPROBE = path.join(require('./mediaBinaries.cjs').binDir, 'ffprobe.exe')
 const TRIPO_4444 = 'D:/视频制作/2026-09-19_Tripo/素材/010_荷花_高细节_独立透明缓转_v2.mov'
 const PROFESSIONAL = [
   { file: path.join(SAMPLES, 'prores422hq.mov'), label: 'Apple ProRes HQ，10 位 4:2:2' },
@@ -93,7 +93,7 @@ function createVideoEditMediaProbeScene() {
             containerDuration: [Math.round(probe.container.durationSeconds * 1e6), Math.round(Number(reference.format.duration) * 1e6)],
             audioCodec: [audio?.codec ?? null, reference.audio?.codec_name ?? null],
           }
-          for (const [field, [actual, expected]] of Object.entries(compared)) assert.deepEqual(actual, expected, `${path.basename(sample.file)} ${field} 与 ffprobe 8.1 不一致`)
+          for (const [field, [actual, expected]] of Object.entries(compared)) assert.deepEqual(actual, expected, `${path.basename(sample.file)} ${field} 与同版本 ffprobe 不一致`)
           assert.equal(video.decodable, true, `${path.basename(sample.file)} 原生应带解码器`)
           evidence.probes.push({ file: sample.file, container: probe.container, video: { codec: video.codec, profile: video.profile, startTimeSeconds: video.startTimeSeconds, durationSeconds: video.durationSeconds, ...video.video }, audio: audio ? { codec: audio.codec, ...audio.audio } : null, ffprobeFieldsMatched: Object.keys(compared).length })
         }

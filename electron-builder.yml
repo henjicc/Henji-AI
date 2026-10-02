@@ -20,9 +20,20 @@ asarUnpack:
   - node_modules/sharp/**
   - node_modules/@img/**
   - node_modules/@napi-rs/**
-  - node_modules/ffmpeg-ffprobe-static/**
 win:
   icon: resources/icons/icon.ico
+  # Windows 全项目只用一份 FFmpeg（BtbN 9.0 GPL 共享构建，重要记录 014）：原生解码服务、其 DLL 与主进程 CLI
+  # 用的 ffmpeg.exe/ffprobe.exe 同在 resources/video-decoder/（由 npm run build:video-decoder 产出到 target/release）。
+  extraResources:
+    - from: native/video-decoder/target/release
+      to: resources/video-decoder
+      filter:
+        - henji-video-decoder.exe
+        - "*.dll"
+        - ffmpeg.exe
+        - ffprobe.exe
+  files:
+    - "!node_modules/ffmpeg-ffprobe-static{,/**/*}"
   target:
     - target: nsis
       arch:
@@ -39,6 +50,9 @@ msi:
   artifactName: henji-ai-${version}-${arch}.${ext}
 mac:
   icon: resources/icons/icon.icns
+  # 非 Windows 平台在 macOS 计划确定前维持 ffmpeg-ffprobe-static（重要记录 014）。
+  asarUnpack:
+    - node_modules/ffmpeg-ffprobe-static/**
   category: public.app-category.graphics-design
   target:
     - target: dmg

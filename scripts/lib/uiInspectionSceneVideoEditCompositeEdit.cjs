@@ -218,7 +218,7 @@ function createVideoEditCompositeEditScene({ pressureOnly = false } = {}) {
         const reopened = await pixels('reopened-90.png'); assert.ok((await pixelDifference(reopened.file, preview.get(90).file)).equal)
         evidence.savedReopened = true; evidence.public = { effectRef, fixedVersion: fixed.versionId, transitionRef, graphicRef, adjustmentRef }
         phase('真实4K60音画图形代码滤镜转场MP4导出回读')
-        const { ffmpegPath, ffprobePath } = require('ffmpeg-ffprobe-static')
+        const { ffmpegPath, ffprobePath } = require('./mediaBinaries.cjs')
         const output = path.join(root, `mixed-4k60-${Date.now()}.mp4`); await dialogs(app, [file], output)
         const began = performance.now(); await button(page, '导出视频').click()
         let task
@@ -238,7 +238,7 @@ function createVideoEditCompositeEditScene({ pressureOnly = false } = {}) {
         evidence.mixedCompleted = true; evidence.phases.push('手动原生对象/源码效果/Modern MCP/保存重开/实际成片全部通过'); store()
         }
         phase('完整500片段500字幕原4K60新增受控代码滤镜压力')
-        const { ffprobePath } = require('ffmpeg-ffprobe-static')
+        const { ffprobePath } = require('./mediaBinaries.cjs')
         const originalProbe = mediaProbe(ffprobePath, pressure.media.find(media => media.kind === 'video').path); evidence.originalVideoProbe = originalProbe
         assert.equal(originalProbe.streams.find(stream => stream.codec_type === 'video').width, 3840); assert.equal(originalProbe.streams.find(stream => stream.codec_type === 'video').avg_frame_rate, '60/1')
         const openAt = performance.now(); await open(pressureFile); evidence.firstDecodeMs = performance.now() - openAt

@@ -2,15 +2,22 @@
 /**
  * 原生视频解码服务（native/video-decoder）的 FFmpeg 获取、定位与构建入口，开发与 CI 共用。
  *
- * FFmpeg 来源固定为 BtbN/FFmpeg-Builds 的 win64-lgpl-shared 预编译包（重要记录 003）：
- * LGPL、不含 --enable-gpl / --enable-nonfree，动态链接。版本、下载地址与 SHA256 固定在
- * FFMPEG_BUILD，禁止改成 latest / master 浮动构建；升级时同步改这里与重要记录 003。
+ * FFmpeg 来源固定为 BtbN/FFmpeg-Builds 的 win64-gpl-shared 预编译包（重要记录 014）：
+ * Windows 上全项目唯一一份 FFmpeg——原生解码服务动态链接其 DLL，主进程 CLI（缩略图、波形、
+ * 压缩、帧导出、探测）调用同包 ffmpeg.exe / ffprobe.exe。版本、下载地址与 SHA256 固定在
+ * FFMPEG_BUILD，禁止改成 latest / master 浮动构建；选月末构建（BtbN 长期保留），升级时同步改
+ * 这里与重要记录 014。
  *
  * 用法：
  *   node scripts/video-decoder-ffmpeg.cjs ensure          下载（如缺失）、校验并解压，输出目录
  *   node scripts/video-decoder-ffmpeg.cjs path            输出已就绪的 FFmpeg 目录（缺失则失败）
- *   node scripts/video-decoder-ffmpeg.cjs build [--debug] ensure + cargo build，并把 DLL 复制到产物目录
+ *   node scripts/video-decoder-ffmpeg.cjs build [--debug] ensure + cargo build，并把 FFmpeg 运行时文件复制到产物目录
  *   node scripts/video-decoder-ffmpeg.cjs test            ensure + cargo test（DLL 目录加入 PATH）
+ *
+ * 定位约定（主进程 electron/main/services/video/ffmpeg-loader.ts 与脚本 scripts/lib/mediaBinaries.cjs 共用）：
+ *   - 开发：ensure 写入 native/video-decoder/ffmpeg/current.json，指向当前包的 bin 目录（ffmpeg.exe、ffprobe.exe 与 DLL）。
+ *   - 打包：target/release 下的服务、全部 FFmpeg DLL 与 ffmpeg.exe/ffprobe.exe 整体放入 resources/video-decoder/
+ *     （electron-builder.yml win.extraResources），服务与 CLI 共用同一份 DLL。
  *
  * 只支持 Windows（重要记录 005）；其他平台 ensure/build/test 输出跳过说明并以 0 退出。
  */
@@ -27,17 +34,22 @@ const manifestPath = path.join(crateDir, 'Cargo.toml')
 const ffmpegRoot = path.join(crateDir, 'ffmpeg')
 
 const FFMPEG_BUILD = Object.freeze({
-  version: 'n8.1.2-50-g1a748fe2cd',
-  releaseTag: 'autobuild-2026-08-31-13-27',
-  asset: 'ffmpeg-n8.1.2-50-g1a748fe2cd-win64-lgpl-shared-8.1.zip',
-  sha256: 'e9712ffbdb03ef71bbab660c75b835bfe698ef6fad0247c76d8d394a39a3db63',
-  size: 70835150,
+  version: 'n9.0.2-17-g2a571b6068',
+  releaseTag: 'autobuild-2026-09-30-13-08',
+  asset: 'ffmpeg-n9.0.2-17-g2a571b6068-win64-gpl-shared-9.0.zip',
+  sha256: '3da6c7b60bb9ccd73ec5b5e815ba804a0879eb362ba0e3beebce50174c022696',
+  size: 86321582,
 })
 const FFMPEG_URL = `https://github.com/BtbN/FFmpeg-Builds/releases/download/${FFMPEG_BUILD.releaseTag}/${FFMPEG_BUILD.asset}`
 const ffmpegDir = path.join(ffmpegRoot, FFMPEG_BUILD.asset.replace(/\.zip$/, ''))
+const ffmpegBinDir = path.join(ffmpegDir, 'bin')
 const READY_MARKER = path.join(ffmpegDir, '.henji-ready')
+const CURRENT_POINTER = path.join(ffmpegRoot, 'current.json')
 const RETRY_DELAYS_MS = [2_000, 5_000, 10_000, 30_000, 60_000]
-const RUNTIME_DLL = /^(avcodec|avformat|avutil|swscale|swresample)-\d+\.dll$/i
+// 服务链接 avcodec/avformat/avutil/swscale/swresample；ffmpeg.exe/ffprobe.exe 另需 avfilter/avdevice。
+// 运行时目录只放这些 DLL 与两个 CLI（不含 ffplay）。
+const FFMPEG_DLL = /^(avcodec|avformat|avutil|swscale|swresample|avfilter|avdevice|postproc)-\d+\.dll$/i
+const CLI_EXECUTABLES = ['ffmpeg.exe', 'ffprobe.exe']
 const CERT_ERROR = /CERT|SELF_SIGNED|UNABLE_TO_VERIFY|ERR_TLS_CERT/i
 
 function log(message) {
@@ -121,15 +133,38 @@ function isReady() {
   return fs.existsSync(READY_MARKER)
     && fs.existsSync(path.join(ffmpegDir, 'include', 'libavformat', 'avformat.h'))
     && fs.existsSync(path.join(ffmpegDir, 'lib', 'avformat.lib'))
+    && CLI_EXECUTABLES.every((name) => fs.existsSync(path.join(ffmpegBinDir, name)))
+}
+
+/** 写入开发期定位指针（主进程 CLI 与脚本读取），并移除本脚本此前解压的旧版本目录。 */
+function finalizeCurrent() {
+  const pointer = {
+    version: FFMPEG_BUILD.version,
+    asset: FFMPEG_BUILD.asset,
+    binDir: path.relative(ffmpegRoot, ffmpegBinDir).split(path.sep).join('/'),
+  }
+  const serialized = `${JSON.stringify(pointer, null, 2)}\n`
+  if (!fs.existsSync(CURRENT_POINTER) || fs.readFileSync(CURRENT_POINTER, 'utf8') !== serialized) {
+    fs.writeFileSync(CURRENT_POINTER, serialized)
+  }
+  for (const entry of fs.readdirSync(ffmpegRoot, { withFileTypes: true })) {
+    const candidate = path.join(ffmpegRoot, entry.name)
+    if (!entry.isDirectory() || candidate === ffmpegDir || !fs.existsSync(path.join(candidate, '.henji-ready'))) continue
+    fs.rmSync(candidate, { recursive: true, force: true })
+    log(`已移除旧版本 FFmpeg：${entry.name}`)
+  }
 }
 
 async function ensureFfmpeg() {
-  if (isReady()) return ffmpegDir
+  if (isReady()) {
+    finalizeCurrent()
+    return ffmpegDir
+  }
   fs.mkdirSync(ffmpegRoot, { recursive: true })
   const zipPath = path.join(ffmpegRoot, FFMPEG_BUILD.asset)
   if (!fs.existsSync(zipPath) || (await sha256File(zipPath)) !== FFMPEG_BUILD.sha256) {
     const partial = `${zipPath}.partial`
-    log(`下载 FFmpeg ${FFMPEG_BUILD.version}（LGPL 共享库）：${FFMPEG_URL}`)
+    log(`下载 FFmpeg ${FFMPEG_BUILD.version}（GPL 共享库）：${FFMPEG_URL}`)
     await downloadWithRetry(FFMPEG_URL, partial)
     const digest = await sha256File(partial)
     if (digest !== FFMPEG_BUILD.sha256) {
@@ -145,14 +180,16 @@ async function ensureFfmpeg() {
   }
   fs.writeFileSync(READY_MARKER, `${JSON.stringify({ ...FFMPEG_BUILD, url: FFMPEG_URL }, null, 2)}\n`)
   fs.rmSync(zipPath, { force: true })
+  finalizeCurrent()
   log(`FFmpeg 已就绪：${ffmpegDir}`)
   return ffmpegDir
 }
 
-function runtimeDlls() {
-  const binDir = path.join(ffmpegDir, 'bin')
-  // 只复制服务实际链接的库（avdevice/avfilter 未链接，不随产物分发）。
-  return fs.readdirSync(binDir).filter((name) => RUNTIME_DLL.test(name)).map((name) => path.join(binDir, name))
+/** 与服务同目录分发的 FFmpeg 运行时文件：库 DLL + ffmpeg.exe/ffprobe.exe（主进程 CLI 用，不含 ffplay）。 */
+function runtimeFiles() {
+  return fs.readdirSync(ffmpegBinDir)
+    .filter((name) => FFMPEG_DLL.test(name) || CLI_EXECUTABLES.includes(name.toLowerCase()))
+    .map((name) => path.join(ffmpegBinDir, name))
 }
 
 function findOnPath(env, exe) {
@@ -216,11 +253,17 @@ async function build(profile) {
   const startedAt = Date.now()
   await runCargo(profile === 'release' ? ['build', '--release'] : ['build'])
   const targetDir = path.join(crateDir, 'target', profile)
-  for (const dll of runtimeDlls()) {
-    const destination = path.join(targetDir, path.basename(dll))
-    const source = fs.statSync(dll)
+  const files = runtimeFiles()
+  const names = new Set(files.map((file) => path.basename(file).toLowerCase()))
+  // 升级后旧主版本的 DLL（如 avcodec-62.dll）留在产物目录会被一并打包，先清掉。
+  for (const name of fs.readdirSync(targetDir)) {
+    if (FFMPEG_DLL.test(name) && !names.has(name.toLowerCase())) fs.rmSync(path.join(targetDir, name), { force: true })
+  }
+  for (const file of files) {
+    const destination = path.join(targetDir, path.basename(file))
+    const source = fs.statSync(file)
     const existing = fs.existsSync(destination) ? fs.statSync(destination) : null
-    if (!existing || existing.size !== source.size || existing.mtimeMs < source.mtimeMs) fs.copyFileSync(dll, destination)
+    if (!existing || existing.size !== source.size || existing.mtimeMs < source.mtimeMs) fs.copyFileSync(file, destination)
   }
   log(`构建完成（${profile}，${((Date.now() - startedAt) / 1000).toFixed(1)}s）：${path.join(targetDir, 'henji-video-decoder.exe')}`)
 }
@@ -245,7 +288,7 @@ async function main() {
   throw new Error(`未知命令：${command}`)
 }
 
-module.exports = { FFMPEG_BUILD, FFMPEG_URL, ffmpegDir }
+module.exports = { FFMPEG_BUILD, FFMPEG_URL, ffmpegDir, ffmpegBinDir, CURRENT_POINTER, ensureFfmpeg, isReady, isSupportedPlatform }
 
 if (require.main === module) {
   main().catch((error) => {

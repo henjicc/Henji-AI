@@ -13,7 +13,7 @@ function createVideoEditScrubScene() {
     setup: async (page, app, { capture }) => {
       const suppliedSource = process.env.HENJI_VIDEO_EDIT_SCRUB_SOURCE
       const root = path.resolve(`node_modules/.cache/video-edit-scrub${suppliedSource ? '-original' : ''}`); fs.mkdirSync(root, { recursive: true })
-      const { ffmpegPath, ffprobePath } = require('ffmpeg-ffprobe-static')
+      const { ffmpegPath, ffprobePath } = require('./mediaBinaries.cjs')
       const source = suppliedSource ? path.resolve(suppliedSource) : path.join(root, '4k60-gop120-b2.mp4')
       if (suppliedSource) assert.ok(fs.existsSync(source), '指定的原素材必须存在，不生成替代文件')
       if (!fs.existsSync(source)) execFileSync(ffmpegPath, ['-v', 'error', '-y', '-f', 'lavfi', '-i', 'testsrc2=size=3840x2160:rate=60', '-t', '8', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-g', '120', '-keyint_min', '120', '-sc_threshold', '0', '-bf', '2', '-pix_fmt', 'yuv420p', source], { windowsHide: true })

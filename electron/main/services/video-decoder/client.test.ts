@@ -52,16 +52,16 @@ const HELLO: VideoDecoderHello = {
   protocolVersion: VIDEO_DECODER_PROTOCOL_VERSION,
   pid: 0,
   ffmpeg: {
-    version: 'n8.1.2-test',
-    libavcodec: '62.11.100',
-    libavformat: '62.3.100',
-    libavutil: '60.8.100',
-    license: 'LGPL version 3 or later',
-    gplEnabled: false,
+    version: 'n9.0.2-test',
+    libavcodec: '63.4.100',
+    libavformat: '63.1.100',
+    libavutil: '61.2.100',
+    license: 'GPL version 3 or later',
+    gplEnabled: true,
     nonfreeEnabled: false,
-    videoDecoders: ['av1', 'cfhd', 'dnxhd', 'h264', 'hevc', 'libdav1d', 'mpeg2video', 'prores', 'vp9'],
+    videoDecoders: ['av1', 'cfhd', 'dnxhd', 'h264', 'hevc', 'libdav1d', 'libvpx-vp9', 'mpeg2video', 'prores', 'vp9'],
     audioDecoders: ['aac'],
-    requiredDecoders: ['h264', 'hevc', 'av1', 'libdav1d', 'vp9', 'prores', 'dnxhd', 'cfhd', 'mpeg2video'],
+    requiredDecoders: ['h264', 'hevc', 'av1', 'libdav1d', 'vp9', 'libvpx-vp9', 'prores', 'dnxhd', 'cfhd', 'mpeg2video'],
     missingRequiredDecoders: [],
     hwDeviceTypes: ['d3d11va'],
   },
@@ -141,7 +141,7 @@ describe('VideoDecoderService', () => {
   it('handshakes once, logs FFmpeg/decoder/D3D11 info and forwards native stderr logs', async () => {
     const { service, children, logs } = createHarness(standardHandler())
     const [first, second] = await Promise.all([service.ensureStarted(), service.probe('D:\\a.mov')])
-    expect(first.ffmpeg.version).toBe('n8.1.2-test')
+    expect(first.ffmpeg.version).toBe('n9.0.2-test')
     expect(second.path).toBe('D:\\a.mov')
     expect(children).toHaveLength(1)
     expect(service.state).toBe('ready')
@@ -150,8 +150,8 @@ describe('VideoDecoderService', () => {
     const ready = logs.find((entry) => entry.meta?.event === 'video_decoder.service.ready')
     expect(ready?.level).toBe('info')
     expect(ready?.meta?.context).toMatchObject({
-      ffmpegVersion: 'n8.1.2-test',
-      requiredDecoders: ['h264', 'hevc', 'av1', 'libdav1d', 'vp9', 'prores', 'dnxhd', 'cfhd', 'mpeg2video'],
+      ffmpegVersion: 'n9.0.2-test',
+      requiredDecoders: ['h264', 'hevc', 'av1', 'libdav1d', 'vp9', 'libvpx-vp9', 'prores', 'dnxhd', 'cfhd', 'mpeg2video'],
       missingRequiredDecoders: [],
       d3d11: { adapter: 'Test GPU', featureLevel: '11.1' },
     })

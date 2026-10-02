@@ -51,7 +51,9 @@ function encoderArguments(
   const alphaPixelFormat = `gray${bits}le`
   const filter = [
     '[0:v]split=2[color][alpha];',
-    `[color]zscale=matrixin=gbr:primariesin=2020:transferin=${transfer}:rangein=full:`,
+    // 颜色支先去掉 alpha 再进 zscale：输入是非预乘 RGBA，alpha 单独编码为辅助图像。FFmpeg 9.0 的
+    // zscale 遇到带 alpha 的输入会在颜色变换时一并处理 alpha，非不透明像素的颜色会被改写。
+    `[color]format=gbrp16le,zscale=matrixin=gbr:primariesin=2020:transferin=${transfer}:rangein=full:`,
     `matrix=2020_ncl:primaries=2020:transfer=${transfer}:range=limited,`,
     `format=${colorPixelFormat}[colorout];`,
     `[alpha]alphaextract,format=${alphaPixelFormat}[alphaout]`,

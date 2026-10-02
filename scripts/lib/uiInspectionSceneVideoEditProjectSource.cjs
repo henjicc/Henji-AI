@@ -50,7 +50,7 @@ function createVideoEditProjectSourceScene() {
       const existing = path.resolve('node_modules/.cache/video-edit-probe/3840-60.mp4')
       const video = fs.existsSync(existing) ? existing : path.join(root, '4k60.mp4')
       const picture = path.join(root, 'picture.png'); const audio = path.join(root, 'audio.wav')
-      const { ffmpegPath } = require('ffmpeg-ffprobe-static')
+      const { ffmpegPath } = require('./mediaBinaries.cjs')
       const ffmpeg = args => execFileSync(ffmpegPath, ['-v', 'error', '-y', ...args], { windowsHide: true, stdio: 'pipe' })
       if (!fs.existsSync(video)) ffmpeg(['-f', 'lavfi', '-i', 'testsrc2=size=3840x2160:rate=60', '-t', '3', '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '20', '-g', '60', '-pix_fmt', 'yuv420p', video])
       if (!fs.existsSync(picture)) ffmpeg(['-f', 'lavfi', '-i', 'color=c=orange:size=320x180', '-frames:v', '1', picture])

@@ -1,7 +1,8 @@
 //! FFmpeg D3D11VA 硬件设备接入。
 //!
-//! ffmpeg-sys-next 8.1 的绑定不含 `libavutil/hwcontext_d3d11va.h`，这里按 FFmpeg 8.1 头文件手写同布局的
-//! `#[repr(C)]` 结构（单元测试固定字段偏移；升级 FFmpeg 时必须对照新头文件复核）。
+//! `AVD3D11VADeviceContext` 等结构直接用 ffmpeg-sys-next 9.0 由 bindgen 按所链接 FFmpeg 的
+//! `libavutil/hwcontext_d3d11va.h` 生成的声明（绑定内带编译期布局断言；8.1 绑定不含该头文件时
+//! 曾在此手写同布局结构，1.4 起删除）。测试再用真实设备核对所链接 DLL 按同一布局读写字段。
 //!
 //! 进程内只建一个 `AVHWDeviceContext`，包装服务自己的 D3D11 设备（与共享纹理池同一设备），
 //! 锁回调用设备的 `ID3D11Multithread::Enter/Leave`（可重入，FFmpeg 要求），与 `GpuDevice::lock()` 是同一把锁。
@@ -13,38 +14,6 @@ use windows::core::Interface;
 use windows::Win32::Graphics::Direct3D11::ID3D11Multithread;
 
 use super::device::GpuDevice;
-
-/// `AVD3D11VADeviceContext`（FFmpeg 8.1）。
-#[repr(C)]
-pub struct AVD3D11VADeviceContext {
-    pub device: *mut c_void,
-    pub device_context: *mut c_void,
-    pub video_device: *mut c_void,
-    pub video_context: *mut c_void,
-    pub lock: Option<unsafe extern "C" fn(*mut c_void)>,
-    pub unlock: Option<unsafe extern "C" fn(*mut c_void)>,
-    pub lock_ctx: *mut c_void,
-    pub bind_flags: u32,
-    pub misc_flags: u32,
-}
-
-/// `AVD3D11FrameDescriptor`（FFmpeg 8.1）。只读帧时按 data[0]/data[1] 取用，保留声明以固定布局。
-#[allow(dead_code)]
-#[repr(C)]
-pub struct AVD3D11FrameDescriptor {
-    pub texture: *mut c_void,
-    pub index: isize,
-}
-
-/// `AVD3D11VAFramesContext`（FFmpeg 8.1）。帧池由 FFmpeg 创建，保留声明以固定布局。
-#[allow(dead_code)]
-#[repr(C)]
-pub struct AVD3D11VAFramesContext {
-    pub texture: *mut c_void,
-    pub bind_flags: u32,
-    pub misc_flags: u32,
-    pub texture_infos: *mut AVD3D11FrameDescriptor,
-}
 
 unsafe extern "C" fn lock_device(context: *mut c_void) {
     if let Some(multithread) = unsafe { ID3D11Multithread::from_raw_borrowed(&context) } {
@@ -82,9 +51,9 @@ pub fn create(gpu: &GpuDevice) -> Result<HwDevice, String> {
             return Err("无法分配 D3D11VA 硬件设备".into());
         }
         let device_context = (*reference).data as *mut ff::AVHWDeviceContext;
-        let hw = (*device_context).hwctx as *mut AVD3D11VADeviceContext;
+        let hw = (*device_context).hwctx as *mut ff::AVD3D11VADeviceContext;
         // FFmpeg 释放设备上下文时会 Release device：交出一份额外引用。
-        (*hw).device = gpu.device.clone().into_raw();
+        (*hw).device = gpu.device.clone().into_raw() as *mut ff::ID3D11Device;
         (*hw).lock = Some(lock_device);
         (*hw).unlock = Some(unlock_device);
         (*hw).lock_ctx = gpu.multithread.as_raw();
@@ -108,21 +77,45 @@ pub unsafe fn frame_texture(frame: *const ff::AVFrame) -> (*mut c_void, u32) {
 mod tests {
     use super::*;
     use std::mem::{offset_of, size_of};
+    use windows::Win32::Graphics::Direct3D11::{ID3D11VideoContext, ID3D11VideoDevice};
 
-    /// 布局与 FFmpeg 8.1 `hwcontext_d3d11va.h`（x64）一致。
+    /// 绑定按 FFmpeg 9.0 头文件生成的布局（x64）：与 8.1 手写声明相同，升级时由绑定自带断言把关。
     #[test]
-    fn layouts_match_ffmpeg_8_1() {
-        assert_eq!(offset_of!(AVD3D11VADeviceContext, device), 0);
-        assert_eq!(offset_of!(AVD3D11VADeviceContext, video_context), 24);
-        assert_eq!(offset_of!(AVD3D11VADeviceContext, lock), 32);
-        assert_eq!(offset_of!(AVD3D11VADeviceContext, unlock), 40);
-        assert_eq!(offset_of!(AVD3D11VADeviceContext, lock_ctx), 48);
-        assert_eq!(offset_of!(AVD3D11VADeviceContext, bind_flags), 56);
-        assert_eq!(offset_of!(AVD3D11VADeviceContext, misc_flags), 60);
-        assert_eq!(size_of::<AVD3D11VADeviceContext>(), 64);
-        assert_eq!(size_of::<AVD3D11FrameDescriptor>(), 16);
-        assert_eq!(offset_of!(AVD3D11VAFramesContext, bind_flags), 8);
-        assert_eq!(offset_of!(AVD3D11VAFramesContext, texture_infos), 16);
-        assert_eq!(size_of::<AVD3D11VAFramesContext>(), 24);
+    fn binding_layouts_match_ffmpeg_9_0_header() {
+        assert_eq!(offset_of!(ff::AVD3D11VADeviceContext, video_context), 24);
+        assert_eq!(offset_of!(ff::AVD3D11VADeviceContext, lock), 32);
+        assert_eq!(offset_of!(ff::AVD3D11VADeviceContext, lock_ctx), 48);
+        assert_eq!(offset_of!(ff::AVD3D11VADeviceContext, MiscFlags), 60);
+        assert_eq!(size_of::<ff::AVD3D11VADeviceContext>(), 64);
+        assert_eq!(size_of::<ff::AVD3D11FrameDescriptor>(), 16);
+        assert_eq!(offset_of!(ff::AVD3D11VAFramesContext, texture_infos), 16);
+    }
+
+    /// 真实校验：在服务设备上让所链接的 FFmpeg DLL 初始化 D3D11VA 设备，读回它按头文件填入的字段，
+    /// 与本进程从同一设备取得的接口逐一比对（布局或 ABI 不符时指针对不上）。无硬件适配器时跳过。
+    #[test]
+    fn linked_ffmpeg_fills_device_context_at_binding_offsets() {
+        let gpu = match super::super::device::create_device() {
+            Ok(gpu) => gpu,
+            Err(error) => {
+                eprintln!("跳过：没有可用的 D3D11 设备（{error}）");
+                return;
+            }
+        };
+        let hw_device = create(&gpu).expect("初始化 D3D11VA 硬件设备");
+        unsafe {
+            let device_context = (*hw_device.reference).data as *const ff::AVHWDeviceContext;
+            assert_eq!((*device_context).type_, ff::AVHWDeviceType::AV_HWDEVICE_TYPE_D3D11VA);
+            let hw = &*((*device_context).hwctx as *const ff::AVD3D11VADeviceContext);
+            assert_eq!(hw.device as *mut c_void, gpu.device.as_raw());
+            let immediate = gpu.device.GetImmediateContext().expect("立即上下文");
+            assert_eq!(hw.device_context as *mut c_void, immediate.as_raw());
+            let video_device = gpu.device.cast::<ID3D11VideoDevice>().expect("视频设备接口");
+            assert_eq!(hw.video_device as *mut c_void, video_device.as_raw());
+            let video_context = immediate.cast::<ID3D11VideoContext>().expect("视频上下文接口");
+            assert_eq!(hw.video_context as *mut c_void, video_context.as_raw());
+            assert_eq!(hw.lock_ctx, gpu.multithread.as_raw());
+            assert!(hw.lock.is_some() && hw.unlock.is_some());
+        }
     }
 }
