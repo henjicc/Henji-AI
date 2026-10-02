@@ -237,6 +237,9 @@ async function launchElectronApp({
   const ownedUserDataDir = reuseUserDataDir ? null : userDataDir
   const entryArg = appPath ?? mainEntry
   const launchArgs = userDataDir ? [`--user-data-dir=${userDataDir}`, entryArg] : [entryArg]
+  // Automated runs keep the whole audio pipeline (mixing, meters, audio clock, export) but never reach the
+  // speakers; Chromium mutes only the final output.
+  launchArgs.push('--mute-audio')
   launchArgs.push(...extraArgs)
   // LOCALAPPDATA/APPDATA 只在 Windows 上决定数据目录；macOS / Linux 走
   // app.getPath('appData')，必须由主进程按 HENJI_ISOLATED_APP_DATA 重定向，
