@@ -1,7 +1,7 @@
 import { beforeEach, expect, it, vi } from 'vitest'
 import type { VideoEditComposition, VideoEditMedia } from '@/core/videoEdit/document'
 import type { RenderResponse } from './videoEditWorker'
-import { VideoEditSourceFrames } from './videoEditSourceFrames'
+import { VideoEditSourceFrames, videoEditSourceBackend } from './videoEditSourceFrames'
 
 const boundary = vi.hoisted(() => ({
   created: [] as Array<{ document: VideoEditComposition; previewWidth?: number; surface?: OffscreenCanvas; budget?: number }>,
@@ -17,6 +17,10 @@ vi.mock('./videoEditRenderSession', () => ({ VideoEditRenderSession: class {
   present(frame: number, sequential: boolean, scrubbing: boolean, deadline?: number): Promise<RenderResponse> { return boundary.present(frame, sequential, scrubbing, deadline) }
   dispose(): Promise<void> { return boundary.dispose() }
 } }))
+const decoding = vi.hoisted(() => ({ status: vi.fn(async () => ({ available: true, forcedBackend: null as 'native' | 'browser' | null })), browser: vi.fn(async (_url: string) => true) }))
+vi.mock('@/platform/runtime', () => ({ getPlatform: () => ({ videoDecoder: { status: decoding.status } }) }))
+vi.mock('@/services/imageSource', () => ({ toFetchableMediaUrl: (path: string) => `url:${path}`, isLikelyLocalImagePath: (path: string) => /^[A-Z]:/.test(path) }))
+vi.mock('./videoEditBrowserFrames', () => ({ videoEditBrowserDecodable: decoding.browser }))
 const media: VideoEditMedia = { id: 'media', name: '原视频', kind: 'video', path: 'D:/素材/原视频.mp4', sourceRevision: 'relinked', assetId: 'asset', width: 3840, height: 2160, durationSeconds: 7, frameRate: { numerator: 60, denominator: 1 } }
 function surface() {
   const transferred = { width: media.width, height: media.height } as OffscreenCanvas
@@ -144,4 +148,51 @@ it('无效素材在转移画布和创建Worker前拒绝', () => {
     expect(target.transfer).not.toHaveBeenCalled()
   }
   expect(boundary.created).toEqual([])
+})
+
+it('素材在该时间没有画面（流首帧之前）时按标称帧格确认位置，反向与播放据此逐帧前进', async () => {
+  const frames = new VideoEditSourceFrames({ ...media, frameRate: { numerator: 30000, denominator: 1001 } }, surface().canvas)
+  boundary.present.mockResolvedValue({ id: 1, presented: true, sourceTimestamps: [], blankPictures: 1 })
+  expect(await frames.present(500_000)).toMatchObject({ timeUs: 500_000, presentedTimeUs: Math.round(14 * 1001 / 30000 * 1e6) })
+  expect(await frames.playFrame(3)).toMatchObject({ presentedTimeUs: Math.round(3 * 1001 / 30000 * 1e6) })
+  boundary.present.mockResolvedValue({ id: 1, presented: true, sourceTimestamps: [] })
+  await expect(frames.present(500_000)).rejects.toThrow('实际呈现位置')
+  await frames.dispose()
+})
+
+it('正向播放走渲染器的连续计划：切换为覆盖整个素材的片段只做一次，逐帧按节拍提交；定位回到单帧文档', async () => {
+  const frames = new VideoEditSourceFrames(media, surface().canvas)
+  expect(frames.frameCount).toBe(420)
+  boundary.present.mockResolvedValueOnce(response(61 / 60)).mockResolvedValueOnce(response(62 / 60))
+  expect(await frames.playFrame(61, 1000)).toMatchObject({ timeUs: 1_016_667, presentedTimeUs: 1_016_667 })
+  expect(await frames.playFrame(62, 1016)).toMatchObject({ timeUs: 1_033_333, presentedTimeUs: 1_033_333 })
+  expect(boundary.documents).toHaveLength(1)
+  expect(boundary.documents[0].clips[0]).toMatchObject({ start: 0, duration: 420, sourceInUs: 0 })
+  expect(boundary.present.mock.calls).toEqual([[61, true, false, 1000], [62, true, false, 1016]])
+  boundary.present.mockResolvedValue(response(1))
+  await frames.present(1_000_000)
+  expect(boundary.documents.at(-1)?.clips[0]).toMatchObject({ duration: 1, sourceInUs: 1_000_000 })
+  boundary.present.mockResolvedValue(response(63 / 60)); await frames.playFrame(63)
+  expect(boundary.documents).toHaveLength(3); expect(boundary.documents.at(-1)?.clips[0]).toMatchObject({ duration: 420, sourceInUs: 0 })
+  await expect(frames.playFrame(420)).rejects.toThrow('超出素材范围')
+  frames.invalidate()
+  let finish!: (result: RenderResponse) => void
+  boundary.present.mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+  const stale = frames.playFrame(64); await flush(); frames.invalidate(); finish(response(64 / 60))
+  await expect(stale).rejects.toThrow('已被更新')
+  await frames.dispose()
+})
+
+it('源监视器与渲染 Worker 同一规则决定后端：浏览器能完整解的留在浏览器，只有原生能解的走原生；按文件与版本缓存，失败下次重试', async () => {
+  decoding.browser.mockImplementation(async url => !url.includes('prores'))
+  expect(await videoEditSourceBackend({ ...media, path: 'D:/h264.mp4' })).toBe('browser')
+  expect(await videoEditSourceBackend({ ...media, path: 'D:/prores.mov' })).toBe('native')
+  expect(await videoEditSourceBackend({ ...media, path: 'D:/prores.mov' })).toBe('native')
+  expect(decoding.browser.mock.calls.map(([url]) => url)).toEqual(['url:D:/h264.mp4', 'url:D:/prores.mov'])
+  decoding.status.mockResolvedValueOnce({ available: true, forcedBackend: 'native' })
+  expect(await videoEditSourceBackend({ ...media, path: 'D:/forced.mp4' })).toBe('native')
+  decoding.status.mockRejectedValueOnce(new Error('no platform'))
+  expect(await videoEditSourceBackend({ ...media, path: 'D:/offline.mov' })).toBe('browser')
+  expect(await videoEditSourceBackend({ ...media, path: 'https://example.com/a.mp4' })).toBe('browser')
+  expect(decoding.browser).toHaveBeenCalledTimes(2)
 })

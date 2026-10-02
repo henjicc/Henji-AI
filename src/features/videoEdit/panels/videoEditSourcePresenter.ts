@@ -1,7 +1,7 @@
 import type { VideoEditMedia } from '@/core/videoEdit/document'
 import type { VideoEditSourceObservation, VideoEditSourcePresenter } from '../application/videoEditSource'
 import { resolveImageDisplayUrl } from '@/services/imageSource'
-import { VideoEditSourceFrames } from '../engine/videoEditSourceFrames'
+import { VideoEditSourceFrames, videoEditSourceBackend } from '../engine/videoEditSourceFrames'
 import { createVideoEditAudioMeter, type VideoEditAudioLevel } from '../engine/videoEditAudioMeter'
 
 // A Dock hide/show may create a different presenter/host before the old worker
@@ -29,6 +29,13 @@ function abortable<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
   })
 }
 
+/**
+ * A video item only the native decoder plays (task 2.2): no media element; the original-source render session shows
+ * every picture, forward playback runs through its scheduled path and reverse playback steps by real timestamps.
+ * Sound stays silent until native sound decoding (task 2.3 stage B).
+ */
+interface NativeSourceView { owner: VideoEditSourceFrames; canvas: HTMLCanvasElement; media: VideoEditMedia; clockUs: number; presentedTimeUs: number; playing: boolean; direction: 1 | -1; run?: AbortController }
+
 /** Native forward playback and cached reverse frames share one source owner. */
 export function createVideoEditSourcePresenter(host: HTMLElement, resolveMedia: (itemId: string) => VideoEditMedia,
   observe: (itemId: string, observation: VideoEditSourceObservation) => void, observeLevel?: (levels: VideoEditAudioLevel[]) => void): { present: VideoEditSourcePresenter; release: () => Promise<void>; dispose: () => Promise<void> } {
@@ -55,6 +62,55 @@ export function createVideoEditSourcePresenter(host: HTMLElement, resolveMedia: 
   let audioSource: MediaElementAudioSourceNode | undefined
   let meter: ReturnType<typeof createVideoEditAudioMeter> | undefined
   let meterTimer: ReturnType<typeof setInterval> | undefined
+  let nativeView: NativeSourceView | undefined
+  let backendChoice: Promise<Awaited<ReturnType<typeof videoEditSourceBackend>> | undefined> | undefined
+  const stopNative = (view: NativeSourceView | undefined): void => { if (!view) return; view.run?.abort(new Error('源播放已停止。')); view.run = undefined; view.playing = false }
+  const releaseNative = (): void => {
+    const view = nativeView; nativeView = undefined
+    if (!view) return
+    stopNative(view); view.canvas.remove()
+    sourceFramesReleased = Promise.allSettled([sourceFramesReleased, view.owner.dispose()]).then(() => undefined)
+  }
+  const recordNative = (view: NativeSourceView, result: { presentedTimeUs: number; decodeMs: number; gpuMs: number; cacheHits: number; cacheBytes: number }): void => {
+    view.presentedTimeUs = result.presentedTimeUs
+    Object.assign(view.canvas.dataset, { presentedTimeUs: String(result.presentedTimeUs), decodeMs: String(result.decodeMs), gpuMs: String(result.gpuMs), cacheHits: String(result.cacheHits), cacheBytes: String(result.cacheBytes) })
+  }
+  const nativeObservation = (view: NativeSourceView, volume: number, error?: string): VideoEditSourceObservation => ({ timeUs: view.clockUs, presentedTimeUs: view.presentedTimeUs, playing: view.playing, volume, ...(view.playing && view.direction === -1 ? { playbackDirection: -1 as const } : {}), ...(error ? { error } : {}) })
+  /** Paced playback in either direction; publishes every confirmed picture, stops at either end. */
+  const runNative = (view: NativeSourceView, direction: 1 | -1, volume: number): void => {
+    const run = new AbortController(); view.run = run; view.playing = true; view.direction = direction
+    const { owner, media } = view
+    const fps = media.frameRate ? media.frameRate.numerator / media.frameRate.denominator : 30
+    const durationUs = Math.round(media.durationSeconds * 1e6)
+    const started = performance.now() + 1000 / fps
+    const startClockUs = view.clockUs
+    const startFrame = Math.min(owner.frameCount - 1, Math.floor(startClockUs * fps / 1e6 + 1e-6))
+    const finish = (): void => { view.playing = false; view.run = undefined; observe(currentItem, nativeObservation(view, volume)) }
+    void (async () => {
+      try {
+        for (let frame = startFrame + 1; ; frame++) {
+          if (run.signal.aborted || nativeView !== view) return
+          if (direction === 1) {
+            if (frame >= owner.frameCount) { view.clockUs = durationUs; finish(); return }
+            const result = await owner.playFrame(frame, performance.timeOrigin + started + (frame - startFrame - 1) * 1000 / fps)
+            if (run.signal.aborted || nativeView !== view) return
+            view.clockUs = result.timeUs; recordNative(view, result)
+          } else {
+            // Step back by real timestamps (variable frame rate included), aiming just before the shown picture.
+            if (view.presentedTimeUs <= 0) { view.clockUs = 0; finish(); return }
+            const result = await owner.present(Math.max(0, view.presentedTimeUs - 1), performance.timeOrigin + started + (startClockUs - view.presentedTimeUs) / 1000)
+            if (run.signal.aborted || nativeView !== view) return
+            recordNative(view, result); view.clockUs = Math.min(durationUs - 1, result.presentedTimeUs + 1)
+          }
+          observe(currentItem, nativeObservation(view, volume))
+        }
+      } catch (error) {
+        if (run.signal.aborted || nativeView !== view) return
+        view.playing = false; view.run = undefined
+        observe(currentItem, nativeObservation(view, volume, error instanceof Error ? error.message : String(error)))
+      }
+    })()
+  }
   const stopReverse = (): void => { clearTimeout(reverseTimer); reverseTimer = undefined; reversePlaying = false; reverse?.abort(new Error('反向源播放已停止。')); reverse = undefined; frames?.invalidate() }
   const releaseFrames = (): void => {
     const previous = frames; frames = undefined; frameCanvas?.remove(); frameCanvas = undefined
@@ -64,6 +120,7 @@ export function createVideoEditSourcePresenter(host: HTMLElement, resolveMedia: 
   const release = (): void => {
     stopReverse()
     releaseFrames()
+    releaseNative(); backendChoice = undefined
     generation++
     const media = element
     clearInterval(meterTimer); meterTimer = undefined; audioSource?.disconnect(); audioSource = undefined; meter?.dispose(); meter = undefined
@@ -180,8 +237,12 @@ export function createVideoEditSourcePresenter(host: HTMLElement, resolveMedia: 
       const media = resolveMedia(request.itemId)
       currentFps = media.frameRate ? media.frameRate.numerator / media.frameRate.denominator : 30
       constantFrameRate = media.frameRateMode === 'sampled-constant'
-      if (currentItem !== request.itemId || currentPath !== media.path || currentRevision !== media.sourceRevision || !element) {
+      if (currentItem !== request.itemId || currentPath !== media.path || currentRevision !== media.sourceRevision || !(element || nativeView)) {
         release(); currentItem = request.itemId; currentPath = media.path; currentRevision = media.sourceRevision
+        // Decided while the media element loads (cached per file), so browser-decoded items open as fast as before.
+        backendChoice = media.kind === 'video' ? videoEditSourceBackend(media).catch(() => undefined) : undefined
+      }
+      if (!element && !nativeView) {
         element = document.createElement(media.kind === 'image' ? 'img' : media.kind === 'audio' ? 'audio' : 'video')
         element.setAttribute('aria-label', '源素材画面'); element.setAttribute('data-video-edit-source-media', media.kind)
         element.className = media.kind === 'audio' ? 'hidden' : 'h-full w-full object-contain'
@@ -195,7 +256,17 @@ export function createVideoEditSourcePresenter(host: HTMLElement, resolveMedia: 
           element.addEventListener('volumechange', () => { if (generation === expected) publish() })
           const loaded = waitEvent(element, 'loadedmetadata', operation.signal)
           element.src = resolveImageDisplayUrl(media.path); host.replaceChildren(element)
-          await loaded
+          const deciding = backendChoice; backendChoice = undefined
+          const [choice, failure] = deciding ? await Promise.all([abortable(deciding, operation.signal), loaded.then(() => undefined, (error: unknown) => error)]) : [undefined, await loaded]
+          if (choice === 'native') {
+            // A media element cannot show this file: drop it and show the source through the render session.
+            const unused = element; element = undefined; unused.removeAttribute('src'); unused.load(); unused.remove()
+            await abortable(sourceFramesReleased, operation.signal)
+            const canvas = document.createElement('canvas'); canvas.className = 'h-full w-full object-contain'
+            canvas.setAttribute('aria-label', '源素材画面'); canvas.setAttribute('data-video-edit-source-media', 'video'); canvas.setAttribute('data-video-edit-source-canvas', '')
+            nativeView = { owner: new VideoEditSourceFrames(media, canvas), canvas, media, clockUs: 0, presentedTimeUs: 0, playing: false, direction: 1 }
+            host.replaceChildren(canvas)
+          } else if (failure !== undefined) throw failure
         } else {
           const loaded = waitEvent(element, 'load', operation.signal)
           element.src = resolveImageDisplayUrl(media.path); element.alt = media.name; host.replaceChildren(element)
@@ -203,6 +274,15 @@ export function createVideoEditSourcePresenter(host: HTMLElement, resolveMedia: 
         }
       }
       operation.signal.throwIfAborted()
+      if (nativeView) {
+        const view = nativeView
+        stopNative(view); observeLevel?.([])
+        const result = await abortable(view.owner.present(request.timeUs), operation.signal)
+        if (nativeView !== view) throw new Error('源预览请求已被更新。')
+        view.clockUs = request.timeUs; recordNative(view, result)
+        if (request.playing) runNative(view, request.playbackDirection === -1 ? -1 : 1, request.volume)
+        return nativeObservation(view, request.volume)
+      }
       const target = element!
       if (target instanceof HTMLImageElement) return { timeUs: 0, presentedTimeUs: 0, playing: false, volume: request.volume }
       target.volume = request.volume

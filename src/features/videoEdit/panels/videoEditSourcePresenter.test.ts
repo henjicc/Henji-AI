@@ -4,8 +4,8 @@ import type { VideoEditMedia } from '@/core/videoEdit/document'
 import { createVideoEditSourcePresenter } from './videoEditSourcePresenter'
 
 vi.mock('@/services/imageSource', () => ({ resolveImageDisplayUrl: (path: string) => `media:${path}` }))
-const gpu = vi.hoisted(() => ({ blocked: false, calls: [] as number[], requests: [] as Array<() => void>, invalidates: vi.fn(), closes: vi.fn(), created: 0, closing: undefined as Promise<void> | undefined, timestamp: undefined as ((timeUs: number) => number) | undefined }))
-vi.mock('../engine/videoEditSourceFrames', () => ({ VideoEditSourceFrames: class {
+const gpu = vi.hoisted(() => ({ blocked: false, calls: [] as number[], requests: [] as Array<() => void>, invalidates: vi.fn(), closes: vi.fn(), created: 0, closing: undefined as Promise<void> | undefined, timestamp: undefined as ((timeUs: number) => number) | undefined, backend: 'browser' as 'browser' | 'native', plays: [] as Array<[number, number | undefined]> }))
+vi.mock('../engine/videoEditSourceFrames', () => ({ videoEditSourceBackend: async () => gpu.backend, VideoEditSourceFrames: class {
   private revision = 0
   constructor(private readonly media: VideoEditMedia) { gpu.created++ }
   async present(timeUs: number) {
@@ -14,6 +14,14 @@ vi.mock('../engine/videoEditSourceFrames', () => ({ VideoEditSourceFrames: class
     if (revision !== this.revision) throw new Error('旧GPU请求已取消')
     const fps = this.media.frameRate ? this.media.frameRate.numerator / this.media.frameRate.denominator : 30
     return { timeUs, presentedTimeUs: gpu.timestamp?.(timeUs) ?? Math.round(Math.floor(timeUs / 1e6 * fps) / fps * 1e6), decodeMs: 1, gpuMs: 2, cacheHits: 1, cacheBytes: 100 }
+  }
+  get frameCount() { return Math.ceil(this.media.durationSeconds * (this.media.frameRate ? this.media.frameRate.numerator / this.media.frameRate.denominator : 30) - 1e-6) }
+  async playFrame(frame: number, deadline?: number) {
+    const revision = this.revision; gpu.plays.push([frame, deadline])
+    if (gpu.blocked) await new Promise<void>(resolve => gpu.requests.push(resolve))
+    if (revision !== this.revision) throw new Error('旧GPU请求已取消')
+    const fps = this.media.frameRate ? this.media.frameRate.numerator / this.media.frameRate.denominator : 30
+    return { timeUs: Math.round(frame / fps * 1e6), presentedTimeUs: Math.round(frame / fps * 1e6), decodeMs: 1, gpuMs: 2, cacheHits: 0, cacheBytes: 100 }
   }
   invalidate() { this.revision++; gpu.invalidates() }
   async dispose() { this.invalidate(); gpu.closes(); await gpu.closing }
@@ -24,7 +32,7 @@ let frameCallbacks: Map<number, VideoFrameRequestCallback>
 let nextFrame: number
 beforeEach(() => {
   host = document.createElement('div'); document.body.append(host); frameCallbacks = new Map(); nextFrame = 0
-  gpu.blocked = false; gpu.calls = []; gpu.requests = []; gpu.invalidates.mockClear(); gpu.closes.mockClear(); gpu.created = 0; gpu.closing = undefined; gpu.timestamp = undefined
+  gpu.blocked = false; gpu.calls = []; gpu.requests = []; gpu.invalidates.mockClear(); gpu.closes.mockClear(); gpu.created = 0; gpu.closing = undefined; gpu.timestamp = undefined; gpu.backend = 'browser'; gpu.plays = []
   vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(function (this: HTMLMediaElement) { Object.defineProperty(this, 'paused', { value: true, configurable: true }) })
   vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => {})
   vi.spyOn(HTMLMediaElement.prototype, 'play').mockImplementation(function (this: HTMLMediaElement) { Object.defineProperty(this, 'paused', { value: false, configurable: true }); return Promise.resolve() })
@@ -35,7 +43,8 @@ afterEach(() => { host.remove(); vi.useRealTimers(); vi.restoreAllMocks(); delet
 
 async function loadVideo(): Promise<HTMLVideoElement> {
   const video = host.querySelector('video')!
-  video.dispatchEvent(new Event('loadedmetadata')); await Promise.resolve(); await Promise.resolve()
+  // The backend choice settles alongside the element's metadata (a few more microtasks than the metadata event alone).
+  video.dispatchEvent(new Event('loadedmetadata')); for (let tick = 0; tick < 8; tick++) await Promise.resolve()
   return video
 }
 function presentFrame(time: number): void {
@@ -282,5 +291,34 @@ it('源音频通过同一个实际媒体元素确认定位和音量，关闭释�
   expect(observe).toHaveBeenLastCalledWith('audio', { timeUs: 2_300_000, presentedTimeUs: 2_300_000, playing: true, volume: 0.6 })
   presenter.release(); observe.mockClear(); audio.dispatchEvent(new Event('timeupdate'))
   expect(observe).not.toHaveBeenCalled(); expect(host.children).toHaveLength(0); expect(audio.getAttribute('src')).toBeNull()
+  presenter.dispose()
+})
+
+it('只有原生能解的视频不用媒体元素：渲染会话确认定位画面，正向按连续帧节拍播放到结尾停止，反向按真实时间戳后退；静音；释放会话', async () => {
+  vi.useFakeTimers()
+  vi.spyOn(performance, 'now').mockImplementation(() => Date.now())
+  gpu.backend = 'native'
+  const observe = vi.fn(); const levels = vi.fn()
+  const presenter = createVideoEditSourcePresenter(host, () => ({ ...media, path: 'D:/prores.mov', durationSeconds: 0.1, frameRate: { numerator: 60, denominator: 1 } }), observe, levels)
+  const paused = presenter.present({ itemId: 'item', timeUs: 45_000, playing: false, volume: .5 }, new AbortController().signal)
+  for (let tick = 0; tick < 8; tick++) await Promise.resolve()
+  host.querySelector('video')?.dispatchEvent(new Event('error'))
+  expect(await paused).toEqual({ timeUs: 45_000, presentedTimeUs: 33_333, playing: false, volume: .5 })
+  expect(host.querySelector('video')).toBeNull(); expect(host.querySelectorAll('canvas')).toHaveLength(1)
+  expect(host.querySelector('canvas')?.dataset).toMatchObject({ videoEditSourceMedia: 'video', presentedTimeUs: '33333' }); expect(gpu.calls).toEqual([45_000])
+  const playing = await presenter.present({ itemId: 'item', timeUs: 45_000, playing: true, volume: .5 }, new AbortController().signal)
+  expect(playing).toMatchObject({ playing: true, timeUs: 45_000 }); expect(playing.playbackDirection).toBeUndefined()
+  await vi.advanceTimersByTimeAsync(200)
+  expect(gpu.plays.map(([frame]) => frame)).toEqual([3, 4, 5])
+  const [first, second] = gpu.plays.map(([, deadline]) => deadline!)
+  expect(second - first).toBeCloseTo(1000 / 60, 2)
+  expect(observe).toHaveBeenLastCalledWith('item', { timeUs: 100_000, presentedTimeUs: 83_333, playing: false, volume: .5 })
+  expect(levels).toHaveBeenCalledWith([])
+  const reverse = await presenter.present({ itemId: 'item', timeUs: 45_000, playing: true, volume: .5, playbackDirection: -1 }, new AbortController().signal)
+  expect(reverse).toMatchObject({ playing: true, playbackDirection: -1 })
+  await vi.advanceTimersByTimeAsync(200)
+  expect(gpu.calls.slice(-3)).toEqual([45_000, 33_332, 16_666])
+  expect(observe).toHaveBeenLastCalledWith('item', expect.objectContaining({ timeUs: 0, playing: false }))
+  presenter.release(); expect(gpu.closes).toHaveBeenCalledOnce(); expect(host.children).toHaveLength(0)
   presenter.dispose()
 })

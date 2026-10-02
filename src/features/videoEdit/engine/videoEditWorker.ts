@@ -2,15 +2,25 @@ import { VideoEditRenderer } from './videoEditRenderer'
 import type { VideoEditComposition } from '@/core/videoEdit/document'
 import { VideoEditNativeFrameReceiver } from './videoEditNativeFrames'
 import { NativeFrameDiagnostics, type NativeFrameDiagnosticsRequest, type NativeFrameDiagnosticsResult } from './videoEditNativeFrameDiagnostics'
+import { VideoEditBrowserFrames } from './videoEditBrowserFrames'
+import { VideoEditNativeFrames } from './videoEditNativeFrameSource'
+import { VideoEditFrameRouter, type VideoEditDecodeSettings } from './videoEditFrameRouter'
 
+/**
+ * Decoding settings of one render session. `localPaths` maps each media item's fetchable URL (its path in the worker)
+ * to the local file the native decoder reads.
+ */
+export interface RenderDecodeOptions extends VideoEditDecodeSettings { localPaths?: Record<string, string> }
 export type RenderRequest = { id: number } & (
-  { kind: 'init'; document: VideoEditComposition; previewWidth?: number; surface?: OffscreenCanvas; cacheBudgetBytes?: number } | { kind: 'update'; document: VideoEditComposition }
+  { kind: 'init'; document: VideoEditComposition; previewWidth?: number; surface?: OffscreenCanvas; cacheBudgetBytes?: number; decode?: RenderDecodeOptions } | { kind: 'update'; document: VideoEditComposition; localPaths?: Record<string, string> }
   | { kind: 'invalidate'; revision: number }
   | { kind: 'dispose' }
   | { kind: 'render'; frame: number; sequential: boolean; scrubbing?: boolean; deadline?: number }
   | { kind: 'audio'; start: number; duration: number })
-export type RenderResponse = { id: number; phase?: 'submitted'; error?: string; bitmap?: ImageBitmap; sourceTimestamps?: number[]; channels?: Float32Array[]; cacheHits?: number; cacheBytes?: number; presented?: boolean; decodeMs?: number; gpuMs?: number; codeResources?: ReturnType<VideoEditRenderer['codeDiagnostics']> }
-/** 原生显卡帧通道（preload 交来的端口）。不进入渲染队列；接收端由 2.2 接入渲染器，诊断只供真实性测试。 */
+export type RenderResponse = { id: number; phase?: 'submitted'; error?: string; bitmap?: ImageBitmap; sourceTimestamps?: number[]; blankPictures?: number; channels?: Float32Array[]; cacheHits?: number; cacheBytes?: number; presented?: boolean; decodeMs?: number; gpuMs?: number; codeResources?: ReturnType<VideoEditRenderer['codeDiagnostics']> }
+/** Structured log entries the worker cannot write itself; the render session forwards them to the application log. */
+export interface RenderLogMessage { kind: 'log'; level: 'info' | 'warn'; message: string; event: string; context: Record<string, unknown> }
+/** 原生显卡帧通道（preload 交来的端口）。不进入渲染队列；渲染器经它读取原生解码帧，诊断只供真实性测试。 */
 export type NativeFramesRequest =
   | { kind: 'nativeFrames.attach'; port: MessagePort }
   | { kind: 'nativeFrames.diagnose'; id: number; request: NativeFrameDiagnosticsRequest }
@@ -21,8 +31,27 @@ let revision = 0
 let queue = Promise.resolve()
 let nativeFrames: VideoEditNativeFrameReceiver | undefined
 let nativeDiagnostics: NativeFrameDiagnostics | undefined
+let nativeBackend: VideoEditNativeFrames | undefined
+let router: VideoEditFrameRouter | undefined
+const localPaths = new Map<string, string>()
+function setLocalPaths(paths: Record<string, string> | undefined): void { if (!paths) return; localPaths.clear(); for (const [url, path] of Object.entries(paths)) localPaths.set(url, path) }
+const log = (level: RenderLogMessage['level'], message: string, event: string, context: Record<string, unknown>): void => { self.postMessage({ kind: 'log', level, message, event, context } satisfies RenderLogMessage) }
+/** The renderer's decoding: the browser backend, plus native decoding when the frame channel is attached. */
+function frameBackend(decode: RenderDecodeOptions | undefined): VideoEditFrameRouter {
+  setLocalPaths(decode?.localPaths)
+  const channel = decode?.nativeAvailable && decode.forced !== 'browser' ? nativeFrames : undefined
+  nativeBackend = channel ? new VideoEditNativeFrames({ channel, localPath: media => localPaths.get(media.path), onFailure: (media, error) => router?.nativeFailed(media, error) }) : undefined
+  router = new VideoEditFrameRouter(new VideoEditBrowserFrames(), nativeBackend, { nativeAvailable: !!nativeBackend, ...(decode?.forced ? { forced: decode.forced } : {}) }, log)
+  return router
+}
+/** Releases the renderer, then the native sessions it closed, then the frame channel (frames return before it closes). */
+async function disposeRenderer(): Promise<void> {
+  await renderer?.dispose()
+  await nativeBackend?.settled(); router?.dispose()
+  nativeBackend = undefined; router = undefined
+}
 function handleNativeFrames(request: NativeFramesRequest): void {
-  if (request.kind === 'nativeFrames.attach') { nativeFrames?.dispose(); nativeFrames = new VideoEditNativeFrameReceiver(request.port); nativeDiagnostics = undefined; return }
+  if (request.kind === 'nativeFrames.attach') { void nativeFrames?.dispose(); nativeFrames = new VideoEditNativeFrameReceiver(request.port); nativeDiagnostics = undefined; return }
   const receiver = nativeFrames
   if (!receiver) { self.postMessage({ id: request.id, error: '原生帧通道尚未接入。' } satisfies NativeFramesResponse); return }
   // 渲染 Worker 按 IIFE 打包，不能按需拆分加载；诊断模块很小且只在收到诊断消息时实例化。
@@ -35,18 +64,22 @@ self.onmessage = (event: MessageEvent<RenderRequest | NativeFramesRequest>) => {
   if (event.data.kind === 'nativeFrames.attach' || event.data.kind === 'nativeFrames.diagnose') { handleNativeFrames(event.data); return }
   const request = event.data
   if (request.kind === 'invalidate') { if (revision !== request.revision) { revision = request.revision; renderer?.cancelPresentation() } return }
-  if (request.kind === 'dispose') { revision = Number.MAX_SAFE_INTEGER; renderer?.cancelPresentation(); nativeFrames?.dispose(); nativeFrames = undefined; nativeDiagnostics = undefined }
+  if (request.kind === 'dispose') { revision = Number.MAX_SAFE_INTEGER; renderer?.cancelPresentation() }
   if (request.kind === 'init') revision = request.document.revision
   if (request.kind === 'update') revision = Math.max(revision, request.document.revision)
   queue = queue.then(async () => {
     try {
       if (request.kind === 'dispose') {
-        await renderer?.dispose(); const codeResources = renderer?.codeDiagnostics(); renderer = undefined; self.postMessage({ id: request.id, codeResources } satisfies RenderResponse)
+        await disposeRenderer(); const codeResources = renderer?.codeDiagnostics(); renderer = undefined
+        // Every borrowed native frame goes back before the session may terminate this worker (record 002).
+        await nativeFrames?.dispose(); nativeFrames = undefined; nativeDiagnostics = undefined
+        self.postMessage({ id: request.id, codeResources } satisfies RenderResponse)
       } else if (request.kind === 'init') {
-        await renderer?.dispose(); renderer = new VideoEditRenderer(request.document, request.previewWidth, request.surface, request.cacheBudgetBytes); direct = !!request.surface
+        await disposeRenderer(); renderer = new VideoEditRenderer(request.document, request.previewWidth, request.surface, request.cacheBudgetBytes, frameBackend(request.decode)); direct = !!request.surface
         self.postMessage({ id: request.id } satisfies RenderResponse)
       } else if (request.kind === 'update') {
         if (!renderer) throw new Error('剪辑渲染器尚未就绪。')
+        setLocalPaths(request.localPaths)
         await renderer.updateDocument(request.document); self.postMessage({ id: request.id } satisfies RenderResponse)
       } else if (request.kind === 'render') {
         if (!renderer) throw new Error('剪辑渲染器尚未就绪。')
@@ -55,7 +88,7 @@ self.onmessage = (event: MessageEvent<RenderRequest | NativeFramesRequest>) => {
           const start = performance.now()
           await result.completion
           const bitmap = direct || !result.presented ? undefined : result.canvas.transferToImageBitmap()
-          self.postMessage({ id: request.id, bitmap, sourceTimestamps: result.sourceTimestamps, cacheHits: result.cacheHits, cacheBytes: result.cacheBytes, presented: result.presented, decodeMs: result.decodeMs, gpuMs: result.gpuMs + performance.now() - start, codeResources: renderer?.codeDiagnostics() } satisfies RenderResponse, { transfer: bitmap ? [bitmap] : [] })
+          self.postMessage({ id: request.id, bitmap, sourceTimestamps: result.sourceTimestamps, blankPictures: result.blankPictures, cacheHits: result.cacheHits, cacheBytes: result.cacheBytes, presented: result.presented, decodeMs: result.decodeMs, gpuMs: result.gpuMs + performance.now() - start, codeResources: renderer?.codeDiagnostics() } satisfies RenderResponse, { transfer: bitmap ? [bitmap] : [] })
         }
         if (direct && request.scrubbing) {
           self.postMessage({ id: request.id, phase: 'submitted' } satisfies RenderResponse)

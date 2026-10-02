@@ -40,6 +40,12 @@ export interface VideoFramePortScheduleMessage {
   event: VideoFrameScheduleEvent
 }
 
+/** preload → 消费方端口的消息：该通道上的流已结束（原生出错或服务退出），消费方不应再等它的帧。 */
+export interface VideoFramePortEndedMessage {
+  type: 'ended'
+  payload: VideoFrameStreamEndedPayload
+}
+
 /** 消费方 → preload 端口的消息：交回帧，由 preload 在主线程关闭。 */
 export interface VideoFramePortReleaseMessage {
   type: 'release'

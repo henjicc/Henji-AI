@@ -1,5 +1,6 @@
 import { VideoSample } from 'mediabunny'
 import { VideoEditGpuFrame } from './videoEditGpuFrame'
+import { VideoEditNativePicture } from './videoEditNativePicture'
 import type { VideoEditClip, VideoEditComposition } from '@/core/videoEdit/document'
 import { ImageEditWebGpuDeviceManager } from '@/core/imageEdit/webgpu/deviceManager'
 import { getWebGpuContext, type GpuDevice, type GpuTexture, type GpuBuffer, type GpuRenderPipeline } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
@@ -59,6 +60,7 @@ export class VideoEditGpuCompositor {
   private readonly copies = new Set<Promise<void>>()
   private disposed = false
   private readonly pool: Array<{ width: number; height: number; texture: GpuTexture; chroma?: GpuTexture; bytes: number }> = []
+  private blankTexture?: GpuTexture
   constructor(readonly canvas: OffscreenCanvas) {
     this.context = getWebGpuContext(canvas)
     this.manager.onDeviceLost(reason => { this.lost = reason })
@@ -137,8 +139,11 @@ struct Vertex { @builtin(position) position: vec4f, @location(0) uv: vec2f }
     })()
   }
   /** Deferred copies may only be consumed on this device/queue. The final draw
-   * completion covers earlier copies; retain decoder frames until their fence. */
-  async snapshot(sample: VideoSample, compact: boolean, deferCompletion = false): Promise<VideoEditGpuFrame> {
+   * completion covers earlier copies; retain decoder frames until their fence.
+   * A borrowed native frame is imported as is and stays borrowed until the copy's fence: it is never closed here
+   * (closing a shared texture frame in a worker crashes the renderer process, record 002). The copy keeps the
+   * existing owned formats; higher bit depth for 10-bit and above material belongs to the pipeline task 2.7. */
+  async snapshot(sample: VideoSample | VideoEditNativePicture, compact: boolean, deferCompletion = false): Promise<VideoEditGpuFrame> {
     await this.ready
     if (this.disposed) throw new Error('剪辑预览已关闭。')
     if (this.lost) throw new Error(`剪辑 GPU 已中断，请重新加载预览：${this.lost}`)
@@ -149,7 +154,9 @@ struct Vertex { @builtin(position) position: vec4f, @location(0) uv: vec2f }
     }
     if (this.disposed) throw new Error('剪辑预览已关闭。')
     // Copy on the compositor's device; no Skia canvas or cross-context fences.
-    const frame = sample.toVideoFrame()
+    const borrowed = sample instanceof VideoEditNativePicture
+    const frame = borrowed ? sample.frame : sample.toVideoFrame()
+    const closeFrame = (): void => { if (!borrowed) frame.close() }
     const width = frame.visibleRect?.width ?? sample.codedWidth; const height = frame.visibleRect?.height ?? sample.codedHeight
     const uvWidth = Math.ceil(width / 2); const uvHeight = Math.ceil(height / 2)
     const index = this.pool.findIndex(entry => entry.width === width && entry.height === height && !!entry.chroma === compact)
@@ -169,7 +176,8 @@ struct Vertex { @builtin(position) position: vec4f, @location(0) uv: vec2f }
         pass.draw(3); pass.end()
       }
       this.device.queue.submit([encoder.finish()])
-      const completion = this.device.queue.onSubmittedWorkDone().finally(() => { frame.close(); this.copies.delete(completion) })
+      const completion = this.device.queue.onSubmittedWorkDone().finally(() => { closeFrame(); this.copies.delete(completion) })
+      if (borrowed) sample.holdUntil(completion)
       this.copies.add(completion); retained = true
       void completion.catch(() => {})
       if (!deferCompletion) await completion
@@ -179,7 +187,17 @@ struct Vertex { @builtin(position) position: vec4f, @location(0) uv: vec2f }
         if (!this.disposed && this.pool.length < 4 && this.pool.reduce((sum, entry) => sum + entry.bytes, 0) + bytes <= 64 * 1024 ** 2) this.pool.push({ width, height, texture, chroma, bytes })
         else { texture.destroy(); chroma?.destroy() }
       })
-    } catch (error) { texture.destroy(); chroma?.destroy(); throw error } finally { if (!retained) frame.close() }
+    } catch (error) { texture.destroy(); chroma?.destroy(); throw error } finally { if (!retained) closeFrame() }
+  }
+  /**
+   * A transparent owned picture for a video layer without a picture at its source time. One shared 1×1 texture
+   * (WebGPU zero-initializes it); releasing the frame never destroys it.
+   */
+  async blank(width: number, height: number, timestamp: number, duration: number): Promise<VideoEditGpuFrame> {
+    await this.ready
+    if (this.disposed || this.lost) throw new Error('剪辑GPU会话不可用。')
+    this.blankTexture ??= this.device.createTexture({ size: [1, 1], format: 'rgba8unorm', usage: 0x04 })
+    return new VideoEditGpuFrame({ timestamp, duration, displayWidth: Math.max(1, width), displayHeight: Math.max(1, height), rotation: 0, flip: false }, this.blankTexture, undefined, 4, () => {})
   }
   async code(): Promise<VideoEditCodeGpu> {
     await this.ready
@@ -311,7 +329,7 @@ struct Vertex { @builtin(position) position: vec4f, @location(0) uv: vec2f }
     for (const value of this.textures.values()) value.texture.destroy()
     for (const value of this.uniforms.values()) value.destroy()
     for (const value of this.pool) { value.texture.destroy(); value.chroma?.destroy() }
-    this.pool.length = 0
+    this.pool.length = 0; this.blankTexture?.destroy(); this.blankTexture = undefined
     this.textures.clear(); this.uniforms.clear(); this.manager.destroy()
   }
   cancelPresentation(): void { for (const finish of this.waits) finish() }

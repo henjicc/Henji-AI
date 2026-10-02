@@ -2,7 +2,7 @@ import type { VideoEditMedia } from '@/core/videoEdit/document'
 import { VIDEO_EDIT_FRAME_RATES, videoEditFps, type VideoEditRatio } from '@/core/videoEdit/time'
 import { getPlatform } from '@/platform/runtime'
 import type { NativeMediaProbe, NativeMediaProbeOutcome, NativeMediaRational, NativeMediaStream, NativeVideoDecoderStatus } from '@/platform/contracts/videoDecoder'
-import { chooseVideoEditDecodeBackend, VIDEO_EDIT_NATIVE_PLAYBACK_READY, type VideoEditDecodeBackend, type VideoEditDecodeSupport } from '../engine/videoEditFrameSource'
+import { chooseVideoEditDecodeBackend, VIDEO_EDIT_NATIVE_PLAYBACK_READY, VIDEO_EDIT_NATIVE_PRIMARY, type VideoEditDecodeBackend, type VideoEditDecodeSupport } from '../engine/videoEditFrameSource'
 
 /**
  * Media inspection: what each decoder can do for a file, which one decodes it, and where its metadata comes from.
@@ -87,12 +87,12 @@ function extensionOf(path: string): string { return path.split(/[\\/]/).at(-1)?.
  * browser whenever it decodes the whole file (its frame clock and duration are what existing projects recorded),
  * otherwise from the native probe. Throws a user-language error naming the format and the reason when nothing
  * decodes the file. Never names a decoder implementation.
- * `nativePlayback` is the switch for native playback: until the renderer plays native frames
- * (`VIDEO_EDIT_NATIVE_PLAYBACK_READY`) native is never a playback backend (a forced `native` waits for it too), and
- * files only the native decoder reads are refused with their format, so nothing is imported that the program
- * monitor cannot show.
+ * `nativePlayback` is the switch for native playback: without it (`VIDEO_EDIT_NATIVE_PLAYBACK_READY`) native is never a
+ * playback backend (a forced `native` waits for it too), and files only the native decoder reads are refused with
+ * their format, so nothing is imported that the program monitor cannot show. `nativePrimary` is the renderer's
+ * policy for files both decoders read (`VIDEO_EDIT_NATIVE_PRIMARY`), so the logged backend is the one that plays.
  */
-export function resolveVideoEditMediaInspection(path: string, native: VideoEditNativeProbeOutcome, browser: VideoEditBrowserInspection, forced?: VideoEditDecodeBackend, nativePlayback = VIDEO_EDIT_NATIVE_PLAYBACK_READY): { backend: VideoEditDecodeBackend; nativeDecodes: boolean; fields: VideoEditInspectedFields } {
+export function resolveVideoEditMediaInspection(path: string, native: VideoEditNativeProbeOutcome, browser: VideoEditBrowserInspection, forced?: VideoEditDecodeBackend, nativePlayback = VIDEO_EDIT_NATIVE_PLAYBACK_READY, nativePrimary = VIDEO_EDIT_NATIVE_PRIMARY): { backend: VideoEditDecodeBackend; nativeDecodes: boolean; fields: VideoEditInspectedFields } {
   const streams = native.status === 'probed' ? nativeStreams(native.probe) : undefined
   const nativeSupport: VideoEditDecodeSupport['native'] = !streams ? 'unavailable' : (streams.video || streams.audio) && (streams.video?.decodable ?? true) && (streams.audio?.decodable ?? true) ? 'decodes' : 'cannot-decode'
   const nativeDecodes = nativeSupport === 'decodes'
@@ -100,7 +100,7 @@ export function resolveVideoEditMediaInspection(path: string, native: VideoEditN
     native: nativePlayback ? nativeSupport : 'unavailable',
     browser: browser.status === 'read' && browser.media ? 'decodes' : 'cannot-decode',
   }
-  const backend = chooseVideoEditDecodeBackend(support, nativePlayback || forced === 'browser' ? forced : undefined)
+  const backend = chooseVideoEditDecodeBackend(support, nativePlayback || forced === 'browser' ? forced : undefined, nativePrimary)
   if (backend && browser.status === 'read' && browser.media) return { backend, nativeDecodes, fields: browser.media }
   if (backend && native.status === 'probed') return { backend, nativeDecodes, fields: videoEditFieldsFromNativeProbe(native.probe) }
   if (!nativePlayback && nativeDecodes && streams && forced !== 'browser') {

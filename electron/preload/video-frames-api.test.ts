@@ -120,6 +120,45 @@ describe('videoFrames preload', () => {
     expect(invoke).toHaveBeenLastCalledWith('videoFrames:cancelSchedule', { streamId: 'vf-1', scheduleId: 's1' })
   })
 
+  it('answers worker session requests on the same port; sessions opened there always belong to that route', async () => {
+    const invoke = vi.fn(async (channel: string, payload?: unknown) => {
+      if (channel === 'videoFrames:frameAt') throw new Error('解码会话不存在或不属于当前窗口')
+      return { channel, payload }
+    })
+    const { api } = await create(invoke)
+    const route = api.connect()
+    const worker = announcements.find((entry) => entry.message.route === route)!.port
+    const replies: Array<{ type: string; id: number; result?: unknown; error?: string }> = []
+    worker.onmessage = (event) => replies.push(event.data as never)
+    worker.postMessage({ type: 'request', id: 7, call: { method: 'openDecoder', params: { route: 'vf-route-other', path: 'D:/a.mov', purpose: 'playback' } } })
+    worker.postMessage({ type: 'request', id: 8, call: { method: 'frameAt', params: { streamId: 'vf-1', time: 1, ticket: 't' } } })
+    worker.postMessage({ type: 'request', id: 9, call: { method: 'stats', params: {} } })
+    worker.postMessage({ type: 'request', id: 10, call: { method: 'closeStream', params: { streamId: 'vf-1' } } })
+    await vi.waitFor(() => expect(replies).toHaveLength(4))
+    expect(invoke).toHaveBeenCalledWith('videoFrames:openDecoder', { route, path: 'D:/a.mov', purpose: 'playback' })
+    expect(invoke).toHaveBeenCalledWith('videoFrames:closeStream', { streamId: 'vf-1' })
+    expect(invoke.mock.calls.map(([channel]) => channel)).not.toContain('videoFrames:stats')
+    expect(replies.find((reply) => reply.id === 7)).toEqual({ type: 'response', id: 7, result: { channel: 'videoFrames:openDecoder', payload: { route, path: 'D:/a.mov', purpose: 'playback' } } })
+    expect(replies.find((reply) => reply.id === 8)).toEqual({ type: 'response', id: 8, error: '解码会话不存在或不属于当前窗口' })
+    expect(replies.find((reply) => reply.id === 9)).toEqual({ type: 'response', id: 9, error: '未知的帧通道请求' })
+  })
+
+  it('forwards stream-ended notices to the owning port and closes the sessions of the route when it disconnects', async () => {
+    const { ipcRenderer } = await import('electron')
+    const invoke = vi.fn(async () => 1)
+    const { api } = await create(invoke)
+    const ended = vi.mocked(ipcRenderer.on).mock.calls.filter(([channel]) => channel === 'videoFrames:streamEnded').at(-1)?.[1] as unknown as (event: unknown, payload: unknown) => void
+    const route = api.connect()
+    const worker = announcements.find((entry) => entry.message.route === route)!.port
+    const received: unknown[] = []
+    worker.onmessage = (event) => received.push(event.data)
+    const payload = { streamId: 'vf-1', route, reason: 'service_exited', message: null }
+    ended({}, payload); ended({}, { ...payload, route: 'elsewhere' })
+    expect(received).toEqual([{ type: 'ended', payload }])
+    api.disconnect(route)
+    expect(invoke).toHaveBeenCalledWith('videoFrames:closeRoute', { route })
+  })
+
   it('releases the receiver import even when creating the frame fails', async () => {
     const { receive } = await create()
     const release = vi.fn()

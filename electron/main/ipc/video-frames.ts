@@ -87,5 +87,11 @@ export function registerVideoFramesIpc(): void {
     (input) => parseStringField(input, 'streamId'),
     (streamId, event) => getVideoFrameBridge().closeStream(streamId, 'requested', event.sender.id),
   )
+  // 通道断开（preload disconnect）时关闭该通道上仍打开的会话：消费方 Worker 被终止时可能来不及自行关闭。
+  registerIpcHandler<string, number>(
+    'videoFrames:closeRoute',
+    (input) => parseStringField(input, 'route'),
+    (route, event) => getVideoFrameBridge().closeRoute(event.sender.id, route),
+  )
   registerIpcHandler<void, VideoFrameBridgeStats>('videoFrames:stats', parseVoid, () => getVideoFrameBridge().stats())
 }

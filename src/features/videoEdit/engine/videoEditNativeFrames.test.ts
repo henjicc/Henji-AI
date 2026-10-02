@@ -3,9 +3,9 @@ import { VideoEditNativeFrameReceiver, type NativeVideoFrame } from './videoEdit
 
 class FakePort {
   onmessage: ((event: MessageEvent) => void) | null = null
-  readonly posted: Array<{ message: { type: string; frame: unknown; token: number }; transfer: unknown[] }> = []
+  readonly posted: Array<{ message: { type: string; frame?: unknown; token?: number; id?: number; call?: unknown }; transfer: unknown[] }> = []
   closed = false
-  postMessage(message: { type: string; frame: unknown; token: number }, transfer: unknown[]): void {
+  postMessage(message: { type: string; frame?: unknown; token?: number; id?: number; call?: unknown }, transfer: unknown[]): void {
     this.posted.push({ message, transfer })
   }
   close(): void {
@@ -79,14 +79,51 @@ describe('VideoEditNativeFrameReceiver', () => {
     expect(port.posted).toHaveLength(1)
   })
 
+  it('sends session requests over the same port and settles them by id; stream-ended notices reach the stream subscriber', async () => {
+    const { port, receiver } = createReceiver()
+    const opened = receiver.call('openDecoder', { path: 'D:/a.mov', purpose: 'seek' })
+    const failed = receiver.call('frameAt', { streamId: 'vf-1', time: 1, ticket: 't1' })
+    expect(port.posted.map(entry => entry.message)).toEqual([
+      { type: 'request', id: 1, call: { method: 'openDecoder', params: { path: 'D:/a.mov', purpose: 'seek' } } },
+      { type: 'request', id: 2, call: { method: 'frameAt', params: { streamId: 'vf-1', time: 1, ticket: 't1' } } },
+    ])
+    port.onmessage?.({ data: { type: 'response', id: 2, error: '解码会话已结束' } } as MessageEvent)
+    port.onmessage?.({ data: { type: 'response', id: 1, result: { streamId: 'vf-1' } } } as MessageEvent)
+    port.onmessage?.({ data: { type: 'response', id: 1, result: 'late duplicate' } } as MessageEvent)
+    await expect(opened).resolves.toEqual({ streamId: 'vf-1' })
+    await expect(failed).rejects.toThrow('解码会话已结束')
+    const ended: unknown[] = []
+    receiver.subscribeEnded('vf-1', payload => ended.push(payload))
+    const payload = { streamId: 'vf-1', route: 'r', reason: 'error', message: '崩溃' }
+    port.onmessage?.({ data: { type: 'ended', payload } } as MessageEvent)
+    port.onmessage?.({ data: { type: 'ended', payload: { ...payload, streamId: 'vf-2' } } } as MessageEvent)
+    expect(ended).toEqual([payload])
+  })
+
+  it('dispose rejects pending requests and closes the port only after every deferred return was sent', async () => {
+    const { port, receiver } = createReceiver()
+    let finishWork: () => void = () => undefined
+    const device = { queue: { onSubmittedWorkDone: () => new Promise<void>((resolve) => { finishWork = resolve }) } }
+    receiver.subscribe('s1', (frame) => frame.release(device))
+    port.deliver('s1', 0)
+    const pending = receiver.call('closeStream', { streamId: 'vf-1' })
+    const disposed = receiver.dispose()
+    await expect(pending).rejects.toThrow('原生帧通道已关闭')
+    await tick(); await tick()
+    expect(port.closed).toBe(false)
+    finishWork(); await disposed
+    expect(port.posted.at(-1)?.message).toMatchObject({ type: 'release', token: 100 })
+    expect(port.closed).toBe(true)
+    await expect(receiver.call('closeStream', { streamId: 'vf-1' })).rejects.toThrow('原生帧通道已关闭')
+  })
+
   it('returns frames when the handler throws and on dispose', async () => {
     const { port, receiver } = createReceiver()
     receiver.subscribe('bad', () => { throw new Error('boom') })
     expect(() => port.deliver('bad', 0)).toThrow('boom')
     receiver.subscribe('held', () => undefined)
     port.deliver('held', 1)
-    receiver.dispose()
-    await tick()
+    await receiver.dispose()
     expect(port.posted).toHaveLength(2)
     expect(port.closed).toBe(true)
     expect(receiver.stats().outstanding).toBe(0)

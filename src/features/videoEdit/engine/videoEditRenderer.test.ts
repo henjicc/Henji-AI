@@ -5,6 +5,9 @@ import type { CodeMaterialProgram } from '@/core/videoEdit/codeMaterial/contract
 import { compileCodeMaterial } from '@/core/videoEdit/codeMaterial/compiler'
 import type { VideoSample } from 'mediabunny'
 import type { VideoEditFrameBackend } from './videoEditFrameSource'
+import { createVideoEditNativeClipAudio, type VideoEditPcmSession } from './videoEditNativeAudio'
+import { VideoEditNativePicture } from './videoEditNativePicture'
+import type { NativeVideoFrame } from './videoEditNativeFrames'
 
 const boundary = vi.hoisted(() => ({ scheduled: [] as Array<{ path: string; timestamps: number[] }>, disposed: [] as string[], pictures: [] as number[], generatorCalls: 0, compilerCalls: 0, compilerDisposed: 0, failGenerator: false, released: [] as string[][], pendingCode: undefined as Promise<CodeMaterialProgram> | undefined, snapshotCalls: [] as boolean[], normalizedReleased: 0, pendingSnapshot: undefined as Promise<void> | undefined, draws: [] as Array<{ ids: string[]; timestamps: number[]; offscreen: boolean }>, mixes: [] as number[] }))
 vi.mock('@/core/logging', () => ({ createLogger: () => ({ debug: vi.fn(), warn: vi.fn() }) }))
@@ -50,6 +53,9 @@ vi.mock('./videoEditGpuCompositor', async () => {
   const owner = {} as import('@/core/imageEdit/worker/webgpuRuntimeSupport').GpuDevice
   const target = (width: number, height: number) => new VideoEditCodePicture({ createView: () => ({}), destroy: vi.fn() }, width, height, owner)
   return { VideoEditGpuCompositor: class {
+  async blank(width: number, height: number, timestamp: number, duration: number) {
+    return new VideoEditGpuFrame({ timestamp, duration, displayWidth: width, displayHeight: height, rotation: 0, flip: false }, { createView: () => ({}), destroy: vi.fn() }, undefined, 4, () => {})
+  }
   async snapshot(sample: { timestamp: number; duration: number }, compact: boolean) {
     boundary.snapshotCalls.push(compact); await boundary.pendingSnapshot
     return new VideoEditGpuFrame({ ...sample, displayWidth: 3840, displayHeight: 2160, rotation: 0, flip: false }, { createView: () => ({}), destroy: vi.fn() }, undefined, 100, () => { boundary.normalizedReleased++ })
@@ -370,4 +376,125 @@ it('渲染器只经注入的帧源后端取帧：定位、顺序、正向计划�
     expect(boundary.disposed).toEqual([]); expect(boundary.scheduled).toEqual([])
   } finally { await renderer.dispose() }
   expect(opened.length).toBeGreaterThan(0); expect(released.sort()).toEqual(opened.sort())
+})
+it('原生借用帧经同一复制入口进入自有显存：正向计划、剪辑点预取与定位的每一帧复制后只交回一次，从不在渲染器里关闭帧本身', async () => {
+  const lent: Array<{ ptsUs: number; release: ReturnType<typeof vi.fn>; close: ReturnType<typeof vi.fn> }> = []
+  const picture = (seconds: number): VideoEditNativePicture => {
+    const entry = { ptsUs: Math.round(seconds * 1e6), release: vi.fn(), close: vi.fn() }; lent.push(entry)
+    return new VideoEditNativePicture({ frame: { codedWidth: 3840, codedHeight: 2160, format: 'NV12', close: entry.close }, meta: { route: 'r', streamId: 's', frameIndex: 0, timestampUs: entry.ptsUs, ptsUs: entry.ptsUs, durationUs: 16_667 }, receivedAt: 0, release: entry.release } as unknown as NativeVideoFrame, 0, 1 / 60)
+  }
+  const backend: VideoEditFrameBackend = {
+    open: media => ({ key: media.path, ready: Promise.resolve({ clipFrames: () => ({ async *frames(start: number) { for (let frame = 0; frame < 3; frame++) yield picture(start + frame / 60) }, frameAt: async (time: number) => picture(time) }), clipAudio: () => undefined, async *schedule(timestamps: readonly number[]) { for (const time of timestamps) yield picture(time) } }) }),
+    release: () => {},
+    seeker: (_media, _cache, snapshot) => ({ sample: async time => { const decoded = picture(time); try { return { sample: await snapshot(decoded, true), hit: false } } finally { decoded.close() } }, dispose: async () => {} }),
+  }
+  const document = { ...fixture(), fps: 60, frameRate: { numerator: 60, denominator: 1 } }
+  const renderer = new VideoEditRenderer(document, 3840, undefined, 8 * 1024 ** 3, backend)
+  try {
+    await renderer.render(0); await renderer.render(1, true); await renderer.render(2, true); await renderer.render(3, true)
+    expect(boundary.pictures).toEqual([3 / 60])
+  } finally { await renderer.dispose() }
+  await new Promise(resolve => setTimeout(resolve, 0))
+  expect(lent.length).toBeGreaterThan(3)
+  for (const entry of lent) { expect(entry.release, `帧 ${entry.ptsUs}`).toHaveBeenCalledOnce(); expect(entry.close).not.toHaveBeenCalled() }
+})
+it('源时间早于流的首个画面（MPEG 节目流从 0.533 秒开始）时该层透明、不记源时间，不让整帧失败；超出素材时长仍报错', async () => {
+  const backend: VideoEditFrameBackend = {
+    open: media => ({ key: media.path, ready: Promise.resolve({ clipFrames: () => ({ async *frames() {}, frameAt: async () => null }), clipAudio: () => undefined, async *schedule() {} }) }),
+    release: () => {},
+    seeker: () => ({ sample: async () => ({ hit: false }), dispose: async () => {} }),
+  }
+  const document = fixture()
+  const renderer = new VideoEditRenderer(document, undefined, undefined, 8 * 1024 ** 3, backend)
+  try {
+    const result = await renderer.render(10)
+    expect(result).toMatchObject({ presented: true, blankPictures: 1, sourceTimestamps: [] })
+    const preview = new VideoEditRenderer(document, 3840, undefined, 8 * 1024 ** 3, backend)
+    try { expect(await preview.render(10)).toMatchObject({ presented: true, blankPictures: 1 }) } finally { await preview.dispose() }
+    // A sequential reader started before the first picture yields that picture early; it waits for its own time.
+    const firstAtHalf: VideoEditFrameBackend = { ...backend, open: media => ({ key: media.path, ready: Promise.resolve({ clipFrames: () => ({ async *frames() { for (let index = 0; index < 30; index++) yield { timestamp: .5 + index / 30, duration: 1 / 30, format: 'NV12', close: vi.fn() } as unknown as VideoSample }, frameAt: async () => null }), clipAudio: () => undefined, async *schedule() {} }) }) }
+    const sequential = new VideoEditRenderer({ ...document, fps: 30, frameRate: { numerator: 30, denominator: 1 } }, undefined, undefined, 8 * 1024 ** 3, firstAtHalf)
+    try {
+      expect(await sequential.render(14, true)).toMatchObject({ blankPictures: 1, sourceTimestamps: [] })
+      expect(await sequential.render(15, true)).toMatchObject({ blankPictures: 0, sourceTimestamps: [.5] })
+    } finally { await sequential.dispose() }
+    const late = { ...document, clips: [{ ...document.clips[0], sourceInUs: 2_000_000 }] }
+    await renderer.updateDocument(late)
+    await expect(renderer.render(0)).rejects.toThrow('在此时间没有画面')
+  } finally { await renderer.dispose() }
+})
+/** A backend whose sound comes from the native reader over a fake PCM session, as the native backend will deliver it. */
+function nativeSoundBackend(session: (path: string) => VideoEditPcmSession): { backend: VideoEditFrameBackend; opened: string[]; released: string[] } {
+  const opened: string[] = []; const released: string[] = []
+  const backend: VideoEditFrameBackend = {
+    open(media) {
+      opened.push(media.path)
+      return { key: media.path, ready: Promise.resolve({ clipFrames: () => undefined, clipAudio: () => createVideoEditNativeClipAudio(async () => session(media.path)), async *schedule() {} }) }
+    },
+    release(key) { released.push(key) },
+    seeker() { throw new Error('声音测试不定位画面。') },
+  }
+  return { backend, opened, released }
+}
+function pcmSession(sampleRate: number, channels: number, value: (channel: number, sample: number) => number, onClose = () => {}): VideoEditPcmSession {
+  return { sampleRate, channels, close: onClose,
+    async read(first: number, frames: number) { return Array.from({ length: channels }, (_, channel) => Float32Array.from({ length: frames }, (_, index) => value(channel, first + index))) } }
+}
+it.each([44100, 48000])('原生声音经混音逐样本对齐：微秒入点、非零流起点、跨混音块、末尾补零，%iHz 源转 48kHz 序列', async sourceRate => {
+  // Sound only between 0.523s and 1.9s of the source timeline; a one-sample or one-microsecond shift changes the values.
+  const [soundStart, soundEnd] = [Math.round(.523 * sourceRate), Math.round(1.9 * sourceRate)]
+  const signal = (channel: number, sample: number): number => sample >= soundStart && sample < soundEnd ? Math.fround(channel * .5 + (sample * 7 % 1000) / 1000 * .4) : 0
+  const { backend } = nativeSoundBackend(() => pcmSession(sourceRate, 2, signal))
+  const base = fixture(); const fps = 30000 / 1001
+  const clip = { ...base.clips[0], start: 7, duration: 60, sourceInUs: 400_000, sourceRemainder: { numerator: 1, denominator: 3 } }
+  const document = { ...base, fps, frameRate: { numerator: 30000, denominator: 1001 }, clips: [clip] }
+  const renderer = new VideoEditRenderer(document, undefined, undefined, 8 * 1024 ** 3, backend)
+  try {
+    const blocks: Float32Array[][] = []
+    for (let start = 0; start < 2.5; start += .5) blocks.push(await renderer.mixAudio(start, .5))
+    const rate = 48000; const inPoint = (400_000 + 1 / 3) / 1e6
+    const [first, last] = [Math.ceil(clip.start / fps * rate - 1e-7), Math.ceil((clip.start + clip.duration) / fps * rate - 1e-7)]
+    let worst = 0; let audible = 0
+    for (const channel of [0, 1]) {
+      const output = blocks.flatMap(block => [...block[channel]])
+      expect(output).toHaveLength(2.5 * rate)
+      output.forEach((actual, sample) => {
+        let expected = 0
+        if (sample >= first && sample < last) {
+          const position = (inPoint + sample / rate - clip.start / fps) * sourceRate
+          const left = Math.floor(position); const alpha = position - left
+          expected = signal(channel, left) * (1 - alpha) + signal(channel, left + 1) * alpha
+        }
+        if (expected !== 0) audible++
+        worst = Math.max(worst, Math.abs(actual - expected))
+      })
+    }
+    expect(audible).toBeGreaterThan(rate); expect(worst).toBeLessThan(1e-5)
+  } finally { await renderer.dispose() }
+})
+it('原生多声道按混音统一规则映射：立体声取前左前右，单声道取全部声道平均', async () => {
+  const sixChannels = () => pcmSession(48000, 6, channel => Math.fround(.1 * (channel + 1)))
+  for (const [channels, expected] of [[2, [.1, .2]], [1, [.35]]] as const) {
+    const { backend } = nativeSoundBackend(sixChannels)
+    const renderer = new VideoEditRenderer({ ...fixture(), channels }, undefined, undefined, 8 * 1024 ** 3, backend)
+    try {
+      const mix = await renderer.mixAudio(.25, .01)
+      expect(mix).toHaveLength(channels)
+      mix.forEach((plane, channel) => expect(plane.every(value => Math.abs(value - expected[channel]) < 1e-6)).toBe(true))
+    } finally { await renderer.dispose() }
+  }
+})
+it('片段声音读取器随源释放而关闭，原生会话只关一次，打开与释放成对', async () => {
+  let closed = 0
+  const { backend, opened, released } = nativeSoundBackend(() => pcmSession(48000, 2, () => .5, () => { closed++ }))
+  const renderer = new VideoEditRenderer(fixture(), undefined, undefined, 8 * 1024 ** 3, backend)
+  try {
+    expect((await renderer.mixAudio(0, .01))[0][0]).toBe(.5)
+    expect(closed).toBe(0)
+    // Past the clip: the mix drops the clip's sound source and its native session.
+    expect((await renderer.mixAudio(5, .01))[0].every(value => value === 0)).toBe(true)
+    expect(closed).toBe(1)
+    expect((await renderer.mixAudio(0, .01))[0][0]).toBe(.5)
+  } finally { await renderer.dispose() }
+  expect(closed).toBe(2); expect(released.sort()).toEqual(opened.sort())
 })

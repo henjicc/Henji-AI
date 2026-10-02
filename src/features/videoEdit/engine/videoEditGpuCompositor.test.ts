@@ -4,6 +4,8 @@ import { createVideoEditDocument, videoEditComposition } from '@/core/videoEdit/
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { VideoEditGpuCompositor } from './videoEditGpuCompositor'
 import type { VideoSample } from 'mediabunny'
+import { VideoEditNativePicture } from './videoEditNativePicture'
+import type { NativeVideoFrame } from './videoEditNativeFrames'
 
 const state = vi.hoisted(() => ({ device: undefined as GpuDevice | undefined, format: 'rgba8unorm' }))
 afterEach(() => { vi.unstubAllGlobals(); state.format = 'rgba8unorm' })
@@ -127,6 +129,26 @@ it('同队列顺序复制不逐层等待，外部解码帧保留到完成；销�
   expect(closed).toHaveBeenCalledTimes(2)
   copies.forEach(copy => copy.close()); expect(destroyed).toHaveBeenCalledTimes(4)
   await expect(compositor.snapshot(sample, true, true)).rejects.toThrow('关闭')
+})
+it('原生共享纹理帧按原样导入、绝不在 Worker 里关闭：复制完成后才随画面关闭交回；复制失败也不关闭', async () => {
+  let complete!: () => void; const fence = new Promise<void>(resolve => { complete = resolve })
+  const { compositor, device } = copyFixture(() => fence)
+  const frame = { codedWidth: 3840, codedHeight: 2160, visibleRect: { width: 3840, height: 2160 }, format: 'NV12', close: vi.fn() }
+  const release = vi.fn()
+  const native = { frame, meta: { route: 'r', streamId: 's', frameIndex: 0, timestampUs: 1_000_000, ptsUs: 1_000_000, durationUs: 16_667 }, receivedAt: 0, release } as unknown as NativeVideoFrame
+  const picture = new VideoEditNativePicture(native, 0, 1 / 60)
+  const copy = await compositor.snapshot(picture, true, true)
+  expect(device.importExternalTexture).toHaveBeenCalledWith({ source: frame })
+  expect(copy).toMatchObject({ timestamp: 1, duration: 0.016667, displayWidth: 3840, displayHeight: 2160 })
+  picture.close(); await Promise.resolve(); await Promise.resolve()
+  expect(release).not.toHaveBeenCalled()
+  complete(); await fence; for (let index = 0; index < 5; index++) await Promise.resolve()
+  expect(release).toHaveBeenCalledOnce(); expect(frame.close).not.toHaveBeenCalled()
+  device.importExternalTexture.mockImplementationOnce(() => { throw new Error('导入失败') })
+  const failing = new VideoEditNativePicture({ ...native, release: vi.fn() } as NativeVideoFrame, 0, 1 / 60)
+  await expect(compositor.snapshot(failing, false)).rejects.toThrow('导入失败')
+  expect(frame.close).not.toHaveBeenCalled()
+  copy.close(); await compositor.dispose()
 })
 it('多源同时等待复制名额时逐次重查，单个完成不能唤醒后突破两份外部帧预算', async () => {
   const finish: Array<() => void> = []

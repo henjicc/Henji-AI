@@ -165,7 +165,7 @@ it.each(['duration', 'fps', 'hasAudio'] as const)('旧视频首次可信绑定�
   expect(owner.document).toBe(baseline); expect(owner.document.media[0].assetContent).toBeUndefined()
 })
 
-it('导入先问原生探测：原生播放接通前只有原生能解的专业格式按具体格式拒绝；原生不可用时给出格式提示；工程不变；原生故障不阻断后备', async () => {
+it('导入先问原生探测：只有原生能解的专业格式按原生元数据导入且只写现有字段；原生不可用时给出格式提示、工程不变；原生故障不阻断后备', async () => {
   const owner = (await createVideoEditProject())!; const id = owner.document.id
   vi.spyOn(getPlatform().system.fs, 'exists').mockResolvedValue(true)
   vi.spyOn(videoEditNativeMediaProbe, 'forcedBackend').mockResolvedValue(undefined)
@@ -176,13 +176,15 @@ it('导入先问原生探测：原生播放接通前只有原生能解的专业�
   native.mockResolvedValue({ status: 'probed', probe: { container: { formatName: 'mov,mp4,m4a,3gp,3g2,mj2', startTimeSeconds: 0, durationSeconds: 14.283 }, primaryVideoStreamIndex: 0, primaryAudioStreamIndex: null, streams: [
     { index: 0, kind: 'video', codec: 'prores', profile: '4444', startTimeSeconds: 0, durationSeconds: 14.283, isAttachedPicture: false, decodable: true, video: { width: 2560, height: 2560, bitDepth: 12, chromaSubsampling: '4:4:4', hasAlpha: true, avgFrameRate: { num: 60, den: 1 }, realFrameRate: { num: 60, den: 1 }, rotationDegrees: null } },
   ] } })
-  await expect(importVideoEditSources(id, [{ path: 'D:/media/lotus.mov' }])).rejects.toThrow('剪辑暂不能播放此视频格式（Apple ProRes 4444，12 位 4:4:4，带透明）')
-  expect(native).toHaveBeenCalledWith('D:/media/lotus.mov', undefined)
   expect(owner.document).toBe(baseline)
+  await importVideoEditSources(id, [{ path: 'D:/media/lotus.mov' }])
+  expect(native).toHaveBeenCalledWith('D:/media/lotus.mov', undefined)
+  expect(owner.document.media[0]).toMatchObject({ path: 'D:/media/lotus.mov', kind: 'video', width: 2560, height: 2560, durationSeconds: 14.283, hasAudio: false, frameRate: { numerator: 60, denominator: 1 }, frameRateMode: 'sampled-constant' })
+  expect(Object.keys(owner.document.media[0]).sort()).toEqual(['durationSeconds', 'frameRate', 'frameRateMode', 'hasAudio', 'height', 'id', 'kind', 'name', 'path', 'width'])
   video.decodable = true; native.mockRejectedValue(new Error('服务崩溃'))
   await importVideoEditSources(id, [{ path: 'D:/media/clip.mp4' }])
-  expect(owner.document.media[0]).toMatchObject({ path: 'D:/media/clip.mp4', width: 3840, height: 2160, durationSeconds: 3, frameRateMode: 'sampled-constant' })
-  expect(Object.keys(owner.document.media[0]).sort()).toEqual(['durationSeconds', 'frameRate', 'frameRateMode', 'hasAudio', 'height', 'id', 'kind', 'name', 'path', 'width'])
+  expect(owner.document.media[1]).toMatchObject({ path: 'D:/media/clip.mp4', width: 3840, height: 2160, durationSeconds: 3, frameRateMode: 'sampled-constant' })
+  expect(Object.keys(owner.document.media[1]).sort()).toEqual(['durationSeconds', 'frameRate', 'frameRateMode', 'hasAudio', 'height', 'id', 'kind', 'name', 'path', 'width'])
 })
 it('诊断变量强制浏览器时不调用原生探测', async () => {
   const owner = (await createVideoEditProject())!

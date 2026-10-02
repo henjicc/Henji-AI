@@ -341,10 +341,13 @@ describe('VideoFrameBridge decoder sessions', () => {
 
     native.emit({ event: 'frame_missing', streamId: 'vf-1', scheduleId: 'play-1', index: 5, reason: 'no_picture' })
     native.emit({ event: 'schedule_done', streamId: 'vf-1', scheduleId: 'play-1', reason: 'completed', message: null, counters: {} })
+    native.emit({ event: 'schedule_done', streamId: 'vf-1', scheduleId: 'range-1', reason: 'completed', message: null, counters: { delivered: 60, cuts: 0 } })
     native.emit({ event: 'frame_missing', streamId: 'vf-99', scheduleId: 'x', index: 0, reason: 'no_picture' })
     expect(sent).toEqual([
       { channel: 'videoFrames:scheduleEvent', payload: { type: 'frame_missing', route: 'vf-route-2', streamId: 'vf-1', scheduleId: 'play-1', index: 5, reason: 'no_picture' } },
       { channel: 'videoFrames:scheduleEvent', payload: { type: 'schedule_done', route: 'vf-route-2', streamId: 'vf-1', scheduleId: 'play-1', reason: 'completed', message: null } },
+      // The consumer learns how many frames a range plan delivered: they may arrive after this event.
+      { channel: 'videoFrames:scheduleEvent', payload: { type: 'schedule_done', route: 'vf-route-2', streamId: 'vf-1', scheduleId: 'range-1', reason: 'completed', message: null, delivered: 60 } },
     ])
   })
 
@@ -364,6 +367,20 @@ describe('VideoFrameBridge decoder sessions', () => {
     expect(await bridge.cancelSchedule(7, 'vf-1', 's1')).toBe(true)
     await bridge.closeStream('vf-1', 'requested', 7)
     await expect(bridge.frameAt(7, { streamId: 'vf-1', time: 1, ticket: 't2' })).rejects.toThrow()
+  })
+
+  it('closes the sessions of one frame channel when that channel disconnects, leaving other channels and windows alone', async () => {
+    const native = createService()
+    const bridge = new VideoFrameBridge({ service: native.service, sharedTexture: createSharedTexture().api, logger: createLogger().logger, overdueCheckIntervalMs: 0 })
+    const window = createTarget(7).target
+    await bridge.openDecoder(window, decoderRequest)
+    await bridge.openDecoder(window, { ...decoderRequest, purpose: 'seek' })
+    await bridge.openDecoder(window, { ...decoderRequest, route: 'vf-route-3' })
+    await bridge.openDecoder(createTarget(8).target, decoderRequest)
+    expect(await bridge.closeRoute(7, 'vf-route-2')).toBe(2)
+    expect(native.stopped.sort()).toEqual(['vf-1', 'vf-2'])
+    expect((await bridge.stats()).streams.map((stream) => stream.streamId).sort()).toEqual(['vf-3', 'vf-4'])
+    expect(await bridge.closeRoute(7, 'vf-route-2')).toBe(0)
   })
 
   it('reports a failed decoder open without registering a stream', async () => {

@@ -56,7 +56,7 @@ function createVideoEditPerformanceScene() {
       const audio = path.join(root, 'music-63s.wav')
       execFileSync(ffmpegPath, ['-v', 'error', '-y', '-f', 'lavfi', '-i', 'aevalsrc=0.2*sin(2*PI*330*t)|0.15*sin(2*PI*550*t):s=48000:d=63', '-c:a', 'pcm_s16le', audio], { windowsHide: true, timeout: 60000 })
       const file = path.join(root, 'performance.henji-video'); fs.writeFileSync(file, JSON.stringify(fixture(audio)))
-      const evidence = { completed: false, tolerance: TOLERANCE, phases: [], captures: [] }
+      const evidence = { completed: false, startedAt: new Date().toISOString(), tolerance: TOLERANCE, phases: [], captures: [] }
       const store = () => fs.writeFileSync(path.join(root, 'evidence.json'), JSON.stringify(evidence, null, 2))
       const phase = name => { evidence.currentPhase = name; store() }
       const projectRef = { kind: 'video_edit.project', id: PROJECT_ID }; const sequenceRef = { kind: 'video_edit.sequence', id: `${PROJECT_ID}:main` }
@@ -105,6 +105,16 @@ function createVideoEditPerformanceScene() {
         const traceStart = tracing ? Number(process.env.HENJI_PERF_TRACE_START ?? 0) : 0
         await playback(traceStart, true); await page.waitForTimeout(500)
         const frames = await measure(page, tracing ? Number(process.env.HENJI_PERF_TRACE_SECONDS ?? 6) : 60)
+        // Which decoder actually played (2.2): the renderer's per-file choice and the native frame channel counters.
+        evidence.decode = await page.evaluate(async startedAt => {
+          const logs = await window.henjiNative.logging.queryLogEvents({ date: startedAt.slice(0, 10), afterTimestamp: startedAt, limit: 500 })
+          const stats = await window.henjiNative.videoFrames?.stats().catch(() => null)
+          return {
+            backends: logs.events.filter(event => event.event === 'video_edit.decode.backend.selected').map(event => event.context),
+            nativeStreams: stats?.streams.filter(stream => stream.kind === 'decoder').map(stream => ({ format: stream.format, width: stream.width, height: stream.height, delivered: stream.delivered, handoffMs: stream.handoffMs })) ?? [],
+            native: stats?.native ? { cpuMs: stats.native.cpuMs, gpuLocalMemory: stats.native.gpuLocalMemory, streams: stats.native.streams.map(stream => ({ kind: stream.kind, format: stream.format, counters: stream.counters })) } : null,
+          }
+        }, evidence.startedAt)
         await playback(0, false)
         if (tracing) evidence.tracePath = await app.evaluate(({ contentTracing }, target) => contentTracing.stopRecording(target), path.join(root, 'playback.trace.json'))
         evidence.playback = summarize(frames); evidence.memoryBeforePlayback = metricsBefore; evidence.memoryAfterPlayback = memory(await app.evaluate(({ app }) => app.getAppMetrics()))
@@ -125,7 +135,9 @@ function createVideoEditPerformanceScene() {
 
         phase('resource-cycles')
         evidence.cycles = []
-        for (let cycle = 0; cycle < 4; cycle++) {
+        // Diagnostic only: HENJI_PERF_CYCLES lengthens the curve; the asserted acceptance always uses 4 cycles.
+        const cycles = Math.max(4, Number(process.env.HENJI_PERF_CYCLES) || 4)
+        for (let cycle = 0; cycle < cycles; cycle++) {
           await button(page, '生成').click(); await button(page, '剪辑').first().click(); await presented(page, 0)
           await group(page, '节目画面').locator('.dv-tab').filter({ has: button(page, '关闭节目画面') }).click()
           const opened = app.waitForEvent('window', { timeout: 30000 })
@@ -136,9 +148,10 @@ function createVideoEditPerformanceScene() {
           await button(page, '关闭工程').click(); await waitReleased(page)
           await dialogs(app, [file], file); await button(page, '打开工程').click(); await presented(page, 0)
           await page.waitForTimeout(1500)
-          evidence.cycles.push({ cycle, memory: memory(await app.evaluate(({ app }) => app.getAppMetrics())), workers: (await workerSnapshot(page)).live }); store()
+          const nativeFrames = await page.evaluate(() => window.henjiNative.videoFrames?.stats().then(stats => ({ streams: stats.streams.length, unreleasedImports: stats.unreleasedImports, preloadOutstanding: stats.preload.outstanding, nativeVramBytes: stats.native?.gpuLocalMemory?.currentUsageBytes ?? null })).catch(() => null))
+          evidence.cycles.push({ cycle, memory: memory(await app.evaluate(({ app }) => app.getAppMetrics())), workers: (await workerSnapshot(page)).live, nativeFrames }); store()
         }
-        const first = evidence.cycles[0].memory; const last = evidence.cycles.at(-1).memory
+        const first = evidence.cycles[0].memory; const last = evidence.cycles[3].memory
         evidence.memoryGrowth = Object.fromEntries(Object.keys(first).map(key => [key, first[key] ? (last[key] - first[key]) / first[key] : 0]))
         for (const key of ['Tab', 'GPU']) check(evidence.memoryGrowth[key] <= TOLERANCE.memoryGrowth, `反复切页/浮窗/重开后${key}进程内存增长${evidence.memoryGrowth[key]}`)
         check(evidence.cycles.every(cycle => cycle.workers <= 1), `循环后节目渲染Worker多于一个：${JSON.stringify(evidence.cycles.map(cycle => cycle.workers))}`)

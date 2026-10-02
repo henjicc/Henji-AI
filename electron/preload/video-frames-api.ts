@@ -3,6 +3,8 @@ import {
   VIDEO_FRAMES_PORT_MESSAGE_TYPE,
   VIDEO_FRAMES_SCHEDULE_EVENT_CHANNEL,
   type VideoFrameMeta,
+  type VideoFramePortCall,
+  type VideoFramePortResponseMessage,
   type VideoFrameScheduleEvent,
   type VideoFrameStreamEndedPayload,
   type VideoFramesPortWindowMessage,
@@ -36,6 +38,15 @@ interface Route {
   port: FramePort
   /** 借出编号 → 帧号。transfer 回来的是新对象，只能按编号对账。 */
   outstanding: Map<number, number>
+}
+
+/** 端口请求方法 → IPC 通道（解码会话的取帧请求，权限与归属仍由主进程按发起窗口检查）。 */
+const PORT_CALL_CHANNELS: Record<VideoFramePortCall['method'], string> = {
+  openDecoder: 'videoFrames:openDecoder',
+  frameAt: 'videoFrames:frameAt',
+  schedule: 'videoFrames:schedule',
+  cancelSchedule: 'videoFrames:cancelSchedule',
+  closeStream: 'videoFrames:closeStream',
 }
 
 function isFrameMeta(value: unknown): value is VideoFrameMeta {
@@ -95,12 +106,48 @@ export function createVideoFramesApi(nativeInvoke: NativeInvoke): HenjiVideoFram
     }
   })
 
+  // 流结束（原生出错、服务退出）也投递到所属通道的端口：消费方 Worker 据此停止等待该流的帧。
+  ipcRenderer.on('videoFrames:streamEnded', (_event, payload: VideoFrameStreamEndedPayload) => {
+    const route = payload && typeof payload.route === 'string' ? routes.get(payload.route) : undefined
+    if (!route) return
+    try {
+      route.port.postMessage({ type: 'ended', payload }, [])
+    } catch {
+      // 端口已关闭：消费方已不在，忽略。
+    }
+  })
+
   const closeRoute = (route: string): void => {
     const entry = routes.get(route)
     if (!entry) return
     routes.delete(route)
     entry.port.onmessage = null
     entry.port.close()
+    // 消费方 Worker 可能未能自行关闭会话（被终止、崩溃）：由主进程关闭该通道上仍打开的会话。
+    void Promise.resolve(nativeInvoke('videoFrames:closeRoute', { route })).catch(() => undefined)
+  }
+
+  /** 端口请求转为 IPC；打开的解码会话一律归属本通道（忽略请求里的 route）。 */
+  const answer = async (route: string, entry: Route, id: number, call: VideoFramePortCall | undefined): Promise<void> => {
+    const reply = (body: Omit<VideoFramePortResponseMessage, 'type' | 'id'>): void => {
+      if (routes.get(route) !== entry) return
+      try {
+        entry.port.postMessage({ type: 'response', id, ...body } satisfies VideoFramePortResponseMessage, [])
+      } catch {
+        // 端口已关闭：消费方已不在。
+      }
+    }
+    const channel = call && typeof call === 'object' && Object.hasOwn(PORT_CALL_CHANNELS, call.method) ? PORT_CALL_CHANNELS[call.method] : undefined
+    if (!call || !channel) {
+      reply({ error: '未知的帧通道请求' })
+      return
+    }
+    const payload = call.method === 'openDecoder' ? { ...call.params, route } : call.params
+    try {
+      reply({ result: await nativeInvoke(channel, payload) })
+    } catch (error) {
+      reply({ error: error instanceof Error ? error.message : String(error) })
+    }
   }
 
   return {
@@ -109,7 +156,11 @@ export function createVideoFramesApi(nativeInvoke: NativeInvoke): HenjiVideoFram
       const channel = new (globalThis as unknown as { MessageChannel: new () => FrameChannel }).MessageChannel()
       const entry: Route = { port: channel.port1, outstanding: new Map() }
       channel.port1.onmessage = (event) => {
-        const message = event.data as { type?: unknown; frame?: unknown; token?: unknown } | null
+        const message = event.data as { type?: unknown; frame?: unknown; token?: unknown; id?: unknown; call?: VideoFramePortCall } | null
+        if (message?.type === 'request' && typeof message.id === 'number') {
+          void answer(route, entry, message.id, message.call)
+          return
+        }
         if (message?.type !== 'release' || !message.frame) return
         if (typeof message.token === 'number') entry.outstanding.delete(message.token)
         counters.returned += 1

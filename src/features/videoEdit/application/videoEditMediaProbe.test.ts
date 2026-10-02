@@ -19,17 +19,20 @@ const browserCannot = (codec: string | null): VideoEditBrowserInspection => ({ s
 const unreadable: VideoEditBrowserInspection = { status: 'unreadable', error: new Error('Input has an unsupported or unrecognizable format.') }
 const prores4444 = videoStream('prores', '4444', { width: 2560, height: 2560, bitDepth: 12, chromaSubsampling: '4:4:4', hasAlpha: true })
 
-it('原生与浏览器都能解：原生播放接通前实际播放后端为浏览器（日志另记原生能解），接通后为原生；元数据都沿用浏览器结果', () => {
+it('原生与浏览器都能解：原生声音接通前整体留在浏览器（日志另记原生能解），原生成为主路径后为原生；诊断强制原生须等原生播放接通；元数据都沿用浏览器结果', () => {
   const both = probe([videoStream('h264', 'High'), audioStream('aac')])
   expect(resolveVideoEditMediaInspection('D:/a.mp4', both, browserDecodes)).toEqual({ backend: 'browser', nativeDecodes: true, fields: browserMedia })
-  expect(resolveVideoEditMediaInspection('D:/a.mp4', both, browserDecodes, 'native')).toEqual({ backend: 'browser', nativeDecodes: true, fields: browserMedia })
-  expect(resolveVideoEditMediaInspection('D:/a.mp4', both, browserDecodes, undefined, true)).toEqual({ backend: 'native', nativeDecodes: true, fields: browserMedia })
+  expect(resolveVideoEditMediaInspection('D:/a.mp4', both, browserDecodes, 'native')).toEqual({ backend: 'native', nativeDecodes: true, fields: browserMedia })
+  expect(resolveVideoEditMediaInspection('D:/a.mp4', both, browserDecodes, 'native', false)).toEqual({ backend: 'browser', nativeDecodes: true, fields: browserMedia })
+  expect(resolveVideoEditMediaInspection('D:/a.mp4', both, browserDecodes, undefined, true, true)).toEqual({ backend: 'native', nativeDecodes: true, fields: browserMedia })
 })
 
 it('只有原生能解的专业格式：原生播放接通前按具体格式拒绝；接通后后端为原生、元数据取自原生探测并通过工程素材校验', () => {
-  expect(() => resolveVideoEditMediaInspection('D:/lotus.mov', probe([prores4444]), browserCannot(null))).toThrow('剪辑暂不能播放此视频格式（Apple ProRes 4444，12 位 4:4:4，带透明），请先转为 H.264 视频后再导入。')
-  expect(() => resolveVideoEditMediaInspection('D:/a.mkv', probe([videoStream('h264', 'High'), audioStream('truehd')]), { status: 'read', video: { codec: 'avc', decodable: true }, audio: { codec: null, decodable: false } })).toThrow('剪辑暂不能播放此声音格式（Dolby TrueHD）')
-  const result = resolveVideoEditMediaInspection('D:/lotus.mov', probe([prores4444]), browserCannot(null), undefined, true)
+  expect(() => resolveVideoEditMediaInspection('D:/lotus.mov', probe([prores4444]), browserCannot(null), undefined, false)).toThrow('剪辑暂不能播放此视频格式（Apple ProRes 4444，12 位 4:4:4，带透明），请先转为 H.264 视频后再导入。')
+  expect(() => resolveVideoEditMediaInspection('D:/a.mkv', probe([videoStream('h264', 'High'), audioStream('truehd')]), { status: 'read', video: { codec: 'avc', decodable: true }, audio: { codec: null, decodable: false } }, undefined, false)).toThrow('剪辑暂不能播放此声音格式（Dolby TrueHD）')
+  // A file whose sound only native decodes plays natively as a whole (one backend per file).
+  expect(resolveVideoEditMediaInspection('D:/a.mkv', probe([videoStream('h264', 'High'), audioStream('truehd')]), { status: 'read', video: { codec: 'avc', decodable: true }, audio: { codec: null, decodable: false } }).backend).toBe('native')
+  const result = resolveVideoEditMediaInspection('D:/lotus.mov', probe([prores4444]), browserCannot(null))
   expect(result).toEqual({ backend: 'native', nativeDecodes: true, fields: { kind: 'video', hasAudio: false, width: 2560, height: 2560, durationSeconds: 3, frameRate: { numerator: 60, denominator: 1 }, frameRateMode: 'sampled-constant' } })
   expect(videoEditMediaSchema.parse({ id: 'm', name: 'lotus.mov', path: 'D:/lotus.mov', ...result.fields })).toBeTruthy()
   const mxf = resolveVideoEditMediaInspection('D:/dnxhr.mxf', probe([videoStream('dnxhd', 'DNXHR HQ', { width: 1920, height: 1080, chromaSubsampling: '4:2:2' }), audioStream('pcm_s24le'), audioStream('pcm_s24le', 2)], 'mxf', 3.003), unreadable, undefined, true)
@@ -63,9 +66,10 @@ it('诊断强制后端时不静默换用另一后端', () => {
   expect(resolveVideoEditMediaInspection('D:/a.mp4', probe([videoStream('h264', 'High')]), browserDecodes, 'browser').backend).toBe('browser')
   expect(() => resolveVideoEditMediaInspection('D:/lotus.mov', probe([prores4444]), browserCannot(null), 'browser', true)).toThrow('当前设备无法解码此视频')
   expect(() => resolveVideoEditMediaInspection('D:/a.mp4', { status: 'unavailable' }, browserDecodes, 'native', true)).toThrow()
-  // Before native playback exists a forced native cannot play anything natively; it never refuses browser-decodable files.
-  expect(resolveVideoEditMediaInspection('D:/a.mp4', { status: 'unavailable' }, browserDecodes, 'native').backend).toBe('browser')
-  expect(() => resolveVideoEditMediaInspection('D:/lotus.mov', probe([prores4444]), browserCannot(null), 'native')).toThrow('剪辑暂不能播放此视频格式')
+  expect(resolveVideoEditMediaInspection('D:/lotus.mov', probe([prores4444]), browserCannot(null), 'native').backend).toBe('native')
+  // Without native playback a forced native cannot play anything natively; it never refuses browser-decodable files.
+  expect(resolveVideoEditMediaInspection('D:/a.mp4', { status: 'unavailable' }, browserDecodes, 'native', false).backend).toBe('browser')
+  expect(() => resolveVideoEditMediaInspection('D:/lotus.mov', probe([prores4444]), browserCannot(null), 'native', false)).toThrow('剪辑暂不能播放此视频格式')
 })
 
 it('原生元数据：旋转交换宽高、帧率不一致视为可变、封面图不算画面、缺少容器时长取流时长', () => {

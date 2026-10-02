@@ -142,9 +142,43 @@ export interface VideoFrameScheduleAck {
 /** 计划的非帧事件（经 IPC 到 preload，再投递到流所属通道的端口）。 */
 export type VideoFrameScheduleEvent =
   | { type: 'frame_missing'; route: string; streamId: string; scheduleId: string; index: number; reason: 'no_picture' | 'decode_error' | 'superseded' }
-  | { type: 'schedule_done'; route: string; streamId: string; scheduleId: string; reason: 'completed' | 'cancelled' | 'error'; message: string | null }
+  /** `delivered`：本计划发出的帧数（区间计划据此判断最后一帧；帧走另一条通道，可能晚于本事件到达）。 */
+  | { type: 'schedule_done'; route: string; streamId: string; scheduleId: string; reason: 'completed' | 'cancelled' | 'error'; message: string | null; delivered?: number }
 
 export const VIDEO_FRAMES_SCHEDULE_EVENT_CHANNEL = 'videoFrames:scheduleEvent'
+
+/**
+ * 消费方（渲染 Worker）经帧通道端口直接发起的解码会话请求：preload 转为对应 IPC，打开的会话归属该端口的通道，
+ * 不经页面主线程。请求与帧、计划事件共用同一端口；`id` 由消费方分配，响应原样带回。
+ */
+export type VideoFramePortCall =
+  | { method: 'openDecoder'; params: Omit<VideoFrameDecoderRequest, 'route'> }
+  | { method: 'frameAt'; params: VideoFrameAtRequest }
+  | { method: 'schedule'; params: VideoFrameScheduleRequest }
+  | { method: 'cancelSchedule'; params: { streamId: string; scheduleId: string } }
+  | { method: 'closeStream'; params: { streamId: string } }
+
+export interface VideoFramePortCallResults {
+  openDecoder: VideoFrameDecoderInfo
+  frameAt: VideoFrameAtResult
+  schedule: VideoFrameScheduleAck
+  cancelSchedule: boolean
+  closeStream: boolean
+}
+
+export interface VideoFramePortRequestMessage {
+  type: 'request'
+  id: number
+  call: VideoFramePortCall
+}
+
+export interface VideoFramePortResponseMessage {
+  type: 'response'
+  id: number
+  result?: unknown
+  /** 失败原因（主进程或原生服务给出的说明，消费方再转为用户语言）。 */
+  error?: string
+}
 
 
 export interface VideoFrameStreamEndedPayload {

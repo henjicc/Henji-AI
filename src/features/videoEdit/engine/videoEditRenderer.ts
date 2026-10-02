@@ -1,4 +1,3 @@
-import type { VideoSample } from 'mediabunny'
 import { videoEditClipMedia, activeVideoEditClips, audibleVideoEditClips, clipSourceSeconds, videoEditVisibleTracks, type VideoEditClip, type VideoEditComposition, type VideoEditMedia } from '@/core/videoEdit/document'
 import { videoEditSourceSeconds } from '@/core/videoEdit/time'
 import { videoEditCaptionClips } from '@/core/videoEdit/timedContent'
@@ -7,7 +6,7 @@ import { VideoEditFrameCache } from './videoEditFrameCache'
 import { VideoEditGpuFrame, videoEditGpuFrameUsesChroma } from './videoEditGpuFrame'
 import { VideoEditCodeSources } from './videoEditCodeSources'
 import { codeMaterialImageIds } from '@/core/videoEdit/codeMaterialResources'
-import type { VideoEditClipAudio, VideoEditClipFrames, VideoEditFrameBackend, VideoEditFrameSeeker, VideoEditFrameSource } from './videoEditFrameSource'
+import type { VideoEditClipAudio, VideoEditClipFrames, VideoEditDecodedPicture, VideoEditFrameBackend, VideoEditFrameSeeker, VideoEditFrameSource } from './videoEditFrameSource'
 import { VideoEditBrowserFrames } from './videoEditBrowserFrames'
 import { videoEditSourceReadError } from './videoEditSourceErrors'
 import { videoEditTransitionsAt } from '@/core/videoEdit/transitions'
@@ -18,9 +17,9 @@ interface PlaybackStream {
   demux: string
   entries: Array<{ frame: number; clipId: string }>
   cursor: number
-  samples: AsyncGenerator<VideoSample | null, void, unknown>
+  samples: AsyncGenerator<VideoEditDecodedPicture | null, void, unknown>
   /** The first pull is started at build time so every scheduled decoder is created before mid-playback cuts. */
-  primed?: Promise<IteratorResult<VideoSample | null, void>>
+  primed?: Promise<IteratorResult<VideoEditDecodedPicture | null, void>>
   /** Serializes pulls; one file never serves two clips at the same frame. */
   tail: Promise<unknown>
 }
@@ -35,8 +34,8 @@ interface VideoSource {
   media: VideoEditMedia
   video?: VideoEditClipFrames
   audio?: VideoEditClipAudio
-  iterator?: AsyncGenerator<VideoSample, void, unknown>
-  current?: VideoSample | VideoEditGpuFrame
+  iterator?: AsyncGenerator<VideoEditDecodedPicture, void, unknown>
+  current?: VideoEditDecodedPicture | VideoEditGpuFrame
   previousTime: number
   codec?: string
   /** First picture of an upcoming cut, decoded before the boundary frame is requested. */
@@ -65,7 +64,8 @@ export class VideoEditRenderer {
     this.canvas = surface ?? new OffscreenCanvas(document.width, document.height)
     this.canvas.width = document.width; this.canvas.height = document.height
   }
-  private release(source: Pick<VideoSource, 'demux'>): void { this.frames.release(source.demux) }
+  /** Drops one user of the shared opened file; a clip's own sound reader closes with its source. */
+  private release(source: Pick<VideoSource, 'demux'> & Partial<Pick<VideoSource, 'audio'>>): void { source.audio?.close?.(); this.frames.release(source.demux) }
   private source(key: string, media: VideoEditMedia): Promise<VideoSource> {
     let source = this.sources.get(key)
     if (!source) {
@@ -194,8 +194,8 @@ export class VideoEditRenderer {
     }))
   }
   /** The scheduled picture for exactly this frame and clip, or undefined to use the regular path. */
-  private takeScheduled(stream: PlaybackStream, frame: number, clipId: string): Promise<VideoSample | undefined> {
-    const pull = (): Promise<IteratorResult<VideoSample | null, void>> => { const primed = stream.primed; stream.primed = undefined; return primed ?? stream.samples.next() }
+  private takeScheduled(stream: PlaybackStream, frame: number, clipId: string): Promise<VideoEditDecodedPicture | undefined> {
+    const pull = (): Promise<IteratorResult<VideoEditDecodedPicture | null, void>> => { const primed = stream.primed; stream.primed = undefined; return primed ?? stream.samples.next() }
     const next = stream.tail.catch(() => undefined).then(async () => {
       while (stream.cursor < stream.entries.length && stream.entries[stream.cursor].frame < frame) {
         stream.cursor++; const skipped = await pull(); skipped.value?.close()
@@ -230,7 +230,10 @@ export class VideoEditRenderer {
       })().catch(() => undefined).finally(() => { source.prerolled = undefined })
     }, () => undefined)
   }
-  async render(frame: number, sequential = false, _scrubbing = false, shouldPresent: () => boolean = () => true, deadline?: number): Promise<{ canvas: OffscreenCanvas; sourceTimestamps: number[]; cacheHits: number; cacheBytes: number; presented: boolean; decodeMs: number; gpuMs: number; completion: Promise<void> }> {
+  /**
+   * `blankPictures` counts video layers with no picture at their source time (drawn transparent, no timestamp).
+   */
+  async render(frame: number, sequential = false, _scrubbing = false, shouldPresent: () => boolean = () => true, deadline?: number): Promise<{ canvas: OffscreenCanvas; sourceTimestamps: number[]; blankPictures: number; cacheHits: number; cacheBytes: number; presented: boolean; decodeMs: number; gpuMs: number; completion: Promise<void> }> {
     if (this.disposed) throw new Error('预览已关闭。')
     const document = this.document; const epoch = this.presentationEpoch
     const canPresent = (): boolean => !this.disposed && this.document === document && this.presentationEpoch === epoch && shouldPresent()
@@ -273,6 +276,7 @@ export class VideoEditRenderer {
     const upcoming = sequential && this.previewWidth ? this.upcomingVideoClips(document, frame, visible) : []
     for (const clip of upcoming) this.preroll(clip, document)
     let cacheHits = 0
+    let blankPictures = 0
     const picturesPending = active.map(async clip => {
       const media = videoEditClipMedia(document, clip)
       if (clip.kind === 'text' || clip.kind === 'adjustment') return null
@@ -292,6 +296,9 @@ export class VideoEditRenderer {
       if (!source.video) throw new Error(`素材 ${media.name} 没有可解码的视频轨。`)
       const scheduledStream = sequential && this.previewWidth ? this.playback?.byClip.get(clip.id) : undefined
       const scheduled = scheduledStream ? await this.takeScheduled(scheduledStream, frame, clip.id) : undefined
+      // A sequential reader started before the stream's first picture hands out that first picture early: it is kept
+      // for its own time and nothing shows until then.
+      let early = false
       // A backwards source clock must use the shared GOP cache even when the
       // caller requests continuous playback; a forward iterator would re-decode
       // the whole GOP for every preceding picture.
@@ -314,13 +321,21 @@ export class VideoEditRenderer {
           const next = await source.iterator.next(); if (next.done) break
           source.current?.close(); source.current = next.value
         }
+        early = !!source.current && source.current.timestamp > time + 1e-6
       } else {
         source.current?.close(); await source.iterator?.return()
         source.iterator = undefined
         source.current = await source.video.frameAt(time) ?? undefined
       }
       source.previousTime = time
-      if (!source.current) throw new Error(`素材 ${media.name} 在此时间没有画面。`)
+      if (!source.current || early) {
+        // No picture at this source time although it is inside the media: the time precedes the stream's first picture
+        // (MPEG program/transport streams start after zero on the source timeline, record of 2.1). The layer is
+        // transparent there, as in the gap before a clip, instead of failing the whole frame.
+        if (time >= media.durationSeconds) throw new Error(`素材 ${media.name} 在此时间没有画面。`)
+        blankPictures++
+        return this.compositor!.blank(media.width, media.height, time, 1 / document.fps)
+      }
       if (!(source.current instanceof VideoEditGpuFrame)) {
         const decoded = source.current
         const normalized = await this.compositor!.snapshot(decoded, videoEditGpuFrameUsesChroma(decoded, source.codec), true)
@@ -338,7 +353,7 @@ export class VideoEditRenderer {
     const settled = await Promise.allSettled(picturesPending)
     const imageResults = await imagesSettled
     const preparedCode = await codeSettled
-    if (!canPresent()) return { canvas: this.canvas, sourceTimestamps: [], cacheHits, cacheBytes: this.frameCache.bytes, presented: false, decodeMs: performance.now() - decodeStart, gpuMs: 0, completion: Promise.resolve() }
+    if (!canPresent()) return { canvas: this.canvas, sourceTimestamps: [], blankPictures, cacheHits, cacheBytes: this.frameCache.bytes, presented: false, decodeMs: performance.now() - decodeStart, gpuMs: 0, completion: Promise.resolve() }
     const codeFailure = preparedCode.find(result => result.status === 'rejected')
     if (codeFailure?.status === 'rejected') throw codeFailure.reason
     if (preparedCode[0]?.status === 'fulfilled') { cacheHits += preparedCode[0].value.cacheHits; timestamps.push(...preparedCode[0].value.sourceTimestamps) }
@@ -366,7 +381,7 @@ export class VideoEditRenderer {
     for (const key of this.images.keys()) if (!activeImages.has(key)) this.releaseImage(key)
     const activePaths = new Set(canPresent() ? active.map(clip => videoEditClipMedia(document, clip)?.path) : this.seekers.keys())
     for (const [path, seeker] of this.seekers) if (!activePaths.has(path)) { this.seekers.delete(path); await seeker.dispose() }
-    return { canvas: this.canvas, sourceTimestamps: timestamps, cacheHits, cacheBytes: this.frameCache.bytes, presented, decodeMs, gpuMs, completion }
+    return { canvas: this.canvas, sourceTimestamps: timestamps, blankPictures, cacheHits, cacheBytes: this.frameCache.bytes, presented, decodeMs, gpuMs, completion }
   }
   /** Bounded one-second mix. Source timestamp alignment also handles VFR video audio. */
   async mixAudio(startSeconds: number, durationSeconds: number): Promise<Float32Array[]> {

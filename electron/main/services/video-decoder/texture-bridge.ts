@@ -443,6 +443,13 @@ export class VideoFrameBridge {
     return true
   }
 
+  /** 关闭某窗口某条帧通道上的全部流（通道断开时兜底：消费方 Worker 可能未能自行关闭）。 */
+  async closeRoute(targetId: number, route: string): Promise<number> {
+    const owned = [...this.streams.values()].filter((stream) => stream.target.id === targetId && stream.route === route)
+    await Promise.all(owned.map((stream) => this.closeStream(stream.id, 'route_closed')))
+    return owned.length
+  }
+
   async closeTarget(targetId: number, reason: string): Promise<void> {
     const owned = [...this.streams.values()].filter((stream) => stream.target.id === targetId)
     await Promise.all(owned.map((stream) => this.closeStream(stream.id, reason)))
@@ -519,7 +526,7 @@ export class VideoFrameBridge {
       if (stream.target.isDestroyed()) return
       const payload: VideoFrameScheduleEvent = event.event === 'frame_missing'
         ? { type: 'frame_missing', route: stream.route, streamId: stream.id, scheduleId: event.scheduleId, index: event.index, reason: event.reason }
-        : { type: 'schedule_done', route: stream.route, streamId: stream.id, scheduleId: event.scheduleId, reason: event.reason, message: event.message }
+        : { type: 'schedule_done', route: stream.route, streamId: stream.id, scheduleId: event.scheduleId, reason: event.reason, message: event.message, ...(typeof event.counters?.delivered === 'number' ? { delivered: event.counters.delivered } : {}) }
       if (event.event === 'schedule_done' && event.reason === 'error') {
         this.options.logger.warn('连续取帧计划失败', { event: 'video_frames.schedule.failed', context: { streamId: stream.id, scheduleId: event.scheduleId, message: event.message } })
       }

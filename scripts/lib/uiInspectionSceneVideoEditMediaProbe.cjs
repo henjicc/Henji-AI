@@ -6,10 +6,13 @@ const { execFileSync } = require('node:child_process')
 const { dialogs, presented } = require('./uiInspectionSceneVideoEditMonitor.cjs')
 
 /**
- * 剪辑素材探测（2.1）：原生探测优先、浏览器兜底在真实 Electron 中的结果。
- * - 原生服务经平台层 probe 的元数据与同版本 ffprobe（BtbN 8.1）逐字段一致；
- * - 只有原生能解的专业格式在原生播放接通（2.2）前按具体格式拒绝导入，工程不变；
- * - H.264+AAC 照常导入（元数据来自浏览器探测），日志记录所选后端；
+ * 剪辑素材探测（2.1）与专业格式导入（2.2）：原生探测优先、浏览器兜底在真实 Electron 中的结果。
+ * - 原生服务经平台层 probe 的元数据与同版本 ffprobe（与服务链接的同一份 FFmpeg 构建）逐字段一致；
+ * - 原生播放接通（2.2）后，只有原生能解的专业格式可以导入：素材字段只有现有字段，元数据来自原生探测并与 ffprobe 一致，
+ *   日志记录实际播放后端为原生；诊断强制浏览器时仍按具体格式拒绝、工程不变；
+ * - 这些素材在源监视器中不用媒体元素：渲染会话出画面、定位到请求时间所在的真实帧、正向播放画面持续前进；
+ * - H.264+AAC 照常导入（元数据来自浏览器探测）；原生声音接通（2.3 阶段 B）前，浏览器能完整解码的文件实际播放后端为浏览器，
+ *   诊断强制原生时为原生；
  * - 诊断变量 HENJI_VIDEO_DECODER=browser|native 的行为（按本次进程环境断言）；
  * - 2.1 改动前由应用保存的旧工程打开无迁移（文件逐字节不变）、能出画面。
  */
@@ -40,7 +43,60 @@ const rate = (text) => { const [num, den] = String(text).split('/').map(Number);
 
 function ffprobe(file) {
   const data = JSON.parse(execFileSync(FFPROBE, ['-v', 'error', '-show_streams', '-show_format', '-of', 'json', file], { windowsHide: true, encoding: 'utf8' }))
-  return { format: data.format, video: data.streams.find((stream) => stream.codec_type === 'video' && !stream.disposition?.attached_pic), audio: data.streams.find((stream) => stream.codec_type === 'audio') }
+  return { format: data.format, streams: data.streams, video: data.streams.find((stream) => stream.codec_type === 'video' && !stream.disposition?.attached_pic), audio: data.streams.find((stream) => stream.codec_type === 'audio') }
+}
+
+/** The media fields the import must record for a file only native decodes, derived independently from ffprobe. */
+function expectedNativeFields(reference) {
+  const ends = reference.streams.filter((stream) => (stream.codec_type === 'video' && !stream.disposition?.attached_pic) || stream.codec_type === 'audio')
+    .filter((stream) => stream.duration !== undefined).map((stream) => Number(stream.duration) + Math.max(0, Number(stream.start_time ?? 0)))
+  const average = rate(reference.video.avg_frame_rate); const real = rate(reference.video.r_frame_rate)
+  return {
+    kind: 'video', width: reference.video.width, height: reference.video.height, hasAudio: Boolean(reference.audio),
+    durationSeconds: Math.max(...ends), frameRate: { numerator: average.num, denominator: average.den },
+    frameRateMode: Math.abs(average.num / average.den / (real.num / real.den) - 1) < 0.001 ? 'sampled-constant' : 'variable',
+  }
+}
+
+/**
+ * Opens an imported item in the source monitor and checks the native path end to end: no media element, a picture
+ * confirmed by the render session, seeks landing on the real frame showing at the requested time, and playback
+ * advancing pictures. Returns the measured numbers for the evidence file.
+ */
+async function nativeSourceMonitor(page, itemId, fps, durationSeconds) {
+  const entry = page.locator(`[data-video-edit-project-entry="${itemId}"]`)
+  const openedAt = Date.now(); await entry.dblclick()
+  await page.waitForFunction(() => document.querySelector('[data-video-edit-source-status]')?.dataset.videoEditSourceStatus === 'ready' && document.querySelector('[data-video-edit-source-canvas]')?.dataset.presentedTimeUs !== undefined, null, { timeout: 30000 })
+  const openMs = Date.now() - openedAt
+  assert.equal(await page.locator('[data-video-edit-source-host] video').count(), 0, '只有原生能解的素材不能交给媒体元素')
+  const seeks = []
+  for (const seconds of [0.5, Math.min(durationSeconds - 0.2, 2.25), 0.1]) {
+    const field = page.getByLabel('源素材定位秒', { exact: true })
+    const at = Date.now(); await field.fill(String(seconds)); await field.press('Enter')
+    await page.waitForFunction(time => {
+      const canvas = document.querySelector('[data-video-edit-source-canvas]')
+      const presented = Number(canvas?.dataset.presentedTimeUs) / 1e6
+      return document.querySelector('[data-video-edit-source-status]')?.dataset.videoEditSourceStatus === 'ready' && presented <= time + 1e-6 && presented > time - 0.5
+    }, seconds, { timeout: 30000 })
+    const presentedTimeUs = Number(await page.locator('[data-video-edit-source-canvas]').getAttribute('data-presented-time-us'))
+    assert.ok(presentedTimeUs / 1e6 <= seconds + 1e-6 && presentedTimeUs / 1e6 > seconds - 1.5 / fps, `源定位 ${seconds}s 落在 ${presentedTimeUs}µs，不是该时间所在的帧`)
+    seeks.push({ seconds, presentedTimeUs, ms: Date.now() - at })
+  }
+  const canvas = page.locator('[data-video-edit-source-canvas]')
+  await canvas.evaluate((element) => {
+    window.__nativeSourceFrames = []
+    window.__nativeSourceObserver = new MutationObserver(() => window.__nativeSourceFrames.push({ at: performance.now(), time: Number(element.dataset.presentedTimeUs) }))
+    window.__nativeSourceObserver.observe(element, { attributes: true, attributeFilter: ['data-presented-time-us'] })
+  })
+  await page.getByRole('button', { name: '播放源素材', exact: true }).click()
+  await page.waitForTimeout(1200)
+  const samples = await page.evaluate(() => { window.__nativeSourceObserver.disconnect(); return window.__nativeSourceFrames })
+  assert.ok(samples.length >= 10, `源监视器正向播放画面没有持续前进：${samples.length} 次更新`)
+  const backwards = samples.findIndex((sample, index) => index > 0 && sample.time <= samples[index - 1].time)
+  assert.equal(backwards, -1, `源监视器正向播放画面倒退：${JSON.stringify(samples.slice(Math.max(0, backwards - 3), backwards + 3).map((sample) => sample.time))}`)
+  const span = (samples.at(-1).at - samples[0].at) / 1000
+  await page.getByRole('button', { name: '关闭源素材', exact: true }).click()
+  return { openMs, seeks, playback: { updates: samples.length, updatesPerSecond: (samples.length - 1) / span, advancedUs: samples.at(-1).time - samples[0].time } }
 }
 
 /** Renderer logs reach the main-process store asynchronously; poll until the expected event arrives. */
@@ -66,7 +122,7 @@ function createVideoEditMediaProbeScene() {
     setup: async (page, app) => {
       fs.mkdirSync(ROOT, { recursive: true })
       const forced = ['native', 'browser'].includes(String(process.env.HENJI_VIDEO_DECODER).toLowerCase()) ? String(process.env.HENJI_VIDEO_DECODER).toLowerCase() : null
-      const evidence = { forced, probes: [], imports: [], legacy: [] }
+      const evidence = { forced, probes: [], imports: [], sourceMonitor: [], legacy: [] }
       const evidencePath = path.join(ROOT, `evidence-${forced ?? 'auto'}.json`)
       const store = () => fs.writeFileSync(evidencePath, JSON.stringify(evidence, null, 2))
       const samples = PROFESSIONAL.filter((sample) => fs.existsSync(sample.file) || (!sample.optional && assert.fail(`缺少样本 ${sample.file}（先运行 1.1 的样本生成）`)))
@@ -111,19 +167,43 @@ function createVideoEditMediaProbeScene() {
           const before = snapshot()
           const startedAt = new Date().toISOString()
           await dialogs(app, [sample.file], projectPath); await button(page, '导入').click()
-          // The log carries this import's own message; the banner may still show the previous one until replaced.
-          const events = await logEvents(page, startedAt, ['video_edit.media.inspect.undecodable'])
-          const event = events.find((item) => item.event === 'video_edit.media.inspect.undecodable')
-          assert.ok(event, `${path.basename(sample.file)} 缺少无法解码日志`)
-          const message = String(event.error)
-          if (forced === 'browser') assert.match(message, /^(当前设备无法解码此视频|当前无法读取此)/, `${path.basename(sample.file)} 提示不符`)
-          else assert.ok(message.startsWith(`剪辑暂不能播放此视频格式（${sample.label}）`), `${path.basename(sample.file)} 提示不符：${message}`)
-          await page.locator('body').getByText(message, { exact: true }).first().waitFor({ state: 'visible', timeout: 10000 })
-          assert.doesNotMatch(message, /原生|浏览器|native|browser|mediabunny|webcodecs|ffmpeg/i, '提示不能出现实现名称')
-          await page.waitForTimeout(300)
-          assert.equal(snapshot(), before, `${path.basename(sample.file)} 被拒绝后工程不能改变`)
-          assert.equal(event.context.native, forced === 'browser' ? 'unavailable' : 'probed')
-          evidence.imports.push({ file: sample.file, accepted: false, message, log: event.context })
+          if (forced === 'browser') {
+            // The log carries this import's own message; the banner may still show the previous one until replaced.
+            const events = await logEvents(page, startedAt, ['video_edit.media.inspect.undecodable'])
+            const event = events.find((item) => item.event === 'video_edit.media.inspect.undecodable')
+            assert.ok(event, `${path.basename(sample.file)} 缺少无法解码日志`)
+            const message = String(event.error)
+            assert.match(message, /^(当前设备无法解码此视频|当前无法读取此)/, `${path.basename(sample.file)} 提示不符`)
+            await page.locator('body').getByText(message, { exact: true }).first().waitFor({ state: 'visible', timeout: 10000 })
+            assert.doesNotMatch(message, /原生|浏览器|native|browser|mediabunny|webcodecs|ffmpeg/i, '提示不能出现实现名称')
+            await page.waitForTimeout(300)
+            assert.equal(snapshot(), before, `${path.basename(sample.file)} 被拒绝后工程不能改变`)
+            assert.equal(event.context.native, 'unavailable')
+            evidence.imports.push({ file: sample.file, accepted: false, message, log: event.context })
+            store()
+            continue
+          }
+          // Native playback is wired (2.2): files only native decodes import with native metadata.
+          for (let index = 0; index < 200 && !project().media.some((media) => path.resolve(media.path) === path.resolve(sample.file)); index++) await page.waitForTimeout(50)
+          const media = project().media.find((item) => path.resolve(item.path) === path.resolve(sample.file))
+          assert.ok(media, `${path.basename(sample.file)}（${sample.label}）应能导入`)
+          assert.deepEqual(Object.keys(media).sort(), ['durationSeconds', 'frameRate', 'frameRateMode', 'hasAudio', 'height', 'id', 'kind', 'name', 'path', 'width'], '素材字段不能新增')
+          const expected = expectedNativeFields(ffprobe(sample.file))
+          assert.ok(Math.abs(media.durationSeconds - expected.durationSeconds) < 1e-6, `${path.basename(sample.file)} 时长 ${media.durationSeconds} 与 ffprobe 绝对结束时间 ${expected.durationSeconds} 不一致`)
+          const { id: _id, name: _name, path: _path, durationSeconds: _duration, ...fields } = media
+          const { durationSeconds: _expectedDuration, ...expectedFields } = expected
+          assert.deepEqual(fields, expectedFields, `${path.basename(sample.file)} 元数据与 ffprobe 不一致`)
+          const completed = (await logEvents(page, startedAt, ['video_edit.media.inspect.completed'])).find((item) => item.event === 'video_edit.media.inspect.completed')
+          assert.ok(completed, `${path.basename(sample.file)} 缺少探测完成日志`)
+          assert.deepEqual({ backend: completed.context.backend, native: completed.context.native, nativeDecodes: completed.context.nativeDecodes, browserDecodes: completed.context.browserDecodes }, { backend: 'native', native: 'probed', nativeDecodes: true, browserDecodes: false })
+          evidence.imports.push({ file: sample.file, label: sample.label, accepted: true, media, expected, log: completed.context })
+          store()
+        }
+        if (forced !== 'browser') for (const record of evidence.imports.filter((item) => item.accepted)) {
+          const item = project().items.find((candidate) => candidate.mediaId === record.media.id)
+          assert.ok(item, `${path.basename(record.file)} 缺少项目项`)
+          const fps = record.media.frameRate.numerator / record.media.frameRate.denominator
+          evidence.sourceMonitor.push({ file: record.file, ...await nativeSourceMonitor(page, item.id, fps, record.media.durationSeconds) })
           store()
         }
         const startedAt = new Date().toISOString()
@@ -135,8 +215,9 @@ function createVideoEditMediaProbeScene() {
         assert.deepEqual({ kind: media.kind, width: media.width, height: media.height, hasAudio: media.hasAudio, frameRate: media.frameRate, frameRateMode: media.frameRateMode }, { kind: 'video', width: 3840, height: 2160, hasAudio: true, frameRate: { numerator: 60, denominator: 1 }, frameRateMode: 'sampled-constant' })
         const completed = (await logEvents(page, startedAt, ['video_edit.media.inspect.completed']))[0]
         assert.ok(completed, '缺少探测完成日志')
-        // Native playback is not wired yet (2.2): the file plays through the browser whatever the probe found.
-        assert.equal(completed.context.backend, 'browser', '原生播放接通前对照样本的实际播放后端必须是浏览器')
+        // Until native sound decoding (2.3 stage B) a file the browser decodes completely plays on the browser;
+        // the diagnostic setting forcing native plays it natively.
+        assert.equal(completed.context.backend, forced === 'native' ? 'native' : 'browser', '对照样本的实际播放后端不符')
         assert.equal(completed.context.nativeDecodes, forced !== 'browser', '日志单独记录原生能否解码')
         assert.equal(completed.context.native, forced === 'browser' ? 'unavailable' : 'probed')
         assert.equal(completed.context.browserDecodes, true)
@@ -169,7 +250,7 @@ function createVideoEditMediaProbeScene() {
         }
         evidence.completed = true
         store()
-        console.log(`[video-edit-media-probe] ${JSON.stringify({ forced, probes: evidence.probes.length, refused: evidence.imports.filter((item) => !item.accepted).length, legacy: evidence.legacy.map((item) => item.outcome) })}`)
+        console.log(`[video-edit-media-probe] ${JSON.stringify({ forced, probes: evidence.probes.length, imported: evidence.imports.filter((item) => item.accepted).length, refused: evidence.imports.filter((item) => !item.accepted).length, sourceMonitor: evidence.sourceMonitor.map((item) => ({ file: path.basename(item.file), openMs: item.openMs, updatesPerSecond: Math.round(item.playback.updatesPerSecond) })), legacy: evidence.legacy.map((item) => item.outcome) })}`)
       } catch (error) {
         evidence.failed = String(error?.message ?? error)
         store()
