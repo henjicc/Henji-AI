@@ -14,6 +14,7 @@ import PromptOptimizationSection from '../sections/PromptOptimizationSection'
 import UpdateSection from '../sections/UpdateSection'
 import OnboardingSection from '../sections/OnboardingSection'
 import McpSection from '../sections/McpSection'
+import AboutSection from '../sections/AboutSection'
 
 const GeneralTab: React.FC = () => {
   const { settings, updateSetting } = useSettings()
@@ -73,6 +74,9 @@ const GeneralTab: React.FC = () => {
       </SettingsSection>
       <SettingsSection id="general-mcp">
         <McpSection />
+      </SettingsSection>
+      <SettingsSection id="general-about">
+        <AboutSection />
       </SettingsSection>
     </UiRegion>
   )

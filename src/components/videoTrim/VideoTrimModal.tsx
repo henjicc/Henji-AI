@@ -58,7 +58,14 @@ export function VideoTrimModal({
   onClose,
 }: VideoTrimModalProps) {
   const { t } = useTranslation();
-  const videoRef = useRef<HTMLVideoElement>(null);
+  // 事件与回调里读 ref；需要绑定监听的 effect 依赖元素状态。UiModal 在确定宿主文档后才挂载内容，
+  // 首次提交时 <video> 还不存在，关闭再打开时又换成新元素——只靠 ref 的 effect 会拿到 null 或旧元素。
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const [videoElement, setVideoElement] = useState<HTMLVideoElement | null>(null);
+  const attachVideo = useCallback((node: HTMLVideoElement | null) => {
+    videoRef.current = node;
+    setVideoElement(node);
+  }, []);
   const [durationSeconds, setDurationSeconds] = useState(0);
   const [start, setStart] = useState(0);
   const [end, setEnd] = useState(0);
@@ -74,6 +81,8 @@ export function VideoTrimModal({
     setIsProbing(true);
     setError(null);
     setDurationSeconds(0);
+    // 上次关闭时 <video> 随弹窗卸载，监听已解绑，收不到那次的 pause；新开的视频总是暂停态。
+    setIsPlaying(false);
   }, [open, previewUrl]);
 
   const handleLoadedMetadata = useCallback(() => {
@@ -102,7 +111,7 @@ export function VideoTrimModal({
   // 预览只在 [start, end] 区间内播放，到 end 自动暂停并回到 start——
   // 既符合"预览选中片段"的直觉，也避免解码裁剪范围之外的内容。
   useEffect(() => {
-    const video = videoRef.current;
+    const video = videoElement;
     if (!video) return;
     const handleTimeUpdate = () => {
       if (video.currentTime >= end) {
@@ -121,7 +130,7 @@ export function VideoTrimModal({
       video.removeEventListener('play', handlePlay);
       video.removeEventListener('pause', handlePause);
     };
-  }, [start, end]);
+  }, [videoElement, start, end]);
 
   // 拖拽手柄/播放指针时把画面实时跳转到对应帧。
   // mousemove 触发频率可能远超 60Hz，用 rAF 合并到每帧最多 seek 一次，避免疯狂 seek 卡顿。
@@ -205,7 +214,7 @@ export function VideoTrimModal({
       <div className="flex flex-col gap-3">
         <div className="flex flex-col gap-1.5">
           <video
-            ref={videoRef}
+            ref={attachVideo}
             src={previewUrl}
             className="max-h-[60vh] w-full rounded-md bg-black object-contain"
             preload="metadata"

@@ -33,7 +33,7 @@ type SettingsTab = SettingsTabId
  * 不会再出现两边对不上、或者内容区根本没有标题的情况。
  */
 const SECTION_MAP: Record<SettingsTab, string[]> = {
-  general: ['general-basic', 'general-onboarding', 'general-storage', 'general-behavior', 'general-maintenance', 'general-mcp'],
+  general: ['general-basic', 'general-onboarding', 'general-storage', 'general-behavior', 'general-maintenance', 'general-mcp', 'general-about'],
   models: ['models-providers', 'models-assistant', 'models-upload', 'models-alias'],
   assistant: ['assistant-preferences', 'assistant-skills'],
   interface: ['interface-layout', 'interface-assets', 'interface-canvas', 'interface-theme'],
@@ -50,7 +50,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, target }) => {
     target?.sectionId ?? SECTION_MAP[initialTab][0] ?? ''
   )
   const [closing, setClosing] = useState(false)
-  const contentRef = useRef<HTMLDivElement | null>(null)
+  // 用状态而不是 ref 持有滚动容器：内容经 UiModal 延后挂载，容器出现时依赖它的定位与测量要重新执行。
+  const [contentElement, setContentElement] = useState<HTMLDivElement | null>(null)
   // 切大类时要跳到的分节。跨大类点击目录时目标分节还没挂载，只能等这一帧渲染完再滚。
   const pendingScrollRef = useRef<string | null>(target?.sectionId ?? null)
   // 每次目录导航自增。延迟补位的定位只有在"期间没有更新的导航"时才允许生效，
@@ -82,7 +83,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, target }) => {
   const activeSurfaceId = resolveSettingsSurfaceId(activeTab, activeSectionId) ?? undefined
 
   const { scrollToSection, tailSpacerHeight } = useSettingsScrollSpy({
-    containerRef: contentRef,
+    container: contentElement,
     sectionIds: SECTION_MAP[activeTab],
     onActiveSectionChange: setActiveSectionId,
   })
@@ -102,7 +103,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, target }) => {
   // 依赖里带 `tailSpacerHeight`：目标是新大类的最后一个分节时（「更新维护」就是），
   // 得等尾部占位按新大类量过一遍才滚得上去。占位是同步测的，这次重跑同样在绘制前完成。
   useLayoutEffect(() => {
-    const container = contentRef.current
+    const container = contentElement
     if (!container) return
     const tabChanged = settledTabRef.current !== activeTab
     settledTabRef.current = activeTab
@@ -124,7 +125,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, target }) => {
       pendingScrollRef.current = null
     }, DEEP_LINK_RESCROLL_MS)
     return () => window.clearTimeout(timer)
-  }, [activeTab, tailSpacerHeight, scrollToSection])
+  }, [activeTab, contentElement, tailSpacerHeight, scrollToSection])
 
   const handleSectionSelect = useCallback(
     (tabId: SettingsTab, sectionId: string): void => {
@@ -231,7 +232,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, target }) => {
             </div>
           </nav>
 
-          <div ref={contentRef} className="settings-scroll-body min-w-0 flex-1 overflow-y-auto">
+          <div ref={setContentElement} className="settings-scroll-body min-w-0 flex-1 overflow-y-auto">
             {ActiveTabComponent && <ActiveTabComponent />}
             {/* 没有这段占位，最后一个分节永远滚不到顶，点目录最后一项会像「没反应」 */}
             <div aria-hidden style={{ height: tailSpacerHeight }} />

@@ -13,6 +13,57 @@ function createGenerationSettingsScenes(context) {
     setupSettings,
   } = context
 
+  const ALT_THEME_MARKER = '__henjiUiTourAboutAltTheme'
+
+  async function setAboutAppearance(page, { palette, blur }) {
+    await clickNamedButton(page, /^主题外观$/)
+    await clickNamedButton(page, palette)
+    const blurRow = page.getByText('毛玻璃效果', { exact: true }).locator('xpath=ancestor::div[contains(@class, "justify-between")][1]')
+    const blurSwitch = blurRow.getByRole('switch')
+    if ((await blurSwitch.getAttribute('aria-checked') === 'true') !== blur) await blurSwitch.click()
+  }
+
+  /**
+   * 巡检实例的资料在场景与尺寸之间共享且没有收尾钩子：对比主题场景留下标记，
+   * 默认外观场景据此先恢复“经典深色 + 毛玻璃”。没有标记时什么都不写。
+   */
+  async function restoreDefaultAboutAppearance(page) {
+    if (!await page.evaluate((key) => localStorage.getItem(key) === '1', ALT_THEME_MARKER)) return
+    await setAboutAppearance(page, { palette: /经典深色/, blur: true })
+    await page.evaluate((key) => localStorage.removeItem(key), ALT_THEME_MARKER)
+  }
+
+  /** 设置弹窗里定位到“关于”分区，等第三方清单加载、平滑滚动停稳后再截图。 */
+  async function openAboutSection(page) {
+    await clickNamedButton(page, /^(关于|About)$/i)
+    // 第三方清单惰性加载，等重点组件列表出现；目录点击是平滑滚动，再等分区停到内容区顶部才截图
+    await page.locator('#general-about').getByRole('button', { name: /FFmpeg/ }).waitFor({ state: 'visible', timeout: 8000 })
+    await page.waitForFunction(() => {
+      const section = document.getElementById('general-about')
+      const body = section?.closest('.settings-scroll-body')
+      if (!section || !body) return false
+      const offset = section.getBoundingClientRect().top - body.getBoundingClientRect().top
+      const state = window.__aboutScrollProbe ?? { top: -1, stable: 0 }
+      state.stable = body.scrollTop === state.top ? state.stable + 1 : 0
+      state.top = body.scrollTop
+      window.__aboutScrollProbe = state
+      return offset >= 0 && offset < 48 && state.stable >= 3
+    }, null, { timeout: 8000, polling: 100 }).catch(async (error) => {
+      const probe = await page.evaluate(() => {
+        const section = document.getElementById('general-about')
+        const body = section?.closest('.settings-scroll-body')
+        return body && section ? {
+          offset: section.getBoundingClientRect().top - body.getBoundingClientRect().top,
+          scrollTop: body.scrollTop, scrollHeight: body.scrollHeight, clientHeight: body.clientHeight,
+          sectionHeight: section.getBoundingClientRect().height,
+          spacer: body.lastElementChild?.getBoundingClientRect().height,
+        } : null
+      })
+      throw new Error(`关于分区未停到顶部：${JSON.stringify(probe)}；${error.message}`)
+    })
+    await settlePage(page)
+  }
+
   return [
     {
       id: 'generation-voice-selector', surface: '生成', name: '生成-音色筛选面板', writesUserData: true,
@@ -209,6 +260,43 @@ function createGenerationSettingsScenes(context) {
       },
     },
     { id: 'settings-general', surface: '设置', name: '设置-基础设置', setup: setupSettings },
+    {
+      id: 'settings-about',
+      surface: '设置',
+      name: '设置-关于',
+      setup: async (page) => {
+        await setupSettings(page)
+        await restoreDefaultAboutAppearance(page)
+        await openAboutSection(page)
+      },
+    },
+    {
+      // 对比截图：在隔离实例里切到另一主题预设并关闭毛玻璃（应用没有浅色主题）
+      id: 'settings-about-alt-theme',
+      surface: '设置',
+      name: '设置-关于-银盐灰阶无毛玻璃',
+      writesUserData: true,
+      setup: async (page) => {
+        await setupSettings(page)
+        await page.evaluate((key) => localStorage.setItem(key, '1'), ALT_THEME_MARKER)
+        await setAboutAppearance(page, { palette: /银盐灰阶/, blur: false })
+        await openAboutSection(page)
+      },
+    },
+    {
+      id: 'settings-about-licenses',
+      surface: '设置',
+      name: '设置-关于-第三方许可',
+      setup: async (page) => {
+        await setupSettings(page)
+        await restoreDefaultAboutAppearance(page)
+        await clickNamedButton(page, /^(关于|About)$/i)
+        await page.locator('#general-about').getByRole('button', { name: /FFmpeg/ }).click({ timeout: 8000 })
+        await page.getByRole('dialog', { name: /第三方开源组件|Third-party open source components/ })
+          .getByText(/GNU GENERAL PUBLIC LICENSE/).first().waitFor({ state: 'visible', timeout: 8000 })
+        await settlePage(page)
+      },
+    },
     {
       id: 'settings-theme',
       surface: '设置',

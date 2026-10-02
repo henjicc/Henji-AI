@@ -31,6 +31,7 @@ const REGISTRY = path.join(SRC, 'core', 'theme', 'icons.ts')
 const GRAPHIC_EXEMPTIONS = new Map([
   ['src/components/Waveform.tsx', '音频波形，逐条 rect 由采样数据绘制'],
   ['src/features/audioEdit/AudioEditTimeline.tsx', '口播时间线波形，柱形由采样峰值与可见时间范围绘制'],
+  ['src/features/audioEdit/AudioEditOverview.tsx', '全局时间导航的整段波形缩略，柱形由采样峰值绘制'],
   ['src/features/cameraStage/timeline/EasingCurveEditor.tsx', '缓动曲线编辑器，路径由控制点算出'],
   ['src/features/cameraStage/timeline/GraphEditor.tsx', '关键帧曲线图，路径由数据算出'],
   ['src/features/canvas/ui/CanvasOverlays.tsx', '画布连线预览，路径随指针位置实时计算'],

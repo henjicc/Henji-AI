@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 
 /**
  * 分节标题停靠在内容区顶部时留出的距离。
@@ -16,7 +16,12 @@ const PROGRAMMATIC_SCROLL_FALLBACK_MS = 800
 export const SETTINGS_SECTION_ATTR = 'data-settings-section'
 
 interface UseSettingsScrollSpyOptions {
-  containerRef: RefObject<HTMLElement>
+  /**
+   * 滚动容器元素本身（不是 ref）。设置弹窗的内容经 UiModal 在宿主文档确定后才挂载，
+   * 首次提交时容器还不存在；传元素才能在它挂载后重新绑定监听与测量占位，
+   * 传 ref 时 effect 只在首次提交读到 null 就再也不会重跑（尾部占位恒为 0）。
+   */
+  container: HTMLElement | null
   /** 当前大类下的分节 id，顺序即渲染顺序；用于在结构变化后重新测量 */
   sectionIds: string[]
   onActiveSectionChange: (sectionId: string) => void
@@ -40,7 +45,7 @@ function readSections(container: HTMLElement): HTMLElement[] {
  * （程序化滚动屏蔽、滚动判定、尾部占位测量），混在渲染代码里很难看出彼此的约束。
  */
 export function useSettingsScrollSpy({
-  containerRef,
+  container,
   sectionIds,
   onActiveSectionChange,
 }: UseSettingsScrollSpyOptions): UseSettingsScrollSpyResult {
@@ -63,7 +68,6 @@ export function useSettingsScrollSpy({
 
   const scrollToSection = useCallback(
     (sectionId: string, behavior: ScrollBehavior = 'smooth'): void => {
-      const container = containerRef.current
       if (!container) return
       const target = container.querySelector<HTMLElement>(
         `[${SETTINGS_SECTION_ATTR}="${sectionId}"]`
@@ -82,12 +86,11 @@ export function useSettingsScrollSpy({
       const delta = target.getBoundingClientRect().top - container.getBoundingClientRect().top
       container.scrollTo({ top: container.scrollTop + delta - SECTION_ANCHOR_OFFSET, behavior })
     },
-    [containerRef, releaseProgrammaticScroll]
+    [container, releaseProgrammaticScroll]
   )
 
   // 滚动判定：取「顶部已经越过判定线的最后一个分节」，滚到底时强制选中最后一个。
   useEffect(() => {
-    const container = containerRef.current
     if (!container) return
 
     let frame = 0
@@ -128,7 +131,7 @@ export function useSettingsScrollSpy({
       container.removeEventListener('scrollend', releaseProgrammaticScroll)
       if (frame !== 0) cancelAnimationFrame(frame)
     }
-  }, [containerRef, releaseProgrammaticScroll, sectionKey])
+  }, [container, releaseProgrammaticScroll, sectionKey])
 
   // 尾部占位测量。刻意只依赖「容器高度」和「最后一个分节高度」，不读 scrollHeight，
   // 否则占位本身会算进去，形成 ResizeObserver 的自激循环。
@@ -138,7 +141,6 @@ export function useSettingsScrollSpy({
   // 首测若排到 rAF，本帧的占位还是上一个大类的旧值，那次跳转就会停在半路，
   // 要等 DEEP_LINK_RESCROLL_MS 的补位才落位——用户看到的就是"先显示别处，过一会儿才跳"。
   useLayoutEffect(() => {
-    const container = containerRef.current
     if (!container) return
 
     let frame = 0
@@ -177,7 +179,7 @@ export function useSettingsScrollSpy({
       observer.disconnect()
       if (frame !== 0) cancelAnimationFrame(frame)
     }
-  }, [containerRef, sectionKey])
+  }, [container, sectionKey])
 
   useEffect(() => releaseProgrammaticScroll, [releaseProgrammaticScroll])
 

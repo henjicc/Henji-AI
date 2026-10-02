@@ -17,6 +17,7 @@ export const SETTINGS_SECTION_IDS = [
   'general-behavior',
   'general-maintenance',
   'general-mcp',
+  'general-about',
   'models-providers',
   'models-assistant',
   'models-upload',

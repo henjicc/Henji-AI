@@ -119,6 +119,8 @@ jspm_packages/
 *.tsbuildinfo
 src-tauri/
 resources/progress-seeds.json
+# 第三方许可清单（npm run gen:licenses 构建时生成）
+resources/licenses/
 dev-data/
 scratchpad_feed/
 nul
