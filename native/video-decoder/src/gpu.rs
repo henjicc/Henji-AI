@@ -1,5 +1,6 @@
 //! D3D11 设备：枚举 DXGI 适配器，在高性能硬件适配器上创建带视频支持的设备。
-//! 1.1 只用于握手报告；1.2/1.3 在同一设备上创建共享纹理与 D3D11VA 解码。
+//! 握手报告设备信息；共享纹理池（1.2）与 D3D11VA 解码（1.3）在同一设备上创建。
+//! 设备开启多线程保护，立即上下文另由互斥锁串行化（每个流的生产线程共用）。
 
 use serde_json::{json, Value};
 
@@ -13,10 +14,27 @@ mod imp {
     use windows::Win32::Graphics::Dxgi::*;
 
     pub struct GpuDevice {
-        /// 1.2 起用于创建共享纹理与 D3D11VA 解码；1.1 只持有以保持设备存活。
-        #[allow(dead_code)]
         pub device: ID3D11Device,
+        /// 立即上下文不是线程安全的：所有使用者先取锁。
+        pub context: std::sync::Mutex<ID3D11DeviceContext>,
+        adapter: IDXGIAdapter1,
         pub summary: Value,
+    }
+
+    impl GpuDevice {
+        /// 处理延迟销毁的资源（已释放的纹理在下一次 Flush 时才归还显存）。
+        pub fn flush(&self) {
+            let context = self.context.lock().unwrap();
+            unsafe { context.Flush() };
+        }
+
+        /// 本进程在本地显存段的占用与预算（字节）。用于资源回收验收与统计。
+        pub fn local_memory(&self) -> Option<(u64, u64)> {
+            let adapter = self.adapter.cast::<IDXGIAdapter3>().ok()?;
+            let mut info = DXGI_QUERY_VIDEO_MEMORY_INFO::default();
+            unsafe { adapter.QueryVideoMemoryInfo(0, DXGI_MEMORY_SEGMENT_GROUP_LOCAL, &mut info) }.ok()?;
+            Some((info.CurrentUsage, info.Budget))
+        }
     }
 
     fn adapter_value(desc: &DXGI_ADAPTER_DESC1) -> Value {
@@ -55,6 +73,26 @@ mod imp {
         }
         let named: Vec<&str> = NAMED_DECODER_PROFILES.iter().filter(|(_, guid)| guids.contains(guid)).map(|(name, _)| *name).collect();
         json!({ "available": true, "count": count, "named": named })
+    }
+
+    /// 各共享格式在本设备上的纹理支持（只用于诊断日志；能否被 Chromium 导入以实测为准）。
+    fn shared_format_support(device: &ID3D11Device) -> Value {
+        use crate::test_pattern::SharedFormat;
+        let formats = [SharedFormat::Nv12, SharedFormat::Nv16, SharedFormat::P010le, SharedFormat::Rgba, SharedFormat::Bgra, SharedFormat::Rgbaf16];
+        let mut support = serde_json::Map::new();
+        for format in formats {
+            let flags = unsafe { device.CheckFormatSupport(crate::shared_texture::dxgi_format(format)) }.unwrap_or(0) as i32;
+            support.insert(
+                format.name().into(),
+                json!({
+                    "texture2d": flags & D3D11_FORMAT_SUPPORT_TEXTURE2D.0 != 0,
+                    "shaderLoad": flags & D3D11_FORMAT_SUPPORT_SHADER_LOAD.0 != 0,
+                    "shaderSample": flags & D3D11_FORMAT_SUPPORT_SHADER_SAMPLE.0 != 0,
+                    "renderTarget": flags & D3D11_FORMAT_SUPPORT_RENDER_TARGET.0 != 0,
+                }),
+            );
+        }
+        Value::Object(support)
     }
 
     fn feature_level_name(level: D3D_FEATURE_LEVEL) -> String {
@@ -98,14 +136,19 @@ mod imp {
         }
         .map_err(|error| format!("D3D11CreateDevice 失败：{error}"))?;
         let device = device.ok_or_else(|| "D3D11CreateDevice 未返回设备".to_string())?;
+        if let Ok(multithread) = device.cast::<ID3D11Multithread>() {
+            let _ = unsafe { multithread.SetMultithreadProtected(true) };
+        }
+        let context = unsafe { device.GetImmediateContext() }.map_err(|error| format!("获取立即上下文失败：{error}"))?;
         let summary = json!({
             "available": true,
             "adapter": adapter_value(&selected_desc),
             "featureLevel": feature_level_name(feature_level),
             "videoDecoderProfiles": decoder_profiles(&device),
+            "sharedFormats": shared_format_support(&device),
             "adapters": adapters.iter().map(|(_, desc)| adapter_value(desc)).collect::<Vec<_>>(),
         });
-        Ok(GpuDevice { device, summary })
+        Ok(GpuDevice { device, context: std::sync::Mutex::new(context), adapter: selected, summary })
     }
 }
 

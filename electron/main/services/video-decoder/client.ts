@@ -3,14 +3,21 @@ import type { Readable, Writable } from 'node:stream'
 import type { MainLogger } from '../logging/main-logger'
 import {
   encodeVideoDecoderFrame,
+  isVideoDecoderEvent,
   isVideoDecoderResponse,
   nativeErrorCode,
   VIDEO_DECODER_PROTOCOL_VERSION,
   VideoDecoderError,
   VideoDecoderFrameReader,
   type VideoDecoderCommand,
+  type VideoDecoderEvent,
   type VideoDecoderHello,
+  type VideoDecoderNotification,
   type VideoDecoderProbeResult,
+  type VideoDecoderStats,
+  type VideoDecoderStreamStarted,
+  type VideoDecoderStreamStopped,
+  type VideoDecoderTestStreamRequest,
 } from './protocol'
 
 /** 子进程最小形状：生产用 child_process.spawn，测试注入假进程。 */
@@ -36,6 +43,9 @@ export interface VideoDecoderRestartPolicy {
 
 export type VideoDecoderServiceState = 'idle' | 'starting' | 'ready' | 'restarting' | 'failed' | 'unavailable' | 'stopped'
 
+/** 进程生命周期通知：`exited` 时该进程创建的帧流与句柄全部失效；`ready` 为新进程握手完成。 */
+export type VideoDecoderLifecycleEvent = { type: 'ready'; pid: number } | { type: 'exited'; pid: number | undefined }
+
 export interface VideoDecoderServiceOptions {
   resolveExecutable: () => string | null
   logger: Pick<MainLogger, 'debug' | 'info' | 'warn' | 'error'>
@@ -45,6 +55,8 @@ export interface VideoDecoderServiceOptions {
   shutdownTimeoutMs?: number
   restart?: Partial<VideoDecoderRestartPolicy>
   now?: () => number
+  /** 纹理句柄复制目标（Electron 主进程）。默认当前进程。 */
+  clientPid?: number
 }
 
 export interface VideoDecoderRequestOptions {
@@ -93,6 +105,8 @@ export class VideoDecoderService {
   private crashTimes: number[] = []
   private restartTimer: ReturnType<typeof setTimeout> | null = null
   private stderrTail = ''
+  private readonly eventListeners = new Set<(event: VideoDecoderEvent) => void>()
+  private readonly lifecycleListeners = new Set<(event: VideoDecoderLifecycleEvent) => void>()
 
   constructor(options: VideoDecoderServiceOptions) {
     this.options = {
@@ -101,6 +115,7 @@ export class VideoDecoderService {
       requestTimeoutMs: 30_000,
       shutdownTimeoutMs: 3_000,
       now: Date.now,
+      clientPid: process.pid,
       ...options,
       restart: { ...DEFAULT_RESTART_POLICY, ...options.restart },
     }
@@ -149,6 +164,45 @@ export class VideoDecoderService {
     return this.call<VideoDecoderProbeResult>({ type: 'probe', path: filePath }, options)
   }
 
+  /** 原生服务主动发出的事件（帧就绪、流结束）。返回取消订阅函数。 */
+  onEvent(listener: (event: VideoDecoderEvent) => void): () => void {
+    this.eventListeners.add(listener)
+    return () => this.eventListeners.delete(listener)
+  }
+
+  onLifecycle(listener: (event: VideoDecoderLifecycleEvent) => void): () => void {
+    this.lifecycleListeners.add(listener)
+    return () => this.lifecycleListeners.delete(listener)
+  }
+
+  async startTestStream(request: VideoDecoderTestStreamRequest, options: VideoDecoderRequestOptions = {}): Promise<VideoDecoderStreamStarted> {
+    return this.call<VideoDecoderStreamStarted>({ type: 'start_test_stream', ...request }, options)
+  }
+
+  async stopStream(streamId: string, options: VideoDecoderRequestOptions = {}): Promise<VideoDecoderStreamStopped> {
+    return this.call<VideoDecoderStreamStopped>({ type: 'stop_stream', streamId }, options)
+  }
+
+  async stats(options: VideoDecoderRequestOptions = {}): Promise<VideoDecoderStats> {
+    return this.call<VideoDecoderStats>({ type: 'stats' }, options)
+  }
+
+  /** 关闭上一个服务进程遗留在本进程里的纹理句柄（服务异常退出后调用）。 */
+  async closeClientHandles(handles: string[], options: VideoDecoderRequestOptions = {}): Promise<{ closed: number; failed: string[] }> {
+    return this.call<{ closed: number; failed: string[] }>({ type: 'close_client_handles', handles }, options)
+  }
+
+  /**
+   * 发送不等待响应的通知（如 release_frame）。只发给当前就绪的进程；进程已退出时返回 false，
+   * 由调用方按生命周期事件统一回收。
+   */
+  notify(notification: VideoDecoderNotification): boolean {
+    const child = this.child
+    if (!child || this.stateValue !== 'ready') return false
+    this.writeCommand(child, this.allocateId(), notification)
+    return true
+  }
+
   /** 主动关闭：发送 shutdown，超时后强制结束。关闭后实例不可再用。 */
   async shutdown(): Promise<void> {
     if (this.stateValue === 'stopped') return
@@ -183,7 +237,7 @@ export class VideoDecoderService {
     return id
   }
 
-  private writeCommand(child: VideoDecoderChildProcess, id: string, command: VideoDecoderCommand): void {
+  private writeCommand(child: VideoDecoderChildProcess, id: string, command: VideoDecoderCommand | VideoDecoderNotification): void {
     if (child.stdin.destroyed || !child.stdin.writable) return
     child.stdin.write(encodeVideoDecoderFrame({ id, ...command }))
   }
@@ -249,7 +303,7 @@ export class VideoDecoderService {
     this.stderrTail = ''
     this.attach(child, generation)
     try {
-      const hello = (await this.send(child, { type: 'hello' }, this.options.handshakeTimeoutMs)) as VideoDecoderHello
+      const hello = (await this.send(child, { type: 'hello', clientPid: this.options.clientPid }, this.options.handshakeTimeoutMs)) as VideoDecoderHello
       if (hello?.service !== 'henji-video-decoder' || hello.protocolVersion !== VIDEO_DECODER_PROTOCOL_VERSION) {
         throw new VideoDecoderError('HANDSHAKE_FAILED', `原生视频解码服务协议不匹配（${String(hello?.protocolVersion)}）`)
       }
@@ -259,6 +313,7 @@ export class VideoDecoderService {
       this.helloValue = hello
       this.stateValue = 'ready'
       this.logReady(hello, this.options.now() - startedAt)
+      this.emitLifecycle({ type: 'ready', pid: hello.pid })
       return hello
     } catch (error) {
       const failure = error instanceof VideoDecoderError ? error : new VideoDecoderError('HANDSHAKE_FAILED', String(error))
@@ -333,7 +388,27 @@ export class VideoDecoderService {
     child.once('exit', (code, signal) => this.handleChildGone(generation, child, { code, signal }))
   }
 
+  private emitLifecycle(event: VideoDecoderLifecycleEvent): void {
+    for (const listener of [...this.lifecycleListeners]) {
+      try {
+        listener(event)
+      } catch (error) {
+        this.options.logger.error('原生视频解码服务生命周期监听失败', { event: 'video_decoder.listener.failed', error, context: { type: event.type } })
+      }
+    }
+  }
+
   private handleMessage(message: unknown): void {
+    if (isVideoDecoderEvent(message)) {
+      for (const listener of [...this.eventListeners]) {
+        try {
+          listener(message)
+        } catch (error) {
+          this.options.logger.error('原生视频解码事件处理失败', { event: 'video_decoder.listener.failed', error, context: { type: message.event } })
+        }
+      }
+      return
+    }
     if (!isVideoDecoderResponse(message)) {
       this.options.logger.warn('忽略无法识别的原生视频解码服务消息', { event: 'video_decoder.protocol.unknown_message' })
       return
@@ -400,6 +475,7 @@ export class VideoDecoderService {
     this.rejectAll(intentional
       ? new VideoDecoderError('STOPPED', '原生视频解码服务已关闭')
       : new VideoDecoderError(startFailed ? 'START_FAILED' : 'PROCESS_EXITED', startFailed ? '原生视频解码服务启动失败' : '原生视频解码服务异常退出'))
+    this.emitLifecycle({ type: 'exited', pid: child?.pid })
     if (intentional) return
 
     const now = this.options.now()

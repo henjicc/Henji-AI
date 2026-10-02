@@ -23,6 +23,7 @@ import type { AssistantPlatform } from './assistant'
 import type { EmbeddedAgentPlatform } from '@/core/assistant/embeddedAgent'
 import type { ApplicationHostPlatform, McpPlatform } from '@/core/application-control/localHostContracts'
 import type { AudioEditPlatform } from './audioEdit'
+import type { VideoFramesPlatform } from './videoFrames'
 
 export interface PlatformRuntime {
   embeddedAgent: EmbeddedAgentPlatform
@@ -51,6 +52,7 @@ export interface PlatformRuntime {
   assetLibrary: AssetLibraryPlatform
   assistant: AssistantPlatform
   audioEdit: AudioEditPlatform
+  videoFrames: VideoFramesPlatform
 }
 
 export type {
@@ -77,6 +79,7 @@ export type {
   AssetLibraryPlatform,
   AssistantPlatform,
   AudioEditPlatform,
+  VideoFramesPlatform,
 }
 export * from './aiRuntime'
 export * from './llmRuntime'

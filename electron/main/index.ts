@@ -28,6 +28,7 @@ import { registerStoryboardProjectsIpc } from './ipc/storyboard-projects'
 import { registerSystemIpc } from './ipc/system'
 import { registerUpdaterIpc } from './ipc/updater'
 import { registerVideoIpc } from './ipc/video'
+import { registerVideoFramesIpc } from './ipc/video-frames'
 import { registerWindowIpc } from './ipc/window'
 import { registerEmbeddedAgentIpc, disposeEmbeddedAgent } from './ipc/embedded-agent'
 import { registerMcpIpc, disposeMcp } from './ipc/mcp'
@@ -112,6 +113,7 @@ app.whenReady().then(() => {
   registerSystemIpc()
   registerUpdaterIpc()
   registerVideoIpc()
+  registerVideoFramesIpc()
   registerWindowIpc()
   registerApplicationControlIpc()
   registerMcpIpc()

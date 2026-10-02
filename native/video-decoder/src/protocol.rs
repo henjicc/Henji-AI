@@ -1,25 +1,51 @@
 //! stdio 控制通道：每条消息为 4 字节小端长度前缀 + UTF-8 JSON。
 //!
-//! 控制通道只传请求、响应与小体积元数据；画面走显卡共享纹理（1.2），不经过本通道。
+//! 控制通道只传请求、响应、事件与小体积元数据；画面走显卡共享纹理，不经过本通道。
+//! 事件（服务主动发出）没有 `id`，以 `event` 字段区分，如 `frame`、`stream_ended`。
 
 use serde::Deserialize;
+
+use crate::test_pattern::SharedFormat;
 use serde_json::{json, Value};
 use std::io::{self, Read, Write};
 
-pub const PROTOCOL_VERSION: u32 = 1;
+/// 2：新增帧流命令（1.2）与 `frame`/`stream_ended` 事件；hello 携带 clientPid。
+pub const PROTOCOL_VERSION: u32 = 2;
 /// 单条控制消息上限。控制消息只含元数据，超过即视为协议错误，防止异常长度导致巨量分配。
 pub const MAX_MESSAGE_BYTES: usize = 16 * 1024 * 1024;
 
 #[derive(Debug, Deserialize, PartialEq)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[serde(tag = "type", rename_all = "snake_case", rename_all_fields = "camelCase")]
 pub enum Command {
-    Hello,
-    Probe { path: String },
-    Cancel {
-        #[serde(rename = "targetId")]
-        target_id: String,
+    /// `clientPid`：客户端（Electron 主进程）PID，纹理句柄复制到该进程。
+    Hello {
+        #[serde(default)]
+        client_pid: Option<u32>,
     },
+    Probe { path: String },
+    Cancel { target_id: String },
     Shutdown,
+    /// 合成测试画面帧流（1.2 纹理通道验证）。
+    StartTestStream {
+        stream_id: String,
+        format: SharedFormat,
+        width: u32,
+        height: u32,
+        fps: f64,
+        #[serde(default)]
+        pool_size: Option<u32>,
+        #[serde(default)]
+        max_frames: Option<u64>,
+        #[serde(default)]
+        keyed_mutex: Option<bool>,
+    },
+    StopStream { stream_id: String },
+    /// 通知：客户端已释放该槽位的全部引用。不产生响应。
+    ReleaseFrame { stream_id: String, slot: u32 },
+    /// 服务资源统计（CPU、句柄、显存、流计数）。
+    Stats,
+    /// 关闭上一个服务进程遗留在客户端进程里的纹理句柄（服务异常退出后由客户端发起）。
+    CloseClientHandles { handles: Vec<String> },
 }
 
 #[derive(Debug, Deserialize)]
@@ -128,12 +154,24 @@ mod tests {
     fn parses_commands() {
         let hello = parse_request(br#"{"id":"1","type":"hello"}"#).unwrap();
         assert_eq!(hello.id, "1");
-        assert_eq!(hello.command, Command::Hello);
+        assert_eq!(hello.command, Command::Hello { client_pid: None });
+        let hello = parse_request(br#"{"id":"1","type":"hello","clientPid":4242}"#).unwrap();
+        assert_eq!(hello.command, Command::Hello { client_pid: Some(4242) });
         let probe = parse_request(r#"{"id":"2","type":"probe","path":"C:\\a b\\视频.mp4"}"#.as_bytes()).unwrap();
         assert_eq!(probe.command, Command::Probe { path: "C:\\a b\\视频.mp4".into() });
         let cancel = parse_request(br#"{"id":"3","type":"cancel","targetId":"2"}"#).unwrap();
         assert_eq!(cancel.command, Command::Cancel { target_id: "2".into() });
         assert_eq!(parse_request(br#"{"id":"4","type":"shutdown"}"#).unwrap().command, Command::Shutdown);
+        let start = parse_request(br#"{"id":"5","type":"start_test_stream","streamId":"s","format":"p010le","width":3840,"height":2160,"fps":60,"poolSize":8}"#).unwrap();
+        assert_eq!(
+            start.command,
+            Command::StartTestStream { stream_id: "s".into(), format: SharedFormat::P010le, width: 3840, height: 2160, fps: 60.0, pool_size: Some(8), max_frames: None, keyed_mutex: None }
+        );
+        let release = parse_request(br#"{"id":"6","type":"release_frame","streamId":"s","slot":3}"#).unwrap();
+        assert_eq!(release.command, Command::ReleaseFrame { stream_id: "s".into(), slot: 3 });
+        assert!(parse_request(br#"{"id":"7","type":"start_test_stream","streamId":"s","format":"yuv444","width":64,"height":64,"fps":60}"#).is_err());
+        let close = parse_request(br#"{"id":"8","type":"close_client_handles","handles":["1234"]}"#).unwrap();
+        assert_eq!(close.command, Command::CloseClientHandles { handles: vec!["1234".into()] });
     }
 
     #[test]

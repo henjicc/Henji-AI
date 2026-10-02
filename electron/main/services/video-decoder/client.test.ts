@@ -3,7 +3,7 @@ import { PassThrough } from 'node:stream'
 import { describe, expect, it } from 'vitest'
 import type { MainLoggerMeta } from '../logging/main-logger'
 import { VideoDecoderService, type VideoDecoderChildProcess, type VideoDecoderServiceOptions } from './client'
-import { encodeVideoDecoderFrame, VideoDecoderError, VideoDecoderFrameReader, type VideoDecoderHello } from './protocol'
+import { encodeVideoDecoderFrame, VIDEO_DECODER_PROTOCOL_VERSION, VideoDecoderError, VideoDecoderFrameReader, type VideoDecoderEvent, type VideoDecoderHello } from './protocol'
 
 type Message = { id: string; type: string; [key: string]: unknown }
 type Handler = (message: Message, child: FakeChild) => void
@@ -49,7 +49,7 @@ class FakeChild extends EventEmitter {
 const HELLO: VideoDecoderHello = {
   service: 'henji-video-decoder',
   serviceVersion: '0.1.0',
-  protocolVersion: 1,
+  protocolVersion: VIDEO_DECODER_PROTOCOL_VERSION,
   pid: 0,
   ffmpeg: {
     version: 'n8.1.2-test',
@@ -324,5 +324,38 @@ describe('VideoDecoderService', () => {
   it('maps native error codes', async () => {
     const { service } = createHarness(standardHandler({ probe: (message, child) => child.fail(message.id, 'OPEN_FAILED', '无法打开文件') }))
     await expectCode(service.probe('D:\\missing.mov'), 'OPEN_FAILED')
+  })
+
+  it('registers the client pid, dispatches native events and sends notifications without awaiting replies', async () => {
+    const { service, children } = createHarness(standardHandler({
+      start_test_stream: (message, child) => {
+        child.reply(message.id, { streamId: message.streamId, slots: [{ slot: 0, handle: '1234' }] })
+        child.stdout.write(encodeVideoDecoderFrame({ event: 'frame', streamId: message.streamId, slot: 0, frameIndex: 0, timestampUs: 0 }))
+      },
+      stats: (message, child) => child.reply(message.id, { streams: [] }),
+    }), { clientPid: 4242 })
+    const received: VideoDecoderEvent[] = []
+    const unsubscribe = service.onEvent((event) => received.push(event))
+    expect(service.notify({ type: 'release_frame', streamId: 's', slot: 0 })).toBe(false)
+    await service.startTestStream({ streamId: 's', format: 'nv12', width: 3840, height: 2160, fps: 60 })
+    expect(children[0].received.find((message) => message.type === 'hello')?.clientPid).toBe(4242)
+    await waitFor(() => received.length === 1)
+    expect(received[0]).toMatchObject({ event: 'frame', streamId: 's', slot: 0 })
+    expect(service.notify({ type: 'release_frame', streamId: 's', slot: 0 })).toBe(true)
+    await waitFor(() => children[0].received.some((message) => message.type === 'release_frame'))
+    unsubscribe()
+    children[0].stdout.write(encodeVideoDecoderFrame({ event: 'stream_ended', streamId: 's', reason: 'completed', message: null, counters: {} }))
+    await service.stats()
+    expect(received).toHaveLength(1)
+  })
+
+  it('emits lifecycle events so stream owners can drop handles of a crashed process', async () => {
+    const { service, children } = createHarness(standardHandler())
+    const lifecycle: string[] = []
+    service.onLifecycle((event) => lifecycle.push(`${event.type}:${event.pid}`))
+    await service.ensureStarted()
+    children[0].exit(1)
+    await waitFor(() => lifecycle.length === 3)
+    expect(lifecycle).toEqual(['ready:1000', 'exited:1000', 'ready:1001'])
   })
 })

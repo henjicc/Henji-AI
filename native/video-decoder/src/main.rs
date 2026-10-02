@@ -3,13 +3,19 @@
 //! 控制面：stdin/stdout 交换长度前缀 JSON（见 protocol.rs）；stderr 输出一行一 JSON 的结构化日志，
 //! 由主进程转入统一日志。stdin 关闭即退出，父进程异常结束时服务不会残留。
 //!
-//! 1.1 范围：hello（版本、FFmpeg 信息、D3D11 设备）、probe（流信息）、cancel、shutdown。
+//! 命令：hello（版本、FFmpeg 信息、D3D11 设备、登记客户端 PID）、probe（流信息）、cancel、shutdown；
+//! 帧流（1.2）：start_test_stream、stop_stream、release_frame（通知）、stats、close_client_handles。
+//! 画面经显卡共享纹理交给客户端，控制通道只发 `frame` 事件（槽位与时间戳）。
 
 mod ffmpeg_info;
 mod gpu;
 mod logging;
 mod probe;
 mod protocol;
+#[cfg(windows)]
+mod shared_texture;
+mod streams;
+mod test_pattern;
 
 use serde_json::{json, Value};
 use std::collections::HashMap;
@@ -24,6 +30,7 @@ const SERVICE_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 type CancelMap = Arc<Mutex<HashMap<String, Arc<AtomicBool>>>>;
 
+/// 写出一条消息（响应或事件）；stdout 锁保证多线程写出不交错。
 fn send(value: &Value) {
     let mut stdout = io::stdout().lock();
     if let Err(error) = protocol::write_message(&mut stdout, value) {
@@ -40,10 +47,13 @@ fn respond(id: &str, result: Result<Value, ServiceError>) {
 }
 
 struct Service {
-    gpu: Option<gpu::GpuDevice>,
+    gpu: Option<Arc<gpu::GpuDevice>>,
     gpu_summary: Value,
     ffmpeg: Value,
     cancels: CancelMap,
+    #[cfg(windows)]
+    client: Option<Arc<shared_texture::ClientProcess>>,
+    streams: streams::StreamManager,
 }
 
 impl Service {
@@ -52,14 +62,95 @@ impl Service {
         let (gpu, gpu_summary) = match gpu::create_device() {
             Ok(device) => {
                 let summary = device.summary.clone();
-                (Some(device), summary)
+                (Some(Arc::new(device)), summary)
             }
             Err(reason) => {
                 logging::warn("gpu.device_unavailable", "D3D11 设备不可用", json!({ "reason": reason }));
                 (None, gpu::unavailable_summary(&reason))
             }
         };
-        Self { gpu, gpu_summary, ffmpeg: ffmpeg_info::ffmpeg_info(), cancels: Arc::default() }
+        Self {
+            gpu,
+            gpu_summary,
+            ffmpeg: ffmpeg_info::ffmpeg_info(),
+            cancels: Arc::default(),
+            #[cfg(windows)]
+            client: None,
+            streams: streams::StreamManager::new(),
+        }
+    }
+
+    /// 登记客户端进程（纹理句柄的复制目标）。打开失败不影响握手，帧流请求届时报错。
+    fn register_client(&mut self, client_pid: Option<u32>) -> Value {
+        #[cfg(windows)]
+        if let Some(pid) = client_pid {
+            if self.client.as_ref().is_some_and(|client| client.pid == pid) {
+                return json!({ "pid": pid, "ready": true });
+            }
+            return match shared_texture::ClientProcess::open(pid) {
+                Ok(client) => {
+                    self.client = Some(Arc::new(client));
+                    json!({ "pid": pid, "ready": true })
+                }
+                Err(reason) => {
+                    logging::warn("client.open_failed", &reason, json!({ "pid": pid }));
+                    json!({ "pid": pid, "ready": false, "reason": reason })
+                }
+            };
+        }
+        json!({ "pid": client_pid, "ready": false })
+    }
+
+    fn start_test_stream(&mut self, options: streams::TestStreamOptions) -> Result<Value, ServiceError> {
+        #[cfg(windows)]
+        {
+            let gpu = self.gpu.clone().ok_or_else(|| ServiceError::new("GPU_UNAVAILABLE", "D3D11 设备不可用"))?;
+            let client = self.client.clone().ok_or_else(|| ServiceError::new("CLIENT_UNAVAILABLE", "尚未登记客户端进程，无法共享纹理"))?;
+            self.streams.start_test_stream(&gpu, &client, options)
+        }
+        #[cfg(not(windows))]
+        {
+            let _ = options;
+            Err(ServiceError::new("GPU_UNAVAILABLE", "原生视频解码只支持 Windows"))
+        }
+    }
+
+    fn close_client_handles(&self, handles: &[String]) -> Value {
+        let mut closed = 0;
+        let mut failed: Vec<String> = Vec::new();
+        #[cfg(windows)]
+        for handle in handles {
+            match (handle.parse::<u64>(), &self.client) {
+                (Ok(value), Some(client)) => match client.close_remote(value) {
+                    Ok(()) => closed += 1,
+                    Err(_) => failed.push(handle.clone()),
+                },
+                _ => failed.push(handle.clone()),
+            }
+        }
+        #[cfg(not(windows))]
+        failed.extend(handles.iter().cloned());
+        if closed > 0 || !failed.is_empty() {
+            logging::info("client.handles_closed", "已关闭遗留的客户端纹理句柄", json!({ "closed": closed, "failed": failed.len() }));
+        }
+        json!({ "closed": closed, "failed": failed })
+    }
+
+    fn stats(&self) -> Value {
+        #[cfg(windows)]
+        let (cpu_ms, handle_count, memory) = {
+            let (cpu_ms, handle_count) = shared_texture::process_usage();
+            (cpu_ms, handle_count, self.gpu.as_ref().and_then(|gpu| gpu.local_memory()))
+        };
+        #[cfg(not(windows))]
+        let (cpu_ms, handle_count, memory): (f64, u32, Option<(u64, u64)>) = (0.0, 0, None);
+        json!({
+            "pid": std::process::id(),
+            "cpuMs": cpu_ms,
+            "handleCount": handle_count,
+            "gpuLocalMemory": memory.map(|(usage, budget)| json!({ "currentUsageBytes": usage, "budgetBytes": budget })),
+            "streams": self.streams.stats(),
+        })
     }
 
     fn hello(&self) -> Value {
@@ -106,7 +197,7 @@ impl Service {
 
 fn main() {
     let started = Instant::now();
-    let service = Service::new();
+    let mut service = Service::new();
     logging::info(
         "service.started",
         "原生视频解码服务已启动",
@@ -125,6 +216,7 @@ fn main() {
             Ok(Some(body)) => body,
             Ok(None) => {
                 logging::info("service.stdin_closed", "控制通道已关闭，服务退出", json!({}));
+                service.streams.stop_all();
                 break;
             }
             Err(error) => {
@@ -143,13 +235,48 @@ fn main() {
             }
         };
         match request.command {
-            Command::Hello => respond(&request.id, Ok(service.hello())),
+            Command::Hello { client_pid } => {
+                let client = service.register_client(client_pid);
+                let mut hello = service.hello();
+                hello["client"] = client;
+                respond(&request.id, Ok(hello))
+            }
             Command::Probe { path } => service.start_probe(request.id, path),
             Command::Cancel { target_id } => respond(&request.id, Ok(service.cancel(&target_id))),
+            Command::StartTestStream { stream_id, format, width, height, fps, pool_size, max_frames, keyed_mutex } => {
+                let options = streams::TestStreamOptions {
+                    stream_id,
+                    format,
+                    width,
+                    height,
+                    fps,
+                    pool_size: pool_size.unwrap_or(streams::DEFAULT_POOL_SIZE),
+                    max_frames,
+                    keyed_mutex: keyed_mutex.unwrap_or(true),
+                };
+                let stream_id = options.stream_id.clone();
+                let result = service.start_test_stream(options);
+                let started = result.is_ok();
+                if let Err(error) = &result {
+                    logging::warn("stream.start_failed", &error.message, json!({ "code": error.code, "streamId": stream_id }));
+                }
+                respond(&request.id, result);
+                if started {
+                    service.streams.activate(&stream_id);
+                }
+            }
+            Command::StopStream { stream_id } => {
+                let stopped = service.streams.stop(&stream_id);
+                respond(&request.id, Ok(json!({ "streamId": stream_id, "stopped": stopped.is_some(), "final": stopped })))
+            }
+            Command::ReleaseFrame { stream_id, slot } => service.streams.release_frame(&stream_id, slot),
+            Command::Stats => respond(&request.id, Ok(service.stats())),
+            Command::CloseClientHandles { handles } => respond(&request.id, Ok(service.close_client_handles(&handles))),
             Command::Shutdown => {
                 for flag in service.cancels.lock().unwrap().values() {
                     flag.store(true, Ordering::Relaxed);
                 }
+                service.streams.stop_all();
                 respond(&request.id, Ok(json!({ "stopping": true })));
                 logging::info("service.stopping", "收到关闭请求，服务退出", json!({}));
                 break;

@@ -1,5 +1,7 @@
 import { VideoEditRenderer } from './videoEditRenderer'
 import type { VideoEditComposition } from '@/core/videoEdit/document'
+import { VideoEditNativeFrameReceiver } from './videoEditNativeFrames'
+import { NativeFrameDiagnostics, type NativeFrameDiagnosticsRequest, type NativeFrameDiagnosticsResult } from './videoEditNativeFrameDiagnostics'
 
 export type RenderRequest = { id: number } & (
   { kind: 'init'; document: VideoEditComposition; previewWidth?: number; surface?: OffscreenCanvas; cacheBudgetBytes?: number } | { kind: 'update'; document: VideoEditComposition }
@@ -8,14 +10,32 @@ export type RenderRequest = { id: number } & (
   | { kind: 'render'; frame: number; sequential: boolean; scrubbing?: boolean; deadline?: number }
   | { kind: 'audio'; start: number; duration: number })
 export type RenderResponse = { id: number; phase?: 'submitted'; error?: string; bitmap?: ImageBitmap; sourceTimestamps?: number[]; channels?: Float32Array[]; cacheHits?: number; cacheBytes?: number; presented?: boolean; decodeMs?: number; gpuMs?: number; codeResources?: ReturnType<VideoEditRenderer['codeDiagnostics']> }
+/** 原生显卡帧通道（preload 交来的端口）。不进入渲染队列；接收端由 2.2 接入渲染器，诊断只供真实性测试。 */
+export type NativeFramesRequest =
+  | { kind: 'nativeFrames.attach'; port: MessagePort }
+  | { kind: 'nativeFrames.diagnose'; id: number; request: NativeFrameDiagnosticsRequest }
+export type NativeFramesResponse = { id: number; nativeFrames?: NativeFrameDiagnosticsResult; error?: string }
 let renderer: VideoEditRenderer | undefined
 let direct = false
 let revision = 0
 let queue = Promise.resolve()
-self.onmessage = (event: MessageEvent<RenderRequest>) => {
+let nativeFrames: VideoEditNativeFrameReceiver | undefined
+let nativeDiagnostics: NativeFrameDiagnostics | undefined
+function handleNativeFrames(request: NativeFramesRequest): void {
+  if (request.kind === 'nativeFrames.attach') { nativeFrames?.dispose(); nativeFrames = new VideoEditNativeFrameReceiver(request.port); nativeDiagnostics = undefined; return }
+  const receiver = nativeFrames
+  if (!receiver) { self.postMessage({ id: request.id, error: '原生帧通道尚未接入。' } satisfies NativeFramesResponse); return }
+  // 渲染 Worker 按 IIFE 打包，不能按需拆分加载；诊断模块很小且只在收到诊断消息时实例化。
+  nativeDiagnostics ??= new NativeFrameDiagnostics(receiver)
+  void nativeDiagnostics.handle(request.request).then(
+    result => self.postMessage({ id: request.id, nativeFrames: result } satisfies NativeFramesResponse),
+    error => self.postMessage({ id: request.id, error: error instanceof Error ? error.message : String(error) } satisfies NativeFramesResponse))
+}
+self.onmessage = (event: MessageEvent<RenderRequest | NativeFramesRequest>) => {
+  if (event.data.kind === 'nativeFrames.attach' || event.data.kind === 'nativeFrames.diagnose') { handleNativeFrames(event.data); return }
   const request = event.data
   if (request.kind === 'invalidate') { if (revision !== request.revision) { revision = request.revision; renderer?.cancelPresentation() } return }
-  if (request.kind === 'dispose') { revision = Number.MAX_SAFE_INTEGER; renderer?.cancelPresentation() }
+  if (request.kind === 'dispose') { revision = Number.MAX_SAFE_INTEGER; renderer?.cancelPresentation(); nativeFrames?.dispose(); nativeFrames = undefined; nativeDiagnostics = undefined }
   if (request.kind === 'init') revision = request.document.revision
   if (request.kind === 'update') revision = Math.max(revision, request.document.revision)
   queue = queue.then(async () => {

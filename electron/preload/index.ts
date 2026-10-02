@@ -44,6 +44,7 @@ import { createImageVideoApis } from './image-video-api'
 import { createImageEditorV3Api } from './image-editor-v3-api'
 import { createEmbeddedAgentApi } from './embedded-agent-api'
 import { createMcpApi } from './mcp-api'
+import { createVideoFramesApi } from './video-frames-api'
 
 type IpcResultEnvelope<T> =
   | { ok: true; data: T }
@@ -480,6 +481,7 @@ const api: HenjiNativeApi = {
   image: imageApi,
   imageEditorV3: imageEditorV3Api,
   video: videoApi,
+  videoFrames: createVideoFramesApi(nativeInvoke),
   audio: audioApi,
   clipboard: clipboardApi,
   drag: dragApi,

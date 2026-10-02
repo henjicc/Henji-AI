@@ -1,12 +1,24 @@
-import { app } from 'electron'
+import { app, sharedTexture } from 'electron'
 import { createMainLogger } from '../logging/main-logger'
 import { VideoDecoderService } from './client'
 import { resolveVideoDecoderExecutable } from './paths'
+import { VideoFrameBridge } from './texture-bridge'
 
 export { VideoDecoderService } from './client'
-export type { VideoDecoderServiceState, VideoDecoderRequestOptions } from './client'
+export type { VideoDecoderServiceState, VideoDecoderRequestOptions, VideoDecoderLifecycleEvent } from './client'
 export { VideoDecoderError } from './protocol'
-export type { VideoDecoderErrorCode, VideoDecoderHello, VideoDecoderProbeResult, VideoDecoderStreamInfo } from './protocol'
+export { VideoFrameBridge, VIDEO_FRAMES_STREAM_ENDED_CHANNEL, parseVideoFrameTestStreamRequest } from './texture-bridge'
+export type { VideoFrameBridgeStats, VideoFrameStreamInfo, VideoFrameTarget, VideoFrameTestStreamRequest } from './texture-bridge'
+export type {
+  VideoDecoderErrorCode,
+  VideoDecoderEvent,
+  VideoDecoderHello,
+  VideoDecoderProbeResult,
+  VideoDecoderStats,
+  VideoDecoderStreamInfo,
+  VideoDecoderStreamStarted,
+  VideoSharedFormat,
+} from './protocol'
 
 let service: VideoDecoderService | null = null
 
@@ -29,5 +41,23 @@ export function getVideoDecoderService(): VideoDecoderService {
     void created.shutdown()
   })
   service = created
+  return created
+}
+
+let bridge: VideoFrameBridge | null = null
+
+/** 主进程唯一的显卡纹理零拷贝桥（共用原生服务实例）。 */
+export function getVideoFrameBridge(): VideoFrameBridge {
+  if (bridge) return bridge
+  const created = new VideoFrameBridge({
+    service: getVideoDecoderService(),
+    sharedTexture,
+    logger: createMainLogger('main.video_frames'),
+    allowUnsupportedFormats: process.env.HENJI_VIDEO_FRAMES_UNSUPPORTED_FORMATS === '1',
+  })
+  app.once('will-quit', () => {
+    void created.dispose()
+  })
+  bridge = created
   return created
 }
