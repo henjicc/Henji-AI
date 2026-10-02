@@ -9,6 +9,7 @@ import { VideoEditGpuFrame, videoEditGpuFrameUsesChroma } from './videoEditGpuFr
 import { VideoEditCodeSources } from './videoEditCodeSources'
 import { codeMaterialImageIds } from '@/core/videoEdit/codeMaterialResources'
 import { videoEditSourceReadError } from './videoEditSourceErrors'
+import { scheduledVideoSamples } from './videoEditPlaybackDecoder'
 import { videoEditTransitionsAt } from '@/core/videoEdit/transitions'
 import { activeVideoEditEffects, buildVideoEditCompositePlan } from '@/core/videoEdit/compositing'
 import { renderVideoEditCompositeScene, videoEditCompositeSurfaceKeys } from './videoEditCompositeScene'
@@ -33,7 +34,8 @@ interface PlaybackStream {
 interface PlaybackSchedule { document: VideoEditComposition; endFrame: number; streams: PlaybackStream[]; byClip: Map<string, PlaybackStream> }
 /** Files decoded through one long-lived decoder each during forward playback. */
 const PLAYBACK_SCHEDULE_FILES = 4
-const PLAYBACK_SCHEDULE_SECONDS = 120
+// Sequences are at most 30 minutes; one schedule covers the rest of it, since a rebuild means new decoders.
+const PLAYBACK_SCHEDULE_SECONDS = 1800
 interface VideoSource {
   /** Key of the shared parsed container this clip's own sinks read from. */
   demux: string
@@ -214,7 +216,9 @@ export class VideoEditRenderer {
       const samples = (async function* (ready: Promise<SharedDemux>) {
         const shared = await ready
         if (!shared.video) return
-        yield* new VideoSampleSink(shared.video, shared.options).samplesAtTimestamps(timestamps)
+        // H.264 plays through one decoder that never flushes mid-playback; other codecs keep mediabunny's path.
+        if (shared.codec?.startsWith('avc')) yield* scheduledVideoSamples(shared.video, shared.options, timestamps)
+        else yield* new VideoSampleSink(shared.video, shared.options).samplesAtTimestamps(timestamps)
       })(demux.ready)
       const primed = samples.next(); primed.catch(() => undefined)
       const stream: PlaybackStream = { demux: demux.key, entries, cursor: 0, samples, primed, tail: Promise.resolve() }

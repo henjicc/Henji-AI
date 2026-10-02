@@ -7,7 +7,7 @@ const { observeWorkers, workerSnapshot, waitReleased } = require('./uiInspection
 const { dialogs, presented } = require('./uiInspectionSceneVideoEditMonitor.cjs')
 const button = (page, name) => page.getByRole('button', { name, exact: true })
 const group = (page, title) => page.locator('.dv-groupview').filter({ has: button(page, `关闭${title}`) })
-const ORIGINAL = 'D:/视频制作/0A0片头片尾和素材/2021片头V2 4K 60FPS.mp4'
+const ORIGINAL = process.env.HENJI_PERF_SOURCE || 'D:/视频制作/0A0片头片尾和素材/2021片头V2 4K 60FPS.mp4'
 const PROJECT_ID = 'video-edit-performance'
 const TILES = 9; const TILE = 420; const TOTAL = TILES * TILE
 // Fixed before measuring (5.1): a regression must fail, not be re-tuned.
@@ -101,10 +101,10 @@ function createVideoEditPerformanceScene() {
         const metricsBefore = memory(await app.evaluate(({ app }) => app.getAppMetrics()))
         // Opt-in Chromium trace for stall attribution; never part of normal acceptance timing.
         const tracing = process.env.HENJI_PERF_TRACE === '1'
-        if (tracing) await app.evaluate(({ contentTracing }) => contentTracing.startRecording({ included_categories: ['gpu', 'media', 'viz', 'disabled-by-default-gpu.service', 'disabled-by-default-media', 'toplevel'] }))
+        if (tracing) await app.evaluate(({ contentTracing }, categories) => contentTracing.startRecording({ included_categories: categories }), process.env.HENJI_PERF_TRACE_CATEGORIES ? process.env.HENJI_PERF_TRACE_CATEGORIES.split(',') : ['gpu', 'media', 'viz', 'disabled-by-default-gpu.service', 'disabled-by-default-media', 'toplevel'])
         const traceStart = tracing ? Number(process.env.HENJI_PERF_TRACE_START ?? 0) : 0
         await playback(traceStart, true); await page.waitForTimeout(500)
-        const frames = await measure(page, tracing ? 6 : 60)
+        const frames = await measure(page, tracing ? Number(process.env.HENJI_PERF_TRACE_SECONDS ?? 6) : 60)
         await playback(0, false)
         if (tracing) evidence.tracePath = await app.evaluate(({ contentTracing }, target) => contentTracing.stopRecording(target), path.join(root, 'playback.trace.json'))
         evidence.playback = summarize(frames); evidence.memoryBeforePlayback = metricsBefore; evidence.memoryAfterPlayback = memory(await app.evaluate(({ app }) => app.getAppMetrics()))

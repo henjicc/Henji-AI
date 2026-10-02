@@ -37,6 +37,11 @@ vi.mock('mediabunny', async () => {
     },
   }
 })
+// The playback decode pump has its own tests; here the schedule reads the same fake sink.
+vi.mock('./videoEditPlaybackDecoder', async () => {
+  const { VideoSampleSink } = await import('mediabunny')
+  return { scheduledVideoSamples: (track: ConstructorParameters<typeof VideoSampleSink>[0], options: ConstructorParameters<typeof VideoSampleSink>[1], timestamps: number[]) => new VideoSampleSink(track, options).samplesAtTimestamps(timestamps) }
+})
 vi.mock('./videoEditGpuCompositor', async () => {
   const { VideoEditGpuFrame } = await import('./videoEditGpuFrame')
   const { VideoEditCodePicture } = await import('./videoEditCodeGpu')
