@@ -14,7 +14,18 @@ import type { AudioWaveformAggregationOptions, AudioWaveformRangeRequest, AudioW
 const logger = createMainLogger('main.audio.waveform')
 const MICROSECONDS = 1_000_000
 const MAX_RANGE_US = 30 * 60 * MICROSECONDS
-interface AudioMetadata { sampleRate: number; channels: number; durationSeconds: number }
+/** Absolute range requests may overrun the probed end by printing/rounding differences between probes; the tail decodes as silence. */
+const END_TOLERANCE_US = 1000
+interface AudioMetadata {
+  sampleRate: number
+  channels: number
+  /** Decoded span (container end minus start): the legacy full-file timeline. */
+  durationSeconds: number
+  /** Container start on the absolute source clock; maps absolute seeks onto FFmpeg's `-ss`. */
+  startSeconds: number
+  /** Absolute media end, the same measure as the imported media duration. */
+  endSeconds: number
+}
 interface SourceIdentity { path: string; identity: string }
 interface AggregationWorker {
   start(options: AudioWaveformAggregationOptions): Promise<void>
@@ -103,15 +114,39 @@ async function runProcess(binary: string, args: string[], signal: AbortSignal, o
   return output
 }
 
+interface ProbedStream { codec_type?: string; sample_rate?: string; channels?: number; start_time?: string; duration?: string; disposition?: { attached_pic?: number } }
+const finiteSeconds = (value: string | undefined): number | undefined => {
+  if (value === undefined) return undefined
+  const seconds = Number(value)
+  return Number.isFinite(seconds) ? seconds : undefined
+}
+/**
+ * Absolute end of the latest picture or sound stream (start + duration), the import probe's duration
+ * (`videoEditFieldsFromNativeProbe`, mediabunny `computeDuration()`): a timeline starting after zero
+ * (MPEG program streams) keeps its tail and timecode/data tracks do not count. The container span is
+ * only a fallback when no stream reports a duration.
+ */
+export function audioWaveformAbsoluteEndSeconds(streams: readonly ProbedStream[], format: { start_time?: string; duration?: string } | undefined): number {
+  const end = (start: string | undefined, duration: string | undefined): number[] => {
+    const span = finiteSeconds(duration)
+    if (span === undefined || span < 0) return []
+    const offset = finiteSeconds(start)
+    return [span + (offset !== undefined && offset > 0 ? offset : 0)]
+  }
+  const streamEnds = streams.filter(stream => (stream.codec_type === 'video' && stream.disposition?.attached_pic !== 1) || stream.codec_type === 'audio').flatMap(stream => end(stream.start_time, stream.duration))
+  return Math.max(0, ...(streamEnds.length ? streamEnds : end(format?.start_time, format?.duration)))
+}
+
 async function probeAudio(binary: string, source: string, signal: AbortSignal): Promise<AudioMetadata> {
-  const text = await runProcess(binary, ['-v', 'error', '-show_entries', 'format=duration,start_time:stream=index,codec_type,sample_rate,channels,start_time,duration', '-of', 'json', source], signal)
-  const raw = JSON.parse(text) as { format?: { duration?: string; start_time?: string }; streams?: Array<{ codec_type?: string; sample_rate?: string; channels?: number; start_time?: string; duration?: string }> }
+  const text = await runProcess(binary, ['-v', 'error', '-show_entries', 'format=duration,start_time:stream=index,codec_type,sample_rate,channels,start_time,duration:stream_disposition=attached_pic', '-of', 'json', source], signal)
+  const raw = JSON.parse(text) as { format?: { duration?: string; start_time?: string }; streams?: ProbedStream[] }
   const stream = raw.streams?.find(item => item.codec_type === 'audio')
   const sampleRate = Number(stream?.sample_rate)
   const channels = stream?.channels ?? 0
   const durationSeconds = Number(raw.format?.duration ?? stream?.duration)
-  if (!Number.isInteger(sampleRate) || sampleRate < 1 || sampleRate > 768_000 || !Number.isInteger(channels) || channels < 1 || channels > 64 || !Number.isFinite(durationSeconds) || durationSeconds <= 0) throw new Error('音频采样率或时长不可用。')
-  return { sampleRate, channels, durationSeconds }
+  const endSeconds = audioWaveformAbsoluteEndSeconds(raw.streams ?? [], raw.format)
+  if (!Number.isInteger(sampleRate) || sampleRate < 1 || sampleRate > 768_000 || !Number.isInteger(channels) || channels < 1 || channels > 64 || !Number.isFinite(durationSeconds) || durationSeconds <= 0 || endSeconds <= 0) throw new Error('音频采样率或时长不可用。')
+  return { sampleRate, channels, durationSeconds, startSeconds: finiteSeconds(raw.format?.start_time) ?? 0, endSeconds }
 }
 
 export function createAudioWaveformService(dependencies: AudioWaveformServiceDependencies = {}): {
@@ -158,7 +193,8 @@ export function createAudioWaveformService(dependencies: AudioWaveformServiceDep
         const channelCount = request?.channels === 2 && metadata.channels >= 2 ? 2 : 1
         const startUs = request?.startUs ?? 0
         const endUs = request?.endUs ?? Math.round(metadata.durationSeconds * MICROSECONDS)
-        if (request && endUs > Math.round(metadata.durationSeconds * MICROSECONDS)) throw new Error('波形范围超出素材时长。')
+        // Range requests use the absolute source clock (container timestamps), the clock of imported media duration and clip source time.
+        if (request && endUs > Math.round(metadata.endSeconds * MICROSECONDS) + END_TOLERANCE_US) throw new Error('波形范围超出素材时长。')
         const first = audioWaveformSampleIndex(startUs, sampleRate)
         const expectedFrames = request ? audioWaveformSampleIndex(endUs, sampleRate) - first : Math.max(1, Math.round(metadata.durationSeconds * sampleRate))
         if (expectedFrames < 1) throw new Error('波形范围内没有完整采样时刻。')
@@ -166,10 +202,13 @@ export function createAudioWaveformService(dependencies: AudioWaveformServiceDep
         controller.signal.throwIfAborted()
         await worker.start({ format: request ? 'f32le' : 's16le', channels: channelCount, bucketCount: Math.floor(bucketCount), expectedFrames })
         const seekUs = Math.max(0, startUs - 100_000)
-        // Preserve container timestamps through accurate seek. first_pts trims preroll
-        // and inserts source-clock silence before delayed audio, without reducing sample rate.
+        // Keep absolute container timestamps (-copyts without -start_at_zero); FFmpeg's input -ss is
+        // relative to the container start, so the absolute seek is shifted by it (clamped at the start).
+        // first_pts trims preroll and inserts source-clock silence before a later audio start (delayed
+        // streams, MPEG-PS starting after zero), without reducing sample rate.
+        const seekArgUs = Math.max(0, seekUs - Math.round(metadata.startSeconds * MICROSECONDS))
         const args = request
-          ? ['-nostdin', '-v', 'error', '-copyts', '-start_at_zero', '-ss', String(seekUs / MICROSECONDS), '-t', String((endUs - seekUs) / MICROSECONDS + 2 / sampleRate), '-i', original.path, '-map', '0:a:0', '-vn', '-sn', '-dn', '-af', `aresample=${sampleRate}:async=1:first_pts=${first},atrim=end_sample=${expectedFrames},asetpts=PTS-STARTPTS`, '-ar', String(sampleRate), '-ac', String(channelCount), '-f', 'f32le', 'pipe:1']
+          ? ['-nostdin', '-v', 'error', '-copyts', '-ss', String(seekArgUs / MICROSECONDS), '-t', String((endUs - seekUs) / MICROSECONDS + 2 / sampleRate), '-i', original.path, '-map', '0:a:0', '-vn', '-sn', '-dn', '-af', `aresample=${sampleRate}:async=1:first_pts=${first},atrim=end_sample=${expectedFrames},asetpts=PTS-STARTPTS`, '-ar', String(sampleRate), '-ac', String(channelCount), '-f', 'f32le', 'pipe:1']
           : ['-nostdin', '-v', 'error', '-i', original.path, '-map', '0:a:0', '-vn', '-sn', '-dn', '-ar', '8000', '-ac', '1', '-f', 's16le', 'pipe:1']
         await runProcess(ffmpeg, args, controller.signal, chunk => worker!.push(chunk))
         const channels = await worker.finish()
@@ -178,7 +217,7 @@ export function createAudioWaveformService(dependencies: AudioWaveformServiceDep
         if (after.identity !== original.identity) throw new Error('音频素材在分析期间变化，请重新分析。')
         logger.debug('音频波形分析完成', { event: 'audio.waveform.completed', requestId, context: { sampleRate, channelCount, elapsedMs: performance.now() - startedAt } })
         return request
-          ? { startUs, endUs, durationSeconds: metadata.durationSeconds, sampleRate, channelCount, channels, fileIdentity: original.identity, ...(request.sourceRevision !== undefined ? { sourceRevision: request.sourceRevision } : {}) }
+          ? { startUs, endUs, durationSeconds: metadata.endSeconds, sampleRate, channelCount, channels, fileIdentity: original.identity, ...(request.sourceRevision !== undefined ? { sourceRevision: request.sourceRevision } : {}) }
           : { peak: channels[0].peak, rms: channels[0].rms, durationSeconds: metadata.durationSeconds }
       } catch (error) {
         if (controller.signal.aborted) logger.debug('音频波形分析取消', { event: 'audio.waveform.cancelled', requestId })

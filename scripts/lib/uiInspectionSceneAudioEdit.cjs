@@ -6,7 +6,7 @@ const path = require('node:path')
 function createAudioEditScene({ setupToolbox, clickNamedButton }) {
   return {
     id: 'toolbox-audio-edit-waveform', surface: '工具箱', name: '口播剪辑-波形与连续播放', writesUserData: true,
-    setup: async (page, electronApp) => {
+    setup: async (page) => {
       const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'henji-audio-waveform-'))
       const file = path.join(directory, 'waveform.wav')
       const rate = 48000
@@ -71,7 +71,12 @@ function createAudioEditScene({ setupToolbox, clickNamedButton }) {
       await page.getByTitle('播放', { exact: true }).click()
       await page.waitForFunction((rate) => Number(document.querySelector('[aria-label="口播波形定位"]').getAttribute('aria-valuenow')) > rate * 4.1, rate)
       assert.equal(await page.locator('[data-audio-word="middle"]').getAttribute('aria-current'), 'true')
-      assert.ok(await electronApp.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().some((window) => window.webContents.isCurrentlyAudible())), '真实 Electron 应输出音频')
+      // Automated instances run with --mute-audio: Chromium mutes the speaker (isCurrentlyAudible stays false) while
+      // the Web Audio graph keeps rendering. Verify the real pipeline instead: the speaker-bound context runs and its
+      // clock advances; the output RMS checks below prove the signal reaches the destination.
+      const audioClock = await page.evaluate(() => ({ state: window.__audioEditOutputTap.context.state, time: window.__audioEditOutputTap.context.currentTime }))
+      assert.equal(audioClock.state, 'running', '播放时音频管线应处于运行状态')
+      await page.waitForFunction((time) => window.__audioEditOutputTap.context.currentTime > time + 0.15, audioClock.time, { timeout: 5000 })
       const outputRms = () => page.evaluate(() => {
         const analyser = window.__audioEditOutputTap
         const samples = new Float32Array(analyser.fftSize)
@@ -104,11 +109,13 @@ function createAudioEditScene({ setupToolbox, clickNamedButton }) {
       await page.getByRole('button', { name: '显示全部', exact: true }).click()
       await seek(5)
       await page.getByTitle('播放', { exact: true }).click()
-      await page.locator('[data-audio-word="middle"]').dblclick()
+      // Transcript blocks: double-click edits the caption, right-click deletes the sound.
+      await page.locator('[data-audio-word="middle"]').click({ button: 'right' })
+      await page.waitForFunction(() => document.querySelector('[data-audio-word="middle"]').className.includes('line-through'))
       await page.waitForFunction((rate) => Number(document.querySelector('[aria-label="口播波形定位"]').getAttribute('aria-valuenow')) >= rate * 8, rate)
       assert.equal(await page.locator('[data-audio-deleted]').count(), 1, '相邻删除区间应合并')
       await page.getByTitle('暂停', { exact: true }).click()
-      await page.getByTitle('撤销', { exact: true }).click()
+      await page.getByRole('button', { name: '撤销；长按撤销所有修改', exact: true }).click()
       await page.waitForFunction(() => !document.querySelector('[data-audio-word="middle"]').className.includes('line-through'))
       // Tail playback must drain before the transport stops.
       await seek(11.5)

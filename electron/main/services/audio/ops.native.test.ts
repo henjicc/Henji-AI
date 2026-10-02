@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process'
+import { existsSync } from 'node:fs'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
@@ -69,6 +70,35 @@ describe.skipIf(process.env.HENJI_AUDIO_WAVEFORM_NATIVE !== '1')('real ffmpeg so
     expect(sought.channels[0].peak).toEqual(Array(16).fill(0.5))
     expect(sought.channels[0].rms).toEqual(Array(16).fill(0.5))
     expect(sought.channels[0].sampleCounts.reduce((a, b) => a + b, 0)).toBe(9600)
+  }, 20_000)
+  it('reads a container starting after zero on the absolute clock: silence before the start, the absolute end is in range', async () => {
+    const original = path.join(directory, 'offset-source.wav')
+    const shifted = path.join(directory, 'offset.mov')
+    await fs.writeFile(original, wav([Array(48000).fill(0.5)], 48000))
+    await run(binary, ['-nostdin', '-v', 'error', '-f', 'lavfi', '-i', 'color=c=black:s=16x16:r=10:d=1', '-i', original, '-map', '0:v:0', '-map', '1:a:0', '-c:v', 'mjpeg', '-c:a', 'pcm_f32le', '-output_ts_offset', '1', '-y', shifted], { windowsHide: true })
+    const analyzer = service()
+    const whole = await analyzer.extractRange({ source: shifted, startUs: 0, endUs: 2_000_000, bucketCount: 16, channels: 1 })
+    expect(whole.durationSeconds).toBeCloseTo(2, 3)
+    expect(whole.channels[0].peak.slice(0, 8)).toEqual(Array(8).fill(0))
+    expect(whole.channels[0].peak.slice(8)).toEqual(Array(8).fill(0.5))
+    const sought = await analyzer.extractRange({ source: shifted, startUs: 1_200_000, endUs: 1_400_000, bucketCount: 16, channels: 1 })
+    expect(sought.channels[0].peak).toEqual(Array(16).fill(0.5))
+    expect(sought.channels[0].sampleCounts.reduce((a, b) => a + b, 0)).toBe(9600)
+    const straddle = await analyzer.extractRange({ source: shifted, startUs: 900_000, endUs: 1_100_000, bucketCount: 16, channels: 1 })
+    expect(straddle.channels[0].peak.slice(0, 8)).toEqual(Array(8).fill(0))
+    expect(straddle.channels[0].peak.slice(8)).toEqual(Array(8).fill(0.5))
+  }, 20_000)
+  const mpegPs = path.resolve('node_modules/.cache/native-decode/mpeg2.mpg')
+  it.skipIf(!existsSync(mpegPs))('generates the whole-length waveform of the MPEG-PS sample that starts at 0.523s', async () => {
+    const analyzer = service()
+    // Imported duration: picture 0.533367 + 3.069733; sound spans 0.523344..3.523344.
+    const result = await analyzer.extractRange({ source: mpegPs, startUs: 0, endUs: 3_603_100, bucketCount: 64, channels: 2 })
+    expect(result.durationSeconds).toBeCloseTo(3.6031, 6)
+    const bucketUs = 3_603_100 / 64
+    const counts = result.channels[0].sampleCounts
+    expect(counts.reduce((a, b) => a + b, 0)).toBeGreaterThan(48000 * 2.99)
+    expect(result.channels[0].peak.slice(0, Math.floor(523_344 / bucketUs))).toEqual(Array(Math.floor(523_344 / bucketUs)).fill(0))
+    expect(Math.max(...result.channels[0].peak)).toBeGreaterThan(0)
   }, 20_000)
   it('rechecks file identity on legacy and range cache hits and never shares mutable arrays', async () => {
     const source = path.join(directory, 'refresh.wav')

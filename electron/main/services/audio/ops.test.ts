@@ -12,7 +12,7 @@ vi.mock('node:child_process', () => ({ spawn: mocks.spawn }))
 vi.mock('../logging', () => ({ createMainLogger: () => ({ debug: vi.fn(), error: vi.fn() }) }))
 vi.mock('../media/shared', () => ({ resolveLocalMediaPath: async (source: string) => source }))
 vi.mock('../image/source', () => ({ normalizeLocalSource: (source: string) => source }))
-import { createAudioWaveformService, audioWaveformSampleIndex, validateAudioWaveformRange } from './ops'
+import { createAudioWaveformService, audioWaveformAbsoluteEndSeconds, audioWaveformSampleIndex, validateAudioWaveformRange } from './ops'
 
 class Process extends EventEmitter {
   readonly stdout = new PassThrough()
@@ -75,6 +75,39 @@ describe('waveform extraction lifecycle and time bounds', () => {
     const output = await pending
     expect(output.channels[0].rms).toEqual(Array(16).fill(0.5)); expect(output.channels[1].peak).toEqual(Array(16).fill(2))
     expect(output.channels[0].sampleCounts).toEqual(Array(16).fill(3))
+    await analyzer.dispose()
+  })
+  it('validates and seeks on the absolute source clock when the container starts after zero', async () => {
+    // MPEG-PS sample: container 0.523344+3.079756, picture 0.533367+3.069733 (absolute end 3.6031), sound 0.523344+3.
+    const probe = { format: { start_time: '0.523344', duration: '3.079756' }, streams: [
+      { codec_type: 'video', start_time: '0.533367', duration: '3.069733', disposition: { attached_pic: 0 } },
+      { codec_type: 'audio', sample_rate: '48000', channels: 2, start_time: '0.523344', duration: '3.000000', disposition: { attached_pic: 0 } },
+      { codec_type: 'video', start_time: '0', duration: '9', disposition: { attached_pic: 1 } },
+    ] }
+    expect(audioWaveformAbsoluteEndSeconds(probe.streams, probe.format)).toBeCloseTo(3.6031, 9)
+    expect(audioWaveformAbsoluteEndSeconds([{ codec_type: 'data', start_time: '0', duration: '9' }], { start_time: '1.5', duration: '2' })).toBe(3.5)
+    mocks.spawn.mockImplementation((binary: string, args: string[]) => {
+      const child = new Process()
+      if (binary === 'probe') queueMicrotask(() => { child.stdout.end(JSON.stringify(probe)); child.emit('close', 0) })
+      else children.push({ process: child, args })
+      return child
+    })
+    const analyzer = service()
+    const whole = analyzer.extractRange({ ...request, startUs: 0, endUs: 3_603_100 })
+    await vi.waitFor(() => expect(children).toHaveLength(1))
+    const { process, args } = children[0]
+    expect(args).toContain('-copyts'); expect(args).not.toContain('-start_at_zero')
+    expect(Number(args[args.indexOf('-ss') + 1])).toBe(0)
+    expect(args).toContain(`aresample=48000:async=1:first_pts=0,atrim=end_sample=${audioWaveformSampleIndex(3_603_100, 48000)},asetpts=PTS-STARTPTS`)
+    process.stdout.end(samples(Array(96).fill(0.5))); process.emit('close', 0)
+    expect((await whole).durationSeconds).toBeCloseTo(3.6031, 9)
+    const sought = analyzer.extractRange({ ...request, startUs: 2_000_000, endUs: 2_100_000 })
+    await vi.waitFor(() => expect(children).toHaveLength(2))
+    // Absolute 1.9s preroll is 1.376656s after the container start, FFmpeg's -ss origin.
+    expect(Number(children[1].args[children[1].args.indexOf('-ss') + 1])).toBeCloseTo(1.376656, 9)
+    children[1].process.stdout.end(samples(Array(96).fill(0.5))); children[1].process.emit('close', 0)
+    await sought
+    await expect(analyzer.extractRange({ ...request, startUs: 3_000_000, endUs: 3_605_000 })).rejects.toThrow('超出素材时长')
     await analyzer.dispose()
   })
   it('retains permits after cancellation until child/stdIo close; queued work and dispose remain bounded', async () => {
