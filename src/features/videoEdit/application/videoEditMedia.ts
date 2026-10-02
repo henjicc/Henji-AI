@@ -4,7 +4,7 @@ import { toFetchableMediaUrl } from '@/services/imageSource'
 import { editVideoProject, requireVideoEditInstance } from './videoEditService'
 import type { VideoEditMedia, VideoEditDocument } from '@/core/videoEdit/document'
 import { createLogger } from '@/core/logging'
-import { VIDEO_EDIT_FRAME_RATES, videoEditFps } from '@/core/videoEdit/time'
+import { matchVideoEditFrameRate, resolveVideoEditMediaInspection, videoEditNativeMediaProbe, type VideoEditBrowserInspection, type VideoEditNativeProbeOutcome } from './videoEditMediaProbe'
 import type { AssetRecord } from '@/platform/contracts/assetLibrary'
 import { resolveVideoEditAssetReference, sameVideoEditAssetContent, videoEditAssetContentSnapshot } from './videoEditAssetReferences'
 import { verifyVideoEditMediaContent } from '../videoEditMediaContent'
@@ -41,20 +41,45 @@ async function inspectMedia(path: string, signal?: AbortSignal): Promise<VideoEd
     try { signal?.throwIfAborted(); return { ...base, kind: 'image', width: bitmap.width, height: bitmap.height, durationSeconds: 0 } } finally { bitmap.close() }
   }
   signal?.throwIfAborted()
+  // Native first for the decoding decision; the browser inspection runs alongside as fallback and metadata source.
+  // A native fault never blocks the fallback: it counts as the service being unavailable.
+  const forced = await videoEditNativeMediaProbe.forcedBackend()
+  const nativeProbe = forced === 'browser' ? Promise.resolve<VideoEditNativeProbeOutcome>({ status: 'unavailable' }) : videoEditNativeMediaProbe.probe(path, signal).catch((error: unknown): VideoEditNativeProbeOutcome => {
+    signal?.throwIfAborted()
+    logger.warn('原生素材探测异常，改用后备探测', { event: 'video_edit.media.inspect.native_failed', error })
+    return { status: 'unavailable' }
+  })
+  const [native, browser] = await Promise.all([nativeProbe, inspectBrowserMedia(path, signal)])
+  signal?.throwIfAborted()
+  const browserDecodes = browser.status === 'read' && Boolean(browser.media)
+  let resolved: ReturnType<typeof resolveVideoEditMediaInspection>
+  try { resolved = resolveVideoEditMediaInspection(path, native, browser, forced) } catch (error) {
+    logger.info('剪辑素材无法解码', { event: 'video_edit.media.inspect.undecodable', error, context: { native: native.status, browserDecodes, ...(forced ? { forced } : {}) } })
+    throw error
+  }
+  const { backend, nativeDecodes, fields } = resolved
+  // `backend` is the decoder that plays the file; `nativeDecodes` only reports the native probe's finding.
+  logger.info('剪辑素材探测完成', { event: 'video_edit.media.inspect.completed', context: { kind: fields.kind, backend, native: native.status, nativeDecodes, browserDecodes, ...(forced ? { forced } : {}) } })
+  return { ...base, ...fields }
+}
+/** Chromium's view of the file; an unreadable or undecodable file is a result, not an error. */
+async function inspectBrowserMedia(path: string, signal?: AbortSignal): Promise<VideoEditBrowserInspection> {
   const input = new Input({ source: new UrlSource(toFetchableMediaUrl(path), { maxCacheSize: 8 * 1024 * 1024, getRetryDelay: () => null }), formats: ALL_FORMATS })
   const cancel = (): void => input.dispose()
   signal?.addEventListener('abort', cancel, { once: true })
   try {
     const video = await input.getPrimaryVideoTrack()
     const audio = await input.getPrimaryAudioTrack()
-    if (!video && !audio) throw new Error('文件没有可用的音视频轨道。')
-    if (video && !await video.canDecode()) throw new Error('当前设备无法解码此视频，请先转为 H.264 SDR 视频。')
-    if (audio && !await audio.canDecode()) throw new Error('当前设备无法解码此音轨。')
+    const streams = { ...(video ? { video: { codec: video.codec, decodable: await video.canDecode() } } : {}), ...(audio ? { audio: { codec: audio.codec, decodable: await audio.canDecode() } } : {}) }
+    if ((!video && !audio) || streams.video?.decodable === false || streams.audio?.decodable === false) return { status: 'read', ...streams }
     const metrics = video ? await video.computeFrameRateMetrics({ targetPacketCount: 256 }) : undefined
-    const rate = metrics && metrics.probedPacketCount >= 2 && Number.isFinite(metrics.bestGuessFrameRate) ? VIDEO_EDIT_FRAME_RATES.find(rate => Math.abs(videoEditFps(rate) / metrics.bestGuessFrameRate - 1) < 0.001) : undefined
+    const rate = metrics && metrics.probedPacketCount >= 2 ? matchVideoEditFrameRate(metrics.bestGuessFrameRate) : undefined
     const durationSeconds = await input.computeDuration()
     signal?.throwIfAborted()
-    return { ...base, kind: video ? 'video' : 'audio', hasAudio: Boolean(audio), width: video?.displayWidth ?? 0, height: video?.displayHeight ?? 0, durationSeconds, ...(video ? { ...(rate ? { frameRate: rate } : {}), frameRateMode: metrics && metrics.probedPacketCount >= 2 ? metrics.frameRateIsConstant ? 'sampled-constant' as const : 'variable' as const : 'unknown' as const } : {}) }
+    return { status: 'read', ...streams, media: { kind: video ? 'video' : 'audio', hasAudio: Boolean(audio), width: video?.displayWidth ?? 0, height: video?.displayHeight ?? 0, durationSeconds, ...(video ? { ...(rate ? { frameRate: rate } : {}), frameRateMode: metrics && metrics.probedPacketCount >= 2 ? metrics.frameRateIsConstant ? 'sampled-constant' as const : 'variable' as const : 'unknown' as const } : {}) } }
+  } catch (error) {
+    signal?.throwIfAborted()
+    return { status: 'unreadable', error }
   } finally { signal?.removeEventListener('abort', cancel); input.dispose() }
 }
 function validateAssetMedia(media: VideoEditMedia, asset: AssetRecord): void {
@@ -143,9 +168,18 @@ export async function importVideoEditSources(projectId: string, sources: VideoEd
 export async function importVideoEditPaths(projectId: string, paths: string[], binId?: string): Promise<string[]> {
   return importVideoEditSources(projectId, paths.map(path => ({ path })), binId)
 }
+/**
+ * Import dialog formats: containers the media probe reads. Whether a file actually decodes is decided by
+ * inspection, which names the format when it cannot; dropped files are not filtered by extension at all.
+ */
+export const VIDEO_EDIT_IMPORT_EXTENSIONS = [
+  'mp4', 'm4v', 'mov', 'mxf', 'mkv', 'webm', 'avi', 'mpg', 'mpeg', 'm2ts', 'mts',
+  'mp3', 'wav', 'm4a', 'aac', 'flac', 'ogg', 'opus',
+  'png', 'jpg', 'jpeg', 'webp', 'avif',
+] as const
 export async function chooseVideoEditMedia(projectId: string, binId?: string): Promise<string[]> {
   const owner = requireVideoEditInstance(projectId)
-  const paths = await getPlatform().system.dialog.open({ multiple: true, filters: [{ name: '视频、图片与音频', extensions: ['mp4', 'mov', 'webm', 'mkv', 'mp3', 'wav', 'm4a', 'flac', 'ogg', 'png', 'jpg', 'jpeg', 'webp', 'avif'] }] })
+  const paths = await getPlatform().system.dialog.open({ multiple: true, filters: [{ name: '视频、图片与音频', extensions: [...VIDEO_EDIT_IMPORT_EXTENSIONS] }] })
   if (requireVideoEditInstance(projectId) !== owner) throw new Error('原工程已关闭，请重新导入。')
   return paths ? importVideoEditPaths(projectId, Array.isArray(paths) ? paths : [paths], binId) : []
 }

@@ -30,6 +30,7 @@ import type {
 } from './api-desktop'
 import type { HenjiImageEditorV3Api } from './image-editor-v3-api'
 import type { HenjiVideoFramesApi } from './api-video-frames'
+import type { HenjiVideoDecoderApi } from './api-video-decoder'
 
 export * from './api-assistant'
 export * from './api-projects'
@@ -38,6 +39,7 @@ export * from './api-media'
 export * from './api-desktop'
 export type { HenjiImageEditorV3Api } from './image-editor-v3-api'
 export type { HenjiVideoFramesApi } from './api-video-frames'
+export type { HenjiVideoDecoderApi } from './api-video-decoder'
 
 export interface HenjiNativeApi {
   embeddedAgent: EmbeddedAgentPlatform
@@ -71,6 +73,7 @@ export interface HenjiNativeApi {
   imageEditorV3: HenjiImageEditorV3Api
   video: HenjiVideoApi
   videoFrames: HenjiVideoFramesApi
+  videoDecoder: HenjiVideoDecoderApi
   audio: HenjiAudioApi
   clipboard: HenjiClipboardApi
   drag: HenjiDragApi

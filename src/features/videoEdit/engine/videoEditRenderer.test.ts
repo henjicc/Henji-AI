@@ -3,6 +3,8 @@ import { createVideoEditDocument, videoEditComposition, type VideoEditClip } fro
 import { VideoEditRenderer } from './videoEditRenderer'
 import type { CodeMaterialProgram } from '@/core/videoEdit/codeMaterial/contract'
 import { compileCodeMaterial } from '@/core/videoEdit/codeMaterial/compiler'
+import type { VideoSample } from 'mediabunny'
+import type { VideoEditFrameBackend } from './videoEditFrameSource'
 
 const boundary = vi.hoisted(() => ({ scheduled: [] as Array<{ path: string; timestamps: number[] }>, disposed: [] as string[], pictures: [] as number[], generatorCalls: 0, compilerCalls: 0, compilerDisposed: 0, failGenerator: false, released: [] as string[][], pendingCode: undefined as Promise<CodeMaterialProgram> | undefined, snapshotCalls: [] as boolean[], normalizedReleased: 0, pendingSnapshot: undefined as Promise<void> | undefined, draws: [] as Array<{ ids: string[]; timestamps: number[]; offscreen: boolean }>, mixes: [] as number[] }))
 vi.mock('@/core/logging', () => ({ createLogger: () => ({ debug: vi.fn(), warn: vi.fn() }) }))
@@ -340,4 +342,32 @@ it('源文件缺失时给出可操作的提示，失败不缓存；重新定位�
     await renderer.updateDocument(base)
     await renderer.render(0); expect(boundary.pictures).toEqual([1])
   } finally { await renderer.dispose() }
+})
+it('渲染器只经注入的帧源后端取帧：定位、顺序、正向计划与声音都走接口，打开与释放成对', async () => {
+  boundary.scheduled = []; const opened: string[] = []; const released: string[] = []; const calls: string[] = []
+  const picture = (timestamp: number) => ({ timestamp, duration: 1 / 60, format: 'NV12', close: vi.fn() }) as unknown as VideoSample
+  const backend: VideoEditFrameBackend = {
+    open(media) {
+      opened.push(media.path)
+      return { key: media.path, ready: Promise.resolve({ codec: 'avc1',
+        clipFrames: () => ({ async *frames(start: number) { calls.push('frames'); for (let frame = 0; frame < 4; frame++) yield picture(start + frame / 60) }, async frameAt(time: number) { calls.push('frameAt'); return picture(time) } }),
+        clipAudio: () => ({ async *chunks() { yield { timestamp: 0, duration: 2, numberOfFrames: 96000, numberOfChannels: 2, sampleRate: 48000, copyTo(data: Float32Array) { data.fill(.5) }, close: vi.fn() } } }),
+        async *schedule(timestamps: readonly number[]) { calls.push('schedule'); for (const time of timestamps) yield picture(time) },
+      }) }
+    },
+    release(key) { released.push(key) },
+    seeker(media, _cache, snapshot) { calls.push('seeker'); return { sample: async time => ({ sample: await snapshot(picture(time), true), hit: false }), dispose: async () => {} } },
+  }
+  const document = { ...fixture(), fps: 60, frameRate: { numerator: 60, denominator: 1 } }
+  const renderer = new VideoEditRenderer(document, 3840, undefined, 8 * 1024 ** 3, backend)
+  try {
+    await renderer.render(0); expect(boundary.pictures).toEqual([0])
+    await renderer.render(1, true); expect(boundary.pictures).toEqual([1 / 60])
+    await renderer.render(2, true); expect(boundary.pictures).toEqual([2 / 60])
+    expect(calls).toEqual(['seeker', 'frames', 'schedule'])
+    expect((await renderer.mixAudio(0, .01))[0][0]).toBe(.5)
+    // The production fallback is untouched: nothing reached mediabunny.
+    expect(boundary.disposed).toEqual([]); expect(boundary.scheduled).toEqual([])
+  } finally { await renderer.dispose() }
+  expect(opened.length).toBeGreaterThan(0); expect(released.sort()).toEqual(opened.sort())
 })

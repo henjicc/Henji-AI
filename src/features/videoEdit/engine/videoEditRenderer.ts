@@ -1,26 +1,19 @@
-import { ALL_FORMATS, AudioSampleSink, VideoSampleSink, VideoSample, Input, UrlSource } from 'mediabunny'
+import type { VideoSample } from 'mediabunny'
 import { videoEditClipMedia, activeVideoEditClips, audibleVideoEditClips, clipSourceSeconds, videoEditVisibleTracks, type VideoEditClip, type VideoEditComposition, type VideoEditMedia } from '@/core/videoEdit/document'
 import { videoEditSourceSeconds } from '@/core/videoEdit/time'
 import { videoEditCaptionClips } from '@/core/videoEdit/timedContent'
 import { VideoEditGpuCompositor } from './videoEditGpuCompositor'
 import { VideoEditFrameCache } from './videoEditFrameCache'
-import { VideoEditSeekDecoder } from './videoEditSeekDecoder'
 import { VideoEditGpuFrame, videoEditGpuFrameUsesChroma } from './videoEditGpuFrame'
 import { VideoEditCodeSources } from './videoEditCodeSources'
 import { codeMaterialImageIds } from '@/core/videoEdit/codeMaterialResources'
+import type { VideoEditClipAudio, VideoEditClipFrames, VideoEditFrameBackend, VideoEditFrameSeeker, VideoEditFrameSource } from './videoEditFrameSource'
+import { VideoEditBrowserFrames } from './videoEditBrowserFrames'
 import { videoEditSourceReadError } from './videoEditSourceErrors'
-import { scheduledVideoSamples } from './videoEditPlaybackDecoder'
 import { videoEditTransitionsAt } from '@/core/videoEdit/transitions'
 import { activeVideoEditEffects, buildVideoEditCompositePlan } from '@/core/videoEdit/compositing'
 import { renderVideoEditCompositeScene, videoEditCompositeSurfaceKeys } from './videoEditCompositeScene'
 
-interface SharedDemux {
-  input: Input
-  video: Awaited<ReturnType<Input['getPrimaryVideoTrack']>>
-  audio: Awaited<ReturnType<Input['getPrimaryAudioTrack']>>
-  options: { hardwareAcceleration: 'prefer-hardware' | 'no-preference'; optimizeForLatency: true }
-  codec?: string
-}
 interface PlaybackStream {
   demux: string
   entries: Array<{ frame: number; clipId: string }>
@@ -37,11 +30,11 @@ const PLAYBACK_SCHEDULE_FILES = 4
 // Sequences are at most 30 minutes; one schedule covers the rest of it, since a rebuild means new decoders.
 const PLAYBACK_SCHEDULE_SECONDS = 1800
 interface VideoSource {
-  /** Key of the shared parsed container this clip's own sinks read from. */
+  /** Key of the shared opened source this clip's own readers read from. */
   demux: string
   media: VideoEditMedia
-  video?: VideoSampleSink
-  audio?: AudioSampleSink
+  video?: VideoEditClipFrames
+  audio?: VideoEditClipAudio
   iterator?: AsyncGenerator<VideoSample, void, unknown>
   current?: VideoSample | VideoEditGpuFrame
   previousTime: number
@@ -51,7 +44,6 @@ interface VideoSource {
 }
 /** One bounded decoder per visible clip; all inputs close when the view detaches. */
 export class VideoEditRenderer {
-  private readonly demuxers = new Map<string, { users: number; input: Input; ready: Promise<SharedDemux> }>()
   private readonly sources = new Map<string, Promise<VideoSource>>()
   private playback?: PlaybackSchedule
   private lastForwardFrame?: number
@@ -60,58 +52,29 @@ export class VideoEditRenderer {
   private readonly imageQueue: Array<() => void> = []
   private disposed = false
   private readonly frameCache: VideoEditFrameCache
-  private readonly seekers = new Map<string, VideoEditSeekDecoder>()
+  private readonly seekers = new Map<string, VideoEditFrameSeeker>()
   readonly canvas: OffscreenCanvas
   private compositor?: VideoEditGpuCompositor
   private codeSources?: VideoEditCodeSources
   private presentationEpoch = 0
   codeDiagnostics() { return { sources: this.codeSources?.diagnostics(), gpu: this.compositor?.codeDiagnostics(), images: this.compositor?.imageDiagnostics(), decodedImages: this.images.size, decodedImageBytes: [...this.images.values()].reduce((sum, entry) => sum + entry.bytes, 0), imageDecodes: this.imageLoads } }
-  constructor(public document: VideoEditComposition, private readonly previewWidth?: number, surface?: OffscreenCanvas, cacheBudgetBytes = 8 * 1024 ** 3) {
+  /** `frames` is the only decoding dependency; the renderer never touches a decoder implementation. */
+  constructor(public document: VideoEditComposition, private readonly previewWidth?: number, surface?: OffscreenCanvas, cacheBudgetBytes = 8 * 1024 ** 3, private readonly frames: VideoEditFrameBackend = new VideoEditBrowserFrames()) {
     if (!Number.isSafeInteger(cacheBudgetBytes) || cacheBudgetBytes < 1 || cacheBudgetBytes > 8 * 1024 ** 3) throw new Error('预览缓存预算无效。')
     this.frameCache = new VideoEditFrameCache(cacheBudgetBytes)
     this.canvas = surface ?? new OffscreenCanvas(document.width, document.height)
     this.canvas.width = document.width; this.canvas.height = document.height
   }
-  /**
-   * One parsed container per source file and revision. Clips of the same file (cuts, repeats) only create
-   * their own sinks/decoder iterators, so a cut never re-opens and re-parses the file on the playback path.
-   */
-  private acquireDemux(media: VideoEditMedia): { key: string; ready: Promise<SharedDemux> } {
-    const key = `${media.path}\u0000${media.sourceRevision ?? ''}`
-    let entry = this.demuxers.get(key)
-    if (!entry) {
-      const input = new Input({ source: new UrlSource(media.path, { maxCacheSize: 32 * 1024 * 1024, getRetryDelay: () => null }), formats: ALL_FORMATS })
-      const ready = (async (): Promise<SharedDemux> => {
-        const [video, audio] = await Promise.all([input.getPrimaryVideoTrack(), input.getPrimaryAudioTrack()]).catch(error => { throw videoEditSourceReadError(media.name, error) })
-        const config = video ? await video.getDecoderConfig() : null
-        const preference = 'prefer-hardware'
-        const supported = config && (await VideoDecoder.isConfigSupported({ ...config, hardwareAcceleration: preference, optimizeForLatency: true })).supported
-        return { input, video, audio, options: { hardwareAcceleration: supported ? preference : 'no-preference', optimizeForLatency: true }, codec: config?.codec }
-      })()
-      const created = { users: 0, input, ready }
-      // A failed open is not cached: a restored or relinked file must be read again.
-      ready.catch(() => { if (this.demuxers.get(key) === created) { this.demuxers.delete(key); input.dispose() } })
-      entry = created
-      this.demuxers.set(key, entry)
-    }
-    entry.users++
-    return { key, ready: entry.ready }
-  }
-  private release(source: Pick<VideoSource, 'demux'>): void {
-    const entry = this.demuxers.get(source.demux)
-    if (!entry || --entry.users > 0) return
-    this.demuxers.delete(source.demux); entry.input.dispose()
-  }
+  private release(source: Pick<VideoSource, 'demux'>): void { this.frames.release(source.demux) }
   private source(key: string, media: VideoEditMedia): Promise<VideoSource> {
     let source = this.sources.get(key)
     if (!source) {
-      const demux = this.acquireDemux(media)
+      const demux = this.frames.open(media)
       source = (async () => {
         try {
           const shared = await demux.ready
           if (this.disposed) throw new Error('预览已关闭。')
-          // Sequential playback decodes the original compressed stream.
-          return { demux: demux.key, media, video: shared.video ? new VideoSampleSink(shared.video, shared.options) : undefined, audio: shared.audio ? new AudioSampleSink(shared.audio) : undefined, previousTime: -1, codec: shared.codec }
+          return { demux: demux.key, media, video: shared.clipFrames(), audio: shared.clipAudio(), previousTime: -1, codec: shared.codec }
         } catch (error) { this.release({ demux: demux.key }); if (this.sources.get(key) === source) this.sources.delete(key); throw error }
       })()
       this.sources.set(key, source)
@@ -212,14 +175,8 @@ export class VideoEditRenderer {
       for (const clip of group.clips) for (let at = Math.max(frame, clip.start); at < Math.min(endFrame, clip.start + clip.duration); at++) {
         entries.push({ frame: at, clipId: clip.id }); timestamps.push(clipSourceSeconds(clip, at, document.fps))
       }
-      const demux = this.acquireDemux(group.media)
-      const samples = (async function* (ready: Promise<SharedDemux>) {
-        const shared = await ready
-        if (!shared.video) return
-        // H.264 plays through one decoder that never flushes mid-playback; other codecs keep mediabunny's path.
-        if (shared.codec?.startsWith('avc')) yield* scheduledVideoSamples(shared.video, shared.options, timestamps)
-        else yield* new VideoSampleSink(shared.video, shared.options).samplesAtTimestamps(timestamps)
-      })(demux.ready)
+      const demux = this.frames.open(group.media)
+      const samples = (async function* (ready: Promise<VideoEditFrameSource>) { yield* (await ready).schedule(timestamps) })(demux.ready)
       const primed = samples.next(); primed.catch(() => undefined)
       const stream: PlaybackStream = { demux: demux.key, entries, cursor: 0, samples, primed, tail: Promise.resolve() }
       streams.push(stream); for (const clip of group.clips) byClip.set(clip.id, stream)
@@ -264,7 +221,7 @@ export class VideoEditRenderer {
     const pending = this.source(clip.id, media)
     void pending.then(source => {
       if (!source.video || source.iterator || source.prerolled) return
-      const iterator = source.video.samples(time)
+      const iterator = source.video.frames(time)
       source.iterator = iterator
       source.prerolled = (async () => {
         const next = await iterator.next()
@@ -344,14 +301,14 @@ export class VideoEditRenderer {
       } else if (this.previewWidth && (!sequential || time < source.previousTime)) {
         await source.iterator?.return(); source.iterator = undefined
         let seeker = this.seekers.get(media.path)
-        if (!seeker) { seeker = new VideoEditSeekDecoder(media.path, this.frameCache, (sample, compact) => this.compositor!.snapshot(sample, compact)); this.seekers.set(media.path, seeker) }
+        if (!seeker) { seeker = this.frames.seeker(media, this.frameCache, (sample, compact) => this.compositor!.snapshot(sample, compact)); this.seekers.set(media.path, seeker) }
         const direction = source.previousTime < 0 || Math.abs(time - source.previousTime) > 1 ? 0 : Math.sign(time - source.previousTime)
         const result = await seeker.sample(time, direction)
         if (result.hit) cacheHits++
         source.current?.close(); source.current = result.sample
       } else if (sequential || (this.previewWidth && time >= source.previousTime && time - source.previousTime <= 2)) {
         if (!source.iterator || time < source.previousTime || time - source.previousTime > 2) {
-          source.current?.close(); await source.iterator?.return(); source.iterator = source.video.samples(time); source.current = undefined
+          source.current?.close(); await source.iterator?.return(); source.iterator = source.video.frames(time); source.current = undefined
         }
         while (!source.current || source.current.timestamp + source.current.duration <= time + 1e-7) {
           const next = await source.iterator.next(); if (next.done) break
@@ -360,7 +317,7 @@ export class VideoEditRenderer {
       } else {
         source.current?.close(); await source.iterator?.return()
         source.iterator = undefined
-        source.current = await source.video.getSample(time) ?? undefined
+        source.current = await source.video.frameAt(time) ?? undefined
       }
       source.previousTime = time
       if (!source.current) throw new Error(`素材 ${media.name} 在此时间没有画面。`)
@@ -432,7 +389,7 @@ export class VideoEditRenderer {
       if (!source.audio) continue
       const sourceStart = videoEditSourceSeconds(clip) + from - clipStart
       const sourceEnd = sourceStart + to - from
-      for await (const wrapped of source.audio.samples(sourceStart, sourceEnd)) {
+      for await (const wrapped of source.audio.chunks(sourceStart, sourceEnd)) {
         try {
         const outputStart = Math.max(0, Math.ceil((from - sampleStartSeconds) * rate - 1e-7), Math.ceil((from + wrapped.timestamp - sourceStart - sampleStartSeconds) * rate - 1e-7))
         const outputEnd = Math.min(length, Math.ceil((to - sampleStartSeconds) * rate - 1e-7), Math.ceil((from + wrapped.timestamp + wrapped.duration - sourceStart - sampleStartSeconds) * rate - 1e-7))

@@ -8,7 +8,7 @@ const logger = createLogger('services.localMediaImport')
 
 const EXTENSION_KINDS: Record<string, LocalMediaKind> = {
   png: 'image', jpg: 'image', jpeg: 'image', gif: 'image', webp: 'image', bmp: 'image', avif: 'image', svg: 'image',
-  mp4: 'video', m4v: 'video', mov: 'video', webm: 'video', avi: 'video', mkv: 'video',
+  mp4: 'video', m4v: 'video', mov: 'video', webm: 'video', avi: 'video', mkv: 'video', mxf: 'video', mpg: 'video', mpeg: 'video', m2ts: 'video', mts: 'video',
   mp3: 'audio', wav: 'audio', flac: 'audio', ogg: 'audio', m4a: 'audio', aac: 'audio', opus: 'audio', pcm: 'audio',
 }
 

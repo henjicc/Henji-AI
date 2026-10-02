@@ -66,6 +66,8 @@ describe('localMediaImport', () => {
     expect(inferLocalMediaKind({ name: 'a.bin', type: 'image/png' })).toBe('image')
     expect(inferLocalMediaKind({ name: 'b.webm', type: '' })).toBe('video')
     expect(inferLocalMediaKind({ name: 'c.flac', type: '' })).toBe('audio')
+    expect(inferLocalMediaKind({ name: 'e.MXF', type: 'application/mxf' })).toBe('video')
+    expect(inferLocalMediaKind({ name: 'f.mts', type: 'model/vnd.mts' })).toBe('video')
     expect(inferLocalMediaKind({ name: 'd.pdf', type: 'application/pdf' })).toBeNull()
   })
 })

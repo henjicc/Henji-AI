@@ -23,6 +23,12 @@ const EXTENSION_FORMATS: Record<string, DetectedMediaFormat> = {
   '.webm': { kind: 'video', mimeType: 'video/webm', extension: 'webm' },
   '.avi': { kind: 'video', mimeType: 'video/x-msvideo', extension: 'avi' },
   '.mkv': { kind: 'video', mimeType: 'video/x-matroska', extension: 'mkv' },
+  // Professional and broadcast containers; decoding is decided by the consumer's own probe.
+  '.mxf': { kind: 'video', mimeType: 'application/mxf', extension: 'mxf' },
+  '.mpg': { kind: 'video', mimeType: 'video/mpeg', extension: 'mpg' },
+  '.mpeg': { kind: 'video', mimeType: 'video/mpeg', extension: 'mpeg' },
+  '.m2ts': { kind: 'video', mimeType: 'video/mp2t', extension: 'm2ts' },
+  '.mts': { kind: 'video', mimeType: 'video/mp2t', extension: 'mts' },
   '.mp3': { kind: 'audio', mimeType: 'audio/mpeg', extension: 'mp3' },
   '.wav': { kind: 'audio', mimeType: 'audio/wav', extension: 'wav' },
   '.flac': { kind: 'audio', mimeType: 'audio/flac', extension: 'flac' },
@@ -58,6 +64,14 @@ function detectBySignature(bytes: Uint8Array, extensionHint: string): DetectedMe
     return extensionHint === '.mkv' ? EXTENSION_FORMATS['.mkv'] : EXTENSION_FORMATS['.webm']
   }
   if (ascii(bytes, 0, 4) === 'RIFF' && ascii(bytes, 8, 4) === 'AVI ') return EXTENSION_FORMATS['.avi']
+  // MXF header partition pack: SMPTE universal label prefix.
+  if (startsWith(bytes, [0x06, 0x0e, 0x2b, 0x34])) return EXTENSION_FORMATS['.mxf']
+  // MPEG program stream pack header, or an MPEG-1/2 video sequence header.
+  if (startsWith(bytes, [0x00, 0x00, 0x01, 0xba]) || startsWith(bytes, [0x00, 0x00, 0x01, 0xb3])) {
+    return extensionHint === '.mpeg' ? EXTENSION_FORMATS['.mpeg'] : EXTENSION_FORMATS['.mpg']
+  }
+  // MPEG transport stream: sync byte per 188-byte packet, or after the 4-byte timestamp of 192-byte BDAV packets.
+  if ((extensionHint === '.m2ts' || extensionHint === '.mts') && (bytes[0] === 0x47 || bytes[4] === 0x47)) return EXTENSION_FORMATS[extensionHint]
   if (ascii(bytes, 0, 4) === 'RIFF' && ascii(bytes, 8, 4) === 'WAVE') return EXTENSION_FORMATS['.wav']
   if (ascii(bytes, 0, 4) === 'fLaC') return EXTENSION_FORMATS['.flac']
   if (ascii(bytes, 0, 4) === 'OggS') return extensionHint === '.opus' ? EXTENSION_FORMATS['.opus'] : EXTENSION_FORMATS['.ogg']

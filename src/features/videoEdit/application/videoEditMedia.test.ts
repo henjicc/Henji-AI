@@ -6,15 +6,17 @@ import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/te
 import { createApplicationHarness } from '@/tests/applicationHarness'
 import { HENJI_DRAG_DATA_MIME } from '@/contexts/dragDataTransfer'
 import { appendVideoEditMedia, closeVideoEditProject, createVideoEditProject, editVideoProject, listVideoEditInstances, openVideoEditProject, saveVideoEdit, undoVideoEdit } from './videoEditService'
-import { importVideoEditSources, relinkVideoEditMedia } from './videoEditMedia'
+import { importVideoEditSources, relinkVideoEditMedia, VIDEO_EDIT_IMPORT_EXTENSIONS } from './videoEditMedia'
+import { inferLocalMediaKind } from '@/services/localMediaImport'
+import { videoEditNativeMediaProbe } from './videoEditMediaProbe'
 import { dropVideoEditInput, readVideoEditDrop, videoEditDropPaths } from './videoEditDrop'
 
 const files = new Map<string, string>()
-const video = vi.hoisted(() => ({ duration: 3, fps: 60, hasAudio: false }))
+const video = vi.hoisted(() => ({ duration: 3, fps: 60, hasAudio: false, decodable: true }))
 vi.mock('mediabunny', () => ({
   ALL_FORMATS: [], UrlSource: class {},
   Input: class {
-    async getPrimaryVideoTrack() { return { displayWidth: 3840, displayHeight: 2160, canDecode: async () => true, computeFrameRateMetrics: async () => ({ probedPacketCount: 256, bestGuessFrameRate: video.fps, frameRateIsConstant: true }) } }
+    async getPrimaryVideoTrack() { return { codec: null, displayWidth: 3840, displayHeight: 2160, canDecode: async () => video.decodable, computeFrameRateMetrics: async () => ({ probedPacketCount: 256, bestGuessFrameRate: video.fps, frameRateIsConstant: true }) } }
     async getPrimaryAudioTrack() { return video.hasAudio ? { canDecode: async () => true } : null }
     async computeDuration() { return video.duration }
     dispose() {}
@@ -30,7 +32,7 @@ function deferred<T>() {
 }
 beforeEach(() => {
   installHarnessNativeStorage(); files.clear()
-  Object.assign(video, { duration: 3, fps: 60, hasAudio: false })
+  Object.assign(video, { duration: 3, fps: 60, hasAudio: false, decodable: true })
   vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/asset-reference.henji-video')
   vi.spyOn(getPlatform().system.fs, 'writeTextFile').mockImplementation(async (path, content) => { files.set(path, content) })
   vi.spyOn(getPlatform().system.fs, 'readTextFile').mockImplementation(async path => files.get(path)!)
@@ -161,4 +163,35 @@ it.each(['duration', 'fps', 'hasAudio'] as const)('旧视频首次可信绑定�
   const baseline = owner.document
   await expect(importVideoEditSources(id, [{ assetId: 'image-asset' }])).rejects.toThrow('时长、帧率或音轨')
   expect(owner.document).toBe(baseline); expect(owner.document.media[0].assetContent).toBeUndefined()
+})
+
+it('导入先问原生探测：原生播放接通前只有原生能解的专业格式按具体格式拒绝；原生不可用时给出格式提示；工程不变；原生故障不阻断后备', async () => {
+  const owner = (await createVideoEditProject())!; const id = owner.document.id
+  vi.spyOn(getPlatform().system.fs, 'exists').mockResolvedValue(true)
+  vi.spyOn(videoEditNativeMediaProbe, 'forcedBackend').mockResolvedValue(undefined)
+  video.decodable = false
+  const native = vi.spyOn(videoEditNativeMediaProbe, 'probe').mockResolvedValue({ status: 'unavailable' })
+  const baseline = owner.document
+  await expect(importVideoEditSources(id, [{ path: 'D:/media/lotus.mov' }])).rejects.toThrow('当前设备无法解码此视频（MOV 文件中的视频编码）')
+  native.mockResolvedValue({ status: 'probed', probe: { container: { formatName: 'mov,mp4,m4a,3gp,3g2,mj2', startTimeSeconds: 0, durationSeconds: 14.283 }, primaryVideoStreamIndex: 0, primaryAudioStreamIndex: null, streams: [
+    { index: 0, kind: 'video', codec: 'prores', profile: '4444', startTimeSeconds: 0, durationSeconds: 14.283, isAttachedPicture: false, decodable: true, video: { width: 2560, height: 2560, bitDepth: 12, chromaSubsampling: '4:4:4', hasAlpha: true, avgFrameRate: { num: 60, den: 1 }, realFrameRate: { num: 60, den: 1 }, rotationDegrees: null } },
+  ] } })
+  await expect(importVideoEditSources(id, [{ path: 'D:/media/lotus.mov' }])).rejects.toThrow('剪辑暂不能播放此视频格式（Apple ProRes 4444，12 位 4:4:4，带透明）')
+  expect(native).toHaveBeenCalledWith('D:/media/lotus.mov', undefined)
+  expect(owner.document).toBe(baseline)
+  video.decodable = true; native.mockRejectedValue(new Error('服务崩溃'))
+  await importVideoEditSources(id, [{ path: 'D:/media/clip.mp4' }])
+  expect(owner.document.media[0]).toMatchObject({ path: 'D:/media/clip.mp4', width: 3840, height: 2160, durationSeconds: 3, frameRateMode: 'sampled-constant' })
+  expect(Object.keys(owner.document.media[0]).sort()).toEqual(['durationSeconds', 'frameRate', 'frameRateMode', 'hasAudio', 'height', 'id', 'kind', 'name', 'path', 'width'])
+})
+it('诊断变量强制浏览器时不调用原生探测', async () => {
+  const owner = (await createVideoEditProject())!
+  vi.spyOn(getPlatform().system.fs, 'exists').mockResolvedValue(true)
+  vi.spyOn(videoEditNativeMediaProbe, 'forcedBackend').mockResolvedValue('browser')
+  const native = vi.spyOn(videoEditNativeMediaProbe, 'probe')
+  await importVideoEditSources(owner.document.id, [{ path: 'D:/media/clip.mp4' }])
+  expect(native).not.toHaveBeenCalled(); expect(owner.document.media).toHaveLength(1)
+})
+it('剪辑导入对话框的每种格式都能进入素材库，从素材库拖入不会被类型判定拦下', () => {
+  for (const extension of VIDEO_EDIT_IMPORT_EXTENSIONS) expect(inferLocalMediaKind({ name: `素材.${extension}`, type: '' }), extension).not.toBeNull()
 })

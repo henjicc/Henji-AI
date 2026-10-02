@@ -26,6 +26,7 @@ import { createElectronEmbeddedAgent } from './embeddedAgent'
 import { createElectronMcp } from './mcp'
 import { createElectronAudioEdit } from './audioEdit'
 import { createElectronVideoFrames } from './videoFrames'
+import { createElectronVideoDecoder } from './videoDecoder'
 
 export function createElectronPlatform(): PlatformRuntime {
   return {
@@ -56,5 +57,6 @@ export function createElectronPlatform(): PlatformRuntime {
     assistant: createElectronAssistant(),
     audioEdit: createElectronAudioEdit(),
     videoFrames: createElectronVideoFrames(),
+    videoDecoder: createElectronVideoDecoder(),
   }
 }

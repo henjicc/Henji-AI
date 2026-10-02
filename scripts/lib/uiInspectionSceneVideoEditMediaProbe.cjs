@@ -1,0 +1,182 @@
+const assert = require('node:assert/strict')
+const crypto = require('node:crypto')
+const fs = require('node:fs')
+const path = require('node:path')
+const { execFileSync } = require('node:child_process')
+const { dialogs, presented } = require('./uiInspectionSceneVideoEditMonitor.cjs')
+
+/**
+ * 剪辑素材探测（2.1）：原生探测优先、浏览器兜底在真实 Electron 中的结果。
+ * - 原生服务经平台层 probe 的元数据与同版本 ffprobe（BtbN 8.1）逐字段一致；
+ * - 只有原生能解的专业格式在原生播放接通（2.2）前按具体格式拒绝导入，工程不变；
+ * - H.264+AAC 照常导入（元数据来自浏览器探测），日志记录所选后端；
+ * - 诊断变量 HENJI_VIDEO_DECODER=browser|native 的行为（按本次进程环境断言）；
+ * - 2.1 改动前由应用保存的旧工程打开无迁移（文件逐字节不变）、能出画面。
+ */
+const button = (page, name) => page.getByRole('button', { name, exact: true })
+const ROOT = path.resolve('node_modules/.cache/video-edit-media-probe')
+const SAMPLES = path.resolve('node_modules/.cache/native-decode')
+const FFPROBE = path.resolve('native/video-decoder/ffmpeg/ffmpeg-n8.1.2-50-g1a748fe2cd-win64-lgpl-shared-8.1/bin/ffprobe.exe')
+const TRIPO_4444 = 'D:/视频制作/2026-09-19_Tripo/素材/010_荷花_高细节_独立透明缓转_v2.mov'
+const PROFESSIONAL = [
+  { file: path.join(SAMPLES, 'prores422hq.mov'), label: 'Apple ProRes HQ，10 位 4:2:2' },
+  { file: path.join(SAMPLES, 'dnxhr_hqx.mov'), label: 'Avid DNxHR HQX，10 位 4:2:2' },
+  { file: path.join(SAMPLES, 'dnxhr_hq.mxf'), label: 'Avid DNxHR HQ，8 位 4:2:2' },
+  { file: path.join(SAMPLES, 'mpeg2.mpg'), label: 'MPEG-2 Main，8 位 4:2:0' },
+  { file: TRIPO_4444, label: 'Apple ProRes 4444，12 位 4:4:4，带透明', optional: true },
+]
+const CONTROL = path.join(SAMPLES, 'h264_aac.mp4')
+/**
+ * Projects saved by the app before 2.1 (local evidence, frozen once): `legacy/<name>.henji-video` with every media
+ * file it references frozen under `legacy/media/<name>/`. Each run opens a copy whose media paths point at the frozen
+ * files, so other scenes regenerating their own caches cannot change the outcome.
+ * `monitor`: plain references, must present frame 0. `closure`: also holds a fixed asset-library reference whose
+ * identity (path, size, times, inode) cannot survive freezing, so the app must refuse that image as changed; the
+ * project itself must still load and stay byte-identical.
+ */
+const LEGACY = [{ name: 'monitor', fixedReference: false }, { name: 'closure', fixedReference: true }]
+const sha256 = (file) => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex')
+const rate = (text) => { const [num, den] = String(text).split('/').map(Number); return { num, den } }
+
+function ffprobe(file) {
+  const data = JSON.parse(execFileSync(FFPROBE, ['-v', 'error', '-show_streams', '-show_format', '-of', 'json', file], { windowsHide: true, encoding: 'utf8' }))
+  return { format: data.format, video: data.streams.find((stream) => stream.codec_type === 'video' && !stream.disposition?.attached_pic), audio: data.streams.find((stream) => stream.codec_type === 'audio') }
+}
+
+/** Renderer logs reach the main-process store asynchronously; poll until the expected event arrives. */
+async function logEvents(page, afterTimestamp, names, expected = names[0]) {
+  let events = []
+  for (let attempt = 0; attempt < 50; attempt++) {
+    events = await queryEvents(page, afterTimestamp, names)
+    if (events.some((event) => event.event === expected)) return events
+    await page.waitForTimeout(100)
+  }
+  return events
+}
+async function queryEvents(page, afterTimestamp, names) {
+  return page.evaluate(async ({ afterTimestamp, names }) => {
+    const result = await window.henjiNative.logging.queryLogEvents({ date: afterTimestamp.slice(0, 10), afterTimestamp, limit: 500 })
+    return result.events.filter((event) => names.includes(event.event)).map((event) => ({ event: event.event, level: event.level, context: event.context, error: event.error?.message ?? event.error }))
+  }, { afterTimestamp, names })
+}
+
+function createVideoEditMediaProbeScene() {
+  return {
+    id: 'video-edit-media-probe', surface: '剪辑', name: '剪辑-原生优先素材探测与专业格式导入提示', writesUserData: true,
+    setup: async (page, app) => {
+      fs.mkdirSync(ROOT, { recursive: true })
+      const forced = ['native', 'browser'].includes(String(process.env.HENJI_VIDEO_DECODER).toLowerCase()) ? String(process.env.HENJI_VIDEO_DECODER).toLowerCase() : null
+      const evidence = { forced, probes: [], imports: [], legacy: [] }
+      const evidencePath = path.join(ROOT, `evidence-${forced ?? 'auto'}.json`)
+      const store = () => fs.writeFileSync(evidencePath, JSON.stringify(evidence, null, 2))
+      const samples = PROFESSIONAL.filter((sample) => fs.existsSync(sample.file) || (!sample.optional && assert.fail(`缺少样本 ${sample.file}（先运行 1.1 的样本生成）`)))
+      assert.ok(fs.existsSync(CONTROL), `缺少对照样本 ${CONTROL}`)
+      try {
+        evidence.status = await page.evaluate(() => window.henjiNative.videoDecoder.status())
+        assert.equal(evidence.status.forcedBackend, forced, '诊断变量未经平台层传到渲染层')
+        assert.equal(evidence.status.available, true, '本机原生解码服务应可用')
+
+        // 1. 平台层原生探测与同版本 ffprobe 对照。
+        for (const sample of [...samples, { file: CONTROL }]) {
+          await page.evaluate((dir) => window.henjiNative.media.allowRoot(dir), path.dirname(sample.file))
+          const outcome = await page.evaluate((file) => window.henjiNative.videoDecoder.probe(`reality-${Date.now()}`, file), sample.file)
+          assert.equal(outcome.status, 'probed', `${sample.file} 原生探测失败：${JSON.stringify(outcome)}`)
+          const reference = ffprobe(sample.file)
+          const probe = outcome.probe
+          const video = probe.streams.find((stream) => stream.index === probe.primaryVideoStreamIndex)
+          const audio = probe.streams.find((stream) => stream.index === probe.primaryAudioStreamIndex)
+          const compared = {
+            codec: [video.codec, reference.video.codec_name], profile: [video.profile, reference.video.profile ?? null],
+            width: [video.video.width, reference.video.width], height: [video.video.height, reference.video.height],
+            avgFrameRate: [video.video.avgFrameRate, rate(reference.video.avg_frame_rate)],
+            containerStart: [probe.container.startTimeSeconds, Number(reference.format.start_time)],
+            containerDuration: [Math.round(probe.container.durationSeconds * 1e6), Math.round(Number(reference.format.duration) * 1e6)],
+            audioCodec: [audio?.codec ?? null, reference.audio?.codec_name ?? null],
+          }
+          for (const [field, [actual, expected]] of Object.entries(compared)) assert.deepEqual(actual, expected, `${path.basename(sample.file)} ${field} 与 ffprobe 8.1 不一致`)
+          assert.equal(video.decodable, true, `${path.basename(sample.file)} 原生应带解码器`)
+          evidence.probes.push({ file: sample.file, container: probe.container, video: { codec: video.codec, profile: video.profile, startTimeSeconds: video.startTimeSeconds, durationSeconds: video.durationSeconds, ...video.video }, audio: audio ? { codec: audio.codec, ...audio.audio } : null, ffprobeFieldsMatched: Object.keys(compared).length })
+        }
+        store()
+
+        // 2. 真实导入入口。
+        await button(page, '剪辑').first().click()
+        if (await button(page, '关闭工程').isVisible()) await button(page, '关闭工程').click()
+        const projectPath = path.join(ROOT, `import-${forced ?? 'auto'}.henji-video`); fs.rmSync(projectPath, { force: true })
+        await dialogs(app, [CONTROL], projectPath); await button(page, '新建工程').click()
+        const snapshot = () => fs.existsSync(projectPath) ? fs.readFileSync(projectPath, 'utf8') : null
+        const project = () => JSON.parse(snapshot() ?? '{"media":[]}')
+        for (let index = 0; index < 100 && !fs.existsSync(projectPath); index++) await page.waitForTimeout(50)
+        for (const sample of samples) {
+          const before = snapshot()
+          const startedAt = new Date().toISOString()
+          await dialogs(app, [sample.file], projectPath); await button(page, '导入').click()
+          // The log carries this import's own message; the banner may still show the previous one until replaced.
+          const events = await logEvents(page, startedAt, ['video_edit.media.inspect.undecodable'])
+          const event = events.find((item) => item.event === 'video_edit.media.inspect.undecodable')
+          assert.ok(event, `${path.basename(sample.file)} 缺少无法解码日志`)
+          const message = String(event.error)
+          if (forced === 'browser') assert.match(message, /^(当前设备无法解码此视频|当前无法读取此)/, `${path.basename(sample.file)} 提示不符`)
+          else assert.ok(message.startsWith(`剪辑暂不能播放此视频格式（${sample.label}）`), `${path.basename(sample.file)} 提示不符：${message}`)
+          await page.locator('body').getByText(message, { exact: true }).first().waitFor({ state: 'visible', timeout: 10000 })
+          assert.doesNotMatch(message, /原生|浏览器|native|browser|mediabunny|webcodecs|ffmpeg/i, '提示不能出现实现名称')
+          await page.waitForTimeout(300)
+          assert.equal(snapshot(), before, `${path.basename(sample.file)} 被拒绝后工程不能改变`)
+          assert.equal(event.context.native, forced === 'browser' ? 'unavailable' : 'probed')
+          evidence.imports.push({ file: sample.file, accepted: false, message, log: event.context })
+          store()
+        }
+        const startedAt = new Date().toISOString()
+        await dialogs(app, [CONTROL], projectPath); await button(page, '导入').click()
+        for (let index = 0; index < 200 && !project().media.some((media) => media.path === CONTROL); index++) await page.waitForTimeout(50)
+        const media = project().media.find((item) => item.path === CONTROL)
+        assert.ok(media, 'H.264+AAC 对照样本应能导入')
+        assert.deepEqual(Object.keys(media).sort(), ['durationSeconds', 'frameRate', 'frameRateMode', 'hasAudio', 'height', 'id', 'kind', 'name', 'path', 'width'], '素材字段不能新增')
+        assert.deepEqual({ kind: media.kind, width: media.width, height: media.height, hasAudio: media.hasAudio, frameRate: media.frameRate, frameRateMode: media.frameRateMode }, { kind: 'video', width: 3840, height: 2160, hasAudio: true, frameRate: { numerator: 60, denominator: 1 }, frameRateMode: 'sampled-constant' })
+        const completed = (await logEvents(page, startedAt, ['video_edit.media.inspect.completed']))[0]
+        assert.ok(completed, '缺少探测完成日志')
+        // Native playback is not wired yet (2.2): the file plays through the browser whatever the probe found.
+        assert.equal(completed.context.backend, 'browser', '原生播放接通前对照样本的实际播放后端必须是浏览器')
+        assert.equal(completed.context.nativeDecodes, forced !== 'browser', '日志单独记录原生能否解码')
+        assert.equal(completed.context.native, forced === 'browser' ? 'unavailable' : 'probed')
+        assert.equal(completed.context.browserDecodes, true)
+        evidence.imports.push({ file: CONTROL, accepted: true, media, log: completed.context })
+        store()
+
+        // 3. 2.1 改动前由应用保存的旧工程：打开不迁移。
+        for (const legacy of LEGACY) {
+          const source = path.join(ROOT, 'legacy', `${legacy.name}.henji-video`); const mediaDir = path.join(ROOT, 'legacy', 'media', legacy.name)
+          assert.ok(fs.existsSync(source) && fs.existsSync(mediaDir), `缺少旧工程快照 ${source}（本机证据，见 2.1 执行记录）`)
+          const document = JSON.parse(fs.readFileSync(source, 'utf8'))
+          for (const media of document.media) {
+            const frozen = path.join(mediaDir, path.basename(media.path))
+            assert.ok(fs.existsSync(frozen), `旧工程快照缺少素材 ${frozen}`)
+            media.path = frozen
+          }
+          const target = path.join(ROOT, `legacy-open-${forced ?? 'auto'}-${legacy.name}.henji-video`); fs.writeFileSync(target, JSON.stringify(document))
+          const hash = sha256(target)
+          if (await button(page, '关闭工程').isVisible()) await button(page, '关闭工程').click()
+          await dialogs(app, [target], target); await button(page, '打开工程').click()
+          let outcome = 'presented'
+          if (legacy.fixedReference) {
+            const refused = page.locator('body').getByText(/源文件已改变或丢失/).first()
+            outcome = await Promise.race([presented(page, 0).then(() => 'presented'), refused.waitFor({ state: 'visible', timeout: 90000 }).then(() => 'fixed_reference_refused')])
+          } else await presented(page, 0)
+          await page.waitForTimeout(1500)
+          assert.equal(sha256(target), hash, `${legacy.name} 打开后被改写（迁移）`)
+          evidence.legacy.push({ file: source, savedAt: fs.statSync(source).mtime.toISOString(), media: document.media.length, outcome, unchanged: true })
+          store()
+        }
+        evidence.completed = true
+        store()
+        console.log(`[video-edit-media-probe] ${JSON.stringify({ forced, probes: evidence.probes.length, refused: evidence.imports.filter((item) => !item.accepted).length, legacy: evidence.legacy.map((item) => item.outcome) })}`)
+      } catch (error) {
+        evidence.failed = String(error?.message ?? error)
+        store()
+        throw error
+      }
+    },
+  }
+}
+
+module.exports = { createVideoEditMediaProbeScene }
