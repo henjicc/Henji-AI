@@ -313,4 +313,37 @@ describe('代码GPU会话复用与资源边界', () => {
       expect(runtime.diagnostics().glyphs).toBe(64)
     } finally { await runtime.dispose(); vi.unstubAllGlobals() }
   })
+  it('高精度滤镜与混合保持 rgba16float，按输出格式分别编译，八位路径不变', async () => {
+    const { device, compiled } = gpu(); const runtime = new VideoEditCodeGpu(device)
+    const deep = await runtime.target('deep', 3840, 2160, 'rgba16float'); const plain = await runtime.target('plain', 3840, 2160)
+    expect([deep.highPrecision, plain.highPrecision]).toEqual([true, false])
+    const program = compileCodeMaterial(source('return sample(ctx.u,ctx.v);', 'filter'))
+    const format = (): string => (compiled.mock.lastCall?.[0] as { fragment: { targets: Array<{ format: string }> } }).fragment.targets[0].format
+    const filtered = await runtime.filter('deep-out', 'version', program, context, {}, deep)
+    expect(filtered.textureFormat).toBe('rgba16float'); expect(format()).toBe('rgba16float')
+    const ordinary = await runtime.filter('plain-out', 'version', program, context, {}, plain)
+    expect(ordinary.textureFormat).toBe('rgba8unorm'); expect(format()).toBe('rgba8unorm')
+    const compiles = runtime.diagnostics().pipelineCompiles
+    await runtime.filter('deep-out', 'version', program, context, {}, deep); await runtime.filter('plain-out', 'version', program, context, {}, plain)
+    expect(runtime.diagnostics().pipelineCompiles).toBe(compiles)
+    const mixed = await runtime.mix('mix', plain, filtered, .5)
+    expect(mixed.textureFormat).toBe('rgba16float'); expect(format()).toBe('rgba16float')
+    expect((await runtime.mix('plain-mix', plain, ordinary, .5)).textureFormat).toBe('rgba8unorm'); expect(format()).toBe('rgba8unorm')
+    // A key reused at another format is reallocated, never written in the old format.
+    expect((await runtime.target('plain', 3840, 2160, 'rgba16float')).textureFormat).toBe('rgba16float')
+    const frame = 3840 * 2160
+    expect(runtime.diagnostics()).toMatchObject({ surfaces: 6, residentBytes: frame * 8 * 4 + frame * 4 * 2, pipelines: 2 + 2 + 2 })
+    await runtime.dispose(); expect(runtime.diagnostics()).toMatchObject({ surfaces: 0, residentBytes: 0, pipelines: 0 })
+  })
+  it('高精度目标有独立的512MiB上限，不挤占八位256MiB预算', async () => {
+    const { device } = gpu(); const runtime = new VideoEditCodeGpu(device)
+    for (let index = 0; index < 8; index++) await runtime.target(`deep-${index}`, 3840, 2160, 'rgba16float')
+    await expect(runtime.target('deep-8', 3840, 2160, 'rgba16float')).rejects.toThrow('512MiB')
+    for (let index = 0; index < 7; index++) await runtime.target(`plain-${index}`, 3840, 2160)
+    expect(runtime.diagnostics().surfaces).toBe(15)
+    runtime.releaseUnused(new Set(Array.from({ length: 7 }, (_, index) => [`plain-${index}`, `deep-${index + 1}`]).flat()))
+    await runtime.target('deep-8', 3840, 2160, 'rgba16float')
+    expect(runtime.diagnostics()).toMatchObject({ surfaces: 15, residentBytes: 3840 * 2160 * (8 * 8 + 4 * 7) })
+    await runtime.dispose(); expect(runtime.diagnostics().residentBytes).toBe(0)
+  })
 })

@@ -6,8 +6,15 @@ import type { VideoEditGraphicDraw } from '@/core/videoEdit/graphics'
 import type { CodeColor, CodeDrawCommand, CodeMaterialContext, CodeMaterialProgram } from '@/core/videoEdit/codeMaterial/contract'
 import { emitCodeMaterialFilter } from './codeGpuFilter'
 import { measureVideoEditGlyph } from '../videoEditGlyphMetrics'
+import { videoEditGpuBytesPerPixel, VIDEO_EDIT_PRECISE_FORMAT, type VideoEditGpuColorFormat } from './videoEditGpuFrame'
 
 const MAX_RESIDENT_BYTES = 256 * 1024 ** 2
+/**
+ * Separate budget of `rgba16float` surfaces (task 2.7): effects and transitions on 10-bit and deeper material. Two
+ * effected 4K clips in a transition hold 7 full-frame surfaces (464 MB in rgba16float); 8 such 4K surfaces fit. The
+ * 8-bit budget above is unchanged.
+ */
+const MAX_PRECISE_RESIDENT_BYTES = 512 * 1024 ** 2
 const MAX_SURFACES = 16
 const blend = { color: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' }, alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' } }
 const shapeShader = `
@@ -56,9 +63,15 @@ export interface VideoEditCodeImageInput { texture: GpuTexture; width: number; h
 
 /** Texture belongs to the compositor's device, with premultiplied alpha. */
 export class VideoEditCodePicture {
-  constructor(readonly texture: GpuTexture, readonly width: number, readonly height: number, readonly owner: GpuDevice) {}
+  /** True for `rgba16float` surfaces: effects and transitions on high-precision material keep its precision. */
+  readonly highPrecision: boolean
+  constructor(readonly texture: GpuTexture, readonly width: number, readonly height: number, readonly owner: GpuDevice, readonly textureFormat: VideoEditGpuColorFormat = 'rgba8unorm') {
+    this.highPrecision = textureFormat === VIDEO_EDIT_PRECISE_FORMAT
+  }
 }
 interface Surface { picture: VideoEditCodePicture; bytes: number; buffers: GpuBuffer[]; filterBuffer?: GpuBuffer; mixBuffer?: GpuBuffer }
+/** A filter version's compiled pipelines, one per output format. */
+interface CompiledFilter { program: CodeMaterialProgram; pipelines: Map<VideoEditGpuColorFormat, GpuRenderPipeline>; transitionHandles: boolean }
 interface Glyph { texture: GpuTexture; width: number; height: number; bytes: number }
 interface FilterLayoutDevice {
   createBindGroupLayout(descriptor: unknown): unknown
@@ -67,18 +80,21 @@ interface FilterLayoutDevice {
 export class VideoEditCodeGpu {
   private readonly surfaces = new Map<string, Surface>()
   private readonly glyphs = new Map<string, Glyph>()
-  private readonly filters = new Map<string, { program: CodeMaterialProgram; pipeline: GpuRenderPipeline; transitionHandles: boolean }>()
-  private readonly filterCompiles = new Map<string, { program: CodeMaterialProgram; pending: Promise<GpuRenderPipeline> }>()
+  private readonly filters = new Map<string, CompiledFilter>()
+  /** Keyed by version and output format. */
+  private readonly filterCompiles = new Map<string, { version: string; program: CodeMaterialProgram; pending: Promise<GpuRenderPipeline> }>()
   private readonly retiredTextures = new WeakSet<GpuTexture>()
   private filterLayout?: unknown
   private shape!: GpuRenderPipeline
   private text!: GpuRenderPipeline
   private image?: GpuRenderPipeline
   private imageReady?: Promise<void>
-  private mixPipeline?: GpuRenderPipeline
-  private mixReady?: Promise<void>
+  private readonly mixPipelines = new Map<VideoEditGpuColorFormat, GpuRenderPipeline>()
+  private readonly mixReady = new Map<VideoEditGpuColorFormat, Promise<void>>()
   private sampler: unknown
   private bytes = 0
+  /** Part of `bytes` held by `rgba16float` surfaces. */
+  private preciseBytes = 0
   private disposed = false
   private readonly ready: Promise<void>
   private pending: Promise<void> = Promise.resolve()
@@ -114,15 +130,17 @@ export class VideoEditCodeGpu {
     ] })
     return this.filterLayout = device.createPipelineLayout({ bindGroupLayouts: [group] })
   }
-  private async prepareFilter(version: string, program: CodeMaterialProgram, transitionHandles: boolean): Promise<GpuRenderPipeline> {
+  private async prepareFilter(version: string, program: CodeMaterialProgram, transitionHandles: boolean, format: VideoEditGpuColorFormat = 'rgba8unorm'): Promise<GpuRenderPipeline> {
     const cached = this.filters.get(version)
-    const compiling = this.filterCompiles.get(version)
-    if ((cached && cached.program !== program) || (compiling && compiling.program !== program)) throw new CodeMaterialError('COMPATIBILITY', '不可变代码版本被替换，请使用新版本。')
+    const key = `${version}\u0000${format}`
+    const compiling = this.filterCompiles.get(key)
+    if ((cached && cached.program !== program) || [...this.filterCompiles.values()].some(entry => entry.version === version && entry.program !== program)) throw new CodeMaterialError('COMPATIBILITY', '不可变代码版本被替换，请使用新版本。')
     if (cached) {
       if (transitionHandles && !cached.transitionHandles) { emitCodeMaterialFilter(program, true); cached.transitionHandles = true }
-      return cached.pipeline
+      const pipeline = cached.pipelines.get(format)
+      if (pipeline) return pipeline
     }
-    if (compiling) { await compiling.pending; return this.prepareFilter(version, program, transitionHandles) }
+    if (compiling) { await compiling.pending; return this.prepareFilter(version, program, transitionHandles, format) }
     if (this.filterCompiles.size >= 32) throw new CodeMaterialError('BUDGET', '代码滤镜同时最多32份编译。')
     const code = emitCodeMaterialFilter(program, transitionHandles)
     const pending = (async (): Promise<GpuRenderPipeline> => {
@@ -130,18 +148,23 @@ export class VideoEditCodeGpu {
       let pipeline: GpuRenderPipeline
       try {
         const module = this.device.createShaderModule({ code })
-        pipeline = this.device.createRenderPipeline({ layout: this.fixedFilterLayout(), vertex: { module, entryPoint: 'vs' }, fragment: { module, entryPoint: 'fs', targets: [{ format: 'rgba8unorm' }] }, primitive: { topology: 'triangle-list' } })
+        pipeline = this.device.createRenderPipeline({ layout: this.fixedFilterLayout(), vertex: { module, entryPoint: 'vs' }, fragment: { module, entryPoint: 'fs', targets: [{ format }] }, primitive: { topology: 'triangle-list' } })
       } catch (error) { await this.device.popErrorScope().catch(() => null); throw error }
       const error = await this.device.popErrorScope()
       if (error) throw new Error(`代码滤镜编译失败：${error.message}`)
       this.assertLive()
-      if (this.filters.size >= 32) this.filters.delete(this.filters.keys().next().value!)
-      this.filters.set(version, { program, pipeline, transitionHandles }); this.counts.pipelineCompiles++
+      const entry = this.filters.get(version)
+      if (entry && entry.program === program) { entry.pipelines.set(format, pipeline); entry.transitionHandles ||= transitionHandles }
+      else {
+        if (this.filters.size >= 32) this.filters.delete(this.filters.keys().next().value!)
+        this.filters.set(version, { program, pipelines: new Map([[format, pipeline]]), transitionHandles })
+      }
+      this.counts.pipelineCompiles++
       return pipeline
     })()
-    this.filterCompiles.set(version, { program, pending })
+    this.filterCompiles.set(key, { version, program, pending })
     try { return await pending }
-    finally { if (this.filterCompiles.get(version)?.pending === pending) this.filterCompiles.delete(version) }
+    finally { if (this.filterCompiles.get(key)?.pending === pending) this.filterCompiles.delete(key) }
   }
   private async prepareImagePipeline(): Promise<void> {
     if (this.image) return
@@ -159,20 +182,23 @@ export class VideoEditCodeGpu {
     try { await pending }
     catch (error) { if (this.imageReady === pending) this.imageReady = undefined; throw error }
   }
-  private texture(width: number, height: number): GpuTexture {
-    const bytes = width * height * 4
-    if (![width, height].every(value => Number.isInteger(value) && value >= 1 && value <= 8192) || bytes + this.bytes > MAX_RESIDENT_BYTES) throw new CodeMaterialError('BUDGET', '代码素材纹理超出尺寸或256MiB会话预算。')
-    const texture = this.device.createTexture({ size: [width, height], format: 'rgba8unorm', usage: 0x02 | 0x04 | 0x10 })
-    this.bytes += bytes; this.counts.textureAllocations++
+  private texture(width: number, height: number, format: VideoEditGpuColorFormat = 'rgba8unorm'): GpuTexture {
+    const bytes = width * height * videoEditGpuBytesPerPixel(format)
+    const precise = format === VIDEO_EDIT_PRECISE_FORMAT
+    if (![width, height].every(value => Number.isInteger(value) && value >= 1 && value <= 8192)) throw new CodeMaterialError('BUDGET', '代码素材纹理超出尺寸或256MiB会话预算。')
+    if (precise ? bytes + this.preciseBytes > MAX_PRECISE_RESIDENT_BYTES : bytes + this.bytes - this.preciseBytes > MAX_RESIDENT_BYTES) throw new CodeMaterialError('BUDGET', precise ? '高精度代码素材纹理超出512MiB会话预算。' : '代码素材纹理超出尺寸或256MiB会话预算。')
+    const texture = this.device.createTexture({ size: [width, height], format, usage: 0x02 | 0x04 | 0x10 })
+    this.bytes += bytes; if (precise) this.preciseBytes += bytes
+    this.counts.textureAllocations++
     return texture
   }
-  private surface(key: string, width: number, height: number): Surface {
+  private surface(key: string, width: number, height: number, format: VideoEditGpuColorFormat = 'rgba8unorm'): Surface {
     let surface = this.surfaces.get(key)
-    if (surface && (surface.picture.width !== width || surface.picture.height !== height)) { this.releaseSurface(key); surface = undefined }
+    if (surface && (surface.picture.width !== width || surface.picture.height !== height || surface.picture.textureFormat !== format)) { this.releaseSurface(key); surface = undefined }
     if (!surface) {
       if (this.surfaces.size >= MAX_SURFACES) throw new CodeMaterialError('BUDGET', '代码素材同时最多16个渲染目标。')
-      const texture = this.texture(width, height)
-      surface = { picture: new VideoEditCodePicture(texture, width, height, this.device), bytes: width * height * 4, buffers: [] }
+      const texture = this.texture(width, height, format)
+      surface = { picture: new VideoEditCodePicture(texture, width, height, this.device, format), bytes: width * height * videoEditGpuBytesPerPixel(format), buffers: [] }
       this.surfaces.set(key, surface)
     }
     return surface
@@ -183,7 +209,7 @@ export class VideoEditCodeGpu {
     if (cached) { this.glyphs.delete(key); this.glyphs.set(key, cached); return cached }
     const metrics = measureVideoEditGlyph(command.text, command.fontSize, command.fontFamily)
     const { width, height } = metrics
-    while (this.glyphs.size >= 64 || this.bytes + width * height * 4 > MAX_RESIDENT_BYTES) {
+    while (this.glyphs.size >= 64 || this.bytes - this.preciseBytes + width * height * 4 > MAX_RESIDENT_BYTES) {
       const oldest = [...this.glyphs].find(([key]) => !protectedKeys.has(key))
       if (!oldest) break
       oldest[1].texture.destroy(); this.bytes -= oldest[1].bytes; this.glyphs.delete(oldest[0])
@@ -270,9 +296,11 @@ export class VideoEditCodeGpu {
     for (const name of ['localTime', 'sequenceTime', 'width', 'height', 'frame', 'fps'] as const) { const value = context[name]; if (typeof value !== 'number' || !Number.isFinite(value) || Math.abs(value) > 432000) throw new CodeMaterialError('CONTEXT', `滤镜时间上下文无效：${name}`) }
     if (shaderTime > 1800 || context.sequenceTime < 0 || context.sequenceTime > 1800 || context.localTime < (transitionHandles ? -1800 : 0) || context.localTime > 1800 || !Number.isInteger(context.frame) || context.frame < 0 || context.frame > 432000 || context.fps < 1 || context.fps > 240) throw new CodeMaterialError('CONTEXT', '滤镜时间或帧率超出范围。')
     await this.ready; this.assertLive(); this.assertInput(input.texture)
-    const pipeline = await this.prepareFilter(version, program, transitionHandles)
+    // The output keeps the input's precision: an effect on 10-bit material stays rgba16float.
+    const format = input.textureFormat
+    const pipeline = await this.prepareFilter(version, program, transitionHandles, format)
     this.assertLive(); this.assertInput(input.texture)
-    const target = this.surface(key, context.width, context.height)
+    const target = this.surface(key, context.width, context.height, format)
     if (target.picture.texture === input.texture) throw new CodeMaterialError('CONTEXT', '滤镜输入输出不能引用同一纹理。')
     target.filterBuffer ??= this.device.createBuffer({ size: 35 * 16, usage: 0x08 | 0x40 })
     const packed = new Float32Array(35 * 4)
@@ -290,13 +318,17 @@ export class VideoEditCodeGpu {
     pass.draw(3); pass.end(); this.submit(encoder); this.counts.filterFrames++
     return target.picture
   }
-  /** All generated, filtered and composition targets share this same resident budget. */
-  async target(key: string, width: number, height: number): Promise<VideoEditCodePicture> {
-    await this.ready; this.assertLive(); return this.surface(key, width, height).picture
+  /**
+   * All generated, filtered and composition targets share the resident budget of their format: `rgba16float` targets
+   * hold compositions of high-precision material (task 2.7).
+   */
+  async target(key: string, width: number, height: number, format: VideoEditGpuColorFormat = 'rgba8unorm'): Promise<VideoEditCodePicture> {
+    await this.ready; this.assertLive(); return this.surface(key, width, height, format).picture
   }
-  private async prepareMix(): Promise<void> {
-    if (this.mixPipeline) return
-    const pending = this.mixReady ??= (async () => {
+  private async prepareMix(format: VideoEditGpuColorFormat): Promise<void> {
+    if (this.mixPipelines.has(format)) return
+    let pending = this.mixReady.get(format)
+    if (!pending) pending = (async () => {
       this.device.pushErrorScope('validation')
       let pipeline: GpuRenderPipeline
       try {
@@ -313,28 +345,32 @@ struct Vertex { @builtin(position) position:vec4f, @location(0) uv:vec2f }
 @fragment fn fs(v:Vertex)->@location(0) vec4f {
  return mix(textureSample(left,s,v.uv),textureSample(right,s,v.uv),amount.x);
 }` })
-        pipeline = this.device.createRenderPipeline({ layout: 'auto', vertex: { module, entryPoint: 'vs' }, fragment: { module, entryPoint: 'fs', targets: [{ format: 'rgba8unorm' }] }, primitive: { topology: 'triangle-list' } })
+        pipeline = this.device.createRenderPipeline({ layout: 'auto', vertex: { module, entryPoint: 'vs' }, fragment: { module, entryPoint: 'fs', targets: [{ format }] }, primitive: { topology: 'triangle-list' } })
       } catch (error) { await this.device.popErrorScope().catch(() => null); throw error }
       const error = await this.device.popErrorScope()
       if (error) throw new Error(`透明混合管线编译失败：${error.message}`)
-      this.assertLive(); this.mixPipeline = pipeline; this.counts.pipelineCompiles++
+      this.assertLive(); this.mixPipelines.set(format, pipeline); this.counts.pipelineCompiles++
     })()
-    try { await pending } catch (error) { if (this.mixReady === pending) this.mixReady = undefined; throw error }
+    this.mixReady.set(format, pending)
+    try { await pending } catch (error) { if (this.mixReady.get(format) === pending) this.mixReady.delete(format); throw error }
   }
   async mix(key: string, left: VideoEditCodePicture, right: VideoEditCodePicture, amount: number): Promise<VideoEditCodePicture> {
     if (left.owner !== this.device || right.owner !== this.device || left.width !== right.width || left.height !== right.height || !Number.isFinite(amount) || amount < 0 || amount > 1) throw new CodeMaterialError('CONTEXT', '透明混合需要同设备同尺寸画面和0到1的强度。')
     const old = this.surfaces.get(key)?.picture.texture
     if (old && (old === left.texture || old === right.texture)) throw new CodeMaterialError('CONTEXT', '透明混合输入输出不能引用同一纹理。')
-    await this.ready; this.assertLive(); await this.prepareMix(); this.assertLive()
+    // Mixing an 8-bit picture into a high-precision one keeps the higher precision.
+    const format = left.highPrecision || right.highPrecision ? VIDEO_EDIT_PRECISE_FORMAT : 'rgba8unorm'
+    await this.ready; this.assertLive(); await this.prepareMix(format); this.assertLive()
     this.assertInput(left.texture); this.assertInput(right.texture)
-    const target = this.surface(key, left.width, left.height)
+    const pipeline = this.mixPipelines.get(format)!
+    const target = this.surface(key, left.width, left.height, format)
     if (target.picture.texture === left.texture || target.picture.texture === right.texture) throw new CodeMaterialError('CONTEXT', '透明混合输入输出不能引用同一纹理。')
     target.mixBuffer ??= this.device.createBuffer({ size: 16, usage: 0x08 | 0x40 })
     this.device.queue.writeBuffer(target.mixBuffer, 0, new Float32Array([amount, 0, 0, 0]))
     const encoder = this.device.createCommandEncoder()
     const pass = encoder.beginRenderPass({ colorAttachments: [{ view: target.picture.texture.createView(), loadOp: 'clear', storeOp: 'store', clearValue: { r: 0, g: 0, b: 0, a: 0 } }] })
-    pass.setPipeline(this.mixPipeline!)
-    pass.setBindGroup(0, this.device.createBindGroup({ layout: this.mixPipeline!.getBindGroupLayout(0), entries: [{ binding: 0, resource: left.texture.createView() }, { binding: 1, resource: right.texture.createView() }, { binding: 2, resource: this.sampler }, { binding: 3, resource: { buffer: target.mixBuffer } }] }))
+    pass.setPipeline(pipeline)
+    pass.setBindGroup(0, this.device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries: [{ binding: 0, resource: left.texture.createView() }, { binding: 1, resource: right.texture.createView() }, { binding: 2, resource: this.sampler }, { binding: 3, resource: { buffer: target.mixBuffer } }] }))
     pass.draw(3); pass.end(); this.submit(encoder); this.counts.mixFrames++
     return target.picture
   }
@@ -348,12 +384,13 @@ struct Vertex { @builtin(position) position:vec4f, @location(0) uv:vec2f }
     if (!surface) return
     this.retiredTextures.add(surface.picture.texture)
     surface.picture.texture.destroy(); surface.buffers.forEach(buffer => buffer?.destroy()); surface.filterBuffer?.destroy(); surface.mixBuffer?.destroy(); this.bytes -= surface.bytes; this.surfaces.delete(key)
+    if (surface.picture.highPrecision) this.preciseBytes -= surface.bytes
   }
-  diagnostics(): { residentBytes: number; surfaces: number; glyphs: number; pipelines: number; pipelineCompiles: number; textureAllocations: number; externalCopies: number; generatorFrames: number; filterFrames: number; mixFrames: number } { return { ...this.counts, residentBytes: this.bytes, surfaces: this.surfaces.size, glyphs: this.glyphs.size, pipelines: this.disposed ? 0 : this.filters.size + 2 + Number(!!this.image) + Number(!!this.mixPipeline) } }
+  diagnostics(): { residentBytes: number; surfaces: number; glyphs: number; pipelines: number; pipelineCompiles: number; textureAllocations: number; externalCopies: number; generatorFrames: number; filterFrames: number; mixFrames: number } { return { ...this.counts, residentBytes: this.bytes, surfaces: this.surfaces.size, glyphs: this.glyphs.size, pipelines: this.disposed ? 0 : [...this.filters.values()].reduce((sum, filter) => sum + filter.pipelines.size, 0) + 2 + Number(!!this.image) + this.mixPipelines.size } }
   async dispose(): Promise<void> {
-    this.disposed = true; await this.ready.catch(() => {}); await this.imageReady?.catch(() => {}); await this.mixReady?.catch(() => {})
+    this.disposed = true; await this.ready.catch(() => {}); await this.imageReady?.catch(() => {}); await Promise.allSettled(this.mixReady.values())
     await Promise.allSettled([...this.filterCompiles.values()].map(value => value.pending)); await this.pending.catch(() => {})
     this.releaseUnused(new Set()); for (const glyph of this.glyphs.values()) { glyph.texture.destroy(); this.bytes -= glyph.bytes }
-    this.glyphs.clear(); this.filters.clear(); this.filterLayout = undefined; this.image = undefined; this.mixPipeline = undefined
+    this.glyphs.clear(); this.filters.clear(); this.filterLayout = undefined; this.image = undefined; this.mixPipelines.clear()
   }
 }

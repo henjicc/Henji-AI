@@ -69,7 +69,7 @@ export class VideoEditNativeDecoderSession {
 
   get intraOnly(): boolean { return this.info.decoder.intraOnly }
 
-  private picture(frame: NativeVideoFrame): VideoEditNativePicture { return new VideoEditNativePicture(frame, this.rotation, this.frameDuration) }
+  private picture(frame: NativeVideoFrame): VideoEditNativePicture { return new VideoEditNativePicture(frame, this.rotation, this.frameDuration, { bitDepth: this.info.decoder.bitDepth, hasAlpha: this.info.decoder.hasAlpha }) }
 
   private onFrame(frame: NativeVideoFrame): void {
     const tag = frame.meta.request

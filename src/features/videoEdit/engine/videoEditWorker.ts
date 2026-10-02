@@ -16,8 +16,10 @@ export type RenderRequest = { id: number } & (
   | { kind: 'invalidate'; revision: number }
   | { kind: 'dispose' }
   | { kind: 'render'; frame: number; sequential: boolean; scrubbing?: boolean; deadline?: number }
-  | { kind: 'audio'; start: number; duration: number })
-export type RenderResponse = { id: number; phase?: 'submitted'; error?: string; bitmap?: ImageBitmap; sourceTimestamps?: number[]; blankPictures?: number; channels?: Float32Array[]; cacheHits?: number; cacheBytes?: number; presented?: boolean; decodeMs?: number; gpuMs?: number; codeResources?: ReturnType<VideoEditRenderer['codeDiagnostics']> }
+  | { kind: 'audio'; start: number; duration: number }
+  /** Acceptance probes only (task 2.7): high-precision counters and one row of the last high-precision composition. */
+  | { kind: 'precision'; row?: number })
+export type RenderResponse = { id: number; phase?: 'submitted'; error?: string; bitmap?: ImageBitmap; sourceTimestamps?: number[]; blankPictures?: number; channels?: Float32Array[]; cacheHits?: number; cacheBytes?: number; presented?: boolean; decodeMs?: number; gpuMs?: number; codeResources?: ReturnType<VideoEditRenderer['codeDiagnostics']>; precision?: Awaited<ReturnType<VideoEditRenderer['precisionDiagnostics']>> }
 /** Structured log entries the worker cannot write itself; the render session forwards them to the application log. */
 export interface RenderLogMessage { kind: 'log'; level: 'info' | 'warn'; message: string; event: string; context: Record<string, unknown> }
 /** 原生显卡帧通道（preload 交来的端口）。不进入渲染队列；渲染器经它读取原生解码帧，诊断只供真实性测试。 */
@@ -94,6 +96,10 @@ self.onmessage = (event: MessageEvent<RenderRequest | NativeFramesRequest>) => {
           self.postMessage({ id: request.id, phase: 'submitted' } satisfies RenderResponse)
           void finish().catch(error => self.postMessage({ id: request.id, error: String(error) } satisfies RenderResponse))
         } else await finish()
+      } else if (request.kind === 'precision') {
+        if (!renderer) throw new Error('剪辑渲染器尚未就绪。')
+        const precision = await renderer.precisionDiagnostics(request.row)
+        self.postMessage({ id: request.id, precision } satisfies RenderResponse, { transfer: precision.row ? [precision.row.buffer as ArrayBuffer] : [] })
       } else {
         if (!renderer) throw new Error('剪辑渲染器尚未就绪。')
         const channels = await renderer.mixAudio(request.start, request.duration)

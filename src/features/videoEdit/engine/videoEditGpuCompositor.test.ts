@@ -19,15 +19,16 @@ function copyFixture(fence: () => Promise<void>) {
   const pass = { setPipeline: vi.fn(), setBindGroup: vi.fn(), draw: vi.fn(), end: vi.fn() }
   const device = {
     queue: { copyExternalImageToTexture: vi.fn(), writeBuffer: vi.fn(), submit: vi.fn(), onSubmittedWorkDone: fence },
-    lost: new Promise<{ reason?: string; message?: string }>(() => {}), createShaderModule: vi.fn(), createRenderPipeline: vi.fn((_descriptor: unknown) => ({ getBindGroupLayout: () => ({}) })), createSampler: vi.fn(),
-    createTexture: () => ({ createView: () => ({}), destroy: destroyed }), createBuffer: () => ({ destroy: vi.fn() }),
+    lost: new Promise<{ reason?: string; message?: string }>(() => {}), createShaderModule: vi.fn(), createRenderPipeline: vi.fn((descriptor: unknown) => ({ descriptor, getBindGroupLayout: () => ({}) })), createSampler: vi.fn(),
+    createTexture: vi.fn((descriptor: unknown) => ({ descriptor, createView: () => ({ descriptor }), destroy: destroyed })), createBuffer: () => ({ destroy: vi.fn() }),
     createBindGroup: vi.fn(), createCommandEncoder: vi.fn(() => ({ beginRenderPass: vi.fn((_descriptor: unknown) => pass), finish: () => ({}) })), pushErrorScope: vi.fn(), popErrorScope: vi.fn(async (): Promise<{ message?: string } | null> => null), destroy: vi.fn(), importExternalTexture: vi.fn(),
   }
   state.device = device
-  const output = { width: 3840, height: 2160, getContext: () => ({ configure: vi.fn(), getCurrentTexture: () => ({ createView: () => ({}) }) }) } as unknown as OffscreenCanvas
+  const canvasView = { canvas: true }
+  const output = { width: 3840, height: 2160, getContext: () => ({ configure: vi.fn(), getCurrentTexture: () => ({ createView: () => canvasView }) }) } as unknown as OffscreenCanvas
   const compositor = new VideoEditGpuCompositor(output)
   const sample = { timestamp: 0, duration: 1 / 60, displayWidth: 3840, displayHeight: 2160, rotation: 0, flip: false, toVideoFrame: () => ({ visibleRect: { width: 3840, height: 2160 }, close: closed }) } as unknown as VideoSample
-  return { compositor, sample, device, closed, destroyed }
+  return { compositor, sample, device, closed, destroyed, canvasView, pass }
 }
 it('已经到时的画面直接提交，不再等待额外一次垂直同步', async () => {
   const request = vi.fn((callback: FrameRequestCallback) => { queueMicrotask(() => callback(performance.now())); return 1 })
@@ -208,5 +209,70 @@ describe('合成器共享图片候选生命周期', () => {
     await (await compositor.draw(composition, [clip], [first], () => true)).completion
     expect(copy).toHaveBeenCalledTimes(2)
     await compositor.dispose(); expect(textures[0].destroy).toHaveBeenCalledOnce()
+  })
+})
+describe('高位深合成（任务 2.7）', () => {
+  type Descriptor = { format?: string; fragment?: { targets: Array<{ format: string }> } }
+  type Fixture = ReturnType<typeof copyFixture>
+  const textureFormats = (device: Fixture['device']): string[] => device.createTexture.mock.calls.map(([descriptor]) => (descriptor as Descriptor).format!)
+  const pipelineFormat = (pipeline: unknown): string => (pipeline as { descriptor: Descriptor }).descriptor.fragment!.targets[0].format
+  const nativeFrame = (format: VideoFrame['format'], depth?: { bitDepth: number; hasAlpha: boolean }): VideoEditNativePicture => {
+    const frame = { codedWidth: 3840, codedHeight: 2160, visibleRect: { width: 3840, height: 2160 }, format, close: vi.fn() }
+    return new VideoEditNativePicture({ frame, meta: { route: 'r', streamId: 's', frameIndex: 0, timestampUs: 0, ptsUs: 0, durationUs: 16_667 }, receivedAt: 0, release: vi.fn() } as unknown as NativeVideoFrame, 0, 1 / 60, depth)
+  }
+  const browserSample = (format: VideoFrame['format']): VideoSample => ({ timestamp: 0, duration: 1 / 60, displayWidth: 3840, displayHeight: 2160, rotation: 0, flip: false, format, toVideoFrame: () => ({ visibleRect: { width: 3840, height: 2160 }, close: vi.fn() }) }) as unknown as VideoSample
+  it('原生与浏览器高位深帧按位深与透明复制为 rgb10a2unorm 或 rgba16float；八位与无格式浏览器帧保持原格式、字节与复制管线', async () => {
+    const { compositor, pass } = copyFixture(async () => {})
+    const cases: Array<[VideoSample | VideoEditNativePicture, boolean, string, number, boolean]> = [
+      [nativeFrame(null, { bitDepth: 10, hasAlpha: false }), false, 'rgb10a2unorm', 4, true],
+      [nativeFrame(null, { bitDepth: 12, hasAlpha: true }), false, 'rgba16float', 8, true],
+      [nativeFrame(null), false, 'rgba16float', 8, true],
+      [nativeFrame('NV12'), true, 'r8unorm', 1.5, false],
+      [browserSample('I420P10' as VideoFrame['format']), false, 'rgb10a2unorm', 4, true],
+      [browserSample('I420AP10' as VideoFrame['format']), false, 'rgba16float', 8, true],
+      [browserSample(null), false, 'rgba8unorm', 4, false],
+      [browserSample('RGBA'), false, 'rgba8unorm', 4, false],
+    ]
+    for (const [picture, compact, format, bytesPerPixel, highPrecision] of cases) {
+      const copy = await compositor.snapshot(picture, compact)
+      // Pool reuse is per format: a recycled texture must have the requested format too.
+      expect((copy.texture as unknown as { descriptor: Descriptor }).descriptor.format).toBe(format)
+      expect(copy.allocationSize()).toBe(3840 * 2160 * bytesPerPixel); expect(copy.highPrecision).toBe(highPrecision)
+      if (!compact) expect(pipelineFormat(pass.setPipeline.mock.lastCall![0])).toBe(format)
+      copy.close()
+    }
+    expect(compositor.precisionDiagnostics()).toMatchObject({ highPrecisionSnapshots: 5, highPrecisionFrames: 0, preciseTargetBytes: 0 })
+    await compositor.dispose()
+  })
+  it('八位帧仍直接写画布；含高精度画面的帧写 rgba16float 目标并在同一次提交量化到画布', async () => {
+    state.format = 'bgra8unorm'
+    const { compositor, device, canvasView, destroyed } = copyFixture(async () => {})
+    const model = createVideoEditDocument('高位深'); model.sequences[0].width = 3840; model.sequences[0].height = 2160
+    model.items.push({ id: 'item', kind: 'text', name: '画面' })
+    const document = videoEditComposition(model, model.sequences[0].id)
+    const clip = makeVideoEditItemClip(model, 'item', model.sequences[0].id, { frame: 0 })
+    const eight = await compositor.snapshot(nativeFrame('NV12'), true); const ten = await compositor.snapshot(nativeFrame(null), false)
+    const compiles = device.createRenderPipeline.mock.calls.length; const textures = device.createTexture.mock.calls.length
+    const views = (): unknown[] => {
+      const encoder = device.createCommandEncoder.mock.results.at(-1)!.value as { beginRenderPass: { mock: { calls: Array<[{ colorAttachments: Array<{ view: unknown; clearValue: unknown }> }]> } } }
+      return encoder.beginRenderPass.mock.calls.map(([descriptor]) => descriptor.colorAttachments[0].view)
+    }
+    await (await compositor.draw(document, [clip], [eight], () => true)).completion
+    expect(views()).toEqual([canvasView])
+    expect(device.createRenderPipeline).toHaveBeenCalledTimes(compiles); expect(device.createTexture).toHaveBeenCalledTimes(textures)
+    for (let frame = 0; frame < 2; frame++) {
+      await (await compositor.draw(document, [clip, { ...clip, id: 'over' }], [eight, ten], () => true)).completion
+      const [composed, quantized] = views()
+      expect(composed).toMatchObject({ descriptor: { format: 'rgba16float', size: [3840, 2160] } }); expect(quantized).toBe(canvasView)
+    }
+    // Four layer pipelines for the rgba16float target and one quantizing pass for the canvas, compiled once.
+    expect(device.createRenderPipeline.mock.calls.slice(compiles).map(([descriptor]) => (descriptor as Descriptor).fragment!.targets[0].format)).toEqual(['rgba16float', 'rgba16float', 'rgba16float', 'rgba16float', 'bgra8unorm'])
+    expect(textureFormats(device).slice(textures)).toEqual(['rgba16float'])
+    expect(device.queue.submit).toHaveBeenCalledTimes(5)
+    expect(compositor.precisionDiagnostics()).toEqual({ highPrecisionSnapshots: 1, highPrecisionFrames: 2, preciseTargetBytes: 3840 * 2160 * 8 })
+    eight.close(); ten.close()
+    const before = destroyed.mock.calls.length; await compositor.dispose()
+    expect(destroyed.mock.calls.length).toBeGreaterThan(before)
+    expect(compositor.precisionDiagnostics().preciseTargetBytes).toBe(0)
   })
 })

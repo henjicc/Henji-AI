@@ -5,6 +5,7 @@ import { videoEditTransitionAmount } from '@/core/videoEdit/transitions'
 import type { PreparedVideoEditEffect } from './videoEditCodeSources'
 import type { VideoEditCodePicture, VideoEditCodeGpu } from './videoEditCodeGpu'
 import type { VideoEditGpuCompositor, VideoEditPicture } from './videoEditGpuCompositor'
+import { VIDEO_EDIT_PRECISE_FORMAT, videoEditPictureHighPrecision } from './videoEditGpuFrame'
 
 interface Layer { clip: VideoEditClip; picture: VideoEditPicture }
 const effective = (clip: VideoEditClip): boolean => activeVideoEditEffects(clip).length > 0
@@ -35,7 +36,10 @@ export async function renderVideoEditCompositeScene(document: VideoEditCompositi
   const current = (): void => { if (!shouldPresent()) throw new DOMException('旧合成画面已取消。', 'AbortError') }
   const gpu = async (): Promise<VideoEditCodeGpu> => { current(); runtime ??= await compositor.code(); current(); return runtime }
   const normalize = async (clip: VideoEditClip, layers: readonly Layer[]): Promise<VideoEditCodePicture> => {
-    const target = await (await gpu()).target(slot(clip, 0), document.width, document.height); current()
+    // High-precision layers (10-bit and deeper material) are normalized into an rgba16float surface, so effects and
+    // transitions built on them keep their precision (task 2.7).
+    const format = layers.some(layer => videoEditPictureHighPrecision(layer.picture)) ? VIDEO_EDIT_PRECISE_FORMAT : 'rgba8unorm'
+    const target = await (await gpu()).target(slot(clip, 0), document.width, document.height, format); current()
     const result = await compositor.draw(document, layers.map(layer => layer.clip), layers.map(layer => layer.picture), shouldPresent, undefined, target)
     watch(result.completion)
     current(); if (!result.presented) throw new DOMException('旧合成画面已取消。', 'AbortError')

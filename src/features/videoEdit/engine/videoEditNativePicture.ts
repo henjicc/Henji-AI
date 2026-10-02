@@ -1,4 +1,5 @@
 import type { NativeVideoFrame } from './videoEditNativeFrames'
+import type { VideoEditSourceDepth } from './videoEditGpuFrame'
 
 export type VideoEditNativeRotation = 0 | 90 | 180 | 270
 
@@ -34,7 +35,10 @@ export class VideoEditNativePicture {
   private readonly fences: Promise<unknown>[] = []
   private returned = false
 
-  constructor(private readonly native: NativeVideoFrame, readonly rotation: VideoEditNativeRotation, frameDurationSeconds: number) {
+  /** The decoded stream's bit depth and alpha (native decoder details); chooses the owned format of `rgbaf16` pictures. */
+  readonly sourceDepth?: VideoEditSourceDepth
+  constructor(private readonly native: NativeVideoFrame, readonly rotation: VideoEditNativeRotation, frameDurationSeconds: number, sourceDepth?: VideoEditSourceDepth) {
+    this.sourceDepth = sourceDepth
     const frame = native.frame
     const ptsUs = native.meta.ptsUs ?? native.meta.timestampUs
     this.timestamp = ptsUs / 1e6

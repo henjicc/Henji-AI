@@ -37,14 +37,15 @@ function pixels(document: VideoEditComposition, reserved: ReadonlySet<string>, o
   const device = {} as GpuDevice
   const data = new WeakMap<GpuTexture, CodeColor>(); const keys = new WeakMap<GpuTexture, string>()
   const targets = new Map<string, VideoEditCodePicture>()
+  const formats = new Map<string, string>()
   const filters: Array<{ key: string; version: string; context: CodeMaterialContext; parameters: Readonly<Record<string, unknown>>; transitionHandles: boolean; input: CodeColor; output: CodeColor }> = []
   const mixes: Array<{ key: string; leftKey: string; rightKey: string; amount: number; output: CodeColor }> = []
   const draws: Array<{ target?: string; clips: VideoEditClip[]; inputKeys: string[]; pixel: CodeColor; deadline?: number }> = []
   let canvas: CodeColor = [0, 0, 0, 1]; let commits = 0
-  function picture(key: string, value: CodeColor, width = document.width, height = document.height): VideoEditCodePicture {
+  function picture(key: string, value: CodeColor, width = document.width, height = document.height, format: 'rgba8unorm' | 'rgba16float' = 'rgba8unorm'): VideoEditCodePicture {
     const texture: GpuTexture = { createView: () => ({}), destroy: () => {} }
     data.set(texture, [...value]); keys.set(texture, key)
-    return new VideoEditCodePicture(texture, width, height, device)
+    return new VideoEditCodePicture(texture, width, height, device, format)
   }
   function pixel(picture: VideoEditPicture): CodeColor {
     if (!(picture instanceof VideoEditCodePicture)) throw new Error('测试像素边界只接受明确的预乘RGBA输入')
@@ -68,7 +69,7 @@ function pixels(document: VideoEditComposition, reserved: ReadonlySet<string>, o
     return [values[0] * values[3], values[1] * values[3], values[2] * values[3], values[3]]
   }
   const runtime: Pick<VideoEditCodeGpu, 'target' | 'filter' | 'mix'> = {
-    target: async (key, width, height) => target(key, width, height),
+    target: async (key, width, height, format = 'rgba8unorm') => { formats.set(key, format); return target(key, width, height) },
     filter: async (key, version, program, context, parameters, input, transitionHandles = false) => {
       const destination = target(key, input.width, input.height)
       expect(destination.texture).not.toBe(input.texture)
@@ -107,7 +108,7 @@ function pixels(document: VideoEditComposition, reserved: ReadonlySet<string>, o
       return { presented: true, completion: destination ? options.offscreenCompletion ?? Promise.resolve() : Promise.resolve() }
     },
   }
-  return { picture, pixel, targets, filters, mixes, draws, compositor, canvas: () => canvas, commits: () => commits }
+  return { picture, pixel, targets, formats, filters, mixes, draws, compositor, canvas: () => canvas, commits: () => commits }
 }
 
 describe('正式合成场景的预乘RGBA编排与有界目标', () => {
@@ -228,5 +229,15 @@ describe('正式合成场景的预乘RGBA编排与有界目标', () => {
     expect(result.presented).toBe(true); expect(boundary.commits()).toBe(1)
     const failure = new Error('离屏提交失败'); const rejection = expect(result.completion).rejects.toBe(failure)
     reject(failure); await rejection
+  })
+  it('高精度画面的转场端点归一化到 rgba16float 目标，八位端点目标格式不变', async () => {
+    const left = clip('left', 2, { duration: 60 }); const right = clip('right', 2, { start: 60, duration: 60 })
+    const document = composition([left, right])
+    const window = videoEditTransitionWindow(document, { id: 'dissolve', kind: 'cross_dissolve', leftClipId: left.id, rightClipId: right.id, durationFrames: 5 })
+    const nodes = buildVideoEditCompositePlan(document.clips, [window]); const boundary = pixels(document, videoEditCompositeSurfaceKeys(nodes))
+    const pictures = new Map([[left.id, boundary.picture('ten-bit', [1, 0, 0, 1], 3840, 2160, 'rgba16float')], [right.id, boundary.picture('eight-bit', [0, 0, 1, 1])]])
+    await (await renderVideoEditCompositeScene(document, nodes, pictures, new Map(), boundary.compositor, 60, () => true)).completion
+    expect(boundary.formats.get('composite:clip:left:0')).toBe('rgba16float'); expect(boundary.formats.get('composite:clip:right:0')).toBe('rgba8unorm')
+    expectPixel(boundary.canvas(), [.5, 0, .5, 1])
   })
 })

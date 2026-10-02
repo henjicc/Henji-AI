@@ -1,5 +1,6 @@
 import { VideoSample } from 'mediabunny'
-import { VideoEditGpuFrame } from './videoEditGpuFrame'
+import { VIDEO_EDIT_PRECISE_FORMAT, VideoEditGpuFrame, videoEditGpuFrameFormat, videoEditPictureHighPrecision, type VideoEditGpuColorFormat, type VideoEditOwnedFormat } from './videoEditGpuFrame'
+import { VIDEO_EDIT_CACHED_YUV_SHADER, VIDEO_EDIT_COPY_SHADER, VIDEO_EDIT_PRESENT_SHADER, VIDEO_EDIT_READBACK_USAGE, readVideoEditPreciseRow, videoEditLayerShader } from './videoEditGpuShaders'
 import { VideoEditNativePicture } from './videoEditNativePicture'
 import type { VideoEditClip, VideoEditComposition } from '@/core/videoEdit/document'
 import { ImageEditWebGpuDeviceManager } from '@/core/imageEdit/webgpu/deviceManager'
@@ -12,26 +13,13 @@ interface VideoGpuDevice extends GpuDevice {
 }
 export type VideoEditPicture = VideoSample | VideoEditGpuFrame | VideoEditCodePicture | ImageBitmap | null
 interface LayerPipelines { video: GpuRenderPipeline; image: GpuRenderPipeline; codeImage: GpuRenderPipeline; cachedVideo: GpuRenderPipeline }
-const vertex = `
-struct Params { size: vec2f, rotation: vec2f, position: vec2f, brightness: f32, opacity: f32, aspect: vec2f, padding: vec2f }
-@group(0) @binding(2) var<uniform> p: Params;
-struct Vertex { @builtin(position) position: vec4f, @location(0) uv: vec2f }
-@vertex fn vs(@builtin(vertex_index) i: u32) -> Vertex {
-  let uv = array<vec2f, 6>(vec2f(0,0),vec2f(0,1),vec2f(1,0),vec2f(1,0),vec2f(0,1),vec2f(1,1))[i];
-  let point = (uv * 2 - 1) * p.size;
-  let rotated = vec2f(point.x * p.rotation.x - point.y * p.rotation.y * p.aspect.x,
-                      point.x * p.rotation.y * p.aspect.y + point.y * p.rotation.x);
-  var sampleUv = uv;
-  if (p.padding.y == 1) { sampleUv.x = 1 - sampleUv.x; }
-  if (p.padding.x == 90) { sampleUv = vec2f(sampleUv.y, 1 - sampleUv.x); }
-  if (p.padding.x == 180) { sampleUv = 1 - sampleUv; }
-  if (p.padding.x == 270) { sampleUv = vec2f(1 - sampleUv.y, sampleUv.x); }
-  return Vertex(vec4f(rotated.x + p.position.x, -rotated.y - p.position.y, 0, 1), sampleUv);
-}
-@group(0) @binding(1) var s: sampler;
-`
 /** Full resolution composition, shared by preview and export. VideoFrames stay on
- * the GPU import path; no CPU pixels or thumbnail-sized intermediate surfaces. */
+ * the GPU import path; no CPU pixels or thumbnail-sized intermediate surfaces.
+ *
+ * Precision (task 2.7): a frame whose inputs are all 8-bit composes straight into the 8-bit canvas exactly as before.
+ * A frame with any high-precision input (10-bit and deeper material, native `rgbaf16`, or effects/transitions built
+ * on them) composes into one `rgba16float` target of the canvas size and is quantized to the canvas, with a fixed
+ * dither, in a final pass of the same submission. */
 export class VideoEditGpuCompositor {
   private readonly manager = new ImageEditWebGpuDeviceManager()
   private readonly context
@@ -43,8 +31,15 @@ export class VideoEditGpuCompositor {
   private copyY!: GpuRenderPipeline
   private copyUv!: GpuRenderPipeline
   private copyRgba!: GpuRenderPipeline
+  private readonly copyDeep = new Map<VideoEditOwnedFormat, GpuRenderPipeline>()
   private cachedVideo!: GpuRenderPipeline
-  private rgbaReady?: Promise<LayerPipelines>
+  private canvasFormat = 'bgra8unorm'
+  /** Layer pipelines for owned targets, per target format; compiled on first use. */
+  private readonly offscreen = new Map<VideoEditGpuColorFormat, Promise<LayerPipelines>>()
+  private presentReady?: Promise<GpuRenderPipeline>
+  /** The `rgba16float` composition target of high-precision frames, canvas-sized, kept until size change or dispose. */
+  private precise?: { texture: GpuTexture; width: number; height: number }
+  private readonly precision = { snapshots: 0, frames: 0 }
   private sampler: unknown
   private readonly uniforms = new Map<string, GpuBuffer>()
   private readonly textures = new Map<string, { texture: GpuTexture; key: string; bytes: number }>()
@@ -59,7 +54,7 @@ export class VideoEditGpuCompositor {
   private readonly uploads = new Set<Promise<void>>()
   private readonly copies = new Set<Promise<void>>()
   private disposed = false
-  private readonly pool: Array<{ width: number; height: number; texture: GpuTexture; chroma?: GpuTexture; bytes: number }> = []
+  private readonly pool: Array<{ width: number; height: number; format: string; texture: GpuTexture; chroma?: GpuTexture; bytes: number }> = []
   private blankTexture?: GpuTexture
   constructor(readonly canvas: OffscreenCanvas) {
     this.context = getWebGpuContext(canvas)
@@ -70,79 +65,65 @@ export class VideoEditGpuCompositor {
     const managed = await this.manager.acquire()
     this.device = managed.device as VideoGpuDevice
     const format = managed.provider.getPreferredCanvasFormat()
+    this.canvasFormat = format
     this.context.configure({ device: this.device, format, alphaMode: 'premultiplied' })
     this.sampler = this.device.createSampler({ magFilter: 'linear', minFilter: 'linear' })
     this.device.pushErrorScope('validation')
     Object.assign(this, this.layerPipelines(format))
-    const copyShader = this.device.createShaderModule({ code: `
-struct Vertex { @builtin(position) position: vec4f, @location(0) uv: vec2f }
-@vertex fn vs(@builtin(vertex_index) i: u32) -> Vertex {
- let uv = array<vec2f, 3>(vec2f(0,0), vec2f(0,2), vec2f(2,0))[i];
- return Vertex(vec4f(uv.x * 2 - 1, 1 - uv.y * 2, 0, 1), uv);
-}
-@group(0) @binding(0) var t: texture_external;
-@fragment fn rgba(v: Vertex) -> @location(0) vec4f { return textureLoad(t, vec2u(v.position.xy)); }
-@fragment fn y(v: Vertex) -> @location(0) vec4f {
- let c = textureLoad(t, vec2u(v.position.xy)).rgb;
- return vec4f(dot(c, vec3f(0.2126, 0.7152, 0.0722)), 0, 0, 1);
-}
-@fragment fn uv(v: Vertex) -> @location(0) vec4f {
- let point = vec2u(v.position.xy) * 2u;
- let edge = textureDimensions(t) - 1u;
- let c = (textureLoad(t, min(point, edge)).rgb + textureLoad(t, min(point + vec2u(1,0), edge)).rgb + textureLoad(t, min(point + vec2u(0,1), edge)).rgb + textureLoad(t, min(point + vec2u(1,1), edge)).rgb) * 0.25;
- let luma = dot(c, vec3f(0.2126, 0.7152, 0.0722));
- return vec4f((c.b - luma) / 1.8556 + 0.5, (c.r - luma) / 1.5748 + 0.5, 0, 1);
-}
-` })
+    const copyShader = this.device.createShaderModule({ code: VIDEO_EDIT_COPY_SHADER })
     const copy = (entryPoint: string, format: string): GpuRenderPipeline => this.device.createRenderPipeline({ layout: 'auto', vertex: { module: copyShader, entryPoint: 'vs' }, fragment: { module: copyShader, entryPoint, targets: [{ format }] }, primitive: { topology: 'triangle-list' } })
     this.copyY = copy('y', 'r8unorm'); this.copyUv = copy('uv', 'rg8unorm')
     this.copyRgba = copy('rgba', 'rgba8unorm')
+    for (const deep of ['rgb10a2unorm', 'rgba16float'] as const) this.copyDeep.set(deep, copy('rgba', deep))
     const error = await this.device.popErrorScope()
     if (error) throw new Error(`无法初始化剪辑 GPU 合成：${error.message}`)
   }
   private layerPipelines(format: string): LayerPipelines {
-    const pipeline = (external: boolean, premultiplied = false): GpuRenderPipeline => {
-      const sample = external ? 'textureSampleBaseClampToEdge(t, s, v.uv)' : 'textureSample(t, s, v.uv)'
-      const shader = this.device.createShaderModule({ code: vertex + `
-@group(0) @binding(0) var t: ${external ? 'texture_external' : 'texture_2d<f32>'};
-@fragment fn fs(v: Vertex) -> @location(0) vec4f {
- let c = ${sample}; let alpha = c.a * p.opacity;
- return vec4f(${premultiplied ? 'clamp(c.rgb * p.brightness, vec3f(0), vec3f(c.a)) * p.opacity' : 'clamp(c.rgb * p.brightness, vec3f(0), vec3f(1)) * alpha'}, alpha);
-}` })
-      return this.device.createRenderPipeline({ layout: 'auto', vertex: { module: shader, entryPoint: 'vs' }, fragment: { module: shader, entryPoint: 'fs', targets: [{ format, blend: { color: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' }, alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' } } }] }, primitive: { topology: 'triangle-list' } })
+    const blend = { color: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' }, alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' } }
+    const pipeline = (code: string): GpuRenderPipeline => {
+      const shader = this.device.createShaderModule({ code })
+      return this.device.createRenderPipeline({ layout: 'auto', vertex: { module: shader, entryPoint: 'vs' }, fragment: { module: shader, entryPoint: 'fs', targets: [{ format, blend }] }, primitive: { topology: 'triangle-list' } })
     }
-    const video = pipeline(true); const image = pipeline(false); const codeImage = pipeline(false, true)
-    const cachedShader = this.device.createShaderModule({ code: vertex + `
-@group(0) @binding(0) var y: texture_2d<f32>;
-@group(0) @binding(3) var uv: texture_2d<f32>;
-@fragment fn fs(v: Vertex) -> @location(0) vec4f {
- let luma = textureSample(y, s, v.uv).r;
- let chroma = textureSample(uv, s, v.uv).rg - 0.5;
- let rgb = vec3f(luma + 1.5748 * chroma.y, luma - 0.187324 * chroma.x - 0.468124 * chroma.y, luma + 1.8556 * chroma.x);
- return vec4f(clamp(rgb * p.brightness, vec3f(0), vec3f(1)) * p.opacity, p.opacity);
-}` })
-    const cachedVideo = this.device.createRenderPipeline({ layout: 'auto', vertex: { module: cachedShader, entryPoint: 'vs' }, fragment: { module: cachedShader, entryPoint: 'fs', targets: [{ format, blend: { color: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' }, alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' } } }] }, primitive: { topology: 'triangle-list' } })
-    return { video, image, codeImage, cachedVideo }
+    const video = pipeline(videoEditLayerShader(true)); const image = pipeline(videoEditLayerShader(false)); const codeImage = pipeline(videoEditLayerShader(false, true))
+    return { video, image, codeImage, cachedVideo: pipeline(VIDEO_EDIT_CACHED_YUV_SHADER) }
   }
-  private async rgbaPipelines(): Promise<LayerPipelines> {
-    return this.rgbaReady ??= (async () => {
-      await this.ready
-      if (this.disposed || this.lost) throw new Error('剪辑GPU会话不可用。')
-      this.device.pushErrorScope('validation')
-      let pipelines: LayerPipelines
-      try { pipelines = this.layerPipelines('rgba8unorm') }
-      catch (error) { await this.device.popErrorScope().catch(() => null); throw error }
-      const error = await this.device.popErrorScope()
-      if (error) throw new Error(`离屏合成管线初始化失败：${error.message}`)
-      if (this.disposed || this.lost) throw new Error('剪辑GPU会话不可用。')
-      return pipelines
-    })()
+  private async compiled<T>(build: () => T, failure: string): Promise<T> {
+    await this.ready
+    if (this.disposed || this.lost) throw new Error('剪辑GPU会话不可用。')
+    this.device.pushErrorScope('validation')
+    let result: T
+    try { result = build() }
+    catch (error) { await this.device.popErrorScope().catch(() => null); throw error }
+    const error = await this.device.popErrorScope()
+    if (error) throw new Error(`${failure}：${error.message}`)
+    if (this.disposed || this.lost) throw new Error('剪辑GPU会话不可用。')
+    return result
+  }
+  /** Layer pipelines writing an owned target of `format` (offscreen code surfaces and the high-precision target). */
+  private offscreenPipelines(format: VideoEditGpuColorFormat): Promise<LayerPipelines> {
+    let ready = this.offscreen.get(format)
+    if (!ready) { ready = this.compiled(() => this.layerPipelines(format), '离屏合成管线初始化失败'); this.offscreen.set(format, ready) }
+    return ready
+  }
+  /** Final pass of a high-precision frame: `rgba16float` target to the canvas format, with the fixed dither. */
+  private presentPipeline(): Promise<GpuRenderPipeline> {
+    return this.presentReady ??= this.compiled(() => {
+      const module = this.device.createShaderModule({ code: VIDEO_EDIT_PRESENT_SHADER })
+      return this.device.createRenderPipeline({ layout: 'auto', vertex: { module, entryPoint: 'vs' }, fragment: { module, entryPoint: 'fs', targets: [{ format: this.canvasFormat }] }, primitive: { topology: 'triangle-list' } })
+    }, '高精度合成呈现管线初始化失败')
+  }
+  private preciseTarget(): GpuTexture {
+    const { width, height } = this.canvas
+    if (this.precise && (this.precise.width !== width || this.precise.height !== height)) { this.precise.texture.destroy(); this.precise = undefined }
+    this.precise ??= { texture: this.device.createTexture({ size: [width, height], format: VIDEO_EDIT_PRECISE_FORMAT, usage: 0x04 | 0x10 | VIDEO_EDIT_READBACK_USAGE }), width, height }
+    return this.precise.texture
   }
   /** Deferred copies may only be consumed on this device/queue. The final draw
    * completion covers earlier copies; retain decoder frames until their fence.
    * A borrowed native frame is imported as is and stays borrowed until the copy's fence: it is never closed here
-   * (closing a shared texture frame in a worker crashes the renderer process, record 002). The copy keeps the
-   * existing owned formats; higher bit depth for 10-bit and above material belongs to the pipeline task 2.7. */
+   * (closing a shared texture frame in a worker crashes the renderer process, record 002).
+   * Owned format: compact 4:2:0 planes when `compact`; otherwise `videoEditGpuFrameFormat()` (`rgb10a2unorm` or
+   * `rgba16float` for more than 8 bits, `rgba8unorm` for the rest). */
   async snapshot(sample: VideoSample | VideoEditNativePicture, compact: boolean, deferCompletion = false): Promise<VideoEditGpuFrame> {
     await this.ready
     if (this.disposed) throw new Error('剪辑预览已关闭。')
@@ -159,16 +140,20 @@ struct Vertex { @builtin(position) position: vec4f, @location(0) uv: vec2f }
     const closeFrame = (): void => { if (!borrowed) frame.close() }
     const width = frame.visibleRect?.width ?? sample.codedWidth; const height = frame.visibleRect?.height ?? sample.codedHeight
     const uvWidth = Math.ceil(width / 2); const uvHeight = Math.ceil(height / 2)
-    const index = this.pool.findIndex(entry => entry.width === width && entry.height === height && !!entry.chroma === compact)
+    // A native picture without decoder details is treated as having alpha and more than 10 bits (rgba16float).
+    const owned = compact ? undefined : videoEditGpuFrameFormat(sample, borrowed ? sample.sourceDepth ?? { bitDepth: null, hasAlpha: true } : undefined)
+    const highPrecision = owned !== undefined && owned !== 'rgba8unorm'
+    const format = owned ?? 'r8unorm'
+    const index = this.pool.findIndex(entry => entry.width === width && entry.height === height && entry.format === format)
     const recycled = index >= 0 ? this.pool.splice(index, 1)[0] : undefined
-    const texture = recycled?.texture ?? this.device.createTexture({ size: [width, height], format: compact ? 'r8unorm' : 'rgba8unorm', usage: 0x04 | 0x10 })
+    const texture = recycled?.texture ?? this.device.createTexture({ size: [width, height], format, usage: 0x04 | 0x10 })
     const chroma = compact ? recycled?.chroma ?? this.device.createTexture({ size: [uvWidth, uvHeight], format: 'rg8unorm', usage: 0x04 | 0x10 }) : undefined
-    const bytes = compact ? width * height + uvWidth * uvHeight * 2 : width * height * 4
+    const bytes = compact ? width * height + uvWidth * uvHeight * 2 : width * height * (owned === 'rgba16float' ? 8 : 4)
     let retained = false
     try {
       const encoder = this.device.createCommandEncoder()
       const resource = this.device.importExternalTexture({ source: frame })
-      const planes: Array<readonly [GpuTexture, GpuRenderPipeline]> = chroma ? [[texture, this.copyY], [chroma, this.copyUv]] : [[texture, this.copyRgba]]
+      const planes: Array<readonly [GpuTexture, GpuRenderPipeline]> = chroma ? [[texture, this.copyY], [chroma, this.copyUv]] : [[texture, this.copyDeep.get(format as VideoEditOwnedFormat) ?? this.copyRgba]]
       for (const [target, pipeline] of planes) {
         const pass = encoder.beginRenderPass({ colorAttachments: [{ view: target.createView(), loadOp: 'clear', storeOp: 'store', clearValue: { r: 0, g: 0, b: 0, a: 0 } }] })
         pass.setPipeline(pipeline)
@@ -181,12 +166,14 @@ struct Vertex { @builtin(position) position: vec4f, @location(0) uv: vec2f }
       this.copies.add(completion); retained = true
       void completion.catch(() => {})
       if (!deferCompletion) await completion
+      if (highPrecision) this.precision.snapshots++
       return new VideoEditGpuFrame(sample, texture, chroma, bytes, () => {
         // Reuse evicted allocations instead of stalling the driver at every
-        // working-set boundary. Idle pool has a separate hard 64 MiB ceiling.
-        if (!this.disposed && this.pool.length < 4 && this.pool.reduce((sum, entry) => sum + entry.bytes, 0) + bytes <= 64 * 1024 ** 2) this.pool.push({ width, height, texture, chroma, bytes })
+        // working-set boundary. Idle pool has a separate hard 64 MiB ceiling
+        // (one 4K rgba16float picture, 63.3 MiB, still fits).
+        if (!this.disposed && this.pool.length < 4 && this.pool.reduce((sum, entry) => sum + entry.bytes, 0) + bytes <= 64 * 1024 ** 2) this.pool.push({ width, height, format, texture, chroma, bytes })
         else { texture.destroy(); chroma?.destroy() }
-      })
+      }, undefined, highPrecision)
     } catch (error) { texture.destroy(); chroma?.destroy(); throw error } finally { if (!retained) closeFrame() }
   }
   /**
@@ -206,6 +193,18 @@ struct Vertex { @builtin(position) position: vec4f, @location(0) uv: vec2f }
     return this.codeRuntime
   }
   codeDiagnostics(): ReturnType<VideoEditCodeGpu['diagnostics']> | undefined { return this.codeRuntime?.diagnostics() }
+  /** High-precision path counters: owned `rgba16float` snapshots, frames composed through the precise target and its size. */
+  precisionDiagnostics() { return { highPrecisionSnapshots: this.precision.snapshots, highPrecisionFrames: this.precision.frames, preciseTargetBytes: this.precise ? this.precise.width * this.precise.height * 8 : 0 } }
+  /**
+   * Raw half floats (RGBA per pixel) of one row of the last high-precision composition, before the 8-bit
+   * quantization; undefined when no frame used the precise target. Acceptance probes only (task 2.7).
+   */
+  async readPreciseRow(y: number): Promise<Uint16Array | undefined> {
+    await this.ready
+    if (this.disposed || this.lost || !this.precise) return undefined
+    const { texture, width, height } = this.precise
+    return readVideoEditPreciseRow(this.device, texture, width, Math.min(height - 1, Math.max(0, Math.floor(y))))
+  }
   imageDiagnostics() { return { textures: this.textures.size, bytes: [...this.textures.values()].reduce((total, entry) => total + entry.bytes, 0), uploads: this.imageUploads } }
   private imageKey(picture: ImageBitmap): string {
     if (!this.imageIds.has(picture)) this.imageIds.set(picture, ++this.nextImageId)
@@ -244,7 +243,11 @@ struct Vertex { @builtin(position) position: vec4f, @location(0) uv: vec2f }
   async draw(document: VideoEditComposition, clips: VideoEditClip[], pictures: VideoEditPicture[], shouldPresent: () => boolean, deadline?: number, target?: VideoEditCodePicture): Promise<{ presented: boolean; completion: Promise<void> }> {
     await this.ready
     if (this.disposed || !shouldPresent()) return { presented: false, completion: Promise.resolve() }
-    const pipelines = target ? await this.rgbaPipelines() : undefined
+    // 8-bit-only frames draw straight into the canvas (unchanged); any high-precision input moves the whole frame
+    // to the rgba16float target.
+    const highPrecision = !target && pictures.some(videoEditPictureHighPrecision)
+    const pipelines = target ? await this.offscreenPipelines(target.textureFormat) : highPrecision ? await this.offscreenPipelines(VIDEO_EDIT_PRECISE_FORMAT) : undefined
+    const present = highPrecision ? await this.presentPipeline() : undefined
     if (!shouldPresent()) return { presented: false, completion: Promise.resolve() }
     if (deadline !== undefined && performance.timeOrigin + performance.now() < deadline - 0.8) await new Promise<void>(resolve => {
       let request = 0
@@ -265,7 +268,9 @@ struct Vertex { @builtin(position) position: vec4f, @location(0) uv: vec2f }
     const frames: VideoFrame[] = []
     try {
       const encoder = device.createCommandEncoder()
-      const pass = encoder.beginRenderPass({ colorAttachments: [{ view: (target?.texture ?? this.context.getCurrentTexture()).createView(), clearValue: { r: 0, g: 0, b: 0, a: target ? 0 : 1 }, loadOp: 'clear', storeOp: 'store' }] })
+      const canvas = target ? undefined : this.context.getCurrentTexture()
+      const composed = present ? this.preciseTarget() : undefined
+      const pass = encoder.beginRenderPass({ colorAttachments: [{ view: (target?.texture ?? composed ?? canvas!).createView(), clearValue: { r: 0, g: 0, b: 0, a: target ? 0 : 1 }, loadOp: 'clear', storeOp: 'store' }] })
       clips.forEach((clip, index) => {
         const picture = pictures[index]
         let resource: unknown
@@ -310,7 +315,15 @@ struct Vertex { @builtin(position) position: vec4f, @location(0) uv: vec2f }
         pass.setBindGroup(0, device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries: [{ binding: 0, resource }, { binding: 1, resource: this.sampler }, { binding: 2, resource: { buffer: uniform } }, ...(cachedVideo && picture.chroma ? [{ binding: 3, resource: picture.chroma.createView() }] : [])] }))
         pass.draw(6)
       })
-      pass.end(); device.queue.submit([encoder.finish()])
+      pass.end()
+      if (present && composed && canvas) {
+        const quantize = encoder.beginRenderPass({ colorAttachments: [{ view: canvas.createView(), clearValue: { r: 0, g: 0, b: 0, a: 1 }, loadOp: 'clear', storeOp: 'store' }] })
+        quantize.setPipeline(present)
+        quantize.setBindGroup(0, device.createBindGroup({ layout: present.getBindGroupLayout(0), entries: [{ binding: 0, resource: composed.createView() }] }))
+        quantize.draw(3); quantize.end()
+        this.precision.frames++
+      }
+      device.queue.submit([encoder.finish()])
       const completion = device.queue.onSubmittedWorkDone().finally(() => { frames.forEach(frame => frame.close()); this.uploads.delete(completion) })
       this.uploads.add(completion)
       const ids = new Set(clips.map(clip => clip.id))
@@ -323,13 +336,14 @@ struct Vertex { @builtin(position) position: vec4f, @location(0) uv: vec2f }
     this.disposed = true
     this.cancelPresentation()
     await this.ready.catch(() => {})
-    await this.rgbaReady?.catch(() => {})
+    await Promise.allSettled([...this.offscreen.values(), this.presentReady])
     await Promise.allSettled([...this.uploads, ...this.copies])
     await this.codeRuntime?.dispose()
     for (const value of this.textures.values()) value.texture.destroy()
     for (const value of this.uniforms.values()) value.destroy()
     for (const value of this.pool) { value.texture.destroy(); value.chroma?.destroy() }
     this.pool.length = 0; this.blankTexture?.destroy(); this.blankTexture = undefined
+    this.precise?.texture.destroy(); this.precise = undefined
     this.textures.clear(); this.uniforms.clear(); this.manager.destroy()
   }
   cancelPresentation(): void { for (const finish of this.waits) finish() }
