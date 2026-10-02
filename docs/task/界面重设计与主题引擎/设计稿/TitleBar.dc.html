@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>应用标题栏</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&amp;family=Noto+Sans+SC:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<header style="height: 40px; flex: none; display: flex; align-items: center; gap: 12px; padding: 0 6px 0 16px; box-sizing: border-box; width: 100%; background: var(--window, #0F1013); border-bottom: 1px solid var(--line, #24272C); font-family: Geist, 'Noto Sans SC', 'Microsoft YaHei UI', sans-serif; color: var(--text1, #ECEDEF)">
+<div style="flex: 1; min-width: 0; font-size: 13px; font-weight: 600; letter-spacing: 0.02em">痕迹AI</div>
+<nav aria-label="工作区" style="display: flex; gap: 2px">
+<sc-for list="{{tabs}}" as="tab" hint-placeholder-count="5">
+<a href="#" aria-current="{{tab.current}}" style="display: inline-flex; align-items: center; height: 28px; padding: 0 12px; border-radius: 6px; text-decoration: none; font-size: 13px; font-weight: 500; {{tab.st}}">{{tab.name}}</a>
+</sc-for>
+</nav>
+<div style="flex: 1; display: flex; justify-content: flex-end; align-items: center; gap: 2px">
+<dc-import name="IconButton" glyph="sparkles" label="智能助手" on="{{assistantOn}}" hint-size="28px,28px"></dc-import>
+<dc-import name="IconButton" glyph="sliders" label="设置" hint-size="28px,28px"></dc-import>
+<span style="width: 1px; height: 14px; background: var(--line, #24272C); margin: 0 6px"></span>
+<button type="button" aria-label="最小化" style="width: 36px; height: 28px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--text3, #80858E); display: inline-flex; align-items: center; justify-content: center"><dc-import name="Icon" glyph="minus" size="14" weight="1.5" hint-size="14px,14px"></dc-import></button>
+<button type="button" aria-label="最大化" style="width: 36px; height: 28px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--text3, #80858E); display: inline-flex; align-items: center; justify-content: center"><dc-import name="Icon" glyph="square" size="12" weight="1.75" hint-size="12px,12px"></dc-import></button>
+<button type="button" aria-label="关闭" style="width: 36px; height: 28px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--text3, #80858E); display: inline-flex; align-items: center; justify-content: center"><dc-import name="Icon" glyph="x" size="14" weight="1.5" hint-size="14px,14px"></dc-import></button>
+</div>
+</header>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"active":{"editor":"enum","default":"generate","options":["generate","canvas","edit","tools","assets"]},"assistantOn":{"editor":"boolean","default":false},"$preview":{"width":1440,"height":40}}'>
+const TABS = [['generate', '生成'], ['canvas', '画布'], ['edit', '剪辑'], ['tools', '工具'], ['assets', '资产']];
+class Component extends DCLogic {
+  renderVals() {
+    const active = this.props.active ?? 'generate';
+    return {
+      assistantOn: this.props.assistantOn ?? false,
+      tabs: TABS.map(([id, name]) => ({
+        name,
+        current: id === active ? 'page' : 'false',
+        st: id === active ? 'background: var(--hover, #22252A); color: var(--text1, #ECEDEF)' : 'background: transparent; color: var(--text2, #A4A8B0)'
+      }))
+    };
+  }
+}
+</script>
+</body>
+</html>

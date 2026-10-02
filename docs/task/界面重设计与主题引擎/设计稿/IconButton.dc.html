@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>图标按钮</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<button type="button" aria-label="{{label}}" aria-pressed="{{pressedAttr}}" disabled="{{isDisabled}}" style="padding: 0; {{st}}"><dc-import name="Icon" glyph="{{glyph}}" size="{{iconPx}}" solid="{{solid}}" hint-size="16px,16px"></dc-import></button>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"glyph":{"editor":"enum","default":"undo","options":["sparkles","sliders","x","minus","square","search","more","refresh","pencil","download","play","pause","plus","chevDown","chevLeft","chevRight","wand","arrowUp","grid","list","import","trash","undo","redo","mute","volume","lock","unlock","eye","eyeOff","headphones","mic","image","film","music","type","cube","layout","skipBack","skipFwd","pointer","move","comment","scissors","hand","trackSelect","link","magnet","keyframe","folder","sequence","check","zoomFit","clock"]},"label":{"editor":"text","default":"撤销"},"size":{"editor":"enum","default":"md","options":["xs","sm","md","lg"]},"state":{"editor":"enum","default":"rest","options":["rest","hover","pressed","focus","disabled"]},"on":{"editor":"boolean","default":false},"tone":{"editor":"enum","default":"default","options":["default","media","accent"]},"solid":{"editor":"boolean","default":false},"$preview":{"width":48,"height":48}}'>
+const V = (name, fallback) => 'var(--' + name + ', ' + fallback + ')';
+const SIZES = { xs: { box: 20, icon: 13, r: 4 }, sm: { box: 24, icon: 14, r: 5 }, md: { box: 28, icon: 16, r: 6 }, lg: { box: 32, icon: 18, r: 8 } };
+function skin(tone, state, on) {
+  if (tone === 'media') {
+    const bg = state === 'hover' || state === 'pressed' ? 'rgba(10,11,13,0.78)' : 'rgba(10,11,13,0.56)';
+    return { bg, fg: '#FFFFFF', sh: 'none' };
+  }
+  if (tone === 'accent') {
+    const bg = state === 'pressed' ? V('accent-pressed', '#3163CC') : state === 'hover' ? 'linear-gradient(180deg, ' + V('accent-hover-hi', '#5486EE') + ', ' + V('accent-hover', '#4579E6') + ')' : 'linear-gradient(180deg, ' + V('accent-hi', '#4579E6') + ', ' + V('accent', '#3A6FDF') + ')';
+    return { bg, fg: V('on-accent', '#FFFFFF'), sh: state === 'pressed' ? 'inset 0 1px 2px rgba(0,0,0,0.36)' : 'inset 0 1px 0 rgba(255,255,255,0.18), inset 0 0 0 1px rgba(0,0,0,0.16), 0 1px 2px rgba(0,0,0,0.32)' };
+  }
+  if (state === 'disabled') return { bg: 'transparent', fg: V('text-disabled', '#4A4E55'), sh: 'none' };
+  if (on) return { bg: state === 'hover' ? V('control-hover', '#2E3238') : V('selected', '#2A2D33'), fg: V('accent-text', '#8DB4FF'), sh: state === 'focus' ? '0 0 0 2px ' + V('accent-ring', '#7BA2F2') : 'none' };
+  if (state === 'hover') return { bg: V('hover', '#22252A'), fg: V('text1', '#ECEDEF'), sh: 'none' };
+  if (state === 'pressed') return { bg: V('selected', '#2A2D33'), fg: V('text1', '#ECEDEF'), sh: 'none' };
+  if (state === 'focus') return { bg: 'transparent', fg: V('text1', '#ECEDEF'), sh: '0 0 0 2px ' + V('accent-ring', '#7BA2F2') };
+  return { bg: 'transparent', fg: V('text2', '#A4A8B0'), sh: 'none' };
+}
+class Component extends DCLogic {
+  renderVals() {
+    const z = SIZES[this.props.size ?? 'md'] || SIZES.md;
+    const state = this.props.state ?? 'rest';
+    const tone = this.props.tone ?? 'default';
+    const on = this.props.on ?? false;
+    const k = skin(tone, state, on);
+    const st = [
+      'display:inline-flex', 'align-items:center', 'justify-content:center', 'flex:none',
+      'width:' + z.box + 'px', 'height:' + z.box + 'px', 'border:0', 'border-radius:' + (tone === 'accent' ? z.box / 2 : z.r) + 'px',
+      'background:' + k.bg, 'color:' + k.fg, 'box-shadow:' + k.sh, 'cursor:pointer',
+      'transition:background-color 120ms ease, color 120ms ease'
+    ].join(';');
+    return {
+      st,
+      label: this.props.label ?? '撤销',
+      glyph: this.props.glyph ?? 'undo',
+      iconPx: z.icon,
+      solid: this.props.solid ?? false,
+      isDisabled: state === 'disabled',
+      pressedAttr: on ? 'true' : 'false'
+    };
+  }
+}
+</script>
+</body>
+</html>

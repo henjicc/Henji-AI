@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>胶片缩略图</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div role="img" aria-label="{{label}}" style="display: flex; gap: 1px; width: 100%; height: {{height}}px; overflow: hidden; border-radius: {{radius}}px; background: rgba(0, 0, 0, 0.35)">
+<sc-for list="{{tiles}}" as="t" hint-placeholder-count="8">
+<div style="flex: 1 1 0; min-width: 0; height: 100%; {{t.st}}"></div>
+</sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"frames":{"editor":"int","default":8,"min":1,"max":40},"seed":{"editor":"int","default":3,"min":1,"max":999},"height":{"editor":"int","default":36,"min":12,"max":200},"radius":{"editor":"int","default":0,"min":0,"max":12},"label":{"editor":"text","default":"视频缩略图"},"$preview":{"width":480,"height":60}}'>
+function rng(seed) {
+  let a = (seed >>> 0) || 1;
+  return () => { a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+}
+class Component extends DCLogic {
+  renderVals() {
+    const r = rng(this.props.seed ?? 3);
+    const frames = this.props.frames ?? 8;
+    const hue = 200 + r() * 40;
+    const warm = 20 + r() * 25;
+    const tiles = Array.from({ length: frames }, (_, i) => {
+      const drift = Math.sin((i / Math.max(1, frames - 1)) * Math.PI) * 6;
+      const lx = 25 + r() * 50; const ly = 30 + r() * 40;
+      const l1 = 22 + r() * 6 + drift; const l2 = 12 + r() * 4;
+      const glow = 0.18 + r() * 0.3;
+      return { st: 'background: radial-gradient(circle at ' + lx.toFixed(0) + '% ' + ly.toFixed(0) + '%, hsla(' + warm.toFixed(0) + ', 80%, 62%, ' + glow.toFixed(2) + '), transparent 34%), linear-gradient(' + (150 + r() * 40).toFixed(0) + 'deg, hsl(' + hue.toFixed(0) + ', 18%, ' + l1.toFixed(0) + '%), hsl(' + (hue + 10).toFixed(0) + ', 14%, ' + l2.toFixed(0) + '%))' };
+    });
+    return { tiles, height: this.props.height ?? 36, radius: this.props.radius ?? 0, label: this.props.label ?? '视频缩略图' };
+  }
+}
+</script>
+</body>
+</html>

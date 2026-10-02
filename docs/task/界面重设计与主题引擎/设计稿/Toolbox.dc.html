@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>工具</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500&amp;family=Noto+Sans+SC:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#8DB4FF}a:hover{color:#B3CCFF}
+</style>
+</helmet>
+<div style="width: 100%; height: 900px; display: flex; flex-direction: column; overflow: hidden; font-family: Geist, 'Noto Sans SC', 'Microsoft YaHei UI', sans-serif; font-size: 13px; background: var(--window); color: var(--text1); {{themeVars}}">
+<dc-import name="TitleBar" active="tools" hint-size="100%,40px"></dc-import>
+
+<main style="flex: 1; min-height: 0; overflow: hidden; display: flex; justify-content: center">
+<div style="width: 100%; max-width: 1040px; box-sizing: border-box; padding: 40px; display: flex; flex-direction: column; gap: 40px">
+
+<div style="display: flex; flex-direction: column; gap: 6px">
+<h1 style="margin: 0; font-size: 20px; font-weight: 600">工具</h1>
+<p style="margin: 0; font-size: 13px; color: var(--text2)">不依赖生成和画布、可以单独打开的处理工具</p>
+</div>
+
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px">
+<sc-for list="{{tools}}" as="t" hint-placeholder-count="3">
+<a href="#" style="display: flex; flex-direction: column; gap: 14px; padding: 18px; border-radius: 12px; text-decoration: none; color: var(--text1); {{t.st}}">
+<div style="width: 36px; height: 36px; border-radius: 9px; background: var(--raised); color: var(--text1); display: flex; align-items: center; justify-content: center; box-shadow: inset 0 1px 0 var(--edge)"><dc-import name="Icon" glyph="{{t.glyph}}" size="18" weight="1.6" hint-size="18px,18px"></dc-import></div>
+<div style="display: flex; flex-direction: column; gap: 6px">
+<span style="font-size: 14px; font-weight: 500">{{t.name}}</span>
+<span style="font-size: 12px; line-height: 18px; color: var(--text2)">{{t.desc}}</span>
+</div>
+<span style="font-size: 11px; color: var(--text3)">{{t.recent}}</span>
+</a>
+</sc-for>
+</div>
+
+<section style="display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; align-items: center; justify-content: space-between">
+<h2 style="margin: 0; font-size: 14px; font-weight: 500">最近文件</h2>
+<dc-import name="Button" variant="quiet" size="sm" label="全部" hint-size="48px,28px"></dc-import>
+</div>
+<div style="display: flex; flex-direction: column">
+<sc-for list="{{recent}}" as="r" hint-placeholder-count="5">
+<a href="#" style="display: grid; grid-template-columns: 28px minmax(0, 1fr) 140px 120px; align-items: center; gap: 12px; height: 44px; padding: 0 10px; margin: 0 -10px; border-radius: 8px; text-decoration: none; color: var(--text1); {{r.st}}">
+<span style="color: var(--text3); display: flex"><dc-import name="Icon" glyph="{{r.glyph}}" size="16" hint-size="16px,16px"></dc-import></span>
+<span style="font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">{{r.name}}</span>
+<span style="font-size: 12px; color: var(--text2)">{{r.tool}}</span>
+<span style="font-size: 12px; color: var(--text3); text-align: right">{{r.time}}</span>
+</a>
+</sc-for>
+</div>
+</section>
+
+</div>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"preset":{"editor":"enum","default":"graphite","options":["graphite","ocean","film","paper"],"section":"主题"},"accent":{"editor":"enum","default":"跟随预设","options":["跟随预设","蓝","紫","青","橙","玫红"],"section":"主题"},"$preview":{"width":1440,"height":900}}'>
+const HenjiTheme = (function () {
+  const toLin = v => (v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4));
+  const toSrgb = v => (v <= 0.0031308 ? 12.92 * v : 1.055 * Math.pow(v, 1 / 2.4) - 0.055);
+  function rgbOf(L, C, H) {
+    let c = C;
+    for (let n = 0; n < 60; n++) {
+      const h = (H * Math.PI) / 180; const a = c * Math.cos(h); const b = c * Math.sin(h);
+      const l_ = L + 0.3963377774 * a + 0.2158037573 * b;
+      const m_ = L - 0.1055613458 * a - 0.0638541728 * b;
+      const s_ = L - 0.0894841775 * a - 1.291485548 * b;
+      const l = l_ * l_ * l_, m = m_ * m_ * m_, s = s_ * s_ * s_;
+      const rgb = [4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s, -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s, -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s].map(toSrgb);
+      if (rgb.every(v => v >= -0.002 && v <= 1.002) || c <= 0) return rgb.map(v => Math.min(1, Math.max(0, v)));
+      c = Math.max(0, c - 0.005);
+    }
+    return [L, L, L];
+  }
+  const hex = rgb => '#' + rgb.map(v => Math.round(v * 255).toString(16).padStart(2, '0')).join('').toUpperCase();
+  const ok = (L, C, H) => hex(rgbOf(Math.min(1, Math.max(0, L)), Math.max(0, C), H));
+  const parse = x => { const n = parseInt(String(x).replace('#', ''), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
+  function toOklch(x) {
+    const [r, g, b] = parse(x).map(v => toLin(v / 255));
+    const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
+    const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
+    const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
+    const A = 1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s;
+    const B = 0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s;
+    return { L: 0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s, C: Math.hypot(A, B), H: ((Math.atan2(B, A) * 180) / Math.PI + 360) % 360 };
+  }
+  const lum = x => { const [r, g, b] = parse(x).map(v => toLin(v / 255)); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+  const contrast = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+  const alpha = (x, a) => { const [r, g, b] = parse(x); return 'rgba(' + r + ',' + g + ',' + b + ',' + a + ')'; };
+  const PRESETS = {
+    graphite: { name: '石墨', mode: 'dark', hue: 260, tint: 0.006, base: 0.17, accent: '#3A6FDF' },
+    ocean: { name: '深海', mode: 'dark', hue: 245, tint: 0.024, base: 0.165, accent: '#3D86E8' },
+    film: { name: '胶片', mode: 'dark', hue: 70, tint: 0.013, base: 0.172, accent: '#D9822B' },
+    paper: { name: '纸白', mode: 'light', hue: 260, tint: 0.005, base: 0.975, accent: '#3A6FDF' }
+  };
+  const ACCENTS = { '跟随预设': null, '蓝': '#3A6FDF', '紫': '#7B61FF', '青': '#159F8C', '橙': '#D9822B', '玫红': '#D9467A' };
+  function derive(seed) {
+    const s = Object.assign({ contrast: 1 }, seed);
+    const dark = s.mode !== 'light';
+    const k = s.contrast; const st = 0.024 * k; const L0 = s.base;
+    const N = (L, c) => ok(L, c === undefined ? s.tint : c, s.hue);
+    const t = {};
+    if (dark) {
+      Object.assign(t, { gap: N(L0 - 0.6 * st), window: N(L0), panel: N(L0 + st), raised: N(L0 + 2 * st), control: N(L0 + 2.8 * st), controlHover: N(L0 + 3.8 * st), controlPressed: N(L0 + 4.8 * st), hover: N(L0 + 2.6 * st), selected: N(L0 + 4 * st), line: N(L0 + 2.2 * st), lineStrong: N(L0 + 3.8 * st), text1: N(0.95, s.tint * 0.5), text2: N(0.95 - 0.18 * k, s.tint * 0.8), text3: N(0.95 - 0.32 * k, s.tint), textDisabled: N(L0 + 0.2), edge: 'rgba(255,255,255,0.06)', shade: 'rgba(0,0,0,0.5)', media: N(L0 - 0.5 * st) });
+    } else {
+      Object.assign(t, { gap: N(L0 - 0.05 * k), window: N(L0), panel: N(Math.min(1, L0 + 0.022)), raised: N(L0 - 0.022 * k), control: N(L0 - 0.032 * k), controlHover: N(L0 - 0.055 * k), controlPressed: N(L0 - 0.08 * k), hover: N(L0 - 0.035 * k), selected: N(L0 - 0.065 * k), line: N(L0 - 0.075 * k), lineStrong: N(L0 - 0.13 * k), text1: N(0.2, s.tint * 2), text2: N(0.2 + 0.25 * k, s.tint * 2), text3: N(0.2 + 0.33 * k, s.tint * 2), textDisabled: N(0.78), edge: 'rgba(0,0,0,0.07)', shade: 'rgba(28,32,40,0.18)', media: N(0.16) });
+    }
+    const a = toOklch(s.accent);
+    const aL = dark ? Math.min(0.64, Math.max(0.5, a.L)) : Math.min(0.6, Math.max(0.46, a.L));
+    const A = (L, C) => ok(L, C === undefined ? a.C : C, a.H);
+    Object.assign(t, { accent: A(aL), accentHi: A(aL + 0.035), accentHover: A(aL + 0.04), accentHoverHi: A(aL + 0.075), accentPressed: A(aL - 0.045), accentText: dark ? A(0.8, Math.min(a.C, 0.13)) : A(0.5), accentRing: A(dark ? 0.7 : 0.62) });
+    t.accentTint = alpha(t.accent, dark ? 0.2 : 0.12);
+    t.onAccent = contrast('#FFFFFF', t.accent) >= 4.5 ? '#FFFFFF' : N(0.17, 0.01);
+    Object.assign(t, { danger: ok(dark ? 0.6 : 0.55, 0.19, 25), dangerHi: ok(dark ? 0.635 : 0.585, 0.19, 25), dangerText: ok(dark ? 0.74 : 0.5, 0.15, 25), success: ok(dark ? 0.76 : 0.55, 0.15, 155), warning: ok(dark ? 0.8 : 0.64, 0.15, 75) });
+    t.dangerTint = alpha(t.danger, dark ? 0.16 : 0.1);
+    const clipL = dark ? L0 + 6 * st : L0 - 0.12; const edgeL = clipL + (dark ? 0.07 : -0.09);
+    Object.assign(t, { clipVideo: ok(clipL, 0.045, 255), clipVideoLine: ok(edgeL, 0.07, 255), clipAudio: ok(clipL, 0.045, 165), clipAudioLine: ok(edgeL, 0.07, 165), clipText: ok(clipL, 0.045, 305), clipTextLine: ok(edgeL, 0.07, 305), clipWave: dark ? ok(0.84, 0.06, 165) : ok(0.36, 0.07, 165), wave: N(0.6), wavePlayed: t.text1, waveCut: ok(dark ? 0.42 : 0.78, 0.09, 25) });
+    return t;
+  }
+  const vars = t => Object.keys(t).map(key => '--' + key.replace(/[A-Z]/g, m => '-' + m.toLowerCase()) + ': ' + t[key]).join('; ');
+  function fromProps(props) {
+    const base = PRESETS[props.preset || 'graphite'] || PRESETS.graphite;
+    const accent = ACCENTS[props.accent || '跟随预设'];
+    return vars(derive(Object.assign({}, base, accent ? { accent } : {})));
+  }
+  return { PRESETS, derive, vars, contrast, ok, fromProps };
+})();
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      themeVars: HenjiTheme.fromProps(this.props),
+      tools: [
+        { name: '口播剪辑', desc: '按逐字稿剪口播：删掉停顿和语气词，保留想要的句子，导出成片或交给剪辑', recent: '最近：采访_0928.wav', glyph: 'mic', st: 'background: var(--panel); box-shadow: inset 0 0 0 1px var(--line-strong)' },
+        { name: '图片编辑', desc: '打开或粘贴图片，标注、裁剪、模糊与调整，一键复制或保存', recent: '最近：封面_v3.png', glyph: 'image', st: 'background: var(--panel); box-shadow: none' },
+        { name: '3D 镜头参考', desc: '搭三维场景、摆角色姿势、调机位取景，截图作为生成参考图', recent: '最近：雨巷夜景', glyph: 'cube', st: 'background: var(--panel); box-shadow: none' }
+      ],
+      recent: [
+        { name: '采访_0928.wav', tool: '口播剪辑', time: '今天 10:42', glyph: 'mic', st: 'background: var(--hover)' },
+        { name: '封面_v3.png', tool: '图片编辑', time: '今天 09:05', glyph: 'image', st: 'background: transparent' },
+        { name: '雨巷夜景', tool: '3D 镜头参考', time: '昨天', glyph: 'cube', st: 'background: transparent' },
+        { name: '产品口播_第二版.mp4', tool: '口播剪辑', time: '9 月 30 日', glyph: 'mic', st: 'background: transparent' },
+        { name: '角色站姿参考', tool: '3D 镜头参考', time: '9 月 28 日', glyph: 'cube', st: 'background: transparent' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

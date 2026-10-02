@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>按钮</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&amp;family=Noto+Sans+SC:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<button type="button" disabled="{{isDisabled}}" style="font-family: Geist, 'Noto Sans SC', 'Microsoft YaHei UI', sans-serif; {{st}}"><sc-if value="{{hasGlyph}}" hint-placeholder-val="{{false}}"><dc-import name="Icon" glyph="{{glyph}}" size="{{iconPx}}" solid="{{solid}}" hint-size="16px,16px"></dc-import></sc-if><span>{{label}}</span><sc-if value="{{hasTrailing}}" hint-placeholder-val="{{false}}"><span style="display: inline-flex; margin-right: -2px; color: {{trailColor}}"><dc-import name="Icon" glyph="{{trailing}}" size="{{trailPx}}" hint-size="14px,14px"></dc-import></span></sc-if></button>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"variant":{"editor":"enum","default":"primary","options":["primary","secondary","quiet","danger","dangerSolid"]},"size":{"editor":"enum","default":"md","options":["sm","md","lg"]},"state":{"editor":"enum","default":"rest","options":["rest","hover","pressed","focus","disabled"]},"label":{"editor":"text","default":"导出"},"glyph":{"editor":"enum","default":"none","options":["none","download","plus","import","trash","sparkles","wand","refresh","pencil","search","play","undo","lock","mute"]},"solid":{"editor":"boolean","default":false},"trailing":{"editor":"enum","default":"none","options":["none","chevDown","chevRight"]},"block":{"editor":"boolean","default":false},"$preview":{"width":160,"height":48}}'>
+const V = (name, fallback) => 'var(--' + name + ', ' + fallback + ')';
+const SIZES = {
+  sm: { h: 28, pad: 10, fs: 12, icon: 14, gap: 6, r: 6 },
+  md: { h: 32, pad: 12, fs: 13, icon: 15, gap: 6, r: 6 },
+  lg: { h: 36, pad: 16, fs: 14, icon: 16, gap: 8, r: 8 }
+};
+const LIFT = 'inset 0 1px 0 rgba(255,255,255,0.18), inset 0 0 0 1px rgba(0,0,0,0.16), 0 1px 2px rgba(0,0,0,0.32)';
+const SINK = 'inset 0 1px 2px rgba(0,0,0,0.36), inset 0 0 0 1px rgba(0,0,0,0.18)';
+const RING = '0 0 0 2px ' + V('window', '#0F1013') + ', 0 0 0 4px ' + V('accent-ring', '#7BA2F2');
+function skin(variant, state) {
+  const grad = (a, b) => 'linear-gradient(180deg, ' + a + ', ' + b + ')';
+  const S = {
+    primary: {
+      rest: { bg: grad(V('accent-hi', '#4579E6'), V('accent', '#3A6FDF')), fg: V('on-accent', '#FFFFFF'), sh: LIFT },
+      hover: { bg: grad(V('accent-hover-hi', '#5486EE'), V('accent-hover', '#4579E6')), fg: V('on-accent', '#FFFFFF'), sh: LIFT },
+      pressed: { bg: V('accent-pressed', '#3163CC'), fg: V('on-accent', '#FFFFFF'), sh: SINK, tf: 'translateY(0.5px)' },
+      focus: { bg: grad(V('accent-hi', '#4579E6'), V('accent', '#3A6FDF')), fg: V('on-accent', '#FFFFFF'), sh: LIFT + ', ' + RING },
+      disabled: { bg: V('control', '#22252A'), fg: V('text-disabled', '#4A4E55'), sh: 'none' }
+    },
+    secondary: {
+      rest: { bg: V('control', '#22252A'), fg: V('text1', '#ECEDEF'), sh: 'inset 0 1px 0 ' + V('edge', 'rgba(255,255,255,0.06)') },
+      hover: { bg: V('control-hover', '#2A2D33'), fg: V('text1', '#ECEDEF'), sh: 'inset 0 1px 0 ' + V('edge', 'rgba(255,255,255,0.06)') },
+      pressed: { bg: V('control-pressed', '#31353B'), fg: V('text1', '#ECEDEF'), sh: 'inset 0 1px 2px rgba(0,0,0,0.25)', tf: 'translateY(0.5px)' },
+      focus: { bg: V('control', '#22252A'), fg: V('text1', '#ECEDEF'), sh: RING },
+      disabled: { bg: V('raised', '#1A1C20'), fg: V('text-disabled', '#4A4E55'), sh: 'none' }
+    },
+    quiet: {
+      rest: { bg: 'transparent', fg: V('text2', '#A4A8B0'), sh: 'none' },
+      hover: { bg: V('hover', '#22252A'), fg: V('text1', '#ECEDEF'), sh: 'none' },
+      pressed: { bg: V('selected', '#2A2D33'), fg: V('text1', '#ECEDEF'), sh: 'none' },
+      focus: { bg: 'transparent', fg: V('text1', '#ECEDEF'), sh: '0 0 0 2px ' + V('accent-ring', '#7BA2F2') },
+      disabled: { bg: 'transparent', fg: V('text-disabled', '#4A4E55'), sh: 'none' }
+    },
+    danger: {
+      rest: { bg: 'transparent', fg: V('text2', '#A4A8B0'), sh: 'none' },
+      hover: { bg: V('danger-tint', 'rgba(229,72,77,0.14)'), fg: V('danger-text', '#F2797D'), sh: 'none' },
+      pressed: { bg: V('danger-tint', 'rgba(229,72,77,0.14)'), fg: V('danger-text', '#F2797D'), sh: 'inset 0 1px 2px rgba(0,0,0,0.3)' },
+      focus: { bg: 'transparent', fg: V('danger-text', '#F2797D'), sh: '0 0 0 2px ' + V('danger', '#E5484D') },
+      disabled: { bg: 'transparent', fg: V('text-disabled', '#4A4E55'), sh: 'none' }
+    },
+    dangerSolid: {
+      rest: { bg: grad(V('danger-hi', '#E5555A'), V('danger', '#D63F44')), fg: '#FFFFFF', sh: LIFT },
+      hover: { bg: grad(V('danger-hi', '#E5555A'), V('danger-hi', '#E5555A')), fg: '#FFFFFF', sh: LIFT },
+      pressed: { bg: V('danger', '#D63F44'), fg: '#FFFFFF', sh: SINK, tf: 'translateY(0.5px)' },
+      focus: { bg: grad(V('danger-hi', '#E5555A'), V('danger', '#D63F44')), fg: '#FFFFFF', sh: LIFT + ', 0 0 0 2px ' + V('window', '#0F1013') + ', 0 0 0 4px ' + V('danger', '#D63F44') },
+      disabled: { bg: V('control', '#22252A'), fg: V('text-disabled', '#4A4E55'), sh: 'none' }
+    }
+  };
+  return (S[variant] || S.primary)[state] || (S[variant] || S.primary).rest;
+}
+class Component extends DCLogic {
+  renderVals() {
+    const variant = this.props.variant ?? 'primary';
+    const state = this.props.state ?? 'rest';
+    const z = SIZES[this.props.size ?? 'md'] || SIZES.md;
+    const k = skin(variant, state);
+    const glyph = this.props.glyph ?? 'none';
+    const trailing = this.props.trailing ?? 'none';
+    const quietish = variant === 'quiet' || variant === 'danger';
+    const st = [
+      'display:inline-flex', 'align-items:center', 'justify-content:center', 'gap:' + z.gap + 'px',
+      'height:' + z.h + 'px', 'padding:0 ' + (quietish ? z.pad - 2 : z.pad) + 'px', 'border:0', 'border-radius:' + z.r + 'px',
+      'font-size:' + z.fs + 'px', 'font-weight:500', 'line-height:1', 'white-space:nowrap', 'cursor:pointer',
+      'background:' + k.bg, 'color:' + k.fg, 'box-shadow:' + k.sh, 'transform:' + (k.tf || 'none'),
+      'transition:background-color 120ms ease, box-shadow 120ms ease, transform 80ms ease',
+      (this.props.block ?? false) ? 'width:100%' : 'width:auto'
+    ].join(';');
+    return {
+      st,
+      label: this.props.label ?? '导出',
+      isDisabled: state === 'disabled',
+      hasGlyph: glyph !== 'none',
+      glyph,
+      solid: this.props.solid ?? false,
+      iconPx: z.icon,
+      hasTrailing: trailing !== 'none',
+      trailing,
+      trailPx: z.icon - 1,
+      trailColor: variant === 'primary' || variant === 'dangerSolid' ? 'currentColor' : V('text3', '#80858E')
+    };
+  }
+}
+</script>
+</body>
+</html>

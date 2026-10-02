@@ -1,0 +1,424 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>设计系统</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500&amp;family=Noto+Sans+SC:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#8DB4FF}a:hover{color:#B3CCFF}
+</style>
+</helmet>
+<div style="width: 100%; min-height: 3560px; box-sizing: border-box; padding: 64px 64px 80px; display: flex; flex-direction: column; gap: 64px; font-family: Geist, 'Noto Sans SC', 'Microsoft YaHei UI', sans-serif; background: var(--window); color: var(--text1); transition: background-color 200ms ease; {{themeVars}}">
+
+<header style="display: flex; justify-content: space-between; align-items: flex-end; gap: 24px; flex-wrap: wrap">
+<div style="display: flex; flex-direction: column; gap: 10px">
+<div style="font-size: 12px; color: var(--text3); letter-spacing: 0.08em">痕迹AI · 界面重设计 · 第二版</div>
+<h1 style="margin: 0; font-size: 32px; font-weight: 600; letter-spacing: -0.01em">设计系统：主题、令牌与组件</h1>
+</div>
+<div style="font-size: 14px; color: var(--text2)">所有颜色由种子推导 · 所有页面由共享组件搭建</div>
+</header>
+
+<section style="display: flex; flex-direction: column; gap: 24px">
+<div style="display: flex; flex-direction: column; gap: 6px">
+<h2 style="margin: 0; font-size: 18px; font-weight: 600">主题引擎</h2>
+<p style="margin: 0; font-size: 13px; color: var(--text2)">只改左侧几个种子，右侧全部令牌自动重算。点一下预设、强调色或对比度试试。</p>
+</div>
+<div style="display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 48px; align-items: start">
+<div style="display: flex; flex-direction: column; gap: 22px">
+<div style="display: flex; flex-direction: column; gap: 10px">
+<div style="font-size: 12px; color: var(--text3)">预设</div>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+<sc-for list="{{presetButtons}}" as="p" hint-placeholder-count="4">
+<button type="button" onClick="{{p.pick}}" aria-pressed="{{p.pressed}}" style="display: flex; align-items: center; gap: 10px; height: 44px; padding: 0 10px; border: 0; border-radius: 8px; font: inherit; font-size: 13px; cursor: pointer; text-align: left; {{p.st}}"><span aria-hidden="true" style="width: 22px; height: 22px; border-radius: 6px; flex: none; {{p.chip}}"></span>{{p.name}}</button>
+</sc-for>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 10px">
+<div style="font-size: 12px; color: var(--text3)">强调色</div>
+<div style="display: flex; gap: 10px; flex-wrap: wrap">
+<sc-for list="{{accentButtons}}" as="c" hint-placeholder-count="6">
+<button type="button" onClick="{{c.pick}}" aria-label="{{c.name}}" aria-pressed="{{c.pressed}}" style="width: 28px; height: 28px; padding: 0; border: 0; border-radius: 14px; cursor: pointer; {{c.st}}"></button>
+</sc-for>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 10px">
+<div style="font-size: 12px; color: var(--text3)">层级对比</div>
+<div role="radiogroup" aria-label="层级对比" style="display: inline-flex; gap: 2px; padding: 2px; border-radius: 8px; background: var(--gap); width: fit-content">
+<sc-for list="{{contrastButtons}}" as="o" hint-placeholder-count="3">
+<button type="button" role="radio" aria-checked="{{o.checked}}" onClick="{{o.pick}}" style="height: 28px; padding: 0 12px; border: 0; border-radius: 6px; font: inherit; font-size: 12px; font-weight: 500; cursor: pointer; {{o.st}}">{{o.label}}</button>
+</sc-for>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; border-top: 1px solid var(--line); padding-top: 12px">
+<sc-for list="{{seedRows}}" as="s" hint-placeholder-count="6">
+<div style="display: flex; justify-content: space-between; align-items: center; height: 30px; font-size: 12px"><span style="color: var(--text2)">{{s.name}}</span><span style="color: var(--text1); font-family: 'Geist Mono', monospace; font-variant-numeric: tabular-nums">{{s.value}}</span></div>
+</sc-for>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 24px">
+<sc-for list="{{tokenGroups}}" as="g" hint-placeholder-count="4">
+<div style="display: flex; flex-direction: column; gap: 10px">
+<div style="font-size: 12px; color: var(--text3)">{{g.title}}</div>
+<div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px">
+<sc-for list="{{g.items}}" as="tok" hint-placeholder-count="8">
+<div style="display: flex; gap: 10px; align-items: center; min-width: 0">
+<div style="width: 40px; height: 40px; border-radius: 8px; flex: none; box-shadow: inset 0 0 0 1px var(--line); background: var(--{{tok.v}})"></div>
+<div style="display: flex; flex-direction: column; gap: 2px; min-width: 0">
+<span style="font-size: 12px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{tok.name}}</span>
+<span style="font-size: 11px; color: var(--text3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{tok.rule}}</span>
+<span style="font-size: 10px; color: var(--text3); font-family: 'Geist Mono', monospace">{{tok.hex}}</span>
+</div>
+</div>
+</sc-for>
+</div>
+</div>
+</sc-for>
+</div>
+</div>
+</section>
+
+<section style="display: flex; flex-direction: column; gap: 20px">
+<div style="display: flex; flex-direction: column; gap: 6px">
+<h2 style="margin: 0; font-size: 18px; font-weight: 600">四个预设，同一套组件</h2>
+<p style="margin: 0; font-size: 13px; color: var(--text2)">每个预览只换了种子，组件代码完全相同。浅色主题也是同一套规则反向推导出来的。</p>
+</div>
+<div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px">
+<sc-for list="{{previews}}" as="pv" hint-placeholder-count="4">
+<div style="display: flex; flex-direction: column; gap: 10px; {{pv.vars}}">
+<div style="border-radius: 12px; overflow: hidden; background: var(--window); box-shadow: 0 0 0 1px var(--line); color: var(--text1); display: flex; flex-direction: column">
+<div style="height: 36px; display: flex; align-items: center; gap: 2px; padding: 0 6px; background: var(--panel); border-bottom: 1px solid var(--line)">
+<dc-import name="IconButton" glyph="chevLeft" label="返回" size="sm" hint-size="24px,24px"></dc-import>
+<span style="font-size: 12px; font-weight: 500; padding: 0 6px">雨巷夜景</span>
+<span style="flex: 1"></span>
+<dc-import name="IconButton" glyph="undo" label="撤销" size="sm" hint-size="24px,24px"></dc-import>
+<dc-import name="IconButton" glyph="magnet" label="吸附" size="sm" on="{{true}}" hint-size="24px,24px"></dc-import>
+<dc-import name="Button" variant="primary" size="sm" label="导出" hint-size="52px,28px"></dc-import>
+</div>
+<div style="display: flex; flex-direction: column; padding: 8px 6px; gap: 2px">
+<div style="display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 8px; border-radius: 6px; background: var(--selected); font-size: 12px"><span style="color: var(--accent-text); display: flex"><dc-import name="Icon" glyph="film" size="14" hint-size="14px,14px"></dc-import></span>镜头 01.mov</div>
+<div style="display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 8px; border-radius: 6px; background: var(--hover); font-size: 12px; color: var(--text1)"><span style="color: var(--text3); display: flex"><dc-import name="Icon" glyph="music" size="14" hint-size="14px,14px"></dc-import></span>采访_0928.wav</div>
+<div style="display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 8px; border-radius: 6px; font-size: 12px; color: var(--text2)"><span style="color: var(--text3); display: flex"><dc-import name="Icon" glyph="image" size="14" hint-size="14px,14px"></dc-import></span>封面_v3.png</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 3px; padding: 6px 8px 10px; background: var(--gap)">
+<div style="height: 30px; border-radius: 4px; overflow: hidden; box-shadow: inset 0 0 0 1px var(--clip-video-line); background: var(--clip-video); display: flex"><div style="width: 54px; flex: none"><dc-import name="Filmstrip" frames="1" seed="{{pv.seed}}" height="30" hint-size="54px,30px"></dc-import></div><span style="font-size: 10px; padding: 3px 6px; color: var(--text1); white-space: nowrap">镜头 01.mov</span></div>
+<div style="height: 30px; border-radius: 4px; overflow: hidden; box-shadow: inset 0 0 0 1px var(--clip-audio-line); background: var(--clip-audio); position: relative"><div style="position: absolute; left: 4px; right: 4px; top: 4px"><dc-import name="Waveform" mode="mini" tone="clip" bins="90" seed="{{pv.seed}}" height="22" hint-size="100%,22px"></dc-import></div></div>
+</div>
+</div>
+<div style="display: flex; justify-content: space-between; font-size: 12px; padding: 0 2px"><span style="font-weight: 500">{{pv.name}}</span><span style="color: var(--text3); font-family: 'Geist Mono', monospace">{{pv.summary}}</span></div>
+</div>
+</sc-for>
+</div>
+</section>
+
+<section style="display: flex; flex-direction: column; gap: 20px">
+<div style="display: flex; flex-direction: column; gap: 6px">
+<h2 style="margin: 0; font-size: 18px; font-weight: 600">令牌分三层</h2>
+<p style="margin: 0; font-size: 13px; color: var(--text2)">界面代码只引用“语义令牌”；以后加主题编辑器、改色、换浅色，都只动第一层。</p>
+</div>
+<div style="display: flex; flex-direction: column; gap: 10px; max-width: 1120px">
+<div style="display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 16px; align-items: center">
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 13px; font-weight: 500">基础色阶</span><span style="font-size: 11px; color: var(--text3)">由种子算出的连续灰阶</span></div>
+<div style="display: flex; height: 40px; border-radius: 8px; overflow: hidden; box-shadow: inset 0 0 0 1px var(--line)">
+<sc-for list="{{ramp}}" as="rp" hint-placeholder-count="12"><div style="flex: 1; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 4px; font-size: 9px; font-family: 'Geist Mono', monospace; background: {{rp.hex}}; color: {{rp.ink}}">{{rp.label}}</div></sc-for>
+</div>
+</div>
+<div style="padding-left: 196px; color: var(--text3); font-size: 12px">↓ 按规则取用</div>
+<div style="display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 16px; align-items: center">
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 13px; font-weight: 500">语义令牌</span><span style="font-size: 11px; color: var(--text3)">界面只认这一层</span></div>
+<div style="display: flex; gap: 8px; flex-wrap: wrap">
+<sc-for list="{{semantic}}" as="sm" hint-placeholder-count="10"><span style="display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px 0 6px; border-radius: 6px; background: var(--raised); font-size: 12px"><span style="width: 16px; height: 16px; border-radius: 4px; box-shadow: inset 0 0 0 1px var(--line); background: var(--{{sm.v}})"></span>{{sm.name}}</span></sc-for>
+</div>
+</div>
+<div style="padding-left: 196px; color: var(--text3); font-size: 12px">↓ 组件内部映射，可按场景覆盖</div>
+<div style="display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 16px; align-items: center">
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 13px; font-weight: 500">组件令牌</span><span style="font-size: 11px; color: var(--text3)">按钮、片段、波形各自的取色</span></div>
+<div style="display: flex; gap: 8px; flex-wrap: wrap">
+<sc-for list="{{componentTokens}}" as="ct" hint-placeholder-count="6"><span style="display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: 6px; box-shadow: inset 0 0 0 1px var(--line); font-size: 12px; color: var(--text2)">{{ct.name}}<span style="color: var(--text3)">→</span><span style="color: var(--text1)">{{ct.from}}</span></span></sc-for>
+</div>
+</div>
+</div>
+</section>
+
+<section style="display: flex; flex-direction: column; gap: 20px">
+<div style="display: flex; flex-direction: column; gap: 6px">
+<h2 style="margin: 0; font-size: 18px; font-weight: 600">按钮：材质与状态</h2>
+<p style="margin: 0; font-size: 13px; color: var(--text2)">主按钮不靠“换颜色”区分状态：静息有极细的上亮下暗、顶部一条高光和内描边；悬停整体提亮；按下时高光消失、轻微下沉。</p>
+</div>
+<div style="display: grid; grid-template-columns: 120px repeat(5, minmax(0, 1fr)); align-items: center; row-gap: 4px; column-gap: 12px; max-width: 1180px">
+<div></div>
+<sc-for list="{{stateNames}}" as="sn" hint-placeholder-count="5"><div style="font-size: 12px; color: var(--text3); padding: 6px 0">{{sn}}</div></sc-for>
+<sc-for list="{{buttonRows}}" as="br" hint-placeholder-count="5">
+<div style="font-size: 13px; font-weight: 500; padding: 12px 0; border-top: 1px solid var(--line)">{{br.name}}</div>
+<sc-for list="{{br.cells}}" as="cell" hint-placeholder-count="5">
+<div style="padding: 12px 0; border-top: 1px solid var(--line)"><dc-import name="Button" variant="{{cell.variant}}" state="{{cell.state}}" label="{{cell.label}}" glyph="{{cell.glyph}}" hint-size="96px,32px"></dc-import></div>
+</sc-for>
+</sc-for>
+</div>
+<div style="display: flex; gap: 40px; flex-wrap: wrap; align-items: center">
+<div style="display: flex; gap: 10px; align-items: center">
+<dc-import name="Button" variant="primary" size="sm" label="新建" glyph="plus" hint-size="72px,28px"></dc-import>
+<dc-import name="Button" variant="primary" size="md" label="新建画布" glyph="plus" hint-size="104px,32px"></dc-import>
+<dc-import name="Button" variant="primary" size="lg" label="开始生成" glyph="sparkles" hint-size="120px,36px"></dc-import>
+<span style="font-size: 12px; color: var(--text3); margin-left: 6px">小 28 · 中 32 · 大 36</span>
+</div>
+<div style="display: flex; gap: 6px; align-items: center">
+<dc-import name="IconButton" glyph="scissors" label="剃刀" hint-size="28px,28px"></dc-import>
+<dc-import name="IconButton" glyph="scissors" label="剃刀（悬停）" state="hover" hint-size="28px,28px"></dc-import>
+<dc-import name="IconButton" glyph="magnet" label="吸附（开）" on="{{true}}" hint-size="28px,28px"></dc-import>
+<dc-import name="IconButton" glyph="play" label="播放（画面上）" tone="media" solid="{{true}}" hint-size="28px,28px"></dc-import>
+<dc-import name="IconButton" glyph="arrowUp" label="生成" tone="accent" size="lg" hint-size="32px,32px"></dc-import>
+<span style="font-size: 12px; color: var(--text3); margin-left: 6px">图标按钮：静默 · 悬停 · 开启 · 压在画面上 · 圆形主动作</span>
+</div>
+</div>
+</section>
+
+<section style="display: flex; flex-direction: column; gap: 20px">
+<div style="display: flex; flex-direction: column; gap: 6px">
+<h2 style="margin: 0; font-size: 18px; font-weight: 600">统一波形组件</h2>
+<p style="margin: 0; font-size: 13px; color: var(--text2)">口播剪辑、剪辑时间线、画布音频节点、生成记录共用一个组件。外层峰值 + 内层响度两层叠画；放大到底能看到每个采样点。</p>
+</div>
+<div style="display: grid; grid-template-columns: 160px minmax(0, 1fr); row-gap: 20px; column-gap: 24px; align-items: center; max-width: 1240px">
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 13px; font-weight: 500">迷你</span><span style="font-size: 11px; color: var(--text3)">列表、生成记录、片段内</span></div>
+<div style="display: flex; align-items: center; gap: 12px; height: 44px; padding: 0 12px 0 6px; border-radius: 10px; background: var(--panel); max-width: 520px">
+<dc-import name="IconButton" glyph="play" label="播放" solid="{{true}}" hint-size="28px,28px"></dc-import>
+<div style="flex: 1; min-width: 0"><dc-import name="Waveform" mode="mini" bins="120" seed="11" played="0.4" height="26" hint-size="100%,26px"></dc-import></div>
+<span style="font-size: 12px; font-family: 'Geist Mono', monospace; color: var(--text2)">0:12 / 0:30</span>
+</div>
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 13px; font-weight: 500">标准</span><span style="font-size: 11px; color: var(--text3)">时间线：已播放、已剪去</span></div>
+<div style="padding: 10px 0; border-radius: 8px; background: var(--gap)"><dc-import name="Waveform" mode="standard" bins="900" seed="7" played="0.34" cuts="0.06-0.11,0.58-0.63" height="96" hint-size="100%,96px"></dc-import></div>
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 13px; font-weight: 500">精细</span><span style="font-size: 11px; color: var(--text3)">放大到采样级，用来精确定位剪点</span></div>
+<div style="display: flex; flex-direction: column; gap: 6px; padding: 10px 0 8px; border-radius: 8px; background: var(--gap); position: relative">
+<dc-import name="Waveform" mode="detail" seed="5" height="110" hint-size="100%,110px"></dc-import>
+<div style="display: flex; justify-content: space-between; padding: 0 8px; font-size: 10px; color: var(--text3); font-family: 'Geist Mono', monospace"><span>00:03.2400</span><span>00:03.2425</span><span>00:03.2450</span><span>00:03.2475</span><span>00:03.2500</span></div>
+<div aria-hidden="true" style="position: absolute; top: 6px; bottom: 26px; left: 41%; width: 1px; background: var(--accent-ring)"></div>
+</div>
+</div>
+</section>
+
+<section style="display: flex; flex-direction: column; gap: 20px">
+<div style="display: flex; flex-direction: column; gap: 6px">
+<h2 style="margin: 0; font-size: 18px; font-weight: 600">轨道与片段</h2>
+<p style="margin: 0; font-size: 13px; color: var(--text2)">轨道头全部用图标（参照 Premiere）；视频片段显示缩略图条，音频片段显示真实波形（渲染一次后缓存）。</p>
+</div>
+<div style="display: flex; flex-direction: column; max-width: 1240px; border-radius: 10px; overflow: hidden; box-shadow: 0 0 0 1px var(--line)">
+<sc-for list="{{demoTracks}}" as="tr" hint-placeholder-count="3">
+<div style="display: grid; grid-template-columns: 220px minmax(0, 1fr); height: {{tr.h}}px; border-bottom: 1px solid var(--gap)">
+<div style="display: flex; align-items: center; gap: 2px; padding: 0 6px 0 12px; background: var(--panel); border-right: 1px solid var(--gap)">
+<span style="width: 26px; font-size: 11px; font-weight: 600; color: var(--text2); font-family: 'Geist Mono', monospace">{{tr.id}}</span>
+<span style="flex: 1; min-width: 0; font-size: 11px; color: var(--text3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{tr.name}}</span>
+<sc-for list="{{tr.toggles}}" as="tg" hint-placeholder-count="3"><dc-import name="IconButton" glyph="{{tg.glyph}}" label="{{tg.label}}" size="sm" on="{{tg.on}}" hint-size="24px,24px"></dc-import></sc-for>
+</div>
+<div style="position: relative; background: var(--window)">
+<sc-for list="{{tr.clips}}" as="c" hint-placeholder-count="2">
+<div style="position: absolute; top: 3px; bottom: 3px; border-radius: 5px; overflow: hidden; {{c.st}}">
+<sc-if value="{{c.video}}" hint-placeholder-val="{{false}}"><div style="position: absolute; inset: 0"><dc-import name="Filmstrip" frames="{{c.frames}}" seed="{{c.seed}}" height="{{c.inner}}" hint-size="100%,40px"></dc-import></div></sc-if>
+<sc-if value="{{c.audio}}" hint-placeholder-val="{{false}}"><div style="position: absolute; left: 0; right: 0; top: 14px; bottom: 2px"><dc-import name="Waveform" mode="standard" tone="clip" bins="420" seed="{{c.seed}}" height="{{c.wave}}" hint-size="100%,24px"></dc-import></div></sc-if>
+<span style="position: absolute; left: 0; top: 0; max-width: 100%; box-sizing: border-box; padding: 1px 6px; font-size: 10px; line-height: 14px; color: #FFFFFF; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: linear-gradient(90deg, rgba(0,0,0,0.55), rgba(0,0,0,0)); border-bottom-right-radius: 4px">{{c.name}}</span>
+</div>
+</sc-for>
+</div>
+</div>
+</sc-for>
+</div>
+</section>
+
+<section style="display: flex; flex-direction: column; gap: 20px">
+<h2 style="margin: 0; font-size: 18px; font-weight: 600">同一条工具栏：现在 → 调整后</h2>
+<div style="display: grid; grid-template-columns: 72px minmax(0, 1fr); row-gap: 14px; column-gap: 20px; align-items: center; max-width: 1240px">
+<div style="font-size: 12px; color: var(--text3)">现在</div>
+<div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 12px; border-radius: 8px; background: #171717; color: #E5E5E5">
+<span style="display: inline-flex; align-items: center; height: 38px; padding: 0 16px; border-radius: 8px; border: 1px solid #404040; background: #262626; font-size: 14px">导入</span>
+<span style="display: inline-flex; align-items: center; height: 38px; padding: 0 16px; border-radius: 8px; border: 1px solid #404040; background: #262626; font-size: 14px">资产库</span>
+<span style="display: inline-flex; align-items: center; height: 38px; padding: 0 12px; border-radius: 8px; border: 1px solid #404040; background: #262626; font-size: 14px; color: #A3A3A3; width: 110px; overflow: hidden; white-space: nowrap">搜索名称或t</span>
+<span style="display: inline-flex; align-items: center; height: 38px; padding: 0 12px; border-radius: 8px; border: 1px solid #404040; background: #262626; font-size: 14px">名称 ▾</span>
+<span style="font-size: 14px; color: #A3A3A3; padding: 0 8px">适合窗口</span><span style="font-size: 14px; color: #A3A3A3; padding: 0 8px">重新加载预览</span><span style="font-size: 14px; color: #A3A3A3; padding: 0 8px">选帧加入资产库</span><span style="font-size: 14px; color: #A3A3A3; padding: 0 8px">点标注</span>
+</div>
+<div style="font-size: 12px; color: var(--text3)">调整后</div>
+<div style="display: flex; align-items: center; gap: 4px; flex-wrap: wrap; padding: 6px 8px; border-radius: 8px; background: var(--panel)">
+<div style="display: flex; align-items: center; gap: 8px; width: 220px; height: 28px; box-sizing: border-box; padding: 0 8px; border-radius: 6px; background: var(--raised); color: var(--text3)"><dc-import name="Icon" glyph="search" size="14" hint-size="14px,14px"></dc-import><input aria-label="搜索素材" placeholder="搜索素材" style="flex: 1; min-width: 0; border: 0; outline: none; background: transparent; color: var(--text1); font: inherit; font-size: 12px"></div>
+<dc-import name="Button" variant="quiet" size="sm" label="名称" trailing="chevDown" hint-size="64px,28px"></dc-import>
+<span style="flex: 1"></span>
+<dc-import name="IconButton" glyph="list" label="列表视图" on="{{true}}" hint-size="28px,28px"></dc-import>
+<dc-import name="IconButton" glyph="grid" label="网格视图" hint-size="28px,28px"></dc-import>
+<dc-import name="IconButton" glyph="plus" label="导入素材" hint-size="28px,28px"></dc-import>
+<span style="width: 1px; height: 16px; background: var(--line); margin: 0 6px"></span>
+<span style="font-size: 12px; font-family: 'Geist Mono', monospace; font-variant-numeric: tabular-nums; padding: 0 6px">00:00:01:59</span>
+<dc-import name="IconButton" glyph="play" label="播放" solid="{{true}}" hint-size="28px,28px"></dc-import>
+<dc-import name="Button" variant="quiet" size="sm" label="适应" trailing="chevDown" hint-size="64px,28px"></dc-import>
+<dc-import name="IconButton" glyph="more" label="更多" hint-size="28px,28px"></dc-import>
+</div>
+</div>
+</section>
+
+<section style="display: flex; flex-direction: column; gap: 20px">
+<h2 style="margin: 0; font-size: 18px; font-weight: 600">文字与尺寸</h2>
+<div style="display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 48px; max-width: 1240px">
+<div style="display: flex; flex-direction: column">
+<sc-for list="{{typeScale}}" as="ty" hint-placeholder-count="7">
+<div style="display: flex; justify-content: space-between; align-items: baseline; padding: 10px 0; border-top: 1px solid var(--line)"><span style="{{ty.st}}">{{ty.sample}}</span><span style="font-size: 11px; color: var(--text3)">{{ty.spec}}</span></div>
+</sc-for>
+</div>
+<div style="display: flex; flex-direction: column; gap: 18px">
+<div style="display: flex; gap: 12px; align-items: flex-end">
+<div style="display: flex; flex-direction: column; gap: 6px; align-items: center"><div style="width: 64px; height: 28px; border-radius: 6px; background: var(--raised)"></div><span style="font-size: 11px; color: var(--text3)">28 紧凑</span></div>
+<div style="display: flex; flex-direction: column; gap: 6px; align-items: center"><div style="width: 64px; height: 32px; border-radius: 6px; background: var(--raised)"></div><span style="font-size: 11px; color: var(--text3)">32 默认</span></div>
+<div style="display: flex; flex-direction: column; gap: 6px; align-items: center"><div style="width: 64px; height: 36px; border-radius: 8px; background: var(--raised)"></div><span style="font-size: 11px; color: var(--text3)">36 醒目</span></div>
+<div style="display: flex; flex-direction: column; gap: 6px; align-items: center; margin-left: 24px"><div style="width: 40px; height: 40px; border-radius: 6px; background: var(--raised)"></div><span style="font-size: 11px; color: var(--text3)">圆角 6</span></div>
+<div style="display: flex; flex-direction: column; gap: 6px; align-items: center"><div style="width: 40px; height: 40px; border-radius: 8px; background: var(--raised)"></div><span style="font-size: 11px; color: var(--text3)">8</span></div>
+<div style="display: flex; flex-direction: column; gap: 6px; align-items: center"><div style="width: 40px; height: 40px; border-radius: 12px; background: var(--raised)"></div><span style="font-size: 11px; color: var(--text3)">12</span></div>
+</div>
+<div style="display: flex; gap: 10px; align-items: flex-end">
+<sc-for list="{{spacing}}" as="sp" hint-placeholder-count="6"><div style="display: flex; flex-direction: column; gap: 6px; align-items: center"><div style="height: 24px; border-radius: 2px; background: var(--accent); width: {{sp}}px"></div><span style="font-size: 11px; color: var(--text3)">{{sp}}</span></div></sc-for>
+<span style="font-size: 11px; color: var(--text3); margin-left: 8px">间距只用这六档</span>
+</div>
+<div style="font-size: 12px; line-height: 20px; color: var(--text2); max-width: 480px">动效：悬停 120ms、展开 180ms、面板 240ms，统一缓出；只做透明度与位移，不动画宽高。</div>
+</div>
+</div>
+</section>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":3560}}'>
+const HenjiTheme = (function () {
+  const toLin = v => (v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4));
+  const toSrgb = v => (v <= 0.0031308 ? 12.92 * v : 1.055 * Math.pow(v, 1 / 2.4) - 0.055);
+  function rgbOf(L, C, H) {
+    let c = C;
+    for (let n = 0; n < 60; n++) {
+      const h = (H * Math.PI) / 180; const a = c * Math.cos(h); const b = c * Math.sin(h);
+      const l_ = L + 0.3963377774 * a + 0.2158037573 * b;
+      const m_ = L - 0.1055613458 * a - 0.0638541728 * b;
+      const s_ = L - 0.0894841775 * a - 1.291485548 * b;
+      const l = l_ * l_ * l_, m = m_ * m_ * m_, s = s_ * s_ * s_;
+      const rgb = [4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s, -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s, -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s].map(toSrgb);
+      if (rgb.every(v => v >= -0.002 && v <= 1.002) || c <= 0) return rgb.map(v => Math.min(1, Math.max(0, v)));
+      c = Math.max(0, c - 0.005);
+    }
+    return [L, L, L];
+  }
+  const hex = rgb => '#' + rgb.map(v => Math.round(v * 255).toString(16).padStart(2, '0')).join('').toUpperCase();
+  const ok = (L, C, H) => hex(rgbOf(Math.min(1, Math.max(0, L)), Math.max(0, C), H));
+  const parse = x => { const n = parseInt(String(x).replace('#', ''), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
+  function toOklch(x) {
+    const [r, g, b] = parse(x).map(v => toLin(v / 255));
+    const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
+    const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
+    const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
+    const A = 1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s;
+    const B = 0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s;
+    return { L: 0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s, C: Math.hypot(A, B), H: ((Math.atan2(B, A) * 180) / Math.PI + 360) % 360 };
+  }
+  const lum = x => { const [r, g, b] = parse(x).map(v => toLin(v / 255)); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+  const contrast = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+  const alpha = (x, a) => { const [r, g, b] = parse(x); return 'rgba(' + r + ',' + g + ',' + b + ',' + a + ')'; };
+  const PRESETS = {
+    graphite: { name: '石墨', mode: 'dark', hue: 260, tint: 0.006, base: 0.17, accent: '#3A6FDF' },
+    ocean: { name: '深海', mode: 'dark', hue: 245, tint: 0.024, base: 0.165, accent: '#3D86E8' },
+    film: { name: '胶片', mode: 'dark', hue: 70, tint: 0.013, base: 0.172, accent: '#D9822B' },
+    paper: { name: '纸白', mode: 'light', hue: 260, tint: 0.005, base: 0.975, accent: '#3A6FDF' }
+  };
+  function derive(seed) {
+    const s = Object.assign({ contrast: 1 }, seed);
+    const dark = s.mode !== 'light';
+    const k = s.contrast; const st = 0.024 * k; const L0 = s.base;
+    const N = (L, c) => ok(L, c === undefined ? s.tint : c, s.hue);
+    const t = {};
+    if (dark) {
+      Object.assign(t, { gap: N(L0 - 0.6 * st), window: N(L0), panel: N(L0 + st), raised: N(L0 + 2 * st), control: N(L0 + 2.8 * st), controlHover: N(L0 + 3.8 * st), controlPressed: N(L0 + 4.8 * st), hover: N(L0 + 2.6 * st), selected: N(L0 + 4 * st), line: N(L0 + 2.2 * st), lineStrong: N(L0 + 3.8 * st), text1: N(0.95, s.tint * 0.5), text2: N(0.95 - 0.18 * k, s.tint * 0.8), text3: N(0.95 - 0.32 * k, s.tint), textDisabled: N(L0 + 0.2), edge: 'rgba(255,255,255,0.06)', shade: 'rgba(0,0,0,0.5)', media: N(L0 - 0.5 * st) });
+    } else {
+      Object.assign(t, { gap: N(L0 - 0.05 * k), window: N(L0), panel: N(Math.min(1, L0 + 0.022)), raised: N(L0 - 0.022 * k), control: N(L0 - 0.032 * k), controlHover: N(L0 - 0.055 * k), controlPressed: N(L0 - 0.08 * k), hover: N(L0 - 0.035 * k), selected: N(L0 - 0.065 * k), line: N(L0 - 0.075 * k), lineStrong: N(L0 - 0.13 * k), text1: N(0.2, s.tint * 2), text2: N(0.2 + 0.25 * k, s.tint * 2), text3: N(0.2 + 0.33 * k, s.tint * 2), textDisabled: N(0.78), edge: 'rgba(0,0,0,0.07)', shade: 'rgba(28,32,40,0.18)', media: N(0.16) });
+    }
+    const a = toOklch(s.accent);
+    const aL = dark ? Math.min(0.64, Math.max(0.5, a.L)) : Math.min(0.6, Math.max(0.46, a.L));
+    const A = (L, C) => ok(L, C === undefined ? a.C : C, a.H);
+    Object.assign(t, { accent: A(aL), accentHi: A(aL + 0.035), accentHover: A(aL + 0.04), accentHoverHi: A(aL + 0.075), accentPressed: A(aL - 0.045), accentText: dark ? A(0.8, Math.min(a.C, 0.13)) : A(0.5), accentRing: A(dark ? 0.7 : 0.62) });
+    t.accentTint = alpha(t.accent, dark ? 0.2 : 0.12);
+    t.onAccent = contrast('#FFFFFF', t.accent) >= 4.5 ? '#FFFFFF' : N(0.17, 0.01);
+    Object.assign(t, { danger: ok(dark ? 0.6 : 0.55, 0.19, 25), dangerHi: ok(dark ? 0.635 : 0.585, 0.19, 25), dangerText: ok(dark ? 0.74 : 0.5, 0.15, 25), success: ok(dark ? 0.76 : 0.55, 0.15, 155), warning: ok(dark ? 0.8 : 0.64, 0.15, 75) });
+    t.dangerTint = alpha(t.danger, dark ? 0.16 : 0.1);
+    const clipL = dark ? L0 + 6 * st : L0 - 0.12; const edgeL = clipL + (dark ? 0.07 : -0.09);
+    Object.assign(t, { clipVideo: ok(clipL, 0.045, 255), clipVideoLine: ok(edgeL, 0.07, 255), clipAudio: ok(clipL, 0.045, 165), clipAudioLine: ok(edgeL, 0.07, 165), clipText: ok(clipL, 0.045, 305), clipTextLine: ok(edgeL, 0.07, 305), clipWave: dark ? ok(0.84, 0.06, 165) : ok(0.36, 0.07, 165), wave: N(0.6), wavePlayed: t.text1, waveCut: ok(dark ? 0.42 : 0.78, 0.09, 25) });
+    return t;
+  }
+  const vars = t => Object.keys(t).map(key => '--' + key.replace(/[A-Z]/g, m => '-' + m.toLowerCase()) + ': ' + t[key]).join('; ');
+  return { PRESETS, derive, vars, contrast, ok };
+})();
+const ACCENTS = [['跟随预设', null], ['蓝', '#3A6FDF'], ['紫', '#7B61FF'], ['青', '#159F8C'], ['橙', '#D9822B'], ['玫红', '#D9467A']];
+class Component extends DCLogic {
+  constructor(props) { super(props); this.state = { preset: 'graphite', accent: null, contrast: 1 }; }
+  renderVals() {
+    const T = HenjiTheme;
+    const base = T.PRESETS[this.state.preset];
+    const seed = Object.assign({}, base, { contrast: this.state.contrast }, this.state.accent ? { accent: this.state.accent } : {});
+    const t = T.derive(seed);
+    const dark = seed.mode !== 'light';
+    const presetButtons = Object.keys(T.PRESETS).map(id => {
+      const p = T.PRESETS[id]; const pt = T.derive(p); const on = id === this.state.preset;
+      return { name: p.name, pressed: on ? 'true' : 'false', pick: () => this.setState({ preset: id }), chip: 'background: linear-gradient(135deg, ' + pt.window + ' 0 50%, ' + pt.accent + ' 50% 100%); box-shadow: inset 0 0 0 1px ' + pt.lineStrong, st: on ? 'background: var(--selected); color: var(--text1)' : 'background: var(--raised); color: var(--text2)' };
+    });
+    const accentButtons = ACCENTS.map(([name, hex]) => {
+      const on = (this.state.accent || null) === hex;
+      const fill = hex || base.accent;
+      return { name, pressed: on ? 'true' : 'false', pick: () => this.setState({ accent: hex }), st: 'background: ' + (hex ? fill : 'conic-gradient(' + base.accent + ' 0 50%, var(--raised) 50% 100%)') + '; box-shadow: ' + (on ? '0 0 0 2px var(--window), 0 0 0 4px var(--text1)' : 'inset 0 0 0 1px rgba(255,255,255,0.15)') };
+    });
+    const contrastButtons = [['柔和', 0.8], ['标准', 1], ['更强', 1.35]].map(([label, v]) => ({ label, checked: this.state.contrast === v ? 'true' : 'false', pick: () => this.setState({ contrast: v }), st: this.state.contrast === v ? 'background: var(--selected); color: var(--text1)' : 'background: transparent; color: var(--text2)' }));
+    const seedRows = [
+      ['模式', dark ? '深色' : '浅色'], ['底色色相', Math.round(seed.hue) + '°'], ['底色倾向（彩度）', seed.tint.toFixed(3)],
+      ['窗口亮度', Math.round(seed.base * 100) + '%'], ['层级间距', (2.4 * seed.contrast).toFixed(1) + '% / 级'], ['强调色', String(seed.accent).toUpperCase()]
+    ].map(([name, value]) => ({ name, value }));
+    const R = dark ? {
+      gap: '窗口 −0.6 级', window: '种子：窗口亮度', panel: '窗口 +1 级', raised: '窗口 +2 级', hover: '窗口 +2.6 级', selected: '窗口 +4 级', line: '窗口 +2.2 级', lineStrong: '窗口 +3.8 级'
+    } : {
+      gap: '窗口 −5%', window: '种子：窗口亮度', panel: '窗口 +2%', raised: '窗口 −2%', hover: '窗口 −3.5%', selected: '窗口 −6.5%', line: '窗口 −7.5%', lineStrong: '窗口 −13%'
+    };
+    const tok = (name, key, rule) => ({ name, v: key.replace(/[A-Z]/g, m => '-' + m.toLowerCase()), hex: String(t[key]).startsWith('#') ? t[key] : '半透明', rule });
+    const tokenGroups = [
+      { title: '表面 · 同一个灰，不同亮度', items: [tok('间隙', 'gap', R.gap), tok('窗口', 'window', R.window), tok('面板', 'panel', R.panel), tok('输入 / 浮层', 'raised', R.raised), tok('悬停', 'hover', R.hover), tok('选中', 'selected', R.selected), tok('发丝线', 'line', R.line), tok('强分隔', 'lineStrong', R.lineStrong)] },
+      { title: '文字 · 按对比度目标计算', items: [tok('主要文字', 'text1', dark ? '固定 95% 亮度' : '固定 20% 亮度'), tok('次要文字', 'text2', '主要 ∓ 18% × 对比'), tok('辅助文字', 'text3', '保证 ≥ 4.5 : 1'), tok('禁用', 'textDisabled', '窗口 ± 20%')] },
+      { title: '强调 · 一个颜色派生全部状态', items: [tok('主动作', 'accent', '亮度夹在 50–64%'), tok('悬停', 'accentHover', '主动作 +4%'), tok('按下', 'accentPressed', '主动作 −4.5%'), tok('强调文字', 'accentText', '80% 亮度'), tok('强调浅底', 'accentTint', '20% 透明'), tok('强调上的字', 'onAccent', '对比 ≥ 4.5 自动黑 / 白'), tok('焦点环', 'accentRing', '70% 亮度')] },
+      { title: '状态与素材 · 固定色相，同一亮度', items: [tok('危险', 'danger', '色相 25°'), tok('成功', 'success', '色相 155°'), tok('警示', 'warning', '色相 75°'), tok('视频片段', 'clipVideo', '色相 255° · 低彩度'), tok('音频片段', 'clipAudio', '色相 165° · 低彩度'), tok('文字片段', 'clipText', '色相 305° · 低彩度'), tok('波形', 'wave', '60% 亮度')] }
+    ];
+    const previews = Object.keys(T.PRESETS).map((id, i) => {
+      const p = T.PRESETS[id];
+      return { name: p.name, seed: 3 + i * 7, vars: T.vars(T.derive(p)), summary: (p.mode === 'dark' ? '深' : '浅') + ' · ' + p.hue + '° · ' + p.tint.toFixed(3) + ' · ' + p.accent };
+    });
+    const rampLs = [0.12, 0.16, 0.2, 0.25, 0.3, 0.38, 0.48, 0.58, 0.68, 0.78, 0.88, 0.97];
+    const ramp = rampLs.map(L => ({ hex: T.ok(L, seed.tint, seed.hue), ink: L > 0.6 ? '#1A1C20' : '#ECEDEF', label: Math.round(L * 100) }));
+    const semantic = [['窗口', 'window'], ['面板', 'panel'], ['输入', 'raised'], ['悬停', 'hover'], ['选中', 'selected'], ['发丝线', 'line'], ['主要文字', 'text1'], ['次要文字', 'text2'], ['主动作', 'accent'], ['危险', 'danger']].map(([name, v]) => ({ name, v }));
+    const componentTokens = [['按钮·主要·底', '主动作'], ['按钮·静默·悬停', '悬停'], ['列表行·选中', '选中'], ['片段·音频', '音频片段'], ['波形·已播放', '主要文字'], ['时间线·播放头', '焦点环']].map(([name, from]) => ({ name, from }));
+    const states = [['rest', '静息'], ['hover', '悬停'], ['pressed', '按下'], ['focus', '键盘聚焦'], ['disabled', '禁用']];
+    const rows = [['primary', '主要', '导出', 'download'], ['secondary', '次要', '加入剪辑', 'none'], ['quiet', '静默（默认）', '导入', 'plus'], ['danger', '危险', '删除', 'trash'], ['dangerSolid', '危险确认', '确认删除', 'none']];
+    const buttonRows = rows.map(([variant, name, label, glyph]) => ({ name, cells: states.map(([state]) => ({ variant, state, label, glyph })) }));
+    const demoTracks = [
+      { id: 'V1', name: '画面', h: 52, toggles: [{ glyph: 'eye', label: '显示轨道', on: true }, { glyph: 'lock', label: '锁定轨道', on: false }], clips: [
+        { name: '镜头 01.mov', st: 'left: 0%; width: 34%; background: var(--clip-video); box-shadow: inset 0 0 0 1px var(--clip-video-line)', video: true, audio: false, frames: 7, seed: 4, inner: 46, wave: 0 },
+        { name: '1920-30.mp4', st: 'left: 34.3%; width: 40%; background: var(--clip-video); box-shadow: inset 0 0 0 1px var(--clip-video-line), 0 0 0 1.5px var(--accent-ring)', video: true, audio: false, frames: 8, seed: 9, inner: 46, wave: 0 }
+      ] },
+      { id: 'A1', name: '对白 · 单声道', h: 48, toggles: [{ glyph: 'mute', label: '静音', on: false }, { glyph: 'headphones', label: '独奏', on: false }, { glyph: 'lock', label: '锁定轨道', on: false }], clips: [
+        { name: '镜头 01 · 声道 1', st: 'left: 0%; width: 34%; background: var(--clip-audio); box-shadow: inset 0 0 0 1px var(--clip-audio-line)', video: false, audio: true, frames: 0, seed: 21, inner: 0, wave: 30 },
+        { name: '1920-30.mp4', st: 'left: 34.3%; width: 40%; background: var(--clip-audio); box-shadow: inset 0 0 0 1px var(--clip-audio-line), 0 0 0 1.5px var(--accent-ring)', video: false, audio: true, frames: 0, seed: 33, inner: 0, wave: 30 }
+      ] },
+      { id: 'A2', name: '对白 · 单声道', h: 48, toggles: [{ glyph: 'mute', label: '静音', on: false }, { glyph: 'headphones', label: '独奏', on: true }, { glyph: 'lock', label: '锁定轨道', on: true }], clips: [
+        { name: '镜头 01 · 声道 2', st: 'left: 0%; width: 34%; background: var(--clip-audio); box-shadow: inset 0 0 0 1px var(--clip-audio-line)', video: false, audio: true, frames: 0, seed: 45, inner: 0, wave: 30 }
+      ] }
+    ];
+    const typeScale = [
+      ['画布', 'font-size: 20px; font-weight: 600', '页面标题 20 / 600'], ['最近打开', 'font-size: 16px; font-weight: 600', '区块标题 16 / 600'], ['效果控件', 'font-size: 14px; font-weight: 500', '面板标题 14 / 500'],
+      ['描述你想生成的画面', 'font-size: 13px', '正文与控件 13 / 400（基准）'], ['3840 × 2160 · 60 fps', 'font-size: 12px; color: var(--text2)', '次要信息 12 / 400'], ['2 小时前编辑', 'font-size: 11px; font-weight: 500; color: var(--text3)', '元信息 11 / 500'],
+      ['00:00:01:59', 'font-size: 13px; font-family: Geist Mono, monospace; font-variant-numeric: tabular-nums', '时间码 等宽数字']
+    ].map(([sample, st, spec]) => ({ sample, st, spec }));
+    return {
+      themeVars: T.vars(t), presetButtons, accentButtons, contrastButtons, seedRows, tokenGroups, previews, ramp, semantic, componentTokens,
+      stateNames: states.map(([, n]) => n), buttonRows, demoTracks, typeScale, spacing: [4, 8, 12, 16, 24, 32]
+    };
+  }
+}
+</script>
+</body>
+</html>

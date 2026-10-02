@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>口播剪辑</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500&amp;family=Noto+Sans+SC:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#8DB4FF}a:hover{color:#B3CCFF}
+</style>
+</helmet>
+<div style="width: 100%; height: 900px; display: flex; flex-direction: column; overflow: hidden; font-family: Geist, 'Noto Sans SC', 'Microsoft YaHei UI', sans-serif; font-size: 13px; background: var(--window); color: var(--text1); {{themeVars}}">
+<dc-import name="TitleBar" active="tools" hint-size="100%,40px"></dc-import>
+
+<div style="height: 44px; flex: none; display: flex; align-items: center; gap: 6px; padding: 0 10px; background: var(--panel); border-bottom: 1px solid var(--gap)">
+<dc-import name="IconButton" glyph="chevLeft" label="返回工具" hint-size="28px,28px"></dc-import>
+<dc-import name="Button" variant="quiet" size="sm" label="采访_0928" trailing="chevDown" hint-size="96px,28px"></dc-import>
+<span style="font-size: 12px; color: var(--text3)">已自动保存</span>
+<div style="flex: 1; display: flex; justify-content: center">
+<div role="radiogroup" aria-label="查看" style="display: inline-flex; gap: 2px; padding: 2px; border-radius: 8px; background: var(--gap)">
+<button type="button" role="radio" aria-checked="false" style="height: 26px; padding: 0 12px; border: 0; border-radius: 6px; background: transparent; color: var(--text2); font: inherit; font-size: 12px; font-weight: 500">原始</button>
+<button type="button" role="radio" aria-checked="true" style="height: 26px; padding: 0 12px; border: 0; border-radius: 6px; background: var(--selected); color: var(--text1); font: inherit; font-size: 12px; font-weight: 500; box-shadow: inset 0 1px 0 var(--edge)">剪后</button>
+</div>
+</div>
+<dc-import name="IconButton" glyph="search" label="查找" hint-size="28px,28px"></dc-import>
+<dc-import name="IconButton" glyph="undo" label="撤销" hint-size="28px,28px"></dc-import>
+<dc-import name="IconButton" glyph="redo" label="重做" state="disabled" hint-size="28px,28px"></dc-import>
+<span style="width: 1px; height: 16px; background: var(--line); margin: 0 4px"></span>
+<dc-import name="Button" variant="secondary" label="加入剪辑" hint-size="84px,32px"></dc-import>
+<dc-import name="Button" variant="primary" label="导出" glyph="download" hint-size="72px,32px"></dc-import>
+</div>
+
+<div style="flex: 1; min-height: 0; display: flex">
+<main style="flex: 1; min-width: 0; overflow: hidden; display: flex; justify-content: center">
+<div style="width: 100%; max-width: 760px; box-sizing: border-box; padding: 32px 40px; display: flex; flex-direction: column; gap: 24px">
+<sc-for list="{{paragraphs}}" as="para" hint-placeholder-count="3">
+<div style="display: flex; flex-direction: column; gap: 6px">
+<div style="font-size: 12px; color: var(--text3); font-variant-numeric: tabular-nums">{{para.speaker}}</div>
+<p style="margin: 0; font-size: 17px; line-height: 32px">
+<sc-for list="{{para.tokens}}" as="t" hint-placeholder-count="10"><span style="display: inline; {{t.s}}">{{t.text}}</span></sc-for>
+</p>
+</div>
+</sc-for>
+</div>
+</main>
+
+<aside aria-label="处理" style="width: 300px; flex: none; box-sizing: border-box; background: var(--panel); border-left: 1px solid var(--gap); padding: 16px; display: flex; flex-direction: column; gap: 20px">
+<div style="display: flex; flex-direction: column; gap: 10px">
+<h2 style="margin: 0; font-size: 14px; font-weight: 500">一键处理</h2>
+<p style="margin: 0; font-size: 12px; line-height: 18px; color: var(--text2)">压缩停顿、删除语气词，处理后仍可逐词调整。</p>
+<dc-import name="Button" variant="secondary" label="开始处理" glyph="sparkles" block="{{true}}" hint-size="100%,32px"></dc-import>
+</div>
+<div style="display: flex; flex-direction: column; border-top: 1px solid var(--line); padding-top: 8px">
+<sc-for list="{{sections}}" as="sec" hint-placeholder-count="4">
+<button type="button" aria-expanded="false" style="display: flex; align-items: center; justify-content: space-between; height: 34px; padding: 0 8px; margin: 0 -8px; border: 0; border-radius: 6px; background: transparent; color: var(--text1); font: inherit; font-size: 13px; text-align: left">{{sec.name}}<span style="display: flex; align-items: center; gap: 6px; color: var(--text3); font-size: 12px">{{sec.value}}<dc-import name="Icon" glyph="chevRight" size="14" hint-size="14px,14px"></dc-import></span></button>
+</sc-for>
+</div>
+<div style="display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--line); padding-top: 14px">
+<div style="font-size: 12px; color: var(--text3)">已选 3 个词 · 1.4 秒</div>
+<div style="display: flex; gap: 2px; flex-wrap: wrap; margin: 0 -8px">
+<dc-import name="Button" variant="danger" size="sm" label="删除" glyph="trash" hint-size="64px,28px"></dc-import>
+<dc-import name="Button" variant="quiet" size="sm" label="恢复" glyph="undo" hint-size="64px,28px"></dc-import>
+<dc-import name="Button" variant="quiet" size="sm" label="静音" glyph="mute" hint-size="64px,28px"></dc-import>
+<dc-import name="Button" variant="quiet" size="sm" label="锁定" glyph="lock" hint-size="64px,28px"></dc-import>
+</div>
+</div>
+</aside>
+</div>
+
+<section aria-label="波形" style="height: 304px; flex: none; display: flex; flex-direction: column; border-top: 1px solid var(--gap); background: var(--panel)">
+<div style="height: 40px; flex: none; display: flex; align-items: center; gap: 6px; padding: 0 10px">
+<dc-import name="IconButton" glyph="play" label="播放" solid="{{true}}" hint-size="28px,28px"></dc-import>
+<span style="font-size: 13px; font-family: 'Geist Mono', monospace; font-variant-numeric: tabular-nums">00:03.240</span>
+<span style="font-size: 13px; font-family: 'Geist Mono', monospace; font-variant-numeric: tabular-nums; color: var(--text3)">/ 00:10.000</span>
+<span style="font-size: 12px; color: var(--text3); margin-left: 8px">已剪去 1.6 秒</span>
+<div style="flex: 1"></div>
+<div style="display: flex; align-items: center; gap: 8px"><div role="switch" aria-checked="true" aria-label="自动增益" style="width: 26px; height: 15px; border-radius: 8px; background: var(--accent); position: relative"><div style="position: absolute; right: 2px; top: 2px; width: 11px; height: 11px; border-radius: 6px; background: var(--on-accent)"></div></div><span style="font-size: 12px; color: var(--text2)">自动增益</span></div>
+<span style="width: 1px; height: 16px; background: var(--line); margin: 0 6px"></span>
+<dc-import name="IconButton" glyph="zoomFit" label="适应窗口" hint-size="28px,28px"></dc-import>
+<span style="color: var(--text3); display: flex"><dc-import name="Icon" glyph="minus" size="14" hint-size="14px,14px"></dc-import></span>
+<div style="width: 110px; height: 2px; border-radius: 1px; background: var(--line-strong); position: relative; margin: 0 6px"><div style="position: absolute; left: 62%; top: -5px; width: 12px; height: 12px; margin-left: -6px; border-radius: 6px; background: var(--text2)"></div></div>
+<span style="color: var(--text3); display: flex"><dc-import name="Icon" glyph="plus" size="14" hint-size="14px,14px"></dc-import></span>
+<dc-import name="IconButton" glyph="clock" label="快捷键" hint-size="28px,28px"></dc-import>
+</div>
+<div style="position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 0 10px 10px; gap: 6px">
+<div style="height: 16px; display: flex; justify-content: space-between; font-size: 10px; color: var(--text3); font-family: 'Geist Mono', monospace">
+<span>0:00</span><span>0:01</span><span>0:02</span><span>0:03</span><span>0:04</span><span>0:05</span><span>0:06</span><span>0:07</span><span>0:08</span><span>0:09</span><span>0:10</span>
+</div>
+<div style="height: 22px; display: flex; gap: 2px">
+<sc-for list="{{lane}}" as="w" hint-placeholder-count="9">
+<div style="height: 22px; box-sizing: border-box; padding: 0 6px; border-radius: 4px; display: flex; align-items: center; font-size: 11px; overflow: hidden; white-space: nowrap; {{w.s}}">{{w.text}}</div>
+</sc-for>
+</div>
+<div style="position: relative; height: 104px; border-radius: 6px; background: var(--gap)">
+<dc-import name="Waveform" mode="standard" bins="1200" seed="7" played="0.324" cuts="0-0.04,0.6-0.65" height="104" label="口播波形" hint-size="100%,104px"></dc-import>
+<div aria-hidden="true" style="position: absolute; top: 0; bottom: 0; left: 32.4%; width: 1px; background: var(--accent-ring)"><div style="position: absolute; top: -2px; left: -5px; width: 11px; height: 11px; border-radius: 2px 2px 6px 6px; background: var(--accent-ring)"></div></div>
+<div aria-hidden="true" style="position: absolute; top: 0; bottom: 0; left: 31%; width: 3%; box-shadow: inset 0 0 0 1px var(--text3); border-radius: 3px"></div>
+</div>
+<div style="display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 10px; align-items: stretch">
+<div style="display: flex; flex-direction: column; justify-content: center; gap: 2px"><span style="font-size: 12px; font-weight: 500">放大</span><span style="font-size: 11px; color: var(--text3); font-family: 'Geist Mono', monospace">03.229–03.259</span></div>
+<div style="position: relative; height: 62px; border-radius: 6px; background: var(--gap); overflow: hidden">
+<dc-import name="Waveform" mode="detail" seed="5" height="62" label="播放头附近的采样级波形" hint-size="100%,62px"></dc-import>
+<div aria-hidden="true" style="position: absolute; top: 0; bottom: 0; left: 37%; width: 1px; background: var(--accent-ring)"></div>
+</div>
+</div>
+</div>
+</section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"preset":{"editor":"enum","default":"graphite","options":["graphite","ocean","film","paper"],"section":"主题"},"accent":{"editor":"enum","default":"跟随预设","options":["跟随预设","蓝","紫","青","橙","玫红"],"section":"主题"},"$preview":{"width":1440,"height":900}}'>
+const HenjiTheme = (function () {
+  const toLin = v => (v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4));
+  const toSrgb = v => (v <= 0.0031308 ? 12.92 * v : 1.055 * Math.pow(v, 1 / 2.4) - 0.055);
+  function rgbOf(L, C, H) {
+    let c = C;
+    for (let n = 0; n < 60; n++) {
+      const h = (H * Math.PI) / 180; const a = c * Math.cos(h); const b = c * Math.sin(h);
+      const l_ = L + 0.3963377774 * a + 0.2158037573 * b;
+      const m_ = L - 0.1055613458 * a - 0.0638541728 * b;
+      const s_ = L - 0.0894841775 * a - 1.291485548 * b;
+      const l = l_ * l_ * l_, m = m_ * m_ * m_, s = s_ * s_ * s_;
+      const rgb = [4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s, -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s, -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s].map(toSrgb);
+      if (rgb.every(v => v >= -0.002 && v <= 1.002) || c <= 0) return rgb.map(v => Math.min(1, Math.max(0, v)));
+      c = Math.max(0, c - 0.005);
+    }
+    return [L, L, L];
+  }
+  const hex = rgb => '#' + rgb.map(v => Math.round(v * 255).toString(16).padStart(2, '0')).join('').toUpperCase();
+  const ok = (L, C, H) => hex(rgbOf(Math.min(1, Math.max(0, L)), Math.max(0, C), H));
+  const parse = x => { const n = parseInt(String(x).replace('#', ''), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
+  function toOklch(x) {
+    const [r, g, b] = parse(x).map(v => toLin(v / 255));
+    const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
+    const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
+    const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
+    const A = 1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s;
+    const B = 0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s;
+    return { L: 0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s, C: Math.hypot(A, B), H: ((Math.atan2(B, A) * 180) / Math.PI + 360) % 360 };
+  }
+  const lum = x => { const [r, g, b] = parse(x).map(v => toLin(v / 255)); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+  const contrast = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+  const alpha = (x, a) => { const [r, g, b] = parse(x); return 'rgba(' + r + ',' + g + ',' + b + ',' + a + ')'; };
+  const PRESETS = {
+    graphite: { name: '石墨', mode: 'dark', hue: 260, tint: 0.006, base: 0.17, accent: '#3A6FDF' },
+    ocean: { name: '深海', mode: 'dark', hue: 245, tint: 0.024, base: 0.165, accent: '#3D86E8' },
+    film: { name: '胶片', mode: 'dark', hue: 70, tint: 0.013, base: 0.172, accent: '#D9822B' },
+    paper: { name: '纸白', mode: 'light', hue: 260, tint: 0.005, base: 0.975, accent: '#3A6FDF' }
+  };
+  const ACCENTS = { '跟随预设': null, '蓝': '#3A6FDF', '紫': '#7B61FF', '青': '#159F8C', '橙': '#D9822B', '玫红': '#D9467A' };
+  function derive(seed) {
+    const s = Object.assign({ contrast: 1 }, seed);
+    const dark = s.mode !== 'light';
+    const k = s.contrast; const st = 0.024 * k; const L0 = s.base;
+    const N = (L, c) => ok(L, c === undefined ? s.tint : c, s.hue);
+    const t = {};
+    if (dark) {
+      Object.assign(t, { gap: N(L0 - 0.6 * st), window: N(L0), panel: N(L0 + st), raised: N(L0 + 2 * st), control: N(L0 + 2.8 * st), controlHover: N(L0 + 3.8 * st), controlPressed: N(L0 + 4.8 * st), hover: N(L0 + 2.6 * st), selected: N(L0 + 4 * st), line: N(L0 + 2.2 * st), lineStrong: N(L0 + 3.8 * st), text1: N(0.95, s.tint * 0.5), text2: N(0.95 - 0.18 * k, s.tint * 0.8), text3: N(0.95 - 0.32 * k, s.tint), textDisabled: N(L0 + 0.2), edge: 'rgba(255,255,255,0.06)', shade: 'rgba(0,0,0,0.5)', media: N(L0 - 0.5 * st) });
+    } else {
+      Object.assign(t, { gap: N(L0 - 0.05 * k), window: N(L0), panel: N(Math.min(1, L0 + 0.022)), raised: N(L0 - 0.022 * k), control: N(L0 - 0.032 * k), controlHover: N(L0 - 0.055 * k), controlPressed: N(L0 - 0.08 * k), hover: N(L0 - 0.035 * k), selected: N(L0 - 0.065 * k), line: N(L0 - 0.075 * k), lineStrong: N(L0 - 0.13 * k), text1: N(0.2, s.tint * 2), text2: N(0.2 + 0.25 * k, s.tint * 2), text3: N(0.2 + 0.33 * k, s.tint * 2), textDisabled: N(0.78), edge: 'rgba(0,0,0,0.07)', shade: 'rgba(28,32,40,0.18)', media: N(0.16) });
+    }
+    const a = toOklch(s.accent);
+    const aL = dark ? Math.min(0.64, Math.max(0.5, a.L)) : Math.min(0.6, Math.max(0.46, a.L));
+    const A = (L, C) => ok(L, C === undefined ? a.C : C, a.H);
+    Object.assign(t, { accent: A(aL), accentHi: A(aL + 0.035), accentHover: A(aL + 0.04), accentHoverHi: A(aL + 0.075), accentPressed: A(aL - 0.045), accentText: dark ? A(0.8, Math.min(a.C, 0.13)) : A(0.5), accentRing: A(dark ? 0.7 : 0.62) });
+    t.accentTint = alpha(t.accent, dark ? 0.2 : 0.12);
+    t.onAccent = contrast('#FFFFFF', t.accent) >= 4.5 ? '#FFFFFF' : N(0.17, 0.01);
+    Object.assign(t, { danger: ok(dark ? 0.6 : 0.55, 0.19, 25), dangerHi: ok(dark ? 0.635 : 0.585, 0.19, 25), dangerText: ok(dark ? 0.74 : 0.5, 0.15, 25), success: ok(dark ? 0.76 : 0.55, 0.15, 155), warning: ok(dark ? 0.8 : 0.64, 0.15, 75) });
+    t.dangerTint = alpha(t.danger, dark ? 0.16 : 0.1);
+    const clipL = dark ? L0 + 6 * st : L0 - 0.12; const edgeL = clipL + (dark ? 0.07 : -0.09);
+    Object.assign(t, { clipVideo: ok(clipL, 0.045, 255), clipVideoLine: ok(edgeL, 0.07, 255), clipAudio: ok(clipL, 0.045, 165), clipAudioLine: ok(edgeL, 0.07, 165), clipText: ok(clipL, 0.045, 305), clipTextLine: ok(edgeL, 0.07, 305), clipWave: dark ? ok(0.84, 0.06, 165) : ok(0.36, 0.07, 165), wave: N(0.6), wavePlayed: t.text1, waveCut: ok(dark ? 0.42 : 0.78, 0.09, 25) });
+    return t;
+  }
+  const vars = t => Object.keys(t).map(key => '--' + key.replace(/[A-Z]/g, m => '-' + m.toLowerCase()) + ': ' + t[key]).join('; ');
+  function fromProps(props) {
+    const base = PRESETS[props.preset || 'graphite'] || PRESETS.graphite;
+    const accent = ACCENTS[props.accent || '跟随预设'];
+    return vars(derive(Object.assign({}, base, accent ? { accent } : {})));
+  }
+  return { PRESETS, derive, vars, contrast, ok, fromProps };
+})();
+class Component extends DCLogic {
+  renderVals() {
+    const N = 'color: var(--text1)';
+    const D = 'color: var(--text3); text-decoration: line-through; text-decoration-color: var(--danger); background: var(--danger-tint); border-radius: 3px';
+    const F = 'color: var(--text1); text-decoration: underline dotted var(--warning); text-underline-offset: 6px';
+    const S = 'color: var(--text1); background: var(--accent-tint); box-shadow: 0 0 0 1px var(--accent-ring); border-radius: 3px';
+    const P = 'font-size: 11px; color: var(--text3); background: var(--raised); border-radius: 4px; padding: 2px 6px; margin: 0 4px; vertical-align: 2px; font-family: Geist Mono, monospace';
+    const tok = (text, s) => ({ text, s });
+    const laneN = 'background: var(--raised); color: var(--text2)';
+    const laneD = 'background: var(--danger-tint); color: var(--danger-text); text-decoration: line-through';
+    const laneF = 'background: var(--raised); color: var(--warning); box-shadow: inset 0 -2px 0 var(--warning)';
+    return {
+      themeVars: HenjiTheme.fromProps(this.props),
+      paragraphs: [
+        { speaker: '主持人 · 00:00', tokens: [tok('嗯，', D), tok('大家好，欢迎回到痕迹的频道。', N), tok('0.8s', P), tok('今天我们来聊一聊', N), tok('就是', F), tok('本地剪辑这件事。', N)] },
+        { speaker: '主持人 · 00:04', tokens: [tok('很多人会觉得，', N), tok('那个', D), tok('专业格式只能在专业软件里处理，', N), tok('其实现在', S), tok('也可以直接拖进来剪。', N)] },
+        { speaker: '主持人 · 00:08', tokens: [tok('我们一步一步看，', N), tok('1.2s', P), tok('先从导入素材开始。', N)] }
+      ],
+      lane: [
+        { text: '嗯', s: laneD + '; flex: 0.4' }, { text: '大家好，欢迎回到痕迹的频道', s: laneN + '; flex: 2.4' }, { text: '', s: 'background: transparent; flex: 0.5' },
+        { text: '今天我们来聊一聊', s: laneN + '; flex: 1.6' }, { text: '就是', s: laneF + '; flex: 0.5' }, { text: '本地剪辑这件事', s: laneN + '; flex: 1.6' },
+        { text: '很多人会觉得', s: laneN + '; flex: 1.2' }, { text: '那个', s: laneD + '; flex: 0.5' }, { text: '专业格式只能在专业软件里处理', s: laneN + '; flex: 2.6' }
+      ],
+      sections: [
+        { name: '处理参数', value: '标准' }, { name: '参考逐字稿', value: '未使用' }, { name: '声音处理', value: '降噪 · 中' }, { name: '交付设置', value: 'WAV 48k' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>
