@@ -20,7 +20,7 @@ function requestId(value: unknown): string {
 function parseSamples(input: unknown): SamplesPayload {
   const record = parseRecord(input)
   if (record.mode === 'range') {
-    const allowed = new Set(['mode', 'requestId', 'source', 'sourceRevision', 'startUs', 'endUs', 'bucketCount', 'channels'])
+    const allowed = new Set(['mode', 'requestId', 'source', 'sourceRevision', 'startUs', 'endUs', 'bucketCount', 'channels', 'audioStream', 'audioChannel'])
     if (Object.keys(record).some(key => !allowed.has(key))) throw new Error('未知的音频范围字段。')
     const result = { ...record, mode: 'range', requestId: requestId(record.requestId) } as SamplesPayload & { mode: 'range' }
     validateAudioWaveformRange(result)
@@ -65,7 +65,7 @@ async function extract(payload: SamplesPayload, event: IpcMainInvokeEvent): Prom
       : await authorizedLocalPath(payload.source)
     controller.signal.throwIfAborted()
     const result = payload.mode === 'range'
-      ? await extractAudioWaveformRange({ source, startUs: payload.startUs, endUs: payload.endUs, bucketCount: payload.bucketCount, channels: payload.channels, ...(payload.sourceRevision !== undefined ? { sourceRevision: payload.sourceRevision } : {}) }, controller.signal)
+      ? await extractAudioWaveformRange({ source, startUs: payload.startUs, endUs: payload.endUs, bucketCount: payload.bucketCount, channels: payload.channels, ...(payload.sourceRevision !== undefined ? { sourceRevision: payload.sourceRevision } : {}), ...(payload.audioStream !== undefined ? { audioStream: payload.audioStream } : {}), ...(payload.audioChannel !== undefined ? { audioChannel: payload.audioChannel } : {}) }, controller.signal)
       : await extractAudioSamples(source, payload.bucketCount, controller.signal)
     controller.signal.throwIfAborted()
     if (event.sender.isDestroyed() || requests.get(event.sender.id) !== owned || owned.get(id) !== controller) throw new DOMException('音频采样已取消', 'AbortError')

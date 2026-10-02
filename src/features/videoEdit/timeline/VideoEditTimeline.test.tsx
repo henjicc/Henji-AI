@@ -522,3 +522,29 @@ it('关闭链接选择后点击编组内片段仍选中整组，只有按住 Alt
   fireEvent.pointerDown(clipButton(view, ids[1]), event(header + 140, trackClientY(), { altKey: true })); fireEvent.pointerUp(host, event(header + 140))
   expect(owner.selectedClipIds).toEqual([ids[1]]); expect(onError).not.toHaveBeenCalled()
 })
+
+it('声道映射片段按每个片段声道各画一条波形并按声音流与声道取波形，悬停与轨道头显示声道类型；右键“音频声道…”打开只改源声道的设置（2.6）', async () => {
+  const requests: Array<{ audioStream?: number; audioChannel?: number; channels: number }> = []
+  vi.spyOn(getPlatform().audioEdit, 'extractWaveformRange').mockImplementation(async request => {
+    requests.push({ audioStream: request.audioStream, audioChannel: request.audioChannel, channels: request.channels })
+    return { startUs: request.startUs, endUs: request.endUs, durationSeconds: 30, sampleRate: 48000, channelCount: 1, channels: [{ peak: Array(16).fill(.5), rms: Array(16).fill(.3), sampleCounts: Array(16).fill(1) }], fileIdentity: 'file' }
+  })
+  const { sound } = linkedPair()
+  editVideoProject(owner.document.id, document => {
+    document.media[0].audioStreams = [{ channels: 1 }, { channels: 1 }]
+    document.sequences[0].clips = document.sequences[0].clips.map(clip => clip.id === sound ? { ...clip, audioMapping: { format: 'stereo', sources: [{ stream: 0, channel: 0 }, { stream: 1, channel: 0 }] } } : clip)
+    return document
+  })
+  const view = render(<View />)
+  await waitFor(() => expect(view.container.querySelector(`[data-video-edit-waveform="${sound}"]`)?.getAttribute('data-waveform-lanes')).toBe('2'))
+  expect(requests).toEqual(expect.arrayContaining([{ audioStream: 0, audioChannel: 0, channels: 1 }, { audioStream: 1, audioChannel: 0, channels: 1 }]))
+  expect(clipButton(view, sound).getAttribute('title')).toBe('视频 · 立体声')
+  expect([...view.container.querySelectorAll('[data-video-edit-track-channels]')].map(node => [node.closest('[data-track-index]')!.getAttribute('data-track-index'), node.textContent])).toEqual([['0', '立体声']])
+  expect(view.container.querySelector(`[data-video-edit-clip="${sound}"] [data-video-edit-audio-format]`)?.getAttribute('data-video-edit-audio-format')).toBe('stereo')
+  fireEvent.contextMenu(clipButton(view, sound), { clientX: 300, clientY: 80 })
+  fireEvent.click(view.getByRole('menuitem', { name: '音频声道…' }))
+  await waitFor(() => expect(view.getByLabelText('左源声道')).toBeTruthy())
+  expect((view.getByLabelText('右源声道') as HTMLSelectElement).value).toBe('1:0')
+  expect(view.queryByLabelText('音频声道预设')).toBeNull()
+  expect(onError).not.toHaveBeenCalled()
+})

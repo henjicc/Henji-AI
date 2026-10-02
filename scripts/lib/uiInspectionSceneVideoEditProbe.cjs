@@ -91,9 +91,11 @@ function createVideoEditProbeScene() {
       catch (error) { await capture('video-edit-import-error'); throw new Error(`导入后界面报错：${await page.getByRole('alert').allTextContents()}`, { cause: error }) }
       await page.waitForTimeout(300)
       assert.equal(await button(page, '保存').count(), 0, '编辑后静默保存，无需保存按钮')
-      const original = await savedProject(page, projectPath, document => document.sequences[0].clips.length === 5, '初始合成保存')
-      assert.deepEqual(original.media.map(item => item.path.toLowerCase()).sort(), [specs[0].source, picture, sound].map(value => value.toLowerCase()).sort()); assert.equal(original.sequences[0].clips.length, 5)
-      assert.deepEqual(original.sequences[0].clips.map(clip => clip.kind), ['video', 'video', 'image', 'audio', 'text'])
+      // A video with sound places its picture plus a linked sound clip (task 2.6, as Premiere).
+      const original = await savedProject(page, projectPath, document => document.sequences[0].clips.length === 7, '初始合成保存')
+      assert.deepEqual(original.media.map(item => item.path.toLowerCase()).sort(), [specs[0].source, picture, sound].map(value => value.toLowerCase()).sort()); assert.equal(original.sequences[0].clips.length, 7)
+      assert.deepEqual(original.sequences[0].clips.map(clip => [clip.kind, clip.sourceComponent ?? null]), [['video', 'video'], ['audio', 'audio'], ['video', 'video'], ['audio', 'audio'], ['image', null], ['audio', null], ['text', null]])
+      for (const [picture, sound] of [[0, 1], [2, 3]]) assert.ok(original.sequences[0].clips[picture].linkId && original.sequences[0].clips[picture].linkId === original.sequences[0].clips[sound].linkId, '视频的画面与声音片段应链接')
       const drops = [
         { item: items.video, path: specs[0].source, kind: 'video', x: 120, track: 2 },
         { item: items.audio, path: sound, kind: 'audio', x: 180, track: 0 },
@@ -104,8 +106,11 @@ function createVideoEditProbeScene() {
         if (drop.asset) { await button(page, '资产库').click(); await source.waitFor({ state: 'visible' }) }
         await source.dragTo(trackRow(page, drop.track), { targetPosition: { x: TRACK_HEADER + drop.x, y: 16 }, timeout: 10000 })
         if (drop.asset) await list.click({ position: { x: 12, y: listRect.height - 30 } })
-        const after = await savedProject(page, projectPath, document => document.sequences[0].clips.length === original.sequences[0].clips.length + 1, `拖入 ${drop.kind} 保存`); const last = after.sequences[0].clips.at(-1)
+        const count = drop.kind === 'video' ? 2 : 1
+        const after = await savedProject(page, projectPath, document => document.sequences[0].clips.length === original.sequences[0].clips.length + count, `拖入 ${drop.kind} 保存`)
+        const added = after.sequences[0].clips.slice(original.sequences[0].clips.length); const last = added.find(clip => clip.kind === drop.kind)
         assert.equal(last.kind, drop.kind); assert.equal(last.start, drop.x / 2); assert.equal(last.track, drop.track)
+        if (drop.kind === 'video') { const voice = added.find(clip => clip.kind === 'audio'); assert.equal(voice.sourceComponent, 'audio'); assert.equal(voice.start, last.start); assert.equal(voice.track, 0); assert.ok(last.linkId && voice.linkId === last.linkId) }
         assert.equal(after.media.find(item => item.id === after.items.find(item => item.id === last.itemId).mediaId).path.toLowerCase(), drop.path.toLowerCase())
         assert.equal(after.media.length, original.media.length, '同一原路径或同一资产不应创建第二份素材')
         await button(page, '撤销').click(); await page.waitForTimeout(150)
@@ -117,8 +122,9 @@ function createVideoEditProbeScene() {
       try {
         const projectRef = { kind: 'video_edit.project', id: original.id }
         const clips = original.sequences[0].clips.map(item => ({ kind: 'video_edit.clip', id: `${original.id}:${item.id}` }))
-        // Stack the five appended clips at frame 0 on their own tracks in one public transaction.
-        const changes = [{ duration: 60, track: 1, volume: 0.5 }, { duration: 60, track: 2, scale: 0.35, x: 0.25, y: -0.25, volume: 0, brightness: 0.6 }, { duration: 60, track: 3, scale: 0.18, x: -0.3, y: -0.3 }, { duration: 60, track: 0, volume: 0.25 }, { duration: 60, track: 4, text: 'Henji · 本地剪辑', y: 0.3 }]
+        // Stack the appended clips at frame 0 in one public transaction: pictures on their own tracks, the first
+        // video's sound at half volume, the second video's sound silent, the tone at a quarter.
+        const changes = [{ duration: 60, track: 1 }, { duration: 60, track: 0, volume: 0.5 }, { duration: 60, track: 2, scale: 0.35, x: 0.25, y: -0.25, brightness: 0.6 }, { duration: 60, track: 0, volume: 0 }, { duration: 60, track: 3, scale: 0.18, x: -0.3, y: -0.3 }, { duration: 60, track: 0, volume: 0.25 }, { duration: 60, track: 4, text: 'Henji · 本地剪辑', y: 0.3 }]
           .map((values, index) => ({ kind: 'set_properties', entityType: 'video_edit.clip', target: clips[index], properties: Object.fromEntries(Object.entries({ start: 0, ...values }).map(([key, value]) => [`video_edit.clip.${key}`, value])) }))
         const baselines = []
         for (const ref of clips) baselines.push(await callTool(client, 'read_application_entity', { ref, propertyIds: ['video_edit.clip.start', 'video_edit.clip.duration', 'video_edit.clip.scale'] }))
@@ -126,9 +132,9 @@ function createVideoEditProbeScene() {
         assert.equal(changed.executionState, 'completed', JSON.stringify(changed)); assert.equal(changed.verificationState, 'verified', JSON.stringify(changed))
         await presented(page, 0); await capture('video-edit-composition')
         await button(page, '撤销').click(); await page.waitForTimeout(150)
-        assert.equal((await savedProject(page, projectPath, document => document.sequences[0].clips[1].scale === 1, '撤销 MCP 合成保存')).sequences[0].clips[1].scale, 1)
+        assert.equal((await savedProject(page, projectPath, document => document.sequences[0].clips[2].scale === 1, '撤销 MCP 合成保存')).sequences[0].clips[2].scale, 1)
         await button(page, '重做').click(); await page.waitForTimeout(150)
-        assert.equal((await savedProject(page, projectPath, document => document.sequences[0].clips[1].scale === 0.35, '重做 MCP 合成保存')).sequences[0].clips[1].scale, 0.35)
+        assert.equal((await savedProject(page, projectPath, document => document.sequences[0].clips[2].scale === 0.35, '重做 MCP 合成保存')).sequences[0].clips[2].scale, 0.35)
         await seek(page, 30, 30); await page.getByTitle('1920-30.mp4', { exact: true }).first().click(); await button(page, '点标注').click()
         await page.getByLabel('标注文字', { exact: true }).fill('检查叠加边缘')
         await page.getByLabel('剪辑画面', { exact: true }).click({ position: { x: 100, y: 100 } })
@@ -138,24 +144,29 @@ function createVideoEditProbeScene() {
         await button(page, '删除').click(); await page.waitForTimeout(150)
         assert.equal((await savedProject(page, projectPath, document => document.sequences[0].annotations.length === 0, '删除标注保存')).sequences[0].annotations.length, 0)
         await button(page, '撤销').click()
-        const clipButton = page.getByTitle('1920-30.mp4', { exact: true }).first()
+        // Move and trim the text clip: the stacked sounds share the one audio track, so moving the linked
+        // picture-and-sound pair would move its sound onto the others (the timeline refuses moves into occupied ranges).
+        const textClip = original.sequences[0].clips[6]; assert.equal(textClip.kind, 'text')
+        await page.locator(`[data-video-edit-clip="${textClip.id}"]`).scrollIntoViewIfNeeded()
+        const clipButton = page.locator(`[data-video-edit-clip="${textClip.id}"]`).getByRole('button', { name: `选择片段 ${textClip.name}`, exact: true })
         const clipBox = await clipButton.boundingBox()
         await page.mouse.move(clipBox.x + clipBox.width / 2, clipBox.y + clipBox.height / 2); await page.mouse.down()
         await page.mouse.move(clipBox.x + clipBox.width / 2 + 24, clipBox.y + clipBox.height / 2, { steps: 4 }); await page.mouse.up()
         await page.waitForTimeout(150)
-        assert.equal((await savedProject(page, projectPath, document => document.sequences[0].clips[0].start === 12, '移动片段保存')).sequences[0].clips[0].start, 12)
+        assert.equal((await savedProject(page, projectPath, document => document.sequences[0].clips[6].start === 12, '移动片段保存')).sequences[0].clips[6].start, 12)
         await button(page, '撤销').click()
-        const trimBox = await page.locator('[data-video-edit-trim="out"]').first().boundingBox()
+        const trimBox = await page.locator(`[data-video-edit-clip="${textClip.id}"] [data-video-edit-trim="out"]`).boundingBox()
         await page.mouse.move(trimBox.x + trimBox.width / 2, trimBox.y + trimBox.height / 2); await page.mouse.down()
         await page.mouse.move(trimBox.x + trimBox.width / 2 - 20, trimBox.y + trimBox.height / 2, { steps: 4 }); await page.mouse.up()
         await page.waitForTimeout(150)
-        assert.equal((await savedProject(page, projectPath, document => document.sequences[0].clips[0].duration === 50, '修剪片段保存')).sequences[0].clips[0].duration, 50)
+        assert.equal((await savedProject(page, projectPath, document => document.sequences[0].clips[6].duration === 50, '修剪片段保存')).sequences[0].clips[6].duration, 50)
         await button(page, '撤销').click()
         const splitBefore = await callTool(client, 'read_application_entity', { ref: projectRef, propertyIds: ['video_edit.project.name'] })
         const split = await callTool(client, 'split_video_edit', operationEnvelope([splitBefore], { projectRef, clipRef: clips[0], frame: 30 }))
         assert.equal(split.executionState, 'completed', JSON.stringify(split))
         const saved = JSON.parse(fs.readFileSync(projectPath, 'utf8'))
-        assert.equal(saved.sequences[0].clips.length, 6); assert.equal(saved.sequences[0].clips[1].sourceInUs, 1000000)
+        // Linked Selection splits the picture and its linked sound together.
+        assert.equal(saved.sequences[0].clips.length, 9); assert.equal(saved.sequences[0].clips[1].sourceInUs, 1000000)
         evidence.toolRoundTrip = { change: changed.executionState, verification: changed.verificationState, annotation: marks.data.items, split: split.executionState }
         await button(page, '选择').click()
         for (const spec of specs) {

@@ -77,6 +77,27 @@ describe('waveform extraction lifecycle and time bounds', () => {
     expect(output.channels[0].sampleCounts).toEqual(Array(16).fill(3))
     await analyzer.dispose()
   })
+  it('reads one channel of a numbered sound stream for mapped edit clips (task 2.6) and keys its cache apart', async () => {
+    for (const change of [{ audioStream: -1 }, { audioStream: 64 }, { audioStream: 0.5 }, { audioChannel: 0 }, { audioChannel: 64, channels: 1 }]) expect(() => validateAudioWaveformRange({ ...request, ...change } as typeof request)).toThrow()
+    mocks.spawn.mockImplementation((binary: string, args: string[]) => {
+      const child = new Process()
+      if (binary === 'probe') queueMicrotask(() => { child.stdout.end(JSON.stringify({ format: { duration: '1800' }, streams: [{ codec_type: 'video' }, { codec_type: 'audio', sample_rate: '48000', channels: 1 }, { codec_type: 'audio', sample_rate: '44100', channels: 2 }] })); child.emit('close', 0) })
+      else children.push({ process: child, args })
+      return child
+    })
+    const analyzer = service()
+    const right = analyzer.extractRange({ ...request, channels: 1, audioStream: 1, audioChannel: 1 })
+    await vi.waitFor(() => expect(children).toHaveLength(1))
+    const { process, args } = children[0]
+    expect(args[args.indexOf('-map') + 1]).toBe('0:a:1')
+    expect(args).toContain('pan=mono|c0=c1,aresample=44100:async=1:first_pts=0,atrim=end_sample=45,asetpts=PTS-STARTPTS')
+    expect(args[args.indexOf('-ac') + 1]).toBe('1')
+    process.stdout.end(samples(Array(45).fill(0.25))); process.emit('close', 0)
+    expect((await right).sampleRate).toBe(44100)
+    await expect(analyzer.extractRange({ ...request, channels: 1, audioStream: 0, audioChannel: 1 })).rejects.toThrow('只有 1 个声道')
+    await expect(analyzer.extractRange({ ...request, audioStream: 2 })).rejects.toThrow('没有第 3 条声音流')
+    await analyzer.dispose()
+  })
   it('validates and seeks on the absolute source clock when the container starts after zero', async () => {
     // MPEG-PS sample: container 0.523344+3.079756, picture 0.533367+3.069733 (absolute end 3.6031), sound 0.523344+3.
     const probe = { format: { start_time: '0.523344', duration: '3.079756' }, streams: [

@@ -6,6 +6,10 @@ export interface AudioWaveformRangeRequest {
   endUs: number
   bucketCount: number
   channels: 1 | 2
+  /** The n-th sound stream of the file in file order (default the first). */
+  audioStream?: number
+  /** Only this channel of the stream (needs `channels: 1`); default all channels mixed to `channels`. */
+  audioChannel?: number
 }
 
 export interface AudioWaveformChannel {

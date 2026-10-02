@@ -5,8 +5,8 @@ import type { AssetRecord } from '@/platform/contracts/assetLibrary'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { createApplicationHarness } from '@/tests/applicationHarness'
 import { HENJI_DRAG_DATA_MIME } from '@/contexts/dragDataTransfer'
-import { appendVideoEditMedia, closeVideoEditProject, createVideoEditProject, editVideoProject, listVideoEditInstances, openVideoEditProject, saveVideoEdit, undoVideoEdit } from './videoEditService'
-import { importVideoEditSources, relinkVideoEditMedia, VIDEO_EDIT_IMPORT_EXTENSIONS } from './videoEditMedia'
+import { appendVideoEditMedia, closeVideoEditProject, createVideoEditProject, editVideoProject, getActiveVideoEditSequence, listVideoEditInstances, openVideoEditProject, saveVideoEdit, undoVideoEdit } from './videoEditService'
+import { ensureVideoEditMediaAudioStreams, importVideoEditSources, relinkVideoEditMedia, VIDEO_EDIT_IMPORT_EXTENSIONS } from './videoEditMedia'
 import { inferLocalMediaKind } from '@/services/localMediaImport'
 import { videoEditNativeMediaProbe } from './videoEditMediaProbe'
 import { dropVideoEditInput, readVideoEditDrop, videoEditDropPaths } from './videoEditDrop'
@@ -18,6 +18,7 @@ vi.mock('mediabunny', () => ({
   Input: class {
     async getPrimaryVideoTrack() { return { codec: null, displayWidth: 3840, displayHeight: 2160, canDecode: async () => video.decodable, computeFrameRateMetrics: async () => ({ probedPacketCount: 256, bestGuessFrameRate: video.fps, frameRateIsConstant: true }) } }
     async getPrimaryAudioTrack() { return video.hasAudio ? { canDecode: async () => true } : null }
+    async getAudioTracks() { return video.hasAudio ? [{ numberOfChannels: 2, sampleRate: 48000 }] : [] }
     async computeDuration() { return video.duration }
     dispose() {}
   },
@@ -196,4 +197,46 @@ it('诊断变量强制浏览器时不调用原生探测', async () => {
 })
 it('剪辑导入对话框的每种格式都能进入素材库，从素材库拖入不会被类型判定拦下', () => {
   for (const extension of VIDEO_EDIT_IMPORT_EXTENSIONS) expect(inferLocalMediaKind({ name: `素材.${extension}`, type: '' }), extension).not.toBeNull()
+})
+
+it('多音轨 MXF（2.6）：导入记录四条单声道流，拖入时间线铺成画面加四个链接单声道片段并新增音频轨，一次撤销全部回到拖入前；保存重开不变', async () => {
+  const owner = (await createVideoEditProject())!; const id = owner.document.id
+  vi.spyOn(getPlatform().system.fs, 'exists').mockResolvedValue(true)
+  vi.spyOn(videoEditNativeMediaProbe, 'forcedBackend').mockResolvedValue(undefined)
+  video.decodable = false
+  const pcm = (index: number) => ({ index, kind: 'audio' as const, codec: 'pcm_s24le', profile: null, startTimeSeconds: 0, durationSeconds: 4, isAttachedPicture: false, decodable: true, audio: { sampleRate: 48000, channels: 1 } })
+  vi.spyOn(videoEditNativeMediaProbe, 'probe').mockResolvedValue({ status: 'probed', probe: { container: { formatName: 'mxf', startTimeSeconds: 0, durationSeconds: 4 }, primaryVideoStreamIndex: 0, primaryAudioStreamIndex: 1, streams: [
+    { index: 0, kind: 'video', codec: 'dnxhd', profile: 'DNXHR LB', startTimeSeconds: 0, durationSeconds: 4, isAttachedPicture: false, decodable: true, video: { width: 1280, height: 720, bitDepth: 8, chromaSubsampling: '4:2:2', hasAlpha: false, avgFrameRate: { num: 30, den: 1 }, realFrameRate: { num: 30, den: 1 }, rotationDegrees: null } },
+    pcm(1), pcm(2), pcm(3), pcm(4),
+  ] } })
+  const [itemId] = await importVideoEditSources(id, [{ path: 'D:/media/four.mxf' }])
+  expect(owner.document.media[0].audioStreams).toEqual([{ channels: 1, sampleRate: 48000 }, { channels: 1, sampleRate: 48000 }, { channels: 1, sampleRate: 48000 }, { channels: 1, sampleRate: 48000 }])
+  const before = owner.document
+  await dropVideoEditInput(id, { kind: 'items', projectId: id, itemIds: [itemId] }, { frame: 15 })
+  const sequence = getActiveVideoEditSequence(owner)
+  expect(sequence.tracks.filter(track => track.kind === 'audio').map(track => track.name)).toEqual(['音频 1', '音频 2', '音频 3', '音频 4'])
+  expect(sequence.clips.map(clip => [clip.kind, clip.sourceComponent, clip.audioMapping?.sources[0].stream ?? 0, clip.start])).toEqual([['video', 'video', 0, 15], ['audio', 'audio', 0, 15], ['audio', 'audio', 1, 15], ['audio', 'audio', 2, 15], ['audio', 'audio', 3, 15]])
+  expect(sequence.clips.every(clip => clip.linkId && clip.linkId === sequence.clips[0].linkId)).toBe(true)
+  // Tracks and clips are one history step.
+  undoVideoEdit(id)
+  expect(owner.document.sequences).toEqual(before.sequences)
+  undoVideoEdit(id, true)
+  await saveVideoEdit(id); await closeVideoEditProject(id)
+  const reopened = (await openVideoEditProject(owner.path))!
+  expect(getActiveVideoEditSequence(reopened).clips).toEqual(sequence.clips)
+  expect(getActiveVideoEditSequence(reopened).tracks).toHaveLength(11)
+})
+it('旧工程素材没有声音流清单：打开音频声道设置时按需读取一次并记录，不迁移其余素材；无声素材给出提示', async () => {
+  const owner = (await createVideoEditProject())!; const id = owner.document.id
+  vi.spyOn(getPlatform().system.fs, 'exists').mockResolvedValue(true)
+  vi.spyOn(videoEditNativeMediaProbe, 'forcedBackend').mockResolvedValue('browser')
+  appendVideoEditMedia(id, { id: 'old', name: '旧视频', path: 'D:/media/old.mp4', kind: 'video', width: 3840, height: 2160, durationSeconds: 3, hasAudio: true, frameRate: { numerator: 60, denominator: 1 }, frameRateMode: 'sampled-constant' })
+  appendVideoEditMedia(id, { id: 'other', name: '另一旧视频', path: 'D:/media/other.mp4', kind: 'video', width: 3840, height: 2160, durationSeconds: 3, hasAudio: true })
+  video.hasAudio = true
+  expect(await ensureVideoEditMediaAudioStreams(id, 'old')).toEqual([{ channels: 2, sampleRate: 48000 }])
+  expect(owner.document.media.find(media => media.id === 'old')!.audioStreams).toEqual([{ channels: 2, sampleRate: 48000 }])
+  expect(owner.document.media.find(media => media.id === 'other')).not.toHaveProperty('audioStreams')
+  video.hasAudio = false
+  expect(await ensureVideoEditMediaAudioStreams(id, 'old')).toEqual([{ channels: 2, sampleRate: 48000 }])
+  await expect(ensureVideoEditMediaAudioStreams(id, 'other')).rejects.toThrow('没有可用的声音')
 })

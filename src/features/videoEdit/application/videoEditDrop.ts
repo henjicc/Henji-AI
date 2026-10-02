@@ -2,7 +2,7 @@ import { HENJI_DRAG_DATA_MIME, readHenjiDragData } from '@/contexts/dragDataTran
 import { getPlatform } from '@/platform/runtime'
 import { importVideoEditSources, type VideoEditImportSource } from './videoEditMedia'
 import { editVideoProject, requireVideoEditInstance, setVideoEditView, switchVideoEditSequence } from './videoEditService'
-import { makeVideoEditItemClip, makeVideoEditItemSequence, type VideoEditSequenceSettings } from '@/core/videoEdit/projectItems'
+import { makeVideoEditItemSequence, placeVideoEditItems, type VideoEditSequenceSettings } from '@/core/videoEdit/projectItems'
 import type { VideoEditDocument } from '@/core/videoEdit/document'
 import { readVideoEditCodeMetadata } from './videoEditCodeState'
 import { VIDEO_EDIT_SOURCE_DRAG_MIME, videoEditSourceRangeSchema, placeVideoEditSourceRange, type VideoEditSourceRange } from './videoEditSourceRange'
@@ -61,14 +61,12 @@ export async function dropVideoEditInput(projectId: string, input: VideoEditDrop
       createdId = created.id; selectedClip = created.clips.at(-1)?.id
       return { ...document, sequences: [...document.sequences, created] }
     }
-    let frame = placement.frame
-    const clips = ids.map(itemId => {
-      const kind = document.items.find(item => item.id === itemId)?.kind === 'audio' ? 'audio' : 'video'
-      const track = placement.track ?? sequence.tracks.find(track => targetTrackIds.includes(track.id) && track.kind === kind)?.index
-      const clip = makeVideoEditItemClip(document, itemId, sequenceId, { frame, track }, readVideoEditCodeMetadata(owner, document)); frame += clip.duration; return clip
-    })
-    selectedClip = clips.at(-1)?.id
-    return { ...document, sequences: document.sequences.map(item => item.id === sequenceId ? { ...item, clips: [...item.clips, ...clips] } : item) }
+    const target = (kind: 'video' | 'audio'): number | undefined => sequence.tracks.find(track => targetTrackIds.includes(track.id) && track.kind === kind)?.index
+    const video = target('video'); const audio = target('audio')
+    // Multi-track sound spreads over consecutive audio tracks from the targeted one (task 2.6).
+    const placed = placeVideoEditItems(document, ids, sequenceId, { frame: placement.frame, ...(placement.track !== undefined ? { track: placement.track } : {}), ...(video !== undefined ? { videoTrack: video } : {}), ...(audio !== undefined ? { audioTrack: audio } : {}) }, readVideoEditCodeMetadata(owner, document))
+    selectedClip = placed.primaryIds.at(-1)
+    return { ...document, sequences: document.sequences.map(item => item.id === sequenceId ? { ...item, tracks: [...item.tracks, ...placed.addedTracks], clips: [...item.clips, ...placed.clips] } : item) }
   }
   let ids: string[]
   if (input.kind === 'items') ids = input.itemIds

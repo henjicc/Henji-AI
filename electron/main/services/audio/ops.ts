@@ -60,6 +60,8 @@ export function validateAudioWaveformRange(request: AudioWaveformRangeRequest): 
   if (request.sourceRevision !== undefined && (typeof request.sourceRevision !== 'string' || !request.sourceRevision.length || request.sourceRevision.length > 256)) throw new Error('无效的音频素材修订。')
   if (!Number.isSafeInteger(request.startUs) || !Number.isSafeInteger(request.endUs) || request.startUs < 0 || request.endUs <= request.startUs || request.endUs - request.startUs > MAX_RANGE_US) throw new Error('波形范围必须为非负整数微秒，且不超过30分钟。')
   if (!Number.isInteger(request.bucketCount) || request.bucketCount < 16 || request.bucketCount > 4096 || (request.channels !== 1 && request.channels !== 2)) throw new Error('无效的波形采样规格。')
+  if (request.audioStream !== undefined && (!Number.isInteger(request.audioStream) || request.audioStream < 0 || request.audioStream > 63)) throw new Error('无效的声音流序号。')
+  if (request.audioChannel !== undefined && (!Number.isInteger(request.audioChannel) || request.audioChannel < 0 || request.audioChannel > 63 || request.channels !== 1)) throw new Error('无效的单声道波形声道。')
 }
 
 /** Close, rather than error/exit, is the subprocess and stdio ownership barrier. */
@@ -137,10 +139,12 @@ export function audioWaveformAbsoluteEndSeconds(streams: readonly ProbedStream[]
   return Math.max(0, ...(streamEnds.length ? streamEnds : end(format?.start_time, format?.duration)))
 }
 
-async function probeAudio(binary: string, source: string, signal: AbortSignal): Promise<AudioMetadata> {
+/** `audioStream` is the n-th sound stream in file order (the number the edit decoders open it by). */
+async function probeAudio(binary: string, source: string, signal: AbortSignal, audioStream = 0): Promise<AudioMetadata> {
   const text = await runProcess(binary, ['-v', 'error', '-show_entries', 'format=duration,start_time:stream=index,codec_type,sample_rate,channels,start_time,duration:stream_disposition=attached_pic', '-of', 'json', source], signal)
   const raw = JSON.parse(text) as { format?: { duration?: string; start_time?: string }; streams?: ProbedStream[] }
-  const stream = raw.streams?.find(item => item.codec_type === 'audio')
+  const stream = raw.streams?.filter(item => item.codec_type === 'audio')[audioStream]
+  if (!stream && audioStream > 0) throw new Error(`素材没有第 ${audioStream + 1} 条声音流。`)
   const sampleRate = Number(stream?.sample_rate)
   const channels = stream?.channels ?? 0
   const durationSeconds = Number(raw.format?.duration ?? stream?.duration)
@@ -166,7 +170,7 @@ export function createAudioWaveformService(dependencies: AudioWaveformServiceDep
     const localPath = remote ? undefined : await resolvePath(source, signal)
     const knownIdentity = localPath ? await identity(localPath) : undefined
     signal?.throwIfAborted()
-    const key = JSON.stringify([knownIdentity?.path ?? createHash('sha256').update(source).digest('hex'), knownIdentity?.identity ?? null, request?.sourceRevision ?? null, request ? 'range-f32-v1' : 'legacy-s16-v1', request?.startUs, request?.endUs, Math.floor(bucketCount), request?.channels ?? 1])
+    const key = JSON.stringify([knownIdentity?.path ?? createHash('sha256').update(source).digest('hex'), knownIdentity?.identity ?? null, request?.sourceRevision ?? null, request ? 'range-f32-v1' : 'legacy-s16-v1', request?.startUs, request?.endUs, Math.floor(bucketCount), request?.channels ?? 1, request?.audioStream ?? 0, request?.audioChannel ?? null])
     const result = await queue.run(key, jobSignal => withMediaHeavyTask(async () => {
       const requestId = randomUUID()
       const startedAt = performance.now()
@@ -188,9 +192,13 @@ export function createAudioWaveformService(dependencies: AudioWaveformServiceDep
         const before = await identity(resolved)
         if (before.identity !== original.identity) throw new Error('音频素材已变化，请重新分析。')
         const [ffmpeg, ffprobe] = await Promise.all([(dependencies.ffmpegPath ?? loadFfmpegPath)(), (dependencies.ffprobePath ?? loadFfprobePath)()])
-        const metadata = await probeAudio(ffprobe, original.path, controller.signal)
+        const audioStream = request?.audioStream ?? 0
+        const metadata = await probeAudio(ffprobe, original.path, controller.signal, audioStream)
+        if (request?.audioChannel !== undefined && request.audioChannel >= metadata.channels) throw new Error(`声音流只有 ${metadata.channels} 个声道。`)
         const sampleRate = request ? metadata.sampleRate : 8000
         const channelCount = request?.channels === 2 && metadata.channels >= 2 ? 2 : 1
+        // One channel of the stream (a mono clip mapped to it, task 2.6) instead of the downmix.
+        const pick = request?.audioChannel !== undefined ? `pan=mono|c0=c${request.audioChannel},` : ''
         const startUs = request?.startUs ?? 0
         const endUs = request?.endUs ?? Math.round(metadata.durationSeconds * MICROSECONDS)
         // Range requests use the absolute source clock (container timestamps), the clock of imported media duration and clip source time.
@@ -208,7 +216,7 @@ export function createAudioWaveformService(dependencies: AudioWaveformServiceDep
         // streams, MPEG-PS starting after zero), without reducing sample rate.
         const seekArgUs = Math.max(0, seekUs - Math.round(metadata.startSeconds * MICROSECONDS))
         const args = request
-          ? ['-nostdin', '-v', 'error', '-copyts', '-ss', String(seekArgUs / MICROSECONDS), '-t', String((endUs - seekUs) / MICROSECONDS + 2 / sampleRate), '-i', original.path, '-map', '0:a:0', '-vn', '-sn', '-dn', '-af', `aresample=${sampleRate}:async=1:first_pts=${first},atrim=end_sample=${expectedFrames},asetpts=PTS-STARTPTS`, '-ar', String(sampleRate), '-ac', String(channelCount), '-f', 'f32le', 'pipe:1']
+          ? ['-nostdin', '-v', 'error', '-copyts', '-ss', String(seekArgUs / MICROSECONDS), '-t', String((endUs - seekUs) / MICROSECONDS + 2 / sampleRate), '-i', original.path, '-map', `0:a:${audioStream}`, '-vn', '-sn', '-dn', '-af', `${pick}aresample=${sampleRate}:async=1:first_pts=${first},atrim=end_sample=${expectedFrames},asetpts=PTS-STARTPTS`, '-ar', String(sampleRate), '-ac', String(channelCount), '-f', 'f32le', 'pipe:1']
           : ['-nostdin', '-v', 'error', '-i', original.path, '-map', '0:a:0', '-vn', '-sn', '-dn', '-ar', '8000', '-ac', '1', '-f', 's16le', 'pipe:1']
         await runProcess(ffmpeg, args, controller.signal, chunk => worker!.push(chunk))
         const channels = await worker.finish()

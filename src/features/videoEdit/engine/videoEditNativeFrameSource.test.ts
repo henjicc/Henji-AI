@@ -305,6 +305,11 @@ describe('原生声音', () => {
     expect(frames.openSessions).toBe(0)
     audio.close?.(); await flush()
     expect(channel.last('closeAudio')).toEqual({ audioId: 'va-1' })
+    // A numbered sound stream (task 2.6) opens its own session by that number.
+    const third = source.clipAudio(2)!
+    for await (const chunk of third.chunks(1, 1.1, 48000)) chunk.close()
+    expect(channel.last('openAudio')).toEqual({ path: 'D:/a.mov', sampleRate: 48000, audioStream: 2 })
+    third.close?.(); await flush()
     frames.release(key)
   })
 

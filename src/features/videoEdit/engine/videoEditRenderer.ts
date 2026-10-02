@@ -12,6 +12,7 @@ import { videoEditSourceReadError } from './videoEditSourceErrors'
 import { videoEditTransitionsAt } from '@/core/videoEdit/transitions'
 import { activeVideoEditEffects, buildVideoEditCompositePlan } from '@/core/videoEdit/compositing'
 import { renderVideoEditCompositeScene, videoEditCompositeSurfaceKeys } from './videoEditCompositeScene'
+import { videoEditAudioMixReads, videoEditDefaultAudioGains } from '@/core/videoEdit/audioChannels'
 
 interface PlaybackStream {
   demux: string
@@ -29,6 +30,8 @@ interface PlaybackSchedule { document: VideoEditComposition; endFrame: number; s
  * phase lies exactly half-way between two samples picks the same neighbour in every mix block.
  */
 const NEAREST_SAMPLE_EDGE = 0.5 + 1e-6
+/** Separates a clip id from the sound stream number in a mapped clip's sound source key (`audio:<clip>\0<stream>`). */
+const AUDIO_STREAM_KEY = '\u0000'
 /** Files decoded through one long-lived decoder each during forward playback. */
 const PLAYBACK_SCHEDULE_FILES = 4
 // Sequences are at most 30 minutes; one schedule covers the rest of it, since a rebuild means new decoders.
@@ -61,13 +64,13 @@ export class VideoEditRenderer {
   private compositor?: VideoEditGpuCompositor
   private codeSources?: VideoEditCodeSources
   private presentationEpoch = 0
-  codeDiagnostics() { return { sources: this.codeSources?.diagnostics(), gpu: this.compositor?.codeDiagnostics(), images: this.compositor?.imageDiagnostics(), decodedImages: this.images.size, decodedImageBytes: [...this.images.values()].reduce((sum, entry) => sum + entry.bytes, 0), imageDecodes: this.imageLoads } }
-  /** `frames` is the only decoding dependency; the renderer never touches a decoder implementation. */
-  constructor(public document: VideoEditComposition, private readonly previewWidth?: number, surface?: OffscreenCanvas, cacheBudgetBytes = 8 * 1024 ** 3, private readonly frames: VideoEditFrameBackend = new VideoEditBrowserFrames()) {
   /** High-precision composition counters and, with `row`, that row of the last high-precision frame before 8-bit quantization (task 2.7 acceptance). */
   async precisionDiagnostics(row?: number): Promise<{ counters?: ReturnType<VideoEditGpuCompositor['precisionDiagnostics']>; row?: Uint16Array }> {
     return { counters: this.compositor?.precisionDiagnostics(), row: row === undefined ? undefined : await this.compositor?.readPreciseRow(row) }
   }
+  codeDiagnostics() { return { sources: this.codeSources?.diagnostics(), gpu: this.compositor?.codeDiagnostics(), images: this.compositor?.imageDiagnostics(), decodedImages: this.images.size, decodedImageBytes: [...this.images.values()].reduce((sum, entry) => sum + entry.bytes, 0), imageDecodes: this.imageLoads } }
+  /** `frames` is the only decoding dependency; the renderer never touches a decoder implementation. */
+  constructor(public document: VideoEditComposition, private readonly previewWidth?: number, surface?: OffscreenCanvas, cacheBudgetBytes = 8 * 1024 ** 3, private readonly frames: VideoEditFrameBackend = new VideoEditBrowserFrames()) {
     if (!Number.isSafeInteger(cacheBudgetBytes) || cacheBudgetBytes < 1 || cacheBudgetBytes > 8 * 1024 ** 3) throw new Error('预览缓存预算无效。')
     this.frameCache = new VideoEditFrameCache(cacheBudgetBytes)
     this.canvas = surface ?? new OffscreenCanvas(document.width, document.height)
@@ -75,7 +78,7 @@ export class VideoEditRenderer {
   }
   /** Drops one user of the shared opened file; a clip's own sound reader closes with its source. */
   private release(source: Pick<VideoSource, 'demux'> & Partial<Pick<VideoSource, 'audio'>>): void { source.audio?.close?.(); this.frames.release(source.demux) }
-  private source(key: string, media: VideoEditMedia): Promise<VideoSource> {
+  private source(key: string, media: VideoEditMedia, audioStream?: number): Promise<VideoSource> {
     let source = this.sources.get(key)
     if (!source) {
       const demux = this.frames.open(media)
@@ -83,7 +86,7 @@ export class VideoEditRenderer {
         try {
           const shared = await demux.ready
           if (this.disposed) throw new Error('预览已关闭。')
-          return { demux: demux.key, media, video: shared.clipFrames(), audio: shared.clipAudio(), previousTime: -1, codec: shared.codec }
+          return { demux: demux.key, media, video: shared.clipFrames(), audio: shared.clipAudio(audioStream), previousTime: -1, codec: shared.codec }
         } catch (error) { this.release({ demux: demux.key }); if (this.sources.get(key) === source) this.sources.delete(key); throw error }
       })()
       this.sources.set(key, source)
@@ -147,7 +150,7 @@ export class VideoEditRenderer {
     for (const [key, pending] of this.sources) {
       const source = await pending.catch(() => undefined)
       if (!source) { this.sources.delete(key); continue }
-      const clip = document.clips.find(clip => clip.id === (key.startsWith('audio:') ? key.slice(6) : key))
+      const clip = document.clips.find(clip => clip.id === (key.startsWith('audio:') ? key.slice(6).split(AUDIO_STREAM_KEY)[0] : key))
       const media = clip ? videoEditClipMedia(document, clip) : undefined
       if (!media || media.id !== source.media.id || media.path !== source.media.path || media.sourceRevision !== source.media.sourceRevision) {
         this.sources.delete(key); source.current?.close(); await source.iterator?.return(); this.release(source)
@@ -408,11 +411,15 @@ export class VideoEditRenderer {
       if (from >= to) continue
       const media = videoEditClipMedia(this.document, clip)
       if (!media) continue
-      activeAudio.add(`audio:${clip.id}`)
-      const source = await this.source(`audio:${clip.id}`, media)
-      if (!source.audio) continue
       const sourceStart = videoEditSourceSeconds(clip) + from - clipStart
       const sourceEnd = sourceStart + to - from
+      // A clip with a channel mapping (task 2.6) reads every sound stream it names, each with its own reader; a clip
+      // without one reads the file's first stream with its own channels.
+      for (const read of clip.audioMapping ? videoEditAudioMixReads(clip.audioMapping, this.document.channels) : [undefined]) {
+      const key = read ? `audio:${clip.id}${AUDIO_STREAM_KEY}${read.stream}` : `audio:${clip.id}`
+      activeAudio.add(key)
+      const source = await this.source(key, media, read?.stream)
+      if (!source.audio) continue
       for await (const wrapped of source.audio.chunks(sourceStart, sourceEnd, rate)) {
         try {
         // A block already at the sequence rate is read by nearest sample; block edges move by the same half sample so
@@ -421,13 +428,22 @@ export class VideoEditRenderer {
         const edge = aligned ? NEAREST_SAMPLE_EDGE : 1e-7
         const outputStart = Math.max(0, Math.ceil((from - sampleStartSeconds) * rate - 1e-7), Math.ceil((from + wrapped.timestamp - sourceStart - sampleStartSeconds) * rate - edge))
         const outputEnd = Math.min(length, Math.ceil((to - sampleStartSeconds) * rate - 1e-7), Math.ceil((from + wrapped.timestamp + wrapped.duration - sourceStart - sampleStartSeconds) * rate - edge))
+        const gains = read ? read.gains : videoEditDefaultAudioGains(wrapped.numberOfChannels, this.document.channels)
+        const planes = new Map<number, Float32Array>()
+        const plane = (index: number): Float32Array => {
+          let values = planes.get(index)
+          if (!values) { values = new Float32Array(wrapped.numberOfFrames); wrapped.copyTo(values, { planeIndex: index, format: 'f32-planar' }); planes.set(index, values) }
+          return values
+        }
         for (let channel = 0; channel < this.document.channels; channel++) {
           const data = new Float32Array(wrapped.numberOfFrames)
-          const inputChannels = this.document.channels === 1 ? wrapped.numberOfChannels : 1
-          for (let inputChannel = 0; inputChannel < inputChannels; inputChannel++) {
-            const plane = new Float32Array(wrapped.numberOfFrames)
-            wrapped.copyTo(plane, { planeIndex: this.document.channels === 1 ? inputChannel : Math.min(channel, wrapped.numberOfChannels - 1), format: 'f32-planar' })
-            for (let sample = 0; sample < data.length; sample++) data[sample] += plane[sample] / inputChannels
+          const row = gains[channel]
+          // A source channel past the block's channels (a mapping naming a missing channel) is silence.
+          for (let inputChannel = 0; inputChannel < Math.min(row.length, wrapped.numberOfChannels); inputChannel++) {
+            const gain = row[inputChannel]
+            if (!gain) continue
+            const values = plane(inputChannel)
+            for (let sample = 0; sample < data.length; sample++) data[sample] += values[sample] * gain
           }
           const output = result[channel]
           for (let sample = outputStart; sample < outputEnd; sample++) {
@@ -443,6 +459,7 @@ export class VideoEditRenderer {
           }
         }
         } finally { wrapped.close() }
+      }
       }
     }
     for (const [key, pending] of this.sources) if (key.startsWith('audio:') && !activeAudio.has(key)) {

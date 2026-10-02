@@ -6,12 +6,14 @@ import type { VideoEditCommandId } from '@/core/videoEdit/commands'
 import { captureVideoEditCommandContext, executeVideoEditCommand, videoEditCommandState } from '../application/videoEditCommands'
 import { setVideoEditTimelineView, type VideoEditInstance } from '../application/videoEditService'
 import { timelineCommandPresentation } from './timelineCommandPresentation'
+import { videoEditClipMedia } from '@/core/videoEdit/document'
+import type { VideoEditAudioChannelsTarget } from '../panels/VideoEditAudioChannelsDialog'
 import { elementOfEventTarget } from '@/utils/crossRealmDom'
 
 const actionIcons = { copy: Copy, paste: Clipboard, insert: ArrowRightToLine, overwrite: Clipboard, split: Scissors, split_tracks: Scissors, delete: Trash2, ripple_delete: Trash2, link: Link2, unlink: Unlink, group: Group, ungroup: Ungroup, separate_audio: AudioLines, locate_source: Play, locate_project: Locate, locate_effects: SlidersHorizontal, select_all: ListChecks, move_into_sync: MoveHorizontal, slip_into_sync: ChevronsLeftRight } as const
 type MenuCommand = keyof typeof actionIcons
 
-export function useTimelineMenu(instance: VideoEditInstance, onError: (error: unknown) => void, cancelPointer: () => void) {
+export function useTimelineMenu(instance: VideoEditInstance, onError: (error: unknown) => void, cancelPointer: () => void, onAudioChannels?: (target: VideoEditAudioChannelsTarget) => void) {
   const menu = useContextMenu()
   const shortcuts = useSettingsStore(state => state.videoEditShortcuts)
   const show = (event: React.MouseEvent): void => {
@@ -34,6 +36,13 @@ export function useTimelineMenu(instance: VideoEditInstance, onError: (error: un
         const presentation = timelineCommandPresentation(context, id, shortcuts); const Icon = actionIcons[id]
         return { id, label: presentation.label, icon: <Icon size={16} />, disabled: !presentation.enabled, divider: dividers.has(id), onClick: () => executeVideoEditCommand(context, id).catch(onError) }
       })
+      // Premiere's "Audio Channels" on a sequence clip: reassign the source channels of the clicked clip (task 2.6).
+      const clip = clipId ? sequence.clips.find(value => value.id === clipId) : undefined
+      const media = clip && videoEditClipMedia(instance.document, clip)
+      if (clip && media && onAudioChannels && (clip.kind === 'audio' || clip.kind === 'video' && clip.sourceComponent !== 'video' && media.hasAudio === true)) {
+        const locked = sequence.tracks.find(track => track.index === clip.track)?.locked === true
+        items.push({ id: 'audio_channels', label: '音频声道…', icon: <AudioLines size={16} />, disabled: locked, onClick: () => onAudioChannels({ kind: 'clip', sequenceId: sequence.id, clipIds: [clip.id], mediaId: media.id, ...(clip.audioMapping ? { mapping: clip.audioMapping } : {}) }) })
+      }
       menu.showMenu(event, items)
     } catch (error) { onError(error) }
   }

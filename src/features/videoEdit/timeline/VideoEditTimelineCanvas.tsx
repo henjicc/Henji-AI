@@ -8,12 +8,14 @@ import { videoEditFps, videoEditSourceSeconds } from '@/core/videoEdit/time'
 import { videoEditSyncOffsets } from '@/core/videoEdit/linkSync'
 import { videoEditPickRelations } from '@/core/videoEdit/timelineSelection'
 import Waveform from '@/components/Waveform'
-import { useVideoEditWaveformRanges } from '../panels/useVideoEditWaveformRanges'
+import { useVideoEditWaveformRanges, type VideoEditWaveformRequest } from '../panels/useVideoEditWaveformRanges'
+import { videoEditAudioFormatLabel, videoEditClipAudioFormat } from '@/core/videoEdit/audioChannels'
 import { acceptsVideoEditDrop, dropVideoEditInput, readVideoEditDrop, type VideoEditDropInput } from '../application/videoEditDrop'
 import { listVideoEditInstances, requireVideoEditInstance, setVideoEditTimelineView, setVideoEditView, focusVideoEditPanel, type VideoEditInstance } from '../application/videoEditService'
 import { updateVideoEditTrack } from '../application/videoEditTimeline'
 import { isDomNode, ownerWindowOf } from '@/utils/crossRealmDom'
 import { VideoEditSequenceDialog } from '../panels/VideoEditSequenceDialog'
+import { VideoEditAudioChannelsDialog, type VideoEditAudioChannelsTarget } from '../panels/VideoEditAudioChannelsDialog'
 import { VideoEditTrackHeader } from './VideoEditTrackHeader'
 import { VideoEditTimelinePlayhead, VideoEditTimelinePosition } from './VideoEditTimelineTransport'
 import { useTimelinePointer } from './useTimelinePointer'
@@ -28,7 +30,8 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
   const [hint, setHint] = useState<{ frame: number; track: number } | null>(null)
   const [pendingSequence, setPendingSequence] = useState<{ owner: VideoEditInstance; input: VideoEditDropInput; placement: { frame: number; track: number }; sequenceId: string; settings: VideoEditSequenceSettings } | null>(null)
   const pointer = useTimelinePointer({ instance, sequence, rows: timelineTrackRows(sequence), pixels, onError })
-  const menu = useTimelineMenu(instance, onError, pointer.cancel)
+  const [audioChannels, setAudioChannels] = useState<VideoEditAudioChannelsTarget | null>(null)
+  const menu = useTimelineMenu(instance, onError, pointer.cancel, setAudioChannels)
   const rows = timelineTrackRows(sequence, pointer.resized)
   const divider = timelineTrackDivider(rows)
   const initialViewport = useRef({ owner: instance, sequenceId: sequence.id, measured: false, settled: false, stableFrames: 0, frameCount: 0, width: 0, height: 0, visible, rows })
@@ -44,16 +47,26 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
   const visibleClips = timelineVisibleClips(displayed.clips, rows, view, pixels)
   // Out-of-sync offsets follow the drag preview so an Alt move shows its drift before release.
   const syncOffsets = videoEditSyncOffsets(displayed)
-  const waveRanges = visibleClips.flatMap(clip => {
+  const waveRanges = visibleClips.flatMap((clip): Array<VideoEditWaveformRequest & { from: number; to: number }> => {
     const media = videoEditClipMedia(instance.document, clip)
     if (!media || !(clip.kind === 'audio' || clip.kind === 'video' && clip.sourceComponent !== 'video' && media.hasAudio === true)) return []
     const from = Math.max(clip.start, Math.floor(Math.max(0, view.left) / pixels)); const to = Math.min(clip.start + clip.duration, Math.ceil((view.left + view.width - TIMELINE_HEADER_WIDTH) / pixels))
     if (to <= from) return []
     const startUs = Math.max(0, Math.round((videoEditSourceSeconds(clip) + (from - clip.start) / fps) * 1e6)); const endUs = Math.min(Math.round(media.durationSeconds * 1e6), Math.round((videoEditSourceSeconds(clip) + (to - clip.start) / fps) * 1e6))
     if (endUs <= startUs) return []
-    return [{ key: clip.id, from, to, request: { source: media.path, ...(media.sourceRevision ? { sourceRevision: media.sourceRevision } : {}), startUs, endUs, bucketCount: Math.max(16, Math.min(4096, Math.ceil((to - from) * pixels / 2))), channels: 2 as const } }]
+    const request = { source: media.path, ...(media.sourceRevision ? { sourceRevision: media.sourceRevision } : {}), startUs, endUs, bucketCount: Math.max(16, Math.min(4096, Math.ceil((to - from) * pixels / 2))) }
+    // A mapped clip (task 2.6) draws one lane per clip channel from the source channel it reads.
+    if (clip.audioMapping) return clip.audioMapping.sources.map((source, index) => ({ key: `${clip.id}:${index}`, from, to, request: { ...request, channels: 1 as const, audioStream: source.stream, audioChannel: source.channel } }))
+    return [{ key: clip.id, from, to, request: { ...request, channels: 2 as const } }]
   })
   const waves = useVideoEditWaveformRanges(waveRanges, visible)
+  // Track headers hint the channel type of the clips on each audio track (task 2.6).
+  const trackFormats = new Map<number, Set<'mono' | 'stereo'>>()
+  for (const clip of displayed.clips) {
+    const format = videoEditClipAudioFormat(clip, videoEditClipMedia(instance.document, clip))
+    if (format) trackFormats.set(clip.track, (trackFormats.get(clip.track) ?? new Set()).add(format))
+  }
+  const channelFormatOf = (track: number): 'mono' | 'stereo' | 'mixed' | undefined => { const formats = trackFormats.get(track); return !formats ? undefined : formats.size > 1 ? 'mixed' : [...formats][0] }
   const rangesByClip = new Map(waveRanges.map(range => [range.key, range]))
   const tickSeconds = Math.max(1, Math.ceil(64 / (pixels * fps)))
   const tickWidth = tickSeconds * fps * pixels
@@ -167,22 +180,26 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
         </div>
         {rows.map(row => <div key={row.track.id} className="absolute left-0 right-0 border-b border-border-dark" style={{ top: row.top, height: row.height }} data-video-edit-track={row.track.id} data-track-index={row.track.index} data-track-kind={row.track.kind}>
           <VideoEditTrackHeader row={row} targeted={instance.targetTrackIds.includes(row.track.id)} onTarget={() => run(() => setVideoEditTimelineView(projectId, { targetTrackIds: instance.targetTrackIds.includes(row.track.id) ? instance.targetTrackIds.filter(id => id !== row.track.id) : [...instance.targetTrackIds, row.track.id] }))}
-            onPatch={patch => run(() => updateVideoEditTrack(projectId, sequence.id, row.track.id, patch))} onResize={event => pointer.resize(event, row)} />
+            onPatch={patch => run(() => updateVideoEditTrack(projectId, sequence.id, row.track.id, patch))} onResize={event => pointer.resize(event, row)} channelFormat={row.track.kind === 'audio' ? channelFormatOf(row.track.index) : undefined} />
         </div>)}
         {divider !== undefined && <div role="separator" aria-label="画面与声音轨道分界" aria-orientation="horizontal" data-video-edit-track-divider className={`pointer-events-none absolute left-0 right-0 ${UI_DIVIDER_CLASS}`} style={{ top: divider }} />}
         {visibleClips.map(clip => {
           const row = rows.find(row => row.track.index === clip.track)!
-          const waveform = waves.get(clip.id)?.result
-          const range = rangesByClip.get(clip.id)
+          const laneKeys = clip.audioMapping ? clip.audioMapping.sources.map((_, index) => `${clip.id}:${index}`) : [clip.id]
+          const laneResults = laneKeys.map(key => waves.get(key)?.result)
+          const lanes = laneResults.every(Boolean) ? laneResults.flatMap(result => result!.channels.map(channel => ({ peak: channel.peak, duration: (result!.endUs - result!.startUs) / 1e6 }))) : undefined
+          const waveError = laneKeys.map(key => waves.get(key)?.error).find(Boolean)
+          const range = rangesByClip.get(laneKeys[0])
+          const channelType = videoEditClipAudioFormat(clip, videoEditClipMedia(instance.document, clip))
           const offset = syncOffsets.get(clip.id)
           const offsetLabel = offset === undefined ? undefined : `${offset > 0 ? '+' : ''}${offset}`
           return <div key={clip.id} data-video-edit-clip={clip.id} data-clip-start={clip.start} data-clip-duration={clip.duration} className={`absolute flex items-center overflow-hidden rounded-lg ${instance.selectedClipIds.includes(clip.id) ? 'bg-accent/30 ring-1 ring-accent' : clip.kind === 'audio' ? 'bg-accent/10' : 'bg-app'}`} style={{ top: row.top + 2, height: row.height - 4, left: TIMELINE_HEADER_WIDTH + clip.start * pixels, width: Math.max(3, clip.duration * pixels) }}>
-            {waveform && range && <div className="pointer-events-none absolute inset-y-0 opacity-40" data-video-edit-waveform={clip.id} style={{ left: (range.from - clip.start) * pixels, width: (range.to - range.from) * pixels }}>
-              {waveform.channels.map((channel, index) => <Waveform key={`${index}:${range.from}:${range.to}:${pixels}`} samples={channel.peak} duration={(waveform.endUs - waveform.startUs) / 1e6} height={Math.max(4, (row.height - 4) / waveform.channelCount)} />)}
+            {lanes && range && <div className="pointer-events-none absolute inset-y-0 opacity-40" data-video-edit-waveform={clip.id} data-waveform-lanes={lanes.length} style={{ left: (range.from - clip.start) * pixels, width: (range.to - range.from) * pixels }}>
+              {lanes.map((lane, index) => <Waveform key={`${index}:${range.from}:${range.to}:${pixels}`} samples={lane.peak} duration={lane.duration} height={Math.max(4, (row.height - 4) / lanes.length)} />)}
             </div>}
-            {waves.get(clip.id)?.error && <span className="pointer-events-none absolute bottom-0 text-2xs text-danger" title={waves.get(clip.id)!.error}>波形未能读取</span>}
+            {waveError && <span className="pointer-events-none absolute bottom-0 text-2xs text-danger" title={waveError}>波形未能读取</span>}
             <UiButton variant="plain" data-video-edit-trim="in" aria-label={`裁剪${clip.name}入点`} className="!h-full !w-2 shrink-0 cursor-ew-resize !rounded-none !p-0" tabIndex={-1}>│</UiButton>
-            <UiButton variant="plain" aria-label={`选择片段 ${clip.name}`} title={offset === undefined ? clip.name : `${clip.name}：与链接片段失步 ${Math.abs(offset)} 帧，右键可移入同步或滑入同步`} className="!h-full min-w-0 flex-1 truncate !rounded-none !px-1 !py-0 text-2xs" onClick={event => { if (event.detail === 0) run(() => pointer.select([clip.id], event.ctrlKey || event.metaKey, event.shiftKey, videoEditPickRelations(instance.linkedSelection !== false, event.altKey))) }}>{clip.name}</UiButton>
+            <UiButton variant="plain" aria-label={`选择片段 ${clip.name}`} title={`${clip.name}${channelType ? ` · ${videoEditAudioFormatLabel(channelType)}` : ''}${offset === undefined ? '' : `：与链接片段失步 ${Math.abs(offset)} 帧，右键可移入同步或滑入同步`}`} data-video-edit-audio-format={channelType} className="!h-full min-w-0 flex-1 truncate !rounded-none !px-1 !py-0 text-2xs" onClick={event => { if (event.detail === 0) run(() => pointer.select([clip.id], event.ctrlKey || event.metaKey, event.shiftKey, videoEditPickRelations(instance.linkedSelection !== false, event.altKey))) }}>{clip.name}</UiButton>
             {offsetLabel && <span className="pointer-events-none shrink-0 px-1 text-2xs font-medium tabular-nums text-danger" data-video-edit-sync-offset={offset}>{offsetLabel}</span>}
             <UiButton variant="plain" data-video-edit-trim="out" aria-label={`裁剪${clip.name}出点`} className="!h-full !w-2 shrink-0 cursor-ew-resize !rounded-none !p-0" tabIndex={-1}>│</UiButton>
           </div>
@@ -194,6 +211,7 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
       {pointer.failure && <div className="sticky bottom-0 left-0 z-raised max-w-lg bg-panel px-2 py-1"><UiError title="当前位置不能编辑" message={pointer.failure} /></div>}
     </div>
     <ContextMenu items={menu.menuItems} position={menu.menuPosition} visible={menu.menuVisible} onClose={menu.hideMenu} />
+    {audioChannels && <VideoEditAudioChannelsDialog projectId={projectId} target={audioChannels} onClose={() => setAudioChannels(null)} />}
     {pendingSequence && <VideoEditSequenceDialog title="按素材新建序列" requireFrameRate initial={pendingSequence.settings} bins={pendingSequence.owner.document.bins} onClose={() => setPendingSequence(null)} onSubmit={async settings => {
       const { owner, input, placement: at, sequenceId } = pendingSequence
       if (requireVideoEditInstance(owner.document.id) !== owner) throw new Error('原工程已关闭，请重新拖入。')

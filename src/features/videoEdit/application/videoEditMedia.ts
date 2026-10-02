@@ -70,13 +70,16 @@ async function inspectBrowserMedia(path: string, signal?: AbortSignal): Promise<
   try {
     const video = await input.getPrimaryVideoTrack()
     const audio = await input.getPrimaryAudioTrack()
+    const audioTracks = audio ? (await input.getAudioTracks()).slice(0, 64) : []
     const streams = { ...(video ? { video: { codec: video.codec, decodable: await video.canDecode() } } : {}), ...(audio ? { audio: { codec: audio.codec, decodable: await audio.canDecode() } } : {}) }
     if ((!video && !audio) || streams.video?.decodable === false || streams.audio?.decodable === false) return { status: 'read', ...streams }
     const metrics = video ? await video.computeFrameRateMetrics({ targetPacketCount: 256 }) : undefined
     const rate = metrics && metrics.probedPacketCount >= 2 ? matchVideoEditFrameRate(metrics.bestGuessFrameRate) : undefined
     const durationSeconds = await input.computeDuration()
     signal?.throwIfAborted()
-    return { status: 'read', ...streams, media: { kind: video ? 'video' : 'audio', hasAudio: Boolean(audio), width: video?.displayWidth ?? 0, height: video?.displayHeight ?? 0, durationSeconds, ...(video ? { ...(rate ? { frameRate: rate } : {}), frameRateMode: metrics && metrics.probedPacketCount >= 2 ? metrics.frameRateIsConstant ? 'sampled-constant' as const : 'variable' as const : 'unknown' as const } : {}) } }
+    // Every sound track in file order (task 2.6); the browser decoder opens them by the same number.
+    const audioStreams = audioTracks.every(track => Number.isInteger(track.numberOfChannels) && track.numberOfChannels >= 1 && track.numberOfChannels <= 64) && audioTracks.length ? { audioStreams: audioTracks.map(track => ({ channels: track.numberOfChannels, ...(Number.isInteger(track.sampleRate) && track.sampleRate > 0 && track.sampleRate <= 768_000 ? { sampleRate: track.sampleRate } : {}) })) } : {}
+    return { status: 'read', ...streams, media: { kind: video ? 'video' : 'audio', hasAudio: Boolean(audio), width: video?.displayWidth ?? 0, height: video?.displayHeight ?? 0, durationSeconds, ...(video ? { ...(rate ? { frameRate: rate } : {}), frameRateMode: metrics && metrics.probedPacketCount >= 2 ? metrics.frameRateIsConstant ? 'sampled-constant' as const : 'variable' as const : 'unknown' as const } : {}), ...audioStreams } }
   } catch (error) {
     signal?.throwIfAborted()
     return { status: 'unreadable', error }
@@ -201,4 +204,26 @@ export async function relinkVideoEditMedia(projectId: string, mediaId: string): 
   if (requireVideoEditInstance(projectId) !== owner) throw new Error('原工程已关闭，请重新定位素材。')
   if (owner.document.media.find(item => item.id === mediaId) !== previous) throw new Error('源素材在重新定位期间已改变，请重新选择。')
   editVideoProject(projectId, document => ({ ...document, media: document.media.map(item => item.id === mediaId ? { ...media, id: mediaId, sourceRevision: media.id, ...(content ? { assetId: previous.assetId, assetContent: content } : {}) } : item) }))
+}
+/**
+ * The sound streams of one media file (task 2.6). Media imported before the stream list existed is read once on
+ * demand and the list is recorded, so its audio channels can be modified; nothing is migrated when a project opens.
+ */
+export async function ensureVideoEditMediaAudioStreams(projectId: string, mediaId: string, signal?: AbortSignal): Promise<NonNullable<VideoEditMedia['audioStreams']>> {
+  const owner = requireVideoEditInstance(projectId)
+  const media = owner.document.media.find(media => media.id === mediaId)
+  if (!media || media.kind === 'image') throw new Error('此项目项没有声音。')
+  if (media.audioStreams) return media.audioStreams
+  const inspected = await inspectVideoEditMedia(media.path, signal)
+  signal?.throwIfAborted()
+  if (!inspected.audioStreams) throw new Error('此素材没有可用的声音。')
+  const streams = inspected.audioStreams
+  if (requireVideoEditInstance(projectId) !== owner) throw new Error('原工程已关闭。')
+  editVideoProject(projectId, document => {
+    const current = document.media.find(value => value.id === mediaId)
+    if (!current || current.path !== media.path) throw new Error('素材已改变，请重新打开音频声道设置。')
+    return current.audioStreams ? document : { ...document, media: document.media.map(value => value.id === mediaId ? { ...value, audioStreams: streams } : value) }
+  })
+  logger.info('补读剪辑素材声音流', { event: 'video_edit.media.audio_streams.completed', context: { projectId, streams: streams.length } })
+  return streams
 }

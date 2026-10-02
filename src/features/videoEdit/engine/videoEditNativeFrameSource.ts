@@ -249,10 +249,10 @@ export class VideoEditNativeFileSource implements VideoEditFrameSource {
     }
   }
 
-  /** The first sound stream of the file (multi-stream expansion, task 2.6, opens others by their number). */
-  clipAudio(): VideoEditClipAudio | undefined {
+  /** The `audioStream`-th sound stream of the file (default the first; task 2.6 opens the others by their number). */
+  clipAudio(audioStream?: number): VideoEditClipAudio | undefined {
     if (!this.owner.sound || this.media.kind === 'image' || (this.media.kind === 'video' && this.media.hasAudio === false)) return undefined
-    return createVideoEditNativeClipAudio(sampleRate => this.owner.openSound(this.media, this.path, sampleRate))
+    return createVideoEditNativeClipAudio(sampleRate => this.owner.openSound(this.media, this.path, sampleRate, audioStream))
   }
 
   async *schedule(timestamps: readonly number[]): AsyncGenerator<VideoEditNativePicture | null, void, unknown> {
@@ -300,9 +300,9 @@ export class VideoEditNativeFrames implements VideoEditFrameBackend {
   get sound(): boolean { return this.options.sound ?? VIDEO_EDIT_NATIVE_SOUND_READY }
 
   /** Opens the sound session of one clip reader; null when the file has no sound stream. */
-  async openSound(media: VideoEditMedia, path: string, sampleRate: number | undefined): Promise<VideoEditPcmSession | null> {
+  async openSound(media: VideoEditMedia, path: string, sampleRate: number | undefined, audioStream?: number): Promise<VideoEditPcmSession | null> {
     try {
-      return await openVideoEditNativePcm(this.options.channel, path, media.name, { ...(sampleRate !== undefined ? { sampleRate } : {}) })
+      return await openVideoEditNativePcm(this.options.channel, path, media.name, { ...(sampleRate !== undefined ? { sampleRate } : {}), ...(audioStream !== undefined ? { audioStream } : {}) })
     } catch (error) { this.options.onFailure?.(media, error); throw error }
   }
 

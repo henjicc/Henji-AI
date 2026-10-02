@@ -1,4 +1,5 @@
 import type { VideoEditComposition, VideoEditMedia } from '@/core/videoEdit/document'
+import type { VideoEditAudioMapping } from '@/core/videoEdit/audioChannels'
 import { videoEditFps } from '@/core/videoEdit/time'
 import { createVideoEditAudioMeter, type VideoEditAudioLevel } from './videoEditAudioMeter'
 import { VideoEditAudioScheduler } from './videoEditAudioScheduler'
@@ -8,11 +9,12 @@ import { VideoEditRenderSession } from './videoEditRenderSession'
 const SOURCE_SOUND_RATE = 48000
 
 /**
- * A one-clip sequence that plays the first sound stream of `media` from its start, at full volume: timeline seconds
- * equal source seconds. Mixed by its own render session, so the source monitor hears exactly what the program mix
- * would (same decoding backend, resampling and channel mapping).
+ * A sequence that plays `media` from its start, at full volume: timeline seconds equal source seconds. Mixed by its
+ * own render session, so the source monitor hears exactly what the program mix would (same decoding backend,
+ * resampling and channel mapping). With the item's audio layout (task 2.6, Premiere's source monitor plays every
+ * audio clip of the item) there is one clip per layout entry; without it the first sound stream plays.
  */
-export function videoEditSourceSoundComposition(media: VideoEditMedia): VideoEditComposition {
+export function videoEditSourceSoundComposition(media: VideoEditMedia, layout?: readonly VideoEditAudioMapping[]): VideoEditComposition {
   if (media.kind === 'image' || !Number.isFinite(media.durationSeconds) || media.durationSeconds <= 0) throw new Error('源声音需要具有有效时长的音视频素材。')
   const frameRate = media.frameRate ? { ...media.frameRate } : { numerator: 30, denominator: 1 }
   const fps = videoEditFps(frameRate)
@@ -24,8 +26,8 @@ export function videoEditSourceSoundComposition(media: VideoEditMedia): VideoEdi
     media: [{ ...media, ...(media.frameRate ? { frameRate: { ...media.frameRate } } : {}) }],
     items: [{ id: itemId, name: media.name, kind: media.kind, mediaId: media.id }],
     tracks: [{ id: crypto.randomUUID(), name: media.name, index: 0, kind: 'audio', locked: false, enabled: true, muted: false, solo: false }],
-    clips: [{ id: crypto.randomUUID(), itemId, name: media.name, kind: 'audio', sourceComponent: 'audio', track: 0, start: 0, duration: Math.max(1, Math.ceil(media.durationSeconds * fps - 1e-6)),
-      sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, brightness: 1, text: '' }],
+    clips: (layout?.length ? layout : [undefined]).map(mapping => ({ id: crypto.randomUUID(), itemId, name: media.name, kind: 'audio' as const, sourceComponent: 'audio' as const, track: 0, start: 0, duration: Math.max(1, Math.ceil(media.durationSeconds * fps - 1e-6)),
+      sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, brightness: 1, text: '', ...(mapping ? { audioMapping: structuredClone(mapping) } : {}) })),
     annotations: [],
   }
 }
@@ -44,7 +46,7 @@ export class VideoEditSourceSoundPlayer {
   private origin = 0
   private disposed = false
 
-  constructor(private readonly media: VideoEditMedia, private readonly createSession: (document: VideoEditComposition) => VideoEditRenderSession = document => new VideoEditRenderSession(document)) {}
+  constructor(private readonly media: VideoEditMedia, private readonly createSession: (document: VideoEditComposition) => VideoEditRenderSession = document => new VideoEditRenderSession(document), private readonly layout?: readonly VideoEditAudioMapping[]) {}
 
   /** Starts the audio clock (it may need a user gesture or a device wake-up) and applies the monitor volume. */
   async prepare(volume: number): Promise<void> {
@@ -73,7 +75,7 @@ export class VideoEditSourceSoundPlayer {
     if (!context || !gain || this.disposed) return
     this.scheduler.pump({
       context, destination: gain, origin: this.origin, timelineTime: seconds, endTime: this.media.durationSeconds,
-      mix: (from, duration) => (this.session ??= this.createSession(videoEditSourceSoundComposition(this.media))).mixAudio(from, duration),
+      mix: (from, duration) => (this.session ??= this.createSession(videoEditSourceSoundComposition(this.media, this.layout))).mixAudio(from, duration),
       isCurrent: () => !this.disposed && isCurrent(), onError,
     })
   }

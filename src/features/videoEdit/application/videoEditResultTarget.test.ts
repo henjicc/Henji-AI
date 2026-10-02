@@ -13,6 +13,7 @@ const mediaMode = vi.hoisted(() => ({ video: false }))
 vi.mock('mediabunny', () => ({ ALL_FORMATS: [], UrlSource: class {}, Input: class {
   async getPrimaryVideoTrack() { return mediaMode.video ? { displayWidth: 3840, displayHeight: 2160, canDecode: async () => true, computeFrameRateMetrics: async () => ({ probedPacketCount: 256, bestGuessFrameRate: 30, frameRateIsConstant: true }) } : null }
   async getPrimaryAudioTrack() { return { canDecode: async () => true } }
+  async getAudioTracks() { return [{ numberOfChannels: 2, sampleRate: 48000 }] }
   async computeDuration() { return 3 }
   dispose() {}
 } }))

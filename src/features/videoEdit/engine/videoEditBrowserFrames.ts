@@ -25,17 +25,30 @@ export async function videoEditBrowserDecodable(url: string): Promise<boolean> {
 
 /** Chromium decoding of one parsed file: mediabunny demuxing and WebCodecs decoders. */
 class BrowserFrameSource implements VideoEditFrameSource {
-  constructor(private readonly video: VideoTrack | null, private readonly audio: AudioTrack | null, private readonly options: DecodeOptions, readonly codec?: string) {}
+  constructor(private readonly video: VideoTrack | null, private readonly audio: AudioTrack | null, private readonly options: DecodeOptions, readonly codec?: string, private readonly audioTracks?: () => Promise<readonly AudioTrack[]>) {}
   clipFrames(): VideoEditClipFrames | undefined {
     if (!this.video) return undefined
     // Sequential playback decodes the original compressed stream.
     const sink = new VideoSampleSink(this.video, this.options)
     return { frames: start => sink.samples(start), frameAt: seconds => sink.getSample(seconds) }
   }
-  clipAudio(): VideoEditClipAudio | undefined {
-    if (!this.audio) return undefined
-    const sink = new AudioSampleSink(this.audio)
-    return { chunks: (start, end) => sink.samples(start, end) }
+  clipAudio(audioStream?: number): VideoEditClipAudio | undefined {
+    if (audioStream === undefined) {
+      if (!this.audio) return undefined
+      const sink = new AudioSampleSink(this.audio)
+      return { chunks: (start, end) => sink.samples(start, end) }
+    }
+    // A numbered stream (task 2.6) is looked up on first read; a stream the file does not have is silence.
+    const tracks = this.audioTracks
+    if (!tracks) return undefined
+    let sink: Promise<AudioSampleSink | undefined> | undefined
+    return {
+      async *chunks(start, end) {
+        sink ??= tracks().then(list => list[audioStream] ? new AudioSampleSink(list[audioStream]) : undefined)
+        const current = await sink
+        if (current) yield* current.samples(start, end)
+      },
+    }
   }
   /** Chromium decodes every stream of the file (the import probe's measure; asked only when choosing a backend). */
   decodable(): Promise<boolean> { return tracksDecodable(this.video, this.audio) }
@@ -63,7 +76,7 @@ export class VideoEditBrowserFrames implements VideoEditFrameBackend {
         const config = video ? await video.getDecoderConfig() : null
         const preference = 'prefer-hardware'
         const supported = config && (await VideoDecoder.isConfigSupported({ ...config, hardwareAcceleration: preference, optimizeForLatency: true })).supported
-        return new BrowserFrameSource(video, audio, { hardwareAcceleration: supported ? preference : 'no-preference', optimizeForLatency: true }, config?.codec)
+        return new BrowserFrameSource(video, audio, { hardwareAcceleration: supported ? preference : 'no-preference', optimizeForLatency: true }, config?.codec, () => input.getAudioTracks())
       })()
       const created = { users: 0, input, ready }
       // A failed open is not cached: a restored or relinked file must be read again.

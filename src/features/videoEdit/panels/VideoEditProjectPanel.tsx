@@ -1,6 +1,6 @@
 import { forwardRef, useMemo, useRef, useState } from 'react'
 import { Virtuoso, VirtuosoGrid } from 'react-virtuoso'
-import { ChevronDown, ChevronRight, Folder, FolderPlus, Import, List, Grid2X2, Plus, Pencil, Trash2, RefreshCw, Play, Settings2, Code2 } from 'lucide-react'
+import { ChevronDown, ChevronRight, Folder, FolderPlus, Import, List, Grid2X2, Plus, Pencil, Trash2, RefreshCw, Play, Settings2, Code2, AudioLines } from 'lucide-react'
 import { ICON_WORKSPACE_VIDEO_EDIT as SequenceIcon, ICON_ASSET_LIBRARY as AssetLibraryIcon, ICON_VIDEO_EDIT_GRAPHIC as GraphicIcon } from '@/core/theme/icons'
 import ContextMenu from '@/components/ContextMenu'
 import { UiButton, UiChipButton, UiEmpty, UiIconButton, UiInput, UiOptionButton, UiSelect, UI_MULTISELECT_ITEM_ACTIVE_OVERRIDE_CLASS } from '@/components/ui'
@@ -17,6 +17,7 @@ import { VideoEditSequenceDialog } from './VideoEditSequenceDialog'
 import { VideoEditProjectEditDialog, type ProjectEditDialog } from './VideoEditProjectEditDialog'
 import { VideoEditProjectThumbnail } from './VideoEditProjectThumbnail'
 import { VideoEditCodeCreateDialog } from './VideoEditCodeCreateDialog'
+import { VideoEditAudioChannelsDialog, type VideoEditAudioChannelsTarget } from './VideoEditAudioChannelsDialog'
 import { readVideoEditCodeMetadata } from '../application/videoEditCodeState'
 import { selectVideoEditProjectItems, videoEditBinRows, videoEditProjectEntries, type VideoEditProjectEntry } from './videoEditProjectModel'
 
@@ -36,6 +37,7 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
   const [sequenceDialog, setSequenceDialog] = useState<SequenceDialog | null>(null)
   const [selectedSequence, setSelectedSequence] = useState<string | null>(null)
   const [creatingCode, setCreatingCode] = useState(false)
+  const [audioChannels, setAudioChannels] = useState<VideoEditAudioChannelsTarget | null>(null)
   const anchor = useRef<string | null>(null)
   const menu = useContextMenu()
   const projectId = instance.document.id
@@ -91,11 +93,15 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
     const item = entry.value
     const ids = instance.selectedItemIds.includes(item.id) ? instance.selectedItemIds : [item.id]
     const items = instance.document.items.filter(value => ids.includes(value.id))
+    // Premiere "Modify > Audio Channels": several items at once only when their files have the same sound streams.
+    const sounding = items.map(value => media.get(value.mediaId ?? '')).filter(value => value && (value.kind === 'audio' || value.kind === 'video' && value.hasAudio !== false))
+    const audioTarget: VideoEditAudioChannelsTarget | undefined = sounding.length === items.length && sounding[0] && (items.length === 1 || sounding.every(value => value!.audioStreams && JSON.stringify(value!.audioStreams) === JSON.stringify(sounding[0]!.audioStreams))) ? { kind: 'items', itemIds: items.map(value => value.id), mediaId: sounding[0].id, ...(items[0].audioChannels ? { layout: items[0].audioChannels } : {}) } : undefined
     return [
       { id: 'preview', label: '打开源素材', icon: <Play size={16} />, disabled: !item.mediaId, onClick: () => run(() => updateVideoEditSource(projectId, { itemId: item.id })) },
       { id: 'append', label: `添加${ids.length > 1 ? ` ${ids.length} 项` : ''}到当前序列`, icon: <Plus size={16} />, onClick: () => run(() => appendVideoEditItems(projectId, ids, instance.activeSequenceId)) },
       { id: 'sequence', label: item.kind === 'adjustment' ? '调整图层请添加到现有序列' : '按此素材新建序列', icon: <SequenceIcon size={16} />, disabled: ids.length !== 1 || item.kind === 'adjustment', onClick: () => createFromItem(item.id) },
       { id: 'edit', label: '重命名、标签与移动', icon: <Pencil size={16} />, onClick: () => setEdit({ kind: 'items', items }) },
+      { id: 'audio_channels', label: '音频声道…', icon: <AudioLines size={16} />, disabled: !audioTarget, onClick: () => { if (audioTarget) setAudioChannels(audioTarget) } },
       { id: 'relink', label: '重新定位源文件', icon: <RefreshCw size={16} />, disabled: !item.mediaId || ids.length !== 1, onClick: () => run(() => relinkVideoEditMedia(projectId, item.mediaId!)) },
       { id: 'remove', label: `从工程移除${ids.length > 1 ? ` ${ids.length} 项` : ''}`, icon: <Trash2 size={16} />, onClick: () => run(() => deleteVideoEditItems(projectId, ids)) },
     ]
@@ -170,6 +176,7 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
       </div>
     </div>
     <ContextMenu items={menu.menuItems} position={menu.menuPosition} visible={menu.menuVisible} onClose={menu.hideMenu} />
+    {audioChannels && <VideoEditAudioChannelsDialog projectId={projectId} target={audioChannels} onClose={() => setAudioChannels(null)} />}
     {creatingCode && <VideoEditCodeCreateDialog projectId={projectId} binId={binId || undefined} onClose={() => setCreatingCode(false)} onCreated={ids => setVideoEditProjectView(projectId, { selectedItemIds: ids })} />}
     {edit && <VideoEditProjectEditDialog value={edit} bins={instance.document.bins} onClose={() => setEdit(null)} onSubmit={values => {
       if (edit.kind === 'createBin') { const id = createVideoEditBin(projectId, values.name!, values.binId || undefined); selectBin(id) }

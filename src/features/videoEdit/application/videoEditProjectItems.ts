@@ -1,6 +1,8 @@
 import { videoEditBinSchema, videoEditItemSchema, type VideoEditItem } from '@/core/videoEdit/document'
-import { makeVideoEditItemClip, makeVideoEditItemSequence, removeVideoEditBins, removeVideoEditItems, videoEditItemUsage, type VideoEditSequenceSettings } from '@/core/videoEdit/projectItems'
-import { editVideoProject, requireVideoEditInstance, setVideoEditView, switchVideoEditSequence } from './videoEditService'
+import { placeVideoEditItems, makeVideoEditItemSequence, removeVideoEditBins, removeVideoEditItems, videoEditItemUsage, type VideoEditSequenceSettings } from '@/core/videoEdit/projectItems'
+import { editVideoProject, editVideoSequence, requireVideoEditInstance, setVideoEditView, switchVideoEditSequence } from './videoEditService'
+import { assertVideoEditClipsEditable } from '@/core/videoEdit/lockedTracks'
+import { videoEditAudioMappingSchema, videoEditAudioLayoutSchema, type VideoEditAudioMapping } from '@/core/videoEdit/audioChannels'
 import { readVideoEditCodeMetadata } from './videoEditCodeState'
 import { createVideoEditGraphic } from '@/core/videoEdit/graphics'
 
@@ -38,15 +40,35 @@ export function updateVideoEditItems(projectId: string, ids: string[], values: {
     return { ...document, items: document.items.map(item => ids.includes(item.id) ? videoEditItemSchema.parse({ ...item, ...values, ...(values.binId === null ? { binId: undefined } : {}) }) : item) }
   })
 }
+/**
+ * Premiere "Modify > Audio Channels" on project items: the layout clips placed from now on use (null: Use File).
+ * Clips already in sequences keep their own mapping.
+ */
+export function setVideoEditItemAudioChannels(projectId: string, itemIds: string[], layout: VideoEditAudioMapping[] | null): void {
+  const parsed = layout === null ? null : videoEditAudioLayoutSchema.parse(layout)
+  editVideoProject(projectId, document => {
+    if (!itemIds.length || itemIds.some(id => !document.items.some(item => item.id === id))) throw new Error('项目项不存在。')
+    return { ...document, items: document.items.map(item => { if (!itemIds.includes(item.id)) return item; const next = { ...item }; if (parsed) next.audioChannels = structuredClone(parsed); else delete next.audioChannels; return videoEditItemSchema.parse(next) }) }
+  })
+}
+/** The source channels one timeline clip reads (null: its file's first stream with its own channels). */
+export function setVideoEditClipAudioMapping(projectId: string, sequenceId: string, clipIds: string[], mapping: VideoEditAudioMapping | null): void {
+  const parsed = mapping === null ? null : videoEditAudioMappingSchema.parse(mapping)
+  editVideoSequence(projectId, sequenceId, sequence => {
+    if (!clipIds.length || clipIds.some(id => !sequence.clips.some(clip => clip.id === id))) throw new Error('片段不存在。')
+    assertVideoEditClipsEditable(sequence, clipIds)
+    return { ...sequence, clips: sequence.clips.map(clip => { if (!clipIds.includes(clip.id)) return clip; const next = { ...clip }; if (parsed) next.audioMapping = structuredClone(parsed); else delete next.audioMapping; return next }) }
+  })
+}
 export function deleteVideoEditItems(projectId: string, ids: string[]): void { editVideoProject(projectId, document => removeVideoEditItems(document, ids)) }
 export function deleteVideoEditBins(projectId: string, ids: string[]): void { editVideoProject(projectId, document => removeVideoEditBins(document, ids)) }
 export function appendVideoEditItems(projectId: string, itemIds: string[], sequenceId: string, placement?: { frame: number; track?: number }): string[] {
   const instance = requireVideoEditInstance(projectId)
-  let frame = placement?.frame ?? (instance.activeSequenceId === sequenceId ? instance.frame : instance.sequenceViews.get(sequenceId)?.frame ?? 0)
-  const clips = itemIds.map(itemId => { const clip = makeVideoEditItemClip(instance.document, itemId, sequenceId, { frame, track: placement?.track }, readVideoEditCodeMetadata(instance, instance.document)); frame += clip.duration; return clip })
-  editVideoProject(projectId, document => ({ ...document, sequences: document.sequences.map(sequence => sequence.id === sequenceId ? { ...sequence, clips: [...sequence.clips, ...clips] } : sequence) }))
-  if (instance.activeSequenceId === sequenceId && clips.length) setVideoEditView(projectId, { selection: clips.at(-1)!.id })
-  return clips.map(clip => clip.id)
+  const frame = placement?.frame ?? (instance.activeSequenceId === sequenceId ? instance.frame : instance.sequenceViews.get(sequenceId)?.frame ?? 0)
+  const placed = placeVideoEditItems(instance.document, itemIds, sequenceId, { frame, ...(placement?.track !== undefined ? { track: placement.track } : {}) }, readVideoEditCodeMetadata(instance, instance.document))
+  editVideoProject(projectId, document => ({ ...document, sequences: document.sequences.map(sequence => sequence.id === sequenceId ? { ...sequence, tracks: [...sequence.tracks, ...placed.addedTracks], clips: [...sequence.clips, ...placed.clips] } : sequence) }))
+  if (instance.activeSequenceId === sequenceId && placed.primaryIds.length) setVideoEditView(projectId, { selection: placed.primaryIds.at(-1)! })
+  return placed.clips.map(clip => clip.id)
 }
 export function createVideoEditSequenceFromItem(projectId: string, itemId: string, settings: VideoEditSequenceSettings = {}): string {
   return createVideoEditSequenceFromItems(projectId, [itemId], settings)

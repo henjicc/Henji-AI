@@ -23,6 +23,7 @@ const { createVideoEditNativeAudioScene } = require('./uiInspectionSceneVideoEdi
 const { createVideoEditHighPrecisionScene } = require('./uiInspectionSceneVideoEditHighPrecision.cjs')
 const { createVideoDecodeScene } = require('./uiInspectionSceneVideoDecode.cjs')
 const { createVideoEditLinksScene } = require('./uiInspectionSceneVideoEditLinks.cjs')
+const { createVideoEditMultitrackScene } = require('./uiInspectionSceneVideoEditMultitrack.cjs')
 const { attachUiInspectionCommon } = require('./uiInspectionSceneCommon.cjs')
 const { attachUiInspectionGeneration } = require('./uiInspectionSceneGeneration.cjs')
 const { attachUiInspectionCanvasWorkspace } = require('./uiInspectionSceneCanvasWorkspace.cjs')
@@ -117,6 +118,7 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
     createVideoEditHighPrecisionScene(),
     createVideoDecodeScene(),
     createVideoEditLinksScene(),
+    createVideoEditMultitrackScene(),
     ...createGenerationPerformanceScenes(context),
     ...createGenerationVirtualizationScenes(context),
     ...createCanvasScalePerformanceScenes(context),

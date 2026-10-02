@@ -142,7 +142,9 @@ function createVideoEditProjectSourceScene() {
         await entry(page, videoId).click({ button: 'right' }); await menuItem(page, '按此素材新建序列').click(); await page.getByLabel('序列名称', { exact: true }).fill('4K60 匹配序列'); await button(page, '确定').click()
         document = await saved(page, file, value => value.sequences.some(sequence => sequence.name === '4K60 匹配序列'))
         const sequence = document.sequences.find(sequence => sequence.name === '4K60 匹配序列')
-        assert.equal(sequence.width, 3840); assert.equal(sequence.height, 2160); assert.deepEqual(sequence.frameRate, { numerator: 60, denominator: 1 }); assert.equal(sequence.clips.length, 1)
+        // A video with sound becomes its picture plus a linked sound clip (task 2.6).
+        const videoHasAudio = document.media.find(media => media.id === document.items.find(item => item.id === videoId).mediaId).hasAudio === true
+        assert.equal(sequence.width, 3840); assert.equal(sequence.height, 2160); assert.deepEqual(sequence.frameRate, { numerator: 60, denominator: 1 }); assert.equal(sequence.clips.length, videoHasAudio ? 2 : 1)
         await button(page, '序列设置').click(); await page.getByLabel('音频采样率', { exact: true }).selectOption('44100'); await page.getByLabel('声道', { exact: true }).selectOption('1'); await button(page, '确定').click()
         await saved(page, file, value => value.sequences.find(item => item.id === sequence.id)?.sampleRate === 44100)
         await capture('video-project-matched-sequence')

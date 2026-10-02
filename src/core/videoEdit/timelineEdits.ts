@@ -31,7 +31,8 @@ export type VideoEditTimelineEdit =
   | { kind: 'separate_audio'; clipIds: string[]; linked?: VideoEditRelations; audioTrack: number }
   /** Premiere "Move into sync" / "Slip into sync" for the selected out-of-sync portions only. */
   | { kind: 'sync'; clipIds: string[]; mode: 'move' | 'slip' }
-  | { kind: 'place'; clipboard: VideoEditClipboard; frame: number; mode: 'paste' | 'insert' | 'overwrite'; trackMap?: Record<number, number>; targetTracks?: number[] }
+  /** `newTracks`: audio tracks appended before placing (a multi-track item needs more audio tracks than the sequence has). */
+  | { kind: 'place'; clipboard: VideoEditClipboard; frame: number; mode: 'paste' | 'insert' | 'overwrite'; trackMap?: Record<number, number>; targetTracks?: number[]; newTracks?: VideoEditSequence['tracks'] }
 
 function integer(value: number): void { if (!Number.isSafeInteger(value)) throw new Error('剪辑位置和位移必须为整数帧。') }
 function sequenceOf(document: VideoEditDocument, id: string): VideoEditSequence {
@@ -234,7 +235,9 @@ function applyClipEdit(document: VideoEditDocument, sequenceId: string, edit: Ex
     const pairs = new Map(clips.map(clip => [clip.id, { audioId: crypto.randomUUID(), linkId: clip.linkId ?? crypto.randomUUID() }]))
     const audio = clips.map(clip => { const next = { ...clip, id: pairs.get(clip.id)!.audioId, kind: 'audio' as const, sourceComponent: 'audio' as const, track: edit.audioTrack, linkId: pairs.get(clip.id)!.linkId }; delete next.effects; return next })
     assertNoOverlap(sequence.clips, audio)
-    return { ...sequence, clips: sequence.clips.flatMap(clip => selected.has(clip.id) ? [{ ...clip, sourceComponent: 'video' as const, linkId: pairs.get(clip.id)!.linkId }, audio.find(value => value.id === pairs.get(clip.id)!.audioId)!] : [clip]) }
+    // The sound keeps the clip's channel mapping; the picture no longer plays sound.
+    const picture = (clip: VideoEditClip): VideoEditClip => { const next = { ...clip, sourceComponent: 'video' as const, linkId: pairs.get(clip.id)!.linkId }; delete next.audioMapping; return next }
+    return { ...sequence, clips: sequence.clips.flatMap(clip => selected.has(clip.id) ? [picture(clip), audio.find(value => value.id === pairs.get(clip.id)!.audioId)!] : [clip]) }
   }
   const key = edit.kind === 'link' || edit.kind === 'unlink' ? 'linkId' : 'groupId'
   const remove = edit.kind === 'unlink' || edit.kind === 'ungroup'
@@ -269,8 +272,11 @@ function syncClips(document: VideoEditDocument, sequence: VideoEditSequence, ids
   return retimeVideoEditContent(sequence, { ...sequence, clips, annotations: shiftAnnotations(sequence, clips) }, origins)
 }
 
-function placeClips(document: VideoEditDocument, sequence: VideoEditSequence, edit: Extract<VideoEditTimelineEdit, { kind: 'place' }>): { sequence: VideoEditSequence; selectedClipIds: string[] } {
+function placeClips(document: VideoEditDocument, original: VideoEditSequence, edit: Extract<VideoEditTimelineEdit, { kind: 'place' }>): { sequence: VideoEditSequence; selectedClipIds: string[] } {
   integer(edit.frame)
+  const added = edit.newTracks ?? []
+  if (added.some(track => track.kind !== 'audio' || original.tracks.some(value => value.index === track.index || value.id === track.id)) || new Set(added.map(track => track.index)).size !== added.length || original.tracks.length + added.length > 32) throw new Error('新增的音频轨道无效，或序列将超过 32 条轨道。')
+  const sequence = added.length ? { ...original, tracks: [...original.tracks, ...added] } : original
   if (edit.clipboard.projectId !== document.id) throw new Error('此剪贴板属于另一工程，请通过项目素材引用导入。')
   if (!edit.clipboard.clips.length || edit.clipboard.clips.length > 500) throw new Error('剪贴板没有有效片段。')
   const from = Math.min(...edit.clipboard.clips.map(clip => clip.start))

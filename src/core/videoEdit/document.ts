@@ -6,6 +6,7 @@ import { videoEditMarkerSchema, videoEditCaptionSchema, retimeVideoEditContent }
 import { videoEditGraphicSchema } from './graphics'
 import { videoEditAdjustmentSchema, videoEditEffectSchema, validateVideoEditAdjustmentRanges } from './compositing'
 import { videoEditTransitionSchema, validateVideoEditTransitions } from './transitions'
+import { videoEditAudioLayoutSchema, videoEditAudioMappingIssue, videoEditAudioMappingSchema, videoEditAudioStreamsSchema } from './audioChannels'
 
 const frame = z.number().int().min(0).max(108_000)
 const identifier = z.string().min(1).max(100)
@@ -16,16 +17,18 @@ export const videoEditMediaSchema = z.object({
   kind: z.enum(['video', 'audio', 'image']), durationSeconds: z.number().finite().nonnegative(),
   width: z.number().int().nonnegative(), height: z.number().int().nonnegative(),
   assetId: identifier.optional(), assetContent: z.object({ sizeBytes: z.number().int().nonnegative(), fileModifiedAt: z.number().finite().nonnegative(), contentIdentity: identifier.optional() }).strict().optional(), sourceRevision: identifier.optional(), hasAudio: z.boolean().optional(), frameRate: videoEditRatioSchema.optional(), frameRateMode: z.enum(['sampled-constant', 'variable', 'unknown']).optional(),
+  /** Sound streams in file order (task 2.6); absent on media imported before, which plays its first stream. */
+  audioStreams: videoEditAudioStreamsSchema.optional(),
 }).strict()
 export const videoEditBinSchema = z.object({ id: identifier, name, parentId: identifier.optional() }).strict()
-export const videoEditItemSchema = z.object({ id: identifier, name, binId: identifier.optional(), tags: z.array(z.string().trim().min(1).max(80)).max(32).optional(), kind: z.enum(['video', 'audio', 'image', 'text', 'code', 'graphic', 'adjustment']), mediaId: identifier.optional(), code: codeMaterialInstanceSchema.optional(), graphic: videoEditGraphicSchema.optional() }).strict()
+export const videoEditItemSchema = z.object({ id: identifier, name, binId: identifier.optional(), tags: z.array(z.string().trim().min(1).max(80)).max(32).optional(), kind: z.enum(['video', 'audio', 'image', 'text', 'code', 'graphic', 'adjustment']), mediaId: identifier.optional(), code: codeMaterialInstanceSchema.optional(), graphic: videoEditGraphicSchema.optional(), audioChannels: videoEditAudioLayoutSchema.optional() }).strict()
 export const videoEditTrackSchema = z.object({ id: identifier, name, index: z.number().int().min(0).max(31), kind: z.enum(['video', 'audio']), locked: z.boolean(), enabled: z.boolean(), muted: z.boolean(), solo: z.boolean(), height: z.number().int().min(24).max(160).optional(), syncLocked: z.boolean().optional() }).strict()
 export const videoEditCreativeSourceSchema = z.object({ kind: z.enum(['generation.result', 'canvas.node', 'image_edit.document', 'audio_edit.project', 'camera_stage.render_task']), id: z.string().min(1).max(2048), version: z.string().min(1).max(200) }).strict()
 export type VideoEditCreativeSource = z.infer<typeof videoEditCreativeSourceSchema>
 export const videoEditClipSchema = z.object({
   id: identifier, itemId: identifier, name, kind: z.enum(['video', 'audio', 'image', 'text', 'code', 'graphic', 'adjustment']), track: z.number().int().min(0).max(31), code: codeMaterialInstanceSchema.optional(),
   graphic: videoEditGraphicSchema.optional(), effects: z.array(videoEditEffectSchema).max(4).optional(), adjustment: videoEditAdjustmentSchema.optional(),
-  linkId: identifier.optional(), groupId: identifier.optional(), sourceComponent: z.enum(['video', 'audio']).optional(), creativeSource: videoEditCreativeSourceSchema.optional(),
+  linkId: identifier.optional(), groupId: identifier.optional(), sourceComponent: z.enum(['video', 'audio']).optional(), creativeSource: videoEditCreativeSourceSchema.optional(), audioMapping: videoEditAudioMappingSchema.optional(),
   start: frame, duration: frame.min(1), sourceInUs: z.number().int().nonnegative(), sourceRemainder,
   x: z.number().finite().min(-2).max(2), y: z.number().finite().min(-2).max(2),
   scale: z.number().min(0.01).max(4), rotation: z.number().min(-360).max(360),
@@ -75,6 +78,10 @@ export const videoEditDocumentSchema = z.object({
       const definition = document.codeMaterials?.find(value => value.id === item.code?.definitionId)
       if (!definition?.versions.some(version => version.id === item.code?.versionId)) issue('代码项目项的固定源码版本不存在。')
     } else if (item.code) issue('普通项目项不能附带代码生成实例。')
+    if (item.audioChannels) {
+      if (!media || !(item.kind === 'audio' || item.kind === 'video' && media.hasAudio !== false)) issue('只有带声音的音视频项目项可以设置音频声道。')
+      for (const mapping of item.audioChannels) { const problem = videoEditAudioMappingIssue(mapping, media?.audioStreams); if (problem) issue(problem) }
+    }
   }
   for (const sequence of document.sequences) {
     if (sequence.binId && !document.bins.some(bin => bin.id === sequence.binId)) issue('序列的素材箱不存在。')
@@ -89,6 +96,10 @@ export const videoEditDocumentSchema = z.object({
       if (!item || (item.kind !== clip.kind && !extractedAudio)) issue(`片段 ${clip.name} 的项目项引用无效。`)
       if (clip.sourceComponent && !(item?.kind === 'video' && ((clip.kind === 'video' && clip.sourceComponent === 'video') || extractedAudio))) issue('只有视频素材可以拆开引用画面或声音。')
       if (extractedAudio && media?.hasAudio !== true) issue('拆出的声音必须引用已确认具有音轨的视频素材。')
+      if (clip.audioMapping) {
+        if (!media || !(clip.kind === 'audio' || clip.kind === 'video' && clip.sourceComponent !== 'video')) issue('只有发声的音视频片段可以设置声道映射。')
+        const problem = videoEditAudioMappingIssue(clip.audioMapping, media?.audioStreams); if (problem) issue(problem)
+      }
       if (clip.kind === 'code') {
         if (!clip.code || clip.code.definitionId !== item?.code?.definitionId || !document.codeMaterials?.find(value => value.id === clip.code?.definitionId)?.versions.some(version => version.id === clip.code?.versionId)) issue('代码片段必须引用所属定义的固定源码版本。')
       } else if (clip.code) issue('普通片段不能附带代码生成实例。')

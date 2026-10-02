@@ -21,11 +21,15 @@ const prores4444 = videoStream('prores', '4444', { width: 2560, height: 2560, bi
 
 it('原生与浏览器都能解：原生是主路径（默认）时为原生，不是主路径时整体留在浏览器（日志另记原生能解）；诊断强制原生须等原生播放接通；元数据都沿用浏览器结果', () => {
   const both = probe([videoStream('h264', 'High'), audioStream('aac')])
-  expect(resolveVideoEditMediaInspection('D:/a.mp4', both, browserDecodes)).toEqual({ backend: 'native', nativeDecodes: true, fields: browserMedia })
+  // The sound stream list follows the decoder that plays the file (the native service opens streams by number).
+  const nativeFields = { ...browserMedia, audioStreams: [{ channels: 2, sampleRate: 48000 }] }
+  expect(resolveVideoEditMediaInspection('D:/a.mp4', both, browserDecodes)).toEqual({ backend: 'native', nativeDecodes: true, fields: nativeFields })
   expect(resolveVideoEditMediaInspection('D:/a.mp4', both, browserDecodes, undefined, true, false)).toEqual({ backend: 'browser', nativeDecodes: true, fields: browserMedia })
-  expect(resolveVideoEditMediaInspection('D:/a.mp4', both, browserDecodes, 'native')).toEqual({ backend: 'native', nativeDecodes: true, fields: browserMedia })
+  expect(resolveVideoEditMediaInspection('D:/a.mp4', both, browserDecodes, 'native')).toEqual({ backend: 'native', nativeDecodes: true, fields: nativeFields })
   expect(resolveVideoEditMediaInspection('D:/a.mp4', both, browserDecodes, 'native', false)).toEqual({ backend: 'browser', nativeDecodes: true, fields: browserMedia })
-  expect(resolveVideoEditMediaInspection('D:/a.mp4', both, browserDecodes, undefined, true, true)).toEqual({ backend: 'native', nativeDecodes: true, fields: browserMedia })
+  expect(resolveVideoEditMediaInspection('D:/a.mp4', both, browserDecodes, undefined, true, true)).toEqual({ backend: 'native', nativeDecodes: true, fields: nativeFields })
+  const browserStreams: VideoEditBrowserInspection = { ...browserDecodes, media: { ...browserMedia, audioStreams: [{ channels: 1 }, { channels: 1 }] } }
+  expect(resolveVideoEditMediaInspection('D:/a.mp4', both, browserStreams, 'browser').fields.audioStreams).toEqual([{ channels: 1 }, { channels: 1 }])
 })
 
 it('只有原生能解的专业格式：原生播放接通前按具体格式拒绝；接通后后端为原生、元数据取自原生探测并通过工程素材校验', () => {
@@ -85,8 +89,19 @@ it('原生元数据：旋转交换宽高、帧率不一致视为可变、封面�
   expect(videoEditFieldsFromNativeProbe({ ...mpegPs.probe, container: { formatName: 'mov', startTimeSeconds: 0, durationSeconds: 3.666667 }, streams: [{ ...videoStream('h264', 'High'), durationSeconds: 3.016992 }, { ...audioStream('aac'), durationSeconds: 3 }, timecode] }).durationSeconds).toBe(3.016992)
   expect(videoEditFieldsFromNativeProbe({ ...mpegPs.probe, streams: [{ ...videoStream('h264', 'High'), durationSeconds: null }] }).durationSeconds).toBeCloseTo(3.533, 9)
   const cover = { ...videoStream('mjpeg', 'Baseline'), isAttachedPicture: true }
-  expect(videoEditFieldsFromNativeProbe((probe([cover, audioStream('mp3')], 'mp3') as { probe: VideoEditNativeProbe }).probe)).toEqual({ kind: 'audio', hasAudio: true, width: 0, height: 0, durationSeconds: 3 })
+  expect(videoEditFieldsFromNativeProbe((probe([cover, audioStream('mp3')], 'mp3') as { probe: VideoEditNativeProbe }).probe)).toEqual({ kind: 'audio', hasAudio: true, width: 0, height: 0, durationSeconds: 3, audioStreams: [{ channels: 2, sampleRate: 48000 }] })
   expect(videoEditFieldsFromNativeProbe((probe([videoStream('prores', 'HQ', { avgFrameRate: null, realFrameRate: { num: 50, den: 1 } })]) as { probe: VideoEditNativeProbe }).probe)).toMatchObject({ frameRate: { numerator: 50, denominator: 1 }, frameRateMode: 'unknown' })
   expect(videoEditNativeFormatLabel(videoStream('dnxhd', 'DNXHR HQX', { bitDepth: 10, chromaSubsampling: '4:2:2' }))).toBe('Avid DNxHR HQX，10 位 4:2:2')
   expect(videoEditNativeFormatLabel(videoStream('dnxhd', 'DNXHD', { width: 1920, height: 1080 }))).toBe('Avid DNxHD，8 位 4:2:0')
+})
+
+it('原生探测按文件顺序列出全部声音流（2.6）：多条单声道 MXF、声道数缺失时不写入清单、无声视频没有清单，结果通过素材严格结构', () => {
+  const mono = (index: number, sampleRate = 48000): VideoEditNativeStream => ({ ...audioStream('pcm_s24le', index), audio: { sampleRate, channels: 1 } })
+  const mxf = probe([videoStream('dnxhd', 'DNXHR LB'), mono(4), mono(2), mono(1), mono(3, 96000)], 'mxf') as { probe: VideoEditNativeProbe }
+  const fields = videoEditFieldsFromNativeProbe(mxf.probe)
+  expect(fields.audioStreams).toEqual([{ channels: 1, sampleRate: 48000 }, { channels: 1, sampleRate: 48000 }, { channels: 1, sampleRate: 96000 }, { channels: 1, sampleRate: 48000 }])
+  expect(videoEditMediaSchema.parse({ id: 'm', name: 'a.mxf', path: 'D:/a.mxf', ...fields }).audioStreams).toHaveLength(4)
+  const broken = { ...mxf.probe, streams: [...mxf.probe.streams.slice(0, 2), { ...audioStream('pcm_s16le', 5), audio: undefined }] }
+  expect(videoEditFieldsFromNativeProbe(broken).audioStreams).toBeUndefined()
+  expect(videoEditFieldsFromNativeProbe((probe([videoStream('h264', 'High')]) as { probe: VideoEditNativeProbe }).probe)).not.toHaveProperty('audioStreams')
 })

@@ -1,6 +1,6 @@
 import { VIDEO_EDIT_COMMANDS, type VideoEditCommandId, type VideoEditCommandScope } from '@/core/videoEdit/commands'
-import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
-import { videoEditDuration } from '@/core/videoEdit/document'
+import { placeVideoEditItems } from '@/core/videoEdit/projectItems'
+import { videoEditDuration, type VideoEditSequence } from '@/core/videoEdit/document'
 import { assertVideoEditClipsEditable } from '@/core/videoEdit/lockedTracks'
 import { expandVideoEditSelection, videoEditPickRelations, type VideoEditRelations } from '@/core/videoEdit/timelineSelection'
 import { applyVideoEditTimelineEdit, type VideoEditClipboard, type VideoEditTimelineEdit } from '@/core/videoEdit/timelineEdits'
@@ -37,20 +37,22 @@ function stateOf(context: VideoEditCommandContext): ContextState {
 }
 function selection(context: VideoEditCommandContext) { const owner = stateOf(context).owner!; return getActiveVideoEditSequence(owner).clips.filter(clip => context.clipIds.includes(clip.id)) }
 function sourceItem(context: VideoEditCommandContext): string | undefined { return context.scope === 'source' ? stateOf(context).source?.itemId : getActiveVideoEditSequence(stateOf(context).owner!).clips.find(clip => clip.id === context.clipIds[0])?.itemId }
-function placeClipboard(context: VideoEditCommandContext): VideoEditClipboard {
+/** Source and project placements also return the audio tracks a multi-track item needs (task 2.6); their clips are already on target tracks. */
+function placeClipboard(context: VideoEditCommandContext): { clipboard: VideoEditClipboard; newTracks?: VideoEditSequence['tracks'] } {
   const { owner, source } = stateOf(context); if (!owner) throw new Error('请先打开剪辑工程。')
-  if (context.scope !== 'source' && context.scope !== 'project') { const clipboard = stateOf(context).clipboard; if (!clipboard) throw new Error('请先复制片段。'); return clipboard }
+  if (context.scope !== 'source' && context.scope !== 'project') { const clipboard = stateOf(context).clipboard; if (!clipboard) throw new Error('请先复制片段。'); return { clipboard } }
   const sequence = getActiveVideoEditSequence(owner); const items = context.scope === 'source' ? source?.itemId ? [source.itemId] : [] : [...context.itemIds]
   if (!items.length) throw new Error('请选择要放入序列的源素材或项目项。')
-  let frame = 0
-  const clips = items.map(itemId => {
+  const target = (kind: 'video' | 'audio'): number | undefined => sequence.tracks.find(track => stateOf(context).targetTrackIds.includes(track.id) && track.kind === kind)?.index
+  const videoTrack = target('video'); const audioTrack = target('audio')
+  for (const itemId of items) {
     const item = owner.document.items.find(item => item.id === itemId)
-    const target = sequence.tracks.find(track => stateOf(context).targetTrackIds.includes(track.id) && track.kind === (item?.kind === 'audio' ? 'audio' : 'video'))
-    if (!target) throw new Error('请选择对应的目标轨道。')
-    const clip = makeVideoEditItemClip(owner.document, itemId, sequence.id, { frame, track: target.index, ...(context.scope === 'source' && item?.kind !== 'image' && source ? { sourceInUs: source.inUs ?? 0, ...(source.outUs !== null ? { sourceOutUs: source.outUs } : {}) } : {}) }, readVideoEditCodeMetadata(owner, owner.document))
-    frame += clip.duration; return clip
-  })
-  return { projectId: owner.document.id, frameRate: sequence.frameRate, clips, annotations: [], tracks: sequence.tracks.map(track => ({ index: track.index, kind: track.kind })) }
+    if ((item?.kind === 'audio' ? audioTrack : videoTrack) === undefined) throw new Error('请选择对应的目标轨道。')
+  }
+  const range = context.scope === 'source' && source && owner.document.items.find(item => item.id === items[0])?.kind !== 'image' ? { sourceInUs: source.inUs ?? 0, ...(source.outUs !== null ? { sourceOutUs: source.outUs } : {}) } : {}
+  const placed = placeVideoEditItems(owner.document, items, sequence.id, { frame: 0, ...(videoTrack !== undefined ? { videoTrack } : {}), ...(audioTrack !== undefined ? { audioTrack } : {}), ...range }, readVideoEditCodeMetadata(owner, owner.document))
+  const tracks = [...sequence.tracks, ...placed.addedTracks]
+  return { clipboard: { projectId: owner.document.id, frameRate: sequence.frameRate, clips: placed.clips, annotations: [], tracks: tracks.map(track => ({ index: track.index, kind: track.kind })) }, ...(placed.addedTracks.length ? { newTracks: placed.addedTracks } : {}) }
 }
 function clipboardTrackMap(context: VideoEditCommandContext, clipboard: VideoEditClipboard): Record<number, number> {
   const owner = stateOf(context).owner!; const sequence = getActiveVideoEditSequence(owner); const mapping: Record<number, number> = {}
@@ -76,8 +78,9 @@ function contextTargetTracks(context: VideoEditCommandContext): number[] { const
 function timelineIntent(context: VideoEditCommandContext, id: VideoEditCommandId): VideoEditTimelineEdit | undefined {
   const clips = [...context.clipIds]
   if (id === 'paste' || id === 'insert' || id === 'overwrite') {
-    const clipboard = placeClipboard(context)
-    return { kind: 'place', clipboard, mode: id, frame: context.frame, trackMap: clipboardTrackMap(context, clipboard), targetTracks: contextTargetTracks(context) }
+    const { clipboard, newTracks } = placeClipboard(context)
+    // Source and project placements already sit on the target tracks (and on tracks they add).
+    return { kind: 'place', clipboard, mode: id, frame: context.frame, ...(context.scope === 'source' || context.scope === 'project' ? newTracks ? { newTracks } : {} : { trackMap: clipboardTrackMap(context, clipboard) }), targetTracks: contextTargetTracks(context) }
   }
   if (id === 'split') return { kind: 'split', clipIds: clips, linked: false, frame: context.frame }
   if (id === 'split_tracks') return { kind: 'split', clipIds: getActiveVideoEditSequence(stateOf(context).owner!).clips.filter(clip => contextTargetTracks(context).includes(clip.track) && context.frame > clip.start && context.frame < clip.start + clip.duration).map(clip => clip.id), linked: videoEditPickRelations(stateOf(context).owner!.linkedSelection !== false), frame: context.frame }

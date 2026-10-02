@@ -55,8 +55,12 @@ function expectedNativeFields(reference) {
     kind: 'video', width: reference.video.width, height: reference.video.height, hasAudio: Boolean(reference.audio),
     durationSeconds: Math.max(...ends), frameRate: { numerator: average.num, denominator: average.den },
     frameRateMode: Math.abs(average.num / average.den / (real.num / real.den) - 1) < 0.001 ? 'sampled-constant' : 'variable',
+    // Every sound stream in file order (task 2.6).
+    ...(reference.audio ? { audioStreams: reference.streams.filter((stream) => stream.codec_type === 'audio').map((stream) => ({ channels: stream.channels, sampleRate: Number(stream.sample_rate) })) } : {}),
   }
 }
+/** The media keys an import records: the fixed set, plus the sound stream list when the file has sound (task 2.6). */
+const mediaKeys = (media) => ['durationSeconds', 'frameRate', 'frameRateMode', 'hasAudio', 'height', 'id', 'kind', 'name', 'path', 'width', ...(media.hasAudio ? ['audioStreams'] : [])].sort()
 
 /**
  * Opens an imported item in the source monitor and checks the native path end to end: no media element, a picture
@@ -195,7 +199,7 @@ function createVideoEditMediaProbeScene() {
           for (let index = 0; index < 200 && !project().media.some((media) => path.resolve(media.path) === path.resolve(sample.file)); index++) await page.waitForTimeout(50)
           const media = project().media.find((item) => path.resolve(item.path) === path.resolve(sample.file))
           assert.ok(media, `${path.basename(sample.file)}（${sample.label}）应能导入`)
-          assert.deepEqual(Object.keys(media).sort(), ['durationSeconds', 'frameRate', 'frameRateMode', 'hasAudio', 'height', 'id', 'kind', 'name', 'path', 'width'], '素材字段不能新增')
+          assert.deepEqual(Object.keys(media).sort(), mediaKeys(media), '素材字段只能是固定字段与声音流清单')
           const expected = expectedNativeFields(ffprobe(sample.file))
           assert.ok(Math.abs(media.durationSeconds - expected.durationSeconds) < 1e-6, `${path.basename(sample.file)} 时长 ${media.durationSeconds} 与 ffprobe 绝对结束时间 ${expected.durationSeconds} 不一致`)
           const { id: _id, name: _name, path: _path, durationSeconds: _duration, ...fields } = media
@@ -219,7 +223,8 @@ function createVideoEditMediaProbeScene() {
         for (let index = 0; index < 200 && !project().media.some((media) => media.path === CONTROL); index++) await page.waitForTimeout(50)
         const media = project().media.find((item) => item.path === CONTROL)
         assert.ok(media, 'H.264+AAC 对照样本应能导入')
-        assert.deepEqual(Object.keys(media).sort(), ['durationSeconds', 'frameRate', 'frameRateMode', 'hasAudio', 'height', 'id', 'kind', 'name', 'path', 'width'], '素材字段不能新增')
+        assert.deepEqual(Object.keys(media).sort(), mediaKeys(media), '素材字段只能是固定字段与声音流清单')
+        assert.equal(media.audioStreams?.length, 1, 'H.264+AAC 对照样本只有一条声音流')
         assert.deepEqual({ kind: media.kind, width: media.width, height: media.height, hasAudio: media.hasAudio, frameRate: media.frameRate, frameRateMode: media.frameRateMode }, { kind: 'video', width: 3840, height: 2160, hasAudio: true, frameRate: { numerator: 60, denominator: 1 }, frameRateMode: 'sampled-constant' })
         const completed = (await logEvents(page, startedAt, ['video_edit.media.inspect.completed']))[0]
         assert.ok(completed, '缺少探测完成日志')

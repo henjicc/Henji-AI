@@ -1,4 +1,5 @@
 import type { VideoEditMedia } from '@/core/videoEdit/document'
+import type { VideoEditAudioMapping } from '@/core/videoEdit/audioChannels'
 import type { VideoEditSourceObservation, VideoEditSourcePresenter } from '../application/videoEditSource'
 import { resolveImageDisplayUrl } from '@/services/imageSource'
 import { VideoEditSourceFrames, videoEditSourceBackend } from '../engine/videoEditSourceFrames'
@@ -42,11 +43,13 @@ const NATIVE_SOUND_CLOCK_MS = 50
 
 /** Native forward playback and cached reverse frames share one source owner. */
 export function createVideoEditSourcePresenter(host: HTMLElement, resolveMedia: (itemId: string) => VideoEditMedia,
-  observe: (itemId: string, observation: VideoEditSourceObservation) => void, observeLevel?: (levels: VideoEditAudioLevel[]) => void): { present: VideoEditSourcePresenter; release: () => Promise<void>; dispose: () => Promise<void> } {
+  observe: (itemId: string, observation: VideoEditSourceObservation) => void, observeLevel?: (levels: VideoEditAudioLevel[]) => void,
+  resolveAudioLayout?: (itemId: string) => VideoEditAudioMapping[] | undefined): { present: VideoEditSourcePresenter; release: () => Promise<void>; dispose: () => Promise<void> } {
   let element: HTMLVideoElement | HTMLAudioElement | HTMLImageElement | undefined
   let currentItem = ''
   let currentPath = ''
   let currentRevision: string | undefined
+  let currentLayout = 'null'
   let presentedTimeUs = 0
   let nativePresentedTimeUs: number | undefined
   let nativePresentedSeconds: number | undefined
@@ -172,7 +175,7 @@ export function createVideoEditSourcePresenter(host: HTMLElement, resolveMedia: 
     clearInterval(meterTimer); meterTimer = undefined; audioSource?.disconnect(); audioSource = undefined; meter?.dispose(); meter = undefined
     if (audio) { const retired = audio; audio = undefined; sourceFramesReleased = Promise.allSettled([sourceFramesReleased, retired.close()]).then(() => undefined) }
     observeLevel?.([])
-    element = undefined; currentItem = ''; currentPath = ''; currentRevision = undefined; presentedTimeUs = 0; nativePresentedTimeUs = undefined; nativePresentedSeconds = undefined
+    element = undefined; currentItem = ''; currentPath = ''; currentRevision = undefined; currentLayout = 'null'; presentedTimeUs = 0; nativePresentedTimeUs = undefined; nativePresentedSeconds = undefined
     if (media instanceof HTMLMediaElement) {
       media.pause()
       if (media instanceof HTMLVideoElement && videoFrame !== undefined) media.cancelVideoFrameCallback(videoFrame)
@@ -283,8 +286,10 @@ export function createVideoEditSourcePresenter(host: HTMLElement, resolveMedia: 
       const media = resolveMedia(request.itemId)
       currentFps = media.frameRate ? media.frameRate.numerator / media.frameRate.denominator : 30
       constantFrameRate = media.frameRateMode === 'sampled-constant'
-      if (currentItem !== request.itemId || currentPath !== media.path || currentRevision !== media.sourceRevision || !(element || nativeView)) {
-        release(); currentItem = request.itemId; currentPath = media.path; currentRevision = media.sourceRevision
+      // The item's audio layout (task 2.6) decides which sound streams the source monitor plays.
+      const layout = resolveAudioLayout?.(request.itemId); const layoutKey = JSON.stringify(layout ?? null)
+      if (currentItem !== request.itemId || currentPath !== media.path || currentRevision !== media.sourceRevision || currentLayout !== layoutKey || !(element || nativeView)) {
+        release(); currentItem = request.itemId; currentPath = media.path; currentRevision = media.sourceRevision; currentLayout = layoutKey
         // Decided while the media element loads (cached per file), so browser-decoded items open as fast as before.
         backendChoice = media.kind !== 'image' ? videoEditSourceBackend(media).catch(() => undefined) : undefined
       }
@@ -308,7 +313,7 @@ export function createVideoEditSourcePresenter(host: HTMLElement, resolveMedia: 
             // A media element cannot play this file: drop it and play the source through render sessions.
             const unused = element; element = undefined; unused.removeAttribute('src'); unused.load(); unused.remove()
             await abortable(sourceFramesReleased, operation.signal)
-            const sound = media.kind === 'audio' || media.hasAudio !== false ? new VideoEditSourceSoundPlayer(media) : undefined
+            const sound = media.kind === 'audio' || media.hasAudio !== false ? new VideoEditSourceSoundPlayer(media, undefined, layout) : undefined
             if (media.kind === 'video') {
               const canvas = document.createElement('canvas'); canvas.className = 'h-full w-full object-contain'
               canvas.setAttribute('aria-label', '源素材画面'); canvas.setAttribute('data-video-edit-source-media', 'video'); canvas.setAttribute('data-video-edit-source-canvas', '')

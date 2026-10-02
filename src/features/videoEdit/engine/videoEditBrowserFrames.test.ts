@@ -11,12 +11,16 @@ vi.mock('mediabunny', () => ({
     constructor(options: { source: { path: string } }) { this.path = options.source.path; boundary.inputs.push(this.path) }
     async getPrimaryVideoTrack() { if (this.path.includes('missing')) throw new Error('404 Not Found'); return boundary.video ? { getDecoderConfig: async () => boundary.codec ? { codec: boundary.codec } : null } : null }
     async getPrimaryAudioTrack() { return null }
+    async getAudioTracks() { boundary.routes.push('audioTracks'); return [{ id: 'first' }, { id: 'second' }] }
     dispose(): void { boundary.disposed.push(this.path) }
   },
   VideoSampleSink: class {
     async *samplesAtTimestamps(timestamps: number[]) { boundary.routes.push('samplesAtTimestamps'); for (const timestamp of timestamps) yield { timestamp } }
   },
-  AudioSampleSink: class {},
+  AudioSampleSink: class {
+    constructor(readonly track: { id: string }) {}
+    async *samples(start: number, end: number) { yield { track: this.track.id, start, end } }
+  },
 }))
 vi.mock('./videoEditPlaybackDecoder', () => ({ scheduledVideoSamples: async function* (_track: unknown, _options: unknown, timestamps: number[]) { boundary.routes.push('pump'); for (const timestamp of timestamps) yield { timestamp } } }))
 vi.mock('./videoEditSeekDecoder', () => ({ VideoEditSeekDecoder: class {} }))
@@ -57,4 +61,18 @@ it('正向计划：H.264 走不 flush 的长期解码泵，其他编码走逐时
   const audioOnly = await frames.open(media('D:/sound.m4a')).ready
   expect(audioOnly.clipFrames()).toBeUndefined(); expect(audioOnly.clipAudio()).toBeUndefined()
   expect(await drain(audioOnly.schedule([0]))).toEqual([]); expect(boundary.routes).toHaveLength(2)
+})
+
+it('按声音流序号读取（2.6）：首次读取才查找该流并复用同一读取器，文件没有这条流时为静音；不带序号仍读首选声音轨', async () => {
+  const frames = new VideoEditBrowserFrames()
+  const opened = frames.open(media('D:/OBS.mp4'))
+  const source = await opened.ready
+  expect(source.clipAudio()).toBeUndefined()
+  const second = source.clipAudio(1)!
+  expect(boundary.routes).toEqual([])
+  expect(await drain(second.chunks(1, 2))).toEqual([{ track: 'second', start: 1, end: 2 }])
+  expect(await drain(second.chunks(2, 3))).toEqual([{ track: 'second', start: 2, end: 3 }])
+  expect(boundary.routes).toEqual(['audioTracks'])
+  expect(await drain(source.clipAudio(5)!.chunks(0, 1))).toEqual([])
+  frames.release(opened.key)
 })

@@ -531,3 +531,40 @@ it('同采样率块按最近样本混入：半样本相位在相邻混音块中�
     expect(output.every((value, sample) => value === signal(0, sample + 1))).toBe(true)
   } finally { await renderer.dispose() }
 })
+it('声道映射（2.6）：每个片段按映射读取指定声音流，单声道居中、两条单声道合成立体声、单声道序列取平均；轨道静音逐轨生效，不再使用的流会话释放', async () => {
+  const sessions: Array<{ stream: number | undefined; closed: boolean }> = []
+  const backend: VideoEditFrameBackend = {
+    open: media => ({ key: media.path, ready: Promise.resolve({ clipFrames: () => undefined, async *schedule() {},
+      clipAudio: (stream?: number) => createVideoEditNativeClipAudio(async () => {
+        if (stream === 9) return null
+        const entry = { stream, closed: false }; sessions.push(entry)
+        return pcmSession(48000, 1, () => Math.fround(.1 * ((stream ?? 0) + 1)), () => { entry.closed = true })
+      }) }) }),
+    release() {},
+    seeker() { throw new Error('声音测试不定位画面。') },
+  }
+  const base = fixture()
+  const sound = (id: string, track: number, audioMapping?: VideoEditClip['audioMapping']): VideoEditClip => ({ ...base.clips[0], id, kind: 'audio', sourceComponent: 'audio', track, ...(audioMapping ? { audioMapping } : {}) })
+  const tracks = [...base.tracks, { id: 'a2', name: '音频 2', index: 8, kind: 'audio' as const, locked: false, enabled: true, muted: false, solo: false }, { id: 'a3', name: '音频 3', index: 9, kind: 'audio' as const, locked: false, enabled: true, muted: false, solo: false }]
+  const clips = [sound('third', 0, { format: 'mono', sources: [{ stream: 2, channel: 0 }] }), sound('pair', 8, { format: 'stereo', sources: [{ stream: 0, channel: 0 }, { stream: 1, channel: 0 }] }), sound('missing', 9, { format: 'mono', sources: [{ stream: 9, channel: 0 }] })]
+  const document = { ...base, tracks, clips }
+  const renderer = new VideoEditRenderer(document, undefined, undefined, 8 * 1024 ** 3, backend)
+  const level = (plane: Float32Array): number => { expect(plane.every(value => Math.abs(value - plane[0]) < 1e-7)).toBe(true); return plane[0] }
+  try {
+    expect((await renderer.mixAudio(.25, .01)).map(level).map(value => Math.round(value * 1e6) / 1e6)).toEqual([.4, .5])
+    expect(sessions.map(entry => entry.stream).sort()).toEqual([0, 1, 2])
+    // Muting the stereo pair's track leaves the centred mono clip in both channels.
+    await renderer.updateDocument({ ...document, tracks: tracks.map(track => track.index === 8 ? { ...track, muted: true } : track) })
+    expect((await renderer.mixAudio(.25, .01)).map(level).map(value => Math.round(value * 1e6) / 1e6)).toEqual([.3, .3])
+    expect(sessions.filter(entry => entry.stream !== 2).every(entry => entry.closed)).toBe(true)
+    // A mono sequence averages the stereo clip's two channels.
+    await renderer.updateDocument({ ...document, channels: 1 })
+    expect((await renderer.mixAudio(.25, .01)).map(level).map(value => Math.round(value * 1e6) / 1e6)).toEqual([.45])
+    // A clip without a mapping still reads the first stream with its own channels.
+    await renderer.updateDocument({ ...document, clips: [sound('plain', 0)] })
+    expect((await renderer.mixAudio(.25, .01)).map(level).map(value => Math.round(value * 1e6) / 1e6)).toEqual([.1, .1])
+    expect(sessions.at(-1)!.stream).toBeUndefined()
+    expect(sessions.slice(0, -1).every(entry => entry.closed)).toBe(true)
+  } finally { await renderer.dispose() }
+  expect(sessions.every(entry => entry.closed)).toBe(true)
+})

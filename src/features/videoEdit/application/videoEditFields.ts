@@ -9,6 +9,7 @@ import { videoEditMarkerSchema, videoEditCaptionSchema } from '@/core/videoEdit/
 import { videoEditEffectSchema, videoEditAdjustmentSchema } from '@/core/videoEdit/compositing'
 import { videoEditTransitionSchema } from '@/core/videoEdit/transitions'
 import { VIDEO_EDIT_COMPOSITE_TYPES } from './videoEditCompositeEntities'
+import { videoEditAudioLayoutSchema, videoEditAudioMappingSchema, videoEditAudioStreamsSchema } from '@/core/videoEdit/audioChannels'
 
 export const VIDEO_EDIT_TYPES = ['video_edit.project', 'video_edit.clip', 'video_edit.annotation', 'video_edit.media', 'video_edit.sequence', 'video_edit.bin', 'video_edit.item', 'video_edit.track', 'video_edit.source', 'video_edit.code_material', 'video_edit.code_version', 'video_edit.marker', 'video_edit.caption', ...VIDEO_EDIT_COMPOSITE_TYPES] as const
 export type VideoEditEntityType = typeof VIDEO_EDIT_TYPES[number]
@@ -68,6 +69,10 @@ schemas['video_edit.media'].hasAudio = z.boolean().nullable()
 schemas['video_edit.clip'].creativeSource = videoEditClipSchema.shape.creativeSource.unwrap().nullable()
 schemas['video_edit.media'].frameRate = z.object({ numerator: z.number().int().positive(), denominator: z.number().int().positive() }).nullable()
 schemas['video_edit.media'].frameRateMode = z.enum(['sampled-constant', 'variable', 'unknown'])
+// Audio channels (task 2.6): null reads as "file default" (Use File / the first stream) and writing null restores it.
+schemas['video_edit.media'].audioStreams = videoEditAudioStreamsSchema.nullable()
+schemas['video_edit.item'].audioChannels = videoEditAudioLayoutSchema.nullable()
+schemas['video_edit.clip'].audioMapping = videoEditAudioMappingSchema.nullable()
 for (const type of ['video_edit.bin', 'video_edit.item', 'video_edit.sequence'] as const) schemas[type][type === 'video_edit.bin' ? 'parentId' : 'binId'] = z.string().max(100)
 export function videoEditSchemaRef(kind: 'entity' | 'property', id: string): ApplicationSchemaRef {
   const hash = [...id].reduce((result, char) => (result * 33 + char.charCodeAt(0)) >>> 0, 5381).toString(16)
@@ -75,6 +80,7 @@ export function videoEditSchemaRef(kind: 'entity' | 'property', id: string): App
 }
 const labels: Record<string, string> = { name: '名称', selectedItemIds: '所选项目项', selectedBinId: '当前素材箱', openSequenceIds: '打开的序列', tags: '标签', assetId: '资产来源', frameRateMode: '源帧率状态', timeUs: '源定位微秒', presentedTimeUs: '实际画面微秒', playing: '源播放', status: '源预览状态', error: '预览失败原因', frame: '当前帧', selection: '所选片段', width: '宽度', height: '高度', fps: '序列帧率', dirty: '尚未保存', activeSequenceId: '当前序列', frameRate: '帧率', pixelAspectRatio: '像素长宽比', sampleRate: '音频采样率', channels: '声道数量', parentId: '父素材箱', binId: '素材箱', itemId: '项目项', enabled: '输出启用', locked: '锁定', muted: '静音', solo: '独奏', mediaId: '源素材标识', kind: '类型', track: '轨道', start: '时间线开始帧', duration: '时长帧', sourceInUs: '源素材入点微秒', x: '水平位置', y: '垂直位置', scale: '缩放', rotation: '旋转角度', opacity: '不透明度', volume: '音量', brightness: '亮度', text: '文字', clipId: '所属片段标识', space: '坐标空间', durationSeconds: '源时长秒', index: '轨道号' }
 Object.assign(labels, { codeParameters: '代码实例参数', codeCurves: '参数关键帧', codeVersionId: '固定源码版本', linkId: '片段链接', groupId: '片段编组', sourceComponent: '使用画面或声音', syncLocked: '同步波纹编辑', hasAudio: '已检测到音轨', timelineView: '时间线选区、工具、链接选择与范围', programPlayback: '节目播放控制', inUs: '源入点微秒', outUs: '源出点微秒', playbackDirection: '播放方向（反向静音）' })
+Object.assign(labels, { audioStreams: '源声音流（文件顺序，每条的声道数与采样率）', audioChannels: '放入序列时的音频声道（每项一个音频片段：单声道或立体声及其源声道；空为按文件）', audioMapping: '声道映射（单声道或立体声及其源声音流与声道；空为第一条声音流原声道）' })
 Object.assign(labels, { graphic: '图形对象结构', effects: '效果链', adjustment: '调整图层范围', transitions: '序列转场' })
 Object.assign(labels, { graphicObjectIds: '图形对象顺序（从下到上）', effectIds: '效果执行顺序', adjustmentFromTrack: '调整起始轨道', graphicKind: '创建图形类型', graphicWidth: '图形宽度', graphicHeight: '图形高度', parameters: '实例参数', curves: '参数关键帧', versionId: '固定源码版本', definitionId: '滤镜源码定义', sequenceId: '所属序列', leftClipId: '左侧片段', rightClipId: '右侧片段', durationFrames: '转场时长帧' })
 const codeKeys: Record<string, string> = { codeParameters: 'parameters', codeCurves: 'curves', codeVersionId: 'versionId' }
@@ -92,7 +98,7 @@ export const VIDEO_EDIT_FIELDS = Object.fromEntries(VIDEO_EDIT_TYPES.map(entityT
     ...((entityType === 'video_edit.clip' || entityType === 'video_edit.sequence' || child) && writable ? { cascadeEffects: [...(entityType === 'video_edit.clip' && ['start', 'duration', 'sourceInUs'].includes(key) ? VIDEO_EDIT_CLIP_CONTENT_CASCADES : []), ...(entityType === 'video_edit.sequence' && key === 'frameRate' ? VIDEO_EDIT_TIME_CASCADES : []), ...VIDEO_EDIT_COMPOSITE_CASCADES] } : {}),
     ...(entityType === 'video_edit.source' && writable ? { cascadeEffects: [VIDEO_EDIT_SOURCE_PROGRAM_CASCADE] } : {}),
     ...(entityType === 'video_edit.project' && key === 'programPlayback' ? { cascadeEffects: [VIDEO_EDIT_PROGRAM_SOURCE_CASCADE] } : {}),
-    ...(writable ? { writer: { write: (draft: VideoEditFieldData, mutation: { value?: JsonValue }) => { const value = schema.parse(mutation.value) as JsonValue; if (codeKeys[key]) { if (!draft.code || typeof draft.code !== 'object' || Array.isArray(draft.code)) throw new Error('此片段没有代码实例。'); draft.code = { ...draft.code, [codeKeys[key]]: value } } else if ((['binId', 'parentId', 'linkId', 'groupId'].includes(key) || ['video_edit.marker', 'video_edit.caption'].includes(entityType) && key === 'clipId') && value === '' || key === 'sourceComponent' && value === 'all') delete draft[key]; else draft[key] = value } } } : {}),
+    ...(writable ? { writer: { write: (draft: VideoEditFieldData, mutation: { value?: JsonValue }) => { const value = schema.parse(mutation.value) as JsonValue; if (codeKeys[key]) { if (!draft.code || typeof draft.code !== 'object' || Array.isArray(draft.code)) throw new Error('此片段没有代码实例。'); draft.code = { ...draft.code, [codeKeys[key]]: value } } else if ((['binId', 'parentId', 'linkId', 'groupId'].includes(key) || ['video_edit.marker', 'video_edit.caption'].includes(entityType) && key === 'clipId') && value === '' || key === 'sourceComponent' && value === 'all' || ['audioChannels', 'audioMapping'].includes(key) && value === null) delete draft[key]; else draft[key] = value } } } : {}),
   }
 })])) as Record<VideoEditEntityType, ApplicationFieldDefinition<VideoEditFieldData, VideoEditFieldData>[]>
 export function videoEditSchemaDocuments(entityType: VideoEditEntityType): Array<{ ref: ApplicationSchemaRef; value: JsonValue }> {

@@ -14,7 +14,7 @@ export type VideoEditNativeStream = NativeMediaStream
 export type VideoEditNativeProbe = NativeMediaProbe
 export type VideoEditNativeProbeOutcome = NativeMediaProbeOutcome
 interface BrowserStream { codec: string | null; decodable: boolean }
-export type VideoEditInspectedFields = Pick<VideoEditMedia, 'kind' | 'hasAudio' | 'width' | 'height' | 'durationSeconds' | 'frameRate' | 'frameRateMode'>
+export type VideoEditInspectedFields = Pick<VideoEditMedia, 'kind' | 'hasAudio' | 'width' | 'height' | 'durationSeconds' | 'frameRate' | 'frameRateMode' | 'audioStreams'>
 /** Chromium's view of the file (mediabunny + WebCodecs). `media` is read only when every stream decodes. */
 export type VideoEditBrowserInspection = { status: 'read'; video?: BrowserStream; audio?: BrowserStream; media?: VideoEditInspectedFields } | { status: 'unreadable'; error: unknown }
 
@@ -39,6 +39,12 @@ function nativeStreams(probe: VideoEditNativeProbe): { video?: VideoEditNativeSt
   const audio = probe.streams.find(stream => stream.index === probe.primaryAudioStreamIndex && stream.kind === 'audio')
   return { ...(video ? { video } : {}), ...(audio ? { audio } : {}) }
 }
+/** Every sound stream in file order, the order both decoders number them by (task 2.6); absent without sound. */
+export function videoEditNativeAudioStreams(probe: VideoEditNativeProbe): Pick<VideoEditMedia, 'audioStreams'> {
+  const streams = probe.streams.filter(stream => stream.kind === 'audio').sort((a, b) => a.index - b.index).slice(0, 64)
+  if (!streams.length || streams.some(stream => !stream.audio || !Number.isInteger(stream.audio.channels) || stream.audio.channels < 1 || stream.audio.channels > 64)) return {}
+  return { audioStreams: streams.map(stream => ({ channels: stream.audio!.channels, ...(Number.isInteger(stream.audio!.sampleRate) && stream.audio!.sampleRate > 0 && stream.audio!.sampleRate <= 768_000 ? { sampleRate: stream.audio!.sampleRate } : {}) })) }
+}
 const fps = (rate: VideoEditNativeRational | null): number | undefined => rate && rate.num > 0 && rate.den > 0 ? rate.num / rate.den : undefined
 /**
  * Metadata from the native probe. Duration is the absolute end time. The container's declared average and real (base) frame rates agree for constant
@@ -52,13 +58,14 @@ export function videoEditFieldsFromNativeProbe(probe: VideoEditNativeProbe): Vid
   const end = (start: number | null | undefined, duration: number | null | undefined): number[] => typeof duration === 'number' && Number.isFinite(duration) && duration >= 0 ? [duration + (typeof start === 'number' && Number.isFinite(start) && start > 0 ? start : 0)] : []
   const streamEnds = probe.streams.filter(stream => (stream.kind === 'video' && !stream.isAttachedPicture) || stream.kind === 'audio').flatMap(stream => end(stream.startTimeSeconds, stream.durationSeconds))
   const durationSeconds = Math.max(0, ...(streamEnds.length ? streamEnds : end(probe.container.startTimeSeconds, probe.container.durationSeconds)))
-  if (!video?.video) return { kind: 'audio', hasAudio: Boolean(audio), width: 0, height: 0, durationSeconds }
+  const sound = audio ? videoEditNativeAudioStreams(probe) : {}
+  if (!video?.video) return { kind: 'audio', hasAudio: Boolean(audio), width: 0, height: 0, durationSeconds, ...sound }
   const { width, height, rotationDegrees, avgFrameRate, realFrameRate } = video.video
   const quarterTurn = Math.abs(Math.round(rotationDegrees ?? 0)) % 180 === 90
   const average = fps(avgFrameRate); const real = fps(realFrameRate)
   const rate = matchVideoEditFrameRate(average ?? real ?? NaN)
   const frameRateMode = average !== undefined && real !== undefined ? Math.abs(average / real - 1) < 0.001 ? 'sampled-constant' as const : 'variable' as const : 'unknown' as const
-  return { kind: 'video', hasAudio: Boolean(audio), width: quarterTurn ? height : width, height: quarterTurn ? width : height, durationSeconds, ...(rate ? { frameRate: rate } : {}), frameRateMode }
+  return { kind: 'video', hasAudio: Boolean(audio), width: quarterTurn ? height : width, height: quarterTurn ? width : height, durationSeconds, ...(rate ? { frameRate: rate } : {}), frameRateMode, ...sound }
 }
 
 const CODEC_NAMES: Record<string, string> = {
@@ -101,7 +108,12 @@ export function resolveVideoEditMediaInspection(path: string, native: VideoEditN
     browser: browser.status === 'read' && browser.media ? 'decodes' : 'cannot-decode',
   }
   const backend = chooseVideoEditDecodeBackend(support, nativePlayback || forced === 'browser' ? forced : undefined, nativePrimary)
-  if (backend && browser.status === 'read' && browser.media) return { backend, nativeDecodes, fields: browser.media }
+  // The stream list follows the decoder that plays the file: the native service opens sound streams by number.
+  if (backend && browser.status === 'read' && browser.media) {
+    const { audioStreams: browserStreams, ...fields } = browser.media
+    const streamsOf = backend === 'native' && native.status === 'probed' && fields.hasAudio ? videoEditNativeAudioStreams(native.probe) : browserStreams ? { audioStreams: browserStreams } : {}
+    return { backend, nativeDecodes, fields: { ...fields, ...streamsOf } }
+  }
   if (backend && native.status === 'probed') return { backend, nativeDecodes, fields: videoEditFieldsFromNativeProbe(native.probe) }
   if (!nativePlayback && nativeDecodes && streams && forced !== 'browser') {
     const browserVideoFails = browser.status === 'unreadable' || browser.video?.decodable === false

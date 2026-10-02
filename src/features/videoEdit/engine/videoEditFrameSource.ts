@@ -69,8 +69,12 @@ export interface VideoEditFrameSource {
   readonly codec?: string
   /** A new picture reader for one clip, or undefined when the file has no picture stream. */
   clipFrames(): VideoEditClipFrames | undefined
-  /** A new sound reader for one clip, or undefined when the file has no sound stream. */
-  clipAudio(): VideoEditClipAudio | undefined
+  /**
+   * A new sound reader for one clip, or undefined when the file has no sound stream. `audioStream` is the n-th sound
+   * stream of the file in file order (task 2.6, both backends number streams alike); without it the reader plays the
+   * stream clips without a channel mapping always played (the first one). A missing stream is silence.
+   */
+  clipAudio(audioStream?: number): VideoEditClipAudio | undefined
   /**
    * Forward playback through one long-lived decoder: exactly one picture or null per requested source time, in
    * request order (the picture is the last one starting at or before that time). Null makes the caller use its
@@ -129,14 +133,14 @@ export interface VideoEditDecodeSupport {
 export const VIDEO_EDIT_NATIVE_PLAYBACK_READY = true
 
 /**
- * Whether native decoding is the primary path for files the browser also decodes. The picture and the sound of one
- * file are read by one backend; until native sound decoding is in place (task 2.3 stage B), a file the browser
-/**
  * Whether the native service decodes sound for the renderer (task 2.3). Native sound sessions need protocol 4 of the
  * native service; until its native side is built this stays off and files on the native backend are silent.
  */
 export const VIDEO_EDIT_NATIVE_SOUND_READY = true
 
+/**
+ * Whether native decoding is the primary path for files the browser also decodes. The picture and the sound of one
+ * file are read by one backend; until native sound decoding is in place (task 2.3 stage B), a file the browser
  * decodes completely stays on the browser for both, and native plays the files only it decodes (their sound is
  * silent until then). Task 2.3 stage B turns this on.
  */

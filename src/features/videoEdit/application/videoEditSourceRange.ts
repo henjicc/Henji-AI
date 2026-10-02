@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { videoEditFps } from '@/core/videoEdit/time'
-import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
+import { placeVideoEditItem } from '@/core/videoEdit/projectItems'
 import { readVideoEditSource } from './videoEditSource'
 import { requireVideoEditInstance, setVideoEditTimelineView } from './videoEditService'
 import { executeVideoEditTimelineEdit } from './videoEditTimeline'
@@ -24,18 +24,17 @@ export function placeVideoEditSourceRange(projectId: string, input: VideoEditSou
   const sequence = owner.document.sequences.find(sequence => sequence.id === sequenceId)
   const item = owner.document.items.find(item => item.id === input.itemId); const media = owner.document.media.find(media => media.id === item?.mediaId)
   if (!sequence || !media || identity(media) !== input.sourceIdentity) throw new Error('原序列或源素材已改变，请重新拖入。')
-  const trackFor = (kind: 'video' | 'audio', primary: boolean): number => {
-    if (primary && placement.track !== undefined) return placement.track
-    const track = sequence.tracks.find(track => track.kind === kind && owner.targetTrackIds.includes(track.id) && !track.locked) ?? sequence.tracks.find(track => track.kind === kind && !track.locked && track.enabled)
-    if (!track) throw new Error('请先创建未锁定的对应轨道。')
-    return track.index
-  }
-  const components = input.component === 'linked' ? ['video', 'audio'] as const : [input.component]
-  const linkId = input.component === 'linked' ? crypto.randomUUID() : undefined
-  const clips = components.map((component, index) => ({ ...makeVideoEditItemClip(owner.document, input.itemId, sequenceId, { frame: 0, track: trackFor(component, index === 0), sourceInUs: input.inUs, sourceOutUs: input.outUs, ...(media.kind === 'video' ? { sourceComponent: component } : {}) }), ...(linkId ? { linkId } : {}) }))
+  const trackFor = (kind: 'video' | 'audio'): number | undefined => (sequence.tracks.find(track => track.kind === kind && owner.targetTrackIds.includes(track.id) && !track.locked) ?? sequence.tracks.find(track => track.kind === kind && !track.locked && track.enabled))?.index
   if (Math.floor((input.outUs - input.inUs) / 1e6 * videoEditFps(sequence.frameRate) + 1e-6) < 1) throw new Error('源选区短于一个序列帧。')
+  const primary = input.component === 'audio' || media.kind === 'audio' ? 'audio' : 'video'
+  const fallback = trackFor(primary)
+  if (placement.track === undefined && fallback === undefined) throw new Error('请先创建未锁定的对应轨道。')
+  const videoTrack = primary === 'video' ? placement.track ?? fallback : undefined; const audioTrack = primary === 'audio' ? placement.track ?? fallback : trackFor('audio')
+  // Every audio clip of the item's layout comes along, on the following audio tracks (task 2.6).
+  const placed = placeVideoEditItem(owner.document, input.itemId, sequenceId, { frame: 0, ...(videoTrack !== undefined ? { videoTrack } : {}), ...(audioTrack !== undefined ? { audioTrack } : {}), sourceInUs: input.inUs, sourceOutUs: input.outUs, components: media.kind === 'video' ? input.component : 'audio' })
   // The same paste algorithm owns overlap, locks, boundaries, selection and history.
-  const result = executeVideoEditTimelineEdit(projectId, sequenceId, { kind: 'place', frame: placement.frame, mode: 'paste', clipboard: { projectId, frameRate: sequence.frameRate, clips, annotations: [], tracks: sequence.tracks.map(track => ({ index: track.index, kind: track.kind })) } })
+  const tracks = [...sequence.tracks, ...placed.addedTracks]
+  const result = executeVideoEditTimelineEdit(projectId, sequenceId, { kind: 'place', frame: placement.frame, mode: 'paste', clipboard: { projectId, frameRate: sequence.frameRate, clips: placed.clips, annotations: [], tracks: tracks.map(track => ({ index: track.index, kind: track.kind })) }, ...(placed.addedTracks.length ? { newTracks: placed.addedTracks } : {}) })
   const prior = new Set(sequence.clips.map(clip => clip.id)); const ids = result.clips.filter(clip => !prior.has(clip.id)).map(clip => clip.id)
   if (owner.activeSequenceId === sequenceId) setVideoEditTimelineView(projectId, { selectedClipIds: ids })
   return ids

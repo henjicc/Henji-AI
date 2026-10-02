@@ -56,6 +56,14 @@ describe('waveform IPC ownership and permissions', () => {
     expect(await invoke('audio:extractSamples', payload, a.event)).toEqual({ channels: [] })
     a.emitter.emit('destroyed')
   })
+  it('passes the sound stream and single channel of a mapped edit clip through to the waveform service (task 2.6)', async () => {
+    const a = owner(105)
+    mocks.range.mockResolvedValue({ channels: [] })
+    await invoke('audio:extractSamples', { ...payload, requestId: 'mapped', channels: 1, audioStream: 3, audioChannel: 1 }, a.event)
+    expect(mocks.range.mock.calls[0][0]).toEqual({ source: payload.source, startUs: 0, endUs: 100000, bucketCount: 16, channels: 1, audioStream: 3, audioChannel: 1 })
+    await expect(invoke('audio:extractSamples', { ...payload, requestId: 'unknown', audioTrack: 1 }, a.event)).rejects.toThrow('未知的音频范围字段')
+    a.emitter.emit('destroyed')
+  })
   it('checks canonical grants and trusted callers, rejects new range remote inputs, and preserves legacy remote routing', async () => {
     const a = owner(104)
     mocks.realpath.mockResolvedValueOnce('D:/outside/linked.wav')

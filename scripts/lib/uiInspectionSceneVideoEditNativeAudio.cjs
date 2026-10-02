@@ -131,6 +131,24 @@ async function installHarness(page) {
         const channels = blocks[0].map((_, channel) => blocks.flatMap((entry) => entry[channel]))
         return { channels, timings, sessions }
       },
+      /** Long mixes (task 2.6): each channel as base64 little-endian float32, far smaller than number arrays. */
+      async mixPacked(document, decode, seconds, block) {
+        await request({ kind: 'init', document, decode })
+        const blocks = []; let maxSessions = 0
+        for (let start = 0; start < seconds - 1e-9; start += block) {
+          const response = await request({ kind: 'audio', start, duration: Math.min(block, seconds - start) })
+          blocks.push(response.channels)
+          maxSessions = Math.max(maxSessions, (await native.stats()).native?.audioSessions ?? 0)
+        }
+        const encode = (parts) => {
+          const total = parts.reduce((sum, part) => sum + part.length, 0); const joined = new Float32Array(total); let offset = 0
+          for (const part of parts) { joined.set(part, offset); offset += part.length }
+          const bytes = new Uint8Array(joined.buffer); let binary = ''
+          for (let index = 0; index < bytes.length; index += 0x8000) binary += String.fromCharCode.apply(null, bytes.subarray(index, index + 0x8000))
+          return btoa(binary)
+        }
+        return { channels: blocks[0].map((_, channel) => encode(blocks.map((entry) => entry[channel]))), maxSessions }
+      },
       async close() {
         await request({ kind: 'dispose' })
         worker.terminate(); native.disconnect(route)
@@ -215,4 +233,4 @@ function createVideoEditNativeAudioScene() {
   }
 }
 
-module.exports = { createVideoEditNativeAudioScene }
+module.exports = { createVideoEditNativeAudioScene, installNativeMixHarness: installHarness }

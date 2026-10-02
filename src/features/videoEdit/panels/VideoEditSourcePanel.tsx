@@ -9,6 +9,7 @@ import { createVideoEditSourcePresenter } from './videoEditSourcePresenter'
 import { captureVideoEditCommandContext, executeVideoEditCommand, videoEditCommandState } from '../application/videoEditCommands'
 import type { VideoEditCommandId } from '@/core/videoEdit/commands'
 import { videoEditSourceTimecode } from '@/core/videoEdit/timecode'
+import { videoEditItemAudioLayout } from '@/core/videoEdit/audioChannels'
 import { writeVideoEditSourceDrag } from '../application/videoEditSourceRange'
 import type { VideoEditAudioLevel } from '../engine/videoEditAudioMeter'
 import { VideoEditLevelMeter } from './VideoEditLevelMeter'
@@ -48,7 +49,11 @@ export function VideoEditSourcePanel({ instance, onError, visible = true }: { in
       const media = document.media.find(media => media.id === item?.mediaId)
       if (!media) throw new Error('此项目项没有源文件，请选择视频、图片或音频。')
       return media
-    }, (itemId, observation) => observeVideoEditSource(projectId, itemId, observation), setLevels)
+    }, (itemId, observation) => observeVideoEditSource(projectId, itemId, observation), setLevels, itemId => {
+      const document = requireVideoEditInstance(projectId).document
+      const item = document.items.find(item => item.id === itemId)
+      return item ? videoEditItemAudioLayout(item, document.media.find(media => media.id === item.mediaId)) : undefined
+    })
     presenterRef.current = presenter
     const unregister = registerVideoEditSourcePresenter(projectId, presenter.present, presenter.release)
     return () => { presenterRef.current = null; presenter.dispose(); unregister() }
