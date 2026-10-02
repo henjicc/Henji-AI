@@ -6,7 +6,7 @@ import { createVideoEditDocument, createVideoEditSequence, changeVideoEditSequen
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { rescaleVideoEditFrame } from '@/core/videoEdit/time'
 import { assertVideoEditLockedTracks, assertVideoEditClipsEditable } from '@/core/videoEdit/lockedTracks'
-import { expandVideoEditSelection, type VideoEditTimelineTool } from '@/core/videoEdit/timelineSelection'
+import { expandVideoEditSelection, videoEditPickRelations, type VideoEditTimelineTool } from '@/core/videoEdit/timelineSelection'
 import { getPlatform } from '@/platform/runtime'
 import { validateCodeMaterialDocument } from '@/core/videoEdit/codeMaterialDocument'
 import { installVideoEditCodeMetadata, prepareVideoEditCodeMetadata, readVideoEditCodeMetadata, releaseVideoEditCodeCompiler } from './videoEditCodeState'
@@ -22,6 +22,8 @@ export interface VideoEditTimelineView {
   zoom: number
   inFrame: number | null
   outFrame: number | null
+  /** Premiere Linked Selection (absent means on): clicks extend to linked partners; groups always. The selection itself is the edit set. */
+  linkedSelection?: boolean
 }
 export interface VideoEditInstance extends VideoEditTimelineView {
   document: VideoEditDocument
@@ -172,7 +174,7 @@ function reconcileSequenceView(instance: VideoEditInstance): void {
   if (!instance.openSequenceIds.includes(instance.activeSequenceId)) instance.openSequenceIds.push(instance.activeSequenceId)
 }
 function defaultSequenceView(sequence: VideoEditSequence): VideoEditTimelineView & { selection: string | null; frame: number } {
-  return { selectedClipIds: [], targetTrackIds: ['video', 'audio'].flatMap(kind => { const track = sequence.tracks.find(track => track.kind === kind && !track.locked); return track ? [track.id] : [] }), tool: 'select', snapping: true, zoom: 1, inFrame: null, outFrame: null, selection: null, frame: 0 }
+  return { selectedClipIds: [], targetTrackIds: ['video', 'audio'].flatMap(kind => { const track = sequence.tracks.find(track => track.kind === kind && !track.locked); return track ? [track.id] : [] }), tool: 'select', snapping: true, zoom: 1, inFrame: null, outFrame: null, linkedSelection: true, selection: null, frame: 0 }
 }
 function rescaleSequenceViews(instance: VideoEditInstance, before: VideoEditDocument): void {
   for (const sequence of instance.document.sequences) {
@@ -289,7 +291,7 @@ export function setVideoEditView(id: string, values: Partial<Pick<VideoEditInsta
   validateVideoEditProgramControl(id, values)
   if (Object.entries(values).every(([key, value]) => instance[key as keyof VideoEditInstance] === value)) return videoEditProgramCommandIdentity(id)
   const selectionChanged = values.selection !== undefined && values.selection !== instance.selection
-  const selectedClipIds = values.selection !== undefined ? values.selection ? expandVideoEditSelection(getActiveVideoEditSequence(instance), [values.selection]) : [] : instance.selectedClipIds
+  const selectedClipIds = values.selection !== undefined ? values.selection ? expandVideoEditSelection(getActiveVideoEditSequence(instance), [values.selection], videoEditPickRelations(instance.linkedSelection !== false)) : [] : instance.selectedClipIds
   const programCommand = !observation && ['frame', 'playing', 'playbackDirection'].some(key => Object.prototype.hasOwnProperty.call(values, key))
   if (programCommand) programCommands.set(instance, {})
   const command = videoEditProgramCommandIdentity(id)
@@ -314,12 +316,16 @@ export function videoEditExportRange(instance: VideoEditInstance, sequenceId = i
 }
 export function getVideoEditTimelineView(id: string): VideoEditTimelineView {
   const instance = requireVideoEditInstance(id)
-  return { selectedClipIds: [...instance.selectedClipIds], targetTrackIds: [...instance.targetTrackIds], tool: instance.tool, snapping: instance.snapping, zoom: instance.zoom, inFrame: instance.inFrame, outFrame: instance.outFrame }
+  return { selectedClipIds: [...instance.selectedClipIds], targetTrackIds: [...instance.targetTrackIds], tool: instance.tool, snapping: instance.snapping, zoom: instance.zoom, inFrame: instance.inFrame, outFrame: instance.outFrame, linkedSelection: instance.linkedSelection !== false }
 }
 export function validateVideoEditTimelineView(id: string, values: Partial<VideoEditTimelineView>): VideoEditTimelineView {
   const instance = requireVideoEditInstance(id); const sequence = getActiveVideoEditSequence(instance)
   const next = { ...getVideoEditTimelineView(id), ...values }
-  next.selectedClipIds = expandVideoEditSelection(sequence, next.selectedClipIds)
+  // The stored selection is exactly what the user picked (Alt or Linked Selection off keeps one portion);
+  // pickers expand relations before writing, so normalisation only checks membership and bounds.
+  next.selectedClipIds = expandVideoEditSelection(sequence, next.selectedClipIds, false)
+  next.linkedSelection ??= instance.linkedSelection !== false
+  if (typeof next.linkedSelection !== 'boolean') throw new Error('链接选择开关无效。')
   next.targetTrackIds = [...new Set(next.targetTrackIds)]
   if (next.targetTrackIds.some(id => !sequence.tracks.some(track => track.id === id))) throw new Error('目标轨道不属于此序列。')
   if (!['select', 'razor', 'hand', 'track'].includes(next.tool) || typeof next.snapping !== 'boolean' || !Number.isFinite(next.zoom) || next.zoom < .1 || next.zoom > 20) throw new Error('时间线工具、吸附或缩放无效。')

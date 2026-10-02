@@ -206,3 +206,27 @@ it('旧工程拆音先检测真实音轨，检查期间文档变化/无音轨均
   expect(owner.past.length).toBe(before + 1); expect(getActiveVideoEditSequence(owner).clips).toHaveLength(2); expect(owner.document.media[0].hasAudio).toBe(true)
   copyVideoEditTimeline(id, sequence.id); expect(readVideoEditClipboard(id)?.clips).toHaveLength(2)
 })
+it('助手经时间线视图读写链接选择；拆分能力与剃刀同语义，选区写入按原样保存不再扩展', async () => {
+  const owner = (await createVideoEditProject())!; const id = owner.document.id
+  appendVideoEditMedia(id, { id: 'media', name: '原视频', path: 'D:/original.mp4', kind: 'video', width: 320, height: 180, durationSeconds: 3, hasAudio: true })
+  appendVideoEditClip(id, 'media'); const sequence = getActiveVideoEditSequence(owner)
+  await separateVideoEditAudio(id, sequence.id, [sequence.clips[0].id], 0)
+  const [picture, sound] = getActiveVideoEditSequence(owner).clips.map(clip => clip.id)
+  expect(new Set(owner.selectedClipIds)).toEqual(new Set([picture, sound]))
+  const app = createApplicationHarness(); const projectRef = { kind: 'video_edit.project', id }
+  try {
+    expect((await app.read(projectRef, ['video_edit.project.timeline_view']) as { properties: Record<string, unknown> }).properties['video_edit.project.timeline_view']).toMatchObject({ linkedSelection: true })
+    expect((await app.change(projectRef, { 'video_edit.project.timeline_view': { ...getVideoEditTimelineView(id), selectedClipIds: [sound], linkedSelection: false } })).ok).toBe(true)
+    expect(owner.selectedClipIds).toEqual([sound]); expect(owner.linkedSelection).toBe(false)
+    const clipRef = (clipId: string) => ({ kind: 'video_edit.clip', id: `${id}:${clipId}` })
+    await app.requireResult('split_video_edit', { projectRef, clipRef: clipRef(picture), frame: 30 })
+    expect(getActiveVideoEditSequence(owner).clips).toHaveLength(3)
+    expect(new Set(getActiveVideoEditSequence(owner).clips.map(clip => clip.linkId)).size).toBe(1)
+    setVideoEditTimelineView(id, { linkedSelection: true })
+    await app.requireResult('split_video_edit', { projectRef, clipRef: clipRef(picture), frame: 15 })
+    const clips = getActiveVideoEditSequence(owner).clips
+    expect(clips).toHaveLength(5)
+    expect(clips.filter(clip => clip.start === 15).map(clip => clip.kind).sort()).toEqual(['audio', 'video'])
+    expect(new Set(clips.filter(clip => clip.start === 15).map(clip => clip.linkId)).size).toBe(1)
+  } finally { app.dispose() }
+})

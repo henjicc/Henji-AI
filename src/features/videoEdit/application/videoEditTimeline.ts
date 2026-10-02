@@ -1,16 +1,17 @@
 import { createLogger } from '@/core/logging'
 import { videoEditDocumentSchema, type VideoEditSequence } from '@/core/videoEdit/document'
 import { applyVideoEditTimelineEdit, applyVideoEditTimelineEditResult, copyVideoEditClips, type VideoEditClipboard, type VideoEditTimelineEdit } from '@/core/videoEdit/timelineEdits'
-import { expandVideoEditSelection } from '@/core/videoEdit/timelineSelection'
+import { expandVideoEditSelection, videoEditPickRelations, type VideoEditRelations } from '@/core/videoEdit/timelineSelection'
 import { readVideoEditCodeMetadata } from './videoEditCodeState'
 import { inspectVideoEditMedia } from './videoEditMedia'
 import { editVideoProject, requireVideoEditInstance, setVideoEditTimelineView, type VideoEditInstance } from './videoEditService'
 
 const logger = createLogger('features.videoEdit.timeline')
 const clipboards = new WeakMap<VideoEditInstance, VideoEditClipboard>()
-export function copyVideoEditTimeline(projectId: string, sequenceId: string, clipIds?: string[]): void {
+/** `linked: false` copies exactly the given clips (the timeline selection is already resolved). */
+export function copyVideoEditTimeline(projectId: string, sequenceId: string, clipIds?: string[], linked: VideoEditRelations = true): void {
   const owner = requireVideoEditInstance(projectId)
-  clipboards.set(owner, copyVideoEditClips(owner.document, sequenceId, clipIds ?? owner.selectedClipIds))
+  clipboards.set(owner, copyVideoEditClips(owner.document, sequenceId, clipIds ?? owner.selectedClipIds, clipIds ? linked : false))
 }
 export function readVideoEditClipboard(projectId: string): VideoEditClipboard | undefined {
   const value = clipboards.get(requireVideoEditInstance(projectId))
@@ -25,17 +26,17 @@ export function executeVideoEditTimelineEdit(projectId: string, sequenceId: stri
     if (owner.activeSequenceId === sequenceId && result.selectedClipIds) setVideoEditTimelineView(projectId, { selectedClipIds: result.selectedClipIds })
     else if (owner.activeSequenceId === sequenceId && edit.kind === 'separate_audio') {
       const original = new Set(baseline.sequences.find(value => value.id === sequenceId)!.clips.map(clip => clip.id))
-      setVideoEditTimelineView(projectId, { selectedClipIds: sequence.clips.filter(clip => !original.has(clip.id)).map(clip => clip.id) })
+      setVideoEditTimelineView(projectId, { selectedClipIds: expandVideoEditSelection(sequence, sequence.clips.filter(clip => !original.has(clip.id)).map(clip => clip.id), videoEditPickRelations(owner.linkedSelection !== false)) })
     }
     logger.debug('时间线剪辑已提交', { event: 'video_edit.timeline.edit.completed', context: { projectId, sequenceId, operation: edit.kind } })
     return sequence
   } catch (error) { logger.debug('时间线剪辑未提交', { event: 'video_edit.timeline.edit.failed', error, context: { projectId, sequenceId, operation: edit.kind } }); throw error }
 }
-export async function separateVideoEditAudio(projectId: string, sequenceId: string, clipIds: string[], audioTrack: number, signal?: AbortSignal): Promise<void> {
+export async function separateVideoEditAudio(projectId: string, sequenceId: string, clipIds: string[], audioTrack: number, signal?: AbortSignal, linked: VideoEditRelations = true): Promise<void> {
   const owner = requireVideoEditInstance(projectId); const baseline = owner.document
   const sequence = baseline.sequences.find(value => value.id === sequenceId)
   if (!sequence) throw new Error('目标序列不存在。')
-  const expanded = expandVideoEditSelection(sequence, clipIds)
+  const expanded = expandVideoEditSelection(sequence, clipIds, linked)
   const mediaIds = new Set(sequence.clips.filter(clip => expanded.includes(clip.id)).map(clip => baseline.items.find(item => item.id === clip.itemId)?.mediaId))
   const updates = new Map<string, boolean>()
   for (const id of mediaIds) {
@@ -46,9 +47,10 @@ export async function separateVideoEditAudio(projectId: string, sequenceId: stri
   signal?.throwIfAborted()
   if (requireVideoEditInstance(projectId) !== owner || owner.document !== baseline) throw new Error('音轨检查期间原工程已改变，请重新选择。')
   const candidate = { ...baseline, media: baseline.media.map(media => updates.has(media.id) ? { ...media, hasAudio: updates.get(media.id)! } : media) }
-  const next = applyVideoEditTimelineEdit(candidate, sequenceId, { kind: 'separate_audio', clipIds, audioTrack })
+  const next = applyVideoEditTimelineEdit(candidate, sequenceId, { kind: 'separate_audio', clipIds, linked, audioTrack })
   editVideoProject(projectId, () => ({ ...candidate, sequences: candidate.sequences.map(value => value.id === sequenceId ? next : value) }))
-  if (owner.activeSequenceId === sequenceId) setVideoEditTimelineView(projectId, { selectedClipIds: next.clips.filter(clip => clip.linkId && clipIds.includes(clip.id)).map(clip => clip.id) })
+  // The new sound portions join each picture's link, so the picked clips select as a pair.
+  if (owner.activeSequenceId === sequenceId) setVideoEditTimelineView(projectId, { selectedClipIds: expandVideoEditSelection(next, next.clips.filter(clip => clip.linkId && expanded.includes(clip.id)).map(clip => clip.id), videoEditPickRelations(owner.linkedSelection !== false)) })
 }
 
 export interface VideoEditTimelineDrag { readonly projectId: string; readonly sequenceId: string; readonly token: string }
@@ -58,7 +60,7 @@ export function beginVideoEditTimelineDrag(projectId: string, sequenceId: string
   const owner = requireVideoEditInstance(projectId)
   if (owner.activeSequenceId !== sequenceId) throw new Error('请先打开目标序列。')
   const ids = clipIds ?? owner.selectedClipIds
-  copyVideoEditClips(owner.document, sequenceId, ids)
+  copyVideoEditClips(owner.document, sequenceId, ids, false)
   const handle = Object.freeze({ projectId, sequenceId, token: crypto.randomUUID() })
   drags.set(handle, { owner, baseline: owner.document, clipIds: [...ids] })
   return handle
@@ -71,7 +73,8 @@ function requireDrag(handle: VideoEditTimelineDrag): DragState {
 export type VideoEditTimelineAdjustment = Omit<Extract<VideoEditTimelineEdit, { kind: 'adjust' }>, 'kind' | 'clipIds'>
 export function previewVideoEditTimelineDrag(handle: VideoEditTimelineDrag, adjustment: VideoEditTimelineAdjustment): VideoEditSequence {
   const state = requireDrag(handle)
-  return applyVideoEditTimelineEdit(state.baseline, handle.sequenceId, { ...adjustment, kind: 'adjust', clipIds: state.clipIds }, readVideoEditCodeMetadata(state.owner, state.baseline))
+  // Drags move exactly the selection; Alt/Linked Selection already decided whether partners belong to it.
+  return applyVideoEditTimelineEdit(state.baseline, handle.sequenceId, { ...adjustment, kind: 'adjust', clipIds: state.clipIds, linked: false }, readVideoEditCodeMetadata(state.owner, state.baseline))
 }
 export function finishVideoEditTimelineDrag(handle: VideoEditTimelineDrag, adjustment?: VideoEditTimelineAdjustment): void {
   if (!adjustment) { drags.delete(handle); return }
@@ -80,7 +83,7 @@ export function finishVideoEditTimelineDrag(handle: VideoEditTimelineDrag, adjus
   // Schema and source bounds are checked once on release, never for every pointer event.
   videoEditDocumentSchema.parse({ ...state.baseline, sequences: state.baseline.sequences.map(value => value.id === handle.sequenceId ? sequence : value) })
   drags.delete(handle)
-  executeVideoEditTimelineEdit(handle.projectId, handle.sequenceId, { ...adjustment, kind: 'adjust', clipIds: state.clipIds })
+  executeVideoEditTimelineEdit(handle.projectId, handle.sequenceId, { ...adjustment, kind: 'adjust', clipIds: state.clipIds, linked: false })
 }
 export function updateVideoEditTrack(projectId: string, sequenceId: string, trackId: string, patch: Partial<Pick<VideoEditSequence['tracks'][number], 'name' | 'locked' | 'enabled' | 'muted' | 'solo' | 'height' | 'syncLocked'>>): void {
   editVideoProject(projectId, document => {

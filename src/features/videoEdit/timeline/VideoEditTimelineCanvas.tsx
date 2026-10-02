@@ -5,6 +5,8 @@ import { UI_DIVIDER_CLASS } from '@/components/ui/styleTokens'
 import { VideoEditSequenceFrameRateRequired, type VideoEditSequenceSettings } from '@/core/videoEdit/projectItems'
 import { videoEditDuration, videoEditClipMedia, type VideoEditSequence } from '@/core/videoEdit/document'
 import { videoEditFps, videoEditSourceSeconds } from '@/core/videoEdit/time'
+import { videoEditSyncOffsets } from '@/core/videoEdit/linkSync'
+import { videoEditPickRelations } from '@/core/videoEdit/timelineSelection'
 import Waveform from '@/components/Waveform'
 import { useVideoEditWaveformRanges } from '../panels/useVideoEditWaveformRanges'
 import { acceptsVideoEditDrop, dropVideoEditInput, readVideoEditDrop, type VideoEditDropInput } from '../application/videoEditDrop'
@@ -40,6 +42,8 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
   const width = Math.max(view.width, TIMELINE_HEADER_WIDTH + (duration + fps * 5) * pixels)
   const height = rows.at(-1) ? rows.at(-1)!.top + rows.at(-1)!.height : TIMELINE_RULER_HEIGHT
   const visibleClips = timelineVisibleClips(displayed.clips, rows, view, pixels)
+  // Out-of-sync offsets follow the drag preview so an Alt move shows its drift before release.
+  const syncOffsets = videoEditSyncOffsets(displayed)
   const waveRanges = visibleClips.flatMap(clip => {
     const media = videoEditClipMedia(instance.document, clip)
     if (!media || !(clip.kind === 'audio' || clip.kind === 'video' && clip.sourceComponent !== 'video' && media.hasAudio === true)) return []
@@ -170,13 +174,16 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
           const row = rows.find(row => row.track.index === clip.track)!
           const waveform = waves.get(clip.id)?.result
           const range = rangesByClip.get(clip.id)
+          const offset = syncOffsets.get(clip.id)
+          const offsetLabel = offset === undefined ? undefined : `${offset > 0 ? '+' : ''}${offset}`
           return <div key={clip.id} data-video-edit-clip={clip.id} data-clip-start={clip.start} data-clip-duration={clip.duration} className={`absolute flex items-center overflow-hidden rounded-lg ${instance.selectedClipIds.includes(clip.id) ? 'bg-accent/30 ring-1 ring-accent' : clip.kind === 'audio' ? 'bg-accent/10' : 'bg-app'}`} style={{ top: row.top + 2, height: row.height - 4, left: TIMELINE_HEADER_WIDTH + clip.start * pixels, width: Math.max(3, clip.duration * pixels) }}>
             {waveform && range && <div className="pointer-events-none absolute inset-y-0 opacity-40" data-video-edit-waveform={clip.id} style={{ left: (range.from - clip.start) * pixels, width: (range.to - range.from) * pixels }}>
               {waveform.channels.map((channel, index) => <Waveform key={`${index}:${range.from}:${range.to}:${pixels}`} samples={channel.peak} duration={(waveform.endUs - waveform.startUs) / 1e6} height={Math.max(4, (row.height - 4) / waveform.channelCount)} />)}
             </div>}
             {waves.get(clip.id)?.error && <span className="pointer-events-none absolute bottom-0 text-2xs text-danger" title={waves.get(clip.id)!.error}>波形未能读取</span>}
             <UiButton variant="plain" data-video-edit-trim="in" aria-label={`裁剪${clip.name}入点`} className="!h-full !w-2 shrink-0 cursor-ew-resize !rounded-none !p-0" tabIndex={-1}>│</UiButton>
-            <UiButton variant="plain" aria-label={`选择片段 ${clip.name}`} title={clip.name} className="!h-full min-w-0 flex-1 truncate !rounded-none !px-1 !py-0 text-2xs" onClick={event => { if (event.detail === 0) run(() => pointer.select([clip.id], event.ctrlKey || event.metaKey, event.shiftKey)) }}>{clip.name}</UiButton>
+            <UiButton variant="plain" aria-label={`选择片段 ${clip.name}`} title={offset === undefined ? clip.name : `${clip.name}：与链接片段失步 ${Math.abs(offset)} 帧，右键可移入同步或滑入同步`} className="!h-full min-w-0 flex-1 truncate !rounded-none !px-1 !py-0 text-2xs" onClick={event => { if (event.detail === 0) run(() => pointer.select([clip.id], event.ctrlKey || event.metaKey, event.shiftKey, videoEditPickRelations(instance.linkedSelection !== false, event.altKey))) }}>{clip.name}</UiButton>
+            {offsetLabel && <span className="pointer-events-none shrink-0 px-1 text-2xs font-medium tabular-nums text-danger" data-video-edit-sync-offset={offset}>{offsetLabel}</span>}
             <UiButton variant="plain" data-video-edit-trim="out" aria-label={`裁剪${clip.name}出点`} className="!h-full !w-2 shrink-0 cursor-ew-resize !rounded-none !p-0" tabIndex={-1}>│</UiButton>
           </div>
         })}

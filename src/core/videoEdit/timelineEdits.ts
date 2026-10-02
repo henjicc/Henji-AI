@@ -1,8 +1,9 @@
-import { adjustVideoEditClip, splitVideoEditClip, videoEditComposition, type VideoEditAnnotation, type VideoEditClip, type VideoEditDocument, type VideoEditSequence } from './document'
+import { adjustVideoEditClip, splitVideoEditClip, videoEditClipMedia, videoEditComposition, type VideoEditAnnotation, type VideoEditClip, type VideoEditDocument, type VideoEditSequence } from './document'
 import type { CodeMaterialMetadataReader } from './codeMaterialDocument'
 import { assertVideoEditClipsEditable } from './lockedTracks'
-import { expandVideoEditSelection } from './timelineSelection'
-import { offsetVideoEditSource, rescaleVideoEditFrame, type VideoEditRatio } from './time'
+import { expandVideoEditSelection, type VideoEditRelations } from './timelineSelection'
+import { offsetVideoEditSource, rescaleVideoEditFrame, videoEditSourceSeconds, type VideoEditRatio } from './time'
+import { videoEditSyncCorrections } from './linkSync'
 import { retimeVideoEditContent, type VideoEditMarker, type VideoEditCaption, type VideoEditContentOrigin } from './timedContent'
 import { validateVideoEditTransitions, type VideoEditTransition } from './transitions'
 import { validateVideoEditAdjustmentRanges } from './compositing'
@@ -17,12 +18,19 @@ export interface VideoEditClipboard {
   transitions?: VideoEditTransition[]
   tracks?: Array<{ index: number; kind: 'video' | 'audio' }>
 }
+/**
+ * `linked` (default true) extends clip edits to linked and grouped partners. Callers that already
+ * resolved the selection (Linked Selection off, Alt single selection) pass `false` so the edit acts
+ * on exactly those clips; the link relation itself is kept and drift shows as out-of-sync offsets.
+ */
 export type VideoEditTimelineEdit =
-  | { kind: 'adjust'; clipIds: string[]; mode: 'move' | 'in' | 'out'; delta: number; trackMap?: Record<number, number>; snapThreshold?: number; snapFrames?: number[] }
-  | { kind: 'split'; clipIds: string[]; frame: number }
-  | { kind: 'delete'; clipIds: string[]; ripple?: boolean; targetTracks?: number[] }
-  | { kind: 'link' | 'unlink' | 'group' | 'ungroup'; clipIds: string[] }
-  | { kind: 'separate_audio'; clipIds: string[]; audioTrack: number }
+  | { kind: 'adjust'; clipIds: string[]; linked?: VideoEditRelations; mode: 'move' | 'in' | 'out'; delta: number; trackMap?: Record<number, number>; snapThreshold?: number; snapFrames?: number[] }
+  | { kind: 'split'; clipIds: string[]; linked?: VideoEditRelations; frame: number }
+  | { kind: 'delete'; clipIds: string[]; linked?: VideoEditRelations; ripple?: boolean; targetTracks?: number[] }
+  | { kind: 'link' | 'unlink' | 'group' | 'ungroup'; clipIds: string[]; linked?: VideoEditRelations }
+  | { kind: 'separate_audio'; clipIds: string[]; linked?: VideoEditRelations; audioTrack: number }
+  /** Premiere "Move into sync" / "Slip into sync" for the selected out-of-sync portions only. */
+  | { kind: 'sync'; clipIds: string[]; mode: 'move' | 'slip' }
   | { kind: 'place'; clipboard: VideoEditClipboard; frame: number; mode: 'paste' | 'insert' | 'overwrite'; trackMap?: Record<number, number>; targetTracks?: number[] }
 
 function integer(value: number): void { if (!Number.isSafeInteger(value)) throw new Error('剪辑位置和位移必须为整数帧。') }
@@ -48,37 +56,48 @@ function assertNewInternalOverlap(before: readonly VideoEditClip[], after: reado
     if (overlaps(first, second) && !overlaps(before[index], before[other])) throw new Error('编辑会使不同片段在同一轨道重叠，请保留独立轨道。')
   }
 }
-function assertRelatedCoverage(sequence: VideoEditSequence, ids: string[]): void {
-  const affected = new Set(ids)
-  if (expandVideoEditSelection(sequence, ids).some(id => !affected.has(id))) throw new Error('编辑会改变链接或编组的相对时间，请先启用相关轨道同步或解除关联。')
-}
-function assertRelatedShifts(sequence: VideoEditSequence, after: VideoEditClip[]): void {
-  const previous = new Map(sequence.clips.map(clip => [clip.id, clip])); const shifts = new Map<string, number>()
-  for (const clip of after) {
-    const shift = clip.start - previous.get(clip.id)!.start
-    for (const relation of [clip.linkId ? `link:${clip.linkId}` : '', clip.groupId ? `group:${clip.groupId}` : ''].filter(Boolean)) {
-      if (shifts.has(relation) && shifts.get(relation) !== shift) throw new Error('波纹编辑会使链接或编组错位，请先启用相关轨道同步或解除关联。')
-      shifts.set(relation, shift)
-    }
-  }
-}
 function remapRelations(clips: VideoEditClip[]): VideoEditClip[] {
   const links = new Map<string, string>(); const groups = new Map<string, string>()
   const next = (map: Map<string, string>, id: string): string => { if (!map.has(id)) map.set(id, crypto.randomUUID()); return map.get(id)! }
   return clips.map(clip => ({ ...clip, ...(clip.linkId ? { linkId: next(links, clip.linkId) } : {}), ...(clip.groupId ? { groupId: next(groups, clip.groupId) } : {}) }))
 }
+/**
+ * Right-hand pieces form their own link/group only when every member of that relation crossing
+ * the cut was cut too (Premiere: razoring a linked pair yields two linked pairs). When a partner
+ * was left whole (Alt single cut, overwrite on some tracks), both pieces stay linked to it.
+ */
+function separateRightRelations(before: VideoEditSequence, clips: VideoEditClip[], rights: ReadonlyMap<string, string>, frame: number): VideoEditClip[] {
+  const cut = new Set(rights.values()); const fresh = new Map<string, string>()
+  const locked = new Set(before.tracks.filter(track => track.locked).map(track => track.index))
+  const touched = new Set(before.clips.filter(clip => cut.has(clip.id)).flatMap(clip => [clip.linkId ? `linkId:${clip.linkId}` : '', clip.groupId ? `groupId:${clip.groupId}` : '']).filter(Boolean))
+  const complete = (key: 'linkId' | 'groupId', relation: string): boolean => touched.has(`${key}:${relation}`) && before.clips.every(clip => clip[key] !== relation || cut.has(clip.id) || !(clip.start < frame && clip.start + clip.duration > frame))
+  // Uncut members wholly after the cut follow the right-hand side.
+  const follows = (clip: VideoEditClip): boolean => !cut.has(clip.id) && clip.start >= frame && !locked.has(clip.track) && before.clips.some(value => value.id === clip.id)
+  return clips.map(clip => {
+    if (!rights.has(clip.id) && !follows(clip)) return clip
+    const next = { ...clip }
+    for (const key of ['linkId', 'groupId'] as const) {
+      const relation = clip[key]
+      if (!relation || !complete(key, relation)) continue
+      if (!fresh.has(`${key}:${relation}`)) fresh.set(`${key}:${relation}`, crypto.randomUUID())
+      next[key] = fresh.get(`${key}:${relation}`)!
+    }
+    return next
+  })
+}
 function splitClips(sequence: VideoEditSequence, ids: string[], frame: number): VideoEditSequence {
   integer(frame)
-  const originals = new Set(sequence.clips.map(clip => clip.id))
   let next = sequence
+  const rights = new Map<string, string>()
   for (const id of ids) {
     const clip = next.clips.find(value => value.id === id)!
-    if (frame > clip.start && frame < clip.start + clip.duration) next = splitVideoEditClip(next, id, frame)
+    if (!(frame > clip.start && frame < clip.start + clip.duration)) continue
+    const before = new Set(next.clips.map(value => value.id))
+    next = splitVideoEditClip(next, id, frame)
+    rights.set(next.clips.find(value => !before.has(value.id))!.id, id)
   }
   if (next === sequence) throw new Error('请将播放头置于所选片段内部再拆分。')
-  const right = remapRelations(next.clips.filter(clip => !originals.has(clip.id)))
-  const byId = new Map(right.map(clip => [clip.id, clip]))
-  return { ...next, clips: next.clips.map(clip => byId.get(clip.id) ?? clip) }
+  return { ...next, clips: separateRightRelations(sequence, next.clips, rights, frame) }
 }
 function shiftAnnotations(sequence: VideoEditSequence, clips: VideoEditClip[]): VideoEditAnnotation[] {
   const before = new Map(sequence.clips.map(clip => [clip.id, clip])); const after = new Map(clips.map(clip => [clip.id, clip]))
@@ -103,8 +122,8 @@ function intervals(clips: readonly VideoEditClip[]): Array<{ from: number; to: n
   return result
 }
 
-export function copyVideoEditClips(document: VideoEditDocument, sequenceId: string, clipIds: string[]): VideoEditClipboard {
-  const sequence = sequenceOf(document, sequenceId); const ids = new Set(expandVideoEditSelection(sequence, clipIds))
+export function copyVideoEditClips(document: VideoEditDocument, sequenceId: string, clipIds: string[], linked: VideoEditRelations = true): VideoEditClipboard {
+  const sequence = sequenceOf(document, sequenceId); const ids = new Set(expandVideoEditSelection(sequence, clipIds, linked))
   if (!ids.size) throw new Error('请先选择要复制的片段。')
   return structuredClone({ projectId: document.id, frameRate: sequence.frameRate, clips: sequence.clips.filter(clip => ids.has(clip.id)), annotations: sequence.annotations.filter(mark => ids.has(mark.clipId)), markers: (sequence.markers ?? []).filter(mark => mark.clipId && ids.has(mark.clipId)), captions: (sequence.captions ?? []).filter(caption => caption.clipId && ids.has(caption.clipId)), transitions: (sequence.transitions ?? []).filter(transition => ids.has(transition.leftClipId) && ids.has(transition.rightClipId)), tracks: sequence.tracks.map(track => ({ index: track.index, kind: track.kind })) })
 }
@@ -140,11 +159,12 @@ export function applyVideoEditTimelineEditResult(document: VideoEditDocument, se
 }
 function applyClipEdit(document: VideoEditDocument, sequenceId: string, edit: Exclude<VideoEditTimelineEdit, { kind: 'place' }>, metadata?: CodeMaterialMetadataReader): VideoEditSequence {
   const sequence = sequenceOf(document, sequenceId)
-  const ids = expandVideoEditSelection(sequence, edit.clipIds); const selected = new Set(ids)
+  const ids = expandVideoEditSelection(sequence, edit.clipIds, edit.kind === 'sync' ? false : edit.linked ?? true); const selected = new Set(ids)
   if (!ids.length) throw new Error('请先选择片段。')
   assertVideoEditClipsEditable(sequence, ids)
   const clips = sequence.clips.filter(clip => selected.has(clip.id))
   if (edit.kind === 'split') return splitClips(sequence, ids, edit.frame)
+  if (edit.kind === 'sync') return syncClips(document, sequence, ids, edit.mode)
   if (edit.kind === 'adjust') {
     integer(edit.delta)
     const composition = videoEditComposition(document, sequenceId)
@@ -202,7 +222,7 @@ function applyClipEdit(document: VideoEditDocument, sequenceId: string, edit: Ex
         if (shift) assertVideoEditClipsEditable(sequence, [clip.id])
         return { ...clip, start: clip.start - shift }
       })
-      assertRelatedShifts(sequence, kept)
+      // Linked partners on tracks outside sync lock stay put and show as out of sync (Premiere).
     }
     return retimeVideoEditContent(sequence, { ...sequence, clips: kept, annotations: shiftAnnotations(sequence, kept) })
   }
@@ -221,6 +241,32 @@ function applyClipEdit(document: VideoEditDocument, sequenceId: string, edit: Ex
   if (!remove && ids.length < 2) throw new Error('请至少选择两个片段。')
   const relation = crypto.randomUUID()
   return { ...sequence, clips: sequence.clips.map(clip => { if (!selected.has(clip.id)) return clip; const next = { ...clip }; if (remove) delete next[key]; else next[key] = relation; return next }) }
+}
+
+function syncClips(document: VideoEditDocument, sequence: VideoEditSequence, ids: string[], mode: 'move' | 'slip'): VideoEditSequence {
+  const corrections = videoEditSyncCorrections(sequence, ids)
+  if (!corrections.size) throw new Error('所选片段与链接片段没有失步。')
+  const composition = videoEditComposition(document, sequence.id); const limit = Math.floor(composition.fps * 1800)
+  const before = sequence.clips.filter(clip => corrections.has(clip.id))
+  const after = before.map(clip => {
+    const offset = corrections.get(clip.id)!
+    if (mode === 'move') {
+      const start = clip.start - offset
+      if (start < 0 || start + clip.duration > limit) throw new Error('移入同步会超出序列范围，请改用滑入同步。')
+      return { ...clip, start }
+    }
+    let source: ReturnType<typeof offsetVideoEditSource>
+    try { source = offsetVideoEditSource(clip, offset, sequence.frameRate) } catch { throw new Error('素材开头之前没有可用内容，无法滑入同步，请改用移入同步。') }
+    const media = videoEditClipMedia(composition, clip)
+    if (media && videoEditSourceSeconds(source) + clip.duration / composition.fps > media.durationSeconds + 1 / composition.fps) throw new Error('素材结尾之后没有可用内容，无法滑入同步，请改用移入同步。')
+    return { ...clip, ...source }
+  })
+  assertNewInternalOverlap(before, after)
+  assertNoOverlap(sequence.clips.filter(clip => !corrections.has(clip.id)), after)
+  const byId = new Map(after.map(clip => [clip.id, clip])); const clips = sequence.clips.map(clip => byId.get(clip.id) ?? clip)
+  if (mode === 'slip') return { ...sequence, clips }
+  const origins = new Map(before.map(clip => [clip.id, { originalId: clip.id, shift: byId.get(clip.id)!.start - clip.start }]))
+  return retimeVideoEditContent(sequence, { ...sequence, clips, annotations: shiftAnnotations(sequence, clips) }, origins)
 }
 
 function placeClips(document: VideoEditDocument, sequence: VideoEditSequence, edit: Extract<VideoEditTimelineEdit, { kind: 'place' }>): { sequence: VideoEditSequence; selectedClipIds: string[] } {
@@ -242,7 +288,8 @@ function placeClips(document: VideoEditDocument, sequence: VideoEditSequence, ed
     const affected = synchronizedTracks(sequence, [...tracks, ...(edit.targetTracks ?? [])])
     const crossing = sequence.clips.filter(clip => affected.has(clip.track) && clip.start < edit.frame && clip.start + clip.duration > edit.frame)
     const changing = sequence.clips.filter(clip => affected.has(clip.track) && clip.start + clip.duration > edit.frame).map(clip => clip.id)
-    assertRelatedCoverage(sequence, changing); assertVideoEditClipsEditable(sequence, changing)
+    // Linked partners on tracks outside sync lock stay put and show as out of sync (Premiere).
+    assertVideoEditClipsEditable(sequence, changing)
     if (crossing.length) kept = splitClips(sequence, crossing.map(clip => clip.id), edit.frame)
     const shifted = kept.clips.map(clip => affected.has(clip.track) && clip.start >= edit.frame ? { ...clip, start: clip.start + length } : clip)
     kept = retimeVideoEditContent(kept, { ...kept, clips: shifted, annotations: shiftAnnotations(kept, shifted) })
@@ -250,7 +297,6 @@ function placeClips(document: VideoEditDocument, sequence: VideoEditSequence, ed
   if (edit.mode === 'overwrite') {
     const end = edit.frame + length
     const overlapping = sequence.clips.filter(clip => tracks.has(clip.track) && clip.start < end && clip.start + clip.duration > edit.frame)
-    assertRelatedCoverage(sequence, overlapping.map(clip => clip.id))
     assertVideoEditClipsEditable(sequence, overlapping.map(clip => clip.id))
     const fragments = new Map<string, VideoEditClip[]>()
     const origins = new Map<string, VideoEditContentOrigin>()
@@ -261,7 +307,8 @@ function placeClips(document: VideoEditDocument, sequence: VideoEditSequence, ed
       fragments.set(clip.id, pieces)
       for (const piece of pieces) origins.set(piece.id, { originalId: clip.id, shift: 0 })
     }
-    const rightPieces = remapRelations([...fragments.values()].flatMap(pieces => pieces.filter(clip => clip.start === end)))
+    const rights = new Map([...fragments].flatMap(([id, pieces]) => pieces.filter(clip => clip.start === end).map(clip => [clip.id, id] as const)))
+    const rightPieces = separateRightRelations(sequence, [...fragments.values()].flatMap(pieces => pieces.filter(clip => clip.start === end)), rights, end)
     const rightById = new Map(rightPieces.map(clip => [clip.id, clip]))
     for (const [id, pieces] of fragments) fragments.set(id, pieces.map(clip => rightById.get(clip.id) ?? clip))
     kept = retimeVideoEditContent(sequence, { ...sequence, clips: sequence.clips.flatMap(clip => fragments.get(clip.id) ?? [clip]), annotations: sequence.annotations.flatMap(mark => {

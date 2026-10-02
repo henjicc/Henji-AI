@@ -4,9 +4,10 @@ import { createVideoEditRegistrations } from './videoEditReflection'
 import { VideoEditCollectionExecutor, VideoEditMutationExecutor } from './videoEditExecutors'
 import { VIDEO_EDIT_COMPOSITE_TYPES } from './videoEditCompositeEntities'
 import { requireVideoEditInstance, saveVideoEdit, type VideoEditInstance } from './videoEditService'
-import { editVideoSequence, undoVideoEdit } from './videoEditService'
+import { undoVideoEdit } from './videoEditService'
+import { executeVideoEditTimelineEdit } from './videoEditTimeline'
+import { videoEditPickRelations } from '@/core/videoEdit/timelineSelection'
 import { splitVideoEditRef } from './videoEditReflection'
-import { splitVideoEditClip } from '@/core/videoEdit/document'
 import { VIDEO_EDIT_APPLICATION_CAPABILITIES, collectVideoEditOutputCapability, collectVideoEditCodeAssetCapability, placeVideoEditCreativeResultCapability, observeVideoEditFrameCapability } from '@/core/application-control/domains/videoEdit/videoEditApplicationCapabilities'
 import { exportVideoEdit, cancelVideoEditExport, videoEditExportTask } from './videoEditExport'
 import { getPlatform } from '@/platform/runtime'
@@ -86,7 +87,10 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
           const clipId = input.clipRef.id.slice(id.length + 1)
           const sequence = requireVideoEditInstance(id).document.sequences.find(sequence => sequence.clips.some(clip => clip.id === clipId))
           if (!sequence) throw new Error('目标片段不存在。')
-          editVideoSequence(id, sequence.id, sequence => splitVideoEditClip(sequence, clipId, input.frame!)); await saveVideoEdit(id); break
+          // Same razor semantics as the timeline: linked portions are cut together unless Linked Selection is off.
+          const current = requireVideoEditInstance(id)
+          const linked = videoEditPickRelations((current.activeSequenceId === sequence.id ? current : current.sequenceViews.get(sequence.id))?.linkedSelection !== false)
+          executeVideoEditTimelineEdit(id, sequence.id, { kind: 'split', clipIds: [clipId], linked, frame: input.frame! }); await saveVideoEdit(id); break
         }
         case 'import_video_edit_asset': {
           if (!input.assetRef) throw new Error('请提供素材库 assetRef。')

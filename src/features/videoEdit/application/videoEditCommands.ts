@@ -2,8 +2,9 @@ import { VIDEO_EDIT_COMMANDS, type VideoEditCommandId, type VideoEditCommandScop
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { videoEditDuration } from '@/core/videoEdit/document'
 import { assertVideoEditClipsEditable } from '@/core/videoEdit/lockedTracks'
-import { expandVideoEditSelection } from '@/core/videoEdit/timelineSelection'
+import { expandVideoEditSelection, videoEditPickRelations, type VideoEditRelations } from '@/core/videoEdit/timelineSelection'
 import { applyVideoEditTimelineEdit, type VideoEditClipboard, type VideoEditTimelineEdit } from '@/core/videoEdit/timelineEdits'
+import { videoEditSyncCorrections } from '@/core/videoEdit/linkSync'
 import { appendVideoEditSequence, createVideoEditProject, focusVideoEditPanel, getActiveVideoEditSequence, requireVideoEditInstance, listVideoEditInstances, saveVideoEdit, setVideoEditProjectView, setVideoEditTimelineView, setVideoEditView, videoEditProgramCommandIdentity, switchVideoEditSequence, undoVideoEdit, type VideoEditInstance } from './videoEditService'
 import { chooseVideoEditMedia } from './videoEditMedia'
 import { exportVideoEdit } from './videoEditExport'
@@ -14,17 +15,15 @@ import { copyVideoEditTimeline, executeVideoEditTimelineEdit, readVideoEditClipb
 export interface VideoEditCommandContext { readonly projectId?: string; readonly sequenceId?: string; readonly scope: VideoEditCommandScope; readonly clipIds: readonly string[]; readonly itemIds: readonly string[]; readonly frame: number }
 interface ContextState { owner?: VideoEditInstance; document?: VideoEditInstance['document']; source?: VideoEditSourceState; sourceCommand?: VideoEditSourceCommandIdentity; targetTrackIds: string[]; clipboard?: VideoEditClipboard }
 const contexts = new WeakMap<VideoEditCommandContext, ContextState>()
-const selections = new WeakMap<object, { input: string[]; expanded: string[] }>()
-export function captureVideoEditCommandContext(projectId: string | undefined, scope: VideoEditCommandScope, options: { clipIds?: string[]; itemIds?: string[]; frame?: number; includeClipboard?: boolean } = {}): VideoEditCommandContext {
+/**
+ * The timeline selection is already the edit set: pickers expand linked partners per Linked
+ * Selection/Alt before storing it. Explicit `clipIds` (razor click) expand only when `linked` is set.
+ */
+export function captureVideoEditCommandContext(projectId: string | undefined, scope: VideoEditCommandScope, options: { clipIds?: string[]; linked?: VideoEditRelations; itemIds?: string[]; frame?: number; includeClipboard?: boolean } = {}): VideoEditCommandContext {
   const owner = projectId ? requireVideoEditInstance(projectId) : undefined
   const sequence = owner && getActiveVideoEditSequence(owner)
   let clipIds: string[] = []
-  if (sequence && owner) {
-    const cached = selections.get(sequence)
-    if (options.clipIds) clipIds = expandVideoEditSelection(sequence, options.clipIds)
-    else if (cached?.input === owner.selectedClipIds) clipIds = cached.expanded.slice()
-    else { clipIds = expandVideoEditSelection(sequence, owner.selectedClipIds); selections.set(sequence, { input: owner.selectedClipIds, expanded: clipIds.slice() }) }
-  }
+  if (sequence && owner) clipIds = options.clipIds ? expandVideoEditSelection(sequence, options.clipIds, options.linked ?? false) : owner.selectedClipIds.slice()
   const context = Object.freeze({ projectId, sequenceId: owner?.activeSequenceId, scope, clipIds: Object.freeze(clipIds), itemIds: Object.freeze(options.itemIds?.slice() ?? owner?.selectedItemIds.slice() ?? []), frame: options.frame ?? owner?.frame ?? 0 })
   contexts.set(context, { owner, document: owner?.document, source: owner ? readVideoEditSource(owner.document.id) : undefined, sourceCommand: owner && scope === 'source' ? videoEditSourceCommandIdentity(owner.document.id) : undefined, targetTrackIds: owner?.targetTrackIds.slice() ?? [], clipboard: owner && options.includeClipboard !== false ? readVideoEditClipboard(owner.document.id) : undefined })
   return context
@@ -80,10 +79,11 @@ function timelineIntent(context: VideoEditCommandContext, id: VideoEditCommandId
     const clipboard = placeClipboard(context)
     return { kind: 'place', clipboard, mode: id, frame: context.frame, trackMap: clipboardTrackMap(context, clipboard), targetTracks: contextTargetTracks(context) }
   }
-  if (id === 'split') return { kind: 'split', clipIds: clips, frame: context.frame }
-  if (id === 'split_tracks') return { kind: 'split', clipIds: getActiveVideoEditSequence(stateOf(context).owner!).clips.filter(clip => contextTargetTracks(context).includes(clip.track) && context.frame > clip.start && context.frame < clip.start + clip.duration).map(clip => clip.id), frame: context.frame }
-  if (id === 'delete' || id === 'ripple_delete') return { kind: 'delete', clipIds: clips, ripple: id === 'ripple_delete', targetTracks: contextTargetTracks(context) }
-  if (id === 'link' || id === 'unlink' || id === 'group' || id === 'ungroup') return { kind: id, clipIds: clips }
+  if (id === 'split') return { kind: 'split', clipIds: clips, linked: false, frame: context.frame }
+  if (id === 'split_tracks') return { kind: 'split', clipIds: getActiveVideoEditSequence(stateOf(context).owner!).clips.filter(clip => contextTargetTracks(context).includes(clip.track) && context.frame > clip.start && context.frame < clip.start + clip.duration).map(clip => clip.id), linked: videoEditPickRelations(stateOf(context).owner!.linkedSelection !== false), frame: context.frame }
+  if (id === 'delete' || id === 'ripple_delete') return { kind: 'delete', clipIds: clips, linked: false, ripple: id === 'ripple_delete', targetTracks: contextTargetTracks(context) }
+  if (id === 'link' || id === 'unlink' || id === 'group' || id === 'ungroup') return { kind: id, clipIds: clips, linked: false }
+  if (id === 'move_into_sync' || id === 'slip_into_sync') return { kind: 'sync', clipIds: clips, mode: id === 'move_into_sync' ? 'move' : 'slip' }
 }
 export function videoEditCommandState(context: VideoEditCommandContext, id: VideoEditCommandId): { enabled: boolean; reason?: string; checked?: boolean } {
   try {
@@ -97,6 +97,7 @@ export function videoEditCommandState(context: VideoEditCommandContext, id: Vide
     const tools = { select_tool: 'select', razor_tool: 'razor', hand_tool: 'hand', track_tool: 'track' } as const
     if (id in tools) return { enabled: true, checked: owner.tool === tools[id as keyof typeof tools] }
     if (id === 'toggle_snapping') return { enabled: true, checked: owner.snapping }
+    if (id === 'toggle_linked_selection') return { enabled: true, checked: owner.linkedSelection !== false }
     if (id === 'export') return { enabled: sequence.clips.length > 0 && !owner.busy, reason: '序列没有可导出的片段或正在导出。' }
     if (['play_pause', 'play_forward', 'play_reverse', 'play_stop', 'step_back', 'step_forward', 'mark_in', 'mark_out'].includes(id) && context.scope === 'source') {
       const item = owner.document.items.find(item => item.id === source?.itemId); const media = owner.document.media.find(media => media.id === item?.mediaId)
@@ -117,8 +118,12 @@ export function videoEditCommandState(context: VideoEditCommandContext, id: Vide
     }
     if (id === 'split_tracks') {
       const clips = sequence.clips.filter(clip => contextTargetTracks(context).includes(clip.track) && context.frame > clip.start && context.frame < clip.start + clip.duration)
-      assertVideoEditClipsEditable(sequence, expandVideoEditSelection(sequence, clips.map(clip => clip.id)))
+      assertVideoEditClipsEditable(sequence, expandVideoEditSelection(sequence, clips.map(clip => clip.id), videoEditPickRelations(owner.linkedSelection !== false)))
       if (!clips.length) return { enabled: false, reason: '目标轨道没有可拆分的片段。' }
+    }
+    if (id === 'move_into_sync' || id === 'slip_into_sync') {
+      if (!context.clipIds.length) return { enabled: false, reason: '请先选择片段。' }
+      if (!videoEditSyncCorrections(sequence, context.clipIds).size) return { enabled: false, reason: '所选片段与链接片段没有失步。' }
     }
     if (id === 'copy' || id === 'locate_project' || id === 'locate_effects') return { enabled: context.clipIds.length > 0, reason: '请先选择片段。' }
     if (id === 'locate_source') return { enabled: Boolean(owner.document.items.find(item => item.id === sourceItem(context))?.mediaId), reason: '此片段没有源媒体文件。' }
@@ -143,10 +148,11 @@ export async function executeVideoEditCommand(context: VideoEditCommandContext, 
     case 'export': await exportVideoEdit(projectId); return
     case 'select_tool': case 'razor_tool': case 'hand_tool': case 'track_tool': setVideoEditTimelineView(projectId, { tool: ({ select_tool: 'select', razor_tool: 'razor', hand_tool: 'hand', track_tool: 'track' } as const)[id] }); return
     case 'toggle_snapping': setVideoEditTimelineView(projectId, { snapping: !owner!.snapping }); return
+    case 'toggle_linked_selection': setVideoEditTimelineView(projectId, { linkedSelection: owner!.linkedSelection === false }); return
     case 'zoom_in': case 'zoom_out': setVideoEditTimelineView(projectId, { zoom: Math.max(.1, Math.min(20, owner!.zoom * (id === 'zoom_in' ? 1.25 : .8))) }); return
     case 'select_all': if (context.scope === 'project') setVideoEditProjectView(projectId, { selectedItemIds: owner!.document.items.map(item => item.id) }); else setVideoEditTimelineView(projectId, { selectedClipIds: sequence.clips.map(clip => clip.id) }); return
-    case 'copy': copyVideoEditTimeline(projectId, sequenceId, [...context.clipIds]); return
-    case 'separate_audio': await separateVideoEditAudio(projectId, sequenceId, [...context.clipIds], sequence.tracks.find(track => track.kind === 'audio' && !track.locked && stateOf(context).targetTrackIds.includes(track.id))?.index ?? sequence.tracks.find(track => track.kind === 'audio' && !track.locked)!.index); return
+    case 'copy': copyVideoEditTimeline(projectId, sequenceId, [...context.clipIds], false); return
+    case 'separate_audio': await separateVideoEditAudio(projectId, sequenceId, [...context.clipIds], sequence.tracks.find(track => track.kind === 'audio' && !track.locked && stateOf(context).targetTrackIds.includes(track.id))?.index ?? sequence.tracks.find(track => track.kind === 'audio' && !track.locked)!.index, undefined, false); return
     case 'locate_project': { const item = owner!.document.items.find(item => item.id === sourceItem(context))!; setVideoEditProjectView(projectId, { selectedItemIds: [item.id], selectedBinId: item.binId ?? '' }); focusVideoEditPanel(projectId, 'project'); return }
     case 'locate_source': await updateVideoEditSource(projectId, { itemId: sourceItem(context), playing: false }); focusVideoEditPanel(projectId, 'source'); return
     case 'locate_effects': setVideoEditTimelineView(projectId, { selectedClipIds: [...context.clipIds] }, context.clipIds[0]); focusVideoEditPanel(projectId, 'effects'); return

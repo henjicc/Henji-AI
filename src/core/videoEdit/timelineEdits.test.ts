@@ -4,6 +4,7 @@ import { makeVideoEditItemClip } from './projectItems'
 import { applyVideoEditTimelineEdit, applyVideoEditTimelineEditResult, copyVideoEditClips, videoEditMoveTrackMap } from './timelineEdits'
 import { expandVideoEditSelection, selectVideoEditRegion } from './timelineSelection'
 import { assertVideoEditLockedTracks } from './lockedTracks'
+import { videoEditSyncOffsets } from './linkSync'
 import { offsetVideoEditSource } from './time'
 
 function fixture() {
@@ -30,7 +31,7 @@ it('插入和覆盖只选择实际放置片段，不选择保留的原片段右�
     expect(result.sequence.clips.filter(clip => clip.start === 50).every(clip => !result.selectedClipIds!.includes(clip.id))).toBe(true)
   }
 })
-it('完整音画覆盖后左右各自关联，部分关联覆盖拒绝', () => {
+it('完整音画覆盖后左右各自关联；只覆盖画面时两段画面仍与整段声音链接且同步', () => {
   const { document, sequence } = fixture()
   document.sequences[0] = applyVideoEditTimelineEdit(document, sequence.id, { kind: 'separate_audio', clipIds: ['a'], audioTrack: 0 })
   const paired = document.sequences[0]
@@ -43,18 +44,26 @@ it('完整音画覆盖后左右各自关联，部分关联覆盖拒绝', () => {
   expect(left[0].linkId).not.toBe(right[0].linkId); expect(left[0].groupId).not.toBe(right[0].groupId)
   expect(expandVideoEditSelection(result, [right[0].id])).toHaveLength(2)
   const partial = { ...clipboard, clips: clipboard.clips.filter(clip => clip.kind !== 'audio') }
-  expect(() => applyVideoEditTimelineEdit(document, sequence.id, { kind: 'place', clipboard: partial, frame: 40, mode: 'overwrite' })).toThrow('关联')
+  const picture = applyVideoEditTimelineEdit(document, sequence.id, { kind: 'place', clipboard: partial, frame: 40, mode: 'overwrite' })
+  const original = paired.clips.find(clip => clip.id === 'a')!.linkId
+  expect(picture.clips.filter(clip => clip.linkId === original).map(clip => [clip.kind, clip.start, clip.duration])).toEqual([['video', 10, 30], ['video', 50, 20], ['audio', 10, 60]])
+  expect(videoEditSyncOffsets(picture).size).toBe(0)
 })
-it('关闭同步或锁定的关联伙伴不能被波纹和插入间接拆散', () => {
+it('关闭同步的链接伙伴在波纹和插入中原地保留并显示失步帧数（Premiere 同步锁定语义）', () => {
   const { document, sequence } = fixture()
   document.sequences[0] = applyVideoEditTimelineEdit(document, sequence.id, { kind: 'separate_audio', clipIds: ['b'], audioTrack: 0 })
   const paired = document.sequences[0]; paired.tracks[0].syncLocked = false
+  const sound = paired.clips.find(clip => clip.kind === 'audio')!.id
   const clipboard = copyVideoEditClips(document, sequence.id, ['a'])
   for (const locked of [false, true]) {
     paired.tracks[0].locked = locked
     const before = JSON.stringify(document)
-    expect(() => applyVideoEditTimelineEdit(document, sequence.id, { kind: 'delete', clipIds: ['a'], ripple: true, targetTracks: [1] })).toThrow('错位')
-    for (const frame of [80, 120]) expect(() => applyVideoEditTimelineEdit(document, sequence.id, { kind: 'place', clipboard, frame, mode: 'insert', targetTracks: [1] })).toThrow('关联')
+    const rippled = applyVideoEditTimelineEdit(document, sequence.id, { kind: 'delete', clipIds: ['a'], ripple: true, targetTracks: [1] })
+    expect(rippled.clips.find(clip => clip.id === 'b')!.start).toBe(40); expect(rippled.clips.find(clip => clip.id === sound)!.start).toBe(100)
+    expect(Object.fromEntries(videoEditSyncOffsets(rippled))).toEqual({ b: -60, [sound]: 60 })
+    const inserted = applyVideoEditTimelineEdit(document, sequence.id, { kind: 'place', clipboard, frame: 80, mode: 'insert', targetTracks: [1] })
+    expect(inserted.clips.find(clip => clip.id === 'b')!.start).toBe(160); expect(inserted.clips.find(clip => clip.id === sound)!.start).toBe(100)
+    expect(videoEditSyncOffsets(inserted).get('b')).toBe(60)
     expect(JSON.stringify(document)).toBe(before)
   }
 })

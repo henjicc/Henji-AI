@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, useState } from 'react'
 import type { VideoEditSequence } from '@/core/videoEdit/document'
 import { videoEditFps } from '@/core/videoEdit/time'
-import { expandVideoEditSelection, selectVideoEditRegion, selectVideoEditTrackFrom } from '@/core/videoEdit/timelineSelection'
+import { expandVideoEditSelection, selectVideoEditRegion, selectVideoEditTrackFrom, videoEditPickRelations, type VideoEditRelations } from '@/core/videoEdit/timelineSelection'
 import { videoEditMoveTrackMap } from '@/core/videoEdit/timelineEdits'
 import { beginVideoEditTimelineDrag, finishVideoEditTimelineDrag, previewVideoEditTimelineDrag, updateVideoEditTrack, type VideoEditTimelineAdjustment, type VideoEditTimelineDrag } from '../application/videoEditTimeline'
 import { captureVideoEditCommandContext, executeVideoEditCommand } from '../application/videoEditCommands'
@@ -14,11 +14,11 @@ export interface TimelineBox { from: Point; to: Point }
 interface BaseGesture { owner: VideoEditInstance; baseline: VideoEditInstance['document']; sequenceId: string; pointerId: number; origin: Point; client: Point; tool: VideoEditInstance['tool']; zoom: number; pixels: number }
 type PointerGesture = BaseGesture & (
   | { kind: 'clip'; handle: VideoEditTimelineDrag; ids: string[]; primary: string; mode: VideoEditTimelineAdjustment['mode']; moved: boolean; adjustment?: VideoEditTimelineAdjustment; error?: Error }
-  | { kind: 'box'; initial: string[]; additive: boolean }
+  | { kind: 'box'; initial: string[]; additive: boolean; linked: VideoEditRelations }
   | { kind: 'hand'; left: number; top: number }
   | { kind: 'seek' }
   | { kind: 'height'; trackId: string; height: number; next: number }
-  | { kind: 'razor'; clipId: string }
+  | { kind: 'razor'; clipId: string; linked: VideoEditRelations }
 )
 interface Options { instance: VideoEditInstance; sequence: VideoEditSequence; rows: TimelineTrackRow[]; pixels: number; onError: (error: unknown) => void }
 
@@ -114,9 +114,10 @@ export function useTimelinePointer(options: Options) {
     const client = { x: event.clientX, y: event.clientY }
     return { owner: instance, baseline: instance.document, sequenceId: sequence.id, pointerId: event.pointerId, origin: point(client), client, tool: instance.tool, zoom: instance.zoom, pixels: current.current.pixels }
   }
-  const select = (ids: string[], toggle: boolean, additive: boolean): void => {
+  /** `linked`: links follow Linked Selection, groups always; Alt inverts the former and singles out of groups (Premiere). */
+  const select = (ids: string[], toggle: boolean, additive: boolean, linked: VideoEditRelations = videoEditPickRelations(current.current.instance.linkedSelection !== false)): void => {
     const { instance, sequence } = current.current
-    const expanded = expandVideoEditSelection(sequence, ids)
+    const expanded = expandVideoEditSelection(sequence, ids, linked)
     const selected = toggle && expanded.every(id => instance.selectedClipIds.includes(id)) ? instance.selectedClipIds.filter(id => !expanded.includes(id)) : additive || toggle ? [...new Set([...instance.selectedClipIds, ...expanded])] : expanded
     setVideoEditTimelineView(instance.document.id, { selectedClipIds: selected }, selected.includes(ids[0]) ? ids[0] : undefined)
   }
@@ -131,17 +132,20 @@ export function useTimelinePointer(options: Options) {
     const at = point({ x: event.clientX, y: event.clientY }); const row = timelineTrackAt(rows, at.y)
     const clipId = target.closest('[data-video-edit-clip]')?.getAttribute('data-video-edit-clip')
     const clip = sequence.clips.find(value => value.id === clipId)
+    const linked = videoEditPickRelations(instance.linkedSelection !== false, event.altKey)
     try {
       if (instance.tool === 'hand') { const host = viewport.current!; capture({ ...base(event), kind: 'hand', origin: { x: event.clientX, y: event.clientY }, left: host.scrollLeft, top: host.scrollTop }); return }
       if (target.closest('[data-video-edit-ruler]')) { const gesture: PointerGesture = { ...base(event), kind: 'seek' }; capture(gesture); setVideoEditView(instance.document.id, { scrubbing: true }); applyPointer(gesture); return }
-      if (instance.tool === 'track') { if (row) select(selectVideoEditTrackFrom(sequence, row.track.index, Math.max(0, Math.round(at.x / pixels)), event.shiftKey), false, event.ctrlKey || event.metaKey); return }
+      if (instance.tool === 'track') { if (row) select(selectVideoEditTrackFrom(sequence, row.track.index, Math.max(0, Math.round(at.x / pixels)), event.shiftKey, linked), false, event.ctrlKey || event.metaKey, linked); return }
       if (instance.tool === 'razor') {
-        if (clip) capture({ ...base(event), kind: 'razor', clipId: clip.id })
+        // Alt-razor cuts only the clicked portion; its link to the uncut partner is kept.
+        if (clip) capture({ ...base(event), kind: 'razor', clipId: clip.id, linked })
         return
       }
-      if (!clip) { capture({ ...base(event), kind: 'box', initial: [...instance.selectedClipIds], additive: event.ctrlKey || event.metaKey || event.shiftKey }); setBox({ from: at, to: at }); return }
-      if (event.ctrlKey || event.metaKey || event.shiftKey) { select([clip.id], event.ctrlKey || event.metaKey, event.shiftKey); return }
-      if (!instance.selectedClipIds.includes(clip.id)) select([clip.id], false, false)
+      if (!clip) { capture({ ...base(event), kind: 'box', initial: [...instance.selectedClipIds], additive: event.ctrlKey || event.metaKey || event.shiftKey, linked }); setBox({ from: at, to: at }); return }
+      if (event.ctrlKey || event.metaKey || event.shiftKey) { select([clip.id], event.ctrlKey || event.metaKey, event.shiftKey, linked); return }
+      // Alt on an already selected linked clip narrows the selection to that single portion.
+      if (event.altKey || !instance.selectedClipIds.includes(clip.id)) select([clip.id], false, false, linked)
       else setVideoEditTimelineView(instance.document.id, { selectedClipIds: [...instance.selectedClipIds] }, clip.id)
       const ids = [...instance.selectedClipIds]
       const mode = target.closest('[data-video-edit-trim]')?.getAttribute('data-video-edit-trim') === 'in' ? 'in' : target.closest('[data-video-edit-trim]')?.getAttribute('data-video-edit-trim') === 'out' ? 'out' : 'move'
@@ -173,12 +177,12 @@ export function useTimelinePointer(options: Options) {
         else finishVideoEditTimelineDrag(previous.handle)
       } else if (previous.kind === 'box') {
         const at = point(previous.client); const fromY = Math.min(previous.origin.y, at.y); const toY = Math.max(previous.origin.y, at.y)
-        const ids = selectVideoEditRegion(sequence, { from: Math.max(0, previous.origin.x / pixels), to: Math.max(0, at.x / pixels), tracks: rows.filter(row => row.top < toY && row.top + row.height > fromY).map(row => row.track.index) })
+        const ids = selectVideoEditRegion(sequence, { from: Math.max(0, previous.origin.x / pixels), to: Math.max(0, at.x / pixels), tracks: rows.filter(row => row.top < toY && row.top + row.height > fromY).map(row => row.track.index) }, previous.linked)
         setVideoEditTimelineView(instance.document.id, { selectedClipIds: previous.additive ? [...new Set([...previous.initial, ...ids])] : ids })
       } else if (previous.kind === 'height' && previous.next !== previous.height) updateVideoEditTrack(instance.document.id, sequence.id, previous.trackId, { height: previous.next })
       else if (previous.kind === 'seek') setVideoEditView(instance.document.id, { scrubbing: false })
       else if (previous.kind === 'razor') {
-        const context = captureVideoEditCommandContext(instance.document.id, 'timeline', { clipIds: [previous.clipId], frame: Math.max(0, Math.round(point(previous.client).x / pixels)) })
+        const context = captureVideoEditCommandContext(instance.document.id, 'timeline', { clipIds: [previous.clipId], linked: previous.linked, frame: Math.max(0, Math.round(point(previous.client).x / pixels)) })
         void executeVideoEditCommand(context, 'split').catch(onError)
       }
     } catch (error) { if (previous.kind === 'clip') finishVideoEditTimelineDrag(previous.handle); onError(error) }

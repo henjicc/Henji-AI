@@ -30,6 +30,7 @@ export const VIDEO_EDIT_COMMANDS = [
   command('delete', '删除片段', editScopes, key('Delete')),
   command('ripple_delete', '波纹删除', editScopes, key('Delete', false, true)),
   command('toggle_snapping', '吸附', ['timeline'], key('KeyS')),
+  command('toggle_linked_selection', '链接选择', ['timeline']),
   command('copy', '复制片段', editScopes, key('KeyC', true)),
   command('paste', '粘贴片段', editScopes, key('KeyV', true)),
   command('insert', '插入', ['timeline', 'program', 'source', 'project'], key('Comma')),
@@ -41,6 +42,7 @@ export const VIDEO_EDIT_COMMANDS = [
   command('link', '链接片段', editScopes), command('unlink', '解除链接', editScopes),
   command('group', '编组', editScopes), command('ungroup', '解除编组', editScopes),
   command('separate_audio', '拆开音画', editScopes),
+  command('move_into_sync', '移入同步', editScopes), command('slip_into_sync', '滑入同步', editScopes),
   command('locate_source', '打开源素材', editScopes), command('locate_project', '在项目中定位', editScopes),
   command('locate_effects', '编辑片段属性', editScopes),
 ] as const

@@ -1,4 +1,4 @@
-import { Hand, MousePointer2, Scissors, ArrowRight } from 'lucide-react'
+import { Hand, MousePointer2, Scissors, ArrowRight, Link } from 'lucide-react'
 import { UiButton, UiIconButton, UiRangeInput } from '@/components/ui'
 import { getActiveVideoEditSequence, setVideoEditTimelineView, type VideoEditInstance } from './application/videoEditService'
 import { captureVideoEditCommandContext, executeVideoEditCommand } from './application/videoEditCommands'
@@ -12,6 +12,7 @@ export function VideoEditTimeline({ instance, onError, visible = true }: { insta
   const shortcuts = useSettingsStore(state => state.videoEditShortcuts)
   const context = captureVideoEditCommandContext(instance.document.id, 'timeline')
   const snapping = timelineCommandPresentation(context, 'toggle_snapping', shortcuts)
+  const linkedSelection = timelineCommandPresentation(context, 'toggle_linked_selection', shortcuts)
   const run = (operation: () => void): void => { try { operation() } catch (error) { onError(error) } }
   return <div className="flex h-full min-h-0 select-none flex-col bg-panel" aria-label="剪辑时间线" data-video-edit-timeline>
     <div className="flex shrink-0 items-center gap-1 overflow-x-auto whitespace-nowrap px-2 py-1">
@@ -22,6 +23,7 @@ export function VideoEditTimeline({ instance, onError, visible = true }: { insta
           return <UiIconButton key={id} appearance="hover-only" active={command.checked} disabled={!command.enabled} className="!h-7 !w-7 !p-0" aria-label={command.title} aria-pressed={command.checked} title={command.tooltip} onClick={() => { void executeVideoEditCommand(captureVideoEditCommandContext(instance.document.id, 'timeline'), id).catch(onError) }}><Icon className="h-3.5 w-3.5" /></UiIconButton>
         })}
       </div>
+      <UiIconButton appearance="hover-only" active={linkedSelection.checked} disabled={!linkedSelection.enabled} className="!h-7 !w-7 !p-0" aria-label={linkedSelection.title} aria-pressed={linkedSelection.checked} title={`${linkedSelection.tooltip}（按住 Alt 临时切换）`} onClick={() => { void executeVideoEditCommand(captureVideoEditCommandContext(instance.document.id, 'timeline'), 'toggle_linked_selection').catch(onError) }}><Link className="h-3.5 w-3.5" /></UiIconButton>
       <UiButton variant="plain" size="sm" className="!h-7" aria-pressed={snapping.checked} disabled={!snapping.enabled} title={snapping.tooltip} onClick={() => { void executeVideoEditCommand(captureVideoEditCommandContext(instance.document.id, 'timeline'), 'toggle_snapping').catch(onError) }}>{snapping.title}</UiButton>
       <div className="ml-auto flex w-28 shrink-0 items-center"><UiRangeInput aria-label="时间线缩放" min={0.1} max={20} step={0.1} value={instance.zoom} onChange={event => run(() => setVideoEditTimelineView(instance.document.id, { zoom: Number(event.target.value) }))} /></div>
     </div>
