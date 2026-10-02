@@ -117,7 +117,7 @@ fn dictionary_value(dictionary: *const ff::AVDictionary, key: &str) -> Option<St
     }
 }
 
-fn error_text(code: c_int) -> String {
+pub(crate) fn error_text(code: c_int) -> String {
     let mut buffer = [0 as std::ffi::c_char; 256];
     unsafe { ff::av_strerror(code, buffer.as_mut_ptr(), buffer.len()) };
     c_text(buffer.as_ptr()).unwrap_or_else(|| format!("FFmpeg 错误 {code}"))
@@ -128,7 +128,7 @@ unsafe extern "C" fn interrupt_callback(opaque: *mut c_void) -> c_int {
     flag.load(Ordering::Relaxed) as c_int
 }
 
-struct FormatContext(*mut ff::AVFormatContext);
+pub(crate) struct FormatContext(pub(crate) *mut ff::AVFormatContext);
 
 impl Drop for FormatContext {
     fn drop(&mut self) {
@@ -157,12 +157,9 @@ fn media_kind(kind: ff::AVMediaType) -> &'static str {
     }
 }
 
-fn video_details(stream: &ff::AVStream, parameters: &ff::AVCodecParameters) -> Value {
-    let layout = pixel_layout(parameters.format);
-    let alpha_tag = dictionary_value(stream.metadata, "alpha_mode").is_some_and(|value| value == "1");
-    let alpha_declared = parameters.alpha_mode != ff::AVAlphaMode::AVALPHA_MODE_UNSPECIFIED;
-    let transfer = c_text(unsafe { ff::av_color_transfer_name(parameters.color_trc) });
-    let rotation = unsafe {
+/// 显示矩阵给出的旋转角度（度）。
+pub(crate) fn stream_rotation(parameters: &ff::AVCodecParameters) -> Option<f64> {
+    unsafe {
         let side_data = ff::av_packet_side_data_get(parameters.coded_side_data, parameters.nb_coded_side_data, ff::AVPacketSideDataType::AV_PKT_DATA_DISPLAYMATRIX);
         if side_data.is_null() || (*side_data).size < 36 {
             None
@@ -170,7 +167,20 @@ fn video_details(stream: &ff::AVStream, parameters: &ff::AVCodecParameters) -> V
             let degrees = ff::av_display_rotation_get((*side_data).data as *const i32);
             degrees.is_finite().then_some(degrees)
         }
-    };
+    }
+}
+
+/// 视频流是否带透明：像素格式、`alpha_mode` 标签（WebM VP8/VP9 透明）或参数声明。
+pub(crate) fn stream_has_alpha(stream: &ff::AVStream, parameters: &ff::AVCodecParameters) -> bool {
+    let alpha_tag = dictionary_value(stream.metadata, "alpha_mode").is_some_and(|value| value == "1");
+    let alpha_declared = parameters.alpha_mode != ff::AVAlphaMode::AVALPHA_MODE_UNSPECIFIED;
+    pixel_layout(parameters.format).is_some_and(|(_, layout)| layout.has_alpha) || alpha_tag || alpha_declared
+}
+
+fn video_details(stream: &ff::AVStream, parameters: &ff::AVCodecParameters) -> Value {
+    let layout = pixel_layout(parameters.format);
+    let transfer = c_text(unsafe { ff::av_color_transfer_name(parameters.color_trc) });
+    let rotation = stream_rotation(parameters);
     json!({
         "width": parameters.width,
         "height": parameters.height,
@@ -178,7 +188,7 @@ fn video_details(stream: &ff::AVStream, parameters: &ff::AVCodecParameters) -> V
         "bitDepth": layout.as_ref().and_then(|(_, layout)| layout.bit_depth).or((parameters.bits_per_raw_sample > 0).then_some(parameters.bits_per_raw_sample)),
         "chromaSubsampling": layout.as_ref().and_then(|(_, layout)| layout.chroma_subsampling),
         "isRgb": layout.as_ref().is_some_and(|(_, layout)| layout.is_rgb),
-        "hasAlpha": layout.as_ref().is_some_and(|(_, layout)| layout.has_alpha) || alpha_tag || alpha_declared,
+        "hasAlpha": stream_has_alpha(stream, parameters),
         "avgFrameRate": rational_value(stream.avg_frame_rate),
         "realFrameRate": rational_value(stream.r_frame_rate),
         "frameRate": preferred_frame_rate(stream.avg_frame_rate, stream.r_frame_rate),
@@ -217,8 +227,9 @@ fn audio_details(parameters: &ff::AVCodecParameters) -> Value {
     })
 }
 
-/// 打开并探测文件。`cancelled` 被置位后 FFmpeg 的阻塞 I/O 会经中断回调尽快返回。
-pub fn probe(path: &str, cancelled: &AtomicBool) -> Result<Value, ServiceError> {
+/// 安全打开本地文件并读取流信息：只允许绝对路径与 `file` 协议；`cancelled` 被置位后阻塞 I/O 经中断回调尽快返回。
+/// `cancelled` 的地址在返回的上下文存续期间必须有效（中断回调持有该指针）。
+pub(crate) fn open_input(path: &str, cancelled: &AtomicBool) -> Result<FormatContext, ServiceError> {
     if !Path::new(path).is_absolute() {
         return Err(ServiceError::new("INVALID_REQUEST", "探测路径必须是绝对路径"));
     }
@@ -240,12 +251,14 @@ pub fn probe(path: &str, cancelled: &AtomicBool) -> Result<Value, ServiceError> 
         };
     }
     let opened = unsafe { ff::avformat_open_input(&mut context.0, url.as_ptr(), ptr::null(), &mut options.0) };
+    if opened < 0 {
+        // avformat_open_input 失败时会释放上下文并置空。
+        context.0 = ptr::null_mut();
+    }
     if cancelled.load(Ordering::Relaxed) {
         return Err(ServiceError::new("CANCELLED", "探测已取消"));
     }
     if opened < 0 {
-        // avformat_open_input 失败时会释放上下文并置空。
-        context.0 = ptr::null_mut();
         return Err(ServiceError::new("OPEN_FAILED", format!("无法打开文件：{}", error_text(opened))));
     }
     let found = unsafe { ff::avformat_find_stream_info(context.0, ptr::null_mut()) };
@@ -255,6 +268,12 @@ pub fn probe(path: &str, cancelled: &AtomicBool) -> Result<Value, ServiceError> 
     if found < 0 {
         return Err(ServiceError::new("STREAM_INFO_FAILED", format!("无法读取流信息：{}", error_text(found))));
     }
+    Ok(context)
+}
+
+/// 打开并探测文件。`cancelled` 被置位后 FFmpeg 的阻塞 I/O 会经中断回调尽快返回。
+pub fn probe(path: &str, cancelled: &AtomicBool) -> Result<Value, ServiceError> {
+    let context = open_input(path, cancelled)?;
 
     let format = unsafe { &*context.0 };
     let input_format = unsafe { &*format.iformat };

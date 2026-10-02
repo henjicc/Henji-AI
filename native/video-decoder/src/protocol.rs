@@ -1,7 +1,7 @@
 //! stdio 控制通道：每条消息为 4 字节小端长度前缀 + UTF-8 JSON。
 //!
 //! 控制通道只传请求、响应、事件与小体积元数据；画面走显卡共享纹理，不经过本通道。
-//! 事件（服务主动发出）没有 `id`，以 `event` 字段区分，如 `frame`、`stream_ended`。
+//! 事件（服务主动发出）没有 `id`，以 `event` 字段区分，如 `frame`、`frame_missing`、`schedule_done`、`stream_ended`。
 
 use serde::Deserialize;
 
@@ -10,7 +10,9 @@ use serde_json::{json, Value};
 use std::io::{self, Read, Write};
 
 /// 2：新增帧流命令（1.2）与 `frame`/`stream_ended` 事件；hello 携带 clientPid。
-pub const PROTOCOL_VERSION: u32 = 2;
+/// 3：解码会话（1.3）：`open_decoder`/`frame_at`/`schedule`/`cancel_schedule`，`frame` 带 `ptsUs`/`request`，
+///    新事件 `frame_missing`/`schedule_done`。
+pub const PROTOCOL_VERSION: u32 = 3;
 /// 单条控制消息上限。控制消息只含元数据，超过即视为协议错误，防止异常长度导致巨量分配。
 pub const MAX_MESSAGE_BYTES: usize = 16 * 1024 * 1024;
 
@@ -46,6 +48,56 @@ pub enum Command {
     Stats,
     /// 关闭上一个服务进程遗留在客户端进程里的纹理句柄（服务异常退出后由客户端发起）。
     CloseClientHandles { handles: Vec<String> },
+    /// 打开解码会话（1.3）。响应由会话线程在打开文件、解出第一帧后发出。
+    OpenDecoder {
+        stream_id: String,
+        path: String,
+        #[serde(default)]
+        stream_index: Option<i32>,
+        #[serde(default)]
+        purpose: Option<DecodePurpose>,
+        #[serde(default)]
+        pool_size: Option<u32>,
+        #[serde(default)]
+        hardware: Option<HardwareMode>,
+        #[serde(default)]
+        format: Option<SharedFormat>,
+        #[serde(default)]
+        transfer: Option<String>,
+    },
+    /// 按时间取单帧：命中时先发 `frame` 事件再响应。
+    FrameAt { stream_id: String, time: f64, ticket: String },
+    /// 连续计划取帧：`times`（每项恰好一帧或缺帧）或 `range`（区间内每一帧）。
+    Schedule {
+        stream_id: String,
+        schedule_id: String,
+        #[serde(default)]
+        times: Option<Vec<f64>>,
+        #[serde(default)]
+        range: Option<ScheduleRange>,
+    },
+    CancelSchedule { stream_id: String, schedule_id: String },
+}
+
+#[derive(Debug, Deserialize, PartialEq, Clone, Copy)]
+#[serde(rename_all = "snake_case")]
+pub enum DecodePurpose {
+    Playback,
+    Seek,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Clone, Copy)]
+#[serde(rename_all = "snake_case")]
+pub enum HardwareMode {
+    Auto,
+    Off,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Clone, Copy)]
+pub struct ScheduleRange {
+    pub from: f64,
+    #[serde(default)]
+    pub to: Option<f64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -172,6 +224,18 @@ mod tests {
         assert!(parse_request(br#"{"id":"7","type":"start_test_stream","streamId":"s","format":"yuv444","width":64,"height":64,"fps":60}"#).is_err());
         let close = parse_request(br#"{"id":"8","type":"close_client_handles","handles":["1234"]}"#).unwrap();
         assert_eq!(close.command, Command::CloseClientHandles { handles: vec!["1234".into()] });
+        let open = parse_request(r#"{"id":"9","type":"open_decoder","streamId":"vf-1","path":"D:\\素材\\a.mov","purpose":"seek","hardware":"off","format":"rgbaf16"}"#.as_bytes()).unwrap();
+        assert_eq!(
+            open.command,
+            Command::OpenDecoder { stream_id: "vf-1".into(), path: "D:\\素材\\a.mov".into(), stream_index: None, purpose: Some(DecodePurpose::Seek), pool_size: None, hardware: Some(HardwareMode::Off), format: Some(SharedFormat::Rgbaf16), transfer: None }
+        );
+        let frame_at = parse_request(br#"{"id":"10","type":"frame_at","streamId":"vf-1","time":1.5,"ticket":"t1"}"#).unwrap();
+        assert_eq!(frame_at.command, Command::FrameAt { stream_id: "vf-1".into(), time: 1.5, ticket: "t1".into() });
+        let schedule = parse_request(br#"{"id":"11","type":"schedule","streamId":"vf-1","scheduleId":"s1","times":[0,0.0166]}"#).unwrap();
+        assert_eq!(schedule.command, Command::Schedule { stream_id: "vf-1".into(), schedule_id: "s1".into(), times: Some(vec![0.0, 0.0166]), range: None });
+        let range = parse_request(br#"{"id":"12","type":"schedule","streamId":"vf-1","scheduleId":"s2","range":{"from":2}}"#).unwrap();
+        assert_eq!(range.command, Command::Schedule { stream_id: "vf-1".into(), schedule_id: "s2".into(), times: None, range: Some(ScheduleRange { from: 2.0, to: None }) });
+        assert!(parse_request(br#"{"id":"13","type":"open_decoder","streamId":"a","path":"x","purpose":"export"}"#).is_err());
     }
 
     #[test]

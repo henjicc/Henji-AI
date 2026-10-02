@@ -96,6 +96,30 @@ describe('videoFrames preload', () => {
     expect(late.close).toHaveBeenCalledOnce()
   })
 
+  it('posts decoder schedule events to the port of the owning route and exposes decoder requests', async () => {
+    const { ipcRenderer } = await import('electron')
+    const invoke = vi.fn(async (_channel: string, _payload?: unknown) => ({}))
+    const { api } = await create(invoke)
+    const listener = vi.mocked(ipcRenderer.on).mock.calls.filter(([channel]) => channel === 'videoFrames:scheduleEvent').at(-1)?.[1] as unknown as (event: unknown, payload: unknown) => void
+    expect(listener).toBeTypeOf('function')
+    const route = api.connect()
+    const consumer = announcements.find((entry) => entry.message.route === route)!.port
+    const received: unknown[] = []
+    consumer.onmessage = (event) => received.push(event.data)
+    const missing = { type: 'frame_missing', route, streamId: 'vf-1', scheduleId: 's1', index: 3, reason: 'no_picture' }
+    listener({}, missing)
+    listener({}, { ...missing, route: 'vf-route-other' })
+    listener({}, null)
+    expect(received).toEqual([{ type: 'schedule', event: missing }])
+
+    await api.openDecoder({ route, path: 'D:\\a.mov', purpose: 'seek' })
+    await api.frameAt({ streamId: 'vf-1', time: 1, ticket: 't' })
+    await api.schedule({ streamId: 'vf-1', scheduleId: 's1', times: [0] })
+    await api.cancelSchedule('vf-1', 's1')
+    expect(invoke.mock.calls.map(([channel]) => channel)).toEqual(['videoFrames:openDecoder', 'videoFrames:frameAt', 'videoFrames:schedule', 'videoFrames:cancelSchedule'])
+    expect(invoke).toHaveBeenLastCalledWith('videoFrames:cancelSchedule', { streamId: 'vf-1', scheduleId: 's1' })
+  })
+
   it('releases the receiver import even when creating the frame fails', async () => {
     const { receive } = await create()
     const release = vi.fn()

@@ -1,29 +1,44 @@
 import type { ImportSharedTextureOptions, SendSharedTextureOptions, SharedTextureImported, WebFrameMain } from 'electron'
 import type { MainLogger } from '../logging/main-logger'
 import type { VideoDecoderLifecycleEvent, VideoDecoderService, VideoDecoderServiceState } from './client'
-import type {
-  VideoFrameBridgeStats,
-  VideoFrameBridgeStreamStats,
-  VideoFrameDurationSummary,
-  VideoFrameMeta,
-  VideoFrameNativeStats,
-  VideoFrameStreamEndedPayload,
-  VideoFrameStreamInfo,
-  VideoFrameStreamState,
-  VideoFrameTestStreamRequest,
-  VideoSharedFormat,
+import {
+  VIDEO_FRAMES_SCHEDULE_EVENT_CHANNEL,
+  type VideoFrameAtRequest,
+  type VideoFrameAtResult,
+  type VideoFrameBridgeStats,
+  type VideoFrameBridgeStreamStats,
+  type VideoFrameDecoderInfo,
+  type VideoFrameDecoderRequest,
+  type VideoFrameDurationSummary,
+  type VideoFrameMeta,
+  type VideoFrameNativeStats,
+  type VideoFrameScheduleAck,
+  type VideoFrameScheduleEvent,
+  type VideoFrameScheduleRequest,
+  type VideoFrameStreamEndedPayload,
+  type VideoFrameStreamInfo,
+  type VideoFrameStreamState,
+  type VideoFrameTestStreamRequest,
+  type VideoSharedFormat,
 } from '../../../../src/platform/contracts/videoFrameTypes'
 import {
   VideoDecoderError,
+  type VideoDecoderDecoderStarted,
   type VideoDecoderEvent,
   type VideoDecoderFrameEvent,
   type VideoDecoderStreamStarted,
 } from './protocol'
 
 export type {
+  VideoFrameAtRequest,
+  VideoFrameAtResult,
   VideoFrameBridgeStats,
   VideoFrameBridgeStreamStats,
+  VideoFrameDecoderInfo,
+  VideoFrameDecoderRequest,
   VideoFrameMeta,
+  VideoFrameScheduleAck,
+  VideoFrameScheduleRequest,
   VideoFrameStreamEndedPayload,
   VideoFrameStreamInfo,
   VideoFrameTestStreamRequest,
@@ -39,6 +54,10 @@ export type {
  * 句柄所有权：槽位句柄由原生服务复制进本进程并负责关闭（`stop_stream` 时远程关闭）；
  * Electron 每次导入自行复制一份。因此流一旦进入关闭流程就不再导入它的任何帧。
  * 原生进程异常退出时它来不及关闭这些句柄，桥记下后交给下一个服务进程关闭。
+ *
+ * 两种流：合成测试画面（1.2，开发与诊断）与原生解码会话（1.3）。解码会话的取帧请求（`frameAt`/`schedule`）
+ * 只允许发起窗口操作自己的流；帧随 `sendSharedTexture` 带元数据（`ptsUs`、`request`）到达，
+ * 计划的缺帧与结束事件经 `VIDEO_FRAMES_SCHEDULE_EVENT_CHANNEL` 发给该窗口，由 preload 投递到同一端口。
  */
 
 /** 帧的目标窗口：生产用 WebContents 适配，测试注入假对象。 */
@@ -56,7 +75,7 @@ export interface SharedTextureApi {
   sendSharedTexture(options: SendSharedTextureOptions, ...args: unknown[]): Promise<void>
 }
 
-export type VideoFrameBridgeService = Pick<VideoDecoderService, 'startTestStream' | 'stopStream' | 'notify' | 'onEvent' | 'onLifecycle' | 'closeClientHandles' | 'stats'> & {
+export type VideoFrameBridgeService = Pick<VideoDecoderService, 'startTestStream' | 'openDecoder' | 'frameAt' | 'schedule' | 'cancelSchedule' | 'stopStream' | 'notify' | 'onEvent' | 'onLifecycle' | 'closeClientHandles' | 'stats'> & {
   readonly state: VideoDecoderServiceState
 }
 
@@ -85,6 +104,8 @@ const SHARED_FORMATS: readonly VideoSharedFormat[] = ['nv12', 'nv16', 'p010le', 
  */
 export const VIDEO_FRAMES_UNSUPPORTED_FORMATS: ReadonlySet<VideoSharedFormat> = new Set(['p010le', 'nv16'])
 const ROUTE_PATTERN = /^[A-Za-z0-9_-]{1,64}$/
+const ID_PATTERN = /^[A-Za-z0-9_.:-]{1,128}$/
+const MAX_SCHEDULE_TIMES = 200_000
 const SAMPLE_LIMIT = 8192
 
 class DurationSampler {
@@ -122,6 +143,7 @@ interface OutstandingFrame {
 
 interface BridgeStream {
   id: string
+  kind: 'test' | 'decoder'
   route: string
   target: VideoFrameTarget
   info: VideoDecoderStreamStarted
@@ -173,6 +195,75 @@ export function parseVideoFrameTestStreamRequest(input: unknown): VideoFrameTest
   }
 }
 
+function parseRecord(input: unknown, label: string): Record<string, unknown> {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error(`${label}必须是对象`)
+  return input as Record<string, unknown>
+}
+
+function parseId(record: Record<string, unknown>, field: string): string {
+  const value = record[field]
+  if (typeof value !== 'string' || !ID_PATTERN.test(value)) throw new Error(`参数 ${field} 无效`)
+  return value
+}
+
+/** 解码会话打开请求（路径授权由 IPC 层检查）。 */
+export function parseVideoFrameDecoderRequest(input: unknown): VideoFrameDecoderRequest {
+  const record = parseRecord(input, '解码请求')
+  if (typeof record.route !== 'string' || !ROUTE_PATTERN.test(record.route)) throw new Error('解码参数 route 无效')
+  if (typeof record.path !== 'string' || record.path.length === 0 || record.path.length > 4096 || record.path.includes('\0')) throw new Error('解码参数 path 无效')
+  if (record.purpose !== 'playback' && record.purpose !== 'seek') throw new Error('解码参数 purpose 无效')
+  const optionalInteger = (field: string, min: number, max: number): number | undefined => {
+    const value = record[field]
+    if (value === undefined) return undefined
+    if (typeof value !== 'number' || !Number.isInteger(value) || value < min || value > max) throw new Error(`解码参数 ${field} 无效`)
+    return value
+  }
+  const optionalEnum = <T extends string>(field: string, values: readonly T[]): T | undefined => {
+    const value = record[field]
+    if (value === undefined) return undefined
+    if (typeof value !== 'string' || !values.includes(value as T)) throw new Error(`解码参数 ${field} 无效`)
+    return value as T
+  }
+  const transfer = record.transfer
+  if (transfer !== undefined && (typeof transfer !== 'string' || !/^[a-z0-9-]{1,32}$/.test(transfer))) throw new Error('解码参数 transfer 无效')
+  return {
+    route: record.route,
+    path: record.path,
+    streamIndex: optionalInteger('streamIndex', 0, 1024),
+    purpose: record.purpose,
+    poolSize: optionalInteger('poolSize', 2, 16),
+    hardware: optionalEnum('hardware', ['auto', 'off'] as const),
+    format: optionalEnum('format', ['nv12', 'rgbaf16'] as const),
+    transfer: transfer as string | undefined,
+  }
+}
+
+export function parseVideoFrameAtRequest(input: unknown): VideoFrameAtRequest {
+  const record = parseRecord(input, '取帧请求')
+  if (typeof record.time !== 'number' || !Number.isFinite(record.time)) throw new Error('取帧参数 time 无效')
+  return { streamId: parseId(record, 'streamId'), time: record.time, ticket: parseId(record, 'ticket') }
+}
+
+export function parseVideoFrameScheduleRequest(input: unknown): VideoFrameScheduleRequest {
+  const record = parseRecord(input, '计划请求')
+  const streamId = parseId(record, 'streamId')
+  const scheduleId = parseId(record, 'scheduleId')
+  if (Array.isArray(record.times) === (record.range !== undefined)) throw new Error('计划需要 times 或 range 之一')
+  if (Array.isArray(record.times)) {
+    if (record.times.length > MAX_SCHEDULE_TIMES) throw new Error('计划时间点过多')
+    if (!record.times.every((value) => typeof value === 'number' && Number.isFinite(value))) throw new Error('计划时间点无效')
+    return { streamId, scheduleId, times: record.times as number[] }
+  }
+  const range = parseRecord(record.range, '计划区间')
+  if (typeof range.from !== 'number' || !Number.isFinite(range.from) || (range.to !== undefined && (typeof range.to !== 'number' || !Number.isFinite(range.to)))) throw new Error('计划区间无效')
+  return { streamId, scheduleId, range: { from: range.from, ...(range.to !== undefined ? { to: range.to as number } : {}) } }
+}
+
+export function parseVideoFrameCancelRequest(input: unknown): { streamId: string; scheduleId: string } {
+  const record = parseRecord(input, '取消请求')
+  return { streamId: parseId(record, 'streamId'), scheduleId: parseId(record, 'scheduleId') }
+}
+
 export class VideoFrameBridge {
   private readonly streams = new Map<string, BridgeStream>()
   /** 启动响应尚未处理时先到达的帧（同一块 stdout 里响应之后紧跟首帧）。 */
@@ -197,31 +288,95 @@ export class VideoFrameBridge {
   }
 
   async openTestStream(target: VideoFrameTarget, request: VideoFrameTestStreamRequest): Promise<VideoFrameStreamInfo> {
-    if (target.isDestroyed()) throw new Error('目标窗口已关闭')
     if (VIDEO_FRAMES_UNSUPPORTED_FORMATS.has(request.format) && !this.options.allowUnsupportedFormats) {
       throw new Error(`显卡帧通道不支持 ${request.format} 格式`)
     }
+    const { stream, info } = await this.openStream(target, 'test', request.route, { ...request }, (streamId) => this.options.service.startTestStream({
+      streamId,
+      format: request.format,
+      width: request.width,
+      height: request.height,
+      fps: request.fps,
+      poolSize: request.poolSize,
+      maxFrames: request.maxFrames,
+      keyedMutex: request.keyedMutex,
+    }))
+    return { ...this.publicInfo(stream, info), pattern: info.pattern }
+  }
+
+  /** 打开原生解码会话（路径授权由调用方检查）。 */
+  async openDecoder(target: VideoFrameTarget, request: VideoFrameDecoderRequest): Promise<VideoFrameDecoderInfo> {
+    const { route, ...options } = request
+    const { stream, info } = await this.openStream(target, 'decoder', route, { purpose: request.purpose, format: request.format, hardware: request.hardware }, (streamId) => this.options.service.openDecoder({ streamId, ...options }))
+    const started = info as VideoDecoderDecoderStarted
+    return {
+      ...this.publicInfo(stream, info),
+      visibleRect: info.visibleRect,
+      decoder: started.decoder,
+      timeBase: started.timeBase,
+      startSeconds: started.startSeconds,
+      endSeconds: started.endSeconds,
+      firstFramePtsUs: started.firstFramePtsUs,
+      rotationDegrees: started.rotationDegrees,
+      purpose: started.purpose,
+      color: started.color,
+    }
+  }
+
+  async frameAt(targetId: number, request: VideoFrameAtRequest): Promise<VideoFrameAtResult> {
+    this.ownedDecoder(request.streamId, targetId)
+    return this.options.service.frameAt(request.streamId, request.time, request.ticket)
+  }
+
+  async schedule(targetId: number, request: VideoFrameScheduleRequest): Promise<VideoFrameScheduleAck> {
+    this.ownedDecoder(request.streamId, targetId)
+    const { streamId, scheduleId, times, range } = request
+    return this.options.service.schedule({ streamId, scheduleId, ...(times ? { times } : {}), ...(range ? { range } : {}) })
+  }
+
+  async cancelSchedule(targetId: number, streamId: string, scheduleId: string): Promise<boolean> {
+    const stream = this.streams.get(streamId)
+    if (!stream || stream.target.id !== targetId || stream.kind !== 'decoder') return false
+    return (await this.options.service.cancelSchedule(streamId, scheduleId)).cancelled
+  }
+
+  private ownedDecoder(streamId: string, targetId: number): BridgeStream {
+    const stream = this.streams.get(streamId)
+    if (!stream || stream.target.id !== targetId || stream.kind !== 'decoder') throw new Error('解码会话不存在或不属于当前窗口')
+    if (stream.state !== 'open') throw new Error('解码会话已结束')
+    return stream
+  }
+
+  private publicInfo(stream: BridgeStream, info: VideoDecoderStreamStarted): VideoFrameStreamInfo {
+    return {
+      streamId: stream.id,
+      route: stream.route,
+      format: info.format,
+      codedSize: info.codedSize,
+      visibleRect: info.visibleRect,
+      colorSpace: info.colorSpace,
+      fps: info.fps,
+      poolSize: info.slots.length,
+    }
+  }
+
+  /** 两种流共用的打开流程：分配流号、登记首帧缓冲、编码句柄、窗口失效清理。 */
+  private async openStream(target: VideoFrameTarget, kind: BridgeStream['kind'], route: string, context: Record<string, unknown>, start: (streamId: string) => Promise<VideoDecoderStreamStarted>): Promise<{ stream: BridgeStream; info: VideoDecoderStreamStarted }> {
+    if (target.isDestroyed()) throw new Error('目标窗口已关闭')
     const owned = [...this.streams.values()].filter((stream) => stream.target.id === target.id).length
     if (owned >= this.maxStreamsPerTarget) throw new Error(`同一窗口最多 ${this.maxStreamsPerTarget} 路帧流`)
     const streamId = `vf-${this.nextStreamId++}`
     const startedAt = this.now()
-    this.options.logger.info('打开测试帧流', { event: 'video_frames.stream.open.start', context: { streamId, targetId: target.id, ...request } })
+    const label = kind === 'test' ? '测试帧流' : '解码会话'
+    const event = kind === 'test' ? 'video_frames.stream.open' : 'video_frames.decoder.open'
+    this.options.logger.info(`打开${label}`, { event: `${event}.start`, context: { streamId, targetId: target.id, route, ...context } })
     this.pendingStarts.set(streamId, [])
     let info: VideoDecoderStreamStarted
     try {
-      info = await this.options.service.startTestStream({
-        streamId,
-        format: request.format,
-        width: request.width,
-        height: request.height,
-        fps: request.fps,
-        poolSize: request.poolSize,
-        maxFrames: request.maxFrames,
-        keyedMutex: request.keyedMutex,
-      })
+      info = await start(streamId)
     } catch (error) {
       this.pendingStarts.delete(streamId)
-      this.options.logger.warn('打开测试帧流失败', { event: 'video_frames.stream.open.failed', error, context: { streamId, code: error instanceof VideoDecoderError ? error.code : undefined } })
+      this.options.logger.warn(`打开${label}失败`, { event: `${event}.failed`, error, context: { streamId, code: error instanceof VideoDecoderError ? error.code : undefined } })
       throw error
     }
     const queued = this.pendingStarts.get(streamId) ?? []
@@ -239,7 +394,8 @@ export class VideoFrameBridge {
     }
     const stream: BridgeStream = {
       id: streamId,
-      route: request.route,
+      kind,
+      route,
       target,
       info,
       handles,
@@ -259,21 +415,13 @@ export class VideoFrameBridge {
     stream.stopGone = target.onGone((reason) => this.closeTarget(target.id, reason))
     this.streams.set(streamId, stream)
     this.ensureOverdueTimer()
-    this.options.logger.info('测试帧流已打开', {
-      event: 'video_frames.stream.open.completed',
-      context: { streamId, format: info.format, codedSize: info.codedSize, slots: info.slots.length, keyedMutex: info.keyedMutex, elapsedMs: this.now() - startedAt, nativeSetupMs: info.setupMs },
+    const decoder = (info as Partial<VideoDecoderDecoderStarted>).decoder
+    this.options.logger.info(`${label}已打开`, {
+      event: `${event}.completed`,
+      context: { streamId, format: info.format, codedSize: info.codedSize, slots: info.slots.length, keyedMutex: info.keyedMutex, elapsedMs: this.now() - startedAt, nativeSetupMs: info.setupMs, ...(decoder ? { decoder } : {}) },
     })
-    for (const event of queued) this.handleFrame(event)
-    return {
-      streamId,
-      route: request.route,
-      format: info.format,
-      codedSize: info.codedSize,
-      colorSpace: info.colorSpace,
-      fps: info.fps,
-      poolSize: info.slots.length,
-      pattern: info.pattern,
-    }
+    for (const queuedEvent of queued) this.handleFrame(queuedEvent)
+    return { stream, info }
   }
 
   /** 关闭流：先停止导入（从表中移除），再让原生服务停止并关闭句柄。在途帧的引用照常释放。 */
@@ -338,6 +486,7 @@ export class VideoFrameBridge {
   private streamStats(stream: BridgeStream): VideoFrameBridgeStreamStats {
     return {
       streamId: stream.id,
+      kind: stream.kind,
       route: stream.route,
       targetId: stream.target.id,
       format: stream.info.format,
@@ -366,6 +515,17 @@ export class VideoFrameBridge {
     }
     const stream = this.streams.get(event.streamId)
     if (!stream) return
+    if (event.event === 'frame_missing' || event.event === 'schedule_done') {
+      if (stream.target.isDestroyed()) return
+      const payload: VideoFrameScheduleEvent = event.event === 'frame_missing'
+        ? { type: 'frame_missing', route: stream.route, streamId: stream.id, scheduleId: event.scheduleId, index: event.index, reason: event.reason }
+        : { type: 'schedule_done', route: stream.route, streamId: stream.id, scheduleId: event.scheduleId, reason: event.reason, message: event.message }
+      if (event.event === 'schedule_done' && event.reason === 'error') {
+        this.options.logger.warn('连续取帧计划失败', { event: 'video_frames.schedule.failed', context: { streamId: stream.id, scheduleId: event.scheduleId, message: event.message } })
+      }
+      stream.target.send(VIDEO_FRAMES_SCHEDULE_EVENT_CHANNEL, payload)
+      return
+    }
     stream.state = 'ended'
     this.options.logger[event.reason === 'error' ? 'warn' : 'info']('原生帧流已结束', { event: 'video_frames.stream.ended', context: { streamId: stream.id, reason: event.reason, message: event.message, counters: event.counters } })
     this.notifyEnded(stream, event.reason, event.message)
@@ -415,7 +575,15 @@ export class VideoFrameBridge {
     }
     this.unreleasedImports += 1
     stream.outstanding.set(event.slot, { frameIndex: event.frameIndex, importedAt, overdueLogged: false })
-    const meta: VideoFrameMeta = { route: stream.route, streamId: stream.id, frameIndex: event.frameIndex, timestampUs: event.timestampUs }
+    const meta: VideoFrameMeta = {
+      route: stream.route,
+      streamId: stream.id,
+      frameIndex: event.frameIndex,
+      timestampUs: event.timestampUs,
+      ...(event.ptsUs !== undefined ? { ptsUs: event.ptsUs } : {}),
+      ...(event.durationUs !== undefined ? { durationUs: event.durationUs } : {}),
+      ...(event.request ? { request: event.request } : {}),
+    }
     let sending: Promise<void>
     try {
       sending = this.options.sharedTexture.sendSharedTexture({ frame: stream.target.mainFrame, importedSharedTexture: imported }, meta)

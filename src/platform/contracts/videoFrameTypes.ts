@@ -6,6 +6,9 @@
 /** `sharedTexture.importSharedTexture` 支持的像素格式。 */
 export type VideoSharedFormat = 'nv12' | 'nv16' | 'p010le' | 'rgba' | 'bgra' | 'rgbaf16'
 
+/** 解码帧对应的请求：按时间取单帧（`ticket`）或连续计划的第 `index` 项。 */
+export type VideoFrameRequestTag = { kind: 'frame_at'; id: string } | { kind: 'schedule'; id: string; index: number }
+
 /** 每帧随 VideoFrame 一起到达的元数据。 */
 export interface VideoFrameMeta {
   /** `connect()` 返回的通道标识，preload 据此把帧投递到对应端口。 */
@@ -13,6 +16,11 @@ export interface VideoFrameMeta {
   streamId: string
   frameIndex: number
   timestampUs: number
+  /** 解码帧：源呈现时间（微秒，与 mediabunny `microsecondTimestamp` 同口径）与时长。 */
+  ptsUs?: number
+  durationUs?: number
+  /** 解码帧对应的请求（测试画面帧没有）。 */
+  request?: VideoFrameRequestTag
 }
 
 /** preload 把端口交给页面时使用的 window message。 */
@@ -46,12 +54,98 @@ export interface VideoFrameStreamInfo {
   route: string
   format: VideoSharedFormat
   codedSize: { width: number; height: number }
+  /** 画面实际区域（nv12 池纹理按偶数对齐，可能大于画面）。 */
+  visibleRect?: { x: number; y: number; width: number; height: number }
   colorSpace: VideoFrameColorSpace
   fps: number
   poolSize: number
   /** 合成测试画面的布局（像素校验用）；真实解码流没有。 */
   pattern?: unknown
 }
+
+/** 打开原生解码会话（1.3）。`path` 为本地绝对路径，须在已授权的媒体目录内。 */
+export interface VideoFrameDecoderRequest {
+  route: string
+  path: string
+  /** 视频流序号；缺省取首选视频流。 */
+  streamIndex?: number
+  /** playback：连续计划（播放）；seek：按时间取单帧（定位、拖动、导出）。 */
+  purpose: 'playback' | 'seek'
+  poolSize?: number
+  /** off：只用软解（诊断）。 */
+  hardware?: 'auto' | 'off'
+  /** 强制输出格式（诊断）；nv12 只适用于 8 位 4:2:0 无透明素材。 */
+  format?: 'nv12' | 'rgbaf16'
+  /** 色彩空间传输特性标注覆盖（诊断，重要记录 007 的标注实验）。 */
+  transfer?: string
+}
+
+/** 解码会话的解码细节（诊断与日志用，不进正式界面）。 */
+export interface VideoFrameDecoderDetails {
+  codec: string | null
+  decoderName: string
+  hardware: boolean
+  hardwareRequested: boolean
+  pixelFormat: string
+  bitDepth: number
+  chromaLog2: [number, number]
+  hasAlpha: boolean
+  path: 'copy_nv12' | 'shader_semiplanar' | 'upload_nv12' | 'shader_planar' | 'cpu_fallback'
+  intraOnly: boolean
+}
+
+export interface VideoFrameDecoderInfo extends VideoFrameStreamInfo {
+  visibleRect: { x: number; y: number; width: number; height: number }
+  decoder: VideoFrameDecoderDetails
+  timeBase: { num: number; den: number }
+  startSeconds: number | null
+  endSeconds: number | null
+  firstFramePtsUs: number
+  rotationDegrees: number | null
+  purpose: 'playback' | 'seek'
+  /** 文件的色彩解释（未标注项已按 WebCodecs 默认补齐）；rgbaf16 输出的 colorSpace 只给出 rgb/full。 */
+  color: { matrix: string; primaries: string; transfer: string; range: 'limited' | 'full'; hdrAsSdr: boolean }
+}
+
+export interface VideoFrameAtRequest {
+  streamId: string
+  /** 源时间（秒）：取呈现时间不晚于它的最后一帧。 */
+  time: number
+  /** 请求标识，随帧元数据 `request.id` 返回。 */
+  ticket: string
+}
+
+export interface VideoFrameAtResult {
+  ticket: string
+  /** 有画面时帧已经（或即将）从端口到达，`request.id === ticket`。 */
+  found: boolean
+  ptsUs?: number
+  timestampSeconds?: number
+  durationSeconds?: number
+  seeked: boolean
+  decodeMs: number
+}
+
+/** 连续计划：`times` 每项恰好对应一帧或一个缺帧事件；`range` 交付区间 [from, to) 内每一帧。 */
+export interface VideoFrameScheduleRequest {
+  streamId: string
+  scheduleId: string
+  times?: number[]
+  range?: { from: number; to?: number }
+}
+
+export interface VideoFrameScheduleAck {
+  scheduleId: string
+  count: number | null
+}
+
+/** 计划的非帧事件（经 IPC 到 preload，再投递到流所属通道的端口）。 */
+export type VideoFrameScheduleEvent =
+  | { type: 'frame_missing'; route: string; streamId: string; scheduleId: string; index: number; reason: 'no_picture' | 'decode_error' | 'superseded' }
+  | { type: 'schedule_done'; route: string; streamId: string; scheduleId: string; reason: 'completed' | 'cancelled' | 'error'; message: string | null }
+
+export const VIDEO_FRAMES_SCHEDULE_EVENT_CHANNEL = 'videoFrames:scheduleEvent'
+
 
 export interface VideoFrameStreamEndedPayload {
   streamId: string
@@ -73,6 +167,7 @@ export type VideoFrameStreamState = 'open' | 'ended' | 'closing'
 
 export interface VideoFrameBridgeStreamStats {
   streamId: string
+  kind?: 'test' | 'decoder'
   route: string
   targetId: number
   format: VideoSharedFormat
@@ -101,6 +196,21 @@ export interface VideoFrameNativeStreamCounters {
   duplicateReleases: number
   outstanding: number
   renderUsAverage: number
+  /** 以下为解码会话计数（测试画面流为 0）。 */
+  decoded?: number
+  discarded?: number
+  missing?: number
+  seeks?: number
+  /** 播放计划中的剪辑点/跳转（开新段、不 flush）。 */
+  cuts?: number
+  /** 单帧定位的 flush。 */
+  flushes?: number
+  /** 排空到文件末尾后再定位的 flush。 */
+  eofFlushes?: number
+  decodeErrors?: number
+  decodeUsTotal?: number
+  uploadUsAverage?: number
+  waitUsTotal?: number
 }
 
 export interface VideoFrameNativeStats {
@@ -108,7 +218,7 @@ export interface VideoFrameNativeStats {
   cpuMs: number
   handleCount: number
   gpuLocalMemory: { currentUsageBytes: number; budgetBytes: number } | null
-  streams: Array<{ streamId: string; format: VideoSharedFormat; width: number; height: number; running: boolean; counters: VideoFrameNativeStreamCounters }>
+  streams: Array<{ streamId: string; kind?: 'test' | 'decoder'; format: VideoSharedFormat | null; width: number; height: number; running: boolean; counters: VideoFrameNativeStreamCounters }>
 }
 
 export interface VideoFrameBridgeStats {

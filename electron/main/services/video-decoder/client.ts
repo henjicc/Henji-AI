@@ -10,10 +10,14 @@ import {
   VideoDecoderError,
   VideoDecoderFrameReader,
   type VideoDecoderCommand,
+  type VideoDecoderDecoderStarted,
   type VideoDecoderEvent,
+  type VideoDecoderFrameAtResult,
   type VideoDecoderHello,
   type VideoDecoderNotification,
+  type VideoDecoderOpenRequest,
   type VideoDecoderProbeResult,
+  type VideoDecoderScheduleAck,
   type VideoDecoderStats,
   type VideoDecoderStreamStarted,
   type VideoDecoderStreamStopped,
@@ -177,6 +181,24 @@ export class VideoDecoderService {
 
   async startTestStream(request: VideoDecoderTestStreamRequest, options: VideoDecoderRequestOptions = {}): Promise<VideoDecoderStreamStarted> {
     return this.call<VideoDecoderStreamStarted>({ type: 'start_test_stream', ...request }, options)
+  }
+
+  /** 打开解码会话：原生服务打开文件并解出第一帧后才响应（大文件或慢盘可能较久）。 */
+  async openDecoder(request: VideoDecoderOpenRequest, options: VideoDecoderRequestOptions = {}): Promise<VideoDecoderDecoderStarted> {
+    return this.call<VideoDecoderDecoderStarted>({ type: 'open_decoder', ...request }, options)
+  }
+
+  /** 按时间取单帧：命中时 `frame` 事件先于响应到达。 */
+  async frameAt(streamId: string, time: number, ticket: string, options: VideoDecoderRequestOptions = {}): Promise<VideoDecoderFrameAtResult> {
+    return this.call<VideoDecoderFrameAtResult>({ type: 'frame_at', streamId, time, ticket }, options)
+  }
+
+  async schedule(request: { streamId: string; scheduleId: string; times?: number[]; range?: { from: number; to?: number } }, options: VideoDecoderRequestOptions = {}): Promise<VideoDecoderScheduleAck> {
+    return this.call<VideoDecoderScheduleAck>({ type: 'schedule', ...request }, options)
+  }
+
+  async cancelSchedule(streamId: string, scheduleId: string, options: VideoDecoderRequestOptions = {}): Promise<{ cancelled: boolean }> {
+    return this.call<{ cancelled: boolean }>({ type: 'cancel_schedule', streamId, scheduleId }, options)
   }
 
   async stopStream(streamId: string, options: VideoDecoderRequestOptions = {}): Promise<VideoDecoderStreamStopped> {

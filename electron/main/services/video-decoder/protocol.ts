@@ -1,11 +1,25 @@
 /**
  * 原生视频解码服务（native/video-decoder）控制通道协议：4 字节小端长度前缀 + UTF-8 JSON。
  * 与 native/video-decoder/src/protocol.rs 保持一致；画面走显卡共享纹理，不走本通道。
- * 服务主动发出的事件没有 `id`，以 `event` 区分（`frame`、`stream_ended`）。
+ * 服务主动发出的事件没有 `id`，以 `event` 区分（`frame`、`frame_missing`、`schedule_done`、`stream_ended`）。
  */
 
-/** 2：帧流命令（1.2）、`frame`/`stream_ended` 事件，hello 携带 clientPid。 */
-export const VIDEO_DECODER_PROTOCOL_VERSION = 2
+import type {
+  VideoFrameAtResult,
+  VideoFrameDecoderInfo,
+  VideoFrameNativeStats,
+  VideoFrameNativeStreamCounters,
+  VideoFrameRequestTag,
+  VideoFrameScheduleAck,
+  VideoFrameStreamInfo,
+} from '../../../../src/platform/contracts/videoFrameTypes'
+
+/**
+ * 2：帧流命令（1.2）、`frame`/`stream_ended` 事件，hello 携带 clientPid。
+ * 3：解码会话（1.3）：`open_decoder`/`frame_at`/`schedule`/`cancel_schedule`，`frame` 带 `ptsUs`/`request`，
+ *    新事件 `frame_missing`/`schedule_done`。
+ */
+export const VIDEO_DECODER_PROTOCOL_VERSION = 3
 export const VIDEO_DECODER_MAX_MESSAGE_BYTES = 16 * 1024 * 1024
 
 export type VideoDecoderErrorCode =
@@ -25,6 +39,10 @@ export type VideoDecoderErrorCode =
   | 'GPU_UNAVAILABLE'
   | 'CLIENT_UNAVAILABLE'
   | 'INTERNAL'
+  | 'BUSY'
+  | 'DECODE_FAILED'
+  | 'UNSUPPORTED_FORMAT'
+  | 'FORMAT_CHANGED'
 
 export class VideoDecoderError extends Error {
   readonly code: VideoDecoderErrorCode
@@ -124,28 +142,37 @@ export interface VideoDecoderStreamStarted {
   setupMs: number
 }
 
-export interface VideoDecoderStreamCounters {
-  produced: number
-  skipped: number
-  released: number
-  duplicateReleases: number
-  outstanding: number
-  renderUsAverage: number
-}
+export type VideoDecoderStreamCounters = VideoFrameNativeStreamCounters
 
 export interface VideoDecoderStreamStopped {
   streamId: string
   stopped: boolean
-  final: { streamId: string; format: VideoSharedFormat; width: number; height: number; counters: VideoDecoderStreamCounters } | null
+  final: { streamId: string; format: VideoSharedFormat | null; width: number; height: number; counters: VideoDecoderStreamCounters } | null
 }
 
-export interface VideoDecoderStats {
-  pid: number
-  cpuMs: number
-  handleCount: number
-  gpuLocalMemory: { currentUsageBytes: number; budgetBytes: number } | null
-  streams: Array<{ streamId: string; format: VideoSharedFormat; width: number; height: number; running: boolean; counters: VideoDecoderStreamCounters }>
+export type VideoDecoderStats = VideoFrameNativeStats
+
+/** 打开解码会话（与平台契约同名字段，去掉通道标识）。 */
+export interface VideoDecoderOpenRequest {
+  streamId: string
+  path: string
+  streamIndex?: number
+  purpose: 'playback' | 'seek'
+  poolSize?: number
+  hardware?: 'auto' | 'off'
+  format?: 'nv12' | 'rgbaf16'
+  transfer?: string
 }
+
+/** 解码会话启动结果：与测试流同形，另含解码细节与时间信息。 */
+export type VideoDecoderDecoderStarted = VideoDecoderStreamStarted & Omit<VideoFrameDecoderInfo, keyof VideoFrameStreamInfo | 'visibleRect'> & {
+  container: string | null
+  frameRate: number
+  setupMs: number
+}
+
+export type VideoDecoderFrameAtResult = VideoFrameAtResult
+export type VideoDecoderScheduleAck = VideoFrameScheduleAck
 
 export interface VideoDecoderFrameEvent {
   event: 'frame'
@@ -153,6 +180,9 @@ export interface VideoDecoderFrameEvent {
   slot: number
   frameIndex: number
   timestampUs: number
+  ptsUs?: number
+  durationUs?: number
+  request?: VideoFrameRequestTag
 }
 
 export interface VideoDecoderStreamEndedEvent {
@@ -163,7 +193,24 @@ export interface VideoDecoderStreamEndedEvent {
   counters: VideoDecoderStreamCounters
 }
 
-export type VideoDecoderEvent = VideoDecoderFrameEvent | VideoDecoderStreamEndedEvent
+export interface VideoDecoderFrameMissingEvent {
+  event: 'frame_missing'
+  streamId: string
+  scheduleId: string
+  index: number
+  reason: 'no_picture' | 'decode_error' | 'superseded'
+}
+
+export interface VideoDecoderScheduleDoneEvent {
+  event: 'schedule_done'
+  streamId: string
+  scheduleId: string
+  reason: 'completed' | 'cancelled' | 'error'
+  message: string | null
+  counters: Record<string, number>
+}
+
+export type VideoDecoderEvent = VideoDecoderFrameEvent | VideoDecoderStreamEndedEvent | VideoDecoderFrameMissingEvent | VideoDecoderScheduleDoneEvent
 
 export interface VideoDecoderVideoStreamInfo {
   width: number
@@ -238,6 +285,10 @@ export type VideoDecoderCommand =
   | { type: 'stop_stream'; streamId: string }
   | { type: 'stats' }
   | { type: 'close_client_handles'; handles: string[] }
+  | ({ type: 'open_decoder' } & VideoDecoderOpenRequest)
+  | { type: 'frame_at'; streamId: string; time: number; ticket: string }
+  | { type: 'schedule'; streamId: string; scheduleId: string; times?: number[]; range?: { from: number; to?: number } }
+  | { type: 'cancel_schedule'; streamId: string; scheduleId: string }
 
 /** 通知类命令：不等待响应。 */
 export type VideoDecoderNotification = { type: 'release_frame'; streamId: string; slot: number }
@@ -292,10 +343,12 @@ export function isVideoDecoderEvent(value: unknown): value is VideoDecoderEvent 
   const record = value as Record<string, unknown>
   if (typeof record.streamId !== 'string') return false
   if (record.event === 'frame') return typeof record.slot === 'number' && typeof record.frameIndex === 'number' && typeof record.timestampUs === 'number'
+  if (record.event === 'frame_missing') return typeof record.scheduleId === 'string' && typeof record.index === 'number'
+  if (record.event === 'schedule_done') return typeof record.scheduleId === 'string'
   return record.event === 'stream_ended'
 }
 
-const NATIVE_ERROR_CODES = new Set<VideoDecoderErrorCode>(['INVALID_REQUEST', 'OPEN_FAILED', 'STREAM_INFO_FAILED', 'GPU_FAILED', 'GPU_UNAVAILABLE', 'CLIENT_UNAVAILABLE', 'INTERNAL', 'CANCELLED'])
+const NATIVE_ERROR_CODES = new Set<VideoDecoderErrorCode>(['INVALID_REQUEST', 'OPEN_FAILED', 'STREAM_INFO_FAILED', 'GPU_FAILED', 'GPU_UNAVAILABLE', 'CLIENT_UNAVAILABLE', 'INTERNAL', 'CANCELLED', 'BUSY', 'DECODE_FAILED', 'UNSUPPORTED_FORMAT', 'FORMAT_CHANGED'])
 
 export function nativeErrorCode(code: string | undefined): VideoDecoderErrorCode {
   return code && NATIVE_ERROR_CODES.has(code as VideoDecoderErrorCode) ? (code as VideoDecoderErrorCode) : 'INTERNAL'

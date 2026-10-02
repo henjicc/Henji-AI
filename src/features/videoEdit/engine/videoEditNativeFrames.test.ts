@@ -26,6 +26,20 @@ function createReceiver() {
 }
 
 describe('VideoEditNativeFrameReceiver', () => {
+  it('routes decoder schedule events to the stream subscriber without touching frames', () => {
+    const { port, receiver } = createReceiver()
+    const events: unknown[] = []
+    const stop = receiver.subscribeSchedule('vf-1', (event) => events.push(event))
+    const done = { type: 'schedule_done', route: 'r', streamId: 'vf-1', scheduleId: 's', reason: 'completed', message: null }
+    port.onmessage?.({ data: { type: 'schedule', event: done } } as MessageEvent)
+    port.onmessage?.({ data: { type: 'schedule', event: { ...done, streamId: 'vf-2' } } } as MessageEvent)
+    expect(events).toEqual([done])
+    stop()
+    port.onmessage?.({ data: { type: 'schedule', event: done } } as MessageEvent)
+    expect(events).toHaveLength(1)
+    expect(receiver.stats()).toEqual({ received: 0, released: 0, unclaimed: 0, outstanding: 0 })
+  })
+
   it('returns unclaimed frames to the main thread instead of dropping or closing them in the worker', async () => {
     const { port, receiver } = createReceiver()
     const frame = port.deliver('nobody', 1)

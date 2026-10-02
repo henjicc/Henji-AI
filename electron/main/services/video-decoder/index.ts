@@ -7,8 +7,27 @@ import { VideoFrameBridge } from './texture-bridge'
 export { VideoDecoderService } from './client'
 export type { VideoDecoderServiceState, VideoDecoderRequestOptions, VideoDecoderLifecycleEvent } from './client'
 export { VideoDecoderError } from './protocol'
-export { VideoFrameBridge, VIDEO_FRAMES_STREAM_ENDED_CHANNEL, parseVideoFrameTestStreamRequest } from './texture-bridge'
-export type { VideoFrameBridgeStats, VideoFrameStreamInfo, VideoFrameTarget, VideoFrameTestStreamRequest } from './texture-bridge'
+export {
+  VideoFrameBridge,
+  VIDEO_FRAMES_STREAM_ENDED_CHANNEL,
+  parseVideoFrameAtRequest,
+  parseVideoFrameCancelRequest,
+  parseVideoFrameDecoderRequest,
+  parseVideoFrameScheduleRequest,
+  parseVideoFrameTestStreamRequest,
+} from './texture-bridge'
+export type {
+  VideoFrameAtRequest,
+  VideoFrameAtResult,
+  VideoFrameBridgeStats,
+  VideoFrameDecoderInfo,
+  VideoFrameDecoderRequest,
+  VideoFrameScheduleAck,
+  VideoFrameScheduleRequest,
+  VideoFrameStreamInfo,
+  VideoFrameTarget,
+  VideoFrameTestStreamRequest,
+} from './texture-bridge'
 export type {
   VideoDecoderErrorCode,
   VideoDecoderEvent,

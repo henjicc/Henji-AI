@@ -4,8 +4,6 @@
 //! 客户端进程里的句柄由本服务负责回收——流结束时用 `DUPLICATE_CLOSE_SOURCE` 远程关闭。
 //! Electron `importSharedTexture` 每次导入会自行再复制一份并在释放时关闭，不接管我们复制过去的句柄。
 
-#![cfg(windows)]
-
 use windows::core::{Interface, PCWSTR};
 use windows::Win32::Foundation::{CloseHandle, DuplicateHandle, DUPLICATE_CLOSE_SOURCE, DUPLICATE_SAME_ACCESS, HANDLE};
 use windows::Win32::Graphics::Direct3D11::*;

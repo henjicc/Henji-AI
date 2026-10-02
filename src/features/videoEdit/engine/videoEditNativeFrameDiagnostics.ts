@@ -1,10 +1,12 @@
 import type { NativeVideoFrame, VideoEditNativeFrameReceiver } from './videoEditNativeFrames'
+import { NativeDecodeDiagnostics, type DecodeDiagnosticsRequest, type DecodeDiagnosticsResult, type DiagnosticsDevice } from './videoEditNativeDecodeDiagnostics'
 
 /**
  * 原生帧通道诊断（只在渲染 Worker 收到真实性测试的诊断消息时实例化，正式剪辑流程不使用）：
  * - 像素校验：按原生测试画面布局，用 WebGPU `importExternalTexture` + 计算着色器 `textureLoad` 读回色条、
  *   帧号位块、透明块与整行灰阶，得到颜色误差、帧号是否正确、位深是否保留；
  * - 负载：其余帧照正式合成入口的做法导入外部纹理并绘制到一张同尺寸自有纹理，统计到达间隔。
+ * 原生解码会话（1.3）的读回与节拍消费见 `videoEditNativeDecodeDiagnostics.ts`，共用这里的 WebGPU 设备与管线。
  */
 
 export interface NativeFramePatternLayout {
@@ -29,6 +31,7 @@ export type NativeFrameDiagnosticsRequest =
   | { action: 'start'; streams: NativeFrameDiagnosticsStream[]; composite?: boolean }
   | { action: 'stop'; streamIds?: string[] }
   | { action: 'snapshot' }
+  | DecodeDiagnosticsRequest
 
 export interface NativeFramePixelCheck {
   frameIndex: number
@@ -70,6 +73,8 @@ export interface NativeFrameStreamDiagnostics {
 export interface NativeFrameDiagnosticsResult {
   streams: NativeFrameStreamDiagnostics[]
   receiver: ReturnType<VideoEditNativeFrameReceiver['stats']>
+  /** 解码会话诊断的结果（只在对应动作时出现）。 */
+  decode?: DecodeDiagnosticsResult
 }
 
 const BIT_COUNT = 16
@@ -162,7 +167,7 @@ interface StreamState {
 }
 
 interface GpuResources {
-  device: DiagDevice
+  device: DiagDevice & DiagnosticsDevice
   sample: DiagPipeline
   copy: DiagPipeline
   sampler: unknown
@@ -178,10 +183,15 @@ export class NativeFrameDiagnostics {
   private gpu: Promise<GpuResources> | null = null
   private readonly streams = new Map<string, StreamState>()
   private composite = true
+  private decode: NativeDecodeDiagnostics | null = null
 
   constructor(private readonly receiver: VideoEditNativeFrameReceiver) {}
 
   async handle(request: NativeFrameDiagnosticsRequest): Promise<NativeFrameDiagnosticsResult> {
+    if (request.action === 'capture' || request.action === 'browserCapture' || request.action === 'pace' || request.action === 'paceResult') {
+      this.decode ??= new NativeDecodeDiagnostics(this.receiver, () => this.resources())
+      return { streams: [], receiver: this.receiver.stats(), decode: await this.decode.handle(request) }
+    }
     if (request.action === 'start') {
       const gpu = await this.resources()
       this.composite = request.composite !== false
@@ -215,7 +225,7 @@ export class NativeFrameDiagnostics {
       const gpu = (navigator as Navigator & { gpu?: { requestAdapter(options?: unknown): Promise<DiagAdapter | null> } }).gpu
       const adapter = await gpu?.requestAdapter({ powerPreference: 'high-performance' })
       if (!adapter) throw new Error('WebGPU 不可用')
-      const device = await adapter.requestDevice()
+      const device = (await adapter.requestDevice()) as DiagDevice & DiagnosticsDevice
       const sample = device.createComputePipeline({ layout: 'auto', compute: { module: device.createShaderModule({ code: SAMPLE_WGSL }), entryPoint: 'main' } })
       const module = device.createShaderModule({ code: COPY_WGSL })
       const copy = device.createRenderPipeline({ layout: 'auto', vertex: { module, entryPoint: 'vs' }, fragment: { module, entryPoint: 'fs', targets: [{ format: 'rgba8unorm' }] }, primitive: { topology: 'triangle-list' } })

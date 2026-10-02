@@ -1,8 +1,20 @@
+import path from 'node:path'
 import { app, type WebContents } from 'electron'
+import { isPathWithinAllowedMediaRoots } from '../protocol'
 import {
   getVideoFrameBridge,
+  parseVideoFrameAtRequest,
+  parseVideoFrameCancelRequest,
+  parseVideoFrameDecoderRequest,
+  parseVideoFrameScheduleRequest,
   parseVideoFrameTestStreamRequest,
+  type VideoFrameAtRequest,
+  type VideoFrameAtResult,
   type VideoFrameBridgeStats,
+  type VideoFrameDecoderInfo,
+  type VideoFrameDecoderRequest,
+  type VideoFrameScheduleAck,
+  type VideoFrameScheduleRequest,
   type VideoFrameStreamInfo,
   type VideoFrameTarget,
 } from '../services/video-decoder'
@@ -10,8 +22,9 @@ import { parseStringField, parseVoid, registerIpcHandler } from './registry'
 
 /**
  * 显卡纹理帧流 IPC：渲染层经 preload `videoFrames` 打开/关闭帧流，帧本身走 `sharedTexture`
- * 直接送到发起请求的窗口主 frame。1.2 只开放合成测试画面（开发运行或显式诊断开关），
- * 真实解码流在 1.3/2.2 接入同一桥。
+ * 直接送到发起请求的窗口主 frame。合成测试画面只在开发运行或显式诊断开关下开放；
+ * 原生解码会话（1.3）读取已授权媒体目录内的本地文件（与 henji-media 协议同一授权），
+ * 取帧请求只能操作本窗口打开的会话。
  */
 
 const targets = new WeakMap<WebContents, VideoFrameTarget>()
@@ -61,6 +74,14 @@ export function registerVideoFramesIpc(): void {
       return getVideoFrameBridge().openTestStream(webContentsFrameTarget(event.sender), request)
     },
   )
+  registerIpcHandler<VideoFrameDecoderRequest, VideoFrameDecoderInfo>('videoFrames:openDecoder', parseVideoFrameDecoderRequest, (request, event) => {
+    if (!path.isAbsolute(request.path)) throw new Error('素材路径必须是绝对路径')
+    if (!isPathWithinAllowedMediaRoots(request.path)) throw new Error('素材所在目录尚未授权读取')
+    return getVideoFrameBridge().openDecoder(webContentsFrameTarget(event.sender), request)
+  })
+  registerIpcHandler<VideoFrameAtRequest, VideoFrameAtResult>('videoFrames:frameAt', parseVideoFrameAtRequest, (request, event) => getVideoFrameBridge().frameAt(event.sender.id, request))
+  registerIpcHandler<VideoFrameScheduleRequest, VideoFrameScheduleAck>('videoFrames:schedule', parseVideoFrameScheduleRequest, (request, event) => getVideoFrameBridge().schedule(event.sender.id, request))
+  registerIpcHandler<{ streamId: string; scheduleId: string }, boolean>('videoFrames:cancelSchedule', parseVideoFrameCancelRequest, (request, event) => getVideoFrameBridge().cancelSchedule(event.sender.id, request.streamId, request.scheduleId))
   registerIpcHandler<string, boolean>(
     'videoFrames:closeStream',
     (input) => parseStringField(input, 'streamId'),

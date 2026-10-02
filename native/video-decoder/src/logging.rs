@@ -39,10 +39,36 @@ unsafe extern "C" fn ffmpeg_log_callback(avcl: *mut c_void, level: c_int, fmt: *
         return;
     }
     let text = unsafe { CStr::from_ptr(buffer.as_ptr()) }.to_string_lossy().trim().to_string();
-    if !text.is_empty() {
+    if !text.is_empty() && FFMPEG_LOG_LIMIT.admit() {
         emit("warn", "ffmpeg.log", &text, json!({ "ffmpegLevel": level }));
     }
 }
+
+/// FFmpeg 日志限频：开放 GOP 定位等场景下解码器会连续报参考帧缺失，每 10 秒最多转发 20 条，
+/// 窗口结束时报告被略去的条数。
+struct LogLimit {
+    state: std::sync::Mutex<(std::time::Instant, u32)>,
+}
+
+const FFMPEG_LOG_WINDOW: std::time::Duration = std::time::Duration::from_secs(10);
+const FFMPEG_LOG_PER_WINDOW: u32 = 20;
+
+impl LogLimit {
+    fn admit(&self) -> bool {
+        let mut state = self.state.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let now = std::time::Instant::now();
+        if now.duration_since(state.0) >= FFMPEG_LOG_WINDOW {
+            if state.1 > FFMPEG_LOG_PER_WINDOW {
+                emit("warn", "ffmpeg.log_suppressed", "FFmpeg 日志过多，已略去部分", json!({ "suppressed": state.1 - FFMPEG_LOG_PER_WINDOW }));
+            }
+            *state = (now, 0);
+        }
+        state.1 += 1;
+        state.1 <= FFMPEG_LOG_PER_WINDOW
+    }
+}
+
+static FFMPEG_LOG_LIMIT: std::sync::LazyLock<LogLimit> = std::sync::LazyLock::new(|| LogLimit { state: std::sync::Mutex::new((std::time::Instant::now(), 0)) });
 
 pub fn install_ffmpeg_log_bridge() {
     unsafe {

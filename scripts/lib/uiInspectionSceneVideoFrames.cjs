@@ -308,7 +308,7 @@ function createVideoFramesScene() {
         }))
         assert.equal(evidence.isolation.pageHasSharedTexture, 'undefined', '页面不应拿到 sharedTexture')
         assert.equal(evidence.isolation.pageHasRequire, 'undefined', '页面不应拿到 require')
-        assert.deepEqual(evidence.isolation.videoFramesKeys, ['closeStream', 'connect', 'disconnect', 'onStreamEnded', 'openTestStream', 'stats'])
+        assert.deepEqual(evidence.isolation.videoFramesKeys, ['cancelSchedule', 'closeStream', 'connect', 'disconnect', 'frameAt', 'onStreamEnded', 'openDecoder', 'openTestStream', 'schedule', 'stats'])
         evidence.isolation.webPreferences = await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().map((win) => { const prefs = win.webContents.getLastWebPreferences(); return { sandbox: prefs.sandbox, contextIsolation: prefs.contextIsolation, nodeIntegration: prefs.nodeIntegration } }))
         assert.ok(evidence.isolation.webPreferences.every((prefs) => prefs.sandbox === true && prefs.contextIsolation === true && prefs.nodeIntegration !== true), '窗口必须保持 sandbox + contextIsolation')
         await installHarness(page)
@@ -429,4 +429,4 @@ function createVideoFramesScene() {
   }
 }
 
-module.exports = { createVideoFramesScene }
+module.exports = { createVideoFramesScene, videoFramesHarness: { installHarness, processResources, totalGpuMemoryMiB, cpuSample, cpuCores, quantile, workerAssetUrl } }

@@ -1,7 +1,9 @@
 import { ipcRenderer, sharedTexture } from 'electron'
 import {
   VIDEO_FRAMES_PORT_MESSAGE_TYPE,
+  VIDEO_FRAMES_SCHEDULE_EVENT_CHANNEL,
   type VideoFrameMeta,
+  type VideoFrameScheduleEvent,
   type VideoFrameStreamEndedPayload,
   type VideoFramesPortWindowMessage,
   type VideoFramesPreloadStats,
@@ -82,6 +84,17 @@ export function createVideoFramesApi(nativeInvoke: NativeInvoke): HenjiVideoFram
     }
   })
 
+  // 解码计划的缺帧与结束事件：投递到流所属通道的端口（与帧同一端口，消费方按 index 对齐）。
+  ipcRenderer.on(VIDEO_FRAMES_SCHEDULE_EVENT_CHANNEL, (_event, payload: VideoFrameScheduleEvent) => {
+    const route = payload && typeof payload.route === 'string' ? routes.get(payload.route) : undefined
+    if (!route) return
+    try {
+      route.port.postMessage({ type: 'schedule', event: payload }, [])
+    } catch {
+      // 端口已关闭：消费方已不在，忽略。
+    }
+  })
+
   const closeRoute = (route: string): void => {
     const entry = routes.get(route)
     if (!entry) return
@@ -110,6 +123,10 @@ export function createVideoFramesApi(nativeInvoke: NativeInvoke): HenjiVideoFram
     },
     disconnect: (route) => closeRoute(route),
     openTestStream: (request) => nativeInvoke('videoFrames:openTestStream', request),
+    openDecoder: (request) => nativeInvoke('videoFrames:openDecoder', request),
+    frameAt: (request) => nativeInvoke('videoFrames:frameAt', request),
+    schedule: (request) => nativeInvoke('videoFrames:schedule', request),
+    cancelSchedule: (streamId, scheduleId) => nativeInvoke('videoFrames:cancelSchedule', { streamId, scheduleId }),
     closeStream: (streamId) => nativeInvoke('videoFrames:closeStream', { streamId }),
     stats: async () => {
       const bridge = await nativeInvoke<Awaited<ReturnType<HenjiVideoFramesApi['stats']>>>('videoFrames:stats')

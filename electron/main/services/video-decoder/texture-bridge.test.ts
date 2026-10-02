@@ -2,9 +2,12 @@ import { describe, expect, it, vi } from 'vitest'
 import type { ImportSharedTextureOptions, SendSharedTextureOptions, SharedTextureImported, WebFrameMain } from 'electron'
 import type { MainLoggerMeta } from '../logging/main-logger'
 import type { VideoDecoderLifecycleEvent } from './client'
-import type { VideoDecoderEvent, VideoDecoderStreamStarted, VideoDecoderTestStreamRequest } from './protocol'
+import type { VideoDecoderDecoderStarted, VideoDecoderEvent, VideoDecoderOpenRequest, VideoDecoderStreamStarted, VideoDecoderTestStreamRequest } from './protocol'
 import {
   encodeNtHandle,
+  parseVideoFrameAtRequest,
+  parseVideoFrameDecoderRequest,
+  parseVideoFrameScheduleRequest,
   parseVideoFrameTestStreamRequest,
   VIDEO_FRAMES_STREAM_ENDED_CHANNEL,
   VideoFrameBridge,
@@ -28,6 +31,30 @@ function started(request: VideoDecoderTestStreamRequest, slots = 3): VideoDecode
   }
 }
 
+function decoderStarted(request: VideoDecoderOpenRequest): VideoDecoderDecoderStarted {
+  return {
+    streamId: request.streamId,
+    format: 'rgbaf16',
+    codedSize: { width: 3840, height: 2160 },
+    visibleRect: { x: 0, y: 0, width: 3840, height: 2160 },
+    colorSpace: { primaries: 'bt709', transfer: 'bt709', matrix: 'rgb', range: 'full' },
+    fps: 60,
+    keyedMutex: true,
+    slots: [0, 1, 2].map((slot) => ({ slot, handle: String(2000 + slot * 4) })),
+    setupMs: 12,
+    decoder: { codec: 'prores', decoderName: 'prores', hardware: false, hardwareRequested: true, pixelFormat: 'yuv422p10le', bitDepth: 10, chromaLog2: [1, 0], hasAlpha: false, path: 'shader_planar', intraOnly: true },
+    timeBase: { num: 1, den: 15360 },
+    startSeconds: 0,
+    endSeconds: 7,
+    firstFramePtsUs: 0,
+    rotationDegrees: null,
+    purpose: request.purpose,
+    color: { matrix: 'bt709', primaries: 'bt709', transfer: 'bt709', range: 'limited', hdrAsSdr: false },
+    container: 'mov,mp4,m4a,3gp,3g2,mj2',
+    frameRate: 60,
+  }
+}
+
 function createService() {
   let eventListener: ((event: VideoDecoderEvent) => void) | null = null
   let lifecycleListener: ((event: VideoDecoderLifecycleEvent) => void) | null = null
@@ -41,6 +68,10 @@ function createService() {
       beforeStartResolves?.(request.streamId)
       return started(request)
     }),
+    openDecoder: vi.fn(async (request: VideoDecoderOpenRequest) => decoderStarted(request)),
+    frameAt: vi.fn(async (_streamId: string, _time: number, ticket: string) => ({ ticket, found: true, ptsUs: 1_000_000, seeked: true, decodeMs: 3 })),
+    schedule: vi.fn(async (request: { scheduleId: string; times?: number[] }) => ({ scheduleId: request.scheduleId, count: request.times?.length ?? null })),
+    cancelSchedule: vi.fn(async () => ({ cancelled: true })),
     stopStream: vi.fn(async (streamId: string) => {
       stopped.push(streamId)
       return { streamId, stopped: true, final: null }
@@ -292,11 +323,81 @@ describe('VideoFrameBridge', () => {
   })
 })
 
+describe('VideoFrameBridge decoder sessions', () => {
+  const decoderRequest = { route: 'vf-route-2', path: 'D:\\素材\\a.mov', purpose: 'playback' as const }
+
+  it('opens a decoder session, forwards PTS and request tags with each frame, and routes schedule events to the owning window', async () => {
+    const native = createService()
+    const shared = createSharedTexture()
+    const { target, sent } = createTarget(7)
+    const bridge = new VideoFrameBridge({ service: native.service, sharedTexture: shared.api, logger: createLogger().logger, overdueCheckIntervalMs: 0 })
+    const info = await bridge.openDecoder(target, decoderRequest)
+    expect(native.service.openDecoder).toHaveBeenCalledWith({ streamId: 'vf-1', path: decoderRequest.path, purpose: 'playback' })
+    expect(info).toMatchObject({ streamId: 'vf-1', route: 'vf-route-2', format: 'rgbaf16', poolSize: 3, decoder: { decoderName: 'prores', path: 'shader_planar' }, color: { matrix: 'bt709', range: 'limited' }, purpose: 'playback' })
+
+    native.emit({ event: 'frame', streamId: 'vf-1', slot: 1, frameIndex: 0, timestampUs: 16666, ptsUs: 16666, durationUs: 16666, request: { kind: 'schedule', id: 'play-1', index: 4 } })
+    expect(shared.imports[0].options.textureInfo).toMatchObject({ pixelFormat: 'rgbaf16', timestamp: 16666 })
+    expect(shared.sends[0].meta).toEqual({ route: 'vf-route-2', streamId: 'vf-1', frameIndex: 0, timestampUs: 16666, ptsUs: 16666, durationUs: 16666, request: { kind: 'schedule', id: 'play-1', index: 4 } })
+
+    native.emit({ event: 'frame_missing', streamId: 'vf-1', scheduleId: 'play-1', index: 5, reason: 'no_picture' })
+    native.emit({ event: 'schedule_done', streamId: 'vf-1', scheduleId: 'play-1', reason: 'completed', message: null, counters: {} })
+    native.emit({ event: 'frame_missing', streamId: 'vf-99', scheduleId: 'x', index: 0, reason: 'no_picture' })
+    expect(sent).toEqual([
+      { channel: 'videoFrames:scheduleEvent', payload: { type: 'frame_missing', route: 'vf-route-2', streamId: 'vf-1', scheduleId: 'play-1', index: 5, reason: 'no_picture' } },
+      { channel: 'videoFrames:scheduleEvent', payload: { type: 'schedule_done', route: 'vf-route-2', streamId: 'vf-1', scheduleId: 'play-1', reason: 'completed', message: null } },
+    ])
+  })
+
+  it('only lets the owning window request frames from its own decoder sessions', async () => {
+    const native = createService()
+    const bridge = new VideoFrameBridge({ service: native.service, sharedTexture: createSharedTexture().api, logger: createLogger().logger, overdueCheckIntervalMs: 0 })
+    await bridge.openDecoder(createTarget(7).target, { ...decoderRequest, purpose: 'seek' })
+    await bridge.openTestStream(createTarget(7).target, request)
+    await expect(bridge.frameAt(8, { streamId: 'vf-1', time: 1, ticket: 't1' })).rejects.toThrow('不属于当前窗口')
+    await expect(bridge.frameAt(7, { streamId: 'vf-2', time: 1, ticket: 't1' })).rejects.toThrow()
+    await expect(bridge.frameAt(7, { streamId: 'vf-1', time: 1, ticket: 't1' })).resolves.toMatchObject({ ticket: 't1', found: true, ptsUs: 1_000_000 })
+    expect(native.service.frameAt).toHaveBeenCalledWith('vf-1', 1, 't1')
+    await expect(bridge.schedule(8, { streamId: 'vf-1', scheduleId: 's1', times: [0] })).rejects.toThrow()
+    await expect(bridge.schedule(7, { streamId: 'vf-1', scheduleId: 's1', times: [0, 0.5] })).resolves.toEqual({ scheduleId: 's1', count: 2 })
+    expect(native.service.schedule).toHaveBeenCalledWith({ streamId: 'vf-1', scheduleId: 's1', times: [0, 0.5] })
+    expect(await bridge.cancelSchedule(8, 'vf-1', 's1')).toBe(false)
+    expect(await bridge.cancelSchedule(7, 'vf-1', 's1')).toBe(true)
+    await bridge.closeStream('vf-1', 'requested', 7)
+    await expect(bridge.frameAt(7, { streamId: 'vf-1', time: 1, ticket: 't2' })).rejects.toThrow()
+  })
+
+  it('reports a failed decoder open without registering a stream', async () => {
+    const native = createService()
+    native.service.openDecoder = vi.fn(async () => { throw new Error('无法打开文件') })
+    const { logger, entries } = createLogger()
+    const bridge = new VideoFrameBridge({ service: native.service, sharedTexture: createSharedTexture().api, logger, overdueCheckIntervalMs: 0 })
+    await expect(bridge.openDecoder(createTarget().target, decoderRequest)).rejects.toThrow('无法打开文件')
+    expect((await bridge.stats()).streams).toEqual([])
+    expect(entries.some((entry) => entry.event === 'video_frames.decoder.open.failed')).toBe(true)
+  })
+})
+
 describe('texture bridge helpers', () => {
   it('encodes NT handles as 8-byte little endian and rejects malformed values', () => {
     expect([...encodeNtHandle('4660')]).toEqual([0x34, 0x12, 0, 0, 0, 0, 0, 0])
     expect(() => encodeNtHandle('0x10')).toThrow()
     expect(() => encodeNtHandle('-1')).toThrow()
+  })
+
+  it('validates decoder requests from the renderer', () => {
+    const valid = { route: 'vf-route-1', path: 'D:\\a.mov', purpose: 'seek' }
+    expect(parseVideoFrameDecoderRequest({ ...valid, poolSize: 4, hardware: 'off', format: 'rgbaf16', transfer: 'srgb' })).toEqual({ ...valid, streamIndex: undefined, poolSize: 4, hardware: 'off', format: 'rgbaf16', transfer: 'srgb' })
+    for (const invalid of [null, { ...valid, purpose: 'export' }, { ...valid, path: '' }, { ...valid, format: 'p010le' }, { ...valid, poolSize: 40 }, { ...valid, transfer: 'S RGB' }, { ...valid, route: 'x y' }]) {
+      expect(() => parseVideoFrameDecoderRequest(invalid)).toThrow()
+    }
+    expect(parseVideoFrameAtRequest({ streamId: 'vf-1', time: 1.25, ticket: 't-1' })).toEqual({ streamId: 'vf-1', time: 1.25, ticket: 't-1' })
+    for (const invalid of [{ streamId: 'vf-1', time: Number.NaN, ticket: 't' }, { streamId: 'vf 1', time: 1, ticket: 't' }, { streamId: 'vf-1', time: 1 }]) {
+      expect(() => parseVideoFrameAtRequest(invalid)).toThrow()
+    }
+    expect(parseVideoFrameScheduleRequest({ streamId: 'vf-1', scheduleId: 's', range: { from: 2 } })).toEqual({ streamId: 'vf-1', scheduleId: 's', range: { from: 2 } })
+    for (const invalid of [{ streamId: 'vf-1', scheduleId: 's' }, { streamId: 'vf-1', scheduleId: 's', times: [0], range: { from: 0 } }, { streamId: 'vf-1', scheduleId: 's', times: [0, Number.POSITIVE_INFINITY] }, { streamId: 'vf-1', scheduleId: 's', range: { from: 'a' } }]) {
+      expect(() => parseVideoFrameScheduleRequest(invalid)).toThrow()
+    }
   })
 
   it('validates open requests from the renderer', () => {

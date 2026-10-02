@@ -4,16 +4,20 @@
 //! 由主进程转入统一日志。stdin 关闭即退出，父进程异常结束时服务不会残留。
 //!
 //! 命令：hello（版本、FFmpeg 信息、D3D11 设备、登记客户端 PID）、probe（流信息）、cancel、shutdown；
-//! 帧流（1.2）：start_test_stream、stop_stream、release_frame（通知）、stats、close_client_handles。
-//! 画面经显卡共享纹理交给客户端，控制通道只发 `frame` 事件（槽位与时间戳）。
+//! 帧流（1.2）：start_test_stream、stop_stream、release_frame（通知）、stats、close_client_handles；
+//! 解码会话（1.3，协议见 decode/mod.rs）：open_decoder、frame_at、schedule、cancel_schedule。
+//! 画面经显卡共享纹理交给客户端，控制通道只发 `frame` 等事件（槽位、时间戳与请求归属）。
+//!
+//! 平台层边界（重要记录 011）：显卡设备、硬件解码设备、共享纹理与格式转换只在 `platform/` 之后；
+//! 其余模块跨平台，不直接依赖 D3D11/`windows` crate。
 
+mod convert;
+mod decode;
 mod ffmpeg_info;
-mod gpu;
 mod logging;
+mod platform;
 mod probe;
 mod protocol;
-#[cfg(windows)]
-mod shared_texture;
 mod streams;
 mod test_pattern;
 
@@ -47,89 +51,75 @@ fn respond(id: &str, result: Result<Value, ServiceError>) {
 }
 
 struct Service {
-    gpu: Option<Arc<gpu::GpuDevice>>,
-    gpu_summary: Value,
+    platform: Option<Arc<dyn platform::VideoPlatform>>,
+    platform_summary: Value,
     ffmpeg: Value,
     cancels: CancelMap,
-    #[cfg(windows)]
-    client: Option<Arc<shared_texture::ClientProcess>>,
     streams: streams::StreamManager,
 }
 
 impl Service {
     fn new() -> Self {
         logging::install_ffmpeg_log_bridge();
-        let (gpu, gpu_summary) = match gpu::create_device() {
-            Ok(device) => {
-                let summary = device.summary.clone();
-                (Some(Arc::new(device)), summary)
+        let (platform, platform_summary) = match platform::create() {
+            Ok(platform) => {
+                let summary = platform.summary();
+                (Some(platform), summary)
             }
             Err(reason) => {
-                logging::warn("gpu.device_unavailable", "D3D11 设备不可用", json!({ "reason": reason }));
-                (None, gpu::unavailable_summary(&reason))
+                logging::warn("gpu.device_unavailable", "显卡设备不可用", json!({ "reason": reason }));
+                (None, platform::unavailable_summary(&reason))
             }
         };
-        Self {
-            gpu,
-            gpu_summary,
-            ffmpeg: ffmpeg_info::ffmpeg_info(),
-            cancels: Arc::default(),
-            #[cfg(windows)]
-            client: None,
-            streams: streams::StreamManager::new(),
-        }
+        Self { platform, platform_summary, ffmpeg: ffmpeg_info::ffmpeg_info(), cancels: Arc::default(), streams: streams::StreamManager::new() }
     }
 
     /// 登记客户端进程（纹理句柄的复制目标）。打开失败不影响握手，帧流请求届时报错。
     fn register_client(&mut self, client_pid: Option<u32>) -> Value {
-        #[cfg(windows)]
-        if let Some(pid) = client_pid {
-            if self.client.as_ref().is_some_and(|client| client.pid == pid) {
-                return json!({ "pid": pid, "ready": true });
+        let (Some(pid), Some(platform)) = (client_pid, &self.platform) else {
+            return json!({ "pid": client_pid, "ready": false });
+        };
+        match platform.register_client(pid) {
+            Ok(()) => json!({ "pid": pid, "ready": true }),
+            Err(reason) => {
+                logging::warn("client.open_failed", &reason, json!({ "pid": pid }));
+                json!({ "pid": pid, "ready": false, "reason": reason })
             }
-            return match shared_texture::ClientProcess::open(pid) {
-                Ok(client) => {
-                    self.client = Some(Arc::new(client));
-                    json!({ "pid": pid, "ready": true })
-                }
-                Err(reason) => {
-                    logging::warn("client.open_failed", &reason, json!({ "pid": pid }));
-                    json!({ "pid": pid, "ready": false, "reason": reason })
-                }
-            };
         }
-        json!({ "pid": client_pid, "ready": false })
+    }
+
+    /// 可用于帧流的平台（设备就绪且已登记客户端进程）。
+    fn ready_platform(&self) -> Result<Arc<dyn platform::VideoPlatform>, ServiceError> {
+        let platform = self.platform.clone().ok_or_else(|| ServiceError::new("GPU_UNAVAILABLE", "显卡设备不可用"))?;
+        if !platform.client_ready() {
+            return Err(ServiceError::new("CLIENT_UNAVAILABLE", "尚未登记客户端进程，无法共享纹理"));
+        }
+        Ok(platform)
     }
 
     fn start_test_stream(&mut self, options: streams::TestStreamOptions) -> Result<Value, ServiceError> {
-        #[cfg(windows)]
-        {
-            let gpu = self.gpu.clone().ok_or_else(|| ServiceError::new("GPU_UNAVAILABLE", "D3D11 设备不可用"))?;
-            let client = self.client.clone().ok_or_else(|| ServiceError::new("CLIENT_UNAVAILABLE", "尚未登记客户端进程，无法共享纹理"))?;
-            self.streams.start_test_stream(&gpu, &client, options)
-        }
-        #[cfg(not(windows))]
-        {
-            let _ = options;
-            Err(ServiceError::new("GPU_UNAVAILABLE", "原生视频解码只支持 Windows"))
-        }
+        let platform = self.ready_platform()?;
+        self.streams.start_test_stream(&platform, options)
+    }
+
+    /// 打开解码会话：会话线程打开文件后自行响应。
+    fn open_decoder(&mut self, request_id: &str, options: decode::DecodeOptions) -> Result<(), ServiceError> {
+        let platform = self.ready_platform()?;
+        self.streams.start_decoder(request_id.to_string(), &platform, options)
     }
 
     fn close_client_handles(&self, handles: &[String]) -> Value {
         let mut closed = 0;
         let mut failed: Vec<String> = Vec::new();
-        #[cfg(windows)]
         for handle in handles {
-            match (handle.parse::<u64>(), &self.client) {
-                (Ok(value), Some(client)) => match client.close_remote(value) {
+            match (handle.parse::<u64>(), &self.platform) {
+                (Ok(value), Some(platform)) => match platform.close_client_handle(value) {
                     Ok(()) => closed += 1,
                     Err(_) => failed.push(handle.clone()),
                 },
                 _ => failed.push(handle.clone()),
             }
         }
-        #[cfg(not(windows))]
-        failed.extend(handles.iter().cloned());
         if closed > 0 || !failed.is_empty() {
             logging::info("client.handles_closed", "已关闭遗留的客户端纹理句柄", json!({ "closed": closed, "failed": failed.len() }));
         }
@@ -137,13 +127,8 @@ impl Service {
     }
 
     fn stats(&self) -> Value {
-        #[cfg(windows)]
-        let (cpu_ms, handle_count, memory) = {
-            let (cpu_ms, handle_count) = shared_texture::process_usage();
-            (cpu_ms, handle_count, self.gpu.as_ref().and_then(|gpu| gpu.local_memory()))
-        };
-        #[cfg(not(windows))]
-        let (cpu_ms, handle_count, memory): (f64, u32, Option<(u64, u64)>) = (0.0, 0, None);
+        let (cpu_ms, handle_count) = platform::process_usage();
+        let memory = self.platform.as_ref().and_then(|platform| platform.local_memory());
         json!({
             "pid": std::process::id(),
             "cpuMs": cpu_ms,
@@ -160,8 +145,8 @@ impl Service {
             "protocolVersion": protocol::PROTOCOL_VERSION,
             "pid": std::process::id(),
             "ffmpeg": self.ffmpeg,
-            "d3d11": self.gpu_summary,
-            "gpuReady": self.gpu.is_some(),
+            "d3d11": self.platform_summary,
+            "gpuReady": self.platform.is_some(),
         })
     }
 
@@ -205,7 +190,7 @@ fn main() {
             "pid": std::process::id(),
             "serviceVersion": SERVICE_VERSION,
             "ffmpegVersion": service.ffmpeg["version"],
-            "gpuReady": service.gpu.is_some(),
+            "gpuReady": service.platform.is_some(),
             "startupMs": started.elapsed().as_secs_f64() * 1000.0,
         }),
     );
@@ -224,6 +209,7 @@ fn main() {
                 std::process::exit(2);
             }
         };
+        service.streams.reap();
         let request = match protocol::parse_request(&body) {
             Ok(request) => request,
             Err(error) => {
@@ -272,6 +258,58 @@ fn main() {
             Command::ReleaseFrame { stream_id, slot } => service.streams.release_frame(&stream_id, slot),
             Command::Stats => respond(&request.id, Ok(service.stats())),
             Command::CloseClientHandles { handles } => respond(&request.id, Ok(service.close_client_handles(&handles))),
+            Command::OpenDecoder { stream_id, path, stream_index, purpose, pool_size, hardware, format, transfer } => {
+                let options = decode::DecodeOptions {
+                    stream_id,
+                    path,
+                    stream_index,
+                    purpose: match purpose {
+                        Some(protocol::DecodePurpose::Seek) => decode::codec::Purpose::Seek,
+                        _ => decode::codec::Purpose::Playback,
+                    },
+                    pool_size,
+                    hardware: hardware != Some(protocol::HardwareMode::Off),
+                    format,
+                    transfer,
+                };
+                let stream_id = options.stream_id.clone();
+                if let Err(error) = service.open_decoder(&request.id, options) {
+                    logging::warn("decode.session.open_failed", &error.message, json!({ "code": error.code, "streamId": stream_id }));
+                    respond(&request.id, Err(error));
+                }
+            }
+            Command::FrameAt { stream_id, time, ticket } => {
+                if let Err(error) = service.streams.dispatch(&stream_id, decode::SessionCommand::FrameAt { request_id: request.id.clone(), time, ticket }) {
+                    respond(&request.id, Err(error));
+                }
+            }
+            Command::Schedule { stream_id, schedule_id, times, range } => {
+                let plan = match (times, range) {
+                    (Some(times), None) if times.len() <= decode::MAX_SCHEDULE_TIMES => Ok(decode::SchedulePlan::Times(times)),
+                    (Some(_), None) => Err(ServiceError::new("INVALID_REQUEST", "计划时间点过多")),
+                    (None, Some(range)) => Ok(decode::SchedulePlan::Range { from: range.from, to: range.to }),
+                    _ => Err(ServiceError::new("INVALID_REQUEST", "计划需要 times 或 range 之一")),
+                };
+                match plan {
+                    Err(error) => respond(&request.id, Err(error)),
+                    Ok(_) if !service.streams.is_decoder(&stream_id) => respond(&request.id, Err(ServiceError::new("INVALID_REQUEST", format!("解码会话 {stream_id} 不存在")))),
+                    Ok(plan) => {
+                        let count = match &plan {
+                            decode::SchedulePlan::Times(times) => json!(times.len()),
+                            decode::SchedulePlan::Range { .. } => Value::Null,
+                        };
+                        // 先确认再交给会话线程：客户端收到确认前不会看到本计划的帧。
+                        respond(&request.id, Ok(json!({ "scheduleId": schedule_id, "count": count })));
+                        if let Err(error) = service.streams.dispatch(&stream_id, decode::SessionCommand::Schedule { schedule_id: schedule_id.clone(), plan }) {
+                            send(&json!({ "event": "schedule_done", "streamId": stream_id, "scheduleId": schedule_id, "reason": "error", "message": error.message, "counters": {} }));
+                        }
+                    }
+                }
+            }
+            Command::CancelSchedule { stream_id, schedule_id } => {
+                let cancelled = service.streams.dispatch(&stream_id, decode::SessionCommand::Cancel { schedule_id }).is_ok();
+                respond(&request.id, Ok(json!({ "cancelled": cancelled })));
+            }
             Command::Shutdown => {
                 for flag in service.cancels.lock().unwrap().values() {
                     flag.store(true, Ordering::Relaxed);

@@ -349,6 +349,33 @@ describe('VideoDecoderService', () => {
     expect(received).toHaveLength(1)
   })
 
+  it('sends decoder session commands and dispatches schedule events in arrival order', async () => {
+    const { service, children } = createHarness(standardHandler({
+      open_decoder: (message, child) => child.reply(message.id, { streamId: message.streamId, format: 'nv12', slots: [{ slot: 0, handle: '1234' }], decoder: { decoderName: 'h264' } }),
+      frame_at: (message, child) => {
+        // 命中时帧事件先于响应写出。
+        child.stdout.write(encodeVideoDecoderFrame({ event: 'frame', streamId: message.streamId, slot: 0, frameIndex: 0, timestampUs: 2_000_000, ptsUs: 2_000_000, durationUs: 16666, request: { kind: 'frame_at', id: message.ticket } }))
+        child.reply(message.id, { ticket: message.ticket, found: true, ptsUs: 2_000_000, seeked: true, decodeMs: 4 })
+      },
+      schedule: (message, child) => {
+        child.reply(message.id, { scheduleId: message.scheduleId, count: (message.times as number[]).length })
+        child.stdout.write(encodeVideoDecoderFrame({ event: 'frame_missing', streamId: message.streamId, scheduleId: message.scheduleId, index: 0, reason: 'no_picture' }))
+        child.stdout.write(encodeVideoDecoderFrame({ event: 'schedule_done', streamId: message.streamId, scheduleId: message.scheduleId, reason: 'completed', message: null, counters: { delivered: 0 } }))
+      },
+      cancel_schedule: (message, child) => child.reply(message.id, { cancelled: true }),
+    }))
+    const received: VideoDecoderEvent[] = []
+    service.onEvent((event) => received.push(event))
+    await service.openDecoder({ streamId: 'd', path: 'D:\\a.mov', purpose: 'seek', hardware: 'off' })
+    expect(children[0].received.find((message) => message.type === 'open_decoder')).toMatchObject({ streamId: 'd', path: 'D:\\a.mov', purpose: 'seek', hardware: 'off' })
+    await expect(service.frameAt('d', 2, 't1')).resolves.toMatchObject({ ticket: 't1', found: true })
+    expect(received[0]).toMatchObject({ event: 'frame', request: { kind: 'frame_at', id: 't1' }, ptsUs: 2_000_000 })
+    await expect(service.schedule({ streamId: 'd', scheduleId: 's1', times: [-1] })).resolves.toEqual({ scheduleId: 's1', count: 1 })
+    await waitFor(() => received.length === 3)
+    expect(received.slice(1).map((event) => event.event)).toEqual(['frame_missing', 'schedule_done'])
+    await expect(service.cancelSchedule('d', 's1')).resolves.toEqual({ cancelled: true })
+  })
+
   it('emits lifecycle events so stream owners can drop handles of a crashed process', async () => {
     const { service, children } = createHarness(standardHandler())
     const lifecycle: string[] = []

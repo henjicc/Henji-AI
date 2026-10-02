@@ -1,10 +1,12 @@
-//! D3D11 设备：枚举 DXGI 适配器，在高性能硬件适配器上创建带视频支持的设备。
+//! D3D11 设备（Windows 平台层）：枚举 DXGI 适配器，在高性能硬件适配器上创建带视频支持的设备。
 //! 握手报告设备信息；共享纹理池（1.2）与 D3D11VA 解码（1.3）在同一设备上创建。
-//! 设备开启多线程保护，立即上下文另由互斥锁串行化（每个流的生产线程共用）。
+//!
+//! 立即上下文的锁：设备开启多线程保护后，`ID3D11Multithread::Enter/Leave` 就是运行时内部那把可重入锁。
+//! 本服务所有多步操作（复制、键控互斥体内写入、着色器调度）都在 `lock()` 守卫内完成，同一把锁也交给
+//! FFmpeg D3D11VA 作为 `lock/unlock` 回调（要求可重入），解码调用与我们的命令序列因此不会交错。
 
 use serde_json::{json, Value};
 
-#[cfg(windows)]
 mod imp {
     use super::*;
     use windows::core::{Interface, GUID};
@@ -15,17 +17,48 @@ mod imp {
 
     pub struct GpuDevice {
         pub device: ID3D11Device,
-        /// 立即上下文不是线程安全的：所有使用者先取锁。
-        pub context: std::sync::Mutex<ID3D11DeviceContext>,
+        /// 立即上下文不是线程安全的：所有使用者先经 `lock()` 取得守卫。
+        context: ID3D11DeviceContext,
+        pub multithread: ID3D11Multithread,
         adapter: IDXGIAdapter1,
         pub summary: Value,
+        /// FFmpeg D3D11VA 共享硬件设备（首个硬解会话时创建，进程内复用）。
+        pub hw_device: std::sync::OnceLock<Result<super::super::d3d11va::HwDevice, String>>,
+    }
+
+    /// 持有立即上下文锁的守卫（可重入，Drop 时释放）。
+    pub struct ContextGuard<'a> {
+        gpu: &'a GpuDevice,
+    }
+
+    impl std::ops::Deref for ContextGuard<'_> {
+        type Target = ID3D11DeviceContext;
+        fn deref(&self) -> &ID3D11DeviceContext {
+            &self.gpu.context
+        }
+    }
+
+    impl Drop for ContextGuard<'_> {
+        fn drop(&mut self) {
+            unsafe { self.gpu.multithread.Leave() };
+        }
     }
 
     impl GpuDevice {
+        pub fn lock(&self) -> ContextGuard<'_> {
+            unsafe { self.multithread.Enter() };
+            ContextGuard { gpu: self }
+        }
+
         /// 处理延迟销毁的资源（已释放的纹理在下一次 Flush 时才归还显存）。
         pub fn flush(&self) {
-            let context = self.context.lock().unwrap();
+            let context = self.lock();
             unsafe { context.Flush() };
+        }
+
+        /// 设备支持的 D3D11 视频解码配置名（握手时已枚举）。
+        pub fn has_decoder_profile(&self, name: &str) -> bool {
+            self.summary["videoDecoderProfiles"]["named"].as_array().is_some_and(|names| names.iter().any(|value| value == name))
         }
 
         /// 本进程在本地显存段的占用与预算（字节）。用于资源回收验收与统计。
@@ -81,7 +114,7 @@ mod imp {
         let formats = [SharedFormat::Nv12, SharedFormat::Nv16, SharedFormat::P010le, SharedFormat::Rgba, SharedFormat::Bgra, SharedFormat::Rgbaf16];
         let mut support = serde_json::Map::new();
         for format in formats {
-            let flags = unsafe { device.CheckFormatSupport(crate::shared_texture::dxgi_format(format)) }.unwrap_or(0) as i32;
+            let flags = unsafe { device.CheckFormatSupport(super::super::shared_texture::dxgi_format(format)) }.unwrap_or(0) as i32;
             support.insert(
                 format.name().into(),
                 json!({
@@ -136,9 +169,8 @@ mod imp {
         }
         .map_err(|error| format!("D3D11CreateDevice 失败：{error}"))?;
         let device = device.ok_or_else(|| "D3D11CreateDevice 未返回设备".to_string())?;
-        if let Ok(multithread) = device.cast::<ID3D11Multithread>() {
-            let _ = unsafe { multithread.SetMultithreadProtected(true) };
-        }
+        let multithread = device.cast::<ID3D11Multithread>().map_err(|error| format!("设备不支持多线程保护：{error}"))?;
+        let _ = unsafe { multithread.SetMultithreadProtected(true) };
         let context = unsafe { device.GetImmediateContext() }.map_err(|error| format!("获取立即上下文失败：{error}"))?;
         let summary = json!({
             "available": true,
@@ -148,24 +180,8 @@ mod imp {
             "sharedFormats": shared_format_support(&device),
             "adapters": adapters.iter().map(|(_, desc)| adapter_value(desc)).collect::<Vec<_>>(),
         });
-        Ok(GpuDevice { device, context: std::sync::Mutex::new(context), adapter: selected, summary })
+        Ok(GpuDevice { device, context, multithread, adapter: selected, summary, hw_device: std::sync::OnceLock::new() })
     }
 }
 
-#[cfg(windows)]
 pub use imp::{create_device, GpuDevice};
-
-#[cfg(not(windows))]
-pub struct GpuDevice {
-    pub summary: Value,
-}
-
-#[cfg(not(windows))]
-pub fn create_device() -> Result<GpuDevice, String> {
-    Err("原生视频解码只支持 Windows".to_string())
-}
-
-/// 设备创建失败时握手仍返回，标明不可用原因，由主进程决定回退。
-pub fn unavailable_summary(reason: &str) -> Value {
-    json!({ "available": false, "reason": reason })
-}

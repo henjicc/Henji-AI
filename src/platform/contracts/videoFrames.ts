@@ -9,7 +9,21 @@
  */
 
 export * from './videoFrameTypes'
-import type { VideoFrameBridgeStats, VideoFrameMeta, VideoFrameStreamEndedPayload, VideoFrameStreamInfo, VideoFramesPreloadStats, VideoFrameTestStreamRequest } from './videoFrameTypes'
+import type {
+  VideoFrameAtRequest,
+  VideoFrameAtResult,
+  VideoFrameBridgeStats,
+  VideoFrameDecoderInfo,
+  VideoFrameDecoderRequest,
+  VideoFrameMeta,
+  VideoFrameScheduleAck,
+  VideoFrameScheduleEvent,
+  VideoFrameScheduleRequest,
+  VideoFrameStreamEndedPayload,
+  VideoFrameStreamInfo,
+  VideoFramesPreloadStats,
+  VideoFrameTestStreamRequest,
+} from './videoFrameTypes'
 
 /** preload → 消费方端口的消息。 */
 export interface VideoFramePortFrameMessage {
@@ -18,6 +32,12 @@ export interface VideoFramePortFrameMessage {
   frame: VideoFrame
   /** preload 分配的借出编号，交回时原样带回（transfer 后对象身份会变，不能按对象匹配）。 */
   token: number
+}
+
+/** preload → 消费方端口的消息：计划的缺帧与结束事件（帧本身走 `frame` 消息，两者到达顺序不保证，按 `index` 对齐）。 */
+export interface VideoFramePortScheduleMessage {
+  type: 'schedule'
+  event: VideoFrameScheduleEvent
 }
 
 /** 消费方 → preload 端口的消息：交回帧，由 preload 在主线程关闭。 */
@@ -39,6 +59,13 @@ export interface VideoFramesPlatform {
   disconnect(route: string): void
   /** 合成测试画面帧流（开发与诊断）。 */
   openTestStream(request: VideoFrameTestStreamRequest): Promise<VideoFrameStreamInfo>
+  /** 打开原生解码会话；帧经 `request.route` 的端口到达。关闭用 `closeStream`。 */
+  openDecoder(request: VideoFrameDecoderRequest): Promise<VideoFrameDecoderInfo>
+  /** 按时间取单帧（会话 purpose 为 seek）。 */
+  frameAt(request: VideoFrameAtRequest): Promise<VideoFrameAtResult>
+  /** 连续计划取帧；新计划取消同一会话的旧计划。 */
+  schedule(request: VideoFrameScheduleRequest): Promise<VideoFrameScheduleAck>
+  cancelSchedule(streamId: string, scheduleId: string): Promise<boolean>
   closeStream(streamId: string): Promise<boolean>
   stats(): Promise<VideoFrameBridgeStats & { preload: VideoFramesPreloadStats }>
   onStreamEnded(listener: (payload: VideoFrameStreamEndedPayload) => void): () => void
