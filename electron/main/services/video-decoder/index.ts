@@ -3,6 +3,7 @@ import { createMainLogger } from '../logging/main-logger'
 import { VideoDecoderService } from './client'
 import { resolveVideoDecoderExecutable } from './paths'
 import { VideoFrameBridge } from './texture-bridge'
+import { VideoAudioSessions } from './audio-sessions'
 
 export { VideoDecoderService } from './client'
 export type { VideoDecoderServiceState, VideoDecoderRequestOptions, VideoDecoderLifecycleEvent } from './client'
@@ -28,6 +29,7 @@ export type {
   VideoFrameTarget,
   VideoFrameTestStreamRequest,
 } from './texture-bridge'
+export { VideoAudioSessions, parseVideoAudioCloseRequest, parseVideoAudioOpenRequest, parseVideoAudioReadRequest } from './audio-sessions'
 export type {
   VideoDecoderErrorCode,
   VideoDecoderEvent,
@@ -78,5 +80,18 @@ export function getVideoFrameBridge(): VideoFrameBridge {
     void created.dispose()
   })
   bridge = created
+  return created
+}
+
+let audioSessions: VideoAudioSessions | null = null
+
+/** 主进程唯一的原生声音会话登记（共用原生服务实例，2.3）。 */
+export function getVideoAudioSessions(): VideoAudioSessions {
+  if (audioSessions) return audioSessions
+  const created = new VideoAudioSessions({ service: getVideoDecoderService(), logger: createMainLogger('main.video_audio') })
+  app.once('will-quit', () => {
+    void created.dispose()
+  })
+  audioSessions = created
   return created
 }

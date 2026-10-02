@@ -1,5 +1,5 @@
 import { expect, it, vi } from 'vitest'
-import { createVideoEditNativeClipAudio, videoEditPcmReadRange, type VideoEditPcmSession } from './videoEditNativeAudio'
+import { createVideoEditNativeClipAudio, openVideoEditNativePcm, videoEditPcmReadRange, type VideoEditNativeSoundChannel, type VideoEditPcmSession } from './videoEditNativeAudio'
 import type { VideoEditAudioChunk } from './videoEditFrameSource'
 
 /** A fake native stream: sound only in [startFrame, endFrame); channel c of sample n is c + n / 1e6. */
@@ -115,4 +115,58 @@ it('会话返回的数据长度或声道数不符、采样率无效时拒绝并�
   const invalid = fakeSession(0, 2, 0, 0)
   await expect(collect(createVideoEditNativeClipAudio(async () => invalid).chunks(0, .1))).rejects.toThrow('原生声音流的采样率或声道数无效。')
   expect(invalid.closed).toBe(1)
+})
+
+it('按混音给的采样率打开会话，采样率改变时关闭旧会话重开；没有这条声音流时无声且不报错', async () => {
+  const sessions: Array<VideoEditPcmSession & { closed: number }> = []
+  const open = vi.fn(async (rate: number | undefined) => { const session = fakeSession(rate ?? 44100, 2, 0, 1e9); sessions.push(session); return session })
+  const audio = createVideoEditNativeClipAudio(open)
+  const [first] = await collect(audio.chunks(0, .1, 48000))
+  await collect(audio.chunks(.1, .2, 48000))
+  expect(first.sampleRate).toBe(48000)
+  const [second] = await collect(audio.chunks(.2, .3, 44100))
+  expect(second.sampleRate).toBe(44100)
+  expect(open.mock.calls.map(([rate]) => rate)).toEqual([48000, 44100])
+  await Promise.resolve()
+  expect(sessions.map(session => session.closed)).toEqual([1, 0])
+  const silent = createVideoEditNativeClipAudio(async () => null)
+  expect(await collect(silent.chunks(0, 1, 48000))).toEqual([])
+})
+
+it('读取失败丢弃会话，下一次读取重新打开（服务重启或文件恢复后继续出声）', async () => {
+  const broken = fakeSession(48000, 1, 0, 48000)
+  broken.read = vi.fn(async () => { throw new Error('声音会话不存在或不属于当前窗口') })
+  const healthy = fakeSession(48000, 1, 0, 48000)
+  const open = vi.fn<[number | undefined], Promise<VideoEditPcmSession>>().mockResolvedValueOnce(broken).mockResolvedValueOnce(healthy)
+  const audio = createVideoEditNativeClipAudio(open)
+  await expect(collect(audio.chunks(0, .1, 48000))).rejects.toThrow('声音会话不存在')
+  await Promise.resolve()
+  expect(broken.closed).toBe(1)
+  expect(await collect(audio.chunks(0, .1, 48000))).toHaveLength(1)
+  expect(open).toHaveBeenCalledTimes(2)
+})
+
+it('端口声音会话：按序列采样率打开，读出的缓冲按声道切成平面，错误转为用户语言，只关一次', async () => {
+  const pcm = new Float32Array([1, 2, 3, -1, -2, -3])
+  const calls: Array<[string, unknown]> = []
+  const channel = {
+    call: vi.fn(async (method: string, params: unknown) => {
+      calls.push([method, params])
+      if (method === 'openAudio') return (params as { path: string }).path.includes('silent') ? { found: false, audioStream: 0 } : { found: true, audioId: 'va-1', route: 'r', audioStream: 0, streamIndex: 1, codec: 'pcm_s24le', decoderName: 'pcm_s24le', sampleRate: 48000, sourceSampleRate: 96000, channels: 2, channelLayout: 'stereo', resampler: 'soxr', startSeconds: 0, endSeconds: 1 }
+      if (method === 'readAudio') { const { frames } = params as { frames: number }; if (frames === 1) throw new Error('原生视频解码服务异常退出'); return { audioId: 'va-1', startFrame: -1, frames, channels: 2, data: pcm.buffer.slice(0), seeked: false, decodeMs: 0 } }
+      return true
+    }),
+  } as unknown as VideoEditNativeSoundChannel
+  expect(await openVideoEditNativePcm(channel, 'D:/silent.mov', '无声', { sampleRate: 48000 })).toBeNull()
+  const session = (await openVideoEditNativePcm(channel, 'D:/a.mxf', 'A', { sampleRate: 48000 }))!
+  expect(calls[1]).toEqual(['openAudio', { path: 'D:/a.mxf', sampleRate: 48000 }])
+  expect(session.sampleRate).toBe(48000); expect(session.channels).toBe(2)
+  const planes = await session.read(-1, 3)
+  expect(planes.map(plane => [...plane])).toEqual([[1, 2, 3], [-1, -2, -3]])
+  await expect(session.read(0, 1)).rejects.toThrow('素材「A」的声音读取失败')
+  await expect(session.read(0, 2)).rejects.toThrow('原生声音数据不完整。')
+  session.close(); session.close()
+  expect(calls.filter(([method]) => method === 'closeAudio')).toEqual([['closeAudio', { audioId: 'va-1' }]])
+  const failing = { call: vi.fn(async () => { throw new Error('素材所在目录尚未授权读取') }) } as unknown as VideoEditNativeSoundChannel
+  await expect(openVideoEditNativePcm(failing, 'D:/b.mxf', 'B', {})).rejects.toThrow('B')
 })

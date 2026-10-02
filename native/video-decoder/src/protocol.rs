@@ -2,6 +2,8 @@
 //!
 //! 控制通道只传请求、响应、事件与小体积元数据；画面走显卡共享纹理，不经过本通道。
 //! 事件（服务主动发出）没有 `id`，以 `event` 字段区分，如 `frame`、`frame_missing`、`schedule_done`、`stream_ended`。
+//! 二进制附件（声音 PCM，协议 4）：JSON 消息带 `attachment: <字节数>` 时，紧随其后的一帧（同样 4 字节长度前缀）
+//! 是原始字节。
 
 use serde::Deserialize;
 
@@ -12,7 +14,8 @@ use std::io::{self, Read, Write};
 /// 2：新增帧流命令（1.2）与 `frame`/`stream_ended` 事件；hello 携带 clientPid。
 /// 3：解码会话（1.3）：`open_decoder`/`frame_at`/`schedule`/`cancel_schedule`，`frame` 带 `ptsUs`/`request`，
 ///    新事件 `frame_missing`/`schedule_done`。
-pub const PROTOCOL_VERSION: u32 = 3;
+/// 4：声音会话（2.3）：`open_audio`/`read_audio`/`close_audio`，读取结果以二进制附件返回 PCM。
+pub const PROTOCOL_VERSION: u32 = 4;
 /// 单条控制消息上限。控制消息只含元数据，超过即视为协议错误，防止异常长度导致巨量分配。
 pub const MAX_MESSAGE_BYTES: usize = 16 * 1024 * 1024;
 
@@ -77,6 +80,18 @@ pub enum Command {
         range: Option<ScheduleRange>,
     },
     CancelSchedule { stream_id: String, schedule_id: String },
+    /// 打开声音会话（2.3）：`audioStream` 只数声音流（从 0 起），`sampleRate` 为输出采样率（缺省为流自身采样率）。
+    OpenAudio {
+        audio_id: String,
+        path: String,
+        #[serde(default)]
+        audio_stream: Option<usize>,
+        #[serde(default)]
+        sample_rate: Option<u32>,
+    },
+    /// 读取输出网格上的绝对样本 [startFrame, startFrame + frames)，响应带二进制附件。
+    ReadAudio { audio_id: String, start_frame: i64, frames: usize },
+    CloseAudio { audio_id: String },
 }
 
 #[derive(Debug, Deserialize, PartialEq, Clone, Copy)]
@@ -164,6 +179,19 @@ pub fn write_message(writer: &mut impl Write, value: &Value) -> io::Result<()> {
     writer.flush()
 }
 
+/// 写出带二进制附件的消息：`value` 须带 `attachment` 字段（附件字节数），附件作为紧随的一帧写出。调用方持有写锁。
+pub fn write_message_with_attachment(writer: &mut impl Write, value: &Value, attachment: &[u8]) -> io::Result<()> {
+    if attachment.len() > MAX_MESSAGE_BYTES || value.get("attachment").and_then(Value::as_u64) != Some(attachment.len() as u64) {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, "附件长度与声明不符或超过上限"));
+    }
+    let mut frame = encode_message(value);
+    frame.reserve(attachment.len() + 4);
+    frame.extend_from_slice(&(attachment.len() as u32).to_le_bytes());
+    frame.extend_from_slice(attachment);
+    writer.write_all(&frame)?;
+    writer.flush()
+}
+
 pub fn parse_request(body: &[u8]) -> Result<Request, ServiceError> {
     serde_json::from_slice::<Request>(body).map_err(|error| ServiceError::new("INVALID_REQUEST", format!("无法解析请求：{error}")))
 }
@@ -236,6 +264,24 @@ mod tests {
         let range = parse_request(br#"{"id":"12","type":"schedule","streamId":"vf-1","scheduleId":"s2","range":{"from":2}}"#).unwrap();
         assert_eq!(range.command, Command::Schedule { stream_id: "vf-1".into(), schedule_id: "s2".into(), times: None, range: Some(ScheduleRange { from: 2.0, to: None }) });
         assert!(parse_request(br#"{"id":"13","type":"open_decoder","streamId":"a","path":"x","purpose":"export"}"#).is_err());
+    }
+
+    #[test]
+    fn parses_audio_commands_and_writes_attachments() {
+        let open = parse_request(r#"{"id":"1","type":"open_audio","audioId":"va-1","path":"D:\\素材\\a.mxf","audioStream":2,"sampleRate":48000}"#.as_bytes()).unwrap();
+        assert_eq!(open.command, Command::OpenAudio { audio_id: "va-1".into(), path: "D:\\素材\\a.mxf".into(), audio_stream: Some(2), sample_rate: Some(48000) });
+        let read = parse_request(br#"{"id":"2","type":"read_audio","audioId":"va-1","startFrame":-1,"frames":24003}"#).unwrap();
+        assert_eq!(read.command, Command::ReadAudio { audio_id: "va-1".into(), start_frame: -1, frames: 24003 });
+        let close = parse_request(br#"{"id":"3","type":"close_audio","audioId":"va-1"}"#).unwrap();
+        assert_eq!(close.command, Command::CloseAudio { audio_id: "va-1".into() });
+        let header = json!({ "id": "2", "ok": true, "result": { "frames": 1 }, "attachment": 4 });
+        let mut buffer = Vec::new();
+        write_message_with_attachment(&mut buffer, &header, &0.5f32.to_le_bytes()).unwrap();
+        let mut reader = Cursor::new(buffer);
+        let parsed: Value = serde_json::from_slice(&read_message(&mut reader).unwrap().unwrap()).unwrap();
+        assert_eq!(parsed, header);
+        assert_eq!(read_message(&mut reader).unwrap().unwrap(), 0.5f32.to_le_bytes().to_vec());
+        assert!(write_message_with_attachment(&mut Vec::new(), &header, &[0u8; 3]).is_err());
     }
 
     #[test]

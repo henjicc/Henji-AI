@@ -24,6 +24,11 @@ interface PlaybackStream {
   tail: Promise<unknown>
 }
 interface PlaybackSchedule { document: VideoEditComposition; endFrame: number; streams: PlaybackStream[]; byClip: Map<string, PlaybackStream> }
+/**
+ * Rounding edge of nearest-sample reads: half a sample plus a margin far above floating-point noise, so a clip whose
+ * phase lies exactly half-way between two samples picks the same neighbour in every mix block.
+ */
+const NEAREST_SAMPLE_EDGE = 0.5 + 1e-6
 /** Files decoded through one long-lived decoder each during forward playback. */
 const PLAYBACK_SCHEDULE_FILES = 4
 // Sequences are at most 30 minutes; one schedule covers the rest of it, since a rebuild means new decoders.
@@ -404,10 +409,14 @@ export class VideoEditRenderer {
       if (!source.audio) continue
       const sourceStart = videoEditSourceSeconds(clip) + from - clipStart
       const sourceEnd = sourceStart + to - from
-      for await (const wrapped of source.audio.chunks(sourceStart, sourceEnd)) {
+      for await (const wrapped of source.audio.chunks(sourceStart, sourceEnd, rate)) {
         try {
-        const outputStart = Math.max(0, Math.ceil((from - sampleStartSeconds) * rate - 1e-7), Math.ceil((from + wrapped.timestamp - sourceStart - sampleStartSeconds) * rate - 1e-7))
-        const outputEnd = Math.min(length, Math.ceil((to - sampleStartSeconds) * rate - 1e-7), Math.ceil((from + wrapped.timestamp + wrapped.duration - sourceStart - sampleStartSeconds) * rate - 1e-7))
+        // A block already at the sequence rate is read by nearest sample; block edges move by the same half sample so
+        // every output sample belongs to exactly one block (any other rate keeps linear interpolation).
+        const aligned = wrapped.sampleRate === rate
+        const edge = aligned ? NEAREST_SAMPLE_EDGE : 1e-7
+        const outputStart = Math.max(0, Math.ceil((from - sampleStartSeconds) * rate - 1e-7), Math.ceil((from + wrapped.timestamp - sourceStart - sampleStartSeconds) * rate - edge))
+        const outputEnd = Math.min(length, Math.ceil((to - sampleStartSeconds) * rate - 1e-7), Math.ceil((from + wrapped.timestamp + wrapped.duration - sourceStart - sampleStartSeconds) * rate - edge))
         for (let channel = 0; channel < this.document.channels; channel++) {
           const data = new Float32Array(wrapped.numberOfFrames)
           const inputChannels = this.document.channels === 1 ? wrapped.numberOfChannels : 1
@@ -420,6 +429,11 @@ export class VideoEditRenderer {
           for (let sample = outputStart; sample < outputEnd; sample++) {
             const sourceTime = sampleStartSeconds + sample / rate - from + sourceStart - wrapped.timestamp
             const position = sourceTime * wrapped.sampleRate
+            if (aligned) {
+              const nearest = Math.floor(position + NEAREST_SAMPLE_EDGE)
+              if (nearest >= 0 && nearest < data.length) output[sample] += data[nearest] * clip.volume
+              continue
+            }
             const left = Math.floor(position); const alpha = position - left
             if (left >= 0 && left < data.length) output[sample] += (data[left] * (1 - alpha) + data[Math.min(left + 1, data.length - 1)] * alpha) * clip.volume
           }

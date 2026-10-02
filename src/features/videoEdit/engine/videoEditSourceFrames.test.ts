@@ -183,16 +183,18 @@ it('正向播放走渲染器的连续计划：切换为覆盖整个素材的片�
   await frames.dispose()
 })
 
-it('源监视器与渲染 Worker 同一规则决定后端：浏览器能完整解的留在浏览器，只有原生能解的走原生；按文件与版本缓存，失败下次重试', async () => {
+it('源监视器与渲染 Worker 同一规则决定后端：原生是主路径，本地音视频都走原生不询问浏览器；原生不可用或非本地文件用浏览器；按文件与版本缓存，失败下次重试', async () => {
   decoding.browser.mockImplementation(async url => !url.includes('prores'))
-  expect(await videoEditSourceBackend({ ...media, path: 'D:/h264.mp4' })).toBe('browser')
+  expect(await videoEditSourceBackend({ ...media, path: 'D:/h264.mp4' })).toBe('native')
   expect(await videoEditSourceBackend({ ...media, path: 'D:/prores.mov' })).toBe('native')
+  expect(await videoEditSourceBackend({ ...media, kind: 'audio', path: 'D:/dialog.mxf' })).toBe('native')
+  const statusCalls = decoding.status.mock.calls.length
   expect(await videoEditSourceBackend({ ...media, path: 'D:/prores.mov' })).toBe('native')
-  expect(decoding.browser.mock.calls.map(([url]) => url)).toEqual(['url:D:/h264.mp4', 'url:D:/prores.mov'])
-  decoding.status.mockResolvedValueOnce({ available: true, forcedBackend: 'native' })
-  expect(await videoEditSourceBackend({ ...media, path: 'D:/forced.mp4' })).toBe('native')
+  expect(decoding.status.mock.calls.length).toBe(statusCalls)
+  decoding.status.mockResolvedValueOnce({ available: true, forcedBackend: 'browser' })
+  expect(await videoEditSourceBackend({ ...media, path: 'D:/forced.mp4' })).toBe('browser')
   decoding.status.mockRejectedValueOnce(new Error('no platform'))
   expect(await videoEditSourceBackend({ ...media, path: 'D:/offline.mov' })).toBe('browser')
   expect(await videoEditSourceBackend({ ...media, path: 'https://example.com/a.mp4' })).toBe('browser')
-  expect(decoding.browser).toHaveBeenCalledTimes(2)
+  expect(decoding.browser).not.toHaveBeenCalled()
 })

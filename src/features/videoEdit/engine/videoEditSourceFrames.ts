@@ -10,9 +10,9 @@ const SOURCE_CACHE_BYTES = 3 * 1024 ** 3
 
 const sourceBackends = new Map<string, Promise<VideoEditDecodeBackend | undefined>>()
 /**
- * The backend that plays a video item in the source monitor, decided like the render worker decides it (one backend
- * per file and revision, cached for the page). Native-decoded items cannot use a media element: the source monitor
- * shows them through `VideoEditSourceFrames`, playback included.
+ * The backend that plays a video or audio item in the source monitor, decided like the render worker decides it (one
+ * backend per file and revision, cached for the page). Native-decoded items cannot use a media element: the source
+ * monitor shows them through `VideoEditSourceFrames` and plays their sound through `VideoEditSourceSoundPlayer`.
  */
 export function videoEditSourceBackend(media: VideoEditMedia): Promise<VideoEditDecodeBackend | undefined> {
   const key = `${media.path}\u0000${media.sourceRevision ?? ''}`
@@ -21,7 +21,7 @@ export function videoEditSourceBackend(media: VideoEditMedia): Promise<VideoEdit
     decided = (async () => {
       const status = await getPlatform().videoDecoder.status().catch(() => ({ available: false, forcedBackend: null }))
       const forced = status.forcedBackend ?? undefined
-      const nativeReads = status.available && media.kind === 'video' && isLikelyLocalImagePath(media.path)
+      const nativeReads = status.available && media.kind !== 'image' && isLikelyLocalImagePath(media.path)
       return (await resolveVideoEditDecodeBackend({ nativeReads, forced, browserDecodes: () => videoEditBrowserDecodable(toFetchableMediaUrl(media.path)) })).backend
     })()
     const settled = decided

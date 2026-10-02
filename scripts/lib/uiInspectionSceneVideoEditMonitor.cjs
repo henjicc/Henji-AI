@@ -213,14 +213,27 @@ function createVideoEditMonitorScene() {
         await play(projectRef); await waitLevel(page, '节目播放电平', true)
         await button(panel(page, 'source'), '正向').click(); await waitLevel(page, '源播放电平', true); await waitLevel(page, '节目播放电平', false)
         const stoppedProgram = (await read(projectRef, ['video_edit.project.program_playback'])).data.properties['video_edit.project.program_playback']; assert.equal(stoppedProgram.playing, false)
-        assert.equal(await panel(page, 'source').locator('audio').count(), 1, '复用AudioPlayer不能另建音频元素')
+        // Native is the primary path (2.3): local items play through the native source views (no media element);
+        // the diagnostic setting forcing the browser keeps the media elements.
+        const sourceNative = String(process.env.HENJI_VIDEO_DECODER ?? '').toLowerCase() !== 'browser'
+        if (sourceNative) {
+          assert.equal(await panel(page, 'source').locator('audio').count(), 0, '原生后端的声音素材不用媒体元素')
+          assert.equal(await panel(page, 'source').locator('[data-video-edit-source-sound]').count(), 1, '原生声音视图只有一个')
+        } else assert.equal(await panel(page, 'source').locator('audio').count(), 1, '复用AudioPlayer不能另建音频元素')
         await play(projectRef)
-        await page.waitForFunction(() => document.querySelector('[data-video-edit-source-media="audio"]').paused)
+        if (sourceNative) await poll(page, sourceRead, value => value['video_edit.source.playing'] === false, '节目播放应暂停源声音')
+        else await page.waitForFunction(() => document.querySelector('[data-video-edit-source-media="audio"]').paused)
         assert.equal((await sourceRead())['video_edit.source.playing'], false)
-        evidence.mutualExclusion = { audio: { sourcePausedProgram: true, programPausedSource: true, audioElements: 1 } }; await frame(0)
+        evidence.mutualExclusion = { audio: { sourcePausedProgram: true, programPausedSource: true, audioElements: sourceNative ? 0 : 1, native: sourceNative } }; await frame(0)
         await button(page, '关闭源素材').click(); await openSource(avItem)
         await change(sourceRef, { 'video_edit.source.time_us': 0, 'video_edit.source.in_us': null, 'video_edit.source.out_us': null, 'video_edit.source.playing': false })
-        await page.locator('[data-video-edit-source-media="video"]').evaluate(video => {
+        if (sourceNative) await page.locator('[data-video-edit-source-canvas]').evaluate(canvas => {
+          // The native source view confirms every presented picture on its canvas.
+          window.__monitorSourceFrames = []; window.__monitorSourceFramesStop = false
+          window.__monitorSourceObserver = new MutationObserver(() => { if (!window.__monitorSourceFramesStop) window.__monitorSourceFrames.push({ at: performance.now(), presentedTimeUs: Number(canvas.dataset.presentedTimeUs) }) })
+          window.__monitorSourceObserver.observe(canvas, { attributes: true, attributeFilter: ['data-presented-time-us'] })
+        })
+        else await page.locator('[data-video-edit-source-media="video"]').evaluate(video => {
           window.__monitorSourceFrames = []; window.__monitorSourceFramesStop = false
           const next = (_now, metadata) => { window.__monitorSourceFrames.push({ at: performance.now(), mediaTime: metadata.mediaTime, presentedFrames: metadata.presentedFrames }); if (!window.__monitorSourceFramesStop && video.isConnected) video.requestVideoFrameCallback(next) }
           video.requestVideoFrameCallback(next)
@@ -229,9 +242,14 @@ function createVideoEditMonitorScene() {
         await waitLevel(page, '源播放电平', true); await waitLevel(page, '节目播放电平', false)
         await page.waitForFunction(() => window.__monitorSourceFrames.length >= 12)
         await play(projectRef)
-        await page.waitForFunction(() => document.querySelector('[data-video-edit-source-media="video"]').paused)
+        if (sourceNative) await poll(page, sourceRead, value => value['video_edit.source.playing'] === false, '节目播放应暂停源画面')
+        else await page.waitForFunction(() => document.querySelector('[data-video-edit-source-media="video"]').paused)
         assert.equal((await sourceRead())['video_edit.source.playing'], false)
-        evidence.mutualExclusion.video = { sourcePausedProgram: true, programPausedSource: true, actualFrames: await page.evaluate(() => { window.__monitorSourceFramesStop = true; return window.__monitorSourceFrames }) }
+        evidence.mutualExclusion.video = { sourcePausedProgram: true, programPausedSource: true, native: sourceNative, actualFrames: await page.evaluate(() => { window.__monitorSourceFramesStop = true; window.__monitorSourceObserver?.disconnect(); return window.__monitorSourceFrames }) }
+        if (sourceNative) {
+          const frames = evidence.mutualExclusion.video.actualFrames
+          assert.ok(frames.every((entry, index) => index === 0 || entry.presentedTimeUs >= frames[index - 1].presentedTimeUs), '源监视器正向播放画面不能倒退')
+        }
         await frame(0); evidence.sourceRange = await setRange(); await shot('monitor-source-precise-range')
         evidence.currentPhase = '源画面、声音和关联分量拖入与一次撤销'; store()
         const viewport = page.locator('[data-video-edit-timeline-viewport]'); const beforeRange = readProject(file).sequences[0].clips

@@ -1,8 +1,13 @@
 import path from 'node:path'
 import { app, type WebContents } from 'electron'
 import { isPathWithinAllowedMediaRoots } from '../protocol'
+import type { VideoAudioOpenRequest, VideoAudioReadRequest, VideoAudioReadResult, VideoAudioSessionInfo } from '../../../src/platform/contracts/videoFrameTypes'
 import {
+  getVideoAudioSessions,
   getVideoFrameBridge,
+  parseVideoAudioCloseRequest,
+  parseVideoAudioOpenRequest,
+  parseVideoAudioReadRequest,
   parseVideoFrameAtRequest,
   parseVideoFrameCancelRequest,
   parseVideoFrameDecoderRequest,
@@ -24,7 +29,7 @@ import { parseStringField, parseVoid, registerIpcHandler } from './registry'
  * 显卡纹理帧流 IPC：渲染层经 preload `videoFrames` 打开/关闭帧流，帧本身走 `sharedTexture`
  * 直接送到发起请求的窗口主 frame。合成测试画面只在开发运行或显式诊断开关下开放；
  * 原生解码会话（1.3）读取已授权媒体目录内的本地文件（与 henji-media 协议同一授权），
- * 取帧请求只能操作本窗口打开的会话。
+ * 取帧请求只能操作本窗口打开的会话。声音会话（2.3）同一授权与归属规则，PCM 随响应返回。
  */
 
 const targets = new WeakMap<WebContents, VideoFrameTarget>()
@@ -87,11 +92,21 @@ export function registerVideoFramesIpc(): void {
     (input) => parseStringField(input, 'streamId'),
     (streamId, event) => getVideoFrameBridge().closeStream(streamId, 'requested', event.sender.id),
   )
-  // 通道断开（preload disconnect）时关闭该通道上仍打开的会话：消费方 Worker 被终止时可能来不及自行关闭。
+  registerIpcHandler<VideoAudioOpenRequest, VideoAudioSessionInfo>('videoFrames:openAudio', parseVideoAudioOpenRequest, (request, event) => {
+    if (!path.isAbsolute(request.path)) throw new Error('素材路径必须是绝对路径')
+    if (!isPathWithinAllowedMediaRoots(request.path)) throw new Error('素材所在目录尚未授权读取')
+    return getVideoAudioSessions().open(webContentsFrameTarget(event.sender), request)
+  })
+  registerIpcHandler<VideoAudioReadRequest, VideoAudioReadResult>('videoFrames:readAudio', parseVideoAudioReadRequest, (request, event) => getVideoAudioSessions().read(event.sender.id, request))
+  registerIpcHandler<string, boolean>('videoFrames:closeAudio', parseVideoAudioCloseRequest, (audioId, event) => getVideoAudioSessions().close(audioId, event.sender.id))
+  // 通道断开（preload disconnect）时关闭该通道上仍打开的会话（画面与声音）：消费方 Worker 被终止时可能来不及自行关闭。
   registerIpcHandler<string, number>(
     'videoFrames:closeRoute',
     (input) => parseStringField(input, 'route'),
-    (route, event) => getVideoFrameBridge().closeRoute(event.sender.id, route),
+    async (route, event) => {
+      const [streams, sounds] = await Promise.all([getVideoFrameBridge().closeRoute(event.sender.id, route), getVideoAudioSessions().closeRoute(event.sender.id, route)])
+      return streams + sounds
+    },
   )
   registerIpcHandler<void, VideoFrameBridgeStats>('videoFrames:stats', parseVoid, () => getVideoFrameBridge().stats())
 }

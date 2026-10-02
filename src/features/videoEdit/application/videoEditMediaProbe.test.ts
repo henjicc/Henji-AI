@@ -19,9 +19,10 @@ const browserCannot = (codec: string | null): VideoEditBrowserInspection => ({ s
 const unreadable: VideoEditBrowserInspection = { status: 'unreadable', error: new Error('Input has an unsupported or unrecognizable format.') }
 const prores4444 = videoStream('prores', '4444', { width: 2560, height: 2560, bitDepth: 12, chromaSubsampling: '4:4:4', hasAlpha: true })
 
-it('原生与浏览器都能解：原生声音接通前整体留在浏览器（日志另记原生能解），原生成为主路径后为原生；诊断强制原生须等原生播放接通；元数据都沿用浏览器结果', () => {
+it('原生与浏览器都能解：原生是主路径（默认）时为原生，不是主路径时整体留在浏览器（日志另记原生能解）；诊断强制原生须等原生播放接通；元数据都沿用浏览器结果', () => {
   const both = probe([videoStream('h264', 'High'), audioStream('aac')])
-  expect(resolveVideoEditMediaInspection('D:/a.mp4', both, browserDecodes)).toEqual({ backend: 'browser', nativeDecodes: true, fields: browserMedia })
+  expect(resolveVideoEditMediaInspection('D:/a.mp4', both, browserDecodes)).toEqual({ backend: 'native', nativeDecodes: true, fields: browserMedia })
+  expect(resolveVideoEditMediaInspection('D:/a.mp4', both, browserDecodes, undefined, true, false)).toEqual({ backend: 'browser', nativeDecodes: true, fields: browserMedia })
   expect(resolveVideoEditMediaInspection('D:/a.mp4', both, browserDecodes, 'native')).toEqual({ backend: 'native', nativeDecodes: true, fields: browserMedia })
   expect(resolveVideoEditMediaInspection('D:/a.mp4', both, browserDecodes, 'native', false)).toEqual({ backend: 'browser', nativeDecodes: true, fields: browserMedia })
   expect(resolveVideoEditMediaInspection('D:/a.mp4', both, browserDecodes, undefined, true, true)).toEqual({ backend: 'native', nativeDecodes: true, fields: browserMedia })

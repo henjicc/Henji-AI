@@ -63,7 +63,7 @@ function expectedNativeFields(reference) {
  * confirmed by the render session, seeks landing on the real frame showing at the requested time, and playback
  * advancing pictures. Returns the measured numbers for the evidence file.
  */
-async function nativeSourceMonitor(page, itemId, fps, durationSeconds) {
+async function nativeSourceMonitor(page, itemId, fps, durationSeconds, hasAudio) {
   const entry = page.locator(`[data-video-edit-project-entry="${itemId}"]`)
   const openedAt = Date.now(); await entry.dblclick()
   await page.waitForFunction(() => document.querySelector('[data-video-edit-source-status]')?.dataset.videoEditSourceStatus === 'ready' && document.querySelector('[data-video-edit-source-canvas]')?.dataset.presentedTimeUs !== undefined, null, { timeout: 30000 })
@@ -89,14 +89,22 @@ async function nativeSourceMonitor(page, itemId, fps, durationSeconds) {
     window.__nativeSourceObserver.observe(element, { attributes: true, attributeFilter: ['data-presented-time-us'] })
   })
   await page.getByRole('button', { name: '播放源素材', exact: true }).click()
-  await page.waitForTimeout(1200)
+  // Source sound (2.3): the level meter reads the sound actually played (muted automation still measures the graph).
+  let maxPeak = 0
+  for (let tick = 0; tick < 12; tick++) {
+    await page.waitForTimeout(100)
+    if (!hasAudio) continue
+    const peaks = await page.getByLabel('源播放电平', { exact: true }).locator('[data-video-edit-level-channel]').evaluateAll(nodes => nodes.map(node => Number(node.dataset.peak)))
+    maxPeak = Math.max(maxPeak, ...peaks)
+  }
   const samples = await page.evaluate(() => { window.__nativeSourceObserver.disconnect(); return window.__nativeSourceFrames })
+  if (hasAudio) assert.ok(maxPeak > 0.01, `只有原生能解的素材在源监视器中应出声，电平峰值 ${maxPeak}`)
   assert.ok(samples.length >= 10, `源监视器正向播放画面没有持续前进：${samples.length} 次更新`)
   const backwards = samples.findIndex((sample, index) => index > 0 && sample.time <= samples[index - 1].time)
   assert.equal(backwards, -1, `源监视器正向播放画面倒退：${JSON.stringify(samples.slice(Math.max(0, backwards - 3), backwards + 3).map((sample) => sample.time))}`)
   const span = (samples.at(-1).at - samples[0].at) / 1000
   await page.getByRole('button', { name: '关闭源素材', exact: true }).click()
-  return { openMs, seeks, playback: { updates: samples.length, updatesPerSecond: (samples.length - 1) / span, advancedUs: samples.at(-1).time - samples[0].time } }
+  return { openMs, seeks, playback: { updates: samples.length, updatesPerSecond: (samples.length - 1) / span, advancedUs: samples.at(-1).time - samples[0].time, clockRate: (samples.at(-1).time - samples[0].time) / 1e6 / span, firstGapMs: samples.length > 1 ? samples[1].at - samples[0].at : null }, ...(hasAudio ? { soundPeak: maxPeak } : {}) }
 }
 
 /** Renderer logs reach the main-process store asynchronously; poll until the expected event arrives. */
@@ -203,7 +211,7 @@ function createVideoEditMediaProbeScene() {
           const item = project().items.find((candidate) => candidate.mediaId === record.media.id)
           assert.ok(item, `${path.basename(record.file)} 缺少项目项`)
           const fps = record.media.frameRate.numerator / record.media.frameRate.denominator
-          evidence.sourceMonitor.push({ file: record.file, ...await nativeSourceMonitor(page, item.id, fps, record.media.durationSeconds) })
+          evidence.sourceMonitor.push({ file: record.file, ...await nativeSourceMonitor(page, item.id, fps, record.media.durationSeconds, record.media.hasAudio === true) })
           store()
         }
         const startedAt = new Date().toISOString()
@@ -215,9 +223,9 @@ function createVideoEditMediaProbeScene() {
         assert.deepEqual({ kind: media.kind, width: media.width, height: media.height, hasAudio: media.hasAudio, frameRate: media.frameRate, frameRateMode: media.frameRateMode }, { kind: 'video', width: 3840, height: 2160, hasAudio: true, frameRate: { numerator: 60, denominator: 1 }, frameRateMode: 'sampled-constant' })
         const completed = (await logEvents(page, startedAt, ['video_edit.media.inspect.completed']))[0]
         assert.ok(completed, '缺少探测完成日志')
-        // Until native sound decoding (2.3 stage B) a file the browser decodes completely plays on the browser;
-        // the diagnostic setting forcing native plays it natively.
-        assert.equal(completed.context.backend, forced === 'native' ? 'native' : 'browser', '对照样本的实际播放后端不符')
+        // Native is the primary path since native sound decoding (2.3 stage B): the control sample plays natively unless
+        // the diagnostic setting forces the browser.
+        assert.equal(completed.context.backend, forced === 'browser' ? 'browser' : 'native', '对照样本的实际播放后端不符')
         assert.equal(completed.context.nativeDecodes, forced !== 'browser', '日志单独记录原生能否解码')
         assert.equal(completed.context.native, forced === 'browser' ? 'unavailable' : 'probed')
         assert.equal(completed.context.browserDecodes, true)

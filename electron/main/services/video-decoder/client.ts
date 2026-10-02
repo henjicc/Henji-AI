@@ -9,6 +9,9 @@ import {
   VIDEO_DECODER_PROTOCOL_VERSION,
   VideoDecoderError,
   VideoDecoderFrameReader,
+  type VideoDecoderAudioOpened,
+  type VideoDecoderAudioOpenRequest,
+  type VideoDecoderAudioRead,
   type VideoDecoderCommand,
   type VideoDecoderDecoderStarted,
   type VideoDecoderEvent,
@@ -199,6 +202,22 @@ export class VideoDecoderService {
 
   async cancelSchedule(streamId: string, scheduleId: string, options: VideoDecoderRequestOptions = {}): Promise<{ cancelled: boolean }> {
     return this.call<{ cancelled: boolean }>({ type: 'cancel_schedule', streamId, scheduleId }, options)
+  }
+
+  /** 打开声音会话（2.3）：解码并按需用 SoX 重采样到 `sampleRate`，输出平面 float32。 */
+  async openAudio(request: VideoDecoderAudioOpenRequest, options: VideoDecoderRequestOptions = {}): Promise<VideoDecoderAudioOpened> {
+    return this.call<VideoDecoderAudioOpened>({ type: 'open_audio', ...request }, options)
+  }
+
+  /** 读取输出采样网格上 [startFrame, startFrame + frames) 的 PCM；`data` 为响应的二进制附件。 */
+  async readAudio(audioId: string, startFrame: number, frames: number, options: VideoDecoderRequestOptions = {}): Promise<VideoDecoderAudioRead & { data: Buffer }> {
+    const read = await this.call<VideoDecoderAudioRead & { data?: Buffer }>({ type: 'read_audio', audioId, startFrame, frames }, options)
+    if (!(read?.data instanceof Buffer)) throw new VideoDecoderError('PROTOCOL_ERROR', '原生视频解码服务的声音读取缺少数据')
+    return read as VideoDecoderAudioRead & { data: Buffer }
+  }
+
+  async closeAudio(audioId: string, options: VideoDecoderRequestOptions = {}): Promise<{ closed: boolean }> {
+    return this.call<{ closed: boolean }>({ type: 'close_audio', audioId }, options)
   }
 
   async stopStream(streamId: string, options: VideoDecoderRequestOptions = {}): Promise<VideoDecoderStreamStopped> {
@@ -440,7 +459,8 @@ export class VideoDecoderService {
     this.pending.delete(message.id)
     pending.cleanup()
     if (message.ok) {
-      pending.resolve(message.result)
+      // 带二进制附件的响应（声音 PCM）：附件作为结果的 `data`。
+      pending.resolve(message.binary ? { ...(message.result && typeof message.result === 'object' ? message.result : {}), data: message.binary } : message.result)
     } else {
       const code = nativeErrorCode(message.error?.code)
       if (pending.type !== 'hello') {

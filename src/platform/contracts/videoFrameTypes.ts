@@ -148,6 +148,65 @@ export type VideoFrameScheduleEvent =
 export const VIDEO_FRAMES_SCHEDULE_EVENT_CHANNEL = 'videoFrames:scheduleEvent'
 
 /**
+ * 打开原生声音会话（2.3）。`path` 为本地绝对路径，须在已授权的媒体目录内。声音不走显卡通道：PCM 经主进程、
+ * preload 与帧通道端口送到渲染 Worker。
+ */
+export interface VideoAudioOpenRequest {
+  route: string
+  path: string
+  /** 第几条声音流（只数声音流，从 0 起）；缺省 0，即首条声音流（与浏览器后端一致）。多音轨展开（2.6）按它分别打开。 */
+  audioStream?: number
+  /** 输出采样率（序列采样率）：原生侧用 SoX 重采样器转换；缺省保持流自身采样率。 */
+  sampleRate?: number
+}
+
+/** 声音会话信息。`found: false` 表示文件没有这条声音流（不是错误：该片段无声）。 */
+export type VideoAudioSessionInfo =
+  | { found: false; audioStream: number }
+  | {
+      found: true
+      audioId: string
+      route: string
+      audioStream: number
+      /** 容器内的流序号（诊断与日志用）。 */
+      streamIndex: number
+      codec: string | null
+      decoderName: string
+      /** 输出采样率：样本 n 在源绝对时间轴 n / sampleRate 秒处。 */
+      sampleRate: number
+      sourceSampleRate: number
+      /** 输出声道数与流相同，按 FFmpeg 原生顺序（有前左、前右时排在最前）。 */
+      channels: number
+      channelLayout: string | null
+      /** 采样率转换方式：none 为流自身采样率。 */
+      resampler: 'none' | 'soxr'
+      startSeconds: number | null
+      endSeconds: number | null
+    }
+
+export interface VideoAudioReadRequest {
+  audioId: string
+  /** 输出采样率网格上的绝对样本序号（可为负）。 */
+  startFrame: number
+  frames: number
+}
+
+/** 一次读取：恰好 `frames` 个样本，平面 float32（按声道依次排列，每声道 `frames` 个）；流开始前、缺口与结束后为 0。 */
+export interface VideoAudioReadResult {
+  audioId: string
+  startFrame: number
+  frames: number
+  channels: number
+  /** 平面 float32 小端。preload 交给 Worker 时 transfer。主进程与 preload 之间经 IPC 为字节数组。 */
+  data: ArrayBuffer | Uint8Array
+  seeked: boolean
+  decodeMs: number
+}
+
+/** 单次声音读取的样本数上限（每声道）。渲染层每次最多读 2 秒。 */
+export const VIDEO_AUDIO_MAX_READ_FRAMES = 2 * 192_000
+
+/**
  * 消费方（渲染 Worker）经帧通道端口直接发起的解码会话请求：preload 转为对应 IPC，打开的会话归属该端口的通道，
  * 不经页面主线程。请求与帧、计划事件共用同一端口；`id` 由消费方分配，响应原样带回。
  */
@@ -157,6 +216,9 @@ export type VideoFramePortCall =
   | { method: 'schedule'; params: VideoFrameScheduleRequest }
   | { method: 'cancelSchedule'; params: { streamId: string; scheduleId: string } }
   | { method: 'closeStream'; params: { streamId: string } }
+  | { method: 'openAudio'; params: Omit<VideoAudioOpenRequest, 'route'> }
+  | { method: 'readAudio'; params: VideoAudioReadRequest }
+  | { method: 'closeAudio'; params: { audioId: string } }
 
 export interface VideoFramePortCallResults {
   openDecoder: VideoFrameDecoderInfo
@@ -164,6 +226,10 @@ export interface VideoFramePortCallResults {
   schedule: VideoFrameScheduleAck
   cancelSchedule: boolean
   closeStream: boolean
+  openAudio: VideoAudioSessionInfo
+  /** 到达 Worker 时 `data` 一定是 ArrayBuffer（preload 已转换并 transfer）。 */
+  readAudio: VideoAudioReadResult & { data: ArrayBuffer }
+  closeAudio: boolean
 }
 
 export interface VideoFramePortRequestMessage {

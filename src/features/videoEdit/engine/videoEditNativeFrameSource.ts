@@ -1,7 +1,8 @@
 import type { VideoEditMedia } from '@/core/videoEdit/document'
 import type { VideoFrameDecoderInfo, VideoFrameScheduleEvent, VideoFrameStreamEndedPayload } from '@/platform/contracts/videoFrames'
 import type { VideoEditFrameCache } from './videoEditFrameCache'
-import type { VideoEditClipAudio, VideoEditClipFrames, VideoEditFrameBackend, VideoEditFrameSeeker, VideoEditFrameSource, VideoEditSnapshot } from './videoEditFrameSource'
+import { VIDEO_EDIT_NATIVE_SOUND_READY, type VideoEditClipAudio, type VideoEditClipFrames, type VideoEditFrameBackend, type VideoEditFrameSeeker, type VideoEditFrameSource, type VideoEditSnapshot } from './videoEditFrameSource'
+import { createVideoEditNativeClipAudio, openVideoEditNativePcm, type VideoEditPcmSession } from './videoEditNativeAudio'
 import { VideoEditGpuFrame, videoEditGpuFrameUsesChroma } from './videoEditGpuFrame'
 import { VideoEditNativePicture, videoEditNativeRotation } from './videoEditNativePicture'
 import type { NativeVideoFrame, VideoEditNativeFrameReceiver } from './videoEditNativeFrames'
@@ -15,9 +16,9 @@ import { videoEditSourceReadError } from './videoEditSourceErrors'
  * - one `playback` session for forward playback schedules (one long-lived decoder, cuts continue without flushing,
  *   exact microsecond timestamps; a new schedule cancels the previous one);
  * - one `seek` session shared by single-frame reads and the seeker, whose operations run one at a time;
- * - one `playback` session per sequential reader (`frames(start)`), closed with the reader.
- * Sound is not decoded natively yet (task 2.3 stage B): `clipAudio()` is undefined, so a file played by this backend
- * is silent until then (files the browser decodes completely stay on the browser for picture and sound).
+ * - one `playback` session per sequential reader (`frames(start)`), closed with the reader;
+ * - one sound session per clip sound reader (`clipAudio()`, task 2.3), opened on its first read at the mix's sample
+ *   rate and closed with the reader. Sound sessions carry no textures and do not count against the session limit.
  */
 
 /** Worker-side access to native decoder sessions: port requests and borrowed frames over one frame channel. */
@@ -248,8 +249,11 @@ export class VideoEditNativeFileSource implements VideoEditFrameSource {
     }
   }
 
-  // Native sound decoding arrives with task 2.3 stage B; until then a file on this backend is silent.
-  clipAudio(): VideoEditClipAudio | undefined { return undefined }
+  /** The first sound stream of the file (multi-stream expansion, task 2.6, opens others by their number). */
+  clipAudio(): VideoEditClipAudio | undefined {
+    if (!this.owner.sound || this.media.kind === 'image' || (this.media.kind === 'video' && this.media.hasAudio === false)) return undefined
+    return createVideoEditNativeClipAudio(sampleRate => this.owner.openSound(this.media, this.path, sampleRate))
+  }
 
   async *schedule(timestamps: readonly number[]): AsyncGenerator<VideoEditNativePicture | null, void, unknown> {
     if (this.media.kind !== 'video') return
@@ -276,6 +280,8 @@ export interface VideoEditNativeFramesOptions {
   /** The local file the native service reads for a media item (its path in the worker is a fetchable URL). */
   localPath(media: VideoEditMedia): string | undefined
   maxSessions?: number
+  /** Whether sound is decoded natively (default `VIDEO_EDIT_NATIVE_SOUND_READY`). */
+  sound?: boolean
   /** A session of this file could not be opened (the router may choose another backend for later opens). */
   onFailure?(media: VideoEditMedia, error: unknown): void
 }
@@ -290,6 +296,15 @@ export class VideoEditNativeFrames implements VideoEditFrameBackend {
 
   /** Whether the native service can be asked to read this media item at all. */
   reads(media: VideoEditMedia): boolean { return media.kind !== 'image' && !!this.options.localPath(media) }
+
+  get sound(): boolean { return this.options.sound ?? VIDEO_EDIT_NATIVE_SOUND_READY }
+
+  /** Opens the sound session of one clip reader; null when the file has no sound stream. */
+  async openSound(media: VideoEditMedia, path: string, sampleRate: number | undefined): Promise<VideoEditPcmSession | null> {
+    try {
+      return await openVideoEditNativePcm(this.options.channel, path, media.name, { ...(sampleRate !== undefined ? { sampleRate } : {}) })
+    } catch (error) { this.options.onFailure?.(media, error); throw error }
+  }
 
   /** Opens a native decoder session, counted against the per-renderer limit. */
   async openSession(media: VideoEditMedia, path: string, purpose: 'playback' | 'seek'): Promise<VideoEditNativeDecoderSession> {

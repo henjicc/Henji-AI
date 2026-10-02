@@ -63,7 +63,7 @@ class FakeChannel implements VideoEditNativeChannel {
 
 const media = (overrides: Partial<VideoEditMedia> = {}): VideoEditMedia => ({ id: 'm', name: '专业素材', path: 'henji-media://local/D%3A%2Fa.mov', kind: 'video', width: 3840, height: 2160, durationSeconds: 7, ...overrides })
 const flush = async (rounds = 10): Promise<void> => { for (let index = 0; index < rounds; index++) await Promise.resolve() }
-function backend(channel: FakeChannel, options: { maxSessions?: number; onFailure?: (media: VideoEditMedia, error: unknown) => void } = {}): VideoEditNativeFrames {
+function backend(channel: FakeChannel, options: { maxSessions?: number; sound?: boolean; onFailure?: (media: VideoEditMedia, error: unknown) => void } = {}): VideoEditNativeFrames {
   return new VideoEditNativeFrames({ channel, localPath: item => item.path.includes('remote') ? undefined : 'D:/a.mov', ...options })
 }
 
@@ -210,12 +210,13 @@ describe('原生帧源：单帧与会话', () => {
     // A moved or deleted file gets the same relink hint as on the browser backend.
     channel.answers.openDecoder = () => { throw new Error('无法打开文件：No such file or directory') }
     await expect((await backend(channel).open(media({ sourceRevision: 'moved' })).ready).clipFrames()!.frameAt(0)).rejects.toThrow('找不到素材「专业素材」的源文件')
-    expect(other.clipAudio()).toBeUndefined()
+    // Sound sessions are separate from picture sessions: the limit does not apply to them.
+    expect(other.clipAudio()).toBeDefined()
   })
 
-  it('无画面的文件没有画面读取器，计划为空；原生声音接通前文件静音', async () => {
+  it('无画面的文件没有画面读取器，计划为空，但有声音读取器（原生声音已接通）', async () => {
     const source = await backend(new FakeChannel()).open(media({ kind: 'audio' })).ready
-    expect(source.clipFrames()).toBeUndefined(); expect(source.clipAudio()).toBeUndefined()
+    expect(source.clipFrames()).toBeUndefined(); expect(source.clipAudio()).toBeDefined()
     expect((await source.schedule([0]).next()).done).toBe(true)
   })
 })
@@ -283,5 +284,40 @@ describe('原生定位器', () => {
     expect((await jump).sample?.timestamp).toBe(6.2)
     await seeker.dispose()
     expect(cache.bytes).toBe(0)
+  })
+})
+
+describe('原生声音', () => {
+  it('片段声音读取器经同一通道打开声音会话（按混音采样率），读完关闭；不占画面会话名额', async () => {
+    const channel = new FakeChannel()
+    channel.answers.openAudio = () => ({ found: true, audioId: 'va-1', route: 'r', audioStream: 0, streamIndex: 1, codec: 'pcm_s24le', decoderName: 'pcm_s24le', sampleRate: 48000, sourceSampleRate: 48000, channels: 1, channelLayout: 'mono', resampler: 'none', startSeconds: 0, endSeconds: 3 })
+    channel.answers.readAudio = params => ({ audioId: 'va-1', startFrame: params.startFrame, frames: params.frames, channels: 1, data: new Float32Array(params.frames as number).fill(.5).buffer, seeked: false, decodeMs: 0 })
+    const frames = backend(channel, { sound: true, maxSessions: 1 })
+    const { key, ready } = frames.open(media({ kind: 'audio' }))
+    const source = await ready
+    expect(source.clipFrames()).toBeUndefined()
+    const audio = source.clipAudio()!
+    expect(channel.calls).toEqual([])
+    const chunks = []
+    for await (const chunk of audio.chunks(1, 1.1, 48000)) chunks.push(chunk)
+    expect(chunks).toHaveLength(1); expect(chunks[0].sampleRate).toBe(48000)
+    expect(channel.last('openAudio')).toEqual({ path: 'D:/a.mov', sampleRate: 48000 })
+    expect(frames.openSessions).toBe(0)
+    audio.close?.(); await flush()
+    expect(channel.last('closeAudio')).toEqual({ audioId: 'va-1' })
+    frames.release(key)
+  })
+
+  it('原生声音未就绪、明确无声的视频、图片都没有声音读取器；打开失败通知路由层并给出用户语言提示', async () => {
+    const channel = new FakeChannel()
+    expect((await backend(channel, { sound: false }).open(media()).ready).clipAudio()).toBeUndefined()
+    expect((await backend(channel).open(media()).ready).clipAudio()).toBeDefined()
+    expect((await backend(channel, { sound: true }).open(media({ hasAudio: false })).ready).clipAudio()).toBeUndefined()
+    const failures: unknown[] = []
+    channel.answers.openAudio = () => { throw new Error('No such file or directory') }
+    const audio = (await backend(channel, { sound: true, onFailure: (_media, error) => failures.push(error) }).open(media({ path: 'henji-media://local/D%3A%2Fmissing.mov' })).ready).clipAudio()!
+    const drained = (async () => { for await (const chunk of audio.chunks(0, .1, 48000)) void chunk })()
+    await expect(drained).rejects.toThrow('找不到素材「专业素材」的源文件')
+    expect(failures).toHaveLength(1)
   })
 })

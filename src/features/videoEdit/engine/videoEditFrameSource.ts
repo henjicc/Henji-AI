@@ -21,10 +21,15 @@ export type VideoEditDecodedPicture = VideoSample | VideoEditNativePicture
  *
  * Time is the absolute source timeline in seconds (container presentation time, not rebased to the stream start), the
  * same clock as clip source in-points (`sourceInUs`), so a stream starting at 0.523s has silence before it. Sample `i`
- * of the block plays at `timestamp + i / sampleRate`; `duration` is `numberOfFrames / sampleRate`. The block keeps the
- * stream's own sample rate and channels: `VideoEditRenderer.mixAudio` alone converts to the sequence rate (linear
- * interpolation) and maps channels (mono sequence: average of all channels; otherwise channel c reads channel
- * min(c, channels - 1)), so planes 0 and 1 must be front left and front right when the stream has them.
+ * of the block plays at `timestamp + i / sampleRate`; `duration` is `numberOfFrames / sampleRate`.
+ *
+ * Sample rate (record 012, sound quality first): a reader that resamples well delivers blocks at the rate the mix asks
+ * for (the native reader resamples with SoX in the native service), and the mix then takes, for every output sample,
+ * the nearest block sample (at most half a sample, about 10µs, of constant offset; no filtering). Blocks at any other
+ * rate (the browser reader keeps the stream's rate) are converted by linear interpolation in the mix.
+ * Channels keep the stream's layout and the mix alone maps them (mono sequence: average of all channels; otherwise
+ * channel c reads channel min(c, channels - 1)), so planes 0 and 1 must be front left and front right when the stream
+ * has them.
  */
 export interface VideoEditAudioChunk {
   readonly timestamp: number
@@ -51,8 +56,9 @@ export interface VideoEditClipAudio {
    * twice). Blocks may start before and end after the range; a gap or a missing block is silence. The mix interpolates
    * between neighbouring samples of one block and holds the last sample of a block, so a reader should deliver the
    * sample before and after the range and as few block boundaries inside it as possible.
+   * `sampleRate` is the rate the mix runs at; a reader that resamples well delivers blocks at it.
    */
-  chunks(startSeconds: number, endSeconds: number): AsyncGenerator<VideoEditAudioChunk, void, unknown>
+  chunks(startSeconds: number, endSeconds: number, sampleRate?: number): AsyncGenerator<VideoEditAudioChunk, void, unknown>
   /** Releases decoder resources the reader holds; called once when the renderer drops the clip's source. */
   close?(): void
 }
@@ -125,10 +131,16 @@ export const VIDEO_EDIT_NATIVE_PLAYBACK_READY = true
 /**
  * Whether native decoding is the primary path for files the browser also decodes. The picture and the sound of one
  * file are read by one backend; until native sound decoding is in place (task 2.3 stage B), a file the browser
+/**
+ * Whether the native service decodes sound for the renderer (task 2.3). Native sound sessions need protocol 4 of the
+ * native service; until its native side is built this stays off and files on the native backend are silent.
+ */
+export const VIDEO_EDIT_NATIVE_SOUND_READY = true
+
  * decodes completely stays on the browser for both, and native plays the files only it decodes (their sound is
  * silent until then). Task 2.3 stage B turns this on.
  */
-export const VIDEO_EDIT_NATIVE_PRIMARY = false
+export const VIDEO_EDIT_NATIVE_PRIMARY = true
 
 /**
  * The single backend choice. With native primary: native when it decodes every stream of the file, otherwise the

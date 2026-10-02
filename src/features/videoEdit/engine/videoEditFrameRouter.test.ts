@@ -24,9 +24,9 @@ function fakeBackend(name: string, options: { decodable?: boolean; unreadable?: 
 const media = (id = 'a'): VideoEditMedia => ({ id, name: '素材', path: `henji-media://local/${id}`, kind: 'video', width: 1920, height: 1080, durationSeconds: 5 })
 
 describe('剪辑渲染的解码路由', () => {
-  it('原生声音接通前：浏览器能完整解的文件整体走浏览器，并复用询问时打开的同一次解析；决定只做一次并记日志', async () => {
+  it('原生不是主路径时：浏览器能完整解的文件整体走浏览器，并复用询问时打开的同一次解析；决定只做一次并记日志', async () => {
     const browser = fakeBackend('browser'); const native = fakeBackend('native'); const log = vi.fn()
-    const router = new VideoEditFrameRouter(browser, native, { nativeAvailable: true }, log)
+    const router = new VideoEditFrameRouter(browser, native, { nativeAvailable: true }, log, false)
     const first = router.open(media()); const second = router.open(media())
     expect((await first.ready).codec).toBe('browser'); expect((await second.ready).codec).toBe('browser')
     expect(browser.log).toEqual(['open browser-1 a', 'open browser-2 a']); expect(native.log).toEqual([])
@@ -36,9 +36,9 @@ describe('剪辑渲染的解码路由', () => {
     expect(browser.log.slice(2)).toEqual(['release browser-1', 'release browser-2'])
   })
 
-  it('只有原生能解（浏览器解不了或读不了）走原生，询问用的浏览器解析立即释放；同一文件的定位器也走原生', async () => {
+  it('原生不是主路径时只有原生能解（浏览器解不了或读不了）走原生，询问用的浏览器解析立即释放；同一文件的定位器也走原生', async () => {
     const browser = fakeBackend('browser', { decodable: false }); const native = fakeBackend('native')
-    const router = new VideoEditFrameRouter(browser, native, { nativeAvailable: true })
+    const router = new VideoEditFrameRouter(browser, native, { nativeAvailable: true }, () => {}, false)
     const opened = router.open(media())
     expect((await opened.ready).codec).toBe('native')
     expect(browser.log).toEqual(['open browser-1 a', 'release browser-1'])
@@ -46,7 +46,7 @@ describe('剪辑渲染的解码路由', () => {
     router.release(opened.key); expect(native.log).toEqual(['open native-1 a', 'seeker', 'release native-1'])
     // A file the browser cannot even read (moved, MXF) is asked again on its next open.
     const unreadable = fakeBackend('browser', { unreadable: true })
-    const again = new VideoEditFrameRouter(unreadable, fakeBackend('native'), { nativeAvailable: true })
+    const again = new VideoEditFrameRouter(unreadable, fakeBackend('native'), { nativeAvailable: true }, () => {}, false)
     expect((await again.open(media('b')).ready).codec).toBe('native'); expect((await again.open(media('b')).ready).codec).toBe('native')
     expect(unreadable.log.filter(entry => entry.startsWith('open'))).toHaveLength(2)
   })
@@ -64,21 +64,21 @@ describe('剪辑渲染的解码路由', () => {
     expect(forcedBrowser.log).toEqual(['open browser-1 a'])
   })
 
-  it('原生成为主路径后不询问浏览器；原生打开失败后此文件后续改用后备解码，浏览器确定解不了或强制时不换', async () => {
+  it('原生是主路径（默认）时不询问浏览器；原生打开失败后此文件后续改用后备解码，浏览器确定解不了或强制时不换', async () => {
     const browser = fakeBackend('browser'); const native = fakeBackend('native'); const log = vi.fn()
-    const router = new VideoEditFrameRouter(browser, native, { nativeAvailable: true }, log, true)
+    const router = new VideoEditFrameRouter(browser, native, { nativeAvailable: true }, log)
     expect((await router.open(media()).ready).codec).toBe('native'); expect(browser.log).toEqual([])
     router.nativeFailed(media(), new Error('服务退出')); await Promise.resolve(); await Promise.resolve()
     expect((await router.open(media()).ready).codec).toBe('browser')
     expect(log).toHaveBeenLastCalledWith('warn', expect.any(String), 'video_edit.decode.native.fallback', { mediaId: 'a', error: '服务退出' })
-    const onlyNative = new VideoEditFrameRouter(fakeBackend('browser', { decodable: false }), fakeBackend('native'), { nativeAvailable: true })
+    const onlyNative = new VideoEditFrameRouter(fakeBackend('browser', { decodable: false }), fakeBackend('native'), { nativeAvailable: true }, () => {}, false)
     expect((await onlyNative.open(media()).ready).codec).toBe('native')
     onlyNative.nativeFailed(media(), new Error('x')); await Promise.resolve(); await Promise.resolve()
     expect((await onlyNative.open(media()).ready).codec).toBe('native')
   })
 
   it('决定前就释放的打开不会再打开底层后端；关闭时释放未被使用的询问解析', async () => {
-    const browser = fakeBackend('browser'); const router = new VideoEditFrameRouter(browser, fakeBackend('native'), { nativeAvailable: true })
+    const browser = fakeBackend('browser'); const router = new VideoEditFrameRouter(browser, fakeBackend('native'), { nativeAvailable: true }, () => {}, false)
     const opened = router.open(media()); router.release(opened.key)
     await expect(opened.ready).rejects.toThrow('预览已关闭')
     expect(browser.log).toEqual(['open browser-1 a'])

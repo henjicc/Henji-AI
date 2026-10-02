@@ -5,12 +5,14 @@
 //!
 //! 命令：hello（版本、FFmpeg 信息、D3D11 设备、登记客户端 PID）、probe（流信息）、cancel、shutdown；
 //! 帧流（1.2）：start_test_stream、stop_stream、release_frame（通知）、stats、close_client_handles；
-//! 解码会话（1.3，协议见 decode/mod.rs）：open_decoder、frame_at、schedule、cancel_schedule。
+//! 解码会话（1.3，协议见 decode/mod.rs）：open_decoder、frame_at、schedule、cancel_schedule；
+//! 声音会话（2.3，协议见 audio/mod.rs）：open_audio、read_audio、close_audio（PCM 走二进制附件）。
 //! 画面经显卡共享纹理交给客户端，控制通道只发 `frame` 等事件（槽位、时间戳与请求归属）。
 //!
 //! 平台层边界（重要记录 011）：显卡设备、硬件解码设备、共享纹理与格式转换只在 `platform/` 之后；
 //! 其余模块跨平台，不直接依赖 D3D11/`windows` crate。
 
+mod audio;
 mod convert;
 mod decode;
 mod ffmpeg_info;
@@ -43,6 +45,14 @@ fn send(value: &Value) {
     }
 }
 
+/// 写出带二进制附件的消息（声音 PCM）：头与附件在同一把 stdout 锁内写出，不与其他消息交错。
+fn send_with_attachment(value: &Value, attachment: &[u8]) {
+    let mut stdout = io::stdout().lock();
+    if let Err(error) = protocol::write_message_with_attachment(&mut stdout, value, attachment) {
+        logging::error("protocol.write_failed", "写出带附件的响应失败", json!({ "error": error.to_string() }));
+    }
+}
+
 fn respond(id: &str, result: Result<Value, ServiceError>) {
     match result {
         Ok(value) => send(&protocol::success(id, value)),
@@ -56,6 +66,7 @@ struct Service {
     ffmpeg: Value,
     cancels: CancelMap,
     streams: streams::StreamManager,
+    audio: audio::AudioManager,
 }
 
 impl Service {
@@ -71,7 +82,7 @@ impl Service {
                 (None, platform::unavailable_summary(&reason))
             }
         };
-        Self { platform, platform_summary, ffmpeg: ffmpeg_info::ffmpeg_info(), cancels: Arc::default(), streams: streams::StreamManager::new() }
+        Self { platform, platform_summary, ffmpeg: ffmpeg_info::ffmpeg_info(), cancels: Arc::default(), streams: streams::StreamManager::new(), audio: audio::AudioManager::default() }
     }
 
     /// 登记客户端进程（纹理句柄的复制目标）。打开失败不影响握手，帧流请求届时报错。
@@ -135,6 +146,7 @@ impl Service {
             "handleCount": handle_count,
             "gpuLocalMemory": memory.map(|(usage, budget)| json!({ "currentUsageBytes": usage, "budgetBytes": budget })),
             "streams": self.streams.stats(),
+            "audioSessions": self.audio.count(),
         })
     }
 
@@ -202,6 +214,7 @@ fn main() {
             Ok(None) => {
                 logging::info("service.stdin_closed", "控制通道已关闭，服务退出", json!({}));
                 service.streams.stop_all();
+                service.audio.stop_all();
                 break;
             }
             Err(error) => {
@@ -210,6 +223,7 @@ fn main() {
             }
         };
         service.streams.reap();
+        service.audio.reap();
         let request = match protocol::parse_request(&body) {
             Ok(request) => request,
             Err(error) => {
@@ -310,11 +324,29 @@ fn main() {
                 let cancelled = service.streams.dispatch(&stream_id, decode::SessionCommand::Cancel { schedule_id }).is_ok();
                 respond(&request.id, Ok(json!({ "cancelled": cancelled })));
             }
+            Command::OpenAudio { audio_id, path, audio_stream, sample_rate } => {
+                let options = audio::AudioOpenOptions { audio_id: audio_id.clone(), path, audio_stream: audio_stream.unwrap_or(0), sample_rate };
+                if let Err(error) = service.audio.open(request.id.clone(), options) {
+                    logging::warn("audio.session.open_failed", &error.message, json!({ "code": error.code, "audioId": audio_id }));
+                    respond(&request.id, Err(error));
+                }
+            }
+            Command::ReadAudio { audio_id, start_frame, frames } => {
+                if let Err(error) = service.audio.read(&request.id, &audio_id, start_frame, frames) {
+                    respond(&request.id, Err(error));
+                }
+            }
+            Command::CloseAudio { audio_id } => {
+                if !service.audio.close(&request.id, &audio_id) {
+                    respond(&request.id, Ok(json!({ "closed": false })));
+                }
+            }
             Command::Shutdown => {
                 for flag in service.cancels.lock().unwrap().values() {
                     flag.store(true, Ordering::Relaxed);
                 }
                 service.streams.stop_all();
+                service.audio.stop_all();
                 respond(&request.id, Ok(json!({ "stopping": true })));
                 logging::info("service.stopping", "收到关闭请求，服务退出", json!({}));
                 break;

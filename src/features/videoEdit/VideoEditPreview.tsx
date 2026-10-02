@@ -6,6 +6,7 @@ import { acceptsVideoEditDrop, dropVideoEditInput, readVideoEditDrop } from './a
 import { activeVideoEditInstance, editVideoSequence, getActiveVideoEditSequence, requireVideoEditInstance, listVideoEditInstances, setVideoEditView, subscribeVideoEditDomain, subscribeVideoEditView, videoEditViewRevision, videoEditProgramCommandIdentity, type VideoEditInstance } from './application/videoEditService'
 import { yieldVideoEditSource } from './application/videoEditSource'
 import { createVideoEditAudioMeter, type VideoEditAudioLevel } from './engine/videoEditAudioMeter'
+import { VideoEditAudioScheduler } from './engine/videoEditAudioScheduler'
 import { VideoEditLevelMeter } from './panels/VideoEditLevelMeter'
 import { useVideoEditPictureGesture } from './panels/useVideoEditPictureGesture'
 import { timelineTimecode } from './timeline/timelineGeometry'
@@ -67,8 +68,6 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
       if (!instance.playing || instance.playbackDirection !== direction || activeCommand && videoEditProgramCommandIdentity(instance.document.id) !== activeCommand) { stopAudio(); setLevels([]) }
     })
     let audioRenderer: VideoEditRenderSession | undefined
-    let audioPending = false
-    let audioGeneration = 0
     let appliedDocument = initialDocument
     let timer: ReturnType<typeof setTimeout>
     let audio: AudioContext | undefined
@@ -82,9 +81,8 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
     let wasPlaying = false
     let direction: 1 | -1 = 1
     let activeCommand: object | undefined
-    let nextAudio = 0
-    const nodes = new Set<AudioBufferSourceNode>()
-    const stopAudio = (): void => { audioGeneration++; for (const node of nodes) { try { node.stop() } catch { /* already ended */ } node.disconnect() } nodes.clear() }
+    const audioScheduler = new VideoEditAudioScheduler()
+    const stopAudio = (): void => audioScheduler.stop()
     const meterTimer = setInterval(() => { if (!stopped && meter) setLevels(instance.playing && instance.playbackDirection === 1 ? meter.read() : Array.from({ length: appliedDocument.channels }, () => ({ peak: 0, rms: 0 }))) }, 50)
     let lastPresentation = -Infinity
     // A failure is retried once the sequence changes (relink, removal, undo) or the user moves the playhead.
@@ -161,7 +159,7 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
             while (audio.currentTime === before && performance.now() - waiting < 1000 && !stopped) await new Promise(resolve => setTimeout(resolve, 2))
           }
           if (stopped) return
-          clockStart = (audio?.currentTime ?? 0) + 0.1; startFrame = initialFrame; nextAudio = initialFrame / document.fps
+          clockStart = (audio?.currentTime ?? 0) + 0.1; startFrame = initialFrame; audioScheduler.start(initialFrame / document.fps)
           if (!current.playing || getActiveVideoEditSequence(instance) !== document || videoEditProgramCommandIdentity(instance.document.id) !== command) { wasPlaying = false; timer = setTimeout(() => { void loop() }, 0); return }
           clockPerformanceStart = performance.now() + 100
           surface.dataset.playClockStartAt = String(clockPerformanceStart)
@@ -172,19 +170,13 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
         if (current.playing) {
           const timelineTime = startFrame / document.fps + direction * (performance.now() - clockPerformanceStart) / 1000
           if (direction === 1 ? timelineTime >= videoEditDuration(document) / document.fps && lastFrame >= videoEditDuration(document) - 1 : timelineTime <= 0 && lastFrame <= 0) { setVideoEditView(instance.document.id, { playing: false }, true); stopAudio() }
-          if (direction === 1 && audio && !audioPending && nextAudio < timelineTime + 0.4 && nextAudio < videoEditDuration(document) / document.fps && audibleVideoEditClips(document).length) {
-            audioRenderer ??= new VideoEditRenderSession(document)
-            const duration = Math.min(0.5, videoEditDuration(document) / document.fps - nextAudio)
-            const from = nextAudio; nextAudio += duration; audioPending = true
-            const generation = audioGeneration; const context = audio
-            void audioRenderer.mixAudio(from, duration).then(buffer => {
-              if (stopped || generation !== audioGeneration || !listVideoEditInstances().includes(instance) || getActiveVideoEditSequence(instance) !== document || videoEditProgramCommandIdentity(instance.document.id) !== command) return
-              const node = context.createBufferSource(); node.buffer = buffer; node.connect(meter!.input)
-              const when = clockStart + from - startFrame / document.fps
-              const offset = Math.max(0, context.currentTime - when)
-              if (offset < buffer.duration) { node.start(Math.max(when, context.currentTime), offset); nodes.add(node); node.onended = () => { nodes.delete(node); node.disconnect() } }
-              else node.disconnect()
-            }).catch(error => { if (!stopped && generation === audioGeneration && listVideoEditInstances().includes(instance) && getActiveVideoEditSequence(instance) === document && videoEditProgramCommandIdentity(instance.document.id) === command) { setVideoEditView(instance.document.id, { playing: false }, true); onError(error) } }).finally(() => { audioPending = false })
+          if (direction === 1 && audio && meter && audibleVideoEditClips(document).length) {
+            audioScheduler.pump({
+              context: audio, destination: meter.input, origin: clockStart - startFrame / document.fps, timelineTime, endTime: videoEditDuration(document) / document.fps,
+              mix: (from, duration) => (audioRenderer ??= new VideoEditRenderSession(document)).mixAudio(from, duration),
+              isCurrent: () => !stopped && listVideoEditInstances().includes(instance) && getActiveVideoEditSequence(instance) === document && videoEditProgramCommandIdentity(instance.document.id) === command,
+              onError: error => { setVideoEditView(instance.document.id, { playing: false }, true); onError(error) },
+            })
           }
         }
         const playing = current.playing

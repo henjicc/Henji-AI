@@ -26,13 +26,24 @@ vi.mock('../engine/videoEditSourceFrames', () => ({ videoEditSourceBackend: asyn
   invalidate() { this.revision++; gpu.invalidates() }
   async dispose() { this.invalidate(); gpu.closes(); await gpu.closing }
 } }))
+const sound = vi.hoisted(() => ({ players: [] as Array<{ media: VideoEditMedia; calls: Array<[string, ...unknown[]]>; disposed: boolean }>, fail: undefined as Error | undefined }))
+vi.mock('../engine/videoEditSourceSound', () => ({ VideoEditSourceSoundPlayer: class {
+  readonly record: { media: VideoEditMedia; calls: Array<[string, ...unknown[]]>; disposed: boolean }
+  constructor(media: VideoEditMedia) { this.record = { media, calls: [], disposed: false }; sound.players.push(this.record) }
+  async prepare(volume: number) { this.record.calls.push(['prepare', volume]) }
+  start(seconds: number, at: number) { this.record.calls.push(['start', seconds, at]) }
+  pump(seconds: number, _current: () => boolean, onError: (error: unknown) => void) { this.record.calls.push(['pump', seconds]); if (sound.fail) onError(sound.fail) }
+  levels() { return [{ peak: .5, rms: .25 }, { peak: .5, rms: .25 }] }
+  stop() { this.record.calls.push(['stop']) }
+  async dispose() { this.record.disposed = true }
+} }))
 const media: VideoEditMedia = { id: 'media', kind: 'video', name: '原视频', path: 'D:/source.mp4', durationSeconds: 7, width: 3840, height: 2160, frameRateMode: 'sampled-constant' }
 let host: HTMLDivElement
 let frameCallbacks: Map<number, VideoFrameRequestCallback>
 let nextFrame: number
 beforeEach(() => {
   host = document.createElement('div'); document.body.append(host); frameCallbacks = new Map(); nextFrame = 0
-  gpu.blocked = false; gpu.calls = []; gpu.requests = []; gpu.invalidates.mockClear(); gpu.closes.mockClear(); gpu.created = 0; gpu.closing = undefined; gpu.timestamp = undefined; gpu.backend = 'browser'; gpu.plays = []
+  gpu.blocked = false; gpu.calls = []; gpu.requests = []; gpu.invalidates.mockClear(); gpu.closes.mockClear(); gpu.created = 0; gpu.closing = undefined; gpu.timestamp = undefined; gpu.backend = 'browser'; gpu.plays = []; sound.players = []; sound.fail = undefined
   vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(function (this: HTMLMediaElement) { Object.defineProperty(this, 'paused', { value: true, configurable: true }) })
   vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => {})
   vi.spyOn(HTMLMediaElement.prototype, 'play').mockImplementation(function (this: HTMLMediaElement) { Object.defineProperty(this, 'paused', { value: false, configurable: true }); return Promise.resolve() })
@@ -281,9 +292,11 @@ it('源音频通过同一个实际媒体元素确认定位和音量，关闭释�
   const presenter = createVideoEditSourcePresenter(host, () => ({ ...media, kind: 'audio', path: 'D:/source.wav' }), observe)
   const request = presenter.present({ itemId: 'audio', timeUs: 2_000_000, playing: false, volume: 0.35 }, new AbortController().signal)
   const audio = host.querySelector('audio')!
-  audio.dispatchEvent(new Event('loadedmetadata')); await Promise.resolve(); await Promise.resolve()
+  // The backend is decided while the element loads (audio items too), so the seek starts a few ticks later.
+  audio.dispatchEvent(new Event('loadedmetadata')); for (let tick = 0; tick < 8; tick++) await Promise.resolve()
   audio.dispatchEvent(new Event('seeked'))
   expect(await request).toEqual({ timeUs: 2_000_000, presentedTimeUs: 2_000_000, playing: false, volume: 0.35 })
+  expect(sound.players).toEqual([])
   expect(host.querySelectorAll('audio')).toHaveLength(1); expect(audio.controls).toBe(false)
   const playing = await presenter.present({ itemId: 'audio', timeUs: 2_000_000, playing: true, volume: 0.6 }, new AbortController().signal)
   expect(playing).toMatchObject({ playing: true, volume: 0.6 })
@@ -310,8 +323,10 @@ it('只有原生能解的视频不用媒体元素：渲染会话确认定位画�
   expect(playing).toMatchObject({ playing: true, timeUs: 45_000 }); expect(playing.playbackDirection).toBeUndefined()
   await vi.advanceTimersByTimeAsync(200)
   expect(gpu.plays.map(([frame]) => frame)).toEqual([3, 4, 5])
-  const [first, second] = gpu.plays.map(([, deadline]) => deadline!)
-  expect(second - first).toBeCloseTo(1000 / 60, 2)
+  // The first picture of the run is presented unpaced (it opens the scheduled path); the rest follow it at 60fps.
+  const [warm, second, third] = gpu.plays.map(([, deadline]) => deadline)
+  expect(warm).toBeUndefined()
+  expect(third! - second!).toBeCloseTo(1000 / 60, 2)
   expect(observe).toHaveBeenLastCalledWith('item', { timeUs: 100_000, presentedTimeUs: 83_333, playing: false, volume: .5 })
   expect(levels).toHaveBeenCalledWith([])
   const reverse = await presenter.present({ itemId: 'item', timeUs: 45_000, playing: true, volume: .5, playbackDirection: -1 }, new AbortController().signal)
@@ -320,5 +335,89 @@ it('只有原生能解的视频不用媒体元素：渲染会话确认定位画�
   expect(gpu.calls.slice(-3)).toEqual([45_000, 33_332, 16_666])
   expect(observe).toHaveBeenLastCalledWith('item', expect.objectContaining({ timeUs: 0, playing: false }))
   presenter.release(); expect(gpu.closes).toHaveBeenCalledOnce(); expect(host.children).toHaveLength(0)
+  presenter.dispose()
+})
+
+it('只有原生能解的视频有声：正向播放先启动音频时钟，再把下一帧与它的声音放在同一时刻；反向不出声；释放关闭声音', async () => {
+  vi.useFakeTimers()
+  vi.spyOn(performance, 'now').mockImplementation(() => Date.now())
+  gpu.backend = 'native'
+  const observe = vi.fn(); const levels = vi.fn()
+  const presenter = createVideoEditSourcePresenter(host, () => ({ ...media, path: 'D:/prores.mov', durationSeconds: 0.5, frameRate: { numerator: 60, denominator: 1 } }), observe, levels)
+  const paused = presenter.present({ itemId: 'item', timeUs: 45_000, playing: false, volume: .5 }, new AbortController().signal)
+  for (let tick = 0; tick < 8; tick++) await Promise.resolve()
+  host.querySelector('video')?.dispatchEvent(new Event('error'))
+  await paused
+  expect(sound.players).toHaveLength(1)
+  const [player] = sound.players
+  await presenter.present({ itemId: 'item', timeUs: 45_000, playing: true, volume: .7 }, new AbortController().signal)
+  await vi.advanceTimersByTimeAsync(60)
+  // present() first stops any earlier run; the run then prepares the audio clock before anything is placed.
+  const run = player.calls.slice(player.calls.findIndex(([kind]) => kind === 'prepare'))
+  expect(run[0]).toEqual(['prepare', .7])
+  const start = run[1] as [string, number, number]
+  // Frame 3 (source 0.05s) is presented first (unpaced) and the sound of 0.05s is anchored at that moment; frame 4
+  // follows one frame later.
+  expect(start[0]).toBe('start'); expect(start[1]).toBeCloseTo(3 / 60, 9)
+  expect(gpu.plays[0]).toEqual([3, undefined])
+  expect(gpu.plays[1][0]).toBe(4); expect(gpu.plays[1][1]).toBeCloseTo(performance.timeOrigin + start[2] + 1000 / 60, 3)
+  // Sound is requested along the picture clock: before every paced frame (and at the end), never going back.
+  const pumps = player.calls.filter(([kind]) => kind === 'pump').map(([, seconds]) => seconds as number)
+  expect(pumps.length).toBe(gpu.plays.length); expect(pumps.every((value, index) => index === 0 || value >= pumps[index - 1])).toBe(true)
+  await vi.advanceTimersByTimeAsync(600)
+  expect(player.calls.at(-1)).toEqual(['stop'])
+  const before = player.calls.length
+  await presenter.present({ itemId: 'item', timeUs: 45_000, playing: true, volume: .7, playbackDirection: -1 }, new AbortController().signal)
+  await vi.advanceTimersByTimeAsync(200)
+  expect(player.calls.slice(before).some(([kind]) => kind === 'prepare' || kind === 'pump')).toBe(false)
+  presenter.release()
+  await vi.advanceTimersByTimeAsync(0)
+  expect(player.disposed).toBe(true)
+  presenter.dispose()
+})
+
+it('只有原生能解的声音素材：不用媒体元素，定位只移动时钟，正向播放按时钟推进并出声直到结尾，电平来自声音；声音失败时停止并报告', async () => {
+  vi.useFakeTimers()
+  vi.spyOn(performance, 'now').mockImplementation(() => Date.now())
+  gpu.backend = 'native'
+  const observe = vi.fn(); const levels = vi.fn()
+  const presenter = createVideoEditSourcePresenter(host, () => ({ ...media, kind: 'audio', path: 'D:/dialog.mxf', durationSeconds: 0.3 }), observe, levels)
+  const paused = presenter.present({ itemId: 'audio', timeUs: 100_000, playing: false, volume: 1 }, new AbortController().signal)
+  for (let tick = 0; tick < 8; tick++) await Promise.resolve()
+  host.querySelector('audio')?.dispatchEvent(new Event('error'))
+  expect(await paused).toEqual({ timeUs: 100_000, presentedTimeUs: 100_000, playing: false, volume: 1 })
+  expect(host.querySelector('audio')).toBeNull(); expect(gpu.created).toBe(0)
+  expect(host.querySelector('[data-video-edit-source-sound]')).not.toBeNull()
+  const [player] = sound.players
+  await presenter.present({ itemId: 'audio', timeUs: 100_000, playing: true, volume: 1 }, new AbortController().signal)
+  await vi.advanceTimersByTimeAsync(120)
+  const start = player.calls.find(([kind]) => kind === 'start') as [string, number, number]
+  expect(start[1]).toBeCloseTo(.1, 9)
+  const last = observe.mock.calls.at(-1)![1] as { timeUs: number; playing: boolean }
+  expect(last.playing).toBe(true); expect(last.timeUs).toBeGreaterThan(100_000)
+  expect(levels).toHaveBeenCalledWith([{ peak: .5, rms: .25 }, { peak: .5, rms: .25 }])
+  expect(player.calls.filter(([kind]) => kind === 'pump').length).toBeGreaterThan(1)
+  await vi.advanceTimersByTimeAsync(400)
+  expect(observe).toHaveBeenLastCalledWith('audio', { timeUs: 300_000, presentedTimeUs: 300_000, playing: false, volume: 1 })
+  sound.fail = new Error('素材「原视频」的声音读取失败，请确认文件可用，或在项目素材中重新定位源文件。')
+  await presenter.present({ itemId: 'audio', timeUs: 0, playing: true, volume: 1 }, new AbortController().signal)
+  await vi.advanceTimersByTimeAsync(100)
+  expect(observe).toHaveBeenLastCalledWith('audio', expect.objectContaining({ playing: false, error: sound.fail.message }))
+  presenter.dispose()
+})
+
+it('原生视图暂停在同一时钟时（设入出点、改音量）沿用已确认画面不重新渲染；时钟改变或刚停止播放时重新确认', async () => {
+  gpu.backend = 'native'
+  const observe = vi.fn()
+  const presenter = createVideoEditSourcePresenter(host, () => ({ ...media, path: 'D:/prores.mov', frameRate: { numerator: 60, denominator: 1 } }), observe)
+  const first = presenter.present({ itemId: 'item', timeUs: 500_000, playing: false, volume: 1 }, new AbortController().signal)
+  for (let tick = 0; tick < 8; tick++) await Promise.resolve()
+  host.querySelector('video')?.dispatchEvent(new Event('error'))
+  await first
+  expect(gpu.calls).toEqual([500_000])
+  expect(await presenter.present({ itemId: 'item', timeUs: 500_000, playing: false, volume: .4, inUs: 500_000 }, new AbortController().signal)).toMatchObject({ timeUs: 500_000, presentedTimeUs: 500_000, volume: .4 })
+  expect(gpu.calls).toEqual([500_000])
+  await presenter.present({ itemId: 'item', timeUs: 1_233_334, playing: false, volume: .4 }, new AbortController().signal)
+  expect(gpu.calls).toEqual([500_000, 1_233_334])
   presenter.dispose()
 })

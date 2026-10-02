@@ -386,3 +386,51 @@ describe('VideoDecoderService', () => {
     expect(lifecycle).toEqual(['ready:1000', 'exited:1000', 'ready:1001'])
   })
 })
+
+describe('声音会话与二进制附件', () => {
+  function attachment(id: string, result: unknown, bytes: Buffer): Buffer {
+    const header = Buffer.alloc(4); header.writeUInt32LE(bytes.length, 0)
+    return Buffer.concat([encodeVideoDecoderFrame({ id, ok: true, result, attachment: bytes.length }), header, bytes])
+  }
+
+  it('带 attachment 的消息挂上紧随其后的原始字节，分块到达也能拼回；不带的消息不受影响', () => {
+    const pcm = Buffer.from(new Float32Array([0.5, -0.25, 1, 0]).buffer)
+    const stream = Buffer.concat([encodeVideoDecoderFrame({ event: 'stream_ended', streamId: 'vf-1' }), attachment('vd-9', { frames: 2 }, pcm), encodeVideoDecoderFrame({ id: 'vd-10', ok: true, result: 1 })])
+    const reader = new VideoDecoderFrameReader()
+    const messages: unknown[] = []
+    for (let offset = 0; offset < stream.length; offset += 5) messages.push(...reader.push(stream.subarray(offset, offset + 5)))
+    expect(messages).toHaveLength(3)
+    const read = messages[1] as { binary: Buffer; result: unknown }
+    expect(read.result).toEqual({ frames: 2 })
+    expect([...new Float32Array(read.binary.buffer, read.binary.byteOffset, 4)]).toEqual([0.5, -0.25, 1, 0])
+    expect(messages[2]).toEqual({ id: 'vd-10', ok: true, result: 1 })
+  })
+
+  it('附件长度与声明不符、或声明无效时是协议错误', () => {
+    const header = Buffer.alloc(4); header.writeUInt32LE(3, 0)
+    expect(() => new VideoDecoderFrameReader().push(Buffer.concat([encodeVideoDecoderFrame({ id: 'a', ok: true, attachment: 4 }), header, Buffer.alloc(3)]))).toThrow('附件长度不符')
+    expect(() => new VideoDecoderFrameReader().push(encodeVideoDecoderFrame({ id: 'a', ok: true, attachment: -1 }))).toThrow('附件长度无效')
+  })
+
+  it('openAudio/readAudio/closeAudio 发送对应命令，读取结果带上附件数据；缺少附件时报协议错误', async () => {
+    const pcm = Buffer.from(new Float32Array([0.25, 0.75]).buffer)
+    const { service, children } = createHarness(standardHandler({
+      open_audio: (message, child) => child.reply(message.id, { found: true, audioId: message.audioId, audioStream: 0, streamIndex: 1, codec: 'pcm_s24le', decoderName: 'pcm_s24le', sampleRate: 48000, sourceSampleRate: 48000, channels: 1, channelLayout: 'mono', resampler: 'none', startSeconds: 0, endSeconds: 3, setupMs: 1 }),
+      read_audio: (message, child) => {
+        if (message.frames === 1) child.reply(message.id, { audioId: message.audioId, startFrame: message.startFrame, frames: 1, channels: 1, seeked: false, decodeMs: 0 })
+        else child.stdout.write(attachment(message.id, { audioId: message.audioId, startFrame: message.startFrame, frames: 2, channels: 1, seeked: true, decodeMs: 1 }, pcm))
+      },
+      close_audio: (message, child) => child.reply(message.id, { closed: true }),
+    }))
+    const opened = await service.openAudio({ audioId: 'va-1', path: 'D:/a.mxf', sampleRate: 48000 })
+    expect(opened).toMatchObject({ found: true, sampleRate: 48000, channels: 1 })
+    const read = await service.readAudio('va-1', -1, 2)
+    expect(read).toMatchObject({ startFrame: -1, frames: 2, seeked: true })
+    expect([...new Float32Array(read.data.buffer, read.data.byteOffset, 2)]).toEqual([0.25, 0.75])
+    await expectCode(service.readAudio('va-1', 0, 1), 'PROTOCOL_ERROR')
+    expect(await service.closeAudio('va-1')).toEqual({ closed: true })
+    expect(children[0].received.filter((message) => message.type.endsWith('_audio')).map((message) => message.type)).toEqual(['open_audio', 'read_audio', 'read_audio', 'close_audio'])
+    expect(children[0].received.find((message) => message.type === 'open_audio')).toMatchObject({ audioId: 'va-1', path: 'D:/a.mxf', sampleRate: 48000 })
+    await service.shutdown()
+  })
+})

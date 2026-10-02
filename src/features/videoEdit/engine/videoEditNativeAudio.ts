@@ -1,12 +1,15 @@
+import type { VideoAudioSessionInfo, VideoFramePortCallResults } from '@/platform/contracts/videoFrames'
 import type { VideoEditAudioChunk, VideoEditClipAudio } from './videoEditFrameSource'
+import type { VideoEditNativeFrameReceiver } from './videoEditNativeFrames'
+import { videoEditSourceReadError } from './videoEditSourceErrors'
 
 /**
  * One opened sound stream of the native decoder service (one per clip reader, so two clips of a file never share a
- * decode position). The service decodes and converts to planar float32 at the stream's own rate and channels; it does
- * not resample or remix (`VideoEditRenderer.mixAudio` owns both, identically for every backend).
+ * decode position). The service decodes, resamples with SoX to the requested rate (record 012: a mature resampler,
+ * sound quality first) and delivers planar float32 in the stream's own channel layout; the mix maps channels.
  */
 export interface VideoEditPcmSession {
-  /** Stream sample rate. Sample `n` plays at `n / sampleRate` seconds on the absolute source timeline. */
+  /** Output sample rate. Sample `n` plays at `n / sampleRate` seconds on the absolute source timeline. */
   readonly sampleRate: number
   /** Planes per read, in FFmpeg native order: front left and front right first when the layout has them. */
   readonly channels: number
@@ -18,6 +21,12 @@ export interface VideoEditPcmSession {
   read(startFrame: number, frames: number): Promise<readonly Float32Array[]>
   close(): void
 }
+
+/**
+ * Opens the session of one clip at a sample rate (undefined: the stream's own rate). `null`: the file has no such
+ * sound stream, so the clip is silent (not an error).
+ */
+export type VideoEditPcmOpener = (sampleRate: number | undefined) => Promise<VideoEditPcmSession | null>
 
 /** Guard samples on each side so the mix can interpolate at the range edges despite floating-point rounding. */
 const GUARD_FRAMES = 1
@@ -55,34 +64,48 @@ class PcmChunk implements VideoEditAudioChunk {
 
 /**
  * The native sound reader of one clip. The session opens on the first read (picture clips also get a reader they
- * never read) and a failed open is retried on the next read; `close()` releases the session, even one still opening.
+ * never read) at the rate the mix asks for, and opens again when that rate changes. A failed open or read drops the
+ * session, so the next read opens a new one (a restarted service or a restored file); `close()` releases the
+ * session, even one still opening.
  */
-export function createVideoEditNativeClipAudio(open: () => Promise<VideoEditPcmSession>): Required<VideoEditClipAudio> {
-  let session: Promise<VideoEditPcmSession> | undefined
+export function createVideoEditNativeClipAudio(open: VideoEditPcmOpener): Required<VideoEditClipAudio> {
+  type Entry = { rate: number | undefined; session: Promise<VideoEditPcmSession | null> }
+  let current: Entry | undefined
   let closed = false
-  const current = (): Promise<VideoEditPcmSession> => {
-    if (closed) return Promise.reject(new Error('声音读取已关闭。'))
-    if (!session) {
-      const opening = open().then(opened => {
+  const drop = (entry: Entry | undefined): void => {
+    if (!entry || current !== entry) return
+    current = undefined
+    void entry.session.then(session => session?.close(), () => undefined)
+  }
+  const session = (rate: number | undefined): Entry => {
+    if (closed) throw new Error('声音读取已关闭。')
+    if (current && current.rate !== rate) drop(current)
+    if (!current) {
+      const opening = open(rate).then(opened => {
+        if (!opened) return null
         if (closed) { opened.close(); throw new Error('声音读取已关闭。') }
         if (!(Number.isSafeInteger(opened.sampleRate) && opened.sampleRate > 0) || !(Number.isSafeInteger(opened.channels) && opened.channels > 0)) { opened.close(); throw new Error('原生声音流的采样率或声道数无效。') }
         return opened
       })
-      opening.catch(() => { if (session === opening) session = undefined })
-      session = opening
+      const entry: Entry = { rate, session: opening }
+      opening.catch(() => { if (current === entry) current = undefined })
+      current = entry
     }
-    return session
+    return current
   }
   return {
-    async *chunks(startSeconds: number, endSeconds: number): AsyncGenerator<VideoEditAudioChunk, void, unknown> {
-      const pcm = await current()
+    async *chunks(startSeconds: number, endSeconds: number, sampleRate?: number): AsyncGenerator<VideoEditAudioChunk, void, unknown> {
+      const entry = session(sampleRate)
+      const pcm = await entry.session
+      if (!pcm) return
       const { first, last } = videoEditPcmReadRange(startSeconds, endSeconds, pcm.sampleRate)
       const limit = pcm.sampleRate * MAX_READ_SECONDS
       for (let next = first; next < last;) {
         const frames = Math.min(limit, last - next)
-        const planes = await pcm.read(next, frames)
+        let planes: readonly Float32Array[]
+        try { planes = await pcm.read(next, frames) } catch (error) { drop(entry); throw error }
         if (closed) throw new Error('声音读取已关闭。')
-        if (planes.length !== pcm.channels || planes.some(plane => !(plane instanceof Float32Array) || plane.length !== frames)) throw new Error('原生声音数据不完整。')
+        if (planes.length !== pcm.channels || planes.some(plane => !(plane instanceof Float32Array) || plane.length !== frames)) { drop(entry); throw new Error('原生声音数据不完整。') }
         yield new PcmChunk(planes, next, pcm.sampleRate)
         next += frames
       }
@@ -90,8 +113,43 @@ export function createVideoEditNativeClipAudio(open: () => Promise<VideoEditPcmS
     close(): void {
       if (closed) return
       closed = true
-      const opened = session; session = undefined
-      void opened?.then(pcm => pcm.close(), () => undefined)
+      const entry = current; current = undefined
+      void entry?.session.then(pcm => pcm?.close(), () => undefined)
+    },
+  }
+}
+
+/** The worker-side port of the frame channel, as sound sessions need it. */
+export type VideoEditNativeSoundChannel = Pick<VideoEditNativeFrameReceiver, 'call'>
+
+/**
+ * Opens a native sound session over the render worker's frame channel: the request goes through the preload to the
+ * main process, and each read comes back as one transferred buffer of planar float32. Failures are in user language.
+ */
+export async function openVideoEditNativePcm(channel: VideoEditNativeSoundChannel, path: string, name: string, options: { audioStream?: number; sampleRate?: number }): Promise<VideoEditPcmSession | null> {
+  let info: VideoAudioSessionInfo
+  try {
+    info = await channel.call('openAudio', { path, ...(options.audioStream !== undefined ? { audioStream: options.audioStream } : {}), ...(options.sampleRate !== undefined ? { sampleRate: options.sampleRate } : {}) })
+  } catch (error) { throw videoEditSourceReadError(name, error) }
+  if (!info.found) return null
+  const { audioId, sampleRate, channels } = info
+  let closed = false
+  return {
+    sampleRate, channels,
+    async read(startFrame, frames) {
+      if (closed) throw new Error('声音读取已关闭。')
+      let result: VideoFramePortCallResults['readAudio']
+      try { result = await channel.call('readAudio', { audioId, startFrame, frames }) } catch (error) {
+        throw new Error(`素材「${name}」的声音读取失败，请确认文件可用，或在项目素材中重新定位源文件。`, { cause: error })
+      }
+      const data: unknown = result.data
+      if (!(data instanceof ArrayBuffer) || result.frames !== frames || result.channels !== channels || data.byteLength !== frames * channels * 4) throw new Error('原生声音数据不完整。')
+      return Array.from({ length: channels }, (_, channel) => new Float32Array(data, channel * frames * 4, frames))
+    },
+    close() {
+      if (closed) return
+      closed = true
+      void channel.call('closeAudio', { audioId }).catch(() => undefined)
     },
   }
 }

@@ -47,6 +47,24 @@ const PORT_CALL_CHANNELS: Record<VideoFramePortCall['method'], string> = {
   schedule: 'videoFrames:schedule',
   cancelSchedule: 'videoFrames:cancelSchedule',
   closeStream: 'videoFrames:closeStream',
+  openAudio: 'videoFrames:openAudio',
+  readAudio: 'videoFrames:readAudio',
+  closeAudio: 'videoFrames:closeAudio',
+}
+
+/** 会话归属本通道的请求：preload 填入本通道的 route（忽略消费方给的值）。 */
+const ROUTED_CALLS: ReadonlySet<VideoFramePortCall['method']> = new Set(['openDecoder', 'openAudio'])
+
+/**
+ * 声音读取结果里的 PCM：IPC 送来的是字节数组，转为独占的 ArrayBuffer 后 transfer 给 Worker（这一跳不再拷贝）。
+ * 其他请求的结果不含可转交的数据。
+ */
+function transferable(method: VideoFramePortCall['method'], result: unknown): { result: unknown; transfer: unknown[] } {
+  if (method !== 'readAudio' || !result || typeof result !== 'object') return { result, transfer: [] }
+  const data = (result as { data?: unknown }).data
+  if (!(data instanceof Uint8Array)) return { result, transfer: [] }
+  const buffer = data.byteOffset === 0 && data.byteLength === data.buffer.byteLength && data.buffer instanceof ArrayBuffer ? data.buffer : data.slice().buffer
+  return { result: { ...result, data: buffer }, transfer: [buffer] }
 }
 
 function isFrameMeta(value: unknown): value is VideoFrameMeta {
@@ -127,12 +145,12 @@ export function createVideoFramesApi(nativeInvoke: NativeInvoke): HenjiVideoFram
     void Promise.resolve(nativeInvoke('videoFrames:closeRoute', { route })).catch(() => undefined)
   }
 
-  /** 端口请求转为 IPC；打开的解码会话一律归属本通道（忽略请求里的 route）。 */
+  /** 端口请求转为 IPC；打开的解码会话与声音会话一律归属本通道（忽略请求里的 route）。 */
   const answer = async (route: string, entry: Route, id: number, call: VideoFramePortCall | undefined): Promise<void> => {
-    const reply = (body: Omit<VideoFramePortResponseMessage, 'type' | 'id'>): void => {
+    const reply = (body: Omit<VideoFramePortResponseMessage, 'type' | 'id'>, transfer: unknown[] = []): void => {
       if (routes.get(route) !== entry) return
       try {
-        entry.port.postMessage({ type: 'response', id, ...body } satisfies VideoFramePortResponseMessage, [])
+        entry.port.postMessage({ type: 'response', id, ...body } satisfies VideoFramePortResponseMessage, transfer)
       } catch {
         // 端口已关闭：消费方已不在。
       }
@@ -142,9 +160,10 @@ export function createVideoFramesApi(nativeInvoke: NativeInvoke): HenjiVideoFram
       reply({ error: '未知的帧通道请求' })
       return
     }
-    const payload = call.method === 'openDecoder' ? { ...call.params, route } : call.params
+    const payload = ROUTED_CALLS.has(call.method) ? { ...call.params, route } : call.params
     try {
-      reply({ result: await nativeInvoke(channel, payload) })
+      const { result, transfer } = transferable(call.method, await nativeInvoke(channel, payload))
+      reply({ result }, transfer)
     } catch (error) {
       reply({ error: error instanceof Error ? error.message : String(error) })
     }

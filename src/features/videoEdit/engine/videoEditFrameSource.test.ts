@@ -13,13 +13,17 @@ it.each<[string, VideoEditDecodeSupport, ReturnType<typeof chooseVideoEditDecode
   expect(chooseVideoEditDecodeBackend(support, undefined, true)).toBe(expected)
 })
 
-it('原生声音接通前（原生不是主路径）：浏览器能完整解的文件整体留在浏览器，只有原生能解的走原生', () => {
-  expect(VIDEO_EDIT_NATIVE_PRIMARY).toBe(false)
-  expect(chooseVideoEditDecodeBackend({ native: 'decodes', browser: 'decodes' })).toBe('browser')
-  expect(chooseVideoEditDecodeBackend({ native: 'decodes', browser: 'cannot-decode' })).toBe('native')
+it('原生声音接通后原生是主路径（默认）：原生能读就走原生，否则浏览器；原生不是主路径时浏览器能完整解的文件整体留在浏览器', () => {
+  expect(VIDEO_EDIT_NATIVE_PRIMARY).toBe(true)
+  expect(chooseVideoEditDecodeBackend({ native: 'decodes', browser: 'decodes' })).toBe('native')
   expect(chooseVideoEditDecodeBackend({ native: 'decodes', browser: 'unknown' })).toBe('native')
   expect(chooseVideoEditDecodeBackend({ native: 'unavailable', browser: 'unknown' })).toBe('browser')
-  expect(chooseVideoEditDecodeBackend({ native: 'decodes', browser: 'decodes' }, 'native')).toBe('native')
+  expect(chooseVideoEditDecodeBackend({ native: 'unavailable', browser: 'cannot-decode' })).toBeUndefined()
+  // The fallback rule (native not primary) is still the choice where it is passed explicitly.
+  expect(chooseVideoEditDecodeBackend({ native: 'decodes', browser: 'decodes' }, undefined, false)).toBe('browser')
+  expect(chooseVideoEditDecodeBackend({ native: 'decodes', browser: 'cannot-decode' }, undefined, false)).toBe('native')
+  expect(chooseVideoEditDecodeBackend({ native: 'decodes', browser: 'unknown' }, undefined, false)).toBe('native')
+  expect(chooseVideoEditDecodeBackend({ native: 'decodes', browser: 'decodes' }, 'native', false)).toBe('native')
 })
 
 it('诊断强制的后端只在它能解时使用，不静默换成另一个', () => {

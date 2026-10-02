@@ -440,7 +440,7 @@ function pcmSession(sampleRate: number, channels: number, value: (channel: numbe
   return { sampleRate, channels, close: onClose,
     async read(first: number, frames: number) { return Array.from({ length: channels }, (_, channel) => Float32Array.from({ length: frames }, (_, index) => value(channel, first + index))) } }
 }
-it.each([44100, 48000])('原生声音经混音逐样本对齐：微秒入点、非零流起点、跨混音块、末尾补零，%iHz 源转 48kHz 序列', async sourceRate => {
+it.each([44100, 48000])('原生声音经混音逐样本对齐：微秒入点、非零流起点、跨混音块、末尾补零，%iHz 块混入 48kHz 序列（同采样率取最近样本）', async sourceRate => {
   // Sound only between 0.523s and 1.9s of the source timeline; a one-sample or one-microsecond shift changes the values.
   const [soundStart, soundEnd] = [Math.round(.523 * sourceRate), Math.round(1.9 * sourceRate)]
   const signal = (channel: number, sample: number): number => sample >= soundStart && sample < soundEnd ? Math.fround(channel * .5 + (sample * 7 % 1000) / 1000 * .4) : 0
@@ -462,8 +462,12 @@ it.each([44100, 48000])('原生声音经混音逐样本对齐：微秒入点、�
         let expected = 0
         if (sample >= first && sample < last) {
           const position = (inPoint + sample / rate - clip.start / fps) * sourceRate
-          const left = Math.floor(position); const alpha = position - left
-          expected = signal(channel, left) * (1 - alpha) + signal(channel, left + 1) * alpha
+          // Blocks at the sequence rate are read by nearest sample (no interpolation filter); others interpolate.
+          if (sourceRate === rate) expected = signal(channel, Math.floor(position + .5 + 1e-6))
+          else {
+            const left = Math.floor(position); const alpha = position - left
+            expected = signal(channel, left) * (1 - alpha) + signal(channel, left + 1) * alpha
+          }
         }
         if (expected !== 0) audible++
         worst = Math.max(worst, Math.abs(actual - expected))
@@ -497,4 +501,33 @@ it('片段声音读取器随源释放而关闭，原生会话只关一次，打�
     expect((await renderer.mixAudio(0, .01))[0][0]).toBe(.5)
   } finally { await renderer.dispose() }
   expect(closed).toBe(2); expect(released.sort()).toEqual(opened.sort())
+})
+it('混音把序列采样率交给声音读取器；序列采样率改变后按新采样率读取', async () => {
+  const rates: Array<number | undefined> = []
+  const backend: VideoEditFrameBackend = {
+    open(media) { return { key: media.path, ready: Promise.resolve({ clipFrames: () => undefined, clipAudio: () => ({ chunks: (_start: number, _end: number, sampleRate?: number) => { rates.push(sampleRate); return (async function* () {})() } }), async *schedule() {} }) } },
+    release() {},
+    seeker() { throw new Error('声音测试不定位画面。') },
+  }
+  const document = fixture()
+  const renderer = new VideoEditRenderer(document, undefined, undefined, 8 * 1024 ** 3, backend)
+  try {
+    await renderer.mixAudio(0, .01)
+    await renderer.updateDocument({ ...document, sampleRate: 44100 })
+    await renderer.mixAudio(0, .01)
+    expect(rates).toEqual([48000, 44100])
+  } finally { await renderer.dispose() }
+})
+it('同采样率块按最近样本混入：半样本相位在相邻混音块中选同一个邻居，块边界不漏不重', async () => {
+  // A 48kHz in-point exactly half a sample in: every output sample takes the later neighbour, in every block.
+  const signal = (_channel: number, sample: number): number => Math.fround(sample / 1e5)
+  const { backend } = nativeSoundBackend(() => pcmSession(48000, 1, signal))
+  const base = fixture()
+  const clip = { ...base.clips[0], start: 0, duration: 60, sourceInUs: 10, sourceRemainder: { numerator: 5, denominator: 12 } }
+  const renderer = new VideoEditRenderer({ ...base, channels: 1, clips: [clip] }, undefined, undefined, 8 * 1024 ** 3, backend)
+  try {
+    const output = [...(await renderer.mixAudio(0, .25))[0], ...(await renderer.mixAudio(.25, .25))[0]]
+    // 10 + 5/12 µs at 48kHz is exactly 0.5 samples.
+    expect(output.every((value, sample) => value === signal(0, sample + 1))).toBe(true)
+  } finally { await renderer.dispose() }
 })

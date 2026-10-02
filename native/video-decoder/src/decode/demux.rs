@@ -84,6 +84,26 @@ impl Input {
         Ok(Self { context, stream_index: index, time_base, _interrupt: interrupt })
     }
 
+    /// 打开第 `ordinal` 条声音流（只数声音流，从 0 起；2.3）。没有这条声音流时返回 `Ok(None)`。其余流不读。
+    pub fn open_audio(path: &str, ordinal: usize, interrupt: Arc<AtomicBool>) -> Result<Option<Self>, ServiceError> {
+        let context = open_input(path, &interrupt)?;
+        let count = unsafe { (*context.0).nb_streams } as usize;
+        let streams = unsafe { std::slice::from_raw_parts((*context.0).streams, count) };
+        let audio: Vec<usize> = (0..count).filter(|&position| unsafe { (*(*streams[position]).codecpar).codec_type } == ff::AVMediaType::AVMEDIA_TYPE_AUDIO).collect();
+        let Some(&index) = audio.get(ordinal) else { return Ok(None) };
+        for (position, stream) in streams.iter().enumerate() {
+            if position != index {
+                unsafe { (**stream).discard = ff::AVDiscard::AVDISCARD_ALL };
+            }
+        }
+        let base = unsafe { (*streams[index]).time_base };
+        let time_base = TimeBase { num: base.num, den: base.den };
+        if !time_base.is_valid() {
+            return Err(ServiceError::new("UNSUPPORTED_FORMAT", "声音流时间基无效"));
+        }
+        Ok(Some(Self { context, stream_index: index as c_int, time_base, _interrupt: interrupt }))
+    }
+
     pub fn stream(&self) -> &ff::AVStream {
         unsafe { &**(*self.context.0).streams.add(self.stream_index as usize) }
     }

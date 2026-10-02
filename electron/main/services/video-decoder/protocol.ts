@@ -2,6 +2,9 @@
  * 原生视频解码服务（native/video-decoder）控制通道协议：4 字节小端长度前缀 + UTF-8 JSON。
  * 与 native/video-decoder/src/protocol.rs 保持一致；画面走显卡共享纹理，不走本通道。
  * 服务主动发出的事件没有 `id`，以 `event` 区分（`frame`、`frame_missing`、`schedule_done`、`stream_ended`）。
+ *
+ * 二进制附件（声音 PCM）：JSON 消息带 `attachment: <字节数>` 时，紧随其后的一帧（同样 4 字节长度前缀）是原始字节，
+ * 不按 JSON 解析，挂到该消息的 `binary` 上。不带 `attachment` 的消息与以前完全相同。
  */
 
 import type {
@@ -18,8 +21,9 @@ import type {
  * 2：帧流命令（1.2）、`frame`/`stream_ended` 事件，hello 携带 clientPid。
  * 3：解码会话（1.3）：`open_decoder`/`frame_at`/`schedule`/`cancel_schedule`，`frame` 带 `ptsUs`/`request`，
  *    新事件 `frame_missing`/`schedule_done`。
+ * 4：声音会话（2.3）：`open_audio`/`read_audio`/`close_audio`，读取结果以二进制附件返回 PCM。
  */
-export const VIDEO_DECODER_PROTOCOL_VERSION = 3
+export const VIDEO_DECODER_PROTOCOL_VERSION = 4
 export const VIDEO_DECODER_MAX_MESSAGE_BYTES = 16 * 1024 * 1024
 
 export type VideoDecoderErrorCode =
@@ -276,6 +280,44 @@ export interface VideoDecoderProbeResult {
   streams: VideoDecoderStreamInfo[]
 }
 
+/** 打开声音会话（2.3）。`audioStream` 只数声音流（从 0 起）；`sampleRate` 缺省为流自身采样率。 */
+export interface VideoDecoderAudioOpenRequest {
+  audioId: string
+  path: string
+  audioStream?: number
+  sampleRate?: number
+}
+
+/** 声音会话打开结果：`found: false` 表示没有这条声音流。 */
+export type VideoDecoderAudioOpened =
+  | { found: false; audioStream: number }
+  | {
+      found: true
+      audioId: string
+      audioStream: number
+      streamIndex: number
+      codec: string | null
+      decoderName: string
+      sampleRate: number
+      sourceSampleRate: number
+      channels: number
+      channelLayout: string | null
+      resampler: 'none' | 'soxr'
+      startSeconds: number | null
+      endSeconds: number | null
+      setupMs: number
+    }
+
+/** 声音读取结果（PCM 在二进制附件里：平面 float32 小端，`channels × frames × 4` 字节）。 */
+export interface VideoDecoderAudioRead {
+  audioId: string
+  startFrame: number
+  frames: number
+  channels: number
+  seeked: boolean
+  decodeMs: number
+}
+
 export type VideoDecoderCommand =
   | { type: 'hello'; clientPid?: number }
   | { type: 'probe'; path: string }
@@ -289,6 +331,9 @@ export type VideoDecoderCommand =
   | { type: 'frame_at'; streamId: string; time: number; ticket: string }
   | { type: 'schedule'; streamId: string; scheduleId: string; times?: number[]; range?: { from: number; to?: number } }
   | { type: 'cancel_schedule'; streamId: string; scheduleId: string }
+  | ({ type: 'open_audio' } & VideoDecoderAudioOpenRequest)
+  | { type: 'read_audio'; audioId: string; startFrame: number; frames: number }
+  | { type: 'close_audio'; audioId: string }
 
 /** 通知类命令：不等待响应。 */
 export type VideoDecoderNotification = { type: 'release_frame'; streamId: string; slot: number }
@@ -298,6 +343,10 @@ export interface VideoDecoderResponse {
   ok: boolean
   result?: unknown
   error?: { code: string; message: string }
+  /** 紧随其后的二进制附件字节数。 */
+  attachment?: number
+  /** 拆帧后挂上的附件。 */
+  binary?: Buffer
 }
 
 export function encodeVideoDecoderFrame(value: unknown): Buffer {
@@ -307,9 +356,11 @@ export function encodeVideoDecoderFrame(value: unknown): Buffer {
   return Buffer.concat([header, body])
 }
 
-/** 增量拆帧：stdout 分块到达时累积，返回已完整的消息。长度超限抛 PROTOCOL_ERROR。 */
+/** 增量拆帧：stdout 分块到达时累积，返回已完整的消息（含挂上的二进制附件）。长度超限或附件不符抛 PROTOCOL_ERROR。 */
 export class VideoDecoderFrameReader {
   private buffer: Buffer = Buffer.alloc(0)
+  /** 已解析、正在等待其二进制附件的消息。 */
+  private awaiting: (Record<string, unknown> & { attachment: number }) | null = null
 
   push(chunk: Buffer): unknown[] {
     this.buffer = this.buffer.length === 0 ? chunk : Buffer.concat([this.buffer, chunk])
@@ -320,13 +371,31 @@ export class VideoDecoderFrameReader {
         throw new VideoDecoderError('PROTOCOL_ERROR', `原生视频解码服务返回了超长消息（${length} 字节）`)
       }
       if (this.buffer.length < 4 + length) break
-      const body = this.buffer.subarray(4, 4 + length).toString('utf8')
+      const body = this.buffer.subarray(4, 4 + length)
       this.buffer = this.buffer.subarray(4 + length)
+      const awaiting = this.awaiting
+      if (awaiting) {
+        if (length !== awaiting.attachment) throw new VideoDecoderError('PROTOCOL_ERROR', '原生视频解码服务的二进制附件长度不符')
+        this.awaiting = null
+        // 复制出独立的 Buffer：累积缓冲之后会被重新拼接，附件需要独立的生命周期。
+        messages.push({ ...awaiting, binary: Buffer.from(body) })
+        continue
+      }
+      let parsed: unknown
       try {
-        messages.push(JSON.parse(body))
+        parsed = JSON.parse(body.toString('utf8'))
       } catch {
         throw new VideoDecoderError('PROTOCOL_ERROR', '原生视频解码服务返回了无法解析的消息')
       }
+      const attachment = parsed && typeof parsed === 'object' ? (parsed as { attachment?: unknown }).attachment : undefined
+      if (attachment === undefined) {
+        messages.push(parsed)
+        continue
+      }
+      if (typeof attachment !== 'number' || !Number.isSafeInteger(attachment) || attachment < 0 || attachment > VIDEO_DECODER_MAX_MESSAGE_BYTES) {
+        throw new VideoDecoderError('PROTOCOL_ERROR', '原生视频解码服务的二进制附件长度无效')
+      }
+      this.awaiting = parsed as Record<string, unknown> & { attachment: number }
     }
     return messages
   }

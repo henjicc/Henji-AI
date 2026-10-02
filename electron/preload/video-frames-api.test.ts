@@ -143,6 +143,33 @@ describe('videoFrames preload', () => {
     expect(replies.find((reply) => reply.id === 9)).toEqual({ type: 'response', id: 9, error: '未知的帧通道请求' })
   })
 
+  it('routes sound sessions to the port that opened them and transfers each PCM block to the worker without another copy', async () => {
+    const pcm = new Float32Array([0.25, -0.5, 0.75, 1])
+    const invoke = vi.fn(async (channel: string, payload?: unknown) => {
+      if (channel === 'videoFrames:readAudio') return { audioId: 'va-1', startFrame: -1, frames: 2, channels: 2, data: new Uint8Array(pcm.buffer.slice(0)), seeked: false, decodeMs: 1 }
+      return { channel, payload }
+    })
+    const { api } = await create(invoke)
+    const route = api.connect()
+    const entry = announcements.find((item) => item.message.route === route)!
+    const worker = entry.port
+    const replies: Array<{ type: string; id: number; result?: { data?: unknown } }> = []
+    worker.onmessage = (event) => replies.push(event.data as never)
+    worker.postMessage({ type: 'request', id: 1, call: { method: 'openAudio', params: { route: 'vf-route-other', path: 'D:/a.mxf', audioStream: 1, sampleRate: 48000 } } })
+    worker.postMessage({ type: 'request', id: 2, call: { method: 'readAudio', params: { audioId: 'va-1', startFrame: -1, frames: 2 } } })
+    worker.postMessage({ type: 'request', id: 3, call: { method: 'closeAudio', params: { audioId: 'va-1' } } })
+    await vi.waitFor(() => expect(replies).toHaveLength(3))
+    expect(invoke).toHaveBeenCalledWith('videoFrames:openAudio', { route, path: 'D:/a.mxf', audioStream: 1, sampleRate: 48000 })
+    expect(invoke).toHaveBeenCalledWith('videoFrames:closeAudio', { audioId: 'va-1' })
+    const read = replies.find((reply) => reply.id === 2)!
+    expect(read.result?.data).toBeInstanceOf(ArrayBuffer)
+    expect([...new Float32Array(read.result!.data as ArrayBuffer)]).toEqual([0.25, -0.5, 0.75, 1])
+    // The reply to the read carried its buffer in the transfer list; other replies transfer nothing.
+    const sent = (entry.port.peer as TestPort).sent.filter((item) => (item.message as { type?: string }).type === 'response')
+    expect(sent.map((item) => item.transfer.length)).toEqual([0, 1, 0])
+    expect(sent[1].transfer[0]).toBe(read.result!.data)
+  })
+
   it('forwards stream-ended notices to the owning port and closes the sessions of the route when it disconnects', async () => {
     const { ipcRenderer } = await import('electron')
     const invoke = vi.fn(async () => 1)
