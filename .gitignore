@@ -133,3 +133,4 @@ nul
 /.artifacts/
 /.tmp/
 /native/**/target/
+/native/video-decoder/ffmpeg/

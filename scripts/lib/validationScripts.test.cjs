@@ -18,4 +18,9 @@ test('发布构建仍保留完整静态与助手能力门禁', () => {
   assert.match(script, /check:sdk/)
   assert.match(script, /tsc -p tsconfig\.electron\.json/)
   assert.match(script, /electron-vite build/)
+  assert.match(script, /build:video-decoder/)
+})
+
+test('build:video-decoder 与轻量构建共用同一构建入口', () => {
+  assert.equal(packageJson.scripts['build:video-decoder'], 'node scripts/video-decoder-ffmpeg.cjs build')
 })

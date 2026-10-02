@@ -15,6 +15,7 @@ test('轻量构建计划只生成运行产物', () => {
   const plan = buildElectronBundlePlan('/workspace')
   assert.deepEqual(plan.map((item) => item.label), [
     '媒体二进制权限',
+    '构建原生视频解码服务',
     '生成进度种子',
     '生成模型目录索引',
     '准备 SDK 产物',
@@ -22,6 +23,10 @@ test('轻量构建计划只生成运行产物', () => {
   ])
   const serialized = JSON.stringify(plan)
   assert.doesNotMatch(serialized, /check:|vitest|\btsc\b|\blint\b|electron:build/)
+  // 原生视频解码服务与 npm run build:video-decoder 复用同一构建入口。
+  const decoder = plan.find((item) => item.label === '构建原生视频解码服务')
+  assert.equal(decoder.args.at(-1), 'build')
+  assert.match(decoder.args[0], /video-decoder-ffmpeg\.cjs$/)
 })
 
 test('开发实例状态只接受仍存活的当前仓库进程', () => {
