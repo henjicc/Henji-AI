@@ -519,6 +519,7 @@ function createVideoEditFormatMatrixScene() {
               window.__tripoSource = []; const read = () => { const canvas = document.querySelector('[data-video-edit-source-canvas]'); const video = document.querySelector('[data-video-edit-source-host] video'); return canvas ? Number(canvas.dataset.presentedTimeUs) : Math.round((video?.currentTime ?? 0) * 1e6) }
               window.__tripoTimer = setInterval(() => { const time = read(); if (window.__tripoSource.at(-1)?.time !== time) window.__tripoSource.push({ at: performance.now(), time }) }, 4)
             })
+            const playedAt = new Date().toISOString()
             await button(page, '播放源素材').click()
             let peak = 0
             // 3 seconds: starting mid-file in long-GOP 4K material decodes from the key frame first (start-up reported separately).
@@ -526,10 +527,14 @@ function createVideoEditFormatMatrixScene() {
             const values = await page.evaluate(() => { clearInterval(window.__tripoTimer); return window.__tripoSource })
             await button(page, '暂停源素材').click().catch(() => {})
             const moving = values.slice(1); const span = moving.length > 1 ? (moving.at(-1).at - moving[0].at) / 1000 : 0
-            const result = { file: path.basename(file), width: media.width, height: media.height, fps: round(fps, 3), durationSeconds: round(media.durationSeconds, 3), hasAudio: media.hasAudio === true, openMs, startupMs: moving.length ? round(moving[0].at - values[0].at, 1) : null, updates: values.length, updatesPerSecond: span ? round((moving.length - 1) / span, 1) : 0, backwards: values.filter((value, index) => index && value.time < values[index - 1].time).length, levelPeak: media.hasAudio ? round(peak, 3) : null }
+            // Native picture sessions opened by the play start: one schedule session positions and decodes the GOP once (task 3.6 F1;
+            // before, a sequential reader session decoded it first and the schedule session again).
+            const playbackSessions = (await logEvents(page, playedAt, ['video_decoder.native.decode.session.opened'])).filter(event => event.context?.purpose === 'Playback').length
+            const result = { file: path.basename(file), width: media.width, height: media.height, fps: round(fps, 3), durationSeconds: round(media.durationSeconds, 3), hasAudio: media.hasAudio === true, openMs, startupMs: moving.length ? round(moving[0].at - values[0].at, 1) : null, secondMs: moving.length > 1 ? round(moving[1].at - values[0].at, 1) : null, startGapMs: moving.length > 1 ? round(Math.max(...moving.slice(1, 30).map((value, index) => value.at - moving[index].at)), 1) : null, updates: values.length, updatesPerSecond: span ? round((moving.length - 1) / span, 1) : 0, backwards: values.filter((value, index) => index && value.time < values[index - 1].time).length, levelPeak: media.hasAudio ? round(peak, 3) : null, playbackSessions }
             evidence.tripo.items.push(result); store()
             assert.ok(result.updates >= 8, `${result.file} 源监视器播放画面没有持续前进：${JSON.stringify(result)}`)
             assert.equal(result.backwards, 0, `${result.file} 源监视器播放画面倒退`)
+            assert.ok(result.playbackSessions <= 1, `${result.file} 起播打开了 ${result.playbackSessions} 个原生播放会话（应只有播放计划一个，3.6 F1）`)
             if (media.hasAudio) assert.ok(peak > 0.001, `${result.file} 有声素材源监视器应出声：${peak}`)
             if (/透明/.test(result.file)) await capture('matrix-tripo-prores4444')
             await button(page, '关闭源素材').click()

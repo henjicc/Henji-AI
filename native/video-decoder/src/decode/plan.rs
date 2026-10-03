@@ -5,6 +5,9 @@
 //!   与浏览器后端的解码泵（`videoEditPlaybackDecoder.ts`）同一语义。
 //! - **前导帧**：段内呈现时间早于段首关键帧的帧（开放 GOP 的 RASL/前导 B 帧）参考了段外画面，丢弃。
 //! - **续解还是定位**：见 `seek_decision`。
+//! - **预先接续的段**（3.6）：播放计划已知下一个剪辑点时，上一段所需的包送完就开始送下一段（`begin_queued`），
+//!   解码器流水不空转、不丢弃预解的帧。此时正在交付的段（`active`）仍是上一段；下一段的帧出现即说明上一段已出完
+//!   （`Claim::Queued`），计划走到剪辑点时 `activate_queued` 切换。
 
 use std::collections::{HashMap, VecDeque};
 
@@ -27,17 +30,39 @@ pub enum Claim {
     Stale,
     /// 不属于任何段（解码器自行丢弃了对应包后又出现的异常时间戳等）：丢弃。
     Unknown,
+    /// 预先接续的下一段的帧：正在交付的段已出完，留给剪辑点之后。
+    Queued,
 }
 
 #[derive(Debug, Default)]
 pub struct RunTracker {
     runs: VecDeque<Run>,
     next_id: u64,
+    /// 正在交付的段；通常是最新的段，预先接续时是倒数第二段。
+    active: u64,
 }
 
 impl RunTracker {
     /// 开始新段（段首为 `key_pts` 的关键包）。返回段号。
     pub fn begin(&mut self, key_pts: i64) -> u64 {
+        let id = self.push(key_pts);
+        self.active = id;
+        id
+    }
+
+    /// 预先接续下一段（段首为 `key_pts`）：之后送入的包属于它，但正在交付的仍是当前段。
+    pub fn begin_queued(&mut self, key_pts: i64) -> u64 {
+        self.push(key_pts)
+    }
+
+    /// 剪辑点到了：预先接续的段成为正在交付的段，上一段还没出的帧此后都作废。
+    pub fn activate_queued(&mut self) {
+        if let Some(run) = self.runs.back() {
+            self.active = run.id;
+        }
+    }
+
+    fn push(&mut self, key_pts: i64) -> u64 {
         self.next_id += 1;
         self.runs.push_back(Run { id: self.next_id, key_pts, pending: HashMap::new() });
         // 旧段最多保留几段：解码器延迟有限，更老的段不会再有输出。
@@ -57,8 +82,9 @@ impl RunTracker {
         }
     }
 
+    /// 正在交付的段（没有段时为 None）。
     pub fn current(&self) -> Option<u64> {
-        self.runs.back().map(|run| run.id)
+        self.runs.iter().any(|run| run.id == self.active).then_some(self.active)
     }
 
     #[cfg(test)]
@@ -78,21 +104,22 @@ impl RunTracker {
         let Some(position) = self.runs.iter().position(|run| run.pending.contains_key(&pts)) else {
             return Claim::Unknown;
         };
-        let is_current = position + 1 == self.runs.len();
         let run = &mut self.runs[position];
         let count = run.pending.get_mut(&pts).expect("刚找到");
         *count -= 1;
         if *count == 0 {
             run.pending.remove(&pts);
         }
-        let key_pts = run.key_pts;
+        let (id, key_pts) = (run.id, run.key_pts);
         for _ in 0..position {
             self.runs.pop_front();
         }
-        if !is_current {
+        if id < self.active {
             Claim::Stale
         } else if pts < key_pts {
             Claim::Leading
+        } else if id > self.active {
+            Claim::Queued
         } else {
             Claim::Current
         }
@@ -222,6 +249,52 @@ mod tests {
         tracker.flushed();
         assert_eq!(tracker.claim(20), Claim::Unknown, "flush 后旧段帧不会再出现");
         assert_eq!(tracker.current_key_pts(), Some(100));
+    }
+
+    #[test]
+    fn queued_run_is_delivered_after_the_active_run() {
+        // 剪辑点预先接续（3.6）：上一段所需的包送完就送下一段，帧按送入顺序出。
+        let mut tracker = RunTracker::default();
+        let first = tracker.begin(100);
+        for pts in [100, 101, 102] {
+            tracker.fed(pts);
+        }
+        let queued = tracker.begin_queued(0);
+        tracker.fed(0);
+        tracker.fed(1);
+        assert_eq!(tracker.current(), Some(first), "交付的仍是当前段");
+        assert_eq!(tracker.claim(100), Claim::Current);
+        assert_eq!(tracker.claim(101), Claim::Current);
+        assert_eq!(tracker.claim(102), Claim::Current);
+        assert_eq!(tracker.claim(0), Claim::Queued, "下一段的帧：当前段已出完");
+        tracker.activate_queued();
+        assert_eq!(tracker.current(), Some(queued));
+        assert_eq!(tracker.claim(1), Claim::Current);
+    }
+
+    #[test]
+    fn activating_early_drops_the_rest_of_the_previous_run() {
+        // 剪辑点到达时上一段（含剪辑点之后多送的帧）还没出完：这些帧作废，下一段照常交付。
+        let mut tracker = RunTracker::default();
+        tracker.begin(100);
+        for pts in [100, 101, 102] {
+            tracker.fed(pts);
+        }
+        tracker.begin_queued(10);
+        tracker.fed(10);
+        tracker.activate_queued();
+        assert_eq!(tracker.claim(101), Claim::Stale);
+        assert_eq!(tracker.claim(102), Claim::Stale);
+        assert_eq!(tracker.claim(10), Claim::Current);
+        // 新段之后再开段（定位）：放弃的预接续段与正常段一样作废。
+        tracker.fed(11);
+        tracker.begin_queued(50);
+        tracker.fed(50);
+        tracker.begin(200);
+        tracker.fed(200);
+        assert_eq!(tracker.claim(11), Claim::Stale);
+        assert_eq!(tracker.claim(50), Claim::Stale);
+        assert_eq!(tracker.claim(200), Claim::Current);
     }
 
     #[test]

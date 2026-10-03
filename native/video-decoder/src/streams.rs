@@ -128,6 +128,8 @@ pub struct StreamCounters {
     pub seeks: AtomicU64,
     /// 播放计划中的剪辑点/跳转（开新段、不 flush）。
     pub cuts: AtomicU64,
+    /// 其中预先接续的剪辑点（3.6）：上一段所需的包送完后立即送入下一段，解码器流水不排空、不丢弃预解的帧。
+    pub prefed_cuts: AtomicU64,
     /// 单帧定位时的 flush。
     pub flushes: AtomicU64,
     /// 解码器排空到文件末尾后再定位所需的 flush。
@@ -192,6 +194,7 @@ pub fn counters_value(control: &StreamControl) -> Value {
         "missing": load(&counters.missing),
         "seeks": load(&counters.seeks),
         "cuts": load(&counters.cuts),
+        "prefedCuts": load(&counters.prefed_cuts),
         "flushes": load(&counters.flushes),
         "eofFlushes": load(&counters.eof_flushes),
         "decodeErrors": load(&counters.decode_errors),

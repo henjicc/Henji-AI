@@ -168,6 +168,7 @@ export class VideoEditRenderer {
    * Forward playback reads every frame of a file through one `samplesAtTimestamps` decoder: a cut back into the
    * same file flushes and re-seeks that decoder instead of allocating a new hardware decoder mid-playback
    * (a new D3D11 decoder blocks the GPU main thread for tens of milliseconds while it creates picture buffers).
+   * Built at the first frame of a play run, so that frame is the first scheduled picture (one positioning, one GOP).
    */
   private buildPlayback(document: VideoEditComposition, frame: number, visible: Set<number>): void {
     const endFrame = frame + Math.ceil(document.fps * PLAYBACK_SCHEDULE_SECONDS)
@@ -257,8 +258,13 @@ export class VideoEditRenderer {
     if (this.previewWidth && sequential) {
       const forward = this.lastForwardFrame === frame - 1
       if (this.playback && (this.playback.document !== document || frame >= this.playback.endFrame || !forward)) await this.disposePlayback()
-      // Only a confirmed forward run builds schedules; reverse play and single steps keep the seek path.
-      if (!this.playback && forward) this.buildPlayback(document, frame, visible)
+      // A sequential preview render is always forward playback (reverse play, single steps and scrubbing render
+      // non-sequentially), so its first frame already builds the schedules and takes its picture from them. Waiting for
+      // a second consecutive frame made the first one open a sequential reader that decoded the GOP up to the start,
+      // and then the schedule decoded the same GOP again on its own session (task 3.6 F1: 0.6–2.4s mid-file start-up
+      // of long-GOP 4K material). A sequential frame before the previous one is not playback: it keeps the seek path
+      // and its frame cache.
+      if (!this.playback && !(this.lastForwardFrame !== undefined && frame < this.lastForwardFrame)) this.buildPlayback(document, frame, visible)
       this.lastForwardFrame = frame
     } else { this.lastForwardFrame = undefined; if (this.playback) await this.disposePlayback() }
     const transitions = videoEditTransitionsAt(document, frame).filter(window => visible.has(window.left.track))

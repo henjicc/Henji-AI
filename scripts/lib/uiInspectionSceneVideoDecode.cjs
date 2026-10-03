@@ -414,7 +414,7 @@ async function runSchedule(page, evidence, store) {
       const got = result.ptsByIndex[index]
       if (got !== expected) mismatches.push({ index, time: round(time, 6), expected, got })
     })
-    const entry = { id: sample.id, requested: times.length, mismatches: mismatches.slice(0, 10), mismatchCount: mismatches.length, scheduleDone: result.scheduleDone, flushes: counters?.flushes, eofFlushes: counters?.eofFlushes, cuts: counters?.cuts, discarded: counters?.discarded }
+    const entry = { id: sample.id, requested: times.length, mismatches: mismatches.slice(0, 10), mismatchCount: mismatches.length, scheduleDone: result.scheduleDone, flushes: counters?.flushes, eofFlushes: counters?.eofFlushes, cuts: counters?.cuts, prefedCuts: counters?.prefedCuts, discarded: counters?.discarded }
     evidence.schedule.push(entry)
     store()
     console.log(`[video-decode] 计划 ${sample.id}`, JSON.stringify(entry))
@@ -475,7 +475,7 @@ async function runLoad(page, app, evidence, store) {
       nativeGpuLocalMemoryMiB: stats.native?.gpuLocalMemory ? Math.round(stats.native.gpuLocalMemory.currentUsageBytes / 1048576) : null,
       gpuTotalMiB: { before: vramBefore, during: vramDuring },
       handoffMs: bridge?.handoffMs,
-      native: native && { flushes: native.flushes, eofFlushes: native.eofFlushes, cuts: native.cuts, decodeErrors: native.decodeErrors, missing: native.missing, uploadUsAverage: Math.round(native.uploadUsAverage ?? 0), mapUsAverage: Math.round(native.mapUsAverage ?? 0), submitUsAverage: Math.round(native.renderUsAverage ?? 0), waitMsTotal: Math.round((native.waitUsTotal ?? 0) / 1000) },
+      native: native && { flushes: native.flushes, eofFlushes: native.eofFlushes, cuts: native.cuts, prefedCuts: native.prefedCuts, discarded: native.discarded, decodeErrors: native.decodeErrors, missing: native.missing, uploadUsAverage: Math.round(native.uploadUsAverage ?? 0), mapUsAverage: Math.round(native.mapUsAverage ?? 0), submitUsAverage: Math.round(native.renderUsAverage ?? 0), waitMsTotal: Math.round((native.waitUsTotal ?? 0) / 1000) },
     }
     evidence.loads.push(entry)
     store()

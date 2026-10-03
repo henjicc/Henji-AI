@@ -12,6 +12,11 @@
 //! 回到前面时 flush。播放计划的剪辑点不 flush（帧内编码等软解保持多线程流水），但 HEVC/H.264 例外（3.1）：
 //! 不 flush 时解码器按上一段推算新关键帧（CRA、非 IDR 的 I 帧）的图序号，相隔超过半个序号周期就算错，之后整段只剩
 //! 关键帧一帧，所以这两种编码的剪辑点也先 flush。
+//!
+//! 剪辑点预先接续（3.6）：帧级多线程解码器要比输出多送“线程数 − 1”个包。时间点计划在剪辑点照常续送上一段时，这些包
+//! 解出的帧在剪辑点全部作废，新段又要重新填满流水才出第一帧；CineForm 的熵解码在帧线程间串行，4K 每个剪辑点因此
+//! 空出约 150ms，播放从此追不回来。所以全是关键包的段（帧内编码）在计划已知下一个剪辑点时，送完剪辑点之前所需的包
+//! 就定位并开始送下一段，流水不空转、预解的帧都有用。H.264/HEVC（剪辑点必须 flush）与含非关键包的段照旧。
 
 pub mod codec;
 pub mod demux;
@@ -31,6 +36,21 @@ use crate::test_pattern::SharedFormat;
 use codec::{Decoder, DecoderSetup, Frame, Purpose, Received};
 use demux::{Input, Packet};
 use plan::{seek_decision, Claim, Decision, Position, RunTracker, FORWARD_SEEK_SECONDS};
+
+/// 计划里向前跳过超过这么久（秒）也算剪辑点（预先接续直接定位过去，不解中间的帧）。
+const CUT_FORWARD_SECONDS: f64 = 0.25;
+
+/// 时间点计划中 `last` 之后跳到 `next` 的剪辑点（刻度）。
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct Cut {
+    last: i64,
+    next: i64,
+}
+
+/// 计划中相邻两个时间之间是否为剪辑点（向后跳，或向前跳过一段）。
+fn is_cut(from: f64, to: f64) -> bool {
+    from.is_finite() && to.is_finite() && (to < from || to - from > CUT_FORWARD_SECONDS)
+}
 use timing::{duration_to_us, pts_to_seconds, pts_to_us, seconds_to_duration_ticks, seconds_to_ticks, TimeBase};
 
 /// 单帧请求等空闲槽位的上限。
@@ -126,6 +146,27 @@ mod imp {
     use crate::platform::{FrameOutput, VideoPlatform};
     use crate::streams::StreamResources;
 
+    /// 预先接续的下一段。
+    struct Queued {
+        next: i64,
+        /// 下一段已出的第一帧（出现即说明正在交付的段已出完）。
+        first: Option<Frame>,
+        ended: bool,
+        /// 下一段没有可解的关键帧：已改为排空当前段，剪辑点照常定位。
+        failed: bool,
+    }
+
+    /// 送包取帧的结果。
+    enum Fetched {
+        Frame(Frame),
+        /// 当前段没有更多帧（文件结束）。
+        End,
+        /// 预先接续的下一段的帧。
+        Queued(Frame),
+        /// 下一个包已超出剪辑点前所需的范围（留在 pending，未送入）。
+        Limit,
+    }
+
     /// 打开失败的会话没有资源。
     struct NoResources;
     impl StreamResources for NoResources {
@@ -167,6 +208,11 @@ mod imp {
         forward_limit: i64,
         /// 剪辑点是否 flush：图序号跨关键帧推算的编码（H.264、HEVC）必须 flush（3.1）。
         flush_cuts: bool,
+        /// 时间点计划中当前段之后的剪辑点（计划逐项设置）。
+        cut: Option<Cut>,
+        queued: Option<Queued>,
+        /// 送入当前送包段的包是否都是关键包（预先接续的前提：无重排，按包时间即可判断剪辑点前所需的包）。
+        run_all_key: bool,
         fallback_logged: bool,
         decode_error_count: u64,
     }
@@ -238,7 +284,7 @@ mod imp {
             let flush_cuts = matches!(parameters.codec_id, ffmpeg_sys_next::AVCodecID::AV_CODEC_ID_H264 | ffmpeg_sys_next::AVCodecID::AV_CODEC_ID_HEVC);
 
             // 先解出第一帧：确定实际像素格式（硬解或软解）与色彩，再按它建纹理池。
-            let mut session_parts = Primer { input, decoder, tracker: RunTracker::default(), pending: None, last_fed_dts: None, draining: false, drained: false, tracker_key: None };
+            let mut session_parts = Primer { input, decoder, tracker: RunTracker::default(), pending: None, last_fed_dts: None, draining: false, drained: false, tracker_key: None, all_key: true };
             let first = session_parts.first_frame(&control)?;
             let content = first.content_format();
             let info = format_info(content).ok_or_else(|| ServiceError::new("UNSUPPORTED_FORMAT", "无法识别解码输出的像素格式"))?;
@@ -316,7 +362,7 @@ mod imp {
                 "memoryBytes": memory_bytes,
             });
             let first_key_ts = session_parts.tracker_key;
-            let Primer { input, decoder, tracker, pending, last_fed_dts, draining, drained, .. } = session_parts;
+            let Primer { input, decoder, tracker, pending, last_fed_dts, draining, drained, all_key, .. } = session_parts;
             let session = Session {
                 stream_id: options.stream_id.clone(),
                 _vram: vram,
@@ -346,6 +392,9 @@ mod imp {
                 delivered: 0,
                 forward_limit,
                 flush_cuts,
+                cut: None,
+                queued: None,
+                run_all_key: all_key,
                 fallback_logged: false,
                 decode_error_count: 0,
             };
@@ -430,6 +479,9 @@ mod imp {
             self.candidate = None;
             self.lookahead = None;
             self.pending_packet = None;
+            // 放弃尚未用上的预接续段：新段开始后它的帧都不再认领。
+            self.queued = None;
+            self.run_all_key = true;
             let key = self.seek_to_key(ticks)?;
             let counters = &self.control.counters;
             counters.seeks.fetch_add(1, Ordering::Relaxed);
@@ -466,9 +518,70 @@ mod imp {
             Ok(())
         }
 
-        /// 下一个属于当前段的帧（呈现顺序）；文件结束返回 None。
+        /// 下一个属于当前段的帧（呈现顺序）；文件结束、或预先接续时当前段已出完，返回 None。
         fn next_frame(&mut self) -> Result<Option<Frame>, ServiceError> {
-            next_frame(&mut self.decoder, &mut self.input, &mut self.tracker, &mut self.pending_packet, &mut self.last_fed_dts, &mut self.draining, &mut self.drained, &mut self.fed_since_output, &self.control, &mut self.decode_error_count)
+            loop {
+                if self.queued.as_ref().is_some_and(|queued| queued.ended) {
+                    return Ok(None);
+                }
+                let limit = self.prefeed_limit();
+                let feed = Feed { pending: &mut self.pending_packet, last_fed_dts: &mut self.last_fed_dts, draining: &mut self.draining, drained: &mut self.drained, fed_since_output: &mut self.fed_since_output, decode_errors: &mut self.decode_error_count, all_key: &mut self.run_all_key };
+                match next_frame(&mut self.decoder, &mut self.input, &mut self.tracker, feed, &self.control, limit)? {
+                    Fetched::Frame(frame) => return Ok(Some(frame)),
+                    Fetched::End => return Ok(None),
+                    Fetched::Queued(frame) => match self.queued.as_mut() {
+                        Some(queued) => {
+                            queued.first = Some(frame);
+                            queued.ended = true;
+                            return Ok(None);
+                        }
+                        // 只有预接续段的帧才是 Queued；没有预接续段时不会出现。
+                        None => return Ok(Some(frame)),
+                    },
+                    Fetched::Limit => self.prefeed()?,
+                }
+            }
+        }
+
+        /// 当前段只送时间不晚于它的包：时间点计划已知下一个剪辑点、尚未预先接续、段内全是关键包。
+        fn prefeed_limit(&self) -> Option<i64> {
+            let cut = self.cut?;
+            (self.queued.is_none() && !self.flush_cuts && self.run_all_key && !self.draining && !self.drained).then_some(cut.last)
+        }
+
+        /// 剪辑点之前所需的包已送完：定位到剪辑点之后的关键帧，开始送下一段（流水不空转）。
+        fn prefeed(&mut self) -> Result<(), ServiceError> {
+            let Some(cut) = self.cut else { return Ok(()) };
+            // 已读出、超出剪辑点的上一段的包不再送入。
+            self.pending_packet = None;
+            let key = self.seek_to_key(cut.next)?;
+            self.control.counters.seeks.fetch_add(1, Ordering::Relaxed);
+            match key {
+                Some(packet) => {
+                    self.tracker.begin_queued(packet.timestamp().unwrap_or(i64::MIN));
+                    self.run_all_key = true;
+                    self.pending_packet = Some(packet);
+                    self.queued = Some(Queued { next: cut.next, first: None, ended: false, failed: false });
+                }
+                None => {
+                    // 剪辑点之后没有可解的关键帧：排空当前段让它出完，剪辑点照常定位（排空后会 flush）。
+                    self.decoder.send(None)?;
+                    self.draining = true;
+                    self.queued = Some(Queued { next: cut.next, first: None, ended: false, failed: true });
+                }
+            }
+            Ok(())
+        }
+
+        /// 剪辑点到了：预先接续的段成为当前段，它已出的第一帧作为前瞻帧。
+        fn activate_queued(&mut self) {
+            let Some(queued) = self.queued.take() else { return };
+            self.tracker.activate_queued();
+            self.candidate = None;
+            self.lookahead = queued.first;
+            let counters = &self.control.counters;
+            counters.cuts.fetch_add(1, Ordering::Relaxed);
+            counters.prefed_cuts.fetch_add(1, Ordering::Relaxed);
         }
 
         /// 推进到 `ticks`：候选帧 = 呈现时间 ≤ ticks 的最后一帧，前瞻帧 = 其后一帧。
@@ -502,6 +615,23 @@ mod imp {
 
         /// 按需定位并推进到 `ticks`。返回是否定位过。
         fn locate(&mut self, ticks: i64, flush_on_seek: bool) -> Result<bool, ServiceError> {
+            if let Some(queued) = &self.queued {
+                // 预先接续中：剪辑点之后的第一个时间切到下一段；剪辑点之前的时间仍在当前段续解（已送的包属于下一段，
+                // 不能再按送包位置判断续解还是定位）；其余（计划变了、单帧定位）放弃预接续段，照常定位。
+                if !flush_on_seek && !queued.failed && ticks == queued.next {
+                    self.activate_queued();
+                    self.advance_to(ticks)?;
+                    return Ok(true);
+                }
+                let in_current = self.cut.is_some_and(|cut| ticks <= cut.last) && self.candidate.as_ref().is_none_or(|frame| ticks >= frame_ts(frame));
+                if !flush_on_seek && in_current {
+                    self.advance_to(ticks)?;
+                    return Ok(false);
+                }
+                self.start_run(ticks, flush_on_seek || self.flush_cuts)?;
+                self.advance_to(ticks)?;
+                return Ok(true);
+            }
             let key = self.input.key_before(ticks);
             let decision = seek_decision(ticks, &self.position(), key, self.forward_limit);
             let seeked = decision == Decision::Seek;
@@ -647,13 +777,16 @@ mod imp {
         fn run_schedule(&mut self, schedule_id: String, plan: SchedulePlan) {
             let started = Instant::now();
             self.schedule = Some(schedule_id.clone());
+            self.cut = None;
             let delivered_before = self.delivered;
             let cuts_before = self.control.counters.cuts.load(Ordering::Relaxed);
+            let prefed_before = self.control.counters.prefed_cuts.load(Ordering::Relaxed);
             let result = match &plan {
                 SchedulePlan::Times(times) => self.schedule_times(&schedule_id, times),
                 SchedulePlan::Range { from, to } => self.schedule_range(&schedule_id, *from, *to),
             };
             self.schedule = None;
+            self.cut = None;
             let (reason, message) = match &result {
                 Ok(()) => ("completed", None),
                 Err(Abort::Cancelled) => ("cancelled", None),
@@ -663,6 +796,7 @@ mod imp {
             let summary = json!({
                 "delivered": self.delivered - delivered_before,
                 "cuts": self.control.counters.cuts.load(Ordering::Relaxed) - cuts_before,
+                "prefedCuts": self.control.counters.prefed_cuts.load(Ordering::Relaxed) - prefed_before,
                 "elapsedMs": started.elapsed().as_secs_f64() * 1000.0,
             });
             if let Some(message) = &message {
@@ -674,10 +808,17 @@ mod imp {
         }
 
         fn schedule_times(&mut self, schedule_id: &str, times: &[f64]) -> Result<(), Abort> {
+            let cuts: Vec<usize> = times.windows(2).enumerate().filter(|(_, pair)| is_cut(pair[0], pair[1])).map(|(index, _)| index).collect();
+            let mut next_cut = 0;
             for (index, time) in times.iter().enumerate() {
                 if self.stopped() {
                     return Err(Abort::Stopped);
                 }
+                // 当前段之后的第一个剪辑点（送包时据此预先接续下一段）。
+                while next_cut < cuts.len() && cuts[next_cut] < index {
+                    next_cut += 1;
+                }
+                self.cut = cuts.get(next_cut).map(|&last| Cut { last: seconds_to_ticks(times[last], self.time_base), next: seconds_to_ticks(times[last + 1], self.time_base) });
                 if self.poll_interrupt() {
                     return Err(Abort::Cancelled);
                 }
@@ -741,9 +882,20 @@ mod imp {
         }
     }
 
-    /// 送包取帧的公共实现（打开时取第一帧与会话共用）。
-    #[allow(clippy::too_many_arguments)]
-    fn next_frame(decoder: &mut Decoder, input: &mut Input, tracker: &mut RunTracker, pending: &mut Option<Packet>, last_fed_dts: &mut Option<i64>, draining: &mut bool, drained: &mut bool, fed_since_output: &mut u32, control: &StreamControl, decode_errors: &mut u64) -> Result<Option<Frame>, ServiceError> {
+    /// 送包状态（会话与打开阶段共用）。
+    struct Feed<'a> {
+        pending: &'a mut Option<Packet>,
+        last_fed_dts: &'a mut Option<i64>,
+        draining: &'a mut bool,
+        drained: &'a mut bool,
+        fed_since_output: &'a mut u32,
+        decode_errors: &'a mut u64,
+        all_key: &'a mut bool,
+    }
+
+    /// 送包取帧的公共实现（打开时取第一帧与会话共用）。`limit`：只送时间不晚于它的包（预先接续，3.6）。
+    fn next_frame(decoder: &mut Decoder, input: &mut Input, tracker: &mut RunTracker, feed: Feed<'_>, control: &StreamControl, limit: Option<i64>) -> Result<Fetched, ServiceError> {
+        let Feed { pending, last_fed_dts, draining, drained, fed_since_output, decode_errors, all_key } = feed;
         let counters = &control.counters;
         loop {
             if control.stop.load(Ordering::Relaxed) {
@@ -758,31 +910,48 @@ mod imp {
                     }
                     // 没有自身 PTS 的帧（时间戳由解码时间推算）无法按段认领，视为当前段。
                     let claim = if frame.has_own_pts() { tracker.claim(frame_ts(&frame)) } else { Claim::Current };
-                    if claim == Claim::Current {
-                        counters.decoded.fetch_add(1, Ordering::Relaxed);
-                        return Ok(Some(frame));
+                    match claim {
+                        Claim::Current => {
+                            counters.decoded.fetch_add(1, Ordering::Relaxed);
+                            return Ok(Fetched::Frame(frame));
+                        }
+                        Claim::Queued => {
+                            counters.decoded.fetch_add(1, Ordering::Relaxed);
+                            return Ok(Fetched::Queued(frame));
+                        }
+                        Claim::Leading | Claim::Stale | Claim::Unknown => {
+                            counters.discarded.fetch_add(1, Ordering::Relaxed);
+                        }
                     }
-                    counters.discarded.fetch_add(1, Ordering::Relaxed);
                 }
                 Received::Eof => {
                     *drained = true;
-                    return Ok(None);
+                    return Ok(Fetched::End);
                 }
                 Received::Again => {
                     if *drained || *draining {
                         // 已在排空：解码器不应再要输入。
                         *drained = true;
-                        return Ok(None);
+                        return Ok(Fetched::End);
                     }
                     let packet = match pending.take() {
                         Some(packet) => Some(packet),
                         None => input.read()?,
                     };
+                    if let (Some(limit), Some(next)) = (limit, &packet) {
+                        if next.timestamp().is_some_and(|ts| ts > limit) {
+                            *pending = packet;
+                            return Ok(Fetched::Limit);
+                        }
+                    }
                     let Some(packet) = packet else {
                         decoder.send(None)?;
                         *draining = true;
                         continue;
                     };
+                    if !packet.is_key() {
+                        *all_key = false;
+                    }
                     let started = Instant::now();
                     match decoder.send(Some(&packet)) {
                         Ok(true) => {}
@@ -823,6 +992,7 @@ mod imp {
         drained: bool,
         /// 第一个关键包的时间。
         tracker_key: Option<i64>,
+        all_key: bool,
     }
 
     impl Primer {
@@ -839,7 +1009,11 @@ mod imp {
             self.tracker.begin(key.timestamp().unwrap_or(i64::MIN));
             self.pending = Some(key);
             let (mut fed, mut errors) = (0u32, 0u64);
-            next_frame(&mut self.decoder, &mut self.input, &mut self.tracker, &mut self.pending, &mut self.last_fed_dts, &mut self.draining, &mut self.drained, &mut fed, control, &mut errors)?.ok_or_else(|| ServiceError::new("DECODE_FAILED", "无法解出第一帧画面"))
+            let feed = Feed { pending: &mut self.pending, last_fed_dts: &mut self.last_fed_dts, draining: &mut self.draining, drained: &mut self.drained, fed_since_output: &mut fed, decode_errors: &mut errors, all_key: &mut self.all_key };
+            match next_frame(&mut self.decoder, &mut self.input, &mut self.tracker, feed, control, None)? {
+                Fetched::Frame(frame) | Fetched::Queued(frame) => Ok(frame),
+                Fetched::End | Fetched::Limit => Err(ServiceError::new("DECODE_FAILED", "无法解出第一帧画面")),
+            }
         }
     }
 }

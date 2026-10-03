@@ -317,7 +317,7 @@ it('晚到代码检查在更新、取消或关闭后不能呈现旧画面', asyn
     await renderer.dispose(); boundary.compilerCalls = 0; boundary.pendingCode = undefined
   }
 })
-it('正向播放按文件建立一条解码计划：同文件剪辑点复用同一解码器且逐帧时间准确，暂停或倒放即释放', async () => {
+it('正向播放从第一帧起按文件建立一条解码计划：同文件剪辑点复用同一解码器且逐帧时间准确，暂停或倒放即释放', async () => {
   boundary.scheduled = []
   const document = { ...fixture(), fps: 60, frameRate: { numerator: 60, denominator: 1 } }
   document.media = document.media.map(media => ({ ...media, durationSeconds: 3 }))
@@ -325,8 +325,10 @@ it('正向播放按文件建立一条解码计划：同文件剪辑点复用同�
   document.clips = [{ ...base, duration: 60, sourceInUs: 1_000_000 }, { ...base, id: 'repeat', start: 60, duration: 60, sourceInUs: 0 }]
   const renderer = new VideoEditRenderer(document, 3840)
   try {
-    await (await renderer.render(50, true)).completion
-    expect(boundary.scheduled).toHaveLength(0)
+    // The first frame of a play run is already the first scheduled picture (task 3.6 F1).
+    const first = await renderer.render(50, true); await first.completion
+    expect(us(first.sourceTimestamps)).toEqual(us([1 + 50 / 60]))
+    expect(boundary.scheduled).toHaveLength(1)
     for (let frame = 51; frame <= 61; frame++) {
       const result = await renderer.render(frame, true); await result.completion
       expect(us(result.sourceTimestamps)).toEqual(us([frame < 60 ? 1 + frame / 60 : (frame - 60) / 60]))
@@ -334,13 +336,15 @@ it('正向播放按文件建立一条解码计划：同文件剪辑点复用同�
     // Both clips of D:/A.mp4 came from one generator (one decoder); the cut jumped back inside it.
     expect(boundary.scheduled.map(entry => entry.path)).toEqual(['D:/A.mp4'])
     // The schedule asks for picture times: source time plus the container timestamp tolerance (task 3.2, D3).
-    expect(boundary.scheduled[0].timestamps.slice(0, 10)).toEqual(Array.from({ length: 9 }, (_, index) => 1 + (51 + index) / 60).concat([0]).map(videoEditPictureSeconds))
+    expect(boundary.scheduled[0].timestamps.slice(0, 11)).toEqual(Array.from({ length: 10 }, (_, index) => 1 + (50 + index) / 60).concat([0]).map(videoEditPictureSeconds))
     const internals = renderer as unknown as { playback?: unknown }
     expect(internals.playback).toBeDefined()
     await (await renderer.render(61, false)).completion
     expect(internals.playback).toBeUndefined()
+    // Playing again from elsewhere starts a new schedule at that frame.
     await (await renderer.render(40, true)).completion
-    expect(internals.playback).toBeUndefined(); expect(boundary.scheduled).toHaveLength(1)
+    expect(internals.playback).toBeDefined(); expect(boundary.scheduled).toHaveLength(2)
+    expect(boundary.scheduled[1].timestamps[0]).toBe(videoEditPictureSeconds(1 + 40 / 60))
   } finally { await renderer.dispose() }
 })
 it('源文件缺失时给出可操作的提示，失败不缓存；重新定位到同一素材后立即恢复画面', async () => {
@@ -377,7 +381,8 @@ it('渲染器只经注入的帧源后端取帧：定位、顺序、正向计划�
     await renderer.render(0); expect(boundary.pictures).toEqual([0])
     await renderer.render(1, true); expect(boundary.pictures).toEqual([1 / 60])
     await renderer.render(2, true); expect(boundary.pictures).toEqual([2 / 60])
-    expect(calls).toEqual(['seeker', 'frames', 'schedule'])
+    // Starting playback opens no sequential reader: the schedule alone positions and decodes (task 3.6 F1).
+    expect(calls).toEqual(['seeker', 'schedule'])
     expect((await renderer.mixAudio(0, .01))[0][0]).toBe(.5)
     // The production fallback is untouched: nothing reached mediabunny.
     expect(boundary.disposed).toEqual([]); expect(boundary.scheduled).toEqual([])
