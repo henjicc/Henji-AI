@@ -40,6 +40,14 @@ pub trait FrameOutput: Send {
     /// `frame` 必须是有效的 `AVFrame`；硬件帧须来自本平台 `hardware_device()` 给出的设备。
     unsafe fn write(&mut self, frame: *const ff::AVFrame, slot: u32, path: WritePath, color: &ColorInfo, premultiplied: bool) -> Result<WriteStats, String>;
 
+    /// 等本服务显卡设备上已提交的工作（含此前的解码）全部完成，返回等待的微秒数（3.8）。
+    /// `write` 返回时帧已可导入，但显卡上可能还压着工作；客户端读取会在它自己的队列上等这些工作。
+    fn settle(&mut self, timeout: std::time::Duration) -> Result<u64, String>;
+
+    /// 在当前位置做交出标记，交出前等上一个标记处之前的显卡工作完成；返回等待的微秒数（3.8）。
+    /// 连续交帧时显卡上只压最近一两帧的工作，CPU 与显卡仍然重叠。
+    fn pace(&mut self, timeout: std::time::Duration) -> Result<u64, String>;
+
     /// 是否用过罕见像素格式的 CPU 转换回落。
     fn cpu_fallback_used(&self) -> bool;
 

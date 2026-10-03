@@ -290,6 +290,9 @@ function createVideoEditCompositeEditScene({ pressureOnly = false } = {}) {
           window.__compositeDragObserver = new MutationObserver(() => window.__compositeDrag.frames.push({ at: performance.now(), frame: Number(canvas.dataset.presentedFrame), requestedAt: Number(canvas.dataset.requestedAt), decodeMs: Number(canvas.dataset.decodeMs), gpuMs: Number(canvas.dataset.gpuMs), cacheHits: Number(canvas.dataset.cacheHits) }))
           window.__compositeDragObserver.observe(canvas, { attributes: true, attributeFilter: ['data-presented-frame'] })
         })
+        // Diagnostics only (task 3.8): HENJI_COMPOSITE_TRACE=1 records a Chromium trace (GPU and renderer processes) of the drag.
+        const tracing = process.env.HENJI_COMPOSITE_TRACE === '1'
+        if (tracing) await app.evaluate(({ contentTracing }, categories) => contentTracing.startRecording({ included_categories: categories }), process.env.HENJI_COMPOSITE_TRACE_CATEGORIES ? process.env.HENJI_COMPOSITE_TRACE_CATEGORIES.split(',') : ['gpu', 'gpu.dawn', 'disabled-by-default-gpu.dawn', 'disabled-by-default-gpu.service', 'viz', 'toplevel', 'v8', 'devtools.timeline', 'disabled-by-default-devtools.timeline', 'blink.worker', 'gpu.angle', 'gpu.memory'])
         const mouse = await page.context().newCDPSession(page)
         // Reuse the accepted picture-gesture driver: held movements retain the
         // left button so Chromium keeps the native pointer capture active.
@@ -300,7 +303,10 @@ function createVideoEditCompositeEditScene({ pressureOnly = false } = {}) {
           await mouseEvent('mousePressed', box.x + 6); const dragStart = performance.now()
           for (let index = 1; index <= 180; index++) { await mouseEvent('mouseMoved', box.x + index + .1); const remaining = dragStart + index * 1000 / 60 - performance.now(); if (remaining > 0) await page.waitForTimeout(remaining) }
           endedAt = await page.evaluate(() => performance.now()); await mouseEvent('mouseReleased', box.x + 180.1)
-        } finally { await mouseEvent('mouseReleased', box.x + 180.1).catch(() => {}); await mouse.detach() }
+        } finally {
+          await mouseEvent('mouseReleased', box.x + 180.1).catch(() => {}); await mouse.detach()
+          if (tracing) evidence.dragTracePath = await app.evaluate(({ contentTracing }, target) => contentTracing.stopRecording(target), path.join(root, 'drag.trace.json')).catch(error => String(error))
+        }
         evidence.inFlightDrag = await page.evaluate(() => window.__compositeDrag); store()
         await presented(page, 180)
         const drag = await page.evaluate(() => { window.__compositeInputObserver.disconnect(); window.__compositeDragObserver.disconnect(); return window.__compositeDrag })

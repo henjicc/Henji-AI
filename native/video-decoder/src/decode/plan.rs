@@ -194,9 +194,58 @@ pub fn seek_decision(ticks: i64, position: &Position, key_ticks: Option<i64>, fo
     }
 }
 
+/// 交出一帧前，上次交出之后解出（含丢弃）的帧数达到它就先等显卡完成（3.8）。连续播放每交出一帧只多解一帧，
+/// 二倍速逐帧跳一帧，都低于它。
+pub const SETTLE_BACKLOG_FRAMES: u64 = 3;
+
+/// 交出一帧前对本服务显卡工作的等待（3.8）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HandoffWait {
+    /// 不等，照常流水。
+    None,
+    /// 只等上一帧交出时的显卡工作完成：显卡上最多压着最近一两帧的工作，CPU 与显卡仍然重叠。
+    Lagged,
+    /// 等本设备已提交的工作全部完成。
+    Full,
+}
+
+/// 交出这一帧前对本服务显卡工作的等待（3.8）。
+///
+/// 共享纹理在 CPU 侧提交写入后就交给客户端，客户端对它的读取在显卡上排在本服务尚未完成的工作之后。会话的第一帧
+/// （硬件解码器刚建立）与定位后解过多帧才交出的帧，背后压着几十到上百毫秒的解码工作：客户端（Chromium 的 WebGPU
+/// 队列）一读，整条队列连同界面上其他画面一起等待（composite-pressure 拖动中预取窗口的第一帧停顿 110–185ms）。
+/// 这类帧在本进程里等完再交出（`Full`），客户端只承担它本来就要等的那一帧。
+///
+/// `paced`：有终点的区间取帧（拖动的一秒解码窗口，含预取）。窗口不服务播放时钟，却会一口气解完整个窗口，连发的
+/// 解码与客户端的合成在显卡上争用（只等第一帧时合成仍多停约 33ms）。这类帧交出前等上一帧的工作完成（`Lagged`），
+/// 显卡上始终只压一两帧，CPU 与显卡仍然重叠（逐帧等全部完成会让窗口变慢，拖动首帧多 140–290ms）。
+/// 连续播放（时间点计划）、顺序读取（无终点区间）与单帧取帧照常流水。
+/// - `delivered`：本会话已交出的帧数；
+/// - `backlog`：上次交出之后本会话解出（含丢弃）的帧数。
+pub fn handoff_wait(delivered: u64, backlog: u64, paced: bool) -> HandoffWait {
+    if delivered == 0 || backlog >= SETTLE_BACKLOG_FRAMES {
+        HandoffWait::Full
+    } else if paced {
+        HandoffWait::Lagged
+    } else {
+        HandoffWait::None
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn waits_for_first_backlogged_and_paced_frames() {
+        assert_eq!(handoff_wait(0, 0, false), HandoffWait::Full, "会话第一帧：解码器刚建立");
+        assert_eq!(handoff_wait(0, 1, true), HandoffWait::Full);
+        assert_eq!(handoff_wait(5, 1, false), HandoffWait::None, "连续播放：每交出一帧多解一帧");
+        assert_eq!(handoff_wait(5, 2, false), HandoffWait::None, "二倍速：每交出一帧跳过一帧");
+        assert_eq!(handoff_wait(5, SETTLE_BACKLOG_FRAMES, false), HandoffWait::Full, "定位后从关键帧解到目标");
+        assert_eq!(handoff_wait(5, 60, true), HandoffWait::Full, "长 GOP 中段定位，窗口内也等全部");
+        assert_eq!(handoff_wait(5, 1, true), HandoffWait::Lagged, "拖动的解码窗口：只压一两帧");
+    }
 
     #[test]
     fn claims_current_leading_and_stale_frames() {

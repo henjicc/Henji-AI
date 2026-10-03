@@ -35,7 +35,7 @@ use crate::streams::StreamControl;
 use crate::test_pattern::SharedFormat;
 use codec::{Decoder, DecoderSetup, Frame, Purpose, Received};
 use demux::{Input, Packet};
-use plan::{seek_decision, Claim, Decision, Position, RunTracker, FORWARD_SEEK_SECONDS};
+use plan::{handoff_wait, seek_decision, Claim, Decision, HandoffWait, Position, RunTracker, FORWARD_SEEK_SECONDS};
 
 /// 计划里向前跳过超过这么久（秒）也算剪辑点（预先接续直接定位过去，不解中间的帧）。
 const CUT_FORWARD_SECONDS: f64 = 0.25;
@@ -55,6 +55,8 @@ use timing::{duration_to_us, pts_to_seconds, pts_to_us, seconds_to_duration_tick
 
 /// 单帧请求等空闲槽位的上限。
 const FRAME_AT_SLOT_TIMEOUT: Duration = Duration::from_secs(2);
+/// 交出前等显卡完成的上限（3.8）：超时照常交出。
+const SETTLE_TIMEOUT: Duration = Duration::from_secs(2);
 /// 送入这么多包仍无输出视为解码器卡死。
 const STALL_PACKETS: u32 = 600;
 pub const MAX_SCHEDULE_TIMES: usize = 200_000;
@@ -215,6 +217,11 @@ mod imp {
         run_all_key: bool,
         fallback_logged: bool,
         decode_error_count: u64,
+        /// 上次交出帧时本会话已解出（含丢弃）的帧数；交出前按差值判断是否先等显卡完成（3.8）。
+        decoded_at_handoff: u64,
+        /// 正在执行有终点的区间取帧（拖动的解码窗口）：每帧交出前等上一帧的显卡工作完成（3.8）。
+        paced: bool,
+        settle_logged: bool,
     }
 
     fn frame_ts(frame: &Frame) -> i64 {
@@ -397,6 +404,9 @@ mod imp {
                 run_all_key: all_key,
                 fallback_logged: false,
                 decode_error_count: 0,
+                decoded_at_handoff: 0,
+                paced: false,
+                settle_logged: false,
             };
             Ok((session, response))
         }
@@ -719,6 +729,7 @@ mod imp {
             let duration = frame.duration();
             let pts_us = pts_to_us(ts, self.time_base);
             let duration_us = if duration > 0 { duration_to_us(ts, duration, self.time_base) } else if self.frame_rate > 0.0 { (1e6 / self.frame_rate).round() as i64 } else { 0 };
+            self.wait_before_handoff();
             let frame_index = self.delivered;
             self.delivered += 1;
             crate::send(&json!({
@@ -732,6 +743,32 @@ mod imp {
                 "request": request.value(),
             }));
             Ok(json!({ "ptsUs": pts_us, "timestampSeconds": pts_to_seconds(ts, self.time_base), "durationSeconds": duration_us as f64 / 1e6 }))
+        }
+
+        /// 交出前按 `handoff_wait` 等本服务的显卡工作（3.8）：会话第一帧与定位后解过多帧才交出的帧等全部完成，
+        /// 拖动的解码窗口等上一帧完成。等待失败或超时只记录一次，帧照常交出（客户端退回到在显卡上等待）。
+        fn wait_before_handoff(&mut self) {
+            let counters = &self.control.counters;
+            let decoded = counters.decoded.load(Ordering::Relaxed) + counters.discarded.load(Ordering::Relaxed);
+            let backlog = decoded.saturating_sub(self.decoded_at_handoff);
+            self.decoded_at_handoff = decoded;
+            let (result, waits, waited) = match handoff_wait(self.delivered, backlog, self.paced) {
+                HandoffWait::None => return,
+                HandoffWait::Full => (self.frames.settle(SETTLE_TIMEOUT), &counters.settles, &counters.settle_us),
+                HandoffWait::Lagged => (self.frames.pace(SETTLE_TIMEOUT), &counters.paces, &counters.pace_us),
+            };
+            match result {
+                Ok(waited_us) => {
+                    waits.fetch_add(1, Ordering::Relaxed);
+                    waited.fetch_add(waited_us, Ordering::Relaxed);
+                }
+                Err(message) => {
+                    if !self.settle_logged {
+                        self.settle_logged = true;
+                        logging::warn("decode.settle_failed", &message, json!({ "streamId": self.stream_id, "backlog": backlog }));
+                    }
+                }
+            }
         }
 
         fn frame_at(&mut self, request_id: &str, time: f64, ticket: String) {
@@ -781,10 +818,13 @@ mod imp {
             let delivered_before = self.delivered;
             let cuts_before = self.control.counters.cuts.load(Ordering::Relaxed);
             let prefed_before = self.control.counters.prefed_cuts.load(Ordering::Relaxed);
+            // 有终点的区间是拖动的解码窗口；无终点的区间是顺序读取（导出、预滚），照常流水。
+            self.paced = matches!(plan, SchedulePlan::Range { to: Some(_), .. });
             let result = match &plan {
                 SchedulePlan::Times(times) => self.schedule_times(&schedule_id, times),
                 SchedulePlan::Range { from, to } => self.schedule_range(&schedule_id, *from, *to),
             };
+            self.paced = false;
             self.schedule = None;
             self.cut = None;
             let (reason, message) = match &result {

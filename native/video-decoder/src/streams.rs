@@ -143,6 +143,12 @@ pub struct StreamCounters {
     pub map_us: AtomicU64,
     /// 等待空闲槽位的累计微秒（背压）。
     pub wait_us: AtomicU64,
+    /// 交出前先等显卡工作全部完成的帧数（会话第一帧、定位后解过多帧，3.8）与累计等待微秒。
+    pub settles: AtomicU64,
+    pub settle_us: AtomicU64,
+    /// 拖动解码窗口里交出前等上一帧显卡工作完成的帧数（3.8）与累计等待微秒。
+    pub paces: AtomicU64,
+    pub pace_us: AtomicU64,
 }
 
 pub struct StreamControl {
@@ -202,6 +208,10 @@ pub fn counters_value(control: &StreamControl) -> Value {
         "uploadUsAverage": average(&counters.upload_us),
         "mapUsAverage": average(&counters.map_us),
         "waitUsTotal": load(&counters.wait_us),
+        "settles": load(&counters.settles),
+        "settleUsTotal": load(&counters.settle_us),
+        "paces": load(&counters.paces),
+        "paceUsTotal": load(&counters.pace_us),
     })
 }
 
