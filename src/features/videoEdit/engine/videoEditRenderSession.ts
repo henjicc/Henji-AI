@@ -78,10 +78,11 @@ export class VideoEditRenderSession {
     if (!result.bitmap) throw new Error('剪辑渲染没有返回画面。')
     return { ...result, bitmap: result.bitmap }
   }
-  async render(frame: number, sequential = false): Promise<{ canvas: OffscreenCanvas; sourceTimestamps: number[] }> {
+  /** Export frames: sequential renders on this session's full-size canvas (task 2.4: exact pictures or a failure). */
+  async render(frame: number, sequential = false): Promise<{ canvas: OffscreenCanvas; sourceTimestamps: number[]; singleFrameReads: number }> {
     const result = await this.renderBitmap(frame, sequential)
     try { this.canvas.getContext('2d')!.drawImage(result.bitmap, 0, 0) } finally { result.bitmap.close() }
-    return { canvas: this.canvas, sourceTimestamps: result.sourceTimestamps ?? [] }
+    return { canvas: this.canvas, sourceTimestamps: result.sourceTimestamps ?? [], singleFrameReads: result.singleFrameReads ?? 0 }
   }
   async mixAudio(start: number, duration: number): Promise<AudioBuffer> {
     await this.ready

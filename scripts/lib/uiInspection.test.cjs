@@ -38,6 +38,14 @@ test('标准4K60性能验收场景只登记一次并声明写入用户数据', (
   assert.equal(scene.writesUserData, true)
   assert.equal(UI_INSPECTION_SCENES.filter(candidate => candidate.id === scene.id).length, 1)
 })
+test('原生专业格式导出验收场景只登记一次，只豁免主动注入的导出失败事件', () => {
+  const { createVideoEditExportNativeScene } = require('./uiInspectionSceneVideoEditExportNative.cjs')
+  const scene = createVideoEditExportNativeScene()
+  assert.equal(scene.id, 'video-edit-export-native')
+  assert.equal(scene.writesUserData, true)
+  assert.deepEqual(scene.expectedLogEvents, ['video_edit.export.failed'])
+  assert.equal(UI_INSPECTION_SCENES.filter(candidate => candidate.id === scene.id).length, 1)
+})
 const { attachUiInspectionCommon } = require('./uiInspectionSceneCommon.cjs')
 const { UI_AUDIT_RULES } = require('./uiAuditDom.cjs')
 const {

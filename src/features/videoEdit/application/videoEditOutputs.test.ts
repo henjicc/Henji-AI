@@ -18,7 +18,7 @@ import { cancelVideoEditExport, exportVideoEdit, videoEditExportTask } from './v
 
 // Only codec/pixel and native I/O boundaries are replaced. Services, ownership,
 // capability permission/registration, collection and project persistence are real.
-const encoder = vi.hoisted(() => ({ finalize: vi.fn(), cancel: vi.fn(), render: vi.fn(), dispose: vi.fn(), failConstructor: false, videoTimestamps: [] as number[] }))
+const encoder = vi.hoisted(() => ({ finalize: vi.fn(), cancel: vi.fn(), render: vi.fn(), mix: vi.fn(), dispose: vi.fn(), failConstructor: false, videoTimestamps: [] as number[] }))
 vi.mock('mediabunny', () => ({
   ALL_FORMATS: [], UrlSource: class {}, Input: class {}, Mp4OutputFormat: class {}, StreamTarget: class {},
   Output: class { addVideoTrack() {} addAudioTrack() {} async start() {} finalize = encoder.finalize; cancel = encoder.cancel },
@@ -26,7 +26,7 @@ vi.mock('mediabunny', () => ({
 }))
 vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: class {
   canvas = {}; constructor() { if (encoder.failConstructor) throw new Error('GPU unavailable') }
-  render = encoder.render; dispose = encoder.dispose; async mixAudio() { return {} }
+  render = encoder.render; dispose = encoder.dispose; mixAudio = encoder.mix
 } }))
 const files = new Map<string, string>(); const media = new Map<string, Uint8Array>(); const assets = new Map<string, AssetRecord>()
 const hash = 'a'.repeat(64)
@@ -38,7 +38,7 @@ function record(path: string, kind: 'image' | 'video'): AssetRecord {
 }
 beforeEach(() => {
   installHarnessNativeStorage(); resetCanvasApplicationStateForTests(); vi.stubGlobal('Blob', NativeBlob); files.clear(); media.clear(); assets.clear(); encoder.failConstructor = false; encoder.videoTimestamps = []
-  encoder.finalize.mockReset().mockResolvedValue(undefined); encoder.cancel.mockReset().mockResolvedValue(undefined); encoder.render.mockReset().mockResolvedValue(undefined); encoder.dispose.mockReset().mockResolvedValue(undefined)
+  encoder.finalize.mockReset().mockResolvedValue(undefined); encoder.cancel.mockReset().mockResolvedValue(undefined); encoder.render.mockReset().mockResolvedValue({ singleFrameReads: 0 }); encoder.mix.mockReset().mockResolvedValue({}); encoder.dispose.mockReset().mockResolvedValue(undefined)
   const platform = getPlatform()
   vi.spyOn(platform.system.dialog, 'save').mockResolvedValue('D:/output.henji-video')
   vi.spyOn(platform.system.fs, 'writeTextFile').mockImplementation(async (path, text) => { files.set(path, text) })
@@ -202,12 +202,25 @@ it.each(['constructor', 'render', 'cancel-last-frame'] as const)('完成前%s失
   const owner = (await createVideoEditProject())!; const id = owner.document.id
   if (failure === 'constructor') encoder.failConstructor = true
   if (failure === 'render') encoder.render.mockRejectedValueOnce(new Error('decode failed'))
-  if (failure === 'cancel-last-frame') encoder.render.mockImplementationOnce(async () => { cancelVideoEditExport(id) })
+  if (failure === 'cancel-last-frame') encoder.render.mockImplementationOnce(async () => { cancelVideoEditExport(id); return { singleFrameReads: 0 } })
   if (failure === 'cancel-last-frame') expect(await exportVideoEdit(id, 'D:/unfinished.mp4')).toBeNull()
   else await expect(exportVideoEdit(id, 'D:/unfinished.mp4')).rejects.toThrow()
   expect(owner.busy).toBe(false); expect(media.has('D:/unfinished.mp4')).toBe(false); expect(encoder.finalize).not.toHaveBeenCalled()
   expect(videoEditExportTask(id)?.state).toBe(failure === 'cancel-last-frame' ? 'cancelled' : 'failed')
   expect(getPlatform().system.fs.remove).toHaveBeenCalledTimes(failure === 'constructor' ? 0 : 1)
+})
+
+it.each([['画面', 45, '00:00:01:15'], ['声音', 30, '00:00:01:00']] as const)('导出中%s取不到准确内容时停在该帧：提示序列位置与原因，删除半成品且不编码之后的帧', async (kind, frame, timecode) => {
+  const owner = (await createVideoEditProject())!; const id = owner.document.id
+  appendVideoEditCaptionText(id, owner.activeSequenceId, '1\n00:00:00,000 --> 00:00:03,000\n字幕')
+  const reason = kind === '画面' ? '素材「A.mov」取不到准确的画面：解码失败，请确认文件可用，或在项目素材中重新定位源文件。' : '素材「A.mov」的声音读取失败，请确认文件可用，或在项目素材中重新定位源文件。'
+  if (kind === '画面') encoder.render.mockImplementation(async (at: number) => { if (at === frame) throw new Error(reason); return { singleFrameReads: 0 } })
+  else encoder.mix.mockImplementation(async (start: number) => { if (Math.round(start * 30) === frame) throw new Error(reason); return {} })
+  await expect(exportVideoEdit(id, 'D:/stopped.mp4')).rejects.toThrow(`导出在 ${timecode} 处停止。${reason}`)
+  expect(videoEditExportTask(id)).toMatchObject({ state: 'failed', error: `导出在 ${timecode} 处停止。${reason}` })
+  // Every frame before the failing one was encoded; nothing at or after it.
+  expect(encoder.videoTimestamps).toHaveLength(frame)
+  expect(media.has('D:/stopped.mp4')).toBe(false); expect(encoder.finalize).not.toHaveBeenCalled(); expect(encoder.cancel).toHaveBeenCalledOnce(); expect(owner.busy).toBe(false)
 })
 
 it('序列入出点选定导出半开范围：成片与字幕文件从入点计时，范围外内容不导出', async () => {

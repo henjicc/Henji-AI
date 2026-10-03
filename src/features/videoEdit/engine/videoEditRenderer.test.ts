@@ -423,6 +423,39 @@ it('源时间早于流的首个画面（MPEG 节目流从 0.533 秒开始）时�
     await expect(renderer.render(0)).rejects.toThrow('在此时间没有画面')
   } finally { await renderer.dispose() }
 })
+it('导出逐帧（无预览宽度的顺序渲染，2.4）：读取器跳过或提前结束时由单帧读取补上准确画面；单帧读取也失败时该帧失败、不画替代画面', async () => {
+  const starts: number[] = []; const singleReads: number[] = []; const lent: Array<{ close: ReturnType<typeof vi.fn> }> = []
+  const picture = (index: number): VideoSample => { const value = { timestamp: index / 30, duration: 1 / 30, format: 'NV12', close: vi.fn() }; lent.push(value); return value as unknown as VideoSample }
+  // First reader: loses picture 2 on the way and ends after picture 4. Second reader: loses picture 10.
+  const lost = [[2], [10]]; const lastIndex = [4, 59]
+  let frameAtFails = false
+  const backend: VideoEditFrameBackend = {
+    open: media => ({ key: media.path, ready: Promise.resolve({ clipAudio: () => undefined, async *schedule() {},
+      clipFrames: () => ({
+        async *frames(start: number) { const reader = starts.push(start) - 1; for (let index = Math.round(start * 30); index <= lastIndex[reader]; index++) if (!lost[reader].includes(index)) yield picture(index) },
+        async frameAt(time: number) { singleReads.push(Math.round(time * 30)); if (frameAtFails) throw new Error('素材「A」解码失败，请确认文件可用，或在项目素材中重新定位源文件。'); return picture(Math.round(time * 30)) },
+      }) }) }),
+    release: () => {},
+    seeker: () => { throw new Error('导出不定位。') },
+  }
+  const renderer = new VideoEditRenderer(fixture(), undefined, undefined, 8 * 1024 ** 3, backend)
+  try {
+    const drawn: number[] = []; let reads = 0
+    for (let frame = 0; frame < 10; frame++) {
+      const result = await renderer.render(frame, true)
+      expect(result).toMatchObject({ presented: true, blankPictures: 0, sourceTimestamps: [frame / 30] })
+      drawn.push(Math.round(boundary.pictures[0] * 30)); reads += result.singleFrameReads
+    }
+    expect(drawn).toEqual(Array.from({ length: 10 }, (_, index) => index))
+    // Picture 2 (lost) and 5 (after the first reader ended) came from single-frame reads; the next frame restarted the reader.
+    expect(singleReads).toEqual([2, 5]); expect(reads).toBe(2); expect(starts).toEqual([0, 6 / 30])
+    frameAtFails = true; const draws = boundary.draws.length
+    await expect(renderer.render(10, true)).rejects.toThrow('素材「A」取不到准确的画面：解码失败，请确认文件可用，或在项目素材中重新定位源文件。')
+    expect(boundary.draws).toHaveLength(draws); expect(singleReads).toEqual([2, 5, 10])
+  } finally { await renderer.dispose() }
+  // Every decoded picture, including the one held ahead of the failed frame, went back exactly once.
+  for (const value of lent) expect(value.close).toHaveBeenCalledOnce()
+})
 /** A backend whose sound comes from the native reader over a fake PCM session, as the native backend will deliver it. */
 function nativeSoundBackend(session: (path: string) => VideoEditPcmSession): { backend: VideoEditFrameBackend; opened: string[]; released: string[] } {
   const opened: string[] = []; const released: string[] = []

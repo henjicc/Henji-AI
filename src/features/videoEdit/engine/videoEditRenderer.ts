@@ -13,6 +13,7 @@ import { videoEditTransitionsAt } from '@/core/videoEdit/transitions'
 import { activeVideoEditEffects, buildVideoEditCompositePlan } from '@/core/videoEdit/compositing'
 import { renderVideoEditCompositeScene, videoEditCompositeSurfaceKeys } from './videoEditCompositeScene'
 import { videoEditAudioMixReads, videoEditDefaultAudioGains } from '@/core/videoEdit/audioChannels'
+import { readVideoEditExportPicture } from './videoEditExportPictures'
 
 interface PlaybackStream {
   demux: string
@@ -244,8 +245,11 @@ export class VideoEditRenderer {
   }
   /**
    * `blankPictures` counts video layers with no picture at their source time (drawn transparent, no timestamp).
+   * A sequential render without a preview width is an export frame (task 2.4): every video layer shows the exact
+   * picture at its source time or the frame fails (`videoEditExportPictures.ts`); `singleFrameReads` counts the layers
+   * a single-frame read decided because the sequential reader's picture was not exact.
    */
-  async render(frame: number, sequential = false, _scrubbing = false, shouldPresent: () => boolean = () => true, deadline?: number): Promise<{ canvas: OffscreenCanvas; sourceTimestamps: number[]; blankPictures: number; cacheHits: number; cacheBytes: number; presented: boolean; decodeMs: number; gpuMs: number; completion: Promise<void> }> {
+  async render(frame: number, sequential = false, _scrubbing = false, shouldPresent: () => boolean = () => true, deadline?: number): Promise<{ canvas: OffscreenCanvas; sourceTimestamps: number[]; blankPictures: number; singleFrameReads: number; cacheHits: number; cacheBytes: number; presented: boolean; decodeMs: number; gpuMs: number; completion: Promise<void> }> {
     if (this.disposed) throw new Error('预览已关闭。')
     const document = this.document; const epoch = this.presentationEpoch
     const canPresent = (): boolean => !this.disposed && this.document === document && this.presentationEpoch === epoch && shouldPresent()
@@ -289,6 +293,7 @@ export class VideoEditRenderer {
     for (const clip of upcoming) this.preroll(clip, document)
     let cacheHits = 0
     let blankPictures = 0
+    let singleFrameReads = 0
     const picturesPending = active.map(async clip => {
       const media = videoEditClipMedia(document, clip)
       if (clip.kind === 'text' || clip.kind === 'adjustment') return null
@@ -325,6 +330,10 @@ export class VideoEditRenderer {
         const result = await seeker.sample(time, direction)
         if (result.hit) cacheHits++
         source.current?.close(); source.current = result.sample
+      } else if (sequential && !this.previewWidth) {
+        // Export: the exact picture at this source time, decided by a single-frame read when the reader's is not.
+        const read = await readVideoEditExportPicture(source, source.video, time, media.name)
+        early = read.blank; if (read.singleFrameRead) singleFrameReads++
       } else if (sequential || (this.previewWidth && time >= source.previousTime && time - source.previousTime <= 2)) {
         if (!source.iterator || time < source.previousTime || time - source.previousTime > 2) {
           source.current?.close(); await source.iterator?.return(); source.iterator = source.video.frames(time); source.current = undefined
@@ -365,7 +374,7 @@ export class VideoEditRenderer {
     const settled = await Promise.allSettled(picturesPending)
     const imageResults = await imagesSettled
     const preparedCode = await codeSettled
-    if (!canPresent()) return { canvas: this.canvas, sourceTimestamps: [], blankPictures, cacheHits, cacheBytes: this.frameCache.bytes, presented: false, decodeMs: performance.now() - decodeStart, gpuMs: 0, completion: Promise.resolve() }
+    if (!canPresent()) return { canvas: this.canvas, sourceTimestamps: [], blankPictures, singleFrameReads, cacheHits, cacheBytes: this.frameCache.bytes, presented: false, decodeMs: performance.now() - decodeStart, gpuMs: 0, completion: Promise.resolve() }
     const codeFailure = preparedCode.find(result => result.status === 'rejected')
     if (codeFailure?.status === 'rejected') throw codeFailure.reason
     if (preparedCode[0]?.status === 'fulfilled') { cacheHits += preparedCode[0].value.cacheHits; timestamps.push(...preparedCode[0].value.sourceTimestamps) }
@@ -393,7 +402,7 @@ export class VideoEditRenderer {
     for (const key of this.images.keys()) if (!activeImages.has(key)) this.releaseImage(key)
     const activePaths = new Set(canPresent() ? active.map(clip => videoEditClipMedia(document, clip)?.path) : this.seekers.keys())
     for (const [path, seeker] of this.seekers) if (!activePaths.has(path)) { this.seekers.delete(path); await seeker.dispose() }
-    return { canvas: this.canvas, sourceTimestamps: timestamps, blankPictures, cacheHits, cacheBytes: this.frameCache.bytes, presented, decodeMs, gpuMs, completion }
+    return { canvas: this.canvas, sourceTimestamps: timestamps, blankPictures, singleFrameReads, cacheHits, cacheBytes: this.frameCache.bytes, presented, decodeMs, gpuMs, completion }
   }
   /** Bounded one-second mix. Source timestamp alignment also handles VFR video audio. */
   async mixAudio(startSeconds: number, durationSeconds: number): Promise<Float32Array[]> {
