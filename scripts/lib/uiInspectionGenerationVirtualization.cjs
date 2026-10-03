@@ -119,7 +119,9 @@ function createGenerationVirtualizationScenes(context) {
       await inspection.capture('image-viewer')
       await page.keyboard.press('Escape')
       await page.getByRole('dialog').filter({ visible: true }).waitFor({ state: 'hidden' })
+      // 搜索与筛选条由命令带的“搜索历史”按钮展开（设计稿 Generation）
       const search = page.getByPlaceholder(/^(搜索提示词 \/ 模型 \/ 提供商 \/ 错误信息|Search prompt \/ model \/ provider \/ error)$/)
+      if (!await search.count()) await page.getByRole('button', { name: /^(搜索历史|Search history)$/ }).click()
       await search.focus()
       await search.fill('交互样本 999。')
       await last.waitFor()

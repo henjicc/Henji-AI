@@ -12,6 +12,7 @@ import { useI18n } from '@/hooks/useI18n'
 import { useOnboardingState } from '@/features/onboarding/application/useOnboardingState'
 import { getModelDisplayName } from '@/utils/modelHelpers'
 import { FloatingInputPanel } from './GenerationWorkspace/components/FloatingInputPanel'
+import { GenerationHistoryToolbar } from './GenerationWorkspace/components/GenerationHistoryToolbar'
 import { NotificationToast } from './GenerationWorkspace/components/NotificationToast'
 import { ClearHistoryDialog } from './GenerationWorkspace/components/ClearHistoryDialog'
 import { ImageViewerModal } from '@/components/mediaViewer/ImageViewerModal'
@@ -31,7 +32,9 @@ import { useGenerationImageViewer } from './GenerationWorkspace/hooks/useGenerat
 import { splitMulti } from './GenerationWorkspace/utils/multiFile'
 import { Copy, Download } from 'lucide-react'
 
-const FLOATING_INPUT_PANEL_MAX_WIDTH_PX = 1100
+// 与历史列的外框（max-w-4xl = 896）同宽：输入卡片两侧比记录文字各宽出一档留白（设计稿 Generation）
+const FLOATING_INPUT_PANEL_MAX_WIDTH_PX = 896
+const FLOATING_INPUT_PANEL_GUTTER_PX = 24
 
 // 稳定引用：删除/清空任务时清掉对应的瞬态进度，避免 store 里残留已结束任务的条目
 const clearGenerationTaskProgress = (taskId: string): void =>
@@ -169,69 +172,20 @@ const GenerationWorkspace: React.FC = () => {
   const [isAudioViewerOpen, setIsAudioViewerOpen] = useState(false)
   const [currentAudioUrl, setCurrentAudioUrl] = useState('')
   const [currentAudioPath, setCurrentAudioPath] = useState<string | undefined>(undefined)
-  const [isTopFilterVisible, setIsTopFilterVisible] = useState(false)
-  const [isTopFilterHovered, setIsTopFilterHovered] = useState(false)
-  const filterHideTimerRef = useRef<number | null>(null)
-  const hasActiveFiltersRef = useRef(hasActiveFilters)
-  const isTopFilterHoveredRef = useRef(isTopFilterHovered)
-
-  const clearFilterHideTimer = useCallback((): void => {
-    if (filterHideTimerRef.current === null) return
-    window.clearTimeout(filterHideTimerRef.current)
-    filterHideTimerRef.current = null
+  // 搜索与筛选条：由命令带的搜索按钮展开；带着生效中的筛选进入页面时默认展开
+  const [isSearchOpen, setIsSearchOpen] = useState(hasActiveFilters)
+  const searchStripRef = useRef<HTMLDivElement | null>(null)
+  const toggleSearch = useCallback((): void => {
+    setIsSearchOpen((open) => !open)
   }, [])
-
-  const showTopFilterBar = useCallback((): void => {
-    clearFilterHideTimer()
-    setIsTopFilterVisible(true)
-  }, [clearFilterHideTimer])
-
-  const requestHideTopFilterBar = useCallback((): void => {
-    clearFilterHideTimer()
-    filterHideTimerRef.current = window.setTimeout(() => {
-      if (hasActiveFiltersRef.current || isTopFilterHoveredRef.current) {
-        filterHideTimerRef.current = null
-        return
-      }
-      setIsTopFilterVisible(false)
-      filterHideTimerRef.current = null
-    }, 220)
-  }, [clearFilterHideTimer])
-
-  const hideTopFilterBarWithDelay = useCallback((): void => {
-    setIsTopFilterHovered(false)
-    requestHideTopFilterBar()
-  }, [requestHideTopFilterBar])
-
   useEffect(() => {
-    if (!hasActiveFilters) return
-    clearFilterHideTimer()
-    setIsTopFilterVisible(true)
-  }, [clearFilterHideTimer, hasActiveFilters])
-
-  useEffect(() => {
-    hasActiveFiltersRef.current = hasActiveFilters
-  }, [hasActiveFilters])
-
-  useEffect(() => {
-    isTopFilterHoveredRef.current = isTopFilterHovered
-  }, [isTopFilterHovered])
-
-  useEffect(() => {
-    if (hasActiveFilters) return
-    if (isTopFilterHovered) return
-    requestHideTopFilterBar()
-  }, [hasActiveFilters, isTopFilterHovered, requestHideTopFilterBar])
-
-  const handleCloseTopFilterBar = useCallback((): void => {
-    clearFilterHideTimer()
+    if (!isSearchOpen) return
+    searchStripRef.current?.querySelector<HTMLInputElement>('input')?.focus()
+  }, [isSearchOpen])
+  const handleCloseSearch = useCallback((): void => {
     resetHistoryFilters()
-    setIsTopFilterVisible(false)
-  }, [clearFilterHideTimer, resetHistoryFilters])
-
-  useEffect(() => {
-    return () => clearFilterHideTimer()
-  }, [clearFilterHideTimer])
+    setIsSearchOpen(false)
+  }, [resetHistoryFilters])
   const openVideoViewer = (url?: string, filePath?: string, trimRange?: { start: number; end: number }) => {
     const rawUrl = typeof url === 'string' ? url : ''
     const normalizedFilePath = filePath ? splitMulti(filePath)[0] : undefined
@@ -278,36 +232,28 @@ const GenerationWorkspace: React.FC = () => {
     await download(filePath, true)
   }
   return (
-    <div className="h-full flex-1 bg-app text-white flex flex-col relative overflow-hidden">
+    <div className="relative flex h-full flex-1 flex-col overflow-hidden bg-app text-text1">
       <NotificationToast notification={notification} visible={notificationVisible} />
       <main className="relative z-raised flex min-h-0 flex-1 flex-col">
-        <div className="pointer-events-none absolute inset-x-0 top-1 z-dropdown flex justify-center px-2">
-          <div
-            className="pointer-events-auto relative flex w-full max-w-[980px] flex-col items-center"
-            onPointerEnter={() => {
-              setIsTopFilterHovered(true)
-              showTopFilterBar()
-            }}
-            onPointerLeave={hideTopFilterBarWithDelay}
-            onFocusCapture={() => {
-              showTopFilterBar()
-            }}
-            onBlurCapture={(event) => {
-              const nextFocusTarget = event.relatedTarget
-              if (nextFocusTarget instanceof Node && event.currentTarget.contains(nextFocusTarget)) return
-              if (hasActiveFilters) return
-              requestHideTopFilterBar()
-            }}
-          >
-            <div className="pointer-events-auto absolute inset-x-0 -top-6 h-16" />
-            <div className={`pointer-events-none transition-[opacity,transform] duration-180 ${
-              (isTopFilterVisible || hasActiveFilters)
-                ? 'pointer-events-auto translate-y-0 opacity-100'
-                : '-translate-y-2 opacity-0'
-            }`}>
+        {/* 命令带：类型分段 + 搜索 + 更多；搜索展开时筛选条作为从属带紧贴其下（不另画底色与边框） */}
+        <div className="mx-auto w-full max-w-4xl shrink-0 px-6 pt-3">
+          <GenerationHistoryToolbar
+            mediaType={filterMediaType}
+            mediaOptions={mediaFilterOptions}
+            onMediaTypeChange={setFilterMediaType}
+            searchOpen={isSearchOpen}
+            onToggleSearch={toggleSearch}
+            hasActiveFilters={hasActiveFilters}
+            matchedCount={matchedCount}
+            totalCount={tasks.length}
+            onOpenClearHistory={() => setIsClearDialogOpen(true)}
+          />
+          {isSearchOpen && (
+            <div ref={searchStripRef} className="pb-1 pt-1">
               <UiTaskHistoryFilterBar
                 mode="always"
                 showCloseButton
+                showMediaType={false}
                 keyword={filterKeyword}
                 providerId={filterProviderId}
                 modelId={filterModelId}
@@ -325,15 +271,15 @@ const GenerationWorkspace: React.FC = () => {
                 onTimePresetChange={setFilterTimePreset}
                 onStartDateChange={setFilterStartDate}
                 onEndDateChange={setFilterEndDate}
-                onClose={handleCloseTopFilterBar}
+                onClose={handleCloseSearch}
               />
             </div>
-          </div>
+          )}
         </div>
         <UiSharedGlassHost
           ref={listContainerRef}
           minTargets={4}
-          className="app-scroll-container min-h-0 flex-1 overflow-y-auto p-6"
+          className="app-scroll-container min-h-0 flex-1 overflow-y-auto pt-4"
           style={{ paddingBottom: inputPadding }}
         >
           <div ref={contentRef}>
@@ -341,7 +287,6 @@ const GenerationWorkspace: React.FC = () => {
               scrollContainerRef={listContainerRef}
               tasks={filteredTasks}
               totalCount={tasks.length}
-              matchedCount={matchedCount}
               hasActiveFilters={hasActiveFilters}
               showMenu={showMenu}
               onDownload={download}
@@ -366,6 +311,7 @@ const GenerationWorkspace: React.FC = () => {
           modelLabel={panelModelId ? getModelDisplayName(panelModelId) : ''}
           prompt={panelPrompt}
           maxWidthPx={FLOATING_INPUT_PANEL_MAX_WIDTH_PX}
+          viewportGutterPx={FLOATING_INPUT_PANEL_GUTTER_PX}
           onExpand={expandPanelSmooth}
           onMouseEnter={handlePanelMouseEnter}
           onMouseLeave={handlePanelMouseLeave}
@@ -376,7 +322,6 @@ const GenerationWorkspace: React.FC = () => {
             onGenerate={handleGenerate}
             isLoading={isGenerating}
             isGenerating={isGenerating}
-            onOpenClearHistory={() => setIsClearDialogOpen(true)}
             onImageClick={(url: string, list: string[]) => openImageViewer(url, list, undefined, true)}
             onSetUploadedImagesRef={(setter) => {
               setUploadedImagesRef.current = setter

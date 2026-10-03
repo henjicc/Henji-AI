@@ -13,6 +13,7 @@ import {
 import type { NumberParamDef } from '@/core/types'
 import { getI18nText } from '@/core/types/I18nText'
 import { ParamLabel } from '../ParamLabel'
+import { ParamField } from '../ParamField'
 
 interface NumberInputProps {
   param: NumberParamDef
@@ -80,7 +81,7 @@ export const NumberInput: React.FC<NumberInputProps> = ({
   }
 
   return (
-    <div className={hasMarks ? 'w-auto min-w-[200px]' : 'w-fit'}>
+    <ParamField className={hasMarks ? 'w-auto min-w-[200px]' : 'w-fit'} inline={!hasMarks}>
       <ParamLabel param={param} language={i18n.language} />
 
       <div className="flex flex-wrap items-center gap-2">
@@ -120,6 +121,6 @@ export const NumberInput: React.FC<NumberInputProps> = ({
           ))}
         </div>
       )}
-    </div>
+    </ParamField>
   )
 }

@@ -4,12 +4,12 @@ function attachUiInspectionGeneration(context) {
     REFERENCE_FIXTURE_IMAGE,
     paramFieldFromLabel,
     openWorkspace,
-    waitForPageHeader,
   } = context
 
   async function setupGeneration(page) {
     await openWorkspace(page, 'generation')
-    await waitForPageHeader(page)
+    // 生成页按设计稿不再有“历史记录”页面标题：以输入区提示词就绪为准
+    await page.locator('[data-onboarding-target="prompt"]:visible').first().waitFor({ state: 'visible', timeout: 12000 })
   }
 
   async function openGenerationModelPanel(page) {

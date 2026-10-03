@@ -1,10 +1,11 @@
-import React, { useEffect, useRef } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { showAlertDialog } from '@/stores/alertDialogStore'
-import { PromptEditor, StackedMediaUploader, UI_TEXT_BODY_CLASS, UiIconButton } from '@/components/ui'
+import { PromptEditor, StackedMediaUploader, UiIconButton } from '@/components/ui'
 import type {
   PromptEditorHandle,
   PromptReferenceItem,
+  StackedMediaUploaderHandle,
 } from '@/components/ui'
 import type { PromptDocumentV1 } from '@/core/inputs/promptDocument'
 import { resolveInputLimits } from '@/core/inputs/inputLimits'
@@ -15,6 +16,9 @@ import { usePromptOptimizationPreviewPlayback } from '../hooks/usePromptOptimiza
 import { ArrowUp, LoaderCircle, Plus } from 'lucide-react'
 import { readVideoInfo } from '@/commands/video'
 import { getPathForFile } from '@/platform/desktopApi'
+import { getPlatform } from '@/platform/runtime'
+import { useDragDrop } from '@/contexts/DragDropContext'
+import { isDesktop } from '@/utils/save'
 export interface FileOrderItem {
   type: 'video' | 'image' | 'audio'
   index: number
@@ -58,6 +62,24 @@ interface InputAreaProps {
   }
   promptEditorRef?: React.RefObject<PromptEditorHandle>
   onGenerate: () => void
+  /** 底栏左侧（“添加素材”之后）：模型与参数条。 */
+  footerStart?: React.ReactNode
+  /** 底栏右侧（生成按钮之前）：预计费用、预设、优化。 */
+  footerEnd?: React.ReactNode
+}
+
+/**
+ * 拖拽进行中（应用内自定义拖拽或系统文件拖入窗口）时临时显示参考素材行，让它成为可见的放置目标；
+ * 平时没有参考素材就不占一行（设计稿 Generation：缩略图在提示词上方，“+”在底栏）。
+ */
+function useMediaDragInProgress(): boolean {
+  const { isDragging: isCustomDragging } = useDragDrop()
+  const [isNativeDragging, setIsNativeDragging] = useState(false)
+  useEffect(() => {
+    if (!isDesktop()) return undefined
+    return getPlatform().dragDrop.onDragStateChange(setIsNativeDragging)
+  }, [])
+  return isCustomDragging || isNativeDragging
 }
 /**
  * 输入区域组件
@@ -97,7 +119,9 @@ const InputArea: React.FC<InputAreaProps> = ({
   onFileOrderChange,
   promptOptimizationPreview,
   promptEditorRef,
-  onGenerate
+  onGenerate,
+  footerStart,
+  footerEnd,
 }) => {
   const { t } = useTranslation('ui')
   // 弹窗渲染统一收在 App 根部的 GlobalAlertDialog，这里只负责发起
@@ -285,14 +309,14 @@ const InputArea: React.FC<InputAreaProps> = ({
     }
   }
   // 紧凑模式由生成工作区的真实可用尺寸决定，CSS 像素已包含系统缩放与应用缩放。
-  // 96px 仍能容纳 82px 媒体上传器与发送按钮；长提示词在编辑区内部滚动。
+  // 长提示词在编辑区内部滚动。
   const promptHeightClass = compact
-    ? 'min-h-[96px] max-h-[176px]'
-    : 'min-h-[146px] max-h-[260px]'
-  const promptLeftPaddingClass =
-    shouldShowUpload
-      ? 'pl-[116px]'
-      : 'pl-4'
+    ? 'min-h-[48px] max-h-[176px]'
+    : 'min-h-[72px] max-h-[260px]'
+  const uploaderRef = useRef<StackedMediaUploaderHandle>(null)
+  const dragInProgress = useMediaDragInProgress()
+  const showReferenceRow = mixedFiles.length > 0 || dragInProgress
+  const canAddReference = !shouldHideUploadButton && !isLoading && (!mixedMaxCount || mixedFiles.length < mixedMaxCount)
   useEffect(() => {
     if (!renderPromptOptimizationPreview) {
       if (promptOptimizationScrollFrameRef.current !== null) {
@@ -339,10 +363,12 @@ const InputArea: React.FC<InputAreaProps> = ({
   ])
 
   return (
-    <div className="relative rounded-2xl">
+    <div className="relative flex flex-col gap-1.5">
+        {/* 参考素材行：始终挂载（系统拖入、替换与裁剪都走它），没有素材且不在拖拽中时不占位 */}
         {shouldShowUpload && (
-          <div className="pointer-events-auto absolute left-2 top-2 z-sticky">
+          <div className={showReferenceRow ? 'pointer-events-auto px-1 pt-0.5' : 'hidden'}>
             <StackedMediaUploader
+              ref={uploaderRef}
               files={mixedFiles}
               onUpload={(needsVideoUpload || needsAudioUpload) ? handleMixedFileUpload : onImageUpload}
               onRemove={(needsVideoUpload || needsAudioUpload) ? handleMixedFileRemove : onImageRemove}
@@ -357,7 +383,7 @@ const InputArea: React.FC<InputAreaProps> = ({
                   : (needsAudioUpload ? "image/*,audio/*" : "image/*"))}
               multiple={needsVideoOnly ? needsAudioUpload : ((needsVideoUpload || needsAudioUpload) ? true : isMultiple)}
               maxCount={mixedMaxCount}
-              hideUploadButton={shouldHideUploadButton}
+              hideUploadButton
               fileTypes={(needsVideoUpload || needsAudioUpload) && currentFileOrder.length > 0
                 ? currentFileOrder.map(item => item.type)
                 : undefined}
@@ -368,7 +394,7 @@ const InputArea: React.FC<InputAreaProps> = ({
           </div>
         )}
 
-        {/* 文本输入框 */}
+        {/* 文本输入框：外层输入卡片已经画了表面，编辑器本身无框 */}
         <div data-onboarding-target="prompt" className="relative">
           <PromptEditor
             ref={promptEditorRef}
@@ -376,6 +402,7 @@ const InputArea: React.FC<InputAreaProps> = ({
             onChange={onPromptDocumentChange}
             preset="media-references"
             layout="fill-scroll"
+            frame="none"
             ariaLabel={t('inputArea.placeholder.default')}
             references={promptReferences}
             onPaste={onPaste}
@@ -395,58 +422,76 @@ const InputArea: React.FC<InputAreaProps> = ({
                   ? t('inputArea.placeholder.englishOnly')
                   : t('inputArea.placeholder.default')
             }
-            className="relative isolate overflow-visible rounded-2xl"
-            editorShellClassName="!rounded-2xl !border-border-dark/35 !bg-transparent transition-colors duration-180 focus-within:!border-veil-soft focus-within:!ring-0"
-            editorClassName={`ui-scrollbar w-full ${promptLeftPaddingClass} py-3 pr-14 leading-6 ${promptHeightClass} whitespace-pre-wrap break-words ${UI_TEXT_BODY_CLASS}`}
+            className="relative isolate"
+            // 内容基础类已有 px-3 py-2.5 text-sm：这里用 pl/pr/pt/pb 与 text-14（产物中排在其后）收紧，不与之抢同一属性的同名档
+            editorClassName={`ui-scrollbar w-full pl-2 pr-2 pt-1 pb-1 text-14 ${promptHeightClass}`}
             disabled={isLoading || isPromptOptimizing || renderPromptOptimizationPreview}
           />
           {renderPromptOptimizationPreview ? (
-          <div className={`prompt-optimize-preview pointer-events-none absolute inset-0 z-dropdown overflow-hidden rounded-2xl border border-accent/40 bg-app/70 ${isPromptOptimizationPreviewClosing ? 'is-closing' : ''}`}>
-            <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-accent/70 to-transparent" />
+          <div className={`prompt-optimize-preview pointer-events-none absolute inset-0 z-dropdown overflow-hidden rounded-lg bg-panel ${isPromptOptimizationPreviewClosing ? 'is-closing' : ''}`}>
             <div
               ref={promptOptimizationScrollRef}
-              className={`prompt-optimize-preview__stream h-full overflow-y-scroll px-4 py-3 pr-14 leading-6 ${UI_TEXT_BODY_CLASS}`}
+              className="prompt-optimize-preview__stream h-full overflow-y-scroll px-2 py-1 text-14 leading-6 text-text1"
             >
               {displayedPromptOptimizationReasoningGlyphs.length > 0 ? (
                 <PromptOptimizationPreviewText
-                  className="prompt-optimize-preview__reasoning whitespace-pre-wrap break-words text-text-muted"
+                  className="prompt-optimize-preview__reasoning whitespace-pre-wrap break-words text-text3"
                   glyphs={displayedPromptOptimizationReasoningGlyphs}
                 />
               ) : null}
               {displayedPromptOptimizationReasoningGlyphs.length > 0 && displayedPromptOptimizationContentGlyphs.length > 0 ? '\n\n' : null}
               {displayedPromptOptimizationContentGlyphs.length > 0 ? (
                 <PromptOptimizationPreviewText
-                  className="prompt-optimize-preview__content whitespace-pre-wrap break-words text-text-dark"
+                  className="prompt-optimize-preview__content whitespace-pre-wrap break-words text-text1"
                   glyphs={displayedPromptOptimizationContentGlyphs}
                 />
               ) : null}
               {!hasOptimizationContent ? (
-                <span className="prompt-optimize-preview__placeholder text-text-muted">
+                <span className="prompt-optimize-preview__placeholder text-text3">
                   模型正在处理提示词...
                 </span>
               ) : null}
             </div>
           </div>
           ) : null}
-          {/* 生成按钮 */}
-          <UiIconButton tone="accent" size="lg"
-          type="button"
-          data-onboarding-target="generate"
-          onClick={onGenerate}
-          disabled={generateDisabled || isPromptOptimizing || renderPromptOptimizationPreview}
-          title={isGenerating ? t('inputArea.button.queue') : t('inputArea.button.generate')}
-          className="absolute bottom-3 right-3"
-          >
-            {isLoading ? (
-              <LoaderCircle className="animate-spin h-5 w-5" />
-            ) : isGenerating ? (
-              <Plus className="h-5 w-5" />
-            ) : (
-              <ArrowUp className="h-5 w-5" />
-            )}
-          </UiIconButton>
         </div>
 
+        {/* 底栏：添加素材 · 模型 · 参数 ｜ 预计费用 · 预设 · 优化 · 生成（设计稿 Generation） */}
+        <div className="flex flex-wrap items-end justify-between gap-x-3 gap-y-1.5">
+          <div className="flex min-w-0 flex-1 flex-wrap items-end gap-x-1 gap-y-1.5">
+            {shouldShowUpload && (
+              <UiIconButton size="lg"
+                type="button"
+                disabled={!canAddReference}
+                onClick={() => uploaderRef.current?.openFilePicker()}
+                title={needsVideoUpload ? uploadHint : t('inputArea.button.addReference')}
+                aria-label={t('inputArea.button.addReference')}
+              >
+                <Plus className="h-[18px] w-[18px]" />
+              </UiIconButton>
+            )}
+            {footerStart}
+          </div>
+          <div className="ml-auto flex shrink-0 items-center gap-1">
+            {footerEnd}
+            {/* 生成按钮：这块输入卡片唯一的主动作 */}
+            <UiIconButton tone="accent" size="lg"
+              type="button"
+              data-onboarding-target="generate"
+              onClick={onGenerate}
+              disabled={generateDisabled || isPromptOptimizing || renderPromptOptimizationPreview}
+              title={isGenerating ? t('inputArea.button.queue') : t('inputArea.button.generate')}
+            >
+              {isLoading ? (
+                <LoaderCircle className="h-[18px] w-[18px] animate-spin" />
+              ) : isGenerating ? (
+                <Plus className="h-[18px] w-[18px]" />
+              ) : (
+                <ArrowUp className="h-[18px] w-[18px]" />
+              )}
+            </UiIconButton>
+          </div>
+        </div>
     </div>
   )
 }

@@ -12,6 +12,9 @@ export const PROMPT_EDITOR_CONTENT_CLASS = [
 export const PROMPT_EDITOR_SHELL_CLASS =
   'rounded-lg border bg-surface-dark transition-shadow'
 
+/** 无框编辑器（`frame="none"`）：外层输入卡片已经画了表面与边界，编辑器只负责文字。 */
+export const PROMPT_EDITOR_FRAMELESS_SHELL_CLASS = 'rounded-none border-0 bg-transparent'
+
 interface PromptEditorLayoutClasses {
   outer: string
   shell: string

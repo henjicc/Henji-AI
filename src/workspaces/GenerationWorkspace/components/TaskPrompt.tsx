@@ -1,27 +1,12 @@
-import React from 'react'
-import { UI_TEXT_BODY_CLASS } from '@/components/ui'
-
 export interface TaskPromptProps {
   prompt: string
 }
 
+/** 记录的提示词：正文 14 / 22，单行省略，全文放悬停提示（设计稿 Generation）。 */
 export function TaskPrompt({ prompt }: TaskPromptProps): JSX.Element {
-  const clampStyle: React.CSSProperties = {
-    display: '-webkit-box',
-    WebkitLineClamp: 1,
-    WebkitBoxOrient: 'vertical',
-    overflow: 'hidden',
-  }
-
   return (
-    <div className="min-w-0 flex-1 rounded-lg">
-      <div
-        className={`pr-10 leading-5 ${UI_TEXT_BODY_CLASS}`}
-        style={clampStyle}
-        title={prompt}
-      >
-        {prompt}
-      </div>
-    </div>
+    <p className="m-0 truncate text-14 leading-[22px] text-text1" title={prompt}>
+      {prompt}
+    </p>
   )
 }

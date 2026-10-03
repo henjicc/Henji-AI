@@ -1,5 +1,5 @@
 import { createLogger } from '@/core/logging'
-import React, { useEffect, useRef, useState } from 'react'
+import React, { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import { readFile } from '@/platform/desktopApi'
 import { AudioLines, RefreshCw, Scissors } from 'lucide-react'
 import { useDragDrop } from '@/contexts/DragDropContext'
@@ -19,6 +19,11 @@ import { useFilePickerExpandLock } from './useFilePickerExpandLock'
 const logger = createLogger('components.ui.fileUploader.StackedMediaUploader')
 
 type MediaType = 'image' | 'video' | 'audio'
+
+/** 宿主把“添加素材”入口放在别处（如生成输入区底栏的“+”）时，经此打开同一个文件选择器。 */
+export interface StackedMediaUploaderHandle {
+  openFilePicker: () => void
+}
 
 interface StackedMediaUploaderProps {
   files: string[]
@@ -96,7 +101,7 @@ function AudioPreviewIcon(): JSX.Element {
   )
 }
 
-export function StackedMediaUploader({
+export const StackedMediaUploader = forwardRef<StackedMediaUploaderHandle, StackedMediaUploaderProps>(function StackedMediaUploader({
   files,
   fileTypes,
   onUpload,
@@ -113,7 +118,7 @@ export function StackedMediaUploader({
   disabled = false,
   hintText,
   onExpandedChange
-}: StackedMediaUploaderProps): JSX.Element {
+}, ref): JSX.Element {
   const uploadInputRef = useRef<HTMLInputElement>(null)
   const replaceInputRef = useRef<HTMLInputElement>(null)
   const [replaceIndex, setReplaceIndex] = useState<number | null>(null)
@@ -136,6 +141,14 @@ export function StackedMediaUploader({
   useEffect(() => {
     onExpandedChange?.(expanded)
   }, [expanded, onExpandedChange])
+
+  useImperativeHandle(ref, () => ({
+    openFilePicker: () => {
+      if (disabled) return
+      beginFilePickerLock()
+      uploadInputRef.current?.click()
+    },
+  }), [beginFilePickerLock, disabled])
 
   const {
     dragState,
@@ -482,4 +495,4 @@ export function StackedMediaUploader({
       {uploaderContent}
     </Tooltip>
   )
-}
+})

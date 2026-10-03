@@ -29,16 +29,32 @@ export function TaskCardToolbar({
 }: TaskCardToolbarProps): JSX.Element {
   const { t } = useI18n()
 
+  // 记录工具条：图标化、名称进悬停提示；静息隐藏，悬停或键盘聚焦到这条记录时出现（设计稿 Generation）。
+  // 顺序：再次生成 · 编辑 · 下载 · 收进资产库 · 用作提示词 ｜ 删除（危险动作放最后）。
   return (
-    <div className="absolute right-0 top-0 flex gap-2">
-      <UiIconButton size="lg"
-        onClick={onUsePrompt}
-        title={t('ui:workspace.actions.usePrompt')}
+    <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity duration-120 focus-within:opacity-100 group-hover/task:opacity-100 group-focus-within/task:opacity-100">
+      <UiIconButton
+        onClick={() => void onRegenerate()}
+        title={t('ui:workspace.actions.regenerate')}
       >
-        <UsePromptIcon className="h-4 w-4" />
+        <RefreshCw className="h-4 w-4" />
+      </UiIconButton>
+      <UiIconButton
+        onClick={onReedit}
+        title={t('ui:workspace.actions.reedit')}
+      >
+        <SquarePen className="h-4 w-4" />
       </UiIconButton>
       {task.result?.filePath && (
-        <UiIconButton size="lg"
+        <UiIconButton
+          onClick={() => void onDownloadAll()}
+          title={t('common:actions.download')}
+        >
+          <DownloadIcon className="h-4 w-4" />
+        </UiIconButton>
+      )}
+      {task.result?.filePath && (
+        <UiIconButton
           onClick={() => void onCollectAll()}
           disabled={collecting}
           on={allResultsCollected}
@@ -49,27 +65,13 @@ export function TaskCardToolbar({
             : <FolderPlus className="h-4 w-4" />}
         </UiIconButton>
       )}
-      {task.result?.filePath && (
-        <UiIconButton size="lg"
-          onClick={() => void onDownloadAll()}
-          title={t('common:actions.download')}
-        >
-          <DownloadIcon className="h-4 w-4" />
-        </UiIconButton>
-      )}
-      <UiIconButton size="lg"
-        onClick={() => void onRegenerate()}
-        title={t('ui:workspace.actions.regenerate')}
+      <UiIconButton
+        onClick={onUsePrompt}
+        title={t('ui:workspace.actions.usePrompt')}
       >
-        <RefreshCw className="h-4 w-4" />
+        <UsePromptIcon className="h-4 w-4" />
       </UiIconButton>
-      <UiIconButton size="lg"
-        onClick={onReedit}
-        title={t('ui:workspace.actions.reedit')}
-      >
-        <SquarePen className="h-4 w-4" />
-      </UiIconButton>
-      <UiIconButton size="lg" tone="danger"
+      <UiIconButton tone="danger"
         onClick={() => void onDelete()}
         title={t('common:delete')}
       >

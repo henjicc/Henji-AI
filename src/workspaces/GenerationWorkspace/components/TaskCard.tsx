@@ -5,25 +5,18 @@ import type { MenuItem } from "@/hooks/useContextMenu"
 import { ProgressBar } from "@/components/ui/ProgressBar"
 import { getProgressTransitionDurationMs } from "@/core/progress/progressTracker"
 import { useGenerationTaskProgressStore } from "@/stores/generationTaskProgressStore"
-import { formatDateTime } from "@/utils/datetimeFormat"
 import {
   UiButton,
-  UiEmpty,
   UiError,
-  UiLoading,
-  UI_INSET_SURFACE_CLASS,
+  UI_TEXT_BODY_CLASS,
   UI_TEXT_META_CLASS,
-  UI_META_BADGE_ACCENT_CLASS,
-  UI_META_BADGE_CLASS,
 } from "@/components/ui"
 import AudioPlayer from "@/components/AudioPlayer"
 import { getModelDisplayName } from "@/utils/modelHelpers"
 import type { GenerationTask, ResultImageDimensions } from "../types"
 import { splitMulti } from "../utils/multiFile"
-import {
-  getResultImageSlotHeight,
-  resolveResultImageDimensions,
-} from "../utils/resultImageDimensions"
+import { resolveResultImageDimensions } from "../utils/resultImageDimensions"
+import { formatMediaDuration, formatTaskCreatedAt, joinTaskMeta } from "../utils/taskMeta"
 import { TaskInputPreview } from "./TaskInputPreview"
 import { TaskPrompt } from "./TaskPrompt"
 import { CopyIcon, DownloadIcon } from "./TaskActionIcons"
@@ -54,28 +47,6 @@ export interface TaskCardProps {
   onOpenVideoViewer: (url: string, filePath?: string, trimRange?: { start: number; end: number }) => void
   showMenu: (e: React.MouseEvent, items: MenuItem[]) => void
   notify: (message: string, type?: 'success' | 'error') => void
-}
-/**
- * 结果区插槽：内嵌表面 + 可预知高度。
- * 已知图片比例时提前匹配结果高度；缺少比例的旧任务回退到固定高度，
- * 避免生成状态切换或图片解码时让历史列表二次跳动。
- * 用 inset（比页面底色更暗）读作"凹进去的待填充槽位"，而不是浮起来的卡片。
- */
-interface TaskStatusSlotProps {
-  dimensions: ResultImageDimensions | null
-  children: React.ReactNode
-}
-
-function TaskStatusSlot({ dimensions, children }: TaskStatusSlotProps): JSX.Element {
-  const height = getResultImageSlotHeight(dimensions)
-  return (
-    <div
-      className={`${height ? '' : 'h-64'} rounded-lg ${UI_INSET_SURFACE_CLASS}`}
-      style={height ? { height } : undefined}
-    >
-      {children}
-    </div>
-  )
 }
 const TaskCard = React.memo(function TaskCard({
   task,
@@ -111,7 +82,7 @@ const TaskCard = React.memo(function TaskCard({
     return () => { cancelled = true }
   }, [resultFilePaths])
   const collectionIcon = (filePath: string | undefined, className: string): React.ReactNode => filePath && collectedPaths.has(filePath)
-    ? <FolderCheck className={`${className} text-emerald-400`} />
+    ? <FolderCheck className={`${className} text-success-text`} />
     : <FolderPlus className={className} />
   const collectResult = async (filePath: string | undefined, mediaType: 'image' | 'video' | 'audio'): Promise<void> => {
     if (!filePath) return
@@ -141,18 +112,8 @@ const TaskCard = React.memo(function TaskCard({
     markContextMenu
   } = useHistoryDrag()
 
-  const formatDate = (value?: Date): string => {
-    if (!value) return ""
-    return formatDateTime(value, i18n.language || "zh-CN", {
-      year: "numeric",
-      month: "numeric",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-      hour12: false,
-    })
-  }
+  // 视频结果的真实时长（读自已加载的元数据），用于画面右下角的时长读数
+  const [videoDurationSeconds, setVideoDurationSeconds] = React.useState<number | null>(null)
 
   const handleImageClick = (url: string, list: string[], filePaths: string[]) => {
     if (shouldIgnoreClick()) return
@@ -193,59 +154,49 @@ const TaskCard = React.memo(function TaskCard({
     : task.type === "video"
       ? t("ui:workspaceToolbar.filter.video")
       : t("ui:workspaceToolbar.filter.audio")
-  const createdAtLabel = formatDate(task.createdAt)
+  const createdAtLabel = formatTaskCreatedAt(task.createdAt, i18n.language || "zh-CN")
   const inputImages = task.images ?? []
   const inputVideos = task.videos ?? []
-  const primaryResultImageDimensions = task.type === 'image'
-    ? resolveResultImageDimensions(task, 0)
-    : null
-  const renderStatusSlot = (content: React.ReactNode): JSX.Element => (
-    <TaskStatusSlot dimensions={primaryResultImageDimensions}>{content}</TaskStatusSlot>
-  )
+  const isInProgress = task.status === "queued" || task.status === "pending" || task.status === "generating"
+  const statusLabel = task.status === "queued"
+    ? t("ui:workspace.status.queued")
+    : task.status === "pending"
+      ? t("ui:workspace.status.preparing")
+      : task.status === "generating"
+        ? `${t("ui:workspace.status.generating")}${progressValue !== undefined ? ` ${Math.floor(progressValue)}%` : ''}`
+        : null
+  const metaLine = joinTaskMeta([
+    typeLabel,
+    modelName,
+    task.dimensions,
+    (task.type === "video" || task.type === "audio") ? task.duration : undefined,
+    statusLabel ?? createdAtLabel,
+  ])
 
   const renderResult = () => {
-    // 四种非成功状态统一走状态组件；已知图片比例时提前使用结果高度，
-    // 未知比例时保留 h-64 作为老任务的稳定降级。
-    if (task.status === "queued") {
-      return renderStatusSlot(
-        <UiEmpty
-          size="sm"
-          className="h-full"
-          title={t("ui:workspace.status.queued")}
-          description={t("ui:workspace.status.waiting")}
+    // 进行中只显示一条进度细线（设计稿 Generation），状态文字已在辅助信息行里
+    if (isInProgress) {
+      return (
+        <ProgressBar
+          appearance="hairline"
+          progress={progressValue ?? 0}
+          duration={progressValue !== undefined ? getProgressTransitionDurationMs(progressValue) : undefined}
         />
       )
     }
 
-    if (task.status === "pending") {
-      return renderStatusSlot(
-        <UiLoading size="sm" className="h-full" message={t("ui:workspace.status.preparing")} />
-      )
-    }
-
-    if (task.status === "generating") {
-      return renderStatusSlot(
-        <UiLoading size="sm" className="h-full" message={t("ui:workspace.status.generating")}>
-          {progressValue !== undefined && (
-            <ProgressBar progress={progressValue} duration={getProgressTransitionDurationMs(progressValue)} />
-          )}
-        </UiLoading>
-      )
-    }
-
     if (task.status === "error") {
-      return renderStatusSlot(
+      return (
         <UiError
-          size="sm"
-          className="h-full"
+          size="xs"
+          align="start"
           title={t("common:error")}
           message={task.error || t("common:status.failed")}
           onRetry={() => void onRetryPolling(task)}
           retryLabel={t("ui:retry")}
           actions={
             <UiButton
-              size="lg"
-              className="gap-1.5 px-4"
+              className="gap-1.5"
               onClick={() => openAssistantForDiagnosis({
                 title: '生成任务失败',
                 message: task.error || '生成任务失败',
@@ -263,7 +214,12 @@ const TaskCard = React.memo(function TaskCard({
     }
 
     if (task.status === 'success' && typeof task.options?.__completionMessage === 'string') {
-      return <UiEmpty size="sm" title="音色已保存" description={task.options.__completionMessage} />
+      return (
+        <div className="flex flex-col gap-0.5">
+          <span className={UI_TEXT_BODY_CLASS}>音色已保存</span>
+          <span className={UI_TEXT_META_CLASS}>{task.options.__completionMessage}</span>
+        </div>
+      )
     }
     if (task.status !== "success" || !task.result) return null
 
@@ -271,8 +227,9 @@ const TaskCard = React.memo(function TaskCard({
       const urls = splitMulti(task.result.url)
       const filePaths = task.result.filePath ? splitMulti(task.result.filePath) : []
 
+      // 图片网格平铺：每格按结果比例占位（未知比例先按方形），不加卡片背景
       return (
-        <div className="flex flex-wrap gap-3">
+        <div className="grid grid-cols-4 items-start gap-1.5">
           {urls.map((url, index) => {
             const filePath = filePaths[index]
             const imageDimensions = resolveResultImageDimensions(task, index)
@@ -280,7 +237,8 @@ const TaskCard = React.memo(function TaskCard({
               <div
                 key={`${task.id}-img-${index}`}
                 data-generation-result={task.id}
-                className={`relative w-64 overflow-hidden rounded-lg ${UI_INSET_SURFACE_CLASS}`}
+                className="relative overflow-hidden rounded-lg bg-media"
+                style={{ aspectRatio: imageDimensions ? `${imageDimensions.width} / ${imageDimensions.height}` : '1 / 1' }}
                 onClick={() => handleImageClick(url, urls, filePaths)}
                 onContextMenu={(e) =>
                   showMenu(e, [
@@ -326,7 +284,7 @@ const TaskCard = React.memo(function TaskCard({
                   height={imageDimensions?.height}
                   loading="lazy"
                   decoding="async"
-                  className="w-full h-auto block cursor-grab active:cursor-grabbing select-none"
+                  className="block h-full w-full cursor-grab select-none object-cover active:cursor-grabbing"
                   draggable={false}
                   onLoad={(event) => {
                     const { naturalWidth, naturalHeight } = event.currentTarget
@@ -350,9 +308,10 @@ const TaskCard = React.memo(function TaskCard({
       const filePaths = task.result.filePath ? splitMulti(task.result.filePath) : []
       const filePath = filePaths[0]
       const videoUrl = filePath ? toDisplaySrc(filePath.replace(/\\/g, "/")) : (urls[0] ?? "")
+      const durationBadge = videoDurationSeconds !== null ? formatMediaDuration(videoDurationSeconds) : ''
       return (
         <div
-          className={`relative w-64 cursor-pointer overflow-hidden rounded-lg ${UI_INSET_SURFACE_CLASS}`}
+          className="relative w-96 max-w-full cursor-pointer overflow-hidden rounded-lg bg-media"
           onClick={() => handleVideoClick(videoUrl, filePath)}
           onContextMenu={(e) =>
             showMenu(e, [
@@ -384,12 +343,28 @@ const TaskCard = React.memo(function TaskCard({
           onDragEnd={endNativeDrag}
           onContextMenuCapture={() => markContextMenu()}
         >
-          <video src={videoUrl} className="w-full h-auto block" draggable={false} muted preload="metadata" />
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div className="ui-glass h-10 w-10 rounded-full flex items-center justify-center text-white">
-              <Play className="h-6 w-6" />
-            </div>
+          <video
+            src={videoUrl}
+            className="block h-auto w-full"
+            draggable={false}
+            muted
+            preload="metadata"
+            onLoadedMetadata={(event) => {
+              const seconds = event.currentTarget.duration
+              if (Number.isFinite(seconds)) setVideoDurationSeconds(seconds)
+            }}
+          />
+          {/* 画面中央的播放提示与右下角时长：媒体叠层固定令牌，不随主题 */}
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-media-control text-on-media">
+              <Play className="h-4 w-4" />
+            </span>
           </div>
+          {durationBadge && (
+            <span className="pointer-events-none absolute bottom-2 right-2 rounded bg-media-scrim px-1.5 py-0.5 font-mono text-2xs tabular-nums text-on-media">
+              {durationBadge}
+            </span>
+          )}
         </div>
       )
     }
@@ -398,6 +373,7 @@ const TaskCard = React.memo(function TaskCard({
       const filePath = task.result.filePath
       return (
         <AudioPlayer
+          layout="inline"
           surface="plain"
           src={task.result.url}
           initialPlaybackState={retention?.getAudio(task.id, task.result.url)}
@@ -429,18 +405,23 @@ const TaskCard = React.memo(function TaskCard({
     return null
   }
 
+  const result = renderResult()
+
   return (
     // ⚠️ 这里曾经加过 `content-visibility:auto` + `contain-intrinsic-size:auto 420px`
     // 来跳过视口外卡片的布局，但任务卡高度差异极大（排队态约 120px，多图结果可到 800px），
     // 单一 420px 估算值在两个方向上都严重偏离：往回滚时占位高度被换成真实高度，
     // 视口上方的内容尺寸突变，滚动锚定晚一帧补偿，表现就是"闪一下又跳回来"。
     // content-visibility 只适合**行高基本一致**的长列表（如助手历史/记忆的等高行）。
-    <div
-      className="rounded-xl p-3"
+    //
+    // 生成记录不加卡片背景（重要记录 001）：提示词一行 + 辅助信息一行，靠列表间距分组；
+    // 操作按钮悬停或键盘聚焦到这条记录时才出现。
+    <article
+      className="group/task flex flex-col gap-2.5 outline-none"
       data-generation-task-id={task.id}
       tabIndex={-1}
     >
-      <div className="flex items-start gap-3">
+      <div className="flex items-start gap-4">
         <TaskInputPreview
           taskId={task.id}
           inputImages={inputImages}
@@ -457,59 +438,34 @@ const TaskCard = React.memo(function TaskCard({
           nativeFileDragEnabled={isNativeFileDragEnabled}
           shouldIgnoreClick={shouldIgnoreClick}
        />
-        <div className="min-w-0 flex-1 relative">
-          <div className="pr-48">
-            <TaskPrompt prompt={task.prompt} />
-            <div className={`mt-2 flex items-center gap-3 ${UI_TEXT_META_CLASS}`}>
-              <div className="flex flex-wrap gap-2">
-                <span className={UI_META_BADGE_CLASS}>
-                  {typeLabel}
-                </span>
-                <span className={UI_META_BADGE_ACCENT_CLASS}>
-                  {modelName}
-                </span>
-                {task.dimensions && (
-                  <span className={UI_META_BADGE_CLASS}>
-                    {task.dimensions}
-                  </span>
-                )}
-                {task.type === "video" && task.duration && (
-                  <span className={UI_META_BADGE_CLASS}>{task.duration}</span>
-                )}
-                {task.type === "audio" && task.duration && (
-                  <span className={UI_META_BADGE_CLASS}>{task.duration}</span>
-                )}
-                {createdAtLabel && (
-                  <span className={`${UI_META_BADGE_CLASS} text-text-muted`}>
-                    {createdAtLabel}
-                  </span>
-                )}
-              </div>
-            </div>
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
+          <TaskPrompt prompt={task.prompt} />
+          <div className="truncate text-xs text-text3" title={createdAtLabel}>
+            {metaLine}
           </div>
-
-          <TaskCardToolbar
-            task={task}
-            collecting={collecting}
-            allResultsCollected={
-              resultFilePaths.length > 0 &&
-              resultFilePaths.every((filePath) => collectedPaths.has(filePath))
-            }
-            onUsePrompt={() => onUsePrompt(task.prompt)}
-            onCollectAll={async () => {
-              for (const filePath of resultFilePaths) await collectResult(filePath, task.type)
-            }}
-            onDownloadAll={async () => {
-              for (const filePath of resultFilePaths) await onDownload(filePath, true)
-            }}
-            onRegenerate={() => onRegenerate(task)}
-            onReedit={() => onReedit(task)}
-            onDelete={() => onDelete(task.id)}
-          />
         </div>
+
+        <TaskCardToolbar
+          task={task}
+          collecting={collecting}
+          allResultsCollected={
+            resultFilePaths.length > 0 &&
+            resultFilePaths.every((filePath) => collectedPaths.has(filePath))
+          }
+          onUsePrompt={() => onUsePrompt(task.prompt)}
+          onCollectAll={async () => {
+            for (const filePath of resultFilePaths) await collectResult(filePath, task.type)
+          }}
+          onDownloadAll={async () => {
+            for (const filePath of resultFilePaths) await onDownload(filePath, true)
+          }}
+          onRegenerate={() => onRegenerate(task)}
+          onReedit={() => onReedit(task)}
+          onDelete={() => onDelete(task.id)}
+        />
       </div>
-      <div className="pt-3">{renderResult()}</div>
-    </div>
+      {result}
+    </article>
   )
 }, (prev, next) => {
   // 进度已改为组件内自订阅 store，这里只需比较 task 引用；

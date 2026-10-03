@@ -8,7 +8,8 @@ import {
   resolveFloatingPanelPosition,
   type FloatingPanelPosition,
 } from './floatingPanelPosition'
-import { UI_FIELD_LABEL_CLASS, UI_TRIGGER_PANEL_PADDING_CLASS, UI_TRIGGER_PANEL_SURFACE_CLASS, type UiFieldSize, type UiTriggerPanelPadding, type UiTriggerPanelSurface } from './styleTokens'
+import { UI_FIELD_INLINE_ROW_CLASS, UI_FIELD_LABEL_CLASS, UI_FIELD_LABEL_INLINE_CLASS, UI_TRIGGER_PANEL_PADDING_CLASS, UI_TRIGGER_PANEL_SURFACE_CLASS, type UiFieldSize, type UiTriggerPanelPadding, type UiTriggerPanelSurface } from './styleTokens'
+import { UiFieldLayoutContext, useUiFieldLayout } from './fieldLayout'
 import { measureElementTextWidth } from './textMeasurement'
 import { UiFieldTrigger } from './primitives'
 import { UI_DURATION } from './motion'
@@ -24,6 +25,11 @@ type PanelTriggerProps = {
   buttonClassName?: string
   /** 触发器尺寸档：sm 28 / md 32（默认）/ lg 36，字号随档位。 */
   size?: UiFieldSize
+  /**
+   * 触发器外观：`field` = raised 字段表面；`quiet` = 静默按钮皮肤（工具条里的入口）。
+   * 不传时随字段排布：`UiFieldLayoutContext` 为 `toolbar` 时取 `quiet`，否则 `field`。
+   */
+  appearance?: 'field' | 'quiet'
   /** 浮层表面：默认实底；压在画布、图片、视频、3D 视口上时传 `glass`。 */
   surface?: UiTriggerPanelSurface
   /** 浮层内边距档（none / menu 4px / content 12px）；浮层外壳表面不接受覆盖。 */
@@ -35,7 +41,7 @@ type PanelTriggerProps = {
   /** 纯文字菜单可传入全部项目文案，在打开前按最长项计算稳定宽度。 */
   panelWidthLabels?: readonly string[]
   alignment?: 'bottomLeft' | 'aboveCenter'
-  /** aboveCenter 对齐时面板底部与触发按钮顶部的间距（默认 45，与画布节点行内紧凑触发器保持一致时可调小） */
+  /** aboveCenter 对齐时面板底部与触发按钮顶部的间距（默认 45；工具条排布下默认 8；与画布节点行内紧凑触发器保持一致时可调小） */
   gap?: number
   panelHeight?: number
   /**
@@ -70,6 +76,7 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
     className,
     buttonClassName,
     size = 'md',
+    appearance,
     panelPadding = 'none',
     surface = 'solid',
     zIndex = Z_LAYERS.popover,
@@ -77,7 +84,7 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
     boundarySelector,
     panelWidthLabels,
     alignment = 'bottomLeft',
-    gap: gapProp = 45,
+    gap: gapOverride,
     panelHeight: _panelHeight,
     closeOnPanelClick,
     renderPanel,
@@ -86,6 +93,11 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
     freezePositionOnOpen = false,
     children,
   } = props
+  const fieldLayout = useUiFieldLayout()
+  const toolbarLayout = fieldLayout === 'toolbar'
+  const resolvedAppearance = appearance ?? (toolbarLayout ? 'quiet' : 'field')
+  // 表单排布的触发器在输入区顶部，浮层要越过整块输入区；工具条里的触发器就近弹出。
+  const gapProp = gapOverride ?? (toolbarLayout ? 8 : 45)
   const [open, setOpen] = useState(false)
   const [closing, setClosing] = useState(false)
   const [pos, setPos] = useState<FloatingPanelPosition | null>(null)
@@ -278,12 +290,13 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
   }, [freezePositionOnOpen, open, stableHeight, updatePanelPosition])
 
   return (
-    <div className={`relative inline-block ${className || ''}`} ref={ref}>
-      {label ? <label className={UI_FIELD_LABEL_CLASS}>{label}</label> : null}
+    <div className={`relative ${toolbarLayout ? UI_FIELD_INLINE_ROW_CLASS : 'inline-block'} ${className || ''}`} ref={ref}>
+      {label ? <label className={toolbarLayout ? UI_FIELD_LABEL_INLINE_CLASS : UI_FIELD_LABEL_CLASS}>{label}</label> : null}
       {children ? children({ open, openPanel, closePanel, togglePanel }) : (
         <UiFieldTrigger
           disabled={disabled}
           size={size}
+          appearance={resolvedAppearance}
           open={open && !closing}
           onClick={togglePanel}
           data-panel-trigger-button
@@ -315,7 +328,10 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
             data-panel-scroll-region
             className="ui-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain"
           >
-            {renderPanel()}
+            {/* 浮层里的字段一律按表单排布，不继承触发器所在工具条的排布 */}
+            <UiFieldLayoutContext.Provider value="form">
+              {renderPanel()}
+            </UiFieldLayoutContext.Provider>
           </div>
         </div>,
         // 面板挂到触发器所在文档：系统浮窗里的菜单留在浮窗内。

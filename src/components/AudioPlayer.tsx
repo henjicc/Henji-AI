@@ -46,6 +46,12 @@ interface AudioPlayerProps {
    * 默认值保持 `card`，未传参的调用点行为不变。
    */
   surface?: 'card' | 'plain'
+  /**
+   * 排布：`stacked`（默认）= 时间行 + 波形 + 控制行；`inline` = 一行迷你播放条
+   * （播放 · 迷你波形 · 时间 · 音量），用于生成记录等列表（设计稿 Generation，界面重设计 3.2）。
+   * `inline` 不带下载按钮：列表行自己的工具条已经提供下载。
+   */
+  layout?: 'stacked' | 'inline'
 }
 
 const AudioPlayer: React.FC<AudioPlayerProps> = ({
@@ -62,6 +68,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
   onActivityChange,
   controlledPlayback,
   surface = 'card',
+  layout = 'stacked',
 }) => {
   const { t } = useI18n()
   const audioRef = useRef<HTMLAudioElement>(null)
@@ -320,108 +327,142 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
   const volumePercent = Math.round(volume * 100)
   const volumeSliderWidthClass = compact ? 'w-[6.75rem]' : 'w-32'
 
+  const keyboardToggle = (e: React.KeyboardEvent): void => {
+    if (e.key === ' ' || e.code === 'Space') {
+      e.preventDefault()
+      e.stopPropagation()
+      togglePlay()
+    }
+  }
+  const iconSize = compact || layout === 'inline' ? 'h-[18px] w-[18px]' : 'h-5 w-5'
+  const buttonSize = compact || layout === 'inline' ? 'md' : 'lg'
+  const playButton = (
+    <UiIconButton disabled={!active || controlledPlayback?.disabled} onClick={togglePlay} size={buttonSize} title={t('ui:audioPlayer.playPause')}>
+      {isPlaying ? <Pause className={iconSize} /> : <Play className={iconSize} />}
+    </UiIconButton>
+  )
+  const waveformView = (height?: number, tier?: 'mini' | 'standard') => (
+    <WaveformView
+      waveform={waveform}
+      {...(height !== undefined ? { height } : {})}
+      {...(tier ? { tier } : {})}
+      playedSeconds={(wavePyramid?.startSeconds ?? 0) + currentTime}
+      durationSeconds={audioRef.current && audioRef.current.duration ? audioRef.current.duration : (duration || 0)}
+      onSeekStart={(r) => { if (audioRef.current) { const d = audioRef.current.duration || duration || 0; audioRef.current.currentTime = r * d } }}
+      onSeekMove={(r) => { if (audioRef.current) { const d = audioRef.current.duration || duration || 0; audioRef.current.currentTime = r * d } }}
+      onSeekEnd={(r, dragged) => {
+        if (!audioRef.current || !duration) return
+        const d = audioRef.current.duration || duration || 0
+        audioRef.current.currentTime = r * d
+        if (dragged) {
+          audioRef.current.play().catch(() => { })
+          setIsPlaying(true)
+        }
+      }}
+    />
+  )
+  const volumeControl = (
+    <div ref={volumeContainerRef} className="relative flex items-center">
+      <UiIconButton
+        size={buttonSize}
+        title={t('ui:audioPlayer.volume')}
+        disabled={!active || controlledPlayback?.disabled}
+        onClick={() => setShowVolumeSlider((value) => !value)}
+      >
+        {volume <= 0 ? <VolumeX className="h-[18px] w-[18px]" /> : <Volume2 className="h-[18px] w-[18px]" />}
+      </UiIconButton>
+      {showVolumeSlider && (
+        <div
+          className={`absolute ${layout === 'inline' ? 'right-[calc(100%+0.5rem)]' : 'left-[calc(100%+0.5rem)]'} top-1/2 z-sticky -translate-y-1/2 ${volumeSliderWidthClass}`}
+          onWheelCapture={onVolumeWheel}
+        >
+          {/* 音量数值 tooltip 是浮层，边框背景是其在波形上可读所必需的 */}
+          {showVolumeValueTip && (
+            <div className="pointer-events-none absolute -top-6 left-1/2 -translate-x-1/2 rounded-md border border-border-dark/70 bg-surface-dark/95 px-1.5 py-0.5 text-2xs text-text-dark">
+              {volumePercent}%
+            </div>
+          )}
+          <UiRangeInput
+            disabled={!active || controlledPlayback?.disabled}
+            min={0}
+            max={1}
+            step={0.01}
+            value={volume}
+            onChange={onVolume}
+            onPointerDown={() => {
+              setIsAdjustingVolume(true)
+              setShowVolumeValueTip(true)
+              if (volumeTipTimerRef.current) {
+                window.clearTimeout(volumeTipTimerRef.current)
+                volumeTipTimerRef.current = null
+              }
+            }}
+            className="w-full"
+          />
+        </div>
+      )}
+    </div>
+  )
+  const audioElement = !controlled && <audio ref={audioRef} src={src} preload="metadata" className="hidden" />
+
+  if (layout === 'inline') {
+    return (
+      <div
+        ref={playerRef}
+        className={`flex w-full max-w-[32.5rem] items-center gap-2.5 outline-none ${className || ''}`}
+        onContextMenu={onContextMenu}
+        tabIndex={0}
+        onKeyDown={keyboardToggle}
+      >
+        {playButton}
+        <div className="h-7 min-w-0 flex-1">
+          {controlledPlayback
+            ? <UiRangeInput aria-label="音频播放位置" className="w-full" min={0} max={duration} step={0.001} value={currentTime} disabled={!active || controlledPlayback.disabled} onChange={event => controlledPlayback.onSeek(Number(event.target.value))} />
+            : waveformView(28, 'mini')}
+        </div>
+        <span className="shrink-0 font-mono text-xs tabular-nums text-text2">
+          {format(currentTime)} / {format(waveDuration ?? duration)}
+        </span>
+        {volumeControl}
+        {rightActions}
+        {audioElement}
+      </div>
+    )
+  }
+
   return (
     <div
       ref={playerRef}
       className={`${compact ? 'w-full min-w-0' : 'w-[36rem]'} ${surface === 'card' ? `rounded-xl p-4 ${UI_PANEL_SURFACE_CLASS}` : 'p-0'} outline-none ${className || ''}`}
       onContextMenu={onContextMenu}
       tabIndex={0}
-      onKeyDown={(e) => {
-        if (e.key === ' ' || e.code === 'Space') {
-          e.preventDefault()
-          e.stopPropagation()
-          togglePlay()
-        }
-      }}
+      onKeyDown={keyboardToggle}
     >
       <div className={`${compact ? 'mb-1.5' : 'mb-2'} flex items-center justify-between text-xs text-text-soft`}>
         <span>{format(currentTime)}</span>
         <span>{format(waveDuration ?? duration)}</span>
       </div>
       <div className={controlled ? 'mb-2' : `${compact ? 'mb-2 h-[48px]' : 'mb-3 h-[72px]'}`}>
-        {controlledPlayback ? <UiRangeInput aria-label="音频播放位置" className="w-full" min={0} max={duration} step={0.001} value={currentTime} disabled={!active || controlledPlayback.disabled} onChange={event => controlledPlayback.onSeek(Number(event.target.value))} /> : (
-          <WaveformView
-            waveform={waveform}
-            {...(waveformHeight !== undefined ? { height: waveformHeight } : {})}
-            playedSeconds={(wavePyramid?.startSeconds ?? 0) + currentTime}
-            durationSeconds={audioRef.current && audioRef.current.duration ? audioRef.current.duration : (duration || 0)}
-            onSeekStart={(r) => { if (audioRef.current) { const d = audioRef.current.duration || duration || 0; audioRef.current.currentTime = r * d } }}
-            onSeekMove={(r) => { if (audioRef.current) { const d = audioRef.current.duration || duration || 0; audioRef.current.currentTime = r * d } }}
-            onSeekEnd={(r, dragged) => {
-              if (!audioRef.current || !duration) return
-              const d = audioRef.current.duration || duration || 0
-              audioRef.current.currentTime = r * d
-              if (dragged) {
-                audioRef.current.play().catch(() => { })
-                setIsPlaying(true)
-              }
-            }}
-          />
-        )}
+        {controlledPlayback ? <UiRangeInput aria-label="音频播放位置" className="w-full" min={0} max={duration} step={0.001} value={currentTime} disabled={!active || controlledPlayback.disabled} onChange={event => controlledPlayback.onSeek(Number(event.target.value))} /> : waveformView(waveformHeight)}
       </div>
       <div className={`${compact ? 'mt-2' : 'mt-3'} flex items-center justify-between`}>
-        <div ref={volumeContainerRef} className="relative flex items-center">
-          <UiIconButton
-            size={compact ? 'md' : 'lg'}
-            title={t('ui:audioPlayer.volume')}
-            disabled={!active || controlledPlayback?.disabled}
-            onClick={() => setShowVolumeSlider((value) => !value)}
-          >
-            {volume <= 0 ? <VolumeX className="h-[18px] w-[18px]" /> : <Volume2 className="h-[18px] w-[18px]" />}
-          </UiIconButton>
-          {showVolumeSlider && (
-            <div
-              className={`absolute left-[calc(100%+0.5rem)] top-1/2 z-sticky -translate-y-1/2 ${volumeSliderWidthClass}`}
-              onWheelCapture={onVolumeWheel}
-            >
-              {/* 音量数值 tooltip 是浮层，边框背景是其在波形上可读所必需的 */}
-              {showVolumeValueTip && (
-                <div className="pointer-events-none absolute -top-6 left-1/2 -translate-x-1/2 rounded-md border border-border-dark/70 bg-surface-dark/95 px-1.5 py-0.5 text-2xs text-text-dark">
-                  {volumePercent}%
-                </div>
-              )}
-              <UiRangeInput
-                disabled={!active || controlledPlayback?.disabled}
-                min={0}
-                max={1}
-                step={0.01}
-                value={volume}
-                onChange={onVolume}
-                onPointerDown={() => {
-                  setIsAdjustingVolume(true)
-                  setShowVolumeValueTip(true)
-                  if (volumeTipTimerRef.current) {
-                    window.clearTimeout(volumeTipTimerRef.current)
-                    volumeTipTimerRef.current = null
-                  }
-                }}
-                className="w-full"
-              />
-            </div>
-          )}
-        </div>
+        {volumeControl}
         <div className="flex items-center">
-          <UiIconButton disabled={!active || controlledPlayback?.disabled} onClick={togglePlay} size={compact ? 'md' : 'lg'} title={t('ui:audioPlayer.playPause')}>
-            {isPlaying ? (
-              <Pause className={`${compact ? 'h-[18px] w-[18px]' : 'h-5 w-5'}`} />
-            ) : (
-              <Play className={`${compact ? 'h-[18px] w-[18px]' : 'h-5 w-5'}`} />
-            )}
-          </UiIconButton>
+          {playButton}
         </div>
         <div className="flex items-center gap-1">
           {rightActions}
           {!controlled && <UiIconButton
             onClick={() => { void handleDownload() }}
             disabled={isDownloading}
-            size={compact ? 'md' : 'lg'}
+            size={buttonSize}
             title={t('common:actions.download')}
           >
-            <Download className={`${compact ? 'h-[18px] w-[18px]' : 'h-5 w-5'}`} />
+            <Download className={iconSize} />
           </UiIconButton>}
         </div>
       </div>
-      {!controlled && <audio ref={audioRef} src={src} preload="metadata" className="hidden" />}
+      {audioElement}
     </div>
   )
 }

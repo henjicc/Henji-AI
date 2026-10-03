@@ -386,7 +386,7 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
                       title={favoriteModels.has(`${p.id}-${m.id}`) ? t('favorite.remove') : t('favorite.add')}
                     >
                       <ICON_PRESET
-                        className={`h-3.5 w-3.5 transition-colors ${favoriteModels.has(`${p.id}-${m.id}`) ? 'fill-yellow-400 text-yellow-400' : 'fill-none text-text-muted'}`}
+                        className={`h-3.5 w-3.5 transition-colors ${favoriteModels.has(`${p.id}-${m.id}`) ? 'fill-warning text-warning' : 'fill-none text-text-muted'}`}
                       />
                     </span>
                   </div>

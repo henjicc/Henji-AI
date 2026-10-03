@@ -10,6 +10,7 @@ import type { RadioParamDef } from '@/core/types'
 import { getI18nText } from '@/core/types/I18nText'
 import { UI_TEXT_LABEL_CLASS, UI_TEXT_META_CLASS, UiOptionButton } from '@/components/ui'
 import { ParamLabel } from '../ParamLabel'
+import { ParamField } from '../ParamField'
 
 interface RadioInputProps {
   param: RadioParamDef
@@ -40,7 +41,7 @@ export const RadioInput: React.FC<RadioInputProps> = ({
   const layout = param.direction || 'vertical'
 
   return (
-    <div className="w-auto">
+    <ParamField inline={false}>
       <ParamLabel param={param} language={i18n.language} />
 
       <div className={`flex gap-3 ${layout === 'vertical' ? 'flex-col' : 'flex-row flex-wrap'}`}>
@@ -80,6 +81,6 @@ export const RadioInput: React.FC<RadioInputProps> = ({
           )
         })}
       </div>
-    </div>
+    </ParamField>
   )
 }

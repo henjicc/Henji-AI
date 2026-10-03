@@ -1,7 +1,6 @@
 import type { GenerationTask, ResultImageDimensions } from '../types'
 
 const DIMENSION_TEXT_PATTERN = /^\s*(\d+)\s*[x×*]\s*(\d+)\s*$/i
-const RESULT_IMAGE_WIDTH_REM = 16
 
 function toPositiveInteger(value: unknown): number | null {
   const parsed = typeof value === 'number'
@@ -48,10 +47,4 @@ export function resolveResultImageDimensions(
     if (parsedDimensions) return parsedDimensions
   }
   return null
-}
-
-export function getResultImageSlotHeight(dimensions: ResultImageDimensions | null): string | null {
-  if (!dimensions) return null
-  const heightRem = RESULT_IMAGE_WIDTH_REM * dimensions.height / dimensions.width
-  return `${Number(heightRem.toFixed(6))}rem`
 }

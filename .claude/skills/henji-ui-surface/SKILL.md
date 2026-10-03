@@ -349,6 +349,8 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 
 字段（任务 2.2）：`UiInput` / `UiSelect` / `UiFieldTrigger`（`Dropdown`、`PanelTrigger` 的按钮）/ `NumberInput` 都是 raised 无边框表面、聚焦一圈强调色焦点环，高度只由 `size` 决定（sm 28 / md 32 默认 / lg 36）。`NumberInput` 自带数值拖动：在读数或标签上按住左右拖动改值（Shift 精细、Alt 粗调），单击进入编辑，读数不会被步进列裁掉。
 
+字段排布（任务 3.2）：一行参数条（如生成输入区底栏）不要做成“标签在上 + 字段框”的表单。在容器上提供 `UiFieldLayoutContext` = `toolbar`：参数标签移到控件左侧（辅助文字 12），`Dropdown` / `PanelTrigger` 的触发器自动改静默皮肤，参数开关改胶囊；多行文本、单选卡片、上传类等大块控件仍按表单排布。两者打开的浮层内容一律重置回 `form`，不要在调用点逐个传 `appearance` 或手写行内标签。
+
 ## 参数说明的受众：`description` 给助手，`tooltip` 给用户
 
 本节只约束模型 / schema 参数的 `ParamDef`、`ParamPresentation` 等参数元数据，

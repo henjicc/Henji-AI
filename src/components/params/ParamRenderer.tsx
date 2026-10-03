@@ -30,7 +30,9 @@ import { CompositePanel } from './panels/CompositePanel'
 
 // 导入 UI 组件
 import PanelTrigger from '@/components/ui/PanelTrigger'
+import { UiFieldLayoutContext, useUiFieldLayout } from '@/components/ui'
 import { ParamLabel } from './ParamLabel'
+import { ParamField } from './ParamField'
 import { DerivedMediaParamControl } from './DerivedMediaParamControl'
 
 function isCompositePanelConfig(value: DynamicValue): value is CompositePanelConfig {
@@ -80,6 +82,11 @@ export const ParamRenderer: React.FC<ParamRendererProps> = React.memo(({
   disabled: externalDisabled = false
 }) => {
   const { i18n } = useTranslation()
+  const toolbarLayout = useUiFieldLayout() === 'toolbar'
+  // 上传类控件是大块内容：工具条排布下仍按表单排布渲染（只重置排布，不增加 DOM）
+  const asFormBlock = (node: JSX.Element): JSX.Element => toolbarLayout
+    ? <UiFieldLayoutContext.Provider value="form">{node}</UiFieldLayoutContext.Provider>
+    : node
 
   const visible = useMemo(
     () => isParamVisible(param, allValues, null),
@@ -96,7 +103,7 @@ export const ParamRenderer: React.FC<ParamRendererProps> = React.memo(({
   }
 
   if (param.type === 'image-upload' && param.derivedMediaAuthoring) {
-    return (
+    return asFormBlock(
       <DerivedMediaParamControl
         param={param}
         value={value}
@@ -130,7 +137,7 @@ export const ParamRenderer: React.FC<ParamRendererProps> = React.memo(({
         const panelWidth = resolvePanelWidth(compositeParam.config, defaultPanelWidth)
         // 使用 PanelTrigger 包装特殊面板，实现点击展开功能
         return (
-          <div className="flex min-w-0 flex-col">
+          <ParamField className="flex min-w-0 flex-col">
             <ParamLabel param={param} language={i18n.language} />
             <PanelTrigger
               display={formatPanelDisplayValue(value, compositeParam.panel, i18n.language, compositeParam.config)}
@@ -147,7 +154,7 @@ export const ParamRenderer: React.FC<ParamRendererProps> = React.memo(({
                 />
               )}
             />
-          </div>
+          </ParamField>
         )
       } else {
         logger.warn(`Panel "${compositeParam.panel}" not found in registry`)
@@ -167,14 +174,14 @@ export const ParamRenderer: React.FC<ParamRendererProps> = React.memo(({
       value && typeof value === 'object' ? (value as DynamicValueMap) : {}
 
     return (
-      <div className="flex min-w-0 flex-col">
+      <ParamField className="flex min-w-0 flex-col" inline={false}>
         <ParamLabel param={param} language={i18n.language} />
         <CompositePanel
           config={compositeParam.config}
           value={compositeValue}
           onChange={(nextValue) => onChange(nextValue)}
         />
-      </div>
+      </ParamField>
     )
   }
 
@@ -199,7 +206,9 @@ export const ParamRenderer: React.FC<ParamRendererProps> = React.memo(({
     />
   )
 
-  return renderedComponent
+  return param.type === 'image-upload' || param.type === 'video-upload' || param.type === 'file-upload'
+    ? asFormBlock(renderedComponent)
+    : renderedComponent
 })
 
 ParamRenderer.displayName = 'ParamRenderer'

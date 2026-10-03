@@ -12,6 +12,7 @@ import type { DropdownParamDef } from '@/core/types'
 import { getI18nText } from '@/core/types/I18nText'
 import Dropdown from '@/components/ui/Dropdown'
 import { ParamLabel } from '../ParamLabel'
+import { ParamField } from '../ParamField'
 
 interface DropdownInputProps {
   param: DropdownParamDef
@@ -92,7 +93,7 @@ export const DropdownInput: React.FC<DropdownInputProps> = ({
   }, [onChange, param.id, resolvedOption, selectedOption])
 
   return (
-    <div className="w-auto">
+    <ParamField>
       <ParamLabel param={param} language={i18n.language} />
       <Dropdown
         value={resolvedOption ? resolvedOption.value : ''}
@@ -104,6 +105,6 @@ export const DropdownInput: React.FC<DropdownInputProps> = ({
         minWidthStrategy="display"
         panelWidthStrategy="options"
       />
-    </div>
+    </ParamField>
   )
 }

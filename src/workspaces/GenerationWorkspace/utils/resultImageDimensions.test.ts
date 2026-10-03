@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import {
-  getResultImageSlotHeight,
   parseResultImageDimensions,
   resolveResultImageDimensions,
 } from './resultImageDimensions'
@@ -30,11 +29,5 @@ describe('resultImageDimensions', () => {
     expect(resolveResultImageDimensions(task, 0)).toEqual({ width: 1536, height: 1024 })
     expect(resolveResultImageDimensions(task, 1)).toEqual({ width: 768, height: 1024 })
     expect(resolveResultImageDimensions(task, 2)).toEqual({ width: 1024, height: 768 })
-  })
-
-  it('按结果图片的固定宽度计算生成状态占位高度', () => {
-    expect(getResultImageSlotHeight({ width: 1024, height: 1024 })).toBe('16rem')
-    expect(getResultImageSlotHeight({ width: 1920, height: 1080 })).toBe('9rem')
-    expect(getResultImageSlotHeight(null)).toBeNull()
   })
 })

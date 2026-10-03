@@ -8,7 +8,8 @@ import React, {
   type KeyboardEvent,
 } from 'react'
 import { createPortal } from 'react-dom'
-import { UI_FIELD_LABEL_CLASS, UI_TRIGGER_PANEL_PADDING_CLASS, UI_TRIGGER_PANEL_SURFACE_CLASS, type UiFieldSize, type UiTriggerPanelPadding, type UiTriggerPanelSurface } from './styleTokens'
+import { UI_FIELD_INLINE_ROW_CLASS, UI_FIELD_LABEL_CLASS, UI_FIELD_LABEL_INLINE_CLASS, UI_TRIGGER_PANEL_PADDING_CLASS, UI_TRIGGER_PANEL_SURFACE_CLASS, type UiFieldSize, type UiTriggerPanelPadding, type UiTriggerPanelSurface } from './styleTokens'
+import { UiFieldLayoutContext, useUiFieldLayout } from './fieldLayout'
 import { UiFieldTrigger, UiOptionButton } from './primitives'
 import { UI_DURATION } from './motion'
 import { resolveDropdownDisplay } from './dropdownUtils'
@@ -48,7 +49,10 @@ type DropdownProps<T extends string | number | boolean> = {
   zIndex?: number
   minWidthStrategy?: 'options' | 'display' | 'none'
   panelWidthStrategy?: 'button' | 'options'
-  /** `text` 用于标题栏等弱化入口：静息态只有文字与箭头，浮层仍使用统一菜单表面。 */
+  /**
+   * `text` 用于标题栏等弱化入口：静息态只有文字与箭头，浮层仍使用统一菜单表面。
+   * 不传时随字段排布：`UiFieldLayoutContext` 为 `toolbar` 时取 `text`，否则 `field`。
+   */
   appearance?: 'field' | 'text'
 }
 
@@ -72,8 +76,11 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
     zIndex = Z_LAYERS.popover,
     minWidthStrategy = 'display',
     panelWidthStrategy = 'button',
-    appearance = 'field',
+    appearance: appearanceOverride,
   } = props
+  const fieldLayout = useUiFieldLayout()
+  const toolbarLayout = fieldLayout === 'toolbar'
+  const appearance = appearanceOverride ?? (toolbarLayout ? 'text' : 'field')
   const [open, setOpen] = useState(false)
   const [closing, setClosing] = useState(false)
   const [activeOptionIndex, setActiveOptionIndex] = useState(-1)
@@ -287,7 +294,10 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
   }, [open, panelMinWidthPx, panelWidthStrategy])
 
   const menuContent = renderPanel ? (
-    <div id={panelId} className="max-h-60 overflow-y-auto">{renderPanel()}</div>
+    <div id={panelId} className="max-h-60 overflow-y-auto">
+      {/* 浮层里的字段一律按表单排布，不继承触发器所在工具条的排布 */}
+      <UiFieldLayoutContext.Provider value="form">{renderPanel()}</UiFieldLayoutContext.Provider>
+    </div>
   ) : (
     <div
       id={panelId}
@@ -324,8 +334,8 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
   )
 
   return (
-    <div className={`relative inline-block ${className || ''}`} ref={ref}>
-      {label ? <label className={UI_FIELD_LABEL_CLASS}>{label}</label> : null}
+    <div className={`relative ${toolbarLayout ? UI_FIELD_INLINE_ROW_CLASS : 'inline-block'} ${className || ''}`} ref={ref}>
+      {label ? <label className={toolbarLayout ? UI_FIELD_LABEL_INLINE_CLASS : UI_FIELD_LABEL_CLASS}>{label}</label> : null}
       <UiFieldTrigger
         ref={triggerRef}
         disabled={disabled}

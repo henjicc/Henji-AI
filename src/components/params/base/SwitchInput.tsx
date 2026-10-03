@@ -10,8 +10,9 @@ import React, { useId } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { SwitchParamDef } from '@/core/types'
 import { getI18nText } from '@/core/types/I18nText'
-import { UiSwitch } from '@/components/ui'
+import { UiSwitch, useUiFieldLayout } from '@/components/ui'
 import { ParamLabel } from '../ParamLabel'
+import { ParamField } from '../ParamField'
 
 interface SwitchInputProps {
   param: SwitchParamDef
@@ -36,23 +37,36 @@ export const SwitchInput: React.FC<SwitchInputProps> = ({
   const offText = t('common:off', '关')
   const labelId = useId()
   const checked = Boolean(value ?? param.default)
+  // 工具条排布：参数名在左，开关用胶囊（强调色只进轨道）；表单排布保留显式“关/开”双段
+  const toolbar = useUiFieldLayout() === 'toolbar'
 
   return (
-    <div className="w-auto">
+    <ParamField>
       {displayName ? (
         <ParamLabel id={labelId} param={param} language={i18n.language} />
       ) : null}
-      <UiSwitch
-        appearance="segmented"
-        checked={checked}
-        onCheckedChange={onChange}
-        offLabel={offText}
-        onLabel={onText}
-        disabled={disabled}
-        aria-labelledby={displayName ? labelId : undefined}
-        aria-label={displayName ? undefined : checked ? onText : offText}
-        title={checked ? onText : offText}
-      />
-    </div>
+      {toolbar ? (
+        <UiSwitch
+          checked={checked}
+          onCheckedChange={onChange}
+          disabled={disabled}
+          aria-labelledby={displayName ? labelId : undefined}
+          aria-label={displayName ? undefined : checked ? onText : offText}
+          title={checked ? onText : offText}
+        />
+      ) : (
+        <UiSwitch
+          appearance="segmented"
+          checked={checked}
+          onCheckedChange={onChange}
+          offLabel={offText}
+          onLabel={onText}
+          disabled={disabled}
+          aria-labelledby={displayName ? labelId : undefined}
+          aria-label={displayName ? undefined : checked ? onText : offText}
+          title={checked ? onText : offText}
+        />
+      )}
+    </ParamField>
   )
 }

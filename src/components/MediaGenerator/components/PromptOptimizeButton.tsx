@@ -1,6 +1,6 @@
 import { createLogger } from '@/core/logging'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Sparkles } from 'lucide-react'
+import { LoaderCircle, WandSparkles } from 'lucide-react'
 import PanelTrigger from '@/components/ui/PanelTrigger'
 import { AlertDialog, UI_TEXT_META_CLASS, UiButton } from '@/components/ui'
 import { LLM_CONFIG_CHANGED_EVENT } from '@/core/llm/events'
@@ -435,7 +435,7 @@ export const PromptOptimizeButton: React.FC<PromptOptimizeButtonProps> = ({
                   onConfigChange={setConfig}
                 />
                 {streaming && output ? (
-                  <div className={`mx-4 mb-4 rounded-lg border border-border-dark bg-app p-3 leading-5 ${UI_TEXT_META_CLASS}`}>
+                  <div className={`mx-4 mb-4 rounded-lg bg-app/40 p-3 leading-5 ${UI_TEXT_META_CLASS}`}>
                     {output}
                   </div>
                 ) : null}
@@ -447,9 +447,10 @@ export const PromptOptimizeButton: React.FC<PromptOptimizeButtonProps> = ({
           closePanelRef.current = closePanel
           openPanelRef.current = openPanel
           return (
-            <UiButton size="lg"
+            // 与底栏其它动作同档（静默）：生成按钮才是这块输入区唯一的主动作，优化不再带光晕特效
+            <UiButton
               type="button"
-              variant="secondary"
+              variant="quiet"
               onClick={() => {
                 if (streaming) return
                 if (buttonBehavior !== 'select-profile') {
@@ -471,11 +472,14 @@ export const PromptOptimizeButton: React.FC<PromptOptimizeButtonProps> = ({
               disabled={disabled}
               aria-disabled={disabled || streaming}
               title={buttonBehavior === 'select-profile' ? '左键先选择配置，右键管理配置' : '左键直接优化，右键管理配置'}
-              className={`prompt-optimize-button px-4 ${streaming ? 'is-streaming' : ''}`}
+              aria-busy={streaming || undefined}
+              className={`gap-1.5 ${streaming ? 'cursor-progress' : ''}`}
               data-panel-trigger-button
             >
-              <Sparkles size={16} className="prompt-optimize-button__icon mr-2" />
-              <span className="prompt-optimize-button__label">{streaming ? '优化中' : '优化'}</span>
+              {streaming
+                ? <LoaderCircle aria-hidden="true" className="h-4 w-4 animate-spin" />
+                : <WandSparkles aria-hidden="true" className="h-4 w-4" />}
+              <span>{streaming ? '优化中' : '优化'}</span>
             </UiButton>
           )
         }}

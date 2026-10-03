@@ -49,10 +49,18 @@ function createEditProbe({ input, counter, value, label, allowedIds }) {
   return { done, dispose }
 }
 
+const SEARCH_PLACEHOLDER = /^(搜索提示词 \/ 模型 \/ 提供商 \/ 错误信息|Search prompt \/ model \/ provider \/ error)$/
+
+// 生成页的搜索与筛选条由命令带“搜索历史”按钮展开；展开期间命令带右侧常驻“显示 X / Y 条”。
+async function ensureHistorySearchOpen(page) {
+  const search = page.getByPlaceholder(SEARCH_PLACEHOLDER)
+  if (!await search.count()) await page.getByRole('button', { name: /^(搜索历史|Search history)$/ }).click()
+  await search.waitFor()
+  return search
+}
+
 async function measureGenerationFiltering(page, count, inspection) {
-  const search = page.getByPlaceholder(/^(搜索提示词 \/ 模型 \/ 提供商 \/ 错误信息|Search prompt \/ model \/ provider \/ error)$/)
-  const expand = page.getByTitle(/^(展开搜索|Expand search)$/)
-  if (await expand.count()) await expand.click()
+  const search = await ensureHistorySearchOpen(page)
   await search.focus()
   await page.evaluate(() => { document.querySelector('.app-scroll-container').scrollTop = 0 })
   await page.waitForTimeout(400)
@@ -87,6 +95,7 @@ async function measureGenerationFiltering(page, count, inspection) {
 }
 
 async function measureGenerationPromptInput(page, count, inspection) {
+  await ensureHistorySearchOpen(page)
   const host = page.locator('[data-onboarding-target="prompt"]')
   await host.getByRole('textbox').click()
   const editor = host.locator('[contenteditable="true"]')
@@ -113,7 +122,7 @@ async function measureGenerationPromptInput(page, count, inspection) {
       } finally { await probe.evaluate(state => state.dispose()); await probe.dispose() }
     }
     // Blur renders the document held by React, so a DOM-only edit cannot pass.
-    await page.getByPlaceholder(/^(搜索提示词 \/ 模型 \/ 提供商 \/ 错误信息|Search prompt \/ model \/ provider \/ error)$/).focus()
+    await page.getByPlaceholder(SEARCH_PLACEHOLDER).focus()
     await page.waitForTimeout(100)
     assert.equal(await host.getByRole('textbox').textContent(), value)
     await inspection.capture(`prompt-input-${count}`)

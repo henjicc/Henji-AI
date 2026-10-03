@@ -14,48 +14,6 @@
         "rgba": 4
       }
     },
-    "src/components/MediaGenerator/components/ModelSelectorPanel.tsx": {
-      "owner": "3.2",
-      "category": "界面色（迁入语义令牌）",
-      "counts": {
-        "palette": 2
-      }
-    },
-    "src/components/MediaGenerator/components/ModelscopeCustomModelManager.tsx": {
-      "owner": "3.2",
-      "category": "界面色（迁入语义令牌）",
-      "counts": {
-        "palette": 5
-      }
-    },
-    "src/components/MediaGenerator/index.tsx": {
-      "owner": "3.2",
-      "category": "界面色（迁入语义令牌）",
-      "counts": {
-        "palette": 1
-      }
-    },
-    "src/components/ModelTypeBadge.tsx": {
-      "owner": "3.2",
-      "category": "界面色（迁入语义令牌）",
-      "counts": {
-        "palette": 9
-      }
-    },
-    "src/components/PresetPanel.tsx": {
-      "owner": "3.2",
-      "category": "界面色（迁入语义令牌）",
-      "counts": {
-        "mono": 1
-      }
-    },
-    "src/components/Presets/PresetManager.tsx": {
-      "owner": "3.2",
-      "category": "界面色（迁入语义令牌）",
-      "counts": {
-        "palette": 5
-      }
-    },
     "src/components/mediaViewer/AudioViewerModal.tsx": {
       "owner": "2.1",
       "category": "媒体叠层（迁入 media-* / on-media 固定令牌）",
@@ -75,20 +33,6 @@
       "category": "媒体叠层（迁入 media-* / on-media 固定令牌）",
       "counts": {
         "mono": 1
-      }
-    },
-    "src/components/params/panels/MinimaxVoiceClonePanel.tsx": {
-      "owner": "3.2",
-      "category": "界面色（迁入语义令牌）",
-      "counts": {
-        "palette": 3
-      }
-    },
-    "src/components/params/panels/composite/BasicInputComponents.tsx": {
-      "owner": "3.2",
-      "category": "界面色（迁入语义令牌）",
-      "counts": {
-        "palette": 1
       }
     },
     "src/components/videoTrim/VideoTrimModal.tsx": {
@@ -369,35 +313,6 @@
       "category": "内容色/算法常量（迁入 colorTokens.ts 登记）",
       "counts": {
         "rgba": 1
-      }
-    },
-    "src/workspaces/GenerationWorkspace.tsx": {
-      "owner": "3.2",
-      "category": "界面色（迁入语义令牌）",
-      "counts": {
-        "mono": 1
-      }
-    },
-    "src/workspaces/GenerationWorkspace/components/NotificationToast.tsx": {
-      "owner": "3.2",
-      "category": "界面色（迁入语义令牌）",
-      "counts": {
-        "palette": 6
-      }
-    },
-    "src/workspaces/GenerationWorkspace/components/TaskCard.tsx": {
-      "owner": "3.2",
-      "category": "界面色（迁入语义令牌）",
-      "counts": {
-        "palette": 1,
-        "mono": 1
-      }
-    },
-    "src/workspaces/GenerationWorkspace/components/TaskInputPreview.tsx": {
-      "owner": "3.2",
-      "category": "媒体叠层（迁入 media-* / on-media 固定令牌）",
-      "counts": {
-        "mono": 4
       }
     }
   }

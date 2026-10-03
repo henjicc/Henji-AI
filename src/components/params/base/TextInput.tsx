@@ -12,6 +12,7 @@ import type { TextParamDef } from '@/core/types'
 import { getI18nText } from '@/core/types/I18nText'
 import { PromptEditor, UiInput, UiTextAreaField } from '@/components/ui'
 import { ParamLabel } from '../ParamLabel'
+import { ParamField } from '../ParamField'
 import {
   resolveTextParamPromptDocument,
   resolveTextParamPromptVariables,
@@ -52,7 +53,7 @@ export const TextInput: React.FC<TextInputProps> = ({
 
   if (param.editor?.kind === 'prompt') {
     return (
-      <div className="w-auto">
+      <ParamField inline={false}>
         <ParamLabel param={param} language={i18n.language} />
         <PromptEditor
           value={promptDocument}
@@ -67,14 +68,14 @@ export const TextInput: React.FC<TextInputProps> = ({
           showCharacterCount={param.maxLength !== undefined}
           editorClassName={`${param.rows && param.rows > 4 ? 'min-h-[120px]' : 'min-h-[92px]'} max-h-[360px]`}
         />
-      </div>
+      </ParamField>
     )
   }
 
   // 多行普通文本输入
   if (param.type === 'textarea' || param.multiline) {
     return (
-      <div className="w-auto">
+      <ParamField inline={false}>
         <ParamLabel param={param} language={i18n.language} />
         <UiTextAreaField
           value={value || ''}
@@ -84,13 +85,13 @@ export const TextInput: React.FC<TextInputProps> = ({
           rows={param.rows || 4}
           className="min-h-[80px] resize-y"
         />
-      </div>
+      </ParamField>
     )
   }
 
   // 单行文本输入
   return (
-    <div className="w-auto">
+    <ParamField>
       <ParamLabel param={param} language={i18n.language} />
       <UiInput
         type="text"
@@ -99,6 +100,6 @@ export const TextInput: React.FC<TextInputProps> = ({
         disabled={disabled}
         placeholder={placeholder}
       />
-    </div>
+    </ParamField>
   )
 }

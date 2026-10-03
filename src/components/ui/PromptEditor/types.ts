@@ -99,6 +99,11 @@ export interface PromptEditorProps {
   error?: boolean
   errorMessage?: string
   className?: string
+  /**
+   * 编辑器外框：`field`（默认）= 字段表面 + 描边 + 聚焦环；`none` = 无框无底，
+   * 用于外层已经是一整块输入卡片的场景（生成输入区，界面重设计 3.2）。
+   */
+  frame?: 'field' | 'none'
   editorShellClassName?: string
   editorClassName?: string
   onSubmit?: () => void

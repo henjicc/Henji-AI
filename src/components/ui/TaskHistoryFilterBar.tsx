@@ -28,6 +28,8 @@ export interface UiTaskHistoryFilterBarProps {
   providerOptions: UiTaskHistoryModelOption[]
   modelOptions: UiTaskHistoryModelOption[]
   mediaOptions?: Array<{ label: string; value: GenerationHistoryMediaType }>
+  /** 是否显示媒体类型下拉；宿主已有类型选项卡时传 false，避免同一筛选出现两处入口。 */
+  showMediaType?: boolean
   onKeywordChange: (keyword: string) => void
   onProviderChange: (providerId: string) => void
   onModelChange: (modelId: string) => void
@@ -51,6 +53,7 @@ export function UiTaskHistoryFilterBar({
   providerOptions,
   modelOptions,
   mediaOptions,
+  showMediaType = true,
   onKeywordChange,
   onProviderChange,
   onModelChange,
@@ -169,7 +172,7 @@ export function UiTaskHistoryFilterBar({
     }`
 
   return (
-    <div className={`relative flex items-start ${isAlwaysVisible ? 'justify-center' : 'justify-end'}`}>
+    <div className={`relative flex items-start ${isAlwaysVisible ? 'justify-start' : 'justify-end'}`}>
       {!isAlwaysVisible && (
         <div ref={triggerRef}>
           <UiIconButton size="lg"
@@ -195,8 +198,12 @@ export function UiTaskHistoryFilterBar({
         ref={panelRef}
         className={panelContainerClassName}
       >
-        <div className="relative flex flex-col items-end gap-1 rounded-lg border border-border-dark/80 bg-panel px-2 py-1.5">
-          <div className="relative flex items-center justify-end gap-1">
+        {/* 常驻模式是宿主命令带下方的从属筛选带：不自带底色与边框；折叠模式是浮起的筛选面板 */}
+        <div className={isAlwaysVisible
+          ? 'relative flex flex-col items-start gap-1'
+          : 'relative flex flex-col items-end gap-1 rounded-lg border border-line-strong bg-panel px-2 py-1.5'}
+        >
+          <div className={`relative flex flex-wrap items-center gap-1 ${isAlwaysVisible ? 'justify-start' : 'justify-end'}`}>
             <div className="relative shrink-0">
               <span ref={iconAnchorRef} className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2" />
               <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text-muted" />
@@ -234,17 +241,19 @@ export function UiTaskHistoryFilterBar({
               panelWidthStrategy="options"
             />
 
-            <Dropdown
-              value={mediaType}
-              display={selectedMediaLabel}
-              options={resolvedMediaOptions}
-              onSelect={onMediaTypeChange}
-              portal={false}
-              className="shrink-0"
-              buttonClassName="w-auto"
-              minWidthStrategy="display"
-              panelWidthStrategy="options"
-            />
+            {showMediaType && (
+              <Dropdown
+                value={mediaType}
+                display={selectedMediaLabel}
+                options={resolvedMediaOptions}
+                onSelect={onMediaTypeChange}
+                portal={false}
+                className="shrink-0"
+                buttonClassName="w-auto"
+                minWidthStrategy="display"
+                panelWidthStrategy="options"
+              />
+            )}
 
             <Dropdown
               value={providerId}

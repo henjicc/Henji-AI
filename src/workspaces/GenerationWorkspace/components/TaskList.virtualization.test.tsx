@@ -11,7 +11,7 @@ import { useGenerationAutoScroll } from '../hooks/useGenerationAutoScroll'
 vi.mock('@/hooks/useI18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }))
 vi.mock('@/components/ui', () => ({
   UiRegion: ({ children }: React.PropsWithChildren) => <section>{children}</section>,
-  UiPageHeader: () => <div>历史</div>, UiEmpty: () => <div>空</div>,
+  UiEmpty: () => <div>空</div>,
 }))
 let retainedState: TaskListRetention | null = null
 const originalScrollTo = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollTo')
@@ -52,10 +52,10 @@ const callbacks = {
   showMenu: vi.fn(), onDownload: vi.fn(), onCopyImage: vi.fn(), onRegenerate: vi.fn(), onRetryPolling: vi.fn(),
   onReedit: vi.fn(), onDelete: vi.fn(), onUsePrompt: vi.fn(), onRememberResultImageDimensions: vi.fn(),
   onOpenImageViewer: vi.fn(), onOpenVideoViewer: vi.fn(), notify: vi.fn(),
-} satisfies Omit<TaskListProps, 'scrollContainerRef' | 'tasks' | 'totalCount' | 'matchedCount' | 'hasActiveFilters'>
+} satisfies Omit<TaskListProps, 'scrollContainerRef' | 'tasks' | 'totalCount' | 'hasActiveFilters'>
 function Fixture({ items }: { items: GenerationTask[] }) {
   const ref = useRef<HTMLDivElement>(null)
-  return <div ref={ref} data-testid="scroll"><TaskList {...callbacks} scrollContainerRef={ref} tasks={items} totalCount={items.length} matchedCount={items.length} hasActiveFilters={false} /></div>
+  return <div ref={ref} data-testid="scroll"><TaskList {...callbacks} scrollContainerRef={ref} tasks={items} totalCount={items.length} hasActiveFilters={false} /></div>
 }
 const card = (root: HTMLElement, id: string) => root.querySelector<HTMLElement>(`[data-generation-task-id="${id}"]`)
 function scroll(element: HTMLElement, top: number) { act(() => { element.scrollTop = top; fireEvent.scroll(element) }) }
@@ -65,7 +65,7 @@ it.each([false, true])('历史首屏定位不会被虚拟列表重置，异步�
     const items = loaded ? tasks(1000) : []
     const { listContainerRef, contentRef } = useGenerationAutoScroll(loaded, items.length)
     return <div ref={listContainerRef} data-testid="scroll"><div ref={contentRef}>
-      <TaskList {...callbacks} scrollContainerRef={listContainerRef} tasks={items} totalCount={items.length} matchedCount={items.length} hasActiveFilters={false} />
+      <TaskList {...callbacks} scrollContainerRef={listContainerRef} tasks={items} totalCount={items.length} hasActiveFilters={false} />
     </div></div>
   }
   const view = render(<InitialHistory loaded={!asyncLoad} />)

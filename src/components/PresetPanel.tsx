@@ -13,7 +13,7 @@ import { checkAssetPaths } from '@/commands/assetLibrary'
 import { showAlertDialog } from '@/stores/alertDialogStore'
 import { useNotification } from '@/contexts/NotificationContext'
 import type { PromptDocumentV1, PromptMediaBinding } from '@/core/inputs/promptDocument'
-import { Trash2 } from 'lucide-react'
+import { Images, SlidersHorizontal, Trash2, Type } from 'lucide-react'
 
 const logger = createLogger('components.PresetPanel')
 
@@ -184,7 +184,6 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
             display={t('ui:presets.label')}
             disabled={disabled}
             className="w-auto"
-            size="lg"
             buttonClassName="w-auto"
             panelWidth={420}
             alignment="aboveCenter"
@@ -251,42 +250,45 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
                             >
                                 <UiOptionButton
                                     type="button"
+                                    variant="grid"
                                     active={false}
                                     onClick={() => handleQuickSave('prompt')}
                                     size="sm"
                                     className="h-full w-full flex-col justify-center gap-1 px-3 py-2"
                                     title={t('ui:presets.saveMode.prompt.title')}
                                 >
-                                    <span className="text-base">💾</span>
+                                    <Type aria-hidden="true" className="h-4 w-4 text-text2" />
                                     <span>{t('ui:presets.saveMode.prompt.label')}</span>
                                 </UiOptionButton>
                                 <UiOptionButton
                                     type="button"
+                                    variant="grid"
                                     active={false}
                                     onClick={() => handleQuickSave('prompt-image')}
                                     size="sm"
                                     className="h-full w-full flex-col justify-center gap-1 px-3 py-2"
                                     title={t('ui:presets.saveMode.promptImage.title')}
                                 >
-                                    <span className="text-base">📦</span>
+                                    <Images aria-hidden="true" className="h-4 w-4 text-text2" />
                                     <span>{t('ui:presets.saveMode.promptImage.label')}</span>
                                 </UiOptionButton>
                                 <UiOptionButton
                                     type="button"
+                                    variant="grid"
                                     active={false}
                                     onClick={() => handleQuickSave('full')}
                                     size="sm"
                                     className="h-full w-full flex-col justify-center gap-1 px-3 py-2"
                                     title={t('ui:presets.saveMode.full.title')}
                                 >
-                                    <span className="text-base">🔧</span>
+                                    <SlidersHorizontal aria-hidden="true" className="h-4 w-4 text-text2" />
                                     <span>{t('ui:presets.saveMode.full.label')}</span>
                                 </UiOptionButton>
                             </div>
                         </div>
                     </div>
                     {/* 分割线 */}
-                    <div className="h-px bg-layer/50 my-3"></div>
+                    <div className="my-3 h-px bg-line"></div>
                     {/* 预设列表 */}
                     <div className="flex-1 overflow-y-auto">
                         <div className="text-xs text-text-muted mb-2 flex items-center justify-between">
@@ -303,16 +305,14 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
                                         onClick={() => {
                                             onLoadPreset(preset)
                                         }}
-                                        className="px-3 py-2.5 bg-layer/40 hover:bg-layer/60 rounded-lg border border-border-dark/50 cursor-pointer transition-colors duration-180 group relative"
+                                        className="group relative cursor-pointer rounded-lg px-3 py-2 transition-colors duration-120 hover:bg-hover"
                                     >
                                         <div className="flex items-center justify-between">
                                             <div className="flex items-center gap-2 flex-1 min-w-0">
                                                 {/* 模式图标 */}
-                                                <span className="text-sm flex-shrink-0">
-                                                    {preset.saveMode === 'prompt' && '💾'}
-                                                    {preset.saveMode === 'prompt-image' && '📦'}
-                                                    {preset.saveMode === 'full' && '🔧'}
-                                                </span>
+                                                {preset.saveMode === 'prompt' && <Type aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-text3" />}
+                                                {preset.saveMode === 'prompt-image' && <Images aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-text3" />}
+                                                {preset.saveMode === 'full' && <SlidersHorizontal aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-text3" />}
                                                 <span className="text-sm font-medium truncate">{preset.name}</span>
                                             </div>
                                             <div className="flex items-center gap-2 flex-shrink-0">
@@ -352,7 +352,7 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
                                                 {/* 这块经 createPortal 挂到 body，视觉上不在预设列表项里，
                                                     和上面那张列表卡不构成嵌套；静态检查看不出 portal 的落点。ui-surface-allow */}
                                                 <UiPanel className="delete-confirm-dialog w-[200px] p-3">
-                                                    <div className="text-sm text-white mb-3">
+                                                    <div className="mb-3 text-13 text-text1">
                                                         {t('ui:presets.confirmDelete')}
                                                     </div>
                                                     <div className="flex gap-2">

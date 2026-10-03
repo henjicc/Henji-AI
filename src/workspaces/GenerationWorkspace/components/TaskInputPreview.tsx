@@ -185,7 +185,7 @@ function StackPreview({
     return (
       <div
         key={`${taskId}-${kind}-${index}`}
-        className={`relative w-12 h-12 flex-shrink-0 rounded overflow-hidden border border-veil-subtle bg-black/20 cursor-pointer transition-[margin,opacity] duration-180 ease-out ${
+        className={`relative w-12 h-12 flex-shrink-0 rounded-md overflow-hidden bg-media ring-2 ring-window cursor-pointer transition-[margin,opacity] duration-180 ease-out ${
           index === 0 ? '' : (expanded ? 'ml-1' : '-ml-3')
         } ${index >= visible.length ? (fadeIn ? 'opacity-100' : 'opacity-0') : 'opacity-100'}`}
         style={{ zIndex: 20 - index }}
@@ -205,8 +205,8 @@ function StackPreview({
         ) : (
           <>
             <video src={item} className="w-full h-full object-cover" muted draggable={false} />
-            <div className="absolute inset-0 flex items-center justify-center bg-black/30 pointer-events-none">
-              <Play className="w-5 h-5 text-white" />
+            <div className="absolute inset-0 flex items-center justify-center bg-media-scrim pointer-events-none">
+              <Play className="w-5 h-5 text-on-media" />
             </div>
           </>
         )}
@@ -224,7 +224,7 @@ function StackPreview({
       {displayItems.map(renderThumb)}
       {showExtra && (
         <div
-          className={`absolute top-0 w-12 h-12 flex-shrink-0 rounded border border-veil-subtle bg-black/20 flex items-center justify-center text-xs text-text-soft cursor-pointer transition-[opacity,transform] duration-180 ease-out ${
+          className={`absolute top-0 w-12 h-12 flex-shrink-0 rounded-md bg-raised flex items-center justify-center text-xs text-text2 cursor-pointer transition-[opacity,transform] duration-180 ease-out ${
             extraVisible ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-1 pointer-events-none'
           }`}
           style={{ left: collapsedWidth - base, zIndex: 0 }}

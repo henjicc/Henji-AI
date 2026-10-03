@@ -2,7 +2,7 @@ import React, { useCallback, useRef } from 'react'
 import { History } from 'lucide-react'
 import { useI18n } from '@/hooks/useI18n'
 import type { MenuItem } from '@/hooks/useContextMenu'
-import { UiEmpty, UiPageHeader, UiRegion } from '@/components/ui'
+import { UiEmpty, UiRegion } from '@/components/ui'
 import type { GenerationTask, ResultImageDimensions } from '../types'
 import TaskCard, { type TaskCardProps } from './TaskCard'
 import { TaskListRetentionContext, type TaskListRetention } from '../hooks/useTaskListRetention'
@@ -12,7 +12,6 @@ export interface TaskListProps {
   scrollContainerRef: React.RefObject<HTMLDivElement>
   tasks: GenerationTask[]
   totalCount: number
-  matchedCount: number
   hasActiveFilters: boolean
   showMenu: (e: React.MouseEvent, items: MenuItem[]) => void
   onDownload: (filePath: string, fromButton?: boolean) => Promise<void>
@@ -36,7 +35,6 @@ export function TaskList({
   scrollContainerRef,
   tasks,
   totalCount,
-  matchedCount,
   hasActiveFilters,
   showMenu,
   onDownload,
@@ -62,14 +60,12 @@ export function TaskList({
   }
 
   return (
-    <UiRegion maxWidthClassName="max-w-6xl" className="mx-auto space-y-6">
-      <UiPageHeader
-        title={t('history:title')}
-        description={t('ui:workspaceFilters.resultsCount', { matched: matchedCount, total: totalCount })}
-      />
+    // 记录列：与命令带同宽同边距（max-w-4xl + px-6）。页面不再单独画“历史记录”标题，
+    // 命中数在筛选生效时显示在命令带右侧。
+    <UiRegion maxWidthClassName="max-w-4xl" className="mx-auto px-6">
       {totalCount === 0 && (
         <UiEmpty
-          icon={<History className="h-10 w-10" />}
+          icon={<History className="h-8 w-8" />}
           title={t('history:empty')}
           description={t('history:emptyHint')}
         />

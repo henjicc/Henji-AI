@@ -61,7 +61,7 @@ export function useVirtualTaskList(tasks: GenerationTask[], scrollContainerRef: 
     getItemKey,
     estimateSize: () => 360,
     overscan: 4,
-    gap: 24,
+    gap: 32,
     scrollMargin,
     rangeExtractor,
   })

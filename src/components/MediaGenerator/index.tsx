@@ -21,18 +21,16 @@ import { PresetManager } from './preset/PresetManager'
 import InputArea from './components/InputArea'
 import { GeneratorConfigurationBar } from './components/GeneratorConfigurationBar'
 import { PromptOptimizeButton } from './components/PromptOptimizeButton'
-import { UiButton, type PromptEditorHandle } from '@/components/ui'
+import { UiFieldLayoutContext, type PromptEditorHandle } from '@/components/ui'
 import { resolveInputLimits } from '@/core/inputs/inputLimits'
 import { validateGenerationRequirements } from '@/core/validation/modelRequirements'
 import { parseLegacyPromptString } from '@/core/inputs/promptDocument'
 import type { Preset } from '@/types/preset'
-import { Trash2 } from 'lucide-react'
 
 interface MediaGeneratorProps {
   compact?: boolean
   onGenerate: (input: string, model: string, type: 'image' | 'video' | 'audio', options?: DynamicValue) => void | Promise<void>
   isLoading: boolean
-  onOpenClearHistory: () => void
   onImageClick?: (imageUrl: string, imageList: string[]) => void
   isCollapsed?: boolean
   onToggleCollapse?: () => void
@@ -51,7 +49,6 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
   compact = false,
   onGenerate,
   isLoading,
-  onOpenClearHistory,
   onImageClick,
   isGenerating,
   onSetUploadedImagesRef,
@@ -321,10 +318,8 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
 
 
   return (
-    <div className="relative w-full rounded-[inherit]">
-      <GeneratorConfigurationBar uiState={uiState} modelState={modelState} />
-
-      {/* 输入区域 */}
+    <div className="relative w-full">
+      {/* 输入区域：参考素材 · 提示词 · 底栏（模型与参数 ｜ 费用、预设、优化、生成） */}
       <InputArea
         compact={compact}
         promptDocument={uiState.promptDocument}
@@ -385,6 +380,57 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         promptOptimizationPreview={promptOptimizationPreview}
         promptEditorRef={promptEditorRef}
         onGenerate={handleGenerate}
+        footerStart={<GeneratorConfigurationBar uiState={uiState} modelState={modelState} />}
+        footerEnd={(
+          <UiFieldLayoutContext.Provider value="toolbar">
+            <PriceEstimate
+              providerId={uiState.selectedProvider}
+              modelId={uiState.selectedModel}
+              params={priceEstimateParams}
+            />
+            <PresetPanel
+              getCurrentState={() => ({
+                input: uiState.input,
+                promptDocument: uiState.promptDocument,
+                promptMediaBindings: uiState.promptMediaBindings,
+                uploadedImages: uiState.uploadedImages,
+                uploadedFilePaths: uiState.uploadedFilePaths,
+                params: modelState.params,
+              })}
+              onLoadPreset={handleLoadPreset}
+            />
+            <PromptOptimizeButton
+              prompt={uiState.input}
+              uploadedImages={uiState.uploadedImages}
+              uploadedFilePaths={uiState.uploadedFilePaths}
+              uploadedVideos={uiState.uploadedVideos}
+              uploadedVideoFiles={uiState.uploadedVideoFiles}
+              uploadedVideoFilePaths={uiState.uploadedVideoFilePaths}
+              targetModel={{
+                providerId: uiState.selectedProvider,
+                providerName: currentProvider?.name,
+                modelId: uiState.selectedModel,
+                modelName: currentModel?.name,
+                modelType: currentModel?.type,
+                modelFunctions: currentModel?.functions,
+                modelDescription: currentModel?.description,
+              }}
+              disabled={inputBusy}
+              onOptimized={(value) => {
+                const document = parseLegacyPromptString(value, {
+                  references: uiState.promptReferences,
+                })
+                if (promptEditorRef.current) {
+                  promptEditorRef.current.replaceDocument(document, { addToHistory: true })
+                  return
+                }
+                uiState.setPromptDocument(document)
+              }}
+              onStreamPreviewChange={setPromptOptimizationPreview}
+              onAlert={uiState.showAlert}
+            />
+          </UiFieldLayoutContext.Provider>
+        )}
       />
 
       {videoTrimState && videoTrimMaxClipSeconds && (
@@ -414,77 +460,6 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
           }}
         />
       )}
-
-      {/* 底部工具栏：按钮 + 价格估算 */}
-      <div className={`${compact ? 'mt-2 pt-2' : 'mt-2.5 pt-2.5'} flex items-center justify-between border-t border-surface-dark/70 px-1`}>
-        <div className="flex items-center gap-2">
-          {/* 清除历史按钮 */}
-          {/* 破坏性动作：静息保持中性、hover 才出危险色。
-              与 `UiIconButton hoverVariant="danger"` 的表达一致。
-              此前是 variant="primary" 再叠 bg-red-600/75——既让"清除"抢走了主动作
-              （发送）的视觉权重，也是一处同属性叠类（红底能盖住 primary 的蓝底
-              只是因为它在 Tailwind 产物里排得更后）。 */}
-          <UiButton size="lg"
-            type="button"
-            variant="danger"
-            onClick={onOpenClearHistory}
-          >
-            <Trash2 className="w-4 h-4 mr-2" />
-            {t('ui:actions.clearHistory')}
-          </UiButton>
-
-          {/* 预设面板 */}
-          <PresetPanel
-            getCurrentState={() => ({
-              input: uiState.input,
-              promptDocument: uiState.promptDocument,
-              promptMediaBindings: uiState.promptMediaBindings,
-              uploadedImages: uiState.uploadedImages,
-              uploadedFilePaths: uiState.uploadedFilePaths,
-              params: modelState.params,
-            })}
-            onLoadPreset={handleLoadPreset}
-          />
-
-          <PromptOptimizeButton
-            prompt={uiState.input}
-            uploadedImages={uiState.uploadedImages}
-            uploadedFilePaths={uiState.uploadedFilePaths}
-            uploadedVideos={uiState.uploadedVideos}
-            uploadedVideoFiles={uiState.uploadedVideoFiles}
-            uploadedVideoFilePaths={uiState.uploadedVideoFilePaths}
-            targetModel={{
-              providerId: uiState.selectedProvider,
-              providerName: currentProvider?.name,
-              modelId: uiState.selectedModel,
-              modelName: currentModel?.name,
-              modelType: currentModel?.type,
-              modelFunctions: currentModel?.functions,
-              modelDescription: currentModel?.description,
-            }}
-            disabled={inputBusy}
-            onOptimized={(value) => {
-              const document = parseLegacyPromptString(value, {
-                references: uiState.promptReferences,
-              })
-              if (promptEditorRef.current) {
-                promptEditorRef.current.replaceDocument(document, { addToHistory: true })
-                return
-              }
-              uiState.setPromptDocument(document)
-            }}
-            onStreamPreviewChange={setPromptOptimizationPreview}
-            onAlert={uiState.showAlert}
-          />
-        </div>
-
-        {/* 价格估算 */}
-        <PriceEstimate
-          providerId={uiState.selectedProvider}
-          modelId={uiState.selectedModel}
-          params={priceEstimateParams}
-        />
-      </div>
 
     </div>
   )

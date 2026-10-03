@@ -1,20 +1,18 @@
 import React, { useMemo, useState, useEffect } from 'react'
 import { registry } from '@/core/ModelRegistry'
 import { useI18n } from '@/hooks/useI18n'
-import { CircleDollarSign } from 'lucide-react'
 import {
     formatPriceEstimate,
     PRICE_SETTING_CHANGED_EVENT,
     readPriceEstimateDisplaySettings,
 } from '@/core/pricing/priceDisplay'
-import { UI_GLASS_ADAPTIVE_CONTROL_CLASS } from './styleTokens'
 import { usePriceEstimateMediaContext } from '@/hooks/usePriceEstimateMediaContext'
 
 interface PriceEstimateProps {
     providerId: string
     modelId: string
     params: DynamicValueMap
-    /** panel=对话模式面板样式（默认）；badge=画布节点紧凑徽标 */
+    /** panel=生成输入区底栏的辅助文字（默认）；badge=画布节点紧凑徽标 */
     variant?: 'panel' | 'badge'
     /** 相同计价参数的请求次数；单位参考价仍按单位展示。 */
     requestCount?: number
@@ -81,13 +79,14 @@ const PriceEstimate: React.FC<PriceEstimateProps> = ({ modelId, params, variant 
         )
     }
 
+    // 输入区底栏里的一段辅助文字（设计稿 Generation：生成按钮左侧的“预计费用”），不画框不铺底
     return (
-        <div className={`flex items-center gap-1.5 rounded-lg border border-border-dark/50 bg-surface-dark/50 px-3 py-1.5 text-xs text-text-muted ${UI_GLASS_ADAPTIVE_CONTROL_CLASS}`}>
-            <CircleDollarSign className="w-3.5 h-3.5 flex-shrink-0" />
-            <span className="whitespace-nowrap">
-                {t('priceEstimate.label')}: <span className="text-text-dark/85">{priceDisplayWithUnit}</span>
-            </span>
-        </div>
+        <span
+            className="whitespace-nowrap px-1.5 text-xs tabular-nums text-text3"
+            title={`${t('priceEstimate.label')}: ${priceDisplayWithUnit}`}
+        >
+            {t('priceEstimate.label')} {priceDisplayWithUnit}
+        </span>
     )
 }
 

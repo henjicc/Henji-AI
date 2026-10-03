@@ -210,6 +210,15 @@ export const UI_FIELD_PADDING_CLASS: Record<UiFieldSize, string> = {
 /** 字段标签（带块级布局与下间距的表单专用变体，视觉继承 UI_TEXT_LABEL_CLASS） */
 export const UI_FIELD_LABEL_CLASS = `block ${UI_TEXT_LABEL_CLASS} mb-1.5`;
 
+/**
+ * 工具条排布（`UiFieldLayoutContext` = `toolbar`）下的字段标签：标签在控件左侧，辅助文字档 12，
+ * 不换行。控件本身保持 32 高，整行读作一条工具条而不是一张表单（界面重设计 3.2）。
+ */
+export const UI_FIELD_LABEL_INLINE_CLASS = 'shrink-0 whitespace-nowrap text-xs text-text3';
+
+/** 工具条排布下“标签 + 控件”的行内容器。 */
+export const UI_FIELD_INLINE_ROW_CLASS = 'inline-flex min-w-0 items-center gap-1.5';
+
 /** 字段聚焦：一圈 2px 强调色焦点环（内收，避免被滚动容器或 overflow-hidden 裁掉）。 */
 export const UI_FIELD_FOCUS_CLASS =
   'outline-none focus:outline-none focus-visible:outline-none focus:ring-2 focus:ring-inset focus:ring-accent-ring transition-shadow duration-120';

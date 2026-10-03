@@ -10,6 +10,7 @@ import { PromptDocumentStatic } from './PromptDocumentStatic'
 import {
   getPromptEditorLayoutClasses,
   getPromptEditorShellStateClass,
+  PROMPT_EDITOR_FRAMELESS_SHELL_CLASS,
   PROMPT_EDITOR_SHELL_CLASS,
 } from './promptEditorStyles'
 import type { PromptEditorHandle, PromptEditorProps } from './types'
@@ -29,6 +30,7 @@ const StaticPromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(
     error = false,
     layout = 'auto',
     className = '',
+    frame = 'field',
     editorShellClassName = '',
     editorClassName = '',
     onActivate,
@@ -55,7 +57,7 @@ const StaticPromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(
     return (
       <div className={`${layoutClasses.outer} ${className}`}>
         <div
-          className={`${PROMPT_EDITOR_SHELL_CLASS} ${getPromptEditorShellStateClass(error)} ${layoutClasses.shell} ${editorShellClassName} ${disabled ? 'cursor-not-allowed opacity-50' : ''}`}
+          className={`${frame === 'none' ? PROMPT_EDITOR_FRAMELESS_SHELL_CLASS : `${PROMPT_EDITOR_SHELL_CLASS} ${getPromptEditorShellStateClass(error)}`} ${layoutClasses.shell} ${editorShellClassName} ${disabled ? 'cursor-not-allowed opacity-50' : ''}`}
         >
           <PromptDocumentStatic
             ref={contentRef}

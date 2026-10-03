@@ -104,3 +104,15 @@ it('宿主尚未确认或面板隐藏时，受控控件不发出新播放命令'
   fireEvent.keyDown(view.container.firstChild!, { key: ' ' })
   expect(onTogglePlay).not.toHaveBeenCalled()
 })
+
+it('列表行内排布：一行内播放、时间读数与音量，复用同一媒体元素与恢复状态，不重复提供下载', () => {
+  const view = render(<AudioPlayer layout="inline" surface="plain" src="media:a" initialPlaybackState={{ currentTime: 12, volume: 0.5 }} />)
+  const audio = view.container.querySelector('audio')!
+  Object.defineProperty(audio, 'duration', { value: 30, configurable: true })
+  fireEvent.loadedMetadata(audio)
+  expect(audio.currentTime).toBe(12)
+  expect(view.getByText('0:12 / 0:30')).toBeTruthy()
+  expect(view.getByTitle('ui:audioPlayer.playPause')).toBeTruthy()
+  expect(view.getByTitle('ui:audioPlayer.volume')).toBeTruthy()
+  expect(view.queryByTitle('common:actions.download')).toBeNull()
+})

@@ -31,6 +31,7 @@ import {
   getPromptEditorLayoutClasses,
   getPromptEditorShellStateClass,
   PROMPT_EDITOR_CONTENT_CLASS,
+  PROMPT_EDITOR_FRAMELESS_SHELL_CLASS,
   PROMPT_EDITOR_SHELL_CLASS,
 } from './promptEditorStyles'
 import {
@@ -90,6 +91,7 @@ const EditablePromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(
     errorMessage,
     layout = 'auto',
     className = '',
+    frame = 'field',
     editorShellClassName = '',
     editorClassName = '',
     onSubmit,
@@ -386,13 +388,15 @@ const EditablePromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(
     }, [editor])
 
     const reachedLimit = maxCharacters !== undefined && characterCount >= maxCharacters
-    const shellStateClass = getPromptEditorShellStateClass(error)
+    const shellStateClass = frame === 'none'
+      ? PROMPT_EDITOR_FRAMELESS_SHELL_CLASS
+      : `${PROMPT_EDITOR_SHELL_CLASS} ${getPromptEditorShellStateClass(error)}`
 
     return (
       <div className={`${layoutClasses.outer} ${className}`}>
         <EditorContent
           editor={editor}
-          className={`${PROMPT_EDITOR_SHELL_CLASS} ${shellStateClass} ${layoutClasses.shell} ${editorShellClassName} ${disabled ? 'cursor-not-allowed opacity-50' : ''}`}
+          className={`${shellStateClass} ${layoutClasses.shell} ${editorShellClassName} ${disabled ? 'cursor-not-allowed opacity-50' : ''}`}
         />
         {(showCharacterCount || errorMessage) ? (
           <div className={`mt-1 flex items-start justify-between gap-2 ${UI_TEXT_META_CLASS}`}>

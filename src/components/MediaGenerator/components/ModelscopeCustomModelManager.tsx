@@ -187,7 +187,7 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
   return (
     <div className="flex flex-col h-full">
       <UiPanel variant="inset" className="mb-3 p-2.5">
-        <div className="text-xs text-blue-300">
+        <div className="text-xs text-text2">
           {t('modelscopeCustomModel.tip.prefix')}
           <UiButton
             type="button"
@@ -248,6 +248,7 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
               <div className="grid grid-cols-2 gap-2">
                 <UiOptionButton
                   type="button"
+                  variant="segment"
                   active={newModelType === 'imageGeneration'}
                   className="justify-center"
                   onClick={() => setNewModelType('imageGeneration')}
@@ -256,6 +257,7 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
                 </UiOptionButton>
                 <UiOptionButton
                   type="button"
+                  variant="segment"
                   active={newModelType === 'imageEditing'}
                   className="justify-center"
                   onClick={() => setNewModelType('imageEditing')}
@@ -320,6 +322,7 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
                       <div className="grid grid-cols-2 gap-2">
                         <UiOptionButton
                           type="button"
+                          variant="segment"
                           active={editModelType === 'imageGeneration'}
                           className="justify-center"
                           onClick={() => setEditModelType('imageGeneration')}
@@ -328,6 +331,7 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
                         </UiOptionButton>
                         <UiOptionButton
                           type="button"
+                          variant="segment"
                           active={editModelType === 'imageEditing'}
                           className="justify-center"
                           onClick={() => setEditModelType('imageEditing')}
@@ -337,9 +341,10 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
                       </div>
                     </div>
                     <div className="flex gap-2">
+                      {/* 行内编辑的保存用次级：这块面板的主动作是顶部“添加”，一个表面只留一个实底 */}
                       <UiButton
                         type="button"
-                        variant="primary"
+                        variant="secondary"
                         onClick={() => void handleSaveEdit(model.id)}
                         className="flex-1"
                       >
@@ -366,12 +371,12 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
                       </div>
                       <div className="flex gap-2 mt-1.5">
                         {model.modelType.imageGeneration && (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-blue-900/30 text-blue-300">
+                          <span className="inline-flex items-center rounded bg-raised px-2 py-0.5 text-xs text-text2">
                             {t('modelscopeCustomModel.types.imageGeneration')}
                           </span>
                         )}
                         {model.modelType.imageEditing && (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-green-900/30 text-green-300">
+                          <span className="inline-flex items-center rounded bg-raised px-2 py-0.5 text-xs text-text2">
                             {t('modelscopeCustomModel.types.imageEditing')}
                           </span>
                         )}

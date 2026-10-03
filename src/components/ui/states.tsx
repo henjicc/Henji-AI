@@ -42,6 +42,8 @@ interface UiErrorProps {
   onRetry?: () => void;
   retryLabel?: ReactNode;
   size?: StateSize;
+  /** 对齐：`center`（默认，独立区域）/ `start`（列表行内，与行首文字左对齐）。 */
+  align?: 'center' | 'start';
   className?: string;
 }
 
@@ -111,17 +113,19 @@ export function UiError({
   onRetry,
   retryLabel,
   size = 'md',
+  align = 'center',
   className = '',
 }: UiErrorProps): JSX.Element {
+  const start = align === 'start';
   return (
     <div
-      className={`flex flex-col items-center justify-center text-center ${resolvePadding(size)} ${className}`}
+      className={`flex flex-col ${start ? 'items-start text-left' : 'items-center justify-center text-center'} ${resolvePadding(size)} ${className}`}
       role="alert"
     >
       {title ? <div className="text-sm font-medium text-danger-text">{title}</div> : null}
       <p className={`mt-1.5 max-w-md break-words ${UI_TEXT_META_CLASS}`}>{message}</p>
       {(actions || onRetry) && (
-        <div className="mt-4 flex items-center justify-center gap-2">
+        <div className={`flex items-center gap-2 ${start ? 'mt-2' : 'mt-4 justify-center'}`}>
           {actions}
           {onRetry ? (
             <UiButton variant="secondary" onClick={onRetry}>

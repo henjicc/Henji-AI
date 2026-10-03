@@ -45,7 +45,8 @@
     },
     "button": {
       "queue": "Add to queue",
-      "generate": "Generate"
+      "generate": "Generate",
+      "addReference": "Add reference media"
     },
     "alerts": {
       "videoSize": {
@@ -426,6 +427,9 @@
     }
   },
   "workspaceFilters": {
+    "typeTabs": "Filter by type",
+    "searchHistory": "Search history",
+    "moreActions": "More actions",
     "searchPlaceholder": "Search prompt / model / provider / error",
     "clearSearch": "Clear search",
     "expandSearch": "Expand search",

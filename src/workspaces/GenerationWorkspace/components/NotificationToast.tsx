@@ -1,6 +1,6 @@
 import React from 'react'
 import type { ToastNotification } from '../types'
-import { UI_TEXT_BODY_CLASS } from '@/components/ui'
+import { UI_TEXT_BODY_CLASS, UiPanel } from '@/components/ui'
 import { Check, X } from 'lucide-react'
 
 export interface NotificationToastProps {
@@ -19,20 +19,15 @@ export function NotificationToast({ notification, visible }: NotificationToastPr
         visible ? 'translate-y-0 opacity-100' : '-translate-y-8 opacity-0 pointer-events-none'
       }`}
     >
-      <div
-        className={`px-6 py-3 rounded-xl shadow-panel border flex items-center gap-3 ${
-          isSuccess
-            ? 'bg-green-500/20 border-green-500/30 text-green-100'
-            : 'bg-red-500/20 border-red-500/30 text-red-100'
-        }`}
-      >
+      {/* 浮层通知：统一浮层表面，状态只进图标颜色 */}
+      <UiPanel role="status" className="flex items-center gap-2.5 px-4 py-2.5">
         {isSuccess ? (
-          <Check className="w-5 h-5" />
+          <Check aria-hidden="true" className="h-4 w-4 text-success-text" />
         ) : (
-          <X className="w-5 h-5" />
+          <X aria-hidden="true" className="h-4 w-4 text-danger-text" />
         )}
         <span className={UI_TEXT_BODY_CLASS}>{notification.message}</span>
-      </div>
+      </UiPanel>
     </div>
   )
 }

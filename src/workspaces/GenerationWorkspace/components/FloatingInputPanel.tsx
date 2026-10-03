@@ -51,15 +51,15 @@ export function FloatingInputPanel({
       onMouseMove={onMouseMove}
       data-layout-density={compact ? 'compact' : 'comfortable'}
     >
+      {/* 一整块实底输入卡片（设计稿 Generation）：浮在记录列表之上，是这页唯一的卡片 */}
       <UiPanel
-        variant="glass"
-        className="relative cursor-pointer overflow-hidden !rounded-3xl"
+        className="relative cursor-pointer overflow-hidden"
         style={{
           transition: uiTransition(['max-height'], UI_DURATION.slow),
-          maxHeight: isCollapsed || isCollapsing ? '52px' : '600px',
-          minHeight: isCollapsed || isCollapsing ? '52px' : 'auto',
+          maxHeight: isCollapsed || isCollapsing ? '48px' : '600px',
+          minHeight: isCollapsed || isCollapsing ? '48px' : 'auto',
           opacity: 1,
-          padding: compact ? '8px' : '12px',
+          padding: compact ? '8px' : '10px 10px 8px',
           overflow: isCollapsed && !isCollapsing ? 'visible' : 'hidden',
         }}
         onClick={() => {
@@ -71,23 +71,23 @@ export function FloatingInputPanel({
           style={{
             // 位移走 transform 而不是过渡 top：top 是布局属性，过渡期间每帧重排；
             // translateY 只走合成器。12px → -60px 等价于位移 -72px。
-            top: '12px',
+            top: '10px',
             transform: isCollapsed || isCollapsing ? 'translateY(0)' : 'translateY(-72px)',
             opacity: isCollapsed || isCollapsing ? 1 : 0,
             transition: uiTransition(['opacity', 'transform'], UI_DURATION.slow),
-            padding: isCollapsed || isCollapsing ? '0 32px' : '0 22px',
+            padding: isCollapsed || isCollapsing ? '0 16px' : '0 12px',
           }}
         >
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3 flex-1 min-w-0">
-              <span className="text-xs bg-accent/20 text-brand-300 px-2 py-1 rounded whitespace-nowrap">
+              <span className="whitespace-nowrap text-xs font-medium text-text2">
                 {displayModel}
               </span>
-              <span className="text-sm text-text-muted truncate flex-1">
+              <span className="flex-1 truncate text-13 text-text3">
                 {hintText}
               </span>
             </div>
-            <ChevronUp className="h-5 w-5 text-text-muted" />
+            <ChevronUp aria-hidden="true" className="h-4 w-4 text-text3" />
           </div>
         </div>
 

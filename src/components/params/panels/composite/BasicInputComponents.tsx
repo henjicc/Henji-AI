@@ -327,7 +327,7 @@ export const CompositeFileInput: React.FC<CompositeComponentProps<FileInputConfi
         </div>
       )}
       {hintText && <div className={UI_TEXT_META_CLASS}>{hintText}</div>}
-      {errorText && <div className="text-xs text-red-400">{errorText}</div>}
+      {errorText && <div className="text-xs text-danger-text">{errorText}</div>}
     </div>
   )
 }

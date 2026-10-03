@@ -45,7 +45,8 @@
     },
     "button": {
       "queue": "加入队列",
-      "generate": "开始生成"
+      "generate": "开始生成",
+      "addReference": "添加参考素材"
     },
     "alerts": {
       "videoSize": {
@@ -426,6 +427,9 @@
     }
   },
   "workspaceFilters": {
+    "typeTabs": "筛选类型",
+    "searchHistory": "搜索历史",
+    "moreActions": "更多操作",
     "searchPlaceholder": "搜索提示词 / 模型 / 提供商 / 错误信息",
     "clearSearch": "清空搜索",
     "expandSearch": "展开搜索",
