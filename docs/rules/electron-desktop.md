@@ -24,6 +24,15 @@ Electron 自动化脚本通过 CDP/Playwright 启动构建产物。需要临时�
 
 `electron-builder.yml` 当前配置：Windows NSIS/MSI、macOS DMG、GitHub Releases 发布通道、`better-sqlite3`/`sharp` 原生模块 unpack、manifest/seeds 资源分发。`resources/icons/` 是打包图标来源。
 
+随包原生程序与 FFmpeg（安装目录 `resources/resources/` 下，主进程只按 `process.resourcesPath` 定位，安装包不读开发目录与 `HENJI_*` 诊断变量）：
+
+- `henji-audio-worker.exe`：全平台，`build:audio-worker`（`scripts/build-audio-worker.cjs`）产出。
+- Windows 上两个自有原生程序都静态链接 MSVC C 运行时（`scripts/lib/nativeCrt.cjs` 给 cargo 加 `+crt-static`），不依赖干净机器上没有的 `VCRUNTIME140.dll`；FFmpeg（mingw 构建）只依赖系统自带的 UCRT。
+- `video-decoder/`（仅 Windows）：原生视频解码服务 `henji-video-decoder.exe`、7 个 FFmpeg DLL 与主进程 CLI 用的 `ffmpeg.exe`/`ffprobe.exe`，同一份 BtbN FFmpeg 9.0 GPL 共享构建（版本、地址、SHA256 唯一定义在 `scripts/video-decoder-ffmpeg.cjs`）。由 `build:video-decoder` 复制到 `native/video-decoder/target/release` 后经 `win.extraResources` 打包；Windows 不打包 `ffmpeg-ffprobe-static`（`win.files` 排除，macOS 维持现状）。
+- `licenses/`：`npm run gen:licenses` 生成（`electron:build` 以 `--strict` 运行，来源缺失或 FFmpeg 构建含 `--enable-nonfree`/缺 `--enable-version3` 即失败）——`README.txt`（许可概要、对应源码获取方式、专利说明）、项目 `LICENSE.txt`、`THIRD-PARTY-NOTICES.txt`（与设置“关于”同源）；Windows 另有 `ffmpeg/COPYING.GPLv3.txt`、`ffmpeg/BUILD-INFO.txt`（configure 输出、包与随包文件 SHA256）、`henji-video-decoder/NOTICE.txt`（原生服务链接 GPL 库，整体按 GPL-3.0-or-later 分发）。`third-party-licenses.json` 进渲染产物，不随包。
+
+`afterPack`（`scripts/electron-builder-after-pack.cjs`）在制作安装包前核对：`app.asar` 顶层只有 `out`/`package.json`/`node_modules`（平台级 `files` 只写排除项会让匹配规则退化成整个仓库，`win.files` 因此重复了顶层包含项）、自有原生程序不动态依赖 VC++ 运行库、`video-decoder/` 文件集合与构建来源逐字节一致（不混入 pdb）、许可文件齐全且 BUILD-INFO 与随包 FFmpeg 哈希一致、Windows 无 `ffmpeg-ffprobe-static` 与其他平台的可选二进制包（`@esbuild/*`、`@mariozechner/clipboard-*` 只留 win32-x64，`win.files` 用 `!(win32-x64)` 排除）、安装目录有 `LICENSES.chromium.html`；不符即中止打包。GPL 对应源码包用 `npm run package:source` 生成到 `release/source/<版本>/`（含 BtbN 构建启用的全部外部库源码，按各阶段自己的下载命令获取、不依赖 Docker；重要记录 016），作为 GitHub Release 附件发布（发布需用户确认，脚本不上传）。
+
 原生模块重建：`npm run electron:rebuild`。
 
 ## 已知发布限制（非功能阻塞）

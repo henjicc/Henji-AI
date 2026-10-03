@@ -15,6 +15,18 @@ extraResources:
     to: resources/assistant-skills
   - from: native/audio-worker/target/release/henji-audio-worker.exe
     to: resources/henji-audio-worker.exe
+  # 许可说明（任务 3.3）：README、项目 LICENSE、THIRD-PARTY-NOTICES（与“设置 → 关于”同源），Windows 另含
+  # FFmpeg GPLv3 全文与构建信息、原生解码服务许可声明；由 npm run gen:licenses 生成（electron:build 以 --strict 运行）。
+  # third-party-licenses.json 已进入渲染产物，指纹文件只供增量判断，二者不随包。
+  - from: resources/licenses
+    to: resources/licenses
+    filter:
+      - "**/*"
+      - "!third-party-licenses.json"
+      - "!.inputs.sha256"
+# 解包目录生成后、制作安装包前核对随包资源（原生服务与 FFmpeg 文件集合与字节、许可文件、Windows 无 ffmpeg-ffprobe-static），
+# 不符即中止打包；见 scripts/lib/packagedResources.cjs。
+afterPack: scripts/electron-builder-after-pack.cjs
 asarUnpack:
   - node_modules/better-sqlite3/**
   - node_modules/sharp/**
@@ -23,7 +35,8 @@ asarUnpack:
 win:
   icon: resources/icons/icon.ico
   # Windows 全项目只用一份 FFmpeg（BtbN 9.0 GPL 共享构建，重要记录 014）：原生解码服务、其 DLL 与主进程 CLI
-  # 用的 ffmpeg.exe/ffprobe.exe 同在 resources/video-decoder/（由 npm run build:video-decoder 产出到 target/release）。
+  # 用的 ffmpeg.exe/ffprobe.exe 同在 resources/video-decoder/（由 npm run build:video-decoder 产出到 target/release，
+  # electron:build 已串联；pdb 等开发产物不随包）。运行时只按 process.resourcesPath 定位，安装包不读开发目录与诊断变量。
   extraResources:
     - from: native/video-decoder/target/release
       to: resources/video-decoder
@@ -32,8 +45,16 @@ win:
         - "*.dll"
         - ffmpeg.exe
         - ffprobe.exe
+  # 平台级 files 会单独成为文件匹配器：只写排除项时 electron-builder 会补一个 "**/*"，把整个仓库打进 app.asar
+  # （3.3 实测 4.3GB，MSI 因单文件超 2GB 失败）。所以这里必须重复顶层的包含项，再加 Windows 排除项。
   files:
+    - out/**
+    - package.json
     - "!node_modules/ffmpeg-ffprobe-static{,/**/*}"
+    # npm 装上了所有平台的可选二进制包；Windows 安装包只保留 win32-x64（约省 300MB，任务 3.3）。esbuild 只被
+    # pi-coding-agent → chord 的构建期打包入口（chord/node、chord/bundler）引用，运行时不调用，保留本平台一份以防万一。
+    - "!**/node_modules/@esbuild/!(win32-x64){,/**/*}"
+    - "!**/node_modules/@mariozechner/clipboard-!(win32-x64-msvc){,/**/*}"
   target:
     - target: nsis
       arch:

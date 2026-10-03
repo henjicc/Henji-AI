@@ -27,6 +27,7 @@ const fs = require('node:fs')
 const https = require('node:https')
 const path = require('node:path')
 const { spawn, spawnSync } = require('node:child_process')
+const { withStaticMsvcCrt } = require('./lib/nativeCrt.cjs')
 
 const root = path.resolve(__dirname, '..')
 const crateDir = path.join(root, 'native', 'video-decoder')
@@ -39,6 +40,10 @@ const FFMPEG_BUILD = Object.freeze({
   asset: 'ffmpeg-n9.0.2-17-g2a571b6068-win64-gpl-shared-9.0.zip',
   sha256: '3da6c7b60bb9ccd73ec5b5e815ba804a0879eb362ba0e3beebce50174c022696',
   size: 86321582,
+  // GPL 对应源码（任务 3.3）：FFmpeg 官方提交（release/9.0 分支）与 BtbN 该发布标签指向的构建脚本提交。
+  variant: 'win64-gpl-shared-9.0',
+  sourceCommit: '2a571b606854520cf89804d8030c8b328e621689',
+  buildScriptsCommit: '6c9aec5fc9a72ec3abedd1fa84db141fa18cf52b',
 })
 const FFMPEG_URL = `https://github.com/BtbN/FFmpeg-Builds/releases/download/${FFMPEG_BUILD.releaseTag}/${FFMPEG_BUILD.asset}`
 const ffmpegDir = path.join(ffmpegRoot, FFMPEG_BUILD.asset.replace(/\.zip$/, ''))
@@ -64,14 +69,14 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-function downloadOnce(url, destination, redirects = 0) {
+function downloadOnce(url, destination, expectedSize, redirects = 0) {
   return new Promise((resolve, reject) => {
     const request = https.get(url, { headers: { 'User-Agent': 'henji-ai-build' }, timeout: 60_000 }, (response) => {
       const status = response.statusCode ?? 0
       if (status >= 300 && status < 400 && response.headers.location) {
         response.resume()
         if (redirects > 5) return reject(new Error('下载重定向次数过多'))
-        return resolve(downloadOnce(new URL(response.headers.location, url).toString(), destination, redirects + 1))
+        return resolve(downloadOnce(new URL(response.headers.location, url).toString(), destination, expectedSize, redirects + 1))
       }
       if (status !== 200) {
         response.resume()
@@ -86,7 +91,7 @@ function downloadOnce(url, destination, redirects = 0) {
         received += chunk.length
         if (Date.now() - lastReport > 5_000) {
           lastReport = Date.now()
-          log(`已下载 ${(received / 1048576).toFixed(1)} / ${(FFMPEG_BUILD.size / 1048576).toFixed(1)} MiB`)
+          log(`已下载 ${(received / 1048576).toFixed(1)}${expectedSize ? ` / ${(expectedSize / 1048576).toFixed(1)}` : ''} MiB`)
         }
       })
       response.pipe(file)
@@ -99,10 +104,11 @@ function downloadOnce(url, destination, redirects = 0) {
   })
 }
 
-async function downloadWithRetry(url, destination) {
+/** 临时网络故障按 2/5/10/30/60 秒退避重试；证书错误与 4xx 立即失败（AGENTS.md 网络故障规则）。源码包脚本复用。 */
+async function downloadWithRetry(url, destination, expectedSize = null) {
   for (let attempt = 0; ; attempt += 1) {
     try {
-      return await downloadOnce(url, destination)
+      return await downloadOnce(url, destination, expectedSize)
     } catch (error) {
       const message = error instanceof Error ? `${error.code ?? ''} ${error.message}` : String(error)
       // 认证/证书错误与 4xx 不是临时故障，停止盲重试。
@@ -165,7 +171,7 @@ async function ensureFfmpeg() {
   if (!fs.existsSync(zipPath) || (await sha256File(zipPath)) !== FFMPEG_BUILD.sha256) {
     const partial = `${zipPath}.partial`
     log(`下载 FFmpeg ${FFMPEG_BUILD.version}（GPL 共享库）：${FFMPEG_URL}`)
-    await downloadWithRetry(FFMPEG_URL, partial)
+    await downloadWithRetry(FFMPEG_URL, partial, FFMPEG_BUILD.size)
     const digest = await sha256File(partial)
     if (digest !== FFMPEG_BUILD.sha256) {
       fs.rmSync(partial, { force: true })
@@ -224,7 +230,8 @@ function msvcDeveloperEnv(env) {
 }
 
 function cargoEnv() {
-  const env = { ...process.env }
+  // 静态链接 MSVC C 运行时：干净机器没有 VCRUNTIME140.dll（scripts/lib/nativeCrt.cjs，任务 3.3）。
+  const env = withStaticMsvcCrt({ ...process.env })
   const developerEnv = msvcDeveloperEnv(env)
   for (const [key, value] of Object.entries(developerEnv)) {
     const existing = Object.keys(env).find((name) => name.toLowerCase() === key.toLowerCase())
@@ -288,7 +295,22 @@ async function main() {
   throw new Error(`未知命令：${command}`)
 }
 
-module.exports = { FFMPEG_BUILD, FFMPEG_URL, ffmpegDir, ffmpegBinDir, CURRENT_POINTER, ensureFfmpeg, isReady, isSupportedPlatform }
+module.exports = {
+  CLI_EXECUTABLES,
+  CURRENT_POINTER,
+  FFMPEG_BUILD,
+  FFMPEG_DLL,
+  FFMPEG_URL,
+  crateDir,
+  downloadWithRetry,
+  ensureFfmpeg,
+  ffmpegBinDir,
+  ffmpegDir,
+  isReady,
+  isSupportedPlatform,
+  runtimeFiles,
+  sha256File,
+}
 
 if (require.main === module) {
   main().catch((error) => {

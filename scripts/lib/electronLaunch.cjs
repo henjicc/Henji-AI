@@ -6,6 +6,7 @@ const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
 const process = require('node:process')
+const { resolveLaunchTarget } = require('./electronLaunchTarget.cjs')
 
 const ONBOARDING_STORAGE_KEY = 'henji-onboarding-state'
 const AUTOMATION_ONBOARDING_STATE = JSON.stringify({
@@ -220,6 +221,10 @@ function assertBuildFreshness(mainEntry) {
  * **safeStorage 于是用另一把密钥**——用户真实的供应商凭据全部解不开，日志里刷出一片
  * `keystore.decrypt.failed`，看上去像"这台机器的密钥坏了"。真实凭据必须可用的验收
  * （付费闭环）一律传 `appPath: 仓库根目录`，让应用保持自己的身份与 userData。
+ *
+ * `executablePath`（或环境变量 `HENJI_ELECTRON_EXECUTABLE`）可选地改为启动打包产物的可执行文件
+ * （如 release/win-unpacked/痕迹AI.exe）：不传主入口、不查 out/ 新鲜度、工作目录改为可执行文件目录，
+ * 其余（隔离资料、静音、CDP、引导抑制）不变。未设置时行为与以往完全相同。见 electronLaunchTarget.cjs。
  */
 async function launchElectronApp({
   mainEntry,
@@ -231,12 +236,13 @@ async function launchElectronApp({
   extraArgs = [],
   reuseUserDataDir = null,
   appPath = null,
+  executablePath = null,
 } = {}) {
-  assertBuildFreshness(mainEntry)
+  const target = resolveLaunchTarget({ executablePath, defaultExecutable: electronExecutablePath, mainEntry, appPath, cwd })
+  if (!target.packaged) assertBuildFreshness(mainEntry)
   const userDataDir = reuseUserDataDir ?? (isolateUserData ? createIsolatedUserDataDir() : null)
   const ownedUserDataDir = reuseUserDataDir ? null : userDataDir
-  const entryArg = appPath ?? mainEntry
-  const launchArgs = userDataDir ? [`--user-data-dir=${userDataDir}`, entryArg] : [entryArg]
+  const launchArgs = userDataDir ? [`--user-data-dir=${userDataDir}`, ...target.entryArgs] : [...target.entryArgs]
   // Automated runs keep the whole audio pipeline (mixing, meters, audio clock, export) but never reach the
   // speakers; Chromium mutes only the final output.
   launchArgs.push('--mute-audio')
@@ -260,9 +266,9 @@ async function launchElectronApp({
   if (useElectronApi || process.env.HENJI_SMOKE_USE_ELECTRON_API === '1') {
     try {
       const app = await electron.launch({
-        executablePath: electronExecutablePath,
+        executablePath: target.executable,
         args: launchArgs,
-        cwd,
+        cwd: target.cwd,
         env: createElectronEnv(launchEnv),
       })
       const page = await app.firstWindow({ timeout: 30000 })
@@ -300,10 +306,10 @@ async function launchElectronApp({
 
   const port = getCdpPort()
   const child = spawn(
-    electronExecutablePath,
+    target.executable,
     launchArgs,
     {
-      cwd,
+      cwd: target.cwd,
       env: createElectronEnv({
         HENJI_ELECTRON_REMOTE_DEBUGGING_PORT: String(port),
         ...launchEnv,

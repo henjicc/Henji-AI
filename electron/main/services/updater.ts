@@ -48,6 +48,18 @@ export type UpdaterEventDto =
 
 const RELEASES_URL = 'https://github.com/henjicc/Henji-AI/releases'
 
+/**
+ * electron-updater 在“发布源里没有可用的更新元数据”时抛出的错误码：最新 Release 没有 latest.yml 等通道文件
+ * （如自动更新启用前发布的旧版本），或仓库还没有任何发布。这表示暂无可经自动更新安装的版本，不是检查失败——
+ * 按“暂无可用更新”处理并记 warn；网络、证书、签名等其他错误仍按 error。
+ */
+const NO_UPDATE_METADATA_CODES = new Set(['ERR_UPDATER_CHANNEL_FILE_NOT_FOUND', 'ERR_UPDATER_NO_PUBLISHED_VERSIONS'])
+
+export function isNoUpdateMetadataError(error: unknown): boolean {
+  const code = error && typeof error === 'object' && 'code' in error ? (error as { code?: unknown }).code : undefined
+  return typeof code === 'string' && NO_UPDATE_METADATA_CODES.has(code)
+}
+
 const logger = createMainLogger('main.updater')
 
 let currentStatus: UpdaterCheckResultDto = {
@@ -197,11 +209,25 @@ function configureUpdater(): void {
   })
 
   autoUpdater.on('error', (error) => {
+    if (isNoUpdateMetadataError(error)) {
+      markNoUpdateMetadata(error)
+      return
+    }
     setStatus('error', {
       ...makeBaseStatus('error'),
       errorMessage: error.message,
     })
   })
+}
+
+function markNoUpdateMetadata(error: unknown): UpdaterCheckResultDto {
+  if (currentStatus.status === 'not-available') return currentStatus
+  const code = (error as { code?: string }).code
+  logger.warn('发布源没有可用的自动更新信息，按暂无可用更新处理', {
+    event: 'updater.metadata.missing',
+    context: { code, currentVersion: app.getVersion() },
+  })
+  return setStatus('not-available', makeBaseStatus('not-available'))
 }
 
 function isUpdaterEnabledInThisEnvironment(): boolean {
@@ -232,7 +258,13 @@ export async function checkForElectronUpdates(): Promise<UpdaterCheckResultDto> 
     })
   }
 
-  const result = await autoUpdater.checkForUpdates()
+  let result: Awaited<ReturnType<typeof autoUpdater.checkForUpdates>>
+  try {
+    result = await autoUpdater.checkForUpdates()
+  } catch (error) {
+    if (isNoUpdateMetadataError(error)) return markNoUpdateMetadata(error)
+    throw error
+  }
   if (!result?.updateInfo) {
     return currentStatus
   }

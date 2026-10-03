@@ -141,10 +141,47 @@ jobs:
       - name: 完整原生 SQLite 清单（禁止零用例、跳过或漏文件）
         run: npm run test:assistant-persistence
 
+  # 原生视频解码服务（native/video-decoder，只支持 Windows x64，重要记录 005/014）：
+  # FFmpeg 由 scripts/video-decoder-ffmpeg.cjs 按固定版本下载并校验 SHA256（与本地开发、打包同一入口，不另写下载逻辑；
+  # 下载自带 2/5/10/30/60 秒退避重试），随后 cargo test 与 release 构建。runner 没有硬件显卡，
+  # 依赖真实 D3D11 设备的用例按设计跳过（像素与 4K60 由本机 Reality video-decode 验收）。
+  video-decoder-tests:
+    name: 原生视频解码服务（Rust + FFmpeg）
+    runs-on: windows-latest
+    timeout-minutes: 45
+    env:
+      CARGO_TERM_COLOR: always
+      CARGO_NET_RETRY: '10'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: 安装 Rust 工具链
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+      - name: 缓存 cargo 依赖与构建产物
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: native/video-decoder -> target
+      - name: 获取并校验 FFmpeg（BtbN 固定版本 + SHA256）
+        run: node scripts/video-decoder-ffmpeg.cjs ensure
+      - name: 原生服务测试（cargo test）
+        run: node scripts/video-decoder-ffmpeg.cjs test --locked
+      - name: 原生服务 release 构建与随包文件
+        shell: bash
+        run: |
+          node scripts/video-decoder-ffmpeg.cjs build
+          ls -la native/video-decoder/target/release/*.exe native/video-decoder/target/release/*.dll
+          test -f native/video-decoder/target/release/henji-video-decoder.exe
+          test -f native/video-decoder/target/release/ffmpeg.exe
+          test -f native/video-decoder/target/release/ffprobe.exe
+
   quality-gate:
     name: 质量门禁
     if: always()
-    needs: [checks, gpu-tests, image-export-tests, native-tests]
+    needs: [checks, gpu-tests, image-export-tests, native-tests, video-decoder-tests]
     runs-on: ubuntu-latest
     steps:
       - name: 所有必跑检查成功才允许交付
@@ -153,11 +190,13 @@ jobs:
           GPU_RESULT: ${{ needs.gpu-tests.result }}
           IMAGE_EXPORT_RESULT: ${{ needs.image-export-tests.result }}
           NATIVE_RESULT: ${{ needs.native-tests.result }}
+          VIDEO_DECODER_RESULT: ${{ needs.video-decoder-tests.result }}
         run: |
           test "$CHECKS_RESULT" = success
           test "$GPU_RESULT" = success
           test "$IMAGE_EXPORT_RESULT" = success
           test "$NATIVE_RESULT" = success
+          test "$VIDEO_DECODER_RESULT" = success
 
   # ---------------------------------------------------------------------------
   # 安装包构建：只在推 v* 标签或手动触发时运行。
@@ -220,12 +259,33 @@ jobs:
       - name: 安装依赖
         run: npm ci
 
-      # electron:build 内部已串联 gen:seeds / gen:manifest / check:* / tsc / electron-vite build
+      # audio-worker（全平台）与原生视频解码服务（Windows）都由 electron:build 内的 cargo 构建。
+      - name: 安装 Rust 工具链
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: 缓存 cargo 依赖与构建产物
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            native/audio-worker -> target
+            native/video-decoder -> target
+
+      # 与 electron:build 内 prepare:media-binaries / build:video-decoder 同一入口；单独成步便于在日志里看到下载与校验。
+      - name: 获取并校验 FFmpeg（Windows）
+        if: runner.os == 'Windows'
+        run: node scripts/video-decoder-ffmpeg.cjs ensure
+
+      # electron:build 内部已串联 gen:seeds / gen:manifest / build:audio-worker / build:video-decoder /
+      # gen:licenses --strict / check:* / tsc / electron-vite build。
       - name: 构建应用
+        env:
+          CARGO_NET_RETRY: '10'
         run: npm run electron:build
 
       # 未配置代码签名证书：显式关闭 macOS 自动签名发现，避免因找不到证书而失败。
       # 产物为未签名状态，这是当前已知的发布限制。
+      # electron-builder afterPack（scripts/electron-builder-after-pack.cjs）在制作安装包前核对随包原生服务、
+      # FFmpeg 与许可文件，不符即失败。GPL 对应源码包（npm run package:source）需用户确认后随 Release 发布，这里不自动上传。
       - name: 打包并发布安装包
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

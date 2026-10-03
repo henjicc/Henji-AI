@@ -3,8 +3,11 @@
  * 生成第三方开源组件许可清单（设置 → 关于 与安装包共用同一份产物）。
  *
  * 产物（不入 Git，构建时生成）：
- *   resources/licenses/third-party-licenses.json  结构化清单，渲染层“关于”页面读取
- *   resources/licenses/THIRD-PARTY-NOTICES.txt     同一份数据渲染的纯文本，随安装包分发（3.3 接入 extraResources）
+ *   resources/licenses/third-party-licenses.json  结构化清单，渲染层“关于”页面读取（不随包）
+ *   resources/licenses/THIRD-PARTY-NOTICES.txt     同一份数据渲染的纯文本，随安装包分发
+ *   resources/licenses/README.txt、LICENSE.txt、ffmpeg/*、henji-video-decoder/NOTICE.txt
+ *                                                 随包许可说明（任务 3.3，见 scripts/lib/distributionNotices.cjs）
+ * resources/licenses 整体经 electron-builder.yml extraResources 进入安装包（排除 json 与指纹文件）。
  *
  * 选型（详见任务 3.4 执行记录）：npm 侧用 npm 自带的 `npm ls`（Arborist 依赖树），Rust 侧用 cargo 自带的
  * `cargo metadata`，不引入额外依赖；许可全文取组件自带文件。
@@ -34,6 +37,13 @@ const {
   sqliteBlessingFromHeader,
   sqliteVersionFromHeader,
 } = require('./lib/thirdPartyLicenses.cjs')
+const {
+  DISTRIBUTED_LICENSE_FILES,
+  WINDOWS_ONLY_LICENSE_FILES,
+  renderFfmpegBuildInfo,
+  renderLicenseReadme,
+  renderVideoDecoderNotice,
+} = require('./lib/distributionNotices.cjs')
 
 const root = path.resolve(__dirname, '..')
 const outputDir = path.join(root, 'resources', 'licenses')
@@ -75,6 +85,7 @@ function inputFingerprint(options) {
     'package.json', 'package-lock.json', 'LICENSE',
     'native/video-decoder/ffmpeg/current.json',
     'scripts/generate-third-party-licenses.cjs', 'scripts/lib/thirdPartyLicenses.cjs',
+    'scripts/lib/distributionNotices.cjs', 'scripts/video-decoder-ffmpeg.cjs',
     ...NATIVE_CRATES.map((crate) => `${crate.dir}/Cargo.lock`),
   ]
   for (const file of files) hash.update(`${file}\n${readTextIfExists(path.join(root, file)) ?? ''}\n`)
@@ -164,7 +175,7 @@ function ffmpegRuntime(options, textTable, referenceTexts) {
   const versionResult = spawnSync(path.join(ffmpegBinDir, 'ffmpeg.exe'), ['-hide_banner', '-version'], {
     encoding: 'utf8', windowsHide: true, timeout: 30_000,
   })
-  const commit = FFMPEG_BUILD.version.match(/-g([0-9a-f]+)$/)?.[1]
+  const commit = FFMPEG_BUILD.sourceCommit ?? FFMPEG_BUILD.version.match(/-g([0-9a-f]+)$/)?.[1]
   return {
     id: 'runtime:ffmpeg', name: 'FFmpeg', version: FFMPEG_BUILD.version.replace(/^n/, ''),
     license: 'GPL-3.0-or-later', ecosystem: 'runtime', homepage: 'https://ffmpeg.org',
@@ -267,20 +278,80 @@ function generate(options) {
   return { notices, missing }
 }
 
-function main() {
+async function ffmpegDistributionFiles(options) {
+  if (options.platform !== 'win32') return { files: {}, problems: [] }
+  const { FFMPEG_BUILD, FFMPEG_URL, ffmpegDir, ffmpegBinDir, isReady, runtimeFiles, sha256File } = require('./video-decoder-ffmpeg.cjs')
+  if (!isReady()) return { files: {}, problems: ['FFmpeg：未找到已就绪的 FFmpeg 包（先运行 npm run build:video-decoder）'] }
+  const ffmpeg = path.join(ffmpegBinDir, 'ffmpeg.exe')
+  const run = (args) => spawnSync(ffmpeg, ['-hide_banner', ...args], { encoding: 'utf8', windowsHide: true, timeout: 30_000 })
+  const version = run(['-version'])
+  const license = run(['-L'])
+  const gplText = readTextIfExists(path.join(ffmpegDir, 'LICENSE.txt'))
+  const problems = []
+  if (version.status !== 0) problems.push(`FFmpeg：ffmpeg -version 失败（退出码 ${version.status}）`)
+  if (!gplText || !/GNU GENERAL PUBLIC LICENSE\s+Version 3/.test(gplText)) problems.push('FFmpeg：BtbN 包内 LICENSE.txt 不是 GPLv3 全文')
+  const files = []
+  for (const file of runtimeFiles().sort()) {
+    files.push({ name: path.basename(file), size: fs.statSync(file).size, sha256: await sha256File(file) })
+  }
+  const { text, inspected } = renderFfmpegBuildInfo({ ffmpegBuild: FFMPEG_BUILD, url: FFMPEG_URL, versionOutput: version.stdout, licenseOutput: license.stdout, files })
+  problems.push(...inspected.problems.map((problem) => `FFmpeg：${problem}`))
+  return {
+    files: {
+      [DISTRIBUTED_LICENSE_FILES.ffmpegLicense]: gplText ?? '',
+      [DISTRIBUTED_LICENSE_FILES.ffmpegBuildInfo]: text,
+    },
+    ffmpegBuild: FFMPEG_BUILD,
+    problems,
+  }
+}
+
+/** 随包许可说明（README、项目许可、FFmpeg 许可与构建信息、原生服务声明）。 */
+async function writeDistributionFiles(options, notices) {
+  const ffmpeg = await ffmpegDistributionFiles(options)
+  const files = {
+    [DISTRIBUTED_LICENSE_FILES.projectLicense]: fs.readFileSync(path.join(root, 'LICENSE'), 'utf8'),
+    [DISTRIBUTED_LICENSE_FILES.readme]: renderLicenseReadme({
+      productName: PRODUCT_NAME, appVersion: notices.project.version, platform: options.platform, ffmpegBuild: ffmpeg.ffmpegBuild ?? null,
+    }),
+    ...ffmpeg.files,
+  }
+  if (ffmpeg.ffmpegBuild) {
+    files[DISTRIBUTED_LICENSE_FILES.videoDecoderNotice] = renderVideoDecoderNotice({ appVersion: notices.project.version, ffmpegBuild: ffmpeg.ffmpegBuild })
+  }
+  // 换平台或 FFmpeg 不可用时清掉上一次的 Windows 专属文件，避免旧文件混进安装包。
+  for (const file of WINDOWS_ONLY_LICENSE_FILES) {
+    if (!(file in files)) fs.rmSync(path.join(outputDir, file), { force: true })
+  }
+  for (const [file, content] of Object.entries(files)) {
+    const target = path.join(outputDir, file)
+    fs.mkdirSync(path.dirname(target), { recursive: true })
+    fs.writeFileSync(target, content.endsWith('\n') ? content : `${content}\n`)
+  }
+  return ffmpeg.problems
+}
+
+function distributionFilesPresent(options) {
+  const required = Object.values(DISTRIBUTED_LICENSE_FILES)
+    .filter((file) => options.platform === 'win32' || !WINDOWS_ONLY_LICENSE_FILES.includes(file))
+  return required.every((file) => fs.existsSync(path.join(outputDir, file)))
+}
+
+async function main() {
   const options = parseArgs(process.argv.slice(2))
   const fingerprint = inputFingerprint(options)
-  if (!options.force && fs.existsSync(JSON_FILE) && fs.existsSync(TEXT_FILE) && readTextIfExists(STAMP_FILE)?.trim() === fingerprint) {
+  if (!options.force && fs.existsSync(JSON_FILE) && fs.existsSync(TEXT_FILE) && distributionFilesPresent(options) && readTextIfExists(STAMP_FILE)?.trim() === fingerprint) {
     log('输入未变化，沿用现有清单。')
     return
   }
   const startedAt = Date.now()
   const { notices, missing } = generate(options)
+  fs.mkdirSync(outputDir, { recursive: true })
+  missing.push(...await writeDistributionFiles(options, notices))
   if (missing.length > 0) {
     for (const item of missing) console.warn(`[licenses] 缺少来源 ${item}`)
     if (options.strict) throw new Error('许可清单来源不完整（--strict）。')
   }
-  fs.mkdirSync(outputDir, { recursive: true })
   fs.writeFileSync(JSON_FILE, JSON.stringify(notices))
   fs.writeFileSync(TEXT_FILE, renderNoticesText(notices))
   // 来源不完整时不写指纹，下次运行会重新尝试补齐。
@@ -291,12 +362,10 @@ function main() {
 }
 
 if (require.main === module) {
-  try {
-    main()
-  } catch (error) {
+  main().catch((error) => {
     console.error(`[licenses] ${error instanceof Error ? error.message : String(error)}`)
     process.exitCode = 1
-  }
+  })
 }
 
 module.exports = { generate, parseArgs }

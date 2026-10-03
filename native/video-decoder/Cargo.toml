@@ -4,6 +4,8 @@ version = "0.1.0"
 edition = "2021"
 description = "Henji-AI 原生视频解码服务：长期驻留子进程，FFmpeg（GPL 共享库，重要记录 014）解码，D3D11 纹理输出"
 publish = false
+# 源码按项目 Apache-2.0 发布；可执行文件动态链接 GPL FFmpeg，整体按 GPL-3.0-or-later 分发（重要记录 014、任务 3.3）。
+license = "GPL-3.0-or-later"
 
 [[bin]]
 name = "henji-video-decoder"
