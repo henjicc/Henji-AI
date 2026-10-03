@@ -306,7 +306,10 @@ function createVideoEditCompositeEditScene({ pressureOnly = false } = {}) {
         const drag = await page.evaluate(() => { window.__compositeInputObserver.disconnect(); window.__compositeDragObserver.disconnect(); return window.__compositeDrag })
         const during = drag.frames.filter(sample => sample.at <= endedAt); const latencies = during.map(sample => { const input = drag.inputs.find(input => input.frame === sample.frame && input.at <= sample.at); return input ? sample.at - input.at : null }).filter(value => value !== null)
         const final = drag.frames.findLast(sample => sample.frame === 180); assert.ok(final); assert.ok(latencies.length)
-        evidence.drag = { ...drag, actualUpdatesPerSecond: during.length * 1000 / (endedAt - drag.inputs[0].at), latencyP95Ms: quantile(latencies, .95), finalSettleMs: Math.max(0, final.at - endedAt) }; store()
+        // Long gaps (task 3.2) attributed to decode / GPU submission when those take at least half of the gap, otherwise to
+        // presentation; reported separately, never part of the assertions.
+        const longGaps = during.slice(1).map((sample, index) => ({ fromFrame: during[index].frame, toFrame: sample.frame, gapMs: Math.round(sample.at - during[index].at), decodeMs: Math.round(sample.decodeMs), gpuMs: Math.round(sample.gpuMs) })).filter(gap => gap.gapMs > 50).map(gap => ({ ...gap, cause: gap.decodeMs >= gap.gapMs / 2 ? 'decode' : gap.gpuMs >= gap.gapMs / 2 ? 'gpu' : 'presentation' }))
+        evidence.drag = { ...drag, actualUpdatesPerSecond: during.length * 1000 / (endedAt - drag.inputs[0].at), latencyP95Ms: quantile(latencies, .95), finalSettleMs: Math.max(0, final.at - endedAt), longGaps }; store()
         assert.ok(evidence.drag.actualUpdatesPerSecond >= 58); assert.ok(evidence.drag.latencyP95Ms < 100); assert.ok(evidence.drag.finalSettleMs < 100)
         await shot('composite-32-track-500-clip-code-filter-original-4k60'); await button(page, '关闭工程').click(); await waitReleased(page)
         evidence.resources = await workerSnapshot(page); assert.equal(evidence.resources.live, 0)

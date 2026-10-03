@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { createVideoEditDocument, videoEditComposition, type VideoEditClip } from '@/core/videoEdit/document'
+import { videoEditPictureSeconds } from '@/core/videoEdit/time'
 import { VideoEditRenderer } from './videoEditRenderer'
 import type { CodeMaterialProgram } from '@/core/videoEdit/codeMaterial/contract'
 import { compileCodeMaterial } from '@/core/videoEdit/codeMaterial/compiler'
@@ -10,6 +11,10 @@ import { VideoEditNativePicture } from './videoEditNativePicture'
 import type { NativeVideoFrame } from './videoEditNativeFrames'
 
 const boundary = vi.hoisted(() => ({ scheduled: [] as Array<{ path: string; timestamps: number[] }>, disposed: [] as string[], pictures: [] as number[], generatorCalls: 0, compilerCalls: 0, compilerDisposed: 0, failGenerator: false, released: [] as string[][], pendingCode: undefined as Promise<CodeMaterialProgram> | undefined, snapshotCalls: [] as boolean[], normalizedReleased: 0, pendingSnapshot: undefined as Promise<void> | undefined, draws: [] as Array<{ ids: string[]; timestamps: number[]; offscreen: boolean }>, mixes: [] as number[] }))
+/** The start of the 60fps picture showing at `time` (exact grid times stay exact despite floating point). */
+const gridPicture = vi.hoisted(() => (time: number, fps = 60): number => Math.floor(time * fps + 1e-6) / fps)
+/** Source seconds compared at whole microseconds (picture starts computed on the grid vs. expectations summed in seconds). */
+const us = (values: ReadonlyArray<number | undefined>): Array<number | undefined> => values.map(value => value === undefined ? undefined : Math.round(value * 1e6))
 vi.mock('@/core/logging', () => ({ createLogger: () => ({ debug: vi.fn(), warn: vi.fn() }) }))
 vi.mock('./videoEditCodeCompiler', async () => {
   const { compileCodeMaterial } = await import('@/core/videoEdit/codeMaterial/compiler')
@@ -31,9 +36,10 @@ vi.mock('mediabunny', async () => {
     },
     VideoSampleSink: class {
       constructor(readonly track: { path: string }) {}
-      async getSample(time: number) { return { timestamp: time || (this.track.path.includes('B') ? 2 : 1), duration: 1 / 60, format: 'NV12', close: vi.fn() } }
-      async *samples(start: number) { for (let frame = 0; frame < 4; frame++) yield { timestamp: start + frame / 60, duration: 1 / 60, format: 'NV12', close: vi.fn() } }
-      async *samplesAtTimestamps(timestamps: number[]) { boundary.scheduled.push({ path: this.track.path, timestamps: [...timestamps] }); for (const timestamp of timestamps) yield { timestamp, duration: 1 / 60, format: 'NV12', close: vi.fn() } }
+      // Like a decoder: the last 60fps picture starting at or before the time (lookups carry the container timestamp tolerance).
+      async getSample(time: number) { return { timestamp: gridPicture(time) || (this.track.path.includes('B') ? 2 : 1), duration: 1 / 60, format: 'NV12', close: vi.fn() } }
+      async *samples(start: number) { for (let frame = 0; frame < 4; frame++) yield { timestamp: gridPicture(start) + frame / 60, duration: 1 / 60, format: 'NV12', close: vi.fn() } }
+      async *samplesAtTimestamps(timestamps: number[]) { boundary.scheduled.push({ path: this.track.path, timestamps: [...timestamps] }); for (const timestamp of timestamps) yield { timestamp: gridPicture(timestamp), duration: 1 / 60, format: 'NV12', close: vi.fn() } }
     },
     AudioSampleSink: class {
       constructor(readonly track: { path: string }) {}
@@ -96,16 +102,16 @@ it('真实转场窗口准备两端原视频余量，不改片段时钟，禁用�
       boundary.draws = []
       const result = await renderer.render(frame); await result.completion
       expect(result.presented).toBe(true)
-      expect(result.sourceTimestamps).toEqual(expect.arrayContaining([1 + frame / 60, 1 + (frame - 60) / 60])); expect(result.sourceTimestamps).toHaveLength(2)
-      expect(boundary.draws).toEqual([
-        { ids: [base.id], timestamps: [1 + frame / 60], offscreen: true },
-        { ids: ['right'], timestamps: [1 + (frame - 60) / 60], offscreen: true },
+      expect(us(result.sourceTimestamps)).toEqual(expect.arrayContaining(us([1 + frame / 60, 1 + (frame - 60) / 60]))); expect(result.sourceTimestamps).toHaveLength(2)
+      expect(boundary.draws.map(draw => ({ ...draw, timestamps: us(draw.timestamps) }))).toEqual([
+        { ids: [base.id], timestamps: us([1 + frame / 60]), offscreen: true },
+        { ids: ['right'], timestamps: us([1 + (frame - 60) / 60]), offscreen: true },
         { ids: [base.id], timestamps: [undefined], offscreen: false },
       ])
     }
     expect(boundary.mixes).toEqual([0, 5 / 9, 1]); expect(boundary.compilerCalls).toBe(0)
     boundary.draws = []; await renderer.render(65)
-    expect(boundary.draws).toEqual([{ ids: ['right'], timestamps: [1 + 5 / 60], offscreen: false }])
+    expect(boundary.draws.map(draw => ({ ...draw, timestamps: us(draw.timestamps) }))).toEqual([{ ids: ['right'], timestamps: us([1 + 5 / 60]), offscreen: false }])
     const decodes = boundary.snapshotCalls.length
     await renderer.updateDocument({ ...document, tracks: document.tracks.map(track => track.index === 1 ? { ...track, enabled: false } : track) })
     boundary.draws = []; const hidden = await renderer.render(55)
@@ -323,11 +329,12 @@ it('正向播放按文件建立一条解码计划：同文件剪辑点复用同�
     expect(boundary.scheduled).toHaveLength(0)
     for (let frame = 51; frame <= 61; frame++) {
       const result = await renderer.render(frame, true); await result.completion
-      expect(result.sourceTimestamps).toEqual([frame < 60 ? 1 + frame / 60 : (frame - 60) / 60])
+      expect(us(result.sourceTimestamps)).toEqual(us([frame < 60 ? 1 + frame / 60 : (frame - 60) / 60]))
     }
     // Both clips of D:/A.mp4 came from one generator (one decoder); the cut jumped back inside it.
     expect(boundary.scheduled.map(entry => entry.path)).toEqual(['D:/A.mp4'])
-    expect(boundary.scheduled[0].timestamps.slice(0, 10)).toEqual(Array.from({ length: 9 }, (_, index) => 1 + (51 + index) / 60).concat([0]))
+    // The schedule asks for picture times: source time plus the container timestamp tolerance (task 3.2, D3).
+    expect(boundary.scheduled[0].timestamps.slice(0, 10)).toEqual(Array.from({ length: 9 }, (_, index) => 1 + (51 + index) / 60).concat([0]).map(videoEditPictureSeconds))
     const internals = renderer as unknown as { playback?: unknown }
     expect(internals.playback).toBeDefined()
     await (await renderer.render(61, false)).completion
@@ -356,13 +363,13 @@ it('渲染器只经注入的帧源后端取帧：定位、顺序、正向计划�
     open(media) {
       opened.push(media.path)
       return { key: media.path, ready: Promise.resolve({ codec: 'avc1',
-        clipFrames: () => ({ async *frames(start: number) { calls.push('frames'); for (let frame = 0; frame < 4; frame++) yield picture(start + frame / 60) }, async frameAt(time: number) { calls.push('frameAt'); return picture(time) } }),
+        clipFrames: () => ({ async *frames(start: number) { calls.push('frames'); for (let frame = 0; frame < 4; frame++) yield picture(gridPicture(start) + frame / 60) }, async frameAt(time: number) { calls.push('frameAt'); return picture(gridPicture(time)) } }),
         clipAudio: () => ({ async *chunks() { yield { timestamp: 0, duration: 2, numberOfFrames: 96000, numberOfChannels: 2, sampleRate: 48000, copyTo(data: Float32Array) { data.fill(.5) }, close: vi.fn() } } }),
-        async *schedule(timestamps: readonly number[]) { calls.push('schedule'); for (const time of timestamps) yield picture(time) },
+        async *schedule(timestamps: readonly number[]) { calls.push('schedule'); for (const time of timestamps) yield picture(gridPicture(time)) },
       }) }
     },
     release(key) { released.push(key) },
-    seeker(media, _cache, snapshot) { calls.push('seeker'); return { sample: async time => ({ sample: await snapshot(picture(time), true), hit: false }), dispose: async () => {} } },
+    seeker(media, _cache, snapshot) { calls.push('seeker'); return { sample: async time => ({ sample: await snapshot(picture(gridPicture(time)), true), hit: false }), dispose: async () => {} } },
   }
   const document = { ...fixture(), fps: 60, frameRate: { numerator: 60, denominator: 1 } }
   const renderer = new VideoEditRenderer(document, 3840, undefined, 8 * 1024 ** 3, backend)
@@ -384,9 +391,9 @@ it('原生借用帧经同一复制入口进入自有显存：正向计划、剪�
     return new VideoEditNativePicture({ frame: { codedWidth: 3840, codedHeight: 2160, format: 'NV12', close: entry.close }, meta: { route: 'r', streamId: 's', frameIndex: 0, timestampUs: entry.ptsUs, ptsUs: entry.ptsUs, durationUs: 16_667 }, receivedAt: 0, release: entry.release } as unknown as NativeVideoFrame, 0, 1 / 60)
   }
   const backend: VideoEditFrameBackend = {
-    open: media => ({ key: media.path, ready: Promise.resolve({ clipFrames: () => ({ async *frames(start: number) { for (let frame = 0; frame < 3; frame++) yield picture(start + frame / 60) }, frameAt: async (time: number) => picture(time) }), clipAudio: () => undefined, async *schedule(timestamps: readonly number[]) { for (const time of timestamps) yield picture(time) } }) }),
+    open: media => ({ key: media.path, ready: Promise.resolve({ clipFrames: () => ({ async *frames(start: number) { for (let frame = 0; frame < 3; frame++) yield picture(gridPicture(start) + frame / 60) }, frameAt: async (time: number) => picture(gridPicture(time)) }), clipAudio: () => undefined, async *schedule(timestamps: readonly number[]) { for (const time of timestamps) yield picture(gridPicture(time)) } }) }),
     release: () => {},
-    seeker: (_media, _cache, snapshot) => ({ sample: async time => { const decoded = picture(time); try { return { sample: await snapshot(decoded, true), hit: false } } finally { decoded.close() } }, dispose: async () => {} }),
+    seeker: (_media, _cache, snapshot) => ({ sample: async time => { const decoded = picture(gridPicture(time)); try { return { sample: await snapshot(decoded, true), hit: false } } finally { decoded.close() } }, dispose: async () => {} }),
   }
   const document = { ...fixture(), fps: 60, frameRate: { numerator: 60, denominator: 1 } }
   const renderer = new VideoEditRenderer(document, 3840, undefined, 8 * 1024 ** 3, backend)
@@ -448,7 +455,7 @@ it('导出逐帧（无预览宽度的顺序渲染，2.4）：读取器跳过或�
     }
     expect(drawn).toEqual(Array.from({ length: 10 }, (_, index) => index))
     // Picture 2 (lost) and 5 (after the first reader ended) came from single-frame reads; the next frame restarted the reader.
-    expect(singleReads).toEqual([2, 5]); expect(reads).toBe(2); expect(starts).toEqual([0, 6 / 30])
+    expect(singleReads).toEqual([2, 5]); expect(reads).toBe(2); expect(starts).toEqual([0, 6 / 30].map(videoEditPictureSeconds))
     frameAtFails = true; const draws = boundary.draws.length
     await expect(renderer.render(10, true)).rejects.toThrow('素材「A」取不到准确的画面：解码失败，请确认文件可用，或在项目素材中重新定位源文件。')
     expect(boundary.draws).toHaveLength(draws); expect(singleReads).toEqual([2, 5, 10])
@@ -465,7 +472,8 @@ it('预览播放回落到顺序读取器（时间计划没有该帧，3.1）：�
   const backend: VideoEditFrameBackend = {
     open: media => ({ key: media.path, ready: Promise.resolve({ clipAudio: () => undefined, async *schedule() {},
       clipFrames: () => ({
-        async *frames(start: number) { for (const time of times) if (time >= start - 1e-9 && time !== 2 / 30) yield picture(time) },
+        // Starts with the picture showing at its start (the last one starting at or before it), like the backends.
+        async *frames(start: number) { const first = times.filter(value => value <= start + 1e-9).at(-1) ?? times[0]; for (const time of times) if (time >= first && time !== 2 / 30) yield picture(time) },
         // The single-frame read's definition: the last picture starting at or before the time.
         async frameAt(time: number) { singleReads.push(Math.round(time * 30)); const at = times.filter(value => value <= time + 1e-9).at(-1); return at === undefined ? null : picture(at) },
       }) }) }),

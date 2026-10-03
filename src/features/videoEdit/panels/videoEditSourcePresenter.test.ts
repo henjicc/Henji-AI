@@ -172,7 +172,8 @@ it('VFR定位不能按标称帧率复用邻近帧，切GPU保留精确实际PTS'
   const reverse = await presenter.present({ itemId: 'item', timeUs: 1_020_000, playing: true, playbackDirection: -1, volume: 1 }, new AbortController().signal)
   expect(reverse.presentedTimeUs).toBe(1_010_000); expect(gpu.calls.at(-1)).toBe(1_010_001)
   gpu.blocked = true; await vi.advanceTimersByTimeAsync(34)
-  expect(gpu.calls.at(-1)).toBe(1_009_999)
+  // Reverse steps aim below the shown picture by 1µs plus the container timestamp tolerance (task 3.2, D3).
+  expect(gpu.calls.at(-1)).toBe(1_010_000 - 1 - 600)
   gpu.requests.shift()!(); await vi.advanceTimersByTimeAsync(0)
   expect(observe).toHaveBeenLastCalledWith('item', expect.objectContaining({ presentedTimeUs: 1_000_000, playing: true }))
   presenter.dispose(); expect(vi.getTimerCount()).toBe(0)
@@ -332,7 +333,8 @@ it('只有原生能解的视频不用媒体元素：渲染会话确认定位画�
   const reverse = await presenter.present({ itemId: 'item', timeUs: 45_000, playing: true, volume: .5, playbackDirection: -1 }, new AbortController().signal)
   expect(reverse).toMatchObject({ playing: true, playbackDirection: -1 })
   await vi.advanceTimersByTimeAsync(200)
-  expect(gpu.calls.slice(-3)).toEqual([45_000, 33_332, 16_666])
+  // Steps aim 1µs + the container timestamp tolerance (600µs) below each shown picture (task 3.2, D3).
+  expect(gpu.calls.slice(-3)).toEqual([45_000, 33_333 - 601, 16_667 - 601])
   expect(observe).toHaveBeenLastCalledWith('item', expect.objectContaining({ timeUs: 0, playing: false }))
   presenter.release(); expect(gpu.closes).toHaveBeenCalledOnce(); expect(host.children).toHaveLength(0)
   presenter.dispose()

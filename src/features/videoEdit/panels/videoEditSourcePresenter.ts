@@ -5,6 +5,10 @@ import { resolveImageDisplayUrl } from '@/services/imageSource'
 import { VideoEditSourceFrames, videoEditSourceBackend } from '../engine/videoEditSourceFrames'
 import { createVideoEditAudioMeter, type VideoEditAudioLevel } from '../engine/videoEditAudioMeter'
 import { VideoEditSourceSoundPlayer } from '../engine/videoEditSourceSound'
+import { VIDEO_EDIT_CONTAINER_TIMESTAMP_TOLERANCE_SECONDS } from '@/core/videoEdit/time'
+
+/** Reverse steps aim below the shown picture by more than the tolerance the renderer adds to every picture lookup. */
+const TIMESTAMP_TOLERANCE_US = Math.ceil(VIDEO_EDIT_CONTAINER_TIMESTAMP_TOLERANCE_SECONDS * 1e6)
 
 // A Dock hide/show may create a different presenter/host before the old worker
 // has closed. New reverse owners wait for every retiring source worker.
@@ -149,7 +153,8 @@ export function createVideoEditSourcePresenter(host: HTMLElement, resolveMedia: 
           } else {
             // Step back by real timestamps (variable frame rate included), aiming just before the shown picture.
             if (view.presentedTimeUs <= 0) { view.clockUs = 0; finish(); return }
-            const result = await owner.present(Math.max(0, view.presentedTimeUs - 1), performance.timeOrigin + started + (startClockUs - view.presentedTimeUs) / 1000)
+            // Just before the shown picture, minus the container timestamp tolerance the renderer adds to every lookup.
+            const result = await owner.present(Math.max(0, view.presentedTimeUs - 1 - TIMESTAMP_TOLERANCE_US), performance.timeOrigin + started + (startClockUs - view.presentedTimeUs) / 1000)
             if (!current()) return
             recordNative(view, result); view.clockUs = Math.min(durationUs - 1, result.presentedTimeUs + 1)
           }
@@ -249,7 +254,7 @@ export function createVideoEditSourcePresenter(host: HTMLElement, resolveMedia: 
         // preceding picture. Aim inside the frame and keep its actual RVFC time.
         if (target instanceof HTMLVideoElement && frames) {
           const owner = frames; const canvas = frameCanvas
-          const queryTimeUs = byTimestamp ? Math.max(0, presentedTimeUs - 1) : Math.round((next + .5) / fps * 1e6)
+          const queryTimeUs = byTimestamp ? Math.max(0, presentedTimeUs - 1 - TIMESTAMP_TOLERANCE_US) : Math.round((next + .5) / fps * 1e6)
           const frameDelayMs = byTimestamp ? (startTimeUs - presentedTimeUs) / 1000 : (start - next) / fps * 1000
           const result = await owner.present(queryTimeUs, performance.timeOrigin + started + frameDelayMs)
           if (controller.signal.aborted || reverse !== controller || frames !== owner || frameCanvas !== canvas) return

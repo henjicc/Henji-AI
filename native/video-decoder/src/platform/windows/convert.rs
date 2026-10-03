@@ -27,6 +27,26 @@ const KEYED_MUTEX_TIMEOUT_MS: u32 = 500;
 const PARALLEL_COPY_BYTES: usize = 4 * 1024 * 1024;
 const COPY_THREADS: usize = 4;
 
+/// 上传复制的常驻线程池（进程内一个，`COPY_THREADS` 个长期线程）。3.2 实测：每帧用 `std::thread::scope` 新建 4 个线程时，
+/// 软解（ProRes、DNxHR）每解约 1000 帧关闭后私有提交残留约 0.8MB 且不封顶（Windows 上每个新线程都让已加载的 DLL 收到线程
+/// 挂接）；改为常驻线程后不再随帧数增长。线程池建不起来时退回当前线程顺序复制（只影响速度）。
+fn copy_pool() -> Option<&'static rayon::ThreadPool> {
+    static POOL: OnceLock<Option<rayon::ThreadPool>> = OnceLock::new();
+    POOL.get_or_init(|| rayon::ThreadPoolBuilder::new().num_threads(COPY_THREADS).thread_name(|index| format!("upload-copy-{index}")).build().ok()).as_ref()
+}
+
+/// 在常驻线程池上并行执行一组复制任务并等全部完成；没有线程池时顺序执行。
+fn run_copies<F: FnOnce() + Send>(jobs: Vec<F>) {
+    match copy_pool() {
+        Some(pool) => pool.scope(|scope| {
+            for job in jobs {
+                scope.spawn(move |_| job());
+            }
+        }),
+        None => jobs.into_iter().for_each(|job| job()),
+    }
+}
+
 /// 编译好的着色器字节码（与设备无关，进程内缓存）。
 pub struct Bytecode {
     pub planar: Vec<u8>,
@@ -223,6 +243,12 @@ impl Nv12Copy {
 struct SendPtr(*mut u8);
 unsafe impl Send for SendPtr {}
 unsafe impl Sync for SendPtr {}
+impl SendPtr {
+    /// 取指针（方法调用让闭包整体捕获 `SendPtr`，而不是按字段捕获裸指针）。
+    fn get(&self) -> *mut u8 {
+        self.0
+    }
+}
 
 /// 把各平面复制到映射的上传缓冲；大平面分多线程。
 ///
@@ -247,11 +273,7 @@ unsafe fn copy_planes(destination: *mut u8, copies: &[PlaneCopy]) {
             done += length;
         }
     }
-    std::thread::scope(|scope| {
-        for (source, target, length) in &jobs {
-            scope.spawn(move || unsafe { std::ptr::copy_nonoverlapping(source.0 as *const u8, target.0, *length) });
-        }
-    });
+    run_copies(jobs.into_iter().map(|(source, target, length)| move || unsafe { std::ptr::copy_nonoverlapping(source.get() as *const u8, target.get(), length) }).collect());
 }
 
 /// 软解平面的上传：CPU 写入 STAGING 缓冲环，再由显卡复制到着色器读取的 DEFAULT 缓冲。
@@ -632,12 +654,8 @@ impl Converter {
             interleaved: source.format == ff::AVPixelFormat::AV_PIX_FMT_NV12 as c_int,
         };
         let rows_per_job = height.div_ceil(COPY_THREADS).next_multiple_of(2);
-        std::thread::scope(|scope| {
-            for job in 0..COPY_THREADS {
-                let layout = &layout;
-                scope.spawn(move || unsafe { layout.copy_rows(job * rows_per_job, ((job + 1) * rows_per_job).min(height)) });
-            }
-        });
+        let layout = &layout;
+        run_copies((0..COPY_THREADS).map(|job| move || unsafe { layout.copy_rows(job * rows_per_job, ((job + 1) * rows_per_job).min(height)) }).collect());
         let upload_us = started.elapsed().as_micros() as u64;
         let submitted = Instant::now();
         acquire(slot).inspect_err(|_| {
@@ -719,6 +737,24 @@ impl Converter {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// 3.2：上传复制在常驻线程上执行（反复调用不新建线程），结果与直接复制逐字节一致。
+    #[test]
+    fn upload_copies_run_on_resident_threads_and_match_a_direct_copy() {
+        let planes: Vec<Vec<u8>> = (0..3usize).map(|plane| (0..3 * 1024 * 1024).map(|index| ((index * 7 + plane * 13) % 251) as u8).collect()).collect();
+        let mut offset = 0;
+        let copies: Vec<PlaneCopy> = planes.iter().map(|plane| { let copy = PlaneCopy { source: plane.as_ptr(), offset, bytes: plane.len() }; offset += plane.len(); copy }).collect();
+        assert!(offset >= PARALLEL_COPY_BYTES, "要走并行复制分支");
+        let mut destination = vec![0u8; offset];
+        unsafe { copy_planes(destination.as_mut_ptr(), &copies) };
+        assert!(destination == planes.concat(), "并行复制结果应与直接复制一致");
+        let threads = std::sync::Mutex::new(std::collections::HashSet::new());
+        for _ in 0..200 {
+            run_copies((0..COPY_THREADS).map(|_| || { threads.lock().unwrap().insert(std::thread::current().id()); }).collect());
+        }
+        let used = threads.lock().unwrap().len();
+        assert!(used >= 1 && used <= COPY_THREADS, "200 次 × {COPY_THREADS} 个任务只应用到常驻的 {COPY_THREADS} 个线程，实际 {used} 个");
+    }
 
     #[test]
     fn shaders_compile() {

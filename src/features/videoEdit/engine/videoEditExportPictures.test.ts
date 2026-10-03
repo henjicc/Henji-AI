@@ -1,6 +1,7 @@
 import { describe, expect, it, vi, type Mock } from 'vitest'
 import { readVideoEditExportPicture, type VideoEditExportClipState } from './videoEditExportPictures'
 import type { VideoEditClipFrames, VideoEditDecodedPicture } from './videoEditFrameSource'
+import { videoEditPictureSeconds } from '@/core/videoEdit/time'
 
 const FPS = 30
 type Picture = VideoEditDecodedPicture & { close: Mock }
@@ -139,4 +140,28 @@ describe('导出逐帧取得准确画面（2.4）', () => {
     expect(starts).toEqual([0, 100 / FPS, 10 / FPS])
     await release(clip, delivered)
   })
+})
+
+it('Matroska 毫秒取整时间戳：按画面时间（源时间 + 容器时间戳取整容差）导出，每一帧都是自己的画面（3.2 缺陷 D3）', async () => {
+  // 60fps with picture times stored in whole milliseconds, rounded to nearest (frame 1 is 0.017s, frame 91 is 1.517s).
+  const fps = 60; const starts = Array.from({ length: 120 }, (_, frame) => Math.round(frame / fps * 1000) / 1000)
+  const delivered: Picture[] = []
+  const make = (index: number): Picture => { const value = { timestamp: starts[index], duration: (starts[index + 1] ?? starts[index] + 0.017) - starts[index], close: vi.fn() } as unknown as Picture; delivered.push(value); return value }
+  const showing = (time: number): number | undefined => { let found: number | undefined; starts.forEach((start, index) => { if (start <= time) found = index }); return found }
+  const video: VideoEditClipFrames = {
+    async *frames(start: number) { for (let index = showing(start) ?? 0; index < starts.length; index++) yield make(index) },
+    async frameAt(time: number) { const index = showing(time); return index === undefined ? null : make(index) },
+  }
+  const clip: VideoEditExportClipState = { previousTime: -1 }
+  const shown: number[] = []; let singleFrameReads = 0
+  for (let frame = 0; frame < starts.length; frame++) {
+    const time = videoEditPictureSeconds(frame / fps)
+    const read = await readVideoEditExportPicture(clip, video, time, NAME)
+    clip.previousTime = time
+    if (read.singleFrameRead) singleFrameReads++
+    shown.push(starts.indexOf(clip.current!.timestamp))
+  }
+  expect(shown).toEqual(range(0, starts.length)); expect(singleFrameReads).toBe(0)
+  clip.current?.close(); await clip.iterator?.return(undefined)
+  for (const picture of delivered) expect(picture.close).toHaveBeenCalledOnce()
 })

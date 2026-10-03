@@ -61,6 +61,30 @@ test('原生解码长时资源曲线场景只登记一次且不豁免任何错�
   assert.equal(scene.expectedLogEvents, undefined)
   assert.equal(UI_INSPECTION_SCENES.filter(candidate => candidate.id === scene.id).length, 1)
 })
+test('专业格式矩阵验收场景只登记一次、声明写入用户数据且不豁免任何错误日志（3.2）', () => {
+  const { createVideoEditFormatMatrixScene } = require('./uiInspectionSceneVideoEditFormatMatrix.cjs')
+  const scene = createVideoEditFormatMatrixScene()
+  assert.equal(scene.id, 'video-edit-format-matrix')
+  assert.equal(scene.writesUserData, true)
+  assert.equal(scene.expectedLogEvents, undefined)
+  assert.equal(UI_INSPECTION_SCENES.filter(candidate => candidate.id === scene.id).length, 1)
+})
+test('场景的画面查找容差与应用常量一致（3.2 缺陷 D3）', () => {
+  const { PICTURE_TOLERANCE_SECONDS } = require('./videoEditFormatMatrix.cjs')
+  const source = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/core/videoEdit/time.ts'), 'utf8')
+  const match = /VIDEO_EDIT_CONTAINER_TIMESTAMP_TOLERANCE_SECONDS = ([0-9.e-]+)/.exec(source)
+  assert.ok(match, '应用常量缺失')
+  assert.equal(Number(match[1]), PICTURE_TOLERANCE_SECONDS)
+})
+test('专业格式矩阵样本定义：编号唯一、参数可生成（3.2）', () => {
+  const { SAMPLES, encodeArgs } = require('./videoEditFormatMatrix.cjs')
+  assert.equal(new Set(SAMPLES.map(sample => sample.id)).size, SAMPLES.length)
+  for (const sample of SAMPLES) {
+    const args = encodeArgs(sample)
+    assert.ok(args.includes('-filter_complex') && args.includes('[v]'), sample.id)
+    assert.equal(args.filter(value => /^\d+:a$/.test(value)).length, sample.streams.length, sample.id)
+  }
+})
 const { attachUiInspectionCommon } = require('./uiInspectionSceneCommon.cjs')
 const { UI_AUDIT_RULES } = require('./uiAuditDom.cjs')
 const {

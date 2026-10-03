@@ -27,6 +27,7 @@ const { createVideoEditMultitrackScene } = require('./uiInspectionSceneVideoEdit
 const { createVideoEditExportNativeScene } = require('./uiInspectionSceneVideoEditExportNative.cjs')
 const { createVideoEditNativeFaultsScene } = require('./uiInspectionSceneVideoEditNativeFaults.cjs')
 const { createVideoEditNativeSoakScene } = require('./uiInspectionSceneVideoEditNativeSoak.cjs')
+const { createVideoEditFormatMatrixScene } = require('./uiInspectionSceneVideoEditFormatMatrix.cjs')
 const { attachUiInspectionCommon } = require('./uiInspectionSceneCommon.cjs')
 const { attachUiInspectionGeneration } = require('./uiInspectionSceneGeneration.cjs')
 const { attachUiInspectionCanvasWorkspace } = require('./uiInspectionSceneCanvasWorkspace.cjs')
@@ -125,6 +126,7 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
     createVideoEditExportNativeScene(),
     createVideoEditNativeFaultsScene(),
     createVideoEditNativeSoakScene(),
+    createVideoEditFormatMatrixScene(),
     ...createGenerationPerformanceScenes(context),
     ...createGenerationVirtualizationScenes(context),
     ...createCanvasScalePerformanceScenes(context),

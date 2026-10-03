@@ -4,8 +4,10 @@ import type { VideoEditGpuFrame } from './videoEditGpuFrame'
 /**
  * Exact pictures for export (task 2.4). Every video layer of an exported frame shows the exact picture at the layer's
  * source time: the last picture of the stream starting at or before that time (the single-frame read's definition,
- * which seeking and the playback schedules share), or nothing when the time precedes the stream's first picture (MPEG
- * program streams start after zero on the source timeline). Never a neighbouring picture, and never a transparent
+ * which seeking and the playback schedules share). The renderer passes the picture time `videoEditPictureSeconds()`
+ * (source time plus the container timestamp rounding tolerance, task 3.2 D3), the same time preview lookups use, so a
+ * picture a container rounded up by under a millisecond is still the exact one at its frame. Nothing shows when the
+ * time precedes the stream's first picture (MPEG program streams start after zero on the source timeline). Never a neighbouring picture, and never a transparent
  * layer in place of a picture the decoder did not deliver.
  *
  * Export reads each clip through its sequential reader (`frames(start)`, which keeps decoding ahead of the encoder).

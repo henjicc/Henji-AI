@@ -1,5 +1,5 @@
 import { videoEditClipMedia, activeVideoEditClips, audibleVideoEditClips, clipSourceSeconds, videoEditVisibleTracks, type VideoEditClip, type VideoEditComposition, type VideoEditMedia } from '@/core/videoEdit/document'
-import { videoEditSourceSeconds } from '@/core/videoEdit/time'
+import { videoEditPictureSeconds, videoEditSourceSeconds } from '@/core/videoEdit/time'
 import { videoEditCaptionClips } from '@/core/videoEdit/timedContent'
 import { VideoEditGpuCompositor } from './videoEditGpuCompositor'
 import { VideoEditFrameCache } from './videoEditFrameCache'
@@ -186,7 +186,7 @@ export class VideoEditRenderer {
     for (const group of ordered) {
       const entries: PlaybackStream['entries'] = []; const timestamps: number[] = []
       for (const clip of group.clips) for (let at = Math.max(frame, clip.start); at < Math.min(endFrame, clip.start + clip.duration); at++) {
-        entries.push({ frame: at, clipId: clip.id }); timestamps.push(clipSourceSeconds(clip, at, document.fps))
+        entries.push({ frame: at, clipId: clip.id }); timestamps.push(videoEditPictureSeconds(clipSourceSeconds(clip, at, document.fps)))
       }
       const demux = this.frames.open(group.media)
       const samples = (async function* (ready: Promise<VideoEditFrameSource>) { yield* (await ready).schedule(timestamps) })(demux.ready)
@@ -230,7 +230,7 @@ export class VideoEditRenderer {
     if (this.sources.has(clip.id) || this.playback?.byClip.has(clip.id)) return
     const media = videoEditClipMedia(document, clip)
     if (!media || media.kind !== 'video') return
-    const time = clipSourceSeconds(clip, clip.start, document.fps)
+    const time = videoEditPictureSeconds(clipSourceSeconds(clip, clip.start, document.fps))
     const pending = this.source(clip.id, media)
     void pending.then(source => {
       if (!source.video || source.iterator || source.prerolled) return
@@ -285,7 +285,7 @@ export class VideoEditRenderer {
     const codeSettled = codeReady ? Promise.allSettled([codeReady]) : Promise.resolve([])
     this.frameCache.setHotFrames(active.flatMap(clip => {
       const media = videoEditClipMedia(document, clip)
-      return clip.kind === 'video' && media ? [{ mediaId: media.path, time: clipSourceSeconds(clip, frame, document.fps) }] : []
+      return clip.kind === 'video' && media ? [{ mediaId: media.path, time: videoEditPictureSeconds(clipSourceSeconds(clip, frame, document.fps)) }] : []
     }))
     // A cut opens a new demuxer/decoder; doing that on the boundary frame stalls playback.
     // Open and decode the first picture of clips starting within half a second ahead of time.
@@ -305,7 +305,9 @@ export class VideoEditRenderer {
       if (!media) throw new Error(`找不到素材 ${clip.name}`)
       if (media.kind === 'image') return this.image(media)
       const originalTime = clipSourceSeconds(clip, frame, document.fps)
-      const time = originalTime
+      // Every picture lookup (schedule, seek, export read) uses the same picture time: the source time plus the container
+      // timestamp rounding tolerance (task 3.2, D3), so a picture a container rounded up still shows at its own frame.
+      const time = videoEditPictureSeconds(originalTime)
       const pendingSource = this.source(clip.id, media)
       const source = await pendingSource
       // Never race a pre-roll on the shared iterator: it would hand this frame the second picture.
@@ -349,9 +351,9 @@ export class VideoEditRenderer {
         // No picture at this source time although it is inside the media: the time precedes the stream's first picture
         // (MPEG program/transport streams start after zero on the source timeline, record of 2.1). The layer is
         // transparent there, as in the gap before a clip, instead of failing the whole frame.
-        if (time >= media.durationSeconds) throw new Error(`素材 ${media.name} 在此时间没有画面。`)
+        if (originalTime >= media.durationSeconds) throw new Error(`素材 ${media.name} 在此时间没有画面。`)
         blankPictures++
-        return this.compositor!.blank(media.width, media.height, time, 1 / document.fps)
+        return this.compositor!.blank(media.width, media.height, originalTime, 1 / document.fps)
       }
       if (!(source.current instanceof VideoEditGpuFrame)) {
         const decoded = source.current

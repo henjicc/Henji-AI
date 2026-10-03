@@ -24,6 +24,13 @@ pub fn pts_to_us(pts: i64, base: TimeBase) -> i64 {
     value.clamp(i64::MIN as i128, i64::MAX as i128) as i64
 }
 
+/// 一帧的微秒时长：结束点与起点同样截断后相减（3.2 缺陷 D1）。起点与时长分别截断时两者之和比下一帧的起点少最多
+/// 1µs，按“已显示画面 − 1µs”后退的读取会落进这个空隙、查不到任何画面；按结束点截断后，时长连续的相邻帧首尾按微秒
+/// 精确衔接（时长本是整微秒时结果不变）。
+pub fn duration_to_us(pts: i64, duration: i64, base: TimeBase) -> i64 {
+    pts_to_us(pts.saturating_add(duration), base) - pts_to_us(pts, base)
+}
+
 /// 刻度 → 秒（与 mediabunny `timestamp` 相同的浮点值）。
 pub fn pts_to_seconds(pts: i64, base: TimeBase) -> f64 {
     pts as f64 * base.num as f64 / base.den as f64
@@ -67,6 +74,23 @@ mod tests {
     fn mediabunny_us(pts: i64, base: TimeBase) -> i64 {
         let seconds = pts as f64 * base.num as f64 / base.den as f64;
         (1e6 * (1.0 + f64::EPSILON) * seconds).trunc() as i64
+    }
+
+    #[test]
+    fn frame_durations_join_the_next_frame_start_to_the_microsecond() {
+        // 60fps MP4 (1/15360, 256 ticks), 59.94 and 29.97 (1/30000 and 1/60000), 25fps TS (1/90000, 3600 ticks).
+        for (base, step) in [(MP4_60, 256), (NTSC, 1001), (TimeBase { num: 1, den: 60000 }, 1001), (TS, 3600), (TS, 1501)] {
+            for index in 0i64..2000 {
+                let pts = index * step;
+                assert_eq!(pts_to_us(pts, base) + duration_to_us(pts, step, base), pts_to_us(pts + step, base), "{base:?} pts={pts}");
+            }
+        }
+        // The case of defect D1: frame 70 at 60fps starts at 1166666µs and must end where frame 71 starts (1183333µs).
+        assert_eq!(pts_to_us(70 * 256, MP4_60), 1_166_666);
+        assert_eq!(duration_to_us(70 * 256, 256, MP4_60), 16_667);
+        assert_eq!(pts_to_us(256, MP4_60) - pts_to_us(0, MP4_60), 16_666);
+        // Whole-microsecond durations are unchanged.
+        assert_eq!(duration_to_us(3600, 3600, TS), 40_000);
     }
 
     #[test]

@@ -4,15 +4,15 @@ const path = require('node:path')
 const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
 const { waitReleased } = require('./uiInspectionSceneVideoEditLayout.cjs')
 const { dialogs, presented } = require('./uiInspectionSceneVideoEditMonitor.cjs')
-const { videoEditResourceCycle } = require('./uiInspectionSceneVideoEditPerformance.cjs')
+const { videoEditResourceCycle, memoryInfraSnapshot } = require('./uiInspectionSceneVideoEditPerformance.cjs')
 
 /**
  * 原生解码长时资源曲线（3.1）：4K60 专业格式素材（默认 ProRes 422 HQ，走原生解码）在节目监视器持续播放，总时长
  * `HENJI_SOAK_MINUTES`（默认 60，验收至少 30），平均分成 4 段，每段之后做一轮 5.1 资源循环（切页、节目浮窗、关闭重开）。
  * 每 30 秒采样一次：各进程类型工作集与私有内存、原生服务工作集/私有提交/句柄/显存/预算占用/会话数、帧通道计数、
  * 区间呈现次数。容差在运行前固定（与 5.1 相同的 15%），不随结果调整：
- * - 渲染与 GPU 进程工作集：第 1 轮循环后到第 4 轮循环后的增长 ≤ 15%（5.1 口径）；
- * - 原生服务工作集、私有提交、句柄与显存：第一段播放 2 分钟后的首个样本到最后一个播放样本的增长 ≤ 15%，会话数不增加；
+ * - 渲染与 GPU 进程私有占用：第 1 轮循环后到第 4 轮循环后的增长 ≤ 15%（重要记录 017；工作集照常记录，不作门槛）；
+ * - 原生服务私有提交、句柄与显存（工作集照常记录）：第一段播放 2 分钟后的首个样本到最后一个播放样本的增长 ≤ 15%，会话数不增加；
  * - 播放不中断（每个采样区间都有新画面），关闭工程后帧流、原生会话、未归还帧、显存预约与渲染 Worker 全部归零。
  * 素材可用 `HENJI_SOAK_SOURCE` 替换（须为 4K60、7 秒）。证据：`node_modules/.cache/video-edit-native-soak/evidence.json`。
  */
@@ -125,7 +125,11 @@ function createVideoEditNativeSoakScene() {
           await playback(0, false); await presented(page, 0)
           await videoEditResourceCycle(page, app, file, 0)
           const metrics = await app.evaluate(({ app }) => app.getAppMetrics())
-          evidence.cycles.push({ segment, minute: Math.round((Date.now() - startedAt) / 600) / 100, workingSet: byType(metrics, 'workingSetSize'), privateBytes: byType(metrics, 'privateBytes'), after: await sample(page, app, startedAt, segment, false) })
+          const entry = { segment, minute: Math.round((Date.now() - startedAt) / 600) / 100, workingSet: byType(metrics, 'workingSetSize'), privateBytes: byType(metrics, 'privateBytes'), after: await sample(page, app, startedAt, segment, false) }
+          // Allocator attribution (task 3.2, record 017): Chromium memory-infra after cycles 1, 2 and 4 (diagnostic record;
+          // HENJI_SOAK_MEMORY_DUMPS=0 turns it off). Taken after the metrics above so they are unaffected.
+          if (process.env.HENJI_SOAK_MEMORY_DUMPS !== '0' && [0, 1, 3].includes(segment)) entry.memoryInfra = await memoryInfraSnapshot(app, ROOT, `cycle-${segment}`)
+          evidence.cycles.push(entry)
           store()
         }
         await capture('native-soak-end')
@@ -137,7 +141,9 @@ function createVideoEditNativeSoakScene() {
         const check = (ok, message) => { if (!ok) violations.push(message) }
         const first = evidence.cycles[0]; const last = evidence.cycles.at(-1)
         evidence.cycleGrowth = Object.fromEntries(['Tab', 'GPU', 'Browser'].map(type => [type, growth(first.workingSet[type], last.workingSet[type])]))
-        for (const type of ['Tab', 'GPU']) check(evidence.cycleGrowth[type] <= TOLERANCE.memoryGrowth, `第1轮到第${evidence.cycles.length}轮循环后${type}进程工作集增长${evidence.cycleGrowth[type]}`)
+        // Record 017 (task 3.2): private bytes are the gate; working sets stay recorded (`cycleGrowth`, native `workingSet`).
+        evidence.cyclePrivateGrowth = Object.fromEntries(['Tab', 'GPU', 'Browser'].map(type => [type, growth(first.privateBytes[type], last.privateBytes[type])]))
+        for (const type of ['Tab', 'GPU']) check(evidence.cyclePrivateGrowth[type] <= TOLERANCE.memoryGrowth, `第1轮到第${evidence.cycles.length}轮循环后${type}进程私有占用增长${evidence.cyclePrivateGrowth[type]}`)
         const playing = evidence.samples.filter(entry => entry.playing && entry.frames.native)
         const warm = playing.find(entry => entry.minute * 60_000 >= WARMUP_MS) ?? playing[0]
         const end = playing.at(-1)
@@ -145,7 +151,7 @@ function createVideoEditNativeSoakScene() {
           workingSet: growth(warm.frames.native.workingSetBytes, end.frames.native.workingSetBytes), privateBytes: growth(warm.frames.native.privateBytes, end.frames.native.privateBytes),
           handles: growth(warm.frames.native.handleCount, end.frames.native.handleCount), vram: growth(warm.frames.native.vramBytes, end.frames.native.vramBytes),
           sessions: { from: warm.frames.native.sessions, to: end.frames.native.sessions } }
-        for (const [key, label] of [['workingSet', '工作集'], ['privateBytes', '私有提交'], ['handles', '句柄'], ['vram', '显存']]) check(evidence.nativeGrowth[key] <= TOLERANCE.memoryGrowth, `原生服务${label}增长${evidence.nativeGrowth[key]}`)
+        for (const [key, label] of [['privateBytes', '私有提交'], ['handles', '句柄'], ['vram', '显存']]) check(evidence.nativeGrowth[key] <= TOLERANCE.memoryGrowth, `原生服务${label}增长${evidence.nativeGrowth[key]}`)
         check(end.frames.native.sessions <= warm.frames.native.sessions, `原生会话数增长：${warm.frames.native.sessions} → ${end.frames.native.sessions}`)
         check(evidence.stalls.length === 0, `播放中断${evidence.stalls.length}次`)
         const closed = evidence.afterClose

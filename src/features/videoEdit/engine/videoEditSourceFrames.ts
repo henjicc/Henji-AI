@@ -1,5 +1,5 @@
 import type { VideoEditComposition, VideoEditMedia } from '@/core/videoEdit/document'
-import { videoEditFps } from '@/core/videoEdit/time'
+import { videoEditFps, videoEditPictureSeconds } from '@/core/videoEdit/time'
 import { getPlatform } from '@/platform/runtime'
 import { isLikelyLocalImagePath, toFetchableMediaUrl } from '@/services/imageSource'
 import { VideoEditRenderSession } from './videoEditRenderSession'
@@ -91,7 +91,7 @@ export class VideoEditSourceFrames {
     try {
       this.assertCurrent(revision)
       const timestamp = this.blank(result) ? this.gridSeconds(sourceInUs) : result.sourceTimestamps?.[0]
-      if (result.presented !== true || timestamp === undefined || !Number.isFinite(timestamp) || timestamp < 0 || timestamp >= this.document.media[0].durationSeconds || timestamp > sourceInUs / 1e6 + 1e-7) throw new Error('源画面未确认有效的实际呈现位置。')
+      if (result.presented !== true || timestamp === undefined || !Number.isFinite(timestamp) || timestamp < 0 || timestamp >= this.document.media[0].durationSeconds || timestamp > videoEditPictureSeconds(sourceInUs / 1e6) + 1e-7) throw new Error('源画面未确认有效的实际呈现位置。')
       const presentedTimeUs = Math.round(timestamp * 1e6)
       if (!Number.isSafeInteger(presentedTimeUs) || presentedTimeUs < 0 || presentedTimeUs > this.durationUs) throw new Error('源画面实际呈现位置超出范围。')
       return { timeUs, presentedTimeUs, decodeMs: result.decodeMs ?? 0, gpuMs: result.gpuMs ?? 0, cacheHits: result.cacheHits ?? 0, cacheBytes: result.cacheBytes ?? 0 }

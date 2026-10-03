@@ -32,3 +32,16 @@ export function offsetVideoEditSource(time: VideoEditSourceTime, frames: number,
   return { sourceInUs: Number(whole), sourceRemainder: { numerator: Number(remainder / divisor), denominator: Number(denominator / divisor) } }
 }
 export function videoEditSourceSeconds(time: VideoEditSourceTime): number { return (time.sourceInUs + time.sourceRemainder.numerator / time.sourceRemainder.denominator) / 1e6 }
+/**
+ * Container timestamp rounding tolerance (task 3.2, defect D3). Matroska and WebM store picture times in whole
+ * milliseconds rounded to nearest, so at 60, 59.94 or 29.97fps a picture can start up to 0.5ms after its true time
+ * (60fps frame 91: 1.516667s stored as 1.517s); "the last picture starting at or before the time" then shows the
+ * previous picture for a third of the frames. Every picture lookup (preview, source monitor, reverse steps, export's
+ * exact-picture reads) asks for the picture at `videoEditPictureSeconds(time)`, the time plus this tolerance, so a
+ * picture rounded up by the container is still the one shown at its frame. 0.6ms covers the 0.5ms maximum with margin
+ * and stays far below any frame interval (240fps is 4.2ms); a variable-frame-rate picture starting less than 0.6ms
+ * after the time shows that much early. Containers with time bases coarser than 1ms are not covered.
+ */
+export const VIDEO_EDIT_CONTAINER_TIMESTAMP_TOLERANCE_SECONDS = 0.0006
+/** The time at which to look up the picture shown at source time `seconds` (see the tolerance above). */
+export function videoEditPictureSeconds(seconds: number): number { return seconds + VIDEO_EDIT_CONTAINER_TIMESTAMP_TOLERANCE_SECONDS }

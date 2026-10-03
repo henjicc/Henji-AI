@@ -31,7 +31,7 @@ use crate::test_pattern::SharedFormat;
 use codec::{Decoder, DecoderSetup, Frame, Purpose, Received};
 use demux::{Input, Packet};
 use plan::{seek_decision, Claim, Decision, Position, RunTracker, FORWARD_SEEK_SECONDS};
-use timing::{pts_to_seconds, pts_to_us, seconds_to_duration_ticks, seconds_to_ticks, TimeBase};
+use timing::{duration_to_us, pts_to_seconds, pts_to_us, seconds_to_duration_ticks, seconds_to_ticks, TimeBase};
 
 /// 单帧请求等空闲槽位的上限。
 const FRAME_AT_SLOT_TIMEOUT: Duration = Duration::from_secs(2);
@@ -588,7 +588,7 @@ mod imp {
             let ts = frame_ts(frame);
             let duration = frame.duration();
             let pts_us = pts_to_us(ts, self.time_base);
-            let duration_us = if duration > 0 { pts_to_us(duration, self.time_base) } else if self.frame_rate > 0.0 { (1e6 / self.frame_rate).round() as i64 } else { 0 };
+            let duration_us = if duration > 0 { duration_to_us(ts, duration, self.time_base) } else if self.frame_rate > 0.0 { (1e6 / self.frame_rate).round() as i64 } else { 0 };
             let frame_index = self.delivered;
             self.delivered += 1;
             crate::send(&json!({

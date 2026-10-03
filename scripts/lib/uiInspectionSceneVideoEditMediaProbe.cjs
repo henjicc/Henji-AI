@@ -4,6 +4,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const { execFileSync } = require('node:child_process')
 const { dialogs, presented } = require('./uiInspectionSceneVideoEditMonitor.cjs')
+const { PICTURE_TOLERANCE_SECONDS } = require('./videoEditFormatMatrix.cjs')
 
 /**
  * 剪辑素材探测（2.1）与专业格式导入（2.2）：原生探测优先、浏览器兜底在真实 Electron 中的结果。
@@ -80,10 +81,11 @@ async function nativeSourceMonitor(page, itemId, fps, durationSeconds, hasAudio)
     await page.waitForFunction(time => {
       const canvas = document.querySelector('[data-video-edit-source-canvas]')
       const presented = Number(canvas?.dataset.presentedTimeUs) / 1e6
-      return document.querySelector('[data-video-edit-source-status]')?.dataset.videoEditSourceStatus === 'ready' && presented <= time + 1e-6 && presented > time - 0.5
-    }, seconds, { timeout: 30000 })
+      // A seek may land on a picture starting up to the container timestamp tolerance after the time (task 3.2, D3).
+      return document.querySelector('[data-video-edit-source-status]')?.dataset.videoEditSourceStatus === 'ready' && presented <= time.at + time.tolerance + 1e-6 && presented > time.at - 0.5
+    }, { at: seconds, tolerance: PICTURE_TOLERANCE_SECONDS }, { timeout: 30000 })
     const presentedTimeUs = Number(await page.locator('[data-video-edit-source-canvas]').getAttribute('data-presented-time-us'))
-    assert.ok(presentedTimeUs / 1e6 <= seconds + 1e-6 && presentedTimeUs / 1e6 > seconds - 1.5 / fps, `源定位 ${seconds}s 落在 ${presentedTimeUs}µs，不是该时间所在的帧`)
+    assert.ok(presentedTimeUs / 1e6 <= seconds + PICTURE_TOLERANCE_SECONDS + 1e-6 && presentedTimeUs / 1e6 > seconds - 1.5 / fps, `源定位 ${seconds}s 落在 ${presentedTimeUs}µs，不是该时间所在的帧`)
     seeks.push({ seconds, presentedTimeUs, ms: Date.now() - at })
   }
   const canvas = page.locator('[data-video-edit-source-canvas]')

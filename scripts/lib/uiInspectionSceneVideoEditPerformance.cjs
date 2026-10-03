@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
-const { execFileSync } = require('node:child_process')
+const { execFile, execFileSync } = require('node:child_process')
 const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
 const { observeWorkers, workerSnapshot, waitReleased } = require('./uiInspectionSceneVideoEditLayout.cjs')
 const { dialogs, presented } = require('./uiInspectionSceneVideoEditMonitor.cjs')
@@ -9,8 +9,27 @@ const button = (page, name) => page.getByRole('button', { name, exact: true })
 const group = (page, title) => page.locator('.dv-groupview').filter({ has: button(page, `关闭${title}`) })
 const ORIGINAL = process.env.HENJI_PERF_SOURCE || 'D:/视频制作/0A0片头片尾和素材/2021片头V2 4K 60FPS.mp4'
 const PROJECT_ID = 'video-edit-performance'
-const TILES = 9; const TILE = 420; const TOTAL = TILES * TILE
+/**
+ * Load layout. Default: the 7-second original tiled nine times (420 frames each, 3780 frames). Diagnostic
+ * HENJI_PERF_SOURCE_FIELDS=probe (task 3.2, sources that are not 7s 3840×2160 60fps, e.g. ProRes 4444 2560² or a long
+ * user film): the source's own size, rate and length from ffprobe, tiles as long as the source allows (one tile for
+ * sources of 63s or more) so the same 3780 frames play; the load (code generator, filter per tile, music) is unchanged.
+ */
+const PROBED = process.env.HENJI_PERF_SOURCE_FIELDS === 'probe'
+function sourceLayout() {
+  if (!PROBED) return { tile: 420, tiles: 9, media: { durationSeconds: 7, width: 3840, height: 2160, frameRate: { numerator: 60, denominator: 1 }, frameRateMode: 'sampled-constant' } }
+  const { ffprobePath } = require('./mediaBinaries.cjs')
+  const data = JSON.parse(execFileSync(ffprobePath, ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=width,height,avg_frame_rate,duration:format=duration', '-of', 'json', ORIGINAL], { encoding: 'utf8', windowsHide: true }))
+  const stream = data.streams[0]; const [numerator, denominator] = stream.avg_frame_rate.split('/').map(Number)
+  const durationSeconds = Number(stream.duration ?? data.format.duration)
+  const tile = Math.min(3780, Math.floor(durationSeconds * 60) - 2); const tiles = Math.ceil(3780 / tile)
+  return { tile, tiles, media: { durationSeconds, width: stream.width, height: stream.height, frameRate: { numerator, denominator }, frameRateMode: 'sampled-constant' } }
+}
+const LAYOUT = sourceLayout()
+// 3780 frames (63s) in every layout; the last tile is shortened when the tiles do not divide it.
+const TILES = LAYOUT.tiles; const TILE = LAYOUT.tile; const TOTAL = 3780
 // Fixed before measuring (5.1): a regression must fail, not be re-tuned.
+// memoryGrowth applies to private bytes and allocator totals (record 017); working sets are recorded only.
 const TOLERANCE = { updatesPerSecond: 59.0, missingRatio: 0.01, maxGapMs: 100, clockDeviation: 0.01, memoryGrowth: 0.15 }
 const GENERATOR = 'export default {apiVersion:1,name:"持续动态标题条",kind:"generator",mode:"dynamic",width:3840,height:2160,durationSeconds:63,seed:5,parameters:{amount:{type:"number",title:"强度",default:.6,min:0,max:1,step:.01,animatable:true}},render(ctx){return [rect({x:200+ctx.time*40,y:1700,width:1200,height:180,fill:[1,.85,.2,ctx.params.amount]}),ellipse({x:3200,y:300+ctx.time*20,width:320,height:320,fill:[.2,.6,1,.7]})];}}'
 const FILTER = 'export default {apiVersion:1,name:"受控暖色",kind:"filter",mode:"static",width:3840,height:2160,durationSeconds:63,seed:9,parameters:{warm:{type:"number",title:"暖色",default:.9,min:0,max:1,step:.01,animatable:true}},render(ctx){const c=sample(ctx.u,ctx.v);return rgba(c.r,c.g*ctx.params.warm,c.b*ctx.params.warm,c.a);}}'
@@ -19,12 +38,12 @@ function fixture(audioPath) {
   const track = (index, kind, name) => ({ id: `${kind[0]}${index}`, name, index, kind, locked: false, enabled: true, muted: false, solo: false })
   const base = { kind: 'video', track: 1, duration: TILE, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, brightness: 1, text: '' }
   return { format: 'henji-video-project', version: 2, id: PROJECT_ID, name: '标准4K60性能负载', revision: 0,
-    media: [{ id: 'original', name: '原4K60片头', path: ORIGINAL, kind: 'video', durationSeconds: 7, width: 3840, height: 2160, hasAudio: false, frameRate: { numerator: 60, denominator: 1 }, frameRateMode: 'sampled-constant' },
+    media: [{ id: 'original', name: '原4K60片头', path: ORIGINAL, kind: 'video', ...LAYOUT.media, hasAudio: false },
       { id: 'music', name: '63秒立体声', path: audioPath, kind: 'audio', durationSeconds: 63, width: 0, height: 0, hasAudio: true }],
     bins: [], items: [{ id: 'original-item', name: '原4K60片头', kind: 'video', mediaId: 'original' }, { id: 'music-item', name: '63秒立体声', kind: 'audio', mediaId: 'music' }],
     sequences: [{ id: 'main', name: '序列 1', width: 3840, height: 2160, frameRate: { numerator: 60, denominator: 1 }, pixelAspectRatio: { numerator: 1, denominator: 1 }, sampleRate: 48000, channels: 2,
       tracks: [track(0, 'audio', '音频 1'), track(1, 'video', '视频 1'), track(2, 'video', '视频 2')],
-      clips: [...Array.from({ length: TILES }, (_, index) => ({ ...base, id: `tile-${index}`, itemId: 'original-item', name: `片头${index + 1}`, start: index * TILE })),
+      clips: [...Array.from({ length: TILES }, (_, index) => ({ ...base, id: `tile-${index}`, itemId: 'original-item', name: `片头${index + 1}`, start: index * TILE, duration: Math.min(TILE, TOTAL - index * TILE) })),
         { ...base, id: 'music-clip', itemId: 'music-item', name: '63秒立体声', kind: 'audio', track: 0, start: 0, duration: TOTAL }], annotations: [] }] }
 }
 const quantile = (values, q) => values.length ? values[Math.min(values.length - 1, Math.floor(values.length * q))] : null
@@ -43,7 +62,11 @@ function summarize(frames) {
   const missing = frames.slice(1).reduce((total, value, index) => total + Math.max(0, value.frame - frames[index].frame - 1), 0)
   const backwards = frames.slice(1).filter((value, index) => value.frame < frames[index].frame).length
   const worstGaps = frames.slice(1).map((value, index) => ({ fromFrame: frames[index].frame, toFrame: value.frame, gapMs: Math.round(value.at - frames[index].at), atSecond: Math.round((frames[index].at - frames[0].at) / 100) / 10, renderMs: Math.round(value.renderMs), decodeMs: Math.round(value.decodeMs), gpuMs: Math.round(value.gpuMs), requestDelayMs: Math.round(value.requestedAt - frames[index].at) })).sort((a, b) => b.gapMs - a.gapMs).slice(0, 8)
-  return { worstGaps, updates: frames.length, spanSeconds: span, updatesPerSecond: (frames.length - 1) / span, framesAdvanced: advanced, missing, missingRatio: missing / Math.max(1, advanced), backwards,
+  // Long gaps (task 3.2): attributed to decode or GPU submission when those account for at least half of the gap,
+  // otherwise to presentation (window swap chain / compositor), reported separately and never re-tuning the tolerance.
+  const longGaps = frames.slice(1).map((value, index) => ({ fromFrame: frames[index].frame, toFrame: value.frame, gapMs: Math.round(value.at - frames[index].at), decodeMs: Math.round(value.decodeMs), gpuMs: Math.round(value.gpuMs), renderMs: Math.round(value.renderMs) })).filter(gap => gap.gapMs > 50)
+    .map(gap => ({ ...gap, cause: gap.decodeMs >= gap.gapMs / 2 ? 'decode' : gap.gpuMs >= gap.gapMs / 2 ? 'gpu' : 'presentation' }))
+  return { worstGaps, longGaps, longGapCauses: Object.fromEntries(['decode', 'gpu', 'presentation'].map(cause => [cause, longGaps.filter(gap => gap.cause === cause).length])), updates: frames.length, spanSeconds: span, updatesPerSecond: (frames.length - 1) / span, framesAdvanced: advanced, missing, missingRatio: missing / Math.max(1, advanced), backwards,
     clockDeviation: Math.abs(advanced / 60 - span) / span, p50GapMs: quantile(gaps, 0.5), p95GapMs: quantile(gaps, 0.95), p99GapMs: quantile(gaps, 0.99), maxGapMs: gaps.at(-1) }
 }
 const memory = metrics => Object.fromEntries(['Browser', 'Tab', 'GPU', 'Utility'].map(type => [type, metrics.filter(item => item.type === type).reduce((total, item) => total + item.memory.workingSetSize, 0)]))
@@ -146,7 +169,7 @@ function createVideoEditPerformanceScene() {
         await create('video_edit.clip', sequenceRef, [{ 'video_edit.clip.item_id': generatorItem.id, 'video_edit.clip.name': '持续动态标题条', 'video_edit.clip.kind': 'code', 'video_edit.clip.track': 2, 'video_edit.clip.start': 0, 'video_edit.clip.duration': TOTAL }])
         for (let index = 0; index < TILES; index++) await create('video_edit.effect', { kind: 'video_edit.clip', id: `${PROJECT_ID}:tile-${index}` }, [{ 'video_edit.effect.definition_id': filterDefinition.id, 'video_edit.effect.version_id': filterDefinition.versions[0].id, 'video_edit.effect.name': '受控暖色', 'video_edit.effect.amount': 1 }])
         document = readProject(); assert.equal(document.sequences[0].clips.filter(clip => clip.effects?.length).length, TILES)
-        evidence.load = { width: 3840, height: 2160, fps: 60, frames: TOTAL, originalTiles: TILES, codeGenerator: 1, codeFilterInstances: TILES, audio: '48kHz stereo 63s', layers: 2 }
+        evidence.load = { width: 3840, height: 2160, fps: 60, frames: TOTAL, originalTiles: TILES, tileFrames: TILE, source: ORIGINAL, sourceFields: PROBED ? LAYOUT.media : 'fixed', codeGenerator: 1, codeFilterInstances: TILES, audio: '48kHz stereo 63s', layers: 2 }
         await playback(0, false); await presented(page, 0)
 
         phase('seek')
@@ -170,7 +193,16 @@ function createVideoEditPerformanceScene() {
         if (tracing) await app.evaluate(({ contentTracing }, categories) => contentTracing.startRecording({ included_categories: categories }), process.env.HENJI_PERF_TRACE_CATEGORIES ? process.env.HENJI_PERF_TRACE_CATEGORIES.split(',') : ['gpu', 'media', 'viz', 'disabled-by-default-gpu.service', 'disabled-by-default-media', 'toplevel'])
         const traceStart = tracing ? Number(process.env.HENJI_PERF_TRACE_START ?? 0) : 0
         await playback(traceStart, true); await page.waitForTimeout(500)
+        // Recorded per run (task 3.2): native service CPU (Get-Process seconds) and whole-card GPU readings (nvidia-smi).
+        const nativeCpu = () => { try { const output = execFileSync('powershell', ['-NoProfile', '-NonInteractive', '-Command', "(Get-Process -Name 'henji-video-decoder' -ErrorAction SilentlyContinue | Measure-Object -Property CPU -Sum).Sum"], { windowsHide: true, encoding: 'utf8', timeout: 30000 }).trim(); return output && Number.isFinite(Number(output)) ? Number(output) : null } catch { return null } }
+        const gpuReadings = []; let sampling = false
+        const gpuTimer = setInterval(() => { if (sampling) return; sampling = true; execFile('nvidia-smi', ['--query-gpu=utilization.gpu,utilization.decoder,memory.used', '--format=csv,noheader,nounits'], { windowsHide: true, timeout: 3000 }, (error, stdout) => { sampling = false; if (!error) { const [gpu, decoder, memory] = stdout.trim().split(',').map(Number); gpuReadings.push({ gpu, decoder, memoryMiB: memory }) } }) }, 1000)
+        const cpuBefore = nativeCpu(); const cpuStartedAt = performance.now()
         const frames = await measure(page, tracing ? Number(process.env.HENJI_PERF_TRACE_SECONDS ?? 6) : 60)
+        clearInterval(gpuTimer)
+        const cpuAfter = nativeCpu(); const cpuSeconds = (performance.now() - cpuStartedAt) / 1000
+        const mean = values => values.length ? Math.round(values.reduce((sum, value) => sum + value, 0) / values.length * 10) / 10 : null
+        evidence.playbackResources = { nativeCores: cpuBefore === null || cpuAfter === null ? null : Math.round((cpuAfter - cpuBefore) / cpuSeconds * 100) / 100, gpuSamples: gpuReadings.length, gpuUtilizationMean: mean(gpuReadings.map(value => value.gpu)), decoderUtilizationMean: mean(gpuReadings.map(value => value.decoder)), cardMemoryMiBMax: gpuReadings.length ? Math.max(...gpuReadings.map(value => value.memoryMiB)) : null, cardMemoryMiBMean: mean(gpuReadings.map(value => value.memoryMiB)) }
         // Which decoder actually played (2.2): the renderer's per-file choice and the native frame channel counters.
         evidence.decode = await page.evaluate(async startedAt => {
           const logs = await window.henjiNative.logging.queryLogEvents({ date: startedAt.slice(0, 10), afterTimestamp: startedAt, limit: 500 })
@@ -209,12 +241,29 @@ function createVideoEditPerformanceScene() {
           const nativeFrames = await page.evaluate(() => window.henjiNative.videoFrames?.stats().then(stats => ({ streams: stats.streams.length, unreleasedImports: stats.unreleasedImports, preloadOutstanding: stats.preload.outstanding, nativeVramBytes: stats.native?.gpuLocalMemory?.currentUsageBytes ?? null })).catch(() => null))
           const metrics = await app.evaluate(({ app }) => app.getAppMetrics())
           const entry = { cycle, memory: memory(metrics), privateMemory: privateMemory(metrics), workers: (await workerSnapshot(page)).live, nativeFrames }
-          if (process.env.HENJI_PERF_MEMORY_DUMPS === '1') entry.memoryInfra = await memoryInfraSnapshot(app, root, `cycle-${cycle}`)
+          // Allocator totals at the compared cycles (0 and 3) always; every cycle with HENJI_PERF_MEMORY_DUMPS=1 (diagnostic).
+          if (process.env.HENJI_PERF_MEMORY_DUMPS === '1' || (process.env.HENJI_PERF_MEMORY_DUMPS !== '0' && (cycle === 0 || cycle === 3))) entry.memoryInfra = await memoryInfraSnapshot(app, root, `cycle-${cycle}`)
           evidence.cycles.push(entry); store()
         }
         const first = evidence.cycles[0].memory; const last = evidence.cycles[3].memory
         evidence.memoryGrowth = Object.fromEntries(Object.keys(first).map(key => [key, first[key] ? (last[key] - first[key]) / first[key] : 0]))
-        for (const key of ['Tab', 'GPU']) check(evidence.memoryGrowth[key] <= TOLERANCE.memoryGrowth, `反复切页/浮窗/重开后${key}进程内存增长${evidence.memoryGrowth[key]}`)
+        // Resource-cycle criterion (record 017, user decision in task 3.2): private bytes and the Chromium allocator total of
+        // the renderer and GPU processes may not grow more than 15% from the first to the fourth cycle. Working sets
+        // (`memoryGrowth`) stay recorded and reported but are no gate: they move with page residency of memory already
+        // allocated (rgbaf16 imports showed a one-time step after the first cycle while allocations stayed flat).
+        const firstPrivate = evidence.cycles[0].privateMemory; const lastPrivate = evidence.cycles[3].privateMemory
+        evidence.privateGrowth = Object.fromEntries(Object.keys(firstPrivate).map(key => [key, firstPrivate[key] ? (lastPrivate[key] - firstPrivate[key]) / firstPrivate[key] : 0]))
+        for (const key of ['Tab', 'GPU']) check(evidence.privateGrowth[key] <= TOLERANCE.memoryGrowth, `反复切页/浮窗/重开后${key}进程私有占用增长${evidence.privateGrowth[key]}`)
+        const allocatorTotal = (infra, pattern) => { const processes = Object.entries(infra ?? {}).filter(([name]) => pattern.test(name)); return processes.length ? processes.reduce((sum, [, dump]) => sum + Object.entries(dump.allocatorsKb).filter(([name]) => !name.includes('/')).reduce((total, [, kb]) => total + kb, 0), 0) : null }
+        evidence.allocatorGrowth = Object.fromEntries([['Tab', /renderer/i], ['GPU', /gpu/i]].map(([key, pattern]) => {
+          const firstKb = allocatorTotal(evidence.cycles[0].memoryInfra, pattern); const lastKb = allocatorTotal(evidence.cycles[3].memoryInfra, pattern)
+          return [key, { firstKb, lastKb, growth: firstKb && lastKb !== null ? (lastKb - firstKb) / firstKb : null }]
+        }))
+        if (process.env.HENJI_PERF_MEMORY_DUMPS !== '0') for (const key of ['Tab', 'GPU']) {
+          const growth = evidence.allocatorGrowth[key].growth
+          check(growth !== null, `未取得${key}进程分配器统计：${JSON.stringify(evidence.allocatorGrowth[key])}`)
+          check(growth === null || growth <= TOLERANCE.memoryGrowth, `反复切页/浮窗/重开后${key}进程分配器增长${growth}`)
+        }
         check(evidence.cycles.every(cycle => cycle.workers <= 1), `循环后节目渲染Worker多于一个：${JSON.stringify(evidence.cycles.map(cycle => cycle.workers))}`)
         evidence.phases.push('切页/节目浮窗/关闭重开4轮后渲染与GPU进程内存不持续增长，单一渲染会话')
 
