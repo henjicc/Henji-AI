@@ -28,6 +28,7 @@ export function AudioEditFileMenu({ name, disabled, onRename, onRelink, onDelete
   }
   return <>
     <PanelTrigger
+      className="min-w-0 max-w-64"
       disabled={disabled}
       panelWidth={200}
       panelPadding="menu"
@@ -47,7 +48,7 @@ export function AudioEditFileMenu({ name, disabled, onRename, onRelink, onDelete
       )}
     >
       {({ open, togglePanel }) => (
-        <UiButton size="sm" className="min-w-0 max-w-64 gap-1" disabled={disabled} aria-haspopup="menu" aria-expanded={open}
+        <UiButton size="sm" className="min-w-0 max-w-full gap-1" disabled={disabled} aria-haspopup="menu" aria-expanded={open}
           title="工程菜单 · 双击重命名" onClick={togglePanel} onDoubleClick={startRename}>
           <span className="truncate">{name}</span>
           <ChevronDown size={14} aria-hidden="true" className="shrink-0 text-text3" />

@@ -107,6 +107,11 @@ interface UiToolbarProps extends HTMLAttributes<HTMLDivElement> {
    * 内容超宽时由内容自己横向滚动（给它 `min-w-0 max-w-full overflow-x-auto`）。
    */
   center?: ReactNode;
+  /**
+   * 仅 command：中间区让位策略。`fill`（默认）中间区先收窄（内容自己横向滚动，如图片编辑的工具参数）；
+   * `fit` 中间区保持内容宽度（如分段视图切换），窄窗口时由左端的文件名先截断。
+   */
+  centerLayout?: 'fill' | 'fit';
   /** 右侧内容（command：次要动作 + 唯一主动作） */
   trailing?: ReactNode;
   /**
@@ -336,6 +341,7 @@ export function UiToolbar({
   variant = 'plain',
   children,
   center,
+  centerLayout = 'fill',
   trailing,
   subordinate,
   barProps,
@@ -355,7 +361,7 @@ export function UiToolbar({
           {...barRest}
         >
           <div data-command-bar-leading className="flex min-w-0 shrink items-center gap-1.5">{children}</div>
-          <div data-command-bar-center className="flex min-w-0 flex-1 items-center justify-center">{center}</div>
+          <div data-command-bar-center className={`flex flex-1 items-center justify-center ${centerLayout === 'fit' ? 'min-w-fit' : 'min-w-0'}`}>{center}</div>
           {trailing ? <div data-command-bar-trailing className="flex shrink-0 items-center gap-1.5">{trailing}</div> : null}
         </div>
         {subordinate ? (

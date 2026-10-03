@@ -38,8 +38,8 @@ export interface AudioEditDelivery { timeline: AudioEditXmlTimeline | null; erro
 export function AudioEditPlaybackModeSwitch({ delivery }: { delivery: AudioEditDelivery }) {
   const mode = useAudioEditPlaybackStore((state) => state.mode)
   const setMode = useAudioEditPlaybackStore((state) => state.setMode)
-  return <div role="group" aria-label="试听" className={UI_SEGMENTED_TRACK_CLASS}>
-    {(['source', 'edited', 'delivery'] as const).map((value) => <UiOptionButton key={value} variant="segment" active={mode === value} aria-pressed={mode === value} disabled={value === 'delivery' && !delivery.timeline} title={value === 'delivery' ? delivery.error || '按 XML 帧网格试听原声，关闭声音处理和自动增益' : undefined} onClick={() => setMode(value)}>{value === 'source' ? '原始' : value === 'edited' ? '剪后' : 'XML 交付'}</UiOptionButton>)}
+  return <div role="group" aria-label="试听" className={`shrink-0 ${UI_SEGMENTED_TRACK_CLASS}`}>
+    {(['source', 'edited', 'delivery'] as const).map((value) => <UiOptionButton key={value} variant="segment" active={mode === value} aria-pressed={mode === value} disabled={value === 'delivery' && !delivery.timeline} aria-label={value === 'delivery' ? 'XML 交付' : undefined} title={value === 'delivery' ? delivery.error || 'XML 交付：按 XML 帧网格试听原声，关闭声音处理和自动增益' : undefined} onClick={() => setMode(value)}>{value === 'source' ? '原始' : value === 'edited' ? '剪后' : 'XML'}</UiOptionButton>)}
   </div>
 }
 

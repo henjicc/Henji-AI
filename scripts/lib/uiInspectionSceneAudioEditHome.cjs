@@ -21,8 +21,8 @@ function createAudioEditHomeScene({ setupToolbox, clickNamedButton }) {
           const rect = range.getBoundingClientRect()
           return { x: rect.x, right: rect.right, height: rect.height, viewport: document.documentElement.clientWidth }
         })
-        assert.ok(bounds && bounds.width > 140 && bounds.height < 50, '导入按钮应完整显示为单行')
-        assert.ok(textBounds.height < 30 && textBounds.x >= bounds.x && textBounds.right <= textBounds.viewport, '图标和文字不能被挤压或溢出')
+        assert.ok(bounds && bounds.height < 50, '导入按钮应完整显示为单行')
+        assert.ok(textBounds.height < 30 && textBounds.x >= bounds.x - 0.5 && textBounds.right <= bounds.x + bounds.width + 0.5 && textBounds.right <= textBounds.viewport, '图标和文字不能被挤压或溢出')
       }
       await assertImportLayout()
       await page.screenshot({ path: path.resolve('.ui-tour', 'audio-edit-home-empty.png') })

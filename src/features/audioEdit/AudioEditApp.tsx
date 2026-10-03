@@ -317,10 +317,6 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
     const sourcePath = Array.isArray(selected) ? selected[0] : selected
     if (sourcePath) setProject(await getPlatform().audioEdit.createProject({ sourcePath, name: basename(sourcePath) }))
   })
-  const assistant = () => {
-    if (!project) return
-    openAssistant()
-  }
   const exportProject = () => run(async () => {
     if (!project) return
     const targetPath = await saveDialog({ defaultPath: `${project.name.replace(/\.[^.]+$/, '')}-剪辑.${format}`, filters: [{ name: format === 'xml' ? 'Final Cut Pro 7 XML' : 'WAV 音频', extensions: [format] }] })
@@ -381,6 +377,7 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
     <UiToolbar
       variant="command"
       center={<AudioEditPlaybackModeSwitch delivery={delivery} />}
+      centerLayout="fit"
       subordinate={textSearch.isOpen ? <AudioEditFindReplace search={textSearch} disabled={disabled} /> : undefined}
       trailing={<>
         {runningTasks.map((task) => <span key={task.requestId} role="status" className="flex items-center gap-1">
@@ -398,7 +395,6 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
         <UiIconButton size="lg" aria-label="查找与替换" on={textSearch.isOpen} aria-expanded={textSearch.isOpen} title={textSearch.isOpen ? '关闭查找替换' : '查找与替换 · Ctrl+F'} onClick={() => textSearch.isOpen ? textSearch.close() : textSearch.open()}><Search size={16} /></UiIconButton>
         <AudioEditUndoButton key={project.id} project={project} canUndo={Boolean(state.past.length)} disabled={disabled} onUndo={state.undo} onError={notifyError} onRestored={() => { state.setSelectedBlockIds([]); setWaveSelection(null); showNotification('已撤销全部剪辑修改；可再次撤销以恢复操作前状态') }} />
         <UiIconButton size="lg" disabled={disabled || !state.future.length} onClick={state.redo} aria-label="重做" title="重做"><Redo2 size={16} /></UiIconButton>
-        <UiIconButton size="lg" onClick={assistant} aria-label="打开智能助手" title="打开智能助手"><Sparkles size={16} /></UiIconButton>
         {/* 一条带只有这一条分隔线：左侧是编辑工具，右侧是交付动作 */}
         <span aria-hidden="true" className="mx-1 h-4 w-px shrink-0 bg-line" />
         <VideoEditSendMenu mediaKind="audio" disabled={disabled || Boolean(sourceError)} notify={showNotification} resolveSource={() => ({ kind: 'audio_edit.project', projectId: project.id, includeProcessing: withRx })} />
@@ -410,7 +406,7 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
     </UiToolbar>
     <div className="flex min-h-0 flex-1">
       <main className="min-h-0 min-w-0 flex-1"><Transcript project={project} onSeek={navigateToFrame} onEdit={setEditingBlockId} onDelete={deleteBlock} disabled={disabled} search={textSearch} /></main>
-      <aside aria-label="处理" className="w-[300px] shrink-0 overflow-y-auto border-l border-gap bg-panel p-4">
+      <aside aria-label="处理" className="w-[clamp(15rem,26vw,18.75rem)] shrink-0 overflow-y-auto border-l border-gap bg-panel p-4">
         <fieldset disabled={disabled} className="flex min-w-0 flex-col gap-5">
           {!project.transcript.length && <section className="flex flex-col gap-2.5">
             <h2 className={UI_TEXT_PANEL_TITLE_CLASS}>语音识别</h2>

@@ -318,7 +318,7 @@ UiPanel.displayName = 'UiPanel';
  */
 const UI_OPTION_NEUTRAL_VARIANT_CLASS = {
   segment: {
-    layout: `${UI_CONTROL_HEIGHT_CLASS.sm} justify-center rounded-md px-3 text-xs font-medium`,
+    layout: `${UI_CONTROL_HEIGHT_CLASS.sm} justify-center whitespace-nowrap rounded-md px-3 text-xs font-medium`,
     rest: `border-transparent text-text2 hover:text-text1 ${UI_GLASS_ADAPTIVE_OPTION_CLASS}`,
     active: `border-transparent text-text1 ${UI_GLASS_ADAPTIVE_SELECTED_CLASS}`,
   },
