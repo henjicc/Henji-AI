@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { CheckSquare2, LoaderCircle, Tags, Trash2, X } from 'lucide-react'
-import { Dropdown, UI_TEXT_META_CLASS, UiButton, UiChipButton, UiError, UiGroup, UiIconButton, UiInput } from '@/components/ui'
+import { LoaderCircle, Tags, Trash2 } from 'lucide-react'
+import { Dropdown, UI_GLASS_ADAPTIVE_DIVIDER_CLASS, UI_TEXT_META_CLASS, UiButton, UiChipButton, UiError, UiGroup, UiInput } from '@/components/ui'
 import type { AssetLibraryRecord } from '@/platform/contracts/assetLibrary'
 import { useI18n } from '@/hooks/useI18n'
 
@@ -16,7 +16,6 @@ interface Props {
   onUpdateTags: (tags: string[], mode: 'add' | 'remove') => Promise<void>
   onUpdateLibrary: (libraryId: string, mode: 'add' | 'remove') => Promise<void>
   onDelete: () => Promise<void>
-  onDone: () => void
 }
 
 export const AssetBatchManager: React.FC<Props> = ({
@@ -31,7 +30,6 @@ export const AssetBatchManager: React.FC<Props> = ({
   onUpdateTags,
   onUpdateLibrary,
   onDelete,
-  onDone,
 }) => {
   const { t } = useI18n('ui')
   const [tagDraft, setTagDraft] = useState('')
@@ -54,31 +52,25 @@ export const AssetBatchManager: React.FC<Props> = ({
   }
 
   return (
-    <aside className="flex w-80 shrink-0 flex-col border-l border-border-dark bg-surface-dark">
-      <div className="flex h-14 shrink-0 items-center gap-2 px-4">
-        {busy ? <LoaderCircle className="h-4 w-4 animate-spin text-text-muted" /> : <CheckSquare2 className="h-4 w-4 text-text-muted" />}
-        <div className="min-w-0 flex-1">
-          <div className="font-medium text-text-dark">{t('assetLibrary.batchManage')}</div>
-          <div className={UI_TEXT_META_CLASS}>{t('assetLibrary.batchSelected', { count: selectedCount })}</div>
-        </div>
-        <UiIconButton size="lg" disabled={busy} onClick={onDone} title={t('assetLibrary.batchDone')}><X className="h-4 w-4" /></UiIconButton>
-      </div>
-      <div className="ui-scrollbar min-h-0 flex-1 overflow-y-auto px-4 pb-4">
-        <p className={`mb-3 ${UI_TEXT_META_CLASS}`}>{t('assetLibrary.batchHint')}</p>
+    // 批量操作侧栏：与左侧资产库侧栏同级，只用一条分隔线，不另铺更亮的底（那会浮成一张卡）。
+    // 标题、已选数量与“完成”都在页头命令带里，这里不再重复一条头带。
+    <aside aria-label={t('assetLibrary.batchManage')} aria-busy={busy} className={`flex w-80 shrink-0 flex-col border-l ${UI_GLASS_ADAPTIVE_DIVIDER_CLASS}`}>
+      <div className="ui-scrollbar min-h-0 flex-1 overflow-y-auto p-4">
+        <p className={`mb-3 flex items-center gap-1.5 ${UI_TEXT_META_CLASS}`}>{busy ? <LoaderCircle className="h-3.5 w-3.5 shrink-0 animate-spin" /> : null}{t('assetLibrary.batchHint')}</p>
         <div className="mb-5 flex gap-2">
-          <UiButton variant="secondary" className="flex-1" disabled={busy || loadedCount === 0} onClick={onSelectAll}>{t('assetLibrary.batchSelectAll')}</UiButton>
+          <UiButton className="flex-1" disabled={busy || loadedCount === 0} onClick={onSelectAll}>{t('assetLibrary.batchSelectAll')}</UiButton>
           <UiButton className="flex-1" disabled={busy || selectedCount === 0} onClick={onClear}>{t('assetLibrary.batchClear')}</UiButton>
         </div>
 
         <UiGroup title={t('assetLibrary.batchTags')}>
           <div className="relative">
-            <Tags className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" />
-            <UiInput disabled={busy} size="lg" className="pl-8" value={tagDraft} onChange={(event) => setTagDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') addDraftTags() }} placeholder={t('assetLibrary.tagPlaceholder')} />
+            <Tags aria-hidden="true" className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-text3" />
+            <UiInput disabled={busy} className="pl-8" aria-label={t('assetLibrary.batchTags')} value={tagDraft} onChange={(event) => setTagDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') addDraftTags() }} placeholder={t('assetLibrary.tagPlaceholder')} />
           </div>
           {(tags.length > 0 || suggestions.length > 0) && (
             <div className="flex flex-wrap gap-1.5">
-              {tags.map((tag) => <UiChipButton key={tag} active disabled={busy} size="sm" className="!px-2" onClick={() => setTags((current) => current.filter((item) => item !== tag))}>{tag}</UiChipButton>)}
-              {suggestions.map((tag) => <UiChipButton key={tag} disabled={busy} size="sm" className="!px-2" onClick={() => { setTags((current) => [...current, tag]); setTagDraft('') }}>{tag}</UiChipButton>)}
+              {tags.map((tag) => <UiChipButton key={tag} active disabled={busy} size="sm" onClick={() => setTags((current) => current.filter((item) => item !== tag))}>{tag}</UiChipButton>)}
+              {suggestions.map((tag) => <UiChipButton key={tag} disabled={busy} size="sm" onClick={() => { setTags((current) => [...current, tag]); setTagDraft('') }}>{tag}</UiChipButton>)}
             </div>
           )}
           <div className="flex gap-2">
@@ -88,7 +80,7 @@ export const AssetBatchManager: React.FC<Props> = ({
         </UiGroup>
 
         <UiGroup divided title={t('assetLibrary.batchLibraries')} className="mt-5">
-          <Dropdown<string> value={libraryId} options={libraries.map((library) => ({ value: library.id, label: library.name }))} onSelect={setLibraryId} className="w-full" size="lg" buttonClassName="w-full" panelWidthStrategy="button" disabled={busy || libraries.length === 0} />
+          <Dropdown<string> value={libraryId} options={libraries.map((library) => ({ value: library.id, label: library.name }))} onSelect={setLibraryId} className="w-full" buttonClassName="w-full" panelWidthStrategy="button" disabled={busy || libraries.length === 0} />
           <div className="flex gap-2">
             <UiButton variant="secondary" className="flex-1" disabled={disabled || !libraryId} onClick={() => void onUpdateLibrary(libraryId, 'add')}>{t('assetLibrary.batchLibraryAdd')}</UiButton>
             <UiButton variant="secondary" className="flex-1" disabled={disabled || !libraryId} onClick={() => void onUpdateLibrary(libraryId, 'remove')}>{t('assetLibrary.batchLibraryRemove')}</UiButton>

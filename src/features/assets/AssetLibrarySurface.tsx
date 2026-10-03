@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { CheckSquare2, ChevronLeft, ChevronRight, FolderPlus, GripVertical, LoaderCircle, Search, X } from 'lucide-react'
-import { Dropdown, UI_GLASS_ADAPTIVE_REGION_CLASS, UI_TEXT_META_CLASS, UiButton, UiChipButton, UiEmpty, UiError, UiIconButton, UiInput, UiPageHeader, UiRangeInput, UiSharedGlassHost } from '@/components/ui'
+import { FolderPlus, GripVertical, LoaderCircle, Search, Settings2, X } from 'lucide-react'
+import { Dropdown, PanelTrigger, UI_FIELD_LABEL_CLASS, UI_GLASS_ADAPTIVE_DIVIDER_CLASS, UI_GLASS_ADAPTIVE_REGION_CLASS, UI_SEGMENTED_TRACK_CLASS, UI_TEXT_META_CLASS, UiButton, UiEmpty, UiError, UiIconButton, UiInput, UiOptionButton, UiPageHeader, UiRangeInput, UiSharedGlassHost } from '@/components/ui'
 import type { AssetLibraryRecord, AssetMediaType, AssetPage, AssetRecord } from '@/platform/contracts/assetLibrary'
 import { addAssetToLibrary, createAssetLibrary, deleteAsset, deleteAssetLibrary, listAssetLibraries, listAssetTags, queryAssets, removeAssetFromLibrary, renameAssetLibrary, setAssetTags, updateAsset } from '@/commands/assetLibrary'
+import { ICON_MULTI_SELECT } from '@/core/theme/icons'
 import { createLogger } from '@/core/logging'
 import { useI18n } from '@/hooks/useI18n'
 import { useSettingsStore } from '@/stores/settingsStore'
@@ -27,6 +28,13 @@ function isMissingAssetLibraryHandler(cause: unknown): boolean {
 
 interface Props { mode: 'floating' | 'workspace'; active?: boolean; onClose?: () => void; onOpenWorkspace?: () => void }
 
+/**
+ * 资产库表面：工作区页面与浮动资产面板共用（界面重设计 3.3）。
+ *
+ * 骨架只有一条命令带：工作区是页头那一条（返回 · 标题 + 数量 ｜ 搜索、类型、排序、标签、显示设置、批量管理），
+ * 浮动面板是网格上方那一条（同一组筛选 + 完整管理 + 关闭）。批量管理是一种模式，不用主按钮表达：
+ * 进入后命令带换成“已选择 N 项 · 完成”，右侧出现批量操作侧栏。显示设置收进命令带的浮层，不再单占底部一条。
+ */
 export const AssetLibrarySurface: React.FC<Props> = ({ mode, active = true, onClose, onOpenWorkspace }) => {
   const { t } = useI18n('ui')
   const libraryId = useAssetLibraryStore((state) => state.libraryId)
@@ -59,12 +67,10 @@ export const AssetLibrarySurface: React.FC<Props> = ({ mode, active = true, onCl
   const [previewAsset, setPreviewAsset] = useState<AssetRecord | null>(null)
   const [availableTags, setAvailableTags] = useState<string[]>([])
   const [selectedTag, setSelectedTag] = useState<string | null>(null)
-  const [thumbnailControlsOpen, setThumbnailControlsOpen] = useState(false)
   const [batchBusy, setBatchBusy] = useState(false)
   const [batchError, setBatchError] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const loadMoreRef = useRef<HTMLDivElement>(null)
-  const thumbnailControlsRef = useRef<HTMLDivElement>(null)
   const queryVersionRef = useRef(0)
   const loadingMoreRef = useRef(false)
   const wasActiveRef = useRef(active)
@@ -143,14 +149,6 @@ export const AssetLibrarySurface: React.FC<Props> = ({ mode, active = true, onCl
     observer.observe(target)
     return () => observer.disconnect()
   }, [error, loadAssets, loading, page.items.length, page.page, page.total])
-  useEffect(() => {
-    if (!thumbnailControlsOpen) return
-    const handlePointerDown = (event: PointerEvent): void => {
-      if (!thumbnailControlsRef.current?.contains(event.target as Node)) setThumbnailControlsOpen(false)
-    }
-    document.addEventListener('pointerdown', handlePointerDown)
-    return () => document.removeEventListener('pointerdown', handlePointerDown)
-  }, [thumbnailControlsOpen])
 
   const mutate = async (operation: () => Promise<unknown>, refreshLibraryList = false): Promise<void> => {
     try {
@@ -185,7 +183,7 @@ export const AssetLibrarySurface: React.FC<Props> = ({ mode, active = true, onCl
     showBlankMenu(event, [{
       id: 'batch-manage',
       label: t('assetLibrary.batchEmptyMenu'),
-      icon: <CheckSquare2 className="h-4 w-4" />,
+      icon: <ICON_MULTI_SELECT className="h-4 w-4" />,
       onClick: () => startBatchManagement(),
     }])
   }
@@ -211,15 +209,87 @@ export const AssetLibrarySurface: React.FC<Props> = ({ mode, active = true, onCl
     }
   }
 
+  // 视图控制（静默触发器）：工作区放在页头命令带，浮动面板放在网格上方那一条。
+  const viewControls = (
+    <>
+      <div className={`relative ${mode === 'workspace' ? 'w-56 shrink' : 'min-w-[150px] flex-1'}`}>
+        <Search aria-hidden="true" className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-text3" />
+        <UiInput className="pl-8" value={keyword} onChange={(event) => setKeyword(event.target.value)} placeholder={t('assetLibrary.search')} aria-label={t('assetLibrary.search')} />
+      </div>
+      <Dropdown<'all' | AssetMediaType> appearance="text" value={mediaType ?? 'all'} options={[{ value: 'all', label: t('assetLibrary.allTypes') }, { value: 'image', label: t('assetLibrary.image') }, { value: 'video', label: t('assetLibrary.video') }, { value: 'audio', label: t('assetLibrary.audio') }, { value: 'code', label: t('assetLibrary.code') }]} onSelect={(value) => setMediaType(value === 'all' ? null : value)} className="shrink-0" buttonClassName="w-auto" minWidthStrategy="options" panelWidthStrategy="options" />
+      <Dropdown<'created' | 'recent'> appearance="text" value={sort} options={[{ value: 'created', label: t('assetLibrary.newest') }, { value: 'recent', label: t('assetLibrary.recent') }]} onSelect={setSort} className="shrink-0" buttonClassName="w-auto" minWidthStrategy="options" panelWidthStrategy="options" />
+      <Dropdown<string> appearance="text" value={selectedTag ?? ''} options={[{ value: '', label: t('assetLibrary.allTags') }, ...availableTags.map((tag) => ({ value: tag, label: tag }))]} onSelect={(value) => setSelectedTag(value || null)} className="shrink-0" buttonClassName="w-auto max-w-40" minWidthStrategy="options" panelWidthStrategy="options" />
+      <PanelTrigger
+        panelWidth={256}
+        renderPanel={() => (
+          <div data-asset-view-settings className="space-y-4 p-3">
+            <div>
+              <div className={UI_FIELD_LABEL_CLASS}>{t('assetLibrary.thumbnailSize')}</div>
+              <UiRangeInput aria-label={t('assetLibrary.thumbnailSize')} min={112} max={280} step={8} value={cardSize} onChange={(event) => setCardSize(Number(event.target.value))} />
+            </div>
+            <div>
+              <div className={UI_FIELD_LABEL_CLASS}>{t('assetLibrary.thumbnailFit')}</div>
+              <div role="radiogroup" aria-label={t('assetLibrary.thumbnailFit')} className={`${UI_SEGMENTED_TRACK_CLASS} w-full`}>
+                {(['cover', 'contain'] as const).map((fit) => (
+                  <UiOptionButton
+                    key={fit}
+                    variant="segment"
+                    role="radio"
+                    aria-checked={thumbnailFit === fit}
+                    active={thumbnailFit === fit}
+                    title={t(fit === 'cover' ? 'assetLibrary.fitCoverHint' : 'assetLibrary.fitContainHint')}
+                    className="flex-1"
+                    onClick={() => setThumbnailFit(fit)}
+                  >
+                    {t(fit === 'cover' ? 'assetLibrary.fitCover' : 'assetLibrary.fitContain')}
+                  </UiOptionButton>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      >
+        {({ open, togglePanel }) => (
+          <UiIconButton
+            type="button"
+            aria-haspopup="dialog"
+            aria-expanded={open}
+            on={open}
+            title={t('assetLibrary.viewSettings')}
+            aria-label={t('assetLibrary.viewSettings')}
+            data-panel-trigger-button
+            onClick={togglePanel}
+          >
+            <Settings2 className="h-4 w-4" />
+          </UiIconButton>
+        )}
+      </PanelTrigger>
+    </>
+  )
+
+  const workspaceActions = workspaceBatchMode ? (
+    <>
+      <span className={UI_TEXT_META_CLASS}>{t('assetLibrary.loadedCount', { loaded: page.items.length, count: page.total })}</span>
+      <span className="text-13 font-medium text-text1">{t('assetLibrary.batchSelected', { count: selectedBatchAssets.length })}</span>
+      <UiButton variant="secondary" disabled={batchBusy} onClick={exitBatchMode}>{t('assetLibrary.batchDone')}</UiButton>
+    </>
+  ) : (
+    <>
+      {viewControls}
+      <UiButton onClick={() => startBatchManagement()}><ICON_MULTI_SELECT className="h-4 w-4" />{t('assetLibrary.batchManage')}</UiButton>
+    </>
+  )
+
   return (
-    <div className={`relative flex h-full min-h-0 flex-col overflow-hidden text-text-dark ${mode === 'floating' ? `z-raised ${UI_GLASS_ADAPTIVE_REGION_CLASS}` : 'bg-app'}`}>
+    <div className={`relative flex h-full min-h-0 flex-col overflow-hidden text-text1 ${mode === 'floating' ? `z-raised ${UI_GLASS_ADAPTIVE_REGION_CLASS}` : 'bg-window'}`}>
       {mode === 'workspace' && (
         <UiPageHeader
-          className="shrink-0 px-3 pt-3"
+          className={`h-14 shrink-0 border-b px-4 ${UI_GLASS_ADAPTIVE_DIVIDER_CLASS}`}
           title={t('assetLibrary.categories')}
-          description={t('assetLibrary.count', { count: page.total })}
+          meta={t('assetLibrary.count', { count: page.total })}
           onBack={onClose}
           backLabel={t('assetLibrary.back')}
+          actions={workspaceActions}
         />
       )}
       <div className="flex min-h-0 flex-1 overflow-hidden">
@@ -231,6 +301,7 @@ export const AssetLibrarySurface: React.FC<Props> = ({ mode, active = true, onCl
           labels={{
             all: t('assetLibrary.all'), recent: t('assetLibrary.recent'), image: t('assetLibrary.image'), video: t('assetLibrary.video'), audio: t('assetLibrary.audio'), code: t('assetLibrary.code'),
             categories: t('assetLibrary.categories'), create: t('assetLibrary.createLibrary'), placeholder: t('assetLibrary.libraryName'), confirmDelete: t('assetLibrary.confirmDeleteLibrary'),
+            rename: t('assetLibrary.renameAsset'), delete: t('assetLibrary.deleteAsset'), confirm: t('assetLibrary.confirm'), cancel: t('cancel'),
           }}
           onShowAll={() => selectSystemView(null, 'created')}
           onShowRecent={() => selectSystemView(null, 'recent')}
@@ -249,95 +320,65 @@ export const AssetLibrarySurface: React.FC<Props> = ({ mode, active = true, onCl
             tabIndex={0}
             onPointerDown={startSidebarResize}
             onKeyDown={resizeSidebarByKeyboard}
-            className="group relative z-raised flex w-2 shrink-0 cursor-col-resize items-center justify-center outline-none"
+            className="group relative z-raised -ml-1 flex w-2 shrink-0 cursor-col-resize items-center justify-center outline-none"
             style={{ touchAction: 'none' }}
           >
-            <span className="h-full w-px bg-border-dark transition-colors group-hover:bg-accent group-focus-visible:bg-accent" />
-            <GripVertical className="absolute h-4 w-4 text-text-muted opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100" />
+            <span className="h-full w-0.5 bg-transparent transition-colors duration-120 group-hover:bg-accent group-focus-visible:bg-accent" />
+            <GripVertical className="absolute h-4 w-4 text-text3 opacity-0 transition-opacity duration-120 group-hover:opacity-100 group-focus-visible:opacity-100" />
           </div>
         )}
         <main className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-14 shrink-0 items-center gap-2 px-3">
-          {workspaceBatchMode ? (
-            <>
-              <span className="font-medium text-text-dark">{t('assetLibrary.batchSelected', { count: selectedBatchAssets.length })}</span>
-              <span className={UI_TEXT_META_CLASS}>{t('assetLibrary.loadedCount', { loaded: page.items.length, count: page.total })}</span>
-              <div className="flex-1" />
-              <UiButton size="lg" variant="secondary" disabled={batchBusy} className="shrink-0" onClick={exitBatchMode}>{t('assetLibrary.batchDone')}</UiButton>
-            </>
-          ) : (
-            <>
-              {mode === 'workspace' && <span className={`hidden shrink-0 min-[1200px]:inline ${UI_TEXT_META_CLASS}`}>{t('assetLibrary.count', { count: page.total })}</span>}
-              <div className="relative min-w-[150px] flex-1"><Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" /><UiInput size="lg" className="pl-9" value={keyword} onChange={(event) => setKeyword(event.target.value)} placeholder={t('assetLibrary.search')} /></div>
-              <Dropdown<'all' | AssetMediaType> value={mediaType ?? 'all'} options={[{ value: 'all', label: t('assetLibrary.allTypes') }, { value: 'image', label: t('assetLibrary.image') }, { value: 'video', label: t('assetLibrary.video') }, { value: 'audio', label: t('assetLibrary.audio') }, { value: 'code', label: t('assetLibrary.code') }]} onSelect={(value) => setMediaType(value === 'all' ? null : value)} className="shrink-0" size="lg" buttonClassName="!px-3" minWidthStrategy="options" panelWidthStrategy="button" />
-              <Dropdown<'created' | 'recent'> value={sort} options={[{ value: 'created', label: t('assetLibrary.newest') }, { value: 'recent', label: t('assetLibrary.recent') }]} onSelect={setSort} className="shrink-0" size="lg" buttonClassName="!px-3" minWidthStrategy="options" panelWidthStrategy="button" />
-              <Dropdown<string> value={selectedTag ?? ''} options={[{ value: '', label: t('assetLibrary.allTags') }, ...availableTags.map((tag) => ({ value: tag, label: tag }))]} onSelect={(value) => setSelectedTag(value || null)} className="shrink-0" size="lg" buttonClassName="!px-3" minWidthStrategy="options" panelWidthStrategy="button" />
-              {mode === 'floating' && <UiButton size="lg" variant="secondary" className="shrink-0" onClick={onOpenWorkspace}>{t('assetLibrary.manage')}</UiButton>}
-              {mode === 'workspace' && <UiButton size="lg" variant="secondary" className="shrink-0" onClick={() => startBatchManagement()}>{t('assetLibrary.batchManage')}</UiButton>}
-              {mode === 'floating' && onClose && <UiIconButton size="xl" className="shrink-0" onClick={onClose}><X className="h-4 w-4" /></UiIconButton>}
-            </>
+          {mode === 'floating' && (
+            <header className="flex h-12 shrink-0 items-center gap-2 px-3">
+              {viewControls}
+              <UiButton className="shrink-0" onClick={onOpenWorkspace}>{t('assetLibrary.manage')}</UiButton>
+              {onClose && <UiIconButton className="shrink-0" title={t('assetLibrary.close')} aria-label={t('assetLibrary.close')} onClick={onClose}><X className="h-4 w-4" /></UiIconButton>}
+            </header>
           )}
-        </header>
-        <UiSharedGlassHost ref={scrollRef} minTargets={4} onContextMenu={handleBlankContextMenu} className="min-h-0 flex-1 overflow-y-auto p-3 [scrollbar-gutter:stable]">
-          {loading && page.items.length === 0 ? (
-            <div className="absolute inset-3 overflow-hidden" aria-busy="true">
-              <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(auto-fill,minmax(${cardSize}px,1fr))` }}>{Array.from({ length: 12 }).map((_, index) => <div key={index} className="aspect-square animate-pulse rounded-xl bg-layer" />)}</div>
-            </div>
-          ) : error ? (
-            <UiError
-              className="h-full"
-              message={error}
-              onRetry={() => void loadAssets(1, true)}
-              retryLabel={t('assetLibrary.retry')}
-            />
-          ) : page.items.length === 0 ? (
-            <UiEmpty
-              className="h-full"
-              icon={<FolderPlus className="h-10 w-10" />}
-              title={keyword || mediaType || libraryId ? t('assetLibrary.noResults') : t('assetLibrary.empty')}
-            />
-          ) : (
-            <>
-              <div className={`grid gap-3 transition-opacity duration-120 ${loading ? 'pointer-events-none opacity-60' : 'opacity-100'}`} aria-busy={loading} style={{ gridTemplateColumns: `repeat(auto-fill,minmax(${cardSize}px,1fr))` }}>
-                {page.items.map((asset) => (
-                  <AssetCard
-                    key={asset.id}
-                    asset={asset}
-                    selected={selected?.id === asset.id}
-                    eager={mode === 'floating'}
-                    thumbnailFit={thumbnailFit}
-                    menuOpen={menuState?.asset.id === asset.id}
-                    batchMode={workspaceBatchMode}
-                    batchSelected={batchSelectedIds.includes(asset.id)}
-                    batchDisabled={batchBusy}
-                    onSelect={setSelected}
-                    onToggleBatch={(nextAsset) => toggleBatchAsset(nextAsset.id)}
-                    onMenu={(nextAsset, anchor, toggle) => setMenuState((current) => toggle && current?.asset.id === nextAsset.id ? null : { asset: nextAsset, anchor })}
-                    onPreview={setPreviewAsset}
-                    onRename={rename}
-                  />
-                ))}
+          <UiSharedGlassHost ref={scrollRef} minTargets={4} onContextMenu={handleBlankContextMenu} className={`min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable] ${mode === 'workspace' ? 'p-4' : 'px-3 pb-3 pt-1'}`}>
+            {loading && page.items.length === 0 ? (
+              <div className={`absolute overflow-hidden ${mode === 'workspace' ? 'inset-4' : 'inset-3'}`} aria-busy="true">
+                <div className="grid gap-x-3 gap-y-4" style={{ gridTemplateColumns: `repeat(auto-fill,minmax(${cardSize}px,1fr))` }}>{Array.from({ length: 12 }).map((_, index) => <div key={index} className="aspect-square animate-pulse rounded-lg bg-panel" />)}</div>
               </div>
-              <div ref={loadMoreRef} className={`flex h-14 items-center justify-center ${UI_TEXT_META_CLASS}`}>{loadingMore ? <><LoaderCircle className="mr-2 h-4 w-4 animate-spin" />{t('assetLibrary.loadingMore')}</> : page.items.length < page.total ? t('assetLibrary.scrollForMore') : t('assetLibrary.allLoaded')}</div>
-            </>
-          )}
-        </UiSharedGlassHost>
-        <footer className="flex h-12 shrink-0 items-center justify-end px-3 text-text-muted">
-          <div ref={thumbnailControlsRef} className="flex items-center justify-end gap-1.5 overflow-hidden">
-            <div className={`relative z-base overflow-hidden transition-[width,transform] duration-180 ease-out ${thumbnailControlsOpen ? 'w-[300px] translate-x-0' : 'pointer-events-none w-0 translate-x-3'}`} aria-hidden={!thumbnailControlsOpen}>
-              <div className={`flex w-[300px] items-center gap-1.5 transition-opacity ${thumbnailControlsOpen ? 'delay-150 duration-120 opacity-100' : 'delay-0 duration-120 opacity-0'}`}>
-                <div className="mr-1 w-32 shrink-0">
-                  <UiRangeInput aria-label={t('assetLibrary.thumbnailSize')} title={t('assetLibrary.thumbnailSize')} tabIndex={thumbnailControlsOpen ? 0 : -1} min={112} max={280} step={8} value={cardSize} onChange={(event) => setCardSize(Number(event.target.value))} />
+            ) : error ? (
+              <UiError
+                className="h-full"
+                message={error}
+                onRetry={() => void loadAssets(1, true)}
+                retryLabel={t('assetLibrary.retry')}
+              />
+            ) : page.items.length === 0 ? (
+              <UiEmpty
+                className="h-full"
+                icon={<FolderPlus className="h-10 w-10" />}
+                title={keyword || mediaType || libraryId ? t('assetLibrary.noResults') : t('assetLibrary.empty')}
+              />
+            ) : (
+              <>
+                <div className={`grid gap-x-3 gap-y-4 transition-opacity duration-120 ${loading ? 'pointer-events-none opacity-60' : 'opacity-100'}`} aria-busy={loading} style={{ gridTemplateColumns: `repeat(auto-fill,minmax(${cardSize}px,1fr))` }}>
+                  {page.items.map((asset) => (
+                    <AssetCard
+                      key={asset.id}
+                      asset={asset}
+                      selected={selected?.id === asset.id}
+                      eager={mode === 'floating'}
+                      thumbnailFit={thumbnailFit}
+                      menuOpen={menuState?.asset.id === asset.id}
+                      batchMode={workspaceBatchMode}
+                      batchSelected={batchSelectedIds.includes(asset.id)}
+                      batchDisabled={batchBusy}
+                      onSelect={setSelected}
+                      onToggleBatch={(nextAsset) => toggleBatchAsset(nextAsset.id)}
+                      onMenu={(nextAsset, anchor, toggle) => setMenuState((current) => toggle && current?.asset.id === nextAsset.id ? null : { asset: nextAsset, anchor })}
+                      onPreview={setPreviewAsset}
+                      onRename={rename}
+                    />
+                  ))}
                 </div>
-                <UiChipButton tabIndex={thumbnailControlsOpen ? 0 : -1} size="md" className="shrink-0 !px-2.5" active={thumbnailFit === 'cover'} onClick={() => setThumbnailFit('cover')}>{t('assetLibrary.fitCover')}</UiChipButton>
-                <UiChipButton tabIndex={thumbnailControlsOpen ? 0 : -1} size="md" className="shrink-0 !px-2.5" active={thumbnailFit === 'contain'} onClick={() => setThumbnailFit('contain')}>{t('assetLibrary.fitContain')}</UiChipButton>
-              </div>
-            </div>
-            <UiIconButton size="lg" className="relative z-raised" onClick={() => setThumbnailControlsOpen((open) => !open)} title={t('assetLibrary.viewSettings')}>
-              {thumbnailControlsOpen ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
-            </UiIconButton>
-          </div>
-        </footer>
+                <div ref={loadMoreRef} className={`flex h-14 items-center justify-center ${UI_TEXT_META_CLASS}`}>{loadingMore ? <><LoaderCircle className="mr-2 h-4 w-4 animate-spin" />{t('assetLibrary.loadingMore')}</> : page.items.length < page.total ? t('assetLibrary.scrollForMore') : t('assetLibrary.allLoaded')}</div>
+              </>
+            )}
+          </UiSharedGlassHost>
         </main>
         {workspaceBatchMode && (
           <AssetBatchManager
@@ -352,7 +393,6 @@ export const AssetLibrarySurface: React.FC<Props> = ({ mode, active = true, onCl
             onUpdateTags={(tags, operation) => runBatchOperation(() => updateAssetTagsBatch(selectedBatchAssets, tags, operation))}
             onUpdateLibrary={(nextLibraryId, operation) => runBatchOperation(() => updateAssetLibraryBatch(selectedBatchAssets, nextLibraryId, operation))}
             onDelete={() => runBatchOperation(() => deleteAssetsBatch(selectedBatchAssets), true)}
-            onDone={exitBatchMode}
           />
         )}
       </div>

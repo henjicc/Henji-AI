@@ -20,6 +20,8 @@ interface UseContextMenuReturn {
     menuPosition: Position
     menuItems: MenuItem[]
     showMenu: (e: React.MouseEvent, items: MenuItem[]) => void
+    /** 从按钮（如卡片上的“更多”）打开同一份菜单：右缘对齐按钮、贴在按钮下方，键盘触发也能定位。 */
+    showMenuAt: (anchor: Element, items: MenuItem[]) => void
     hideMenu: () => void
 }
 
@@ -31,12 +33,8 @@ export const useContextMenu = (): UseContextMenuReturn => {
     /** 打开菜单的文档：剪辑系统浮窗中右键时，关闭监听与视口都取浮窗本身。 */
     const ownerRef = useRef<Document>(document)
 
-    const showMenu = useCallback((e: React.MouseEvent, items: MenuItem[]) => {
-        e.preventDefault()
-        e.stopPropagation()
-
+    const openAt = useCallback((clientX: number, clientY: number, target: Element | null, items: MenuItem[]) => {
         setMenuItems(items)
-        const target = elementOfEventTarget(e.target)
         ownerRef.current = ownerDocumentOf(target)
         const viewport = ownerWindowOf(target)
 
@@ -51,8 +49,8 @@ export const useContextMenu = (): UseContextMenuReturn => {
         const viewportHeight = viewport.innerHeight
 
         // 使用 clientX/clientY（相对于视口的坐标）
-        let x = e.clientX
-        let y = e.clientY
+        let x = clientX
+        let y = clientY
 
         // 如果菜单会超出右边界，向左偏移
         if (x + menuWidth > viewportWidth - 10) {
@@ -71,6 +69,17 @@ export const useContextMenu = (): UseContextMenuReturn => {
         setMenuPosition({ x, y })
         setMenuVisible(true)
     }, [])
+
+    const showMenu = useCallback((e: React.MouseEvent, items: MenuItem[]) => {
+        e.preventDefault()
+        e.stopPropagation()
+        openAt(e.clientX, e.clientY, elementOfEventTarget(e.target), items)
+    }, [openAt])
+
+    const showMenuAt = useCallback((anchor: Element, items: MenuItem[]) => {
+        const rect = anchor.getBoundingClientRect()
+        openAt(rect.right - menuRef.current.width, rect.bottom + 4, anchor, items)
+    }, [openAt])
 
     const hideMenu = useCallback(() => {
         setMenuVisible(false)
@@ -115,6 +124,7 @@ export const useContextMenu = (): UseContextMenuReturn => {
         menuPosition,
         menuItems,
         showMenu,
+        showMenuAt,
         hideMenu
     }
 }

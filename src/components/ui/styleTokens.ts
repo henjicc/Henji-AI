@@ -314,6 +314,18 @@ export const UI_GLASS_ADAPTIVE_TILE_CLASS = 'ui-glass-adaptive-tile';
 /** 分段选择的轨道（容器只是分组，不是按钮）：比所在表面更暗的一条底，段由 `variant="segment"` 填充。 */
 export const UI_SEGMENTED_TRACK_CLASS = 'inline-flex w-fit gap-0.5 rounded-lg bg-gap/60 p-0.5';
 
+/**
+ * 封面内容卡（画布项目、3D 工程、资产卡；界面重设计 3.3，设计稿 CanvasProjects）：卡片本身不画底与框，
+ * 只有封面框有面板底与圆角；悬停一圈强分隔发丝线、键盘焦点一圈焦点环、选中一圈 2px 强调描边，
+ * 全部画在封面框的 `::after` 覆盖层上（不会被封面图盖住）。规则在 index.css `.ui-cover-group` / `.ui-cover-frame`。
+ *
+ * - `UI_COVER_GROUP_CLASS`：放在整张卡的根元素上，选中由根元素的 `data-selected="true"` 表达；
+ *   按钮型卡片直接用 `UiOptionButton variant="cover"`（已自带），非按钮根元素（如可拖拽的资产卡）手动加。
+ * - `UI_COVER_FRAME_CLASS`：封面框（比例由调用点的 aspect-* 决定）。
+ */
+export const UI_COVER_GROUP_CLASS = 'ui-cover-group';
+export const UI_COVER_FRAME_CLASS = 'ui-cover-frame';
+
 /** 单选选中：中性抬升（选中底 + 主要文字），玻璃内自适应。 */
 export const UI_OPTION_ITEM_ACTIVE_CLASS =
   `border-transparent ${UI_GLASS_ADAPTIVE_SELECTED_CLASS} text-text1`;

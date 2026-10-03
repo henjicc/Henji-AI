@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Plus } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { Plus, Search } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import ContextMenu from '@/components/ContextMenu';
 import { DeleteConfirmDialog } from '@/components/DeleteConfirmDialog';
@@ -14,14 +14,26 @@ import {
   type ProjectSelectionToolbarLabels,
 } from '@/components/ProjectSelectionToolbar';
 import { RenameDialog } from '@/components/RenameDialog';
-import { UiButton, UiPageHeader, UiRegion } from '@/components/ui';
+import { Dropdown, UiButton, UiInput, UiPageHeader, UiRegion } from '@/components/ui';
 import { PROJECT_GRID_MAX_WIDTH_CLASS } from '@/components/projectGridLayout';
+import {
+  PROJECT_LIBRARY_SORT_ORDER,
+  arrangeProjectItems,
+  type ProjectLibrarySort,
+} from '@/components/projectLibraryArrange';
 import { useContextMenu } from '@/hooks/useContextMenu';
 import { useMultiSelect } from '@/hooks/useMultiSelect';
 
 export interface ProjectLibraryLabels {
-  /** 页面主按钮与网格首格的「新建」文案 */
+  /** 页头唯一主按钮「新建」的文案 */
   createAction: string;
+  /** 标题旁的数量，如「12 个项目」 */
+  count: (count: number) => string;
+  searchPlaceholder: string;
+  /** 搜索没有命中时的空状态标题 */
+  noResults: string;
+  sortLabel: string;
+  sortOptions: Record<ProjectLibrarySort, string>;
   createDialogTitle: string;
   renameDialogTitle: string;
   namePlaceholder?: string;
@@ -71,6 +83,9 @@ type NameDialogState =
 /**
  * 项目库页面：画布项目与 3D 镜头参考工程共用的完整页面外壳。
  *
+ * 页头按设计稿 CanvasProjects 是**一条**：标题 + 数量 ｜ 搜索、排序（静默下拉）｜ 场景动作（导入，静默）、
+ * 新建（这一屏唯一的主按钮）。多选时整组动作换成多选工具条。搜索与排序只作用于本页显示。
+ *
  * 收口的是**页面骨架加接线**——滚动容器、标题区、多选工具条切换、新建/重命名对话框、
  * 删除确认的单条/多条文案分支、右键菜单挂载——而不只是卡片。此前这套接线在两个页面
  * 里各写了一遍，结果同一个页面在两处的内边距、标题间距、空态图标和 loading 传参都不一样。
@@ -102,8 +117,15 @@ export function ProjectLibraryPage({
   const [pendingDelete, setPendingDelete] = useState<ProjectCardGridItem[] | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  const { menuVisible, menuPosition, menuItems, showMenu, hideMenu } = useContextMenu();
-  const selection = useMultiSelect(items.map((item) => item.id));
+  const [query, setQuery] = useState('');
+  const [sort, setSort] = useState<ProjectLibrarySort>('updated');
+
+  const { menuVisible, menuPosition, menuItems, showMenu, showMenuAt, hideMenu } = useContextMenu();
+  const visibleItems = useMemo(() => arrangeProjectItems(items, query, sort), [items, query, sort]);
+  // 多选的「全选」只覆盖当前搜索结果，删除也只会删看得见的项目
+  const visibleIds = useMemo(() => visibleItems.map((item) => item.id), [visibleItems]);
+  const selection = useMultiSelect(visibleIds);
+  const searching = query.trim().length > 0;
 
   const openCreateDialog = (): void => setNameDialog({ mode: 'create' });
 
@@ -128,13 +150,14 @@ export function ProjectLibraryPage({
   };
 
   return (
-    // 列数由窗口宽度算出（见 ProjectCardGrid），左右留白交给这里的横向 padding。
-    // 最大宽度只为封顶列数（7 列），标题区与网格共用它，否则超宽屏上「新建」按钮会飞到网格右边之外。
-    <div className="ui-scrollbar h-full w-full overflow-auto bg-app px-6 py-6 xl:px-10 2xl:px-14">
+    // 列数由窗口宽度算出（见 projectGridLayout.ts），左右留白交给这里的横向 padding。
+    // 最大宽度封顶列数，标题区与网格共用它，否则宽屏上「新建」按钮会飞到网格右边之外。
+    <div className="ui-scrollbar h-full w-full overflow-auto bg-window px-6 py-8 xl:px-10">
       <UiRegion maxWidthClassName={PROJECT_GRID_MAX_WIDTH_CLASS} className="mx-auto">
         <UiPageHeader
-          className="mb-6"
+          className="mb-7"
           title={title}
+          meta={loading ? undefined : labels.count(items.length)}
           description={description}
           onBack={onBack}
           backLabel={backLabel}
@@ -142,12 +165,40 @@ export function ProjectLibraryPage({
             <ProjectSelectionToolbar
               selection={selection}
               labels={labels.selection}
-              onDeleteSelected={() => setPendingDelete(items.filter((item) => selection.isSelected(item.id)))}
+              onDeleteSelected={() => setPendingDelete(visibleItems.filter((item) => selection.isSelected(item.id)))}
             />
           ) : (
             <>
+              {items.length > 0 ? (
+                <>
+                  <div className="relative w-56">
+                    <Search aria-hidden="true" className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-text3" />
+                    <UiInput
+                      className="pl-8"
+                      value={query}
+                      aria-label={labels.searchPlaceholder}
+                      placeholder={labels.searchPlaceholder}
+                      onChange={(event) => setQuery(event.target.value)}
+                      onKeyDown={(event) => { if (event.key === 'Escape') setQuery('') }}
+                    />
+                  </div>
+                  <Dropdown<ProjectLibrarySort>
+                    appearance="text"
+                    value={sort}
+                    ariaLabel={labels.sortLabel}
+                    options={PROJECT_LIBRARY_SORT_ORDER.map((value) => ({ value, label: labels.sortOptions[value] }))}
+                    onSelect={setSort}
+                    className="shrink-0"
+                    buttonClassName="w-auto"
+                    minWidthStrategy="options"
+                    panelWidthStrategy="options"
+                  />
+                  {/* 视图控制（搜索、排序）与动作（导入、新建）语义不同：这条带唯一的分隔线 */}
+                  <span aria-hidden="true" className="mx-1 h-4 w-px bg-line" />
+                </>
+              ) : null}
               {headerActions}
-              <UiButton onClick={openCreateDialog} variant="primary" className="gap-2" disabled={busy}>
+              <UiButton onClick={openCreateDialog} variant="primary" disabled={busy}>
                 <Plus className="h-4 w-4" />
                 {labels.createAction}
               </UiButton>
@@ -158,7 +209,7 @@ export function ProjectLibraryPage({
         {banner}
 
         <ProjectCardGrid
-          items={items}
+          items={visibleItems}
           loading={loading}
           loadingMessage={labels.loadingMessage ?? ''}
           busy={busy}
@@ -166,15 +217,14 @@ export function ProjectLibraryPage({
           selection={selection}
           labels={labels.card}
           emptyIcon={emptyIcon}
-          emptyTitle={labels.emptyTitle}
-          emptyDescription={labels.emptyDescription}
-          onCreate={openCreateDialog}
-          createLabel={labels.createAction}
+          emptyTitle={searching ? labels.noResults : labels.emptyTitle}
+          emptyDescription={searching ? undefined : labels.emptyDescription}
           onOpen={onOpen}
           onRename={(item) => setNameDialog({ mode: 'rename', item })}
           onDeleteRequest={(targets) => setPendingDelete(targets)}
           extraActions={extraActions}
           showMenu={showMenu}
+          showMenuAt={showMenuAt}
         />
       </UiRegion>
 

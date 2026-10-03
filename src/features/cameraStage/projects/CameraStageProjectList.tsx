@@ -22,6 +22,11 @@ interface CameraStageProjectListProps {
 
 const LABELS: ProjectLibraryLabels = {
   createAction: '新建工程',
+  count: (count) => `${count} 个工程`,
+  searchPlaceholder: '搜索工程',
+  noResults: '没有符合条件的工程',
+  sortLabel: '排序',
+  sortOptions: { updated: '最近编辑', created: '最近创建', name: '名称' },
   createDialogTitle: '新建工程',
   renameDialogTitle: '重命名工程',
   namePlaceholder: '工程名称',
@@ -41,6 +46,7 @@ const LABELS: ProjectLibraryLabels = {
     selectMultiple: '多选',
     selectItem: '选中',
     deselectItem: '取消选中',
+    more: '工程操作',
   },
   selection: {
     selectedCount: (count) => `已选择 ${count} 项`,
@@ -67,6 +73,8 @@ function toCardItem(project: CameraStageProjectPlatformSummary): ProjectCardGrid
     name: project.name,
     metaLine: `${project.objectCount} 个对象 · ${formatTime(project.updatedAt)}`,
     coverPath: project.coverPath,
+    updatedAt: project.updatedAt,
+    createdAt: project.createdAt,
   }
 }
 

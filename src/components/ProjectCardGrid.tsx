@@ -1,8 +1,8 @@
 import React from 'react';
-import { CheckSquare, FolderOpen, Pencil, Plus, Square, Trash2 } from 'lucide-react';
+import { CheckSquare, FolderOpen, MoreHorizontal, Pencil, Square, Trash2 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import {
-  UiButton,
+  UI_COVER_FRAME_CLASS,
   UiCheckbox,
   UiEmpty,
   UiIconButton,
@@ -20,6 +20,9 @@ export interface ProjectCardGridItem {
   metaLine: string;
   /** 封面缩略图本地路径；为空时卡片显示占位图 */
   coverPath?: string | null;
+  /** 排序用的时间戳（毫秒）；不传时该项按原顺序排在后面 */
+  updatedAt?: number;
+  createdAt?: number;
 }
 
 export interface ProjectCardGridExtraAction {
@@ -37,6 +40,8 @@ export interface ProjectCardGridLabels {
   selectMultiple: string;
   selectItem: string;
   deselectItem: string;
+  /** 卡片悬停时右上角“更多”按钮的名称 */
+  more: string;
 }
 
 interface ProjectCardGridProps {
@@ -50,23 +55,22 @@ interface ProjectCardGridProps {
   emptyIcon?: React.ReactNode;
   emptyTitle: string;
   emptyDescription?: string;
-  /** 传入后网格首格是「新建」入口；不传则只渲染既有项目 */
-  onCreate?: () => void;
-  createLabel?: string;
   onOpen: (item: ProjectCardGridItem) => void;
   onRename: (item: ProjectCardGridItem) => void;
   onDeleteRequest: (items: ProjectCardGridItem[]) => void;
   extraActions?: (item: ProjectCardGridItem) => ProjectCardGridExtraAction[];
   showMenu: (event: React.MouseEvent, items: MenuItem[]) => void;
+  showMenuAt: (anchor: Element, items: MenuItem[]) => void;
 }
 
 /**
- * 项目/工程列表的卡片网格：封面 + 名称 + 元信息，打开、重命名、删除、右键菜单、多选批量删除。
+ * 项目/工程列表的卡片网格（设计稿 CanvasProjects）：封面 + 名称 + 元信息，打开、右键菜单、悬停“更多”菜单、多选批量删除。
  *
  * 画布工程与 3D 镜头参考工程共用同一份实现，避免同一交互长成两个样子。
- * 悬浮操作与多选复选框都是覆盖在卡片按钮之上的**同级**元素（不嵌进 `<button>` 内部），
- * 静息态不为它们预留任何布局宽度——同样的坑见资产库侧栏那次修复。
- * 悬浮动作压在封面（真实媒体）之上，所以那一簇用 `ui-glass`，不是压在纯色 UI 上的滥用。
+ * 卡片是 `UiOptionButton variant="cover"`：本身无底无框，悬停/焦点/选中都只画在封面框上。
+ * “更多”按钮与多选复选框是覆盖在卡片按钮之上的**同级**元素（不嵌进 `<button>` 内部），
+ * 静息态不为它们预留布局宽度；“更多”压在封面（真实媒体）上，所以用媒体叠层档 `tone="media"`。
+ * 新建入口只在页头（唯一主按钮），网格与空状态不再各放一个（1.1 盘点的“双新建”）。
  */
 export const ProjectCardGrid: React.FC<ProjectCardGridProps> = ({
   items,
@@ -79,13 +83,12 @@ export const ProjectCardGrid: React.FC<ProjectCardGridProps> = ({
   emptyIcon,
   emptyTitle,
   emptyDescription,
-  onCreate,
-  createLabel,
   onOpen,
   onRename,
   onDeleteRequest,
   extraActions,
   showMenu,
+  showMenuAt,
 }) => {
   const buildMenuItems = (item: ProjectCardGridItem): MenuItem[] => {
     if (selection.active) {
@@ -137,90 +140,60 @@ export const ProjectCardGrid: React.FC<ProjectCardGridProps> = ({
         icon={emptyIcon}
         title={emptyTitle}
         description={emptyDescription}
-        action={onCreate ? (
-          <UiButton variant="secondary" className="gap-2" onClick={onCreate} disabled={busy}>
-            <Plus className="h-4 w-4" />
-            {createLabel}
-          </UiButton>
-        ) : undefined}
       />
     );
   }
 
   return (
-    // 列数与上限见 projectGridLayout.ts；断点式 grid-cols-* 在这里是错的，
-    // 同一个断点下窗口还能继续变宽，列数却卡死。
-    <div className={`grid ${PROJECT_GRID_COLUMNS_CLASS} gap-4`}>
-      {onCreate && !selection.active && (
-        <UiOptionButton
-          variant="card"
-          type="button"
-          className="h-full w-full flex-col justify-center gap-3 !items-center p-2.5 text-center"
-          onClick={onCreate}
-          disabled={busy}
-        >
-          {/* 高度交给网格拉伸对齐同排项目卡，不写死数值 */}
-          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-veil-soft">
-            <Plus className="h-5 w-5" />
-          </span>
-          <span className="text-sm font-medium">{createLabel}</span>
-        </UiOptionButton>
-      )}
-
+    <div className={`grid ${PROJECT_GRID_COLUMNS_CLASS}`}>
       {items.map((item) => {
         const selected = selection.isSelected(item.id);
         return (
-          <div key={item.id} className="group relative">
+          <div key={item.id} className="group relative min-w-0">
             <UiOptionButton
               data-project-id={item.id}
               data-project-meta={item.metaLine}
-              variant="card"
+              variant="cover"
               type="button"
-              selection="multiple"
               active={selected}
-              className="h-auto w-full flex-col !items-stretch gap-0 p-2.5 text-left"
+              aria-pressed={selection.active ? selected : undefined}
+              className="w-full"
               onClick={() => (selection.active ? selection.toggle(item.id) : onOpen(item))}
               onContextMenu={(event) => showMenu(event, buildMenuItems(item))}
               disabled={busy}
             >
-              <span className="relative block aspect-[4/3] w-full overflow-hidden rounded-lg bg-app">
-                <ProjectCardCover coverPath={item.coverPath} icon={Icon} seed={item.id} alt={item.name} />
+              <span className={`${UI_COVER_FRAME_CLASS} aspect-[16/10] w-full`}>
+                <ProjectCardCover coverPath={item.coverPath} icon={Icon} alt={item.name} />
               </span>
-              <span className="flex flex-col gap-0.5 px-1 pb-0.5 pt-2.5">
-                <span className="truncate text-sm font-medium">{item.name}</span>
-                <span className="truncate text-xs text-text-soft">{item.metaLine}</span>
+              <span className="flex min-w-0 flex-col gap-0.5 px-0.5">
+                <span className="truncate text-13 font-medium text-text1">{item.name}</span>
+                <span className="truncate text-xs text-text3">{item.metaLine}</span>
               </span>
             </UiOptionButton>
 
             {selection.active ? (
-              <div className="absolute left-4 top-4">
-                <UiCheckbox checked={selected} onCheckedChange={() => selection.toggle(item.id)} />
+              <div className="absolute left-2 top-2">
+                <UiCheckbox
+                  checked={selected}
+                  aria-label={selected ? labels.deselectItem : labels.selectItem}
+                  onCheckedChange={() => selection.toggle(item.id)}
+                />
               </div>
             ) : (
-              <div className="ui-glass absolute right-4 top-4 flex gap-0.5 rounded-lg p-0.5 opacity-0 transition-opacity group-hover:opacity-100">
-                <UiIconButton
-                  title={labels.rename}
-                  onClick={() => onRename(item)}
-                >
-                  <Pencil size={13} />
-                </UiIconButton>
-                {extraActions?.(item).map((action) => (
-                  <UiIconButton
-                    key={action.id}
-                    title={action.label}
-                    disabled={action.disabled}
-                    onClick={() => action.onClick(item)}
-                  >
-                    {action.icon}
-                  </UiIconButton>
-                ))}
-                <UiIconButton tone="danger"
-                  title={labels.delete}
-                  onClick={() => onDeleteRequest([item])}
-                >
-                  <Trash2 size={13} />
-                </UiIconButton>
-              </div>
+              <UiIconButton
+                tone="media"
+                title={labels.more}
+                aria-label={labels.more}
+                aria-haspopup="menu"
+                disabled={busy}
+                className="absolute right-2 top-2 opacity-0 transition-opacity duration-120 focus-visible:opacity-100 group-hover:opacity-100"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  showMenuAt(event.currentTarget, buildMenuItems(item));
+                }}
+              >
+                <MoreHorizontal className="h-4 w-4" />
+              </UiIconButton>
             )}
           </div>
         );

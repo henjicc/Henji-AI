@@ -148,8 +148,10 @@ export interface UiOptionButtonProps extends ButtonHTMLAttributes<HTMLButtonElem
    * - `swatch`：圆形色样（32 外框），颜色由调用点经 `style.backgroundColor`/`backgroundImage` 传入（不要用 `background` 简写，
    *   它会重置 `background-clip`），选中为外圈一环。
    * - `grid`：二维选项网格的格子（比例、分辨率、音色、模型卡）：静息铺一层 raised 撑出格子、不描边，选中中性抬升。
+   * - `cover`：封面内容卡（画布项目、3D 工程）：按钮本身无底无框，纵向排列“封面 + 文字”；悬停、键盘焦点与
+   *   选中（`active`）只画在子元素 `UI_COVER_FRAME_CLASS` 封面框上（悬停发丝线、焦点环、选中强调描边，界面重设计 3.3）。
    */
-  variant?: 'default' | 'card' | 'flat' | 'menu' | 'grid' | 'segment' | 'tile' | 'swatch'
+  variant?: 'default' | 'card' | 'flat' | 'menu' | 'grid' | 'segment' | 'tile' | 'swatch' | 'cover'
   /**
    * 高度与字号档（default / card / flat / menu / grid）：不传时高度随内容（上下 8px 内边距，字号 13）；
    * sm / md / lg 是最小高度 28 / 32 / 36（字号 12 / 13 / 13），多行内容仍可撑高。segment / tile / swatch 尺寸固定。

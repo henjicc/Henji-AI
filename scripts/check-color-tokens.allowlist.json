@@ -43,13 +43,6 @@
         "palette": 1
       }
     },
-    "src/features/assets/components/AssetCard.tsx": {
-      "owner": "3.3",
-      "category": "界面色（迁入语义令牌）",
-      "counts": {
-        "palette": 1
-      }
-    },
     "src/features/audioEdit/AudioEditApp.tsx": {
       "owner": "3.4",
       "category": "界面色（迁入语义令牌）",

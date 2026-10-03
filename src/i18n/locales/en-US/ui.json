@@ -328,7 +328,9 @@
     "batchConfirmDelete": "Click again to confirm",
     "batchNoSelection": "Select at least one asset",
     "batchPartialFailure": "{{count}} items failed. Please retry.",
-    "batchEmptyMenu": "Manage multiple assets"
+    "batchEmptyMenu": "Manage multiple assets",
+    "close": "Close asset library",
+    "confirm": "Confirm"
   },
   "windowControls": {
     "appName": "Henji AI",

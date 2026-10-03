@@ -706,7 +706,15 @@
     "deleteSelected": "Delete selected",
     "confirmDelete": "Delete",
     "deleteConfirmSingle": "Delete \"{{name}}\"? This cannot be undone.",
-    "deleteConfirmMultiple": "Delete the selected {{count}} projects? This cannot be undone."
+    "deleteConfirmMultiple": "Delete the selected {{count}} projects? This cannot be undone.",
+    "count": "{{count}} projects",
+    "search": "Search projects",
+    "noResults": "No matching projects",
+    "sort": "Sort",
+    "sortUpdated": "Last edited",
+    "sortCreated": "Recently created",
+    "sortName": "Name",
+    "more": "Project actions"
   },
   "settings": {
     "title": "Settings",

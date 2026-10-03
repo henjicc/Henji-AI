@@ -706,7 +706,15 @@
     "deleteSelected": "删除所选",
     "confirmDelete": "删除",
     "deleteConfirmSingle": "确定删除「{{name}}」？此操作不可恢复。",
-    "deleteConfirmMultiple": "确定删除选中的 {{count}} 个项目？此操作不可恢复。"
+    "deleteConfirmMultiple": "确定删除选中的 {{count}} 个项目？此操作不可恢复。",
+    "count": "{{count}} 个项目",
+    "search": "搜索项目",
+    "noResults": "没有符合条件的项目",
+    "sort": "排序",
+    "sortUpdated": "最近编辑",
+    "sortCreated": "最近创建",
+    "sortName": "名称",
+    "more": "项目操作"
   },
   "settings": {
     "title": "设置",

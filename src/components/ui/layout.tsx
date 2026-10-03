@@ -57,6 +57,8 @@ interface UiGroupProps extends Omit<HTMLAttributes<HTMLDivElement>, 'title'> {
 
 interface UiPageHeaderProps extends Omit<HTMLAttributes<HTMLDivElement>, 'title'> {
   title: ReactNode;
+  /** 紧跟标题、与标题基线对齐的辅助信息（如“12 个项目”），辅助文字色、不进标题的无障碍名称。 */
+  meta?: ReactNode;
   description?: ReactNode;
   /** 右侧操作区 */
   actions?: ReactNode;
@@ -199,6 +201,7 @@ export function UiGroup({
 export function UiPageHeader({
   className = '',
   title,
+  meta,
   description,
   actions,
   onBack,
@@ -206,7 +209,8 @@ export function UiPageHeader({
   ...props
 }: UiPageHeaderProps): JSX.Element {
   return (
-    <div data-ui-page-header className={`flex items-start gap-2 ${className}`} {...props}>
+    // 没有说明行时标题只有一行，与右侧 32 高的动作垂直居中；有说明时标题区两行，动作贴顶。
+    <div data-ui-page-header className={`flex ${description ? 'items-start' : 'items-center'} gap-2 ${className}`} {...props}>
       {onBack ? (
         // -ml-1.5 让图标的视觉左边缘与标题文字对齐（按钮自带内边距）
         <UiIconButton
@@ -219,7 +223,14 @@ export function UiPageHeader({
         </UiIconButton>
       ) : null}
       <div className="min-w-0 flex-1">
-        <h2 data-ui-page-title className={UI_TEXT_TITLE_CLASS}>{title}</h2>
+        {meta ? (
+          <div className="flex min-w-0 items-baseline gap-2.5">
+            <h2 data-ui-page-title className={`min-w-0 truncate ${UI_TEXT_TITLE_CLASS}`}>{title}</h2>
+            <span className="shrink-0 text-13 tabular-nums text-text3">{meta}</span>
+          </div>
+        ) : (
+          <h2 data-ui-page-title className={UI_TEXT_TITLE_CLASS}>{title}</h2>
+        )}
         {description ? <p className={`mt-1 ${UI_TEXT_META_CLASS}`}>{description}</p> : null}
       </div>
       {actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}

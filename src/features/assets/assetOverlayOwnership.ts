@@ -2,6 +2,7 @@ const ASSET_CHILD_OVERLAY_SELECTOR = [
   '[data-asset-card-menu]',
   '[data-asset-context-menu="true"]',
   '[data-dropdown-portal="true"]',
+  '[data-asset-view-settings]',
 ].join(', ')
 
 /** Portal 挂到 document.body 后，仍然属于资产面板的交互浮层。 */
@@ -12,7 +13,7 @@ export function isAssetChildOverlayTarget(target: EventTarget | null): boolean {
 /** 有子浮层正在处理 Escape 时，外层资产视图不应抢先关闭。 */
 export function hasOpenAssetChildOverlay(root: ParentNode = document): boolean {
   return Boolean(root.querySelector(
-    '[data-asset-preview="open"], [data-asset-card-menu], [data-asset-context-menu="true"], [data-dropdown-portal="true"]',
+    '[data-asset-preview="open"], [data-asset-card-menu], [data-asset-context-menu="true"], [data-dropdown-portal="true"], [data-asset-view-settings]',
   ))
 }
 

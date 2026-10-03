@@ -1741,14 +1741,47 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
 }
 
 /*
- * 项目卡封面占位图：项目还没有任何内容时代替截图。
- * 颜色只用主题令牌里的品牌色，卡与卡之间的差异靠 --cover-x / --cover-y 两个内联变量
- * 挪动光斑位置——刻意不做色相旋转：转色相会转出与暗色界面打架的橙/绿，
- * 而占位图应该是一族安静的同色系底图，不是彩虹。
+ * 封面内容卡（styleTokens `UI_COVER_GROUP_CLASS` / `UI_COVER_FRAME_CLASS`，界面重设计 3.3）：
+ * 卡片本身无底无框，只有封面框有面板底与圆角。状态画在封面框的 ::after 覆盖层上，
+ * 封面图（img/视频缩略图）不会盖住它：悬停 1px 强分隔线、选中 2px 强调色、键盘焦点 2px 焦点环。
+ * 后写的规则优先（同特异性）：焦点 > 选中 > 悬停。
+ */
+.ui-cover-frame {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  border-radius: var(--radius-field);
+  background-color: rgb(var(--panel-rgb));
+}
+
+.ui-cover-frame::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow: inset 0 0 0 1px transparent;
+  transition: box-shadow 120ms ease-out;
+}
+
+.ui-cover-group:hover .ui-cover-frame::after {
+  box-shadow: inset 0 0 0 1px rgb(var(--line-strong-rgb));
+}
+
+.ui-cover-group[data-selected='true'] .ui-cover-frame::after {
+  box-shadow: inset 0 0 0 2px rgb(var(--accent-rgb));
+}
+
+.ui-cover-group:focus-visible .ui-cover-frame::after {
+  box-shadow: inset 0 0 0 2px rgb(var(--accent-ring-rgb));
+}
+
+/*
+ * 项目卡封面占位图：项目还没有封面截图时，用设计稿的画布点阵（面板底 + 发丝线色圆点）代替。
+ * 只用表面与发丝线令牌，不用强调色（重要记录 001：强调色只给主动作、焦点与选中）。
  */
 .project-cover-placeholder {
-  background:
-    radial-gradient(85% 85% at var(--cover-x, 25%) var(--cover-y, 20%), rgb(var(--brand-500-rgb) / 0.34) 0%, transparent 64%),
-    radial-gradient(75% 75% at calc(100% - var(--cover-x, 25%)) calc(100% - var(--cover-y, 20%)), rgb(var(--brand-300-rgb) / 0.12) 0%, transparent 60%),
-    linear-gradient(145deg, rgb(var(--layer-rgb) / 0.80), rgb(var(--panel-rgb) / 0.95));
+  background-color: rgb(var(--panel-rgb));
+  background-image: radial-gradient(circle, rgb(var(--line-rgb)) 1px, transparent 1.2px);
+  background-size: 14px 14px;
 }

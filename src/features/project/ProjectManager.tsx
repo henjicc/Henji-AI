@@ -20,12 +20,23 @@ function toCardItem(project: ProjectSummary, nodesCountLabel: (count: number) =>
     name: project.name,
     metaLine: `${nodesCountLabel(project.nodeCount)} · ${new Date(project.updatedAt).toLocaleDateString()}`,
     coverPath: project.coverPath,
+    updatedAt: project.updatedAt,
+    createdAt: project.createdAt,
   };
 }
 
 function buildLabels(t: Translate): ProjectLibraryLabels {
   return {
     createAction: t('project.newProject'),
+    count: (count) => t('project.count', { count }),
+    searchPlaceholder: t('project.search'),
+    noResults: t('project.noResults'),
+    sortLabel: t('project.sort'),
+    sortOptions: {
+      updated: t('project.sortUpdated'),
+      created: t('project.sortCreated'),
+      name: t('project.sortName'),
+    },
     createDialogTitle: t('project.newProjectTitle'),
     renameDialogTitle: t('project.renameTitle'),
     namePlaceholder: t('project.namePlaceholder'),
@@ -43,6 +54,7 @@ function buildLabels(t: Translate): ProjectLibraryLabels {
       selectMultiple: t('project.selectMultiple'),
       selectItem: t('project.selectItem'),
       deselectItem: t('project.deselectItem'),
+      more: t('project.more'),
     },
     selection: {
       selectedCount: (count) => t('project.selectedCount', { count }),
@@ -106,8 +118,6 @@ export function ProjectManager(): JSX.Element {
         headerActions={(
           <UiButton
             onClick={() => void handleImportClick()}
-            variant="secondary"
-            className="gap-2 px-4"
             disabled={isImporting}
           >
             <PackageOpen className="h-4 w-4" />

@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { CheckSquare2, Pencil, Trash2 } from 'lucide-react'
-import { UI_TEXT_LABEL_CLASS, UiButton, UiChipButton, UiError, UiIconButton, UiInput, UiPanel } from '@/components/ui'
+import { Pencil, Trash2 } from 'lucide-react'
+import { UI_FIELD_LABEL_CLASS, UI_TEXT_PANEL_TITLE_CLASS, UiButton, UiChipButton, UiError, UiIconButton, UiInput, UiPanel } from '@/components/ui'
+import { ICON_MULTI_SELECT } from '@/core/theme/icons'
 import { UI_DURATION } from '@/components/ui/motion'
 import type { AssetLibraryRecord, AssetRecord } from '@/platform/contracts/assetLibrary'
 import { useI18n } from '@/hooks/useI18n'
@@ -137,22 +138,23 @@ export const AssetCardMenu: React.FC<Props> = ({ asset, anchor, libraries, avail
     <UiPanel ref={ref} variant="glass" className={`fixed z-modal w-80 overflow-y-auto p-3 transition-[opacity,transform] duration-120 ease-out motion-reduce:transition-none ${visible ? 'translate-y-0 scale-100 opacity-100' : `${placeAbove ? 'translate-y-1' : '-translate-y-1'} scale-[0.98] opacity-0`}`} style={{ left, top, maxHeight: menuHeight, transformOrigin: placeAbove ? 'bottom center' : 'top center' }} data-asset-card-menu>
       <div className="mb-3 flex min-w-0 items-center gap-1">
         {editingName ? (
-          <UiInput autoFocus disabled={pendingAction !== null} className="min-w-0 flex-1 !px-2" value={nameDraft} onChange={(event) => setNameDraft(event.target.value)} onBlur={() => void applyName()} onKeyDown={(event) => { if (event.key === 'Enter') void applyName(); if (event.key === 'Escape') { setEditingName(false); setNameDraft(name) } }} />
+          <UiInput autoFocus disabled={pendingAction !== null} className="min-w-0 flex-1" aria-label={t('assetLibrary.renameAsset')} value={nameDraft} onChange={(event) => setNameDraft(event.target.value)} onBlur={() => void applyName()} onKeyDown={(event) => { if (event.key === 'Enter') void applyName(); if (event.key === 'Escape') { setEditingName(false); setNameDraft(name) } }} />
         ) : (
-          <div className="min-w-0 flex-1 truncate font-medium text-text-dark" title={t('assetLibrary.renameAsset')} onDoubleClick={() => setEditingName(true)}>{name}</div>
+          <div className={`min-w-0 flex-1 truncate ${UI_TEXT_PANEL_TITLE_CLASS}`} title={t('assetLibrary.renameAsset')} onDoubleClick={() => setEditingName(true)}>{name}</div>
         )}
-        {!editingName && <UiIconButton className="shrink-0" onClick={() => setEditingName(true)} title={t('assetLibrary.renameAsset')}><Pencil className="h-3.5 w-3.5" /></UiIconButton>}
+        {!editingName && <UiIconButton className="shrink-0" onClick={() => setEditingName(true)} title={t('assetLibrary.renameAsset')} aria-label={t('assetLibrary.renameAsset')}><Pencil className="h-3.5 w-3.5" /></UiIconButton>}
       </div>
-      <div className={`mb-1.5 ${UI_TEXT_LABEL_CLASS}`}>{t('assetLibrary.tags')}</div>
-      <UiInput disabled={pendingAction !== null} className="!px-2" value={tagDraft} onChange={(event) => setTagDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void addDraftTag() }} placeholder={t('assetLibrary.tagPlaceholder')} />
-      <div className="mt-2 flex flex-wrap gap-1.5"><UiChipButton active disabled size="sm" className="!px-2">{t(`assetLibrary.${asset.mediaType}`)}</UiChipButton>{tags.map((tag) => <UiChipButton key={tag} active disabled={pendingAction !== null} size="sm" className="!px-2" onClick={() => void applyTags(tags.filter((item) => item !== tag))}>{tag}</UiChipButton>)}{tagDraft && suggestions.map((tag) => <UiChipButton key={tag} disabled={pendingAction !== null} size="sm" className="!px-2" onClick={() => { setTagDraft(''); void applyTags([...tags, tag]) }}>{tag}</UiChipButton>)}</div>
-      <div className={`mb-1.5 mt-3 ${UI_TEXT_LABEL_CLASS}`}>{t('assetLibrary.membership')}</div>
-      {libraries.length > 6 && <UiInput className="mb-2 !px-2" value={librarySearch} onChange={(event) => setLibrarySearch(event.target.value)} placeholder={t('assetLibrary.searchLibraries')} />}
-      <div className="max-h-32 overflow-y-auto"><div className="flex flex-wrap gap-1.5">{filteredLibraries.map((library) => <UiChipButton key={library.id} active={libraryIds.includes(library.id)} disabled={pendingAction !== null} size="md" className="!px-2.5" onClick={() => void toggleLibrary(library.id)}>{library.name}</UiChipButton>)}</div></div>
+      <div className={UI_FIELD_LABEL_CLASS}>{t('assetLibrary.tags')}</div>
+      <UiInput disabled={pendingAction !== null} aria-label={t('assetLibrary.tags')} value={tagDraft} onChange={(event) => setTagDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void addDraftTag() }} placeholder={t('assetLibrary.tagPlaceholder')} />
+      <div className="mt-2 flex flex-wrap gap-1.5"><UiChipButton active disabled size="sm">{t(`assetLibrary.${asset.mediaType}`)}</UiChipButton>{tags.map((tag) => <UiChipButton key={tag} active disabled={pendingAction !== null} size="sm" onClick={() => void applyTags(tags.filter((item) => item !== tag))}>{tag}</UiChipButton>)}{tagDraft && suggestions.map((tag) => <UiChipButton key={tag} disabled={pendingAction !== null} size="sm" onClick={() => { setTagDraft(''); void applyTags([...tags, tag]) }}>{tag}</UiChipButton>)}</div>
+      <div className={`mt-4 ${UI_FIELD_LABEL_CLASS}`}>{t('assetLibrary.membership')}</div>
+      {libraries.length > 6 && <UiInput className="mb-2" aria-label={t('assetLibrary.searchLibraries')} value={librarySearch} onChange={(event) => setLibrarySearch(event.target.value)} placeholder={t('assetLibrary.searchLibraries')} />}
+      <div className="max-h-32 overflow-y-auto"><div className="flex flex-wrap gap-1.5">{filteredLibraries.map((library) => <UiChipButton key={library.id} active={libraryIds.includes(library.id)} disabled={pendingAction !== null} size="sm" onClick={() => void toggleLibrary(library.id)}>{library.name}</UiChipButton>)}</div></div>
       {actionError ? <UiError size="xs" message={actionError} /> : null}
-      <div className="mt-3 flex gap-2">
-        <UiButton variant="danger" disabled={pendingAction !== null} className="flex-1" onClick={() => void deleteCurrentAsset()}><Trash2 className="mr-2 h-4 w-4" />{t('assetLibrary.deleteAsset')}</UiButton>
-        <UiButton variant="secondary" disabled={pendingAction !== null} className="flex-1" onClick={() => { requestClose(); onOpenBatchManagement() }}><CheckSquare2 className="mr-2 h-4 w-4" />{t('assetLibrary.batchManage')}</UiButton>
+      {/* 菜单里的动作同为辅助档：批量管理是进入一种模式，删除是危险档（静息中性、悬停显红） */}
+      <div className="mt-4 flex justify-between gap-2">
+        <UiButton disabled={pendingAction !== null} onClick={() => { requestClose(); onOpenBatchManagement() }}><ICON_MULTI_SELECT className="h-4 w-4" />{t('assetLibrary.batchManage')}</UiButton>
+        <UiButton variant="danger" disabled={pendingAction !== null} onClick={() => void deleteCurrentAsset()}><Trash2 className="h-4 w-4" />{t('assetLibrary.deleteAsset')}</UiButton>
       </div>
     </UiPanel>, document.body,
   )

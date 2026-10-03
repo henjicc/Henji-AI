@@ -417,7 +417,8 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 |---|---|---|
 | 弹窗 | `UiModal` | 手写 `fixed inset-0` + `bg-black/…` + 卡片（存量已全部清零，`check:surface` 规则 C 会拦，别再加） |
 | 分组 | `UiGroup` | 手写 `border + bg` 的 div |
-| 页面标题区 | `UiPageHeader` | 手写 h2 + p |
+| 页面标题区 | `UiPageHeader`（标题旁的数量等用 `meta`，与标题基线对齐） | 手写 h2 + p；把数量塞进标题文字 |
+| 封面内容卡（项目卡、工程卡、资产卡） | `UiOptionButton variant="cover"` + 封面框 `UI_COVER_FRAME_CLASS`；不是按钮的根元素（可拖拽的资产卡）加 `UI_COVER_GROUP_CLASS` 与 `data-selected` | 给整张卡铺底描边，或在调用点手写悬停描边/选中环 |
 | 表单行 | `UiFormRow` | 手写 label + 间距 |
 | 参数帮助说明 | 参数名称文本本身的 hover / focus tooltip | 加 Info 等额外图标、把 `description` 渲染成控件下方正文，或用 Tooltip 包住整个控件 |
 | 空/加载/错误 | `UiEmpty` / `UiLoading` / `UiError` | 内联手写状态块 |

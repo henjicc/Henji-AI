@@ -328,7 +328,9 @@
     "batchConfirmDelete": "再次点击确认删除",
     "batchNoSelection": "请先选择资产",
     "batchPartialFailure": "{{count}} 项处理失败，请重试",
-    "batchEmptyMenu": "管理多个资产"
+    "batchEmptyMenu": "管理多个资产",
+    "close": "关闭资产库",
+    "confirm": "确定"
   },
   "windowControls": {
     "appName": "痕迹AI",

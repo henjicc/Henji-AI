@@ -18,6 +18,7 @@ import {
   UI_GLASS_ADAPTIVE_SELECTED_CLASS,
   UI_GLASS_ADAPTIVE_TILE_CLASS,
   UI_CONTROL_HEIGHT_CLASS,
+  UI_COVER_GROUP_CLASS,
   UI_MULTISELECT_ITEM_ACTIVE_CLASS,
   UI_NAV_INDICATOR_BOTTOM_CLASS,
   UI_NAV_INDICATOR_BOTTOM_SHORT_CLASS,
@@ -297,6 +298,18 @@ const UI_OPTION_SIZE_CLASS: Record<UiControlSize | 'auto', string> = {
  */
 export const UiOptionButton = forwardRef<HTMLButtonElement, UiOptionButtonProps>(
   ({ className = '', active = false, variant = 'default', size, selection = 'single', highlighted = false, ...props }, ref) => {
+    if (variant === 'cover') {
+      // 封面内容卡：状态全部由子元素封面框（UI_COVER_FRAME_CLASS）经 `ui-cover-group` + data-selected 表达，
+      // 按钮本身不画底、框与焦点环（焦点环画在封面框上，避免被封面盖住）。
+      return (
+        <button
+          ref={ref}
+          data-selected={active ? 'true' : 'false'}
+          className={`${UI_COVER_GROUP_CLASS} relative flex min-w-0 flex-col items-stretch gap-2.5 border-0 bg-transparent p-0 text-left text-text1 ${UI_BUTTON_RESET_CLASS} ${UI_FIELD_DISABLED_CLASS} ${className}`}
+          {...props}
+        />
+      );
+    }
     if (variant === 'segment' || variant === 'tile' || variant === 'swatch') {
       const neutral = UI_OPTION_NEUTRAL_VARIANT_CLASS[variant];
       return (

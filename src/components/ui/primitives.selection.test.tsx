@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   UI_BOOLEAN_CONTROL_ACTIVE_CLASS,
+  UI_COVER_GROUP_CLASS,
   UI_GLASS_ADAPTIVE_CONTROL_CLASS,
   UI_GLASS_ADAPTIVE_OPTION_CLASS,
   UI_GLASS_ADAPTIVE_SELECTED_CLASS,
@@ -250,5 +251,28 @@ describe('Ui primitives 选中态词汇表', () => {
 
     expect(view.getByRole('checkbox', { name: '未勾选' }).classList.contains('h-6')).toBe(true);
     expect(view.getByRole('slider', { name: '范围' }).classList.contains('h-6')).toBe(true);
+  });
+});
+
+describe('UiOptionButton variant="cover"（封面内容卡，界面重设计 3.3）', () => {
+  afterEach(cleanup);
+
+  it('按钮本身无底无框，选中只经 data-selected 交给封面框表达', () => {
+    const view = render(
+      <>
+        <UiOptionButton variant="cover" aria-label="静息卡">静息</UiOptionButton>
+        <UiOptionButton variant="cover" active aria-label="选中卡">选中</UiOptionButton>
+      </>,
+    );
+    const rest = view.getByRole('button', { name: '静息卡' });
+    const selected = view.getByRole('button', { name: '选中卡' });
+    expect(rest.classList.contains(UI_COVER_GROUP_CLASS)).toBe(true);
+    expect(rest.getAttribute('data-selected')).toBe('false');
+    expect(selected.getAttribute('data-selected')).toBe('true');
+    for (const button of [rest, selected]) {
+      expect(button.classList.contains('bg-transparent')).toBe(true);
+      expect(button.classList.contains('border-0')).toBe(true);
+      expect([...button.classList].some((name) => name.startsWith('bg-') && name !== 'bg-transparent')).toBe(false);
+    }
   });
 });

@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AssetRecord } from '@/platform/contracts/assetLibrary'
 import { AssetLibrarySurface } from './AssetLibrarySurface'
 import { useAssetLibraryStore } from './store/assetLibraryStore'
+import { isAssetChildOverlayTarget } from './assetOverlayOwnership'
 
 const mocks = vi.hoisted(() => ({
   query: vi.fn(), readCode: vi.fn(), touch: vi.fn(), libraries: vi.fn(), tags: vi.fn(), t: (key: string) => key,
@@ -84,5 +85,45 @@ describe('资产库代码类型入口', () => {
     view.rerender(<AssetLibrarySurface mode="workspace" active />)
     expect(screen.queryByRole('dialog')).toBeNull()
     expect(mocks.readCode).toHaveBeenCalledOnce()
+  })
+})
+
+describe('资产库命令带（界面重设计 3.3）', () => {
+  it('工作区只有页头一条命令带：返回、标题与数量、筛选、显示设置、批量管理，没有主按钮', async () => {
+    mocks.query.mockResolvedValue({ items: [asset], total: 1, page: 1, pageSize: 48 })
+    const onClose = vi.fn()
+    render(<AssetLibrarySurface mode="workspace" onClose={onClose} />)
+    await screen.findByText('库中代码')
+    const header = document.querySelector('[data-ui-page-header]') as HTMLElement
+    expect(header.querySelector('[data-ui-page-title]')?.textContent).toBe('assetLibrary.categories')
+    expect(screen.getByRole('textbox', { name: 'assetLibrary.search' }).closest('[data-ui-page-header]')).toBe(header)
+    expect(screen.getByRole('button', { name: 'assetLibrary.viewSettings' }).closest('[data-ui-page-header]')).toBe(header)
+    expect(screen.getByRole('button', { name: 'assetLibrary.batchManage' }).getAttribute('data-variant')).toBe('quiet')
+    expect(document.querySelectorAll('[data-variant="primary"]')).toHaveLength(0)
+    fireEvent.click(screen.getByRole('button', { name: 'assetLibrary.back' }))
+    expect(onClose).toHaveBeenCalledOnce()
+  })
+
+  it('显示设置收进浮层：缩略图显示方式是单选分段，浮层算作资产面板的子浮层', async () => {
+    vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} })
+    render(<AssetLibrarySurface mode="floating" />)
+    await waitFor(() => expect(mocks.query).toHaveBeenCalled())
+    fireEvent.click(screen.getByRole('button', { name: 'assetLibrary.viewSettings' }))
+    const group = await screen.findByRole('radiogroup', { name: 'assetLibrary.thumbnailFit' })
+    expect(isAssetChildOverlayTarget(group)).toBe(true)
+    fireEvent.click(screen.getByRole('radio', { name: 'assetLibrary.fitContain' }))
+    expect(mocks.settings.setAssetThumbnailFit).toHaveBeenCalledWith('contain')
+  })
+
+  it('批量管理是模式：命令带换成已选数量与“完成”，不出现主按钮', async () => {
+    useAssetLibraryStore.setState({ batchMode: true, batchSelectedIds: [] })
+    render(<AssetLibrarySurface mode="workspace" />)
+    await waitFor(() => expect(mocks.query).toHaveBeenCalled())
+    expect(screen.getByText('assetLibrary.batchSelected')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'assetLibrary.batchManage' })).toBeNull()
+    expect(screen.getByRole('complementary', { name: 'assetLibrary.batchManage' })).toBeTruthy()
+    expect(document.querySelectorAll('[data-variant="primary"]')).toHaveLength(0)
+    fireEvent.click(screen.getByRole('button', { name: 'assetLibrary.batchDone' }))
+    expect(useAssetLibraryStore.getState().batchMode).toBe(false)
   })
 })
