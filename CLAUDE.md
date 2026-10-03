@@ -22,7 +22,7 @@
 | `henji-application-capability` | Skill 工具调用 | 读 `.codex/skills/henji-application-capability/SKILL.md` |
 | `henji-ai-adaptation-assistant` | Skill 工具调用 | 读 `.codex/skills/henji-ai-adaptation-assistant/SKILL.md` |
 
-对应文件在 `.claude/skills/<skill 名>/SKILL.md`。**两份 skill 内容必须保持同步**：修改任一侧后，同步另一侧再提交。
+对应文件在 `.claude/skills/<skill 名>/SKILL.md`。**两份 skill 内容必须保持同步**：修改任一侧后，同步另一侧并跑 `npm run check:skill-sync` 再提交。
 
 ### 命令执行
 

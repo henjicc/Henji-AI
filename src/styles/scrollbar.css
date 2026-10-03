@@ -23,20 +23,20 @@
 }
 .app-scroll-container::-webkit-scrollbar-thumb,
 .image-strip::-webkit-scrollbar-thumb {
-  background-color: rgb(var(--text-muted-rgb) / 0.4);
+  background-color: rgb(var(--text2-rgb) / 0.4);
   border-radius: 4px;
   transition: background-color 180ms ease;
 }
 .app-scroll-container::-webkit-scrollbar-thumb:hover,
 .image-strip::-webkit-scrollbar-thumb:hover {
-  background-color: rgb(var(--text-muted-rgb) / 0.7);
+  background-color: rgb(var(--text2-rgb) / 0.7);
 }
 
 /* Firefox */
 .app-scroll-container,
 .image-strip {
   scrollbar-width: thin;
-  scrollbar-color: rgb(var(--text-muted-rgb) / 0.4) transparent;
+  scrollbar-color: rgb(var(--text2-rgb) / 0.4) transparent;
   scrollbar-gutter: stable;
   overscroll-behavior: contain;
   touch-action: pan-x;

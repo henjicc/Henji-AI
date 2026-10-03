@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { applyRuntimeTheme } from './runtimeTheme'
-import { LEGACY_THEME_CSS_ALIASES, buildThemeCssVariables } from './themeCssVars'
+import { THEME_COMPONENT_CSS_VARS, buildThemeCssVariables } from './themeCssVars'
 import { DEFAULT_THEME_SEED, THEME_PRESETS, deriveThemeTokens } from './themeEngine'
 import { THEME_FIRST_FRAME_STORAGE_KEY } from './themeFirstFrame'
 import { getThemeTokens, subscribeThemeTokens } from './themeTokenStore'
@@ -19,7 +19,7 @@ describe('applyRuntimeTheme', () => {
     applyRuntimeTheme({ seed: DEFAULT_THEME_SEED, uiRadiusPreset: 'default', uiBlurEnabled: true }, root)
   })
 
-  it('种子 + 覆盖 → 令牌 → 根节点新变量与 color-scheme；不写旧变量名', () => {
+  it('种子 + 覆盖 → 令牌 → 根节点语义变量与 color-scheme；不写组件层变量', () => {
     const overrides = { canvas: deriveThemeTokens(THEME_PRESETS.paper.seed).colors.panel }
     const tokens = applyRuntimeTheme({ seed: THEME_PRESETS.paper.seed, overrides, uiRadiusPreset: 'default', uiBlurEnabled: true }, root)
     expect(tokens.colors.canvas).toBe(overrides.canvas)
@@ -28,17 +28,15 @@ describe('applyRuntimeTheme', () => {
       expect({ name, value: root.style.getPropertyValue(name) }).toEqual({ name, value })
     }
     expect(root.style.colorScheme).toBe('light')
-    for (const alias of LEGACY_THEME_CSS_ALIASES) {
-      expect(root.style.getPropertyValue(alias.legacy)).toBe('')
+    for (const item of THEME_COMPONENT_CSS_VARS) {
+      expect(root.style.getPropertyValue(item.name)).toBe('')
     }
   })
 
-  it('清掉旧版本运行时残留的内联旧变量与 data-theme-tone', () => {
-    root.style.setProperty('--app-rgb', '1 2 3')
+  it('清掉旧版本运行时残留的内联组件层变量与 data-theme-tone', () => {
     root.style.setProperty('--ui-glass-tint', 'red')
     root.dataset.themeTone = 'warm'
     applyRuntimeTheme({ seed: DEFAULT_THEME_SEED, uiRadiusPreset: 'default', uiBlurEnabled: true }, root)
-    expect(root.style.getPropertyValue('--app-rgb')).toBe('')
     expect(root.style.getPropertyValue('--ui-glass-tint')).toBe('')
     expect(root.dataset.themeTone).toBeUndefined()
   })

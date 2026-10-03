@@ -64,6 +64,7 @@
   --on-accent: #FFFFFF;
   --on-accent-rgb: 255 255 255;
   --danger: #CB3135;
+  --danger-rgb: 203 49 53;
   --danger-hi: #D73F3F;
   --danger-hi-rgb: 215 63 63;
   --danger-hover: #CB3135;
@@ -78,12 +79,14 @@
   --on-danger: #FFFFFF;
   --on-danger-rgb: 255 255 255;
   --success: #52CD86;
+  --success-rgb: 82 205 134;
   --success-text: #52CD86;
   --success-text-rgb: 82 205 134;
   --success-tint: rgba(82,205,134,0.16);
   --on-success: #0D1014;
   --on-success-rgb: 13 16 20;
   --warning: #F5AE39;
+  --warning-rgb: 245 174 57;
   --warning-text: #F5AE39;
   --warning-text-rgb: 245 174 57;
   --warning-tint: rgba(245,174,57,0.16);
@@ -130,30 +133,11 @@
   --media-line: rgba(255,255,255,0.16);
   /* theme-tokens:end */
   /*
-   * 旧变量 → 新令牌的静态别名（src/core/theme/themeCssVars.ts LEGACY_THEME_CSS_ALIASES）。
-   * 运行时不写这些名字：内联样式会盖掉下方 [data-ui-blur='off'] 的退化规则。4.2 迁移完调用点后删除本块。
+   * 玻璃材质的组件层变量 → 语义令牌（src/core/theme/themeCssVars.ts THEME_COMPONENT_CSS_VARS）。
+   * 运行时不写这些名字：内联样式会盖掉下方 [data-ui-blur='off'] 的退化规则。
+   * 1.1 的旧变量别名（--app-rgb、--text-muted-rgb、--ui-surface-panel 等）已在 4.2 删除，check:colors 拦截旧名。
    */
-  /* theme-legacy-aliases:start */
-  --app-rgb: var(--window-rgb);
-  --bg-rgb: var(--gap-rgb);
-  --surface-rgb: var(--raised-rgb);
-  --layer-rgb: var(--hover-rgb);
-  --border-rgb: var(--line-rgb);
-  --text-rgb: var(--text1-rgb);
-  --text-soft-rgb: var(--text2-rgb);
-  --text-muted-rgb: var(--text2-rgb);
-  --text-faint-rgb: var(--text3-rgb);
-  --brand-300-rgb: var(--accent-text-rgb);
-  --brand-500-rgb: var(--accent-rgb);
-  --brand-600-rgb: var(--accent-pressed-rgb);
-  --brand-700-rgb: var(--accent-pressed-rgb);
-  --danger-rgb: var(--danger-text-rgb);
-  --success-rgb: var(--success-text-rgb);
-  --warning-rgb: var(--warning-text-rgb);
-  --ui-surface-panel: var(--panel);
-  --ui-surface-field: var(--raised);
-  --ui-border-soft: var(--line);
-  --ui-border-strong: var(--line-strong);
+  /* theme-component-vars:start */
   --ui-glass-tint: var(--glass-tint);
   --ui-glass-edge: var(--glass-edge);
   --ui-glass-sheen: var(--glass-sheen);
@@ -166,7 +150,7 @@
   --ui-glass-surface-tint: var(--glass-surface-tint);
   --ui-scrim-tint: var(--scrim);
   --ui-scrim-tint-soft: var(--scrim-soft);
-  /* theme-legacy-aliases:end */
+  /* theme-component-vars:end */
   /*
    * 毛玻璃「材质」。
    *
@@ -501,9 +485,9 @@
 
   /* 图片区域内的透明像素网格；工作区本身仍保持无限且使用画布底色。 */
   .image-editor-transparency-grid {
-    background-color: rgb(var(--surface-rgb));
+    background-color: rgb(var(--raised-rgb));
     background-image: repeating-conic-gradient(
-      rgb(var(--layer-rgb) / 0.72) 0 25%,
+      rgb(var(--hover-rgb) / 0.72) 0 25%,
       transparent 0 50%
     );
     background-position: 0 0;
@@ -822,24 +806,24 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgb(var(--text-muted-rgb) / 0.4);
+  background: rgb(var(--text2-rgb) / 0.4);
   border-radius: 999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgb(var(--text-muted-rgb) / 0.65);
+  background: rgb(var(--text2-rgb) / 0.65);
 }
 
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgb(var(--text-muted-rgb) / 0.5) transparent;
+  scrollbar-color: rgb(var(--text2-rgb) / 0.5) transparent;
 }
 
 /* PromptEditor 等跨工作区输入面使用的可交互滚动条，必须常驻全局样式；
    放在画布懒加载样式里会导致用户打开画布前其他界面拿不到该样式。 */
 .ui-scrollbar {
   scrollbar-width: thin;
-  scrollbar-color: rgb(var(--text-muted-rgb) / 0.56) transparent;
+  scrollbar-color: rgb(var(--text2-rgb) / 0.56) transparent;
 }
 
 .ui-scrollbar::-webkit-scrollbar {
@@ -853,11 +837,11 @@ body {
 
 .ui-scrollbar::-webkit-scrollbar-thumb {
   border-radius: 9999px;
-  background: rgb(var(--text-muted-rgb) / 0.5);
+  background: rgb(var(--text2-rgb) / 0.5);
 }
 
 .ui-scrollbar:hover::-webkit-scrollbar-thumb {
-  background: rgb(var(--text-muted-rgb) / 0.72);
+  background: rgb(var(--text2-rgb) / 0.72);
 }
 
 /* 模型选择器的供应商栏使用常驻的自定义横向滚动条，隐藏会受系统设置自动消失的原生滚动条。 */
@@ -873,11 +857,11 @@ body {
 /* 保留原 ui-scrollbar 的粗细与颜色，只把横向滑块改成常驻，避免系统自动隐藏。 */
 .model-provider-scroll-thumb {
   height: 7px;
-  background: rgb(var(--text-muted-rgb) / 0.5);
+  background: rgb(var(--text2-rgb) / 0.5);
 }
 
 .model-provider-scrollbar:hover .model-provider-scroll-thumb {
-  background: rgb(var(--text-muted-rgb) / 0.72);
+  background: rgb(var(--text2-rgb) / 0.72);
 }
 
 /* 动画关键帧 */
@@ -1168,13 +1152,13 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgb(var(--text-muted-rgb) / 0.4);
+  background: rgb(var(--text2-rgb) / 0.4);
   border-radius: 999px;
   transition: background 180ms;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgb(var(--text-muted-rgb) / 0.65);
+  background: rgb(var(--text2-rgb) / 0.65);
 }
 
 /* 图片查看器动画 */
@@ -1295,7 +1279,7 @@ body {
 }
 
 .dropdown-scroll {
-  scrollbar-color: rgb(var(--text-muted-rgb) / 0.5) transparent;
+  scrollbar-color: rgb(var(--text2-rgb) / 0.5) transparent;
 }
 
 .dropdown-scroll::-webkit-scrollbar-track {
@@ -1303,7 +1287,7 @@ body {
 }
 
 .dropdown-scroll {
-  scrollbar-color: rgb(var(--text-muted-rgb) / 0.5) transparent;
+  scrollbar-color: rgb(var(--text2-rgb) / 0.5) transparent;
 }
 
 /* Number input spinner removal */
@@ -1391,7 +1375,7 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
 .volume-slider {
   width: 80px;
   height: 4px;
-  background: rgb(var(--text-rgb) / 0.2);
+  background: rgb(var(--text1-rgb) / 0.2);
   border-radius: 2px;
   cursor: pointer;
   position: relative;
@@ -1494,10 +1478,10 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
   background: var(--ui-glass-hover);
 }
 
-/* accent 是填充色，作文字色只有 2.82:1；玻璃上更糟，改用 brand-300 */
+/* accent 是填充色，作文字色对比度不足；玻璃上更糟，改用 accent-text */
 .speed-option.active {
   background: var(--ui-glass-selected);
-  color: rgb(var(--brand-300-rgb));
+  color: rgb(var(--accent-text-rgb));
 }
 
 .controls-right {
@@ -1527,7 +1511,7 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
 }
 
 .volume-percent {
-  color: rgb(var(--text-rgb) / 0.95);
+  color: rgb(var(--text1-rgb) / 0.95);
   font-size: 15px;
   font-weight: 500;
   min-width: 32px;
@@ -1538,7 +1522,7 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
   position: relative;
   width: 6px;
   height: 140px;
-  background: rgb(var(--text-rgb) / 0.15);
+  background: rgb(var(--text1-rgb) / 0.15);
   border-radius: 3px;
   cursor: pointer;
 }
@@ -1559,7 +1543,7 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
   transform: translate(-50%, 50%);
   width: 10px;
   height: 10px;
-  background: rgb(var(--text-rgb));
+  background: rgb(var(--text1-rgb));
   border-radius: 50%;
   box-shadow: 0 1px 4px color-mix(in srgb, var(--shade) 60%, transparent);
   pointer-events: none;
@@ -1572,10 +1556,10 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
 /* 素材组只保留一个真实表面；两层偏移投影表达“多张节点叠放”，不额外制造卡片层级。 */
 .asset-group-node-stack {
   box-shadow:
-    4px 4px 0 var(--ui-surface-panel),
-    5px 5px 0 var(--ui-border-soft),
-    8px 8px 0 var(--ui-surface-panel),
-    9px 9px 0 var(--ui-border-soft),
+    4px 4px 0 var(--panel),
+    5px 5px 0 var(--line),
+    8px 8px 0 var(--panel),
+    9px 9px 0 var(--line),
     var(--ui-shadow-panel);
 }
 

@@ -112,7 +112,10 @@ packages/ai-sdk/       # 可独立发布的模型 SDK：catalog、provider、协
 | 文件上传 | `FileUploader` / `UiInput(type=file)` |
 | 拖拽排序 | `src/components/ui/fileUploader/useReorderDrag.ts` |
 | 画布实现 | `src/features/canvas/` |
-| 颜色令牌 | `src/index.css` + `tailwind.config.js` + `src/core/theme/colorTokens.ts` |
+| 主题与颜色令牌 | 推导 `src/core/theme/themeEngine.ts`（种子 → 语义令牌）→ `themeCssVars.ts` / `runtimeTheme.ts`（CSS 变量）→ `tailwind.config.js`（语义类）+ `src/index.css`（静态默认值、组件皮肤）；非 DOM 渲染面用 `useThemeTokens()`；内容色 `src/core/theme/colorTokens.ts` |
+| 界面组件与外观枚举 | `src/components/ui/`（`Ui*`、`Dropdown`、`PanelTrigger`、`NumberInput`、`Tooltip`），可复用表见 skill `henji-ui-surface` |
+| 音频波形 | 绘制 `src/components/waveform/WaveformView.tsx`；数据 `src/hooks/useWaveformData.ts` → `src/services/waveform/waveformDataService.ts` → 主进程 `electron/main/services/audio/`（Worker 多精度峰值 + 磁盘缓存） |
+| 剪辑片段缩略帧 | `src/hooks/useFilmstripFrames.ts` → `src/services/videoFilmstrip/filmstripFrameService.ts` → 主进程 `electron/main/services/video/filmstrip.ts`（成批取帧 + 磁盘缓存） |
 
 PromptEditor 补充：媒体引用、模板变量、兼容字符串解析和模型文本输出统一走结构化文档 parser/serializer；禁止重新引入透明 textarea + 镜像高亮层，禁止在业务组件重复实现引用解析。
 

@@ -6,10 +6,13 @@
 
 > **两个工具类落在同一个 CSS 属性上时，胜负看 Tailwind 产物里的先后顺序，不看 className 里的顺序。**
 
-`className={"bg-panel/30 " + (dragging ? "bg-surface-dark/55" : "")}` 读起来像"拖拽时换底色"，
+`className={"bg-panel/30 " + (dragging ? "bg-raised/55" : "")}` 读起来像"拖拽时换底色"，
 实际上谁在生成的 CSS 里靠后谁赢，和你写的顺序无关。这类 bug 不报错、不警告，只是"那个效果一直没出现"。
 
-本项目已经因此踩过三次：
+同一插件内（如所有背景色类）Tailwind 3.4 按**类名字母序**输出（实测 `bg-gap < bg-hover < bg-raised < bg-window`），
+所以给颜色改名也可能悄悄改变胜负——这也是“只写互斥三元”的另一个理由。
+
+本项目已经因此踩过三次（表中是当时的旧类名）：
 
 | 现象 | 真相 |
 |---|---|
@@ -19,14 +22,14 @@
 
 **三条做法，按优先级：**
 
-1. **写成互斥三元**：`dragging ? 'bg-surface-dark/55' : 'bg-panel/30'` —— 任何时刻只有一个类，根本不存在打架。
+1. **写成互斥三元**：`dragging ? 'bg-raised/55' : 'bg-panel/30'` —— 任何时刻只有一个类，根本不存在打架。
 2. **变体里不写"默认值等于浏览器默认"的类**（如 button 的 `bg-transparent`，preflight 已经保证），给调用方留出覆盖空间。
 3. **确实要叠**：先用 `npx tailwindcss -i src/index.css -o /tmp/x.css` 生成 CSS，`grep -n` 两个类看谁在后面；或者直接上 `!` 强制。
 
 排查命令：
 
 ```bash
-npx tailwindcss -i src/index.css -o /tmp/x.css && grep -n "^\.bg-panel {\|^\.bg-surface-dark {" /tmp/x.css
+npx tailwindcss -i src/index.css -o /tmp/x.css && grep -n "^\.bg-panel {\|^\.bg-raised {" /tmp/x.css
 ```
 
 同理，**透明度修饰符只能用 Tailwind 刻度值**（步进 5：`/25` `/35` `/45` 都行，`/42` `/72` 不生成任何 CSS）。

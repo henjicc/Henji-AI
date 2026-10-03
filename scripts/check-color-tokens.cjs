@@ -2,23 +2,27 @@ const fs = require('fs');
 const path = require('path');
 
 /*
- * 颜色令牌检查（npm run check:colors，build / electron:build 门禁）。
+ * 颜色令牌检查（npm run check:colors，build / electron:build / CI 门禁）。
  *
- * 一、硬性规则（全部 .ts/.tsx/.css，任何新增都失败）：
+ * 一、硬性规则（全部 .ts/.tsx/.css，任何新增都失败，不可登记）：
  *   - 十六进制颜色字面量、Tailwind 任意十六进制颜色类；
- *   - 纯 CSS 里的 rgb()/rgba() 字面量（只能写 rgb(var(--xxx-rgb) / a) 或引用令牌变量）。
+ *   - 纯 CSS 里的 rgb()/rgba() 字面量（只能写 rgb(var(--xxx-rgb) / a) 或引用令牌变量）；
+ *   - 已删除的旧 CSS 变量别名（--app-rgb、--text-muted-rgb、--ui-surface-panel …，界面重设计 4.2），
+ *     令牌定义处 index.css 也查。
  *
- * 二、语义令牌规则（ts/tsx，非测试文件；界面重设计 1.3 新增）：
+ * 二、语义令牌规则（ts/tsx，非测试文件；界面重设计 1.3 新增，4.2 收紧）：
  *   - palette：固定调色板类（bg-red-500、text-emerald-300 …），不随主题；
  *   - mono：黑白类（text-white、bg-black/40、border-white/10 …），浅色主题下失效；
  *   - rgba：rgb()/rgba() 数字字面量；
- *   - named：命名色（color: 'white'、fill="black" …）。
- *   存量逐文件登记在 scripts/check-color-tokens.allowlist.json（每条写明归属任务与类别）：
- *   某文件某规则的数量超过登记数即失败（新增为零）；低于登记数时提示下调，
- *   用 `--shrink-allowlist` 只会把登记数往下收（不会放宽、不会新增条目）。
+ *   - named：命名色（color: 'white'、fill="black" …）；
+ *   - legacy：旧令牌别名类（bg-app、text-text-muted、border-border-dark、text-brand-300、text-danger …）。
  *   界面色改用语义令牌类（bg-panel、text-text2、text-on-accent、bg-danger-solid、border-media-line …，
  *   见 tailwind.config.js）；内容色（标注默认色、导出图配色、算法遮罩等）在 colorTokens.ts 登记常量。
- *   4.2 会把登记清零的类别改为不可登记。
+ *
+ * 三、存量登记 scripts/check-color-tokens.allowlist.json（每条写明归属与类别）：
+ *   - 某文件某规则的数量超过登记数即失败；低于登记数时提示下调，`--shrink-allowlist` 只会往下收；
+ *   - 已清零的规则（NON_REGISTRABLE_RULES）不可再登记，登记文件里出现即失败；
+ *   - 其余规则的登记总数不得超过本文件的 ALLOWLIST_CEILING（只能下调；调高必须改本脚本，评审可见）。
  */
 
 const projectRoot = process.cwd();
@@ -51,6 +55,9 @@ const hexColorPattern = /#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})\b/g;
 const arbitraryTailwindHexPattern = /(bg|text|border|ring|accent)-\[#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})\]/g;
 
 const UTILITY_PREFIX = '(?:bg|text|border|ring|ring-offset|from|to|via|fill|stroke|outline|divide|placeholder|decoration|shadow|accent|caret)';
+// 已删除的旧令牌别名颜色名（1.3 过渡别名，4.2 从 tailwind.config.js 删除；DEFAULT 别名 bg/surface/border/text 也算）
+const LEGACY_ALIAS_COLOR_NAMES =
+  'bg-dark|bg|surface-dark|surface|border-dark|border|app|layer|brand-\\d{3}|text-dark|text|text-muted(?:-dark)?|text-soft(?:-dark)?|text-faint(?:-dark)?|danger|success|warning';
 const PALETTE_NAMES = 'red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose|slate|gray|zinc|neutral|stone';
 /** @type {Record<string, { pattern: RegExp, label: string }>} */
 const SEMANTIC_RULES = {
@@ -70,7 +77,30 @@ const SEMANTIC_RULES = {
     pattern: /\b(?:color|background|backgroundColor|borderColor|fill|stroke)\s*[:=]\s*['"`](?:white|black|red|green|blue|yellow|orange|gray|grey|purple)['"`]/g,
     label: '命名色：界面色用语义令牌，内容色登记到 colorTokens.ts',
   },
+  legacy: {
+    pattern: new RegExp(
+      `(?<![\\w-])(?:[\\w-]+:)*!?-?${UTILITY_PREFIX}-(?:${LEGACY_ALIAS_COLOR_NAMES})(?:\\/(?:\\d+(?:\\.\\d+)?|\\[[^\\]]+\\]))?(?![\\w-])`,
+      'g'
+    ),
+    label:
+      '旧令牌别名类已删除（界面重设计 4.2）：bg-bg-dark→bg-gap、bg-app→bg-window、bg-surface-dark→bg-raised、bg-layer→bg-hover、' +
+      'border-border-dark→border-line、text-text(-dark)→text-text1、text-text-muted/soft→text-text2、text-text-faint→text-text3、' +
+      'brand-300→accent-text、brand-500→accent、brand-600/700→accent-pressed、text-danger/success/warning→*-text（实底 *-solid）',
+  },
 };
+
+/** 已清零、不可再登记的语义规则：登记文件里出现即失败。 */
+const NON_REGISTRABLE_RULES = new Set(['palette', 'mono', 'named']);
+/**
+ * 可登记规则的登记总数上限（只能下调）。
+ * - rgba：剪辑引擎验收探针里的着色器源码文本（非界面色）；
+ * - legacy：4.2 别名迁移前的过渡存量（迁移完成后改为 0 并移入 NON_REGISTRABLE_RULES）。
+ */
+const ALLOWLIST_CEILING = { rgba: 1, legacy: 632 };
+
+// 已删除的旧 CSS 变量别名（1.1 第七节 → 4.2 删除）。--danger/success/warning-rgb 现在是实底三元组，不在此列。
+const legacyCssVarPattern =
+  /--(?:app|bg|surface|layer|border|text|text-soft|text-muted|text-faint|brand-\d{3})-rgb\b|--ui-(?:surface-panel|surface-field|border-soft|border-strong)\b/g;
 
 /**
  * @param {string} dir
@@ -127,9 +157,25 @@ function readAllowlist() {
   return raw;
 }
 
-const files = collectSourceFiles(srcRoot).filter((file) => !definitionFiles.has(path.normalize(file)));
+const allSourceFiles = collectSourceFiles(srcRoot);
+const files = allSourceFiles.filter((file) => !definitionFiles.has(path.normalize(file)));
 /** @type {string[]} */
 const violations = [];
+
+// 旧 CSS 变量别名：定义处（index.css）也查；测试里拿它们当样例文本的不算。
+for (const file of allSourceFiles) {
+  if (/\.test\.[tj]sx?$/.test(file)) continue;
+  const lines = fs.readFileSync(file, 'utf8').split(/\r?\n/);
+  lines.forEach((line, index) => {
+    if (/^\s*(\/\/|\/\*|\*)/.test(line)) return;
+    const matches = line.match(legacyCssVarPattern);
+    if (matches) {
+      violations.push(
+        formatViolation(file, index + 1, line, `旧 CSS 变量别名已删除（${matches.join(' ')}）：改用新语义变量（--window-rgb、--text2-rgb、--panel …）`)
+      );
+    }
+  });
+}
 /** @type {Map<string, { counts: Record<string, number>, lines: Record<string, string[]> }>} */
 const semanticUsage = new Map();
 
@@ -191,6 +237,28 @@ const allowlist = readAllowlist();
 const shrinkable = [];
 /** @type {string[]} */
 const semanticViolations = [];
+
+// 登记文件本身的约束：不可登记的规则不得出现；可登记规则的总数不得超过脚本里的上限（只能下调）。
+/** @type {Record<string, number>} */
+const registeredByRule = {};
+for (const [file, entry] of Object.entries(allowlist.files)) {
+  for (const [rule, allowed] of Object.entries(entry.counts ?? {})) {
+    if (!(rule in SEMANTIC_RULES)) {
+      semanticViolations.push(`${toRelative(allowlistFile)}：${file} 登记了未知规则 ${rule}`);
+    } else if (NON_REGISTRABLE_RULES.has(rule)) {
+      semanticViolations.push(`${toRelative(allowlistFile)}：${file} 登记了已清零、不可再登记的规则 ${rule}（${SEMANTIC_RULES[rule].label}）`);
+    }
+    registeredByRule[rule] = (registeredByRule[rule] ?? 0) + allowed;
+  }
+}
+for (const [rule, total] of Object.entries(registeredByRule)) {
+  const ceiling = ALLOWLIST_CEILING[rule] ?? 0;
+  if (!NON_REGISTRABLE_RULES.has(rule) && total > ceiling) {
+    semanticViolations.push(
+      `${toRelative(allowlistFile)}：规则 ${rule} 登记 ${total} 处，超过上限 ${ceiling}（登记只能下调，不得为通过检查而调高）`
+    );
+  }
+}
 
 for (const [file, usage] of semanticUsage) {
   const entry = allowlist.files[file];

@@ -22,7 +22,7 @@ env:
 jobs:
   # ---------------------------------------------------------------------------
   # 质量门禁：每次 push / PR 都跑。速度快、无需签名凭据。
-  # 这是 UI 规范（check:colors / check:surface）与类型、测试的统一入口。
+  # 这是 UI 规范（check:colors / check:surface / check:icons / skill 同步）与类型、测试的统一入口。
   # ---------------------------------------------------------------------------
   checks:
     name: 代码检查
@@ -52,11 +52,15 @@ jobs:
       - name: 表面层级检查
         run: npm run check:surface:strict
 
+      - name: 图标令牌检查
+        run: npm run check:icons:strict
+
       - name: 模型 i18n 检查
         run: npm run check:model-i18n
 
-      - name: 模型适配 skill 同步检查
-        run: npm run check:model-adaptation-skill-sync
+      # Codex 与 Claude Code 两份项目 skill（.codex/skills ↔ .claude/skills）必须逐字一致。
+      - name: 项目 skill 同步检查
+        run: npm run check:skill-sync
 
       - name: ESLint（渲染层）
         run: npm run lint

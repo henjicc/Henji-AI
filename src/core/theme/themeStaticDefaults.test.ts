@@ -4,7 +4,7 @@ import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { APP_WINDOW_BACKGROUND_HEX } from './colorTokens'
-import { buildLegacyAliasDeclarations, buildThemeCssVariables } from './themeCssVars'
+import { buildComponentVarDeclarations, buildThemeCssVariables } from './themeCssVars'
 import { DEFAULT_THEME_SEED, THEME_PRESETS, deriveThemeTokens } from './themeEngine'
 import { THEME_FIRST_FRAME_STORAGE_KEY, createThemeFirstFrame } from './themeFirstFrame'
 
@@ -26,9 +26,10 @@ function declarationsBetween(css: string, marker: string): Record<string, string
 const graphite = deriveThemeTokens(DEFAULT_THEME_SEED)
 
 describe('首帧静态默认值（防闪色）', () => {
-  it('index.css 静态主题变量 = 石墨推导结果，旧变量别名 = 别名表（不一致时用 buildThemeCssVariables 重新生成）', () => {
+  it('index.css 静态主题变量 = 石墨推导结果，玻璃组件层变量 = 组件变量表（不一致时用 buildThemeCssVariables 重新生成）', () => {
     expect(declarationsBetween(indexCss, 'theme-tokens')).toEqual(buildThemeCssVariables(graphite))
-    expect(declarationsBetween(indexCss, 'theme-legacy-aliases')).toEqual(buildLegacyAliasDeclarations())
+    expect(declarationsBetween(indexCss, 'theme-component-vars')).toEqual(buildComponentVarDeclarations())
+    expect(indexCss).not.toContain('theme-legacy-aliases')
     expect(indexCss).toMatch(/:root \{\s*\/\*[\s\S]*?\*\/\s*color-scheme: dark;/)
   })
 

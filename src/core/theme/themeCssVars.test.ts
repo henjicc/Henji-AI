@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
 import {
-  LEGACY_THEME_CSS_ALIASES,
+  THEME_COMPONENT_CSS_VARS,
   THEME_TOKEN_CSS_VARS,
-  buildLegacyAliasDeclarations,
+  buildComponentVarDeclarations,
   buildThemeCssVariables,
   formatCssDeclarations,
   themeTokenRgbVar,
@@ -31,41 +31,41 @@ describe('themeCssVars', () => {
     expect(vars['--window-rgb']).toMatch(/^\d{1,3} \d{1,3} \d{1,3}$/)
   })
 
-  it('旧别名不由运行时写入（否则内联样式会盖掉 data-ui-blur 退化规则与 CSS 别名）', () => {
+  it('组件层变量不由运行时写入（否则内联样式会盖掉 data-ui-blur 退化规则）', () => {
     for (const id of THEME_PRESET_IDS) {
       const vars = buildThemeCssVariables(deriveThemeTokens(THEME_PRESETS[id].seed))
-      for (const alias of LEGACY_THEME_CSS_ALIASES) {
-        expect({ legacy: alias.legacy, written: alias.legacy in vars }).toEqual({ legacy: alias.legacy, written: false })
+      for (const item of THEME_COMPONENT_CSS_VARS) {
+        expect({ name: item.name, written: item.name in vars }).toEqual({ name: item.name, written: false })
       }
     }
   })
 
-  it('旧别名都指向运行时实际输出的新变量，且没有自引用', () => {
+  it('组件层变量都指向运行时实际输出的语义变量，且没有自引用', () => {
     const vars = buildThemeCssVariables(deriveThemeTokens(DEFAULT_THEME_SEED))
-    const declarations = buildLegacyAliasDeclarations()
-    expect(Object.keys(declarations)).toHaveLength(LEGACY_THEME_CSS_ALIASES.length)
-    for (const [legacy, value] of Object.entries(declarations)) {
+    const declarations = buildComponentVarDeclarations()
+    expect(Object.keys(declarations)).toHaveLength(THEME_COMPONENT_CSS_VARS.length)
+    for (const [name, value] of Object.entries(declarations)) {
       const target = /^var\((--[a-z0-9-]+)\)$/.exec(value)?.[1]
       expect(target).toBeDefined()
-      expect(target).not.toBe(legacy)
-      expect({ legacy, target, emitted: target! in vars }).toEqual({ legacy, target, emitted: true })
+      expect(target).not.toBe(name)
+      expect({ name, target, emitted: target! in vars }).toEqual({ name, target, emitted: true })
     }
-    expect(declarations['--app-rgb']).toBe('var(--window-rgb)')
-    expect(declarations['--danger-rgb']).toBe('var(--danger-text-rgb)')
     expect(declarations['--ui-glass-tint']).toBe('var(--glass-tint)')
+    expect(declarations['--ui-scrim-tint']).toBe('var(--scrim)')
   })
 
-  it('旧别名覆盖 1.1 第七节可一对一映射的全部变量', () => {
-    const legacy = LEGACY_THEME_CSS_ALIASES.map((alias) => alias.legacy)
+  it('1.1 旧变量别名已删除：--danger/success/warning-rgb 回到实底三元组，其余旧名不再输出', () => {
+    const tokens = deriveThemeTokens(DEFAULT_THEME_SEED)
+    const vars = buildThemeCssVariables(tokens)
+    expect(vars['--danger-rgb']).toBe(toRgbTriple(tokens.colors.danger))
+    expect(vars['--success-rgb']).toBe(toRgbTriple(tokens.colors.success))
+    expect(vars['--warning-rgb']).toBe(toRgbTriple(tokens.colors.warning))
     for (const name of [
       '--app-rgb', '--bg-rgb', '--surface-rgb', '--layer-rgb', '--border-rgb', '--text-rgb', '--text-soft-rgb',
       '--text-muted-rgb', '--text-faint-rgb', '--brand-300-rgb', '--brand-500-rgb', '--brand-600-rgb', '--brand-700-rgb',
-      '--danger-rgb', '--success-rgb', '--warning-rgb', '--ui-surface-panel', '--ui-surface-field', '--ui-border-soft',
-      '--ui-border-strong', '--ui-glass-tint', '--ui-glass-edge', '--ui-glass-sheen', '--ui-glass-hover', '--ui-glass-press',
-      '--ui-glass-selected', '--ui-glass-divider', '--ui-glass-control-tint', '--ui-glass-region-tint',
-      '--ui-glass-surface-tint', '--ui-scrim-tint', '--ui-scrim-tint-soft',
+      '--ui-surface-panel', '--ui-surface-field', '--ui-border-soft', '--ui-border-strong',
     ]) {
-      expect(legacy).toContain(name)
+      expect({ name, emitted: name in vars }).toEqual({ name, emitted: false })
     }
   })
 

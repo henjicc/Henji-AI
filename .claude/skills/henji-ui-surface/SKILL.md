@@ -1,6 +1,6 @@
 ---
 name: henji-ui-surface
-description: Henji-AI 新建或改造任何界面/页面骨架/面板/弹窗/侧栏/设置分区/节点 UI，或调整按钮层级、分隔线、颜色、图标、毛玻璃、动画、层级时使用。主文件涵盖页面骨架的横向条带上限、表面层级（surface/elevation）铁律、五级容器词汇表、动作按钮三档、分隔线准入、选项集合静息态与选中态词汇表；颜色/材质、动效、图标、排版令牌、性能分层、静默失效坑拆在 references/ 按需读。触发场景：用户要求"做一个 XX 面板/页面/弹窗"、"这个界面不好看/太挤/像卡片套卡片"、"顶部堆了好几行/几个条/布局不合理"、"标题栏和工具栏能不能合并"、"这块儿怎么像张卡片"、"帮我美化一下这个界面"、"加一个设置分区"、"统一一下 UI/配色/动画/模糊"、"这个动画太快/太慢/很生硬"、"这个界面卡顿/拖动掉帧"、"切换主题后有些地方没变色"、"为什么有的按钮有边框有的没有"、"这里要不要加分隔线"、"图标不一致"。
+description: Henji-AI 新建或改造任何界面/页面骨架/面板/弹窗/侧栏/设置分区/节点 UI，或调整按钮层级、分隔线、颜色、图标、毛玻璃、动画、层级时使用。主文件涵盖“石墨”设计系统速览（主题引擎与语义令牌、按钮五档默认静默、中性抬升选中态、尺寸档位）、页面骨架的横向条带上限与命令带、表面层级（surface/elevation）铁律、五级容器词汇表、分隔线准入、选项集合静息态与选中态词汇表、必须复用的组件与枚举；颜色/材质、动效、图标、排版令牌、性能分层、静默失效坑拆在 references/ 按需读。触发场景：用户要求"做一个 XX 面板/页面/弹窗"、"这个界面不好看/太挤/像卡片套卡片"、"顶部堆了好几行/几个条/布局不合理"、"标题栏和工具栏能不能合并"、"这块儿怎么像张卡片"、"帮我美化一下这个界面"、"加一个设置分区"、"统一一下 UI/配色/动画/模糊"、"这个动画太快/太慢/很生硬"、"这个界面卡顿/拖动掉帧"、"切换主题后有些地方没变色"、"为什么有的按钮有边框有的没有"、"这里要不要加分隔线"、"图标不一致"。
 ---
 
 # Henji-AI 界面表面与层级规范
@@ -21,7 +21,7 @@ description: Henji-AI 新建或改造任何界面/页面骨架/面板/弹窗/侧
 
 | 什么时候读 | 文件 |
 |---|---|
-| 调颜色、写 `.css`、加毛玻璃、改对比度 | `references/color-and-material.md` |
+| 调颜色、写 `.css`、加毛玻璃、改对比度、碰主题引擎或语义令牌 | `references/color-and-material.md` |
 | 写任何过渡/动画，或用 `setTimeout` 卸载动画组件 | `references/motion.md` |
 | 用到任何图标 | `references/icons.md` |
 | 定字号/圆角/阴影/层级/间距 | `references/typography-and-tokens.md` |
@@ -41,6 +41,23 @@ description: Henji-AI 新建或改造任何界面/页面骨架/面板/弹窗/侧
 
 参考 Atlassian 的表述：能用边框或留白区分时，就不要用抬升（卡片）来分组。成熟设计系统普遍只保留 4~6 个层级并刻意克制。水平方向同理——桌面编辑器（VS Code、Figma、Photoshop）顶部一律是**一条**命令带加一条可选的上下文带，不会因为壳换了一层就多长一条。
 
+## “石墨”设计系统速览（界面重设计计划，重要记录 001–004、010、011）
+
+设计稿与决策在 `docs/task/界面重设计与主题引擎/`（`设计稿/*.dc.html` 是本地源码副本，`重要记录.md` 是决策）。
+核心一句话：**背景只表达“这里是唯一主动作”或“这项被选中”；层次靠明暗不靠描边；强调色只给主动作、焦点、播放头与选中指示。**
+
+| 维度 | 规则 | 细则 |
+|---|---|---|
+| 颜色 | 三层：**种子**（模式、底色色相/倾向、窗口亮度、层级对比度、强调色）→ 主题引擎推导的**语义令牌**（CSS 变量 + Tailwind 类）→ 组件内部令牌。**界面只引用语义令牌**；预设石墨/深海/胶片/纸白只是种子组合，文字三档按对比度 ≥ 4.5:1 求解 | `references/color-and-material.md` |
+| 按钮 | `UiButton` 五档 `primary`/`secondary`/`quiet`（默认）/`danger`/`dangerSolid` + `link` + `media`；`UiIconButton` 默认静默，`on`/`tone`/`shape`/`size`。外观只由枚举决定，调用点 className 只放布局 | 本文「动作层级」 |
+| 选中 | 单选与导航用**中性抬升**（选中底 + 主要文字），不用强调色实底；强调色只进指示条、勾、焦点环、开关轨道、多选描边 | 本文「选中态词汇表」 |
+| 尺寸 | 控件高 28/32/36（`size` sm/md/lg）；字号 20/16/14/13/12/11（正文 13）；圆角 6 控件 / 8 输入与菜单 / 12 浮层；间距 4/8/12/16/24/32；动效 120/180/240（查看器 500） | `references/typography-and-tokens.md`、`references/motion.md` |
+| 材质 | 主按钮材质（细微渐变、顶部高光、内描边、投影、按下下沉）只在 `primary` / `tone="accent"`；**玻璃只压在图片、视频、画布上**（`ui-glass`、`UiPanel variant="glass"`、浮层 `surface="glass"`），纯色界面上的浮层一律实底 | `references/color-and-material.md` |
+| 骨架 | 一个视图一条命令带：`UiToolbar variant="command"`（左端 / `center` / `trailing` / `subordinate`），一个表面一个主动作 | 本文「页面骨架」 |
+| 字体 | 拉丁与数字 Geist，时间码与数值 Geist Mono（`UI_TEXT_TIMECODE_CLASS`），中文系统字体 | `references/typography-and-tokens.md` |
+
+这些约束大多已进门禁：`check:colors`（调色板/黑白/rgba/命名色/旧别名）、`check:surface:strict`（规则 A–E，E = 调用点覆盖组件外观）、`check:icons:strict`（规则 A–C）、ESLint 令牌规则；对比度由 `check:ui-visual` 按渲染后像素审计。
+
 ## 五级容器词汇表（先背这张表）
 
 写任何界面前，先确定"我在第几级"，然后只用那一级允许的东西。
@@ -56,15 +73,18 @@ description: Henji-AI 新建或改造任何界面/页面骨架/面板/弹窗/侧
 
 ```tsx
 <UiPanel>                  {/* 5 卡片：border + bg-panel + shadow-panel + rounded-xl */}
-<UiPanel variant="inset">  {/* 4 内嵌：仅 bg-app/40 + rounded-lg，无边框无阴影 */}
+<UiPanel variant="glass">  {/* 5 玻璃浮层：只压在图片、视频、画布上 */}
+<UiPanel variant="inset">  {/* 4 内嵌：仅 bg-window/40 + rounded-lg，无边框无阴影 */}
 <UiPanel variant="bare">   {/* 4 纯容器：只有圆角 */}
-<UiGroup title="基础设置">  {/* 2 分组：零装饰，标题 + 间距 */}
+<UiGroup title="基础设置">  {/* 2 分组：零装饰，标题 + 间距；窄停靠面板用 titleTone="compact" */}
 <UiGroup divided>          {/* 3 分隔：上方一条线 */}
 ```
 
 **方向铁律：内层背景只能比外层更暗，不能更亮。** 比父级亮 = 视觉上"浮起来" = 卡片。
-本项目 `bg-app`(10) < `bg-panel`(23) < `bg-surface-dark`(38) < `bg-layer`(64)。
-在 `bg-panel` 的弹窗里用 `bg-surface-dark` 做分区，就是在造卡片。
+表面令牌由主题引擎按“窗口 ± n 级”推导，深色下逐级变亮：`bg-gap` < `bg-window` < `bg-panel` < `bg-raised` < `bg-hover` < `bg-selected`
+（浅色模式按同一规则反向：面板比窗口亮，`raised`/`hover`/`selected` 逐级加深）。`bg-control*` 只给控件本身，`bg-media` 是不随主题的媒体底。
+判断“比父级亮”时看的是**层级**而不是像素明暗：在面板里铺 `raised` 就是抬了一级。
+在 `bg-panel` 的弹窗里用 `bg-raised` 做分区，就是在造卡片。
 
 ## 卡片准入条件（四条全中才允许）
 
@@ -101,9 +121,9 @@ description: Henji-AI 新建或改造任何界面/页面骨架/面板/弹窗/侧
 
 | 类 | 名称 | 每视图允许 | 装什么 | 视觉 |
 |---|---|---|---|---|
-| A | **命令带** | **恰好 1 条** | 返回、标题、文件上下文、主工具组、导出/保存动作 | `h-10`~`h-11` + `border-b border-border-dark` + `bg-surface-dark` + `px-2` |
-| B | **从属参数带** | 0~1 条，必须紧贴 A 下方 | 只随当前工具变化的参数（颜色、线宽、字号） | **不自带底色、不自带边框**，与 A 在同一个容器里，共用 A 那条 `border-b` |
-| C | **状态带** | 0~1 条，页面底部 | 只读状态、进度、计数 | 无边框，`text-text-muted` |
+| A | **命令带** | **恰好 1 条** | 返回、标题、文件上下文、主工具组、导出/保存动作 | `UiToolbar variant="command"`：44 高、`bg-panel`、下边一条 `border-gap` 发丝线、`px-2.5`；不要手写 `h-11 border-b bg-*` |
+| B | **从属参数带** | 0~1 条，必须紧贴 A 下方 | 只随当前工具变化的参数（颜色、线宽、字号） | `UiToolbar` 的 `subordinate`：**不自带底色、不自带边框**，与 A 共用同一块底色和那条下边框 |
+| C | **状态带** | 0~1 条，页面底部 | 只读状态、进度、计数 | 无边框，`text-text3` |
 
 **连续操作条带上限 = 2（A + B）。** 出现第三条就是骨架错了，不是间距问题。
 
@@ -126,7 +146,7 @@ description: Henji-AI 新建或改造任何界面/页面骨架/面板/弹窗/侧
 // ❌ 外壳已经有一条命令带了，功能组件又开一条自己的行
 <div className="p-4">
   <div className="flex items-center gap-2">   {/* 第二条带：只为了放一个按钮 */}
-    <UiButton variant="secondary">打开图片</UiButton>
+    <UiButton>打开图片</UiButton>
     <span>{fileName}</span>
   </div>
   <Editor />
@@ -134,7 +154,7 @@ description: Henji-AI 新建或改造任何界面/页面骨架/面板/弹窗/侧
 
 // ✅ 注入到已有的那条命令带里
 <Editor
-  toolbarLeading={<><UiButton variant="secondary">打开图片</UiButton><span>{fileName}</span></>}
+  toolbarLeading={<><UiButton>打开图片</UiButton><span>{fileName}</span></>}
   toolbarActions={<UiButton variant="primary">另存为…</UiButton>}
 />
 ```
@@ -147,7 +167,7 @@ description: Henji-AI 新建或改造任何界面/页面骨架/面板/弹窗/侧
 |---|---|---|
 | 有页面标题的二级页面 | `<UiPageHeader onBack backLabel>`，渲染在标题左侧 | 3D 镜头参考工程列表、图片编辑空态、资产库工作区 |
 | 自带命令带的全屏工作面 | 那条命令带的**左端** | 3D 场景编辑器、图片编辑器 |
-| 没有命令带的全屏工作面 | 浮在内容上的玻璃返回按钮 | 画布项目内 |
+| 没有命令带的全屏工作面 | 浮在内容上的玻璃返回按钮：`ui-glass` 容器包一个静默 `UiButton`（画布底随主题，不用 `media` 档，重要记录 011） | 画布项目内 |
 
 **禁止为"返回 + 页面名"单画一条 `h-10` 横带。** 它会和应用标题栏叠成"双标题栏"，
 而且页面名通常和下面的页面标题重复一遍。
@@ -181,11 +201,11 @@ description: Henji-AI 新建或改造任何界面/页面骨架/面板/弹窗/侧
 画布、编辑区、预览区这类**铺满剩余空间的工作面**不是卡片——对照「卡片准入条件」四条：不能单独移动、不是并列实体、脱离上下文无意义，一条都不中。
 
 ```tsx
-// ❌ MarkCanvas 现状：工作面自带卡片外观，外层再给 p-4 空白，于是整个编辑器浮成一张卡
-<div className="rounded-xl border border-veil-subtle bg-bg-dark/85">
+// ❌ MarkCanvas 当时：工作面自带卡片外观，外层再给 p-4 空白，于是整个编辑器浮成一张卡
+<div className="rounded-xl border border-line bg-gap/85">
 
-// ✅ 铺满，边界由它和命令带之间的那条 border-b 表达
-<div className="bg-bg-dark/85">
+// ✅ 铺满，边界由它和命令带之间的那条下边框表达；放图片/视频的视口用 bg-media（不随主题），其余用 bg-gap
+<div className="bg-gap">
 ```
 
 判据：**这块区域会不会随窗口一起长大？** 会，就不是卡片。要给它一个更暗的底以便和 chrome 区分是可以的，但不要 `rounded` + `border` + 外层留白三件套——那三样凑齐就是卡片。
@@ -200,7 +220,7 @@ prominent/bordered/plain、Fluent 的 primary/default/subtle）。本项目（�
 | 档 | `UiButton variant` | 图标版 `UiIconButton` | 用途 |
 |---|---|---|---|
 | 主 | `primary`（材质实底：顶部高光、内描边、投影，按下下沉） | `tone="accent"`（圆形，如生成） | **一个表面只允许一个**，这一屏的主动作 |
-| 次 | `secondary`（无边框填充） | —— | 弹窗与表单里的普通动作 |
+| 次 | `secondary`（无边框填充 `bg-control`） | —— | 弹窗与表单里的普通动作 |
 | 辅 | `quiet`（**默认**，静息无底，悬停出底） | 默认（静默） | 工具栏、命令带、行内、菜单 |
 | 危险 | `danger`（静息同 quiet，悬停显红）/ `dangerSolid`（只用于确认弹窗） | `tone="danger"` | 删除、清空、移除 |
 | 链接 | `link`（强调文字、悬停下划线、行内高度） | —— | 行内跳转/说明链接，不计入动作层级 |
@@ -212,6 +232,11 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 **外观只由 variant / size / tone / on / shape 决定**，className 只放布局；调用点改底色、边框、文字色、圆角、
 阴影、高度或字号会被 `check:surface` 规则 E 拦截（确属非按钮外观的命中区，如拖动柄、时间轴记号，行级
 `ui-surface-allow` 写明理由与接手任务）。
+
+**默认静默**：不传 `variant` 就是 `quiet`，不传 `tone` 就是静默图标按钮——这是绝大多数按钮该有的样子。
+需要“看得见”的只有三种：唯一主动作（`primary` / `tone="accent"`）、弹窗与表单里的普通动作（`secondary`）、
+确认弹窗的破坏性确认（`dangerSolid`）。旧档位 `ghost` / `muted` / `plain` / `glass`、旧参数 `appearance` / `showBorder` /
+`hoverVariant` 已删除且不留兼容层（重要记录 011），不要再引入同义档位；确需新形态时给组件加有限枚举并登记到「必须复用」表。
 
 ### 两条硬规则
 
@@ -228,8 +253,8 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 
 工具栏里的工具（选择/标注/矩形…）**不是按钮**，是"我现在处于哪个模式"，
 点它改变的是"接下来会发生什么"，不是"立刻发生一件事"。
-它属于**选中态语言**，不属于动作层级：静息不描边，选中用中性层底 + 强调文字
-（`UiChipButton selectionRole="navigation"`），把实底强调色让给那个唯一的主动作。
+它属于**选中态语言**，不属于动作层级：静息不描边，选中用中性抬升（选中底 + 主要文字），
+文字工具用 `UiChipButton selectionRole="navigation"`，图标工具与开关用 `UiIconButton on`，把实底强调色让给那个唯一的主动作。
 
 同理，参数面板里的"当前值是什么"（形状、比例、档位）是**单选**，
 用 `UiOptionButton active`（中性抬升：选中底 + 主要文字）——详见「选中态词汇表」。
@@ -293,9 +318,9 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 | 语义 | 表达 | 通用落点 |
 |---|---|---|
 | 导航：正在看哪里 | 中性选中底 + 主要文字（图标强调色）+ 方向指示条 | `UiNavButton active`；横向 chip 用 `selectionRole="navigation"`；面板标签用 `selectionAppearance="subtle"`（主要文字 + 底部细线）；应用标题栏的工作区导航用 `selectionAppearance="workspace"`（纯文字 28 高，底部短指示条；`aria-current` 只给当前工作区，同栏里只打开浮层的开关项用 `on`：选中底无指示条 + `aria-pressed`） |
-| 单选：当前值是什么 | 中性抬升：选中底 + 主要文字（重要记录 003，不用强调色实底） | `UiOptionButton active`（分段 `variant="segment"`，网格 `variant="grid"`） |
-| 多选/标签：集合中哪些已选 | 强调描边 + 中性选中底 + 强调文字 | `UiChipButton active`；多选的选项卡用 `UiOptionButton selection="multiple"` |
-| 布尔：功能是否开启 | 强调色只进入开关轨道或复选框本体，整行保持静息 | `UiSwitch checked` / `UiCheckbox checked` |
+| 单选：当前值是什么 | 中性抬升：选中底 + 主要文字（重要记录 003，不用强调色实底） | `UiOptionButton active`：菜单 `menu`、分段 `segment`（放在 `UI_SEGMENTED_TRACK_CLASS` 轨道里）、网格 `grid`、带小样的格 `tile`、圆形色样 `swatch`（选中为外圈一环）、封面内容卡 `cover`（状态只画在 `UI_COVER_FRAME_CLASS` 封面框上） |
+| 多选/标签：集合中哪些已选 | 强调描边 + 中性选中底 + 强调文字 | `UiChipButton active`；多选的选项卡用 `UiOptionButton selection="multiple"`；逐字稿词块 `UiTextToken selected` |
+| 布尔：功能是否开启 | 强调色只进入开关轨道、复选框本体或图标本身，整行保持静息 | `UiSwitch checked` / `UiCheckbox checked`；图标开关 `UiIconButton on`（选中底 + 强调色图标，写 `aria-pressed`）；标题栏导航里的浮层开关 `UiChipButton on` |
 
 默认态不是第五种选中态：它保持当前表面的中性视觉。不要用整行实底表达“已启用”，
 也不要把多选语义画成单选项的中性抬升（或反过来）。下拉当前项 = 中性选中底 + 强调色勾。
@@ -347,6 +372,10 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 
 分区之间的间距用 `UI_SECTION_STACK_CLASS`，不要每处自己定 `space-y-*`。
 
+窄停靠面板（剪辑效果控件、属性栏）里 16/600 的区块标题和 14/500 的行标签都太重：分组用 `UiGroup titleTone="compact"`
+（12/600 次要文字、间距收紧），行用 `UiFormRow density="compact"`（标签 12 次要文字），两者成对使用，不要在调用点改字号。
+`UiFormRow` 的 `hint` 只放“不看会选错”的常驻说明，背景知识放 `info`（标签文字本身悬停触发，见下文 tooltip 规则）。
+
 字段（任务 2.2）：`UiInput` / `UiSelect` / `UiFieldTrigger`（`Dropdown`、`PanelTrigger` 的按钮）/ `NumberInput` 都是 raised 无边框表面、聚焦一圈强调色焦点环，高度只由 `size` 决定（sm 28 / md 32 默认 / lg 36）。`NumberInput` 自带数值拖动：在读数或标签上按住左右拖动改值（Shift 精细、Alt 粗调），单击进入编辑，读数不会被步进列裁掉。
 
 字段排布（任务 3.2）：一行参数条（如生成输入区底栏）不要做成“标签在上 + 字段框”的表单。在容器上提供 `UiFieldLayoutContext` = `toolbar`：参数标签移到控件左侧（辅助文字 12），`Dropdown` / `PanelTrigger` 的触发器自动改静默皮肤，参数开关改胶囊；多行文本、单选卡片、上传类等大块控件仍按表单排布。两者打开的浮层内容一律重置回 `form`，不要在调用点逐个传 `appearance` 或手写行内标签。
@@ -379,15 +408,16 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 
 | 禁止 | 正确做法 |
 |---|---|
-| 业务组件手写 `rounded-xl border border-border-dark bg-panel` | `<UiPanel>` |
+| 业务组件手写 `rounded-xl border border-line bg-panel` | `<UiPanel>` |
 | 在 `UiPanel` 内部再放一个 `border + bg` 的 div | `variant="inset"` / `"bare"` / 纯留白 |
 | 在按钮调用点用 className 改底色、边框、文字色、圆角、阴影、高度或字号 | 用 `variant`/`size`/`tone`/`on`/`shape`；确需新形态时给组件加有限枚举 |
 | 容器内的同质选项集合逐项描边 | `UiOptionButton variant="menu"`，见"选项集合的静息态" |
-| 在 `UiOptionButton` 调用点手写 `!border-transparent !bg-transparent hover:!bg-layer` | 用 `variant="menu"`，别再复制这串 |
+| 在 `UiOptionButton` 调用点手写 `!border-transparent !bg-transparent hover:!bg-hover` | 用 `variant="menu"`，别再复制这串 |
 | 面板/弹窗内部再叠一层自己的底色（`bg-zinc-900/40` 这类） | 表面由外壳统一提供；要切分用分隔线，要下沉用 `inset` |
 | 用 className 覆盖 `PanelTrigger` / `Dropdown` 的外壳表面或触发器外观 | 外壳只有 `surface`（`solid` 默认 / 压在画布与媒体上用 `glass`）与 `panelPadding`（none/menu/content）；触发器只有 `size`（sm/md/lg）与 `appearance`；`buttonClassName` 只放宽度等布局（规则 E） |
 | 字段、选项、标签、导航在调用点改高度或字号（`h-8 text-xs`） | 用 `size`（sm 28 / md 32 / lg 36）；选项与标签的 `h-full`、`min-h-*` 属于布局，可以写 |
-| `zinc-*` / `gray-*` 等固定调色板 | 语义色，见「颜色必须跟随主题」 |
+| `zinc-*` / `gray-*` 等固定调色板、`text-white` / `bg-black/40` 等黑白类、rgba 字面量、命名色 | 语义令牌类，见 `references/color-and-material.md`；压在媒体上用 `text-on-media` / `bg-media-control` / `border-media-line`（`check:colors` 拦截，登记不可再增） |
+| 旧令牌别名类（`bg-app`、`bg-surface-dark`、`bg-layer`、`bg-bg-dark`、`border-border-dark`、`text-text-dark`/`-muted`/`-soft`/`-faint`、`brand-*`、不带后缀的 `text-danger` 等）与旧 CSS 变量（`--app-rgb`、`--text-muted-rgb`、`--ui-surface-panel` …） | 直接写语义令牌（`bg-window`、`bg-raised`、`bg-hover`、`bg-gap`、`border-line`、`text-text1/2/3`、`accent-text`/`accent`、`text-danger-text`/`bg-danger-solid`）；`check:colors` 规则 legacy 与旧变量规则拦截 |
 | 自己拼 `backdrop-blur-* + bg-black/xx + border-white/xx` | `ui-glass`；且先确认这个浮层真的压在媒体/画布上 |
 | `text-zinc-600 dark:text-zinc-400` 双分支 | 直接写最终值，`dark:` 的基础值是死代码 |
 | 给已经带边框的控件外面再包一层框 | 去掉外层框 |
@@ -403,6 +433,9 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 | 在调用点自己从 lucide 挑业务概念图标 | 用 `@/core/theme/icons` 的登记常量 |
 | 建一个「本目录自己的图标模块」 | 删掉，调用点直接用 lucide；私有图标集＝又一套平行体系 |
 | 一个表面出现两个 `variant="primary"` | 只留一个主动作，其余降到 `secondary` 或 `quiet` |
+| 破坏性动作用 `primary` 或手写红底 | `danger`（静息静默、悬停显红）；确认弹窗里的最终确认用 `dangerSolid` |
+| 选中/当前值用强调色实底（蓝底白字的分段、选项、标签） | 中性抬升（`UiOptionButton active`、`UiChipButton`），强调色只进指示条、勾、焦点环、开关轨道 |
+| 给压在纯色界面上的浮层、按钮加玻璃 | 不透明实底；玻璃只给压在图片、视频、画布上的浮层（`surface="glass"` / `UiPanel variant="glass"` / `ui-glass`） |
 | 为了省宽度把同组动作里的一个降档 | 缩短文案 / 图标化**整组** / 接受轻微偏移，不要只动一个 |
 | 用分隔线分开两组同类动作 | 加大间距；分隔线只用于交互语义根本不同的两侧，一条 bar 最多一条 |
 | 把工具/模式切换写成带边框的按钮 | 那是选中态语言：`selectionRole="navigation"`，静息不描边 |
@@ -421,7 +454,16 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 | 封面内容卡（项目卡、工程卡、资产卡） | `UiOptionButton variant="cover"` + 封面框 `UI_COVER_FRAME_CLASS`；不是按钮的根元素（可拖拽的资产卡）加 `UI_COVER_GROUP_CLASS` 与 `data-selected` | 给整张卡铺底描边，或在调用点手写悬停描边/选中环 |
 | 工具页 / 全屏工作面的命令带 | `UiToolbar variant="command"`：左端 children（返回、文件上下文、主工具组）/ `center`（视图切换、随工具变化的参数）/ `trailing`（次要动作 + 唯一主动作）/ 可选 `subordinate` 从属带（共用底色与下边框）；状态写进 `barProps` 的 `data-*` | 每个工具自己画 `h-11 border-b bg-*` 头带；从属带另画底色或边框 |
 | 可点的文字记号（逐字稿词块、时间轴字幕块） | `UiTextToken`（`appearance` inline/chip；`current` 播放中、`selected` 已选、`excluded` 已删除、`flagged` 待留意） | 用 `UiButton` 加 className 覆盖底色、圆角、划线 |
-| 表单行 | `UiFormRow` | 手写 label + 间距 |
+| 表单行 | `UiFormRow`（窄停靠面板 `density="compact"`，配 `UiGroup titleTone="compact"`） | 手写 label + 间距；调用点改标签字号 |
+| 字段 | `UiInput` / `UiSelect` / `UiTextArea` / `NumberInput`（数值拖动：读数或标签上左右拖，Shift 精细、Alt 粗调，单击编辑）；高度只用 `size` | 手写数值拖动、自绘步进器；调用点改高度 |
+| 下拉 / 面板触发器 | `Dropdown` / `PanelTrigger`（按钮是 `UiFieldTrigger`：`appearance` field/quiet、`size`；浮层 `surface` solid/glass、`panelPadding`）；一行参数条用 `UiFieldLayoutContext` = `toolbar` | 自己写触发器按钮或浮层外壳；`buttonClassName` 里改外观 |
+| 分段 / 网格 / 小样 / 色样选择 | `UiOptionButton variant="segment"`（放在 `UI_SEGMENTED_TRACK_CLASS` 里）/ `grid` / `tile` / `swatch` | 手写 `bg-veil-faint` 格子、强调色实底的分段 |
+| 开关、复选框、图标开关 | `UiSwitch` / `UiCheckbox` / `UiIconButton on` | 用整行实底或强调色文字表达“已开启” |
+| 标签栏、导航 | `UiNavButton`（侧栏）/ `UiChipButton selectionRole="navigation"`（`selectionAppearance` default / `subtle` 面板标签 / `workspace` 标题栏工作区，后者同栏浮层开关用 `on`） | 手写指示条、选中底 |
+| 无边框窗口的最小化/最大化/还原/关闭 | `UiWindowControl`（`action`、`platform` windows/mac；主窗口与日志窗口共用） | 用 `UiIconButton` 加覆盖拼交通灯或关闭红底 |
+| 悬停说明 | `Tooltip`（300ms、raised 实底）；参数名、设置项标签用 `UiTooltipText` | 自己写 title 浮层或 ⓘ 图标 |
+| 音频波形（任何位置：口播剪辑、剪辑时间线与源监视器、画布音频节点、资产卡、音频播放器、生成记录） | `WaveformView`（`@/components/waveform/WaveformView`，`tier` mini/standard、`tone` neutral/clip）+ `useWaveformData` / `useWaveformDataList`（`@/hooks/useWaveformData`，多精度峰值、磁盘缓存，放大到采样点） | 自己解码音频、自写峰值缓存或 Canvas 波形绘制 |
+| 剪辑片段的视频缩略帧条 | `useFilmstripFrames` + `src/services/videoFilmstrip/filmstripFrameService.ts`（主进程 `electron/main/services/video/filmstrip.ts` 成批取帧、磁盘缓存） | 逐帧走原生解码或另建缩略图通道 |
 | 参数帮助说明 | 参数名称文本本身的 hover / focus tooltip | 加 Info 等额外图标、把 `description` 渲染成控件下方正文，或用 Tooltip 包住整个控件 |
 | 空/加载/错误 | `UiEmpty` / `UiLoading` / `UiError` | 内联手写状态块 |
 | 按钮/输入/开关等 | `@/components/ui` 的 `Ui*` | 原生 `<button>/<input>` |
@@ -481,14 +523,16 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 - [ ] 加分隔线了吗？两侧交互语义真的不同吗？一条 bar 最多一条
 - [ ] 有手写 `<svg>` 吗？路径写死的就是图标，改用 lucide；路径算出来的才是图形
 - [ ] 用到跨界面的业务概念图标了吗？走 `@/core/theme/icons` 的登记常量，别在调用点自己挑
-- [ ] 有没有 `zinc-*` / `gray-*` / `slate-*`？改强调色或换主题预设时它们不会跟着动
-- [ ] 用 `accent` 当文字色了吗？改用 `text-brand-300`；白字要压实心蓝的话底色用 `bg-brand-500`
+- [ ] 有没有固定调色板、黑白类、rgba、命名色或旧别名类（`bg-app`、`text-text-muted`…）？换主题预设时它们不会跟着动，一律改语义令牌
+- [ ] 用 `accent` 当文字色了吗？文字用 `text-accent-text`（`UI_COLOR_ACCENT_TEXT_CLASS`）；字压在强调实底上用 `bg-accent text-on-accent`（`UI_COLOR_ACCENT_FILL_TEXT_CLASS`，黑白由引擎按对比度决定）
+- [ ] 选中/当前值是不是中性抬升？强调色实底只属于唯一主动作
+- [ ] 至少在“石墨”“纸白”两个预设下看过吗？浅色模式下白纱（`veil`）、黑白类、媒体叠层令牌放错位置最容易露馅
 - [ ] 破坏性动作（删除/清空）是不是 `variant="primary"`？那会抢走主动作的视觉权重，应该用 `danger`（静息中性、hover 才出危险色），确认弹窗里用 `dangerSolid`
 - [ ] 改了 `.css` 文件吗？里面不能有 `#hex` 与 `rgba(数字…)`，只能 `rgb(var(--xxx-rgb) / a)`
 - [ ] 新加的全局样式/变量放对文件了吗？懒加载的样式表里不能放全局主题变量
 - [ ] 同一个 className 里有没有两个类抢同一个 CSS 属性？改成互斥三元
 - [ ] 新面板有没有再叠一层自己的底色？表面应该由外壳统一提供
-- [ ] 加了模糊吗？只有压在图片/视频/画布上才该加，且只能用 `ui-glass` / `ui-glass-scrim`
+- [ ] 加了模糊吗？只有压在图片/视频/画布上才该加，且只能用 `ui-glass` / `ui-glass-scrim` / `UiPanel variant="glass"` / 浮层 `surface="glass"`
 - [ ] 动效时长是否落在 120/180/240/500 四档？（缓动已是全局默认，不用每处写）
 - [ ] 有 `setTimeout` 卸载动画组件吗？那个数字必须和 className 里的 `duration-*` 同档
 - [ ] 过渡的是 `opacity`/`transform` 吗？别过渡宽高间距，也别用裸 `transition`
@@ -514,6 +558,7 @@ npm run check:icons
 ```
 
 只运行与本次改动直接相关的专项检查；验证级别和是否追加 lint、类型检查、构建由 `docs/rules/testing.md` 决定。
+改了本 skill（`.claude/skills` 与 `.codex/skills` 任一侧）必须同步另一侧，并跑 `npm run check:skill-sync`（CI 门禁）。
 
 改了动效档位或 `motion.ts` 再补一条（它保证 ms 数值与 `duration-*` 类不漂移）：
 
@@ -525,8 +570,17 @@ npx vitest run src/components/ui/motion.test.ts
 
 ```bash
 npm run ui:tour -- --only <受影响场景> --size <受影响尺寸>
-npm run check:ui-visual
+npm run check:ui-visual -- --only <受影响场景>
+# 改了令牌、主题引擎或跨主题外观时按预设运行（可重复或逗号分隔，all = 石墨/深海/胶片/纸白）
+npm run ui:tour -- --theme-preset graphite,paper --only <受影响场景>
+npm run check:ui-visual -- --theme-preset all --only <受影响场景>
 ```
+
+多个预设时每个预设单独启动一次应用，结果分到 `<输出目录>/<预设>/`。`check:ui-visual` 的对比度规则按**渲染后像素**判定
+（隐藏文字与图标截一张只有背景的图，在每个文字/图标区域取样合成前景，取最差 10% 分位）：正文与辅助文字 ≥ 4.5:1，
+大字与图标 ≥ 3:1；禁用控件、`aria-hidden`、被遮挡的部分不判；场景中途 `capture()` 的菜单、悬停、浮窗状态也审对比度。
+确属装饰、品牌或用户内容色的例外登记在 `scripts/ui-visual-contrast-exceptions.json`（必须写理由，可限定场景/预设/下限）；
+**界面色不达标改令牌，不登记例外。**
 
 用户要求“真实运行环境”的视觉审查时，使用 `npm run test:reality -- --suite ui|ui-audit --profile real --only ...` 的正式 Electron 场景；默认只读，不传 `--allow-writes`。禁止用浏览器、ego-browser、Chrome、裸 Vite 或 temporary profile 代替。场景断言通过后，Agent 仍必须打开实际截图，检查对齐、裁切、层级、颜色、文案和面板开合状态；DOM 通过不等于视觉通过。巡检结束后退出巡检实例，并恢复或重启当前仓库的 `electron:dev`。
 
@@ -537,22 +591,24 @@ npm run check:ui-visual
 ### 已知门禁缺口：条带数量还没进自动检查
 
 「页面骨架：横向条带」那节的规则**目前全靠人看**——`check:surface` 只看单元素的
-`border + bg + rounded` 组合，`check:ui-visual` 的十一条规则里也没有数条带的那条。
-所以 4 条带的图片编辑页在两个门禁下都是全绿的。
+`border + bg + rounded` 组合与调用点外观覆盖，`check:ui-visual` 的十一条规则里也没有数条带的那条。
+所以 4 条带的图片编辑页在两个门禁下都是全绿的。新工具页统一用 `UiToolbar variant="command"` 能从源头避免大部分条带问题。
 
 这条其实**可判定**：在真实 DOM 里沿主轴找连续的 `border-bottom` 兄弟条带，
 数量 > 2 即报错；同理可判「铺满剩余空间且带 `border-radius` 的容器」。
 补这条规则前，看整页时必须人工数一遍，别因为门禁全绿就认为骨架没问题。
 
-`check:surface` 报三类问题：
+`check:surface` 报五类问题：
 
 - `[A]` 手写面板表面 → 改用 `<UiPanel>`
 - `[B]` 同文件多处卡片表面 → 疑似卡片套卡片，内层降级
 - `[C]` 手写弹窗（`fixed inset-0` + 黑色遮罩但没用 `UiModal`/`AlertDialog`）→ 改用 `UiModal`
+- `[D]` `.css` 里手写毛玻璃（`backdrop-filter`）→ 元素上加 `ui-glass`
+- `[E]` 按钮、选项、标签、导航、字段触发器的调用点用 className 覆盖外观（底色/边框/文字色/圆角/阴影/高度/字号）→ 用组件枚举
 
 存量已全部清零，`check:surface:strict` 已接入 `build` / `electron:build` 与 CI，**违规会直接让构建失败**。改完必须跑一次确认通过。
 
-确需例外时在该行上方加注释 `ui-surface-allow` 并写明理由；只允许行级豁免，禁止文件级 `ui-surface-allow-file`（否则该文件将来真正的套娃也会被放行）。
+确需例外时在该行上方加注释 `ui-surface-allow` 并写明理由与接手任务；只允许行级豁免，文件级 `ui-surface-allow-file` 出现即报违规（否则该文件将来真正的套娃也会被放行）。
 
 已确认的例外类别：全屏沉浸式媒体查看器（`mediaViewer/` 三个 Modal）不套用 `UiModal`——`UiModal` 是居中卡片语义，与铺满视口的查看器不匹配。
 

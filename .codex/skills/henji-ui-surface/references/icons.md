@@ -7,7 +7,7 @@
 和颜色、字号、动效一样：**同一个业务概念在全应用只能有一个图形。**
 
 治理前实测：「资产库」在顶部导航是手写的归档盒路径、在工具栏是 `LibraryBig`、在侧栏是
-`Library`——三处三样；「工具箱」tab 和「设置」按钮共用同一个齿轮；全项目 **74 处手写
+`Library`——三处三样；「工具箱」（现名「工具」）tab 和「设置」按钮共用同一个齿轮；全项目 **74 处手写
 inline `<svg>`**，与 lucide-react 两套体系并存。根因就是图标从来没有登记处。
 
 ### 三条规则
@@ -44,7 +44,12 @@ lucide 引入即可——lucide 的名字本身就是单一真源，再包一层
 
 ```bash
 npm run check:icons          # 告警式
-npm run check:icons:strict   # 门禁式，已接入 build / electron:build
+npm run check:icons:strict   # 门禁式，已接入 build / electron:build 与 CI
 ```
 
-确需例外时在该行或上一行加注释 `icon-token-allow` 并写明理由。
+三条规则：`[A]` 业务组件手写 `<svg>`；`[B]` 跨界面业务概念图标绕过 `icons.ts` 登记表；`[C]` 界面可见文字（`src`、`electron`
+的 ts/tsx 与 i18n 文案）里的 emoji 与当图标用的符号字符（✓ ✗ ▶ ◆ 等，含几何图形 U+25A0–25FF），判定在
+`scripts/lib/symbolGlyphs.cjs`。注释与 `console.*` 输出豁免。
+
+确需例外时在该行或上一行加注释 `icon-token-allow` 并写明理由；规则 C 的整文件豁免只给“只产出开发者控制台内容”的文件，
+登记在 `check-icon-tokens.cjs` 的 `GLYPH_FILE_EXEMPTIONS` 并写明理由。

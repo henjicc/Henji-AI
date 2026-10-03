@@ -2,30 +2,48 @@
 
 （`henji-ui-surface` 的参考文档。调颜色、写 CSS、加毛玻璃、改对比度时读这份。）
 
-## 颜色必须跟随主题
+## 颜色必须跟随主题：种子 → 语义令牌 → 组件
 
-设置 → 界面 → 主题外观里，用户可以整体替换 9 个语义色（`bg/surface/border/text/textMuted/app/canvas/panel/layer`），
-强调色还会派生出 `brand-300/500/600/700`。**任何 `zinc-*` 这类固定调色板都不会跟着动**——
-用户切到「石墨灰阶」后，硬编码的地方会原地不动，和周围脱节。
+颜色由主题引擎从少量**种子**推导（重要记录 002、010），界面代码**只引用语义令牌**，不写任何具体颜色：
 
-四档文字色里，中间两档 `text-soft` / `text-faint` 由 `runtimeTheme.applyTextScale` 从
-`text` / `textMuted` 派生，所以整条梯度都跟随主题。对照表：
+| 层 | 内容 | 入口 |
+|---|---|---|
+| 种子 | 模式（深/浅）、底色色相、底色倾向（彩度）、窗口亮度、层级对比度、强调色。预设石墨（默认）/深海/胶片/纸白只是种子组合；设置里开放预设、强调色、层级对比三项 | `src/core/theme/themeEngine.ts`（`THEME_PRESETS`、`deriveThemeTokens`）、`themeSelection.ts` |
+| 语义令牌 | OKLCH 推导：表面按“窗口 ± n 级”，`text2`/`text3` 按目标对比度 ≥ 4.5:1 求解，强调色亮度夹紧，实底上的字按对比度自动黑白；输出为 CSS 变量 `--{token}` 与不透明令牌的 `--{token}-rgb` | `themeCssVars.ts` → `runtimeTheme.ts` 写到根节点；`index.css` 的 `theme-tokens` 块是石墨静态默认值（首帧防闪色，测试保证与引擎一致） |
+| 组件 | 组件内部把语义令牌组合成皮肤（`.ui-btn-*`、`.ui-glass*`、`styleTokens.ts` 的常量）；玻璃的 `--ui-glass-*` 组件层变量静态写在 `index.css`，毛玻璃关闭时整组改指实底 | `src/index.css`、`src/components/ui/styleTokens.ts` |
 
-| 别再写 | 改用 |
+Tailwind 类名规则：**类名里的颜色名 = CSS 变量名去掉 `--`**（`--control-hover` → `bg-control-hover`，`--text2` → `text-text2`），
+唯一例外是文字片段 `--clip-text` 的类叫 `clip-title`（避开 `bg-clip-text`）。常用：
+
+| 用途 | 类 |
 |---|---|
-| `bg-zinc-950 / 900 / 800 / 700` | `bg-app / bg-panel / bg-surface-dark / bg-layer` |
-| `text-zinc-100/200` `300` `400` `500/600` | `text-text-dark` `text-text-soft` `text-text-muted` `text-text-faint` |
-| `border-zinc-700/600` | `border-border-dark` |
-| 叠在图片/视频/画布上的边框与底色 | `veil` 六档（它刻意是白色半透明，与主题无关是有意的） |
+| 表面 | `bg-gap` 面板之间的间隙 / `bg-window` 窗口与工作区 / `bg-canvas` 画布 / `bg-panel` 面板与浮层 / `bg-raised` 字段与内嵌块 / `bg-control`(`-hover`/`-pressed`) 控件 / `bg-hover` 悬停 / `bg-selected` 选中 |
+| 线 | `border-line` 发丝线 / `border-line-strong` 强分隔 / `edge` 受光边 |
+| 文字 | `text-text1` 主要 / `text-text2` 次要 / `text-text3` 辅助（均 ≥ 4.5:1）/ `text-text-disabled` 禁用 |
+| 强调 | `bg-accent`（填充，**不能作文字色**）/ `text-accent-text` 强调文字 / `text-on-accent` 强调实底上的字 / `ring-accent-ring` 焦点环 / `bg-accent-tint` 浅底 / `-hover`/`-pressed` |
+| 状态 | `bg-danger-solid` 实底 / `text-danger-text` 文字 / `bg-danger-tint` 浅底 / `text-on-danger`；`success`、`warning` 同构；信息色复用强调色 |
+| 媒体上（固定，不随主题） | `bg-media` 媒体底 / `bg-media-control`(`-hover`) / `bg-media-scrim` / `border-media-line` / `text-on-media` |
+| 遮罩 | `bg-scrim` / `bg-scrim-soft` / `bg-scrim-solid`（按模式派生） |
+| 剪辑片段与波形 | `bg-clip-video`/`-audio`/`-title` 与 `border-clip-*-line`、`text-clip-wave`；`text-wave` / `text-wave-played` / `text-wave-cut` |
 
-ESLint 已硬拦 `zinc / gray / neutral / slate / stone` 五个中性色板。
-`red / green / yellow / blue / orange / purple` 等是语义色与分类色，**不在禁止范围内**。
+旧类名（`bg-app`、`bg-bg-dark`、`bg-surface-dark`、`bg-layer`、`border-border-dark`、`text-text-dark`/`-muted`/`-soft`/`-faint`、
+`brand-300/500/600/700`、不带后缀的 `text-danger`/`text-success`/`text-warning`）与旧 CSS 变量（`--app-rgb`、`--text-muted-rgb`、
+`--ui-surface-panel` 等）是 1.3 的过渡别名，4.2 删除；`check:colors` 的 legacy 规则与旧变量规则拦截它们再次出现。
+`veil` 六档是**固定白纱**（不随主题），只适合压在媒体与深色画布上，新代码压在媒体上优先用 `media-*` / `on-media`。
+
+非 DOM 渲染面（Canvas 2D、WebGL/WebGPU、波形绘制）读令牌用 `useThemeTokens()`（`themeTokenStore` 订阅），不要硬编码或读 CSS 字符串再解析。
+内容色（标注默认色、导出图配色、算法遮罩、端口类型色等，不属于界面皮肤）登记在 `src/core/theme/colorTokens.ts`；需要随模式变化时
+按模式派生（如端口类型色用 `light-dark(浅, 深)`）。
+
+`check:colors` 拦截：十六进制、Tailwind 任意十六进制、CSS 里的 rgb/rgba 字面量、旧 CSS 变量别名（以上不可登记）；
+ts/tsx 里的固定调色板类、黑白类、rgba 字面量、命名色、旧别名类。登记文件 `scripts/check-color-tokens.allowlist.json` 只能下调：
+palette / mono / named 已清零、不可再登记，其余规则总数不得超过脚本里的上限。ESLint 另拦 `zinc / gray / neutral / slate / stone`。
 
 ### 纯 CSS 文件同样受约束
 
-`.css` 里不能写 `#hex` 也不能写 `rgba(数字…)`，只能写 `rgb(var(--xxx-rgb) / a)`。
-`npm run check:colors` 现在会扫 `.ts/.tsx/.css` 三种；只有
-`src/index.css` 与 `src/core/theme/colorTokens.ts` 两个「令牌定义处」豁免。
+`.css` 里不能写 `#hex` 也不能写 `rgba(数字…)`，只能写 `rgb(var(--xxx-rgb) / a)` 或 `var(--token)`。
+`npm run check:colors` 会扫 `.ts/.tsx/.css` 三种；只有
+`src/index.css` 与 `src/core/theme/colorTokens.ts` 两个「令牌定义处」豁免字面量规则（旧变量别名规则对它们同样生效）。
 
 扩展这条检查时当场抓出 70 处存量硬编码，包括**三种互不相同的蓝**
 （`#3b82f6` 才是应用强调色，`#007eff` 用在视频控件与分辨率面板，`#1890ff` 用在上传组件）
@@ -38,8 +56,8 @@ ESLint 已硬拦 `zinc / gray / neutral / slate / stone` 五个中性色板。
 结果「设置 → 界面 → 圆角尺寸 / 色调」在用户没打开过画布之前完全不生效。
 **全局主题变量只能放 `src/index.css`**（它在 `main.tsx` 里全局引入）。
 
-⚠️ 另外：`index.html` 写死 `class="dark"` 且从不切换，**`dark:` 变体的基础值是死代码**。
-不要写 `text-zinc-600 dark:text-zinc-400` 这种双分支，直接写最终值。
+⚠️ 另外：全仓没有 `dark:` 变体，深浅色由主题引擎改变量完成（Tailwind `darkMode: 'class'` 只是为了让误写的 `dark:` 永不生效）。
+不要写 `text-zinc-600 dark:text-zinc-400` 这种双分支；需要按模式区分的内容色在 `colorTokens.ts` 用 `light-dark()` 派生。
 
 ### 布局定位不得藏在外观样式表里
 
@@ -78,6 +96,10 @@ padding、flex 收缩与助手插入量也会被静默绕开。
 ### 什么时候才该用
 
 > 只用在**浮层压住内容不可预测的东西**上 —— 图片、视频、画布。
+
+落点（都是同一套材质）：`ui-glass` 类、`UiPanel variant="glass"`、`Dropdown` / `PanelTrigger` 的 `surface="glass"`（默认 `solid`）、
+遮罩 `ui-glass-scrim`。画布“返回项目”是 `ui-glass` 容器包静默 `UiButton`（重要记录 011）；压在图片/视频上的单个控件
+用不透明的媒体叠层档（`UiButton variant="media"`、`UiIconButton tone="media"`），不必每个都上玻璃。
 
 **"要不要给所有按钮/边框都加上模糊，省得有的有有的没有？"——不要，而且这不是审美问题。**
 
@@ -135,33 +157,29 @@ padding、flex 收缩与助手插入量也会被静默绕开。
 2. **关闭开关时不能只把 blur 置 0**。那样半透明黑底叠在清晰背景上会看不清内容，
    必须让 tint 同时退化成接近实心的面板色。
 
-## 对比度：静态检查查不到，必须实测
+## 对比度：引擎求解 + 渲染后像素审计
 
-颜色是否达标取决于**渲染后的实际叠加结果**，grep 无能为力。
-`npm run check:ui-visual` 会用 Playwright Electron API 启动隔离的真实 Electron，
-在六类界面、1440×900 / 960×640 两档尺寸上检查十一项：表面叠层、文字对比度、
-内层圆角、非浮层阴影、CSS 隐藏定位、助手插入量逃逸、横向溢出、嵌套滚动、
-文本硬裁、过小命中区、页面标题字号一致性。任一命中都会返回非零退出码。
+颜色是否达标取决于**渲染后的实际叠加结果**（玻璃、半透明、压在媒体上的文字），grep 无能为力。两道保障：
 
-首次跑出来 7 处对比度不达标，根因都在令牌层，不在调用点：
+1. **令牌层求解**（重要记录 010）：`text2`/`text3` 按目标对比度求解亮度，基准取它实际会压上的最亮表面
+   （`selected`/`raised`/`hover`）；对比度档位只拉开表面层级，文字不得因此变暗；强调实底上的字（`on-accent`）与
+   主按钮“静息/悬停渐变中点”都按 ≥ 4.5:1 自动取黑或白。`themeEngine.test.ts` 对四个预设 × 三档对比度逐项断言。
+2. **渲染后审计**：`npm run check:ui-visual`（正式 Electron 场景）的 `lowContrast` 规则——隐藏全部文字与 lucide 图标截一张
+   “只有背景”的图，在每个候选区域网格取样、按 alpha × 祖先 opacity 合成前景后算 WCAG 对比度，取最差 10% 分位
+   （压在渐变/图片上的文字不靠平均值蒙混）。门槛：正文与辅助文字 ≥ 4.5:1；大字（≥ 24px，或 ≥ 18.66px 且粗体）与图标 ≥ 3:1；
+   禁用控件、`aria-hidden`、被遮挡或裁切到不可见的部分不判。`--theme-preset all` 逐个预设审计，场景中途 `capture()` 的状态也审。
+   合理例外登记在 `scripts/ui-visual-contrast-exceptions.json`（`id`、≥ 8 字理由、`text`/`element` 正则，可限 `scene`/`presets`/`minRatio`）。
 
-| 现象 | 实测 | 根因 |
-|---|---|---|
-| 导航/标签/chip 的选中态文字 | **2.82:1** | 用了 `text-accent`。accent 是**填充色**，作文字色太深 |
-| 提示文字、空态文字 | **4.12:1** | `text-faint` 的派生比例（0.30）压太重 |
-| 主按钮的白字 | **3.68:1** | 白字压在 `bg-accent` 上先天不达标 |
+**三条规则：**
 
-**结论沉淀成三条规则：**
+1. **`accent` 不能作文字色**，文字用 `text-accent-text`（`UI_COLOR_ACCENT_TEXT_CLASS`）。`accent` 只用于填充与描边。
+2. **字压在强调实底上用 `bg-accent text-on-accent`**（`UI_COLOR_ACCENT_FILL_TEXT_CLASS`），不要写死白字——深海、胶片等预设
+   的强调色上应是深色字，由引擎按对比度决定。危险/成功/警示实底同理用 `text-on-danger` 等。
+3. **界面色不达标改令牌或改用法，不登记例外**；只有装饰、品牌或用户内容色（素材本身）才登记例外。
+   改主题引擎推导规则后跑 `themeEngine.test.ts` 与四预设 `check:ui-visual`。
 
-1. **`accent` 不能作文字色**，要用 `UI_COLOR_ACCENT_TEXT_CLASS`（`text-brand-300`，7.46:1）。
-   `accent` 只用于填充与描边。
-2. **承载白字的实心强调底用 `UI_COLOR_ACCENT_FILL_TEXT_CLASS`**（`bg-brand-500`，4.85:1），
-   不要用 `bg-accent`（3.68:1）。无文字的纯色块填充仍用 `bg-accent`。
-3. **改任何颜色令牌的派生比例后跑一次 `check:ui-visual`**。
-   `text-soft`/`text-faint`/`brand-*` 都是算出来的，改比例就是改对比度。
+### 历史：为什么必须按渲染后像素判
 
-### 顺带查出的一致性问题
-
-`index.css` 里 `brand-500/600/700` 的**静态默认值和 `applyAccentScale` 的派生结果不一致**
-（静态 `brand-500` 是 `76 136 255`，派生是 `50 111 209`）。首帧用静态值、脚本跑完换派生值，
-启动时会闪一次色，而且等于有两套真值。**静态默认值必须等于用默认强调色算出的结果。**
+旧审计按 DOM 祖先链估背景色：看不到玻璃与半透明叠加，找不到底色时按深色兜底——纸白下会误判，压在媒体上的文字也判不出。
+它曾查出导航选中态用 `text-accent`（2.82:1）、旧 `text-faint` 派生比例压太重（4.12:1）、主按钮白字压 `bg-accent`（3.68:1），
+三者根因都在令牌层，现已由引擎求解消除。

@@ -23,7 +23,7 @@
 | 改动 `electron/main/**` 或 `electron/preload/**`、加 IPC、打包配置、自动更新 | [docs/rules/electron-desktop.md](docs/rules/electron-desktop.md) |
 | **准备收尾任何改动前** | [docs/rules/testing.md](docs/rules/testing.md) |
 
-**skill 在两个工具下的读法不同**（内容相同，两份需同步维护）：
+**skill 在两个工具下的读法不同**（内容相同，两份需同步维护，`npm run check:skill-sync` 校验并已进 CI 门禁）：
 
 - Codex：直接读文件 `.codex/skills/<skill 名>/SKILL.md`
 - Claude Code：用 Skill 工具调用 `<skill 名>`（文件位于 `.claude/skills/<skill 名>/SKILL.md`）

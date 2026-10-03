@@ -10,8 +10,9 @@
 - 原生 `<button>/<input>/<select>/<textarea>` 只允许在 `src/components/ui/primitives.tsx` 中实现；禁止在业务组件重新引入原生控件并单独写样式
 - 能复用现有 `Ui*`、`Dropdown`、`PanelTrigger` 时优先复用
 - `PanelTrigger` 的 `closeOnPanelClick`：面板内只承载**单一类型**可选项（如纯比例选择、纯预设列表）时传 `closeOnPanelClick`，选完即收起；面板内并列**多种类型**独立选项（如比例+分辨率+自定义尺寸的复合面板）时保持默认 `false`，选完不收起，让用户接着调下一组
-- **新增通用组件的门槛**：只有现有组件确实覆盖不了时才新增；动手前先告诉用户原因和替代方案，等用户确认后再创建
-- 新增交互控件优先扩展 `Ui*`（`UiButton`/`UiInput`/`UiOptionButton`），再由业务层复用
+- **新增通用组件的门槛**（与 `AGENTS.md` 一致，Agent 自行判断）：先确认没有可复用或可扩展的组件，优先给现有 `Ui*` 加**有限枚举**变体；只有加变体会让参数语义变乱时才新建职责单一的组件，放在 `@/components/ui`、登记进 skill `henji-ui-surface` 的「必须复用」表并纳入 `check:surface` 规则 E，选型依据写进任务记录或提交正文
+- 组件外观只由枚举决定（`variant`/`size`/`tone`/`on`/`shape`/`active`/`appearance` 等），调用点 `className` 只放布局；按钮、选项、标签、导航、字段触发器的调用点外观覆盖由 `check:surface` 规则 E 拦截
+- 按钮五档 + `link` + `media`，**默认静默**（`quiet`）；选中态用中性抬升；完整词汇表、必须复用的组件与新枚举（`UiToolbar variant="command"`、`UiTextToken`、`UiWindowControl`、`UiFieldTrigger`、`UiOptionButton` 的 `segment/grid/tile/swatch/cover`、`UiGroup titleTone="compact"`、`UiFormRow density="compact"`、`WaveformView` 等）见 skill `henji-ui-surface`
 - 状态展示统一用 `UiEmpty`/`UiLoading`/`UiError`，禁止页面内联手写状态块
 - 弹窗统一走 `UiModal` 或 `AlertDialog`，禁止手写 `fixed inset-0` + 遮罩 + 卡片外壳（全屏媒体查看器是已确认的例外）
 
@@ -49,20 +50,21 @@
 
 | 类别 | 只允许 | 禁止 |
 |---|---|---|
-| 颜色 | 语义令牌类（类名颜色 = 主题 CSS 变量名去掉 `--`）：`bg-window/panel/raised/control/hover/selected/gap/media`、`text-text1/text2/text3`、`border-line/line-strong`、`text-accent-text`/`text-on-accent`、`bg-danger-solid`/`text-danger-text`/`bg-*-tint`、媒体叠层 `text-on-media`/`bg-media-control`/`border-media-line`；旧类 `bg-app/surface-dark/layer`、`text-text-*`、`border-border-dark`、`veil` 为过渡别名 | 一切 `*-zinc-*`、`#hex`、`rgba(数字…)`；新增调色板类、`text-white`/`bg-black` 等黑白类、命名色（`check:colors` 按存量登记拦截） |
+| 颜色 | 语义令牌类（类名颜色 = 主题 CSS 变量名去掉 `--`）：`bg-gap/window/canvas/panel/raised/control/hover/selected/media`、`text-text1/text2/text3`、`border-line/line-strong`、`text-accent-text`/`text-on-accent`、`bg-danger-solid`/`text-danger-text`/`bg-*-tint`、媒体叠层 `text-on-media`/`bg-media-control`/`border-media-line` | 一切 `*-zinc-*`、`#hex`、`rgba(数字…)`、调色板类、`text-white`/`bg-black` 等黑白类、命名色；旧别名类（`bg-app`/`bg-surface-dark`/`bg-layer`/`bg-bg-dark`、`text-text-dark/muted/soft/faint`、`border-border-dark`、`brand-*`、不带后缀的 `text-danger`）与旧 CSS 变量（`--app-rgb`、`--text-muted-rgb`、`--ui-surface-panel` …）。由 ESLint 与 `check:colors` 拦截，登记只能下调 |
 | 字号 | 排版令牌 `UI_TEXT_*`（20/16/14/13/12/11）；`text-2xs/13/14/15`、`text-xs/sm/base+`；界面文字最小 11，`text-3xs/4xs` 只用于媒体叠层读数与标尺刻度 | `text-[Npx]` |
 | 圆角 | `rounded-control/field/overlay`（6/8/12，CSS 变量，随「界面圆角」缩放；`rounded-md/lg/xl` 指向同一组变量）、`rounded-2xl/3xl/full/hairline`（画布节点用 `rounded-[var(--node-radius)]`） | 其它 `rounded-[..]` |
-| 阴影 | `shadow-panel`（仅浮层）、`shadow-node-selected/node-error/thumb/thumb-sm` | `shadow-[..]` |
-| 层级 | `z-base/raised/sticky/dropdown/panel/modal/viewer/toast/tooltip/drag/titlebar`；内联用 `Z_LAYERS`（`src/core/theme/zLayers.ts`） | `z-[..]`、`z-10/20/…` 数字类 |
+| 阴影 | `shadow-panel`（仅浮层）、`shadow-node-selected/node-error/thumb/thumb-sm/thumb-ring` | `shadow-[..]` |
+| 层级 | `z-base/raised/sticky/dropdown/panel/modal/viewer/toast/popover/tooltip/drag/titlebar`；内联用 `Z_LAYERS`（`src/core/theme/zLayers.ts`） | `z-[..]`、`z-10/20/…` 数字类 |
 | 毛玻璃 | `ui-glass` 类、遮罩 `ui-glass-scrim` | 一切 `backdrop-blur-*` |
 | 动效时长 | `duration-120/180/240/500`（= `UI_DURATION.fast/base/slow/viewer`） | 其它时长、`transition: all` |
 | 控件高度 | `UI_CONTROL_HEIGHT_CLASS.sm/md/lg`（`h-control-sm/md/lg` = 28/32/36，CSS 变量）；字段、选项、标签、触发器、数值框用组件的 `size` 档（旧 42/38 字段令牌已删除） | 手写 `h-[38px]`、调用点改高度 |
 
 补充：
 
-- 颜色全部由主题引擎按种子推导（`src/core/theme/themeEngine.ts`），文字三档按对比度 ≥ 4.5:1 求解
+- 颜色三层：种子（模式、底色色相/倾向、窗口亮度、层级对比度、强调色）→ 主题引擎推导的语义令牌（`src/core/theme/themeEngine.ts` → `themeCssVars.ts` → `runtimeTheme.ts` 写到根节点）→ 组件内部令牌。界面只引用语义令牌；文字三档按对比度 ≥ 4.5:1 求解，实底上的字按对比度自动黑白（`text-on-accent` 等，不写死白字）
+- 非 DOM 渲染面（Canvas、WebGL/WebGPU、波形）用 `useThemeTokens()` 取令牌；内容色（标注、导出、端口类型色等）登记在 `src/core/theme/colorTokens.ts`，需要随模式变化时用 `light-dark()` 派生
 - 字体：拉丁与数字 Geist、等宽 Geist Mono（`@fontsource-variable`，随包离线），中文回落系统字体；正文基准 13px 设在 body
-- `veil` 六档是固定白纱，只适合叠在图片/视频/画布上；新代码压在媒体上优先用 `media-*`/`on-media` 固定令牌
+- `veil` 六档是固定白纱（不随主题），只适合叠在图片/视频/深色画布上，放在主题表面上纸白下不可见；新代码压在媒体上优先用 `media-*`/`on-media` 固定令牌
 - 排版层级先用 `styleTokens.ts` 的 `UI_TEXT_TITLE/SECTION/BODY/LABEL/META_CLASS` 建立，再考虑容器装饰
 - 通用视觉 token 在 `src/components/ui/styleTokens.ts` 维护，业务组件不直接复制 token 字符串
 
@@ -75,7 +77,7 @@
 
 ## 毛玻璃是材质不是 blur 值
 
-`ui-glass`（定义在 `src/index.css`）含 blur + saturate + 受光边 + 噪点四层；只写 blur 会得到"模糊+降不透明度"的廉价观感。只用于压在图片/视频/画布上的浮层，压在纯色 UI 上一律用不透明底色。质感调整只改 `--ui-glass-*` 变量。「设置→界面→毛玻璃效果」关掉时整套材质退化成不透明底色。
+`ui-glass`（定义在 `src/index.css`）含 blur + saturate + 受光边 + 噪点四层；只写 blur 会得到"模糊+降不透明度"的廉价观感。只用于压在图片/视频/画布上的浮层（`ui-glass`、`UiPanel variant="glass"`、`Dropdown`/`PanelTrigger` 的 `surface="glass"`），压在纯色 UI 上一律用不透明底色（浮层默认 `surface="solid"`）。质感调整只改 `--ui-glass-*` 组件层变量（静态写在 index.css、引用语义令牌，运行时不写）。「设置→界面→毛玻璃效果」关掉时整套材质退化成不透明底色。
 
 ## 动效
 
@@ -95,17 +97,18 @@
 
 1. **透明度修饰符只能用 Tailwind 刻度值（步进 5）**：`bg-black/72`、`border-white/42` 这类非刻度值**不生成任何 CSS**。需要精确值用 `bg-black/[0.72]` 或登记具名色。
 2. **同属性叠类胜负看 Tailwind 产物顺序**，不是 className 顺序。优先写成互斥三元；确需叠加先生成 CSS 确认谁在后面。
-3. **`index.html` 写死 `class="dark"`**，`dark:` 变体的基础值是死代码。
+3. **不要写 `dark:` 变体**：深浅色由主题引擎改变量完成，`darkMode: 'class'` 只为让误写的 `dark:` 永不生效。
 4. **全局主题变量只能放 `src/index.css`**：放在 `storyboard.css` 这类被工作区懒加载的样式表里，会导致设置项在用户打开对应工作区之前完全不生效。
 5. **布局定位不得藏在外观样式表**：`scrollbar.css` 等具名样式表只能承担文件名承诺的外观或行为；`position`、`top/right/bottom/left`、`z-index` 必须直接写在组件 className。已知两次事故——`scrollbar.css` 藏 `position: fixed` 导致工作区逃逸助手插入量；懒加载的 `storyboard.css` 藏全局主题变量导致设置延迟生效。只 grep JSX 或按文件名查 CSS 都很难发现，确需 CSS 例外时必须就地注释原因。
-6. **`accent` 不能作文字色**（对比度 2.82:1），用 `UI_COLOR_ACCENT_TEXT_CLASS`；白字压实心蓝用 `UI_COLOR_ACCENT_FILL_TEXT_CLASS`（`bg-accent` 只有 3.68:1）。
+6. **`accent` 不能作文字色**（填充色，对比度不足），文字用 `text-accent-text`（`UI_COLOR_ACCENT_TEXT_CLASS`）；字压在强调实底上用 `bg-accent text-on-accent`（`UI_COLOR_ACCENT_FILL_TEXT_CLASS`），不写死白字。
+7. **同一插件的颜色类按类名字母序输出**（Tailwind 3.4），给类改名可能改变两个同属性类的胜负；同一元素上只留一个颜色类（互斥三元）。
 
 ## 颜色查改入口
 
-调色只允许改 `src/index.css`、`tailwind.config.js`、`src/components/ui/styleTokens.ts` 三处。`npm run check:colors` 会扫 `.ts/.tsx/.css`，纯 CSS 里只能写 `rgb(var(--xxx-rgb) / a)`。图像处理/画布像素算法可例外，但优先复用 token。
+主题色的推导规则只改 `src/core/theme/themeEngine.ts`（改后同步 `index.css` 的 `theme-tokens` 静态默认值，`themeStaticDefaults.test.ts` 会校验）；Tailwind 映射改 `tailwind.config.js`；组件皮肤改 `src/index.css` 与 `src/components/ui/styleTokens.ts`；内容色登记 `src/core/theme/colorTokens.ts`。`npm run check:colors` 会扫 `.ts/.tsx/.css`，纯 CSS 里只能写 `rgb(var(--xxx-rgb) / a)` 或 `var(--token)`。图像处理/画布像素算法可例外，但优先复用 token。
 
 `Z_LAYERS` 与 `tailwind.config.js` 互为镜像，需同步修改。
 
 ## 界面改动后的检查
 
-见 [docs/rules/testing.md](../../docs/rules/testing.md) 的「界面改动」一节。改颜色令牌的派生比例后必须复跑 `npm run check:ui-visual`。
+见 [docs/rules/testing.md](../../docs/rules/testing.md) 的「界面改动」一节。改主题引擎推导规则或令牌后跑 `src/core/theme` 的测试，并按四个预设复跑相关场景的 `npm run check:ui-visual -- --theme-preset all --only <场景>`（对比度按渲染后像素审计，例外登记见 testing.md）。

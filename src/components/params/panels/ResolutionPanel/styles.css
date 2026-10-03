@@ -24,10 +24,10 @@
 .custom-size-field {
   flex: 1;
   padding: 8px 12px;
-  background-color: rgb(var(--border-rgb) / 0.5);
-  border: 1px solid rgb(var(--border-rgb) / 0.5);
+  background-color: rgb(var(--line-rgb) / 0.5);
+  border: 1px solid rgb(var(--line-rgb) / 0.5);
   border-radius: 4px;
-  color: rgb(var(--text-soft-rgb));
+  color: rgb(var(--text2-rgb));
   font-size: 14px;
   transition:
     background-color 120ms cubic-bezier(0, 0, 0.2, 1),
@@ -37,7 +37,7 @@
 .custom-size-field:focus {
   outline: none;
   border-color: rgb(var(--accent-rgb));
-  background-color: rgb(var(--border-rgb) / 0.8);
+  background-color: rgb(var(--line-rgb) / 0.8);
 }
 
 .custom-size-field:disabled {
@@ -47,5 +47,5 @@
 
 .custom-size-unit {
   font-size: 12px;
-  color: rgb(var(--text-muted-rgb));
+  color: rgb(var(--text2-rgb));
 }

@@ -8,15 +8,15 @@
  */
 
 .ui-panel {
-  background: var(--ui-surface-panel);
-  border-color: var(--ui-border-soft);
+  background: var(--panel);
+  border-color: var(--line);
   border-radius: var(--ui-radius-xl);
   box-shadow: var(--ui-shadow-panel);
 }
 
 .ui-field {
-  background: var(--ui-surface-field);
-  border-color: var(--ui-border-soft);
+  background: var(--raised);
+  border-color: var(--line);
   border-radius: var(--ui-radius-lg);
 }
 

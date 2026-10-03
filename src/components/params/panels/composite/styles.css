@@ -18,5 +18,5 @@
 .composite-component-label {
   font-size: 12px;
   font-weight: 500;
-  color: rgb(var(--text-muted-rgb));
+  color: rgb(var(--text2-rgb));
 }

@@ -19,9 +19,8 @@
  *
  * 默认只告警（exit 0），便于存量渐进治理；加 --strict 时违规即失败（exit 1）。
  *
- * 豁免方式：
- *   - 行内或上一行注释包含 `ui-surface-allow`
- *   - 文件任意位置包含 `ui-surface-allow-file`
+ * 豁免方式：只有行级——行内或上一行注释包含 `ui-surface-allow` 并写明理由与接手任务。
+ * 文件级 `ui-surface-allow-file` 已禁止（会把该文件将来真正的套娃一起放行），出现即报违规（4.2）。
  */
 const fs = require('fs');
 const path = require('path');
@@ -233,9 +232,14 @@ for (const file of collectStyleSheets(srcRoot)) {
   });
 }
 
+/** 使用了已禁止的文件级豁免标记的文件 */
+const fileLevelAllows = [];
+
 for (const file of files) {
   const raw = fs.readFileSync(file, 'utf8');
-  if (raw.includes(FILE_ALLOW_MARKER)) continue;
+  if (raw.includes(FILE_ALLOW_MARKER)) {
+    fileLevelAllows.push(path.relative(projectRoot, file).replace(/\\/g, '/'));
+  }
 
   const lines = raw.split(/\r?\n/);
 
@@ -319,7 +323,13 @@ const buttonOverrides = findButtonAppearanceOverrides({
   files: collectSourceFiles(srcRoot),
 });
 
-if (fileReports.length === 0 && dialogBypasses.length === 0 && handRolledGlass.length === 0 && buttonOverrides.length === 0) {
+if (
+  fileReports.length === 0 &&
+  dialogBypasses.length === 0 &&
+  handRolledGlass.length === 0 &&
+  buttonOverrides.length === 0 &&
+  fileLevelAllows.length === 0
+) {
   console.log('[check-surface-tokens] 通过：未检测到手写面板表面、卡片套卡片、手写弹窗、手写毛玻璃或按钮外观覆盖。');
   process.exit(0);
 }
@@ -329,6 +339,13 @@ const header = strict ? '检测到表面层级违规' : '检测到表面层级�
 log(`\n[check-surface-tokens] ${header}：\n`);
 
 let totalFindings = 0;
+
+if (fileLevelAllows.length > 0) {
+  log(`[豁免] 文件级 ${FILE_ALLOW_MARKER} 已禁止 ${fileLevelAllows.length} 处 → 改为在具体行上方写 ${LINE_ALLOW_MARKER} 并注明理由与接手任务`);
+  for (const relativePath of fileLevelAllows) log(`      ${relativePath}`);
+  totalFindings += fileLevelAllows.length;
+  log('');
+}
 
 for (const report of fileReports.sort(
   (a, b) => b.panelSurfaces.length + b.cardSurfaces.length - (a.panelSurfaces.length + a.cardSurfaces.length)
@@ -382,7 +399,7 @@ if (buttonOverrides.length > 0) {
   log('');
 }
 
-log(`共 ${totalFindings} 处：表面问题 ${fileReports.length} 个文件，手写弹窗 ${dialogBypasses.length} 处，手写毛玻璃 ${handRolledGlass.length} 处，按钮外观覆盖 ${buttonOverrides.length} 处。`);
+log(`共 ${totalFindings} 处：表面问题 ${fileReports.length} 个文件，手写弹窗 ${dialogBypasses.length} 处，手写毛玻璃 ${handRolledGlass.length} 处，按钮外观覆盖 ${buttonOverrides.length} 处，文件级豁免 ${fileLevelAllows.length} 处。`);
 log('铁律：同一层视觉深度只画一次边框/背景。组件根表面只允许一处；确需例外时加 `ui-surface-allow` 注释豁免。');
 log('详细规则见 skill `henji-ui-surface`。\n');
 

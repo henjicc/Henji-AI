@@ -112,7 +112,7 @@ export function VideoViewerControls({
               style={{
                 left: `${(trimRange.start / videoDuration) * 100}%`,
                 width: `${((trimRange.end - trimRange.start) / videoDuration) * 100}%`,
-                background: 'rgba(var(--text-rgb),0.25)',
+                background: 'rgba(var(--text1-rgb),0.25)',
               }}
             />
           )}
