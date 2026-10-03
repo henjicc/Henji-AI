@@ -42,7 +42,7 @@ export function LogEventDetail({ event, onViewChain }: LogEventDetailProps): JSX
 
   if (!event) {
     return (
-      <div className="h-full rounded-lg border border-border-dark/50 bg-black/20 p-3">
+      <div className="h-full rounded-lg bg-panel p-3">
         <UiEmpty className="h-full" size="sm" title={t('logsWindow.detail.empty')} />
       </div>
     )
@@ -62,8 +62,8 @@ export function LogEventDetail({ event, onViewChain }: LogEventDetailProps): JSX
   }
 
   return (
-    <div className="flex h-full flex-col overflow-hidden rounded-lg border border-border-dark/50 bg-black/20">
-      <div className="shrink-0 border-b border-border-dark/40 bg-white/5 p-2">
+    <div className="flex h-full flex-col overflow-hidden rounded-lg bg-panel">
+      <div className="shrink-0 border-b border-border-dark/40 bg-raised p-2">
         <div className="text-sm text-text-dark">
           <display.icon aria-hidden="true" className="mr-1 inline h-3.5 w-3.5 align-[-2px]" />{display.title}
         </div>
@@ -87,7 +87,7 @@ export function LogEventDetail({ event, onViewChain }: LogEventDetailProps): JSX
 
       <div className="min-h-0 flex-1 overflow-y-auto p-3 text-xs text-text-dark">
         {event.truncatedByLimit && (
-          <div className="mb-3 rounded-md border border-yellow-500/40 bg-yellow-500/10 p-2 text-2xs text-yellow-500/90">
+          <div className="mb-3 rounded-md border border-warning-text/40 bg-warning-tint p-2 text-2xs text-warning-text">
             {t('logsWindow.detail.truncatedNotice', { bytes: truncatedContext?.originalBytes ?? '?' })}
           </div>
         )}

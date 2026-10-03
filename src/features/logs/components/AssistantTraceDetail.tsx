@@ -43,7 +43,7 @@ export function AssistantTraceDetail({
 
   if (!result) {
     return (
-      <div className="h-full rounded-lg border border-border-dark/50 bg-black/20 p-3">
+      <div className="h-full rounded-lg bg-panel p-3">
         {loading
           ? <UiLoading className="h-full" size="sm" message="正在加载追踪详情…" />
           : <UiEmpty className="h-full" size="sm" title="请选择左侧的一轮模型请求" />}
@@ -64,13 +64,13 @@ export function AssistantTraceDetail({
   }
 
   return (
-    <div className="flex h-full flex-col overflow-hidden rounded-lg border border-border-dark/50 bg-black/20">
+    <div className="flex h-full flex-col overflow-hidden rounded-lg bg-panel">
       <div className="shrink-0 border-b border-border-dark/40 bg-panel/70 px-3 py-2">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-sm font-semibold text-text-dark">{getTraceStepLabel(summary)}</span>
-              <span className="rounded border border-border-dark/50 bg-black/20 px-1.5 py-0.5 font-mono text-2xs text-text-muted">
+              <span className="rounded border border-border-dark/50 bg-window/40 px-1.5 py-0.5 font-mono text-2xs text-text-muted">
                 {summary.providerId}/{summary.modelId}
               </span>
               <span className={`rounded px-1.5 py-0.5 text-2xs ${statusClass(summary.status)}`}>
@@ -117,7 +117,7 @@ export function AssistantTraceDetail({
 
       <div className="min-h-0 flex-1 overflow-y-auto p-3">
         {!detail ? (
-          <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-300">
+          <div className="rounded-md border border-warning-text/30 bg-warning-tint p-3 text-xs text-warning-text">
             这一轮只保存了摘要。开启“助手详细追踪”后，新请求才会保存完整上下文和 HTTP 请求。
           </div>
         ) : mode === 'json' ? (
@@ -137,7 +137,7 @@ function TraceVisualDetail({ detail }: { detail: NonNullable<AgentTraceDetailRes
   return (
     <div className="space-y-2">
       {detail.capture.truncated && (
-        <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-2 text-2xs text-amber-300">
+        <div className="rounded-md border border-warning-text/30 bg-warning-tint p-2 text-2xs text-warning-text">
           该追踪已按体积限制截断：原始 {formatBytes(detail.capture.originalBytes)}，保存 {formatBytes(detail.capture.storedBytes)}；
           受影响区块：{detail.capture.sections.join('、') || '部分长内容'}。
         </div>
@@ -154,7 +154,7 @@ function TraceVisualDetail({ detail }: { detail: NonNullable<AgentTraceDetailRes
             {context.layerReports.map((layer) => (
               <div key={layer.id} className="grid grid-cols-[110px_70px_80px_minmax(0,1fr)] gap-2 border-b border-border-dark/30 px-2 py-1.5 text-2xs last:border-b-0">
                 <span className="font-mono text-text-dark">{layer.id}</span>
-                <span className={layer.included ? 'text-emerald-400' : 'text-text-muted'}>{layer.included ? '已注入' : '未注入'}</span>
+                <span className={layer.included ? 'text-success-text' : 'text-text-muted'}>{layer.included ? '已注入' : '未注入'}</span>
                 <span className="font-mono text-text-muted">{formatTraceTokens(layer.estimatedTokens)}</span>
                 <span className="truncate text-text-muted" title={layer.reason}>{layer.reason}</span>
               </div>
@@ -221,7 +221,7 @@ function TraceSection({ title, badge, defaultOpen = false, children }: { title: 
           {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
           {title}
         </span>
-        {badge && <span className="rounded bg-black/25 px-1.5 py-0.5 font-mono text-2xs text-text-muted">{badge}</span>}
+        {badge && <span className="rounded bg-window/40 px-1.5 py-0.5 font-mono text-2xs text-text-muted">{badge}</span>}
       </UiButton>
       {open && <div className="border-t border-border-dark/35 p-3">{children}</div>}
     </section>
@@ -234,7 +234,7 @@ function MessageCard({ message, index }: { message: ModelStepMessage; index: num
       <div className="flex items-center justify-between border-b border-current/15 px-2 py-1 text-2xs font-semibold uppercase tracking-wider">
         <span>{message.role}</span><span className="font-mono opacity-60">#{index + 1}</span>
       </div>
-      <div className="bg-black/15 p-2 text-xs text-text-dark">
+      <div className="bg-window/40 p-2 text-xs text-text-dark">
         {typeof message.content === 'string' ? <TextBlock value={message.content} /> : <JsonTree value={message.content} />}
       </div>
     </div>
@@ -242,7 +242,7 @@ function MessageCard({ message, index }: { message: ModelStepMessage; index: num
 }
 
 function Metric({ label, value }: { label: string; value: string }): JSX.Element {
-  return <div className="rounded border border-border-dark/35 bg-black/20 px-2 py-1.5"><div className="text-2xs uppercase tracking-wider text-text-muted">{label}</div><div className="mt-0.5 truncate font-mono text-2xs text-text-dark" title={value}>{value}</div></div>
+  return <div className="rounded border border-border-dark/35 bg-window/40 px-2 py-1.5"><div className="text-2xs uppercase tracking-wider text-text-muted">{label}</div><div className="mt-0.5 truncate font-mono text-2xs text-text-dark" title={value}>{value}</div></div>
 }
 
 function CopyButton({ label, copied, disabled, onClick, icon = 'copy' }: { label: string; copied: boolean; disabled?: boolean; onClick: () => void; icon?: 'copy' | 'terminal' }): JSX.Element {
@@ -255,21 +255,21 @@ function LabeledBlock({ label, children }: { label: string; children: ReactNode 
 }
 
 function TextBlock({ value }: { value: string }): JSX.Element {
-  return <pre className="max-h-[440px] overflow-auto whitespace-pre-wrap break-words rounded border border-border-dark/35 bg-black/25 p-2 font-mono text-2xs leading-relaxed text-text-dark">{value}</pre>
+  return <pre className="max-h-[440px] overflow-auto whitespace-pre-wrap break-words rounded border border-border-dark/35 bg-window/40 p-2 font-mono text-2xs leading-relaxed text-text-dark">{value}</pre>
 }
 
 function roleClass(role: ModelStepMessage['role']): string {
-  if (role === 'system') return 'border-amber-500/35 text-amber-300'
-  if (role === 'user') return 'border-sky-500/35 text-sky-300'
-  if (role === 'assistant') return 'border-emerald-500/35 text-emerald-300'
-  return 'border-violet-500/35 text-violet-300'
+  if (role === 'system') return 'border-warning-text/35 text-warning-text'
+  if (role === 'user') return 'border-accent-text/35 text-accent-text'
+  if (role === 'assistant') return 'border-success-text/35 text-success-text'
+  return 'border-line-strong text-text2'
 }
 
 function statusClass(status: AgentTraceDetailResult['summary']['status']): string {
-  if (status === 'completed') return 'bg-emerald-500/15 text-emerald-300'
-  if (status === 'running') return 'bg-sky-500/15 text-sky-300'
-  if (status === 'failed') return 'bg-red-500/15 text-red-300'
-  return 'bg-amber-500/15 text-amber-300'
+  if (status === 'completed') return 'bg-success-tint text-success-text'
+  if (status === 'running') return 'bg-accent-tint text-accent-text'
+  if (status === 'failed') return 'bg-danger-tint text-danger-text'
+  return 'bg-warning-tint text-warning-text'
 }
 
 function statusLabel(status: AgentTraceDetailResult['summary']['status']): string {

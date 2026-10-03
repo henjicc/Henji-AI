@@ -227,7 +227,7 @@ export function ImageViewerModal({
       role="dialog"
       aria-label={t('viewer.imageAlt', '图片')}
       aria-modal="true"
-      className={/* ui-surface-allow: 全屏沉浸式媒体查看器，铺满视口，不是 UiModal 的居中卡片语义（见重要记录 003） */ `fixed ${UI_CONTENT_OVERLAY_INSET_CLASS} z-viewer overflow-hidden bg-black/90`}
+      className={/* ui-surface-allow: 全屏沉浸式媒体查看器，铺满视口，不是 UiModal 的居中卡片语义（见重要记录 003） */ `fixed ${UI_CONTENT_OVERLAY_INSET_CLASS} z-viewer overflow-hidden bg-media`}
       style={{
         opacity: overlayOpacity,
         transition: uiTransition(['opacity'], UI_DURATION.viewer),

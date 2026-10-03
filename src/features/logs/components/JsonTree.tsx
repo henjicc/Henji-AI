@@ -99,7 +99,7 @@ function JsonLeafNode({ label, value }: JsonLeafNodeProps): JSX.Element {
     return (
       <div className="py-0.5 pl-1 font-mono text-2xs">
         {label !== undefined && <span className="text-brand-300">{label}: </span>}
-        <span className="whitespace-pre-wrap break-all text-emerald-400">&quot;{display}&quot;</span>
+        <span className="whitespace-pre-wrap break-all text-success-text">&quot;{display}&quot;</span>
         {isLong && (
           <UiButton
             type="button"
@@ -118,7 +118,7 @@ function JsonLeafNode({ label, value }: JsonLeafNodeProps): JSX.Element {
 
   const display = value === null ? 'null' : value === undefined ? 'undefined' : String(value)
   const valueColorClass =
-    typeof value === 'number' ? 'text-sky-400' : typeof value === 'boolean' ? 'text-amber-400' : 'text-text-muted'
+    typeof value === 'number' ? 'text-accent-text' : typeof value === 'boolean' ? 'text-warning-text' : 'text-text-muted'
 
   return (
     <div className="py-0.5 pl-1 font-mono text-2xs">

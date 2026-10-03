@@ -1,6 +1,6 @@
 const UI_AUDIT_RULES = Object.freeze([
   Object.freeze({ key: 'surfaceStacks', label: '表面叠 3 层以上' }),
-  Object.freeze({ key: 'lowContrast', label: '文字对比度不足' }),
+  Object.freeze({ key: 'lowContrast', label: '文字与图标对比度不足（渲染后像素，见 uiContrastAudit）' }),
   Object.freeze({ key: 'oversizedRadius', label: '内层圆角大于外层' }),
   Object.freeze({ key: 'shadowOutsideOverlay', label: '非浮层使用阴影' }),
   Object.freeze({ key: 'hiddenPositioning', label: '布局定位藏在 CSS' }),
@@ -43,43 +43,6 @@ function auditUiDom(context = {}) {
     const parts = match[1].replaceAll('/', ' ').split(/[\s,]+/).filter(Boolean).map((part) => Number.parseFloat(part))
     if (parts.length < 3 || parts.slice(0, 3).some((part) => !Number.isFinite(part))) return null
     return { r: parts[0], g: parts[1], b: parts[2], a: Number.isFinite(parts[3]) ? parts[3] : 1 }
-  }
-  const luminance = (color) => {
-    const channel = (value) => {
-      const normalized = value / 255
-      return normalized <= 0.03928
-        ? normalized / 12.92
-        : ((normalized + 0.055) / 1.055) ** 2.4
-    }
-    return 0.2126 * channel(color.r) + 0.7152 * channel(color.g) + 0.0722 * channel(color.b)
-  }
-  const composite = (foreground, background) => {
-    const alpha = foreground.a
-    return {
-      r: foreground.r * alpha + background.r * (1 - alpha),
-      g: foreground.g * alpha + background.g * (1 - alpha),
-      b: foreground.b * alpha + background.b * (1 - alpha),
-      a: 1,
-    }
-  }
-  const effectiveBackground = (element) => {
-    let node = element
-    let accumulated = null
-    while (node && node !== document.documentElement) {
-      const color = parseRgb(getComputedStyle(node).backgroundColor)
-      if (color && color.a > 0) {
-        accumulated = accumulated ? composite(accumulated, color) : color
-        if (accumulated.a >= 0.999) return accumulated
-      }
-      node = node.parentElement
-    }
-    return accumulated || { r: 10, g: 10, b: 10, a: 1 }
-  }
-  const contrastRatio = (first, second) => {
-    const firstLuminance = luminance(first)
-    const secondLuminance = luminance(second)
-    return (Math.max(firstLuminance, secondLuminance) + 0.05)
-      / (Math.min(firstLuminance, secondLuminance) + 0.05)
   }
   const label = (element) => {
     const classes = classText(element).trim().replace(/\s+/g, '.').slice(0, 110)
@@ -170,28 +133,8 @@ function auditUiDom(context = {}) {
     if (chain.length >= 3) out.surfaceStacks.push({ depth: chain.length, chain: chain.slice(0, 5) })
   }
 
-  for (const element of all) {
-    const text = directText(element)
-    if (!text) continue
-    const style = getComputedStyle(element)
-    const foreground = parseRgb(style.color)
-    if (!foreground || foreground.a < 0.05) continue
-    const background = effectiveBackground(element)
-    const ratio = contrastRatio(composite(foreground, background), background)
-    const size = Number.parseFloat(style.fontSize)
-    const bold = Number.parseInt(style.fontWeight, 10) >= 700
-    const required = size >= 24 || (size >= 18.66 && bold) ? 3 : 4.5
-    if (ratio < required) {
-      out.lowContrast.push({
-        ratio: Math.round(ratio * 100) / 100,
-        required,
-        size,
-        text: text.slice(0, 42),
-        color: style.color,
-        element: label(element),
-      })
-    }
-  }
+  // lowContrast 不在这里按 DOM 祖先链估算背景：半透明叠加、玻璃与压在媒体上的文字只有合成后
+  // 的像素才是真背景。由 ui-visual-audit 调用 uiContrastAudit 截“只有背景”的图后填入。
 
   for (const element of all) {
     const radius = Number.parseFloat(getComputedStyle(element).borderTopLeftRadius) || 0
@@ -342,7 +285,6 @@ function auditUiDom(context = {}) {
   }
 
   out.surfaceStacks = dedupe(out.surfaceStacks, (item) => item.chain.join('|'), 20)
-  out.lowContrast = dedupe(out.lowContrast, (item) => `${item.element}|${item.color}`, 30)
   out.oversizedRadius = dedupe(out.oversizedRadius, (item) => item.element)
   out.shadowOutsideOverlay = dedupe(out.shadowOutsideOverlay, (item) => item.element)
   out.hiddenPositioning = dedupe(out.hiddenPositioning, (item) => item.element)

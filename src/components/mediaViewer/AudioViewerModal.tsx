@@ -92,7 +92,7 @@ export function AudioViewerModal({ open, audioUrl, filePath, onClose, autoPlay =
 
   return (
     <div
-      className={/* ui-surface-allow: 全屏沉浸式媒体查看器，铺满视口，不是 UiModal 的居中卡片语义（见重要记录 003） */ "fixed inset-0 z-viewer flex items-center justify-center bg-black/90 p-6"}
+      className={/* ui-surface-allow: 全屏沉浸式媒体查看器，铺满视口，不是 UiModal 的居中卡片语义（见重要记录 003） */ "fixed inset-0 z-viewer flex items-center justify-center bg-media p-6"}
       style={{
         opacity: overlayOpacity,
         transition: uiTransition(['opacity'], UI_DURATION.viewer),

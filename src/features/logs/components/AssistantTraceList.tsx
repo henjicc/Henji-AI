@@ -27,7 +27,7 @@ export function AssistantTraceList({
 }: AssistantTraceListProps): JSX.Element {
   if (runs.length === 0) {
     return (
-      <div className="h-full rounded-lg border border-border-dark/50 bg-black/20 p-3">
+      <div className="h-full rounded-lg bg-panel p-3">
         {loading
           ? <UiLoading className="h-full" size="sm" message="正在读取助手追踪…" />
           : <UiEmpty className="h-full" size="sm" title="暂无助手模型请求记录" />}
@@ -36,7 +36,7 @@ export function AssistantTraceList({
   }
 
   return (
-    <div className="flex h-full flex-col overflow-hidden rounded-lg border border-border-dark/50 bg-black/20">
+    <div className="flex h-full flex-col overflow-hidden rounded-lg bg-panel">
       <Virtuoso
         className="min-h-0 flex-1"
         data={runs}
@@ -144,15 +144,15 @@ function TraceStepButton({
 }
 
 function StatusMark({ status }: { status: AgentTraceStatus }): JSX.Element {
-  if (status === 'completed') return <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
-  if (status === 'running') return <Clock3 className="h-4 w-4 shrink-0 animate-pulse text-sky-400" />
-  return <AlertTriangle className="h-4 w-4 shrink-0 text-amber-400" />
+  if (status === 'completed') return <CheckCircle2 className="h-4 w-4 shrink-0 text-success-text" />
+  if (status === 'running') return <Clock3 className="h-4 w-4 shrink-0 animate-pulse text-accent-text" />
+  return <AlertTriangle className="h-4 w-4 shrink-0 text-warning-text" />
 }
 
 function statusDot(status: AgentTraceStatus): string {
-  if (status === 'completed') return 'bg-emerald-400'
-  if (status === 'running') return 'bg-sky-400'
-  if (status === 'failed') return 'bg-red-400'
-  if (status === 'cancelled') return 'bg-amber-400'
+  if (status === 'completed') return 'bg-success-solid'
+  if (status === 'running') return 'bg-accent'
+  if (status === 'failed') return 'bg-danger-solid'
+  if (status === 'cancelled') return 'bg-warning-solid'
   return 'bg-text-muted'
 }

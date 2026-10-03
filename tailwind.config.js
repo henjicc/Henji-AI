@@ -84,6 +84,9 @@ export default {
         'node-error': '0 0 0 1px color-mix(in srgb, var(--danger) 28%, transparent)',
         // 堆叠媒体缩略图的立体感
         thumb: `0 8px 16px ${shade(90)}`,
+        // 内容色滑杆（打光亮度/色调）的滑块：白边之外再描 1px 固定深色细线。滑块与轨道都是灯光内容色、
+        // 不随主题，纯白滑块停在白端时只靠这圈深线与白边的双色轮廓辨认（4.1：纸白下白端几乎不可见）。
+        'thumb-ring': `0 0 0 1px var(--media-scrim), 0 8px 16px ${shade(90)}`,
         'thumb-sm': `0 6px 14px ${shade(84)}`,
       },
       // 把默认缓动改成 ease-out。Tailwind 原本的默认是 ease-in-out（起步和收尾都慢），

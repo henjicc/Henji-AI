@@ -11,6 +11,8 @@ import type { NumberParamDef } from './ParamDef'
 import {
   SOCKET_TYPE_COLOR_HEX,
   SOCKET_TYPE_COLOR_FALLBACK_HEX,
+  SOCKET_TYPE_COLOR_LIGHT_HEX,
+  SOCKET_TYPE_COLOR_LIGHT_FALLBACK_HEX,
 } from '@/core/theme/colorTokens'
 
 export type SocketType =
@@ -112,21 +114,14 @@ export function isSocketCompatible(
   )
 }
 
-/** 插槽类型 → 端口颜色（hex 取自 colorTokens，业务组件不直接写字面量） */
-export function getSocketColor(type: SocketType | string | undefined | null): string {
-  if (!type) {
-    return SOCKET_TYPE_COLOR_FALLBACK_HEX
-  }
-  return SOCKET_TYPE_COLOR_HEX[String(type).toUpperCase()] ?? SOCKET_TYPE_COLOR_FALLBACK_HEX
-}
-
 /**
- * 插槽类型 → 低透明度底色（用于"该行已连线"的背景提示）。
- * 在 getSocketColor 的 6 位 hex 基础上追加 2 位透明度，不引入新的颜色字面量。
+ * 插槽类型 → 端口颜色（hex 取自 colorTokens，业务组件不直接写字面量）。
+ * 返回 CSS `light-dark(浅色值, 深色值)`：随根节点 color-scheme 切换，深色主题与原来一致，
+ * 浅色主题用同色相加深的一组，保证端口在浅色画布与节点面上可辨（≥ 3:1）。
  */
-export function getSocketTintColor(
-  type: SocketType | string | undefined | null,
-  alphaHex = '14'
-): string {
-  return `${getSocketColor(type)}${alphaHex}`
+export function getSocketColor(type: SocketType | string | undefined | null): string {
+  const key = type ? String(type).toUpperCase() : ''
+  const dark = SOCKET_TYPE_COLOR_HEX[key] ?? SOCKET_TYPE_COLOR_FALLBACK_HEX
+  const light = SOCKET_TYPE_COLOR_LIGHT_HEX[key] ?? SOCKET_TYPE_COLOR_LIGHT_FALLBACK_HEX
+  return `light-dark(${light}, ${dark})`
 }

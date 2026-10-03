@@ -48,7 +48,12 @@ function createVideoEditPopoutScene() {
       const shot = async name => { evidence.captures.push({ name, result: await capture(name) }); store() }
       const projectRef = { kind: 'video_edit.project', id: PROJECT_ID }
       let client; let observed = false
-      const windows = () => app.evaluate(({ BrowserWindow, screen }) => BrowserWindow.getAllWindows().map(window => ({ id: window.id, title: window.getTitle(), bounds: window.getBounds(), display: screen.getDisplayMatching(window.getBounds()).id, primary: screen.getDisplayMatching(window.getBounds()).id === screen.getPrimaryDisplay().id, visible: window.isVisible() })))
+      const allWindows = () => app.evaluate(({ BrowserWindow, screen }) => BrowserWindow.getAllWindows().map(window => ({ id: window.id, title: window.getTitle(), bounds: window.getBounds(), display: screen.getDisplayMatching(window.getBounds()).id, primary: screen.getDisplayMatching(window.getBounds()).id === screen.getPrimaryDisplay().id, visible: window.isVisible() })))
+      // 主窗口按 Playwright 句柄定位，不按标题：之前的场景可能留下标题同为“痕迹AI”的隐藏窗口
+      // （3D 后台渲染窗口的页面标题会覆盖窗口标题）。场景开始前已存在的其他窗口不属于本场景，
+      // 一律排除在“窗口数/标题集合”判据之外，判据本身不变。
+      let mainWindowId = null; let foreignWindowIds = []
+      const windows = async () => (await allWindows()).filter(window => !foreignWindowIds.includes(window.id)).map(window => ({ ...window, main: window.id === mainWindowId }))
       const popOut = async (title) => {
         await group(page, title).locator('.dv-tab').filter({ has: button(page, `关闭${title}`) }).click()
         const opened = app.waitForEvent('window', { timeout: 30000 })
@@ -64,8 +69,12 @@ function createVideoEditPopoutScene() {
       }
       try {
         const displays = await app.evaluate(({ screen }) => ({ all: screen.getAllDisplays().map(display => ({ id: display.id, bounds: display.bounds, scaleFactor: display.scaleFactor })), primary: screen.getPrimaryDisplay().id }))
+        const mainHandle = await app.browserWindow(page); mainWindowId = await mainHandle.evaluate(window => window.id); await mainHandle.dispose()
+        const startWindows = await allWindows(); foreignWindowIds = startWindows.filter(window => window.id !== mainWindowId).map(window => window.id)
+        evidence.foreignWindowsAtStart = startWindows.filter(window => foreignWindowIds.includes(window.id))
         evidence.displays = displays; evidence.windowsAtStart = await windows()
-        const main = evidence.windowsAtStart.find(window => window.title === '痕迹AI'); assert.ok(main, '主窗口标题必须唯一可识别')
+        const main = evidence.windowsAtStart.find(window => window.main); assert.ok(main, '主窗口必须能按句柄定位')
+        assert.equal(main.title, '痕迹AI', '主窗口标题与浮窗标题可区分')
         if (process.env.HENJI_DEV_DISPLAY_POINT) assert.equal(main.primary, false, '主窗口应在指定副屏1')
 
         phase('open-project')

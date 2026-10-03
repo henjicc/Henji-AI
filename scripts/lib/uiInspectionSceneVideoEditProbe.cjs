@@ -46,11 +46,54 @@ async function seek(page, frame, fps) {
   assert.equal(actual, frame, '实际标尺与逐帧定位必须到达请求帧')
   await presented(page, frame)
 }
+/**
+ * 把片段滚到时间线可见区的“标尺以下”中线，再用命中测试确认片段中心真的在最上层。
+ * 960×640 下时间线只有几条轨高，Playwright 的 scrollIntoViewIfNeeded 只保证进入滚动容器，
+ * 片段会停在吸顶标尺底下，拖动起点就落在标尺上（判据不变：拖动必须从片段本身开始）。
+ */
+async function revealClipBelowRuler(page, clipId) {
+  await page.evaluate((id) => {
+    const viewport = document.querySelector('[data-video-edit-timeline-viewport]')
+    const clip = viewport?.querySelector(`[data-video-edit-clip="${id}"]`)
+    if (!viewport || !clip) throw new Error(`时间线里找不到片段 ${id}`)
+    const view = viewport.getBoundingClientRect()
+    const rulerBottom = viewport.querySelector('[data-video-edit-ruler]')?.getBoundingClientRect().bottom ?? view.top
+    const box = clip.getBoundingClientRect()
+    viewport.scrollTop += (box.top + box.height / 2) - (rulerBottom + (view.bottom - rulerBottom) / 2)
+  }, clipId)
+  await page.waitForTimeout(100)
+  const covered = await page.evaluate((id) => {
+    const button = document.querySelector(`[data-video-edit-clip="${id}"] [aria-label^="选择片段"]`)
+    const box = button?.getBoundingClientRect()
+    if (!box) return 'missing'
+    const hit = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2)
+    return hit?.closest('[data-video-edit-clip]')?.getAttribute('data-video-edit-clip') === id ? null : (hit?.outerHTML.slice(0, 200) ?? 'none')
+  }, clipId)
+  assert.equal(covered, null, `片段 ${clipId} 的中心被其他层遮住，拖动起点不在片段上`)
+}
+
 function createVideoEditProbeScene() {
   return {
     id: 'video-edit-engine-probe', surface: '剪辑', name: '剪辑-工程与MCP合成导出闭环', writesUserData: true,
     // The fault phase denies writes on purpose; every other application error still fails the scene.
     expectedLogEvents: ['video_edit.save.failed'],
+    // 故障阶段最后停在已重新定位的工程上；关掉它，后序场景（与 --only 单跑时一样）从“打开工程”开始。
+    cleanup: async (page) => {
+      const close = button(page, '关闭工程')
+      if (!(await close.isVisible().catch(() => false))) {
+        const tab = button(page, '剪辑').first()
+        if (await tab.isVisible().catch(() => false)) await tab.click()
+      }
+      if (!(await close.isVisible().catch(() => false))) return
+      // 场景若在导出中途失败，工程不允许关闭：先取消导出。
+      const cancel = page.getByRole('button', { name: /^取消导出/ })
+      if (await cancel.isVisible().catch(() => false)) {
+        await cancel.click()
+        await button(page, '导出视频').waitFor({ state: 'visible', timeout: 20000 })
+      }
+      await close.click()
+      await button(page, '打开工程').waitFor({ state: 'visible', timeout: 15000 })
+    },
     setup: async (page, app, { capture }) => {
       const root = path.resolve('node_modules/.cache/video-edit-probe'); fs.mkdirSync(root, { recursive: true })
       const { ffmpegPath, ffprobePath } = require('./mediaBinaries.cjs')
@@ -148,7 +191,7 @@ function createVideoEditProbeScene() {
         // Move and trim the text clip: the stacked sounds share the one audio track, so moving the linked
         // picture-and-sound pair would move its sound onto the others (the timeline refuses moves into occupied ranges).
         const textClip = original.sequences[0].clips[6]; assert.equal(textClip.kind, 'text')
-        await page.locator(`[data-video-edit-clip="${textClip.id}"]`).scrollIntoViewIfNeeded()
+        await revealClipBelowRuler(page, textClip.id)
         const clipButton = page.locator(`[data-video-edit-clip="${textClip.id}"]`).getByRole('button', { name: `选择片段 ${textClip.name}`, exact: true })
         const clipBox = await clipButton.boundingBox()
         await page.mouse.move(clipBox.x + clipBox.width / 2, clipBox.y + clipBox.height / 2); await page.mouse.down()

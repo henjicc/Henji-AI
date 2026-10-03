@@ -368,12 +368,13 @@ export const UI_LIGHTING_COLORS = {
 export const UI_LIGHTING_BRIGHTNESS_GRADIENT = `linear-gradient(90deg, ${CANVAS_GRID_ALT_HEX}, ${TEXT_LIGHT_HEX})`
 export const UI_LIGHTING_COLOR_GRADIENT = `linear-gradient(90deg, ${Object.values(UI_LIGHTING_COLORS).join(', ')})`
 
+/** 滑块：白边 + 外圈固定深色细线（shadow-thumb-ring），压在任何内容色（含纯白端）上都有可辨轮廓。 */
 export const UI_LIGHTING_RANGE_CLASS = `rounded-full focus-visible:ring-2 focus-visible:ring-brand-300
   [&::-webkit-slider-runnable-track]:!h-2.5 [&::-moz-range-track]:!h-2.5
   [&::-webkit-slider-runnable-track]:[background:var(--lighting-track)] [&::-moz-range-track]:[background:var(--lighting-track)]
   [&::-webkit-slider-thumb]:!mt-[-3px] [&::-webkit-slider-thumb]:!h-4 [&::-webkit-slider-thumb]:!w-7
   [&::-moz-range-thumb]:!h-4 [&::-moz-range-thumb]:!w-7
   [&::-webkit-slider-thumb]:!bg-[var(--lighting-color)] [&::-moz-range-thumb]:!bg-[var(--lighting-color)]
-  [&::-webkit-slider-thumb]:!border-2 [&::-webkit-slider-thumb]:!border-solid [&::-webkit-slider-thumb]:!border-veil-bright
-  [&::-moz-range-thumb]:!border-2 [&::-moz-range-thumb]:!border-solid [&::-moz-range-thumb]:!border-veil-bright
-  [&::-webkit-slider-thumb]:shadow-thumb [&::-moz-range-thumb]:shadow-thumb`
+  [&::-webkit-slider-thumb]:!border-2 [&::-webkit-slider-thumb]:!border-solid [&::-webkit-slider-thumb]:!border-on-media
+  [&::-moz-range-thumb]:!border-2 [&::-moz-range-thumb]:!border-solid [&::-moz-range-thumb]:!border-on-media
+  [&::-webkit-slider-thumb]:shadow-thumb-ring [&::-moz-range-thumb]:shadow-thumb-ring`

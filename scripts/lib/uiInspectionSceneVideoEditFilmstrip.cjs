@@ -13,6 +13,9 @@ const quantile = (values, q) => [...values].sort((a, b) => a - b)[Math.min(value
  * - 时间线横向滚动、缩放期间的动画帧间隔与长任务（主线程耗时）。
  * 只有画面轨 1 输出画面（2–4 隐藏），播放负载与“只有一层 4K60”相同；隐藏轨的片段照样显示缩略图条。
  */
+/** 960×640 下时间线只露出约 2 条画面轨、10 个片段；低于这个数说明时间线没铺开，不是缩略图慢。 */
+const MIN_VISIBLE_STRIPS = 8
+
 function createVideoEditFilmstripScene() {
   return {
     id: 'video-edit-filmstrip', surface: '剪辑', name: '剪辑-片段缩略图条生成、缓存与滚动缩放', writesUserData: true,
@@ -52,11 +55,18 @@ function createVideoEditFilmstripScene() {
         const zoom = document.querySelector('input[aria-label="时间线缩放"]')
         Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(zoom, String(value)); zoom.dispatchEvent(new Event('input', { bubbles: true }))
       }, value)
-      /** 当前可见缩略图条的就绪情况。 */
+      /** 当前已挂载缩略图条的就绪情况（失败诊断用）。 */
       const strips = () => page.evaluate(() => [...document.querySelectorAll('[data-video-edit-filmstrip]')].map(node => ({ tiles: Number(node.getAttribute('data-filmstrip-tiles')), ready: Number(node.getAttribute('data-filmstrip-ready')) })))
       const waitFilled = async label => {
         const began = Date.now()
-        try { await page.waitForFunction(() => { const nodes = [...document.querySelectorAll('[data-video-edit-filmstrip]')]; return nodes.length >= 20 && nodes.every(node => Number(node.getAttribute('data-filmstrip-tiles')) > 0 && node.getAttribute('data-filmstrip-ready') === node.getAttribute('data-filmstrip-tiles')) }, null, { timeout: 180000, polling: 50 }) }
+        // 判据：时间线可见区（标尺以下）里的每个片段都有缩略图条且全部就绪。可见片段数随窗口而变
+        // （1440 约 50、960 约 10），所以不写死数量，只要求至少铺满 MIN_VISIBLE_STRIPS 个、且没有漏铺。
+        try { await page.waitForFunction(minimum => {
+          const viewport = document.querySelector('[data-video-edit-timeline-viewport]'); if (!viewport) return false
+          const view = viewport.getBoundingClientRect(); const top = viewport.querySelector('[data-video-edit-ruler]')?.getBoundingClientRect().bottom ?? view.top
+          const visible = [...viewport.querySelectorAll('[data-video-edit-clip]')].filter(clip => { const box = clip.getBoundingClientRect(); return box.right > view.left && box.left < view.right && box.bottom > top && box.top < view.bottom })
+          return visible.length >= minimum && visible.every(clip => { const node = clip.querySelector('[data-video-edit-filmstrip]'); return node && Number(node.getAttribute('data-filmstrip-tiles')) > 0 && node.getAttribute('data-filmstrip-ready') === node.getAttribute('data-filmstrip-tiles') })
+        }, MIN_VISIBLE_STRIPS, { timeout: 180000, polling: 50 }) }
         catch (error) { evidence[`${label}Strips`] = await strips(); await capture(`${label}-failed`); throw error }
         return Date.now() - began
       }

@@ -188,7 +188,7 @@ export function LogFilterToolbar({
             )}
           </UiSelect>
           {historyCorruptedLines > 0 && (
-            <span className="text-2xs text-yellow-500/90">
+            <span className="text-2xs text-warning-text">
               {t('logsWindow.toolbar.historyDate.corrupted', { count: historyCorruptedLines })}
             </span>
           )}

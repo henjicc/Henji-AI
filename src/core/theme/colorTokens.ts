@@ -40,6 +40,27 @@ export const SOCKET_TYPE_COLOR_HEX: Record<string, string> = {
 export const SOCKET_TYPE_COLOR_FALLBACK_HEX = '#D4D4D4';
 
 /**
+ * 浅色模式（纸白等 color-scheme: light）的端口色：同色相加深，压在浅色画布、节点面与间隙色
+ * （纸白 #E4E6EA，最暗的浅色表面）上都 ≥ 3:1（WCAG 非文字对比度）。深色值在浅底上只有 1.2–2.7:1。
+ * 由 getSocketColor 用 CSS light-dark() 与上表组合，随根节点 color-scheme 自动切换（4.1）。
+ */
+export const SOCKET_TYPE_COLOR_LIGHT_HEX: Record<string, string> = {
+  STRING: '#15803D',
+  TEXT: '#15803D',
+  NUMBER: '#2563EB',
+  INT: '#2563EB',
+  FLOAT: '#0284C7',
+  BOOLEAN: '#9333EA',
+  ENUM: '#B45309',
+  IMAGE: '#0F766E',
+  VIDEO: '#DC2626',
+  AUDIO: '#DB2777',
+  MODEL: '#A16207',
+  OBJECT: '#737373',
+};
+export const SOCKET_TYPE_COLOR_LIGHT_FALLBACK_HEX = '#737373';
+
+/**
  * 分镜导出（合并导出 / 图片分镜命令）画进导出图片的内容色：序号徽标底、叠加备注条、缺图占位格。
  * 属于产物像素，不随界面主题变化。
  */

@@ -15,7 +15,9 @@ const {
   launchUiInspectionApp,
   parseUiInspectionArgs,
   resolveOutputDir,
+  resolveThemePresetRuns,
   selectInspectionScenes,
+  themePresetLaunchArgs,
   setInspectionWindowSize,
   assertInspectionWindowSize,
 } = require('./lib/uiInspection.cjs')
@@ -32,6 +34,7 @@ function printHelp() {
   npm run ui:tour -- --only 生成
   npm run ui:tour -- --profile real --only 设置
   npm run ui:tour -- --out .ui-tour/my-run
+  npm run ui:tour -- --theme-preset all --size 1440x900 --out .ui-tour/presets
 
 参数：
   --size <宽x高>  指定窗口尺寸；可重复或用逗号分隔，默认 1440x900、960x640
@@ -39,7 +42,9 @@ function printHelp() {
   --out <目录>    输出目录，默认 .ui-tour
   --profile <模式> temporary（默认，隔离临时数据）或 real（复用真实工程、配置与密钥）
   --real-data     --profile real 的别名
-  --theme-preset <预设> 本次启动临时使用主题预设（graphite/ocean/film/paper），经开发启动参数传给应用，不写入设置
+  --theme-preset <预设> 本次启动临时使用主题预设（graphite/ocean/film/paper，或 all），经开发启动参数传给应用，
+                  不写入设置；可重复或逗号分隔，多个预设时逐个启动应用，截图写到 <输出目录>/<预设>/，
+                  输出目录下另有汇总 index.md
   --allow-writes  real 模式下允许运行会写业务数据的场景；不传则自动跳过
 `)
 }
@@ -94,8 +99,31 @@ async function main() {
     throw new Error('匹配场景会写入真实业务数据；如确认允许，请显式传入 --allow-writes')
   }
 
-  const outDir = resolveOutputDir(ROOT, options.outDir)
+  const runs = resolveThemePresetRuns(options.themePresets, resolveOutputDir(ROOT, options.outDir))
+  const summaries = []
+  for (const run of runs) {
+    summaries.push(await tourPresetRun({ run, scenes, options, selection }))
+  }
+  if (runs.length > 1) {
+    const rootDir = resolveOutputDir(ROOT, options.outDir)
+    const lines = ['# Henji-AI 多预设界面巡检', '', `- 生成时间：${new Date().toISOString()}`, '',
+      '| 预设 | 截图 | 失败 | 索引 |', '|---|---:|---:|---|']
+    for (const summary of summaries) {
+      lines.push(`| ${summary.themePreset} | ${summary.rows} | ${summary.failures} | [打开](${summary.themePreset}/index.md) |`)
+    }
+    fs.writeFileSync(path.join(rootDir, 'index.md'), `${lines.join('\n')}\n`, 'utf8')
+    console.log(`\n多预设索引：${path.join(rootDir, 'index.md')}`)
+  }
+  const failureCount = summaries.reduce((total, summary) => total + summary.failures, 0)
+  if (failureCount > 0) {
+    throw new Error(`${failureCount} 个场景未能完成，已保留成功截图和失败索引`)
+  }
+}
+
+async function tourPresetRun({ run, scenes, options, selection }) {
+  const outDir = run.outDir
   fs.mkdirSync(outDir, { recursive: true })
+  if (run.themePreset) console.log(`\n######## 主题预设：${run.themePreset} ########`)
   const rows = []
   const failures = []
   const evidence = {}
@@ -106,7 +134,7 @@ async function main() {
     readOnly: !options.allowWrites,
     extraArgs: [
       ...(scenes.length === 1 ? scenes[0].launchArgs ?? [] : []),
-      ...(options.themePreset ? [`--dev-theme-preset=${options.themePreset}`] : []),
+      ...themePresetLaunchArgs(run.themePreset),
     ],
     extraEnv: {
       ...(scenes.length === 1 ? scenes[0].launchEnv ?? {} : {}),
@@ -133,15 +161,16 @@ async function main() {
             windowEvidence.launch = await scene.inspectLaunch(app.app, app.page)
           }
           windowEvidence.baseline = await setInspectionWindowSize(app, size)
-          const capture = async (suffix) => {
+          // 默认截主窗口；`{ page }` 截场景打开的其他窗口（日志窗口、剪辑浮窗），同样进本次输出目录与索引。
+          const capture = async (suffix, { page: targetPage = app.page } = {}) => {
             if (!/^[a-z0-9-]+$/.test(suffix)) throw new Error(`截图后缀无效：${suffix}`)
             const fileName = `${sizeLabel}-${scene.id}-${suffix}.png`
             const actual = await assertInspectionWindowSize(app, size, windowEvidence.baseline)
             let pixels
-            const bytes = await captureInspectionPage(app.app, app.page, { onEvidence: (value) => { pixels = value } })
+            const bytes = await captureInspectionPage(app.app, targetPage, { onEvidence: (value) => { pixels = value } })
             fs.writeFileSync(path.join(outDir, fileName), bytes)
             await assertInspectionWindowSize(app, size, windowEvidence.baseline)
-            windowEvidence.captures.push({ suffix, ...actual, pixels })
+            windowEvidence.captures.push({ suffix, ...actual, pixels, window: targetPage === app.page ? 'main' : 'secondary' })
             rows.push({ ...scene, name: `${scene.name}-${suffix}`, size: sizeLabel, file: fileName })
           }
           await scene.setup(app.page, app.app, { capture, electronApp: app.app,
@@ -194,7 +223,7 @@ async function main() {
     await app.close()
   }
 
-  const metadata = { profile: options.profile, themePreset: options.themePreset, blocked: selection.blocked }
+  const metadata = { profile: options.profile, themePreset: run.themePreset, blocked: selection.blocked }
   fs.writeFileSync(path.join(outDir, 'evidence.json'), JSON.stringify({ metadata, scenes: evidence }, null, 2), 'utf8')
   const index = createIndex(rows, failures, metadata)
   const indexPath = path.join(outDir, 'index.md')
@@ -202,10 +231,7 @@ async function main() {
   console.log(`\n截图目录：${outDir}`)
   console.log(`索引文件：${indexPath}\n`)
   console.log(index)
-
-  if (failures.length > 0) {
-    throw new Error(`${failures.length} 个场景未能完成，已保留成功截图和失败索引`)
-  }
+  return { themePreset: run.themePreset ?? 'default', rows: rows.length, failures: failures.length }
 }
 
 main().catch((error) => {

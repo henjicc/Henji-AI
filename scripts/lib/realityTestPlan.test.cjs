@@ -23,6 +23,15 @@ test('UI 计划把资料模式与写入授权传给既有真实 Electron 执行�
   ])
 })
 
+test('界面巡检与审计都透传主题预设，交给执行器统一校验与分目录', () => {
+  const options = parseRealityTestArgs([
+    '--suite', 'ui', '--suite', 'ui-audit', '--theme-preset', 'paper', '--theme-preset', 'all', '--only', '设置',
+  ])
+  for (const step of buildRealityTestPlan(options, '/workspace')) {
+    assert.deepEqual(step.args.slice(-4), ['--theme-preset', 'paper', '--theme-preset', 'all'])
+  }
+})
+
 test('--build 只为需要 Electron 产物的层追加一次轻量构建', () => {
   const options = parseRealityTestArgs([
     '--build', '--suite', 'ui', '--suite', 'ui-audit', '--only', '设置',

@@ -99,11 +99,14 @@ const {
 const {
   DEFAULT_WINDOW_SIZES,
   UI_INSPECTION_SCENES,
+  UI_INSPECTION_THEME_PRESETS,
   filterScenes,
   parseUiInspectionArgs,
   parseWindowSize,
   resolveOutputDir,
+  resolveThemePresetRuns,
   selectInspectionScenes,
+  themePresetLaunchArgs,
   assertInspectionWindowEvidence,
   inspectInspectionScreenshot,
 } = require('./uiInspection.cjs')
@@ -260,10 +263,24 @@ test('已有多图层隔离夹具按文件魔数识别正式导入媒体类型',
 })
 
 test('主题预设参数只接受登记的预设，默认不指定', () => {
-  assert.equal(parseUiInspectionArgs([], '.ui-tour').themePreset, null)
-  assert.equal(parseUiInspectionArgs(['--theme-preset', 'paper'], '.ui-tour').themePreset, 'paper')
-  assert.equal(parseUiInspectionArgs(['--theme-preset=graphite'], '.ui-tour').themePreset, 'graphite')
+  assert.deepEqual(parseUiInspectionArgs([], '.ui-tour').themePresets, [])
+  assert.deepEqual(parseUiInspectionArgs(['--theme-preset', 'paper'], '.ui-tour').themePresets, ['paper'])
+  assert.deepEqual(parseUiInspectionArgs(['--theme-preset=graphite'], '.ui-tour').themePresets, ['graphite'])
   assert.throws(() => parseUiInspectionArgs(['--theme-preset', 'sepia'], '.ui-tour'), /--theme-preset 仅支持/)
+  assert.throws(() => parseUiInspectionArgs(['--theme-preset', 'paper,sepia'], '.ui-tour'), /收到：sepia/)
+})
+
+test('一次巡检多个预设：重复/逗号/all 展开为登记顺序并去重，多个预设按预设分目录', () => {
+  assert.deepEqual(parseUiInspectionArgs(['--theme-preset', 'paper,graphite', '--theme-preset=paper'], '.ui-tour').themePresets,
+    ['graphite', 'paper'])
+  assert.deepEqual(parseUiInspectionArgs(['--theme-preset', 'all'], '.ui-tour').themePresets, UI_INSPECTION_THEME_PRESETS)
+  const root = path.resolve('presets-out')
+  assert.deepEqual(resolveThemePresetRuns([], root), [{ themePreset: null, outDir: root }])
+  assert.deepEqual(resolveThemePresetRuns(['paper'], root), [{ themePreset: 'paper', outDir: root }], '单个预设沿用原目录')
+  assert.deepEqual(resolveThemePresetRuns(['graphite', 'paper'], root).map((run) => [run.themePreset, run.outDir]),
+    [['graphite', path.join(root, 'graphite')], ['paper', path.join(root, 'paper')]])
+  assert.deepEqual(themePresetLaunchArgs('ocean'), ['--dev-theme-preset=ocean'])
+  assert.deepEqual(themePresetLaunchArgs(null), [])
 })
 
 test('拒绝未知的数据模式', () => {

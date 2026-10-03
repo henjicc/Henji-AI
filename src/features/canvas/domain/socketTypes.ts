@@ -14,7 +14,6 @@ export {
   deriveSocketType,
   isSocketCompatible,
   getSocketColor,
-  getSocketTintColor,
 } from '@/core/types/SocketType'
 
 /** 每参数输入端口的 handle id 前缀（与整节点媒体端口 source/target 区分） */

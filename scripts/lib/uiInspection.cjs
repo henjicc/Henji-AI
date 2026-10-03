@@ -55,7 +55,7 @@ function parseUiInspectionArgs(argv, defaultOutDir) {
   let outDir = defaultOutDir
   let profile = 'temporary'
   let allowWrites = false
-  let themePreset = null
+  const themePresetValues = []
   let help = false
   let positionalOutUsed = false
 
@@ -106,12 +106,12 @@ function parseUiInspectionArgs(argv, defaultOutDir) {
       continue
     }
     if (token === '--theme-preset') {
-      themePreset = readOptionValue(argv, index, '--theme-preset')
+      themePresetValues.push(readOptionValue(argv, index, '--theme-preset'))
       index += 1
       continue
     }
     if (token.startsWith('--theme-preset=')) {
-      themePreset = token.slice('--theme-preset='.length)
+      themePresetValues.push(token.slice('--theme-preset='.length))
       continue
     }
     if (token === '--allow-writes') {
@@ -133,10 +133,32 @@ function parseUiInspectionArgs(argv, defaultOutDir) {
   if (profile !== 'temporary' && profile !== 'real') {
     throw new Error('--profile 仅支持 temporary 或 real')
   }
-  if (themePreset !== null && !UI_INSPECTION_THEME_PRESETS.includes(themePreset)) {
-    throw new Error(`--theme-preset 仅支持 ${UI_INSPECTION_THEME_PRESETS.join('、')}`)
+  const themePresets = parseThemePresets(themePresetValues)
+  return { allowWrites, help, only, outDir, profile, sizes, themePresets }
+}
+
+/** `--theme-preset` 可重复或逗号分隔，`all` 表示四个预设；按登记顺序去重。 */
+function parseThemePresets(values) {
+  const requested = values.flatMap((value) => value.split(',')).map((value) => value.trim()).filter(Boolean)
+  const expanded = requested.flatMap((value) => (value === 'all' ? UI_INSPECTION_THEME_PRESETS : [value]))
+  const unknown = expanded.filter((value) => !UI_INSPECTION_THEME_PRESETS.includes(value))
+  if (unknown.length > 0) {
+    throw new Error(`--theme-preset 仅支持 ${UI_INSPECTION_THEME_PRESETS.join('、')} 或 all，收到：${unknown.join('、')}`)
   }
-  return { allowWrites, help, only, outDir, profile, sizes, themePreset }
+  return UI_INSPECTION_THEME_PRESETS.filter((preset) => expanded.includes(preset))
+}
+
+/**
+ * 每个预设单独启动一次应用（预设经开发启动参数传入，进程内不能切换）。
+ * 只指定 0 或 1 个预设时沿用原输出目录；多个预设时按 `<输出目录>/<预设>/` 分目录。
+ */
+function resolveThemePresetRuns(themePresets, outDir) {
+  if (themePresets.length <= 1) return [{ themePreset: themePresets[0] ?? null, outDir }]
+  return themePresets.map((themePreset) => ({ themePreset, outDir: path.join(outDir, themePreset) }))
+}
+
+function themePresetLaunchArgs(themePreset) {
+  return themePreset ? [`--dev-theme-preset=${themePreset}`] : []
 }
 
 function selectInspectionScenes(scenes, options) {
@@ -330,7 +352,10 @@ module.exports = {
   formatWindowSize,
   launchUiInspectionApp,
   parseUiInspectionArgs,
+  parseThemePresets,
   parseWindowSize,
+  resolveThemePresetRuns,
+  themePresetLaunchArgs,
   resolveOutputDir,
   selectInspectionScenes,
   setInspectionWindowSize,

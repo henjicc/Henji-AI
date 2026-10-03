@@ -31,6 +31,7 @@ function printHelp() {
   --real-data               --profile real 的别名
   --allow-writes            允许真实资料模式写业务数据
 
+主题预设：--theme-preset graphite|ocean|film|paper|all（ui / ui-audit，可重复；多个预设按预设分目录）
 场景缩小：--only、--size、--out；clients 用 --only 指定客户端（codex / claude）；
 可重复传入 --suite，但任一层失败后立即停止。
 `)

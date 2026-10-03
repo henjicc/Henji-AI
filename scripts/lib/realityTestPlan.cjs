@@ -54,6 +54,7 @@ function parseRealityTestArgs(argv) {
     skipGeneration: false,
     suites: [],
     tests: [],
+    themePresets: [],
     visible: false,
   }
   for (let index = 0; index < argv.length; index += 1) {
@@ -71,6 +72,7 @@ function parseRealityTestArgs(argv) {
     else if (token === '--only') { options.only.push(readValue(argv, index, token)); index += 1 }
     else if (token === '--size') { options.sizes.push(readValue(argv, index, token)); index += 1 }
     else if (token === '--out') { options.outDir = readValue(argv, index, token); index += 1 }
+    else if (token === '--theme-preset') { options.themePresets.push(readValue(argv, index, token)); index += 1 }
     else if (token === '--profile') { options.profile = readValue(argv, index, token); index += 1 }
     else throw new Error(`未知参数：${token}`)
   }
@@ -93,6 +95,8 @@ function uiArgs(options) {
   for (const value of options.only) args.push('--only', value)
   for (const value of options.sizes) args.push('--size', value)
   if (options.outDir) args.push('--out', options.outDir)
+  // 预设名由 ui:tour / check:ui-visual 统一校验（含 all），这里只透传。
+  for (const value of options.themePresets) args.push('--theme-preset', value)
   return args
 }
 

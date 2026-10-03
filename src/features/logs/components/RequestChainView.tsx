@@ -77,13 +77,13 @@ export function RequestChainView({ isOpen, onClose, requestId, events }: Request
             return (
               <div key={event.id} className="relative border-l border-border-dark/40 pb-1 pl-4">
                 <span
-                  className={`absolute -left-[5px] top-2 h-2.5 w-2.5 rounded-full ${isError ? 'bg-red-500' : 'bg-accent'}`}
+                  className={`absolute -left-[5px] top-2 h-2.5 w-2.5 rounded-full ${isError ? 'bg-danger-solid' : 'bg-accent'}`}
                 />
                 {/* ui-surface-allow 链路事件卡（多行内容的可展开条目），日志窗口外观归 4.1 */}
                 <UiButton
                   type="button"
                   variant="secondary"
-                  className="h-auto w-full flex-col items-stretch justify-start border-border-dark/40 bg-white/5 px-2 py-1.5 text-left font-normal"
+                  className="h-auto w-full flex-col items-stretch justify-start border-border-dark/40 bg-hover px-2 py-1.5 text-left font-normal"
                   onClick={() => setExpandedId(isExpanded ? '' : event.id)}
                 >
                   <div className="flex items-center justify-between gap-2">
@@ -97,7 +97,7 @@ export function RequestChainView({ isOpen, onClose, requestId, events }: Request
                   </div>
                 </UiButton>
                 {isExpanded && (
-                  <div className="mt-1 rounded-md border border-border-dark/40 bg-black/20 p-2">
+                  <div className="mt-1 rounded-md border border-border-dark/40 bg-window/40 p-2">
                     <JsonTree value={event} />
                   </div>
                 )}

@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "description": [
+    "check:ui-visual 对比度规则（lowContrast）的合理例外登记，界面重设计 4.1 建立。",
+    "门槛：正文与辅助文字 ≥ 4.5:1；大字（≥ 24px，或 ≥ 18.66px 且粗体）与图标 ≥ 3:1；禁用控件、aria-hidden 文字与被遮挡部分不判。",
+    "每条字段：id（唯一）、reason（必填，写清为什么用户不依赖它读取信息或为什么无法达标）、text / element（正则，至少一个）、",
+    "可选 kind（text/icon）、scene（场景名正则）、presets（graphite/ocean/film/paper，未指定预设时为 default）、minRatio（只放宽到该下限）、owner。",
+    "例外只用于确属装饰、品牌或内容色（用户素材本身）的情形；界面色不达标应改令牌，不应登记。"
+  ],
+  "exceptions": []
+}

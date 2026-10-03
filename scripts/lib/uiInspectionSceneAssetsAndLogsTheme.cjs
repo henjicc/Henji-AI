@@ -2,7 +2,6 @@ const assert = require('node:assert/strict')
 const fsp = require('node:fs/promises')
 const path = require('node:path')
 const { randomUUID } = require('node:crypto')
-const { captureInspectionPage } = require('./uiInspectionCapture.cjs')
 
 const VIDEO_FIXTURE = path.resolve('scripts/fixtures/plain_video.mp4')
 
@@ -59,7 +58,7 @@ function createAssetsFloatingVideoCoverScene({ openWorkspace, settlePage }) {
 
 /**
  * 日志窗口主题（3.7 第 2 项）：日志壳与主窗口同源应用主题，开发预设 `--dev-theme-preset` 也要生效。
- * 判据是两个窗口的实际背景与配色方案一致；日志窗口截图写到 `.ui-tour/logs-window-theme.png` 供目视。
+ * 判据是两个窗口的实际背景与配色方案一致；日志窗口截图经 capture('logs-window') 进入巡检索引供目视。
  */
 function createLogsWindowThemeScene({ openWorkspace, settlePage }) {
   let logPage = null
@@ -70,7 +69,7 @@ function createLogsWindowThemeScene({ openWorkspace, settlePage }) {
       logPage = null
       if (current && !current.isClosed()) await current.close().catch(() => undefined)
     },
-    setup: async (page, app) => {
+    setup: async (page, app, { capture }) => {
       await openWorkspace(page, 'generation')
       const opened = app.waitForEvent('window', {
         predicate: (candidate) => candidate.url().includes('view=logs'), timeout: 15000,
@@ -87,9 +86,9 @@ function createLogsWindowThemeScene({ openWorkspace, settlePage }) {
       }))
       const [main, logs] = await Promise.all([readTheme(page), readTheme(logPage)])
       assert.deepEqual(logs, main, `日志窗口主题与主窗口不一致：${JSON.stringify({ main, logs })}`)
-      const bytes = await captureInspectionPage(app, logPage)
-      await fsp.mkdir(path.resolve('.ui-tour'), { recursive: true })
-      await fsp.writeFile(path.resolve('.ui-tour', 'logs-window-theme.png'), bytes)
+      // 经运行器的 capture 出口截日志窗口：ui:tour 写进本次（按预设分的）输出目录与索引，
+      // check:ui-visual 在同一状态做对比度审计。
+      await capture('logs-window', { page: logPage })
       await settlePage(page, 200)
     },
   }
