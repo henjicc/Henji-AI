@@ -65,3 +65,17 @@ export function resolveDevelopmentLaunchQuery(
 
   return { query, warnings }
 }
+
+/**
+ * 附属窗口（日志窗口）沿用的开发启动参数：只带对所有窗口都成立的主题预设，
+ * 页面定位、素材与首次引导只属于主窗口。日志窗口与主窗口同源应用主题（重要记录 010），
+ * 巡检用 `--dev-theme-preset` 截图时两个窗口必须是同一个预设。
+ */
+export function resolveSecondaryWindowLaunchQuery(
+  argv: readonly string[] = process.argv,
+  workingDirectory = process.cwd()
+): Record<string, string> {
+  const themePreset = resolveDevelopmentLaunchQuery(argv, workingDirectory)
+    .query[DEVELOPMENT_LAUNCH_QUERY_KEYS.themePreset]
+  return themePreset ? { [DEVELOPMENT_LAUNCH_QUERY_KEYS.themePreset]: themePreset } : {}
+}

@@ -482,6 +482,14 @@ function attachUiInspectionCanvasEditing(context) {
         legacyNodeId,
         expectedNodeCount: nodes.length,
         complexGraph: true,
+        // 前景右下区域：在前景范围内、画面之内（前景 0.55@180,100 会伸出小尺寸夹具图的右下边），
+        // 且避开其上隔离组两个子层（滤色 0.42@24,28；正片叠底 0.36@172,94）。
+        dragStartOutput: [
+          (Math.max(24 + managed.metadata.width * 0.42, 172 + managed.metadata.width * 0.36)
+            + Math.min(180 + managed.metadata.width * 0.55, managed.metadata.width)) / 2,
+          (Math.max(28 + managed.metadata.height * 0.42, 94 + managed.metadata.height * 0.36)
+            + Math.min(100 + managed.metadata.height * 0.55, managed.metadata.height)) / 2,
+        ],
       }
     }, { targetProjectId: projectId, source: panoramaSource })
 

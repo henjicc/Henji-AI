@@ -292,7 +292,7 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 
 | 语义 | 表达 | 通用落点 |
 |---|---|---|
-| 导航：正在看哪里 | 中性选中底 + 主要文字（图标强调色）+ 方向指示条 | `UiNavButton active`；横向 chip 用 `selectionRole="navigation"`；面板标签用 `selectionAppearance="subtle"`（主要文字 + 底部细线）；应用标题栏的工作区导航用 `selectionAppearance="workspace"`（纯文字 28 高，底部短指示条） |
+| 导航：正在看哪里 | 中性选中底 + 主要文字（图标强调色）+ 方向指示条 | `UiNavButton active`；横向 chip 用 `selectionRole="navigation"`；面板标签用 `selectionAppearance="subtle"`（主要文字 + 底部细线）；应用标题栏的工作区导航用 `selectionAppearance="workspace"`（纯文字 28 高，底部短指示条；`aria-current` 只给当前工作区，同栏里只打开浮层的开关项用 `on`：选中底无指示条 + `aria-pressed`） |
 | 单选：当前值是什么 | 中性抬升：选中底 + 主要文字（重要记录 003，不用强调色实底） | `UiOptionButton active`（分段 `variant="segment"`，网格 `variant="grid"`） |
 | 多选/标签：集合中哪些已选 | 强调描边 + 中性选中底 + 强调文字 | `UiChipButton active`；多选的选项卡用 `UiOptionButton selection="multiple"` |
 | 布尔：功能是否开启 | 强调色只进入开关轨道或复选框本体，整行保持静息 | `UiSwitch checked` / `UiCheckbox checked` |

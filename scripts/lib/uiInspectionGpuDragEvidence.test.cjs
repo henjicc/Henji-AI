@@ -90,6 +90,15 @@ test('真实原生驱动持续投递100次并反向结束，不逐事件等待�
   assert.equal(events.at(-1).x, gesture.points.at(-1).x)
 })
 
+test('拖动起点按调用方比例落在目标图层上，净位移保持 (20,10)', () => {
+  const box = { x: 100, y: 50, width: 960, height: 640 }
+  const fallback = createDragPoints(box)
+  assert.deepEqual(fallback.start, { x: 436, y: 274 })
+  const gesture = createDragPoints(box, { x: 670 / 960, y: 350 / 640 })
+  assert.deepEqual(gesture.start, { x: 770, y: 400 })
+  assert.deepEqual(gesture.points.at(-1), { x: 790, y: 410 })
+})
+
 test('100个输入允许10次合帧，仅报告提交ACK、不伪称屏幕present和CPU倍数', () => {
   const metrics = verifyDragTrace(fixture())
   assert.equal(metrics.receivedPointerMoves, 100)

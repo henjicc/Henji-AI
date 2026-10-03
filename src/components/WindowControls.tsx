@@ -170,7 +170,9 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
         data-window-nodrag
       >
         {tabs.map((tab) => {
-          const active = tab.id === 'assets' ? assetView !== 'closed' : activeTab === tab.id
+          // 资产完整工作区是当前页（activeTab === 'assets'）；资产浮动面板只是叠在当前工作区上的开关，
+          // 用 on + aria-pressed 表达，aria-current 只给当前工作区。
+          const active = activeTab === tab.id
           return (
             <UiChipButton
               key={tab.id}
@@ -178,6 +180,7 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
               selectionRole="navigation"
               selectionAppearance="workspace"
               active={active}
+              on={tab.id === 'assets' ? assetView === 'floating' : undefined}
               aria-current={active ? 'page' : undefined}
               onClick={() => tab.id === 'assets' ? onAssetClick?.() : onTabChange?.(tab.id)}
             >

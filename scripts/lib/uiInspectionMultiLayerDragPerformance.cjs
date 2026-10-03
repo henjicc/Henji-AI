@@ -197,9 +197,22 @@ async function verifyMultiLayerDragPerformance({
   const beforeLayerMove = Number(await commandBar.getAttribute('data-document-revision'))
   if (beforeLayerMove !== fixture.initialRevision) throw new Error('拖动前文档版本异常')
   const stableRaster = editor.locator('[data-raster-display-frame]')
+  // 移动工具按下即选中光标下最上层图层（图层点选，b8fe5656）；起点必须只落在前景上，
+  // 否则被拖动的是上层的其他图层，前景保持原位。
+  const [startX, startY] = fixture.dragStartOutput ?? []
+  if (!Number.isFinite(startX) || !Number.isFinite(startY)) throw new Error('夹具缺少只命中前景图层的拖动起点 dragStartOutput')
+  const startRatio = { x: startX / firstOpenEvidence.geometry.width, y: startY / firstOpenEvidence.geometry.height }
+  if (!(startRatio.x > 0 && startRatio.x < 1 && startRatio.y > 0 && startRatio.y < 1)) {
+    throw new Error(`拖动起点不在画面内：${JSON.stringify({ dragStartOutput: fixture.dragStartOutput, geometry: firstOpenEvidence.geometry })}`)
+  }
   const dragStartedAt = new Date().toISOString()
   const dragMetrics = await runContinuousGpuDrag({ page, app: app ?? inspection?.electronApp,
-    editor, box: contentBox })
+    editor, box: contentBox, startRatio })
+  const draggedLayerSelected = await editor.locator('[data-layer-id="ui-foreground-layer"]').getAttribute('aria-selected')
+  if (draggedLayerSelected !== 'true') {
+    const selectedLayerId = await editor.locator('[role="treeitem"][aria-selected="true"]').first().getAttribute('data-layer-id').catch(() => null)
+    throw new Error(`拖动起点命中了其他图层：${JSON.stringify({ startRatio, selectedLayerId })}`)
+  }
   const expectedTransform = [...firstOpenEvidence.initialTransform]
   expectedTransform[4] += (dragMetrics.finalPoint.x - dragMetrics.start.x) / contentBox.width * firstOpenEvidence.geometry.width
   expectedTransform[5] += (dragMetrics.finalPoint.y - dragMetrics.start.y) / contentBox.height * firstOpenEvidence.geometry.height

@@ -2,7 +2,7 @@ import { FileText, Upload, X } from 'lucide-react'
 import { useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { UiButton, UiIconButton, UiInput } from '@/components/ui'
+import { UI_FIELD_INLINE_ROW_CLASS, UiButton, UiIconButton, UiInput, useUiFieldLayout } from '@/components/ui'
 import type { FileUploadParamDef } from '@/core/types'
 import { getI18nText } from '@/core/types/I18nText'
 import { useNotification } from '@/contexts/NotificationContext'
@@ -33,6 +33,8 @@ export function FileUpload({
   const inputRef = useRef<HTMLInputElement>(null)
   const { i18n, t } = useTranslation('ui')
   const { showNotification } = useNotification()
+  // 工具条排布（生成底栏）：文件条与上传按钮都是一行高的控件，标签放左侧与其他参数同一行，不再标签在上。
+  const toolbar = useUiFieldLayout() === 'toolbar'
   const safeValue = Array.isArray(value)
     ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
     : (typeof value === 'string' && value.trim() ? [value.trim()] : [])
@@ -60,13 +62,13 @@ export function FileUpload({
   }
 
   return (
-    <div className="flex min-w-0 flex-col gap-1.5">
+    <div className={toolbar ? UI_FIELD_INLINE_ROW_CLASS : 'flex min-w-0 flex-col gap-1.5'}>
       {showLabel && (
         <ParamLabel param={param} language={i18n.language} />
       )}
       <div className="flex flex-wrap items-center gap-2">
         {safeValue.map((source, index) => (
-          <div key={`${source}-${index}`} className="flex h-9 min-w-0 items-center gap-1.5 rounded-lg bg-app/40 px-2">
+          <div key={`${source}-${index}`} className={`flex ${toolbar ? 'h-8' : 'h-9'} min-w-0 items-center gap-1.5 rounded-lg bg-app/40 px-2`}>
             <FileText className="h-4 w-4 shrink-0 text-text-muted" />
             <span className="max-w-32 truncate text-xs text-text-soft">{displayFilename(source, index)}</span>
             <UiIconButton size="sm"

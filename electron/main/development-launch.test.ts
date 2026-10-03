@@ -6,7 +6,7 @@ vi.mock('node:fs', () => ({
   statSync: () => ({ isFile: () => true }),
 }))
 
-import { resolveDevelopmentLaunchQuery } from './development-launch'
+import { resolveDevelopmentLaunchQuery, resolveSecondaryWindowLaunchQuery } from './development-launch'
 
 describe('resolveDevelopmentLaunchQuery', () => {
   it('没有显式参数时保持正常启动', () => {
@@ -44,5 +44,22 @@ describe('resolveDevelopmentLaunchQuery', () => {
 
     expect(result.query).toEqual({})
     expect(result.warnings).toHaveLength(3)
+  })
+})
+
+describe('resolveSecondaryWindowLaunchQuery', () => {
+  it('日志窗口只沿用主题预设，不带页面定位、素材与首次引导', () => {
+    expect(resolveSecondaryWindowLaunchQuery([
+      'electron',
+      '--dev-skip-onboarding',
+      '--dev-surface=tool.image_edit',
+      '--dev-media=docs/ref/test01.jpg',
+      '--dev-theme-preset=paper',
+    ], '/project')).toEqual({ henjiDevThemePreset: 'paper' })
+  })
+
+  it('没有或无效的主题预设时不附加参数', () => {
+    expect(resolveSecondaryWindowLaunchQuery(['electron'], '/project')).toEqual({})
+    expect(resolveSecondaryWindowLaunchQuery(['electron', '--dev-theme-preset=sepia'], '/project')).toEqual({})
   })
 })

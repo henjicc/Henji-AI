@@ -428,7 +428,8 @@ export function ImageViewerModal({
           )}
           <div data-viewer-controls="true" className="absolute bottom-8 left-1/2 z-sticky flex max-w-[calc(100%_-_2rem)] -translate-x-1/2 items-center gap-3 overflow-x-auto">
             {comparisonImageUrl && (
-              <div className="ui-glass flex shrink-0 items-center gap-0.5 rounded-lg p-1" role="group" aria-label={t('viewer.compare', '对比查看')}>
+              // 与同排查看器控件（缩放读数、重置视图 xl）同高 40；段本身保持分段 28 高。
+              <div className="ui-glass flex h-10 shrink-0 items-center gap-0.5 rounded-lg p-1" role="group" aria-label={t('viewer.compare', '对比查看')}>
                 {(['single', 'side-by-side', 'overlay'] as const).map((value) => (
                   <UiOptionButton
                     key={value}

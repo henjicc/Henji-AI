@@ -6,19 +6,23 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import i18n from '@/i18n/config'
 import type { ImageUploadParamDef } from '@/core/types'
 import { derivedMediaStateKey } from '@/core/params/derivedMediaState'
+import { UI_FIELD_INLINE_ROW_CLASS, UiFieldLayoutContext } from '@/components/ui'
 import { DerivedMediaParamControl } from './DerivedMediaParamControl'
 
 vi.mock('@/platform/runtime', () => ({ isUiInspectionReadOnly: () => true }))
 vi.mock('@/features/maskEditor', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/features/maskEditor')>()
+  const { useUiFieldLayout } = await import('@/components/ui')
   return {
     ...actual,
     MaskEditorModal: ({ isOpen, onCancel, onConfirm }: {
       isOpen: boolean
       onCancel: () => void
       onConfirm: (result: DynamicValue) => void
-    }) => isOpen ? (
-      <div role="dialog" aria-label="测试遮罩编辑器">
+    }) => {
+      const layout = useUiFieldLayout()
+      return isOpen ? (
+      <div role="dialog" aria-label="测试遮罩编辑器" data-field-layout={layout}>
         <div role="button" tabIndex={0} onClick={onCancel}>取消测试编辑</div>
         <div role="button" tabIndex={0} onClick={() => onConfirm({
           document: {
@@ -33,7 +37,8 @@ vi.mock('@/features/maskEditor', async (importOriginal) => {
           height: 32,
         })}>确认测试编辑</div>
       </div>
-    ) : null,
+      ) : null
+    },
   }
 })
 
@@ -162,5 +167,40 @@ describe('派生遮罩参数控件', () => {
     fireEvent.click(screen.getByRole('button', { name: '确认测试编辑' }))
     expect(onParamChanges).toHaveBeenCalledTimes(1)
     expect(onEditorDismiss).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('派生遮罩参数控件的工具条排布（3.7：生成底栏）', () => {
+  it('底栏里标签在左、按钮与行同高（md），编辑弹窗内部重置为表单排布', () => {
+    const view = render(
+      <UiFieldLayoutContext.Provider value="toolbar">
+        <DerivedMediaParamControl
+          param={param}
+          value={[]}
+          allValues={{ uploadedImages: ['data:image/png;base64,source'] }}
+          onChange={() => undefined}
+        />
+      </UiFieldLayoutContext.Provider>
+    )
+    const button = screen.getByRole('button', { name: '绘制' })
+    expect(button.getAttribute('data-size')).toBe('md')
+    const row = view.getByText('局部重绘遮罩').closest(`[class*="${UI_FIELD_INLINE_ROW_CLASS.split(' ')[0]}"]`)
+    expect(row?.className).toBe(UI_FIELD_INLINE_ROW_CLASS)
+    expect(row?.contains(button)).toBe(true)
+    fireEvent.click(button)
+    expect(screen.getByRole('dialog', { name: '测试遮罩编辑器' }).getAttribute('data-field-layout')).toBe('form')
+  })
+
+  it('表单排布（画布、弹窗）保持标签在上与大号按钮', () => {
+    render(
+      <DerivedMediaParamControl
+        param={param}
+        value={[]}
+        allValues={{ uploadedImages: ['data:image/png;base64,source'] }}
+        onChange={() => undefined}
+      />
+    )
+    expect(screen.getByRole('button', { name: '绘制' }).getAttribute('data-size')).toBe('lg')
+    expect(screen.getByText('局部重绘遮罩').closest('.flex-col')).toBeTruthy()
   })
 })

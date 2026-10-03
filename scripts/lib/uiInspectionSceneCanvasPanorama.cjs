@@ -1,4 +1,6 @@
+const { writeFile } = require('node:fs/promises')
 const { findPanePoint, readCanvasState, resetViewport } = require('./canvasPanBench.cjs')
+const { captureInspectionPage } = require('./uiInspectionCapture.cjs')
 
 function attachUiInspectionCanvasPanorama(context) {
   const {
@@ -7,7 +9,7 @@ function attachUiInspectionCanvasPanorama(context) {
     setupCanvasPanoramaToolbar,
   } = context
 
-  async function setupCanvasPanoramaViewer(page) {
+  async function setupCanvasPanoramaViewer(page, app) {
     const { generatedNodeId, projectId } = await setupCanvasPanoramaToolbar(page)
     await page.waitForTimeout(900)
     await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
@@ -91,6 +93,22 @@ function attachUiInspectionCanvasPanorama(context) {
       const box = await primarySurface.boundingBox()
       if (!box) throw new Error('全景节点预览区域不可见')
       return await page.screenshot({ animations: 'disabled', clip: box })
+    }
+    // 屏外恢复比对只看全景画面本身：取节点预览区与窗口的可见交集，截到节点工具条上沿以上，四边内收 3px，
+    // 并走正式 runner 的截屏入口。3.7 第 10 项实测：窗口缩放 0.9 时 CDP 截图的 CSS 裁剪与合成表面坐标
+    // 不一致，截到的是错位区域，包含节点外框与工具条文字；它们随视口恢复落在不同亚像素位置，
+    // 非首个场景时恒定出现约 1.49% 的抗锯齿差异，冻结画面本身逐像素一致。
+    const screenshotFrozenPicture = async () => {
+      const surface = await primarySurface.boundingBox()
+      const toolbarTop = (await resultNode.getByRole('button', { name: /^(平面|Flat)$/i }).boundingBox())?.y
+      const viewport = await page.evaluate(() => ({ width: window.innerWidth, height: window.innerHeight }))
+      if (!surface || toolbarTop === undefined) throw new Error('全景节点预览区域或节点工具条不可见')
+      const left = Math.max(surface.x, 0) + 3
+      const top = Math.max(surface.y, 0) + 3
+      const right = Math.min(surface.x + surface.width, viewport.width) - 3
+      const bottom = Math.min(surface.y + surface.height, viewport.height, toolbarTop - 6) - 3
+      if (right - left < 40 || bottom - top < 40) throw new Error(`全景节点预览可见区域过小：${JSON.stringify({ surface, toolbarTop, viewport })}`)
+      return await captureInspectionPage(app, page, { clip: { x: left, y: top, width: right - left, height: bottom - top } })
     }
     const initialPreview = primarySurface.locator('img[data-panorama-frozen-preview="true"]')
     await initialPreview.waitFor({ state: 'visible', timeout: 12000 })
@@ -215,7 +233,7 @@ function attachUiInspectionCanvasPanorama(context) {
     if (!panePoint) throw new Error('全景布局恢复检查找不到画布空白')
     await page.mouse.click(panePoint.x, panePoint.y)
     const viewportBeforeSuspend = await readCanvasState(page)
-    const frozenBeforeSuspend = await screenshotPrimarySurface()
+    const frozenBeforeSuspend = await screenshotFrozenPicture()
     const layoutSession = await page.context().newCDPSession(page)
     try {
       const away = { x: viewportBeforeSuspend.x - 4500, y: viewportBeforeSuspend.y - 3000 }
@@ -224,8 +242,14 @@ function attachUiInspectionCanvasPanorama(context) {
       if (await activeInlineCanvases.count()) throw new Error('全景节点屏外暂停期间重新创建了 WebGL Canvas')
       if (!(await resetViewport(page, layoutSession, viewportBeforeSuspend)).ok) throw new Error('全景节点无法返回原视口')
       await frozenPreview.waitFor({ state: 'visible' })
-      const restoredFrameDiff = await diffBuffers(frozenBeforeSuspend, await screenshotPrimarySurface())
-      if (restoredFrameDiff.changedPct > 1) throw new Error(`全景屏外恢复改变冻结视角：变化像素 ${restoredFrameDiff.changedPct}%`)
+      const frozenAfterRestore = await screenshotFrozenPicture()
+      const restoredFrameDiff = await diffBuffers(frozenBeforeSuspend, frozenAfterRestore)
+      if (restoredFrameDiff.changedPct > 1) {
+        // 失败现场留下前后两帧，供区分“冻结图变了”与“剪裁区被其他元素覆盖”。
+        await writeFile('.ui-tour/canvas-panorama-viewer-restore-before.png', frozenBeforeSuspend)
+        await writeFile('.ui-tour/canvas-panorama-viewer-restore-after.png', frozenAfterRestore)
+        throw new Error(`全景屏外恢复改变冻结视角：变化像素 ${restoredFrameDiff.changedPct}%（${JSON.stringify(restoredFrameDiff.rect)}，maxDelta ${restoredFrameDiff.maxDelta}）`)
+      }
     } finally { await layoutSession.detach() }
 
     // 项目重开后直接显示上次冻结视角，并从同一相机状态继续交互。

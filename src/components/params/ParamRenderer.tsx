@@ -83,7 +83,8 @@ export const ParamRenderer: React.FC<ParamRendererProps> = React.memo(({
 }) => {
   const { i18n } = useTranslation()
   const toolbarLayout = useUiFieldLayout() === 'toolbar'
-  // 上传类控件是大块内容：工具条排布下仍按表单排布渲染（只重置排布，不增加 DOM）
+  // 图片/视频上传是缩略图大块：工具条排布下仍按表单排布渲染（只重置排布，不增加 DOM）。
+  // 文件上传与遮罩绘制只有一行高，自己按工具条排布（标签在左），见 FileUpload / DerivedMediaParamControl。
   const asFormBlock = (node: JSX.Element): JSX.Element => toolbarLayout
     ? <UiFieldLayoutContext.Provider value="form">{node}</UiFieldLayoutContext.Provider>
     : node
@@ -103,7 +104,7 @@ export const ParamRenderer: React.FC<ParamRendererProps> = React.memo(({
   }
 
   if (param.type === 'image-upload' && param.derivedMediaAuthoring) {
-    return asFormBlock(
+    return (
       <DerivedMediaParamControl
         param={param}
         value={value}
@@ -206,7 +207,7 @@ export const ParamRenderer: React.FC<ParamRendererProps> = React.memo(({
     />
   )
 
-  return param.type === 'image-upload' || param.type === 'video-upload' || param.type === 'file-upload'
+  return param.type === 'image-upload' || param.type === 'video-upload'
     ? asFormBlock(renderedComponent)
     : renderedComponent
 })

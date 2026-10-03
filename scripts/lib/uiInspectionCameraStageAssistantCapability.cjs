@@ -1,6 +1,5 @@
-const fsp = require('node:fs/promises')
-const path = require('node:path')
 const { randomUUID } = require('node:crypto')
+const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
 
 const CAMERA_NODE_ID = '__ui_camera_stage_assistant_capability'
 const REQUIRED_CAPABILITY_IDS = [
@@ -10,31 +9,23 @@ const REQUIRED_CAPABILITY_IDS = [
   'cancel_camera_stage_render_task',
   'apply_camera_stage_camera_move',
 ]
+const READ_CAPABILITY_IDS = new Set(['get_camera_stage_render_task'])
 
-function hasFormalCapabilityRegistryExports(source) {
-  const exportBlocks = source.matchAll(/export\s*\{([\s\S]*?)\}\s*;?/g)
-  for (const match of exportBlocks) {
-    const exported = match[1]
-    if (/\bexecuteApplicationCapabilityResult\b/.test(exported)
-      && /\blistRendererApplicationCapabilityIds\b/.test(exported)) return true
-  }
-  return false
+/**
+ * 能力经正式外部入口（现代 MCP）调用。
+ *
+ * 旧做法按文件名在 out/renderer/assets 里找 registry 构建模块并动态 import；构建分包后注册表并入
+ * 应用能力服务的公共块，执行与清单入口不再对外导出，按文件名定位必然 0 个。构建产物的分块与
+ * 导出名不是契约，MCP 才是正式公共入口；读写结果统一投影回 `{ ok, data }`。
+ */
+async function executeCapability(client, invocation, baselines = []) {
+  if (READ_CAPABILITY_IDS.has(invocation.id)) return await callTool(client, invocation.id, invocation.input)
+  const written = await callTool(client, invocation.id, operationEnvelope(baselines, invocation.input))
+  return written.result
 }
 
-async function findRendererCapabilityRegistryAsset(
-  assetsDir = path.join(process.cwd(), 'out', 'renderer', 'assets')
-) {
-  const names = (await fsp.readdir(assetsDir))
-    .filter((name) => /^registry-[a-zA-Z0-9_-]+\.js$/.test(name))
-  const matches = []
-  for (const name of names) {
-    const source = await fsp.readFile(path.join(assetsDir, name), 'utf8')
-    if (hasFormalCapabilityRegistryExports(source)) matches.push(name)
-  }
-  if (matches.length !== 1) {
-    throw new Error(`正式能力注册构建模块必须唯一，实际 ${matches.length} 个`)
-  }
-  return matches[0]
+async function readCapabilityBaseline(client, taskRef) {
+  return await callTool(client, 'get_camera_stage_render_task', { taskRef })
 }
 
 function requirePersistedCreatedProject(created, record) {
@@ -160,18 +151,6 @@ async function waitForCancelledTaskEvent(page, requestId, timeoutMs) {
   throw new Error('没有收到待取消视频任务对应的 cancelled 终态事件')
 }
 
-async function executeCapability(page, registryAsset, invocation, taskId) {
-  return await page.evaluate(async ({ assetName, capability, callId }) => {
-    const moduleUrl = new URL(`./assets/${assetName}`, window.location.href).href
-    const registry = await import(moduleUrl)
-    return await registry.executeApplicationCapabilityResult(capability, {
-      signal: new AbortController().signal,
-      requestId: callId,
-      taskId: callId,
-    })
-  }, { assetName: registryAsset, capability: invocation, callId: taskId })
-}
-
 function requireCapabilitySuccess(result, capabilityId) {
   if (!result?.ok) {
     throw new Error(`${capabilityId} 正式处理器失败：${JSON.stringify(result?.error ?? null)}`)
@@ -238,17 +217,10 @@ function createCameraStageNode(projectId) {
   }
 }
 
-async function waitForTaskStatus(
-  page, registryAsset, taskRef, accepted, rejected, timeoutMs, executionPrefix
-) {
+async function waitForTaskStatus(page, client, taskRef, accepted, rejected, timeoutMs) {
   const startedAt = Date.now()
-  let attempt = 0
   while (Date.now() - startedAt < timeoutMs) {
-    const result = await executeCapability(page, registryAsset, {
-      id: 'get_camera_stage_render_task',
-      version: 1,
-      input: { taskRef },
-    }, `${executionPrefix}-get-${++attempt}`)
+    const result = await executeCapability(client, { id: 'get_camera_stage_render_task', input: { taskRef } })
     const task = requireCapabilitySuccess(result, 'get_camera_stage_render_task')
     if (accepted.includes(task.status)) return task
     if (rejected.includes(task.status)) {
@@ -271,23 +243,32 @@ async function readCanvasNodes(page, projectId) {
 
 async function setupCameraStageAssistantCapability(page, context, inspection = {}) {
   const { seedAndOpenCanvasPanoramaProject, settlePage, reopenCanvasProjectFromStorage } = context
-  const executionPrefix = `reality-camera-stage-capability-${randomUUID()}`
-  const registryAsset = await findRendererCapabilityRegistryAsset()
-  const registered = await page.evaluate(async (assetName) => {
-    const moduleUrl = new URL(`./assets/${assetName}`, window.location.href).href
-    const registry = await import(moduleUrl)
-    return registry.listRendererApplicationCapabilityIds()
-  }, registryAsset)
-  for (const capabilityId of REQUIRED_CAPABILITY_IDS) {
-    if (!registered.includes(capabilityId)) throw new Error(`正式渲染层缺少能力 ${capabilityId}`)
-  }
-
   const { projectId: canvasProjectId } = await seedAndOpenCanvasPanoramaProject(page)
-  const created = requireCapabilitySuccess(await executeCapability(page, registryAsset, {
+  // 取消视频任务是破坏性操作，需删除授权并提供原读取凭据（与 mcp-camera-render 同一授权档）。
+  const identity = await authorizeMcpConnection(page, {
+    name: `助手3D后台输出验收-${randomUUID().slice(0, 8)}`, allowWrites: true, allowDestructive: true,
+  })
+  const client = await connectMcpClient(identity.config, 'Henji camera stage capability Reality')
+  try {
+    const published = new Set((await client.listTools()).tools.map((tool) => tool.name))
+    for (const capabilityId of REQUIRED_CAPABILITY_IDS) {
+      if (!published.has(capabilityId)) throw new Error(`正式外部入口缺少能力 ${capabilityId}`)
+    }
+    await runCameraStageCapabilityChain(page, client, {
+      canvasProjectId, settlePage, reopenCanvasProjectFromStorage,
+    })
+  } finally {
+    await client.close()
+    await disableMcp(page)
+  }
+  if (typeof inspection.capture === 'function') await inspection.capture('assistant-capability-completed-cancelled')
+}
+
+async function runCameraStageCapabilityChain(page, client, { canvasProjectId, settlePage, reopenCanvasProjectFromStorage }) {
+  const created = requireCapabilitySuccess(await executeCapability(client, {
     id: 'create_camera_stage_project',
-    version: 4,
     input: { name: '真实性巡检-助手后台3D工程' },
-  }, `${executionPrefix}-create-project`), 'create_camera_stage_project')
+  }), 'create_camera_stage_project')
   if (!await page.locator('.react-flow:visible').count()) {
     throw new Error('后台创建 3D 工程不应离开当前画布')
   }
@@ -299,9 +280,8 @@ async function setupCameraStageAssistantCapability(page, context, inspection = {
     created.projectId
   )
   requirePersistedCreatedProject(created, persistedCameraProject)
-  requireCapabilitySuccess(await executeCapability(page, registryAsset, {
+  requireCapabilitySuccess(await executeCapability(client, {
     id: 'apply_camera_stage_camera_move',
-    version: 1,
     input: {
       projectId: created.projectId,
       cameraId: created.defaultCameraId,
@@ -311,7 +291,7 @@ async function setupCameraStageAssistantCapability(page, context, inspection = {
       duration: 2,
       speed: 'uniform',
     },
-  }, `${executionPrefix}-prepare-video-keyframe`), 'apply_camera_stage_camera_move')
+  }), 'apply_camera_stage_camera_move')
   const videoReadyProject = await page.evaluate(
     async (projectId) => await window.henjiNative.cameraStageProjects.getProjectRecord(projectId),
     created.projectId
@@ -339,19 +319,12 @@ async function setupCameraStageAssistantCapability(page, context, inspection = {
 
   const projectRef = { kind: 'canvas.project', id: canvasProjectId }
   const nodeRef = { kind: 'canvas.node', id: `${canvasProjectId}:${CAMERA_NODE_ID}` }
-  const submitted = requireSubmittedTask(await executeCapability(page, registryAsset, {
+  const submitted = requireSubmittedTask(await executeCapability(client, {
     id: 'render_camera_stage_output',
-    version: 1,
     input: { projectRef, nodeRef, outputKind: 'image', resolutionPreset: '720p', selectedTimeSec: 0.25 },
-  }, `${executionPrefix}-render-image`), 'render_camera_stage_output')
+  }), 'render_camera_stage_output')
   const completed = requireCompletedTask(await waitForTaskStatus(
-    page,
-    registryAsset,
-    submitted.taskRef,
-    ['completed'],
-    ['failed', 'cancelled', 'interrupted'],
-    45000,
-    executionPrefix
+    page, client, submitted.taskRef, ['completed'], ['failed', 'cancelled', 'interrupted'], 45000,
   ), canvasProjectId)
   const imageNodes = await readCanvasNodes(page, canvasProjectId)
   const imageResultId = completed.resultRefs[0].id.slice(`${canvasProjectId}:`.length)
@@ -361,27 +334,21 @@ async function setupCameraStageAssistantCapability(page, context, inspection = {
 
   await beginCameraStageTaskEventCapture(page)
   try {
-    const videoSubmitted = requireSubmittedTask(await executeCapability(page, registryAsset, {
+    const videoSubmitted = requireSubmittedTask(await executeCapability(client, {
       id: 'render_camera_stage_output',
-      version: 1,
       input: { projectRef, nodeRef, outputKind: 'video', resolutionPreset: '720p' },
-    }, `${executionPrefix}-render-video`), 'render_camera_stage_output')
+    }), 'render_camera_stage_output')
     const active = await waitForTaskStatus(
-      page,
-      registryAsset,
-      videoSubmitted.taskRef,
-      ['queued', 'running'],
-      ['completed', 'failed', 'cancelled', 'interrupted'],
-      8000,
-      executionPrefix
+      page, client, videoSubmitted.taskRef, ['queued', 'running'],
+      ['completed', 'failed', 'cancelled', 'interrupted'], 8000,
     )
     if (active.resultRefs.length !== 0) throw new Error('活动视频任务不应提前返回结果节点')
     const videoRequestId = await readActiveVideoRequestId(page, canvasProjectId)
-    requireCancellationRequested(await executeCapability(page, registryAsset, {
+    const baseline = await readCapabilityBaseline(client, videoSubmitted.taskRef)
+    requireCancellationRequested(await executeCapability(client, {
       id: 'cancel_camera_stage_render_task',
-      version: 1,
       input: { taskRef: videoSubmitted.taskRef },
-    }, `${executionPrefix}-cancel-video`))
+    }, [baseline]))
     await waitForCancelledTaskEvent(page, videoRequestId, 15000)
     await page.waitForFunction(async ({ projectId, nodeId }) => {
       const rows = await window.henjiNative.db.select(
@@ -395,12 +362,10 @@ async function setupCameraStageAssistantCapability(page, context, inspection = {
   } finally {
     await endCameraStageTaskEventCapture(page)
   }
-  if (typeof inspection.capture === 'function') await inspection.capture('assistant-capability-completed-cancelled')
 }
 
 module.exports = {
-  findRendererCapabilityRegistryAsset,
-  hasFormalCapabilityRegistryExports,
+  executeCapability,
   requireCancellationRequested,
   requireCompletedTask,
   requirePersistedCreatedProject,

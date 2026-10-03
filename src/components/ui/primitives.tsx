@@ -152,10 +152,13 @@ export const UiChipButton = forwardRef<HTMLButtonElement, UiChipButtonProps>(
     selectionRole = 'toggle',
     selectionAppearance = 'default',
     size = 'md',
+    on,
     ...props
   }, ref) => {
     const subtle = selectionRole === 'navigation' && selectionAppearance === 'subtle';
     const workspace = selectionRole === 'navigation' && selectionAppearance === 'workspace';
+    // 开关项只在不是当前工作区时表达开/关；是当前工作区时由 active 与 aria-current 表达。
+    const toggle = workspace && on !== undefined && !active;
     const navigationActiveClass = subtle
       ? `${UI_NAV_ITEM_ACTIVE_SUBTLE_CLASS} ${UI_NAV_INDICATOR_BOTTOM_SUBTLE_CLASS}`
       : workspace
@@ -169,7 +172,9 @@ export const UiChipButton = forwardRef<HTMLButtonElement, UiChipButtonProps>(
     const stateClass = selectionRole === 'navigation'
       ? active
         ? `border-transparent ${navigationActiveClass}`
-        : subtle
+        : toggle && on
+          ? `border-transparent ${UI_NAV_ITEM_ACTIVE_CLASS}`
+          : subtle
           ? 'border-transparent text-text3 hover:text-text2'
           : `border-transparent text-text2 hover:text-text1 ${UI_GLASS_ADAPTIVE_OPTION_CLASS}`
       : active
@@ -182,6 +187,7 @@ export const UiChipButton = forwardRef<HTMLButtonElement, UiChipButtonProps>(
         ref={ref}
         data-size={size}
         className={`relative inline-flex select-none items-center gap-1.5 border transition-colors ${layoutClass} ${UI_BUTTON_RESET_CLASS} ${UI_FIELD_DISABLED_CLASS} ${UI_ITEM_FOCUS_RING_CLASS} ${stateClass} ${className}`}
+        aria-pressed={toggle ? on : undefined}
         {...props}
       />
     );

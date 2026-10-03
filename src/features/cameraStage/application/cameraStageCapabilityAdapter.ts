@@ -2,6 +2,7 @@ import type { ApplicationTransactionResult, JsonValue } from '@/core/application
 import { cameraStageApplicationService, type CameraStageObjectUpdate } from '@/features/cameraStage/application/cameraStageApplicationService'
 import { verifyCameraStageScene, type CameraStageVerificationRequest } from '@/features/cameraStage/application/cameraStageVerification'
 import { createStoredCameraStageProject } from '@/features/cameraStage/projects/cameraStageProjectService'
+import { getCameraStageProjectRecord } from '@/commands/cameraStageProjects'
 import { useCameraStageSessionStore } from '@/features/cameraStage/store/cameraStageSessionStore'
 
 import { getHostScopeRevisions, notifyHostScopeChanged } from '@/features/application-control/hostContext/hostContext'
@@ -154,6 +155,8 @@ export async function createCameraStageProject(name: string): Promise<Record<str
     name: projectName,
     defaultCameraId,
     defaultStateKeyframeId,
+    // 与新建画布项目同一契约：按正式存储回读确认后才声明已验证；外部连接据此判定写入成功。
+    verification: await verifyCreatedCameraStageProject(projectId, projectName, defaultCameraId, defaultStateKeyframeId),
     resultRefs: [
       { kind: 'camera_stage.project', id: projectId },
       { kind: 'camera_stage.camera', id: `${projectId}:${defaultCameraId}` },
@@ -163,6 +166,35 @@ export async function createCameraStageProject(name: string): Promise<Record<str
       },
     ],
     baseRevision: baseRevision(),
+  }
+}
+
+async function verifyCreatedCameraStageProject(
+  projectId: string,
+  name: string,
+  cameraId: string,
+  stateKeyframeId: string,
+): Promise<{ verified: boolean; condition: string; target: { kind: 'camera_stage.project'; id: string } }> {
+  const record = await getCameraStageProjectRecord(projectId)
+  let verified = false
+  if (record?.id === projectId && record.name === name) {
+    try {
+      const scene = JSON.parse(record.sceneJson) as {
+        objects?: Array<{ id?: string; type?: string }>
+        stateKeyframes?: Array<{ id?: string; time?: number; cameraId?: string }>
+      }
+      verified = Boolean(scene.objects?.some((object) => object.id === cameraId && object.type === 'camera'))
+        && Boolean(scene.stateKeyframes?.some((keyframe) => (
+          keyframe.id === stateKeyframeId && keyframe.time === 0 && keyframe.cameraId === cameraId
+        )))
+    } catch {
+      verified = false
+    }
+  }
+  return {
+    verified,
+    condition: '新建 3D 工程及其默认摄像机与 0 秒状态关键帧已从持久存储回读确认',
+    target: { kind: 'camera_stage.project', id: projectId },
   }
 }
 

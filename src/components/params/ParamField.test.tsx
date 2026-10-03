@@ -10,6 +10,11 @@ import type { DropdownParamDef, SwitchParamDef, TextParamDef } from '@/core/type
 import { DropdownInput } from './base/DropdownInput'
 import { SwitchInput } from './base/SwitchInput'
 import { TextInput } from './base/TextInput'
+import { FileUpload } from './upload/FileUpload'
+import { UI_FIELD_INLINE_ROW_CLASS } from '@/components/ui'
+import type { FileUploadParamDef } from '@/core/types'
+
+vi.mock('@/contexts/NotificationContext', () => ({ useNotification: () => ({ showNotification: vi.fn() }) }))
 
 beforeEach(async () => {
   await i18n.changeLanguage('zh-CN')
@@ -101,5 +106,31 @@ describe('参数控件的工具条排布（生成输入区底栏）', () => {
     fireEvent.click(trigger)
     expect(screen.getByText('浮层内容')).toBeTruthy()
     expect(panelLayout).toBe('form')
+  })
+})
+
+describe('文件上传在工具条排布中（3.7：声音样本）', () => {
+  const sampleParam: FileUploadParamDef = {
+    id: 'voice_sample',
+    type: 'file-upload',
+    order: 3,
+    name: { zh: '声音样本', en: 'Voice sample' },
+    required: true,
+    default: [],
+    accept: ['audio/wav'],
+  }
+
+  it('标签在左，已选文件条与上传按钮在同一行且与行同高', () => {
+    const view = render(inToolbar(<FileUpload param={sampleParam} value={['data:audio/wav;base64,AAAA']} onChange={() => undefined} />))
+    const root = view.container.firstElementChild as HTMLElement
+    expect(root.className).toBe(UI_FIELD_INLINE_ROW_CLASS)
+    expect(root.firstElementChild?.textContent).toContain('声音样本')
+    const chip = view.getByText('文件 1').parentElement as HTMLElement
+    expect(chip.className).toMatch(/(?:^|\s)h-8(?:\s|$)/)
+  })
+
+  it('表单排布保持标签在上', () => {
+    const view = render(<FileUpload param={sampleParam} value={[]} onChange={() => undefined} />)
+    expect((view.container.firstElementChild as HTMLElement).className).toContain('flex-col')
   })
 })

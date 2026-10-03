@@ -8,7 +8,7 @@ import { useAssetLibraryStore } from './store/assetLibraryStore'
 import { isAssetChildOverlayTarget } from './assetOverlayOwnership'
 
 const mocks = vi.hoisted(() => ({
-  query: vi.fn(), readCode: vi.fn(), touch: vi.fn(), libraries: vi.fn(), tags: vi.fn(), t: (key: string) => key,
+  query: vi.fn(), inspect: vi.fn(), readCode: vi.fn(), touch: vi.fn(), libraries: vi.fn(), tags: vi.fn(), t: (key: string) => key,
   settings: { assetCardSize: 160, assetThumbnailFit: 'cover', setAssetCardSize: vi.fn(), setAssetThumbnailFit: vi.fn() },
 }))
 vi.mock('@/hooks/useI18n', () => ({ useI18n: () => ({ t: mocks.t }) }))
@@ -26,7 +26,7 @@ vi.mock('@/commands/assetLibrary', () => ({
   queryAssets: mocks.query, listAssetLibraries: mocks.libraries, listAssetTags: mocks.tags, touchAsset: mocks.touch,
   addAssetToLibrary: vi.fn(), createAssetLibrary: vi.fn(), deleteAsset: vi.fn(), deleteAssetLibrary: vi.fn(),
   removeAssetFromLibrary: vi.fn(), renameAssetLibrary: vi.fn(), setAssetTags: vi.fn(), updateAsset: vi.fn(),
-  inspectAsset: vi.fn(), inspectAssetLibrary: vi.fn(), restoreAssetLibrary: vi.fn(),
+  inspectAsset: vi.fn(), inspectAssets: mocks.inspect, inspectAssetLibrary: vi.fn(), restoreAssetLibrary: vi.fn(),
 }))
 vi.mock('@/components/ui', async importOriginal => ({
   ...await importOriginal<typeof import('@/components/ui')>(),
@@ -125,5 +125,49 @@ describe('资产库命令带（界面重设计 3.3）', () => {
     expect(document.querySelectorAll('[data-variant="primary"]')).toHaveLength(0)
     fireEvent.click(screen.getByRole('button', { name: 'assetLibrary.batchDone' }))
     expect(useAssetLibraryStore.getState().batchMode).toBe(false)
+  })
+})
+
+describe('资产后台检查（3.7：视频封面）', () => {
+  const pendingVideo: AssetRecord = {
+    ...asset, id: 'video-1', mediaType: 'video', displayName: '测试彩条视频', filePath: 'C:/assets/bars.mp4',
+    displayUrl: 'henji-media://local/bars.mp4', mimeType: null, width: null, height: null, inspectionStatus: 'pending', contentIdentity: null,
+  }
+  const readyVideo: AssetRecord = {
+    ...pendingVideo, mimeType: 'video/mp4', width: 640, height: 360, durationSeconds: 2, inspectionStatus: 'ready',
+    thumbnailPath: 'C:/data/Thumbnails/bars.webp', thumbnailUrl: 'henji-media://local/bars.webp',
+  }
+
+  it('查询时仍在检查的视频，检查完成后原位换上封面与尺寸，不必重开面板', async () => {
+    mocks.query.mockResolvedValue({ items: [pendingVideo], total: 1, page: 1, pageSize: 30 })
+    let finish!: (value: AssetRecord[]) => void
+    mocks.inspect.mockReturnValue(new Promise((resolve) => { finish = resolve }))
+    render(<AssetLibrarySurface mode="floating" />)
+    await screen.findByText('测试彩条视频')
+    expect(mocks.inspect).toHaveBeenCalledWith(['video-1'])
+    expect(document.querySelector('[data-asset-id="video-1"] img')).toBeNull()
+    await act(async () => finish([readyVideo]))
+    await waitFor(() => expect(document.querySelector('[data-asset-id="video-1"] img')?.getAttribute('src')).toBe('henji-media://local/bars.webp'))
+    expect(screen.getByText('640×360')).toBeTruthy()
+  })
+
+  it('全部已就绪时不额外检查；检查完成前查询已换代则丢弃旧结果', async () => {
+    mocks.query.mockResolvedValueOnce({ items: [asset], total: 1, page: 1, pageSize: 30 })
+    const view = render(<AssetLibrarySurface mode="floating" />)
+    await screen.findByText('库中代码')
+    expect(mocks.inspect).not.toHaveBeenCalled()
+
+    let finishStale!: (value: AssetRecord[]) => void
+    mocks.inspect.mockReturnValueOnce(new Promise((resolve) => { finishStale = resolve }))
+    mocks.inspect.mockReturnValueOnce(new Promise(() => undefined))
+    mocks.query.mockResolvedValueOnce({ items: [pendingVideo], total: 1, page: 1, pageSize: 30 })
+    act(() => useAssetLibraryStore.setState({ keyword: '彩条' }))
+    await screen.findByText('测试彩条视频')
+    mocks.query.mockResolvedValueOnce({ items: [pendingVideo], total: 1, page: 1, pageSize: 30 })
+    act(() => useAssetLibraryStore.setState({ keyword: '彩条视频' }))
+    await waitFor(() => expect(mocks.inspect).toHaveBeenCalledTimes(2))
+    // 旧查询的检查结果迟到：当前查询的检查仍未完成，界面不能被旧结果改写
+    await act(async () => finishStale([readyVideo]))
+    expect(view.container.querySelector('[data-asset-id="video-1"] img')).toBeNull()
   })
 })

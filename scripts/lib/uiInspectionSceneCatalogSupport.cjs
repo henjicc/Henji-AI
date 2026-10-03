@@ -1,5 +1,6 @@
 const { createWindowStartupScene } = require('./uiInspectionSceneWindowStartup.cjs')
 const { createClipboardImageScene } = require('./uiInspectionSceneClipboardImage.cjs')
+const { createAssetsFloatingVideoCoverScene, createLogsWindowThemeScene } = require('./uiInspectionSceneAssetsAndLogsTheme.cjs')
 
 function createSupportScenes(context) {
   const {
@@ -13,6 +14,8 @@ function createSupportScenes(context) {
     createWindowStartupScene(),
     createClipboardImageScene(context),
     { id: 'assets-home', surface: '资产库', name: '资产库-首页', setup: setupAssets },
+    createAssetsFloatingVideoCoverScene(context),
+    createLogsWindowThemeScene(context),
     {
       id: 'assets-search-focus',
       surface: '资产库',

@@ -1,12 +1,8 @@
 const assert = require('node:assert/strict')
-const fsp = require('node:fs/promises')
-const os = require('node:os')
-const path = require('node:path')
 const test = require('node:test')
 
 const {
-  findRendererCapabilityRegistryAsset,
-  hasFormalCapabilityRegistryExports,
+  executeCapability,
   requireCancellationRequested,
   requireCompletedTask,
   requirePersistedCreatedProject,
@@ -18,50 +14,38 @@ const {
   createCameraStagePlaybackScenes,
 } = require('./uiInspectionSceneCatalogCameraStagePlayback.cjs')
 
-async function withAssets(files, callback) {
-  const rootDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'henji-registry-assets-'))
-  try {
-    await Promise.all(Object.entries(files).map(([name, source]) => (
-      fsp.writeFile(path.join(rootDir, name), source)
-    )))
-    await callback(rootDir)
-  } finally {
-    await fsp.rm(rootDir, { recursive: true, force: true })
+function fakeClient(responses) {
+  const calls = []
+  return {
+    calls,
+    callTool: async ({ name, arguments: args }) => {
+      calls.push({ name, args })
+      return { isError: false, structuredContent: responses[name] }
+    },
   }
 }
 
-test('只接受唯一同时导出执行与清单入口的正式 registry 构建模块', async () => {
-  await withAssets({
-    'registry-good.js': 'export { executeApplicationCapabilityResult,\n listRendererApplicationCapabilityIds };',
-    'registry-other.js': 'export const unrelated = true',
-    'registry-decoy.js': 'const executeApplicationCapabilityResult = 1; const listRendererApplicationCapabilityIds = 2; export { unrelated }',
-  }, async (rootDir) => {
-    assert.equal(await findRendererCapabilityRegistryAsset(rootDir), 'registry-good.js')
+test('能力经正式 MCP 入口调用：读取原样返回，写入带操作信封并投影回 { ok, data }', async () => {
+  const taskRef = { kind: 'camera_stage.render_task', id: 'task-1' }
+  const client = fakeClient({
+    get_camera_stage_render_task: { ok: true, data: { status: 'running', resultRefs: [] }, baselineId: 'b-1' },
+    cancel_camera_stage_render_task: { ok: true, executionState: 'completed',
+      result: { ok: true, data: { status: 'cancellation_requested', resultRefs: [] } } },
   })
+  const read = await executeCapability(client, { id: 'get_camera_stage_render_task', input: { taskRef } })
+  assert.equal(read.data.status, 'running')
+  assert.deepEqual(client.calls[0].args, { taskRef })
+  const cancelled = await executeCapability(client, { id: 'cancel_camera_stage_render_task', input: { taskRef } }, [read])
+  assert.equal(requireCancellationRequested(cancelled).status, 'cancellation_requested')
+  const envelope = client.calls[1].args
+  assert.match(envelope.operationId, /^[0-9a-f-]{36}$/)
+  assert.deepEqual(envelope.baselineIds, ['b-1'])
+  assert.deepEqual(envelope.taskRef, taskRef)
 })
 
-test('正式 registry 构建模块缺失或不唯一时明确拒绝', async () => {
-  await withAssets({ 'registry-empty.js': 'export const unrelated = true' }, async (rootDir) => {
-    await assert.rejects(findRendererCapabilityRegistryAsset(rootDir), /实际 0 个/)
-  })
-  await withAssets({
-    'registry-one.js': 'export { executeApplicationCapabilityResult, listRendererApplicationCapabilityIds }',
-    'registry-two.js': 'export { listRendererApplicationCapabilityIds, executeApplicationCapabilityResult }',
-  }, async (rootDir) => {
-    await assert.rejects(findRendererCapabilityRegistryAsset(rootDir), /实际 2 个/)
-  })
-})
-
-test('registry 定位要求两个入口出现在同一个正式 export 块', () => {
-  assert.equal(hasFormalCapabilityRegistryExports(
-    'const executeApplicationCapabilityResult = 1; export { listRendererApplicationCapabilityIds }'
-  ), false)
-  assert.equal(hasFormalCapabilityRegistryExports(
-    'export { executeApplicationCapabilityResult }; export { listRendererApplicationCapabilityIds }'
-  ), false)
-  assert.equal(hasFormalCapabilityRegistryExports(
-    'export { internal as executeApplicationCapabilityResult, listRendererApplicationCapabilityIds }'
-  ), true)
+test('MCP 调用失败不得被当成通过', async () => {
+  const client = { callTool: async () => ({ isError: true, structuredContent: { ok: false } }) }
+  await assert.rejects(executeCapability(client, { id: 'create_camera_stage_project', input: { name: 'x' } }), /调用失败/)
 })
 
 test('Camera Stage 正式目录注册助手后台输出能力场景', () => {

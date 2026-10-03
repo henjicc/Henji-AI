@@ -16,8 +16,9 @@ const FIELDS = {
   gpuSceneGeneration: ['[data-presentation-front-surface]', 'data-render-generation'],
 }
 
-function createDragPoints(box) {
-  const start = { x: Math.round(box.x + box.width * 0.35), y: Math.round(box.y + box.height * 0.35) }
+function createDragPoints(box, startRatio = { x: 0.35, y: 0.35 }) {
+  // 移动工具按下时会选中光标下最上层的可见图层；调用方须给出只落在目标图层上的起点比例。
+  const start = { x: Math.round(box.x + box.width * startRatio.x), y: Math.round(box.y + box.height * startRatio.y) }
   // 后半段反向移动，最后位置不是历史最大位置；旧帧或旧 transform 不得覆盖末次输入。
   const points = Array.from({ length: 100 }, (_, index) => {
     const step = index + 1
@@ -149,9 +150,9 @@ async function waitForVisibleFixtureColors(page, capture, expectedColors) {
   throw new Error(`GPU提交确认后五层实际像素仍未就绪：${failure?.message}`)
 }
 
-async function runContinuousGpuDrag({ page, app, editor, box }) {
+async function runContinuousGpuDrag({ page, app, editor, box, startRatio }) {
   if (!app) throw new Error('真实连续拖动需要正式 runner 的 Electron 实例')
-  const gesture = createDragPoints(box)
+  const gesture = createDragPoints(box, startRatio)
   const finalPoint = gesture.points.at(-1)
   const windowHandle = await app.browserWindow(page)
   const token = `__realityDrag${Date.now()}`

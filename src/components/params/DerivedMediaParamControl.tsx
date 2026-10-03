@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { Paintbrush } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
-import { UiButton } from '@/components/ui'
+import { UI_FIELD_INLINE_ROW_CLASS, UiButton, UiFieldLayoutContext, useUiFieldLayout } from '@/components/ui'
 import type { ImageUploadParamDef } from '@/core/types'
 import { getI18nText } from '@/core/types/I18nText'
 import {
@@ -60,6 +60,8 @@ export function DerivedMediaParamControl({
   onEditorDismiss,
 }: DerivedMediaParamControlProps): JSX.Element | null {
   const { i18n } = useTranslation()
+  // 工具条排布（生成底栏）：操作是一枚按钮，标签放左侧与其他参数同一行、按钮与行同高（32）。
+  const toolbar = useUiFieldLayout() === 'toolbar'
   const [internalEditorOpen, setInternalEditorOpen] = useState(false)
   const isEditorOpen = editorOpen ?? internalEditorOpen
   const values = normalizeMediaValue(value)
@@ -134,7 +136,7 @@ export function DerivedMediaParamControl({
       <UiButton
         type="button"
         variant="secondary"
-        size={compact ? 'sm' : 'lg'}
+        size={compact ? 'sm' : toolbar ? 'md' : 'lg'}
         disabled={disabled || !sourceImage}
         onMouseDown={compact ? (event) => event.stopPropagation() : undefined}
         onClick={() => setInternalEditorOpen(true)}
@@ -149,12 +151,14 @@ export function DerivedMediaParamControl({
   return (
     <>
       {renderTrigger ? (compact ? action : (
-        <div className="flex min-w-0 flex-col">
+        <div className={toolbar ? UI_FIELD_INLINE_ROW_CLASS : 'flex min-w-0 flex-col'}>
           <ParamLabel param={param} language={i18n.language} />
           {action}
         </div>
       )) : null}
       {sourceImage ? (
+        // 编辑器是弹窗：里面的字段不继承底栏的工具条排布。
+        <UiFieldLayoutContext.Provider value="form">
         <MaskEditorModal
           isOpen={isEditorOpen}
           sourceImage={sourceImage}
@@ -165,6 +169,7 @@ export function DerivedMediaParamControl({
           }}
           onConfirm={handleConfirm}
         />
+        </UiFieldLayoutContext.Provider>
       ) : null}
     </>
   )

@@ -95,6 +95,24 @@ describe('Ui primitives 选中态词汇表', () => {
     expect(rest.className).not.toMatch(/(?:^|\s)bg-|after:/);
   });
 
+  it('工作区导航里的开关项：开启为中性选中底且无指示条，只写 aria-pressed；是当前页时不再是开关', () => {
+    const view = render(
+      <>
+        <UiChipButton selectionRole="navigation" selectionAppearance="workspace" on>资产</UiChipButton>
+        <UiChipButton selectionRole="navigation" selectionAppearance="workspace" on={false}>素材</UiChipButton>
+        <UiChipButton active selectionRole="navigation" selectionAppearance="workspace" on={false}>当前</UiChipButton>
+      </>,
+    );
+    const pressed = view.getByRole('button', { name: '资产' });
+    expectClasses(pressed, UI_NAV_ITEM_ACTIVE_CLASS);
+    expect(pressed.className).not.toMatch(/after:/);
+    expect(pressed.getAttribute('aria-pressed')).toBe('true');
+    expect(view.getByRole('button', { name: '素材' }).getAttribute('aria-pressed')).toBe('false');
+    const current = view.getByRole('button', { name: '当前' });
+    expect(current.getAttribute('aria-pressed')).toBeNull();
+    expectClasses(current, UI_NAV_INDICATOR_BOTTOM_SHORT_CLASS);
+  });
+
   it('单选项中性抬升，多选（标签与 selection="multiple" 的选项）用强调描边与强调文字', () => {
     const view = render(
       <>

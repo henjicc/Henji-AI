@@ -479,3 +479,42 @@ test('场景覆盖应用界面和原生窗口且规则数固定为十一条', ()
   assert.equal(sceneIds.has('canvas-camera-stage-background-render-lifecycle'), true)
   assert.equal(sceneIds.has('assistant-memory'), true)
 })
+
+test('口播直接剪辑场景截图后离开编辑器并删除自建工程与临时音频', async () => {
+  const { createAudioEditInteractionScene } = require('./uiInspectionSceneAudioEditInteraction.cjs')
+  const scene = createAudioEditInteractionScene({ setupToolbox: async () => {}, clickNamedButton: async () => {} })
+  assert.equal(typeof scene.cleanup, 'function')
+  // 未执行 setup（或已清理）时 cleanup 不做任何事。
+  await scene.cleanup({ evaluate: () => { throw new Error('不应调用') } })
+  const deleted = []
+  const clicks = []
+  let tempDirectory = null
+  const button = (name) => ({
+    isVisible: async () => name === '返回工程列表',
+    click: async () => { clicks.push(name) },
+    waitFor: async () => {},
+  })
+  const page = {
+    getByRole: (_role, { name }) => {
+      if (name === '口播直接剪辑验收' || name instanceof RegExp) throw new Error('setup 在夹具建好后中止')
+      return button(name)
+    },
+    evaluate: async (callback, arg) => {
+      if (typeof arg === 'object' && arg?.sourcePath) {
+        tempDirectory = path.dirname(arg.sourcePath)
+        return 'audio-project-1'
+      }
+      if (arg === 'audio-project-1') { deleted.push(arg); return undefined }
+      if (!tempDirectory) return '1'
+      throw new Error('setup 在夹具建好后中止')
+    },
+  }
+  await assert.rejects(scene.setup(page), /夹具建好后中止/)
+  assert.ok(tempDirectory && fs.existsSync(tempDirectory))
+  await scene.cleanup(page)
+  assert.deepEqual(clicks, ['返回工程列表'])
+  assert.deepEqual(deleted, ['audio-project-1'])
+  assert.equal(fs.existsSync(tempDirectory), false)
+  await scene.cleanup(page)
+  assert.deepEqual(deleted, ['audio-project-1'], '重复清理不得再删')
+})

@@ -115,6 +115,8 @@ function attachUiInspectionCanvasGpuFiveLayer(context) {
         complexGraph: false,
         fixtureKind: 'synthetic-five-independent-resources',
         resourceCount: 5,
+        // 前景 220×180 位于 (560,260)，中心只被前景覆盖（其上没有其他图层）。
+        dragStartOutput: [670, 350],
         expectedColors: specs.map((spec) => spec[6].match(/\d+/g).map(Number)),
       }
     }, projectId)

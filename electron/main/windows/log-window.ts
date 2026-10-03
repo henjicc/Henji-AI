@@ -4,6 +4,7 @@ import { bindWindowStateEvents } from '../ipc/window'
 import { windowAppearance } from '../services/window-appearance'
 import { resolveAppIconPath } from '../app-icon'
 import { resolveInitialWindowPosition } from '../window-presentation'
+import { resolveSecondaryWindowLaunchQuery } from '../development-launch'
 
 let logWindowInstance: BrowserWindow | null = null
 
@@ -57,10 +58,14 @@ export function openLogWindow(): void {
     win.setMenuBarVisibility(false)
   }
 
+  // 日志壳与主窗口共用 useApplyRuntimeTheme；开发主题预设也要随查询参数带过去，否则只有主窗口换预设。
+  const query = { view: 'logs', ...resolveSecondaryWindowLaunchQuery() }
   if (!process.env['ELECTRON_RENDERER_URL']) {
-    void win.loadFile(path.join(__dirname, '../renderer/index.html'), { search: 'view=logs' })
+    void win.loadFile(path.join(__dirname, '../renderer/index.html'), { query })
   } else {
-    void win.loadURL(`${process.env['ELECTRON_RENDERER_URL']}?view=logs`)
+    const rendererUrl = new URL(process.env['ELECTRON_RENDERER_URL'])
+    Object.entries(query).forEach(([key, value]) => rendererUrl.searchParams.set(key, value))
+    void win.loadURL(rendererUrl.toString())
   }
 
   win.on('closed', () => {

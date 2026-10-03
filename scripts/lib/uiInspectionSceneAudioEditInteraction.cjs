@@ -4,11 +4,30 @@ const os = require('node:os')
 const path = require('node:path')
 
 function createAudioEditInteractionScene({ setupToolbox, clickNamedButton }) {
+  /** 本场景建的工程与临时音频；截图后由 cleanup 撤掉，后续场景（如工程列表空态）不受影响。 */
+  let fixture = null
   return {
     id: 'toolbox-audio-edit-interaction', surface: '工具箱', name: '口播剪辑-直接剪辑', writesUserData: true,
+    cleanup: async (page) => {
+      const current = fixture
+      fixture = null
+      if (!current) return
+      try {
+        // 先经正式入口离开编辑器（会保存），再删工程，避免删掉仍在编辑的工程。
+        const leave = page.getByRole('button', { name: '返回工程列表', exact: true })
+        if (await leave.isVisible().catch(() => false)) {
+          await leave.click()
+          await page.getByRole('button', { name: '返回工具', exact: true }).waitFor({ timeout: 10000 })
+        }
+        if (current.id) await page.evaluate((id) => window.henjiNative.audio.deleteEditProject(id), current.id)
+      } finally {
+        fs.rmSync(current.directory, { recursive: true, force: true })
+      }
+    },
     setup: async (page) => {
       const initialScale = await page.evaluate(() => document.documentElement.dataset.uiScale)
       const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'henji-audio-interaction-'))
+      fixture = { directory, id: null }
       const sourcePath = path.join(directory, '真实波形测试.wav')
       const rate = 48000
       const wav = Buffer.alloc(44 + rate * 16 * 2)
@@ -28,6 +47,7 @@ function createAudioEditInteractionScene({ setupToolbox, clickNamedButton }) {
         await window.henjiNative.audio.saveEditProject(project)
         return project.id
       }, { sourcePath, rate })
+      fixture.id = id
       await setupToolbox(page)
       await clickNamedButton(page, /^(口播剪辑)/)
       await page.evaluate(() => {
@@ -160,7 +180,7 @@ function createAudioEditInteractionScene({ setupToolbox, clickNamedButton }) {
       assert.ok(Number(await waveform.getAttribute('data-view-start')) > viewStart, '中键平移必须保留')
       await page.getByRole('button', { name: '显示全部', exact: true }).click()
       await waitPreview()
-      // The isolated profile owns this fixture; keep the project visible for the standard screenshot.
+      // 标准截图需要工程保持打开；工程与临时音频在截图后由 cleanup 删除。
     },
   }
 }

@@ -52,6 +52,27 @@ describe('应用标题栏（任务 3.1，设计稿 TitleBar）', () => {
     expect(onTabChange).toHaveBeenCalledWith('nodes')
   })
 
+  it('资产浮动面板是开关（aria-pressed），aria-current 只给当前工作区；资产完整工作区才是当前页', async () => {
+    const onAssetClick = vi.fn()
+    const view = await renderTitleBar({ activeTab: 'generation', assetView: 'floating', onAssetClick })
+    const assets = screen.getByRole('button', { name: '资产' })
+    expect(assets.getAttribute('aria-pressed')).toBe('true')
+    expect(assets.getAttribute('aria-current')).toBeNull()
+    expect(screen.getByRole('button', { name: '生成' }).getAttribute('aria-current')).toBe('page')
+    expect(view.container.querySelectorAll('[aria-current="page"]')).toHaveLength(1)
+    fireEvent.click(assets)
+    expect(onAssetClick).toHaveBeenCalledTimes(1)
+
+    view.rerender(<WindowControls activeTab="generation" assetView="closed" />)
+    expect(screen.getByRole('button', { name: '资产' }).getAttribute('aria-pressed')).toBe('false')
+
+    view.rerender(<WindowControls activeTab="assets" assetView="workspace" />)
+    const workspaceAssets = screen.getByRole('button', { name: '资产' })
+    expect(workspaceAssets.getAttribute('aria-current')).toBe('page')
+    expect(workspaceAssets.getAttribute('aria-pressed')).toBeNull()
+    expect(screen.getByRole('button', { name: '生成' }).getAttribute('aria-current')).toBeNull()
+  })
+
   it('右侧依次是助手、设置与三个窗口控件；最大化后按钮改为“还原”', async () => {
     windowApi.isMaximized.mockResolvedValueOnce(true)
     await renderTitleBar({ onAssistantClick: vi.fn(), assistantOpen: true })

@@ -5,7 +5,10 @@ const mocks = vi.hoisted(() => ({
   notifyHostScopeChanged: vi.fn(),
   configureDependencies: vi.fn(),
   setAppView: vi.fn(),
+  getRecord: vi.fn(),
 }))
+
+vi.mock('@/commands/cameraStageProjects', () => ({ getCameraStageProjectRecord: mocks.getRecord }))
 
 vi.mock('@/features/cameraStage/application/cameraStageApplicationService', () => ({
   cameraStageApplicationService: {},
@@ -39,6 +42,13 @@ describe('cameraStageCapabilityAdapter 后台创建工程', () => {
       defaultCameraId: 'camera-default',
       defaultStateKeyframeId: 'state-default',
     })
+    mocks.getRecord.mockResolvedValue({
+      id: 'project-created', name: '后台工程',
+      sceneJson: JSON.stringify({
+        objects: [{ id: 'camera-default', type: 'camera' }],
+        stateKeyframes: [{ id: 'state-default', time: 0, cameraId: 'camera-default' }],
+      }),
+    })
   })
 
   it('只落库并返回稳定引用，不切换当前 3D 编辑会话', async () => {
@@ -53,9 +63,20 @@ describe('cameraStageCapabilityAdapter 后台创建工程', () => {
         { kind: 'camera_stage.state_keyframe', id: 'project-created:state-default' },
       ],
       baseRevision: 7,
+      verification: { verified: true, target: { kind: 'camera_stage.project', id: 'project-created' } },
     })
     expect(mocks.createStoredProject).toHaveBeenCalledWith('后台工程')
     expect(mocks.setAppView).not.toHaveBeenCalled()
     expect(mocks.notifyHostScopeChanged).toHaveBeenCalledWith('toolbox')
+  })
+
+  it('持久存储回读不到工程或缺默认摄像机/0 秒关键帧时如实报告未验证（外部连接据此不判成功）', async () => {
+    mocks.getRecord.mockResolvedValueOnce(null)
+    await expect(createCameraStageProject('后台工程')).resolves.toMatchObject({ verification: { verified: false } })
+    mocks.getRecord.mockResolvedValueOnce({
+      id: 'project-created', name: '后台工程',
+      sceneJson: JSON.stringify({ objects: [{ id: 'camera-default', type: 'camera' }], stateKeyframes: [] }),
+    })
+    await expect(createCameraStageProject('后台工程')).resolves.toMatchObject({ verification: { verified: false } })
   })
 })

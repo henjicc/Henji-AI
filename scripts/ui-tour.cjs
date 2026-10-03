@@ -163,6 +163,17 @@ async function main() {
           failures.push({ name: scene.name, size: sizeLabel, message })
           console.error(`✗ ${sizeLabel} / ${scene.name}：${message}`)
         }
+        // 场景在同一份隔离资料里顺序运行；截图后由场景撤掉自己留下的夹具，
+        // 保证 --only 单跑与全量顺序跑看到的是同一份前置状态。
+        if (typeof scene.cleanup === 'function') {
+          try {
+            await scene.cleanup(app.page)
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error)
+            failures.push({ name: scene.name, size: sizeLabel, message: `场景清理失败：${message}` })
+            console.error(`✗ ${sizeLabel} / ${scene.name}：场景清理失败：${message}`)
+          }
+        }
         try {
           evidence[evidenceKey] = finalizeSceneEvidence(await collector.finish({ expectedLogEvents: scene.expectedLogEvents }), sceneError)
           evidence[evidenceKey].window = windowEvidence

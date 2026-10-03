@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { FolderPlus, GripVertical, LoaderCircle, Search, Settings2, X } from 'lucide-react'
 import { Dropdown, PanelTrigger, UI_FIELD_LABEL_CLASS, UI_GLASS_ADAPTIVE_DIVIDER_CLASS, UI_GLASS_ADAPTIVE_REGION_CLASS, UI_SEGMENTED_TRACK_CLASS, UI_TEXT_META_CLASS, UiButton, UiEmpty, UiError, UiIconButton, UiInput, UiOptionButton, UiPageHeader, UiRangeInput, UiSharedGlassHost } from '@/components/ui'
 import type { AssetLibraryRecord, AssetMediaType, AssetPage, AssetRecord } from '@/platform/contracts/assetLibrary'
-import { addAssetToLibrary, createAssetLibrary, deleteAsset, deleteAssetLibrary, listAssetLibraries, listAssetTags, queryAssets, removeAssetFromLibrary, renameAssetLibrary, setAssetTags, updateAsset } from '@/commands/assetLibrary'
+import { addAssetToLibrary, createAssetLibrary, deleteAsset, deleteAssetLibrary, inspectAssets, listAssetLibraries, listAssetTags, queryAssets, removeAssetFromLibrary, renameAssetLibrary, setAssetTags, updateAsset } from '@/commands/assetLibrary'
 import { ICON_MULTI_SELECT } from '@/core/theme/icons'
 import { createLogger } from '@/core/logging'
 import { useI18n } from '@/hooks/useI18n'
@@ -87,6 +87,23 @@ export const AssetLibrarySurface: React.FC<Props> = ({ mode, active = true, onCl
     setSelectedTag((current) => current && !nextTags.includes(current) ? null : current)
   }, [])
 
+  /**
+   * 新登记的资产在主进程后台检查（尺寸、时长、封面）；视频要跑探测与抽帧，查询时常仍是 pending。
+   * 列表没有变更推送，只靠这一次查询会让视频卡一直没有封面，直到重开面板。这里经正式检查入口
+   * 等这些条目（主进程会并入正在进行的检查，不重复执行）完成后原位替换；查询已换代就丢弃。
+   */
+  const settlePendingInspections = useCallback(async (items: readonly AssetRecord[], version: number): Promise<void> => {
+    const pendingIds = items.filter((asset) => asset.inspectionStatus === 'pending').map((asset) => asset.id)
+    if (pendingIds.length === 0) return
+    try {
+      const inspected = new Map((await inspectAssets(pendingIds)).map((asset) => [asset.id, asset]))
+      if (version !== queryVersionRef.current) return
+      setPage((current) => ({ ...current, items: current.items.map((asset) => inspected.get(asset.id) ?? asset) }))
+    } catch (cause) {
+      logger.warn('等待资产后台检查完成失败，列表保留检查前的状态', cause, { event: 'asset.ui.pending_inspection.failed', context: { count: pendingIds.length } })
+    }
+  }, [])
+
   const loadAssets = useCallback(async (pageNumber: number, replace: boolean): Promise<void> => {
     const version = replace ? ++queryVersionRef.current : queryVersionRef.current
     if (replace) {
@@ -109,6 +126,7 @@ export const AssetLibrarySurface: React.FC<Props> = ({ mode, active = true, onCl
       })
       if (version !== queryVersionRef.current) return
       setPage((current) => ({ ...result, items: replace ? result.items : [...current.items, ...result.items] }))
+      void settlePendingInspections(result.items, version)
     } catch (cause) {
       logger.error('资产查询失败', cause, { event: 'asset.ui.query.failed' })
       if (version === queryVersionRef.current) setError(isMissingAssetLibraryHandler(cause) ? t('assetLibrary.restartRequired') : cause instanceof Error ? cause.message : t('assetLibrary.error'))
@@ -119,7 +137,7 @@ export const AssetLibrarySurface: React.FC<Props> = ({ mode, active = true, onCl
         setLoadingMore(false)
       }
     }
-  }, [keyword, libraryId, mediaType, mode, selectedTag, sort, t])
+  }, [keyword, libraryId, mediaType, mode, selectedTag, settlePendingInspections, sort, t])
 
   useEffect(() => {
     void refreshLibraries().catch((cause) => {
