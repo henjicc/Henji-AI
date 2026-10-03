@@ -85,9 +85,12 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
     const stopAudio = (): void => audioScheduler.stop()
     const meterTimer = setInterval(() => { if (!stopped && meter) setLevels(instance.playing && instance.playbackDirection === 1 ? meter.read() : Array.from({ length: appliedDocument.channels }, () => ({ peak: 0, rms: 0 }))) }, 50)
     let lastPresentation = -Infinity
-    // A failure is retried once the sequence changes (relink, removal, undo) or the user moves the playhead.
+    // A failure is retried once the sequence changes (relink, removal, undo) or the user moves the playhead, and by
+    // itself after a growing pause (2s up to 10s), so a recovered decoder shows the picture again (task 3.1).
     let failedDocument: VideoEditComposition | undefined
     let failedFrame = -1
+    let failedRetryAt = 0
+    let failedRetryMs = 2000
     const recordPresentation = (target: number, result: Awaited<ReturnType<VideoEditRenderSession['present']>>, requestedAt: number, scrubbing: boolean, revision: number): boolean => {
       if (stopped || !listVideoEditInstances().includes(instance) || instance.activeSequenceId !== initialDocument.id || session.current !== renderer || canvas.current !== surface || requestedAt < lastPresentation) return false
       lastPresentation = requestedAt
@@ -97,7 +100,7 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
       surface.dataset.proxyPreparationMs = String(renderer.previewPreparationMs); surface.dataset.proxyBytes = String(renderer.previewBytes)
       surface.dataset.scrubbing = String(scrubbing); surface.dataset.presentedFrame = String(target)
       surface.dataset.presentedRevision = String(revision)
-      if (failedDocument === undefined) setRenderFailure(null)
+      if (failedDocument === undefined) { setRenderFailure(null); failedRetryMs = 2000 }
       return true
     }
     const unregisterCapture = registerVideoEditProgramCapture(instance, initialDocument.id, async (request, signal) => {
@@ -127,7 +130,7 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
         const document = getActiveVideoEditSequence(current)
         requestCommand = command; requestDocument = document
         if (failedDocument) {
-          if (failedDocument === document && failedFrame === current.frame) { timer = setTimeout(() => { void loop() }, 250); return }
+          if (failedDocument === document && failedFrame === current.frame && Date.now() < failedRetryAt) { timer = setTimeout(() => { void loop() }, 250); return }
           failedDocument = undefined
         }
         if (appliedDocument !== document) {
@@ -214,6 +217,7 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
         // Shown on the program monitor itself and cleared by the next presented frame.
         logger.warn('节目画面渲染失败', { event: 'video_edit.preview.render_failed', error, context: { projectId: instance.document.id, revision: requestDocument.revision, cause: error instanceof Error && error.cause instanceof Error ? error.cause.message : undefined } })
         failedDocument = requestDocument; failedFrame = instance.frame; lastFrame = -1; lastRequested = -1
+        failedRetryAt = Date.now() + failedRetryMs; failedRetryMs = Math.min(10_000, failedRetryMs * 2)
         setRenderFailure(error instanceof Error ? error.message : String(error))
         timer = setTimeout(() => { void loop() }, 250)
       }

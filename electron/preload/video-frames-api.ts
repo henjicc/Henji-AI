@@ -2,6 +2,7 @@ import { ipcRenderer, sharedTexture } from 'electron'
 import {
   VIDEO_FRAMES_PORT_MESSAGE_TYPE,
   VIDEO_FRAMES_SCHEDULE_EVENT_CHANNEL,
+  videoFrameErrorCode,
   type VideoFrameMeta,
   type VideoFramePortCall,
   type VideoFramePortResponseMessage,
@@ -165,7 +166,9 @@ export function createVideoFramesApi(nativeInvoke: NativeInvoke): HenjiVideoFram
       const { result, transfer } = transferable(call.method, await nativeInvoke(channel, payload))
       reply({ result }, transfer)
     } catch (error) {
-      reply({ error: error instanceof Error ? error.message : String(error) })
+      // The error code (3.1) tells the consumer a service failure from a file failure or an exceeded budget.
+      const code = error instanceof Error ? videoFrameErrorCode(error.name) : undefined
+      reply({ error: error instanceof Error ? error.message : String(error), ...(code ? { code } : {}) })
     }
   }
 

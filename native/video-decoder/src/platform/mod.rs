@@ -70,6 +70,8 @@ pub trait VideoPlatform: Send + Sync {
     fn close_client_handle(&self, handle: u64) -> Result<(), String>;
     /// 本进程显存占用与预算（字节）。
     fn local_memory(&self) -> Option<(u64, u64)>;
+    /// 显卡设备已丢失时返回原因（驱动重置、设备移除）。设备无法在本进程内恢复：服务应退出，由主进程重启（3.1）。
+    fn device_lost(&self) -> Option<String>;
     /// 硬件解码设备；不可用时返回原因（会话改用软解）。
     fn hardware_device(&self) -> Result<HardwareDevice, String>;
     /// 设备是否有某个硬件解码配置（名字见握手 `videoDecoderProfiles.named`）。
@@ -101,6 +103,27 @@ pub fn process_usage() -> (f64, u32) {
     #[cfg(not(windows))]
     {
         (0.0, 0)
+    }
+}
+
+/// 本进程工作集与私有提交（字节；不支持的平台为 0）。
+pub fn process_memory() -> (u64, u64) {
+    #[cfg(windows)]
+    {
+        windows::process_memory()
+    }
+    #[cfg(not(windows))]
+    {
+        (0, 0)
+    }
+}
+
+/// 显卡设备丢失后服务无法在进程内恢复（设备、硬解上下文与共享纹理池都已失效）：记录后退出，主进程按崩溃处理并
+/// 重启，新进程建新设备（3.1）。退出码 3 便于主进程日志区分。
+pub fn exit_if_device_lost(platform: &dyn VideoPlatform, context: &str) {
+    if let Some(reason) = platform.device_lost() {
+        crate::logging::error("gpu.device_removed", "显卡设备已丢失，服务退出等待重启", serde_json::json!({ "reason": reason, "context": context }));
+        std::process::exit(3);
     }
 }
 

@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events'
 import { PassThrough } from 'node:stream'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { MainLoggerMeta } from '../logging/main-logger'
 import { VideoDecoderService, type VideoDecoderChildProcess, type VideoDecoderServiceOptions } from './client'
 import { encodeVideoDecoderFrame, VIDEO_DECODER_PROTOCOL_VERSION, VideoDecoderError, VideoDecoderFrameReader, type VideoDecoderEvent, type VideoDecoderHello } from './protocol'
@@ -117,6 +117,8 @@ function createHarness(handlers: Handler[] | Handler, options: Partial<VideoDeco
       return child as unknown as VideoDecoderChildProcess
     },
     restart: { maxRestarts: 3, windowMs: 60_000, backoffMs: [5, 5, 5] },
+    // Heartbeats only where a test asks for them (timing-independent elsewhere).
+    heartbeatIntervalMs: 0,
     ...options,
   })
   const events = () => logs.map((entry) => entry.meta?.event)
@@ -176,6 +178,45 @@ describe('VideoDecoderService', () => {
     const results = await Promise.all(['D:\\1.mp4', 'D:\\2.mov', 'D:\\3.mxf'].map((file) => service.probe(file)))
     expect(results.map((result) => result.path)).toEqual(['D:\\1.mp4', 'D:\\2.mov', 'D:\\3.mxf'])
     expect(children).toHaveLength(1)
+  })
+
+  it('心跳：主循环不再回应时（连续未回应达到次数）判定卡死，结束进程并按崩溃重启，在途请求立即失败；回应正常时不打扰（3.1）', async () => {
+    let hung = false
+    const { service, children, logs, events } = createHarness([
+      standardHandler({ ping: (message, child) => { if (!hung) child.reply(message.id, { pong: true }) }, probe: (message, child) => { if (!hung) child.reply(message.id, PROBE_RESULT) } }),
+      standardHandler({ ping: (message, child) => child.reply(message.id, { pong: true }) }),
+    ], { heartbeatIntervalMs: 10, heartbeatTimeoutMs: 15, heartbeatMisses: 2 })
+    await service.ensureStarted()
+    await waitFor(() => children[0].received.filter((message) => message.type === 'ping').length >= 3)
+    expect(children[0].exited).toBe(false)
+    expect(logs.filter((entry) => entry.meta?.event === 'video_decoder.request.completed' && (entry.meta?.context as { type?: string })?.type === 'ping')).toEqual([])
+    hung = true
+    const inflight = service.probe('D:\\a.mov')
+    await expectCode(inflight, 'PROCESS_EXITED')
+    expect(events()).toEqual(expect.arrayContaining(['video_decoder.service.heartbeat_missed', 'video_decoder.service.hung', 'video_decoder.service.exited', 'video_decoder.service.restart_scheduled']))
+    expect(logs.find((entry) => entry.meta?.event === 'video_decoder.service.exited')?.meta?.context).toMatchObject({ reason: 'hung' })
+    await waitFor(() => service.state === 'ready' && children.length === 2)
+    await waitFor(() => children[1].received.filter((message) => message.type === 'ping').length >= 3)
+    expect(children[1].exited).toBe(false)
+    await service.shutdown()
+  })
+
+  it('握手携带诊断用的资源上限覆盖（每次启动重新读取）；交互请求按类型默认限时（3.1）', async () => {
+    let budget: number | undefined = 600 * 1024 * 1024
+    const { service, children } = createHarness([standardHandler({ frame_at: () => undefined }), standardHandler()], { limits: () => (budget ? { vramBytes: budget } : undefined) })
+    await service.ensureStarted()
+    expect(children[0].received.find((message) => message.type === 'hello')).toMatchObject({ limits: { vramBytes: 600 * 1024 * 1024 } })
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      const pending = service.frameAt('vf-1', 1, 't1')
+      const outcome = pending.then(() => 'resolved', (error: VideoDecoderError) => error.code)
+      await vi.advanceTimersByTimeAsync(7_999); expect(await Promise.race([outcome, Promise.resolve('pending')])).toBe('pending')
+      await vi.advanceTimersByTimeAsync(2); expect(await outcome).toBe('TIMEOUT')
+    } finally { vi.useRealTimers() }
+    budget = undefined
+    children[0].exit(1)
+    await waitFor(() => service.state === 'ready' && children.length === 2)
+    expect(children[1].received.find((message) => message.type === 'hello')).not.toHaveProperty('limits')
   })
 
   it('times out a request, cancels it natively, ignores the late response and stays ready', async () => {

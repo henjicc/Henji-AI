@@ -320,6 +320,7 @@ export class VideoFrameBridge {
       rotationDegrees: started.rotationDegrees,
       purpose: started.purpose,
       color: started.color,
+      ...(typeof started.memoryBytes === 'number' ? { memoryBytes: started.memoryBytes } : {}),
     }
   }
 
@@ -340,10 +341,14 @@ export class VideoFrameBridge {
     return (await this.options.service.cancelSchedule(streamId, scheduleId)).cancelled
   }
 
+  /**
+   * A session that is gone (closed, ended by an import failure, or lost with an exited service) answers `SESSION_GONE`:
+   * the consumer reopens it instead of treating the file as unreadable (3.1).
+   */
   private ownedDecoder(streamId: string, targetId: number): BridgeStream {
     const stream = this.streams.get(streamId)
-    if (!stream || stream.target.id !== targetId || stream.kind !== 'decoder') throw new Error('解码会话不存在或不属于当前窗口')
-    if (stream.state !== 'open') throw new Error('解码会话已结束')
+    if (!stream || stream.target.id !== targetId || stream.kind !== 'decoder') throw new VideoDecoderError('SESSION_GONE', '解码会话不存在或不属于当前窗口')
+    if (stream.state !== 'open') throw new VideoDecoderError('SESSION_GONE', '解码会话已结束')
     return stream
   }
 
@@ -362,9 +367,12 @@ export class VideoFrameBridge {
 
   /** 两种流共用的打开流程：分配流号、登记首帧缓冲、编码句柄、窗口失效清理。 */
   private async openStream(target: VideoFrameTarget, kind: BridgeStream['kind'], route: string, context: Record<string, unknown>, start: (streamId: string) => Promise<VideoDecoderStreamStarted>): Promise<{ stream: BridgeStream; info: VideoDecoderStreamStarted }> {
-    if (target.isDestroyed()) throw new Error('目标窗口已关闭')
+    if (target.isDestroyed()) throw new VideoDecoderError('TARGET_GONE', '目标窗口已关闭')
     const owned = [...this.streams.values()].filter((stream) => stream.target.id === target.id).length
-    if (owned >= this.maxStreamsPerTarget) throw new Error(`同一窗口最多 ${this.maxStreamsPerTarget} 路帧流`)
+    if (owned >= this.maxStreamsPerTarget) {
+      this.options.logger.warn('窗口帧流数达到上限', { event: 'video_frames.budget.window_limit', context: { targetId: target.id, limit: this.maxStreamsPerTarget } })
+      throw new VideoDecoderError('BUDGET_EXCEEDED', `同一窗口最多 ${this.maxStreamsPerTarget} 路帧流`)
+    }
     const streamId = `vf-${this.nextStreamId++}`
     const startedAt = this.now()
     const label = kind === 'test' ? '测试帧流' : '解码会话'
@@ -390,7 +398,7 @@ export class VideoFrameBridge {
     }
     if (target.isDestroyed()) {
       void this.options.service.stopStream(streamId).catch(() => undefined)
-      throw new Error('目标窗口已关闭')
+      throw new VideoDecoderError('TARGET_GONE', '目标窗口已关闭')
     }
     const stream: BridgeStream = {
       id: streamId,
@@ -540,6 +548,24 @@ export class VideoFrameBridge {
     void this.closeStream(stream.id, `native_${event.reason}`)
   }
 
+  /**
+   * A frame that cannot reach the renderer (import or send failed) would leave its consumer waiting for a picture that
+   * never comes. End the whole stream instead (3.1): the consumer is told at once (`ended` with the code), reopens the
+   * session or falls back, and a persistent failure is not retried frame by frame.
+   */
+  private failStream(stream: BridgeStream, code: 'IMPORT_FAILED' | 'SEND_FAILED', error: unknown): void {
+    if (stream.state !== 'open') return
+    stream.state = 'ended'
+    const message = code === 'IMPORT_FAILED' ? '共享纹理导入失败' : '共享纹理送达渲染进程失败'
+    this.options.logger.warn(code === 'IMPORT_FAILED' ? '导入共享纹理失败，结束帧流' : '发送共享纹理失败，结束帧流', {
+      event: code === 'IMPORT_FAILED' ? 'video_frames.frame.import_failed' : 'video_frames.frame.send_failed',
+      error,
+      context: { streamId: stream.id, importFailures: stream.importFailures, sendFailures: stream.sendFailures, delivered: stream.delivered },
+    })
+    this.notifyEnded(stream, 'error', message, code)
+    void this.closeStream(stream.id, code === 'IMPORT_FAILED' ? 'import_failed' : 'send_failed')
+  }
+
   private handleFrame(event: VideoDecoderFrameEvent): void {
     const stream = this.streams.get(event.streamId)
     if (!stream || stream.state !== 'open') {
@@ -574,10 +600,11 @@ export class VideoFrameBridge {
       })
     } catch (error) {
       stream.importFailures += 1
+      this.options.service.notify({ type: 'release_frame', streamId: stream.id, slot: event.slot })
+      if (stream.kind === 'decoder') { this.failStream(stream, 'IMPORT_FAILED', error); return }
       if (stream.importFailures === 1 || stream.importFailures % 100 === 0) {
         this.options.logger.warn('导入共享纹理失败', { event: 'video_frames.frame.import_failed', error, context: { streamId: stream.id, slot: event.slot, failures: stream.importFailures } })
       }
-      this.options.service.notify({ type: 'release_frame', streamId: stream.id, slot: event.slot })
       return
     }
     this.unreleasedImports += 1
@@ -610,6 +637,9 @@ export class VideoFrameBridge {
       },
       (error: unknown) => {
         stream.sendFailures += 1
+        // A page that navigated or closed loses its streams through `onGone`; a live page that did not get the frame
+        // (send timeout) must not keep waiting for it.
+        if (stream.kind === 'decoder' && !stream.target.isDestroyed()) { this.failStream(stream, 'SEND_FAILED', error); return }
         if (stream.sendFailures === 1 || stream.sendFailures % 100 === 0) {
           this.options.logger.warn('发送共享纹理到渲染进程失败', { event: 'video_frames.frame.send_failed', error, context: { streamId: stream.id, slot: event.slot, failures: stream.sendFailures } })
         }
@@ -635,7 +665,7 @@ export class VideoFrameBridge {
         stream.state = 'closing'
         stream.stopGone()
         for (const slot of stream.info.slots) this.orphanHandles.add(slot.handle)
-        this.notifyEnded(stream, 'service_exited', '原生视频解码服务异常退出')
+        this.notifyEnded(stream, 'service_exited', '原生视频解码服务异常退出', 'PROCESS_EXITED')
       }
       if (this.orphanHandles.size > 0) {
         this.options.logger.warn('原生服务退出，帧流失效', { event: 'video_frames.service.exited', context: { pid: event.pid, orphanHandles: this.orphanHandles.size } })
@@ -655,9 +685,9 @@ export class VideoFrameBridge {
     )
   }
 
-  private notifyEnded(stream: BridgeStream, reason: VideoFrameStreamEndedPayload['reason'], message: string | null): void {
+  private notifyEnded(stream: BridgeStream, reason: VideoFrameStreamEndedPayload['reason'], message: string | null, code?: string): void {
     if (stream.target.isDestroyed()) return
-    const payload: VideoFrameStreamEndedPayload = { streamId: stream.id, route: stream.route, reason, message }
+    const payload: VideoFrameStreamEndedPayload = { streamId: stream.id, route: stream.route, reason, message, ...(code ? { code } : {}) }
     stream.target.send(VIDEO_FRAMES_STREAM_ENDED_CHANNEL, payload)
   }
 

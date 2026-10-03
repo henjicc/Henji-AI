@@ -163,6 +163,17 @@ pub fn upload(device: &ID3D11Device, context: &ID3D11DeviceContext, format: Shar
     Ok(texture)
 }
 
+/// 本进程工作集与私有提交（字节），用于长时间资源曲线（3.1）。
+pub fn process_memory() -> (u64, u64) {
+    use windows::Win32::System::ProcessStatus::{GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS, PROCESS_MEMORY_COUNTERS_EX};
+    let mut counters = PROCESS_MEMORY_COUNTERS_EX { cb: std::mem::size_of::<PROCESS_MEMORY_COUNTERS_EX>() as u32, ..Default::default() };
+    let read = unsafe { GetProcessMemoryInfo(GetCurrentProcess(), &mut counters as *mut PROCESS_MEMORY_COUNTERS_EX as *mut PROCESS_MEMORY_COUNTERS, counters.cb) };
+    if read.is_err() {
+        return (0, 0);
+    }
+    (counters.WorkingSetSize as u64, counters.PrivateUsage as u64)
+}
+
 /// 本进程累计 CPU 时间（毫秒，内核 + 用户）与句柄数，用于资源回收验收。
 pub fn process_usage() -> (f64, u32) {
     let (mut creation, mut exit, mut kernel, mut user) = (FILETIME::default(), FILETIME::default(), FILETIME::default(), FILETIME::default());

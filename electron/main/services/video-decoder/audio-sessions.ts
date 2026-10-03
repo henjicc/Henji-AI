@@ -94,9 +94,12 @@ export class VideoAudioSessions {
   }
 
   async open(target: VideoFrameTarget, request: VideoAudioOpenRequest): Promise<VideoAudioSessionInfo> {
-    if (target.isDestroyed()) throw new Error('目标窗口已关闭')
+    if (target.isDestroyed()) throw new VideoDecoderError('TARGET_GONE', '目标窗口已关闭')
     const owned = [...this.sessions.values()].filter((session) => session.target.id === target.id).length
-    if (owned >= this.maxSessionsPerTarget) throw new Error(`同一窗口最多 ${this.maxSessionsPerTarget} 路声音会话`)
+    if (owned >= this.maxSessionsPerTarget) {
+      this.options.logger.warn('窗口声音会话数达到上限', { event: 'video_audio.budget.window_limit', context: { targetId: target.id, limit: this.maxSessionsPerTarget } })
+      throw new VideoDecoderError('BUDGET_EXCEEDED', `同一窗口最多 ${this.maxSessionsPerTarget} 路声音会话`)
+    }
     const audioId = `va-${this.nextId++}`
     const { route, ...rest } = request
     let opened: Awaited<ReturnType<VideoAudioSessionService['openAudio']>>
@@ -109,7 +112,7 @@ export class VideoAudioSessions {
     if (!opened.found) return { found: false, audioStream: opened.audioStream }
     if (target.isDestroyed()) {
       void this.options.service.closeAudio(audioId).catch(() => undefined)
-      throw new Error('目标窗口已关闭')
+      throw new VideoDecoderError('TARGET_GONE', '目标窗口已关闭')
     }
     this.sessions.set(audioId, { id: audioId, target, route, channels: opened.channels })
     if (!this.watched.has(target.id)) this.watched.set(target.id, target.onGone((reason) => void this.closeTarget(target.id, reason)))
@@ -123,7 +126,8 @@ export class VideoAudioSessions {
 
   private owned(audioId: string, targetId: number): AudioSession {
     const session = this.sessions.get(audioId)
-    if (!session || session.target.id !== targetId) throw new Error('声音会话不存在或不属于当前窗口')
+    // Gone with an exited service, or never this window's: the consumer reopens the session (3.1).
+    if (!session || session.target.id !== targetId) throw new VideoDecoderError('SESSION_GONE', '声音会话不存在或不属于当前窗口')
     return session
   }
 

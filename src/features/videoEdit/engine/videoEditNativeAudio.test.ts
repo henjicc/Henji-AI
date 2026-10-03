@@ -1,6 +1,7 @@
 import { expect, it, vi } from 'vitest'
 import { createVideoEditNativeClipAudio, openVideoEditNativePcm, videoEditPcmReadRange, type VideoEditNativeSoundChannel, type VideoEditPcmSession } from './videoEditNativeAudio'
 import type { VideoEditAudioChunk } from './videoEditFrameSource'
+import { VideoEditNativeCallError } from './videoEditNativeFailure'
 
 /** A fake native stream: sound only in [startFrame, endFrame); channel c of sample n is c + n / 1e6. */
 function fakeSession(sampleRate: number, channels: number, startFrame: number, endFrame: number): VideoEditPcmSession & { reads: Array<[number, number]>; closed: number } {
@@ -153,7 +154,12 @@ it('端口声音会话：按序列采样率打开，读出的缓冲按声道切�
     call: vi.fn(async (method: string, params: unknown) => {
       calls.push([method, params])
       if (method === 'openAudio') return (params as { path: string }).path.includes('silent') ? { found: false, audioStream: 0 } : { found: true, audioId: 'va-1', route: 'r', audioStream: 0, streamIndex: 1, codec: 'pcm_s24le', decoderName: 'pcm_s24le', sampleRate: 48000, sourceSampleRate: 96000, channels: 2, channelLayout: 'stereo', resampler: 'soxr', startSeconds: 0, endSeconds: 1 }
-      if (method === 'readAudio') { const { frames } = params as { frames: number }; if (frames === 1) throw new Error('原生视频解码服务异常退出'); return { audioId: 'va-1', startFrame: -1, frames, channels: 2, data: pcm.buffer.slice(0), seeked: false, decodeMs: 0 } }
+      if (method === 'readAudio') {
+        const { frames } = params as { frames: number }
+        if (frames === 1) throw new VideoEditNativeCallError('原生视频解码服务异常退出', 'PROCESS_EXITED')
+        if (frames === 4) throw new VideoEditNativeCallError('读取失败', 'DECODE_FAILED')
+        return { audioId: 'va-1', startFrame: -1, frames, channels: 2, data: pcm.buffer.slice(0), seeked: false, decodeMs: 0 }
+      }
       return true
     }),
   } as unknown as VideoEditNativeSoundChannel
@@ -163,10 +169,12 @@ it('端口声音会话：按序列采样率打开，读出的缓冲按声道切�
   expect(session.sampleRate).toBe(48000); expect(session.channels).toBe(2)
   const planes = await session.read(-1, 3)
   expect(planes.map(plane => [...plane])).toEqual([[1, 2, 3], [-1, -2, -3]])
-  await expect(session.read(0, 1)).rejects.toThrow('素材「A」的声音读取失败')
+  // A session lost with the service is a retryable service failure (task 3.1); a decoding failure names the file.
+  await expect(session.read(0, 1)).rejects.toMatchObject({ kind: 'service', message: expect.stringContaining('素材「A」的解码暂时中断') })
+  await expect(session.read(0, 4)).rejects.toMatchObject({ kind: 'file', message: expect.stringContaining('素材「A」的声音读取失败') })
   await expect(session.read(0, 2)).rejects.toThrow('原生声音数据不完整。')
   session.close(); session.close()
   expect(calls.filter(([method]) => method === 'closeAudio')).toEqual([['closeAudio', { audioId: 'va-1' }]])
-  const failing = { call: vi.fn(async () => { throw new Error('素材所在目录尚未授权读取') }) } as unknown as VideoEditNativeSoundChannel
-  await expect(openVideoEditNativePcm(failing, 'D:/b.mxf', 'B', {})).rejects.toThrow('B')
+  const failing = { call: vi.fn(async () => { throw new VideoEditNativeCallError('素材所在目录尚未授权读取', 'UNAUTHORIZED') }) } as unknown as VideoEditNativeSoundChannel
+  await expect(openVideoEditNativePcm(failing, 'D:/b.mxf', 'B', {})).rejects.toMatchObject({ kind: 'file', message: expect.stringContaining('B') })
 })

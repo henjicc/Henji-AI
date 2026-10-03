@@ -32,3 +32,20 @@ export function resolveVideoDecoderExecutable(context: VideoDecoderPathContext):
   const exists = context.exists ?? fs.existsSync
   return videoDecoderExecutableCandidates(context).find((candidate) => exists(candidate)) ?? null
 }
+
+/**
+ * 开发诊断：`HENJI_VIDEO_DECODER_EXECUTABLE` 指定服务可执行文件，文件不存在时按“服务缺失”处理（`path: null`）。
+ * 安装包不读取（不能让环境变量换掉随包服务）。未设置时返回 undefined，按正常路径查找。
+ */
+export function videoDecoderExecutableOverride(isPackaged: boolean, env: NodeJS.ProcessEnv, exists: (candidate: string) => boolean = fs.existsSync): { path: string | null } | undefined {
+  const value = env.HENJI_VIDEO_DECODER_EXECUTABLE?.trim()
+  if (isPackaged || !value) return undefined
+  return { path: path.isAbsolute(value) && exists(value) ? value : null }
+}
+
+/** 开发诊断：`HENJI_VIDEO_DECODER_VRAM_BUDGET_MB` 缩小解码显存预算。安装包不读取；无效值忽略。 */
+export function videoDecoderDiagnosticLimits(isPackaged: boolean, env: NodeJS.ProcessEnv): { vramBytes: number } | undefined {
+  const value = Number(env.HENJI_VIDEO_DECODER_VRAM_BUDGET_MB)
+  if (isPackaged || !Number.isInteger(value) || value < 1 || value > 1_048_576) return undefined
+  return { vramBytes: value * 1024 * 1024 }
+}

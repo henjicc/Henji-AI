@@ -122,7 +122,8 @@ describe('videoFrames preload', () => {
 
   it('answers worker session requests on the same port; sessions opened there always belong to that route', async () => {
     const invoke = vi.fn(async (channel: string, payload?: unknown) => {
-      if (channel === 'videoFrames:frameAt') throw new Error('解码会话不存在或不属于当前窗口')
+      // Main-process decoder errors arrive named after their code (registerIpcHandler keeps name and message, 3.1).
+      if (channel === 'videoFrames:frameAt') throw Object.assign(new Error('解码会话不存在或不属于当前窗口'), { name: 'VideoDecoderError:SESSION_GONE' })
       return { channel, payload }
     })
     const { api } = await create(invoke)
@@ -139,7 +140,7 @@ describe('videoFrames preload', () => {
     expect(invoke).toHaveBeenCalledWith('videoFrames:closeStream', { streamId: 'vf-1' })
     expect(invoke.mock.calls.map(([channel]) => channel)).not.toContain('videoFrames:stats')
     expect(replies.find((reply) => reply.id === 7)).toEqual({ type: 'response', id: 7, result: { channel: 'videoFrames:openDecoder', payload: { route, path: 'D:/a.mov', purpose: 'playback' } } })
-    expect(replies.find((reply) => reply.id === 8)).toEqual({ type: 'response', id: 8, error: '解码会话不存在或不属于当前窗口' })
+    expect(replies.find((reply) => reply.id === 8)).toEqual({ type: 'response', id: 8, error: '解码会话不存在或不属于当前窗口', code: 'SESSION_GONE' })
     expect(replies.find((reply) => reply.id === 9)).toEqual({ type: 'response', id: 9, error: '未知的帧通道请求' })
   })
 

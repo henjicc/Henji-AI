@@ -221,6 +221,35 @@ describe('VideoFrameBridge', () => {
     expect((await bridge.stats()).streams[0].importFailures).toBe(1)
   })
 
+  it('解码会话的帧导入或送达失败时结束整条流并带错误码通知页面（消费方随即重开或回退，不再逐帧等待，3.1）', async () => {
+    for (const failure of ['IMPORT_FAILED', 'SEND_FAILED'] as const) {
+      const native = createService()
+      const shared = createSharedTexture(failure === 'SEND_FAILED' ? async () => { throw new Error('transfer shared texture timed out after 1000ms') } : undefined)
+      if (failure === 'IMPORT_FAILED') shared.api.importSharedTexture = () => { throw new Error('Unable to duplicate handle.') }
+      const { logger, entries } = createLogger()
+      const { target, sent } = createTarget()
+      const bridge = new VideoFrameBridge({ service: native.service, sharedTexture: shared.api, logger, overdueCheckIntervalMs: 0 })
+      await bridge.openDecoder(target, { route: 'vf-route-1', path: 'D:\\a.mov', purpose: 'seek' })
+      native.emit({ event: 'frame', streamId: 'vf-1', slot: 0, frameIndex: 0, timestampUs: 0, ptsUs: 0, request: { kind: 'frame_at', id: 't1' } })
+      await flush()
+      expect(sent.find((entry) => entry.channel === VIDEO_FRAMES_STREAM_ENDED_CHANNEL)?.payload).toMatchObject({ streamId: 'vf-1', route: 'vf-route-1', reason: 'error', code: failure })
+      expect(native.stopped).toEqual(['vf-1'])
+      expect(entries.find((entry) => entry.event === (failure === 'IMPORT_FAILED' ? 'video_frames.frame.import_failed' : 'video_frames.frame.send_failed'))?.level).toBe('warn')
+      // The stream is gone: a later request on it answers SESSION_GONE so the consumer reopens instead of reporting the file.
+      await expect(bridge.frameAt(target.id, { streamId: 'vf-1', time: 0, ticket: 't2' })).rejects.toMatchObject({ code: 'SESSION_GONE', name: 'VideoDecoderError:SESSION_GONE' })
+    }
+  })
+
+  it('窗口帧流数达到上限时以超出预算拒绝（错误码 BUDGET_EXCEEDED，记日志）', async () => {
+    const native = createService()
+    const { logger, entries } = createLogger()
+    const bridge = new VideoFrameBridge({ service: native.service, sharedTexture: createSharedTexture().api, logger, overdueCheckIntervalMs: 0, maxStreamsPerTarget: 1 })
+    const { target } = createTarget()
+    await bridge.openDecoder(target, { route: 'vf-route-1', path: 'D:\\a.mov', purpose: 'seek' })
+    await expect(bridge.openDecoder(target, { route: 'vf-route-1', path: 'D:\\b.mov', purpose: 'seek' })).rejects.toMatchObject({ code: 'BUDGET_EXCEEDED' })
+    expect(entries.some((entry) => entry.event === 'video_frames.budget.window_limit')).toBe(true)
+  })
+
   it('stops importing a closing stream, stops it natively and does not hand slots back for the closed pool', async () => {
     const native = createService()
     const shared = createSharedTexture()

@@ -80,9 +80,21 @@ it('单帧超出缓存预算仍交付独立借用，调用方关闭后只释放�
   const first = await decoder.sample(0, 0)
   expect(cache.bytes).toBe(0); expect(destroyed).not.toHaveBeenCalled()
   expect((first.sample as VideoEditGpuFrame).texture).toBeDefined()
-  first.sample?.close(); first.sample?.close(); expect(destroyed).toHaveBeenCalledOnce()
+  // The range holds its newest picture until the next one fixes its span (3.1); the caller's borrow is independent.
+  first.sample?.close(); first.sample?.close(); expect(destroyed).not.toHaveBeenCalled()
   const closed = decoder.dispose(); release(); await closed
   expect(destroyed).toHaveBeenCalledOnce()
+})
+it('目标帧已被淘汰的完整 GOP 不再被加入等待：再解一次这一段，不显示空层（3.1）', async () => {
+  // A one-picture budget keeps only the newest picture of the GOP: picture 0 is gone once the range ends.
+  const cache = new VideoEditFrameCache(400); const decoder = new VideoEditSeekDecoder('media:original', cache, snapshot)
+  const late = await decoder.sample(1.5, 0)
+  expect(late.sample?.timestamp).toBe(.1); late.sample?.close()
+  await tick()
+  // Picture 0 was evicted (budget of one picture): the read decodes the GOP again instead of returning nothing.
+  const early = await decoder.sample(.01, 1)
+  expect(early.sample?.timestamp).toBe(0); expect(fixture.ranges).toHaveBeenCalledTimes(2)
+  early.sample?.close(); await decoder.dispose()
 })
 it('同一时间的不同原文件隔离，销毁一个输入不能删除其他素材的帧', async () => {
   const cache = new VideoEditFrameCache(4800); const a = new VideoEditSeekDecoder('media:a', cache, snapshot); const b = new VideoEditSeekDecoder('media:b', cache, snapshot)

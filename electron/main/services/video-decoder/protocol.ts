@@ -22,8 +22,10 @@ import type {
  * 3：解码会话（1.3）：`open_decoder`/`frame_at`/`schedule`/`cancel_schedule`，`frame` 带 `ptsUs`/`request`，
  *    新事件 `frame_missing`/`schedule_done`。
  * 4：声音会话（2.3）：`open_audio`/`read_audio`/`close_audio`，读取结果以二进制附件返回 PCM。
+ * 5：故障与资源治理（3.1）：`ping` 心跳；hello 可带资源上限覆盖 `limits`；超出预算返回 `BUDGET_EXCEEDED`；
+ *    `stats` 增加进程内存与预算占用。
  */
-export const VIDEO_DECODER_PROTOCOL_VERSION = 4
+export const VIDEO_DECODER_PROTOCOL_VERSION = 5
 export const VIDEO_DECODER_MAX_MESSAGE_BYTES = 16 * 1024 * 1024
 
 export type VideoDecoderErrorCode =
@@ -35,6 +37,12 @@ export type VideoDecoderErrorCode =
   | 'PROCESS_EXITED'
   | 'PROTOCOL_ERROR'
   | 'STOPPED'
+  // 以下由纹理桥与 IPC 给出（3.1）：会话已随服务退出消失、共享纹理导入/送达失败、窗口上限、路径未授权
+  | 'SESSION_GONE'
+  | 'IMPORT_FAILED'
+  | 'SEND_FAILED'
+  | 'UNAUTHORIZED'
+  | 'TARGET_GONE'
   // 以下由原生服务返回
   | 'INVALID_REQUEST'
   | 'OPEN_FAILED'
@@ -47,13 +55,18 @@ export type VideoDecoderErrorCode =
   | 'DECODE_FAILED'
   | 'UNSUPPORTED_FORMAT'
   | 'FORMAT_CHANGED'
+  | 'BUDGET_EXCEEDED'
 
+/**
+ * 错误名带上错误码（`VideoDecoderError:PROCESS_EXITED`）：IPC 只把错误名与说明传到渲染层（`registerIpcHandler`），
+ * 渲染 Worker 据错误码区分服务故障、单文件失败与超出预算（3.1），见 `videoFrameErrorCode`。
+ */
 export class VideoDecoderError extends Error {
   readonly code: VideoDecoderErrorCode
 
   constructor(code: VideoDecoderErrorCode, message: string) {
     super(message)
-    this.name = 'VideoDecoderError'
+    this.name = `VideoDecoderError:${code}`
     this.code = code
   }
 }
@@ -110,6 +123,25 @@ export interface VideoDecoderHello {
   gpuReady: boolean
   /** 客户端进程登记结果：ready=false 时帧流不可用（无法复制纹理句柄）。 */
   client?: { pid: number | null; ready: boolean; reason?: string }
+  /** 生效的资源上限与占用（3.1，按显卡专用显存确定，诊断时可被 hello 覆盖）。 */
+  limits?: VideoDecoderBudgetStats
+}
+
+/** 原生服务的资源预算（3.1）：解码显存登记、硬解会话与会话数上限。 */
+export interface VideoDecoderBudgetStats {
+  vramLimitBytes: number
+  vramReservedBytes: number
+  vramPeakReservedBytes: number
+  hardwareSessions: number
+  hardwareSessionLimit: number
+  decoderSessionLimit: number
+}
+
+/** hello 的资源上限覆盖（只在开发诊断时传，见 `HENJI_VIDEO_DECODER_VRAM_BUDGET_MB`）。 */
+export interface VideoDecoderLimitOverrides {
+  vramBytes?: number
+  hardwareSessions?: number
+  decoderSessions?: number
 }
 
 /** Electron `ColorSpace` 结构（原生服务按格式给出）。 */
@@ -319,7 +351,8 @@ export interface VideoDecoderAudioRead {
 }
 
 export type VideoDecoderCommand =
-  | { type: 'hello'; clientPid?: number }
+  | { type: 'hello'; clientPid?: number; limits?: VideoDecoderLimitOverrides }
+  | { type: 'ping' }
   | { type: 'probe'; path: string }
   | { type: 'cancel'; targetId: string }
   | { type: 'shutdown' }
@@ -417,7 +450,7 @@ export function isVideoDecoderEvent(value: unknown): value is VideoDecoderEvent 
   return record.event === 'stream_ended'
 }
 
-const NATIVE_ERROR_CODES = new Set<VideoDecoderErrorCode>(['INVALID_REQUEST', 'OPEN_FAILED', 'STREAM_INFO_FAILED', 'GPU_FAILED', 'GPU_UNAVAILABLE', 'CLIENT_UNAVAILABLE', 'INTERNAL', 'CANCELLED', 'BUSY', 'DECODE_FAILED', 'UNSUPPORTED_FORMAT', 'FORMAT_CHANGED'])
+const NATIVE_ERROR_CODES = new Set<VideoDecoderErrorCode>(['INVALID_REQUEST', 'OPEN_FAILED', 'STREAM_INFO_FAILED', 'GPU_FAILED', 'GPU_UNAVAILABLE', 'CLIENT_UNAVAILABLE', 'INTERNAL', 'CANCELLED', 'BUSY', 'DECODE_FAILED', 'UNSUPPORTED_FORMAT', 'FORMAT_CHANGED', 'BUDGET_EXCEEDED'])
 
 export function nativeErrorCode(code: string | undefined): VideoDecoderErrorCode {
   return code && NATIVE_ERROR_CODES.has(code as VideoDecoderErrorCode) ? (code as VideoDecoderErrorCode) : 'INTERNAL'

@@ -25,6 +25,7 @@ windows = { version = "=0.62.2", features = [
   "Win32_Graphics_Dxgi",
   "Win32_Graphics_Dxgi_Common",
   "Win32_Security",
+  "Win32_System_ProcessStatus",
   "Win32_System_Threading",
 ] }
 

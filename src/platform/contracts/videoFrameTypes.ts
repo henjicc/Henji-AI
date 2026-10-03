@@ -105,6 +105,8 @@ export interface VideoFrameDecoderInfo extends VideoFrameStreamInfo {
   purpose: 'playback' | 'seek'
   /** 文件的色彩解释（未标注项已按 WebCodecs 默认补齐）；rgbaf16 输出的 colorSpace 只给出 rgb/full。 */
   color: { matrix: string; primaries: string; transfer: string; range: 'limited' | 'full'; hdrAsSdr: boolean }
+  /** 该会话登记的解码显存（3.1 预算口径：纹理池、中间纹理与硬解表面）。 */
+  memoryBytes?: number
 }
 
 export interface VideoFrameAtRequest {
@@ -244,14 +246,25 @@ export interface VideoFramePortResponseMessage {
   result?: unknown
   /** 失败原因（主进程或原生服务给出的说明，消费方再转为用户语言）。 */
   error?: string
+  /** 失败的错误码（主进程 `VideoDecoderErrorCode`，3.1）：消费方据此区分服务故障、单文件失败与超出预算。 */
+  code?: string
 }
 
+/** 主进程的解码错误在 IPC 中以错误名 `VideoDecoderError:<错误码>` 传递（3.1）。 */
+export const VIDEO_DECODER_ERROR_NAME_PREFIX = 'VideoDecoderError:'
+
+/** 从 IPC 传来的错误名取回错误码；不是解码服务的错误时为 undefined。 */
+export function videoFrameErrorCode(name: unknown): string | undefined {
+  return typeof name === 'string' && name.startsWith(VIDEO_DECODER_ERROR_NAME_PREFIX) ? name.slice(VIDEO_DECODER_ERROR_NAME_PREFIX.length) || undefined : undefined
+}
 
 export interface VideoFrameStreamEndedPayload {
   streamId: string
   route: string
   reason: 'completed' | 'error' | 'service_exited'
   message: string | null
+  /** 结束原因的错误码（3.1）：如服务退出 `PROCESS_EXITED`、共享纹理导入失败 `IMPORT_FAILED`。 */
+  code?: string
 }
 
 export interface VideoFrameDurationSummary {
@@ -317,8 +330,14 @@ export interface VideoFrameNativeStats {
   pid: number
   cpuMs: number
   handleCount: number
+  /** 原生进程工作集与私有提交（字节，3.1 资源曲线）。 */
+  workingSetBytes?: number
+  privateBytes?: number
   gpuLocalMemory: { currentUsageBytes: number; budgetBytes: number } | null
   streams: Array<{ streamId: string; kind?: 'test' | 'decoder'; format: VideoSharedFormat | null; width: number; height: number; running: boolean; counters: VideoFrameNativeStreamCounters }>
+  audioSessions?: number
+  /** 资源预算的上限与占用（3.1）。 */
+  budget?: { vramLimitBytes: number; vramReservedBytes: number; vramPeakReservedBytes: number; hardwareSessions: number; hardwareSessionLimit: number; decoderSessionLimit: number }
 }
 
 export interface VideoFrameBridgeStats {

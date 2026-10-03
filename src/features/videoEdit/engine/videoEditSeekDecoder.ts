@@ -33,15 +33,16 @@ export class VideoEditSeekDecoder {
   }
   private frame(time: number): VideoEditGpuFrame | undefined { return (this.cache.get(this.source, time) as VideoEditGpuFrame | undefined)?.clone() }
   private async range(key: EncodedPacket, prefetch = false, generation?: number): Promise<DecodeRange> {
+    // A completed range is not joined: its waiters were already answered (task 3.1).
     const existing = this.ranges.get(key.timestamp)
-    if (existing) { if (!prefetch) existing.prefetch = false; return existing }
+    if (existing && !existing.completed) { if (!prefetch) existing.prefetch = false; return existing }
     const { video, packets } = await this.ready
     const next = await packets.getNextKeyPacket(key, { metadataOnly: true })
     if (this.disposed) throw new Error('预览解码已关闭。')
     if (prefetch && generation !== undefined && generation !== this.prefetchGeneration) throw new Error('预取已取消。')
     // Recheck after I/O: two visible clips may request the same original GOP.
     const shared = this.ranges.get(key.timestamp)
-    if (shared) { if (!prefetch) shared.prefetch = false; return shared }
+    if (shared && !shared.completed) { if (!prefetch) shared.prefetch = false; return shared }
     const end = next?.timestamp ?? Infinity
     const range: DecodeRange = { start: key.timestamp, end, iterator: video.samples(key.timestamp, end), waiters: new Set(), cancelled: false, completed: false, prefetch }
     this.ranges.set(key.timestamp, range)
@@ -50,6 +51,16 @@ export class VideoEditSeekDecoder {
     return range
   }
   private async decode(range: DecodeRange): Promise<void> {
+    // The exact picture at a time is the last one starting at or before it (task 3.1): each picture is cached with its
+    // span reaching the next picture (or the next key frame for the GOP's last one), so a sample duration shorter than
+    // the gap still holds the picture there instead of leaving the layer empty.
+    let held: VideoEditGpuFrame | undefined
+    const settle = (frame: VideoEditGpuFrame, next: number): void => {
+      const shown = Number.isFinite(next) && next - frame.timestamp > frame.duration + 1e-6 ? frame.retimed(next - frame.timestamp) : frame
+      if (shown !== frame) frame.close()
+      this.deliver(range, shown)
+      this.cache.put(this.source, shown, new Set())
+    }
     try {
       for await (const sample of range.iterator) {
         if (this.disposed || range.cancelled) { sample.close(); break }
@@ -62,12 +73,20 @@ export class VideoEditSeekDecoder {
             // Clone before the cache can evict an over-budget copy; a foreground
             // waiter owns its frame independently from the working set.
             this.deliver(range, copy)
-            this.cache.put(this.source, copy, new Set())
+            if (held) settle(held, copy.timestamp)
+            held = copy
           }
         } finally { sample.close() }
       }
-      for (const waiter of range.waiters) waiter.resolve(undefined)
+      if (held && !this.disposed && !range.cancelled) settle(held, range.end)
+      else held?.close()
+      held = undefined
+      // Waiters left answer from the cache; one whose picture is gone is decoded again by `sample` (no empty layer).
+      range.completed = true
+      if (this.ranges.get(range.start) === range) this.ranges.delete(range.start)
+      for (const waiter of range.waiters) waiter.resolve(this.frame(waiter.time))
     } catch (error) {
+      held?.close(); held = undefined
       if (!this.disposed && !range.cancelled) {
         this.failure = error instanceof Error ? error : new Error(String(error))
         for (const waiter of range.waiters) waiter.reject(this.failure)
@@ -131,13 +150,20 @@ export class VideoEditSeekDecoder {
       if (this.disposed) { cached.close(); throw new Error('预览解码已关闭。') }
       return { sample: cached, hit: true }
     }
-    const range = await this.range(key)
-    if (this.disposed) throw new Error('预览解码已关闭。')
-    if (this.failure) throw this.failure
-    const already = this.frame(time)
-    if (already) return { sample: already, hit: true }
-    if (range.completed) return { hit: false }
-    return { sample: await new Promise<VideoEditGpuFrame | undefined>((resolve, reject) => range.waiters.add({ time, resolve, reject })), hit: false }
+    // A range can end without this time's picture for it (delivered and evicted before this read joined): decode the
+    // GOP once more instead of showing nothing (task 3.1); a time before the stream's first picture stays empty.
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const range = await this.range(key)
+      if (this.disposed) throw new Error('预览解码已关闭。')
+      if (this.failure) throw this.failure
+      const already = this.frame(time)
+      if (already) return { sample: already, hit: true }
+      const picture = range.completed ? undefined : await new Promise<VideoEditGpuFrame | undefined>((resolve, reject) => range.waiters.add({ time, resolve, reject }))
+      if (picture) return { sample: picture, hit: false }
+      if (this.disposed) throw new Error('预览解码已关闭。')
+      if (this.failure) throw this.failure
+    }
+    return { hit: false }
   }
   async dispose(): Promise<void> {
     this.disposed = true

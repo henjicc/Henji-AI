@@ -8,8 +8,10 @@
 //!   （`request.kind = schedule, index`）或 `frame_missing`，最后发 `schedule_done`；新计划取消旧计划，计划进行中 `frame_at` 返回 BUSY；
 //! - `cancel_schedule`、`stop_stream`、`release_frame` 同 1.2。
 //!
-//! 时间口径见 `timing.rs`；续解/新段/前导帧规则见 `plan.rs`。播放计划不 flush（剪辑点开新段续解），
-//! 单帧会话定位时 flush；解码器排空到文件末尾后再定位必须 flush（FFmpeg 的 EOF 状态只能这样复位）。
+//! 时间口径见 `timing.rs`；续解/新段/前导帧规则见 `plan.rs`。相邻请求续解不 flush；单帧定位与排空到文件末尾后
+//! 回到前面时 flush。播放计划的剪辑点不 flush（帧内编码等软解保持多线程流水），但 HEVC/H.264 例外（3.1）：
+//! 不 flush 时解码器按上一段推算新关键帧（CRA、非 IDR 的 I 帧）的图序号，相隔超过半个序号周期就算错，之后整段只剩
+//! 关键帧一帧，所以这两种编码的剪辑点也先 flush。
 
 pub mod codec;
 pub mod demux;
@@ -134,6 +136,10 @@ mod imp {
 
     struct Session {
         stream_id: String,
+        /// 显存登记与硬解名额（3.1 预算）：随会话结束归还。
+        _vram: crate::budget::VramTicket,
+        _hardware: Option<crate::budget::HardwareTicket>,
+        platform: Arc<dyn VideoPlatform>,
         control: Arc<StreamControl>,
         commands: Receiver<SessionCommand>,
         deferred: Option<SessionCommand>,
@@ -159,6 +165,8 @@ mod imp {
         fed_since_output: u32,
         delivered: u64,
         forward_limit: i64,
+        /// 剪辑点是否 flush：图序号跨关键帧推算的编码（H.264、HEVC）必须 flush（3.1）。
+        flush_cuts: bool,
         fallback_logged: bool,
         decode_error_count: u64,
     }
@@ -168,10 +176,11 @@ mod imp {
     }
 
     /// 启动会话线程：打开文件并响应 `request_id`，之后处理命令直到停止。
-    pub fn spawn(request_id: String, platform: Arc<dyn VideoPlatform>, options: DecodeOptions, control: Arc<StreamControl>, commands: Receiver<SessionCommand>) -> std::io::Result<std::thread::JoinHandle<Box<dyn StreamResources>>> {
+    pub fn spawn(request_id: String, platform: Arc<dyn VideoPlatform>, options: DecodeOptions, control: Arc<StreamControl>, commands: Receiver<SessionCommand>, budget: crate::budget::Budget) -> std::io::Result<std::thread::JoinHandle<Box<dyn StreamResources>>> {
         std::thread::Builder::new().name(format!("decode-{}", options.stream_id)).spawn(move || -> Box<dyn StreamResources> {
             let started = Instant::now();
-            match Session::open(platform, &options, control.clone(), commands) {
+            let device = platform.clone();
+            match Session::open(platform, &options, control.clone(), commands, &budget) {
                 Ok((mut session, mut info)) => {
                     info["setupMs"] = json!(started.elapsed().as_secs_f64() * 1000.0);
                     logging::info("decode.session.opened", "解码会话已打开", json!({ "streamId": options.stream_id, "path": options.path, "purpose": format!("{:?}", options.purpose), "decoder": info["decoder"], "format": info["format"], "color": info["color"], "setupMs": info["setupMs"] }));
@@ -181,6 +190,10 @@ mod imp {
                     frames.into_resources()
                 }
                 Err(error) => {
+                    // A lost device fails every session the same way: exit so the main process restarts with a new one.
+                    if matches!(error.code, "GPU_FAILED" | "DECODE_FAILED") {
+                        crate::platform::exit_if_device_lost(device.as_ref(), "open_decoder");
+                    }
                     control.open_failed.store(true, Ordering::Release);
                     logging::warn("decode.session.open_failed", &error.message, json!({ "streamId": options.stream_id, "path": options.path, "code": error.code }));
                     crate::respond(&request_id, Err(error));
@@ -191,12 +204,17 @@ mod imp {
     }
 
     impl Session {
-        fn open(platform: Arc<dyn VideoPlatform>, options: &DecodeOptions, control: Arc<StreamControl>, commands: Receiver<SessionCommand>) -> Result<(Self, Value), ServiceError> {
+        fn open(platform: Arc<dyn VideoPlatform>, options: &DecodeOptions, control: Arc<StreamControl>, commands: Receiver<SessionCommand>, budget: &crate::budget::Budget) -> Result<(Self, Value), ServiceError> {
             let input = Input::open(&options.path, options.stream_index, control.stop.clone())?;
             let stream = input.stream();
             let parameters = input.parameters();
             let has_alpha_tag = crate::probe::stream_has_alpha(stream, parameters);
-            let hardware = if options.hardware {
+            // Hardware decoders are a bounded resource (3.1): past the limit this session decodes in software.
+            let mut hardware_ticket = if options.hardware { budget.hardware() } else { None };
+            if options.hardware && hardware_ticket.is_none() {
+                logging::warn("decode.budget.software_fallback", "硬件解码会话已达上限，本会话改用软解", json!({ "streamId": options.stream_id, "limits": budget.stats() }));
+            }
+            let hardware = if hardware_ticket.is_some() {
                 match platform.hardware_device() {
                     Ok(device) => Some(device),
                     Err(reason) => {
@@ -217,6 +235,7 @@ mod imp {
             let codec_name = crate::ffmpeg_info::c_text(unsafe { ffmpeg_sys_next::avcodec_get_name(parameters.codec_id) });
             let container = input.format_name();
             let forward_limit = seconds_to_duration_ticks(FORWARD_SEEK_SECONDS, time_base);
+            let flush_cuts = matches!(parameters.codec_id, ffmpeg_sys_next::AVCodecID::AV_CODEC_ID_H264 | ffmpeg_sys_next::AVCodecID::AV_CODEC_ID_HEVC);
 
             // 先解出第一帧：确定实际像素格式（硬解或软解）与色彩，再按它建纹理池。
             let mut session_parts = Primer { input, decoder, tracker: RunTracker::default(), pending: None, last_fed_dts: None, draining: false, drained: false, tracker_key: None };
@@ -248,12 +267,20 @@ mod imp {
                 (Purpose::Playback, _) => 6,
             };
             let pool_size = options.pool_size.unwrap_or(default_pool);
+            let hardware_active = first.is_hardware();
+            if !hardware_active {
+                // Software decode after all (no hardware profile, or the device refused): the slot goes back.
+                hardware_ticket = None;
+            }
+            // Video memory budget (3.1): the pool, this path's intermediates and the hardware surface pool.
+            let surface = hardware_active.then(|| if first.hardware_sw_format().and_then(format_info).is_some_and(|info| info.depth > 8) { SharedFormat::P010le } else { SharedFormat::Nv12 });
+            let memory_bytes = crate::budget::session_bytes(output, pool_dimensions, pool_size, path, surface);
+            let vram = budget.reserve_vram(&options.stream_id, memory_bytes)?;
             let frames = platform.create_frame_output(output, pool_dimensions, (width, height), pool_size).map_err(|message| ServiceError::new("GPU_FAILED", message))?;
             control.slots.resize(pool_size as usize);
             control.set_info(output, pool_dimensions.0, pool_dimensions.1);
             let handles: Vec<Value> = frames.remote_handles().iter().enumerate().map(|(slot, handle)| json!({ "slot": slot, "handle": handle.to_string() })).collect();
             let color_space = color.electron_color_space(output, options.transfer.as_deref());
-            let hardware_active = first.is_hardware();
             let decoder_info = json!({
                 "codec": codec_name,
                 "decoderName": session_parts.decoder.name,
@@ -286,11 +313,15 @@ mod imp {
                 "frameRate": frame_rate,
                 "rotationDegrees": rotation,
                 "purpose": format!("{:?}", options.purpose).to_lowercase(),
+                "memoryBytes": memory_bytes,
             });
             let first_key_ts = session_parts.tracker_key;
             let Primer { input, decoder, tracker, pending, last_fed_dts, draining, drained, .. } = session_parts;
             let session = Session {
                 stream_id: options.stream_id.clone(),
+                _vram: vram,
+                _hardware: hardware_ticket,
+                platform,
                 control,
                 commands,
                 deferred: None,
@@ -314,6 +345,7 @@ mod imp {
                 fed_since_output: 0,
                 delivered: 0,
                 forward_limit,
+                flush_cuts,
                 fallback_logged: false,
                 decode_error_count: 0,
             };
@@ -393,7 +425,7 @@ mod imp {
             Ok(None)
         }
 
-        /// 开新段。`flush` 为真时清空解码器（单帧会话）；播放计划不 flush，旧段帧按认领规则丢弃。
+        /// 开新段。`flush` 为真时清空解码器（单帧会话、H.264/HEVC 的剪辑点）；为假时旧段帧按认领规则丢弃。
         fn start_run(&mut self, ticks: i64, flush: bool) -> Result<(), ServiceError> {
             self.candidate = None;
             self.lookahead = None;
@@ -474,7 +506,7 @@ mod imp {
             let decision = seek_decision(ticks, &self.position(), key, self.forward_limit);
             let seeked = decision == Decision::Seek;
             if seeked {
-                self.start_run(ticks, flush_on_seek)?;
+                self.start_run(ticks, flush_on_seek || self.flush_cuts)?;
             }
             self.advance_to(ticks)?;
             Ok(seeked)
@@ -540,6 +572,7 @@ mod imp {
                 Ok(stats) => stats,
                 Err(message) => {
                     self.control.slots.release(slot);
+                    crate::platform::exit_if_device_lost(self.platform.as_ref(), "write_frame");
                     return Err(Abort::Failed(ServiceError::new("GPU_FAILED", message)));
                 }
             };
@@ -581,6 +614,9 @@ mod imp {
             let seeked = match self.locate(ticks, true) {
                 Ok(seeked) => seeked,
                 Err(error) => {
+                    if error.code == "DECODE_FAILED" {
+                        crate::platform::exit_if_device_lost(self.platform.as_ref(), "frame_at");
+                    }
                     crate::respond(request_id, Err(error));
                     return;
                 }
@@ -654,6 +690,7 @@ mod imp {
                     Ok(_) => {}
                     Err(error) if error.code == "CANCELLED" => return Err(Abort::Stopped),
                     Err(error) => {
+                        crate::platform::exit_if_device_lost(self.platform.as_ref(), "schedule");
                         logging::warn("decode.schedule.frame_failed", &error.message, json!({ "streamId": self.stream_id, "index": index }));
                         self.missing(schedule_id, index, "decode_error");
                         continue;

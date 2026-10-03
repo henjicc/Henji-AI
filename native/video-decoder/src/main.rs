@@ -3,7 +3,7 @@
 //! 控制面：stdin/stdout 交换长度前缀 JSON（见 protocol.rs）；stderr 输出一行一 JSON 的结构化日志，
 //! 由主进程转入统一日志。stdin 关闭即退出，父进程异常结束时服务不会残留。
 //!
-//! 命令：hello（版本、FFmpeg 信息、D3D11 设备、登记客户端 PID）、probe（流信息）、cancel、shutdown；
+//! 命令：hello（版本、FFmpeg 信息、D3D11 设备、登记客户端 PID、资源上限）、ping（心跳）、probe（流信息）、cancel、shutdown；
 //! 帧流（1.2）：start_test_stream、stop_stream、release_frame（通知）、stats、close_client_handles；
 //! 解码会话（1.3，协议见 decode/mod.rs）：open_decoder、frame_at、schedule、cancel_schedule；
 //! 声音会话（2.3，协议见 audio/mod.rs）：open_audio、read_audio、close_audio（PCM 走二进制附件）。
@@ -13,6 +13,7 @@
 //! 其余模块跨平台，不直接依赖 D3D11/`windows` crate。
 
 mod audio;
+mod budget;
 mod convert;
 mod decode;
 mod ffmpeg_info;
@@ -67,6 +68,7 @@ struct Service {
     cancels: CancelMap,
     streams: streams::StreamManager,
     audio: audio::AudioManager,
+    budget: budget::Budget,
 }
 
 impl Service {
@@ -82,7 +84,9 @@ impl Service {
                 (None, platform::unavailable_summary(&reason))
             }
         };
-        Self { platform, platform_summary, ffmpeg: ffmpeg_info::ffmpeg_info(), cancels: Arc::default(), streams: streams::StreamManager::new(), audio: audio::AudioManager::default() }
+        // Resource limits follow the selected adapter's dedicated memory (3.1); the main process may override them.
+        let budget = budget::Budget::new(budget::Limits::for_adapter(platform_summary["adapter"]["dedicatedVideoMemoryMiB"].as_u64()));
+        Self { platform, platform_summary, ffmpeg: ffmpeg_info::ffmpeg_info(), cancels: Arc::default(), streams: streams::StreamManager::new(), audio: audio::AudioManager::default(), budget }
     }
 
     /// 登记客户端进程（纹理句柄的复制目标）。打开失败不影响握手，帧流请求届时报错。
@@ -116,7 +120,7 @@ impl Service {
     /// 打开解码会话：会话线程打开文件后自行响应。
     fn open_decoder(&mut self, request_id: &str, options: decode::DecodeOptions) -> Result<(), ServiceError> {
         let platform = self.ready_platform()?;
-        self.streams.start_decoder(request_id.to_string(), &platform, options)
+        self.streams.start_decoder(request_id.to_string(), &platform, options, &self.budget)
     }
 
     fn close_client_handles(&self, handles: &[String]) -> Value {
@@ -139,14 +143,18 @@ impl Service {
 
     fn stats(&self) -> Value {
         let (cpu_ms, handle_count) = platform::process_usage();
+        let (working_set, private_bytes) = platform::process_memory();
         let memory = self.platform.as_ref().and_then(|platform| platform.local_memory());
         json!({
             "pid": std::process::id(),
             "cpuMs": cpu_ms,
             "handleCount": handle_count,
+            "workingSetBytes": working_set,
+            "privateBytes": private_bytes,
             "gpuLocalMemory": memory.map(|(usage, budget)| json!({ "currentUsageBytes": usage, "budgetBytes": budget })),
             "streams": self.streams.stats(),
             "audioSessions": self.audio.count(),
+            "budget": self.budget.stats(),
         })
     }
 
@@ -159,6 +167,7 @@ impl Service {
             "ffmpeg": self.ffmpeg,
             "d3d11": self.platform_summary,
             "gpuReady": self.platform.is_some(),
+            "limits": self.budget.stats(),
         })
     }
 
@@ -235,12 +244,16 @@ fn main() {
             }
         };
         match request.command {
-            Command::Hello { client_pid } => {
+            Command::Hello { client_pid, limits } => {
+                if let Some(limits) = limits {
+                    service.budget.override_limits(limits);
+                }
                 let client = service.register_client(client_pid);
                 let mut hello = service.hello();
                 hello["client"] = client;
                 respond(&request.id, Ok(hello))
             }
+            Command::Ping => respond(&request.id, Ok(json!({ "pong": true, "decoders": service.streams.decoder_count(), "audioSessions": service.audio.count() }))),
             Command::Probe { path } => service.start_probe(request.id, path),
             Command::Cancel { target_id } => respond(&request.id, Ok(service.cancel(&target_id))),
             Command::StartTestStream { stream_id, format, width, height, fps, pool_size, max_frames, keyed_mutex } => {

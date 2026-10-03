@@ -1,4 +1,5 @@
 import type { VideoFrameMeta, VideoFramePortCall, VideoFramePortEndedMessage, VideoFrameStreamEndedPayload, VideoFramePortCallResults, VideoFramePortFrameMessage, VideoFramePortReleaseMessage, VideoFramePortRequestMessage, VideoFramePortResponseMessage, VideoFramePortScheduleMessage, VideoFrameScheduleEvent } from '@/platform/contracts/videoFrames'
+import { VideoEditNativeCallError } from './videoEditNativeFailure'
 
 /** 只需要设备队列的“已提交工作完成”通知。 */
 export interface NativeFrameReleaseDevice {
@@ -66,7 +67,7 @@ export class VideoEditNativeFrameReceiver {
    * 失败原因是主进程或原生服务的说明，调用方负责转为用户语言。
    */
   call<M extends VideoFramePortCall['method']>(method: M, params: NativeFrameCallParams<M>): Promise<VideoFramePortCallResults[M]> {
-    if (this.disposed) return Promise.reject(new Error('原生帧通道已关闭。'))
+    if (this.disposed) return Promise.reject(new VideoEditNativeCallError('原生帧通道已关闭。', 'CHANNEL_CLOSED'))
     const id = ++this.nextCall
     return new Promise((resolve, reject) => {
       this.calls.set(id, { resolve: resolve as (value: unknown) => void, reject })
@@ -79,7 +80,7 @@ export class VideoEditNativeFrameReceiver {
     const call = this.calls.get(message.id)
     if (!call) return
     this.calls.delete(message.id)
-    if (message.error !== undefined) call.reject(new Error(message.error))
+    if (message.error !== undefined) call.reject(new VideoEditNativeCallError(message.error, message.code))
     else call.resolve(message.result)
   }
 
@@ -121,7 +122,7 @@ export class VideoEditNativeFrameReceiver {
     this.handlers.clear()
     this.scheduleHandlers.clear()
     this.endedHandlers.clear()
-    for (const call of this.calls.values()) call.reject(new Error('原生帧通道已关闭。'))
+    for (const call of this.calls.values()) call.reject(new VideoEditNativeCallError('原生帧通道已关闭。', 'CHANNEL_CLOSED'))
     this.calls.clear()
     for (const frame of [...this.outstanding]) frame.release()
     this.closed = (async () => {

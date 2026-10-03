@@ -6,6 +6,7 @@ import { VideoEditGpuFrame } from './videoEditGpuFrame'
 import { VideoEditNativeFrames, type VideoEditNativeChannel } from './videoEditNativeFrameSource'
 import { VideoEditNativePicture, videoEditNativeRotation } from './videoEditNativePicture'
 import type { NativeVideoFrame } from './videoEditNativeFrames'
+import { VideoEditNativeCallError } from './videoEditNativeFailure'
 
 type Method = Parameters<VideoEditNativeChannel['call']>[0]
 
@@ -57,13 +58,13 @@ class FakeChannel implements VideoEditNativeChannel {
   event(event: Omit<Extract<VideoFrameScheduleEvent, { type: 'frame_missing' }>, 'route'> | Omit<Extract<VideoFrameScheduleEvent, { type: 'schedule_done' }>, 'route'>): void {
     this.scheduleHandlers.get(event.streamId)?.({ ...event, route: 'r' } as VideoFrameScheduleEvent)
   }
-  end(streamId: string): void { this.endedHandlers.get(streamId)?.({ streamId, route: 'r', reason: 'error', message: '解码器崩溃' }) }
+  end(streamId: string, code?: string): void { this.endedHandlers.get(streamId)?.({ streamId, route: 'r', reason: code === 'PROCESS_EXITED' ? 'service_exited' : 'error', message: '解码器崩溃', ...(code ? { code } : {}) }) }
   last(method: Method): Record<string, unknown> { return this.calls.filter(call => call.method === method).at(-1)!.params }
 }
 
 const media = (overrides: Partial<VideoEditMedia> = {}): VideoEditMedia => ({ id: 'm', name: '专业素材', path: 'henji-media://local/D%3A%2Fa.mov', kind: 'video', width: 3840, height: 2160, durationSeconds: 7, ...overrides })
 const flush = async (rounds = 10): Promise<void> => { for (let index = 0; index < rounds; index++) await Promise.resolve() }
-function backend(channel: FakeChannel, options: { maxSessions?: number; sound?: boolean; onFailure?: (media: VideoEditMedia, error: unknown) => void } = {}): VideoEditNativeFrames {
+function backend(channel: FakeChannel, options: { maxSessions?: number; sound?: boolean } = {}): VideoEditNativeFrames {
   return new VideoEditNativeFrames({ channel, localPath: item => item.path.includes('remote') ? undefined : 'D:/a.mov', ...options })
 }
 
@@ -156,13 +157,46 @@ describe('原生帧源：连续计划', () => {
     expect(channel.calls.filter(call => call.method === 'closeStream')).toEqual([{ method: 'closeStream', params: { streamId } }])
   })
 
-  it('原生流异常结束：等待中的读取立即失败并给出用户语言，不会一直等帧', async () => {
+  it('原生流异常结束：等待中的读取立即以可恢复的服务故障失败（用户语言），不会一直等帧', async () => {
     const channel = new FakeChannel()
     const clip = (await backend(channel).open(media()).ready).clipFrames()!
     const frames = clip.frames(0)
     const pending = frames.next(); await flush()
-    channel.end((channel.last('schedule') as { streamId: string }).streamId)
-    await expect(pending).rejects.toThrow('素材「专业素材」解码失败')
+    channel.end((channel.last('schedule') as { streamId: string }).streamId, 'IMPORT_FAILED')
+    await expect(pending).rejects.toMatchObject({ kind: 'service', code: 'IMPORT_FAILED', message: expect.stringContaining('素材「专业素材」的解码暂时中断') })
+  })
+
+  it('服务退出时进行中的播放计划失败而不是对余下每个时间回答“无画面”；会话随之丢弃，下一次读取打开新会话（3.1）', async () => {
+    const channel = new FakeChannel()
+    const frames = backend(channel); const opened = frames.open(media())
+    const source = await opened.ready
+    const schedule = source.schedule([0, 1 / 60, 2 / 60])
+    const first = schedule.next(); await flush()
+    const { streamId, scheduleId } = channel.last('schedule') as { streamId: string; scheduleId: string }
+    channel.frame(streamId, { kind: 'schedule', id: scheduleId, index: 0 }, 0)
+    const picture = (await first).value
+    expect(picture).toBeInstanceOf(VideoEditNativePicture); picture?.close()
+    channel.end(streamId, 'PROCESS_EXITED')
+    await expect(schedule.next()).rejects.toMatchObject({ kind: 'service', code: 'PROCESS_EXITED' })
+    const again = source.schedule([1]); const waiting = again.next(); await flush()
+    expect(channel.calls.filter(call => call.method === 'openDecoder')).toHaveLength(2)
+    frames.release(opened.key); await frames.settled()
+    expect((await waiting).value).toBeNull()
+  })
+
+  it('路由层的重置：关闭文件的共享会话，等待中的读取以可恢复故障失败，下一次读取重新打开', async () => {
+    const channel = new FakeChannel()
+    const frames = backend(channel); const opened = frames.open(media())
+    const source = await opened.ready
+    const schedule = source.schedule([0, 1 / 60])
+    const first = schedule.next(); await flush()
+    frames.reset(media())
+    await expect(first).rejects.toMatchObject({ kind: 'service' })
+    await flush()
+    expect(channel.calls.filter(call => call.method === 'closeStream')).toHaveLength(1)
+    void source.schedule([0]).next(); await flush()
+    expect(channel.calls.filter(call => call.method === 'openDecoder')).toHaveLength(2)
+    frames.release(opened.key); await frames.settled()
   })
 })
 
@@ -196,20 +230,25 @@ describe('原生帧源：单帧与会话', () => {
     await expect(frames.open(media({ path: 'remote' })).ready).rejects.toThrow('重新定位源文件')
   })
 
-  it('会话数达到上限时给出用户语言提示；打开失败转为可操作提示并通知路由层，失败不占用会话名额', async () => {
-    const channel = new FakeChannel(); const onFailure = vi.fn()
-    const frames = backend(channel, { maxSessions: 1, onFailure })
+  it('会话数达到上限时给出用户语言提示（预算故障）；打开失败按错误码转为可操作提示，失败不占用会话名额', async () => {
+    const channel = new FakeChannel()
+    const frames = backend(channel, { maxSessions: 1 })
     const source = await frames.open(media()).ready
     await source.clipFrames()!.frameAt(0)
-    await expect(source.clipFrames()!.frames(0).next()).rejects.toThrow('同时读取的视频素材过多')
+    await expect(source.clipFrames()!.frames(0).next()).rejects.toMatchObject({ kind: 'budget', message: expect.stringContaining('同时读取的视频素材过多') })
     const other = await frames.open(media({ path: 'henji-media://local/b', sourceRevision: 'r2' })).ready
-    channel.answers.openDecoder = () => { throw new Error('OPEN_FAILED: 无法打开文件') }
-    const relaxed = backend(channel, { onFailure })
-    await expect((await relaxed.open(media()).ready).clipFrames()!.frameAt(0)).rejects.toThrow('素材「专业素材」无法读取')
-    expect(onFailure).toHaveBeenCalledOnce(); expect(relaxed.openSessions).toBe(0)
+    channel.answers.openDecoder = () => { throw new VideoEditNativeCallError('无法打开文件', 'OPEN_FAILED') }
+    const relaxed = backend(channel)
+    await expect((await relaxed.open(media()).ready).clipFrames()!.frameAt(0)).rejects.toMatchObject({ kind: 'file', message: expect.stringContaining('素材「专业素材」无法读取') })
+    expect(relaxed.openSessions).toBe(0)
     // A moved or deleted file gets the same relink hint as on the browser backend.
-    channel.answers.openDecoder = () => { throw new Error('无法打开文件：No such file or directory') }
+    channel.answers.openDecoder = () => { throw new VideoEditNativeCallError('无法打开文件：No such file or directory', 'OPEN_FAILED') }
     await expect((await backend(channel).open(media({ sourceRevision: 'moved' })).ready).clipFrames()!.frameAt(0)).rejects.toThrow('找不到素材「专业素材」的源文件')
+    // The service's own budget answer is a budget failure too; an exited service is a retryable service failure.
+    channel.answers.openDecoder = () => { throw new VideoEditNativeCallError('解码显存预算不足', 'BUDGET_EXCEEDED') }
+    await expect((await backend(channel).open(media({ sourceRevision: 'big' })).ready).clipFrames()!.frameAt(0)).rejects.toMatchObject({ kind: 'budget' })
+    channel.answers.openDecoder = () => { throw new VideoEditNativeCallError('原生视频解码服务异常退出', 'PROCESS_EXITED') }
+    await expect((await backend(channel).open(media({ sourceRevision: 'gone' })).ready).clipFrames()!.frameAt(0)).rejects.toMatchObject({ kind: 'service', message: expect.stringContaining('解码暂时中断') })
     // Sound sessions are separate from picture sessions: the limit does not apply to them.
     expect(other.clipAudio()).toBeDefined()
   })
@@ -285,6 +324,88 @@ describe('原生定位器', () => {
     await seeker.dispose()
     expect(cache.bytes).toBe(0)
   })
+
+  it('变帧率时长不准：画面保持到下一帧开始，定位到间隙里的时间得到前一帧而不是空层，之后同一间隙命中缓存（3.1）', async () => {
+    const channel = new FakeChannel()
+    const cache = new VideoEditFrameCache(1024 ** 3)
+    const seeker = backend(channel).seeker(media(), cache, snapshot)
+    const target = seeker.sample(2.05, 0)
+    await flush()
+    const window = channel.last('schedule') as { streamId: string; scheduleId: string }
+    // 2.0 reports 1/60s but the next picture starts at 2.1; the last picture of the window reports 1/60s too.
+    channel.frame(window.streamId, { kind: 'schedule', id: window.scheduleId, index: 0 }, 2_000_000)
+    channel.frame(window.streamId, { kind: 'schedule', id: window.scheduleId, index: 1 }, 2_100_000)
+    channel.event({ type: 'schedule_done', streamId: window.streamId, scheduleId: window.scheduleId, reason: 'completed', message: null, delivered: 2 })
+    const picture = (await target).sample
+    expect(picture?.timestamp).toBe(2); expect(picture?.duration).toBeCloseTo(0.1, 9)
+    await flush(40)
+    expect(await seeker.sample(2.07, 1)).toMatchObject({ hit: true, sample: { timestamp: 2 } })
+    // The window's last picture holds to the window's end (every picture before it was delivered).
+    expect(await seeker.sample(2.9, 1)).toMatchObject({ hit: true, sample: { timestamp: 2.1 } })
+    expect(channel.calls.filter(call => call.method === 'schedule')).toHaveLength(1)
+    await seeker.dispose()
+  })
+
+  it('只保持解码器真实的间隙：未送达的帧不由前一帧顶替；窗口提前结束时最后一帧不延到窗口末尾（3.1 10 位拖动）', async () => {
+    const channel = new FakeChannel()
+    const cache = new VideoEditFrameCache(1024 ** 3)
+    const path = media().path
+    const seeker = backend(channel).seeker(media(), cache, snapshot)
+    const first = seeker.sample(4, 0)
+    await flush()
+    const window = channel.last('schedule') as { streamId: string; scheduleId: string }
+    channel.frame(window.streamId, { kind: 'schedule', id: window.scheduleId, index: 0 }, 4_000_000)
+    channel.event({ type: 'frame_missing', streamId: window.streamId, scheduleId: window.scheduleId, index: 1, reason: 'decode_error' })
+    channel.frame(window.streamId, { kind: 'schedule', id: window.scheduleId, index: 2 }, 4_033_333)
+    channel.event({ type: 'schedule_done', streamId: window.streamId, scheduleId: window.scheduleId, reason: 'completed', message: null, delivered: 3 })
+    expect((await first).sample).toMatchObject({ timestamp: 4, duration: expect.closeTo(1 / 60, 5) })
+    await flush(40)
+    expect(cache.get(path, 4.02)).toBeUndefined()
+    expect(cache.get(path, 4.5)?.timestamp).toBeCloseTo(4.033333, 6)
+    // A window stopped early (cancelled by the service) delivered only its key frame: later times are not that picture.
+    const second = seeker.sample(5, 0)
+    await flush()
+    const early = channel.last('schedule') as { streamId: string; scheduleId: string }
+    channel.frame(early.streamId, { kind: 'schedule', id: early.scheduleId, index: 0 }, 5_000_000)
+    channel.event({ type: 'schedule_done', streamId: early.streamId, scheduleId: early.scheduleId, reason: 'cancelled', message: null, delivered: 1 })
+    expect((await second).sample?.timestamp).toBe(5)
+    await flush(40)
+    expect(cache.get(path, 5.005)?.timestamp).toBe(5)
+    expect(cache.get(path, 5.3)).toBeUndefined()
+    await seeker.dispose()
+  })
+
+  it('窗口结束时目标帧不在（已被淘汰或未送达）不显示空层而是再解一次；部分缓存的窗口仍会预取，已缓存的帧不再复制（3.1 拖动）', async () => {
+    const channel = new FakeChannel()
+    const cache = new VideoEditFrameCache(1024 ** 3)
+    snapshot.mockClear()
+    const seeker = backend(channel).seeker(media(), cache, snapshot)
+    const target = seeker.sample(2.5, 1)
+    await flush()
+    // The first window ends without the picture for 2.5 (it came and went before this read joined).
+    const first = channel.last('schedule') as { streamId: string; scheduleId: string }
+    channel.event({ type: 'schedule_done', streamId: first.streamId, scheduleId: first.scheduleId, reason: 'completed', message: null, delivered: 0 })
+    await flush(40)
+    const second = channel.last('schedule') as { streamId: string; scheduleId: string; range: unknown }
+    expect(second.scheduleId).not.toBe(first.scheduleId); expect(second.range).toEqual({ from: 2, to: 3 })
+    channel.frame(second.streamId, { kind: 'schedule', id: second.scheduleId, index: 0 }, 2_500_000)
+    channel.event({ type: 'schedule_done', streamId: second.streamId, scheduleId: second.scheduleId, reason: 'completed', message: null, delivered: 1 })
+    expect((await target).sample?.timestamp).toBe(2.5)
+    await flush(40)
+    // Forward scrub: the next window [3, 4) only has its first picture cached, so it is still prefetched; the cached
+    // picture is delivered from the cache without a second GPU copy.
+    const prefetch = channel.last('schedule') as { streamId: string; scheduleId: string; range: unknown }
+    expect(prefetch.range).toEqual({ from: 3, to: 4 })
+    cache.put(media().path, new VideoEditGpuFrame({ timestamp: 3, duration: 1 / 60, displayWidth: 3840, displayHeight: 2160, rotation: 0, flip: false }, {} as never, undefined, 100, () => {}), new Set())
+    const copies = snapshot.mock.calls.length
+    channel.frame(prefetch.streamId, { kind: 'schedule', id: prefetch.scheduleId, index: 0 }, 3_000_000)
+    channel.frame(prefetch.streamId, { kind: 'schedule', id: prefetch.scheduleId, index: 1 }, 3_016_667)
+    channel.event({ type: 'schedule_done', streamId: prefetch.streamId, scheduleId: prefetch.scheduleId, reason: 'completed', message: null, delivered: 2 })
+    await flush(40)
+    expect(snapshot.mock.calls.length).toBe(copies + 1)
+    expect(channel.released).toContain(3_000_000)
+    await seeker.dispose()
+  })
 })
 
 describe('原生声音', () => {
@@ -313,16 +434,14 @@ describe('原生声音', () => {
     frames.release(key)
   })
 
-  it('原生声音未就绪、明确无声的视频、图片都没有声音读取器；打开失败通知路由层并给出用户语言提示', async () => {
+  it('原生声音未就绪、明确无声的视频、图片都没有声音读取器；打开失败给出用户语言提示', async () => {
     const channel = new FakeChannel()
     expect((await backend(channel, { sound: false }).open(media()).ready).clipAudio()).toBeUndefined()
     expect((await backend(channel).open(media()).ready).clipAudio()).toBeDefined()
     expect((await backend(channel, { sound: true }).open(media({ hasAudio: false })).ready).clipAudio()).toBeUndefined()
-    const failures: unknown[] = []
-    channel.answers.openAudio = () => { throw new Error('No such file or directory') }
-    const audio = (await backend(channel, { sound: true, onFailure: (_media, error) => failures.push(error) }).open(media({ path: 'henji-media://local/D%3A%2Fmissing.mov' })).ready).clipAudio()!
+    channel.answers.openAudio = () => { throw new VideoEditNativeCallError('No such file or directory', 'OPEN_FAILED') }
+    const audio = (await backend(channel, { sound: true }).open(media({ path: 'henji-media://local/D%3A%2Fmissing.mov' })).ready).clipAudio()!
     const drained = (async () => { for await (const chunk of audio.chunks(0, .1, 48000)) void chunk })()
-    await expect(drained).rejects.toThrow('找不到素材「专业素材」的源文件')
-    expect(failures).toHaveLength(1)
+    await expect(drained).rejects.toMatchObject({ kind: 'file', message: expect.stringContaining('找不到素材「专业素材」的源文件') })
   })
 })

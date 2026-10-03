@@ -335,14 +335,10 @@ export class VideoEditRenderer {
         const read = await readVideoEditExportPicture(source, source.video, time, media.name)
         early = read.blank; if (read.singleFrameRead) singleFrameReads++
       } else if (sequential || (this.previewWidth && time >= source.previousTime && time - source.previousTime <= 2)) {
-        if (!source.iterator || time < source.previousTime || time - source.previousTime > 2) {
-          source.current?.close(); await source.iterator?.return(); source.iterator = source.video.frames(time); source.current = undefined
-        }
-        while (!source.current || source.current.timestamp + source.current.duration <= time + 1e-7) {
-          const next = await source.iterator.next(); if (next.done) break
-          source.current?.close(); source.current = next.value
-        }
-        early = !!source.current && source.current.timestamp > time + 1e-6
+        // Preview falls back here when the playback schedule has no picture for this frame (task 3.1). The same exact
+        // picture as export: the last one starting at or before the time, decided by a single-frame read when the
+        // sequential reader skipped it or holds one past its span; transparent only before the stream's first picture.
+        early = (await readVideoEditExportPicture(source, source.video, time, media.name)).blank
       } else {
         source.current?.close(); await source.iterator?.return()
         source.iterator = undefined

@@ -75,6 +75,15 @@ export class VideoEditGpuFrame {
     this.resource.references++
     return new VideoEditGpuFrame(this, this.resource.texture, this.resource.chroma, this.resource.bytes, this.resource.release, this.resource)
   }
+  /**
+   * The same picture shown for `duration` seconds: a picture stays until the next one starts, so a decoder duration
+   * shorter than that gap (variable frame rate, inaccurate durations) is widened to it (task 3.1). Shares the texture.
+   */
+  retimed(duration: number): VideoEditGpuFrame {
+    if (this.closed) throw new Error('预览帧已释放。')
+    this.resource.references++
+    return new VideoEditGpuFrame({ timestamp: this.timestamp, duration, displayWidth: this.displayWidth, displayHeight: this.displayHeight, rotation: this.rotation, flip: this.flip }, this.resource.texture, this.resource.chroma, this.resource.bytes, this.resource.release, this.resource)
+  }
   close(): void {
     if (this.closed) return
     this.closed = true

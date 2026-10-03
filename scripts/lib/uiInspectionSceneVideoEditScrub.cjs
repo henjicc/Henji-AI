@@ -53,7 +53,8 @@ function createVideoEditScrubScene() {
       let pixels = 1
       for (const [name, from, to, duration] of [['cold-reverse', 359, 1, 6000], ['forward', 1, 359, 6000], ['reverse', 359, 1, 6000], ['fast-forward', 1, 359, 2000], ['warm-reverse', 359, 1, 2000], ['segment-forward', 26 * 60, 34 * 60, 6000], ['segment-reverse', 34 * 60, 26 * 60, 6000]]) {
         if (name === 'segment-forward') {
-          const longSource = path.join(root, '4k60-40s.mp4')
+          // Named after its source: a supplied source must not reuse a loop made from another file.
+          const longSource = path.join(root, `${path.basename(source, path.extname(source))}-40s.mp4`)
           if (!fs.existsSync(longSource)) execFileSync(ffmpegPath, ['-v', 'error', '-y', '-stream_loop', '-1', '-i', source, '-t', '40', '-c', 'copy', longSource], { windowsHide: true })
           const longProject = structuredClone(project); longProject.id = 'scrub-boundary'; longProject.media[0].path = longSource; longProject.media[0].durationSeconds = 40; longProject.sequences[0].clips.forEach(clip => { clip.duration = 36 * 60 })
           const longFile = path.join(root, 'boundary.henji-video'); fs.writeFileSync(longFile, JSON.stringify(longProject))
@@ -101,7 +102,12 @@ function createVideoEditScrubScene() {
         const during = data.frames.filter(frame => frame.at <= ended)
         const gaps = during.map((frame, index) => frame.at - (index ? during[index - 1].at : data.start))
         const lags = during.map(frame => { const target = [...data.targets].reverse().find(target => target.at <= frame.at); return target ? Math.abs(frame.frame - target.frame) * duration / Math.abs(to - from) : 0 })
-        for (const frame of during) { const times = frame.timestamps.split(',').map(Number).sort((a, b) => a - b); assert.ok(Math.abs(times[0] - frame.frame / 60) < 1e-5); assert.ok(Math.abs(times[1] - (1 + frame.frame / 60)) < 1e-5) }
+        for (const frame of during) {
+          const times = frame.timestamps.split(',').map(Number).sort((a, b) => a - b)
+          const exact = Math.abs(times[0] - frame.frame / 60) < 1e-5 && Math.abs(times[1] - (1 + frame.frame / 60)) < 1e-5
+          if (!exact) { evidence.failedCase = { name, frame, samples: data }; fs.writeFileSync(path.join(root, 'evidence.json'), JSON.stringify(evidence, null, 2)) }
+          assert.ok(exact, `${name}：第 ${frame.frame} 帧画出的源时间为 ${frame.timestamps}（应为 ${frame.frame / 60} 与 ${1 + frame.frame / 60}）`)
+        }
         const result = { name, durationMs: ended - data.start, inputs: data.targets.length, presentationsDuringDrag: during.length, submittedFramesPerSecond: during.length * 1000 / (ended - data.start), gapP95Ms: quantile(gaps, .95), gapMaxMs: Math.max(...gaps, ended - (during.at(-1)?.at ?? data.start)), pointerLagP95Ms: quantile(lags, .95), settleMs: Math.max(0, data.frames.at(-1).at - ended), renderP95Ms: quantile(during.map(frame => frame.renderMs), .95), decodeP95Ms: quantile(during.map(frame => frame.decodeMs), .95), gpuP95Ms: quantile(during.map(frame => frame.gpuMs), .95), cacheHits: during.reduce((sum, frame) => sum + (frame.cacheHits || 0), 0), samples: data }
         evidence.cases.push(result)
         fs.writeFileSync(path.join(root, 'evidence.json'), JSON.stringify(evidence, null, 2))

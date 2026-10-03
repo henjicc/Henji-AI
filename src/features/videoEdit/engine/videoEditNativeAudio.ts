@@ -1,7 +1,7 @@
 import type { VideoAudioSessionInfo, VideoFramePortCallResults } from '@/platform/contracts/videoFrames'
 import type { VideoEditAudioChunk, VideoEditClipAudio } from './videoEditFrameSource'
 import type { VideoEditNativeFrameReceiver } from './videoEditNativeFrames'
-import { videoEditSourceReadError } from './videoEditSourceErrors'
+import { VideoEditNativeFailure, videoEditNativeFailureCode, videoEditNativeFailureKind, videoEditNativeFailureMessage, videoEditNativeOpenFailure } from './videoEditNativeFailure'
 
 /**
  * One opened sound stream of the native decoder service (one per clip reader, so two clips of a file never share a
@@ -130,7 +130,7 @@ export async function openVideoEditNativePcm(channel: VideoEditNativeSoundChanne
   let info: VideoAudioSessionInfo
   try {
     info = await channel.call('openAudio', { path, ...(options.audioStream !== undefined ? { audioStream: options.audioStream } : {}), ...(options.sampleRate !== undefined ? { sampleRate: options.sampleRate } : {}) })
-  } catch (error) { throw videoEditSourceReadError(name, error) }
+  } catch (error) { throw videoEditNativeOpenFailure(name, error) }
   if (!info.found) return null
   const { audioId, sampleRate, channels } = info
   let closed = false
@@ -140,7 +140,9 @@ export async function openVideoEditNativePcm(channel: VideoEditNativeSoundChanne
       if (closed) throw new Error('声音读取已关闭。')
       let result: VideoFramePortCallResults['readAudio']
       try { result = await channel.call('readAudio', { audioId, startFrame, frames }) } catch (error) {
-        throw new Error(`素材「${name}」的声音读取失败，请确认文件可用，或在项目素材中重新定位源文件。`, { cause: error })
+        // A session lost with an exited service is a service failure (reopened or recovered by the router, 3.1).
+        const kind = videoEditNativeFailureKind(error)
+        throw new VideoEditNativeFailure(kind === 'file' ? `素材「${name}」的声音读取失败，请确认文件可用，或在项目素材中重新定位源文件。` : videoEditNativeFailureMessage(name, kind), kind, videoEditNativeFailureCode(error), { cause: error })
       }
       const data: unknown = result.data
       if (!(data instanceof ArrayBuffer) || result.frames !== frames || result.channels !== channels || data.byteLength !== frames * channels * 4) throw new Error('原生声音数据不完整。')

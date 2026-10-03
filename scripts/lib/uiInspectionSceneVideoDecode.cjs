@@ -573,7 +573,9 @@ function createVideoDecodeScene() {
         for (const entry of evidence.seek ?? []) assert.deepEqual(entry.mismatches, [], `${entry.id} 按时间取帧不正确`)
         for (const entry of evidence.schedule ?? []) {
           assert.equal(entry.mismatchCount, 0, `${entry.id} 连续计划逐项不正确`)
-          assert.equal(entry.flushes, 0, `${entry.id} 连续计划中出现 flush`)
+          // 3.1：剪辑点先 flush 再从目标关键帧续解（不 flush 时 HEVC/H.264 非 IDR 关键帧的图序号会算错）；
+          // 计划含 4 处跳转（开播定位 + 3 个剪辑点），flush 只能出现在这些地方。
+          assert.ok(entry.flushes <= 4, `${entry.id} 连续计划中出现 ${entry.flushes} 次 flush（只允许剪辑点）`)
         }
         for (const entry of evidence.loads ?? []) {
           if (entry.skipped || !LOAD_LIST.find((sample) => sample.id === entry.id)?.required || LOAD_SECONDS < 20) continue

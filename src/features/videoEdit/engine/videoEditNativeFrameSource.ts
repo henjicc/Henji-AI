@@ -7,6 +7,7 @@ import { VideoEditGpuFrame, videoEditGpuFrameUsesChroma } from './videoEditGpuFr
 import { VideoEditNativePicture, videoEditNativeRotation } from './videoEditNativePicture'
 import type { NativeVideoFrame, VideoEditNativeFrameReceiver } from './videoEditNativeFrames'
 import { videoEditSourceReadError } from './videoEditSourceErrors'
+import { VideoEditNativeFailure, videoEditNativeClosed, videoEditNativeFailureKind, videoEditNativeFailureKindOf, videoEditNativeFailureMessage, videoEditNativeOpenFailure, videoEditNativeReadFailure } from './videoEditNativeFailure'
 
 /**
  * The native frame backend (task 2.2): pictures decoded by the native decoder service arrive as borrowed shared GPU
@@ -24,7 +25,11 @@ import { videoEditSourceReadError } from './videoEditSourceErrors'
 /** Worker-side access to native decoder sessions: port requests and borrowed frames over one frame channel. */
 export type VideoEditNativeChannel = Pick<VideoEditNativeFrameReceiver, 'call' | 'subscribe' | 'subscribeSchedule' | 'subscribeEnded'>
 
-/** Conservative per-renderer session limit until the resource budget of task 3.1 (the bridge allows 16 per window). */
+/**
+ * Native decoder sessions per renderer (task 3.1 budget): below the frame bridge's 16 streams per window, so a window's
+ * program and source monitor together stay within the service's 32 sessions; the service also budgets video memory
+ * and hardware decoders across all windows (`native/video-decoder/src/budget.rs`). Beyond it reads fail in place.
+ */
 export const VIDEO_EDIT_NATIVE_MAX_SESSIONS = 10
 /** The native service accepts at most this many times per schedule; later frames use the regular path. */
 const MAX_SCHEDULE_TIMES = 200_000
@@ -36,6 +41,8 @@ const MAX_SCHEDULE_TIMES = 200_000
 const LOST_FRAME_GRACE_MS = 1000
 /** How long a single-frame read waits for its frame after the service confirmed it. */
 const FRAME_ARRIVAL_TIMEOUT_MS = 5000
+/** How long a file failure of a seek window answers further reads before they try the file again (task 3.1). */
+const FILE_FAILURE_HOLD_MS = 2000
 /** Seek windows of long-GOP material: decoded once into the shared frame cache, like the browser's GOP ranges. */
 export const VIDEO_EDIT_NATIVE_SEEK_WINDOW_SECONDS = 1
 
@@ -43,16 +50,16 @@ type Plan = { times: readonly number[] } | { range: { from: number; to?: number 
 interface Consumer { frames: Map<number, NativeVideoFrame>; missing: Set<number>; highest: number; done?: { reason: string; delivered?: number; at: number }; wake?: () => void }
 interface Ticket { deliver: (frame: NativeVideoFrame) => void; fail: (error: Error) => void }
 
-function decodeFailure(name: string, error: unknown): Error {
-  return new Error(`素材「${name}」解码失败，请确认文件可用，或在项目素材中重新定位源文件。`, { cause: error })
-}
+const decodeFailure = videoEditNativeReadFailure
+const closedFailure = (): VideoEditNativeFailure => videoEditNativeClosed()
 
 /** One native decoder session (a native stream) and the routing of its frames and plan events. */
 export class VideoEditNativeDecoderSession {
   private readonly consumers = new Map<string, Consumer>()
   private readonly tickets = new Map<string, Ticket>()
   private readonly unsubscribe: () => void
-  private ended?: Error
+  private ended?: VideoEditNativeFailure
+  private readonly endedListeners = new Set<() => void>()
   private closing?: Promise<void>
   private next = 0
   readonly rotation
@@ -68,6 +75,14 @@ export class VideoEditNativeDecoderSession {
   }
 
   get intraOnly(): boolean { return this.info.decoder.intraOnly }
+
+  /** False once the native stream ended (service exited, frames could not be delivered) or the session closed. */
+  get alive(): boolean { return !this.ended && !this.closing }
+
+  /** Called once when the native stream ends; the owner drops the session so the next read opens a new one. */
+  whenEnded(listener: () => void): void {
+    if (this.ended) listener(); else this.endedListeners.add(listener)
+  }
 
   private picture(frame: NativeVideoFrame): VideoEditNativePicture { return new VideoEditNativePicture(frame, this.rotation, this.frameDuration, { bitDepth: this.info.decoder.bitDepth, hasAlpha: this.info.decoder.hasAlpha }) }
 
@@ -93,8 +108,14 @@ export class VideoEditNativeDecoderSession {
   }
 
   private onEnded(payload: VideoFrameStreamEndedPayload): void {
-    this.ended = decodeFailure(this.name, new Error(payload.message ?? payload.reason))
+    // A stream that ends while open always ended by a failure: the service exited, or its frames could not reach
+    // this worker (import/delivery failure). Both are service failures; no further frame or plan event comes.
+    const code = payload.code ?? (payload.reason === 'service_exited' ? 'PROCESS_EXITED' : undefined)
+    const kind = payload.code ? videoEditNativeFailureKindOf(code) : 'service'
+    this.ended = new VideoEditNativeFailure(videoEditNativeFailureMessage(this.name, kind), kind, code, { cause: new Error(payload.message ?? payload.reason) })
     this.fail(this.ended)
+    for (const listener of this.endedListeners) listener()
+    this.endedListeners.clear()
   }
 
   private fail(error: Error): void {
@@ -105,7 +126,7 @@ export class VideoEditNativeDecoderSession {
 
   /** The picture showing at `time`, or null when the file has none there. */
   async frameAt(time: number): Promise<VideoEditNativePicture | null> {
-    if (this.closing || this.ended) throw this.ended ?? new Error('预览解码已关闭。')
+    if (this.closing || this.ended) throw this.ended ?? closedFailure()
     const ticket = `t${++this.next}`
     let ticketEntry!: Ticket
     const arrived = new Promise<NativeVideoFrame>((deliver, fail) => { ticketEntry = { deliver, fail } })
@@ -128,10 +149,13 @@ export class VideoEditNativeDecoderSession {
 
   /**
    * Runs one plan. `times`: exactly one picture or null per time, in order. `range`: every picture from the one
-   * showing at `from` up to `to`, in order. Aborting (or returning the generator) cancels the plan.
+   * showing at `from` up to `to`, in order, with null where a decoded picture never arrived (so a reader does not
+   * stretch the previous picture over it). Aborting (or returning the generator) cancels the plan. `outcome.completed`
+   * tells whether the service finished the whole plan (a range reached `to` or the end of the file), as opposed to
+   * stopping early (cancelled, interrupted, failed).
    */
-  async *run(plan: Plan, signal?: AbortSignal): AsyncGenerator<VideoEditNativePicture | null, void, unknown> {
-    if (this.closing || this.ended) throw this.ended ?? new Error('预览解码已关闭。')
+  async *run(plan: Plan, signal?: AbortSignal, outcome?: { completed: boolean }): AsyncGenerator<VideoEditNativePicture | null, void, unknown> {
+    if (this.closing || this.ended) throw this.ended ?? closedFailure()
     const scheduleId = `s${++this.next}`
     const consumer: Consumer = { frames: new Map(), missing: new Set(), highest: -1 }
     this.consumers.set(scheduleId, consumer)
@@ -142,13 +166,17 @@ export class VideoEditNativeDecoderSession {
       await this.channel.call('schedule', { streamId: this.info.streamId, scheduleId, ...(times ? { times: [...times] } : { range: { ...('range' in plan ? plan.range : { from: 0 }) } }) })
         .catch(error => { throw decodeFailure(this.name, error) })
       for (let index = 0; times === undefined || index < times.length; index++) {
-        const outcome = await this.take(consumer, index, times !== undefined, signal)
-        if (outcome === 'end') break
-        if (outcome === 'missing') { if (times) yield null; continue }
-        yield this.picture(outcome)
+        const item = await this.take(consumer, index, times !== undefined, signal)
+        if (item === 'end') break
+        if (item === 'missing') { yield null; continue }
+        yield this.picture(item)
       }
+      if (outcome) outcome.completed = consumer.done?.reason === 'completed' && !signal?.aborted && !this.ended
+      // A stream that ended (service exited, frames undeliverable) fails the plan instead of answering every remaining
+      // time with "no picture": the router recovers it on a new session or another backend (task 3.1).
+      if (this.ended && !signal?.aborted) throw this.ended
       if (times && 'times' in plan) for (let index = times.length; index < plan.times.length && !signal?.aborted; index++) yield null
-      if (consumer.done?.reason === 'error' && times === undefined && !signal?.aborted) throw this.ended ?? decodeFailure(this.name, new Error('连续取帧失败'))
+      if (consumer.done?.reason === 'error' && times === undefined && !signal?.aborted) throw decodeFailure(this.name, new Error('连续取帧失败'), 'file')
     } finally {
       signal?.removeEventListener('abort', abort)
       this.consumers.delete(scheduleId)
@@ -171,6 +199,8 @@ export class VideoEditNativeDecoderSession {
       const frame = consumer.frames.get(index)
       if (frame) { consumer.frames.delete(index); return frame }
       if (consumer.missing.has(index)) return 'missing'
+      // Nothing more comes from an ended stream: no grace period.
+      if (this.ended) return 'end'
       const done = consumer.done
       let deadline: number | undefined
       if (done) {
@@ -186,12 +216,17 @@ export class VideoEditNativeDecoderSession {
     }
   }
 
-  /** Stops the native stream; frames still borrowed by pictures come back as their owners close them. */
-  close(): Promise<void> {
+  /**
+   * Stops the native stream; frames still borrowed by pictures come back as their owners close them. `reason`
+   * `service`: the router reset the session after a failure, so waiting reads fail as retryable (task 3.1).
+   */
+  close(reason: 'closed' | 'service' = 'closed'): Promise<void> {
+    // A reset fails plans and reads in progress (instead of answering "no picture"), so they recover too.
+    if (reason === 'service' && !this.closing) this.ended ??= videoEditNativeClosed('service')
     this.closing ??= (async () => {
       this.unsubscribe()
       for (const consumer of this.consumers.values()) { consumer.done ??= { reason: 'cancelled', at: performance.now() - LOST_FRAME_GRACE_MS }; consumer.wake?.() }
-      for (const ticket of this.tickets.values()) ticket.fail(new Error('预览解码已关闭。'))
+      for (const ticket of this.tickets.values()) ticket.fail(videoEditNativeClosed(reason))
       this.tickets.clear()
       await this.channel.call('closeStream', { streamId: this.info.streamId }).catch(() => undefined)
       this.onClosed()
@@ -226,20 +261,32 @@ export class VideoEditNativeFileSource implements VideoEditFrameSource {
   constructor(private readonly owner: VideoEditNativeFrames, readonly media: VideoEditMedia, private readonly path: string) {}
 
   private session(purpose: 'playback' | 'seek'): Promise<VideoEditNativeDecoderSession> {
-    if (this.closed) return Promise.reject(new Error('预览解码已关闭。'))
+    if (this.closed) return Promise.reject(closedFailure())
     const field = purpose === 'playback' ? 'playback' : 'seekSession'
     let pending = this[field]
     if (!pending) {
-      pending = this.owner.openSession(this.media, this.path, purpose)
-      // A failed open is not kept: a restored file is read again.
-      pending.catch(() => { if (this[field] === pending) this[field] = undefined })
-      this[field] = pending
+      const opening = this.owner.openSession(this.media, this.path, purpose)
+      // A failed open is not kept (a restored file is read again), nor is a session whose stream ended: the next
+      // read opens a new one on the restarted service (task 3.1).
+      opening.then(session => session.whenEnded(() => { if (this[field] === opening) this[field] = undefined }), () => { if (this[field] === opening) this[field] = undefined })
+      this[field] = pending = opening
     }
     return pending
   }
 
   /** The shared single-frame session (also used by the seeker); opened on first use. */
   seek(): Promise<VideoEditNativeDecoderSession> { return this.session('seek') }
+
+  /**
+   * Drops this file's shared sessions after a failure (task 3.1): reads waiting on them fail as retryable, and the
+   * next read opens new sessions. A session that timed out may still be alive natively; closing it stops it.
+   */
+  reset(): void {
+    const sessions = [this.playback, this.seekSession]
+    this.playback = undefined; this.seekSession = undefined
+    this.lane.cancelSpeculative()
+    for (const pending of sessions) void pending?.then(session => session.close('service'), () => undefined)
+  }
 
   clipFrames(): VideoEditClipFrames | undefined {
     if (this.media.kind !== 'video') return undefined
@@ -282,8 +329,6 @@ export interface VideoEditNativeFramesOptions {
   maxSessions?: number
   /** Whether sound is decoded natively (default `VIDEO_EDIT_NATIVE_SOUND_READY`). */
   sound?: boolean
-  /** A session of this file could not be opened (the router may choose another backend for later opens). */
-  onFailure?(media: VideoEditMedia, error: unknown): void
 }
 
 /** The native frame backend of one renderer. */
@@ -300,22 +345,23 @@ export class VideoEditNativeFrames implements VideoEditFrameBackend {
   get sound(): boolean { return this.options.sound ?? VIDEO_EDIT_NATIVE_SOUND_READY }
 
   /** Opens the sound session of one clip reader; null when the file has no sound stream. */
-  async openSound(media: VideoEditMedia, path: string, sampleRate: number | undefined, audioStream?: number): Promise<VideoEditPcmSession | null> {
-    try {
-      return await openVideoEditNativePcm(this.options.channel, path, media.name, { ...(sampleRate !== undefined ? { sampleRate } : {}), ...(audioStream !== undefined ? { audioStream } : {}) })
-    } catch (error) { this.options.onFailure?.(media, error); throw error }
+  openSound(media: VideoEditMedia, path: string, sampleRate: number | undefined, audioStream?: number): Promise<VideoEditPcmSession | null> {
+    return openVideoEditNativePcm(this.options.channel, path, media.name, { ...(sampleRate !== undefined ? { sampleRate } : {}), ...(audioStream !== undefined ? { audioStream } : {}) })
   }
 
-  /** Opens a native decoder session, counted against the per-renderer limit. */
+  /** Opens a native decoder session, counted against the per-renderer limit (an exceeded budget is a `budget` failure). */
   async openSession(media: VideoEditMedia, path: string, purpose: 'playback' | 'seek'): Promise<VideoEditNativeDecoderSession> {
     const limit = this.options.maxSessions ?? VIDEO_EDIT_NATIVE_MAX_SESSIONS
-    if (this.sessions >= limit) throw new Error('同时读取的视频素材过多，请减少同时显示的视频后重试。')
+    if (this.sessions >= limit) throw new VideoEditNativeFailure(videoEditNativeFailureMessage(media.name, 'budget'), 'budget', 'BUDGET_EXCEEDED')
     this.sessions++
     try {
       const info = await this.options.channel.call('openDecoder', { path, purpose })
       return new VideoEditNativeDecoderSession(this.options.channel, info, media.name, () => { this.sessions-- })
-    } catch (error) { this.sessions--; this.options.onFailure?.(media, error); throw videoEditSourceReadError(media.name, error) }
+    } catch (error) { this.sessions--; throw videoEditNativeOpenFailure(media.name, error) }
   }
+
+  /** Drops the shared sessions of a file after a failure so the next read opens new ones (router recovery, 3.1). */
+  reset(media: VideoEditMedia): void { this.files.get(`${media.path}\u0000${media.sourceRevision ?? ''}`)?.source.reset() }
 
   /** The shared file source with one more user; pair with `release(key)`. */
   acquire(media: VideoEditMedia): { key: string; source: VideoEditNativeFileSource } {
@@ -323,7 +369,7 @@ export class VideoEditNativeFrames implements VideoEditFrameBackend {
     let entry = this.files.get(key)
     if (!entry) {
       const path = this.options.localPath(media)
-      if (!path) throw videoEditSourceReadError(media.name, new Error('没有本地源文件路径'))
+      if (!path) throw new VideoEditNativeFailure(videoEditSourceReadError(media.name, new Error('没有本地源文件路径')).message, 'file', 'UNAUTHORIZED')
       entry = { users: 0, source: new VideoEditNativeFileSource(this, media, path) }
       this.files.set(key, entry)
     }
@@ -372,12 +418,17 @@ export class VideoEditNativeSeeker implements VideoEditFrameSeeker {
   private opened?: { key: string; source: VideoEditNativeFileSource }
   private readonly windows = new Map<number, SeekWindow>()
   private disposed = false
-  private failure?: Error
+  /**
+   * A file failure of a window answers further reads for `FILE_FAILURE_HOLD_MS`, so a scrub over an unreadable file
+   * does not start a failing decode per pointer event; afterwards reads try again (a repaired or restored file).
+   */
+  private failed?: { error: Error; until: number }
   private direction = 0
 
   constructor(private readonly backend: VideoEditNativeFrames, private readonly media: VideoEditMedia, private readonly cache: VideoEditFrameCache, private readonly snapshot: VideoEditSnapshot) {}
 
   private get path(): string { return this.media.path }
+  private get failure(): Error | undefined { return this.failed && performance.now() < this.failed.until ? this.failed.error : undefined }
   private cached(time: number): VideoEditGpuFrame | undefined { return (this.cache.get(this.path, time) as VideoEditGpuFrame | undefined)?.clone() }
   private source(): VideoEditNativeFileSource { this.opened ??= this.backend.acquire(this.media); return this.opened.source }
 
@@ -386,7 +437,7 @@ export class VideoEditNativeSeeker implements VideoEditFrameSeeker {
   }
 
   async sample(time: number, direction: number): Promise<{ sample?: VideoEditGpuFrame; hit: boolean }> {
-    if (this.disposed) throw new Error('预览解码已关闭。')
+    if (this.disposed) throw closedFailure()
     if (this.failure) throw this.failure
     const source = this.source()
     const changed = Math.sign(direction) !== this.direction
@@ -395,26 +446,50 @@ export class VideoEditNativeSeeker implements VideoEditFrameSeeker {
     const cached = this.cached(time)
     if (cached) { if (direction !== 0) this.prefetch(source, time, direction); return { sample: cached, hit: true } }
     const session = await source.seek()
-    if (this.disposed) throw new Error('预览解码已关闭。')
+    if (this.disposed) throw closedFailure()
     if (session.intraOnly) {
       // Every picture is a key frame: read exactly the requested one.
       const picture = await source.lane.run(() => session.frameAt(time))
-      if (this.disposed) { picture?.close(); throw new Error('预览解码已关闭。') }
+      if (this.disposed) { picture?.close(); throw closedFailure() }
       if (!picture) return { hit: false }
       const copy = await this.normalize(picture)
       this.cache.put(this.path, copy.clone(), new Set())
       return { sample: copy, hit: false }
     }
-    const already = this.cached(time)
-    if (already) return { sample: already, hit: true }
-    const window = this.window(source, Math.floor(time / VIDEO_EDIT_NATIVE_SEEK_WINDOW_SECONDS) * VIDEO_EDIT_NATIVE_SEEK_WINDOW_SECONDS, false)
-    return { sample: await new Promise<VideoEditGpuFrame | undefined>((resolve, reject) => window.waiters.add({ time, resolve, reject })), hit: false }
+    // A window can end without this time's picture for it: delivered and already evicted before this request joined, or
+    // the window was stopped. Decode once more instead of showing nothing (task 3.1: a scrubbed layer showed no picture);
+    // only a time without any picture in the file (before its first frame) stays empty.
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const already = this.cached(time)
+      if (already) return { sample: already, hit: true }
+      const start = Math.floor(time / VIDEO_EDIT_NATIVE_SEEK_WINDOW_SECONDS) * VIDEO_EDIT_NATIVE_SEEK_WINDOW_SECONDS
+      const window = this.window(source, start, false)
+      const picture = await new Promise<VideoEditGpuFrame | undefined>((resolve, reject) => window.waiters.add({ time, resolve, reject }))
+      if (picture) {
+        if (direction !== 0) this.prefetch(source, time, direction)
+        return { sample: picture, hit: false }
+      }
+      if (this.disposed) throw closedFailure()
+      if (this.failure) throw this.failure
+    }
+    return { hit: false }
   }
 
   private cancelSpeculative(): void {
     for (const window of this.windows.values()) if (window.speculative && !window.waiters.size) window.abort.abort()
   }
 
+  /**
+   * Whether every picture of the window starting at `start` is likely cached: probes its first, middle and last
+   * picture (a window is decoded front to back, and the cache evicts by distance, so a partly evicted window misses
+   * one of them). Checking only the first picture let a scrub skip prefetching a window that was mostly gone.
+   */
+  private windowCached(start: number): boolean {
+    const width = VIDEO_EDIT_NATIVE_SEEK_WINDOW_SECONDS
+    return [start + 1e-6, start + width / 2, start + width - 1e-3].every(time => time >= this.media.durationSeconds || this.cache.get(this.path, time) !== undefined)
+  }
+
+  /** Keeps the window ahead of a scrub (in its direction) decoding while the session is idle. */
   private prefetch(source: VideoEditNativeFileSource, time: number, direction: number): void {
     const width = VIDEO_EDIT_NATIVE_SEEK_WINDOW_SECONDS
     const start = Math.floor(time / width) * width + (direction > 0 ? width : -width)
@@ -422,7 +497,7 @@ export class VideoEditNativeSeeker implements VideoEditFrameSeeker {
     // Only when the session is already open (a scrub has started) and the neighbour is not cached yet.
     void source.seek().then(session => {
       if (this.disposed || this.failure || session.intraOnly || this.windows.has(start) || this.windows.size >= 2) return
-      if (this.cache.get(this.path, direction > 0 ? start + 1e-6 : start + width - 1e-6)) return
+      if (this.windowCached(start)) return
       this.window(source, start, true)
     }, () => undefined)
   }
@@ -436,36 +511,68 @@ export class VideoEditNativeSeeker implements VideoEditFrameSeeker {
     const deliver = (frame: VideoEditGpuFrame): void => {
       for (const waiter of window.waiters) if (waiter.time >= frame.timestamp - 1e-7 && waiter.time < frame.timestamp + frame.duration - 1e-7) { window.waiters.delete(waiter); waiter.resolve(frame.clone()) }
     }
+    const end = start + VIDEO_EDIT_NATIVE_SEEK_WINDOW_SECONDS
     window.done = source.lane.run(async lane => {
       const stop = (): void => window.abort.abort()
       lane.addEventListener('abort', () => { if (!window.waiters.size) stop() }, { once: true })
       if (window.abort.signal.aborted) return
       const session = await source.seek()
-      for await (const picture of session.run({ range: { from: start, to: start + VIDEO_EDIT_NATIVE_SEEK_WINDOW_SECONDS } }, window.abort.signal)) {
-        if (!picture) continue
-        if (this.disposed || window.abort.signal.aborted) { picture.close(); break }
-        const copy = await this.normalize(picture)
-        if (this.disposed) { copy.close(); break }
-        deliver(copy)
-        this.cache.put(this.path, copy, new Set())
+      // The exact picture at a time is the last one starting at or before it (task 3.1): each picture is cached and
+      // handed to waiting reads with its span reaching the next picture, so a decoder duration shorter than the gap
+      // (variable frame rate) still holds the picture there instead of leaving the layer empty. Only a gap the decoder
+      // really has is held over: after a picture that never arrived, or a window stopped early, the previous picture
+      // keeps its own span (a scrub showed a key frame for later times when the window ended early).
+      let held: VideoEditGpuFrame | undefined
+      const settle = (frame: VideoEditGpuFrame, next: number): void => {
+        const shown = next - frame.timestamp > frame.duration + 1e-6 ? frame.retimed(next - frame.timestamp) : frame
+        if (shown !== frame) frame.close()
+        deliver(shown)
+        this.cache.put(this.path, shown, new Set())
       }
-    }, speculative).then(() => {
+      const outcome = { completed: false }
+      try {
+        for await (const picture of session.run({ range: { from: start, to: end } }, window.abort.signal, outcome)) {
+          if (!picture) { if (held) settle(held, held.timestamp); held = undefined; continue }
+          if (this.disposed || window.abort.signal.aborted) { picture.close(); break }
+          // A partly cached window (prefetched again after eviction) keeps its cached pictures: no second GPU copy.
+          const cached = this.cached(picture.timestamp + 1e-7)
+          let copy: VideoEditGpuFrame
+          if (cached && Math.abs(cached.timestamp - picture.timestamp) < 1e-6) { picture.close(); copy = cached }
+          else {
+            cached?.close()
+            copy = await this.normalize(picture)
+            if (this.disposed) { copy.close(); break }
+          }
+          deliver(copy)
+          if (held) settle(held, copy.timestamp)
+          held = copy
+        }
+        // When the window ran to its end, every picture starting before it was delivered and the last one holds until it.
+        if (held && !this.disposed && !window.abort.signal.aborted) settle(held, outcome.completed ? end : held.timestamp)
+        else held?.close()
+        held = undefined
+      } finally { held?.close() }
+    }, speculative)
+    // A finished window leaves the map before its waiters resume: a read joining it afterwards would wait forever
+    // (task 3.1: removal used to run one step later, in `finally`).
+    const finish = (): void => { if (this.windows.get(start) === window) this.windows.delete(start) }
+    window.done = window.done.then(() => {
+      finish()
       for (const waiter of window.waiters) waiter.resolve(this.cached(waiter.time))
     }, error => {
+      finish()
       const failure = error instanceof Error ? error : new Error(String(error))
-      if (!this.disposed && !window.abort.signal.aborted) this.failure = failure
-      for (const waiter of window.waiters) waiter.reject(this.disposed ? new Error('预览解码已关闭。') : failure)
-    }).finally(() => {
-      window.waiters.clear()
-      if (this.windows.get(start) === window) this.windows.delete(start)
-    })
+      // Only a file failure sticks (the file cannot be decoded); a service failure is retried by the next request.
+      if (!this.disposed && !window.abort.signal.aborted && videoEditNativeFailureKind(failure) === 'file') this.failed = { error: failure, until: performance.now() + FILE_FAILURE_HOLD_MS }
+      for (const waiter of window.waiters) waiter.reject(this.disposed ? closedFailure() : failure)
+    }).finally(() => window.waiters.clear())
     return window
   }
 
   async dispose(): Promise<void> {
     if (this.disposed) return
     this.disposed = true
-    for (const window of this.windows.values()) { window.abort.abort(); for (const waiter of window.waiters) waiter.reject(new Error('预览解码已关闭。')); window.waiters.clear() }
+    for (const window of this.windows.values()) { window.abort.abort(); for (const waiter of window.waiters) waiter.reject(closedFailure()); window.waiters.clear() }
     await Promise.allSettled([...this.windows.values()].map(window => window.done))
     this.windows.clear()
     if (this.opened) this.backend.release(this.opened.key)

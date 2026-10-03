@@ -13,6 +13,7 @@ import {
   parseVideoFrameDecoderRequest,
   parseVideoFrameScheduleRequest,
   parseVideoFrameTestStreamRequest,
+  VideoDecoderError,
   type VideoFrameAtRequest,
   type VideoFrameAtResult,
   type VideoFrameBridgeStats,
@@ -80,8 +81,8 @@ export function registerVideoFramesIpc(): void {
     },
   )
   registerIpcHandler<VideoFrameDecoderRequest, VideoFrameDecoderInfo>('videoFrames:openDecoder', parseVideoFrameDecoderRequest, (request, event) => {
-    if (!path.isAbsolute(request.path)) throw new Error('素材路径必须是绝对路径')
-    if (!isPathWithinAllowedMediaRoots(request.path)) throw new Error('素材所在目录尚未授权读取')
+    if (!path.isAbsolute(request.path)) throw new VideoDecoderError('UNAUTHORIZED', '素材路径必须是绝对路径')
+    if (!isPathWithinAllowedMediaRoots(request.path)) throw new VideoDecoderError('UNAUTHORIZED', '素材所在目录尚未授权读取')
     return getVideoFrameBridge().openDecoder(webContentsFrameTarget(event.sender), request)
   })
   registerIpcHandler<VideoFrameAtRequest, VideoFrameAtResult>('videoFrames:frameAt', parseVideoFrameAtRequest, (request, event) => getVideoFrameBridge().frameAt(event.sender.id, request))
@@ -93,8 +94,8 @@ export function registerVideoFramesIpc(): void {
     (streamId, event) => getVideoFrameBridge().closeStream(streamId, 'requested', event.sender.id),
   )
   registerIpcHandler<VideoAudioOpenRequest, VideoAudioSessionInfo>('videoFrames:openAudio', parseVideoAudioOpenRequest, (request, event) => {
-    if (!path.isAbsolute(request.path)) throw new Error('素材路径必须是绝对路径')
-    if (!isPathWithinAllowedMediaRoots(request.path)) throw new Error('素材所在目录尚未授权读取')
+    if (!path.isAbsolute(request.path)) throw new VideoDecoderError('UNAUTHORIZED', '素材路径必须是绝对路径')
+    if (!isPathWithinAllowedMediaRoots(request.path)) throw new VideoDecoderError('UNAUTHORIZED', '素材所在目录尚未授权读取')
     return getVideoAudioSessions().open(webContentsFrameTarget(event.sender), request)
   })
   registerIpcHandler<VideoAudioReadRequest, VideoAudioReadResult>('videoFrames:readAudio', parseVideoAudioReadRequest, (request, event) => getVideoAudioSessions().read(event.sender.id, request))

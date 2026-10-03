@@ -21,7 +21,7 @@ use convert::Converter;
 use device::GpuDevice;
 use shared_texture::{ClientProcess, SharedSlot};
 
-pub use shared_texture::process_usage;
+pub use shared_texture::{process_memory, process_usage};
 
 pub struct WindowsPlatform {
     gpu: Arc<GpuDevice>,
@@ -62,6 +62,10 @@ impl VideoPlatform for WindowsPlatform {
 
     fn local_memory(&self) -> Option<(u64, u64)> {
         self.gpu.local_memory()
+    }
+
+    fn device_lost(&self) -> Option<String> {
+        self.gpu.removed_reason()
     }
 
     fn hardware_device(&self) -> Result<HardwareDevice, String> {

@@ -42,7 +42,8 @@ const log = (level: RenderLogMessage['level'], message: string, event: string, c
 function frameBackend(decode: RenderDecodeOptions | undefined): VideoEditFrameRouter {
   setLocalPaths(decode?.localPaths)
   const channel = decode?.nativeAvailable && decode.forced !== 'browser' ? nativeFrames : undefined
-  nativeBackend = channel ? new VideoEditNativeFrames({ channel, localPath: media => localPaths.get(media.path), onFailure: (media, error) => router?.nativeFailed(media, error) }) : undefined
+  // Runtime native failures are recovered per read by the router (task 3.1).
+  nativeBackend = channel ? new VideoEditNativeFrames({ channel, localPath: media => localPaths.get(media.path) }) : undefined
   router = new VideoEditFrameRouter(new VideoEditBrowserFrames(), nativeBackend, { nativeAvailable: !!nativeBackend, ...(decode?.forced ? { forced: decode.forced } : {}) }, log)
   return router
 }

@@ -17,6 +17,7 @@ import {
   type VideoDecoderEvent,
   type VideoDecoderFrameAtResult,
   type VideoDecoderHello,
+  type VideoDecoderLimitOverrides,
   type VideoDecoderNotification,
   type VideoDecoderOpenRequest,
   type VideoDecoderProbeResult,
@@ -64,6 +65,15 @@ export interface VideoDecoderServiceOptions {
   now?: () => number
   /** 纹理句柄复制目标（Electron 主进程）。默认当前进程。 */
   clientPid?: number
+  /**
+   * 心跳（3.1）：就绪后每隔 `heartbeatIntervalMs` 发一次 `ping`，单次等 `heartbeatTimeoutMs`；连续 `heartbeatMisses`
+   * 次没有回应即判定主循环卡死，结束进程并按崩溃重启。间隔为 0 关闭。
+   */
+  heartbeatIntervalMs?: number
+  heartbeatTimeoutMs?: number
+  heartbeatMisses?: number
+  /** 每次启动时读取的资源上限覆盖（开发诊断），随 hello 发给原生服务。 */
+  limits?: () => VideoDecoderLimitOverrides | undefined
 }
 
 export interface VideoDecoderRequestOptions {
@@ -87,6 +97,20 @@ interface NativeLogLine {
 
 const DEFAULT_RESTART_POLICY: VideoDecoderRestartPolicy = { maxRestarts: 3, windowMs: 60_000, backoffMs: [250, 1_000, 3_000] }
 const NATIVE_LOG_EVENT = /^[a-z0-9_.]+$/
+/**
+ * 交互类请求的默认超时（3.1）：超时即视为该会话或服务出了故障，由调用方关闭会话并重试或回退，而不是让预览等 30 秒。
+ * 依据：单帧取帧冷启动最慢约 1 秒（长 GOP 4K，1.3 实测 0.83–0.98s），打开会话含解出首帧（1.3 实测 setup ≤0.5s，
+ * 慢盘放宽），声音读取每次 ≤2 秒（实测 4–8ms）。
+ */
+const COMMAND_TIMEOUT_MS: Partial<Record<VideoDecoderCommand['type'], number>> = {
+  frame_at: 8_000,
+  open_decoder: 20_000,
+  open_audio: 20_000,
+  read_audio: 10_000,
+  schedule: 5_000,
+  cancel_schedule: 5_000,
+  close_audio: 5_000,
+}
 
 function defaultSpawn(executable: string): VideoDecoderChildProcess {
   return spawn(executable, [], { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true })
@@ -101,7 +125,7 @@ function abortError(): VideoDecoderError {
  * 退出检测与有限次自动重启，并把原生 stderr 的结构化日志转入主进程统一日志。
  */
 export class VideoDecoderService {
-  private readonly options: Required<Omit<VideoDecoderServiceOptions, 'restart'>> & { restart: VideoDecoderRestartPolicy }
+  private readonly options: Required<Omit<VideoDecoderServiceOptions, 'restart' | 'limits'>> & { restart: VideoDecoderRestartPolicy; limits?: VideoDecoderServiceOptions['limits'] }
   private stateValue: VideoDecoderServiceState = 'idle'
   private child: VideoDecoderChildProcess | null = null
   private generation = 0
@@ -114,6 +138,11 @@ export class VideoDecoderService {
   private stderrTail = ''
   private readonly eventListeners = new Set<(event: VideoDecoderEvent) => void>()
   private readonly lifecycleListeners = new Set<(event: VideoDecoderLifecycleEvent) => void>()
+  private heartbeatTimer: ReturnType<typeof setInterval> | null = null
+  private heartbeatInFlight = false
+  private heartbeatMissed = 0
+  /** Why the client ended the current process itself (logged with its exit). */
+  private killReason: 'hung' | null = null
 
   constructor(options: VideoDecoderServiceOptions) {
     this.options = {
@@ -123,6 +152,9 @@ export class VideoDecoderService {
       shutdownTimeoutMs: 3_000,
       now: Date.now,
       clientPid: process.pid,
+      heartbeatIntervalMs: 1_000,
+      heartbeatTimeoutMs: 1_500,
+      heartbeatMisses: 2,
       ...options,
       restart: { ...DEFAULT_RESTART_POLICY, ...options.restart },
     }
@@ -249,6 +281,7 @@ export class VideoDecoderService {
     if (this.stateValue === 'stopped') return
     this.stateValue = 'stopped'
     this.clearRestartTimer()
+    this.stopHeartbeat()
     const child = this.child
     if (!child) {
       this.rejectAll(new VideoDecoderError('STOPPED', '原生视频解码服务已关闭'))
@@ -269,7 +302,45 @@ export class VideoDecoderService {
     if (options.signal?.aborted) throw abortError()
     const child = this.child
     if (!child) throw new VideoDecoderError('PROCESS_EXITED', '原生视频解码服务已退出')
-    return (await this.send(child, command, options.timeoutMs ?? this.options.requestTimeoutMs, options.signal)) as T
+    return (await this.send(child, command, options.timeoutMs ?? COMMAND_TIMEOUT_MS[command.type] ?? this.options.requestTimeoutMs, options.signal)) as T
+  }
+
+  /**
+   * Heartbeat (3.1): a `ping` the native main loop answers at once. A request timing out only cancels that request;
+   * only a main loop that stops answering for `heartbeatMisses` pings in a row is hung: the process is ended and
+   * restarts like a crash, so every request it holds fails fast and callers recover on the new process.
+   */
+  private startHeartbeat(child: VideoDecoderChildProcess, generation: number): void {
+    this.stopHeartbeat()
+    const interval = this.options.heartbeatIntervalMs
+    if (interval <= 0) return
+    this.heartbeatMissed = 0
+    const timer = setInterval(() => {
+      if (generation !== this.generation || this.child !== child || this.stateValue !== 'ready') { clearInterval(timer); return }
+      if (this.heartbeatInFlight) return
+      this.heartbeatInFlight = true
+      this.send(child, { type: 'ping' }, this.options.heartbeatTimeoutMs, undefined, true).then(
+        () => { this.heartbeatMissed = 0 },
+        (error: unknown) => {
+          if (generation !== this.generation || this.child !== child || !(error instanceof VideoDecoderError) || error.code !== 'TIMEOUT') return
+          this.heartbeatMissed += 1
+          this.options.logger.warn('原生视频解码服务心跳未回应', { event: 'video_decoder.service.heartbeat_missed', context: { pid: child.pid, missed: this.heartbeatMissed, timeoutMs: this.options.heartbeatTimeoutMs } })
+          if (this.heartbeatMissed < this.options.heartbeatMisses) return
+          this.options.logger.error('原生视频解码服务无响应，结束进程后重启', { event: 'video_decoder.service.hung', context: { pid: child.pid, missed: this.heartbeatMissed, pendingRequests: this.pending.size } })
+          this.heartbeatMissed = 0
+          this.killReason = 'hung'
+          child.kill()
+        },
+      ).finally(() => { this.heartbeatInFlight = false })
+    }, interval)
+    timer.unref?.()
+    this.heartbeatTimer = timer
+  }
+
+  private stopHeartbeat(): void {
+    if (this.heartbeatTimer) clearInterval(this.heartbeatTimer)
+    this.heartbeatTimer = null
+    this.heartbeatInFlight = false
   }
 
   private allocateId(): string {
@@ -283,7 +354,8 @@ export class VideoDecoderService {
     child.stdin.write(encodeVideoDecoderFrame({ id, ...command }))
   }
 
-  private send(child: VideoDecoderChildProcess, command: VideoDecoderCommand, timeoutMs: number, signal?: AbortSignal): Promise<unknown> {
+  /** `quiet`: no per-request logs (heartbeat pings; their outcome is logged by the heartbeat). */
+  private send(child: VideoDecoderChildProcess, command: VideoDecoderCommand, timeoutMs: number, signal?: AbortSignal, quiet = false): Promise<unknown> {
     const id = this.allocateId()
     return new Promise<unknown>((resolve, reject) => {
       const startedAt = this.options.now()
@@ -294,7 +366,7 @@ export class VideoDecoderService {
         this.pending.delete(id)
         cleanup()
         cancelNative()
-        this.options.logger.warn('原生视频解码请求超时', { event: 'video_decoder.request.timeout', context: { requestId: id, type: command.type, timeoutMs } })
+        if (!quiet) this.options.logger.warn('原生视频解码请求超时', { event: 'video_decoder.request.timeout', context: { requestId: id, type: command.type, timeoutMs } })
         reject(new VideoDecoderError('TIMEOUT', `原生视频解码服务响应超时（${timeoutMs}ms）`))
       }, timeoutMs)
       const onAbort = () => {
@@ -312,7 +384,7 @@ export class VideoDecoderService {
       this.pending.set(id, {
         type: command.type,
         resolve: (value) => {
-          this.options.logger.debug('原生视频解码请求完成', { event: 'video_decoder.request.completed', context: { requestId: id, type: command.type, elapsedMs: this.options.now() - startedAt } })
+          if (!quiet) this.options.logger.debug('原生视频解码请求完成', { event: 'video_decoder.request.completed', context: { requestId: id, type: command.type, elapsedMs: this.options.now() - startedAt } })
           resolve(value)
         },
         reject,
@@ -342,9 +414,11 @@ export class VideoDecoderService {
     }
     this.child = child
     this.stderrTail = ''
+    this.killReason = null
     this.attach(child, generation)
     try {
-      const hello = (await this.send(child, { type: 'hello', clientPid: this.options.clientPid }, this.options.handshakeTimeoutMs)) as VideoDecoderHello
+      const limits = this.options.limits?.()
+      const hello = (await this.send(child, { type: 'hello', clientPid: this.options.clientPid, ...(limits ? { limits } : {}) }, this.options.handshakeTimeoutMs)) as VideoDecoderHello
       if (hello?.service !== 'henji-video-decoder' || hello.protocolVersion !== VIDEO_DECODER_PROTOCOL_VERSION) {
         throw new VideoDecoderError('HANDSHAKE_FAILED', `原生视频解码服务协议不匹配（${String(hello?.protocolVersion)}）`)
       }
@@ -354,6 +428,7 @@ export class VideoDecoderService {
       this.helloValue = hello
       this.stateValue = 'ready'
       this.logReady(hello, this.options.now() - startedAt)
+      this.startHeartbeat(child, generation)
       this.emitLifecycle({ type: 'ready', pid: hello.pid })
       return hello
     } catch (error) {
@@ -386,6 +461,7 @@ export class VideoDecoderService {
         audioDecoderCount: hello.ffmpeg.audioDecoders.length,
         videoDecoders: hello.ffmpeg.videoDecoders,
         hwDeviceTypes: hello.ffmpeg.hwDeviceTypes,
+        limits: hello.limits ?? null,
         d3d11: d3d11.available
           ? { adapter: d3d11.adapter.description, vendorId: d3d11.adapter.vendorId, deviceId: d3d11.adapter.deviceId, dedicatedVideoMemoryMiB: d3d11.adapter.dedicatedVideoMemoryMiB, featureLevel: d3d11.featureLevel, videoDecoderProfiles: d3d11.videoDecoderProfiles.named }
           : { available: false, reason: d3d11.reason },
@@ -511,6 +587,9 @@ export class VideoDecoderService {
     this.child = null
     this.helloValue = null
     this.startPromise = null
+    this.stopHeartbeat()
+    const killReason = this.killReason
+    this.killReason = null
     this.generation += 1 // 同一进程的 error 与 exit 只处理一次
     const intentional = this.stateValue === 'stopped'
     const startFailed = detail.error !== undefined
@@ -526,7 +605,7 @@ export class VideoDecoderService {
     this.options.logger.warn('原生视频解码服务异常退出', {
       event: startFailed ? 'video_decoder.service.start_failed' : 'video_decoder.service.exited',
       error: detail.error,
-      context: { pid: child?.pid, code: detail.code ?? null, signal: detail.signal ?? null, crashesInWindow: attempt, stderrTail: this.stderrTail.slice(-1024) },
+      context: { pid: child?.pid, code: detail.code ?? null, signal: detail.signal ?? null, reason: killReason ?? (startFailed ? 'start_failed' : 'exited'), crashesInWindow: attempt, stderrTail: this.stderrTail.slice(-1024) },
     })
     if (attempt > this.options.restart.maxRestarts) {
       this.stateValue = 'failed'

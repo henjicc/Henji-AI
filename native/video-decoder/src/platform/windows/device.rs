@@ -61,6 +61,11 @@ mod imp {
             self.summary["videoDecoderProfiles"]["named"].as_array().is_some_and(|names| names.iter().any(|value| value == name))
         }
 
+        /// 设备已被移除（驱动重置、显卡掉线）时返回原因；设备正常为 None（3.1）。
+        pub fn removed_reason(&self) -> Option<String> {
+            unsafe { self.device.GetDeviceRemovedReason() }.err().map(|error| error.to_string())
+        }
+
         /// 本进程在本地显存段的占用与预算（字节）。用于资源回收验收与统计。
         pub fn local_memory(&self) -> Option<(u64, u64)> {
             let adapter = self.adapter.cast::<IDXGIAdapter3>().ok()?;

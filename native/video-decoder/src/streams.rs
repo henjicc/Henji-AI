@@ -303,16 +303,22 @@ impl StreamManager {
         sender.send(command).map_err(|_| ServiceError::new("INVALID_REQUEST", format!("解码会话 {stream_id} 已结束")))
     }
 
-    /// 启动解码会话：会话线程打开文件后自行响应 `request_id`。
-    pub fn start_decoder(&mut self, request_id: String, platform: &Arc<dyn crate::platform::VideoPlatform>, options: crate::decode::DecodeOptions) -> Result<(), ServiceError> {
+    /// 解码会话数（含正在打开的）。
+    pub fn decoder_count(&self) -> usize {
+        self.streams.values().filter(|stream| stream.commands.is_some() && !stream.control.open_failed.load(Ordering::Acquire)).count()
+    }
+
+    /// 启动解码会话：会话线程打开文件后自行响应 `request_id`。会话数、显存与硬解名额按预算（3.1）。
+    pub fn start_decoder(&mut self, request_id: String, platform: &Arc<dyn crate::platform::VideoPlatform>, options: crate::decode::DecodeOptions, budget: &crate::budget::Budget) -> Result<(), ServiceError> {
         options.validate()?;
         if self.streams.contains_key(&options.stream_id) {
             return Err(ServiceError::new("INVALID_REQUEST", format!("流 {} 已存在", options.stream_id)));
         }
+        budget.admit_session(self.decoder_count())?;
         let control = Arc::new(StreamControl::new(0));
         let (sender, receiver) = std::sync::mpsc::channel();
         let stream_id = options.stream_id.clone();
-        let thread = crate::decode::spawn(request_id, platform.clone(), options, control.clone(), receiver).map_err(|error| ServiceError::new("INTERNAL", format!("无法启动解码线程：{error}")))?;
+        let thread = crate::decode::spawn(request_id, platform.clone(), options, control.clone(), receiver, budget.clone()).map_err(|error| ServiceError::new("INTERNAL", format!("无法启动解码线程：{error}")))?;
         control.active.store(true, Ordering::Release);
         self.streams.insert(stream_id, Stream { control, thread: Some(thread), commands: Some(sender) });
         Ok(())

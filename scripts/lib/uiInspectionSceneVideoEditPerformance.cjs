@@ -47,6 +47,72 @@ function summarize(frames) {
     clockDeviation: Math.abs(advanced / 60 - span) / span, p50GapMs: quantile(gaps, 0.5), p95GapMs: quantile(gaps, 0.95), p99GapMs: quantile(gaps, 0.99), maxGapMs: gaps.at(-1) }
 }
 const memory = metrics => Object.fromEntries(['Browser', 'Tab', 'GPU', 'Utility'].map(type => [type, metrics.filter(item => item.type === type).reduce((total, item) => total + item.memory.workingSetSize, 0)]))
+/** Private bytes per process type (KB), next to the working sets the acceptance compares. */
+const privateMemory = metrics => Object.fromEntries(['Browser', 'Tab', 'GPU'].map(type => [type, metrics.filter(item => item.type === type).reduce((total, item) => total + (item.memory.privateBytes ?? 0), 0)]))
+
+/**
+ * Diagnostic only (task 3.1, `HENJI_PERF_MEMORY_DUMPS=1`): one Chromium memory-infra dump per resource cycle, summarized
+ * per process type and allocator, to attribute GPU and renderer process growth. Never part of the asserted acceptance.
+ */
+async function memoryInfraSnapshot(app, root, label) {
+  await app.evaluate(({ contentTracing }) => contentTracing.startRecording({
+    included_categories: ['disabled-by-default-memory-infra'], excluded_categories: ['*'],
+    memory_dump_config: { allowed_dump_modes: ['background', 'light', 'detailed'], triggers: [{ mode: 'detailed', periodic_interval_ms: 1000 }] },
+  }))
+  await new Promise(resolve => setTimeout(resolve, 2600))
+  const file = await app.evaluate(({ contentTracing }, target) => contentTracing.stopRecording(target), path.join(root, `memory-${label}.json`))
+  const trace = JSON.parse(fs.readFileSync(file, 'utf8'))
+  fs.rmSync(file, { force: true })
+  const events = Array.isArray(trace) ? trace : trace.traceEvents ?? []
+  const names = new Map(events.filter(event => event.ph === 'M' && event.name === 'process_name').map(event => [event.pid, event.args?.name]))
+  // One dump of one process may span several events (totals and allocators separately): merge by dump id and keep
+  // the latest dump that has allocators.
+  const dumps = new Map()
+  for (const event of events) {
+    if (event.ph !== 'v' || !event.args?.dumps) continue
+    const key = `${event.pid}:${event.id}`
+    const merged = dumps.get(key) ?? { pid: event.pid, ts: event.ts, totals: {}, allocators: {}, level: event.args.dumps.level_of_detail }
+    Object.assign(merged.totals, event.args.dumps.process_totals ?? {}); Object.assign(merged.allocators, event.args.dumps.allocators ?? {})
+    merged.ts = Math.max(merged.ts, event.ts); dumps.set(key, merged)
+  }
+  const latest = new Map()
+  for (const dump of dumps.values()) {
+    const previous = latest.get(dump.pid)
+    const richer = Object.keys(dump.allocators).length > 0
+    if (!previous || (richer && !Object.keys(previous.allocators).length) || (richer === Object.keys(previous.allocators).length > 0 && previous.ts < dump.ts)) latest.set(dump.pid, dump)
+  }
+  const bytes = value => typeof value === 'string' ? parseInt(value, 16) : Number(value ?? 0)
+  const result = {}
+  for (const [pid, dump] of latest) {
+    const name = names.get(pid) ?? String(pid)
+    const totals = Object.fromEntries(Object.entries(dump.totals).map(([key, value]) => [key, Math.round(bytes(value) / 1024)]))
+    const allocators = {}
+    for (const [allocator, entry] of Object.entries(dump.allocators)) {
+      const size = bytes(entry?.attrs?.size?.value ?? entry?.attrs?.effective_size?.value)
+      if (allocator.split('/').length <= 3 && size >= 1024 * 1024) allocators[allocator] = Math.round(size / 1024)
+    }
+    result[`${name}#${pid}`] = { level: dump.level, totalsKb: totals, allocatorsKb: allocators, allocatorCount: Object.keys(dump.allocators).length }
+  }
+  return result
+}
+
+/**
+ * One resource cycle of the 5.1 load (shared with the 3.1 soak): switch pages and back, move the program monitor into
+ * its own window and back, close and reopen the project; ends with frame `frame` presented and 1.5s of settling.
+ * Requires `observeWorkers(page)` (waits until the closed project's render workers are gone).
+ */
+async function videoEditResourceCycle(page, app, file, frame) {
+  await button(page, '生成').click(); await button(page, '剪辑').first().click(); await presented(page, frame)
+  await group(page, '节目画面').locator('.dv-tab').filter({ has: button(page, '关闭节目画面') }).click()
+  const opened = app.waitForEvent('window', { timeout: 30000 })
+  await group(page, '节目画面').getByRole('button', { name: '面板菜单', exact: true }).click(); await page.getByText('在独立窗口打开', { exact: true }).click()
+  const child = await opened; await child.waitForFunction(value => document.querySelector('canvas[aria-label="剪辑画面"]')?.dataset.presentedFrame === String(value), frame, { timeout: 60000 })
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find(window => window.getTitle() === '痕迹AI · 节目画面')?.close())
+  await page.locator('canvas[aria-label="剪辑画面"]').waitFor({ state: 'visible', timeout: 60000 }); await presented(page, frame)
+  await button(page, '关闭工程').click(); await waitReleased(page)
+  await dialogs(app, [file], file); await button(page, '打开工程').click(); await presented(page, 0)
+  await page.waitForTimeout(1500)
+}
 
 function createVideoEditPerformanceScene() {
   return { id: 'video-edit-performance', surface: '剪辑', name: '剪辑-标准4K60负载60秒持续播放定位参数与资源释放', writesUserData: true,
@@ -118,6 +184,7 @@ function createVideoEditPerformanceScene() {
         await playback(0, false)
         if (tracing) evidence.tracePath = await app.evaluate(({ contentTracing }, target) => contentTracing.stopRecording(target), path.join(root, 'playback.trace.json'))
         evidence.playback = summarize(frames); evidence.memoryBeforePlayback = metricsBefore; evidence.memoryAfterPlayback = memory(await app.evaluate(({ app }) => app.getAppMetrics()))
+        if (process.env.HENJI_PERF_MEMORY_DUMPS === '1') evidence.memoryInfraAfterPlayback = await memoryInfraSnapshot(app, root, 'after-playback')
         store()
         const play = evidence.playback
         // Violations are recorded and asserted at the end so resource cycles are still measured.
@@ -138,18 +205,12 @@ function createVideoEditPerformanceScene() {
         // Diagnostic only: HENJI_PERF_CYCLES lengthens the curve; the asserted acceptance always uses 4 cycles.
         const cycles = Math.max(4, Number(process.env.HENJI_PERF_CYCLES) || 4)
         for (let cycle = 0; cycle < cycles; cycle++) {
-          await button(page, '生成').click(); await button(page, '剪辑').first().click(); await presented(page, 0)
-          await group(page, '节目画面').locator('.dv-tab').filter({ has: button(page, '关闭节目画面') }).click()
-          const opened = app.waitForEvent('window', { timeout: 30000 })
-          await group(page, '节目画面').getByRole('button', { name: '面板菜单', exact: true }).click(); await page.getByText('在独立窗口打开', { exact: true }).click()
-          const child = await opened; await child.waitForFunction(() => document.querySelector('canvas[aria-label="剪辑画面"]')?.dataset.presentedFrame === '0', null, { timeout: 60000 })
-          await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find(window => window.getTitle() === '痕迹AI · 节目画面')?.close())
-          await page.locator('canvas[aria-label="剪辑画面"]').waitFor({ state: 'visible', timeout: 60000 }); await presented(page, 0)
-          await button(page, '关闭工程').click(); await waitReleased(page)
-          await dialogs(app, [file], file); await button(page, '打开工程').click(); await presented(page, 0)
-          await page.waitForTimeout(1500)
+          await videoEditResourceCycle(page, app, file, 0)
           const nativeFrames = await page.evaluate(() => window.henjiNative.videoFrames?.stats().then(stats => ({ streams: stats.streams.length, unreleasedImports: stats.unreleasedImports, preloadOutstanding: stats.preload.outstanding, nativeVramBytes: stats.native?.gpuLocalMemory?.currentUsageBytes ?? null })).catch(() => null))
-          evidence.cycles.push({ cycle, memory: memory(await app.evaluate(({ app }) => app.getAppMetrics())), workers: (await workerSnapshot(page)).live, nativeFrames }); store()
+          const metrics = await app.evaluate(({ app }) => app.getAppMetrics())
+          const entry = { cycle, memory: memory(metrics), privateMemory: privateMemory(metrics), workers: (await workerSnapshot(page)).live, nativeFrames }
+          if (process.env.HENJI_PERF_MEMORY_DUMPS === '1') entry.memoryInfra = await memoryInfraSnapshot(app, root, `cycle-${cycle}`)
+          evidence.cycles.push(entry); store()
         }
         const first = evidence.cycles[0].memory; const last = evidence.cycles[3].memory
         evidence.memoryGrowth = Object.fromEntries(Object.keys(first).map(key => [key, first[key] ? (last[key] - first[key]) / first[key] : 0]))
@@ -172,4 +233,4 @@ function createVideoEditPerformanceScene() {
     },
   }
 }
-module.exports = { createVideoEditPerformanceScene }
+module.exports = { createVideoEditPerformanceScene, videoEditResourceCycle, memoryInfraSnapshot }

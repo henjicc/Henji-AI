@@ -337,3 +337,18 @@ it('节目渲染失败在监视器上就地提示，不转交全局错误；序�
   await act(async () => { pixel.requests.shift()!.resolve({ sourceTimestamps: [0], presented: true }) })
   expect(view.queryByText(/找不到素材/)).toBeNull(); expect(onError).not.toHaveBeenCalled(); view.unmount()
 })
+it('渲染失败后即使序列与播放头都不变也会自行重试（间隔 2 秒起逐次加倍），解码恢复后清除提示（3.1）', async () => {
+  const instance = (await createVideoEditProject())!; appendVideoEditClip(instance.document.id)
+  const view = render(<VideoEditPreview instance={instance} onError={vi.fn()} />)
+  await act(async () => { await Promise.resolve() })
+  const failure = '素材「A」的解码暂时中断，请稍后重试；如果一直出现，请重启软件。'
+  await act(async () => { pixel.requests.shift()!.reject(new Error(failure)) })
+  expect(view.getByText(failure)).toBeTruthy()
+  await act(async () => { await vi.advanceTimersByTimeAsync(1900) }); expect(pixel.requests).toHaveLength(0)
+  await act(async () => { await vi.advanceTimersByTimeAsync(400) }); expect(pixel.requests).toHaveLength(1)
+  await act(async () => { pixel.requests.shift()!.reject(new Error(failure)) })
+  await act(async () => { await vi.advanceTimersByTimeAsync(3500) }); expect(pixel.requests).toHaveLength(0)
+  await act(async () => { await vi.advanceTimersByTimeAsync(800) }); expect(pixel.requests).toHaveLength(1)
+  await act(async () => { pixel.requests.shift()!.resolve({ sourceTimestamps: [0], presented: true }) })
+  expect(view.queryByText(failure)).toBeNull(); view.unmount()
+})

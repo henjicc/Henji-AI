@@ -456,6 +456,36 @@ it('导出逐帧（无预览宽度的顺序渲染，2.4）：读取器跳过或�
   // Every decoded picture, including the one held ahead of the failed frame, went back exactly once.
   for (const value of lent) expect(value.close).toHaveBeenCalledOnce()
 })
+it('预览播放回落到顺序读取器（时间计划没有该帧，3.1）：读取器漏掉的帧与变帧率时长不准的保持画面都由单帧读取定准，不画透明', async () => {
+  // Pictures at 0, 1/30, 2/30 (lost by the reader), 3/30, then 4/30 with a too-short duration and the next at 6/30.
+  const times = [0, 1 / 30, 2 / 30, 3 / 30, 4 / 30, 6 / 30, 7 / 30]
+  const lent: Array<{ close: ReturnType<typeof vi.fn> }> = []
+  const picture = (time: number): VideoSample => { const value = { timestamp: time, duration: time === 4 / 30 ? 1 / 60 : 1 / 30, format: 'NV12', close: vi.fn() }; lent.push(value); return value as unknown as VideoSample }
+  const singleReads: number[] = []
+  const backend: VideoEditFrameBackend = {
+    open: media => ({ key: media.path, ready: Promise.resolve({ clipAudio: () => undefined, async *schedule() {},
+      clipFrames: () => ({
+        async *frames(start: number) { for (const time of times) if (time >= start - 1e-9 && time !== 2 / 30) yield picture(time) },
+        // The single-frame read's definition: the last picture starting at or before the time.
+        async frameAt(time: number) { singleReads.push(Math.round(time * 30)); const at = times.filter(value => value <= time + 1e-9).at(-1); return at === undefined ? null : picture(at) },
+      }) }) }),
+    release: () => {},
+    seeker: () => ({ sample: async () => ({ hit: false }), dispose: async () => {} }),
+  }
+  const document = { ...fixture(), fps: 30, frameRate: { numerator: 30, denominator: 1 } }
+  const renderer = new VideoEditRenderer(document, 3840, undefined, 8 * 1024 ** 3, backend)
+  try {
+    const drawn: number[] = []
+    for (let frame = 0; frame < 8; frame++) {
+      const result = await renderer.render(frame, true)
+      expect(result, `帧 ${frame}`).toMatchObject({ presented: true, blankPictures: 0 })
+      drawn.push(Math.round(boundary.pictures[0] * 30))
+    }
+    expect(drawn).toEqual([0, 1, 2, 3, 4, 4, 6, 7])
+    expect(singleReads).toEqual([2, 5])
+  } finally { await renderer.dispose() }
+  for (const value of lent) expect(value.close).toHaveBeenCalledOnce()
+})
 /** A backend whose sound comes from the native reader over a fake PCM session, as the native backend will deliver it. */
 function nativeSoundBackend(session: (path: string) => VideoEditPcmSession): { backend: VideoEditFrameBackend; opened: string[]; released: string[] } {
   const opened: string[] = []; const released: string[] = []

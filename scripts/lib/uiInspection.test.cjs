@@ -46,6 +46,21 @@ test('原生专业格式导出验收场景只登记一次，只豁免主动注�
   assert.deepEqual(scene.expectedLogEvents, ['video_edit.export.failed'])
   assert.equal(UI_INSPECTION_SCENES.filter(candidate => candidate.id === scene.id).length, 1)
 })
+test('原生解码故障回退验收场景只登记一次，只豁免主动注入的卡死事件（3.1）', () => {
+  const { createVideoEditNativeFaultsScene } = require('./uiInspectionSceneVideoEditNativeFaults.cjs')
+  const scene = createVideoEditNativeFaultsScene()
+  assert.equal(scene.id, 'video-edit-native-faults')
+  assert.equal(scene.writesUserData, true)
+  assert.deepEqual(scene.expectedLogEvents, ['video_decoder.service.hung'])
+  assert.equal(UI_INSPECTION_SCENES.filter(candidate => candidate.id === scene.id).length, 1)
+})
+test('原生解码长时资源曲线场景只登记一次且不豁免任何错误日志（3.1）', () => {
+  const { createVideoEditNativeSoakScene } = require('./uiInspectionSceneVideoEditNativeSoak.cjs')
+  const scene = createVideoEditNativeSoakScene()
+  assert.equal(scene.id, 'video-edit-native-soak')
+  assert.equal(scene.expectedLogEvents, undefined)
+  assert.equal(UI_INSPECTION_SCENES.filter(candidate => candidate.id === scene.id).length, 1)
+})
 const { attachUiInspectionCommon } = require('./uiInspectionSceneCommon.cjs')
 const { UI_AUDIT_RULES } = require('./uiAuditDom.cjs')
 const {
