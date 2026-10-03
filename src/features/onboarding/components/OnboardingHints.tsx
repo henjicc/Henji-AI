@@ -5,7 +5,7 @@ import { ArrowDown, ArrowUp, CheckCircle2, Sparkles } from 'lucide-react'
 import {
   UI_COLOR_ACCENT_TEXT_CLASS,
   UI_TEXT_META_CLASS,
-  UI_TEXT_SECTION_CLASS,
+  UI_TEXT_PANEL_TITLE_CLASS,
   UiButton,
   UiPanel,
 } from '@/components/ui'
@@ -153,7 +153,7 @@ export function OnboardingHints(): JSX.Element | null {
       >
         <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-success" />
         <div className="min-w-0 flex-1">
-          <div className={UI_TEXT_SECTION_CLASS}>{t('coach.successTitle')}</div>
+          <div className={UI_TEXT_PANEL_TITLE_CLASS}>{t('coach.successTitle')}</div>
           <p className={`mt-1 leading-5 ${UI_TEXT_META_CLASS}`}>{t('coach.successDescription')}</p>
         </div>
         <UiButton
@@ -208,7 +208,7 @@ export function OnboardingHints(): JSX.Element | null {
           <Sparkles className={`mt-0.5 h-5 w-5 shrink-0 ${UI_COLOR_ACCENT_TEXT_CLASS}`} />
           <div className="min-w-0 flex-1">
             <div className="flex items-center justify-between gap-3">
-              <div className={UI_TEXT_SECTION_CLASS}>{t(stage.titleKey)}</div>
+              <div className={UI_TEXT_PANEL_TITLE_CLASS}>{t(stage.titleKey)}</div>
               <span className={UI_TEXT_META_CLASS}>{t('coach.progress', {
                 current: stageIndex + 1,
                 total: COACH_STAGES.length,

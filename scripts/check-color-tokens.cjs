@@ -1,13 +1,43 @@
 const fs = require('fs');
 const path = require('path');
 
+/*
+ * 颜色令牌检查（npm run check:colors，build / electron:build 门禁）。
+ *
+ * 一、硬性规则（全部 .ts/.tsx/.css，任何新增都失败）：
+ *   - 十六进制颜色字面量、Tailwind 任意十六进制颜色类；
+ *   - 纯 CSS 里的 rgb()/rgba() 字面量（只能写 rgb(var(--xxx-rgb) / a) 或引用令牌变量）。
+ *
+ * 二、语义令牌规则（ts/tsx，非测试文件；界面重设计 1.3 新增）：
+ *   - palette：固定调色板类（bg-red-500、text-emerald-300 …），不随主题；
+ *   - mono：黑白类（text-white、bg-black/40、border-white/10 …），浅色主题下失效；
+ *   - rgba：rgb()/rgba() 数字字面量；
+ *   - named：命名色（color: 'white'、fill="black" …）。
+ *   存量逐文件登记在 scripts/check-color-tokens.allowlist.json（每条写明归属任务与类别）：
+ *   某文件某规则的数量超过登记数即失败（新增为零）；低于登记数时提示下调，
+ *   用 `--shrink-allowlist` 只会把登记数往下收（不会放宽、不会新增条目）。
+ *   界面色改用语义令牌类（bg-panel、text-text2、text-on-accent、bg-danger-solid、border-media-line …，
+ *   见 tailwind.config.js）；内容色（标注默认色、导出图配色、算法遮罩等）在 colorTokens.ts 登记常量。
+ *   4.2 会把登记清零的类别改为不可登记。
+ */
+
 const projectRoot = process.cwd();
 const srcRoot = path.join(projectRoot, 'src');
-// 颜色令牌的唯一定义处，允许写字面量
-const allowLiteralFiles = new Set(
+const allowlistFile = path.join(projectRoot, 'scripts', 'check-color-tokens.allowlist.json');
+const shrinkAllowlist = process.argv.includes('--shrink-allowlist');
+
+// 颜色令牌的定义处，允许写字面量
+const definitionFiles = new Set(
   [
     path.join(srcRoot, 'core', 'theme', 'colorTokens.ts'),
     path.join(srcRoot, 'index.css'),
+  ].map((file) => path.normalize(file))
+);
+// 只豁免语义令牌规则的定义/参考实现（主题引擎按种子计算 rgba；设计稿参考实现仅供测试对照）
+const semanticRuleExemptFiles = new Set(
+  [
+    path.join(srcRoot, 'core', 'theme', 'themeEngine.ts'),
+    path.join(srcRoot, 'core', 'theme', 'themeReferenceTestFixture.ts'),
   ].map((file) => path.normalize(file))
 );
 
@@ -19,6 +49,28 @@ const targetExtensions = new Set(['.ts', '.tsx', '.css']);
 const cssRawRgbPattern = /\brgba?\(\s*[0-9]/g;
 const hexColorPattern = /#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})\b/g;
 const arbitraryTailwindHexPattern = /(bg|text|border|ring|accent)-\[#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})\]/g;
+
+const UTILITY_PREFIX = '(?:bg|text|border|ring|ring-offset|from|to|via|fill|stroke|outline|divide|placeholder|decoration|shadow|accent|caret)';
+const PALETTE_NAMES = 'red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose|slate|gray|zinc|neutral|stone';
+/** @type {Record<string, { pattern: RegExp, label: string }>} */
+const SEMANTIC_RULES = {
+  palette: {
+    pattern: new RegExp(`(?<![\\w-])(?:[\\w-]+:)*!?-?${UTILITY_PREFIX}-(?:${PALETTE_NAMES})-\\d{2,3}\\b`, 'g'),
+    label: '固定调色板类不随主题，请改用语义令牌类（状态用 text-danger-text / bg-danger-tint 等）',
+  },
+  mono: {
+    pattern: new RegExp(`(?<![\\w-])(?:[\\w-]+:)*!?${UTILITY_PREFIX}-(?:white|black)(?![\\w-])`, 'g'),
+    label: '黑白类在浅色主题下失效：界面面上用 text-text1 / bg-panel 等，压在媒体上用 text-on-media / bg-media-control / border-media-line',
+  },
+  rgba: {
+    pattern: /\brgba?\(\s*\d/g,
+    label: 'rgb()/rgba() 字面量：界面色用语义令牌，内容色登记到 colorTokens.ts',
+  },
+  named: {
+    pattern: /\b(?:color|background|backgroundColor|borderColor|fill|stroke)\s*[:=]\s*['"`](?:white|black|red|green|blue|yellow|orange|gray|grey|purple)['"`]/g,
+    label: '命名色：界面色用语义令牌，内容色登记到 colorTokens.ts',
+  },
+};
 
 /**
  * @param {string} dir
@@ -44,6 +96,11 @@ function collectSourceFiles(dir) {
   return result;
 }
 
+/** @param {string} fullPath */
+function toRelative(fullPath) {
+  return path.relative(projectRoot, fullPath).replace(/\\/g, '/');
+}
+
 /**
  * @param {string} fullPath
  * @param {number} lineNo
@@ -51,17 +108,39 @@ function collectSourceFiles(dir) {
  * @param {string} reason
  */
 function formatViolation(fullPath, lineNo, line, reason) {
-  const relativePath = path.relative(projectRoot, fullPath).replace(/\\/g, '/');
-  return `${relativePath}:${lineNo} ${reason}\n  ${line.trim()}`;
+  return `${toRelative(fullPath)}:${lineNo} ${reason}\n  ${line.trim()}`;
 }
 
-const files = collectSourceFiles(srcRoot).filter((file) => !allowLiteralFiles.has(path.normalize(file)));
+/** @param {string} file */
+function isSemanticRuleTarget(file) {
+  const ext = path.extname(file);
+  if (ext !== '.ts' && ext !== '.tsx') return false;
+  if (/\.test\.[tj]sx?$/.test(file) || file.split(path.sep).includes('tests')) return false;
+  return !semanticRuleExemptFiles.has(path.normalize(file));
+}
+
+function readAllowlist() {
+  const raw = JSON.parse(fs.readFileSync(allowlistFile, 'utf8'));
+  if (raw.version !== 1 || typeof raw.files !== 'object') {
+    throw new Error(`${toRelative(allowlistFile)} 格式不正确（需要 version: 1 与 files）`);
+  }
+  return raw;
+}
+
+const files = collectSourceFiles(srcRoot).filter((file) => !definitionFiles.has(path.normalize(file)));
 /** @type {string[]} */
 const violations = [];
+/** @type {Map<string, { counts: Record<string, number>, lines: Record<string, string[]> }>} */
+const semanticUsage = new Map();
 
 for (const file of files) {
   const raw = fs.readFileSync(file, 'utf8');
   const lines = raw.split(/\r?\n/);
+  const semantic = isSemanticRuleTarget(file);
+  /** @type {Record<string, number>} */
+  const counts = {};
+  /** @type {Record<string, string[]>} */
+  const ruleLines = {};
 
   for (let index = 0; index < lines.length; index += 1) {
     const lineNo = index + 1;
@@ -84,30 +163,100 @@ for (const file of files) {
     }
     hexColorPattern.lastIndex = 0;
 
-    // CSS 额外查 rgb()/rgba() 字面量；注释行放过（历史值常写在注释里说明来由）
-    if (path.extname(file) === '.css' && !/^\s*(\/\*|\*)/.test(line) && cssRawRgbPattern.test(line)) {
+    // CSS 额外查 rgb()/rgba() 字面量
+    if (path.extname(file) === '.css' && cssRawRgbPattern.test(line)) {
       violations.push(
         formatViolation(file, lineNo, line, '禁止 rgb/rgba 字面量，请写 rgb(var(--xxx-rgb) / a)')
       );
     }
     cssRawRgbPattern.lastIndex = 0;
 
-    // CSS 文件额外查 rgb()/rgba() 字面量；注释行放过（历史值常写在注释里说明来由）
-    if (path.extname(file) === '.css' && !/^\s*(\/\*|\*)/.test(line) && cssRawRgbPattern.test(line)) {
-      violations.push(formatViolation(file, lineNo, line, '禁止 rgb/rgba 字面量，请写 rgb(var(--xxx-rgb) / a)'));
+    if (semantic) {
+      for (const [rule, { pattern }] of Object.entries(SEMANTIC_RULES)) {
+        const matches = line.match(pattern);
+        if (!matches) continue;
+        counts[rule] = (counts[rule] ?? 0) + matches.length;
+        (ruleLines[rule] ??= []).push(`  ${lineNo}: ${matches.join(' ')}`);
+      }
     }
-    cssRawRgbPattern.lastIndex = 0;
+  }
+
+  if (Object.keys(counts).length > 0) {
+    semanticUsage.set(toRelative(file), { counts, lines: ruleLines });
   }
 }
 
-if (violations.length > 0) {
-  console.error('\n[check-color-tokens] 检测到颜色规范违规：\n');
-  for (const item of violations) {
-    console.error(item);
+const allowlist = readAllowlist();
+/** @type {string[]} */
+const shrinkable = [];
+/** @type {string[]} */
+const semanticViolations = [];
+
+for (const [file, usage] of semanticUsage) {
+  const entry = allowlist.files[file];
+  for (const [rule, count] of Object.entries(usage.counts)) {
+    const allowed = entry?.counts?.[rule] ?? 0;
+    if (count > allowed) {
+      semanticViolations.push(
+        `${file} [${rule}] ${count} 处，登记 ${allowed} 处${entry ? `（归属 ${entry.owner}，${entry.category}）` : '（未登记）'}\n` +
+          `  ${SEMANTIC_RULES[rule].label}\n${usage.lines[rule].join('\n')}`
+      );
+    }
   }
-  console.error(`\n共 ${violations.length} 处违规。颜色只允许在 src/index.css / tailwind.config.js / src/core/theme/colorTokens.ts 三处定义；
+}
+
+for (const [file, entry] of Object.entries(allowlist.files)) {
+  const usage = semanticUsage.get(file);
+  for (const [rule, allowed] of Object.entries(entry.counts ?? {})) {
+    const count = usage?.counts?.[rule] ?? 0;
+    if (count < allowed) shrinkable.push(`${file} [${rule}] 实际 ${count}，登记 ${allowed}`);
+  }
+}
+
+if (shrinkAllowlist) {
+  /** @type {Record<string, unknown>} */
+  const nextFiles = {};
+  for (const [file, entry] of Object.entries(allowlist.files)) {
+    const usage = semanticUsage.get(file);
+    /** @type {Record<string, number>} */
+    const counts = {};
+    for (const [rule, allowed] of Object.entries(entry.counts ?? {})) {
+      const next = Math.min(allowed, usage?.counts?.[rule] ?? 0);
+      if (next > 0) counts[rule] = next;
+    }
+    if (Object.keys(counts).length > 0) nextFiles[file] = { ...entry, counts };
+  }
+  fs.writeFileSync(allowlistFile, `${JSON.stringify({ ...allowlist, files: nextFiles }, null, 2)}\n`);
+  console.log(`[check-color-tokens] 已收紧登记：${shrinkable.length} 项下调，未放宽任何条目。`);
+}
+
+if (violations.length > 0 || semanticViolations.length > 0) {
+  if (violations.length > 0) {
+    console.error('\n[check-color-tokens] 检测到颜色规范违规：\n');
+    for (const item of violations) {
+      console.error(item);
+    }
+    console.error(`\n共 ${violations.length} 处违规。颜色只允许在 src/index.css / tailwind.config.js / src/core/theme/colorTokens.ts 三处定义；
 其余位置请用语义化 Tailwind 类或 rgb(var(--xxx-rgb) / a)。\n`);
+  }
+  if (semanticViolations.length > 0) {
+    console.error('\n[check-color-tokens] 新增了不随主题的颜色写法（超出存量登记）：\n');
+    for (const item of semanticViolations) {
+      console.error(item);
+    }
+    console.error(`\n共 ${semanticViolations.length} 项超出登记。请改用语义令牌类；确属内容色时在 colorTokens.ts 登记常量。
+不要为了通过检查而调高 ${toRelative(allowlistFile)} 的登记数。\n`);
+  }
   process.exit(1);
 }
 
-console.log('[check-color-tokens] 通过：ts/tsx/css 均未检测到硬编码颜色。');
+if (shrinkable.length > 0 && !shrinkAllowlist) {
+  console.log(`[check-color-tokens] 提示：${shrinkable.length} 项存量已减少，可运行 \`node scripts/check-color-tokens.cjs --shrink-allowlist\` 收紧登记：`);
+  for (const item of shrinkable) console.log(`  ${item}`);
+}
+
+const registered = Object.values(allowlist.files).reduce(
+  (sum, entry) => sum + Object.values(entry.counts ?? {}).reduce((a, b) => a + b, 0),
+  0
+);
+console.log(`[check-color-tokens] 通过：无硬编码颜色；不随主题的写法未超出存量登记（登记 ${registered} 处，${Object.keys(allowlist.files).length} 个文件）。`);

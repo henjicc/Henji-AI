@@ -33,7 +33,7 @@ export const CanvasToolbar = memo(({ isLocked, onToggleLock }: CanvasToolbarProp
   }, [addNode]);
 
   return (
-    <UiPanel className="absolute left-1/2 top-4 z-10 flex -translate-x-1/2 items-center gap-2 px-2 py-1.5">
+    <UiPanel className="absolute left-1/2 top-4 z-raised flex -translate-x-1/2 items-center gap-2 px-2 py-1.5">
       <UiButton
         onClick={handleAddNode}
         disabled={isLocked}

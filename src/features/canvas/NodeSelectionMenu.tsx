@@ -205,7 +205,7 @@ export function NodeSelectionMenu({
       variant="glass"
       role="menu"
       aria-label={t('node.menuTitle')}
-      className={`ui-scrollbar absolute z-dropdown w-[284px] overflow-y-auto overflow-x-hidden p-2 transition-[opacity,transform] duration-150 ease-out ${
+      className={`ui-scrollbar absolute z-dropdown w-[284px] overflow-y-auto overflow-x-hidden p-2 transition-[opacity,transform] duration-120 ease-out ${
         isVisible ? 'translate-y-0 scale-100 opacity-100' : 'translate-y-1 scale-[0.98] opacity-0'
       }`}
       style={{

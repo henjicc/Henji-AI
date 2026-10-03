@@ -34,7 +34,7 @@ export function StoryboardExportSettingsPanel({
   return createPortal(
     <div
       ref={panelRef}
-      className={`fixed z-dropdown w-[340px] transition-opacity duration-200 ease-out ${isVisible ? 'opacity-100' : 'pointer-events-none opacity-0'
+      className={`fixed z-dropdown w-[340px] transition-opacity duration-180 ease-out ${isVisible ? 'opacity-100' : 'pointer-events-none opacity-0'
         }`}
       style={anchor
         ? {

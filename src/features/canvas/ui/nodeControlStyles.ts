@@ -10,7 +10,7 @@ export const NODE_CONTROL_PRIMARY_BUTTON_CLASS =
 export const NODE_CONTROL_ICON_CLASS = 'h-3 w-3';
 
 export const NODE_PORT_BASE_CLASS =
-  "!h-2 !w-2 !border !border-veil-strong !opacity-0 transition-opacity duration-150 before:absolute before:-inset-2 before:content-[''] [&.connectingfrom]:!opacity-100 [&.connectingto]:!opacity-100";
+  "!h-2 !w-2 !border !border-veil-strong !opacity-0 transition-opacity duration-120 before:absolute before:-inset-2 before:content-[''] [&.connectingfrom]:!opacity-100 [&.connectingto]:!opacity-100";
 
 export const NODE_PORT_VISIBLE_CLASS = '!opacity-100';
 

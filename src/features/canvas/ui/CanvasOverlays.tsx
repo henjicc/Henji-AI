@@ -53,7 +53,7 @@ export function CanvasOverlays({
 
       {showNodeMenu && previewConnectionVisual && (
         <svg
-          className="pointer-events-none absolute z-40 overflow-visible"
+          className="pointer-events-none absolute z-panel overflow-visible"
           style={{
             left: previewConnectionVisual.left,
             top: previewConnectionVisual.top,

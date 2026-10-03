@@ -54,7 +54,7 @@ export function CameraStagePreviewPanel({
             </div>
           </div>
           <div className="pointer-events-none absolute inset-x-0 bottom-0 h-1.5 bg-layer">
-            <div className="h-full origin-left bg-accent transition-transform duration-150" style={{ transform: `scaleX(${renderProgress ?? 0})` }} />
+            <div className="h-full origin-left bg-accent transition-transform duration-120" style={{ transform: `scaleX(${renderProgress ?? 0})` }} />
           </div>
         </>
       )}

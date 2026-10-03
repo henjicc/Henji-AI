@@ -123,9 +123,9 @@ export const FrameCard = memo(({
       }}
       onMouseDown={(event) => event.stopPropagation()}
       className={`storyboard-frame-card group/frame nodrag relative h-full w-full overflow-hidden bg-surface-dark transition-colors ${dragging ? 'cursor-grabbing' : 'cursor-grab'} ${dragging
-        ? 'z-10 opacity-55 ring-1 ring-accent/65'
+        ? 'z-raised opacity-55 ring-1 ring-accent/65'
         : asDropTarget
-          ? 'z-10 ring-1 ring-emerald-400/70'
+          ? 'z-raised ring-1 ring-emerald-400/70'
           : ''
         }`}
       onPointerDown={(event) => {
@@ -153,7 +153,7 @@ export const FrameCard = memo(({
           </div>
         )}
 
-        <div className="storyboard-frame-actions absolute right-1 top-1 flex items-center gap-1 opacity-0 transition-opacity duration-150 group-hover/frame:opacity-100 group-focus-within/frame:opacity-100">
+        <div className="storyboard-frame-actions absolute right-1 top-1 flex items-center gap-1 opacity-0 transition-opacity duration-120 group-hover/frame:opacity-100 group-focus-within/frame:opacity-100">
           <UiIconButton
             type="button"
             appearance="glass"

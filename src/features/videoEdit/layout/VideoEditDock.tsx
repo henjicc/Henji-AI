@@ -87,7 +87,8 @@ export function VideoEditDock({ instance, onError, onApiChange }: DockContext & 
   }, [onApiChange, onError, instance])
   useEffect(() => () => { bindVideoEditPopoutDock(null); disposeRef.current(); apiRef.current = null; onApiChange(null) }, [onApiChange])
   return <Context.Provider value={{ instance, onError }}>
-    <DockviewReact className="henji-cameraStage-dock dockview-theme-abyss h-full min-h-0 w-full" components={COMPONENTS}
+    {/* isolate：dockview 分隔条自带 z-index 99，不隔离会漏到根层叠上下文、压在 body 下的弹窗（z-modal）之上，窄窗口时挡住弹窗按钮 */}
+    <DockviewReact className="henji-cameraStage-dock dockview-theme-abyss isolate h-full min-h-0 w-full" components={COMPONENTS}
       defaultTabComponent={VideoEditDockTab} rightHeaderActionsComponent={VideoEditDockHeaderActions} watermarkComponent={EmptyLayout}
       dndStrategy="pointer" floatingGroupBounds="boundedWithinViewport" floatingGroupDragHandle="tabbar" defaultRenderer="always" onReady={onReady} />
     <VideoEditPopoutPortals onFocusPanel={id => { if (instance.activePanel !== id && listVideoEditInstances().includes(instance)) focusVideoEditPanel(instance.document.id, id) }}

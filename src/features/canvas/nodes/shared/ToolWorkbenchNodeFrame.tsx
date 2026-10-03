@@ -68,7 +68,7 @@ export function ToolWorkbenchNodeFrame({
     <div
       {...dataAttributes}
       data-tool-workbench-node-id={nodeId}
-      className={`group relative flex overflow-visible rounded-[var(--node-radius)] border bg-surface-dark/90 p-2 transition-colors duration-150 ${
+      className={`group relative flex overflow-visible rounded-[var(--node-radius)] border bg-surface-dark/90 p-2 transition-colors duration-120 ${
         selected ? NODE_SELECTED_BORDER_CLASS : NODE_IDLE_BORDER_CLASS
       }`}
       style={{ width: resolvedWidth, height: resolvedHeight }}

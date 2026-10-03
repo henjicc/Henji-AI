@@ -11,6 +11,7 @@ import {
 import { UI_FIELD_CONTROL_HEIGHT_SM_CLASS, UI_FIELD_LABEL_CLASS, UI_TRIGGER_BUTTON_CLASS, UI_TRIGGER_PANEL_CLASS } from './styleTokens'
 import { measureElementTextWidth } from './textMeasurement'
 import { UiButton } from './primitives'
+import { UI_DURATION } from './motion'
 import { ChevronDown } from 'lucide-react'
 import { elementOfEventTarget, isDomNode, ownerDocumentOf, ownerWindowOf } from '@/utils/crossRealmDom'
 
@@ -158,7 +159,7 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
 
   const closePanel = useCallback((): void => {
     setClosing(true)
-    window.setTimeout(() => { setOpen(false); setClosing(false) }, 200)
+    window.setTimeout(() => { setOpen(false); setClosing(false) }, UI_DURATION.base)
   }, [])
 
   const openPanel = useCallback((): void => {
@@ -282,8 +283,8 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
           data-panel-trigger-button
           className={`${UI_TRIGGER_BUTTON_CLASS} rounded-lg px-3 py-2 ${UI_FIELD_CONTROL_HEIGHT_SM_CLASS} ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} ${buttonClassName || 'w-full'}`}
         >
-          <span className={`${buttonLabelClassName || 'text-sm'} truncate`}>{display ?? ''}</span>
-          <ChevronDown className={`w-4 h-4 text-text-muted transition-transform duration-200 ml-2 ${open ? 'rotate-180' : ''}`} />
+          <span className={`${buttonLabelClassName || 'text-13'} truncate`}>{display ?? ''}</span>
+          <ChevronDown className={`w-4 h-4 text-text-muted transition-transform duration-180 ml-2 ${open ? 'rotate-180' : ''}`} />
         </UiButton>
       )}
       {(open || closing) && pos && createPortal(

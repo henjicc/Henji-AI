@@ -3,6 +3,7 @@ import type { RefObject } from 'react'
 import { useI18n } from '@/hooks/useI18n'
 import type { WorkspaceId } from '@/core/types/workspace'
 import { UiLoading } from '@/components/ui'
+import { UI_DURATION } from '@/components/ui/motion'
 import { prefetchWhenIdle } from '@/utils/idlePrefetch'
 import { listPrefetchOrder, workspaceLoaders } from '../workspaces/workspaceLoaders'
 
@@ -56,7 +57,7 @@ const TabContainer: React.FC<TabContainerProps> = ({ containerRef, activeTab, in
             style={{
                 paddingLeft: insetLeft,
                 paddingRight: insetRight,
-                transitionDuration: 'var(--assistant-layout-transition-duration, 200ms)',
+                transitionDuration: `var(--assistant-layout-transition-duration, ${UI_DURATION.base}ms)`,
             }}
         >
             {visitedTabs.has('generation') && (

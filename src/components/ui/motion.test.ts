@@ -24,6 +24,12 @@ describe('动效档位', () => {
     expect(registered).toContain(UI_POPOVER_TRANSITION_MS);
   });
 
+  it('档位取设计令牌：悬停 120、展开 180、面板 240，查看器 500 单列', () => {
+    expect(UI_DURATION).toEqual({ fast: 120, base: 180, slow: 240, viewer: 500 });
+    expect(UI_DIALOG_TRANSITION_MS).toBe(180);
+    expect(UI_POPOVER_TRANSITION_MS).toBe(120);
+  });
+
   it('数据补间档独立于交互反馈档位', () => {
     expect(UI_DATA_TWEEN_MS).toBe(2800);
     expect(Object.values(UI_DURATION)).not.toContain(UI_DATA_TWEEN_MS);

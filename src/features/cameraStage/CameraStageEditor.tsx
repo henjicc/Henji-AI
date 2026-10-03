@@ -400,7 +400,7 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
         <span className="mx-1 h-6 w-px shrink-0 bg-border-dark" />
         <StageViewportToolbar />
 
-        <div className="pointer-events-none absolute inset-y-0 left-1/2 z-20 flex max-w-[52%] -translate-x-1/2 items-center">
+        <div className="pointer-events-none absolute inset-y-0 left-1/2 z-sticky flex max-w-[52%] -translate-x-1/2 items-center">
           <StagePathContextBar />
         </div>
 

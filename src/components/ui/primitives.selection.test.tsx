@@ -185,7 +185,7 @@ describe('Ui primitives 选中态词汇表', () => {
     expect(segmentedOff.firstElementChild?.classList.contains('transition-[transform,background-color]')).toBe(true);
     expect(segmentedOff.firstElementChild?.classList.contains('rounded-md')).toBe(true);
     expect(segmentedOff.firstElementChild?.classList.contains('inset-y-1')).toBe(true);
-    expect(segmentedOff.firstElementChild?.classList.contains('duration-200')).toBe(true);
+    expect(segmentedOff.firstElementChild?.classList.contains('duration-180')).toBe(true);
     expect(segmentedOn.firstElementChild?.classList.contains(UI_COLOR_ACCENT_FILL_TEXT_CLASS)).toBe(true);
     expect(segmentedOn.firstElementChild?.classList.contains('translate-x-full')).toBe(true);
     expect(segmentedOn.firstElementChild?.classList.contains('rounded')).toBe(true);

@@ -1,6 +1,9 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App'
+// 界面字体 Geist / Geist Mono（SIL OFL 1.1，随包离线可用；字体栈见 tailwind.config.js fontFamily）
+import '@fontsource-variable/geist'
+import '@fontsource-variable/geist-mono'
 import './index.css'
 import './styles/scrollbar.css'
 import { DragDropProvider } from './contexts/DragDropContext'

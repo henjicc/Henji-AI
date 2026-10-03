@@ -97,7 +97,7 @@ export function ImageEditorShell({ toolbar, canvas, sidePanel, className = '' }:
           tabIndex={collapsed ? -1 : 0}
           onPointerDown={startResize}
           onKeyDown={adjustWidthByKeyboard}
-          className={`group relative z-10 flex w-2 shrink-0 items-center justify-center ${collapsed ? 'pointer-events-none opacity-0' : 'cursor-col-resize'}`}
+          className={`group relative z-raised flex w-2 shrink-0 items-center justify-center ${collapsed ? 'pointer-events-none opacity-0' : 'cursor-col-resize'}`}
           style={{ touchAction: 'none' }}
         >
           <span className="h-full w-px bg-border-dark transition-colors group-hover:bg-accent group-focus-visible:bg-accent" />

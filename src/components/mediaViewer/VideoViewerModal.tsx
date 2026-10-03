@@ -434,7 +434,7 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
         >
           {hasAudio !== false && (
             <div
-              className="ui-glass absolute top-4 left-4 px-4 py-2 rounded-lg text-white z-10 flex items-center gap-2"
+              className="ui-glass absolute top-4 left-4 px-4 py-2 rounded-lg text-white z-raised flex items-center gap-2"
               style={{ opacity: showVolumeIndicator ? 1 : 0, transition: uiTransition(['opacity'], UI_DURATION.base), pointerEvents: 'none' }}
             >
               {muted || volume === 0 ? (
@@ -494,7 +494,7 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
             controls={false}
           />
           <div
-            className="absolute z-10 pointer-events-none"
+            className="absolute z-raised pointer-events-none"
             style={{
               left: renderedVideoRect.left,
               top: renderedVideoRect.top,

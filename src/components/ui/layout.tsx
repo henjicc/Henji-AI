@@ -23,7 +23,7 @@ import {
   UI_ROW_GAP_CLASS,
   UI_STACK_GAP_CLASS,
   UI_TEXT_META_CLASS,
-  UI_TEXT_SECTION_CLASS,
+  UI_TEXT_PANEL_TITLE_CLASS, UI_TEXT_SECTION_CLASS,
   UI_TEXT_TITLE_CLASS,
 } from './styleTokens';
 
@@ -252,7 +252,7 @@ export function UiFormRow({
     return (
       <div className={`flex items-center justify-between gap-4 ${className}`} {...props}>
         <div className="min-w-0">
-          <div className={UI_TEXT_SECTION_CLASS}>{labelNode}</div>
+          <div className={UI_TEXT_PANEL_TITLE_CLASS}>{labelNode}</div>
           {hint ? <p className={`mt-0.5 ${UI_TEXT_META_CLASS}`}>{hint}</p> : null}
         </div>
         <div className="flex shrink-0 items-center gap-2">{children}</div>
@@ -262,7 +262,7 @@ export function UiFormRow({
 
   return (
     <div className={className} {...props}>
-      <div className={UI_TEXT_SECTION_CLASS}>{labelNode}</div>
+      <div className={UI_TEXT_PANEL_TITLE_CLASS}>{labelNode}</div>
       {hint ? <p className={`mt-0.5 mb-1.5 ${UI_TEXT_META_CLASS}`}>{hint}</p> : <div className="h-1.5" />}
       {children}
     </div>
@@ -283,12 +283,12 @@ interface UiDisclosurePanelProps {
 export function UiDisclosurePanel({ open, children, className = '' }: UiDisclosurePanelProps): JSX.Element {
   return (
     <div
-      className={`grid transition-[grid-template-rows,opacity] duration-200 ease-out ${
+      className={`grid transition-[grid-template-rows,opacity] duration-180 ease-out ${
         open ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
       }`}
     >
       <div className="min-h-0 overflow-hidden">
-        <div className={`transition-transform duration-200 ease-out ${open ? 'translate-y-0' : '-translate-y-2'} ${className}`}>
+        <div className={`transition-transform duration-180 ease-out ${open ? 'translate-y-0' : '-translate-y-2'} ${className}`}>
           {children}
         </div>
       </div>

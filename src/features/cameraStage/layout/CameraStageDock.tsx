@@ -83,8 +83,9 @@ const CameraStageDock = forwardRef<CameraStageDockHandle, CameraStageDockProps>(
 
     return (
       <ViewportCaptureContext.Provider value={captureRef}>
+        {/* isolate：dockview 分隔条与浮动层自带 z-index（99/999），不隔离会压在 body 下的弹窗（z-modal）之上 */}
         <DockviewReact
-          className="henji-cameraStage-dock dockview-theme-abyss"
+          className="henji-cameraStage-dock dockview-theme-abyss isolate"
           components={DOCK_COMPONENTS}
           defaultTabComponent={DockTab}
           rightHeaderActionsComponent={DockHeaderActions}

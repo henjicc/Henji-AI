@@ -204,7 +204,7 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
                         <div className="h-[60px] relative">
                             {/* 输入名称区域 */}
                             <div
-                                className={`absolute inset-0 flex gap-2 items-center h-full transition-[opacity,transform] duration-300 ${isSaving ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none scale-95'
+                                className={`absolute inset-0 flex gap-2 items-center h-full transition-[opacity,transform] duration-240 ${isSaving ? 'opacity-100 z-raised' : 'opacity-0 z-base pointer-events-none scale-95'
                                     }`}
                             >
                                 <UiInput
@@ -247,7 +247,7 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
                             </div>
                             {/* 快速保存按钮区域 */}
                             <div
-                                className={`absolute inset-0 grid grid-cols-3 gap-2 h-full transition-[opacity,transform] duration-300 ${!isSaving ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none scale-95'
+                                className={`absolute inset-0 grid grid-cols-3 gap-2 h-full transition-[opacity,transform] duration-240 ${!isSaving ? 'opacity-100 z-raised' : 'opacity-0 z-base pointer-events-none scale-95'
                                     }`}
                             >
                                 <UiOptionButton
@@ -301,7 +301,7 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
                                         onClick={() => {
                                             onLoadPreset(preset)
                                         }}
-                                        className="px-3 py-2.5 bg-layer/40 hover:bg-layer/60 rounded-lg border border-border-dark/50 cursor-pointer transition-colors duration-200 group relative"
+                                        className="px-3 py-2.5 bg-layer/40 hover:bg-layer/60 rounded-lg border border-border-dark/50 cursor-pointer transition-colors duration-180 group relative"
                                     >
                                         <div className="flex items-center justify-between">
                                             <div className="flex items-center gap-2 flex-1 min-w-0">
@@ -323,7 +323,7 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
                                                     type="button"
                                                     onClick={(e) => handleDeleteClick(preset.id, e)}
                                                     onMouseDown={(e) => e.stopPropagation()}
-                                                    className="h-7 w-7 border-transparent bg-transparent opacity-0 transition-[opacity,background-color] duration-200 group-hover:opacity-100 hover:bg-red-500/20"
+                                                    className="h-7 w-7 border-transparent bg-transparent opacity-0 transition-[opacity,background-color] duration-180 group-hover:opacity-100 hover:bg-red-500/20"
                                                     title={t('ui:presets.deleteTitle')}
                                                 >
                                                     <Trash2 className="h-4 w-4 text-red-400" />
@@ -337,7 +337,7 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
                                         {/* 删除确认弹窗 - 使用 portal 渲染到 body */}
                                         {deletingPresetId === preset.id && deleteButtonRect && createPortal(
                                             <div
-                                                className={`fixed z-modal transition-opacity duration-200 ${deletingClosing ? 'opacity-0' : (deletingAppearing ? 'opacity-100' : 'opacity-0')
+                                                className={`fixed z-modal transition-opacity duration-180 ${deletingClosing ? 'opacity-0' : (deletingAppearing ? 'opacity-100' : 'opacity-0')
                                                     }`}
                                                 style={{
                                                     left: `${deleteButtonRect.right - 200}px`,

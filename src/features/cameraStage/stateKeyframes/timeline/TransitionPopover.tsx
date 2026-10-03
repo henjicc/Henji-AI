@@ -126,7 +126,7 @@ const TransitionPopover: React.FC<TransitionPopoverProps> = ({
                   <Icon size={13} className="shrink-0 text-text-muted" />
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-xs text-text-dark">{object.name}</div>
-                    <div className="truncate text-3xs text-text-muted">
+                    <div className="truncate text-2xs text-text-muted">
                       {detailSummary(stateKeyframe.transition.perObject[object.id] ?? {})}
                     </div>
                   </div>

@@ -129,7 +129,7 @@ export function TextProcessingModelRow({
                     {selectedModelOption.providerName}
                   </span>
                 ) : null}
-                <ChevronDown className={`h-3.5 w-3.5 shrink-0 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
+                <ChevronDown className={`h-3.5 w-3.5 shrink-0 transition-transform duration-180 ${open ? 'rotate-180' : ''}`} />
               </UiButton>
             )
           }}

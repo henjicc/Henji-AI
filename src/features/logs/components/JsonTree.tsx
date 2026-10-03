@@ -104,7 +104,7 @@ function JsonLeafNode({ label, value }: JsonLeafNodeProps): JSX.Element {
             type="button"
             variant="ghost"
             size="sm"
-            className="ml-1 h-auto rounded px-1 py-0 text-3xs font-normal text-brand-300"
+            className="ml-1 h-auto rounded px-1 py-0 text-2xs font-normal text-brand-300"
             onClick={() => setStringExpanded((current) => !current)}
           >
             {stringExpanded

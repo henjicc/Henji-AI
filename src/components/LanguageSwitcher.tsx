@@ -35,7 +35,7 @@ export function LanguageSwitcher() {
             className="fixed inset-0 z-dropdown"
             onClick={() => setIsOpen(false)}
           />
-          <UiPanel className="absolute right-0 z-20 mt-2 w-32 p-1">
+          <UiPanel className="absolute right-0 z-sticky mt-2 w-32 p-1">
             {supportedLanguages.map(lang => (
               <UiOptionButton
                 active={lang.code === currentLanguage}

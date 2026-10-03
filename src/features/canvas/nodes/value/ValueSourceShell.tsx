@@ -75,7 +75,7 @@ export function ValueSourceShell({
   return (
     <div
       className={`
-        group relative flex flex-col rounded-[var(--node-radius)] border bg-surface-dark/90 p-2 transition-colors duration-150
+        group relative flex flex-col rounded-[var(--node-radius)] border bg-surface-dark/90 p-2 transition-colors duration-120
         ${selected
           ? NODE_SELECTED_BORDER_CLASS
           : NODE_IDLE_BORDER_CLASS}

@@ -87,7 +87,7 @@ export function TextEditOverlay({
         }
       }}
       rows={1}
-      className={`absolute z-20 !min-h-0 resize-none overflow-hidden whitespace-pre !rounded-sm !border-0 font-semibold caret-accent outline outline-2 outline-accent/90 focus:!ring-0 ${
+      className={`absolute z-sticky !min-h-0 resize-none overflow-hidden whitespace-pre !rounded-sm !border-0 font-semibold caret-accent outline outline-2 outline-accent/90 focus:!ring-0 ${
         state.backgroundColor ? '' : '!bg-transparent'
       }`}
       style={{

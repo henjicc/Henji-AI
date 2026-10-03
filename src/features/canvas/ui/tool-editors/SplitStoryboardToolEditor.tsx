@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import {
   UI_TEXT_META_CLASS,
-  UI_TEXT_SECTION_CLASS,
+  UI_TEXT_PANEL_TITLE_CLASS,
   UiInput,
   UiRangeInput,
 } from '@/components/ui';
@@ -219,7 +219,7 @@ export function SplitStoryboardToolEditor({ sourceImageUrl, options, onOptionsCh
       </div>
 
       <div className="space-y-4 rounded-xl border border-veil-subtle bg-bg-dark/75 p-3.5">
-        <div className={UI_TEXT_SECTION_CLASS}>切割参数</div>
+        <div className={UI_TEXT_PANEL_TITLE_CLASS}>切割参数</div>
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-1">
           <NumberStepper

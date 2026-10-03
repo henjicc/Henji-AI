@@ -228,7 +228,7 @@ export function CanvasImageCapabilityActions({
                           <span className="flex min-w-0 items-center gap-1.5">
                             <span className="truncate">{t(capability.titleKey)}</span>
                             {capability.availability.releaseStage === 'experimental' && (
-                              <span className="shrink-0 rounded border border-border-dark px-1 py-0.5 text-3xs leading-none text-text-muted">
+                              <span className="shrink-0 rounded border border-border-dark px-1 py-0.5 text-2xs leading-none text-text-muted">
                                 {t('imageCapabilities.status.experimental')}
                               </span>
                             )}
@@ -269,7 +269,7 @@ export function CanvasImageCapabilityActions({
             >
               <MoreHorizontal className="h-3.5 w-3.5" />
               {t('nodeToolbar.more')}
-              <ChevronDown className={`h-3 w-3 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
+              <ChevronDown className={`h-3 w-3 transition-transform duration-180 ${open ? 'rotate-180' : ''}`} />
             </UiChipButton>
             )
           }}

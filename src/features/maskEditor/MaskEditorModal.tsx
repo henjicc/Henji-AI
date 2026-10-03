@@ -1,6 +1,6 @@
 import { Brush, Circle, Lasso, Redo2, Square, Trash2, Undo2 } from 'lucide-react';
 import {
-  UI_TEXT_SECTION_CLASS,
+  UI_TEXT_PANEL_TITLE_CLASS,
   UiButton,
   UiChipButton,
   UiError,
@@ -92,7 +92,7 @@ function LegacyMaskEditorModal({
   const handleConfirm = editor.confirm;
   const toolbar = (
     <div className="flex min-h-10 min-w-0 items-center gap-2">
-      <h2 className={`${UI_TEXT_SECTION_CLASS} mr-2 shrink-0`}>绘制局部重绘遮罩</h2>
+      <h2 className={`${UI_TEXT_PANEL_TITLE_CLASS} mr-2 shrink-0`}>绘制局部重绘遮罩</h2>
       <UiChipButton
         type="button"
         selectionRole="navigation"

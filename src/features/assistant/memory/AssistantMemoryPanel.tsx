@@ -33,7 +33,7 @@ import {
   UI_TEXT_BODY_CLASS,
   UI_TEXT_LABEL_CLASS,
   UI_TEXT_META_CLASS,
-  UI_TEXT_SECTION_CLASS,
+  UI_TEXT_PANEL_TITLE_CLASS,
 } from '@/components/ui'
 import type { AgentMemoryRecord, AgentMemoryState } from '@/core/assistant/memory'
 
@@ -98,7 +98,7 @@ export function AssistantMemoryPanel(): JSX.Element {
     <section className="flex min-h-0 flex-1 flex-col">
       <div className="flex h-10 shrink-0 items-center gap-2 border-b border-border-dark px-3">
         <BrainCircuit className="h-3.5 w-3.5 text-accent" />
-        <span className={`flex-1 ${UI_TEXT_SECTION_CLASS}`}>助手记忆</span>
+        <span className={`flex-1 ${UI_TEXT_PANEL_TITLE_CLASS}`}>助手记忆</span>
         <UiIconButton
           type="button"
           title="刷新助手记忆"
@@ -148,7 +148,7 @@ export function AssistantMemoryPanel(): JSX.Element {
 
             {state.candidates.map((candidate) => (
               <article key={candidate.candidateId} className="rounded-lg border border-accent/30 bg-accent/5 p-2.5">
-                <div className="text-3xs font-medium text-accent">待确认记忆</div>
+                <div className="text-2xs font-medium text-accent">待确认记忆</div>
                 <p className={`mt-1 whitespace-pre-wrap break-words leading-5 ${UI_TEXT_BODY_CLASS}`}>{candidate.content}</p>
                 <div className="mt-2 flex justify-end gap-1.5">
                   <UiButton

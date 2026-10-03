@@ -66,7 +66,7 @@ export const RadioInput: React.FC<RadioInputProps> = ({
                   }`}
                 >
                   {isSelected && (
-                    <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-accent animate-[radioDotAppear_0.2s_ease-out]" />
+                    <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-accent animate-radioDotAppear" />
                   )}
                 </div>
               </div>

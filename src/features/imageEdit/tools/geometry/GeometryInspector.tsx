@@ -2,7 +2,7 @@ import { FlipHorizontal2, FlipVertical2, RotateCcw, RotateCw, X } from 'lucide-r
 import {
   UI_TEXT_LABEL_CLASS,
   UI_TEXT_META_CLASS,
-  UI_TEXT_SECTION_CLASS,
+  UI_TEXT_PANEL_TITLE_CLASS,
   UiButton,
   UiGroup,
   UiOptionButton,
@@ -35,7 +35,7 @@ export function GeometryInspector(): JSX.Element {
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-3">
       <div className="mb-4">
-        <h2 className={UI_TEXT_SECTION_CLASS}>几何</h2>
+        <h2 className={UI_TEXT_PANEL_TITLE_CLASS}>几何</h2>
         <p className={`mt-1 leading-5 ${UI_TEXT_META_CLASS}`}>调整图片朝向和裁剪区域</p>
       </div>
 

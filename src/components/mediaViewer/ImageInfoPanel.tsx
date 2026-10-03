@@ -129,7 +129,7 @@ export function ImageInfoPanel({ open, imageSource }: ImageInfoPanelProps): JSX.
       </UiIconButton>
 
       <div
-        className={`ui-glass overflow-hidden rounded-xl text-white shadow-panel transition-opacity duration-200 ${
+        className={`ui-glass overflow-hidden rounded-xl text-white shadow-panel transition-opacity duration-180 ${
           collapsed ? 'pointer-events-none opacity-0' : 'opacity-100'
         }`}
         aria-hidden={collapsed}

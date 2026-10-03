@@ -11,7 +11,7 @@ import {
 } from '@/core/imageEdit';
 import {
   UI_TEXT_META_CLASS,
-  UI_TEXT_SECTION_CLASS,
+  UI_TEXT_PANEL_TITLE_CLASS,
   UiChipButton,
   UiColorInput,
   UiError,
@@ -140,7 +140,7 @@ export function VgpuGlowInspector(): JSX.Element {
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-3">
       <div className="mb-3 flex items-start justify-between gap-2">
         <div>
-          <h2 className={UI_TEXT_SECTION_CLASS}>辉光 Pro</h2>
+          <h2 className={UI_TEXT_PANEL_TITLE_CLASS}>辉光 Pro</h2>
           <p className={`mt-1 ${UI_TEXT_META_CLASS}`}>多层光晕 · GPU 实时渲染</p>
         </div>
         <UiSwitch

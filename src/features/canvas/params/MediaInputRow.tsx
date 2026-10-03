@@ -27,6 +27,7 @@ import { VideoTrimModal, type VideoTrimRange } from '@/components/videoTrim/Vide
 import { useReorderDrag } from '@/components/ui/fileUploader/useReorderDrag';
 import { readAssetDragPayload } from '@/features/assets/drag/assetDragPayload';
 import { UI_DURATION, uiTransition } from '@/components/ui/motion';
+import { Z_LAYERS } from '@/core/theme/zLayers';
 import {
   formatAcceptedMediaTypes,
   isMediaFileAccepted,
@@ -243,7 +244,7 @@ export function MediaInputRow({
       className={`${NODE_ROW_CLASS} ${
         isConnected ? '' : NODE_ROW_HOVER_CLASS
       }`}
-      style={isRowDragging ? { zIndex: 40 } : undefined}
+      style={isRowDragging ? { zIndex: Z_LAYERS.drag } : undefined}
       onDragOver={(event) => {
         const payload = readAssetDragPayload(event.dataTransfer);
         if (!isConnected && payload?.type === mediaKind && canAddMore) {
@@ -298,7 +299,7 @@ export function MediaInputRow({
                 (dragState.currentY - dragState.startY) / zoom
               }px) scale(1.1)`,
               position: 'relative',
-              zIndex: 50,
+              zIndex: Z_LAYERS.drag,
               opacity: 0.85,
               pointerEvents: 'none',
             };
@@ -309,7 +310,7 @@ export function MediaInputRow({
               transform: `translateX(${(toIndex - fromIndex) * stepPxRef.current}px)`,
               transition: uiTransition(['transform'], UI_DURATION.fast),
               position: 'relative',
-              zIndex: 50,
+              zIndex: Z_LAYERS.drag,
             };
           } else if ((dragState.isDragging || dragState.isDropping) && fromIndex !== null && toIndex !== null) {
             // 让位/复位动画：始终显式给出位移值（哪怕是 0）并保留 transition，
@@ -351,7 +352,7 @@ export function MediaInputRow({
               />
             ) : mediaKind === 'video' ? (
               <span
-                className="flex h-7 cursor-pointer items-center gap-1 rounded-md border border-veil-soft bg-bg-dark/60 px-1.5 text-3xs text-text-muted"
+                className="flex h-7 cursor-pointer items-center gap-1 rounded-md border border-veil-soft bg-bg-dark/60 px-1.5 text-2xs text-text-muted"
                 onDoubleClick={(event) => {
                   event.stopPropagation();
                   setViewerVideoUrl(resolveImageDisplayUrl(url));
@@ -361,7 +362,7 @@ export function MediaInputRow({
                 {resolveFileName(url)}
               </span>
             ) : (
-              <span className="flex h-7 items-center gap-1 rounded-md border border-veil-soft bg-bg-dark/60 px-1.5 text-3xs text-text-muted">
+              <span className="flex h-7 items-center gap-1 rounded-md border border-veil-soft bg-bg-dark/60 px-1.5 text-2xs text-text-muted">
                 <Icon className="h-3 w-3 shrink-0" />
                 {resolveFileName(url)}
               </span>

@@ -144,14 +144,14 @@ export function resolveButtonSize(size: ButtonSize): string {
   }
 
   if (size === 'field') {
-    return `${UI_FIELD_CONTROL_HEIGHT_CLASS} px-3.5 text-sm leading-none`
+    return `${UI_FIELD_CONTROL_HEIGHT_CLASS} px-3.5 text-13 leading-none`
   }
 
   if (size === 'field-sm') {
-    return `${UI_FIELD_CONTROL_HEIGHT_SM_CLASS} px-3.5 text-sm leading-none`
+    return `${UI_FIELD_CONTROL_HEIGHT_SM_CLASS} px-3.5 text-13 leading-none`
   }
 
-  return 'h-10 px-3.5 text-sm'
+  return 'h-10 px-3.5 text-13'
 }
 
 export function resolveUiPanelSurface(variant: UiPanelVariant): string {

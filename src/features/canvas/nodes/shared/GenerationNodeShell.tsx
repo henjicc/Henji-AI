@@ -384,7 +384,7 @@ export const GenerationNodeShell = memo(({
       data-generation-node-model-id={effectiveModelId}
       data-generation-node-layout={resolvedLayoutMode}
       className={`
-        canvas-node-dynamic-min-height group relative flex flex-col overflow-visible rounded-[var(--node-radius)] border bg-surface-dark/90 p-2 transition-colors duration-150
+        canvas-node-dynamic-min-height group relative flex flex-col overflow-visible rounded-[var(--node-radius)] border bg-surface-dark/90 p-2 transition-colors duration-120
         ${selected
           ? NODE_SELECTED_BORDER_CLASS
           : NODE_IDLE_BORDER_CLASS}

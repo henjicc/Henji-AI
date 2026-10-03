@@ -473,7 +473,7 @@ prominent/bordered/plain、Fluent 的 primary/default/subtle），本项目对�
 - [ ] 同一个 className 里有没有两个类抢同一个 CSS 属性？改成互斥三元
 - [ ] 新面板有没有再叠一层自己的底色？表面应该由外壳统一提供
 - [ ] 加了模糊吗？只有压在图片/视频/画布上才该加，且只能用 `ui-glass` / `ui-glass-scrim`
-- [ ] 动效时长是否落在 150/200/300/500 四档？（缓动已是全局默认，不用每处写）
+- [ ] 动效时长是否落在 120/180/240/500 四档？（缓动已是全局默认，不用每处写）
 - [ ] 有 `setTimeout` 卸载动画组件吗？那个数字必须和 className 里的 `duration-*` 同档
 - [ ] 过渡的是 `opacity`/`transform` 吗？别过渡宽高间距，也别用裸 `transition`
 - [ ] 空/加载/错误三态是否都走了 `UiEmpty/UiLoading/UiError`
@@ -481,7 +481,7 @@ prominent/bordered/plain、Fluent 的 primary/default/subtle），本项目对�
 - [ ] 有 tooltip 时参数名称是否可 hover / focus，且没有额外 Info 图标？无 tooltip 时是否仍是普通标签？
 - [ ] 参数 tooltip 是否只由参数名称触发，而不是包住整个控件或上传区？
 - [ ] 字号是否全部来自登记档位（无 `text-[Npx]`）
-- [ ] 圆角是否只用了 `rounded-lg/xl/full`，且内层不大于外层
+- [ ] 圆角是否只用了圆角令牌（`rounded-control/field/overlay`，或同一组变量的 `rounded-md/lg/xl`）与 `rounded-full`，且内层不大于外层
 - [ ] 阴影是否只出现在浮层
 - [ ] z-index 是否用了语义 token
 - [ ] 同级元素间距是否统一（不要一行 `mt-2` 一行 `mt-3`）

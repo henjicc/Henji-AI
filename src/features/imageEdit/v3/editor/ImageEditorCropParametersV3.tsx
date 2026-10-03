@@ -279,7 +279,7 @@ export function ImageEditorCropParametersV3({
           >
             <span className="truncate">{cropAspectRatioLabel}</span>
             <ChevronDown
-              className={`h-3.5 w-3.5 shrink-0 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
+              className={`h-3.5 w-3.5 shrink-0 transition-transform duration-180 ${open ? 'rotate-180' : ''}`}
               aria-hidden="true"
             />
           </UiButton>

@@ -400,7 +400,7 @@ export const NodeModelParamsControls = memo(({
       {typeof document !== 'undefined' && renderPanel === 'model' && createPortal(
         <div
           ref={modelPanelRef}
-          className={`${UI_TRIGGER_PANEL_CLASS} nodrag nowheel fixed z-dropdown flex min-h-0 flex-col overflow-hidden p-2 transition-opacity duration-200 ease-out ${
+          className={`${UI_TRIGGER_PANEL_CLASS} nodrag nowheel fixed z-dropdown flex min-h-0 flex-col overflow-hidden p-2 transition-opacity duration-180 ease-out ${
             isPanelVisible ? 'opacity-100' : 'pointer-events-none opacity-0'
           }`}
           style={modelPanelPosition ? {
@@ -444,7 +444,7 @@ export const NodeModelParamsControls = memo(({
       {typeof document !== 'undefined' && renderPanel === 'params' && selectedModel && createPortal(
         <div
           ref={paramsPanelRef}
-          className={`ui-scrollbar nodrag nowheel fixed z-dropdown transition-opacity duration-200 ease-out ${
+          className={`ui-scrollbar nodrag nowheel fixed z-dropdown transition-opacity duration-180 ease-out ${
             isPanelVisible ? 'opacity-100' : 'pointer-events-none opacity-0'
           }`}
           style={paramsPanelPosition ? {

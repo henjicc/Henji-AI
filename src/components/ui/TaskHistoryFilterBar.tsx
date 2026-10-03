@@ -163,8 +163,8 @@ export function UiTaskHistoryFilterBar({
   }, [isAlwaysVisible, isExpanded, modelOptions.length, providerOptions.length, mediaOptions?.length, timePreset, keyword])
 
   const panelContainerClassName = isAlwaysVisible
-    ? 'relative z-30'
-    : `absolute right-0 top-0 z-30 origin-right will-change-transform transition-[opacity,transform] duration-300 ease-out ${
+    ? 'relative z-dropdown'
+    : `absolute right-0 top-0 z-dropdown origin-right will-change-transform transition-[opacity,transform] duration-240 ease-out ${
       panelVisible ? 'opacity-100 scale-x-100 translate-x-0' : 'pointer-events-none opacity-0 scale-x-[0.35] translate-x-2'
     }`
 
@@ -175,7 +175,7 @@ export function UiTaskHistoryFilterBar({
           <UiIconButton
             type="button"
             active={hasActiveFilters}
-            className={`!h-8 !w-8 transition-[transform,opacity] duration-300 ease-out ${
+            className={`!h-8 !w-8 transition-[transform,opacity] duration-240 ease-out ${
               isExpanded
                 ? 'pointer-events-none opacity-0 [transition-delay:70ms]'
                 : 'opacity-100 [transition-delay:0ms]'
@@ -211,7 +211,7 @@ export function UiTaskHistoryFilterBar({
                 type="button"
                 showBorder={false}
                 appearance="hover-only"
-                className={`absolute right-0.5 top-1/2 !h-5 !w-5 -translate-y-1/2 hover:!border-transparent hover:!bg-transparent transition-opacity duration-150 ${
+                className={`absolute right-0.5 top-1/2 !h-5 !w-5 -translate-y-1/2 hover:!border-transparent hover:!bg-transparent transition-opacity duration-120 ${
                   keyword.length > 0 ? 'opacity-100' : 'pointer-events-none opacity-0'
                 }`}
                 onClick={() => {

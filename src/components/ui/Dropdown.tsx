@@ -10,6 +10,7 @@ import React, {
 import { createPortal } from 'react-dom'
 import { UI_DROPDOWN_OPTION_ACTIVE_CLASS, UI_FIELD_CONTROL_HEIGHT_SM_CLASS, UI_FIELD_LABEL_CLASS, UI_TRIGGER_BUTTON_CLASS, UI_TRIGGER_PANEL_CLASS } from './styleTokens'
 import { UiButton, UiOptionButton } from './primitives'
+import { UI_DURATION } from './motion'
 import { resolveDropdownDisplay } from './dropdownUtils'
 import { measureElementTextWidth } from './textMeasurement'
 import { ChevronDown } from 'lucide-react'
@@ -98,7 +99,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
     if (option.disabled) return
     onSelect?.(option.value)
     setClosing(true)
-    setTimeout(() => { setOpen(false); setClosing(false) }, 200)
+    setTimeout(() => { setOpen(false); setClosing(false) }, UI_DURATION.base)
   }
   const openPanel = (): void => {
     const selectedIndex = (options || []).findIndex((option) => isSelectedOption(option.value) && !option.disabled)
@@ -191,7 +192,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
       if (!inTrigger && !inPanel) {
         if (open) {
           setClosing(true)
-          setTimeout(() => { setOpen(false); setClosing(false) }, 200)
+          setTimeout(() => { setOpen(false); setClosing(false) }, UI_DURATION.base)
         }
       }
     }
@@ -302,7 +303,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
             aria-selected={selected}
             active={selected}
             variant="menu"
-            className={`w-full rounded-none border-0 px-3 py-2 transition-colors duration-200 ${option.disabled
+            className={`w-full rounded-none border-0 px-3 py-2 transition-colors duration-180 ${option.disabled
               ? 'cursor-not-allowed opacity-50'
               : selected
                 ? `${UI_DROPDOWN_OPTION_ACTIVE_CLASS} cursor-pointer`
@@ -311,7 +312,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
             onMouseEnter={() => setActiveOptionIndex(index)}
             onClick={() => selectOption(option)}
           >
-            <span className={`block truncate whitespace-nowrap ${optionLabelClassName || 'text-sm'}`}>{option.label}</span>
+            <span className={`block truncate whitespace-nowrap ${optionLabelClassName || 'text-13'}`}>{option.label}</span>
           </UiOptionButton>
         )
       })}
@@ -355,8 +356,8 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
           ...(buttonMinWidthPx ? { minWidth: `${buttonMinWidthPx}px` } : {})
         }}
       >
-        <span className={`${buttonLabelClassName || 'text-sm'} truncate`}>{resolvedDisplay}</span>
-        <ChevronDown className={`h-4 w-4 text-text-muted transition-transform duration-200 ${appearance === 'text' ? 'ml-0.5' : 'ml-2'} ${open ? 'rotate-180' : ''}`} />
+        <span className={`${buttonLabelClassName || 'text-13'} truncate`}>{resolvedDisplay}</span>
+        <ChevronDown className={`h-4 w-4 text-text-muted transition-transform duration-180 ${appearance === 'text' ? 'ml-0.5' : 'ml-2'} ${open ? 'rotate-180' : ''}`} />
       </UiButton>
       {(open || closing) && (
         portal && fixedPos ? (
@@ -384,7 +385,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
         ) : (
           <div
             ref={panelRef}
-            className={`absolute left-0 z-50 ${fixedPos?.placement === 'above' ? 'bottom-full mb-2' : 'top-full mt-2'} ${panelWidthStrategy === 'options' ? 'w-auto' : 'w-full'} ${UI_TRIGGER_PANEL_CLASS} overflow-hidden ${closing ? 'animate-scale-out' : 'animate-scale-in'} ${panelClassName || ''}`}
+            className={`absolute left-0 z-modal ${fixedPos?.placement === 'above' ? 'bottom-full mb-2' : 'top-full mt-2'} ${panelWidthStrategy === 'options' ? 'w-auto' : 'w-full'} ${UI_TRIGGER_PANEL_CLASS} overflow-hidden ${closing ? 'animate-scale-out' : 'animate-scale-in'} ${panelClassName || ''}`}
             style={panelWidthStrategy === 'options' && panelMinWidthPx ? { minWidth: `${panelMinWidthPx}px` } : undefined}
             data-dropdown-portal="true"
             data-dropdown-placement={fixedPos?.placement ?? 'below'}

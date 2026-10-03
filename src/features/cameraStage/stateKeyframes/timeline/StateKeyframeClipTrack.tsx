@@ -122,7 +122,7 @@ const StateKeyframeClipTrack: React.FC<StateKeyframeClipTrackProps> = ({
 
       {drag.preview && (
         <div
-          className="pointer-events-none absolute z-40 -translate-x-1/2 whitespace-nowrap rounded bg-brand-500 px-1.5 py-0.5 font-mono text-3xs font-medium text-white shadow"
+          className="pointer-events-none absolute z-panel -translate-x-1/2 whitespace-nowrap rounded bg-brand-500 px-1.5 py-0.5 font-mono text-2xs font-medium text-white shadow"
           style={{ left: drag.preview.time * pxPerSecond, top: DRAG_BADGE_TOP }}
         >
           {formatStateKeyframeTimecode(drag.preview.time, 'secondsFrames', fps)}

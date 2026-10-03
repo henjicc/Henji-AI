@@ -1,9 +1,9 @@
 /**
- * 动效档位。
+ * 动效档位（重要记录 004：120 / 180 / 240ms，统一缓出；查看器 500 单列）。
  *
  * 收敛前散落 8 种时长（200/150/300/250/220/100/75/500）与两种缓动，
  * 且 JS 侧的卸载计时与 CSS 侧的过渡时长对不上——`UI_DIALOG_TRANSITION_MS` 是
- * 180ms 而 `UiModal` 的 className 写的是 `duration-200`，组件在淡出还剩 20ms 时
+ * 180ms 而 `UiModal` 的 className 写的是 `duration-180`，组件在淡出还剩 20ms 时
  * 就被卸载，收尾被硬切。这类问题不报错，只表现为"关闭时有点生硬"。
  *
  * ⚠️ **`UI_DURATION` 的数值必须与 `UI_DURATION_CLASS` 的同名档完全一致。**
@@ -12,12 +12,12 @@
  * `motion.test.ts` 保证它们不漂移。
  */
 export const UI_DURATION = {
-  /** 150ms：hover、颜色、开关、小控件 */
-  fast: 150,
-  /** 200ms：弹窗、浮层、下拉、面板开合 —— 默认档 */
-  base: 200,
-  /** 300ms：大面积位移、侧栏模式切换、悬浮输入面板折叠 */
-  slow: 300,
+  /** 120ms：悬停、颜色、开关、小控件（设计稿“悬停 120”） */
+  fast: 120,
+  /** 180ms：弹窗、浮层、下拉、面板开合 —— 默认档（设计稿“展开 180”） */
+  base: 180,
+  /** 240ms：大面积位移、侧栏模式切换、悬浮输入面板折叠（设计稿“面板 240”） */
+  slow: 240,
   /**
    * 500ms：全屏媒体查看器的沉浸式淡入淡出。
    * 不是随手加的档——位移/覆盖面积越大，时长就该越长（标准动效原则），
@@ -28,9 +28,9 @@ export const UI_DURATION = {
 
 /** 与 UI_DURATION 一一对应的 Tailwind 类，必须是字面量 */
 export const UI_DURATION_CLASS = {
-  fast: 'duration-150',
-  base: 'duration-200',
-  slow: 'duration-300',
+  fast: 'duration-120',
+  base: 'duration-180',
+  slow: 'duration-240',
   viewer: 'duration-500',
 } as const;
 

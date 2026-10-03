@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { ownerDocumentOf, ownerWindowOf } from '@/utils/crossRealmDom'
+import { UI_DURATION } from './motion'
 
 type TooltipProps = {
     children: React.ReactElement
@@ -71,7 +72,7 @@ export default function Tooltip({
             window.setTimeout(() => {
                 setVisible(false)
                 setClosing(false)
-            }, 300)
+            }, UI_DURATION.slow) // 与 animate-fade-out（index.css）同档
         }
     }
 

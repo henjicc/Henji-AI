@@ -138,7 +138,7 @@ const StageViewportPane: React.FC<StageViewportPaneProps> = ({ viewportId, captu
         * 它决定的是这台机位的成片长什么样，自由透视与固定视图仍是彩色的编辑视角。
         */}
       {overlayCameraId && (
-        <div className="pointer-events-auto absolute right-2 top-2 z-20">
+        <div className="pointer-events-auto absolute right-2 top-2 z-sticky">
           <Dropdown<StageRenderStyle>
             value={renderStyle}
             display={STAGE_RENDER_STYLE_LABELS[renderStyle]}
@@ -154,7 +154,7 @@ const StageViewportPane: React.FC<StageViewportPaneProps> = ({ viewportId, captu
           />
         </div>
       )}
-      <div className="pointer-events-auto absolute left-2 top-2 z-20">
+      <div className="pointer-events-auto absolute left-2 top-2 z-sticky">
         <Dropdown<string>
           value={sourceValue(source)}
           display={options.find((option) => option.value === sourceValue(source))?.label ?? '自由透视'}

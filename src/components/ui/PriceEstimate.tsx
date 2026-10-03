@@ -73,7 +73,7 @@ const PriceEstimate: React.FC<PriceEstimateProps> = ({ modelId, params, variant 
     if (variant === 'badge') {
         return (
             <span
-                className="inline-flex shrink-0 items-center whitespace-nowrap rounded-md border border-border-dark/60 bg-bg-dark/65 px-1.5 py-1 text-3xs leading-none text-text-muted"
+                className="inline-flex shrink-0 items-center whitespace-nowrap rounded-md border border-border-dark/60 bg-bg-dark/65 px-1.5 py-1 text-2xs leading-none text-text-muted"
                 title={`${t('priceEstimate.label')}: ${priceDisplayWithUnit}`}
             >
                 {priceDisplayWithUnit}

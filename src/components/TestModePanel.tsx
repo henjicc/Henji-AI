@@ -18,7 +18,7 @@ import { openLogWindow } from '@/commands/logging'
 import {
   UI_TEXT_BODY_CLASS,
   UI_TEXT_META_CLASS,
-  UI_TEXT_SECTION_CLASS,
+  UI_TEXT_PANEL_TITLE_CLASS, UI_TEXT_SECTION_CLASS,
   UI_TEXT_TITLE_CLASS,
   UiButton,
   UiCheckbox,
@@ -120,7 +120,7 @@ const TestModePanel: React.FC<TestModePanelProps> = ({
         <div className="mb-6">
           <div className="flex items-center justify-between p-4 rounded-lg bg-app/40">
             <div>
-              <div className={UI_TEXT_SECTION_CLASS}>{t('testMode.enable.title')}</div>
+              <div className={UI_TEXT_PANEL_TITLE_CLASS}>{t('testMode.enable.title')}</div>
               <div className={`mt-1 ${UI_TEXT_META_CLASS}`}>
                 {t('testMode.enable.description')}
               </div>

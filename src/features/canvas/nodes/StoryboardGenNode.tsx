@@ -237,7 +237,7 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
   return (
     <div
       className={`
-        group relative flex h-full flex-col overflow-visible rounded-[var(--node-radius)] border bg-surface-dark/95 p-3 transition-colors duration-150
+        group relative flex h-full flex-col overflow-visible rounded-[var(--node-radius)] border bg-surface-dark/95 p-3 transition-colors duration-120
         ${selected
           ? NODE_SELECTED_BORDER_CLASS
           : NODE_IDLE_BORDER_CLASS
@@ -281,7 +281,7 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
         onFrameDescriptionChange={handleFrameDescriptionChange}
       />
 
-      {error && <div className="canvas-node-lod-detail mb-1.5 shrink-0 text-3xs text-red-400">{error}</div>}
+      {error && <div className="canvas-node-lod-detail mb-1.5 shrink-0 text-2xs text-red-400">{error}</div>}
 
       <div className={`canvas-node-lod-detail flex shrink-0 flex-col ${NODE_ROW_GAP_CLASS}`}>
         <ModelInputRow

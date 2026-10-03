@@ -4,7 +4,7 @@ import {
   PromptEditor,
   UI_TEXT_BODY_CLASS,
   UI_TEXT_META_CLASS,
-  UI_TEXT_SECTION_CLASS,
+  UI_TEXT_PANEL_TITLE_CLASS,
   UiButton,
   UiCheckbox,
   UiInput,
@@ -217,7 +217,7 @@ export function PromptOptimizationProfilesPanel({
     <div className="flex max-h-[min(680px,calc(100vh-96px))] flex-col p-4">
       <div className="mb-3 flex items-start justify-between gap-3">
         <div>
-          <div className={UI_TEXT_SECTION_CLASS}>提示词优化配置</div>
+          <div className={UI_TEXT_PANEL_TITLE_CLASS}>提示词优化配置</div>
         </div>
         <div className={UI_TEXT_META_CLASS}>
           {selectedProfile.isDefault ? '默认配置' : '非默认配置'}

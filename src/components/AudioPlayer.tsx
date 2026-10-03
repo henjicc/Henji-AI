@@ -380,7 +380,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
           </UiIconButton>
           {showVolumeSlider && (
             <div
-              className={`absolute left-[calc(100%+0.5rem)] top-1/2 z-20 -translate-y-1/2 ${volumeSliderWidthClass}`}
+              className={`absolute left-[calc(100%+0.5rem)] top-1/2 z-sticky -translate-y-1/2 ${volumeSliderWidthClass}`}
               onWheelCapture={onVolumeWheel}
             >
               {/* 音量数值 tooltip 是浮层，边框背景是其在波形上可读所必需的 */}

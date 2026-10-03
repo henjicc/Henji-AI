@@ -241,7 +241,7 @@ export function ImageViewerModal({
       }}
     >
       {editorAvailable && !isEditorMode && (
-        <div className="absolute top-12 left-1/2 z-10 -translate-x-1/2">
+        <div className="absolute top-12 left-1/2 z-raised -translate-x-1/2">
           <UiButton
             variant="glass"
             size="sm"

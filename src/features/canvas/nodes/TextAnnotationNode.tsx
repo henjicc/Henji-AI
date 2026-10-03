@@ -133,7 +133,7 @@ export const TextAnnotationNode = memo(({
   return (
     <div
       className={`
-        group relative h-full w-full overflow-visible rounded-[var(--node-radius)] border bg-surface-dark/85 p-1.5 transition-colors duration-150
+        group relative h-full w-full overflow-visible rounded-[var(--node-radius)] border bg-surface-dark/85 p-1.5 transition-colors duration-120
         ${generationError
           ? NODE_GENERATION_ERROR_BORDER_CLASS
           : selected

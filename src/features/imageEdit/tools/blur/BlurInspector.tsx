@@ -8,7 +8,7 @@ import {
 } from '@/core/imageEdit';
 import {
   UI_TEXT_META_CLASS,
-  UI_TEXT_SECTION_CLASS,
+  UI_TEXT_PANEL_TITLE_CLASS,
   UiChipButton,
   UiError,
   UiGroup,
@@ -31,7 +31,7 @@ export function BlurInspector(): JSX.Element {
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-3">
       <div className="mb-3 flex items-start justify-between gap-2">
         <div>
-          <h2 className={UI_TEXT_SECTION_CLASS}>模糊</h2>
+          <h2 className={UI_TEXT_PANEL_TITLE_CLASS}>模糊</h2>
           <p className={`mt-1 leading-5 ${UI_TEXT_META_CLASS}`}>柔化整张图片的细节</p>
         </div>
         <UiSwitch

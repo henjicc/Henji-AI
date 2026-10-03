@@ -79,27 +79,65 @@ export const UI_BOOLEAN_CONTROL_ACTIVE_CLASS =
   `${UI_COLOR_ACCENT_BORDER_CLASS} ${UI_COLOR_ACCENT_SOFT_BG_CLASS}`;
 
 /* ---------------------------------------------------------------------------
- * 排版层级令牌
+ * 排版层级令牌（重要记录 004）
  *
  * 项目此前 72% 的字号决策都落在 text-xs 及更小，层级实际上塌缩成"全是小字"，
  * 只能靠边框/背景区分内容——这是过度卡片化的根源之一。
- * 用这五档表达层级，优先靠字号字重建立结构，而不是靠画框。
+ * 用这几档表达层级，优先靠字号字重建立结构，而不是靠画框：
+ *   页面标题 20/600 · 区块标题 16/600 · 面板标题 14/500 · 正文与控件 13/400（基准）
+ *   · 次要信息 12/400 · 元信息 11/500。界面文字最小 11px。
+ * 字体：拉丁字母与数字 Geist，中文回落系统字体；数值/时间码见 UI_TEXT_NUMERIC/TIMECODE。
  * ------------------------------------------------------------------------- */
 
-/** 一级标题：页面/弹窗主标题 */
-export const UI_TEXT_TITLE_CLASS = 'text-base font-semibold text-text-dark';
+/** 页面标题 20/600：页面/弹窗主标题 */
+export const UI_TEXT_TITLE_CLASS = 'text-xl font-semibold text-text1';
 
-/** 二级标题：分区标题（UiGroup 的 title） */
-export const UI_TEXT_SECTION_CLASS = 'text-sm font-medium text-text-dark';
+/** 区块标题 16/600：分区标题（UiGroup 的 title） */
+export const UI_TEXT_SECTION_CLASS = 'text-base font-semibold text-text1';
 
-/** 正文 */
-export const UI_TEXT_BODY_CLASS = 'text-sm text-text-dark';
+/** 面板标题 14/500：侧栏、检查器、浮层内的面板名 */
+export const UI_TEXT_PANEL_TITLE_CLASS = 'text-sm font-medium text-text1';
 
-/** 字段标签 */
-export const UI_TEXT_LABEL_CLASS = 'text-sm font-medium text-text-soft';
+/** 正文与控件 13/400（基准字号，与 body 默认一致） */
+export const UI_TEXT_BODY_CLASS = 'text-13 text-text1';
 
-/** 辅助说明/元信息 */
-export const UI_TEXT_META_CLASS = 'text-xs text-text-muted';
+/** 字段标签 13/500 */
+export const UI_TEXT_LABEL_CLASS = 'text-13 font-medium text-text2';
+
+/** 次要信息 12/400：规格、计数等第二层信息 */
+export const UI_TEXT_SECONDARY_CLASS = 'text-xs text-text2';
+
+/** 元信息 11/500：时间、状态说明、辅助说明（text3 保证 ≥ 4.5:1） */
+export const UI_TEXT_META_CLASS = 'text-2xs font-medium text-text3';
+
+/**
+ * 等宽数字：会变化的数值（计数、百分比、尺寸、价格）用它防止数字跳动。
+ * Geist 自带等宽数字特性，不需要换字体。
+ */
+export const UI_TEXT_NUMERIC_CLASS = 'tabular-nums';
+
+/** 时间码与代码式数值：Geist Mono + 等宽数字（如 00:00:01:59、帧号、十六进制） */
+export const UI_TEXT_TIMECODE_CLASS = 'font-mono tabular-nums';
+
+/* ---------------------------------------------------------------------------
+ * 尺寸令牌（重要记录 004）：控件高度 28/32/36、圆角 控件 6 / 输入与菜单 8 / 浮层 12。
+ * 值在 index.css 的 CSS 变量里（圆角随「设置 → 界面 → 圆角」缩放），Tailwind 类见 tailwind.config.js。
+ * 组件改用这些档位由 2.1/2.2 完成；旧的 42/38 字段高度令牌在迁移完成前保留。
+ * ------------------------------------------------------------------------- */
+
+/** 控件高度：sm 28 紧凑 / md 32 默认 / lg 36 醒目 */
+export const UI_CONTROL_HEIGHT_CLASS = {
+  sm: 'h-control-sm',
+  md: 'h-control-md',
+  lg: 'h-control-lg',
+} as const;
+
+/** 圆角：control 6（按钮、开关、分段）/ field 8（输入、菜单、下拉）/ overlay 12（浮层、弹窗、面板） */
+export const UI_RADIUS_CLASS = {
+  control: 'rounded-control',
+  field: 'rounded-field',
+  overlay: 'rounded-overlay',
+} as const;
 
 /* ---------------------------------------------------------------------------
  * 间距与分隔令牌
@@ -186,11 +224,11 @@ export const UI_FIELD_CONTROL_HEIGHT_SM_CLASS = 'h-[38px]';
 export const UI_FIELD_LABEL_CLASS = `block ${UI_TEXT_LABEL_CLASS} mb-1.5`;
 
 export const UI_FIELD_FOCUS_CLASS =
-  'outline-none focus:outline-none focus-visible:outline-none focus:ring-inset focus:ring-2 focus:ring-accent focus:ring-offset-0 focus:border-brand-500 transition-shadow duration-300 ease-out';
+  'outline-none focus:outline-none focus-visible:outline-none focus:ring-inset focus:ring-2 focus:ring-accent focus:ring-offset-0 focus:border-brand-500 transition-shadow duration-240 ease-out';
 
 /** 复合字段把边框画在外壳上时使用，焦点由内部输入框传递给整块控件。 */
 export const UI_FIELD_FOCUS_WITHIN_CLASS =
-  'outline-none focus-within:ring-inset focus-within:ring-2 focus-within:ring-accent focus-within:ring-offset-0 focus-within:border-brand-500 transition-shadow duration-300 ease-out';
+  'outline-none focus-within:ring-inset focus-within:ring-2 focus-within:ring-accent focus-within:ring-offset-0 focus-within:border-brand-500 transition-shadow duration-240 ease-out';
 
 export const UI_FIELD_DISABLED_CLASS = 'disabled:opacity-50 disabled:cursor-not-allowed';
 

@@ -152,7 +152,7 @@ export function CanvasVideoPlayer({
       )}
 
       <div
-        className={`nodrag nowheel absolute inset-x-0 bottom-0 px-2 pb-1.5 pt-9 transition-opacity duration-150 ${
+        className={`nodrag nowheel absolute inset-x-0 bottom-0 px-2 pb-1.5 pt-9 transition-opacity duration-120 ${
           playing ? 'opacity-0 group-hover/player:opacity-100' : 'opacity-100'
         }`}
         onPointerDown={(event) => event.stopPropagation()}

@@ -158,7 +158,7 @@ export default function NumberInput(props: NumberInputProps): ReactElement {
   const stepperWidthClass = compact ? 'w-5' : 'w-7'
   const stepperButtonWidthClass = compact ? '!w-5' : '!w-7'
   const iconSizeClass = compact ? 'h-3 w-3' : 'h-3.5 w-3.5'
-  const textSizeClass = compact ? 'text-xs' : 'text-sm'
+  const textSizeClass = compact ? 'text-xs' : 'text-13'
   const alignClass = align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : 'text-left'
   const contentWidthCharacterCount = Math.max(inputValue.length, placeholder?.length ?? 0, 2)
   const contentWidthChromePx = compact ? 38 : 46

@@ -217,7 +217,7 @@ export function AssistantTracePanel({ refreshToken }: AssistantTracePanelProps):
         onClear={() => setClearConfirmOpen(true)}
       />
       {captureMode === 'detailed' && (
-        <div className="shrink-0 border-b border-amber-500/20 bg-amber-500/5 px-3 py-1.5 text-3xs text-amber-300">
+        <div className="shrink-0 border-b border-amber-500/20 bg-amber-500/5 px-3 py-1.5 text-2xs text-amber-300">
           详细追踪已开启：从下一次模型请求开始，完整提示词、消息、工具和脱敏后的 HTTP 请求会保存在本机；应用重启后自动关闭。
         </div>
       )}
@@ -366,5 +366,5 @@ function findPreviousPrimaryStep(runs: AgentTraceRunSummary[], traceId: string):
 }
 
 function SummaryMetric({ label, value }: { label: string; value: string }): JSX.Element {
-  return <div className="rounded border border-border-dark/35 bg-black/15 px-2 py-1"><div className="text-4xs uppercase tracking-wider text-text-muted">{label}</div><div className="mt-0.5 truncate font-mono text-2xs text-text-dark">{value}</div></div>
+  return <div className="rounded border border-border-dark/35 bg-black/15 px-2 py-1"><div className="text-2xs uppercase tracking-wider text-text-muted">{label}</div><div className="mt-0.5 truncate font-mono text-2xs text-text-dark">{value}</div></div>
 }

@@ -188,7 +188,7 @@ export function ModelPickerList({
         <div
           ref={widthMeasurementRef}
           aria-hidden
-          className="pointer-events-none invisible fixed left-0 top-0 -z-10 flex w-max flex-col items-start"
+          className="pointer-events-none invisible fixed left-0 top-0 -z-raised flex w-max flex-col items-start"
         >
           <div className="whitespace-nowrap border border-transparent px-8 text-xs">{searchPlaceholder}</div>
           {/* 逐项测量供应商 chip；横向相加会把整个筛选行误当成面板最小宽度。 */}
@@ -202,7 +202,7 @@ export function ModelPickerList({
                 className="inline-flex h-6 items-center gap-2 rounded-md border border-transparent px-2 text-2xs"
               >
                 <span>{provider.label}</span>
-                <span className="text-3xs">{provider.count}</span>
+                <span className="text-2xs">{provider.count}</span>
               </div>
             ))}
           </div>
@@ -316,7 +316,7 @@ export function ModelPickerList({
                   }`}
                 >
                   <span>{provider.label}</span>
-                  <span className={`text-3xs ${active ? 'text-white/70' : 'text-text-muted/80'}`}>
+                  <span className={`text-2xs ${active ? 'text-white/70' : 'text-text-muted/80'}`}>
                     {provider.count}
                   </span>
                 </UiOptionButton>

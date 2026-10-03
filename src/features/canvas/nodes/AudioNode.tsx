@@ -237,7 +237,7 @@ export const AudioNode = memo(({ id, data, selected, type, width, height }: Audi
   return (
     <div
       className={`
-        group relative overflow-visible rounded-[var(--node-radius)] border bg-surface-dark/85 transition-colors duration-150
+        group relative overflow-visible rounded-[var(--node-radius)] border bg-surface-dark/85 transition-colors duration-120
         ${generationError
           ? NODE_GENERATION_ERROR_BORDER_CLASS
           : selected
@@ -300,7 +300,7 @@ export const AudioNode = memo(({ id, data, selected, type, width, height }: Audi
               >
                 {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="ml-0.5 h-4 w-4" />}
               </UiIconButton>
-              <span className="shrink-0 text-3xs leading-none tabular-nums text-text-muted/85">
+              <span className="shrink-0 text-2xs leading-none tabular-nums text-text-muted/85">
                 {formatDuration(currentTime)} / {durationLabel ?? formatDuration(effectiveDuration)}
               </span>
               <span className="min-w-0 flex-1" />

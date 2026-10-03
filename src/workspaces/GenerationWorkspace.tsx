@@ -280,8 +280,8 @@ const GenerationWorkspace: React.FC = () => {
   return (
     <div className="h-full flex-1 bg-app text-white flex flex-col relative overflow-hidden">
       <NotificationToast notification={notification} visible={notificationVisible} />
-      <main className="relative z-10 flex min-h-0 flex-1 flex-col">
-        <div className="pointer-events-none absolute inset-x-0 top-1 z-30 flex justify-center px-2">
+      <main className="relative z-raised flex min-h-0 flex-1 flex-col">
+        <div className="pointer-events-none absolute inset-x-0 top-1 z-dropdown flex justify-center px-2">
           <div
             className="pointer-events-auto relative flex w-full max-w-[980px] flex-col items-center"
             onPointerEnter={() => {
@@ -300,7 +300,7 @@ const GenerationWorkspace: React.FC = () => {
             }}
           >
             <div className="pointer-events-auto absolute inset-x-0 -top-6 h-16" />
-            <div className={`pointer-events-none transition-[opacity,transform] duration-200 ${
+            <div className={`pointer-events-none transition-[opacity,transform] duration-180 ${
               (isTopFilterVisible || hasActiveFilters)
                 ? 'pointer-events-auto translate-y-0 opacity-100'
                 : '-translate-y-2 opacity-0'

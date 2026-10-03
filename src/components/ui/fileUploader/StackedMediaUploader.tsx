@@ -292,7 +292,7 @@ export function StackedMediaUploader({
   const uploaderContent = (
     <div
       ref={elementRef}
-      className="relative shrink-0 transition-[width] duration-300"
+      className="relative shrink-0 transition-[width] duration-240"
       style={{ width: shellWidth }}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
@@ -351,7 +351,7 @@ export function StackedMediaUploader({
                   type="button"
                   variant="ghost"
                   size="sm"
-                  className={`relative h-[64px] w-[48px] overflow-hidden rounded-xl ${UI_UPLOADER_CARD_BORDER_CLASS} bg-surface-dark/35 p-0 shadow-thumb transition-transform duration-200 ease-out hover:scale-[1.1]`}
+                  className={`relative h-[64px] w-[48px] overflow-hidden rounded-xl ${UI_UPLOADER_CARD_BORDER_CLASS} bg-surface-dark/35 p-0 shadow-thumb transition-transform duration-180 ease-out hover:scale-[1.1]`}
                   onClick={(event) => {
                     event.stopPropagation()
                     onFileClick?.(file, files)
@@ -383,7 +383,7 @@ export function StackedMediaUploader({
                 {onReplace && (
                   <UiIconButton
                     type="button"
-                    className={`absolute -bottom-1 -right-1 z-20 h-5 w-5 rounded border-veil bg-panel/95 p-0 transition-opacity ${expanded ? 'opacity-0 group-hover:opacity-100' : 'pointer-events-none opacity-0'}`}
+                    className={`absolute -bottom-1 -right-1 z-sticky h-5 w-5 rounded border-veil bg-panel/95 p-0 transition-opacity ${expanded ? 'opacity-0 group-hover:opacity-100' : 'pointer-events-none opacity-0'}`}
                     onClick={(event) => {
                       event.stopPropagation()
                       beginFilePickerLock()
@@ -398,7 +398,7 @@ export function StackedMediaUploader({
                 {onTrim && isVideo && (
                   <UiIconButton
                     type="button"
-                    className={`absolute -bottom-1 -left-1 z-20 h-5 w-5 rounded border-veil bg-panel/95 p-0 transition-opacity ${expanded ? 'opacity-0 group-hover:opacity-100' : 'pointer-events-none opacity-0'}`}
+                    className={`absolute -bottom-1 -left-1 z-sticky h-5 w-5 rounded border-veil bg-panel/95 p-0 transition-opacity ${expanded ? 'opacity-0 group-hover:opacity-100' : 'pointer-events-none opacity-0'}`}
                     onClick={(event) => {
                       event.stopPropagation()
                       onTrim(index)
@@ -428,8 +428,8 @@ export function StackedMediaUploader({
                 variant="muted"
                 size="sm"
                 className={`p-0 text-text-dark ${plusUseCardShape
-                  ? `h-[64px] w-[48px] rounded-xl ${UI_UPLOADER_CARD_BORDER_OVERRIDE_CLASS} !bg-panel text-2xl shadow-thumb transition-transform duration-200 ease-out hover:scale-[1.1]`
-                  : 'h-[29px] w-[29px] aspect-square !rounded-full border-veil-soft bg-layer/80 text-base shadow-thumb-sm transition-transform duration-200 ease-out hover:scale-[1.1]'
+                  ? `h-[64px] w-[48px] rounded-xl ${UI_UPLOADER_CARD_BORDER_OVERRIDE_CLASS} !bg-panel text-2xl shadow-thumb transition-transform duration-180 ease-out hover:scale-[1.1]`
+                  : 'h-[29px] w-[29px] aspect-square !rounded-full border-veil-soft bg-layer/80 text-base shadow-thumb-sm transition-transform duration-180 ease-out hover:scale-[1.1]'
                   }`}
                 onClick={(event) => {
                   event.stopPropagation()
@@ -444,7 +444,7 @@ export function StackedMediaUploader({
         </div>
 
         {!hoverCapable && (
-          <div className="pointer-events-none absolute bottom-1 left-2 text-3xs text-text-faint">
+          <div className="pointer-events-none absolute bottom-1 left-2 text-2xs text-text-faint">
             点按展开
           </div>
         )}

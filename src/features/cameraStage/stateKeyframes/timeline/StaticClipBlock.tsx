@@ -67,7 +67,7 @@ const StaticClipBlock: React.FC<StaticClipBlockProps> = ({
 
   return (
     <div
-      className="absolute top-1/2 z-20"
+      className="absolute top-1/2 z-sticky"
       style={{
         left: block.x - KEYFRAME_HIT_SIZE / 2,
         width: KEYFRAME_HIT_SIZE,
@@ -85,7 +85,7 @@ const StaticClipBlock: React.FC<StaticClipBlockProps> = ({
             <div className="flex items-center justify-between gap-3">
               <div>
                 <div className="text-xs font-medium text-text-dark">状态关键帧</div>
-                <div className="mt-0.5 font-mono text-3xs text-text-muted">
+                <div className="mt-0.5 font-mono text-2xs text-text-muted">
                   {formatStateKeyframeTimecode(stateKeyframe.time, 'secondsFrames', fps)}
                 </div>
               </div>

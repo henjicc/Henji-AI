@@ -15,7 +15,7 @@ import {
   UI_GLASS_ADAPTIVE_SURFACE_CLASS,
   UI_TEXT_LABEL_CLASS,
   UI_TEXT_META_CLASS,
-  UI_TEXT_SECTION_CLASS,
+  UI_TEXT_PANEL_TITLE_CLASS,
 } from '@/components/ui/styleTokens'
 import { resolveImageDisplayUrl } from '@/features/canvas/application/imageData'
 import {
@@ -216,7 +216,7 @@ export function MultiAngleWorkbench({
         <div className={`min-h-0 overflow-y-auto border-l border-veil-subtle ${embedded ? 'p-3' : `p-4 ${UI_GLASS_ADAPTIVE_REGION_CLASS}`}`}>
           {sourceControl ? <div className="mb-3">{sourceControl}</div> : null}
           <section className="space-y-3">
-            <h3 className={UI_TEXT_SECTION_CLASS}>{t('node.multiAngleEditor.controlMode')}</h3>
+            <h3 className={UI_TEXT_PANEL_TITLE_CLASS}>{t('node.multiAngleEditor.controlMode')}</h3>
             <div className="grid grid-cols-3 gap-2" data-multi-angle-profile-options="true">
               <UiOptionButton
                 type="button"
@@ -250,7 +250,7 @@ export function MultiAngleWorkbench({
 
           <section className="mt-5 space-y-3">
             <div className="flex items-center justify-between gap-3">
-              <h3 className={UI_TEXT_SECTION_CLASS}>{t('node.multiAngleEditor.outputViews', { count: config.views.length, max: MULTI_ANGLE_MAX_VIEW_COUNT })}</h3>
+              <h3 className={UI_TEXT_PANEL_TITLE_CLASS}>{t('node.multiAngleEditor.outputViews', { count: config.views.length, max: MULTI_ANGLE_MAX_VIEW_COUNT })}</h3>
               <div className="flex items-center gap-1">
                 <UiIconButton type="button" appearance="hover-only" showBorder={false} aria-label={t('node.multiAngleEditor.removeView')} disabled={config.views.length <= 1} onClick={removeSelected}>
                   <Trash2 className="h-4 w-4" />
@@ -280,21 +280,21 @@ export function MultiAngleWorkbench({
 
           {selected?.kind === 'continuous' ? (
             <section className="mt-5 space-y-4">
-              <h3 className={UI_TEXT_SECTION_CLASS}>{t('node.multiAngleEditor.currentContinuous')}</h3>
+              <h3 className={UI_TEXT_PANEL_TITLE_CLASS}>{t('node.multiAngleEditor.currentContinuous')}</h3>
               <RangeField label={t('node.multiAngleEditor.horizontalOrbit')} value={selected.yawControlDeg} min={-180} max={180} step={1} suffix="°" onChange={(value) => patchContinuous({ yawControlDeg: value })} />
               <RangeField label={t('node.multiAngleEditor.verticalPitch')} value={selected.elevationDeg} min={-30} max={90} step={1} suffix="" valueText={describeLocalizedMultiAngleVertical(t, selected.elevationDeg)} onChange={(value) => patchContinuous({ elevationDeg: value })} />
               <RangeField label={t('node.multiAngleEditor.shotZoom')} value={selected.proximity} min={0} max={10} step={0.5} suffix="" valueText={describeLocalizedMultiAngleProximity(t, selected.proximity)} onChange={(value) => patchContinuous({ proximity: value })} />
             </section>
           ) : selected?.kind === 'flux' ? (
             <section className="mt-5 space-y-4">
-              <h3 className={UI_TEXT_SECTION_CLASS}>{t('node.multiAngleEditor.currentFlux')}</h3>
+              <h3 className={UI_TEXT_PANEL_TITLE_CLASS}>{t('node.multiAngleEditor.currentFlux')}</h3>
               <RangeField label={t('node.multiAngleEditor.horizontalAngle')} value={selected.horizontalAngleDeg} min={0} max={360} step={1} suffix="°" onChange={(value) => patchFlux({ horizontalAngleDeg: value })} />
               <RangeField label={t('node.multiAngleEditor.verticalAngle')} value={selected.verticalAngleDeg} min={0} max={60} step={1} suffix="°" onChange={(value) => patchFlux({ verticalAngleDeg: value })} />
               <RangeField label={t('node.multiAngleEditor.zoom')} value={selected.zoom} min={0} max={10} step={0.5} suffix="" onChange={(value) => patchFlux({ zoom: value })} />
             </section>
           ) : (
             <section className="mt-5 space-y-3">
-              <h3 className={UI_TEXT_SECTION_CLASS}>{t('node.multiAngleEditor.discretePresets')}</h3>
+              <h3 className={UI_TEXT_PANEL_TITLE_CLASS}>{t('node.multiAngleEditor.discretePresets')}</h3>
               <div className="grid grid-cols-3 gap-2" data-multi-angle-direction-options="true">
                 {MULTI_ANGLE_DISCRETE_VIEW_PRESETS.map((preset) => {
                   const active = selected?.kind === 'discrete' && selected.preset === preset.view.preset

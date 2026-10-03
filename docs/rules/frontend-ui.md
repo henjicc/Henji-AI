@@ -49,19 +49,20 @@
 
 | 类别 | 只允许 | 禁止 |
 |---|---|---|
-| 颜色 | 语义类 `bg-app/panel/surface-dark/layer`、`text-text-dark/soft/muted/faint`、`border-border-dark`、`veil` 六档 | 一切 `*-zinc-*`、`#hex`、`rgba(数字…)` |
-| 字号 | `text-4xs/3xs/2xs/13/14/15`、`text-xs/sm/base+` | `text-[Npx]` |
-| 圆角 | `rounded-lg/xl/2xl/3xl/full/hairline`（画布节点用 `rounded-[var(--node-radius)]`） | 其它 `rounded-[..]` |
+| 颜色 | 语义令牌类（类名颜色 = 主题 CSS 变量名去掉 `--`）：`bg-window/panel/raised/control/hover/selected/gap/media`、`text-text1/text2/text3`、`border-line/line-strong`、`text-accent-text`/`text-on-accent`、`bg-danger-solid`/`text-danger-text`/`bg-*-tint`、媒体叠层 `text-on-media`/`bg-media-control`/`border-media-line`；旧类 `bg-app/surface-dark/layer`、`text-text-*`、`border-border-dark`、`veil` 为过渡别名 | 一切 `*-zinc-*`、`#hex`、`rgba(数字…)`；新增调色板类、`text-white`/`bg-black` 等黑白类、命名色（`check:colors` 按存量登记拦截） |
+| 字号 | 排版令牌 `UI_TEXT_*`（20/16/14/13/12/11）；`text-2xs/13/14/15`、`text-xs/sm/base+`；界面文字最小 11，`text-3xs/4xs` 只用于媒体叠层读数与标尺刻度 | `text-[Npx]` |
+| 圆角 | `rounded-control/field/overlay`（6/8/12，CSS 变量，随「界面圆角」缩放；`rounded-md/lg/xl` 指向同一组变量）、`rounded-2xl/3xl/full/hairline`（画布节点用 `rounded-[var(--node-radius)]`） | 其它 `rounded-[..]` |
 | 阴影 | `shadow-panel`（仅浮层）、`shadow-node-selected/node-error/thumb/thumb-sm` | `shadow-[..]` |
-| 层级 | `z-raised/sticky/dropdown/panel/modal/viewer/toast/tooltip/drag/titlebar`；内联用 `Z_LAYERS`（`src/core/theme/zLayers.ts`） | `z-[..]` |
+| 层级 | `z-base/raised/sticky/dropdown/panel/modal/viewer/toast/tooltip/drag/titlebar`；内联用 `Z_LAYERS`（`src/core/theme/zLayers.ts`） | `z-[..]`、`z-10/20/…` 数字类 |
 | 毛玻璃 | `ui-glass` 类、遮罩 `ui-glass-scrim` | 一切 `backdrop-blur-*` |
-| 动效时长 | `duration-150/200/300/500`（= `UI_DURATION.fast/base/slow/viewer`） | 其它时长、`transition: all` |
-| 控件高度 | `UI_FIELD_CONTROL_HEIGHT_CLASS`(42px) / `UI_FIELD_CONTROL_HEIGHT_SM_CLASS`(38px) | 手写 `h-[38px]` |
+| 动效时长 | `duration-120/180/240/500`（= `UI_DURATION.fast/base/slow/viewer`） | 其它时长、`transition: all` |
+| 控件高度 | 新控件 `UI_CONTROL_HEIGHT_CLASS.sm/md/lg`（`h-control-sm/md/lg` = 28/32/36，CSS 变量）；存量字段 `UI_FIELD_CONTROL_HEIGHT_CLASS`(42px) / `_SM_CLASS`(38px) 由 2.2 迁移 | 手写 `h-[38px]` |
 
 补充：
 
-- 文字四档中间两档由 `runtimeTheme.applyTextScale` 派生
-- `veil` 六档用于叠在图片/视频/画布上的边框与底色
+- 颜色全部由主题引擎按种子推导（`src/core/theme/themeEngine.ts`），文字三档按对比度 ≥ 4.5:1 求解
+- 字体：拉丁与数字 Geist、等宽 Geist Mono（`@fontsource-variable`，随包离线），中文回落系统字体；正文基准 13px 设在 body
+- `veil` 六档是固定白纱，只适合叠在图片/视频/画布上；新代码压在媒体上优先用 `media-*`/`on-media` 固定令牌
 - 排版层级先用 `styleTokens.ts` 的 `UI_TEXT_TITLE/SECTION/BODY/LABEL/META_CLASS` 建立，再考虑容器装饰
 - 通用视觉 token 在 `src/components/ui/styleTokens.ts` 维护，业务组件不直接复制 token 字符串
 

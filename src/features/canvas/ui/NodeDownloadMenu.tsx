@@ -62,7 +62,7 @@ export function NodeDownloadMenu({
       ref={menuRef}
       /* 菜单弹在画布/图片节点之上，背后是用户内容，走玻璃材质；条目 hover 必须用白纱 */
       variant="glass"
-      className={`fixed z-dropdown ui-scrollbar overflow-y-auto overscroll-contain p-2 transition-opacity duration-150 ${isVisible ? 'opacity-100' : 'opacity-0'}`}
+      className={`fixed z-dropdown ui-scrollbar overflow-y-auto overscroll-contain p-2 transition-opacity duration-120 ${isVisible ? 'opacity-100' : 'opacity-0'}`}
       data-node-download-menu
       style={{ left: position?.left, top: position?.placement === 'above' ? undefined : position?.top, bottom: position?.bottom, width: position?.width ?? 280, maxHeight: position?.maxHeight, visibility: position ? 'visible' : 'hidden' }}
     >

@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Calendar, ChevronLeft, ChevronRight } from 'lucide-react'
 import { UiButton, UiIconButton } from './primitives'
-import { UI_OPTION_ITEM_ACTIVE_OVERRIDE_CLASS, UI_TEXT_META_CLASS, UI_TEXT_SECTION_CLASS } from './styleTokens'
+import { UI_OPTION_ITEM_ACTIVE_OVERRIDE_CLASS, UI_TEXT_META_CLASS, UI_TEXT_PANEL_TITLE_CLASS } from './styleTokens'
 
 interface CalendarCell {
   date: Date
@@ -133,9 +133,9 @@ export function UiDatePicker({
       </UiButton>
 
       {isOpen && (
-        <div className="absolute left-0 top-[calc(100%+6px)] z-50 w-[248px] rounded-lg border border-border-dark bg-panel p-2 shadow-panel">
+        <div className="absolute left-0 top-[calc(100%+6px)] z-modal w-[248px] rounded-lg border border-border-dark bg-panel p-2 shadow-panel">
           <div className="mb-2 flex items-center justify-between">
-            <span className={UI_TEXT_SECTION_CLASS}>{monthLabel}</span>
+            <span className={UI_TEXT_PANEL_TITLE_CLASS}>{monthLabel}</span>
             <div className="flex items-center gap-1">
               <UiIconButton
                 type="button"

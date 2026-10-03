@@ -108,7 +108,7 @@ export function AssistantSidebar({ workspaceRef }: AssistantSidebarProps): JSX.E
         data-application-surface-id="overlay.assistant"
         aria-label="智能助手"
         aria-hidden={!open}
-        className={`relative flex h-full min-h-0 w-full flex-col overflow-hidden ${UI_PANEL_SURFACE_CLASS} transition-[opacity,transform] duration-200 ease-out ${
+        className={`relative flex h-full min-h-0 w-full flex-col overflow-hidden ${UI_PANEL_SURFACE_CLASS} transition-[opacity,transform] duration-180 ease-out ${
           interaction.dragging ? SURFACE_BY_MODE.floating : SURFACE_BY_MODE[mode]
         } ${isVisible ? 'pointer-events-auto translate-x-0 translate-y-0 scale-100 opacity-100' : `pointer-events-none ${hiddenTransform}`}`}
       >
@@ -127,7 +127,7 @@ export function AssistantSidebar({ workspaceRef }: AssistantSidebarProps): JSX.E
             <div className={`min-w-0 truncate ${UI_TEXT_LABEL_CLASS}`}>智能助手</div>
             <GripHorizontal
               aria-hidden="true"
-              className={`h-4 w-4 shrink-0 transition-opacity duration-150 ${
+              className={`h-4 w-4 shrink-0 transition-opacity duration-120 ${
                 interaction.dragging
                   ? `${UI_COLOR_ACCENT_TEXT_CLASS} opacity-100`
                   : 'text-text-faint opacity-0 group-hover:opacity-100'
@@ -220,7 +220,7 @@ export function AssistantSidebar({ workspaceRef }: AssistantSidebarProps): JSX.E
             aria-orientation="vertical"
             aria-valuenow={size.width}
             tabIndex={0}
-            className={`group absolute inset-y-0 z-20 w-2 touch-none cursor-ew-resize outline-none ${mode === 'left' ? 'right-0' : 'left-0'}`}
+            className={`group absolute inset-y-0 z-sticky w-2 touch-none cursor-ew-resize outline-none ${mode === 'left' ? 'right-0' : 'left-0'}`}
             onPointerDown={(event) => interaction.onResizePointerDown(event, 'width')}
             onKeyDown={(event) => interaction.onResizeKeyDown(event, 'width')}
           >
@@ -233,7 +233,7 @@ export function AssistantSidebar({ workspaceRef }: AssistantSidebarProps): JSX.E
               aria-orientation="vertical"
               aria-valuenow={size.width}
               tabIndex={0}
-              className="group absolute bottom-4 right-0 top-10 z-20 w-2 touch-none cursor-ew-resize outline-none"
+              className="group absolute bottom-4 right-0 top-10 z-sticky w-2 touch-none cursor-ew-resize outline-none"
               onPointerDown={(event) => interaction.onResizePointerDown(event, 'width')}
               onKeyDown={(event) => interaction.onResizeKeyDown(event, 'width')}
             >
@@ -244,7 +244,7 @@ export function AssistantSidebar({ workspaceRef }: AssistantSidebarProps): JSX.E
               aria-orientation="horizontal"
               aria-valuenow={size.height}
               tabIndex={0}
-              className="group absolute bottom-0 left-4 right-4 z-20 h-2 touch-none cursor-ns-resize outline-none"
+              className="group absolute bottom-0 left-4 right-4 z-sticky h-2 touch-none cursor-ns-resize outline-none"
               onPointerDown={(event) => interaction.onResizePointerDown(event, 'height')}
               onKeyDown={(event) => interaction.onResizeKeyDown(event, 'height')}
             >
@@ -254,7 +254,7 @@ export function AssistantSidebar({ workspaceRef }: AssistantSidebarProps): JSX.E
               aria-label="同时调整智能助手宽度和高度"
               aria-valuetext={`${size.width} × ${size.height}`}
               tabIndex={0}
-              className="group absolute bottom-0 right-0 z-30 h-4 w-4 touch-none cursor-nwse-resize outline-none"
+              className="group absolute bottom-0 right-0 z-dropdown h-4 w-4 touch-none cursor-nwse-resize outline-none"
               onPointerDown={(event) => interaction.onResizePointerDown(event, 'both')}
               onKeyDown={(event) => interaction.onResizeKeyDown(event, 'both')}
             >

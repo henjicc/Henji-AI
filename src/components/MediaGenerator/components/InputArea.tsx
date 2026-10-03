@@ -341,7 +341,7 @@ const InputArea: React.FC<InputAreaProps> = ({
   return (
     <div className="relative rounded-2xl">
         {shouldShowUpload && (
-          <div className="pointer-events-auto absolute left-2 top-2 z-20">
+          <div className="pointer-events-auto absolute left-2 top-2 z-sticky">
             <StackedMediaUploader
               files={mixedFiles}
               onUpload={(needsVideoUpload || needsAudioUpload) ? handleMixedFileUpload : onImageUpload}
@@ -396,12 +396,12 @@ const InputArea: React.FC<InputAreaProps> = ({
                   : t('inputArea.placeholder.default')
             }
             className="relative isolate overflow-visible rounded-2xl"
-            editorShellClassName="!rounded-2xl !border-border-dark/35 !bg-transparent transition-colors duration-200 focus-within:!border-veil-soft focus-within:!ring-0"
+            editorShellClassName="!rounded-2xl !border-border-dark/35 !bg-transparent transition-colors duration-180 focus-within:!border-veil-soft focus-within:!ring-0"
             editorClassName={`ui-scrollbar w-full ${promptLeftPaddingClass} py-3 pr-14 leading-6 ${promptHeightClass} whitespace-pre-wrap break-words ${UI_TEXT_BODY_CLASS}`}
             disabled={isLoading || isPromptOptimizing || renderPromptOptimizationPreview}
           />
           {renderPromptOptimizationPreview ? (
-          <div className={`prompt-optimize-preview pointer-events-none absolute inset-0 z-30 overflow-hidden rounded-2xl border border-accent/40 bg-app/70 ${isPromptOptimizationPreviewClosing ? 'is-closing' : ''}`}>
+          <div className={`prompt-optimize-preview pointer-events-none absolute inset-0 z-dropdown overflow-hidden rounded-2xl border border-accent/40 bg-app/70 ${isPromptOptimizationPreviewClosing ? 'is-closing' : ''}`}>
             <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-accent/70 to-transparent" />
             <div
               ref={promptOptimizationScrollRef}
@@ -435,7 +435,7 @@ const InputArea: React.FC<InputAreaProps> = ({
           onClick={onGenerate}
           disabled={generateDisabled || isPromptOptimizing || renderPromptOptimizationPreview}
           title={isGenerating ? t('inputArea.button.queue') : t('inputArea.button.generate')}
-          className={`absolute bottom-3 right-3 h-10 w-10 !rounded-full transition-[color,background-color,border-color,transform,filter] duration-200 ${generateDisabled
+          className={`absolute bottom-3 right-3 h-10 w-10 !rounded-full transition-[color,background-color,border-color,transform,filter] duration-180 ${generateDisabled
             ? '!border-border-dark/25 !bg-surface-dark/65 !text-text-faint'
             : '!border-brand-500/55 !bg-brand-500 !text-white hover:scale-105 hover:brightness-110'
             }`}

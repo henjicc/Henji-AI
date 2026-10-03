@@ -141,7 +141,7 @@ export const UiChipButton = forwardRef<HTMLButtonElement, UiChipButtonProps>(
     return (
       <button
         ref={ref}
-        className={`relative inline-flex h-10 items-center gap-2 rounded-lg border px-3 text-sm transition-colors ${UI_BUTTON_RESET_CLASS} ${stateClass} ${className}`}
+        className={`relative inline-flex h-10 items-center gap-2 rounded-lg border px-3 text-13 transition-colors ${UI_BUTTON_RESET_CLASS} ${stateClass} ${className}`}
         {...props}
       />
     );
@@ -218,7 +218,7 @@ export function UiTextArea({ className = '', textHistory, value, ...props }: UiT
   return (
     <textarea
       value={value}
-      className={`w-full resize-none rounded-lg border px-3 py-2.5 text-sm placeholder:text-text-muted ${UI_FIELD_SURFACE_CLASS} ${UI_FIELD_FOCUS_CLASS} ${UI_FIELD_DISABLED_CLASS} ${className}`}
+      className={`w-full resize-none rounded-lg border px-3 py-2.5 text-13 leading-5 placeholder:text-text-muted ${UI_FIELD_SURFACE_CLASS} ${UI_FIELD_FOCUS_CLASS} ${UI_FIELD_DISABLED_CLASS} ${className}`}
       {...props}
       {...historyProps}
     />
@@ -236,7 +236,7 @@ export const UiTextAreaField = forwardRef<HTMLTextAreaElement, UiTextAreaProps>(
       <textarea
         ref={ref}
         value={value}
-        className={`w-full resize-none rounded-lg border px-3 py-2.5 text-sm placeholder:text-text-muted ${UI_FIELD_SURFACE_CLASS} ${UI_FIELD_FOCUS_CLASS} ${UI_FIELD_DISABLED_CLASS} ${className}`}
+        className={`w-full resize-none rounded-lg border px-3 py-2.5 text-13 leading-5 placeholder:text-text-muted ${UI_FIELD_SURFACE_CLASS} ${UI_FIELD_FOCUS_CLASS} ${UI_FIELD_DISABLED_CLASS} ${className}`}
         {...props}
         {...historyProps}
       />
@@ -257,7 +257,7 @@ export const UiInput = forwardRef<HTMLInputElement, UiInputProps>(
       <input
         ref={ref}
         value={value}
-        className={`w-full rounded-lg border px-3 py-2 text-sm placeholder:text-text-muted ${UI_FIELD_SURFACE_CLASS} ${UI_FIELD_FOCUS_CLASS} ${UI_FIELD_DISABLED_CLASS} ${className}`}
+        className={`w-full rounded-lg border px-3 py-2 text-13 leading-5 placeholder:text-text-muted ${UI_FIELD_SURFACE_CLASS} ${UI_FIELD_FOCUS_CLASS} ${UI_FIELD_DISABLED_CLASS} ${className}`}
         {...props}
         {...historyProps}
       />
@@ -339,7 +339,7 @@ export const UiSwitch = forwardRef<HTMLButtonElement, UiSwitchProps>(
       const isCompact = size === 'compact';
       const sizeClass = isCompact
         ? 'h-7 w-20 rounded-md bg-surface-dark text-xs'
-        : `${UI_FIELD_CONTROL_HEIGHT_SM_CLASS} w-28 rounded-lg bg-surface-dark text-sm`;
+        : `${UI_FIELD_CONTROL_HEIGHT_SM_CLASS} w-28 rounded-lg bg-surface-dark text-13`;
       const thumbRadiusClass = isCompact
         ? 'rounded'
         : 'rounded-md';
@@ -353,27 +353,27 @@ export const UiSwitch = forwardRef<HTMLButtonElement, UiSwitchProps>(
           type="button"
           role="switch"
           aria-checked={checked}
-          className={`relative inline-grid grid-cols-2 items-stretch border border-border-dark p-1 font-medium uppercase transition-colors duration-150 hover:border-text-muted/60 ${UI_BUTTON_RESET_CLASS} ${UI_FIELD_DISABLED_CLASS} ${sizeClass} ${className}`}
+          className={`relative inline-grid grid-cols-2 items-stretch border border-border-dark p-1 font-medium uppercase transition-colors duration-120 hover:border-text-muted/60 ${UI_BUTTON_RESET_CLASS} ${UI_FIELD_DISABLED_CLASS} ${sizeClass} ${className}`}
           onClick={handleClick}
           {...props}
         >
           <span
             aria-hidden="true"
-            className={`pointer-events-none absolute ${thumbVerticalInsetClass} left-1 w-[calc(50%_-_0.25rem)] ${thumbRadiusClass} transition-[transform,background-color] duration-200 ${
+            className={`pointer-events-none absolute ${thumbVerticalInsetClass} left-1 w-[calc(50%_-_0.25rem)] ${thumbRadiusClass} transition-[transform,background-color] duration-180 ${
               checked
                 ? `${UI_COLOR_ACCENT_FILL_TEXT_CLASS} translate-x-full`
                 : 'translate-x-0 bg-layer'
             }`}
           />
           <span
-            className={`pointer-events-none relative flex min-w-0 items-center justify-center transition-colors duration-200 ${
+            className={`pointer-events-none relative flex min-w-0 items-center justify-center transition-colors duration-180 ${
               checked ? 'text-text-soft' : 'text-text-dark'
             }`}
           >
             {offLabel}
           </span>
           <span
-            className={`pointer-events-none relative flex min-w-0 items-center justify-center transition-colors duration-200 ${
+            className={`pointer-events-none relative flex min-w-0 items-center justify-center transition-colors duration-180 ${
               checked ? 'text-white' : 'text-text-soft'
             }`}
           >
@@ -398,7 +398,7 @@ export const UiSwitch = forwardRef<HTMLButtonElement, UiSwitchProps>(
         {...props}
       >
         <span
-          className={`pointer-events-none ml-0.5 h-5 w-5 rounded-full bg-white transition-transform duration-150 ${
+          className={`pointer-events-none ml-0.5 h-5 w-5 rounded-full bg-white transition-transform duration-120 ${
             checked ? 'translate-x-5' : 'translate-x-0'
           }`}
         />
@@ -413,7 +413,7 @@ export function UiSelect({ className = '', children, ...props }: UiSelectProps) 
   return (
     <div className="relative">
       <select
-        className={`${UI_FIELD_CONTROL_HEIGHT_SM_CLASS} w-full appearance-none rounded-lg border px-3 pr-8 text-sm ${UI_FIELD_SURFACE_CLASS} ${UI_FIELD_FOCUS_CLASS} ${UI_FIELD_DISABLED_CLASS} ${className}`}
+        className={`${UI_FIELD_CONTROL_HEIGHT_SM_CLASS} w-full appearance-none rounded-lg border px-3 pr-8 text-13 ${UI_FIELD_SURFACE_CLASS} ${UI_FIELD_FOCUS_CLASS} ${UI_FIELD_DISABLED_CLASS} ${className}`}
         {...props}
       >
         {children}

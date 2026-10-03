@@ -3,7 +3,7 @@ import { Check, ChevronDown, Settings2 } from 'lucide-react'
 
 import {
   PanelTrigger,
-  UI_TEXT_SECTION_CLASS,
+  UI_TEXT_PANEL_TITLE_CLASS,
   UiButton,
   UiOptionButton,
 } from '@/components/ui'
@@ -68,7 +68,7 @@ export function TextProcessingPromptTemplateSelector({
             renderPanel={() => (
               <div className="flex max-h-[min(460px,calc(100vh-96px))] flex-col p-3">
                 <div className="mb-2 flex items-center justify-between gap-3">
-                  <div className={UI_TEXT_SECTION_CLASS}>{label}</div>
+                  <div className={UI_TEXT_PANEL_TITLE_CLASS}>{label}</div>
                   <UiButton type="button" variant="plain" size="sm" onClick={openManager}>
                     <Settings2 className="mr-1.5 h-3.5 w-3.5" />
                     {editLabel}
@@ -122,7 +122,7 @@ export function TextProcessingPromptTemplateSelector({
                   className={`nodrag nowheel ${NODE_CONTROL_CHIP_CLASS} ${NODE_CONTROL_MODEL_CHIP_CLASS}`}
                 >
                   <span className="min-w-0 flex-1 truncate text-left">{display}</span>
-                  <ChevronDown className={`h-3.5 w-3.5 shrink-0 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
+                  <ChevronDown className={`h-3.5 w-3.5 shrink-0 transition-transform duration-180 ${open ? 'rotate-180' : ''}`} />
                 </UiButton>
               )
             }}

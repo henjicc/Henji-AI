@@ -14,7 +14,7 @@ import {
   UI_META_BADGE_CLASS,
   UI_TEXT_BODY_CLASS,
   UI_TEXT_META_CLASS,
-  UI_TEXT_SECTION_CLASS,
+  UI_TEXT_PANEL_TITLE_CLASS,
   UI_TEXT_TITLE_CLASS,
   Dropdown,
   UiButton,
@@ -137,9 +137,9 @@ function ProviderStep({
           >
             <div>
               <div className="flex items-center gap-2">
-                <span className={UI_TEXT_SECTION_CLASS}>{getProviderDisplayName(providerId)}</span>
+                <span className={UI_TEXT_PANEL_TITLE_CLASS}>{getProviderDisplayName(providerId)}</span>
                 {providerId === 'kie' ? (
-                  <span className={`text-3xs font-medium ${
+                  <span className={`text-2xs font-medium ${
                     primaryProvider === providerId ? UI_META_BADGE_CLASS : UI_META_BADGE_ACCENT_CLASS
                   }`}>
                     {t('provider.recommended')}
@@ -441,7 +441,7 @@ export function OnboardingModal(): JSX.Element {
         })}</span>
         <div className="h-1 flex-1 overflow-hidden rounded-full bg-layer">
           <div
-            className="h-full rounded-full bg-accent transition-[width] duration-200"
+            className="h-full rounded-full bg-accent transition-[width] duration-180"
             style={{ width: `${((stepIndex + 1) / ONBOARDING_STEP_IDS.length) * 100}%` }}
           />
         </div>

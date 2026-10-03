@@ -70,14 +70,14 @@ export function AssistantTraceDetail({
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-sm font-semibold text-text-dark">{getTraceStepLabel(summary)}</span>
-              <span className="rounded border border-border-dark/50 bg-black/20 px-1.5 py-0.5 font-mono text-3xs text-text-muted">
+              <span className="rounded border border-border-dark/50 bg-black/20 px-1.5 py-0.5 font-mono text-2xs text-text-muted">
                 {summary.providerId}/{summary.modelId}
               </span>
-              <span className={`rounded px-1.5 py-0.5 text-3xs ${statusClass(summary.status)}`}>
+              <span className={`rounded px-1.5 py-0.5 text-2xs ${statusClass(summary.status)}`}>
                 {statusLabel(summary.status)}
               </span>
             </div>
-            <div className="mt-1 font-mono text-3xs text-text-muted">
+            <div className="mt-1 font-mono text-2xs text-text-muted">
               {summary.stepId} · {new Date(summary.startedAt).toLocaleString('zh-CN')}
             </div>
           </div>
@@ -219,7 +219,7 @@ function TraceSection({ title, badge, defaultOpen = false, children }: { title: 
           {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
           {title}
         </span>
-        {badge && <span className="rounded bg-black/25 px-1.5 py-0.5 font-mono text-3xs text-text-muted">{badge}</span>}
+        {badge && <span className="rounded bg-black/25 px-1.5 py-0.5 font-mono text-2xs text-text-muted">{badge}</span>}
       </UiButton>
       {open && <div className="border-t border-border-dark/35 p-3">{children}</div>}
     </section>
@@ -229,7 +229,7 @@ function TraceSection({ title, badge, defaultOpen = false, children }: { title: 
 function MessageCard({ message, index }: { message: ModelStepMessage; index: number }): JSX.Element {
   return (
     <div className={`overflow-hidden rounded-md border ${roleClass(message.role)}`}>
-      <div className="flex items-center justify-between border-b border-current/15 px-2 py-1 text-3xs font-semibold uppercase tracking-wider">
+      <div className="flex items-center justify-between border-b border-current/15 px-2 py-1 text-2xs font-semibold uppercase tracking-wider">
         <span>{message.role}</span><span className="font-mono opacity-60">#{index + 1}</span>
       </div>
       <div className="bg-black/15 p-2 text-xs text-text-dark">
@@ -240,7 +240,7 @@ function MessageCard({ message, index }: { message: ModelStepMessage; index: num
 }
 
 function Metric({ label, value }: { label: string; value: string }): JSX.Element {
-  return <div className="rounded border border-border-dark/35 bg-black/20 px-2 py-1.5"><div className="text-4xs uppercase tracking-wider text-text-muted">{label}</div><div className="mt-0.5 truncate font-mono text-2xs text-text-dark" title={value}>{value}</div></div>
+  return <div className="rounded border border-border-dark/35 bg-black/20 px-2 py-1.5"><div className="text-2xs uppercase tracking-wider text-text-muted">{label}</div><div className="mt-0.5 truncate font-mono text-2xs text-text-dark" title={value}>{value}</div></div>
 }
 
 function CopyButton({ label, copied, disabled, onClick, icon = 'copy' }: { label: string; copied: boolean; disabled?: boolean; onClick: () => void; icon?: 'copy' | 'terminal' }): JSX.Element {
@@ -249,7 +249,7 @@ function CopyButton({ label, copied, disabled, onClick, icon = 'copy' }: { label
 }
 
 function LabeledBlock({ label, children }: { label: string; children: ReactNode }): JSX.Element {
-  return <div><div className="mb-1 text-3xs font-medium uppercase tracking-wider text-text-muted">{label}</div>{children}</div>
+  return <div><div className="mb-1 text-2xs font-medium uppercase tracking-wider text-text-muted">{label}</div>{children}</div>
 }
 
 function TextBlock({ value }: { value: string }): JSX.Element {

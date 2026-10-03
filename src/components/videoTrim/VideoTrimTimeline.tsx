@@ -120,7 +120,7 @@ export function VideoTrimTimeline({
           onMouseDown={(event) => handlePointerDown('end', event)}
         />
         <div
-          className="absolute top-0 z-10 h-full w-0.5 -translate-x-1/2 cursor-ew-resize bg-text-dark"
+          className="absolute top-0 z-raised h-full w-0.5 -translate-x-1/2 cursor-ew-resize bg-text-dark"
           style={{ left: `${playheadPct}%` }}
           onMouseDown={(event) => handlePointerDown('playhead', event)}
         >

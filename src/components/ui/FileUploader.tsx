@@ -9,6 +9,7 @@ import { isDesktop, inferMimeFromPath } from '../../utils/save'
 import { useReorderDrag } from './fileUploader/useReorderDrag'
 import { UiButton, UiIconButton, UiInput } from './primitives'
 import { UI_DURATION, uiTransition } from './motion'
+import { Z_LAYERS } from '@/core/theme/zLayers'
 import { UI_FIELD_CONTROL_HEIGHT_SM_CLASS } from './styleTokens'
 import { Play, Plus, X } from 'lucide-react'
 
@@ -228,7 +229,7 @@ export default function FileUploader({
     return (
         <div
             ref={elementRef}
-            className={`flex items-center gap-2 transition-colors duration-200 rounded-lg ${className}`}
+            className={`flex items-center gap-2 transition-colors duration-180 rounded-lg ${className}`}
             onDragEnter={handleDragEnter}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
@@ -310,7 +311,7 @@ export default function FileUploader({
                             opacity: isDraggingThis ? 0.8 : 1,
                             visibility: 'visible',
                             position: isDraggingThis ? 'relative' : 'static',
-                            zIndex: isDraggingThis || isDroppingThis ? 10000 : 'auto'
+                            zIndex: isDraggingThis || isDroppingThis ? Z_LAYERS.drag : 'auto'
                         }}
                         onMouseDown={(e) => handleMouseDown(index, e)}
                         onMouseUp={(e) => !dragState.isDragging && handleCustomPreviewDrop(e, index)}
@@ -358,7 +359,7 @@ export default function FileUploader({
                                     e.preventDefault()    // 防止默认行为
                                     onRemove(index)
                                 }}
-                                className="absolute -top-2 -right-2 h-5 w-5 border-0 bg-red-500 p-1 text-white opacity-0 shadow-thumb-sm transition-opacity duration-200 hover:bg-red-600 group-hover:opacity-100 z-20 pointer-events-auto"
+                                className="absolute -top-2 -right-2 h-5 w-5 border-0 bg-red-500 p-1 text-white opacity-0 shadow-thumb-sm transition-opacity duration-180 hover:bg-red-600 group-hover:opacity-100 z-sticky pointer-events-auto"
                                 type="button"
                             >
                                 <X className="h-3 w-3 text-white" />

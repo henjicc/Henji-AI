@@ -219,7 +219,7 @@ const StateKeyframeTimelinePanel: React.FC = () => {
             onUpdateStateKeyframeContinuity={updateStateKeyframeContinuity}
           />
           <div
-            className="pointer-events-none absolute z-20"
+            className="pointer-events-none absolute z-sticky"
             style={{
               left: timeToX(currentTime, pxPerSecond),
               top: 0,

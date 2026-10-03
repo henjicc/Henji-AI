@@ -160,7 +160,7 @@ export function PanoramaViewerPanel({
             }
             className={`pointer-events-none absolute inset-0 h-full w-full select-none object-contain ${
               isSphereFramePresented
-                ? 'opacity-0 transition-opacity duration-150'
+                ? 'opacity-0 transition-opacity duration-120'
                 : 'opacity-100'
             }`}
             draggable={false}

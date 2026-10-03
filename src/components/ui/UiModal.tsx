@@ -101,12 +101,12 @@ export function UiModal({
       className={`fixed ${UI_CONTENT_OVERLAY_INSET_CLASS} z-modal flex items-center justify-center outline-none ${overlayClassName}`}
     >
       <div
-        className={`ui-glass-scrim ${isGlass ? 'ui-glass-scrim-soft' : ''} absolute inset-0 transition-opacity duration-200 ${isVisible ? 'opacity-100' : 'opacity-0'}`}
+        className={`ui-glass-scrim ${isGlass ? 'ui-glass-scrim-soft' : ''} absolute inset-0 transition-opacity duration-180 ${isVisible ? 'opacity-100' : 'opacity-0'}`}
         onClick={onClose}
       />
       <UiPanel
         variant={isGlass ? 'glass' : 'panel'}
-        className={`relative flex max-h-[calc(100vh-2rem)] flex-col overflow-hidden transition-opacity duration-200 ${isVisible ? 'opacity-100' : 'opacity-0'} ${UI_MODAL_SIZE_CLASS[size]} ${panelClassName}`}
+        className={`relative flex max-h-[calc(100vh-2rem)] flex-col overflow-hidden transition-opacity duration-180 ${isVisible ? 'opacity-100' : 'opacity-0'} ${UI_MODAL_SIZE_CLASS[size]} ${panelClassName}`}
       >
         {!hideHeader && (
           <div className="flex items-center justify-between border-b border-veil-subtle px-4 py-3">

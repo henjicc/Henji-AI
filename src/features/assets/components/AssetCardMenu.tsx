@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { CheckSquare2, Pencil, Trash2 } from 'lucide-react'
 import { UI_TEXT_LABEL_CLASS, UiButton, UiChipButton, UiError, UiIconButton, UiInput, UiPanel } from '@/components/ui'
+import { UI_DURATION } from '@/components/ui/motion'
 import type { AssetLibraryRecord, AssetRecord } from '@/platform/contracts/assetLibrary'
 import { useI18n } from '@/hooks/useI18n'
 import { createLogger } from '@/core/logging'
@@ -50,7 +51,7 @@ export const AssetCardMenu: React.FC<Props> = ({ asset, anchor, libraries, avail
   const requestClose = useCallback((): void => {
     setVisible(false)
     if (closeTimerRef.current) window.clearTimeout(closeTimerRef.current)
-    closeTimerRef.current = window.setTimeout(onClose, 150)
+    closeTimerRef.current = window.setTimeout(onClose, UI_DURATION.fast)
   }, [onClose])
 
   useEffect(() => {
@@ -133,7 +134,7 @@ export const AssetCardMenu: React.FC<Props> = ({ asset, anchor, libraries, avail
   }
 
   return createPortal(
-    <UiPanel ref={ref} variant="glass" className={`fixed z-modal w-80 overflow-y-auto p-3 transition-[opacity,transform] duration-150 ease-out motion-reduce:transition-none ${visible ? 'translate-y-0 scale-100 opacity-100' : `${placeAbove ? 'translate-y-1' : '-translate-y-1'} scale-[0.98] opacity-0`}`} style={{ left, top, maxHeight: menuHeight, transformOrigin: placeAbove ? 'bottom center' : 'top center' }} data-asset-card-menu>
+    <UiPanel ref={ref} variant="glass" className={`fixed z-modal w-80 overflow-y-auto p-3 transition-[opacity,transform] duration-120 ease-out motion-reduce:transition-none ${visible ? 'translate-y-0 scale-100 opacity-100' : `${placeAbove ? 'translate-y-1' : '-translate-y-1'} scale-[0.98] opacity-0`}`} style={{ left, top, maxHeight: menuHeight, transformOrigin: placeAbove ? 'bottom center' : 'top center' }} data-asset-card-menu>
       <div className="mb-3 flex min-w-0 items-center gap-1">
         {editingName ? (
           <UiInput autoFocus disabled={pendingAction !== null} className="!h-8 min-w-0 flex-1 !px-2 text-sm" value={nameDraft} onChange={(event) => setNameDraft(event.target.value)} onBlur={() => void applyName()} onKeyDown={(event) => { if (event.key === 'Enter') void applyName(); if (event.key === 'Escape') { setEditingName(false); setNameDraft(name) } }} />

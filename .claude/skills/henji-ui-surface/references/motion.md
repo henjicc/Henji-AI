@@ -11,9 +11,9 @@
 
 | 档 | 值 | 用途 |
 |---|---|---|
-| `fast` | 150ms | hover、颜色、开关、小控件 |
-| `base` | 200ms | 弹窗、浮层、下拉、面板开合 —— **默认档** |
-| `slow` | 300ms | 大面积位移、通知 Toast、悬浮面板折叠、缩略图扇形展开 |
+| `fast` | 120ms | hover、颜色、开关、小控件（设计稿“悬停 120”） |
+| `base` | 180ms | 弹窗、浮层、下拉、面板开合 —— **默认档**（设计稿“展开 180”） |
+| `slow` | 240ms | 大面积位移、通知 Toast、悬浮面板折叠、缩略图扇形展开（设计稿“面板 240”） |
 | `viewer` | 500ms | 全屏媒体查看器的沉浸式淡入淡出 |
 
 位移/覆盖面积越大，时长就该越长——`viewer` 不是随手加的档，是 7 处查看器实际在用的聚类。
@@ -31,9 +31,9 @@
 组件常见写法是"先播淡出、再用 `setTimeout` 卸载"。两个数字对不上就会把过渡截断：
 
 ```tsx
-// ❌ 卸载比过渡早 20ms，淡出收尾被硬切（不报错，只是"关起来有点生硬"）
-useDialogTransition(isOpen, 180)          // JS
-className="transition-opacity duration-200"  // CSS
+// ❌ 卸载比过渡早 60ms，淡出收尾被硬切（不报错，只是"关起来有点生硬"）
+useDialogTransition(isOpen, 120)          // JS
+className="transition-opacity duration-180"  // CSS
 
 // ✅ 两边同档
 useDialogTransition(isOpen, UI_DIALOG_TRANSITION_MS)  // = UI_DURATION.base

@@ -218,15 +218,27 @@
    * 背后只剩约 20% 透光率——玻璃只会更脏。所以走 `surface="glass"` 的弹窗必须换用 soft 档。
    */
   /* 组件级令牌（第三层）：仅供无法使用 Tailwind 类的纯 CSS 文件消费；颜色类已改为上方别名 */
-  --ui-shadow-panel: 0 14px 34px rgba(0, 0, 0, 0.38);
+  /* 浮层投影走主题 shade：深色 = 黑 38%（原值），浅色自动变浅 */
+  --ui-shadow-panel: 0 14px 34px color-mix(in srgb, var(--shade) 76%, transparent);
   --ui-radius-lg: 12px;
   --ui-radius-xl: 16px;
   --ui-radius-2xl: 20px;
   --node-radius: 12px;
+  /*
+   * 尺寸令牌（重要记录 004）。Tailwind 的 rounded-control/field/overlay（以及改指同一组变量的
+   * rounded-md/lg/xl）与 h-control-sm/md/lg 读取这里；圆角随下方 data-ui-radius 预设整体缩放。
+   */
+  --radius-control: 6px;
+  --radius-field: 8px;
+  --radius-overlay: 12px;
+  --size-control-sm: 28px;
+  --size-control-md: 32px;
+  --size-control-lg: 36px;
 }
 
 /*
- * 圆角预设。
+ * 圆角预设：同时缩放界面控件（--radius-*，Tailwind rounded-md/lg/xl 与 rounded-control/field/overlay）
+ * 与画布节点（--node-radius）。标准档不写属性，取 :root 默认值。
  *
  * ⚠️ 这组规则原先写在 `src/features/canvas/storyboard.css` 里，而那个文件是
  * `CanvasWorkspace.tsx` 懒加载的——结果「设置 → 界面 → 圆角尺寸」在用户
@@ -237,6 +249,9 @@
  * （原 `data-theme-tone` 色调预设从未生效——总被内联变量覆盖——已随主题引擎删除。）
  */
 :root[data-ui-radius='compact'] {
+  --radius-control: 4px;
+  --radius-field: 6px;
+  --radius-overlay: 10px;
   --ui-radius-lg: 10px;
   --ui-radius-xl: 12px;
   --ui-radius-2xl: 16px;
@@ -244,6 +259,9 @@
 }
 
 :root[data-ui-radius='large'] {
+  --radius-control: 8px;
+  --radius-field: 10px;
+  --radius-overlay: 16px;
   --ui-radius-lg: 14px;
   --ui-radius-xl: 20px;
   --ui-radius-2xl: 26px;
@@ -368,7 +386,7 @@
    * 这里改用 background-image 叠一层纯色渐变，压在 tint 之上而不是替换它。
    */
   .ui-glass-interactive {
-    transition: background-image 150ms ease-out;
+    transition: background-image 120ms ease-out;
   }
 
   .ui-glass-interactive:hover:not(:disabled) {
@@ -525,6 +543,17 @@ body,
   height: 100%;
   margin: 0;
   padding: 0;
+}
+
+/*
+ * 全局排版基准（重要记录 004）：字体族由 tailwind.config.js 的 fontFamily.sans 经 preflight 作用到 html
+ * （Geist + 系统中文字体回落）；正文与控件基准字号 13px 只设在 body 上——html 保持 16px，
+ * 否则 Tailwind 的 rem 间距会整体缩小。未写字号类的元素继承 13px。
+ */
+body {
+  font-size: 13px;
+  font-optical-sizing: auto;
+  -webkit-font-smoothing: antialiased;
 }
 
 /* 禁用浏览器默认的聚焦样式（白色 ring） */
@@ -702,20 +731,21 @@ body,
 }
 
 /* 动画类 */
+/* 时长与 UI_DURATION 同档；Dropdown/PanelTrigger/Tooltip 的卸载计时引用同一常量 */
 .animate-scale-in {
-  animation: scaleIn 0.2s ease-out forwards;
+  animation: scaleIn 180ms ease-out forwards;
 }
 
 .animate-scale-out {
-  animation: scaleOut 0.2s ease-out forwards;
+  animation: scaleOut 180ms ease-out forwards;
 }
 
 .animate-fade-in {
-  animation: fadeIn 0.3s ease-out forwards;
+  animation: fadeIn 240ms ease-out forwards;
 }
 
 .animate-fade-out {
-  animation: fadeOut 0.3s ease-out forwards;
+  animation: fadeOut 240ms ease-out forwards;
 }
 
 .animate-shake {
@@ -1020,7 +1050,7 @@ body {
 ::-webkit-scrollbar-thumb {
   background: rgb(var(--text-muted-rgb) / 0.4);
   border-radius: 999px;
-  transition: background 0.2s;
+  transition: background 180ms;
 }
 
 ::-webkit-scrollbar-thumb:hover {
@@ -1097,32 +1127,32 @@ body {
 }
 
 .image-viewer-mask-enter {
-  animation: imageViewerFadeIn 0.3s ease-out;
+  animation: imageViewerFadeIn 240ms ease-out;
 }
 
 .image-viewer-mask-exit {
-  animation: imageViewerFadeOut 0.3s ease-out;
+  animation: imageViewerFadeOut 240ms ease-out;
 }
 
 .image-viewer-content-enter {
-  animation: imageZoomIn 0.3s ease-out;
+  animation: imageZoomIn 240ms ease-out;
 }
 
 .image-viewer-content-exit {
-  animation: imageZoomOut 0.3s ease-out;
+  animation: imageZoomOut 240ms ease-out;
 }
 
 /* 保留兼容性 */
 .image-viewer-enter {
-  animation: imageViewerFadeIn 0.3s ease-out;
+  animation: imageViewerFadeIn 240ms ease-out;
 }
 
 .image-viewer-exit {
-  animation: imageViewerFadeOut 0.3s ease-out;
+  animation: imageViewerFadeOut 240ms ease-out;
 }
 
 .image-transition {
-  transition: opacity 0.15s ease-out, transform 0.15s ease-out;
+  transition: opacity 120ms ease-out, transform 120ms ease-out;
 }
 
 .image-transitioning {
@@ -1175,14 +1205,15 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
   display: none;
 }
 
+/* 视频查看器控件直接压在画面上：文字与轨道用固定媒体叠层令牌（on-media），不随主题变色 */
 .progress-container {
   width: 100%;
   height: 6px;
-  background: rgb(var(--text-rgb) / 0.2);
+  background: rgb(var(--on-media-rgb) / 0.2);
   border-radius: 3px;
   cursor: pointer;
   position: relative;
-  transition: height 0.2s;
+  transition: height 180ms;
 }
 
 .progress-container:hover {
@@ -1209,7 +1240,7 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
   background: rgb(var(--accent-rgb));
   border-radius: 50%;
   opacity: 0;
-  transition: opacity 0.2s;
+  transition: opacity 180ms;
 }
 
 .progress-container:hover .progress-bar::after {
@@ -1220,26 +1251,26 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
   display: flex;
   align-items: center;
   gap: 15px;
-  color: white;
+  color: var(--on-media);
 }
 
 .btn {
   background: none;
   border: none;
-  color: white;
+  color: var(--on-media);
   cursor: pointer;
   padding: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: 4px;
-  transition: all 0.2s;
+  transition: color 180ms;
 }
 
 .btn:hover {
   background: none;
   transform: none;
-  color: rgb(var(--text-rgb) / 0.6);
+  color: rgb(var(--on-media-rgb) / 0.6);
 }
 
 /* lucide 是描边图标，这里不能再设 fill，否则会被填成实心块 */
@@ -1255,7 +1286,8 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
 
 .time-display {
   font-size: 14px;
-  color: rgb(var(--text-rgb) / 0.9);
+  font-variant-numeric: tabular-nums;
+  color: rgb(var(--on-media-rgb) / 0.9);
   min-width: 100px;
   text-align: center;
 }
@@ -1277,7 +1309,7 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
 
 .volume-level {
   height: 100%;
-  background: white;
+  background: var(--on-media);
   border-radius: 2px;
   width: 100%;
 }
@@ -1301,11 +1333,11 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
 
 .speed-display {
   font-size: 14px;
-  color: white;
+  color: var(--on-media);
   cursor: pointer;
   padding: 8px 12px;
   border-radius: 4px;
-  transition: all 0.2s;
+  transition: color 180ms;
   user-select: none;
   text-align: center;
 }
@@ -1318,7 +1350,7 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
 
 .speed-display:hover {
   background: none;
-  color: rgb(var(--text-rgb) / 0.6);
+  color: rgb(var(--on-media-rgb) / 0.6);
 }
 
 .speed-display svg {
@@ -1344,7 +1376,7 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
   z-index: 20;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 200ms ease, transform 200ms ease;
+  transition: opacity 180ms ease, transform 180ms ease;
 }
 
 .speed-menu.active {
@@ -1354,14 +1386,15 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
 }
 
 
+/* 倍速/音量菜单在 ui-glass 上：玻璃按主题模式派生，文字随主题 */
 .speed-option {
   padding: 8px 16px;
-  color: white;
+  color: var(--text1);
   cursor: pointer;
   border-radius: 4px;
   font-size: 14px;
   white-space: nowrap;
-  transition: background 0.2s;
+  transition: background 180ms;
   text-align: center;
   /* 浮在 .ui-glass::after 噪点层之上 */
   position: relative;
@@ -1447,7 +1480,7 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
   height: 10px;
   background: rgb(var(--text-rgb));
   border-radius: 50%;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 1px 4px color-mix(in srgb, var(--shade) 60%, transparent);
   pointer-events: none;
 }
 
@@ -1490,10 +1523,11 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
   align-items: center;
   gap: 0.75rem;
   padding: 0.5rem 0.75rem;
-  color: white;
+  /* 菜单在 ui-glass 上（按主题模式派生），文字随主题；原写死白字在浅色玻璃上不可读 */
+  color: var(--text1);
   cursor: pointer;
   border-radius: 0.5rem;
-  transition: background 0.2s;
+  transition: background 180ms;
   font-size: 0.875rem;
   user-select: none;
   /* 噪点层是 .ui-glass::after（z 轴上压在材质之上），菜单项要浮在它之上才不被扰动 */

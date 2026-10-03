@@ -181,7 +181,7 @@ export const VideoNode = memo(({ id, data, selected, type, width, height }: Vide
   return (
     <div
       className={`
-        group relative overflow-visible rounded-[var(--node-radius)] border bg-surface-dark/85 p-0 transition-colors duration-150
+        group relative overflow-visible rounded-[var(--node-radius)] border bg-surface-dark/85 p-0 transition-colors duration-120
         ${generationError
           ? NODE_GENERATION_ERROR_BORDER_CLASS
           : selected
