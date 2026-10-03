@@ -39,6 +39,8 @@ const menuItem = (page, name) => page.getByRole('menuitem', { name, exact: true 
 const entry = (page, id) => page.locator(`[data-video-edit-project-entry="${id}"]`)
 const clipNode = (page, id) => page.locator(`[data-video-edit-clip="${id}"]`)
 const trackRow = (page, index) => page.locator(`[data-video-edit-track][data-track-index="${index}"]`)
+/** Scrolls the timeline vertically so a track row is at the top: clips mount only inside the viewport (few rows fit at 960x640). */
+const showTrack = (page, index) => page.locator('[data-video-edit-timeline-viewport]').evaluate((host, index) => { const row = host.querySelector(`[data-track-index="${index}"]`); host.scrollTop = Math.max(0, row.offsetTop - 28) }, index)
 const readProject = file => JSON.parse(fs.readFileSync(file, 'utf8'))
 const hash = file => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex')
 const mono = (stream, channel = 0) => ({ format: 'mono', sources: [{ stream, channel }] })
@@ -147,12 +149,14 @@ function compareWindow(actual, expected, window) {
   })
 }
 /**
- * Acceptance: correlation >= 0.98 and lag < 10ms everywhere. The native mix of PCM sources must equal the reference
- * sample for sample. AAC sources (clips starting at source 0) are exact except their first and last AAC frame: the
- * native audio session does not decode the stream's priming packet and the end of a non-first AAC stream differs —
- * pre-existing native session defects reported separately, bounded here so any other deviation still fails.
+ * Acceptance: correlation >= 0.98 and lag < 10ms everywhere. The native mix must equal the reference sample for sample
+ * (zero lag, maximum error < 1e-3), AAC included from the first to the last frame (task 2.10: the native session decodes
+ * the priming packet, so the decoder's state matches FFmpeg's full decode). Only an AAC clip whose source in-point lies
+ * inside the stream gets `AAC_NOISE_TOLERANCE`: AAC perceptual noise substitution (PNS, on by default in FFmpeg's
+ * encoder) fills noise bands from the decoder's random generator, whose state after a seek cannot equal the state of a
+ * decode from the stream start (FFmpeg's `-ss` behaves the same); 2.10 measured at most 1.6e-3 on these signals.
  */
-const AAC_FRAME = 1024
+const AAC_NOISE_TOLERANCE = 2e-3
 function assertMatches(results, label, exact) {
   for (const window of results) for (const channel of window.channels) {
     const where = `${label}：第 ${window.start} 帧起的片段组，声道 ${channel.channel}`
@@ -161,9 +165,8 @@ function assertMatches(results, label, exact) {
     assert.ok(Math.abs(channel.bestLagMs) < 10, `${where} 时差 ${channel.bestLagMs}ms`)
     if (!exact) continue
     assert.equal(channel.bestLagSamples, 0, `${where} 原生混音应逐样本对齐`)
-    if (!window.lossy) { assert.ok(channel.maxErrorAtZero < 1e-3, `${where} 最大误差 ${channel.maxErrorAtZero}`); continue }
-    const outside = channel.runs.filter(([from, to]) => !(to <= AAC_FRAME + 1 || from >= window.clipSamples - 2 * AAC_FRAME))
-    assert.deepEqual(outside, [], `${where} 除首尾 AAC 帧外应逐样本一致`)
+    const tolerance = window.aacFromInside ? AAC_NOISE_TOLERANCE : 1e-3
+    assert.ok(channel.maxErrorAtZero < tolerance, `${where} 最大误差 ${channel.maxErrorAtZero}（阈值 ${tolerance}）`)
   }
 }
 const unpack = base64 => { const bytes = Buffer.from(base64, 'base64'); return new Float32Array(new Uint8Array(bytes).buffer) }
@@ -189,7 +192,11 @@ function createVideoEditMultitrackScene() {
       const phase = name => { evidence.currentPhase = name; store() }
       const shot = async name => { evidence.captures.push({ name, result: await capture(name) }); store() }
       let client; let previousLayout; let revision = 0; let harness = false
-      const lossy = (current, window) => window.items.some(id => { const media = current.media.find(media => media.id === current.items.find(item => item.id === id).mediaId); return Object.values(samples).find(sample => path.resolve(sample.path).toLowerCase() === path.resolve(media.path).toLowerCase()).audio.some(stream => stream.codec_name === 'aac') })
+      // A placement group holding an AAC clip whose source in-point is inside the stream (PNS tolerance, see assertMatches).
+      const aacFromInside = (current, clips, window) => clips.filter(clip => clip.start === window.start && (clip.sourceInUs > 0 || clip.sourceRemainder?.numerator > 0)).some(clip => {
+        const media = current.media.find(media => media.id === current.items.find(item => item.id === clip.itemId).mediaId)
+        return Object.values(samples).find(sample => path.resolve(sample.path).toLowerCase() === path.resolve(media.path).toLowerCase()).audio.some(stream => stream.codec_name === 'aac')
+      })
       let samples
       const sessionsNow = async () => (await page.evaluate(() => window.henjiNative.videoFrames.stats())).native?.audioSessions ?? 0
       const closeHarness = async () => { if (harness) { harness = false; await page.evaluate(() => window.__henjiNativeAudio.close()) } }
@@ -277,8 +284,16 @@ function createVideoEditMultitrackScene() {
         assert.deepEqual(headers, expectedHeaders, '轨道头声道类型提示')
         evidence.trackHeaders = headers
         const visibleSound = project.sequences[0].clips.filter(clip => clip.kind === 'audio' && clip.start < 200)
-        for (const clip of visibleSound) await page.locator(`[data-video-edit-waveform="${clip.id}"]`).waitFor({ state: 'attached', timeout: 30000 })
-        const lanes = await page.locator('[data-video-edit-waveform]').evaluateAll(nodes => Object.fromEntries(nodes.map(node => [node.getAttribute('data-video-edit-waveform'), Number(node.getAttribute('data-waveform-lanes'))])))
+        // The timeline mounts only the clips inside its viewport; a small window (960x640) shows two or three audio rows
+        // at a time, so each row is scrolled into view before its waveform is read.
+        const lanes = {}
+        for (const clip of visibleSound) {
+          await viewport.evaluate((host, track) => { const row = host.querySelector(`[data-track-index="${track}"]`); host.scrollTop = Math.max(0, row.offsetTop - 28); host.scrollLeft = 0 }, clip.track)
+          const wave = page.locator(`[data-video-edit-waveform="${clip.id}"]`)
+          await wave.waitFor({ state: 'attached', timeout: 30000 })
+          lanes[clip.id] = Number(await wave.getAttribute('data-waveform-lanes'))
+        }
+        await viewport.evaluate(host => { const row = host.querySelector('[data-track-kind="audio"]'); host.scrollTop = Math.max(0, row.offsetTop - 28); host.scrollLeft = 0 })
         for (const clip of visibleSound) {
           const media = project.media.find(media => media.id === project.items.find(item => item.id === clip.itemId).mediaId)
           assert.equal(lanes[clip.id], clip.audioMapping ? clip.audioMapping.sources.length : Math.min(2, media.audioStreams[0].channels), `片段 ${clip.id} 波形条数`)
@@ -297,7 +312,7 @@ function createVideoEditMultitrackScene() {
           await closeHarness()
           const actual = mixed.channels.map(unpack); const total = actual[0].length
           const expected = expectedMix(current, { ...sequence, clips: sequence.clips.filter(keep) }, samples, total)
-          const results = windows({ ...sequence, clips: sequence.clips.filter(keep) }).map(window => ({ start: window.start, clipSamples: window.clipSamples, lossy: lossy(current, window), items: window.items.map(id => current.items.find(item => item.id === id).name), channels: compareWindow(actual, expected, window) }))
+          const results = windows({ ...sequence, clips: sequence.clips.filter(keep) }).map(window => ({ start: window.start, clipSamples: window.clipSamples, aacFromInside: aacFromInside(current, sequence.clips.filter(keep), window), items: window.items.map(id => current.items.find(item => item.id === id).name), channels: compareWindow(actual, expected, window) }))
           evidence.mixes.push({ label, backend: forced, seconds, maxSessions: mixed.maxSessions, results }); store()
           assertMatches(results, label, exact)
           return results
@@ -316,7 +331,7 @@ function createVideoEditMultitrackScene() {
         await shot('multitrack-solo')
         await button(page, '音频 3独奏').click(); await saved(page, file, value => !value.sequences[0].tracks.some(track => track.solo), '取消独奏未保存')
         const fourth = readProject(file).sequences[0].clips.find(clip => clip.start === 0 && clip.track === 10)
-        await clipNode(page, fourth.id).scrollIntoViewIfNeeded()
+        await showTrack(page, fourth.track); await clipNode(page, fourth.id).scrollIntoViewIfNeeded()
         await page.keyboard.down('Alt')
         try { await clipNode(page, fourth.id).getByRole('button', { name: `选择片段 ${fourth.name}`, exact: true }).click() } finally { await page.keyboard.up('Alt') }
         assert.equal((await read(projectRef, ['video_edit.project.selection'])).data.properties['video_edit.project.selection'], fourth.id, 'Alt 点击应只选中音频 4 的片段')
@@ -351,7 +366,7 @@ function createVideoEditMultitrackScene() {
         phase('时间线片段音频声道：只改源声道')
         const second = readProject(file).sequences[0].clips.find(clip => clip.start === 0 && clip.track === 8)
         await viewport.evaluate(host => { host.scrollLeft = 0 })
-        await clipNode(page, second.id).scrollIntoViewIfNeeded()
+        await showTrack(page, second.track); await clipNode(page, second.id).scrollIntoViewIfNeeded()
         await clipNode(page, second.id).click({ button: 'right' }); await menuItem(page, '音频声道…').click()
         const source = page.getByLabel('单声道源声道', { exact: true })
         await source.waitFor({ state: 'visible', timeout: 15000 })
@@ -382,7 +397,7 @@ function createVideoEditMultitrackScene() {
         for (let index = 0; index < frames; index++) { exportedPlanes[0][index] = raw.readFloatLE(index * 8); exportedPlanes[1][index] = raw.readFloatLE(index * 8 + 4) }
         project = readProject(file)
         const expectedExport = expectedMix(project, project.sequences[0], samples, frames)
-        const exportResults = windows(project.sequences[0]).map(window => ({ start: window.start, clipSamples: window.clipSamples, lossy: true, channels: compareWindow(exportedPlanes, expectedExport, { ...window, to: Math.min(window.to, frames - MAX_LAG) }) }))
+        const exportResults = windows(project.sequences[0]).map(window => ({ start: window.start, clipSamples: window.clipSamples, channels: compareWindow(exportedPlanes, expectedExport, { ...window, to: Math.min(window.to, frames - MAX_LAG) }) }))
         evidence.export = { output, duration: Number(exported.format.duration), codec: exportedAudio.codec_name, sampleRate: Number(exportedAudio.sample_rate), results: exportResults }; store()
         assertMatches(exportResults, '导出', false)
         evidence.phases.push('导出音轨按映射与音量出声'); store()
@@ -422,7 +437,7 @@ function createVideoEditMultitrackScene() {
         const legacyMix = await page.evaluate(({ document, decode, seconds, block }) => window.__henjiNativeAudio.mixPacked(document, decode, seconds, block), { document: legacyComposition.document, decode: { nativeAvailable: true, forced: 'native', localPaths: legacyComposition.localPaths }, seconds: 4, block: BLOCK_SECONDS })
         await closeHarness()
         const legacyActual = legacyMix.channels.map(unpack)
-        const legacyResults = windows(legacy.sequences[0]).map(window => ({ start: window.start, clipSamples: window.clipSamples, lossy: false, channels: compareWindow(legacyActual, expectedMix(legacy, legacy.sequences[0], samples, legacyActual[0].length), window) }))
+        const legacyResults = windows(legacy.sequences[0]).map(window => ({ start: window.start, clipSamples: window.clipSamples, channels: compareWindow(legacyActual, expectedMix(legacy, legacy.sequences[0], samples, legacyActual[0].length), window) }))
         evidence.legacy = { file: legacyFile, unchangedAfterOpen: true, baselineSessions, maxSessions: legacyMix.maxSessions, results: legacyResults }; store()
         assertMatches(legacyResults, '旧工程合一片段（只播放第一条声音流）', true)
         assert.equal(legacyMix.maxSessions - baselineSessions, 1, '旧工程合一片段只打开第一条声音流')

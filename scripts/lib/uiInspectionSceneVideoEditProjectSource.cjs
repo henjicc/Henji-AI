@@ -34,13 +34,31 @@ async function renameItem(page, id, name, tags, bin) {
   await page.getByLabel('移动到素材箱', { exact: true }).selectOption(bin)
   await button(page, '保存').click(); await page.waitForTimeout(250)
 }
-async function sourceSeek(page, seconds) {
+/**
+ * Seeks the source monitor and waits for the picture (or sound clock) confirmed at that time. The native primary path
+ * (tasks 2.2, 2.3) shows a video item on the render-session canvas and plays a sound item through an element-less
+ * sound view, both confirming `data-presented-time-us`; a video confirms the real frame showing at the time (at most
+ * one frame earlier), a sound view the exact clock. The browser backend (forced by the diagnostic setting) keeps the
+ * media elements and their `currentTime`.
+ */
+async function sourceSeek(page, seconds, native, frameSeconds = 0) {
   const field = page.getByLabel('源素材定位秒', { exact: true })
   await field.fill(String(seconds)); await field.press('Enter')
-  await page.waitForFunction(time => {
+  await page.waitForFunction(({ time, native, frame }) => {
     const media = document.querySelector('[data-video-edit-source-media]')
-    return document.querySelector('[data-video-edit-source-status]')?.dataset.videoEditSourceStatus === 'ready' && Math.abs(media.currentTime - time) < 0.001
-  }, seconds, { timeout: 15000 })
+    if (document.querySelector('[data-video-edit-source-status]')?.dataset.videoEditSourceStatus !== 'ready' || !media) return false
+    if (!native) return Math.abs(media.currentTime - time) < 0.001
+    if (media.dataset.presentedTimeUs === undefined) return false
+    const shown = Number(media.dataset.presentedTimeUs) / 1e6
+    return shown <= time + 1e-6 && shown > time - frame - 1e-6
+  }, { time: seconds, native, frame: frameSeconds }, { timeout: 15000 })
+}
+/** The source monitor's own elements: native canvas / sound view, or browser media elements, never both. */
+async function sourceElements(page) {
+  return page.locator('[data-video-edit-source-host]').evaluate(host => ({
+    video: host.querySelectorAll('video').length, audio: host.querySelectorAll('audio').length,
+    canvas: host.querySelectorAll('canvas[data-video-edit-source-canvas]').length, sound: host.querySelectorAll('[data-video-edit-source-sound]').length,
+  }))
 }
 function createVideoEditProjectSourceScene() {
   return {
@@ -60,6 +78,13 @@ function createVideoEditProjectSourceScene() {
       let client
       await observeWorkers(page)
       try {
+        // Native decoding is the primary path (2.3): local video and sound items play through native source views; the
+        // diagnostic setting forcing the browser keeps the media elements. Each mode asserts its own real elements.
+        const status = await page.evaluate(() => window.henjiNative.videoDecoder.status())
+        const native = status.forcedBackend !== 'browser'
+        if (native) assert.equal(status.available, true, '本机原生解码服务应可用')
+        evidence.sourceBackend = native ? 'native' : 'browser'
+        const FRAME = 1 / 60
         await button(page, '剪辑').click(); await dialogs(app, [video, audio], file); await button(page, '新建工程').click()
         const list = page.getByLabel('项目项列表', { exact: true }); const listRect = await list.boundingBox()
         await list.dblclick({ position: { x: 24, y: listRect.height - 20 } })
@@ -98,9 +123,14 @@ function createVideoEditProjectSourceScene() {
         const savedBeforePreview = fs.readFileSync(file, 'utf8')
         const openedAt = performance.now(); await entry(page, videoId).dblclick(); await ready(page, 'video')
         evidence.firstSourcePresentationMs = performance.now() - openedAt
-        evidence.sourceVideo = await page.locator('[data-video-edit-source-media="video"]').evaluate(video => ({ width: video.videoWidth, height: video.videoHeight, src: video.currentSrc }))
+        evidence.sourceVideo = await page.locator('[data-video-edit-source-media="video"]').evaluate(media => media instanceof HTMLVideoElement
+          ? { element: 'video', width: media.videoWidth, height: media.videoHeight, src: media.currentSrc }
+          : { element: media.localName, width: media.width, height: media.height, presentedTimeUs: Number(media.dataset.presentedTimeUs) })
+        evidence.sourceVideo.elements = await sourceElements(page)
+        assert.deepEqual(evidence.sourceVideo.elements, native ? { video: 0, audio: 0, canvas: 1, sound: 0 } : { video: 1, audio: 0, canvas: 0, sound: 0 }, '源监视器视频元素与后端不符')
+        assert.equal(evidence.sourceVideo.element, native ? 'canvas' : 'video')
         assert.equal(evidence.sourceVideo.width, 3840); assert.equal(evidence.sourceVideo.height, 2160)
-        const seekAt = performance.now(); await sourceSeek(page, 0.5); evidence.sourceSeekMs = performance.now() - seekAt
+        const seekAt = performance.now(); await sourceSeek(page, 0.5, native, FRAME); evidence.sourceSeekMs = performance.now() - seekAt
         await capture('video-project-source-4k60')
         const identity = await authorizeMcpConnection(page, { name: '项目源回环', allowWrites: true, allowDestructive: true })
         client = await connectMcpClient(identity.config, 'Video project source Reality')
@@ -109,18 +139,36 @@ function createVideoEditProjectSourceScene() {
         assert.equal(baseline.data.properties['video_edit.source.time_us'], 500000)
         const change = await callTool(client, 'change_application_entities', operationEnvelope([baseline], { summary: '真实源定位与音量', changes: [{ kind: 'set_properties', entityType: ref.kind, target: ref, properties: { 'video_edit.source.time_us': 1000000, 'video_edit.source.volume': 0.2 } }] }))
         assert.equal(change.executionState, 'completed', JSON.stringify(change))
-        assert.deepEqual(await page.locator('[data-video-edit-source-media="video"]').evaluate(video => ({ time: video.currentTime, volume: video.volume })), { time: 1, volume: 0.2 })
+        if (native) {
+          // The native view confirms the picture showing at 1s on its canvas; the volume drives its sound session.
+          await page.waitForFunction(frame => { const shown = Number(document.querySelector('[data-video-edit-source-canvas]')?.dataset.presentedTimeUs); return shown <= 1000000 && shown > 1000000 - frame * 1e6 }, FRAME, { timeout: 15000 })
+        }
         evidence.sourceMcp = (await callTool(client, 'read_application_entity', { ref, propertyIds: ['video_edit.source.time_us', 'video_edit.source.presented_time_us', 'video_edit.source.volume'] })).data.properties
-        await sourceSeek(page, 0)
-        // Count actual media presentation callbacks, with native frame counters; never rAF callbacks.
-        await page.locator('[data-video-edit-source-media="video"]').evaluate(video => {
+        if (native) {
+          assert.equal(evidence.sourceMcp['video_edit.source.time_us'], 1000000); assert.equal(evidence.sourceMcp['video_edit.source.volume'], 0.2)
+          assert.equal(evidence.sourceMcp['video_edit.source.presented_time_us'], Number(await page.locator('[data-video-edit-source-canvas]').getAttribute('data-presented-time-us')), '源实体报告的呈现时间就是画布确认的画面')
+        } else assert.deepEqual(await page.locator('[data-video-edit-source-media="video"]').evaluate(video => ({ time: video.currentTime, volume: video.volume })), { time: 1, volume: 0.2 })
+        await sourceSeek(page, 0, native, FRAME)
+        // Count actually presented pictures: media presentation callbacks with frame counters (browser) or the native
+        // canvas's confirmed timestamps (every picture the render session presents); never rAF callbacks.
+        if (native) await page.locator('[data-video-edit-source-canvas]').evaluate(canvas => {
+          window.__sourceFrames = []
+          window.__sourceObserver = new MutationObserver(() => window.__sourceFrames.push({ at: performance.now(), mediaTime: Number(canvas.dataset.presentedTimeUs) / 1e6 }))
+          window.__sourceObserver.observe(canvas, { attributes: true, attributeFilter: ['data-presented-time-us'] })
+        })
+        else await page.locator('[data-video-edit-source-media="video"]').evaluate(video => {
           window.__sourceFrames = []
           const record = (at, metadata) => { window.__sourceFrames.push({ at, mediaTime: metadata.mediaTime, presentedFrames: metadata.presentedFrames, width: metadata.width, height: metadata.height }); if (!video.ended) video.requestVideoFrameCallback(record) }
           video.requestVideoFrameCallback(record)
         })
-        await button(page, '播放源素材').click(); await page.waitForFunction(() => document.querySelector('[data-video-edit-source-media="video"]')?.ended, null, { timeout: 15000 })
-        evidence.sourcePlayback = await page.locator('[data-video-edit-source-media="video"]').evaluate(video => ({ frames: window.__sourceFrames, quality: video.getVideoPlaybackQuality().toJSON?.() ?? { totalVideoFrames: video.getVideoPlaybackQuality().totalVideoFrames, droppedVideoFrames: video.getVideoPlaybackQuality().droppedVideoFrames } }))
+        await button(page, '播放源素材').click()
+        if (native) { await button(page, '暂停源素材').waitFor({ state: 'visible' }); await button(page, '播放源素材').waitFor({ state: 'visible', timeout: 15000 }) }
+        else await page.waitForFunction(() => document.querySelector('[data-video-edit-source-media="video"]')?.ended, null, { timeout: 15000 })
+        evidence.sourcePlayback = native
+          ? await page.evaluate(() => { window.__sourceObserver.disconnect(); return { frames: window.__sourceFrames.filter((entry, index, all) => index === 0 || entry.mediaTime !== all[index - 1].mediaTime) } })
+          : await page.locator('[data-video-edit-source-media="video"]').evaluate(video => ({ frames: window.__sourceFrames, quality: video.getVideoPlaybackQuality().toJSON?.() ?? { totalVideoFrames: video.getVideoPlaybackQuality().totalVideoFrames, droppedVideoFrames: video.getVideoPlaybackQuality().droppedVideoFrames } }))
         const frames = evidence.sourcePlayback.frames; assert.ok(frames.length >= 170, `4K60 源需呈现真实视频帧：${frames.length}`)
+        if (native) assert.ok(frames.every((entry, index) => index === 0 || entry.mediaTime > frames[index - 1].mediaTime), '原生源画面正向播放不能倒退')
         const mediaElapsed = frames.at(-1).mediaTime - frames[0].mediaTime; const elapsed = (frames.at(-1).at - frames[0].at) / 1000
         evidence.sourcePlayback.actualUpdatesPerSecond = (frames.length - 1) / elapsed
         assert.ok(evidence.sourcePlayback.actualUpdatesPerSecond >= 58, `4K60 实际源画面更新：${evidence.sourcePlayback.actualUpdatesPerSecond}`)
@@ -128,9 +176,10 @@ function createVideoEditProjectSourceScene() {
         await button(page, '关闭源素材').click(); await page.waitForFunction(() => !document.querySelector('[data-video-edit-source-media]'))
         const beforeReopen = performance.now(); await entry(page, videoId).dblclick(); await ready(page, 'video'); evidence.sourceReopenMs = performance.now() - beforeReopen
         await button(page, '关闭源素材').click(); await button(page, '工程根目录').click()
-        await entry(page, audioId).dblclick(); await ready(page, 'audio'); await sourceSeek(page, 0.75)
-        assert.equal(await page.locator('[data-video-edit-source-host] audio').count(), 1)
-        assert.equal(await page.getByLabel('源监视器', { exact: true }).locator('audio').count(), 1, '受控音频控件不得另建解码器')
+        await entry(page, audioId).dblclick(); await ready(page, 'audio'); await sourceSeek(page, 0.75, native)
+        // One sound reader either way: the native sound view (no media element) or one controlled audio element.
+        assert.deepEqual(await sourceElements(page), native ? { video: 0, audio: 0, canvas: 0, sound: 1 } : { video: 0, audio: 1, canvas: 0, sound: 0 }, '源监视器声音元素与后端不符')
+        assert.equal(await page.getByLabel('源监视器', { exact: true }).locator('audio').count(), native ? 0 : 1, '受控音频控件不得另建解码器')
         await capture('video-project-source-audio'); await button(page, '关闭源素材').click()
         await entry(page, imageId).dblclick(); await ready(page, 'image'); await capture('video-project-source-image')
         await button(page, '关闭源监视器').click(); await page.waitForFunction(() => !document.querySelector('[data-video-edit-source-media]'))
@@ -188,7 +237,10 @@ function createVideoEditProjectSourceScene() {
         await page.getByLabel('项目项列表', { exact: true }).hover(); await page.mouse.wheel(0, 50000)
         await entry(page, 'scale-item-499').waitFor({ state: 'visible' }); await capture('video-project-scale-end')
         await button(page, '关闭工程').click(); await waitReleased(page)
-        evidence.resources = await workerSnapshot(page); assert.equal(evidence.resources.live, 0); assert.equal(evidence.resources.peakLive, 1)
+        // Render workers at once: the program's, plus on the native path the source view's picture session and, for an
+        // item with sound, its sound session (tasks 2.2, 2.3); the browser path's source monitor uses media elements.
+        const expectedPeak = 1 + (native ? 1 + (videoHasAudio ? 1 : 0) : 0)
+        evidence.resources = await workerSnapshot(page); assert.equal(evidence.resources.live, 0); assert.equal(evidence.resources.peakLive, expectedPeak, `同时运行的渲染 Worker 应为 ${expectedPeak}`)
         assert.equal(await page.locator('[data-video-edit-source-media]').count(), 0)
         for (const original of originalStats) { const current = fs.statSync(original.file); assert.equal(current.size, original.size); assert.equal(current.mtimeMs, original.mtime) }
         evidence.completed = true

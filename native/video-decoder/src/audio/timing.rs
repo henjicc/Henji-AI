@@ -43,6 +43,32 @@ pub fn sample_index(pts: i64, time_base: TimeBase, rate: u32) -> i64 {
     floor_div(2 * numerator + denominator, 2 * denominator) as i64
 }
 
+/// 时间基粗于一个样本时（Matroska/WebM 的 1/1000 秒：48kHz 下一个刻度 48 个样本），帧时间戳的舍入误差最多半个刻度。
+/// 返回吸附到帧长网格时允许的最大偏差（样本，半个刻度向上取整再加 1 个样本的舍入）；细时间基返回 None（不吸附）。
+pub fn coarse_snap_limit(time_base: TimeBase, rate: u32) -> Option<i64> {
+    let per_tick = time_base.num as i128 * rate as i128;
+    let den = time_base.den as i128;
+    if den <= 0 || per_tick <= den {
+        return None;
+    }
+    Some(((per_tick + 2 * den - 1) / (2 * den)) as i64 + 1)
+}
+
+/// 把帧落位吸附到 `anchor + k × frame`（固定帧长编码从流起点连续累加的位置，与连续读取一致）。
+/// 偏差超过 `limit` 时说明不在这张网格上（可变帧长、流中缺口），保持原位。
+pub fn snap_to_frame_grid(index: i64, anchor: i64, frame: i64, limit: i64) -> i64 {
+    if frame <= 0 {
+        return index;
+    }
+    let periods = floor_div(2 * (index - anchor) as i128 + frame as i128, 2 * frame as i128);
+    let snapped = anchor + (periods * frame as i128) as i64;
+    if (snapped - index).abs() <= limit {
+        snapped
+    } else {
+        index
+    }
+}
+
 /// 新解出的一帧相对预期位置的落位。
 #[derive(Debug, PartialEq, Eq)]
 pub enum Placement {
@@ -118,6 +144,25 @@ mod tests {
         // 1 / 1000 时间基的 1ms 在 44.1k 下是 44.1 个样本 → 44。
         assert_eq!(sample_index(1, TimeBase { num: 1, den: 1000 }, 44_100), 44);
         assert_eq!(sample_index(3, TimeBase { num: 1, den: 2000 }, 1000), 2);
+    }
+
+    #[test]
+    fn coarse_time_bases_snap_to_the_frame_grid() {
+        let millis = TimeBase { num: 1, den: 1000 };
+        // 48kHz：一个刻度 48 个样本，舍入误差最多 24 个样本。
+        assert_eq!(coarse_snap_limit(millis, 48_000), Some(25));
+        assert_eq!(coarse_snap_limit(millis, 44_100), Some(24));
+        assert_eq!(coarse_snap_limit(TimeBase { num: 1, den: 48_000 }, 48_000), None);
+        assert_eq!(coarse_snap_limit(TimeBase { num: 1, den: 90_000 }, 48_000), None);
+        // AAC 第 70 帧真实位置 71680（1493.33ms），容器记为 1493ms → 71664；吸附回 71680。
+        assert_eq!(snap_to_frame_grid(71_664, 0, 1024, 25), 71_680);
+        assert_eq!(snap_to_frame_grid(71_696, 0, 1024, 25), 71_680);
+        // 网格原点不为 0（流起点）与负偏移同样成立。
+        assert_eq!(snap_to_frame_grid(1_000 + 3 * 1152 + 20, 1_000, 1152, 25), 1_000 + 3 * 1152);
+        assert_eq!(snap_to_frame_grid(-1030, 0, 1024, 25), -1024);
+        // 偏差超出半个刻度：不在这张网格上（可变帧长、缺口），保持原位。
+        assert_eq!(snap_to_frame_grid(71_680 + 312, 0, 1024, 25), 71_680 + 312);
+        assert_eq!(snap_to_frame_grid(500, 0, 0, 25), 500);
     }
 
     #[test]

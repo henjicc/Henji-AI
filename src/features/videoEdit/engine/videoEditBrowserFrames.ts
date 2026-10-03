@@ -1,4 +1,4 @@
-import { ALL_FORMATS, AudioSampleSink, Input, UrlSource, VideoSampleSink, type VideoSample } from 'mediabunny'
+import { ALL_FORMATS, AudioSampleSink, Input, UrlSource, VideoSampleSink, type AudioSample, type VideoSample } from 'mediabunny'
 import type { VideoEditMedia } from '@/core/videoEdit/document'
 import type { VideoEditFrameCache } from './videoEditFrameCache'
 import type { VideoEditClipAudio, VideoEditClipFrames, VideoEditFrameBackend, VideoEditFrameSeeker, VideoEditFrameSource, VideoEditSnapshot } from './videoEditFrameSource'
@@ -9,6 +9,23 @@ import { videoEditSourceReadError } from './videoEditSourceErrors'
 type DecodeOptions = { hardwareAcceleration: 'prefer-hardware' | 'no-preference'; optimizeForLatency: true }
 type VideoTrack = NonNullable<Awaited<ReturnType<Input['getPrimaryVideoTrack']>>>
 type AudioTrack = NonNullable<Awaited<ReturnType<Input['getPrimaryAudioTrack']>>>
+
+/**
+ * Decoding of a mix block starts this much before the block (task 2.10). mediabunny opens a fresh WebCodecs decoder at
+ * the packet holding the start, but compressed audio frames depend on their predecessor: AAC and Vorbis overlap
+ * neighbouring MDCT frames, MP3 reaches back into the bit reservoir and Opus needs about 80ms to converge after a seek
+ * (RFC 7845). Without warm-up the first frame of every block decoded wrong (about 500 samples per 0.5 second block).
+ * 0.1 second covers all of them; the warm-up blocks are dropped before the mix sees them.
+ */
+export const VIDEO_EDIT_AUDIO_PREROLL_SECONDS = 0.1
+
+/** Blocks of [start, end) decoded with warm-up; a block ending at the start is kept for the sample before the range. */
+async function* prerolledAudio(sink: AudioSampleSink, start: number, end: number): AsyncGenerator<AudioSample, void, unknown> {
+  for await (const sample of sink.samples(start - VIDEO_EDIT_AUDIO_PREROLL_SECONDS, end)) {
+    if (sample.timestamp + sample.duration < start - 1e-6) { sample.close(); continue }
+    yield sample
+  }
+}
 
 /** Chromium decodes every stream of a file: the measure media import and backend choices use. */
 async function tracksDecodable(video: VideoTrack | null, audio: AudioTrack | null): Promise<boolean> {
@@ -36,7 +53,7 @@ class BrowserFrameSource implements VideoEditFrameSource {
     if (audioStream === undefined) {
       if (!this.audio) return undefined
       const sink = new AudioSampleSink(this.audio)
-      return { chunks: (start, end) => sink.samples(start, end) }
+      return { chunks: (start, end) => prerolledAudio(sink, start, end) }
     }
     // A numbered stream (task 2.6) is looked up on first read; a stream the file does not have is silence.
     const tracks = this.audioTracks
@@ -46,7 +63,7 @@ class BrowserFrameSource implements VideoEditFrameSource {
       async *chunks(start, end) {
         sink ??= tracks().then(list => list[audioStream] ? new AudioSampleSink(list[audioStream]) : undefined)
         const current = await sink
-        if (current) yield* current.samples(start, end)
+        if (current) yield* prerolledAudio(current, start, end)
       },
     }
   }

@@ -30,11 +30,11 @@ use serde_json::{json, Value};
 
 use crate::decode::codec::Frame;
 use crate::decode::demux::Input;
-use crate::decode::timing::{pts_to_seconds, seconds_to_ticks};
+use crate::decode::timing::{pts_to_seconds, seconds_to_ticks, TimeBase};
 use crate::logging;
 use crate::probe::error_text;
 use crate::protocol::ServiceError;
-use timing::{place, read_plan, sample_index, segment_start, Placement, ReadPlan};
+use timing::{coarse_snap_limit, place, read_plan, sample_index, segment_start, snap_to_frame_grid, Placement, ReadPlan};
 
 /// 单次读取的样本数上限（每声道，与主进程 `VIDEO_AUDIO_MAX_READ_FRAMES` 一致）。
 pub const MAX_READ_FRAMES: usize = 2 * 192_000;
@@ -407,6 +407,41 @@ impl Segment {
     }
 }
 
+/// 固定帧长编码在粗时间基容器中的帧网格（2.10）：从流起点按帧长连续累加，输入样本序号。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct FrameGrid {
+    anchor: i64,
+    frame: i64,
+    limit: i64,
+}
+
+impl FrameGrid {
+    /// 只对每帧样本数固定的编码启用；Opus、Vorbis 等可变帧长编码在毫秒时间基下定位仍可能偏最多半个刻度（已知边界）。
+    fn new(parameters: &ff::AVCodecParameters, time_base: TimeBase, start_time: i64) -> Option<Self> {
+        use ff::AVCodecID::*;
+        let fixed = matches!(parameters.codec_id, AV_CODEC_ID_AAC | AV_CODEC_ID_MP3 | AV_CODEC_ID_MP2 | AV_CODEC_ID_MP1 | AV_CODEC_ID_AC3 | AV_CODEC_ID_EAC3);
+        // AC-3/E-AC-3 的解码参数不带帧长：按 6 个音频块（1536）；E-AC-3 可用更少的块，落位时还会核对实际帧长。
+        let frame = match (parameters.frame_size, parameters.codec_id) {
+            (size, _) if size > 0 => size as i64,
+            (_, AV_CODEC_ID_AC3 | AV_CODEC_ID_EAC3) => 1536,
+            _ => return None,
+        };
+        if !fixed || parameters.sample_rate <= 0 || start_time == ff::AV_NOPTS_VALUE {
+            return None;
+        }
+        let rate = parameters.sample_rate as u32;
+        let limit = coarse_snap_limit(time_base, rate)?;
+        // 流起点是丢掉编码器延迟（`initial_padding`，如 MKV 里 MP3 的 1105、AAC 的 1024）之后的第一个样本；
+        // 完整的帧从首包算起，所以网格原点是起点之前 `initial_padding` 个样本（MP3 首帧只剩 47 个样本，之后才是整帧）。
+        let anchor = sample_index(start_time, time_base, rate) - parameters.initial_padding.max(0) as i64;
+        Some(Self { anchor, frame, limit })
+    }
+
+    fn snap(&self, index: i64) -> i64 {
+        snap_to_frame_grid(index, self.anchor, self.frame, self.limit)
+    }
+}
+
 struct AudioSession {
     input: Input,
     decoder: AudioDecoder,
@@ -420,6 +455,7 @@ struct AudioSession {
     stream_start_seconds: Option<f64>,
     stream_end_seconds: Option<f64>,
     codec: Option<String>,
+    frame_grid: Option<FrameGrid>,
     /// 已输出的样本（每声道），第一个样本的输出序号为 `buffer_start`。
     buffer: Vec<Vec<f32>>,
     buffer_start: i64,
@@ -443,6 +479,7 @@ impl AudioSession {
         let end = (stream.duration != ff::AV_NOPTS_VALUE && stream.duration > 0).then(|| pts_to_seconds(stream.duration, input.time_base) + start.unwrap_or(0.0));
         let codec = crate::ffmpeg_info::c_text(unsafe { ff::avcodec_get_name(parameters.codec_id) });
         let channels = out_layout.0.nb_channels as usize;
+        let frame_grid = FrameGrid::new(parameters, input.time_base, stream.start_time);
         Ok(Some(Self {
             stream_index: input.stream_index,
             input,
@@ -456,6 +493,7 @@ impl AudioSession {
             stream_start_seconds: start,
             stream_end_seconds: end,
             codec,
+            frame_grid,
             buffer: vec![Vec::new(); channels],
             buffer_start: 0,
             segment: None,
@@ -575,6 +613,12 @@ impl AudioSession {
                             }
                         }
                         let exact = !segment.fed;
+                        // 本段送入样本前的帧（定位后的首帧）：粗时间基下吸附到帧长网格，与连续读取的位置一致。
+                        // 之后的帧按容差连续累加，本来就在网格上。
+                        let index = match self.frame_grid {
+                            Some(grid) if exact && raw.nb_samples as i64 == grid.frame => grid.snap(index),
+                            _ => index,
+                        };
                         segment.pending = Some((frame, index, exact));
                     }
                     None => {
@@ -889,6 +933,57 @@ mod tests {
         assert!(max_error(&mut session, &expected, 0, -480, 48_000) < 1e-6, "开头");
         assert!(max_error(&mut session, &expected, 0, 100_000, 24_000) < 1e-6, "定位");
         assert!(max_error(&mut session, &expected, 0, total - 12_000, 24_000) < 1e-6, "结尾");
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn millisecond_containers_snap_seeks_to_the_frame_grid() {
+        // 2.10：OBS 风格 MKV（H.264 + 两条 AAC 立体声）。Matroska 时间戳只到毫秒，流中间定位后首帧时间最多偏半毫秒；
+        // 固定帧长编码吸附到帧长网格后，任意定位与连续读取逐样本相同（关 PNS，排除噪声替代的随机数差异）。
+        let mut args: Vec<String> = ["-f", "lavfi", "-i", "testsrc2=s=320x240:r=30:d=4"].iter().map(|text| text.to_string()).collect();
+        let source = |frequency: u32| format!("aevalsrc='0.2*sin(2*PI*{frequency}*t)+0.1*sin(2*PI*({}+{}*t)*t)':s=48000:d=4", frequency * 2 + 37, 50 + frequency / 10);
+        for frequency in [300, 600, 700, 900] {
+            args.extend(["-f".to_string(), "lavfi".to_string(), "-i".to_string(), source(frequency)]);
+        }
+        args.extend(
+            ["-filter_complex", "[1:a][2:a]join=inputs=2:channel_layout=stereo[game];[3:a][4:a]join=inputs=2:channel_layout=stereo[mic]", "-map", "0:v", "-map", "[game]", "-map", "[mic]", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k", "-aac_pns", "0", "-shortest"]
+                .iter()
+                .map(|text| text.to_string()),
+        );
+        let Some(path) = generate("obs.mkv", &args.iter().map(String::as_str).collect::<Vec<_>>()) else { return };
+        for stream in [0usize, 1] {
+            let expected = reference(&path, stream, None);
+            let open_stream = || AudioSession::open(&AudioOpenOptions { audio_id: "va-mkv".into(), path: path.clone(), audio_stream: stream, sample_rate: Some(48_000) }, Arc::new(AtomicBool::new(false))).unwrap().unwrap();
+            let grid = open_stream().frame_grid.expect("毫秒时间基的 AAC 启用帧网格");
+            assert_eq!((grid.frame, grid.limit), (1024, 25));
+            let mut session = open_stream();
+            assert_eq!(max_error(&mut session, &expected, 0, -480, 96_000), 0.0, "第 {stream} 条流从开头连续读");
+            for step in 0..24i64 {
+                let target = 30_000 + step * 4099;
+                let mut session = open_stream();
+                assert_eq!(max_error(&mut session, &expected, 0, target, 2000), 0.0, "第 {stream} 条流定位到 {target}");
+            }
+        }
+        let _ = std::fs::remove_file(path);
+        // MP3、AC-3 放进 MKV：帧长 1152、1536。AC-3 解码带抖动随机数，定位后误差为噪声级。
+        for (name, codec, frame, tolerance) in [("mp3.mkv", "libmp3lame", 1152i64, 1e-6f32), ("ac3.mkv", "ac3", 1536, 1e-4)] {
+            let Some(path) = generate_tone(name, 48_000, &["-c:a", codec, "-b:a", "192k"]) else { return };
+            let expected = reference(&path, 0, None);
+            assert_eq!(open(&path, Some(48_000)).frame_grid.map(|grid| grid.frame), Some(frame), "{name}");
+            for step in 0..12i64 {
+                let target = 30_000 + step * 7001;
+                let mut session = open(&path, Some(48_000));
+                let error = max_error(&mut session, &expected, 0, target, 2000);
+                assert!(error < tolerance, "{name} 定位到 {target} 误差 {error}");
+            }
+            let _ = std::fs::remove_file(path);
+        }
+        // 可变帧长（Opus）与细时间基（MP4）不吸附。
+        let Some(path) = generate_tone("opus.webm", 48_000, &["-c:a", "libopus", "-b:a", "160k"]) else { return };
+        assert_eq!(open(&path, Some(48_000)).frame_grid, None);
+        let _ = std::fs::remove_file(path);
+        let Some(path) = generate_tone("aac-grid.mp4", 48_000, &["-c:a", "aac", "-b:a", "192k"]) else { return };
+        assert_eq!(open(&path, Some(48_000)).frame_grid, None);
         let _ = std::fs::remove_file(path);
     }
 }
