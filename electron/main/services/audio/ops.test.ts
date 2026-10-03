@@ -33,7 +33,9 @@ function worker(): { start: (options: AudioWaveformAggregationOptions) => Promis
     dispose: vi.fn(async () => undefined),
   }
 }
-const request = { source: 'D:/source.wav', startUs: 0, endUs: 1000, bucketCount: 16, channels: 2 as const }
+/** 宿主平台的绝对路径：Windows 是盘符路径，Linux/macOS 是 `/` 开头；写死 `D:/` 在 CI Linux 上不是绝对路径。 */
+const localMedia = (name: string): string => path.resolve(path.sep, 'media', name)
+const request = { source: localMedia('source.wav'), startUs: 0, endUs: 1000, bucketCount: 16, channels: 2 as const }
 let children: Array<{ process: Process; args: string[] }>
 beforeEach(() => {
   vi.resetAllMocks(); children = []
@@ -134,10 +136,10 @@ describe('waveform extraction lifecycle and time bounds', () => {
   it('retains permits after cancellation until child/stdIo close; queued work and dispose remain bounded', async () => {
     const analyzer = service()
     const a = new AbortController(); const b = new AbortController()
-    const first = analyzer.extractRange({ ...request, source: 'D:/a.wav', endUs: 1800_000_000 }, a.signal).catch(error => error)
-    const second = analyzer.extractRange({ ...request, source: 'D:/b.wav' }, b.signal).catch(error => error)
+    const first = analyzer.extractRange({ ...request, source: localMedia('a.wav'), endUs: 1800_000_000 }, a.signal).catch(error => error)
+    const second = analyzer.extractRange({ ...request, source: localMedia('b.wav') }, b.signal).catch(error => error)
     await vi.waitFor(() => expect(children).toHaveLength(2))
-    const third = analyzer.extractRange({ ...request, source: 'D:/c.wav' }).catch(error => error)
+    const third = analyzer.extractRange({ ...request, source: localMedia('c.wav') }).catch(error => error)
     await vi.waitFor(() => expect(analyzer.statistics().queued).toBe(1))
     a.abort(); b.abort()
     expect(await first).toMatchObject({ name: 'AbortError' }); expect(await second).toMatchObject({ name: 'AbortError' })

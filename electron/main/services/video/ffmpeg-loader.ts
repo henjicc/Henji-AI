@@ -37,8 +37,10 @@ function readTextOrNull(file: string): string | null {
  */
 export function unifiedFfmpegDirectory(context: MediaBinaryContext): string | null {
   if (context.platform !== 'win32') return null
-  if (context.isPackaged) return path.join(context.resourcesPath, ...UNIFIED_FFMPEG_PACKAGED_SEGMENTS)
-  const pointerPath = path.join(context.cwd, ...UNIFIED_FFMPEG_POINTER_SEGMENTS)
+  // 统一构建只服务 Windows：路径一律按 Windows 规则拼接与判定（盘符才算绝对路径），不随执行代码的宿主平台变化。
+  const winPath = path.win32
+  if (context.isPackaged) return winPath.join(context.resourcesPath, ...UNIFIED_FFMPEG_PACKAGED_SEGMENTS)
+  const pointerPath = winPath.join(context.cwd, ...UNIFIED_FFMPEG_POINTER_SEGMENTS)
   const text = (context.readText ?? readTextOrNull)(pointerPath)
   const hint = '请运行 `node scripts/video-decoder-ffmpeg.cjs ensure`（或 `npm run prepare:media-binaries`）'
   if (text === null) throw new Error(`FFmpeg 尚未就绪：缺少 ${pointerPath}，${hint}`)
@@ -48,15 +50,15 @@ export function unifiedFfmpegDirectory(context: MediaBinaryContext): string | nu
   } catch {
     binDir = undefined
   }
-  if (typeof binDir !== 'string' || !binDir || path.isAbsolute(binDir) || binDir.split(/[\\/]/).includes('..')) {
+  if (typeof binDir !== 'string' || !binDir || winPath.isAbsolute(binDir) || binDir.split(/[\\/]/).includes('..')) {
     throw new Error(`FFmpeg 定位指针无效：${pointerPath}，${hint}`)
   }
-  return path.join(path.dirname(pointerPath), ...binDir.split('/'))
+  return winPath.join(winPath.dirname(pointerPath), ...binDir.split('/'))
 }
 
 export function unifiedMediaBinaryPath(name: MediaBinaryName, context: MediaBinaryContext): string | null {
   const directory = unifiedFfmpegDirectory(context)
-  return directory ? path.join(directory, `${name}.exe`) : null
+  return directory ? path.win32.join(directory, `${name}.exe`) : null
 }
 
 /**

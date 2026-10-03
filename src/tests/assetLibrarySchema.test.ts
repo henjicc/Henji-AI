@@ -11,7 +11,8 @@ describe('asset library schema migration', () => {
 
   it('enforces path uniqueness and constrained media values', () => {
     expect(dbSource).toContain('file_path TEXT NOT NULL UNIQUE')
-    expect(dbSource).toContain("media_type IN ('image', 'video', 'audio')")
+    // 7dfeccb9 起代码资产（code）也是正式素材类型；旧库由 upgradeAssetSources 补齐同一约束。
+    expect(dbSource).toContain("media_type IN ('image', 'video', 'audio', 'code')")
   })
 
   it('cascades relations without defining physical file deletion', () => {

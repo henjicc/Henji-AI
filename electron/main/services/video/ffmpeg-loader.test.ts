@@ -12,8 +12,8 @@ const pointer = JSON.stringify({ version: 'n9.0.2-17-g2a571b6068', binDir: 'ffmp
 const base: MediaBinaryContext = {
   platform: 'win32',
   isPackaged: false,
-  resourcesPath: path.join('C:', 'App', 'resources'),
-  cwd: path.join('D:', 'repo'),
+  resourcesPath: path.win32.join('C:', 'App', 'resources'),
+  cwd: path.win32.join('D:', 'repo'),
   readText: () => pointer,
 }
 
@@ -21,14 +21,14 @@ describe('统一 FFmpeg 定位（重要记录 014）', () => {
   it('开发环境按 current.json 指向的包 bin 目录定位 ffmpeg.exe / ffprobe.exe', () => {
     let read = ''
     const directory = unifiedFfmpegDirectory({ ...base, readText: (file) => { read = file; return pointer } })
-    expect(read).toBe(path.join('D:', 'repo', 'native', 'video-decoder', 'ffmpeg', 'current.json'))
-    expect(directory).toBe(path.join('D:', 'repo', 'native', 'video-decoder', 'ffmpeg', 'ffmpeg-n9.0.2-17-g2a571b6068-win64-gpl-shared-9.0', 'bin'))
-    expect(unifiedMediaBinaryPath('ffprobe', base)).toBe(path.join(directory ?? '', 'ffprobe.exe'))
+    expect(read).toBe(path.win32.join('D:', 'repo', 'native', 'video-decoder', 'ffmpeg', 'current.json'))
+    expect(directory).toBe(path.win32.join('D:', 'repo', 'native', 'video-decoder', 'ffmpeg', 'ffmpeg-n9.0.2-17-g2a571b6068-win64-gpl-shared-9.0', 'bin'))
+    expect(unifiedMediaBinaryPath('ffprobe', base)).toBe(path.win32.join(directory ?? '', 'ffprobe.exe'))
   })
 
   it('打包后与原生解码服务同目录 resources/video-decoder，不读指针', () => {
     const context = { ...base, isPackaged: true, readText: () => { throw new Error('打包后不得读取开发指针') } }
-    expect(unifiedMediaBinaryPath('ffmpeg', context)).toBe(path.join('C:', 'App', 'resources', 'resources', 'video-decoder', 'ffmpeg.exe'))
+    expect(unifiedMediaBinaryPath('ffmpeg', context)).toBe(path.win32.join('C:', 'App', 'resources', 'resources', 'video-decoder', 'ffmpeg.exe'))
   })
 
   it('非 Windows 不走统一构建（维持 ffmpeg-ffprobe-static）', () => {

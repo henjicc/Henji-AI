@@ -1,4 +1,5 @@
 import { EventEmitter } from 'node:events'
+import path from 'node:path'
 import type { IpcMainInvokeEvent } from 'electron'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 type Handler = (input: unknown, event: IpcMainInvokeEvent) => unknown
@@ -14,7 +15,9 @@ vi.mock('./registry', () => ({
   registerIpcHandler: (channel: string, parse: (value: unknown) => unknown, handler: Handler, guard: (event: IpcMainInvokeEvent) => void) => mocks.handlers.set(channel, (input, event) => { guard(event); return handler(parse(input), event) }),
 }))
 import { registerAudioSampleHandlers } from './audio-samples'
-const payload = { mode: 'range', source: 'D:/allowed/source.wav', startUs: 0, endUs: 100000, channels: 2, bucketCount: 16, requestId: 'same' }
+/** 宿主平台的绝对路径：写死 `D:/` 在 CI Linux 上不是绝对路径，会在授权判定前就被拒绝。 */
+const localMedia = (...segments: string[]): string => path.resolve(path.sep, ...segments)
+const payload = { mode: 'range', source: localMedia('allowed', 'source.wav'), startUs: 0, endUs: 100000, channels: 2, bucketCount: 16, requestId: 'same' }
 function owner(id: number): { event: IpcMainInvokeEvent; emitter: EventEmitter } {
   const emitter = Object.assign(new EventEmitter(), { id, isDestroyed: () => false })
   return { event: { sender: emitter } as unknown as IpcMainInvokeEvent, emitter }
@@ -66,7 +69,7 @@ describe('waveform IPC ownership and permissions', () => {
   })
   it('checks canonical grants and trusted callers, rejects new range remote inputs, and preserves legacy remote routing', async () => {
     const a = owner(104)
-    mocks.realpath.mockResolvedValueOnce('D:/outside/linked.wav')
+    mocks.realpath.mockResolvedValueOnce(localMedia('outside', 'linked.wav'))
     mocks.allowed.mockImplementation((source: string) => !source.includes('outside'))
     await expect(invoke('audio:extractSamples', payload, a.event)).rejects.toThrow('实际路径')
     for (const source of ['https://example.test/a.wav', 'relative.wav', 'data:audio/wav']) await expect(invoke('audio:extractSamples', { ...payload, source }, a.event)).rejects.toThrow('读取权限')

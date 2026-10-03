@@ -18,13 +18,15 @@ export interface VideoDecoderPathContext {
  */
 export function videoDecoderExecutableCandidates(context: VideoDecoderPathContext): string[] {
   if (context.platform !== 'win32') return []
+  // 只服务 Windows：按 Windows 路径规则拼接，不随执行代码的宿主平台变化。
+  const winPath = path.win32
   if (context.isPackaged) {
-    return [path.join(context.resourcesPath, 'resources', 'video-decoder', VIDEO_DECODER_EXECUTABLE_NAME)]
+    return [winPath.join(context.resourcesPath, 'resources', 'video-decoder', VIDEO_DECODER_EXECUTABLE_NAME)]
   }
-  const target = path.join(context.cwd, 'native', 'video-decoder', 'target')
+  const target = winPath.join(context.cwd, 'native', 'video-decoder', 'target')
   return [
-    path.join(target, 'release', VIDEO_DECODER_EXECUTABLE_NAME),
-    path.join(target, 'debug', VIDEO_DECODER_EXECUTABLE_NAME),
+    winPath.join(target, 'release', VIDEO_DECODER_EXECUTABLE_NAME),
+    winPath.join(target, 'debug', VIDEO_DECODER_EXECUTABLE_NAME),
   ]
 }
 
