@@ -458,7 +458,7 @@ const InputArea: React.FC<InputAreaProps> = ({
 
         {/* 底栏：添加素材 · 模型 · 参数 ｜ 预计费用 · 预设 · 优化 · 生成（设计稿 Generation） */}
         <div className="flex flex-wrap items-end justify-between gap-x-3 gap-y-1.5">
-          <div className="flex min-w-0 flex-1 flex-wrap items-end gap-x-1 gap-y-1.5">
+          <div className="flex min-w-0 flex-1 flex-wrap items-end gap-x-3 gap-y-1.5">
             {shouldShowUpload && (
               <UiIconButton size="lg"
                 type="button"

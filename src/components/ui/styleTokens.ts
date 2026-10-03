@@ -217,7 +217,7 @@ export const UI_FIELD_LABEL_CLASS = `block ${UI_TEXT_LABEL_CLASS} mb-1.5`;
 export const UI_FIELD_LABEL_INLINE_CLASS = 'shrink-0 whitespace-nowrap text-xs text-text3';
 
 /** 工具条排布下“标签 + 控件”的行内容器。 */
-export const UI_FIELD_INLINE_ROW_CLASS = 'inline-flex min-w-0 items-center gap-1.5';
+export const UI_FIELD_INLINE_ROW_CLASS = 'inline-flex min-h-control-md min-w-0 items-center gap-1.5';
 
 /** 字段聚焦：一圈 2px 强调色焦点环（内收，避免被滚动容器或 overflow-hidden 裁掉）。 */
 export const UI_FIELD_FOCUS_CLASS =

@@ -205,11 +205,30 @@ function createVideoEditMonitorScene() {
         assert.equal(evidence.meters.solo.length, 2); assert.ok(Math.abs(evidence.meters.solo[0].rms - evidence.meters.solo[1].rms) < .01, '单声道独奏应等量映射到节目左右声道')
         await shot('monitor-actual-mix-meter'); await frame(0); await button(page, '单声道声音独奏').click()
         await saved(page, file, value => !value.sequences[0].tracks[0].solo)
+        // 2.3: one whole-file multi-level pyramid per sound stream (absolute clock from 0); the source range
+        // 0.5..1.25 s is sliced from it. The mono base clip's pyramid was decoded for the timeline in this run,
+        // so opening the source must reuse it (no second decode) and still draw the exact range.
+        const monoPath = document.media.find(media => media.id === monoItem.mediaId).path
+        const monoDecodes = value => value.processes.filter(process => process.source === monoPath)
+        const pyramidDecoded = value => monoDecodes(value).some(process => process.firstSample === 0 && process.sampleRate === 48000 && process.sampleCount >= 60000 && process.ended && process.exitCode === 0
+          && value.workers.some(worker => worker.options?.kind === 'pyramid' && worker.options.expectedFrames === process.sampleCount && worker.channels?.some(channel => channel.sampleCount === process.sampleCount && channel.maxPeak > .01 && channel.maxRms > .003)))
+        const beforeSource = await poll(page, () => nativeWaveformSnapshot(app), pyramidDecoded, '时间线须已按整文件多级波形解码单声道素材（绝对时钟0起、覆盖0.5..1.25秒）')
         await openSource(monoItem)
         await change(sourceRef, { 'video_edit.source.in_us': 500000, 'video_edit.source.out_us': 1250000, 'video_edit.source.time_us': 500000, 'video_edit.source.playing': false })
-        await page.locator('[data-video-edit-source-waveform]').waitFor({ state: 'visible', timeout: 30000 })
-        const rangeWave = await poll(page, () => nativeWaveformSnapshot(app), value => value.processes.some(process => process.source === document.media.find(media => media.id === monoItem.mediaId).path && process.firstSample === 24000 && process.sampleCount === 36000 && process.sampleRate === 48000) && value.workers.some(worker => worker.options?.expectedFrames === 36000 && worker.channels?.some(channel => channel.sampleCount === 36000 && channel.maxPeak > .01 && channel.maxRms > .003)), '源波形必须按0.5..1.25秒实际半开范围解码')
-        evidence.sourceRangeWaveform = rangeWave
+        const sourceWave = page.locator('[data-video-edit-source-waveform]')
+        await sourceWave.waitFor({ state: 'visible', timeout: 30000 })
+        await sourceWave.locator('canvas[data-waveform-state="ready"]').waitFor({ state: 'visible', timeout: 30000 })
+        assert.equal((await sourceWave.locator('span').first().textContent()).trim(), '00:00:00.500000 — 00:00:01.250000', '源波形应只显示入出点半开范围')
+        const rangeWave = await nativeWaveformSnapshot(app)
+        assert.equal(monoDecodes(rangeWave).length, monoDecodes(beforeSource).length, '打开源素材应命中本次已生成的多级波形，不得再起解码')
+        const sourceInk = await sourceWave.locator('canvas').evaluate(canvas => {
+          const { data } = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height)
+          let inked = 0
+          for (let index = 3; index < data.length; index += 4) if (data[index] > 0) inked++
+          return { inked, total: data.length / 4, width: canvas.width, height: canvas.height }
+        })
+        assert.ok(sourceInk.inked > sourceInk.total * .02, `源波形画布须画出非静音范围：${JSON.stringify(sourceInk)}`)
+        evidence.sourceRangeWaveform = { ...rangeWave, monoDecodes: monoDecodes(rangeWave), sourceInk }
         await play(projectRef); await waitLevel(page, '节目播放电平', true)
         await button(panel(page, 'source'), '正向').click(); await waitLevel(page, '源播放电平', true); await waitLevel(page, '节目播放电平', false)
         const stoppedProgram = (await read(projectRef, ['video_edit.project.program_playback'])).data.properties['video_edit.project.program_playback']; assert.equal(stoppedProgram.playing, false)

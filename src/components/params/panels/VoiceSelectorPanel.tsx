@@ -440,7 +440,7 @@ export const VoiceSelectorPanel: React.FC<VoiceSelectorPanelProps> = ({
             aria-label="搜索音色"
             className={`min-w-0 flex-1`}
           />}
-          {remoteModelId && <UiButton type="button" variant="secondary" size="lg" disabled={remoteStatus === 'loading'} onClick={() => void loadRemoteVoices(true)}>
+          {remoteModelId && <UiButton type="button" variant="secondary" disabled={remoteStatus === 'loading'} onClick={() => void loadRemoteVoices(true)}>
             刷新音色
           </UiButton>}
         </div>

@@ -97,6 +97,9 @@ async function measureGenerationFiltering(page, count, inspection) {
 async function measureGenerationPromptInput(page, count, inspection) {
   await ensureHistorySearchOpen(page)
   const host = page.locator('[data-onboarding-target="prompt"]')
+  // 筛选在命令带里进行，滚动记录时输入卡片会按既有规则自动收起；像用户一样先移到卡片上展开再输入。
+  await page.locator('[data-layout-density]').hover()
+  await host.getByRole('textbox').waitFor({ state: 'visible' })
   await host.getByRole('textbox').click()
   const editor = host.locator('[contenteditable="true"]')
   await editor.waitFor()

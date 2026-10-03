@@ -17,6 +17,7 @@ import {
   getPresentedParamIds,
 } from '@/core/params/paramPresentation'
 import { ParamGroupTrigger } from '@/components/params/ParamGroupTrigger'
+import { useUiFieldLayout } from '@/components/ui'
 import AspectResolutionPanel from './AspectResolutionPanel'
 import { isPrimarySelectorParam } from './parameterOrder'
 
@@ -59,6 +60,8 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
   onChange,
   onChanges
 }) => {
+  // 工具条排布（生成底栏）下参数直接参与宿主那一行的换行；表单排布（画布节点等）保留自身的换行容器
+  const toolbarLayout = useUiFieldLayout() === 'toolbar'
   // 从 ModelRegistry 获取模型定义
   const modelDef = registry.getModel(selectedModel)
 
@@ -158,7 +161,7 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
 
   // 渲染参数：渠道最优先，其次是模式/版本/变体；分辨率/比例面板保持其余参数前置
   return (
-    <div className="flex flex-wrap items-end gap-x-3 gap-y-2">
+    <div className={toolbarLayout ? 'contents' : 'flex flex-wrap items-end gap-x-3 gap-y-2'}>
       {primarySelectorParams.map((param) => (
         <ParamRenderer
           key={param.id}

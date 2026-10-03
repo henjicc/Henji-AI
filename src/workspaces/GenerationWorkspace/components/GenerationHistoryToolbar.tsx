@@ -39,7 +39,8 @@ export function GenerationHistoryToolbar({
   return (
     <div className="flex h-10 items-center justify-between gap-3">
       <div role="radiogroup" aria-label={t('ui:workspaceFilters.typeTabs')} className="flex min-w-0 items-center gap-0.5">
-        {mediaOptions.map((option) => (
+        {/* 只有“全部”一项（还没有任何记录）时不显示：单个选项不构成选择 */}
+        {mediaOptions.length > 1 && mediaOptions.map((option) => (
           <UiOptionButton
             key={option.value}
             variant="segment"

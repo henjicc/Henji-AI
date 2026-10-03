@@ -196,7 +196,10 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
             {/* ui-surface-allow 片段入点裁剪柄、片段体、出点裁剪柄：片段外观由 2.4 片段组件接管（素材片段令牌、缩略图与波形） */}
             <UiButton data-video-edit-trim="in" aria-label={`裁剪${clip.name}入点`} className="!h-full !w-2 shrink-0 cursor-ew-resize !rounded-none !p-0" tabIndex={-1}>│</UiButton>
             {/* ui-surface-allow 片段体，同上 */}
-            <UiButton aria-label={`选择片段 ${clip.name}`} title={`${clip.name}${channelType ? ` · ${videoEditAudioFormatLabel(channelType)}` : ''}${offset === undefined ? '' : `：与链接片段失步 ${Math.abs(offset)} 帧，右键可移入同步或滑入同步`}`} data-video-edit-audio-format={channelType} className="!h-full min-w-0 flex-1 truncate !rounded-none !px-1 !py-0" onClick={event => { if (event.detail === 0) run(() => pointer.select([clip.id], event.ctrlKey || event.metaKey, event.shiftKey, videoEditPickRelations(instance.linkedSelection !== false, event.altKey))) }}>{clip.name}</UiButton>
+            <UiButton aria-label={`选择片段 ${clip.name}`} title={`${clip.name}${channelType ? ` · ${videoEditAudioFormatLabel(channelType)}` : ''}${offset === undefined ? '' : `：与链接片段失步 ${Math.abs(offset)} 帧，右键可移入同步或滑入同步`}`} data-video-edit-audio-format={channelType} className="!h-full min-w-0 flex-1 truncate !rounded-none !px-1 !py-0" onClick={event => { if (event.detail === 0) run(() => pointer.select([clip.id], event.ctrlKey || event.metaKey, event.shiftKey, videoEditPickRelations(instance.linkedSelection !== false, event.altKey))) }}>
+              {/* 名称压在波形上：媒体叠层底 + 叠层文字（设计稿 VideoEdit 片段名称条），两套主题下都可读；定位使其绘制在绝对定位的波形之上 */}
+              <span className="relative min-w-0 truncate rounded-sm bg-media-scrim px-1 text-on-media">{clip.name}</span>
+            </UiButton>
             {offsetLabel && <span className="pointer-events-none shrink-0 px-1 text-2xs font-medium tabular-nums text-danger" data-video-edit-sync-offset={offset}>{offsetLabel}</span>}
             {/* ui-surface-allow 出点裁剪柄，同上 */}
             <UiButton data-video-edit-trim="out" aria-label={`裁剪${clip.name}出点`} className="!h-full !w-2 shrink-0 cursor-ew-resize !rounded-none !p-0" tabIndex={-1}>│</UiButton>

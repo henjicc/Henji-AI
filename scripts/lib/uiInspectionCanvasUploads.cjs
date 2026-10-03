@@ -34,6 +34,10 @@ function createCanvasUploadsScene(context) {
           'UPDATE storyboard_projects SET node_count = ?, nodes_json = ?, edges_json = ?, viewport_json = ?, history_json = ? WHERE id = ?',
           [nodes.length, JSON.stringify(nodes), '[]', JSON.stringify({ x: 65, y: 45, zoom: 0.65 }), JSON.stringify({ past: [], future: [], imagePool: [] }), projectId])
       }, projectId)
+      // 直接改库后重载渲染层，避免复用刚关闭工程留在内存里的旧会话。
+      await page.reload({ waitUntil: 'domcontentloaded' })
+      await context.setupCanvas(page)
+      if (await page.locator('.react-flow').count()) await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
       await page.locator(`[data-project-id="${projectId}"]:visible`).click()
       const cases = [
         ['landscape', landscape, 'uploadNode', 427, 240],

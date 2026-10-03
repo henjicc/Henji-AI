@@ -80,7 +80,8 @@ export function ParamGroupTrigger({
               gap="none"
               className={index > 0 ? 'mt-4' : ''}
             >
-              <div className="flex flex-wrap items-end gap-x-3 gap-y-3">
+              {/* 表单排布标签在上：按顶端对齐，控件高度不一（上传格、数值框、分段）时标签仍在同一行 */}
+              <div className="flex flex-wrap items-start gap-x-3 gap-y-3">
                 {sectionParams.map((param) => (
                   <div
                     key={param.id}

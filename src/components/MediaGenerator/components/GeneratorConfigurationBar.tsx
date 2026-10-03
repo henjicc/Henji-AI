@@ -44,7 +44,8 @@ export function GeneratorConfigurationBar({
 
   return (
     <UiFieldLayoutContext.Provider value="toolbar">
-      <div className="flex min-w-0 flex-wrap items-end gap-x-3 gap-y-1.5">
+      {/* 不另起换行容器：模型与各参数直接参与底栏左组的同一行换行，避免整组掉到“+”下一行 */}
+      <div className="contents">
         <div data-onboarding-target="model" className="min-w-0">
           {/* 视觉上模型名自明，不显示“模型”标签；保留给读屏与按名称定位 */}
           <label className="sr-only">{t('title')}</label>
