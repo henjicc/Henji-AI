@@ -1,5 +1,5 @@
 import React, { useCallback, useRef } from 'react'
-import { CAMERA_STAGE_TIMELINE_HEX } from '@/core/theme/colorTokens'
+import { useThemeTokens } from '@/hooks/useThemeTokens'
 import { generateTicks, xToTime, type TimeRulerMode } from './timeScale'
 import { TIMELINE_RULER_HEIGHT } from './timelineLayout'
 
@@ -26,6 +26,8 @@ const TimeRuler: React.FC<TimeRulerProps> = ({
   formatLabel,
 }) => {
   const rulerRef = useRef<HTMLDivElement>(null)
+  // 刻度线颜色取主题 line 令牌
+  const { colors: themeColors } = useThemeTokens()
   const ticks = generateTicks(duration, pxPerSecond, mode, fps)
 
   const scrubTo = useCallback(
@@ -62,7 +64,7 @@ const TimeRuler: React.FC<TimeRulerProps> = ({
           style={{
             left: tick.x,
             height: tick.major ? '100%' : '40%',
-            borderLeft: `1px solid ${CAMERA_STAGE_TIMELINE_HEX.laneBorder}`,
+            borderLeft: `1px solid ${themeColors.line}`,
           }}
         >
           {tick.label && (

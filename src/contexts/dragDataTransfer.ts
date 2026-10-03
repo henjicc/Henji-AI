@@ -1,3 +1,5 @@
+import { getThemeTokens } from '@/core/theme/themeTokenStore';
+
 export const HENJI_DRAG_DATA_MIME = 'application/x-henji-drag-data';
 
 export interface HenjiDragTransferData {
@@ -97,15 +99,14 @@ export function setCompactWaveformDragPreview(dataTransfer: DataTransfer, sample
   canvas.style.borderRadius = '8px';
   const context = canvas.getContext('2d');
   if (!context) return;
-  const rootStyle = getComputedStyle(document.documentElement);
-  const panelRgb = rootStyle.getPropertyValue('--panel-rgb').trim() || '23 23 23';
-  const mutedRgb = rootStyle.getPropertyValue('--text-muted-rgb').trim() || '163 163 163';
-  context.fillStyle = `rgb(${panelRgb.replaceAll(' ', ', ')})`;
+  const { colors } = getThemeTokens();
+  context.fillStyle = colors.panel;
   context.fillRect(0, 0, COMPACT_DRAG_PREVIEW_SIZE, COMPACT_DRAG_PREVIEW_SIZE);
   const bars = samples?.length ? samples : Array.from({ length: 32 }, (_, index) => 0.22 + Math.sin(index * 0.73) ** 2 * 0.56);
   const targetBars = Math.min(32, bars.length);
   const step = bars.length / targetBars;
-  context.fillStyle = `rgba(${mutedRgb.replaceAll(' ', ', ')}, 0.78)`;
+  context.fillStyle = colors.text2;
+  context.globalAlpha = 0.78;
   for (let index = 0; index < targetBars; index += 1) {
     const amplitude = Math.max(0.08, Math.min(1, bars[Math.floor(index * step)] ?? 0));
     const height = Math.max(3, Math.round(amplitude * 42));

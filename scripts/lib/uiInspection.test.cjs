@@ -235,6 +235,13 @@ test('已有多图层隔离夹具按文件魔数识别正式导入媒体类型',
   assert.throws(() => detectImageMediaType(Buffer.from('GIF89a')), /不支持的源资源格式/)
 })
 
+test('主题预设参数只接受登记的预设，默认不指定', () => {
+  assert.equal(parseUiInspectionArgs([], '.ui-tour').themePreset, null)
+  assert.equal(parseUiInspectionArgs(['--theme-preset', 'paper'], '.ui-tour').themePreset, 'paper')
+  assert.equal(parseUiInspectionArgs(['--theme-preset=graphite'], '.ui-tour').themePreset, 'graphite')
+  assert.throws(() => parseUiInspectionArgs(['--theme-preset', 'sepia'], '.ui-tour'), /--theme-preset 仅支持/)
+})
+
 test('拒绝未知的数据模式', () => {
   assert.throws(() => parseUiInspectionArgs(['--profile', 'production'], '.ui-tour'), /temporary 或 real/)
 })

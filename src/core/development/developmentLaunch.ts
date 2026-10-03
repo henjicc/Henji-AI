@@ -11,5 +11,6 @@ export function readDevelopmentLaunchOptions(
     skipOnboarding: params.get(DEVELOPMENT_LAUNCH_QUERY_KEYS.skipOnboarding) === '1',
     surfaceId: params.get(DEVELOPMENT_LAUNCH_QUERY_KEYS.surface) || null,
     mediaPath: params.get(DEVELOPMENT_LAUNCH_QUERY_KEYS.media) || null,
+    themePresetId: params.get(DEVELOPMENT_LAUNCH_QUERY_KEYS.themePreset) || null,
   }
 }

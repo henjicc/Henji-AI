@@ -1,5 +1,5 @@
 import { screen, type BrowserWindow, type HandlerDetails, type Rectangle, type WindowOpenHandlerResponse } from 'electron'
-import { APP_WINDOW_BACKGROUND_HEX } from '../../../src/core/theme/colorTokens'
+import { windowAppearance } from '../services/window-appearance'
 import { resolveAppIconPath } from '../app-icon'
 import { createMainLogger } from '../services/logging/main-logger'
 import {
@@ -154,7 +154,7 @@ export function createVideoEditPopoutHost(owner: BrowserWindow): VideoEditPopout
           parent: owner,
           show: true,
           autoHideMenuBar: true,
-          backgroundColor: APP_WINDOW_BACKGROUND_HEX,
+          backgroundColor: windowAppearance.getBackgroundColor(),
           title: request.title,
           ...(iconPath ? { icon: iconPath } : {}),
           webPreferences: {

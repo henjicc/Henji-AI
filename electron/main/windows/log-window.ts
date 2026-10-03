@@ -1,7 +1,7 @@
 import { BrowserWindow, screen } from 'electron'
 import path from 'node:path'
 import { bindWindowStateEvents } from '../ipc/window'
-import { APP_WINDOW_BACKGROUND_HEX } from '../../../src/core/theme/colorTokens'
+import { windowAppearance } from '../services/window-appearance'
 import { resolveAppIconPath } from '../app-icon'
 import { resolveInitialWindowPosition } from '../window-presentation'
 
@@ -33,7 +33,7 @@ export function openLogWindow(): void {
     minHeight: 420,
     show: false,
     frame: false,
-    backgroundColor: APP_WINDOW_BACKGROUND_HEX,
+    backgroundColor: windowAppearance.getBackgroundColor(),
     title: '痕迹AI - 日志',
     ...(iconPath ? { icon: iconPath } : {}),
     webPreferences: {

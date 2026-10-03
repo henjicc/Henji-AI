@@ -40,7 +40,7 @@ import { useCanvasResumePolling } from './hooks/useCanvasResumePolling';
 import { useCanvasShortcuts } from './hooks/useCanvasShortcuts';
 import { nodeTypes } from './nodes';
 import { edgeTypes } from './edges';
-import { CANVAS_GRID_ALT_HEX } from '@/core/theme/colorTokens';
+import { useThemeTokens } from '@/hooks/useThemeTokens';
 import { SelectedNodeOverlay } from './ui/SelectedNodeOverlay';
 import { NodeToolDialogRouter } from './ui/NodeToolDialogRouter';
 import { CameraStageNodeDialog } from './nodes/cameraStage/CameraStageNodeDialog';
@@ -69,6 +69,12 @@ const CANVAS_DEFAULT_EDGE_OPTIONS: DefaultEdgeOptions = { type: 'disconnectableE
 const CANVAS_PRO_OPTIONS = { hideAttribution: true };
 const CANVAS_MULTI_SELECTION_KEY_CODE = ['Control', 'Meta'];
 const CANVAS_SELECTION_KEY_CODE = ['Control', 'Meta'];
+
+/** 画布点阵：颜色取主题 `line` 令牌，切换主题时只重渲染这一层。 */
+function CanvasGridBackground() {
+  const { colors } = useThemeTokens();
+  return <Background variant={BackgroundVariant.Dots} gap={20} size={1} color={colors.line} />;
+}
 
 function CanvasConnectionToast({ toast }: { toast: CanvasToastState | null }) {
   if (!toast) {
@@ -467,7 +473,7 @@ export function Canvas() {
         proOptions={CANVAS_PRO_OPTIONS}
         className="bg-canvas"
       >
-        <Background variant={BackgroundVariant.Dots} gap={20} size={1} color={CANVAS_GRID_ALT_HEX} />
+        <CanvasGridBackground />
         <CanvasMiniMap />
 
         <SelectedNodeOverlay

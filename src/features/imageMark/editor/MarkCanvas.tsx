@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { Group, Image as KonvaImage, Layer, Line, Rect, Stage, Transformer } from 'react-konva';
 import type { KonvaEventObject } from 'konva/lib/Node';
 import type Konva from 'konva';
-import { ANNOTATION_TRANSFORMER_HEX, WHITE_HEX } from '@/core/theme/colorTokens';
+import { WHITE_HEX } from '@/core/theme/colorTokens';
+import { useThemeTokens } from '@/hooks/useThemeTokens';
 import { stabilizeStraightArrowBounds } from '../domain/arrowGeometry';
 import { labelRefPoint } from '../domain/geometry';
 import {
@@ -91,6 +92,8 @@ export function MarkCanvas({
   onCropChange,
   onCropCommit,
 }: MarkCanvasProps): JSX.Element {
+  // 变换框颜色取主题 accent 令牌（选中指示，随强调色）
+  const { colors: themeColors } = useThemeTokens();
   const shapeRefs = useRef<Map<string, Konva.Node>>(new Map());
   const labelRefs = useRef<Map<string, Konva.Node>>(new Map());
   const transformerRef = useRef<Konva.Transformer | null>(null);
@@ -352,8 +355,8 @@ export function MarkCanvas({
                     return nextBox;
                   }}
                   rotateEnabled={false}
-                  borderStroke={ANNOTATION_TRANSFORMER_HEX}
-                  anchorStroke={ANNOTATION_TRANSFORMER_HEX}
+                  borderStroke={themeColors.accent}
+                  anchorStroke={themeColors.accent}
                   anchorFill={WHITE_HEX}
                   anchorSize={8}
                   ignoreStroke

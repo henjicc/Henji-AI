@@ -1,5 +1,6 @@
 import { BrowserWindow, type IpcMainInvokeEvent } from 'electron'
 import { isUiScaleFactor, type UiScaleFactor } from '../../../src/core/theme/uiScale'
+import { parseWindowAppearance, windowAppearance } from '../services/window-appearance'
 import { parseRecord, parseVoid, registerIpcHandler } from './registry'
 
 const WINDOW_MINIMIZE = 'window:minimize'
@@ -8,6 +9,7 @@ const WINDOW_CLOSE = 'window:close'
 const WINDOW_IS_MAXIMIZED = 'window:isMaximized'
 const WINDOW_GET_CONTENT_SIZE = 'window:getContentSize'
 const WINDOW_SET_ZOOM_FACTOR = 'window:setZoomFactor'
+const WINDOW_SET_APPEARANCE = 'window:setAppearance'
 const WINDOW_TOGGLE_DEVTOOLS = 'window:toggleDevTools'
 const WINDOW_STATE_CHANGED = 'window:stateChanged'
 const WINDOW_CLOSE_REQUESTED = 'window:closeRequested'
@@ -96,6 +98,11 @@ export function registerWindowIpc(): void {
 
   registerIpcHandler(WINDOW_SET_ZOOM_FACTOR, parseZoomFactor, (factor, event) => {
     getEventWindow(event).webContents.setZoomFactor(factor)
+  })
+
+  // 渲染层应用主题后同步窗口底色与 color-scheme：更新已开窗口并持久化，供下次创建窗口使用
+  registerIpcHandler(WINDOW_SET_APPEARANCE, parseWindowAppearance, async (appearance) => {
+    await windowAppearance.update(appearance)
   })
 
   registerIpcHandler(WINDOW_TOGGLE_DEVTOOLS, parseVoid, (_input, event) => {

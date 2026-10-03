@@ -3,14 +3,170 @@
 @tailwind utilities;
 
 :root {
-  --bg-rgb: 23 23 23;
-  --surface-rgb: 38 38 38;
-  --border-rgb: 64 64 64;
-  --text-rgb: 255 255 255;
-  --text-muted-rgb: 163 163 163;
-  /* 文字四档中间两级，由 runtimeTheme 从 text/text-muted 派生，会跟随主题预设 */
-  --text-soft-rgb: 214 214 214;
-  --text-faint-rgb: 139 139 139;
+  /*
+   * 主题颜色由 src/core/theme/runtimeTheme.ts 按种子推导后写到根节点内联样式（只写下方“新变量”）。
+   * 这里的静态值 = 默认主题（石墨）的推导结果，用于首帧与无脚本环境；
+   * themeStaticDefaults.test.ts 断言两个标记块与推导结果、别名表逐字一致——改引擎后按测试提示重新生成。
+   */
+  color-scheme: dark;
+  /* theme-tokens:start */
+  --gap: #0B0C0F;
+  --gap-rgb: 11 12 15;
+  --window: #0E0F12;
+  --window-rgb: 14 15 18;
+  --canvas: #0E0F12;
+  --canvas-rgb: 14 15 18;
+  --panel: #131517;
+  --panel-rgb: 19 21 23;
+  --raised: #181A1D;
+  --raised-rgb: 24 26 29;
+  --control: #1D1F21;
+  --control-rgb: 29 31 33;
+  --control-hover: #232427;
+  --control-hover-rgb: 35 36 39;
+  --control-pressed: #282A2D;
+  --control-pressed-rgb: 40 42 45;
+  --hover: #1C1E20;
+  --hover-rgb: 28 30 32;
+  --selected: #242628;
+  --selected-rgb: 36 38 40;
+  --line: #1A1B1E;
+  --line-rgb: 26 27 30;
+  --line-strong: #232427;
+  --line-strong-rgb: 35 36 39;
+  --media: #0B0D0F;
+  --media-rgb: 11 13 15;
+  --edge: rgba(255,255,255,0.06);
+  --shade: rgba(0,0,0,0.5);
+  --text1: #EDEEF0;
+  --text1-rgb: 237 238 240;
+  --text2: #B2B4B7;
+  --text2-rgb: 178 180 183;
+  --text3: #8A8C8F;
+  --text3-rgb: 138 140 143;
+  --text-disabled: #3E4043;
+  --text-disabled-rgb: 62 64 67;
+  --accent: #3266D6;
+  --accent-rgb: 50 102 214;
+  --accent-hi: #3C71E2;
+  --accent-hi-rgb: 60 113 226;
+  --accent-hover: #3266D6;
+  --accent-hover-rgb: 50 102 214;
+  --accent-hover-hi: #467DEE;
+  --accent-hover-hi-rgb: 70 125 238;
+  --accent-pressed: #2658C6;
+  --accent-pressed-rgb: 38 88 198;
+  --accent-text: #9CBEFF;
+  --accent-text-rgb: 156 190 255;
+  --accent-ring: #6A9BFE;
+  --accent-ring-rgb: 106 155 254;
+  --accent-tint: rgba(50,102,214,0.2);
+  --on-accent: #FFFFFF;
+  --on-accent-rgb: 255 255 255;
+  --danger: #CB3135;
+  --danger-hi: #D73F3F;
+  --danger-hi-rgb: 215 63 63;
+  --danger-hover: #CB3135;
+  --danger-hover-rgb: 203 49 53;
+  --danger-hover-hi: #E44B49;
+  --danger-hover-hi-rgb: 228 75 73;
+  --danger-pressed: #BB1E27;
+  --danger-pressed-rgb: 187 30 39;
+  --danger-text: #FB817A;
+  --danger-text-rgb: 251 129 122;
+  --danger-tint: rgba(203,49,53,0.16);
+  --on-danger: #FFFFFF;
+  --on-danger-rgb: 255 255 255;
+  --success: #52CD86;
+  --success-text: #52CD86;
+  --success-text-rgb: 82 205 134;
+  --success-tint: rgba(82,205,134,0.16);
+  --on-success: #0D1014;
+  --on-success-rgb: 13 16 20;
+  --warning: #F5AE39;
+  --warning-text: #F5AE39;
+  --warning-text-rgb: 245 174 57;
+  --warning-tint: rgba(245,174,57,0.16);
+  --on-warning: #0D1014;
+  --on-warning-rgb: 13 16 20;
+  --clip-video: #213248;
+  --clip-video-rgb: 33 50 72;
+  --clip-video-line: #284568;
+  --clip-video-line-rgb: 40 69 104;
+  --clip-audio: #19392C;
+  --clip-audio-rgb: 25 57 44;
+  --clip-audio-line: #144F3A;
+  --clip-audio-line-rgb: 20 79 58;
+  --clip-text: #372B44;
+  --clip-text-rgb: 55 43 68;
+  --clip-text-line: #4C3961;
+  --clip-text-line-rgb: 76 57 97;
+  --clip-wave: #A7D8C1;
+  --clip-wave-rgb: 167 216 193;
+  --wave: #7E8084;
+  --wave-rgb: 126 128 132;
+  --wave-played: #EDEEF0;
+  --wave-played-rgb: 237 238 240;
+  --wave-cut: #773733;
+  --wave-cut-rgb: 119 55 51;
+  --glass-tint: rgba(0,0,0,0.66);
+  --glass-edge: rgba(255,255,255,0.16);
+  --glass-sheen: rgba(255,255,255,0.1);
+  --glass-hover: rgba(255,255,255,0.14);
+  --glass-pressed: rgba(255,255,255,0.22);
+  --glass-selected: rgba(255,255,255,0.18);
+  --glass-divider: rgba(255,255,255,0.12);
+  --glass-control-tint: rgba(255,255,255,0.08);
+  --glass-region-tint: rgba(14,15,18,0.18);
+  --glass-surface-tint: rgba(19,21,23,0.58);
+  --scrim: rgba(0,0,0,0.42);
+  --scrim-soft: rgba(0,0,0,0.2);
+  --scrim-solid: rgba(0,0,0,0.55);
+  --media-control: rgba(10,11,13,0.56);
+  --media-control-hover: rgba(10,11,13,0.78);
+  --on-media: #FFFFFF;
+  --on-media-rgb: 255 255 255;
+  --media-scrim: rgba(0,0,0,0.55);
+  --media-line: rgba(255,255,255,0.16);
+  /* theme-tokens:end */
+  /*
+   * 旧变量 → 新令牌的静态别名（src/core/theme/themeCssVars.ts LEGACY_THEME_CSS_ALIASES）。
+   * 运行时不写这些名字：内联样式会盖掉下方 [data-ui-blur='off'] 的退化规则。4.2 迁移完调用点后删除本块。
+   */
+  /* theme-legacy-aliases:start */
+  --app-rgb: var(--window-rgb);
+  --bg-rgb: var(--gap-rgb);
+  --surface-rgb: var(--raised-rgb);
+  --layer-rgb: var(--hover-rgb);
+  --border-rgb: var(--line-rgb);
+  --text-rgb: var(--text1-rgb);
+  --text-soft-rgb: var(--text2-rgb);
+  --text-muted-rgb: var(--text2-rgb);
+  --text-faint-rgb: var(--text3-rgb);
+  --brand-300-rgb: var(--accent-text-rgb);
+  --brand-500-rgb: var(--accent-rgb);
+  --brand-600-rgb: var(--accent-pressed-rgb);
+  --brand-700-rgb: var(--accent-pressed-rgb);
+  --danger-rgb: var(--danger-text-rgb);
+  --success-rgb: var(--success-text-rgb);
+  --warning-rgb: var(--warning-text-rgb);
+  --ui-surface-panel: var(--panel);
+  --ui-surface-field: var(--raised);
+  --ui-border-soft: var(--line);
+  --ui-border-strong: var(--line-strong);
+  --ui-glass-tint: var(--glass-tint);
+  --ui-glass-edge: var(--glass-edge);
+  --ui-glass-sheen: var(--glass-sheen);
+  --ui-glass-hover: var(--glass-hover);
+  --ui-glass-press: var(--glass-pressed);
+  --ui-glass-selected: var(--glass-selected);
+  --ui-glass-divider: var(--glass-divider);
+  --ui-glass-control-tint: var(--glass-control-tint);
+  --ui-glass-region-tint: var(--glass-region-tint);
+  --ui-glass-surface-tint: var(--glass-surface-tint);
+  --ui-scrim-tint: var(--scrim);
+  --ui-scrim-tint-soft: var(--scrim-soft);
+  /* theme-legacy-aliases:end */
   /*
    * 毛玻璃「材质」。
    *
@@ -46,71 +202,22 @@
    */
   --ui-blur: 24px;
   --ui-glass-filter: blur(var(--ui-blur)) saturate(180%) brightness(1.06);
-  /* 压住亮图片的直透，只保留足够的背景色与模糊辨识度。 */
-  --ui-glass-tint: rgb(0 0 0 / 0.66);
-  --ui-glass-edge: rgb(255 255 255 / 0.16);
-  --ui-glass-sheen: rgb(255 255 255 / 0.1);
   --ui-glass-grain: 0.04;
   /*
-   * 玻璃上的交互态。**必须是白色半透明，不能用中性灰。**
-   *
-   * 灰色（如 `--border-rgb` = 64 64 64）在深色实底 UI 上有效，但压在带黑 tint 的
-   * 玻璃上、背后又是亮图片时会被 tint 完全吃掉——实测右键菜单的 hover 就是这么
-   * 变成"看不出来"的。玻璃的层次只能靠加白，不能靠加灰。
+   * 玻璃的底、受光边、高光、交互态（--ui-glass-tint/edge/sheen/hover/press/selected/divider/control-tint/
+   * region-tint/surface-tint）与遮罩（--ui-scrim-tint/-soft）都在上方别名块，由主题引擎按模式派生：
+   * 深色沿用原数值（黑 66% 底 + 白纱，层次只能靠加白——灰色会被黑 tint 吃掉）；浅色改为浅底 + 深色纱。
    */
-  --ui-glass-hover: rgb(255 255 255 / 0.14);
-  --ui-glass-press: rgb(255 255 255 / 0.22);
-  --ui-glass-selected: rgb(255 255 255 / 0.18);
-  /* 玻璃浮层内部的分隔线：同理走白纱，不用 border 色 */
-  --ui-glass-divider: rgb(255 255 255 / 0.12);
-  /*
-   * 玻璃内部中性控件只叠一层浅色纱，不再盖不透明灰底。
-   * 这不是额外的 backdrop-filter，因此不会增加毛玻璃合成层。
-   */
-  --ui-glass-control-tint: rgb(255 255 255 / 0.08);
   --ui-glass-control-border: var(--ui-glass-divider);
   --ui-glass-control-hover: var(--ui-glass-hover);
-  /*
-   * 单块玻璃内部的连续区域与内容表面。它们只叠 tint，不再创建 backdrop-filter：
-   * 外壳负责一次模糊，内层靠半透明建立层级，避免每张卡/每个侧栏各占一个合成层。
-   */
-  --ui-glass-region-tint: rgb(var(--app-rgb) / 0.18);
-  --ui-glass-surface-tint: rgb(var(--panel-rgb) / 0.58);
   --ui-glass-surface-divider: var(--ui-glass-divider);
   /* 弹窗遮罩用更浅的一档：它覆盖整个视口，半径给太大既糊又贵 */
   --ui-scrim-blur: 10px;
-  --ui-scrim-tint: rgb(0 0 0 / 0.42);
   /*
-   * 弹窗**自身**是玻璃时用的遮罩档位。
-   *
-   * 遮罩与玻璃 tint 是相乘的：0.42 的遮罩叠 0.66 的玻璃，背后内容只剩
-   * (1-0.42)×(1-0.66) ≈ 20% 透光率——玻璃看起来只会更脏，不会更通透。
-   * 所以走 `surface="glass"` 的弹窗必须换用这一档，两件事不能分开做。
-   * 关闭毛玻璃后弹窗恢复实底，遮罩也就没有让路的必要，回到常规强度。
+   * 弹窗**自身**是玻璃时用 --ui-scrim-tint-soft：遮罩与玻璃 tint 相乘，0.42 的遮罩叠 0.66 的玻璃，
+   * 背后只剩约 20% 透光率——玻璃只会更脏。所以走 `surface="glass"` 的弹窗必须换用 soft 档。
    */
-  --ui-scrim-tint-soft: rgb(0 0 0 / 0.2);
-  --accent-rgb: 59 130 246;
-  --app-rgb: 10 10 10;
-  --canvas-rgb: 10 10 10;
-  --panel-rgb: 23 23 23;
-  --layer-rgb: 64 64 64;
-  /* 这四档必须等于 runtimeTheme.applyAccentScale 用默认强调色算出的结果，
-     否则首帧用这里的值、脚本跑完换成派生值，启动时会闪一次色。
-     实测原先 brand-500 静态是 76 136 255 而派生是 50 111 209，差得很明显。 */
-  --brand-300-rgb: 133 178 249;
-  --brand-500-rgb: 50 111 209;
-  --brand-600-rgb: 40 88 167;
-  --brand-700-rgb: 32 72 135;
-  --success-rgb: 52 211 153;
-  --warning-rgb: 251 191 36;
-  --danger-rgb: 248 113 113;
-  /* 组件级令牌（第三层）：仅供无法使用 Tailwind 类的纯 CSS 文件消费
-     （storyboard.css / ParamsPanel.css / ResolutionPanel 的 styles.css 等）。
-     新代码请优先用语义化 Tailwind 类，不要在此新增。 */
-  --ui-surface-panel: rgb(23, 23, 23);
-  --ui-surface-field: rgba(10, 10, 10, 0.92);
-  --ui-border-soft: rgba(255, 255, 255, 0.14);
-  --ui-border-strong: rgba(255, 255, 255, 0.24);
+  /* 组件级令牌（第三层）：仅供无法使用 Tailwind 类的纯 CSS 文件消费；颜色类已改为上方别名 */
   --ui-shadow-panel: 0 14px 34px rgba(0, 0, 0, 0.38);
   --ui-radius-lg: 12px;
   --ui-radius-xl: 16px;
@@ -119,15 +226,15 @@
 }
 
 /*
- * 圆角预设与主题色调预设。
+ * 圆角预设。
  *
- * ⚠️ 这两组规则原先写在 `src/features/canvas/storyboard.css` 里，而那个文件是
- * `CanvasWorkspace.tsx` 懒加载的——结果「设置 → 界面 → 圆角尺寸 / 色调」在用户
+ * ⚠️ 这组规则原先写在 `src/features/canvas/storyboard.css` 里，而那个文件是
+ * `CanvasWorkspace.tsx` 懒加载的——结果「设置 → 界面 → 圆角尺寸」在用户
  * 没打开过画布工作区之前完全不生效，进过画布之后才突然应用。
  * 全局主题变量必须待在这个全局加载的文件里。
  *
- * `runtimeTheme.applyRuntimeTheme` 负责往 documentElement 写 `data-ui-radius`
- * 与 `data-theme-tone`，这里只负责这两个属性对应的取值。
+ * `runtimeTheme.applyRuntimeTheme` 负责往 documentElement 写 `data-ui-radius`，这里只负责取值。
+ * （原 `data-theme-tone` 色调预设从未生效——总被内联变量覆盖——已随主题引擎删除。）
  */
 :root[data-ui-radius='compact'] {
   --ui-radius-lg: 10px;
@@ -144,27 +251,6 @@
 }
 
 /*
- * 色调预设只改中性色梯度，不动强调色。
- * 注意：这里的值会被 `applyRuntimeTheme` 写的**内联样式**覆盖（内联优先级更高），
- * 所以用户在「主题外观」里自定义过 9 个语义色之后色调预设就不再起作用——这是预期行为。
- */
-:root[data-theme-tone='warm'] {
-  --bg-rgb: 38 38 38;
-  --surface-rgb: 64 64 64;
-  --border-rgb: 82 82 82;
-  --text-rgb: 255 255 255;
-  --text-muted-rgb: 212 212 212;
-}
-
-:root[data-theme-tone='cool'] {
-  --bg-rgb: 10 10 10;
-  --surface-rgb: 23 23 23;
-  --border-rgb: 38 38 38;
-  --text-rgb: 245 245 245;
-  --text-muted-rgb: 163 163 163;
-}
-
-/*
  * 关闭毛玻璃：整套材质一起退化成不透明底色。
  * 注意不能只把 blur 置 0——那样 66% 的黑底叠在清晰背景上仍会透出干扰，
  * 所以外壳及其内部的 region / surface / control tint 都必须切成 100% 实体色，
@@ -173,18 +259,18 @@
 :root[data-ui-blur='off'] {
   --ui-blur: 0px;
   --ui-glass-filter: none;
-  --ui-glass-tint: rgb(var(--panel-rgb) / 1);
+  --ui-glass-tint: var(--panel);
   --ui-glass-grain: 0;
-  --ui-glass-region-tint: rgb(var(--panel-rgb) / 1);
-  --ui-glass-surface-tint: rgb(var(--panel-rgb) / 1);
-  --ui-glass-surface-divider: rgb(var(--border-rgb) / 1);
-  --ui-glass-control-tint: rgb(var(--surface-rgb) / 1);
-  --ui-glass-control-border: rgb(var(--border-rgb) / 1);
-  --ui-glass-control-hover: rgb(var(--layer-rgb) / 1);
+  --ui-glass-region-tint: var(--panel);
+  --ui-glass-surface-tint: var(--panel);
+  --ui-glass-surface-divider: var(--line);
+  --ui-glass-control-tint: var(--raised);
+  --ui-glass-control-border: var(--line);
+  --ui-glass-control-hover: var(--hover);
   --ui-scrim-blur: 0px;
-  --ui-scrim-tint: rgb(0 0 0 / 0.55);
+  --ui-scrim-tint: var(--scrim-solid);
   /* 弹窗已经退化成实底，遮罩不需要再为透光让路 */
-  --ui-scrim-tint-soft: rgb(0 0 0 / 0.55);
+  --ui-scrim-tint-soft: var(--scrim-solid);
 }
 
 /*

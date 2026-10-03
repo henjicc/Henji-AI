@@ -7,7 +7,9 @@
  * 迁移规则（重要记录 010、1.1 第八节）：
  * - 色调 `themeTonePreset` 从未生效，忽略；
  * - 颜色等于任一 v1 内置方案（当前默认、两代旧默认、4 个内置预设、5 个旧版内置预设）时视为未自定义 9 色
- *   → 石墨预设（主控决定 2026-10-03），不拟合、无覆盖；强调色若不等于旧默认强调色（各代均为 #3B82F6）则保留为种子 accent；
+ *   → 石墨预设（主控决定 2026-10-03），不拟合、无覆盖；
+ * - 强调色：旧默认强调色（各代均为 #3B82F6）视为“跟随预设”，换成石墨强调色；改过的保留为种子 accent（`seedAccentFromV1`，
+ *   迁移、拟合与 settingsStore 的旧设置写入共用这一条）；
  * - 只有真正自定义过 9 色的方案才拟合为种子（模式、色相、倾向、窗口亮度、层级对比度），拟合后色差超过阈值的令牌放进 overrides；
  *   文字类覆盖只在仍满足 4.5:1 时保留，避免把旧方案的对比度缺陷带进新主题。
  *
@@ -127,6 +129,12 @@ function round(value: number, digits: number): number {
   return Number(value.toFixed(digits));
 }
 
+/** v1 强调色 → 种子强调色：旧默认值视为“跟随预设”。 */
+export function seedAccentFromV1(accentColor: string | null | undefined): string {
+  const accent = (accentColor && normalizeHex(accentColor)) || null;
+  return !accent || accent === normalizeHex(SETTINGS_ACCENT_HEX) ? DEFAULT_THEME_SEED.accent : accent;
+}
+
 /** 只拟合种子（不含覆盖），供迁移与测试使用。 */
 export function fitSeedFromV1Colors(colors: ThemeV1ColorScheme, accentColor: string): ThemeSeed {
   const lch = Object.fromEntries(THEME_V1_COLOR_TOKENS.map((token) => [token, hexToOklch(colors[token])])) as Record<
@@ -177,7 +185,7 @@ export function fitSeedFromV1Colors(colors: ThemeV1ColorScheme, accentColor: str
     tint: round(clamp(tint, THEME_SEED_LIMITS.tint.min, THEME_SEED_LIMITS.tint.max), 4),
     base: round(L0, 3),
     contrast: round(clamp(contrast, THEME_SEED_LIMITS.contrast.min, THEME_SEED_LIMITS.contrast.max), 2),
-    accent: normalizeHex(accentColor) ?? SETTINGS_ACCENT_HEX,
+    accent: seedAccentFromV1(accentColor),
   });
 }
 
@@ -239,8 +247,7 @@ export function migrateV1Theme(input: {
   const uiRadiusPreset = isUiRadiusPreset(input.uiRadiusPreset) ? input.uiRadiusPreset : 'default';
 
   if (isV1BuiltInColors(colors)) {
-    const keepsDefaultAccent = accent === normalizeHex(SETTINGS_ACCENT_HEX);
-    const seed = normalizeThemeSeed({ ...DEFAULT_THEME_SEED, accent: keepsDefaultAccent ? DEFAULT_THEME_SEED.accent : accent });
+    const seed = normalizeThemeSeed({ ...DEFAULT_THEME_SEED, accent: seedAccentFromV1(accent) });
     return { payload: createThemePayloadV2({ seed, uiRadiusPreset }), strategy: 'builtIn', report: [] };
   }
 

@@ -1,5 +1,5 @@
 import React from 'react'
-import { UI_ACCENT_HEX, UI_TEXT_LIGHT_HEX } from '@/components/ui'
+import { useThemeTokens } from '@/hooks/useThemeTokens'
 
 interface WaveformProps {
   samples: number[]
@@ -23,7 +23,7 @@ interface BarGeom {
 }
 
 // 静态灰色波形条 + clipPath 定义只依赖采样数据，与播放进度无关；用 memo 隔离避免进度高频更新时整组波形条重渲染
-const StaticBars = React.memo(function StaticBars({ bars, clipId }: { bars: BarGeom[]; clipId: string }) {
+const StaticBars = React.memo(function StaticBars({ bars, clipId, fill }: { bars: BarGeom[]; clipId: string; fill: string }) {
   return (
     <>
       <defs>
@@ -35,7 +35,7 @@ const StaticBars = React.memo(function StaticBars({ bars, clipId }: { bars: BarG
       </defs>
       <g>
         {bars.map((bar) => (
-          <rect key={bar.key} x={bar.xStart} y={bar.y} width={bar.baseW} height={bar.bh} rx={bar.r} ry={bar.r} fill="rgba(120,120,120,0.35)" />
+          <rect key={bar.key} x={bar.xStart} y={bar.y} width={bar.baseW} height={bar.bh} rx={bar.r} ry={bar.r} fill={fill} />
         ))}
       </g>
     </>
@@ -50,6 +50,8 @@ const Waveform: React.FC<WaveformProps> = ({ samples, width = 0, height = 72, pr
   const svgRef = React.useRef<SVGSVGElement | null>(null)
   const [vw, setVw] = React.useState<number>(width || 0)
   const clipId = React.useId()
+  // 颜色取主题令牌：波形 wave、已播放 wavePlayed、悬停线与读数 text1、读数底 raised（重要记录 002 / 1.1 映射表）
+  const { colors } = useThemeTokens()
   React.useLayoutEffect(() => {
     const update = () => {
       const el = svgRef.current
@@ -116,9 +118,9 @@ const Waveform: React.FC<WaveformProps> = ({ samples, width = 0, height = 72, pr
   }
   return (
     <svg ref={svgRef} width="100%" height={h} viewBox={`0 0 ${w} ${h}`} className="block" onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onMouseLeave={handleMouseLeave}>
-      <StaticBars bars={bars} clipId={clipId} />
-      <rect x={0} y={0} width={coverX} height={h} fill={UI_ACCENT_HEX} clipPath={`url(#${clipId})`} />
-      {hoverX != null && (<rect x={hoverX} y={0} width={1} height={h} fill="rgba(255,255,255,0.35)" />)}
+      <StaticBars bars={bars} clipId={clipId} fill={colors.wave} />
+      <rect x={0} y={0} width={coverX} height={h} fill={colors.wavePlayed} clipPath={`url(#${clipId})`} />
+      {hoverX != null && (<rect x={hoverX} y={0} width={1} height={h} fill={colors.text1} fillOpacity={0.35} />)}
       {hoverX != null && (
         (() => {
           const ratio = Math.max(0, Math.min(1, hoverX / w))
@@ -130,8 +132,8 @@ const Waveform: React.FC<WaveformProps> = ({ samples, width = 0, height = 72, pr
           const ty = 12
           return (
             <g>
-              <rect x={tx - 2} y={ty - 10} width={36} height={16} rx={6} ry={6} fill="rgba(20,20,20,0.8)" />
-              <text x={tx + 16} y={ty} textAnchor="middle" fontSize="10" fill={UI_TEXT_LIGHT_HEX}>{`${mm}:${ss}`}</text>
+              <rect x={tx - 2} y={ty - 10} width={36} height={16} rx={6} ry={6} fill={colors.raised} fillOpacity={0.8} />
+              <text x={tx + 16} y={ty} textAnchor="middle" fontSize="10" fill={colors.text1}>{`${mm}:${ss}`}</text>
             </g>
           )
         })()

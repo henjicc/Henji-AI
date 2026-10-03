@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Plus } from 'lucide-react'
 import { UiIconButton } from '@/components/ui'
-import { CAMERA_STAGE_TIMELINE_HEX } from '@/core/theme/colorTokens'
+import { useThemeTokens } from '@/hooks/useThemeTokens'
 import { useCameraStageStore } from '../store/cameraStageStore'
 import { PlaybackButtons } from '../timeline/PlaybackControls'
 import TimeRuler from '../timeline/TimeRuler'
@@ -30,6 +30,8 @@ const FRAME_TICK_PX_PER_SECOND = 200
 const WHEEL_ZOOM_BASE = 1.0018
 
 const StateKeyframeTimelinePanel: React.FC = () => {
+  // 播放头颜色取主题 accentRing 令牌（设计稿“时间线·播放头 → 焦点环”）
+  const { colors: themeColors } = useThemeTokens()
   const stateKeyframes = useCameraStageStore((state) => state.stateKeyframes)
   const objects = useCameraStageStore((state) => state.objects)
   const selectedStateKeyframeId = useCameraStageStore((state) => state.selectedStateKeyframeId)
@@ -222,7 +224,7 @@ const StateKeyframeTimelinePanel: React.FC = () => {
               left: timeToX(currentTime, pxPerSecond),
               top: 0,
               height: TIMELINE_RULER_HEIGHT + STATE_KEYFRAME_CLIP_TRACK_HEIGHT,
-              borderLeft: `1px solid ${CAMERA_STAGE_TIMELINE_HEX.playhead}`,
+              borderLeft: `1px solid ${themeColors.accentRing}`,
             }}
           >
             <div
@@ -234,7 +236,7 @@ const StateKeyframeTimelinePanel: React.FC = () => {
                 height: 0,
                 borderLeft: '5px solid transparent',
                 borderRight: '5px solid transparent',
-                borderTop: `7px solid ${CAMERA_STAGE_TIMELINE_HEX.playhead}`,
+                borderTop: `7px solid ${themeColors.accentRing}`,
               }}
             />
           </div>

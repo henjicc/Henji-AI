@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useRef } from 'react'
+import { useThemeTokens } from '@/hooks/useThemeTokens'
 
 interface NotificationState {
     message: string
@@ -26,6 +27,8 @@ interface NotificationProviderProps {
 }
 
 export const NotificationProvider: React.FC<NotificationProviderProps> = ({ children }) => {
+    // 底色与文字取主题状态令牌：success/danger 实底 + onSuccess/onDanger（按对比度自动黑白）
+    const { colors: themeColors } = useThemeTokens()
     const [notification, setNotification] = useState<NotificationState | null>(null)
     const [notificationVisible, setNotificationVisible] = useState(false)
     const notificationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -59,8 +62,8 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
                     className={`fixed top-20 left-1/2 transform -translate-x-1/2 px-6 py-3 rounded-lg shadow-panel z-toast transition-opacity duration-300 ${notificationVisible ? 'opacity-100' : 'opacity-0'
                         }`}
                     style={{
-                        backgroundColor: notification.type === 'success' ? 'rgba(34, 197, 94, 0.95)' : 'rgba(239, 68, 68, 0.95)',
-                        color: 'white',
+                        backgroundColor: notification.type === 'success' ? themeColors.success : themeColors.danger,
+                        color: notification.type === 'success' ? themeColors.onSuccess : themeColors.onDanger,
                         pointerEvents: 'none'
                     }}
                 >

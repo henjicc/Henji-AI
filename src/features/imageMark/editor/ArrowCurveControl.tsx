@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef, type MutableRefObject } from 'react';
 import { Circle } from 'react-konva';
 import type Konva from 'konva';
 import type { KonvaEventObject } from 'konva/lib/Node';
-import { ANNOTATION_TRANSFORMER_HEX, WHITE_HEX } from '@/core/theme/colorTokens';
+import { WHITE_HEX } from '@/core/theme/colorTokens';
+import { useThemeTokens } from '@/hooks/useThemeTokens';
 import {
   arrowCurveHandleToControl,
   resolveArrowCurveHandle,
@@ -31,6 +32,8 @@ export function ArrowCurveControl({
   transformerRef,
   onItemsUpdated,
 }: ArrowCurveControlProps): JSX.Element {
+  // 曲线控制点描边取主题 accent 令牌（与变换框一致）
+  const { colors: themeColors } = useThemeTokens();
   const handle = selectedArrow ? resolveArrowCurveHandle(selectedArrow) : null;
   const safeScale = Math.max(scale, 0.01);
   const curveHandleRef = useRef<Konva.Circle | null>(null);
@@ -120,7 +123,7 @@ export function ArrowCurveControl({
           y={handle[1]}
           radius={6 / safeScale}
           fill={WHITE_HEX}
-          stroke={ANNOTATION_TRANSFORMER_HEX}
+          stroke={themeColors.accent}
           strokeWidth={1}
           strokeScaleEnabled={false}
           hitStrokeWidth={12 / safeScale}

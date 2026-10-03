@@ -7,7 +7,7 @@ import { cleanupAllVideoFrameExports } from './services/video/frame-export'
 import { closeLogWindow } from './windows/log-window'
 import { createVideoEditPopoutHost } from './windows/video-edit-popout'
 import { closeCameraStageRenderWindow } from './services/camera-stage-render'
-import { APP_WINDOW_BACKGROUND_HEX } from '../../src/core/theme/colorTokens'
+import { windowAppearance } from './services/window-appearance'
 import { warmupMediaImportPipeline } from './services/media-import'
 import {
   presentWindow,
@@ -48,7 +48,7 @@ export function createWindow(options: CreateWindowOptions = {}): BrowserWindow {
     enableLargerThanScreen: allowOversizeForInspection,
     show: false,
     frame: false,
-    backgroundColor: APP_WINDOW_BACKGROUND_HEX,
+    backgroundColor: windowAppearance.getBackgroundColor(),
     title: '痕迹AI',
     ...(iconPath ? { icon: iconPath } : {}),
     webPreferences: {

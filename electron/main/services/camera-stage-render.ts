@@ -1,6 +1,6 @@
 import { BrowserWindow, powerSaveBlocker, webContents } from 'electron'
 import path from 'node:path'
-import { APP_WINDOW_BACKGROUND_HEX } from '../../../src/core/theme/colorTokens'
+import { windowAppearance } from './window-appearance'
 import { cleanupAllVideoFrameExports } from './video/frame-export'
 import { cameraStageRenderTaskStorage } from './camera-stage-render-task-storage'
 import { getCameraStageProject } from './camera-stage-projects'
@@ -147,7 +147,7 @@ function ensureWorkerWindow(): BrowserWindow {
     show: false,
     frame: false,
     skipTaskbar: true,
-    backgroundColor: APP_WINDOW_BACKGROUND_HEX,
+    backgroundColor: windowAppearance.getBackgroundColor(),
     title: '痕迹AI - 后台渲染',
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.cjs'),

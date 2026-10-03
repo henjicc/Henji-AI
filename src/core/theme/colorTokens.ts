@@ -1,5 +1,16 @@
 export const APP_ACCENT_HEX = '#007eff';
+/** v1 设置的默认强调色。主题种子里它等价于“跟随预设”（迁移与旧设置读取都按此换成预设强调色）。 */
 export const SETTINGS_ACCENT_HEX = '#3B82F6';
+
+/** 主题种子强调色（设计稿原值；预设与强调色选项引用这里，见 themeEngine.ts）。 */
+export const THEME_SEED_ACCENT_HEX = {
+  blue: '#3A6FDF',
+  oceanBlue: '#3D86E8',
+  violet: '#7B61FF',
+  teal: '#159F8C',
+  orange: '#D9822B',
+  rose: '#D9467A',
+} as const;
 export const WHITE_HEX = '#ffffff';
 export const BLACK_HEX = '#000000';
 export const TEXT_LIGHT_HEX = '#E5E5E5';
@@ -137,7 +148,11 @@ export const DEFAULT_THEME_COLOR_SCHEME_HEX = {
   layer: '#404040',
 } as const;
 
-export const APP_WINDOW_BACKGROUND_HEX = DEFAULT_THEME_COLOR_SCHEME_HEX.app;
+/**
+ * 窗口首帧底色 = 默认主题（石墨）推导出的 `window` 令牌；`themeStaticDefaults.test.ts` 断言二者一致。
+ * 主进程创建窗口时用它；用户主题同步到主进程之前，非石墨主题在窗口 ready-to-show 之前的极短时间仍是此色。
+ */
+export const APP_WINDOW_BACKGROUND_HEX = '#0E0F12';
 
 export const LEGACY_DEFAULT_THEME_COLOR_SCHEME_HEX = {
   bg: '#0F0F0F',

@@ -11,6 +11,7 @@
  *
  * 与参考实现逐令牌的差异列表见 1.2 任务执行记录。
  */
+import { THEME_SEED_ACCENT_HEX } from './colorTokens';
 import {
   WHITE,
   compositeOver,
@@ -61,20 +62,7 @@ export const THEME_SEED_LIMITS = {
   contrast: { min: 0.5, max: 3 },
 } as const;
 
-/*
- * 种子强调色（设计稿原值）。按 ESLint 约定 hex 应集中在 colorTokens.ts；第一段不改应用已导入的文件，
- * 暂用区段豁免，第二段接线时迁入 colorTokens.ts 并删除本豁免。
- */
-/* eslint-disable no-restricted-syntax */
-const SEED_ACCENT_HEX = {
-  blue: '#3A6FDF',
-  oceanBlue: '#3D86E8',
-  violet: '#7B61FF',
-  teal: '#159F8C',
-  orange: '#D9822B',
-  rose: '#D9467A',
-} as const;
-/* eslint-enable no-restricted-syntax */
+const SEED_ACCENT_HEX = THEME_SEED_ACCENT_HEX;
 
 export const THEME_PRESETS: Record<ThemePresetId, ThemePreset> = {
   graphite: {

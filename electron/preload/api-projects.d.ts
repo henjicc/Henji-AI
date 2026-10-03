@@ -26,6 +26,8 @@ export interface HenjiWindowApi {
   isMaximized(): Promise<boolean>
   getContentSize(): Promise<HenjiWindowContentSize>
   setZoomFactor(factor: import('../../src/core/theme/uiScale').UiScaleFactor): Promise<void>
+  /** 同步主题窗口底色与 color-scheme 到主进程（窗口创建与缩放露底用） */
+  setAppearance(appearance: { windowBackground: string; colorScheme: 'dark' | 'light' }): Promise<void>
   toggleDevTools(): Promise<void>
   onStateChanged(handler: (payload: HenjiWindowStatePayload) => void): () => void
   onCloseRequested(handler: () => void): () => void

@@ -1,3 +1,4 @@
+import { getThemeTokens, subscribeThemeTokens } from '@/core/theme/themeTokenStore';
 import { getEdgeFlowPathBounds } from './edgeFlowPathBounds';
 
 interface FlowPath {
@@ -19,7 +20,7 @@ export class EdgeFlowCanvas {
   private readonly paths = new Map<Element, FlowPath>();
   private readonly resize: ResizeObserver;
   private readonly viewportObserver: MutationObserver;
-  private readonly themeObserver: MutationObserver;
+  private readonly unsubscribeTheme: () => void;
   private readonly motion = window.matchMedia('(prefers-reduced-motion: reduce)');
   private matrix = new DOMMatrix();
   private width = 0;
@@ -33,7 +34,7 @@ export class EdgeFlowCanvas {
   private offset = 0;
 
   constructor(private readonly flow: HTMLElement, pane: HTMLElement, private readonly viewport: HTMLElement) {
-    this.canvas.className = 'canvas-edge-flow-layer pointer-events-none absolute inset-0 h-full w-full text-accent';
+    this.canvas.className = 'canvas-edge-flow-layer pointer-events-none absolute inset-0 h-full w-full';
     this.canvas.setAttribute('aria-hidden', 'true');
     // 位于节点所在 viewport 之前，节点和端口继续遮挡连线；不改变原视口的合成/测量。
     pane.prepend(this.canvas);
@@ -45,13 +46,12 @@ export class EdgeFlowCanvas {
       this.draw(performance.now());
     });
     this.viewportObserver.observe(viewport, { attributes: true, attributeFilter: ['style'] });
-    this.themeObserver = new MutationObserver(this.refreshTheme);
-    this.themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class', 'style', 'data-theme'] });
-    this.themeObserver.observe(document.body, { attributes: true, attributeFilter: ['class', 'style', 'data-theme'] });
+    // 连线流动色 = 主题 accent 令牌；主题切换时由令牌订阅通知重画。
+    this.unsubscribeTheme = subscribeThemeTokens(this.refreshTheme);
     this.motion.addEventListener('change', this.refresh);
     document.addEventListener('visibilitychange', this.refresh);
     this.matrix = new DOMMatrix(viewport.style.transform);
-    this.color = getComputedStyle(this.canvas).color;
+    this.color = getThemeTokens().colors.accent;
     this.resizeLayer();
   }
 
@@ -100,7 +100,7 @@ export class EdgeFlowCanvas {
   }
 
   private refreshTheme = (): void => {
-    this.color = getComputedStyle(this.canvas).color;
+    this.color = getThemeTokens().colors.accent;
     this.refresh();
   };
 
@@ -156,7 +156,7 @@ export class EdgeFlowCanvas {
     if (this.frame) cancelAnimationFrame(this.frame);
     this.resize.disconnect();
     this.viewportObserver.disconnect();
-    this.themeObserver.disconnect();
+    this.unsubscribeTheme();
     this.motion.removeEventListener('change', this.refresh);
     document.removeEventListener('visibilitychange', this.refresh);
     this.canvas.remove();

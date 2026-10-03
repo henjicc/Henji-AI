@@ -21,6 +21,13 @@ import {
   type ThemeTonePreset,
   type UiRadiusPreset,
 } from '@/core/theme/runtimeTheme';
+import {
+  DEFAULT_THEME_SEED,
+  normalizeThemeSeed,
+  type ThemeSeed,
+  type ThemeTokenOverrides,
+} from '@/core/theme/themeEngine';
+import { migrateV1ThemeSettings, normalizeThemeOverrides, seedAccentFromV1 } from '@/core/theme/themeMigration';
 import type { StartupWorkspaceId } from '@/core/types/workspace';
 import {
   DEFAULT_UI_SCALE_MODE,
@@ -70,8 +77,14 @@ interface SettingsState {
   themeTonePreset: ThemeTonePreset;
   /** 界面毛玻璃效果。关闭后 `--ui-blur` 置 0，所有走该令牌的浮层一起变成不模糊 */
   uiBlurEnabled: boolean;
+  /** v1 强调色（外观设置界面与助手设置项在 1.4 前仍读写它）；写入时同步到 `themeSeed.accent`，旧默认值视为跟随预设。 */
   accentColor: string;
+  /** v1 九色方案（同上）；写入时经 `migrateV1ThemeSettings` 换算为 `themeSeed` / `themeOverrides`。 */
   themeColors: ThemeColorScheme;
+  /** 主题种子：界面颜色的唯一来源（`applyRuntimeTheme` 由它推导全部令牌）。 */
+  themeSeed: ThemeSeed;
+  /** 单令牌覆盖（v1 自定义九色拟合误差大的令牌、将来的主题编辑器）。 */
+  themeOverrides: ThemeTokenOverrides;
   /** 启动时默认停在哪个工作区。常用画布/工具箱的用户不必每次开机再切一次 */
   startupWorkspace: StartupWorkspaceId;
   assetTabAction: AssetTabAction;
@@ -131,6 +144,16 @@ function normalizeHexColor(input: string): string {
     return SETTINGS_ACCENT_HEX;
   }
   return trimmed.startsWith('#') ? trimmed.toUpperCase() : `#${trimmed.toUpperCase()}`;
+}
+
+/** 由 v1 九色 + 强调色换算主题种子（与旧设置迁移同一入口）。 */
+function deriveThemeSeedState(
+  themeColors: Partial<ThemeColorScheme> | undefined,
+  accentColor: string | undefined,
+  uiRadiusPreset: string | undefined
+): { themeSeed: ThemeSeed; themeOverrides: ThemeTokenOverrides } {
+  const payload = migrateV1ThemeSettings({ themeColors, accentColor, uiRadiusPreset });
+  return { themeSeed: payload.seed, themeOverrides: payload.overrides ?? {} };
 }
 
 function normalizeApiKey(input: string): string {
@@ -235,6 +258,8 @@ export const useSettingsStore = create<SettingsState>()(
       uiBlurEnabled: true,
       accentColor: SETTINGS_ACCENT_HEX,
       themeColors: DEFAULT_THEME_COLOR_SCHEME,
+      themeSeed: DEFAULT_THEME_SEED,
+      themeOverrides: {},
       startupWorkspace: 'generation',
       assetTabAction: 'floating',
       assetPanelPosition: 'top',
@@ -299,22 +324,25 @@ export const useSettingsStore = create<SettingsState>()(
       setUiRadiusPreset: (uiRadiusPreset) => set({ uiRadiusPreset }),
       setThemeTonePreset: (themeTonePreset) => set({ themeTonePreset }),
       setUiBlurEnabled: (uiBlurEnabled) => set({ uiBlurEnabled }),
-      setAccentColor: (color) => set({ accentColor: normalizeHexColor(color) }),
+      setAccentColor: (color) => {
+        const accentColor = normalizeHexColor(color);
+        set((state) => ({ accentColor, themeSeed: { ...state.themeSeed, accent: seedAccentFromV1(accentColor) } }));
+      },
       setThemeColor: (token, color) =>
-        set((state) => ({
-          themeColors: normalizeThemeColorScheme({
-            ...state.themeColors,
-            [token]: color,
-          }),
-        })),
+        set((state) => {
+          const themeColors = normalizeThemeColorScheme({ ...state.themeColors, [token]: color });
+          return { themeColors, ...deriveThemeSeedState(themeColors, state.accentColor, state.uiRadiusPreset) };
+        }),
       setThemeColors: (colors) =>
+        set((state) => {
+          const themeColors = normalizeThemeColorScheme({ ...state.themeColors, ...colors });
+          return { themeColors, ...deriveThemeSeedState(themeColors, state.accentColor, state.uiRadiusPreset) };
+        }),
+      resetThemeColors: () =>
         set((state) => ({
-          themeColors: normalizeThemeColorScheme({
-            ...state.themeColors,
-            ...colors,
-          }),
+          themeColors: DEFAULT_THEME_COLOR_SCHEME,
+          ...deriveThemeSeedState(DEFAULT_THEME_COLOR_SCHEME, state.accentColor, state.uiRadiusPreset),
         })),
-      resetThemeColors: () => set({ themeColors: DEFAULT_THEME_COLOR_SCHEME }),
       setStartupWorkspace: (startupWorkspace) => set({ startupWorkspace }),
       setAssetTabAction: (assetTabAction) => set({ assetTabAction }),
       setAssetPanelPosition: (assetPanelPosition) => set({ assetPanelPosition }),
@@ -328,7 +356,8 @@ export const useSettingsStore = create<SettingsState>()(
     {
       name: 'settings-storage',
       // v11：边缘唤起改为显式选择，避免旧默认值让窗口边缘成为隐藏触发区
-      version: 11,
+      // v12：主题改为种子推导；旧九色 + 强调色经 migrateV1ThemeSettings 换算（内置方案一律石墨）
+      version: 12,
       // `logCaptureMode` 有意不持久化：应用重启应回落 standard，避免用户忘记关闭
       // "完整捕获" 导致日志长期膨胀。
       partialize: (state) => {
@@ -344,6 +373,10 @@ export const useSettingsStore = create<SettingsState>()(
           uploadFallbackEnabled?: boolean;
           ignoreAtTagWhenCopyingAndGenerating?: boolean;
           themeColors?: Partial<ThemeColorScheme>;
+          accentColor?: string;
+          uiRadiusPreset?: string;
+          themeSeed?: Partial<ThemeSeed>;
+          themeOverrides?: unknown;
           assetEdgeTriggerEnabled?: boolean;
           assetTriggerEdge?: AssetTriggerEdge;
           assetEdgeDelayMs?: number;
@@ -353,6 +386,12 @@ export const useSettingsStore = create<SettingsState>()(
         const themeColors = shouldUpgradeLegacyNeutralTheme(state.themeColors)
           ? DEFAULT_THEME_COLOR_SCHEME
           : normalizedThemeColors;
+        const themeSeedState = state.themeSeed && typeof state.themeSeed === 'object'
+          ? {
+            themeSeed: normalizeThemeSeed(state.themeSeed),
+            themeOverrides: normalizeThemeOverrides(state.themeOverrides) ?? {},
+          }
+          : deriveThemeSeedState(themeColors, state.accentColor, state.uiRadiusPreset);
 
         const migratedProviderStatus = normalizeProviderKeyStatus(state.providerKeyStatus);
         if (state.apiKeys && typeof state.apiKeys === 'object') {
@@ -384,6 +423,7 @@ export const useSettingsStore = create<SettingsState>()(
           uploadFallbackEnabled,
           ignoreAtTagWhenCopyingAndGenerating,
           themeColors,
+          ...themeSeedState,
           assetEdgeTriggerEnabled: hasUntouchedLegacyEdgeTriggerDefaults
             ? false
             : (state.assetEdgeTriggerEnabled ?? false),

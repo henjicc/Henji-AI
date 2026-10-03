@@ -1,8 +1,9 @@
 /**
  * 设计稿 `docs/task/界面重设计与主题引擎/设计稿/Main.dc.html` 中 `HenjiTheme` 的逐字移植，只供测试作对照基准。
- * 除补类型、把 '#FFFFFF' 换成 colorTokens 常量外不做任何改动；修改引擎时不要同步修改本文件。
+ * 除补类型、把 hex 字面量换成 colorTokens 常量（check:colors 只允许 colorTokens 写 hex）外不做任何改动；
+ * 修改引擎时不要同步修改本文件。
  */
-import { WHITE_HEX } from './colorTokens';
+import { THEME_SEED_ACCENT_HEX, WHITE_HEX } from './colorTokens';
 
 type Rgb = [number, number, number];
 export type ReferenceSeed = {
@@ -45,14 +46,12 @@ function toOklch(x: string) {
 const lum = (x: string) => { const [r, g, b] = parse(x).map(v => toLin(v / 255)); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
 export const referenceContrast = (a: string, b: string) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
 const alpha = (x: string, a: number) => { const [r, g, b] = parse(x); return 'rgba(' + r + ',' + g + ',' + b + ',' + a + ')'; };
-/* eslint-disable no-restricted-syntax -- 设计稿原值，测试基准 */
 export const REFERENCE_PRESETS: Record<string, ReferenceSeed & { name: string }> = {
-  graphite: { name: '石墨', mode: 'dark', hue: 260, tint: 0.006, base: 0.17, accent: '#3A6FDF' },
-  ocean: { name: '深海', mode: 'dark', hue: 245, tint: 0.024, base: 0.165, accent: '#3D86E8' },
-  film: { name: '胶片', mode: 'dark', hue: 70, tint: 0.013, base: 0.172, accent: '#D9822B' },
-  paper: { name: '纸白', mode: 'light', hue: 260, tint: 0.005, base: 0.975, accent: '#3A6FDF' }
+  graphite: { name: '石墨', mode: 'dark', hue: 260, tint: 0.006, base: 0.17, accent: THEME_SEED_ACCENT_HEX.blue },
+  ocean: { name: '深海', mode: 'dark', hue: 245, tint: 0.024, base: 0.165, accent: THEME_SEED_ACCENT_HEX.oceanBlue },
+  film: { name: '胶片', mode: 'dark', hue: 70, tint: 0.013, base: 0.172, accent: THEME_SEED_ACCENT_HEX.orange },
+  paper: { name: '纸白', mode: 'light', hue: 260, tint: 0.005, base: 0.975, accent: THEME_SEED_ACCENT_HEX.blue }
 };
-/* eslint-enable no-restricted-syntax */
 export const REFERENCE_CONTRAST_LEVELS = [0.8, 1, 1.35];
 export function referenceDerive(seed: ReferenceSeed): Record<string, string> {
   const s = Object.assign({ contrast: 1 }, seed);

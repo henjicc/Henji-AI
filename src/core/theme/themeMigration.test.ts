@@ -21,6 +21,7 @@ import {
   migrateV1ThemeSettings,
   normalizeV1Colors,
   parseThemePayload,
+  seedAccentFromV1,
   type ThemePayloadV1,
 } from './themeMigration'
 
@@ -67,6 +68,13 @@ describe('themeMigration v1 → v2', () => {
       const payload = migrateV1ThemeSettings({ themeColors: colors, accentColor: accent })
       expect(payload).toEqual({ version: 2, seed: { ...DEFAULT_THEME_SEED, accent: normalizeHex(accent) }, uiRadiusPreset: 'default' })
     }
+  })
+
+  it('旧默认强调色在拟合路径同样视为跟随预设，改过的强调色保留', () => {
+    const colors = customize(THEME_PALETTE_PRESET_HEX[3].colors)
+    expect(migrateV1Theme({ colors, accentColor: SETTINGS_ACCENT_HEX, uiRadiusPreset: 'default' }).payload.seed.accent).toBe(DEFAULT_THEME_SEED.accent)
+    expect(migrateV1Theme({ colors, accentColor: ACCENT_PRESET_HEX[5], uiRadiusPreset: 'default' }).payload.seed.accent).toBe(normalizeHex(ACCENT_PRESET_HEX[5]))
+    expect(seedAccentFromV1(null)).toBe(DEFAULT_THEME_SEED.accent)
   })
 
   it('真正自定义过 9 色才走拟合', () => {

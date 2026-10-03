@@ -8,16 +8,18 @@ describe('readDevelopmentLaunchOptions', () => {
       skipOnboarding: false,
       surfaceId: null,
       mediaPath: null,
+      themePresetId: null,
     })
   })
 
   it('读取开发启动页面和素材', () => {
     expect(readDevelopmentLaunchOptions(
-      '?henjiDevSkipOnboarding=1&henjiDevSurface=tool.image_edit&henjiDevMedia=%2Ftmp%2Ftest.jpg'
+      '?henjiDevSkipOnboarding=1&henjiDevSurface=tool.image_edit&henjiDevMedia=%2Ftmp%2Ftest.jpg&henjiDevThemePreset=paper'
     )).toEqual({
       skipOnboarding: true,
       surfaceId: 'tool.image_edit',
       mediaPath: '/tmp/test.jpg',
+      themePresetId: 'paper',
     })
   })
 })

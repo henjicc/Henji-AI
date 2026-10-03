@@ -46,12 +46,16 @@ function readOptionValue(argv, index, name) {
   return value
 }
 
+/** 与 src/core/theme/themeEngine.ts THEME_PRESET_IDS 一致；应用侧（--dev-theme-preset）同样校验。 */
+const UI_INSPECTION_THEME_PRESETS = ['graphite', 'ocean', 'film', 'paper']
+
 function parseUiInspectionArgs(argv, defaultOutDir) {
   const sizeValues = []
   const onlyValues = []
   let outDir = defaultOutDir
   let profile = 'temporary'
   let allowWrites = false
+  let themePreset = null
   let help = false
   let positionalOutUsed = false
 
@@ -101,6 +105,15 @@ function parseUiInspectionArgs(argv, defaultOutDir) {
       profile = 'real'
       continue
     }
+    if (token === '--theme-preset') {
+      themePreset = readOptionValue(argv, index, '--theme-preset')
+      index += 1
+      continue
+    }
+    if (token.startsWith('--theme-preset=')) {
+      themePreset = token.slice('--theme-preset='.length)
+      continue
+    }
     if (token === '--allow-writes') {
       allowWrites = true
       continue
@@ -120,7 +133,10 @@ function parseUiInspectionArgs(argv, defaultOutDir) {
   if (profile !== 'temporary' && profile !== 'real') {
     throw new Error('--profile 仅支持 temporary 或 real')
   }
-  return { allowWrites, help, only, outDir, profile, sizes }
+  if (themePreset !== null && !UI_INSPECTION_THEME_PRESETS.includes(themePreset)) {
+    throw new Error(`--theme-preset 仅支持 ${UI_INSPECTION_THEME_PRESETS.join('、')}`)
+  }
+  return { allowWrites, help, only, outDir, profile, sizes, themePreset }
 }
 
 function selectInspectionScenes(scenes, options) {
@@ -308,6 +324,7 @@ function resolveOutputDir(root, outDir) {
 
 module.exports = {
   DEFAULT_WINDOW_SIZES,
+  UI_INSPECTION_THEME_PRESETS,
   UI_INSPECTION_SCENES,
   filterScenes,
   formatWindowSize,

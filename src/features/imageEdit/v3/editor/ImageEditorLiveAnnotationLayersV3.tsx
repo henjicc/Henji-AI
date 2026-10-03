@@ -3,7 +3,8 @@ import { Group, Transformer } from 'react-konva'
 import Konva from 'konva'
 
 import type { MarkItem, MarkToolType } from '@/core/imageEdit/types'
-import { ANNOTATION_TRANSFORMER_HEX, WHITE_HEX } from '@/core/theme/colorTokens'
+import { WHITE_HEX } from '@/core/theme/colorTokens'
+import { useThemeTokens } from '@/hooks/useThemeTokens'
 import { stabilizeStraightArrowBounds } from '@/features/imageMark/domain/arrowGeometry'
 import { labelRefPoint } from '@/features/imageMark/domain/geometry'
 import {
@@ -86,6 +87,8 @@ export function ImageEditorLiveAnnotationLayersV3({
   onCommitItem,
   onOpenTextEditor,
 }: ImageEditorLiveAnnotationLayersV3Props): JSX.Element {
+  // 变换框颜色取主题 accent 令牌（选中指示，随强调色）
+  const { colors: themeColors } = useThemeTokens()
   const selectedArrow = selectedItem?.type === 'arrow' ? selectedItem : null
   const selectedIsLabel = Boolean(selectedItem && activeLabelId === selectedItem.id)
   const keepRatio = selectedIsLabel || selectedItem?.type === 'text' || selectedItem?.type === 'number'
@@ -166,8 +169,8 @@ export function ImageEditorLiveAnnotationLayersV3({
                     return next.width < 5 || next.height < 5 ? oldBox : next
                   }}
                   rotateEnabled={false}
-                  borderStroke={ANNOTATION_TRANSFORMER_HEX}
-                  anchorStroke={ANNOTATION_TRANSFORMER_HEX}
+                  borderStroke={themeColors.accent}
+                  anchorStroke={themeColors.accent}
                   anchorFill={WHITE_HEX}
                   anchorSize={IMAGE_EDITOR_ANNOTATION_ANCHOR_SIZE_PX}
                   ignoreStroke

@@ -39,6 +39,7 @@ function printHelp() {
   --out <目录>    输出目录，默认 .ui-tour
   --profile <模式> temporary（默认，隔离临时数据）或 real（复用真实工程、配置与密钥）
   --real-data     --profile real 的别名
+  --theme-preset <预设> 本次启动临时使用主题预设（graphite/ocean/film/paper），经开发启动参数传给应用，不写入设置
   --allow-writes  real 模式下允许运行会写业务数据的场景；不传则自动跳过
 `)
 }
@@ -55,6 +56,7 @@ function createIndex(rows, failures, metadata) {
     `- 截图数量：${rows.length}`,
     `- 失败数量：${failures.length}`,
     `- 数据模式：${metadata.profile === 'real' ? '真实用户数据' : '隔离临时数据'}`,
+    ...(metadata.themePreset ? [`- 主题预设：${metadata.themePreset}（开发启动参数，未写入设置）`] : []),
     `- 结构化日志：通过应用查询接口按场景起始时间截取`,
     '',
     '| 界面 | 场景 | 窗口尺寸 | 截图 |',
@@ -102,7 +104,10 @@ async function main() {
     mainEntry: MAIN_ENTRY,
     profile: options.profile,
     readOnly: !options.allowWrites,
-    extraArgs: scenes.length === 1 ? scenes[0].launchArgs ?? [] : [],
+    extraArgs: [
+      ...(scenes.length === 1 ? scenes[0].launchArgs ?? [] : []),
+      ...(options.themePreset ? [`--dev-theme-preset=${options.themePreset}`] : []),
+    ],
     extraEnv: {
       ...(scenes.length === 1 ? scenes[0].launchEnv ?? {} : {}),
       ...(scenes.length === 1 && scenes[0]?.forceGpuInitializationFailure === true
@@ -178,7 +183,7 @@ async function main() {
     await app.close()
   }
 
-  const metadata = { profile: options.profile, blocked: selection.blocked }
+  const metadata = { profile: options.profile, themePreset: options.themePreset, blocked: selection.blocked }
   fs.writeFileSync(path.join(outDir, 'evidence.json'), JSON.stringify({ metadata, scenes: evidence }, null, 2), 'utf8')
   const index = createIndex(rows, failures, metadata)
   const indexPath = path.join(outDir, 'index.md')

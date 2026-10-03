@@ -1,29 +1,41 @@
 <!DOCTYPE html>
-<html lang="zh-CN" class="dark">
+<html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" href="data:," />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>痕迹AI</title>
     <script>
-      // 防止主题闪烁
-      (function() {
-        const theme = localStorage.getItem('theme') || 'dark'
-        const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches
-        const applied = theme === 'auto' ? (systemDark ? 'dark' : 'light') : theme
-        document.documentElement.classList.add(applied)
+      // 首帧主题：在样式表加载前写回上次应用主题时缓存的 CSS 变量，避免非默认主题启动时闪一下深色。
+      // 键名与结构见 src/core/theme/themeFirstFrame.ts；themeStaticDefaults.test.ts 会执行本脚本校验。
+      (function () {
+        try {
+          var raw = localStorage.getItem('henji-theme-first-frame')
+          if (!raw) return
+          var frame = JSON.parse(raw)
+          if (!frame || frame.version !== 1 || !frame.vars || typeof frame.vars !== 'object') return
+          var root = document.documentElement
+          for (var name in frame.vars) {
+            var value = frame.vars[name]
+            if (name.indexOf('--') === 0 && typeof value === 'string') root.style.setProperty(name, value)
+          }
+          if (frame.colorScheme === 'dark' || frame.colorScheme === 'light') root.style.colorScheme = frame.colorScheme
+          if (frame.uiRadius === 'compact' || frame.uiRadius === 'large') root.setAttribute('data-ui-radius', frame.uiRadius)
+          if (frame.uiBlur === 'off') root.setAttribute('data-ui-blur', 'off')
+        } catch (error) {
+          // 缓存缺失或损坏时使用 index.css 的静态默认主题
+        }
       })()
     </script>
     <style>
-      /* 设置body背景色，避免白屏 */
+      /* 首帧底色 = 主题 window 令牌；样式表加载前取不到变量时回落到石墨推导值（与 APP_WINDOW_BACKGROUND_HEX 一致，有单测） */
       body {
-        background-color: #0a0b0d;
+        background-color: var(--window, #0E0F12);
         margin: 0;
         padding: 0;
       }
-      /* 确保根元素也有背景色 */
       #root {
-        background-color: #0a0b0d;
+        background-color: var(--window, #0E0F12);
         min-height: 100vh;
       }
     </style>

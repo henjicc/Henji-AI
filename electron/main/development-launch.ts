@@ -2,6 +2,7 @@ import { existsSync, statSync } from 'node:fs'
 import path from 'node:path'
 
 import { DEVELOPMENT_LAUNCH_QUERY_KEYS } from '../../src/core/development/developmentLaunchContract'
+import { THEME_PRESET_IDS } from '../../src/core/theme/themeEngine'
 
 export interface DevelopmentLaunchQuery {
   query: Record<string, string>
@@ -35,6 +36,16 @@ export function resolveDevelopmentLaunchQuery(
       query[DEVELOPMENT_LAUNCH_QUERY_KEYS.surface] = surfaceId
     } else {
       warnings.push('开发启动 Surface ID 无效，已忽略自动定位。')
+    }
+  }
+
+  // 本次启动临时使用的主题预设（不写入用户设置），供真实界面巡检按预设截图
+  const themePreset = readOption(argv, '--dev-theme-preset')
+  if (themePreset) {
+    if ((THEME_PRESET_IDS as readonly string[]).includes(themePreset)) {
+      query[DEVELOPMENT_LAUNCH_QUERY_KEYS.themePreset] = themePreset
+    } else {
+      warnings.push('开发启动主题预设无效，已忽略。')
     }
   }
 
