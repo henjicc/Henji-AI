@@ -6,7 +6,7 @@ import { execFileSync } from 'node:child_process'
 
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { ensureExecutableBinary, loadFfmpegPath, loadFfprobePath, unifiedFfmpegDirectory, unifiedMediaBinaryPath, type MediaBinaryContext } from './ffmpeg-loader'
+import { ensureExecutableBinary, ffmpegFilterComplexFileArgs, loadFfmpegPath, loadFfprobePath, unifiedFfmpegDirectory, unifiedMediaBinaryPath, type MediaBinaryContext } from './ffmpeg-loader'
 
 const pointer = JSON.stringify({ version: 'n9.0.2-17-g2a571b6068', binDir: 'ffmpeg-n9.0.2-17-g2a571b6068-win64-gpl-shared-9.0/bin' })
 const base: MediaBinaryContext = {
@@ -41,6 +41,26 @@ describe('统一 FFmpeg 定位（重要记录 014）', () => {
     expect(() => unifiedFfmpegDirectory({ ...base, readText: () => '{' })).toThrow(/定位指针无效/)
     expect(() => unifiedFfmpegDirectory({ ...base, readText: () => JSON.stringify({ binDir: '../../evil/bin' }) })).toThrow(/定位指针无效/)
     expect(() => unifiedFfmpegDirectory({ ...base, readText: () => JSON.stringify({ binDir: 'C:/evil/bin' }) })).toThrow(/定位指针无效/)
+  })
+})
+
+describe('从文件读取滤镜图的参数按二进制自身能力选择（任务 3.7）', () => {
+  const modernHelp = '-filter_complex <graph_description>  create a complex filtergraph\n-filter_complex_threads  number of threads for -filter_complex\n'
+  const legacyHelp = '-filter_complex graph_description  create a complex filtergraph\n-filter_complex_script filename  read complex filtergraph description from a file\n'
+
+  it('FFmpeg 8 起没有 -filter_complex_script，改用 -/filter_complex；6.1 仍用旧写法', async () => {
+    await expect(ffmpegFilterComplexFileArgs('modern-ffmpeg', 'g.txt', async () => modernHelp)).resolves.toEqual(['-/filter_complex', 'g.txt'])
+    await expect(ffmpegFilterComplexFileArgs('legacy-ffmpeg', 'g.txt', async () => legacyHelp)).resolves.toEqual(['-filter_complex_script', 'g.txt'])
+  })
+
+  it('同一二进制只查一次选项列表；查询失败不缓存', async () => {
+    let calls = 0
+    const help = async () => { calls += 1; return modernHelp }
+    await ffmpegFilterComplexFileArgs('cached-ffmpeg', 'a.txt', help)
+    await ffmpegFilterComplexFileArgs('cached-ffmpeg', 'b.txt', help)
+    expect(calls).toBe(1)
+    await expect(ffmpegFilterComplexFileArgs('flaky-ffmpeg', 'a.txt', async () => { throw new Error('spawn EBUSY') })).rejects.toThrow('spawn EBUSY')
+    await expect(ffmpegFilterComplexFileArgs('flaky-ffmpeg', 'a.txt', async () => legacyHelp)).resolves.toEqual(['-filter_complex_script', 'a.txt'])
   })
 })
 

@@ -2,7 +2,7 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
 const test = require('node:test')
-const { GPU_TEST_FILES, IMAGE_EXPORT_TEST_FILES, NATIVE_TEST_FILES, FORK_POOL_TEST_FILES, FORK_POOL_MATCH_GLOBS, ALL_TEST_PATTERNS, testSuiteOptions, testSuiteForFile } = require('./testSuites.cjs')
+const { GPU_TEST_FILES, IMAGE_EXPORT_TEST_FILES, NATIVE_TEST_FILES, FFMPEG_CLI_TEST_FILES, FORK_POOL_TEST_FILES, FORK_POOL_MATCH_GLOBS, ALL_TEST_PATTERNS, testSuiteOptions, testSuiteForFile } = require('./testSuites.cjs')
 
 const root = path.resolve(__dirname, '../..')
 const read = (file) => fs.readFileSync(path.join(root, file), 'utf8')
@@ -29,9 +29,9 @@ function testFiles(directory) {
   })
 }
 
-test('普通/真实 GPU/大图/原生 SQLite 互斥且覆盖完整清单，默认 test 仍是全量', () => {
+test('普通/真实 GPU/大图/原生 SQLite/FFmpeg CLI 互斥且覆盖完整清单，默认 test 仍是全量', () => {
   const files = ['src', 'electron', 'packages'].flatMap(testFiles)
-  const special = [...GPU_TEST_FILES, ...IMAGE_EXPORT_TEST_FILES, ...NATIVE_TEST_FILES]
+  const special = [...GPU_TEST_FILES, ...IMAGE_EXPORT_TEST_FILES, ...NATIVE_TEST_FILES, ...FFMPEG_CLI_TEST_FILES]
   assert.equal(new Set(special).size, special.length, '专项测试不能重复归类')
   for (const file of special) assert.ok(files.includes(file), `专项文件不存在：${file}`)
   assert.deepEqual(testSuiteOptions('unit'), { include: ALL_TEST_PATTERNS, exclude: special, poolMatchGlobs: FORK_POOL_MATCH_GLOBS })
@@ -39,7 +39,7 @@ test('普通/真实 GPU/大图/原生 SQLite 互斥且覆盖完整清单，默�
   assert.deepEqual(testSuiteOptions('test'), { include: ALL_TEST_PATTERNS, poolMatchGlobs: FORK_POOL_MATCH_GLOBS })
   assert.equal(scripts.test, 'vitest run')
   for (const file of files) {
-    const matching = ['unit', 'gpu', 'image-export', 'native'].filter((suite) => {
+    const matching = ['unit', 'gpu', 'image-export', 'native', 'ffmpeg-cli'].filter((suite) => {
       const options = testSuiteOptions(suite)
       return suite === 'unit' ? !options.exclude.includes(file) : options.include.includes(file)
     })
@@ -74,7 +74,7 @@ test('真实 vgpu/node 测试不能漏进普通单测，新增原生测试必须
 })
 
 test('CI 对每层执行明确命令，初始化失败不能自动跳过，发布依赖全部门禁', () => {
-  for (const mode of ['unit', 'gpu', 'image-export']) {
+  for (const mode of ['unit', 'gpu', 'image-export', 'ffmpeg-cli']) {
     assert.equal(scripts[`test:${mode}`], `vitest run --mode ${mode}`)
     assert.ok(workflow.includes(`run: npm run test:${mode}`), `${mode} 未接入 CI`)
   }
@@ -111,4 +111,7 @@ test('CI 对每层执行明确命令，初始化失败不能自动跳过，发�
   const steps = ['node scripts/video-decoder-ffmpeg.cjs ensure', 'node scripts/video-decoder-ffmpeg.cjs test --locked', 'node scripts/video-decoder-ffmpeg.cjs build']
   for (const step of steps) assert.ok(decoderJob.includes(step), `video-decoder-tests 缺少：${step}`)
   assert.ok(steps.every((step, index) => index === 0 || decoderJob.indexOf(steps[index - 1]) < decoderJob.indexOf(step)), '必须先获取校验 FFmpeg，再测试与构建')
+  // FFmpeg CLI 兼容层只在已获取固定版本 FFmpeg 的 Windows job 跑，必须排在 ensure 之后。
+  assert.ok(decoderJob.indexOf('npm run test:ffmpeg-cli') > decoderJob.indexOf(steps[0]), 'test:ffmpeg-cli 必须在获取校验 FFmpeg 之后执行')
+  assert.ok(decoderJob.indexOf('run: npm ci') > 0 && decoderJob.indexOf('run: npm ci') < decoderJob.indexOf('npm run test:ffmpeg-cli'), 'test:ffmpeg-cli 前需要安装依赖')
 })

@@ -157,6 +157,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
       - name: 安装 Rust 工具链
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -167,6 +168,11 @@ jobs:
           workspaces: native/video-decoder -> target
       - name: 获取并校验 FFmpeg（BtbN 固定版本 + SHA256）
         run: node scripts/video-decoder-ffmpeg.cjs ensure
+      # FFmpeg CLI 兼容层（任务 3.7）：用刚校验的随包 ffmpeg.exe 与 ffmpeg-ffprobe-static 6.1.2 核对全仓参数并实跑导出。
+      - name: 安装依赖（FFmpeg CLI 兼容层）
+        run: npm ci
+      - name: FFmpeg CLI 兼容层（9.0 随包 + 6.1.2 非 Windows 分发）
+        run: npm run test:ffmpeg-cli
       - name: 原生服务测试（cargo test）
         run: node scripts/video-decoder-ffmpeg.cjs test --locked
       - name: 原生服务 release 构建与随包文件

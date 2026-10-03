@@ -302,9 +302,9 @@ wc -l src/App.tsx
 
 ## 七、CI 全量兜底
 
-`.github/workflows/build.yml` 每次 push / PR 分五层必跑：代码检查 job 执行生成器、静态规则、渲染层/主进程 lint 与类型检查、`test:suites` 分层完整性门禁及 `test:unit`；WebGPU job 安装官方软件 Vulkan adapter、通过 `vgpu doctor` 真渲染后执行 `test:gpu`（含 HDR probe）；大图导出 job 独占 worker 执行 `test:image-export`；原生 SQLite job 在独立依赖目录中执行 `electron:rebuild`，再用 `test:assistant-persistence` 运行唯一原生清单（历史命令名，现在包含助手与工程持久化）；原生视频解码 job 在 Windows runner 用 `scripts/video-decoder-ffmpeg.cjs` 获取并校验固定 FFmpeg，执行 cargo test 与 release 构建（无硬件显卡，依赖真实 D3D11 设备的用例按设计跳过，不代表像素与性能验收）。前四套测试互斥并覆盖完整 Vitest 清单；`npm test` / `npx vitest run` 保留本地全量入口，但普通 Node 中的 Electron 条件跳过不代表原生验证通过。
+`.github/workflows/build.yml` 每次 push / PR 分五层必跑：代码检查 job 执行生成器、静态规则、渲染层/主进程 lint 与类型检查、`test:suites` 分层完整性门禁及 `test:unit`；WebGPU job 安装官方软件 Vulkan adapter、通过 `vgpu doctor` 真渲染后执行 `test:gpu`（含 HDR probe）；大图导出 job 独占 worker 执行 `test:image-export`；原生 SQLite job 在独立依赖目录中执行 `electron:rebuild`，再用 `test:assistant-persistence` 运行唯一原生清单（历史命令名，现在包含助手与工程持久化）；原生视频解码 job 在 Windows runner 用 `scripts/video-decoder-ffmpeg.cjs` 获取并校验固定 FFmpeg，执行 `test:ffmpeg-cli`（用随包 FFmpeg 9 与 ffmpeg-ffprobe-static 6.1.2 核对全仓 FFmpeg 参数并实跑导出）、cargo test 与 release 构建（无硬件显卡，依赖真实 D3D11 设备的用例按设计跳过，不代表像素与性能验收）。unit、gpu、image-export、原生 SQLite 与 ffmpeg-cli 五个 Vitest 层互斥并覆盖完整清单；`npm test` / `npx vitest run` 保留本地全量入口，但普通 Node 中的 Electron 条件跳过不代表原生验证通过。
 
-原生清单维护在 `scripts/lib/testSuites.cjs`，新增 Electron 条件测试必须登记。验收器要求所有声明文件实际执行、每文件至少一项、零跳过/待办/失败，并核对报告统计与子进程正常退出；不能只看 `success:true` 或报告文件存在。显式基准开关与平台专属测试不冒充原生清单。缺失设备、ABI 错配或专项失败均不能降级成成功。
+原生清单维护在 `scripts/lib/testSuites.cjs`，新增 Electron 条件测试必须登记；依赖真实 FFmpeg CLI 的测试登记到同文件的 `FFMPEG_CLI_TEST_FILES`。验收器要求所有声明文件实际执行、每文件至少一项、零跳过/待办/失败，并核对报告统计与子进程正常退出；不能只看 `success:true` 或报告文件存在。显式基准开关与平台专属测试不冒充原生清单。缺失设备、ABI 错配或专项失败均不能降级成成功。
 
 稳定的「质量门禁」聚合检查只在五层全部成功时通过，安装包构建依赖该门禁。软件 WebGPU 的像素正确性不代表真实 Electron 的交互流畅度；后者仍由匹配场景的 Reality / 性能专项证明。CI 全量覆盖与本地最小验证分工不同，不应互相替代。
 

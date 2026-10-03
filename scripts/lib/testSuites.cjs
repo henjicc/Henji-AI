@@ -26,6 +26,11 @@ const NATIVE_TEST_FILES = [
   'electron/main/services/storyboard-projects.storage.test.ts',
   'src/stores/projectPersistenceQueue.storage.test.ts',
 ]
+// 真实 FFmpeg CLI 兼容层（任务 3.7）：用已就绪的随包 ffmpeg/ffprobe 实跑与核对全仓参数，不进普通单测。
+// CI 在已获取固定版本 FFmpeg 的 Windows job 执行（同时覆盖 9.0 随包与 ffmpeg-ffprobe-static 6.1.2）。
+const FFMPEG_CLI_TEST_FILES = [
+  'electron/main/services/video/ffmpeg-cli-compat.ffmpeg.test.ts',
+]
 // 这两个文件在用例内起真实本机 HTTP 服务，并让 SSE 连接被客户端中止。放在默认 threads 池里，
 // worker 线程会带着尚未释放的 socket 句柄被池收尾终止，Windows 上稳定以 0xC0000005 段错误结束
 // 整个进程：全部用例都已通过，崩在池收尾之后，所以它不是断言失败，而是门禁本身不可信。
@@ -41,17 +46,19 @@ function testSuiteForFile(file) {
   if (GPU_TEST_FILES.includes(file)) return 'gpu'
   if (IMAGE_EXPORT_TEST_FILES.includes(file)) return 'image-export'
   if (NATIVE_TEST_FILES.includes(file)) return 'native'
+  if (FFMPEG_CLI_TEST_FILES.includes(file)) return 'ffmpeg-cli'
   return 'unit'
 }
 
 function testSuiteOptions(mode, defaultExcludes = []) {
-  if (mode === 'unit') return { include: ALL_TEST_PATTERNS, exclude: [...defaultExcludes, ...GPU_TEST_FILES, ...IMAGE_EXPORT_TEST_FILES, ...NATIVE_TEST_FILES], poolMatchGlobs: FORK_POOL_MATCH_GLOBS }
+  if (mode === 'unit') return { include: ALL_TEST_PATTERNS, exclude: [...defaultExcludes, ...GPU_TEST_FILES, ...IMAGE_EXPORT_TEST_FILES, ...NATIVE_TEST_FILES, ...FFMPEG_CLI_TEST_FILES], poolMatchGlobs: FORK_POOL_MATCH_GLOBS }
   // 原生 Dawn 不在多线程中并发初始化；重图测试独占 worker，避免全量单测争抢 CPU/内存。
   if (mode === 'gpu' || mode === 'image-export' || mode === 'native') return {
     include: mode === 'gpu' ? GPU_TEST_FILES : mode === 'native' ? NATIVE_TEST_FILES : IMAGE_EXPORT_TEST_FILES,
     pool: 'forks', minWorkers: 1, maxWorkers: 1, fileParallelism: false,
   }
+  if (mode === 'ffmpeg-cli') return { include: FFMPEG_CLI_TEST_FILES }
   return { include: ALL_TEST_PATTERNS, poolMatchGlobs: FORK_POOL_MATCH_GLOBS }
 }
 
-module.exports = { GPU_TEST_FILES, IMAGE_EXPORT_TEST_FILES, NATIVE_TEST_FILES, FORK_POOL_TEST_FILES, FORK_POOL_MATCH_GLOBS, ALL_TEST_PATTERNS, testSuiteForFile, testSuiteOptions }
+module.exports = { GPU_TEST_FILES, IMAGE_EXPORT_TEST_FILES, NATIVE_TEST_FILES, FFMPEG_CLI_TEST_FILES, FORK_POOL_TEST_FILES, FORK_POOL_MATCH_GLOBS, ALL_TEST_PATTERNS, testSuiteForFile, testSuiteOptions }

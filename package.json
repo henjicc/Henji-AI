@@ -45,6 +45,7 @@
     "test:unit": "vitest run --mode unit",
     "test:gpu": "vitest run --mode gpu",
     "test:image-export": "vitest run --mode image-export",
+    "test:ffmpeg-cli": "vitest run --mode ffmpeg-cli",
     "test:suites": "node --test scripts/lib/testSuites.test.cjs",
     "verify:changed": "node scripts/run-changed-verification.cjs",
     "test:ui-inspection": "node --test scripts/lib/uiInspection.test.cjs scripts/lib/runtimeEvidence.test.cjs scripts/lib/realityTestPlan.test.cjs scripts/lib/canvasVisualDiff.test.cjs",

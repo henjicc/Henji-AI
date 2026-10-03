@@ -1,5 +1,6 @@
 import path from 'node:path'
 import fs from 'node:fs/promises'
+import { execFile } from 'node:child_process'
 import { constants as fsConstants, readFileSync } from 'node:fs'
 
 /**
@@ -136,4 +137,32 @@ export function loadFfprobePath(): Promise<string> {
     })
   }
   return ffprobePathPromise
+}
+
+const legacyFilterScriptSupport = new Map<string, Promise<boolean>>()
+
+function readFfmpegOptionHelp(binary: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    execFile(binary, ['-hide_banner', '-h', 'long'], { windowsHide: true, timeout: 15_000, maxBuffer: 4 * 1024 * 1024 }, (error, stdout) => {
+      if (error) reject(new Error(`无法读取 FFmpeg 选项列表：${error.message}`))
+      else resolve(stdout)
+    })
+  })
+}
+
+/**
+ * 从文件读取复杂滤镜图的参数（任务 3.7）。滤镜图可能远超 Windows 32K 命令行上限，必须走文件。
+ *
+ * FFmpeg 7.0 起用通用的 `-/filter_complex <文件>`，8.0 删除了 `-filter_complex_script`；Windows 随包的是 9.0，
+ * 非 Windows 仍是 ffmpeg-ffprobe-static 6.1.2，只认旧写法。按二进制自己的选项列表判定（每个路径只查一次），
+ * 不按平台或版本号猜。
+ */
+export async function ffmpegFilterComplexFileArgs(binary: string, scriptPath: string, readHelp: (binary: string) => Promise<string> = readFfmpegOptionHelp): Promise<string[]> {
+  let legacy = legacyFilterScriptSupport.get(binary)
+  if (!legacy) {
+    legacy = readHelp(binary).then((help) => /^-filter_complex_script\b/m.test(help))
+    legacyFilterScriptSupport.set(binary, legacy)
+    legacy.catch(() => legacyFilterScriptSupport.delete(binary))
+  }
+  return await legacy ? ['-filter_complex_script', scriptPath] : ['-/filter_complex', scriptPath]
 }
