@@ -79,6 +79,7 @@ npm run test:reality -- --suite integration
 - 禁止在参数面板中提供图片、视频、音频、PDF 等媒体/文件 URL 的手动输入框；即使供应商字段名是 `*_url`，也必须呈现为上传按钮或对应上传组件，由主进程调用当前供应商的官方文件上传服务并自动回填请求 URL
 - 禁止把内部实现状态直接展示在正式界面，包括但不限于 `revision`、schema/协议版本、请求/任务/资源 ID、哈希、缓存/Worker/渲染管线状态、调试计数与风险分级。可观察性进入日志、诊断页或开发模式；正式界面只呈现用户当前需要据此行动、决策、理解结果或恢复失败的信息，并使用用户任务语言表达
 - 禁止在 `src/components/ui/primitives.tsx` 以外的地方写原生 `<button>/<input>/<select>/<textarea>`
+- 禁止用 emoji（及 ✓ ✗ 等当图标用的符号字符）作图标或状态标记：正式界面（含日志窗口）的图标只能用 `lucide-react` 图标库，确属图形的才用 SVG；emoji 只允许出现在开发者控制台输出
 - 禁止硬编码颜色（`#hex` / `rgba(数字…)` / `*-zinc-*`），只能改 `src/index.css`、`tailwind.config.js`、`src/components/ui/styleTokens.ts`
 - 禁止新增裸 `any`（存量可留，增量为零）
 - 禁止同功能多份实现（上传、拖拽排序、提示词编辑、状态块、弹窗都有唯一入口）
