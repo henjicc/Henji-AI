@@ -14,6 +14,7 @@ import { VIDEO_EDIT_ITEM_DRAG_MIME } from '../application/videoEditDrop'
 import { VideoEditTimeline } from '../VideoEditTimeline'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { TIMELINE_HEADER_WIDTH as header, timelineInitialScrollTop, timelineTrackRows } from './timelineGeometry'
+import { resetFilmstripFramesForTests } from '@/services/videoFilmstrip/filmstripFrameService'
 
 vi.mock('@/hooks/useI18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }))
 const source = 'export default {apiVersion:1,name:"代码",kind:"generator",mode:"dynamic",width:64,height:64,durationSeconds:30,seed:1,parameters:{},render(ctx){return [rect({x:0,y:0,width:10,height:10,fill:[1,0,0,1]})];}}'
@@ -66,7 +67,7 @@ beforeEach(async () => {
   ids = current().clips.map(clip => clip.id)
   setVideoEditTimelineView(owner.document.id, { selectedClipIds: [], snapping: false })
 })
-afterEach(async () => { cleanup(); for (const instance of listVideoEditInstances()) await closeVideoEditProject(instance.document.id); vi.restoreAllMocks(); vi.unstubAllGlobals(); uninstallHarnessNativeStorage() })
+afterEach(async () => { cleanup(); for (const instance of listVideoEditInstances()) await closeVideoEditProject(instance.document.id); vi.restoreAllMocks(); vi.unstubAllGlobals(); uninstallHarnessNativeStorage(); resetFilmstripFramesForTests() })
 
 it('普通视频与代码多选，连续拖动仅本地预览，释放一次历史且一次撤销', () => {
   const view = render(<View />); const host = view.getByRole('region', { name: '时间线编辑区域' })
@@ -547,4 +548,54 @@ it('声道映射片段按每个片段声道各画一条波形并按声音流与�
   expect((view.getByLabelText('右源声道') as HTMLSelectElement).value).toBe('1:0')
   expect(view.queryByLabelText('音频声道预设')).toBeNull()
   expect(onError).not.toHaveBeenCalled()
+})
+
+it('视频片段显示缩略图条：首格取入点画面，只铺可见范围，滚动换批后复用已取的帧；代码片段不取帧（2.4）', async () => {
+  const requests: Array<{ timeUs: number; height: number }> = []
+  vi.spyOn(getPlatform().video, 'getFilmstripFrame').mockImplementation(async ({ source, timeUs, height }) => {
+    requests.push({ timeUs, height })
+    return { path: `${source}.${timeUs}.${height}.webp` }
+  })
+  editVideoProject(owner.document.id, document => {
+    const sequence = document.sequences[0]
+    // A twenty-minute clip whose in point is 2.5s into the source; far wider than the viewport.
+    sequence.clips = sequence.clips.map((clip, index) => index === 0 ? { ...clip, duration: 30 * 1200, sourceInUs: 2_500_000 } : { ...clip, start: 30 * 1200 + 10 })
+    document.media[0].durationSeconds = 4000
+    return document
+  })
+  const view = render(<View />); const host = view.getByRole('region', { name: '时间线编辑区域' })
+  const strip = (): HTMLElement => view.container.querySelector<HTMLElement>(`[data-video-edit-filmstrip="${ids[0]}"]`)!
+  await waitFor(() => expect(Number(strip().getAttribute('data-filmstrip-ready'))).toBe(Number(strip().getAttribute('data-filmstrip-tiles'))))
+  const tiles = Number(strip().getAttribute('data-filmstrip-tiles'))
+  // Only the visible span (≈ 692px at a 26px-tall square tile) plus one tile each side, not the whole clip.
+  expect(tiles).toBeGreaterThan(20); expect(tiles).toBeLessThan(40)
+  expect(requests[0]).toEqual({ timeUs: 2_500_000, height: 32 })
+  expect(strip().querySelectorAll('img')).toHaveLength(tiles)
+  expect(view.container.querySelector(`[data-video-edit-filmstrip="${ids[1]}"]`)).toBeNull()
+  const firstBatch = requests.length
+  host.scrollLeft = 300; fireEvent.scroll(host)
+  await waitFor(() => expect(requests.length).toBeGreaterThan(firstBatch))
+  // Tiles already fetched are not requested again; the new batch only adds the newly visible ones.
+  expect(new Set(requests.map(request => request.timeUs)).size).toBe(requests.length)
+  expect(requests.length - firstBatch).toBeLessThan(16)
+  expect(onError).not.toHaveBeenCalled()
+})
+
+it('轨道头全部为图标开关并显示 V/A 编号，独奏不再是文字“S”，目标轨道整行高亮（2.4）', () => {
+  const view = render(<View />)
+  const video = current().tracks.find(track => track.index === 1)!
+  const header = view.container.querySelector<HTMLElement>(`[data-video-edit-track-header="${video.id}"]`)!
+  expect(header.querySelector('[data-video-edit-track-code]')!.textContent).toBe('V1')
+  expect(view.container.querySelector(`[data-video-edit-track-header="${current().tracks.find(track => track.kind === 'audio')!.id}"] [data-video-edit-track-code]`)!.textContent).toBe('A1')
+  for (const label of ['设为目标', '同步锁定', '输出', '锁定', '静音', '独奏']) {
+    const toggle = view.getByRole('button', { name: `${video.name}${label}` })
+    expect(toggle.querySelector('svg')).not.toBeNull(); expect(toggle.textContent).toBe('')
+  }
+  // Picture tracks lead with show/lock, sound tracks with mute/solo/lock.
+  const order = (id: string): string[] => [...view.container.querySelectorAll(`[data-video-edit-track-header="${id}"] button`)].map(button => button.getAttribute('aria-label')!.replace(/^.*?(设为目标|同步锁定|输出|锁定|静音|独奏)$/, '$1')).slice(1)
+  expect(order(video.id)).toEqual(['设为目标', '同步锁定', '输出', '锁定', '静音', '独奏'])
+  expect(order(current().tracks.find(track => track.kind === 'audio')!.id)).toEqual(['设为目标', '同步锁定', '静音', '独奏', '锁定', '输出'])
+  expect(view.getByRole('button', { name: `${video.name}输出` }).getAttribute('aria-pressed')).toBe('true')
+  fireEvent.click(view.getByRole('button', { name: `${video.name}设为目标` }))
+  expect(header.className.includes('bg-raised')).toBe(owner.targetTrackIds.includes(video.id))
 })

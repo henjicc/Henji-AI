@@ -10,7 +10,8 @@ import { loadFfmpegPath, loadFfprobePath } from '../video/ffmpeg-loader'
 import { createMainLogger } from '../logging'
 import { AudioWaveformQueue } from './queue'
 import { AudioWaveformWorker } from './worker-client'
-import { createWaveformDiskCache, type WaveformDiskCache } from './waveform-cache'
+import { createContentDiskCache, type ContentDiskCache } from '../media/content-disk-cache'
+import { identifyMediaContent, type MediaContentIdentity } from '../media/content-identity'
 import {
   WAVEFORM_DETAIL_MAX_FRAMES, WAVEFORM_PYRAMID_BASE_SAMPLES_PER_BUCKET, WAVEFORM_PYRAMID_FORMAT_VERSION, WAVEFORM_PYRAMID_LEVEL_FACTOR, WAVEFORM_PYRAMID_TOP_BUCKETS,
   aggregateWaveformLevel, audioWaveformSampleIndex, decodeWaveformPyramid, encodeWaveformPyramid, selectWaveformLevel, waveformPyramidByteSize, waveformPyramidPeakMax,
@@ -37,7 +38,7 @@ interface AudioMetadata {
   /** Absolute media end, the same measure as the imported media duration. */
   endSeconds: number
 }
-interface SourceIdentity { path: string; identity: string }
+type SourceIdentity = MediaContentIdentity
 interface AggregationWorker {
   start(options: AudioWaveformWorkerOptions): Promise<void>
   push(bytes: Uint8Array): Promise<void>
@@ -53,7 +54,7 @@ export interface AudioWaveformServiceDependencies {
   createWorker?: () => AggregationWorker
   cacheBudgetBytes?: number
   /** Disk cache of whole-source pyramids; `null` disables it. Default: userData/HenjiCache/Waveforms. */
-  diskCache?: WaveformDiskCache | null
+  diskCache?: ContentDiskCache | null
   pyramidMemoryBytes?: number
 }
 
@@ -63,13 +64,6 @@ type FileLayout = 'native' | 'mix1' | 'mix2' | `ch${number}`
 interface PyramidJobResult { readonly shared: true; data: WaveformPyramidData; layout: FileLayout }
 interface LoadedPyramid { data: WaveformPyramidData; channels: number[]; version: string }
 
-async function identifySource(source: string): Promise<SourceIdentity> {
-  const canonical = await fs.realpath(source)
-  const stat = await fs.stat(canonical, { bigint: true })
-  if (!stat.isFile()) throw new Error('波形来源必须为可读取的媒体文件。')
-  const identity = createHash('sha256').update([canonical, stat.dev, stat.ino, stat.size, stat.mtimeNs, stat.ctimeNs].join('|')).digest('hex')
-  return { path: canonical, identity }
-}
 
 const isRemote = (source: string): boolean => source.startsWith('http://') || source.startsWith('https://')
 const digest = (parts: unknown[]): string => createHash('sha256').update(JSON.stringify(parts)).digest('hex')
@@ -221,10 +215,10 @@ export function createAudioWaveformService(dependencies: AudioWaveformServiceDep
 } {
   const queue = new AudioWaveformQueue(dependencies.cacheBudgetBytes)
   const resolvePath = dependencies.resolvePath ?? resolveLocalMediaPath
-  const identity = dependencies.identity ?? identifySource
+  const identity = dependencies.identity ?? identifyMediaContent
   const createWorker = dependencies.createWorker ?? (() => new AudioWaveformWorker())
   const disk = dependencies.diskCache === undefined
-    ? createWaveformDiskCache({ directory: () => app?.getPath ? path.join(app.getPath('userData'), 'HenjiCache', 'Waveforms') : undefined, onError: (event, error) => logger.error('波形磁盘缓存失败', { event: `audio.waveform.cache.${event}_failed`, error }) })
+    ? createContentDiskCache({ extension: '.hwpk', directory: () => app?.getPath ? path.join(app.getPath('userData'), 'HenjiCache', 'Waveforms') : undefined, onError: (event, error) => logger.error('波形磁盘缓存失败', { event: `audio.waveform.cache.${event}_failed`, error }) })
     : dependencies.diskCache
   const memoryBudget = dependencies.pyramidMemoryBytes ?? 128 * 1024 * 1024
   const memory = new Map<string, { data: WaveformPyramidData; bytes: number }>()

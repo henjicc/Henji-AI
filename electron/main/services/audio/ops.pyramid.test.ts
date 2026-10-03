@@ -5,7 +5,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AudioWaveformAggregator, AudioWaveformPyramidBuilder } from './waveform-worker'
-import { createWaveformDiskCache } from './waveform-cache'
+import { createContentDiskCache } from '../media/content-disk-cache'
 import type { AudioWaveformChannel, AudioWaveformPyramidOutput, AudioWaveformPyramidResult, AudioWaveformWorkerOptions } from './types'
 
 const mocks = vi.hoisted(() => ({ spawn: vi.fn() }))
@@ -48,7 +48,7 @@ function probeWith(streams: Array<Record<string, unknown>>, duration = '0.01'): 
 function finish(index: number, values: number[]): void { children[index].process.stdout.end(samples(values)); children[index].process.emit('close', 0) }
 async function cacheDirectory(): Promise<string> { return fs.mkdtemp(path.join(os.tmpdir(), 'henji-waveform-cache-')) }
 function cachedService(directory: string | null, identity = async (source: string) => ({ path: source, identity: 'file-v1' })): ReturnType<typeof createAudioWaveformService> {
-  return createAudioWaveformService({ ffmpegPath: async () => 'mpeg', ffprobePath: async () => 'probe', identity, createWorker: worker, diskCache: directory ? createWaveformDiskCache({ directory: () => directory }) : null })
+  return createAudioWaveformService({ ffmpegPath: async () => 'mpeg', ffprobePath: async () => 'probe', identity, createWorker: worker, diskCache: directory ? createContentDiskCache({ directory: () => directory, extension: '.hwpk' }) : null })
 }
 beforeEach(() => { vi.resetAllMocks(); children = [] })
 

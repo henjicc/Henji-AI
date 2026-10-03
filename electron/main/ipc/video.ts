@@ -25,8 +25,10 @@ import { clearLegacyVideoPreviewCache } from '../services/video/preview-cache'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { ensureAssetThumbnail } from '../services/asset-library/thumbnailService'
-import { allowMediaRoot } from '../protocol'
+import { allowMediaRoot, isPathWithinAllowedMediaRoots } from '../protocol'
 import { normalizeLocalSource } from '../services/image/source'
+import { filmstripService } from '../services/video/filmstrip'
+import { FILMSTRIP_MAX_TIME_US, isFilmstripHeight, type FilmstripHeight } from '../../../src/core/media/filmstripFrames'
 
 const thumbnailRequests = new Map<number, Map<string, AbortController>>()
 
@@ -56,7 +58,7 @@ export function registerVideoIpc(): void {
   registerIpcHandler<ThumbnailBytesPayload, { bytes: Uint8Array; cachePath?: string }>(
     'video:generateThumbnailBytes',
     parseThumbnailBytesPayload,
-    async ({ source, maxSize, cache, requestId }, event) => {
+    async ({ source, maxSize, cache, frame, requestId }, event) => {
       let requests = thumbnailRequests.get(event.sender.id)
       if (!requests) {
         requests = new Map(); thumbnailRequests.set(event.sender.id, requests)
@@ -71,6 +73,12 @@ export function registerVideoIpc(): void {
       const key = requestId ?? crypto.randomUUID()
       const controller = new AbortController(); requests.set(key, controller)
       try {
+        if (frame) {
+          // 片段缩略图条（任务 2.4）：按时间点与高度取一帧，结果缓存在磁盘，渲染层按路径显示。
+          const cachePath = await filmstripService().frame({ source: await authorizedVideoPath(source), timeUs: frame.timeUs, height: frame.height }, controller.signal)
+          allowMediaRoot(path.dirname(cachePath))
+          return { bytes: new Uint8Array(), cachePath }
+        }
         if (cache) {
           const filePath = normalizeLocalSource(source)
           const info = await fs.stat(filePath)
@@ -154,7 +162,26 @@ interface ThumbnailBytesPayload {
   source: string
   maxSize?: number
   cache?: boolean
+  /** 片段缩略图条：素材绝对时钟上的时间点（微秒）与取帧高度档。 */
+  frame?: { timeUs: number; height: FilmstripHeight }
   requestId?: string
+}
+
+async function authorizedVideoPath(source: string): Promise<string> {
+  const normalized = normalizeLocalSource(source)
+  if (!path.isAbsolute(normalized) || !isPathWithinAllowedMediaRoots(normalized)) throw new Error('视频素材尚未获得读取权限，请从素材库导入。')
+  const canonical = await fs.realpath(normalized)
+  if (!isPathWithinAllowedMediaRoots(canonical)) throw new Error('视频素材的实际路径不在已授权目录内。')
+  return canonical
+}
+
+function parseThumbnailFrame(value: unknown): ThumbnailBytesPayload['frame'] {
+  const record = parseRecord(value)
+  const { timeUs, height } = record
+  if (typeof timeUs !== 'number' || !Number.isSafeInteger(timeUs) || timeUs < 0 || timeUs > FILMSTRIP_MAX_TIME_US) throw new Error('无效的缩略帧时间。')
+  if (!isFilmstripHeight(height)) throw new Error('无效的缩略帧高度。')
+  if (Object.keys(record).some(key => key !== 'timeUs' && key !== 'height')) throw new Error('缩略帧请求含未知字段。')
+  return { timeUs, height }
 }
 
 function parseThumbnailBytesPayload(input: unknown): ThumbnailBytesPayload {
@@ -163,10 +190,12 @@ function parseThumbnailBytesPayload(input: unknown): ThumbnailBytesPayload {
   if (record.requestId !== undefined && (typeof record.requestId !== 'string' || !record.requestId.length || record.requestId.length > 100)) throw new Error('Expected bounded string field "requestId"')
   const maxSize = readOptionalNumber(record, 'maxSize')
   if (maxSize !== undefined && (!Number.isSafeInteger(maxSize) || maxSize < 16 || maxSize > 1024)) throw new Error('缩略图尺寸超出范围。')
+  if (record.frame !== undefined && record.cache !== undefined) throw new Error('缩略帧请求不能同时指定 cache。')
   return {
     source: readString(record, 'source'),
     maxSize,
     ...(record.cache !== undefined ? { cache: record.cache } : {}),
+    ...(record.frame !== undefined ? { frame: parseThumbnailFrame(record.frame) } : {}),
     ...(record.requestId !== undefined ? { requestId: record.requestId as string } : {}),
   }
 }

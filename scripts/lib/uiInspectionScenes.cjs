@@ -1,6 +1,7 @@
 const { diffBuffers } = require('./canvasVisualDiff.cjs')
 const { createVideoEditProbeScene } = require('./uiInspectionSceneVideoEditProbe.cjs')
 const { createVideoEditScrubScene } = require('./uiInspectionSceneVideoEditScrub.cjs')
+const { createVideoEditFilmstripScene } = require('./uiInspectionSceneVideoEditFilmstrip.cjs')
 const { createVideoEditTimelineScene } = require('./uiInspectionSceneVideoEditTimeline.cjs')
 const { createVideoEditMonitorScene } = require('./uiInspectionSceneVideoEditMonitor.cjs')
 const { createVideoEditPictureGestureScene } = require('./uiInspectionSceneVideoEditPictureGesture.cjs')
@@ -98,6 +99,7 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
   return Object.freeze([
     createVideoEditProbeScene(),
     createVideoEditScrubScene(),
+    createVideoEditFilmstripScene(),
     createVideoEditTimelineScene(),
     createVideoEditMonitorScene(),
     createVideoEditPictureGestureScene(),

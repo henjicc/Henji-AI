@@ -6,7 +6,7 @@ import { promisify } from 'node:util'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { createAudioWaveformService } from './ops'
 import { AudioWaveformWorker } from './worker-client'
-import { createWaveformDiskCache } from './waveform-cache'
+import { createContentDiskCache } from '../media/content-disk-cache'
 import { loadFfmpegPath, loadFfprobePath } from '../video/ffmpeg-loader'
 import { aggregateWaveformLevel, selectWaveformLevel, WAVEFORM_PYRAMID_QUANT } from '../../../../src/core/media/waveformPyramid'
 import type { AudioWaveformPyramid, AudioWaveformPyramidResult } from '../../../../src/platform/contracts/audioWaveform'
@@ -41,7 +41,7 @@ describe.skipIf(process.env.HENJI_AUDIO_WAVEFORM_NATIVE !== '1')('real ffmpeg wh
   afterAll(async () => { await fs.rm(directory, { recursive: true, force: true }) })
   function service(cache: string, workers: { count: number }): ReturnType<typeof createAudioWaveformService> {
     return createAudioWaveformService({
-      ffmpegPath: async () => binary, ffprobePath: async () => probe, diskCache: createWaveformDiskCache({ directory: () => cache }),
+      ffmpegPath: async () => binary, ffprobePath: async () => probe, diskCache: createContentDiskCache({ directory: () => cache, extension: '.hwpk' }),
       createWorker: () => { workers.count++; return new AudioWaveformWorker(path.resolve('electron/main/services/audio/waveform-worker.ts')) },
     })
   }

@@ -66,8 +66,17 @@ export interface VideoFrameExportProgress {
 /**
  * 视频本地处理原生命令（ffmpeg/ffprobe）。
  */
+/** 片段缩略图条的一帧（任务 2.4）：素材绝对时钟上的时间点（微秒）与取帧高度档（设备像素，见 `FILMSTRIP_HEIGHTS`）。 */
+export interface FilmstripFrameRequest {
+  source: string
+  timeUs: number
+  height: number
+}
+
 export interface VideoPlatform {
   getCachedThumbnail(source: string, signal?: AbortSignal): Promise<{ path: string }>
+  /** 返回主进程磁盘缓存中该帧的路径（按内容身份缓存，二次打开直接命中）。 */
+  getFilmstripFrame(request: FilmstripFrameRequest, signal?: AbortSignal): Promise<{ path: string }>
   readVideoInfo(source: string): Promise<VideoInfoResult>
   trimVideoSource(payload: TrimVideoSourcePayload): Promise<TrimVideoSourceResult>
   compressVideoToFit(payload: CompressVideoToFitPayload): Promise<CompressVideoToFitResult>
