@@ -270,7 +270,7 @@ async function readCanvasNodes(page, projectId) {
 }
 
 async function setupCameraStageAssistantCapability(page, context, inspection = {}) {
-  const { seedAndOpenCanvasPanoramaProject, settlePage } = context
+  const { seedAndOpenCanvasPanoramaProject, settlePage, reopenCanvasProjectFromStorage } = context
   const executionPrefix = `reality-camera-stage-capability-${randomUUID()}`
   const registryAsset = await findRendererCapabilityRegistryAsset()
   const registered = await page.evaluate(async (assetName) => {
@@ -332,7 +332,8 @@ async function setupCameraStageAssistantCapability(page, context, inspection = {
         JSON.stringify({ past: [], future: [], imagePool: [] }), projectId]
     )
   }, { projectId: canvasProjectId, node: cameraNode })
-  await page.locator(`[data-project-id="${canvasProjectId}"]:visible`).click()
+  // 工程实例常驻内存，库层改写后必须经 reload 重新读取（见 reopenCanvasProjectFromStorage）
+  await reopenCanvasProjectFromStorage(page, canvasProjectId)
   await page.locator(`.react-flow__node[data-id="${CAMERA_NODE_ID}"]`)
     .waitFor({ state: 'visible', timeout: 12000 })
 

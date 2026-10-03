@@ -158,7 +158,8 @@ async function openCanvasImageEditorV3Fixture({
       sourceGeometry: { width: managed.metadata.width, height: managed.metadata.height } }
   }, { projectId, width, height, label, sourceWidth, sourceHeight, transform, solidColor, foreground, annotations })
   if (!openEditor) return { dialog: null, editor: null, fixture, projectId }
-  await page.locator(`[data-project-id="${projectId}"]:visible`).click()
+  // 工程实例常驻内存，库层改写后必须经 reload 重新读取（见 reopenCanvasProjectFromStorage）
+  await context.reopenCanvasProjectFromStorage(page, projectId)
   const node = page.locator(`[data-layer-stack-node-id="${fixture.nodeId}"][data-layer-stack-status="editable-v3"]`)
   await node.waitFor({ state: 'visible', timeout: 12000 })
   await node.dblclick()

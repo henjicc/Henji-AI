@@ -40,7 +40,6 @@ import { useCanvasResumePolling } from './hooks/useCanvasResumePolling';
 import { useCanvasShortcuts } from './hooks/useCanvasShortcuts';
 import { nodeTypes } from './nodes';
 import { edgeTypes } from './edges';
-import { useThemeTokens } from '@/hooks/useThemeTokens';
 import { SelectedNodeOverlay } from './ui/SelectedNodeOverlay';
 import { NodeToolDialogRouter } from './ui/NodeToolDialogRouter';
 import { CameraStageNodeDialog } from './nodes/cameraStage/CameraStageNodeDialog';
@@ -70,10 +69,15 @@ const CANVAS_PRO_OPTIONS = { hideAttribution: true };
 const CANVAS_MULTI_SELECTION_KEY_CODE = ['Control', 'Meta'];
 const CANVAS_SELECTION_KEY_CODE = ['Control', 'Meta'];
 
-/** 画布点阵：颜色取主题 `line` 令牌，切换主题时只重渲染这一层。 */
+/**
+ * 画布点阵：直接引用主题 CSS 变量（辅助文字色 35%），切换主题由浏览器重算样式，不触发 React 渲染。
+ * `line` 在深色预设下与画布底几乎同亮（点阵消失），辅助文字色两种模式都与底色拉开、压低透明度后
+ * 深色与改版前的深灰点阵观感一致，纸白下为浅灰点。
+ */
+const CANVAS_GRID_DOT_COLOR = 'rgb(var(--text3-rgb) / 0.35)';
+
 function CanvasGridBackground() {
-  const { colors } = useThemeTokens();
-  return <Background variant={BackgroundVariant.Dots} gap={20} size={1} color={colors.line} />;
+  return <Background variant={BackgroundVariant.Dots} gap={20} size={1} color={CANVAS_GRID_DOT_COLOR} />;
 }
 
 function CanvasConnectionToast({ toast }: { toast: CanvasToastState | null }) {
@@ -85,10 +89,8 @@ function CanvasConnectionToast({ toast }: { toast: CanvasToastState | null }) {
     <div className="pointer-events-none absolute left-1/2 top-4 z-toast -translate-x-1/2">
       <div
         key={toast.id}
-        className={`rounded-lg border px-4 py-2 text-sm font-medium shadow-panel ${
-          toast.type === 'success'
-            ? 'border-green-500/30 bg-green-500/20 text-green-100'
-            : 'border-red-400/30 bg-red-500/15 text-red-100'
+        className={`rounded-lg bg-panel px-4 py-2 text-sm font-medium shadow-panel ${
+          toast.type === 'success' ? 'text-success-text' : 'text-danger-text'
         }`}
       >
         {toast.message}

@@ -71,8 +71,11 @@ export function CameraStagePreviewPanel({
         </div>
       )}
 
-      <span className="pointer-events-none absolute inset-x-0 bottom-2 text-center text-3xs text-text-muted opacity-0 transition-opacity group-hover:opacity-100">
-        {t(rendering ? 'node.cameraStage.openBlockedRendering' : 'node.cameraStage.openHint')}
+      {/* 悬停提示压在三维预览画面上：固定媒体叠层（深色底 + 白字），不随主题 */}
+      <span className="pointer-events-none absolute inset-x-0 bottom-2 flex justify-center opacity-0 transition-opacity group-hover:opacity-100">
+        <span className="rounded-full bg-media-control px-2 py-0.5 text-2xs text-on-media">
+          {t(rendering ? 'node.cameraStage.openBlockedRendering' : 'node.cameraStage.openHint')}
+        </span>
       </span>
     </div>
   );

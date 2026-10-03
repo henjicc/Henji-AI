@@ -10,6 +10,7 @@ function attachUiInspectionCanvasEditing(context) {
     clickCanvasCapabilityAction,
     resizeCanvasNodeAndAssertHitBox,
     seedAndOpenCanvasPanoramaProject,
+    reopenCanvasProjectFromStorage,
   } = context
 
   async function setupCanvasElementEditNode(page) {
@@ -154,7 +155,7 @@ function attachUiInspectionCanvasEditing(context) {
       )
     }, { targetProjectId: projectId, targetNodeId: nodeId, resultSource: panoramaSource })
 
-    await page.locator(`[data-project-id="${projectId}"]:visible`).click()
+    await reopenCanvasProjectFromStorage(page, projectId)
     const reopened = page.locator(`[data-generation-node-id="${nodeId}"][data-generation-node-model-id="apimart-gpt-image-2"]`)
     await reopened.waitFor({ state: 'visible', timeout: 12000 })
     await page.locator('.react-flow__node[data-id="__ui_element_edit_result"]')
@@ -487,6 +488,7 @@ function attachUiInspectionCanvasEditing(context) {
     const verifiedDrag = await verifyMultiLayerDragPerformance({
       page,
       projectId,
+      reopenProject: reopenCanvasProjectFromStorage,
       fixture,
       settlePage,
       inspection,

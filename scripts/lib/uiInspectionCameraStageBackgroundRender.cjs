@@ -4,7 +4,7 @@ const CAMERA_STAGE_BACKGROUND_PROJECT_ID = 'ui-camera-stage-background-render'
 const CAMERA_STAGE_NODE_ID = '__ui_camera_stage_background'
 
 async function setupCameraStageBackgroundRender(page, context, inspection = {}) {
-  const { seedAndOpenCanvasPanoramaProject, settlePage } = context
+  const { seedAndOpenCanvasPanoramaProject, settlePage, reopenCanvasProjectFromStorage } = context
   await page.evaluate(async ({ stageProjectId, sceneJson }) => {
     const now = Date.now()
     await window.henjiNative.cameraStageProjects.upsertProjectRecord({
@@ -63,7 +63,8 @@ async function setupCameraStageBackgroundRender(page, context, inspection = {}) 
   }, { canvasProjectId: projectId, cameraNode: node })
 
   const projectCard = page.locator(`[data-project-id="${projectId}"]:visible`)
-  await projectCard.click()
+  // 工程实例常驻内存，库层改写后必须经 reload 重新读取（见 reopenCanvasProjectFromStorage）
+  await reopenCanvasProjectFromStorage(page, projectId)
   const cameraNode = page.locator(`.react-flow__node[data-id="${CAMERA_STAGE_NODE_ID}"]`)
   await cameraNode.waitFor({ state: 'visible', timeout: 12000 })
   await cameraNode.click()

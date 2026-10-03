@@ -1697,7 +1697,8 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
   box-shadow: inset 0 -1.5px 0 rgb(var(--line-strong-rgb));
 }
 
-/* 画布视频进度条：轨道与滑块共享同一条中心线，已播放段跟随主题强调色。 */
+/* 画布视频进度条：轨道与滑块共享同一条中心线，已播放段跟随主题强调色；未播放段压在画面暗角上，
+   取固定媒体叠层白（不随主题，纸白下的 text2 深灰压在黑色暗角上看不见）。 */
 .canvas-video-progress::-webkit-slider-runnable-track {
   height: 4px;
   border-radius: 9999px;
@@ -1705,8 +1706,8 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
     to right,
     rgb(var(--accent-rgb)) 0,
     rgb(var(--accent-rgb)) var(--video-progress),
-    rgb(var(--text-muted-rgb) / 0.88) var(--video-progress),
-    rgb(var(--text-muted-rgb) / 0.88) 100%
+    rgb(var(--on-media-rgb) / 0.4) var(--video-progress),
+    rgb(var(--on-media-rgb) / 0.4) 100%
   );
 }
 
@@ -1720,7 +1721,7 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
 .canvas-video-progress::-moz-range-track {
   height: 4px;
   border-radius: 9999px;
-  background: rgb(var(--text-muted-rgb) / 0.88);
+  background: rgb(var(--on-media-rgb) / 0.4);
 }
 
 .canvas-video-progress::-moz-range-progress {

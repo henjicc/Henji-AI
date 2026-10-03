@@ -97,6 +97,19 @@
   }
 }
 
+/* React Flow 自带配色（连线、拖线预览、框选、默认端口）是固定的浅色主题值：选中连线的默认深灰在深色画布上
+   反而比未选中更暗、纸白下默认端口白边看不见。这里把它们接到主题令牌上，切换主题只重算样式。
+   连线用辅助文字色（两种模式都与画布底拉开），选中与框选用强调色（选中指示）。 */
+.react-flow {
+  --xy-edge-stroke: rgb(var(--text3-rgb));
+  --xy-edge-stroke-selected: rgb(var(--accent-rgb));
+  --xy-connectionline-stroke: rgb(var(--text2-rgb));
+  --xy-selection-background-color: rgb(var(--accent-rgb) / 0.08);
+  --xy-selection-border: 1px dashed rgb(var(--accent-rgb) / 0.7);
+  --xy-handle-background-color: rgb(var(--text3-rgb));
+  --xy-handle-border-color: rgb(var(--panel-rgb));
+}
+
 /* 内层 frame 负责精确包住节点自己的溢出绘制；外层 React Flow 节点再建立一次
    paint containment，才能让 Chromium 在视口层录制绘制指令时跳过整棵离屏节点子树。
    overflow-clip-margin 只扩展绘制裁剪边界，不进入盒模型，因此不会污染节点测量。 */
@@ -174,7 +187,7 @@
 }
 
 .canvas-minimap {
-  border-radius: 12px;
+  border-radius: var(--radius-overlay);
   overflow: hidden;
   pointer-events: auto !important;
 }
@@ -189,15 +202,17 @@
   touch-action: none;
 }
 
+/* 小地图节点块用辅助文字色的半透明：深色下是浅灰块、纸白下是中灰块（原 text2 实色在纸白下成了深色块）；
+   视口框外侧压一层比面板更暗的间隙色，视口边框用辅助文字色。 */
 .canvas-minimap .react-flow__minimap-node {
-  fill: rgb(var(--text-muted-rgb) / 0.92);
+  fill: rgb(var(--text3-rgb) / 0.55);
 }
 
 .canvas-minimap .react-flow__minimap-mask {
   cursor: grab;
-  stroke: rgb(var(--text-muted-rgb) / 0.92);
+  stroke: rgb(var(--text3-rgb));
   stroke-width: 1.4px;
-  fill: rgb(var(--border-rgb) / 0.35);
+  fill: rgb(var(--gap-rgb) / 0.55);
 }
 
 .canvas-minimap .react-flow__minimap-mask:active {

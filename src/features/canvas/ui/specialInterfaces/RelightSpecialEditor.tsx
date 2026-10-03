@@ -7,6 +7,7 @@ import { UiTooltipText } from '@/components/ui/layout'
 import { UiButton, UiOptionButton, UiSwitch, UiTextAreaField } from '@/components/ui/primitives'
 import { UiModal } from '@/components/ui/UiModal'
 import {
+  UI_GLASS_ADAPTIVE_DIVIDER_CLASS,
   UI_GLASS_ADAPTIVE_REGION_CLASS,
   UI_TEXT_LABEL_CLASS,
   UI_TEXT_META_CLASS,
@@ -124,7 +125,7 @@ export function RelightWorkbench({
           </div>
         )}
 
-        <div data-relight-inspector="true" className={`min-h-0 min-w-0 overflow-y-auto ${settings.lightingMode === 'manual' ? 'border-l border-veil-subtle' : ''} ${embedded ? 'p-3' : `p-5 ${UI_GLASS_ADAPTIVE_REGION_CLASS}`}`}>
+        <div data-relight-inspector="true" className={`min-h-0 min-w-0 overflow-y-auto ${settings.lightingMode === 'manual' ? `border-l ${UI_GLASS_ADAPTIVE_DIVIDER_CLASS}` : ''} ${embedded ? 'p-3' : `p-5 ${UI_GLASS_ADAPTIVE_REGION_CLASS}`}`}>
           <div className="flex min-h-full flex-col">
           {sourceControl ? <div className="mb-3">{sourceControl}</div> : null}
           <section aria-label="打光模式">

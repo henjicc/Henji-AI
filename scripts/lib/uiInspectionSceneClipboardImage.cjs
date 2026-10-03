@@ -44,7 +44,8 @@ function createClipboardImageScene(context) {
           [JSON.stringify([node]), '[]', JSON.stringify({ past: [], future: [], imagePool: [] }), JSON.stringify({ x: 0, y: 0, zoom: 1 }), 1, projectId],
         )
       }, { projectId, nodeId, source })
-      await page.locator(`[data-project-id="${projectId}"]`).click()
+      // 工程实例常驻内存，库层改写后必须经 reload 重新读取（见 reopenCanvasProjectFromStorage）
+      await context.reopenCanvasProjectFromStorage(page, projectId)
       await page.locator(`.react-flow__node[data-id="${nodeId}"]`).click()
       await app.evaluate(({ clipboard }) => clipboard.clear())
       console.log('[clipboard-image] canvas copy button start')

@@ -22,6 +22,7 @@ import {
   NODE_PORT_NODE_CLASS,
   NODE_PORT_VISIBLE_CLASS,
   NODE_SELECTED_BORDER_CLASS,
+  NODE_SURFACE_CLASS,
 } from '@/features/canvas/ui/nodeControlStyles';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { useProjectStore } from '@/stores/projectStore';
@@ -95,7 +96,7 @@ export const LayerStackResultNode = memo(({ id, data, selected, width, height }:
     <div
       data-layer-stack-node-id={id}
       data-layer-stack-status={isEditableV3 ? 'editable-v3' : document?.status ?? 'invalid'}
-      className={`group relative overflow-visible rounded-[var(--node-radius)] border bg-surface-dark/90 ${selected ? NODE_SELECTED_BORDER_CLASS : NODE_IDLE_BORDER_CLASS}`}
+      className={`group relative overflow-visible rounded-[var(--node-radius)] border ${NODE_SURFACE_CLASS} ${selected ? NODE_SELECTED_BORDER_CLASS : NODE_IDLE_BORDER_CLASS}`}
       style={{ width: resolvedWidth, height: resolvedHeight }}
       onClick={() => setSelectedNode(id)}
       onDoubleClick={(event) => { event.stopPropagation(); void openEditor(); }}

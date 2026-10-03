@@ -26,6 +26,7 @@ import {
   NODE_PORT_VISIBLE_CLASS,
   NODE_ROW_GAP_CLASS,
   NODE_SELECTED_BORDER_CLASS,
+  NODE_SURFACE_CLASS,
 } from '@/features/canvas/ui/nodeControlStyles';
 import {
   areMediaOutputListsEqual,
@@ -384,7 +385,7 @@ export const GenerationNodeShell = memo(({
       data-generation-node-model-id={effectiveModelId}
       data-generation-node-layout={resolvedLayoutMode}
       className={`
-        canvas-node-dynamic-min-height group relative flex flex-col overflow-visible rounded-[var(--node-radius)] border bg-surface-dark/90 p-2 transition-colors duration-120
+        canvas-node-dynamic-min-height group relative flex flex-col overflow-visible rounded-[var(--node-radius)] border ${NODE_SURFACE_CLASS} p-2 transition-colors duration-120
         ${selected
           ? NODE_SELECTED_BORDER_CLASS
           : NODE_IDLE_BORDER_CLASS}
@@ -426,7 +427,7 @@ export const GenerationNodeShell = memo(({
           <main className="nodrag nowheel flex min-h-0 min-w-0 overflow-hidden">
             {resolvedWorkbenchStage}
           </main>
-          <aside className="nodrag nowheel flex min-h-0 min-w-0 flex-col gap-1.5 overflow-y-auto border-l border-veil-subtle p-2">
+          <aside className="nodrag nowheel flex min-h-0 min-w-0 flex-col gap-1.5 overflow-y-auto border-l border-line p-2">
             {workbenchPromptLast ? inputRows : promptEditor}
             {workbenchPromptLast ? promptEditor : inputRows}
           </aside>

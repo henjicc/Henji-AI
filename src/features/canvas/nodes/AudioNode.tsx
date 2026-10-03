@@ -22,6 +22,7 @@ import {
   NODE_PORT_NODE_CLASS,
   NODE_PORT_VISIBLE_CLASS,
   NODE_SELECTED_BORDER_CLASS,
+  NODE_SURFACE_CLASS,
 } from '@/features/canvas/ui/nodeControlStyles';
 import { getSocketColor } from '@/features/canvas/domain/socketTypes';
 import { useGenerationProgressDisplay } from '@/features/canvas/nodes/shared/useGenerationProgressDisplay';
@@ -232,7 +233,7 @@ export const AudioNode = memo(({ id, data, selected, type, width, height }: Audi
   return (
     <div
       className={`
-        group relative overflow-visible rounded-[var(--node-radius)] border bg-surface-dark/85 transition-colors duration-120
+        group relative overflow-visible rounded-[var(--node-radius)] border ${NODE_SURFACE_CLASS} transition-colors duration-120
         ${generationError
           ? NODE_GENERATION_ERROR_BORDER_CLASS
           : selected
@@ -335,7 +336,7 @@ export const AudioNode = memo(({ id, data, selected, type, width, height }: Audi
           <div className="pointer-events-none absolute inset-0 overflow-hidden">
             <div className="absolute inset-0 bg-bg-dark/55" />
             <div
-              className="absolute left-0 top-0 h-full w-full origin-left bg-gradient-to-r from-veil-bright to-veil-faint ease-out"
+              className="absolute left-0 top-0 h-full w-full origin-left bg-gradient-to-r from-text1/30 to-text1/5 ease-out"
               style={{ transform: `scaleX(${progress})`, transition: uiTransition(['transform'], transitionDurationMs) }}
             />
           </div>

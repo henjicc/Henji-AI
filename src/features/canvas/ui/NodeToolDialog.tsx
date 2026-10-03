@@ -381,7 +381,7 @@ export function NodeToolDialog() {
     >
       <div className="space-y-3 max-h-[82vh] overflow-y-auto pr-1">
         {editorContent}
-        {error && <div className="text-xs text-red-400">{error}</div>}
+        {error && <div className="text-xs text-danger-text">{error}</div>}
       </div>
     </UiModal>
   );

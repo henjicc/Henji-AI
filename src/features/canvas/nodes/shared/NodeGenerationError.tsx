@@ -32,10 +32,10 @@ export function NodeGenerationError({ message }: NodeGenerationErrorProps) {
         });
       }}
     >
-      <div className="pointer-events-none absolute inset-0 bg-red-500/10" />
-      <AlertTriangle className="relative h-6 w-6 shrink-0 text-red-400" />
-      <span className="relative line-clamp-3 text-xs leading-5 text-red-300">{message}</span>
-      <span className="relative text-2xs text-red-400/70">{t('node.generationError.viewDetail')}</span>
+      <div className="pointer-events-none absolute inset-0 bg-danger-tint" />
+      <AlertTriangle className="relative h-6 w-6 shrink-0 text-danger-text" />
+      <span className="relative line-clamp-3 text-xs leading-5 text-danger-text">{message}</span>
+      <span className="relative text-2xs text-text2">{t('node.generationError.viewDetail')}</span>
     </div>
   );
 }

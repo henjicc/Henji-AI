@@ -230,7 +230,7 @@ export function CanvasMiniMap(): JSX.Element {
   return (
     <Panel
       position="bottom-right"
-      className="canvas-minimap react-flow__minimap nopan nowheel !border-border-dark !bg-surface-dark"
+      className="canvas-minimap react-flow__minimap nopan nowheel border border-line !bg-panel shadow-panel"
       style={{ pointerEvents: 'all', zIndex: CANVAS_MINIMAP_Z_INDEX }}
       data-testid="rf__minimap"
     >

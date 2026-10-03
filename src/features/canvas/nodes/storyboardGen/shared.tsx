@@ -2,7 +2,7 @@ import { Minus, Plus } from 'lucide-react'
 import type { StoryboardGenNodeData } from '@/features/canvas/domain/canvasNodes'
 import { AUTO_REQUEST_ASPECT_RATIO } from '@/features/canvas/domain/canvasNodes'
 import { parseAspectRatio } from '@/features/canvas/application/imageData'
-import { UiButton } from '@/components/ui'
+import { UiIconButton } from '@/components/ui'
 import { BLACK_HEX, WHITE_HEX } from '@/core/theme/colorTokens'
 
 export interface AspectRatioChoice {
@@ -27,12 +27,13 @@ export const STORYBOARD_PARAMS_ROW_WIDTH_PX = 286
 export const STORYBOARD_GEN_NODE_MIN_WIDTH_PX = 320
 export const STORYBOARD_GEN_NODE_MIN_HEIGHT_PX = 320
 export const STORYBOARD_GEN_ICON_ADJUST = { x: 0, y: 0, scale: 0.95 }
-const GRID_CONTROL_CONTAINER_CLASS = 'flex h-5 items-center gap-0.5 rounded-full border border-veil-soft bg-veil-faint px-1'
-const GRID_CONTROL_LABEL_CLASS = 'text-4xs text-text-muted'
-const GRID_CONTROL_BUTTON_CLASS = 'flex h-3 w-3 items-center justify-center rounded text-text-muted transition-colors hover:bg-white/10 hover:text-text-dark'
-const GRID_CONTROL_ICON_CLASS = 'h-1.5 w-1.5'
-const GRID_CONTROL_VALUE_CLASS = 'min-w-[14px] text-center text-4xs font-semibold text-text-dark'
-export const GRID_SUMMARY_CLASS = 'flex h-5 items-center rounded-full border border-veil-soft bg-veil-faint px-1.5 text-4xs text-text-muted'
+// 宫格行列步进：一行 20px（CONTROL_ROW_HEIGHT_PX），只分组不画框（容器已是节点卡片），
+// 步进用 20px 静默图标按钮；标签与汇总是元信息档（11px 辅助文字）。
+const GRID_CONTROL_CONTAINER_CLASS = 'flex h-5 items-center gap-0.5'
+const GRID_CONTROL_LABEL_CLASS = 'pr-0.5 text-2xs text-text3'
+const GRID_CONTROL_ICON_CLASS = 'h-3 w-3'
+const GRID_CONTROL_VALUE_CLASS = 'min-w-[14px] text-center text-2xs font-medium tabular-nums text-text1'
+export const GRID_SUMMARY_CLASS = 'flex h-5 items-center text-2xs text-text3'
 export const FRAME_GRID_GAP_PX = 2
 export const CONTROL_ROW_HEIGHT_PX = 20
 export const CONTROL_ROW_MARGIN_BOTTOM_PX = 10
@@ -92,35 +93,31 @@ export function GridStepperControl({
   return (
     <div className={GRID_CONTROL_CONTAINER_CLASS}>
       <span className={GRID_CONTROL_LABEL_CLASS}>{label}</span>
-      {/* ui-surface-allow 宫格节点内 12px 步进按钮，节点尺寸固定；交 3.6 节点外观 */}
-      <UiButton
+      <UiIconButton
         type="button"
-        variant="secondary"
+        size="xs"
         disabled={disabled}
         aria-label={`${label}数减少`}
-        className={`${GRID_CONTROL_BUTTON_CLASS} !h-3 !w-3 !px-0`}
         onClick={(event) => {
           event.stopPropagation()
           onDecrease()
         }}
       >
         <Minus className={GRID_CONTROL_ICON_CLASS} />
-      </UiButton>
+      </UiIconButton>
       <span className={GRID_CONTROL_VALUE_CLASS}>{value}</span>
-      {/* ui-surface-allow 宫格节点内 12px 步进按钮，节点尺寸固定；交 3.6 节点外观 */}
-      <UiButton
+      <UiIconButton
         type="button"
-        variant="secondary"
+        size="xs"
         disabled={disabled}
         aria-label={`${label}数增加`}
-        className={`${GRID_CONTROL_BUTTON_CLASS} !h-3 !w-3 !px-0`}
         onClick={(event) => {
           event.stopPropagation()
           onIncrease()
         }}
       >
         <Plus className={GRID_CONTROL_ICON_CLASS} />
-      </UiButton>
+      </UiIconButton>
     </div>
   )
 }

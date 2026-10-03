@@ -38,6 +38,7 @@ import {
   NODE_PORT_NODE_CLASS,
   NODE_PORT_VISIBLE_CLASS,
   NODE_SELECTED_BORDER_CLASS,
+  NODE_SURFACE_CLASS,
 } from '@/features/canvas/ui/nodeControlStyles';
 import { type PanoramaCaptureCurrentView } from '@/features/canvas/ui/specialInterfaces/panorama/PanoramaSphereCanvas';
 import { usePanoramaImageResource } from '@/features/canvas/ui/specialInterfaces/panorama/usePanoramaImageResource';
@@ -435,7 +436,7 @@ export const PanoramaViewerNode = memo(({
       data-panorama-viewer-node-id={id}
       data-panorama-view-mode={data.viewMode}
       data-panorama-viewport-ratio={data.viewportAspectRatio}
-      className={`group relative overflow-visible rounded-[var(--node-radius)] border bg-surface-dark/90 transition-colors duration-120 ${
+      className={`group relative overflow-visible rounded-[var(--node-radius)] border ${NODE_SURFACE_CLASS} transition-colors duration-120 ${
         generationError
           ? NODE_GENERATION_ERROR_BORDER_CLASS
           : isActive ? NODE_SELECTED_BORDER_CLASS : NODE_IDLE_BORDER_CLASS

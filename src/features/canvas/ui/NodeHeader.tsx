@@ -56,7 +56,8 @@ export const NODE_HEADER_ICON_TITLE_ADJUST: HeaderAdjust = { x: -8, y: 8, scale:
 // 只改这一处数值即可同时影响全部节点；x/y 单位为 px，scale 为缩放比例。
 export const NODE_HEADER_PRICE_ADJUST: HeaderAdjust = NODE_HEADER_ICON_TITLE_ADJUST;
 
-export const NODE_HEADER_TONE_CLASS = 'text-white/55';
+// 浮动标题压在画布底上（不在节点卡片内），取辅助文字色：两种模式都保证 ≥ 4.5:1，深色下与原 55% 白观感一致。
+export const NODE_HEADER_TONE_CLASS = 'text-text3';
 export const NODE_HEADER_TITLE_CLASS = 'text-14 font-normal';
 export const NODE_HEADER_META_CLASS = 'text-xs text-text-muted';
 export const NODE_HEADER_FLOATING_POSITION_CLASS = 'absolute -top-8 left-2 right-2 z-sticky';
@@ -247,7 +248,7 @@ export function NodeHeader({
     }
 
     return (
-      // ui-surface-allow 节点标题文字（拖动节点、双击改名）借用按钮语义，外观是标题排版不是按钮档位；交 3.6 节点外观
+      // ui-surface-allow 节点标题文字（拖动节点、双击改名）借用按钮语义以便聚焦，外观是标题排版不是按钮档位（3.6 确认保留）
       <UiButton
         ref={setTitleElement}
         type="button"

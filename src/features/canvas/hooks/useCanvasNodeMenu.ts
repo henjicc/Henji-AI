@@ -479,7 +479,8 @@ export function useCanvasNodeMenu(params: UseCanvasNodeMenuParams) {
             end: { x: endX, y: endY },
             handleType: pendingConnectStart.handleType,
           }),
-          stroke: 'rgba(255,255,255,0.9)',
+          // 与 storyboard.css 中连线拖动预览（--xy-connectionline-stroke）同色，跟随主题
+          stroke: 'rgb(var(--text2-rgb))',
           strokeWidth: 1,
           strokeLinecap: 'round',
           left: 0,

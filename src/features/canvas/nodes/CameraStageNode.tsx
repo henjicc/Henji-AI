@@ -24,7 +24,7 @@ import { resolveImageDisplayUrl } from '@/features/canvas/application/imageData'
 import { resolveNodeDisplayName } from '@/features/canvas/domain/nodeDisplay';
 import { NodeHeader, NODE_HEADER_FLOATING_POSITION_CLASS } from '@/features/canvas/ui/NodeHeader';
 import { NodeResizeHandle } from '@/features/canvas/ui/NodeResizeHandle';
-import { NODE_IDLE_BORDER_CLASS, NODE_PORT_NODE_CLASS, NODE_PORT_VISIBLE_CLASS, NODE_SELECTED_BORDER_CLASS } from '@/features/canvas/ui/nodeControlStyles';
+import { NODE_IDLE_BORDER_CLASS, NODE_PORT_NODE_CLASS, NODE_PORT_VISIBLE_CLASS, NODE_SELECTED_BORDER_CLASS, NODE_SURFACE_CLASS } from '@/features/canvas/ui/nodeControlStyles';
 import { getSocketColor } from '@/features/canvas/domain/socketTypes';
 import { canvasViewStore, useCanvasStore } from '@/stores/canvasStore';
 import { createLogger } from '@/core/logging';
@@ -118,7 +118,7 @@ export const CameraStageNode = memo(({ id, data, selected, width, height }: Came
   return (
     <div
       className={`
-        group relative overflow-visible rounded-[var(--node-radius)] border bg-surface-dark/85 p-0 transition-colors duration-120
+        group relative overflow-visible rounded-[var(--node-radius)] border ${NODE_SURFACE_CLASS} p-0 transition-colors duration-120
         ${selected
           ? NODE_SELECTED_BORDER_CLASS
           : NODE_IDLE_BORDER_CLASS}
@@ -146,7 +146,7 @@ export const CameraStageNode = memo(({ id, data, selected, width, height }: Came
             renderError={data.imageRenderError ?? data.videoRenderError ?? null}
           />
         </div>
-        <div className="shrink-0 border-t border-veil-soft px-2 py-1.5">
+        <div className="shrink-0 border-t border-line px-2 py-1.5">
           <MediaInputRow
             nodeId={id}
             mediaKind="image"

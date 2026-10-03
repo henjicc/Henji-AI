@@ -88,7 +88,7 @@ export const AssetGroupPreview = memo(({
   return (
     <div
       data-asset-group-preview-count={items.length}
-      className="grid h-full w-full grid-cols-2 grid-rows-2 gap-px bg-veil-soft"
+      className="grid h-full w-full grid-cols-2 grid-rows-2 gap-px bg-line"
     >
       {visibleItems.map((item, index) => (
         <AssetGroupPreviewTile

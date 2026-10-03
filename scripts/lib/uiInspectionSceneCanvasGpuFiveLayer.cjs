@@ -3,7 +3,7 @@ const {
 } = require('./uiInspectionMultiLayerDragPerformance.cjs')
 
 function attachUiInspectionCanvasGpuFiveLayer(context) {
-  const { seedAndOpenCanvasPanoramaProject, settlePage } = context
+  const { seedAndOpenCanvasPanoramaProject, settlePage, reopenCanvasProjectFromStorage } = context
 
   async function setupCanvasGpuFiveLayerPerformance(page, app, inspection) {
     const { projectId } = await seedAndOpenCanvasPanoramaProject(page)
@@ -120,7 +120,7 @@ function attachUiInspectionCanvasGpuFiveLayer(context) {
     }, projectId)
     fixture.windowSize = inspection?.requestedWindowSize ?? null
     const verified = await verifyMultiLayerDragPerformance({
-      page, app, projectId, fixture, settlePage, inspection,
+      page, app, projectId, fixture, settlePage, inspection, reopenProject: reopenCanvasProjectFromStorage,
     })
     console.log(`[image-editor-gpu-baseline] ${JSON.stringify({
       fixture: 'synthetic-five-independent-resources',

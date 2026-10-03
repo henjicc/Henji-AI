@@ -54,7 +54,7 @@ export function RelightSpatialScene({ main, rim, view, color, intensity, sourceI
         fill={`url(#${id}-${light.key}-beam)`} />}
       <circle cx={source.x} cy={source.y} r={light.key === 'main' ? 6 : 4.5} fill={`url(#${id}-glow)`} opacity={light.strength} />
       <circle cx={source.x} cy={source.y} r={light.key === 'main' ? 2.8 : 1.9}
-        fill={light.strength > 0 ? `url(#${id}-${light.key}-lamp)` : 'none'} className="stroke-veil-bright" strokeWidth="0.3" />
+        fill={light.strength > 0 ? `url(#${id}-${light.key}-lamp)` : 'none'} className="stroke-text2/70" strokeWidth="0.3" />
     </g>
   }
   return (
@@ -71,14 +71,14 @@ export function RelightSpatialScene({ main, rim, view, color, intensity, sourceI
           <stop offset="1" stopColor={color} stopOpacity="0" />
         </radialGradient>
       </defs>
-      <circle cx="50" cy="50" r="41" fill={`url(#${id}-sphere)`} className="stroke-veil-subtle" strokeWidth="0.3" />
+      <circle cx="50" cy="50" r="41" fill={`url(#${id}-sphere)`} className="stroke-line-strong" strokeWidth="0.3" />
       {RELIGHT_SPATIAL_GUIDES[view].map((path, index) => <g key={index}>
-        <path d={path.back} fill="none" className="stroke-veil-subtle" strokeWidth="0.2" strokeDasharray="0.7 1.4" />
-        <path d={path.front} fill="none" className="stroke-veil-soft" strokeWidth="0.25" />
+        <path d={path.back} fill="none" className="stroke-line-strong" strokeWidth="0.2" strokeDasharray="0.7 1.4" />
+        <path d={path.front} fill="none" className="stroke-text3/50" strokeWidth="0.25" />
       </g>)}
       {lights.filter(light => light.position.z < 0).map(lamp)}
       {size.sides.map((points, index) => <polygon key={`edge-${index}`} points={points} data-image-thickness="true"
-        className="fill-text-muted stroke-veil-soft" strokeWidth="0.15" />)}
+        className="fill-text-muted stroke-text3/50" strokeWidth="0.15" />)}
       <g transform={matrix} data-relight-image-plane="true" data-image-aspect={size.width / size.height}>
         {sourceImage ? <foreignObject x={-size.width * 50} y={-size.height * 50} width={size.width * 100} height={size.height * 100}>
           <img src={sourceImage} alt={sourceAlt} draggable={false} className="block h-full w-full"
@@ -86,7 +86,7 @@ export function RelightSpatialScene({ main, rim, view, color, intensity, sourceI
             onLoad={event => { const image = event.currentTarget; if (image.naturalWidth && image.naturalHeight)
               setImageSize({ source: sourceImage, aspect: image.naturalWidth / image.naturalHeight }) }} />
         </foreignObject> : <rect x={-size.width * 50} y={-size.height * 50} width={size.width * 100} height={size.height * 100}
-          className="fill-surface-dark stroke-veil-soft" strokeWidth="0.8" />}
+          className="fill-surface-dark stroke-text3/50" strokeWidth="0.8" />}
       </g>
       {lights.filter(light => light.position.z >= 0).map(lamp)}
       {(activeLamp === 'rim' ? RIM_DIRECTION_ORDER.map(direction => ({ pose: poseForRim(direction), label: RIM_DIRECTION_LABELS[direction] }))
@@ -96,7 +96,7 @@ export function RelightSpatialScene({ main, rim, view, color, intensity, sourceI
         const active = Boolean(activeLamp && current && pose.azimuth === current.azimuth && pose.elevation === current.elevation)
         return <g key={label} data-light-stop={label} data-snap-active={active}>
           <circle cx={point.x} cy={point.y} r={active ? 4 : 0.65} fill="none"
-            className={active ? 'stroke-accent' : 'stroke-veil-soft'} strokeWidth={active ? 0.5 : 0.3} />
+            className={active ? 'stroke-accent' : 'stroke-text3/50'} strokeWidth={active ? 0.5 : 0.3} />
           {active && <text x={point.x} y={point.y - 5.5} textAnchor="middle" fontSize="3" className="fill-text-dark">{label}</text>}
         </g>
       })}

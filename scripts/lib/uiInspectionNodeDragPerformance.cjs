@@ -34,7 +34,8 @@ function createNodeDragPerformanceScene(context) {
           'UPDATE storyboard_projects SET node_count = ?, nodes_json = ?, edges_json = ?, viewport_json = ?, history_json = ? WHERE id = ?',
           [nodes.length, JSON.stringify(nodes), JSON.stringify(edges), JSON.stringify({ x: 40, y: 30, zoom: 0.7 }), JSON.stringify({ past: [], future: [], imagePool: [] }), projectId])
       }, { projectId, image })
-      await page.locator(`[data-project-id="${projectId}"]:visible`).click()
+      // 工程实例常驻内存，库层改写后必须经 reload 重新读取（见 reopenCanvasProjectFromStorage）
+      await context.reopenCanvasProjectFromStorage(page, projectId)
       await page.locator('.react-flow__edge[data-id="drag-output"] .react-flow__edge-path').waitFor()
       await page.waitForFunction(() => {
         const image = document.querySelector('.react-flow__node[data-id="drag-source"] img')

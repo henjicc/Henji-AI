@@ -1,4 +1,5 @@
 import { createLogger } from '@/core/logging'
+import { STORYBOARD_EXPORT_COLOR } from '@/core/theme/colorTokens'
 import {
   embedStoryboardImageMetadata,
   mergeStoryboardImages,
@@ -115,7 +116,7 @@ async function applyStoryboardTextOverlay(
       const textWidth = context.measureText(label).width;
       const badgeWidth = Math.round(textWidth + badgePaddingX * 2);
 
-      context.fillStyle = 'rgba(0,0,0,0.65)';
+      context.fillStyle = STORYBOARD_EXPORT_COLOR.frameIndexBadge;
       context.fillRect(x + 6, y + 6, badgeWidth, badgeHeight);
       context.fillStyle = options.textColor;
       context.fillText(label, x + 6 + badgePaddingX, y + 6 + badgeHeight / 2);
@@ -135,7 +136,7 @@ async function applyStoryboardTextOverlay(
       if (options.notePlacement === 'overlay') {
         const overlayHeight = Math.max(18, Math.round(layout.fontSize * 1.35));
         const overlayY = y + layout.cellHeight - overlayHeight;
-        context.fillStyle = 'rgba(0, 0, 0, 0.6)';
+        context.fillStyle = STORYBOARD_EXPORT_COLOR.noteOverlay;
         context.fillRect(x, overlayY, layout.cellWidth, overlayHeight);
         context.fillStyle = options.textColor;
         context.fillText(note, x + 7, overlayY + overlayHeight / 2);

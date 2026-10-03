@@ -131,7 +131,7 @@ export const StoryboardGridEditor = memo(({
             return (
               <div
                 key={frame.id}
-                className="relative overflow-hidden rounded border border-veil-subtle bg-bg-dark/40 transition-colors focus-within:border-accent/50"
+                className="relative overflow-hidden rounded border border-line bg-gap/40 transition-colors focus-within:border-accent/50"
                 style={cellStyle}
               >
                 <FrameDescriptionEditor

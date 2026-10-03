@@ -139,7 +139,7 @@ export function GenerationPromptEditor({
         className={`${NODE_PORT_ROW_CLASS} ${readOnly ? NODE_PORT_VISIBLE_CLASS : ''}`}
       />
       <div
-        className={`flex min-h-0 flex-1 flex-col p-1.5 focus-within:border-accent/70 ${NODE_ROW_CARD_CLASS} ${invalid ? '!border-red-500/70' : ''}`}
+        className={`flex min-h-0 flex-1 flex-col p-1.5 focus-within:border-accent/70 ${NODE_ROW_CARD_CLASS} ${invalid ? '!border-danger-hi/70' : ''}`}
       >
         <PromptEditor
           ref={handleEditorRef}
@@ -160,9 +160,9 @@ export function GenerationPromptEditor({
           onReady={handleEditorReady}
           onEditEnd={handleEditEnd}
           onActivate={canActivate ? handleActivate : undefined}
-          className={`nodrag nowheel relative cursor-text !rounded-md !border-0 !bg-transparent !p-0 !shadow-none ${invalid ? '[&>span]:!text-red-400/90' : ''}`}
+          className={`nodrag nowheel relative cursor-text !rounded-md !border-0 !bg-transparent !p-0 !shadow-none ${invalid ? '[&>span]:!text-danger-text' : ''}`}
           editorShellClassName="relative cursor-text !rounded-md !border-0 !bg-transparent !shadow-none focus-within:!ring-0"
-          editorClassName={`ui-scrollbar nodrag nowheel !px-1.5 !py-1 !text-sm !leading-6 ${invalid ? '[&.is-editor-empty:first-child::before]:!text-red-400/90' : ''}`}
+          editorClassName={`ui-scrollbar nodrag nowheel !px-1.5 !py-1 !text-sm !leading-6 ${invalid ? '[&.is-editor-empty:first-child::before]:!text-danger-text' : ''}`}
         />
       </div>
     </div>

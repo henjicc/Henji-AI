@@ -3,6 +3,7 @@ function attachUiInspectionCanvasMedia(context) {
     settlePage,
     canvasFixtureProjectId,
     setupCanvas,
+    reopenCanvasProjectFromStorage,
   } = context
 
   async function setupCanvasMidjourneyNode(page, openSettings) {
@@ -31,7 +32,7 @@ function attachUiInspectionCanvasMedia(context) {
         [1, JSON.stringify([payload.node]), '[]', JSON.stringify({ x: 180, y: 90, zoom: 0.9 }), payload.projectId]
       )
     }, { projectId, node: nodeData })
-    await projectCard.click()
+    await reopenCanvasProjectFromStorage(page, projectId)
     const viewport = page.locator('[data-application-observation-region="canvas.viewport_observer"]:visible')
     await viewport.waitFor({ state: 'visible', timeout: 12000 })
     const node = page.locator('.react-flow__node:has([data-generation-node-model-id="apimart-midjourney"])').last()
@@ -82,7 +83,7 @@ function attachUiInspectionCanvasMedia(context) {
         [1, JSON.stringify([payload.node]), '[]', JSON.stringify({ x: 180, y: 80, zoom: 0.9 }), payload.projectId]
       )
     }, { projectId, node: nodeData })
-    await projectCard.click()
+    await reopenCanvasProjectFromStorage(page, projectId)
     const node = page.locator('.react-flow__node:has([data-generation-node-model-id="apimart-gpt-image-2"])').last()
     await node.waitFor({ state: 'visible', timeout: 12000 })
     await node.click()
@@ -175,7 +176,7 @@ function attachUiInspectionCanvasMedia(context) {
         [payload.nodes.length, JSON.stringify(payload.nodes), '[]', JSON.stringify({ x: 120, y: 80, zoom: 0.85 }), payload.projectId]
       )
     }, { projectId, nodes })
-    await projectCard.click()
+    await reopenCanvasProjectFromStorage(page, projectId)
     const group = page.locator('.react-flow__node[data-id="__asset_group"]')
     await group.waitFor({ state: 'visible', timeout: 12000 })
     await settlePage(page, 700)

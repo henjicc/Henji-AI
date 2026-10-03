@@ -49,7 +49,8 @@ test('两层夹具真实调用两次ingest再一次save，默认单层不变，�
   } }
   const locator = { click: async () => {}, dblclick: async () => {}, waitFor: async () => {}, locator: () => locator }
   const page = { getByRole: () => locator, locator: () => locator, evaluate: (run, input) => run(input) }
-  const context = { seedAndOpenCanvasPanoramaProject: async () => ({ projectId: 'temporary-project' }), settlePage: async () => {} }
+  const context = { seedAndOpenCanvasPanoramaProject: async () => ({ projectId: 'temporary-project' }), settlePage: async () => {},
+    reopenCanvasProjectFromStorage: async () => {} }
   try {
     const result = await openCanvasImageEditorV3Fixture({ page, context, width: 1600, height: 1000, label: '两层', foreground: WORKLOAD_FOREGROUND })
     assert.equal(ingests.length, 2); assert.equal(saves.length, 1); assert.equal(canvases.length, 2)

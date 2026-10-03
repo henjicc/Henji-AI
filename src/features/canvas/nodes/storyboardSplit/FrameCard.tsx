@@ -125,7 +125,7 @@ export const FrameCard = memo(({
       className={`storyboard-frame-card group/frame nodrag relative h-full w-full overflow-hidden bg-surface-dark transition-colors ${dragging ? 'cursor-grabbing' : 'cursor-grab'} ${dragging
         ? 'z-raised opacity-55 ring-1 ring-accent/65'
         : asDropTarget
-          ? 'z-raised ring-1 ring-emerald-400/70'
+          ? 'z-raised ring-1 ring-success-text/70'
           : ''
         }`}
       onPointerDown={(event) => {
@@ -182,7 +182,7 @@ export const FrameCard = memo(({
         </div>
 
         <div
-          className="nodrag absolute inset-x-0 bottom-0 z-raised overflow-hidden bg-gradient-to-t from-black/80 via-black/45 to-transparent"
+          className="nodrag absolute inset-x-0 bottom-0 z-raised overflow-hidden bg-gradient-to-t from-media-scrim via-media-scrim to-transparent"
           style={noteWrapperStyle}
           onPointerDown={(event) => event.stopPropagation()}
         >
@@ -198,7 +198,7 @@ export const FrameCard = memo(({
             placeholder={`分镜 ${String(index + 1).padStart(2, '0')} 描述`}
             className="nodrag nowheel relative h-full min-h-0 w-full cursor-text"
             editorShellClassName="relative h-full min-h-0 w-full cursor-text overflow-visible !rounded-none !border-0 !bg-transparent !shadow-none focus-within:!ring-0"
-            editorClassName="ui-scrollbar nodrag nowheel h-full min-h-0 overflow-y-auto !px-2 !py-1 text-left !text-[length:var(--storyboard-note-font-size)] !leading-[var(--storyboard-note-line-height)] !text-white"
+            editorClassName="ui-scrollbar nodrag nowheel h-full min-h-0 overflow-y-auto !px-2 !py-1 text-left !text-[length:var(--storyboard-note-font-size)] !leading-[var(--storyboard-note-line-height)] !text-on-media"
           />
         </div>
       </div>

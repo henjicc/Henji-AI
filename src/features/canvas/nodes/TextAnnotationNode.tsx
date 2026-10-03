@@ -29,6 +29,7 @@ import {
   NODE_PORT_NODE_CLASS,
   NODE_PORT_VISIBLE_CLASS,
   NODE_SELECTED_BORDER_CLASS,
+  NODE_SURFACE_CLASS,
 } from '@/features/canvas/ui/nodeControlStyles';
 
 const TextAnnotationIcon = ICON_NODE_TEXT_ANNOTATION;
@@ -49,7 +50,7 @@ const LIVE_MARKDOWN_MAX_CHARACTERS = 6_000;
 const MARKDOWN_REMARK_PLUGINS = [remarkGfm];
 
 const TextAnnotationMarkdown = memo(({ content }: { content: string }) => (
-  <div className="markdown-body break-words [&_a]:text-accent [&_blockquote]:border-l-2 [&_blockquote]:border-white/20 [&_blockquote]:pl-3 [&_code]:rounded [&_code]:bg-white/10 [&_code]:px-1 [&_code]:py-0.5 [&_h1]:text-base [&_h1]:font-semibold [&_h2]:text-15 [&_h2]:font-semibold [&_h3]:text-sm [&_h3]:font-semibold [&_hr]:border-white/10 [&_li]:my-0.5 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-1.5 [&_pre]:overflow-auto [&_pre]:rounded-md [&_pre]:bg-black/30 [&_pre]:p-2 [&_table]:w-full [&_table]:border-collapse [&_table]:text-xs [&_td]:border [&_td]:border-white/10 [&_td]:px-2 [&_td]:py-1 [&_th]:border [&_th]:border-white/10 [&_th]:px-2 [&_th]:py-1 [&_ul]:list-disc [&_ul]:pl-5">
+  <div className="markdown-body break-words [&_a]:text-accent-text [&_blockquote]:border-l-2 [&_blockquote]:border-line-strong [&_blockquote]:pl-3 [&_code]:rounded [&_code]:bg-hover [&_code]:px-1 [&_code]:py-0.5 [&_h1]:text-base [&_h1]:font-semibold [&_h2]:text-15 [&_h2]:font-semibold [&_h3]:text-sm [&_h3]:font-semibold [&_hr]:border-line [&_li]:my-0.5 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-1.5 [&_pre]:overflow-auto [&_pre]:rounded-md [&_pre]:bg-gap [&_pre]:p-2 [&_table]:w-full [&_table]:border-collapse [&_table]:text-xs [&_td]:border [&_td]:border-line [&_td]:px-2 [&_td]:py-1 [&_th]:border [&_th]:border-line [&_th]:px-2 [&_th]:py-1 [&_ul]:list-disc [&_ul]:pl-5">
     <ReactMarkdown remarkPlugins={MARKDOWN_REMARK_PLUGINS}>{content}</ReactMarkdown>
   </div>
 ));
@@ -133,7 +134,7 @@ export const TextAnnotationNode = memo(({
   return (
     <div
       className={`
-        group relative h-full w-full overflow-visible rounded-[var(--node-radius)] border bg-surface-dark/85 p-1.5 transition-colors duration-120
+        group relative h-full w-full overflow-visible rounded-[var(--node-radius)] border ${NODE_SURFACE_CLASS} p-1.5 transition-colors duration-120
         ${generationError
           ? NODE_GENERATION_ERROR_BORDER_CLASS
           : selected

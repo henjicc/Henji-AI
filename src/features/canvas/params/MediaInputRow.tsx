@@ -347,12 +347,12 @@ export function MediaInputRow({
                 viewerSourceUrl={resolveImageDisplayUrl(url)}
                 viewerImageList={displayUrls.map((item) => resolveImageDisplayUrl(item))}
                 alt=""
-                className="h-7 w-7 rounded-md border border-veil-soft object-cover"
+                className="h-7 w-7 rounded-md border border-line object-cover"
                 draggable={false}
               />
             ) : mediaKind === 'video' ? (
               <span
-                className="flex h-7 cursor-pointer items-center gap-1 rounded-md border border-veil-soft bg-bg-dark/60 px-1.5 text-2xs text-text-muted"
+                className="flex h-7 cursor-pointer items-center gap-1 rounded-md border border-line bg-bg-dark/60 px-1.5 text-2xs text-text-muted"
                 onDoubleClick={(event) => {
                   event.stopPropagation();
                   setViewerVideoUrl(resolveImageDisplayUrl(url));
@@ -362,7 +362,7 @@ export function MediaInputRow({
                 {resolveFileName(url)}
               </span>
             ) : (
-              <span className="flex h-7 items-center gap-1 rounded-md border border-veil-soft bg-bg-dark/60 px-1.5 text-2xs text-text-muted">
+              <span className="flex h-7 items-center gap-1 rounded-md border border-line bg-bg-dark/60 px-1.5 text-2xs text-text-muted">
                 <Icon className="h-3 w-3 shrink-0" />
                 {resolveFileName(url)}
               </span>

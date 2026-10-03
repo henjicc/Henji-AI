@@ -10,6 +10,7 @@ import {
   UiRangeInput,
 } from '@/components/ui'
 import {
+  UI_GLASS_ADAPTIVE_DIVIDER_CLASS,
   UI_GLASS_ADAPTIVE_REGION_CLASS,
   UI_GLASS_ADAPTIVE_SURFACE_CLASS,
   UI_TEXT_LABEL_CLASS,
@@ -199,7 +200,7 @@ export function MultiAngleWorkbench({
         className="grid min-h-0 min-w-0 flex-1 grid-cols-[minmax(0,1.5fr)_minmax(320px,1fr)]"
       >
         <div className={`flex min-h-0 items-center justify-center ${embedded ? 'p-2' : 'p-4'}`}>
-          <div className={`relative flex h-full w-full items-center justify-center overflow-hidden rounded-xl ${embedded ? 'bg-bg-dark/45' : `border border-veil-subtle ${UI_GLASS_ADAPTIVE_SURFACE_CLASS}`}`}>
+          <div className={`relative flex h-full w-full items-center justify-center overflow-hidden rounded-xl ${embedded ? 'bg-bg-dark/45' : `border ${UI_GLASS_ADAPTIVE_DIVIDER_CLASS} ${UI_GLASS_ADAPTIVE_SURFACE_CLASS}`}`}>
             <MultiAngleOrbitPreview
               sourceImage={sourceImage ? resolveImageDisplayUrl(sourceImage) : null}
               sourceAlt={t('node.multiAngleEditor.sourceAlt')}
@@ -212,7 +213,7 @@ export function MultiAngleWorkbench({
           </div>
         </div>
 
-        <div className={`min-h-0 overflow-y-auto border-l border-veil-subtle ${embedded ? 'p-3' : `p-4 ${UI_GLASS_ADAPTIVE_REGION_CLASS}`}`}>
+        <div className={`min-h-0 overflow-y-auto border-l ${UI_GLASS_ADAPTIVE_DIVIDER_CLASS} ${embedded ? 'p-3' : `p-4 ${UI_GLASS_ADAPTIVE_REGION_CLASS}`}`}>
           {sourceControl ? <div className="mb-3">{sourceControl}</div> : null}
           <section className="space-y-3">
             <h3 className={UI_TEXT_PANEL_TITLE_CLASS}>{t('node.multiAngleEditor.controlMode')}</h3>

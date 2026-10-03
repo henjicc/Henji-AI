@@ -1,5 +1,5 @@
 import { getPlatform } from '@/platform/runtime'
-import { CANVAS_BG_HEX, CANVAS_TEXT_HEX } from '@/core/theme/colorTokens'
+import { CANVAS_BG_HEX, CANVAS_TEXT_HEX, STORYBOARD_EXPORT_COLOR } from '@/core/theme/colorTokens'
 import type {
   MergeStoryboardImagesPayload,
   MergeStoryboardImagesResult,
@@ -107,11 +107,11 @@ export async function mergeStoryboardImages(
         const image = await loadImageElement(source);
         drawImageWithFit(context, image, x, y, cellWidth, cellHeight, fit);
       } catch {
-        context.fillStyle = 'rgba(255,255,255,0.08)';
+        context.fillStyle = STORYBOARD_EXPORT_COLOR.emptyCell;
         context.fillRect(x, y, cellWidth, cellHeight);
       }
     } else {
-      context.fillStyle = 'rgba(255,255,255,0.08)';
+      context.fillStyle = STORYBOARD_EXPORT_COLOR.emptyCell;
       context.fillRect(x, y, cellWidth, cellHeight);
     }
 
@@ -127,7 +127,7 @@ export async function mergeStoryboardImages(
       const badgeHeight = Math.max(18, Math.round(fontSize * 1.15));
       const textWidth = context.measureText(label).width;
       const badgeWidth = Math.round(textWidth + badgePaddingX * 2);
-      context.fillStyle = 'rgba(0,0,0,0.65)';
+      context.fillStyle = STORYBOARD_EXPORT_COLOR.frameIndexBadge;
       context.fillRect(x + 6, y + 6, badgeWidth, badgeHeight);
       context.fillStyle = textColor;
       context.fillText(label, x + 6 + badgePaddingX, y + 6 + badgeHeight / 2);
@@ -140,7 +140,7 @@ export async function mergeStoryboardImages(
       if (notePlacement === 'overlay') {
         const overlayHeight = Math.max(18, Math.round(fontSize * 1.35));
         const overlayY = y + cellHeight - overlayHeight;
-        context.fillStyle = 'rgba(0,0,0,0.6)';
+        context.fillStyle = STORYBOARD_EXPORT_COLOR.noteOverlay;
         context.fillRect(x, overlayY, cellWidth, overlayHeight);
         context.fillStyle = textColor;
         context.fillText(safeText, x + 6, overlayY + overlayHeight / 2);

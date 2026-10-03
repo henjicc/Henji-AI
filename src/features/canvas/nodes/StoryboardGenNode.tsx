@@ -28,7 +28,7 @@ import { showAlertDialog } from '@/stores/alertDialogStore';
 import { NodeHeader, NODE_HEADER_FLOATING_POSITION_CLASS } from '@/features/canvas/ui/NodeHeader';
 import { NodeLodPlaceholder } from '@/features/canvas/ui/NodeLodPlaceholder';
 import { NodeResizeHandle } from '@/features/canvas/ui/NodeResizeHandle';
-import { NODE_IDLE_BORDER_CLASS, NODE_PORT_NODE_CLASS, NODE_PORT_VISIBLE_CLASS, NODE_ROW_GAP_CLASS, NODE_SELECTED_BORDER_CLASS } from '@/features/canvas/ui/nodeControlStyles';
+import { NODE_IDLE_BORDER_CLASS, NODE_PORT_NODE_CLASS, NODE_PORT_VISIBLE_CLASS, NODE_ROW_GAP_CLASS, NODE_SELECTED_BORDER_CLASS, NODE_SURFACE_CLASS } from '@/features/canvas/ui/nodeControlStyles';
 import PriceEstimate from '@/components/ui/PriceEstimate';
 import { STORYBOARD_GEN_ICON_ADJUST, generateFrameId } from '@/features/canvas/nodes/storyboardGen/shared';
 import { computeStoryboardBaseFrameLayout, computeStoryboardFrameLayout } from '@/features/canvas/nodes/storyboardGen/layout';
@@ -237,7 +237,7 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
   return (
     <div
       className={`
-        group relative flex h-full flex-col overflow-visible rounded-[var(--node-radius)] border bg-surface-dark/95 p-3 transition-colors duration-120
+        group relative flex h-full flex-col overflow-visible rounded-[var(--node-radius)] border ${NODE_SURFACE_CLASS} p-3 transition-colors duration-120
         ${selected
           ? NODE_SELECTED_BORDER_CLASS
           : NODE_IDLE_BORDER_CLASS
@@ -281,7 +281,7 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
         onFrameDescriptionChange={handleFrameDescriptionChange}
       />
 
-      {error && <div className="canvas-node-lod-detail mb-1.5 shrink-0 text-2xs text-red-400">{error}</div>}
+      {error && <div className="canvas-node-lod-detail mb-1.5 shrink-0 text-2xs text-danger-text">{error}</div>}
 
       <div className={`canvas-node-lod-detail flex shrink-0 flex-col ${NODE_ROW_GAP_CLASS}`}>
         <ModelInputRow

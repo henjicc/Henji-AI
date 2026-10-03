@@ -249,7 +249,9 @@ export function ModelPickerList({
             </UiIconButton>
           )}
         </div>
-        <div className={variant === 'floating' ? 'relative h-10' : 'relative'}>
+        {/* 浮动面板的供应商行：28px 选项 + 常驻横向滑块，行高 44 让滑块与上方选项、下方分区边的间距相等
+            （2.2 起选项为 sm 28，原 h-10 使滑块上方只剩约 5px、下方 8px） */}
+        <div className={variant === 'floating' ? 'relative h-11' : 'relative'}>
           <div
             ref={providerListRef}
             className={variant === 'floating'

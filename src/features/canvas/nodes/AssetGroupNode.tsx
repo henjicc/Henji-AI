@@ -29,6 +29,7 @@ import {
   NODE_PORT_NODE_CLASS,
   NODE_PORT_VISIBLE_CLASS,
   NODE_SELECTED_BORDER_CLASS,
+  NODE_SURFACE_CLASS,
 } from '@/features/canvas/ui/nodeControlStyles';
 
 interface AssetGroupNodeProps {
@@ -64,7 +65,7 @@ export const AssetGroupNode = memo(({ id, data, selected }: AssetGroupNodeProps)
   return (
     <div className="group relative h-full min-h-36 w-full min-w-[220px] overflow-visible">
       <div
-        className={`asset-group-node-stack relative flex h-full flex-col overflow-hidden rounded-[var(--node-radius)] border bg-surface-dark ${
+        className={`asset-group-node-stack relative flex h-full flex-col overflow-hidden rounded-[var(--node-radius)] border ${NODE_SURFACE_CLASS} ${
           isActive ? NODE_SELECTED_BORDER_CLASS : NODE_IDLE_BORDER_STATIC_CLASS
         }`}
         onDoubleClick={(event) => {
@@ -72,7 +73,7 @@ export const AssetGroupNode = memo(({ id, data, selected }: AssetGroupNodeProps)
           canvasEventBus.publish('asset-group/open', { groupId: id });
         }}
       >
-        <div className="shrink-0 border-b border-veil-subtle px-2.5 py-1">
+        <div className="shrink-0 border-b border-line px-2.5 py-1">
           <NodeHeader
             icon={<ICON_NODE_ASSET_GROUP className="h-3.5 w-3.5" />}
             titleText={title}

@@ -65,6 +65,7 @@ import {
   NODE_ROW_HOVER_CLASS,
   NODE_ROW_LABEL_CLASS,
   NODE_SELECTED_BORDER_CLASS,
+  NODE_SURFACE_CLASS,
 } from '@/features/canvas/ui/nodeControlStyles'
 import { llmConfigService } from '@/services/llm/LlmConfigService'
 import { showAlertDialog } from '@/stores/alertDialogStore'
@@ -252,7 +253,7 @@ export const TextProcessingNode = memo(({
   return (
     <div
       ref={rootRef}
-      className={`canvas-node-dynamic-min-height group relative flex flex-col overflow-visible rounded-[var(--node-radius)] border bg-surface-dark/90 p-2 transition-colors duration-120 ${selected ? NODE_SELECTED_BORDER_CLASS : NODE_IDLE_BORDER_CLASS}`}
+      className={`canvas-node-dynamic-min-height group relative flex flex-col overflow-visible rounded-[var(--node-radius)] border ${NODE_SURFACE_CLASS} p-2 transition-colors duration-120 ${selected ? NODE_SELECTED_BORDER_CLASS : NODE_IDLE_BORDER_CLASS}`}
       style={{ width: resolvedWidth, height: resolvedHeight, minHeight: minimumHeight }}
       onClick={() => setSelectedNode(id)}
     >

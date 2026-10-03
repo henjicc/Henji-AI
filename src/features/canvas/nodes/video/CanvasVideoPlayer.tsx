@@ -156,7 +156,7 @@ export function CanvasVideoPlayer({
         }`}
         onPointerDown={(event) => event.stopPropagation()}
       >
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/85 via-black/45 to-transparent" />
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-media-scrim via-media-scrim to-transparent" />
         <div className="relative flex flex-col gap-0.5">
           <UiRangeInput
             min={0}
@@ -179,7 +179,7 @@ export function CanvasVideoPlayer({
             >
               {playing ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
             </UiIconButton>
-            <span className="shrink-0 whitespace-nowrap text-3xs leading-none tabular-nums text-white/90">
+            <span className="shrink-0 whitespace-nowrap text-3xs leading-none tabular-nums text-on-media/90">
               {formatTime(currentTime)} / {formatTime(duration)}
             </span>
             <span className="min-w-0 flex-1" />

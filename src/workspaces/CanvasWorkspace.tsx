@@ -61,15 +61,17 @@ const CanvasWorkspace = (): JSX.Element => {
           <div className="relative h-full w-full bg-canvas" aria-busy={isOpeningProject}>
             {/* 截封面期间隐藏自己：它悬在画布上，留着会被一起截进节点区域封面里 */}
             {!isLeavingProject && (
-              <UiButton
-                onClick={() => void handleBackToProjects()}
-                disabled={isOpeningProject && Boolean(currentProjectId)}
-                /* 悬浮在画布上，背后是用户内容而非纯色 UI */
-                variant="media"
-                className="absolute left-3 top-3 z-sticky px-3"
-              >
-                返回项目
-              </UiButton>
+              /* 没有命令带的全屏工作面：返回入口浮在画布上，走随主题的玻璃（纸白下为浅色玻璃 + 深色字），
+                 一块玻璃包住静默按钮；media 档是压在图片/视频上的固定深色叠层，不跟主题。 */
+              <div className="ui-glass absolute left-3 top-3 z-sticky rounded-lg p-0.5">
+                <UiButton
+                  onClick={() => void handleBackToProjects()}
+                  disabled={isOpeningProject && Boolean(currentProjectId)}
+                  size="sm"
+                >
+                  返回项目
+                </UiButton>
+              </div>
             )}
             {(persistenceError || openError) && (
               <UiError

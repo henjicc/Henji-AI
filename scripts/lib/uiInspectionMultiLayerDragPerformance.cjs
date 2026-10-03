@@ -83,8 +83,10 @@ async function verifyMultiLayerDragPerformance({
   projectId,
   fixture,
   inspection,
+  reopenProject,
 }) {
-  await page.locator(`[data-project-id="${projectId}"]:visible`).click()
+  // 调用方刚在库层写入夹具；工程实例常驻内存，必须经 reload 重新读取（reopenCanvasProjectFromStorage）
+  await reopenProject(page, projectId)
   const result = page.locator(
     `[data-layer-stack-node-id="${fixture.nodeId}"][data-layer-stack-status="editable-v3"]`
   )

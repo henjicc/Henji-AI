@@ -8,6 +8,7 @@ function attachUiInspectionCanvasEnhance(context) {
     resizeCanvasNodeAndAssertHitBox,
     paramFieldFromLabel,
     seedAndOpenCanvasPanoramaProject,
+    reopenCanvasProjectFromStorage,
   } = context
 
   async function setupCanvasUpscaleNode(page, electronApp) {
@@ -130,7 +131,7 @@ function attachUiInspectionCanvasEnhance(context) {
       )
     }, { targetProjectId: projectId, targetNodeId: nodeId, resultSource: panoramaSource })
 
-    await page.locator(`[data-project-id="${projectId}"]:visible`).click()
+    await reopenCanvasProjectFromStorage(page, projectId)
     await page.locator(`[data-generation-node-id="${nodeId}"][data-generation-node-model-id="fal-ai-topaz-image-upscale"]`)
       .waitFor({ state: 'visible', timeout: 12000 })
     const resultNode = page.locator('.react-flow__node[data-id="__ui_upscale_result"]')

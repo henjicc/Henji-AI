@@ -40,6 +40,7 @@ import {
   NODE_PORT_NODE_CLASS,
   NODE_PORT_VISIBLE_CLASS,
   NODE_SELECTED_BORDER_CLASS,
+  NODE_SURFACE_CLASS,
 } from '@/features/canvas/ui/nodeControlStyles';
 import { getSocketColor } from '@/features/canvas/domain/socketTypes';
 import {
@@ -329,7 +330,7 @@ export const UploadNode = memo(({ id, data, selected, width, height }: UploadNod
   return (
     <div
       className={`
-        group relative overflow-visible rounded-[var(--node-radius)] border bg-surface-dark/85 p-0 transition-colors duration-120
+        group relative overflow-visible rounded-[var(--node-radius)] border ${NODE_SURFACE_CLASS} p-0 transition-colors duration-120
         ${selected
           ? NODE_SELECTED_BORDER_CLASS
           : NODE_IDLE_BORDER_CLASS}

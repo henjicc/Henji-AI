@@ -8,7 +8,7 @@ export const NODE_CONTROL_PARAMS_CHIP_CLASS = '!max-w-[120px] !justify-start';
 export const NODE_CONTROL_ICON_CLASS = 'h-3 w-3';
 
 export const NODE_PORT_BASE_CLASS =
-  "!h-2 !w-2 !border !border-veil-strong !opacity-0 transition-opacity duration-120 before:absolute before:-inset-2 before:content-[''] [&.connectingfrom]:!opacity-100 [&.connectingto]:!opacity-100";
+  "!h-2 !w-2 !border !border-text3/60 !opacity-0 transition-opacity duration-120 before:absolute before:-inset-2 before:content-[''] [&.connectingfrom]:!opacity-100 [&.connectingto]:!opacity-100";
 
 export const NODE_PORT_VISIBLE_CLASS = '!opacity-100';
 
@@ -24,7 +24,7 @@ export const NODE_PORT_NODE_CLASS =
  * 避免"不同控件类型各自圆角"导致的不统一感。
  */
 export const NODE_ROW_CARD_CLASS =
-  'rounded-lg border border-veil-subtle bg-bg-dark/45 transition-colors';
+  'rounded-lg border border-line bg-gap/45 transition-colors';
 
 export const NODE_ROW_CLASS =
   `group/row relative flex min-h-10 items-center gap-3 px-3 py-1.5 ${NODE_ROW_CARD_CLASS}`;
@@ -35,14 +35,14 @@ export const NODE_ROW_LABEL_CLASS =
 export const NODE_ROW_CONTROL_SLOT_CLASS = 'ml-auto flex min-w-0 items-center justify-end';
 
 /** 未连线行的悬停提示（连线行改用插槽色底色，不叠加该 hover） */
-export const NODE_ROW_HOVER_CLASS = 'hover:bg-white/[0.06]';
+export const NODE_ROW_HOVER_CLASS = 'hover:bg-hover';
 
 /** 行与行之间的间隙（替代旧版贴边 divide-y），让每行读成独立卡片 */
 export const NODE_ROW_GAP_CLASS = 'gap-1.5';
 
 /** 结果节点生成失败时的红色描边（配合 NodeGenerationError 覆盖层使用） */
 export const NODE_GENERATION_ERROR_BORDER_CLASS =
-  'border-red-500/70 shadow-node-error';
+  'border-danger-hi/70 shadow-node-error';
 
 /**
  * 节点外壳的选中 / 未选中描边。
@@ -55,7 +55,18 @@ export const NODE_GENERATION_ERROR_BORDER_CLASS =
  */
 export const NODE_SELECTED_BORDER_CLASS = 'border-accent shadow-node-selected';
 
-export const NODE_IDLE_BORDER_CLASS = 'border-veil hover:border-veil-strong';
+/**
+ * 节点静息描边取辅助文字色的低透明度：`line` / `line-strong` 在深色预设里与节点面几乎同亮，
+ * 画布上节点会失去轮廓；辅助文字色两种模式都与表面拉开足够对比，压低透明度后与旧白纱观感一致，
+ * 纸白下自动变成浅灰描边。
+ */
+export const NODE_IDLE_BORDER_CLASS = 'border-text3/30 hover:border-text3/50';
 
 /** 不需要 hover 反馈的节点（如分组节点）用这个 */
-export const NODE_IDLE_BORDER_STATIC_CLASS = 'border-veil';
+export const NODE_IDLE_BORDER_STATIC_CLASS = 'border-text3/30';
+
+/**
+ * 节点外壳表面（henji-ui-surface 五级容器：画布节点是卡片 = 面板底）。实底不透明：
+ * 点阵不再透进节点，纸白下节点为白色卡片、深色下比画布底亮一级。
+ */
+export const NODE_SURFACE_CLASS = 'bg-panel';

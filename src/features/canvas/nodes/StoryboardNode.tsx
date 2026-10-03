@@ -20,6 +20,7 @@ import {
   NODE_PORT_NODE_CLASS,
   NODE_PORT_VISIBLE_CLASS,
   NODE_SELECTED_BORDER_CLASS,
+  NODE_SURFACE_CLASS,
 } from '@/features/canvas/ui/nodeControlStyles';
 import { getSocketColor, mediaPortId } from '@/features/canvas/domain/socketTypes';
 import { canvasViewStore, useCanvasStore } from '@/stores/canvasStore';
@@ -278,7 +279,7 @@ export const StoryboardNode = memo(({ id, data, selected, width, height }: Story
     <div
       ref={rootRef}
       className={`
-        group relative flex h-full flex-col overflow-visible rounded-[var(--node-radius)] border bg-surface-dark/90 p-2 transition-colors duration-120
+        group relative flex h-full flex-col overflow-visible rounded-[var(--node-radius)] border ${NODE_SURFACE_CLASS} p-2 transition-colors duration-120
         ${selected
           ? NODE_SELECTED_BORDER_CLASS
           : NODE_IDLE_BORDER_CLASS}
@@ -296,7 +297,7 @@ export const StoryboardNode = memo(({ id, data, selected, width, height }: Story
 
       <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden">
         <div
-          className="grid overflow-hidden rounded-lg border border-veil-soft bg-veil-soft"
+          className="grid overflow-hidden rounded-lg border border-line bg-line"
           style={{
             gap: `${STORYBOARD_GRID_GAP_PX}px`,
             width: `${frameLayout.gridWidth}px`,
@@ -391,7 +392,7 @@ export const StoryboardNode = memo(({ id, data, selected, width, height }: Story
         onPatch={patchExportOptions}
       />
 
-      {exportError && <div className="mt-2 shrink-0 text-xs text-red-400">{exportError}</div>}
+      {exportError && <div className="mt-2 shrink-0 text-xs text-danger-text">{exportError}</div>}
 
       <Handle
         type="target"

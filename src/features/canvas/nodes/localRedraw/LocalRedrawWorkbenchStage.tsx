@@ -2,7 +2,7 @@ import { Brush, Circle, Eraser, Lasso, Redo2, Square, Trash2, Undo2 } from 'luci
 import { memo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { UiChipButton, UiError, UiIconButton, UiLoading, UiRangeInput } from '@/components/ui';
+import { UI_GLASS_ADAPTIVE_DIVIDER_CLASS, UiChipButton, UiError, UiIconButton, UiLoading, UiRangeInput } from '@/components/ui';
 import { MaskEditorCanvas } from '@/features/maskEditor/MaskEditorCanvas';
 import { hasPaintedMask } from '@/features/maskEditor/maskDocument';
 import type { MaskEditorDocument, MaskTool } from '@/features/maskEditor/types';
@@ -76,7 +76,8 @@ export const LocalRedrawWorkbenchStage = memo(function LocalRedrawWorkbenchStage
         <UiLoading message={t('node.elementEditGeneration.loadingMask')} className="flex-1" />
       )}
 
-      <div className="absolute left-2 right-2 top-2 flex min-w-0 items-center gap-1 rounded-lg bg-overlay p-1.5">
+      {/* 工具条压在待编辑图片上：一块玻璃包住整排静默控件（原 bg-overlay 不是已登记颜色，实际没有底） */}
+      <div className="ui-glass absolute left-2 right-2 top-2 flex min-w-0 items-center gap-1 rounded-lg p-1.5">
         {TOOLS.map(({ value, labelKey, icon: Icon }) => {
           const label = t(labelKey);
           return (
@@ -105,7 +106,7 @@ export const LocalRedrawWorkbenchStage = memo(function LocalRedrawWorkbenchStage
         >
           <Eraser className="h-3.5 w-3.5" />
         </UiChipButton>
-        <div className="ml-1 flex items-center gap-1 border-l border-veil-subtle pl-1.5">
+        <div className={`ml-1 flex items-center gap-1 border-l pl-1.5 ${UI_GLASS_ADAPTIVE_DIVIDER_CLASS}`}>
           <UiIconButton size="lg"
             type="button"
             aria-label={t('node.elementEditGeneration.undoMask')}

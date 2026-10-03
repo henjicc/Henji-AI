@@ -39,6 +39,16 @@ export const SOCKET_TYPE_COLOR_HEX: Record<string, string> = {
 };
 export const SOCKET_TYPE_COLOR_FALLBACK_HEX = '#D4D4D4';
 
+/**
+ * 分镜导出（合并导出 / 图片分镜命令）画进导出图片的内容色：序号徽标底、叠加备注条、缺图占位格。
+ * 属于产物像素，不随界面主题变化。
+ */
+export const STORYBOARD_EXPORT_COLOR = {
+  frameIndexBadge: 'rgba(0,0,0,0.65)',
+  noteOverlay: 'rgba(0,0,0,0.6)',
+  emptyCell: 'rgba(255,255,255,0.08)',
+} as const;
+
 // 3D 镜头参考三维场景纯色渲染基础色（1.1 技术验证引入，第二阶段编辑器继续复用）
 export const CAMERA_STAGE_COLOR_HEX = {
   stageBg: '#18181c',

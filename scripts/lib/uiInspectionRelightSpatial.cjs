@@ -1,7 +1,7 @@
 const { writeFile } = require('node:fs/promises')
 const { captureInspectionPage } = require('./uiInspectionCapture.cjs')
 
-async function prepareRelightPortrait(page, projectId) {
+async function prepareRelightPortrait(page, projectId, reopenCanvasProjectFromStorage) {
   await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
   await page.locator(`[data-project-id="${projectId}"]:visible`).waitFor()
   await page.evaluate(async (id) => {
@@ -30,7 +30,8 @@ async function prepareRelightPortrait(page, projectId) {
     node.data = { ...node.data, imageUrl: source, previewImageUrl: source, aspectRatio: '1:2', displayName: '竖版产品参考图' }
     await window.henjiNative.db.execute('UPDATE storyboard_projects SET nodes_json = ? WHERE id = ?', [JSON.stringify(nodes), id])
   }, projectId)
-  await page.locator(`[data-project-id="${projectId}"]:visible`).click()
+  // 工程实例常驻内存，库层改写后必须经 reload 重新读取（见 reopenCanvasProjectFromStorage）
+  await reopenCanvasProjectFromStorage(page, projectId)
   await page.locator('.react-flow__node[data-id="__ui_panorama_source"]').waitFor()
 }
 

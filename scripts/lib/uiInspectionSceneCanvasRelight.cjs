@@ -11,6 +11,7 @@ function attachUiInspectionCanvasRelight(context) {
     clickCanvasCapabilityAction,
     resizeCanvasNodeAndAssertHitBox,
     seedAndOpenCanvasPanoramaProject,
+    reopenCanvasProjectFromStorage,
     openWorkspace,
   } = context
 
@@ -41,7 +42,7 @@ function attachUiInspectionCanvasRelight(context) {
 
   async function setupCanvasRelightEditor(page, electronApp) {
     const { projectId } = await seedAndOpenCanvasPanoramaProject(page)
-    await prepareRelightPortrait(page, projectId)
+    await prepareRelightPortrait(page, projectId, reopenCanvasProjectFromStorage)
     const sourceNode = page.locator('.react-flow__node[data-id="__ui_panorama_source"]')
     await sourceNode.click()
     let relightAction = page.getByRole('button', { name: /^(打光|Relight)$/i })
@@ -199,7 +200,7 @@ function attachUiInspectionCanvasRelight(context) {
       node.style = { ...node.style, width: 680, height: 360 }
       await window.henjiNative.db.execute('UPDATE storyboard_projects SET nodes_json = ? WHERE id = ?', [JSON.stringify(nodes), projectId])
     }, { projectId, nodeId: relightNodeId })
-    await page.locator(`[data-project-id="${projectId}"]:visible`).click()
+    await reopenCanvasProjectFromStorage(page, projectId)
     const reopened = page.locator(`[data-relight-node-id="${relightNodeId}"][data-relight-mode="smart"]`)
     await reopened.waitFor({ state: 'visible', timeout: 12000 })
     await reopened.click()
@@ -265,8 +266,8 @@ function attachUiInspectionCanvasRelight(context) {
         }
       }))
       const reference = sizes[0]
-      // Allow only sub-layout-pixel rounding from Electron zoom.
-      if (!reference || sizes.some(size => Math.abs(size.height - 38) > 0.01
+      // 选项高度 = 控件 lg 档 36（任务 2.2 起；原 38 是旧字段令牌）；只容许 Electron 缩放带来的亚像素误差。
+      if (!reference || sizes.some(size => Math.abs(size.height - 36) > 0.01
         || size.typography !== reference.typography || size.padding !== reference.padding || !size.fits)) {
         throw new Error(`多角度同层级选项尺寸或排版不一致：${JSON.stringify(sizes)}`)
       }

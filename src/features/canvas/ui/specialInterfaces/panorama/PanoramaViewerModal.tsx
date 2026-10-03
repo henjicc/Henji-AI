@@ -255,11 +255,11 @@ export function PanoramaViewerModal({
         ) : null}
       </div>
 
-      <header className="ui-glass absolute inset-x-0 top-0 z-sticky flex h-12 items-center gap-3 border-b border-veil-subtle px-3">
-        <div className="flex min-w-0 items-center gap-2 text-white">
+      <header className="ui-glass absolute inset-x-0 top-0 z-sticky flex h-12 items-center gap-3 border-b px-3">
+        <div className="flex min-w-0 items-center gap-2 text-text1">
           <ICON_PANORAMA className="h-4 w-4 shrink-0" />
           <span className="truncate text-sm font-medium">{t('viewer.panorama.title')}</span>
-          {dimensions ? <span className="hidden text-xs text-white/70 sm:inline">{dimensions}</span> : null}
+          {dimensions ? <span className="hidden text-xs text-text2 sm:inline">{dimensions}</span> : null}
         </div>
 
         {imageList.length > 1 ? (
@@ -271,7 +271,7 @@ export function PanoramaViewerModal({
             >
               <ChevronLeft className="h-4 w-4" />
             </UiIconButton>
-            <span className="min-w-[44px] text-center text-xs text-white/70">
+            <span className="min-w-[44px] text-center text-xs text-text2">
               {currentIndex + 1} / {imageList.length}
             </span>
             <UiIconButton size="lg" tone="media" shape="circle"
@@ -335,13 +335,13 @@ export function PanoramaViewerModal({
       </header>
 
       {isReady && !resource.isEquirectangular ? (
-        <div className="ui-glass pointer-events-none absolute left-1/2 top-16 z-sticky -translate-x-1/2 rounded-full px-4 py-2 text-xs text-white">
+        <div className="ui-glass pointer-events-none absolute left-1/2 top-16 z-sticky -translate-x-1/2 rounded-full px-4 py-2 text-xs text-text1">
           {t('viewer.panorama.invalidRatio', { dimensions })}
         </div>
       ) : null}
 
       {renderSphere ? (
-        <div className="ui-glass pointer-events-none absolute bottom-5 left-1/2 z-sticky -translate-x-1/2 rounded-full px-4 py-2 text-xs text-white/80">
+        <div className="ui-glass pointer-events-none absolute bottom-5 left-1/2 z-sticky -translate-x-1/2 rounded-full px-4 py-2 text-xs text-text2">
           {t('viewer.panorama.interactionHint')}
         </div>
       ) : null}

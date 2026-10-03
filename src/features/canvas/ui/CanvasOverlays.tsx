@@ -67,7 +67,8 @@ export function CanvasOverlays({
             className="pointer-events-none"
             d={previewConnectionVisual.d}
             fill="none"
-            stroke={previewConnectionVisual.stroke}
+            // 颜色可能是 CSS 变量表达式，SVG 呈现属性不解析 var()，走内联样式
+            style={{ stroke: previewConnectionVisual.stroke }}
             strokeWidth={previewConnectionVisual.strokeWidth}
             strokeLinecap={previewConnectionVisual.strokeLinecap}
           />

@@ -93,6 +93,18 @@ function attachUiInspectionCanvasWorkspace(context) {
     return { panoramaSource, projectId }
   }
 
+  /**
+   * 直接改库后重新打开工程。画布工程实例在本次会话中常驻内存（canvasProjectInstances），
+   * 打开过的工程再次打开时读内存实例而不是数据库，所以库层夹具写入后必须 reload 丢弃旧实例。
+   */
+  async function reopenCanvasProjectFromStorage(page, projectId) {
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await setupCanvas(page)
+    const card = page.locator(`[data-project-id="${projectId}"]:visible`)
+    await card.waitFor({ state: 'visible', timeout: 15000 })
+    await card.click()
+  }
+
   async function setupCanvasMissingNodes(page) {
     const { projectId } = await seedAndOpenCanvasPanoramaProject(page)
     await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
@@ -248,7 +260,7 @@ function attachUiInspectionCanvasWorkspace(context) {
         [nodes.length, JSON.stringify(nodes), JSON.stringify({ x: 330, y: 80, zoom: 0.65 }), targetProjectId]
       )
     }, projectId)
-    await page.locator(`[data-project-id="${projectId}"]:visible`).click()
+    await reopenCanvasProjectFromStorage(page, projectId)
     const emptyNode = page.locator('.react-flow__node[data-id="__ui_empty_image_source"]')
     await emptyNode.waitFor({ state: 'visible', timeout: 12000 })
     await emptyNode.click()
@@ -832,6 +844,7 @@ function attachUiInspectionCanvasWorkspace(context) {
     setupSettings,
     setupCanvas,
     seedAndOpenCanvasPanoramaProject,
+    reopenCanvasProjectFromStorage,
     setupCanvasMissingNodes,
     setupCanvasImageCapabilityToolbar,
     setupCanvasPanoramaToolbar,

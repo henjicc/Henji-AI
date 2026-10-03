@@ -124,7 +124,7 @@ export function RelightDirectionVisualizer({ direction, brightness = 0, colorPre
     </div>
     <div className="flex min-h-0 flex-1 items-center justify-center [container-type:size]">
       <div ref={stageRef} style={{ width: 'min(100cqw, 100cqh)', height: 'min(100cqw, 100cqh)' }}
-        className="relative shrink-0 select-none overflow-hidden rounded-lg text-veil-subtle">
+        className="relative shrink-0 select-none overflow-hidden rounded-lg">
         <RelightSpatialScene main={poses.main} rim={rimDirection === 'off' ? null : poses.rim} view={view}
           activeLamp={dragging ? drag.current?.lamp : undefined} snapTarget={drag.current?.target}
           mainEnabled={drag.current?.lamp === 'main' || mainDirectionForPose(poses.main) !== 'none'}

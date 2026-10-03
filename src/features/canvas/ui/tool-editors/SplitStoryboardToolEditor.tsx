@@ -162,13 +162,13 @@ export function SplitStoryboardToolEditor({ sourceImageUrl, options, onOptionsCh
         </div>
 
         <div
-          className={`ui-scrollbar flex ${PREVIEW_VIEWPORT_HEIGHT} items-center justify-center overflow-auto rounded-xl border border-veil-subtle bg-bg-dark/70 p-3`}
+          className={`ui-scrollbar flex ${PREVIEW_VIEWPORT_HEIGHT} items-center justify-center overflow-auto rounded-xl border border-line bg-bg-dark/70 p-3`}
         >
           <div className="relative inline-flex items-center justify-center">
             <img
               src={displaySourceImageUrl}
               alt="split-preview"
-              className="max-h-full w-auto max-w-full rounded-lg border border-veil-subtle object-contain"
+              className="max-h-full w-auto max-w-full rounded-lg border border-line object-contain"
               onLoad={(event) => {
                 const target = event.currentTarget;
                 setNaturalSize({
@@ -183,7 +183,7 @@ export function SplitStoryboardToolEditor({ sourceImageUrl, options, onOptionsCh
                 {layout.lineRects.map((rect, index) => (
                   <div
                     key={`line-${index}`}
-                    className="absolute bg-red-400/35"
+                    className="absolute bg-danger-hi/40"
                     style={{
                       left: toPercent(rect.x, naturalSize.width),
                       top: toPercent(rect.y, naturalSize.height),
@@ -196,7 +196,7 @@ export function SplitStoryboardToolEditor({ sourceImageUrl, options, onOptionsCh
                 {layout.cellRects.map((cell, index) => (
                   <div
                     key={`cell-${index}`}
-                    className="absolute border border-white/40"
+                    className="absolute border border-on-media/40"
                     style={{
                       left: toPercent(cell.x, naturalSize.width),
                       top: toPercent(cell.y, naturalSize.height),
@@ -212,13 +212,13 @@ export function SplitStoryboardToolEditor({ sourceImageUrl, options, onOptionsCh
 
         <div className={`flex items-center gap-3 ${UI_TEXT_META_CLASS}`}>
           <div className="inline-flex items-center gap-2">
-            <span className="h-2.5 w-2.5 rounded-sm bg-red-400/70" />
+            <span className="h-2.5 w-2.5 rounded-sm bg-danger-hi/70" />
             红色区域为切割时会丢弃的分割线像素
           </div>
         </div>
       </div>
 
-      <div className="space-y-4 rounded-xl border border-veil-subtle bg-bg-dark/75 p-3.5">
+      <div className="space-y-4 rounded-xl border border-line bg-bg-dark/75 p-3.5">
         <div className={UI_TEXT_PANEL_TITLE_CLASS}>切割参数</div>
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-1">
@@ -265,7 +265,7 @@ export function SplitStoryboardToolEditor({ sourceImageUrl, options, onOptionsCh
           />
         </div>
 
-        <div className={`rounded-lg border border-veil-subtle bg-bg-dark/80 px-3 py-2 ${UI_TEXT_META_CLASS}`}>
+        <div className={`rounded-lg border border-line bg-bg-dark/80 px-3 py-2 ${UI_TEXT_META_CLASS}`}>
           <div className="flex items-center justify-between">
             <span>输出小格数量</span>
             <span className="font-medium text-text-dark">{rows * cols}</span>
@@ -285,7 +285,7 @@ export function SplitStoryboardToolEditor({ sourceImageUrl, options, onOptionsCh
         </div>
 
         {hasLayoutError && (
-          <div className="rounded-lg border border-red-400/35 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+          <div className="rounded-lg bg-danger-tint px-3 py-2 text-xs text-danger-text">
             当前分割线过粗，导致可切割区域不足。请减少线宽或降低行列数。
           </div>
         )}

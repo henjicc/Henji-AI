@@ -34,6 +34,7 @@ import {
   NODE_PORT_NODE_CLASS,
   NODE_PORT_VISIBLE_CLASS,
   NODE_SELECTED_BORDER_CLASS,
+  NODE_SURFACE_CLASS,
 } from '@/features/canvas/ui/nodeControlStyles'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useSettingsStore } from '@/stores/settingsStore'
@@ -135,7 +136,7 @@ const EmptyUploadNode = memo(({ id, data, selected, width, height }: UniversalUp
 
   return (
     <div
-      className={`group relative overflow-visible rounded-[var(--node-radius)] border bg-surface-dark/85 transition-colors duration-120 ${
+      className={`group relative overflow-visible rounded-[var(--node-radius)] border ${NODE_SURFACE_CLASS} transition-colors duration-120 ${
         selected ? NODE_SELECTED_BORDER_CLASS : NODE_IDLE_BORDER_CLASS
       }`}
       style={{ width: width || defaultSize.width, height: height || defaultSize.height }}
