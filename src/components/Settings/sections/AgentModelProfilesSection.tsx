@@ -149,7 +149,7 @@ function capabilitySummary(model: LlmModelConfig | undefined): string {
     `工具 ${capabilities.toolCall ? '是' : '否'}`,
     `并行 ${capabilities.parallelTools ? '是' : '否'}`,
     `结构化 ${capabilities.structuredOutputMode}`,
-    `输入 图${capabilities.image ? '✓' : '—'} / 视频${capabilities.video ? '✓' : '—'} / 音频${capabilities.audio ? '✓' : '—'}`,
+    `输入 ${[capabilities.image && '图片', capabilities.video && '视频', capabilities.audio && '音频'].filter(Boolean).join('、') || '仅文字'}`,
     `上下文 ${capabilities.contextWindow ?? '未知'}`,
     `输出 ${capabilities.maxOutputTokens ?? '未知'}`,
   ].join(' · ')

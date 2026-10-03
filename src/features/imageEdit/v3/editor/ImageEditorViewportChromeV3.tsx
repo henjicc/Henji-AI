@@ -32,11 +32,12 @@ export function ImageEditorViewportChromeV3({
         className="pointer-events-none absolute z-raised h-px -translate-y-1/2 bg-accent"
         style={{ visibility: 'hidden' }}
       />
+      {/* 压在画面上的缩放条：媒体叠层固定令牌（不随主题），三段同高 28 */}
       <div
         data-viewport-control
-        className="ui-glass absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-lg p-1"
+        className="absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1"
       >
-        <UiIconButton size="lg"
+        <UiIconButton tone="media"
           aria-label={t('imageEditor.v3.zoomOut')}
           title={t('imageEditor.v3.zoomOut')}
           disabled={zoom <= 0.05}
@@ -44,10 +45,10 @@ export function ImageEditorViewportChromeV3({
         >
           <Minus className="h-4 w-4" />
         </UiIconButton>
-        <span className="w-14 text-center text-xs tabular-nums text-text1">
+        <span className="flex h-7 w-14 items-center justify-center rounded-md bg-media-control text-xs tabular-nums text-on-media">
           {Math.round(zoom * 100)}%
         </span>
-        <UiIconButton size="lg"
+        <UiIconButton tone="media"
           aria-label={t('imageEditor.v3.zoomIn')}
           title={t('imageEditor.v3.zoomIn')}
           disabled={zoom >= 8}

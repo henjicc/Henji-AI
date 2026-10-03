@@ -320,11 +320,12 @@ export function ImageMarkTool({ onBack }: ImageMarkToolProps = {}): JSX.Element 
 
   const backButton = onBack ? (
     <UiIconButton
+      size="lg"
       title="返回工具"
       aria-label="返回工具"
       onClick={onBack}
     >
-      <ArrowLeft size={15} />
+      <ArrowLeft size={16} />
     </UiIconButton>
   ) : null;
 

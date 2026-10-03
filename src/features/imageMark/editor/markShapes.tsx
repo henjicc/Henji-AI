@@ -1,7 +1,7 @@
 import { Circle, Ellipse, Group, Line, Rect, Shape, Text } from 'react-konva';
 import type { KonvaEventObject } from 'konva/lib/Node';
 import type Konva from 'konva';
-import { WHITE_HEX } from '@/core/theme/colorTokens';
+import { ANNOTATION_MOSAIC_PLACEHOLDER_FILL, WHITE_HEX } from '@/core/theme/colorTokens';
 import {
   MARK_FONT_FAMILY,
   MARK_FONT_STYLE,
@@ -351,7 +351,7 @@ export function MarkShapeNode({
         if (mosaicSource) {
           drawMosaicRegion(native, mosaicSource, mosaicPixelSize, region, 0, 0);
         } else {
-          native.fillStyle = 'rgba(127, 127, 127, 0.6)';
+          native.fillStyle = ANNOTATION_MOSAIC_PLACEHOLDER_FILL;
           native.fillRect(0, 0, shape.width(), shape.height());
         }
       }}

@@ -41,7 +41,7 @@ function ImageEditorWorkspaceV3(props: ImageEditorV3Props): JSX.Element {
       }}
       data-image-editor-v3
       data-host-profile={controller.profile.id}
-      className={`flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-bg-dark text-text-dark ${props.className ?? ''}`}
+      className={`flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-gap text-text1 ${props.className ?? ''}`}
     >
       <ImageEditorCommandBarV3
         controller={controller}

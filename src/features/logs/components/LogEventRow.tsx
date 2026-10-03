@@ -23,7 +23,7 @@ export function LogEventRow({ event, selected, onSelect }: LogEventRowProps): JS
       {isError && !selected ? <span aria-hidden="true" className="absolute inset-y-2 left-0 w-0.5 rounded-full bg-danger-solid" /> : null}
       <div className="flex items-center justify-between gap-2 text-xs">
         <span className="truncate">
-          {display.emoji} {display.title}
+          <display.icon aria-hidden="true" className="mr-1 inline h-3.5 w-3.5 align-[-2px]" />{display.title}
         </span>
         <span className="shrink-0 text-2xs uppercase tracking-wide opacity-70">{event.level}</span>
       </div>

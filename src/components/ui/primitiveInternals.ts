@@ -78,6 +78,26 @@ export interface UiChipButtonProps extends ButtonHTMLAttributes<HTMLButtonElemen
   size?: UiControlSize
 }
 
+/**
+ * 文字记号（逐字稿词块、时间轴字幕块）。它不是动作按钮也不是选项，而是“可点的文字”：
+ * 单击定位/选中、双击编辑、右键删除，状态由内容决定（界面重设计 3.4，设计稿 ToolAudioEdit）。
+ * - `inline`：行内词块，继承段落字号与行高，静息无底；
+ * - `chip`：时间轴上的字幕块，高度填满所在泳道、11 号字，静息铺 raised。
+ */
+export type UiTextTokenAppearance = 'inline' | 'chip'
+
+export interface UiTextTokenProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+  appearance?: UiTextTokenAppearance
+  /** 当前播放位置所在的词（中性选中底）。 */
+  current?: boolean
+  /** 已选中（多选集合：强调浅底 + 强调描边环）。 */
+  selected?: boolean
+  /** 已删除、不进入成片（划线 + 危险浅底）。 */
+  excluded?: boolean
+  /** 待留意的标记（如语气词）：警示色点状下划线；与 `excluded` 同时出现时以删除为准。 */
+  flagged?: boolean
+}
+
 /** 窗口控件动作：`maximize` 与 `restore` 由调用点按窗口当前是否最大化选择。 */
 export type UiWindowControlAction = 'minimize' | 'maximize' | 'restore' | 'close'
 

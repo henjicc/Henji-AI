@@ -59,20 +59,18 @@ const StageViewportToolbar: React.FC = () => {
       {TOOLS.map((definition, index) => {
         const Icon = definition.icon
         const disabled = definition.id === 'path' && pathDisabled
+        // 路径编辑与三个变换同属“模式”，用间距隔开即可（一条命令带只留一条分隔线）
         return (
-          <React.Fragment key={definition.id}>
-            {index === 3 && <span className="mx-1 h-5 w-px bg-border-dark" />}
-            <UiIconButton size="lg"
+            <UiIconButton key={definition.id} size="lg"
               on={activeTool === definition.id}
               disabled={disabled}
-              className="disabled:cursor-not-allowed disabled:opacity-40"
+              className={index === 3 ? 'ml-1.5' : undefined}
               title={`${definition.label}（${definition.shortcut}）`}
               aria-label={`${definition.label}，快捷键 ${definition.shortcut}`}
               onClick={() => activateTool(definition)}
             >
-              <Icon size={15} strokeWidth={1.8} />
+              <Icon size={16} strokeWidth={1.8} />
             </UiIconButton>
-          </React.Fragment>
         )
       })}
     </div>

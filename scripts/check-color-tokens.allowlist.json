@@ -43,34 +43,6 @@
         "palette": 1
       }
     },
-    "src/features/audioEdit/AudioEditApp.tsx": {
-      "owner": "3.4",
-      "category": "界面色（迁入语义令牌）",
-      "counts": {
-        "mono": 1
-      }
-    },
-    "src/features/audioEdit/AudioEditTimeline.tsx": {
-      "owner": "3.4",
-      "category": "界面色（迁入语义令牌）",
-      "counts": {
-        "palette": 3
-      }
-    },
-    "src/features/cameraStage/scene/StageAspectRatioOverlay.tsx": {
-      "owner": "3.4",
-      "category": "媒体叠层（迁入 media-* / on-media 固定令牌）",
-      "counts": {
-        "mono": 1
-      }
-    },
-    "src/features/cameraStage/stateKeyframes/timeline/StateKeyframeClipTrack.tsx": {
-      "owner": "3.4",
-      "category": "界面色（迁入语义令牌）",
-      "counts": {
-        "mono": 1
-      }
-    },
     "src/features/canvas/Canvas.tsx": {
       "owner": "3.6",
       "category": "界面色（迁入语义令牌）",
@@ -191,20 +163,6 @@
       "counts": {
         "palette": 5,
         "mono": 1
-      }
-    },
-    "src/features/imageMark/editor/CropOverlayBox.tsx": {
-      "owner": "3.4",
-      "category": "媒体叠层（迁入 media-* / on-media 固定令牌）",
-      "counts": {
-        "mono": 11
-      }
-    },
-    "src/features/imageMark/editor/markShapes.tsx": {
-      "owner": "3.4",
-      "category": "内容色/算法常量（迁入 colorTokens.ts 登记）",
-      "counts": {
-        "rgba": 1
       }
     },
     "src/features/logs/components/AssistantTraceDetail.tsx": {

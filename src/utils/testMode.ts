@@ -245,10 +245,10 @@ export function logRequestParams(params: DynamicValue): void {
   if (state.options.logParams) {
     const { input, model, type, options = {} } = params
 
-    logger.group('🧪 [测试模式] 请求参数详情')
+    logger.group('[测试模式] 请求参数详情')
 
     // 基本信息
-    logger.group('📋 基本信息')
+    logger.group('基本信息')
     logger.info('模型:', model)
     logger.info('类型:', type === 'image' ? '图片' : type === 'video' ? '视频' : type === 'audio' ? '音频' : type)
     logger.info('提示词:', input || '(无)')
@@ -258,7 +258,7 @@ export function logRequestParams(params: DynamicValue): void {
     // 关键参数
     const keyParams = extractKeyParams(options, type)
     if (Object.keys(keyParams).length > 0) {
-      logger.group('⚙️ 关键参数')
+      logger.group('关键参数')
       for (const [key, value] of Object.entries(keyParams)) {
         logger.info(`${key}:`, value)
       }
@@ -268,7 +268,7 @@ export function logRequestParams(params: DynamicValue): void {
     // 上传的文件
     const files = analyzeUploadedFiles(options)
     if (Object.keys(files).length > 0) {
-      logger.group('📁 上传文件')
+      logger.group('上传文件')
       for (const [key, value] of Object.entries(files)) {
         logger.info(`${key}:`, value)
       }
@@ -276,13 +276,13 @@ export function logRequestParams(params: DynamicValue): void {
     }
 
     // 完整参数（格式化 Base64）
-    logger.group('📦 完整参数 (Base64已简化)')
+    logger.group('完整参数 (Base64已简化)')
     const formattedOptions = formatBase64(options)
     logger.info('', formattedOptions)
     logger.groupEnd()
 
     // 原始参数（折叠，仅在需要时展开）
-    logger.groupCollapsed('🔍 原始参数 (包含Base64)')
+    logger.groupCollapsed('原始参数 (包含Base64)')
     logger.info('完整options对象:', options)
     logger.groupEnd()
 

@@ -93,10 +93,29 @@ interface UiFormRowProps extends Omit<HTMLAttributes<HTMLDivElement>, 'title'> {
 }
 
 interface UiToolbarProps extends HTMLAttributes<HTMLDivElement> {
-  /** 左侧内容 */
+  /**
+   * - `plain`（默认）：横向排布容器，无边框无背景。
+   * - `command`：工具页骨架的**命令带**（skill `henji-ui-surface`「页面骨架：横向条带」A 类）：
+   *   44 高、面板底、下边一条间隙色发丝线。一个视图只有一条；返回、标题/文件上下文、主工具组、
+   *   导出/保存全部进这一条，内层功能组件不得再长自己的头带（用 props 注入）。
+   */
+  variant?: 'plain' | 'command';
+  /** 左侧内容（command：返回、文件上下文、主工具组） */
   children?: ReactNode;
-  /** 右侧内容 */
+  /**
+   * 仅 command：中间区，占据两端之间的剩余宽度并居中（视图切换、路径上下文、随工具变化的参数）。
+   * 内容超宽时由内容自己横向滚动（给它 `min-w-0 max-w-full overflow-x-auto`）。
+   */
+  center?: ReactNode;
+  /** 右侧内容（command：次要动作 + 唯一主动作） */
   trailing?: ReactNode;
+  /**
+   * 仅 command：从属参数带（B 类）——只随当前工具变化的参数，紧贴命令带下方，
+   * 与命令带共用同一块底色和同一条下边框，自身不画底色与边框。
+   */
+  subordinate?: ReactNode;
+  /** 仅 command：命令带那一行的附加属性（如 `data-*` 状态），不用于改外观。 */
+  barProps?: HTMLAttributes<HTMLDivElement> & Record<`data-${string}`, string | number | undefined>;
 }
 
 interface UiTooltipTextProps {
@@ -306,15 +325,47 @@ export function UiDisclosurePanel({ open, children, className = '' }: UiDisclosu
 }
 
 /**
- * 工具栏：横向排布容器，无边框无背景。
- * 需要与内容区分隔时用 `divided` 一条线，不要包成卡片。
+ * 工具栏。
+ *
+ * - 默认 `plain`：横向排布容器，无边框无背景；需要与内容区分隔时用一条线，不要包成卡片。
+ * - `command`：工具页统一骨架的命令带（口播剪辑、图片编辑、3D 镜头参考共用，界面重设计 3.4）。
+ *   左端 / 中间 / 右端三段 + 可选从属参数带；横向内边距与其下内容区对齐（10px）。
  */
 export function UiToolbar({
   className = '',
+  variant = 'plain',
   children,
+  center,
   trailing,
+  subordinate,
+  barProps,
   ...props
 }: UiToolbarProps): JSX.Element {
+  if (variant === 'command') {
+    const { className: barClassName = '', ...barRest } = barProps ?? {};
+    return (
+      <header
+        data-command-stack
+        className={`shrink-0 border-b border-gap bg-panel ${className}`}
+        {...props}
+      >
+        <div
+          data-command-bar
+          className={`flex h-11 min-w-0 items-center gap-1.5 px-2.5 ${barClassName}`}
+          {...barRest}
+        >
+          <div data-command-bar-leading className="flex min-w-0 shrink items-center gap-1.5">{children}</div>
+          <div data-command-bar-center className="flex min-w-0 flex-1 items-center justify-center">{center}</div>
+          {trailing ? <div data-command-bar-trailing className="flex shrink-0 items-center gap-1.5">{trailing}</div> : null}
+        </div>
+        {subordinate ? (
+          <div data-command-subordinate className="flex min-h-10 min-w-0 items-center gap-3 px-2.5 pb-1.5">
+            {subordinate}
+          </div>
+        ) : null}
+      </header>
+    );
+  }
   return (
     <div className={`flex items-center justify-between gap-3 ${className}`} {...props}>
       <div className="flex min-w-0 items-center gap-2">{children}</div>

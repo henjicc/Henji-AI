@@ -1,9 +1,10 @@
-import { FlipHorizontal2, FlipVertical2, RotateCcw, RotateCw, X } from 'lucide-react';
+import { Crop, FlipHorizontal2, FlipVertical2, RotateCcw, RotateCw, X } from 'lucide-react';
 import {
   UI_TEXT_LABEL_CLASS,
   UI_TEXT_META_CLASS,
   UI_TEXT_PANEL_TITLE_CLASS,
   UiButton,
+  UiChipButton,
   UiGroup,
   UiOptionButton,
 } from '@/components/ui';
@@ -61,14 +62,19 @@ export function GeometryInspector(): JSX.Element {
       <UiGroup divided className="pt-4">
         <div className="mb-2 flex items-center justify-between">
           <h3 className={UI_TEXT_LABEL_CLASS}>裁剪</h3>
-          <UiButton
+          {/* 裁剪是“接下来拖动会发生什么”的模式，不是立刻发生的动作：用选中态语言，不占动作档位 */}
+          <UiChipButton
             type="button"
-            variant="secondary"
+            selectionRole="navigation"
+            size="sm"
+            active={tool === 'crop'}
             aria-pressed={tool === 'crop'}
+            title={tool === 'crop' ? '退出裁剪模式' : '进入裁剪模式'}
             onClick={() => selectTool(tool === 'crop' ? 'select' : 'crop')}
           >
-            {tool === 'crop' ? '退出裁剪' : '开始裁剪'}
-          </UiButton>
+            <Crop className={ICON_CLASS} />
+            裁剪模式
+          </UiChipButton>
         </div>
         <div className="flex flex-wrap gap-2">
           {CROP_RATIO_OPTIONS.map((option) => (

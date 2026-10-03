@@ -407,7 +407,7 @@ export function ImageEditorPreviewV3({
       data-move-availability={navigation.effectiveTool === 'move'
         ? layerMoveHandlers.unavailableReason ?? 'ready'
         : undefined}
-      className={`relative min-h-0 min-w-0 flex-1 overflow-hidden bg-bg-dark ${navigationCursor}`}
+      className={`relative min-h-0 min-w-0 flex-1 overflow-hidden bg-gap ${navigationCursor}`}
       style={{ touchAction: ['hand', 'zoom', 'move'].includes(navigation.effectiveTool) ? 'none' : undefined }}
       onPointerDownCapture={layerMoveHandlers.onPointerDownCapture}
       onPointerMoveCapture={layerMoveHandlers.onPointerMoveCapture}

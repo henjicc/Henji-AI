@@ -147,7 +147,7 @@ const StageViewportPane: React.FC<StageViewportPaneProps> = ({ viewportId, captu
             onSelect={setRenderStyle}
             ariaLabel="渲染方式"
             className="min-w-20"
-            size="sm" buttonClassName="py-1"
+            size="sm"
             minWidthStrategy="options"
             panelWidthStrategy="options"
           />
@@ -161,7 +161,7 @@ const StageViewportPane: React.FC<StageViewportPaneProps> = ({ viewportId, captu
           options={options}
           onSelect={handleSourceChange}
           className="min-w-24"
-          size="sm" buttonClassName="py-1"
+          size="sm"
           minWidthStrategy="options"
           panelWidthStrategy="options"
         />

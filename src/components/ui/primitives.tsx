@@ -46,6 +46,7 @@ import {
   type UiSelectProps,
   type UiSwitchProps,
   type UiTextAreaProps,
+  type UiTextTokenProps,
   type UiWindowControlAction,
   type UiWindowControlProps,
   UI_RANGE_TRACK_TONE_CLASS,
@@ -55,7 +56,7 @@ import {
   resolveTextHistoryValue,
   resolveUiPanelSurface,
 } from './primitiveInternals';
-export type { UiControlSize, UiRangeTrackTone, UiWindowControlAction } from './primitiveInternals';
+export type { UiControlSize, UiRangeTrackTone, UiTextTokenAppearance, UiWindowControlAction } from './primitiveInternals';
 
 /** 选项、标签、导航共用的键盘焦点环（按钮重置类会清掉 ring，这里用 `!` 补回）。 */
 const UI_ITEM_FOCUS_RING_CLASS = 'focus-visible:!ring-2 focus-visible:!ring-inset focus-visible:!ring-accent-ring';
@@ -188,6 +189,57 @@ export const UiChipButton = forwardRef<HTMLButtonElement, UiChipButtonProps>(
 );
 
 UiChipButton.displayName = 'UiChipButton';
+
+const UI_TEXT_TOKEN_LAYOUT_CLASS = {
+  inline: 'inline rounded-sm px-[0.1em] text-left align-baseline',
+  chip: 'inline-flex h-full min-w-0 shrink-0 items-center overflow-hidden whitespace-nowrap rounded px-1.5 text-left text-2xs',
+} as const;
+
+/**
+ * 文字记号（逐字稿词块、时间轴字幕块），见 `UiTextTokenProps`。
+ * 状态优先级：删除 > 当前播放 > 选中 > 标记 > 静息；选中环可与删除、播放叠加。
+ * 外观只由 appearance / current / selected / excluded / flagged 决定，className 只放布局（check:surface 规则 E）。
+ */
+export const UiTextToken = forwardRef<HTMLButtonElement, UiTextTokenProps>(
+  ({
+    className = '',
+    appearance = 'inline',
+    current = false,
+    selected = false,
+    excluded = false,
+    flagged = false,
+    type = 'button',
+    ...props
+  }, ref) => {
+    const chip = appearance === 'chip';
+    const fillClass = excluded
+      ? chip
+        ? 'bg-danger-tint text-danger-text line-through'
+        : `${current ? 'bg-selected' : 'bg-danger-tint'} text-text3 line-through decoration-danger`
+      : current
+        ? 'bg-selected text-text1'
+        : selected
+          ? 'bg-accent-tint text-text1'
+          : chip
+            ? `bg-raised hover:bg-hover hover:text-text1 ${flagged ? 'text-warning' : 'text-text2'}`
+            : 'text-text1 hover:bg-hover';
+    const flagClass = flagged && !excluded
+      ? 'underline decoration-warning decoration-dotted underline-offset-4'
+      : '';
+    const ringClass = selected ? 'ring-1 ring-inset ring-accent-ring' : '';
+    return (
+      <button
+        ref={ref}
+        type={type}
+        data-text-token={appearance}
+        className={`select-none border-0 outline-none transition-colors duration-120 focus-visible:ring-2 focus-visible:ring-accent-ring disabled:cursor-not-allowed ${UI_TEXT_TOKEN_LAYOUT_CLASS[appearance]} ${fillClass} ${flagClass} ${ringClass} ${className}`}
+        {...props}
+      />
+    );
+  }
+);
+
+UiTextToken.displayName = 'UiTextToken';
 
 const UI_WINDOW_CONTROL_ICON: Record<UiWindowControlAction, { Icon: typeof Minus; size: number; strokeWidth: number }> = {
   minimize: { Icon: Minus, size: 14, strokeWidth: 1.5 },

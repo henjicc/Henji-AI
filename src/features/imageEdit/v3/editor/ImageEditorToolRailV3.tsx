@@ -80,7 +80,7 @@ export function ImageEditorToolRailV3({ controller }: { controller: ImageEditorV
   return (
     <nav
       aria-label={t('imageEditor.v3.tools.label')}
-      className="flex w-12 shrink-0 flex-col items-center border-r border-border-dark bg-panel py-2"
+      className="flex w-12 shrink-0 flex-col items-center border-r border-gap bg-panel py-2"
     >
       {TOOL_GROUPS.map((group, groupIndex) => {
         const tools: RenderableToolRailEntryV3[] = []

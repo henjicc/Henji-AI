@@ -50,16 +50,17 @@ const QuickAddGroup: React.FC = () => {
   }
 
   return (
-    <div className="flex items-center gap-0.5 border-l border-border-dark pl-2">
+    <div className="flex items-center gap-0.5">
       {QUICK_ADD_ORDER.map((value) => {
         const Icon = QUICK_ADD_ICONS[value]
         return (
           <UiIconButton
             key={value}
+            size="lg"
             title={`添加${QUICK_ADD_LABELS[value]}`}
             onClick={() => handleAdd(value)}
           >
-            <Icon size={14} />
+            <Icon size={16} />
           </UiIconButton>
         )
       })}

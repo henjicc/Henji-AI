@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { ArrowLeft, Camera, Clipboard, Film, Save, Undo2, X } from 'lucide-react'
-import { Dropdown, PanelTrigger, UiButton, UiCheckbox, UiIconButton } from '@/components/ui'
+import { ArrowLeft, Camera, Clipboard, Film, LayoutDashboard, Save, Undo2, X } from 'lucide-react'
+import { Dropdown, PanelTrigger, UiButton, UiCheckbox, UiIconButton, UiOptionButton, UiToolbar } from '@/components/ui'
+import { ICON_ASSET_LIBRARY as AssetLibraryIcon } from '@/core/theme/icons'
 import { createLogger } from '@/core/logging'
 import type { AssetLibraryRecord } from '@/platform/contracts/assetLibrary'
 import {
@@ -367,197 +368,220 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
       : `导出 ${videoProgress.doneFrames}/${videoProgress.totalFrames}`
     : null
 
+  // 输出动作：当前输出类型（单帧 → 截图/更新图片，多个状态关键帧 → 视频）是这条命令带唯一的主动作，
+  // 另一种输出降为次级；资产收录与重置布局是低频设置，图标化。
+  const imagePrimary = outputKind === 'image'
+  const assetTargetLabel = `导出后加入资产库：${assetTarget.enabled ? '开启' : '关闭'}`
+  const outputActions = (
+    <>
+      {embeddedOutput && outputKind === 'image' ? (
+        <UiButton variant="primary" onClick={() => void handleUpdateCanvasFrame()} disabled={!canScreenshot || !!stateKeyframeAction}>
+          <Camera size={14} className="mr-1.5" />{stateKeyframeAction ? '处理中…' : '更新图片'}
+        </UiButton>
+      ) : !embeddedOutput ? <PanelTrigger
+        disabled={!canScreenshot || !!stateKeyframeAction}
+        panelWidth={156}
+        closeOnPanelClick
+        panelPadding="menu"
+        renderPanel={() => (
+          <div className="flex flex-col gap-0.5" role="menu" aria-label="截图">
+            <UiOptionButton
+              role="menuitem"
+              variant="menu"
+              size="md"
+              disabled={!!stateKeyframeAction}
+              onClick={() => void handleSaveScreenshot()}
+              className="w-full gap-2"
+            >
+              <Save size={14} />
+              保存到本地
+            </UiOptionButton>
+            <UiOptionButton
+              role="menuitem"
+              variant="menu"
+              size="md"
+              disabled={!!stateKeyframeAction}
+              onClick={() => void handleCopyScreenshot()}
+              className="w-full gap-2"
+            >
+              <Clipboard size={14} />
+              复制到剪贴板
+            </UiOptionButton>
+          </div>
+        )}
+      >
+        {({ open, togglePanel }) => (
+          <UiButton
+            variant={imagePrimary ? 'primary' : 'secondary'}
+            onClick={togglePanel}
+            disabled={!canScreenshot || !!stateKeyframeAction}
+            title={canScreenshot ? '当前摄像机取景截图' : '切换到摄像机视角后可截图'}
+            aria-haspopup="menu"
+            aria-expanded={open}
+            data-panel-trigger-button
+          >
+            <Camera size={14} className="mr-1.5" />
+            {stateKeyframeAction ? '处理中…' : '截图'}
+          </UiButton>
+        )}
+      </PanelTrigger> : null}
+      {videoProgress ? (
+        <UiButton variant="secondary" onClick={handleCancelVideoExport}>
+          <X size={14} className="mr-1.5" />
+          取消导出
+        </UiButton>
+      ) : embeddedOutput && outputKind === 'video' ? (
+        <UiButton variant="primary" onClick={() => void handleExportVideo()} disabled={!canExportVideo}>
+          <Film size={14} className="mr-1.5" />渲染视频
+        </UiButton>
+      ) : !embeddedOutput ? (
+        <PanelTrigger
+          disabled={!canExportVideo}
+          panelWidth={176}
+          panelPadding="content"
+          renderPanel={() => (
+            <div className="flex flex-col gap-2">
+              <Dropdown<CameraStageVideoResolutionPreset>
+                value={videoPreset}
+                display={videoPreset}
+                options={VIDEO_RESOLUTION_OPTIONS}
+                onSelect={setVideoPreset}
+                className="w-full"
+                size="sm"
+                minWidthStrategy="none"
+              />
+              <UiButton
+                variant="primary"
+                size="sm"
+                onClick={() => void handleExportVideo()}
+                className="w-full gap-1.5"
+              >
+                <Film size={14} />
+                导出 MP4
+              </UiButton>
+            </div>
+          )}
+        >
+          {({ open, togglePanel }) => (
+            <UiButton
+              variant={imagePrimary ? 'secondary' : 'primary'}
+              onClick={togglePanel}
+              disabled={!canExportVideo}
+              title={canExportVideo ? '导出当前摄像机动画为 MP4' : '切换到摄像机视角、并有两个以上状态关键帧后可导出视频'}
+              aria-expanded={open}
+              data-panel-trigger-button
+            >
+              <Film size={14} className="mr-1.5" />
+              导出视频
+            </UiButton>
+          )}
+        </PanelTrigger>
+      ) : null}
+    </>
+  )
+
   return (
     <div className="flex h-full flex-1 flex-col overflow-hidden bg-app">
-      <div className="relative flex h-11 shrink-0 items-center gap-2 border-b border-border-dark bg-surface-dark px-2">
-        {onBackToList && (
-          <UiIconButton
-            aria-label={backLabel}
-            onClick={handleBackToList}
-          >
-            <ArrowLeft size={15} />
-          </UiIconButton>
-        )}
-
-        <div className="flex items-center gap-0.5 border-l border-border-dark pl-2">
-          <UiIconButton
-            disabled={!canUndo}
-            title="撤销 (Ctrl+Z)"
-            onClick={() => undo()}
-          >
-            <Undo2 size={14} />
-          </UiIconButton>
-        </div>
-
-        <QuickAddGroup />
-
-        <span className="mx-1 h-6 w-px shrink-0 bg-border-dark" />
-        <StageViewportToolbar />
-
-        <div className="pointer-events-none absolute inset-y-0 left-1/2 z-sticky flex max-w-[52%] -translate-x-1/2 items-center">
-          <StagePathContextBar />
-        </div>
-
-        <div className="ml-auto flex items-center gap-2">
-          {videoProgressLabel && (
-            <span className="max-w-28 truncate text-xs text-text-muted" title={videoProgressLabel}>
-              {videoProgressLabel}
-            </span>
-          )}
-          {stateKeyframeHint && <span className="max-w-64 truncate text-xs text-text-muted">{stateKeyframeHint}</span>}
-          {autosaveErrorLabel && (
-            <span className="max-w-28 truncate text-xs text-text-muted" title={autosaveErrorLabel}>
-              {autosaveErrorLabel}
-            </span>
-          )}
-          <span className="max-w-40 truncate text-xs text-text-muted" title={projectName}>
-            {projectName}
-          </span>
-          <PanelTrigger
-            panelWidth={208}
-            panelPadding="content"
-            renderPanel={() => (
-              <div className="flex flex-col gap-2">
-                <label className="flex items-center gap-2 text-xs text-text2">
-                  <UiCheckbox
-                    checked={assetTarget.enabled}
-                    onCheckedChange={(enabled) => updateAssetTarget({ ...assetTarget, enabled })}
-                  />
-                  导出后加入资产库
-                </label>
-                <Dropdown<string>
-                  value={assetTarget.libraryId ?? '__uncategorized__'}
-                  display={assetLibraries.find((item) => item.id === assetTarget.libraryId)?.name ?? '未分类'}
-                  options={[
-                    { label: '未分类', value: '__uncategorized__' },
-                    ...assetLibraries.map((item) => ({ label: item.name, value: item.id })),
-                  ]}
-                  onSelect={(value) => updateAssetTarget({
-                    ...assetTarget,
-                    libraryId: value === '__uncategorized__' ? null : value,
-                  })}
-                  disabled={!assetTarget.enabled}
-                  className="w-full"
-                  size="sm" buttonClassName="py-1.5"
-                  minWidthStrategy="none"
-                />
-              </div>
+      <UiToolbar
+        variant="command"
+        center={<StagePathContextBar />}
+        trailing={(
+          <>
+            {videoProgressLabel && (
+              <span role="status" className="max-w-28 truncate text-xs tabular-nums text-text2" title={videoProgressLabel}>
+                {videoProgressLabel}
+              </span>
             )}
-          >
-            {({ togglePanel }) => (
-              <UiButton
-                onClick={togglePanel}
-                className="py-1.5"
-                data-panel-trigger-button
-              >
-                资产：{assetTarget.enabled ? '开启' : '关闭'}
-              </UiButton>
+            {stateKeyframeHint && <span role="status" className="max-w-64 truncate text-xs text-text2" title={stateKeyframeHint}>{stateKeyframeHint}</span>}
+            {autosaveErrorLabel && (
+              <span role="alert" className="max-w-28 truncate text-xs text-danger-text" title={autosaveErrorLabel}>
+                {autosaveErrorLabel}
+              </span>
             )}
-          </PanelTrigger>
-          {embeddedOutput && outputKind === 'image' ? (
-            <UiButton onClick={() => void handleUpdateCanvasFrame()} disabled={!canScreenshot || !!stateKeyframeAction} className="py-1.5">
-              <Camera size={13} className="mr-1" />{stateKeyframeAction ? '处理中…' : '更新图片'}
-            </UiButton>
-          ) : !embeddedOutput ? <PanelTrigger
-            disabled={!canScreenshot || !!stateKeyframeAction}
-            panelWidth={156}
-            closeOnPanelClick
-            panelPadding="menu"
-            renderPanel={() => (
-              <div className="flex flex-col gap-1">
-                <UiButton
-                  disabled={!!stateKeyframeAction}
-                  onClick={() => void handleSaveScreenshot()}
-                  className="w-full justify-start gap-2 px-2.5"
-                >
-                  <Save size={13} />
-                  保存到本地
-                </UiButton>
-                <UiButton
-                  disabled={!!stateKeyframeAction}
-                  onClick={() => void handleCopyScreenshot()}
-                  className="w-full justify-start gap-2 px-2.5"
-                >
-                  <Clipboard size={13} />
-                  复制到剪贴板
-                </UiButton>
-              </div>
-            )}
-          >
-            {({ togglePanel }) => (
-              <UiButton
-                onClick={togglePanel}
-                disabled={!canScreenshot || !!stateKeyframeAction}
-                title={canScreenshot ? '当前摄像机取景截图' : '切换到摄像机视角后可截图'}
-                className="py-1.5"
-                data-panel-trigger-button
-              >
-                <Camera size={13} className="mr-1" />
-                {stateKeyframeAction ? '处理中…' : '截图'}
-              </UiButton>
-            )}
-          </PanelTrigger> : null}
-          {videoProgress ? (
-            <UiButton
-              onClick={handleCancelVideoExport}
-              className="py-1.5"
-            >
-              <X size={13} className="mr-1" />
-              取消导出
-            </UiButton>
-          ) : embeddedOutput && outputKind === 'video' ? (
-            <UiButton onClick={() => void handleExportVideo()} disabled={!canExportVideo} className="py-1.5">
-              <Film size={13} className="mr-1" />渲染视频
-            </UiButton>
-          ) : !embeddedOutput ? (
             <PanelTrigger
-              disabled={!canExportVideo}
-              panelWidth={176}
+              panelWidth={208}
               panelPadding="content"
               renderPanel={() => (
                 <div className="flex flex-col gap-2">
-                  <Dropdown<CameraStageVideoResolutionPreset>
-                    value={videoPreset}
-                    display={videoPreset}
-                    options={VIDEO_RESOLUTION_OPTIONS}
-                    onSelect={setVideoPreset}
+                  <label className="flex items-center gap-2 text-xs text-text2">
+                    <UiCheckbox
+                      checked={assetTarget.enabled}
+                      onCheckedChange={(enabled) => updateAssetTarget({ ...assetTarget, enabled })}
+                    />
+                    导出后加入资产库
+                  </label>
+                  <Dropdown<string>
+                    value={assetTarget.libraryId ?? '__uncategorized__'}
+                    display={assetLibraries.find((item) => item.id === assetTarget.libraryId)?.name ?? '未分类'}
+                    options={[
+                      { label: '未分类', value: '__uncategorized__' },
+                      ...assetLibraries.map((item) => ({ label: item.name, value: item.id })),
+                    ]}
+                    onSelect={(value) => updateAssetTarget({
+                      ...assetTarget,
+                      libraryId: value === '__uncategorized__' ? null : value,
+                    })}
+                    disabled={!assetTarget.enabled}
                     className="w-full"
-                    size="sm" buttonClassName="py-1.5"
+                    size="sm"
                     minWidthStrategy="none"
                   />
-                  <UiButton
-                    onClick={() => void handleExportVideo()}
-                    className="w-full justify-start gap-2 px-2.5"
-                  >
-                    <Film size={13} />
-                    导出 MP4
-                  </UiButton>
                 </div>
               )}
             >
-              {({ togglePanel }) => (
-                <UiButton
+              {({ open, togglePanel }) => (
+                <UiIconButton
+                  size="lg"
+                  on={assetTarget.enabled}
                   onClick={togglePanel}
-                  disabled={!canExportVideo}
-                  title={canExportVideo ? '导出当前摄像机动画为 MP4' : '切换到摄像机视角后可导出视频'}
-                  className="py-1.5"
+                  aria-expanded={open}
+                  aria-label={assetTargetLabel}
+                  title={assetTargetLabel}
                   data-panel-trigger-button
                 >
-                  <Film size={13} className="mr-1" />
-                  导出视频
-                </UiButton>
+                  <AssetLibraryIcon size={16} />
+                </UiIconButton>
               )}
             </PanelTrigger>
-          ) : null}
-          <UiButton
-            onClick={() => dockRef.current?.resetLayout()}
-            title="恢复默认面板布局"
-            className="py-1.5"
+            <UiIconButton
+              size="lg"
+              onClick={() => dockRef.current?.resetLayout()}
+              aria-label="重置布局"
+              title="恢复默认面板布局"
+            >
+              <LayoutDashboard size={16} />
+            </UiIconButton>
+            <span className="ml-1 flex items-center gap-1.5">{outputActions}</span>
+          </>
+        )}
+      >
+        {onBackToList && (
+          <UiIconButton
+            size="lg"
+            aria-label={backLabel}
+            title={backLabel}
+            onClick={handleBackToList}
           >
-            重置布局
-          </UiButton>
-        </div>
-      </div>
+            <ArrowLeft size={16} />
+          </UiIconButton>
+        )}
+        <span className="min-w-0 max-w-40 truncate text-13 font-medium text-text1" title={projectName}>
+          {projectName}
+        </span>
+        <UiIconButton
+          size="lg"
+          disabled={!canUndo}
+          aria-label="撤销"
+          title="撤销 (Ctrl+Z)"
+          onClick={() => undo()}
+        >
+          <Undo2 size={16} />
+        </UiIconButton>
+        <QuickAddGroup />
+        {/* 一条带只有这一条分隔线：左侧是“立刻添加”的动作，右侧是“接下来怎么操作”的变换模式 */}
+        <span aria-hidden="true" className="mx-1 h-4 w-px shrink-0 bg-line" />
+        <StageViewportToolbar />
+      </UiToolbar>
 
       <div className="relative min-h-0 flex-1">
         <CameraStageDock ref={dockRef} captureRef={captureRef} />

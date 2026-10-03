@@ -6,11 +6,14 @@
  * 结果同一个「资产库」概念在顶部导航、工具栏、侧栏长成三个样，
  * 「工具箱」和「设置」还共用了同一个齿轮。
  *
- * 两条规则：
+ * 三条规则：
  *   A. 业务组件禁止手写 <svg>——图标一律走 lucide-react（与「原生 <button> 只能落在
  *      primitives.tsx」同构）。真正的图形（波形、缓动曲线、连线预览）在豁免名单里。
  *   B. 跨界面复用的业务概念图标必须走 `src/core/theme/icons.ts` 的登记常量，
  *      不要在调用点各自从 lucide 挑图形。
+ *   C. 界面可见文字（src、electron 的 ts/tsx 与 i18n 文案）禁止用 emoji 及 ✓ ✗ ▶ 等符号字符
+ *      充当图标或状态标记；emoji 只允许进开发者控制台。注释与 console.* 输出豁免，判定见
+ *      scripts/lib/symbolGlyphs.cjs（自测 symbolGlyphs.test.cjs）。
  *
  * 用法：
  *   node scripts/check-icon-tokens.cjs            # 告警式，退出码恒为 0
@@ -19,10 +22,20 @@
 
 const fs = require('fs')
 const path = require('path')
+const { findSymbolGlyphs } = require('./lib/symbolGlyphs.cjs')
 
 const ROOT = path.resolve(__dirname, '..')
 const SRC = path.join(ROOT, 'src')
 const REGISTRY = path.join(SRC, 'core', 'theme', 'icons.ts')
+const ELECTRON = path.join(ROOT, 'electron')
+const LOCALES = path.join(SRC, 'i18n', 'locales')
+
+/**
+ * 规则 C 的文件级豁免：整份文件只产出开发者控制台内容。新增豁免必须写明理由。
+ */
+const GLYPH_FILE_EXEMPTIONS = new Map([
+  ['src/core/logging/logger.ts', '控制台格式化（CONSOLE_EVENT_LABELS / buildConsoleDetail / 级别标签只进 console，不写入日志文件与日志窗口）'],
+])
 
 /**
  * 真正的图形，不是图标：这些 <svg> 承载的是数据可视化或画布绘制，
@@ -50,17 +63,30 @@ const CONCEPT_ICONS = new Map([
 
 const ALLOW_COMMENT = 'icon-token-allow'
 
-function walk(dir, out = []) {
+function walk(dir, out = [], pattern = /\.tsx$/) {
+  if (!fs.existsSync(dir)) return out
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name)
     if (entry.isDirectory()) {
       if (entry.name === 'node_modules') continue
-      walk(full, out)
-    } else if (/\.tsx$/.test(entry.name)) {
+      walk(full, out, pattern)
+    } else if (pattern.test(entry.name)) {
       out.push(full)
     }
   }
   return out
+}
+
+/** 规则 C 扫描范围：界面代码与主进程（不含测试），以及 i18n 文案。 */
+function collectGlyphTargets() {
+  const code = [
+    ...walk(SRC, [], /\.(ts|tsx)$/),
+    ...walk(ELECTRON, [], /\.(ts|tsx)$/),
+  ].filter((file) => !/\.(test|spec)\.tsx?$/.test(file) && !/\.d\.ts$/.test(file))
+  return [
+    ...code.map((file) => ({ file, json: false })),
+    ...walk(LOCALES, [], /\.json$/).map((file) => ({ file, json: true })),
+  ]
 }
 
 function toRel(file) {
@@ -119,8 +145,22 @@ function main() {
     }
   }
 
+  // 规则 C：emoji / 符号字符当图标
+  for (const { file, json } of collectGlyphTargets()) {
+    const rel = toRel(file)
+    if (GLYPH_FILE_EXEMPTIONS.has(rel)) continue
+    for (const hit of findSymbolGlyphs(fs.readFileSync(file, 'utf8'), { json })) {
+      findings.push({
+        rule: 'C',
+        rel,
+        line: hit.line,
+        message: `界面文字里的符号「${hit.glyph}」当作图标或状态标记：改用 lucide 图标或文字（控制台输出与注释豁免）`,
+      })
+    }
+  }
+
   if (findings.length === 0) {
-    console.log('[check-icon-tokens] 通过：未检测到手写 svg 或绕过登记表的概念图标。')
+    console.log('[check-icon-tokens] 通过：未检测到手写 svg、绕过登记表的概念图标或 emoji/符号图标。')
     return
   }
 

@@ -174,38 +174,38 @@ export function CropOverlayBox({
   return (
     <div ref={overlayRef} className="absolute inset-0 z-raised" style={{ width: displayWidth, height: displayHeight }}>
       {/* 四向遮罩 */}
-      <div className="absolute left-0 right-0 top-0 bg-black/60" style={{ height: Math.max(0, top) }} />
+      <div className="absolute left-0 right-0 top-0 bg-media-scrim" style={{ height: Math.max(0, top) }} />
       <div
-        className="absolute left-0 right-0 bottom-0 bg-black/60"
+        className="absolute left-0 right-0 bottom-0 bg-media-scrim"
         style={{ height: Math.max(0, displayHeight - top - height) }}
       />
       <div
-        className="absolute left-0 bg-black/60"
+        className="absolute left-0 bg-media-scrim"
         style={{ top, height, width: Math.max(0, left) }}
       />
       <div
-        className="absolute right-0 bg-black/60"
+        className="absolute right-0 bg-media-scrim"
         style={{ top, height, width: Math.max(0, displayWidth - left - width) }}
       />
 
       {/* 裁剪框 */}
       <div
         data-crop-frame
-        className={`absolute border-2 ${appearance === 'expand' ? 'border-accent' : 'border-white/90'}`}
+        className={`absolute border-2 ${appearance === 'expand' ? 'border-accent' : 'border-on-media/90'}`}
         style={{ left, top, width, height, cursor: 'move' }}
         onMouseDown={(event) => beginGesture(event, 'move')}
       >
         {/* 三分参考线 */}
-        <div className="pointer-events-none absolute left-1/3 top-0 h-full w-px bg-white/30" />
-        <div className="pointer-events-none absolute left-2/3 top-0 h-full w-px bg-white/30" />
-        <div className="pointer-events-none absolute top-1/3 left-0 w-full h-px bg-white/30" />
-        <div className="pointer-events-none absolute top-2/3 left-0 w-full h-px bg-white/30" />
+        <div className="pointer-events-none absolute left-1/3 top-0 h-full w-px bg-on-media/30" />
+        <div className="pointer-events-none absolute left-2/3 top-0 h-full w-px bg-on-media/30" />
+        <div className="pointer-events-none absolute top-1/3 left-0 w-full h-px bg-on-media/30" />
+        <div className="pointer-events-none absolute top-2/3 left-0 w-full h-px bg-on-media/30" />
 
         {HANDLE_DEFS.map((handle) => (
           <div
             key={handle.type}
             data-crop-handle={handle.type}
-            className={`absolute h-2.5 w-2.5 border ${appearance === 'expand' ? 'rounded-hairline border-accent bg-text-dark' : `rounded-sm border-black/40 bg-white ${handle.className}`} before:absolute before:-inset-2 before:content-['']`}
+            className={`absolute h-2.5 w-2.5 border ${appearance === 'expand' ? 'rounded-hairline border-accent bg-text-dark' : `rounded-sm border-media-scrim bg-on-media ${handle.className}`} before:absolute before:-inset-2 before:content-['']`}
             style={{ cursor: handle.cursor, ...(appearance === 'expand' ? {
               left: handle.type.includes('w') ? 0 : handle.type.includes('e') ? 'calc(100% - 10px)' : 'calc(50% - 5px)',
               top: handle.type.includes('n') ? 0 : handle.type.includes('s') ? 'calc(100% - 10px)' : 'calc(50% - 5px)',

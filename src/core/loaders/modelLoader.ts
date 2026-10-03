@@ -61,7 +61,7 @@ export async function loadAllModels(): Promise<LoadStats> {
 
       successCount++
     } catch (error) {
-      logger.error(`[ModelLoader] ✗ Failed to load ${path}:`, error)
+      logger.error(`[ModelLoader] Failed to load ${path}:`, error)
       failedModels.push({ path, error })
       errorCount++
     }
@@ -73,7 +73,7 @@ export async function loadAllModels(): Promise<LoadStats> {
       defineHiddenModel(model)
       successCount++
     } catch (error) {
-      logger.error(`[ModelLoader] ✗ Failed to load controlled model ${path}:`, error)
+      logger.error(`[ModelLoader] Failed to load controlled model ${path}:`, error)
       failedModels.push({ path, error })
       errorCount++
     }
@@ -89,7 +89,7 @@ export async function loadAllModels(): Promise<LoadStats> {
 
   // 如果有失败的模型，输出详细错误信息
   if (failedModels.length > 0 && import.meta.env.DEV) {
-    logger.group('[ModelLoader] ❌ Failed Models Details:')
+    logger.group('[ModelLoader] Failed Models Details:')
     failedModels.forEach(({ path, error }) => {
       logger.error(`- ${path}:`, error.message || error)
     })
@@ -118,7 +118,7 @@ export async function loadAllModels(): Promise<LoadStats> {
 export function listLoadedModels(): void {
   const models = registry.listAllModels()
 
-  logger.info(`[ModelLoader] 📋 Total Models: ${models.length}`)
+  logger.info(`[ModelLoader] Total Models: ${models.length}`)
     logger.table(
       models.map((m) => ({
         ID: m.meta.id,
@@ -146,7 +146,7 @@ export function listLoadedModels(): void {
 export function getLoaderStats(): void {
   const stats = registry.getStats()
 
-  logger.info('[ModelLoader] 📈 Registry Statistics:')
+  logger.info('[ModelLoader] Registry Statistics:')
   logger.info('━'.repeat(50))
   logger.info(`Total Models:      ${stats.totalModels}`)
   logger.info(`Total Aliases:     ${stats.totalAliases}`)
@@ -185,7 +185,7 @@ export async function reloadModels(): Promise<void> {
     return
   }
 
-  logger.info('[ModelLoader] 🔄 Reloading all models...')
+  logger.info('[ModelLoader] Reloading all models...')
 
   // 清空注册中心
   registry.clear()
@@ -193,7 +193,7 @@ export async function reloadModels(): Promise<void> {
   // 重新加载
   await loadAllModels()
 
-  logger.info('[ModelLoader] ✅ Reload complete')
+  logger.info('[ModelLoader] Reload complete')
 }
 
 // ========== 开发环境调试工具 ==========
@@ -204,7 +204,7 @@ if (import.meta.env.DEV) {
   ;(window as DynamicValue).__getModelStats = getLoaderStats
   ;(window as DynamicValue).__reloadModels = reloadModels
 
-  logger.info('[ModelLoader] 🛠️  Debug tools available:')
+  logger.info('[ModelLoader] Debug tools available:')
   logger.info('  - window.__listModels()      - List all loaded models')
   logger.info('  - window.__getModelStats()   - Show registry statistics')
   logger.info('  - window.__reloadModels()    - Reload all models')
@@ -214,7 +214,7 @@ if (import.meta.env.DEV) {
 
 if (import.meta.hot) {
   import.meta.hot.accept((_newModule) => {
-    logger.info('[HMR] 🔥 Model loader updated, reloading models...')
+    logger.info('[HMR] Model loader updated, reloading models...')
     reloadModels()
   })
 }

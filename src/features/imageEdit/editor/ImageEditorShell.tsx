@@ -83,7 +83,7 @@ export function ImageEditorShell({ toolbar, canvas, sidePanel, className = '' }:
   return (
     <div className={`flex min-h-0 min-w-0 flex-col overflow-hidden ${className}`}>
       {/* 命令带 + 从属参数带共用这一块底色与这一条 border-b,不允许在它上下再叠带 */}
-      <div className="shrink-0 border-b border-border-dark bg-surface-dark px-2 py-1.5">
+      <div className="shrink-0 border-b border-gap bg-panel px-2.5 py-1.5">
         {toolbar}
       </div>
       <div className="flex min-h-0 min-w-0 flex-1">
@@ -104,14 +104,14 @@ export function ImageEditorShell({ toolbar, canvas, sidePanel, className = '' }:
           <GripVertical className="absolute h-4 w-4 text-text-muted opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100" />
         </div>
         <aside
-          className="relative flex min-h-0 shrink-0 flex-col overflow-hidden border-l border-border-dark bg-surface-dark"
+          className="relative flex min-h-0 shrink-0 flex-col overflow-hidden border-l border-gap bg-panel"
           style={{
             width: collapsed ? IMAGE_EDITOR_TOOL_RAIL_WIDTH : draftWidth,
             minWidth: collapsed ? IMAGE_EDITOR_TOOL_RAIL_WIDTH : IMAGE_EDITOR_INSPECTOR_MIN_WIDTH,
             maxWidth: collapsed ? IMAGE_EDITOR_TOOL_RAIL_WIDTH : Math.min(IMAGE_EDITOR_INSPECTOR_MAX_WIDTH, Math.max(IMAGE_EDITOR_INSPECTOR_MIN_WIDTH, draftWidth)),
           }}
         >
-          <div className="flex h-10 shrink-0 items-center justify-end gap-1 border-b border-border-dark px-1">
+          <div className="flex h-10 shrink-0 items-center justify-end gap-1 px-1">
             <UiIconButton size="lg"
               type="button"
               title={collapsed ? '展开参数面板' : '折叠参数面板'}

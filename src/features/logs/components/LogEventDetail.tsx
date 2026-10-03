@@ -65,7 +65,7 @@ export function LogEventDetail({ event, onViewChain }: LogEventDetailProps): JSX
     <div className="flex h-full flex-col overflow-hidden rounded-lg border border-border-dark/50 bg-black/20">
       <div className="shrink-0 border-b border-border-dark/40 bg-white/5 p-2">
         <div className="text-sm text-text-dark">
-          {display.emoji} {display.title}
+          <display.icon aria-hidden="true" className="mr-1 inline h-3.5 w-3.5 align-[-2px]" />{display.title}
         </div>
         <div className="mt-1 text-2xs text-text-muted">
           {getDomainHint(event.domain)} · {event.source} · {new Date(event.timestamp).toLocaleString('zh-CN')}

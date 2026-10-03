@@ -68,11 +68,12 @@ export function ImageMarkToolV3Host(props: ImageMarkToolV3HostProps): JSX.Elemen
 
   const backButton = onBack ? (
     <UiIconButton
+      size="lg"
       title={t('imageEditor.v3.host.backToToolbox')}
       aria-label={t('imageEditor.v3.host.backToToolbox')}
       onClick={() => void host.runAfterSave(onBack)}
     >
-      <ArrowLeft size={15} />
+      <ArrowLeft size={16} />
     </UiIconButton>
   ) : null
 

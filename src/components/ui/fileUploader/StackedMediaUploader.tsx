@@ -1,7 +1,7 @@
 import { createLogger } from '@/core/logging'
 import React, { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import { readFile } from '@/platform/desktopApi'
-import { AudioLines, RefreshCw, Scissors } from 'lucide-react'
+import { AudioLines, Play, RefreshCw, Scissors } from 'lucide-react'
 import { useDragDrop } from '@/contexts/DragDropContext'
 import { readHenjiDragData, type HenjiDragTransferData } from '@/contexts/dragDataTransfer'
 import { useNativeDragDrop } from '@/hooks/useNativeDragDrop'
@@ -378,8 +378,8 @@ export const StackedMediaUploader = forwardRef<StackedMediaUploaderHandle, Stack
                     <img src={file} alt={`参考 ${index + 1}`} className="absolute inset-0 block h-full w-full object-cover" draggable={false} />
                   )}
                   {isVideo && (
-                    <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-media-scrim text-2xs text-on-media">
-                      ▶
+                    <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-media-scrim text-on-media">
+                      <Play aria-hidden="true" className="h-3 w-3 fill-current" />
                     </span>
                   )}
                 </UiButton>

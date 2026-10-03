@@ -42,7 +42,7 @@ const StageAspectRatioOverlay: React.FC<StageAspectRatioOverlayProps> = ({ camer
     && !!activeCamera
     && size.width > 0
     && size.height > 0
-  const barClassName = 'absolute bg-black/70'
+  const barClassName = 'absolute bg-media-scrim'
 
   return (
     <div ref={containerRef} className="pointer-events-none absolute inset-0 overflow-hidden">

@@ -92,6 +92,8 @@ export const CAMERA_STAGE_OBJECT_PALETTE_HEX = [
   '#9aa3ad',
 ] as const;
 
+/** 马赛克标注在源图像素尚未就绪时的占位填充（中性灰 60%），画进 Konva 画布，不随主题。 */
+export const ANNOTATION_MOSAIC_PLACEHOLDER_FILL = 'rgba(127, 127, 127, 0.6)';
 export const ANNOTATION_DEFAULT_STROKE_HEX = '#ff4d4f';
 export const ANNOTATION_DEFAULT_TEXT_HEX = '#ffffff';
 export const ANNOTATION_TRANSFORMER_HEX = '#3b82f6';

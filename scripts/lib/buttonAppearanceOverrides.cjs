@@ -4,7 +4,7 @@
  *
  * 外观只由组件的有限枚举决定——`UiButton variant/size`、`UiIconButton tone/size/on/shape`、
  * `UiOptionButton variant/size/active/selection`、`UiChipButton active/selectionRole/size`、`UiNavButton active/size`、
- * `UiFieldTrigger size/appearance`、`Dropdown`/`PanelTrigger` 的 `size`；className（下拉与面板触发器是 `buttonClassName`）
+ * `UiFieldTrigger size/appearance`、`UiTextToken appearance/current/selected/excluded/flagged`（3.4）、`Dropdown`/`PanelTrigger` 的 `size`；className（下拉与面板触发器是 `buttonClassName`）
  * 只放布局（宽度、弹性、对齐、定位、外边距、内边距、显隐、过渡、指针）。以下类一律视为外观覆盖：
  *   - 底色、边框、文字色、圆角、阴影/环/描边、毛玻璃与滤镜、下划线（链接档负责）；
  *   - 字号与高度（`size` 负责）；图标按钮的宽高（`size` 负责）。
@@ -33,6 +33,7 @@ const CHECKED_ATTRIBUTES = {
   UiNavButton: 'className',
   UiFieldTrigger: 'className',
   UiWindowControl: 'className',
+  UiTextToken: 'className',
   Dropdown: 'buttonClassName',
   PanelTrigger: 'buttonClassName',
 };

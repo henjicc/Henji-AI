@@ -377,7 +377,7 @@ export function ImageEditorFloatingPanelsV3({
         data-editor-panel-dock={edge}
         aria-label={t(`imageEditor.v3.panels.${edge}Dock`)}
         className={`relative z-raised flex shrink-0 flex-col overflow-hidden bg-panel ${
-          edge === 'left' ? 'border-r border-border-dark' : 'border-l border-border-dark'
+          edge === 'left' ? 'border-r border-gap' : 'border-l border-gap'
         }`}
         style={{ width: dockWidths[edge], maxWidth: '55%' }}
       >

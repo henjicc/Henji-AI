@@ -19,7 +19,7 @@ export function eventToMarkdown(event: DisplayLogEvent): string {
   const display = getEventDisplay(event)
   const lines: string[] = []
 
-  lines.push(`### ${display.emoji} ${display.title}`)
+  lines.push(`### ${display.title}`)
   lines.push('')
   lines.push(`- 时间: ${event.timestamp}`)
   lines.push(`- 级别: ${event.level}`)

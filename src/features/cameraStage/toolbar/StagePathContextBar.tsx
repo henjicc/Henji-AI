@@ -135,21 +135,20 @@ const StagePathContextBar: React.FC = () => {
   return (
     <div className="pointer-events-auto flex min-w-0 items-center gap-1.5 whitespace-nowrap">
       <div
-        className="flex min-w-0 items-center gap-1.5 text-xs text-text-dark"
+        className="mr-1.5 flex min-w-0 items-center gap-1.5 text-xs text-text1"
         title={`${object.name}，关键帧 ${stateKeyframeIndex + 1} 到 ${stateKeyframeIndex + 2}`}
       >
-        <Spline size={14} className="text-accent" />
+        <Spline size={14} className="text-accent-text" />
         <span className="max-w-24 truncate font-medium">{object.name}</span>
-        <span className="text-text-muted">{stateKeyframeIndex + 1} → {stateKeyframeIndex + 2}</span>
+        <span className="text-text3">{stateKeyframeIndex + 1} → {stateKeyframeIndex + 2}</span>
       </div>
-      <span className="mx-0.5 h-5 w-px shrink-0 bg-border-dark" />
 
       <Dropdown<PathChoice>
         value={pathChoice}
         display={`路径 · ${pathLabel}`}
         options={pathOptions}
         onSelect={handlePathChoice}
-        size="md" buttonClassName="w-36 py-1"
+        size="md" buttonClassName="w-36"
         panelWidthStrategy="options"
       />
       <Dropdown<StageSpeedPreset>
@@ -157,7 +156,7 @@ const StagePathContextBar: React.FC = () => {
         display={`速度 · ${speedLabel}`}
         options={SPEED_OPTIONS}
         onSelect={(nextSpeedPreset) => updateDetail({ speedPreset: nextSpeedPreset })}
-        size="md" buttonClassName="w-28 py-1"
+        size="md" buttonClassName="w-28"
       />
 
       <PanelTrigger
@@ -194,7 +193,7 @@ const StagePathContextBar: React.FC = () => {
                     value={activePreset.direction}
                     options={[{ label: '顺时针', value: 'cw' }, { label: '逆时针', value: 'ccw' }]}
                     onSelect={(direction) => updatePreset({ ...activePreset, direction })}
-                    size="md" buttonClassName="w-24 py-1"
+                    size="md" buttonClassName="w-24"
                   />
                 </div>
               </>
@@ -219,7 +218,7 @@ const StagePathContextBar: React.FC = () => {
                         ? createPoseMotion()
                         : createClipMotion(value),
                   })}
-                  size="md" buttonClassName="w-36 py-1"
+                  size="md" buttonClassName="w-36"
                   panelWidthStrategy="options"
                 />
               </div>

@@ -1,7 +1,7 @@
 import React from 'react'
 import { Lock, Unlock } from 'lucide-react'
 import NumberInput from '@/components/ui/NumberInput'
-import { UiButton, UiIconButton, UiInput, UiSwitch } from '@/components/ui'
+import { UiIconButton, UiInput, UiOptionButton, UiSwitch } from '@/components/ui'
 import { CAMERA_STAGE_OBJECT_PALETTE_HEX } from '@/core/theme/colorTokens'
 import type { StageObject, StageTransform, StageVec3 } from '../domain/sceneTypes'
 import { beginHistorySession, endHistorySession, useCameraStageStore } from '../store/cameraStageStore'
@@ -147,12 +147,13 @@ const PropertyPanel: React.FC = () => {
             />
             <div className="flex flex-1 flex-wrap gap-1">
               {CAMERA_STAGE_OBJECT_PALETTE_HEX.map((hex) => (
-                // ui-surface-allow 物体颜色色样（背景色即内容色），交 3.4 改为 UiOptionButton variant="swatch"
-                <UiButton variant="secondary"
+                <UiOptionButton
                   key={hex}
-                  size="sm"
+                  variant="swatch"
+                  active={selected.color.toLowerCase() === hex.toLowerCase()}
+                  aria-pressed={selected.color.toLowerCase() === hex.toLowerCase()}
+                  aria-label={`颜色 ${hex}`}
                   title={hex}
-                  className="w-6 min-w-0 border-border-dark p-0"
                   style={{ backgroundColor: hex }}
                   onClick={() => updateObject(selected.id, { color: hex })}
                 />

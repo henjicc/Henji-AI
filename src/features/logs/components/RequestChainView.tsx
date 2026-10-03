@@ -88,7 +88,7 @@ export function RequestChainView({ isOpen, onClose, requestId, events }: Request
                 >
                   <div className="flex items-center justify-between gap-2">
                     <span className="truncate text-text-dark">
-                      {display.emoji} {display.title}
+                      <display.icon aria-hidden="true" className="mr-1 inline h-3.5 w-3.5 align-[-2px]" />{display.title}
                     </span>
                     <span className="shrink-0 text-2xs opacity-70">+{deltaMs}ms</span>
                   </div>

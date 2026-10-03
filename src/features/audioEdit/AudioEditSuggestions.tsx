@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
-import { UiButton, UiOptionButton } from '@/components/ui'
+import { UI_TEXT_META_CLASS, UiButton, UiOptionButton } from '@/components/ui'
+import { AudioEditDisclosure } from './AudioEditDisclosure'
 import { audioEditSuggestionStates } from '@/core/audioEdit/edits'
 import { normalizeAudioEditFiller } from '@/core/audioEdit/analysis'
 import type { AudioEditProjectDocument, AudioEditSuggestion } from '@/core/audioEdit/types'
@@ -19,19 +20,19 @@ function ClueGroupRows({ group, project, onSeek, onResolve }: {
     .filter((block) => block.included && block.endFrame > item.startFrame - project.source.sampleRate * 2 && block.startFrame < item.endFrame + project.source.sampleRate * 2)
     .map((block) => block.text).join('').slice(0, 70)
   return <details>
-    <summary className="cursor-pointer text-sm text-text-muted">{group.title} · {group.items.length} 处</summary>
-    <div className="mt-1 flex gap-2">
-      <UiButton onClick={() => onResolve(group.items.map((item) => item.id), true)}>{group.items[0].kind === 'long_silence' ? '压缩这一组' : '删除这一组'}</UiButton>
-      <UiButton onClick={() => onResolve(group.items.map((item) => item.id), false)}>隐藏这一组</UiButton>
+    <summary className="cursor-pointer text-13 text-text1">{group.title} <span className="text-xs text-text3">· {group.items.length} 处</span></summary>
+    <div className="mt-1 flex gap-1">
+      <UiButton size="sm" onClick={() => onResolve(group.items.map((item) => item.id), true)}>{group.items[0].kind === 'long_silence' ? '压缩这一组' : '删除这一组'}</UiButton>
+      <UiButton size="sm" onClick={() => onResolve(group.items.map((item) => item.id), false)}>隐藏这一组</UiButton>
     </div>
     {group.items.slice(current * pageSize, (current + 1) * pageSize).map((item) => <div key={item.id} className="py-1">
       {/* 可定位的建议列表行（多行文字）：menu 选项，高度随内容 */}
       <UiOptionButton variant="menu" className="w-full !justify-start !px-1" title="定位到这段声音" onClick={() => onSeek(item.startFrame)}>
-        <span className="mr-2 shrink-0 text-xs tabular-nums text-text-muted">{time(item.startFrame)}</span><span className="line-clamp-2 break-all text-xs text-text-dark">{context(item) || item.title}</span>
+        <span className="mr-2 shrink-0 font-mono text-xs tabular-nums text-text3">{time(item.startFrame)}</span><span className="line-clamp-2 break-all text-xs text-text1">{context(item) || item.title}</span>
       </UiOptionButton>
-      <div className="flex gap-1"><UiButton onClick={() => onResolve([item.id], true)}>{item.kind === 'long_silence' ? '压缩' : '删除'}</UiButton><UiButton onClick={() => onResolve([item.id], false)}>隐藏</UiButton></div>
+      <div className="flex gap-1"><UiButton size="sm" onClick={() => onResolve([item.id], true)}>{item.kind === 'long_silence' ? '压缩' : '删除'}</UiButton><UiButton size="sm" onClick={() => onResolve([item.id], false)}>隐藏</UiButton></div>
     </div>)}
-    {pages > 1 && <div className="flex items-center gap-2 text-xs text-text-muted"><UiButton disabled={current === 0} onClick={() => setPage(current - 1)}>上一页</UiButton><span>{current + 1} / {pages}</span><UiButton disabled={current === pages - 1} onClick={() => setPage(current + 1)}>下一页</UiButton></div>}
+    {pages > 1 && <div className="flex items-center gap-2 text-xs text-text3"><UiButton size="sm" disabled={current === 0} onClick={() => setPage(current - 1)}>上一页</UiButton><span className="tabular-nums">{current + 1} / {pages}</span><UiButton size="sm" disabled={current === pages - 1} onClick={() => setPage(current + 1)}>下一页</UiButton></div>}
   </details>
 }
 
@@ -55,9 +56,8 @@ export function AudioEditSuggestions({ project, onSeek, onResolve }: {
     return [...result.values()]
   }, [project])
   if (!groups.length) return null
-  return <details className="space-y-3">
-    <summary className="cursor-pointer text-sm text-text-muted">剪辑线索</summary>
-    <p className="text-xs text-text-muted">关键词与音频检测结果，仅供定位；助手会结合全文自行判断。</p>
-    <div className="max-h-64 space-y-3 overflow-y-auto">{groups.map((group) => <ClueGroupRows key={`${project.id}:${group.title}`} group={group} project={project} onSeek={onSeek} onResolve={onResolve} />)}</div>
-  </details>
+  return <AudioEditDisclosure title="剪辑线索" value={`${groups.reduce((total, group) => total + group.items.length, 0)} 处`}>
+    <p className={UI_TEXT_META_CLASS}>关键词与音频检测结果，仅供定位；助手会结合全文自行判断。</p>
+    <div className="flex max-h-64 flex-col gap-3 overflow-y-auto">{groups.map((group) => <ClueGroupRows key={`${project.id}:${group.title}`} group={group} project={project} onSeek={onSeek} onResolve={onResolve} />)}</div>
+  </AudioEditDisclosure>
 }

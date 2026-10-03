@@ -419,6 +419,8 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 | 分组 | `UiGroup` | 手写 `border + bg` 的 div |
 | 页面标题区 | `UiPageHeader`（标题旁的数量等用 `meta`，与标题基线对齐） | 手写 h2 + p；把数量塞进标题文字 |
 | 封面内容卡（项目卡、工程卡、资产卡） | `UiOptionButton variant="cover"` + 封面框 `UI_COVER_FRAME_CLASS`；不是按钮的根元素（可拖拽的资产卡）加 `UI_COVER_GROUP_CLASS` 与 `data-selected` | 给整张卡铺底描边，或在调用点手写悬停描边/选中环 |
+| 工具页 / 全屏工作面的命令带 | `UiToolbar variant="command"`：左端 children（返回、文件上下文、主工具组）/ `center`（视图切换、随工具变化的参数）/ `trailing`（次要动作 + 唯一主动作）/ 可选 `subordinate` 从属带（共用底色与下边框）；状态写进 `barProps` 的 `data-*` | 每个工具自己画 `h-11 border-b bg-*` 头带；从属带另画底色或边框 |
+| 可点的文字记号（逐字稿词块、时间轴字幕块） | `UiTextToken`（`appearance` inline/chip；`current` 播放中、`selected` 已选、`excluded` 已删除、`flagged` 待留意） | 用 `UiButton` 加 className 覆盖底色、圆角、划线 |
 | 表单行 | `UiFormRow` | 手写 label + 间距 |
 | 参数帮助说明 | 参数名称文本本身的 hover / focus tooltip | 加 Info 等额外图标、把 `description` 渲染成控件下方正文，或用 Tooltip 包住整个控件 |
 | 空/加载/错误 | `UiEmpty` / `UiLoading` / `UiError` | 内联手写状态块 |

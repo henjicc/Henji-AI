@@ -6,6 +6,7 @@ import type { CameraStageProjectPlatformSummary } from '@/platform/contracts/cam
 import { cameraStageApplicationService } from '../application/cameraStageApplicationService'
 import { useCameraStageSessionStore } from '../store/cameraStageSessionStore'
 import { CAMERA_STAGE_DEFAULT_PROJECT_NAME } from '../store/cameraStageStore'
+import { createNewProject } from './cameraStageProjectService'
 
 /**
  * 3D 镜头参考工程列表页：新建 / 打开 / 重命名 / 删除 / 多选批量删除工程。
@@ -99,10 +100,13 @@ const CameraStageProjectList: React.FC<CameraStageProjectListProps> = ({ onEnter
     void refresh()
   }, [refresh, coverRevision])
 
+  // 界面新建必须走 createNewProject：它在落盘后附着工程实例并写入会话（lastProjectId），
+  // 编辑器恢复逻辑据此进入新工程。应用服务的 createProject 是给助手/MCP 的后台建档，
+  // 只落盘不附着、不改用户当前视图——用它会让编辑器因找不到会话工程而退回列表。
   const handleCreate = useCallback(async (name: string): Promise<void> => {
     setBusy(true)
     try {
-      await cameraStageApplicationService.createProject(name.trim() || CAMERA_STAGE_DEFAULT_PROJECT_NAME)
+      await createNewProject(name.trim() || CAMERA_STAGE_DEFAULT_PROJECT_NAME)
       onEnterEditor()
     } finally {
       setBusy(false)
