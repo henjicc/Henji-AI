@@ -1,0 +1,24 @@
+{
+  "id": "review-generation-seedance-kie",
+  "surface": "生成",
+  "name": "核对-Seedance 2.0 KIE 底栏与模式菜单",
+  "checklist": ["G05.1", "G05.6", "G07"],
+  "steps": [
+    { "enter": "generation" },
+    { "selectModel": { "modelId": "kie-seedance-2.0", "providerId": "kie", "search": "Seedance 2.0" } },
+    { "waitStable": { "target": { "role": "button", "name": "/^模型：/" } } },
+    { "capture": { "name": "bar", "metrics": {
+      "target": { "role": "button", "name": "/^模型：/", "commonAncestorWith": { "selector": "[data-onboarding-target=\"generate\"]" } },
+      "maxRows": 1 } } },
+    { "hover": { "selector": "[data-param-id=\"kieSeedance20Mode\"] [data-dropdown-button], [data-param-id=\"kieSeedance20Mode\"] [data-panel-trigger-button]" } },
+    { "waitStable": {} },
+    { "capture": "mode-hover" },
+    { "open": { "trigger": { "selector": "[data-param-id=\"kieSeedance20Mode\"] [data-dropdown-button], [data-param-id=\"kieSeedance20Mode\"] [data-panel-trigger-button]" } } },
+    { "waitStable": {} },
+    { "capture": { "name": "mode-menu", "metrics": { "selector": "[role=\"listbox\"]", "nth": "last", "maxRows": null } } },
+    { "escape": {} },
+    { "open": { "trigger": { "role": "button", "name": "/^更多参数/" } }, "ifPresent": { "role": "button", "name": "/^更多参数/" } },
+    { "waitStable": {}, "ifPresent": { "role": "button", "name": "/^更多参数/" } },
+    { "capture": "more-params", "ifPresent": { "role": "button", "name": "/^更多参数/" } }
+  ]
+}

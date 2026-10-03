@@ -3,19 +3,24 @@
  *
  * 这个命令只负责产出供人查看的截图与 Markdown 索引，不把像素差异作为 CI 门禁。
  * 可自动判定的 DOM 规则由 check:ui-visual 单独负责。
+ *
+ * 界面核对（skill henji-ui-surface references/review.md）也走这里：`--steps` 用一份步骤描述
+ * 驱动“进入 → 动作 → 等待稳定 → 截图（+自动指标）”，`--matrix review` 展开四预设 + 960，
+ * `--contrast` 对每张截图做像素对比度审计，结果写进同一个输出目录。
  */
 const fs = require('node:fs')
 const path = require('node:path')
 const { captureInspectionPage } = require('./lib/uiInspectionCapture.cjs')
+const { auditPageContrast, loadContrastExceptions } = require('./lib/uiContrastAudit.cjs')
 const { createRuntimeEvidenceCollector, finalizeSceneEvidence } = require('./lib/runtimeEvidence.cjs')
 const {
-  UI_INSPECTION_SCENES,
   filterScenes,
   formatWindowSize,
   launchUiInspectionApp,
   parseUiInspectionArgs,
+  resolveInspectionRuns,
+  resolveInspectionScenePool,
   resolveOutputDir,
-  resolveThemePresetRuns,
   selectInspectionScenes,
   themePresetLaunchArgs,
   setInspectionWindowSize,
@@ -35,6 +40,7 @@ function printHelp() {
   npm run ui:tour -- --profile real --only 设置
   npm run ui:tour -- --out .ui-tour/my-run
   npm run ui:tour -- --theme-preset all --size 1440x900 --out .ui-tour/presets
+  npm run ui:tour -- --steps scripts/ui-review/generation-seedance-kie.json --matrix review --contrast
 
 参数：
   --size <宽x高>  指定窗口尺寸；可重复或用逗号分隔，默认 1440x900、960x640
@@ -46,6 +52,12 @@ function printHelp() {
                   不写入设置；可重复或逗号分隔，多个预设时逐个启动应用，截图写到 <输出目录>/<预设>/，
                   输出目录下另有汇总 index.md
   --allow-writes  real 模式下允许运行会写业务数据的场景；不传则自动跳过
+  --steps <文件>  改为运行步骤描述（JSON / cjs，可重复或逗号分隔），格式见 skill henji-ui-surface
+                  references/review.md 第 6 节，样例在 scripts/ui-review/
+  --matrix <名>   核对矩阵：review = 石墨 1440+960、深海/胶片/纸白 1440；screen = 石墨 1440+960。
+                  与 --size / --theme-preset 互斥
+  --contrast      对每张截图（含场景中途截图）做像素对比度审计，结果写 contrast.json 并汇总进 index.md
+  --display-point <x,y|none> 测试窗口放到哪块显示器；默认取 HENJI_DEV_DISPLAY_POINT，未设置时用本机副屏 2561,1
 `)
 }
 
@@ -62,6 +74,8 @@ function createIndex(rows, failures, metadata) {
     `- 失败数量：${failures.length}`,
     `- 数据模式：${metadata.profile === 'real' ? '真实用户数据' : '隔离临时数据'}`,
     ...(metadata.themePreset ? [`- 主题预设：${metadata.themePreset}（开发启动参数，未写入设置）`] : []),
+    ...(metadata.contrast ? [`- 对比度审计：${metadata.contrast.issueCount} 处不达标，${metadata.contrast.exempted} 处登记例外（详见 contrast.json）`] : []),
+    ...(metadata.metrics.length ? [`- 自动指标：${metadata.metrics.length} 项，可疑 ${metadata.metrics.filter((item) => item.metrics.suspicious).length} 项（详见 metrics.json）`] : []),
     `- 结构化日志：通过应用查询接口按场景起始时间截取`,
     '',
     '| 界面 | 场景 | 窗口尺寸 | 截图 |',
@@ -69,6 +83,21 @@ function createIndex(rows, failures, metadata) {
   ]
   for (const row of rows) {
     lines.push(`| ${markdownEscape(row.surface)} | ${markdownEscape(row.name)} | ${row.size} | [打开截图](${row.file}) |`)
+  }
+  const suspicious = metadata.metrics.filter((item) => item.metrics.suspicious)
+  if (suspicious.length > 0) {
+    lines.push('', '## 自动指标可疑项（先看这些截图）', '', '| 尺寸 | 场景 | 截图后缀 | 行数 | 原因 |', '|---|---|---|---:|---|')
+    for (const item of suspicious) {
+      lines.push(`| ${item.size} | ${markdownEscape(item.scene)} | ${item.suffix} | ${item.metrics.rows} | ${markdownEscape(item.metrics.reasons.join('；'))} |`)
+    }
+  }
+  if (metadata.contrast?.issueCount > 0) {
+    lines.push('', '## 对比度不达标', '')
+    for (const [key, result] of Object.entries(metadata.contrast.results)) {
+      for (const issue of result.issues.slice(0, 8)) {
+        lines.push(`- ${markdownEscape(key)}：${issue.kind === 'icon' ? '图标' : '文字'} ${issue.ratio}:1（需 ${issue.required}）"${markdownEscape(issue.text ?? '')}" ${markdownEscape(issue.element ?? '')}`)
+      }
+    }
   }
   if (failures.length > 0) {
     lines.push('', '## 失败场景', '')
@@ -89,9 +118,10 @@ async function main() {
     printHelp()
     return
   }
-  const matchedScenes = filterScenes(UI_INSPECTION_SCENES, options.only)
+  const scenePool = resolveInspectionScenePool(options, ROOT)
+  const matchedScenes = filterScenes(scenePool, options.only)
   if (matchedScenes.length === 0) {
-    throw new Error(`--only 没有匹配到场景。可用界面：${[...new Set(UI_INSPECTION_SCENES.map((scene) => scene.surface))].join('、')}`)
+    throw new Error(`--only 没有匹配到场景。可用界面：${[...new Set(scenePool.map((scene) => scene.surface))].join('、')}`)
   }
   const selection = selectInspectionScenes(matchedScenes, options)
   const scenes = selection.scenes
@@ -99,17 +129,18 @@ async function main() {
     throw new Error('匹配场景会写入真实业务数据；如确认允许，请显式传入 --allow-writes')
   }
 
-  const runs = resolveThemePresetRuns(options.themePresets, resolveOutputDir(ROOT, options.outDir))
+  const rootDir = resolveOutputDir(ROOT, options.outDir)
+  const runs = resolveInspectionRuns(options, rootDir)
+  const exceptions = options.contrast ? loadContrastExceptions() : []
   const summaries = []
   for (const run of runs) {
-    summaries.push(await tourPresetRun({ run, scenes, options, selection }))
+    summaries.push(await tourPresetRun({ run, scenes, options, selection, exceptions }))
   }
   if (runs.length > 1) {
-    const rootDir = resolveOutputDir(ROOT, options.outDir)
     const lines = ['# Henji-AI 多预设界面巡检', '', `- 生成时间：${new Date().toISOString()}`, '',
-      '| 预设 | 截图 | 失败 | 索引 |', '|---|---:|---:|---|']
+      '| 预设 | 尺寸 | 截图 | 失败 | 指标可疑 | 对比度问题 | 索引 |', '|---|---|---:|---:|---:|---:|---|']
     for (const summary of summaries) {
-      lines.push(`| ${summary.themePreset} | ${summary.rows} | ${summary.failures} | [打开](${summary.themePreset}/index.md) |`)
+      lines.push(`| ${summary.themePreset} | ${summary.sizes} | ${summary.rows} | ${summary.failures} | ${summary.suspicious} | ${summary.contrastIssues ?? '—'} | [打开](${summary.themePreset}/index.md) |`)
     }
     fs.writeFileSync(path.join(rootDir, 'index.md'), `${lines.join('\n')}\n`, 'utf8')
     console.log(`\n多预设索引：${path.join(rootDir, 'index.md')}`)
@@ -120,18 +151,21 @@ async function main() {
   }
 }
 
-async function tourPresetRun({ run, scenes, options, selection }) {
+async function tourPresetRun({ run, scenes, options, selection, exceptions }) {
   const outDir = run.outDir
   fs.mkdirSync(outDir, { recursive: true })
   if (run.themePreset) console.log(`\n######## 主题预设：${run.themePreset} ########`)
   const rows = []
   const failures = []
   const evidence = {}
+  const metrics = []
+  const contrastResults = {}
   const app = await launchUiInspectionApp({
     root: ROOT,
     mainEntry: MAIN_ENTRY,
     profile: options.profile,
     readOnly: !options.allowWrites,
+    displayPoint: options.displayPoint,
     extraArgs: [
       ...(scenes.length === 1 ? scenes[0].launchArgs ?? [] : []),
       ...themePresetLaunchArgs(run.themePreset),
@@ -145,8 +179,18 @@ async function tourPresetRun({ run, scenes, options, selection }) {
   const collector = createRuntimeEvidenceCollector(app.page)
   let launchInspected = false
 
+  // 截图已落盘后再审：审计会临时隐藏文字取背景，不能影响截图本身
+  const auditContrast = async (key, targetPage, scene) => {
+    if (!options.contrast) return
+    const result = await auditPageContrast(targetPage, (page) => captureInspectionPage(app.app, page), {
+      scene: scene.name, themePreset: run.themePreset, exceptions,
+    })
+    contrastResults[key] = { issues: result.issues, exempted: result.exempted, stats: result.stats }
+    if (result.issues.length) console.error(`  对比度不达标 ${result.issues.length} 处：${key}`)
+  }
+
   try {
-    for (const size of options.sizes) {
+    for (const size of run.sizes) {
       const sizeLabel = formatWindowSize(size)
       for (const scene of scenes) {
         const evidenceKey = `${sizeLabel} / ${scene.name}`
@@ -172,8 +216,15 @@ async function tourPresetRun({ run, scenes, options, selection }) {
             await assertInspectionWindowSize(app, size, windowEvidence.baseline)
             windowEvidence.captures.push({ suffix, ...actual, pixels, window: targetPage === app.page ? 'main' : 'secondary' })
             rows.push({ ...scene, name: `${scene.name}-${suffix}`, size: sizeLabel, file: fileName })
+            await auditContrast(`${evidenceKey} / ${suffix}`, targetPage, scene)
           }
-          await scene.setup(app.page, app.app, { capture, electronApp: app.app,
+          // 步骤描述的自动指标（行数、溢出、截断）；普通场景不调用
+          const recordMetrics = ({ suffix, variant, metrics: value }) => {
+            metrics.push({ size: sizeLabel, scene: scene.name, sceneId: scene.id, suffix, variant,
+              file: `${sizeLabel}-${scene.id}-${suffix}.png`, metrics: value })
+            if (value.suspicious) console.log(`  ! ${suffix}：${value.reasons.join('；')}`)
+          }
+          await scene.setup(app.page, app.app, { capture, recordMetrics, electronApp: app.app,
             requestedWindowSize: size, windowEvidence: windowEvidence.baseline })
           const fileName = `${sizeLabel}-${scene.id}.png`
           windowEvidence.completed = await assertInspectionWindowSize(app, size, windowEvidence.baseline)
@@ -184,6 +235,7 @@ async function tourPresetRun({ run, scenes, options, selection }) {
           windowEvidence.captures.push({ suffix: 'final', ...windowEvidence.completed,
             pixels })
           rows.push({ ...scene, size: sizeLabel, file: fileName })
+          await auditContrast(evidenceKey, app.page, scene)
           console.log(`✓ ${sizeLabel} / ${scene.name}`)
         } catch (error) {
           sceneFailed = true
@@ -223,15 +275,25 @@ async function tourPresetRun({ run, scenes, options, selection }) {
     await app.close()
   }
 
-  const metadata = { profile: options.profile, themePreset: run.themePreset, blocked: selection.blocked }
-  fs.writeFileSync(path.join(outDir, 'evidence.json'), JSON.stringify({ metadata, scenes: evidence }, null, 2), 'utf8')
+  const contrast = options.contrast ? {
+    issueCount: Object.values(contrastResults).reduce((total, result) => total + result.issues.length, 0),
+    exempted: Object.values(contrastResults).reduce((total, result) => total + result.exempted.length, 0),
+    results: contrastResults,
+  } : null
+  const metadata = { profile: options.profile, themePreset: run.themePreset, blocked: selection.blocked,
+    displayPoint: options.displayPoint, steps: options.steps, metrics, contrast }
+  fs.writeFileSync(path.join(outDir, 'evidence.json'), JSON.stringify({ metadata: { ...metadata, metrics: undefined, contrast: undefined }, scenes: evidence }, null, 2), 'utf8')
+  if (metrics.length) fs.writeFileSync(path.join(outDir, 'metrics.json'), JSON.stringify(metrics, null, 2), 'utf8')
+  if (contrast) fs.writeFileSync(path.join(outDir, 'contrast.json'), JSON.stringify(contrast, null, 2), 'utf8')
   const index = createIndex(rows, failures, metadata)
   const indexPath = path.join(outDir, 'index.md')
   fs.writeFileSync(indexPath, index, 'utf8')
   console.log(`\n截图目录：${outDir}`)
   console.log(`索引文件：${indexPath}\n`)
   console.log(index)
-  return { themePreset: run.themePreset ?? 'default', rows: rows.length, failures: failures.length }
+  return { themePreset: run.themePreset ?? 'default', sizes: run.sizes.map(formatWindowSize).join('、'),
+    rows: rows.length, failures: failures.length, suspicious: metrics.filter((item) => item.metrics.suspicious).length,
+    contrastIssues: contrast?.issueCount ?? null }
 }
 
 main().catch((error) => {

@@ -2,6 +2,8 @@ const fs = require('node:fs')
 const path = require('node:path')
 const { launchElectronApp, waitForApp } = require('./electronLaunch.cjs')
 const { createUiInspectionScenes } = require('./uiInspectionScenes.cjs')
+const { createReviewStepContext } = require('./uiReviewContext.cjs')
+const { loadStepScenes } = require('./uiReviewSteps.cjs')
 const { inspectInspectionScreenshot } = require('./uiInspectionCapture.cjs')
 
 const WINDOW_SIZE_TOLERANCE_PX = 2
@@ -49,6 +51,36 @@ function readOptionValue(argv, index, name) {
 /** 与 src/core/theme/themeEngine.ts THEME_PRESET_IDS 一致；应用侧（--dev-theme-preset）同样校验。 */
 const UI_INSPECTION_THEME_PRESETS = ['graphite', 'ocean', 'film', 'paper']
 
+/**
+ * 核对矩阵（skill henji-ui-surface references/review.md 第 4 节第 5 条）：
+ * - review：石墨 1440×900 + 960×640，深海、胶片、纸白 1440×900（每个界面的标准五张）；
+ * - screen：石墨 1440×900 + 960×640（数据变体多时先全量筛查，再对可疑项与代表项跑 review）。
+ */
+const UI_REVIEW_MATRICES = Object.freeze({
+  review: Object.freeze([
+    { themePreset: 'graphite', sizes: ['1440x900', '960x640'] },
+    { themePreset: 'ocean', sizes: ['1440x900'] },
+    { themePreset: 'film', sizes: ['1440x900'] },
+    { themePreset: 'paper', sizes: ['1440x900'] },
+  ]),
+  screen: Object.freeze([
+    { themePreset: 'graphite', sizes: ['1440x900', '960x640'] },
+  ]),
+})
+
+/**
+ * 自动化测试实例默认放到本机副屏（AGENTS.md 完成标准第 3 条：Windows 编号 1 的右侧副屏，2026-10-01 核对为 2561,1）。
+ * 坐标不落在任何显示器上时应用按正常启动处理；显示器变化后用 --display-point 或环境变量覆盖，`none` 关闭。
+ */
+const DEFAULT_UI_INSPECTION_DISPLAY_POINT = '2561,1'
+
+function resolveDisplayPoint(value, env = process.env) {
+  if (value === 'none') return null
+  const candidate = value ?? env.HENJI_DEV_DISPLAY_POINT ?? DEFAULT_UI_INSPECTION_DISPLAY_POINT
+  if (!/^-?\d+,-?\d+$/.test(candidate)) throw new Error(`--display-point 需要 x,y 整数坐标或 none，收到：${candidate}`)
+  return candidate
+}
+
 function parseUiInspectionArgs(argv, defaultOutDir) {
   const sizeValues = []
   const onlyValues = []
@@ -56,6 +88,10 @@ function parseUiInspectionArgs(argv, defaultOutDir) {
   let profile = 'temporary'
   let allowWrites = false
   const themePresetValues = []
+  const stepValues = []
+  let matrix = null
+  let contrast = false
+  let displayPointValue
   let help = false
   let positionalOutUsed = false
 
@@ -118,6 +154,37 @@ function parseUiInspectionArgs(argv, defaultOutDir) {
       allowWrites = true
       continue
     }
+    if (token === '--steps') {
+      stepValues.push(readOptionValue(argv, index, '--steps'))
+      index += 1
+      continue
+    }
+    if (token.startsWith('--steps=')) {
+      stepValues.push(token.slice('--steps='.length))
+      continue
+    }
+    if (token === '--matrix') {
+      matrix = readOptionValue(argv, index, '--matrix')
+      index += 1
+      continue
+    }
+    if (token.startsWith('--matrix=')) {
+      matrix = token.slice('--matrix='.length)
+      continue
+    }
+    if (token === '--contrast') {
+      contrast = true
+      continue
+    }
+    if (token === '--display-point') {
+      displayPointValue = readOptionValue(argv, index, '--display-point')
+      index += 1
+      continue
+    }
+    if (token.startsWith('--display-point=')) {
+      displayPointValue = token.slice('--display-point='.length)
+      continue
+    }
     if (!token.startsWith('--') && !positionalOutUsed) {
       outDir = token
       positionalOutUsed = true
@@ -134,7 +201,15 @@ function parseUiInspectionArgs(argv, defaultOutDir) {
     throw new Error('--profile 仅支持 temporary 或 real')
   }
   const themePresets = parseThemePresets(themePresetValues)
-  return { allowWrites, help, only, outDir, profile, sizes, themePresets }
+  if (matrix !== null) {
+    if (!UI_REVIEW_MATRICES[matrix]) throw new Error(`--matrix 仅支持 ${Object.keys(UI_REVIEW_MATRICES).join('、')}`)
+    if (sizeValues.length > 0 || themePresetValues.length > 0) {
+      throw new Error('--matrix 已决定预设与尺寸，不能再同时传 --size 或 --theme-preset')
+    }
+  }
+  const steps = stepValues.flatMap((value) => value.split(',')).map((value) => value.trim()).filter(Boolean)
+  const displayPoint = resolveDisplayPoint(displayPointValue)
+  return { allowWrites, contrast, displayPoint, help, matrix, only, outDir, profile, sizes, steps, themePresets }
 }
 
 /** `--theme-preset` 可重复或逗号分隔，`all` 表示四个预设；按登记顺序去重。 */
@@ -155,6 +230,29 @@ function parseThemePresets(values) {
 function resolveThemePresetRuns(themePresets, outDir) {
   if (themePresets.length <= 1) return [{ themePreset: themePresets[0] ?? null, outDir }]
   return themePresets.map((themePreset) => ({ themePreset, outDir: path.join(outDir, themePreset) }))
+}
+
+/**
+ * 一次运行 = 一个预设启动一次应用，带自己的尺寸列表。--matrix 时按矩阵展开（多个预设分到 <输出目录>/<预设>/），
+ * 否则沿用 --theme-preset × --size。
+ */
+function resolveInspectionRuns(options, outDir) {
+  if (options.matrix) {
+    const entries = UI_REVIEW_MATRICES[options.matrix]
+    return entries.map((entry) => ({
+      themePreset: entry.themePreset,
+      outDir: entries.length > 1 ? path.join(outDir, entry.themePreset) : outDir,
+      sizes: entry.sizes.map(parseWindowSize),
+    }))
+  }
+  return resolveThemePresetRuns(options.themePresets, outDir).map((run) => ({ ...run, sizes: options.sizes }))
+}
+
+/** 场景来源：--steps 时只跑步骤描述编译出的场景（同样受 --only 过滤），否则是登记的全部场景。 */
+function resolveInspectionScenePool(options, root) {
+  if (options.steps.length === 0) return UI_INSPECTION_SCENES
+  const context = createReviewStepContext({ canvasFixtureProjectId: UI_INSPECTION_CANVAS_PROJECT_ID, settlePage })
+  return loadStepScenes(options.steps, context, root)
 }
 
 function themePresetLaunchArgs(themePreset) {
@@ -238,7 +336,8 @@ async function cleanupCanvasInspectionFixtures(page, seededAt) {
   })
 }
 
-async function launchUiInspectionApp({ root, mainEntry, extraEnv = {}, extraArgs = [], profile = 'temporary', readOnly = true }) {
+async function launchUiInspectionApp({ root, mainEntry, extraEnv = {}, extraArgs = [], profile = 'temporary', readOnly = true,
+  displayPoint = null }) {
   if (!fs.existsSync(mainEntry)) {
     throw new Error(`未找到 Electron 构建产物：${mainEntry}\n请先运行 npm run electron:bundle`)
   }
@@ -252,6 +351,7 @@ async function launchUiInspectionApp({ root, mainEntry, extraEnv = {}, extraArgs
     extraEnv: {
       HENJI_UI_INSPECTION_ALLOW_OVERSIZE: '1',
       HENJI_UI_INSPECTION_READ_ONLY: readOnly ? '1' : '0',
+      ...(displayPoint ? { HENJI_DEV_DISPLAY_POINT: displayPoint } : {}),
       ...extraEnv,
     },
   })
@@ -345,7 +445,9 @@ function resolveOutputDir(root, outDir) {
 }
 
 module.exports = {
+  DEFAULT_UI_INSPECTION_DISPLAY_POINT,
   DEFAULT_WINDOW_SIZES,
+  UI_REVIEW_MATRICES,
   UI_INSPECTION_THEME_PRESETS,
   UI_INSPECTION_SCENES,
   filterScenes,
@@ -355,6 +457,9 @@ module.exports = {
   parseThemePresets,
   parseWindowSize,
   resolveThemePresetRuns,
+  resolveDisplayPoint,
+  resolveInspectionRuns,
+  resolveInspectionScenePool,
   themePresetLaunchArgs,
   resolveOutputDir,
   selectInspectionScenes,

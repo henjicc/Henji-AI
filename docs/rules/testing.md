@@ -198,11 +198,14 @@ npm run check:icons
 - 共享页面骨架、设计令牌、弹窗/滚动/溢出机制：再考虑构建后运行相关视觉检查
 - `ui:tour` 必须用 `--only` 和必要的 `--size` 缩小场景；只有全局 UI 改造才跑全部场景
 - 改了主题引擎、语义令牌或跨主题外观：按预设运行。`--theme-preset` 可重复或逗号分隔（`graphite`/`ocean`/`film`/`paper`，`all` = 四个），每个预设单独启动一次应用，结果分到 `<输出目录>/<预设>/`，`ui:tour` 另写汇总 `index.md`；`test:reality --suite ui|ui-audit` 透传该参数。视觉验收至少看“石墨”“纸白”两个预设
+- 界面视觉验收与全界面核对的判据、旧界面残留的定义和操作规范以 skill `henji-ui-surface` 的 `references/review.md` 为准。需要截交互态或数据变体（悬停、菜单打开、逐个模型）时用一份步骤描述驱动 `ui:tour -- --steps <文件>`，配合 `--matrix review|screen`（四预设 + 960 / 石墨双尺寸）、`--contrast`（像素对比度）与自动指标（行数、溢出、截断）；代码残留用 `npm run ui:residue` 出按文件与区域的报告（报告模式，不阻断）。步骤解析、矩阵、指标与扫描规则的改动跑 `npm run test:ui-inspection`
 
 ```bash
 npm run ui:tour -- --only 设置 --size 960x640
 npm run check:ui-visual -- --only 设置
 npm run check:ui-visual -- --theme-preset all --only 设置
+npm run ui:tour -- --steps scripts/ui-review/generation-seedance-kie.json --matrix review --contrast
+npm run ui:residue
 ```
 
 `check:ui-visual` 的对比度规则（`lowContrast`）按**渲染后像素**判定：隐藏文字与 lucide 图标截一张只有背景的图，在每个候选区域取样并合成前景，取最差 10% 分位；正文与辅助文字 ≥ 4.5:1，大字（≥ 24px，或 ≥ 18.66px 且粗体）与图标 ≥ 3:1；禁用控件、`aria-hidden`、被遮挡或不可见部分不判。场景终态审全部规则，中途 `capture()` 的状态只审对比度。合理例外登记在 `scripts/ui-visual-contrast-exceptions.json`（唯一 `id`、≥ 8 字理由、`text`/`element` 正则，可限定 `scene`/`presets`/`minRatio`），只给装饰、品牌或用户内容色；界面色不达标改令牌，不登记。审计逻辑改动跑 `npm run test:validation-tools`（含 `uiContrastAudit.test.cjs`）。

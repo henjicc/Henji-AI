@@ -1,0 +1,39 @@
+{
+  "id": "review-canvas-image-node-rows",
+  "surface": "画布",
+  "name": "核对-图片生成节点行悬停、选中与参数菜单",
+  "checklist": ["C06", "C10"],
+  "writesUserData": true,
+  "steps": [
+    { "seedCanvas": {
+      "viewport": { "x": 180, "y": 90, "zoom": 0.9 },
+      "nodes": [{
+        "id": "__ui_review_image_node", "type": "imageNode", "position": { "x": 300, "y": 120 },
+        "width": 360, "height": 560, "measured": { "width": 360, "height": 560 }, "style": { "width": 360, "height": 560 },
+        "data": {
+          "displayName": "核对样例", "prompt": "cinematic portrait", "modelId": "apimart-gpt-image-2.5",
+          "params": {}, "mediaInputs": {}, "imageUrl": null, "previewImageUrl": null, "aspectRatio": "1:1",
+          "isGenerating": false, "generationStartedAt": null
+        }
+      }]
+    } },
+    { "waitStable": { "target": { "selector": ".react-flow__node:has([data-generation-node-model-id=\"apimart-gpt-image-2.5\"])" } } },
+    { "capture": { "name": "rest", "metrics": { "selector": "[data-generation-node-model-id=\"apimart-gpt-image-2.5\"]", "maxRows": null } } },
+    { "hover": { "text": "/^(版本|Version)$/", "within": { "selector": ".react-flow__node:has([data-generation-node-model-id=\"apimart-gpt-image-2.5\"])" } } },
+    { "waitStable": {} },
+    { "capture": "row-hover" },
+    { "hover": { "selector": "[data-dropdown-button], [data-panel-trigger-button]", "nth": 1,
+      "within": { "selector": ".react-flow__node:has([data-generation-node-model-id=\"apimart-gpt-image-2.5\"])" } } },
+    { "waitStable": {} },
+    { "capture": "trigger-hover" },
+    { "click": { "text": "核对样例", "within": { "selector": ".react-flow__node:has([data-generation-node-model-id=\"apimart-gpt-image-2.5\"])" } } },
+    { "hover": { "text": "/^(版本|Version)$/", "within": { "selector": ".react-flow__node:has([data-generation-node-model-id=\"apimart-gpt-image-2.5\"])" } } },
+    { "waitStable": {} },
+    { "capture": "selected-row-hover" },
+    { "open": { "trigger": { "selector": "[data-dropdown-button], [data-panel-trigger-button]", "nth": 1,
+      "within": { "selector": ".react-flow__node:has([data-generation-node-model-id=\"apimart-gpt-image-2.5\"])" } } } },
+    { "waitStable": {} },
+    { "capture": { "name": "menu", "metrics": { "selector": "[role=\"listbox\"]", "nth": "last", "maxRows": null } } },
+    { "escape": {} }
+  ]
+}

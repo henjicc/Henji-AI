@@ -1,0 +1,180 @@
+/**
+ * 界面核对的自动指标（skill henji-ui-surface references/review.md 第 2、4 节）：行数、溢出、截断、短标签折行。
+ *
+ * 分两半：
+ * - `collectLayoutMeasurements` 在页面里执行（自包含，不引用外部变量），只采集原始几何与样式；
+ * - `analyzeLayoutMetrics` 在 Node 里把原始数据判成指标与可疑原因，纯函数，有精确测试。
+ *
+ * 指标只用于“先筛可疑项”，不替代 Agent 打开截图目视；判据宁可多报，不漏报。
+ */
+
+/** 页面侧：采集目标元素内的原始几何。参数 element 是 Playwright 传入的 DOM 元素。 */
+function collectLayoutMeasurements(element) {
+  const ATOM_SELECTOR = [
+    'button', 'a[href]', 'input', 'select', 'textarea',
+    '[role="button"]', '[role="combobox"]', '[role="switch"]', '[role="tab"]', '[role="radio"]',
+    '[role="checkbox"]', '[role="menuitem"]', '[role="option"]', '[role="slider"]',
+    '[data-panel-trigger-button]', '[data-dropdown-button]',
+  ].join(',')
+  const round = (value) => Math.round(value * 100) / 100
+  const rectOf = (node) => {
+    const rect = node.getBoundingClientRect()
+    return { left: round(rect.left), top: round(rect.top), right: round(rect.right), bottom: round(rect.bottom),
+      width: round(rect.width), height: round(rect.height) }
+  }
+  const isVisible = (node) => {
+    const rect = node.getBoundingClientRect()
+    if (rect.width < 1 || rect.height < 1) return false
+    const style = getComputedStyle(node)
+    return style.visibility !== 'hidden' && style.display !== 'none' && Number(style.opacity) > 0.01
+  }
+  const describe = (node) => {
+    const label = node.getAttribute('aria-label') || node.getAttribute('title') || node.textContent || ''
+    const name = label.replace(/\s+/g, ' ').trim().slice(0, 40)
+    return `${node.tagName.toLowerCase()}${name ? `「${name}」` : ''}`
+  }
+  const ownText = (node) => [...node.childNodes]
+    .filter((child) => child.nodeType === Node.TEXT_NODE)
+    .map((child) => child.textContent ?? '').join('').replace(/\s+/g, ' ').trim()
+
+  const container = rectOf(element)
+  const containerStyle = getComputedStyle(element)
+  const allAtoms = [...element.querySelectorAll(ATOM_SELECTOR)].filter(isVisible)
+  // 只取最外层的可交互件：触发器里的图标按钮不再单独算一项
+  const atoms = allAtoms.filter((node) => !allAtoms.some((other) => other !== node && other.contains(node)))
+  const items = (atoms.length > 0 ? atoms : [...element.children].filter(isVisible))
+    .map((node) => ({ label: describe(node), rect: rectOf(node) }))
+
+  const texts = []
+  for (const node of [element, ...element.querySelectorAll('*')]) {
+    if (!isVisible(node)) continue
+    const text = ownText(node)
+    if (!text) continue
+    const style = getComputedStyle(node)
+    const range = document.createRange()
+    range.selectNodeContents(node)
+    const lineTops = [...range.getClientRects()].filter((rect) => rect.width > 0 && rect.height > 0)
+      .map((rect) => Math.round(rect.top))
+    range.detach?.()
+    // 悬停可看全：自身或祖先带 title / aria-label（UiMarqueeText 默认把全文写进 title）
+    const titled = node.closest('[title],[aria-label]')
+    texts.push({
+      text: text.slice(0, 60),
+      length: [...text].length,
+      clientWidth: node.clientWidth,
+      scrollWidth: node.scrollWidth,
+      clientHeight: node.clientHeight,
+      scrollHeight: node.scrollHeight,
+      overflowX: style.overflowX,
+      overflowY: style.overflowY,
+      textOverflow: style.textOverflow,
+      lineClamp: style.webkitLineClamp || style.getPropertyValue('-webkit-line-clamp') || 'none',
+      whiteSpace: style.whiteSpace,
+      lineCount: new Set(lineTops).size,
+      hasFullTextHint: Boolean(titled),
+      label: describe(node),
+    })
+  }
+
+  return {
+    container,
+    containerScroll: { scrollWidth: element.scrollWidth, clientWidth: element.clientWidth,
+      scrollHeight: element.scrollHeight, clientHeight: element.clientHeight },
+    containerOverflowX: containerStyle.overflowX,
+    viewport: { width: window.innerWidth, height: window.innerHeight },
+    items,
+    texts,
+  }
+}
+
+/**
+ * 把一组矩形按“竖直方向是否重叠”分成视觉行：区间图的连通分量。
+ * 同一行里高低不同的控件（32 高按钮与 28 高标签）仍算一行；完全错开的才是折行。
+ */
+function countVisualRows(rects, minOverlapPx = 2) {
+  const intervals = rects
+    .filter((rect) => rect && rect.height > 0 && rect.width > 0)
+    .map((rect) => [rect.top, rect.bottom])
+    .sort((a, b) => a[0] - b[0] || a[1] - b[1])
+  let rows = 0
+  let currentBottom = -Infinity
+  for (const [top, bottom] of intervals) {
+    if (top > currentBottom - minOverlapPx) {
+      rows += 1
+      currentBottom = bottom
+    } else {
+      currentBottom = Math.max(currentBottom, bottom)
+    }
+  }
+  return rows
+}
+
+const OVERFLOW_TOLERANCE_PX = 1
+const SHORT_LABEL_MAX_CHARS = 12
+
+function isTruncated(text) {
+  const clipsX = ['hidden', 'clip', 'auto', 'scroll'].includes(text.overflowX) || text.textOverflow === 'ellipsis'
+  if (clipsX && text.scrollWidth > text.clientWidth + OVERFLOW_TOLERANCE_PX) return 'horizontal'
+  const clamped = text.lineClamp && text.lineClamp !== 'none'
+  const clipsY = clamped || ['hidden', 'clip'].includes(text.overflowY)
+  if (clipsY && text.scrollHeight > text.clientHeight + OVERFLOW_TOLERANCE_PX) return 'vertical'
+  return null
+}
+
+/**
+ * Node 侧：原始几何 → 指标与可疑原因。
+ * @param {ReturnType<typeof collectLayoutMeasurements>} raw
+ * @param {{ maxRows?: number }} [expect] maxRows 默认 1（工具条、底栏、命令带必须单行）；表单类目标传 null 不判行数
+ */
+function analyzeLayoutMetrics(raw, expect = {}) {
+  const maxRows = expect.maxRows === undefined ? 1 : expect.maxRows
+  const rows = countVisualRows(raw.items.map((item) => item.rect))
+  const { container } = raw
+  const overflowingItems = raw.items.filter(({ rect }) => (
+    rect.left < container.left - OVERFLOW_TOLERANCE_PX || rect.right > container.right + OVERFLOW_TOLERANCE_PX
+  )).map((item) => item.label)
+  const offscreenItems = raw.items.filter(({ rect }) => (
+    rect.left < -OVERFLOW_TOLERANCE_PX || rect.right > raw.viewport.width + OVERFLOW_TOLERANCE_PX
+    || rect.bottom > raw.viewport.height + OVERFLOW_TOLERANCE_PX
+  )).map((item) => item.label)
+  const containerOverflow = raw.containerScroll.scrollWidth > raw.containerScroll.clientWidth + OVERFLOW_TOLERANCE_PX
+  const truncated = raw.texts
+    .map((text) => ({ text, kind: isTruncated(text) }))
+    .filter(({ kind }) => kind)
+    .map(({ text, kind }) => ({ text: text.text, kind, hint: text.hasFullTextHint, element: text.label }))
+  const wrappedLabels = raw.texts
+    .filter((text) => text.length <= SHORT_LABEL_MAX_CHARS && text.lineCount > 1 && !isTruncated(text))
+    .map((text) => ({ text: text.text, lines: text.lineCount, element: text.label }))
+
+  const reasons = []
+  if (maxRows !== null && rows > maxRows) reasons.push(`折行：${rows} 行（上限 ${maxRows}）`)
+  if (containerOverflow) reasons.push(`容器横向溢出 ${raw.containerScroll.scrollWidth}>${raw.containerScroll.clientWidth}`)
+  if (overflowingItems.length) reasons.push(`超出容器：${overflowingItems.slice(0, 3).join('、')}`)
+  if (offscreenItems.length) reasons.push(`超出窗口：${offscreenItems.slice(0, 3).join('、')}`)
+  const unhinted = truncated.filter((item) => !item.hint)
+  if (unhinted.length) reasons.push(`截断且悬停看不全：${unhinted.slice(0, 3).map((item) => item.text).join('、')}`)
+  if (truncated.length > unhinted.length) reasons.push(`截断（有悬停提示）：${truncated.length - unhinted.length} 处`)
+  if (wrappedLabels.length) reasons.push(`短标签折行：${wrappedLabels.slice(0, 3).map((item) => item.text).join('、')}`)
+
+  return {
+    rows,
+    itemCount: raw.items.length,
+    width: container.width,
+    height: container.height,
+    containerOverflow,
+    overflowingItems,
+    offscreenItems,
+    truncated,
+    wrappedLabels,
+    suspicious: reasons.length > 0,
+    reasons,
+  }
+}
+
+module.exports = {
+  SHORT_LABEL_MAX_CHARS,
+  analyzeLayoutMetrics,
+  collectLayoutMeasurements,
+  countVisualRows,
+  isTruncated,
+}

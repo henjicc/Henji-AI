@@ -1,6 +1,26 @@
 const { createAudioEditScene } = require('./uiInspectionSceneAudioEdit.cjs')
 const { createAudioEditHomeScene } = require('./uiInspectionSceneAudioEditHome.cjs')
 const { createAudioEditInteractionScene } = require('./uiInspectionSceneAudioEditInteraction.cjs')
+const {
+  assertCompositedDisplacement,
+  captureRegionPixels,
+  patchTextureStdDev,
+  selectFeaturePatch,
+} = require('./uiInspectionCompositedMove.cjs')
+
+/** 发布候选夹具（1600×1000 JPG）里白色矩形 (230,220)–(650,520) 的四个角：二维纹理强，适合判定位移。 */
+const RELEASE_FIXTURE_FEATURE_ANCHORS = Object.freeze([
+  { x: 230 / 1600, y: 520 / 1000 },
+  { x: 650 / 1600, y: 520 / 1000 },
+  { x: 230 / 1600, y: 220 / 1000 },
+  { x: 650 / 1600, y: 220 / 1000 },
+])
+
+function intersectBoxes(a, b) {
+  const x = Math.max(a.x, b.x)
+  const y = Math.max(a.y, b.y)
+  return { x, y, width: Math.min(a.x + a.width, b.x + b.width) - x, height: Math.min(a.y + a.height, b.y + b.height) - y }
+}
 
 function createToolboxScenes(context) {
   const {
@@ -314,7 +334,7 @@ function createToolboxScenes(context) {
       surface: '工具箱',
       name: '图片编辑器 V3-发布候选核心路径',
       writesUserData: true,
-      setup: async (page) => {
+      setup: async (page, app) => {
         const startedAt = new Date().toISOString()
         await setupToolbox(page)
         await clickNamedButton(page, /^(图片编辑|Image Edit)/i)
@@ -807,6 +827,41 @@ function createToolboxScenes(context) {
         if (!initialFeedbackBox || !initialViewportContentBox || !initialTransparencyBox) {
           throw new Error('移动 JPG 前无法读取稳定画面边界')
         }
+        // 与 ImageEditorPreviewV3 的 gpuPresentationActive 同一判据：GPU 合成 + GPU 呈现时，拖动只改 GPU 场景的
+        // 临时变换，DOM 反馈层不动（9d719232）。这时“画面跟随指针”按正式截屏的合成结果判定，判据与 DOM 路径同一容差。
+        const moveBackends = await preview.evaluate((element) => ({
+          composition: element.getAttribute('data-preview-composition-backend'),
+          presentation: element.getAttribute('data-preview-presentation-backend'),
+        }))
+        const gpuMove = moveBackends.composition === 'gpu'
+          && ['webgpu-surface', 'gpu-image-bitmap'].includes(moveBackends.presentation)
+        const readInteractionSequence = () => editor.locator('[data-presentation-front-surface]')
+          .getAttribute('data-interaction-sequence').then(Number)
+        let moveClip = null
+        let moveBaseline = null
+        let movePatch = null
+        if (gpuMove) {
+          moveClip = await preview.boundingBox()
+          if (!moveClip) throw new Error('GPU 拖动判定前无法读取预览范围')
+          moveBaseline = await captureRegionPixels(app, page, moveClip)
+          movePatch = selectFeaturePatch({
+            anchorBox: initialViewportContentBox,
+            visibleBox: intersectBoxes(initialViewportContentBox, moveClip),
+            anchors: RELEASE_FIXTURE_FEATURE_ANCHORS,
+            delta: { x: 42, y: -180 },
+          })
+          if (!movePatch) {
+            throw new Error(`GPU 拖动判定找不到移动前后都可见的特征区域：${JSON.stringify({ initialViewportContentBox, moveClip })}`)
+          }
+          const toDevice = (value) => Math.round(value * moveBaseline.scale)
+          const texture = patchTextureStdDev(moveBaseline, {
+            x: toDevice(movePatch.patch.x - moveClip.x), y: toDevice(movePatch.patch.y - moveClip.y),
+            width: toDevice(movePatch.patch.width), height: toDevice(movePatch.patch.height),
+          })
+          if (!(texture >= 12)) {
+            throw new Error(`GPU 拖动判定的特征区域没有画出夹具图像（纹理 ${texture.toFixed(1)}）：${JSON.stringify(movePatch)}`)
+          }
+        }
         const beforeSnap = await readRevision()
         await page.mouse.move(startX, startY)
         await page.mouse.down()
@@ -833,6 +888,11 @@ function createToolboxScenes(context) {
             snapGuides,
           })}`)
         }
+        if (gpuMove) {
+          // GPU 路径下 DOM 反馈层本来就不动，吸附回原位要看合成画面
+          await assertCompositedDisplacement({ app, page, clip: moveClip, baseline: moveBaseline,
+            patchCss: movePatch.patch, expectedCss: { x: 0, y: 0 }, label: '图片靠近原位时吸附' })
+        }
         await page.mouse.up()
         if (await readRevision() !== beforeSnap) {
           throw new Error('吸附回原位仍错误产生了编辑记录')
@@ -853,6 +913,7 @@ function createToolboxScenes(context) {
           || Math.abs(pressedFeedbackBox.y - initialFeedbackBox.y) > 0.5) {
           throw new Error('按下移动工具时稳定画面发生了闪跳或显示源切换')
         }
+        const interactionSequenceBeforeMove = gpuMove ? await readInteractionSequence() : null
         for (let step = 1; step <= 6; step += 1) {
           const expectedX = 42 * step / 6
           const expectedY = -180 * step / 6
@@ -875,8 +936,12 @@ function createToolboxScenes(context) {
           ])
           if (source !== 'viewport') throw new Error('移动 JPG 期间稳定分块画面被草稿替换')
           if (revision !== beforeMove) throw new Error('移动 JPG 期间提前提交了文档 revision')
-          if (!currentFeedbackBox || !currentViewportContentBox) throw new Error('移动 JPG 期间画面边界丢失')
-          if (Math.abs(currentFeedbackBox.x - initialFeedbackBox.x - expectedX) > 1.5
+          if ((!gpuMove && !currentFeedbackBox) || !currentViewportContentBox) throw new Error('移动 JPG 期间画面边界丢失')
+          if (gpuMove) {
+            await assertCompositedDisplacement({ app, page, clip: moveClip, baseline: moveBaseline,
+              patchCss: movePatch.patch, expectedCss: { x: expectedX, y: expectedY },
+              label: `移动 JPG 的实际画面位置没有跟随指针（第 ${step} 步）` })
+          } else if (Math.abs(currentFeedbackBox.x - initialFeedbackBox.x - expectedX) > 1.5
             || Math.abs(currentFeedbackBox.y - initialFeedbackBox.y - expectedY) > 1.5) {
             throw new Error(`移动 JPG 的实际画面位置没有跟随指针：${JSON.stringify({ step, expected: [expectedX, expectedY], actual: [currentFeedbackBox.x - initialFeedbackBox.x, currentFeedbackBox.y - initialFeedbackBox.y], initialFeedbackBox, currentFeedbackBox })}`)
           }
@@ -896,7 +961,15 @@ function createToolboxScenes(context) {
         const transientTransform = await feedback.evaluate(
           (element) => element.style.transform,
         )
-        if (!transientTransform.includes('translate')) {
+        if (gpuMove) {
+          // GPU 路径：位移经 GPU 临时变换逐帧提交，DOM 反馈层不得同时移动（否则会画两份）
+          const interactionSequenceAfterMove = await readInteractionSequence()
+          if (!(interactionSequenceAfterMove > interactionSequenceBeforeMove) || transientTransform !== '') {
+            throw new Error(`移动 JPG 时 GPU 即时位移反馈异常：${JSON.stringify({
+              interactionSequenceBeforeMove, interactionSequenceAfterMove, transientTransform,
+            })}`)
+          }
+        } else if (!transientTransform.includes('translate')) {
           throw new Error('移动 JPG 时没有即时位移反馈')
         }
         await page.mouse.up()
@@ -913,8 +986,11 @@ function createToolboxScenes(context) {
         }, undefined, { timeout: 12000 })
 
         const beforeReverseMove = await readRevision()
+        // GPU 路径下 DOM 反馈层不跟随图层，图层位置取已由合成画面验证过的位移（夹具图片铺满文档）
         const [movedImageBox, currentDocumentBox] = await Promise.all([
-          feedback.locator('img').boundingBox(),
+          gpuMove
+            ? Promise.resolve({ ...initialViewportContentBox, x: initialViewportContentBox.x + 42, y: initialViewportContentBox.y - 180 })
+            : feedback.locator('img').boundingBox(),
           viewportContent.boundingBox(),
         ])
         if (!movedImageBox || !currentDocumentBox) {
@@ -935,12 +1011,27 @@ function createToolboxScenes(context) {
         }
         const reverseStartX = (visibleLeft + visibleRight) / 2
         const reverseStartY = (visibleTop + visibleBottom) / 2
+        let reverseBaseline = null
+        let reversePatch = null
+        if (gpuMove) {
+          reverseBaseline = await captureRegionPixels(app, page, moveClip)
+          reversePatch = selectFeaturePatch({
+            anchorBox: movedImageBox,
+            visibleBox: intersectBoxes(currentDocumentBox, moveClip),
+            anchors: RELEASE_FIXTURE_FEATURE_ANCHORS,
+            delta: { x: -30, y: 0 },
+          })
+          if (!reversePatch) throw new Error(`反向拖回判定找不到可见特征区域：${JSON.stringify({ movedImageBox, currentDocumentBox })}`)
+        }
         await page.mouse.move(reverseStartX, reverseStartY)
         await page.mouse.down()
         await page.mouse.move(reverseStartX - 30, reverseStartY, { steps: 6 })
         await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => resolve())))
         const reverseTransform = await feedback.evaluate((element) => element.style.transform)
-        if (!reverseTransform.includes('-30px')) {
+        if (gpuMove) {
+          await assertCompositedDisplacement({ app, page, clip: moveClip, baseline: reverseBaseline,
+            patchCss: reversePatch.patch, expectedCss: { x: -30, y: 0 }, label: '反向拖回时完整源图没有跟随指针' })
+        } else if (!reverseTransform.includes('-30px')) {
           throw new Error(`反向拖回时完整源图没有跟随指针：${reverseTransform}`)
         }
         const duringReverse = await documentClip.screenshot({ animations: 'disabled' })

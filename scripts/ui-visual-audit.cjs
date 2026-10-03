@@ -9,13 +9,13 @@ const { UI_AUDIT_RULES, auditUiDom } = require('./lib/uiAuditDom.cjs')
 const { auditPageContrast, loadContrastExceptions } = require('./lib/uiContrastAudit.cjs')
 const { captureInspectionPage } = require('./lib/uiInspectionCapture.cjs')
 const {
-  UI_INSPECTION_SCENES,
   filterScenes,
   formatWindowSize,
   launchUiInspectionApp,
   parseUiInspectionArgs,
+  resolveInspectionRuns,
+  resolveInspectionScenePool,
   resolveOutputDir,
-  resolveThemePresetRuns,
   selectInspectionScenes,
   themePresetLaunchArgs,
   setInspectionWindowSize,
@@ -37,7 +37,7 @@ function printHelp() {
   npm run check:ui-visual -- --out .ui-audit/my-run
   npm run check:ui-visual -- --theme-preset all --only 设置
 
-参数与 ui:tour 相同（--size / --only / --out / --profile / --allow-writes / --theme-preset）。
+参数与 ui:tour 相同（--size / --only / --out / --profile / --allow-writes / --theme-preset / --steps / --matrix / --display-point）。
 --theme-preset 可重复或逗号分隔，all = 石墨/深海/胶片/纸白；多个预设时每个预设单独启动应用，
 结果写到 <输出目录>/<预设>/audit.json。
 
@@ -124,9 +124,10 @@ async function main() {
     printHelp()
     return
   }
-  const matchedScenes = filterScenes(UI_INSPECTION_SCENES, options.only)
+  const scenePool = resolveInspectionScenePool(options, ROOT)
+  const matchedScenes = filterScenes(scenePool, options.only)
   if (matchedScenes.length === 0) {
-    throw new Error(`--only 没有匹配到场景。可用界面：${[...new Set(UI_INSPECTION_SCENES.map((scene) => scene.surface))].join('、')}`)
+    throw new Error(`--only 没有匹配到场景。可用界面：${[...new Set(scenePool.map((scene) => scene.surface))].join('、')}`)
   }
   const selection = selectInspectionScenes(matchedScenes, options)
   const scenes = selection.scenes
@@ -135,7 +136,7 @@ async function main() {
   }
 
   const exceptions = loadContrastExceptions()
-  const runs = resolveThemePresetRuns(options.themePresets, resolveOutputDir(ROOT, options.outDir))
+  const runs = resolveInspectionRuns(options, resolveOutputDir(ROOT, options.outDir))
   const summaries = []
   for (const run of runs) {
     summaries.push(await auditPresetRun({ run, scenes, options, selection, exceptions }))
@@ -178,6 +179,7 @@ async function auditPresetRun({ run, scenes, options, selection, exceptions }) {
     mainEntry: MAIN_ENTRY,
     profile: options.profile,
     readOnly: !options.allowWrites,
+    displayPoint: options.displayPoint,
     extraArgs: [
       ...(scenes.length === 1 ? scenes[0].launchArgs ?? [] : []),
       ...themePresetLaunchArgs(run.themePreset),
@@ -191,7 +193,7 @@ async function auditPresetRun({ run, scenes, options, selection, exceptions }) {
   const collector = createRuntimeEvidenceCollector(app.page)
 
   try {
-    for (const size of options.sizes) {
+    for (const size of run.sizes) {
       const sizeLabel = formatWindowSize(size)
       for (const scene of scenes) {
         const resultKey = `${sizeLabel} / ${scene.name}`
@@ -210,7 +212,8 @@ async function auditPresetRun({ run, scenes, options, selection, exceptions }) {
             results[key] = result
             printSceneResult(key, result)
           }
-          await scene.setup(app.page, app.app, { capture, electronApp: app.app,
+          // 步骤描述的自动指标只在 ui:tour 里汇总；这里只审规则与对比度
+          await scene.setup(app.page, app.app, { capture, recordMetrics: () => undefined, electronApp: app.app,
             requestedWindowSize: size, windowEvidence: windowEvidence.baseline })
           windowEvidence.completed = await assertInspectionWindowSize(app, size, windowEvidence.baseline)
           const result = await app.page.evaluate(auditUiDom, {
