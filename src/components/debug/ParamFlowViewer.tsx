@@ -21,7 +21,7 @@ export function ParamFlowViewer({ record, onExport }: ParamFlowViewerProps) {
   return (
     <UiPanel variant="inset" className="mt-4 p-4">
       <div className="flex justify-between items-center mb-4">
-        <h3 className="text-lg font-semibold text-white">{t('debug.paramFlow.title')}</h3>
+        <h3 className="text-lg font-semibold text-text1">{t('debug.paramFlow.title')}</h3>
         <div className="flex gap-2 items-center">
           <span className="text-xs text-text-muted">
             {t('debug.paramFlow.modelLabel')}: {record.modelId}
@@ -29,9 +29,8 @@ export function ParamFlowViewer({ record, onExport }: ParamFlowViewerProps) {
           {onExport && (
             <UiButton
               variant="primary"
-              size="sm"
               onClick={onExport}
-              className="px-3 py-1 text-xs"
+              className="px-3 py-1"
             >
               {t('debug.paramFlow.exportJson')}
             </UiButton>
@@ -70,13 +69,13 @@ function StageView({ stage }: StageViewProps) {
   const getStageColor = () => {
     switch (stage.stage) {
       case 'ui-input':
-        return 'text-blue-400'
+        return 'text-accent-text'
       case 'linkage':
-        return 'text-orange-400'
+        return 'text-warning-text'
       case 'transform':
-        return 'text-purple-400'
+        return 'text-text2'
       case 'api-build':
-        return 'text-green-400'
+        return 'text-success-text'
     }
   }
 

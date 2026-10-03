@@ -10,7 +10,6 @@ import {
 import type { TextProcessingPromptTemplate } from '@henjicc/ai-sdk'
 import { TEXT_PROCESSING_CUSTOM_TEMPLATE_ID } from '@/features/canvas/application/textProcessing'
 import {
-  NODE_CONTROL_CHIP_CLASS,
   NODE_CONTROL_MODEL_CHIP_CLASS,
   NODE_ROW_CLASS,
   NODE_ROW_CONTROL_SLOT_CLASS,
@@ -69,7 +68,7 @@ export function TextProcessingPromptTemplateSelector({
               <div className="flex max-h-[min(460px,calc(100vh-96px))] flex-col p-3">
                 <div className="mb-2 flex items-center justify-between gap-3">
                   <div className={UI_TEXT_PANEL_TITLE_CLASS}>{label}</div>
-                  <UiButton type="button" variant="plain" size="sm" onClick={openManager}>
+                  <UiButton type="button" onClick={openManager}>
                     <Settings2 className="mr-1.5 h-3.5 w-3.5" />
                     {editLabel}
                   </UiButton>
@@ -111,7 +110,8 @@ export function TextProcessingPromptTemplateSelector({
               return (
                 <UiButton
                   type="button"
-                  variant="muted"
+                  variant="secondary"
+                  size="sm"
                   onClick={(event) => {
                     event.stopPropagation()
                     togglePanel()
@@ -119,7 +119,7 @@ export function TextProcessingPromptTemplateSelector({
                   data-panel-trigger-button
                   aria-label={label}
                   aria-expanded={open}
-                  className={`nodrag nowheel ${NODE_CONTROL_CHIP_CLASS} ${NODE_CONTROL_MODEL_CHIP_CLASS}`}
+                  className={`nodrag nowheel font-normal ${NODE_CONTROL_MODEL_CHIP_CLASS}`}
                 >
                   <span className="min-w-0 flex-1 truncate text-left">{display}</span>
                   <ChevronDown className={`h-3.5 w-3.5 shrink-0 transition-transform duration-180 ${open ? 'rotate-180' : ''}`} />

@@ -17,14 +17,10 @@ export interface SettingsDialogProps {
   onClose?: () => void
 }
 
-const getActionClass = (variant: DialogActionVariant | undefined): string => {
-  if (variant === 'danger') {
-    return 'bg-red-600 text-white hover:bg-red-500'
-  }
-  if (variant === 'secondary') {
-    return ''
-  }
-  return ''
+/** danger 是确认弹窗里的破坏性确认，用 dangerSolid；其余按主次映射。 */
+const resolveActionVariant = (variant: DialogActionVariant | undefined): 'primary' | 'secondary' | 'dangerSolid' => {
+  if (variant === 'danger') return 'dangerSolid'
+  return variant === 'primary' ? 'primary' : 'secondary'
 }
 
 /**
@@ -43,10 +39,9 @@ const SettingsDialog: React.FC<SettingsDialogProps> = ({ open, title, descriptio
     footer={actions.map(action => (
       <UiButton
         key={action.label}
-        size="sm"
-        variant={action.variant === 'primary' || action.variant === 'danger' ? 'primary' : 'muted'}
+        size="lg"
+        variant={resolveActionVariant(action.variant)}
         onClick={action.onClick}
-        className={`h-9 px-3 ${getActionClass(action.variant)}`}
       >
         {action.label}
       </UiButton>

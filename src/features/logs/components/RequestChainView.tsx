@@ -55,10 +55,10 @@ export function RequestChainView({ isOpen, onClose, requestId, events }: Request
       <div className="mb-3 flex items-center justify-between gap-2">
         <span className="text-xs text-text-muted">{t('logsWindow.chain.count', { count: events.length })}</span>
         <div className="flex gap-2">
-          <UiButton type="button" size="sm" variant="ghost" onClick={() => handleCopy('markdown')}>
+          <UiButton type="button" variant="secondary" onClick={() => handleCopy('markdown')}>
             {copiedFormat === 'markdown' ? t('logsWindow.copy.copied') : t('logsWindow.copy.markdown')}
           </UiButton>
-          <UiButton type="button" size="sm" variant="ghost" onClick={() => handleCopy('json')}>
+          <UiButton type="button" variant="secondary" onClick={() => handleCopy('json')}>
             {copiedFormat === 'json' ? t('logsWindow.copy.copied') : t('logsWindow.copy.json')}
           </UiButton>
         </div>
@@ -77,13 +77,13 @@ export function RequestChainView({ isOpen, onClose, requestId, events }: Request
             return (
               <div key={event.id} className="relative border-l border-border-dark/40 pb-1 pl-4">
                 <span
-                  className={`absolute -left-[5px] top-2 h-2.5 w-2.5 rounded-full ${isError ? 'bg-red-500' : 'bg-brand-400'}`}
+                  className={`absolute -left-[5px] top-2 h-2.5 w-2.5 rounded-full ${isError ? 'bg-red-500' : 'bg-accent'}`}
                 />
+                {/* ui-surface-allow 链路事件卡（多行内容的可展开条目），日志窗口外观归 4.1 */}
                 <UiButton
                   type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-auto w-full flex-col items-stretch justify-start rounded-md border border-border-dark/40 bg-white/5 px-2 py-1.5 text-left text-xs font-normal"
+                  variant="secondary"
+                  className="h-auto w-full flex-col items-stretch justify-start border-border-dark/40 bg-white/5 px-2 py-1.5 text-left font-normal"
                   onClick={() => setExpandedId(isExpanded ? '' : event.id)}
                 >
                   <div className="flex items-center justify-between gap-2">

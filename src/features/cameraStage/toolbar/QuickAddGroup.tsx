@@ -56,9 +56,6 @@ const QuickAddGroup: React.FC = () => {
         return (
           <UiIconButton
             key={value}
-            showBorder={false}
-            appearance="hover-only"
-            className="h-7 w-7"
             title={`添加${QUICK_ADD_LABELS[value]}`}
             onClick={() => handleAdd(value)}
           >

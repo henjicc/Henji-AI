@@ -109,11 +109,11 @@ export default function OnboardingSection(): JSX.Element {
           <span className={UI_TEXT_META_CLASS}>{t(`settings.status.${state.status}`)}</span>
         </UiFormRow>
         <div className="flex flex-wrap gap-2">
-          <UiButton variant="primary" onClick={() => onboardingManager.restart()}>
+          <UiButton variant="secondary" onClick={() => onboardingManager.restart()}>
             {t('actions.rerun')}
           </UiButton>
           <UiButton
-            variant="muted"
+            variant="secondary"
             onClick={() => openSettingsPanel({ tab: 'models', sectionId: 'models-providers' })}
           >
             {t('actions.openApiSettings')}

@@ -62,11 +62,10 @@ const StageViewportToolbar: React.FC = () => {
         return (
           <React.Fragment key={definition.id}>
             {index === 3 && <span className="mx-1 h-5 w-px bg-border-dark" />}
-            <UiIconButton
-              showBorder={false}
-              active={activeTool === definition.id}
+            <UiIconButton size="lg"
+              on={activeTool === definition.id}
               disabled={disabled}
-              className="h-8 w-8 rounded-md disabled:cursor-not-allowed disabled:opacity-40"
+              className="disabled:cursor-not-allowed disabled:opacity-40"
               title={`${definition.label}（${definition.shortcut}）`}
               aria-label={`${definition.label}，快捷键 ${definition.shortcut}`}
               onClick={() => activateTool(definition)}

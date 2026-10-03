@@ -125,28 +125,21 @@ const ObjectListPanel: React.FC = () => {
                   </UiOptionButton>
                 )}
                 <UiIconButton
-                  showBorder={false}
-                  appearance="hover-only"
-                  className="h-7 w-7 shrink-0"
+                  className="shrink-0"
                   title={object.visible ? '隐藏' : '显示'}
                   onClick={() => updateObject(object.id, { visible: !object.visible })}
                 >
                   {object.visible ? <Eye size={13} /> : <EyeOff size={13} />}
                 </UiIconButton>
                 <UiIconButton
-                  showBorder={false}
-                  appearance="hover-only"
-                  className="h-7 w-7 shrink-0"
+                  className="shrink-0"
                   title="复制 (Ctrl+D)"
                   onClick={() => duplicateObject(object.id)}
                 >
                   <Copy size={13} />
                 </UiIconButton>
-                <UiIconButton
-                  showBorder={false}
-                  appearance="hover-only"
-                  hoverVariant="danger"
-                  className="h-7 w-7 shrink-0"
+                <UiIconButton tone="danger"
+                  className="shrink-0"
                   title="删除"
                   onClick={() => removeObject(object.id)}
                 >

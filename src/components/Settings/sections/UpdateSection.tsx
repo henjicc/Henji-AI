@@ -102,9 +102,7 @@ const UpdateSection: React.FC = () => {
         <UiButton
           onClick={handleCheck}
           disabled={isChecking}
-          variant="primary"
-          size="sm"
-          className="px-4"
+          variant="secondary"
         >
           {isChecking ? t('actions.checking') : t('actions.checkUpdate')}
         </UiButton>
@@ -115,7 +113,7 @@ const UpdateSection: React.FC = () => {
         info={t('sections.updates.clearIgnoredHint')}
         inline
       >
-        <UiButton onClick={clearIgnored} variant="muted" size="sm" className="px-4">
+        <UiButton onClick={clearIgnored} variant="secondary" className="px-4">
           {t('sections.updates.clearIgnoredAction')}
         </UiButton>
       </UiFormRow>

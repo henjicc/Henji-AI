@@ -78,7 +78,7 @@ export function VideoEditParameterFields({ editor, onError }: { editor: VideoEdi
   const title = 'code' in editor ? editor.target.effectId ? '效果参数' : '代码参数' : '对象参数'
   return <UiGroup title={title} divided data-video-edit-code-parameters={editor.target.clipId}>
     {editor.metadata.parameters.map(parameter => parameter.type === 'image' ? 'code' in editor ? <UiFormRow key={`${identity}:${parameter.key}`} label={parameter.title} info={parameter.description || undefined} data-video-edit-code-parameter={parameter.key}><CodeImageParameterControl target={editor.target} parameterKey={parameter.key} title={parameter.title} value={editor.parameters[parameter.key] as CodeImageReference | null} /></UiFormRow> : null : <UiGroup key={`${identity}:${parameter.key}`} gap="row" data-video-edit-code-parameter={parameter.key}>
-      <UiFormRow label={<span className="flex items-center gap-2"><span>{parameter.title}</span><UiIconButton appearance="hover-only" showBorder={false} title={`重置${parameter.title}${editor.curves[parameter.key]?.length ? '（含关键帧）' : ''}`} aria-label={`重置${parameter.title}`} onClick={() => { try { resetVideoEditCodeParameter(editor.target, parameter.key) } catch (error) { onError(error) } }}><RotateCcw className="h-3.5 w-3.5" /></UiIconButton></span>} info={parameter.description || undefined}>
+      <UiFormRow label={<span className="flex items-center gap-2"><span>{parameter.title}</span><UiIconButton size="lg" title={`重置${parameter.title}${editor.curves[parameter.key]?.length ? '（含关键帧）' : ''}`} aria-label={`重置${parameter.title}`} onClick={() => { try { resetVideoEditCodeParameter(editor.target, parameter.key) } catch (error) { onError(error) } }}><RotateCcw className="h-3.5 w-3.5" /></UiIconButton></span>} info={parameter.description || undefined}>
         <CodeScalarControl target={editor.target} parameter={parameter} value={editor.parameters[parameter.key]} label={parameter.title} time={editor.sourceTime} onError={onError} onWrite={(value, gesture, at) => setVideoEditCodeParameter(editor.target, parameter.key, value, { gesture, time: at })} />
       </UiFormRow>
       {parameter.animatable && <CodeKeyframePanel editor={editor} parameter={parameter} onError={onError} renderValue={(point, label) => <CodeScalarControl target={editor.target} parameter={parameter} value={point.value} label={label} onError={onError} onWrite={(value, gesture) => updateVideoEditCodeKeyframe(editor.target, parameter.key, point.id, { value: value as typeof point.value }, gesture)} />} />}
@@ -105,7 +105,7 @@ function CollectCodeAsset({ editor, onError }: { editor: VideoEditCodeEditorStat
     finally { if (pending.current === controller) { pending.current = undefined; setBusy(false) } }
   }
   const AssetIcon = ICON_ASSET_LIBRARY
-  return <UiButton variant="ghost" size="sm" disabled={busy} onClick={() => { void collect() }}><AssetIcon className="h-3.5 w-3.5" />{busy ? '正在加入资产库' : '代码素材加入资产库'}</UiButton>
+  return <UiButton variant="secondary" disabled={busy} onClick={() => { void collect() }}><AssetIcon className="h-3.5 w-3.5" />{busy ? '正在加入资产库' : '代码素材加入资产库'}</UiButton>
 }
 
 export function CodeParameterPanel({ projectId, sequenceId, clipId, effectId, onError }: { projectId: string; sequenceId: string; clipId: string; effectId?: string; onError: (reason: unknown) => void }): React.ReactElement {

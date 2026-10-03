@@ -33,7 +33,6 @@ import { PanoramaSphereCanvas } from './PanoramaSphereCanvas';
 import { usePanoramaImageResource } from './usePanoramaImageResource';
 
 const logger = createLogger('features.canvas.panoramaViewer');
-const CONTROL_BUTTON_CLASS = '!h-9 !w-9 !rounded-full';
 
 type PanoramaViewMode = 'sphere' | 'flat';
 
@@ -244,10 +243,10 @@ export function PanoramaViewerModal({
             retryLabel={t('viewer.panorama.retry')}
             actions={(
               <>
-                <UiButton variant="ghost" size="sm" onClick={() => setViewMode('flat')}>
+                <UiButton variant="secondary" onClick={() => setViewMode('flat')}>
                   {t('viewer.panorama.flat')}
                 </UiButton>
-                <UiButton variant="ghost" size="sm" onClick={() => void handleDownload()}>
+                <UiButton variant="secondary" onClick={() => void handleDownload()}>
                   {t('viewer.panorama.download')}
                 </UiButton>
               </>
@@ -265,9 +264,7 @@ export function PanoramaViewerModal({
 
         {imageList.length > 1 ? (
           <div className="flex items-center gap-1">
-            <UiIconButton
-              appearance="glass"
-              className={CONTROL_BUTTON_CLASS}
+            <UiIconButton size="lg" tone="media" shape="circle"
               onClick={() => onNavigate('prev')}
               disabled={currentIndex <= 0}
               title={t('viewer.prev')}
@@ -277,9 +274,7 @@ export function PanoramaViewerModal({
             <span className="min-w-[44px] text-center text-xs text-white/70">
               {currentIndex + 1} / {imageList.length}
             </span>
-            <UiIconButton
-              appearance="glass"
-              className={CONTROL_BUTTON_CLASS}
+            <UiIconButton size="lg" tone="media" shape="circle"
               onClick={() => onNavigate('next')}
               disabled={currentIndex >= imageList.length - 1}
               title={t('viewer.next')}
@@ -307,35 +302,27 @@ export function PanoramaViewerModal({
           >
             {t('viewer.panorama.flat')}
           </UiChipButton>
-          <UiIconButton
-            appearance="glass"
-            className={CONTROL_BUTTON_CLASS}
+          <UiIconButton size="lg" tone="media" shape="circle"
             onClick={() => setResetRevision((revision) => revision + 1)}
             disabled={!renderSphere}
             title={t('viewer.reset')}
           >
             <RotateCcw className="h-4 w-4" />
           </UiIconButton>
-          <UiIconButton
-            appearance="glass"
-            className={CONTROL_BUTTON_CLASS}
+          <UiIconButton size="lg" tone="media" shape="circle"
             onClick={() => void handleDownload()}
             disabled={isDownloading}
             title={t('viewer.panorama.download')}
           >
             <Download className="h-4 w-4" />
           </UiIconButton>
-          <UiIconButton
-            appearance="glass"
-            className={CONTROL_BUTTON_CLASS}
+          <UiIconButton size="lg" tone="media" shape="circle"
             onClick={() => void handleFullscreen()}
             title={t(isFullscreen ? 'viewer.panorama.exitFullscreen' : 'viewer.panorama.fullscreen')}
           >
             {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
           </UiIconButton>
-          <UiIconButton
-            appearance="glass"
-            className={CONTROL_BUTTON_CLASS}
+          <UiIconButton size="lg" tone="media" shape="circle"
             onClick={onClose}
             title={t('common.close')}
           >

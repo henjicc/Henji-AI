@@ -27,14 +27,14 @@ import { getSocketColor } from '@/features/canvas/domain/socketTypes';
 import { useGenerationProgressDisplay } from '@/features/canvas/nodes/shared/useGenerationProgressDisplay';
 import { NodeGenerationError } from '@/features/canvas/nodes/shared/NodeGenerationError';
 import { formatDuration } from '@/utils/mediaDimensions';
-import { useAudioWaveform } from '@/hooks/useAudioWaveform';
+import { useWaveformData } from '@/hooks/useWaveformData';
 import { importCanvasMediaFile } from '@/features/canvas/application/mediaImport';
 import { ICON_NODE_AUDIO_GENERATION, ICON_NODE_AUDIO_UPLOAD } from '@/core/theme/icons';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { UiIconButton, UiInput } from '@/components/ui';
 import { AudioViewerModal } from '@/components/mediaViewer/AudioViewerModal';
-import Waveform from '@/components/Waveform';
+import { WaveformView } from '@/components/waveform/WaveformView';
 import { uiTransition } from '@/components/ui/motion';
 
 const AudioUploadIcon = ICON_NODE_AUDIO_UPLOAD;
@@ -48,7 +48,6 @@ type AudioNodeProps = NodeProps & {
 
 const AUDIO_NODE_WIDTH = 280;
 const AUDIO_NODE_HEIGHT = 96;
-const AUDIO_WAVEFORM_WIDTH = AUDIO_NODE_WIDTH - 24;
 const AUDIO_WAVEFORM_HEIGHT = 44;
 
 /** 音频节点：服务于结果音频与上传音频，卡片式展示 + 懒挂载播放 */
@@ -75,7 +74,6 @@ export const AudioNode = memo(({ id, data, selected, type, width, height }: Audi
   const defaultSize = resolveUploadNodeSize(UPLOAD_AUDIO_ASPECT_RATIO);
   const resolvedWidth = isUploadVariant ? width || defaultSize.width : AUDIO_NODE_WIDTH;
   const resolvedHeight = isUploadVariant ? height || defaultSize.height : AUDIO_NODE_HEIGHT;
-  const waveformWidth = isUploadVariant ? resolvedWidth - 26 : AUDIO_WAVEFORM_WIDTH;
   const waveformHeight = isUploadVariant ? Math.max(44, resolvedHeight - 54) : AUDIO_WAVEFORM_HEIGHT;
   const { isGenerating, progress, transitionDurationMs } = useGenerationProgressDisplay(id, data);
   const generationError = typeof data.generationError === 'string' ? data.generationError : null;
@@ -92,14 +90,11 @@ export const AudioNode = memo(({ id, data, selected, type, width, height }: Audi
     () => (data.audioUrl ? resolveImageDisplayUrl(data.audioUrl) : null),
     [data.audioUrl]
   );
-  const { waveform, waveDuration } = useAudioWaveform(audioSource ?? '', undefined, {
-    // 采样精度固定，拖动尺寸时只重排波形，避免重复读取/解码音频。
-    width: isUploadVariant ? defaultSize.width - 26 : AUDIO_WAVEFORM_WIDTH,
-    compact: true,
-    duration: data.durationSec ?? undefined,
-  });
+  // 多级波形与尺寸无关：拖动节点尺寸只重画，不重新读取或解码音频。
+  const waveform = useWaveformData(data.audioUrl ? { source: data.audioUrl, channels: 1 } : null);
+  const wavePyramid = waveform.data?.pyramid;
+  const waveDuration = wavePyramid ? wavePyramid.endSeconds - wavePyramid.startSeconds : 0;
   const effectiveDuration = mediaDuration || waveDuration || data.durationSec || 0;
-  const waveformProgress = effectiveDuration > 0 ? currentTime / effectiveDuration : 0;
   const durationLabel = useMemo(
     () => (typeof data.durationSec === 'number' && data.durationSec > 0
       ? formatDuration(data.durationSec)
@@ -272,31 +267,24 @@ export const AudioNode = memo(({ id, data, selected, type, width, height }: Audi
         {generationError ? null : data.audioUrl ? (
           <div className="flex min-w-0 flex-1 flex-col justify-between gap-1">
             <div className="nodrag nowheel" style={{ height: waveformHeight }}>
-              {waveform ? (
-                <Waveform
-                  samples={waveform}
-                  width={waveformWidth}
-                  height={waveformHeight}
-                  progress={waveformProgress}
-                  duration={effectiveDuration}
-                  onSeekStart={seekToRatio}
-                  onSeekMove={seekToRatio}
-                  onSeekEnd={handleWaveformSeekEnd}
-                />
-              ) : (
-                <div className="relative top-1/2 h-px w-full bg-layer/50" />
-              )}
+              <WaveformView
+                waveform={waveform}
+                height={waveformHeight}
+                playedSeconds={(wavePyramid?.startSeconds ?? 0) + currentTime}
+                durationSeconds={effectiveDuration}
+                onSeekStart={seekToRatio}
+                onSeekMove={seekToRatio}
+                onSeekEnd={handleWaveformSeekEnd}
+              />
             </div>
             <div className="flex h-7 min-w-0 items-center gap-1">
               <UiIconButton
                 aria-label={isPlaying ? t('node.audioNode.pause') : t('node.audioNode.play')}
-                showBorder={false}
-                appearance="hover-only"
                 onClick={(event) => {
                   event.stopPropagation();
                   togglePlay();
                 }}
-                className="nodrag !h-7 !w-7 shrink-0 !p-0 text-text-dark"
+                className="nodrag"
               >
                 {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="ml-0.5 h-4 w-4" />}
               </UiIconButton>
@@ -306,8 +294,6 @@ export const AudioNode = memo(({ id, data, selected, type, width, height }: Audi
               <span className="min-w-0 flex-1" />
               <UiIconButton
                 aria-label={muted ? t('ui:viewer.unmute') : t('ui:viewer.mute')}
-                showBorder={false}
-                appearance="hover-only"
                 onClick={(event) => {
                   event.stopPropagation();
                   const element = ensureAudioElement();
@@ -315,21 +301,19 @@ export const AudioNode = memo(({ id, data, selected, type, width, height }: Audi
                   element.muted = !element.muted;
                   setMuted(element.muted);
                 }}
-                className="nodrag !h-7 !w-7 shrink-0 !p-0 text-text-dark"
+                className="nodrag"
               >
                 {muted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
               </UiIconButton>
               <UiIconButton
                 aria-label={t('node.audioNode.openViewer')}
-                showBorder={false}
-                appearance="hover-only"
                 onClick={(event) => {
                   event.stopPropagation();
                   audioRef.current?.pause();
                   setIsPlaying(false);
                   setIsViewerOpen(true);
                 }}
-                className="nodrag !h-7 !w-7 shrink-0 !p-0 text-text-dark"
+                className="nodrag"
               >
                 <Maximize2 className="h-3.5 w-3.5" strokeWidth={1.75} />
               </UiIconButton>

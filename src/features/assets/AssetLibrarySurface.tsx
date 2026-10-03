@@ -263,7 +263,7 @@ export const AssetLibrarySurface: React.FC<Props> = ({ mode, active = true, onCl
               <span className="font-medium text-text-dark">{t('assetLibrary.batchSelected', { count: selectedBatchAssets.length })}</span>
               <span className={UI_TEXT_META_CLASS}>{t('assetLibrary.loadedCount', { loaded: page.items.length, count: page.total })}</span>
               <div className="flex-1" />
-              <UiButton variant="primary" disabled={batchBusy} className="!h-10 shrink-0 px-4" onClick={exitBatchMode}>{t('assetLibrary.batchDone')}</UiButton>
+              <UiButton size="lg" variant="secondary" disabled={batchBusy} className="shrink-0" onClick={exitBatchMode}>{t('assetLibrary.batchDone')}</UiButton>
             </>
           ) : (
             <>
@@ -272,9 +272,9 @@ export const AssetLibrarySurface: React.FC<Props> = ({ mode, active = true, onCl
               <Dropdown<'all' | AssetMediaType> value={mediaType ?? 'all'} options={[{ value: 'all', label: t('assetLibrary.allTypes') }, { value: 'image', label: t('assetLibrary.image') }, { value: 'video', label: t('assetLibrary.video') }, { value: 'audio', label: t('assetLibrary.audio') }, { value: 'code', label: t('assetLibrary.code') }]} onSelect={(value) => setMediaType(value === 'all' ? null : value)} className="shrink-0" buttonClassName="!h-10 !px-3" minWidthStrategy="options" panelWidthStrategy="button" />
               <Dropdown<'created' | 'recent'> value={sort} options={[{ value: 'created', label: t('assetLibrary.newest') }, { value: 'recent', label: t('assetLibrary.recent') }]} onSelect={setSort} className="shrink-0" buttonClassName="!h-10 !px-3" minWidthStrategy="options" panelWidthStrategy="button" />
               <Dropdown<string> value={selectedTag ?? ''} options={[{ value: '', label: t('assetLibrary.allTags') }, ...availableTags.map((tag) => ({ value: tag, label: tag }))]} onSelect={(value) => setSelectedTag(value || null)} className="shrink-0" buttonClassName="!h-10 !px-3" minWidthStrategy="options" panelWidthStrategy="button" />
-              {mode === 'floating' && <UiButton variant="primary" className="!h-10 shrink-0 px-4" onClick={onOpenWorkspace}>{t('assetLibrary.manage')}</UiButton>}
-              {mode === 'workspace' && <UiButton variant="primary" className="!h-10 shrink-0 px-4" onClick={() => startBatchManagement()}>{t('assetLibrary.batchManage')}</UiButton>}
-              {mode === 'floating' && onClose && <UiIconButton appearance="hover-only" className="!h-10 !w-10 shrink-0" onClick={onClose}><X className="h-4 w-4" /></UiIconButton>}
+              {mode === 'floating' && <UiButton size="lg" variant="secondary" className="shrink-0" onClick={onOpenWorkspace}>{t('assetLibrary.manage')}</UiButton>}
+              {mode === 'workspace' && <UiButton size="lg" variant="secondary" className="shrink-0" onClick={() => startBatchManagement()}>{t('assetLibrary.batchManage')}</UiButton>}
+              {mode === 'floating' && onClose && <UiIconButton size="xl" className="shrink-0" onClick={onClose}><X className="h-4 w-4" /></UiIconButton>}
             </>
           )}
         </header>
@@ -333,7 +333,7 @@ export const AssetLibrarySurface: React.FC<Props> = ({ mode, active = true, onCl
                 <UiChipButton tabIndex={thumbnailControlsOpen ? 0 : -1} className="!h-8 shrink-0 !px-2.5 text-xs" active={thumbnailFit === 'contain'} onClick={() => setThumbnailFit('contain')}>{t('assetLibrary.fitContain')}</UiChipButton>
               </div>
             </div>
-            <UiIconButton className="relative z-raised !h-8 !w-8 shrink-0 bg-surface-dark" onClick={() => setThumbnailControlsOpen((open) => !open)} title={t('assetLibrary.viewSettings')}>
+            <UiIconButton size="lg" className="relative z-raised" onClick={() => setThumbnailControlsOpen((open) => !open)} title={t('assetLibrary.viewSettings')}>
               {thumbnailControlsOpen ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
             </UiIconButton>
           </div>

@@ -447,9 +447,9 @@ export const PromptOptimizeButton: React.FC<PromptOptimizeButtonProps> = ({
           closePanelRef.current = closePanel
           openPanelRef.current = openPanel
           return (
-            <UiButton
+            <UiButton size="lg"
               type="button"
-              variant="muted"
+              variant="secondary"
               onClick={() => {
                 if (streaming) return
                 if (buttonBehavior !== 'select-profile') {
@@ -471,7 +471,7 @@ export const PromptOptimizeButton: React.FC<PromptOptimizeButtonProps> = ({
               disabled={disabled}
               aria-disabled={disabled || streaming}
               title={buttonBehavior === 'select-profile' ? '左键先选择配置，右键管理配置' : '左键直接优化，右键管理配置'}
-              className={`prompt-optimize-button h-9 px-4 ${streaming ? 'is-streaming' : ''}`}
+              className={`prompt-optimize-button px-4 ${streaming ? 'is-streaming' : ''}`}
               data-panel-trigger-button
             >
               <Sparkles size={16} className="prompt-optimize-button__icon mr-2" />

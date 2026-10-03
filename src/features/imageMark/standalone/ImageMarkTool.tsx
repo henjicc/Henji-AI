@@ -320,9 +320,6 @@ export function ImageMarkTool({ onBack }: ImageMarkToolProps = {}): JSX.Element 
 
   const backButton = onBack ? (
     <UiIconButton
-      showBorder={false}
-      appearance="hover-only"
-      className="h-7 w-7"
       title="返回工具箱"
       aria-label="返回工具箱"
       onClick={onBack}
@@ -354,15 +351,15 @@ export function ImageMarkTool({ onBack }: ImageMarkToolProps = {}): JSX.Element 
               <ImagePlus size={40} className="text-text-muted" />
               <div className={UI_TEXT_BODY_CLASS}>打开已有图片，或创建一张空白画布</div>
               <div className="flex flex-wrap items-center justify-center gap-2">
-                <UiButton variant="primary" size="sm" onClick={() => void handleOpenFile()}>
+                <UiButton variant="primary" onClick={() => void handleOpenFile()}>
                   <FolderOpen size={15} className="mr-1.5" />
                   从文件打开
                 </UiButton>
-                <UiButton variant="ghost" size="sm" onClick={() => setIsBlankDialogOpen(true)}>
+                <UiButton variant="secondary" onClick={() => setIsBlankDialogOpen(true)}>
                   <FilePlus2 size={15} className="mr-1.5" />
                   新建空白图片
                 </UiButton>
-                <UiButton variant="ghost" size="sm" onClick={() => void handlePasteFromClipboard()}>
+                <UiButton variant="secondary" onClick={() => void handlePasteFromClipboard()}>
                   <ClipboardPaste size={15} className="mr-1.5" />
                   粘贴剪贴板图片
                 </UiButton>
@@ -445,20 +442,19 @@ export function ImageMarkTool({ onBack }: ImageMarkToolProps = {}): JSX.Element 
             />
             {/* 「打开」与右侧三个导出动作都是动作，只是方向相反，用间距分组即可。
                 分隔线留给交互语义根本不同的两侧（如工具 vs 动作），一条带上最多一条。 */}
-            <UiButton variant="ghost" size="sm" className="ml-2" disabled={isBusy} onClick={() => void runExport('copy')}>
+            <UiButton variant="secondary" className="ml-2" disabled={isBusy} onClick={() => void runExport('copy')}>
               <ClipboardCopy size={15} className="mr-1.5" />
               复制
             </UiButton>
             <UiButton
-              variant="ghost"
-              size="sm"
+              variant="secondary"
               disabled={isBusy || collecting}
               onClick={() => void runExport('collect')}
             >
               <ICON_ASSET_LIBRARY size={15} className="mr-1.5" />
               加入资产库
             </UiButton>
-            <UiButton variant="primary" size="sm" disabled={isBusy} onClick={() => void runExport('save')}>
+            <UiButton variant="primary" disabled={isBusy} onClick={() => void runExport('save')}>
               <Save size={15} className="mr-1.5" />
               {isBusy ? '处理中…' : '另存为…'}
             </UiButton>

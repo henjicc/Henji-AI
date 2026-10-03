@@ -106,9 +106,9 @@ function ContentWorkspace({ instance, sequence, onError }: { instance: VideoEdit
     <div className="flex shrink-0 flex-wrap items-center gap-2 px-2 py-2">
       <UiChipButton selectionRole="navigation" active={kind === 'caption'} disabled={busy} onClick={() => { setKind('caption'); setDraft(null); setSelectedId(''); setError('') }}>字幕</UiChipButton>
       <UiChipButton selectionRole="navigation" active={kind === 'marker'} disabled={busy} onClick={() => { setKind('marker'); setDraft(null); setSelectedId(''); setError('') }}>标记</UiChipButton>
-      <UiButton variant="plain" disabled={busy || count >= 500} onClick={() => { setDraft(freshDraft(kind)); setError('') }}>{kind === 'caption' ? '新增字幕' : '新增标记'}</UiButton>
+      <UiButton disabled={busy || count >= 500} onClick={() => { setDraft(freshDraft(kind)); setError('') }}>{kind === 'caption' ? '新增字幕' : '新增标记'}</UiButton>
       {kind === 'caption' && <>
-        <UiButton variant="plain" disabled={busy || count >= 500} onClick={() => { setDraft(freshDraft('import')); setError('') }}>导入字幕</UiButton>
+        <UiButton disabled={busy || count >= 500} onClick={() => { setDraft(freshDraft('import')); setError('') }}>导入字幕</UiButton>
         <Dropdown ariaLabel="导出字幕格式" display="导出字幕" disabled={busy || !sequence.captions?.length} appearance="text" options={[{ label: '导出 SRT', value: 'srt' }, { label: '导出 WebVTT', value: 'vtt' }]} onSelect={format => asyncFile(signal => exportVideoEditSubtitles(projectId, format as 'srt' | 'vtt', sequence.id, signal))} />
       </>}
       <UiInput aria-label="搜索字幕或标记" placeholder="搜索文字或片段" className="min-w-24 flex-1" value={keyword} onChange={event => setKeyword(event.target.value)} />
@@ -136,13 +136,13 @@ function ContentWorkspace({ instance, sequence, onError }: { instance: VideoEdit
         </>}
         <div className="flex flex-wrap items-center gap-2">
           <UiButton variant="primary" disabled={busy || draft.kind !== 'import' && !draft.text.trim()} onClick={() => draft.kind === 'import' ? asyncFile(signal => importVideoEditCaptionFile(projectId, sequence.id, { offset: draft.start, ...(draft.clipId ? { clipId: draft.clipId } : {}) }, signal)) : saveDraft()}>{draft.kind === 'import' ? busy ? '正在导入…' : '选择字幕文件' : draft.id ? '保存修改' : '添加'}</UiButton>
-          {selected && draft.id && <UiButton variant="plain" disabled={busy} onClick={() => locate(selected)}>定位</UiButton>}
-          {draft.id && <UiButton variant="plain" disabled={busy} onClick={removeDraft}>删除</UiButton>}
-          <UiButton variant="plain" onClick={cancel}>取消</UiButton>
+          {selected && draft.id && <UiButton disabled={busy} onClick={() => locate(selected)}>定位</UiButton>}
+          {draft.id && <UiButton disabled={busy} onClick={removeDraft}>删除</UiButton>}
+          <UiButton onClick={cancel}>取消</UiButton>
         </div>
       </div>
     </UiGroup>}
-    {busy && !draft && <UiButton variant="plain" className="mx-2 mb-2" onClick={cancel}>取消文件操作</UiButton>}
+    {busy && !draft && <UiButton className="mx-2 mb-2" onClick={cancel}>取消文件操作</UiButton>}
   </div>
 }
 

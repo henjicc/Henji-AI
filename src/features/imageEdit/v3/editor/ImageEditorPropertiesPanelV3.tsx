@@ -340,8 +340,6 @@ export function ImageEditorPropertiesPanelV3({
                 />
               </UiFormRow>
               <UiButton
-                variant="plain"
-                size="sm"
                 className="justify-start gap-2"
                 disabled={contentLocked}
                 onClick={() => {
@@ -354,8 +352,7 @@ export function ImageEditorPropertiesPanelV3({
             </>
           ) : (
             <UiButton
-              variant="muted"
-              size="sm"
+              variant="secondary"
               className="justify-start gap-2"
               disabled={contentLocked}
               onClick={addMask}

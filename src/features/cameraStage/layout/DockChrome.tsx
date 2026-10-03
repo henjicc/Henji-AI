@@ -34,11 +34,8 @@ export const DockHeaderActions: React.FC<IDockviewHeaderActionsProps> = ({ conta
 
   return (
     <div ref={rootRef} className="relative flex h-full items-center pr-1">
-      <UiIconButton
-        showBorder={false}
-        appearance="hover-only"
-        active={open}
-        className="h-6 w-6"
+      <UiIconButton size="sm"
+        on={open}
         title="面板菜单"
         onClick={() => setOpen((prev) => !prev)}
       >
@@ -47,9 +44,7 @@ export const DockHeaderActions: React.FC<IDockviewHeaderActionsProps> = ({ conta
       {open && (
         <div className="absolute right-1 top-full z-modal mt-1 min-w-32 rounded-md border border-border-dark bg-surface-dark p-1 shadow-panel">
           <UiButton
-            variant="ghost"
-            size="sm"
-            className="w-full justify-start gap-2 text-xs"
+            className="w-full justify-start gap-2"
             onClick={() => {
               resetLayout(containerApi)
               setOpen(false)

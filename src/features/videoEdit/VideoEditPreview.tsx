@@ -259,10 +259,10 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
     </div>
     <div className="flex flex-wrap items-center justify-center gap-2 px-3 py-1 [&_button]:shrink-0 [&_button]:whitespace-nowrap">
       <span className="text-2xs tabular-nums text-text-muted" aria-label="节目时间码">{timelineTimecode(instance.frame, document.fps)}{Number.isInteger(document.fps) ? '' : ' NDF'}</span>
-      <UiButton variant="plain" aria-pressed={display === 'fit'} onClick={() => setDisplay('fit')}>适合窗口</UiButton><UiButton variant="plain" aria-pressed={display === 'actual'} onClick={() => setDisplay('actual')}>100%</UiButton>
-      {preparing && <><span className="text-xs text-text-muted">正在准备流畅预览…</span><UiButton variant="plain" onClick={() => { stopPreview.current(); setPreparing(false) }}>取消准备</UiButton></>}
-      {!preparing && <UiButton variant="plain" onClick={() => setRetry(value => value + 1)}>重新加载预览</UiButton>}
-      <UiButton variant="plain" disabled={collecting || preparing} onClick={() => {
+      <UiButton aria-pressed={display === 'fit'} onClick={() => setDisplay('fit')}>适合窗口</UiButton><UiButton aria-pressed={display === 'actual'} onClick={() => setDisplay('actual')}>100%</UiButton>
+      {preparing && <><span className="text-xs text-text-muted">正在准备流畅预览…</span><UiButton onClick={() => { stopPreview.current(); setPreparing(false) }}>取消准备</UiButton></>}
+      {!preparing && <UiButton onClick={() => setRetry(value => value + 1)}>重新加载预览</UiButton>}
+      <UiButton disabled={collecting || preparing} onClick={() => {
         setCollecting(true)
         setVideoEditView(instance.document.id, { playing: false })
         void captureVideoEditProgramFrame(instance.document.id).then(async output => {
@@ -271,12 +271,12 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
           if (activeVideoEditInstance() === instance) { useAssetLibraryStore.getState().setSelectedAsset(asset); openAssetLibrary('floating') }
         }).catch(onError).finally(() => setCollecting(false))
       }}>{collecting ? '正在收录选帧…' : '选帧加入资产库'}</UiButton>
-      <UiButton variant="plain" disabled={collecting || preparing} title="在图片编辑中修改当前帧，完成后可回填到此帧上方的空画面轨道" onClick={() => {
+      <UiButton disabled={collecting || preparing} title="在图片编辑中修改当前帧，完成后可回填到此帧上方的空画面轨道" onClick={() => {
         setCollecting(true)
         setVideoEditView(instance.document.id, { playing: false })
         void editVideoEditProgramFrame(instance.document.id).catch(onError).finally(() => setCollecting(false))
       }}>编辑当前帧</UiButton>
-      {(['select', 'move', 'point', 'region'] as const).map((value, index) => <UiButton key={value} variant="plain" aria-pressed={mode === value} onClick={() => setMode(value)}>{['选择', '移动画面', '点标注', '区域标注'][index]}</UiButton>)}
+      {(['select', 'move', 'point', 'region'] as const).map((value, index) => <UiButton key={value} aria-pressed={mode === value} onClick={() => setMode(value)}>{['选择', '移动画面', '点标注', '区域标注'][index]}</UiButton>)}
       {(mode === 'point' || mode === 'region') && <UiInput aria-label="标注文字" value={label} onChange={event => setLabel(event.target.value)} placeholder="标注文字" />}
       {mode !== 'select' && !instance.selection && <UiError message="请先选择要编辑的片段" />}
       {renderFailure && <UiError title="节目画面无法显示" message={renderFailure} />}

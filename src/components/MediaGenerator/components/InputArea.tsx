@@ -429,16 +429,13 @@ const InputArea: React.FC<InputAreaProps> = ({
           </div>
           ) : null}
           {/* 生成按钮 */}
-          <UiIconButton
+          <UiIconButton tone="accent" size="lg"
           type="button"
           data-onboarding-target="generate"
           onClick={onGenerate}
           disabled={generateDisabled || isPromptOptimizing || renderPromptOptimizationPreview}
           title={isGenerating ? t('inputArea.button.queue') : t('inputArea.button.generate')}
-          className={`absolute bottom-3 right-3 h-10 w-10 !rounded-full transition-[color,background-color,border-color,transform,filter] duration-180 ${generateDisabled
-            ? '!border-border-dark/25 !bg-surface-dark/65 !text-text-faint'
-            : '!border-brand-500/55 !bg-brand-500 !text-white hover:scale-105 hover:brightness-110'
-            }`}
+          className="absolute bottom-3 right-3"
           >
             {isLoading ? (
               <LoaderCircle className="animate-spin h-5 w-5" />

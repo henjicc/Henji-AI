@@ -10,8 +10,16 @@ import { Info, TriangleAlert, X } from 'lucide-react'
 export interface AlertDialogAction {
   label: string
   onClick: () => void
-  variant?: 'primary' | 'muted'
+  /** 主动作用 primary（一个弹窗最多一个），其余用 secondary（默认）。 */
+  variant?: 'primary' | 'secondary'
+  /** 破坏性动作：primary → dangerSolid（确认弹窗），secondary → danger（悬停显红）。 */
   tone?: 'default' | 'danger'
+}
+
+function resolveAlertActionVariant(action: AlertDialogAction): 'primary' | 'secondary' | 'danger' | 'dangerSolid' {
+  const variant = action.variant ?? 'secondary'
+  if (action.tone !== 'danger') return variant
+  return variant === 'primary' ? 'dangerSolid' : 'danger'
 }
 
 interface AlertDialogProps {
@@ -79,14 +87,14 @@ export default function AlertDialog({
           icon: (
             <X className="h-5 w-5" />
           ),
-          color: 'text-red-500'
+          color: 'text-danger-text'
         }
       case 'info':
         return {
           icon: (
             <Info className="h-5 w-5" />
           ),
-          color: 'text-blue-500'
+          color: 'text-accent-text'
         }
       case 'warning':
       default:
@@ -94,7 +102,7 @@ export default function AlertDialog({
           icon: (
             <TriangleAlert className="h-5 w-5" />
           ),
-          color: 'text-yellow-500'
+          color: 'text-warning-text'
         }
     }
   }
@@ -148,24 +156,18 @@ export default function AlertDialog({
             <UiButton
               key={action.label}
               type="button"
-              size="sm"
-              variant={action.variant ?? 'muted'}
+              size="lg"
+              variant={resolveAlertActionVariant(action)}
               onClick={action.onClick}
-              className={`h-9 px-4 ${
-                action.tone === 'danger'
-                  ? 'hover:!border-red-500/40 hover:!bg-red-600/35 hover:!text-white'
-                  : ''
-              }`}
             >
               {action.label}
             </UiButton>
           ))}
           <UiButton
             type="button"
-            size="sm"
-            variant="muted"
+            size="lg"
+            variant="secondary"
             onClick={handleClose}
-            className="h-9 px-4"
           >
             {closeLabel ?? t('close')}
           </UiButton>

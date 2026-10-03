@@ -99,9 +99,9 @@ const DownloadSection: React.FC<DownloadSectionProps> = ({
           <UiButton
             onClick={handleSelectPath}
             disabled={!enableQuickDownload}
-            variant="primary"
-            size="field-sm"
-            className="shrink-0 whitespace-nowrap px-4"
+            variant="secondary"
+            size="lg"
+            className="shrink-0 whitespace-nowrap"
           >
             {t('actions.select')}
           </UiButton>
@@ -122,10 +122,8 @@ const DownloadSection: React.FC<DownloadSectionProps> = ({
               <span data-observation-sensitive className="min-w-0 flex-1 truncate text-sm" title={path}>
                 {path}
               </span>
-              <UiIconButton
+              <UiIconButton size="lg"
                 type="button"
-                showBorder={false}
-                appearance="hover-only"
                 aria-label={t('sections.download.presetPathsRemove', { path })}
                 onClick={() => handleRemovePresetPath(path)}
               >
@@ -137,8 +135,7 @@ const DownloadSection: React.FC<DownloadSectionProps> = ({
             <UiButton
               onClick={handleAddPresetPath}
               disabled={presetPaths.length >= DOWNLOAD_PRESET_PATH_LIMIT}
-              variant="ghost"
-              size="sm"
+              variant="secondary"
               className="shrink-0 gap-1.5 whitespace-nowrap"
             >
               <Plus className="h-3.5 w-3.5" />

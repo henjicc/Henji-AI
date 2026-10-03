@@ -101,7 +101,6 @@ export function CustomModelManager(): JSX.Element {
         <h2 className="text-xl font-bold">{t('customModels.title')}</h2>
         <UiButton
           variant="primary"
-          size="sm"
           onClick={() => setShowAddDialog(true)}
         >
           {t('customModels.add')}
@@ -140,10 +139,8 @@ export function CustomModelManager(): JSX.Element {
                 />
 
                 <UiButton
-                  variant="primary"
-                  size="sm"
+                  variant="danger"
                   onClick={() => handleDelete(model.id)}
-                  className="bg-red-500 text-white hover:bg-red-600"
                 >
                   {t('delete')}
                 </UiButton>

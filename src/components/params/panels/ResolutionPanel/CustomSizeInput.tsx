@@ -75,10 +75,9 @@ export const CustomSizeInput: React.FC<CustomSizeInputProps> = ({
           className="custom-size-field"
         />
 
-        <UiIconButton
-          active={isRatioLocked}
+        <UiIconButton size="lg"
+          on={isRatioLocked}
           onClick={() => setIsRatioLocked(!isRatioLocked)}
-          className={`ratio-lock-button ${isRatioLocked ? 'locked' : ''}`}
           disabled={disabled}
         >
           <Lock className="w-4 h-4" />

@@ -13,7 +13,7 @@ vi.mock('@/components/ui', async () => {
       ({ minTargets: _minTargets, ...props }, ref) => <div {...props} ref={ref} />),
     UiButton: React.forwardRef<HTMLButtonElement, React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: string; size?: string }>(
       ({ variant: _variant, size: _size, ...props }, ref) => <button {...props} ref={ref} />),
-    UiIconButton: ({ appearance: _appearance, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & { appearance?: string }) => <button {...props} />,
+    UiIconButton: ({ size: _size, tone: _tone, on: _on, shape: _shape, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & { size?: string; tone?: string; on?: boolean; shape?: string }) => <button {...props} />,
     UiOptionButton: ({ variant: _variant, active: _active, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: string; active?: boolean }) => <button {...props} />,
     UiError: ({ message }: { message: string }) => <div role="alert">{message}</div>,
   };

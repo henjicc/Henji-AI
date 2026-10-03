@@ -49,14 +49,12 @@ const Vec3Row: React.FC<Vec3RowProps> = ({
     <div className="mb-1 flex items-center justify-between gap-2 text-xs text-text-muted">
       <span>{label}</span>
       {pathKey === 'scale' && onScaleLockedChange && (
-        <UiIconButton
+        <UiIconButton size="sm"
           type="button"
-          showBorder={false}
-          appearance="hover-only"
-          active={scaleLocked}
+          on={scaleLocked}
           title={scaleLocked ? '已锁定等比缩放' : '独立缩放'}
           aria-label={scaleLocked ? '关闭等比缩放' : '开启等比缩放'}
-          className="h-6 w-6 shrink-0"
+          className="shrink-0"
           onClick={() => onScaleLockedChange(!scaleLocked)}
         >
           {scaleLocked ? <Lock size={13} /> : <Unlock size={13} />}
@@ -149,11 +147,12 @@ const PropertyPanel: React.FC = () => {
             />
             <div className="flex flex-1 flex-wrap gap-1">
               {CAMERA_STAGE_OBJECT_PALETTE_HEX.map((hex) => (
-                <UiButton
+                // ui-surface-allow 物体颜色色样（背景色即内容色），交 3.4 改为 UiOptionButton variant="swatch"
+                <UiButton variant="secondary"
                   key={hex}
                   size="sm"
                   title={hex}
-                  className="h-6 w-6 min-w-0 rounded-md border-border-dark p-0"
+                  className="w-6 min-w-0 border-border-dark p-0"
                   style={{ backgroundColor: hex }}
                   onClick={() => updateObject(selected.id, { color: hex })}
                 />

@@ -94,7 +94,8 @@ describe('Dropdown 键盘交互', () => {
     }))
 
     const trigger = rendered.getByRole('button', { name: '切换语言' })
-    expect(trigger.className).toContain('border-transparent')
+    // 文字外观 = 静默档按钮（静息无底无框），不叠字段表面
+    expect(trigger.dataset.variant).toBe('quiet')
     expect(trigger.className).toContain('font-normal')
     expect(trigger.className).not.toContain('bg-surface-dark')
   })

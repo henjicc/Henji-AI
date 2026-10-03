@@ -188,9 +188,7 @@ export function ImageEditorLayerRowV3({
       ) : null}
       {row.layer.type === 'group' ? (
         <UiIconButton
-          className="h-7 w-7 shrink-0"
-          showBorder={false}
-          appearance="hover-only"
+          className="shrink-0"
           aria-label={expanded
             ? t('imageEditor.v3.layers.collapseGroup')
             : t('imageEditor.v3.layers.expandGroup')}
@@ -259,9 +257,7 @@ export function ImageEditorLayerRowV3({
       </div>
 
       <UiIconButton
-        className="h-7 w-7 shrink-0"
-        showBorder={false}
-        appearance="hover-only"
+        className="shrink-0"
         aria-label={row.layer.visible
           ? t('imageEditor.v3.layers.hideLayer', { name: row.layer.name })
           : t('imageEditor.v3.layers.showLayer', { name: row.layer.name })}
@@ -275,9 +271,7 @@ export function ImageEditorLayerRowV3({
       </UiIconButton>
 
       <UiIconButton
-        className="h-7 w-7 shrink-0"
-        showBorder={false}
-        appearance="hover-only"
+        className="shrink-0"
         aria-label={row.layer.locked
           ? t('imageEditor.v3.layers.unlockLayer', { name: row.layer.name })
           : t('imageEditor.v3.layers.lockLayer', { name: row.layer.name })}

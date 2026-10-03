@@ -132,8 +132,7 @@ export const LayerStackResultNode = memo(({ id, data, selected, width, height }:
         {!generationError && !data.isGenerating && (isEditableV3 || document) && (
           <UiButton
             type="button"
-            size="sm"
-            variant="glass"
+            variant="media"
             className="nodrag absolute bottom-3 right-3 gap-1.5"
             onClick={(event) => { event.stopPropagation(); void openEditor(); }}
           >

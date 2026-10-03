@@ -395,7 +395,6 @@ const LlmProviderDialog = ({
           {isBuiltIn ? (
             <UiButton
               type="button"
-              variant="plain"
               disabled={saving}
               onClick={() => void handleReset()}
             >
@@ -405,9 +404,8 @@ const LlmProviderDialog = ({
           ) : (
             <UiButton
               type="button"
-              variant="plain"
+              variant="danger"
               disabled={saving}
-              className="text-text-muted hover:text-red-400"
               onClick={() => void handleDelete()}
             >
               <Trash2 size={14} className="mr-1.5" />
@@ -427,7 +425,7 @@ const LlmProviderDialog = ({
       size="editor"
       footer={(
         <>
-          <UiButton type="button" variant="muted" onClick={handleClose}>
+          <UiButton type="button" variant="secondary" onClick={handleClose}>
             {t(startInCreateMode ? 'llmProvider.actions.cancel' : 'llmProvider.actions.close')}
           </UiButton>
           <UiButton
@@ -473,7 +471,7 @@ const LlmProviderDialog = ({
                 </span>
               </UiOptionButton>
             ))}
-            <UiButton type="button" variant="muted" className="w-full" onClick={startNew}>
+            <UiButton type="button" variant="secondary" className="w-full" onClick={startNew}>
               <Plus size={14} className="mr-1.5" />
               {t('llmProvider.actions.new')}
             </UiButton>

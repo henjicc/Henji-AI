@@ -3,12 +3,12 @@ import path from 'node:path'
 import type { IpcMainInvokeEvent } from 'electron'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 type Handler = (input: unknown, event: IpcMainInvokeEvent) => unknown
-const mocks = vi.hoisted(() => ({ handlers: new Map<string, Handler>(), appEvents: new Map<string, () => void>(), range: vi.fn(), legacy: vi.fn(), allowed: vi.fn(), realpath: vi.fn(), trusted: vi.fn(), dispose: vi.fn(), validate: vi.fn() }))
+const mocks = vi.hoisted(() => ({ handlers: new Map<string, Handler>(), appEvents: new Map<string, () => void>(), range: vi.fn(), legacy: vi.fn(), pyramid: vi.fn(), allowed: vi.fn(), realpath: vi.fn(), trusted: vi.fn(), dispose: vi.fn(), validate: vi.fn(), validatePyramid: vi.fn() }))
 vi.mock('electron', () => ({ app: { once: (event: string, callback: () => void) => mocks.appEvents.set(event, callback) } }))
 vi.mock('node:fs/promises', () => ({ default: { realpath: mocks.realpath } }))
 vi.mock('../protocol', () => ({ isPathWithinAllowedMediaRoots: mocks.allowed }))
 vi.mock('../services/image/source', () => ({ normalizeLocalSource: (source: string) => source }))
-vi.mock('../services/audio/ops', () => ({ extractAudioSamples: mocks.legacy, extractAudioWaveformRange: mocks.range, disposeAudioWaveformService: mocks.dispose, validateAudioWaveformRange: mocks.validate }))
+vi.mock('../services/audio/ops', () => ({ extractAudioSamples: mocks.legacy, extractAudioWaveformRange: mocks.range, extractAudioWaveformPyramid: mocks.pyramid, disposeAudioWaveformService: mocks.dispose, validateAudioWaveformRange: mocks.validate, validateAudioWaveformPyramid: mocks.validatePyramid }))
 vi.mock('./application-control', () => ({ assertTrustedApplicationSender: mocks.trusted }))
 vi.mock('./registry', () => ({
   parseRecord: (value: unknown) => { if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('object'); return value },
@@ -80,6 +80,25 @@ describe('waveform IPC ownership and permissions', () => {
     await expect(invoke('audio:extractSamples', { source: payload.source, bucketCount: 16, startUs: 0 }, a.event)).rejects.toThrow('未知')
     mocks.trusted.mockImplementationOnce(() => { throw new Error('untrusted') })
     await expect(invoke('audio:extractSamples', payload, a.event)).rejects.toThrow('untrusted')
+    a.emitter.emit('destroyed')
+  })
+  it('routes whole-source pyramid requests with the same channel selection, authorization and closed field set (task 2.3)', async () => {
+    const a = owner(106)
+    mocks.pyramid.mockResolvedValue({ notModified: true, version: 'v' })
+    const request = { mode: 'pyramid', requestId: 'p1', source: payload.source, channels: 1, audioStream: 2, audioChannel: 0, maxBuckets: 4096, ifNoneMatch: 'v' }
+    expect(await invoke('audio:extractSamples', request, a.event)).toEqual({ notModified: true, version: 'v' })
+    expect(mocks.validatePyramid).toHaveBeenCalled()
+    expect(mocks.pyramid.mock.calls[0][0]).toEqual({ source: payload.source, channels: 1, audioStream: 2, audioChannel: 0, maxBuckets: 4096, ifNoneMatch: 'v' })
+    await expect(invoke('audio:extractSamples', { ...request, requestId: 'p2', startUs: 0 }, a.event)).rejects.toThrow('未知的音频波形字段')
+    mocks.allowed.mockReturnValue(false)
+    await expect(invoke('audio:extractSamples', { ...request, requestId: 'p3' }, a.event)).rejects.toThrow('读取权限')
+    // Remote audio keeps the legacy route through the service's own download.
+    await invoke('audio:extractSamples', { ...request, requestId: 'p4', source: 'https://example.test/a.wav' }, a.event)
+    expect(mocks.pyramid.mock.calls.at(-1)![0].source).toBe('https://example.test/a.wav')
+    mocks.range.mockResolvedValue({ channels: [] })
+    mocks.allowed.mockReturnValue(true)
+    await invoke('audio:extractSamples', { ...payload, requestId: 'detail', samples: true }, a.event)
+    expect(mocks.range.mock.calls.at(-1)![0]).toMatchObject({ samples: true })
     a.emitter.emit('destroyed')
   })
   it('aborts destroyed senders and application exit without allowing late successful responses', async () => {

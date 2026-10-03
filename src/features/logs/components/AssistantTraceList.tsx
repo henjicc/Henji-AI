@@ -53,8 +53,7 @@ export function AssistantTraceList({
         <div className="shrink-0 border-t border-border-dark/35 p-2">
           <UiButton
             type="button"
-            size="sm"
-            variant="ghost"
+            variant="secondary"
             className="w-full"
             disabled={loadingMore}
             onClick={onLoadMore}

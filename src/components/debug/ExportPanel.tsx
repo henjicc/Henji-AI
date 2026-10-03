@@ -135,15 +135,13 @@ export const ExportPanel: React.FC<ExportPanelProps> = ({ modelId, params, conte
       <div className="flex gap-2">
         <UiButton
           variant="primary"
-          size="sm"
           onClick={handleDownload}
-          className="flex-1 bg-yellow-500 text-black hover:bg-yellow-400"
+          className="flex-1"
         >
           {t('debug.export.actions.downloadJson')}
         </UiButton>
         <UiButton
-          variant="muted"
-          size="sm"
+          variant="secondary"
           onClick={handleCopy}
           className="flex-1"
         >

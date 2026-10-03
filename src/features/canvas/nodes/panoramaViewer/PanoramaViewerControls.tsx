@@ -74,9 +74,8 @@ export function PanoramaViewerControls({
 
       <UiButton
         type="button"
-        size="sm"
-        variant="primary"
-        className="ml-auto h-8 gap-1.5 px-3 text-xs"
+        variant="secondary"
+        className="ml-auto gap-1.5"
         disabled={!canCapture || isCapturing}
         title={captureTitle}
         aria-label={captureTitle}

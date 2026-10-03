@@ -191,10 +191,9 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
           {t('modelscopeCustomModel.tip.prefix')}
           <UiButton
             type="button"
-            size="sm"
-            variant="ghost"
+            variant="link"
             onClick={handleOpenModelLibrary}
-            className="mx-1 h-auto px-1.5 py-0.5 text-brand-300 hover:bg-blue-900/50"
+            className="mx-1"
           >
             {t('modelscopeCustomModel.tip.library')}
           </UiButton>
@@ -215,14 +214,13 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
         <UiPanel variant="inset" className="mb-3 p-3">
           <div className="flex items-center justify-between mb-2">
             <div className={UI_TEXT_LABEL_CLASS}>{t('modelscopeCustomModel.addNew')}</div>
-            <UiIconButton
+            <UiIconButton size="lg"
               type="button"
               onClick={() => {
                 setIsAddingNew(false)
                 setNewModelId('')
                 setNewModelName('')
               }}
-              className="h-8 w-8 border-transparent bg-transparent text-text-muted hover:bg-layer/60"
               aria-label={t('common:close')}
             >
               <X className="w-4 h-4" />
@@ -280,7 +278,7 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
               </UiButton>
               <UiButton
                 type="button"
-                variant="muted"
+                variant="secondary"
                 onClick={() => {
                   setIsAddingNew(false)
                   setNewModelId('')
@@ -341,7 +339,6 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
                     <div className="flex gap-2">
                       <UiButton
                         type="button"
-                        size="sm"
                         variant="primary"
                         onClick={() => void handleSaveEdit(model.id)}
                         className="flex-1"
@@ -350,8 +347,7 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
                       </UiButton>
                       <UiButton
                         type="button"
-                        size="sm"
-                        variant="muted"
+                        variant="secondary"
                         onClick={handleCancelEdit}
                         className="flex-1"
                       >
@@ -384,20 +380,17 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
                     <div className="flex gap-1 flex-shrink-0">
                       <UiButton
                         type="button"
-                        variant="ghost"
                         size="sm"
                         onClick={() => handleStartEdit(model)}
-                        className="h-7 px-2.5 text-xs text-brand-300 hover:bg-accent/10"
                         title={t('common:edit')}
                       >
                         {t('common:edit')}
                       </UiButton>
                       <UiButton
                         type="button"
-                        variant="ghost"
+                        variant="danger"
                         size="sm"
                         onClick={() => void handleDelete(model.id)}
-                        className="h-7 px-2.5 text-xs text-red-400 hover:bg-red-500/10"
                         title={t('modelscopeCustomModel.actions.deleteTitle')}
                       >
                         {t('common:delete')}

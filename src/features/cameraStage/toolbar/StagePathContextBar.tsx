@@ -233,9 +233,7 @@ const StagePathContextBar: React.FC = () => {
 
             {originPreset && (
               <UiButton
-                size="sm"
-                variant="ghost"
-                className="h-8 justify-start rounded-md px-2 text-xs"
+                className="justify-start px-2"
                 title="丢弃手动修改并重新生成预设路径"
                 onClick={() => updatePreset(originPreset)}
               >
@@ -246,10 +244,8 @@ const StagePathContextBar: React.FC = () => {
         )}
       >
         {({ togglePanel, open }) => (
-          <UiIconButton
-            showBorder={false}
-            active={open}
-            className="h-8 w-8 rounded-md"
+          <UiIconButton size="lg"
+            on={open}
             title="更多路径参数"
             aria-label="更多路径参数"
             onClick={togglePanel}
@@ -261,9 +257,7 @@ const StagePathContextBar: React.FC = () => {
       </PanelTrigger>
 
       {path && (
-        <UiIconButton
-          showBorder={false}
-          className="h-8 w-8 rounded-md"
+        <UiIconButton size="lg"
           title="重置为直线"
           aria-label="重置为直线"
           onClick={() => setStateKeyframeSpatialPath(stateKeyframe.id, object.id, undefined)}

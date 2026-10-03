@@ -40,7 +40,7 @@ function dockPanel(id: VideoEditPanelId, Body: PanelBody): (props: IDockviewPane
 }
 const COMPONENTS = Object.fromEntries(VIDEO_EDIT_PANELS.map(({ id }) => [id, dockPanel(id, BODIES[id])])) as Record<VideoEditPanelId, (props: IDockviewPanelProps) => React.ReactElement>
 function EmptyLayout({ containerApi }: IWatermarkPanelProps): React.ReactElement {
-  return <UiEmpty className="h-full" title="选择需要的面板" description="在顶部面板菜单中恢复视图。" action={<UiButton variant="ghost" onClick={() => resetVideoEditWorkspaceLayout(containerApi)}>重置布局</UiButton>} />
+  return <UiEmpty className="h-full" title="选择需要的面板" description="在顶部面板菜单中恢复视图。" action={<UiButton variant="secondary" onClick={() => resetVideoEditWorkspaceLayout(containerApi)}>重置布局</UiButton>} />
 }
 
 export function VideoEditDock({ instance, onError, onApiChange }: DockContext & { onApiChange: (api: DockviewApi | null) => void }): React.ReactElement {

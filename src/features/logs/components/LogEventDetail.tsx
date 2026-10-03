@@ -71,14 +71,14 @@ export function LogEventDetail({ event, onViewChain }: LogEventDetailProps): JSX
           {getDomainHint(event.domain)} · {event.source} · {new Date(event.timestamp).toLocaleString('zh-CN')}
         </div>
         <div className="mt-2 flex flex-wrap items-center gap-2">
-          <UiButton type="button" size="sm" variant="ghost" onClick={() => handleCopy('markdown')}>
+          <UiButton type="button" onClick={() => handleCopy('markdown')}>
             {copiedFormat === 'markdown' ? t('logsWindow.copy.copied') : t('logsWindow.copy.markdown')}
           </UiButton>
-          <UiButton type="button" size="sm" variant="ghost" onClick={() => handleCopy('json')}>
+          <UiButton type="button" onClick={() => handleCopy('json')}>
             {copiedFormat === 'json' ? t('logsWindow.copy.copied') : t('logsWindow.copy.json')}
           </UiButton>
           {requestId && (
-            <UiButton type="button" size="sm" variant="ghost" onClick={() => onViewChain(requestId)}>
+            <UiButton type="button" onClick={() => onViewChain(requestId)}>
               {t('logsWindow.chain.viewButton')}
             </UiButton>
           )}

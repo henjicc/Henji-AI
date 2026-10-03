@@ -85,10 +85,8 @@ export const AssetGroupNode = memo(({ id, data, selected }: AssetGroupNodeProps)
             editable
             onTitleChange={(displayName) => updateNodeData(id, { displayName })}
             rightSlot={(
-              <UiIconButton
-                appearance="hover-only"
-                showBorder={false}
-                className="nodrag nopan h-6 w-6"
+              <UiIconButton size="sm"
+                className="nodrag nopan"
                 aria-label={t('canvas.assetGroup.manager.open')}
                 title={t('canvas.assetGroup.manager.open')}
                 onClick={(event) => {

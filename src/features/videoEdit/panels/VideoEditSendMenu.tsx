@@ -15,7 +15,7 @@ export function VideoEditSendMenu({ mediaKind, resolveSource, notify, disabled, 
     const controller = new AbortController(); setRunning(controller)
     void runSend(() => run(controller.signal), notify).finally(() => setRunning(current => current === controller ? null : current))
   }
-  if (running) return <UiButton variant="ghost" size="sm" onClick={() => running.abort()}>正在加入剪辑… 取消</UiButton>
+  if (running) return <UiButton variant="secondary" onClick={() => running.abort()}>正在加入剪辑… 取消</UiButton>
   return <PanelTrigger disabled={disabled} panelWidth={300} panelClassName="p-1" closeOnPanelClick renderPanel={() => (
     <div role="menu" aria-label="加入剪辑" className="flex flex-col gap-0.5">
       {boundTarget && <UiOptionButton type="button" role="menuitem" variant="menu" className="w-full flex-col items-start gap-0.5 text-left text-sm"
@@ -31,7 +31,7 @@ export function VideoEditSendMenu({ mediaKind, resolveSource, notify, disabled, 
       })}
     </div>
   )}>
-    {({ open, togglePanel }) => <UiButton type="button" variant="ghost" size="sm" disabled={disabled} aria-expanded={open} aria-haspopup="menu" onClick={togglePanel}>
+    {({ open, togglePanel }) => <UiButton type="button" variant="secondary" disabled={disabled} aria-expanded={open} aria-haspopup="menu" onClick={togglePanel}>
       <ICON_WORKSPACE_VIDEO_EDIT size={15} className="mr-1.5" />加入剪辑<ChevronDown size={14} className="ml-1.5" />
     </UiButton>}
   </PanelTrigger>

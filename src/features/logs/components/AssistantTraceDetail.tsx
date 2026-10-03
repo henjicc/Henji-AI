@@ -9,7 +9,7 @@ import {
   TerminalSquare,
 } from 'lucide-react'
 
-import { UiButton, UiEmpty, UiLoading, UI_INSET_SURFACE_CLASS } from '@/components/ui'
+import { UiButton, UiEmpty, UiLoading, UiOptionButton, UI_INSET_SURFACE_CLASS, UI_SEGMENTED_TRACK_CLASS } from '@/components/ui'
 import type { AgentTraceDetailResult } from '@/core/assistant/trace'
 import type { ModelStepMessage } from '@henjicc/ai-sdk'
 import { copyTextToClipboard } from '../copyFormats'
@@ -82,13 +82,15 @@ export function AssistantTraceDetail({
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-1.5">
-            <UiButton type="button" size="sm" variant={mode === 'visual' ? 'primary' : 'ghost'} onClick={() => setMode('visual')}>
-              <PanelsTopLeft className="mr-1 h-3.5 w-3.5" />可视化
-            </UiButton>
-            <UiButton type="button" size="sm" variant={mode === 'json' ? 'primary' : 'ghost'} onClick={() => setMode('json')}>
-              <Braces className="mr-1 h-3.5 w-3.5" />原始 JSON
-            </UiButton>
-            <UiButton type="button" size="sm" variant="ghost" disabled={!canCompare} onClick={onCompare}>
+            <div className={UI_SEGMENTED_TRACK_CLASS}>
+              <UiOptionButton type="button" variant="segment" active={mode === 'visual'} aria-pressed={mode === 'visual'} onClick={() => setMode('visual')}>
+                <PanelsTopLeft className="mr-1 h-3.5 w-3.5" />可视化
+              </UiOptionButton>
+              <UiOptionButton type="button" variant="segment" active={mode === 'json'} aria-pressed={mode === 'json'} onClick={() => setMode('json')}>
+                <Braces className="mr-1 h-3.5 w-3.5" />原始 JSON
+              </UiOptionButton>
+            </div>
+            <UiButton type="button" variant="secondary" disabled={!canCompare} onClick={onCompare}>
               <GitCompare className="mr-1 h-3.5 w-3.5" />对比上轮
             </UiButton>
           </div>
@@ -214,7 +216,7 @@ function TraceSection({ title, badge, defaultOpen = false, children }: { title: 
   const [open, setOpen] = useState(defaultOpen)
   return (
     <section className={`overflow-hidden rounded-lg ${UI_INSET_SURFACE_CLASS}`}>
-      <UiButton type="button" variant="ghost" size="sm" className="h-10 w-full justify-between rounded-none !border-0 !bg-transparent px-3" onClick={() => setOpen(!open)}>
+      <UiButton type="button" size="lg" className="w-full justify-between" onClick={() => setOpen(!open)}>
         <span className="flex items-center gap-2 text-xs font-medium text-text-dark">
           {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
           {title}
@@ -245,7 +247,7 @@ function Metric({ label, value }: { label: string; value: string }): JSX.Element
 
 function CopyButton({ label, copied, disabled, onClick, icon = 'copy' }: { label: string; copied: boolean; disabled?: boolean; onClick: () => void; icon?: 'copy' | 'terminal' }): JSX.Element {
   const Icon = icon === 'terminal' ? TerminalSquare : Copy
-  return <UiButton type="button" size="sm" variant="ghost" disabled={disabled} onClick={onClick}><Icon className="mr-1 h-3.5 w-3.5" />{copied ? '已复制' : label}</UiButton>
+  return <UiButton type="button" variant="secondary" disabled={disabled} onClick={onClick}><Icon className="mr-1 h-3.5 w-3.5" />{copied ? '已复制' : label}</UiButton>
 }
 
 function LabeledBlock({ label, children }: { label: string; children: ReactNode }): JSX.Element {

@@ -61,13 +61,13 @@ export const AssetBatchManager: React.FC<Props> = ({
           <div className="font-medium text-text-dark">{t('assetLibrary.batchManage')}</div>
           <div className={UI_TEXT_META_CLASS}>{t('assetLibrary.batchSelected', { count: selectedCount })}</div>
         </div>
-        <UiIconButton appearance="hover-only" showBorder={false} disabled={busy} className="!h-8 !w-8" onClick={onDone} title={t('assetLibrary.batchDone')}><X className="h-4 w-4" /></UiIconButton>
+        <UiIconButton size="lg" disabled={busy} onClick={onDone} title={t('assetLibrary.batchDone')}><X className="h-4 w-4" /></UiIconButton>
       </div>
       <div className="ui-scrollbar min-h-0 flex-1 overflow-y-auto px-4 pb-4">
         <p className={`mb-3 ${UI_TEXT_META_CLASS}`}>{t('assetLibrary.batchHint')}</p>
         <div className="mb-5 flex gap-2">
-          <UiButton size="sm" className="flex-1" disabled={busy || loadedCount === 0} onClick={onSelectAll}>{t('assetLibrary.batchSelectAll')}</UiButton>
-          <UiButton size="sm" variant="plain" className="flex-1" disabled={busy || selectedCount === 0} onClick={onClear}>{t('assetLibrary.batchClear')}</UiButton>
+          <UiButton variant="secondary" className="flex-1" disabled={busy || loadedCount === 0} onClick={onSelectAll}>{t('assetLibrary.batchSelectAll')}</UiButton>
+          <UiButton className="flex-1" disabled={busy || selectedCount === 0} onClick={onClear}>{t('assetLibrary.batchClear')}</UiButton>
         </div>
 
         <UiGroup title={t('assetLibrary.batchTags')}>
@@ -82,24 +82,23 @@ export const AssetBatchManager: React.FC<Props> = ({
             </div>
           )}
           <div className="flex gap-2">
-            <UiButton size="sm" className="flex-1" disabled={disabled || tags.length === 0} onClick={() => void onUpdateTags(tags, 'add')}>{t('assetLibrary.batchTagAdd')}</UiButton>
-            <UiButton size="sm" className="flex-1" disabled={disabled || tags.length === 0} onClick={() => void onUpdateTags(tags, 'remove')}>{t('assetLibrary.batchTagRemove')}</UiButton>
+            <UiButton variant="secondary" className="flex-1" disabled={disabled || tags.length === 0} onClick={() => void onUpdateTags(tags, 'add')}>{t('assetLibrary.batchTagAdd')}</UiButton>
+            <UiButton variant="secondary" className="flex-1" disabled={disabled || tags.length === 0} onClick={() => void onUpdateTags(tags, 'remove')}>{t('assetLibrary.batchTagRemove')}</UiButton>
           </div>
         </UiGroup>
 
         <UiGroup divided title={t('assetLibrary.batchLibraries')} className="mt-5">
           <Dropdown<string> value={libraryId} options={libraries.map((library) => ({ value: library.id, label: library.name }))} onSelect={setLibraryId} className="w-full" buttonClassName="!h-9 w-full" panelWidthStrategy="button" disabled={busy || libraries.length === 0} />
           <div className="flex gap-2">
-            <UiButton size="sm" className="flex-1" disabled={disabled || !libraryId} onClick={() => void onUpdateLibrary(libraryId, 'add')}>{t('assetLibrary.batchLibraryAdd')}</UiButton>
-            <UiButton size="sm" className="flex-1" disabled={disabled || !libraryId} onClick={() => void onUpdateLibrary(libraryId, 'remove')}>{t('assetLibrary.batchLibraryRemove')}</UiButton>
+            <UiButton variant="secondary" className="flex-1" disabled={disabled || !libraryId} onClick={() => void onUpdateLibrary(libraryId, 'add')}>{t('assetLibrary.batchLibraryAdd')}</UiButton>
+            <UiButton variant="secondary" className="flex-1" disabled={disabled || !libraryId} onClick={() => void onUpdateLibrary(libraryId, 'remove')}>{t('assetLibrary.batchLibraryRemove')}</UiButton>
           </div>
         </UiGroup>
 
         <UiGroup divided className="mt-5">
           {error ? <UiError size="xs" message={error} /> : null}
-          <UiButton
-            size="sm"
-            className="w-full text-danger hover:bg-danger/35"
+          <UiButton variant={deleteArmed ? 'dangerSolid' : 'danger'}
+            className="w-full"
             disabled={disabled}
             onClick={() => {
               if (!deleteArmed) { setDeleteArmed(true); return }

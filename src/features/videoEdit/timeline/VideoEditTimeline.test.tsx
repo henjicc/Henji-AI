@@ -525,9 +525,9 @@ it('关闭链接选择后点击编组内片段仍选中整组，只有按住 Alt
 
 it('声道映射片段按每个片段声道各画一条波形并按声音流与声道取波形，悬停与轨道头显示声道类型；右键“音频声道…”打开只改源声道的设置（2.6）', async () => {
   const requests: Array<{ audioStream?: number; audioChannel?: number; channels: number }> = []
-  vi.spyOn(getPlatform().audioEdit, 'extractWaveformRange').mockImplementation(async request => {
-    requests.push({ audioStream: request.audioStream, audioChannel: request.audioChannel, channels: request.channels })
-    return { startUs: request.startUs, endUs: request.endUs, durationSeconds: 30, sampleRate: 48000, channelCount: 1, channels: [{ peak: Array(16).fill(.5), rms: Array(16).fill(.3), sampleCounts: Array(16).fill(1) }], fileIdentity: 'file' }
+  vi.spyOn(getPlatform().audioEdit, 'extractWaveformPyramid').mockImplementation(async request => {
+    requests.push({ audioStream: request.audioStream ?? 0, audioChannel: request.audioChannel, channels: request.channels })
+    return { version: `v${request.audioStream ?? 0}`, sampleRate: 48000, frameCount: 48000 * 30, startSeconds: 0, endSeconds: 30, amplitudeScale: 1, peakMax: .5, channelCount: 1, levels: [{ samplesPerBucket: 128, bucketCount: 11250, peak: [new Uint16Array(11250).fill(32768)], rms: [new Uint16Array(11250).fill(19660)] }] }
   })
   const { sound } = linkedPair()
   editVideoProject(owner.document.id, document => {

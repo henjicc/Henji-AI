@@ -105,7 +105,7 @@ export function TextProcessingPromptTemplateManager({
       contentClassName="overflow-hidden p-4"
       footer={(
         <>
-          <UiButton type="button" variant="ghost" onClick={onClose} disabled={saving}>
+          <UiButton type="button" variant="secondary" onClick={onClose} disabled={saving}>
             取消
           </UiButton>
           <UiButton type="button" variant="primary" onClick={() => void save()} disabled={!canSave || saving}>
@@ -130,7 +130,7 @@ export function TextProcessingPromptTemplateManager({
               </UiOptionButton>
             ))}
           </div>
-          <UiButton type="button" variant="muted" size="field-sm" onClick={addTemplate}>
+          <UiButton type="button" variant="secondary" size="lg" onClick={addTemplate}>
             <Plus className="mr-2 h-4 w-4" />
             新增模板
           </UiButton>
@@ -156,7 +156,7 @@ export function TextProcessingPromptTemplateManager({
             />
             <div className="flex items-center justify-between gap-3">
               <span className={UI_TEXT_META_CLASS}>模板仅包含纯文本，不支持变量。</span>
-              <UiButton type="button" variant="plain" size="sm" onClick={deleteSelected}>
+              <UiButton type="button" onClick={deleteSelected}>
                 <Trash2 className="mr-2 h-4 w-4" />
                 删除模板
               </UiButton>

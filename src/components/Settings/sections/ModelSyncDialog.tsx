@@ -152,10 +152,8 @@ export function ModelSyncDialog({
                         <span className={`truncate ${UI_TEXT_LABEL_CLASS}`}>{row.group}</span>
                         <span className={UI_TEXT_META_CLASS}>{row.models.length}</span>
                       </UiOptionButton>
-                      <UiIconButton
+                      <UiIconButton size="lg"
                         type="button"
-                        showBorder={false}
-                        appearance="hover-only"
                         aria-label={allAdded ? `移除 ${row.group} 全部模型` : `添加 ${row.group} 全部模型`}
                         onClick={() => {
                           const ids = row.models.map(item => item.modelId)
@@ -178,10 +176,8 @@ export function ModelSyncDialog({
                         <div className={`truncate ${UI_TEXT_META_CLASS}`}>{row.model.modelId}</div>
                       )}
                     </div>
-                    <UiIconButton
+                    <UiIconButton size="lg"
                       type="button"
-                      showBorder={false}
-                      appearance="hover-only"
                       aria-label={added ? `移除 ${row.model.modelId}` : `添加 ${row.model.modelId}`}
                       onClick={() => {
                         if (added) void onRemove([row.model.modelId])

@@ -252,10 +252,10 @@ export function MultiAngleWorkbench({
             <div className="flex items-center justify-between gap-3">
               <h3 className={UI_TEXT_PANEL_TITLE_CLASS}>{t('node.multiAngleEditor.outputViews', { count: config.views.length, max: MULTI_ANGLE_MAX_VIEW_COUNT })}</h3>
               <div className="flex items-center gap-1">
-                <UiIconButton type="button" appearance="hover-only" showBorder={false} aria-label={t('node.multiAngleEditor.removeView')} disabled={config.views.length <= 1} onClick={removeSelected}>
+                <UiIconButton size="lg" type="button" aria-label={t('node.multiAngleEditor.removeView')} disabled={config.views.length <= 1} onClick={removeSelected}>
                   <Trash2 className="h-4 w-4" />
                 </UiIconButton>
-                <UiIconButton type="button" appearance="hover-only" showBorder={false} aria-label={t('node.multiAngleEditor.addView')} disabled={config.views.length >= MULTI_ANGLE_MAX_VIEW_COUNT || !nextUnusedView(config)} onClick={addView}>
+                <UiIconButton size="lg" type="button" aria-label={t('node.multiAngleEditor.addView')} disabled={config.views.length >= MULTI_ANGLE_MAX_VIEW_COUNT || !nextUnusedView(config)} onClick={addView}>
                   <Plus className="h-4 w-4" />
                 </UiIconButton>
               </div>
@@ -345,14 +345,14 @@ export default function MultiAngleSpecialEditor({
         <div className="flex w-full items-center justify-between gap-3">
           <p className={UI_TEXT_META_CLASS}>{t('node.multiAngleEditor.discardPrompt')}</p>
           <div className="flex items-center gap-2">
-            <UiButton type="button" variant="ghost" size="sm" onClick={onKeepEditing}>{t('node.multiAngleEditor.keepEditing')}</UiButton>
-            <UiButton type="button" variant="primary" size="sm" onClick={onDiscard}>{t('node.multiAngleEditor.discard')}</UiButton>
+            <UiButton type="button" variant="secondary" onClick={onKeepEditing}>{t('node.multiAngleEditor.keepEditing')}</UiButton>
+            <UiButton type="button" variant="dangerSolid" onClick={onDiscard}>{t('node.multiAngleEditor.discard')}</UiButton>
           </div>
         </div>
       ) : (
         <>
-          <UiButton type="button" variant="ghost" size="sm" onClick={close}>{t('common.cancel')}</UiButton>
-          <UiButton type="button" variant="primary" size="sm" onClick={onConfirm}>{t('node.multiAngleEditor.apply')}</UiButton>
+          <UiButton type="button" variant="secondary" onClick={close}>{t('common.cancel')}</UiButton>
+          <UiButton type="button" variant="primary" onClick={onConfirm}>{t('node.multiAngleEditor.apply')}</UiButton>
         </>
       )}
     >

@@ -106,8 +106,7 @@ export function ProjectManager(): JSX.Element {
         headerActions={(
           <UiButton
             onClick={() => void handleImportClick()}
-            variant="muted"
-            size="sm"
+            variant="secondary"
             className="gap-2 px-4"
             disabled={isImporting}
           >

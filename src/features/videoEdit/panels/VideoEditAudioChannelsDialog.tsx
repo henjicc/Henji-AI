@@ -55,7 +55,7 @@ export function VideoEditAudioChannelsDialog({ projectId, target, onClose }: { p
     } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)) }
   }
   const channelName = (channel: number): string => format === 'mono' ? '单声道' : channel === 0 ? '左' : '右'
-  return <UiModal isOpen title="音频声道" onClose={onClose} footer={<><UiButton variant="plain" onClick={onClose}>取消</UiButton><UiButton variant="primary" disabled={!streams || !layout.length} onClick={submit}>确定</UiButton></>}>
+  return <UiModal isOpen title="音频声道" onClose={onClose} footer={<><UiButton onClick={onClose}>取消</UiButton><UiButton variant="primary" disabled={!streams || !layout.length} onClick={submit}>确定</UiButton></>}>
     <div className="space-y-4" data-video-edit-audio-channels={target.kind}>
       {!streams && !error && <UiLoading size="sm" message="正在读取素材的声音…" />}
       {streams && target.kind === 'items' && <>

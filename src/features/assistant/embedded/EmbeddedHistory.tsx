@@ -20,7 +20,8 @@ export function EmbeddedHistory({ visible, onOpen }: { visible: boolean; onOpen(
     {state.error ? <UiError message={state.error} size="xs" /> : null}
     {state.busy ? <p className="text-sm text-text-muted">请先停止当前回复，再打开其他对话。</p> : null}
     {loading ? <p className="text-sm text-text-muted">正在读取对话…</p> : !sessions.length ? <p className="text-sm text-text-muted">还没有保存的对话。</p> : null}
-    {sessions.map((session) => <UiButton key={session.id} className="shrink-0 justify-start text-left" disabled={state.busy} onClick={() => {
+    {/* ui-surface-allow 两行的历史对话列表行（行高随内容），交 2.2 列表行组件 */}
+    {sessions.map((session) => <UiButton key={session.id} className="h-auto shrink-0 justify-start py-1.5 text-left" disabled={state.busy} onClick={() => {
       void getPlatform().embeddedAgent.openSession(session.id).then(onOpen, reportEmbeddedAgentError)
     }}><span className="min-w-0"><span className="block truncate">{session.title}</span><span className="block text-xs text-text-muted">{new Date(session.updatedAt).toLocaleString()}</span></span></UiButton>)}
   </div>

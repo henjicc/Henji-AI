@@ -69,11 +69,9 @@ export function FileUpload({
           <div key={`${source}-${index}`} className="flex h-9 min-w-0 items-center gap-1.5 rounded-lg bg-app/40 px-2">
             <FileText className="h-4 w-4 shrink-0 text-text-muted" />
             <span className="max-w-32 truncate text-xs text-text-soft">{displayFilename(source, index)}</span>
-            <UiIconButton
+            <UiIconButton size="sm"
               type="button"
-              showBorder={false}
-              appearance="hover-only"
-              className="!h-6 !w-6 shrink-0"
+              className="shrink-0"
               onClick={() => onChange(safeValue.filter((_, candidate) => candidate !== index))}
               disabled={disabled}
               aria-label={t('common:delete', '删除')}
@@ -85,8 +83,7 @@ export function FileUpload({
         {safeValue.length < maxCount && (
           <UiButton
             type="button"
-            variant="ghost"
-            size="sm"
+            variant="secondary"
             onClick={() => inputRef.current?.click()}
             disabled={disabled}
           >

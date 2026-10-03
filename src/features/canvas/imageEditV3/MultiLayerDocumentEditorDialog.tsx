@@ -174,8 +174,6 @@ export function MultiLayerDocumentEditorDialog({
     : exportSelection.ready ? undefined : exportSelection.reason
   const exportButton = (
     <UiButton
-      variant="plain"
-      size="sm"
       disabled={exporting || Boolean(exportUnavailableReason)}
       title={exportUnavailableReason ?? t('toolDialog.imageEditorV3.exportToCanvas')}
       onClick={exportToCanvas}
@@ -219,10 +217,8 @@ export function MultiLayerDocumentEditorDialog({
         onEditorContextChange={setEditorContext}
         interactionDisabled={closing}
         toolbarLeading={(
-          <UiIconButton
-            className="h-8 w-8 shrink-0"
-            showBorder={false}
-            appearance="hover-only"
+          <UiIconButton size="lg"
+            className="shrink-0"
             aria-label={t('toolDialog.imageEditorV3.close')}
             title={t('toolDialog.imageEditorV3.close')}
             disabled={closing}

@@ -90,7 +90,7 @@ const LlmModelDialog = ({ isOpen, model, onChange, onClose, onSave }: LlmModelDi
       size="form"
       footer={(
         <>
-          <UiButton type="button" variant="muted" onClick={onClose}>取消</UiButton>
+          <UiButton type="button" variant="secondary" onClick={onClose}>取消</UiButton>
           <UiButton type="button" variant="primary" onClick={() => void onSave()}>确定</UiButton>
         </>
       )}

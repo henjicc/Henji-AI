@@ -134,11 +134,8 @@ function LegacyMaskEditorModal({
         自由框选
       </UiChipButton>
       <div className="ml-1 flex items-center gap-1 border-l border-border-dark pl-2">
-        <UiIconButton
+        <UiIconButton size="lg"
           type="button"
-          showBorder={false}
-          appearance="hover-only"
-          className="h-8 w-8"
           disabled={history.undoStack.length === 0}
           onClick={() => dispatchHistory({ type: 'undo' })}
           title="撤销(Ctrl+Z)"
@@ -146,11 +143,8 @@ function LegacyMaskEditorModal({
         >
           <Undo2 className="h-4 w-4" />
         </UiIconButton>
-        <UiIconButton
+        <UiIconButton size="lg"
           type="button"
-          showBorder={false}
-          appearance="hover-only"
-          className="h-8 w-8"
           disabled={history.redoStack.length === 0}
           onClick={() => dispatchHistory({ type: 'redo' })}
           title="重做(Ctrl+Y)"
@@ -158,12 +152,8 @@ function LegacyMaskEditorModal({
         >
           <Redo2 className="h-4 w-4" />
         </UiIconButton>
-        <UiIconButton
+        <UiIconButton size="lg" tone="danger"
           type="button"
-          showBorder={false}
-          appearance="hover-only"
-          hoverVariant="danger"
-          className="h-8 w-8"
           disabled={history.document.strokes.length === 0}
           onClick={clearDocument}
           title="清空遮罩"
@@ -173,13 +163,12 @@ function LegacyMaskEditorModal({
         </UiIconButton>
       </div>
       <div className="ml-auto flex items-center gap-2">
-        <UiButton type="button" variant="ghost" size="sm" onClick={handleCancel} disabled={isConfirming}>
+        <UiButton type="button" variant="secondary" onClick={handleCancel} disabled={isConfirming}>
           取消
         </UiButton>
         <UiButton
           type="button"
           variant="primary"
-          size="sm"
           onClick={() => void handleConfirm()}
           disabled={!readyImage || !hasPaintedMask(history.document) || isConfirming}
         >

@@ -79,14 +79,6 @@ export async function getMediaPath(): Promise<string> {
 }
 
 /**
- * 获取 Waveforms 子目录路径
- */
-export async function getWaveformsPath(): Promise<string> {
-  const root = await getDataRoot()
-  return await join(root, 'Waveforms')
-}
-
-/**
  * 获取 Thumbnails 子目录路径（图片和视频缩略图缓存）
  */
 export async function getThumbnailsPath(): Promise<string> {
@@ -133,7 +125,6 @@ export async function initializeDataDirectory(rootPath: string): Promise<void> {
 
     // 创建子目录
     await mkdir(await join(rootPath, 'Media'), { recursive: true })
-    await mkdir(await join(rootPath, 'Waveforms'), { recursive: true })
     await mkdir(await join(rootPath, 'Thumbnails'), { recursive: true })
     await mkdir(await join(rootPath, 'Uploads'), { recursive: true })
   } catch (error) {

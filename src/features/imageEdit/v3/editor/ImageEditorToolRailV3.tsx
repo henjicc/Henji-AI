@@ -127,13 +127,10 @@ export function ImageEditorToolRailV3({ controller }: { controller: ImageEditorV
                   delay={180}
                   anchor="pointer-start"
                 >
-                  <UiIconButton
+                  <UiIconButton size="lg"
                     data-tool-id={id}
                     data-tool-readiness={disabled ? 'disabled' : readiness.state}
-                    className="h-8 w-8"
-                    showBorder={false}
-                    appearance="hover-only"
-                    active={isAnnotation ? activeTool?.startsWith('annotation-') : activeTool === id}
+                    on={isAnnotation ? activeTool?.startsWith('annotation-') : activeTool === id}
                     disabled={disabled}
                     aria-label={disabled ? unavailableLabel : label}
                     aria-pressed={isAnnotation ? activeTool?.startsWith('annotation-') : activeTool === id}

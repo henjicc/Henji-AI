@@ -35,7 +35,7 @@ export default function McpSection(): React.JSX.Element {
       <UiFormRow label={t('mcp.name')}>
         <div className="flex items-center gap-2">
           <UiInput className="min-w-0 flex-1" value={name} onChange={(event) => setName(event.target.value)} maxLength={80} placeholder={t('mcp.namePlaceholder')} />
-          <UiButton className="shrink-0 whitespace-nowrap" variant="primary" disabled={busy || !name.trim()} onClick={() => void act(async () => { await getMcpConnectionService().authorize({ name, allowWrites, allowDestructive, allowPaid }); setName('') })}>{t('mcp.authorize')}</UiButton>
+          <UiButton className="shrink-0 whitespace-nowrap" variant="secondary" disabled={busy || !name.trim()} onClick={() => void act(async () => { await getMcpConnectionService().authorize({ name, allowWrites, allowDestructive, allowPaid }); setName('') })}>{t('mcp.authorize')}</UiButton>
         </div>
       </UiFormRow>
       <UiFormRow label={t('mcp.allowWrites')} inline info={t('mcp.writeScope')}>
@@ -50,12 +50,12 @@ export default function McpSection(): React.JSX.Element {
       {status.connections.map((connection) => <UiFormRow key={connection.id} label={connection.name} inline>
         <div className="flex items-center gap-2">
           <span className="text-xs text-text-muted">{[t(connection.allowDestructive ? 'mcp.accessDelete' : connection.allowWrites ? 'mcp.accessWrite' : 'mcp.accessRead'), ...(connection.allowPaid ? [t('mcp.accessPaid')] : [])].join(' · ')}</span>
-          <UiButton variant="ghost" disabled={busy} onClick={() => void act(async () => {
+          <UiButton variant="secondary" disabled={busy} onClick={() => void act(async () => {
             const value = await getMcpConnectionService().connectionConfig({ id: connection.id })
             setConfig(value)
             await writeClipboardText(value)
           })}>{t('mcp.copy')}</UiButton>
-          <UiButton variant="ghost" disabled={busy} onClick={() => void act(async () => { await getMcpConnectionService().revoke({ id: connection.id }); setConfig('') })}>{t('mcp.revoke')}</UiButton>
+          <UiButton variant="secondary" disabled={busy} onClick={() => void act(async () => { await getMcpConnectionService().revoke({ id: connection.id }); setConfig('') })}>{t('mcp.revoke')}</UiButton>
         </div>
       </UiFormRow>)}
       {config && <pre data-observation-sensitive className="overflow-auto whitespace-pre-wrap break-all text-xs text-text-muted">{config}</pre>}

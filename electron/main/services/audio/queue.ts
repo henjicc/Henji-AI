@@ -1,20 +1,22 @@
 import type { ExtractAudioSamplesResultDto, AudioWaveformRangeResult } from './types'
 
-type Result = ExtractAudioSamplesResultDto | AudioWaveformRangeResult
+/** Cacheable results are cloned per consumer; shared results (immutable whole-source pyramids) are neither cached here nor cloned. */
+type Result = ExtractAudioSamplesResultDto | AudioWaveformRangeResult | { readonly shared: true }
 interface Job {
   key: string
   controller: AbortController
   users: number
   task: (signal: AbortSignal) => Promise<Result>
   cacheable: boolean
+  shared: boolean
   promise: Promise<Result>
   resolve: (value: Result) => void
   reject: (error: unknown) => void
 }
 
-function byteSize(key: string, result: Result): number {
+function byteSize(key: string, result: ExtractAudioSamplesResultDto | AudioWaveformRangeResult): number {
   return 256 + key.length * 2 + ('channels' in result
-    ? 2 * (result.fileIdentity.length + (result.sourceRevision?.length ?? 0)) + result.channels.reduce((sum, channel) => sum + 128 + 8 * (channel.peak.length + channel.rms.length + channel.sampleCounts.length), 0)
+    ? 2 * (result.fileIdentity.length + (result.sourceRevision?.length ?? 0)) + result.channels.reduce((sum, channel) => sum + 128 + 8 * (channel.peak.length + channel.rms.length + channel.sampleCounts.length) + (channel.samples?.byteLength ?? 0), 0)
     : 128 + 8 * (result.peak.length + result.rms.length))
 }
 
@@ -32,10 +34,10 @@ export class AudioWaveformQueue {
   get statistics(): { active: number; queued: number; cacheBytes: number; cacheEntries: number } {
     return { active: this.active, queued: this.waiting.length, cacheBytes: this.cacheBytes, cacheEntries: this.cache.size }
   }
-  run<T extends Result>(key: string, task: (signal: AbortSignal) => Promise<T>, signal?: AbortSignal, cacheable = true): Promise<T> {
+  run<T extends Result>(key: string, task: (signal: AbortSignal) => Promise<T>, signal?: AbortSignal, cacheable = true, shared = false): Promise<T> {
     signal?.throwIfAborted()
     if (this.disposed) throw new Error('音频波形服务已关闭。')
-    const cached = cacheable ? this.cache.get(key) : undefined
+    const cached = cacheable && !shared ? this.cache.get(key) : undefined
     if (cached) {
       this.cache.delete(key); this.cache.set(key, cached)
       return Promise.resolve(structuredClone(cached.value) as T)
@@ -48,7 +50,7 @@ export class AudioWaveformQueue {
       const promise = new Promise<Result>((done, fail) => { resolve = done; reject = fail })
       // The consumer may leave before native close; keep the job rejection observed.
       void promise.catch(() => undefined)
-      job = { key, controller: new AbortController(), users: 0, task, cacheable, promise, resolve, reject }
+      job = { key, controller: new AbortController(), users: 0, task, cacheable: cacheable && !shared, shared, promise, resolve, reject }
       this.jobs.set(key, job); this.waiting.push(job)
     }
     const owned = job
@@ -75,7 +77,7 @@ export class AudioWaveformQueue {
       signal?.addEventListener('abort', onAbort, { once: true })
       owned.controller.signal.addEventListener('abort', onJobAbort, { once: true })
       if (signal?.aborted) onAbort()
-      owned.promise.then(value => complete(() => resolve(structuredClone(value) as T)), error => complete(() => reject(error)))
+      owned.promise.then(value => complete(() => resolve((owned.shared ? value : structuredClone(value)) as T)), error => complete(() => reject(error)))
     })
     this.pump()
     return result
@@ -87,8 +89,8 @@ export class AudioWaveformQueue {
       this.running.add(job)
       void Promise.resolve().then(() => { job.controller.signal.throwIfAborted(); return job.task(job.controller.signal) }).then(value => {
         if (job.controller.signal.aborted) { job.reject(job.controller.signal.reason); return }
-        const bytes = byteSize(job.key, value)
-        if (job.cacheable && bytes <= this.budgetBytes) {
+        const bytes = job.cacheable && !('shared' in value) ? byteSize(job.key, value) : Infinity
+        if (job.cacheable && !('shared' in value) && bytes <= this.budgetBytes) {
           const previous = this.cache.get(job.key)
           if (previous) { this.cacheBytes -= previous.bytes; this.cache.delete(job.key) }
           while (this.cacheBytes + bytes > this.budgetBytes && this.cache.size) {

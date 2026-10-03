@@ -416,10 +416,8 @@ export const MinimaxVoiceClonePanel: React.FC<MinimaxVoiceClonePanelProps> = ({
             playerRightActions={cloneAudioPreviewSrc ? (
               <UiButton
                 type="button"
-                variant="ghost"
-                size="sm"
+                variant="link"
                 onClick={() => cloneAudioInputRef.current?.click()}
-                className="!h-7 !px-1.5 border-0 bg-transparent text-accent hover:bg-transparent hover:underline"
                 title="重新上传音频"
               >
                 重新上传音频
@@ -460,10 +458,8 @@ export const MinimaxVoiceClonePanel: React.FC<MinimaxVoiceClonePanelProps> = ({
             playerRightActions={promptAudioPreviewSrc ? (
               <UiButton
                 type="button"
-                variant="ghost"
-                size="sm"
+                variant="link"
                 onClick={() => promptAudioInputRef.current?.click()}
-                className="!h-7 !px-1.5 border-0 bg-transparent text-accent hover:bg-transparent hover:underline"
                 title="重新上传示例音频"
               >
                 重新上传示例音频
@@ -498,11 +494,9 @@ export const MinimaxVoiceClonePanel: React.FC<MinimaxVoiceClonePanelProps> = ({
             playerRightActions={hasResultPreview ? (
               <UiButton
                 type="button"
-                variant="ghost"
-                size="sm"
+                variant="link"
                 onClick={() => { void runClone() }}
                 disabled={isSubmitting}
-                className="!h-7 !px-1.5 border-0 bg-transparent text-accent hover:bg-transparent hover:underline disabled:opacity-40"
                 title="重新克隆"
               >
                 重新克隆

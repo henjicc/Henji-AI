@@ -320,7 +320,7 @@ export interface HenjiVideoApi {
   onFrameExportProgress(listener: (progress: HenjiVideoFrameExportProgress) => void): () => void
 }
 
-import type { AudioWaveformRangeRequest, AudioWaveformRangeResult } from '../../src/platform/contracts/audioWaveform'
+import type { AudioWaveformPyramidRequest, AudioWaveformPyramidResult, AudioWaveformRangeRequest, AudioWaveformRangeResult } from '../../src/platform/contracts/audioWaveform'
 
 export interface HenjiAudioExtractSamplesResult {
   rms: number[]
@@ -331,6 +331,7 @@ export interface HenjiAudioExtractSamplesResult {
 export interface HenjiAudioApi {
   extractSamples(payload: { source: string; bucketCount: number }): Promise<HenjiAudioExtractSamplesResult>
   extractRangeSamples(payload: AudioWaveformRangeRequest & { requestId: string }): Promise<AudioWaveformRangeResult>
+  extractWaveformPyramid(payload: AudioWaveformPyramidRequest & { requestId: string }): Promise<AudioWaveformPyramidResult>
   cancelExtractSamples(requestId: string): Promise<void>
   listEditProjects(): Promise<AudioEditProjectSummary[]>
   createEditProject(payload: AudioEditProjectCreateRequest): Promise<AudioEditProjectDocument>

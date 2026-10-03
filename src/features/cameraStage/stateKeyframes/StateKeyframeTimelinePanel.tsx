@@ -169,9 +169,7 @@ const StateKeyframeTimelinePanel: React.FC = () => {
           onModeChange={setTimecodeMode}
         />
         <UiIconButton
-          showBorder={false}
-          appearance="hover-only"
-          className="ml-4 h-7 w-7"
+          className="ml-4"
           title="在播放头位置添加关键帧"
           onClick={addStateKeyframe}
         >

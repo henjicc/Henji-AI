@@ -4,12 +4,14 @@ import { createPortal } from 'react-dom'
 import ContextMenu from '@/components/ContextMenu'
 import { useContextMenu } from '@/hooks/useContextMenu'
 import { ICON_SETTINGS as SettingsIcon } from '@/core/theme/icons'
-import { UiButton, UiIconButton, UiRangeInput, UiSwitch, UI_TEXT_META_CLASS } from '@/components/ui'
+import { UiButton, UiIconButton, UiOptionButton, UiRangeInput, UiSwitch, UI_SEGMENTED_TRACK_CLASS, UI_TEXT_META_CLASS } from '@/components/ui'
 import { buildProjectAudioEditTimeline, editedDurationFrames } from '@/core/audioEdit/timeline'
 import { compileAudioEditXmlTimeline } from '@/core/audioEdit/xml'
 import type { AudioEditProjectDocument, AudioEditRange } from '@/core/audioEdit/types'
 import { useAudioEditPlaybackStore } from './store/audioEditPlaybackStore'
-import { clampViewport, sampleWaveform, waveformReference, zoomViewport } from './waveformViewport'
+import { AUDIO_EDIT_MIN_VIEW_FRAMES, clampViewport, zoomViewport } from './waveformViewport'
+import { WaveformView } from '@/components/waveform/WaveformView'
+import { useWaveformData } from '@/hooks/useWaveformData'
 import { AudioEditOverview } from './AudioEditOverview'
 import { AudioEditMatchedText } from './AudioEditTextTools'
 import { buildAudioEditCaptionGroups } from '@/core/audioEdit/captions'
@@ -20,9 +22,8 @@ function time(frame: number, rate: number) {
   return `${Math.floor(seconds / 60)}:${(seconds % 60).toFixed(1).padStart(4, '0')}`
 }
 
-export const AudioEditTimeline = memo(function AudioEditTimeline({ project, peaks, onSeek, onToggle, selection, onSelection, onEditSelection, previewRanges, previewPending, previewError, disabled, onSettings, selectedBlockIds, onSelectBlock, onEditBlock, onDeleteBlock, navigationTarget, textSearch }: {
+export const AudioEditTimeline = memo(function AudioEditTimeline({ project, onSeek, onToggle, selection, onSelection, onEditSelection, previewRanges, previewPending, previewError, disabled, onSettings, selectedBlockIds, onSelectBlock, onEditBlock, onDeleteBlock, navigationTarget, textSearch }: {
   project: AudioEditProjectDocument
-  peaks: number[]
   onSeek: (frame: number) => void
   onToggle: () => Promise<void>
   selection: AudioEditRange | null
@@ -76,13 +77,8 @@ export const AudioEditTimeline = memo(function AudioEditTimeline({ project, peak
     if (cursor < duration) ranges.push({ start: cursor, end: duration })
     return ranges
   }, [duration, spans])
-  const reference = useMemo(() => waveformReference(peaks), [peaks])
-  const bars = useMemo(() => sampleWaveform(peaks, view, duration, Math.min(1000, width / 3), reference), [peaks, view, duration, width, reference])
-  const barElements = useMemo(() => bars.map((peak, index) => {
-    const frame = view.start + (index + 0.5) / bars.length * (view.end - view.start)
-    const deleted = removed.some((range) => frame >= range.start && frame < range.end)
-    return <rect key={index} x={index + 0.15} y={50 - peak * 46} width={0.7} height={Math.max(0.6, peak * 92)} className={deleted ? 'text-red-400' : undefined} fill="currentColor" />
-  }), [bars, removed, view])
+  const waveform = useWaveformData(project.source.audioPath ? { source: project.source.audioPath, channels: 1 } : null, 'full')
+  const cutRanges = useMemo(() => removed.map((range) => ({ start: range.start / rate, end: range.end / rate })), [removed, rate])
   const length = Math.max(1, view.end - view.start)
   const position = (frame: number) => (frame - view.start) / length * 100
   const frameAt = (clientX: number, element: HTMLDivElement) => {
@@ -119,7 +115,7 @@ export const AudioEditTimeline = memo(function AudioEditTimeline({ project, peak
       const movement = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY
       const delta = movement * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? (zooming ? rect.height : rect.width) : 1)
       setView((current) => zooming
-        ? zoomViewport(current, (event.clientX - rect.left) / Math.max(1, rect.width), Math.exp(Math.max(-1, Math.min(1, delta * 0.002))), duration, rate * 2)
+        ? zoomViewport(current, (event.clientX - rect.left) / Math.max(1, rect.width), Math.exp(Math.max(-1, Math.min(1, delta * 0.002))), duration, AUDIO_EDIT_MIN_VIEW_FRAMES)
         : clampViewport(current.start + delta / Math.max(1, rect.width) * (current.end - current.start), current.end - current.start, duration))
     }
     region.addEventListener('wheel', wheel, { passive: false })
@@ -133,9 +129,11 @@ export const AudioEditTimeline = memo(function AudioEditTimeline({ project, peak
   return (
     <div ref={wheelRegion} data-audio-timeline className="shrink-0 border-t border-border-dark p-3">
       <div className="mb-2 flex flex-wrap items-center gap-3">
-        <UiIconButton appearance="hover-only" showBorder={false} className="h-9 w-9" disabled={!ready || playDuration === 0} onClick={() => void onToggle()} title={playing ? '暂停' : '播放'}>{playing ? <Pause size={16} /> : <Play size={16} />}</UiIconButton>
+        <UiIconButton size="lg" disabled={!ready || playDuration === 0} onClick={() => void onToggle()} title={playing ? '暂停' : '播放'}>{playing ? <Pause size={16} /> : <Play size={16} />}</UiIconButton>
         <span className="text-sm tabular-nums text-text-dark" data-audio-edit-time>{time(outputFrame, rate)} / {time(playDuration, rate)}</span>
-        {(['source', 'edited', 'delivery'] as const).map((value) => <UiButton key={value} variant="plain" aria-pressed={mode === value} className={mode === value ? 'underline underline-offset-4' : ''} size="sm" disabled={value === 'delivery' && !delivery.timeline} title={value === 'delivery' ? delivery.error || '按 XML 帧网格试听原声，关闭声音处理和自动增益' : undefined} onClick={() => setMode(value)}>{value === 'source' ? '原始' : value === 'edited' ? '剪后' : 'XML 交付'}</UiButton>)}
+        <div className={UI_SEGMENTED_TRACK_CLASS}>
+          {(['source', 'edited', 'delivery'] as const).map((value) => <UiOptionButton key={value} variant="segment" active={mode === value} aria-pressed={mode === value} disabled={value === 'delivery' && !delivery.timeline} title={value === 'delivery' ? delivery.error || '按 XML 帧网格试听原声，关闭声音处理和自动增益' : undefined} onClick={() => setMode(value)}>{value === 'source' ? '原始' : value === 'edited' ? '剪后' : 'XML 交付'}</UiOptionButton>)}
+        </div>
         <span className={UI_TEXT_META_CLASS}>素材 {time(sourceFrame, rate)}</span>
         {preparing && <span className={UI_TEXT_META_CLASS}>正在准备预览…</span>}
         {error && <span className="text-sm text-red-400">{error}</span>}
@@ -147,14 +145,14 @@ export const AudioEditTimeline = memo(function AudioEditTimeline({ project, peak
           <UiRangeInput className="!w-24 shrink-0" aria-label="试听音量" min={0} max={100} step={1} value={Math.round(volume * 100)} onChange={(event) => setVolume(Number(event.target.value) / 100)} />
           <span className="w-9 tabular-nums">{Math.round(volume * 100)}%</span>
         </label>
-        <UiButton variant="plain" size="sm" onClick={() => { pauseFollow(); setView({ start: 0, end: duration }) }}>显示全部</UiButton>
+        <UiButton onClick={() => { pauseFollow(); setView({ start: 0, end: duration }) }}>显示全部</UiButton>
       </div>
       {selection && <div className="mb-2 flex flex-wrap items-center gap-2 text-sm text-text-muted" aria-label="波形选区操作">
         <span>选区 {time(selection.startFrame, rate)} – {time(selection.endFrame, rate)}</span>
-        <UiButton variant="plain" size="sm" disabled={disabled} onClick={() => onEditSelection('delete')}>删除 · Delete</UiButton>
-        <UiButton variant="plain" size="sm" disabled={disabled} onClick={() => onEditSelection('mute')}>静音 · M</UiButton>
-        <UiButton variant="plain" size="sm" disabled={disabled} onClick={() => onEditSelection('restore')}>恢复选区</UiButton>
-        <UiButton variant="plain" size="sm" onClick={() => onSelection(null)}>取消选区</UiButton>
+        <UiButton disabled={disabled} onClick={() => onEditSelection('delete')}>删除 · Delete</UiButton>
+        <UiButton disabled={disabled} onClick={() => onEditSelection('mute')}>静音 · M</UiButton>
+        <UiButton disabled={disabled} onClick={() => onEditSelection('restore')}>恢复选区</UiButton>
+        <UiButton onClick={() => onSelection(null)}>取消选区</UiButton>
       </div>}
       <div ref={container} role="slider" tabIndex={0} aria-label="口播波形定位" aria-valuemin={0} aria-valuemax={duration} aria-valuenow={sourceFrame} aria-valuetext={time(sourceFrame, rate)}
         data-view-start={view.start} data-view-end={view.end}
@@ -203,25 +201,25 @@ export const AudioEditTimeline = memo(function AudioEditTimeline({ project, peak
         <div className="pointer-events-none absolute inset-x-0 top-0 flex justify-between px-1 text-xs tabular-nums text-text-muted">
           {Array.from({ length: 6 }, (_, index) => <span key={index}>{time(view.start + length * index / 5, rate)}</span>)}
         </div>
-        {showCaptions && <div className="absolute inset-x-0 top-6 h-7 overflow-hidden" data-audio-captions>{captions.map((group) => <div key={group.id} className="absolute flex h-7 overflow-hidden whitespace-nowrap border-l border-border-dark bg-layer/40" style={{ left: `${position(Math.max(view.start, group.startFrame))}%`, width: `${(Math.min(view.end, group.endFrame) - Math.max(view.start, group.startFrame)) / length * 100}%` }}>{group.blocks.map((block) => <UiButton key={block.id} variant="plain" disabled={disabled} title={`${block.text} · 单击选中，双击编辑，右键删除`} className={`!h-7 !min-h-0 shrink-0 !rounded-none !px-0.5 !py-0 text-left text-sm ${selectedBlockIds.includes(block.id) ? '!bg-accent/25 text-text-dark' : 'text-text-muted'} ${block.included ? '' : 'line-through opacity-55'}`}
+        {showCaptions && <div className="absolute inset-x-0 top-6 h-7 overflow-hidden" data-audio-captions>{captions.map((group) => <div key={group.id} className="absolute flex h-7 overflow-hidden whitespace-nowrap border-l border-border-dark bg-layer/40" style={{ left: `${position(Math.max(view.start, group.startFrame))}%`, width: `${(Math.min(view.end, group.endFrame) - Math.max(view.start, group.startFrame)) / length * 100}%` }}>{/* ui-surface-allow 字幕块是时间轴上的文字记号（选中/已删两态），不是按钮档位；交 3.4 口播剪辑页面重做 */}{group.blocks.map((block) => <UiButton size="sm" key={block.id} disabled={disabled} title={`${block.text} · 单击选中，双击编辑，右键删除`} className={`!min-h-0 shrink-0 !rounded-none !px-0.5 !py-0 text-left ${selectedBlockIds.includes(block.id) ? '!bg-accent/25 text-text-dark' : 'text-text-muted'} ${block.included ? '' : 'line-through opacity-55'}`}
           onPointerDown={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}
           onClick={(event) => { event.stopPropagation(); onSelectBlock(block.id) }} onDoubleClick={(event) => { event.stopPropagation(); onEditBlock(block.id) }}
           onContextMenu={(event) => { event.preventDefault(); event.stopPropagation(); onSelectBlock(block.id); onDeleteBlock(block.id) }}><span className="block w-full truncate">{block.text ? <AudioEditMatchedText block={block} search={textSearch} /> : '（空字幕）'}</span></UiButton>)}</div>)}</div>}
-        <svg className={`pointer-events-none absolute inset-x-0 bottom-2 w-full text-accent ${showCaptions ? 'top-14 h-[calc(100%-4rem)]' : 'top-6 h-[calc(100%-2rem)]'}`} viewBox={`0 0 ${Math.max(1, bars.length)} 100`} preserveAspectRatio="none" aria-hidden="true">
-          {barElements}
-        </svg>
+        <div className={`pointer-events-none absolute inset-x-0 bottom-2 ${showCaptions ? 'top-14' : 'top-6'}`}>
+          <WaveformView waveform={waveform} startSeconds={view.start / rate} endSeconds={view.end / rate} playedSeconds={sourceFrame / rate} cutRanges={cutRanges} />
+        </div>
         {removed.filter((range) => range.end > view.start && range.start < view.end).map((range) => (
           <div key={range.start} data-audio-deleted className="pointer-events-none absolute inset-y-5 border-x border-red-400 bg-red-500/25" style={{ left: `${position(Math.max(view.start, range.start))}%`, width: `${(Math.min(view.end, range.end) - Math.max(view.start, range.start)) / length * 100}%` }} />
         ))}
         {[...spans.filter((span) => span.muted).map((span) => ({ startFrame: span.sourceStartFrame, endFrame: span.sourceEndFrame, kind: 'mute' })), ...previewRanges.map((range) => ({ ...range, kind: 'preview' })), ...(selection ? [{ ...selection, kind: 'selection' }] : [])].filter((range) => range.endFrame > view.start && range.startFrame < view.end).map((range, index) => <div key={`${range.kind}:${index}`} data-audio-overlay={range.kind} className={`pointer-events-none absolute inset-y-5 border-x ${range.kind === 'preview' ? 'border-warning bg-warning/20' : range.kind === 'mute' ? 'border-text-muted bg-text-muted/20' : 'border-accent bg-accent/25'}`} style={{ left: `${position(Math.max(view.start, range.startFrame))}%`, width: `${(Math.min(view.end, range.endFrame) - Math.max(view.start, range.startFrame)) / length * 100}%` }} />)}
         {sourceFrame >= view.start && sourceFrame <= view.end && <div className="pointer-events-none absolute inset-y-0 w-px bg-text-dark" style={{ left: `${Math.min(99.95, position(sourceFrame))}%` }} />}
-        {!peaks.length && <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-sm text-text-muted">正在准备波形…</div>}
+        {!waveform.data && <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-sm text-text-muted">{waveform.status === 'error' ? waveform.error : '正在准备波形…'}</div>}
       </div>
-      <AudioEditOverview duration={duration} sampleRate={rate} sourceFrame={sourceFrame} peaks={peaks} view={view} onChange={(next) => { pauseFollow(); setView(next) }} />
+      <AudioEditOverview duration={duration} sampleRate={rate} sourceFrame={sourceFrame} waveform={waveform} view={view} onChange={(next) => { pauseFollow(); setView(next) }} />
       <div className={`mt-1 flex flex-wrap items-center justify-between gap-3 ${UI_TEXT_META_CLASS}`}>
         <span>拖动选区 · Delete 删除 · M 静音 · 右键更多 · 滚轮或中键平移 · Ctrl / Alt + 滚轮缩放</span>
         <span aria-live="polite">{previewError || (previewPending ? '正在更新停顿预览…' : '黄色：待处理 · 红色：已删除 · 灰色：已静音')}</span>
-        <UiIconButton appearance="hover-only" showBorder={false} title="界面设置" onClick={onSettings}><SettingsIcon size={16} /></UiIconButton>
+        <UiIconButton size="lg" title="界面设置" onClick={onSettings}><SettingsIcon size={16} /></UiIconButton>
       </div>
       {createPortal(<ContextMenu visible={menu.menuVisible} position={menu.menuPosition} items={menu.menuItems} onClose={menu.hideMenu} />, document.body)}
     </div>

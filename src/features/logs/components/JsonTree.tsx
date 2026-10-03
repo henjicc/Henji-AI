@@ -60,11 +60,10 @@ function JsonContainerNode({ label, value, depth, expandDepth }: JsonNodeProps):
 
   return (
     <div>
+      {/* ui-surface-allow JSON 树的可展开行（行高随内容），交 2.2 列表行组件 */}
       <UiButton
         type="button"
-        variant="ghost"
-        size="sm"
-        className="h-auto w-full justify-start gap-1 rounded px-1 py-0.5 text-left font-mono text-2xs font-normal"
+        className="h-auto w-full justify-start gap-1 px-1 py-0.5 text-left font-mono font-normal"
         onClick={() => setExpanded((current) => !current)}
       >
         {expanded ? <ChevronDown className="h-3 w-3 shrink-0" /> : <ChevronRight className="h-3 w-3 shrink-0" />}
@@ -102,9 +101,8 @@ function JsonLeafNode({ label, value }: JsonLeafNodeProps): JSX.Element {
         {isLong && (
           <UiButton
             type="button"
-            variant="ghost"
-            size="sm"
-            className="ml-1 h-auto rounded px-1 py-0 text-2xs font-normal text-brand-300"
+            variant="link"
+            className="ml-1 font-normal"
             onClick={() => setStringExpanded((current) => !current)}
           >
             {stringExpanded

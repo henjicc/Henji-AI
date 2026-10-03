@@ -59,26 +59,19 @@ function PresetItem({ preset, currentModelId, onApply, onToggleFavorite, onDelet
         <div className="preset-actions flex gap-2 ml-4">
           <UiButton
             onClick={onToggleFavorite}
-            size="sm"
-            variant="muted"
-            className="h-8 px-3"
             title={preset.isFavorite ? t('ui:presets.actions.unfavorite') : t('ui:presets.actions.favorite')}
           >
             {preset.isFavorite ? '★' : '☆'}
           </UiButton>
           <UiButton
             onClick={onApply}
-            size="sm"
-            variant="primary"
-            className="h-8 px-3"
+            variant="secondary"
           >
             {t('common:actions.apply')}
           </UiButton>
           <UiButton
             onClick={onDelete}
-            size="sm"
-            variant="ghost"
-            className="h-8 px-3 border-red-500/70 text-red-400 hover:bg-red-500/10"
+            variant="danger"
           >
             {t('common:delete')}
           </UiButton>
@@ -131,16 +124,16 @@ export function PresetManager({ currentModelId, onClose }: PresetManagerProps) {
             <UiButton
               onClick={() => setShowCreateDialog(true)}
               variant="primary"
-              size="sm"
-              className="h-9 px-4"
+              size="lg"
+              className="px-4"
             >
               {t('ui:presets.manager.create')}
             </UiButton>
             <UiButton
               onClick={onClose}
-              variant="ghost"
-              size="sm"
-              className="h-9 px-4"
+              variant="secondary"
+              size="lg"
+              className="px-4"
             >
               {t('common:close')}
             </UiButton>

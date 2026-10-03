@@ -227,7 +227,6 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
                                 />
                                 <UiButton
                                     type="button"
-                                    size="sm"
                                     variant="primary"
                                     onClick={handleConfirmSave}
                                     disabled={!presetName.trim()}
@@ -237,8 +236,7 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
                                 </UiButton>
                                 <UiButton
                                     type="button"
-                                    size="sm"
-                                    variant="muted"
+                                    variant="secondary"
                                     onClick={handleCancelSave}
                                     className="whitespace-nowrap"
                                 >
@@ -321,12 +319,13 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
                                                 {/* 删除按钮 */}
                                                 <UiIconButton
                                                     type="button"
+                                                    tone="danger"
                                                     onClick={(e) => handleDeleteClick(preset.id, e)}
                                                     onMouseDown={(e) => e.stopPropagation()}
-                                                    className="h-7 w-7 border-transparent bg-transparent opacity-0 transition-[opacity,background-color] duration-180 group-hover:opacity-100 hover:bg-red-500/20"
+                                                    className="opacity-0 transition-opacity duration-180 group-hover:opacity-100 focus-visible:opacity-100"
                                                     title={t('ui:presets.deleteTitle')}
                                                 >
-                                                    <Trash2 className="h-4 w-4 text-red-400" />
+                                                    <Trash2 className="h-4 w-4" />
                                                 </UiIconButton>
                                             </div>
                                         </div>
@@ -355,21 +354,19 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
                                                     <div className="flex gap-2">
                                                         <UiButton
                                                             type="button"
-                                                            size="sm"
-                                                            variant="primary"
+                                                            variant="dangerSolid"
                                                             onClick={(e) => {
                                                                 e.stopPropagation()
                                                                 handleConfirmDelete()
                                                             }}
                                                             onMouseDown={(e) => e.stopPropagation()}
-                                                            className="h-8 flex-1 bg-red-600/80 hover:bg-red-600"
+                                                            className="flex-1"
                                                         >
                                                             {t('common:delete')}
                                                         </UiButton>
                                                         <UiButton
                                                             type="button"
-                                                            size="sm"
-                                                            variant="muted"
+                                                            variant="secondary"
                                                             onClick={(e) => {
                                                                 e.stopPropagation()
                                                                 setDeletingClosing(true)
@@ -379,7 +376,7 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
                                                                 }, 200)
                                                             }}
                                                             onMouseDown={(e) => e.stopPropagation()}
-                                                            className="h-8 flex-1"
+                                                            className="flex-1"
                                                         >
                                                             {t('common:cancel')}
                                                         </UiButton>

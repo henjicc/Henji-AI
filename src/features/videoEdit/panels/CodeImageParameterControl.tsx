@@ -58,10 +58,10 @@ export function CodeImageParameterControl({ target, parameterKey, title, value }
   return <div className="flex flex-col gap-2" aria-label={`${title}图片拖放区`} data-video-edit-code-image={parameterKey} onDrop={drop} onDragOver={event => { if (acceptsVideoEditDrop(event.dataTransfer)) { event.preventDefault(); event.stopPropagation(); event.dataTransfer.dropEffect = 'copy' } }}>
     <Dropdown ariaLabel={`${title}工程图片`} value={value?.mediaId ?? ''} options={[{ value: '', label: '未绑定图片' }, ...images.map(media => ({ value: media.id, label: media.name }))]} disabled={busy} onSelect={mediaId => bind(mediaId ? { kind: 'media', mediaId } : null)} />
     <div className="flex flex-wrap items-center gap-2">
-      <UiButton variant="ghost" size="sm" disabled={busy} onClick={() => { void run(signal => chooseVideoEditCodeImage(target, parameterKey, signal)) }}>选择文件</UiButton>
-      <UiButton variant="ghost" size="sm" onClick={() => openAssetLibrary('floating')}>从资产库拖入</UiButton>
-      <UiButton variant="plain" size="sm" disabled={!value || busy} onClick={() => bind(null)}>清除图片</UiButton>
-      {busy && <UiButton variant="plain" size="sm" onClick={cancel}>取消选择</UiButton>}
+      <UiButton variant="secondary" disabled={busy} onClick={() => { void run(signal => chooseVideoEditCodeImage(target, parameterKey, signal)) }}>选择文件</UiButton>
+      <UiButton variant="secondary" onClick={() => openAssetLibrary('floating')}>从资产库拖入</UiButton>
+      <UiButton disabled={!value || busy} onClick={() => bind(null)}>清除图片</UiButton>
+      {busy && <UiButton onClick={cancel}>取消选择</UiButton>}
     </div>
     {busy && <UiLoading size="xs" message="正在应用图片" />}
     {error && <UiError size="xs" message={error} />}

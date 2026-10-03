@@ -65,8 +65,7 @@ const CanvasWorkspace = (): JSX.Element => {
                 onClick={() => void handleBackToProjects()}
                 disabled={isOpeningProject && Boolean(currentProjectId)}
                 /* 悬浮在画布上，背后是用户内容而非纯色 UI */
-                variant="glass"
-                size="sm"
+                variant="media"
                 className="absolute left-3 top-3 z-sticky px-3"
               >
                 返回项目

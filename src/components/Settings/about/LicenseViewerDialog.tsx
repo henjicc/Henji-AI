@@ -37,8 +37,6 @@ const ExternalLinkButton: React.FC<{ url: string; label?: string }> = ({ url, la
   return (
     <UiButton
       type="button"
-      variant="plain"
-      size="sm"
       className="max-w-full justify-start gap-1.5 !px-2"
       onClick={() => void openExternal(url)}
     >

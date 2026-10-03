@@ -17,7 +17,6 @@ export const TEXT_LIGHT_HEX = '#E5E5E5';
 
 export const CANVAS_BG_HEX = '#0A0A0A';
 export const CANVAS_TEXT_HEX = '#FAFAFA';
-export const CANVAS_GRID_HEX = '#262626';
 export const CANVAS_GRID_ALT_HEX = '#404040';
 
 /**
@@ -39,11 +38,6 @@ export const SOCKET_TYPE_COLOR_HEX: Record<string, string> = {
   OBJECT: '#D4D4D4',
 };
 export const SOCKET_TYPE_COLOR_FALLBACK_HEX = '#D4D4D4';
-
-export const STORYBOARD_BG_HEX = '#171717';
-export const STORYBOARD_CELL_BG_HEX = '#262626';
-export const STORYBOARD_NOTE_BG_HEX = '#0A0A0A';
-export const STORYBOARD_NOTE_TEXT_HEX = '#E5E5E5';
 
 // 3D 镜头参考三维场景纯色渲染基础色（1.1 技术验证引入，第二阶段编辑器继续复用）
 export const CAMERA_STAGE_COLOR_HEX = {
@@ -127,14 +121,6 @@ export const BLANK_IMAGE_BACKGROUND_PRESET_HEX = [
   '#f2f2f2',
   BLACK_HEX,
 ] as const;
-
-export const NANO_BANANA_ICON_COLORS = {
-  peelDark: '#F3AD61',
-  peelMid: '#F9C23C',
-  peelLight: '#FEEFC2',
-  peelBright: '#FCD53F',
-  peelHighlight: '#FFF478',
-} as const;
 
 export const DEFAULT_THEME_COLOR_SCHEME_HEX = {
   bg: '#171717',

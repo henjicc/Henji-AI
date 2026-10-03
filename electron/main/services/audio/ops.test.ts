@@ -4,8 +4,8 @@ import path from 'node:path'
 import os from 'node:os'
 import { randomUUID } from 'node:crypto'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { AudioWaveformAggregator } from './waveform-worker'
-import type { AudioWaveformAggregationOptions } from './types'
+import { AudioWaveformAggregator, AudioWaveformPyramidBuilder } from './waveform-worker'
+import type { AudioWaveformChannel, AudioWaveformPyramidOutput, AudioWaveformWorkerOptions } from './types'
 
 const mocks = vi.hoisted(() => ({ spawn: vi.fn() }))
 vi.mock('node:child_process', () => ({ spawn: mocks.spawn }))
@@ -24,12 +24,13 @@ class Process extends EventEmitter {
     this.closed = true; this.stdout.end(); this.stderr.end(); this.emit('close', code)
   }
 }
-function worker(): { start: (options: AudioWaveformAggregationOptions) => Promise<void>; push: (chunk: Uint8Array) => Promise<void>; finish: () => Promise<ReturnType<AudioWaveformAggregator['finish']>>; dispose: () => Promise<void> } {
-  let aggregate: AudioWaveformAggregator
+function worker(): { start: (options: AudioWaveformWorkerOptions) => Promise<void>; push: (chunk: Uint8Array) => Promise<void>; finish: () => Promise<AudioWaveformChannel[]>; finishPyramid: () => Promise<AudioWaveformPyramidOutput>; dispose: () => Promise<void> } {
+  let aggregate: AudioWaveformAggregator | AudioWaveformPyramidBuilder
   return {
-    start: async options => { aggregate = new AudioWaveformAggregator(options) },
+    start: async options => { aggregate = options.kind === 'pyramid' ? new AudioWaveformPyramidBuilder(options) : new AudioWaveformAggregator(options) },
     push: async chunk => { aggregate.push(chunk) },
-    finish: async () => aggregate.finish(),
+    finish: async () => (aggregate as AudioWaveformAggregator).finish(),
+    finishPyramid: async () => (aggregate as AudioWaveformPyramidBuilder).finish(),
     dispose: vi.fn(async () => undefined),
   }
 }

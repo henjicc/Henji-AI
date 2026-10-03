@@ -90,13 +90,11 @@ function ColorPicker({
       {IMAGE_EDITOR_PRESET_COLORS.map((color) => {
         const active = value.toLowerCase() === color.toLowerCase()
         return (
-          <UiIconButton
+          <UiIconButton shape="circle" size="sm"
             key={color}
-            className={`h-6 w-6 rounded-full !p-1 ${active ? 'ring-2 ring-veil-strong' : ''}`}
-            showBorder={false}
-            appearance="hover-only"
+            on={active}
+            className="p-1"
             aria-label={`${label} ${color}`}
-            aria-pressed={active}
             title={`${label} ${color}`}
             onClick={() => onChange(color)}
           >
@@ -142,13 +140,10 @@ function ToolPicker({
         const Icon = ANNOTATION_TOOL_ICONS[toolId]
         const label = t(`imageEditor.v3.tools.${toolId}`)
         return [(
-          <UiIconButton
+          <UiIconButton size="lg"
             key={toolId}
             data-annotation-tool-id={toolId}
-            className="h-8 w-8"
-            showBorder={false}
-            appearance="hover-only"
-            active={activeTool === toolId}
+            on={activeTool === toolId}
             aria-label={label}
             aria-pressed={activeTool === toolId}
             title={label}
@@ -387,12 +382,9 @@ export function ImageEditorAnnotationParametersV3({
             const Icon = shape === 'rect' ? Square : Circle
             const label = t(`imageEditor.v3.toolSettings.${shape}`)
             return (
-              <UiIconButton
+              <UiIconButton size="lg"
                 key={shape}
-                className="h-8 w-8"
-                showBorder={false}
-                appearance="hover-only"
-                active={calloutShape === shape}
+                on={calloutShape === shape}
                 aria-label={label}
                 aria-pressed={calloutShape === shape}
                 title={label}

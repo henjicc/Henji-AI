@@ -434,7 +434,7 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
         >
           {hasAudio !== false && (
             <div
-              className="ui-glass absolute top-4 left-4 px-4 py-2 rounded-lg text-white z-raised flex items-center gap-2"
+              className="ui-glass absolute top-4 left-4 px-4 py-2 rounded-lg text-text1 z-raised flex items-center gap-2"
               style={{ opacity: showVolumeIndicator ? 1 : 0, transition: uiTransition(['opacity'], UI_DURATION.base), pointerEvents: 'none' }}
             >
               {muted || volume === 0 ? (
@@ -504,10 +504,9 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
               transition: uiTransition(['opacity'], UI_DURATION.viewer),
             }}
           >
-            <UiIconButton
-              appearance="glass"
+            <UiIconButton shape="circle" size="lg" tone="media"
               onClick={onClose}
-              className="absolute top-2 right-2 !rounded-full pointer-events-auto"
+              className="absolute top-2 right-2 pointer-events-auto"
               title={t('common:close')}
             >
               <X className="h-5 w-5" />

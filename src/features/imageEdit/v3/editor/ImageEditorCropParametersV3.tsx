@@ -183,31 +183,25 @@ export function ImageEditorCropParametersV3({
 
   return (
     <div data-crop-parameters className="flex h-full min-w-max items-center gap-1.5">
-      <UiIconButton
-        className="h-8 w-8 shrink-0"
-        showBorder={false}
-        appearance="hover-only"
+      <UiIconButton size="lg"
+        className="shrink-0"
         aria-label={t('imageEditor.v3.crop.rotateLeft')}
         title={t('imageEditor.v3.crop.rotateLeft')}
         onClick={() => rotate(-90)}
       >
         <RotateCcw className="h-4 w-4" />
       </UiIconButton>
-      <UiIconButton
-        className="h-8 w-8 shrink-0"
-        showBorder={false}
-        appearance="hover-only"
+      <UiIconButton size="lg"
+        className="shrink-0"
         aria-label={t('imageEditor.v3.crop.rotateRight')}
         title={t('imageEditor.v3.crop.rotateRight')}
         onClick={() => rotate(90)}
       >
         <RotateCw className="h-4 w-4" />
       </UiIconButton>
-      <UiIconButton
-        className="h-8 w-8 shrink-0"
-        showBorder={false}
-        appearance="hover-only"
-        active={orientation.mirrored}
+      <UiIconButton size="lg"
+        className="shrink-0"
+        on={orientation.mirrored}
         aria-label={t('imageEditor.v3.crop.mirror')}
         aria-pressed={orientation.mirrored}
         title={t('imageEditor.v3.crop.mirror')}
@@ -268,9 +262,8 @@ export function ImageEditorCropParametersV3({
           <UiButton
             type="button"
             data-panel-trigger-button
-            size="sm"
-            variant="muted"
-            className="h-8 w-24 justify-between !px-2"
+            variant="secondary"
+            className="w-24 justify-between !px-2"
             aria-label={`${t('imageEditor.v3.crop.aspectRatio')}: ${cropAspectRatioLabel}`}
             title={`${t('imageEditor.v3.crop.aspectRatio')}: ${cropAspectRatioLabel}`}
             aria-haspopup="menu"
@@ -300,13 +293,13 @@ export function ImageEditorCropParametersV3({
         </label>
       ))}
       <div className="flex shrink-0 items-center gap-1.5">
-        <UiButton size="sm" variant="plain" onClick={clearCrop}>
+        <UiButton onClick={clearCrop}>
           {t('imageEditor.v3.crop.fullImage')}
         </UiButton>
-        <UiButton size="sm" variant="ghost" onClick={reset}>
+        <UiButton variant="secondary" onClick={reset}>
           {t('imageEditor.v3.crop.cancel')}
         </UiButton>
-        <UiButton size="sm" variant="primary" disabled={!valid || !dirty} onClick={apply}>
+        <UiButton variant="primary" disabled={!valid || !dirty} onClick={apply}>
           {t('imageEditor.v3.crop.apply')}
         </UiButton>
       </div>

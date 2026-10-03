@@ -59,7 +59,7 @@ function createAudioEditScene({ setupToolbox, clickNamedButton }) {
       }
       const waveform = page.getByRole('slider', { name: '口播波形定位' })
       await waveform.waitFor({ state: 'visible' })
-      await page.waitForFunction(() => document.querySelector('[aria-label="口播波形定位"] svg rect'))
+      await page.waitForFunction(() => document.querySelector('[aria-label="口播波形定位"] canvas[data-waveform-state="ready"]'))
       assert.equal(await page.locator('[data-audio-deleted]').count(), 1)
       const bounds = await waveform.boundingBox()
       assert.ok(bounds && bounds.height >= 120)

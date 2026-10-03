@@ -45,33 +45,6 @@
   cursor: not-allowed;
 }
 
-.ratio-lock-button {
-  padding: 8px;
-  background-color: rgb(var(--border-rgb) / 0.5);
-  border: 1px solid transparent;
-  border-radius: 4px;
-  color: rgb(var(--text-muted-rgb));
-  cursor: pointer;
-  transition:
-    background-color 120ms cubic-bezier(0, 0, 0.2, 1),
-    color 120ms cubic-bezier(0, 0, 0.2, 1);
-}
-
-.ratio-lock-button:hover {
-  background-color: rgb(var(--layer-rgb) / 0.5);
-  color: rgb(var(--text-soft-rgb));
-}
-
-.ratio-lock-button.locked {
-  background-color: rgb(var(--accent-rgb));
-  color: rgb(var(--text-rgb));
-}
-
-.ratio-lock-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
 .custom-size-unit {
   font-size: 12px;
   color: rgb(var(--text-muted-rgb));

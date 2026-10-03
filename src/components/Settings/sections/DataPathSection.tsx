@@ -46,18 +46,18 @@ const DataPathSection: React.FC = () => {
           <UiButton
             onClick={selectDirectory}
             disabled={isMigrating}
-            variant="primary"
-            size="field-sm"
-            className="shrink-0 whitespace-nowrap px-4"
+            variant="secondary"
+            size="lg"
+            className="shrink-0 whitespace-nowrap"
           >
             {t('actions.select')}
           </UiButton>
           <UiButton
             onClick={openResetConfirm}
             disabled={isMigrating}
-            variant="muted"
-            size="field-sm"
-            className="shrink-0 whitespace-nowrap px-4"
+            variant="secondary"
+            size="lg"
+            className="shrink-0 whitespace-nowrap"
           >
             {t('actions.resetDefault')}
           </UiButton>

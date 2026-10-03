@@ -83,8 +83,7 @@ export function LogEventList({
               <div className="p-2">
                 <UiButton
                   type="button"
-                  variant="ghost"
-                  size="sm"
+                  variant="secondary"
                   className="w-full"
                   disabled={remoteLoading && !hasMoreLocal}
                   onClick={handleLoadMore}

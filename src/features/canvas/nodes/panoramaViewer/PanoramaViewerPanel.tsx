@@ -199,7 +199,7 @@ export function PanoramaViewerPanel({
         ) : null}
 
         {isReady && !resource.isEquirectangular ? (
-          <div className="ui-glass pointer-events-none absolute bottom-2 left-1/2 -translate-x-1/2 rounded-full px-3 py-1.5 text-2xs text-text-primary">
+          <div className="ui-glass pointer-events-none absolute bottom-2 left-1/2 -translate-x-1/2 rounded-full px-3 py-1.5 text-2xs text-text1">
             {t('viewer.panorama.invalidRatio', {
               dimensions: `${resource.width} × ${resource.height}`,
             })}
@@ -207,7 +207,7 @@ export function PanoramaViewerPanel({
         ) : null}
 
         {viewMode === 'sphere' && isSphereAvailable && !renderSphere && !frozenPreviewUrl ? (
-          <div className="ui-glass pointer-events-none absolute bottom-2 left-1/2 -translate-x-1/2 rounded-full px-3 py-1.5 text-2xs text-text-secondary">
+          <div className="ui-glass pointer-events-none absolute bottom-2 left-1/2 -translate-x-1/2 rounded-full px-3 py-1.5 text-2xs text-text2">
             {t(hasWebglFailure ? 'viewer.panorama.webglError' : 'viewer.panorama.directInteractionHint')}
           </div>
         ) : null}

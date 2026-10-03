@@ -6,7 +6,7 @@ import { CanvasVideoPlayer } from './CanvasVideoPlayer';
 
 vi.mock('@/commands/video', () => ({ readVideoInfo: vi.fn() }));
 vi.mock('@/components/ui', () => ({
-  UiIconButton: ({ showBorder: _border, appearance: _appearance, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & { showBorder?: boolean; appearance?: string }) => React.createElement('button', props),
+  UiIconButton: ({ size: _size, tone: _tone, on: _on, shape: _shape, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & { size?: string; tone?: string; on?: boolean; shape?: string }) => React.createElement('button', props),
   UiRangeInput: (props: React.InputHTMLAttributes<HTMLInputElement>) => React.createElement('input', props),
 }));
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });

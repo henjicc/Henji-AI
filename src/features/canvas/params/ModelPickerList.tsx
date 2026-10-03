@@ -236,14 +236,13 @@ export function ModelPickerList({
             className="h-7 rounded-md pl-8 pr-8 text-xs"
           />
           {modelSearchQuery && (
-            <UiIconButton
+            <UiIconButton size="xs"
               type="button"
-              showBorder={false}
               onClick={(event) => {
                 event.stopPropagation();
                 onSearchChange('');
               }}
-              className="absolute right-1 top-1/2 !h-5 !w-5 -translate-y-1/2 !border-0 !bg-transparent !p-0 text-text-muted hover:!bg-layer hover:!text-text-dark"
+              className="absolute right-1 top-1/2 -translate-y-1/2"
               title={t('modelParams.clearSearch', { defaultValue: '清空搜索' })}
             >
               <X className="h-3 w-3" />

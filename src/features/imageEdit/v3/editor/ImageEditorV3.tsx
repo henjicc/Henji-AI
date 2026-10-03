@@ -122,8 +122,7 @@ function ImageEditorRecoveryFallbackV3({
       actions={(
         <>
           <UiButton
-            variant="ghost"
-            size="sm"
+            variant="secondary"
             disabled={exporting}
             onClick={() => { void exportDiagnostics() }}
           >
@@ -132,7 +131,7 @@ function ImageEditorRecoveryFallbackV3({
               : t('imageEditor.v3.recovery.exportDiagnostics')}
           </UiButton>
           {props.onOpenLegacyEditor ? (
-            <UiButton variant="ghost" size="sm" onClick={props.onOpenLegacyEditor}>
+            <UiButton variant="secondary" onClick={props.onOpenLegacyEditor}>
               {t('imageEditor.v3.recovery.openLegacy')}
             </UiButton>
           ) : null}

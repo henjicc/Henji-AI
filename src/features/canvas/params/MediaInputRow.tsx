@@ -368,25 +368,25 @@ export function MediaInputRow({
               </span>
             )}
             {!isConnected && mediaKind === 'video' && videoTrimMaxClipSeconds && (
-              <UiIconButton
+              <UiIconButton size="xs" tone="media" shape="circle"
                 onClick={(event) => {
                   event.stopPropagation();
                   setTrimTargetIndex(index);
                 }}
                 title={t('node.mediaRow.videoTrim')}
-                className="absolute -left-1.5 -top-1.5 h-4 w-4 border-0 bg-bg-dark/90 p-0.5 text-text-dark opacity-0 shadow transition-opacity group-hover:opacity-100"
+                className="absolute -left-1.5 -top-1.5 opacity-0 transition-opacity group-hover:opacity-100"
                 type="button"
               >
                 <Scissors className="h-2.5 w-2.5" />
               </UiIconButton>
             )}
             {!isConnected && (
-              <UiIconButton
+              <UiIconButton size="xs" tone="media" shape="circle"
                 onClick={(event) => {
                   event.stopPropagation();
                   handleRemove(index);
                 }}
-                className="absolute -right-1.5 -top-1.5 h-4 w-4 border-0 bg-red-500 p-0.5 text-white opacity-0 shadow transition-opacity group-hover:opacity-100"
+                className="absolute -right-1.5 -top-1.5 opacity-0 transition-opacity group-hover:opacity-100"
                 type="button"
               >
                 <X className="h-2.5 w-2.5" />
@@ -396,6 +396,7 @@ export function MediaInputRow({
           );
         })}
         {canAddMore && (
+          // ui-surface-allow 添加媒体的虚线占位格（拖放目标），与上传组件同一表面语言，不是按钮档位
           <UiIconButton
             type="button"
             onClick={(event) => {
@@ -403,8 +404,7 @@ export function MediaInputRow({
               inputRef.current?.click();
             }}
             title={constraintError ?? t('node.mediaRow.upload')}
-            showBorder
-            className="!h-7 !w-7 shrink-0 !rounded-md !border-dashed hover:!border-accent hover:!text-accent"
+            className="border border-dashed border-line hover:border-accent hover:text-accent-text"
           >
             <Icon className="h-3.5 w-3.5" />
           </UiIconButton>

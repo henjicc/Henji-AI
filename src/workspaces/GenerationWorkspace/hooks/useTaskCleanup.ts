@@ -4,7 +4,7 @@ import { remove } from '@/platform/desktopApi'
 import { canDeleteFile } from '@/utils/fileRefCount'
 import { loadPresets } from '@/utils/preset'
 import { deleteEditState } from '@/utils/editStatePersistence'
-import { deleteWaveformCacheForAudio, isDesktop, isWithinUploadsDir } from '@/utils/save'
+import { isDesktop, isWithinUploadsDir } from '@/utils/save'
 import type { GenerationTask } from '../types'
 import { splitMulti } from '../utils/multiFile'
 import { checkAssetPaths } from '@/commands/assetLibrary'
@@ -90,13 +90,6 @@ export function useTaskCleanup({ tasks, setTasks, clearTaskProgress }: UseTaskCl
         if (target.result.type === 'image' || target.result.type === 'video') {
           await deleteThumbnailCacheSafe(p)
         }
-        if (target.result.type === 'audio') {
-          try {
-            await deleteWaveformCacheForAudio(p)
-          } catch (e) {
-            logger.error('[Workspace] 删除波形缓存失败', { data: [p, e] })
-          }
-        }
       }
     }
 
@@ -135,7 +128,6 @@ export function useTaskCleanup({ tasks, setTasks, clearTaskProgress }: UseTaskCl
         const usedByOthers = tasks.some((t) => t.id !== taskId && t.uploadedAudioFilePaths?.includes(filePath))
         if (usedByOthers) continue
         await removeUploadedSourceSafe(filePath)
-        await deleteWaveformCacheForAudio(filePath)
         await deleteThumbnailCacheSafe(filePath)
       }
     }
@@ -160,7 +152,6 @@ export function useTaskCleanup({ tasks, setTasks, clearTaskProgress }: UseTaskCl
 
     const editStateFiles = new Set<string>()
     const resultFiles = new Set<string>()
-    const resultAudioPaths = new Set<string>()
     const audioPaths: string[] = []
     const uploadedImages = new Set<string>()
     const uploadedVideos = new Set<string>()
@@ -173,7 +164,6 @@ export function useTaskCleanup({ tasks, setTasks, clearTaskProgress }: UseTaskCl
         const paths = splitMulti(t.result.filePath)
         for (const p of paths) {
           resultFiles.add(p)
-          if (t.result.type === 'audio') resultAudioPaths.add(p)
         }
       }
 
@@ -190,15 +180,6 @@ export function useTaskCleanup({ tasks, setTasks, clearTaskProgress }: UseTaskCl
       if (await isAssetLibraryReferenced(f)) continue
       await removeFileSafe(f)
       await deleteThumbnailCacheSafe(f)
-    }
-
-    for (const p of resultAudioPaths) {
-      if (await isAssetLibraryReferenced(p)) continue
-      try {
-        await deleteWaveformCacheForAudio(p)
-      } catch (e) {
-        logger.error('[Workspace] 删除波形缓存失败', { data: [p, e] })
-      }
     }
 
     for (const filePath of uploadedImages) {
@@ -222,7 +203,6 @@ export function useTaskCleanup({ tasks, setTasks, clearTaskProgress }: UseTaskCl
       const usedByRemaining = remainingTasks.some((t) => t.uploadedAudioFilePaths?.includes(filePath))
       if (usedByRemaining) continue
       await removeUploadedSourceSafe(filePath)
-      await deleteWaveformCacheForAudio(filePath)
       await deleteThumbnailCacheSafe(filePath)
     }
 
@@ -243,7 +223,6 @@ export function useTaskCleanup({ tasks, setTasks, clearTaskProgress }: UseTaskCl
     const presets = await loadPresets()
     const editStateFiles = new Set<string>()
     const resultFiles = new Set<string>()
-    const resultAudioPaths = new Set<string>()
     const audioPaths: string[] = []
     const uploadedImages = new Set<string>()
     const uploadedVideos = new Set<string>()
@@ -256,7 +235,6 @@ export function useTaskCleanup({ tasks, setTasks, clearTaskProgress }: UseTaskCl
         const paths = splitMulti(t.result.filePath)
         for (const p of paths) {
           resultFiles.add(p)
-          if (t.result.type === 'audio') resultAudioPaths.add(p)
         }
       }
 
@@ -273,15 +251,6 @@ export function useTaskCleanup({ tasks, setTasks, clearTaskProgress }: UseTaskCl
       if (await isAssetLibraryReferenced(f)) continue
       await removeFileSafe(f)
       await deleteThumbnailCacheSafe(f)
-    }
-
-    for (const p of resultAudioPaths) {
-      if (await isAssetLibraryReferenced(p)) continue
-      try {
-        await deleteWaveformCacheForAudio(p)
-      } catch (e) {
-        logger.error('[Workspace] 删除波形缓存失败', { data: [p, e] })
-      }
     }
 
     // 由于 remainingTasks 为空，canDeleteFile 仅会检查预设引用
@@ -303,7 +272,6 @@ export function useTaskCleanup({ tasks, setTasks, clearTaskProgress }: UseTaskCl
     for (const filePath of audioPaths) {
       if (await isAssetLibraryReferenced(filePath)) continue
       await removeUploadedSourceSafe(filePath)
-      await deleteWaveformCacheForAudio(filePath)
       await deleteThumbnailCacheSafe(filePath)
     }
 

@@ -160,10 +160,8 @@ const UpdateDialog: React.FC<UpdateDialogProps> = ({ releaseInfo, currentVersion
                 <span>{formatReleaseDate(releaseInfo.publishedAt)}</span>
               </div>
             </div>
-            <UiIconButton
+            <UiIconButton shape="circle" size="lg"
               onClick={handleClose}
-              appearance="hover-only"
-              className="rounded-full text-text-muted hover:text-white"
             >
               <X className="h-5 w-5" />
             </UiIconButton>
@@ -182,16 +180,14 @@ const UpdateDialog: React.FC<UpdateDialogProps> = ({ releaseInfo, currentVersion
         <div className="p-6 border-t border-border-dark flex items-center justify-end gap-3">
           <UiButton
             onClick={handleIgnore}
-            variant="muted"
-            size="sm"
+            variant="secondary"
             className="px-5"
           >
             {t('updateDialog.actions.skip')}
           </UiButton>
           <UiButton
             onClick={handleClose}
-            variant="muted"
-            size="sm"
+            variant="secondary"
             className="px-5"
           >
             {t('updateDialog.actions.remindLater')}
@@ -200,7 +196,6 @@ const UpdateDialog: React.FC<UpdateDialogProps> = ({ releaseInfo, currentVersion
             onClick={handleUpdate}
             disabled={isUpdating || releaseInfo.updateStatus === 'downloading'}
             variant="primary"
-            size="sm"
             className="px-5"
           >
             {isUpdating ? t('updateDialog.actions.downloading', { defaultValue: '下载中' }) : actionLabel}

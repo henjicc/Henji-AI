@@ -17,11 +17,6 @@ export {
   dataUrlToBlob,
   ensureCompressedJpegBytesWithPica,
 } from './save/uploads'
-export {
-  readWaveformCacheForAudio,
-  writeWaveformCacheForAudio,
-  deleteWaveformCacheForAudio,
-} from './save/waveformCache'
 export { writeJsonToAppData, readJsonFromAppData } from './save/appDataJson'
 
 // Backward-compatible API: some call sites import this helper from '@/utils/save'.

@@ -13,7 +13,6 @@ import {
   useModelPickerOptions,
 } from '@/features/canvas/params/useModelPickerList'
 import {
-  NODE_CONTROL_CHIP_CLASS,
   NODE_CONTROL_MODEL_CHIP_CLASS,
   NODE_ROW_CLASS,
   NODE_ROW_CONTROL_SLOT_CLASS,
@@ -106,7 +105,8 @@ export function TextProcessingModelRow({
             return (
               <UiButton
                 type="button"
-                variant="muted"
+                variant="secondary"
+                size="sm"
                 disabled={choices.length === 0}
                 onClick={(event) => {
                   event.stopPropagation()
@@ -119,7 +119,7 @@ export function TextProcessingModelRow({
                 data-panel-trigger-button
                 aria-label={t('node.modelRow.label')}
                 aria-expanded={open}
-                className={`nodrag nowheel ${NODE_CONTROL_CHIP_CLASS} ${NODE_CONTROL_MODEL_CHIP_CLASS}`}
+                className={`nodrag nowheel font-normal ${NODE_CONTROL_MODEL_CHIP_CLASS}`}
               >
                 <span className="min-w-0 flex-1 truncate text-left">
                   {selectedModelOption?.displayName ?? t('node.textProcessing.noModel')}

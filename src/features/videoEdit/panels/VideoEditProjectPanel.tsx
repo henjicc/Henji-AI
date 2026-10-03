@@ -155,19 +155,19 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'a') { event.preventDefault(); event.stopPropagation(); run(() => setVideoEditProjectView(projectId, { selectedItemIds: entries.filter(value => value.kind === 'item').map(value => value.value.id) })) }
     }}>
     <div className="flex shrink-0 flex-wrap items-center gap-1 px-2 py-2">
-      <UiButton variant="ghost" className="text-xs" onClick={choose}>导入</UiButton><UiButton variant="ghost" className="text-xs" onClick={() => openAssetLibrary('floating')}>资产库</UiButton>
-      <UiIconButton appearance="hover-only" title="新建素材箱" onClick={() => setEdit({ kind: 'createBin', parentId: binId })}><FolderPlus size={15} /></UiIconButton><UiIconButton appearance="hover-only" title="新建序列" onClick={newSequence}><Plus size={15} /></UiIconButton>
-      <UiIconButton appearance="hover-only" title="新建代码素材" onClick={() => setCreatingCode(true)}><Code2 size={15} /></UiIconButton>
-      <UiIconButton appearance="hover-only" title="新建图形与调整图层" onClick={event => menu.showMenu(event, graphicMenu())}><GraphicIcon size={15} /></UiIconButton>
+      <UiButton onClick={choose}>导入</UiButton><UiButton onClick={() => openAssetLibrary('floating')}>资产库</UiButton>
+      <UiIconButton size="lg" title="新建素材箱" onClick={() => setEdit({ kind: 'createBin', parentId: binId })}><FolderPlus size={15} /></UiIconButton><UiIconButton size="lg" title="新建序列" onClick={newSequence}><Plus size={15} /></UiIconButton>
+      <UiIconButton size="lg" title="新建代码素材" onClick={() => setCreatingCode(true)}><Code2 size={15} /></UiIconButton>
+      <UiIconButton size="lg" title="新建图形与调整图层" onClick={event => menu.showMenu(event, graphicMenu())}><GraphicIcon size={15} /></UiIconButton>
       <UiInput aria-label="搜索项目素材" placeholder="搜索名称或标签" className="min-w-20 flex-1 text-xs" value={keyword} onChange={event => setKeyword(event.target.value)} />
       <UiSelect aria-label="项目素材排序" className="max-w-24 text-xs" value={sort} onChange={event => setSort(event.target.value as typeof sort)}><option value="name">名称</option><option value="kind">类型</option><option value="duration">时长</option></UiSelect>
-      <UiIconButton appearance="hover-only" active={view === 'list'} title="列表视图" onClick={() => setView('list')}><List size={15} /></UiIconButton><UiIconButton appearance="hover-only" active={view === 'grid'} title="缩略图视图" onClick={() => setView('grid')}><Grid2X2 size={15} /></UiIconButton>
+      <UiIconButton size="lg" on={view === 'list'} title="列表视图" onClick={() => setView('list')}><List size={15} /></UiIconButton><UiIconButton size="lg" on={view === 'grid'} title="缩略图视图" onClick={() => setView('grid')}><Grid2X2 size={15} /></UiIconButton>
     </div>
     <div className="flex min-h-0 flex-1">
       <div className="flex w-28 min-w-20 shrink-0 flex-col border-r border-border-dark" aria-label="素材箱树" role="tree">
         <UiChipButton selectionRole="navigation" active={!binId} className="w-full gap-1 !px-2 text-xs" onClick={() => selectBin('')} onDrop={event => drop(event, '')}><Folder size={14} /><span className="truncate">工程根目录</span></UiChipButton>
         <Virtuoso className="min-h-0 flex-1" data={bins} computeItemKey={(_index, row) => row.bin.id} itemContent={(_index, row) => <div className="flex items-center" style={{ paddingLeft: Math.min(row.depth, 8) * 10 }} role="treeitem" aria-level={row.depth + 1} aria-expanded={row.hasChildren ? !collapsed.has(row.bin.id) : undefined}>
-          <UiIconButton appearance="hover-only" className="!h-6 !w-5 shrink-0" disabled={!row.hasChildren} title={collapsed.has(row.bin.id) ? '展开素材箱' : '折叠素材箱'} onClick={() => setCollapsed(previous => { const next = new Set(previous); if (next.has(row.bin.id)) next.delete(row.bin.id); else next.add(row.bin.id); return next })}>{row.hasChildren ? collapsed.has(row.bin.id) ? <ChevronRight size={12} /> : <ChevronDown size={12} /> : null}</UiIconButton>
+          <UiIconButton size="sm" className="shrink-0" disabled={!row.hasChildren} title={collapsed.has(row.bin.id) ? '展开素材箱' : '折叠素材箱'} onClick={() => setCollapsed(previous => { const next = new Set(previous); if (next.has(row.bin.id)) next.delete(row.bin.id); else next.add(row.bin.id); return next })}>{row.hasChildren ? collapsed.has(row.bin.id) ? <ChevronRight size={12} /> : <ChevronDown size={12} /> : null}</UiIconButton>
           <UiChipButton selectionRole="navigation" active={binId === row.bin.id} data-video-edit-bin={row.bin.id} className="min-w-0 flex-1 gap-1 !px-1 !py-2 text-xs" onClick={() => selectBin(row.bin.id)} onContextMenu={event => menu.showMenu(event, binMenu(row.bin))} onDrop={event => drop(event, row.bin.id)}><Folder size={13} className="shrink-0" /><span className="truncate">{row.bin.name}</span></UiChipButton>
         </div>} />
       </div>

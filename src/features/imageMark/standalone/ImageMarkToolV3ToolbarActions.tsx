@@ -70,8 +70,7 @@ export function ImageMarkToolV3ToolbarActions({
       />
       {saveFailed ? (
         <UiButton
-          variant="ghost"
-          size="sm"
+          variant="secondary"
           disabled={host.isHostBusy}
           onClick={() => void host.flushPending().catch(() => undefined)}
         >
@@ -102,8 +101,7 @@ export function ImageMarkToolV3ToolbarActions({
                 : t('imageEditor.v3.host.toolbar.exportPreparing')}
           </span>
           <UiButton
-            variant="ghost"
-            size="sm"
+            variant="secondary"
             disabled={host.rasterExport.cancelling}
             onClick={host.handleCancelRasterExport}
           >
@@ -165,7 +163,7 @@ export function ImageMarkToolV3ToolbarActions({
                 data-panel-trigger-button
                 data-export-readiness={host.rasterExportReadiness.state}
                 variant="primary"
-                size="sm"
+                className="shrink-0 whitespace-nowrap"
                 disabled={host.isHostBusy || exportUnavailable}
                 title={exportReason}
                 aria-expanded={open}

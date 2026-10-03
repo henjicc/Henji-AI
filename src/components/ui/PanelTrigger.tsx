@@ -275,10 +275,11 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
     <div className={`relative inline-block ${className || ''}`} ref={ref}>
       {label ? <label className={UI_FIELD_LABEL_CLASS}>{label}</label> : null}
       {children ? children({ open, openPanel, closePanel, togglePanel }) : (
+        // ui-surface-allow 字段型触发器的表面暂由 UI_TRIGGER_BUTTON_CLASS 提供，交 2.2 拆为独立触发器 + size 枚举
         <UiButton
           type="button"
           disabled={disabled}
-          variant="muted"
+          variant="secondary"
           onClick={togglePanel}
           data-panel-trigger-button
           className={`${UI_TRIGGER_BUTTON_CLASS} rounded-lg px-3 py-2 ${UI_FIELD_CONTROL_HEIGHT_SM_CLASS} ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} ${buttonClassName || 'w-full'}`}

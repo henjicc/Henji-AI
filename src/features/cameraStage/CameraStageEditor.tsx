@@ -372,9 +372,6 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
       <div className="relative flex h-11 shrink-0 items-center gap-2 border-b border-border-dark bg-surface-dark px-2">
         {onBackToList && (
           <UiIconButton
-            showBorder={false}
-            appearance="hover-only"
-            className="h-7 w-7"
             aria-label={backLabel}
             onClick={handleBackToList}
           >
@@ -384,10 +381,7 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
 
         <div className="flex items-center gap-0.5 border-l border-border-dark pl-2">
           <UiIconButton
-            showBorder={false}
-            appearance="hover-only"
             disabled={!canUndo}
-            className="h-7 w-7"
             title="撤销 (Ctrl+Z)"
             onClick={() => undo()}
           >
@@ -424,7 +418,7 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
             panelClassName="overflow-hidden p-2"
             renderPanel={() => (
               <div className="flex flex-col gap-2">
-                <label className="flex items-center gap-2 text-xs text-text-secondary">
+                <label className="flex items-center gap-2 text-xs text-text2">
                   <UiCheckbox
                     checked={assetTarget.enabled}
                     onCheckedChange={(enabled) => updateAssetTarget({ ...assetTarget, enabled })}
@@ -454,10 +448,8 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
           >
             {({ togglePanel }) => (
               <UiButton
-                size="sm"
-                variant="ghost"
                 onClick={togglePanel}
-                className="py-1.5 text-xs"
+                className="py-1.5"
                 data-panel-trigger-button
               >
                 资产：{assetTarget.enabled ? '开启' : '关闭'}
@@ -465,7 +457,7 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
             )}
           </PanelTrigger>
           {embeddedOutput && outputKind === 'image' ? (
-            <UiButton size="sm" onClick={() => void handleUpdateCanvasFrame()} disabled={!canScreenshot || !!stateKeyframeAction} className="py-1.5 text-xs">
+            <UiButton onClick={() => void handleUpdateCanvasFrame()} disabled={!canScreenshot || !!stateKeyframeAction} className="py-1.5">
               <Camera size={13} className="mr-1" />{stateKeyframeAction ? '处理中…' : '更新图片'}
             </UiButton>
           ) : !embeddedOutput ? <PanelTrigger
@@ -476,21 +468,17 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
             renderPanel={() => (
               <div className="flex flex-col gap-1">
                 <UiButton
-                  size="sm"
-                  variant="ghost"
                   disabled={!!stateKeyframeAction}
                   onClick={() => void handleSaveScreenshot()}
-                  className="w-full justify-start gap-2 rounded-md border-0 px-2.5"
+                  className="w-full justify-start gap-2 px-2.5"
                 >
                   <Save size={13} />
                   保存到本地
                 </UiButton>
                 <UiButton
-                  size="sm"
-                  variant="ghost"
                   disabled={!!stateKeyframeAction}
                   onClick={() => void handleCopyScreenshot()}
-                  className="w-full justify-start gap-2 rounded-md border-0 px-2.5"
+                  className="w-full justify-start gap-2 px-2.5"
                 >
                   <Clipboard size={13} />
                   复制到剪贴板
@@ -500,11 +488,10 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
           >
             {({ togglePanel }) => (
               <UiButton
-                size="sm"
                 onClick={togglePanel}
                 disabled={!canScreenshot || !!stateKeyframeAction}
                 title={canScreenshot ? '当前摄像机取景截图' : '切换到摄像机视角后可截图'}
-                className="py-1.5 text-xs"
+                className="py-1.5"
                 data-panel-trigger-button
               >
                 <Camera size={13} className="mr-1" />
@@ -514,16 +501,14 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
           </PanelTrigger> : null}
           {videoProgress ? (
             <UiButton
-              size="sm"
-              variant="ghost"
               onClick={handleCancelVideoExport}
-              className="py-1.5 text-xs"
+              className="py-1.5"
             >
               <X size={13} className="mr-1" />
               取消导出
             </UiButton>
           ) : embeddedOutput && outputKind === 'video' ? (
-            <UiButton size="sm" onClick={() => void handleExportVideo()} disabled={!canExportVideo} className="py-1.5 text-xs">
+            <UiButton onClick={() => void handleExportVideo()} disabled={!canExportVideo} className="py-1.5">
               <Film size={13} className="mr-1" />渲染视频
             </UiButton>
           ) : !embeddedOutput ? (
@@ -545,9 +530,8 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
                     minWidthStrategy="none"
                   />
                   <UiButton
-                    size="sm"
                     onClick={() => void handleExportVideo()}
-                    className="w-full justify-start gap-2 rounded-md px-2.5"
+                    className="w-full justify-start gap-2 px-2.5"
                   >
                     <Film size={13} />
                     导出 MP4
@@ -557,11 +541,10 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
             >
               {({ togglePanel }) => (
                 <UiButton
-                  size="sm"
                   onClick={togglePanel}
                   disabled={!canExportVideo}
                   title={canExportVideo ? '导出当前摄像机动画为 MP4' : '切换到摄像机视角后可导出视频'}
-                  className="py-1.5 text-xs"
+                  className="py-1.5"
                   data-panel-trigger-button
                 >
                   <Film size={13} className="mr-1" />
@@ -571,11 +554,9 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
             </PanelTrigger>
           ) : null}
           <UiButton
-            size="sm"
-            variant="ghost"
             onClick={() => dockRef.current?.resetLayout()}
             title="恢复默认面板布局"
-            className="py-1.5 text-xs"
+            className="py-1.5"
           >
             重置布局
           </UiButton>

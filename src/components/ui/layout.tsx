@@ -194,9 +194,7 @@ export function UiPageHeader({
       {onBack ? (
         // -ml-1.5 让图标的视觉左边缘与标题文字对齐（按钮自带内边距）
         <UiIconButton
-          showBorder={false}
-          appearance="hover-only"
-          className="-ml-1.5 h-7 w-7 shrink-0"
+          className="-ml-1.5 shrink-0"
           title={backLabel}
           aria-label={backLabel}
           onClick={onBack}

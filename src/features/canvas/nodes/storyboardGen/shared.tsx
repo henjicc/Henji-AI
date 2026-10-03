@@ -92,13 +92,13 @@ export function GridStepperControl({
   return (
     <div className={GRID_CONTROL_CONTAINER_CLASS}>
       <span className={GRID_CONTROL_LABEL_CLASS}>{label}</span>
+      {/* ui-surface-allow 宫格节点内 12px 步进按钮，节点尺寸固定；交 3.6 节点外观 */}
       <UiButton
         type="button"
-        variant="ghost"
-        size="sm"
+        variant="secondary"
         disabled={disabled}
         aria-label={`${label}数减少`}
-        className={`${GRID_CONTROL_BUTTON_CLASS} !h-3 !w-3 !rounded !px-0`}
+        className={`${GRID_CONTROL_BUTTON_CLASS} !h-3 !w-3 !px-0`}
         onClick={(event) => {
           event.stopPropagation()
           onDecrease()
@@ -107,13 +107,13 @@ export function GridStepperControl({
         <Minus className={GRID_CONTROL_ICON_CLASS} />
       </UiButton>
       <span className={GRID_CONTROL_VALUE_CLASS}>{value}</span>
+      {/* ui-surface-allow 宫格节点内 12px 步进按钮，节点尺寸固定；交 3.6 节点外观 */}
       <UiButton
         type="button"
-        variant="ghost"
-        size="sm"
+        variant="secondary"
         disabled={disabled}
         aria-label={`${label}数增加`}
-        className={`${GRID_CONTROL_BUTTON_CLASS} !h-3 !w-3 !rounded !px-0`}
+        className={`${GRID_CONTROL_BUTTON_CLASS} !h-3 !w-3 !px-0`}
         onClick={(event) => {
           event.stopPropagation()
           onIncrease()

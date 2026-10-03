@@ -297,10 +297,7 @@ export function ImageEditorFloatingPanelsV3({
         >
           <GripHorizontal className="h-3.5 w-3.5 text-text-muted" aria-hidden="true" />
           <span className="min-w-0 flex-1 truncate text-xs font-medium text-text-dark">{title}</span>
-          <UiIconButton
-            className="h-6 w-6"
-            showBorder={false}
-            appearance="hover-only"
+          <UiIconButton size="sm"
             aria-label={collapsed[panelId]
               ? t('imageEditor.v3.panels.expand', { title })
               : t('imageEditor.v3.panels.collapse', { title })}

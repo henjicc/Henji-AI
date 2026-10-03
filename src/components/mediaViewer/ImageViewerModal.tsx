@@ -20,15 +20,12 @@ const ViewerMarkEditor = React.lazy(() =>
 
 const logger = createLogger('components.mediaViewer.ImageViewerModal');
 
-const VIEWER_HEIGHT_CLASS = '!h-10';
-
-/** 只读读数芯片（页码 / 缩放比例）：静态玻璃，无交互态 */
+/**
+ * 只读读数芯片（页码 / 缩放比例）：与压在画面上的按钮（`tone="media"`）同一材质，无交互态。
+ * 按钮本身的外观全部来自 UiIconButton tone/size/shape，这里不再给形状类。
+ */
 const VIEWER_CONTROL_CLASS =
-  `${VIEWER_HEIGHT_CLASS} ui-glass inline-flex items-center justify-center rounded-full px-4 text-sm text-white`;
-/** 玻璃上的圆形图标按钮，配合 `appearance="glass"`：这里只给形状，材质与交互态归 primitive */
-const VIEWER_ICON_BUTTON_CLASS = `${VIEWER_HEIGHT_CLASS} !w-10 !rounded-full`;
-/** 玻璃上的胶囊按钮，配合 `variant="glass"` */
-const VIEWER_PILL_BUTTON_CLASS = `${VIEWER_HEIGHT_CLASS} !rounded-full !px-3`;
+  'inline-flex h-10 items-center justify-center rounded-full bg-media-control px-4 text-sm text-on-media';
 
 function comparisonClip(left: boolean, position: number): string {
   return left ? `inset(0 ${100 - position}% 0 0)` : `inset(0 0 0 ${position}%)`;
@@ -243,9 +240,8 @@ export function ImageViewerModal({
       {editorAvailable && !isEditorMode && (
         <div className="absolute top-12 left-1/2 z-raised -translate-x-1/2">
           <UiButton
-            variant="glass"
-            size="sm"
-            className="rounded-full px-4"
+            variant="media"
+            size="lg"
             onClick={onEnterEditor}
             title={t('common.edit', '编辑')}
           >
@@ -356,25 +352,25 @@ export function ImageViewerModal({
             )}
             {comparing && (
               <>
-                <span className="pointer-events-none absolute left-16 top-3 rounded-full bg-black/60 px-3 py-1 text-sm text-white">
+                <span className="pointer-events-none absolute left-16 top-3 rounded-full bg-media-control px-3 py-1 text-sm text-on-media">
                   {swapped ? t('viewer.upscaled', '放大后') : t('viewer.original', '原图')}
                 </span>
-                <span className="pointer-events-none absolute right-16 top-3 rounded-full bg-black/60 px-3 py-1 text-sm text-white">
+                <span className="pointer-events-none absolute right-16 top-3 rounded-full bg-media-control px-3 py-1 text-sm text-on-media">
                   {swapped ? t('viewer.original', '原图') : t('viewer.upscaled', '放大后')}
                 </span>
               </>
             )}
             {mode === 'overlay' && (
+              // ui-surface-allow 对比分界线拖动柄：满高透明命中区借用按钮语义，不是按钮外观（交 3.x 查看器重做时换成拖动柄组件）
               <UiButton
                 ref={dividerRef}
-                variant="plain"
                 role="slider"
                 aria-label={t('viewer.comparisonDivider', '对比分界线')}
                 aria-valuemin={0}
                 aria-valuemax={100}
                 aria-valuenow={Math.round(dividerPositionRef.current)}
                 aria-orientation="horizontal"
-                className="absolute inset-y-0 !h-full !w-8 -translate-x-1/2 !cursor-ew-resize !p-0 !bg-transparent touch-none"
+                className="absolute inset-y-0 !h-full !w-8 -translate-x-1/2 !cursor-ew-resize !p-0 touch-none"
                 style={{ left: `${dividerPositionRef.current}%` }}
                 onPointerDown={(event) => {
                   if (event.button !== 0) return;
@@ -405,7 +401,7 @@ export function ImageViewerModal({
                   setDivider(next);
                 }}
               >
-                <span className="pointer-events-none absolute inset-y-0 left-1/2 w-px bg-white" />
+                <span className="pointer-events-none absolute inset-y-0 left-1/2 w-px bg-on-media" />
                 <span className="pointer-events-none relative flex h-10 w-7 items-center justify-center rounded-full bg-panel text-text-dark shadow-panel">
                   <GripVertical className="h-5 w-5" />
                 </span>
@@ -414,10 +410,9 @@ export function ImageViewerModal({
           </div>
 
 
-          <UiIconButton
-            appearance="glass"
+          <UiIconButton size="xl" tone="media" shape="circle"
             onClick={onClose}
-            className={`${VIEWER_ICON_BUTTON_CLASS} absolute right-4 top-4 z-sticky`}
+            className="absolute right-4 top-4 z-sticky"
             title={t('common.close', '关闭')}
             aria-label={t('common.close', '关闭')}
           >
@@ -433,7 +428,7 @@ export function ImageViewerModal({
           )}
           <div data-viewer-controls="true" className="absolute bottom-8 left-1/2 z-sticky flex max-w-[calc(100%_-_2rem)] -translate-x-1/2 items-center gap-3 overflow-x-auto">
             {comparisonImageUrl && (
-              <div className={`${VIEWER_HEIGHT_CLASS} ui-glass flex shrink-0 items-center gap-1 rounded-full p-1`} role="group" aria-label={t('viewer.compare', '对比查看')}>
+              <div className="h-10 ui-glass flex shrink-0 items-center gap-1 rounded-full p-1" role="group" aria-label={t('viewer.compare', '对比查看')}>
                 {(['single', 'side-by-side', 'overlay'] as const).map((value) => (
                   <UiOptionButton
                     key={value}
@@ -461,20 +456,16 @@ export function ImageViewerModal({
             )}
             {imageList.length > 1 && (
               <div className="flex shrink-0 items-center gap-3">
-                <UiIconButton
-                  appearance="glass"
+                <UiIconButton size="xl" tone="media" shape="circle"
                   onClick={() => onNavigate('prev')}
                   disabled={currentIndex <= 0}
-                  className={VIEWER_ICON_BUTTON_CLASS}
                   title={t('viewer.prev', '上一张')}
                 >
                   <ChevronLeft className="h-5 w-5" />
                 </UiIconButton>
-                <UiIconButton
-                  appearance="glass"
+                <UiIconButton size="xl" tone="media" shape="circle"
                   onClick={() => onNavigate('next')}
                   disabled={currentIndex >= imageList.length - 1}
-                  className={VIEWER_ICON_BUTTON_CLASS}
                   title={t('viewer.next', '下一张')}
                 >
                   <ChevronRight className="h-5 w-5" />
@@ -491,15 +482,16 @@ export function ImageViewerModal({
               <div data-viewer-scale="true" ref={scaleDisplayRef} className={`${VIEWER_CONTROL_CLASS} min-w-[74px]`}>
                 100%
               </div>
-              <UiButton
+              <UiIconButton
                 onClick={resetComparison}
-                variant="glass"
-                size="sm"
-                className={VIEWER_PILL_BUTTON_CLASS}
+                tone="media"
+                size="xl"
+                shape="circle"
                 title={t('viewer.reset', '重置视图')}
+                aria-label={t('viewer.reset', '重置视图')}
               >
                 <RotateCcw className="h-4 w-4" />
-              </UiButton>
+              </UiIconButton>
             </div>
           </div>
         </UiSharedGlassHost>

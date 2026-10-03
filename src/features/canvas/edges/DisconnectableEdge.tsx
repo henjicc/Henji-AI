@@ -64,9 +64,9 @@ export const DisconnectableEdge = memo(function DisconnectableEdge(props: EdgePr
       {isProcessingEdge && <EdgeFlowPulse path={edgePath} edgeId={id} />}
       {selected && (
         <EdgeLabelRenderer>
-          <UiIconButton
+          <UiIconButton shape="circle" size="sm" tone="media"
             type="button"
-            className="nodrag nopan absolute !h-6 !w-6 rounded-full !p-0 text-text-muted hover:text-text-dark"
+            className="nodrag nopan absolute"
             style={{
               transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
               pointerEvents: 'all',

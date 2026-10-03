@@ -14,13 +14,13 @@ export function SourceBadge({ record }: SourceBadgeProps) {
   const getBadgeClass = () => {
     switch (record.source) {
       case 'user-input':
-        return 'bg-blue-500 text-white'
+        return 'bg-accent text-on-accent'
       case 'linkage':
-        return 'bg-orange-500 text-white'
+        return 'bg-warning-solid text-on-warning'
       case 'transform':
-        return 'bg-purple-500 text-white'
+        return 'bg-selected text-text1'
       case 'api-build':
-        return 'bg-green-500 text-white'
+        return 'bg-success-solid text-on-success'
       case 'default':
         return 'bg-layer text-text-dark'
       default:

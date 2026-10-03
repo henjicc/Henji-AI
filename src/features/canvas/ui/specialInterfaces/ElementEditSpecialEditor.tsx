@@ -44,7 +44,7 @@ export default function ElementEditSpecialEditor({
         title="局部重绘"
         size="compact"
         onClose={onCancel}
-        footer={<UiButton type="button" variant="primary" size="sm" onClick={onCancel}>返回画布</UiButton>}
+        footer={<UiButton type="button" variant="primary" onClick={onCancel}>返回画布</UiButton>}
       >
         <UiError title="无法打开遮罩编辑器" message="局部重绘必须且只能连接一张源图。" />
       </UiModal>

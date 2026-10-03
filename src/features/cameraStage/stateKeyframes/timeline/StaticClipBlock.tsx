@@ -89,11 +89,8 @@ const StaticClipBlock: React.FC<StaticClipBlockProps> = ({
                   {formatStateKeyframeTimecode(stateKeyframe.time, 'secondsFrames', fps)}
                 </div>
               </div>
-              <UiIconButton
-                showBorder={false}
-                appearance="hover-only"
-                hoverVariant="danger"
-                className="h-7 w-7 shrink-0"
+              <UiIconButton tone="danger"
+                className="shrink-0"
                 title="删除关键帧"
                 onClick={onRemove}
               >

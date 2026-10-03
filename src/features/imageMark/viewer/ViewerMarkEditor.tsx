@@ -76,10 +76,10 @@ function LegacyViewerMarkEditor({
         }}
         toolbarActions={
           <>
-            <UiButton variant="ghost" size="sm" onClick={onClose}>
+            <UiButton variant="secondary" onClick={onClose}>
               取消
             </UiButton>
-            <UiButton variant="primary" size="sm" disabled={isSaving} onClick={() => void handleSave()}>
+            <UiButton variant="primary" disabled={isSaving} onClick={() => void handleSave()}>
               {isSaving ? '保存中…' : '保存'}
             </UiButton>
           </>

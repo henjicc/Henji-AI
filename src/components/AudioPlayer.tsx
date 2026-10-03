@@ -1,9 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { downloadAudioFile, saveAudioFromUrl } from '@/utils/save'
 import { UiIconButton, UiRangeInput, UI_PANEL_SURFACE_CLASS } from '@/components/ui'
-import Waveform from './Waveform'
+import { WaveformView } from './waveform/WaveformView'
 import { useI18n } from '@/hooks/useI18n'
-import { useAudioWaveform } from '@/hooks/useAudioWaveform'
+import { useWaveformData } from '@/hooks/useWaveformData'
 import { Download, Pause, Play, Volume2, VolumeX } from 'lucide-react'
 
 export interface AudioPlaybackState {
@@ -28,7 +28,7 @@ interface AudioPlayerProps {
   className?: string
   onContextMenu?: (e: React.MouseEvent) => void
   compact?: boolean
-  waveformWidth?: number
+  /** 波形高度（CSS 像素）；不传则填满波形区。 */
   waveformHeight?: number
   rightActions?: React.ReactNode
   autoPlay?: boolean
@@ -54,7 +54,6 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
   className,
   onContextMenu,
   compact = false,
-  waveformWidth,
   waveformHeight,
   rightActions,
   autoPlay = false,
@@ -83,13 +82,10 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
   const [isAdjustingVolume, setIsAdjustingVolume] = useState(false)
   const [showVolumeValueTip, setShowVolumeValueTip] = useState(false)
   const [isDownloading, setIsDownloading] = useState(false)
-  const resolvedWaveformWidth = waveformWidth ?? (compact ? 300 : 576)
-  const resolvedWaveformHeight = waveformHeight ?? (compact ? 60 : 72)
-  const { waveform, waveDuration } = useAudioWaveform(controlled ? '' : src, controlled ? undefined : filePath, {
-    width: resolvedWaveformWidth,
-    compact,
-    duration,
-  })
+  const waveformSource = controlled ? '' : filePath?.trim() || src
+  const waveform = useWaveformData(waveformSource ? { source: waveformSource, channels: 1 } : null)
+  const wavePyramid = waveform.data?.pyramid
+  const waveDuration = wavePyramid ? wavePyramid.endSeconds - wavePyramid.startSeconds : null
   const volumeContainerRef = useRef<HTMLDivElement | null>(null)
   const volumeTipTimerRef = useRef<number | null>(null)
 
@@ -343,13 +339,12 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
         <span>{format(waveDuration ?? duration)}</span>
       </div>
       <div className={controlled ? 'mb-2' : `${compact ? 'mb-2 h-[48px]' : 'mb-3 h-[72px]'}`}>
-        {controlledPlayback ? <UiRangeInput aria-label="音频播放位置" className="w-full" min={0} max={duration} step={0.001} value={currentTime} disabled={!active || controlledPlayback.disabled} onChange={event => controlledPlayback.onSeek(Number(event.target.value))} /> : waveform ? (
-          <Waveform
-            samples={waveform}
-            width={resolvedWaveformWidth}
-            height={resolvedWaveformHeight}
-            progress={audioRef.current && audioRef.current.duration ? currentTime / audioRef.current.duration : (duration ? currentTime / duration : 0)}
-            duration={audioRef.current && audioRef.current.duration ? audioRef.current.duration : (duration || 0)}
+        {controlledPlayback ? <UiRangeInput aria-label="音频播放位置" className="w-full" min={0} max={duration} step={0.001} value={currentTime} disabled={!active || controlledPlayback.disabled} onChange={event => controlledPlayback.onSeek(Number(event.target.value))} /> : (
+          <WaveformView
+            waveform={waveform}
+            {...(waveformHeight !== undefined ? { height: waveformHeight } : {})}
+            playedSeconds={(wavePyramid?.startSeconds ?? 0) + currentTime}
+            durationSeconds={audioRef.current && audioRef.current.duration ? audioRef.current.duration : (duration || 0)}
             onSeekStart={(r) => { if (audioRef.current) { const d = audioRef.current.duration || duration || 0; audioRef.current.currentTime = r * d } }}
             onSeekMove={(r) => { if (audioRef.current) { const d = audioRef.current.duration || duration || 0; audioRef.current.currentTime = r * d } }}
             onSeekEnd={(r, dragged) => {
@@ -362,16 +357,12 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
               }
             }}
           />
-        ) : (
-          <div className="flex h-full w-full items-center" aria-hidden="true">
-            <div className="h-px w-full bg-layer" />
-          </div>
         )}
       </div>
       <div className={`${compact ? 'mt-2' : 'mt-3'} flex items-center justify-between`}>
         <div ref={volumeContainerRef} className="relative flex items-center">
           <UiIconButton
-            className={`${compact ? '!h-7 !w-7' : '!h-8 !w-8'} border-0 bg-transparent text-text-soft hover:opacity-70`}
+            size={compact ? 'md' : 'lg'}
             title={t('ui:audioPlayer.volume')}
             disabled={!active || controlledPlayback?.disabled}
             onClick={() => setShowVolumeSlider((value) => !value)}
@@ -410,7 +401,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
           )}
         </div>
         <div className="flex items-center">
-          <UiIconButton disabled={!active || controlledPlayback?.disabled} onClick={togglePlay} className={`${compact ? '!h-7 !w-7' : '!h-8 !w-8'} border-0 bg-transparent text-text-soft hover:opacity-70`} title={t('ui:audioPlayer.playPause')}>
+          <UiIconButton disabled={!active || controlledPlayback?.disabled} onClick={togglePlay} size={compact ? 'md' : 'lg'} title={t('ui:audioPlayer.playPause')}>
             {isPlaying ? (
               <Pause className={`${compact ? 'h-[18px] w-[18px]' : 'h-5 w-5'}`} />
             ) : (
@@ -423,7 +414,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
           {!controlled && <UiIconButton
             onClick={() => { void handleDownload() }}
             disabled={isDownloading}
-            className={`${compact ? '!h-7 !w-7' : '!h-8 !w-8'} border-0 bg-transparent ${isDownloading ? 'text-text-faint opacity-40 cursor-not-allowed' : 'text-text-soft hover:opacity-70'} transition-opacity`}
+            size={compact ? 'md' : 'lg'}
             title={t('common:actions.download')}
           >
             <Download className={`${compact ? 'h-[18px] w-[18px]' : 'h-5 w-5'}`} />

@@ -156,30 +156,33 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
             style={noDragRegionStyle}
             data-window-nodrag
           >
-            <UiIconButton
+            {/* ui-surface-allow macOS 交通灯：圆点由内部色块表达，按钮本身无底；交 3.1 标题栏专用组件 */}
+            <UiIconButton shape="circle" size="sm"
               type="button"
               onClick={handleClose}
-              className="group !h-6 !w-6 !rounded-full !border-0 !bg-transparent !p-0 hover:!bg-transparent"
+              className="group !p-0 hover:!bg-transparent active:!bg-transparent"
               title={t('windowControls.close')}
             >
               <span className="flex h-3 w-3 items-center justify-center rounded-full bg-red-400 group-hover:bg-red-400/80">
                 <X className="h-2 w-2 text-black/50 opacity-0 group-hover:opacity-100" strokeWidth={3} />
               </span>
             </UiIconButton>
-            <UiIconButton
+            {/* ui-surface-allow macOS 交通灯，同上 */}
+            <UiIconButton shape="circle" size="sm"
               type="button"
               onClick={handleMinimize}
-              className="group !h-6 !w-6 !rounded-full !border-0 !bg-transparent !p-0 hover:!bg-transparent"
+              className="group !p-0 hover:!bg-transparent active:!bg-transparent"
               title={t('windowControls.minimize')}
             >
               <span className="flex h-3 w-3 items-center justify-center rounded-full bg-yellow-400 group-hover:bg-yellow-400/80">
                 <Minus className="h-2 w-2 text-black/50 opacity-0 group-hover:opacity-100" strokeWidth={3} />
               </span>
             </UiIconButton>
-            <UiIconButton
+            {/* ui-surface-allow macOS 交通灯，同上 */}
+            <UiIconButton shape="circle" size="sm"
               type="button"
               onClick={handleToggleMaximize}
-              className="group !h-6 !w-6 !rounded-full !border-0 !bg-transparent !p-0 hover:!bg-transparent"
+              className="group !p-0 hover:!bg-transparent active:!bg-transparent"
               title={t('windowControls.maximize')}
             >
               <span className="flex h-3 w-3 items-center justify-center rounded-full bg-green-500 group-hover:bg-green-500/80">
@@ -200,22 +203,16 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
           <div className="absolute right-3 top-1/2 flex -translate-y-1/2 items-center gap-1" style={noDragRegionStyle} data-window-nodrag>
             {onAssistantClick && <UiIconButton
               type="button"
-              active={assistantOpen}
-              showBorder={false}
-              appearance="hover-only"
+              on={assistantOpen}
               onClick={onAssistantClick}
-              className="!h-7 !w-7"
               title="智能助手"
             >
               <Sparkles className="h-4 w-4" />
             </UiIconButton>}
             <UiIconButton
               type="button"
-              showBorder={false}
-              appearance="hover-only"
               onClick={handleOpenSettings}
               onPointerEnter={handlePrefetchSettings}
-              className="!h-7 !w-7"
               title={t('actions.settings')}
             >
               <ICON_SETTINGS className="h-4 w-4" />
@@ -243,38 +240,32 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
             style={noDragRegionStyle}
             data-window-nodrag
           >
-            {onAssistantClick && <UiIconButton
+            {onAssistantClick && <UiIconButton size="lg"
               type="button"
-              active={assistantOpen}
-              showBorder={false}
-              appearance="hover-only"
+              on={assistantOpen}
               onClick={onAssistantClick}
-              className="!h-8 !w-8 !rounded"
               title="智能助手"
             >
               <Sparkles className="h-4 w-4" />
             </UiIconButton>}
-            <UiIconButton
+            <UiIconButton size="lg"
               type="button"
               onClick={handleOpenSettings}
               onPointerEnter={handlePrefetchSettings}
-              className="!w-8 !h-8 !rounded border-0 bg-transparent hover:bg-surface-dark/80"
               title={t('actions.settings')}
             >
               <ICON_SETTINGS className="h-4 w-4" />
             </UiIconButton>
-            <UiIconButton
+            <UiIconButton size="lg"
               type="button"
               onClick={handleMinimize}
-              className="!w-8 !h-8 !rounded border-0 bg-transparent hover:bg-surface-dark/80"
               title={t('windowControls.minimize')}
             >
               <Minus className="h-4 w-4" />
             </UiIconButton>
-            <UiIconButton
+            <UiIconButton size="lg"
               type="button"
               onClick={handleToggleMaximize}
-              className="!w-8 !h-8 !rounded border-0 bg-transparent hover:bg-surface-dark/80"
               title={t('windowControls.toggleMaximize')}
             >
               {isMaximized ? (
@@ -283,10 +274,9 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
                 <Square className="h-3.5 w-3.5" />
               )}
             </UiIconButton>
-            <UiIconButton
+            <UiIconButton size="lg" tone="danger"
               type="button"
               onClick={handleClose}
-              className="!w-8 !h-8 !rounded border-0 bg-transparent hover:bg-red-700/70"
               title={t('windowControls.close')}
             >
               <X className="h-4 w-4" />

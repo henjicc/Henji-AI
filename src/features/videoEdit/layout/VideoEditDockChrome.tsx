@@ -11,7 +11,7 @@ export function VideoEditDockTab({ api }: IDockviewPanelHeaderProps): React.Reac
   useEffect(() => { const event = api.onDidTitleChange(value => setTitle(value.title)); return () => event.dispose() }, [api])
   return <span className="flex h-full items-center gap-2 pl-2 pr-1 text-xs text-text-dark">
     <span>{title}</span>
-    <UiIconButton title={`关闭${title}`} aria-label={`关闭${title}`} showBorder={false} appearance="hover-only" className="h-5 w-5"
+    <UiIconButton size="xs" title={`关闭${title}`} aria-label={`关闭${title}`}
       onPointerDown={event => event.stopPropagation()} onClick={event => { event.stopPropagation(); api.close() }}><X size={12} /></UiIconButton>
   </span>
 }
@@ -36,8 +36,8 @@ export function VideoEditDockHeaderActions({ api, containerApi, activePanel, pan
       <UiOptionButton variant="menu" className="text-xs" onClick={() => resetVideoEditWorkspaceLayout(containerApi)}>重置布局</UiOptionButton>
     </div>}>
     {({ open, togglePanel }) => <div className="flex h-full items-center gap-1 pr-1">
-      {api.location.type === 'grid' && <UiIconButton title={maximized ? '还原面板' : '放大面板'} aria-label={maximized ? '还原面板' : '放大面板'} showBorder={false} appearance="hover-only" className="h-6 w-6" onClick={() => { if (maximized) api.exitMaximized(); else api.maximize() }}>{maximized ? <Minimize2 size={13} /> : <Maximize2 size={13} />}</UiIconButton>}
-      <UiIconButton title="面板菜单" aria-label="面板菜单" showBorder={false} appearance="hover-only" active={open} className="h-6 w-6" data-panel-trigger-button onClick={togglePanel}><Menu size={14} /></UiIconButton>
+      {api.location.type === 'grid' && <UiIconButton size="sm" title={maximized ? '还原面板' : '放大面板'} aria-label={maximized ? '还原面板' : '放大面板'} onClick={() => { if (maximized) api.exitMaximized(); else api.maximize() }}>{maximized ? <Minimize2 size={13} /> : <Maximize2 size={13} />}</UiIconButton>}
+      <UiIconButton size="sm" title="面板菜单" aria-label="面板菜单" on={open} data-panel-trigger-button onClick={togglePanel}><Menu size={14} /></UiIconButton>
     </div>}
   </PanelTrigger>
 }
@@ -62,6 +62,6 @@ export function VideoEditLayoutMenu({ api }: { api: DockviewApi | null }): React
       }}><span>{panel.title}</span>{(api?.getPanel(panel.id) || isVideoEditPanelPoppedOut(panel.id)) && <Check size={13} />}</UiOptionButton>)}
       <UiOptionButton variant="menu" className="flex items-center gap-2 text-xs" disabled={!api} onClick={() => { if (api) resetVideoEditWorkspaceLayout(api) }}><RotateCcw size={13} />重置布局</UiOptionButton>
     </div>}>
-    {({ open, togglePanel }) => <UiButton variant="plain" disabled={!api} className="gap-1.5" aria-expanded={open} data-panel-trigger-button onClick={togglePanel}><LayoutGrid size={15} />面板</UiButton>}
+    {({ open, togglePanel }) => <UiButton disabled={!api} className="gap-1.5" aria-expanded={open} data-panel-trigger-button onClick={togglePanel}><LayoutGrid size={15} />面板</UiButton>}
   </PanelTrigger>
 }

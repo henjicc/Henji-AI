@@ -84,7 +84,7 @@ export class UiErrorBoundary extends React.Component<UiErrorBoundaryProps, UiErr
         <div className="max-w-xl break-words text-xs text-text-muted opacity-70">
           {this.state.error.message}
         </div>
-        <UiButton onClick={this.retry}>重新加载界面</UiButton>
+        <UiButton variant="secondary" onClick={this.retry}>重新加载界面</UiButton>
       </div>
     )
   }

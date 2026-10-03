@@ -198,7 +198,7 @@ export function VideoTrimModal({
       contentClassName="overflow-y-auto px-4 py-4"
       footer={(
         <>
-          <UiButton variant="ghost" onClick={onClose} disabled={isProcessing}>
+          <UiButton variant="secondary" onClick={onClose} disabled={isProcessing}>
             {t('common:cancel')}
           </UiButton>
           <UiButton
@@ -226,14 +226,12 @@ export function VideoTrimModal({
           <div className="flex items-center gap-1">
             <UiIconButton
               onClick={togglePlay}
-              className="h-7 w-7 border-0 bg-transparent"
               title={t('ui:audioPlayer.playPause')}
             >
               {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
             </UiIconButton>
             <UiIconButton
               onClick={() => setMuted((value) => !value)}
-              className="h-7 w-7 border-0 bg-transparent"
               title={muted ? t('ui:viewer.unmute') : t('ui:viewer.mute')}
             >
               {muted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}

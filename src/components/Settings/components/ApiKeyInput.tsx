@@ -60,9 +60,8 @@ const ApiKeyInput: React.FC<ApiKeyInputProps> = ({
             {websiteUrl && websiteLabel && onOpenUrl ? (
               <UiButton
                 type="button"
-                variant="plain"
-                size="sm"
-                className="!h-6 !min-h-0 shrink-0 !px-0 !py-0 !text-sm font-medium !text-brand-300 hover:bg-transparent hover:!text-brand-300 hover:underline"
+                variant="link"
+                className="shrink-0"
                 onClick={() => onOpenUrl(websiteUrl)}
               >
                 {websiteLabel}
@@ -72,9 +71,8 @@ const ApiKeyInput: React.FC<ApiKeyInputProps> = ({
             {managementUrl && managementLabel && onOpenUrl ? (
               <UiButton
                 type="button"
-                variant="plain"
-                size="sm"
-                className="!h-6 !min-h-0 shrink-0 !px-0 !py-0 !text-sm font-medium !text-brand-300 hover:bg-transparent hover:!text-brand-300 hover:underline"
+                variant="link"
+                className="shrink-0"
                 onClick={() => onOpenUrl(managementUrl)}
               >
                 {managementLabel}
@@ -97,12 +95,11 @@ const ApiKeyInput: React.FC<ApiKeyInputProps> = ({
           data-observation-sensitive={visible ? 'true' : undefined}
           className={`${UI_FIELD_CONTROL_HEIGHT_CLASS} pr-12`}
         />
-        <UiIconButton
+        <UiIconButton size="lg"
           type="button"
           onClick={onToggleVisibility}
           disabled={disabled}
-          appearance="color-only"
-          className="absolute right-1 top-1/2 h-8 w-8 -translate-y-1/2"
+          className="absolute right-1 top-1/2 -translate-y-1/2"
           title={toggleLabel}
           aria-label={toggleLabel}
           aria-pressed={visible}

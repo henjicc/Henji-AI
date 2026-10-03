@@ -38,7 +38,9 @@ describe('ApiKeyInput', () => {
     expect(input.className).toContain('pr-12')
     expect(toggle.parentElement).toBe(input.parentElement)
     expect(toggle.className).toContain('absolute')
-    expect(toggle.className).toContain('border-transparent')
+    // 嵌在输入框里的静默图标按钮（静息无底无框）
+    expect(toggle.dataset.tone).toBe('default')
+    expect(toggle.className).not.toContain('ui-btn-on')
     expect(input.getAttribute('aria-describedby')).toBeTruthy()
     expect(toggle.getAttribute('aria-pressed')).toBe('false')
 

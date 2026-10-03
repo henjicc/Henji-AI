@@ -68,26 +68,23 @@ export default function LogsShell(): JSX.Element {
       >
         <div className="text-sm text-text-muted">{t('logsWindow.title')}</div>
         <div className="flex items-center gap-1" style={noDragRegionStyle}>
-          <UiIconButton
+          <UiIconButton size="lg"
             type="button"
             onClick={handleMinimize}
-            className="!h-8 !w-8 rounded border-0 bg-transparent hover:bg-white/10"
             title={t('windowControls.minimize')}
           >
             <Minus className="h-4 w-4" />
           </UiIconButton>
-          <UiIconButton
+          <UiIconButton size="lg"
             type="button"
             onClick={handleToggleMaximize}
-            className="!h-8 !w-8 rounded border-0 bg-transparent hover:bg-white/10"
             title={t('windowControls.toggleMaximize')}
           >
             {isMaximized ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
           </UiIconButton>
-          <UiIconButton
+          <UiIconButton size="lg" tone="danger"
             type="button"
             onClick={handleClose}
-            className="!h-8 !w-8 rounded border-0 bg-transparent hover:bg-red-700/70"
             title={t('windowControls.close')}
           >
             <X className="h-4 w-4" />

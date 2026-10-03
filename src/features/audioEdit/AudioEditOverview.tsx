@@ -1,13 +1,14 @@
-import { useMemo, useRef } from 'react'
+import { useRef } from 'react'
 import { UiButton } from '@/components/ui'
-import { clampViewport, sampleWaveform, waveformReference, type WaveformViewport } from './waveformViewport'
+import { WaveformView } from '@/components/waveform/WaveformView'
+import type { WaveformState } from '@/hooks/useWaveformData'
+import { AUDIO_EDIT_MIN_VIEW_FRAMES, clampViewport, type WaveformViewport } from './waveformViewport'
 
-export function AudioEditOverview({ duration, sampleRate, sourceFrame, peaks, view, onChange }: {
-  duration: number; sampleRate: number; sourceFrame: number; peaks: number[]; view: WaveformViewport; onChange: (view: WaveformViewport) => void
+export function AudioEditOverview({ duration, sampleRate, sourceFrame, waveform, view, onChange }: {
+  duration: number; sampleRate: number; sourceFrame: number; waveform: WaveformState; view: WaveformViewport; onChange: (view: WaveformViewport) => void
 }) {
   const drag = useRef<{ pointer: number; x: number; width: number; view: WaveformViewport; edge: string } | null>(null)
-  const bars = useMemo(() => sampleWaveform(peaks, { start: 0, end: duration }, duration, 250, waveformReference(peaks)), [peaks, duration])
-  const minimum = Math.min(duration, sampleRate * 2)
+  const minimum = Math.min(duration, AUDIO_EDIT_MIN_VIEW_FRAMES)
   return <div className="relative mt-2 h-7 touch-none select-none overflow-hidden bg-bg-dark" aria-label="全局时间导航" title="拖动选框平移，拖动左右边缘缩放，点击空白快速定位"
     onPointerDown={(event) => {
       if (event.button !== 0 || duration <= 0) return
@@ -30,9 +31,10 @@ export function AudioEditOverview({ duration, sampleRate, sourceFrame, peaks, vi
     }}
     onPointerUp={(event) => { if (drag.current?.pointer === event.pointerId) { drag.current = null; event.currentTarget.releasePointerCapture(event.pointerId) } }}
     onLostPointerCapture={() => { drag.current = null }} onPointerCancel={() => { drag.current = null }}>
-    <svg className="pointer-events-none absolute inset-0 h-full w-full text-text-muted" viewBox="0 0 250 40" preserveAspectRatio="none" aria-hidden="true">{bars.map((peak, index) => <rect key={index} x={index} y={20 - peak * 18} width={0.7} height={Math.max(1, peak * 36)} fill="currentColor" />)}</svg>
+    <div className="pointer-events-none absolute inset-0"><WaveformView waveform={waveform} tier="mini" startSeconds={0} endSeconds={duration / Math.max(1, sampleRate)} /></div>
     <div data-overview-edge="move" className="absolute inset-y-0 cursor-grab border border-accent bg-accent/20 active:cursor-grabbing" style={{ left: `${view.start / Math.max(1, duration) * 100}%`, width: `${(view.end - view.start) / Math.max(1, duration) * 100}%` }}>
-      {(['left', 'right'] as const).map((edge) => <UiButton key={edge} data-overview-edge={edge} variant="plain" title={edge === 'left' ? '拖动调整可见起点' : '拖动调整可见终点'} className={`!absolute inset-y-0 !h-full !min-h-0 !w-3 !rounded-none !p-0 cursor-ew-resize ${edge === 'left' ? 'left-0' : 'right-0'}`}
+      {/* ui-surface-allow 总览可见区的左右拖动柄，不是按钮外观；交 2.3/3.4 波形总览重做 */}
+      {(['left', 'right'] as const).map((edge) => <UiButton key={edge} data-overview-edge={edge} title={edge === 'left' ? '拖动调整可见起点' : '拖动调整可见终点'} className={`!absolute inset-y-0 !h-full !min-h-0 !w-3 !rounded-none !p-0 cursor-ew-resize ${edge === 'left' ? 'left-0' : 'right-0'}`}
         onKeyDown={(event) => {
           if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
           event.preventDefault()

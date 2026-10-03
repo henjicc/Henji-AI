@@ -94,13 +94,13 @@ export const AssetLibrarySidebar: React.FC<Props> = ({
 
       <div className={`flex items-center justify-between px-3 pb-1 pt-2 ${UI_TEXT_LABEL_CLASS}`}>
         <span>{labels.categories}</span>
-        <UiIconButton appearance="hover-only" className="!h-7 !w-7" onClick={() => setCreating(true)} title={labels.create}><Plus className="h-3.5 w-3.5" /></UiIconButton>
+        <UiIconButton onClick={() => setCreating(true)} title={labels.create}><Plus className="h-3.5 w-3.5" /></UiIconButton>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2 [scrollbar-gutter:stable]">
         {creating && (
           <div className="mb-1 flex items-center gap-1">
             <UiInput autoFocus className="!h-8 min-w-0 !px-2" value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void submitCreate(); if (event.key === 'Escape') setCreating(false) }} placeholder={labels.placeholder} />
-            <UiIconButton className="!h-7 !w-7" onClick={() => void submitCreate()}><Check className="h-3.5 w-3.5" /></UiIconButton>
+            <UiIconButton onClick={() => void submitCreate()}><Check className="h-3.5 w-3.5" /></UiIconButton>
           </div>
         )}
         {libraries.map((library) => (
@@ -108,7 +108,7 @@ export const AssetLibrarySidebar: React.FC<Props> = ({
             {editingId === library.id ? (
               <div className="flex w-full items-center gap-1">
                 <UiInput autoFocus className="!h-8 min-w-0 flex-1 !px-2" value={editingName} onChange={(event) => setEditingName(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void submitRename(library); if (event.key === 'Escape') setEditingId(null) }} />
-                <UiIconButton className="!h-7 !w-7" onClick={() => void submitRename(library)}><Check className="h-3.5 w-3.5" /></UiIconButton>
+                <UiIconButton onClick={() => void submitRename(library)}><Check className="h-3.5 w-3.5" /></UiIconButton>
               </div>
             ) : (
               <>
@@ -120,13 +120,13 @@ export const AssetLibrarySidebar: React.FC<Props> = ({
                 <div className={`pointer-events-none absolute right-1 top-1/2 flex -translate-y-1/2 bg-gradient-to-l from-layer via-layer/95 to-transparent pl-6 ${deletingId === library.id ? 'pointer-events-auto opacity-100' : 'opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100'}`}>
                   {deletingId === library.id ? (
                     <>
-                      <UiIconButton className="!h-7 !w-7" hoverVariant="danger" title={labels.confirmDelete} onClick={() => { void onDelete(library); setDeletingId(null) }}><Check className="h-3.5 w-3.5" /></UiIconButton>
-                      <UiIconButton className="!h-7 !w-7" onClick={() => setDeletingId(null)}><X className="h-3.5 w-3.5" /></UiIconButton>
+                      <UiIconButton tone="danger" title={labels.confirmDelete} onClick={() => { void onDelete(library); setDeletingId(null) }}><Check className="h-3.5 w-3.5" /></UiIconButton>
+                      <UiIconButton onClick={() => setDeletingId(null)}><X className="h-3.5 w-3.5" /></UiIconButton>
                     </>
                   ) : (
                     <>
-                      <UiIconButton appearance="hover-only" className="!h-7 !w-7" onClick={() => { setEditingId(library.id); setEditingName(library.name) }}><Pencil className="h-3 w-3" /></UiIconButton>
-                      <UiIconButton appearance="hover-only" className="!h-7 !w-7" hoverVariant="danger" onClick={() => setDeletingId(library.id)}><Trash2 className="h-3 w-3" /></UiIconButton>
+                      <UiIconButton onClick={() => { setEditingId(library.id); setEditingName(library.name) }}><Pencil className="h-3 w-3" /></UiIconButton>
+                      <UiIconButton tone="danger" onClick={() => setDeletingId(library.id)}><Trash2 className="h-3 w-3" /></UiIconButton>
                     </>
                   )}
                 </div>

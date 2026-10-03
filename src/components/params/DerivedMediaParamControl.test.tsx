@@ -121,7 +121,8 @@ describe('派生遮罩参数控件', () => {
       />
     )
 
-    expect(screen.getByRole('button', { name: '绘制' }).className).toContain('h-[38px]')
+    // 生成页：与参数字段同一行的醒目档（36）
+    expect(screen.getByRole('button', { name: '绘制' }).dataset.size).toBe('lg')
 
     rerender(
       <DerivedMediaParamControl
@@ -133,7 +134,8 @@ describe('派生遮罩参数控件', () => {
       />
     )
 
-    expect(screen.getByRole('button', { name: '绘制' }).className).toContain('!h-7')
+    // 画布节点：紧凑档（28）
+    expect(screen.getByRole('button', { name: '绘制' }).dataset.size).toBe('sm')
   })
 
   it('允许专用宿主直接打开唯一编辑器，取消不写入且确认仍原子提交', () => {

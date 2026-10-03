@@ -47,8 +47,6 @@ export function GeometryInspector(): JSX.Element {
               <UiButton
                 key={button.operation}
                 type="button"
-                variant="plain"
-                size="sm"
                 title={button.label}
                 onClick={() => onOrientation(button.operation)}
               >
@@ -65,8 +63,8 @@ export function GeometryInspector(): JSX.Element {
           <h3 className={UI_TEXT_LABEL_CLASS}>裁剪</h3>
           <UiButton
             type="button"
-            variant={tool === 'crop' ? 'primary' : 'ghost'}
-            size="sm"
+            variant="secondary"
+            aria-pressed={tool === 'crop'}
             onClick={() => selectTool(tool === 'crop' ? 'select' : 'crop')}
           >
             {tool === 'crop' ? '退出裁剪' : '开始裁剪'}
@@ -91,8 +89,6 @@ export function GeometryInspector(): JSX.Element {
         </div>
         <UiButton
           type="button"
-          variant="plain"
-          size="sm"
           className="mt-3"
           onClick={onCropReset}
           disabled={!hasCrop}

@@ -12,7 +12,6 @@ import { newEmbeddedConversation, useEmbeddedAgent } from './embedded/controller
 import { useAssistantPanelInteraction } from './hooks/useAssistantPanelInteraction'
 import { useAssistantUiStore, type AssistantDockMode } from './store/assistantUiStore'
 
-const HEADER_ICON_BUTTON_CLASS = '!h-8 !w-8 shrink-0'
 
 /**
  * 停靠态是窗口 chrome 的一部分，不是浮层：直角、无阴影、只留朝向工作区的那一条边。
@@ -141,10 +140,8 @@ export function AssistantSidebar({ workspaceRef }: AssistantSidebarProps): JSX.E
             data-assistant-drag-ignore
           >
             <div role="group" aria-label="对话操作" className="flex items-center gap-0.5">
-              <UiIconButton
+              <UiIconButton size="lg"
                 type="button"
-                showBorder={false}
-                appearance="hover-only"
                 onClick={() => {
                   void newEmbeddedConversation()
                   setContentView('conversation')
@@ -152,28 +149,24 @@ export function AssistantSidebar({ workspaceRef }: AssistantSidebarProps): JSX.E
                 disabled={embedded.busy}
                 title="新建对话"
                 aria-label="新建对话"
-                className={HEADER_ICON_BUTTON_CLASS}
               >
                 <MessageSquarePlus className="h-4 w-4" />
               </UiIconButton>
-              <UiIconButton
+              <UiIconButton size="lg"
                 type="button"
-                showBorder={false}
-                appearance="hover-only"
-                active={contentView === 'history'}
+                on={contentView === 'history'}
                 aria-pressed={contentView === 'history'}
                 onClick={() => setContentView((view) => (
                   view === 'history' ? 'conversation' : 'history'
                 ))}
                 title={contentView === 'history' ? '返回当前对话' : '对话历史'}
                 aria-label={contentView === 'history' ? '返回当前对话' : '对话历史'}
-                className={HEADER_ICON_BUTTON_CLASS}
               >
                 <History className="h-4 w-4" />
               </UiIconButton>
-              <UiIconButton type="button" showBorder={false} appearance="hover-only" active={contentView === 'memory'}
+              <UiIconButton size="lg" type="button" on={contentView === 'memory'}
                 onClick={() => setContentView(view => view === 'memory' ? 'conversation' : 'memory')}
-                title={contentView === 'memory' ? '返回当前对话' : '助手记忆'} aria-label="助手记忆" className={HEADER_ICON_BUTTON_CLASS}>
+                title={contentView === 'memory' ? '返回当前对话' : '助手记忆'} aria-label="助手记忆">
                 <BrainCircuit className="h-4 w-4" />
               </UiIconButton>
             </div>
@@ -181,15 +174,12 @@ export function AssistantSidebar({ workspaceRef }: AssistantSidebarProps): JSX.E
             {/* 停靠态不放关闭：它正好落在窗口关闭按钮的正下方，两个 X 叠在一条竖线上很容易误点。
                 停靠时改用标题栏的助手按钮或 Ctrl+Shift+A 收起；悬浮窗没有可依的边，仍需自带关闭。 */}
             {mode === 'floating' ? (
-              <UiIconButton
+              <UiIconButton size="lg" tone="danger"
                 type="button"
-                showBorder={false}
-                appearance="hover-only"
                 onClick={() => setOpen(false)}
                 title="收起智能助手"
                 aria-label="收起智能助手"
-                hoverVariant="danger"
-                className={`${HEADER_ICON_BUTTON_CLASS} ml-1.5`}
+                className="ml-1.5"
               >
                 <X className="h-4 w-4" />
               </UiIconButton>

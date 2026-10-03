@@ -30,20 +30,18 @@ export function ProjectSelectionToolbar({
   return (
     <div className="flex items-center gap-2">
       <span className={`${UI_TEXT_META_CLASS} mr-1`}>{labels.selectedCount(selection.count)}</span>
-      <UiButton variant="muted" size="sm" onClick={selection.toggleAll}>
+      <UiButton onClick={selection.toggleAll}>
         {selection.isAllSelected ? labels.deselectAll : labels.selectAll}
       </UiButton>
       <UiButton
-        variant="ghost"
-        size="sm"
-        className="gap-2 hover:!border-red-500/40 hover:!bg-red-600/35 hover:!text-red-100"
+        variant="danger"
         disabled={selection.count === 0}
         onClick={onDeleteSelected}
       >
         <Trash2 className="h-4 w-4" />
         {labels.deleteSelected}
       </UiButton>
-      <UiButton variant="muted" size="sm" onClick={selection.exit}>
+      <UiButton onClick={selection.exit}>
         {labels.cancel}
       </UiButton>
     </div>

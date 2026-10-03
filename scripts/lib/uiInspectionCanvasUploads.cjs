@@ -52,7 +52,7 @@ function createCanvasUploadsScene(context) {
       }
       await page.waitForFunction(() => [...document.querySelectorAll('.react-flow__node img')].filter(img => img.naturalWidth > 0).length >= 3)
       const audioNode = page.locator('.react-flow__node[data-id="upload-audio"]')
-      await audioNode.locator('svg rect').nth(10).waitFor({ state: 'attached' })
+      await audioNode.locator('canvas[data-waveform-state="ready"]').waitFor({ state: 'attached' })
       if (await page.locator('.react-flow__node video').count()) throw new Error('视频封面展示时不应启动播放器')
       await writeFile('.ui-tour/canvas-unified-upload.png', await captureInspectionPage(app, page))
 

@@ -15,9 +15,9 @@ export function VideoEditShortcutSettings(): React.ReactElement {
     setError(result)
   }
   return <>
-    <UiButton variant="plain" onClick={() => { setDraft(structuredClone(useSettingsStore.getState().videoEditShortcuts)); setCapture(null); setError(''); setOpen(true) }}>剪辑快捷键</UiButton>
+    <UiButton onClick={() => { setDraft(structuredClone(useSettingsStore.getState().videoEditShortcuts)); setCapture(null); setError(''); setOpen(true) }}>剪辑快捷键</UiButton>
     <UiModal isOpen={open} title="剪辑快捷键" size="editor" onClose={close} footer={<>
-      <UiButton variant="plain" onClick={() => { setCapture(null); change({}) }}>恢复默认</UiButton><UiButton variant="plain" onClick={close}>取消</UiButton>
+      <UiButton onClick={() => { setCapture(null); change({}) }}>恢复默认</UiButton><UiButton onClick={close}>取消</UiButton>
       <UiButton variant="primary" disabled={Boolean(error) || capture !== null} onClick={() => { try { useSettingsStore.getState().setVideoEditShortcuts(draft); close() } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)) } }}>保存快捷键</UiButton>
     </>}>
       <div onKeyDownCapture={event => {
@@ -32,8 +32,8 @@ export function VideoEditShortcutSettings(): React.ReactElement {
         <div className="max-h-96 space-y-1 overflow-y-auto">
           {VIDEO_EDIT_COMMANDS.map(command => <div className="flex items-center gap-2 border-b border-border-dark py-1" key={command.id}>
             <span className="min-w-0 flex-1 text-xs">{command.title}</span>
-            <UiButton variant="plain" aria-label={`${command.title}键位`} aria-pressed={capture === command.id} onClick={() => setCapture(command.id)}>{capture === command.id ? '请按下组合键…' : videoEditShortcutLabel(videoEditCommandShortcut(command.id, draft))}</UiButton>
-            <UiButton variant="plain" aria-label={`清除${command.title}键位`} onClick={() => { setCapture(null); change({ ...draft, [command.id]: null }) }}>清除</UiButton>
+            <UiButton aria-label={`${command.title}键位`} aria-pressed={capture === command.id} onClick={() => setCapture(command.id)}>{capture === command.id ? '请按下组合键…' : videoEditShortcutLabel(videoEditCommandShortcut(command.id, draft))}</UiButton>
+            <UiButton aria-label={`清除${command.title}键位`} onClick={() => { setCapture(null); change({ ...draft, [command.id]: null }) }}>清除</UiButton>
           </div>)}
         </div>
         {error && <UiError size="xs" message={error} />}

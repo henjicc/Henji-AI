@@ -124,7 +124,7 @@ export function UiError({
         <div className="mt-4 flex items-center justify-center gap-2">
           {actions}
           {onRetry ? (
-            <UiButton variant="primary" size="sm" onClick={onRetry}>
+            <UiButton variant="secondary" onClick={onRetry}>
               {retryLabel ?? '重试'}
             </UiButton>
           ) : null}

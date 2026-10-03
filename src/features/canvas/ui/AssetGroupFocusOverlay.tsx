@@ -187,9 +187,8 @@ export const AssetGroupFocusOverlay = memo(({ groupId, onClose }: AssetGroupFocu
           </p>
         </div>
         <UiButton
-          variant="muted"
-          size="sm"
-          className="ml-auto h-8 gap-1.5 px-3"
+          variant="secondary"
+          className="ml-auto gap-1.5 px-3"
           disabled={isImporting}
           onClick={() => inputRef.current?.click()}
         >
@@ -208,10 +207,7 @@ export const AssetGroupFocusOverlay = memo(({ groupId, onClose }: AssetGroupFocu
             void importFiles(files);
           }}
         />
-        <UiIconButton
-          appearance="hover-only"
-          showBorder={false}
-          className="h-8 w-8"
+        <UiIconButton size="lg"
           aria-label={t('canvas.assetGroup.manager.close')}
           title={t('canvas.assetGroup.manager.close')}
           onClick={onClose}
@@ -289,9 +285,8 @@ export const AssetGroupFocusOverlay = memo(({ groupId, onClose }: AssetGroupFocu
                 })}</span>
                 {status.excluded > 0 && (
                   <UiButton
-                    variant="plain"
                     size="sm"
-                    className="h-7 gap-1 px-2"
+                    className="gap-1 px-2"
                     onClick={() => restoreAssetGroupBinding({ groupId: node.id, bindingId: binding.id }).catch(reportCanvasOperationFailure)}
                   >
                     <RotateCcw className="h-3 w-3" />
@@ -310,10 +305,10 @@ export const AssetGroupFocusOverlay = memo(({ groupId, onClose }: AssetGroupFocu
         onClose={() => setRemoveCandidateId(null)}
         footer={(
           <>
-            <UiButton variant="muted" size="sm" onClick={() => setRemoveCandidateId(null)}>
+            <UiButton variant="secondary" onClick={() => setRemoveCandidateId(null)}>
               {t('common.cancel')}
             </UiButton>
-            <UiButton variant="muted" size="sm" className="text-danger hover:bg-danger/10" onClick={confirmRemove}>
+            <UiButton variant="dangerSolid" onClick={confirmRemove}>
               {t('canvas.assetGroup.manager.removeConfirmAction')}
             </UiButton>
           </>

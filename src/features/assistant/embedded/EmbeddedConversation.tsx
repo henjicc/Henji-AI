@@ -96,7 +96,7 @@ export function EmbeddedConversation(): JSX.Element {
     <AudioEditAssistantAction disabled={busy || !selectedModel} />
     <div className="space-y-2 px-3 pt-3">
       {state.error ? <UiError message={assistantErrorMessage(state.error)} size="xs" /> : null}
-      {models.length === 0 ? <UiButton size="sm" onClick={() => useUiStore.getState().openSettings({ tab: 'models', sectionId: 'models-assistant' })}>设置可调用工具的模型</UiButton> : null}
+      {models.length === 0 ? <UiButton variant="secondary" onClick={() => useUiStore.getState().openSettings({ tab: 'models', sectionId: 'models-assistant' })}>设置可调用工具的模型</UiButton> : null}
     </div>
     <AssistantComposer key={state.sessionId ?? 'new'} value={document} onChange={setDocument} onSubmit={send} attachments={attachments} onAttachmentsChange={setAttachments}
       inputModalities={selectedModel?.inputModalities ?? []} attachmentsDisabled={submitting || !selectedModel} disabled={submitting || !selectedModel}

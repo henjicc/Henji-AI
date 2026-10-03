@@ -119,8 +119,8 @@ export function VideoViewerControls({
         </div>
 
         <div className="controls-main">
-          <UiIconButton onClick={togglePlay} className="btn btn-play !h-auto !w-auto !border-0 !bg-transparent" title={t('ui:audioPlayer.playPause')}>
-            {isVideoPlaying ? <Pause /> : <Play />}
+          <UiIconButton tone="media" size="xl" shape="circle" onClick={togglePlay} title={t('ui:audioPlayer.playPause')}>
+            {isVideoPlaying ? <Pause className="h-6 w-6" /> : <Play className="h-6 w-6" />}
           </UiIconButton>
           <div className="time-display">{formatTime(currentTime)} / {formatTime(videoDuration)}</div>
           <div className="controls-right">
@@ -185,20 +185,19 @@ export function VideoViewerControls({
               </div>
             </div>
 
-            <UiIconButton
-              className={`btn btn-small !h-auto !w-auto !border-0 !bg-transparent ${loop ? 'loop-active' : ''}`}
+            <UiIconButton tone="media" size="lg"
+              on={loop}
               onClick={() => setLoop((value) => !value)}
               title={t('ui:viewer.loop')}
             >
-              <Repeat />
+              <Repeat className="h-5 w-5" />
             </UiIconButton>
             {onDownload && filePath && (
-              <UiIconButton
-                className="btn btn-small !h-auto !w-auto !border-0 !bg-transparent"
+              <UiIconButton tone="media" size="lg"
                 onClick={() => onDownload(filePath)}
                 title={t('common:actions.download')}
               >
-                <Download />
+                <Download className="h-5 w-5" />
               </UiIconButton>
             )}
           </div>

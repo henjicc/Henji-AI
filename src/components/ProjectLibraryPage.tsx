@@ -147,7 +147,7 @@ export function ProjectLibraryPage({
           ) : (
             <>
               {headerActions}
-              <UiButton onClick={openCreateDialog} variant="primary" size="sm" className="gap-2 px-4" disabled={busy}>
+              <UiButton onClick={openCreateDialog} variant="primary" className="gap-2" disabled={busy}>
                 <Plus className="h-4 w-4" />
                 {labels.createAction}
               </UiButton>

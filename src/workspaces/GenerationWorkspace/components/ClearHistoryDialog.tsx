@@ -37,18 +37,17 @@ export function ClearHistoryDialog({ open, onClose, onClearFailed, onClearAll }:
       <div className={`mt-2 ${UI_TEXT_BODY_CLASS}`}>{t('ui:workspace.clearDialog.subtitle')}</div>
 
       <div className="mt-4 flex flex-col gap-2">
-        <UiButton
+        <UiButton size="lg" variant="secondary"
           onClick={async () => {
             await onClearFailed()
             close()
           }}
-          className="h-9 bg-yellow-600/70 text-white hover:bg-yellow-600"
         >
           <TriangleAlert className="mr-2 h-4 w-4" />
           {t('ui:workspace.clearDialog.failedOnly')}
         </UiButton>
 
-        <UiButton
+        <UiButton size="lg" variant={needsConfirm ? 'dangerSolid' : 'danger'}
           onClick={async () => {
             if (needsConfirm) {
               await onClearAll()
@@ -57,13 +56,13 @@ export function ClearHistoryDialog({ open, onClose, onClearFailed, onClearAll }:
             }
             setNeedsConfirm(true)
           }}
-          className={`h-9 text-white transition-colors ${needsConfirm ? 'animate-pulse-scale bg-red-700 hover:bg-red-800' : 'bg-red-600/70 hover:bg-red-600'}`}
+          className={needsConfirm ? 'animate-pulse-scale' : ''}
         >
           <Trash2 className="mr-2 h-4 w-4" />
           {needsConfirm ? t('ui:workspace.clearDialog.confirmDelete') : t('ui:workspace.clearDialog.deleteAll')}
         </UiButton>
 
-        <UiButton onClick={close} variant="muted" className="h-9">
+        <UiButton size="lg" onClick={close} variant="secondary">
           {t('common:cancel')}
         </UiButton>
       </div>

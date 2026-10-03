@@ -5,8 +5,8 @@ import { UI_GLASS_ADAPTIVE_CONTROL_CLASS, UI_GLASS_ADAPTIVE_SURFACE_CLASS, UI_TE
 import { clearCompactDragPreview, setCompactDragPreview, setCompactWaveformDragPreview } from '@/contexts/dragDataTransfer'
 import type { AssetRecord } from '@/platform/contracts/assetLibrary'
 import { assetRecordToDragPayload, writeAssetDragPayload, writeCodeAssetDrag } from '../drag/assetDragPayload'
-import Waveform from '@/components/Waveform'
-import { useAudioWaveform } from '@/hooks/useAudioWaveform'
+import { WaveformView } from '@/components/waveform/WaveformView'
+import { useWaveformData } from '@/hooks/useWaveformData'
 import { useI18n } from '@/hooks/useI18n'
 
 interface AssetCardProps {
@@ -35,19 +35,6 @@ export interface AssetMenuAnchor {
 
 const mediaIcons = { image: ImageIcon, video: Film, audio: FileAudio, code: ICON_ASSET_CODE }
 
-function selectThumbnailWaveform(samples: number[] | null): number[] | null {
-  if (!samples || samples.length <= 72) return samples
-  const windowSize = 72
-  let bestStart = 0
-  let bestEnergy = -1
-  for (let start = 0; start <= samples.length - windowSize; start += 12) {
-    let energy = 0
-    for (let index = start; index < start + windowSize; index += 1) energy += samples[index]
-    if (energy > bestEnergy) { bestEnergy = energy; bestStart = start }
-  }
-  return samples.slice(bestStart, bestStart + windowSize)
-}
-
 export const AssetCard: React.FC<AssetCardProps> = ({ asset, selected, eager = false, menuOpen = false, batchMode = false, batchSelected = false, batchDisabled = false, onSelect, onMenu, onToggleBatch, onPreview, onRename, thumbnailFit }) => {
   const { t } = useI18n('ui')
   const [editing, setEditing] = useState(false)
@@ -55,8 +42,8 @@ export const AssetCard: React.FC<AssetCardProps> = ({ asset, selected, eager = f
   const MediaIcon = mediaIcons[asset.mediaType]
   const previewUrl = asset.mediaType === 'code' ? null : asset.thumbnailUrl ?? (asset.mediaType === 'image' ? asset.displayUrl : null)
   const isAudio = asset.mediaType === 'audio'
-  const { waveform } = useAudioWaveform(isAudio ? asset.displayUrl : '', isAudio ? asset.filePath : undefined, { width: 240, compact: true, duration: asset.durationSeconds ?? undefined })
-  const thumbnailWaveform = selectThumbnailWaveform(waveform)
+  const waveformSource = isAudio ? asset.filePath?.trim() || asset.displayUrl : ''
+  const waveform = useWaveformData(waveformSource ? { source: waveformSource, channels: 1 } : null)
   useEffect(() => { if (batchMode) setEditing(false) }, [batchMode])
   const submitRename = async (): Promise<void> => {
     const name = draft.trim()
@@ -73,7 +60,7 @@ export const AssetCard: React.FC<AssetCardProps> = ({ asset, selected, eager = f
       onDragStart={(event) => {
         if (asset.mediaType === 'code') writeCodeAssetDrag(event.dataTransfer, asset.id)
         else writeAssetDragPayload(event.dataTransfer, assetRecordToDragPayload(asset))
-        if (isAudio) setCompactWaveformDragPreview(event.dataTransfer, thumbnailWaveform)
+        if (isAudio) setCompactWaveformDragPreview(event.dataTransfer, waveform.data)
         else setCompactDragPreview(event.dataTransfer, previewUrl)
       }}
       onDragEnd={clearCompactDragPreview}
@@ -86,8 +73,8 @@ export const AssetCard: React.FC<AssetCardProps> = ({ asset, selected, eager = f
       }}
     >
       <div className="relative aspect-square bg-layer" onDoubleClick={(event) => { event.stopPropagation(); onPreview(asset) }}>
-        {isAudio && thumbnailWaveform ? (
-          <div className="pointer-events-none flex h-full items-center px-4"><Waveform samples={thumbnailWaveform} width={240} height={72} duration={asset.durationSeconds ?? 0} /></div>
+        {isAudio && waveform.data ? (
+          <div className="pointer-events-none flex h-full items-center px-4"><WaveformView waveform={waveform} tier="mini" height={72} className="w-full" /></div>
         ) : previewUrl ? (
           <img src={previewUrl} alt={asset.displayName} loading={eager ? 'eager' : 'lazy'} draggable={false} className={`h-full w-full ${thumbnailFit === 'contain' ? 'object-contain' : 'object-cover'}`} />
         ) : (
@@ -106,15 +93,14 @@ export const AssetCard: React.FC<AssetCardProps> = ({ asset, selected, eager = f
             onCheckedChange={() => { if (!batchDisabled) onToggleBatch?.(asset) }}
           />
         )}
-        <UiIconButton
-          appearance="glass"
+        <UiIconButton tone="media"
           data-ui-shared-glass="exclude"
           data-asset-card-menu-trigger
           aria-label="menu"
-          className={`absolute right-1.5 top-1.5 !h-7 !w-7 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 ${menuOpen ? 'opacity-100' : 'opacity-0'}`}
+          className={`absolute right-1.5 top-1.5 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 ${menuOpen ? 'opacity-100' : 'opacity-0'}`}
           onClick={(event) => { event.stopPropagation(); onMenu(asset, event.currentTarget.getBoundingClientRect(), true) }}
         ><MoreHorizontal className="h-4 w-4" /></UiIconButton>
-        {(asset.mediaType === 'video' || asset.mediaType === 'audio') && <UiIconButton appearance="glass" aria-label={t('audioPlayer.playPause')} className="absolute left-1/2 top-1/2 !h-10 !w-10 -translate-x-1/2 -translate-y-1/2 !rounded-full" onClick={(event) => { event.stopPropagation(); onPreview(asset) }}><Play className="h-4 w-4" /></UiIconButton>}
+        {(asset.mediaType === 'video' || asset.mediaType === 'audio') && <UiIconButton shape="circle" size="xl" tone="media" aria-label={t('audioPlayer.playPause')} className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2" onClick={(event) => { event.stopPropagation(); onPreview(asset) }}><Play className="h-4 w-4" /></UiIconButton>}
       </div>
       <div className="min-w-0 px-2.5 py-2">
         {editing ? <UiInput autoFocus className="!h-7 !px-1.5 text-sm" value={draft} onChange={(event) => setDraft(event.target.value)} onBlur={() => void submitRename()} onKeyDown={(event) => { if (event.key === 'Enter') void submitRename(); if (event.key === 'Escape') { setDraft(asset.displayName); setEditing(false) } }} onClick={(event) => event.stopPropagation()} /> : <div className={`truncate ${UI_TEXT_BODY_CLASS}`} title={t('assetLibrary.renameAsset')} onDoubleClick={(event) => { if (batchMode) return; event.stopPropagation(); setDraft(asset.displayName); setEditing(true) }}>{asset.displayName}</div>}

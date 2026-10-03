@@ -265,12 +265,11 @@ const ThemeSection: React.FC<ThemeSectionProps> = ({ onExportTheme, onImportThem
 
       <UiGroup title={t('sections.theme.portable.label')} titleTone="overline">
         <div className="flex flex-wrap items-center gap-2">
-          <UiButton variant="muted" size="sm" className="px-4" onClick={onExportTheme}>
+          <UiButton variant="secondary" className="px-4" onClick={onExportTheme}>
             {t('sections.theme.portable.export')}
           </UiButton>
           <UiButton
-            variant="muted"
-            size="sm"
+            variant="secondary"
             className="px-4"
             disabled={importing}
             onClick={() => fileInputRef.current?.click()}

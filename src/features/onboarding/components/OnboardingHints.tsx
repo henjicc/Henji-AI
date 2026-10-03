@@ -157,8 +157,6 @@ export function OnboardingHints(): JSX.Element | null {
           <p className={`mt-1 leading-5 ${UI_TEXT_META_CLASS}`}>{t('coach.successDescription')}</p>
         </div>
         <UiButton
-          variant="plain"
-          size="sm"
           className="shrink-0"
           onClick={() => onboardingManager.markHintShown(FIRST_TASK_SUCCESS_HINT_ID)}
         >
@@ -218,12 +216,11 @@ export function OnboardingHints(): JSX.Element | null {
           </div>
         </div>
         <div className="mt-4 flex items-center justify-between gap-3">
-          <UiButton variant="plain" size="sm" onClick={skipCoach}>
+          <UiButton onClick={skipCoach}>
             {t('coach.skip')}
           </UiButton>
           <UiButton
-            variant={stageIndex < COACH_STAGES.length - 1 ? 'primary' : 'plain'}
-            size="sm"
+            variant="primary"
             onClick={advance}
           >
             {t(stageIndex < COACH_STAGES.length - 1 ? 'coach.next' : 'coach.finish')}

@@ -73,14 +73,13 @@ function useModelChipMinWidth(): [number, (contentWidth: number) => void] {
 function ExpandToggleButton({ isExpanded, onToggle }: { isExpanded: boolean; onToggle: () => void }) {
   const { t } = useTranslation();
   return (
-    <UiIconButton
+    <UiIconButton size="sm"
       type="button"
-      showBorder={false}
       onClick={(event) => {
         event.stopPropagation();
         onToggle();
       }}
-      className="nodrag !h-6 !w-6 !border-0 !bg-transparent !p-0 text-text-muted hover:!bg-transparent hover:!text-accent"
+      className="nodrag"
       title={isExpanded ? t('modelParams.collapse', { defaultValue: '收起' }) : t('modelParams.expand', { defaultValue: '展开' })}
     >
       {isExpanded ? <Minimize2 className="h-3 w-3" /> : <Maximize2 className="h-3 w-3" />}

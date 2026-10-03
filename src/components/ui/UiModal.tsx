@@ -114,10 +114,7 @@ export function UiModal({
               <h2 id={titleId} className={UI_TEXT_TITLE_CLASS}>{title}</h2>
               {headerActions}
             </div>
-            <UiIconButton
-              className="h-8 w-8"
-              appearance="hover-only"
-              showBorder={false}
+            <UiIconButton size="lg"
               aria-label={`${title} - 关闭`}
               onClick={onClose}
             >

@@ -57,8 +57,7 @@ export const AssetGroupBundleEdge = memo(function AssetGroupBundleEdge(props: Ed
             {bundle.excluded > 0 ? ` · ${bundle.excluded} 已排除` : ''}
           </UiChipButton>
           {selected && (
-            <UiIconButton
-              className="h-6 w-6 rounded-full"
+            <UiIconButton shape="circle" size="sm" tone="media"
               aria-label="解除素材组绑定"
               onClick={(event) => {
                 event.stopPropagation();

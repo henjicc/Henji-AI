@@ -89,8 +89,7 @@ export function AddCustomModelDialog({ onAdd, onClose }: AddCustomModelDialogPro
           <div className="flex justify-end gap-2">
             <UiButton
               type="button"
-              variant="muted"
-              size="sm"
+              variant="secondary"
               onClick={onClose}
             >
               {t('common:cancel')}
@@ -98,7 +97,6 @@ export function AddCustomModelDialog({ onAdd, onClose }: AddCustomModelDialogPro
             <UiButton
               type="submit"
               variant="primary"
-              size="sm"
             >
               {t('customModels.add')}
             </UiButton>

@@ -244,7 +244,7 @@ export function PromptOptimizationProfilesPanel({
               {profile.isDefault ? <Star size={14} className={profile.id === selectedProfile.id ? 'text-white/90' : ''} /> : null}
             </UiOptionButton>
           ))}
-          <UiButton type="button" variant="muted" className="w-full" onClick={addProfile}>
+          <UiButton type="button" variant="secondary" className="w-full" onClick={addProfile}>
             <Plus size={15} className="mr-2" />
             新增配置
           </UiButton>
@@ -347,7 +347,7 @@ export function PromptOptimizationProfilesPanel({
             </UiButton>
             <UiButton
               type="button"
-              variant="ghost"
+              variant="secondary"
               onClick={deleteSelected}
               disabled={profiles.length <= 1}
             >

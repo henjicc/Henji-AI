@@ -331,12 +331,12 @@ export default function FileUploader({
                                             <img
                                                 src={file}
                                                 alt={`Video thumbnail ${index + 1}`}
-                                                className="w-full h-full object-cover rounded-lg border-2 border-white"
+                                                className="w-full h-full object-cover rounded-lg border-2 border-on-media"
                                                 draggable={false}
                                             />
                                             {/* 播放图标覆盖层 */}
-                                            <div className="absolute inset-0 flex items-center justify-center bg-black/30 rounded-lg pointer-events-none">
-                                                <Play className="h-6 w-6 text-white opacity-90" />
+                                            <div className="absolute inset-0 flex items-center justify-center bg-media-scrim rounded-lg pointer-events-none">
+                                                <Play className="h-6 w-6 text-on-media opacity-90" />
                                             </div>
                                         </div>
                                     )
@@ -346,23 +346,23 @@ export default function FileUploader({
                                         <img
                                             src={file}
                                             alt={`Uploaded ${index + 1}`}
-                                            className="w-full h-full object-cover rounded-lg border-2 border-white"
+                                            className="w-full h-full object-cover rounded-lg border-2 border-on-media"
                                             draggable={false}
                                         />
                                     )
                                 }
                             })()}
 
-                            <UiIconButton
+                            <UiIconButton size="xs" tone="media" shape="circle"
                                 onClick={(e) => {
                                     e.stopPropagation()  // 阻止事件冒泡
                                     e.preventDefault()    // 防止默认行为
                                     onRemove(index)
                                 }}
-                                className="absolute -top-2 -right-2 h-5 w-5 border-0 bg-red-500 p-1 text-white opacity-0 shadow-thumb-sm transition-opacity duration-180 hover:bg-red-600 group-hover:opacity-100 z-sticky pointer-events-auto"
+                                className="absolute -top-2 -right-2 opacity-0 transition-opacity duration-180 group-hover:opacity-100 z-sticky pointer-events-auto"
                                 type="button"
                             >
-                                <X className="h-3 w-3 text-white" />
+                                <X className="h-3 w-3" />
                             </UiIconButton>
                         </div>
                     </div>
@@ -372,11 +372,11 @@ export default function FileUploader({
 
             {/* Upload Button */}
             {canUploadMore && !hideUploadButton && (
+                // ui-surface-allow 上传占位卡：虚线卡形与缩略图同尺寸，是上传组件的拖放目标表面，不是按钮档位
                 <UiButton
                     type="button"
-                    variant="ghost"
-                    size="sm"
-                    className={`${itemFrameClass} rounded-lg border-2 border-dashed p-0 shadow-thumb ${isDragging ? 'border-accent bg-layer/90' : 'border-border-dark/50 bg-layer/80 hover:border-border-dark/50'} flex-shrink-0`}
+                    variant="secondary"
+                    className={`${itemFrameClass} border-2 border-dashed p-0 shadow-thumb ${isDragging ? 'border-accent bg-layer/90' : 'border-border-dark/50 bg-layer/80 hover:border-border-dark/50'} flex-shrink-0`}
                     onClick={() => !disabled && inputRef.current?.click()}
                 >
                     <Plus className={`h-5 w-5 ${isDragging ? 'text-accent' : 'text-text-muted'}`} />

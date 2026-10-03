@@ -290,8 +290,6 @@ const AgentModelProfilesSection = ({ config, saveConfig }: AgentModelProfilesSec
                 {/* 能力/验证详情过于专业，普通用户选好模型就够了，折叠掉默认不显示 */}
                 <UiButton
                   type="button"
-                  size="sm"
-                  variant="plain"
                   onClick={() => toggleRoleDetails(role)}
                   className="shrink-0 gap-0.5 px-1.5"
                 >
@@ -324,7 +322,7 @@ const AgentModelProfilesSection = ({ config, saveConfig }: AgentModelProfilesSec
                     </div>
                   ) : <div className="text-xs text-danger">尚未进行动态能力验证</div>}
                   {effectiveReference ? (
-                    <UiButton type="button" size="sm" variant="muted" disabled={verifyingKey !== null} onClick={() => void verify(effectiveReference)}>
+                    <UiButton type="button" variant="secondary" disabled={verifyingKey !== null} onClick={() => void verify(effectiveReference)}>
                       <RefreshCw size={14} className={`mr-1.5 ${verifyingKey === key ? 'animate-spin' : ''}`} />
                       {verifyingKey === key ? '验证中' : '验证此模型'}
                     </UiButton>
@@ -340,8 +338,6 @@ const AgentModelProfilesSection = ({ config, saveConfig }: AgentModelProfilesSec
       <div>
         <UiButton
           type="button"
-          size="sm"
-          variant="plain"
           onClick={() => setAdvancedOpen(prev => !prev)}
           className="gap-1 px-1.5"
         >

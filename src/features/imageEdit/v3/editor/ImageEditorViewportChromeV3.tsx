@@ -36,10 +36,7 @@ export function ImageEditorViewportChromeV3({
         data-viewport-control
         className="ui-glass absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-lg p-1"
       >
-        <UiIconButton
-          className="h-8 w-8 text-white hover:text-white"
-          showBorder={false}
-          appearance="hover-only"
+        <UiIconButton size="lg"
           aria-label={t('imageEditor.v3.zoomOut')}
           title={t('imageEditor.v3.zoomOut')}
           disabled={zoom <= 0.05}
@@ -47,13 +44,10 @@ export function ImageEditorViewportChromeV3({
         >
           <Minus className="h-4 w-4" />
         </UiIconButton>
-        <span className="w-14 text-center text-xs tabular-nums text-white">
+        <span className="w-14 text-center text-xs tabular-nums text-text1">
           {Math.round(zoom * 100)}%
         </span>
-        <UiIconButton
-          className="h-8 w-8 text-white hover:text-white"
-          showBorder={false}
-          appearance="hover-only"
+        <UiIconButton size="lg"
           aria-label={t('imageEditor.v3.zoomIn')}
           title={t('imageEditor.v3.zoomIn')}
           disabled={zoom >= 8}

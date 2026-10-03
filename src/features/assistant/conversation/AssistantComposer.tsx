@@ -174,12 +174,11 @@ export function AssistantComposer({
                 <audio src={item.previewSrc} aria-label={item.attachment.displayName} className="h-16 w-full px-1" controls />
               )}
               <div className={`truncate px-1.5 py-1 ${UI_TEXT_META_CLASS}`}>{item.attachment.displayName}</div>
-              <UiIconButton
+              <UiIconButton tone="media"
                 type="button"
                 aria-label={`移除 ${item.attachment.displayName}`}
                 title={`移除 ${item.attachment.displayName}`}
-                appearance="glass"
-                className="absolute right-1 top-1 !h-7 !w-7"
+                className="absolute right-1 top-1"
                 disabled={attachmentsDisabled || importing}
                 onClick={() => onAttachmentsChange(attachments.filter(entry => entry.attachment.mediaRef !== item.attachment.mediaRef))}
               ><X className="h-3.5 w-3.5" /></UiIconButton>
@@ -215,18 +214,15 @@ export function AssistantComposer({
             type="button"
             aria-label={attachmentLabel}
             title={attachmentLabel}
-            appearance="hover-only"
-            className="!h-7 !w-7"
             disabled={attachmentsDisabled || importing || submitting}
             onClick={() => inputRef.current?.click()}
           ><Paperclip className="h-4 w-4" /></UiIconButton> : null}
           {controls}
         </div>
         <div className="ml-auto flex shrink-0 items-center gap-2">
-        {busy && onCancel ? <UiButton size="sm" onClick={onCancel} title={sendLabel ? '停止当前回复，等待中的消息将继续发送' : '停止当前回复'}><Square className="mr-1 h-3 w-3" />停止</UiButton> : null}
+        {busy && onCancel ? <UiButton variant="secondary" onClick={onCancel} title={sendLabel ? '停止当前回复，等待中的消息将继续发送' : '停止当前回复'}><Square className="mr-1 h-3 w-3" />停止</UiButton> : null}
         {(!busy || !onCancel || sendLabel) ? <UiButton
           type="button"
-          size="sm"
           variant="primary"
           disabled={disabled || submitting || importing || unavailable || (!toModelPromptText(value).trim() && attachments.length === 0)}
           onClick={submit}

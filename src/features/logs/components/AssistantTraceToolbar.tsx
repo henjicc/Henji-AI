@@ -1,6 +1,6 @@
 import { RefreshCw, Trash2 } from 'lucide-react'
 
-import { UiButton, UiCheckbox, UiInput, UiSelect } from '@/components/ui'
+import { UiButton, UiCheckbox, UiInput, UiOptionButton, UiSelect, UI_SEGMENTED_TRACK_CLASS } from '@/components/ui'
 import type { AgentTraceCaptureMode, AgentTraceStatus } from '@/core/assistant/trace'
 
 export type AssistantTraceViewMode = 'live' | 'history'
@@ -51,9 +51,9 @@ export function AssistantTraceToolbar({
 }: AssistantTraceToolbarProps): JSX.Element {
   return (
     <div className="flex flex-wrap items-center gap-2 border-b border-border-dark/50 bg-panel/60 px-3 py-2">
-      <div className="flex items-center gap-1 rounded-md border border-border-dark/50 bg-black/10 p-0.5">
-        <UiButton type="button" size="sm" variant={mode === 'live' ? 'primary' : 'ghost'} onClick={() => onModeChange('live')}>实时</UiButton>
-        <UiButton type="button" size="sm" variant={mode === 'history' ? 'primary' : 'ghost'} onClick={() => onModeChange('history')}>历史</UiButton>
+      <div className={UI_SEGMENTED_TRACK_CLASS}>
+        <UiOptionButton type="button" variant="segment" active={mode === 'live'} aria-pressed={mode === 'live'} onClick={() => onModeChange('live')}>实时</UiOptionButton>
+        <UiOptionButton type="button" variant="segment" active={mode === 'history'} aria-pressed={mode === 'history'} onClick={() => onModeChange('history')}>历史</UiOptionButton>
       </div>
       <UiInput value={keyword} onChange={(event) => onKeywordChange(event.target.value)} placeholder="搜索目标、运行、模型或请求标识" className="min-w-[210px] flex-1" />
       <UiSelect value={providerId} onChange={(event) => onProviderChange(event.target.value)} className="w-36">
@@ -85,8 +85,8 @@ export function AssistantTraceToolbar({
         <UiCheckbox checked={captureMode === 'detailed'} onCheckedChange={(checked) => onCaptureModeChange(checked ? 'detailed' : 'summary')} />
         助手详细追踪
       </label>
-      <UiButton type="button" size="sm" variant="ghost" onClick={onRefresh} title="刷新"><RefreshCw className="h-3.5 w-3.5" /></UiButton>
-      <UiButton type="button" size="sm" variant="ghost" onClick={onClear} title="清空助手追踪"><Trash2 className="h-3.5 w-3.5" /></UiButton>
+      <UiButton type="button" variant="secondary" onClick={onRefresh} title="刷新"><RefreshCw className="h-3.5 w-3.5" /></UiButton>
+      <UiButton type="button" variant="secondary" onClick={onClear} title="清空助手追踪"><Trash2 className="h-3.5 w-3.5" /></UiButton>
     </div>
   )
 }

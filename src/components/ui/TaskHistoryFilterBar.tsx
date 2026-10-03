@@ -172,10 +172,10 @@ export function UiTaskHistoryFilterBar({
     <div className={`relative flex items-start ${isAlwaysVisible ? 'justify-center' : 'justify-end'}`}>
       {!isAlwaysVisible && (
         <div ref={triggerRef}>
-          <UiIconButton
+          <UiIconButton size="lg"
             type="button"
-            active={hasActiveFilters}
-            className={`!h-8 !w-8 transition-[transform,opacity] duration-240 ease-out ${
+            on={hasActiveFilters}
+            className={`transition-[transform,opacity] duration-240 ease-out ${
               isExpanded
                 ? 'pointer-events-none opacity-0 [transition-delay:70ms]'
                 : 'opacity-100 [transition-delay:0ms]'
@@ -207,11 +207,9 @@ export function UiTaskHistoryFilterBar({
                 placeholder={t('workspaceFilters.searchPlaceholder')}
                 className="h-8 w-[300px] border-border-dark bg-surface-dark pl-7 pr-7 text-xs"
               />
-              <UiIconButton
+              <UiIconButton size="xs"
                 type="button"
-                showBorder={false}
-                appearance="hover-only"
-                className={`absolute right-0.5 top-1/2 !h-5 !w-5 -translate-y-1/2 hover:!border-transparent hover:!bg-transparent transition-opacity duration-120 ${
+                className={`absolute right-0.5 top-1/2 -translate-y-1/2 transition-opacity duration-120 ${
                   keyword.length > 0 ? 'opacity-100' : 'pointer-events-none opacity-0'
                 }`}
                 onClick={() => {
@@ -273,9 +271,8 @@ export function UiTaskHistoryFilterBar({
             />
 
             {showCloseButton && onClose && (
-              <UiIconButton
+              <UiIconButton size="lg"
                 type="button"
-                className="!h-8 !w-8"
                 onClick={onClose}
                 title={t('workspaceFilters.close')}
               >

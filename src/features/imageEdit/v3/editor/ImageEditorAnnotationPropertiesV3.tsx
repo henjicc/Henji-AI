@@ -223,9 +223,8 @@ export function ImageEditorAnnotationPropertiesV3({
         </UiFormRow>
       ) : null}
       <UiButton
-        variant="plain"
-        size="sm"
-        className="justify-start gap-2 text-danger"
+        variant="danger"
+        className="justify-start gap-2"
         disabled={locked}
         onClick={remove}
       >

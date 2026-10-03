@@ -392,6 +392,7 @@ const cameraStageRenderApi: HenjiCameraStageRenderApi = {
 const audioApi: HenjiAudioApi = {
   extractSamples: (payload) => nativeInvoke('audio:extractSamples', payload),
   extractRangeSamples: (payload) => nativeInvoke('audio:extractSamples', { ...payload, mode: 'range' }),
+  extractWaveformPyramid: (payload) => nativeInvoke('audio:extractSamples', { ...payload, mode: 'pyramid' }),
   cancelExtractSamples: (requestId) => nativeInvoke('audio:cancelExtractSamples', { requestId }),
   listEditProjects: () => nativeInvoke('audioEdit:projects:list'),
   createEditProject: (payload) => nativeInvoke('audioEdit:projects:create', payload),

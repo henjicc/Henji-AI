@@ -73,7 +73,7 @@ export function AudioEditHome({ projects, loading, loadFailed, disabled, onBack,
               </div>
             </div>
             {filtered.length === 0 ? (
-              <UiEmpty title="没有找到匹配的工程" description="试试其他名称，或清除搜索查看全部工程。" action={<UiButton variant="ghost" onClick={() => { setQuery(''); setPage(0) }}>清除搜索</UiButton>} />
+              <UiEmpty title="没有找到匹配的工程" description="试试其他名称，或清除搜索查看全部工程。" action={<UiButton variant="secondary" onClick={() => { setQuery(''); setPage(0) }}>清除搜索</UiButton>} />
             ) : (
               <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
                 {filtered.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE).map((item) => {
@@ -89,9 +89,9 @@ export function AudioEditHome({ projects, loading, loadFailed, disabled, onBack,
             )}
             {pageCount > 1 && (
               <nav aria-label="工程分页" className="mt-6 flex items-center justify-end gap-3">
-                <UiButton variant="ghost" size="sm" disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}>上一页</UiButton>
+                <UiButton variant="secondary" disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}>上一页</UiButton>
                 <span className={UI_TEXT_META_CLASS}>{currentPage + 1} / {pageCount}</span>
-                <UiButton variant="ghost" size="sm" disabled={currentPage + 1 === pageCount} onClick={() => setPage(currentPage + 1)}>下一页</UiButton>
+                <UiButton variant="secondary" disabled={currentPage + 1 === pageCount} onClick={() => setPage(currentPage + 1)}>下一页</UiButton>
               </nav>
             )}
           </section>

@@ -51,10 +51,10 @@ export function RenameDialog({
       contentClassName="p-6"
       footer={
         <>
-          <UiButton onClick={onClose} variant="ghost" size="sm">
+          <UiButton onClick={onClose} variant="secondary">
             {t('common.cancel')}
           </UiButton>
-          <UiButton onClick={handleConfirm} disabled={!name.trim()} variant="primary" size="sm">
+          <UiButton onClick={handleConfirm} disabled={!name.trim()} variant="primary">
             {t('common.confirm')}
           </UiButton>
         </>

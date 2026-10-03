@@ -144,19 +144,19 @@ export default function AgentUserInstructionsSection(): JSX.Element {
       </UiFormRow>
 
       <div className="flex flex-wrap items-center gap-2">
-        <UiButton type="button" size="sm" variant="primary" disabled={busy} onClick={() => void save()}>
+        <UiButton type="button" variant="primary" disabled={busy} onClick={() => void save()}>
           <Save size={14} className="mr-1.5" />
           保存指令
         </UiButton>
-        <UiButton type="button" size="sm" variant="muted" disabled={busy} onClick={() => void load()}>
+        <UiButton type="button" variant="secondary" disabled={busy} onClick={() => void load()}>
           <RefreshCw size={14} className="mr-1.5" />
           重新读取
         </UiButton>
-        <UiButton type="button" size="sm" variant="muted" disabled={busy} onClick={() => void openFile()}>
+        <UiButton type="button" variant="secondary" disabled={busy} onClick={() => void openFile()}>
           <ExternalLink size={14} className="mr-1.5" />
           打开指令文件
         </UiButton>
-        <UiButton type="button" size="sm" variant="muted" disabled={busy} onClick={() => void reset()}>
+        <UiButton type="button" variant="secondary" disabled={busy} onClick={() => void reset()}>
           <RotateCcw size={14} className="mr-1.5" />
           清空指令
         </UiButton>

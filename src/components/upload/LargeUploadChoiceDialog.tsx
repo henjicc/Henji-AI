@@ -55,7 +55,7 @@ export const LargeUploadChoiceDialog: React.FC = () => {
           <p className="px-1 text-xs text-text-faint">{t('largeUpload.copyHint')}</p>
 
           <UiButton
-            variant="muted"
+            variant="secondary"
             className="w-full justify-start !py-2.5"
             onClick={() => settleCurrent('reference', remember)}
           >

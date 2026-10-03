@@ -13,7 +13,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/hooks/useI18n', () => ({ useI18n: () => ({ t: mocks.t }) }))
 vi.mock('@/core/logging', () => ({ createLogger: () => ({ error: vi.fn(), warn: vi.fn() }) }))
 vi.mock('@/stores/settingsStore', () => ({ useSettingsStore: (selector: (state: typeof mocks.settings) => unknown) => selector(mocks.settings) }))
-vi.mock('@/hooks/useAudioWaveform', () => ({ useAudioWaveform: () => ({ waveform: null }) }))
+vi.mock('@/hooks/useWaveformData', () => ({ useWaveformData: () => ({ status: 'idle' }) }))
 vi.mock('./hooks/useAssetSidebarResize', () => ({ useAssetSidebarResize: () => ({ width: 208, startResize: vi.fn(), resizeByKeyboard: vi.fn() }) }))
 vi.mock('@/components/mediaViewer/ImageViewerModal', () => ({ ImageViewerModal: () => null }))
 vi.mock('@/components/mediaViewer/VideoViewerModal', () => ({ VideoViewerModal: () => null }))

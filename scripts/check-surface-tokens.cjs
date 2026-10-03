@@ -9,6 +9,7 @@
  *   B. 同一文件出现 >= 2 处卡片表面 —— 高度疑似"卡片套卡片"
  *   C. 手写弹窗（fixed inset-0 + 黑遮罩，却没走 UiModal/AlertDialog）
  *   D. `.css` 里手写毛玻璃（backdrop-filter），绕开 `.ui-glass`
+ *   E. 按钮调用点用 className 覆盖外观（底色/边框/文字色/圆角/阴影/高度/字号），见 lib/buttonAppearanceOverrides.cjs
  * 单个卡片表面不报（组件自己的根表面是合理的，比如画布节点外壳）。
  *
  * 规则 D 的由来：ESLint 只拦得住 `backdrop-blur-*` 工具类，拦不住 CSS 文件里直接写
@@ -24,6 +25,7 @@
  */
 const fs = require('fs');
 const path = require('path');
+const { findButtonAppearanceOverrides } = require('./lib/buttonAppearanceOverrides.cjs');
 
 const projectRoot = process.cwd();
 const srcRoot = path.join(projectRoot, 'src');
@@ -308,8 +310,17 @@ for (const file of files) {
   });
 }
 
-if (fileReports.length === 0 && dialogBypasses.length === 0 && handRolledGlass.length === 0) {
-  console.log('[check-surface-tokens] 通过：未检测到手写面板表面、卡片套卡片、手写弹窗或手写毛玻璃。');
+/*
+ * 规则 E：按钮外观覆盖。组件目录也要查（Dropdown、AlertDialog 等都在调用按钮），只豁免定义处 primitives.tsx。
+ */
+const buttonOverrides = findButtonAppearanceOverrides({
+  srcRoot,
+  projectRoot,
+  files: collectSourceFiles(srcRoot),
+});
+
+if (fileReports.length === 0 && dialogBypasses.length === 0 && handRolledGlass.length === 0 && buttonOverrides.length === 0) {
+  console.log('[check-surface-tokens] 通过：未检测到手写面板表面、卡片套卡片、手写弹窗、手写毛玻璃或按钮外观覆盖。');
   process.exit(0);
 }
 
@@ -361,7 +372,17 @@ if (handRolledGlass.length > 0) {
   log('');
 }
 
-log(`共 ${totalFindings} 处：表面问题 ${fileReports.length} 个文件，手写弹窗 ${dialogBypasses.length} 处，手写毛玻璃 ${handRolledGlass.length} 处。`);
+if (buttonOverrides.length > 0) {
+  log(`[E] 按钮调用点覆盖外观 ${buttonOverrides.length} 处 → 外观只用 UiButton variant/size、UiIconButton tone/size/on/shape；className 只放布局`);
+  for (const item of buttonOverrides) {
+    const detail = item.violations.map((violation) => `${violation.token}（${violation.kind}）`).join(' ');
+    log(`      ${item.relativePath}:${item.line}  <${item.component}> ${detail}`);
+  }
+  totalFindings += buttonOverrides.length;
+  log('');
+}
+
+log(`共 ${totalFindings} 处：表面问题 ${fileReports.length} 个文件，手写弹窗 ${dialogBypasses.length} 处，手写毛玻璃 ${handRolledGlass.length} 处，按钮外观覆盖 ${buttonOverrides.length} 处。`);
 log('铁律：同一层视觉深度只画一次边框/背景。组件根表面只允许一处；确需例外时加 `ui-surface-allow` 注释豁免。');
 log('详细规则见 skill `henji-ui-surface`。\n');
 

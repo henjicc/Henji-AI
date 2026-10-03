@@ -21,16 +21,17 @@ function ClueGroupRows({ group, project, onSeek, onResolve }: {
   return <details>
     <summary className="cursor-pointer text-sm text-text-muted">{group.title} · {group.items.length} 处</summary>
     <div className="mt-1 flex gap-2">
-      <UiButton variant="plain" size="sm" onClick={() => onResolve(group.items.map((item) => item.id), true)}>{group.items[0].kind === 'long_silence' ? '压缩这一组' : '删除这一组'}</UiButton>
-      <UiButton variant="plain" size="sm" onClick={() => onResolve(group.items.map((item) => item.id), false)}>隐藏这一组</UiButton>
+      <UiButton onClick={() => onResolve(group.items.map((item) => item.id), true)}>{group.items[0].kind === 'long_silence' ? '压缩这一组' : '删除这一组'}</UiButton>
+      <UiButton onClick={() => onResolve(group.items.map((item) => item.id), false)}>隐藏这一组</UiButton>
     </div>
     {group.items.slice(current * pageSize, (current + 1) * pageSize).map((item) => <div key={item.id} className="py-1">
-      <UiButton variant="plain" size="sm" className="!h-auto w-full !justify-start !px-0 text-left" title="定位到这段声音" onClick={() => onSeek(item.startFrame)}>
+      {/* ui-surface-allow 可定位的建议列表行（多行文字），交 2.2 列表行组件 */}
+      <UiButton className="!h-auto w-full !justify-start !px-0 text-left" title="定位到这段声音" onClick={() => onSeek(item.startFrame)}>
         <span className="mr-2 shrink-0 text-xs tabular-nums text-text-muted">{time(item.startFrame)}</span><span className="line-clamp-2 break-all text-xs text-text-dark">{context(item) || item.title}</span>
       </UiButton>
-      <div className="flex gap-1"><UiButton variant="plain" size="sm" onClick={() => onResolve([item.id], true)}>{item.kind === 'long_silence' ? '压缩' : '删除'}</UiButton><UiButton variant="plain" size="sm" onClick={() => onResolve([item.id], false)}>隐藏</UiButton></div>
+      <div className="flex gap-1"><UiButton onClick={() => onResolve([item.id], true)}>{item.kind === 'long_silence' ? '压缩' : '删除'}</UiButton><UiButton onClick={() => onResolve([item.id], false)}>隐藏</UiButton></div>
     </div>)}
-    {pages > 1 && <div className="flex items-center gap-2 text-xs text-text-muted"><UiButton variant="plain" size="sm" disabled={current === 0} onClick={() => setPage(current - 1)}>上一页</UiButton><span>{current + 1} / {pages}</span><UiButton variant="plain" size="sm" disabled={current === pages - 1} onClick={() => setPage(current + 1)}>下一页</UiButton></div>}
+    {pages > 1 && <div className="flex items-center gap-2 text-xs text-text-muted"><UiButton disabled={current === 0} onClick={() => setPage(current - 1)}>上一页</UiButton><span>{current + 1} / {pages}</span><UiButton disabled={current === pages - 1} onClick={() => setPage(current + 1)}>下一页</UiButton></div>}
   </details>
 }
 

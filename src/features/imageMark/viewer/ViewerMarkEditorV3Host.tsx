@@ -26,7 +26,7 @@ function SessionStateShell({
         <span className="text-sm font-medium text-text-dark">
           {t('imageEditor.v3.viewer.title')}
         </span>
-        <UiButton variant="ghost" size="sm" className="ml-auto" onClick={onClose}>
+        <UiButton variant="secondary" className="ml-auto" onClick={onClose}>
           {t('imageEditor.v3.viewer.close')}
         </UiButton>
       </header>
@@ -107,8 +107,7 @@ export function ViewerMarkEditorV3Host(props: ViewerMarkEditorV3HostProps): JSX.
       toolbarActions={(
         <>
           <UiButton
-            variant="ghost"
-            size="sm"
+            variant="secondary"
             disabled={replaceDisabled || Boolean(materialization?.cancelling)}
             title={replaceTitle}
             onClick={() => {
@@ -120,7 +119,6 @@ export function ViewerMarkEditorV3Host(props: ViewerMarkEditorV3HostProps): JSX.
           </UiButton>
           <UiButton
             variant="primary"
-            size="sm"
             disabled={host.busy || persistenceBusy}
             onClick={() => void host.finish()}
           >

@@ -141,7 +141,7 @@ export const AssetCardMenu: React.FC<Props> = ({ asset, anchor, libraries, avail
         ) : (
           <div className="min-w-0 flex-1 truncate font-medium text-text-dark" title={t('assetLibrary.renameAsset')} onDoubleClick={() => setEditingName(true)}>{name}</div>
         )}
-        {!editingName && <UiIconButton appearance="hover-only" showBorder={false} className="!h-7 !w-7 shrink-0" onClick={() => setEditingName(true)} title={t('assetLibrary.renameAsset')}><Pencil className="h-3.5 w-3.5" /></UiIconButton>}
+        {!editingName && <UiIconButton className="shrink-0" onClick={() => setEditingName(true)} title={t('assetLibrary.renameAsset')}><Pencil className="h-3.5 w-3.5" /></UiIconButton>}
       </div>
       <div className={`mb-1.5 ${UI_TEXT_LABEL_CLASS}`}>{t('assetLibrary.tags')}</div>
       <UiInput disabled={pendingAction !== null} className="!h-8 !px-2 text-xs" value={tagDraft} onChange={(event) => setTagDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void addDraftTag() }} placeholder={t('assetLibrary.tagPlaceholder')} />
@@ -151,8 +151,8 @@ export const AssetCardMenu: React.FC<Props> = ({ asset, anchor, libraries, avail
       <div className="max-h-32 overflow-y-auto"><div className="flex flex-wrap gap-1.5">{filteredLibraries.map((library) => <UiChipButton key={library.id} active={libraryIds.includes(library.id)} disabled={pendingAction !== null} className="!h-8 !px-2.5 text-xs" onClick={() => void toggleLibrary(library.id)}>{library.name}</UiChipButton>)}</div></div>
       {actionError ? <UiError size="xs" message={actionError} /> : null}
       <div className="mt-3 flex gap-2">
-        <UiButton disabled={pendingAction !== null} className="flex-1 text-danger hover:bg-danger/35" size="sm" onClick={() => void deleteCurrentAsset()}><Trash2 className="mr-2 h-4 w-4" />{t('assetLibrary.deleteAsset')}</UiButton>
-        <UiButton disabled={pendingAction !== null} className="flex-1" size="sm" onClick={() => { requestClose(); onOpenBatchManagement() }}><CheckSquare2 className="mr-2 h-4 w-4" />{t('assetLibrary.batchManage')}</UiButton>
+        <UiButton variant="danger" disabled={pendingAction !== null} className="flex-1" onClick={() => void deleteCurrentAsset()}><Trash2 className="mr-2 h-4 w-4" />{t('assetLibrary.deleteAsset')}</UiButton>
+        <UiButton variant="secondary" disabled={pendingAction !== null} className="flex-1" onClick={() => { requestClose(); onOpenBatchManagement() }}><CheckSquare2 className="mr-2 h-4 w-4" />{t('assetLibrary.batchManage')}</UiButton>
       </div>
     </UiPanel>, document.body,
   )

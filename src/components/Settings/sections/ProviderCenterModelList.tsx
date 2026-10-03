@@ -80,10 +80,10 @@ const ProviderCenterModelList = ({
           ))}
         </div>
         <div className="flex items-center gap-2">
-          <UiButton type="button" size="sm" variant="plain" onClick={() => void onSetFilteredEnabled(filtered, true)}>
+          <UiButton type="button" onClick={() => void onSetFilteredEnabled(filtered, true)}>
             {t('modelSettings.actions.showAll')}
           </UiButton>
-          <UiButton type="button" size="sm" variant="plain" onClick={() => void onSetFilteredEnabled(filtered, false)}>
+          <UiButton type="button" onClick={() => void onSetFilteredEnabled(filtered, false)}>
             {t('modelSettings.actions.hideAll')}
           </UiButton>
         </div>
@@ -114,21 +114,16 @@ const ProviderCenterModelList = ({
               <div className="flex items-center justify-end gap-1">
                 {model.source === 'llm' ? (
                   <>
-                    <UiIconButton
+                    <UiIconButton size="lg"
                       type="button"
-                      showBorder={false}
-                      appearance="hover-only"
                       aria-label={t('providerCenter.actions.editModel')}
                       title={t('providerCenter.actions.editModel')}
                       onClick={() => onEditModel(model)}
                     >
                       <Pencil size={15} />
                     </UiIconButton>
-                    <UiIconButton
+                    <UiIconButton size="lg" tone="danger"
                       type="button"
-                      showBorder={false}
-                      appearance="hover-only"
-                      hoverVariant="danger"
                       aria-label={t('providerCenter.actions.deleteModel')}
                       title={t('providerCenter.actions.deleteModel')}
                       onClick={() => void onDeleteModel(model)}

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { BrainCircuit, ListTree } from 'lucide-react'
 import { queryLogEvents } from '@/commands/logging'
 import { createLogger } from '@/core/logging'
-import { UiButton } from '@/components/ui'
+import { UiOptionButton, UI_SEGMENTED_TRACK_CLASS } from '@/components/ui'
 import { selectEventsByRequestId, useLogWindowStore } from './logStore'
 import { useLogHistoryQuery } from './useLogHistoryQuery'
 import { matchesKeyword, type DisplayLogEvent } from './eventDisplay'
@@ -129,12 +129,14 @@ export function LogsPanel(): JSX.Element {
   return (
     <div className="flex h-full flex-col overflow-hidden">
       <div className="flex shrink-0 items-center gap-1 border-b border-border-dark/50 bg-panel px-3 py-1.5">
-        <UiButton type="button" size="sm" variant={surface === 'events' ? 'primary' : 'ghost'} onClick={() => setSurface('events')}>
-          <ListTree className="mr-1.5 h-3.5 w-3.5" />事件日志
-        </UiButton>
-        <UiButton type="button" size="sm" variant={surface === 'assistant' ? 'primary' : 'ghost'} onClick={() => setSurface('assistant')}>
-          <BrainCircuit className="mr-1.5 h-3.5 w-3.5" />助手追踪
-        </UiButton>
+        <div className={UI_SEGMENTED_TRACK_CLASS}>
+          <UiOptionButton type="button" variant="segment" active={surface === 'events'} aria-pressed={surface === 'events'} onClick={() => setSurface('events')}>
+            <ListTree className="mr-1.5 h-3.5 w-3.5" />事件日志
+          </UiOptionButton>
+          <UiOptionButton type="button" variant="segment" active={surface === 'assistant'} aria-pressed={surface === 'assistant'} onClick={() => setSurface('assistant')}>
+            <BrainCircuit className="mr-1.5 h-3.5 w-3.5" />助手追踪
+          </UiOptionButton>
+        </div>
       </div>
       {surface === 'assistant' ? (
         <div className="min-h-0 flex-1"><AssistantTracePanel refreshToken={traceRefreshToken} /></div>

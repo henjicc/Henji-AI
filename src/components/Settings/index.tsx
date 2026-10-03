@@ -175,12 +175,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, target }) => {
       >
         <div className={`flex h-14 shrink-0 items-center justify-between border-b px-4 ${UI_GLASS_ADAPTIVE_DIVIDER_CLASS}`}>
           <h2 className={UI_TEXT_TITLE_CLASS}>{t('title')}</h2>
-          <UiIconButton
+          <UiIconButton size="lg"
             onClick={handleClose}
             aria-label={t('actions.close')}
-            showBorder={false}
-            appearance="hover-only"
-            className="!h-9 !w-9 rounded-lg text-text-soft hover:text-white"
           >
             <X className="h-5 w-5" />
           </UiIconButton>

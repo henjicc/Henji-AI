@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useI18n } from '@/hooks/useI18n'
 import { getLogCaptureMode } from '@/commands/logging'
 import { useSettingsStore } from '@/stores/settingsStore'
-import { UiButton, UiCheckbox, UiInput, UiSelect } from '@/components/ui'
+import { UiButton, UiCheckbox, UiInput, UiOptionButton, UiSelect, UI_SEGMENTED_TRACK_CLASS } from '@/components/ui'
 import type { LogLevel } from '../eventDisplay'
 
 export type SourceFilter = 'all' | 'frontend' | 'backend'
@@ -97,23 +97,25 @@ export function LogFilterToolbar({
 
   return (
     <div className="flex flex-wrap items-center gap-2 border-b border-border-dark/50 bg-panel/60 px-3 py-2">
-      <div className="flex items-center gap-1 rounded-md border border-border-dark/50 bg-black/10 p-0.5">
-        <UiButton
+      <div className={UI_SEGMENTED_TRACK_CLASS}>
+        <UiOptionButton
           type="button"
-          size="sm"
-          variant={mode === 'live' ? 'primary' : 'ghost'}
+          variant="segment"
+          active={mode === 'live'}
+          aria-pressed={mode === 'live'}
           onClick={() => onModeChange('live')}
         >
           {t('logsWindow.toolbar.mode.live')}
-        </UiButton>
-        <UiButton
+        </UiOptionButton>
+        <UiOptionButton
           type="button"
-          size="sm"
-          variant={mode === 'history' ? 'primary' : 'ghost'}
+          variant="segment"
+          active={mode === 'history'}
+          aria-pressed={mode === 'history'}
           onClick={() => onModeChange('history')}
         >
           {t('logsWindow.toolbar.mode.history')}
-        </UiButton>
+        </UiOptionButton>
       </div>
 
       <UiSelect
@@ -162,10 +164,10 @@ export function LogFilterToolbar({
 
       {mode === 'live' ? (
         <>
-          <UiButton type="button" size="sm" variant="ghost" onClick={onTogglePause}>
+          <UiButton type="button" onClick={onTogglePause}>
             {paused ? t('logsWindow.toolbar.resume') : t('logsWindow.toolbar.pause')}
           </UiButton>
-          <UiButton type="button" size="sm" variant="ghost" onClick={onClear}>
+          <UiButton type="button" onClick={onClear}>
             {t('logsWindow.toolbar.clear')}
           </UiButton>
         </>
@@ -205,7 +207,7 @@ export function LogFilterToolbar({
           placeholder={t('logsWindow.toolbar.chainLookupPlaceholder')}
           className="w-40"
         />
-        <UiButton type="button" size="sm" variant="ghost" onClick={handleChainLookup}>
+        <UiButton type="button" onClick={handleChainLookup}>
           {t('logsWindow.chain.viewButton')}
         </UiButton>
       </div>

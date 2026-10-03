@@ -136,10 +136,9 @@ export function CanvasVideoPlayer({
 
       {!playing && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-          <UiIconButton
+          <UiIconButton shape="circle" size="xl" tone="media"
             aria-label="播放"
-            appearance="glass"
-            className="nodrag nowheel pointer-events-auto !h-11 !w-11 !rounded-full shadow-panel"
+            className="nodrag nowheel pointer-events-auto"
             onPointerDown={(event) => event.stopPropagation()}
             onClick={(event) => {
               event.stopPropagation();
@@ -171,10 +170,7 @@ export function CanvasVideoPlayer({
             onClick={(event) => event.stopPropagation()}
           />
           <div className="flex h-6 min-w-0 items-center gap-1">
-            <UiIconButton
-              className="!h-6 !w-6 shrink-0 !p-0 !text-white/90 hover:!border-white/10 hover:!bg-white/10 hover:!text-white"
-              showBorder={false}
-              appearance="hover-only"
+            <UiIconButton size="sm" tone="media"
               aria-label={playing ? '暂停' : '播放'}
               onClick={(event) => {
                 event.stopPropagation();
@@ -188,10 +184,7 @@ export function CanvasVideoPlayer({
             </span>
             <span className="min-w-0 flex-1" />
             {!compactControls && hasAudio !== false && (
-              <UiIconButton
-                className="!h-6 !w-6 shrink-0 !p-0 !text-white/90 hover:!border-white/10 hover:!bg-white/10 hover:!text-white"
-                showBorder={false}
-                appearance="hover-only"
+              <UiIconButton size="sm" tone="media"
                 aria-label={muted ? '取消静音' : '静音'}
                 onClick={(event) => {
                   event.stopPropagation();
@@ -204,10 +197,7 @@ export function CanvasVideoPlayer({
                 {muted ? <VolumeX className="h-3.5 w-3.5" /> : <Volume2 className="h-3.5 w-3.5" />}
               </UiIconButton>
             )}
-            <UiIconButton
-              className="!h-6 !w-6 shrink-0 !p-0 !text-white/90 hover:!border-white/10 hover:!bg-white/10 hover:!text-white"
-              showBorder={false}
-              appearance="hover-only"
+            <UiIconButton size="sm" tone="media"
               aria-label="打开大播放器"
               onClick={(event) => {
                 event.stopPropagation();

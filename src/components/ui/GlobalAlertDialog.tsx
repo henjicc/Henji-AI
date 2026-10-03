@@ -59,7 +59,7 @@ export const GlobalAlertDialog: React.FC<GlobalAlertDialogProps> = ({ onAskAssis
       const detail = current.detail
       result.push({
         label: copied ? t('alertDialog.detailCopied') : t('alertDialog.copyDetail'),
-        variant: 'muted',
+        variant: 'secondary',
         onClick: () => { void handleCopyDetail(detail) },
       })
     }
@@ -67,7 +67,7 @@ export const GlobalAlertDialog: React.FC<GlobalAlertDialogProps> = ({ onAskAssis
     if (onAskAssistant && current.type !== 'info') {
       result.push({
         label: '问助手',
-        variant: 'muted',
+        variant: 'secondary',
         onClick: () => {
           const context = { title: current.title, message: current.message, ...current.diagnostic }
           handleClose()

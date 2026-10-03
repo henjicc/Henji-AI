@@ -139,7 +139,7 @@ export const ProjectCardGrid: React.FC<ProjectCardGridProps> = ({
         title={emptyTitle}
         description={emptyDescription}
         action={onCreate ? (
-          <UiButton variant="primary" size="sm" className="gap-2 px-4" onClick={onCreate} disabled={busy}>
+          <UiButton variant="secondary" className="gap-2" onClick={onCreate} disabled={busy}>
             <Plus className="h-4 w-4" />
             {createLabel}
           </UiButton>
@@ -198,9 +198,6 @@ export const ProjectCardGrid: React.FC<ProjectCardGridProps> = ({
             ) : (
               <div className="ui-glass absolute right-4 top-4 flex gap-0.5 rounded-lg p-0.5 opacity-0 transition-opacity group-hover:opacity-100">
                 <UiIconButton
-                  showBorder={false}
-                  appearance="hover-only"
-                  className="h-7 w-7"
                   title={labels.rename}
                   onClick={() => onRename(item)}
                 >
@@ -209,9 +206,6 @@ export const ProjectCardGrid: React.FC<ProjectCardGridProps> = ({
                 {extraActions?.(item).map((action) => (
                   <UiIconButton
                     key={action.id}
-                    showBorder={false}
-                    appearance="hover-only"
-                    className="h-7 w-7"
                     title={action.label}
                     disabled={action.disabled}
                     onClick={() => action.onClick(item)}
@@ -219,11 +213,7 @@ export const ProjectCardGrid: React.FC<ProjectCardGridProps> = ({
                     {action.icon}
                   </UiIconButton>
                 ))}
-                <UiIconButton
-                  showBorder={false}
-                  appearance="hover-only"
-                  hoverVariant="danger"
-                  className="h-7 w-7"
+                <UiIconButton tone="danger"
                   title={labels.delete}
                   onClick={() => onDeleteRequest([item])}
                 >

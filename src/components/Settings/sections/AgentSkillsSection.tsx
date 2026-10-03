@@ -228,10 +228,8 @@ export default function AgentSkillsSection(): JSX.Element {
           aria-label={`启用技能 ${skill.name}`}
         />
         {skill.source === 'user' ? (
-          <UiIconButton
+          <UiIconButton size="lg"
             type="button"
-            showBorder={false}
-            appearance="hover-only"
             disabled={busy}
             aria-label={`删除技能 ${skill.name}`}
             onClick={() => removeSkill(skill)}
@@ -292,15 +290,15 @@ export default function AgentSkillsSection(): JSX.Element {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <UiButton type="button" size="sm" variant="primary" disabled={busy} onClick={() => void pickAndInstall()}>
+          <UiButton type="button" variant="primary" disabled={busy} onClick={() => void pickAndInstall()}>
             <Upload size={14} className="mr-1.5" />
             选择文件安装
           </UiButton>
-          <UiButton type="button" size="sm" variant="muted" disabled={busy} onClick={() => void load()}>
+          <UiButton type="button" variant="secondary" disabled={busy} onClick={() => void load()}>
             <RefreshCw size={14} className="mr-1.5" />
             重新读取
           </UiButton>
-          <UiButton type="button" size="sm" variant="muted" disabled={busy} onClick={() => void openDirectory()}>
+          <UiButton type="button" variant="secondary" disabled={busy} onClick={() => void openDirectory()}>
             <FolderOpen size={14} className="mr-1.5" />
             打开技能目录
           </UiButton>

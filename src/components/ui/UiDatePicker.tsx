@@ -120,10 +120,9 @@ export function UiDatePicker({
     <div ref={rootRef} className={`relative ${className}`}>
       <UiButton
         type="button"
-        variant="muted"
-        size="sm"
+        variant="secondary"
         onClick={() => setIsOpen((prev) => !prev)}
-        className="!h-8 !w-full !justify-between !rounded-md !px-2 !text-xs"
+        className="!w-full !justify-between !px-2"
         title={ariaLabel}
       >
         <span className={`truncate ${selectedIso ? 'text-text-dark' : 'text-text-muted'}`}>
@@ -137,20 +136,14 @@ export function UiDatePicker({
           <div className="mb-2 flex items-center justify-between">
             <span className={UI_TEXT_PANEL_TITLE_CLASS}>{monthLabel}</span>
             <div className="flex items-center gap-1">
-              <UiIconButton
+              <UiIconButton size="sm"
                 type="button"
-                showBorder={false}
-                appearance="hover-only"
-                className="!h-6 !w-6"
                 onClick={() => setViewMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))}
               >
                 <ChevronLeft className="h-3.5 w-3.5" />
               </UiIconButton>
-              <UiIconButton
+              <UiIconButton size="sm"
                 type="button"
-                showBorder={false}
-                appearance="hover-only"
-                className="!h-6 !w-6"
                 onClick={() => setViewMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))}
               >
                 <ChevronRight className="h-3.5 w-3.5" />
@@ -172,17 +165,17 @@ export function UiDatePicker({
               const isSelected = iso === selectedIso
               const isToday = iso === todayIso
               return (
+                // ui-surface-allow 日期格是单选选项（选中/今天两种状态），交 2.2 迁到 UiOptionButton 选项变体
                 <UiButton
                   key={iso}
                   type="button"
-                  variant="ghost"
-                  size="sm"
-                  className={`!h-8 !w-8 !min-h-0 !rounded-md !px-0 !text-sm !font-normal ${
+                  variant="secondary"
+                  className={`!w-8 !min-h-0 !px-0 !font-normal ${
                     isSelected
                       ? `${UI_OPTION_ITEM_ACTIVE_OVERRIDE_CLASS} hover:!brightness-110`
                       : isToday
                         ? '!border-border-dark !bg-layer !text-text-dark'
-                        : '!border-transparent !bg-transparent hover:!bg-layer'
+                        : 'hover:!bg-layer'
                   } ${cell.inCurrentMonth ? 'opacity-100' : 'opacity-45'}`}
                   onClick={() => {
                     onChange(iso)
@@ -198,9 +191,9 @@ export function UiDatePicker({
           <div className="mt-2 flex items-center justify-between border-t border-border-dark pt-2">
             <UiButton
               type="button"
-              variant="ghost"
+              variant="secondary"
               size="sm"
-              className="!h-7 !px-2 text-xs"
+              className="!px-2"
               onClick={() => {
                 onChange('')
                 setIsOpen(false)
@@ -210,9 +203,9 @@ export function UiDatePicker({
             </UiButton>
             <UiButton
               type="button"
-              variant="ghost"
+              variant="secondary"
               size="sm"
-              className="!h-7 !px-2 text-xs"
+              className="!px-2"
               onClick={() => {
                 onChange(todayIso)
                 setViewMonth(startOfMonth(today))

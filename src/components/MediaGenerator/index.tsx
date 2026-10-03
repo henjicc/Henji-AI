@@ -424,11 +424,10 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
               此前是 variant="primary" 再叠 bg-red-600/75——既让"清除"抢走了主动作
               （发送）的视觉权重，也是一处同属性叠类（红底能盖住 primary 的蓝底
               只是因为它在 Tailwind 产物里排得更后）。 */}
-          <UiButton
+          <UiButton size="lg"
             type="button"
-            variant="muted"
+            variant="danger"
             onClick={onOpenClearHistory}
-            className="h-9 text-red-400 hover:border-red-500/40 hover:bg-red-600/25 hover:text-red-300"
           >
             <Trash2 className="w-4 h-4 mr-2" />
             {t('ui:actions.clearHistory')}

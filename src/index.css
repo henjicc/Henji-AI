@@ -220,6 +220,18 @@
   /* 组件级令牌（第三层）：仅供无法使用 Tailwind 类的纯 CSS 文件消费；颜色类已改为上方别名 */
   /* 浮层投影走主题 shade：深色 = 黑 38%（原值），浅色自动变浅 */
   --ui-shadow-panel: 0 14px 34px color-mix(in srgb, var(--shade) 76%, transparent);
+  /*
+   * 实底按钮材质（重要记录 001/003：主按钮“顶部高光 + 内描边 + 投影，按下下沉”）。
+   * 只有 primary / dangerSolid / 图标按钮 accent 消费，见下方 .ui-btn-* 规则。
+   * 高光是压在实底上的白光，与主题无关，取固定白 on-media；内描边与投影走主题 shade，浅色自动变浅。
+   */
+  --ui-material-lift:
+    inset 0 1px 0 rgb(var(--on-media-rgb) / 0.18),
+    inset 0 0 0 1px color-mix(in srgb, var(--shade) 32%, transparent),
+    0 1px 2px color-mix(in srgb, var(--shade) 64%, transparent);
+  --ui-material-sink:
+    inset 0 1px 2px color-mix(in srgb, var(--shade) 72%, transparent),
+    inset 0 0 0 1px color-mix(in srgb, var(--shade) 36%, transparent);
   --ui-radius-lg: 12px;
   --ui-radius-xl: 16px;
   --ui-radius-2xl: 20px;
@@ -553,6 +565,221 @@
   .ui-color-input-spectrum::-moz-color-swatch {
     border: 2px solid transparent;
     border-radius: 9999px;
+  }
+
+  /*
+   * 按钮外观（重要记录 003，设计稿 Button.dc.html / IconButton.dc.html）。
+   * 唯一消费者是 primitives.tsx 的 UiButton / UiIconButton；调用点不得再用 className 改底色、边框、
+   * 文字色、圆角、阴影或高度（check:surface 规则 E 拦截）。五态：静息 / 悬停 / 按下 / 键盘聚焦 / 禁用，
+   * 颜色只走主题令牌，动效 120ms。按钮不画边框：层次靠明暗，主按钮靠材质。
+   *
+   * 放在 components 层：尺寸、圆角、布局仍由 Tailwind 工具类给出。
+   */
+  .ui-btn {
+    border: 0;
+    transition:
+      background-color 120ms ease,
+      color 120ms ease,
+      box-shadow 120ms ease,
+      transform 80ms ease;
+  }
+
+  .ui-btn:focus-visible {
+    box-shadow: 0 0 0 2px rgb(var(--accent-ring-rgb));
+  }
+
+  .ui-btn:disabled {
+    cursor: not-allowed;
+  }
+
+  /* quiet（默认）：静息无底 text2；悬停出 hover 底；按下 selected。玻璃内改加白纱，不盖实心灰。 */
+  .ui-btn-quiet {
+    background-color: transparent;
+    color: rgb(var(--text2-rgb));
+  }
+
+  .ui-btn-quiet:hover:not(:disabled) {
+    background-color: rgb(var(--hover-rgb));
+    color: rgb(var(--text1-rgb));
+  }
+
+  .ui-btn-quiet:active:not(:disabled) {
+    background-color: rgb(var(--selected-rgb));
+    color: rgb(var(--text1-rgb));
+  }
+
+  .ui-glass .ui-btn-quiet:hover:not(:disabled) {
+    background-color: var(--ui-glass-hover);
+  }
+
+  .ui-glass .ui-btn-quiet:active:not(:disabled) {
+    background-color: var(--ui-glass-press);
+  }
+
+  .ui-btn-quiet:disabled,
+  .ui-btn-danger:disabled,
+  .ui-btn-link:disabled {
+    background-color: transparent;
+    color: rgb(var(--text-disabled-rgb));
+  }
+
+  /* 图标按钮 on（开关开启）：selected 底 + 强调文字。 */
+  .ui-btn-on {
+    background-color: rgb(var(--selected-rgb));
+    color: rgb(var(--accent-text-rgb));
+  }
+
+  .ui-btn-on:hover:not(:disabled) {
+    background-color: rgb(var(--control-hover-rgb));
+  }
+
+  .ui-glass .ui-btn-on {
+    background-color: var(--ui-glass-selected);
+  }
+
+  .ui-btn-on:disabled {
+    color: rgb(var(--text-disabled-rgb));
+  }
+
+  /* secondary：无边框填充 control，顶部一道受光边；弹窗与表单中的普通动作。 */
+  .ui-btn-secondary {
+    background-color: rgb(var(--control-rgb));
+    color: rgb(var(--text1-rgb));
+    box-shadow: inset 0 1px 0 var(--edge);
+  }
+
+  .ui-btn-secondary:hover:not(:disabled) {
+    background-color: rgb(var(--control-hover-rgb));
+  }
+
+  .ui-btn-secondary:active:not(:disabled) {
+    background-color: rgb(var(--control-pressed-rgb));
+    box-shadow: inset 0 1px 2px color-mix(in srgb, var(--shade) 50%, transparent);
+    transform: translateY(0.5px);
+  }
+
+  .ui-glass .ui-btn-secondary {
+    background-color: var(--ui-glass-control-tint);
+  }
+
+  .ui-glass .ui-btn-secondary:hover:not(:disabled) {
+    background-color: var(--ui-glass-control-hover);
+  }
+
+  .ui-btn-secondary:focus-visible {
+    box-shadow: 0 0 0 2px rgb(var(--accent-ring-rgb));
+  }
+
+  .ui-btn-secondary:disabled {
+    background-color: rgb(var(--raised-rgb));
+    color: rgb(var(--text-disabled-rgb));
+    box-shadow: none;
+  }
+
+  /* danger：静息与 quiet 相同，悬停才显红；危险动作不抢主动作的视觉权重。 */
+  .ui-btn-danger {
+    background-color: transparent;
+    color: rgb(var(--text2-rgb));
+  }
+
+  .ui-btn-danger:hover:not(:disabled),
+  .ui-btn-danger:active:not(:disabled) {
+    background-color: var(--danger-tint);
+    color: rgb(var(--danger-text-rgb));
+  }
+
+  .ui-btn-danger:active:not(:disabled) {
+    box-shadow: inset 0 1px 2px color-mix(in srgb, var(--shade) 60%, transparent);
+  }
+
+  .ui-btn-danger:focus-visible {
+    color: rgb(var(--danger-text-rgb));
+    box-shadow: 0 0 0 2px var(--danger);
+  }
+
+  /* primary / dangerSolid / 图标 accent：材质实底（上亮下暗渐变 + 高光 + 内描边 + 投影，按下下沉）。 */
+  .ui-btn-primary {
+    background-image: linear-gradient(180deg, rgb(var(--accent-hi-rgb)), rgb(var(--accent-rgb)));
+    color: rgb(var(--on-accent-rgb));
+    box-shadow: var(--ui-material-lift);
+  }
+
+  .ui-btn-primary:hover:not(:disabled) {
+    background-image: linear-gradient(180deg, rgb(var(--accent-hover-hi-rgb)), rgb(var(--accent-hover-rgb)));
+  }
+
+  .ui-btn-primary:active:not(:disabled) {
+    background-image: none;
+    background-color: rgb(var(--accent-pressed-rgb));
+    box-shadow: var(--ui-material-sink);
+    transform: translateY(0.5px);
+  }
+
+  .ui-btn-primary:focus-visible {
+    box-shadow: var(--ui-material-lift), 0 0 0 2px rgb(var(--window-rgb)), 0 0 0 4px rgb(var(--accent-ring-rgb));
+  }
+
+  .ui-btn-danger-solid {
+    background-image: linear-gradient(180deg, rgb(var(--danger-hi-rgb)), var(--danger));
+    color: rgb(var(--on-danger-rgb));
+    box-shadow: var(--ui-material-lift);
+  }
+
+  .ui-btn-danger-solid:hover:not(:disabled) {
+    background-image: linear-gradient(180deg, rgb(var(--danger-hover-hi-rgb)), rgb(var(--danger-hover-rgb)));
+  }
+
+  .ui-btn-danger-solid:active:not(:disabled) {
+    background-image: none;
+    background-color: rgb(var(--danger-pressed-rgb));
+    box-shadow: var(--ui-material-sink);
+    transform: translateY(0.5px);
+  }
+
+  .ui-btn-danger-solid:focus-visible {
+    box-shadow: var(--ui-material-lift), 0 0 0 2px rgb(var(--window-rgb)), 0 0 0 4px var(--danger);
+  }
+
+  .ui-btn-primary:disabled,
+  .ui-btn-danger-solid:disabled {
+    background-image: none;
+    background-color: rgb(var(--control-rgb));
+    color: rgb(var(--text-disabled-rgb));
+    box-shadow: none;
+  }
+
+  /* link：行内跳转/说明链接，强调文字，悬停下划线；不计入动作层级。 */
+  .ui-btn-link {
+    background-color: transparent;
+    color: rgb(var(--accent-text-rgb));
+    text-underline-offset: 3px;
+  }
+
+  .ui-btn-link:hover:not(:disabled) {
+    text-decoration-line: underline;
+  }
+
+  /*
+   * media：压在图片/视频/画布画面上的控件（重要记录 010 媒体叠层固定令牌，不随主题）。
+   * 底是半透明深色，所以不管画面亮暗、深浅主题都能读。
+   */
+  .ui-btn-media {
+    background-color: var(--media-control);
+    color: rgb(var(--on-media-rgb));
+  }
+
+  .ui-btn-media:hover:not(:disabled),
+  .ui-btn-media:active:not(:disabled) {
+    background-color: var(--media-control-hover);
+  }
+
+  .ui-btn-media.ui-btn-media-on {
+    background-color: rgb(var(--accent-rgb));
+    color: rgb(var(--on-accent-rgb));
+  }
+
+  .ui-btn-media:disabled {
+    opacity: 0.5;
   }
 }
 
@@ -1274,36 +1501,6 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
   color: var(--on-media);
 }
 
-.btn {
-  background: none;
-  border: none;
-  color: var(--on-media);
-  cursor: pointer;
-  padding: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 4px;
-  transition: color 180ms;
-}
-
-.btn:hover {
-  background: none;
-  transform: none;
-  color: rgb(var(--on-media-rgb) / 0.6);
-}
-
-/* lucide 是描边图标，这里不能再设 fill，否则会被填成实心块 */
-.btn svg {
-  width: 24px;
-  height: 24px;
-}
-
-.btn-play svg {
-  width: 28px;
-  height: 28px;
-}
-
 .time-display {
   font-size: 14px;
   font-variant-numeric: tabular-nums;
@@ -1435,15 +1632,6 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
   display: flex;
   align-items: center;
   gap: 10px;
-}
-
-.btn-small svg {
-  width: 20px;
-  height: 20px;
-}
-
-.loop-active {
-  color: rgb(var(--accent-rgb));
 }
 
 @media (max-width: 768px) {

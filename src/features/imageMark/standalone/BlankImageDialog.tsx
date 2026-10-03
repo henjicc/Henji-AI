@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { ArrowLeftRight } from 'lucide-react';
 import {
   UI_FIELD_LABEL_CLASS,
-  UI_FIELD_CONTROL_HEIGHT_CLASS,
   UI_TEXT_META_CLASS,
   UiButton,
   UiColorInput,
@@ -69,10 +68,9 @@ export function BlankImageDialog({ isOpen, onClose, onCreate }: BlankImageDialog
       onClose={onClose}
       footer={(
         <>
-          <UiButton variant="ghost" size="sm" onClick={onClose}>取消</UiButton>
+          <UiButton variant="secondary" onClick={onClose}>取消</UiButton>
           <UiButton
             variant="primary"
-            size="sm"
             disabled={Boolean(validationError)}
             onClick={() => onCreate(spec)}
           >
@@ -120,9 +118,8 @@ export function BlankImageDialog({ isOpen, onClose, onCreate }: BlankImageDialog
                 onChange={(event) => setWidth(parseInteger(event.target.value))}
               />
             </label>
-            <UiIconButton
+            <UiIconButton size="lg"
               type="button"
-              className={UI_FIELD_CONTROL_HEIGHT_CLASS}
               aria-label="互换宽度和高度"
               title="互换宽度和高度"
               onClick={() => {

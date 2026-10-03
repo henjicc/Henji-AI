@@ -14,7 +14,7 @@ export function VideoEditTimelineTransport({ instance, onError }: { instance: Vi
   return <>
     {(['step_back', 'play_pause', 'step_forward'] as const).map(id => {
       const command = timelineCommandPresentation(context, id, shortcuts)
-      return <UiButton key={id} variant="plain" size="sm" className="!h-7" aria-pressed={id === 'play_pause' ? instance.playing : undefined} disabled={!command.enabled} title={command.tooltip} onClick={() => { void executeVideoEditCommand(captureVideoEditCommandContext(instance.document.id, 'timeline'), id).catch(onError) }}>{command.title}</UiButton>
+      return <UiButton key={id} size="sm" aria-pressed={id === 'play_pause' ? instance.playing : undefined} disabled={!command.enabled} title={command.tooltip} onClick={() => { void executeVideoEditCommand(captureVideoEditCommandContext(instance.document.id, 'timeline'), id).catch(onError) }}>{command.title}</UiButton>
     })}
     <span className="text-2xs tabular-nums text-text-muted" aria-label="当前时间码">{timelineTimecode(instance.frame, sequence.fps)}</span>
   </>

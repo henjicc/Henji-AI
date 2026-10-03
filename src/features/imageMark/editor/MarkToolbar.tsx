@@ -87,18 +87,13 @@ function ColorPicker({
     <div className="flex items-center gap-1" aria-label={label}>
       <span className="mr-1 text-xs text-text-muted">{label}</span>
       {IMAGE_EDITOR_PRESET_COLORS.map((presetColor, index) => (
-        <UiIconButton
+        <UiIconButton shape="circle"
           key={presetColor}
           type="button"
-          showBorder={false}
-          appearance="hover-only"
           title={withShortcuts ? `${label} ${index + 1}(按 ${index + 1})` : `${label} ${index + 1}`}
           aria-label={`${label} ${presetColor}`}
-          className={`h-7 w-7 rounded-full !p-1 ${
-            value.toLowerCase() === presetColor.toLowerCase()
-              ? 'ring-2 ring-veil-strong'
-              : ''
-          }`}
+          on={value.toLowerCase() === presetColor.toLowerCase()}
+          className="p-1"
           onClick={() => onChange(presetColor)}
         >
           <span
@@ -201,8 +196,6 @@ export function MarkToolbar({
                   <UiButton
                     key={button.op}
                     type="button"
-                    variant="plain"
-                    size="sm"
                     title={button.label}
                     onClick={() => onOrientation(button.op)}
                   >
@@ -218,11 +211,8 @@ export function MarkToolbar({
 
           {/* 历史动作是动作不是选项:走 hover-only 图标,既不与工具组抢视觉权重,
               也让工具组窄下来后能真正居中 */}
-          <UiIconButton
+          <UiIconButton size="lg"
             type="button"
-            showBorder={false}
-            appearance="hover-only"
-            className="h-8 w-8"
             onClick={onUndo}
             disabled={!canUndo}
             title="撤销(Ctrl+Z)"
@@ -230,11 +220,8 @@ export function MarkToolbar({
           >
             <Undo2 className={ICON_CLASS} />
           </UiIconButton>
-          <UiIconButton
+          <UiIconButton size="lg"
             type="button"
-            showBorder={false}
-            appearance="hover-only"
-            className="h-8 w-8"
             onClick={onRedo}
             disabled={!canRedo}
             title="重做(Ctrl+Y)"
@@ -242,12 +229,8 @@ export function MarkToolbar({
           >
             <Redo2 className={ICON_CLASS} />
           </UiIconButton>
-          <UiIconButton
+          <UiIconButton size="lg" tone="danger"
             type="button"
-            showBorder={false}
-            appearance="hover-only"
-            hoverVariant="danger"
-            className="h-8 w-8"
             onClick={onClear}
             disabled={!canClear}
             title="清空全部标记"
@@ -278,8 +261,6 @@ export function MarkToolbar({
             ))}
             <UiButton
               type="button"
-              variant="plain"
-              size="sm"
               onClick={onCropReset}
               disabled={!hasCrop}
             >

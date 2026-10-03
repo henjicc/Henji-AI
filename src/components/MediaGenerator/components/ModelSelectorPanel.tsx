@@ -266,10 +266,8 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
             {searchQuery && (
               <UiIconButton
                 type="button"
-                showBorder={false}
-                appearance="hover-only"
                 onClick={() => setSearchQuery('')}
-                className="absolute right-1.5 top-1/2 h-7 w-7 -translate-y-1/2"
+                className="absolute right-1.5 top-1/2 -translate-y-1/2"
                 title={t('search.clear')}
               >
                 <X className="w-4 h-4" />

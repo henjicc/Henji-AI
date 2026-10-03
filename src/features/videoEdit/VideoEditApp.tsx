@@ -28,24 +28,24 @@ function VideoEditToolbar({ instance, api, run }: { instance: VideoEditInstance;
   const enabled = (id: VideoEditCommandId): boolean => videoEditCommandState(context, id).enabled
   const command = (id: VideoEditCommandId): void => { const current = captureVideoEditCommandContext(projectId, 'timeline'); run(() => executeVideoEditCommand(current, id)) }
   return <div className="flex h-11 shrink-0 items-center gap-1 overflow-x-auto whitespace-nowrap border-b border-border-dark bg-surface-dark px-3">
-    <UiButton variant="plain" onClick={() => run(() => closeVideoEditProject(projectId))}>关闭工程</UiButton>
+    <UiButton onClick={() => run(() => closeVideoEditProject(projectId))}>关闭工程</UiButton>
     <span className="max-w-40 truncate text-sm" data-observation-sensitive>{instance.document.name}</span>
-    <UiButton variant="plain" className="gap-1.5" disabled={!enabled('undo')} onClick={() => command('undo')}><Undo2 size={15} />撤销</UiButton>
-    <UiButton variant="plain" className="gap-1.5" disabled={!enabled('redo')} onClick={() => command('redo')}><Redo2 size={15} />重做</UiButton>
-    <UiButton variant="plain" className="gap-1.5" disabled={!enabled('split')} onClick={() => command('split')}><Scissors size={15} />拆分</UiButton>
-    <UiButton variant="plain" className="gap-1.5" disabled={!enabled('delete')} onClick={() => command('delete')}><Trash2 size={15} />删除</UiButton>
-    <UiButton variant="plain" className="gap-1.5" onClick={() => run(() => appendVideoEditClip(projectId))}><Type size={15} />文字</UiButton>
+    <UiButton className="gap-1.5" disabled={!enabled('undo')} onClick={() => command('undo')}><Undo2 size={15} />撤销</UiButton>
+    <UiButton className="gap-1.5" disabled={!enabled('redo')} onClick={() => command('redo')}><Redo2 size={15} />重做</UiButton>
+    <UiButton className="gap-1.5" disabled={!enabled('split')} onClick={() => command('split')}><Scissors size={15} />拆分</UiButton>
+    <UiButton className="gap-1.5" disabled={!enabled('delete')} onClick={() => command('delete')}><Trash2 size={15} />删除</UiButton>
+    <UiButton className="gap-1.5" onClick={() => run(() => appendVideoEditClip(projectId))}><Type size={15} />文字</UiButton>
     <VideoEditLayoutMenu api={api} /><VideoEditShortcutSettings /><div className="ml-auto" />
     <span className="mr-2 text-2xs tabular-nums text-text-faint">{sequence.width} × {sequence.height} · {Number(sequence.fps.toFixed(3))}fps</span>
     {marked && <span className="mr-2 text-2xs tabular-nums text-text-muted" data-video-edit-export-range>导出范围 {videoEditFrameTimecode(marked.startFrame, sequence.fps)}–{videoEditFrameTimecode(marked.endFrame - 1, sequence.fps)}</span>}
-    {task?.state === 'completed' && task.output && <UiButton variant="plain" disabled={collecting} onClick={() => run(async () => {
+    {task?.state === 'completed' && task.output && <UiButton disabled={collecting} onClick={() => run(async () => {
       setCollecting(true)
       try {
         const asset = await collectVideoEditOutput(task.output!, libraryId ? { libraryId } : {})
         if (activeVideoEditInstance() === instance) { useAssetLibraryStore.getState().setSelectedAsset(asset); openAssetLibrary('floating') }
       } finally { setCollecting(false) }
     })}>{collecting ? '正在收录成片…' : '成片加入资产库'}</UiButton>}
-    {task?.state === 'running' ? <UiButton variant="plain" onClick={() => cancelVideoEditExport(projectId)}>取消导出 {Math.round(task.progress * 100)}%</UiButton> : <UiButton variant="primary" className="gap-2" disabled={!enabled('export')} onClick={() => command('export')}><Download size={16} />导出视频</UiButton>}
+    {task?.state === 'running' ? <UiButton onClick={() => cancelVideoEditExport(projectId)}>取消导出 {Math.round(task.progress * 100)}%</UiButton> : <UiButton variant="primary" className="gap-2" disabled={!enabled('export')} onClick={() => command('export')}><Download size={16} />导出视频</UiButton>}
   </div>
 }
 
@@ -77,8 +77,8 @@ export default function VideoEditApp(): React.ReactElement {
       <div className="min-h-0 flex-1" aria-label="剪辑面板工作区"><VideoEditDock instance={instance} onError={onError} onApiChange={setDockApi} /></div>
     </> : <UiRegion className="m-auto max-w-3xl">
       <UiPageHeader title="剪辑" description="从本地素材开始创作，将可编辑工程保存在自己的磁盘上。" />
-      <div className="my-5 flex gap-3"><UiButton variant="primary" onClick={() => run(createVideoEditProject)}>新建工程</UiButton><UiButton variant="ghost" onClick={() => run(() => openVideoEditProject())}>打开工程</UiButton></div>
-      {listVideoEditInstances().map(item => <UiButton key={item.document.id} variant="plain" onClick={() => focusVideoEdit(item.document.id)}>{item.document.name}</UiButton>)}
+      <div className="my-5 flex gap-3"><UiButton variant="primary" onClick={() => run(createVideoEditProject)}>新建工程</UiButton><UiButton variant="secondary" onClick={() => run(() => openVideoEditProject())}>打开工程</UiButton></div>
+      {listVideoEditInstances().map(item => <UiButton key={item.document.id} onClick={() => focusVideoEdit(item.document.id)}>{item.document.name}</UiButton>)}
     </UiRegion>}
     {(error || instance?.error) && <UiError message={error || instance?.error || ''} />}
   </div>

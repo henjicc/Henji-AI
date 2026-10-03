@@ -168,7 +168,6 @@ const CharacterPoseSection: React.FC<{ object: StageCharacterObject }> = ({ obje
           {POSE_PRESETS.map((preset) => (
             <UiButton
               key={preset.id}
-              size="sm"
               onClick={() => applyPosePreset(object.id, preset)}
             >
               {preset.name}
@@ -185,7 +184,6 @@ const CharacterPoseSection: React.FC<{ object: StageCharacterObject }> = ({ obje
             return (
               <div key={group.id} className="flex flex-col gap-2">
                 <UiButton
-                  size="sm"
                   className="w-full justify-between"
                   onClick={() => setOpenGroupId(open ? null : group.id)}
                 >

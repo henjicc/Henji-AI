@@ -106,31 +106,24 @@ export const LocalRedrawWorkbenchStage = memo(function LocalRedrawWorkbenchStage
           <Eraser className="h-3.5 w-3.5" />
         </UiChipButton>
         <div className="ml-1 flex items-center gap-1 border-l border-veil-subtle pl-1.5">
-          <UiIconButton
+          <UiIconButton size="lg"
             type="button"
-            appearance="hover-only"
-            showBorder={false}
             aria-label={t('node.elementEditGeneration.undoMask')}
             disabled={editor.history.undoStack.length === 0}
             onClick={() => editor.dispatchHistory({ type: 'undo' })}
           >
             <Undo2 className="h-3.5 w-3.5" />
           </UiIconButton>
-          <UiIconButton
+          <UiIconButton size="lg"
             type="button"
-            appearance="hover-only"
-            showBorder={false}
             aria-label={t('node.elementEditGeneration.redoMask')}
             disabled={editor.history.redoStack.length === 0}
             onClick={() => editor.dispatchHistory({ type: 'redo' })}
           >
             <Redo2 className="h-3.5 w-3.5" />
           </UiIconButton>
-          <UiIconButton
+          <UiIconButton size="lg" tone="danger"
             type="button"
-            appearance="hover-only"
-            showBorder={false}
-            hoverVariant="danger"
             aria-label={t('node.elementEditGeneration.clearMask')}
             disabled={!painted}
             onClick={editor.clearDocument}

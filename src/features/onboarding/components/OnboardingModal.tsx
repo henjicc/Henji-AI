@@ -200,8 +200,6 @@ function ApiKeyStep({
         <p className={`leading-5 ${UI_TEXT_META_CLASS}`}>{t('apiKey.testNote')}</p>
         {provider ? (
           <UiButton
-            variant="plain"
-            size="sm"
             className="shrink-0"
             onClick={() => void openExternal(provider.websiteUrl)}
           >
@@ -373,26 +371,26 @@ export function OnboardingModal(): JSX.Element {
   const footer = (
     <div className="flex w-full items-center justify-between gap-4">
       <div className="flex items-center gap-1">
-        <UiButton variant="plain" size="sm" onClick={() => onboardingManager.skip()}>
+        <UiButton onClick={() => onboardingManager.skip()}>
           {t('actions.skipAll')}
         </UiButton>
-        <UiButton variant="plain" size="sm" onClick={() => onboardingManager.defer()}>
+        <UiButton onClick={() => onboardingManager.defer()}>
           {t('actions.later')}
         </UiButton>
       </div>
       <div className="flex items-center gap-2">
         {stepIndex > 0 ? (
-          <UiButton variant="muted" onClick={() => onboardingManager.back()}>
+          <UiButton variant="secondary" onClick={() => onboardingManager.back()}>
             {t('actions.back')}
           </UiButton>
         ) : null}
         {state.activeStepId === 'api-key' ? (
-          <UiButton variant="plain" onClick={() => onboardingManager.next()}>
+          <UiButton onClick={() => onboardingManager.next()}>
             {t('actions.skipStep')}
           </UiButton>
         ) : null}
         {state.activeStepId === 'first-task' ? (
-          <UiButton variant="muted" onClick={() => onboardingManager.complete()}>
+          <UiButton variant="secondary" onClick={() => onboardingManager.complete()}>
             {t('actions.createLater')}
           </UiButton>
         ) : null}

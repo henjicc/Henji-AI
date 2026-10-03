@@ -247,11 +247,10 @@ export function NodeHeader({
     }
 
     return (
+      // ui-surface-allow 节点标题文字（拖动节点、双击改名）借用按钮语义，外观是标题排版不是按钮档位；交 3.6 节点外观
       <UiButton
         ref={setTitleElement}
         type="button"
-        variant="ghost"
-        size="sm"
         className={joinClasses(
           '!h-auto !min-h-0 !rounded-none !border-0 !bg-transparent !px-0 !py-0 hover:!bg-transparent',
           '!justify-start overflow-hidden whitespace-nowrap cursor-grab select-none text-left active:cursor-grabbing',

@@ -440,7 +440,7 @@ export const VoiceSelectorPanel: React.FC<VoiceSelectorPanelProps> = ({
             aria-label="搜索音色"
             className={`${UI_FIELD_CONTROL_HEIGHT_SM_CLASS} min-w-0 flex-1`}
           />}
-          {remoteModelId && <UiButton type="button" variant="ghost" size="field-sm" disabled={remoteStatus === 'loading'} onClick={() => void loadRemoteVoices(true)}>
+          {remoteModelId && <UiButton type="button" variant="secondary" size="lg" disabled={remoteStatus === 'loading'} onClick={() => void loadRemoteVoices(true)}>
             刷新音色
           </UiButton>}
         </div>
@@ -451,7 +451,7 @@ export const VoiceSelectorPanel: React.FC<VoiceSelectorPanelProps> = ({
             <Dropdown ariaLabel="音色年龄" value={selectedAge} options={ageFilterOptions} onSelect={setSelectedAge} disabled={ageFilterOptions.length < 2} minWidthStrategy="none" panelWidthStrategy="options" />
             <Dropdown ariaLabel="音色语言" value={selectedLanguage} options={languageFilterOptions} onSelect={setSelectedLanguage} disabled={languageFilterOptions.length < 2} minWidthStrategy="none" panelWidthStrategy="options" />
           </div>
-          {hasFilters && <UiButton type="button" variant="plain" size="field-sm" onClick={() => {
+          {hasFilters && <UiButton type="button" size="lg" onClick={() => {
             setSelectedSource('all'); setSelectedGender('all'); setSelectedAge('all'); setSelectedLanguage('all')
           }}>清除筛选</UiButton>}
         </div>
@@ -500,11 +500,11 @@ export const VoiceSelectorPanel: React.FC<VoiceSelectorPanelProps> = ({
                   {canDelete && (
                     <UiButton
                       type="button"
-                      variant="ghost"
+                      variant="secondary"
                       size="sm"
                       disabled={deletingVoiceId === voice.id}
                       title="仅从本地列表移除，不删除供应商音色或取消计费"
-                      className="absolute right-1 top-1 !h-6 !px-2 text-2xs"
+                      className="absolute right-1 top-1 !px-2"
                       onClick={(event) => {
                         event.preventDefault()
                         event.stopPropagation()
@@ -515,11 +515,11 @@ export const VoiceSelectorPanel: React.FC<VoiceSelectorPanelProps> = ({
                     </UiButton>
                   )}
                   {record && <div className="flex flex-wrap gap-1">
-                    {record.previewPath && !training && <UiButton type="button" variant="ghost" size="sm" onClick={() => setPreviewVoiceId(previewVoiceId === voice.id ? null : voice.id)}>试听</UiButton>}
-                    {record.taskId && <UiButton type="button" variant="ghost" size="sm" disabled={refreshingVoiceId !== null} onClick={() => void refreshVoice(record)}>
+                    {record.previewPath && !training && <UiButton type="button" variant="secondary" onClick={() => setPreviewVoiceId(previewVoiceId === voice.id ? null : voice.id)}>试听</UiButton>}
+                    {record.taskId && <UiButton type="button" variant="secondary" disabled={refreshingVoiceId !== null} onClick={() => void refreshVoice(record)}>
                       {refreshingVoiceId === voice.id ? '正在查询…' : training ? '查看训练结果' : '刷新状态'}
                     </UiButton>}
-                    {refreshingVoiceId === voice.id && <UiButton type="button" variant="ghost" size="sm" onClick={() => refreshController.current?.abort()}>停止等待</UiButton>}
+                    {refreshingVoiceId === voice.id && <UiButton type="button" variant="secondary" onClick={() => refreshController.current?.abort()}>停止等待</UiButton>}
                   </div>}
                 </div>
               )
@@ -547,12 +547,12 @@ export const VoiceSelectorPanel: React.FC<VoiceSelectorPanelProps> = ({
                 placeholder="输入列表中没有的音色 ID"
                 className={`${UI_FIELD_CONTROL_HEIGHT_SM_CLASS} min-w-0 flex-1`}
               />
-              <UiButton type="button" variant="primary" size="field-sm" disabled={!customId.trim()} onClick={() => onChange(customId.trim())}>
+              <UiButton type="button" variant="primary" size="lg" disabled={!customId.trim()} onClick={() => onChange(customId.trim())}>
                 使用 ID
               </UiButton>
             </div>
           ) : (
-            <UiButton type="button" variant="ghost" size="sm" onClick={() => { setCustomId(value); setCustomIdOpen(true) }}>
+            <UiButton type="button" variant="secondary" onClick={() => { setCustomId(value); setCustomIdOpen(true) }}>
               使用其他音色 ID
             </UiButton>
           )}

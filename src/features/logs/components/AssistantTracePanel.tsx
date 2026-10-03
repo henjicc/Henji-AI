@@ -251,7 +251,7 @@ export function AssistantTracePanel({ refreshToken }: AssistantTracePanelProps):
         onClose={() => setClearConfirmOpen(false)}
         title="清空助手追踪"
         size="compact"
-        footer={<><UiButton type="button" variant="ghost" onClick={() => setClearConfirmOpen(false)}>取消</UiButton><UiButton type="button" variant="primary" onClick={() => void handleClear()}>确认清空</UiButton></>}
+        footer={<><UiButton type="button" variant="secondary" onClick={() => setClearConfirmOpen(false)}>取消</UiButton><UiButton type="button" variant="dangerSolid" onClick={() => void handleClear()}>确认清空</UiButton></>}
       >
         <div className="text-sm text-text-muted">
           {mode === 'history' ? `将删除 ${selectedDate} 的助手追踪记录。` : '将删除当前保存的全部助手追踪记录。'}此操作不会影响助手对话和普通日志。

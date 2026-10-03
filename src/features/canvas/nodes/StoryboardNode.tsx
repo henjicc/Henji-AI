@@ -16,7 +16,6 @@ import { areMediaOutputListsEqual, collectInputMediaByKind } from '@/features/ca
 import {
   NODE_CONTROL_CHIP_CLASS,
   NODE_CONTROL_ICON_CLASS,
-  NODE_CONTROL_PRIMARY_BUTTON_CLASS,
   NODE_IDLE_BORDER_CLASS,
   NODE_PORT_NODE_CLASS,
   NODE_PORT_VISIBLE_CLASS,
@@ -368,9 +367,9 @@ export const StoryboardNode = memo(({ id, data, selected, width, height }: Story
         </div>
 
         <UiButton
+          variant="secondary"
           size="sm"
-          variant="primary"
-          className={`nodrag ${NODE_CONTROL_PRIMARY_BUTTON_CLASS}`}
+          className="nodrag"
           onClick={(event) => {
             event.stopPropagation();
             void handleExport();

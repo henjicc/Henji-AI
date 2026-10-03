@@ -9,35 +9,55 @@ import type {
 
 import type { ScopedTextHistoryBinding } from './useScopedTextHistory'
 import {
-  UI_COLOR_ACCENT_FILL_TEXT_CLASS,
-  UI_FIELD_CONTROL_HEIGHT_CLASS,
-  UI_FIELD_CONTROL_HEIGHT_SM_CLASS,
-  UI_FIELD_SURFACE_CLASS,
-  UI_GLASS_ADAPTIVE_CONTROL_CLASS,
+  UI_CONTROL_HEIGHT_CLASS,
   UI_INSET_SURFACE_CLASS,
   UI_LIGHTING_RANGE_CLASS,
   UI_PANEL_SURFACE_CLASS,
+  UI_RADIUS_CLASS,
 } from './styleTokens'
 
-export type ButtonVariant = 'primary' | 'muted' | 'ghost' | 'plain' | 'glass'
+/**
+ * 按钮档位（重要记录 003 / 010）。视觉重量 = 动作的重要性：
+ * - `primary`：材质主按钮，**一个表面最多一个**；
+ * - `secondary`：无边框填充，弹窗与表单里的普通动作；
+ * - `quiet`（默认）：静息无底、悬停出底，工具栏与行内动作；
+ * - `danger`：静息同 quiet、悬停显红，删除/清空等破坏性动作；
+ * - `dangerSolid`：只用于确认弹窗里的破坏性确认；
+ * - `link`：行内跳转/说明链接（强调文字、悬停下划线、行内高度），不计入动作层级；
+ * - `media`：压在图片/视频/画布画面上的文字按钮（媒体叠层固定令牌，不随主题）。
+ */
+export type ButtonVariant = 'primary' | 'secondary' | 'quiet' | 'danger' | 'dangerSolid' | 'link' | 'media'
 
-export type ButtonSize = 'sm' | 'md' | 'field' | 'field-sm'
+/** 控件高度 sm 28 / md 32（默认）/ lg 36（重要记录 004）。`link` 跟随行内文字，不受尺寸影响。 */
+export type ButtonSize = 'sm' | 'md' | 'lg'
 
+/**
+ * 外观只由 `variant` / `size` 决定。`className` 只用于布局（宽度、弹性、对齐、定位、间距、显隐），
+ * 不得改底色、边框、文字色、圆角、阴影、高度或字号——check:surface 规则 E 会拦截。
+ */
 export interface UiButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant
   size?: ButtonSize
 }
 
+/** 图标按钮尺寸：xs 20 / sm 24 / md 28（默认）/ lg 32 / xl 40（仅全屏查看器、画面中央播放键等大目标）。 */
+export type IconButtonSize = 'xs' | 'sm' | 'md' | 'lg' | 'xl'
+
+/**
+ * - `default`：静默，静息无底、悬停出底（工具栏、行内）；
+ * - `media`：压在图片/视频/画布画面上（半透明深底 + 白色图标，不随主题）；
+ * - `accent`：圆形材质主动作（如生成），一个表面最多一个；
+ * - `danger`：静息静默、悬停显红（删除、移除）。
+ */
+export type IconButtonTone = 'default' | 'media' | 'accent' | 'danger'
+
 export interface UiIconButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-  active?: boolean
-  showBorder?: boolean
-  /**
-   * `hover-only`：静息无框无底，悬浮时出现表面反馈。
-   * `color-only`：始终无框无底，悬浮/按下时只压暗图标，适合数字步进箭头。
-   * `glass`：压在图片/视频/画布上时用，材质与交互态全部来自 `.ui-glass`。
-   */
-  appearance?: 'default' | 'hover-only' | 'color-only' | 'glass'
-  hoverVariant?: 'default' | 'danger'
+  /** 开关开启（选中底 + 强调色图标），同时写出 `aria-pressed`。只表达“功能是否开启”，不是动作层级。 */
+  on?: boolean
+  tone?: IconButtonTone
+  size?: IconButtonSize
+  /** 圆形外框；`tone="accent"` 恒为圆形。 */
+  shape?: 'square' | 'circle'
 }
 
 export interface UiChipButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -124,40 +144,69 @@ export function resolveTextHistoryValue(value: string | number | readonly string
   return typeof value === 'string' || typeof value === 'number' ? String(value) : ''
 }
 
-export function resolveButtonVariant(variant: ButtonVariant): string {
-  if (variant === 'primary') {
-    return `border border-transparent ${UI_COLOR_ACCENT_FILL_TEXT_CLASS} text-white hover:brightness-110`
-  }
-
-  if (variant === 'glass') {
-    return 'ui-glass ui-glass-interactive text-white'
-  }
-
-  if (variant === 'plain') {
-    return 'border border-transparent text-text-muted hover:bg-layer hover:text-text-dark'
-  }
-
-  if (variant === 'ghost') {
-    return `${UI_GLASS_ADAPTIVE_CONTROL_CLASS} border border-border-dark bg-surface-dark text-text-dark hover:bg-layer`
-  }
-
-  return `${UI_GLASS_ADAPTIVE_CONTROL_CLASS} ${UI_FIELD_SURFACE_CLASS} border border-border-dark text-text-dark hover:bg-layer`
+/** 各档的皮肤类（定义在 index.css `.ui-btn-*`，颜色全部走主题令牌）。 */
+export const UI_BUTTON_VARIANT_CLASS: Record<ButtonVariant, string> = {
+  primary: 'ui-btn-primary',
+  secondary: 'ui-btn-secondary',
+  quiet: 'ui-btn-quiet',
+  danger: 'ui-btn-danger',
+  dangerSolid: 'ui-btn-danger-solid',
+  link: 'ui-btn-link',
+  media: 'ui-btn-media',
 }
 
-export function resolveButtonSize(size: ButtonSize): string {
-  if (size === 'sm') {
-    return 'h-8 px-3 text-xs'
-  }
+/** 高度 / 字号 / 圆角 / 间距。静默档（quiet、danger）左右内边距少 2px，与设计稿一致。 */
+const UI_BUTTON_SIZE_CLASS: Record<ButtonSize, { box: string; padding: string; quietPadding: string }> = {
+  sm: { box: `${UI_CONTROL_HEIGHT_CLASS.sm} gap-1.5 text-xs ${UI_RADIUS_CLASS.control}`, padding: 'px-2.5', quietPadding: 'px-2' },
+  md: { box: `${UI_CONTROL_HEIGHT_CLASS.md} gap-1.5 text-13 ${UI_RADIUS_CLASS.control}`, padding: 'px-3', quietPadding: 'px-2.5' },
+  lg: { box: `${UI_CONTROL_HEIGHT_CLASS.lg} gap-2 text-sm ${UI_RADIUS_CLASS.field}`, padding: 'px-4', quietPadding: 'px-3.5' },
+}
 
-  if (size === 'field') {
-    return `${UI_FIELD_CONTROL_HEIGHT_CLASS} px-3.5 text-13 leading-none`
-  }
+export function resolveButtonVariant(variant: ButtonVariant): string {
+  return UI_BUTTON_VARIANT_CLASS[variant]
+}
 
-  if (size === 'field-sm') {
-    return `${UI_FIELD_CONTROL_HEIGHT_SM_CLASS} px-3.5 text-13 leading-none`
+export function resolveButtonSize(size: ButtonSize, variant: ButtonVariant = 'quiet'): string {
+  if (variant === 'link') {
+    // 行内链接：跟随所在文字的字号与行高，只保留一点圆角给键盘焦点环。
+    return 'gap-1 rounded-sm'
   }
+  const entry = UI_BUTTON_SIZE_CLASS[size]
+  const padding = variant === 'quiet' || variant === 'danger' ? entry.quietPadding : entry.padding
+  return `${entry.box} ${padding}`
+}
 
-  return 'h-10 px-3.5 text-13'
+const UI_ICON_BUTTON_SIZE_CLASS: Record<IconButtonSize, { box: string; radius: string }> = {
+  xs: { box: 'h-5 w-5', radius: 'rounded' },
+  sm: { box: 'h-6 w-6', radius: UI_RADIUS_CLASS.control },
+  md: { box: `${UI_CONTROL_HEIGHT_CLASS.sm} w-7`, radius: UI_RADIUS_CLASS.control },
+  lg: { box: `${UI_CONTROL_HEIGHT_CLASS.md} w-8`, radius: UI_RADIUS_CLASS.field },
+  xl: { box: 'h-10 w-10', radius: UI_RADIUS_CLASS.field },
+}
+
+export function resolveIconButtonClass({
+  tone,
+  size,
+  shape,
+  on,
+}: {
+  tone: IconButtonTone
+  size: IconButtonSize
+  shape: 'square' | 'circle'
+  on: boolean
+}): string {
+  const entry = UI_ICON_BUTTON_SIZE_CLASS[size]
+  const radius = tone === 'accent' || shape === 'circle' ? 'rounded-full' : entry.radius
+  const skin = tone === 'accent'
+    ? UI_BUTTON_VARIANT_CLASS.primary
+    : tone === 'media'
+      ? `${UI_BUTTON_VARIANT_CLASS.media}${on ? ' ui-btn-media-on' : ''}`
+      : on
+        ? 'ui-btn-on'
+        : tone === 'danger'
+          ? UI_BUTTON_VARIANT_CLASS.danger
+          : UI_BUTTON_VARIANT_CLASS.quiet
+  return `${entry.box} ${radius} ${skin}`
 }
 
 export function resolveUiPanelSurface(variant: UiPanelVariant): string {

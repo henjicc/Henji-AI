@@ -45,16 +45,23 @@ import {
   UI_RANGE_TRACK_TONE_CLASS,
   resolveButtonSize,
   resolveButtonVariant,
+  resolveIconButtonClass,
   resolveTextHistoryValue,
   resolveUiPanelSurface,
 } from './primitiveInternals';
 export type { UiRangeTrackTone } from './primitiveInternals';
 
+/**
+ * 文字按钮。默认 `quiet`（静息无底）；档位与尺寸见 `ButtonVariant` / `ButtonSize`。
+ * 外观只由 variant/size 决定，className 只放布局类（check:surface 规则 E）。
+ */
 export const UiButton = forwardRef<HTMLButtonElement, UiButtonProps>(
-  ({ className = '', variant = 'muted', size = 'md', ...props }, ref) => (
+  ({ className = '', variant = 'quiet', size = 'md', ...props }, ref) => (
     <button
       ref={ref}
-      className={`inline-flex items-center justify-center rounded-lg font-medium transition-colors ${UI_BUTTON_RESET_CLASS} ${UI_FIELD_DISABLED_CLASS} ${resolveButtonVariant(variant)} ${resolveButtonSize(size)} ${className}`}
+      data-variant={variant}
+      data-size={size}
+      className={`ui-btn inline-flex select-none items-center justify-center font-medium ${resolveButtonVariant(variant)} ${resolveButtonSize(size, variant)} ${className}`}
       {...props}
     />
   )
@@ -78,49 +85,31 @@ export const UiNavButton = forwardRef<HTMLButtonElement, UiNavButtonProps>(
 
 UiNavButton.displayName = 'UiNavButton';
 
-export function UiIconButton({
-  className = '',
-  active = false,
-  showBorder = true,
-  appearance = 'default',
-  hoverVariant = 'default',
-  ...props
-}: UiIconButtonProps) {
-  const hoverOnly = appearance === 'hover-only';
-  const colorOnly = appearance === 'color-only';
-  // hover-only 的语义就是静息态无框无底；不能再让遗漏 showBorder={false}
-  // 的调用点静默退回成有背景的默认按钮。
-  const bordered = hoverOnly || colorOnly ? false : showBorder;
-  const adaptiveSurfaceClass = !active && appearance === 'default' ? UI_GLASS_ADAPTIVE_CONTROL_CLASS : '';
-  const stateClass = appearance === 'glass'
-    // 玻璃档没有走 UI_FIELD_SURFACE_CLASS，禁用态要自己补，否则查看器的上/下一张
-    // 到头时按钮看起来仍可点
-    ? `ui-glass ui-glass-interactive text-white ${UI_FIELD_DISABLED_CLASS}${active ? ' !text-brand-300' : ''}`
-    : colorOnly
-    ? 'border-transparent text-text-soft hover:text-text-muted active:text-text-faint'
-    : active
-    ? (bordered
-      ? UI_MULTISELECT_ITEM_ACTIVE_CLASS
-      : `border-transparent ${UI_NAV_ITEM_ACTIVE_CLASS}`)
-    : (bordered
-      ? hoverVariant === 'danger'
-        ? `${UI_FIELD_SURFACE_CLASS} text-text-muted hover:border-red-500/40 hover:bg-red-600/35`
-        : `${UI_FIELD_SURFACE_CLASS} text-text-muted hover:bg-layer`
-      : hoverOnly
-        ? hoverVariant === 'danger'
-          ? 'border-transparent text-text-muted hover:border-red-500/40 hover:bg-red-600/35'
-          : 'border-transparent text-text-muted hover:border-border-dark hover:bg-surface-dark'
-        : hoverVariant === 'danger'
-          ? 'border-border-dark bg-surface-dark text-text-muted hover:border-red-500/40 hover:bg-red-600/35'
-          : 'border-border-dark bg-surface-dark text-text-muted');
-
-  return (
+/**
+ * 图标按钮。默认静默（静息无底、悬停出底），尺寸默认 md 28；`on` 表示开关开启，
+ * `tone` 见 `IconButtonTone`。名称放 `title`/`aria-label`。外观不得在 className 覆盖（check:surface 规则 E）。
+ */
+export const UiIconButton = forwardRef<HTMLButtonElement, UiIconButtonProps>(
+  ({
+    className = '',
+    on,
+    tone = 'default',
+    size = 'md',
+    shape = 'square',
+    ...props
+  }, ref) => (
     <button
-      className={`inline-flex h-10 w-10 items-center justify-center rounded-lg border transition-colors ${UI_BUTTON_RESET_CLASS} ${adaptiveSurfaceClass} ${stateClass} ${className}`}
+      ref={ref}
       {...props}
+      data-tone={tone}
+      data-size={size}
+      aria-pressed={props['aria-pressed'] ?? on}
+      className={`ui-btn inline-flex shrink-0 select-none items-center justify-center ${resolveIconButtonClass({ tone, size, shape, on: on === true })} ${className}`}
     />
-  );
-}
+  )
+);
+
+UiIconButton.displayName = 'UiIconButton';
 
 export const UiChipButton = forwardRef<HTMLButtonElement, UiChipButtonProps>(
   ({

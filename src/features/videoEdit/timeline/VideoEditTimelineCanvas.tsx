@@ -7,8 +7,8 @@ import { videoEditDuration, videoEditClipMedia, type VideoEditSequence } from '@
 import { videoEditFps, videoEditSourceSeconds } from '@/core/videoEdit/time'
 import { videoEditSyncOffsets } from '@/core/videoEdit/linkSync'
 import { videoEditPickRelations } from '@/core/videoEdit/timelineSelection'
-import Waveform from '@/components/Waveform'
-import { useVideoEditWaveformRanges, type VideoEditWaveformRequest } from '../panels/useVideoEditWaveformRanges'
+import type { WaveformSourceRef } from '@/hooks/useWaveformData'
+import { VideoEditClipWaveform } from './VideoEditClipWaveform'
 import { videoEditAudioFormatLabel, videoEditClipAudioFormat } from '@/core/videoEdit/audioChannels'
 import { acceptsVideoEditDrop, dropVideoEditInput, readVideoEditDrop, type VideoEditDropInput } from '../application/videoEditDrop'
 import { listVideoEditInstances, requireVideoEditInstance, setVideoEditTimelineView, setVideoEditView, focusVideoEditPanel, type VideoEditInstance } from '../application/videoEditService'
@@ -47,19 +47,19 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
   const visibleClips = timelineVisibleClips(displayed.clips, rows, view, pixels)
   // Out-of-sync offsets follow the drag preview so an Alt move shows its drift before release.
   const syncOffsets = videoEditSyncOffsets(displayed)
-  const waveRanges = visibleClips.flatMap((clip): Array<VideoEditWaveformRequest & { from: number; to: number }> => {
+  // Waveforms slice each source's whole multi-resolution peaks (task 2.3): scrolling and zooming only redraw the visible part.
+  const waveRanges = visibleClips.flatMap((clip): Array<{ clipId: string; from: number; to: number; startSeconds: number; endSeconds: number; sources: WaveformSourceRef[] }> => {
     const media = videoEditClipMedia(instance.document, clip)
     if (!media || !(clip.kind === 'audio' || clip.kind === 'video' && clip.sourceComponent !== 'video' && media.hasAudio === true)) return []
     const from = Math.max(clip.start, Math.floor(Math.max(0, view.left) / pixels)); const to = Math.min(clip.start + clip.duration, Math.ceil((view.left + view.width - TIMELINE_HEADER_WIDTH) / pixels))
     if (to <= from) return []
-    const startUs = Math.max(0, Math.round((videoEditSourceSeconds(clip) + (from - clip.start) / fps) * 1e6)); const endUs = Math.min(Math.round(media.durationSeconds * 1e6), Math.round((videoEditSourceSeconds(clip) + (to - clip.start) / fps) * 1e6))
-    if (endUs <= startUs) return []
-    const request = { source: media.path, ...(media.sourceRevision ? { sourceRevision: media.sourceRevision } : {}), startUs, endUs, bucketCount: Math.max(16, Math.min(4096, Math.ceil((to - from) * pixels / 2))) }
+    const startSeconds = Math.max(0, videoEditSourceSeconds(clip) + (from - clip.start) / fps); const endSeconds = Math.min(media.durationSeconds, videoEditSourceSeconds(clip) + (to - clip.start) / fps)
+    if (endSeconds <= startSeconds) return []
+    const source = { source: media.path, ...(media.sourceRevision ? { sourceRevision: media.sourceRevision } : {}) }
     // A mapped clip (task 2.6) draws one lane per clip channel from the source channel it reads.
-    if (clip.audioMapping) return clip.audioMapping.sources.map((source, index) => ({ key: `${clip.id}:${index}`, from, to, request: { ...request, channels: 1 as const, audioStream: source.stream, audioChannel: source.channel } }))
-    return [{ key: clip.id, from, to, request: { ...request, channels: 2 as const } }]
+    const sources = clip.audioMapping ? clip.audioMapping.sources.map(mapped => ({ ...source, channels: 1 as const, audioStream: mapped.stream, audioChannel: mapped.channel })) : [{ ...source, channels: 2 as const }]
+    return [{ clipId: clip.id, from, to, startSeconds, endSeconds, sources }]
   })
-  const waves = useVideoEditWaveformRanges(waveRanges, visible)
   // Track headers hint the channel type of the clips on each audio track (task 2.6).
   const trackFormats = new Map<number, Set<'mono' | 'stereo'>>()
   for (const clip of displayed.clips) {
@@ -67,7 +67,7 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
     if (format) trackFormats.set(clip.track, (trackFormats.get(clip.track) ?? new Set()).add(format))
   }
   const channelFormatOf = (track: number): 'mono' | 'stereo' | 'mixed' | undefined => { const formats = trackFormats.get(track); return !formats ? undefined : formats.size > 1 ? 'mixed' : [...formats][0] }
-  const rangesByClip = new Map(waveRanges.map(range => [range.key, range]))
+  const rangesByClip = new Map(waveRanges.map(range => [range.clipId, range]))
   const tickSeconds = Math.max(1, Math.ceil(64 / (pixels * fps)))
   const tickWidth = tickSeconds * fps * pixels
   const tickStart = Math.max(0, Math.floor(view.left / tickWidth) - 1)
@@ -174,8 +174,10 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
           <div className="sticky left-0 z-sticky flex shrink-0 items-center bg-panel px-2 text-2xs text-text-muted" style={{ width: TIMELINE_HEADER_WIDTH }} data-video-edit-track-header>轨道</div>
           <VideoEditTimelinePosition instance={instance}>
             {Array.from({ length: Math.max(0, tickEnd - tickStart) }, (_, index) => index + tickStart).map(index => <span key={index} className="pointer-events-none absolute border-l border-border-dark pl-1 text-2xs tabular-nums text-text-muted" style={{ left: index * tickWidth }}>{index * tickSeconds}s</span>)}
-            {(sequence.markers ?? []).filter(mark => mark.frame * pixels >= view.left - 8 && mark.frame * pixels <= view.left + view.width - TIMELINE_HEADER_WIDTH + 8).map(mark => <UiButton key={mark.id} variant="plain" data-video-edit-marker={mark.id} aria-label={`定位标记 ${mark.name}`} className="absolute top-3 z-raised !h-3 !p-0 text-2xs text-accent" title={mark.name} style={{ left: mark.frame * pixels }} onPointerDown={event => event.stopPropagation()} onClick={() => run(() => { setVideoEditView(projectId, { frame: mark.frame, playing: false, selection: mark.clipId ?? null }); focusVideoEditPanel(projectId, 'content') })}>◆</UiButton>)}
-            {(sequence.captions ?? []).filter(caption => (caption.start + caption.duration) * pixels >= view.left && caption.start * pixels <= view.left + view.width - TIMELINE_HEADER_WIDTH).map(caption => <UiButton key={caption.id} variant="plain" data-video-edit-caption-range={caption.id} aria-label={`定位字幕 ${caption.text}`} className="absolute top-0 !h-2 overflow-hidden !rounded-none !p-0 bg-accent/30" style={{ left: caption.start * pixels, width: Math.max(2, caption.duration * pixels) }} title={caption.text} onPointerDown={event => event.stopPropagation()} onClick={() => run(() => { setVideoEditView(projectId, { frame: caption.start, playing: false, selection: caption.clipId ?? null }); focusVideoEditPanel(projectId, 'content') })} />)}
+            {/* ui-surface-allow 标尺上的标记 ◆ 与字幕区间条是时间轴记号，不是按钮档位；交 2.4/3.5 */}
+            {(sequence.markers ?? []).filter(mark => mark.frame * pixels >= view.left - 8 && mark.frame * pixels <= view.left + view.width - TIMELINE_HEADER_WIDTH + 8).map(mark => <UiButton key={mark.id} data-video-edit-marker={mark.id} aria-label={`定位标记 ${mark.name}`} className="absolute top-3 z-raised !h-3 !p-0 text-accent" title={mark.name} style={{ left: mark.frame * pixels }} onPointerDown={event => event.stopPropagation()} onClick={() => run(() => { setVideoEditView(projectId, { frame: mark.frame, playing: false, selection: mark.clipId ?? null }); focusVideoEditPanel(projectId, 'content') })}>◆</UiButton>)}
+            {/* ui-surface-allow 同上：字幕区间条 */}
+            {(sequence.captions ?? []).filter(caption => (caption.start + caption.duration) * pixels >= view.left && caption.start * pixels <= view.left + view.width - TIMELINE_HEADER_WIDTH).map(caption => <UiButton key={caption.id} data-video-edit-caption-range={caption.id} aria-label={`定位字幕 ${caption.text}`} className="absolute top-0 !h-2 overflow-hidden !rounded-none !p-0 bg-accent/30" style={{ left: caption.start * pixels, width: Math.max(2, caption.duration * pixels) }} title={caption.text} onPointerDown={event => event.stopPropagation()} onClick={() => run(() => { setVideoEditView(projectId, { frame: caption.start, playing: false, selection: caption.clipId ?? null }); focusVideoEditPanel(projectId, 'content') })} />)}
           </VideoEditTimelinePosition>
         </div>
         {rows.map(row => <div key={row.track.id} className="absolute left-0 right-0 border-b border-border-dark" style={{ top: row.top, height: row.height }} data-video-edit-track={row.track.id} data-track-index={row.track.index} data-track-kind={row.track.kind}>
@@ -185,23 +187,19 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
         {divider !== undefined && <div role="separator" aria-label="画面与声音轨道分界" aria-orientation="horizontal" data-video-edit-track-divider className={`pointer-events-none absolute left-0 right-0 ${UI_DIVIDER_CLASS}`} style={{ top: divider }} />}
         {visibleClips.map(clip => {
           const row = rows.find(row => row.track.index === clip.track)!
-          const laneKeys = clip.audioMapping ? clip.audioMapping.sources.map((_, index) => `${clip.id}:${index}`) : [clip.id]
-          const laneResults = laneKeys.map(key => waves.get(key)?.result)
-          const lanes = laneResults.every(Boolean) ? laneResults.flatMap(result => result!.channels.map(channel => ({ peak: channel.peak, duration: (result!.endUs - result!.startUs) / 1e6 }))) : undefined
-          const waveError = laneKeys.map(key => waves.get(key)?.error).find(Boolean)
-          const range = rangesByClip.get(laneKeys[0])
+          const range = rangesByClip.get(clip.id)
           const channelType = videoEditClipAudioFormat(clip, videoEditClipMedia(instance.document, clip))
           const offset = syncOffsets.get(clip.id)
           const offsetLabel = offset === undefined ? undefined : `${offset > 0 ? '+' : ''}${offset}`
           return <div key={clip.id} data-video-edit-clip={clip.id} data-clip-start={clip.start} data-clip-duration={clip.duration} className={`absolute flex items-center overflow-hidden rounded-lg ${instance.selectedClipIds.includes(clip.id) ? 'bg-accent/30 ring-1 ring-accent' : clip.kind === 'audio' ? 'bg-accent/10' : 'bg-app'}`} style={{ top: row.top + 2, height: row.height - 4, left: TIMELINE_HEADER_WIDTH + clip.start * pixels, width: Math.max(3, clip.duration * pixels) }}>
-            {lanes && range && <div className="pointer-events-none absolute inset-y-0 opacity-40" data-video-edit-waveform={clip.id} data-waveform-lanes={lanes.length} style={{ left: (range.from - clip.start) * pixels, width: (range.to - range.from) * pixels }}>
-              {lanes.map((lane, index) => <Waveform key={`${index}:${range.from}:${range.to}:${pixels}`} samples={lane.peak} duration={lane.duration} height={Math.max(4, (row.height - 4) / lanes.length)} />)}
-            </div>}
-            {waveError && <span className="pointer-events-none absolute bottom-0 text-2xs text-danger" title={waveError}>波形未能读取</span>}
-            <UiButton variant="plain" data-video-edit-trim="in" aria-label={`裁剪${clip.name}入点`} className="!h-full !w-2 shrink-0 cursor-ew-resize !rounded-none !p-0" tabIndex={-1}>│</UiButton>
-            <UiButton variant="plain" aria-label={`选择片段 ${clip.name}`} title={`${clip.name}${channelType ? ` · ${videoEditAudioFormatLabel(channelType)}` : ''}${offset === undefined ? '' : `：与链接片段失步 ${Math.abs(offset)} 帧，右键可移入同步或滑入同步`}`} data-video-edit-audio-format={channelType} className="!h-full min-w-0 flex-1 truncate !rounded-none !px-1 !py-0 text-2xs" onClick={event => { if (event.detail === 0) run(() => pointer.select([clip.id], event.ctrlKey || event.metaKey, event.shiftKey, videoEditPickRelations(instance.linkedSelection !== false, event.altKey))) }}>{clip.name}</UiButton>
+            {range && <VideoEditClipWaveform clipId={clip.id} sources={range.sources} startSeconds={range.startSeconds} endSeconds={range.endSeconds} left={(range.from - clip.start) * pixels} width={(range.to - range.from) * pixels} visible={visible} />}
+            {/* ui-surface-allow 片段入点裁剪柄、片段体、出点裁剪柄：片段外观由 2.4 片段组件接管（素材片段令牌、缩略图与波形） */}
+            <UiButton data-video-edit-trim="in" aria-label={`裁剪${clip.name}入点`} className="!h-full !w-2 shrink-0 cursor-ew-resize !rounded-none !p-0" tabIndex={-1}>│</UiButton>
+            {/* ui-surface-allow 片段体，同上 */}
+            <UiButton aria-label={`选择片段 ${clip.name}`} title={`${clip.name}${channelType ? ` · ${videoEditAudioFormatLabel(channelType)}` : ''}${offset === undefined ? '' : `：与链接片段失步 ${Math.abs(offset)} 帧，右键可移入同步或滑入同步`}`} data-video-edit-audio-format={channelType} className="!h-full min-w-0 flex-1 truncate !rounded-none !px-1 !py-0" onClick={event => { if (event.detail === 0) run(() => pointer.select([clip.id], event.ctrlKey || event.metaKey, event.shiftKey, videoEditPickRelations(instance.linkedSelection !== false, event.altKey))) }}>{clip.name}</UiButton>
             {offsetLabel && <span className="pointer-events-none shrink-0 px-1 text-2xs font-medium tabular-nums text-danger" data-video-edit-sync-offset={offset}>{offsetLabel}</span>}
-            <UiButton variant="plain" data-video-edit-trim="out" aria-label={`裁剪${clip.name}出点`} className="!h-full !w-2 shrink-0 cursor-ew-resize !rounded-none !p-0" tabIndex={-1}>│</UiButton>
+            {/* ui-surface-allow 出点裁剪柄，同上 */}
+            <UiButton data-video-edit-trim="out" aria-label={`裁剪${clip.name}出点`} className="!h-full !w-2 shrink-0 cursor-ew-resize !rounded-none !p-0" tabIndex={-1}>│</UiButton>
           </div>
         })}
         {pointer.box && <div className="pointer-events-none absolute z-raised border border-accent bg-accent/10" style={{ left: TIMELINE_HEADER_WIDTH + Math.min(pointer.box.from.x, pointer.box.to.x), top: Math.min(pointer.box.from.y, pointer.box.to.y), width: Math.abs(pointer.box.to.x - pointer.box.from.x), height: Math.abs(pointer.box.to.y - pointer.box.from.y) }} data-video-edit-selection-box />}

@@ -154,10 +154,9 @@ export const FrameCard = memo(({
         )}
 
         <div className="storyboard-frame-actions absolute right-1 top-1 flex items-center gap-1 opacity-0 transition-opacity duration-120 group-hover/frame:opacity-100 group-focus-within/frame:opacity-100">
-          <UiIconButton
+          <UiIconButton size="sm" tone="media"
             type="button"
-            appearance="glass"
-            className="!h-6 !w-6 !rounded p-1"
+            className="p-1"
             onPointerDown={(event) => event.stopPropagation()}
             onClick={(event) => {
               event.stopPropagation();
@@ -168,10 +167,9 @@ export const FrameCard = memo(({
             <ImagePlus className="h-3 w-3" />
           </UiIconButton>
 
-          <UiIconButton
+          <UiIconButton size="sm" tone="media"
             type="button"
-            appearance="glass"
-            className="!h-6 !w-6 !rounded p-1"
+            className="p-1"
             onPointerDown={(event) => event.stopPropagation()}
             onClick={(event) => {
               event.stopPropagation();

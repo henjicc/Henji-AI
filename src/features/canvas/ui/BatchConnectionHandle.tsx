@@ -76,10 +76,8 @@ export function BatchConnectionHandle({ nodes, onConnect }: BatchConnectionHandl
         className="pointer-events-auto"
       >
         <UiPanel variant="glass" className="p-1">
-          <UiIconButton
-            appearance="hover-only"
-            showBorder={false}
-            className="nodrag nopan h-8 w-8 rounded-full text-brand-300"
+          <UiIconButton shape="circle" size="lg"
+            className="nodrag nopan"
             aria-label={t('nodeToolbar.batchConnect')}
             title={t('nodeToolbar.batchConnect')}
             onPointerDown={handlePointerDown}

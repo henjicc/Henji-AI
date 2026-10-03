@@ -24,10 +24,10 @@ export function VideoEditSequenceTabs({ instance, onError }: { instance: VideoEd
           { id: 'delete', label: '移除空序列', icon: <Trash2 size={16} />, disabled: instance.document.sequences.length <= 1 || !!sequence.clips.length || !!sequence.annotations.length, onClick: () => run(() => deleteVideoEditSequence(id, sequence.id)) },
         ])}>
           <UiChipButton role="tab" aria-selected={active} active={active} selectionRole="navigation" selectionAppearance="subtle" className="!h-8 max-w-48 truncate text-xs" onClick={() => run(() => switchVideoEditSequence(id, sequence.id))}>{sequence.name}</UiChipButton>
-          <UiIconButton title={`关闭 ${sequence.name} 标签`} aria-label={`关闭 ${sequence.name} 标签`} appearance="hover-only" disabled={instance.openSequenceIds.length <= 1} onClick={() => run(() => setVideoEditProjectView(id, { openSequenceIds: instance.openSequenceIds.filter(item => item !== sequence.id) }))}>×</UiIconButton>
+          <UiIconButton size="lg" title={`关闭 ${sequence.name} 标签`} aria-label={`关闭 ${sequence.name} 标签`} disabled={instance.openSequenceIds.length <= 1} onClick={() => run(() => setVideoEditProjectView(id, { openSequenceIds: instance.openSequenceIds.filter(item => item !== sequence.id) }))}>×</UiIconButton>
         </div>
       })}
-      <UiButton variant="plain" className="shrink-0 text-2xs" onClick={() => setSettings(instance.document.sequences.find(item => item.id === instance.activeSequenceId)!)}>序列设置</UiButton>
+      <UiButton className="shrink-0" onClick={() => setSettings(instance.document.sequences.find(item => item.id === instance.activeSequenceId)!)}>序列设置</UiButton>
     </div>
     <ContextMenu items={menu.menuItems} position={menu.menuPosition} visible={menu.menuVisible} onClose={menu.hideMenu} />
     {settings && <VideoEditSequenceDialog title="序列设置" initial={settings} bins={instance.document.bins} onClose={() => setSettings(null)} onSubmit={values => updateVideoEditSequenceSettings(id, settings.id, values)} />}

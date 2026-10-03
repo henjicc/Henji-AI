@@ -118,34 +118,33 @@ export function ImageInfoPanel({ open, imageSource }: ImageInfoPanelProps): JSX.
 
   return (
     <div className="absolute left-5 top-5 z-sticky flex max-w-[min(420px,calc(100vw-40px))] items-start gap-2">
-      <UiIconButton
+      <UiIconButton shape="circle" size="lg" tone="media"
         type="button"
-        appearance="glass"
         onClick={() => setCollapsed(!collapsed)}
-        className="!h-9 !w-9 shrink-0 !rounded-full"
+        className="shrink-0"
         title={t('viewer.toggleInfo', '显示/隐藏图片信息（Tab）')}
       >
         <Info className="h-4 w-4" />
       </UiIconButton>
 
       <div
-        className={`ui-glass overflow-hidden rounded-xl text-white shadow-panel transition-opacity duration-180 ${
+        className={`ui-glass overflow-hidden rounded-xl text-text1 shadow-panel transition-opacity duration-180 ${
           collapsed ? 'pointer-events-none opacity-0' : 'opacity-100'
         }`}
         aria-hidden={collapsed}
       >
         <div className="px-3 py-2.5">
           {status === 'loading' && (
-            <p className="text-xs leading-5 text-white/70">{t('viewer.infoLoading', '正在读取图片信息…')}</p>
+            <p className="text-xs leading-5 text-text2">{t('viewer.infoLoading', '正在读取图片信息…')}</p>
           )}
           {status === 'error' && (
-            <p className="text-xs leading-5 text-white/70">{t('viewer.infoUnavailable', '图片信息不可用')}</p>
+            <p className="text-xs leading-5 text-text2">{t('viewer.infoUnavailable', '图片信息不可用')}</p>
           )}
           {status === 'ready' && (
             <div className="space-y-1 text-xs leading-5">
               {infoRows.map((item) => (
-                <p key={item.label} className="break-words text-white/85">
-                  <span className="mr-2 text-white/50">{item.label}</span>
+                <p key={item.label} className="break-words text-text1">
+                  <span className="mr-2 text-text3">{item.label}</span>
                   <span>{item.value}</span>
                 </p>
               ))}

@@ -55,7 +55,7 @@ export function ImageMarkToolV3Host(props: ImageMarkToolV3HostProps): JSX.Elemen
             title={t('imageEditor.v3.host.bootstrapError.title')}
             message={t('imageEditor.v3.host.bootstrapError.message')}
             actions={(
-              <UiButton variant="ghost" size="sm" onClick={onFallback}>
+              <UiButton variant="secondary" onClick={onFallback}>
                 {t('imageEditor.v3.host.bootstrapError.fallback')}
               </UiButton>
             )}
@@ -68,9 +68,6 @@ export function ImageMarkToolV3Host(props: ImageMarkToolV3HostProps): JSX.Elemen
 
   const backButton = onBack ? (
     <UiIconButton
-      showBorder={false}
-      appearance="hover-only"
-      className="h-7 w-7"
       title={t('imageEditor.v3.host.backToToolbox')}
       aria-label={t('imageEditor.v3.host.backToToolbox')}
       onClick={() => void host.runAfterSave(onBack)}

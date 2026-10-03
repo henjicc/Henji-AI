@@ -51,10 +51,8 @@ export function ImageEditorCommandBarV3({
           </span>
         </div>
         <div className="mx-1 h-5 w-px shrink-0 bg-border-dark" aria-hidden="true" />
-        <UiIconButton
-          className="h-8 w-8 shrink-0"
-          showBorder={false}
-          appearance="hover-only"
+        <UiIconButton size="lg"
+          className="shrink-0"
           disabled={!controller.canUndo}
           aria-label={t('imageEditor.actions.undo')}
           title={t('imageEditor.actions.undo')}
@@ -62,10 +60,8 @@ export function ImageEditorCommandBarV3({
         >
           <Undo2 className="h-4 w-4" />
         </UiIconButton>
-        <UiIconButton
-          className="h-8 w-8 shrink-0"
-          showBorder={false}
-          appearance="hover-only"
+        <UiIconButton size="lg"
+          className="shrink-0"
           disabled={!controller.canRedo}
           aria-label={t('imageEditor.actions.redo')}
           title={t('imageEditor.actions.redo')}

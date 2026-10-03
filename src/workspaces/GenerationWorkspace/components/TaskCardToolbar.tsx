@@ -31,22 +31,17 @@ export function TaskCardToolbar({
 
   return (
     <div className="absolute right-0 top-0 flex gap-2">
-      <UiIconButton
+      <UiIconButton size="lg"
         onClick={onUsePrompt}
-        showBorder={false}
-        appearance="hover-only"
-        className="!h-8 !w-8"
         title={t('ui:workspace.actions.usePrompt')}
       >
         <UsePromptIcon className="h-4 w-4" />
       </UiIconButton>
       {task.result?.filePath && (
-        <UiIconButton
+        <UiIconButton size="lg"
           onClick={() => void onCollectAll()}
           disabled={collecting}
-          showBorder={false}
-          appearance="hover-only"
-          className={`!h-8 !w-8 ${allResultsCollected ? '!text-emerald-400' : ''}`}
+          on={allResultsCollected}
           title={t('ui:assetLibrary.collect')}
         >
           {allResultsCollected
@@ -55,40 +50,27 @@ export function TaskCardToolbar({
         </UiIconButton>
       )}
       {task.result?.filePath && (
-        <UiIconButton
+        <UiIconButton size="lg"
           onClick={() => void onDownloadAll()}
-          showBorder={false}
-          appearance="hover-only"
-          className="!h-8 !w-8"
           title={t('common:actions.download')}
         >
           <DownloadIcon className="h-4 w-4" />
         </UiIconButton>
       )}
-      <UiIconButton
+      <UiIconButton size="lg"
         onClick={() => void onRegenerate()}
-        showBorder={false}
-        appearance="hover-only"
-        className="!h-8 !w-8"
         title={t('ui:workspace.actions.regenerate')}
       >
         <RefreshCw className="h-4 w-4" />
       </UiIconButton>
-      <UiIconButton
+      <UiIconButton size="lg"
         onClick={onReedit}
-        showBorder={false}
-        appearance="hover-only"
-        className="!h-8 !w-8"
         title={t('ui:workspace.actions.reedit')}
       >
         <SquarePen className="h-4 w-4" />
       </UiIconButton>
-      <UiIconButton
+      <UiIconButton size="lg" tone="danger"
         onClick={() => void onDelete()}
-        hoverVariant="danger"
-        showBorder={false}
-        appearance="hover-only"
-        className="!h-8 !w-8"
         title={t('common:delete')}
       >
         <Trash2 className="h-4 w-4" />

@@ -92,7 +92,7 @@ async function dragTransferDataToFile(dragData: HenjiDragTransferData): Promise<
 
 function AudioPreviewIcon(): JSX.Element {
   return (
-    <AudioLines className="h-8 w-8 text-white/90" />
+    <AudioLines className="h-8 w-8 text-on-media/90" />
   )
 }
 
@@ -347,11 +347,11 @@ export function StackedMediaUploader({
                 }}
                 onMouseDown={(event) => handleMouseDown(index, event)}
               >
+                {/* ui-surface-allow 上传缩略图卡：卡形、描边与投影是上传组件的缩略图表面（UI_UPLOADER_CARD_*），不是按钮档位 */}
                 <UiButton
                   type="button"
-                  variant="ghost"
-                  size="sm"
-                  className={`relative h-[64px] w-[48px] overflow-hidden rounded-xl ${UI_UPLOADER_CARD_BORDER_CLASS} bg-surface-dark/35 p-0 shadow-thumb transition-transform duration-180 ease-out hover:scale-[1.1]`}
+                  variant="secondary"
+                  className={`relative h-[64px] w-[48px] overflow-hidden ${UI_UPLOADER_CARD_BORDER_CLASS} bg-surface-dark/35 p-0 shadow-thumb transition-transform duration-180 ease-out hover:scale-[1.1]`}
                   onClick={(event) => {
                     event.stopPropagation()
                     onFileClick?.(file, files)
@@ -365,14 +365,14 @@ export function StackedMediaUploader({
                     <img src={file} alt={`参考 ${index + 1}`} className="absolute inset-0 block h-full w-full object-cover" draggable={false} />
                   )}
                   {isVideo && (
-                    <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/30 text-3xs text-white">
+                    <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-media-scrim text-2xs text-on-media">
                       ▶
                     </span>
                   )}
                 </UiButton>
-                <UiIconButton
+                <UiIconButton size="xs" tone="media" shape="circle"
                   type="button"
-                  className={`absolute -right-1 -top-1 h-5 w-5 border-veil-soft bg-panel/90 p-0 transition-opacity ${expanded ? 'opacity-0 group-hover:opacity-100' : 'pointer-events-none opacity-0'}`}
+                  className={`absolute -right-1 -top-1 transition-opacity ${expanded ? 'opacity-0 group-hover:opacity-100' : 'pointer-events-none opacity-0'}`}
                   onClick={(event) => {
                     event.stopPropagation()
                     onRemove(index)
@@ -381,9 +381,9 @@ export function StackedMediaUploader({
                   ×
                 </UiIconButton>
                 {onReplace && (
-                  <UiIconButton
+                  <UiIconButton size="xs" tone="media"
                     type="button"
-                    className={`absolute -bottom-1 -right-1 z-sticky h-5 w-5 rounded border-veil bg-panel/95 p-0 transition-opacity ${expanded ? 'opacity-0 group-hover:opacity-100' : 'pointer-events-none opacity-0'}`}
+                    className={`absolute -bottom-1 -right-1 z-sticky transition-opacity ${expanded ? 'opacity-0 group-hover:opacity-100' : 'pointer-events-none opacity-0'}`}
                     onClick={(event) => {
                       event.stopPropagation()
                       beginFilePickerLock()
@@ -392,20 +392,20 @@ export function StackedMediaUploader({
                     }}
                     title="替换"
                   >
-                    <RefreshCw className="h-3.5 w-3.5 text-white" strokeWidth={2.3} />
+                    <RefreshCw className="h-3.5 w-3.5" strokeWidth={2.3} />
                   </UiIconButton>
                 )}
                 {onTrim && isVideo && (
-                  <UiIconButton
+                  <UiIconButton size="xs" tone="media"
                     type="button"
-                    className={`absolute -bottom-1 -left-1 z-sticky h-5 w-5 rounded border-veil bg-panel/95 p-0 transition-opacity ${expanded ? 'opacity-0 group-hover:opacity-100' : 'pointer-events-none opacity-0'}`}
+                    className={`absolute -bottom-1 -left-1 z-sticky transition-opacity ${expanded ? 'opacity-0 group-hover:opacity-100' : 'pointer-events-none opacity-0'}`}
                     onClick={(event) => {
                       event.stopPropagation()
                       onTrim(index)
                     }}
                     title="裁剪"
                   >
-                    <Scissors className="h-3.5 w-3.5 text-white" strokeWidth={2.3} />
+                    <Scissors className="h-3.5 w-3.5" strokeWidth={2.3} />
                   </UiIconButton>
                 )}
               </div>
@@ -423,12 +423,12 @@ export function StackedMediaUploader({
                 zIndex: plusZIndex
               }}
             >
+              {/* ui-surface-allow 上传卡“+”：与缩略图卡同形（卡形/圆形随堆叠状态切换），是上传组件的缩略图表面，不是按钮档位 */}
               <UiButton
                 type="button"
-                variant="muted"
-                size="sm"
+                variant="secondary"
                 className={`p-0 text-text-dark ${plusUseCardShape
-                  ? `h-[64px] w-[48px] rounded-xl ${UI_UPLOADER_CARD_BORDER_OVERRIDE_CLASS} !bg-panel text-2xl shadow-thumb transition-transform duration-180 ease-out hover:scale-[1.1]`
+                  ? `h-[64px] w-[48px] ${UI_UPLOADER_CARD_BORDER_OVERRIDE_CLASS} !bg-panel text-2xl shadow-thumb transition-transform duration-180 ease-out hover:scale-[1.1]`
                   : 'h-[29px] w-[29px] aspect-square !rounded-full border-veil-soft bg-layer/80 text-base shadow-thumb-sm transition-transform duration-180 ease-out hover:scale-[1.1]'
                   }`}
                 onClick={(event) => {

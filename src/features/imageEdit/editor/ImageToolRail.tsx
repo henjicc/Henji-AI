@@ -12,12 +12,10 @@ export function ImageToolRail(): JSX.Element {
       {tools.map((tool) => {
         const Icon = tool.icon;
         return (
-          <UiIconButton
+          <UiIconButton size="lg"
             key={tool.id}
             type="button"
-            active={activeToolId === tool.id}
-            appearance="hover-only"
-            showBorder={false}
+            on={activeToolId === tool.id}
             title={tool.label}
             aria-label={tool.label}
             onClick={() => setActiveToolId(tool.id)}

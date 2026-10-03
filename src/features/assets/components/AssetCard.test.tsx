@@ -7,10 +7,10 @@ import type { AssetRecord } from '@/platform/contracts/assetLibrary'
 import { AssetCard } from './AssetCard'
 import { ASSET_DRAG_MIME, CODE_ASSET_DRAG_MIME } from '../drag/assetDragPayload'
 
-const mocks = vi.hoisted(() => ({ waveform: vi.fn(() => ({ waveform: null })) }))
+const mocks = vi.hoisted(() => ({ waveform: vi.fn(() => ({ status: 'idle' })) }))
 
 vi.mock('@/hooks/useI18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }))
-vi.mock('@/hooks/useAudioWaveform', () => ({ useAudioWaveform: mocks.waveform }))
+vi.mock('@/hooks/useWaveformData', () => ({ useWaveformData: mocks.waveform }))
 vi.mock('@/contexts/dragDataTransfer', async importOriginal => ({
   ...await importOriginal<typeof import('@/contexts/dragDataTransfer')>(),
   clearCompactDragPreview: vi.fn(), setCompactDragPreview: vi.fn(), setCompactWaveformDragPreview: vi.fn(),
@@ -61,7 +61,7 @@ describe('AssetCard', () => {
     expect(screen.getByText('assetLibrary.code')).toBeTruthy()
     expect(document.querySelector('img, video, audio')).toBeNull()
     expect(screen.queryByRole('button', { name: 'audioPlayer.playPause' })).toBeNull()
-    expect(mocks.waveform).toHaveBeenCalledWith('', undefined, expect.objectContaining({ compact: true }))
+    expect(mocks.waveform).toHaveBeenCalledWith(null)
     fireEvent.doubleClick(document.querySelector('[data-asset-card] .aspect-square')!)
     expect(onPreview).toHaveBeenCalledWith(code)
   })

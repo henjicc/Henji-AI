@@ -35,8 +35,8 @@ export function OnboardingBasicsStep({ dataPath }: { dataPath: UseDataPathResult
                 className={`${UI_FIELD_CONTROL_HEIGHT_SM_CLASS} min-w-0 flex-1 font-mono`}
               />
               <UiButton
-                variant="muted"
-                size="field-sm"
+                variant="secondary"
+                size="lg"
                 className="shrink-0 whitespace-nowrap px-4"
                 disabled={dataPath.isMigrating}
                 onClick={() => void dataPath.selectDirectory()}

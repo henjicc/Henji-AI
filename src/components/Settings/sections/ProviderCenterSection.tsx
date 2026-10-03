@@ -247,7 +247,7 @@ const ProviderCenterSection = ({ llm }: ProviderCenterSectionProps): JSX.Element
               <h3 className={UI_TEXT_TITLE_CLASS}>{selected.displayName}</h3>
               <div className="flex shrink-0 items-center gap-2">
                 {selected.llmProvider ? (
-                  <UiButton type="button" variant="muted" size="sm" onClick={() => { setProviderDialogCreate(false); setProviderDialogOpen(true) }}>
+                  <UiButton type="button" variant="secondary" onClick={() => { setProviderDialogCreate(false); setProviderDialogOpen(true) }}>
                     <Settings2 size={14} className="mr-1.5" />
                     {t('providerCenter.actions.connectionSettings')}
                   </UiButton>
@@ -310,10 +310,10 @@ const ProviderCenterSection = ({ llm }: ProviderCenterSectionProps): JSX.Element
               <div className="flex items-center gap-2">
                 {selected.llmProvider ? (
                   <>
-                    <UiButton type="button" variant="muted" size="sm" disabled={fetchingModels} onClick={() => void fetchModels()}>
+                    <UiButton type="button" variant="secondary" disabled={fetchingModels} onClick={() => void fetchModels()}>
                       <RefreshCw size={14} className="mr-1.5" />{t('providerCenter.actions.syncModels')}
                     </UiButton>
-                    <UiButton type="button" variant="muted" size="sm" onClick={() => openModelDialog()}>
+                    <UiButton type="button" variant="secondary" onClick={() => openModelDialog()}>
                       <Plus size={14} className="mr-1.5" />{t('providerCenter.actions.addModel')}
                     </UiButton>
                   </>

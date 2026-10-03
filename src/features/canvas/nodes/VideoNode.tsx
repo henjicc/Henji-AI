@@ -226,10 +226,9 @@ export const VideoNode = memo(({ id, data, selected, type, width, height }: Vide
               draggable={false}
             />
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-              <UiIconButton
+              <UiIconButton shape="circle" size="xl" tone="media"
                 aria-label={t('node.videoNode.play')}
-                appearance="glass"
-                className="nodrag nowheel pointer-events-auto !h-11 !w-11 !rounded-full shadow-panel"
+                className="nodrag nowheel pointer-events-auto"
                 onPointerDown={(event) => event.stopPropagation()}
                 onClick={(event) => {
                   event.stopPropagation();

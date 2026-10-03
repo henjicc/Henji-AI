@@ -71,8 +71,7 @@ export function MaskEditorV3Modal({
             ) : null}
             <UiButton
               type="button"
-              variant="ghost"
-              size="sm"
+              variant="secondary"
               disabled={confirming}
               onClick={onCancel}
             >
@@ -81,7 +80,6 @@ export function MaskEditorV3Modal({
             <UiButton
               type="button"
               variant="primary"
-              size="sm"
               disabled={confirming}
               onClick={() => { void confirm() }}
             >

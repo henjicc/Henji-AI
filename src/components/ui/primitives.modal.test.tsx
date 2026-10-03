@@ -88,7 +88,7 @@ describe('UiModal', () => {
       <UiModal
         isOpen
         title="首次设置"
-        headerActions={<UiButton variant="plain">简体中文</UiButton>}
+        headerActions={<UiButton>简体中文</UiButton>}
         onClose={vi.fn()}
       >
         内容

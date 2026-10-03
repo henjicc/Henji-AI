@@ -104,7 +104,7 @@ export function CreatePresetDialog({
           <UiButton
             onClick={onClose}
             disabled={saving}
-            variant="ghost"
+            variant="secondary"
             className="flex-1"
           >
             {t('common:cancel')}

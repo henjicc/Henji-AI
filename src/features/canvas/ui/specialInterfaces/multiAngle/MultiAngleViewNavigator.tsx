@@ -36,11 +36,12 @@ export const MultiAngleViewNavigator = memo(function MultiAngleViewNavigator({
             aria-hidden="true" className={`pointer-events-none ${active ? 'fill-accent' : 'fill-text-muted group-hover/direction:fill-text group-focus-within/direction:fill-text'}`} />
           <foreignObject x={x - 3} y={y - 3} width="6" height="6"
             visibility={occluded ? 'hidden' : 'visible'} data-direction-depth={depth}>
+            {/* ui-surface-allow 6px 方向点的透明命中区（外观由 SVG 圆点表达），不是按钮档位 */}
             <UiButton
-              type="button" variant="plain" aria-label={label} aria-pressed={active} title={label}
+              type="button" aria-label={label} aria-pressed={active} title={label}
               tabIndex={occluded ? -1 : 0}
               data-multi-angle-direction={view.preset}
-              className="pointer-events-auto !flex !h-full !w-full !rounded-full !border-0 !bg-transparent !p-0"
+              className="pointer-events-auto !flex !h-full !w-full !rounded-full !p-0"
               onPointerDown={event => { if (!active) event.stopPropagation() }}
               onKeyDown={event => event.stopPropagation()}
               onClick={event => { event.stopPropagation(); onSelect(view.preset) }}

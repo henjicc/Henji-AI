@@ -13,7 +13,7 @@ import type {
   AudioEditSuggestion,
   AudioEditTask,
 } from '@/core/audioEdit/types'
-import type { AudioWaveformRangeRequest, AudioWaveformRangeResult } from './audioWaveform'
+import type { AudioWaveformPyramidRequest, AudioWaveformPyramidResult, AudioWaveformRangeRequest, AudioWaveformRangeResult } from './audioWaveform'
 
 export interface AudioEditAsrModel {
   id: string
@@ -42,4 +42,6 @@ export interface AudioEditPlatform {
   preparePreviewChunk(request: AudioEditPreviewChunkRequest): Promise<AudioEditPreviewChunk>
   extractWaveform(source: string, bucketCount: number): Promise<{ rms: number[]; peak: number[]; durationSeconds: number }>
   extractWaveformRange(request: AudioWaveformRangeRequest, signal?: AbortSignal): Promise<AudioWaveformRangeResult>
+  /** Whole-source multi-resolution peaks, cached by content in the main process (task 2.3). */
+  extractWaveformPyramid(request: AudioWaveformPyramidRequest, signal?: AbortSignal): Promise<AudioWaveformPyramidResult>
 }

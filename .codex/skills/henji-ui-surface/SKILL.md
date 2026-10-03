@@ -126,7 +126,7 @@ description: Henji-AI 新建或改造任何界面/页面骨架/面板/弹窗/侧
 // ❌ 外壳已经有一条命令带了，功能组件又开一条自己的行
 <div className="p-4">
   <div className="flex items-center gap-2">   {/* 第二条带：只为了放一个按钮 */}
-    <UiButton variant="ghost">打开图片</UiButton>
+    <UiButton variant="secondary">打开图片</UiButton>
     <span>{fileName}</span>
   </div>
   <Editor />
@@ -134,7 +134,7 @@ description: Henji-AI 新建或改造任何界面/页面骨架/面板/弹窗/侧
 
 // ✅ 注入到已有的那条命令带里
 <Editor
-  toolbarLeading={<><UiButton variant="ghost">打开图片</UiButton><span>{fileName}</span></>}
+  toolbarLeading={<><UiButton variant="secondary">打开图片</UiButton><span>{fileName}</span></>}
   toolbarActions={<UiButton variant="primary">另存为…</UiButton>}
 />
 ```
@@ -195,13 +195,22 @@ description: Henji-AI 新建或改造任何界面/页面骨架/面板/弹窗/侧
 上面几节管容器和骨架，这一节管**按钮本身该有多重**。
 
 主流设计系统都是同一个阶梯（Material 的 filled/outlined/text、Apple 的
-prominent/bordered/plain、Fluent 的 primary/default/subtle），本项目对应三档：
+prominent/bordered/plain、Fluent 的 primary/default/subtle）。本项目（重要记录 003，任务 2.1）：
 
-| 档 | `UiButton variant` | 图标版 | 用途 |
+| 档 | `UiButton variant` | 图标版 `UiIconButton` | 用途 |
 |---|---|---|---|
-| 主 | `primary`（实底） | —— | **一个表面只允许一个**，这一屏的主动作 |
-| 次 | `ghost` / `muted`（描边） | `UiIconButton`（默认带边框） | 常用但非唯一的动作 |
-| 辅 | `plain`（无边框，hover 出底） | `UiIconButton showBorder={false} appearance="hover-only"` | 工具栏、行内辅助动作 |
+| 主 | `primary`（材质实底：顶部高光、内描边、投影，按下下沉） | `tone="accent"`（圆形，如生成） | **一个表面只允许一个**，这一屏的主动作 |
+| 次 | `secondary`（无边框填充） | —— | 弹窗与表单里的普通动作 |
+| 辅 | `quiet`（**默认**，静息无底，悬停出底） | 默认（静默） | 工具栏、命令带、行内、菜单 |
+| 危险 | `danger`（静息同 quiet，悬停显红）/ `dangerSolid`（只用于确认弹窗） | `tone="danger"` | 删除、清空、移除 |
+| 链接 | `link`（强调文字、悬停下划线、行内高度） | —— | 行内跳转/说明链接，不计入动作层级 |
+| 画面上 | `media` | `tone="media"` | 压在图片/视频/画布上的控件（固定媒体叠层令牌） |
+
+尺寸：`UiButton size` sm/md/lg = 28/32/36（默认 md）；`UiIconButton size` xs/sm/md/lg = 20/24/28/32（默认 md），
+xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconButton on`（选中底 + 强调色图标）。
+**外观只由 variant / size / tone / on / shape 决定**，className 只放布局；调用点改底色、边框、文字色、圆角、
+阴影、高度或字号会被 `check:surface` 规则 E 拦截（确属非按钮外观的命中区，如拖动柄、时间轴记号，行级
+`ui-surface-allow` 写明理由与接手任务）。
 
 ### 两条硬规则
 
@@ -213,9 +222,6 @@ prominent/bordered/plain、Fluent 的 primary/default/subtle），本项目对�
 > 实测踩过：图片编辑命令带右侧的「打开」和「复制 / 加入资产库」同属文件类次级动作，
 > 为了给工具组腾 44px 宽度被降成了无边框图标，一眼就看出不对。宽度问题要用缩短文案、
 > 图标化**整组**、或接受轻微偏移来解决，不能只降其中一个。
-
-⚠️ **`ghost` 与 `muted` 目前视觉等价**（都是描边 + 底色），是历史命名，
-不要按字面理解成"无边框"——真正的无边框档是 `plain`。
 
 ### 动作 ≠ 模式
 
@@ -370,7 +376,7 @@ prominent/bordered/plain、Fluent 的 primary/default/subtle），本项目对�
 |---|---|
 | 业务组件手写 `rounded-xl border border-border-dark bg-panel` | `<UiPanel>` |
 | 在 `UiPanel` 内部再放一个 `border + bg` 的 div | `variant="inset"` / `"bare"` / 纯留白 |
-| 用 `UiIconButton` 默认态（自带边框）做工具栏密集图标 | `showBorder={false}` 或 `appearance="hover-only"` |
+| 在按钮调用点用 className 改底色、边框、文字色、圆角、阴影、高度或字号 | 用 `variant`/`size`/`tone`/`on`/`shape`；确需新形态时给组件加有限枚举 |
 | 容器内的同质选项集合逐项描边 | `UiOptionButton variant="menu"`，见"选项集合的静息态" |
 | 在 `UiOptionButton` 调用点手写 `!border-transparent !bg-transparent hover:!bg-layer` | 用 `variant="menu"`，别再复制这串 |
 | 面板/弹窗内部再叠一层自己的底色（`bg-zinc-900/40` 这类） | 表面由外壳统一提供；要切分用分隔线，要下沉用 `inset` |
@@ -390,7 +396,7 @@ prominent/bordered/plain、Fluent 的 primary/default/subtle），本项目对�
 | 业务组件手写 inline `<svg>` 画图标 | 用 lucide-react；确属图形则加入 `check-icon-tokens.cjs` 豁免并写明理由 |
 | 在调用点自己从 lucide 挑业务概念图标 | 用 `@/core/theme/icons` 的登记常量 |
 | 建一个「本目录自己的图标模块」 | 删掉，调用点直接用 lucide；私有图标集＝又一套平行体系 |
-| 一个表面出现两个 `variant="primary"` | 只留一个主动作，其余降到 `ghost` |
+| 一个表面出现两个 `variant="primary"` | 只留一个主动作，其余降到 `secondary` 或 `quiet` |
 | 为了省宽度把同组动作里的一个降档 | 缩短文案 / 图标化**整组** / 接受轻微偏移，不要只动一个 |
 | 用分隔线分开两组同类动作 | 加大间距；分隔线只用于交互语义根本不同的两侧，一条 bar 最多一条 |
 | 把工具/模式切换写成带边框的按钮 | 那是选中态语言：`selectionRole="navigation"`，静息不描边 |
@@ -467,7 +473,7 @@ prominent/bordered/plain、Fluent 的 primary/default/subtle），本项目对�
 - [ ] 用到跨界面的业务概念图标了吗？走 `@/core/theme/icons` 的登记常量，别在调用点自己挑
 - [ ] 有没有 `zinc-*` / `gray-*` / `slate-*`？改强调色或换主题预设时它们不会跟着动
 - [ ] 用 `accent` 当文字色了吗？改用 `text-brand-300`；白字要压实心蓝的话底色用 `bg-brand-500`
-- [ ] 破坏性动作（删除/清空）是不是 `variant="primary"`？那会抢走主动作的视觉权重，应该静息中性、hover 才出危险色
+- [ ] 破坏性动作（删除/清空）是不是 `variant="primary"`？那会抢走主动作的视觉权重，应该用 `danger`（静息中性、hover 才出危险色），确认弹窗里用 `dangerSolid`
 - [ ] 改了 `.css` 文件吗？里面不能有 `#hex` 与 `rgba(数字…)`，只能 `rgb(var(--xxx-rgb) / a)`
 - [ ] 新加的全局样式/变量放对文件了吗？懒加载的样式表里不能放全局主题变量
 - [ ] 同一个 className 里有没有两个类抢同一个 CSS 属性？改成互斥三元

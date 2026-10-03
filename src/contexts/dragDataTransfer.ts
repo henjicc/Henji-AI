@@ -1,4 +1,6 @@
 import { getThemeTokens } from '@/core/theme/themeTokenStore';
+import { drawWaveform } from '@/components/waveform/waveformDraw';
+import type { WaveformData } from '@/services/waveform/waveformDataService';
 
 export const HENJI_DRAG_DATA_MIME = 'application/x-henji-drag-data';
 
@@ -89,7 +91,8 @@ export function setCompactDragPreview(dataTransfer: DataTransfer, previewUrl?: s
   dataTransfer.setDragImage(host, COMPACT_DRAG_PREVIEW_SIZE / 2, COMPACT_DRAG_PREVIEW_SIZE / 2);
 }
 
-export function setCompactWaveformDragPreview(dataTransfer: DataTransfer, samples?: number[] | null): void {
+/** 音频拖拽预览：同步绘制（setDragImage 不能等待），用统一波形绘制的迷你档；没有波形数据时只画零线，不伪造内容。 */
+export function setCompactWaveformDragPreview(dataTransfer: DataTransfer, waveform?: WaveformData | null): void {
   const host = getCompactDragPreviewHost();
   host.replaceChildren();
   const canvas = document.createElement('canvas');
@@ -98,21 +101,22 @@ export function setCompactWaveformDragPreview(dataTransfer: DataTransfer, sample
   canvas.style.display = 'block';
   canvas.style.borderRadius = '8px';
   const context = canvas.getContext('2d');
-  if (!context) return;
+  const lane = document.createElement('canvas');
+  lane.width = COMPACT_DRAG_PREVIEW_SIZE - 12;
+  lane.height = 42;
+  const laneContext = lane.getContext('2d');
+  if (!context || !laneContext) return;
   const { colors } = getThemeTokens();
   context.fillStyle = colors.panel;
   context.fillRect(0, 0, COMPACT_DRAG_PREVIEW_SIZE, COMPACT_DRAG_PREVIEW_SIZE);
-  const bars = samples?.length ? samples : Array.from({ length: 32 }, (_, index) => 0.22 + Math.sin(index * 0.73) ** 2 * 0.56);
-  const targetBars = Math.min(32, bars.length);
-  const step = bars.length / targetBars;
-  context.fillStyle = colors.text2;
-  context.globalAlpha = 0.78;
-  for (let index = 0; index < targetBars; index += 1) {
-    const amplitude = Math.max(0.08, Math.min(1, bars[Math.floor(index * step)] ?? 0));
-    const height = Math.max(3, Math.round(amplitude * 42));
-    const x = 7 + index * (50 / targetBars);
-    context.fillRect(x, (COMPACT_DRAG_PREVIEW_SIZE - height) / 2, Math.max(1, 36 / targetBars), height);
-  }
+  const pyramid = waveform?.pyramid;
+  drawWaveform(laneContext, {
+    width: lane.width, height: lane.height, pixelRatio: 1, ...(waveform ? { data: waveform } : {}), lanes: [0],
+    startFrame: (pyramid?.startSeconds ?? 0) * (pyramid?.sampleRate ?? 1), endFrame: (pyramid?.endSeconds ?? 1) * (pyramid?.sampleRate ?? 1),
+    tier: 'mini', tone: 'neutral',
+    palette: { wave: colors.wave, wavePlayed: colors.wavePlayed, waveCut: colors.waveCut, clipWave: colors.clipWave, line: colors.line, lineStrong: colors.lineStrong },
+  });
+  context.drawImage(lane, 6, (COMPACT_DRAG_PREVIEW_SIZE - lane.height) / 2);
   host.appendChild(canvas);
   dataTransfer.setDragImage(host, COMPACT_DRAG_PREVIEW_SIZE / 2, COMPACT_DRAG_PREVIEW_SIZE / 2);
 }

@@ -322,12 +322,13 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
   return (
     <div className={`relative inline-block ${className || ''}`} ref={ref}>
       {label ? <label className={UI_FIELD_LABEL_CLASS}>{label}</label> : null}
+      {/* ui-surface-allow 字段型触发器的表面暂由 UI_TRIGGER_BUTTON_CLASS 提供（含 buttonClassName 改高），交 2.2 拆为独立触发器 + size 枚举 */}
       <UiButton
         ref={triggerRef}
         type="button"
         disabled={disabled}
-        variant={appearance === 'text' ? 'plain' : 'muted'}
-        size={appearance === 'text' ? 'sm' : 'md'}
+        variant={appearance === 'text' ? 'quiet' : 'secondary'}
+        size="md"
         onClick={() => {
           if (disabled) return
           if (open) {

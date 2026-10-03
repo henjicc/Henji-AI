@@ -29,11 +29,10 @@ export function DeleteConfirmDialog({
       onClose={onCancel}
       footer={
         <>
-          <UiButton variant="ghost" onClick={onCancel} disabled={busy}>
+          <UiButton variant="secondary" onClick={onCancel} disabled={busy}>
             {cancelLabel}
           </UiButton>
-          <UiButton
-            className="border-red-500/40 bg-red-600/80 text-white hover:bg-red-600"
+          <UiButton variant="dangerSolid"
             onClick={onConfirm}
             disabled={busy}
           >

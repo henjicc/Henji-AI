@@ -1,12 +1,12 @@
 import type { AudioEditPlatform } from '@/platform/contracts/audioEdit'
-import type { AudioWaveformRangeRequest, AudioWaveformRangeResult } from '@/platform/contracts/audioWaveform'
 
 function api() {
   if (!window.henjiNative?.audio) throw new Error('Audio edit platform is unavailable')
   return window.henjiNative.audio
 }
 
-function extractWaveformRange(request: AudioWaveformRangeRequest, signal?: AbortSignal): Promise<AudioWaveformRangeResult> {
+/** One cancellable `audio:extractSamples` request: an abort cancels this request ID in the main process. */
+function cancellable<TRequest extends object, TResult>(call: (payload: TRequest & { requestId: string }) => Promise<TResult>, request: TRequest, signal?: AbortSignal): Promise<TResult> {
   signal?.throwIfAborted()
   const requestId = crypto.randomUUID()
   const native = api()
@@ -24,8 +24,8 @@ function extractWaveformRange(request: AudioWaveformRangeRequest, signal?: Abort
     }
     signal?.addEventListener('abort', onAbort, { once: true })
     if (signal?.aborted) { onAbort(); return }
-    native.extractRangeSamples({ ...request, requestId }).then(
-      (result: AudioWaveformRangeResult) => finish(() => resolve(result)),
+    call({ ...request, requestId }).then(
+      (result: TResult) => finish(() => resolve(result)),
       (error: unknown) => finish(() => reject(error)),
     )
   })
@@ -50,6 +50,7 @@ export function createElectronAudioEdit(): AudioEditPlatform {
     listProcessors: () => api().listEditProcessors(),
     preparePreviewChunk: (request) => api().prepareEditPreviewChunk(request),
     extractWaveform: (source, bucketCount) => api().extractSamples({ source, bucketCount }),
-    extractWaveformRange,
+    extractWaveformRange: (request, signal) => cancellable((payload) => api().extractRangeSamples(payload), request, signal),
+    extractWaveformPyramid: (request, signal) => cancellable((payload) => api().extractWaveformPyramid(payload), request, signal),
   }
 }

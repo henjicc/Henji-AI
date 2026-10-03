@@ -24,8 +24,7 @@ export function PromptOptimizationSelectorPanel({
         <div className={UI_TEXT_PANEL_TITLE_CLASS}>选择提示词优化配置</div>
         <UiButton
           type="button"
-          variant="ghost"
-          size="sm"
+          variant="secondary"
           onClick={onOpenEditor}
           className="shrink-0"
         >

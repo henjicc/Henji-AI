@@ -244,9 +244,8 @@ const TaskCard = React.memo(function TaskCard({
           retryLabel={t("ui:retry")}
           actions={
             <UiButton
-              variant="muted"
-              size="sm"
-              className="h-9 gap-1.5 px-4"
+              size="lg"
+              className="gap-1.5 px-4"
               onClick={() => openAssistantForDiagnosis({
                 title: '生成任务失败',
                 message: task.error || '生成任务失败',

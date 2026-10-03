@@ -23,7 +23,7 @@ function TransitionControls({ projectId, sequence, entry, action, owner }: { pro
     {window && <p className="text-2xs text-text-muted">作用帧：{window.start} 至 {window.end - 1}；剪切点：{window.cut}。</p>}
     <p className="text-2xs text-text-muted">使用两侧真实源画面完成溶解；源余量不足时会保留原剪辑并提示调整。</p>
     <div className="flex flex-wrap items-center gap-2">
-      {transition ? <><UiButton variant="ghost" size="sm" disabled={action.busy || !valid || durationFrames === transition.durationFrames} onClick={() => { void action.run(signal => updateVideoEditTransition(projectId, sequence.id, transition.id, durationFrames, signal)) }}>应用转场时长</UiButton><UiButton variant="plain" size="sm" disabled={action.busy} onClick={() => { void action.run(signal => deleteVideoEditTransition(projectId, sequence.id, transition.id, signal)) }}>移除交叉溶解</UiButton></> : <UiButton variant="ghost" size="sm" disabled={action.busy || !valid} onClick={() => { void action.run(signal => createVideoEditTransition(projectId, sequence.id, { leftClipId: entry.left.id, rightClipId: entry.right.id, durationFrames }, signal)) }}>添加交叉溶解</UiButton>}
+      {transition ? <><UiButton variant="secondary" disabled={action.busy || !valid || durationFrames === transition.durationFrames} onClick={() => { void action.run(signal => updateVideoEditTransition(projectId, sequence.id, transition.id, durationFrames, signal)) }}>应用转场时长</UiButton><UiButton disabled={action.busy} onClick={() => { void action.run(signal => deleteVideoEditTransition(projectId, sequence.id, transition.id, signal)) }}>移除交叉溶解</UiButton></> : <UiButton variant="secondary" disabled={action.busy || !valid} onClick={() => { void action.run(signal => createVideoEditTransition(projectId, sequence.id, { leftClipId: entry.left.id, rightClipId: entry.right.id, durationFrames }, signal)) }}>添加交叉溶解</UiButton>}
     </div>
   </UiGroup>
 }
@@ -52,6 +52,6 @@ export const VideoEditTransitionPanel = memo(function VideoEditTransitionPanel({
       <div className="flex flex-col gap-1">{entries.map(entry => <UiOptionButton key={entry.key} variant="menu" className="w-full min-w-0 justify-between gap-2 text-xs" active={entry.key === selected?.key} disabled={action.busy} aria-label={`选择转场${entry.left.name}到${entry.right.name}`} aria-pressed={entry.key === selected?.key} data-video-edit-transition-pair={entry.key} onClick={() => setSelectedKey(entry.key)}><span className="truncate">{entry.left.name} → {entry.right.name}</span><span className="shrink-0 text-2xs text-text-muted">{entry.transition ? '已添加' : entry.right.id === clip.id ? '入点' : '出点'}</span></UiOptionButton>)}</div>
       {selected && <TransitionControls key={JSON.stringify([selected.key, selected.transition?.id ?? null])} projectId={projectId} sequence={sequence} entry={selected} action={action} owner={instance} />}
     </> : <UiEmpty title="没有紧邻的画面片段" description="交叉溶解用于同一画面轨道上紧邻的两个片段。" />}
-    {action.busy && <div className="flex items-center gap-2"><UiLoading size="xs" message="正在检查转场画面" /><UiButton variant="plain" size="sm" onClick={action.cancel}>取消检查</UiButton></div>}
+    {action.busy && <div className="flex items-center gap-2"><UiLoading size="xs" message="正在检查转场画面" /><UiButton onClick={action.cancel}>取消检查</UiButton></div>}
   </UiGroup>
 })

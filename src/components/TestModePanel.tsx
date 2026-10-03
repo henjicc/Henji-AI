@@ -96,11 +96,9 @@ const TestModePanel: React.FC<TestModePanelProps> = ({
             <div className="w-3 h-3 bg-yellow-500 rounded-full animate-pulse" />
             <h2 className={UI_TEXT_TITLE_CLASS}>{t('testMode.title')}</h2>
           </div>
-          <UiIconButton
+          <UiIconButton size="lg"
             type="button"
             onClick={handleClose}
-            appearance="hover-only"
-            className="h-8 w-8 text-text-muted hover:text-white hover:bg-white/10"
           >
             <X className="h-5 w-5" />
           </UiIconButton>
@@ -268,7 +266,7 @@ const TestModePanel: React.FC<TestModePanelProps> = ({
             <h3 className={`mb-3 ${UI_TEXT_SECTION_CLASS}`}>{t('testMode.logsWindow.title')}</h3>
             <div className="flex items-center justify-between p-3 rounded-lg bg-app/40">
               <div className={UI_TEXT_META_CLASS}>{t('testMode.logsWindow.description')}</div>
-              <UiButton type="button" size="sm" onClick={() => void openLogWindow()}>
+              <UiButton variant="secondary" type="button" onClick={() => void openLogWindow()}>
                 {t('testMode.logsWindow.openButton')}
               </UiButton>
             </div>

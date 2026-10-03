@@ -133,9 +133,8 @@ export function DerivedMediaParamControl({
     <div className={`flex items-center gap-1.5 ${compact ? 'nodrag nowheel' : ''}`}>
       <UiButton
         type="button"
-        variant="muted"
-        size={compact ? 'sm' : 'field-sm'}
-        className={compact ? '!h-7 gap-1.5 !rounded-md !px-2' : 'gap-1.5'}
+        variant="secondary"
+        size={compact ? 'sm' : 'lg'}
         disabled={disabled || !sourceImage}
         onMouseDown={compact ? (event) => event.stopPropagation() : undefined}
         onClick={() => setInternalEditorOpen(true)}

@@ -16,10 +16,10 @@ export function NumberStepper({ label, value, min, max, onChange }: NumberSteppe
     <div className="space-y-1.5">
       <div className={UI_TEXT_META_CLASS}>{label}</div>
       <div className="flex items-center gap-2">
-        <UiButton
+        <UiButton variant="secondary"
           type="button"
-          size="sm"
-          className="h-9 w-9 px-0 text-sm"
+          size="lg"
+          className="w-9 px-0"
           onClick={() => onChange(value - 1)}
           disabled={decreaseDisabled}
         >
@@ -35,10 +35,10 @@ export function NumberStepper({ label, value, min, max, onChange }: NumberSteppe
           textHistory={{ onValueChange: (nextValue) => onChange(Number(nextValue)) }}
           className="h-9 text-center"
         />
-        <UiButton
+        <UiButton variant="secondary"
           type="button"
-          size="sm"
-          className="h-9 w-9 px-0 text-sm"
+          size="lg"
+          className="w-9 px-0"
           onClick={() => onChange(value + 1)}
           disabled={increaseDisabled}
         >

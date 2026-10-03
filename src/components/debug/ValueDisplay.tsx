@@ -26,7 +26,7 @@ export function ValueDisplay({ value, previousValue, record }: ValueDisplayProps
 
   return (
     <div className="flex flex-col gap-1">
-      <span className={hasChanged || hasTransform ? 'text-orange-500 font-semibold' : 'text-text-muted'}>
+      <span className={hasChanged || hasTransform ? 'text-warning-text font-semibold' : 'text-text-muted'}>
         {formatValue(value)}
       </span>
 

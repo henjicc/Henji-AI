@@ -362,11 +362,10 @@ export function NodeToolDialog() {
       contentClassName="overflow-y-auto px-4 py-4"
       footer={
         <>
-          <UiButton variant="ghost" size="sm" onClick={closeDialog}>
+          <UiButton variant="secondary" onClick={closeDialog}>
             {t('common.cancel')}
           </UiButton>
           <UiButton
-            size="sm"
             variant="primary"
             onClick={handleApply}
             disabled={isProcessing || !sourceImageUrl || (

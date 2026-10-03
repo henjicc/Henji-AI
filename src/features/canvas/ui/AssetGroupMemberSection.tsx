@@ -132,10 +132,7 @@ export const AssetGroupMemberSection = memo(({
                   {resolveNodeDisplayName(member.type, member.data)}
                 </span>
                 <div className="flex shrink-0 items-center gap-1">
-                  <UiIconButton
-                    appearance="hover-only"
-                    showBorder={false}
-                    className="h-8 w-8"
+                  <UiIconButton size="lg"
                     aria-label={labels.moveEarlier}
                     title={labels.moveEarlier}
                     disabled={index === 0}
@@ -143,10 +140,7 @@ export const AssetGroupMemberSection = memo(({
                   >
                     <ArrowLeft className="h-4 w-4" />
                   </UiIconButton>
-                  <UiIconButton
-                    appearance="hover-only"
-                    showBorder={false}
-                    className="h-8 w-8"
+                  <UiIconButton size="lg"
                     aria-label={labels.moveLater}
                     title={labels.moveLater}
                     disabled={index === members.length - 1}
@@ -154,11 +148,8 @@ export const AssetGroupMemberSection = memo(({
                   >
                     <ArrowRight className="h-4 w-4" />
                   </UiIconButton>
-                  <UiIconButton
-                    appearance="hover-only"
-                    showBorder={false}
-                    active={isCover}
-                    className="h-8 w-8"
+                  <UiIconButton size="lg"
+                    on={isCover}
                     aria-label={labels.setCover}
                     title={labels.setCover}
                     onClick={() => onSetCover(member.id)}
@@ -169,11 +160,7 @@ export const AssetGroupMemberSection = memo(({
                       strokeWidth={isCover ? 0 : 2}
                     />
                   </UiIconButton>
-                  <UiIconButton
-                    appearance="hover-only"
-                    showBorder={false}
-                    hoverVariant="danger"
-                    className="h-8 w-8"
+                  <UiIconButton size="lg" tone="danger"
                     aria-label={labels.remove}
                     title={labels.remove}
                     onClick={() => onRemoveRequest(member.id)}

@@ -35,9 +35,10 @@ export function ImageEditorLayerControlsV3({ presentation, document, layerId, bo
         <div key={edge} data-layer-transform-edge={edge} className="absolute h-px origin-left bg-accent" />
       ))}
       {LAYER_TRANSFORM_HANDLES_V3.map((handle) => (
-        <UiButton key={handle} variant="plain" data-layer-transform-handle={handle}
+        // ui-surface-allow 图片上的小型变换控制点（需要对比描边），不是按钮档位
+        <UiButton key={handle} data-layer-transform-handle={handle}
           aria-label={t(handle === 'rotate' ? 'imageEditor.v3.layerControls.rotate' : 'imageEditor.v3.layerControls.resize', { handle })}
-          // ui-surface-allow: 图片上的小型变换控制点需要对比描边，不是面板或嵌套卡片。
+          // ui-surface-allow: 控制点的对比描边（规则 A），见上
           className={`pointer-events-auto absolute !h-3 !min-h-0 !w-3 !min-w-0 !p-0 !border !border-accent !bg-panel ${handle === 'rotate' ? '!rounded-full cursor-grab' : '!rounded-hairline cursor-crosshair'}`} />
       ))}
     </div>

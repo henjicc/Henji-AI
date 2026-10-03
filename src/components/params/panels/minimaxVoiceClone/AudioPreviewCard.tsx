@@ -91,7 +91,6 @@ export function AudioPreviewCard({
             filePath={filePath}
             rightActions={playerRightActions}
             compact
-            waveformWidth={compact ? 236 : 280}
             waveformHeight={compact ? 40 : 58}
             className={`!w-full !max-w-none ${compact ? '!p-2.5' : '!p-3'}`}
           />

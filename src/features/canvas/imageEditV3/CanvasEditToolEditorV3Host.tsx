@@ -363,8 +363,6 @@ export function CanvasEditToolEditorV3Host({
   const persistenceAction = saving || saveFailed || projectionFailure ? (
     saveFailed || projectionFailure ? (
       <UiButton
-        variant="plain"
-        size="sm"
         disabled={saving || interactionDisabled}
         title={t(`toolDialog.imageEditorV3.${saveFailed ? 'saveFailedDescription'
           : projectionFailure === 'target-changed' ? 'targetChangedDescription' : 'syncFailedDescription'}`)}

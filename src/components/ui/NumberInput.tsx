@@ -204,10 +204,9 @@ export default function NumberInput(props: NumberInputProps): ReactElement {
           disabled={disabled}
         />
         <div className={`flex shrink-0 flex-col ${stepperWidthClass}`}>
+          {/* ui-surface-allow 数值框内置步进箭头：高度与宽度随字段档位，交 2.2 数值拖动字段替换 */}
           <UiIconButton
             type="button"
-            showBorder={false}
-            appearance="color-only"
             tabIndex={-1}
             data-ui-compact-stepper-button
             onMouseDown={(event) => {
@@ -218,17 +217,16 @@ export default function NumberInput(props: NumberInputProps): ReactElement {
               event.stopPropagation()
               stepBy(1)
             }}
-            className={`!h-1/2 !rounded-none !border-0 !p-0 ${stepperButtonWidthClass}`}
+            className={`!h-1/2 !rounded-none !p-0 ${stepperButtonWidthClass}`}
             title={increaseLabel}
             aria-label={increaseLabel}
             disabled={disabled || (typeof max === 'number' && safeValue >= max)}
           >
             <ChevronUp className={iconSizeClass} />
           </UiIconButton>
+          {/* ui-surface-allow 数值框内置步进箭头：高度与宽度随字段档位，交 2.2 数值拖动字段替换 */}
           <UiIconButton
             type="button"
-            showBorder={false}
-            appearance="color-only"
             tabIndex={-1}
             data-ui-compact-stepper-button
             onMouseDown={(event) => {
@@ -239,7 +237,7 @@ export default function NumberInput(props: NumberInputProps): ReactElement {
               event.stopPropagation()
               stepBy(-1)
             }}
-            className={`!h-1/2 !rounded-none !border-0 !p-0 ${stepperButtonWidthClass}`}
+            className={`!h-1/2 !rounded-none !p-0 ${stepperButtonWidthClass}`}
             title={decreaseLabel}
             aria-label={decreaseLabel}
             disabled={disabled || (typeof min === 'number' && safeValue <= min)}

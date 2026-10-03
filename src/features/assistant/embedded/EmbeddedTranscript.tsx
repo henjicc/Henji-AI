@@ -33,13 +33,13 @@ function AssistantTurn({ messages, busy, onToggle }: { messages: EmbeddedAgentMe
   }
   return <div className="min-w-0 space-y-4" data-embedded-assistant-turn>
     {process.length ? <div>
-      <UiButton variant="plain" size="sm" className="!px-0 text-text-muted" aria-expanded={expanded}
+      <UiButton className="!px-0" aria-expanded={expanded}
         onClick={() => { onToggle(); setExpanded(value => !value) }}>
         {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />} {hasAnswer ? '查看过程' : '处理过程'}
       </UiButton>
       {expanded ? <div className="space-y-3 pt-2 text-text-muted" data-embedded-process>
         {thinking.length ? <div>
-          <UiButton variant="plain" size="sm" className="!px-0 text-text-muted" aria-expanded={thinkingExpanded}
+          <UiButton className="!px-0" aria-expanded={thinkingExpanded}
             onClick={() => { onToggle(); setThinkingExpanded(value => !value) }}>
             {thinkingExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
             {busy && !hasAnswer ? '正在思考' : '思考过程'}

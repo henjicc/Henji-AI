@@ -278,10 +278,7 @@ export function ImageEditorLayersPanelV3({
           {({ togglePanel, open }) => (
             <UiIconButton
               data-panel-trigger-button
-              className="h-7 w-7 text-xs"
-              showBorder={false}
-              appearance="hover-only"
-              active={open}
+              on={open}
               aria-label={t('imageEditor.v3.layers.addLayer')}
               title={t('imageEditor.v3.layers.addLayer')}
               aria-expanded={open}
@@ -292,9 +289,6 @@ export function ImageEditorLayersPanelV3({
           )}
         </PanelTrigger>
         <UiIconButton
-          className="h-7 w-7"
-          showBorder={false}
-          appearance="hover-only"
           disabled={!primaryEditable || !primaryLocation
             || primaryLocation.index >= primaryLocation.container.length - 1}
           aria-label={t('imageEditor.v3.layers.moveUp')}
@@ -311,9 +305,6 @@ export function ImageEditorLayersPanelV3({
           <ArrowUp className="h-3.5 w-3.5" />
         </UiIconButton>
         <UiIconButton
-          className="h-7 w-7"
-          showBorder={false}
-          appearance="hover-only"
           disabled={!primaryEditable || !primaryLocation || primaryLocation.index <= 0}
           aria-label={t('imageEditor.v3.layers.moveDown')}
           title={t('imageEditor.v3.layers.moveDown')}
@@ -329,9 +320,6 @@ export function ImageEditorLayersPanelV3({
           <ArrowDown className="h-3.5 w-3.5" />
         </UiIconButton>
         <UiIconButton
-          className="h-7 w-7"
-          showBorder={false}
-          appearance="hover-only"
           disabled={!primaryEditable || !primaryLocation}
           aria-label={t('imageEditor.v3.layers.duplicate')}
           title={t('imageEditor.v3.layers.duplicate')}
@@ -347,11 +335,7 @@ export function ImageEditorLayersPanelV3({
         >
           <Copy className="h-3.5 w-3.5" />
         </UiIconButton>
-        <UiIconButton
-          className="h-7 w-7"
-          showBorder={false}
-          appearance="hover-only"
-          hoverVariant="danger"
+        <UiIconButton tone="danger"
           disabled={!canDelete}
           aria-label={t('imageEditor.v3.layers.delete')}
           title={t('imageEditor.v3.layers.delete')}

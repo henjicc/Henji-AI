@@ -3,14 +3,15 @@ import React from 'react'
 import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import AudioPlayer from './AudioPlayer'
-import { useAudioWaveform } from '@/hooks/useAudioWaveform'
+import { useWaveformData } from '@/hooks/useWaveformData'
 
 vi.mock('@/hooks/useI18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }))
-vi.mock('@/hooks/useAudioWaveform', () => ({ useAudioWaveform: vi.fn(() => ({ waveform: null, waveDuration: undefined })) }))
+vi.mock('@/hooks/useWaveformData', () => ({ useWaveformData: vi.fn(() => ({ status: 'idle' })) }))
+vi.mock('@/components/waveform/WaveformView', () => ({ WaveformView: () => null }))
 vi.mock('@/utils/save', () => ({ downloadAudioFile: vi.fn(), saveAudioFromUrl: vi.fn() }))
 vi.mock('@/components/ui', () => ({
   UI_PANEL_SURFACE_CLASS: '',
-  UiIconButton: (props: React.ButtonHTMLAttributes<HTMLButtonElement>) => React.createElement('button', props),
+  UiIconButton: ({ size: _size, tone: _tone, on: _on, shape: _shape, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & { size?: string; tone?: string; on?: boolean; shape?: string }) => React.createElement('button', props),
   UiRangeInput: (props: React.InputHTMLAttributes<HTMLInputElement>) => React.createElement('input', props),
 }))
 beforeEach(() => {
@@ -76,7 +77,7 @@ it('宿主受控模式只发送播放、定位和音量命令，无第二媒体�
   const controlled = { currentTime: 12, duration: 120, playing: false, volume: 0.4, onTogglePlay, onSeek, onVolume }
   const view = render(<AudioPlayer src="media:source" filePath="D:/source.wav" compact controlledPlayback={controlled} />)
   expect(view.container.querySelector('audio')).toBeNull()
-  expect(useAudioWaveform).toHaveBeenLastCalledWith('', undefined, expect.objectContaining({ duration: 120 }))
+  expect(useWaveformData).toHaveBeenLastCalledWith(null)
   expect(view.getByText('0:12')).toBeTruthy(); expect(view.getByText('2:00')).toBeTruthy()
   await act(async () => fireEvent.click(view.getByTitle('ui:audioPlayer.playPause')))
   expect(onTogglePlay).toHaveBeenCalledTimes(1); expect(HTMLMediaElement.prototype.play).not.toHaveBeenCalled()

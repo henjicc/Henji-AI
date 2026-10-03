@@ -260,14 +260,14 @@ export default function RelightSpecialEditor({
         <div className="flex w-full items-center justify-between gap-3">
           <p className={UI_TEXT_META_CLASS}>有尚未确认的打光设置，确定放弃吗？</p>
           <div className="flex items-center gap-2">
-            <UiButton type="button" variant="ghost" size="sm" onClick={onKeepEditing}>继续编辑</UiButton>
-            <UiButton type="button" variant="primary" size="sm" onClick={onDiscard}>放弃更改</UiButton>
+            <UiButton type="button" variant="secondary" onClick={onKeepEditing}>继续编辑</UiButton>
+            <UiButton type="button" variant="dangerSolid" onClick={onDiscard}>放弃更改</UiButton>
           </div>
         </div>
       ) : (
         <>
-          <UiButton type="button" variant="ghost" size="sm" onClick={close}>取消</UiButton>
-          <UiButton type="button" variant="primary" size="sm" onClick={onConfirm}>应用设置</UiButton>
+          <UiButton type="button" variant="secondary" onClick={close}>取消</UiButton>
+          <UiButton type="button" variant="primary" onClick={onConfirm}>应用设置</UiButton>
         </>
       )}
     >

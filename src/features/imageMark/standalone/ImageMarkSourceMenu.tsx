@@ -71,8 +71,7 @@ export function ImageMarkSourceMenu({
     >
       {({ togglePanel }) => (
         <UiButton
-          variant="ghost"
-          size="sm"
+          variant="secondary"
           disabled={disabled}
           onClick={togglePanel}
           title={t('imageEditor.v3.host.sourceMenu.title')}

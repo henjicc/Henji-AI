@@ -4,12 +4,15 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { normalizeLocalSource } from '../services/image/source'
 import { isPathWithinAllowedMediaRoots } from '../protocol'
-import { extractAudioSamples, extractAudioWaveformRange, disposeAudioWaveformService, validateAudioWaveformRange } from '../services/audio/ops'
-import type { AudioWaveformRangeRequest } from '../services/audio/types'
+import { extractAudioSamples, extractAudioWaveformPyramid, extractAudioWaveformRange, disposeAudioWaveformService, validateAudioWaveformPyramid, validateAudioWaveformRange } from '../services/audio/ops'
+import type { AudioWaveformPyramidRequest, AudioWaveformRangeRequest } from '../services/audio/types'
 import { assertTrustedApplicationSender } from './application-control'
 import { parseRecord, registerIpcHandler } from './registry'
 
-type SamplesPayload = ({ mode: 'range'; requestId: string } & AudioWaveformRangeRequest) | { mode: 'legacy'; requestId?: string; source: string; bucketCount: number }
+type SamplesPayload = ({ mode: 'range'; requestId: string } & AudioWaveformRangeRequest)
+  | ({ mode: 'pyramid'; requestId: string } & AudioWaveformPyramidRequest)
+  | { mode: 'legacy'; requestId?: string; source: string; bucketCount: number }
+const isRemote = (source: string): boolean => source.startsWith('http://') || source.startsWith('https://')
 const requests = new Map<number, Map<string, AbortController>>()
 const watched = new WeakSet<WebContents>()
 
@@ -20,10 +23,17 @@ function requestId(value: unknown): string {
 function parseSamples(input: unknown): SamplesPayload {
   const record = parseRecord(input)
   if (record.mode === 'range') {
-    const allowed = new Set(['mode', 'requestId', 'source', 'sourceRevision', 'startUs', 'endUs', 'bucketCount', 'channels', 'audioStream', 'audioChannel'])
+    const allowed = new Set(['mode', 'requestId', 'source', 'sourceRevision', 'startUs', 'endUs', 'bucketCount', 'channels', 'audioStream', 'audioChannel', 'samples'])
     if (Object.keys(record).some(key => !allowed.has(key))) throw new Error('未知的音频范围字段。')
     const result = { ...record, mode: 'range', requestId: requestId(record.requestId) } as SamplesPayload & { mode: 'range' }
     validateAudioWaveformRange(result)
+    return result
+  }
+  if (record.mode === 'pyramid') {
+    const allowed = new Set(['mode', 'requestId', 'source', 'sourceRevision', 'channels', 'audioStream', 'audioChannel', 'maxBuckets', 'ifNoneMatch'])
+    if (Object.keys(record).some(key => !allowed.has(key))) throw new Error('未知的音频波形字段。')
+    const result = { ...record, mode: 'pyramid', requestId: requestId(record.requestId) } as SamplesPayload & { mode: 'pyramid' }
+    validateAudioWaveformPyramid(result)
     return result
   }
   if (Object.keys(record).some(key => !['source', 'bucketCount', 'requestId'].includes(key))) throw new Error('未知的音频采样字段。')
@@ -60,13 +70,17 @@ async function extract(payload: SamplesPayload, event: IpcMainInvokeEvent): Prom
   owned.set(id, controller)
   try {
     // Install ownership before filesystem awaits so an immediate cancel cannot be lost.
-    const source = payload.mode === 'legacy' && (payload.source.startsWith('http://') || payload.source.startsWith('https://'))
+    // Remote http(s) audio (legacy overview and pyramid only) is downloaded by the service; local paths must be authorized.
+    const source = payload.mode !== 'range' && isRemote(payload.source)
       ? payload.source
       : await authorizedLocalPath(payload.source)
     controller.signal.throwIfAborted()
+    const selection = payload.mode === 'legacy' ? {} : { channels: payload.channels, ...(payload.sourceRevision !== undefined ? { sourceRevision: payload.sourceRevision } : {}), ...(payload.audioStream !== undefined ? { audioStream: payload.audioStream } : {}), ...(payload.audioChannel !== undefined ? { audioChannel: payload.audioChannel } : {}) }
     const result = payload.mode === 'range'
-      ? await extractAudioWaveformRange({ source, startUs: payload.startUs, endUs: payload.endUs, bucketCount: payload.bucketCount, channels: payload.channels, ...(payload.sourceRevision !== undefined ? { sourceRevision: payload.sourceRevision } : {}), ...(payload.audioStream !== undefined ? { audioStream: payload.audioStream } : {}), ...(payload.audioChannel !== undefined ? { audioChannel: payload.audioChannel } : {}) }, controller.signal)
-      : await extractAudioSamples(source, payload.bucketCount, controller.signal)
+      ? await extractAudioWaveformRange({ source, startUs: payload.startUs, endUs: payload.endUs, bucketCount: payload.bucketCount, channels: payload.channels, ...selection, ...(payload.samples !== undefined ? { samples: payload.samples } : {}) }, controller.signal)
+      : payload.mode === 'pyramid'
+        ? await extractAudioWaveformPyramid({ source, channels: payload.channels, ...selection, ...(payload.maxBuckets !== undefined ? { maxBuckets: payload.maxBuckets } : {}), ...(payload.ifNoneMatch !== undefined ? { ifNoneMatch: payload.ifNoneMatch } : {}) }, controller.signal)
+        : await extractAudioSamples(source, payload.bucketCount, controller.signal)
     controller.signal.throwIfAborted()
     if (event.sender.isDestroyed() || requests.get(event.sender.id) !== owned || owned.get(id) !== controller) throw new DOMException('音频采样已取消', 'AbortError')
     return result

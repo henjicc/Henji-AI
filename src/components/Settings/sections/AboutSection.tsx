@@ -60,14 +60,14 @@ const AboutSection: React.FC = () => {
       </UiFormRow>
 
       <UiFormRow label={t('sections.about.authorLabel')} inline>
-        <UiButton type="button" variant="plain" size="sm" className="-mr-3 gap-1.5" onClick={() => void openExternal(ABOUT_AUTHOR_URL)}>
+        <UiButton type="button" className="-mr-3 gap-1.5" onClick={() => void openExternal(ABOUT_AUTHOR_URL)}>
           {ABOUT_AUTHOR_NAME}
           <ExternalLink className="h-3.5 w-3.5" />
         </UiButton>
       </UiFormRow>
 
       <UiFormRow label={t('sections.about.homepageLabel')} inline>
-        <UiButton type="button" variant="plain" size="sm" className="-mr-3 gap-1.5" onClick={() => void openExternal(ABOUT_PROJECT_URL)}>
+        <UiButton type="button" className="-mr-3 gap-1.5" onClick={() => void openExternal(ABOUT_PROJECT_URL)}>
           {ABOUT_PROJECT_URL_LABEL}
           <ExternalLink className="h-3.5 w-3.5" />
         </UiButton>
@@ -77,8 +77,7 @@ const AboutSection: React.FC = () => {
         <span className={UI_TEXT_META_CLASS}>{notices?.project.license ?? 'Apache-2.0'}</span>
         <UiButton
           type="button"
-          variant="muted"
-          size="sm"
+          variant="secondary"
           className="px-4"
           disabled={!projectLicenseText}
           onClick={() => setProjectLicenseOpen(true)}
@@ -122,8 +121,7 @@ const AboutSection: React.FC = () => {
         >
           <UiButton
             type="button"
-            variant="muted"
-            size="sm"
+            variant="secondary"
             className="px-4"
             onClick={() => setViewer({ open: true, componentId: null })}
           >
