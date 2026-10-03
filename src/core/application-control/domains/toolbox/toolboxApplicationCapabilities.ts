@@ -17,10 +17,10 @@ import {
 const listToolboxTools = defineApplicationCapability({
   id: 'list_toolbox_tools',
   version: 1,
-  title: '列出工具箱能力',
-  description: '列出工具箱内可通过结构化参数使用的工具和能力边界。',
+  title: '列出工具页能力',
+  description: '列出“工具”页内可通过结构化参数使用的工具和能力边界。',
   domain: 'toolbox',
-  aliases: ['工具箱有什么', 'toolbox tools'],
+  aliases: ['工具有什么', '工具箱有什么', 'tools', 'toolbox tools'],
   readOnly: true,
   control: capabilityControl('observe', ['toolbox.tool']),
   risk: 'R0',
@@ -37,13 +37,13 @@ const listToolboxTools = defineApplicationCapability({
     tools: z.array(z.record(z.string(), z.unknown())),
   }),
   concurrencyKey: 'toolbox_catalog',
-  summarize: (output) => `工具箱提供 ${output.tools.length} 个工具。`,
+  summarize: (output) => `“工具”页提供 ${output.tools.length} 个工具。`,
 })
 
 const getToolboxState = defineApplicationCapability({
   id: 'get_toolbox_state',
   version: 1,
-  title: '读取工具箱状态',
+  title: '读取工具页状态',
   description: '读取当前工具、3D 工程和选择摘要，不返回完整场景。',
   domain: 'toolbox',
   aliases: ['当前工具状态', 'toolbox state'],
@@ -63,14 +63,14 @@ const getToolboxState = defineApplicationCapability({
     state: z.record(z.string(), z.unknown()),
   }),
   concurrencyKey: 'toolbox_state',
-  summarize: () => '已读取工具箱状态。',
+  summarize: () => '已读取工具页状态。',
 })
 
 const selectToolboxTool = defineApplicationCapability({
   id: 'select_toolbox_tool',
   version: 2,
-  title: '切换工具箱工具',
-  description: '按稳定工具 ID 打开或关闭工具箱子工具。',
+  title: '切换工具',
+  description: '按稳定工具 ID 打开或关闭“工具”页里的工具。',
   domain: 'toolbox',
   aliases: ['打开 3D 运镜', '打开图片编辑', 'select toolbox tool'],
   readOnly: false,
@@ -86,7 +86,7 @@ const selectToolboxTool = defineApplicationCapability({
   requiredScopes: ['navigation', 'toolbox'],
   producesRefs: ['application.surface'],
   successEvidence: ['打开工具时返回实际 Surface ID，关闭工具时返回 surfaceId=null，且宿主工具选择与请求一致。'],
-  failureRecovery: ['工具 Surface 无法打开时停止并说明，不得声称已切换；关闭失败时重新读取工具箱状态。'],
+  failureRecovery: ['工具 Surface 无法打开时停止并说明，不得声称已切换；关闭失败时重新读取工具页状态。'],
   inputSchema: z.object({
     toolId: z.enum(['audioEdit', 'cameraStage', 'imageMark']).nullable(),
   }).strict(),
@@ -96,7 +96,7 @@ const selectToolboxTool = defineApplicationCapability({
   }),
   concurrencyKey: 'toolbox_selection',
   resolveTargetIds: (input) => ({ toolId: input.toolId ?? '' }),
-  summarize: (output) => `当前工具：${output.toolId ?? '工具箱首页'}。`,
+  summarize: (output) => `当前工具：${output.toolId ?? '工具首页'}。`,
 })
 
 const imageEditPreviewSourceRefSchema = applicationRefSchema.extend({

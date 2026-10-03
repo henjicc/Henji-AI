@@ -51,7 +51,7 @@ export const GENERAL_APPLICATION_SETTING_DEFINITIONS: ApplicationSettingDefiniti
   }, () => modelDefaultsManager.getSnapshot().models.audio || 'auto',
   (value) => modelDefaultsManager.setDefaultModel('audio', value === 'auto' ? '' : value)),
   storeSetting({
-    id: 'general.startup_workspace', title: '启动工作区', description: '设置应用启动后默认显示生成、画布或工具箱。',
+    id: 'general.startup_workspace', title: '启动工作区', description: '设置应用启动后默认显示生成、画布或工具。',
     aliases: ['启动页面', '默认页面', 'startup'], schema: z.enum(['generation', 'nodes', 'tools']), defaultValue: 'generation',
     target: { tab: 'general', sectionId: 'general-basic' }, requiresReload: false, requiresRestart: false, sensitive: false,
   }, () => useSettingsStore.getState().startupWorkspace,

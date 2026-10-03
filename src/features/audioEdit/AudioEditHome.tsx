@@ -48,7 +48,7 @@ export function AudioEditHome({ projects, loading, loadFailed, disabled, onBack,
           title="口播剪辑"
           description="用文字和波形剪辑，再交给专业剪辑软件"
           onBack={onBack}
-          backLabel="返回工具箱"
+          backLabel="返回工具"
           actions={hasProjects ? importButton : undefined}
         />
         {loading ? (

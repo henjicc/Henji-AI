@@ -164,7 +164,7 @@ function createToolboxScenes(context) {
         await intensity.focus()
         for (let index = 0; index < 6; index += 1) await intensity.press('ArrowRight')
         await settlePage(page, 1200)
-        await page.getByRole('button', { name: '返回工具箱' }).click()
+        await page.getByRole('button', { name: '返回工具' }).click()
         await openGlowEditor()
         const radius = page.getByRole('slider', { name: '半径' })
         await radius.fill('0.78')

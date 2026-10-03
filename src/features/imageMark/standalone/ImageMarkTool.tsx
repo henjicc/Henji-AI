@@ -49,7 +49,7 @@ const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'avif'];
 type ImageMarkSource = ImageMarkToolWorkspaceSourceV3;
 
 export interface ImageMarkToolProps {
-  /** 返回工具箱。本工具自带命令带,返回按钮由它自己渲染,外层不再画标题带。 */
+  /** 返回“工具”首页。本工具自带命令带,返回按钮由它自己渲染,外层不再画标题带。 */
   onBack?: () => void;
 }
 
@@ -320,8 +320,8 @@ export function ImageMarkTool({ onBack }: ImageMarkToolProps = {}): JSX.Element 
 
   const backButton = onBack ? (
     <UiIconButton
-      title="返回工具箱"
-      aria-label="返回工具箱"
+      title="返回工具"
+      aria-label="返回工具"
       onClick={onBack}
     >
       <ArrowLeft size={15} />
@@ -334,7 +334,7 @@ export function ImageMarkTool({ onBack }: ImageMarkToolProps = {}): JSX.Element 
         {/* 空态没有工作面，是一张普通页面：返回进标题左侧，不为它单画一条命令带 */}
         <div className="flex h-full flex-col overflow-y-auto bg-app p-6">
           <UiRegion maxWidthClassName="max-w-6xl" className="mx-auto w-full">
-            <UiPageHeader title="图片编辑" onBack={onBack} backLabel="返回工具箱" />
+            <UiPageHeader title="图片编辑" onBack={onBack} backLabel="返回工具" />
           </UiRegion>
           <div className="flex min-h-0 flex-1 items-center justify-center p-8">
             <div

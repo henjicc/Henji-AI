@@ -264,7 +264,7 @@ const App: React.FC = () => {
       <GenerationLifecycleProvider>
       <CameraStageRenderLifecycleHost />
       <div
-        className="h-screen min-h-screen bg-app text-white flex flex-col relative overflow-hidden"
+        className="h-screen min-h-screen bg-window text-text1 flex flex-col relative overflow-hidden"
         style={{
           opacity: isReady ? 1 : 0,
           transition: uiTransition(['opacity'], UI_DURATION.slow)

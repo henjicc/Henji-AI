@@ -205,6 +205,7 @@ prominent/bordered/plain、Fluent 的 primary/default/subtle）。本项目（�
 | 危险 | `danger`（静息同 quiet，悬停显红）/ `dangerSolid`（只用于确认弹窗） | `tone="danger"` | 删除、清空、移除 |
 | 链接 | `link`（强调文字、悬停下划线、行内高度） | —— | 行内跳转/说明链接，不计入动作层级 |
 | 画面上 | `media` | `tone="media"` | 压在图片/视频/画布上的控件（固定媒体叠层令牌） |
+| 窗口控件 | —— | `UiWindowControl action platform` | 只用于无边框窗口标题栏的最小化/最大化/还原/关闭（Windows 36×28 静默、关闭悬停危险实底；macOS 交通灯取状态实底令牌） |
 
 尺寸：`UiButton size` sm/md/lg = 28/32/36（默认 md）；`UiIconButton size` xs/sm/md/lg = 20/24/28/32（默认 md），
 xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconButton on`（选中底 + 强调色图标）。
@@ -291,7 +292,7 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 
 | 语义 | 表达 | 通用落点 |
 |---|---|---|
-| 导航：正在看哪里 | 中性选中底 + 主要文字（图标强调色）+ 方向指示条 | `UiNavButton active`；横向 chip 用 `selectionRole="navigation"`；面板标签用 `selectionAppearance="subtle"`（主要文字 + 底部细线） |
+| 导航：正在看哪里 | 中性选中底 + 主要文字（图标强调色）+ 方向指示条 | `UiNavButton active`；横向 chip 用 `selectionRole="navigation"`；面板标签用 `selectionAppearance="subtle"`（主要文字 + 底部细线）；应用标题栏的工作区导航用 `selectionAppearance="workspace"`（纯文字 28 高，底部短指示条） |
 | 单选：当前值是什么 | 中性抬升：选中底 + 主要文字（重要记录 003，不用强调色实底） | `UiOptionButton active`（分段 `variant="segment"`，网格 `variant="grid"`） |
 | 多选/标签：集合中哪些已选 | 强调描边 + 中性选中底 + 强调文字 | `UiChipButton active`；多选的选项卡用 `UiOptionButton selection="multiple"` |
 | 布尔：功能是否开启 | 强调色只进入开关轨道或复选框本体，整行保持静息 | `UiSwitch checked` / `UiCheckbox checked` |

@@ -241,7 +241,8 @@
   "tabs": {
     "generation": "Generation",
     "canvas": "Canvas",
-    "tools": "Toolbox",
+    "videoEdit": "Edit",
+    "tools": "Tools",
     "assets": "Assets"
   },
   "videoEditSend": {
@@ -333,7 +334,9 @@
     "close": "Close",
     "minimize": "Minimize",
     "maximize": "Maximize",
-    "toggleMaximize": "Maximize/Restore"
+    "restore": "Restore",
+    "assistant": "Assistant",
+    "workspaceNav": "Workspaces"
   },
   "updateDialog": {
     "title": "New Version Available",
@@ -660,7 +663,7 @@
         }
       },
       "host": {
-        "backToToolbox": "Back to Toolbox",
+        "backToToolbox": "Back to Tools",
         "loading": "Preparing the editable image…",
         "bootstrapError": {
           "title": "Could not open the new image editor",

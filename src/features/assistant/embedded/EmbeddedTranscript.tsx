@@ -7,7 +7,7 @@ import { AssistantMessageAttachments } from '../conversation/AssistantMessageAtt
 
 export function EmbeddedUserMessage({ message }: { message: Pick<EmbeddedAgentMessage, 'text' | 'attachments'> }): JSX.Element {
   return <div className="flex min-w-0 justify-end" data-embedded-user-message>
-    <div className={`max-w-[90%] rounded-2xl px-4 py-3 ${UI_COLOR_ACCENT_FILL_TEXT_CLASS} text-white`}>
+    <div className={`max-w-[90%] rounded-2xl px-4 py-3 ${UI_COLOR_ACCENT_FILL_TEXT_CLASS}`}>
       <p className="whitespace-pre-wrap break-words text-sm leading-6 [overflow-wrap:anywhere]">{message.text}</p>
       {message.attachments?.length ? <AssistantMessageAttachments attachments={message.attachments} /> : null}
     </div>

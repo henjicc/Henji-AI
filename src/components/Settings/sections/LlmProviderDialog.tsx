@@ -388,7 +388,7 @@ const LlmProviderDialog = ({
         </UiFormRow>
       )}
 
-      {error ? <div role="alert" className="text-sm text-red-400">{error}</div> : null}
+      {error ? <div role="alert" className="text-sm text-danger-text">{error}</div> : null}
 
       {isExisting ? (
         <UiGroup divided>

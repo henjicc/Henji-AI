@@ -11,6 +11,7 @@ import {
   UI_GLASS_ADAPTIVE_TILE_CLASS,
   UI_MULTISELECT_ITEM_ACTIVE_CLASS,
   UI_NAV_INDICATOR_BOTTOM_CLASS,
+  UI_NAV_INDICATOR_BOTTOM_SHORT_CLASS,
   UI_NAV_INDICATOR_BOTTOM_SUBTLE_CLASS,
   UI_NAV_INDICATOR_END_CLASS,
   UI_NAV_ITEM_ACTIVE_CLASS,
@@ -73,6 +74,24 @@ describe('Ui primitives 选中态词汇表', () => {
     expectClasses(subtleNavigation, UI_NAV_ITEM_ACTIVE_SUBTLE_CLASS);
     expectClasses(subtleNavigation, UI_NAV_INDICATOR_BOTTOM_SUBTLE_CLASS);
     expect(subtleNavigation.className).not.toMatch(/(?:^|\s)bg-/);
+  });
+
+  it('标题栏工作区导航：28 高 13/500，选中中性底 + 主要文字 + 短指示条，静息无底', () => {
+    const view = render(
+      <>
+        <UiChipButton active selectionRole="navigation" selectionAppearance="workspace" size="lg">生成</UiChipButton>
+        <UiChipButton selectionRole="navigation" selectionAppearance="workspace">画布</UiChipButton>
+      </>,
+    );
+    const active = view.getByRole('button', { name: '生成' });
+    const rest = view.getByRole('button', { name: '画布' });
+
+    expectClasses(active, UI_NAV_ITEM_ACTIVE_CLASS);
+    expectClasses(active, UI_NAV_INDICATOR_BOTTOM_SHORT_CLASS);
+    expectClasses(active, 'h-control-sm text-13 font-medium');
+    expect(active.classList.contains('h-control-lg')).toBe(false);
+    expectClasses(rest, `text-text2 ${UI_GLASS_ADAPTIVE_OPTION_CLASS}`);
+    expect(rest.className).not.toMatch(/(?:^|\s)bg-|after:/);
   });
 
   it('单选项中性抬升，多选（标签与 selection="multiple" 的选项）用强调描边与强调文字', () => {

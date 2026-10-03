@@ -3,8 +3,7 @@ import { useApplyRuntimeTheme } from '@/hooks/useApplyRuntimeTheme'
 import { useApplyUiScale } from '@/hooks/useApplyUiScale'
 import { useI18n } from '@/hooks/useI18n'
 import { getPlatform } from '@/platform/runtime'
-import { UiIconButton } from '@/components/ui'
-import { Maximize2, Minimize2, Minus, X } from 'lucide-react'
+import { UiWindowControl } from '@/components/ui'
 import { LogsPanel } from './LogsPanel'
 
 type AppRegionStyle = CSSProperties & { WebkitAppRegion: 'drag' | 'no-drag' }
@@ -60,37 +59,37 @@ export default function LogsShell(): JSX.Element {
     void win.close()
   }
 
+  const maximizeLabel = isMaximized ? t('windowControls.restore') : t('windowControls.maximize')
+
+  // 标题栏与主窗口同一套：window 底 + 发丝线、标题 13/600，窗口控件用 `UiWindowControl`（设计稿 TitleBar）。
   return (
-    <div className="flex h-screen min-h-screen flex-col overflow-hidden bg-app text-text-dark">
-      <div
-        className="flex h-10 shrink-0 select-none items-center justify-between border-b border-border-dark/50 bg-panel px-3"
+    <div className="flex h-screen min-h-screen flex-col overflow-hidden bg-window text-text1">
+      <header
+        className="flex h-10 shrink-0 select-none items-center justify-between gap-3 border-b border-line bg-window pl-4 pr-1.5"
         style={dragRegionStyle}
       >
-        <div className="text-sm text-text-muted">{t('logsWindow.title')}</div>
-        <div className="flex items-center gap-1" style={noDragRegionStyle}>
-          <UiIconButton size="lg"
-            type="button"
+        <span className="min-w-0 truncate text-13 font-semibold">{t('logsWindow.title')}</span>
+        <div className="flex shrink-0 items-center gap-0.5" style={noDragRegionStyle}>
+          <UiWindowControl
+            action="minimize"
             onClick={handleMinimize}
             title={t('windowControls.minimize')}
-          >
-            <Minus className="h-4 w-4" />
-          </UiIconButton>
-          <UiIconButton size="lg"
-            type="button"
+            aria-label={t('windowControls.minimize')}
+          />
+          <UiWindowControl
+            action={isMaximized ? 'restore' : 'maximize'}
             onClick={handleToggleMaximize}
-            title={t('windowControls.toggleMaximize')}
-          >
-            {isMaximized ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
-          </UiIconButton>
-          <UiIconButton size="lg" tone="danger"
-            type="button"
+            title={maximizeLabel}
+            aria-label={maximizeLabel}
+          />
+          <UiWindowControl
+            action="close"
             onClick={handleClose}
             title={t('windowControls.close')}
-          >
-            <X className="h-4 w-4" />
-          </UiIconButton>
+            aria-label={t('windowControls.close')}
+          />
         </div>
-      </div>
+      </header>
       <div className="min-h-0 flex-1">
         <LogsPanel />
       </div>

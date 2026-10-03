@@ -41,6 +41,10 @@ export const UI_NAV_INDICATOR_END_CLASS =
 export const UI_NAV_INDICATOR_BOTTOM_CLASS =
   "after:absolute after:bottom-0 after:left-2 after:right-2 after:h-0.5 after:bg-accent after:content-['']";
 
+/** 标题栏工作区导航的底部短指示条（居中 12px，强调色）。 */
+export const UI_NAV_INDICATOR_BOTTOM_SHORT_CLASS =
+  "after:absolute after:bottom-0.5 after:left-1/2 after:h-0.5 after:w-3 after:-translate-x-1/2 after:rounded-full after:bg-accent after:content-['']";
+
 /** 面板标签的底部细线（设计稿 1.5px 主要文字色）。 */
 export const UI_NAV_INDICATOR_BOTTOM_SUBTLE_CLASS =
   "after:absolute after:bottom-0 after:left-2 after:right-2 after:h-[1.5px] after:bg-text1 after:content-['']";

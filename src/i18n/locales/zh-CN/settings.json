@@ -430,11 +430,11 @@
         "110": "110%"
       },
       "startupWorkspaceLabel": "启动默认页面",
-      "startupWorkspaceHint": "打开软件时直接停在这个页面，常用画布或工具箱时不必每次再切一次",
+      "startupWorkspaceHint": "打开软件时直接停在这个页面，常用画布或工具时不必每次再切一次",
       "startupWorkspaceOptions": {
         "generation": "生成",
         "nodes": "画布",
-        "tools": "工具箱"
+        "tools": "工具"
       }
     },
     "assetLibrary": {

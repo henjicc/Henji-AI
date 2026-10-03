@@ -88,14 +88,14 @@ const UpdateDialog: React.FC<UpdateDialogProps> = ({ releaseInfo, currentVersion
           // 标题
           if (line.startsWith('### ')) {
             return (
-              <h4 key={index} className="text-white font-semibold mt-3 mb-1">
+              <h4 key={index} className="text-text1 font-semibold mt-3 mb-1">
                 {line.replace('### ', '')}
               </h4>
             )
           }
           if (line.startsWith('## ')) {
             return (
-              <h3 key={index} className="text-white font-bold text-base mt-4 mb-2">
+              <h3 key={index} className="text-text1 font-bold text-base mt-4 mb-2">
                 {line.replace('## ', '')}
               </h3>
             )
@@ -140,7 +140,7 @@ const UpdateDialog: React.FC<UpdateDialogProps> = ({ releaseInfo, currentVersion
               <div className="flex items-center gap-3 mb-2">
                 <CloudUpload className="h-8 w-8 text-accent" />
                 <div>
-                  <h2 className="text-xl font-bold text-white">{t('updateDialog.title')}</h2>
+                  <h2 className="text-xl font-bold text-text1">{t('updateDialog.title')}</h2>
                   <p className="text-sm text-text-muted mt-1">
                     {releaseInfo.name || t('updateDialog.versionFallback', { version: releaseInfo.version })}
                   </p>
@@ -169,7 +169,7 @@ const UpdateDialog: React.FC<UpdateDialogProps> = ({ releaseInfo, currentVersion
         </div>
 
         {/* 更新说明 */}
-        <div className="p-6 max-h-[400px] overflow-y-auto custom-scrollbar">
+        <div className="p-6 max-h-[400px] overflow-y-auto">
           <h3 className="text-sm font-semibold text-text-muted uppercase tracking-wider mb-3">
             {t('updateDialog.notesTitle')}
           </h3>
@@ -201,23 +201,6 @@ const UpdateDialog: React.FC<UpdateDialogProps> = ({ releaseInfo, currentVersion
             {isUpdating ? t('updateDialog.actions.downloading', { defaultValue: '下载中' }) : actionLabel}
           </UiButton>
         </div>
-      <style>{`
-        .custom-scrollbar::-webkit-scrollbar {
-          width: 8px;
-
-        }
-        .custom-scrollbar::-webkit-scrollbar-track {
-          background: rgba(39, 39, 42, 0.3);
-          border-radius: 4px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-          background: rgba(113, 113, 122, 0.5);
-          border-radius: 4px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-          background: rgba(113, 113, 122, 0.7);
-        }
-      `}</style>
     </UiModal>
   )
 }

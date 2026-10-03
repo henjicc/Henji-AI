@@ -1,19 +1,12 @@
 import { createLogger } from '@/core/logging'
 import React from 'react'
 import { useI18n } from '@/hooks/useI18n'
-import { UiIconButton, UiOptionButton } from '@/components/ui'
+import { UiChipButton, UiIconButton, UiWindowControl } from '@/components/ui'
 import { getPlatform, isDesktopRuntime } from '@/platform/runtime'
 import type { WorkspaceId } from '@/core/types/workspace'
 import type { AssetLibraryView } from '@/features/assets/store/assetLibraryStore'
-import { Copy, Minus, Sparkles, Square, X, type LucideIcon } from 'lucide-react'
-import {
-  ICON_ASSET_LIBRARY,
-  ICON_SETTINGS,
-  ICON_WORKSPACE_CANVAS,
-  ICON_WORKSPACE_VIDEO_EDIT,
-  ICON_WORKSPACE_GENERATE,
-  ICON_WORKSPACE_TOOLBOX,
-} from '@/core/theme/icons'
+import { Sparkles } from 'lucide-react'
+import { ICON_SETTINGS } from '@/core/theme/icons'
 
 const logger = createLogger('components.WindowControls')
 
@@ -25,12 +18,10 @@ const dragRegionStyle: AppRegionStyle = { WebkitAppRegion: 'drag' }
 const noDragRegionStyle: AppRegionStyle = { WebkitAppRegion: 'no-drag' }
 
 
-// Tab 配置
+/** 工作区导航项：设计稿为纯文字导航（“生成 / 画布 / 剪辑 / 工具 / 资产”），不带图标。 */
 interface TabConfig {
   id: WorkspaceId
   label: string
-  /** 概念图标一律取自 `@/core/theme/icons`，不在这里各自挑图形，也不手写 svg */
-  icon: LucideIcon
 }
 
 interface WindowControlsProps {
@@ -51,11 +42,11 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
   const [isMacOS, setIsMacOS] = React.useState<boolean>(false)
   const [isMaximized, setIsMaximized] = React.useState<boolean>(false)
   const tabs: TabConfig[] = [
-    { id: 'generation', label: t('tabs.generation'), icon: ICON_WORKSPACE_GENERATE },
-    { id: 'nodes', label: t('tabs.canvas'), icon: ICON_WORKSPACE_CANVAS },
-    { id: 'videoEdit', label: '剪辑', icon: ICON_WORKSPACE_VIDEO_EDIT },
-    { id: 'tools', label: t('tabs.tools'), icon: ICON_WORKSPACE_TOOLBOX },
-    { id: 'assets', label: t('tabs.assets'), icon: ICON_ASSET_LIBRARY },
+    { id: 'generation', label: t('tabs.generation') },
+    { id: 'nodes', label: t('tabs.canvas') },
+    { id: 'videoEdit', label: t('tabs.videoEdit') },
+    { id: 'tools', label: t('tabs.tools') },
+    { id: 'assets', label: t('tabs.assets') },
   ]
 
   React.useEffect(() => {
@@ -120,171 +111,115 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
     onPrefetchSettings?.()
   }
 
-  // Tab 组件 - 居中显示
-  const TabBar = () => (
-    <div
-      className="flex items-center gap-0.5 rounded-lg bg-app/40 p-0.5"
-      style={noDragRegionStyle}
-    >
-      {tabs.map((tab) => (
-        // 工作区切换 = 分段选择（设计稿标题栏：28 高、选中中性抬升），3.1 再定标题栏专用外观
-        <UiOptionButton
-          key={tab.id}
-          type="button"
-          variant="segment"
-          onClick={() => tab.id === 'assets' ? onAssetClick?.() : onTabChange?.(tab.id)}
-          active={tab.id === 'assets' ? assetView !== 'closed' : activeTab === tab.id}
-          className="gap-1.5"
-        >
-          <tab.icon className="h-3.5 w-3.5" />
-          <span>{tab.label}</span>
-        </UiOptionButton>
-      ))}
-    </div>
+  const windowControlsPlatform = isMacOS ? 'mac' : 'windows'
+  const minimizeControl = (
+    <UiWindowControl
+      platform={windowControlsPlatform}
+      action="minimize"
+      onClick={handleMinimize}
+      title={t('windowControls.minimize')}
+      aria-label={t('windowControls.minimize')}
+    />
+  )
+  const maximizeControl = (
+    <UiWindowControl
+      platform={windowControlsPlatform}
+      action={isMaximized ? 'restore' : 'maximize'}
+      onClick={handleToggleMaximize}
+      title={isMaximized ? t('windowControls.restore') : t('windowControls.maximize')}
+      aria-label={isMaximized ? t('windowControls.restore') : t('windowControls.maximize')}
+    />
+  )
+  const closeControl = (
+    <UiWindowControl
+      platform={windowControlsPlatform}
+      action="close"
+      onClick={handleClose}
+      title={t('windowControls.close')}
+      aria-label={t('windowControls.close')}
+    />
   )
 
+  // 设计稿 TitleBar：左（应用名 / macOS 交通灯）与右（助手、设置、窗口控件）各占 flex-1，导航居中；
+  // 窗口变窄时两侧先让出空白，应用名可截断，导航与右侧控件保持完整。
   return (
-    <div
-      className="fixed top-0 left-0 right-0 z-titlebar h-10 select-none border-b border-border-dark/50 bg-panel px-3 text-white"
+    <header
+      className={`fixed inset-x-0 top-0 z-titlebar flex h-10 select-none items-center gap-3 border-b border-line bg-window pr-1.5 text-text1 ${isMacOS ? 'pl-2' : 'pl-4'}`}
       style={dragRegionStyle}
     >
-      {isMacOS ? (
-        <>
-          {/* macOS: 左侧窗口控制按钮 */}
+      <div className="flex min-w-0 flex-1 items-center">
+        {isMacOS ? (
           <div
-            className="absolute left-1 top-1/2 flex -translate-y-1/2 items-center"
+            className="group/window-controls flex items-center"
             style={noDragRegionStyle}
             data-window-nodrag
           >
-            {/* ui-surface-allow macOS 交通灯：圆点由内部色块表达，按钮本身无底；交 3.1 标题栏专用组件 */}
-            <UiIconButton shape="circle" size="sm"
-              type="button"
-              onClick={handleClose}
-              className="group !p-0 hover:!bg-transparent active:!bg-transparent"
-              title={t('windowControls.close')}
-            >
-              <span className="flex h-3 w-3 items-center justify-center rounded-full bg-red-400 group-hover:bg-red-400/80">
-                <X className="h-2 w-2 text-black/50 opacity-0 group-hover:opacity-100" strokeWidth={3} />
-              </span>
-            </UiIconButton>
-            {/* ui-surface-allow macOS 交通灯，同上 */}
-            <UiIconButton shape="circle" size="sm"
-              type="button"
-              onClick={handleMinimize}
-              className="group !p-0 hover:!bg-transparent active:!bg-transparent"
-              title={t('windowControls.minimize')}
-            >
-              <span className="flex h-3 w-3 items-center justify-center rounded-full bg-yellow-400 group-hover:bg-yellow-400/80">
-                <Minus className="h-2 w-2 text-black/50 opacity-0 group-hover:opacity-100" strokeWidth={3} />
-              </span>
-            </UiIconButton>
-            {/* ui-surface-allow macOS 交通灯，同上 */}
-            <UiIconButton shape="circle" size="sm"
-              type="button"
-              onClick={handleToggleMaximize}
-              className="group !p-0 hover:!bg-transparent active:!bg-transparent"
-              title={t('windowControls.maximize')}
-            >
-              <span className="flex h-3 w-3 items-center justify-center rounded-full bg-green-500 group-hover:bg-green-500/80">
-                <Square className="h-2 w-2 text-black/50 opacity-0 group-hover:opacity-100" strokeWidth={3} />
-              </span>
-            </UiIconButton>
+            {closeControl}
+            {minimizeControl}
+            {maximizeControl}
           </div>
+        ) : (
+          <span className="truncate text-13 font-semibold tracking-wide">{t('windowControls.appName')}</span>
+        )}
+      </div>
 
-          {/* macOS: 中间 Tab 栏 */}
-          <div
-            className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
-            style={noDragRegionStyle}
-            data-window-nodrag
-          >
-            <TabBar />
-          </div>
-
-          <div className="absolute right-3 top-1/2 flex -translate-y-1/2 items-center gap-1" style={noDragRegionStyle} data-window-nodrag>
-            {onAssistantClick && <UiIconButton
+      <nav
+        aria-label={t('windowControls.workspaceNav')}
+        className="flex shrink-0 items-center gap-0.5"
+        style={noDragRegionStyle}
+        data-window-nodrag
+      >
+        {tabs.map((tab) => {
+          const active = tab.id === 'assets' ? assetView !== 'closed' : activeTab === tab.id
+          return (
+            <UiChipButton
+              key={tab.id}
               type="button"
-              on={assistantOpen}
-              onClick={onAssistantClick}
-              title="智能助手"
+              selectionRole="navigation"
+              selectionAppearance="workspace"
+              active={active}
+              aria-current={active ? 'page' : undefined}
+              onClick={() => tab.id === 'assets' ? onAssetClick?.() : onTabChange?.(tab.id)}
             >
-              <Sparkles className="h-4 w-4" />
-            </UiIconButton>}
+              {tab.label}
+            </UiChipButton>
+          )
+        })}
+      </nav>
+
+      <div className="flex flex-1 items-center justify-end">
+        <div className="flex items-center gap-0.5" style={noDragRegionStyle} data-window-nodrag>
+          {onAssistantClick && (
             <UiIconButton
               type="button"
-              onClick={handleOpenSettings}
-              onPointerEnter={handlePrefetchSettings}
-              title={t('actions.settings')}
-            >
-              <ICON_SETTINGS className="h-4 w-4" />
-            </UiIconButton>
-          </div>
-
-        </>
-      ) : (
-        <>
-          {/* Windows: 左侧标题 */}
-          <div className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-text-soft shrink-0">{t('windowControls.appName')}</div>
-
-          {/* Windows: 中间 Tab 栏 */}
-          <div
-            className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
-            style={noDragRegionStyle}
-            data-window-nodrag
-          >
-            <TabBar />
-          </div>
-
-          {/* Windows: 右侧窗口控制按钮 */}
-          <div
-            className="absolute right-3 top-1/2 flex -translate-y-1/2 items-center gap-2 shrink-0"
-            style={noDragRegionStyle}
-            data-window-nodrag
-          >
-            {onAssistantClick && <UiIconButton size="lg"
-              type="button"
               on={assistantOpen}
               onClick={onAssistantClick}
-              title="智能助手"
+              title={t('windowControls.assistant')}
+              aria-label={t('windowControls.assistant')}
             >
               <Sparkles className="h-4 w-4" />
-            </UiIconButton>}
-            <UiIconButton size="lg"
-              type="button"
-              onClick={handleOpenSettings}
-              onPointerEnter={handlePrefetchSettings}
-              title={t('actions.settings')}
-            >
-              <ICON_SETTINGS className="h-4 w-4" />
             </UiIconButton>
-            <UiIconButton size="lg"
-              type="button"
-              onClick={handleMinimize}
-              title={t('windowControls.minimize')}
-            >
-              <Minus className="h-4 w-4" />
-            </UiIconButton>
-            <UiIconButton size="lg"
-              type="button"
-              onClick={handleToggleMaximize}
-              title={t('windowControls.toggleMaximize')}
-            >
-              {isMaximized ? (
-                <Copy className="h-3.5 w-3.5" />
-              ) : (
-                <Square className="h-3.5 w-3.5" />
-              )}
-            </UiIconButton>
-            <UiIconButton size="lg" tone="danger"
-              type="button"
-              onClick={handleClose}
-              title={t('windowControls.close')}
-            >
-              <X className="h-4 w-4" />
-            </UiIconButton>
-          </div>
-        </>
-      )}
-    </div>
+          )}
+          <UiIconButton
+            type="button"
+            onClick={handleOpenSettings}
+            onPointerEnter={handlePrefetchSettings}
+            title={t('actions.settings')}
+            aria-label={t('actions.settings')}
+          >
+            <ICON_SETTINGS className="h-4 w-4" />
+          </UiIconButton>
+          {!isMacOS && (
+            <>
+              <span aria-hidden="true" className="mx-1.5 h-3.5 w-px bg-line" />
+              {minimizeControl}
+              {maximizeControl}
+              {closeControl}
+            </>
+          )}
+        </div>
+      </div>
+    </header>
   )
 }
 

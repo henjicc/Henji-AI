@@ -7,13 +7,6 @@
     "owner = 负责迁移的计划任务（docs/task/界面重设计与主题引擎）；category = 迁移去向。"
   ],
   "files": {
-    "src/App.tsx": {
-      "owner": "3.1",
-      "category": "界面色（迁入语义令牌）",
-      "counts": {
-        "mono": 1
-      }
-    },
     "src/commands/imageStoryboardCommands.ts": {
       "owner": "3.6",
       "category": "内容色/算法常量（迁入 colorTokens.ts 登记）",
@@ -61,52 +54,6 @@
       "category": "界面色（迁入语义令牌）",
       "counts": {
         "palette": 5
-      }
-    },
-    "src/components/Settings/components/ApiKeyInput.tsx": {
-      "owner": "3.1",
-      "category": "界面色（迁入语义令牌）",
-      "counts": {
-        "palette": 1
-      }
-    },
-    "src/components/Settings/sections/LlmProviderDialog.tsx": {
-      "owner": "3.1",
-      "category": "界面色（迁入语义令牌）",
-      "counts": {
-        "palette": 1
-      }
-    },
-    "src/components/TestModeIndicator.tsx": {
-      "owner": "3.1",
-      "category": "界面色（迁入语义令牌）",
-      "counts": {
-        "palette": 2,
-        "mono": 1
-      }
-    },
-    "src/components/TestModePanel.tsx": {
-      "owner": "3.1",
-      "category": "界面色（迁入语义令牌）",
-      "counts": {
-        "palette": 4,
-        "mono": 4
-      }
-    },
-    "src/components/UpdateDialog.tsx": {
-      "owner": "3.1",
-      "category": "界面色（迁入语义令牌）",
-      "counts": {
-        "mono": 3,
-        "rgba": 3
-      }
-    },
-    "src/components/WindowControls.tsx": {
-      "owner": "3.1",
-      "category": "界面色（迁入语义令牌）",
-      "counts": {
-        "mono": 4,
-        "palette": 6
       }
     },
     "src/components/mediaViewer/AudioViewerModal.tsx": {
@@ -157,13 +104,6 @@
       "category": "界面色（迁入语义令牌）",
       "counts": {
         "palette": 1
-      }
-    },
-    "src/features/assistant/embedded/EmbeddedTranscript.tsx": {
-      "owner": "3.1",
-      "category": "界面色（迁入语义令牌）",
-      "counts": {
-        "mono": 1
       }
     },
     "src/features/audioEdit/AudioEditApp.tsx": {

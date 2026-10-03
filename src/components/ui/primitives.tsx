@@ -3,7 +3,7 @@ import {
   type ButtonHTMLAttributes,
   type InputHTMLAttributes,
 } from 'react';
-import { Check, ChevronDown } from 'lucide-react';
+import { Check, ChevronDown, Copy, Minus, Square, X } from 'lucide-react';
 import {
   UI_BOOLEAN_CONTROL_ACTIVE_CLASS,
   UI_BUTTON_RESET_CLASS,
@@ -20,6 +20,7 @@ import {
   UI_CONTROL_HEIGHT_CLASS,
   UI_MULTISELECT_ITEM_ACTIVE_CLASS,
   UI_NAV_INDICATOR_BOTTOM_CLASS,
+  UI_NAV_INDICATOR_BOTTOM_SHORT_CLASS,
   UI_NAV_INDICATOR_BOTTOM_SUBTLE_CLASS,
   UI_NAV_INDICATOR_END_CLASS,
   UI_NAV_ITEM_ACTIVE_CLASS,
@@ -44,6 +45,8 @@ import {
   type UiSelectProps,
   type UiSwitchProps,
   type UiTextAreaProps,
+  type UiWindowControlAction,
+  type UiWindowControlProps,
   UI_RANGE_TRACK_TONE_CLASS,
   resolveButtonSize,
   resolveButtonVariant,
@@ -51,7 +54,7 @@ import {
   resolveTextHistoryValue,
   resolveUiPanelSurface,
 } from './primitiveInternals';
-export type { UiControlSize, UiRangeTrackTone } from './primitiveInternals';
+export type { UiControlSize, UiRangeTrackTone, UiWindowControlAction } from './primitiveInternals';
 
 /** 选项、标签、导航共用的键盘焦点环（按钮重置类会清掉 ring，这里用 `!` 补回）。 */
 const UI_ITEM_FOCUS_RING_CLASS = 'focus-visible:!ring-2 focus-visible:!ring-inset focus-visible:!ring-accent-ring';
@@ -150,9 +153,17 @@ export const UiChipButton = forwardRef<HTMLButtonElement, UiChipButtonProps>(
     ...props
   }, ref) => {
     const subtle = selectionRole === 'navigation' && selectionAppearance === 'subtle';
+    const workspace = selectionRole === 'navigation' && selectionAppearance === 'workspace';
     const navigationActiveClass = subtle
       ? `${UI_NAV_ITEM_ACTIVE_SUBTLE_CLASS} ${UI_NAV_INDICATOR_BOTTOM_SUBTLE_CLASS}`
-      : `${UI_NAV_ITEM_ACTIVE_CLASS} ${UI_NAV_INDICATOR_BOTTOM_CLASS}`;
+      : workspace
+        ? `${UI_NAV_ITEM_ACTIVE_CLASS} ${UI_NAV_INDICATOR_BOTTOM_SHORT_CLASS}`
+        : `${UI_NAV_ITEM_ACTIVE_CLASS} ${UI_NAV_INDICATOR_BOTTOM_CLASS}`;
+    const layoutClass = subtle
+      ? `${UI_CHIP_SIZE_CLASS[size]} rounded-none font-medium`
+      : workspace
+        ? `${UI_CONTROL_HEIGHT_CLASS.sm} shrink-0 whitespace-nowrap px-3 text-13 font-medium ${UI_RADIUS_CLASS.control}`
+        : `${UI_CHIP_SIZE_CLASS[size]} ${UI_RADIUS_CLASS.control}`;
     const stateClass = selectionRole === 'navigation'
       ? active
         ? `border-transparent ${navigationActiveClass}`
@@ -168,7 +179,7 @@ export const UiChipButton = forwardRef<HTMLButtonElement, UiChipButtonProps>(
       <button
         ref={ref}
         data-size={size}
-        className={`relative inline-flex select-none items-center gap-1.5 border transition-colors ${UI_CHIP_SIZE_CLASS[size]} ${subtle ? 'rounded-none font-medium' : UI_RADIUS_CLASS.control} ${UI_BUTTON_RESET_CLASS} ${UI_FIELD_DISABLED_CLASS} ${UI_ITEM_FOCUS_RING_CLASS} ${stateClass} ${className}`}
+        className={`relative inline-flex select-none items-center gap-1.5 border transition-colors ${layoutClass} ${UI_BUTTON_RESET_CLASS} ${UI_FIELD_DISABLED_CLASS} ${UI_ITEM_FOCUS_RING_CLASS} ${stateClass} ${className}`}
         {...props}
       />
     );
@@ -176,6 +187,65 @@ export const UiChipButton = forwardRef<HTMLButtonElement, UiChipButtonProps>(
 );
 
 UiChipButton.displayName = 'UiChipButton';
+
+const UI_WINDOW_CONTROL_ICON: Record<UiWindowControlAction, { Icon: typeof Minus; size: number; strokeWidth: number }> = {
+  minimize: { Icon: Minus, size: 14, strokeWidth: 1.5 },
+  maximize: { Icon: Square, size: 12, strokeWidth: 1.75 },
+  restore: { Icon: Copy, size: 12, strokeWidth: 1.75 },
+  close: { Icon: X, size: 14, strokeWidth: 1.5 },
+};
+
+/**
+ * 交通灯圆点：关闭 = 危险、最小化 = 警示、最大化/还原 = 成功（状态实底令牌，符号取各自的 on-* 文字色）。
+ * 悬停单个圆点或外层带 `group/window-controls` 的整组时显出符号（macOS 惯例）。
+ */
+const UI_WINDOW_CONTROL_MAC_DOT_CLASS: Record<UiWindowControlAction, string> = {
+  close: 'bg-danger-solid text-on-danger',
+  minimize: 'bg-warning-solid text-on-warning',
+  maximize: 'bg-success-solid text-on-success',
+  restore: 'bg-success-solid text-on-success',
+};
+
+const UI_WINDOW_CONTROL_WINDOWS_CLASS = `${UI_CONTROL_HEIGHT_CLASS.sm} w-9 ${UI_RADIUS_CLASS.control} text-text3 hover:bg-hover hover:text-text1 active:bg-selected`;
+const UI_WINDOW_CONTROL_WINDOWS_CLOSE_CLASS = `${UI_CONTROL_HEIGHT_CLASS.sm} w-9 ${UI_RADIUS_CLASS.control} text-text3 hover:bg-danger-solid hover:text-on-danger active:bg-danger-pressed active:text-on-danger`;
+
+/**
+ * 无边框窗口的窗口控件（标题栏专用的有限变体，见 `UiWindowControlProps`）。
+ * 外观只由 action / platform 决定，className 只放布局（check:surface 规则 E）。
+ */
+export const UiWindowControl = forwardRef<HTMLButtonElement, UiWindowControlProps>(
+  ({ className = '', action, platform = 'windows', type = 'button', ...props }, ref) => {
+    const { Icon, size, strokeWidth } = UI_WINDOW_CONTROL_ICON[action];
+    if (platform === 'mac') {
+      return (
+        <button
+          ref={ref}
+          type={type}
+          data-window-control={action}
+          className={`group/window-control inline-flex h-6 w-5 shrink-0 items-center justify-center border-0 bg-transparent p-0 ${UI_BUTTON_RESET_CLASS} focus-visible:!ring-2 focus-visible:!ring-accent-ring ${className}`}
+          {...props}
+        >
+          <span className={`flex h-3 w-3 items-center justify-center rounded-full ${UI_WINDOW_CONTROL_MAC_DOT_CLASS[action]}`}>
+            <Icon className="h-2 w-2 opacity-0 transition-opacity duration-120 group-hover/window-control:opacity-70 group-hover/window-controls:opacity-70 group-focus-visible/window-control:opacity-70" strokeWidth={3} aria-hidden="true" />
+          </span>
+        </button>
+      );
+    }
+    return (
+      <button
+        ref={ref}
+        type={type}
+        data-window-control={action}
+        className={`ui-btn inline-flex shrink-0 select-none items-center justify-center ${action === 'close' ? UI_WINDOW_CONTROL_WINDOWS_CLOSE_CLASS : UI_WINDOW_CONTROL_WINDOWS_CLASS} ${className}`}
+        {...props}
+      >
+        <Icon size={size} strokeWidth={strokeWidth} aria-hidden="true" />
+      </button>
+    );
+  }
+);
+
+UiWindowControl.displayName = 'UiWindowControl';
 
 export const UiPanel = forwardRef<HTMLDivElement, UiPanelProps>(
   ({ className = '', variant = 'panel', ...props }, ref) => (

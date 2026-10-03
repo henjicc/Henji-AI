@@ -6,7 +6,7 @@ import { createRequire } from 'node:module';
 import { cleanup, render } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { UiButton, UiIconButton } from './primitives';
+import { UiButton, UiIconButton, UiWindowControl } from './primitives';
 import { UI_BUTTON_VARIANT_CLASS } from './primitiveInternals';
 
 afterEach(cleanup);
@@ -215,5 +215,51 @@ describe('check:surface 规则 E（2.2 扩展）：选项、标签、导航与�
       [8, 'UiFieldTrigger'],
     ]);
     expect(findings[0].violations.map((violation) => violation.token)).toEqual(['h-8', 'rounded-md']);
+  });
+});
+
+describe('UiWindowControl：标题栏窗口控件（任务 3.1）', () => {
+  it('Windows 形态 36×28、静息辅助文字；关闭悬停为危险实底', () => {
+    const view = render(
+      <>
+        <UiWindowControl action="minimize" aria-label="最小化" />
+        <UiWindowControl action="close" aria-label="关闭" />
+      </>,
+    );
+    const minimize = view.getByRole('button', { name: '最小化' });
+    const close = view.getByRole('button', { name: '关闭' });
+    expect(minimize.getAttribute('type')).toBe('button');
+    expect(classes(minimize)).toEqual(expect.arrayContaining(['h-control-sm', 'w-9', 'text-text3', 'hover:bg-hover']));
+    expect(classes(close)).toEqual(expect.arrayContaining(['hover:bg-danger-solid', 'hover:text-on-danger']));
+    expect(classes(minimize)).not.toContain('hover:bg-danger-solid');
+    expect(minimize.querySelector('svg')).not.toBeNull();
+  });
+
+  it('macOS 交通灯：圆点取状态实底令牌，不用固定调色板', () => {
+    const view = render(
+      <>
+        <UiWindowControl platform="mac" action="close" aria-label="关闭" />
+        <UiWindowControl platform="mac" action="minimize" aria-label="最小化" />
+        <UiWindowControl platform="mac" action="restore" aria-label="还原" />
+      </>,
+    );
+    const dot = (name: string) => view.getByRole('button', { name }).querySelector('span') as HTMLElement;
+    expect(classes(dot('关闭'))).toContain('bg-danger-solid');
+    expect(classes(dot('最小化'))).toContain('bg-warning-solid');
+    expect(classes(dot('还原'))).toContain('bg-success-solid');
+    for (const name of ['关闭', '最小化', '还原']) {
+      expect(view.getByRole('button', { name }).outerHTML).not.toMatch(/(?:red|yellow|green)-\d{3}/);
+    }
+  });
+
+  it('规则 E 同样检查窗口控件的 className', () => {
+    const source = [
+      'export function A() {',
+      '  return <UiWindowControl action="close" className="ml-1 !bg-transparent" />',
+      '}',
+    ].join('\n');
+    const findings = findButtonAppearanceOverridesInSource(source, 'Sample.tsx');
+    expect(findings.map((finding) => finding.component)).toEqual(['UiWindowControl']);
+    expect(findings[0].violations.map((violation) => violation.token)).toEqual(['bg-transparent']);
   });
 });

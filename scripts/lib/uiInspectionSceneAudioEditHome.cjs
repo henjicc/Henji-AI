@@ -40,7 +40,7 @@ function createAudioEditHomeScene({ setupToolbox, clickNamedButton }) {
         for (const name of ['产品介绍 · 第一版', '周末随想', '这是一段名称比较长的口播工程，用来检查工程标题是否会挤压其他内容']) {
           ids.push(await page.evaluate(async ({ sourcePath, name }) => (await window.henjiNative.audio.createEditProject({ sourcePath, name })).id, { sourcePath, name }))
         }
-        await page.getByRole('button', { name: '返回工具箱', exact: true }).click()
+        await page.getByRole('button', { name: '返回工具', exact: true }).click()
         await clickNamedButton(page, /^(口播剪辑)/)
         await page.getByRole('button', { name: /产品介绍 · 第一版/ }).waitFor()
         await assertImportLayout()
@@ -58,7 +58,7 @@ function createAudioEditHomeScene({ setupToolbox, clickNamedButton }) {
         fs.unlinkSync(sourcePath)
         fs.rmdirSync(directory)
       }
-      await page.getByRole('button', { name: '返回工具箱', exact: true }).click()
+      await page.getByRole('button', { name: '返回工具', exact: true }).click()
       await clickNamedButton(page, /^(口播剪辑)/)
       await page.getByText('从一段口播开始', { exact: true }).waitFor()
     },

@@ -67,10 +67,28 @@ export interface UiChipButtonProps extends ButtonHTMLAttributes<HTMLButtonElemen
   active?: boolean
   /** `navigation` 表示“正在看哪里”；默认 `toggle` 表示多选/标签开态。 */
   selectionRole?: 'toggle' | 'navigation'
-  /** `subtle`：面板标签（设计稿面板头，选中只换主要文字 + 底部细线）；其他选中语义不受影响。 */
-  selectionAppearance?: 'default' | 'subtle'
+  /**
+   * 只对 `selectionRole="navigation"` 生效：
+   * - `subtle`：面板标签（设计稿面板头，选中只换主要文字 + 底部细线）；
+   * - `workspace`：应用标题栏的工作区导航（设计稿 TitleBar：28 高、13/500、纯文字；选中 = 中性选中底 +
+   *   主要文字 + 底部短指示条），尺寸固定，`size` 不参与。
+   */
+  selectionAppearance?: 'default' | 'subtle' | 'workspace'
   /** 高度档，默认 md 32（字号 sm 12 / md、lg 13）。外观只由 active / selectionRole / size 决定。 */
   size?: UiControlSize
+}
+
+/** 窗口控件动作：`maximize` 与 `restore` 由调用点按窗口当前是否最大化选择。 */
+export type UiWindowControlAction = 'minimize' | 'maximize' | 'restore' | 'close'
+
+/**
+ * 无边框窗口的窗口控件（应用标题栏、日志窗口标题栏共用）。图标由组件按 `action` 决定，名称放 `title`/`aria-label`。
+ * - `windows`：36×28 静默按钮，静息辅助文字、悬停出底；关闭悬停为危险实底（系统惯例）；
+ * - `mac`：12px 交通灯圆点（危险/警示/成功实底令牌），悬停整组时显出符号，命中区 24px。
+ */
+export interface UiWindowControlProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'children'> {
+  action: UiWindowControlAction
+  platform?: 'windows' | 'mac'
 }
 
 export interface UiNavButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {

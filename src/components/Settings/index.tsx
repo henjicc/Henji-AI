@@ -175,11 +175,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, target }) => {
       >
         <div className={`flex h-14 shrink-0 items-center justify-between border-b px-4 ${UI_GLASS_ADAPTIVE_DIVIDER_CLASS}`}>
           <h2 className={UI_TEXT_TITLE_CLASS}>{t('title')}</h2>
-          <UiIconButton size="lg"
+          <UiIconButton
             onClick={handleClose}
             aria-label={t('actions.close')}
+            title={t('actions.close')}
           >
-            <X className="h-5 w-5" />
+            <X className="h-4 w-4" />
           </UiIconButton>
         </div>
 
@@ -206,8 +207,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, target }) => {
                       onClick={() => handleSectionSelect(tab.id, firstSectionId)}
                       size="lg"
                     >
-                      <tab.icon className="h-[18px] w-[18px] shrink-0" />
-                      <span className={`text-left text-sm font-medium leading-none ${!isLeafGroup && isCurrentTab ? 'text-text1' : ''}`}>{tab.label}</span>
+                      <tab.icon className="h-4 w-4 shrink-0" />
+                      <span className={`text-left font-medium leading-none ${!isLeafGroup && isCurrentTab ? 'text-text1' : ''}`}>{tab.label}</span>
                     </UiNavButton>
                     {isLeafGroup ? null : (
                       <div className="space-y-1 py-1">

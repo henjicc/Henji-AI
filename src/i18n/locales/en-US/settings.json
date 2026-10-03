@@ -434,7 +434,7 @@
       "startupWorkspaceOptions": {
         "generation": "Generate",
         "nodes": "Canvas",
-        "tools": "Toolbox"
+        "tools": "Tools"
       }
     },
     "assetLibrary": {

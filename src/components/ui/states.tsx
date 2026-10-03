@@ -11,7 +11,7 @@
  */
 import type { ReactNode } from 'react';
 import { UiButton } from './primitives';
-import { UI_TEXT_META_CLASS, UI_TEXT_SECTION_CLASS } from './styleTokens';
+import { UI_TEXT_META_CLASS, UI_TEXT_PANEL_TITLE_CLASS, UI_TEXT_SECTION_CLASS } from './styleTokens';
 
 type StateSize = 'xs' | 'sm' | 'md';
 
@@ -65,8 +65,8 @@ export function UiEmpty({
 }: UiEmptyProps): JSX.Element {
   return (
     <div className={`flex flex-col items-center justify-center text-center ${resolvePadding(size)} ${className}`}>
-      {icon ? <div className="mb-3 text-text-muted">{icon}</div> : null}
-      <div className={size === 'xs' ? UI_TEXT_META_CLASS : UI_TEXT_SECTION_CLASS}>{title}</div>
+      {icon ? <div className="mb-3 text-text3">{icon}</div> : null}
+      <div className={size === 'xs' ? UI_TEXT_META_CLASS : size === 'sm' ? UI_TEXT_PANEL_TITLE_CLASS : UI_TEXT_SECTION_CLASS}>{title}</div>
       {description ? <p className={`mt-1.5 max-w-sm ${UI_TEXT_META_CLASS}`}>{description}</p> : null}
       {action ? <div className="mt-4 flex items-center gap-2">{action}</div> : null}
     </div>
@@ -91,7 +91,7 @@ export function UiLoading({
       aria-live="polite"
     >
       <div
-        className={`animate-spin rounded-full border-b-2 border-t-2 border-accent ${spinnerSize}`}
+        className={`animate-spin rounded-full border-2 border-line-strong border-t-accent ${spinnerSize}`}
         aria-hidden="true"
       />
       {message ? <p className={`mt-3 ${UI_TEXT_META_CLASS}`}>{message}</p> : null}
@@ -118,7 +118,7 @@ export function UiError({
       className={`flex flex-col items-center justify-center text-center ${resolvePadding(size)} ${className}`}
       role="alert"
     >
-      {title ? <div className="text-sm font-medium text-danger">{title}</div> : null}
+      {title ? <div className="text-sm font-medium text-danger-text">{title}</div> : null}
       <p className={`mt-1.5 max-w-md break-words ${UI_TEXT_META_CLASS}`}>{message}</p>
       {(actions || onRetry) && (
         <div className="mt-4 flex items-center justify-center gap-2">

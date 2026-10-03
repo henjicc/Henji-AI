@@ -91,7 +91,7 @@ const ToolboxWorkspace: React.FC = () => {
         <UiRegion maxWidthClassName="max-w-6xl" className="mx-auto">
           <UiPageHeader
             className="mb-6"
-            title="工具箱"
+            title="工具"
             description="独立于生成和画布的实用工具集合"
           />
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">

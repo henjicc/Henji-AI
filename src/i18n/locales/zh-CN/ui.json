@@ -241,7 +241,8 @@
   "tabs": {
     "generation": "生成",
     "canvas": "画布",
-    "tools": "工具箱",
+    "videoEdit": "剪辑",
+    "tools": "工具",
     "assets": "资产"
   },
   "videoEditSend": {
@@ -333,7 +334,9 @@
     "close": "关闭",
     "minimize": "最小化",
     "maximize": "最大化",
-    "toggleMaximize": "最大化/还原"
+    "restore": "还原",
+    "assistant": "智能助手",
+    "workspaceNav": "工作区"
   },
   "updateDialog": {
     "title": "发现新版本",
@@ -660,7 +663,7 @@
         }
       },
       "host": {
-        "backToToolbox": "返回工具箱",
+        "backToToolbox": "返回工具",
         "loading": "正在准备可编辑图片…",
         "bootstrapError": {
           "title": "无法打开新版图片编辑器",

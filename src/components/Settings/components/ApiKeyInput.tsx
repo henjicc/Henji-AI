@@ -108,7 +108,7 @@ const ApiKeyInput: React.FC<ApiKeyInputProps> = ({
         </UiIconButton>
       </div>
       {hint ? <div id={hintId} className={`mt-2 ${UI_TEXT_META_CLASS}`}>{hint}</div> : null}
-      {error ? <div id={errorId} role="alert" className="mt-2 text-xs text-red-400">{error}</div> : null}
+      {error ? <div id={errorId} role="alert" className="mt-2 text-xs text-danger-text">{error}</div> : null}
     </div>
   )
 }

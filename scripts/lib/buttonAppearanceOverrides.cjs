@@ -32,6 +32,7 @@ const CHECKED_ATTRIBUTES = {
   UiChipButton: 'className',
   UiNavButton: 'className',
   UiFieldTrigger: 'className',
+  UiWindowControl: 'className',
   Dropdown: 'buttonClassName',
   PanelTrigger: 'buttonClassName',
 };

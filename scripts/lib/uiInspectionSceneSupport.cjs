@@ -9,7 +9,7 @@ function attachUiInspectionSupport(context) {
 
   async function setupToolbox(page) {
     await openWorkspace(page, 'toolbox')
-    for (const title of ['返回工程列表', '返回工具箱']) {
+    for (const title of ['返回工程列表', '返回工具']) {
       const back = page.locator(`[title="${title}"]:visible, [aria-label="${title}"]:visible`).first()
       if (await back.count()) {
         await back.click()

@@ -87,13 +87,12 @@ const TestModePanel: React.FC<TestModePanelProps> = ({
       onClose={handleClose}
       hideHeader
       size="form"
-      panelClassName="border-yellow-500/50"
       contentClassName="overflow-y-auto p-6"
     >
         {/* 标题栏 */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
-            <div className="w-3 h-3 bg-yellow-500 rounded-full animate-pulse" />
+            <div className="w-3 h-3 bg-warning-solid rounded-full animate-pulse" />
             <h2 className={UI_TEXT_TITLE_CLASS}>{t('testMode.title')}</h2>
           </div>
           <UiIconButton size="lg"
@@ -105,12 +104,12 @@ const TestModePanel: React.FC<TestModePanelProps> = ({
         </div>
 
         {/* 快捷键提示 */}
-        <div className="mb-6 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+        <div className="mb-6 p-3 bg-warning-tint rounded-lg">
           <div className={UI_TEXT_BODY_CLASS}>
-            {t('testMode.shortcutLabel')} <kbd className="px-2 py-1 bg-black/30 rounded">Ctrl</kbd> +{' '}
-            <kbd className="px-2 py-1 bg-black/30 rounded">Alt</kbd> +{' '}
-            <kbd className="px-2 py-1 bg-black/30 rounded">Shift</kbd> +{' '}
-            <kbd className="px-2 py-1 bg-black/30 rounded">T</kbd>
+            {t('testMode.shortcutLabel')} <kbd className="rounded-control bg-raised px-2 py-1">Ctrl</kbd> +{' '}
+            <kbd className="rounded-control bg-raised px-2 py-1">Alt</kbd> +{' '}
+            <kbd className="rounded-control bg-raised px-2 py-1">Shift</kbd> +{' '}
+            <kbd className="rounded-control bg-raised px-2 py-1">T</kbd>
           </div>
         </div>
 

@@ -67,7 +67,7 @@ const { createCanvasScalePerformanceScenes } = require('./uiInspectionCanvasScal
 const TAB_NAMES = Object.freeze({
   generation: /^(生成|Generation)$/i,
   canvas: /^(画布|Canvas)$/i,
-  toolbox: /^(工具箱|Toolbox)$/i,
+  toolbox: /^(工具|Tools)$/i,
   assets: /^(资产|Assets)$/i,
 })
 

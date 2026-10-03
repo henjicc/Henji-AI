@@ -69,7 +69,7 @@ interface UiPageHeaderProps extends Omit<HTMLAttributes<HTMLDivElement>, 'title'
    * 不要再为返回单开一条横向条带——那会和应用标题栏叠成「双标题栏」。
    */
   onBack?: () => void;
-  /** 返回按钮的无障碍名称与悬浮提示，如「返回工具箱」 */
+  /** 返回按钮的无障碍名称与悬浮提示，如「返回工具」 */
   backLabel?: string;
 }
 

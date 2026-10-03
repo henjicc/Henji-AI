@@ -62,7 +62,7 @@ const openMultiLayerDocumentNodeEditor = defineApplicationCapability({
   ],
   prerequisites: [
     'projectRef 与 nodeRef 必须来自画布项目和节点的稳定引用；nodeRef 必须属于 projectRef。',
-    '本能力只打开画布节点自己的编辑器，不会打开工具箱里的独立图片编辑器。',
+    '本能力只打开画布节点自己的编辑器，不会打开“工具”页里的独立图片编辑器。',
   ],
   acceptsRefs: ['canvas.project', 'canvas.node'],
   producesRefs: ['canvas.project', 'canvas.node', 'application.surface'],
