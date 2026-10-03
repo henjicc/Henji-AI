@@ -87,7 +87,7 @@ function createVideoEditCompositeEditScene({ pressureOnly = false } = {}) {
         const newItems = []
         for (const label of ['新建纯色', '新建矩形', '新建椭圆', '新建原生文字', '新建调整图层']) {
           const oldIds = new Set(readFile(file).items.map(item => item.id))
-          await button(page, '新建图形与调整图层').click(); await page.getByText(label, { exact: true }).click()
+          await button(page, '新建项目项').click(); await button(page, label).click()
           const doc = await saved(page, file, value => value.items.some(item => !oldIds.has(item.id)))
           const item = doc.items.find(item => !oldIds.has(item.id)); newItems.push(item)
           assert.equal(item.kind, label === '新建调整图层' ? 'adjustment' : 'graphic')

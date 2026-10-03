@@ -29,7 +29,7 @@ export function VideoEditTrackHeader({ row, code, targeted, onTarget, onPatch, o
   const solo = <UiIconButton key="solo" size="xs" on={track.solo} aria-label={`${name}独奏`} aria-pressed={track.solo} title={track.kind === 'video' ? (track.solo ? '取消独奏' : '独奏：只显示独奏的画面轨道') : (track.solo ? '取消独奏' : '独奏')} onClick={() => onPatch({ solo: !track.solo })}><Headphones className={ICON} /></UiIconButton>
   const lock = <UiIconButton key="locked" size="xs" on={track.locked} aria-label={`${name}锁定`} aria-pressed={track.locked} title={track.locked ? '解锁轨道' : '锁定轨道'} onClick={() => onPatch({ locked: !track.locked })}>{track.locked ? <LockKeyhole className={ICON} /> : <UnlockKeyhole className={ICON} />}</UiIconButton>
   const primary = track.kind === 'video' ? [visibility, lock, mute, solo] : [mute, solo, lock, visibility]
-  return <div className={`sticky left-0 z-sticky flex h-full items-center gap-px border-r border-border-dark pl-1 pr-1.5 ${targeted ? 'bg-raised' : 'bg-panel'}`} style={{ width: TIMELINE_HEADER_WIDTH }} data-video-edit-track-header={track.id}>
+  return <div className={`sticky left-0 z-sticky flex h-full items-center gap-px border-r border-gap pl-1 pr-1.5 ${targeted ? 'bg-raised' : 'bg-panel'}`} style={{ width: TIMELINE_HEADER_WIDTH }} data-video-edit-track-header={track.id}>
     <UiButton size="sm" className="min-w-0 flex-1 !justify-start !gap-1.5 !px-1" aria-label={`目标轨道 ${name}`} aria-pressed={targeted} onClick={onTarget} title={channelFormat ? `${name}：${channelFormat === 'mixed' ? '既有单声道也有立体声片段' : `${CHANNEL_LABELS[channelFormat]}片段`}` : name}>
       <span className="w-5 shrink-0 text-left font-mono text-2xs font-semibold" data-video-edit-track-code>{code}</span>
       {/* 声道类型在名称下方，名称保留整行宽度。 */}

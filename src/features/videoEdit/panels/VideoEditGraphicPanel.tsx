@@ -55,14 +55,14 @@ function GraphicObjects({ owner, target, graphic, onError }: { owner: VideoEditI
     try { editor = readVideoEditGraphicEditor(target.projectId, target.sequenceId, target.clipId, selected.id) } catch (reason) { error = reason }
   }
   return <>
-    <UiGroup title="图形对象" divided data-video-edit-graphic-objects={target.clipId} actions={<Dropdown<'rect' | 'ellipse' | 'text'> ariaLabel="添加图形对象" display="添加对象" disabled={objects.length >= 32} options={[...objectOptions]} onSelect={kind => run(() => setSelectedId(createVideoEditGraphicObject(target, { kind })))} />}>
-      {rows.length ? <div className="flex flex-col gap-1" aria-label="图形对象层级">{rows.map(object => <UiOptionButton key={object.id} variant="menu" active={object.id === selected?.id} aria-label={`选择图形对象${object.name}`} aria-pressed={object.id === selected?.id} data-video-edit-graphic-object={object.id} size="sm" className="w-full min-w-0 justify-between gap-2" onPointerDown={event => { if (event.button === 0) setSelectedId(object.id) }} onClick={() => setSelectedId(object.id)}><span className="truncate">{object.name}</span><span className="shrink-0 text-2xs text-text-muted">{objectKinds[object.kind]}</span></UiOptionButton>)}</div> : <UiEmpty title="此图形暂无对象" description="添加矩形、椭圆或文字以创作画面。" />}
+    <UiGroup title="图形对象" titleTone="compact" divided data-video-edit-graphic-objects={target.clipId} actions={<Dropdown<'rect' | 'ellipse' | 'text'> ariaLabel="添加图形对象" display="添加对象" disabled={objects.length >= 32} options={[...objectOptions]} onSelect={kind => run(() => setSelectedId(createVideoEditGraphicObject(target, { kind })))} />}>
+      {rows.length ? <div className="flex flex-col gap-1" aria-label="图形对象层级">{rows.map(object => <UiOptionButton key={object.id} variant="menu" active={object.id === selected?.id} aria-label={`选择图形对象${object.name}`} aria-pressed={object.id === selected?.id} data-video-edit-graphic-object={object.id} size="sm" className="w-full min-w-0 justify-between gap-2" onPointerDown={event => { if (event.button === 0) setSelectedId(object.id) }} onClick={() => setSelectedId(object.id)}><span className="truncate">{object.name}</span><span className="shrink-0 text-2xs text-text3">{objectKinds[object.kind]}</span></UiOptionButton>)}</div> : <UiEmpty size="xs" title="此图形暂无对象" description="添加矩形、椭圆或文字以创作画面。" />}
       {selected && <>
-        <UiFormRow label="对象名称"><GraphicObjectName key={videoEditParameterTargetIdentity({ ...target, objectId: selected.id })} owner={owner} target={{ ...target, objectId: selected.id }} name={selected.name} onError={onError} /></UiFormRow>
+        <UiFormRow density="compact" label="对象名称"><GraphicObjectName key={videoEditParameterTargetIdentity({ ...target, objectId: selected.id })} owner={owner} target={{ ...target, objectId: selected.id }} name={selected.name} onError={onError} /></UiFormRow>
         <div className="flex items-center gap-1">
-          <UiIconButton size="lg" title="上移对象" aria-label="上移图形对象" disabled={selectedIndex >= objects.length - 1} onClick={() => move(1)}><ArrowUp size={16} /></UiIconButton>
-          <UiIconButton size="lg" title="下移对象" aria-label="下移图形对象" disabled={selectedIndex <= 0} onClick={() => move(-1)}><ArrowDown size={16} /></UiIconButton>
-          <UiIconButton size="lg" title="删除对象" aria-label="删除图形对象" onClick={() => run(() => { deleteVideoEditGraphicObjects(target, [selected.id]); setSelectedId(objects[selectedIndex - 1]?.id ?? objects[selectedIndex + 1]?.id ?? '') })}><Trash2 size={16} /></UiIconButton>
+          <UiIconButton title="上移对象" aria-label="上移图形对象" disabled={selectedIndex >= objects.length - 1} onClick={() => move(1)}><ArrowUp size={15} /></UiIconButton>
+          <UiIconButton title="下移对象" aria-label="下移图形对象" disabled={selectedIndex <= 0} onClick={() => move(-1)}><ArrowDown size={15} /></UiIconButton>
+          <UiIconButton tone="danger" title="删除对象" aria-label="删除图形对象" onClick={() => run(() => { deleteVideoEditGraphicObjects(target, [selected.id]); setSelectedId(objects[selectedIndex - 1]?.id ?? objects[selectedIndex + 1]?.id ?? '') })}><Trash2 size={15} /></UiIconButton>
         </div>
       </>}
     </UiGroup>

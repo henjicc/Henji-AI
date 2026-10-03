@@ -7,14 +7,15 @@
  *   - U+2600–U+27BF：杂项符号与装饰符号（☀ ★ ☆ ⚠ ✂ ✓ ✔ ✗ ✘ ❌ ➜ …）
  *   - U+2B50、U+2B55：⭐ ⭕
  *   - U+23E9–U+23FA：⏩ ⏳ ⏱ ⏸ ⏹ ⏺ 等媒体控制符号
- *   - U+25B6、U+25C0：▶ ◀（常被当作播放键）
+ *   - U+25A0–U+25FF：几何图形（■ □ ▲ ▶ ◀ ◆ ◇ ○ ● …，常被当作播放键、标记与状态点；界面重设计 3.5 并入，
+ *     剪辑时间轴标记 ◆ 已改为 lucide Diamond）
  *   - U+2139：ℹ
  * 不在范围内的排版符号（— → · … 等）是文字，不是图标。
  *
  * 豁免：注释（// 与块注释，含 JSX 注释）；`console.*(...)` 所在行；行内或上一行含 `icon-token-allow` 的行。
  */
 
-const SYMBOL_GLYPH_PATTERN = /[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B50}\u{2B55}\u{23E9}-\u{23FA}\u{25B6}\u{25C0}\u{2139}]/u
+const SYMBOL_GLYPH_PATTERN = /[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B50}\u{2B55}\u{23E9}-\u{23FA}\u{25A0}-\u{25FF}\u{2139}]/u
 const CONSOLE_CALL_PATTERN = /\bconsole\.(?:log|info|warn|error|debug|trace|group|groupCollapsed|table)\s*\(/
 const ALLOW_COMMENT = 'icon-token-allow'
 

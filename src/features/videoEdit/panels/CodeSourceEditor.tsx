@@ -19,7 +19,7 @@ function CandidatePreview({ candidate, onError }: { candidate: VideoEditCodeCand
     } catch (error) { errorHandler.current(error) }
     return () => { canvas.width = 0; canvas.height = 0 }
   }, [candidate])
-  return <canvas ref={host} aria-label="源码候选预览" data-video-edit-code-candidate-preview className="h-auto w-full bg-app object-contain" />
+  return <canvas ref={host} aria-label="源码候选预览" data-video-edit-code-candidate-preview className="h-auto w-full bg-media object-contain" />
 }
 
 function SourceDraft({ editor }: { editor: VideoEditCodeEditorState }): React.ReactElement {
@@ -73,8 +73,8 @@ function SourceDraft({ editor }: { editor: VideoEditCodeEditorState }): React.Re
     } finally { disposeVideoEditCodeCandidate(current); job?.controller.abort() }
   }
   return <UiGroup gap="row" data-video-edit-code-source-editor={editor.target.clipId}>
-    <UiFormRow label="源码"><UiTextAreaField aria-label="代码素材源码" className="font-mono" rows={12} value={draft} spellCheck={false} onChange={event => changeDraft(event.target.value)} textHistory={{ onValueChange: changeDraft }} /></UiFormRow>
-    <UiFormRow label="应用范围"><Dropdown<VideoEditCodeApplyScope> ariaLabel="源码应用范围" value={scope} options={[{ value: 'single', label: '此片段' }, { value: 'matching', label: '相同原版本的所有片段' }]} onSelect={value => { if (value !== scope) { invalidate(); setScope(value); setError(null) } }} /></UiFormRow>
+    <UiFormRow density="compact" label="源码"><UiTextAreaField aria-label="代码素材源码" className="font-mono" rows={12} value={draft} spellCheck={false} onChange={event => changeDraft(event.target.value)} textHistory={{ onValueChange: changeDraft }} /></UiFormRow>
+    <UiFormRow density="compact" label="应用范围"><Dropdown<VideoEditCodeApplyScope> ariaLabel="源码应用范围" value={scope} options={[{ value: 'single', label: '此片段' }, { value: 'matching', label: '相同原版本的所有片段' }]} onSelect={value => { if (value !== scope) { invalidate(); setScope(value); setError(null) } }} /></UiFormRow>
     <div className="flex flex-wrap items-center gap-2">
       <UiButton variant="secondary" disabled={busy} onClick={() => { void check() }}>检查并预览</UiButton>
       <UiButton disabled={draft === editor.source} onClick={() => changeDraft(editor.source)}>恢复当前源码</UiButton>
@@ -84,13 +84,13 @@ function SourceDraft({ editor }: { editor: VideoEditCodeEditorState }): React.Re
     {error && <UiError size="xs" message={error} />}
     {candidate && <UiGroup title="候选画面" gap="row">
       <CandidatePreview candidate={candidate} onError={reason => { invalidate(); setError(reason instanceof Error ? reason.message : '候选画面无法显示。') }} />
-      <span className="text-xs text-text-muted">将应用到 {candidate.clipCount} 个片段</span>
+      <span className="text-xs text-text3">将应用到 {candidate.clipCount} 个片段</span>
       {candidate.impacts.length > 0 && <UiGroup title="参数与关键帧变化" gap="row">
         {candidate.impacts.map((impact, index) => <div key={index} className="text-xs" data-video-edit-code-migration-impact>
-          <div className="text-text-dark">{impact.sequenceName} · {impact.clipName} · {impact.title}</div>
-          <div className="text-text-muted">{impact.reason}{impact.resetValue ? impact.reason === '参数已删除' ? '；移除原值' : '；恢复默认值' : ''}{impact.removeCurve ? '；移除已有关键帧' : ''}</div>
+          <div className="text-text1">{impact.sequenceName} · {impact.clipName} · {impact.title}</div>
+          <div className="text-text3">{impact.reason}{impact.resetValue ? impact.reason === '参数已删除' ? '；移除原值' : '；恢复默认值' : ''}{impact.removeCurve ? '；移除已有关键帧' : ''}</div>
         </div>)}
-        <UiFormRow label="确认以上参数与关键帧变化" inline><UiCheckbox aria-label="确认参数与关键帧迁移" checked={confirmed} onCheckedChange={setConfirmed} /></UiFormRow>
+        <UiFormRow density="compact" label="确认以上参数与关键帧变化" inline><UiCheckbox aria-label="确认参数与关键帧迁移" checked={confirmed} onCheckedChange={setConfirmed} /></UiFormRow>
       </UiGroup>}
     </UiGroup>}
     <UiButton variant="primary" disabled={!candidate || busy || (candidate.impacts.length > 0 && !confirmed)} onClick={commit}>应用已检查源码</UiButton>
@@ -99,7 +99,7 @@ function SourceDraft({ editor }: { editor: VideoEditCodeEditorState }): React.Re
 
 export function CodeSourceEditor({ editor }: { editor: VideoEditCodeEditorState }): React.ReactElement {
   const [expanded, setExpanded] = useState(false)
-  return <UiGroup divided title={<UiButton className="!p-0" aria-expanded={expanded} onClick={() => setExpanded(value => !value)}>{expanded ? '收起源码编辑' : '查看与编辑源码'}</UiButton>}>
+  return <UiGroup divided titleTone="compact" title={<UiButton size="sm" className="-ml-2" aria-expanded={expanded} onClick={() => setExpanded(value => !value)}>{expanded ? '收起源码编辑' : '查看与编辑源码'}</UiButton>}>
     {expanded && <SourceDraft key={videoEditParameterTargetIdentity(editor.target)} editor={editor} />}
   </UiGroup>
 }

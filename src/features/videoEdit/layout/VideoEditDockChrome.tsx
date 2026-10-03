@@ -1,7 +1,7 @@
 import { useEffect, useState, useSyncExternalStore } from 'react'
 import { Check, LayoutGrid, Maximize2, Menu, Minimize2, RotateCcw, X } from 'lucide-react'
 import type { DockviewApi, IDockviewHeaderActionsProps, IDockviewPanelHeaderProps } from 'dockview-react'
-import { PanelTrigger, UiButton, UiIconButton, UiOptionButton } from '@/components/ui'
+import { PanelTrigger, UiIconButton, UiOptionButton } from '@/components/ui'
 import { Z_LAYERS } from '@/core/theme/zLayers'
 import { dockVideoEditGroup, dockVideoEditPanel, showVideoEditPanel, VIDEO_EDIT_PANELS } from './videoEditDockLayout'
 import { dockVideoEditPopout, isVideoEditPanelPoppedOut, isVideoEditPopoutPanel, popOutVideoEditPanel, resetVideoEditWorkspaceLayout, subscribeVideoEditPopouts, videoEditPopoutRevision } from './popout/videoEditPopouts'
@@ -10,9 +10,10 @@ export function VideoEditDockTab({ api }: IDockviewPanelHeaderProps): React.Reac
   const [title, setTitle] = useState(api.title ?? '')
   useEffect(() => { const event = api.onDidTitleChange(value => setTitle(value.title)); return () => event.dispose() }, [api])
   // 文字色交给 dockview 的标签色变量（选中主要文字、其余辅助文字，见 index.css 面板标签映射）
-  return <span className="flex h-full items-center gap-2 pl-2 pr-1 text-xs">
+  // 关闭按钮只在悬停标签或键盘聚焦时出现（设计稿面板头为纯文字标签），命中区始终保留，不改变标签宽度。
+  return <span className="group/dock-tab flex h-full items-center gap-1.5 pl-2 pr-1 text-xs">
     <span>{title}</span>
-    <UiIconButton size="xs" title={`关闭${title}`} aria-label={`关闭${title}`}
+    <UiIconButton size="xs" className="opacity-0 transition-opacity duration-120 focus-visible:opacity-100 group-hover/dock-tab:opacity-100" title={`关闭${title}`} aria-label={`关闭${title}`}
       onPointerDown={event => event.stopPropagation()} onClick={event => { event.stopPropagation(); api.close() }}><X size={12} /></UiIconButton>
   </span>
 }
@@ -36,7 +37,7 @@ export function VideoEditDockHeaderActions({ api, containerApi, activePanel, pan
       <UiOptionButton variant="menu" size="sm" disabled={api.location.type !== 'grid'} onClick={() => { if (maximized) api.exitMaximized(); else api.maximize() }}>{maximized ? '还原面板' : '放大面板'}</UiOptionButton>
       <UiOptionButton variant="menu" size="sm" onClick={() => resetVideoEditWorkspaceLayout(containerApi)}>重置布局</UiOptionButton>
     </div>}>
-    {({ open, togglePanel }) => <div className="flex h-full items-center gap-1 pr-1">
+    {({ open, togglePanel }) => <div className="flex h-full items-center gap-1 pr-1" data-video-edit-dock-actions data-open={open ? 'true' : undefined}>
       {api.location.type === 'grid' && <UiIconButton size="sm" title={maximized ? '还原面板' : '放大面板'} aria-label={maximized ? '还原面板' : '放大面板'} onClick={() => { if (maximized) api.exitMaximized(); else api.maximize() }}>{maximized ? <Minimize2 size={13} /> : <Maximize2 size={13} />}</UiIconButton>}
       <UiIconButton size="sm" title="面板菜单" aria-label="面板菜单" on={open} data-panel-trigger-button onClick={togglePanel}><Menu size={14} /></UiIconButton>
     </div>}
@@ -63,6 +64,6 @@ export function VideoEditLayoutMenu({ api }: { api: DockviewApi | null }): React
       }}><span>{panel.title}</span>{(api?.getPanel(panel.id) || isVideoEditPanelPoppedOut(panel.id)) && <Check size={13} />}</UiOptionButton>)}
       <UiOptionButton variant="menu" size="sm" className="flex items-center gap-2" disabled={!api} onClick={() => { if (api) resetVideoEditWorkspaceLayout(api) }}><RotateCcw size={13} />重置布局</UiOptionButton>
     </div>}>
-    {({ open, togglePanel }) => <UiButton disabled={!api} className="gap-1.5" aria-expanded={open} data-panel-trigger-button onClick={togglePanel}><LayoutGrid size={15} />面板</UiButton>}
+    {({ open, togglePanel }) => <UiIconButton disabled={!api} aria-label="面板" title="面板与布局" aria-expanded={open} data-panel-trigger-button onClick={togglePanel}><LayoutGrid size={16} /></UiIconButton>}
   </PanelTrigger>
 }

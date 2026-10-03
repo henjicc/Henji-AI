@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import { UiButton, UiInput, UiError } from '@/components/ui'
+import { Dropdown, PanelTrigger, UiButton, UiError, UiIconButton, UiInput, UiOptionButton, UiPanel } from '@/components/ui'
+import { ImagePlus, MapPin, MoreHorizontal, MousePointer2, Move, PenLine, RotateCcw, SquareDashed } from 'lucide-react'
+import { Z_LAYERS } from '@/core/theme/zLayers'
 import { audibleVideoEditClips, videoEditDuration } from '@/core/videoEdit/document'
 import { VideoEditRenderSession } from './engine/videoEditRenderSession'
 import { acceptsVideoEditDrop, dropVideoEditInput, readVideoEditDrop } from './application/videoEditDrop'
@@ -9,7 +11,7 @@ import { createVideoEditAudioMeter, type VideoEditAudioLevel } from './engine/vi
 import { VideoEditAudioScheduler } from './engine/videoEditAudioScheduler'
 import { VideoEditLevelMeter } from './panels/VideoEditLevelMeter'
 import { useVideoEditPictureGesture } from './panels/useVideoEditPictureGesture'
-import { timelineTimecode } from './timeline/timelineGeometry'
+import { VideoEditTimecode, VideoEditTransportControls } from './timeline/VideoEditTimelineTransport'
 import { captureVideoEditProgramFrame, registerVideoEditProgramCapture } from './application/videoEditProgramCapture'
 import { collectVideoEditOutput } from './application/videoEditOutputs'
 import { editVideoEditProgramFrame } from './application/videoEditFrameEdit'
@@ -19,6 +21,8 @@ import { createLogger } from '@/core/logging'
 import type { VideoEditComposition } from '@/core/videoEdit/document'
 
 const logger = createLogger('features.videoEdit.preview')
+/** 节目监视器的工具模式：选中态开关（不是动作按钮），名称与标注逻辑不变。 */
+const PROGRAM_MODES = [{ id: 'select', title: '选择', Icon: MousePointer2 }, { id: 'move', title: '移动画面', Icon: Move }, { id: 'point', title: '点标注', Icon: MapPin }, { id: 'region', title: '区域标注', Icon: SquareDashed }] as const
 
 /** The Program GPU surface belongs to the project: a remount (dock ↔ popout window) waits until the previous session actually retired. */
 const programReleases = new WeakMap<VideoEditInstance, Promise<unknown>>()
@@ -234,8 +238,26 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
     void initialize().catch(error => { if (!stopped) onError(error) })
     return stop
   }, [instance, instance.activeSequenceId, onError, retry, visible])
-  return <div className="flex min-h-0 flex-1 flex-col bg-app">
-    <div className={`relative flex min-h-0 flex-1 p-3 ${display === 'fit' ? 'items-center justify-center overflow-hidden' : 'items-start justify-start overflow-auto'}`}
+  const busy = collecting || preparing
+  const captureFrame = (): void => {
+    setCollecting(true)
+    setVideoEditView(instance.document.id, { playing: false })
+    void captureVideoEditProgramFrame(instance.document.id).then(async output => {
+      if (!output) return
+      const asset = await collectVideoEditOutput(output, libraryId ? { libraryId } : {})
+      if (activeVideoEditInstance() === instance) { useAssetLibraryStore.getState().setSelectedAsset(asset); openAssetLibrary('floating') }
+    }).catch(onError).finally(() => setCollecting(false))
+  }
+  const editFrame = (): void => {
+    setCollecting(true)
+    setVideoEditView(instance.document.id, { playing: false })
+    void editVideoEditProgramFrame(instance.document.id).catch(onError).finally(() => setCollecting(false))
+  }
+  // 节目监视器（界面重设计 3.5，设计稿 VideoEdit）：画面区（媒体底 + 右侧纵向电平）+ 唯一一条控制带：
+  // 时间码 ｜ 播放控制 ｜ 适应、工具模式（选中态）、更多（重新加载、选帧加入资产库、编辑当前帧）。
+  // 压在画面上的状态与标注输入用玻璃 / 媒体叠层令牌。
+  return <div className="flex min-h-0 flex-1 flex-col bg-panel">
+    <div className={`relative flex min-h-0 flex-1 bg-media py-3 pl-3 pr-6 ${display === 'fit' ? 'items-center justify-center overflow-hidden' : 'items-start justify-start overflow-auto'}`}
       onDragOver={event => { if (acceptsVideoEditDrop(event.dataTransfer)) { event.preventDefault(); event.dataTransfer.dropEffect = 'copy' } }}
       onDrop={event => {
         if (!acceptsVideoEditDrop(event.dataTransfer)) return
@@ -254,33 +276,36 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
             const rect = event.currentTarget.getBoundingClientRect(); const x = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width)); const y = Math.min(1, Math.max(0, (event.clientY - rect.top) / rect.height))
             try { editVideoSequence(instance.document.id, start.sequenceId, draft => ({ ...draft, annotations: [...draft.annotations, { id: crypto.randomUUID(), clipId: start.clipId, frame: start.frame, space: 'composition-normalized', kind: mode === 'region' ? 'region' : 'point', x: Math.min(start.x, x), y: Math.min(start.y, y), width: mode === 'region' ? Math.abs(x - start.x) : 0, height: mode === 'region' ? Math.abs(y - start.y) : 0, text: label }] })) } catch (error) { onError(error) }
           }} />
-        {document.annotations.filter(mark => mark.frame === instance.frame).map(mark => <div key={mark.id} className="pointer-events-none absolute border border-white text-xs text-white" style={{ left: `${mark.x * 100}%`, top: `${mark.y * 100}%`, width: mark.kind === 'point' ? 8 : `${mark.width * 100}%`, height: mark.kind === 'point' ? 8 : `${mark.height * 100}%` }}><span className="absolute bottom-full whitespace-nowrap bg-black/60 px-1">{mark.text}</span></div>)}
+        {document.annotations.filter(mark => mark.frame === instance.frame).map(mark => <div key={mark.id} className="pointer-events-none absolute border border-on-media text-xs text-on-media" style={{ left: `${mark.x * 100}%`, top: `${mark.y * 100}%`, width: mark.kind === 'point' ? 8 : `${mark.width * 100}%`, height: mark.kind === 'point' ? 8 : `${mark.height * 100}%` }}><span className="absolute bottom-full whitespace-nowrap bg-media-scrim px-1">{mark.text}</span></div>)}
+      </div>
+      <VideoEditLevelMeter className="absolute bottom-3 right-2 top-3" levels={levels.length ? levels : Array.from({ length: document.channels }, () => ({ peak: 0, rms: 0 }))} title="节目播放电平" />
+      {(mode === 'point' || mode === 'region' || preparing || collecting) && <div className="absolute left-2 top-2 flex max-w-full items-center gap-2 rounded-lg bg-media-scrim p-1 text-xs text-on-media">
+        {(mode === 'point' || mode === 'region') && <div className="w-44 shrink-0"><UiInput aria-label="标注文字" size="sm" value={label} onChange={event => setLabel(event.target.value)} placeholder="标注文字" /></div>}
+        {preparing && <><span className="whitespace-nowrap px-1">正在准备流畅预览…</span><UiButton variant="media" size="sm" onClick={() => { stopPreview.current(); setPreparing(false) }}>取消准备</UiButton></>}
+        {collecting && !preparing && <span className="whitespace-nowrap px-1">正在处理当前帧…</span>}
+      </div>}
+      {(renderFailure || (mode !== 'select' && !instance.selection)) && <div className="pointer-events-none absolute inset-x-6 bottom-3 flex justify-center">
+        <UiPanel className="pointer-events-auto max-w-md px-3 py-2">
+          {renderFailure ? <UiError title="节目画面无法显示" message={renderFailure} /> : <UiError message="请先选择要编辑的片段" />}
+        </UiPanel>
+      </div>}
+    </div>
+    <div className="flex min-h-10 shrink-0 flex-wrap items-center gap-x-1 gap-y-0.5 whitespace-nowrap border-t border-line px-2 py-1" role="toolbar" aria-label="节目监视器控制">
+      <VideoEditTimecode instance={instance} label="节目时间码" className="w-28 px-1.5 text-13 text-text1" />
+      <div className="flex min-w-fit flex-1 justify-center"><VideoEditTransportControls instance={instance} onError={onError} /></div>
+      <div className="ml-auto flex shrink-0 items-center gap-1">
+      <Dropdown<'fit' | 'actual'> ariaLabel="节目显示比例" appearance="text" size="sm" value={display} options={[{ value: 'fit', label: '适应' }, { value: 'actual', label: '100%' }]} onSelect={setDisplay} />
+      <div className="flex items-center gap-0.5" role="group" aria-label="节目工具">
+        {PROGRAM_MODES.map(({ id, title, Icon }) => <UiIconButton key={id} on={mode === id} aria-label={title} title={title} onClick={() => setMode(id)}><Icon size={15} /></UiIconButton>)}
+      </div>
+      <PanelTrigger panelWidth={188} zIndex={Z_LAYERS.dropdown} closeOnPanelClick panelPadding="menu" renderPanel={() => <div className="flex flex-col gap-1">
+        <UiOptionButton variant="menu" size="sm" className="gap-2" disabled={preparing} onClick={() => setRetry(value => value + 1)}><RotateCcw size={14} />重新加载预览</UiOptionButton>
+        <UiOptionButton variant="menu" size="sm" className="gap-2" disabled={busy} onClick={captureFrame}><ImagePlus size={14} />选帧加入资产库</UiOptionButton>
+        <UiOptionButton variant="menu" size="sm" className="gap-2" disabled={busy} title="在图片编辑中修改当前帧，完成后可回填到此帧上方的空画面轨道" onClick={editFrame}><PenLine size={14} />编辑当前帧</UiOptionButton>
+      </div>}>
+        {({ open, togglePanel }) => <UiIconButton aria-label="更多节目操作" title="更多：重新加载预览、选帧加入资产库、编辑当前帧" aria-expanded={open} data-panel-trigger-button onClick={togglePanel}><MoreHorizontal size={16} /></UiIconButton>}
+      </PanelTrigger>
       </div>
     </div>
-    <div className="flex flex-wrap items-center justify-center gap-2 px-3 py-1 [&_button]:shrink-0 [&_button]:whitespace-nowrap">
-      <span className="text-2xs tabular-nums text-text-muted" aria-label="节目时间码">{timelineTimecode(instance.frame, document.fps)}{Number.isInteger(document.fps) ? '' : ' NDF'}</span>
-      <UiButton aria-pressed={display === 'fit'} onClick={() => setDisplay('fit')}>适合窗口</UiButton><UiButton aria-pressed={display === 'actual'} onClick={() => setDisplay('actual')}>100%</UiButton>
-      {preparing && <><span className="text-xs text-text-muted">正在准备流畅预览…</span><UiButton onClick={() => { stopPreview.current(); setPreparing(false) }}>取消准备</UiButton></>}
-      {!preparing && <UiButton onClick={() => setRetry(value => value + 1)}>重新加载预览</UiButton>}
-      <UiButton disabled={collecting || preparing} onClick={() => {
-        setCollecting(true)
-        setVideoEditView(instance.document.id, { playing: false })
-        void captureVideoEditProgramFrame(instance.document.id).then(async output => {
-          if (!output) return
-          const asset = await collectVideoEditOutput(output, libraryId ? { libraryId } : {})
-          if (activeVideoEditInstance() === instance) { useAssetLibraryStore.getState().setSelectedAsset(asset); openAssetLibrary('floating') }
-        }).catch(onError).finally(() => setCollecting(false))
-      }}>{collecting ? '正在收录选帧…' : '选帧加入资产库'}</UiButton>
-      <UiButton disabled={collecting || preparing} title="在图片编辑中修改当前帧，完成后可回填到此帧上方的空画面轨道" onClick={() => {
-        setCollecting(true)
-        setVideoEditView(instance.document.id, { playing: false })
-        void editVideoEditProgramFrame(instance.document.id).catch(onError).finally(() => setCollecting(false))
-      }}>编辑当前帧</UiButton>
-      {(['select', 'move', 'point', 'region'] as const).map((value, index) => <UiButton key={value} aria-pressed={mode === value} onClick={() => setMode(value)}>{['选择', '移动画面', '点标注', '区域标注'][index]}</UiButton>)}
-      {(mode === 'point' || mode === 'region') && <UiInput aria-label="标注文字" value={label} onChange={event => setLabel(event.target.value)} placeholder="标注文字" />}
-      {mode !== 'select' && !instance.selection && <UiError message="请先选择要编辑的片段" />}
-      {renderFailure && <UiError title="节目画面无法显示" message={renderFailure} />}
-    </div>
-    <div className="shrink-0 px-3 py-1"><VideoEditLevelMeter levels={levels.length ? levels : Array.from({ length: document.channels }, () => ({ peak: 0, rms: 0 }))} title="节目播放电平" /></div>
   </div>
 }

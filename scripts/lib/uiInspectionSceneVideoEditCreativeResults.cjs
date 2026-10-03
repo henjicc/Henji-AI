@@ -144,7 +144,7 @@ function createVideoEditCreativeResultsScene(context) {
         await openEdit(); await playhead(300); await presented(page, 300)
         const before = await png(page, path.join(root, 'program-300-before.png'))
         const framePath = path.join(root, `frame-300-${Date.now()}.png`)
-        await dialogs(app, [file], framePath); at = performance.now(); await button(page, '编辑当前帧').click()
+        await dialogs(app, [file], framePath); at = performance.now(); await button(page, '更多节目操作').click(); await button(page, '编辑当前帧').click()
         const sendMenu = page.getByRole('button', { name: /加入剪辑/ })
         await page.locator('[data-image-editor-v3-host-state]').waitFor({ state: 'detached', timeout: 60000 })
         await sendMenu.waitFor({ state: 'visible', timeout: 60000 })

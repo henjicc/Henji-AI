@@ -36,6 +36,11 @@ test('字符串里的双斜杠不会把后面的代码当成注释吞掉', () =>
   assert.equal(findSymbolGlyphs(source).length, 1)
 })
 
+test('几何图形段 U+25A0–U+25FF 整段拦截（◆ ● ■ ▲ ○）', () => {
+  const source = ['<span>◆</span>', "const dot = '●'", "const stop = '■'", "const up = '▲'", "const ring = '○'"].join('\n')
+  assert.deepEqual(findSymbolGlyphs(source).map((item) => item.glyph), ['◆', '●', '■', '▲', '○'])
+})
+
 test('排版符号不是图标：破折号、箭头、间隔号放行', () => {
   assert.deepEqual(findSymbolGlyphs("const text = '1 → 2 — 完成 · 共 3 项…'"), [])
 })

@@ -51,8 +51,10 @@ interface UiGroupProps extends Omit<HTMLAttributes<HTMLDivElement>, 'title'> {
    * 标题排版档位（刻意做成枚举而非任意 className，避免变体无限扩散）：
    * - `section`（默认）：常规分区标题
    * - `overline`：全大写字距加宽的弱化组标签，适合设置类分组
+   * - `compact`：窄停靠面板（剪辑效果控件等）里的分组标题，12/600 次要文字、标题与内容间距收紧
+   *   （设计稿 VideoEdit 效果控件；界面重设计 3.5 按 1.3 记录评估：16/600 区块标题在窄面板里过重）
    */
-  titleTone?: 'section' | 'overline';
+  titleTone?: 'section' | 'overline' | 'compact';
 }
 
 interface UiPageHeaderProps extends Omit<HTMLAttributes<HTMLDivElement>, 'title'> {
@@ -89,6 +91,11 @@ interface UiFormRowProps extends Omit<HTMLAttributes<HTMLDivElement>, 'title'> {
   info?: ReactNode;
   /** 横向排列（标签左、控件右），默认纵向 */
   inline?: boolean;
+  /**
+   * 标签档位：`default` 面板标题档 14/500；`compact` 给窄停靠面板（剪辑效果控件等），12 次要文字，
+   * 低于同面板 `UiGroup titleTone="compact"` 的分组标题（界面重设计 3.5）。
+   */
+  density?: 'default' | 'compact';
   children: ReactNode;
 }
 
@@ -192,15 +199,17 @@ export function UiGroup({
   const hasHeader = Boolean(title || description || actions);
   const titleClass = titleTone === 'overline'
     ? 'text-xs font-medium uppercase tracking-wider text-text-muted'
-    : UI_TEXT_SECTION_CLASS;
+    : titleTone === 'compact'
+      ? 'text-xs font-semibold text-text2'
+      : UI_TEXT_SECTION_CLASS;
 
   return (
     <div
-      className={`${divided ? `${UI_DIVIDER_CLASS} pt-4` : ''} ${className}`}
+      className={`${divided ? `${UI_DIVIDER_CLASS} ${titleTone === 'compact' ? 'pt-2.5' : 'pt-4'}` : ''} ${className}`}
       {...props}
     >
       {hasHeader && (
-        <div className="mb-3 flex items-start justify-between gap-3">
+        <div className={`${titleTone === 'compact' ? 'mb-1.5 min-h-7 items-center' : 'mb-3 items-start'} flex justify-between gap-3`}>
           <div className="min-w-0">
             {title ? (
               <div className={`flex items-center gap-1 ${titleClass}`}>
@@ -276,16 +285,18 @@ export function UiFormRow({
   hint,
   info,
   inline = false,
+  density = 'default',
   children,
   ...props
 }: UiFormRowProps): JSX.Element {
   const labelNode = <UiTooltipText tooltip={info}>{label}</UiTooltipText>;
+  const labelClass = density === 'compact' ? 'text-xs text-text2' : UI_TEXT_PANEL_TITLE_CLASS;
 
   if (inline) {
     return (
       <div className={`flex items-center justify-between gap-4 ${className}`} {...props}>
         <div className="min-w-0">
-          <div className={UI_TEXT_PANEL_TITLE_CLASS}>{labelNode}</div>
+          <div className={labelClass}>{labelNode}</div>
           {hint ? <p className={`mt-0.5 ${UI_TEXT_META_CLASS}`}>{hint}</p> : null}
         </div>
         <div className="flex shrink-0 items-center gap-2">{children}</div>
@@ -295,8 +306,8 @@ export function UiFormRow({
 
   return (
     <div className={className} {...props}>
-      <div className={UI_TEXT_PANEL_TITLE_CLASS}>{labelNode}</div>
-      {hint ? <p className={`mt-0.5 mb-1.5 ${UI_TEXT_META_CLASS}`}>{hint}</p> : <div className="h-1.5" />}
+      <div className={labelClass}>{labelNode}</div>
+      {hint ? <p className={`mt-0.5 mb-1.5 ${UI_TEXT_META_CLASS}`}>{hint}</p> : <div className={density === 'compact' ? 'h-1' : 'h-1.5'} />}
       {children}
     </div>
   );

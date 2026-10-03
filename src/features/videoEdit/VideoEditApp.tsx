@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
-import { UiButton, UiError, UiPageHeader, UiRegion } from '@/components/ui'
-import { Download, Undo2, Redo2, Scissors, Trash2, Type } from 'lucide-react'
+import { PanelTrigger, UiButton, UiError, UiIconButton, UiOptionButton, UiPageHeader, UiRegion, UiToolbar } from '@/components/ui'
+import { ChevronDown, ChevronLeft, Download, Keyboard, Redo2, Undo2 } from 'lucide-react'
+import { Z_LAYERS } from '@/core/theme/zLayers'
 import type { DockviewApi } from 'dockview-react'
-import { activeVideoEditInstance, appendVideoEditClip, closeVideoEditProject, createVideoEditProject, getActiveVideoEditSequence, listVideoEditInstances, openVideoEditProject, subscribeVideoEdit, subscribeVideoEditView, videoEditViewRevision, videoEditRevision, focusVideoEdit, focusVideoEditPanel, videoEditExportRange, type VideoEditInstance } from './application/videoEditService'
+import { activeVideoEditInstance, closeVideoEditProject, createVideoEditProject, getActiveVideoEditSequence, listVideoEditInstances, openVideoEditProject, subscribeVideoEdit, subscribeVideoEditView, videoEditViewRevision, videoEditRevision, focusVideoEdit, focusVideoEditPanel, videoEditExportRange, type VideoEditInstance } from './application/videoEditService'
 import { videoEditFrameTimecode } from '@/core/videoEdit/timecode'
 import { cancelVideoEditExport, videoEditExportTask } from './application/videoEditExport'
 import { VideoEditDock } from './layout/VideoEditDock'
@@ -11,33 +12,37 @@ import { isUiInspectionActive } from '@/platform/runtime'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { captureVideoEditCommandContext, executeVideoEditCommand, videoEditCommandState } from './application/videoEditCommands'
 import { videoEditKeyboardCommand } from './application/videoEditKeyboard'
-import { VideoEditShortcutSettings } from './panels/VideoEditShortcutSettings'
+import { VideoEditShortcutDialog } from './panels/VideoEditShortcutSettings'
+import { timelineCommandPresentation } from './timeline/timelineCommandPresentation'
 import type { VideoEditCommandId } from '@/core/videoEdit/commands'
 import { collectVideoEditOutput } from './application/videoEditOutputs'
 import { useAssetLibraryStore } from '@/features/assets/store/assetLibraryStore'
 import { openAssetLibrary } from '@/stores/navigationStore'
 
+/**
+ * 剪辑命令带（界面重设计 3.5，设计稿 VideoEdit）：一条带。左端关闭工程、工程名菜单与序列规格；右端撤销/重做、
+ * 面板布局，唯一一条分隔线后是成片收录与唯一主动作“导出”。拆分、删除、文字移入时间线工具栏。
+ */
 function VideoEditToolbar({ instance, api, run }: { instance: VideoEditInstance; api: DockviewApi | null; run: (operation: () => unknown | Promise<unknown>) => void }): React.ReactElement {
   useSyncExternalStore(subscribeVideoEditView, videoEditViewRevision)
   const sequence = getActiveVideoEditSequence(instance); const projectId = instance.document.id
   const task = videoEditExportTask(projectId)
   const marked = instance.inFrame !== null || instance.outFrame !== null ? (() => { try { return videoEditExportRange(instance) } catch { return undefined } })() : undefined
   const [collecting, setCollecting] = useState(false)
+  const [shortcutsOpen, setShortcutsOpen] = useState(false)
   const libraryId = useAssetLibraryStore(state => state.libraryId)
+  const shortcuts = useSettingsStore(state => state.videoEditShortcuts)
   const context = captureVideoEditCommandContext(projectId, 'timeline', { includeClipboard: false })
-  const enabled = (id: VideoEditCommandId): boolean => videoEditCommandState(context, id).enabled
+  const presentation = (id: VideoEditCommandId) => timelineCommandPresentation(context, id, shortcuts)
   const command = (id: VideoEditCommandId): void => { const current = captureVideoEditCommandContext(projectId, 'timeline'); run(() => executeVideoEditCommand(current, id)) }
-  return <div className="flex h-11 shrink-0 items-center gap-1 overflow-x-auto whitespace-nowrap border-b border-border-dark bg-surface-dark px-3">
-    <UiButton onClick={() => run(() => closeVideoEditProject(projectId))}>关闭工程</UiButton>
-    <span className="max-w-40 truncate text-sm" data-observation-sensitive>{instance.document.name}</span>
-    <UiButton className="gap-1.5" disabled={!enabled('undo')} onClick={() => command('undo')}><Undo2 size={15} />撤销</UiButton>
-    <UiButton className="gap-1.5" disabled={!enabled('redo')} onClick={() => command('redo')}><Redo2 size={15} />重做</UiButton>
-    <UiButton className="gap-1.5" disabled={!enabled('split')} onClick={() => command('split')}><Scissors size={15} />拆分</UiButton>
-    <UiButton className="gap-1.5" disabled={!enabled('delete')} onClick={() => command('delete')}><Trash2 size={15} />删除</UiButton>
-    <UiButton className="gap-1.5" onClick={() => run(() => appendVideoEditClip(projectId))}><Type size={15} />文字</UiButton>
-    <VideoEditLayoutMenu api={api} /><VideoEditShortcutSettings /><div className="ml-auto" />
-    <span className="mr-2 text-2xs tabular-nums text-text-faint">{sequence.width} × {sequence.height} · {Number(sequence.fps.toFixed(3))}fps</span>
-    {marked && <span className="mr-2 text-2xs tabular-nums text-text-muted" data-video-edit-export-range>导出范围 {videoEditFrameTimecode(marked.startFrame, sequence.fps)}–{videoEditFrameTimecode(marked.endFrame - 1, sequence.fps)}</span>}
+  const undo = presentation('undo'); const redo = presentation('redo'); const exporting = presentation('export')
+  const others = listVideoEditInstances().filter(item => item !== instance)
+  return <UiToolbar variant="command" trailing={<>
+    {marked && <span className="mr-1 text-xs tabular-nums text-text3" data-video-edit-export-range>导出范围 {videoEditFrameTimecode(marked.startFrame, sequence.fps)}–{videoEditFrameTimecode(marked.endFrame - 1, sequence.fps)}</span>}
+    <UiIconButton aria-label="撤销" title={undo.tooltip} disabled={!undo.enabled} onClick={() => command('undo')}><Undo2 size={16} /></UiIconButton>
+    <UiIconButton aria-label="重做" title={redo.tooltip} disabled={!redo.enabled} onClick={() => command('redo')}><Redo2 size={16} /></UiIconButton>
+    <VideoEditLayoutMenu api={api} />
+    <span aria-hidden="true" className="mx-1 h-4 w-px shrink-0 bg-line" />
     {task?.state === 'completed' && task.output && <UiButton disabled={collecting} onClick={() => run(async () => {
       setCollecting(true)
       try {
@@ -45,8 +50,20 @@ function VideoEditToolbar({ instance, api, run }: { instance: VideoEditInstance;
         if (activeVideoEditInstance() === instance) { useAssetLibraryStore.getState().setSelectedAsset(asset); openAssetLibrary('floating') }
       } finally { setCollecting(false) }
     })}>{collecting ? '正在收录成片…' : '成片加入资产库'}</UiButton>}
-    {task?.state === 'running' ? <UiButton onClick={() => cancelVideoEditExport(projectId)}>取消导出 {Math.round(task.progress * 100)}%</UiButton> : <UiButton variant="primary" className="gap-2" disabled={!enabled('export')} onClick={() => command('export')}><Download size={16} />导出视频</UiButton>}
-  </div>
+    {task?.state === 'running' ? <UiButton onClick={() => cancelVideoEditExport(projectId)}>取消导出 {Math.round(task.progress * 100)}%</UiButton> : <UiButton variant="primary" aria-label="导出视频" title={exporting.tooltip} disabled={!exporting.enabled} onClick={() => command('export')}><Download size={15} />导出</UiButton>}
+  </>}>
+    <UiIconButton size="lg" aria-label="关闭工程" title="关闭工程" onClick={() => run(() => closeVideoEditProject(projectId))}><ChevronLeft size={18} /></UiIconButton>
+    <PanelTrigger panelWidth={200} zIndex={Z_LAYERS.dropdown} closeOnPanelClick panelPadding="menu" renderPanel={() => <div className="flex flex-col gap-1">
+      <UiOptionButton variant="menu" size="sm" className="gap-2" onClick={() => setShortcutsOpen(true)}><Keyboard size={14} />剪辑快捷键…</UiOptionButton>
+      {others.map(item => <UiOptionButton key={item.document.id} variant="menu" size="sm" className="min-w-0" onClick={() => focusVideoEdit(item.document.id)}><span className="truncate" data-observation-sensitive>切换到 {item.document.name}</span></UiOptionButton>)}
+    </div>}>
+      {({ open, togglePanel }) => <UiButton size="sm" className="min-w-0 max-w-56" aria-label={`工程 ${instance.document.name}`} aria-expanded={open} data-panel-trigger-button onClick={togglePanel}>
+        <span className="truncate" data-observation-sensitive>{instance.document.name}</span><ChevronDown size={14} className="shrink-0 text-text3" />
+      </UiButton>}
+    </PanelTrigger>
+    <span className="shrink-0 truncate text-xs tabular-nums text-text3">{sequence.width} × {sequence.height} · {Number(sequence.fps.toFixed(3))} fps</span>
+    <VideoEditShortcutDialog open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
+  </UiToolbar>
 }
 
 export default function VideoEditApp(): React.ReactElement {
@@ -65,7 +82,7 @@ export default function VideoEditApp(): React.ReactElement {
     if (projectId && panel && ['timeline', 'program', 'source', 'project', 'effects', 'content'].includes(panel) && panel !== instance?.activePanel) focusVideoEditPanel(projectId, panel as NonNullable<typeof instance>['activePanel'])
   }
   const shortcuts = useSettingsStore(state => state.videoEditShortcuts)
-  return <div className="flex h-full min-h-0 flex-col bg-app text-text-dark" onFocusCapture={event => focusPanel(event.target)} onPointerDownCapture={event => focusPanel(event.target)} onKeyDown={event => {
+  return <div className="flex h-full min-h-0 flex-col bg-window text-text1" onFocusCapture={event => focusPanel(event.target)} onPointerDownCapture={event => focusPanel(event.target)} onKeyDown={event => {
     const binding = videoEditKeyboardCommand({ ...event.nativeEvent, code: event.code, key: event.key, ctrlKey: event.ctrlKey, metaKey: event.metaKey, altKey: event.altKey, shiftKey: event.shiftKey, repeat: event.repeat, isComposing: event.nativeEvent.isComposing, defaultPrevented: event.defaultPrevented, target: event.target }, instance?.activePanel ?? 'global', shortcuts)
     if (!binding) return
     const context = captureVideoEditCommandContext(projectId, binding.scope)
@@ -80,6 +97,7 @@ export default function VideoEditApp(): React.ReactElement {
       <div className="my-5 flex gap-3"><UiButton variant="primary" onClick={() => run(createVideoEditProject)}>新建工程</UiButton><UiButton variant="secondary" onClick={() => run(() => openVideoEditProject())}>打开工程</UiButton></div>
       {listVideoEditInstances().map(item => <UiButton key={item.document.id} onClick={() => focusVideoEdit(item.document.id)}>{item.document.name}</UiButton>)}
     </UiRegion>}
-    {(error || instance?.error) && <UiError message={error || instance?.error || ''} />}
+    {/* 操作失败与保存状态：底部状态带（不挤占面板区的大块居中提示），重试成功或下一次操作后清除。 */}
+    {(error || instance?.error) && <UiError size="xs" align="start" className="shrink-0 border-t border-gap bg-panel px-3" message={error || instance?.error || ''} />}
   </div>
 }

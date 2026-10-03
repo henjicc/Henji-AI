@@ -10,7 +10,6 @@ import { VideoEditProjectPanel } from '../panels/VideoEditProjectPanel'
 import { VideoEditEffectsPanel } from '../panels/VideoEditEffectsPanel'
 import { VideoEditSourcePanel } from '../panels/VideoEditSourcePanel'
 import { VideoEditTimedContentPanel } from '../panels/VideoEditTimedContentPanel'
-import { VideoEditSequenceTabs } from '../panels/VideoEditSequenceTabs'
 import { readVideoEditSource, subscribeVideoEditSource } from '../application/videoEditSource'
 import { VideoEditDockHeaderActions, VideoEditDockTab } from './VideoEditDockChrome'
 import { restoreVideoEditLayout, saveVideoEditLayout, showVideoEditPanel, VIDEO_EDIT_PANELS, type VideoEditPanelId } from './videoEditDockLayout'
@@ -26,7 +25,7 @@ type PanelBody = (props: { visible: boolean }) => React.ReactElement
 function ProjectBody({ visible }: { visible: boolean }): React.ReactElement { return <div className="h-full min-h-0" data-video-edit-panel="project"><VideoEditProjectPanel {...useDock()} visible={visible} /></div> }
 function EffectsBody({ visible }: { visible: boolean }): React.ReactElement { return <div className="h-full min-h-0" data-video-edit-panel="effects"><VideoEditEffectsPanel {...useDock()} visible={visible} /></div> }
 function ProgramBody({ visible }: { visible: boolean }): React.ReactElement { return <div className="flex h-full min-h-0 flex-col" data-video-edit-panel="program"><VideoEditPreview {...useDock()} visible={visible} /></div> }
-function TimelineBody({ visible }: { visible: boolean }): React.ReactElement { const context = useDock(); return <div className="flex h-full min-h-0 flex-col" data-video-edit-panel="timeline"><VideoEditSequenceTabs {...context} /><VideoEditTimeline {...context} visible={visible} /></div> }
+function TimelineBody({ visible }: { visible: boolean }): React.ReactElement { return <div className="flex h-full min-h-0 flex-col" data-video-edit-panel="timeline"><VideoEditTimeline {...useDock()} visible={visible} /></div> }
 function ContentBody({ visible }: { visible: boolean }): React.ReactElement { return <div className="h-full min-h-0" data-video-edit-panel="content"><VideoEditTimedContentPanel {...useDock()} visible={visible} /></div> }
 function SourceBody({ visible }: { visible: boolean }): React.ReactElement { return <div className="h-full min-h-0" data-video-edit-panel="source"><VideoEditSourcePanel {...useDock()} visible={visible} /></div> }
 const BODIES: Record<VideoEditPanelId, PanelBody> = { project: ProjectBody, effects: EffectsBody, program: ProgramBody, timeline: TimelineBody, content: ContentBody, source: SourceBody }
@@ -88,7 +87,7 @@ export function VideoEditDock({ instance, onError, onApiChange }: DockContext & 
   useEffect(() => () => { bindVideoEditPopoutDock(null); disposeRef.current(); apiRef.current = null; onApiChange(null) }, [onApiChange])
   return <Context.Provider value={{ instance, onError }}>
     {/* isolate：dockview 分隔条自带 z-index 99，不隔离会漏到根层叠上下文、压在 body 下的弹窗（z-modal）之上，窄窗口时挡住弹窗按钮 */}
-    <DockviewReact className="henji-cameraStage-dock dockview-theme-abyss isolate h-full min-h-0 w-full" components={COMPONENTS}
+    <DockviewReact className="henji-cameraStage-dock henji-videoEdit-dock dockview-theme-abyss isolate h-full min-h-0 w-full" components={COMPONENTS}
       defaultTabComponent={VideoEditDockTab} rightHeaderActionsComponent={VideoEditDockHeaderActions} watermarkComponent={EmptyLayout}
       dndStrategy="pointer" floatingGroupBounds="boundedWithinViewport" floatingGroupDragHandle="tabbar" defaultRenderer="always" onReady={onReady} />
     <VideoEditPopoutPortals onFocusPanel={id => { if (instance.activePanel !== id && listVideoEditInstances().includes(instance)) focusVideoEditPanel(instance.document.id, id) }}

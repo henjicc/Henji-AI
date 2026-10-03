@@ -1,4 +1,5 @@
 import { useCallback, useLayoutEffect, useRef, useState } from 'react'
+import { Diamond } from 'lucide-react'
 import ContextMenu from '@/components/ContextMenu'
 import { UiButton, UiError } from '@/components/ui'
 import { UI_DIVIDER_CLASS } from '@/components/ui/styleTokens'
@@ -184,17 +185,17 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
         } catch (error) { onError(error) }
       }}>
       <div className="relative" style={{ width, height }} data-video-edit-timeline-content>
-        <div className="sticky top-0 z-sticky flex h-7 bg-app" data-video-edit-ruler>
-          <div className="sticky left-0 z-sticky flex shrink-0 items-center bg-panel px-2 text-2xs text-text-muted" style={{ width: TIMELINE_HEADER_WIDTH }} data-video-edit-track-header>轨道</div>
+        <div className="sticky top-0 z-sticky flex h-7 border-b border-line bg-panel" data-video-edit-ruler>
+          <div className="sticky left-0 z-sticky flex shrink-0 items-center border-r border-gap bg-panel px-2.5 text-2xs text-text3" style={{ width: TIMELINE_HEADER_WIDTH }} data-video-edit-track-header>轨道</div>
           <VideoEditTimelinePosition instance={instance}>
-            {Array.from({ length: Math.max(0, tickEnd - tickStart) }, (_, index) => index + tickStart).map(index => <span key={index} className="pointer-events-none absolute border-l border-border-dark pl-1 text-2xs tabular-nums text-text-muted" style={{ left: index * tickWidth }}>{index * tickSeconds}s</span>)}
-            {/* ui-surface-allow 标尺上的标记 ◆ 与字幕区间条是时间轴记号，不是按钮档位；交 2.4/3.5 */}
-            {(sequence.markers ?? []).filter(mark => mark.frame * pixels >= view.left - 8 && mark.frame * pixels <= view.left + view.width - TIMELINE_HEADER_WIDTH + 8).map(mark => <UiButton key={mark.id} data-video-edit-marker={mark.id} aria-label={`定位标记 ${mark.name}`} className="absolute top-3 z-raised !h-3 !p-0 text-accent" title={mark.name} style={{ left: mark.frame * pixels }} onPointerDown={event => event.stopPropagation()} onClick={() => run(() => { setVideoEditView(projectId, { frame: mark.frame, playing: false, selection: mark.clipId ?? null }); focusVideoEditPanel(projectId, 'content') })}>◆</UiButton>)}
+            {Array.from({ length: Math.max(0, tickEnd - tickStart) }, (_, index) => index + tickStart).map(index => <span key={index} className="pointer-events-none absolute bottom-0 top-1 border-l border-line pl-1 font-mono text-2xs tabular-nums text-text3" style={{ left: index * tickWidth }}>{index * tickSeconds}s</span>)}
+            {/* ui-surface-allow 标尺上的标记与字幕区间条是时间轴记号（12px 命中区 + 菱形图形），不是按钮档位（3.5 确认保留） */}
+            {(sequence.markers ?? []).filter(mark => mark.frame * pixels >= view.left - 8 && mark.frame * pixels <= view.left + view.width - TIMELINE_HEADER_WIDTH + 8).map(mark => <UiButton key={mark.id} data-video-edit-marker={mark.id} aria-label={`定位标记 ${mark.name}`} className="absolute top-3 z-raised -ml-1.5 !h-3 !w-3 !p-0 text-accent-text" title={mark.name} style={{ left: mark.frame * pixels }} onPointerDown={event => event.stopPropagation()} onClick={() => run(() => { setVideoEditView(projectId, { frame: mark.frame, playing: false, selection: mark.clipId ?? null }); focusVideoEditPanel(projectId, 'content') })}><Diamond size={10} fill="currentColor" strokeWidth={1.5} aria-hidden="true" /></UiButton>)}
             {/* ui-surface-allow 同上：字幕区间条 */}
-            {(sequence.captions ?? []).filter(caption => (caption.start + caption.duration) * pixels >= view.left && caption.start * pixels <= view.left + view.width - TIMELINE_HEADER_WIDTH).map(caption => <UiButton key={caption.id} data-video-edit-caption-range={caption.id} aria-label={`定位字幕 ${caption.text}`} className="absolute top-0 !h-2 overflow-hidden !rounded-none !p-0 bg-accent/30" style={{ left: caption.start * pixels, width: Math.max(2, caption.duration * pixels) }} title={caption.text} onPointerDown={event => event.stopPropagation()} onClick={() => run(() => { setVideoEditView(projectId, { frame: caption.start, playing: false, selection: caption.clipId ?? null }); focusVideoEditPanel(projectId, 'content') })} />)}
+            {(sequence.captions ?? []).filter(caption => (caption.start + caption.duration) * pixels >= view.left && caption.start * pixels <= view.left + view.width - TIMELINE_HEADER_WIDTH).map(caption => <UiButton key={caption.id} data-video-edit-caption-range={caption.id} aria-label={`定位字幕 ${caption.text}`} className="absolute top-0 !h-1.5 overflow-hidden !rounded-none !p-0 bg-accent-tint" style={{ left: caption.start * pixels, width: Math.max(2, caption.duration * pixels) }} title={caption.text} onPointerDown={event => event.stopPropagation()} onClick={() => run(() => { setVideoEditView(projectId, { frame: caption.start, playing: false, selection: caption.clipId ?? null }); focusVideoEditPanel(projectId, 'content') })} />)}
           </VideoEditTimelinePosition>
         </div>
-        {rows.map(row => <div key={row.track.id} className="absolute left-0 right-0 border-b border-border-dark" style={{ top: row.top, height: row.height }} data-video-edit-track={row.track.id} data-track-index={row.track.index} data-track-kind={row.track.kind}>
+        {rows.map(row => <div key={row.track.id} className="absolute left-0 right-0 border-b border-gap bg-window" style={{ top: row.top, height: row.height }} data-video-edit-track={row.track.id} data-track-index={row.track.index} data-track-kind={row.track.kind}>
           <VideoEditTrackHeader row={row} code={trackCodes.get(row.track.id) ?? ''} targeted={instance.targetTrackIds.includes(row.track.id)} onTarget={() => run(() => setVideoEditTimelineView(projectId, { targetTrackIds: instance.targetTrackIds.includes(row.track.id) ? instance.targetTrackIds.filter(id => id !== row.track.id) : [...instance.targetTrackIds, row.track.id] }))}
             onPatch={patch => run(() => updateVideoEditTrack(projectId, sequence.id, row.track.id, patch))} onResize={event => pointer.resize(event, row)} channelFormat={row.track.kind === 'audio' ? channelFormatOf(row.track.index) : undefined} />
         </div>)}
@@ -233,8 +234,8 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
             {offsetLabel && <span className="pointer-events-none absolute right-2.5 top-0.5 rounded-sm bg-danger-solid px-1 text-2xs font-medium leading-4 tabular-nums text-on-danger" data-video-edit-sync-offset={offset}>{offsetLabel}</span>}
           </div>
         })}
-        {pointer.box && <div className="pointer-events-none absolute z-raised border border-accent bg-accent/10" style={{ left: TIMELINE_HEADER_WIDTH + Math.min(pointer.box.from.x, pointer.box.to.x), top: Math.min(pointer.box.from.y, pointer.box.to.y), width: Math.abs(pointer.box.to.x - pointer.box.from.x), height: Math.abs(pointer.box.to.y - pointer.box.from.y) }} data-video-edit-selection-box />}
-        {hint && rows.some(row => row.track.index === hint.track) && <div className="pointer-events-none absolute h-6 w-36 border-l-2 border-accent bg-accent/20 px-2 text-2xs text-text-dark" style={{ top: rows.find(row => row.track.index === hint.track)!.top + 2, left: TIMELINE_HEADER_WIDTH + hint.frame * pixels }}>释放以添加素材</div>}
+        {pointer.box && <div className="pointer-events-none absolute z-raised border border-accent-ring bg-accent-tint" style={{ left: TIMELINE_HEADER_WIDTH + Math.min(pointer.box.from.x, pointer.box.to.x), top: Math.min(pointer.box.from.y, pointer.box.to.y), width: Math.abs(pointer.box.to.x - pointer.box.from.x), height: Math.abs(pointer.box.to.y - pointer.box.from.y) }} data-video-edit-selection-box />}
+        {hint && rows.some(row => row.track.index === hint.track) && <div className="pointer-events-none absolute flex h-6 w-36 items-center border-l-2 border-accent-ring bg-accent-tint px-2 text-2xs text-text1" style={{ top: rows.find(row => row.track.index === hint.track)!.top + 2, left: TIMELINE_HEADER_WIDTH + hint.frame * pixels }}>释放以添加素材</div>}
         <VideoEditTimelinePlayhead instance={instance} pixels={pixels} />
       </div>
       {pointer.failure && <div className="sticky bottom-0 left-0 z-raised max-w-lg bg-panel px-2 py-1"><UiError title="当前位置不能编辑" message={pointer.failure} /></div>}

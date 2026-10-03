@@ -175,9 +175,15 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
     updatePanelPosition(rect, false)
   }, [updatePanelPosition])
 
+  // 收起动画期间（UI_DURATION.base）再次点触发器应当留在打开态，而不是被当成“已打开 → 关闭”：
+  // 收起计时器可被取消（界面重设计 3.5：剪辑面板的新建/更多菜单连续使用时暴露）。
+  const closeTimerRef = useRef<number | undefined>(undefined)
+  useEffect(() => () => window.clearTimeout(closeTimerRef.current), [])
+
   const closePanel = useCallback((): void => {
     setClosing(true)
-    window.setTimeout(() => { setOpen(false); setClosing(false) }, UI_DURATION.base)
+    window.clearTimeout(closeTimerRef.current)
+    closeTimerRef.current = window.setTimeout(() => { closeTimerRef.current = undefined; setOpen(false); setClosing(false) }, UI_DURATION.base)
   }, [])
 
   const openPanel = useCallback((): void => {
@@ -188,12 +194,19 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
 
   const togglePanel = useCallback((): void => {
     if (disabled) return
+    if (open && closing) {
+      // 仍在收起动画中：取消收起即可，面板保持原位（不重新定位，避免停在未就绪的隐藏态）。
+      window.clearTimeout(closeTimerRef.current)
+      closeTimerRef.current = undefined
+      setClosing(false)
+      return
+    }
     if (open) {
       closePanel()
       return
     }
     openPanel()
-  }, [closePanel, disabled, open, openPanel])
+  }, [closePanel, closing, disabled, open, openPanel])
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {

@@ -86,7 +86,8 @@ function createVideoEditProbeScene() {
       for (const item of [items.video, items.video, items.image, items.audio]) {
         await entry(page, item.id).click(); await entry(page, item.id).click({ button: 'right' }); await menuItem(page, '添加到当前序列').click()
       }
-      await button(page, '文字').click()
+      // 3.5：“文字”在时间线工具栏；项目面板随后也会列出同名文字项，所以限定在时间线面板内。
+      await button(page.locator('[data-video-edit-panel="timeline"]').first(), '文字').click()
       try { await page.waitForFunction(() => ![...document.querySelectorAll('[role=alert]')].some(alert => alert.getClientRects().length && alert.textContent?.trim())) }
       catch (error) { await capture('video-edit-import-error'); throw new Error(`导入后界面报错：${await page.getByRole('alert').allTextContents()}`, { cause: error }) }
       await page.waitForTimeout(300)
@@ -329,8 +330,8 @@ function createVideoEditProbeScene() {
           const output = path.join(root, `during-export-${Date.now()}.mp4`); await dialogs(app, [path.join(root, `${specs[0].width}-${specs[0].fps}.henji-video`)], output)
           const before = JSON.parse(projectText()).sequences[1].clips.length
           await button(page, '导出视频').click(); await page.getByRole('button', { name: /^取消导出/ }).waitFor({ state: 'visible', timeout: 10000 })
-          // The command band comes first; the project panel also lists a text item named 文字.
-          await button(page, '文字').first().click()
+          // 3.5: 文字 lives in the timeline toolbar; the project panel also lists a text item named 文字.
+          await button(page.locator('[data-video-edit-panel="timeline"]').first(), '文字').click()
           await savedProject(page, multiPath, document => document.sequences[1].clips.length === before + 1, '导出期间编辑保存')
           // Leaving the project is refused while its export runs; the export keeps going.
           await button(page, '关闭工程').click(); await page.waitForTimeout(300)

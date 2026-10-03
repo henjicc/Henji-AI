@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Pause, Play, Volume2, VolumeX } from 'lucide-react';
 import { createLogger } from '@/core/logging';
-import { UiButton, UiIconButton, UiModal } from '@/components/ui';
+import { UiButton, UiError, UiIconButton, UiModal } from '@/components/ui';
 import { compressVideoToFit } from '@/commands/video';
 import { VideoTrimTimeline } from './VideoTrimTimeline';
 
@@ -216,7 +216,7 @@ export function VideoTrimModal({
           <video
             ref={attachVideo}
             src={previewUrl}
-            className="max-h-[60vh] w-full rounded-md bg-black object-contain"
+            className="max-h-[60vh] w-full rounded-md bg-media object-contain"
             preload="metadata"
             muted={muted}
             playsInline
@@ -265,7 +265,7 @@ export function VideoTrimModal({
             }}
           />
         ) : null}
-        {error && <div className="text-xs text-red-400">{error}</div>}
+        {error && <UiError size="xs" align="start" message={error} />}
       </div>
     </UiModal>
   );

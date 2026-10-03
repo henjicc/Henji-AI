@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 
 import React from 'react'
-import { cleanup, fireEvent, render } from '@testing-library/react'
+import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import PanelTrigger from './PanelTrigger'
 import {
@@ -142,5 +142,29 @@ describe('PanelTrigger 面板内部点击关闭策略', () => {
 
     const panel = document.querySelector<HTMLElement>('[data-panel-placement]')
     expect(panel?.style.width).toBe('112px')
+  })
+  it('收起动画期间再次点触发器会重新打开，收起计时器不会把它关掉', () => {
+    vi.useFakeTimers()
+    try {
+      vi.stubGlobal('ResizeObserver', class { observe(): void {} disconnect(): void {} })
+      const view = render(React.createElement(PanelTrigger, {
+        display: '新建',
+        closeOnPanelClick: true,
+        renderPanel: () => React.createElement('button', { type: 'button' }, '新建矩形'),
+      }))
+      const trigger = view.getAllByRole('button')[0]
+      fireEvent.click(trigger)
+      // 面板内选项：mousedown 触发收起（动画进行中）
+      fireEvent.mouseDown(view.getByText('新建矩形'))
+      expect(trigger.getAttribute('aria-expanded')).toBe('false')
+      // 动画结束前再次点触发器
+      fireEvent.click(trigger)
+      expect(trigger.getAttribute('aria-expanded')).toBe('true')
+      act(() => { vi.advanceTimersByTime(1000) })
+      expect(trigger.getAttribute('aria-expanded')).toBe('true')
+      expect(view.queryByText('新建矩形')).not.toBeNull()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

@@ -12,6 +12,7 @@ import { appendVideoEditSequence, closeVideoEditProject, createVideoEditProject,
 import { executeVideoEditTimelineEdit } from '../application/videoEditTimeline'
 import { VIDEO_EDIT_ITEM_DRAG_MIME } from '../application/videoEditDrop'
 import { VideoEditTimeline } from '../VideoEditTimeline'
+import { VideoEditTransportControls } from './VideoEditTimelineTransport'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { TIMELINE_HEADER_WIDTH as header, timelineInitialScrollTop, timelineTrackRows } from './timelineGeometry'
 import { resetFilmstripFramesForTests } from '@/services/videoFilmstrip/filmstripFrameService'
@@ -255,7 +256,8 @@ it('矮时间线在边缘区按住片段不动不滚动，拖向边缘才滚动�
 })
 
 it('正式运输/工具按钮共用命令与自定义键位；实时读数使用当前上下文', async () => {
-  const view = render(<View />)
+  // 3.5：播放控制在节目监视器（VideoEditTransportControls），时间线工具栏只留工具、开关与编辑动作。
+  const view = render(<><View /><VideoEditTransportControls instance={owner} onError={onError} /></>)
   const previous = useSettingsStore.getState().videoEditShortcuts
   try {
     act(() => useSettingsStore.getState().setVideoEditShortcuts({ ...previous, select_tool: { code: 'KeyQ', ctrl: false, alt: false, shift: false, meta: false } }))

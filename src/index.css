@@ -1697,6 +1697,24 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
   box-shadow: inset 0 -1.5px 0 rgb(var(--line-strong-rgb));
 }
 
+/* 剪辑工作区（界面重设计 3.5，设计稿 VideoEdit）：面板之间只露 1px 间隙色（不再画发丝线），
+ * 面板头右侧的“放大/面板菜单”平时隐藏，悬停该面板组、键盘聚焦或菜单展开时出现。
+ * 只用 opacity：按钮始终占位、可被键盘与自动化命中，标签条不因显隐抖动。 */
+.henji-videoEdit-dock.dockview-theme-abyss {
+  --dv-separator-border: rgb(var(--gap-rgb));
+}
+
+.henji-videoEdit-dock [data-video-edit-dock-actions] {
+  opacity: 0;
+  transition: opacity 120ms ease-out;
+}
+
+.henji-videoEdit-dock .dv-groupview:hover [data-video-edit-dock-actions],
+.henji-videoEdit-dock [data-video-edit-dock-actions]:focus-within,
+.henji-videoEdit-dock [data-video-edit-dock-actions][data-open='true'] {
+  opacity: 1;
+}
+
 /* 画布视频进度条：轨道与滑块共享同一条中心线，已播放段跟随主题强调色；未播放段压在画面暗角上，
    取固定媒体叠层白（不随主题，纸白下的 text2 深灰压在黑色暗角上看不见）。 */
 .canvas-video-progress::-webkit-slider-runnable-track {

@@ -28,14 +28,6 @@
         "mono": 1
       }
     },
-    "src/components/videoTrim/VideoTrimModal.tsx": {
-      "owner": "3.5",
-      "category": "界面色（迁入语义令牌）",
-      "counts": {
-        "mono": 1,
-        "palette": 1
-      }
-    },
     "src/features/logs/components/AssistantTraceDetail.tsx": {
       "owner": "4.1",
       "category": "日志窗口界面色",
@@ -123,16 +115,9 @@
         "mono": 2
       }
     },
-    "src/features/videoEdit/VideoEditPreview.tsx": {
-      "owner": "3.5",
-      "category": "媒体叠层（迁入 media-* / on-media 固定令牌）",
-      "counts": {
-        "mono": 3
-      }
-    },
     "src/features/videoEdit/engine/videoEditCompositeProbe.ts": {
-      "owner": "3.5",
-      "category": "内容色/算法常量（迁入 colorTokens.ts 登记）",
+      "owner": "剪辑引擎（非界面色）",
+      "category": "验收探针里的代码素材着色器源码文本（DSL 的 rgba() 函数，不是界面色）；位于 engine/**，界面任务不改（3.5 复核后转出）",
       "counts": {
         "rgba": 1
       }

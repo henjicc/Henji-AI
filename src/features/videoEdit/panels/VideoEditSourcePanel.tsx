@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import { UiButton, UiEmpty, UiError, UiInput, UiLoading, UiRangeInput } from '@/components/ui'
+import { Dropdown, UiEmpty, UiError, UiIconButton, UiInput, UiRangeInput } from '@/components/ui'
+import { ArrowRightFromLine, ArrowRightToLine, AudioLines, FastForward, Film, Link2, Pause, Play, Rewind, Square, X } from 'lucide-react'
 import AudioPlayer from '@/components/AudioPlayer'
 import { resolveImageDisplayUrl } from '@/services/imageSource'
 import type { VideoEditInstance } from '../application/videoEditService'
@@ -60,35 +61,54 @@ export function VideoEditSourcePanel({ instance, onError, visible = true }: { in
     return () => { presenterRef.current = null; presenter.dispose(); unregister() }
   }, [projectId, visible])
   useEffect(() => { if (state.status === 'closed') presenterRef.current?.release() }, [state.status, state.itemId])
-  return <div className="flex h-full min-h-0 flex-col overflow-hidden bg-app" aria-label="源监视器" data-video-edit-panel="source" data-video-edit-source-status={state.status} tabIndex={0}>
-    <div className="relative min-h-0 flex-1 p-3"><div ref={host} className={display === 'fit' ? 'absolute inset-3' : 'absolute inset-3 overflow-auto [&>video]:!h-auto [&>video]:!w-auto [&>img]:!h-auto [&>img]:!w-auto [&>canvas]:!h-auto [&>canvas]:!w-auto'} data-video-edit-source-host data-video-edit-source-display={display} />
-      {media?.kind === 'audio' && <div className="relative flex h-full items-center"><AudioPlayer src={resolveImageDisplayUrl(media.path)} filePath={media.path} compact surface="plain" active={visible} controlledPlayback={{ currentTime: state.timeUs / 1e6, duration: media.durationSeconds, playing: state.playing, volume: state.volume, disabled: state.status !== 'ready', onTogglePlay: () => command('play_pause'), onSeek: seconds => run({ timeUs: Math.round(seconds * 1e6), playing: false }), onVolume: volume => run({ volume }) }} /></div>}
-      {!state.itemId && <UiEmpty title="选择源素材" description="在项目素材中双击视频、图片或音频，独立预览原文件。" />}
+  const meterLevels = levels.length ? levels : [{ peak: 0, rms: 0 }, { peak: 0, rms: 0 }]
+  const sounding = media?.kind === 'audio' || media?.hasAudio === true
+  const transport = (id: VideoEditCommandId, label: string, Icon: typeof Play, size: 'md' | 'lg' = 'md'): React.ReactElement => <UiIconButton size={size} aria-label={label} title={label} disabled={!enabled(id)} onClick={() => command(id)}><Icon size={size === 'lg' ? 18 : 15} /></UiIconButton>
+  // 源监视器（界面重设计 3.5）：画面区（媒体底 + 纵向电平）→ 定位区（素材名、定位秒、实际时间码、进度、波形、入出点读数）→
+  // 唯一一条控制带：反向/停止/播放/正向 · 入出点 · 拖入画面/声音/链接音画 ｜ 适应、关闭（窄面板时整组换行，不横向滚动）。压在画面上的状态用媒体叠层令牌。
+  return <div className="flex h-full min-h-0 flex-col overflow-hidden bg-panel" aria-label="源监视器" data-video-edit-panel="source" data-video-edit-source-status={state.status} tabIndex={0}>
+    <div className={`relative min-h-0 flex-1 ${state.itemId ? 'bg-media' : ''}`}><div ref={host} className={display === 'fit' ? 'absolute bottom-3 left-3 right-6 top-3' : 'absolute bottom-3 left-3 right-6 top-3 overflow-auto [&>video]:!h-auto [&>video]:!w-auto [&>img]:!h-auto [&>img]:!w-auto [&>canvas]:!h-auto [&>canvas]:!w-auto'} data-video-edit-source-host data-video-edit-source-display={display} />
+      {media?.kind === 'audio' && <div className="relative flex h-full items-center px-3 pr-6"><AudioPlayer src={resolveImageDisplayUrl(media.path)} filePath={media.path} compact surface="plain" active={visible} controlledPlayback={{ currentTime: state.timeUs / 1e6, duration: media.durationSeconds, playing: state.playing, volume: state.volume, disabled: state.status !== 'ready', onTogglePlay: () => command('play_pause'), onSeek: seconds => run({ timeUs: Math.round(seconds * 1e6), playing: false }), onVolume: volume => run({ volume }) }} /></div>}
+      {!state.itemId && <UiEmpty size="sm" className="h-full" title="选择源素材" description="在项目素材中双击视频、图片或音频，独立预览原文件。" />}
+      {state.itemId && sounding && <VideoEditLevelMeter className="absolute bottom-3 right-2 top-3" levels={meterLevels} title="源播放电平" />}
+      {state.itemId && (state.status === 'loading' || state.playing && state.playbackDirection === -1) && <span className="pointer-events-none absolute left-2 top-2 rounded-md bg-media-scrim px-2 py-1 text-xs text-on-media">{state.status === 'loading' ? '正在打开源素材…' : '正在反向静音浏览'}</span>}
     </div>
-    {state.itemId && <div className="flex max-h-[60%] shrink-0 flex-wrap items-center gap-2 overflow-y-auto px-3 py-2">
-      <span className="min-w-0 flex-1 truncate text-xs text-text-muted">{item?.name}</span>
-      <span aria-label="源实际时间码" className="text-2xs tabular-nums text-text-muted">{videoEditSourceTimecode(media?.kind === 'video' ? state.presentedTimeUs : state.timeUs)}</span>
-      {media?.kind !== 'audio' && <><UiButton aria-pressed={display === 'fit'} onClick={() => setDisplay('fit')}>适合窗口</UiButton><UiButton aria-pressed={display === 'actual'} onClick={() => setDisplay('actual')}>100%</UiButton></>}
-      {media?.kind === 'video' && <UiButton disabled={!enabled('play_pause')} onClick={() => command('play_pause')}>{state.playing ? '暂停源素材' : '播放源素材'}</UiButton>}
-      <UiButton onClick={() => run({ itemId: '', timeUs: 0, playing: false })}>关闭源素材</UiButton>
-      {media?.kind !== 'image' && <div className="flex w-full flex-wrap items-center gap-1 text-xs">
-        <UiButton disabled={!enabled('play_reverse')} onClick={() => command('play_reverse')}>反向（静音）</UiButton><UiButton disabled={!enabled('play_stop')} onClick={() => command('play_stop')}>停止</UiButton><UiButton disabled={!enabled('play_forward')} onClick={() => command('play_forward')}>正向</UiButton>
-        <UiButton disabled={!enabled('mark_in')} onClick={() => command('mark_in')}>设入点</UiButton><UiButton disabled={!enabled('mark_out')} onClick={() => command('mark_out')}>设出点</UiButton>
-        <span className="text-text-muted">入 {state.inUs === null ? '未设置' : videoEditSourceTimecode(state.inUs)} · 出 {state.outUs === null ? '未设置' : videoEditSourceTimecode(state.outUs)}</span>
-        {state.playing && state.playbackDirection === -1 && <span className="text-text-muted">正在反向静音浏览</span>}
-      </div>}
-      {media?.kind !== 'image' && <div className="flex w-full items-center gap-2"><UiInput aria-label="源素材定位秒" type="number" min={0} max={media?.durationSeconds ?? 0} step={0.000001} className="w-28" value={draftTime} onFocus={() => { editingTime.current = true }} onChange={event => setDraftTime(event.target.value)} onBlur={() => { editingTime.current = false; run({ timeUs: Math.round(Number(draftTime) * 1e6), playing: false }) }} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); event.currentTarget.blur() } }} />
-        {media?.kind === 'video' && <UiRangeInput aria-label="源素材进度" min={0} max={Math.round((media?.durationSeconds ?? 0) * 1e6)} step={1} value={state.timeUs} onChange={event => run({ timeUs: Number(event.target.value), playing: false })} />}</div>}
-      {media?.kind !== 'image' && <div className="flex w-full flex-wrap gap-1" aria-label="源选区拖放">
-        {(media?.kind === 'audio' ? ['audio'] as const : media?.hasAudio ? ['video', 'audio', 'linked'] as const : ['video'] as const).map(component => <UiButton key={component} variant="secondary" draggable={state.status === 'ready'} disabled={state.status !== 'ready'} onDragStart={event => { try { writeVideoEditSourceDrag(event.dataTransfer, projectId, component); event.dataTransfer.effectAllowed = 'copy' } catch (error) { event.preventDefault(); onError(error) } }} title="拖入对应时间线轨道，使用当前源入出点">{component === 'video' ? '拖入画面' : component === 'audio' ? '拖入声音' : '拖入链接音画'}</UiButton>)}
-      </div>}
-      {(media?.kind === 'audio' || media?.hasAudio) && <div className="w-full"><VideoEditLevelMeter levels={levels.length ? levels : [{ peak: 0, rms: 0 }, { peak: 0, rms: 0 }]} title="源播放电平" /></div>}
-      {hasWave && waveform.data && <div className="pointer-events-none w-full" data-video-edit-source-waveform>
-        <span className="text-2xs text-text-muted">{videoEditSourceTimecode(waveStartUs)} — {videoEditSourceTimecode(waveEndUs)}</span>
+    {state.itemId && <div className="flex shrink-0 flex-col gap-1 px-2.5 py-2">
+      <div className="flex min-w-0 items-center gap-2">
+        <span className="min-w-0 flex-1 truncate text-xs text-text2" title={item?.name}>{item?.name}</span>
+        {media?.kind !== 'image' && <div className="w-28 shrink-0"><UiInput aria-label="源素材定位秒" type="number" size="sm" min={0} max={media?.durationSeconds ?? 0} step={0.000001} className="tabular-nums" value={draftTime} onFocus={() => { editingTime.current = true }} onChange={event => setDraftTime(event.target.value)} onBlur={() => { editingTime.current = false; run({ timeUs: Math.round(Number(draftTime) * 1e6), playing: false }) }} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); event.currentTarget.blur() } }} /></div>}
+        <span aria-label="源实际时间码" className="shrink-0 px-1 font-mono text-xs tabular-nums text-text3">{videoEditSourceTimecode(media?.kind === 'video' ? state.presentedTimeUs : state.timeUs)}</span>
+      </div>
+      {media?.kind === 'video' && <UiRangeInput aria-label="源素材进度" min={0} max={Math.round((media?.durationSeconds ?? 0) * 1e6)} step={1} value={state.timeUs} onChange={event => run({ timeUs: Number(event.target.value), playing: false })} />}
+      {hasWave && waveform.data && <div className="pointer-events-none flex w-full flex-col gap-0.5" data-video-edit-source-waveform>
+        <span className="font-mono text-2xs tabular-nums text-text3">{videoEditSourceTimecode(waveStartUs)} — {videoEditSourceTimecode(waveEndUs)}</span>
         <WaveformView waveform={waveform} startSeconds={waveStartUs / 1e6} endSeconds={waveEndUs / 1e6} playedSeconds={state.timeUs / 1e6} height={20 * waveform.data.pyramid.channelCount} />
       </div>}
-      {hasWave && waveform.status === 'error' && <UiError size="xs" title="波形未能读取" message={waveform.error ?? ''} />}
-      {state.status === 'loading' && <UiLoading message="正在打开源素材…" />}
+      {hasWave && waveform.status === 'error' && <UiError size="xs" align="start" title="波形未能读取" message={waveform.error ?? ''} />}
+      {media?.kind !== 'image' && <span className="font-mono text-2xs tabular-nums text-text3">入点 {state.inUs === null ? '未设置' : videoEditSourceTimecode(state.inUs)} · 出点 {state.outUs === null ? '未设置' : videoEditSourceTimecode(state.outUs)}</span>}
+    </div>}
+    {state.itemId && <div className="flex min-h-10 shrink-0 flex-wrap items-center justify-center gap-x-1 gap-y-0.5 border-t border-line px-2 py-1" role="toolbar" aria-label="源监视器控制">
+      <div className="flex min-w-0 flex-1 flex-wrap items-center justify-center gap-0.5">
+        {media?.kind !== 'image' && <div className="flex items-center gap-0.5" role="group" aria-label="源播放控制">
+          {transport('play_reverse', '反向（静音）', Rewind)}
+          {transport('play_stop', '停止', Square)}
+          {media?.kind === 'video' && transport('play_pause', state.playing ? '暂停源素材' : '播放源素材', state.playing ? Pause : Play, 'lg')}
+          {transport('play_forward', '正向', FastForward)}
+        </div>}
+        {media?.kind !== 'image' && <div className="ml-2 flex items-center gap-0.5" role="group" aria-label="源入出点">
+          {transport('mark_in', '设入点', ArrowRightFromLine)}
+          {transport('mark_out', '设出点', ArrowRightToLine)}
+        </div>}
+        {media?.kind !== 'image' && <div className="ml-2 flex items-center gap-0.5" role="group" aria-label="源选区拖放">
+          {(media?.kind === 'audio' ? ['audio'] as const : media?.hasAudio ? ['video', 'audio', 'linked'] as const : ['video'] as const).map(component => {
+            const name = component === 'video' ? '拖入画面' : component === 'audio' ? '拖入声音' : '拖入链接音画'
+            const Icon = component === 'video' ? Film : component === 'audio' ? AudioLines : Link2
+            return <UiIconButton key={component} aria-label={name} draggable={state.status === 'ready'} disabled={state.status !== 'ready'} onDragStart={event => { try { writeVideoEditSourceDrag(event.dataTransfer, projectId, component); event.dataTransfer.effectAllowed = 'copy' } catch (error) { event.preventDefault(); onError(error) } }} title={`${name}：拖入对应时间线轨道，使用当前源入出点`}><Icon size={15} /></UiIconButton>
+          })}
+        </div>}
+      </div>
+      {media?.kind !== 'audio' && <Dropdown<'fit' | 'actual'> ariaLabel="源显示比例" appearance="text" size="sm" value={display} options={[{ value: 'fit', label: '适应' }, { value: 'actual', label: '100%' }]} onSelect={setDisplay} />}
+      <UiIconButton aria-label="关闭源素材" title="关闭源素材" onClick={() => run({ itemId: '', timeUs: 0, playing: false })}><X size={15} /></UiIconButton>
     </div>}
     {state.error && <UiError message={state.error} />}
   </div>

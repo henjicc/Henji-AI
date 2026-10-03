@@ -221,7 +221,7 @@ function createVideoEditNativeFaultsScene() {
         // Frames around the playhead are in the frame cache (no import), so the preview is reloaded: a new render session
         // (empty cache) whose every picture goes through the failing import.
         const target = Number(await page.getByRole('slider', { name: '剪辑时间定位' }).getAttribute('aria-valuenow'))
-        await button(page, '重新加载预览').click()
+        await button(page, '更多节目操作').click(); await button(page, '重新加载预览').click()
         await waitPrompt(page, '素材「prores.mov」的解码暂时中断')
         const blocked = await page.evaluate(() => document.querySelector('canvas[aria-label="剪辑画面"]')?.dataset.presentedFrame ?? null)
         evidence.phases.importFailure = { target, promptWhileFailing: await promptText(page), presentedWhileFailing: blocked }
@@ -297,7 +297,7 @@ function createVideoEditNativeFaultsScene() {
         evidence.phases.missing.prompt = await promptText(page)
         await capture('native-faults-missing')
         await app.evaluate(() => { delete process.env.HENJI_VIDEO_DECODER_EXECUTABLE })
-        await button(page, '重新加载预览').click()
+        await button(page, '更多节目操作').click(); await button(page, '重新加载预览').click()
         await presented(page, 0); await waitNoPrompt(page)
         evidence.phases.missing.recovered = { timestamps: await page.evaluate(() => document.querySelector('canvas[aria-label="剪辑画面"]').dataset.sourceTimestamps), pid: await servicePid(page) }
         assert.deepEqual(evidence.phases.missing.recovered.timestamps.split(',').map(Number), [0, 0])

@@ -103,7 +103,7 @@ function createVideoEditProjectSourceScene() {
         // Clicking the uncovered project area closes the shared asset overlay.
         await list.click({ position: { x: 12, y: listRect.height - 30 } })
         await page.locator('[data-asset-floating-panel]').waitFor({ state: 'hidden' })
-        await button(page, '新建素材箱').click(); await page.getByLabel('项目项名称', { exact: true }).fill('镜头素材'); await button(page, '保存').click()
+        await button(page, '新建项目项').click(); await button(page, '新建素材箱').click(); await page.getByLabel('项目项名称', { exact: true }).fill('镜头素材'); await button(page, '保存').click()
         document = await saved(page, file, value => value.bins.length === 1)
         const binId = document.bins[0].id
         await button(page, '工程根目录').click(); await renameItem(page, videoId, '4K60 原镜头', '片头,压力样本', binId)
@@ -229,10 +229,10 @@ function createVideoEditProjectSourceScene() {
         const scaleStarted = performance.now(); await dialogs(app, [scaleFile], scaleFile); await button(page, '打开工程').click(); await entry(page, 'scale-item-0').waitFor({ state: 'visible' })
         evidence.scale = { items: 500, bins: 200, firstVisibleMs: performance.now() - scaleStarted, mountedItems: await page.locator('[data-video-edit-project-entry]').count(), mountedBins: await page.locator('[data-video-edit-bin]').count() }
         assert.ok(evidence.scale.mountedItems < 80); assert.ok(evidence.scale.mountedBins < 80)
-        await button(page, '缩略图视图').click(); await page.waitForTimeout(500)
+        await button(page, '视图与排序').click(); await button(page, '缩略图视图').click(); await page.waitForTimeout(500)
         evidence.scale.gridMountedItems = await page.locator('[data-video-edit-project-entry]').count(); assert.ok(evidence.scale.gridMountedItems < 80)
         await capture('video-project-scale-grid')
-        await button(page, '列表视图').click()
+        await button(page, '视图与排序').click(); await button(page, '列表视图').click()
         await entry(page, 'scale-item-0').waitFor({ state: 'visible' })
         await page.getByLabel('项目项列表', { exact: true }).hover(); await page.mouse.wheel(0, 50000)
         await entry(page, 'scale-item-499').waitFor({ state: 'visible' }); await capture('video-project-scale-end')

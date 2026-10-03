@@ -43,7 +43,7 @@ function createVideoEditOutputsScene({ canvasFixtureProjectId }) {
         await presented(page, 90)
         evidence.program = await png(page, path.join(root, 'program-before-capture.png')); evidence.trackBanks = await trackBanks(page)
         const before = await workerSnapshot(page); await dialogs(app, [file], selectedPath)
-        const captureAt = performance.now(); await button(page, '选帧加入资产库').click()
+        const captureAt = performance.now(); await button(page, '更多节目操作').click(); await button(page, '选帧加入资产库').click()
         await page.locator('[data-asset-floating-panel]').waitFor({ state: 'visible', timeout: 30000 })
         await page.locator('[data-asset-card]').filter({ hasText: `${fixture.name} · 帧 90` }).waitFor({ state: 'visible', timeout: 30000 })
         evidence.captureAndCollectionMs = performance.now() - captureAt

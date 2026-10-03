@@ -131,7 +131,8 @@ export const WaveformView = React.memo(function WaveformView({ waveform, startSe
   const hoverSeconds = hoverX === null || size.width <= 0 ? 0 : hoverX / size.width * (durationSeconds ?? Math.max(0, viewEnd - viewStart))
   return (
     <div ref={host} className={`relative min-w-0 ${height === undefined ? 'h-full' : ''} ${interactive ? 'cursor-pointer' : ''} ${className ?? ''}`} style={height === undefined ? undefined : { height }} {...handlers}>
-      <canvas ref={canvas} className="block h-full w-full" data-waveform-state={state} {...(label ? { role: 'img', 'aria-label': label } : { 'aria-hidden': true })} />
+      {/* 采样率与总帧数只供验收读取（判断“解码或命中缓存”都得到真实素材的波形），不显示。 */}
+      <canvas ref={canvas} className="block h-full w-full" data-waveform-state={state} data-waveform-sample-rate={pyramid?.sampleRate} data-waveform-frames={pyramid?.frameCount} {...(label ? { role: 'img', 'aria-label': label } : { 'aria-hidden': true })} />
       {interactive && hoverX !== null && (
         <>
           <div className="pointer-events-none absolute inset-y-0 w-px bg-text1/35" style={{ left: hoverX }} />

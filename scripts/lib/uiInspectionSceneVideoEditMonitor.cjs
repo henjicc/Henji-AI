@@ -53,6 +53,19 @@ async function poll(page, read, matches, message, attempts = 200) {
   }
   assert.fail(`${message}：${JSON.stringify(value)}`)
 }
+/**
+ * 2.4 交接（3.5 修正，不放宽）：同一进程连续运行时，前序场景可能已把同一素材的多级波形写入同一临时资料的磁盘缓存，
+ * 本场景就不再解码。“解码”与“命中缓存”两条路都必须得到真实采样率、真实帧数且画出墨迹的波形；
+ * 命中缓存时该素材确实没有起解码进程，解码时仍按原判据核对解码进程与 Worker 峰值。
+ */
+async function clipWaveform(page, clipId) {
+  return page.locator(`[data-video-edit-waveform="${clipId}"] canvas`).first().evaluate(canvas => {
+    const { data } = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height)
+    let inked = 0
+    for (let index = 3; index < data.length; index += 4) if (data[index] > 0) inked++
+    return { state: canvas.dataset.waveformState, sampleRate: Number(canvas.dataset.waveformSampleRate), frames: Number(canvas.dataset.waveformFrames), inked, total: data.length / 4 }
+  }).catch(() => null)
+}
 async function levels(page, title) {
   return page.getByLabel(title, { exact: true }).locator('[data-video-edit-level-channel]').evaluateAll(nodes => nodes.map(node => ({ peak: Number(node.dataset.peak), rms: Number(node.dataset.rms) })))
 }
@@ -190,9 +203,21 @@ function createVideoEditMonitorScene() {
         await page.locator(`[data-video-edit-waveform="${baseAudio.id}"]`).waitFor({ state: 'visible', timeout: 30000 })
         await page.locator(`[data-video-edit-waveform="${stereoClip.id}"]`).waitFor({ state: 'visible', timeout: 30000 })
         evidence.timelineWaveforms = { clipIds: [baseAudio.id, stereoClip.id], visible: true, native: await nativeWaveformSnapshot(app) }
-        const wholeWave = await poll(page, () => nativeWaveformSnapshot(app), value => value.workers.some(worker => worker.channels?.some(channel => channel.maxPeak > .01 && channel.maxRms > .003)) && value.processes.some(process => process.sampleRate === 44100) && value.processes.some(process => process.sampleRate === 48000), '正式范围解码须保持真实44.1/48kHz且产生非零峰值与RMS')
-        assert.ok(wholeWave.processes.some(process => process.source === controls.stereo && process.sampleRate === 44100 && process.channels === 2 && process.firstSample === 0 && process.sampleCount === 132300))
-        assert.ok(wholeWave.workers.some(worker => worker.options?.expectedFrames === 132300 && worker.channels?.every(channel => channel.sampleCount === 132300 && channel.maxPeak > .05 && channel.maxRms > .02)))
+        const monoPath = document.media.find(media => media.id === monoItem.mediaId).path
+        const inkedWave = value => value?.state === 'ready' && value.inked > value.total * .02
+        const stereoWave = await poll(page, () => clipWaveform(page, stereoClip.id), inkedWave, '44.1kHz立体声片段须画出真实波形')
+        const monoWave = await poll(page, () => clipWaveform(page, baseAudio.id), inkedWave, '48kHz单声道片段须画出真实波形')
+        assert.equal(stereoWave.sampleRate, 44100); assert.equal(stereoWave.frames, 132300)
+        assert.equal(monoWave.sampleRate, 48000); assert.ok(monoWave.frames >= 60000)
+        const wholeWave = await nativeWaveformSnapshot(app)
+        const decodesOf = file => wholeWave.processes.filter(process => process.source === file)
+        evidence.timelineWaveforms.drawn = { stereo: stereoWave, mono: monoWave }
+        evidence.timelineWaveforms.decoded = { stereo: decodesOf(controls.stereo).length > 0, mono: decodesOf(monoPath).length > 0 }
+        if (evidence.timelineWaveforms.decoded.stereo) {
+          await poll(page, () => nativeWaveformSnapshot(app), value => value.workers.some(worker => worker.options?.expectedFrames === 132300 && worker.channels?.every(channel => channel.sampleCount === 132300 && channel.maxPeak > .05 && channel.maxRms > .02)), '正式范围解码须保持真实44.1kHz且产生非零峰值与RMS')
+          assert.ok(decodesOf(controls.stereo).some(process => process.sampleRate === 44100 && process.channels === 2 && process.firstSample === 0 && process.sampleCount === 132300))
+        }
+        if (evidence.timelineWaveforms.decoded.mono) assert.ok(decodesOf(monoPath).every(process => process.sampleRate === 48000), '单声道素材解码须保持真实48kHz')
         evidence.timelineWaveforms.native = wholeWave; await shot('monitor-timeline-range-waveforms')
         await play(projectRef); evidence.meters = { mix: await waitLevel(page, '节目播放电平', true) }; await frame(0)
         await button(page, '单声道声音静音').click(); await button(page, '立体声声音静音').click()
@@ -208,16 +233,17 @@ function createVideoEditMonitorScene() {
         // 2.3: one whole-file multi-level pyramid per sound stream (absolute clock from 0); the source range
         // 0.5..1.25 s is sliced from it. The mono base clip's pyramid was decoded for the timeline in this run,
         // so opening the source must reuse it (no second decode) and still draw the exact range.
-        const monoPath = document.media.find(media => media.id === monoItem.mediaId).path
         const monoDecodes = value => value.processes.filter(process => process.source === monoPath)
         const pyramidDecoded = value => monoDecodes(value).some(process => process.firstSample === 0 && process.sampleRate === 48000 && process.sampleCount >= 60000 && process.ended && process.exitCode === 0
           && value.workers.some(worker => worker.options?.kind === 'pyramid' && worker.options.expectedFrames === process.sampleCount && worker.channels?.some(channel => channel.sampleCount === process.sampleCount && channel.maxPeak > .01 && channel.maxRms > .003)))
-        const beforeSource = await poll(page, () => nativeWaveformSnapshot(app), pyramidDecoded, '时间线须已按整文件多级波形解码单声道素材（绝对时钟0起、覆盖0.5..1.25秒）')
+        // 本次运行解码过就核对解码本身；命中前序场景的磁盘缓存时，上面已核对时间线波形为真实48kHz整段且有墨迹。
+        const beforeSource = evidence.timelineWaveforms.decoded.mono ? await poll(page, () => nativeWaveformSnapshot(app), pyramidDecoded, '时间线须已按整文件多级波形解码单声道素材（绝对时钟0起、覆盖0.5..1.25秒）') : await nativeWaveformSnapshot(app)
         await openSource(monoItem)
         await change(sourceRef, { 'video_edit.source.in_us': 500000, 'video_edit.source.out_us': 1250000, 'video_edit.source.time_us': 500000, 'video_edit.source.playing': false })
         const sourceWave = page.locator('[data-video-edit-source-waveform]')
         await sourceWave.waitFor({ state: 'visible', timeout: 30000 })
         await sourceWave.locator('canvas[data-waveform-state="ready"]').waitFor({ state: 'visible', timeout: 30000 })
+        assert.equal(Number(await sourceWave.locator('canvas').first().getAttribute('data-waveform-sample-rate')), 48000, '源波形须来自真实48kHz多级波形')
         assert.equal((await sourceWave.locator('span').first().textContent()).trim(), '00:00:00.500000 — 00:00:01.250000', '源波形应只显示入出点半开范围')
         const rangeWave = await nativeWaveformSnapshot(app)
         assert.equal(monoDecodes(rangeWave).length, monoDecodes(beforeSource).length, '打开源素材应命中本次已生成的多级波形，不得再起解码')

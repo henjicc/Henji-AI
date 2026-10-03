@@ -28,7 +28,7 @@ export function VideoEditProjectThumbnail({ media, kind, active }: { media?: Vid
   }, [active, visible, media?.kind, media?.path])
   const url = active && visible && media && failedPath !== media.path ? media.kind === 'image' ? resolveImageDisplayUrl(media.path) : preview?.path === media.path ? preview.url : null : null
   const Icon = kind === 'audio' ? ICON_MEDIA_AUDIO : kind === 'image' ? ICON_MEDIA_IMAGE : kind === 'video' ? ICON_MEDIA_VIDEO : kind === 'text' ? ICON_NODE_TEXT : kind === 'code' ? Code2 : kind === 'graphic' ? ICON_VIDEO_EDIT_GRAPHIC : kind === 'adjustment' ? ICON_VIDEO_EDIT_ADJUSTMENT : ICON_WORKSPACE_VIDEO_EDIT
-  return <div ref={host} className="flex h-full w-full items-center justify-center overflow-hidden text-text-muted" title={media && failedPath === media.path ? '预览图不可用，双击打开源素材或重新定位文件。' : undefined}>
-    {url ? <img src={url} alt="" draggable={false} className="h-full w-full object-contain" onError={() => { if (media) setFailedPath(media.path) }} /> : <Icon size={20} />}
+  return <div ref={host} className="flex h-full w-full items-center justify-center overflow-hidden text-text3" title={media && failedPath === media.path ? '预览图不可用，双击打开源素材或重新定位文件。' : undefined}>
+    {url ? <img src={url} alt="" draggable={false} className="h-full w-full object-cover" onError={() => { if (media) setFailedPath(media.path) }} /> : <Icon size={15} />}
   </div>
 }

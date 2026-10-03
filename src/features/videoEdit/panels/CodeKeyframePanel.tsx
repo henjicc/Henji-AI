@@ -1,6 +1,6 @@
 import { useRef, useState, type ReactNode } from 'react'
 import { elementOfEventTarget } from '@/utils/crossRealmDom'
-import { Plus, Trash2 } from 'lucide-react'
+import { ChevronDown, ChevronRight, Diamond, Trash2 } from 'lucide-react'
 import { Dropdown, UiButton, UiFormRow, UiGroup, UiIconButton } from '@/components/ui'
 import NumberInput from '@/components/ui/NumberInput'
 import type { CodeParameterDeclaration } from '@/core/videoEdit/codeMaterial/contract'
@@ -48,14 +48,15 @@ export function CodeKeyframePanel({ editor, parameter, onError, renderValue }: P
   const discrete = !['number', 'color'].includes(parameter.type)
   const run = (operation: () => void): void => { try { operation() } catch (error) { onError(error) } }
   const addLabel = `为${parameter.title}添加关键帧`
-  return <UiGroup title={points.length ? <UiButton className="!p-0" aria-expanded={expanded} aria-label={`${expanded ? '收起' : '展开'}${parameter.title}关键帧`} onClick={() => setExpanded(value => !value)}>关键帧（{points.length}）</UiButton> : '关键帧'} gap="row" data-video-edit-code-keyframes={parameter.key} actions={<UiIconButton size="lg" title={addLabel} aria-label={addLabel} onClick={() => run(() => { addVideoEditCodeKeyframe(editor.target, parameter.key, editor.sourceTime); setExpanded(true) })}><Plus className="h-3.5 w-3.5" /></UiIconButton>}>
+  // 关键帧（设计稿 VideoEdit 效果控件）：菱形按钮添加关键帧，已有关键帧时菱形实心强调色；标题行可展开逐帧编辑。
+  return <UiGroup title={points.length ? <UiButton size="sm" className="-ml-2 gap-1" aria-expanded={expanded} aria-label={`${expanded ? '收起' : '展开'}${parameter.title}关键帧`} onClick={() => setExpanded(value => !value)}>{expanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}关键帧（{points.length}）</UiButton> : '关键帧'} titleTone="compact" gap="row" data-video-edit-code-keyframes={parameter.key} actions={<UiIconButton size="sm" title={addLabel} aria-label={addLabel} onClick={() => run(() => { addVideoEditCodeKeyframe(editor.target, parameter.key, editor.sourceTime); setExpanded(true) })}><Diamond size={12} strokeWidth={2.2} className={points.length ? 'text-accent-text' : undefined} fill={points.length ? 'currentColor' : 'none'} /></UiIconButton>}>
     {expanded && points.map((point, index) => <UiGroup key={point.id} gap="row" data-video-edit-code-keyframe={point.id}>
       <div className="flex items-center gap-2">
         <div className="min-w-0 flex-1"><KeyframeTime editor={editor} parameter={parameter} point={point} index={index} onError={onError} /></div>
-        <UiIconButton size="lg" title={`删除${parameter.title}关键帧${index + 1}`} aria-label={`删除${parameter.title}关键帧${index + 1}`} onClick={() => run(() => deleteVideoEditCodeKeyframe(editor.target, parameter.key, point.id))}><Trash2 className="h-3.5 w-3.5" /></UiIconButton>
+        <UiIconButton size="sm" tone="danger" title={`删除${parameter.title}关键帧${index + 1}`} aria-label={`删除${parameter.title}关键帧${index + 1}`} onClick={() => run(() => deleteVideoEditCodeKeyframe(editor.target, parameter.key, point.id))}><Trash2 className="h-3.5 w-3.5" /></UiIconButton>
       </div>
-      <UiFormRow label="值">{renderValue(point, `${parameter.title}关键帧${index + 1}值`)}</UiFormRow>
-      {discrete ? <span className="text-2xs text-text-muted">保持</span> : <Dropdown ariaLabel={`${parameter.title}关键帧${index + 1}插值`} value={point.interpolation} options={[...interpolationOptions]} onSelect={interpolation => run(() => updateVideoEditCodeKeyframe(editor.target, parameter.key, point.id, { interpolation }))} />}
+      <UiFormRow density="compact" label="值">{renderValue(point, `${parameter.title}关键帧${index + 1}值`)}</UiFormRow>
+      {discrete ? <span className="text-2xs text-text3">保持</span> : <Dropdown ariaLabel={`${parameter.title}关键帧${index + 1}插值`} value={point.interpolation} options={[...interpolationOptions]} onSelect={interpolation => run(() => updateVideoEditCodeKeyframe(editor.target, parameter.key, point.id, { interpolation }))} />}
     </UiGroup>)}
   </UiGroup>
 }
