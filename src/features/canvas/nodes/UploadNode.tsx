@@ -364,7 +364,7 @@ export const UploadNode = memo(({ id, data, selected, width, height }: UploadNod
         <label
           className="block h-full w-full overflow-hidden rounded-[var(--node-radius)] bg-bg-dark"
         >
-          <div className="flex h-full w-full cursor-pointer flex-col items-center justify-center gap-2 text-text-muted/85">
+          <div className="flex h-full w-full cursor-pointer flex-col items-center justify-center gap-2 text-text2">
             <ImageUploadIcon className="h-7 w-7 opacity-60" />
             <span className="px-3 text-center text-xs leading-6">{t('node.upload.hint')}</span>
           </div>

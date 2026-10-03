@@ -81,6 +81,7 @@ const UpdateSection: React.FC = () => {
         label={t('sections.updates.frequencyLabel')}
         info={t('sections.updates.frequencyHint')}
         className={config.enabled ? '' : 'opacity-50'}
+        aria-disabled={!config.enabled || undefined}
       >
         {/* 检查频率是单选：分段选择（中性抬升） */}
         <div className={UI_SEGMENTED_TRACK_CLASS}>

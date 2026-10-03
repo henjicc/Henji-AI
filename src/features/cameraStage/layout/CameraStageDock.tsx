@@ -19,6 +19,8 @@ import StageViewportWorkspace from '../viewport/StageViewportWorkspace'
 import StateKeyframeTimelinePanel from '../stateKeyframes/StateKeyframeTimelinePanel'
 import { useCameraStageViewportStore } from '../store/cameraStageViewportStore'
 import type { StageCaptureFn } from '../scene/StageCaptureBridge'
+import { DockviewHost } from '@/components/DockviewHost'
+import { dockviewHostTheme } from '@/components/dockviewHostTheme'
 import { DockHeaderActions, DockTab } from './DockChrome'
 import { LAYOUT_STORAGE_KEY, resetLayout, restoreLayout } from './dockLayout'
 
@@ -46,6 +48,7 @@ const ObjectsPanel: React.FC<IDockviewPanelProps> = () => <ObjectListPanel />
 const PropertiesPanel: React.FC<IDockviewPanelProps> = () => <PropertyPanel />
 const TimelineDockPanel: React.FC<IDockviewPanelProps> = () => <StateKeyframeTimelinePanel />
 
+const CAMERA_STAGE_DOCK_THEME = dockviewHostTheme('henji-cameraStage-dock')
 const DOCK_COMPONENTS = {
   viewport: ViewportPanel,
   objects: ObjectsPanel,
@@ -83,14 +86,17 @@ const CameraStageDock = forwardRef<CameraStageDockHandle, CameraStageDockProps>(
 
     return (
       <ViewportCaptureContext.Provider value={captureRef}>
-        {/* isolate：dockview 分隔条与浮动层自带 z-index（99/999），不隔离会压在 body 下的弹窗（z-modal）之上 */}
-        <DockviewReact
-          className="henji-cameraStage-dock dockview-theme-abyss isolate"
-          components={DOCK_COMPONENTS}
-          defaultTabComponent={DockTab}
-          rightHeaderActionsComponent={DockHeaderActions}
-          onReady={onReady}
-        />
+        {/* 层叠隔离与分隔条拖动保护见 DockviewHost（与剪辑工作区共用） */}
+        <DockviewHost className="h-full w-full">
+          <DockviewReact
+            className="henji-cameraStage-dock dockview-theme-abyss"
+            theme={CAMERA_STAGE_DOCK_THEME}
+            components={DOCK_COMPONENTS}
+            defaultTabComponent={DockTab}
+            rightHeaderActionsComponent={DockHeaderActions}
+            onReady={onReady}
+          />
+        </DockviewHost>
       </ViewportCaptureContext.Provider>
     )
   },

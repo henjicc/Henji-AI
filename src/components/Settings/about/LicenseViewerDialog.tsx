@@ -138,7 +138,7 @@ const LicenseViewerDialog: React.FC<LicenseViewerDialogProps> = ({ open, notices
       contentClassName="flex min-h-0 flex-1"
     >
       <div className="flex min-h-0 flex-1">
-        <div className="flex w-72 shrink-0 flex-col gap-2 border-r border-veil-subtle p-3">
+        <div className="flex w-72 shrink-0 flex-col gap-2 border-r border-line p-3">
           <div className="relative">
             <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
             <UiInput

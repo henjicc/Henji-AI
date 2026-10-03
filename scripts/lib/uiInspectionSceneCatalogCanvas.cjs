@@ -11,6 +11,23 @@ const { createCanvasUploadsScene } = require('./uiInspectionCanvasUploads.cjs')
 
 const { createLayerControlsScene } = require('./uiInspectionLayerControls.cjs')
 
+/**
+ * 素材组管理工作面铺在画布视口之上（含标题栏），不关掉会盖住后序场景要点的“返回项目”（4.1：
+ * 全量顺序跑时“框选素材批量拖连”因此超时，单跑通过）。先取消移出确认，再关掉工作面。
+ */
+async function closeAssetGroupManager(page) {
+  const confirm = page.getByRole('dialog', { name: /移出素材|Remove media/i })
+  if (await confirm.isVisible().catch(() => false)) {
+    await confirm.getByRole('button', { name: /^(取消|Cancel)$/i }).click()
+    await confirm.waitFor({ state: 'hidden', timeout: 8000 })
+  }
+  const close = page.getByRole('button', { name: /关闭素材组管理|Close asset group manager/i })
+  if (await close.isVisible().catch(() => false)) {
+    await close.click()
+    await close.waitFor({ state: 'hidden', timeout: 8000 })
+  }
+}
+
 function createCanvasScenes(context) {
   const {
     setupCanvas,
@@ -179,6 +196,7 @@ function createCanvasScenes(context) {
       writesUserData: true,
       name: '画布-素材组管理工作面',
       setup: async (page) => setupCanvasAssetGroup(page, true),
+      cleanup: closeAssetGroupManager,
     },
     {
       id: 'canvas-asset-group-remove-confirmation',
@@ -186,6 +204,7 @@ function createCanvasScenes(context) {
       writesUserData: true,
       name: '画布-素材组移出确认',
       setup: setupCanvasAssetGroupRemoveConfirmation,
+      cleanup: closeAssetGroupManager,
     },
     {
       id: 'canvas-batch-connection',

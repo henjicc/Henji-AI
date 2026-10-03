@@ -97,7 +97,7 @@ function ColorPicker({
           onClick={() => onChange(presetColor)}
         >
           <span
-            className="block h-full w-full rounded-full border border-veil-soft"
+            className="block h-full w-full rounded-full border border-line-strong"
             style={{ backgroundColor: presetColor }}
           />
         </UiIconButton>

@@ -39,7 +39,7 @@ export function CameraStagePreviewPanel({
           disableViewer
         />
       ) : (
-        <div className="flex h-full w-full flex-col items-center justify-center gap-2 text-text-muted/85">
+        <div className="flex h-full w-full flex-col items-center justify-center gap-2 text-text2">
           <ICON_TOOL_CAMERA_STAGE className="h-7 w-7 opacity-60" />
           <span className="px-4 text-center text-xs leading-6">{t('node.cameraStage.empty')}</span>
         </div>

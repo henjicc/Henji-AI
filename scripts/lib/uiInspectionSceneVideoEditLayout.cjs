@@ -174,6 +174,7 @@ function createVideoEditLayoutScene() {
           evidence.steps.push({ name, ...current, frame: baseline.frame, selection: baseline.selection, workerIds: worker.workers.filter(item => !item.terminated).map(item => item.id) })
         }
         await stable('默认布局'); await capture('video-layout-default')
+        let rebuiltSessions = 0
 
         // Real mouse movement drives Dockview's pointer DnD inside the Electron host.
         // Always-rendered views live in Dockview's overlay beside its empty ARIA tabpanel.
@@ -181,16 +182,28 @@ function createVideoEditLayoutScene() {
         let target = group(page, '节目画面'); let box = await target.boundingBox()
         evidence.centerDrag = await pointerDrag(page, tab(page, '项目素材'), target, { x: box.width / 2, y: box.height / 2 })
         assert.equal(await tab(page, '项目素材').getAttribute('aria-controls'), await tab(page, '节目画面').getAttribute('aria-controls'), '中心拖入合并为同一标签组')
+        // 拖入的标签成为组内当前标签，节目面板随即不可见：按产品契约（ffd46ccf「隐藏节目停止取帧并释放会话」）
+        // 释放渲染会话与画面，与“关闭节目面板”同一套释放回执；切回后重建一份画面并回到原播放位置与选区。
         await tab(page, '项目素材').click({ position: { x: 12, y: 14 } })
-        assert.equal(await page.getByLabel('剪辑画面', { exact: true }).isVisible(), false, '切换组内标签隐藏节目画面')
-        await stable('中心分组与标签隐藏'); await capture('video-layout-grouped-hidden')
-        await tab(page, '节目画面').click({ position: { x: 12, y: 14 } })
+        await waitReleased(page)
+        assert.equal(await page.getByLabel('剪辑画面', { exact: true }).count(), 0, '组内隐藏节目面板释放画面')
+        evidence.hiddenRelease = (await workerSnapshot(page)).workers.at(-1)
+        assert.ok(evidence.hiddenRelease.disposedAt && evidence.hiddenRelease.terminatedAt, '组内隐藏等待资源释放回执并终止 Worker')
+        await capture('video-layout-grouped-hidden')
+        await tab(page, '节目画面').click({ position: { x: 12, y: 14 } }); await presented(page, 120)
+        await page.evaluate(() => window.__videoLayoutWatchCanvas(document.querySelector('canvas[aria-label="剪辑画面"]')))
+        await stable('组内标签切回', false); rebuiltSessions += 1
+        await page.evaluate(() => { window.__videoLayoutOriginalCanvas = document.querySelector('canvas[aria-label="剪辑画面"]') })
 
         // The same real drag at the content's edge must split the group again.
         target = group(page, '节目画面'); box = await target.boundingBox()
         evidence.edgeDrag = await pointerDrag(page, tab(page, '项目素材'), target, { x: 8, y: box.height / 2 })
         assert.notEqual(await tab(page, '项目素材').getAttribute('aria-controls'), await tab(page, '节目画面').getAttribute('aria-controls'), '边缘拖入拆分面板')
-        await stable('边缘拆分'); await capture('video-layout-edge-split')
+        // 按下同组标签开始拖动即切换组内当前标签（节目暂时不可见并释放），拆分后节目回到可见并重建一份画面。
+        await presented(page, 120)
+        await page.evaluate(() => window.__videoLayoutWatchCanvas(document.querySelector('canvas[aria-label="剪辑画面"]')))
+        await stable('边缘拆分', false); rebuiltSessions += 1; await capture('video-layout-edge-split')
+        await page.evaluate(() => { window.__videoLayoutOriginalCanvas = document.querySelector('canvas[aria-label="剪辑画面"]') })
 
         const beforeResize = await group(page, '节目画面').boundingBox()
         const projectBox = await group(page, '项目素材').boundingBox()
@@ -200,11 +213,14 @@ function createVideoEditLayoutScene() {
         const boundary = projectBox.x + projectBox.width
         const sash = sashes.sort((a, b) => Math.abs(a.x - boundary) - Math.abs(b.x - boundary))[0]
         assert.ok(sash, '当前布局应存在可操作的列分隔线')
+        // 分隔条必须在最上层（4.1：只隔离 dockview className 元素时面板内容层盖住分隔条）。
+        const sashHit = await page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.classList.contains('dv-sash') ?? false, { x: sash.x + sash.width / 2, y: sash.y + Math.min(sash.height / 2, 100) })
+        assert.equal(sashHit, true, '分隔条被面板内容层盖住')
         const dragBegan = performance.now()
         await page.mouse.move(sash.x + sash.width / 2, sash.y + Math.min(sash.height / 2, 100)); await page.mouse.down()
         await page.mouse.move(sash.x + sash.width / 2 + 48, sash.y + Math.min(sash.height / 2, 100), { steps: 12 }); await page.mouse.up()
         const afterResize = await group(page, '节目画面').boundingBox()
-        assert.ok(Math.abs(afterResize.width - beforeResize.width) > 16, '拖动分隔线应实际改变面板尺寸')
+        assert.ok(Math.abs(afterResize.width - beforeResize.width) > 16, `拖动分隔线应实际改变面板尺寸：${JSON.stringify({ beforeResize, afterResize })}`)
         evidence.resize = { milliseconds: performance.now() - dragBegan, before: beforeResize, after: afterResize }
         await stable('拖动分隔线'); await capture('video-layout-resized')
 
@@ -223,7 +239,9 @@ function createVideoEditLayoutScene() {
         await stable('还原面板')
         await layoutAction(page, '重置布局'); await stable('重置布局'); await capture('video-layout-reset')
         const beforeCloseWorkers = await workerSnapshot(page)
-        assert.equal(beforeCloseWorkers.workers.length, 1, '移动、隐藏和重置整个过程不创建新 Worker')
+        // 组内隐藏/拆分时按契约释放并重建会话；除这些重建外，移动、浮动、放大与重置不创建新 Worker，旧会话都已退场。
+        assert.equal(beforeCloseWorkers.workers.length, 1 + rebuiltSessions, '移动、隐藏和重置整个过程只在节目面板不可见再显示时重建会话')
+        assert.equal(beforeCloseWorkers.live, 1, '重建后只保留一个真实渲染 Worker')
 
         await button(page, '关闭节目画面').click(); await waitReleased(page)
         assert.equal(await page.getByLabel('剪辑画面', { exact: true }).count(), 0, '关闭节目面板卸载画面')

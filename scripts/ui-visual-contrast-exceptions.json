@@ -7,5 +7,34 @@
     "可选 kind（text/icon）、scene（场景名正则）、presets（graphite/ocean/film/paper，未指定预设时为 default）、minRatio（只放宽到该下限）、owner。",
     "例外只用于确属装饰、品牌或内容色（用户素材本身）的情形；界面色不达标应改令牌，不应登记。"
   ],
-  "exceptions": []
+  "exceptions": [
+    {
+      "id": "primary-button-gradient-top",
+      "kind": "text",
+      "element": "ui-btn-primary",
+      "minRatio": 3.8,
+      "reason": "主按钮材质渐变按“静息/悬停渐变中点 ≥ 4.5、悬停提升 ≤ 0.02”判定（1.2 主控决定）：静息顶端 4.51、中段 ≥ 4.5；悬停态顶端 accentHoverHi 为 3.87，像素审计按最差 10% 取样会落在顶部受光区。只放宽到 3.8，再低仍判违规。",
+      "owner": "1.2 / 4.1"
+    },
+    {
+      "id": "audio-edit-ruler-under-playhead",
+      "kind": "text",
+      "scene": "口播剪辑",
+      "element": "absolute\\.inset-x-0\\.top-0\\.flex\\.h-5\\.items-center\\.justify-between",
+      "text": "^\\d+:\\d{2}\\.\\d$",
+      "minRatio": 2,
+      "reason": "口播剪辑波形顶部的时间刻度被播放头顶端标记（强调色）经过时会短暂压住数字，属移动中的指示器遮挡；刻度在其他位置石墨 ≥ 5.4、纸白 ≥ 5.9（辅助文字令牌）。",
+      "owner": "4.1"
+    },
+    {
+      "id": "agent-canvas-fixture-stacked-title",
+      "kind": "text",
+      "scene": "内置助手-对话工具停止与恢复",
+      "text": "^图片生成$",
+      "element": "items-baseline",
+      "minRatio": 3,
+      "reason": "助手画布夹具在 960 窗口下两个节点上下贴得很近，下方节点的浮动标题行框压到上方节点的选中描边，取样落在描边上；标题本身压画布底为辅助文字 ≥ 5.4:1，不是界面配色问题。",
+      "owner": "4.1"
+    }
+  ]
 }

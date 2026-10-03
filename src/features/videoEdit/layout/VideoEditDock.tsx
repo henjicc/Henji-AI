@@ -11,6 +11,8 @@ import { VideoEditEffectsPanel } from '../panels/VideoEditEffectsPanel'
 import { VideoEditSourcePanel } from '../panels/VideoEditSourcePanel'
 import { VideoEditTimedContentPanel } from '../panels/VideoEditTimedContentPanel'
 import { readVideoEditSource, subscribeVideoEditSource } from '../application/videoEditSource'
+import { DockviewHost } from '@/components/DockviewHost'
+import { dockviewHostTheme } from '@/components/dockviewHostTheme'
 import { VideoEditDockHeaderActions, VideoEditDockTab } from './VideoEditDockChrome'
 import { restoreVideoEditLayout, saveVideoEditLayout, showVideoEditPanel, VIDEO_EDIT_PANELS, type VideoEditPanelId } from './videoEditDockLayout'
 import { bindVideoEditPopoutDock, isVideoEditPanelPoppedOut, listVideoEditPopouts, resetVideoEditWorkspaceLayout, restoreVideoEditPopouts, trackVideoEditDockPanel } from './popout/videoEditPopouts'
@@ -28,6 +30,7 @@ function ProgramBody({ visible }: { visible: boolean }): React.ReactElement { re
 function TimelineBody({ visible }: { visible: boolean }): React.ReactElement { return <div className="flex h-full min-h-0 flex-col" data-video-edit-panel="timeline"><VideoEditTimeline {...useDock()} visible={visible} /></div> }
 function ContentBody({ visible }: { visible: boolean }): React.ReactElement { return <div className="h-full min-h-0" data-video-edit-panel="content"><VideoEditTimedContentPanel {...useDock()} visible={visible} /></div> }
 function SourceBody({ visible }: { visible: boolean }): React.ReactElement { return <div className="h-full min-h-0" data-video-edit-panel="source"><VideoEditSourcePanel {...useDock()} visible={visible} /></div> }
+const VIDEO_EDIT_DOCK_THEME = dockviewHostTheme('henji-cameraStage-dock henji-videoEdit-dock')
 const BODIES: Record<VideoEditPanelId, PanelBody> = { project: ProjectBody, effects: EffectsBody, program: ProgramBody, timeline: TimelineBody, content: ContentBody, source: SourceBody }
 function dockPanel(id: VideoEditPanelId, Body: PanelBody): (props: IDockviewPanelProps) => React.ReactElement {
   return function DockPanel({ api }: IDockviewPanelProps): React.ReactElement {
@@ -86,10 +89,12 @@ export function VideoEditDock({ instance, onError, onApiChange }: DockContext & 
   }, [onApiChange, onError, instance])
   useEffect(() => () => { bindVideoEditPopoutDock(null); disposeRef.current(); apiRef.current = null; onApiChange(null) }, [onApiChange])
   return <Context.Provider value={{ instance, onError }}>
-    {/* isolate：dockview 分隔条自带 z-index 99，不隔离会漏到根层叠上下文、压在 body 下的弹窗（z-modal）之上，窄窗口时挡住弹窗按钮 */}
-    <DockviewReact className="henji-cameraStage-dock henji-videoEdit-dock dockview-theme-abyss isolate h-full min-h-0 w-full" components={COMPONENTS}
-      defaultTabComponent={VideoEditDockTab} rightHeaderActionsComponent={VideoEditDockHeaderActions} watermarkComponent={EmptyLayout}
-      dndStrategy="pointer" floatingGroupBounds="boundedWithinViewport" floatingGroupDragHandle="tabbar" defaultRenderer="always" onReady={onReady} />
+    {/* 层叠隔离与分隔条拖动保护见 DockviewHost（与 3D 镜头参考共用） */}
+    <DockviewHost className="h-full min-h-0 w-full">
+      <DockviewReact className="henji-cameraStage-dock henji-videoEdit-dock dockview-theme-abyss h-full min-h-0 w-full" theme={VIDEO_EDIT_DOCK_THEME} components={COMPONENTS}
+        defaultTabComponent={VideoEditDockTab} rightHeaderActionsComponent={VideoEditDockHeaderActions} watermarkComponent={EmptyLayout}
+        dndStrategy="pointer" floatingGroupBounds="boundedWithinViewport" floatingGroupDragHandle="tabbar" defaultRenderer="always" onReady={onReady} />
+    </DockviewHost>
     <VideoEditPopoutPortals onFocusPanel={id => { if (instance.activePanel !== id && listVideoEditInstances().includes(instance)) focusVideoEditPanel(instance.document.id, id) }}
       render={(id, visible) => { const Body = BODIES[id]; return <Body visible={visible} /> }} />
   </Context.Provider>

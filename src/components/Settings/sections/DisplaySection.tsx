@@ -46,6 +46,7 @@ const DisplaySection: React.FC<DisplaySectionProps> = ({
         info={t('sections.display.currencyModeHint')}
         inline
         className={priceDependentClass}
+        aria-disabled={!showPriceEstimate || undefined}
       >
         <Dropdown
           value={priceEstimateCurrencyMode}
@@ -62,6 +63,7 @@ const DisplaySection: React.FC<DisplaySectionProps> = ({
         info={t('sections.display.exchangeRateHint')}
         inline
         className={priceDependentClass}
+        aria-disabled={!showPriceEstimate || undefined}
       >
         <NumberInput
           value={usdToCnyRate}

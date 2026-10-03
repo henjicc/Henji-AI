@@ -82,7 +82,7 @@ export function BlankImageDialog({ isOpen, onClose, onCreate }: BlankImageDialog
       <div className="space-y-5">
         <section>
           <div className={UI_FIELD_LABEL_CLASS}>常用尺寸</div>
-          <div className="grid grid-cols-2 gap-2 rounded-lg bg-veil-faint p-1">
+          <div className="grid grid-cols-2 gap-2 rounded-lg bg-gap/60 p-1">
             {SIZE_PRESETS.map((preset) => {
               const active = width === preset.width && height === preset.height;
               return (
@@ -168,7 +168,7 @@ export function BlankImageDialog({ isOpen, onClose, onCreate }: BlankImageDialog
                 onClick={() => setBackgroundColor(color)}
               >
                 <span
-                  className="h-5 w-5 rounded-full border border-veil-soft"
+                  className="h-5 w-5 rounded-full border border-line-strong"
                   style={{ backgroundColor: color }}
                 />
                 {COLOR_LABELS[index]}

@@ -99,7 +99,7 @@ function ColorPicker({
             onClick={() => onChange(color)}
           >
             <span
-              className="block h-full w-full rounded-full border border-veil-soft"
+              className="block h-full w-full rounded-full border border-line-strong"
               style={{ backgroundColor: color }}
             />
           </UiIconButton>

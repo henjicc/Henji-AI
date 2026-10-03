@@ -109,7 +109,7 @@ export function UiModal({
         className={`relative flex max-h-[calc(100vh-2rem)] flex-col overflow-hidden transition-opacity duration-180 ${isVisible ? 'opacity-100' : 'opacity-0'} ${UI_MODAL_SIZE_CLASS[size]} ${panelClassName}`}
       >
         {!hideHeader && (
-          <div className="flex items-center justify-between border-b border-veil-subtle px-4 py-3">
+          <div className="flex items-center justify-between border-b border-line px-4 py-3">
             <div className="flex min-w-0 items-center gap-3">
               <h2 id={titleId} className={UI_TEXT_TITLE_CLASS}>{title}</h2>
               {headerActions}
@@ -126,7 +126,7 @@ export function UiModal({
         <div className={`flex min-h-0 flex-1 flex-col ${contentClassName}`}>{children}</div>
 
         {footer && (
-          <div className="flex justify-end gap-2 border-t border-veil-subtle px-4 py-3">
+          <div className="flex justify-end gap-2 border-t border-line px-4 py-3">
             {footer}
           </div>
         )}

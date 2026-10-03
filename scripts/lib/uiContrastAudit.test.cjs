@@ -88,6 +88,23 @@ test('截图按实际像素密度映射 CSS 坐标（2x 截图、只取候选区
   assert.deepEqual(result.issues.map((issue) => issue.text), ['白底白字'])
 })
 
+test('只吸收截图 8 位量化的一级误差：4.49 视为达标，4.40 仍是违规', () => {
+  // 深海 text3 #7F8D99 压 selected #1A262F 为 4.53；截图读成 (26,39,47) 时约 4.49。
+  const quantized = bitmap(100, 50, () => [26, 39, 47])
+  const pass = evaluateContrast({ candidates: [candidate({ color: 'rgb(127, 141, 153)' })], viewport }, quantized)
+  assert.equal(pass.issues.length, 0)
+  const lighter = bitmap(100, 50, () => [33, 41, 51])
+  const fail = evaluateContrast({ candidates: [candidate({ color: 'rgb(127, 141, 153)' })], viewport }, lighter)
+  assert.equal(fail.issues.length, 1)
+})
+
+test('取样四边内收，压在文字盒最外一圈的选中环/描边不算背景', () => {
+  // 候选盒 10..50 × 10..22，外圈 1px 是高亮描边，内部是深底。
+  const ringed = bitmap(100, 50, (x, y) => (x === 10 || x === 49 || y === 10 || y === 21 ? [106, 155, 254] : [20, 20, 20]))
+  const result = evaluateContrast({ candidates: [candidate()], viewport }, ringed)
+  assert.equal(result.issues.length, 0)
+})
+
 test('透明前景与截图外的候选计入跳过统计，不判也不报', () => {
   const dark = bitmap(100, 50, () => [20, 20, 20])
   const result = evaluateContrast({ candidates: [
@@ -117,6 +134,21 @@ test('登记的例外按场景/预设/文字/元素命中，且只放宽到登�
   assert.deepEqual(graphite.issues.map((issue) => issue.text), ['痕迹淡', '00:01'])
   const otherScene = evaluateContrast(collected, light, { exceptions, scene: '设置-外观', themePreset: 'paper' })
   assert.deepEqual(otherScene.issues.map((issue) => issue.text), ['痕迹淡', '00:01'])
+})
+
+test('maxOpacity 只豁免被有意整体淡化的状态，正常显示的同一元素仍按门槛判', () => {
+  const dark = bitmap(100, 50, () => [70, 70, 70])
+  const exceptions = validateContrastExceptions([
+    { id: 'hidden-track', reason: '隐藏轨上的片段整体半透明表达“不参与输出”', element: 'clip-label', maxOpacity: 0.5, minRatio: 1.5 },
+  ])
+  const collected = { candidates: [
+    candidate({ color: 'rgb(255, 255, 255)', opacity: 0.5, element: 'span.clip-label', text: '隐藏轨' }),
+    candidate({ color: 'rgb(150, 150, 150)', opacity: 1, element: 'span.clip-label', text: '正常轨' }),
+  ], viewport }
+  const result = evaluateContrast(collected, dark, { exceptions })
+  assert.deepEqual(result.exempted.map((item) => item.text), ['隐藏轨'])
+  assert.deepEqual(result.issues.map((item) => item.text), ['正常轨'])
+  assert.throws(() => validateContrastExceptions([{ id: 'x', reason: '这是一条足够长的理由', text: 'x', maxOpacity: 1 }]), /maxOpacity/)
 })
 
 test('例外登记必须有理由、匹配条件、合法正则与唯一 id', () => {

@@ -8,7 +8,8 @@ export function CanvasEmptyHint({ title, subtitle }: CanvasEmptyHintProps): JSX.
     <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
       <div className="text-center">
         <div className={`mb-2 ${UI_TEXT_TITLE_CLASS}`}>{title}</div>
-        <div className={`${UI_TEXT_META_CLASS} opacity-60`}>{subtitle}</div>
+        {/* 不再叠 opacity：辅助文字令牌本身已按 4.5:1 求解，再淡化就不可读（4.1） */}
+        <div className={UI_TEXT_META_CLASS}>{subtitle}</div>
       </div>
     </div>
   )

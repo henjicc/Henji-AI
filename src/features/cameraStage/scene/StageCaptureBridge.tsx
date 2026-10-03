@@ -2,6 +2,7 @@ import React, { useEffect } from 'react'
 import { useThree } from '@react-three/fiber'
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js'
 import {
+  HalfFloatType,
   RGBAFormat,
   UnsignedByteType,
   Vector4,
@@ -156,7 +157,8 @@ function getExportRenderer(
   return {
     // Three.js 对普通 RenderTarget 固定输出线性工作色彩空间；先保留线性场景结果，
     // 再由 OutputPass 显式补齐与主画布相同的 tone mapping 和 sRGB 输出转换。
-    sceneTarget: new WebGLRenderTarget(options.width, options.height, targetOptions),
+    // 线性场景结果用半浮点保存：8 位线性缓冲会把暗部量化成台阶，sRGB 转换后暗部偏亮（与全景冻结帧同源，4.1）。
+    sceneTarget: new WebGLRenderTarget(options.width, options.height, { ...targetOptions, type: HalfFloatType }),
     outputTarget: new WebGLRenderTarget(options.width, options.height, targetOptions),
     outputPass: new OutputPass(),
     pixels: new Uint8Array(options.width * options.height * 4),

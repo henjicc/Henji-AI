@@ -39,6 +39,7 @@ const BottomPanelSection: React.FC<BottomPanelSectionProps> = ({
         info={t('sections.interface.collapseDelayHint')}
         inline
         className={dependentClass}
+        aria-disabled={!enableAutoCollapse || undefined}
       >
         <NumberInput
           value={collapseDelay}
@@ -56,6 +57,7 @@ const BottomPanelSection: React.FC<BottomPanelSectionProps> = ({
         info={t('sections.interface.collapseOnScrollHint')}
         inline
         className={dependentClass}
+        aria-disabled={!enableAutoCollapse || undefined}
       >
         <UiSwitch
           checked={collapseOnScrollOnly}

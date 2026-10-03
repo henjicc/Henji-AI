@@ -174,19 +174,20 @@ function attachUiInspectionCanvasWorkspace(context) {
     await sourceNode.click()
     await page.waitForTimeout(350)
 
+    // 直达项按工具条实际可用宽度放（CanvasImageCapabilityActions 逐项量宽，最多 4 个），断点只是首帧初值：
+    // 1.3 起字号与按钮变窄，960 窗口也能放下全部 4 个。判据：按固定顺序取前缀、不少于断点档位、工具条不出窗口。
     const viewportWidth = await page.evaluate(() => window.innerWidth)
-    const expectedInlineIds = viewportWidth >= 1360
-      ? ['image.element-edit', 'image.upscale', 'image.relight', 'image.panorama']
-      : viewportWidth >= 1080
-        ? ['image.element-edit', 'image.upscale', 'image.relight']
-        : viewportWidth >= 760
-          ? ['image.element-edit', 'image.upscale']
-          : ['image.element-edit']
+    const inlineOrder = ['image.element-edit', 'image.upscale', 'image.relight', 'image.panorama']
+    const minimumInline = viewportWidth >= 1360 ? 4 : viewportWidth >= 1080 ? 3 : viewportWidth >= 760 ? 2 : 1
     const inlineIds = await page
       .locator('[data-image-capability-placement="inline"]:visible')
       .evaluateAll((elements) => elements.map((element) => element.getAttribute('data-image-capability-id')))
-    if (JSON.stringify(inlineIds) !== JSON.stringify(expectedInlineIds)) {
-      throw new Error(`图片能力直达项不符合响应式排序：${JSON.stringify({ viewportWidth, inlineIds, expectedInlineIds })}`)
+    const toolbarRight = await page.locator('[data-image-capability-more="true"]:visible')
+      .evaluate((element) => element.closest('[data-node-toolbar-panel]')?.getBoundingClientRect().right ?? Infinity)
+    if (JSON.stringify(inlineIds) !== JSON.stringify(inlineOrder.slice(0, inlineIds.length))
+      || inlineIds.length < minimumInline
+      || toolbarRight > viewportWidth) {
+      throw new Error(`图片能力直达项不符合响应式排序：${JSON.stringify({ viewportWidth, inlineIds, minimumInline, toolbarRight })}`)
     }
     if (await page.locator('[role="separator"][aria-orientation="vertical"]:visible').count() !== 1) {
       throw new Error('图片能力与基础动作之间必须且只能有一条分隔线')
@@ -198,7 +199,7 @@ function attachUiInspectionCanvasWorkspace(context) {
     const menu = page.locator('[data-image-capability-menu="true"]:visible')
     await menu.waitFor({ state: 'visible', timeout: 8000 })
     const menuItems = menu.getByRole('menuitem')
-    if (await menuItems.count() !== expectedCapabilityCount - expectedInlineIds.length) {
+    if (await menuItems.count() !== expectedCapabilityCount - inlineIds.length) {
       throw new Error('更多菜单未完整承接非直达能力')
     }
     const menuCapabilityIds = await menuItems.evaluateAll((elements) => (

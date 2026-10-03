@@ -1,4 +1,4 @@
-import { useState, type MutableRefObject } from 'react';
+import { useLayoutEffect, useRef, useState, type MutableRefObject } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { UiEmpty, UiError, UiErrorBoundary, UiLoading } from '@/components/ui';
@@ -80,10 +80,39 @@ export function PanoramaViewerPanel({
   const isSphereFramePresented = renderSphere
     && Boolean(frozenPreviewUrl)
     && readyFrozenPreviewUrl === frozenPreviewUrl;
+  // 冻结帧要与实时球面逐像素重合：画布按 offsetWidth/offsetHeight（整数布局尺寸）定尺寸，冻结帧取自同一
+  // 绘制缓冲。面板在缩放后的画布视口里布局尺寸常带小数，若冻结图铺满面板（inset-0）就比画布小零点几像素，
+  // 切换时画面整体错动约 1px（4.1）。冻结图因此按同一整数尺寸摆放（max-w-none：预检样式的 img max-width:100%
+  // 会把宽度压回面板宽）。
+  const surfaceRef = useRef<HTMLDivElement>(null);
+  const [surfaceSize, setSurfaceSize] = useState<{ width: number; height: number } | null>(null);
+  // 冻结图取自绘制缓冲（布局尺寸 × 像素比取整），与面板比例只差取整误差时按画布同样的方式拉伸铺满（object-fill），
+  // 才与实时画面逐像素重合；节点改过比例、冻结图还没重拍时比例差得多，退回 object-contain 不变形。
+  const [frozenNaturalSize, setFrozenNaturalSize] = useState<{ width: number; height: number } | null>(null);
+  const frozenMatchesSurface = Boolean(surfaceSize && frozenNaturalSize && frozenNaturalSize.height > 0
+    && Math.abs((frozenNaturalSize.width / frozenNaturalSize.height) / (surfaceSize.width / surfaceSize.height) - 1) < 0.01);
+  useLayoutEffect(() => {
+    const element = surfaceRef.current;
+    if (!element) return undefined;
+    const measure = (): void => {
+      const width = element.offsetWidth;
+      const height = element.offsetHeight;
+      setSurfaceSize((current) => {
+        if (width <= 0 || height <= 0) return null;
+        return current?.width === width && current.height === height ? current : { width, height };
+      });
+    };
+    measure();
+    if (typeof ResizeObserver === 'undefined') return undefined;
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-[var(--node-radius)] bg-bg-dark">
       <div
+        ref={surfaceRef}
         className="nodrag nopan nowheel relative min-h-0 flex-1 overflow-hidden touch-none"
         role="region"
         aria-label={t('viewer.panorama.directInteractionLabel')}
@@ -158,13 +187,18 @@ export function PanoramaViewerPanel({
             data-panorama-transition-preview={
               renderSphere && !isSphereFramePresented ? 'true' : undefined
             }
-            className={`pointer-events-none absolute inset-0 h-full w-full select-none object-contain ${
+            style={surfaceSize ? { width: surfaceSize.width, height: surfaceSize.height } : undefined}
+            className={`pointer-events-none absolute left-0 top-0 h-full w-full max-w-none select-none ${
+              frozenMatchesSurface ? 'object-fill' : 'object-contain'
+            } ${
               isSphereFramePresented
                 ? 'opacity-0 transition-opacity duration-120'
                 : 'opacity-100'
             }`}
             draggable={false}
-            onLoad={() => {
+            onLoad={(event) => {
+              const image = event.currentTarget;
+              setFrozenNaturalSize({ width: image.naturalWidth, height: image.naturalHeight });
               setLoadedFrozenPreviewUrl(frozenPreviewUrl);
               onFrozenPreviewReady();
             }}

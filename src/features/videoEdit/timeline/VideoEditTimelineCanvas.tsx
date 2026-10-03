@@ -212,15 +212,18 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
           const sound = clip.kind === 'audio' || clip.kind === 'video' && clip.sourceComponent === 'audio'
           const picture = !sound && (clip.kind === 'video' && media?.kind === 'video' || clip.kind === 'image' && media?.kind === 'image')
           const surface = sound ? CLIP_SURFACE.audio : clip.kind === 'video' || clip.kind === 'image' ? CLIP_SURFACE.video : CLIP_SURFACE.title
-          // Hidden picture tracks and muted sound tracks dim their clips, as in Premiere.
+          // Hidden picture tracks and muted sound tracks dim their clips (content only, see the overlay below), as in Premiere.
           const dimmed = !row.track.enabled || row.track.kind === 'audio' && row.track.muted
           const clipLeft = TIMELINE_HEADER_WIDTH + clip.start * pixels
           const clipWidth = Math.max(3, clip.duration * pixels)
-          return <div key={clip.id} data-video-edit-clip={clip.id} data-clip-start={clip.start} data-clip-duration={clip.duration} className={`absolute overflow-hidden rounded-md border ${surface.fill} ${selected ? CLIP_SELECTED_LINE : surface.line}${dimmed ? ' opacity-50' : ''}`} style={{ top: row.top + 2, height: row.height - 4, left: clipLeft, width: clipWidth }}>
+          return <div key={clip.id} data-video-edit-clip={clip.id} data-clip-start={clip.start} data-clip-duration={clip.duration} className={`absolute overflow-hidden rounded-md border ${surface.fill} ${selected ? CLIP_SELECTED_LINE : surface.line}`} data-clip-dimmed={dimmed || undefined} style={{ top: row.top + 2, height: row.height - 4, left: clipLeft, width: clipWidth }}>
             {picture && media && <VideoEditClipFilmstrip clipId={clip.id} source={media.path} sourceRevision={media.sourceRevision} still={media.kind === 'image'} aspect={media.width > 0 && media.height > 0 ? media.width / media.height : 16 / 9}
               mediaEndSeconds={media.durationSeconds} frameSeconds={media.frameRate ? media.frameRate.denominator / media.frameRate.numerator : 1 / 30} sourceInSeconds={videoEditSourceSeconds(clip)} clipWidth={clipWidth} height={row.height - 6}
               secondsPerPixel={1 / (pixels * fps)} visibleFrom={stripEdge(view.left + TIMELINE_HEADER_WIDTH - clipLeft, clipWidth, Math.floor)} visibleTo={stripEdge(view.left + view.width - clipLeft, clipWidth, Math.ceil)} devicePixelRatio={devicePixelRatio} active={visible} />}
             {range && <VideoEditClipWaveform clipId={clip.id} sources={range.sources} startSeconds={range.startSeconds} endSeconds={range.endSeconds} left={(range.from - clip.start) * pixels} width={(range.to - range.from) * pixels} visible={visible} lane={picture ? 'lower' : 'full'} />}
+            {/* 隐藏轨/静音轨只淡化画面与波形（盖一层半透明窗口底），片段名标签不跟着变淡：整片 opacity-50 时
+                纸白下标签只剩 1.5:1（4.1 对比度审计） */}
+            {dimmed && <div className="pointer-events-none absolute inset-0 bg-window/50" aria-hidden="true" />}
             <div className="absolute inset-0 flex">
               {/* ui-surface-allow 片段入点裁剪柄：命中区不是按钮档位，外观由片段容器的 clip 令牌给出 */}
               <UiButton data-video-edit-trim="in" aria-label={`裁剪${clip.name}入点`} className="!h-full !w-2 shrink-0 cursor-ew-resize !rounded-none !bg-transparent !p-0" tabIndex={-1} />

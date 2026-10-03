@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, type MutableRefObject } from '
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import {
+  HalfFloatType,
   RGBAFormat,
   UnsignedByteType,
   Vector2,
@@ -235,7 +236,9 @@ function getPanoramaCaptureResources(
     stencilBuffer: false,
   } as const;
   return {
-    sceneTarget: new WebGLRenderTarget(options.width, options.height, targetOptions),
+    // 场景先渲染成线性色彩；8 位线性中间缓冲会把暗部量化成台阶，OutputPass 转 sRGB 后暗部整体偏亮
+    // （4.1：冻结帧比实时画面暗部亮 5–8 级）。与 EffectComposer 默认一致用半浮点，只在 sRGB 输出处量化一次。
+    sceneTarget: new WebGLRenderTarget(options.width, options.height, { ...targetOptions, type: HalfFloatType }),
     outputTarget: new WebGLRenderTarget(options.width, options.height, targetOptions),
     outputPass: new OutputPass(),
     pixels: new Uint8Array(options.width * options.height * 4),
@@ -283,6 +286,11 @@ function capturePanoramaView(
     captureCamera.updateProjectionMatrix();
   }
   const { sceneTarget, outputTarget, outputPass, pixels } = resources;
+  // 所见即所得：three.js 的画布尺寸向下取整（canvas.height = floor(高 × 像素比)），视口却四舍五入，
+  // 像素比为小数时实时画面的视口会比画布高出一行、顶行被裁掉。冻结帧沿用同一视口，否则内容整体错开约一行
+  // （4.1：冻结预览比实时球面偏下约 1px）。指定尺寸导出时仍铺满目标。
+  if (preserveCameraProjection) renderer.getCurrentViewport(sceneTarget.viewport);
+  else sceneTarget.viewport.set(0, 0, options.width, options.height);
   return withPanoramaRendererState(renderer, () => {
     renderer.setRenderTarget(sceneTarget);
     renderer.clear();

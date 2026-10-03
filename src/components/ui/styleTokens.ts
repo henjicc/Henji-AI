@@ -162,7 +162,7 @@ export const UI_INSET_SURFACE_CLASS = 'bg-app/40 text-text-dark';
  * 元信息徽标（类型/尺寸/时长/时间这类只读标签）。
  * 之前在 TaskCard 里同一串类名抄了 5 遍，收敛到这里；强调态用下面的 accent 变体。
  */
-export const UI_META_BADGE_CLASS = 'bg-veil-faint border border-veil-subtle px-2 py-0.5 rounded';
+export const UI_META_BADGE_CLASS = 'bg-hover border border-line px-2 py-0.5 rounded';
 
 export const UI_META_BADGE_ACCENT_CLASS =
   'bg-accent/10 border border-accent/40 text-brand-300 px-2 py-0.5 rounded';
@@ -355,8 +355,8 @@ export const UI_MODAL_SIZE_CLASS = {
 
 export type UiModalSize = keyof typeof UI_MODAL_SIZE_CLASS;
 
-export const UI_UPLOADER_CARD_BORDER_CLASS = 'border-1.5 border-veil-strong';
-export const UI_UPLOADER_CARD_BORDER_OVERRIDE_CLASS = '!border-1.5 !border-veil-strong';
+export const UI_UPLOADER_CARD_BORDER_CLASS = 'border-1.5 border-text3/60';
+export const UI_UPLOADER_CARD_BORDER_OVERRIDE_CLASS = '!border-1.5 !border-text3/60';
 /** 灯光色值是所选光源的内容色，不随界面主题变色。 */
 export const UI_LIGHTING_COLORS = {
   amber: SOCKET_TYPE_COLOR_HEX.ENUM, warm: CAMERA_STAGE_COLOR_HEX.sunlightWarm,

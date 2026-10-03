@@ -2,6 +2,29 @@ const { writeFile } = require('node:fs/promises')
 const { findPanePoint, readCanvasState, resetViewport } = require('./canvasPanBench.cjs')
 const { captureInspectionPage } = require('./uiInspectionCapture.cjs')
 
+/** 失败诊断：在 ±2 像素内平移第二帧，找差异最小的偏移（区分“画面整体错位”与“视角/内容不同”）。 */
+async function bestPixelShift(first, second) {
+  const sharp = require('sharp')
+  const gray = async (buffer) => sharp(buffer).removeAlpha().greyscale().raw().toBuffer({ resolveWithObject: true })
+  const [a, b] = await Promise.all([gray(first), gray(second)])
+  const { width, height } = a.info
+  let best = null
+  for (let dy = -2; dy <= 2; dy += 1) {
+    for (let dx = -2; dx <= 2; dx += 1) {
+      let changed = 0; let total = 0
+      for (let y = 2; y < height - 2; y += 1) {
+        for (let x = 2; x < width - 2; x += 1) {
+          total += 1
+          if (Math.abs(a.data[y * width + x] - b.data[(y + dy) * width + (x + dx)]) > 2) changed += 1
+        }
+      }
+      const pct = Number(((changed / total) * 100).toFixed(4))
+      if (!best || pct < best.pct) best = { dx, dy, pct }
+    }
+  }
+  return { size: [width, height], best }
+}
+
 function attachUiInspectionCanvasPanorama(context) {
   const {
     settlePage,
@@ -89,12 +112,7 @@ function attachUiInspectionCanvasPanorama(context) {
         throw new Error(`全景 Canvas 未就绪（${stage}）：${error.message}`)
       }
     }
-    const screenshotPrimarySurface = async () => {
-      const box = await primarySurface.boundingBox()
-      if (!box) throw new Error('全景节点预览区域不可见')
-      return await page.screenshot({ animations: 'disabled', clip: box })
-    }
-    // 屏外恢复比对只看全景画面本身：取节点预览区与窗口的可见交集，截到节点工具条上沿以上，四边内收 3px，
+    // 三处所见即所得比对（初始预览 / 冻结帧 / 屏外恢复）都只看全景画面本身：取节点预览区与窗口的可见交集，截到节点工具条上沿以上，四边内收 3px，
     // 并走正式 runner 的截屏入口。3.7 第 10 项实测：窗口缩放 0.9 时 CDP 截图的 CSS 裁剪与合成表面坐标
     // 不一致，截到的是错位区域，包含节点外框与工具条文字；它们随视口恢复落在不同亚像素位置，
     // 非首个场景时恒定出现约 1.49% 的抗锯齿差异，冻结画面本身逐像素一致。
@@ -115,7 +133,7 @@ function attachUiInspectionCanvasPanorama(context) {
     await page.waitForFunction(() => (
       document.querySelectorAll('[data-panorama-inline-surface] [data-panorama-surface="sphere"] canvas').length === 0
     ), undefined, { timeout: 8000 })
-    const initialPreviewFrame = await screenshotPrimarySurface()
+    const initialPreviewFrame = await screenshotFrozenPicture()
     await page.mouse.move(20, 80)
     await primarySurface.hover()
     const primarySphere = primarySurface.locator('[data-panorama-surface="sphere"] canvas')
@@ -131,10 +149,12 @@ function attachUiInspectionCanvasPanorama(context) {
     if (await primarySphere.getAttribute('data-reality-panorama-instance') !== 'retained') {
       throw new Error('快速移出再移入时错误重建了全景 WebGL 实例')
     }
-    const initialSphereFrame = await screenshotPrimarySurface()
+    const initialSphereFrame = await screenshotFrozenPicture()
     const initialPreviewDiff = await diffBuffers(initialPreviewFrame, initialSphereFrame)
     if (initialPreviewDiff.changedPct > 1) {
-      throw new Error(`全景结果初始预览不是默认球面视角：变化像素 ${initialPreviewDiff.changedPct}%`)
+      await writeFile('.ui-tour/canvas-panorama-viewer-initial-preview.png', initialPreviewFrame)
+      await writeFile('.ui-tour/canvas-panorama-viewer-initial-sphere.png', initialSphereFrame)
+      throw new Error(`全景结果初始预览不是默认球面视角：变化像素 ${initialPreviewDiff.changedPct}%（${JSON.stringify(await bestPixelShift(initialPreviewFrame, initialSphereFrame))}）`)
     }
     if (await activeInlineCanvases.count() > 1) throw new Error('全景节点内嵌 WebGL Canvas 超过 1 个')
     await secondarySurface.hover()
@@ -214,7 +234,8 @@ function attachUiInspectionCanvasPanorama(context) {
     }
 
     // 指针移出后释放 WebGL，但节点必须冻结在刚才停下的视角，不能回退到原始全景图。
-    const interactiveFrame = await screenshotPrimarySurface()
+    const interactiveFrame = await screenshotFrozenPicture()
+    const interactiveGeometry = await primarySurface.evaluate((surface) => { const canvas = surface.querySelector('[data-panorama-surface="sphere"] canvas'); const r = canvas?.getBoundingClientRect(); const s = surface.getBoundingClientRect(); return { surface: [s.x, s.y, s.width, s.height], canvas: canvas ? [canvas.width, canvas.height, r.x, r.y, r.width, r.height] : null, dpr: devicePixelRatio } })
     await page.mouse.move(20, 80)
     await page.waitForFunction(() => (
       document.querySelectorAll('[data-panorama-inline-surface] [data-panorama-surface="sphere"] canvas').length === 0
@@ -222,10 +243,14 @@ function attachUiInspectionCanvasPanorama(context) {
     if (await activeInlineCanvases.count()) throw new Error('指针移出全景节点后仍保留内嵌 WebGL Canvas')
     const frozenPreview = primarySurface.locator('img[data-panorama-frozen-preview="true"]')
     await frozenPreview.waitFor({ state: 'visible', timeout: 8000 })
-    const frozenFrame = await screenshotPrimarySurface()
+    const frozenFrame = await screenshotFrozenPicture()
     const frozenFrameDiff = await diffBuffers(interactiveFrame, frozenFrame)
+    console.log(`全景所见即所得比对：初始预览 ${initialPreviewDiff.changedPct}%，冻结帧 ${frozenFrameDiff.changedPct}%（阈值 1%）`)
     if (frozenFrameDiff.changedPct > 1) {
-      throw new Error(`全景冻结帧不是所见即所得：变化像素 ${frozenFrameDiff.changedPct}%`)
+      await writeFile('.ui-tour/canvas-panorama-viewer-interactive.png', interactiveFrame)
+      await writeFile('.ui-tour/canvas-panorama-viewer-frozen.png', frozenFrame)
+      const frozenGeometry = await frozenPreview.evaluate((img) => { const r = img.getBoundingClientRect(); return { natural: [img.naturalWidth, img.naturalHeight], box: [r.x, r.y, r.width, r.height], fit: getComputedStyle(img).objectFit } })
+      throw new Error(`全景冻结帧不是所见即所得：变化像素 ${frozenFrameDiff.changedPct}%（${JSON.stringify({ shift: await bestPixelShift(interactiveFrame, frozenFrame), interactiveGeometry, frozenGeometry })}）`)
     }
 
     // 平移到屏外后保留同一冻结视角，返回时不能丢失预览或重新常驻 WebGL。

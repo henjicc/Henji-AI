@@ -442,7 +442,7 @@ export const StackedMediaUploader = forwardRef<StackedMediaUploaderHandle, Stack
                 variant="secondary"
                 className={`p-0 text-text-dark ${plusUseCardShape
                   ? `h-[64px] w-[48px] ${UI_UPLOADER_CARD_BORDER_OVERRIDE_CLASS} !bg-panel text-2xl shadow-thumb transition-transform duration-180 ease-out hover:scale-[1.1]`
-                  : 'h-[29px] w-[29px] aspect-square !rounded-full border-veil-soft bg-layer/80 text-base shadow-thumb-sm transition-transform duration-180 ease-out hover:scale-[1.1]'
+                  : 'h-[29px] w-[29px] aspect-square !rounded-full border-line-strong bg-layer/80 text-base shadow-thumb-sm transition-transform duration-180 ease-out hover:scale-[1.1]'
                   }`}
                 onClick={(event) => {
                   event.stopPropagation()

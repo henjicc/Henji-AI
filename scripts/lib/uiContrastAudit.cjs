@@ -10,7 +10,8 @@
  *    用正式截屏通道截一张“只有背景”的图，再移除样式。
  * 3. 在每个候选可见区域内网格取样背景像素，前景按 alpha 与 opacity 合成到每个样本上算
  *    WCAG 对比度，取最差 10% 分位作为该候选的对比度（文字压在渐变/图片上时不靠平均值蒙混）。
- * 门槛：正文与辅助文字 ≥ 4.5:1；大字（≥ 24px，或 ≥ 18.66px 且字重 ≥ 700）与图标 ≥ 3:1。
+ * 门槛：正文与辅助文字 ≥ 4.5:1；大字（≥ 24px，或 ≥ 18.66px 且字重 ≥ 700）与图标 ≥ 3:1；
+ * 只扣除 0.05 的截图量化容差（见 CONTRAST_MEASUREMENT_TOLERANCE）。
  * 不判：禁用控件（WCAG 1.4.3 对非活动组件豁免）、aria-hidden 文字、被遮挡或裁切到不可见的部分。
  * 合理例外登记在 scripts/ui-visual-contrast-exceptions.json，每条必须写理由。
  */
@@ -20,12 +21,18 @@ const path = require('node:path')
 const CONTRAST_TEXT_MIN = 4.5
 const CONTRAST_LARGE_MIN = 3
 const CONTRAST_ICON_MIN = 3
+/**
+ * 截图测量容差：截图是 8 位、经色彩管理的合成结果，深色表面 ±1 级量化就能让 4.53 的令牌对比读成 4.49
+ * （4.1 深海 text3 压 selected 实测）。只吸收这一级误差，不用于放宽设计门槛。
+ */
+const CONTRAST_MEASUREMENT_TOLERANCE = 0.05
 /** 取样对比度的分位：0.1 = 候选区域里最差的 10% 背景像素。 */
 const CONTRAST_SAMPLE_PERCENTILE = 0.1
 const MAX_SAMPLES_PER_CANDIDATE = 240
 const DEFAULT_EXCEPTIONS_FILE = path.resolve(__dirname, '..', 'ui-visual-contrast-exceptions.json')
 
 const HIDE_FOREGROUND_STYLE_ID = '__henji_contrast_hide_foreground__'
+const NO_TRANSITION_STYLE_ID = '__henji_contrast_no_transition__'
 const HIDE_FOREGROUND_CSS = `*, *::before, *::after {
   color: transparent !important; -webkit-text-fill-color: transparent !important;
   text-shadow: none !important; caret-color: transparent !important;
@@ -33,7 +40,7 @@ const HIDE_FOREGROUND_CSS = `*, *::before, *::after {
 }
 *::placeholder { color: transparent !important; }
 svg.lucide { visibility: hidden !important; }`
-const NO_TRANSITION_CSS = '*, *::before, *::after { transition: none !important; }'
+const NO_TRANSITION_CSS = '*, *::before, *::after { transition: none !important; animation-duration: 0s !important; animation-delay: 0s !important; }'
 
 function parseCssColor(value) {
   const text = String(value || '').trim()
@@ -105,8 +112,13 @@ function formatRgb(color) {
   return `rgb(${Math.round(color.r)}, ${Math.round(color.g)}, ${Math.round(color.b)})`
 }
 
-/** 在候选可见区域（CSS 像素）内网格取样截图像素；bitmap 为 sharp raw（RGB/RGBA）。 */
+/**
+ * 在候选可见区域（CSS 像素）内网格取样截图像素；bitmap 为 sharp raw（RGB/RGBA）。
+ * 四边内收最多 2px：文字行框与图标盒的最外一圈常压着相邻的描边/选中环，字形本身不会画到那里。
+ */
 function sampleBackground(bitmap, rect, viewport) {
+  const inset = Math.min(2, rect.width * 0.15, rect.height * 0.15)
+  rect = { x: rect.x + inset, y: rect.y + inset, width: rect.width - inset * 2, height: rect.height - inset * 2 }
   const scaleX = bitmap.width / viewport.width
   const scaleY = bitmap.height / viewport.height
   const left = Math.max(0, Math.floor(rect.x * scaleX))
@@ -165,6 +177,7 @@ function validateContrastExceptions(entries) {
     if (entry.kind !== undefined && !['text', 'icon'].includes(entry.kind)) throw new Error(`${where} kind 只能是 text 或 icon`)
     if (entry.presets !== undefined && !Array.isArray(entry.presets)) throw new Error(`${where} presets 必须是数组`)
     if (entry.minRatio !== undefined && !(Number(entry.minRatio) > 1)) throw new Error(`${where} minRatio 必须大于 1`)
+    if (entry.maxOpacity !== undefined && !(Number(entry.maxOpacity) > 0 && Number(entry.maxOpacity) < 1)) throw new Error(`${where} maxOpacity 必须在 0 与 1 之间`)
     const compile = (field) => {
       if (entry[field] === undefined) return null
       try { return new RegExp(entry[field], 'u') } catch (error) { throw new Error(`${where} ${field} 正则无效：${error.message}`) }
@@ -180,6 +193,8 @@ function findContrastException(issue, exceptions, context) {
     if (entry.matchers.scene && !entry.matchers.scene.test(context.scene ?? '')) return false
     if (entry.matchers.text && !entry.matchers.text.test(issue.text ?? '')) return false
     if (entry.matchers.element && !entry.matchers.element.test(issue.element ?? '')) return false
+    // 只豁免被有意整体淡化（opacity ≤ 上限）的状态，例如隐藏轨上的片段；同一元素正常显示时仍按门槛判。
+    if (entry.maxOpacity !== undefined && !(issue.opacity <= Number(entry.maxOpacity))) return false
     // 例外只放宽到登记的下限，再低仍然算违规（防止一条例外掩盖后续更严重的退化）。
     return entry.minRatio === undefined || issue.ratio >= Number(entry.minRatio)
   }) ?? null
@@ -202,7 +217,7 @@ function evaluateContrast(collected, bitmap, { exceptions = [], scene = '', them
     }
     checked += 1
     const required = requiredContrast(candidate)
-    if (measured.ratio >= required) continue
+    if (measured.ratio >= required - CONTRAST_MEASUREMENT_TOLERANCE) continue
     const issue = {
       kind: candidate.kind,
       ratio: round2(measured.ratio),
@@ -290,11 +305,13 @@ function collectContrastCandidates() {
     }
     const visibleRect = (element, rect) => {
       let current = intersect(rect, { x: 0, y: 0, width: window.innerWidth, height: window.innerHeight })
-      for (let node = element.parentElement; node && current && node !== document.documentElement; node = node.parentElement) {
+      // 从元素自身算起：truncate 的文字行框比元素宽，被元素自己的 overflow 裁掉的部分看不见。
+      for (let node = element; node && current && node !== document.documentElement; node = node.parentElement) {
         const style = getComputedStyle(node)
         if (style.overflowX === 'visible' && style.overflowY === 'visible') continue
+        // 只算客户区：滚动条压住的那一条看不见文字，不能把滚动条颜色当背景。
         const box = node.getBoundingClientRect()
-        current = intersect(current, { x: box.x, y: box.y, width: box.width, height: box.height })
+        current = intersect(current, { x: box.x + node.clientLeft, y: box.y + node.clientTop, width: node.clientWidth || box.width, height: node.clientHeight || box.height })
       }
       return current
     }
@@ -306,13 +323,16 @@ function collectContrastCandidates() {
       const alpha = background ? Number.parseFloat(background[1].replaceAll('/', ' ').split(/[\s,]+/).filter(Boolean)[3] ?? '1') : 0
       return alpha > 0.05 || (style.backdropFilter && style.backdropFilter !== 'none') || style.backgroundImage !== 'none'
     }
-    const occluded = (element, rect) => {
-      for (const hit of document.elementsFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2)) {
+    // 横向取 5 个点：只要有一处被别的浮层盖住，这行字就有一部分看不见，取样背景会混进浮层像素，不判。
+    const occludedAt = (element, x, y) => {
+      for (const hit of document.elementsFromPoint(x, y)) {
         if (hit === element || element.contains(hit) || hit.contains(element)) return false
         if (paints(hit)) return true
       }
       return false
     }
+    const occluded = (element, rect) => [0.1, 0.3, 0.5, 0.7, 0.9]
+      .some((fraction) => occludedAt(element, rect.x + rect.width * fraction, rect.y + rect.height / 2))
     const accept = (element, kind, rawRect, extra) => {
       if (!rawRect || rawRect.width < 2 || rawRect.height < 2) { skipped.clipped += 1; return }
       const rect = visibleRect(element, rawRect)
@@ -409,18 +429,23 @@ async function nextFrames(page) {
  */
 async function auditPageContrast(page, capture, options = {}) {
   const sharp = require('sharp')
-  const collected = await page.evaluate(collectContrastCandidates)
+  let collected
   let bytes
   try {
+    // 先让过渡与入场动画立即落到终态再收集：悬停才显现的工具条、刚展开的浮层如果正处在 120–240ms 的淡入里，
+    // 读到的是半透明中间值，会误报（4.1 首轮全量审计里一批“图标 2.3:1”就是这么来的）。
+    await injectStyle(page, NO_TRANSITION_STYLE_ID, NO_TRANSITION_CSS)
+    await nextFrames(page)
+    collected = await page.evaluate(collectContrastCandidates)
     await injectStyle(page, HIDE_FOREGROUND_STYLE_ID, HIDE_FOREGROUND_CSS)
     await nextFrames(page)
     bytes = await capture(page)
   } finally {
-    // 先只保留“禁用过渡”，颜色复原后再撤掉：否则 transition-colors 会让文字从透明渐显 120–180ms，
+    // 颜色复原时仍保持“禁用过渡”一帧再撤掉：否则 transition-colors 会让文字从透明渐显 120–180ms，
     // 场景随后的截图或像素比对会看到半透明文字。
-    await injectStyle(page, HIDE_FOREGROUND_STYLE_ID, NO_TRANSITION_CSS).catch(() => undefined)
-    await nextFrames(page).catch(() => undefined)
     await removeStyle(page, HIDE_FOREGROUND_STYLE_ID).catch(() => undefined)
+    await nextFrames(page).catch(() => undefined)
+    await removeStyle(page, NO_TRANSITION_STYLE_ID).catch(() => undefined)
   }
   const { data, info } = await sharp(bytes).removeAlpha().raw().toBuffer({ resolveWithObject: true })
   return evaluateContrast(collected, { data, width: info.width, height: info.height, channels: info.channels }, options)
@@ -428,6 +453,7 @@ async function auditPageContrast(page, capture, options = {}) {
 
 module.exports = {
   CONTRAST_ICON_MIN,
+  CONTRAST_MEASUREMENT_TOLERANCE,
   CONTRAST_LARGE_MIN,
   CONTRAST_TEXT_MIN,
   DEFAULT_EXCEPTIONS_FILE,

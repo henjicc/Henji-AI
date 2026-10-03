@@ -878,7 +878,7 @@ function createToolboxScenes(context) {
           if (!currentFeedbackBox || !currentViewportContentBox) throw new Error('移动 JPG 期间画面边界丢失')
           if (Math.abs(currentFeedbackBox.x - initialFeedbackBox.x - expectedX) > 1.5
             || Math.abs(currentFeedbackBox.y - initialFeedbackBox.y - expectedY) > 1.5) {
-            throw new Error('移动 JPG 的实际画面位置没有跟随指针')
+            throw new Error(`移动 JPG 的实际画面位置没有跟随指针：${JSON.stringify({ step, expected: [expectedX, expectedY], actual: [currentFeedbackBox.x - initialFeedbackBox.x, currentFeedbackBox.y - initialFeedbackBox.y], initialFeedbackBox, currentFeedbackBox })}`)
           }
           if (Math.abs(currentViewportContentBox.x - initialViewportContentBox.x) > 0.5
             || Math.abs(currentViewportContentBox.y - initialViewportContentBox.y) > 0.5

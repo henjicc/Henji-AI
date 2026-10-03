@@ -72,6 +72,7 @@ const DownloadSection: React.FC<DownloadSectionProps> = ({
         info={t('sections.download.buttonOnlyHint')}
         inline
         className={enableQuickDownload ? '' : 'opacity-50'}
+        aria-disabled={!enableQuickDownload || undefined}
       >
         <UiSwitch
           checked={quickDownloadButtonOnly}
@@ -84,6 +85,7 @@ const DownloadSection: React.FC<DownloadSectionProps> = ({
         label={t('sections.download.pathLabel')}
         info={t('sections.download.pathHint')}
         className={enableQuickDownload ? '' : 'opacity-50'}
+        aria-disabled={!enableQuickDownload || undefined}
       >
         <div className="flex items-stretch gap-2">
           {/* 明文本地路径，观察截图时需要遮罩；密钥类输入自带 password 掩码，无需标注。 */}

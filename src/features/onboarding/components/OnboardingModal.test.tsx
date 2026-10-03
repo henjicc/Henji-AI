@@ -10,6 +10,7 @@ import {
   aiTestProviderConnection,
 } from '@/commands/aiRuntime'
 import { API_KEY_PROVIDERS } from '@/core/config/providers'
+import { UI_META_BADGE_CLASS } from '@/components/ui/styleTokens'
 import { openExternal } from '@/platform/desktopApi'
 import { onboardingManager } from '../application/onboardingManager'
 import { OnboardingModal } from './OnboardingModal'
@@ -88,7 +89,7 @@ describe('OnboardingModal', () => {
         .some((name) => button.textContent?.startsWith(name)))
       .map((button) => button.textContent?.match(/^(KIE|APIMart|Fal|派欧云)/)?.[0])
     expect(providerButtons).toEqual(['KIE', 'APIMart', 'Fal', '派欧云'])
-    expect(screen.getByText('推荐起步').className).toContain('bg-veil-faint')
+    expect(screen.getByText('推荐起步').className).toContain(UI_META_BADGE_CLASS)
     expect(screen.getByText(/但目前支持的模型相对较少/)).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: /Fal/ }))

@@ -363,7 +363,7 @@ export const StoryboardNode = memo(({ id, data, selected, width, height }: Story
             </UiChipButton>
           </div>
 
-          <div className="truncate text-2xs text-text-muted/80">
+          <div className="truncate text-2xs text-text2">
             {gridRows} x {gridCols} | {totalFrames} 格
           </div>
         </div>

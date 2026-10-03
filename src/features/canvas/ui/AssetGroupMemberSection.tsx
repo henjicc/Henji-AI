@@ -3,7 +3,6 @@ import { ArrowLeft, ArrowRight, GripVertical, LogOut, Star } from 'lucide-react'
 
 import { useReorderDrag } from '@/components/ui/fileUploader/useReorderDrag';
 import {
-  UI_META_BADGE_CLASS,
   UI_TEXT_LABEL_CLASS,
   UI_TEXT_META_CLASS,
   UiIconButton,
@@ -115,11 +114,12 @@ export const AssetGroupMemberSection = memo(({
                     <KindIcon className="h-10 w-10" />
                   </div>
                 )}
-                <span className={`absolute left-2 top-2 text-2xs ${UI_META_BADGE_CLASS}`}>
+                {/* 压在素材预览上的读数与徽标用固定媒体叠层令牌（4.1：主题色徽标压在图片上对比不足） */}
+                <span className="absolute left-2 top-2 rounded bg-media-control px-2 py-0.5 text-2xs text-on-media">
                   {index + 1}
                 </span>
                 {isCover && (
-                  <span className="absolute right-2 top-2 flex items-center gap-1 rounded bg-accent/10 px-2 py-0.5 text-2xs text-brand-300">
+                  <span className="absolute right-2 top-2 flex items-center gap-1 rounded bg-media-control px-2 py-0.5 text-2xs text-on-media">
                     <Star className="h-3 w-3" fill="currentColor" strokeWidth={0} />
                     {labels.cover}
                   </span>

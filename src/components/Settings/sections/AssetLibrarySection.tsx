@@ -60,7 +60,7 @@ const AssetLibrarySection: React.FC = () => {
         <UiSwitch checked={s.assetEdgeTriggerEnabled} onCheckedChange={s.setAssetEdgeTriggerEnabled} />
       </UiFormRow>
 
-      <UiFormRow label={t('sections.assetLibrary.triggerEdge')} inline className={edgeDependentClass}>
+      <UiFormRow label={t('sections.assetLibrary.triggerEdge')} inline className={edgeDependentClass} aria-disabled={!s.assetEdgeTriggerEnabled || undefined}>
         <Dropdown
           value={s.assetTriggerEdge}
           options={triggerEdgeOptions}
@@ -75,6 +75,7 @@ const AssetLibrarySection: React.FC = () => {
         label={t('sections.assetLibrary.delay', { value: s.assetEdgeDelayMs })}
         inline
         className={edgeDependentClass}
+        aria-disabled={!s.assetEdgeTriggerEnabled || undefined}
       >
         <UiRangeInput
           min={100}

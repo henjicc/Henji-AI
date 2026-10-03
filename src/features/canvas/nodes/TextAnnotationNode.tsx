@@ -167,7 +167,7 @@ export const TextAnnotationNode = memo(({
           textHistory={contentTextHistory}
           onBlur={() => setIsEditing(false)}
           placeholder={t('node.textAnnotation.placeholder')}
-          className="nodrag nowheel h-full w-full border-none bg-transparent px-1 py-0.5 text-sm leading-6 text-text-dark outline-none placeholder:text-text-muted/70"
+          className="nodrag nowheel h-full w-full border-none bg-transparent px-1 py-0.5 text-sm leading-6 text-text-dark outline-none placeholder:text-text3"
         />
       ) : (
         <div
