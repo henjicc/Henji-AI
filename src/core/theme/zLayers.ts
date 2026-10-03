@@ -22,6 +22,7 @@ export const Z_LAYERS = {
   modal: 50,
   viewer: 60,
   toast: 70,
+  popover: 75,
   tooltip: 80,
   drag: 90,
   titlebar: 100,

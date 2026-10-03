@@ -117,7 +117,7 @@ export function RelightDirectionVisualizer({ direction, brightness = 0, colorPre
       <h3 className={UI_TEXT_LABEL_CLASS}>主光方向</h3>
       <div className="grid grid-cols-2 gap-1">
         {(['perspective', 'front'] as const).map(value => <UiChipButton key={value} type="button" selectionRole="navigation"
-          active={view === value} className="!h-8 justify-center !px-3 !py-0 text-xs" onClick={() => setView(value)}>
+          active={view === value} size="md" className="justify-center !px-3 !py-0" onClick={() => setView(value)}>
           {value === 'perspective' ? '透视' : '正面'}
         </UiChipButton>)}
       </div>

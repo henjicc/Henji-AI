@@ -24,14 +24,14 @@ export function ImageMarkSourceMenu({
   return (
     <PanelTrigger
       panelWidth={172}
-      panelClassName="p-1"
+      panelPadding="menu"
       closeOnPanelClick
       renderPanel={() => (
         <div className="flex flex-col gap-0.5">
           <UiOptionButton
             type="button"
             variant="menu"
-            className="gap-2 text-sm"
+            size="md" className="gap-2"
             onClick={onOpenFile}
           >
             <FolderOpen size={15} />
@@ -41,7 +41,7 @@ export function ImageMarkSourceMenu({
             <UiOptionButton
               type="button"
               variant="menu"
-              className="gap-2 text-sm"
+              size="md" className="gap-2"
               onClick={onOpenPackage}
             >
               <FileArchive size={15} />
@@ -51,7 +51,7 @@ export function ImageMarkSourceMenu({
           <UiOptionButton
             type="button"
             variant="menu"
-            className="gap-2 text-sm"
+            size="md" className="gap-2"
             onClick={onPasteFromClipboard}
           >
             <ClipboardPaste size={15} />
@@ -60,7 +60,7 @@ export function ImageMarkSourceMenu({
           <UiOptionButton
             type="button"
             variant="menu"
-            className="gap-2 text-sm"
+            size="md" className="gap-2"
             onClick={onCreateBlank}
           >
             <FilePlus2 size={15} />

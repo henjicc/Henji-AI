@@ -1,5 +1,5 @@
 import { UiInput } from './primitives'
-import { UI_FIELD_CONTROL_HEIGHT_SM_CLASS, UI_FIELD_LABEL_CLASS } from './styleTokens'
+import { UI_FIELD_LABEL_CLASS } from './styleTokens'
 
 type TextInputProps = {
   label?: string
@@ -19,7 +19,7 @@ export default function TextInput(props: TextInputProps): JSX.Element {
         value={value}
         onChange={e => onChange(e.target.value)}
         placeholder={placeholder}
-        className={`${UI_FIELD_CONTROL_HEIGHT_SM_CLASS} ${inputClassName || 'w-full'}`}
+        className={`${inputClassName || 'w-full'}`}
       />
     </div>
   )

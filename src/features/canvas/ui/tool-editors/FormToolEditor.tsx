@@ -67,7 +67,7 @@ export function FormToolEditor({ fields, options, onOptionsChange }: FormToolEdi
         <UiSelect
           value={readTextOption(options, field.key)}
           onChange={(event) => updateOption(field.key, event.target.value)}
-          className="h-10 text-sm"
+          size="lg"
         >
           {field.options.map((option) => (
             <option key={option.value} value={option.value}>

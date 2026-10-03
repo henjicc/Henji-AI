@@ -14,7 +14,7 @@ afterEach(cleanup);
 const require = createRequire(path.join(process.cwd(), 'package.json'));
 const { findButtonAppearanceOverridesInSource, classifyToken } = require(path.join(process.cwd(), 'scripts/lib/buttonAppearanceOverrides.cjs')) as {
   findButtonAppearanceOverridesInSource: (raw: string, fileName: string) => { line: number; component: string; violations: { token: string; kind: string }[] }[];
-  classifyToken: (token: string, component: 'UiButton' | 'UiIconButton') => string | null;
+  classifyToken: (token: string, component: string) => string | null;
 };
 
 function classes(element: HTMLElement): string[] {
@@ -178,5 +178,42 @@ describe('check:surface 规则 E：调用点覆盖按钮外观会被拦截', () 
     expect(findings.map((finding) => finding.line)).toEqual([4, 5]);
     expect(findings[0].violations.map((violation) => violation.token)).toEqual(['bg-red-600', 'text-white']);
     expect(findings[1].violations.map((violation) => violation.token)).toEqual(['h-8', 'w-8']);
+  });
+});
+
+describe('check:surface 规则 E（2.2 扩展）：选项、标签、导航与字段触发器', () => {
+  it('选项/标签/导航只放行随内容的高度，固定高度与字号走 size', () => {
+    for (const component of ['UiOptionButton', 'UiChipButton', 'UiNavButton']) {
+      expect(classifyToken('h-full', component)).toBeNull();
+      expect(classifyToken('h-auto', component)).toBeNull();
+      expect(classifyToken('min-h-24', component)).toBeNull();
+      expect(classifyToken('h-8', component)).toMatch(/高度/);
+      expect(classifyToken('text-xs', component)).toMatch(/字号/);
+      expect(classifyToken('bg-veil-faint', component)).toBe('底色');
+    }
+    expect(classifyToken('h-full', 'UiButton')).toMatch(/高度/);
+  });
+
+  it('下拉与面板触发器检查 buttonClassName，其它组件检查 className', () => {
+    const source = [
+      'export function A() {',
+      '  return <>',
+      '    <Dropdown buttonClassName="!h-8 w-36 rounded-md" />',
+      '    <PanelTrigger buttonClassName="w-auto max-w-32" renderPanel={() => null} />',
+      '    <UiOptionButton className="w-full bg-veil-faint">格子</UiOptionButton>',
+      '    <UiChipButton className="h-full">卡片</UiChipButton>',
+      '    <UiNavButton className="!h-10 !rounded-lg">导航</UiNavButton>',
+      '    <UiFieldTrigger className="w-full text-xs">值</UiFieldTrigger>',
+      '  </>',
+      '}',
+    ].join('\n');
+    const findings = findButtonAppearanceOverridesInSource(source, 'Sample.tsx');
+    expect(findings.map((finding) => [finding.line, finding.component])).toEqual([
+      [3, 'Dropdown'],
+      [5, 'UiOptionButton'],
+      [7, 'UiNavButton'],
+      [8, 'UiFieldTrigger'],
+    ]);
+    expect(findings[0].violations.map((violation) => violation.token)).toEqual(['h-8', 'rounded-md']);
   });
 });

@@ -60,9 +60,9 @@ interface MarkToolbarProps {
   actions?: React.ReactNode;
 }
 
-const CHIP_CLASS = '!h-8 !gap-1 !px-2.5 !py-1.5 !text-xs'
+const CHIP_CLASS = '!gap-1 !px-2.5'
 // 单选参数值走 UiOptionButton，尺寸与命令带 chip 对齐
-const OPTION_CLASS = 'h-8 gap-1 px-2.5 py-1.5 text-xs';
+const OPTION_CLASS = 'gap-1 px-2.5';
 const ICON_CLASS = 'h-3.5 w-3.5';
 
 const ORIENTATION_BUTTONS: { op: OrientationOp; label: string; icon: typeof RotateCw }[] = [
@@ -179,6 +179,7 @@ export function MarkToolbar({
                 selectionRole="navigation"
                 title={`${button.label}(${button.shortcut})`}
                 onClick={() => setTool(button.type)}
+                size="md"
                 className={CHIP_CLASS}
               >
                 <Icon className={ICON_CLASS} />
@@ -254,6 +255,7 @@ export function MarkToolbar({
                 variant="flat"
                 active={cropRatioValue === option.value}
                 onClick={() => onCropRatioChange(option.value)}
+                size="md"
                 className={OPTION_CLASS}
               >
                 {option.label}
@@ -275,6 +277,7 @@ export function MarkToolbar({
               variant="flat"
               active={style.mosaicMode === 'pixel'}
               onClick={() => onStylePatch({ mosaicMode: 'pixel' })}
+              size="md"
               className={OPTION_CLASS}
             >
               马赛克
@@ -284,6 +287,7 @@ export function MarkToolbar({
               variant="flat"
               active={style.mosaicMode === 'blur'}
               onClick={() => onStylePatch({ mosaicMode: 'blur' })}
+              size="md"
               className={OPTION_CLASS}
             >
               高斯模糊
@@ -312,6 +316,7 @@ export function MarkToolbar({
                   variant="flat"
                   active={style.calloutShape === 'rect'}
                   onClick={() => onStylePatch({ calloutShape: 'rect' })}
+                  size="md"
                   className={OPTION_CLASS}
                 >
                   矩形
@@ -321,6 +326,7 @@ export function MarkToolbar({
                   variant="flat"
                   active={style.calloutShape === 'ellipse'}
                   onClick={() => onStylePatch({ calloutShape: 'ellipse' })}
+                  size="md"
                   className={OPTION_CLASS}
                 >
                   圆形

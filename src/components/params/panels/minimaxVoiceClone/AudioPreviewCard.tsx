@@ -113,7 +113,7 @@ export function AudioPreviewCard({
                   <UiOptionButton
                     type="button"
                     variant="flat"
-                    className="!h-[30px] !px-3 !py-1 text-xs leading-none"
+                    size="sm"
                     onClick={() => onUploadClick()}
                   >
                     <Upload className="mr-1 h-3.5 w-3.5" />

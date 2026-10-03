@@ -262,7 +262,7 @@ export function ImageEditorLayersPanelV3({
                     type="button"
                     role="menuitem"
                     variant="menu"
-                    className="w-full text-left text-xs"
+                    size="sm" className="w-full text-left"
                     disabled={disabled}
                     aria-label={disabled ? unavailableLabel : choice.name}
                     title={disabled ? unavailableLabel : undefined}

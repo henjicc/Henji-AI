@@ -54,8 +54,8 @@ describe('PromptSuggestionList', () => {
     expect(rendered.getByRole('listbox').getAttribute('data-prompt-suggestion-portal')).toBe('true')
     // 未选中项静息态不描边、不铺底（menu 变体），选中项才有实底
     expect(rendered.getAllByRole('option')[1].className).toContain('border-transparent')
-    expect(rendered.getAllByRole('option')[1].className).not.toContain('bg-brand-600')
-    expect(rendered.getAllByRole('option')[0].className).toContain('bg-brand-600')
+    expect(rendered.getAllByRole('option')[1].className).not.toContain('ui-glass-adaptive-selected')
+    expect(rendered.getAllByRole('option')[0].className).toContain('ui-glass-adaptive-selected')
 
     act(() => {
       ref.current?.onKeyDown(createKeyDownProps('ArrowDown'))

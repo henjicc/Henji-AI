@@ -1,12 +1,16 @@
 /**
- * check:surface 规则 E：按钮调用点不得用 className 覆盖外观（重要记录 003，任务 2.1）。
+ * check:surface 规则 E：按钮、选项、标签、导航与字段触发器的调用点不得用 className 覆盖外观
+ * （重要记录 003，任务 2.1 建立、2.2 扩展）。
  *
- * 按钮外观只由 `UiButton variant/size`、`UiIconButton tone/size/on/shape` 决定；className 只放布局
- * （宽度、弹性、对齐、定位、外边距、内边距、显隐、过渡、指针）。以下类一律视为外观覆盖：
+ * 外观只由组件的有限枚举决定——`UiButton variant/size`、`UiIconButton tone/size/on/shape`、
+ * `UiOptionButton variant/size/active/selection`、`UiChipButton active/selectionRole/size`、`UiNavButton active/size`、
+ * `UiFieldTrigger size/appearance`、`Dropdown`/`PanelTrigger` 的 `size`；className（下拉与面板触发器是 `buttonClassName`）
+ * 只放布局（宽度、弹性、对齐、定位、外边距、内边距、显隐、过渡、指针）。以下类一律视为外观覆盖：
  *   - 底色、边框、文字色、圆角、阴影/环/描边、毛玻璃与滤镜、下划线（链接档负责）；
  *   - 字号与高度（`size` 负责）；图标按钮的宽高（`size` 负责）。
+ *   - 选项/标签/导航允许 `h-full`、`h-auto` 与 `min-h-*`/`max-h-*`（内容卡片随网格拉伸或随内容撑高），固定高度仍走 `size`。
  *
- * 用 TypeScript AST 找到 `<UiButton>` / `<UiIconButton>`，把 className 里的字符串、模板、条件分支，
+ * 用 TypeScript AST 找到受检元素，把受检属性里的字符串、模板、条件分支，
  * 以及同文件 `const` 与 `components/ui/styleTokens.ts` 导出的类串常量都展开后逐个检查。
  *
  * 豁免：元素起始行或上一行注释含 `ui-surface-allow`，并写明理由与接手任务。
@@ -20,8 +24,21 @@ function loadTypeScript() {
   return ts;
 }
 
-/** 受检组件。2.2 接管选项/标签/导航按钮时把组件名加到这里。 */
-const CHECKED_COMPONENTS = new Set(['UiButton', 'UiIconButton']);
+/** 受检组件 → 受检属性。 */
+const CHECKED_ATTRIBUTES = {
+  UiButton: 'className',
+  UiIconButton: 'className',
+  UiOptionButton: 'className',
+  UiChipButton: 'className',
+  UiNavButton: 'className',
+  UiFieldTrigger: 'className',
+  Dropdown: 'buttonClassName',
+  PanelTrigger: 'buttonClassName',
+};
+const CHECKED_COMPONENTS = new Set(Object.keys(CHECKED_ATTRIBUTES));
+/** 内容随网格拉伸或随内容撑高的条目类组件：只禁止固定高度。 */
+const ITEM_COMPONENTS = new Set(['UiOptionButton', 'UiChipButton', 'UiNavButton']);
+const ITEM_FLEXIBLE_HEIGHT = /^(?:h-full|h-auto|min-h-.+|max-h-.+)$/;
 
 const LINE_ALLOW_MARKER = 'ui-surface-allow';
 
@@ -34,7 +51,7 @@ const BG_LAYOUT = new Set(['bg-clip-content', 'bg-clip-padding', 'bg-clip-border
 
 /**
  * @param {string} token 去掉变体前缀与 `!` 后的裸类
- * @param {'UiButton' | 'UiIconButton'} component
+ * @param {string} component 受检组件名（见 CHECKED_ATTRIBUTES）
  * @returns {string | null} 违规类别，null 表示允许
  */
 function classifyToken(token, component) {
@@ -50,7 +67,10 @@ function classifyToken(token, component) {
   if (/^(shadow|ring|outline)(?:$|-)/.test(token)) return '阴影/描边';
   if (/^(ui-glass|backdrop-|brightness-|saturate-|contrast-)/.test(token)) return '材质';
   if (token === 'underline' || /^(underline-offset|decoration)-/.test(token)) return '下划线（用 variant="link"）';
-  if (/^(h|min-h|max-h)-/.test(token)) return '高度（用 size）';
+  if (/^(h|min-h|max-h)-/.test(token)) {
+    if (ITEM_COMPONENTS.has(component) && ITEM_FLEXIBLE_HEIGHT.test(token)) return null;
+    return '高度（用 size）';
+  }
   if (component === 'UiIconButton' && /^(w|min-w|max-w|size)-/.test(token)) return '宽度（用 size）';
   return null;
 }
@@ -220,8 +240,9 @@ function findButtonAppearanceOverridesInSource(raw, fileName, shared = new Map()
     if ((t.isJsxOpeningElement(node) || t.isJsxSelfClosingElement(node))) {
       const component = node.tagName.getText(sf);
       if (CHECKED_COMPONENTS.has(component)) {
+        const attrName = CHECKED_ATTRIBUTES[component];
         const classAttr = node.attributes.properties.find(
-          (attr) => t.isJsxAttribute(attr) && attr.name.getText(sf) === 'className',
+          (attr) => t.isJsxAttribute(attr) && attr.name.getText(sf) === attrName,
         );
         if (classAttr && classAttr.initializer) {
           const strings = collectStrings(classAttr.initializer, [local, imported, shared]);
@@ -267,6 +288,7 @@ function findButtonAppearanceOverrides({ srcRoot, projectRoot, files }) {
 }
 
 module.exports = {
+  CHECKED_ATTRIBUTES,
   CHECKED_COMPONENTS,
   classifyToken,
   findButtonAppearanceOverrides,

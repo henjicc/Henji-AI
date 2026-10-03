@@ -74,7 +74,7 @@ export function ImageEditorToolParametersV3({
               {(['paint', 'erase'] as const).map((mode) => (
                 <UiChipButton
                   key={mode}
-                  className="!h-8 !px-2 !text-xs"
+                  size="md" className="!px-2"
                   selectionRole="navigation"
                   active={session.toolSettings.maskMode === mode}
                   onClick={() => setToolSetting(controller.sessionId, 'maskMode', mode)}
@@ -125,7 +125,7 @@ export function ImageEditorToolParametersV3({
             return (
               <UiChipButton
                 key={mode}
-                className="!h-8 !px-2 !text-xs"
+                size="md" className="!px-2"
                 selectionRole="navigation"
                 active={session.toolSettings.selectionCombineMode === mode}
                 disabled={disabled}

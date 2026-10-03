@@ -113,7 +113,7 @@ export const NumberInput: React.FC<NumberInputProps> = ({
               active={isMarkActive(mark.value)}
               disabled={disabled}
               onClick={() => onChange(clampValue(mark.value, param))}
-              className="!h-8 !px-2.5 !py-1 !text-xs"
+              size="sm"
             >
               {mark.label}
             </UiOptionButton>

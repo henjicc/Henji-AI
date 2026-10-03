@@ -154,7 +154,7 @@ const CharacterPoseSection: React.FC<{ object: StageCharacterObject }> = ({ obje
               key={variant.id}
               active={object.variant === variant.id}
               onClick={() => updateObject(object.id, { variant: variant.id })}
-              className="py-1 text-xs"
+              size="sm" className="py-1"
             >
               {variant.name}
             </UiOptionButton>

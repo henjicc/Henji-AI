@@ -44,6 +44,6 @@ export const PROMPT_MEDIA_ATOM_CLASS = `${PROMPT_ATOM_CLASS} gap-1`
 
 export function getPromptEditorShellStateClass(error: boolean): string {
   return error
-    ? 'border-red-500/70'
+    ? 'border-danger/70'
     : 'border-border-dark focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-accent'
 }

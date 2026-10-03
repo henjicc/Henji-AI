@@ -1,5 +1,5 @@
 import React from 'react'
-import { UI_FIELD_CONTROL_HEIGHT_SM_CLASS, UiButton, UiFormRow, UiInput } from '@/components/ui'
+import { UiButton, UiFormRow, UiInput } from '@/components/ui'
 import SettingsDialog from '../components/SettingsDialog'
 import SettingsProgressDialog from '../components/SettingsProgressDialog'
 import { useDataPath } from '../hooks/useDataPath'
@@ -41,7 +41,7 @@ const DataPathSection: React.FC = () => {
             data-observation-sensitive
             value={currentPath}
             readOnly
-            className={`${UI_FIELD_CONTROL_HEIGHT_SM_CLASS} flex-1 font-mono`}
+            className={`flex-1 font-mono`}
           />
           <UiButton
             onClick={selectDirectory}

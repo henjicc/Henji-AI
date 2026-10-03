@@ -10,7 +10,7 @@ import { useReorderDrag } from './fileUploader/useReorderDrag'
 import { UiButton, UiIconButton, UiInput } from './primitives'
 import { UI_DURATION, uiTransition } from './motion'
 import { Z_LAYERS } from '@/core/theme/zLayers'
-import { UI_FIELD_CONTROL_HEIGHT_SM_CLASS } from './styleTokens'
+import { UI_CONTROL_HEIGHT_CLASS } from './styleTokens'
 import { Play, Plus, X } from 'lucide-react'
 
 const logger = createLogger('components.ui.FileUploader')
@@ -221,10 +221,10 @@ export default function FileUploader({
     const canUploadMore = !maxCount || files.length < maxCount
     const isCompact = density === 'compact'
     const itemFrameClass = isCompact
-        ? `${UI_FIELD_CONTROL_HEIGHT_SM_CLASS} aspect-square`
+        ? `${UI_CONTROL_HEIGHT_CLASS.lg} aspect-square`
         : 'h-16 w-12'
     // 预览宽度 + `gap-2`（8px），拖拽排序与视觉尺寸必须保持一致。
-    const reorderStep = isCompact ? 46 : 56
+    const reorderStep = isCompact ? 44 : 56
 
     return (
         <div

@@ -184,7 +184,8 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
             display={t('ui:presets.label')}
             disabled={disabled}
             className="w-auto"
-            buttonClassName="!h-9 px-4 text-sm"
+            size="lg"
+            buttonClassName="w-auto"
             panelWidth={420}
             alignment="aboveCenter"
             stableHeight={true}
@@ -252,7 +253,8 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
                                     type="button"
                                     active={false}
                                     onClick={() => handleQuickSave('prompt')}
-                                    className="h-full w-full flex-col justify-center gap-1 px-3 py-2 text-xs"
+                                    size="sm"
+                                    className="h-full w-full flex-col justify-center gap-1 px-3 py-2"
                                     title={t('ui:presets.saveMode.prompt.title')}
                                 >
                                     <span className="text-base">💾</span>
@@ -262,7 +264,8 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
                                     type="button"
                                     active={false}
                                     onClick={() => handleQuickSave('prompt-image')}
-                                    className="h-full w-full flex-col justify-center gap-1 px-3 py-2 text-xs"
+                                    size="sm"
+                                    className="h-full w-full flex-col justify-center gap-1 px-3 py-2"
                                     title={t('ui:presets.saveMode.promptImage.title')}
                                 >
                                     <span className="text-base">📦</span>
@@ -272,7 +275,8 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
                                     type="button"
                                     active={false}
                                     onClick={() => handleQuickSave('full')}
-                                    className="h-full w-full flex-col justify-center gap-1 px-3 py-2 text-xs"
+                                    size="sm"
+                                    className="h-full w-full flex-col justify-center gap-1 px-3 py-2"
                                     title={t('ui:presets.saveMode.full.title')}
                                 >
                                     <span className="text-base">🔧</span>

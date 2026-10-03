@@ -56,7 +56,7 @@
 | 层级 | `z-base/raised/sticky/dropdown/panel/modal/viewer/toast/tooltip/drag/titlebar`；内联用 `Z_LAYERS`（`src/core/theme/zLayers.ts`） | `z-[..]`、`z-10/20/…` 数字类 |
 | 毛玻璃 | `ui-glass` 类、遮罩 `ui-glass-scrim` | 一切 `backdrop-blur-*` |
 | 动效时长 | `duration-120/180/240/500`（= `UI_DURATION.fast/base/slow/viewer`） | 其它时长、`transition: all` |
-| 控件高度 | 新控件 `UI_CONTROL_HEIGHT_CLASS.sm/md/lg`（`h-control-sm/md/lg` = 28/32/36，CSS 变量）；存量字段 `UI_FIELD_CONTROL_HEIGHT_CLASS`(42px) / `_SM_CLASS`(38px) 由 2.2 迁移 | 手写 `h-[38px]` |
+| 控件高度 | `UI_CONTROL_HEIGHT_CLASS.sm/md/lg`（`h-control-sm/md/lg` = 28/32/36，CSS 变量）；字段、选项、标签、触发器、数值框用组件的 `size` 档（旧 42/38 字段令牌已删除） | 手写 `h-[38px]`、调用点改高度 |
 
 补充：
 

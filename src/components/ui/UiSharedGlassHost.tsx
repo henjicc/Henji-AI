@@ -5,10 +5,13 @@ import {
   useRef,
   type HTMLAttributes,
 } from 'react';
+import { WHITE_HEX } from '@/core/theme/colorTokens';
 
 const GLASS_TARGET_SELECTOR =
   '.ui-glass:not(.ui-shared-glass-layer):not([data-ui-shared-glass="exclude"])';
 const TRANSITION_SAMPLE_MS = 320;
+/** 蒙版只用 alpha：不透明白 = 显示玻璃（内容色常量，不随主题）。 */
+const MASK_OPAQUE_FILL = WHITE_HEX;
 
 interface UiSharedGlassHostProps extends HTMLAttributes<HTMLDivElement> {
   /**
@@ -61,7 +64,7 @@ function createMaskImage(width: number, height: number, rects: GlassMaskRect[]):
   const shapes = rects
     .map(
       ({ x, y, width: rectWidth, height: rectHeight, radius, opacity }) =>
-        `<rect x="${roundMaskValue(x)}" y="${roundMaskValue(y)}" width="${roundMaskValue(rectWidth)}" height="${roundMaskValue(rectHeight)}" rx="${roundMaskValue(radius)}" fill="white" fill-opacity="${roundMaskValue(opacity)}"/>`,
+        `<rect x="${roundMaskValue(x)}" y="${roundMaskValue(y)}" width="${roundMaskValue(rectWidth)}" height="${roundMaskValue(rectHeight)}" rx="${roundMaskValue(radius)}" fill="${MASK_OPAQUE_FILL}" fill-opacity="${roundMaskValue(opacity)}"/>`,
     )
     .join('');
   const svg =

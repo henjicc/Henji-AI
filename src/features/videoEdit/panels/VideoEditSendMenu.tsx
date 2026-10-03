@@ -16,15 +16,15 @@ export function VideoEditSendMenu({ mediaKind, resolveSource, notify, disabled, 
     void runSend(() => run(controller.signal), notify).finally(() => setRunning(current => current === controller ? null : current))
   }
   if (running) return <UiButton variant="secondary" onClick={() => running.abort()}>正在加入剪辑… 取消</UiButton>
-  return <PanelTrigger disabled={disabled} panelWidth={300} panelClassName="p-1" closeOnPanelClick renderPanel={() => (
+  return <PanelTrigger disabled={disabled} panelWidth={300} panelPadding="menu" closeOnPanelClick renderPanel={() => (
     <div role="menu" aria-label="加入剪辑" className="flex flex-col gap-0.5">
-      {boundTarget && <UiOptionButton type="button" role="menuitem" variant="menu" className="w-full flex-col items-start gap-0.5 text-left text-sm"
+      {boundTarget && <UiOptionButton type="button" role="menuitem" variant="menu" size="md" className="w-full flex-col items-start gap-0.5 text-left"
         onClick={() => start(async signal => runVideoEditCreativeTransfer(createVideoEditCreativeTransfer(boundTarget.target, await resolveSource()), signal))}>
         <span>回填到原剪辑位置</span><span className={UI_TEXT_META_CLASS}>{boundTarget.label}</span>
       </UiOptionButton>}
       {MODES.map(({ mode, title }) => {
         const plan = planVideoEditSend({ mediaKind, mode })
-        return <UiOptionButton key={mode} type="button" role="menuitem" variant="menu" disabled={!plan.available} className="w-full flex-col items-start gap-0.5 text-left text-sm disabled:cursor-not-allowed disabled:opacity-60"
+        return <UiOptionButton key={mode} type="button" role="menuitem" variant="menu" disabled={!plan.available} size="md" className="w-full flex-col items-start gap-0.5 text-left disabled:cursor-not-allowed disabled:opacity-60"
           onClick={() => start(async signal => sendCreativeResultToVideoEdit(await resolveSource(), { mediaKind, mode }, signal))}>
           <span>{title}</span><span className={UI_TEXT_META_CLASS}>{plan.available ? plan.label : plan.reason}</span>
         </UiOptionButton>

@@ -60,16 +60,31 @@ export interface UiIconButtonProps extends ButtonHTMLAttributes<HTMLButtonElemen
   shape?: 'square' | 'circle'
 }
 
+/** 选项、标签、导航、字段共用的高度档：sm 28 / md 32 / lg 36（重要记录 004）。 */
+export type UiControlSize = 'sm' | 'md' | 'lg'
+
 export interface UiChipButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   active?: boolean
   /** `navigation` 表示“正在看哪里”；默认 `toggle` 表示多选/标签开态。 */
   selectionRole?: 'toggle' | 'navigation'
-  /** 仅收敛导航型 Tab 的视觉重量；其他选中语义不受影响。 */
+  /** `subtle`：面板标签（设计稿面板头，选中只换主要文字 + 底部细线）；其他选中语义不受影响。 */
   selectionAppearance?: 'default' | 'subtle'
+  /** 高度档，默认 md 32（字号 sm 12 / md、lg 13）。外观只由 active / selectionRole / size 决定。 */
+  size?: UiControlSize
 }
 
 export interface UiNavButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   active?: boolean
+  /** 高度档：md 32 / lg 36（默认）；`auto` 用于两行内容的导航行（高度随内容）。 */
+  size?: 'md' | 'lg' | 'auto'
+}
+
+/** 字段触发器（下拉、面板触发器的按钮）。`field` 是 raised 字段表面；`quiet` 是标题栏/工具栏里的弱化入口。 */
+export interface UiFieldTriggerProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+  size?: UiControlSize
+  appearance?: 'field' | 'quiet'
+  /** 浮层是否展开（箭头翻转）。 */
+  open?: boolean
 }
 
 export interface UiCheckboxProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'onChange'> {
@@ -97,7 +112,10 @@ export type UiSwitchProps = UiSwitchBaseProps & (
     }
 )
 
-export interface UiSelectProps extends SelectHTMLAttributes<HTMLSelectElement> {}
+export interface UiSelectProps extends Omit<SelectHTMLAttributes<HTMLSelectElement>, 'size'> {
+  /** 高度档，默认 md 32。 */
+  size?: UiControlSize
+}
 
 export interface UiOptionButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   active?: boolean
@@ -111,12 +129,24 @@ export interface UiOptionButtonProps extends ButtonHTMLAttributes<HTMLButtonElem
    * - `tile`：带小样的选项格（44 高，静息有底），如主题预设；
    * - `swatch`：圆形色样（32 外框），颜色由调用点经 `style.backgroundColor`/`backgroundImage` 传入（不要用 `background` 简写，
    *   它会重置 `background-clip`），选中为外圈一环。
+   * - `grid`：二维选项网格的格子（比例、分辨率、音色、模型卡）：静息铺一层 raised 撑出格子、不描边，选中中性抬升。
    */
-  variant?: 'default' | 'card' | 'flat' | 'menu' | 'segment' | 'tile' | 'swatch'
+  variant?: 'default' | 'card' | 'flat' | 'menu' | 'grid' | 'segment' | 'tile' | 'swatch'
+  /**
+   * 高度与字号档（default / card / flat / menu / grid）：不传时高度随内容（上下 8px 内边距，字号 13）；
+   * sm / md / lg 是最小高度 28 / 32 / 36（字号 12 / 13 / 13），多行内容仍可撑高。segment / tile / swatch 尺寸固定。
+   */
+  size?: UiControlSize
+  /** 选中语义：默认 `single`（单选，中性抬升）；`multiple` 表示多选集合中已选（强调描边 + 强调文字）。 */
+  selection?: 'single' | 'multiple'
+  /** 键盘导航当前项（下拉 aria-activedescendant、模型网格方向键指向的项），未选中时显示悬停底。 */
+  highlighted?: boolean
 }
 
-export interface UiInputProps extends InputHTMLAttributes<HTMLInputElement> {
+export interface UiInputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'size'> {
   textHistory?: ScopedTextHistoryBinding
+  /** 高度档，默认 md 32（字号 sm 12 / md、lg 13）。 */
+  size?: UiControlSize
 }
 
 export interface UiTextAreaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
@@ -224,7 +254,7 @@ export function resolveUiPanelSurface(variant: UiPanelVariant): string {
 
 // 两种轨道底色必须互斥，避免 Tailwind 产物顺序造成静默覆盖。
 export const UI_RANGE_TRACK_TONE_CLASS: Record<UiRangeTrackTone, string> = {
-  neutral: '[&::-webkit-slider-runnable-track]:bg-layer/80 [&::-moz-range-track]:bg-layer/80',
+  neutral: '[&::-webkit-slider-runnable-track]:bg-control-pressed [&::-moz-range-track]:bg-control-pressed',
   hue: 'ui-range-track-hue',
   lighting: UI_LIGHTING_RANGE_CLASS,
 }

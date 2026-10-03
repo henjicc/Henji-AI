@@ -5,7 +5,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   UI_BOOLEAN_CONTROL_ACTIVE_CLASS,
-  UI_COLOR_ACCENT_FILL_TEXT_CLASS,
   UI_GLASS_ADAPTIVE_CONTROL_CLASS,
   UI_GLASS_ADAPTIVE_OPTION_CLASS,
   UI_GLASS_ADAPTIVE_SELECTED_CLASS,
@@ -76,21 +75,40 @@ describe('Ui primitives 选中态词汇表', () => {
     expect(subtleNavigation.className).not.toMatch(/(?:^|\s)bg-/);
   });
 
-  it('单选项使用强实底，多选标签使用描边与中性底', () => {
+  it('单选项中性抬升，多选（标签与 selection="multiple" 的选项）用强调描边与强调文字', () => {
     const view = render(
       <>
         <UiOptionButton active>当前值</UiOptionButton>
+        <UiOptionButton active selection="multiple">已选项</UiOptionButton>
         <UiChipButton active>已选标签</UiChipButton>
       </>,
     );
 
     const option = view.getByRole('button', { name: '当前值' });
+    const multiple = view.getByRole('button', { name: '已选项' });
     const chip = view.getByRole('button', { name: '已选标签' });
 
     expectClasses(option, UI_OPTION_ITEM_ACTIVE_CLASS);
+    expect(option.className).not.toMatch(/(^| )(bg|text|border)-(accent|brand)/);
+    expectClasses(multiple, UI_MULTISELECT_ITEM_ACTIVE_CLASS);
     expectClasses(chip, UI_MULTISELECT_ITEM_ACTIVE_CLASS);
-    expect(option.classList.contains('bg-layer')).toBe(false);
-    expect(chip.classList.contains('bg-brand-500')).toBe(false);
+  });
+
+  it('grid 选项格静息铺底不描边，键盘当前项显示悬停底', () => {
+    const view = render(
+      <>
+        <UiOptionButton variant="grid">静息格子</UiOptionButton>
+        <UiOptionButton variant="menu" highlighted>键盘当前项</UiOptionButton>
+        <UiOptionButton variant="menu" size="sm">紧凑菜单项</UiOptionButton>
+      </>,
+    );
+    const cell = view.getByRole('button', { name: '静息格子' });
+    expectClasses(cell, `${UI_GLASS_ADAPTIVE_TILE_CLASS} ${UI_GLASS_ADAPTIVE_OPTION_CLASS} border-transparent`);
+    expect(cell.className).not.toMatch(/veil/);
+    expect(view.getByRole('button', { name: '键盘当前项' }).classList.contains('ui-option-highlighted')).toBe(true);
+    const compact = view.getByRole('button', { name: '紧凑菜单项' });
+    expectClasses(compact, 'min-h-control-sm text-xs');
+    expect(compact.dataset.size).toBe('sm');
   });
 
   it('分段、选项格与色样的选中是中性抬升，不用强调色实底（重要记录 003）', () => {
@@ -113,7 +131,7 @@ describe('Ui primitives 选中态词汇表', () => {
 
     for (const active of [activeSegment, activeTile]) {
       expectClasses(active, `${UI_GLASS_ADAPTIVE_SELECTED_CLASS} text-text1 border-transparent`);
-      expect(active.className).not.toMatch(/brand|accent/);
+      expect(active.className).not.toMatch(/(^| )(bg|text|border)-(accent|brand)/);
     }
     expectClasses(restSegment, `${UI_GLASS_ADAPTIVE_OPTION_CLASS} text-text2`);
     expect(restSegment.classList.contains(UI_GLASS_ADAPTIVE_SELECTED_CLASS)).toBe(false);
@@ -138,7 +156,9 @@ describe('Ui primitives 选中态词汇表', () => {
     expect(idleOption.classList.contains(UI_GLASS_ADAPTIVE_CONTROL_CLASS)).toBe(false);
     expect(idleOption.classList.contains('bg-surface-dark')).toBe(false);
     expect(view.getByRole('button', { name: '选中选项' }).classList.contains(UI_GLASS_ADAPTIVE_CONTROL_CLASS)).toBe(false);
-    expect(view.getByRole('button', { name: '静息标签' }).classList.contains(UI_GLASS_ADAPTIVE_CONTROL_CLASS)).toBe(true);
+    // 纯文字标签：静息一圈发丝线，悬停交给玻璃自适应的 option 底（不铺控件实底）
+    expect(view.getByRole('button', { name: '静息标签' }).classList.contains(UI_GLASS_ADAPTIVE_OPTION_CLASS)).toBe(true);
+    expect(view.getByRole('button', { name: '静息标签' }).classList.contains('border-line-strong')).toBe(true);
     expect(view.getByRole('button', { name: '选中标签' }).classList.contains(UI_GLASS_ADAPTIVE_CONTROL_CLASS)).toBe(false);
   });
 
@@ -183,23 +203,19 @@ describe('Ui primitives 选中态词汇表', () => {
     const segmentedOn = view.getByRole('switch', { name: '开启的双段开关' });
 
     expect(pill.classList.contains('rounded-full')).toBe(true);
+    expect(pill.classList.contains('bg-control-pressed')).toBe(true);
+    // 双段外观与分段选择同一套中性抬升：轨道更暗、滑块是选中底，不用强调色
     expect(segmentedOff.classList.contains('rounded-lg')).toBe(true);
-    expect(segmentedOff.classList.contains('bg-surface-dark')).toBe(true);
+    expect(segmentedOff.classList.contains('bg-gap/60')).toBe(true);
     expect(segmentedOff.textContent).toBe('关开');
-    expect(segmentedOff.firstElementChild?.classList.contains('bg-layer')).toBe(true);
+    expect(segmentedOff.firstElementChild?.classList.contains(UI_GLASS_ADAPTIVE_SELECTED_CLASS)).toBe(true);
     expect(segmentedOff.firstElementChild?.classList.contains('translate-x-0')).toBe(true);
-    expect(segmentedOff.firstElementChild?.classList.contains('transition-[transform,background-color]')).toBe(true);
-    expect(segmentedOff.firstElementChild?.classList.contains('rounded-md')).toBe(true);
-    expect(segmentedOff.firstElementChild?.classList.contains('inset-y-1')).toBe(true);
     expect(segmentedOff.firstElementChild?.classList.contains('duration-180')).toBe(true);
-    expect(segmentedOn.firstElementChild?.classList.contains(UI_COLOR_ACCENT_FILL_TEXT_CLASS)).toBe(true);
+    expect(segmentedOn.firstElementChild?.classList.contains(UI_GLASS_ADAPTIVE_SELECTED_CLASS)).toBe(true);
+    expect(segmentedOn.firstElementChild?.className).not.toMatch(/(^| )(bg|text)-accent/);
     expect(segmentedOn.firstElementChild?.classList.contains('translate-x-full')).toBe(true);
-    expect(segmentedOn.firstElementChild?.classList.contains('rounded')).toBe(true);
-    expect(segmentedOn.firstElementChild?.classList.contains('inset-y-0.5')).toBe(true);
-    expect(segmentedOn.classList.contains('h-7')).toBe(true);
+    expect(segmentedOn.classList.contains('h-control-sm')).toBe(true);
     expect(segmentedOn.classList.contains('w-20')).toBe(true);
-    expect(segmentedOn.classList.contains('rounded-md')).toBe(true);
-    expect(segmentedOn.classList.contains('bg-surface-dark')).toBe(true);
 
     fireEvent.click(segmentedOff);
     expect(onCheckedChange).toHaveBeenCalledWith(true);

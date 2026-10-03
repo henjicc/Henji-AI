@@ -4,7 +4,6 @@ import { useMemo, useState } from 'react'
 import { llmVerifyModelCapabilities } from '@/commands/llmRuntime'
 import {
   Dropdown,
-  UI_FIELD_CONTROL_HEIGHT_SM_CLASS,
   UI_FORM_ROW_GAP_CLASS,
   UI_TEXT_LABEL_CLASS,
   UI_TEXT_META_CLASS,
@@ -354,7 +353,7 @@ const AgentModelProfilesSection = ({ config, saveConfig }: AgentModelProfilesSec
                   max={field.max}
                   value={profile.settings[field.key]}
                   onChange={event => void updateSetting(field.key, Number(event.target.value))}
-                  className={`${UI_FIELD_CONTROL_HEIGHT_SM_CLASS} ${SETTINGS_INLINE_CONTROL_CLASS}`}
+                  className={`${SETTINGS_INLINE_CONTROL_CLASS}`}
                 />
               </UiFormRow>
             ))}

@@ -13,9 +13,8 @@ import { useTranslation } from 'react-i18next'
 
 import PanelTrigger from '@/components/ui/PanelTrigger'
 import {
-  UI_GLASS_ITEM_HOVER_CLASS,
   UI_TEXT_META_CLASS,
-  UiChipButton,
+  UiButton,
   UiOptionButton,
 } from '@/components/ui'
 import {
@@ -33,10 +32,6 @@ import type {
   CanvasImageCapabilityId,
 } from '@/features/canvas/capabilities'
 
-import {
-  NODE_TOOLBAR_BUTTON_RADIUS_CLASS,
-  NODE_TOOLBAR_NEUTRAL_BUTTON_CLASS,
-} from './nodeToolbarConfig'
 import {
   partitionCanvasImageCapabilities,
   resolveCanvasImageCapabilityInlineCapacity,
@@ -154,7 +149,7 @@ export function CanvasImageCapabilityActions({
   const renderInlineCapability = ({ capability }: CanvasImageCapabilityAction): JSX.Element => {
     const Icon = CAPABILITY_ICON_MAP[capability.icon]
     return (
-      <UiChipButton
+      <UiButton
         key={capability.id}
         type="button"
         data-image-capability-id={capability.id}
@@ -162,7 +157,6 @@ export function CanvasImageCapabilityActions({
         disabled={pendingCapabilityId !== null}
         aria-label={t(capability.titleKey)}
         title={t(capability.descriptionKey)}
-        className={`h-8 ${NODE_TOOLBAR_BUTTON_RADIUS_CLASS} px-2.5 text-xs ${NODE_TOOLBAR_NEUTRAL_BUTTON_CLASS}`}
         onClick={(event) => {
           event.stopPropagation()
           onExecute(capability.id)
@@ -170,7 +164,7 @@ export function CanvasImageCapabilityActions({
       >
         <Icon className="h-3.5 w-3.5" />
         {t(capability.titleKey)}
-      </UiChipButton>
+      </UiButton>
     )
   }
 
@@ -184,6 +178,7 @@ export function CanvasImageCapabilityActions({
           gap={8}
           panelWidth={320}
           zIndex={Z_LAYERS.dropdown}
+          surface="glass"
           closeOnPanelClick={(target) => {
             const element = target instanceof Element ? target : target.parentElement
             return Boolean(element?.closest('[data-capability-enabled="true"]'))
@@ -216,7 +211,8 @@ export function CanvasImageCapabilityActions({
                         data-image-capability-id={capability.id}
                         data-image-capability-placement="overflow"
                         title={t(capability.descriptionKey)}
-                        className={`min-h-12 w-full items-start gap-2 px-2 py-2 text-left text-sm ${disabled ? 'cursor-not-allowed opacity-50 hover:!border-transparent hover:!bg-transparent' : UI_GLASS_ITEM_HOVER_CLASS}`}
+                        size="lg"
+                        className={`min-h-12 w-full items-start gap-2 px-2 py-2 text-left ${disabled ? 'cursor-not-allowed opacity-50' : ''}`}
                         onClick={(event) => {
                           event.stopPropagation()
                           if (disabled) return
@@ -250,7 +246,7 @@ export function CanvasImageCapabilityActions({
           {({ open, closePanel, togglePanel }) => {
             closeMenuRef.current = closePanel
             return (
-            <UiChipButton
+            <UiButton
               ref={moreButtonRef}
               type="button"
               data-panel-trigger-button
@@ -260,7 +256,7 @@ export function CanvasImageCapabilityActions({
               aria-haspopup="menu"
               aria-label={t('nodeToolbar.moreImageCapabilities')}
               title={t('nodeToolbar.moreImageCapabilities')}
-              className={`h-8 ${NODE_TOOLBAR_BUTTON_RADIUS_CLASS} gap-1 px-2.5 text-xs ${NODE_TOOLBAR_NEUTRAL_BUTTON_CLASS}`}
+              className="gap-1"
               onClick={(event) => {
                 event.stopPropagation()
                 if (!open) shouldFocusMenuRef.current = true
@@ -270,7 +266,7 @@ export function CanvasImageCapabilityActions({
               <MoreHorizontal className="h-3.5 w-3.5" />
               {t('nodeToolbar.more')}
               <ChevronDown className={`h-3 w-3 transition-transform duration-180 ${open ? 'rotate-180' : ''}`} />
-            </UiChipButton>
+            </UiButton>
             )
           }}
         </PanelTrigger>

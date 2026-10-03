@@ -261,7 +261,7 @@ export function SplitStoryboardToolEditor({ sourceImageUrl, options, onOptionsCh
             step={0.1}
             onChange={(event) => updateOptions({ lineThicknessPercent: Number(event.target.value) })}
             textHistory={{ onValueChange: (value) => updateOptions({ lineThicknessPercent: Number(value) }) }}
-            className="h-9"
+            size="lg"
           />
         </div>
 

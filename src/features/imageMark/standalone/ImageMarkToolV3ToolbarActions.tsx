@@ -122,7 +122,7 @@ export function ImageMarkToolV3ToolbarActions({
           <PanelTrigger
             disabled={host.isHostBusy || exportUnavailable}
             panelWidth={190}
-            panelClassName="p-1"
+            panelPadding="menu"
             closeOnPanelClick
             renderPanel={() => (
               <div
@@ -147,7 +147,7 @@ export function ImageMarkToolV3ToolbarActions({
                       title={reason}
                       data-export-format={format}
                       data-export-readiness={readiness.state}
-                      className="w-full gap-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+                      size="md" className="w-full gap-2 disabled:cursor-not-allowed disabled:opacity-50"
                       onClick={() => void host.handleRasterExport(format)}
                     >
                       {rasterExportFormatLabel(format, t)}

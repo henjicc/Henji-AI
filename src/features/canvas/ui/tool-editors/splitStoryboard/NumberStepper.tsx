@@ -33,7 +33,7 @@ export function NumberStepper({ label, value, min, max, onChange }: NumberSteppe
           step={1}
           onChange={(event) => onChange(Number(event.target.value))}
           textHistory={{ onValueChange: (nextValue) => onChange(Number(nextValue)) }}
-          className="h-9 text-center"
+          size="lg" className="text-center"
         />
         <UiButton variant="secondary"
           type="button"

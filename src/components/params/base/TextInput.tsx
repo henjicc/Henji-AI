@@ -10,7 +10,7 @@ import React, { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { TextParamDef } from '@/core/types'
 import { getI18nText } from '@/core/types/I18nText'
-import { PromptEditor, UI_FIELD_CONTROL_HEIGHT_SM_CLASS, UiInput, UiTextAreaField } from '@/components/ui'
+import { PromptEditor, UiInput, UiTextAreaField } from '@/components/ui'
 import { ParamLabel } from '../ParamLabel'
 import {
   resolveTextParamPromptDocument,
@@ -98,7 +98,6 @@ export const TextInput: React.FC<TextInputProps> = ({
         onChange={handleChange}
         disabled={disabled}
         placeholder={placeholder}
-        className={`${UI_FIELD_CONTROL_HEIGHT_SM_CLASS}`}
       />
     </div>
   )

@@ -238,7 +238,7 @@ export function ImageEditorCropParametersV3({
                   aria-checked={cropAspectRatio === ratio}
                   active={cropAspectRatio === ratio}
                   variant="menu"
-                  className="h-14 min-w-0 flex-col justify-center gap-1 text-xs"
+                  size="sm" className="min-w-0 flex-col justify-center gap-1"
                   onClick={() => setToolSetting(controller.sessionId, 'cropAspectRatio', ratio)}
                 >
                   <span className="flex h-6 items-center justify-center" aria-hidden="true">
@@ -282,7 +282,7 @@ export function ImageEditorCropParametersV3({
         <label key={key} className="flex shrink-0 items-center gap-1.5 text-xs text-text-muted">
           <span>{t(`imageEditor.v3.crop.${key}`)}</span>
           <UiInput
-            className="!h-8 !w-16 !px-2 tabular-nums"
+            className="!w-16 !px-2 tabular-nums"
             type="number"
             min={0}
             step={1}

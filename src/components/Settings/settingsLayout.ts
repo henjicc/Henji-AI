@@ -25,7 +25,7 @@ export const SETTINGS_CONTENT_CLASS = 'px-4 pb-4 pt-5'
  * 横向行（`UiFormRow inline`）右侧控件的宽度。
  *
  * 收敛成一个常量的理由：改造前下拉宽度有 `w-40` / `w-44` / `w-48` / `w-full` 四种，
- * 同一页里右边缘对不齐。控件本身的高度走 `UI_FIELD_CONTROL_HEIGHT_SM_CLASS`（38px），
+ * 同一页里右边缘对不齐。控件本身的高度走组件的 `size` 档（默认 md 32px），
  * 不要再在调用点写 `h-[34px]` 这类没登记的数字。
  *
  * 带 `!` 是必需的：`UiInput` / `UiRangeInput` 的基础类里都有 `w-full`，

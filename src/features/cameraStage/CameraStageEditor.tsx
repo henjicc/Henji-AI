@@ -415,7 +415,7 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
           </span>
           <PanelTrigger
             panelWidth={208}
-            panelClassName="overflow-hidden p-2"
+            panelPadding="content"
             renderPanel={() => (
               <div className="flex flex-col gap-2">
                 <label className="flex items-center gap-2 text-xs text-text2">
@@ -438,9 +438,7 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
                   })}
                   disabled={!assetTarget.enabled}
                   className="w-full"
-                  buttonClassName="h-7 py-1.5 text-xs"
-                  buttonLabelClassName="text-xs"
-                  optionLabelClassName="text-xs"
+                  size="sm" buttonClassName="py-1.5"
                   minWidthStrategy="none"
                 />
               </div>
@@ -464,7 +462,7 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
             disabled={!canScreenshot || !!stateKeyframeAction}
             panelWidth={156}
             closeOnPanelClick
-            panelClassName="overflow-hidden p-1"
+            panelPadding="menu"
             renderPanel={() => (
               <div className="flex flex-col gap-1">
                 <UiButton
@@ -515,7 +513,7 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
             <PanelTrigger
               disabled={!canExportVideo}
               panelWidth={176}
-              panelClassName="overflow-hidden p-2"
+              panelPadding="content"
               renderPanel={() => (
                 <div className="flex flex-col gap-2">
                   <Dropdown<CameraStageVideoResolutionPreset>
@@ -524,9 +522,7 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
                     options={VIDEO_RESOLUTION_OPTIONS}
                     onSelect={setVideoPreset}
                     className="w-full"
-                    buttonClassName="h-7 py-1.5 text-xs"
-                    buttonLabelClassName="text-xs"
-                    optionLabelClassName="text-xs"
+                    size="sm" buttonClassName="py-1.5"
                     minWidthStrategy="none"
                   />
                   <UiButton

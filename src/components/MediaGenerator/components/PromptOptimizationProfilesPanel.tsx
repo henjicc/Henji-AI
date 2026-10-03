@@ -237,11 +237,11 @@ export function PromptOptimizationProfilesPanel({
             >
               <span className="min-w-0">
                 <span className="block truncate text-sm">{profile.name}</span>
-                <span className={`block truncate text-xs ${profile.id === selectedProfile.id ? 'text-white/80' : 'text-text-muted'}`}>
+                <span className={`block truncate text-xs text-text3`}>
                   {profile.modelId ? `${profile.providerId} / ${profile.modelId}` : '未选择模型'}
                 </span>
               </span>
-              {profile.isDefault ? <Star size={14} className={profile.id === selectedProfile.id ? 'text-white/90' : ''} /> : null}
+              {profile.isDefault ? <Star size={14} className="text-text2" /> : null}
             </UiOptionButton>
           ))}
           <UiButton type="button" variant="secondary" className="w-full" onClick={addProfile}>

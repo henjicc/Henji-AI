@@ -2,7 +2,7 @@ import { useLayoutEffect, useState, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import { resolveFloatingPanelPosition, type FloatingPanelPosition } from '@/components/ui/floatingPanelPosition';
 import { Download, FolderOpen } from 'lucide-react';
-import { UI_GLASS_ITEM_HOVER_CLASS, UI_TEXT_META_CLASS, UiOptionButton, UiPanel } from '@/components/ui';
+import { UI_TEXT_META_CLASS, UiOptionButton, UiPanel } from '@/components/ui';
 
 interface DownloadMenuPosition {
   x: number;
@@ -60,7 +60,7 @@ export function NodeDownloadMenu({
   return createPortal(
     <UiPanel
       ref={menuRef}
-      /* 菜单弹在画布/图片节点之上，背后是用户内容，走玻璃材质；条目 hover 必须用白纱 */
+      /* 菜单弹在画布/图片节点之上，背后是用户内容，走玻璃材质；条目 hover 由 UiOptionButton 自适应为玻璃纱 */
       variant="glass"
       className={`fixed z-dropdown ui-scrollbar overflow-y-auto overscroll-contain p-2 transition-opacity duration-120 ${isVisible ? 'opacity-100' : 'opacity-0'}`}
       data-node-download-menu
@@ -69,7 +69,8 @@ export function NodeDownloadMenu({
       <UiOptionButton
         type="button"
         variant="menu"
-        className={`h-9 w-full gap-2 text-sm ${UI_GLASS_ITEM_HOVER_CLASS}`}
+        size="lg"
+        className="w-full gap-2"
         onClick={onSaveAs}
       >
         <Download className="h-4 w-4" />
@@ -77,13 +78,14 @@ export function NodeDownloadMenu({
       </UiOptionButton>
 
       {downloadPresetPaths.length > 0 ? (
-        <div className="mt-1 space-y-1 border-t border-veil-subtle pt-2">
+        <div className="mt-1 space-y-1 border-t ui-glass-adaptive-divider pt-2">
           {downloadPresetPaths.map((path) => (
             <UiOptionButton
               key={path}
               type="button"
               variant="menu"
-              className={`h-9 w-full gap-2 text-xs ${UI_GLASS_ITEM_HOVER_CLASS}`}
+              size="lg"
+              className="w-full gap-2"
               onClick={() => {
                 onSaveToPreset(path);
               }}
@@ -95,7 +97,7 @@ export function NodeDownloadMenu({
           ))}
         </div>
       ) : (
-        <div className={`mt-1 border-t border-veil-subtle px-2.5 pt-2 ${UI_TEXT_META_CLASS}`}>
+        <div className={`mt-1 border-t ui-glass-adaptive-divider px-2.5 pt-2 ${UI_TEXT_META_CLASS}`}>
           {noPresetHintLabel}
         </div>
       )}

@@ -140,15 +140,14 @@ const StageViewportPane: React.FC<StageViewportPaneProps> = ({ viewportId, captu
       {overlayCameraId && (
         <div className="pointer-events-auto absolute right-2 top-2 z-sticky">
           <Dropdown<StageRenderStyle>
+            surface="glass"
             value={renderStyle}
             display={STAGE_RENDER_STYLE_LABELS[renderStyle]}
             options={STAGE_RENDER_STYLE_OPTIONS}
             onSelect={setRenderStyle}
             ariaLabel="渲染方式"
             className="min-w-20"
-            buttonClassName="h-7 bg-surface-dark/90 py-1 text-xs"
-            buttonLabelClassName="text-xs"
-            optionLabelClassName="text-xs"
+            size="sm" buttonClassName="py-1"
             minWidthStrategy="options"
             panelWidthStrategy="options"
           />
@@ -156,14 +155,13 @@ const StageViewportPane: React.FC<StageViewportPaneProps> = ({ viewportId, captu
       )}
       <div className="pointer-events-auto absolute left-2 top-2 z-sticky">
         <Dropdown<string>
+          surface="glass"
           value={sourceValue(source)}
           display={options.find((option) => option.value === sourceValue(source))?.label ?? '自由透视'}
           options={options}
           onSelect={handleSourceChange}
           className="min-w-24"
-          buttonClassName="h-7 bg-surface-dark/90 py-1 text-xs"
-          buttonLabelClassName="text-xs"
-          optionLabelClassName="text-xs"
+          size="sm" buttonClassName="py-1"
           minWidthStrategy="options"
           panelWidthStrategy="options"
         />

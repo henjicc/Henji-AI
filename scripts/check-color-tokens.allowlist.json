@@ -25,8 +25,7 @@
       "owner": "3.2",
       "category": "界面色（迁入语义令牌）",
       "counts": {
-        "palette": 2,
-        "mono": 2
+        "palette": 2
       }
     },
     "src/components/MediaGenerator/components/ModelscopeCustomModelManager.tsx": {
@@ -34,13 +33,6 @@
       "category": "界面色（迁入语义令牌）",
       "counts": {
         "palette": 5
-      }
-    },
-    "src/components/MediaGenerator/components/PromptOptimizationProfilesPanel.tsx": {
-      "owner": "3.2",
-      "category": "界面色（迁入语义令牌）",
-      "counts": {
-        "mono": 2
       }
     },
     "src/components/MediaGenerator/index.tsx": {
@@ -138,13 +130,6 @@
         "mono": 1
       }
     },
-    "src/components/params/base/RadioInput.tsx": {
-      "owner": "3.2",
-      "category": "界面色（迁入语义令牌）",
-      "counts": {
-        "mono": 2
-      }
-    },
     "src/components/params/panels/MinimaxVoiceClonePanel.tsx": {
       "owner": "3.2",
       "category": "界面色（迁入语义令牌）",
@@ -157,77 +142,6 @@
       "category": "界面色（迁入语义令牌）",
       "counts": {
         "palette": 1
-      }
-    },
-    "src/components/ui/PromptEditor/PromptDocumentStatic.tsx": {
-      "owner": "2.1/2.2",
-      "category": "界面色（迁入语义令牌）",
-      "counts": {
-        "palette": 4
-      }
-    },
-    "src/components/ui/PromptEditor/PromptEditor.tsx": {
-      "owner": "2.1/2.2",
-      "category": "界面色（迁入语义令牌）",
-      "counts": {
-        "palette": 2
-      }
-    },
-    "src/components/ui/PromptEditor/nodeViews/ReferenceNodeViews.tsx": {
-      "owner": "2.1/2.2",
-      "category": "界面色（迁入语义令牌）",
-      "counts": {
-        "palette": 4
-      }
-    },
-    "src/components/ui/PromptEditor/promptEditorStyles.ts": {
-      "owner": "2.1/2.2",
-      "category": "界面色（迁入语义令牌）",
-      "counts": {
-        "palette": 1
-      }
-    },
-    "src/components/ui/Tooltip.tsx": {
-      "owner": "2.1/2.2",
-      "category": "界面色（迁入语义令牌）",
-      "counts": {
-        "mono": 1
-      }
-    },
-    "src/components/ui/UiSharedGlassHost.tsx": {
-      "owner": "2.1/2.2",
-      "category": "内容色/算法常量（迁入 colorTokens.ts 登记）",
-      "counts": {
-        "named": 1
-      }
-    },
-    "src/components/ui/UniversalResolutionSelector.tsx": {
-      "owner": "2.1/2.2",
-      "category": "界面色（迁入语义令牌）",
-      "counts": {
-        "palette": 1,
-        "mono": 1
-      }
-    },
-    "src/components/ui/fileUploader/StackedMediaUploader.tsx": {
-      "owner": "2.1/2.2",
-      "category": "媒体叠层（迁入 media-* / on-media 固定令牌）",
-      "counts": {
-        "palette": 2
-      }
-    },
-    "src/components/ui/primitives.tsx": {
-      "owner": "2.1/2.2",
-      "category": "界面色（迁入语义令牌）",
-      "counts": {
-        "mono": 3
-      }
-    },
-    "src/components/ui/styleTokens.ts": {
-      "owner": "2.1/2.2",
-      "category": "界面色（迁入语义令牌）",
-      "counts": {
-        "mono": 4
       }
     },
     "src/components/videoTrim/VideoTrimModal.tsx": {
@@ -264,13 +178,6 @@
       "category": "界面色（迁入语义令牌）",
       "counts": {
         "palette": 3
-      }
-    },
-    "src/features/cameraStage/panels/ObjectListPanel.tsx": {
-      "owner": "3.4",
-      "category": "界面色（迁入语义令牌）",
-      "counts": {
-        "mono": 1
       }
     },
     "src/features/cameraStage/scene/StageAspectRatioOverlay.tsx": {
@@ -365,27 +272,6 @@
         "mono": 3
       }
     },
-    "src/features/canvas/params/ModelPickerList.tsx": {
-      "owner": "3.6",
-      "category": "界面色（迁入语义令牌）",
-      "counts": {
-        "mono": 6
-      }
-    },
-    "src/features/canvas/params/NodeModelParamsControls.tsx": {
-      "owner": "3.6",
-      "category": "界面色（迁入语义令牌）",
-      "counts": {
-        "mono": 1
-      }
-    },
-    "src/features/canvas/ui/NodeActionToolbar.tsx": {
-      "owner": "3.6",
-      "category": "界面色（迁入语义令牌）",
-      "counts": {
-        "palette": 12
-      }
-    },
     "src/features/canvas/ui/NodeHeader.tsx": {
       "owner": "3.6",
       "category": "界面色（迁入语义令牌）",
@@ -415,19 +301,11 @@
         "palette": 1
       }
     },
-    "src/features/canvas/ui/nodeToolbarConfig.ts": {
-      "owner": "3.6",
-      "category": "界面色（迁入语义令牌）",
-      "counts": {
-        "palette": 3,
-        "mono": 1
-      }
-    },
     "src/features/canvas/ui/specialInterfaces/panorama/PanoramaViewerModal.tsx": {
       "owner": "3.6",
       "category": "媒体叠层（迁入 media-* / on-media 固定令牌）",
       "counts": {
-        "mono": 7
+        "mono": 5
       }
     },
     "src/features/canvas/ui/tool-editors/SplitStoryboardToolEditor.tsx": {
@@ -537,13 +415,6 @@
       "counts": {
         "palette": 1,
         "mono": 2
-      }
-    },
-    "src/features/onboarding/components/OnboardingModal.tsx": {
-      "owner": "3.1",
-      "category": "界面色（迁入语义令牌）",
-      "counts": {
-        "mono": 1
       }
     },
     "src/features/videoEdit/VideoEditPreview.tsx": {

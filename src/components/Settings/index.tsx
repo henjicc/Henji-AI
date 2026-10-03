@@ -204,10 +204,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, target }) => {
                     <UiNavButton
                       active={isLeafGroup && isCurrentTab}
                       onClick={() => handleSectionSelect(tab.id, firstSectionId)}
-                      className={`!h-10 !rounded-lg !px-3 ${!isLeafGroup && isCurrentTab ? '!text-text-dark' : ''}`}
+                      size="lg"
                     >
                       <tab.icon className="h-[18px] w-[18px] shrink-0" />
-                      <span className="ml-2 text-left text-sm font-medium leading-none">{tab.label}</span>
+                      <span className={`text-left text-sm font-medium leading-none ${!isLeafGroup && isCurrentTab ? 'text-text1' : ''}`}>{tab.label}</span>
                     </UiNavButton>
                     {isLeafGroup ? null : (
                       <div className="space-y-1 py-1">
@@ -216,7 +216,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, target }) => {
                             key={sectionId}
                             active={isCurrentTab && activeSectionId === sectionId}
                             onClick={() => handleSectionSelect(tab.id, sectionId)}
-                            className="!h-9 !rounded-lg !pl-11 !pr-3 text-sm"
+                            size="md"
+                            className="pl-11"
                           >
                             {t(`navSections.${sectionId}`)}
                           </UiNavButton>

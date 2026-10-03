@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { Calendar, ChevronLeft, ChevronRight } from 'lucide-react'
-import { UiButton, UiIconButton } from './primitives'
-import { UI_OPTION_ITEM_ACTIVE_OVERRIDE_CLASS, UI_TEXT_META_CLASS, UI_TEXT_PANEL_TITLE_CLASS } from './styleTokens'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { UiButton, UiFieldTrigger, UiIconButton, UiOptionButton } from './primitives'
+import { UI_TEXT_META_CLASS, UI_TEXT_PANEL_TITLE_CLASS, UI_TRIGGER_PANEL_CLASS } from './styleTokens'
 
 interface CalendarCell {
   date: Date
@@ -118,21 +118,21 @@ export function UiDatePicker({
 
   return (
     <div ref={rootRef} className={`relative ${className}`}>
-      <UiButton
-        type="button"
-        variant="secondary"
+      <UiFieldTrigger
         onClick={() => setIsOpen((prev) => !prev)}
-        className="!w-full !justify-between !px-2"
+        open={isOpen}
+        className="w-full"
         title={ariaLabel}
+        aria-expanded={isOpen}
       >
-        <span className={`truncate ${selectedIso ? 'text-text-dark' : 'text-text-muted'}`}>
+        <span className={selectedIso ? 'text-text1' : 'text-text3'}>
           {selectedIso ? toDisplayDate(selectedIso) : placeholder}
         </span>
-        <Calendar className="h-3.5 w-3.5 text-text-muted" />
-      </UiButton>
+      </UiFieldTrigger>
 
       {isOpen && (
-        <div className="absolute left-0 top-[calc(100%+6px)] z-modal w-[248px] rounded-lg border border-border-dark bg-panel p-2 shadow-panel">
+        // 与下拉同一浮层表面；非 portal，只需盖住同一层叠上下文里的兄弟内容
+        <div className={`absolute left-0 top-[calc(100%+6px)] z-dropdown w-[248px] ${UI_TRIGGER_PANEL_CLASS} p-2`}>
           <div className="mb-2 flex items-center justify-between">
             <span className={UI_TEXT_PANEL_TITLE_CLASS}>{monthLabel}</span>
             <div className="flex items-center gap-1">
@@ -165,35 +165,33 @@ export function UiDatePicker({
               const isSelected = iso === selectedIso
               const isToday = iso === todayIso
               return (
-                // ui-surface-allow 日期格是单选选项（选中/今天两种状态），交 2.2 迁到 UiOptionButton 选项变体
-                <UiButton
+                // 日期格是单选选项：选中中性抬升；今天只用强调文字标出，不另画底
+                <UiOptionButton
                   key={iso}
                   type="button"
-                  variant="secondary"
-                  className={`!w-8 !min-h-0 !px-0 !font-normal ${
-                    isSelected
-                      ? `${UI_OPTION_ITEM_ACTIVE_OVERRIDE_CLASS} hover:!brightness-110`
-                      : isToday
-                        ? '!border-border-dark !bg-layer !text-text-dark'
-                        : 'hover:!bg-layer'
-                  } ${cell.inCurrentMonth ? 'opacity-100' : 'opacity-45'}`}
+                  variant="menu"
+                  size="sm"
+                  active={isSelected}
+                  aria-pressed={isSelected}
+                  aria-current={isToday ? 'date' : undefined}
+                  className="w-8 justify-center !px-0 tabular-nums"
                   onClick={() => {
                     onChange(iso)
                     setIsOpen(false)
                   }}
                 >
-                  {cell.date.getDate()}
-                </UiButton>
+                  <span className={isToday && !isSelected ? 'font-semibold text-accent-text' : cell.inCurrentMonth ? '' : 'text-text3'}>
+                    {cell.date.getDate()}
+                  </span>
+                </UiOptionButton>
               )
             })}
           </div>
 
-          <div className="mt-2 flex items-center justify-between border-t border-border-dark pt-2">
+          <div className="mt-2 flex items-center justify-between border-t border-line pt-2">
             <UiButton
               type="button"
-              variant="secondary"
               size="sm"
-              className="!px-2"
               onClick={() => {
                 onChange('')
                 setIsOpen(false)
@@ -203,9 +201,7 @@ export function UiDatePicker({
             </UiButton>
             <UiButton
               type="button"
-              variant="secondary"
               size="sm"
-              className="!px-2"
               onClick={() => {
                 onChange(todayIso)
                 setViewMonth(startOfMonth(today))

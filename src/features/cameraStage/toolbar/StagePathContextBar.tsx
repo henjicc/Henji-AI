@@ -121,7 +121,7 @@ const StagePathContextBar: React.FC = () => {
         type="number"
         step={0.1}
         value={value}
-        className="h-8 w-24 rounded-md px-2 text-right text-xs tabular-nums"
+        className="w-24 px-2 text-right tabular-nums"
         onChange={(event) => onChange(Number(event.target.value))}
       />
     </label>
@@ -149,9 +149,7 @@ const StagePathContextBar: React.FC = () => {
         display={`路径 · ${pathLabel}`}
         options={pathOptions}
         onSelect={handlePathChoice}
-        buttonClassName="h-8 w-36 rounded-md py-1 text-xs"
-        buttonLabelClassName="text-xs"
-        optionLabelClassName="text-xs"
+        size="md" buttonClassName="w-36 py-1"
         panelWidthStrategy="options"
       />
       <Dropdown<StageSpeedPreset>
@@ -159,14 +157,12 @@ const StagePathContextBar: React.FC = () => {
         display={`速度 · ${speedLabel}`}
         options={SPEED_OPTIONS}
         onSelect={(nextSpeedPreset) => updateDetail({ speedPreset: nextSpeedPreset })}
-        buttonClassName="h-8 w-28 rounded-md py-1 text-xs"
-        buttonLabelClassName="text-xs"
-        optionLabelClassName="text-xs"
+        size="md" buttonClassName="w-28 py-1"
       />
 
       <PanelTrigger
         panelWidth={272}
-        panelClassName="p-3"
+        panelPadding="content"
         renderPanel={() => (
           <div className="flex flex-col gap-3">
             <div className="flex flex-col gap-1.5">
@@ -178,7 +174,7 @@ const StagePathContextBar: React.FC = () => {
                     min={0}
                     step={0.1}
                     value={detail.delay ?? 0}
-                    className="h-8 w-20 rounded-md px-2 text-right text-xs tabular-nums"
+                    className="w-20 px-2 text-right tabular-nums"
                     onChange={(event) => updateDetail({ delay: Math.max(0, Number(event.target.value)) })}
                   />
                   <span className="text-2xs text-text-muted">秒</span>
@@ -198,8 +194,7 @@ const StagePathContextBar: React.FC = () => {
                     value={activePreset.direction}
                     options={[{ label: '顺时针', value: 'cw' }, { label: '逆时针', value: 'ccw' }]}
                     onSelect={(direction) => updatePreset({ ...activePreset, direction })}
-                    buttonClassName="h-8 w-24 rounded-md py-1 text-xs"
-                    buttonLabelClassName="text-xs"
+                    size="md" buttonClassName="w-24 py-1"
                   />
                 </div>
               </>
@@ -224,8 +219,7 @@ const StagePathContextBar: React.FC = () => {
                         ? createPoseMotion()
                         : createClipMotion(value),
                   })}
-                  buttonClassName="h-8 w-36 rounded-md py-1 text-xs"
-                  buttonLabelClassName="text-xs"
+                  size="md" buttonClassName="w-36 py-1"
                   panelWidthStrategy="options"
                 />
               </div>

@@ -70,7 +70,7 @@ function NumberValueField({
         onChange={commit}
         step={integer ? 1 : 0.1}
         precision={integer ? 0 : 1}
-        size="compact"
+        size="sm"
         align="center"
         widthClassName="w-full"
         commitOnChange

@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import NumberInput from './NumberInput'
+import { resolveScrubFactor } from './numberScrub'
 
 afterEach(cleanup)
 
@@ -44,7 +45,7 @@ describe('NumberInput', () => {
     expect((screen.getByRole('button', { name: '增加时长' }) as HTMLButtonElement).disabled).toBe(true)
   })
 
-  it('输入框上下键与小数步长共用同一套步进逻辑', () => {
+  it('输入框上下键与小数步长共用同一套步进逻辑，Shift 一次十步', () => {
     const onChange = vi.fn()
     render(
       <NumberInput
@@ -62,23 +63,29 @@ describe('NumberInput', () => {
 
     fireEvent.keyDown(input, { key: 'ArrowDown' })
     expect(onChange).toHaveBeenLastCalledWith(0.2)
+
+    fireEvent.keyDown(input, { key: 'ArrowUp', shiftKey: true })
+    expect(onChange).toHaveBeenLastCalledWith(1.2)
   })
 
-  it('紧凑尺寸保持画布参数行所需的 28px 高度', () => {
+  it('尺寸档决定外框高度（sm 28），字段为 raised 无边框表面', () => {
     render(
       <NumberInput
         ariaLabel="生成数量"
         value={1}
         onChange={() => undefined}
-        size="compact"
+        size="sm"
         align="center"
         widthClassName="w-[72px]"
       />
     )
 
     const input = screen.getByRole('spinbutton', { name: '生成数量' })
-    expect(input.parentElement?.classList.contains('h-7')).toBe(true)
-    expect(input.parentElement?.classList.contains('w-[72px]')).toBe(true)
+    const field = input.parentElement as HTMLElement
+    expect(field.classList.contains('h-control-sm')).toBe(true)
+    expect(field.classList.contains('w-[72px]')).toBe(true)
+    expect(field.classList.contains('bg-raised')).toBe(true)
+    expect(field.className).not.toMatch(/(^| )border( |$)/)
     expect(input.classList.contains('text-center')).toBe(true)
   })
 
@@ -93,12 +100,90 @@ describe('NumberInput', () => {
     )
 
     const input = screen.getByRole('spinbutton', { name: '时长' })
-    expect(input.parentElement?.style.width).toBe('calc(2ch + 46px)')
+    expect(input.parentElement?.style.width).toBe('calc(2ch + 34px)')
 
     fireEvent.change(input, { target: { value: '12' } })
-    expect(input.parentElement?.style.width).toBe('calc(2ch + 46px)')
+    expect(input.parentElement?.style.width).toBe('calc(2ch + 34px)')
 
     fireEvent.change(input, { target: { value: '123' } })
-    expect(input.parentElement?.style.width).toBe('calc(3ch + 46px)')
+    expect(input.parentElement?.style.width).toBe('calc(3ch + 34px)')
+  })
+
+  it('固定宽度时外框最小宽度仍容纳读数，步进列不会裁掉数字', () => {
+    render(
+      <NumberInput
+        ariaLabel="网格密度"
+        value={1000}
+        onChange={() => undefined}
+        widthClassName="w-16"
+      />
+    )
+    const field = screen.getByRole('spinbutton', { name: '网格密度' }).parentElement as HTMLElement
+    expect(field.classList.contains('w-16')).toBe(true)
+    expect(field.style.minWidth).toBe('calc(4ch + 34px)')
+  })
+
+  it('在读数上按住左右拖动改值（每 2px 一步），松开后不进入编辑', () => {
+    const onChange = vi.fn()
+    render(<NumberInput ariaLabel="缩放" value={10} onChange={onChange} min={0} max={100} />)
+    const input = screen.getByRole('spinbutton', { name: '缩放' })
+
+    fireEvent.pointerDown(input, { pointerId: 1, button: 0, clientX: 100 })
+    fireEvent.pointerMove(input, { pointerId: 1, clientX: 102 })
+    expect(onChange).not.toHaveBeenCalled()
+    fireEvent.pointerMove(input, { pointerId: 1, clientX: 110 })
+    expect(onChange).toHaveBeenLastCalledWith(15)
+    fireEvent.pointerMove(input, { pointerId: 1, clientX: 80 })
+    expect(onChange).toHaveBeenLastCalledWith(0)
+    fireEvent.pointerUp(input, { pointerId: 1, clientX: 80 })
+    expect(document.activeElement).not.toBe(input)
+  })
+
+  it('拖动时 Shift 精细、Alt 粗调，中途切换修饰键不跳变', () => {
+    expect(resolveScrubFactor({ shiftKey: true, altKey: false })).toBe(0.1)
+    expect(resolveScrubFactor({ shiftKey: false, altKey: true })).toBe(10)
+    expect(resolveScrubFactor({ shiftKey: true, altKey: true })).toBe(0.1)
+    expect(resolveScrubFactor({ shiftKey: false, altKey: false })).toBe(1)
+
+    const onChange = vi.fn()
+    render(<NumberInput ariaLabel="旋转" value={0} onChange={onChange} />)
+    const input = screen.getByRole('spinbutton', { name: '旋转' })
+    fireEvent.pointerDown(input, { pointerId: 2, button: 0, clientX: 0 })
+    fireEvent.pointerMove(input, { pointerId: 2, clientX: 4, altKey: true })
+    expect(onChange).toHaveBeenLastCalledWith(20)
+    fireEvent.pointerMove(input, { pointerId: 2, clientX: 44, shiftKey: true })
+    expect(onChange).toHaveBeenLastCalledWith(22)
+    fireEvent.pointerUp(input, { pointerId: 2, clientX: 44 })
+  })
+
+  it('单击读数（未拖动）进入编辑并全选；标签也可拖动改值', () => {
+    const onChange = vi.fn()
+    render(<NumberInput label="不透明度" value={50} onChange={onChange} />)
+    const input = screen.getByRole('spinbutton', { name: '不透明度' })
+
+    fireEvent.pointerDown(input, { pointerId: 3, button: 0, clientX: 10 })
+    fireEvent.pointerUp(input, { pointerId: 3, clientX: 11 })
+    expect(document.activeElement).toBe(input)
+    expect(onChange).not.toHaveBeenCalled()
+
+    // 编辑中按下读数是移动光标，不触发拖动
+    fireEvent.pointerDown(input, { pointerId: 4, button: 0, clientX: 10 })
+    fireEvent.pointerMove(input, { pointerId: 4, clientX: 60 })
+    expect(onChange).not.toHaveBeenCalled()
+    fireEvent.pointerUp(input, { pointerId: 4, clientX: 60 })
+
+    const label = screen.getByText('不透明度')
+    fireEvent.pointerDown(label, { pointerId: 5, button: 0, clientX: 0 })
+    fireEvent.pointerMove(label, { pointerId: 5, clientX: 10 })
+    expect(onChange).toHaveBeenLastCalledWith(55)
+  })
+
+  it('禁用时不响应拖动', () => {
+    const onChange = vi.fn()
+    render(<NumberInput ariaLabel="音量" value={0} onChange={onChange} disabled />)
+    const input = screen.getByRole('spinbutton', { name: '音量' })
+    fireEvent.pointerDown(input, { pointerId: 6, button: 0, clientX: 0 })
+    fireEvent.pointerMove(input, { pointerId: 6, clientX: 40 })
+    expect(onChange).not.toHaveBeenCalled()
   })
 })

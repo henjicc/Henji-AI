@@ -2,7 +2,6 @@ import React from 'react'
 import { FolderOpen, Plus, Trash2 } from 'lucide-react'
 import { openDialog } from '@/platform/desktopApi'
 import {
-  UI_FIELD_CONTROL_HEIGHT_SM_CLASS,
   UI_TEXT_META_CLASS,
   UiButton,
   UiFormRow,
@@ -94,7 +93,7 @@ const DownloadSection: React.FC<DownloadSectionProps> = ({
             onChange={(e) => onChangePath(e.target.value)}
             placeholder={t('sections.download.pathPlaceholder')}
             disabled={!enableQuickDownload}
-            className={`${UI_FIELD_CONTROL_HEIGHT_SM_CLASS} flex-1`}
+            className={`flex-1`}
           />
           <UiButton
             onClick={handleSelectPath}

@@ -396,11 +396,11 @@ const EditablePromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(
         />
         {(showCharacterCount || errorMessage) ? (
           <div className={`mt-1 flex items-start justify-between gap-2 ${UI_TEXT_META_CLASS}`}>
-            <span className={error ? 'text-red-300' : 'text-text-muted'}>
+            <span className={error ? 'text-danger-text' : 'text-text-muted'}>
               {errorMessage ?? ''}
             </span>
             {showCharacterCount ? (
-              <span className={reachedLimit ? 'text-red-300' : 'text-text-muted'}>
+              <span className={reachedLimit ? 'text-danger-text' : 'text-text-muted'}>
                 {characterCount}{maxCharacters === undefined ? '' : ` / ${maxCharacters}`}
               </span>
             ) : null}

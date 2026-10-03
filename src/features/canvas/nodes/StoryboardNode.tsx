@@ -345,6 +345,7 @@ export const StoryboardNode = memo(({ id, data, selected, width, height }: Story
           <div ref={exportSettingsTriggerRef} className="nodrag relative flex">
             <UiChipButton
               active={isExportPanelOpen}
+              size="sm"
               className={NODE_CONTROL_CHIP_CLASS}
               onClick={(event) => {
                 event.stopPropagation();

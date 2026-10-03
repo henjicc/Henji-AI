@@ -164,7 +164,8 @@ const LicenseViewerDialog: React.FC<LicenseViewerDialogProps> = ({ open, notices
                   active={component.id === selected?.id}
                   aria-current={component.id === selected?.id ? 'true' : undefined}
                   onClick={() => setSelectedId(component.id)}
-                  className="!h-auto flex-col !items-start !gap-0.5 !rounded-lg !px-3 !py-2"
+                  size="auto"
+                  className="flex-col !items-start"
                 >
                   <span className="w-full truncate text-sm">{component.name}</span>
                   <span className={`w-full truncate ${UI_TEXT_META_CLASS}`}>

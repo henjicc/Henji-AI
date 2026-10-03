@@ -2,7 +2,7 @@ import React from 'react'
 import { useTranslation } from 'react-i18next'
 import Dropdown from '@/components/ui/Dropdown'
 import Toggle from '@/components/ui/Toggle'
-import { UI_FIELD_CONTROL_HEIGHT_SM_CLASS, UI_TEXT_BODY_CLASS, UI_TEXT_META_CLASS, UiInput, UiOptionButton } from '@/components/ui'
+import { UI_TEXT_BODY_CLASS, UI_TEXT_META_CLASS, UiButton, UiInput, UiOptionButton } from '@/components/ui'
 import { getI18nText, type I18nText } from '@/core/types'
 
 interface CompositeComponentProps<TConfig> {
@@ -93,7 +93,7 @@ export const CompositeTextInput: React.FC<CompositeComponentProps<TextInputConfi
       placeholder={placeholder}
       maxLength={config.maxLength}
       disabled={disabled}
-      className={`${UI_FIELD_CONTROL_HEIGHT_SM_CLASS} w-full`}
+      className="w-full"
     />
   )
 }
@@ -119,7 +119,7 @@ export const CompositeNumberInput: React.FC<CompositeComponentProps<NumberInputC
       step={config.step}
       placeholder={placeholder}
       disabled={disabled}
-      className={`${UI_FIELD_CONTROL_HEIGHT_SM_CLASS} w-full`}
+      className="w-full"
       onChange={(event) => {
         const parsed = Number(event.target.value)
         if (!Number.isFinite(parsed)) {
@@ -201,7 +201,7 @@ export const CompositeRadio: React.FC<CompositeComponentProps<RadioConfig>> = ({
           active={String(value) === String(option.value)}
           disabled={disabled || option.disabled === true}
           onClick={() => onChange(option.value)}
-          className="!h-9 !px-3 !py-1.5 !text-xs"
+          size="lg"
         >
           {option.label}
         </UiOptionButton>
@@ -298,20 +298,18 @@ export const CompositeFileInput: React.FC<CompositeComponentProps<FileInputConfi
       />
 
       <div className="flex items-center gap-2">
-        <UiOptionButton
+        <UiButton
           type="button"
-          variant="flat"
-          className={`!${UI_FIELD_CONTROL_HEIGHT_SM_CLASS} !px-3 !py-2 text-sm leading-none`}
+          variant="secondary"
           disabled={disabled}
           onClick={() => inputRef.current?.click()}
         >
           {buttonText}
-        </UiOptionButton>
+        </UiButton>
         {selectedFileName && (
-          <UiOptionButton
+          <UiButton
             type="button"
-            variant="flat"
-            className={`!${UI_FIELD_CONTROL_HEIGHT_SM_CLASS} !px-3 !py-2 text-sm leading-none`}
+            variant="secondary"
             disabled={disabled}
             onClick={() => {
               setErrorText('')
@@ -319,7 +317,7 @@ export const CompositeFileInput: React.FC<CompositeComponentProps<FileInputConfi
             }}
           >
             清除
-          </UiOptionButton>
+          </UiButton>
         )}
       </div>
 

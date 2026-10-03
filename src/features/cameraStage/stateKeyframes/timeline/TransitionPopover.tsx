@@ -93,7 +93,7 @@ const TransitionPopover: React.FC<TransitionPopoverProps> = ({
             min={0}
             step={1}
             value={durationFrames}
-            className="h-8 w-24 px-2 text-xs tabular-nums"
+            className="w-24 px-2 tabular-nums"
             onChange={(event) => onDurationFramesChange(Math.max(0, Math.round(Number(event.target.value))))}
           />
         </label>

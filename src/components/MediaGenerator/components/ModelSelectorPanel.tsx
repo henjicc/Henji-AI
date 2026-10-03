@@ -9,7 +9,6 @@ import {
   UiInput,
   UiMarqueeText,
   UiOptionButton,
-  UI_HIGHLIGHT_RING_INSET_CLASS,
   UI_TEXT_BODY_CLASS,
   UI_TEXT_LABEL_CLASS,
   UI_TEXT_META_CLASS,
@@ -76,7 +75,7 @@ function compareModelItems(
 // 筛选项是同质选项集合，走 UiOptionButton：静息保留描边（纯文字 chip 去框会变裸文字），
 // 选中态由公共令牌给出，和下方模型网格、比例/分辨率面板是同一个蓝。
 function getFilterChipClass(active: boolean, dimmed = false): string {
-  return `h-8 px-3 text-xs ${dimmed && !active ? 'opacity-40' : ''}`
+  return dimmed && !active ? 'opacity-40' : ''
 }
 
 /**
@@ -283,6 +282,7 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
               type="button"
               active={modelFilterProvider === 'all'}
               onClick={() => onFilterProviderChange('all')}
+              size="md"
               className={getFilterChipClass(modelFilterProvider === 'all')}
             >
               {t('all')}
@@ -293,6 +293,7 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
                 type="button"
                 active={providerBrandId(modelFilterProvider) === p.id}
                 onClick={() => onFilterProviderChange(p.id)}
+                size="md"
                 className={getFilterChipClass(providerBrandId(modelFilterProvider) === p.id)}
               >
                 {p.name}
@@ -314,6 +315,7 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
                   type="button"
                   active={modelFilterType === typeOption.value}
                   onClick={() => onFilterTypeChange(typeOption.value)}
+                  size="md"
                   className={getFilterChipClass(modelFilterType === typeOption.value, isTypeHidden)}
                 >
                   {typeOption.label}
@@ -338,6 +340,7 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
                 type="button"
                 active={modelFilterFunction === f.value}
                 onClick={() => onFilterFunctionChange(f.value)}
+                size="md"
                 className={getFilterChipClass(modelFilterFunction === f.value)}
               >
                 {f.label}
@@ -362,12 +365,11 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
                 data-close-on-select
                 onClick={() => onModelSelect(p.id, m.id)}
                 active={isSelected}
-                variant="menu"
-                // 网格是二维的：静息态留一层极淡底色撑出格子形状（否则列边界会糊），
-                // 但不再描边——底色已经表达过一次边界，边框是多余的第二次。
-                className={`relative w-full flex-col items-start px-3 py-2.5 ${
-                  isSelected ? '' : 'bg-veil-faint'
-                } ${isHighlighted ? UI_HIGHLIGHT_RING_INSET_CLASS : ''}`}
+                // 网格是二维的：grid 变体静息铺一层 raised 撑出格子形状（否则列边界会糊），
+                // 但不描边——底色已经表达过一次边界；方向键当前项用悬停底表达。
+                variant="grid"
+                highlighted={isHighlighted}
+                className="relative w-full flex-col items-start px-3 py-2.5"
               >
                 {/* 两列两行（表格式）: 左列=名称/供应商，右列=收藏/类型 */}
                 <div className={`grid w-full grid-cols-[minmax(0,1fr)_auto] ${MODEL_CARD_COLUMN_GAP_CLASS} ${MODEL_CARD_ROW_GAP_CLASS}`}>
@@ -388,10 +390,10 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
                       />
                     </span>
                   </div>
-                  <span className={`col-start-1 row-start-2 block min-w-0 self-end truncate text-left ${isSelected ? 'text-xs leading-4 text-white/80' : MODEL_CARD_META_TEXT_CLASS}`}>
+                  <span className={`col-start-1 row-start-2 block min-w-0 self-end truncate text-left ${MODEL_CARD_META_TEXT_CLASS}`}>
                     {p.name}
                   </span>
-                  <span className={`col-start-2 row-start-2 justify-self-end self-end text-right ${isSelected ? 'text-xs leading-4 text-white/80' : MODEL_CARD_META_TEXT_CLASS}`}>
+                  <span className={`col-start-2 row-start-2 justify-self-end self-end text-right ${MODEL_CARD_META_TEXT_CLASS}`}>
                     {getModelTypeGroup(m.type) === 'other'
                       ? `${t('types.other')} · ${m.type}`
                       : t(`types.${m.type}`)}

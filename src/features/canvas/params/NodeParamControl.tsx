@@ -48,8 +48,8 @@ interface NodeParamControlProps {
 }
 
 /** 紧凑右对齐控件按钮的通用底座样式 */
-const COMPACT_TRIGGER_CLASS = '!h-7 !w-auto !justify-between !gap-1.5 !rounded-md !px-2 !py-0 !text-xs !font-normal';
-const COMPACT_TRIGGER_LABEL_CLASS = 'text-xs leading-none';
+// 画布参数行的紧凑触发器：尺寸走 size="sm"（28），这里只放布局
+const COMPACT_TRIGGER_CLASS = 'w-auto'
 
 function CompactNumberControl({
   param,
@@ -78,7 +78,7 @@ function CompactNumberControl({
         max={param.max}
         step={step}
         disabled={disabled}
-        size="compact"
+        size="sm"
         align="center"
         widthClassName="w-[72px]"
         commitOnChange
@@ -129,9 +129,9 @@ function CompactDropdownControl({
       options={options}
       onSelect={onChange}
       disabled={disabled}
+      size="sm"
       buttonClassName={COMPACT_TRIGGER_CLASS}
-      buttonLabelClassName={COMPACT_TRIGGER_LABEL_CLASS}
-      optionLabelClassName={COMPACT_TRIGGER_LABEL_CLASS}
+      surface="glass"
       minWidthStrategy="display"
       panelWidthStrategy="options"
     />
@@ -183,8 +183,9 @@ function CompactAspectRatioControl({
     <PanelTrigger
       display={display}
       disabled={disabled}
+      size="sm"
       buttonClassName={COMPACT_TRIGGER_CLASS}
-      buttonLabelClassName={COMPACT_TRIGGER_LABEL_CLASS}
+      surface="glass"
       panelWidth={panelWidth}
       alignment="aboveCenter"
       gap={8}
@@ -234,13 +235,13 @@ function CompactTextControl({
       <PanelTrigger
         display={textValue || placeholder || '编辑提示词'}
         disabled={disabled}
+        size="sm"
         buttonClassName={`${COMPACT_TRIGGER_CLASS} max-w-32`}
-        buttonLabelClassName={`${COMPACT_TRIGGER_LABEL_CLASS} max-w-24 truncate`}
+        surface="glass"
         panelWidth={360}
         alignment="aboveCenter"
         gap={8}
         closeOnPanelClick={false}
-        panelClassName="overflow-hidden"
         renderPanel={() => (
           <div className="flex h-60 min-h-0 flex-col p-3">
             <PromptEditor
@@ -275,7 +276,7 @@ function CompactTextControl({
       textHistory={textHistory}
       onMouseDown={(event) => event.stopPropagation()}
       disabled={disabled}
-      className="h-7 w-32 px-2 text-xs"
+      size="sm" className="w-32 px-2"
     />
   );
 }
@@ -300,8 +301,9 @@ function CompactPanelControl({
     <PanelTrigger
       display={display}
       disabled={disabled}
+      size="sm"
       buttonClassName={COMPACT_TRIGGER_CLASS}
-      buttonLabelClassName={COMPACT_TRIGGER_LABEL_CLASS}
+      surface="glass"
       panelWidth={panelWidth}
       alignment="aboveCenter"
       gap={8}
@@ -337,8 +339,9 @@ function CompactUploadControl({
     <PanelTrigger
       display={display}
       disabled={disabled}
+      size="sm"
       buttonClassName={COMPACT_TRIGGER_CLASS}
-      buttonLabelClassName={COMPACT_TRIGGER_LABEL_CLASS}
+      surface="glass"
       panelWidth={280}
       alignment="aboveCenter"
       gap={8}

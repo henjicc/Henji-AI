@@ -3,80 +3,53 @@ import {
   IMAGE_EDITOR_GLOW_TINT_HEX, SOCKET_TYPE_COLOR_HEX, CANVAS_GRID_ALT_HEX,
 } from '@/core/theme/colorTokens';
 
-export const UI_COLOR_ACCENT_BORDER_CLASS = 'border-brand-500';
 /** Alpha masks only: soften the source edge over an already blurred outpaint preview. */
 export const UI_OUTPAINT_FEATHER_MASK = `linear-gradient(to right, transparent, ${WHITE_HEX} 12%, ${WHITE_HEX} 88%, transparent), linear-gradient(to bottom, transparent, ${WHITE_HEX} 12%, ${WHITE_HEX} 88%, transparent)`;
+/** 纯色块强调填充（进度条、裁剪手柄等无文字场景）。承载文字的强调实底用 `bg-accent text-on-accent`。 */
 export const UI_COLOR_ACCENT_BG_CLASS = 'bg-accent';
-/**
- * 承载白字的实心强调底。
- *
- * 不能直接用 `bg-accent`：白字压在 accent(#3b82f6) 上实测只有 **3.68:1**，
- * 未达 WCAG AA 的 4.5；`brand-500`（accent 压暗 15%）是 4.85:1，观感上仍是同一支亮蓝。
- * 纯色块填充（进度条、裁剪手柄等无文字场景）继续用 UI_COLOR_ACCENT_BG_CLASS。
- */
-export const UI_COLOR_ACCENT_FILL_TEXT_CLASS = 'bg-brand-500';
-export const UI_COLOR_ACCENT_TEXT_CLASS = 'text-brand-300';
-export const UI_COLOR_ACCENT_SOFT_BORDER_CLASS = 'border-accent';
-export const UI_COLOR_ACCENT_SOFT_BG_CLASS = 'bg-brand-600';
-export const UI_COLOR_ACCENT_SOFT_BG_WEAK_CLASS = 'bg-layer';
-export const UI_COLOR_ACCENT_RING_CLASS = 'ring-brand-300';
-export const UI_HIGHLIGHT_RING_INSET_CLASS = `ring-2 ${UI_COLOR_ACCENT_RING_CLASS} ring-inset`;
+/** 强调实底 + 自动黑白文字（对比度由主题引擎保证 ≥ 4.5:1）。 */
+export const UI_COLOR_ACCENT_FILL_TEXT_CLASS = 'bg-accent text-on-accent';
+/** 强调文字（深浅主题都满足 4.5:1；不要用 `text-accent` 压文字）。 */
+export const UI_COLOR_ACCENT_TEXT_CLASS = 'text-accent-text';
 export const UI_ACCENT_HEX = APP_ACCENT_HEX;
 export const UI_WHITE_HEX = WHITE_HEX;
 export const UI_TEXT_LIGHT_HEX = TEXT_LIGHT_HEX;
 
 /* ---------------------------------------------------------------------------
- * 选中态词汇表
+ * 选中态词汇表（重要记录 001/003，任务 2.2）
  *
- * 1. 导航：弱强调，表示“正在看哪里”
- * 2. 选项：强强调，表示“值是什么”
- * 3. 多选：中强调，表示“集合里哪些已选”
- * 4. 布尔：强调色只收在开关/复选框控件本身，不铺满整行
+ * 1. 导航“正在看哪里”：中性选中底 + 主要文字（图标强调色）+ 方向指示条（面板标签：主要文字 + 底部细线）
+ * 2. 单选“值是什么”：中性抬升（selected 底 + 主要文字），不用强调色实底
+ * 3. 多选“集合里哪些已选”：强调描边 + 中性选中底 + 强调文字
+ * 4. 布尔“是否开启”：强调色只进入开关轨道或复选框本体，整行保持静息
  *
  * 令牌只负责状态，不和静息态类叠加同一 CSS 属性。调用组件必须用互斥分支，
- * 否则 Tailwind 产物顺序会让选中态静默失效。
+ * 否则 Tailwind 产物顺序会让选中态静默失效。业务调用点只传 active / checked，不直接拼这些类。
  * ------------------------------------------------------------------------- */
 
-/** 导航选中：中性底 + 强调文字。指示条由导航组件按方向补充。 */
-export const UI_NAV_ITEM_ACTIVE_CLASS =
-  `${UI_COLOR_ACCENT_SOFT_BG_WEAK_CLASS} ${UI_COLOR_ACCENT_TEXT_CLASS}`;
+/** 导航选中：中性选中底 + 主要文字，图标取强调文字色（设计稿列表行选中）。指示条由导航组件按方向补充。 */
+export const UI_NAV_ITEM_ACTIVE_CLASS = 'bg-selected text-text1 [&_svg]:text-accent-text';
 
-/**
- * 紧凑横向 Tab 的线性选中态：背景保持透明，只用强调文字和底部指示线表达当前页。
- * 仅由明确选择 subtle 外观的 UiChipButton 消费。
- */
-export const UI_NAV_ITEM_ACTIVE_SUBTLE_CLASS =
-  UI_COLOR_ACCENT_TEXT_CLASS;
+/** 面板标签（设计稿面板头）：选中只换成主要文字 + 底部细线，背景保持透明。 */
+export const UI_NAV_ITEM_ACTIVE_SUBTLE_CLASS = 'text-text1';
 
 /** 纵向导航的末端指示条。 */
 export const UI_NAV_INDICATOR_END_CLASS =
-  "after:absolute after:right-0 after:top-0 after:h-full after:w-[3px] after:bg-accent after:content-['']";
+  "after:absolute after:right-0 after:top-1.5 after:bottom-1.5 after:w-0.5 after:rounded-full after:bg-accent after:content-['']";
 
 /** 横向导航的底部指示条。 */
 export const UI_NAV_INDICATOR_BOTTOM_CLASS =
   "after:absolute after:bottom-0 after:left-2 after:right-2 after:h-0.5 after:bg-accent after:content-['']";
 
-/** 紧凑横向 Tab 的细底部指示条。 */
+/** 面板标签的底部细线（设计稿 1.5px 主要文字色）。 */
 export const UI_NAV_INDICATOR_BOTTOM_SUBTLE_CLASS =
-  "after:absolute after:bottom-0 after:left-2 after:right-2 after:h-px after:bg-accent after:content-['']";
+  "after:absolute after:bottom-0 after:left-2 after:right-2 after:h-[1.5px] after:bg-text1 after:content-['']";
 
-/** 多选/标签选中：描边 + 中性底 + 强调文字。 */
-export const UI_MULTISELECT_ITEM_ACTIVE_CLASS =
-  `${UI_COLOR_ACCENT_BORDER_CLASS} ${UI_COLOR_ACCENT_SOFT_BG_WEAK_CLASS} ${UI_COLOR_ACCENT_TEXT_CLASS}`;
+/** 多选/标签选中：强调描边 + 中性选中底 + 强调文字。 */
+export const UI_MULTISELECT_ITEM_ACTIVE_CLASS = 'border-accent bg-selected text-accent-text';
 
-/**
- * 多选选中态的 `!` 覆盖版本。
- *
- * 供 `UiOptionButton variant="card"` 这类内部已用 `active` prop 表达
- * "单选：当前值是什么"（强实底 + 白字）的组件，在外部以多选语义覆盖其静息态时使用——
- * 两种语义不能共用同一个 `active` 分支，只能在调用点用 `!` 类覆盖赢过内部样式。
- */
-export const UI_MULTISELECT_ITEM_ACTIVE_OVERRIDE_CLASS =
-  '!border-brand-500 !bg-layer !text-brand-300';
-
-/** 布尔控件开态：强调色只用于开关轨道或复选框本体。 */
-export const UI_BOOLEAN_CONTROL_ACTIVE_CLASS =
-  `${UI_COLOR_ACCENT_BORDER_CLASS} ${UI_COLOR_ACCENT_SOFT_BG_CLASS}`;
+/** 布尔控件开态：强调色只用于开关轨道或复选框本体；其上的勾/滑块用 on-accent。 */
+export const UI_BOOLEAN_CONTROL_ACTIVE_CLASS = 'border-accent bg-accent text-on-accent';
 
 /* ---------------------------------------------------------------------------
  * 排版层级令牌（重要记录 004）
@@ -122,7 +95,7 @@ export const UI_TEXT_TIMECODE_CLASS = 'font-mono tabular-nums';
 /* ---------------------------------------------------------------------------
  * 尺寸令牌（重要记录 004）：控件高度 28/32/36、圆角 控件 6 / 输入与菜单 8 / 浮层 12。
  * 值在 index.css 的 CSS 变量里（圆角随「设置 → 界面 → 圆角」缩放），Tailwind 类见 tailwind.config.js。
- * 组件改用这些档位由 2.1/2.2 完成；旧的 42/38 字段高度令牌在迁移完成前保留。
+ * 按钮（2.1）与字段、选项、触发器（2.2）都用这三档；旧的 42/38 字段高度令牌已删除。
  * ------------------------------------------------------------------------- */
 
 /** 控件高度：sm 28 紧凑 / md 32 默认 / lg 36 醒目 */
@@ -205,65 +178,85 @@ export const UI_META_BADGE_ACCENT_CLASS =
  * 高度差异大的列表要么老老实实虚拟化，要么什么都不做。
  */
 
-export const UI_FIELD_SURFACE_CLASS =
-  'bg-surface-dark border border-border-dark text-text-dark';
+/**
+ * 字段表面（输入、文本域、原生选择、字段触发器、数值框）：设计稿“输入 / 浮层”档 `raised`，**无边框**——
+ * 层次靠明暗，聚焦时一圈强调色焦点环（`UI_FIELD_FOCUS_CLASS`）。玻璃内由 `ui-glass-adaptive-control` 换成控件纱。
+ */
+export const UI_FIELD_SURFACE_CLASS = 'bg-raised text-text1 ui-glass-adaptive-control';
 
-/* ---------------------------------------------------------------------------
- * 字段控件高度：两档，都不是 Tailwind 刻度（h-9=36 / h-10=40 都不合），
- * 所以登记为具名令牌，不要在调用点各写一遍 `h-[38px]` / `h-[42px]`。
- * 实测收敛前 `h-[38px]` 散落 17 处、`h-[42px]` 散落 4 处，是事实标准但没登记。
- * ------------------------------------------------------------------------- */
+/**
+ * 字段尺寸档位（重要记录 004）：高度 28/32/36，字号 12/13/13，圆角 sm 用控件档 6、md/lg 用输入档 8。
+ * `UiInput`/`UiSelect`/`UiFieldTrigger`/`NumberInput` 的 `size` 共用这张表，调用点不再写高度与字号。
+ */
+export const UI_FIELD_SIZE_CLASS = {
+  sm: `${UI_CONTROL_HEIGHT_CLASS.sm} text-xs ${UI_RADIUS_CLASS.control}`,
+  md: `${UI_CONTROL_HEIGHT_CLASS.md} text-13 ${UI_RADIUS_CLASS.field}`,
+  lg: `${UI_CONTROL_HEIGHT_CLASS.lg} text-13 ${UI_RADIUS_CLASS.field}`,
+} as const;
 
-/** 标准档 42px：独立表单字段（输入框、下拉、主按钮） */
-export const UI_FIELD_CONTROL_HEIGHT_CLASS = 'h-[42px]';
+export type UiFieldSize = keyof typeof UI_FIELD_SIZE_CLASS;
 
-/** 紧凑档 38px：参数面板、逐行控件、面板触发器等密集布局 */
-export const UI_FIELD_CONTROL_HEIGHT_SM_CLASS = 'h-[38px]';
+/** 字段内边距（左右），与尺寸档对应；带图标/附件的字段由调用点用 pl-/pr- 预留位置。 */
+export const UI_FIELD_PADDING_CLASS: Record<UiFieldSize, string> = {
+  sm: 'px-2',
+  md: 'px-2.5',
+  lg: 'px-3',
+};
 
 /** 字段标签（带块级布局与下间距的表单专用变体，视觉继承 UI_TEXT_LABEL_CLASS） */
 export const UI_FIELD_LABEL_CLASS = `block ${UI_TEXT_LABEL_CLASS} mb-1.5`;
 
+/** 字段聚焦：一圈 2px 强调色焦点环（内收，避免被滚动容器或 overflow-hidden 裁掉）。 */
 export const UI_FIELD_FOCUS_CLASS =
-  'outline-none focus:outline-none focus-visible:outline-none focus:ring-inset focus:ring-2 focus:ring-accent focus:ring-offset-0 focus:border-brand-500 transition-shadow duration-240 ease-out';
+  'outline-none focus:outline-none focus-visible:outline-none focus:ring-2 focus:ring-inset focus:ring-accent-ring transition-shadow duration-120';
 
-/** 复合字段把边框画在外壳上时使用，焦点由内部输入框传递给整块控件。 */
+/** 复合字段（数值框、带按钮的输入）把表面画在外壳上时使用，焦点由内部输入框传给整块控件。 */
 export const UI_FIELD_FOCUS_WITHIN_CLASS =
-  'outline-none focus-within:ring-inset focus-within:ring-2 focus-within:ring-accent focus-within:ring-offset-0 focus-within:border-brand-500 transition-shadow duration-240 ease-out';
+  'outline-none focus-within:ring-2 focus-within:ring-inset focus-within:ring-accent-ring transition-shadow duration-120';
+
+/** 占位文字：辅助文字档（保证 ≥ 4.5:1）。 */
+export const UI_FIELD_PLACEHOLDER_CLASS = 'placeholder:text-text3';
 
 export const UI_FIELD_DISABLED_CLASS = 'disabled:opacity-50 disabled:cursor-not-allowed';
 
 export const UI_BUTTON_RESET_CLASS =
   '!outline-none focus:!outline-none focus-visible:!outline-none !ring-0 focus:!ring-0 focus-visible:!ring-0 shadow-none focus:shadow-none';
 
-export const UI_TRIGGER_BUTTON_CLASS =
-  `${UI_FIELD_SURFACE_CLASS} ${UI_FIELD_FOCUS_CLASS} ${UI_BUTTON_RESET_CLASS} flex items-center justify-between whitespace-nowrap`;
-
 /**
- * 下拉菜单与 PanelTrigger 都是临时悬浮在当前内容之上的最外层表面。
- * 统一使用一块完整玻璃，而不是让内部选项各自模糊；同一时刻通常只展开一块，
- * 所以层数固定且会自动跟随“毛玻璃效果”开关退化为近实心面板。
+ * 下拉菜单与 PanelTrigger 的浮层表面（设计稿“菜单与浮层：玻璃仅压在媒体上”）。
+ *
+ * - 默认实底：面板底 + 强分隔发丝线 + 浮层投影。浮层内的字段（raised）、选项格（raised）与悬停/选中底
+ *   都比它亮，层次清楚；与“关闭毛玻璃”时玻璃浮层的退化外观一致。
+ * - `UI_TRIGGER_PANEL_GLASS_CLASS`：只给压在画布、图片、视频、3D 视口上的浮层（`surface="glass"`）。
+ *   一整块玻璃（深浅主题由主题引擎派生 glass 令牌，浅色下是浅底 + 深色纱），内部选项不各自模糊。
+ * 圆角取输入与菜单档 8；内容裁到圆角内。
  */
 export const UI_TRIGGER_PANEL_CLASS =
-  'ui-glass ui-glass-elevated rounded-lg text-text-dark';
+  `bg-panel border border-line-strong shadow-panel overflow-hidden ${UI_RADIUS_CLASS.field} text-text1`;
 
+export const UI_TRIGGER_PANEL_GLASS_CLASS =
+  `ui-glass ui-glass-elevated overflow-hidden ${UI_RADIUS_CLASS.field} text-text1`;
+
+/** 浮层表面档：`solid`（默认，普通界面上）/ `glass`（压在画布与媒体上）。 */
+export const UI_TRIGGER_PANEL_SURFACE_CLASS = {
+  solid: UI_TRIGGER_PANEL_CLASS,
+  glass: UI_TRIGGER_PANEL_GLASS_CLASS,
+} as const;
+
+export type UiTriggerPanelSurface = keyof typeof UI_TRIGGER_PANEL_SURFACE_CLASS;
+
+/** 浮层面板的内边距档位（`Dropdown` / `PanelTrigger` 的 `panelPadding`）。外壳表面不接受调用点覆盖。 */
+export const UI_TRIGGER_PANEL_PADDING_CLASS = {
+  none: '',
+  menu: 'p-1',
+  content: 'p-3',
+} as const;
+
+export type UiTriggerPanelPadding = keyof typeof UI_TRIGGER_PANEL_PADDING_CLASS;
+
+/** 描边选项（`UiOptionButton` 默认变体）的静息态：纯文字 chip 组靠一圈发丝线保留点击可供性。 */
 export const UI_OPTION_ITEM_CLASS =
-  'rounded-lg border border-border-dark text-text-dark transition-colors';
-
-export const UI_OPTION_ITEM_HOVER_CLASS =
-  'hover:bg-layer hover:border-text-muted/50';
-
-/**
- * 玻璃浮层**内部条目**的交互态（菜单项、工具条按钮）。
- *
- * 玻璃上不能沿用 `UI_OPTION_ITEM_HOVER_CLASS` 的 `hover:bg-layer`——`layer` 是不透明的
- * `rgb(64 64 64)`，压在玻璃上会变成一块实心灰贴片，把底下的图片/画布整块糊掉。
- * 玻璃的层次只能靠加白（veil），加灰会被 tint 直接吃掉。
- *
- * 玻璃元素**自身**可交互时（整块玻璃就是个按钮）用 `.ui-glass-interactive`，
- * 它叠 background-image 而不是替换 background-color，能保住黑 tint。
- */
-export const UI_GLASS_ITEM_HOVER_CLASS =
-  'hover:!bg-veil-soft hover:!border-veil-subtle hover:!text-white';
+  'rounded-lg border border-line-strong text-text1 transition-colors';
 
 /**
  * 中性实底控件在 `.ui-glass` 内随毛玻璃开关联动；类本身不添加 blur，
@@ -282,7 +275,7 @@ export const UI_GLASS_ADAPTIVE_DIVIDER_CLASS = 'ui-glass-adaptive-divider';
 
 /**
  * 纵向导航项静息态的 hover 底。由 `UiNavButton` 统一消费，调用点不需要自己判断
- * 当前导航在不在玻璃里——普通面板中是 surface 实底，玻璃里自动换成白纱。
+ * 当前导航在不在玻璃里——普通面板中是 hover 实底，玻璃里自动换成玻璃纱。
  */
 export const UI_GLASS_ADAPTIVE_NAV_CLASS = 'ui-glass-adaptive-nav'
 
@@ -297,26 +290,20 @@ export const UI_GLASS_ADAPTIVE_NAV_CLASS = 'ui-glass-adaptive-nav'
 export const UI_GLASS_ADAPTIVE_OPTION_CLASS = 'ui-glass-adaptive-option';
 
 /**
- * 中性抬升的选中底（分段选择、主题预设格等单选）：普通面板上是 `selected` 实底，玻璃里换成加白的
+ * 中性抬升的选中底（单选、分段选择、主题预设格、下拉当前项）：普通面板上是 `selected` 实底，玻璃里换成
  * `--ui-glass-selected`。重要记录 003：单选选中不用强调色实底。
  */
 export const UI_GLASS_ADAPTIVE_SELECTED_CLASS = 'ui-glass-adaptive-selected';
 
-/** 选项格（`UiOptionButton variant="tile"`）的静息底：普通面板上是 `raised`，玻璃里是控件纱。 */
+/** 选项格（`UiOptionButton variant="tile" | "grid"`）的静息底：普通面板上是 `raised`，玻璃里是控件纱。 */
 export const UI_GLASS_ADAPTIVE_TILE_CLASS = 'ui-glass-adaptive-tile';
 
 /** 分段选择的轨道（容器只是分组，不是按钮）：比所在表面更暗的一条底，段由 `variant="segment"` 填充。 */
 export const UI_SEGMENTED_TRACK_CLASS = 'inline-flex w-fit gap-0.5 rounded-lg bg-gap/60 p-0.5';
 
+/** 单选选中：中性抬升（选中底 + 主要文字），玻璃内自适应。 */
 export const UI_OPTION_ITEM_ACTIVE_CLASS =
-  `${UI_COLOR_ACCENT_SOFT_BORDER_CLASS} ${UI_COLOR_ACCENT_SOFT_BG_CLASS} text-white`;
-
-/** 原语调用点确需覆盖内部表面时使用，避免业务组件重复拼 `!` 类串。 */
-export const UI_OPTION_ITEM_ACTIVE_OVERRIDE_CLASS =
-  '!border-accent !bg-brand-600 !text-white hover:!bg-brand-600';
-
-export const UI_DROPDOWN_OPTION_ACTIVE_CLASS =
-  '!bg-brand-600 !text-white hover:!bg-brand-600';
+  `border-transparent ${UI_GLASS_ADAPTIVE_SELECTED_CLASS} text-text1`;
 
 /**
  * 居中弹窗的统一响应式尺寸。

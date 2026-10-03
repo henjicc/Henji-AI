@@ -50,7 +50,7 @@ export function BlurInspector(): JSX.Element {
                 type="button"
                 variant="flat"
                 active={params.algorithm === algorithm.id}
-                className="justify-center text-xs"
+                size="sm" className="justify-center"
                 onClick={() => update((current) => ({
                   ...current,
                   algorithm: algorithm.id,
@@ -98,7 +98,7 @@ export function BlurInspector(): JSX.Element {
       <div className="mt-4 flex gap-2">
         <UiChipButton
           type="button"
-          className="!h-8 flex-1 !justify-center !text-xs"
+          size="md" className="flex-1 !justify-center"
           onClick={() => controller.resetOperation(IMAGE_EDIT_OPERATION_IDS.blur)}
         >
           <RotateCcw className="h-3.5 w-3.5" />
@@ -106,7 +106,7 @@ export function BlurInspector(): JSX.Element {
         </UiChipButton>
         <UiChipButton
           type="button"
-          className="!h-8 flex-1 !justify-center !text-xs"
+          size="md" className="flex-1 !justify-center"
           disabled={!operation}
           onClick={() => controller.removeOperation(IMAGE_EDIT_OPERATION_IDS.blur)}
         >

@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { Menu, RotateCcw } from 'lucide-react'
 import type { IDockviewHeaderActionsProps, IDockviewPanelHeaderProps } from 'dockview-react'
-import { UiButton, UiIconButton } from '@/components/ui'
+import { UI_TRIGGER_PANEL_CLASS, UiIconButton, UiOptionButton } from '@/components/ui'
 import { resetLayout } from './dockLayout'
 
 /**
@@ -16,7 +16,8 @@ export const DockTab: React.FC<IDockviewPanelHeaderProps> = (props) => {
     const disposable = props.api.onDidTitleChange((event) => setTitle(event.title))
     return () => disposable.dispose()
   }, [props.api])
-  return <span className="px-2 text-xs text-text-dark">{title}</span>
+  // 文字色交给 dockview 的标签色变量（选中主要文字、其余辅助文字，见 index.css 面板标签映射）
+  return <span className="px-2 text-xs">{title}</span>
 }
 
 export const DockHeaderActions: React.FC<IDockviewHeaderActionsProps> = ({ containerApi }) => {
@@ -41,9 +42,12 @@ export const DockHeaderActions: React.FC<IDockviewHeaderActionsProps> = ({ conta
       >
         <Menu size={14} />
       </UiIconButton>
+      {/* 与下拉同一浮层表面；非 portal，只需盖住同一层叠上下文里的兄弟内容 */}
       {open && (
-        <div className="absolute right-1 top-full z-modal mt-1 min-w-32 rounded-md border border-border-dark bg-surface-dark p-1 shadow-panel">
-          <UiButton
+        <div className={`absolute right-1 top-full z-dropdown mt-1 min-w-32 p-1 ${UI_TRIGGER_PANEL_CLASS}`}>
+          <UiOptionButton
+            variant="menu"
+            size="sm"
             className="w-full justify-start gap-2"
             onClick={() => {
               resetLayout(containerApi)
@@ -52,7 +56,7 @@ export const DockHeaderActions: React.FC<IDockviewHeaderActionsProps> = ({ conta
           >
             <RotateCcw size={13} />
             重置布局
-          </UiButton>
+          </UiOptionButton>
         </div>
       )}
     </div>

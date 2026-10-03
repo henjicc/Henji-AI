@@ -62,10 +62,9 @@ export function ParamGroupTrigger({
         label={compact ? undefined : groupName}
         display={summary}
         className={compact ? 'min-w-0' : 'w-auto min-w-[108px]'}
-        buttonClassName={compact
-          ? '!h-7 !w-auto !max-w-[116px] !justify-between !gap-1.5 !rounded-md !px-2 !py-0 !text-xs !font-normal'
-          : 'w-auto min-w-[108px]'}
-        buttonLabelClassName="text-xs"
+        size={compact ? 'sm' : 'md'}
+        surface={compact ? 'glass' : 'solid'}
+        buttonClassName={compact ? 'w-auto max-w-[116px]' : 'w-auto min-w-[108px]'}
         panelWidth={group.panelWidth ?? 440}
         alignment="aboveCenter"
         gap={compact ? 8 : 45}

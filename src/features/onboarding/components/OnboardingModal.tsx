@@ -146,9 +146,7 @@ function ProviderStep({
                   </span>
                 ) : null}
               </div>
-              <p className={`mt-1.5 leading-5 ${
-                primaryProvider === providerId ? 'text-xs text-white/80' : UI_TEXT_META_CLASS
-              }`}>
+              <p className={`mt-1.5 leading-5 ${UI_TEXT_META_CLASS}`}>
                 {t(`provider.items.${providerId}.description`)}
               </p>
             </div>

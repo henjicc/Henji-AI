@@ -239,7 +239,7 @@ export function NodeSelectionMenu({
                 role="menuitem"
                 tabIndex={-1}
                 variant="menu"
-                className="h-11 w-full gap-3 rounded-lg px-3 !transition-none"
+                size="lg" className="w-full gap-3 px-3 !transition-none"
                 onClick={() => {
                   if (chooseFileFirst) {
                     uploadInputRef.current?.click()

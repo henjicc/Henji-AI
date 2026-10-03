@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { UI_FIELD_CONTROL_HEIGHT_SM_CLASS, UiButton, UiEmpty, UiError, UiLoading, UiInput, UiOptionButton } from '@/components/ui'
+import { UiButton, UiEmpty, UiError, UiLoading, UiInput, UiOptionButton } from '@/components/ui'
 import Dropdown from '@/components/ui/Dropdown'
 import AudioPlayer from '@/components/AudioPlayer'
 import { toFetchableMediaUrl, isLikelyLocalImagePath } from '@/services/imageSource'
@@ -438,7 +438,7 @@ export const VoiceSelectorPanel: React.FC<VoiceSelectorPanelProps> = ({
             onChange={(event) => setKeyword(event.target.value)}
             placeholder="搜索音色名称或描述"
             aria-label="搜索音色"
-            className={`${UI_FIELD_CONTROL_HEIGHT_SM_CLASS} min-w-0 flex-1`}
+            className={`min-w-0 flex-1`}
           />}
           {remoteModelId && <UiButton type="button" variant="secondary" size="lg" disabled={remoteStatus === 'loading'} onClick={() => void loadRemoteVoices(true)}>
             刷新音色
@@ -479,16 +479,14 @@ export const VoiceSelectorPanel: React.FC<VoiceSelectorPanelProps> = ({
                 <div key={voice.id} className="relative">
                   <UiOptionButton
                     type="button"
-                    variant="menu"
+                    // 二维网格：grid 变体静息铺一层底撑出格子形状，不叠边框
+                    variant="grid"
                     active={active}
                     disabled={training || failed || expired}
                     onClick={() => onChange(voice.id)}
                     title={voice.description || voice.name}
-                    // 二维网格：静息态留一层极淡底色撑出格子形状，不再叠边框
-                    className={`${active ? '' : 'bg-veil-faint'} ${
-                      hasDescription
-                        ? 'h-auto min-h-[58px] w-full flex-col items-start justify-center gap-1 px-3 py-2'
-                        : 'h-[52px] w-full flex-col items-start justify-center px-3 py-2'
+                    className={`w-full flex-col items-start justify-center px-3 py-2 ${
+                      hasDescription ? 'min-h-[58px] gap-1' : 'min-h-[52px]'
                     }`}
                   >
                     <span className="w-full truncate text-left text-sm leading-tight">{voice.name}</span>
@@ -545,7 +543,7 @@ export const VoiceSelectorPanel: React.FC<VoiceSelectorPanelProps> = ({
                   if (event.key === 'Enter' && customId.trim()) onChange(customId.trim())
                 }}
                 placeholder="输入列表中没有的音色 ID"
-                className={`${UI_FIELD_CONTROL_HEIGHT_SM_CLASS} min-w-0 flex-1`}
+                className={`min-w-0 flex-1`}
               />
               <UiButton type="button" variant="primary" size="lg" disabled={!customId.trim()} onClick={() => onChange(customId.trim())}>
                 使用 ID

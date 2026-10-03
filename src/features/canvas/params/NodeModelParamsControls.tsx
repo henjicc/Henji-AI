@@ -10,7 +10,7 @@ import { UiChipButton, UiPanel } from '@/components/ui';
 import type { CanvasModelMediaType } from '@/features/canvas/domain/defaultModels';
 import type { CanvasImageCapabilityModelPolicy } from '@/features/canvas/capabilities/types';
 import { getI18nText } from '@/core/types/I18nText';
-import { UI_TRIGGER_PANEL_CLASS } from '@/components/ui/styleTokens';
+import { UI_TRIGGER_PANEL_GLASS_CLASS } from '@/components/ui/styleTokens';
 import {
   resolveFloatingPanelPosition,
   type FloatingPanelAnchorRect,
@@ -329,6 +329,7 @@ export const NodeModelParamsControls = memo(({
       <div ref={modelTriggerRef} className="relative flex min-w-0 flex-1">
         <UiChipButton
           active={openPanel === 'model'}
+          size="sm"
           className={`min-w-0 overflow-hidden ${chipClassName} ${modelChipClassName}`}
           onClick={(event) => {
             event.stopPropagation();
@@ -345,7 +346,7 @@ export const NodeModelParamsControls = memo(({
         >
           <span className="min-w-0 flex-1 truncate text-xs font-normal leading-none">{selectedModelName}</span>
           {selectedModel && (
-            <span className={`shrink-0 text-xs leading-none ${openPanel === 'model' ? 'text-white/90' : 'text-text-soft'}`}>
+            <span className={`shrink-0 text-xs leading-none text-text2`}>
               {getProviderDisplayName(selectedModel.meta.provider, i18n.language)}
             </span>
           )}
@@ -370,6 +371,7 @@ export const NodeModelParamsControls = memo(({
         <div ref={paramsTriggerRef} className="relative flex">
           <UiChipButton
             active={openPanel === 'params'}
+            size="sm"
             className={`${chipClassName} ${paramsChipClassName}`}
             onClick={(event) => {
               event.stopPropagation();
@@ -400,7 +402,7 @@ export const NodeModelParamsControls = memo(({
       {typeof document !== 'undefined' && renderPanel === 'model' && createPortal(
         <div
           ref={modelPanelRef}
-          className={`${UI_TRIGGER_PANEL_CLASS} nodrag nowheel fixed z-dropdown flex min-h-0 flex-col overflow-hidden p-2 transition-opacity duration-180 ease-out ${
+          className={`${UI_TRIGGER_PANEL_GLASS_CLASS} nodrag nowheel fixed z-dropdown flex min-h-0 flex-col overflow-hidden p-2 transition-opacity duration-180 ease-out ${
             isPanelVisible ? 'opacity-100' : 'pointer-events-none opacity-0'
           }`}
           style={modelPanelPosition ? {

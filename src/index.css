@@ -441,7 +441,7 @@
    * （实测设置面板分节之间那条线因此完全看不见）。基础值在这里给，玻璃里换成白纱。
    */
   .ui-glass-adaptive-divider {
-    border-color: rgb(var(--border-rgb) / 0.6);
+    border-color: rgb(var(--line-rgb));
   }
 
   .ui-glass .ui-glass-adaptive-divider {
@@ -451,13 +451,12 @@
   /*
    * 纵向导航项的静息 hover。
    *
-   * 之所以不能在调用点写 `hover:bg-surface-dark`：surface 是不透明的 rgb(23 23 23)，
-   * 压在玻璃上会变成一块实心灰贴片，把底下的内容整块糊掉（和 UI_GLASS_ITEM_HOVER_CLASS
-   * 注释里记的是同一个坑）。玻璃上的层次只能靠加白。
+   * 之所以不能在调用点写 `hover:bg-hover`：hover 是不透明实底，
+   * 压在玻璃上会变成一块实心贴片，把底下的内容整块糊掉。玻璃上的层次只能靠玻璃纱。
    * 这里把两种语境合成一个类，由 UiNavButton 统一消费，调用点不用判断自己在不在玻璃里。
    */
   .ui-glass-adaptive-nav:hover:not(:disabled) {
-    background-color: rgb(var(--surface-rgb));
+    background-color: rgb(var(--hover-rgb));
   }
 
   .ui-glass .ui-glass-adaptive-nav:hover:not(:disabled) {
@@ -470,11 +469,13 @@
    * 调用点因此**不要**再写 `hover:bg-layer`：那是工具类，和这里同特异性但排在后面会赢，
    * 玻璃上就又变回一块实心灰贴片。
    */
-  .ui-glass-adaptive-option:hover:not(:disabled) {
-    background-color: rgb(var(--layer-rgb));
+  .ui-glass-adaptive-option:hover:not(:disabled):not([aria-disabled='true']),
+  .ui-glass-adaptive-option.ui-option-highlighted {
+    background-color: rgb(var(--hover-rgb));
   }
 
-  .ui-glass .ui-glass-adaptive-option:hover:not(:disabled) {
+  .ui-glass .ui-glass-adaptive-option:hover:not(:disabled):not([aria-disabled='true']),
+  .ui-glass .ui-glass-adaptive-option.ui-option-highlighted {
     background-color: var(--ui-glass-hover);
   }
 
@@ -1782,25 +1783,46 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
  * 不写死十六进制。变更 dockview 观感只在此处调整。 */
 .henji-cameraStage-dock.dockview-theme-abyss {
   /* 彻底中和 abyss 紫色强调色：所有引用它的地方（sash / 选中描边等）改用项目 accent */
+  /*
+   * 面板标签（设计稿面板头，任务 2.2）：标签条与面板同底（panel），32 高、12/500；
+   * 选中的可见标签 = 主要文字 + 底部 1.5px 主要文字色细线，其余标签辅助文字；不再用底色块区分标签。
+   * 与 UiChipButton selectionRole="navigation" selectionAppearance="subtle" 是同一套面板标签外观。
+   */
   --dv-color-abyss-accent: rgb(var(--accent-rgb));
-  --dv-background-color: rgb(var(--app-rgb));
-  --dv-group-view-background-color: rgb(var(--app-rgb));
-  --dv-tabs-and-actions-container-background-color: rgb(var(--app-rgb));
-  --dv-activegroup-visiblepanel-tab-background-color: rgb(var(--surface-rgb));
-  --dv-activegroup-visiblepanel-tab-color: rgb(var(--text-rgb));
-  --dv-inactivegroup-visiblepanel-tab-background-color: rgb(var(--app-rgb));
-  --dv-inactivegroup-visiblepanel-tab-color: rgb(var(--text-muted-rgb));
-  --dv-activegroup-hiddenpanel-tab-background-color: rgb(var(--app-rgb));
-  --dv-activegroup-hiddenpanel-tab-color: rgb(var(--text-muted-rgb));
-  --dv-inactivegroup-hiddenpanel-tab-background-color: rgb(var(--app-rgb));
-  --dv-inactivegroup-hiddenpanel-tab-color: rgb(var(--text-muted-rgb));
-  --dv-separator-border: rgb(var(--border-rgb));
-  --dv-tab-divider-color: rgb(var(--border-rgb));
-  --dv-paneview-active-outline-color: rgb(var(--accent-rgb));
-  --dv-icon-hover-background-color: rgb(var(--layer-rgb));
+  --dv-background-color: rgb(var(--gap-rgb));
+  --dv-group-view-background-color: rgb(var(--panel-rgb));
+  --dv-tabs-and-actions-container-background-color: rgb(var(--panel-rgb));
+  --dv-activegroup-visiblepanel-tab-background-color: transparent;
+  --dv-activegroup-visiblepanel-tab-color: rgb(var(--text1-rgb));
+  --dv-inactivegroup-visiblepanel-tab-background-color: transparent;
+  --dv-inactivegroup-visiblepanel-tab-color: rgb(var(--text2-rgb));
+  --dv-activegroup-hiddenpanel-tab-background-color: transparent;
+  --dv-activegroup-hiddenpanel-tab-color: rgb(var(--text3-rgb));
+  --dv-inactivegroup-hiddenpanel-tab-background-color: transparent;
+  --dv-inactivegroup-hiddenpanel-tab-color: rgb(var(--text3-rgb));
+  --dv-separator-border: rgb(var(--line-rgb));
+  --dv-tab-divider-color: transparent;
+  --dv-paneview-active-outline-color: rgb(var(--accent-ring-rgb));
+  --dv-icon-hover-background-color: rgb(var(--hover-rgb));
   --dv-active-sash-color: rgb(var(--accent-rgb));
   --dv-tabs-and-actions-container-font-size: 12px;
   --dv-tabs-and-actions-container-height: 32px;
+}
+
+.henji-cameraStage-dock.dockview-theme-abyss .dv-tabs-and-actions-container {
+  border-bottom: 1px solid rgb(var(--line-rgb));
+}
+
+.henji-cameraStage-dock.dockview-theme-abyss .dv-tab {
+  font-weight: 500;
+}
+
+.henji-cameraStage-dock.dockview-theme-abyss .dv-groupview > .dv-tabs-and-actions-container .dv-tab.dv-active-tab {
+  box-shadow: inset 0 -1.5px 0 rgb(var(--text1-rgb));
+}
+
+.henji-cameraStage-dock.dockview-theme-abyss .dv-groupview.dv-inactive-group > .dv-tabs-and-actions-container .dv-tab.dv-active-tab {
+  box-shadow: inset 0 -1.5px 0 rgb(var(--line-strong-rgb));
 }
 
 /* 画布视频进度条：轨道与滑块共享同一条中心线，已播放段跟随主题强调色。 */

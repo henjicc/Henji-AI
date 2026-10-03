@@ -53,7 +53,7 @@ export function AddCustomModelDialog({ onAdd, onClose }: AddCustomModelDialogPro
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="h-10"
+              size="lg"
               placeholder={t('customModels.placeholders.name')}
               required
             />
@@ -67,7 +67,7 @@ export function AddCustomModelDialog({ onAdd, onClose }: AddCustomModelDialogPro
               type="text"
               value={modelUrl}
               onChange={(e) => setModelUrl(e.target.value)}
-              className="h-10"
+              size="lg"
               placeholder={t('customModels.placeholders.url')}
               required
             />

@@ -48,11 +48,10 @@ export const AspectRatioSelector: React.FC<AspectRatioSelectorProps> = ({
           <UiOptionButton
             type="button"
             active={value === 'smart'}
-            variant="menu"
+            variant="grid"
             onClick={() => onChange('smart')}
-            className={`w-[78px] px-2 py-2 text-xs flex-col justify-center gap-2 ${
-              value === 'smart' ? '' : 'bg-veil-faint'
-            }`}
+            size="sm"
+            className="w-[78px] px-2 py-2 flex-col justify-center gap-2"
             style={{ height: '92px' }}
           >
             <div className="h-8 flex items-center justify-center">
@@ -77,12 +76,11 @@ export const AspectRatioSelector: React.FC<AspectRatioSelectorProps> = ({
               <UiOptionButton
                 type="button"
                 active={value === option.value}
-                variant="menu"
+                variant="grid"
                 key={option.value}
                 onClick={() => onChange(option.value)}
-                className={`w-[78px] px-2 py-2 text-xs flex-col justify-center gap-2 ${
-                  value === option.value ? '' : 'bg-veil-faint'
-                }`}
+                size="sm"
+            className="w-[78px] px-2 py-2 flex-col justify-center gap-2"
                 style={{ height: '92px' }}
               >
                 {visualize && (

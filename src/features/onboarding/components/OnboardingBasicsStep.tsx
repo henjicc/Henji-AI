@@ -2,7 +2,6 @@ import { Database } from 'lucide-react'
 
 import {
   UI_COLOR_ACCENT_TEXT_CLASS,
-  UI_FIELD_CONTROL_HEIGHT_SM_CLASS,
   UI_TEXT_BODY_CLASS,
   UI_TEXT_META_CLASS,
   UI_TEXT_TITLE_CLASS,
@@ -32,7 +31,7 @@ export function OnboardingBasicsStep({ dataPath }: { dataPath: UseDataPathResult
                 value={dataPath.currentPath || dataPath.defaultPath}
                 readOnly
                 aria-label={t('basics.currentPath')}
-                className={`${UI_FIELD_CONTROL_HEIGHT_SM_CLASS} min-w-0 flex-1 font-mono`}
+                className={`min-w-0 flex-1 font-mono`}
               />
               <UiButton
                 variant="secondary"

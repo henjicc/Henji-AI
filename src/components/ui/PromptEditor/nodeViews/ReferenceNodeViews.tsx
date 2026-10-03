@@ -2,7 +2,6 @@ import { useSyncExternalStore } from 'react'
 import { NodeViewWrapper, type NodeViewProps } from '@tiptap/react'
 
 import type { PromptMediaType } from '@/core/inputs/promptDocument'
-import { UI_OPTION_ITEM_ACTIVE_CLASS } from '@/components/ui/styleTokens'
 import type { PromptEditorResourceRegistry } from '../resourceRegistry'
 import { PROMPT_ATOM_CLASS, PROMPT_MEDIA_ATOM_CLASS } from '../promptEditorStyles'
 
@@ -69,10 +68,10 @@ export function MediaReferenceNodeView({
       as="span"
       className={`${PROMPT_MEDIA_ATOM_CLASS} ${
         selected
-          ? UI_OPTION_ITEM_ACTIVE_CLASS
+          ? 'border-accent bg-accent-tint text-text1'
           : reference
-            ? 'border-transparent bg-veil-faint text-text-soft'
-            : 'border-red-500/50 bg-surface-dark text-red-300'
+            ? 'border-transparent bg-selected text-text2'
+            : 'border-danger/50 bg-raised text-danger-text'
       }`}
       data-prompt-media-reference=""
       data-reference-id={attrs.resourceId}
@@ -113,10 +112,10 @@ export function TemplateVariableNodeView({
       as="span"
       className={`${PROMPT_ATOM_CLASS} ${
         selected
-          ? UI_OPTION_ITEM_ACTIVE_CLASS
+          ? 'border-accent bg-accent-tint text-text1'
           : variable
-            ? 'border-transparent bg-veil-faint text-text-soft'
-            : 'border-red-500/50 bg-surface-dark text-red-300'
+            ? 'border-transparent bg-selected text-text2'
+            : 'border-danger/50 bg-raised text-danger-text'
       }`}
       data-prompt-template-variable=""
       data-variable-key={attrs.key}

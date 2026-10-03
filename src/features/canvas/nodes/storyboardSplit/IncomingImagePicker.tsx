@@ -51,7 +51,7 @@ export function IncomingImagePicker({
                 key={`${pickerState.frameId}-${item.imageUrl}`}
                 type="button"
                 variant="menu"
-                className="w-full gap-2 px-2 py-2 text-sm"
+                size="md" className="w-full gap-2 px-2 py-2"
                 onClick={(event) => {
                   event.stopPropagation();
                   onReplaceFromInput(pickerState.frameId, item.imageUrl);

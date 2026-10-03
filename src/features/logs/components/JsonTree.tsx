@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { useI18n } from '@/hooks/useI18n'
-import { UiButton } from '@/components/ui'
+import { UiButton, UiOptionButton } from '@/components/ui'
 
 /** 超过该长度的字符串默认收起，点击展开查看完整内容。 */
 const LONG_STRING_THRESHOLD = 200
@@ -60,16 +60,18 @@ function JsonContainerNode({ label, value, depth, expandDepth }: JsonNodeProps):
 
   return (
     <div>
-      {/* ui-surface-allow JSON 树的可展开行（行高随内容），交 2.2 列表行组件 */}
-      <UiButton
+      {/* JSON 树的可展开行：menu 选项，高度随内容 */}
+      <UiOptionButton
         type="button"
-        className="h-auto w-full justify-start gap-1 px-1 py-0.5 text-left font-mono font-normal"
+        variant="menu"
+        className="w-full justify-start gap-1 !px-1 !py-0.5 font-mono font-normal"
+        aria-expanded={expanded}
         onClick={() => setExpanded((current) => !current)}
       >
         {expanded ? <ChevronDown className="h-3 w-3 shrink-0" /> : <ChevronRight className="h-3 w-3 shrink-0" />}
         {label !== undefined && <span className="text-brand-300">{label}:</span>}
         <span className="text-text-muted">{isArray ? `Array(${entries.length})` : `Object{${entries.length}}`}</span>
-      </UiButton>
+      </UiOptionButton>
       {expanded && (
         <div className="ml-2 border-l border-border-dark/40 pl-2">
           {entries.map(([key, item]) => (

@@ -231,7 +231,7 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 （`UiChipButton selectionRole="navigation"`），把实底强调色让给那个唯一的主动作。
 
 同理，参数面板里的"当前值是什么"（形状、比例、档位）是**单选**，
-用 `UiOptionButton active`（强实底 + 白字）——详见「选中态词汇表」。
+用 `UiOptionButton active`（中性抬升：选中底 + 主要文字）——详见「选中态词汇表」。
 
 ## 分隔线：分组的第二手段，不是第一手段
 
@@ -264,7 +264,7 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 > 一屏里几十个选项各自描边时，边框互相抵消、不再传递任何信息，只剩视觉重量。
 > 可点击性由 **hover 反馈 + 排布规律**表达，不需要静息态的框。
 
-`UiOptionButton` 的 `variant="menu"` 就是这条规则的落点：静息态无边框无底色，hover 出 `bg-layer`，选中态才是实底。
+`UiOptionButton` 的 `variant="menu"` 就是这条规则的落点：静息态无边框无底色，hover 出悬停底，选中态是中性选中底（`selected`）。
 
 ### 判据（两条都要满足才用 `menu`）
 
@@ -272,7 +272,7 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 2. **去掉框之后形状还在**。满足任一即可：
    - 已被可见容器圈住（浮层面板、弹窗左栏、下拉列表）——容器已经画过一次边界了
    - 每项自带足以撑出形状的内容（缩略图、图标块、多行文本、比例示意图）
-   - 是二维网格 —— 此时补一层 `bg-veil-faint` 撑格子，**但仍然不描边**（底色已经表达过一次边界，边框是多余的第二次）
+   - 是二维网格 —— 用 `variant="grid"`：静息铺一层 raised 撑格子，**但仍然不描边**（底色已经表达过一次边界，边框是多余的第二次）；不要在调用点手写 `bg-veil-faint`
 
 ### 反例：这些**要保留**边框
 
@@ -291,13 +291,13 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 
 | 语义 | 表达 | 通用落点 |
 |---|---|---|
-| 导航：正在看哪里 | 中性层底 + 强调文字 + 方向指示条 | `UiNavButton active`；横向 chip 用 `selectionRole="navigation"` |
-| 单选：当前值是什么 | 强品牌实底 + 白字 | `UiOptionButton active` |
-| 多选/标签：集合中哪些已选 | 强调描边 + 中性层底 + 强调文字 | `UiChipButton active` |
+| 导航：正在看哪里 | 中性选中底 + 主要文字（图标强调色）+ 方向指示条 | `UiNavButton active`；横向 chip 用 `selectionRole="navigation"`；面板标签用 `selectionAppearance="subtle"`（主要文字 + 底部细线） |
+| 单选：当前值是什么 | 中性抬升：选中底 + 主要文字（重要记录 003，不用强调色实底） | `UiOptionButton active`（分段 `variant="segment"`，网格 `variant="grid"`） |
+| 多选/标签：集合中哪些已选 | 强调描边 + 中性选中底 + 强调文字 | `UiChipButton active`；多选的选项卡用 `UiOptionButton selection="multiple"` |
 | 布尔：功能是否开启 | 强调色只进入开关轨道或复选框本体，整行保持静息 | `UiSwitch checked` / `UiCheckbox checked` |
 
 默认态不是第五种选中态：它保持当前表面的中性视觉。不要用整行实底表达“已启用”，
-也不要把筛选 chip 的多选语义画成单选项的强实底。
+也不要把多选语义画成单选项的中性抬升（或反过来）。下拉当前项 = 中性选中底 + 强调色勾。
 
 ## 状态展示统一走这三个
 
@@ -346,6 +346,8 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 
 分区之间的间距用 `UI_SECTION_STACK_CLASS`，不要每处自己定 `space-y-*`。
 
+字段（任务 2.2）：`UiInput` / `UiSelect` / `UiFieldTrigger`（`Dropdown`、`PanelTrigger` 的按钮）/ `NumberInput` 都是 raised 无边框表面、聚焦一圈强调色焦点环，高度只由 `size` 决定（sm 28 / md 32 默认 / lg 36）。`NumberInput` 自带数值拖动：在读数或标签上按住左右拖动改值（Shift 精细、Alt 粗调），单击进入编辑，读数不会被步进列裁掉。
+
 ## 参数说明的受众：`description` 给助手，`tooltip` 给用户
 
 本节只约束模型 / schema 参数的 `ParamDef`、`ParamPresentation` 等参数元数据，
@@ -380,7 +382,8 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 | 容器内的同质选项集合逐项描边 | `UiOptionButton variant="menu"`，见"选项集合的静息态" |
 | 在 `UiOptionButton` 调用点手写 `!border-transparent !bg-transparent hover:!bg-layer` | 用 `variant="menu"`，别再复制这串 |
 | 面板/弹窗内部再叠一层自己的底色（`bg-zinc-900/40` 这类） | 表面由外壳统一提供；要切分用分隔线，要下沉用 `inset` |
-| 用 `panelClassName` 覆盖 `PanelTrigger` / `Dropdown` 的外壳表面 | 不传即可；同级浮层长得不一样多半就是这么来的 |
+| 用 className 覆盖 `PanelTrigger` / `Dropdown` 的外壳表面或触发器外观 | 外壳只有 `surface`（`solid` 默认 / 压在画布与媒体上用 `glass`）与 `panelPadding`（none/menu/content）；触发器只有 `size`（sm/md/lg）与 `appearance`；`buttonClassName` 只放宽度等布局（规则 E） |
+| 字段、选项、标签、导航在调用点改高度或字号（`h-8 text-xs`） | 用 `size`（sm 28 / md 32 / lg 36）；选项与标签的 `h-full`、`min-h-*` 属于布局，可以写 |
 | `zinc-*` / `gray-*` 等固定调色板 | 语义色，见「颜色必须跟随主题」 |
 | 自己拼 `backdrop-blur-* + bg-black/xx + border-white/xx` | `ui-glass`；且先确认这个浮层真的压在媒体/画布上 |
 | `text-zinc-600 dark:text-zinc-400` 双分支 | 直接写最终值，`dark:` 的基础值是死代码 |

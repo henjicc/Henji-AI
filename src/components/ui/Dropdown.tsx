@@ -8,12 +8,13 @@ import React, {
   type KeyboardEvent,
 } from 'react'
 import { createPortal } from 'react-dom'
-import { UI_DROPDOWN_OPTION_ACTIVE_CLASS, UI_FIELD_CONTROL_HEIGHT_SM_CLASS, UI_FIELD_LABEL_CLASS, UI_TRIGGER_BUTTON_CLASS, UI_TRIGGER_PANEL_CLASS } from './styleTokens'
-import { UiButton, UiOptionButton } from './primitives'
+import { UI_FIELD_LABEL_CLASS, UI_TRIGGER_PANEL_PADDING_CLASS, UI_TRIGGER_PANEL_SURFACE_CLASS, type UiFieldSize, type UiTriggerPanelPadding, type UiTriggerPanelSurface } from './styleTokens'
+import { UiFieldTrigger, UiOptionButton } from './primitives'
 import { UI_DURATION } from './motion'
 import { resolveDropdownDisplay } from './dropdownUtils'
 import { measureElementTextWidth } from './textMeasurement'
-import { ChevronDown } from 'lucide-react'
+import { Check } from 'lucide-react'
+import { Z_LAYERS } from '@/core/theme/zLayers'
 import { isDomNode, ownerDocumentOf, ownerWindowOf } from '@/utils/crossRealmDom'
 
 const DROPDOWN_PANEL_GAP_PX = 8
@@ -33,10 +34,14 @@ type DropdownProps<T extends string | number | boolean> = {
   renderPanel?: () => React.ReactNode
   disabled?: boolean
   className?: string
+  /** 触发器的布局类（宽度、最大宽度、弹性）。外观只由 size / appearance 决定（check:surface 规则 E）。默认 `w-full`。 */
   buttonClassName?: string
-  buttonLabelClassName?: string
-  optionLabelClassName?: string
-  panelClassName?: string
+  /** 触发器与选项的尺寸档：sm 28 / md 32（默认）/ lg 36，字号随档位。 */
+  size?: UiFieldSize
+  /** 浮层表面：默认实底；压在画布、图片、视频、3D 视口上时传 `glass`。 */
+  surface?: UiTriggerPanelSurface
+  /** 浮层内边距档；浮层外壳表面不接受覆盖。 */
+  panelPadding?: UiTriggerPanelPadding
   ariaLabel?: string
   ariaLabelledBy?: string
   portal?: boolean
@@ -58,13 +63,13 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
     disabled,
     className,
     buttonClassName,
-    buttonLabelClassName,
-    optionLabelClassName,
-    panelClassName,
+    size = 'md',
+    panelPadding = 'none',
+    surface = 'solid',
     ariaLabel,
     ariaLabelledBy,
     portal = true,
-    zIndex = 1000,
+    zIndex = Z_LAYERS.popover,
     minWidthStrategy = 'display',
     panelWidthStrategy = 'button',
     appearance = 'field',
@@ -175,7 +180,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
     const paddingLeft = parseFloat(computedStyle.paddingLeft || '12')
     const paddingRight = parseFloat(computedStyle.paddingRight || '12')
     const arrowSpace = 24
-    const borderWidth = (parseFloat(computedStyle.borderLeftWidth || '1') + parseFloat(computedStyle.borderRightWidth || '1')) || 2
+    const borderWidth = parseFloat(computedStyle.borderLeftWidth || '0') + parseFloat(computedStyle.borderRightWidth || '0')
     return measureElementTextWidth(
       targetButton,
       labels,
@@ -289,11 +294,10 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
       role="listbox"
       aria-label={ariaLabel ?? label ?? resolvedDisplay}
       aria-labelledby={ariaLabelledBy}
-      className="max-h-60 overflow-y-auto"
+      className="max-h-60 overflow-y-auto p-1"
     >
       {(options || []).map((option, index) => {
         const selected = isSelectedOption(option.value)
-        const active = activeOptionIndex === index
         return (
           <UiOptionButton
             key={String(option.value)}
@@ -302,17 +306,17 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
             tabIndex={-1}
             aria-selected={selected}
             active={selected}
+            highlighted={activeOptionIndex === index && !selected}
             variant="menu"
-            className={`w-full rounded-none border-0 px-3 py-2 transition-colors duration-180 ${option.disabled
-              ? 'cursor-not-allowed opacity-50'
-              : selected
-                ? `${UI_DROPDOWN_OPTION_ACTIVE_CLASS} cursor-pointer`
-                : 'cursor-pointer'
-            } ${active ? 'ring-1 ring-accent ring-inset' : ''}`}
+            size={size}
+            disabled={option.disabled}
+            className="w-full cursor-pointer justify-between gap-2"
             onMouseEnter={() => setActiveOptionIndex(index)}
             onClick={() => selectOption(option)}
           >
-            <span className={`block truncate whitespace-nowrap ${optionLabelClassName || 'text-13'}`}>{option.label}</span>
+            <span className="block min-w-0 truncate whitespace-nowrap">{option.label}</span>
+            {/* 当前值：中性选中底 + 强调色勾（重要记录 001：强调色只用于选中指示） */}
+            {selected ? <Check aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-accent-text" /> : null}
           </UiOptionButton>
         )
       })}
@@ -322,13 +326,12 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
   return (
     <div className={`relative inline-block ${className || ''}`} ref={ref}>
       {label ? <label className={UI_FIELD_LABEL_CLASS}>{label}</label> : null}
-      {/* ui-surface-allow 字段型触发器的表面暂由 UI_TRIGGER_BUTTON_CLASS 提供（含 buttonClassName 改高），交 2.2 拆为独立触发器 + size 枚举 */}
-      <UiButton
+      <UiFieldTrigger
         ref={triggerRef}
-        type="button"
         disabled={disabled}
-        variant={appearance === 'text' ? 'quiet' : 'secondary'}
-        size="md"
+        size={size}
+        appearance={appearance === 'text' ? 'quiet' : 'field'}
+        open={open && !closing}
         onClick={() => {
           if (disabled) return
           if (open) {
@@ -345,27 +348,17 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
         aria-activedescendant={open && activeOptionIndex >= 0 ? `${panelId}-option-${activeOptionIndex}` : undefined}
         aria-label={ariaLabelledBy ? undefined : ariaLabel ?? label ?? resolvedDisplay}
         aria-labelledby={ariaLabelledBy}
-        className={
-          `${appearance === 'text'
-            ? 'gap-1 font-normal'
-            : `${UI_TRIGGER_BUTTON_CLASS} rounded-lg px-3 py-2 ${UI_FIELD_CONTROL_HEIGHT_SM_CLASS}`
-          } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} ${buttonClassName || 'w-full'}`
-        }
-        style={{
-          outline: 'none',
-          boxShadow: 'none',
-          ...(buttonMinWidthPx ? { minWidth: `${buttonMinWidthPx}px` } : {})
-        }}
+        className={`${disabled ? '' : 'cursor-pointer'} ${buttonClassName || 'w-full'}`}
+        style={buttonMinWidthPx ? { minWidth: `${buttonMinWidthPx}px` } : undefined}
       >
-        <span className={`${buttonLabelClassName || 'text-13'} truncate`}>{resolvedDisplay}</span>
-        <ChevronDown className={`h-4 w-4 text-text-muted transition-transform duration-180 ${appearance === 'text' ? 'ml-0.5' : 'ml-2'} ${open ? 'rotate-180' : ''}`} />
-      </UiButton>
+        {resolvedDisplay}
+      </UiFieldTrigger>
       {(open || closing) && (
         portal && fixedPos ? (
           createPortal(
             <div
               ref={panelRef}
-              className={`${UI_TRIGGER_PANEL_CLASS} overflow-hidden ${closing ? 'animate-scale-out' : 'animate-scale-in'} ${panelClassName || ''}`}
+              className={`${UI_TRIGGER_PANEL_SURFACE_CLASS[surface]} ${UI_TRIGGER_PANEL_PADDING_CLASS[panelPadding]} ${closing ? 'animate-scale-out' : 'animate-scale-in'}`}
               style={{
                 position: 'fixed',
                 top: fixedPos.top,
@@ -386,7 +379,8 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
         ) : (
           <div
             ref={panelRef}
-            className={`absolute left-0 z-modal ${fixedPos?.placement === 'above' ? 'bottom-full mb-2' : 'top-full mt-2'} ${panelWidthStrategy === 'options' ? 'w-auto' : 'w-full'} ${UI_TRIGGER_PANEL_CLASS} overflow-hidden ${closing ? 'animate-scale-out' : 'animate-scale-in'} ${panelClassName || ''}`}
+            // 非 portal 面板在触发器所在的层叠上下文里展开，只需盖住同一上下文里的兄弟内容：下拉档即可
+            className={`absolute left-0 z-dropdown ${fixedPos?.placement === 'above' ? 'bottom-full mb-2' : 'top-full mt-2'} ${panelWidthStrategy === 'options' ? 'w-auto' : 'w-full'} ${UI_TRIGGER_PANEL_SURFACE_CLASS[surface]} ${UI_TRIGGER_PANEL_PADDING_CLASS[panelPadding]} ${closing ? 'animate-scale-out' : 'animate-scale-in'}`}
             style={panelWidthStrategy === 'options' && panelMinWidthPx ? { minWidth: `${panelMinWidthPx}px` } : undefined}
             data-dropdown-portal="true"
             data-dropdown-placement={fixedPos?.placement ?? 'below'}

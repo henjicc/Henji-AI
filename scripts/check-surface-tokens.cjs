@@ -9,7 +9,7 @@
  *   B. 同一文件出现 >= 2 处卡片表面 —— 高度疑似"卡片套卡片"
  *   C. 手写弹窗（fixed inset-0 + 黑遮罩，却没走 UiModal/AlertDialog）
  *   D. `.css` 里手写毛玻璃（backdrop-filter），绕开 `.ui-glass`
- *   E. 按钮调用点用 className 覆盖外观（底色/边框/文字色/圆角/阴影/高度/字号），见 lib/buttonAppearanceOverrides.cjs
+ *   E. 按钮、选项、标签、导航与字段触发器的调用点覆盖外观（底色/边框/文字色/圆角/阴影/高度/字号），见 lib/buttonAppearanceOverrides.cjs
  * 单个卡片表面不报（组件自己的根表面是合理的，比如画布节点外壳）。
  *
  * 规则 D 的由来：ESLint 只拦得住 `backdrop-blur-*` 工具类，拦不住 CSS 文件里直接写
@@ -373,7 +373,7 @@ if (handRolledGlass.length > 0) {
 }
 
 if (buttonOverrides.length > 0) {
-  log(`[E] 按钮调用点覆盖外观 ${buttonOverrides.length} 处 → 外观只用 UiButton variant/size、UiIconButton tone/size/on/shape；className 只放布局`);
+  log(`[E] 按钮/选项/标签/导航/字段触发器调用点覆盖外观 ${buttonOverrides.length} 处 → 外观只用组件的 variant/size/tone/on/shape/active 等枚举；className（下拉与面板触发器是 buttonClassName）只放布局`);
   for (const item of buttonOverrides) {
     const detail = item.violations.map((violation) => `${violation.token}（${violation.kind}）`).join(' ');
     log(`      ${item.relativePath}:${item.line}  <${item.component}> ${detail}`);

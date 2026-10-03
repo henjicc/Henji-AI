@@ -1,13 +1,13 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react'
-import { ChevronDown, ChevronUp } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactElement } from 'react'
 
-import { UiIconButton, UiInput } from './primitives'
+import { SCRUB_PIXELS_PER_STEP, SCRUB_START_THRESHOLD_PX, resolveScrubFactor } from './numberScrub'
+import { UiInput, UiNumberStepper } from './primitives'
 import {
-  UI_FIELD_CONTROL_HEIGHT_SM_CLASS,
   UI_FIELD_FOCUS_WITHIN_CLASS,
   UI_FIELD_LABEL_CLASS,
+  UI_FIELD_SIZE_CLASS,
   UI_FIELD_SURFACE_CLASS,
-  UI_GLASS_ADAPTIVE_CONTROL_CLASS,
+  type UiFieldSize,
 } from './styleTokens'
 import type { ScopedTextHistoryBinding } from './useScopedTextHistory'
 
@@ -19,12 +19,14 @@ type NumberInputProps = {
   min?: number
   max?: number
   step?: number
+  /** 外框宽度（布局类）。读数比它长时外框按内容撑开，读数不会被裁切。 */
   widthClassName?: string
   className?: string
   precision?: number
   disabled?: boolean
   placeholder?: string
-  size?: 'field' | 'compact'
+  /** 高度档：sm 28 / md 32（默认）/ lg 36，字号随档位。 */
+  size?: UiFieldSize
   align?: 'left' | 'center' | 'right'
   widthStrategy?: 'fixed' | 'content'
   increaseLabel?: string
@@ -35,6 +37,13 @@ type NumberInputProps = {
   /** 悬浮时滚轮直接步进并提交（无需先聚焦），会阻止容器滚动 */
   wheelStep?: boolean
 }
+
+/** 键盘 Shift + 上下键一次走十个步长。 */
+const KEYBOARD_COARSE_FACTOR = 10
+
+/** 输入框左右内边距 + 步进列宽 + 余量（px）：外框最小宽度 = 读数字符数 × 1ch + 这个值，保证读数不被裁切。 */
+const NUMBER_FIELD_CHROME_PX: Record<UiFieldSize, number> = { sm: 30, md: 34, lg: 38 }
+const NUMBER_FIELD_INPUT_PADDING_CLASS: Record<UiFieldSize, string> = { sm: 'px-1.5', md: 'px-2', lg: 'px-2.5' }
 
 function resolvePrecision(step: number): number {
   const normalized = String(step).toLowerCase()
@@ -54,6 +63,26 @@ function formatNumber(value: number, precision?: number): string {
   return fixed.replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '')
 }
 
+type ScrubSession = {
+  pointerId: number
+  startX: number
+  lastX: number
+  startValue: number
+  /** 已折算倍率后的累计位移（px）。中途切换修饰键不会让数值跳变。 */
+  travel: number
+  active: boolean
+  lastCommitted: number
+  /** 从输入框本身按下：未拖动就松开时进入编辑并全选读数。 */
+  fromInput: boolean
+}
+
+/**
+ * 数值字段：raised 字段表面 + 右侧步进列，支持**数值拖动**（设计稿“数值拖动字段”）：
+ * - 在读数或标签上按住左右拖动改值（每 2px 一个步长），Shift 精细（十分之一）、Alt 粗调（十倍）；
+ * - 单击读数进入键盘编辑（全选），回车或失焦提交；
+ * - 聚焦时上下键步进，Shift + 上下键一次十个步长；可选悬停滚轮步进。
+ * 外框最小宽度随读数长度，步进列不会把读数挤掉。
+ */
 export default function NumberInput(props: NumberInputProps): ReactElement {
   const {
     label,
@@ -68,7 +97,7 @@ export default function NumberInput(props: NumberInputProps): ReactElement {
     precision,
     disabled = false,
     placeholder,
-    size = 'field',
+    size = 'md',
     align = 'left',
     widthStrategy = 'fixed',
     increaseLabel = label ? `增加${label}` : '增加数值',
@@ -83,7 +112,9 @@ export default function NumberInput(props: NumberInputProps): ReactElement {
   const displayValue = formatNumber(safeValue, effectivePrecision)
   const [inputValue, setInputValue] = useState(displayValue)
   const [isFocused, setIsFocused] = useState(false)
+  const [isScrubbing, setIsScrubbing] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
+  const scrubRef = useRef<ScrubSession | null>(null)
 
   const clamp = useCallback((raw: number): number => {
     let next = raw
@@ -121,10 +152,10 @@ export default function NumberInput(props: NumberInputProps): ReactElement {
     }
   }
 
-  const stepBy = useCallback((direction: 1 | -1): void => {
+  const stepBy = useCallback((direction: 1 | -1, multiplier = 1): void => {
     const parsed = Number.parseFloat(inputValue)
     const base = Number.isFinite(parsed) ? parsed : safeValue
-    const next = clamp(base + direction * step)
+    const next = clamp(base + direction * step * multiplier)
     onChange(next)
     setInputValue(formatNumber(next, effectivePrecision))
   }, [clamp, effectivePrecision, inputValue, onChange, safeValue, step])
@@ -152,99 +183,135 @@ export default function NumberInput(props: NumberInputProps): ReactElement {
     return () => element.removeEventListener('wheel', handleWheel)
   }, [disabled, stepBy, wheelStep])
 
-  const compact = size === 'compact'
-  const controlHeightClass = compact ? 'h-7' : UI_FIELD_CONTROL_HEIGHT_SM_CLASS
-  const controlRadiusClass = compact ? 'rounded-md' : 'rounded-lg'
-  const stepperWidthClass = compact ? 'w-5' : 'w-7'
-  const stepperButtonWidthClass = compact ? '!w-5' : '!w-7'
-  const iconSizeClass = compact ? 'h-3 w-3' : 'h-3.5 w-3.5'
-  const textSizeClass = compact ? 'text-xs' : 'text-13'
+  const beginScrub = (event: ReactPointerEvent<HTMLElement>, fromInput: boolean): void => {
+    if (disabled || event.button !== 0) return
+    // 正在键盘编辑时，读数上的按下是移动光标/选择文字，不是拖动
+    if (fromInput && isFocused) return
+    event.preventDefault()
+    event.currentTarget.setPointerCapture?.(event.pointerId)
+    scrubRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      lastX: event.clientX,
+      startValue: safeValue,
+      travel: 0,
+      active: false,
+      lastCommitted: safeValue,
+      fromInput,
+    }
+  }
+
+  const moveScrub = (event: ReactPointerEvent<HTMLElement>): void => {
+    const session = scrubRef.current
+    if (!session || session.pointerId !== event.pointerId) return
+    if (!session.active) {
+      if (Math.abs(event.clientX - session.startX) < SCRUB_START_THRESHOLD_PX) return
+      session.active = true
+      session.lastX = session.startX
+      setIsScrubbing(true)
+    }
+    session.travel += (event.clientX - session.lastX) * resolveScrubFactor(event)
+    session.lastX = event.clientX
+    const steps = Math.round(session.travel / SCRUB_PIXELS_PER_STEP)
+    const next = clamp(session.startValue + steps * step)
+    if (next === session.lastCommitted) return
+    session.lastCommitted = next
+    onChange(next)
+    setInputValue(formatNumber(next, effectivePrecision))
+  }
+
+  const endScrub = (event: ReactPointerEvent<HTMLElement>): void => {
+    const session = scrubRef.current
+    if (!session || session.pointerId !== event.pointerId) return
+    scrubRef.current = null
+    event.currentTarget.releasePointerCapture?.(event.pointerId)
+    if (session.active) {
+      setIsScrubbing(false)
+      return
+    }
+    // 没有拖动：单击读数或标签进入编辑
+    const input = inputRef.current
+    if (!input) return
+    input.focus()
+    if (session.fromInput) input.select()
+  }
+
+  const cancelScrub = (event: ReactPointerEvent<HTMLElement>): void => {
+    if (scrubRef.current?.pointerId !== event.pointerId) return
+    scrubRef.current = null
+    setIsScrubbing(false)
+  }
+
+  const scrubHandlers = (fromInput: boolean) => ({
+    onPointerDown: (event: ReactPointerEvent<HTMLElement>) => beginScrub(event, fromInput),
+    onPointerMove: moveScrub,
+    onPointerUp: endScrub,
+    onPointerCancel: cancelScrub,
+  })
+
   const alignClass = align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : 'text-left'
   const contentWidthCharacterCount = Math.max(inputValue.length, placeholder?.length ?? 0, 2)
-  const contentWidthChromePx = compact ? 38 : 46
+  const minContentWidth = `calc(${contentWidthCharacterCount}ch + ${NUMBER_FIELD_CHROME_PX[size]}px)`
+  const scrubCursorClass = disabled ? '' : isFocused ? 'cursor-text' : 'cursor-ew-resize'
 
   return (
     <div className={className}>
-      {label ? <label className={UI_FIELD_LABEL_CLASS}>{label}</label> : null}
+      {label ? (
+        <label
+          className={`${UI_FIELD_LABEL_CLASS} select-none ${disabled ? '' : 'cursor-ew-resize'}`}
+          {...scrubHandlers(false)}
+        >
+          {label}
+        </label>
+      ) : null}
       <div
         data-ui-field-control
-        className={`inline-flex overflow-hidden ${controlHeightClass} ${controlRadiusClass} ${widthStrategy === 'fixed' ? widthClassName : ''} ${UI_FIELD_SURFACE_CLASS} ${UI_GLASS_ADAPTIVE_CONTROL_CLASS} ${UI_FIELD_FOCUS_WITHIN_CLASS}`}
-        style={widthStrategy === 'content'
-          ? { width: `calc(${contentWidthCharacterCount}ch + ${contentWidthChromePx}px)` }
-          : undefined}
+        data-scrubbing={isScrubbing ? 'true' : undefined}
+        className={`inline-flex overflow-hidden ${UI_FIELD_SIZE_CLASS[size]} ${widthStrategy === 'fixed' ? widthClassName : ''} ${UI_FIELD_SURFACE_CLASS} ${UI_FIELD_FOCUS_WITHIN_CLASS}`}
+        style={widthStrategy === 'content' ? { width: minContentWidth } : { minWidth: minContentWidth }}
       >
         <UiInput
           ref={inputRef}
           type="number"
           inputMode="decimal"
+          size={size}
           value={inputValue}
           onChange={(event) => handleInputChange(event.target.value)}
           onBlur={handleBlur}
           onFocus={handleFocus}
+          {...scrubHandlers(true)}
           onKeyDown={(event) => {
             if (event.key === 'Enter') {
               event.currentTarget.blur()
             }
             if (event.key === 'ArrowUp') {
               event.preventDefault()
-              stepBy(1)
+              stepBy(1, event.shiftKey ? KEYBOARD_COARSE_FACTOR : 1)
             }
             if (event.key === 'ArrowDown') {
               event.preventDefault()
-              stepBy(-1)
+              stepBy(-1, event.shiftKey ? KEYBOARD_COARSE_FACTOR : 1)
             }
           }}
           textHistory={scopedTextHistory}
           aria-label={ariaLabel ?? label}
           placeholder={placeholder}
-          className={`!h-full !min-h-0 !w-auto min-w-0 flex-1 appearance-none rounded-none !border-0 !bg-transparent px-2 py-0 ${textSizeClass} ${alignClass}`}
+          // 外框已经画了字段表面与焦点环：内层输入框只负责文字，铺满高度、透明、不再画环
+          className={`!h-full min-w-0 flex-1 appearance-none !bg-transparent tabular-nums !ring-0 ${NUMBER_FIELD_INPUT_PADDING_CLASS[size]} ${alignClass} ${scrubCursorClass}`}
           min={min}
           max={max}
           step={step}
           disabled={disabled}
         />
-        <div className={`flex shrink-0 flex-col ${stepperWidthClass}`}>
-          {/* ui-surface-allow 数值框内置步进箭头：高度与宽度随字段档位，交 2.2 数值拖动字段替换 */}
-          <UiIconButton
-            type="button"
-            tabIndex={-1}
-            data-ui-compact-stepper-button
-            onMouseDown={(event) => {
-              event.preventDefault()
-              event.stopPropagation()
-            }}
-            onClick={(event) => {
-              event.stopPropagation()
-              stepBy(1)
-            }}
-            className={`!h-1/2 !rounded-none !p-0 ${stepperButtonWidthClass}`}
-            title={increaseLabel}
-            aria-label={increaseLabel}
-            disabled={disabled || (typeof max === 'number' && safeValue >= max)}
-          >
-            <ChevronUp className={iconSizeClass} />
-          </UiIconButton>
-          {/* ui-surface-allow 数值框内置步进箭头：高度与宽度随字段档位，交 2.2 数值拖动字段替换 */}
-          <UiIconButton
-            type="button"
-            tabIndex={-1}
-            data-ui-compact-stepper-button
-            onMouseDown={(event) => {
-              event.preventDefault()
-              event.stopPropagation()
-            }}
-            onClick={(event) => {
-              event.stopPropagation()
-              stepBy(-1)
-            }}
-            className={`!h-1/2 !rounded-none !p-0 ${stepperButtonWidthClass}`}
-            title={decreaseLabel}
-            aria-label={decreaseLabel}
-            disabled={disabled || (typeof min === 'number' && safeValue <= min)}
-          >
-            <ChevronDown className={iconSizeClass} />
-          </UiIconButton>
-        </div>
+        <UiNumberStepper
+          size={size}
+          increaseLabel={increaseLabel}
+          decreaseLabel={decreaseLabel}
+          disabled={disabled}
+          canIncrease={!(typeof max === 'number' && safeValue >= max)}
+          canDecrease={!(typeof min === 'number' && safeValue <= min)}
+          onStep={(direction) => stepBy(direction)}
+        />
       </div>
     </div>
   )

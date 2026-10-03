@@ -66,7 +66,7 @@ export function RenameDialog({
         onChange={(e) => setName(e.target.value)}
         onKeyDown={handleKeyDown}
         placeholder={placeholder ?? t('project.namePlaceholder')}
-        className="h-10"
+        size="lg"
         autoFocus
       />
     </UiModal>

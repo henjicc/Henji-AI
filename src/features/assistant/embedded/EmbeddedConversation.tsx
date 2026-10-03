@@ -104,7 +104,7 @@ export function EmbeddedConversation(): JSX.Element {
       onImportingChange={setImporting}
       onCancel={() => { void getPlatform().embeddedAgent.cancel().catch(reportEmbeddedAgentError) }}
       sendLabel={busy ? delivery === 'wait' ? '等待发送' : '打断发送' : '发送'}
-      controls={<><Dropdown value={access} options={accessOptions} onSelect={setAccess} disabled={busy || importing} ariaLabel="助手操作权限" appearance="text" className="min-w-0" buttonClassName="!h-7 !px-2 text-2xs" />
+      controls={<><Dropdown value={access} options={accessOptions} onSelect={setAccess} disabled={busy || importing} ariaLabel="助手操作权限" appearance="text" className="min-w-0" size="sm" buttonClassName="!px-2" />
         {busy ? <Dropdown value={delivery} options={[{ value: 'wait', label: '等待' }, { value: 'interrupt', label: '打断' }]} onSelect={setDelivery} ariaLabel="发送方式" appearance="text" /> : null}</>} />
   </div>
 }

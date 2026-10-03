@@ -2,7 +2,6 @@ import React from 'react';
 import { CheckSquare, FolderOpen, Pencil, Plus, Square, Trash2 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import {
-  UI_MULTISELECT_ITEM_ACTIVE_OVERRIDE_CLASS,
   UiButton,
   UiCheckbox,
   UiEmpty,
@@ -177,7 +176,9 @@ export const ProjectCardGrid: React.FC<ProjectCardGridProps> = ({
               data-project-meta={item.metaLine}
               variant="card"
               type="button"
-              className={`h-auto w-full flex-col !items-stretch gap-0 p-2.5 text-left ${selected ? UI_MULTISELECT_ITEM_ACTIVE_OVERRIDE_CLASS : ''}`}
+              selection="multiple"
+              active={selected}
+              className="h-auto w-full flex-col !items-stretch gap-0 p-2.5 text-left"
               onClick={() => (selection.active ? selection.toggle(item.id) : onOpen(item))}
               onContextMenu={(event) => showMenu(event, buildMenuItems(item))}
               disabled={busy}

@@ -4,7 +4,7 @@ import { reportCanvasOperationFailure } from '@/features/canvas/application/canv
 import { createLogger } from '@/core/logging'
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { NodeToolbar as ReactFlowNodeToolbar } from '@xyflow/react';
-import { Copy, Crop, Download, FolderCheck, FolderPlus, Image, PenLine, RefreshCw, Scissors, Sparkles, Trash2, Unlink2, Video } from 'lucide-react';
+import { Check, Copy, Crop, Download, FolderCheck, FolderPlus, Image, PenLine, RefreshCw, Scissors, Sparkles, Trash2, Unlink2, Video } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 const logger = createLogger('features.canvas.ui.NodeActionToolbar')
@@ -34,7 +34,7 @@ import { getNodeToolPlugins } from '@/features/canvas/tools';
 import type { ToolIconKey } from '@/features/canvas/tools';
 import {
   UI_GLASS_ADAPTIVE_DIVIDER_CLASS,
-  UiChipButton,
+  UiButton,
   UiPanel,
 } from '@/components/ui';
 import { copyImageSourceToClipboard } from '@/commands/image';
@@ -45,11 +45,7 @@ import { deleteCanvasNodes } from '@/features/canvas/application/canvasMutationS
 import { sanitizeStoryboardText } from '@/features/canvas/application/storyboardText';
 import {
   NODE_TOOLBAR_ALIGN,
-  NODE_TOOLBAR_ACCENT_BUTTON_CLASS,
-  NODE_TOOLBAR_BUTTON_RADIUS_CLASS,
   NODE_TOOLBAR_CLASS,
-  NODE_TOOLBAR_DANGER_BUTTON_CLASS,
-  NODE_TOOLBAR_NEUTRAL_BUTTON_CLASS,
   NODE_TOOLBAR_OFFSET,
   NODE_TOOLBAR_POSITION,
 } from './nodeToolbarConfig';
@@ -305,9 +301,9 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
       {/* 工具条浮在画布/图片节点之上，背后是用户内容而非纯色 UI，走玻璃材质 */}
       <UiPanel ref={toolbarPanelRef} variant="glass" data-node-toolbar-panel className="ui-scrollbar flex w-max items-center gap-1 overflow-x-auto p-1 [&>*]:shrink-0">
         {canTriggerGeneration && (
-          <UiChipButton
+          <UiButton
             key="node-generate"
-            className={`h-8 ${NODE_TOOLBAR_BUTTON_RADIUS_CLASS} px-2.5 text-xs ${NODE_TOOLBAR_ACCENT_BUTTON_CLASS}`}
+            variant="primary"
             onClick={(event) => {
               event.stopPropagation();
               void runCanvasNode(node.id).catch(() => undefined);
@@ -315,11 +311,11 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
           >
             <Sparkles className="h-3.5 w-3.5" />
             {t('canvas.generate')}
-          </UiChipButton>
+          </UiButton>
         )}
         {isCameraStage && (node.data.outputKind ?? 'image') === 'image' && (
-            <UiChipButton
-              className={`h-8 ${NODE_TOOLBAR_BUTTON_RADIUS_CLASS} px-2.5 text-xs ${NODE_TOOLBAR_ACCENT_BUTTON_CLASS}`}
+            <UiButton
+              variant="secondary"
               disabled={Boolean(node.data.imageExporting || node.data.videoExporting)}
               onClick={(event) => {
                 event.stopPropagation();
@@ -328,11 +324,11 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
             >
               <Image className="h-3.5 w-3.5" />
               {t('nodeToolbar.outputImage')}
-            </UiChipButton>
+            </UiButton>
         )}
         {isCameraStage && node.data.outputKind === 'video' && (
-            <UiChipButton
-              className={`h-8 ${NODE_TOOLBAR_BUTTON_RADIUS_CLASS} px-2.5 text-xs ${NODE_TOOLBAR_ACCENT_BUTTON_CLASS}`}
+            <UiButton
+              variant="secondary"
               disabled={Boolean(node.data.videoExporting)}
               onClick={(event) => {
                 event.stopPropagation();
@@ -341,7 +337,7 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
             >
               <Video className="h-3.5 w-3.5" />
               {t('nodeToolbar.outputVideo')}
-            </UiChipButton>
+            </UiButton>
         )}
         <CanvasImageCapabilityActions
           actions={imageCapabilityActions}
@@ -361,9 +357,8 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
           const Icon = toolIconMap[tool.icon] ?? Crop;
 
           return (
-            <UiChipButton
+            <UiButton
               key={tool.type}
-              className={`h-8 ${NODE_TOOLBAR_BUTTON_RADIUS_CLASS} px-2.5 text-xs ${NODE_TOOLBAR_NEUTRAL_BUTTON_CLASS}`}
               onClick={() =>
                 canvasEventBus.publish('tool-dialog/open', {
                   nodeId: node.id,
@@ -373,13 +368,12 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
             >
               <Icon className="h-3.5 w-3.5" />
               {tool.label}
-            </UiChipButton>
+            </UiButton>
           );
         })}
         {!isImageEdit && canReupload && (
-          <UiChipButton
+          <UiButton
             key="upload-reupload"
-            className={`h-8 ${NODE_TOOLBAR_BUTTON_RADIUS_CLASS} px-2.5 text-xs ${NODE_TOOLBAR_NEUTRAL_BUTTON_CLASS}`}
             onClick={() =>
               canvasEventBus.publish('upload-node/reupload', {
                 nodeId: node.id,
@@ -388,45 +382,38 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
           >
             <RefreshCw className="h-3.5 w-3.5" />
             {t('nodeToolbar.reupload')}
-          </UiChipButton>
+          </UiButton>
         )}
         {!isImageEdit && canHandleImage && (
-          <UiChipButton
+          <UiButton
             key="image-copy"
             aria-label={isCopySuccess ? t('ui:workspace.toast.copySuccess') : t('nodeToolbar.copy')}
-            className={`h-8 ${NODE_TOOLBAR_BUTTON_RADIUS_CLASS} px-2.5 text-xs ${NODE_TOOLBAR_NEUTRAL_BUTTON_CLASS} ${
-              isCopySuccess
-                ? '!border-emerald-400/70 !bg-emerald-500/20 !text-emerald-200 hover:!bg-emerald-500/30'
-                : ''
-            }`}
             onClick={() => {
               void handleCopyImage();
             }}
           >
-            <Copy className="h-3.5 w-3.5" />
+            {isCopySuccess ? <Check className="h-3.5 w-3.5 text-success-text" /> : <Copy className="h-3.5 w-3.5" />}
             {t('nodeToolbar.copy')}
-          </UiChipButton>
+          </UiButton>
         )}
         {assetMedia && (
-          <UiChipButton
+          <UiButton
             key="asset-collect"
             disabled={collecting}
-            className={`h-8 ${NODE_TOOLBAR_BUTTON_RADIUS_CLASS} px-2.5 text-xs ${NODE_TOOLBAR_NEUTRAL_BUTTON_CLASS} ${assetCollected ? '!text-emerald-400' : ''}`}
             onClick={(event) => {
               event.stopPropagation();
               void handleCollectAsset();
             }}
           >
-            {assetCollected ? <FolderCheck className="h-3.5 w-3.5" /> : <FolderPlus className="h-3.5 w-3.5" />}
+            {assetCollected ? <FolderCheck className="h-3.5 w-3.5 text-success-text" /> : <FolderPlus className="h-3.5 w-3.5" />}
             {t('ui:assetLibrary.assetShort')}
-          </UiChipButton>
+          </UiButton>
         )}
         {videoEditSource && (
-          <UiChipButton
+          <UiButton
             key="video-edit-send"
             disabled={sendingToVideoEdit}
             title={t('ui:videoEditSend.addToPlayhead')}
-            className={`h-8 ${NODE_TOOLBAR_BUTTON_RADIUS_CLASS} px-2.5 text-xs ${NODE_TOOLBAR_NEUTRAL_BUTTON_CLASS}`}
             onClick={(event) => {
               event.stopPropagation();
               void handleSendToVideoEdit();
@@ -434,39 +421,32 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
           >
             <ICON_WORKSPACE_VIDEO_EDIT className="h-3.5 w-3.5" />
             {t('ui:videoEditSend.short')}
-          </UiChipButton>
+          </UiButton>
         )}
         {!isImageEdit && canCopyStoryboardText && (
-          <UiChipButton
+          <UiButton
             key="storyboard-text-copy"
             aria-label={isCopyTextSuccess ? t('ui:workspace.toast.copySuccess') : t('nodeToolbar.copyText')}
-            className={`h-8 ${NODE_TOOLBAR_BUTTON_RADIUS_CLASS} px-2.5 text-xs ${NODE_TOOLBAR_NEUTRAL_BUTTON_CLASS} ${
-              isCopyTextSuccess
-                ? '!border-emerald-400/70 !bg-emerald-500/20 !text-emerald-200 hover:!bg-emerald-500/30'
-                : ''
-            }`}
             onClick={() => {
               void handleCopyStoryboardText();
             }}
           >
-            <Copy className="h-3.5 w-3.5" />
+            {isCopyTextSuccess ? <Check className="h-3.5 w-3.5 text-success-text" /> : <Copy className="h-3.5 w-3.5" />}
             {t('nodeToolbar.copyText')}
-          </UiChipButton>
+          </UiButton>
         )}
         {canDownload && (
-          <UiChipButton
+          <UiButton
             key="media-download"
-            className={`h-8 ${NODE_TOOLBAR_BUTTON_RADIUS_CLASS} px-2.5 text-xs ${NODE_TOOLBAR_NEUTRAL_BUTTON_CLASS}`}
             onClick={handleDownloadClick}
           >
             <Download className="h-3.5 w-3.5" />
             {t('nodeToolbar.download')}
-          </UiChipButton>
+          </UiButton>
         )}
         {!isImageEdit && (isGroupNode(node) || isAssetGroupNode(node)) && (
-          <UiChipButton
+          <UiButton
             key="group-ungroup"
-            className={`h-8 ${NODE_TOOLBAR_BUTTON_RADIUS_CLASS} px-2.5 text-xs ${NODE_TOOLBAR_NEUTRAL_BUTTON_CLASS} hover:!border-amber-400/60 hover:!bg-amber-500/20 hover:!text-amber-200`}
             onClick={(event) => {
               event.stopPropagation();
               closeDownloadMenu();
@@ -476,11 +456,11 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
           >
             <Unlink2 className="h-3.5 w-3.5" />
             {t('nodeToolbar.ungroup')}
-          </UiChipButton>
+          </UiButton>
         )}
-        <UiChipButton
+        <UiButton
           key="node-delete"
-          className={`h-8 ${NODE_TOOLBAR_BUTTON_RADIUS_CLASS} px-2.5 text-xs ${NODE_TOOLBAR_DANGER_BUTTON_CLASS}`}
+          variant="danger"
           onClick={(event) => {
             event.stopPropagation();
             closeDownloadMenu();
@@ -489,7 +469,7 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
         >
           <Trash2 className="h-3.5 w-3.5" />
           {t('common.delete')}
-        </UiChipButton>
+        </UiButton>
       </UiPanel>
 
       {canDownload && (

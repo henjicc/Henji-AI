@@ -138,7 +138,7 @@ export function AssistantMemoryPanel(): JSX.Element {
                   onSelect={(defaultTtlDays) => void act('settings', async () => {
                     await updateAgentMemorySettings({ defaultTtlDays })
                   })}
-                  buttonClassName="!h-7 !rounded-md !px-2 text-2xs"
+                  size="sm" buttonClassName="!px-2"
                 />
               </div>
             </div>

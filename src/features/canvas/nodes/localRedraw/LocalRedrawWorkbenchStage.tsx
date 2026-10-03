@@ -87,7 +87,7 @@ export const LocalRedrawWorkbenchStage = memo(function LocalRedrawWorkbenchStage
               active={editor.tool === value}
               title={label}
               aria-label={label}
-              className="h-8 px-2"
+              size="md" className="px-2"
               onClick={() => editor.setTool(value)}
             >
               <Icon className="h-3.5 w-3.5" />
@@ -100,7 +100,7 @@ export const LocalRedrawWorkbenchStage = memo(function LocalRedrawWorkbenchStage
           active={editor.mode === 'erase'}
           title={t('node.elementEditGeneration.tools.erase')}
           aria-label={t('node.elementEditGeneration.tools.erase')}
-          className="h-8 px-2"
+          size="md" className="px-2"
           onClick={() => editor.setMode(editor.mode === 'erase' ? 'paint' : 'erase')}
         >
           <Eraser className="h-3.5 w-3.5" />

@@ -23,7 +23,7 @@ export function VideoEditSequenceTabs({ instance, onError }: { instance: VideoEd
           { id: 'duplicate', label: '复制序列', icon: <Copy size={16} />, onClick: () => run(() => switchVideoEditSequence(id, duplicateVideoEditSequence(id, sequence.id))) },
           { id: 'delete', label: '移除空序列', icon: <Trash2 size={16} />, disabled: instance.document.sequences.length <= 1 || !!sequence.clips.length || !!sequence.annotations.length, onClick: () => run(() => deleteVideoEditSequence(id, sequence.id)) },
         ])}>
-          <UiChipButton role="tab" aria-selected={active} active={active} selectionRole="navigation" selectionAppearance="subtle" className="!h-8 max-w-48 truncate text-xs" onClick={() => run(() => switchVideoEditSequence(id, sequence.id))}>{sequence.name}</UiChipButton>
+          <UiChipButton role="tab" aria-selected={active} active={active} selectionRole="navigation" selectionAppearance="subtle" size="md" className="max-w-48 truncate" onClick={() => run(() => switchVideoEditSequence(id, sequence.id))}>{sequence.name}</UiChipButton>
           <UiIconButton size="lg" title={`关闭 ${sequence.name} 标签`} aria-label={`关闭 ${sequence.name} 标签`} disabled={instance.openSequenceIds.length <= 1} onClick={() => run(() => setVideoEditProjectView(id, { openSequenceIds: instance.openSequenceIds.filter(item => item !== sequence.id) }))}>×</UiIconButton>
         </div>
       })}

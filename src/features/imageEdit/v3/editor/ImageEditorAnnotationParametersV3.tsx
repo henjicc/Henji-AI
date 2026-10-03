@@ -347,7 +347,7 @@ export function ImageEditorAnnotationParametersV3({
             {(['pixel', 'blur'] as const).map((mode) => (
               <UiChipButton
                 key={mode}
-                className="!h-8 !px-2 !text-xs"
+                size="md" className="!px-2"
                 selectionRole="navigation"
                 active={mosaicMode === mode}
                 onClick={() => applyAndCommit({ mosaicMode: mode })}

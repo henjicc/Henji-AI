@@ -1,9 +1,9 @@
-import { useId, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useMemo, useRef, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import Dropdown from '@/components/ui/Dropdown'
 import FileUploader from '@/components/ui/FileUploader'
-import Tooltip from '@/components/ui/Tooltip'
+import { UiTooltipText } from '@/components/ui/layout'
 import { UiButton, UiOptionButton, UiSwitch, UiTextAreaField } from '@/components/ui/primitives'
 import { UiModal } from '@/components/ui/UiModal'
 import {
@@ -52,18 +52,9 @@ function readSettings(state: Readonly<DynamicValueMap>): RelightSettingsV1 {
 }
 
 function FieldTitle({ children, tooltip }: { children: string; tooltip: string }): JSX.Element {
-  const tooltipId = useId()
   return (
     <div className={UI_TEXT_LABEL_CLASS}>
-      <Tooltip content={tooltip} contentId={tooltipId} delay={200}>
-        <span
-          tabIndex={0}
-          className="inline-block cursor-help rounded-lg outline-none focus-visible:ring-1 focus-visible:ring-accent"
-          aria-describedby={tooltipId}
-        >
-          {children}
-        </span>
-      </Tooltip>
+      <UiTooltipText tooltip={tooltip}>{children}</UiTooltipText>
     </div>
   )
 }
@@ -142,7 +133,7 @@ export function RelightWorkbench({
                 type="button"
                 variant="menu"
                 active={settings.lightingMode === 'manual'}
-                className="!h-9 justify-center whitespace-nowrap !px-2 text-xs"
+                size="lg" className="justify-center whitespace-nowrap !px-2"
                 onClick={() => updateSettings({ ...settings, lightingMode: 'manual' })}
               >
                 手动打光
@@ -151,7 +142,7 @@ export function RelightWorkbench({
                 type="button"
                 variant="menu"
                 active={settings.lightingMode === 'smart'}
-                className="!h-9 justify-center whitespace-nowrap !px-2 text-xs"
+                size="lg" className="justify-center whitespace-nowrap !px-2"
                 onClick={() => updateSettings({ ...settings, lightingMode: 'smart' })}
               >
                 智能打光

@@ -101,7 +101,7 @@ const StaticClipBlock: React.FC<StaticClipBlockProps> = ({
               名称
               <UiInput
                 value={draftName}
-                className="h-8 text-xs"
+                
                 onChange={(event) => setDraftName(event.target.value)}
                 onBlur={commitName}
                 onKeyDown={(event) => {

@@ -233,7 +233,7 @@ export function ModelPickerList({
             textHistory={{ onValueChange: onSearchChange }}
             onKeyDown={(event) => event.stopPropagation()}
             placeholder={searchPlaceholder}
-            className="h-7 rounded-md pl-8 pr-8 text-xs"
+            size="sm" className="pl-8 pr-8"
           />
           {modelSearchQuery && (
             <UiIconButton size="xs"
@@ -287,11 +287,8 @@ export function ModelPickerList({
                 event.stopPropagation();
                 onProviderFilterChange('all');
               }}
-              className={`!h-6 shrink-0 !rounded-md !px-2 !text-2xs ${
-                providerFilter === 'all'
-                  ? ''
-                  : '!border-border-dark !bg-panel hover:!border-text-muted hover:!bg-panel'
-              }`}
+              size="sm"
+              className="shrink-0"
             >
               {t('modelParams.allProviders', { defaultValue: '全部' })}
             </UiOptionButton>
@@ -308,14 +305,11 @@ export function ModelPickerList({
                     event.stopPropagation();
                     onProviderFilterChange(provider.id);
                   }}
-                  className={`!h-6 shrink-0 gap-2 !rounded-md !px-2 !text-2xs ${
-                    active
-                      ? ''
-                      : '!border-border-dark !bg-panel hover:!border-text-muted hover:!bg-panel'
-                  }`}
+                  size="sm"
+                  className="shrink-0 gap-2"
                 >
                   <span>{provider.label}</span>
-                  <span className={`text-2xs ${active ? 'text-white/70' : 'text-text-muted/80'}`}>
+                  <span className={`text-2xs ${active ? 'text-text2' : 'text-text3'}`}>
                     {provider.count}
                   </span>
                 </UiOptionButton>
@@ -432,24 +426,24 @@ export function ModelPickerList({
               key={model.key}
               active={active}
               variant="menu"
-              className="w-full items-start gap-2.5 rounded-lg px-2.5 py-1.5"
+              className="w-full items-start gap-2.5 px-2.5 py-1.5"
               onClick={(event) => {
                 event.stopPropagation();
                 onModelChange(model.key);
               }}
             >
               {model.icon && (
-                <div className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-lg text-text-muted ${active ? 'bg-white/15 text-white' : 'bg-bg-dark'}`}>
+                <div className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-gap text-text2`}>
                   <img src={model.icon} alt="" className="h-full w-full object-cover" />
                 </div>
               )}
               <div className="min-w-0 flex-1">
-                <div className={`truncate text-13 ${active ? 'text-white' : 'text-text-dark'}`}>{model.displayName}</div>
-                <div className={`truncate text-2xs ${active ? 'text-white/70' : 'text-text-muted'}`}>
+                <div className="truncate text-13 text-text1">{model.displayName}</div>
+                <div className={`truncate text-2xs ${active ? 'text-text2' : 'text-text3'}`}>
                   {getModelDetail(model)}
                 </div>
               </div>
-              {active && <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-white" />}
+              {active && <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent-text" />}
             </UiOptionButton>
           );
         })}

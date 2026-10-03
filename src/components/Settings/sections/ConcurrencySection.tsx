@@ -12,7 +12,7 @@ interface ConcurrencySectionProps {
 const ConcurrencySection: React.FC<ConcurrencySectionProps> = ({ maxConcurrentTasks, onChange }) => {
   const { t } = useI18n('settings')
   return (
-    // 两条说明合并进 ⓘ：都是「超出后会排队」这类工作原理，不影响用户填几
+    // 两条说明合并进标签本身的悬停说明（info）：都是「超出后会排队」这类工作原理，不影响用户填几
     <UiFormRow
       label={t('sections.concurrency.label')}
       info={`${t('sections.concurrency.hint')} ${t('sections.concurrency.queueHint')}`}

@@ -23,7 +23,7 @@ function ContentAnchor({ clips, value, disabled, onChange }: { clips: VideoEditC
   return <Dropdown key={value} ariaLabel="内容锚定" display={value ? selected?.name ?? '所属片段已移除' : '序列时钟'} disabled={disabled} renderPanel={() => <div className="flex h-64 min-w-48 flex-col gap-2 p-2">
     <UiInput aria-label="搜索锚定片段" placeholder="搜索片段" value={search} onChange={event => setSearch(event.target.value)} />
     <UiOptionButton variant="menu" active={!value} className="w-full" onClick={() => onChange('')}>序列时钟</UiOptionButton>
-    <Virtuoso className="min-h-0 flex-1" data={choices} fixedItemHeight={38} computeItemKey={(_index, clip) => clip.id} itemContent={(_index, clip) => <UiOptionButton variant="menu" active={value === clip.id} className="w-full min-w-0 !py-2 text-xs" aria-label={`锚定片段：${clip.name}`} onClick={() => onChange(clip.id)}><span className="truncate">{clip.name}</span></UiOptionButton>} />
+    <Virtuoso className="min-h-0 flex-1" data={choices} fixedItemHeight={38} computeItemKey={(_index, clip) => clip.id} itemContent={(_index, clip) => <UiOptionButton variant="menu" active={value === clip.id} size="sm" className="w-full min-w-0 !py-2" aria-label={`锚定片段：${clip.name}`} onClick={() => onChange(clip.id)}><span className="truncate">{clip.name}</span></UiOptionButton>} />
   </div>} />
 }
 
@@ -114,7 +114,7 @@ function ContentWorkspace({ instance, sequence, onError }: { instance: VideoEdit
       <UiInput aria-label="搜索字幕或标记" placeholder="搜索文字或片段" className="min-w-24 flex-1" value={keyword} onChange={event => setKeyword(event.target.value)} />
     </div>
     <div className="min-h-0 flex-1 px-2" aria-label={kind === 'caption' ? '字幕列表' : '标记列表'}>
-      {entries.length ? <Virtuoso className="h-full" data={entries} fixedItemHeight={56} increaseViewportBy={96} computeItemKey={(_index, entry) => entry.value.id} itemContent={(_index, entry) => <UiOptionButton variant="menu" active={selectedId === entry.value.id} disabled={busy} className="h-14 w-full min-w-0 flex-col !items-start !px-2 !py-2" aria-label={`${entry.kind === 'caption' ? '字幕' : '标记'}：${entryText(entry)}`} data-video-edit-timed-entry={entry.value.id} data-entry-kind={entry.kind}
+      {entries.length ? <Virtuoso className="h-full" data={entries} fixedItemHeight={56} increaseViewportBy={96} computeItemKey={(_index, entry) => entry.value.id} itemContent={(_index, entry) => <UiOptionButton variant="menu" active={selectedId === entry.value.id} disabled={busy} className="w-full min-w-0 flex-col !items-start !px-2 !py-2" aria-label={`${entry.kind === 'caption' ? '字幕' : '标记'}：${entryText(entry)}`} data-video-edit-timed-entry={entry.value.id} data-entry-kind={entry.kind}
         onClick={() => openEntry(entry)} onDoubleClick={() => locate(entry)}>
         <span className="block w-full truncate text-sm" data-observation-sensitive>{entryText(entry)}</span>
         <span className={`${UI_TEXT_META_CLASS} block w-full truncate`}>第 {atFrame(entry)} 帧{entry.kind === 'caption' ? ` · ${entry.value.duration} 帧` : ''} · {clips.get(entry.value.clipId ?? '')?.name ?? '序列时钟'}</span>

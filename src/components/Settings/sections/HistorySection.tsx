@@ -12,7 +12,7 @@ interface HistorySectionProps {
 const HistorySection: React.FC<HistorySectionProps> = ({ maxHistoryCount, onChange }) => {
   const { t } = useI18n('settings')
   return (
-    // 取值范围（1-500）和超出后的行为属于「不看也能填对」，收进 ⓘ
+    // 取值范围（1-500）和超出后的行为属于「不看也能填对」，收进标签本身的悬停说明（info）
     <UiFormRow label={t('sections.history.limitLabel')} info={t('sections.history.limitHint')} inline>
       <NumberInput
         value={maxHistoryCount}

@@ -13,12 +13,11 @@
  *   Surface  UiPanel variant=inset 仅更暗底色
  *   Card     UiPanel               唯一允许画完整卡片的一层（浮层/弹窗/侧栏/画布节点）
  */
-import type { HTMLAttributes, ReactNode } from 'react';
-import { ArrowLeft, Info } from 'lucide-react';
+import { useId, type HTMLAttributes, type ReactNode } from 'react';
+import { ArrowLeft } from 'lucide-react';
 import Tooltip from './Tooltip';
 import { UiIconButton } from './primitives';
 import {
-  UI_BUTTON_RESET_CLASS,
   UI_DIVIDER_CLASS,
   UI_ROW_GAP_CLASS,
   UI_STACK_GAP_CLASS,
@@ -40,7 +39,7 @@ interface UiGroupProps extends Omit<HTMLAttributes<HTMLDivElement>, 'title'> {
    * 多数分组解释"是什么/怎么用"应该走 `info`，这里只留给真正常驻必要的那一句。
    */
   description?: ReactNode;
-  /** 背景知识型说明，收进标题后的 ⓘ，悬停/聚焦显示。设置类分组的默认选择。 */
+  /** 背景知识型说明：标题文字本身在悬停/聚焦时显示（不加 ⓘ 图标）。设置类分组的默认选择。 */
   info?: ReactNode;
   /** 标题行右侧操作区 */
   actions?: ReactNode;
@@ -84,7 +83,7 @@ interface UiFormRowProps extends Omit<HTMLAttributes<HTMLDivElement>, 'title'> {
    * 标签已经自解释的（「界面语言」「触发边缘」），两个都不要给。
    */
   hint?: ReactNode;
-  /** 背景知识型说明，收进标签后的 ⓘ，悬停或聚焦时显示 */
+  /** 背景知识型说明：标签文字本身在悬停或聚焦时显示（不加 ⓘ 图标） */
   info?: ReactNode;
   /** 横向排列（标签左、控件右），默认纵向 */
   inline?: boolean;
@@ -96,6 +95,34 @@ interface UiToolbarProps extends HTMLAttributes<HTMLDivElement> {
   children?: ReactNode;
   /** 右侧内容 */
   trailing?: ReactNode;
+}
+
+interface UiTooltipTextProps {
+  /** 给用户看的说明（参数 `tooltip`、设置项 `info`）；为空时只渲染普通文字，不制造伪交互。 */
+  tooltip?: ReactNode;
+  children: ReactNode;
+  className?: string;
+}
+
+/**
+ * 名称文字本身作为说明的触发器（skill `henji-ui-surface`「参数说明的受众」）：
+ * 有说明时文字可聚焦、悬停或聚焦显示 tooltip，用一道点状下划线提示“这里有说明”；
+ * 不在名称旁加 ⓘ / 问号图标，也不把整个控件包进 Tooltip。没有说明时就是普通文字。
+ */
+export function UiTooltipText({ tooltip, children, className = '' }: UiTooltipTextProps): JSX.Element {
+  const tooltipId = useId();
+  if (!tooltip) return className ? <span className={className}>{children}</span> : <>{children}</>;
+  return (
+    <Tooltip content={tooltip} contentId={tooltipId} delay={200}>
+      <span
+        tabIndex={0}
+        aria-describedby={tooltipId}
+        className={`cursor-help rounded-sm underline decoration-line-strong decoration-dotted underline-offset-4 outline-none focus-visible:ring-2 focus-visible:ring-accent-ring ${className}`}
+      >
+        {children}
+      </span>
+    </Tooltip>
+  );
 }
 
 function resolveGapClass(gap: UiGroupProps['gap']): string {
@@ -151,18 +178,7 @@ export function UiGroup({
           <div className="min-w-0">
             {title ? (
               <div className={`flex items-center gap-1 ${titleClass}`}>
-                <span>{title}</span>
-                {info ? (
-                  <Tooltip content={info} delay={200}>
-                    <button
-                      type="button"
-                      aria-label="查看说明"
-                      className={`${UI_BUTTON_RESET_CLASS} inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-text-muted transition-colors hover:text-text-dark`}
-                    >
-                      <Info className="h-3.5 w-3.5" />
-                    </button>
-                  </Tooltip>
-                ) : null}
+                <UiTooltipText tooltip={info}>{title}</UiTooltipText>
               </div>
             ) : null}
             {description ? (
@@ -228,23 +244,7 @@ export function UiFormRow({
   children,
   ...props
 }: UiFormRowProps): JSX.Element {
-  const labelNode = info ? (
-    <span className="inline-flex items-center gap-1">
-      <span>{label}</span>
-      <Tooltip content={info} delay={200}>
-        <button
-          type="button"
-          // 说明本身已经在 tooltip 里，按钮只需要一个能被读屏念出来的名字
-          aria-label="查看说明"
-          className={`${UI_BUTTON_RESET_CLASS} inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-text-muted transition-colors hover:text-text-dark`}
-        >
-          <Info className="h-3.5 w-3.5" />
-        </button>
-      </Tooltip>
-    </span>
-  ) : (
-    label
-  );
+  const labelNode = <UiTooltipText tooltip={info}>{label}</UiTooltipText>;
 
   if (inline) {
     return (

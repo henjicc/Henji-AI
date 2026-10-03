@@ -8,11 +8,11 @@ import {
   resolveFloatingPanelPosition,
   type FloatingPanelPosition,
 } from './floatingPanelPosition'
-import { UI_FIELD_CONTROL_HEIGHT_SM_CLASS, UI_FIELD_LABEL_CLASS, UI_TRIGGER_BUTTON_CLASS, UI_TRIGGER_PANEL_CLASS } from './styleTokens'
+import { UI_FIELD_LABEL_CLASS, UI_TRIGGER_PANEL_PADDING_CLASS, UI_TRIGGER_PANEL_SURFACE_CLASS, type UiFieldSize, type UiTriggerPanelPadding, type UiTriggerPanelSurface } from './styleTokens'
 import { measureElementTextWidth } from './textMeasurement'
-import { UiButton } from './primitives'
+import { UiFieldTrigger } from './primitives'
 import { UI_DURATION } from './motion'
-import { ChevronDown } from 'lucide-react'
+import { Z_LAYERS } from '@/core/theme/zLayers'
 import { elementOfEventTarget, isDomNode, ownerDocumentOf, ownerWindowOf } from '@/utils/crossRealmDom'
 
 type PanelTriggerProps = {
@@ -20,9 +20,14 @@ type PanelTriggerProps = {
   display?: string
   disabled?: boolean
   className?: string
+  /** 触发器的布局类（宽度、最大宽度、弹性）。外观只由 size 决定（check:surface 规则 E）。默认 `w-full`。 */
   buttonClassName?: string
-  buttonLabelClassName?: string
-  panelClassName?: string
+  /** 触发器尺寸档：sm 28 / md 32（默认）/ lg 36，字号随档位。 */
+  size?: UiFieldSize
+  /** 浮层表面：默认实底；压在画布、图片、视频、3D 视口上时传 `glass`。 */
+  surface?: UiTriggerPanelSurface
+  /** 浮层内边距档（none / menu 4px / content 12px）；浮层外壳表面不接受覆盖。 */
+  panelPadding?: UiTriggerPanelPadding
   zIndex?: number
   panelWidth?: number
   /** 可选的最近宿主边界，如画布可见区域。 */
@@ -54,7 +59,7 @@ type PanelTriggerControls = {
 
 const PANEL_VIEWPORT_GUTTER_PX = 8
 const PANEL_VIEWPORT_TOP_INSET_PX = 48
-// 标准文字菜单：外层 p-1（8）+ 菜单项 px-2.5（20）+ 玻璃边框（2）。
+// 标准文字菜单：外层 panelPadding="menu" p-1（8）+ 菜单项 px-2.5（20）+ 玻璃边框（2）。
 const PANEL_TEXT_MENU_HORIZONTAL_CHROME_PX = 30
 
 export default function PanelTrigger(props: PanelTriggerProps): React.ReactElement {
@@ -64,9 +69,10 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
     disabled,
     className,
     buttonClassName,
-    buttonLabelClassName,
-    panelClassName,
-    zIndex = 1000,
+    size = 'md',
+    panelPadding = 'none',
+    surface = 'solid',
+    zIndex = Z_LAYERS.popover,
     panelWidth,
     boundarySelector,
     panelWidthLabels,
@@ -275,23 +281,22 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
     <div className={`relative inline-block ${className || ''}`} ref={ref}>
       {label ? <label className={UI_FIELD_LABEL_CLASS}>{label}</label> : null}
       {children ? children({ open, openPanel, closePanel, togglePanel }) : (
-        // ui-surface-allow 字段型触发器的表面暂由 UI_TRIGGER_BUTTON_CLASS 提供，交 2.2 拆为独立触发器 + size 枚举
-        <UiButton
-          type="button"
+        <UiFieldTrigger
           disabled={disabled}
-          variant="secondary"
+          size={size}
+          open={open && !closing}
           onClick={togglePanel}
           data-panel-trigger-button
-          className={`${UI_TRIGGER_BUTTON_CLASS} rounded-lg px-3 py-2 ${UI_FIELD_CONTROL_HEIGHT_SM_CLASS} ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} ${buttonClassName || 'w-full'}`}
+          aria-expanded={open && !closing}
+          className={`${disabled ? '' : 'cursor-pointer'} ${buttonClassName || 'w-full'}`}
         >
-          <span className={`${buttonLabelClassName || 'text-13'} truncate`}>{display ?? ''}</span>
-          <ChevronDown className={`w-4 h-4 text-text-muted transition-transform duration-180 ml-2 ${open ? 'rotate-180' : ''}`} />
-        </UiButton>
+          {display ?? ''}
+        </UiFieldTrigger>
       )}
       {(open || closing) && pos && createPortal(
         <div
           ref={panelRef}
-          className={`${UI_TRIGGER_PANEL_CLASS} ${panelClassName || ''} flex flex-col ${closing ? 'animate-scale-out' : 'animate-scale-in'}`}
+          className={`${UI_TRIGGER_PANEL_SURFACE_CLASS[surface]} ${UI_TRIGGER_PANEL_PADDING_CLASS[panelPadding]} flex flex-col ${closing ? 'animate-scale-out' : 'animate-scale-in'}`}
           style={{
             position: 'fixed',
             top: pos.placement === 'above' ? undefined : pos.top,

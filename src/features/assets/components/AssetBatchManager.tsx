@@ -73,12 +73,12 @@ export const AssetBatchManager: React.FC<Props> = ({
         <UiGroup title={t('assetLibrary.batchTags')}>
           <div className="relative">
             <Tags className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" />
-            <UiInput disabled={busy} className="!h-9 pl-8 text-xs" value={tagDraft} onChange={(event) => setTagDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') addDraftTags() }} placeholder={t('assetLibrary.tagPlaceholder')} />
+            <UiInput disabled={busy} size="lg" className="pl-8" value={tagDraft} onChange={(event) => setTagDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') addDraftTags() }} placeholder={t('assetLibrary.tagPlaceholder')} />
           </div>
           {(tags.length > 0 || suggestions.length > 0) && (
             <div className="flex flex-wrap gap-1.5">
-              {tags.map((tag) => <UiChipButton key={tag} active disabled={busy} className="!h-7 !px-2 text-xs" onClick={() => setTags((current) => current.filter((item) => item !== tag))}>{tag}</UiChipButton>)}
-              {suggestions.map((tag) => <UiChipButton key={tag} disabled={busy} className="!h-7 !px-2 text-xs" onClick={() => { setTags((current) => [...current, tag]); setTagDraft('') }}>{tag}</UiChipButton>)}
+              {tags.map((tag) => <UiChipButton key={tag} active disabled={busy} size="sm" className="!px-2" onClick={() => setTags((current) => current.filter((item) => item !== tag))}>{tag}</UiChipButton>)}
+              {suggestions.map((tag) => <UiChipButton key={tag} disabled={busy} size="sm" className="!px-2" onClick={() => { setTags((current) => [...current, tag]); setTagDraft('') }}>{tag}</UiChipButton>)}
             </div>
           )}
           <div className="flex gap-2">
@@ -88,7 +88,7 @@ export const AssetBatchManager: React.FC<Props> = ({
         </UiGroup>
 
         <UiGroup divided title={t('assetLibrary.batchLibraries')} className="mt-5">
-          <Dropdown<string> value={libraryId} options={libraries.map((library) => ({ value: library.id, label: library.name }))} onSelect={setLibraryId} className="w-full" buttonClassName="!h-9 w-full" panelWidthStrategy="button" disabled={busy || libraries.length === 0} />
+          <Dropdown<string> value={libraryId} options={libraries.map((library) => ({ value: library.id, label: library.name }))} onSelect={setLibraryId} className="w-full" size="lg" buttonClassName="w-full" panelWidthStrategy="button" disabled={busy || libraries.length === 0} />
           <div className="flex gap-2">
             <UiButton variant="secondary" className="flex-1" disabled={disabled || !libraryId} onClick={() => void onUpdateLibrary(libraryId, 'add')}>{t('assetLibrary.batchLibraryAdd')}</UiButton>
             <UiButton variant="secondary" className="flex-1" disabled={disabled || !libraryId} onClick={() => void onUpdateLibrary(libraryId, 'remove')}>{t('assetLibrary.batchLibraryRemove')}</UiButton>

@@ -12,7 +12,7 @@ import type { OrientationOp } from '@/features/imageMark/domain/geometry';
 import { useMarkEditorContext } from '@/features/imageMark/editor/useMarkEditorContext';
 
 const ICON_CLASS = 'h-4 w-4';
-const OPTION_CLASS = 'h-9 justify-center gap-1.5 px-2.5 text-xs';
+const OPTION_CLASS = 'justify-center gap-1.5 px-2.5';
 
 const ORIENTATION_BUTTONS: { operation: OrientationOp; label: string; icon: typeof RotateCw }[] = [
   { operation: 'rotate-ccw', label: '左转', icon: RotateCcw },
@@ -77,6 +77,7 @@ export function GeometryInspector(): JSX.Element {
               type="button"
               variant="flat"
               active={cropRatioValue === option.value}
+              size="lg"
               className={OPTION_CLASS}
               onClick={() => {
                 selectTool('crop');

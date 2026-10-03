@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { UI_TEXT_META_CLASS, UiButton, UiChipButton, UiFormRow, UiSwitch } from '@/components/ui'
+import { UI_SEGMENTED_TRACK_CLASS, UI_TEXT_META_CLASS, UiButton, UiFormRow, UiOptionButton, UiSwitch } from '@/components/ui'
 import SettingsDialog from '../components/SettingsDialog'
 import { useUpdateConfig } from '../hooks/useUpdateConfig'
 import { useExternalLink } from '../hooks/useExternalLink'
@@ -82,17 +82,19 @@ const UpdateSection: React.FC = () => {
         info={t('sections.updates.frequencyHint')}
         className={config.enabled ? '' : 'opacity-50'}
       >
-        <div className="grid grid-cols-4 gap-2">
+        {/* 检查频率是单选：分段选择（中性抬升） */}
+        <div className={UI_SEGMENTED_TRACK_CLASS}>
           {frequencies.map((freq) => (
-            <UiChipButton
+            <UiOptionButton
               key={freq}
+              variant="segment"
               onClick={() => updateFrequency(freq)}
               disabled={!config.enabled}
               active={config.frequency === freq}
-              className="justify-center px-4 text-sm font-medium"
+              aria-pressed={config.frequency === freq}
             >
               {t(`sections.updates.frequency.${freq}`)}
-            </UiChipButton>
+            </UiOptionButton>
           ))}
         </div>
       </UiFormRow>

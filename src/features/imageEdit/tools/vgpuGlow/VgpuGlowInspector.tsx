@@ -159,7 +159,7 @@ export function VgpuGlowInspector(): JSX.Element {
                 type="button"
                 variant="menu"
                 active={params.look === option.value}
-                className="justify-center text-xs"
+                size="sm" className="justify-center"
                 title={option.detail}
                 onClick={() => update(() => applyVgpuGlowLook(option.value))}
               >
@@ -227,7 +227,7 @@ export function VgpuGlowInspector(): JSX.Element {
                     type="button"
                     variant="menu"
                     active={params.chromaticChannels[side.index] === option.value}
-                    className="justify-center text-xs"
+                    size="sm" className="justify-center"
                     aria-label={`${side.label}${option.label}`}
                     onClick={() => setChromaticChannel(side.index, option.value)}
                   >
@@ -268,7 +268,7 @@ export function VgpuGlowInspector(): JSX.Element {
       <div className="mt-4 flex gap-2">
         <UiChipButton
           type="button"
-          className="!h-8 flex-1 !justify-center !text-xs"
+          size="md" className="flex-1 !justify-center"
           onClick={() => controller.resetOperation(IMAGE_EDIT_OPERATION_IDS.vgpuGlow)}
         >
           <RotateCcw className="h-3.5 w-3.5" />
@@ -276,7 +276,7 @@ export function VgpuGlowInspector(): JSX.Element {
         </UiChipButton>
         <UiChipButton
           type="button"
-          className="!h-8 flex-1 !justify-center !text-xs"
+          size="md" className="flex-1 !justify-center"
           disabled={!operation}
           onClick={() => controller.removeOperation(IMAGE_EDIT_OPERATION_IDS.vgpuGlow)}
         >

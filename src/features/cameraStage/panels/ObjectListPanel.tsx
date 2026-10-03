@@ -100,7 +100,7 @@ const ObjectListPanel: React.FC = () => {
                           finishRename('cancel')
                         }
                       }}
-                      className="h-7 min-w-0 flex-1 px-2 py-0 text-sm"
+                      size="sm" className="min-w-0 flex-1 px-2 py-0"
                     />
                     {object.type === 'camera' && object.id === activeCameraId && (
                       <span className="shrink-0 text-2xs text-text-soft">取景</span>
@@ -112,7 +112,7 @@ const ObjectListPanel: React.FC = () => {
                     variant="menu"
                     onClick={() => setSelected(object.id)}
                     onDoubleClick={() => beginRename(object)}
-                    className="min-w-0 flex-1 gap-2 py-1.5 text-sm"
+                    size="md" className="min-w-0 flex-1 gap-2 py-1.5"
                     title="双击可改名"
                   >
                     <span className="shrink-0 text-text-muted">
@@ -120,7 +120,7 @@ const ObjectListPanel: React.FC = () => {
                     </span>
                     <span className="truncate">{object.name}</span>
                     {object.type === 'camera' && object.id === activeCameraId && (
-                      <span className={`ml-auto shrink-0 text-2xs ${isSelected ? 'text-white/90' : 'text-text-soft'}`}>取景</span>
+                      <span className={`ml-auto shrink-0 text-2xs text-text2`}>取景</span>
                     )}
                   </UiOptionButton>
                 )}

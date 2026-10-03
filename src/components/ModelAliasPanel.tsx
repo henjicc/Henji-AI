@@ -78,7 +78,7 @@ const ModelAliasPanel: React.FC = () => {
                 if (e.key === 'Enter') e.currentTarget.blur()
               }}
               placeholder={entry.originalName}
-              className="h-8 text-xs"
+              
               aria-label={t('modelSettings.alias.inputLabel', { name: entry.originalName })}
             />
           </div>

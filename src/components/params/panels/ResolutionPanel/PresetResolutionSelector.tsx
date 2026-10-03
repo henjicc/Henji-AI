@@ -34,12 +34,11 @@ export const PresetResolutionSelector: React.FC<PresetResolutionSelectorProps> =
             <UiOptionButton
               type="button"
               active={value === option.value}
-              variant="menu"
+              variant="grid"
               key={option.value}
               onClick={() => onChange(option.value)}
-              className={`w-[120px] px-2 py-2 text-sm flex-col justify-center gap-1 ${
-                value === option.value ? '' : 'bg-veil-faint'
-              }`}
+              size="lg"
+              className="w-[120px] px-2 py-2 flex-col justify-center gap-1"
               style={{ minHeight: '52px' }}
             >
               <span className="font-medium leading-none">{label}</span>

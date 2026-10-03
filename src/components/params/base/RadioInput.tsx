@@ -71,9 +71,9 @@ export const RadioInput: React.FC<RadioInputProps> = ({
                 </div>
               </div>
               <div className="flex-1">
-                <div className={isSelected ? 'text-sm font-medium text-white' : UI_TEXT_LABEL_CLASS}>{getOptionLabel(option)}</div>
+                <div className={isSelected ? 'text-13 font-medium text-text1' : UI_TEXT_LABEL_CLASS}>{getOptionLabel(option)}</div>
                 {getOptionDescription(option) && (
-                  <div className={isSelected ? 'mt-1 text-xs text-white/80' : `mt-1 ${UI_TEXT_META_CLASS}`}>{getOptionDescription(option)}</div>
+                  <div className={`mt-1 ${UI_TEXT_META_CLASS}`}>{getOptionDescription(option)}</div>
                 )}
               </div>
             </UiOptionButton>

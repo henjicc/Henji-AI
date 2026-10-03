@@ -239,7 +239,7 @@ export function NodeHeader({
             }
           }}
           className={joinClasses(
-            `nodrag nowheel h-6 min-w-[70px] w-full max-w-full rounded border px-2 text-13 font-normal ${UI_FIELD_SURFACE_CLASS} ${UI_FIELD_FOCUS_CLASS}`,
+            `nodrag nowheel h-6 min-w-[70px] w-full max-w-full rounded px-2 text-13 font-normal ${UI_FIELD_SURFACE_CLASS} ${UI_FIELD_FOCUS_CLASS}`,
             titleClassName
           )}
         />

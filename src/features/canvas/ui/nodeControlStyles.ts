@@ -1,4 +1,5 @@
-export const NODE_CONTROL_CHIP_CLASS = '!h-7 !rounded-md !px-2.5 !text-xs !font-normal !gap-1.5';
+// 节点内控件芯片：高度与字号走 UiChipButton size="sm"（28 / 12px），这里只放布局
+export const NODE_CONTROL_CHIP_CLASS = '!gap-1.5';
 
 export const NODE_CONTROL_MODEL_CHIP_CLASS = '!w-full !min-w-0 !max-w-[260px] !justify-start';
 

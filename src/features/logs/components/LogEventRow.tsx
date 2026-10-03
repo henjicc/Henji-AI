@@ -15,12 +15,13 @@ export function LogEventRow({ event, selected, onSelect }: LogEventRowProps): JS
     <UiNavButton
       type="button"
       active={selected}
-      className={`!h-auto flex-col items-stretch justify-start border-b border-border-dark/40 px-3 py-2 text-xs font-normal ${
-        isError && !selected ? 'border-l-2 border-l-red-500/60' : ''
-      }`}
+      size="auto"
+      className="flex-col items-stretch justify-start font-normal"
       onClick={() => onSelect(event.id)}
     >
-      <div className="flex items-center justify-between gap-2">
+      {/* 错误行：左侧一道危险色标记（列表行本身不改外观） */}
+      {isError && !selected ? <span aria-hidden="true" className="absolute inset-y-2 left-0 w-0.5 rounded-full bg-danger-solid" /> : null}
+      <div className="flex items-center justify-between gap-2 text-xs">
         <span className="truncate">
           {display.emoji} {display.title}
         </span>
@@ -30,7 +31,7 @@ export function LogEventRow({ event, selected, onSelect }: LogEventRowProps): JS
         <span className="rounded bg-white/5 px-1 py-0.5">{event.source}</span>
         <span>{getDomainHint(event.domain)}</span>
       </div>
-      <div className="mt-1 truncate">{display.summary}</div>
+      <div className="mt-1 truncate text-xs">{display.summary}</div>
       <div className="mt-1 flex items-center justify-between gap-2">
         <span className="text-2xs opacity-70">{new Date(event.timestamp).toLocaleTimeString('zh-CN')}</span>
       </div>

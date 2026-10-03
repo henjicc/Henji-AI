@@ -52,8 +52,8 @@ describe('ModelPickerList 供应商横向导航', () => {
 
     expect(activeProvider.getAttribute('aria-pressed')).toBe('true');
     expect(inactiveProvider.getAttribute('aria-pressed')).toBe('false');
-    expect(activeProvider.lastElementChild?.classList.contains('text-white/70')).toBe(true);
-    expect(inactiveProvider.lastElementChild?.classList.contains('text-white/70')).toBe(false);
+    expect(activeProvider.lastElementChild?.classList.contains('text-text2')).toBe(true);
+    expect(inactiveProvider.lastElementChild?.classList.contains('text-text2')).toBe(false);
   });
 
   it('供应商切换后把当前项带入可视区域中央', () => {

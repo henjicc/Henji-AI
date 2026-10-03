@@ -67,7 +67,7 @@ export function StoryboardExportSettingsPanel({
             <div>
               <div className="mb-1">图片填充</div>
               <UiSelect
-                className="h-8 text-xs"
+                
                 value={exportOptions.imageFit}
                 onChange={(event) =>
                   onPatch({
@@ -84,7 +84,7 @@ export function StoryboardExportSettingsPanel({
               <UiInput
                 value={exportOptions.frameIndexPrefix}
                 maxLength={4}
-                className="h-8"
+                
                 onChange={(event) => onPatch({ frameIndexPrefix: event.target.value })}
                 textHistory={{ onValueChange: (value) => onPatch({ frameIndexPrefix: value }) }}
               />
@@ -92,7 +92,7 @@ export function StoryboardExportSettingsPanel({
             <div>
               <div className="mb-1">描述位置</div>
               <UiSelect
-                className="h-8 text-xs"
+                
                 value={exportOptions.notePlacement}
                 onChange={(event) =>
                   onPatch({
@@ -115,7 +115,7 @@ export function StoryboardExportSettingsPanel({
                 value={exportOptions.cellGap}
                 onChange={(value) => onPatch({ cellGap: value || 0 })}
                 textHistory={{ onValueChange: (value) => onPatch({ cellGap: Number(value) || 0 }) }}
-                size="compact"
+                size="sm"
                 align="center"
                 widthClassName="w-full"
                 commitOnChange
@@ -132,7 +132,7 @@ export function StoryboardExportSettingsPanel({
                 value={exportOptions.fontSize}
                 onChange={(value) => onPatch({ fontSize: value || 4 })}
                 textHistory={{ onValueChange: (value) => onPatch({ fontSize: Number(value) || 4 }) }}
-                size="compact"
+                size="sm"
                 align="center"
                 widthClassName="w-full"
                 commitOnChange

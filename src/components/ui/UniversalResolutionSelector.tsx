@@ -242,7 +242,7 @@ const UniversalResolutionSelector: React.FC<UniversalResolutionSelectorProps> = 
     if (ratio === null || ratio === undefined) {
       return (
         <div className="flex items-center justify-center h-8">
-          <Zap className="w-6 h-6 text-yellow-400" />
+          <Zap className="w-6 h-6" />
         </div>
       )
     }
@@ -250,7 +250,7 @@ const UniversalResolutionSelector: React.FC<UniversalResolutionSelectorProps> = 
     const size = calculateVisualizationSize(ratio, 32)
     return (
       <div className="flex items-center justify-center h-8">
-        <div className="border-2 border-white" style={{ width: `${size.width}px`, height: `${size.height}px` }} />
+        <div className="border-2 border-current" style={{ width: `${size.width}px`, height: `${size.height}px` }} />
       </div>
     )
   }
@@ -285,7 +285,7 @@ const UniversalResolutionSelector: React.FC<UniversalResolutionSelectorProps> = 
                       onBaseSizeChange(parsed)
                     }
                   }}
-                  className="h-9"
+                  size="lg"
                 />
                 <span className="text-xs text-text-muted whitespace-nowrap">PX</span>
               </div>
@@ -310,16 +310,15 @@ const UniversalResolutionSelector: React.FC<UniversalResolutionSelectorProps> = 
                     key={String(option.value)}
                     type="button"
                     active={value === option.value}
-                    variant="menu"
+                    variant="grid"
+                    size={config.type === 'resolution' ? 'lg' : 'sm'}
                     disabled={option.disabled}
                     onClick={() => {
                       if (!option.disabled) {
                         onChange(option.value)
                       }
                     }}
-                    className={`px-2 py-3 ${config.type === 'resolution' ? 'text-sm' : 'text-xs'} flex-col justify-center gap-2 ${
-                      value === option.value ? '' : 'bg-veil-faint'
-                    } ${option.disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    className="flex-col justify-center gap-2 px-2 py-3"
                   >
                     {config.visualize && config.type !== 'resolution' && renderVisualization(option.value)}
                     <span className="font-medium">
@@ -344,16 +343,15 @@ const UniversalResolutionSelector: React.FC<UniversalResolutionSelectorProps> = 
                     key={String(quality.value)}
                     type="button"
                     active={qualityValue === quality.value}
-                    variant="menu"
+                    variant="grid"
+                    size="lg"
                     disabled={quality.disabled}
                     onClick={() => {
                       if (!quality.disabled) {
                         onQualityChange(quality.value)
                       }
                     }}
-                    className={`px-3 py-2 text-sm justify-center ${
-                      qualityValue === quality.value ? '' : 'bg-veil-faint'
-                    } ${quality.disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    className="justify-center px-3 py-2"
                   >
                     {quality.label}
                   </UiOptionButton>
@@ -373,7 +371,7 @@ const UniversalResolutionSelector: React.FC<UniversalResolutionSelectorProps> = 
                     onChange={(event) => onWidthChange(event.target.value)}
                     disabled={customInputDisabled}
                     placeholder="2048"
-                    className="h-9"
+                    size="lg"
                     min={512}
                     max={8192}
                   />
@@ -386,7 +384,7 @@ const UniversalResolutionSelector: React.FC<UniversalResolutionSelectorProps> = 
                     onChange={(event) => onHeightChange(event.target.value)}
                     disabled={customInputDisabled}
                     placeholder="2048"
-                    className="h-9"
+                    size="lg"
                     min={512}
                     max={8192}
                   />

@@ -8,7 +8,7 @@ import {
   type EdgeProps,
 } from '@xyflow/react';
 
-import { UiChipButton, UiIconButton } from '@/components/ui';
+import { UiIconButton } from '@/components/ui';
 import type { CanvasEdge } from '@/features/canvas/domain/canvasNodes';
 import { disconnectAssetGroup } from '@/features/canvas/application/assetGroupApplicationService';
 
@@ -51,11 +51,12 @@ export const AssetGroupBundleEdge = memo(function AssetGroupBundleEdge(props: Ed
             pointerEvents: 'all',
           }}
         >
-          <UiChipButton className="h-6 cursor-default rounded-full px-2 text-2xs text-text-dark">
+          {/* 连接摘要是只读标签（压在画布上，走玻璃），不是按钮 */}
+          <span className="ui-glass inline-flex h-6 items-center rounded-full px-2 text-2xs text-text1">
             {bundle.connected} 已连接
             {bundle.pending > 0 ? ` · ${bundle.pending} 待连接` : ''}
             {bundle.excluded > 0 ? ` · ${bundle.excluded} 已排除` : ''}
-          </UiChipButton>
+          </span>
           {selected && (
             <UiIconButton shape="circle" size="sm" tone="media"
               aria-label="解除素材组绑定"

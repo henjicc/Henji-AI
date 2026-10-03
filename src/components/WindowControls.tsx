@@ -1,7 +1,7 @@
 import { createLogger } from '@/core/logging'
 import React from 'react'
 import { useI18n } from '@/hooks/useI18n'
-import { UiChipButton, UiIconButton } from '@/components/ui'
+import { UiIconButton, UiOptionButton } from '@/components/ui'
 import { getPlatform, isDesktopRuntime } from '@/platform/runtime'
 import type { WorkspaceId } from '@/core/types/workspace'
 import type { AssetLibraryView } from '@/features/assets/store/assetLibraryStore'
@@ -127,18 +127,18 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
       style={noDragRegionStyle}
     >
       {tabs.map((tab) => (
-        <UiChipButton
+        // 工作区切换 = 分段选择（设计稿标题栏：28 高、选中中性抬升），3.1 再定标题栏专用外观
+        <UiOptionButton
           key={tab.id}
           type="button"
+          variant="segment"
           onClick={() => tab.id === 'assets' ? onAssetClick?.() : onTabChange?.(tab.id)}
           active={tab.id === 'assets' ? assetView !== 'closed' : activeTab === tab.id}
-          selectionRole="navigation"
-          selectionAppearance="subtle"
-          className="!h-7 gap-1.5 rounded-md border-0 px-3 py-1 text-xs font-medium"
+          className="gap-1.5"
         >
           <tab.icon className="h-3.5 w-3.5" />
           <span>{tab.label}</span>
-        </UiChipButton>
+        </UiOptionButton>
       ))}
     </div>
   )

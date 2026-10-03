@@ -62,7 +62,7 @@ const ProviderCenterModelList = ({
             active={category === 'all'}
             selectionRole="navigation"
             onClick={() => onCategoryChange('all')}
-            className="h-8 px-3 text-xs"
+            size="md"
           >
             {t('providerCenter.categories.all')} {group.models.length}
           </UiChipButton>
@@ -73,7 +73,7 @@ const ProviderCenterModelList = ({
               active={category === item}
               selectionRole="navigation"
               onClick={() => onCategoryChange(item)}
-              className="h-8 px-3 text-xs"
+              size="md"
             >
               {categoryLabel(item, t)} {counts[item]}
             </UiChipButton>

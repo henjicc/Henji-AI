@@ -109,7 +109,7 @@ function DiffusionSegmentedField<T extends string>({
             type="button"
             variant="menu"
             active={option.value === value}
-            className="justify-center text-xs"
+            size="sm" className="justify-center"
             onClick={() => onChange(option.value)}
           >
             {option.label}
@@ -298,7 +298,7 @@ export function DiffusionInspector(): JSX.Element {
       <div className="mt-4 flex gap-2">
         <UiChipButton
           type="button"
-          className="!h-8 flex-1 !justify-center !text-xs"
+          size="md" className="flex-1 !justify-center"
           onClick={() => controller.resetOperation(IMAGE_EDIT_OPERATION_IDS.diffusion)}
         >
           <RotateCcw className="h-3.5 w-3.5" />
@@ -306,7 +306,7 @@ export function DiffusionInspector(): JSX.Element {
         </UiChipButton>
         <UiChipButton
           type="button"
-          className="!h-8 flex-1 !justify-center !text-xs"
+          size="md" className="flex-1 !justify-center"
           disabled={!operation}
           onClick={() => controller.removeOperation(IMAGE_EDIT_OPERATION_IDS.diffusion)}
         >

@@ -121,7 +121,8 @@ function TraceStepButton({
     <UiNavButton
       type="button"
       active={selected}
-      className="!h-auto justify-start !rounded-md !px-2 py-2 font-normal"
+      size="auto"
+      className="items-center justify-start !px-2 font-normal"
       onClick={onSelect}
     >
       <Icon className="mr-2 h-3.5 w-3.5 shrink-0 text-accent" />

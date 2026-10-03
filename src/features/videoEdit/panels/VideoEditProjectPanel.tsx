@@ -3,7 +3,7 @@ import { Virtuoso, VirtuosoGrid } from 'react-virtuoso'
 import { ChevronDown, ChevronRight, Folder, FolderPlus, Import, List, Grid2X2, Plus, Pencil, Trash2, RefreshCw, Play, Settings2, Code2, AudioLines } from 'lucide-react'
 import { ICON_WORKSPACE_VIDEO_EDIT as SequenceIcon, ICON_ASSET_LIBRARY as AssetLibraryIcon, ICON_VIDEO_EDIT_GRAPHIC as GraphicIcon } from '@/core/theme/icons'
 import ContextMenu from '@/components/ContextMenu'
-import { UiButton, UiChipButton, UiEmpty, UiIconButton, UiInput, UiOptionButton, UiSelect, UI_MULTISELECT_ITEM_ACTIVE_OVERRIDE_CLASS } from '@/components/ui'
+import { UiButton, UiChipButton, UiEmpty, UiIconButton, UiInput, UiOptionButton, UiSelect } from '@/components/ui'
 import { useContextMenu, type MenuItem } from '@/hooks/useContextMenu'
 import { openAssetLibrary } from '@/stores/navigationStore'
 import { videoEditSequenceFromItem, type VideoEditSequenceSettings } from '@/core/videoEdit/projectItems'
@@ -125,7 +125,7 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
     const kind = entry.kind === 'sequence' ? 'sequence' : entry.value.kind
     const graphic = entry.kind === 'item' && kind === 'graphic' ? entry.value.graphic : undefined
     const detail = entry.kind === 'sequence' ? `${entry.value.width} × ${entry.value.height} · ${Number((entry.value.frameRate.numerator / entry.value.frameRate.denominator).toFixed(3))} fps` : itemMedia ? `${itemMedia.kind === 'audio' ? '音频' : `${itemMedia.width} × ${itemMedia.height}`}${itemMedia.durationSeconds ? ` · ${itemMedia.durationSeconds.toFixed(1)} 秒` : ''}${itemMedia.assetId ? ' · 来自资产库' : ''}` : graphic ? `可编辑图形 · ${graphic.width} × ${graphic.height}` : kind === 'adjustment' ? '调整图层 · 添加到现有序列上方画面轨道' : kind === 'code' ? '原生代码素材' : '文字'
-    return <UiOptionButton variant="menu" active={selected} className={`w-full min-w-0 gap-2 text-xs ${selected && entry.kind === 'item' ? UI_MULTISELECT_ITEM_ACTIVE_OVERRIDE_CLASS : ''} ${view === 'grid' ? 'flex-col !p-2' : '!px-2 !py-1.5'}`} data-video-edit-project-entry={entry.value.id} data-entry-kind={kind} aria-label={entry.value.name} aria-pressed={selected} draggable={entry.kind === 'item'}
+    return <UiOptionButton variant="menu" size="sm" active={selected} selection={entry.kind === 'item' ? 'multiple' : 'single'} className={`w-full min-w-0 gap-2 ${view === 'grid' ? 'flex-col !p-2' : '!px-2 !py-1.5'}`} data-video-edit-project-entry={entry.value.id} data-entry-kind={kind} aria-label={entry.value.name} aria-pressed={selected} draggable={entry.kind === 'item'}
       onClick={event => {
         if (entry.kind === 'sequence') { setSelectedSequence(entry.value.id); run(() => setVideoEditProjectView(projectId, { selectedItemIds: [] })); return }
         setSelectedSequence(null)
@@ -159,16 +159,16 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
       <UiIconButton size="lg" title="新建素材箱" onClick={() => setEdit({ kind: 'createBin', parentId: binId })}><FolderPlus size={15} /></UiIconButton><UiIconButton size="lg" title="新建序列" onClick={newSequence}><Plus size={15} /></UiIconButton>
       <UiIconButton size="lg" title="新建代码素材" onClick={() => setCreatingCode(true)}><Code2 size={15} /></UiIconButton>
       <UiIconButton size="lg" title="新建图形与调整图层" onClick={event => menu.showMenu(event, graphicMenu())}><GraphicIcon size={15} /></UiIconButton>
-      <UiInput aria-label="搜索项目素材" placeholder="搜索名称或标签" className="min-w-20 flex-1 text-xs" value={keyword} onChange={event => setKeyword(event.target.value)} />
-      <UiSelect aria-label="项目素材排序" className="max-w-24 text-xs" value={sort} onChange={event => setSort(event.target.value as typeof sort)}><option value="name">名称</option><option value="kind">类型</option><option value="duration">时长</option></UiSelect>
+      <UiInput aria-label="搜索项目素材" placeholder="搜索名称或标签" size="sm" className="min-w-20 flex-1" value={keyword} onChange={event => setKeyword(event.target.value)} />
+      <UiSelect aria-label="项目素材排序" size="sm" className="max-w-24" value={sort} onChange={event => setSort(event.target.value as typeof sort)}><option value="name">名称</option><option value="kind">类型</option><option value="duration">时长</option></UiSelect>
       <UiIconButton size="lg" on={view === 'list'} title="列表视图" onClick={() => setView('list')}><List size={15} /></UiIconButton><UiIconButton size="lg" on={view === 'grid'} title="缩略图视图" onClick={() => setView('grid')}><Grid2X2 size={15} /></UiIconButton>
     </div>
     <div className="flex min-h-0 flex-1">
       <div className="flex w-28 min-w-20 shrink-0 flex-col border-r border-border-dark" aria-label="素材箱树" role="tree">
-        <UiChipButton selectionRole="navigation" active={!binId} className="w-full gap-1 !px-2 text-xs" onClick={() => selectBin('')} onDrop={event => drop(event, '')}><Folder size={14} /><span className="truncate">工程根目录</span></UiChipButton>
+        <UiChipButton selectionRole="navigation" active={!binId} size="sm" className="w-full gap-1 !px-2" onClick={() => selectBin('')} onDrop={event => drop(event, '')}><Folder size={14} /><span className="truncate">工程根目录</span></UiChipButton>
         <Virtuoso className="min-h-0 flex-1" data={bins} computeItemKey={(_index, row) => row.bin.id} itemContent={(_index, row) => <div className="flex items-center" style={{ paddingLeft: Math.min(row.depth, 8) * 10 }} role="treeitem" aria-level={row.depth + 1} aria-expanded={row.hasChildren ? !collapsed.has(row.bin.id) : undefined}>
           <UiIconButton size="sm" className="shrink-0" disabled={!row.hasChildren} title={collapsed.has(row.bin.id) ? '展开素材箱' : '折叠素材箱'} onClick={() => setCollapsed(previous => { const next = new Set(previous); if (next.has(row.bin.id)) next.delete(row.bin.id); else next.add(row.bin.id); return next })}>{row.hasChildren ? collapsed.has(row.bin.id) ? <ChevronRight size={12} /> : <ChevronDown size={12} /> : null}</UiIconButton>
-          <UiChipButton selectionRole="navigation" active={binId === row.bin.id} data-video-edit-bin={row.bin.id} className="min-w-0 flex-1 gap-1 !px-1 !py-2 text-xs" onClick={() => selectBin(row.bin.id)} onContextMenu={event => menu.showMenu(event, binMenu(row.bin))} onDrop={event => drop(event, row.bin.id)}><Folder size={13} className="shrink-0" /><span className="truncate">{row.bin.name}</span></UiChipButton>
+          <UiChipButton selectionRole="navigation" active={binId === row.bin.id} data-video-edit-bin={row.bin.id} size="sm" className="min-w-0 flex-1 gap-1 !px-1" onClick={() => selectBin(row.bin.id)} onContextMenu={event => menu.showMenu(event, binMenu(row.bin))} onDrop={event => drop(event, row.bin.id)}><Folder size={13} className="shrink-0" /><span className="truncate">{row.bin.name}</span></UiChipButton>
         </div>} />
       </div>
       <div className="min-h-0 min-w-0 flex-1" aria-label="项目项列表" onDoubleClick={event => { if (!(event.target as HTMLElement).closest('[data-video-edit-project-entry]')) choose() }} onContextMenu={event => menu.showMenu(event, blankMenu())}>

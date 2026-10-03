@@ -257,7 +257,7 @@ export function ImageEditorEffectParametersV3({
                 variant="menu"
                 active={glow.look === look}
                 disabled={disabled}
-                className="justify-center text-xs"
+                size="sm" className="justify-center"
                 onClick={() => replaceParams(applyVgpuGlowLook(look))}
               >
                 {t(`imageEditor.v3.parameters.glowLooks.${look}`)}
@@ -298,7 +298,7 @@ export function ImageEditorEffectParametersV3({
                     variant="menu"
                     active={glow.chromaticChannels[index] === channel}
                     disabled={disabled}
-                    className="justify-center text-xs"
+                    size="sm" className="justify-center"
                     onClick={() => replaceParams({
                       ...glow,
                       chromaticChannels: replaceVgpuGlowChromaticChannel(

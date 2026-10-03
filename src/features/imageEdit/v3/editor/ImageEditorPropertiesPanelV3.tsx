@@ -207,7 +207,7 @@ export function ImageEditorPropertiesPanelV3({
             selectionRole="navigation"
             selectionAppearance="subtle"
             data-properties-tab={tab}
-            className="!h-9 justify-center rounded-none text-xs"
+            size="lg" className="justify-center"
             active={activeTab === tab}
             aria-selected={activeTab === tab}
             aria-controls={`image-editor-properties-${tab}`}

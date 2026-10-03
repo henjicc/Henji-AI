@@ -10,7 +10,6 @@ import {
   UiRangeInput,
 } from '@/components/ui'
 import {
-  UI_FIELD_CONTROL_HEIGHT_SM_CLASS,
   UI_GLASS_ADAPTIVE_REGION_CLASS,
   UI_GLASS_ADAPTIVE_SURFACE_CLASS,
   UI_TEXT_LABEL_CLASS,
@@ -42,7 +41,7 @@ import {
 } from './multiAngleLocalization'
 
 // 同层级的三组选项共用尺寸，避免子元素字号与默认 padding 各自漂移。
-const OPTION_CLASS = `${UI_FIELD_CONTROL_HEIGHT_SM_CLASS} min-w-0 justify-center !px-2 !py-0 text-sm font-medium`
+const OPTION_CLASS = 'min-w-0 justify-center px-2 font-medium'
 
 function sourceImageFromState(state: Readonly<DynamicValueMap>): string | null {
   if (typeof state.sourceImageUrl === 'string' && state.sourceImageUrl.trim()) return state.sourceImageUrl
@@ -222,6 +221,7 @@ export function MultiAngleWorkbench({
                 type="button"
                 variant="flat"
                 active={config.controlProfile === 'flux-native-v1'}
+                size="lg"
                 className={OPTION_CLASS}
                 onClick={() => selectProfile('flux-native-v1')}
               >
@@ -231,6 +231,7 @@ export function MultiAngleWorkbench({
                 type="button"
                 variant="flat"
                 active={config.controlProfile === 'continuous-v1'}
+                size="lg"
                 className={OPTION_CLASS}
                 onClick={() => selectProfile('continuous-v1')}
               >
@@ -240,6 +241,7 @@ export function MultiAngleWorkbench({
                 type="button"
                 variant="flat"
                 active={config.controlProfile === 'discrete-v1'}
+                size="lg"
                 className={OPTION_CLASS}
                 onClick={() => selectProfile('discrete-v1')}
               >
@@ -268,6 +270,7 @@ export function MultiAngleWorkbench({
                   variant="flat"
                   active={view.viewId === selected?.viewId}
                   aria-pressed={view.viewId === selected?.viewId}
+                  size="lg"
                   className={OPTION_CLASS}
                   title={`${index + 1}. ${translateMultiAngleViewLabel(t, view, index)}`}
                   onClick={() => setSelectedViewId(view.viewId)}
@@ -305,6 +308,7 @@ export function MultiAngleWorkbench({
                       variant="flat"
                       active={active}
                       aria-pressed={active}
+                      size="lg"
                       className={OPTION_CLASS}
                       onClick={() => chooseDiscretePreset(preset.view.preset)}
                     >

@@ -1,7 +1,6 @@
 import React, { useId } from 'react'
 import { ExternalLink, Eye, EyeOff } from 'lucide-react'
 import {
-  UI_FIELD_CONTROL_HEIGHT_CLASS,
   UI_FIELD_LABEL_CLASS,
   UI_TEXT_META_CLASS,
   UiButton,
@@ -93,7 +92,8 @@ const ApiKeyInput: React.FC<ApiKeyInputProps> = ({
           aria-invalid={error ? true : undefined}
           aria-describedby={describedBy}
           data-observation-sensitive={visible ? 'true' : undefined}
-          className={`${UI_FIELD_CONTROL_HEIGHT_CLASS} pr-12`}
+          size="lg"
+          className="pr-12"
         />
         <UiIconButton size="lg"
           type="button"

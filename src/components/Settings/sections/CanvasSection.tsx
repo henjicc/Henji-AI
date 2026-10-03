@@ -35,7 +35,7 @@ const CanvasSection: React.FC = () => {
 
   return (
     <>
-      {/* 各档具体怎么降级属于工作原理，收进 ⓘ；档位名本身已经说明了取舍方向 */}
+      {/* 各档具体怎么降级属于工作原理，收进标签本身的悬停说明（info）；档位名本身已经说明了取舍方向 */}
       <UiFormRow label={t('sections.canvas.lodLabel')} info={t('sections.canvas.lodHint')} inline>
         <Dropdown
           value={canvasLodLevel}

@@ -205,7 +205,7 @@ export function UiTaskHistoryFilterBar({
                 value={keyword}
                 onChange={(event) => onKeywordChange(event.target.value)}
                 placeholder={t('workspaceFilters.searchPlaceholder')}
-                className="h-8 w-[300px] border-border-dark bg-surface-dark pl-7 pr-7 text-xs"
+                className="w-[300px] pl-7 pr-7"
               />
               <UiIconButton size="xs"
                 type="button"
@@ -229,7 +229,7 @@ export function UiTaskHistoryFilterBar({
               onSelect={onTimePresetChange}
               portal={false}
               className="shrink-0"
-              buttonClassName="!h-8 !px-2"
+              buttonClassName="w-auto"
               minWidthStrategy="display"
               panelWidthStrategy="options"
             />
@@ -241,7 +241,7 @@ export function UiTaskHistoryFilterBar({
               onSelect={onMediaTypeChange}
               portal={false}
               className="shrink-0"
-              buttonClassName="!h-8 !px-2"
+              buttonClassName="w-auto"
               minWidthStrategy="display"
               panelWidthStrategy="options"
             />
@@ -253,7 +253,7 @@ export function UiTaskHistoryFilterBar({
               onSelect={onProviderChange}
               portal={false}
               className="shrink-0"
-              buttonClassName="!h-8 !px-2"
+              buttonClassName="w-auto"
               minWidthStrategy="display"
               panelWidthStrategy="options"
             />
@@ -265,7 +265,7 @@ export function UiTaskHistoryFilterBar({
               onSelect={onModelChange}
               portal={false}
               className="shrink-0"
-              buttonClassName="!h-8 !px-2"
+              buttonClassName="w-auto"
               minWidthStrategy="display"
               panelWidthStrategy="options"
             />
