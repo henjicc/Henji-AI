@@ -24,7 +24,7 @@ afterAll(() => uninstallHarnessNativeStorage())
 
 it('所有已登记写域均经公共授权入口修改、正式读回并核对持久化', async () => {
   const app = createApplicationHarness()
-  const originalTone = useSettingsStore.getState().themeTonePreset
+  const originalContrast = useSettingsStore.getState().themeSelection.contrast
   const document = createImageEditDocumentV3({ width: 8, height: 8, documentId: 'application-write-loop' })
   document.layers = [createImageEditEffectLayerV3('effect', '模糊', 'image.gaussian-blur-v2', { radius: 8 })]
   const bus = new ImageEditCommandBusV3(document)
@@ -56,7 +56,7 @@ it('所有已登记写域均经公共授权入口修改、正式读回并核对�
       return refs[0]
     }
     const loops = [
-      { domain: 'settings', ref: { kind: 'settings.registry', id: 'singleton' }, property: 'interface.theme_tone', value: 'cool' },
+      { domain: 'settings', ref: { kind: 'settings.registry', id: 'singleton' }, property: 'interface.theme_contrast', value: 'strong' },
       { domain: 'generation', ref: { kind: 'generation.draft', id: 'singleton' }, property: 'generation.draft.prompt_text', value: '公共草稿回环' },
       { domain: 'canvas', ref: { kind: 'canvas.project', id: String(canvas.projectId) }, property: 'canvas.project.name', value: '公共画布已改名' },
       { domain: 'camera_stage', ref: { kind: 'camera_stage.project', id: String(camera.projectId) }, property: 'camera_stage.project.name', value: '公共三维已改名' },
@@ -85,7 +85,7 @@ it('所有已登记写域均经公共授权入口修改、正式读回并核对�
       const after = await app.read(loop.ref, [loop.property])
       expect((after.properties as Record<string, unknown>)[loop.property], loop.domain).toEqual(loop.value)
     }
-    expect(useSettingsStore.getState().themeTonePreset).toBe('cool')
+    expect(useSettingsStore.getState().themeSelection.contrast).toBe('strong')
     expect(bus.getSnapshot().document.layers[0].opacity).toBe(0.42)
     expect(imageEditDocumentToMarkDoc(useImageEditSessionStore.getState().sessions['application-mark-loop'].document).orientation.rotate).toBe(90)
     expect((await getPlatform().storyboardProjects.listProjectSummaries()).map(project => project.name)).toContain('公共画布已改名')
@@ -93,5 +93,5 @@ it('所有已登记写域均经公共授权入口修改、正式读回并核对�
     expect(useCameraStageStore.getState().currentProjectName).not.toBe('公共三维已改名')
     expect(JSON.parse(videoFiles.get('D:/write-loop.henji-video')!).name).toBe('公共剪辑已改名')
     await closeVideoEditProject(video.document.id)
-  } finally { vi.restoreAllMocks(); dispose(); app.dispose(); useSettingsStore.getState().setThemeTonePreset(originalTone) }
+  } finally { vi.restoreAllMocks(); dispose(); app.dispose(); useSettingsStore.getState().setThemeContrast(originalContrast) }
 })

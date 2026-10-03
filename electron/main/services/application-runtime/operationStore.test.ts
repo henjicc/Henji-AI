@@ -29,7 +29,7 @@ function fixture(): { db: Database.Database; store: ApplicationOperationStore; c
 }
 const access = { allowWrites: true, allowDestructive: false }
 function input(baselineId: string): Record<string, unknown> {
-  return { operationId: randomUUID(), baselineIds: [baselineId], summary: '修改主题', changes: [{ kind: 'set_properties', entityType: 'settings.registry', target: { kind: 'settings.registry', id: 'singleton' }, properties: { 'interface.theme_tone': 'dark' } }] }
+  return { operationId: randomUUID(), baselineIds: [baselineId], summary: '修改主题', changes: [{ kind: 'set_properties', entityType: 'settings.registry', target: { kind: 'settings.registry', id: 'singleton' }, properties: { 'interface.theme_contrast': 'strong' } }] }
 }
 
 describe('应用原生操作记录与恢复', () => {
@@ -66,7 +66,7 @@ describe('应用原生操作记录与恢复', () => {
     const recovered = f.store.get(original.operationId, f.callerId)!
     expect(recovered).toMatchObject({ state: 'completed', verificationState: 'verified', result, recoveryResult: { data: { verification: { verified: true } } } })
     expect(() => f.coordinator.prepare(f.callerId, input(f.baseline), f.rendererEpoch, access)).not.toThrow()
-    expect(verify).toHaveBeenCalledWith(expect.objectContaining({ conditions: [expect.objectContaining({ kind: 'property_equals', expected: 'dark' })], evidence: [] }))
+    expect(verify).toHaveBeenCalledWith(expect.objectContaining({ conditions: [expect.objectContaining({ kind: 'property_equals', expected: 'strong' })], evidence: [] }))
   })
 
   it('查询核实复用只读宿主与权限，其他调用者查询不泄漏原操作', async () => {

@@ -122,7 +122,7 @@ PromptEditor 补充：媒体引用、模板变量、兼容字符串解析和模�
 
 ## 主题状态落地
 
-- `settingsStore` 中的 `themeTonePreset` / `uiRadiusPreset` / `accentColor` 变更后，必须同步到 `document.documentElement`（`data-*` 或 CSS 变量）
+- `settingsStore` 的外观选择 `themeSelection`（预设 / 强调色 / 层级对比，派生 `themeSeed` / `themeOverrides`）与 `uiRadiusPreset` / `uiBlurEnabled` 变更后，由 `useApplyRuntimeTheme` → `applyRuntimeTheme` 同步到 `document.documentElement`（CSS 变量与 `data-*`）；外观只经 `setThemePreset` / `setThemeAccent` / `setThemeContrast` / `importThemePayload` 写入
 - 禁止"有设置项但未生效"长期存在；新增主题设置须同时提交"状态 + 应用层同步器"
 - 主题状态单一数据源，避免多套 store 并存且互不联动
 

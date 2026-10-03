@@ -296,6 +296,18 @@ export const UI_GLASS_ADAPTIVE_NAV_CLASS = 'ui-glass-adaptive-nav'
  */
 export const UI_GLASS_ADAPTIVE_OPTION_CLASS = 'ui-glass-adaptive-option';
 
+/**
+ * 中性抬升的选中底（分段选择、主题预设格等单选）：普通面板上是 `selected` 实底，玻璃里换成加白的
+ * `--ui-glass-selected`。重要记录 003：单选选中不用强调色实底。
+ */
+export const UI_GLASS_ADAPTIVE_SELECTED_CLASS = 'ui-glass-adaptive-selected';
+
+/** 选项格（`UiOptionButton variant="tile"`）的静息底：普通面板上是 `raised`，玻璃里是控件纱。 */
+export const UI_GLASS_ADAPTIVE_TILE_CLASS = 'ui-glass-adaptive-tile';
+
+/** 分段选择的轨道（容器只是分组，不是按钮）：比所在表面更暗的一条底，段由 `variant="segment"` 填充。 */
+export const UI_SEGMENTED_TRACK_CLASS = 'inline-flex w-fit gap-0.5 rounded-lg bg-gap/60 p-0.5';
+
 export const UI_OPTION_ITEM_ACTIVE_CLASS =
   `${UI_COLOR_ACCENT_SOFT_BORDER_CLASS} ${UI_COLOR_ACCENT_SOFT_BG_CLASS} text-white`;
 

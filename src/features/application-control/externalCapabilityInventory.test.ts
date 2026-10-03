@@ -73,7 +73,7 @@ describe('外部能力面派生自真实注册表', () => {
   it('按域发现的载荷足够小，不会在初始发现阶段注入全部属性', () => {
     expect(Buffer.byteLength(JSON.stringify(domains))).toBeLessThan(64 * 1024)
     // 只投影结构，不投影任何属性值或属性 ID 清单。
-    expect(JSON.stringify(domains)).not.toContain('interface.theme_tone')
+    expect(JSON.stringify(domains)).not.toContain('interface.theme_contrast')
   })
 })
 

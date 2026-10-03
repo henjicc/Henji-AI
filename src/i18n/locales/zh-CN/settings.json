@@ -453,12 +453,22 @@
     },
     "theme": {
       "title": "主题外观",
-      "description": "通过规范化配色与尺寸选项，自定义全局界面风格并实时预览。",
-      "tone": {
-        "label": "色调预设",
-        "neutral": "中性",
-        "warm": "暖色",
-        "cool": "冷色"
+      "description": "选择预设、强调色与层级对比，界面颜色会自动推导并即时生效。",
+      "preset": {
+        "label": "主题预设",
+        "custom": "自定义"
+      },
+      "accent": {
+        "label": "强调色",
+        "custom": "自定义颜色",
+        "pick": "选择自定义强调色"
+      },
+      "contrast": {
+        "label": "层级对比",
+        "info": "调整面板、输入框、悬停与选中之间的明暗差；文字始终保持清晰可读。",
+        "soft": "柔和",
+        "standard": "标准",
+        "strong": "更强"
       },
       "radius": {
         "label": "圆角尺寸",
@@ -470,38 +480,18 @@
         "label": "毛玻璃效果",
         "hint": "浮层压在图片、视频、画布之上时虚化背景。关闭后统一改用不透明底色，可减少合成开销。"
       },
-      "palette": {
-        "label": "主题色板"
-      },
-      "accent": {
-        "label": "高亮色"
-      },
-      "advanced": {
-        "label": "高级颜色映射"
-      },
       "portable": {
         "label": "主题配置文件",
         "export": "导出 JSON",
         "import": "导入 JSON",
         "chooseModeTitle": "选择导入方式",
-        "chooseModeDesc": "你可以导入完整主题，或只导入颜色/结构配置。",
+        "chooseModeDesc": "你可以导入完整主题，或只导入配色、只导入圆角。",
         "modeAll": "导入全部",
         "modeColors": "仅导入配色",
-        "modeLayout": "仅导入结构",
+        "modeRadius": "仅导入圆角",
         "feedbackTitle": "主题导入结果",
         "importSuccess": "主题导入成功",
         "importFail": "导入失败：文件格式不正确"
-      },
-      "tokens": {
-        "bg": "背景",
-        "surface": "表面",
-        "border": "边框",
-        "text": "正文",
-        "textMuted": "次级文字",
-        "app": "应用底色",
-        "canvas": "画布底色",
-        "panel": "面板底色",
-        "layer": "层级底色"
       }
     },
     "largeUpload": {

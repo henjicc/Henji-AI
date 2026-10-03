@@ -1,9 +1,9 @@
+import { THEME_PRESET_IDS, type ThemeContrastLevel } from '@/core/theme/themeEngine'
 import {
-  DEFAULT_THEME_COLOR_SCHEME,
-  THEME_COLOR_TOKENS,
-  type ThemeColorToken,
-} from '@/core/theme/runtimeTheme'
-import { SETTINGS_ACCENT_HEX } from '@/core/theme/colorTokens'
+  THEME_CONTRAST_LEVEL_IDS,
+  THEME_CUSTOM_PRESET,
+  type ThemeSelectionPreset,
+} from '@/core/theme/themeSelection'
 import { DEFAULT_UI_SCALE_MODE, UI_SCALE_MODES } from '@/core/theme/uiScale'
 import {
   COLLAPSE_SETTING_CHANGED_EVENT,
@@ -16,20 +16,18 @@ import { z } from 'zod'
 import { hexSettingSchema, storageSetting, storeSetting } from './definitionFactories'
 import type { ApplicationSettingDefinition } from './types'
 
-function themeColorDefinition(token: ThemeColorToken): ApplicationSettingDefinition {
-  return storeSetting({
-    id: `interface.theme_color_${token.toLowerCase()}`,
-    title: `主题颜色 ${token}`,
-    description: '设置界面主题中的一个语义颜色。',
-    aliases: ['主题颜色', token],
-    schema: hexSettingSchema,
-    defaultValue: DEFAULT_THEME_COLOR_SCHEME[token],
-    target: { tab: 'interface', sectionId: 'interface-theme' },
-    requiresReload: false,
-    requiresRestart: false,
-    sensitive: false,
-  }, () => useSettingsStore.getState().themeColors[token],
-  (value) => useSettingsStore.getState().setThemeColor(token, value))
+/** 强调色：`preset` 跟随预设，或 `#RRGGBB`。 */
+const THEME_ACCENT_FOLLOW_PRESET = 'preset'
+const themeAccentSchema = z.union([z.literal(THEME_ACCENT_FOLLOW_PRESET), hexSettingSchema])
+const themePresetSchema = z.enum([...THEME_PRESET_IDS, THEME_CUSTOM_PRESET] as unknown as [ThemeSelectionPreset, ...ThemeSelectionPreset[]])
+const themeContrastSchema = z.enum(THEME_CONTRAST_LEVEL_IDS as [ThemeContrastLevel, ...ThemeContrastLevel[]])
+
+function writeThemePreset(preset: ThemeSelectionPreset): void {
+  const store = useSettingsStore.getState()
+  if (preset === THEME_CUSTOM_PRESET && !store.themeSelection.custom) {
+    throw new Error('当前没有自定义配色：自定义配色只来自旧版自定义颜色或导入的非预设主题文件，可选 graphite、ocean、film、paper。')
+  }
+  store.setThemePreset(preset)
 }
 
 export const INTERFACE_APPLICATION_SETTING_DEFINITIONS: ApplicationSettingDefinition[] = [
@@ -58,17 +56,29 @@ export const INTERFACE_APPLICATION_SETTING_DEFINITIONS: ApplicationSettingDefini
   }, () => useSettingsStore.getState().uiRadiusPreset,
   (value) => useSettingsStore.getState().setUiRadiusPreset(value)),
   storeSetting({
-    id: 'interface.theme_tone', title: '主题色调', description: '设置界面的中性、暖色或冷色色调。',
-    aliases: ['主题', '色调', '暖色', '冷色', 'theme'], schema: z.enum(['neutral', 'warm', 'cool']), defaultValue: 'neutral',
+    id: 'interface.theme_preset', title: '主题预设',
+    description: '切换界面配色预设：graphite 石墨（深色，默认）、ocean 深海（深色偏蓝）、film 胶片（深色偏暖）、paper 纸白（浅色）；'
+      + 'custom 是用户从旧版自定义颜色或主题文件导入的配色，只有存在时才能切回。切换预设保留当前强调色选择与层级对比度。',
+    aliases: ['主题', '配色', '深色', '浅色', '暗色', '亮色', '石墨', '深海', '胶片', '纸白', 'theme', 'dark mode', 'light mode'],
+    schema: themePresetSchema, defaultValue: 'graphite',
     target: { tab: 'interface', sectionId: 'interface-theme' }, requiresReload: false, requiresRestart: false, sensitive: false,
-  }, () => useSettingsStore.getState().themeTonePreset,
-  (value) => useSettingsStore.getState().setThemeTonePreset(value)),
+  }, () => useSettingsStore.getState().themeSelection.preset,
+  writeThemePreset),
   storeSetting({
-    id: 'interface.accent_color', title: '界面强调色', description: '设置按钮和选中状态使用的强调色。',
-    aliases: ['强调色', '主题蓝色', 'accent'], schema: hexSettingSchema, defaultValue: SETTINGS_ACCENT_HEX,
+    id: 'interface.accent_color', title: '界面强调色',
+    description: '设置主按钮、焦点与选中指示使用的强调色：preset 跟随当前预设，或填写 #RRGGBB。'
+      + '实际显示的按钮颜色会按对比度自动微调，保证按钮文字清晰。',
+    aliases: ['强调色', '主题色', '高亮色', 'accent'], schema: themeAccentSchema, defaultValue: THEME_ACCENT_FOLLOW_PRESET,
     target: { tab: 'interface', sectionId: 'interface-theme' }, requiresReload: false, requiresRestart: false, sensitive: false,
-  }, () => useSettingsStore.getState().accentColor,
-  (value) => useSettingsStore.getState().setAccentColor(value)),
+  }, () => useSettingsStore.getState().themeSelection.accent ?? THEME_ACCENT_FOLLOW_PRESET,
+  (value) => useSettingsStore.getState().setThemeAccent(value === THEME_ACCENT_FOLLOW_PRESET ? null : value)),
+  storeSetting({
+    id: 'interface.theme_contrast', title: '层级对比',
+    description: '设置面板、输入框、悬停与选中之间的明暗差：soft 柔和、standard 标准、strong 更强。文字始终保持清晰可读。',
+    aliases: ['层级对比', '对比度', '明暗差', 'contrast'], schema: themeContrastSchema, defaultValue: 'standard',
+    target: { tab: 'interface', sectionId: 'interface-theme' }, requiresReload: false, requiresRestart: false, sensitive: false,
+  }, () => useSettingsStore.getState().themeSelection.contrast,
+  (value) => useSettingsStore.getState().setThemeContrast(value)),
   storageSetting({
     id: 'interface.bottom_panel_auto_collapse', title: '底部面板自动收起', description: '闲置后自动收起生成页底部操作区。',
     aliases: ['底部面板', '自动收起'], schema: z.boolean(), defaultValue: true,
@@ -165,5 +175,4 @@ export const INTERFACE_APPLICATION_SETTING_DEFINITIONS: ApplicationSettingDefini
     target: { tab: 'interface', sectionId: 'interface-assets' }, requiresReload: false, requiresRestart: false, sensitive: false,
   }, () => useSettingsStore.getState().assetCardSize,
   (value) => useSettingsStore.getState().setAssetCardSize(value)),
-  ...THEME_COLOR_TOKENS.map(themeColorDefinition),
 ]

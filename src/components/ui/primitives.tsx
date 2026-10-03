@@ -15,6 +15,9 @@ import {
   UI_GLASS_ADAPTIVE_CONTROL_CLASS,
   UI_GLASS_ADAPTIVE_NAV_CLASS,
   UI_GLASS_ADAPTIVE_OPTION_CLASS,
+  UI_GLASS_ADAPTIVE_SELECTED_CLASS,
+  UI_GLASS_ADAPTIVE_TILE_CLASS,
+  UI_CONTROL_HEIGHT_CLASS,
   UI_MULTISELECT_ITEM_ACTIVE_CLASS,
   UI_NAV_INDICATOR_BOTTOM_CLASS,
   UI_NAV_INDICATOR_BOTTOM_SUBTLE_CLASS,
@@ -162,8 +165,40 @@ export const UiPanel = forwardRef<HTMLDivElement, UiPanelProps>(
 
 UiPanel.displayName = 'UiPanel';
 
+/** 中性抬升三档（segment / tile / swatch）各自的尺寸与状态；颜色在玻璃内外由 `ui-glass-adaptive-*` 统一切换。 */
+const UI_OPTION_NEUTRAL_VARIANT_CLASS = {
+  segment: {
+    layout: `${UI_CONTROL_HEIGHT_CLASS.sm} justify-center rounded-md px-3 text-xs font-medium`,
+    rest: `border-transparent text-text2 hover:text-text1 ${UI_GLASS_ADAPTIVE_OPTION_CLASS}`,
+    active: `border-transparent text-text1 ${UI_GLASS_ADAPTIVE_SELECTED_CLASS}`,
+  },
+  tile: {
+    layout: 'h-11 gap-2.5 rounded-lg px-2.5 text-13',
+    rest: `border-transparent text-text2 hover:text-text1 ${UI_GLASS_ADAPTIVE_TILE_CLASS} ${UI_GLASS_ADAPTIVE_OPTION_CLASS}`,
+    active: `border-transparent text-text1 ${UI_GLASS_ADAPTIVE_SELECTED_CLASS}`,
+  },
+  // 色样：颜色由调用点经 style.backgroundColor / backgroundImage 传入，bg-clip-content 让它只铺内圈；
+  // 外圈 2px 边框 + 2px 间隙表达选中（按钮重置类会清掉 outline/ring，所以不用它们，也不会被父级裁切）。
+  swatch: {
+    layout: 'h-8 w-8 shrink-0 justify-center rounded-full border-2 p-0.5 bg-clip-content',
+    rest: 'border-transparent hover:border-line-strong',
+    active: 'border-text1',
+  },
+} as const;
+
 export const UiOptionButton = forwardRef<HTMLButtonElement, UiOptionButtonProps>(
   ({ className = '', active = false, variant = 'default', ...props }, ref) => {
+    if (variant === 'segment' || variant === 'tile' || variant === 'swatch') {
+      const neutral = UI_OPTION_NEUTRAL_VARIANT_CLASS[variant];
+      return (
+        <button
+          ref={ref}
+          className={`inline-flex items-center border transition-colors ${UI_BUTTON_RESET_CLASS} ${UI_FIELD_DISABLED_CLASS} ${neutral.layout} ${active ? neutral.active : neutral.rest} ${className}`}
+          {...props}
+        />
+      );
+    }
+
     const stateClass = (() => {
       if (variant === 'menu') {
         return active

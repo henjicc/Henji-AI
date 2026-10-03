@@ -18,8 +18,8 @@ import { readPersistedCanvasProjectSnapshot } from '@/features/canvas/applicatio
 import { useNavigationStore } from '@/stores/navigationStore'
 import { clearLogEvents, getLogEvents } from '@/core/logging'
 
-const originalTone = useSettingsStore.getState().themeTonePreset
-afterEach(() => useSettingsStore.getState().setThemeTonePreset(originalTone))
+const originalContrast = useSettingsStore.getState().themeSelection.contrast
+afterEach(() => useSettingsStore.getState().setThemeContrast(originalContrast))
 
 function grant(permissions = ['application:read', 'settings:read'], writes = false) {
   return createApplicationCallerGrant({
@@ -29,12 +29,12 @@ function grant(permissions = ['application:read', 'settings:read'], writes = fal
 }
 const request = (requestId: string) => ({ requestId, signal: new AbortController().signal })
 const read = { id: 'read_application_entity', version: 1, input: {
-  ref: { kind: 'settings.registry', id: 'singleton' }, propertyIds: ['interface.theme_tone'],
+  ref: { kind: 'settings.registry', id: 'singleton' }, propertyIds: ['interface.theme_contrast'],
 } }
 const write = (value: string) => ({ id: 'change_application_entities', version: 2,
   expectedRevisions: { settings: getSettingsRegistryRevision() }, input: {
     summary: '改变色调', changes: [{ kind: 'set_properties', entityType: 'settings.registry',
-      target: { kind: 'settings.registry', id: 'singleton' }, properties: { 'interface.theme_tone': value } }],
+      target: { kind: 'settings.registry', id: 'singleton' }, properties: { 'interface.theme_contrast': value } }],
   } })
 
 describe('独立应用调用入口', () => {
@@ -80,36 +80,36 @@ describe('独立应用调用入口', () => {
   })
   it('普通修改省略基线时自动读取当前状态，仍经正式事务写入', async () => {
     const session = createApplicationCapabilitySession(grant(['application:read', 'application:write', 'settings:read', 'settings:write'], true))
-    const target = originalTone === 'warm' ? 'cool' : 'warm'
-    const result = await session.execute({ ...write(target), expectedRevisions: undefined }, request('automatic-tone'))
+    const target = originalContrast === 'soft' ? 'strong' : 'soft'
+    const result = await session.execute({ ...write(target), expectedRevisions: undefined }, request('automatic-contrast'))
     expect(result.ok, JSON.stringify(result)).toBe(true)
-    expect(useSettingsStore.getState().themeTonePreset).toBe(target)
+    expect(useSettingsStore.getState().themeSelection.contrast).toBe(target)
   })
   it('不需要助手运行或脚本即可通过正式注册表读取', async () => {
     const result = await createApplicationCapabilitySession(grant()).execute(read, request('read'))
     expect(result.ok).toBe(true)
-    if (result.ok) expect(result.data.properties).toEqual({ 'interface.theme_tone': originalTone })
+    if (result.ok) expect(result.data.properties).toEqual({ 'interface.theme_contrast': originalContrast })
   })
 
   it('有权内存事务经原执行器写入，再从正式状态读回', async () => {
     const dispose = retainHostContextTracking()
     try {
       const session = createApplicationCapabilitySession(grant(['application:read', 'application:write', 'settings:read', 'settings:write'], true))
-      const target = originalTone === 'warm' ? 'cool' : 'warm'
-      const result = await session.execute(write(target), request('write-tone'))
+      const target = originalContrast === 'soft' ? 'strong' : 'soft'
+      const result = await session.execute(write(target), request('write-contrast'))
       expect(result.ok, JSON.stringify(result)).toBe(true)
-      expect(useSettingsStore.getState().themeTonePreset).toBe(target)
+      expect(useSettingsStore.getState().themeSelection.contrast).toBe(target)
       const readback = await session.execute(read, request('read-after'))
       expect(readback.ok).toBe(true)
-      if (readback.ok) expect(readback.data.properties).toEqual({ 'interface.theme_tone': target })
+      if (readback.ok) expect(readback.data.properties).toEqual({ 'interface.theme_contrast': target })
     } finally { dispose() }
   })
 
   it('只读授权拒绝写入；工具参数不能伪造权限', async () => {
     const session = createApplicationCapabilitySession(grant())
-    await expect(session.execute(write('warm'), request('deny-write'))).rejects.toThrow(/application:write.*应用/)
+    await expect(session.execute(write('soft'), request('deny-write'))).rejects.toThrow(/application:write.*应用/)
     await expect(session.execute({ ...read, callerGrant: grant(['application:write'], true) }, request('forge'))).rejects.toThrow()
-    expect(useSettingsStore.getState().themeTonePreset).toBe(originalTone)
+    expect(useSettingsStore.getState().themeSelection.contrast).toBe(originalContrast)
   })
 
   it('有能力写权限但缺少属性权限时由事务内核再次拒绝', async () => {
@@ -117,7 +117,7 @@ describe('独立应用调用入口', () => {
     const deniedGrant = grant(permissions, true)
     const apply = vi.spyOn(SettingsMutationExecutor.prototype, 'applyAtomic')
     const dispose = retainHostContextTracking()
-    const target = originalTone === 'warm' ? 'cool' : 'warm'
+    const target = originalContrast === 'soft' ? 'strong' : 'soft'
     const before = localStorage.getItem('settings-storage')
     try {
       const registry = getApplicationReflectionRegistry()
@@ -127,11 +127,11 @@ describe('独立应用调用入口', () => {
       const result = await createApplicationCapabilitySession(deniedGrant).execute(write(target), request('deny-property'))
       expect(result.ok).toBe(false)
       if (!result.ok) {
-        expect(result.error.message).toBe('PROPERTY_NOT_WRITABLE:interface.theme_tone')
+        expect(result.error.message).toBe('PROPERTY_NOT_WRITABLE:interface.theme_contrast')
         expect(result.error.details).toMatchObject({ execution: { notExecuted: true } })
       }
       expect(apply).not.toHaveBeenCalled()
-      expect(useSettingsStore.getState().themeTonePreset).toBe(originalTone)
+      expect(useSettingsStore.getState().themeSelection.contrast).toBe(originalContrast)
       expect(localStorage.getItem('settings-storage')).toBe(before)
 
       // 唯一授权差异为属性所需的 settings:write；相同目标和值必须可通过原执行器。
@@ -142,8 +142,8 @@ describe('独立应用调用入口', () => {
       const accepted = await createApplicationCapabilitySession(allowedGrant).execute(write(target), request('allow-property'))
       expect(accepted.ok, JSON.stringify(accepted)).toBe(true)
       expect(apply).toHaveBeenCalledTimes(1)
-      expect(useSettingsStore.getState().themeTonePreset).toBe(target)
-      expect(JSON.parse(localStorage.getItem('settings-storage') ?? '{}').state.themeTonePreset).toBe(target)
+      expect(useSettingsStore.getState().themeSelection.contrast).toBe(target)
+      expect(JSON.parse(localStorage.getItem('settings-storage') ?? '{}').state.themeSelection.contrast).toBe(target)
     } finally { apply.mockRestore(); dispose() }
   })
 
@@ -220,8 +220,8 @@ describe('独立应用调用入口', () => {
     const truncated = await session.execute({ ...read, input: { ...read.input, ref: { kind: 'settings.registry', id: 'single...' } } }, request('truncated'))
     expect(truncated.ok).toBe(false)
     if (!truncated.ok) expect(truncated.error.message).toContain('完整稳定引用')
-    const stale = await session.execute({ ...write('warm'), expectedRevisions: { settings: 999999 } }, request('stale'))
+    const stale = await session.execute({ ...write('soft'), expectedRevisions: { settings: 999999 } }, request('stale'))
     expect(stale.ok).toBe(false)
-    expect(useSettingsStore.getState().themeTonePreset).toBe(originalTone)
+    expect(useSettingsStore.getState().themeSelection.contrast).toBe(originalContrast)
   })
 })

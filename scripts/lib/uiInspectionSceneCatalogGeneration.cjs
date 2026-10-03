@@ -15,9 +15,21 @@ function createGenerationSettingsScenes(context) {
 
   const ALT_THEME_MARKER = '__henjiUiTourAboutAltTheme'
 
-  async function setAboutAppearance(page, { palette, blur }) {
+  /** 外观设置里的单选（预设 / 强调色 / 层级对比）按无障碍名称点击，并等它成为选中项。 */
+  async function chooseThemeRadio(page, name) {
+    const radio = page.getByRole('radio', { name, exact: true }).filter({ visible: true }).first()
+    await radio.click({ timeout: 8000 })
+    await assertThemeRadioChecked(page, name)
+  }
+
+  async function assertThemeRadioChecked(page, name) {
+    const radio = page.getByRole('radio', { name, exact: true }).filter({ visible: true }).first()
+    assert.equal(await radio.getAttribute('aria-checked'), 'true', `外观选项“${name}”应为选中`)
+  }
+
+  async function setAboutAppearance(page, { preset, blur }) {
     await clickNamedButton(page, /^主题外观$/)
-    await clickNamedButton(page, palette)
+    await chooseThemeRadio(page, preset)
     const blurRow = page.getByText('毛玻璃效果', { exact: true }).locator('xpath=ancestor::div[contains(@class, "justify-between")][1]')
     const blurSwitch = blurRow.getByRole('switch')
     if ((await blurSwitch.getAttribute('aria-checked') === 'true') !== blur) await blurSwitch.click()
@@ -25,12 +37,36 @@ function createGenerationSettingsScenes(context) {
 
   /**
    * 巡检实例的资料在场景与尺寸之间共享且没有收尾钩子：对比主题场景留下标记，
-   * 默认外观场景据此先恢复“经典深色 + 毛玻璃”。没有标记时什么都不写。
+   * 默认外观场景据此先恢复“石墨 + 毛玻璃”。没有标记时什么都不写。
    */
   async function restoreDefaultAboutAppearance(page) {
     if (!await page.evaluate((key) => localStorage.getItem(key) === '1', ALT_THEME_MARKER)) return
-    await setAboutAppearance(page, { palette: /经典深色/, blur: true })
+    await setAboutAppearance(page, { preset: '石墨', blur: true })
     await page.evaluate((key) => localStorage.removeItem(key), ALT_THEME_MARKER)
+  }
+
+  /**
+   * 目录点击是平滑滚动；滚动未停就去点单选，Playwright 只会把目标滚到可见边缘，
+   * 分区停在视口底部。先等滚动停稳，再把“主题外观”分区顶到内容区顶部。
+   */
+  async function showThemeSection(page) {
+    await page.waitForTimeout(400)
+    await page.evaluate(() => document.getElementById('interface-theme')?.scrollIntoView({ block: 'start', behavior: 'instant' }))
+    await page.waitForTimeout(150)
+  }
+
+  /** 根节点上的主题令牌（运行时写入的内联 CSS 变量），用来断言切换即时生效。 */
+  async function readThemeVars(page) {
+    return page.evaluate(() => {
+      const style = getComputedStyle(document.documentElement)
+      return Object.fromEntries(['--window', '--raised', '--accent'].map((name) => [name, style.getPropertyValue(name).trim()]))
+    })
+  }
+
+  async function expectThemeVarChange(page, before, name) {
+    await page.waitForFunction(([varName, previous]) => getComputedStyle(document.documentElement).getPropertyValue(varName).trim() !== previous,
+      [name, before[name]], { timeout: 3000 })
+    return readThemeVars(page)
   }
 
   /** 设置弹窗里定位到“关于”分区，等第三方清单加载、平滑滚动停稳后再截图。 */
@@ -271,15 +307,15 @@ function createGenerationSettingsScenes(context) {
       },
     },
     {
-      // 对比截图：在隔离实例里切到另一主题预设并关闭毛玻璃（应用没有浅色主题）
+      // 对比截图：在隔离实例里切到另一主题预设并关闭毛玻璃
       id: 'settings-about-alt-theme',
       surface: '设置',
-      name: '设置-关于-银盐灰阶无毛玻璃',
+      name: '设置-关于-胶片无毛玻璃',
       writesUserData: true,
       setup: async (page) => {
         await setupSettings(page)
         await page.evaluate((key) => localStorage.setItem(key, '1'), ALT_THEME_MARKER)
-        await setAboutAppearance(page, { palette: /银盐灰阶/, blur: false })
+        await setAboutAppearance(page, { preset: '胶片', blur: false })
         await openAboutSection(page)
       },
     },
@@ -301,10 +337,48 @@ function createGenerationSettingsScenes(context) {
       id: 'settings-theme',
       surface: '设置',
       name: '设置-主题外观',
-      setup: async (page) => {
+      writesUserData: true,
+      /*
+       * 种子式外观（1.4）：先选中本次运行的预设截图，再依次切换预设、强调色、层级对比，
+       * 每步断言根节点令牌即时变化后截图；最后恢复默认设置（石墨 / 跟随预设 / 标准），
+       * 开发预设参数随之重新生效，不影响后续场景。
+       */
+      setup: async (page, _app, { capture }) => {
         await setupSettings(page)
         await clickNamedButton(page, /^(界面|Interface)$/i)
         await clickNamedButton(page, /^主题外观$/)
+        const runPreset = await page.evaluate(() => new URLSearchParams(location.search).get('henjiDevThemePreset') ?? 'graphite')
+        const presetName = { graphite: '石墨', ocean: '深海', film: '胶片', paper: '纸白' }
+        const otherPreset = runPreset === 'paper' ? 'film' : 'paper'
+        await showThemeSection(page)
+        try {
+          await chooseThemeRadio(page, presetName[runPreset])
+          await assertThemeRadioChecked(page, '跟随预设')
+          await assertThemeRadioChecked(page, '标准')
+          await showThemeSection(page)
+          await settlePage(page)
+          await capture('preset')
+          let vars = await readThemeVars(page)
+          await chooseThemeRadio(page, '玫红')
+          vars = await expectThemeVarChange(page, vars, '--accent')
+          await chooseThemeRadio(page, '更强')
+          vars = await expectThemeVarChange(page, vars, '--raised')
+          await showThemeSection(page)
+          await settlePage(page)
+          await capture('accent-contrast')
+          await chooseThemeRadio(page, presetName[otherPreset])
+          await expectThemeVarChange(page, vars, '--window')
+          await assertThemeRadioChecked(page, '玫红')
+          await assertThemeRadioChecked(page, '更强')
+          await showThemeSection(page)
+          await settlePage(page)
+          await capture('switched-preset')
+        } finally {
+          await chooseThemeRadio(page, '石墨')
+          await chooseThemeRadio(page, '跟随预设')
+          await chooseThemeRadio(page, '标准')
+        }
+        await showThemeSection(page)
         await settlePage(page)
       },
     },

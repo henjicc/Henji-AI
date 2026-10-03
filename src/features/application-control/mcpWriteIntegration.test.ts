@@ -78,14 +78,14 @@ it('真实 MCP 与 Pi 写入经过授权、SQLite账本、正式Session及设置
       expect(operations.store.get(createId, identity.id)?.state).toBe('completed')
     } finally { uninstallHarnessNativeStorage() }
     const ref = { kind: 'settings.registry', id: 'singleton' }
-    const read = await client.callTool({ name: 'read_application_entity', arguments: { ref, propertyIds: ['interface.theme_tone'] } })
+    const read = await client.callTool({ name: 'read_application_entity', arguments: { ref, propertyIds: ['interface.theme_contrast'] } })
     const baselineIds = [(read.structuredContent as Record<string, unknown>).baselineId]
-    const original = useSettingsStore.getState().themeTonePreset
-    for (const properties of [{ 'interface.theme_tone': 'not-a-tone' }, { 'settings.not_registered': true }]) {
+    const original = useSettingsStore.getState().themeSelection.contrast
+    for (const properties of [{ 'interface.theme_contrast': 'not-a-level' }, { 'settings.not_registered': true }]) {
       const operationId = randomUUID()
       const rejected = await client.callTool({ name: 'change_application_entities', arguments: { operationId, baselineIds, summary: '非法输入', changes: [{ kind: 'set_properties', entityType: ref.kind, target: ref, properties }] } })
       expect(rejected.structuredContent, JSON.stringify(rejected)).toMatchObject({ executionState: 'not_executed' })
-      expect(useSettingsStore.getState().themeTonePreset).toBe(original)
+      expect(useSettingsStore.getState().themeSelection.contrast).toBe(original)
     }
     /*
      * 公开写入范围来自反射注册表的派生结果，不是 MCP 侧的前缀白名单。
@@ -99,11 +99,11 @@ it('真实 MCP 与 Pi 写入经过授权、SQLite账本、正式Session及设置
     expect(bridge.writableEntityTypes().has('image_edit.document')).toBe(false)
 
     const operationId = randomUUID()
-    const tone = original === 'warm' ? 'cool' : 'warm'
-    const args = { operationId, baselineIds, summary: '修改主题', changes: [{ kind: 'set_properties', entityType: ref.kind, target: ref, properties: { 'interface.theme_tone': tone } }] }
+    const contrast = original === 'soft' ? 'strong' : 'soft'
+    const args = { operationId, baselineIds, summary: '修改主题', changes: [{ kind: 'set_properties', entityType: ref.kind, target: ref, properties: { 'interface.theme_contrast': contrast } }] }
     const result = await client.callTool({ name: 'change_application_entities', arguments: args })
     expect(result.structuredContent, JSON.stringify(result)).toMatchObject({ executionState: 'completed', verificationState: 'verified' })
-    expect(JSON.parse(localStorage.getItem('settings-storage')!).state.themeTonePreset).toBe(tone)
+    expect(JSON.parse(localStorage.getItem('settings-storage')!).state.themeSelection.contrast).toBe(contrast)
     const revision = operations.store.get(operationId, identity.id)!.result
     expect((await client.callTool({ name: 'change_application_entities', arguments: args })).structuredContent).toEqual(result.structuredContent)
     expect(operations.store.get(operationId, identity.id)!.result).toEqual(revision)
@@ -112,12 +112,12 @@ it('真实 MCP 与 Pi 写入经过授权、SQLite账本、正式Session及设置
     const rejectedId = randomUUID(); const acceptedId = randomUUID()
     const plan = [
       { name: 'change_application_entities', arguments: { operationId: rejectedId, summary: '无效主题', changes: [
-        { kind: 'set_properties', entityType: ref.kind, target: ref, properties: { 'interface.theme_tone': 'invalid' } },
+        { kind: 'set_properties', entityType: ref.kind, target: ref, properties: { 'interface.theme_contrast': 'invalid' } },
       ] } },
       { name: 'change_application_entities', arguments: { operationId: acceptedId, summary: '恢复原主题', changes: [
-        { kind: 'set_properties', entityType: ref.kind, target: ref, properties: { 'interface.theme_tone': original } },
+        { kind: 'set_properties', entityType: ref.kind, target: ref, properties: { 'interface.theme_contrast': original } },
       ] } },
-      { name: 'read_application_entity', arguments: { ref, propertyIds: ['interface.theme_tone'] } },
+      { name: 'read_application_entity', arguments: { ref, propertyIds: ['interface.theme_contrast'] } },
     ]
     const requests: Array<{ messages: Array<{ role: string; content: unknown }> }> = []
     const modelServer = createServer(async (request, response) => {
@@ -163,8 +163,8 @@ it('真实 MCP 与 Pi 写入经过授权、SQLite账本、正式Session及设置
       expect(calls).toEqual(plan.map(item => item.name))
       expect(operations.store.get(rejectedId, identity.id)?.state).toBe('not_executed')
       expect(operations.store.get(acceptedId, identity.id)?.state).toBe('completed')
-      expect(useSettingsStore.getState().themeTonePreset).toBe(original)
-      expect(JSON.parse(localStorage.getItem('settings-storage')!).state.themeTonePreset).toBe(original)
+      expect(useSettingsStore.getState().themeSelection.contrast).toBe(original)
+      expect(JSON.parse(localStorage.getItem('settings-storage')!).state.themeSelection.contrast).toBe(original)
       const toolResults = requests.at(-1)!.messages.filter(message => message.role === 'tool')
       expect(toolResults).toHaveLength(3)
       expect(JSON.stringify(toolResults[0].content)).toContain('not_executed')
@@ -200,7 +200,7 @@ it('关闭现代 HTTP 监听只结束等待，已登记写入仍可完成并从�
     await client.connect(new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${server.listeningPort}/mcp`), { requestInit: { headers: { Authorization: `Bearer ${connections.token(caller.id)}` } } }))
     const operationId = randomUUID()
     const waiting = client.callTool({ name: 'change_application_entities', arguments: { operationId, summary: '保存修改', changes: [{
-      kind: 'set_properties', entityType: 'settings.registry', target: { kind: 'settings.registry', id: 'singleton' }, properties: { 'interface.theme_tone': 'cool' },
+      kind: 'set_properties', entityType: 'settings.registry', target: { kind: 'settings.registry', id: 'singleton' }, properties: { 'interface.theme_contrast': 'strong' },
     }] } }).catch(() => undefined)
     await vi.waitFor(() => expect(requests).toHaveLength(1))
     await server.stop()

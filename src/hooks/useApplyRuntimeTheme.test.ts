@@ -14,13 +14,24 @@ vi.mock('@/core/logging', () => ({
 }))
 
 import { DEFAULT_THEME_SEED, THEME_PRESETS, deriveThemeTokens } from '@/core/theme/themeEngine'
-import { resetWindowAppearanceSyncForTests, resolveDevelopmentThemeOverride, syncWindowAppearance } from './useApplyRuntimeTheme'
+import { resetWindowAppearanceSyncForTests, resolveDevelopmentThemeOverride, selectAppliedTheme, syncWindowAppearance } from './useApplyRuntimeTheme'
 
 describe('开发启动主题预设', () => {
   it('只接受登记的预设，覆盖种子且不带用户覆盖', () => {
     expect(resolveDevelopmentThemeOverride('?henjiDevThemePreset=paper')).toEqual({ seed: THEME_PRESETS.paper.seed, overrides: {} })
     expect(resolveDevelopmentThemeOverride('?henjiDevThemePreset=sepia')).toBeNull()
     expect(resolveDevelopmentThemeOverride('')).toBeNull()
+  })
+
+  it('设置等于启动值时用开发预设；设置改动后让位，改回后重新生效', () => {
+    resetWindowAppearanceSyncForTests()
+    const paper = { seed: THEME_PRESETS.paper.seed, overrides: {} }
+    const startup = { seed: DEFAULT_THEME_SEED, overrides: {} }
+    const changed = { seed: THEME_PRESETS.film.seed, overrides: {} }
+    expect(selectAppliedTheme(startup, paper)).toBe(paper)
+    expect(selectAppliedTheme(changed, paper)).toBe(changed)
+    expect(selectAppliedTheme({ seed: { ...DEFAULT_THEME_SEED }, overrides: {} }, paper)).toBe(paper)
+    expect(selectAppliedTheme(changed, null)).toBe(changed)
   })
 })
 

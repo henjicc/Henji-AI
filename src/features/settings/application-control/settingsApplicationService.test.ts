@@ -28,7 +28,7 @@ describe('assistant settings registry', () => {
   beforeEach(() => {
     useSettingsStore.getState().setVideoEditShortcuts({})
     useSettingsStore.getState().setUiBlurEnabled(true)
-    useSettingsStore.getState().setThemeTonePreset('neutral')
+    useSettingsStore.getState().setThemeContrast('standard')
   })
   it('剪辑键位封闭对象由正式设置提交，冲突不写入，空配置恢复默认', () => {
     const config = { select_tool: { code: 'KeyQ', ctrl: false, alt: false, shift: false, meta: false } }
@@ -60,7 +60,7 @@ describe('assistant settings registry', () => {
     const plan = planApplicationSettingsChange([
       { id: 'interface.blur_enabled', value: false },
     ])
-    useSettingsStore.getState().setThemeTonePreset('warm')
+    useSettingsStore.getState().setThemeContrast('soft')
     expect(() => applyApplicationSettingsChange(plan.planRef)).toThrow('CONFLICT')
     expect(useSettingsStore.getState().uiBlurEnabled).toBe(true)
   })

@@ -9,12 +9,12 @@ type ActionName = {
 
 /*
  * themeStore 是死代码：全仓库除它自己的定义外没有任何消费方（已用 grep 确认，界面的明暗/色调
- * 主题走 settingsStore 的 interface.theme_* 字段，早就注册进 settings.registry）。这里先如实
+ * 主题走 settingsStore 的外观选择，已注册进 settings.registry）。这里先如实
  * 登记为 excluded，不在建账任务里顺手删文件；是否删除交给专门的清理任务处理。
  */
 const DEAD_CODE_REASON = 'themeStore 未被任何组件或服务引用，是死代码；界面真正的主题设置'
-  + '（明暗、色调、强调色）由 settingsStore 承载，已通过 settings.registry 的 interface.theme_*'
-  + ' 属性对助手开放。'
+  + '（预设、强调色、层级对比）由 settingsStore 承载，已通过 settings.registry 的 interface.theme_preset、'
+  + 'interface.accent_color、interface.theme_contrast 属性对助手开放。'
 
 export const THEME_STORE_LEDGER: ApplicationStoreActionLedger<ActionName> = {
   storeId: 'themeStore',

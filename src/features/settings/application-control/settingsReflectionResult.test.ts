@@ -13,7 +13,7 @@ import { INTERFACE_APPLICATION_SETTING_DEFINITIONS } from './interfaceSettingDef
 
 describe('设置的正式反射结果', () => {
   let originalLanguage: ReturnType<typeof getCurrentLanguage>
-  let originalTone: ReturnType<typeof useSettingsStore.getState>['themeTonePreset']
+  let originalContrast: ReturnType<typeof useSettingsStore.getState>['themeSelection']['contrast']
   let originalUiScaleMode: ReturnType<typeof useSettingsStore.getState>['uiScaleMode']
   let originalAutoInsertTextDisplay: boolean
   let originalProvider: ReturnType<typeof modelDefaultsManager.getSnapshot>['providerId']
@@ -21,7 +21,7 @@ describe('设置的正式反射结果', () => {
 
   beforeEach(() => {
     originalLanguage = getCurrentLanguage()
-    originalTone = useSettingsStore.getState().themeTonePreset
+    originalContrast = useSettingsStore.getState().themeSelection.contrast
     originalUiScaleMode = useSettingsStore.getState().uiScaleMode
     originalAutoInsertTextDisplay = useSettingsStore.getState().autoInsertTextDisplayNode
     originalProvider = modelDefaultsManager.getSnapshot().providerId
@@ -31,7 +31,7 @@ describe('设置的正式反射结果', () => {
   afterEach(() => {
     vi.restoreAllMocks()
     changeLanguage(originalLanguage)
-    useSettingsStore.getState().setThemeTonePreset(originalTone)
+    useSettingsStore.getState().setThemeContrast(originalContrast)
     useSettingsStore.getState().setUiScaleMode(originalUiScaleMode)
     useSettingsStore.getState().setAutoInsertTextDisplayNode(originalAutoInsertTextDisplay)
     modelDefaultsManager.setDefaultModel('image', '')
@@ -61,11 +61,11 @@ describe('设置的正式反射结果', () => {
     }, context(`settings-${id}`))
   }
   it('同步保存抛错后恢复设置内存，持久值不变', async () => {
-    useSettingsStore.getState().setThemeTonePreset(originalTone)
+    useSettingsStore.getState().setThemeContrast(originalContrast)
     const stored = localStorage.getItem('settings-storage')
     vi.spyOn(Storage.prototype, 'setItem').mockImplementationOnce(() => { throw new Error('DISK_FULL') })
-    await expect(change('interface.theme_tone', originalTone === 'warm' ? 'cool' : 'warm')).rejects.toThrow()
-    expect(useSettingsStore.getState().themeTonePreset).toBe(originalTone)
+    await expect(change('interface.theme_contrast', originalContrast === 'soft' ? 'strong' : 'soft')).rejects.toThrow()
+    expect(useSettingsStore.getState().themeSelection.contrast).toBe(originalContrast)
     expect(localStorage.getItem('settings-storage')).toBe(stored)
   })
   it('多字段恢复写盘持续失败仍恢复全部内存并保留部分执行及未确认保存事实', async () => {
@@ -78,12 +78,12 @@ describe('设置的正式反射结果', () => {
     })
     const promise = applicationReflectionHandlers.changeEntities({ summary: '多个设置', changes: [{
       kind: 'set_properties', target: { kind: 'settings.registry', id: 'singleton' }, entityType: 'settings.registry',
-      properties: { 'interface.theme_tone': originalTone === 'warm' ? 'cool' : 'warm', 'canvas.auto_insert_text_display': !originalAutoInsertTextDisplay },
+      properties: { 'interface.theme_contrast': originalContrast === 'soft' ? 'strong' : 'soft', 'canvas.auto_insert_text_display': !originalAutoInsertTextDisplay },
     }] }, context('settings-multi-save-failure'))
     let failure: unknown
     try { await promise } catch (error) { failure = error }
     expect(failure).toMatchObject({ result: { status: 'failed', persistence: { persistenceState: 'unconfirmed' }, partial: { completedStepIndexes: [0] } } })
-    expect(useSettingsStore.getState().themeTonePreset).toBe(originalTone)
+    expect(useSettingsStore.getState().themeSelection.contrast).toBe(originalContrast)
     expect(useSettingsStore.getState().autoInsertTextDisplayNode).toBe(originalAutoInsertTextDisplay)
     expect(writes).toBeGreaterThanOrEqual(4)
   })
@@ -112,14 +112,14 @@ describe('设置的正式反射结果', () => {
     expect(snapshot.properties['general.language']).toBe(next)
   })
 
-  it('通过通用 change 修改 interface.theme_tone，zustand 真相源与反射读回一致', async () => {
-    const next = originalTone === 'warm' ? 'cool' : 'warm'
-    await change('interface.theme_tone', next)
-    expect(useSettingsStore.getState().themeTonePreset).toBe(next)
+  it('通过通用 change 修改 interface.theme_contrast，zustand 真相源与反射读回一致', async () => {
+    const next = originalContrast === 'soft' ? 'strong' : 'soft'
+    await change('interface.theme_contrast', next)
+    expect(useSettingsStore.getState().themeSelection.contrast).toBe(next)
     const snapshot = await applicationReflectionHandlers.readEntity({
-      ref: { kind: 'settings.registry', id: 'singleton' }, propertyIds: ['interface.theme_tone'],
-    }, context('settings-read-tone'))
-    expect(snapshot.properties['interface.theme_tone']).toBe(next)
+      ref: { kind: 'settings.registry', id: 'singleton' }, propertyIds: ['interface.theme_contrast'],
+    }, context('settings-read-contrast'))
+    expect(snapshot.properties['interface.theme_contrast']).toBe(next)
   })
 
   it('通过通用 change 修改界面缩放，并持久化且可反射读回', async () => {

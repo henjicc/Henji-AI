@@ -58,7 +58,7 @@ function createEmbeddedAgentScenes(context) {
               { operationId: require('node:crypto').randomUUID(), modelId: 'kie-gpt-image-2.5', prompt: '画布节点生成验收', mediaType: 'image', params: {} })
               : { content: '画布生成任务已提交。' })
           : called ? { content: '已读取当前主题设置。' } : call('call_read_theme', 'read_application_entity',
-            { ref: { kind: 'settings.registry', id: 'singleton' }, propertyIds: ['interface.theme_tone'] })
+            { ref: { kind: 'settings.registry', id: 'singleton' }, propertyIds: ['interface.theme_contrast'] })
         // 收尾原因跟着本轮实际产出走：多一轮加载工具之后仍然是工具调用，不是结论。
         for (const item of [{ delta, finish_reason: null }, { delta: {}, finish_reason: delta.tool_calls ? 'tool_calls' : 'stop' }]) {
           response.write(`data: ${JSON.stringify({ id: 'fixture-reply', object: 'chat.completion.chunk', created: 1, model: 'fixture', choices: [{ index: 0, ...item }] })}\n\n`)
@@ -150,7 +150,7 @@ function createEmbeddedAgentScenes(context) {
         }
         const toolResult = JSON.parse(requests[1].messages.find((message) => message.role === 'tool').content)
         assert.equal(toolResult.ok, true, JSON.stringify(toolResult))
-        assert.equal(typeof toolResult.data.properties['interface.theme_tone'], 'string', JSON.stringify(toolResult))
+        assert.equal(typeof toolResult.data.properties['interface.theme_contrast'], 'string', JSON.stringify(toolResult))
         assert.equal(Object.hasOwn(toolResult, 'structuredContent'), false, 'Pi 回执不应重复携带 MCP 镜像')
         assert.equal((await page.evaluate(() => window.henjiNative.mcp.status())).enabled, false)
         const before = await page.evaluate(() => window.henjiNative.embeddedAgent.snapshot())

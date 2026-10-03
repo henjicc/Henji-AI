@@ -1,82 +1,95 @@
 import React from 'react';
 import Dropdown from '@/components/ui/Dropdown';
 import {
-  UI_FIELD_CONTROL_HEIGHT_SM_CLASS,
   UI_FORM_ROW_GAP_CLASS,
-  UI_TEXT_LABEL_CLASS,
-  UI_TEXT_META_CLASS,
+  UI_SEGMENTED_TRACK_CLASS,
   UiButton,
   UiColorInput,
   UiFormRow,
   UiGroup,
-  UiIconButton,
   UiInput,
   UiOptionButton,
-  UiPanel,
   UiSwitch,
 } from '@/components/ui';
 import { SETTINGS_INLINE_CONTROL_CLASS } from '../settingsLayout';
 import { useI18n } from '@/hooks/useI18n';
+import type { UiRadiusPreset } from '@/core/theme/runtimeTheme';
 import {
-  ACCENT_PRESET_OPTIONS,
-  DEFAULT_THEME_COLOR_SCHEME,
-  THEME_COLOR_TOKENS,
-  THEME_PALETTE_PRESETS,
-  getTokenColorOptions,
-  type ThemeImportMode,
-  type ThemeColorScheme,
-  type ThemeColorToken,
-  type ThemeTonePreset,
-  type UiRadiusPreset,
-} from '@/core/theme/runtimeTheme';
+  THEME_ACCENT_CHOICES,
+  THEME_PRESETS,
+  THEME_PRESET_IDS,
+  deriveThemeTokens,
+  type ThemeContrastLevel,
+  type ThemeSeed,
+} from '@/core/theme/themeEngine';
+import {
+  THEME_CONTRAST_LEVEL_IDS,
+  THEME_CUSTOM_PRESET,
+  resolveThemeBaseSeed,
+  resolveThemeSelection,
+  type ThemeSelection,
+  type ThemeSelectionPreset,
+} from '@/core/theme/themeSelection';
+import { useSettingsStore, type ThemeImportMode } from '@/stores/settingsStore';
 import SettingsDialog from '../components/SettingsDialog';
 
 interface ThemeSectionProps {
-  themeTonePreset: ThemeTonePreset;
-  uiRadiusPreset: UiRadiusPreset;
-  uiBlurEnabled: boolean;
-  accentColor: string;
-  colors: ThemeColorScheme;
-  onChangeThemeTone: (preset: ThemeTonePreset) => void;
-  onChangeUiRadius: (preset: UiRadiusPreset) => void;
-  onChangeUiBlurEnabled: (enabled: boolean) => void;
-  onChangeAccentColor: (color: string) => void;
-  onChangeThemeColor: (token: ThemeColorToken, color: string) => void;
-  onApplyPalette: (colors: Partial<ThemeColorScheme>) => void;
-  onResetThemeColors: () => void;
   onExportTheme: () => void;
   onImportTheme: (file: File, mode: ThemeImportMode) => Promise<boolean>;
 }
 
-const tokenLabelKeyMap: Record<ThemeColorToken, string> = {
-  bg: 'sections.theme.tokens.bg',
-  surface: 'sections.theme.tokens.surface',
-  border: 'sections.theme.tokens.border',
-  text: 'sections.theme.tokens.text',
-  textMuted: 'sections.theme.tokens.textMuted',
-  app: 'sections.theme.tokens.app',
-  canvas: 'sections.theme.tokens.canvas',
-  panel: 'sections.theme.tokens.panel',
-  layer: 'sections.theme.tokens.layer',
-};
+type LocalizedName = { zh: string; en: string };
 
-const ThemeSection: React.FC<ThemeSectionProps> = ({
-  themeTonePreset,
-  uiRadiusPreset,
-  uiBlurEnabled,
-  accentColor,
-  colors,
-  onChangeThemeTone,
-  onChangeUiRadius,
-  onChangeUiBlurEnabled,
-  onChangeAccentColor,
-  onChangeThemeColor,
-  onApplyPalette,
-  onResetThemeColors,
-  onExportTheme,
-  onImportTheme,
-}) => {
+interface PresetSample {
+  id: ThemeSelectionPreset;
+  name: LocalizedName | null;
+  /** 推导后的窗口底色与强调实底（不是种子原值） */
+  window: string;
+  accent: string;
+  edge: string;
+}
+
+interface AccentSwatch {
+  id: string;
+  name: LocalizedName;
+  hex: string | null;
+  /** 当前底色下推导出的强调实底 */
+  fill: string;
+}
+
+/** 预设格小样：窗口底色与强调实底沿对角线各占一半（设计稿“主题引擎”预设卡）。 */
+function presetSampleStyle(sample: PresetSample): React.CSSProperties {
+  return {
+    background: `linear-gradient(135deg, ${sample.window} 0 50%, ${sample.accent} 50% 100%)`,
+    boxShadow: `inset 0 0 0 1px ${sample.edge}`,
+  };
+}
+
+function derivedAccent(seed: ThemeSeed): string {
+  return deriveThemeTokens(seed).colors.accent;
+}
+
+function samplePreset(
+  id: ThemeSelectionPreset,
+  name: LocalizedName | null,
+  selection: ThemeSelection
+): PresetSample {
+  const { seed, overrides } = resolveThemeSelection({ ...selection, preset: id });
+  const colors = deriveThemeTokens(seed, overrides).colors;
+  return { id, name, window: colors.window, accent: colors.accent, edge: colors.lineStrong };
+}
+
+const ThemeSection: React.FC<ThemeSectionProps> = ({ onExportTheme, onImportTheme }) => {
   const { t, i18n } = useI18n('settings');
+  const selection = useSettingsStore((state) => state.themeSelection);
+  const uiRadiusPreset = useSettingsStore((state) => state.uiRadiusPreset);
+  const uiBlurEnabled = useSettingsStore((state) => state.uiBlurEnabled);
+  const setThemePreset = useSettingsStore((state) => state.setThemePreset);
+  const setThemeAccent = useSettingsStore((state) => state.setThemeAccent);
+  const setThemeContrast = useSettingsStore((state) => state.setThemeContrast);
+  const setUiRadiusPreset = useSettingsStore((state) => state.setUiRadiusPreset);
+  const setUiBlurEnabled = useSettingsStore((state) => state.setUiBlurEnabled);
+
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
   const [importing, setImporting] = React.useState(false);
   const [pendingImportFile, setPendingImportFile] = React.useState<File | null>(null);
@@ -85,6 +98,33 @@ const ThemeSection: React.FC<ThemeSectionProps> = ({
     open: false,
     message: '',
   });
+
+  const localize = (name: LocalizedName): string => (i18n.language.startsWith('zh') ? name.zh : name.en);
+
+  // 小样与色样都显示推导后的令牌色：引擎会按对比度微调强调实底，种子原值与按钮实际颜色不一定相同。
+  const presetSamples = React.useMemo<PresetSample[]>(() => {
+    const samples = THEME_PRESET_IDS.map((id) => samplePreset(id, THEME_PRESETS[id].name, selection));
+    if (selection.custom) samples.push(samplePreset(THEME_CUSTOM_PRESET, null, selection));
+    return samples;
+  }, [selection]);
+
+  const accentSwatches = React.useMemo<AccentSwatch[]>(() => {
+    const base = resolveThemeBaseSeed(selection);
+    return THEME_ACCENT_CHOICES.map((choice) => ({
+      id: choice.id,
+      name: choice.name,
+      hex: choice.hex,
+      fill: derivedAccent({ ...base, accent: choice.hex ?? base.accent }),
+    }));
+  }, [selection]);
+
+  const customAccentActive = selection.accent !== null
+    && !THEME_ACCENT_CHOICES.some((choice) => choice.hex === selection.accent);
+  const effectiveAccent = resolveThemeSelection(selection).seed.accent;
+  const customAccentFill = React.useMemo(
+    () => (customAccentActive ? derivedAccent({ ...resolveThemeBaseSeed(selection), accent: effectiveAccent }) : null),
+    [customAccentActive, effectiveAccent, selection]
+  );
 
   const handleModeImport = async (mode: ThemeImportMode): Promise<void> => {
     if (!pendingImportFile) {
@@ -101,29 +141,106 @@ const ThemeSection: React.FC<ThemeSectionProps> = ({
     });
   };
 
-  const toneOptions: Array<{ value: ThemeTonePreset; label: string }> = [
-    { value: 'neutral', label: t('sections.theme.tone.neutral') },
-    { value: 'warm', label: t('sections.theme.tone.warm') },
-    { value: 'cool', label: t('sections.theme.tone.cool') },
-  ];
-
   const radiusOptions: Array<{ value: UiRadiusPreset; label: string }> = [
     { value: 'compact', label: t('sections.theme.radius.compact') },
     { value: 'default', label: t('sections.theme.radius.default') },
     { value: 'large', label: t('sections.theme.radius.large') },
   ];
 
+  const contrastLabels: Record<ThemeContrastLevel, string> = {
+    soft: t('sections.theme.contrast.soft'),
+    standard: t('sections.theme.contrast.standard'),
+    strong: t('sections.theme.contrast.strong'),
+  };
+
   return (
     <>
-      <div className={UI_FORM_ROW_GAP_CLASS}>
-        <UiFormRow label={t('sections.theme.tone.label')} inline>
-          <Dropdown
-            value={themeTonePreset}
-            options={toneOptions}
-            display={toneOptions.find((option) => option.value === themeTonePreset)?.label}
-            onSelect={(value) => onChangeThemeTone(value as ThemeTonePreset)}
-            className={SETTINGS_INLINE_CONTROL_CLASS}
+      <UiGroup title={t('sections.theme.preset.label')} titleTone="overline">
+        <div role="radiogroup" aria-label={t('sections.theme.preset.label')} className="grid grid-cols-2 gap-2 md:grid-cols-4">
+          {presetSamples.map((sample) => {
+            const label = sample.name ? localize(sample.name) : t('sections.theme.preset.custom');
+            const active = selection.preset === sample.id;
+            return (
+              <UiOptionButton
+                key={sample.id}
+                type="button"
+                variant="tile"
+                role="radio"
+                aria-checked={active}
+                active={active}
+                onClick={() => setThemePreset(sample.id)}
+              >
+                <span aria-hidden="true" className="h-5 w-5 shrink-0 rounded-md" style={presetSampleStyle(sample)} />
+                <span className="truncate">{label}</span>
+              </UiOptionButton>
+            );
+          })}
+        </div>
+      </UiGroup>
+
+      <UiGroup title={t('sections.theme.accent.label')} titleTone="overline">
+        <div role="radiogroup" aria-label={t('sections.theme.accent.label')} className="flex flex-wrap items-center gap-2.5">
+          {accentSwatches.map((swatch) => {
+            const active = swatch.hex === null ? selection.accent === null : selection.accent === swatch.hex;
+            return (
+              <UiOptionButton
+                key={swatch.id}
+                type="button"
+                variant="swatch"
+                role="radio"
+                aria-checked={active}
+                aria-label={localize(swatch.name)}
+                title={localize(swatch.name)}
+                active={active}
+                onClick={() => setThemeAccent(swatch.hex)}
+                // 跟随预设：一半是预设强调色、一半是辅助文字灰，和具体颜色区分开
+                style={swatch.hex === null
+                  ? { backgroundImage: `conic-gradient(${swatch.fill} 0 50%, var(--text3) 50% 100%)` }
+                  : { backgroundColor: swatch.fill }}
+              />
+            );
+          })}
+          {customAccentFill && (
+            <UiOptionButton
+              type="button"
+              variant="swatch"
+              role="radio"
+              aria-checked
+              aria-label={t('sections.theme.accent.custom')}
+              title={t('sections.theme.accent.custom')}
+              active
+              style={{ backgroundColor: customAccentFill }}
+            />
+          )}
+          <UiColorInput
+            value={effectiveAccent.toLowerCase()}
+            aria-label={t('sections.theme.accent.pick')}
+            title={t('sections.theme.accent.pick')}
+            onChange={(event) => setThemeAccent(event.target.value)}
+            className="!h-8 !w-8"
           />
+        </div>
+      </UiGroup>
+
+      {/* 预留：将来的“高级 / 主题编辑器”入口放在这里（开放完整种子，见重要记录 002）；本任务不显示入口。 */}
+
+      <div className={UI_FORM_ROW_GAP_CLASS}>
+        <UiFormRow label={t('sections.theme.contrast.label')} info={t('sections.theme.contrast.info')} inline>
+          <div role="radiogroup" aria-label={t('sections.theme.contrast.label')} className={UI_SEGMENTED_TRACK_CLASS}>
+            {THEME_CONTRAST_LEVEL_IDS.map((level) => (
+              <UiOptionButton
+                key={level}
+                type="button"
+                variant="segment"
+                role="radio"
+                aria-checked={selection.contrast === level}
+                active={selection.contrast === level}
+                onClick={() => setThemeContrast(level)}
+              >
+                {contrastLabels[level]}
+              </UiOptionButton>
+            ))}
+          </div>
         </UiFormRow>
 
         <UiFormRow label={t('sections.theme.radius.label')} inline>
@@ -131,7 +248,7 @@ const ThemeSection: React.FC<ThemeSectionProps> = ({
             value={uiRadiusPreset}
             options={radiusOptions}
             display={radiusOptions.find((option) => option.value === uiRadiusPreset)?.label}
-            onSelect={(value) => onChangeUiRadius(value as UiRadiusPreset)}
+            onSelect={(value) => setUiRadiusPreset(value as UiRadiusPreset)}
             className={SETTINGS_INLINE_CONTROL_CLASS}
           />
         </UiFormRow>
@@ -142,76 +259,9 @@ const ThemeSection: React.FC<ThemeSectionProps> = ({
           hint={t('sections.theme.blur.hint')}
           inline
         >
-          <UiSwitch checked={uiBlurEnabled} onCheckedChange={onChangeUiBlurEnabled} />
+          <UiSwitch checked={uiBlurEnabled} onCheckedChange={setUiBlurEnabled} />
         </UiFormRow>
       </div>
-
-      <UiGroup title={t('sections.theme.palette.label')} titleTone="overline">
-        <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-            {/*
-              色板是「≥3 个由 map 渲染的同质选项」，且每项自带名字 + 色点撑得出形状，
-              按选项集合规则静息态不描边：二维网格补一层 veil 撑格子即可。
-              原来用 `UiButton variant="muted"`（border + bg-surface-dark），在玻璃弹窗里
-              形成"弹窗 → 按钮 → 色点"三层表面叠加，巡检的表面叠层规则会直接命中。
-            */}
-            {THEME_PALETTE_PRESETS.map((preset) => (
-              <UiOptionButton
-                key={preset.id}
-                type="button"
-                variant="menu"
-                className="h-auto flex-col items-start gap-1.5 bg-veil-faint px-2 py-2"
-                onClick={() => onApplyPalette(preset.colors)}
-              >
-                <div className={UI_TEXT_LABEL_CLASS}>
-                  {i18n.language.startsWith('zh') ? preset.name.zh : preset.name.en}
-                </div>
-                <div className="flex items-center gap-1">
-                  {(['bg', 'surface', 'border', 'text'] as ThemeColorToken[]).map((token) => (
-                    <span
-                      key={`${preset.id}-${token}`}
-                      className="h-3 w-3 rounded-full border border-border-dark"
-                      style={{ backgroundColor: preset.colors[token] }}
-                    />
-                  ))}
-                </div>
-              </UiOptionButton>
-            ))}
-        </div>
-      </UiGroup>
-
-      <UiGroup
-        title={t('sections.theme.accent.label')}
-        titleTone="overline"
-        actions={
-          <UiButton variant="ghost" size="sm" className="h-7 px-2 text-2xs" onClick={onResetThemeColors}>
-            {t('actions.resetDefault')}
-          </UiButton>
-        }
-      >
-        <div className="flex flex-wrap items-center gap-2">
-            {ACCENT_PRESET_OPTIONS.map((option) => (
-              <UiIconButton
-                key={option}
-                showBorder
-                className="!h-7 !w-7 !rounded-md"
-                aria-label={option}
-                onClick={() => onChangeAccentColor(option)}
-                style={{ backgroundColor: option }}
-                active={accentColor.toUpperCase() === option}
-              />
-            ))}
-          <UiColorInput
-            value={accentColor}
-            onChange={(event) => onChangeAccentColor(event.target.value)}
-            className={`${UI_FIELD_CONTROL_HEIGHT_SM_CLASS} ml-1`}
-          />
-          <UiInput
-            value={accentColor}
-            onChange={(event) => onChangeAccentColor(event.target.value)}
-            className={`${UI_FIELD_CONTROL_HEIGHT_SM_CLASS} !w-28 font-mono text-xs uppercase`}
-          />
-        </div>
-      </UiGroup>
 
       <UiGroup title={t('sections.theme.portable.label')} titleTone="overline">
         <div className="flex flex-wrap items-center gap-2">
@@ -245,42 +295,6 @@ const ThemeSection: React.FC<ThemeSectionProps> = ({
         </div>
       </UiGroup>
 
-      {/* 九个色令牌是「同构重复单元」，保留分块；但块本身要比页面更暗，不是更亮的卡片 */}
-      <UiGroup title={t('sections.theme.advanced.label')} titleTone="overline">
-        <div className="grid grid-cols-1 gap-3">
-          {THEME_COLOR_TOKENS.map((token) => (
-            <UiPanel key={token} variant="inset" className="p-2">
-              <div className={`mb-2 ${UI_TEXT_META_CLASS}`}>{t(tokenLabelKeyMap[token])}</div>
-              <div className="mb-2 flex flex-wrap gap-1.5">
-                {getTokenColorOptions(token).map((option) => (
-                  <UiIconButton
-                    key={`${token}-${option}`}
-                    showBorder
-                    className="!h-6 !w-6 !rounded-md"
-                    aria-label={option}
-                    onClick={() => onChangeThemeColor(token, option)}
-                    style={{ backgroundColor: option }}
-                    active={colors[token].toUpperCase() === option}
-                  />
-                ))}
-              </div>
-              <div className="flex items-center gap-2">
-                <UiColorInput
-                  value={colors[token]}
-                  onChange={(event) => onChangeThemeColor(token, event.target.value)}
-                  className={UI_FIELD_CONTROL_HEIGHT_SM_CLASS}
-                />
-                <UiInput
-                  value={colors[token] || DEFAULT_THEME_COLOR_SCHEME[token]}
-                  onChange={(event) => onChangeThemeColor(token, event.target.value)}
-                  className={`${UI_FIELD_CONTROL_HEIGHT_SM_CLASS} font-mono text-xs uppercase`}
-                />
-              </div>
-            </UiPanel>
-          ))}
-        </div>
-      </UiGroup>
-
       <SettingsDialog
         open={modeDialogOpen}
         title={t('sections.theme.portable.chooseModeTitle')}
@@ -307,9 +321,9 @@ const ThemeSection: React.FC<ThemeSectionProps> = ({
             variant: 'secondary',
           },
           {
-            label: t('sections.theme.portable.modeLayout'),
+            label: t('sections.theme.portable.modeRadius'),
             onClick: () => {
-              void handleModeImport('toneRadiusOnly');
+              void handleModeImport('radiusOnly');
             },
             variant: 'secondary',
           },

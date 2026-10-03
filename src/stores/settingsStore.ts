@@ -7,27 +7,29 @@ export const DOWNLOAD_PRESET_PATH_LIMIT = 8;
 
 import { setLogCaptureMode as syncLogCaptureMode, type LogCaptureMode } from '@/commands/logging';
 import { API_KEY_PROVIDER_IDS, type UploadProvider } from '@/core/config/providers';
+import type { UiRadiusPreset } from '@/core/theme/runtimeTheme';
+import { normalizeHex } from '@/core/theme/themeColor';
 import {
-  LEGACY_DEFAULT_THEME_COLOR_SCHEME_HEX,
-  LEGACY_THEME_PALETTE_PRESET_HEX,
-  SETTINGS_ACCENT_HEX,
-  THEME_PALETTE_PRESET_HEX,
-} from '@/core/theme/colorTokens';
-import {
-  DEFAULT_THEME_COLOR_SCHEME,
-  normalizeThemeColorScheme,
-  type ThemeColorScheme,
-  type ThemeColorToken,
-  type ThemeTonePreset,
-  type UiRadiusPreset,
-} from '@/core/theme/runtimeTheme';
-import {
-  DEFAULT_THEME_SEED,
   normalizeThemeSeed,
+  type ThemeContrastLevel,
   type ThemeSeed,
   type ThemeTokenOverrides,
 } from '@/core/theme/themeEngine';
-import { migrateV1ThemeSettings, normalizeThemeOverrides, seedAccentFromV1 } from '@/core/theme/themeMigration';
+import {
+  migrateV1ThemeSettings,
+  normalizeThemeOverrides,
+  type ThemePayloadV2,
+  type ThemeV1ColorScheme,
+} from '@/core/theme/themeMigration';
+import {
+  DEFAULT_THEME_SELECTION,
+  THEME_CUSTOM_PRESET,
+  normalizeThemeSelection,
+  resolveThemeSelection,
+  selectionFromThemeSeed,
+  type ThemeSelection,
+  type ThemeSelectionPreset,
+} from '@/core/theme/themeSelection';
 import type { StartupWorkspaceId } from '@/core/types/workspace';
 import {
   DEFAULT_UI_SCALE_MODE,
@@ -74,16 +76,13 @@ interface SettingsState {
   /** 整个可见应用窗口的界面缩放；auto 按窗口逻辑尺寸在 90%/100% 间选择。 */
   uiScaleMode: UiScaleMode;
   uiRadiusPreset: UiRadiusPreset;
-  themeTonePreset: ThemeTonePreset;
   /** 界面毛玻璃效果。关闭后 `--ui-blur` 置 0，所有走该令牌的浮层一起变成不模糊 */
   uiBlurEnabled: boolean;
-  /** v1 强调色（外观设置界面与助手设置项在 1.4 前仍读写它）；写入时同步到 `themeSeed.accent`，旧默认值视为跟随预设。 */
-  accentColor: string;
-  /** v1 九色方案（同上）；写入时经 `migrateV1ThemeSettings` 换算为 `themeSeed` / `themeOverrides`。 */
-  themeColors: ThemeColorScheme;
-  /** 主题种子：界面颜色的唯一来源（`applyRuntimeTheme` 由它推导全部令牌）。 */
+  /** 外观选择（预设 / 强调色 / 层级对比度 / 自定义底色）：主题颜色的唯一可写来源。 */
+  themeSelection: ThemeSelection;
+  /** 由 `themeSelection` 派生的生效种子（`applyRuntimeTheme` 由它推导全部令牌）；只由主题动作同步写入。 */
   themeSeed: ThemeSeed;
-  /** 单令牌覆盖（v1 自定义九色拟合误差大的令牌、将来的主题编辑器）。 */
+  /** 由 `themeSelection` 派生的单令牌覆盖（仅自定义底色带覆盖）。 */
   themeOverrides: ThemeTokenOverrides;
   /** 启动时默认停在哪个工作区。常用画布/工具箱的用户不必每次开机再切一次 */
   startupWorkspace: StartupWorkspaceId;
@@ -116,12 +115,14 @@ interface SettingsState {
   setLogCaptureMode: (mode: LogCaptureMode) => void;
   setUiScaleMode: (mode: UiScaleMode) => void;
   setUiRadiusPreset: (preset: UiRadiusPreset) => void;
-  setThemeTonePreset: (preset: ThemeTonePreset) => void;
   setUiBlurEnabled: (enabled: boolean) => void;
-  setAccentColor: (color: string) => void;
-  setThemeColor: (token: ThemeColorToken, color: string) => void;
-  setThemeColors: (colors: Partial<ThemeColorScheme>) => void;
-  resetThemeColors: () => void;
+  /** 切换主题预设；`custom` 只在存在自定义底色时生效。保留当前强调色选择与对比度档位。 */
+  setThemePreset: (preset: ThemeSelectionPreset) => void;
+  /** 设置强调色 `#RRGGBB`；`null` 跟随预设。 */
+  setThemeAccent: (accent: string | null) => void;
+  setThemeContrast: (contrast: ThemeContrastLevel) => void;
+  /** 应用导入的主题文件（v1 已由 `parseThemePayload` 迁移为 v2）。 */
+  importThemePayload: (payload: ThemePayloadV2, mode: ThemeImportMode) => void;
   setStartupWorkspace: (workspace: StartupWorkspaceId) => void;
   setAssetTabAction: (action: AssetTabAction) => void;
   setAssetPanelPosition: (position: AssetPanelPosition) => void;
@@ -133,62 +134,19 @@ interface SettingsState {
   setVideoEditShortcuts: (shortcuts: VideoEditShortcutOverrides) => void;
 }
 
-const HEX_COLOR_PATTERN = /^#?[0-9a-fA-F]{6}$/;
-const LEGACY_DEFAULT_THEME_COLOR_SCHEME: ThemeColorScheme = {
-  ...LEGACY_DEFAULT_THEME_COLOR_SCHEME_HEX,
-};
+/** 主题文件导入范围：全部 / 仅配色 / 仅圆角。 */
+export type ThemeImportMode = 'all' | 'colorsOnly' | 'radiusOnly';
 
-function normalizeHexColor(input: string): string {
-  const trimmed = input.trim();
-  if (!HEX_COLOR_PATTERN.test(trimmed)) {
-    return SETTINGS_ACCENT_HEX;
-  }
-  return trimmed.startsWith('#') ? trimmed.toUpperCase() : `#${trimmed.toUpperCase()}`;
+/** 选择 → 写入 store 的三项（选择本身与派生的种子、覆盖），保证三者始终一致。 */
+function themeSelectionState(themeSelection: ThemeSelection): Pick<SettingsState, 'themeSelection' | 'themeSeed' | 'themeOverrides'> {
+  const { seed, overrides } = resolveThemeSelection(themeSelection);
+  return { themeSelection, themeSeed: seed, themeOverrides: overrides };
 }
 
-/** 由 v1 九色 + 强调色换算主题种子（与旧设置迁移同一入口）。 */
-function deriveThemeSeedState(
-  themeColors: Partial<ThemeColorScheme> | undefined,
-  accentColor: string | undefined,
-  uiRadiusPreset: string | undefined
-): { themeSeed: ThemeSeed; themeOverrides: ThemeTokenOverrides } {
-  const payload = migrateV1ThemeSettings({ themeColors, accentColor, uiRadiusPreset });
-  return { themeSeed: payload.seed, themeOverrides: payload.overrides ?? {} };
-}
+const DEFAULT_THEME_STATE = themeSelectionState(DEFAULT_THEME_SELECTION);
 
 function normalizeApiKey(input: string): string {
   return input.trim();
-}
-
-function shouldUpgradeLegacyNeutralTheme(input?: Partial<ThemeColorScheme>): boolean {
-  if (!input) {
-    return false;
-  }
-  const normalized = normalizeThemeColorScheme(input);
-  return Object.entries(LEGACY_DEFAULT_THEME_COLOR_SCHEME).every(([token, value]) => {
-    return normalized[token as ThemeColorToken] === value;
-  });
-}
-
-function mapLegacyPaletteTheme(input?: Partial<ThemeColorScheme>): ThemeColorScheme {
-  const normalized = normalizeThemeColorScheme(input);
-  for (const legacyPreset of LEGACY_THEME_PALETTE_PRESET_HEX) {
-    const legacyColors = normalizeThemeColorScheme(legacyPreset.colors);
-    const isMatch = Object.entries(legacyColors).every(([token, value]) => {
-      return normalized[token as ThemeColorToken] === value;
-    });
-
-    if (!isMatch) {
-      continue;
-    }
-
-    const nextPreset = THEME_PALETTE_PRESET_HEX.find((preset) => preset.id === legacyPreset.id);
-    if (nextPreset) {
-      return normalizeThemeColorScheme(nextPreset.colors);
-    }
-  }
-
-  return normalized;
 }
 
 function createDefaultProviderKeyStatus(): ProviderKeyStatusMap {
@@ -254,12 +212,8 @@ export const useSettingsStore = create<SettingsState>()(
       logCaptureMode: 'standard',
       uiScaleMode: DEFAULT_UI_SCALE_MODE,
       uiRadiusPreset: 'default',
-      themeTonePreset: 'neutral',
       uiBlurEnabled: true,
-      accentColor: SETTINGS_ACCENT_HEX,
-      themeColors: DEFAULT_THEME_COLOR_SCHEME,
-      themeSeed: DEFAULT_THEME_SEED,
-      themeOverrides: {},
+      ...DEFAULT_THEME_STATE,
       startupWorkspace: 'generation',
       assetTabAction: 'floating',
       assetPanelPosition: 'top',
@@ -322,27 +276,28 @@ export const useSettingsStore = create<SettingsState>()(
       },
       setUiScaleMode: (uiScaleMode) => set({ uiScaleMode }),
       setUiRadiusPreset: (uiRadiusPreset) => set({ uiRadiusPreset }),
-      setThemeTonePreset: (themeTonePreset) => set({ themeTonePreset }),
       setUiBlurEnabled: (uiBlurEnabled) => set({ uiBlurEnabled }),
-      setAccentColor: (color) => {
-        const accentColor = normalizeHexColor(color);
-        set((state) => ({ accentColor, themeSeed: { ...state.themeSeed, accent: seedAccentFromV1(accentColor) } }));
-      },
-      setThemeColor: (token, color) =>
+      setThemePreset: (preset) =>
         set((state) => {
-          const themeColors = normalizeThemeColorScheme({ ...state.themeColors, [token]: color });
-          return { themeColors, ...deriveThemeSeedState(themeColors, state.accentColor, state.uiRadiusPreset) };
+          if (preset === THEME_CUSTOM_PRESET && !state.themeSelection.custom) return {};
+          return themeSelectionState({ ...state.themeSelection, preset });
         }),
-      setThemeColors: (colors) =>
+      setThemeAccent: (accent) =>
         set((state) => {
-          const themeColors = normalizeThemeColorScheme({ ...state.themeColors, ...colors });
-          return { themeColors, ...deriveThemeSeedState(themeColors, state.accentColor, state.uiRadiusPreset) };
+          const normalized = accent === null ? null : normalizeHex(accent);
+          if (accent !== null && !normalized) return {};
+          return themeSelectionState({ ...state.themeSelection, accent: normalized });
         }),
-      resetThemeColors: () =>
-        set((state) => ({
-          themeColors: DEFAULT_THEME_COLOR_SCHEME,
-          ...deriveThemeSeedState(DEFAULT_THEME_COLOR_SCHEME, state.accentColor, state.uiRadiusPreset),
-        })),
+      setThemeContrast: (contrast) =>
+        set((state) => themeSelectionState({ ...state.themeSelection, contrast })),
+      importThemePayload: (payload, mode) =>
+        set((state) => {
+          const colors = mode === 'radiusOnly'
+            ? {}
+            : themeSelectionState(selectionFromThemeSeed(payload.seed, payload.overrides, state.themeSelection.custom));
+          const radius = mode === 'colorsOnly' ? {} : { uiRadiusPreset: payload.uiRadiusPreset };
+          return { ...colors, ...radius };
+        }),
       setStartupWorkspace: (startupWorkspace) => set({ startupWorkspace }),
       setAssetTabAction: (assetTabAction) => set({ assetTabAction }),
       setAssetPanelPosition: (assetPanelPosition) => set({ assetPanelPosition }),
@@ -357,7 +312,8 @@ export const useSettingsStore = create<SettingsState>()(
       name: 'settings-storage',
       // v11：边缘唤起改为显式选择，避免旧默认值让窗口边缘成为隐藏触发区
       // v12：主题改为种子推导；旧九色 + 强调色经 migrateV1ThemeSettings 换算（内置方案一律石墨）
-      version: 12,
+      // v13：外观改为选择式（预设 / 强调色 / 对比度 / 自定义底色）；由已有种子反推选择，删除 v1 字段
+      version: 13,
       // `logCaptureMode` 有意不持久化：应用重启应回落 standard，避免用户忘记关闭
       // "完整捕获" 导致日志长期膨胀。
       partialize: (state) => {
@@ -372,26 +328,32 @@ export const useSettingsStore = create<SettingsState>()(
           uploadProvider?: UploadProvider;
           uploadFallbackEnabled?: boolean;
           ignoreAtTagWhenCopyingAndGenerating?: boolean;
-          themeColors?: Partial<ThemeColorScheme>;
+          themeColors?: Partial<ThemeV1ColorScheme>;
           accentColor?: string;
           uiRadiusPreset?: string;
           themeSeed?: Partial<ThemeSeed>;
           themeOverrides?: unknown;
+          themeSelection?: unknown;
           assetEdgeTriggerEnabled?: boolean;
           assetTriggerEdge?: AssetTriggerEdge;
           assetEdgeDelayMs?: number;
           assetDragEdgeDelayMs?: number;
         };
-        const normalizedThemeColors = mapLegacyPaletteTheme(state.themeColors);
-        const themeColors = shouldUpgradeLegacyNeutralTheme(state.themeColors)
-          ? DEFAULT_THEME_COLOR_SCHEME
-          : normalizedThemeColors;
-        const themeSeedState = state.themeSeed && typeof state.themeSeed === 'object'
-          ? {
-            themeSeed: normalizeThemeSeed(state.themeSeed),
-            themeOverrides: normalizeThemeOverrides(state.themeOverrides) ?? {},
-          }
-          : deriveThemeSeedState(themeColors, state.accentColor, state.uiRadiusPreset);
+        // 主题：已有选择只规范化；否则由种子（v12）或 v1 九色 + 强调色（v11 及更早，内置方案一律石墨）反推
+        const legacyThemePayload = state.themeSeed && typeof state.themeSeed === 'object'
+          ? { seed: normalizeThemeSeed(state.themeSeed), overrides: normalizeThemeOverrides(state.themeOverrides) }
+          : migrateV1ThemeSettings({ themeColors: state.themeColors, accentColor: state.accentColor, uiRadiusPreset: state.uiRadiusPreset });
+        const themeState = themeSelectionState(
+          normalizeThemeSelection(state.themeSelection)
+          ?? selectionFromThemeSeed(legacyThemePayload.seed, legacyThemePayload.overrides)
+        );
+        // v1 外观字段（色调、强调色、九色）已由选择取代，不再保留在持久化状态里
+        const {
+          themeTonePreset: _themeTonePreset,
+          accentColor: _accentColor,
+          themeColors: _themeColors,
+          ...rest
+        } = (persistedState ?? {}) as Record<string, unknown>;
 
         const migratedProviderStatus = normalizeProviderKeyStatus(state.providerKeyStatus);
         if (state.apiKeys && typeof state.apiKeys === 'object') {
@@ -417,13 +379,12 @@ export const useSettingsStore = create<SettingsState>()(
           && (state.assetEdgeDelayMs === undefined || state.assetEdgeDelayMs === 650)
           && (state.assetDragEdgeDelayMs === undefined || state.assetDragEdgeDelayMs === 180);
         return {
-          ...(persistedState as object),
+          ...rest,
           providerKeyStatus: migratedProviderStatus,
           uploadProvider,
           uploadFallbackEnabled,
           ignoreAtTagWhenCopyingAndGenerating,
-          themeColors,
-          ...themeSeedState,
+          ...themeState,
           assetEdgeTriggerEnabled: hasUntouchedLegacyEdgeTriggerDefaults
             ? false
             : (state.assetEdgeTriggerEnabled ?? false),

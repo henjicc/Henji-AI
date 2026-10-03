@@ -1,7 +1,6 @@
 import type { ApplicationStoreActionBinding, ApplicationStoreActionLedger } from '@/core/application-control'
 
 import type { useSettingsStore } from '@/stores/settingsStore'
-import { THEME_COLOR_TOKENS } from '@/core/theme/runtimeTheme'
 
 type State = ReturnType<typeof useSettingsStore.getState>
 type ActionName = {
@@ -11,10 +10,6 @@ type ActionName = {
 function property(...propertyIds: [string, ...string[]]): ApplicationStoreActionBinding {
   return { kind: 'property', propertyIds }
 }
-
-const THEME_COLOR_PROPERTY_IDS = THEME_COLOR_TOKENS.map(
-  (token) => `interface.theme_color_${token.toLowerCase()}`,
-) as [string, ...string[]]
 
 export const SETTINGS_STORE_LEDGER: ApplicationStoreActionLedger<ActionName> = {
   storeId: 'settingsStore',
@@ -89,12 +84,21 @@ export const SETTINGS_STORE_LEDGER: ApplicationStoreActionLedger<ActionName> = {
     setLogCaptureMode: property('diagnostics.log_capture_mode'),
     setUiScaleMode: property('interface.scale'),
     setUiRadiusPreset: property('interface.radius'),
-    setThemeTonePreset: property('interface.theme_tone'),
     setUiBlurEnabled: property('interface.blur_enabled'),
-    setAccentColor: property('interface.accent_color'),
-    setThemeColor: { kind: 'property', propertyIds: THEME_COLOR_PROPERTY_IDS },
-    setThemeColors: { kind: 'property', propertyIds: THEME_COLOR_PROPERTY_IDS },
-    resetThemeColors: { kind: 'property', propertyIds: THEME_COLOR_PROPERTY_IDS },
+    setThemePreset: property('interface.theme_preset'),
+    setThemeAccent: property('interface.accent_color'),
+    setThemeContrast: property('interface.theme_contrast'),
+    /*
+     * 导入主题文件的结果（预设、强调色、对比度、圆角）都能由上面几条属性写出；唯一写不出的是
+     * 非预设种子组成的“自定义”配色，它只能来自用户自己选的文件。
+     */
+    importThemePayload: {
+      kind: 'excluded',
+      category: 'user_only',
+      reason: '导入需要用户在系统文件选择框里选一个主题文件，该对话框由 OS 弹出、助手无法代劳；'
+        + '导入能产生的预设、强调色、层级对比与圆角都可直接经 interface.theme_preset / interface.accent_color / '
+        + 'interface.theme_contrast / interface.radius 写入。',
+    },
     setStartupWorkspace: property('general.startup_workspace'),
     setAssetTabAction: property('assets.open_mode'),
     setAssetPanelPosition: property('assets.panel_position'),

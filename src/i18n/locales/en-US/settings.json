@@ -453,12 +453,22 @@
     },
     "theme": {
       "title": "Theme Appearance",
-      "description": "Customize the global style with curated color tokens and live preview.",
-      "tone": {
-        "label": "Tone Preset",
-        "neutral": "Neutral",
-        "warm": "Warm",
-        "cool": "Cool"
+      "description": "Pick a preset, accent color, and layer contrast; all interface colors are derived and applied instantly.",
+      "preset": {
+        "label": "Preset",
+        "custom": "Custom"
+      },
+      "accent": {
+        "label": "Accent Color",
+        "custom": "Custom color",
+        "pick": "Pick a custom accent color"
+      },
+      "contrast": {
+        "label": "Layer Contrast",
+        "info": "Adjusts how far panels, inputs, hover and selection stand apart; text always stays legible.",
+        "soft": "Soft",
+        "standard": "Standard",
+        "strong": "Strong"
       },
       "radius": {
         "label": "Corner Radius",
@@ -470,38 +480,18 @@
         "label": "Frosted Glass",
         "hint": "Blur the backdrop when a panel sits over images, video, or the canvas. Turning it off uses solid backgrounds and lowers compositing cost."
       },
-      "palette": {
-        "label": "Palette Presets"
-      },
-      "accent": {
-        "label": "Accent Color"
-      },
-      "advanced": {
-        "label": "Advanced Token Mapping"
-      },
       "portable": {
         "label": "Theme Profile",
         "export": "Export JSON",
         "import": "Import JSON",
         "chooseModeTitle": "Select Import Mode",
-        "chooseModeDesc": "Import the full theme, or only colors/layout tokens.",
+        "chooseModeDesc": "Import the full theme, only the colors, or only the corner radius.",
         "modeAll": "Import All",
         "modeColors": "Colors Only",
-        "modeLayout": "Layout Only",
+        "modeRadius": "Corner Radius Only",
         "feedbackTitle": "Theme Import Result",
         "importSuccess": "Theme imported successfully",
         "importFail": "Import failed: invalid theme file"
-      },
-      "tokens": {
-        "bg": "Background",
-        "surface": "Surface",
-        "border": "Border",
-        "text": "Text",
-        "textMuted": "Muted Text",
-        "app": "App Base",
-        "canvas": "Canvas Base",
-        "panel": "Panel Base",
-        "layer": "Layer Base"
       }
     },
     "largeUpload": {

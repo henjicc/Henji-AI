@@ -8,6 +8,8 @@ import {
   UI_COLOR_ACCENT_FILL_TEXT_CLASS,
   UI_GLASS_ADAPTIVE_CONTROL_CLASS,
   UI_GLASS_ADAPTIVE_OPTION_CLASS,
+  UI_GLASS_ADAPTIVE_SELECTED_CLASS,
+  UI_GLASS_ADAPTIVE_TILE_CLASS,
   UI_MULTISELECT_ITEM_ACTIVE_CLASS,
   UI_NAV_INDICATOR_BOTTOM_CLASS,
   UI_NAV_INDICATOR_BOTTOM_SUBTLE_CLASS,
@@ -91,6 +93,36 @@ describe('Ui primitives 选中态词汇表', () => {
     expectClasses(chip, UI_MULTISELECT_ITEM_ACTIVE_CLASS);
     expect(option.classList.contains('bg-layer')).toBe(false);
     expect(chip.classList.contains('bg-brand-500')).toBe(false);
+  });
+
+  it('分段、选项格与色样的选中是中性抬升，不用强调色实底（重要记录 003）', () => {
+    const view = render(
+      <>
+        <UiOptionButton variant="segment" active>选中段</UiOptionButton>
+        <UiOptionButton variant="segment">静息段</UiOptionButton>
+        <UiOptionButton variant="tile" active>选中格</UiOptionButton>
+        <UiOptionButton variant="tile">静息格</UiOptionButton>
+        <UiOptionButton variant="swatch" active aria-label="选中色样" />
+        <UiOptionButton variant="swatch" aria-label="静息色样" />
+      </>,
+    );
+    const activeSegment = view.getByRole('button', { name: '选中段' });
+    const restSegment = view.getByRole('button', { name: '静息段' });
+    const activeTile = view.getByRole('button', { name: '选中格' });
+    const restTile = view.getByRole('button', { name: '静息格' });
+    const activeSwatch = view.getByRole('button', { name: '选中色样' });
+    const restSwatch = view.getByRole('button', { name: '静息色样' });
+
+    for (const active of [activeSegment, activeTile]) {
+      expectClasses(active, `${UI_GLASS_ADAPTIVE_SELECTED_CLASS} text-text1 border-transparent`);
+      expect(active.className).not.toMatch(/brand|accent/);
+    }
+    expectClasses(restSegment, `${UI_GLASS_ADAPTIVE_OPTION_CLASS} text-text2`);
+    expect(restSegment.classList.contains(UI_GLASS_ADAPTIVE_SELECTED_CLASS)).toBe(false);
+    expectClasses(restTile, `${UI_GLASS_ADAPTIVE_TILE_CLASS} ${UI_GLASS_ADAPTIVE_OPTION_CLASS} text-text2`);
+    expectClasses(activeSwatch, 'rounded-full bg-clip-content border-text1');
+    expectClasses(restSwatch, 'border-transparent');
+    expect(activeSwatch.className).not.toMatch(/(^| )bg-(?!clip-)/);
   });
 
   it('只有中性静息项携带玻璃内层自适应标记', () => {

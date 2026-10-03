@@ -11,38 +11,19 @@ import ThemeSection from '../sections/ThemeSection'
 import AssetLibrarySection from '../sections/AssetLibrarySection'
 import UiScaleSection from '../sections/UiScaleSection'
 import { VideoEditShortcutSettings } from '@/features/videoEdit/panels/VideoEditShortcutSettings'
-import { useSettingsStore } from '@/stores/settingsStore'
-import {
-
-  createRuntimeThemePayload,
-  parseRuntimeThemePayload,
-  type ThemeImportMode,
-} from '@/core/theme/runtimeTheme'
+import { useSettingsStore, type ThemeImportMode } from '@/stores/settingsStore'
+import { createThemePayloadV2, parseThemePayload } from '@/core/theme/themeMigration'
 
 const logger = createLogger('components.Settings.tabs.InterfaceTab')
 
 const InterfaceTab: React.FC = () => {
   const { settings, updateSetting } = useSettings()
-  const themeTonePreset = useSettingsStore((state) => state.themeTonePreset)
-  const uiRadiusPreset = useSettingsStore((state) => state.uiRadiusPreset)
-  const accentColor = useSettingsStore((state) => state.accentColor)
-  const themeColors = useSettingsStore((state) => state.themeColors)
-  const setThemeTonePreset = useSettingsStore((state) => state.setThemeTonePreset)
-  const setUiRadiusPreset = useSettingsStore((state) => state.setUiRadiusPreset)
-  const uiBlurEnabled = useSettingsStore((state) => state.uiBlurEnabled)
-  const setUiBlurEnabled = useSettingsStore((state) => state.setUiBlurEnabled)
-  const setAccentColor = useSettingsStore((state) => state.setAccentColor)
-  const setThemeColor = useSettingsStore((state) => state.setThemeColor)
-  const setThemeColors = useSettingsStore((state) => state.setThemeColors)
-  const resetThemeColors = useSettingsStore((state) => state.resetThemeColors)
+  const importThemePayload = useSettingsStore((state) => state.importThemePayload)
 
+  /** 导出 v2 主题文件：生效的种子、覆盖与圆角（毛玻璃是本机偏好，不进文件）。 */
   const handleExportTheme = (): void => {
-    const payload = createRuntimeThemePayload({
-      themeTonePreset,
-      uiRadiusPreset,
-      accentColor,
-      colors: themeColors,
-    })
+    const { themeSeed, themeOverrides, uiRadiusPreset } = useSettingsStore.getState()
+    const payload = createThemePayloadV2({ seed: themeSeed, overrides: themeOverrides, uiRadiusPreset })
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
     const anchor = document.createElement('a')
@@ -52,28 +33,20 @@ const InterfaceTab: React.FC = () => {
     URL.revokeObjectURL(url)
   }
 
+  /** 导入 v1/v2 主题文件：统一经 parseThemePayload（v1 自动迁移）。 */
   const handleImportTheme = async (file: File, mode: ThemeImportMode): Promise<boolean> => {
     try {
       const raw = await file.text()
-      const parsed = parseRuntimeThemePayload(JSON.parse(raw))
-      if (!parsed) {
+      const payload = parseThemePayload(JSON.parse(raw))
+      if (!payload) {
+        logger.warn('主题文件格式不正确，已拒绝导入', { event: 'theme.import.rejected', context: { mode } })
         return false
       }
-      if (mode === 'all') {
-        setThemeTonePreset(parsed.themeTonePreset)
-        setUiRadiusPreset(parsed.uiRadiusPreset)
-        setAccentColor(parsed.accentColor)
-        setThemeColors(parsed.colors)
-      } else if (mode === 'colorsOnly') {
-        setAccentColor(parsed.accentColor)
-        setThemeColors(parsed.colors)
-      } else {
-        setThemeTonePreset(parsed.themeTonePreset)
-        setUiRadiusPreset(parsed.uiRadiusPreset)
-      }
+      importThemePayload(payload, mode)
+      logger.info('主题文件已导入', { event: 'theme.import.completed', context: { mode } })
       return true
     } catch (error) {
-      logger.error('[InterfaceTab] Failed to import theme:', error)
+      logger.error('主题文件导入失败', error, { event: 'theme.import.failed', context: { mode } })
       return false
     }
   }
@@ -103,22 +76,7 @@ const InterfaceTab: React.FC = () => {
       </SettingsSection>
 
       <SettingsSection id="interface-theme">
-        <ThemeSection
-          themeTonePreset={themeTonePreset}
-          uiRadiusPreset={uiRadiusPreset}
-          uiBlurEnabled={uiBlurEnabled}
-          accentColor={accentColor}
-          colors={themeColors}
-          onChangeThemeTone={setThemeTonePreset}
-          onChangeUiRadius={setUiRadiusPreset}
-          onChangeUiBlurEnabled={setUiBlurEnabled}
-          onChangeAccentColor={setAccentColor}
-          onChangeThemeColor={setThemeColor}
-          onApplyPalette={setThemeColors}
-          onResetThemeColors={resetThemeColors}
-          onExportTheme={handleExportTheme}
-          onImportTheme={handleImportTheme}
-        />
+        <ThemeSection onExportTheme={handleExportTheme} onImportTheme={handleImportTheme} />
       </SettingsSection>
     </UiRegion>
   )

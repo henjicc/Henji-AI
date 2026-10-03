@@ -466,6 +466,26 @@
     background-color: var(--ui-glass-hover);
   }
 
+  /*
+   * 中性抬升选中（UiOptionButton segment/tile）与选项格静息底（tile）。玻璃里同样不能盖实心色：
+   * 选中加白（--ui-glass-selected），静息用控件纱（关闭毛玻璃时变量退化为 raised）。
+   */
+  .ui-glass-adaptive-selected {
+    background-color: rgb(var(--selected-rgb));
+  }
+
+  .ui-glass .ui-glass-adaptive-selected {
+    background-color: var(--ui-glass-selected);
+  }
+
+  .ui-glass-adaptive-tile {
+    background-color: rgb(var(--raised-rgb));
+  }
+
+  .ui-glass .ui-glass-adaptive-tile {
+    background-color: var(--ui-glass-control-tint);
+  }
+
   /* 图片区域内的透明像素网格；工作区本身仍保持无限且使用画布底色。 */
   .image-editor-transparency-grid {
     background-color: rgb(var(--surface-rgb));

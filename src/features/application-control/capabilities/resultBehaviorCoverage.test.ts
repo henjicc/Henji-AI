@@ -18,7 +18,7 @@ const RESULT_SCENARIOS: Record<string, Scenario[]> = {
   ],
   settings: [
     { file: 'src/features/settings/application-control/settingsReflectionResult.test.ts', title: '通过 describe 与 change 切换 general.language，正式读取值随之变化' },
-    { file: 'src/features/settings/application-control/settingsReflectionResult.test.ts', title: '通过通用 change 修改 interface.theme_tone，zustand 真相源与反射读回一致' },
+    { file: 'src/features/settings/application-control/settingsReflectionResult.test.ts', title: '通过通用 change 修改 interface.theme_contrast，zustand 真相源与反射读回一致' },
   ],
   assets: [
     { file: 'src/features/assets/application/assetMutationExecutor.test.ts', title: '名称与标签写入委托正式领域服务' },

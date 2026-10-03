@@ -112,7 +112,7 @@ function createMcpScenes({ setupSettings, canvasFixtureProjectId }) {
         console.log('[MCP Reality] 等待重载宿主')
         await waitReady(page)
         assertReadOnlyTools((await client.listTools()).tools.map((tool) => tool.name))
-        const after = await client.callTool({ name: 'read_application_entity', arguments: { ref: { kind: 'settings.registry', id: 'singleton' }, propertyIds: ['interface.theme_tone'] } })
+        const after = await client.callTool({ name: 'read_application_entity', arguments: { ref: { kind: 'settings.registry', id: 'singleton' }, propertyIds: ['interface.theme_contrast'] } })
         assert.equal(after.isError, false)
         await client.close()
         console.log('[MCP Reality] 同页面关闭再开启')
@@ -169,10 +169,10 @@ function createMcpScenes({ setupSettings, canvasFixtureProjectId }) {
       try {
         await client.connect(new StreamableHTTPClientTransport(new URL(config.url), { requestInit: { headers: config.headers } }))
         const settingsRef = { kind: 'settings.registry', id: 'singleton' }
-        const settings = await read(settingsRef, ['interface.theme_tone'])
-        const theme = settings.data.properties['interface.theme_tone'] === 'warm' ? 'cool' : 'warm'
-        await change([{ kind: 'set_properties', entityType: settingsRef.kind, target: settingsRef, properties: { 'interface.theme_tone': theme } }], [settings])
-        assert.equal((await read(settingsRef, ['interface.theme_tone'])).data.properties['interface.theme_tone'], theme)
+        const settings = await read(settingsRef, ['interface.theme_contrast'])
+        const theme = settings.data.properties['interface.theme_contrast'] === 'soft' ? 'strong' : 'soft'
+        await change([{ kind: 'set_properties', entityType: settingsRef.kind, target: settingsRef, properties: { 'interface.theme_contrast': theme } }], [settings])
+        assert.equal((await read(settingsRef, ['interface.theme_contrast'])).data.properties['interface.theme_contrast'], theme)
         const models = await call('list_application_entities', { entityType: 'generation.model', limit: 1 })
         const modelRef = models.data.refs[0]; assert.ok(modelRef)
         const model = await read(modelRef, ['generation.model.hidden', 'generation.model.provider_id'])
@@ -201,7 +201,7 @@ function createMcpScenes({ setupSettings, canvasFixtureProjectId }) {
         const storedLibrary = stored.libraries.find((item) => String(item.id) === String(libraryRef.id))
         assert.ok(storedLibrary, `正式素材库缺少结果引用：${JSON.stringify({ libraryRef, libraries: stored.libraries })}`)
         assert.equal(storedLibrary.name, 'MCP已改名集合')
-        assert.equal(stored.settings.state.themeTonePreset, theme)
+        assert.equal(stored.settings.state.themeSelection.contrast, theme)
         assert.equal(JSON.parse(stored.hiddenModels).includes(`${model.data.properties['generation.model.provider_id']}-${modelRef.id}`), hidden)
         assert.ok(stored.project, `正式画布存储缺少工程：${canvasFixtureProjectId}`)
         assert.equal(stored.project.name, 'MCP已保存画布')
