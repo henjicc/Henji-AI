@@ -393,11 +393,21 @@ function createVideoEditExportNativeScene() {
           for (const frame of PREVIEW_FRAMES) {
             const exported = path.join(ROOT, `export-${id}-${frame}.png`); ffmpeg(['-i', output, '-vf', `select=eq(n\\,${frame}),format=rgb24`, '-frames:v', '1', exported])
             const reference = path.join(ROOT, `reference-${id}-${frame}.png`)
-            ffmpeg(['-i', samples.prores.path, '-i', samples.alpha.path, '-filter_complex', `[0:v][1:v]overlay=0:0:format=auto,select=eq(n\\,${frame}),format=rgb24`, '-frames:v', '1', reference])
+            // The samples carry no colour tags; the app reads them as BT.709 limited range (WebCodecs default), so the
+            // reference converts the same way (FFmpeg's own default would be BT.601, about 24dB off everywhere).
+            ffmpeg(['-i', samples.prores.path, '-i', samples.alpha.path, '-filter_complex', `[0:v][1:v]overlay=0:0:format=auto,select=eq(n\\,${frame}),scale=in_color_matrix=bt709:in_range=tv,format=rgb24`, '-frames:v', '1', reference])
             const previewPsnr = await psnr(previews[frame], exported); const referencePsnr = await psnr(reference, exported)
-            comparisons.push({ frame, previewPsnr, referencePsnr })
+            // Mean luma of the regions the overlay defines: opaque block, half-transparent band, fully transparent area.
+            const boxX = Math.floor((frame * 0.6) % 76) * 40
+            const regions = { opaque: { left: boxX + 40, top: 1240, width: 680, height: 520 }, half: { left: 40, top: 1880, width: WIDTH - 80, height: 160 }, transparent: { left: 40, top: 400, width: WIDTH - 80, height: 700 } }
+            const mean = async (file, region) => { const pixels = await require('sharp')(file).extract(region).greyscale().raw().toBuffer(); return pixels.reduce((sum, value) => sum + value, 0) / pixels.length }
+            const levels = {}
+            for (const [name, region] of Object.entries(regions)) levels[name] = { exported: await mean(exported, region), reference: await mean(reference, region) }
+            comparisons.push({ frame, previewPsnr, referencePsnr, levels })
             assert.ok(previewPsnr > 24, `透明叠加预览与导出第 ${frame} 帧不一致：${previewPsnr}dB`)
             assert.ok(referencePsnr > 24, `透明叠加与 FFmpeg overlay 参考第 ${frame} 帧不一致：${referencePsnr}dB`)
+            for (const [name, level] of Object.entries(levels)) assert.ok(Math.abs(level.exported - level.reference) < 6, `透明叠加第 ${frame} 帧${name}区域亮度 ${level.exported} 与参考 ${level.reference} 不符`)
+            assert.ok(levels.opaque.exported > 225, `不透明块应为白色：${levels.opaque.exported}`)
           }
           evidence.overlay = { output, exportMs: run.ms, log: run.log, nativeCpuSeconds: run.nativeCpuSeconds, comparisons, ...verified }
           store(); await capture('export-native-alpha-overlay')
