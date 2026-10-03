@@ -1,4 +1,5 @@
 import { EventEmitter } from 'node:events'
+import path from 'node:path'
 import type { IpcMainInvokeEvent } from 'electron'
 import { beforeEach, expect, it, vi } from 'vitest'
 type Handler = (input: unknown, event: IpcMainInvokeEvent) => unknown
@@ -56,17 +57,21 @@ it('取消限定调用窗口；窗口销毁取消其剩余请求，重复标识�
 
 it('片段缩略帧：只接受已授权素材、合法时间与高度档，按实际路径取帧并授权缓存目录（2.4）', async () => {
   const owner = sender(4)
+  // Absolute on the platform running the test (a drive path is not absolute on Linux CI).
+  const at = (...parts: string[]): string => path.resolve(path.sep, ...parts)
+  const clip = at('media', 'clip.mp4'); const link = at('media', 'link.mp4'); const outside = at('outside', 'clip.mp4')
+  const cached = at('profile', 'HenjiCache', 'Filmstrip', 'frame.webp')
   mock.allowed.mockImplementation((value: string) => !value.includes('outside'))
-  mock.realpath.mockImplementation(async (value: string) => value === 'D:/media/link.mp4' ? 'D:/outside/real.mp4' : value)
-  mock.frame.mockResolvedValue('D:/profile/HenjiCache/Filmstrip/frame.webp')
+  mock.realpath.mockImplementation(async (value: string) => value === link ? at('outside', 'real.mp4') : value)
+  mock.frame.mockResolvedValue(cached)
   try {
-    expect(await invoke('video:generateThumbnailBytes', { source: 'D:/media/clip.mp4', frame: { timeUs: 1_500_000, height: 48 }, requestId: 'tile' }, owner.event)).toEqual({ bytes: new Uint8Array(), cachePath: 'D:/profile/HenjiCache/Filmstrip/frame.webp' })
-    expect(mock.frame).toHaveBeenCalledWith({ source: 'D:/media/clip.mp4', timeUs: 1_500_000, height: 48 }, expect.any(AbortSignal))
-    expect(mock.allowRoot).toHaveBeenCalledWith('D:/profile/HenjiCache/Filmstrip')
-    await expect(invoke('video:generateThumbnailBytes', { source: 'D:/outside/clip.mp4', frame: { timeUs: 0, height: 48 } }, owner.event)).rejects.toThrow('读取权限')
-    await expect(invoke('video:generateThumbnailBytes', { source: 'D:/media/link.mp4', frame: { timeUs: 0, height: 48 } }, owner.event)).rejects.toThrow('实际路径')
-    for (const frame of [{ timeUs: -1, height: 48 }, { timeUs: 1.5, height: 48 }, { timeUs: 0, height: 50 }, { timeUs: 0, height: 48, extra: 1 }, 'frame']) await expect(invoke('video:generateThumbnailBytes', { source: 'D:/media/clip.mp4', frame }, owner.event)).rejects.toThrow()
-    await expect(invoke('video:generateThumbnailBytes', { source: 'D:/media/clip.mp4', cache: true, frame: { timeUs: 0, height: 48 } }, owner.event)).rejects.toThrow('cache')
+    expect(await invoke('video:generateThumbnailBytes', { source: clip, frame: { timeUs: 1_500_000, height: 48 }, requestId: 'tile' }, owner.event)).toEqual({ bytes: new Uint8Array(), cachePath: cached })
+    expect(mock.frame).toHaveBeenCalledWith({ source: clip, timeUs: 1_500_000, height: 48 }, expect.any(AbortSignal))
+    expect(mock.allowRoot).toHaveBeenCalledWith(path.dirname(cached))
+    await expect(invoke('video:generateThumbnailBytes', { source: outside, frame: { timeUs: 0, height: 48 } }, owner.event)).rejects.toThrow('读取权限')
+    await expect(invoke('video:generateThumbnailBytes', { source: link, frame: { timeUs: 0, height: 48 } }, owner.event)).rejects.toThrow('实际路径')
+    for (const frame of [{ timeUs: -1, height: 48 }, { timeUs: 1.5, height: 48 }, { timeUs: 0, height: 50 }, { timeUs: 0, height: 48, extra: 1 }, 'frame']) await expect(invoke('video:generateThumbnailBytes', { source: clip, frame }, owner.event)).rejects.toThrow()
+    await expect(invoke('video:generateThumbnailBytes', { source: clip, cache: true, frame: { timeUs: 0, height: 48 } }, owner.event)).rejects.toThrow('cache')
     expect(mock.frame).toHaveBeenCalledTimes(1)
   } finally { owner.destroy() }
 })
