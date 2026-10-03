@@ -271,10 +271,6 @@ impl AudioDecoder {
         }
         Ok(Self { context, name })
     }
-
-    fn flush(&mut self) {
-        unsafe { ff::avcodec_flush_buffers(self.context) };
-    }
 }
 
 impl Drop for AudioDecoder {
@@ -398,8 +394,17 @@ struct Segment {
     seek_retries: u32,
     demux_eof: bool,
     decoder_eof: bool,
+    /// 本段已送入解码出的样本。之前的帧一律精确落位（2.10）：段起点 `next_in` 是按目标算出的位置，不是上一帧的
+    /// 延续，按容差合并会把跨过起点的整帧错位最多 1ms（Opus 20ms 帧、AAC 1024 样本帧定位时约 1/10 概率命中）。
+    fed: bool,
     /// 流结束（含重采样器排空）后的输出位置；之后全是静音。
     ended_at: Option<i64>,
+}
+
+impl Segment {
+    fn new(next_in: i64, next_out: i64, seek_seconds: f64, seek_retries: u32) -> Self {
+        Self { resampler: None, next_in, next_out, pending: None, awaiting_first: true, seek_seconds, seek_retries, demux_eof: false, decoder_eof: false, fed: false, ended_at: None }
+    }
 }
 
 struct AudioSession {
@@ -517,7 +522,7 @@ impl AudioSession {
             plane.clear();
         }
         self.buffer_start = n0;
-        self.segment = Some(Segment { resampler: None, next_in: m0, next_out: n0, pending: None, awaiting_first: true, seek_seconds, seek_retries: 0, demux_eof: false, decoder_eof: false, ended_at: None });
+        self.segment = Some(Segment::new(m0, n0, seek_seconds, 0));
         Ok(())
     }
 
@@ -528,7 +533,9 @@ impl AudioSession {
         } else {
             self.input.seek(seconds_to_ticks(seconds, self.input.time_base))?;
         }
-        self.decoder.flush();
+        // 重新打开解码器而不是 flush（2.10，与 FFmpeg CLI 定位后新建解码器一致）：`avcodec_flush_buffers` 只清重叠缓冲，
+        // 不重置 AAC 感知噪声替代（PNS）等解码器内部的随机数状态，定位后的输出会随此前读过多少而变，回到开头也与完整解码不同。
+        self.decoder = AudioDecoder::open(self.input.parameters(), self.input.stream().time_base)?;
         Ok(())
     }
 
@@ -563,11 +570,12 @@ impl AudioSession {
                                 let seconds = segment.seek_seconds - 1.0;
                                 let (next_in, next_out) = (segment.next_in, segment.next_out);
                                 self.seek(seconds)?;
-                                self.segment = Some(Segment { resampler: None, next_in, next_out, pending: None, awaiting_first: true, seek_seconds: seconds, seek_retries: retries, demux_eof: false, decoder_eof: false, ended_at: None });
+                                self.segment = Some(Segment::new(next_in, next_out, seconds, retries));
                                 continue;
                             }
                         }
-                        segment.pending = Some((frame, index, false));
+                        let exact = !segment.fed;
+                        segment.pending = Some((frame, index, exact));
                     }
                     None => {
                         let segment = self.segment.as_mut().expect("解码段存在");
@@ -669,6 +677,7 @@ impl AudioSession {
         let produced = resampler.convert(Some(&planes), fed, &mut self.buffer)?;
         segment.next_in += fed as i64;
         segment.next_out += produced as i64;
+        segment.fed = true;
         Ok(())
     }
 
@@ -775,6 +784,111 @@ mod tests {
         let samples = read(&mut session, 0, 48_000);
         let (index, _) = peak(&samples[0]);
         assert!((index as i64 - 9600).abs() <= 2, "冲激位置 {index}");
+        let _ = std::fs::remove_file(path);
+    }
+
+    /// 双声道测试信号：每个声道一个正弦加一个扫频（非周期，任何样本错位都会产生大误差；与 2.6 场景同一形式）。
+    fn tone_args(rate: u32) -> Vec<String> {
+        let source = |frequency: u32| format!("aevalsrc='0.2*sin(2*PI*{frequency}*t)+0.1*sin(2*PI*({}+{}*t)*t)':s={rate}:d=4", frequency * 2 + 37, 50 + frequency / 10);
+        ["-f", "lavfi", "-i", &source(700), "-f", "lavfi", "-i", &source(900), "-filter_complex", "[0:a][1:a]join=inputs=2:channel_layout=stereo[a]", "-map", "[a]"].iter().map(|text| text.to_string()).collect()
+    }
+
+    fn generate_tone(name: &str, rate: u32, codec: &[&str]) -> Option<String> {
+        let mut args = tone_args(rate);
+        args.extend(codec.iter().map(|text| text.to_string()));
+        generate(name, &args.iter().map(String::as_str).collect::<Vec<_>>())
+    }
+
+    /// FFmpeg CLI 完整解码第 `stream` 条声音流的参考 PCM（交错 float32，从流的第一个输出样本起）。
+    fn reference(path: &str, stream: usize, filter: Option<&str>) -> Vec<f32> {
+        let map = format!("0:a:{stream}");
+        let mut args = vec!["-v", "error", "-i", path, "-map", &map];
+        if let Some(filter) = filter {
+            args.extend(["-af", filter]);
+        }
+        args.extend(["-f", "f32le", "-"]);
+        let output = std::process::Command::new("ffmpeg").args(&args).output().expect("ffmpeg 可运行");
+        assert!(output.status.success(), "参考解码失败");
+        output.stdout.chunks_exact(4).map(|chunk| f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]])).collect()
+    }
+
+    /// 读取 [start, start + frames) 与参考（第一个参考样本在绝对样本 `offset`）逐样本比较，返回最大绝对误差。
+    fn max_error(session: &mut AudioSession, reference: &[f32], offset: i64, start: i64, frames: usize) -> f32 {
+        let channels = session.channels;
+        let total = (reference.len() / channels) as i64;
+        let planes = read(session, start, frames);
+        let mut worst = 0f32;
+        for (channel, plane) in planes.iter().enumerate() {
+            for (index, value) in plane.iter().enumerate() {
+                let position = start + index as i64 - offset;
+                let expected = if (0..total).contains(&position) { reference[position as usize * channels + channel] } else { 0.0 };
+                worst = worst.max((value - expected).abs());
+            }
+        }
+        worst
+    }
+
+    #[test]
+    fn aac_with_priming_and_noise_substitution_matches_ffmpeg_from_start_to_end() {
+        // 2.10 缺陷 1、2：MP4 编辑列表下 AAC 首包 pts 为 -1024、带 skip_samples；末包带 discard_padding。
+        // FFmpeg 默认的 AAC 编码器启用感知噪声替代（PNS），解码器的噪声随机数状态从第一个包起累积。
+        let Some(path) = generate_tone("pns.mp4", 48_000, &["-c:a", "aac", "-b:a", "192k"]) else { return };
+        let expected = reference(&path, 0, None);
+        let total = expected.len() / 2;
+        assert_eq!(total, 192_000, "参考按编辑列表裁掉首尾填充");
+        // 流开头之前起读、0.5 秒块带 3 个样本保护重叠续读到流结束之后：逐样本与完整解码相同（首帧、末帧都不例外）。
+        let mut session = open(&path, Some(48_000));
+        let mut start = -480i64;
+        while start < total as i64 + 24_000 {
+            assert_eq!(max_error(&mut session, &expected, 0, start, 24_003), 0.0, "从 {start} 起的块");
+            start += 24_000;
+        }
+        // 读过别处之后重新定位回开头：解码器重新打开，噪声随机数状态与完整解码一致。
+        let mut session = open(&path, Some(48_000));
+        assert!(max_error(&mut session, &expected, 0, 120_000, 4800) < 0.01);
+        assert_eq!(max_error(&mut session, &expected, 0, 0, 24_000), 0.0, "回到开头");
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn seeks_place_the_first_frame_exactly_at_every_phase() {
+        // 2.10：定位后跨过段起点的那一帧必须精确落位（此前按 1ms 容差合并，整帧错位最多 1ms）。
+        // 关闭 PNS 的 AAC 定位解码与完整解码逐样本相同；目标覆盖段起点相对 1024 样本帧的各种相位。
+        let Some(path) = generate_tone("nopns.mp4", 48_000, &["-c:a", "aac", "-b:a", "192k", "-aac_pns", "0"]) else { return };
+        let expected = reference(&path, 0, None);
+        for step in 0..48i64 {
+            let target = 30_000 + step * 1031;
+            let mut session = open(&path, Some(48_000));
+            assert_eq!(max_error(&mut session, &expected, 0, target, 2000), 0.0, "定位到 {target}");
+        }
+        let _ = std::fs::remove_file(path);
+        // Opus（20ms 帧、pre-skip 312）：此前目标 150000 处整段晚 40 个样本。Opus 定位后需约 80ms 收敛，误差为浮点级。
+        let Some(path) = generate_tone("opus.ogg", 48_000, &["-c:a", "libopus", "-b:a", "160k"]) else { return };
+        let expected = reference(&path, 0, None);
+        let mut session = open(&path, Some(48_000));
+        assert_eq!(max_error(&mut session, &expected, 0, -480, 4800), 0.0, "Opus 流开头（pre-skip）");
+        for target in [150_000i64, 72_000, 30_011, 100_003] {
+            let mut session = open(&path, Some(48_000));
+            let error = max_error(&mut session, &expected, 0, target, 9600);
+            assert!(error < 1e-5, "Opus 定位到 {target} 误差 {error}");
+        }
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn mp3_encoder_delay_and_resampling_stay_on_the_absolute_grid() {
+        // LAME 头的编码器延迟与末尾填充由 FFmpeg 去掉，流起点 1105/44100 秒不在 48k 输出网格上：
+        // 参考先在流开头前补零到绝对 0 再用 soxr 重采样（与原生同一口径），开头、定位与结尾都应一致。
+        let Some(path) = generate_tone("lame.mp3", 44_100, &["-c:a", "libmp3lame", "-b:a", "192k"]) else { return };
+        let mut session = open(&path, Some(48_000));
+        let start = session.stream_start_seconds.expect("有起点");
+        let delay = (start * 44_100.0).round() as i64;
+        assert_eq!(delay, 1105);
+        let expected = reference(&path, 0, Some(&format!("adelay={delay}S:all=1,aresample=48000:resampler=soxr:precision=28")));
+        let total = (expected.len() / 2) as i64;
+        assert!(max_error(&mut session, &expected, 0, -480, 48_000) < 1e-6, "开头");
+        assert!(max_error(&mut session, &expected, 0, 100_000, 24_000) < 1e-6, "定位");
+        assert!(max_error(&mut session, &expected, 0, total - 12_000, 24_000) < 1e-6, "结尾");
         let _ = std::fs::remove_file(path);
     }
 }

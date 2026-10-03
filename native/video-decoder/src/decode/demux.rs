@@ -149,10 +149,19 @@ impl Input {
     }
 
     /// 回到流的开头（第一个关键帧）。
+    ///
+    /// 声音流回到最早的包（2.10）：带编码器延迟的声音（MP4 编辑列表下的 AAC/Opus 等）首包时间早于流起点，
+    /// 解封装器在首包附上 `AV_PKT_DATA_SKIP_SAMPLES`，由解码器解出后整帧丢弃；它是下一帧的重叠预滚，
+    /// 跳过它会让流开头一帧解错。以 `start_time` 定位会落在起点处的包上，所以取索引中最早的时间。
     pub fn seek_start(&mut self) -> Result<(), ServiceError> {
         let stream = self.stream();
+        let audio = unsafe { (*stream.codecpar).codec_type } == ff::AVMediaType::AVMEDIA_TYPE_AUDIO;
         let start = if stream.start_time != ff::AV_NOPTS_VALUE {
-            stream.start_time
+            if audio && self.has_index() {
+                stream.start_time.min(self.first_index_timestamp())
+            } else {
+                stream.start_time
+            }
         } else if self.has_index() {
             self.first_index_timestamp()
         } else {
