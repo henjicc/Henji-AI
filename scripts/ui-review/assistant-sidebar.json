@@ -1,0 +1,923 @@
+[
+  {
+    "id": "review-assistant-empty",
+    "surface": "助手",
+    "name": "核对-助手侧栏空态、聚焦、命令带、历史与记忆空态、悬浮",
+    "checklist": [
+      "A21.1",
+      "A21.8",
+      "A22.1",
+      "A23.1"
+    ],
+    "writesUserData": true,
+    "steps": [
+      {
+        "enter": "generation"
+      },
+      {
+        "seedAssistant": {
+          "replies": []
+        }
+      },
+      {
+        "press": "Control+Shift+A"
+      },
+      {
+        "waitFor": {
+          "role": "complementary",
+          "name": "智能助手"
+        }
+      },
+      {
+        "waitFor": {
+          "text": "从当前工作开始",
+          "exact": true
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": {
+          "name": "empty",
+          "metrics": {
+            "selector": "[data-application-surface-id=\"overlay.assistant\"] [data-command-bar]",
+            "maxRows": 1
+          }
+        }
+      },
+      {
+        "metrics": {
+          "name": "composer-bar",
+          "selector": "[data-assistant-composer-field] > div:last-child",
+          "maxRows": 1
+        }
+      },
+      {
+        "focus": {
+          "role": "textbox",
+          "name": "向智能助手描述任务"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "focus"
+      },
+      {
+        "hover": {
+          "role": "button",
+          "name": "新建对话",
+          "exact": true
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "toolbar-hover"
+      },
+      {
+        "focus": {
+          "label": "/^智能助手（当前/"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "title-focus"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "对话历史",
+          "exact": true
+        }
+      },
+      {
+        "waitFor": {
+          "target": {
+            "text": "正在读取对话",
+            "exact": true
+          },
+          "state": "hidden"
+        },
+        "timeout": 15000
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "history-first"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "助手记忆",
+          "exact": true
+        }
+      },
+      {
+        "waitFor": {
+          "text": "/暂无记忆|已保存/"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "memory-first"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "助手记忆",
+          "exact": true
+        }
+      },
+      {
+        "focus": {
+          "label": "/^智能助手（当前/"
+        }
+      },
+      {
+        "press": "ArrowDown"
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "floating"
+      },
+      {
+        "hover": {
+          "role": "button",
+          "name": "收起智能助手"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "floating-close-hover"
+      },
+      {
+        "focus": {
+          "label": "/^智能助手（当前/"
+        }
+      },
+      {
+        "press": "ArrowRight"
+      },
+      {
+        "waitStable": {}
+      }
+    ]
+  },
+  {
+    "id": "review-assistant-conversation",
+    "surface": "助手",
+    "name": "核对-助手对话：思考中、工具调用、长 Markdown、多轮",
+    "checklist": [
+      "A21.2",
+      "A21.3",
+      "A21.6",
+      "A22.3"
+    ],
+    "writesUserData": true,
+    "steps": [
+      {
+        "enter": "generation"
+      },
+      {
+        "seedAssistant": {
+          "replies": [
+            {
+              "thinking": "先读取当前主题设置，再按设置给出排版示例。",
+              "hold": true,
+              "tool": {
+                "name": "read_application_entity",
+                "arguments": {
+                  "ref": {
+                    "kind": "settings.registry",
+                    "id": "singleton"
+                  },
+                  "propertyIds": [
+                    "interface.theme_contrast"
+                  ]
+                }
+              }
+            },
+            {
+              "hold": true,
+              "content": "## 当前主题\n\n已读取主题设置，下面是一份**排版示例**，用来核对标题、列表、代码与表格。\n\n### 建议步骤\n\n1. 先在生成页选择 `Seedance 2.0` 模型。\n2. 把比例改成 16:9，时长设为 10 秒。\n3. 参考图放在第一位，提示词写清楚主体、动作和镜头。\n\n- 无序列表第一项\n- 无序列表第二项，内容稍长一些，用来看换行后的缩进是否对齐，以及行高是否舒适。\n\n> 引用：提示词越具体，生成结果越可控。\n\n```json\n{\n  \"model\": \"seedance-2.0\",\n  \"ratio\": \"16:9\",\n  \"duration\": 10,\n  \"prompt\": \"一只橘猫在雨夜的霓虹街道上慢慢走过，镜头缓慢推近，电影感光影\"\n}\n```\n\n| 参数 | 当前值 | 说明 |\n|---|---|---|\n| 比例 | 16:9 | 横屏视频 |\n| 时长 | 10 秒 | 越长费用越高 |\n| 分辨率 | 1080p | 画面更清晰 |\n\n参考链接：[查看帮助](https://example.com/help)。超长不换行的地址：https://example.com/a/very/long/path/that/should/wrap/inside/the/sidebar/without/overflowing/the/panel\n\n---\n\n以上就是全部示例。"
+            },
+            {
+              "thinking": "整理第二段回复。",
+              "hold": true,
+              "content": "先确认参考图，再提交任务。整理完成。"
+            }
+          ]
+        }
+      },
+      {
+        "press": "Control+Shift+A"
+      },
+      {
+        "waitFor": {
+          "role": "complementary",
+          "name": "智能助手"
+        }
+      },
+      {
+        "fill": {
+          "target": {
+            "role": "textbox",
+            "name": "向智能助手描述任务"
+          },
+          "text": "核对：读取主题设置，并给我一份排版示例"
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "发送",
+          "exact": true
+        }
+      },
+      {
+        "waitFor": {
+          "role": "button",
+          "name": "正在思考",
+          "exact": true
+        },
+        "timeout": 60000
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "thinking"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "正在思考",
+          "exact": true
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "thinking-expanded"
+      },
+      {
+        "releaseAssistant": {}
+      },
+      {
+        "waitFor": {
+          "selector": "[data-embedded-process] .lucide-check"
+        },
+        "timeout": 60000
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "tool-done"
+      },
+      {
+        "releaseAssistant": {}
+      },
+      {
+        "waitFor": {
+          "role": "button",
+          "name": "发送",
+          "exact": true
+        },
+        "timeout": 60000
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "answer-end"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "查看过程",
+          "exact": true
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "answer-process"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "查看过程",
+          "exact": true
+        }
+      },
+      {
+        "scroll": {
+          "target": {
+            "role": "log",
+            "name": "助手对话"
+          },
+          "dy": -4000
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "answer-top"
+      },
+      {
+        "scroll": {
+          "target": {
+            "role": "log",
+            "name": "助手对话"
+          },
+          "dy": 900
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "answer-middle"
+      },
+      {
+        "fill": {
+          "target": {
+            "role": "textbox",
+            "name": "向智能助手描述任务"
+          },
+          "text": "继续第二段"
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "发送",
+          "exact": true
+        }
+      },
+      {
+        "waitFor": {
+          "role": "button",
+          "name": "正在思考",
+          "exact": true
+        },
+        "timeout": 60000
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "streaming"
+      },
+      {
+        "releaseAssistant": {}
+      },
+      {
+        "waitFor": {
+          "role": "button",
+          "name": "发送",
+          "exact": true
+        },
+        "timeout": 60000
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "multi-turn"
+      }
+    ]
+  },
+  {
+    "id": "review-assistant-queue-error",
+    "surface": "助手",
+    "name": "核对-助手排队发送、权限与发送方式菜单、错误与重试",
+    "checklist": [
+      "A21.5"
+    ],
+    "writesUserData": true,
+    "expectedLogEvents": [
+      "embedded_agent.request.failed",
+      "embedded_agent.turn.failed"
+    ],
+    "steps": [
+      {
+        "enter": "generation"
+      },
+      {
+        "seedAssistant": {
+          "replies": [
+            {
+              "thinking": "先处理第一条消息。",
+              "hold": true,
+              "content": "第一条已处理。"
+            },
+            {
+              "error": {
+                "status": 500,
+                "message": "上游服务暂时不可用"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "press": "Control+Shift+A"
+      },
+      {
+        "waitFor": {
+          "role": "complementary",
+          "name": "智能助手"
+        }
+      },
+      {
+        "open": {
+          "trigger": {
+            "role": "button",
+            "name": "助手操作权限"
+          }
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": {
+          "name": "access-menu",
+          "metrics": {
+            "selector": "[role=\"listbox\"]",
+            "nth": "last",
+            "maxRows": null
+          }
+        }
+      },
+      {
+        "press": "Escape"
+      },
+      {
+        "fill": {
+          "target": {
+            "role": "textbox",
+            "name": "向智能助手描述任务"
+          },
+          "text": "第一条消息"
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "发送",
+          "exact": true
+        }
+      },
+      {
+        "waitFor": {
+          "role": "button",
+          "name": "停止",
+          "exact": true
+        },
+        "timeout": 60000
+      },
+      {
+        "fill": {
+          "target": {
+            "role": "textbox",
+            "name": "向智能助手描述任务"
+          },
+          "text": "第二条消息，等当前回复结束后再发送"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": {
+          "name": "busy-composer",
+          "metrics": {
+            "selector": "[data-assistant-composer-field] > div:last-child",
+            "maxRows": 1
+          }
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "等待发送",
+          "exact": true
+        }
+      },
+      {
+        "waitFor": {
+          "text": "等待发送",
+          "exact": true
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "queued"
+      },
+      {
+        "open": {
+          "trigger": {
+            "role": "button",
+            "name": "发送方式"
+          }
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "delivery-menu"
+      },
+      {
+        "press": "Escape"
+      },
+      {
+        "releaseAssistant": {}
+      },
+      {
+        "waitFor": {
+          "role": "alert"
+        },
+        "timeout": 60000
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "error"
+      },
+      {
+        "hover": {
+          "role": "button",
+          "name": "重试"
+        },
+        "ifPresent": {
+          "role": "button",
+          "name": "重试"
+        }
+      },
+      {
+        "waitStable": {},
+        "ifPresent": {
+          "role": "button",
+          "name": "重试"
+        }
+      },
+      {
+        "capture": "error-retry-hover",
+        "ifPresent": {
+          "role": "button",
+          "name": "重试"
+        }
+      }
+    ]
+  },
+  {
+    "id": "review-assistant-history-memory",
+    "surface": "助手",
+    "name": "核对-助手对话历史多条与当前项、记忆已保存与编辑、清空确认",
+    "checklist": [
+      "A23.2",
+      "A23.3"
+    ],
+    "writesUserData": true,
+    "steps": [
+      {
+        "enter": "generation"
+      },
+      {
+        "seedAssistant": {
+          "memory": "用户偏好水墨质感，画面比例常用 16:9，提示词习惯用中文书写。",
+          "replies": [
+            {
+              "content": "好的，已按水墨质感整理。"
+            },
+            {
+              "content": "第二段对话已完成。"
+            }
+          ]
+        }
+      },
+      {
+        "press": "Control+Shift+A"
+      },
+      {
+        "waitFor": {
+          "role": "complementary",
+          "name": "智能助手"
+        }
+      },
+      {
+        "fill": {
+          "target": {
+            "role": "textbox",
+            "name": "向智能助手描述任务"
+          },
+          "text": "核对历史：第一段对话"
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "发送",
+          "exact": true
+        }
+      },
+      {
+        "waitFor": {
+          "text": "好的，已按水墨质感整理。",
+          "exact": true
+        },
+        "timeout": 60000
+      },
+      {
+        "waitFor": {
+          "role": "button",
+          "name": "发送",
+          "exact": true
+        },
+        "timeout": 60000
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "新建对话",
+          "exact": true
+        }
+      },
+      {
+        "waitFor": {
+          "text": "从当前工作开始",
+          "exact": true
+        }
+      },
+      {
+        "fill": {
+          "target": {
+            "role": "textbox",
+            "name": "向智能助手描述任务"
+          },
+          "text": "核对历史：第二段对话，标题足够长用来检查列表行截断与悬停看全"
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "发送",
+          "exact": true
+        }
+      },
+      {
+        "waitFor": {
+          "text": "第二段对话已完成。",
+          "exact": true
+        },
+        "timeout": 60000
+      },
+      {
+        "waitFor": {
+          "role": "button",
+          "name": "发送",
+          "exact": true
+        },
+        "timeout": 60000
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "对话历史",
+          "exact": true
+        }
+      },
+      {
+        "waitFor": {
+          "role": "button",
+          "name": "/核对历史：第一段对话/"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "history-list"
+      },
+      {
+        "hover": {
+          "role": "button",
+          "name": "/核对历史：第一段对话/"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "history-hover"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "助手记忆",
+          "exact": true
+        }
+      },
+      {
+        "waitFor": {
+          "text": "/用户偏好水墨质感/"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "memory-list"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "编辑记忆",
+          "exact": true
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "memory-edit"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "清空全部记忆"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "memory-clear-armed"
+      },
+      {
+        "open": {
+          "trigger": {
+            "role": "button",
+            "name": "历史条目默认保留时间"
+          }
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "memory-ttl-menu"
+      },
+      {
+        "press": "Escape"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "助手记忆",
+          "exact": true
+        }
+      },
+      {
+        "waitFor": {
+          "role": "textbox",
+          "name": "向智能助手描述任务"
+        }
+      }
+    ]
+  },
+  {
+    "id": "review-assistant-attachments",
+    "surface": "助手",
+    "name": "核对-助手附件草稿与已发送消息中的附件",
+    "checklist": [
+      "A22.2"
+    ],
+    "writesUserData": true,
+    "steps": [
+      {
+        "enter": "generation"
+      },
+      {
+        "seedAssistant": {
+          "capabilities": [
+            "image"
+          ],
+          "replies": [
+            {
+              "content": "已查看这张图片：主体是应用图标，背景透明。"
+            }
+          ]
+        }
+      },
+      {
+        "press": "Control+Shift+A"
+      },
+      {
+        "waitFor": {
+          "role": "complementary",
+          "name": "智能助手"
+        }
+      },
+      {
+        "waitFor": {
+          "role": "button",
+          "name": "/^添加图片/"
+        }
+      },
+      {
+        "setFiles": {
+          "target": {
+            "selector": "input[aria-label=\"聊天附件\"]"
+          },
+          "files": [
+            "resources/icons/icon.png"
+          ]
+        }
+      },
+      {
+        "waitFor": {
+          "role": "button",
+          "name": "/^移除 /"
+        }
+      },
+      {
+        "fill": {
+          "target": {
+            "role": "textbox",
+            "name": "向智能助手描述任务"
+          },
+          "text": "看看这张图"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "attachment-draft"
+      },
+      {
+        "hover": {
+          "role": "button",
+          "name": "/^移除 /"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "attachment-remove-hover"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "发送",
+          "exact": true
+        }
+      },
+      {
+        "waitFor": {
+          "text": "/已查看这张图片/"
+        },
+        "timeout": 60000
+      },
+      {
+        "waitFor": {
+          "role": "button",
+          "name": "发送",
+          "exact": true
+        },
+        "timeout": 60000
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "attachment-sent"
+      }
+    ]
+  }
+]

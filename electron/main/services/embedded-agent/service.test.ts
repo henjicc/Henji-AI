@@ -56,16 +56,18 @@ it('已有生成结果导入沿用原选中对象或原视口，显式落点与�
   expect(withGenerationOrigin(name, input, 'null')).toBe(input)
 })
 
-function setup() {
+function setup({ holdNavigation = false } = {}) {
   mocks.skills.mockResolvedValue({ tools: [], instructions: '' })
   const child = new EventEmitter() as EventEmitter & { postMessage: (value: { id: string; command: EngineCommand }) => void; kill: () => void }
   const prompts: string[] = []
   let active: string | undefined
   let cancelId: string | undefined
+  const navigations: string[] = []
   const reply = (id: string) => child.emit('message', { type: 'result', id })
   child.postMessage = ({ id, command }) => {
     if (command.action === 'prompt') { prompts.push(command.input.text); active = id }
     else if (command.action === 'cancel') { cancelId = id }
+    else if (holdNavigation && ['open', 'new', 'sessions'].includes(command.action)) navigations.push(id)
     else queueMicrotask(() => reply(id))
   }
   child.kill = () => child.emit('exit', 0)
@@ -76,7 +78,8 @@ function setup() {
   const send = (text: string, delivery: EmbeddedAgentPrompt['delivery'] = 'wait') => service.prompt({ text, delivery,
     model: { providerId: 'test', modelId: 'fixture' }, access: 'read', context: '' })
   const finish = () => { if (active) { reply(active); active = undefined } }
-  return { service, send, prompts, finish, child, finishCancel: () => { finish(); if (cancelId) { reply(cancelId); cancelId = undefined } } }
+  const finishNavigation = () => { const id = navigations.shift(); if (id) reply(id) }
+  return { service, send, prompts, finish, child, navigations, finishNavigation, finishCancel: () => { finish(); if (cancelId) { reply(cancelId); cancelId = undefined } } }
 }
 afterEach(() => { vi.clearAllMocks() })
 
@@ -211,6 +214,25 @@ describe('内置助手消息调度', () => {
     await vi.waitFor(() => expect(f.prompts).toEqual(['原请求', '插入消息']))
     f.finish()
     await vi.waitFor(() => expect(f.prompts).toEqual(['原请求', '插入消息', '等待消息']))
+    f.finish()
+    await vi.waitFor(() => expect(f.service.snapshot().busy).toBe(false))
+  })
+  it('切换对话期间对界面报忙；此时发出的消息排队，切换完成后才发送，不再被拒绝', async () => {
+    const f = setup({ holdNavigation: true })
+    const listing = f.service.navigate({ action: 'sessions' })
+    await vi.waitFor(() => expect(f.navigations).toHaveLength(1))
+    expect(f.service.snapshot()).toMatchObject({ busy: true, switching: true })
+    // 再起一次切换仍拒绝（界面在 busy 时已禁用这些入口），但发消息按等待语义排队
+    await expect(f.service.navigate({ action: 'new' })).rejects.toThrow('请先等待当前操作结束')
+    await expect(f.send('切换中发出的消息')).resolves.toBeUndefined()
+    expect(f.service.snapshot().pendingMessages?.map(item => item.text)).toEqual(['切换中发出的消息'])
+    await new Promise(resolve => setTimeout(resolve, 20))
+    expect(f.prompts).toEqual([])
+    f.finishNavigation()
+    await listing
+    await vi.waitFor(() => expect(f.prompts).toEqual(['切换中发出的消息']))
+    expect(f.service.snapshot().switching).toBeUndefined()
+    expect(f.service.snapshot().busy).toBe(true)
     f.finish()
     await vi.waitFor(() => expect(f.service.snapshot().busy).toBe(false))
   })

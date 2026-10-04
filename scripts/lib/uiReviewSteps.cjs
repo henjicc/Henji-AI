@@ -19,6 +19,8 @@
 const fs = require('node:fs')
 const path = require('node:path')
 const { analyzeLayoutMetrics, collectLayoutMeasurements } = require('./uiReviewMetrics.cjs')
+const { normalizeSeedAssistant, seedAssistantFixture } = require('./uiReviewAssistantFixture.cjs')
+const { blockPaidGeneration } = require('./uiReviewPaidGuard.cjs')
 
 const ROOT = path.resolve(__dirname, '..', '..')
 const WORKSPACES = Object.freeze(['generation', 'canvas', 'toolbox', 'assets'])
@@ -71,6 +73,11 @@ const STEP_ACTIONS = Object.freeze({
       release: value.release !== false }
   },
   release: () => ({}),
+  // 文件选择框不可点：直接给（通常隐藏的）文件输入设值，走与用户选文件相同的 change 事件。路径相对仓库根目录。
+  setFiles: (value) => {
+    if (!Array.isArray(value?.files) || value.files.length === 0) throw new Error('setFiles 需要 files 数组')
+    return { target: normalizeTarget({ includeHidden: true, ...value.target }), files: value.files.map(String) }
+  },
   scroll: (value) => ({ target: normalizeTarget(value?.target ?? value), dx: Number(value?.dx ?? 0), dy: Number(value?.dy ?? 240) }),
   waitFor: (value) => ({ target: normalizeTarget(value?.target ?? value), state: value?.state ?? 'visible' }),
   wait: (value) => ({ ms: positiveInteger(typeof value === 'number' ? value : value?.ms, 'wait') }),
@@ -84,6 +91,10 @@ const STEP_ACTIONS = Object.freeze({
     if (!Array.isArray(value?.nodes) || value.nodes.length === 0) throw new Error('seedCanvas 需要 nodes')
     return { nodes: value.nodes, edges: value.edges ?? [], viewport: value.viewport ?? { x: 120, y: 80, zoom: 0.9 } }
   },
+  // 助手夹具：本机流式模型替身 + 隔离模型配置（uiReviewAssistantFixture.cjs）；要在打开助手侧栏之前执行，
+  // 侧栏挂载时才读取模型列表。releaseAssistant 放行 hold 暂停中的那一轮回复。
+  seedAssistant: (value) => normalizeSeedAssistant(value),
+  releaseAssistant: () => ({}),
   capture: (value) => {
     const spec = typeof value === 'string' ? { name: value } : value
     if (!spec?.name || !/^[a-z0-9-]+$/.test(spec.name)) throw new Error(`capture.name 只能是小写字母、数字与连字符：${spec?.name}`)
@@ -178,6 +189,8 @@ function normalizeStepSpec(raw, sourceFile = '<内联>') {
     checklist: raw.checklist ?? [],
     sourceFile,
     writesUserData: raw.writesUserData === true,
+    // 场景有意制造的失败日志事件（如助手替身返回 HTTP 500）：记入证据，不判失败（与正式场景同名字段）
+    expectedLogEvents: normalizeExpectedLogEvents(raw.expectedLogEvents, sourceFile),
     launchArgs: raw.launchArgs ?? [],
     launchEnv: raw.launchEnv ?? {},
     prepare: (raw.prepare ?? []).map((step, index) => normalizeStep(step, `${sourceFile} prepare[${index}]`)),
@@ -186,6 +199,14 @@ function normalizeStepSpec(raw, sourceFile = '<内联>') {
     steps: raw.steps.map((step, index) => normalizeStep(expandTemplate(step, TEMPLATE_PROBE), `${sourceFile} steps[${index}]`)),
     variants: normalizeVariants(raw.variants),
   }
+}
+
+function normalizeExpectedLogEvents(value, sourceFile) {
+  if (value === undefined) return undefined
+  if (!Array.isArray(value) || value.some((item) => typeof item !== 'string' || !/^[a-z0-9_.]+$/.test(item))) {
+    throw new Error(`${sourceFile}：expectedLogEvents 必须是日志事件名数组`)
+  }
+  return value
 }
 
 /** 结构校验时用的占位变体：模板字段替换成可通过格式校验的值。 */
@@ -419,6 +440,10 @@ async function runStep(page, step, runtime) {
       await page.mouse.up()
       runtime.mouseDown = false
       return
+    case 'setFiles':
+      await resolveTarget(page, step.target).setInputFiles(
+        step.files.map((file) => (path.isAbsolute(file) ? file : path.resolve(ROOT, file))), { timeout })
+      return
     case 'scroll': {
       const box = await resolveTarget(page, step.target).boundingBox({ timeout })
       if (!box) throw new Error('滚动目标不可见')
@@ -452,6 +477,18 @@ async function runStep(page, step, runtime) {
     }
     case 'seedCanvas':
       await seedCanvasFixture(page, context, step)
+      return
+    case 'seedAssistant': {
+      if (runtime.assistantFixture) {
+        await runtime.assistantFixture.cleanup()
+        runtime.assistantFixture = null
+      }
+      runtime.assistantFixture = await seedAssistantFixture(page, step)
+      return
+    }
+    case 'releaseAssistant':
+      if (!runtime.assistantFixture) throw new Error('releaseAssistant 之前需要 seedAssistant')
+      runtime.assistantFixture.release()
       return
     case 'capture':
     case 'metrics': {
@@ -492,10 +529,14 @@ function compileStepScene(spec, context) {
     checklist: spec.checklist,
     sourceFile: spec.sourceFile,
     writesUserData: spec.writesUserData,
+    ...(spec.expectedLogEvents ? { expectedLogEvents: spec.expectedLogEvents } : {}),
     launchArgs: spec.launchArgs,
     launchEnv: spec.launchEnv,
-    setup: async (page, _electronApp, ctx) => {
-      const runtime = { context, ctx, prefix: '', variant: null, skipped: [], mouseDown: false }
+    setup: async (page, electronApp, ctx) => {
+      // 付费保护：步骤场景里任何误触的“生成”或对真实任务的续查都到不了供应商（uiReviewPaidGuard.cjs）
+      if (!electronApp || typeof electronApp.evaluate !== 'function') throw new Error('步骤场景缺少 Electron 应用，无法加付费保护')
+      const unblockPaidGeneration = await blockPaidGeneration(electronApp)
+      const runtime = { context, ctx, prefix: '', variant: null, skipped: [], mouseDown: false, assistantFixture: null }
       try {
         await runSteps(page, spec.prepare, runtime)
         if (!spec.variants) {
@@ -528,6 +569,8 @@ function compileStepScene(spec, context) {
         if (failures.length) throw new Error(`${failures.length}/${variants.length} 个变体失败：${failures.slice(0, 10).join('；')}`)
       } finally {
         if (runtime.mouseDown) await page.mouse.up().catch(() => undefined)
+        if (runtime.assistantFixture) await runtime.assistantFixture.cleanup().catch(() => undefined)
+        await unblockPaidGeneration()
         if (runtime.skipped.length) console.log(`  可选步骤跳过 ${runtime.skipped.length} 个：${runtime.skipped.slice(0, 5).join('；')}`)
       }
     },

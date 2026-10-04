@@ -58,6 +58,8 @@ export class EmbeddedAgentService {
   private state = emptyEmbeddedAgentSnapshot()
   private running = false
   private changing = false
+  /** 正在进行的切换（打开、新建、列出对话）；等待中的消息在它结束后才发送，避免落进切换前的会话。 */
+  private switching?: Promise<unknown>
   private cancelled = false
   private preparation?: AbortController
   private queue: Array<{ id: string; input: EmbeddedAgentPrompt }> = []
@@ -68,7 +70,12 @@ export class EmbeddedAgentService {
   private originContext?: string
   private requestId?: string
   private sending?: { id: string; input: EmbeddedAgentPrompt; userCount: number }
-  snapshot(): EmbeddedAgentSnapshot { return { ...this.state, busy: this.draining || this.running || this.state.busy,
+  /*
+   * 切换对话期间（changing）同样算忙并推给界面：以前 busy 不含切换，界面看到“空闲”就去打开历史、新建对话或发消息，
+   * 撞上 navigate 的拒绝（“请先等待当前操作结束”）或 prompt 的“正在切换对话”。switching 让界面区分“回复中”和“切换中”。
+   */
+  snapshot(): EmbeddedAgentSnapshot { return { ...this.state, busy: this.draining || this.running || this.changing || this.state.busy,
+    ...(this.changing ? { switching: true } : {}),
     sendingMessage: this.sending && this.state.messages.filter(message => message.role === 'user').length <= this.sending.userCount
       ? { id: this.sending.id, text: this.sending.input.text, attachments: this.sending.input.attachments } : undefined,
     pendingMessages: [...this.failedMessages, ...this.queue.map(({ id, input }) => ({ id, text: input.text, attachments: input.attachments }))] } }
@@ -155,7 +162,7 @@ export class EmbeddedAgentService {
   }
   async prompt(input: EmbeddedAgentPrompt, requestId = input.clientMessageId ?? randomUUID()): Promise<void> {
     if (this.disposed) throw new Error('助手已关闭。')
-    if (this.changing) throw new Error('正在切换对话，请稍后发送。')
+    // 切换中收到的消息按等待语义排队，切换完成后在切换后的对话里发送（drain 会等待 switching）。
     const entry = { id: requestId, input }
     if (input.delivery === 'interrupt') this.queue.unshift(entry)
     else this.queue.push(entry)
@@ -173,6 +180,7 @@ export class EmbeddedAgentService {
     try {
       while (this.queue.length && !this.disposed) {
         await this.cancelling?.catch(() => {})
+        await this.switching?.catch(() => {})
         if (this.disposed) break
         const entry = this.queue.shift()!
         const userCount = this.state.messages.filter(message => message.role === 'user').length
@@ -233,13 +241,20 @@ export class EmbeddedAgentService {
   async navigate(command: Extract<EngineCommand, { action: 'open' | 'new' | 'sessions' | 'snapshot' | 'cancel' }>): Promise<unknown> {
     if (this.draining || this.running || this.changing) throw new Error('请先等待当前操作结束或停止回复。')
     this.changing = true
-    try {
+    this.publish(this.state)
+    const run = (async () => {
       await this.ensureReady()
       const result = await this.send(command)
-      if (command.action === 'new' || command.action === 'open') { this.failedMessages = []; this.publish(this.state) }
+      if (command.action === 'new' || command.action === 'open') this.failedMessages = []
       return result
+    })()
+    this.switching = run
+    try { return await run }
+    finally {
+      if (this.switching === run) this.switching = undefined
+      this.changing = false
+      this.publish(this.state)
     }
-    finally { this.changing = false }
   }
   dispose(): void { this.disposed = true; this.queue = []; this.cancelled = true; this.preparation?.abort(); this.child?.kill() }
 }

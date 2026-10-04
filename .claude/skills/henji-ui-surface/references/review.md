@@ -80,6 +80,7 @@ npm run check:ui-visual -- --steps scripts/ui-review/generation-seedance-kie.jso
   "surface": "生成", "name": "核对-Seedance 2.0 KIE 底栏与模式菜单",
   "checklist": ["G07"],                     // 可选：对应清单行，只作记录
   "writesUserData": false,                  // 写业务数据（如画布夹具工程）时必须 true；real 模式下会被跳过
+  "expectedLogEvents": [],                  // 可选：场景有意制造的失败日志事件（如助手替身返回 HTTP 500），记入证据不判失败
   "launchArgs": [], "launchEnv": {},        // 只在本次只运行这一个场景时生效
   "prepare": [ /* 步骤：变体开始前执行一次 */ ],
   "variants": [ { "modelId": "…", "providerId": "…" } ]   // 或 { "source": "generation-models", "include": ["/seedance/i"], "exclude": [], "limit": 0 }
@@ -105,6 +106,9 @@ npm run check:ui-visual -- --steps scripts/ui-review/generation-seedance-kie.jso
 | `escape` | `{}` | 关闭浮层与弹窗（与正式场景同一实现） |
 | `selectModel` | `{ "modelId", "providerId", "search"? }` | 生成页模型面板里按 `data-model-id` / `data-provider-id` 点选 |
 | `seedCanvas` | `{ "nodes": [...], "edges": [], "viewport": {…} }` | 把节点写进巡检专用画布工程并打开（需 `writesUserData: true`） |
+| `seedAssistant` | `{ "replies": [...], "capabilities"?: ["image"], "memory"?: "…", "newConversation"?: true }` | 本机流式模型替身 + 隔离助手模型配置（不访问外部模型、不产生费用）；每轮回复可含 `thinking`、`partial`（暂停前先流出的半截正文）、`content`、`tool`（只读工具）、`error`（HTTP 状态）、`hold`（暂停到 `releaseAssistant`）。要在打开助手侧栏前执行；场景结束自动停止助手、关闭替身、恢复模型配置（需 `writesUserData: true`） |
+| `releaseAssistant` | `{}` | 放行 `hold` 暂停中的那一轮回复 |
+| `setFiles` | `{ "target": 定位, "files": ["resources/icons/icon.png"] }` | 给文件输入（默认可定位隐藏元素）设值，等同用户选了文件；路径相对仓库根目录 |
 | `capture` | `"后缀"` 或 `{ "name": "后缀", "metrics": 指标目标? }` | 正式截屏；带 metrics 时同时记自动指标 |
 | `metrics` | `{ "name": "后缀", …指标目标 }` | 只记指标不截图 |
 
@@ -116,4 +120,4 @@ npm run check:ui-visual -- --steps scripts/ui-review/generation-seedance-kie.jso
 
 **变体来源** `generation-models`：从真实模型选择面板读出全部可选的“模型 × 渠道”，每个变体带 `modelId`、`providerId`、`name`、`id`（截图后缀前缀）。单个变体失败不中断其余变体，最后汇总报失败。有变体时 `ui:tour` 另写 `variants.md`：按“变体 × 尺寸”列出底栏行数、收纳行空余、底栏可见参数、收进“更多参数”的参数与可疑原因（折行、溢出、截断、短标签折行、收纳行空余 ≥ 120px 却仍把选择器收进“更多参数”）。指标名约定 `bar` / `row` / `more` / `first-menu`；对旧输出目录补汇总用 `node scripts/lib/uiReviewSummary.cjs <输出目录>`。
 
-样例：`scripts/ui-review/generation-seedance-kie.json`（底栏、模式触发器悬停、模式菜单、960 的“更多参数”）、`canvas-image-node-rows.json`（画布图片生成节点的行悬停、触发器悬停、选中后行悬停、参数菜单）、`generation-all-models.json`（全部模型底栏行数与首个参数菜单截断）。
+样例：`scripts/ui-review/assistant-sidebar.json`（助手侧栏空态、思考中、工具调用、长 Markdown、流式、排队、错误、历史、记忆、附件，用 `seedAssistant` 夹具）、`scripts/ui-review/generation-seedance-kie.json`（底栏、模式触发器悬停、模式菜单、960 的“更多参数”）、`canvas-image-node-rows.json`（画布图片生成节点的行悬停、触发器悬停、选中后行悬停、参数菜单）、`generation-all-models.json`（全部模型底栏行数与首个参数菜单截断）。

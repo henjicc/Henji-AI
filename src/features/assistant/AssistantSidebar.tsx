@@ -2,7 +2,7 @@ import { AssistantMemoryPanel } from './memory/AssistantMemoryPanel'
 import { BrainCircuit, GripHorizontal, History, MessageSquarePlus, Sparkles, X } from 'lucide-react'
 import { useState, type CSSProperties, type KeyboardEvent, type RefObject } from 'react'
 
-import { UI_COLOR_ACCENT_TEXT_CLASS, UI_PANEL_SURFACE_CLASS, UI_TEXT_LABEL_CLASS, UiIconButton } from '@/components/ui'
+import { UI_COLOR_ACCENT_TEXT_CLASS, UI_PANEL_SURFACE_CLASS, UI_TEXT_PANEL_TITLE_CLASS, UiIconButton, UiToolbar } from '@/components/ui'
 import { useDialogTransition } from '@/components/ui/useDialogTransition'
 import { UI_DIALOG_TRANSITION_MS } from '@/components/ui/motion'
 
@@ -18,9 +18,16 @@ import { useAssistantUiStore, type AssistantDockMode } from './store/assistantUi
  * 悬浮态才是卡片语义，保留圆角 + 四边框 + 浮层阴影。
  */
 const SURFACE_BY_MODE = {
-  floating: 'rounded-2xl',
+  floating: 'rounded-xl',
   left: 'border-y-0 border-l-0 shadow-none',
   right: 'border-y-0 border-r-0 shadow-none',
+} as const
+
+/** 命令带标题跟随当前内容：历史与记忆没有自己的头带，靠这里说明“正在看哪里”。 */
+const contentViewTitles = {
+  conversation: '智能助手',
+  history: '对话历史',
+  memory: '助手记忆',
 } as const
 
 const dockModeLabels: Record<AssistantDockMode, string> = {
@@ -111,36 +118,19 @@ export function AssistantSidebar({ workspaceRef }: AssistantSidebarProps): JSX.E
           interaction.dragging ? SURFACE_BY_MODE.floating : SURFACE_BY_MODE[mode]
         } ${isVisible ? 'pointer-events-auto translate-x-0 translate-y-0 scale-100 opacity-100' : `pointer-events-none ${hiddenTransform}`}`}
       >
-        {/* 命令带：不画底色也不画下边框，与正文同为 bg-panel，整块面板读作一张连续表面 */}
-        <header
-          tabIndex={0}
-          aria-label={`智能助手（当前${dockModeLabels[mode]}）；拖动可改变位置，方向键左右停靠、下键悬浮`}
-          className={`group flex h-10 shrink-0 touch-none select-none items-center gap-2 px-2 outline-none focus-visible:ring-inset focus-visible:ring-2 focus-visible:ring-accent ${
-            interaction.dragging ? 'cursor-grabbing' : 'cursor-grab'
-          }`}
+        {/* 唯一命令带：标题（随内容切换）+ 对话操作；历史、记忆不再各自长头带（skill 页面骨架 A 类） */}
+        <UiToolbar
+          variant="command"
+          className={`group touch-none select-none ${interaction.dragging ? 'cursor-grabbing' : 'cursor-grab'}`}
           onPointerDown={interaction.onDragPointerDown}
-          onKeyDown={handleHeaderKeyDown}
-        >
-          <div className="flex min-w-0 flex-1 items-center gap-2 px-1">
-            <Sparkles className="h-4 w-4 shrink-0 text-text2" />
-            <div className={`min-w-0 truncate ${UI_TEXT_LABEL_CLASS}`}>智能助手</div>
-            <GripHorizontal
-              aria-hidden="true"
-              className={`h-4 w-4 shrink-0 transition-opacity duration-120 ${
-                interaction.dragging
-                  ? `${UI_COLOR_ACCENT_TEXT_CLASS} opacity-100`
-                  : 'text-text3 opacity-0 group-hover:opacity-100'
-              }`}
-            />
-          </div>
-          <div
-            role="toolbar"
-            aria-label="智能助手工具栏"
-            className="flex items-center"
-            data-assistant-drag-ignore
-          >
-            <div role="group" aria-label="对话操作" className="flex items-center gap-0.5">
-              <UiIconButton size="lg"
+          trailing={(
+            <div
+              role="toolbar"
+              aria-label="智能助手工具栏"
+              className="flex items-center gap-0.5"
+              data-assistant-drag-ignore
+            >
+              <UiIconButton
                 type="button"
                 onClick={() => {
                   void newEmbeddedConversation()
@@ -152,10 +142,9 @@ export function AssistantSidebar({ workspaceRef }: AssistantSidebarProps): JSX.E
               >
                 <MessageSquarePlus className="h-4 w-4" />
               </UiIconButton>
-              <UiIconButton size="lg"
+              <UiIconButton
                 type="button"
                 on={contentView === 'history'}
-                aria-pressed={contentView === 'history'}
                 onClick={() => setContentView((view) => (
                   view === 'history' ? 'conversation' : 'history'
                 ))}
@@ -164,28 +153,51 @@ export function AssistantSidebar({ workspaceRef }: AssistantSidebarProps): JSX.E
               >
                 <History className="h-4 w-4" />
               </UiIconButton>
-              <UiIconButton size="lg" type="button" on={contentView === 'memory'}
+              <UiIconButton
+                type="button"
+                on={contentView === 'memory'}
                 onClick={() => setContentView(view => view === 'memory' ? 'conversation' : 'memory')}
-                title={contentView === 'memory' ? '返回当前对话' : '助手记忆'} aria-label="助手记忆">
+                title={contentView === 'memory' ? '返回当前对话' : '助手记忆'}
+                aria-label="助手记忆"
+              >
                 <BrainCircuit className="h-4 w-4" />
               </UiIconButton>
+              {/* 停靠态不放关闭：它正好落在窗口关闭按钮的正下方，两个 X 叠在一条竖线上很容易误点。
+                  停靠时改用标题栏的助手按钮或 Ctrl+Shift+A 收起；悬浮窗没有可依的边，仍需自带关闭。
+                  收起不是破坏性动作，用静默档。 */}
+              {mode === 'floating' ? (
+                <UiIconButton
+                  type="button"
+                  onClick={() => setOpen(false)}
+                  title="收起智能助手"
+                  aria-label="收起智能助手"
+                  className="ml-1"
+                >
+                  <X className="h-4 w-4" />
+                </UiIconButton>
+              ) : null}
             </div>
-
-            {/* 停靠态不放关闭：它正好落在窗口关闭按钮的正下方，两个 X 叠在一条竖线上很容易误点。
-                停靠时改用标题栏的助手按钮或 Ctrl+Shift+A 收起；悬浮窗没有可依的边，仍需自带关闭。 */}
-            {mode === 'floating' ? (
-              <UiIconButton size="lg" tone="danger"
-                type="button"
-                onClick={() => setOpen(false)}
-                title="收起智能助手"
-                aria-label="收起智能助手"
-                className="ml-1.5"
-              >
-                <X className="h-4 w-4" />
-              </UiIconButton>
-            ) : null}
+          )}
+        >
+          {/* 标题区兼作拖动柄的键盘出口：聚焦后方向键左右停靠、下键悬浮（拖拽本身由整条命令带接收） */}
+          <div
+            tabIndex={0}
+            aria-label={`智能助手（当前${dockModeLabels[mode]}）；拖动可改变位置，方向键左右停靠、下键悬浮`}
+            className="flex min-w-0 items-center gap-1.5 rounded-control px-1 py-1 outline-none focus-visible:ring-2 focus-visible:ring-accent-ring"
+            onKeyDown={handleHeaderKeyDown}
+          >
+            <Sparkles aria-hidden="true" className="h-4 w-4 shrink-0 text-text2" />
+            <div className={`min-w-0 truncate ${UI_TEXT_PANEL_TITLE_CLASS}`}>{contentViewTitles[contentView]}</div>
           </div>
-        </header>
+          <GripHorizontal
+            aria-hidden="true"
+            className={`h-4 w-4 shrink-0 transition-opacity duration-120 ${
+              interaction.dragging
+                ? `${UI_COLOR_ACCENT_TEXT_CLASS} opacity-100`
+                : 'text-text3 opacity-0 group-hover:opacity-100'
+            }`}
+          />
+        </UiToolbar>
         {contentView === 'memory' ? <AssistantMemoryPanel /> : null}
         <div
           aria-hidden={contentView !== 'conversation'}
@@ -223,7 +235,7 @@ export function AssistantSidebar({ workspaceRef }: AssistantSidebarProps): JSX.E
               aria-orientation="vertical"
               aria-valuenow={size.width}
               tabIndex={0}
-              className="group absolute bottom-4 right-0 top-10 z-sticky w-2 touch-none cursor-ew-resize outline-none"
+              className="group absolute bottom-4 right-0 top-11 z-sticky w-2 touch-none cursor-ew-resize outline-none"
               onPointerDown={(event) => interaction.onResizePointerDown(event, 'width')}
               onKeyDown={(event) => interaction.onResizeKeyDown(event, 'width')}
             >

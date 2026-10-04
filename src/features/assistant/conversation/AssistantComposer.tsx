@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ClipboardEvent, type DragEvent, type ReactNode } from 'react'
-import { Paperclip, Send, Square, X } from 'lucide-react'
+import { ArrowUp, AudioLines, LoaderCircle, Paperclip, Square, X } from 'lucide-react'
 
-import { PromptEditor, UI_TEXT_BODY_CLASS, UI_TEXT_META_CLASS, UiButton, UiError, UiIconButton, UiInput } from '@/components/ui'
+import { PromptEditor, UI_FIELD_FOCUS_WITHIN_CLASS, UI_FIELD_SURFACE_CLASS, UI_TEXT_META_CLASS, UiButton, UiError, UiIconButton, UiInput } from '@/components/ui'
 import { AGENT_ATTACHMENT_MAX_COUNT, AGENT_ATTACHMENT_FORMATS, type AgentAttachment } from '@/core/assistant/attachments'
 import {
   toModelPromptText,
@@ -143,8 +143,13 @@ export function AssistantComposer({
     void addSources(files)
   }, [addSources])
 
+  const sendDisabled = disabled || submitting || importing || unavailable || (!toModelPromptText(value).trim() && attachments.length === 0)
+  const sendTitle = importing ? '导入中' : submitting ? '提交中' : sendLabel ?? '发送'
+
+  // 一整块输入字段（与生成页输入卡片同构）：附件、无框编辑器、底栏都在这块 raised 表面里，
+  // 聚焦时整块一圈焦点环；外层只留与面板对齐的内边距，不再画分隔线或第二层底色。
   return (
-    <div className={controls ? 'p-3' : 'border-t border-line bg-panel p-3'} aria-label="聊天输入区" onDragOver={event => {
+    <div className="px-3 pb-3 pt-2" aria-label="聊天输入区" onDragOver={event => {
       if (event.dataTransfer.types.includes('Files') || event.dataTransfer.types.includes(HENJI_DRAG_DATA_MIME)) { event.preventDefault(); event.stopPropagation() }
     }} onDropCapture={onDrop} onPasteCapture={onPaste} onMouseUpCapture={event => {
       if (isDragging && dragData) { event.preventDefault(); event.stopPropagation(); void addSources([dragData]); endDrag() }
@@ -162,75 +167,85 @@ export function AssistantComposer({
           event.target.value = ''
         }}
       /> : null}
-      {attachments.length > 0 ? (
-        <div className="mb-2 flex gap-2 overflow-x-auto pb-1">
-          {attachments.map(item => (
-            <div key={item.attachment.mediaRef} className="relative w-24 shrink-0 overflow-hidden rounded-lg border border-line bg-raised">
-              {item.attachment.modality === 'image' ? (
-                <img src={item.previewSrc} alt={item.attachment.displayName} className="h-16 w-full object-cover" />
-              ) : item.attachment.modality === 'video' ? (
-                <video src={item.previewSrc} aria-label={item.attachment.displayName} className="h-16 w-full object-cover" muted />
-              ) : (
-                <audio src={item.previewSrc} aria-label={item.attachment.displayName} className="h-16 w-full px-1" controls />
-              )}
-              <div className={`truncate px-1.5 py-1 ${UI_TEXT_META_CLASS}`}>{item.attachment.displayName}</div>
-              <UiIconButton tone="media"
-                type="button"
-                aria-label={`移除 ${item.attachment.displayName}`}
-                title={`移除 ${item.attachment.displayName}`}
-                className="absolute right-1 top-1"
-                disabled={attachmentsDisabled || importing}
-                onClick={() => onAttachmentsChange(attachments.filter(entry => entry.attachment.mediaRef !== item.attachment.mediaRef))}
-              ><X className="h-3.5 w-3.5" /></UiIconButton>
-            </div>
-          ))}
-        </div>
-      ) : null}
-      {attachmentError ? <UiError size="xs" message={attachmentError} className="mb-2" /> : null}
-      {unavailable ? <UiError size="xs" message="当前模型无法读取部分附件，请移除这些附件或切换模型。" className="mb-2" /> : null}
-      <PromptEditor
-        mode="edit"
-        preset="media-references"
-        suggestionContainer={'[data-application-surface-id="overlay.assistant"]'}
-        getReferenceSuggestions={query => attachmentsDisabled || importingRef.current ? [] : selectedMedia()
-          .filter(item => item.label.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))
-          .map(item => ({ resourceId: item.id, mediaType: item.data.type, label: item.label, sourceNodeId: item.nodeId,
-            thumbnailSrc: item.data.type === 'image' ? resolveImageDisplayUrl(item.data.thumbnailUrl || item.data.imageUrl) : undefined }))}
-        layout="fill-scroll"
-        value={value}
-        onChange={changeDocument}
-        ariaLabel="向智能助手描述任务"
-        placeholder={busy ? '可补充当前任务，或安排任务结束后继续…' : inputModalities.length ? '描述目标，输入 @ 添加选中节点的素材…' : '描述目标，或粘贴错误信息…'}
-        disabled={submitting}
-        maxCharacters={32 * 1024}
-        submitShortcut="enter"
-        onSubmit={submit}
-        editorShellClassName="!rounded-xl !border-line bg-raised"
-        editorClassName={`max-h-32 min-h-[72px] px-3 py-2.5 ${UI_TEXT_BODY_CLASS}`}
-      />
-      <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          {inputModalities.length > 0 ? <UiIconButton
-            type="button"
-            aria-label={attachmentLabel}
-            title={attachmentLabel}
-            disabled={attachmentsDisabled || importing || submitting}
-            onClick={() => inputRef.current?.click()}
-          ><Paperclip className="h-4 w-4" /></UiIconButton> : null}
-          {controls}
-        </div>
-        <div className="ml-auto flex shrink-0 items-center gap-2">
-        {busy && onCancel ? <UiButton variant="secondary" onClick={onCancel} title={sendLabel ? '停止当前回复，等待中的消息将继续发送' : '停止当前回复'}><Square className="mr-1 h-3 w-3" />停止</UiButton> : null}
-        {(!busy || !onCancel || sendLabel) ? <UiButton
-          type="button"
-          variant="primary"
-          disabled={disabled || submitting || importing || unavailable || (!toModelPromptText(value).trim() && attachments.length === 0)}
-          onClick={submit}
-          className="gap-1.5"
-        >
-          {submitting ? <Square className="h-3.5 w-3.5" /> : <Send className="h-3.5 w-3.5" />}
-          {importing ? '导入中' : submitting ? '提交中' : sendLabel ?? '发送'}
-        </UiButton> : null}
+      {attachmentError ? <UiError size="xs" align="start" message={attachmentError} /> : null}
+      {unavailable ? <UiError size="xs" align="start" message="当前模型无法读取部分附件，请移除这些附件或切换模型。" /> : null}
+      <div data-assistant-composer-field className={`rounded-lg ${UI_FIELD_SURFACE_CLASS} ${UI_FIELD_FOCUS_WITHIN_CLASS} ${submitting ? 'opacity-70' : ''}`}>
+        {attachments.length > 0 ? (
+          <div className="ui-scrollbar flex gap-2 overflow-x-auto px-2 pb-1 pt-2">
+            {attachments.map(item => (
+              <div key={item.attachment.mediaRef} className="relative w-20 shrink-0">
+                {item.attachment.modality === 'image' ? (
+                  <img src={item.previewSrc} alt={item.attachment.displayName} className="h-14 w-full rounded-md bg-media object-cover" />
+                ) : item.attachment.modality === 'video' ? (
+                  <video src={item.previewSrc} aria-label={item.attachment.displayName} className="h-14 w-full rounded-md bg-media object-cover" muted />
+                ) : (
+                  <div className="flex h-14 w-full items-center justify-center rounded-md bg-window text-text2" aria-label={item.attachment.displayName}>
+                    <AudioLines aria-hidden="true" className="h-5 w-5" />
+                  </div>
+                )}
+                <div className={`truncate pt-1 ${UI_TEXT_META_CLASS}`} title={item.attachment.displayName}>{item.attachment.displayName}</div>
+                <UiIconButton tone="media" size="sm"
+                  type="button"
+                  aria-label={`移除 ${item.attachment.displayName}`}
+                  title={`移除 ${item.attachment.displayName}`}
+                  className="absolute right-1 top-1"
+                  disabled={attachmentsDisabled || importing}
+                  onClick={() => onAttachmentsChange(attachments.filter(entry => entry.attachment.mediaRef !== item.attachment.mediaRef))}
+                ><X className="h-3.5 w-3.5" /></UiIconButton>
+              </div>
+            ))}
+          </div>
+        ) : null}
+        <PromptEditor
+          mode="edit"
+          preset="media-references"
+          frame="none"
+          suggestionContainer={'[data-application-surface-id="overlay.assistant"]'}
+          getReferenceSuggestions={query => attachmentsDisabled || importingRef.current ? [] : selectedMedia()
+            .filter(item => item.label.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))
+            .map(item => ({ resourceId: item.id, mediaType: item.data.type, label: item.label, sourceNodeId: item.nodeId,
+              thumbnailSrc: item.data.type === 'image' ? resolveImageDisplayUrl(item.data.thumbnailUrl || item.data.imageUrl) : undefined }))}
+          layout="fill-scroll"
+          value={value}
+          onChange={changeDocument}
+          ariaLabel="向智能助手描述任务"
+          // 占位文字不随“回复中”切换：编辑器只在内容变化时重算占位装饰，随状态切换会停在旧文案（回复结束后仍显示“可补充当前任务”）；
+          // 回复中能做什么由发送按钮的名称（等待发送 / 打断发送）说明
+          placeholder={inputModalities.length ? '描述目标，输入 @ 添加选中节点的素材…' : '描述目标，或粘贴错误信息…'}
+          disabled={submitting}
+          maxCharacters={32 * 1024}
+          submitShortcut="enter"
+          onSubmit={submit}
+          // 内容基础类已有 px-3 py-2.5 text-sm：这里用 pt/pb 与 text-13（产物中排在其后）收紧，不与之抢同一属性的同名档
+          editorClassName="ui-scrollbar max-h-32 min-h-16 pt-2 pb-1 text-13"
+        />
+        {/* 底栏始终单行：左侧附件与权限，右侧停止与唯一主动作“发送”（强调色实底圆钮，与生成页一致） */}
+        <div className="flex flex-nowrap items-center gap-1 px-1.5 pb-1.5">
+          <div className="flex min-w-0 flex-1 flex-nowrap items-center gap-1">
+            {inputModalities.length > 0 ? <UiIconButton
+              type="button"
+              aria-label={attachmentLabel}
+              title={attachmentLabel}
+              disabled={attachmentsDisabled || importing || submitting}
+              onClick={() => inputRef.current?.click()}
+            ><Paperclip className="h-4 w-4" /></UiIconButton> : null}
+            {controls}
+          </div>
+          <div className="flex shrink-0 items-center gap-1">
+            {busy && onCancel ? <UiButton size="sm" onClick={onCancel} title={sendLabel ? '停止当前回复，等待中的消息将继续发送' : '停止当前回复'}>
+              <Square aria-hidden="true" className="mr-1 h-3 w-3" />停止
+            </UiButton> : null}
+            {(!busy || !onCancel || sendLabel) ? <UiIconButton
+              type="button"
+              tone="accent"
+              disabled={sendDisabled}
+              onClick={submit}
+              aria-label={sendTitle}
+              title={sendTitle}
+            >
+              {importing || submitting ? <LoaderCircle aria-hidden="true" className="h-4 w-4 motion-safe:animate-spin" /> : <ArrowUp aria-hidden="true" className="h-4 w-4" />}
+            </UiIconButton> : null}
+          </div>
         </div>
       </div>
     </div>

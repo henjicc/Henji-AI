@@ -81,3 +81,32 @@ it('自动发送失败不会循环重试或丢掉草稿', async () => {
   expect(screen.getByTestId('draft').textContent).toBe('原草稿')
   expect(useAssistantUiStore.getState().pendingGoal).toBeNull()
 })
+
+it('切换对话中算忙：只能等待发送，不出现停止与打断，消息按等待语义提交', async () => {
+  mocks.snapshot.value = { ...emptyEmbeddedAgentSnapshot(), busy: true, switching: true }
+  render(<EmbeddedConversation />)
+  await waitFor(() => expect(screen.getByRole('button', { name: '发送' }).hasAttribute('disabled')).toBe(false))
+  expect(screen.getByRole('status', { name: '正在切换对话' })).toBeTruthy()
+  expect(screen.queryByRole('button', { name: '发送方式' })).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: '发送' }))
+  expect(mocks.prompt.mock.calls[0][0]).toMatchObject({ text: '第一条消息', delivery: 'wait' })
+})
+
+it('回复失败后用上一条用户消息与附件原样重试，不清空草稿；已有结论时不提供重试', async () => {
+  const attachment = { mediaRef: 'asset:1', modality: 'image', displayName: '图.png', mimeType: 'image/png', sizeBytes: 10 }
+  const failed = { ...emptyEmbeddedAgentSnapshot(), sessionId: 's', error: '上游服务暂时不可用',
+    messages: [{ id: 'u1', role: 'user', text: '上一条消息', attachments: [attachment] }, { id: 'p1', role: 'assistant', text: '思考', kind: 'process' }] }
+  mocks.snapshot.value = failed
+  openAssistant('正在写的草稿')
+  const view = render(<EmbeddedConversation />)
+  await waitFor(() => expect(screen.getByTestId('draft').textContent).toBe('正在写的草稿'))
+  fireEvent.click(await screen.findByRole('button', { name: '重试' }))
+  expect(mocks.prompt).toHaveBeenCalledTimes(1)
+  expect(mocks.prompt.mock.calls[0][0]).toMatchObject({ text: '上一条消息', attachments: [attachment], delivery: 'wait' })
+  expect(screen.getByTestId('draft').textContent).toBe('正在写的草稿')
+  view.unmount()
+  mocks.snapshot.value = { ...failed, messages: [...failed.messages, { id: 'a1', role: 'assistant', text: '结论', kind: 'answer' }] }
+  render(<EmbeddedConversation />)
+  await waitFor(() => expect(screen.getByRole('alert')).toBeTruthy())
+  expect(screen.queryByRole('button', { name: '重试' })).toBeNull()
+})

@@ -15,6 +15,8 @@ export interface EmbeddedAgentMessage { id: string; role: 'user' | 'assistant'; 
 export interface EmbeddedAgentSnapshot {
   sessionId: string | null
   busy: boolean
+  /** 正在切换对话（打开、新建、列出对话）：busy 同时为 true；此时发送的消息排队，切换完成后发送。 */
+  switching?: boolean
   messages: EmbeddedAgentMessage[]
   activity: string | null
   error: string | null
