@@ -22,9 +22,9 @@ export function SourceBadge({ record }: SourceBadgeProps) {
       case 'api-build':
         return 'bg-success-solid text-on-success'
       case 'default':
-        return 'bg-layer text-text-dark'
+        return 'bg-hover text-text1'
       default:
-        return 'bg-surface-dark text-text-muted'
+        return 'bg-raised text-text2'
     }
   }
 
@@ -52,13 +52,13 @@ export function SourceBadge({ record }: SourceBadgeProps) {
       </span>
 
       {record.changedBy && (
-        <span className="text-xs text-text-faint">
+        <span className="text-xs text-text3">
           触发者: {record.changedBy}
         </span>
       )}
 
       {record.reason && (
-        <span className="text-xs text-text-faint">
+        <span className="text-xs text-text3">
           {record.reason}
         </span>
       )}

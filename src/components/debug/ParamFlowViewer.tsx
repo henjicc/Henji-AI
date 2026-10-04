@@ -23,7 +23,7 @@ export function ParamFlowViewer({ record, onExport }: ParamFlowViewerProps) {
       <div className="flex justify-between items-center mb-4">
         <h3 className="text-lg font-semibold text-text1">{t('debug.paramFlow.title')}</h3>
         <div className="flex gap-2 items-center">
-          <span className="text-xs text-text-muted">
+          <span className="text-xs text-text2">
             {t('debug.paramFlow.modelLabel')}: {record.modelId}
           </span>
           {onExport && (
@@ -86,7 +86,7 @@ function StageView({ stage }: StageViewProps) {
   }
 
   return (
-    <div className="bg-surface-dark rounded-lg p-4">
+    <div className="bg-raised rounded-lg p-4">
       <h4 className={`text-sm font-semibold mb-3 ${getStageColor()}`}>
         {getStageTitle()}
       </h4>
@@ -94,16 +94,16 @@ function StageView({ stage }: StageViewProps) {
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-border-dark">
-              <th className="text-left py-2 px-3 text-text-muted font-medium">{t('debug.paramFlow.table.param')}</th>
-              <th className="text-left py-2 px-3 text-text-muted font-medium">{t('debug.paramFlow.table.value')}</th>
-              <th className="text-left py-2 px-3 text-text-muted font-medium">{t('debug.paramFlow.table.source')}</th>
+            <tr className="border-b border-line">
+              <th className="text-left py-2 px-3 text-text2 font-medium">{t('debug.paramFlow.table.param')}</th>
+              <th className="text-left py-2 px-3 text-text2 font-medium">{t('debug.paramFlow.table.value')}</th>
+              <th className="text-left py-2 px-3 text-text2 font-medium">{t('debug.paramFlow.table.source')}</th>
             </tr>
           </thead>
           <tbody>
             {paramEntries.map(([key, record]) => (
-              <tr key={key} className="border-b border-border-dark last:border-0">
-                <td className="py-2 px-3 text-text-soft font-mono text-xs">
+              <tr key={key} className="border-b border-line last:border-0">
+                <td className="py-2 px-3 text-text2 font-mono text-xs">
                   {key}
                 </td>
                 <td className="py-2 px-3">

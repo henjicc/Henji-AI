@@ -372,7 +372,7 @@ export function CanvasEditToolEditorV3Host({
           : projectionFailure === 'target-changed' ? 'targetChangedRetry' : 'syncFailedRetry'}`)}
       </UiButton>
     ) : (
-      <span role="status" className="text-xs text-text-muted">
+      <span role="status" className="text-xs text-text2">
         {t('toolDialog.imageEditorV3.saving')}
       </span>
     )

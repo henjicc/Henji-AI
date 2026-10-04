@@ -8,7 +8,7 @@ export function ImageToolRail(): JSX.Element {
   const tools = getImageEditorTools();
 
   return (
-    <nav aria-label="图片编辑工具" className="flex w-[52px] shrink-0 flex-col items-center gap-2 border-r border-border-dark p-2">
+    <nav aria-label="图片编辑工具" className="flex w-[52px] shrink-0 flex-col items-center gap-2 border-r border-line p-2">
       {tools.map((tool) => {
         const Icon = tool.icon;
         return (

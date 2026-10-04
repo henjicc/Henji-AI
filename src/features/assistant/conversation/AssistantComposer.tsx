@@ -144,7 +144,7 @@ export function AssistantComposer({
   }, [addSources])
 
   return (
-    <div className={controls ? 'p-3' : 'border-t border-border-dark bg-panel p-3'} aria-label="聊天输入区" onDragOver={event => {
+    <div className={controls ? 'p-3' : 'border-t border-line bg-panel p-3'} aria-label="聊天输入区" onDragOver={event => {
       if (event.dataTransfer.types.includes('Files') || event.dataTransfer.types.includes(HENJI_DRAG_DATA_MIME)) { event.preventDefault(); event.stopPropagation() }
     }} onDropCapture={onDrop} onPasteCapture={onPaste} onMouseUpCapture={event => {
       if (isDragging && dragData) { event.preventDefault(); event.stopPropagation(); void addSources([dragData]); endDrag() }
@@ -165,7 +165,7 @@ export function AssistantComposer({
       {attachments.length > 0 ? (
         <div className="mb-2 flex gap-2 overflow-x-auto pb-1">
           {attachments.map(item => (
-            <div key={item.attachment.mediaRef} className="relative w-24 shrink-0 overflow-hidden rounded-lg border border-border-dark bg-surface-dark">
+            <div key={item.attachment.mediaRef} className="relative w-24 shrink-0 overflow-hidden rounded-lg border border-line bg-raised">
               {item.attachment.modality === 'image' ? (
                 <img src={item.previewSrc} alt={item.attachment.displayName} className="h-16 w-full object-cover" />
               ) : item.attachment.modality === 'video' ? (
@@ -205,7 +205,7 @@ export function AssistantComposer({
         maxCharacters={32 * 1024}
         submitShortcut="enter"
         onSubmit={submit}
-        editorShellClassName="!rounded-xl !border-border-dark bg-surface-dark"
+        editorShellClassName="!rounded-xl !border-line bg-raised"
         editorClassName={`max-h-32 min-h-[72px] px-3 py-2.5 ${UI_TEXT_BODY_CLASS}`}
       />
       <div className="mt-2 flex flex-wrap items-center justify-between gap-3">

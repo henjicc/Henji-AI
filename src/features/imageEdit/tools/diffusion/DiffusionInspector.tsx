@@ -63,7 +63,7 @@ function DiffusionRangeField({
     <label className="block space-y-1.5">
       <span className={`flex items-center justify-between gap-3 ${UI_TEXT_META_CLASS}`}>
         <span>{label}</span>
-        <span className="shrink-0 text-text-dark">{display}</span>
+        <span className="shrink-0 text-text1">{display}</span>
       </span>
       <UiRangeInput
         value={value}

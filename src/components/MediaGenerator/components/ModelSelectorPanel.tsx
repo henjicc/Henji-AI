@@ -299,7 +299,7 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
                 {p.name}
               </UiOptionButton>
             ))}
-            <div className="w-px bg-border-dark mx-1"></div>
+            <div className="w-px bg-line mx-1"></div>
             {([
               { label: t('all'), value: 'all' },
               { label: t('favorites'), value: 'favorite' },
@@ -382,11 +382,11 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
                       data-prevent-close
                       onMouseDown={(e) => { e.preventDefault(); e.stopPropagation() }}
                       onClick={(e) => { e.preventDefault(); e.stopPropagation(); onToggleFavorite(e, p.id, m.id) }}
-                      className="inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-lg border border-transparent bg-transparent text-text-muted transition-colors hover:bg-layer"
+                      className="inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-lg border border-transparent bg-transparent text-text2 transition-colors hover:bg-hover"
                       title={favoriteModels.has(`${p.id}-${m.id}`) ? t('favorite.remove') : t('favorite.add')}
                     >
                       <ICON_PRESET
-                        className={`h-3.5 w-3.5 transition-colors ${favoriteModels.has(`${p.id}-${m.id}`) ? 'fill-warning text-warning' : 'fill-none text-text-muted'}`}
+                        className={`h-3.5 w-3.5 transition-colors ${favoriteModels.has(`${p.id}-${m.id}`) ? 'fill-warning-text text-warning-text' : 'fill-none text-text2'}`}
                       />
                     </span>
                   </div>

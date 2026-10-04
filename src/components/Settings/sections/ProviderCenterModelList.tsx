@@ -92,7 +92,7 @@ const ProviderCenterModelList = ({
       {filtered.length === 0 ? (
         <UiEmpty size="sm" title={t('providerCenter.emptyModels')} description={t('providerCenter.emptyModelsHint')} />
       ) : (
-        <div className="divide-y divide-border-dark">
+        <div className="divide-y divide-line">
           <div className={`grid grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto] gap-4 px-1 pb-2 ${UI_TEXT_META_CLASS}`}>
             <span>{t('providerCenter.columns.model')}</span>
             <span>{t('providerCenter.columns.capability')}</span>
@@ -106,7 +106,7 @@ const ProviderCenterModelList = ({
               </div>
               <div className="flex min-w-0 flex-wrap gap-1.5">
                 {model.capabilityIds.slice(0, 4).map(capability => (
-                  <span key={capability} className={`rounded-full bg-layer px-2 py-1 ${UI_TEXT_META_CLASS}`}>
+                  <span key={capability} className={`rounded-full bg-hover px-2 py-1 ${UI_TEXT_META_CLASS}`}>
                     {t(`providerCenter.capabilities.${capability}`, { defaultValue: capability })}
                   </span>
                 ))}

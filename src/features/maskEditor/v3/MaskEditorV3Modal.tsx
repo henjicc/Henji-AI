@@ -67,7 +67,7 @@ export function MaskEditorV3Modal({
         toolbarActions={(
           <div className="flex items-center gap-2">
             {confirmError ? (
-              <span role="alert" className="text-xs text-danger">保存蒙版失败，请重试</span>
+              <span role="alert" className="text-xs text-danger-text">保存蒙版失败，请重试</span>
             ) : null}
             <UiButton
               type="button"

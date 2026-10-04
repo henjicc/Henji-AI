@@ -86,7 +86,7 @@ function ColorPicker({
 }): JSX.Element {
   return (
     <div className="flex shrink-0 items-center gap-1">
-      <span className="mr-1 text-xs text-text-muted">{label}</span>
+      <span className="mr-1 text-xs text-text2">{label}</span>
       {IMAGE_EDITOR_PRESET_COLORS.map((color) => {
         const active = value.toLowerCase() === color.toLowerCase()
         return (
@@ -356,7 +356,7 @@ export function ImageEditorAnnotationParametersV3({
               </UiChipButton>
             ))}
           </div>
-          <label className="flex shrink-0 items-center gap-2 text-xs text-text-muted">
+          <label className="flex shrink-0 items-center gap-2 text-xs text-text2">
             <span>{t('imageEditor.v3.toolSettings.strength')}</span>
             <UiRangeInput
               className="!w-24"
@@ -370,7 +370,7 @@ export function ImageEditorAnnotationParametersV3({
               onPointerCancel={preview.cancel}
               onBlur={preview.commit}
             />
-            <span className="w-9 text-right tabular-nums text-text-dark">
+            <span className="w-9 text-right tabular-nums text-text1">
               {mosaicStrength.toFixed(1)}%
             </span>
           </label>
@@ -403,7 +403,7 @@ export function ImageEditorAnnotationParametersV3({
       ) : null}
       {showBackground ? (
         <>
-          <label className="flex shrink-0 items-center gap-2 text-xs text-text-muted">
+          <label className="flex shrink-0 items-center gap-2 text-xs text-text2">
             <span>{t('imageEditor.v3.toolSettings.textBackground')}</span>
             <UiSwitch
               aria-label={t('imageEditor.v3.toolSettings.textBackground')}
@@ -424,7 +424,7 @@ export function ImageEditorAnnotationParametersV3({
         </>
       ) : null}
       {showStroke ? (
-        <label className="flex shrink-0 items-center gap-2 text-xs text-text-muted">
+        <label className="flex shrink-0 items-center gap-2 text-xs text-text2">
           <span>{t('imageEditor.v3.toolSettings.strokeWidth')}</span>
           <UiRangeInput
             className="!w-24"
@@ -438,13 +438,13 @@ export function ImageEditorAnnotationParametersV3({
             onPointerCancel={preview.cancel}
             onBlur={preview.commit}
           />
-          <span className="w-10 text-right tabular-nums text-text-dark">
+          <span className="w-10 text-right tabular-nums text-text1">
             {lineWidthPercent.toFixed(1)}%
           </span>
         </label>
       ) : null}
       {showFontSize ? (
-        <label className="flex shrink-0 items-center gap-2 text-xs text-text-muted">
+        <label className="flex shrink-0 items-center gap-2 text-xs text-text2">
           <span>{t('imageEditor.v3.toolSettings.fontSize')}</span>
           <UiRangeInput
             className="!w-24"
@@ -458,7 +458,7 @@ export function ImageEditorAnnotationParametersV3({
             onPointerCancel={preview.cancel}
             onBlur={preview.commit}
           />
-          <span className="w-10 text-right tabular-nums text-text-dark">
+          <span className="w-10 text-right tabular-nums text-text1">
             {textSizePercent.toFixed(1)}%
           </span>
         </label>

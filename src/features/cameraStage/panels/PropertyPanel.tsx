@@ -46,7 +46,7 @@ const Vec3Row: React.FC<Vec3RowProps> = ({
   onScaleLockedChange,
 }) => (
   <div>
-    <div className="mb-1 flex items-center justify-between gap-2 text-xs text-text-muted">
+    <div className="mb-1 flex items-center justify-between gap-2 text-xs text-text2">
       <span>{label}</span>
       {pathKey === 'scale' && onScaleLockedChange && (
         <UiIconButton size="sm"
@@ -64,7 +64,7 @@ const Vec3Row: React.FC<Vec3RowProps> = ({
     <div className="flex gap-1.5">
       {AXES.map((axis) => (
         <div key={axis} className="min-w-0 flex-1">
-          <div className="mb-1 flex items-center gap-0.5 text-2xs text-text-muted">
+          <div className="mb-1 flex items-center gap-0.5 text-2xs text-text2">
             <span>{AXIS_LABELS[axis]}</span>
           </div>
           <NumberInput
@@ -91,7 +91,7 @@ const Vec3Row: React.FC<Vec3RowProps> = ({
 )
 
 const SectionTitle: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <div className="text-xs font-medium uppercase tracking-wide text-text-muted">{children}</div>
+  <div className="text-xs font-medium uppercase tracking-wide text-text2">{children}</div>
 )
 
 const PropertyPanel: React.FC = () => {
@@ -121,12 +121,12 @@ const PropertyPanel: React.FC = () => {
 
   return (
     <div
-      className="flex h-full w-full flex-col overflow-y-auto overflow-x-hidden bg-surface-dark"
+      className="flex h-full w-full flex-col overflow-y-auto overflow-x-hidden bg-raised"
       // 一段连续编辑（聚焦某控件时的输入/滑杆拖动）合并为一条撤销记录：焦点进入开会话，离开提交
       onFocusCapture={beginHistorySession}
       onBlurCapture={endHistorySession}
     >
-      <div className="px-3 pb-2 pt-3 text-sm font-medium text-text-dark">属性</div>
+      <div className="px-3 pb-2 pt-3 text-sm font-medium text-text1">属性</div>
       <div className="flex flex-col gap-4 px-3 pb-4">
         <div className="flex flex-col gap-2">
           <SectionTitle>名称</SectionTitle>

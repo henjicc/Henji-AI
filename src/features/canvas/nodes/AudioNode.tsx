@@ -264,7 +264,7 @@ export const AudioNode = memo(({ id, data, selected, type, width, height }: Audi
         onTitleChange={(nextTitle) => updateNodeData(id, { displayName: nextTitle })}
       />
 
-      <div className="relative flex h-full w-full overflow-hidden rounded-[var(--node-radius)] bg-bg-dark px-3 py-2">
+      <div className="relative flex h-full w-full overflow-hidden rounded-[var(--node-radius)] bg-gap px-3 py-2">
         {generationError ? null : data.audioUrl ? (
           <div className="flex min-w-0 flex-1 flex-col justify-between gap-1">
             <div className="nodrag nowheel" style={{ height: waveformHeight }}>
@@ -334,7 +334,7 @@ export const AudioNode = memo(({ id, data, selected, type, width, height }: Audi
 
         {isGenerating && (
           <div className="pointer-events-none absolute inset-0 overflow-hidden">
-            <div className="absolute inset-0 bg-bg-dark/55" />
+            <div className="absolute inset-0 bg-gap/55" />
             <div
               className="absolute left-0 top-0 h-full w-full origin-left bg-gradient-to-r from-text1/30 to-text1/5 ease-out"
               style={{ transform: `scaleX(${progress})`, transition: uiTransition(['transform'], transitionDurationMs) }}

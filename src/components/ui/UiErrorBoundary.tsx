@@ -78,10 +78,10 @@ export class UiErrorBoundary extends React.Component<UiErrorBoundaryProps, UiErr
         : this.props.fallback
     }
     return (
-      <div className="flex h-full w-full flex-col items-center justify-center gap-3 bg-app p-6 text-center">
-        <div className="text-sm text-text-muted">{this.props.title}，错误详情已写入日志</div>
+      <div className="flex h-full w-full flex-col items-center justify-center gap-3 bg-window p-6 text-center">
+        <div className="text-sm text-text2">{this.props.title}，错误详情已写入日志</div>
         {/* 崩溃信息直接显示出来：黑屏加一句"出错了"仍然等于无从追查 */}
-        <div className="max-w-xl break-words text-xs text-text-muted opacity-70">
+        <div className="max-w-xl break-words text-xs text-text2 opacity-70">
           {this.state.error.message}
         </div>
         <UiButton variant="secondary" onClick={this.retry}>重新加载界面</UiButton>

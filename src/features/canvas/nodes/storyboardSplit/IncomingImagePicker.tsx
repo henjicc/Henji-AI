@@ -71,7 +71,7 @@ export function IncomingImagePicker({
             ))}
           </div>
         ) : (
-          <div className="px-2 py-2 text-sm text-text-muted">
+          <div className="px-2 py-2 text-sm text-text2">
             暂无输入图片
           </div>
         )}

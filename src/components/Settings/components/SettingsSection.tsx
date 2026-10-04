@@ -50,7 +50,7 @@ const SettingsSection: React.FC<SettingsSectionProps> = ({ id, description, chil
       className={`mt-10 border-t ${UI_GLASS_ADAPTIVE_DIVIDER_CLASS} pt-10 first:mt-0 first:border-t-0 first:pt-0`}
     >
       <h3 className={UI_TEXT_TITLE_CLASS}>{t(`navSections.${id}`)}</h3>
-      {description ? <p className="mt-1 text-xs text-text-muted">{description}</p> : null}
+      {description ? <p className="mt-1 text-xs text-text2">{description}</p> : null}
       <div className={`mt-5 ${UI_FORM_ROW_GAP_CLASS}`}>{children}</div>
     </section>
   )

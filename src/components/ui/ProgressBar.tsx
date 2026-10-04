@@ -46,7 +46,7 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
 
     return (
         <div className={`w-full ${className}`}>
-            <div className={`w-full ${height} bg-layer rounded overflow-hidden`}>
+            <div className={`w-full ${height} bg-hover rounded overflow-hidden`}>
                 <div
                     className="h-full w-full origin-left bg-accent"
                     style={{

@@ -61,14 +61,14 @@ const ObjectListPanel: React.FC = () => {
   }
 
   return (
-    <div className="flex h-full w-full flex-col bg-surface-dark">
+    <div className="flex h-full w-full flex-col bg-raised">
       <div className="flex items-center justify-between px-3 pb-2 pt-3">
-        <span className="text-sm font-medium text-text-dark">场景对象</span>
-        <span className="text-xs text-text-muted">{objects.length}</span>
+        <span className="text-sm font-medium text-text1">场景对象</span>
+        <span className="text-xs text-text2">{objects.length}</span>
       </div>
       <div className="flex-1 overflow-y-auto px-2 pb-2">
         {objects.length === 0 && (
-          <div className="px-2 pt-6 text-center text-xs text-text-muted">
+          <div className="px-2 pt-6 text-center text-xs text-text2">
             场景为空，点击顶部工具栏的快速添加图标开始搭建
           </div>
         )}
@@ -80,8 +80,8 @@ const ObjectListPanel: React.FC = () => {
             return (
               <div key={object.id} className="flex items-center gap-1">
                 {isEditing ? (
-                  <div className="flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-accent bg-layer px-2.5 py-1.5">
-                    <span className="shrink-0 text-text-muted">
+                  <div className="flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-accent bg-hover px-2.5 py-1.5">
+                    <span className="shrink-0 text-text2">
                       <TypeIcon object={object} />
                     </span>
                     <UiInput
@@ -103,7 +103,7 @@ const ObjectListPanel: React.FC = () => {
                       size="sm" className="min-w-0 flex-1 px-2 py-0"
                     />
                     {object.type === 'camera' && object.id === activeCameraId && (
-                      <span className="shrink-0 text-2xs text-text-soft">取景</span>
+                      <span className="shrink-0 text-2xs text-text2">取景</span>
                     )}
                   </div>
                 ) : (
@@ -115,7 +115,7 @@ const ObjectListPanel: React.FC = () => {
                     size="md" className="min-w-0 flex-1 gap-2 py-1.5"
                     title="双击可改名"
                   >
-                    <span className="shrink-0 text-text-muted">
+                    <span className="shrink-0 text-text2">
                       <TypeIcon object={object} />
                     </span>
                     <span className="truncate">{object.name}</span>

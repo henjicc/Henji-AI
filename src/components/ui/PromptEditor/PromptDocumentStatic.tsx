@@ -172,7 +172,7 @@ function renderInlineNode(
     return (
       <span
         key={key}
-        className={`${PROMPT_MEDIA_ATOM_CLASS} ${reference ? 'border-transparent bg-selected text-text2' : 'border-danger/50 text-danger-text'}`}
+        className={`${PROMPT_MEDIA_ATOM_CLASS} ${reference ? 'border-transparent bg-selected text-text2' : 'border-danger-text/50 text-danger-text'}`}
         data-prompt-media-reference=""
         data-reference-id={node.attrs.resourceId}
         data-reference-state={reference ? 'resolved' : 'missing'}
@@ -190,7 +190,7 @@ function renderInlineNode(
   return (
     <span
       key={key}
-      className={`${PROMPT_ATOM_CLASS} ${variable ? 'border-transparent bg-selected text-text2' : 'border-danger/50 text-danger-text'}`}
+      className={`${PROMPT_ATOM_CLASS} ${variable ? 'border-transparent bg-selected text-text2' : 'border-danger-text/50 text-danger-text'}`}
       data-prompt-template-variable=""
       data-variable-key={node.attrs.key}
       data-variable-state={variable ? 'resolved' : 'missing'}
@@ -301,7 +301,7 @@ const PromptDocumentStaticView = forwardRef<HTMLDivElement, PromptDocumentStatic
             ))}
           </div>
         )) : (
-          <span className="text-text-muted">{placeholder}</span>
+          <span className="text-text2">{placeholder}</span>
         )}
       </div>
     )

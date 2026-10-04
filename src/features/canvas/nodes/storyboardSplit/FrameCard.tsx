@@ -122,7 +122,7 @@ export const FrameCard = memo(({
         onSortHover(frame.id);
       }}
       onMouseDown={(event) => event.stopPropagation()}
-      className={`storyboard-frame-card group/frame nodrag relative h-full w-full overflow-hidden bg-surface-dark transition-colors ${dragging ? 'cursor-grabbing' : 'cursor-grab'} ${dragging
+      className={`storyboard-frame-card group/frame nodrag relative h-full w-full overflow-hidden bg-raised transition-colors ${dragging ? 'cursor-grabbing' : 'cursor-grab'} ${dragging
         ? 'z-raised opacity-55 ring-1 ring-accent/65'
         : asDropTarget
           ? 'z-raised ring-1 ring-success-text/70'
@@ -148,7 +148,7 @@ export const FrameCard = memo(({
             draggable={false}
           />
         ) : (
-          <div className="flex h-full w-full items-center justify-center text-2xs text-text-muted">
+          <div className="flex h-full w-full items-center justify-center text-2xs text-text2">
             空分镜
           </div>
         )}

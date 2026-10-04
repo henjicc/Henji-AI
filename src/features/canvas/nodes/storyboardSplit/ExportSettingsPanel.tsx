@@ -46,7 +46,7 @@ export function StoryboardExportSettingsPanel({
       onMouseDown={(event) => event.stopPropagation()}
     >
       <UiPanel className="p-2.5">
-        <div className="space-y-2 text-xs text-text-muted">
+        <div className="space-y-2 text-xs text-text2">
           <label className="flex items-center gap-2">
             <UiCheckbox
               checked={exportOptions.showFrameIndex}

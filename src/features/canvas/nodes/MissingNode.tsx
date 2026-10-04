@@ -16,16 +16,16 @@ export const MissingNode = memo(function MissingNode({ id, data, width, height }
   ]))], [edges, id]);
   const title = typeof data.displayName === 'string' && data.displayName ? data.displayName : t('node.missing');
   return (
-    <UiPanel className="group relative flex items-center justify-center !border-danger text-danger"
+    <UiPanel className="group relative flex items-center justify-center !border-danger-text text-danger-text"
       style={{ width: width ?? 280, height: height ?? 160 }} data-missing-node="true">
-      <NodeHeader className={NODE_HEADER_FLOATING_POSITION_CLASS} titleText={title} toneClassName="text-danger" />
+      <NodeHeader className={NODE_HEADER_FLOATING_POSITION_CLASS} titleText={title} toneClassName="text-danger-text" />
       <UiError className="min-w-0 max-w-full px-4" title={t('node.missing')} message={t('node.missingDescription')} size="xs" />
       {handles.map((key) => {
         const separator = key.indexOf(':');
         const type = key.slice(0, separator) as 'source' | 'target';
         const handleId = key.slice(separator + 1) || undefined;
         return <Handle key={key} id={handleId} type={type} position={type === 'source' ? Position.Right : Position.Left}
-          isConnectable={false} className={`${NODE_PORT_NODE_CLASS} ${NODE_PORT_VISIBLE_CLASS} !bg-danger`} />;
+          isConnectable={false} className={`${NODE_PORT_NODE_CLASS} ${NODE_PORT_VISIBLE_CLASS} !bg-danger-text`} />;
       })}
     </UiPanel>
   );

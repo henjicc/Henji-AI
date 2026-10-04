@@ -71,7 +71,7 @@ export const PromptSuggestionList = forwardRef<
   if (items.length === 0) {
     return (
       <div
-        className={`rounded-lg border border-border-dark bg-panel px-3 py-2 shadow-panel ${UI_TEXT_META_CLASS}`}
+        className={`rounded-lg border border-line bg-panel px-3 py-2 shadow-panel ${UI_TEXT_META_CLASS}`}
         data-ui-overlay-detached="prompt-suggestion"
       >
         没有匹配项
@@ -81,7 +81,7 @@ export const PromptSuggestionList = forwardRef<
 
   return (
     <div
-      className="inline-flex w-max max-w-[calc(100vw-32px)] flex-col gap-1 rounded-lg border border-border-dark bg-panel p-1.5 shadow-panel"
+      className="inline-flex w-max max-w-[calc(100vw-32px)] flex-col gap-1 rounded-lg border border-line bg-panel p-1.5 shadow-panel"
       data-ui-overlay-detached="prompt-suggestion"
       role="listbox"
       aria-label={items[0]?.kind === 'reference' ? '媒体引用候选' : '模板变量候选'}
@@ -109,27 +109,27 @@ export const PromptSuggestionList = forwardRef<
                 draggable={false}
               />
             ) : (
-              <span className="flex h-8 min-w-8 items-center justify-center rounded bg-layer px-1 text-2xs text-text-muted">
+              <span className="flex h-8 min-w-8 items-center justify-center rounded bg-hover px-1 text-2xs text-text2">
                 {reference?.mediaType ?? '{{ }}'}
               </span>
             )}
             {reference ? (
-              <span className="min-w-0 flex-1 truncate text-sm text-text-dark">
+              <span className="min-w-0 flex-1 truncate text-sm text-text1">
                 {getSuggestionLabel(item)}
               </span>
             ) : (
               <span className="flex min-w-0 flex-1 flex-col">
                 <span className="flex min-w-0 items-center gap-2">
-                  <span className="truncate text-xs text-text-dark">{getSuggestionLabel(item)}</span>
+                  <span className="truncate text-xs text-text1">{getSuggestionLabel(item)}</span>
                   {variable?.group ? (
-                    <span className="shrink-0 rounded border border-border-dark px-1 py-0.5 text-2xs text-text-muted">
+                    <span className="shrink-0 rounded border border-line px-1 py-0.5 text-2xs text-text2">
                       {variable.group}
                     </span>
                   ) : null}
                 </span>
-                <span className="truncate text-2xs text-text-muted">{getSuggestionKey(item)}</span>
+                <span className="truncate text-2xs text-text2">{getSuggestionKey(item)}</span>
                 {variable?.description ? (
-                  <span className="max-w-72 truncate text-2xs text-text-muted">
+                  <span className="max-w-72 truncate text-2xs text-text2">
                     {variable.description}
                   </span>
                 ) : null}

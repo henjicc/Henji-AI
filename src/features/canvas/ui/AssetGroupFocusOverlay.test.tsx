@@ -103,7 +103,7 @@ describe('AssetGroupFocusOverlay', () => {
     const workspace = rendered.getByRole('region', { name: 'canvas.assetGroup.manager.label' });
 
     expect(workspace.className).toContain('inset-0');
-    expect(workspace.className).toContain('bg-app');
+    expect(workspace.className).toContain('bg-window');
     expect(workspace.querySelector('.ui-glass-scrim')).toBeNull();
     expect(workspace.querySelectorAll('[data-asset-group-manager-member]')).toHaveLength(4);
     expect(rendered.getAllByTestId('member-preview')).toHaveLength(3);

@@ -206,7 +206,7 @@ export function UiTaskHistoryFilterBar({
           <div className={`relative flex flex-wrap items-center gap-1 ${isAlwaysVisible ? 'justify-start' : 'justify-end'}`}>
             <div className="relative shrink-0">
               <span ref={iconAnchorRef} className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2" />
-              <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text-muted" />
+              <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text2" />
               <UiInput
                 ref={inputRef}
                 value={keyword}

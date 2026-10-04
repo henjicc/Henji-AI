@@ -98,7 +98,7 @@ const TransitionClipBlock: React.FC<TransitionClipBlockProps> = ({
               {camerasDiffer ? (
                 <Camera size={11} className="text-accent" />
               ) : (
-                <span className="h-full w-0.5 rounded-full bg-text-muted transition-colors hover:bg-accent" />
+                <span className="h-full w-0.5 rounded-full bg-text2 transition-colors hover:bg-accent" />
               )}
             </div>
           ) : camerasDiffer ? (
@@ -107,7 +107,7 @@ const TransitionClipBlock: React.FC<TransitionClipBlockProps> = ({
               tabIndex={0}
               data-panel-trigger-button
               title="区间末端切换机位，点击查看详情"
-              className="flex h-full w-full cursor-pointer items-center justify-center gap-1 overflow-hidden border-y border-dashed border-border-dark bg-layer/40 px-1 text-2xs text-text-muted hover:bg-layer/70"
+              className="flex h-full w-full cursor-pointer items-center justify-center gap-1 overflow-hidden border-y border-dashed border-line bg-hover/40 px-1 text-2xs text-text2 hover:bg-hover/70"
               onClick={togglePanel}
               onKeyDown={handleKeyDown}
             >
@@ -120,7 +120,7 @@ const TransitionClipBlock: React.FC<TransitionClipBlockProps> = ({
               tabIndex={0}
               data-panel-trigger-button
               title={`过渡 ${stateKeyframe.transitionDuration.toFixed(2)}s`}
-              className="flex h-full w-full cursor-pointer flex-col items-center justify-center gap-0.5 overflow-hidden border-y border-border-dark bg-layer/50 px-1 text-2xs text-text-muted transition-colors hover:bg-layer/80"
+              className="flex h-full w-full cursor-pointer flex-col items-center justify-center gap-0.5 overflow-hidden border-y border-line bg-hover/50 px-1 text-2xs text-text2 transition-colors hover:bg-hover/80"
               onClick={togglePanel}
               onKeyDown={handleKeyDown}
             >

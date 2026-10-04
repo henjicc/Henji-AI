@@ -57,7 +57,7 @@ const SHORTCUTS: Array<[string, string]> = [
 ]
 
 const LEGEND: Array<[string, string]> = [
-  ['bg-warning/40', '待处理'],
+  ['bg-warning-text/40', '待处理'],
   ['bg-danger-tint', '已删除'],
   ['bg-text3/30', '已静音'],
 ]
@@ -287,9 +287,9 @@ export const AudioEditTimeline = memo(function AudioEditTimeline({ project, deli
             <WaveformView waveform={waveform} startSeconds={view.start / rate} endSeconds={view.end / rate} playedSeconds={sourceFrame / rate} cutRanges={cutRanges} />
           </div>
           {removed.filter((range) => range.end > view.start && range.start < view.end).map((range) => (
-            <div key={range.start} data-audio-deleted className="pointer-events-none absolute inset-y-5 border-x border-danger bg-danger-tint" style={{ left: `${position(Math.max(view.start, range.start))}%`, width: `${(Math.min(view.end, range.end) - Math.max(view.start, range.start)) / length * 100}%` }} />
+            <div key={range.start} data-audio-deleted className="pointer-events-none absolute inset-y-5 border-x border-danger-text bg-danger-tint" style={{ left: `${position(Math.max(view.start, range.start))}%`, width: `${(Math.min(view.end, range.end) - Math.max(view.start, range.start)) / length * 100}%` }} />
           ))}
-          {[...spans.filter((span) => span.muted).map((span) => ({ startFrame: span.sourceStartFrame, endFrame: span.sourceEndFrame, kind: 'mute' })), ...previewRanges.map((range) => ({ ...range, kind: 'preview' })), ...(selection ? [{ ...selection, kind: 'selection' }] : [])].filter((range) => range.endFrame > view.start && range.startFrame < view.end).map((range, index) => <div key={`${range.kind}:${index}`} data-audio-overlay={range.kind} className={`pointer-events-none absolute inset-y-5 border-x ${range.kind === 'preview' ? 'border-warning bg-warning/20' : range.kind === 'mute' ? 'border-text3 bg-text3/20' : 'border-accent-ring bg-accent-tint'}`} style={{ left: `${position(Math.max(view.start, range.startFrame))}%`, width: `${(Math.min(view.end, range.endFrame) - Math.max(view.start, range.startFrame)) / length * 100}%` }} />)}
+          {[...spans.filter((span) => span.muted).map((span) => ({ startFrame: span.sourceStartFrame, endFrame: span.sourceEndFrame, kind: 'mute' })), ...previewRanges.map((range) => ({ ...range, kind: 'preview' })), ...(selection ? [{ ...selection, kind: 'selection' }] : [])].filter((range) => range.endFrame > view.start && range.startFrame < view.end).map((range, index) => <div key={`${range.kind}:${index}`} data-audio-overlay={range.kind} className={`pointer-events-none absolute inset-y-5 border-x ${range.kind === 'preview' ? 'border-warning-text bg-warning-text/20' : range.kind === 'mute' ? 'border-text3 bg-text3/20' : 'border-accent-ring bg-accent-tint'}`} style={{ left: `${position(Math.max(view.start, range.startFrame))}%`, width: `${(Math.min(view.end, range.endFrame) - Math.max(view.start, range.startFrame)) / length * 100}%` }} />)}
           {sourceFrame >= view.start && sourceFrame <= view.end && <div aria-hidden="true" className="pointer-events-none absolute inset-y-0 w-px bg-accent-ring" style={{ left: `${Math.min(99.95, position(sourceFrame))}%` }}><span className="absolute -left-[5px] -top-0.5 h-2.5 w-[11px] rounded-b-md bg-accent-ring" /></div>}
           {!waveform.data && <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-xs text-text3">{waveform.status === 'error' ? waveform.error : '正在准备波形…'}</div>}
         </div>

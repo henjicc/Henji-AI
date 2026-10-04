@@ -130,7 +130,7 @@ export const ImageNode = memo(({ id, data, selected, type, width, height }: Imag
       />
 
       <div
-        className="relative h-full w-full overflow-hidden rounded-[var(--node-radius)] bg-bg-dark"
+        className="relative h-full w-full overflow-hidden rounded-[var(--node-radius)] bg-gap"
       >
         {generationError ? null : data.imageUrl ? (
           <CanvasNodeImage
@@ -156,7 +156,7 @@ export const ImageNode = memo(({ id, data, selected, type, width, height }: Imag
 
         {isGenerating && (
           <div className="pointer-events-none absolute inset-0 overflow-hidden">
-            <div className="absolute inset-0 bg-bg-dark/55" />
+            <div className="absolute inset-0 bg-gap/55" />
             <div
               className="absolute left-0 top-0 h-full w-full origin-left bg-gradient-to-r from-text1/30 to-text1/5 ease-out"
               style={{ transform: `scaleX(${displayProgress})`, transition: uiTransition(['transform'], transitionDurationMs) }}

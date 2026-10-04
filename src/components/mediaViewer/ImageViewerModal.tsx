@@ -402,7 +402,7 @@ export function ImageViewerModal({
                 }}
               >
                 <span className="pointer-events-none absolute inset-y-0 left-1/2 w-px bg-on-media" />
-                <span className="pointer-events-none relative flex h-10 w-7 items-center justify-center rounded-full bg-panel text-text-dark shadow-panel">
+                <span className="pointer-events-none relative flex h-10 w-7 items-center justify-center rounded-full bg-panel text-text1 shadow-panel">
                   <GripVertical className="h-5 w-5" />
                 </span>
               </UiButton>

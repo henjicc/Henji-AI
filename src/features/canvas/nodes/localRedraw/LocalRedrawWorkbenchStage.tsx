@@ -135,7 +135,7 @@ export const LocalRedrawWorkbenchStage = memo(function LocalRedrawWorkbenchStage
       </div>
 
       <div className="absolute bottom-2 left-2 right-2 flex items-center gap-2 rounded-lg bg-overlay p-2">
-        <span className="shrink-0 text-2xs text-text-soft">
+        <span className="shrink-0 text-2xs text-text2">
           {t('node.elementEditGeneration.brushSize', { size: Math.round(editor.brushSize) })}
         </span>
         <UiRangeInput
@@ -148,7 +148,7 @@ export const LocalRedrawWorkbenchStage = memo(function LocalRedrawWorkbenchStage
         />
         <span
           data-local-redraw-autosave-status={autosave.status}
-          className={`shrink-0 text-2xs ${autosave.status === 'failed' ? 'text-danger' : 'text-text-muted'}`}
+          className={`shrink-0 text-2xs ${autosave.status === 'failed' ? 'text-danger-text' : 'text-text2'}`}
         >
           {autosave.status === 'saving'
             ? t('node.elementEditGeneration.autosave.saving')

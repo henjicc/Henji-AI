@@ -232,7 +232,7 @@ const GenerationWorkspace: React.FC = () => {
     await download(filePath, true)
   }
   return (
-    <div className="relative flex h-full flex-1 flex-col overflow-hidden bg-app text-text1">
+    <div className="relative flex h-full flex-1 flex-col overflow-hidden bg-window text-text1">
       <NotificationToast notification={notification} visible={notificationVisible} />
       <main className="relative z-raised flex min-h-0 flex-1 flex-col">
         {/* 命令带：类型分段 + 搜索 + 更多；搜索展开时筛选条作为从属带紧贴其下（不另画底色与边框） */}

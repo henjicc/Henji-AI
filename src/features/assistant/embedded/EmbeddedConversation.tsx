@@ -81,8 +81,8 @@ export function EmbeddedConversation(): JSX.Element {
   return <div className="flex min-h-0 min-w-0 flex-1 flex-col">
     <div ref={scroll.viewportRef} onScroll={scroll.onScroll} onWheel={scroll.onWheel} onKeyDown={scroll.onKeyDown} className="ui-scrollbar min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 py-4" role="log" aria-label="助手对话">
       <div ref={scroll.contentRef} className="space-y-6">
-      {!state.messages.length && !state.sendingMessage && !optimistic && !state.pendingMessages?.length ? <div className="space-y-2 py-8 text-sm text-text-muted">
-        <p className="font-medium text-text-dark">从当前工作开始</p>
+      {!state.messages.length && !state.sendingMessage && !optimistic && !state.pendingMessages?.length ? <div className="space-y-2 py-8 text-sm text-text2">
+        <p className="font-medium text-text1">从当前工作开始</p>
         <p>可以让我查看项目、调整参数，或帮你安排创作任务。</p>
       </div> : <EmbeddedTranscript messages={state.messages} busy={state.busy} onToggle={scroll.suspendFollowing} />}
       {state.sendingMessage ? <EmbeddedUserMessage message={state.sendingMessage} /> : null}
@@ -90,7 +90,7 @@ export function EmbeddedConversation(): JSX.Element {
         ? <EmbeddedUserMessage message={optimistic} /> : null}
       {busy ? <div aria-label="助手正在回复"><UiLoading size="xs" className="!items-start !py-1 motion-reduce:[&>div]:animate-none" /></div> : null}
       {state.pendingMessages?.map(message => <div key={message.id} className="space-y-2"><EmbeddedUserMessage message={message} />
-        <p className="text-right text-xs text-text-muted">{message.error ? `发送未完成：${assistantErrorMessage(message.error)}` : '等待发送'}</p></div>)}
+        <p className="text-right text-xs text-text2">{message.error ? `发送未完成：${assistantErrorMessage(message.error)}` : '等待发送'}</p></div>)}
       </div>
     </div>
     <AudioEditAssistantAction disabled={busy || !selectedModel} />

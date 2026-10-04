@@ -292,7 +292,7 @@ export const NodeModelParamsControls = memo(({
           >
             <span className="text-xs font-normal leading-none">{selectedModelName}</span>
             {selectedModel && (
-              <span className="text-xs leading-none text-text-soft">
+              <span className="text-xs leading-none text-text2">
                 {getProviderDisplayName(selectedModel.meta.provider, i18n.language)}
               </span>
             )}

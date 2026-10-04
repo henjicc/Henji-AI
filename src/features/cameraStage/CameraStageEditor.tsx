@@ -481,7 +481,7 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
   )
 
   return (
-    <div className="flex h-full flex-1 flex-col overflow-hidden bg-app">
+    <div className="flex h-full flex-1 flex-col overflow-hidden bg-window">
       <UiToolbar
         variant="command"
         center={<StagePathContextBar />}

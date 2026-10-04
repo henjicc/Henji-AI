@@ -227,7 +227,7 @@ export function MarkCanvas({
       ref={viewportRef}
       data-application-observation-region="image_edit.canvas_observer"
       /* 铺满剩余空间的工作面不是卡片:不加 rounded/border,边界交给命令带那条 border-b */
-      className="relative min-h-0 flex-1 overflow-hidden bg-bg-dark/85"
+      className="relative min-h-0 flex-1 overflow-hidden bg-gap/85"
     >
       <div
         ref={stageHostRef}

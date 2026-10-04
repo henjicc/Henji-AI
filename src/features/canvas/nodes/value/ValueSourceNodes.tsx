@@ -177,7 +177,7 @@ export const BooleanSourceNode = memo(({ id, data, selected, width, height }: Va
       icon={<BooleanIcon className="h-4 w-4" />}
     >
       <div className="flex items-center justify-between">
-        <span className="text-xs text-text-muted">{checked ? onLabel : offLabel}</span>
+        <span className="text-xs text-text2">{checked ? onLabel : offLabel}</span>
         <UiSwitch
           appearance="segmented"
           checked={checked}

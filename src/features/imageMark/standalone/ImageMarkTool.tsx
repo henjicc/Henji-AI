@@ -333,14 +333,14 @@ export function ImageMarkTool({ onBack }: ImageMarkToolProps = {}): JSX.Element 
     return (
       <>
         {/* 空态没有工作面，是一张普通页面：返回进标题左侧，不为它单画一条命令带 */}
-        <div className="flex h-full flex-col overflow-y-auto bg-app p-6">
+        <div className="flex h-full flex-col overflow-y-auto bg-window p-6">
           <UiRegion maxWidthClassName="max-w-6xl" className="mx-auto w-full">
             <UiPageHeader title="图片编辑" onBack={onBack} backLabel="返回工具" />
           </UiRegion>
           <div className="flex min-h-0 flex-1 items-center justify-center p-8">
             <div
               className={`flex w-full max-w-xl flex-col items-center gap-4 rounded-2xl border-2 border-dashed p-12 transition-colors ${
-                isDragOver ? 'border-accent bg-accent/10' : 'border-border-dark bg-surface-dark/40'
+                isDragOver ? 'border-accent bg-accent/10' : 'border-line bg-raised/40'
               }`}
               onDragOver={(event) => {
                 event.preventDefault();
@@ -349,7 +349,7 @@ export function ImageMarkTool({ onBack }: ImageMarkToolProps = {}): JSX.Element 
               onDragLeave={() => setIsDragOver(false)}
               onDrop={handleDrop}
             >
-              <ImagePlus size={40} className="text-text-muted" />
+              <ImagePlus size={40} className="text-text2" />
               <div className={UI_TEXT_BODY_CLASS}>打开已有图片，或创建一张空白画布</div>
               <div className="flex flex-wrap items-center justify-center gap-2">
                 <UiButton variant="primary" onClick={() => void handleOpenFile()}>

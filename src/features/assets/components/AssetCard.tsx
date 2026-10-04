@@ -86,7 +86,7 @@ export const AssetCard: React.FC<AssetCardProps> = ({ asset, selected, eager = f
           <div className="flex h-full items-center justify-center text-text3"><MediaIcon className="h-8 w-8" /></div>
         )}
         {asset.inspectionStatus === 'missing' && (
-          <div className="ui-glass-scrim absolute inset-0 flex items-center justify-center text-warning"><AlertTriangle className="h-7 w-7" /></div>
+          <div className="ui-glass-scrim absolute inset-0 flex items-center justify-center text-warning-text"><AlertTriangle className="h-7 w-7" /></div>
         )}
         {batchMode && (
           <UiCheckbox

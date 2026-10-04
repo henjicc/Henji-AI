@@ -115,7 +115,7 @@ const LlmModelDialog = ({ isOpen, model, onChange, onClose, onSave }: LlmModelDi
         ) : null}
         <div className={`grid grid-cols-2 gap-2 ${UI_TEXT_BODY_CLASS}`}>
           {capabilityItems.map(item => (
-            <label key={item.id} className="inline-flex items-center gap-2 rounded-lg border border-border-dark bg-app px-3 py-2">
+            <label key={item.id} className="inline-flex items-center gap-2 rounded-lg border border-line bg-window px-3 py-2">
               <UiCheckbox checked={model?.capabilities[item.id] === true} onCheckedChange={checked => updateCapabilities({ [item.id]: checked })} />
               {item.label}
             </label>

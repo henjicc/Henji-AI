@@ -28,7 +28,7 @@ const SettingsProgressDialog: React.FC<SettingsProgressDialogProps> = ({ open, t
     >
       <div className={UI_TEXT_TITLE_CLASS}>{title}</div>
       <div className="mt-4">
-        <div className="mb-2 truncate text-text-soft">{progress.file}</div>
+        <div className="mb-2 truncate text-text2">{progress.file}</div>
         <div className={`mb-2 ${UI_TEXT_META_CLASS}`}>{progress.current} / {progress.total}</div>
         <ProgressBar progress={ratio} showPercentage={false} duration={300} />
       </div>

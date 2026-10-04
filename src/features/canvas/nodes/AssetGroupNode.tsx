@@ -100,9 +100,9 @@ export const AssetGroupNode = memo(({ id, data, selected }: AssetGroupNodeProps)
             )}
           />
         </div>
-        <div className="relative min-h-0 flex-1 overflow-hidden bg-app">
+        <div className="relative min-h-0 flex-1 overflow-hidden bg-window">
           <AssetGroupPreview items={previewItems} />
-          <div className="ui-glass absolute bottom-2 left-2 flex items-center gap-2 rounded-lg px-2 py-1 text-2xs text-text-dark">
+          <div className="ui-glass absolute bottom-2 left-2 flex items-center gap-2 rounded-lg px-2 py-1 text-2xs text-text1">
             <span className="flex items-center gap-1"><ICON_MEDIA_IMAGE className="h-3 w-3" />{mediaSummary.image}</span>
             <span className="flex items-center gap-1"><ICON_MEDIA_VIDEO className="h-3 w-3" />{mediaSummary.video}</span>
             <span className="flex items-center gap-1"><ICON_MEDIA_AUDIO className="h-3 w-3" />{mediaSummary.audio}</span>

@@ -128,7 +128,7 @@ function OpacityControl({ controller, layer, disabled }: {
           onKeyUp={commit}
           onBlur={commit}
         />
-        <span className="w-10 text-right text-xs tabular-nums text-text-muted">
+        <span className="w-10 text-right text-xs tabular-nums text-text2">
           {Math.round(draft * 100)}%
         </span>
       </div>
@@ -163,11 +163,11 @@ export function ImageEditorPropertiesPanelV3({
     return (
       <section data-properties-panel className="min-h-0 flex-1 px-4 py-8">
         {!embedded ? (
-          <h2 className="text-xs font-medium uppercase tracking-wider text-text-muted">
+          <h2 className="text-xs font-medium uppercase tracking-wider text-text2">
             {t('imageEditor.v3.properties.title')}
           </h2>
         ) : null}
-        <p className="mt-4 text-xs text-text-muted">{t('imageEditor.v3.properties.selectOne')}</p>
+        <p className="mt-4 text-xs text-text2">{t('imageEditor.v3.properties.selectOne')}</p>
       </section>
     )
   }
@@ -191,14 +191,14 @@ export function ImageEditorPropertiesPanelV3({
       className="flex min-h-0 flex-1 flex-col overflow-hidden"
     >
       {!embedded ? (
-        <h2 className="mb-4 text-xs font-medium uppercase tracking-wider text-text-muted">
+        <h2 className="mb-4 text-xs font-medium uppercase tracking-wider text-text2">
           {t('imageEditor.v3.properties.title')}
         </h2>
       ) : null}
       <div
         role="tablist"
         aria-label={t('imageEditor.v3.properties.tabsLabel')}
-        className="grid shrink-0 grid-cols-2 border-b border-border-dark/60 px-2"
+        className="grid shrink-0 grid-cols-2 border-b border-line/60 px-2"
       >
         {(['parameters', 'basics'] as const).map((tab) => (
           <UiChipButton
@@ -298,10 +298,10 @@ export function ImageEditorPropertiesPanelV3({
         {(selected.type === 'effect' || selected.type === 'adjustment') ? (
           <div>
             {!selected.renderable ? (
-              <p className="mb-3 text-xs text-warning">{t('imageEditor.v3.properties.unrenderable')}</p>
+              <p className="mb-3 text-xs text-warning-text">{t('imageEditor.v3.properties.unrenderable')}</p>
             ) : null}
             {effectReadiness?.state !== 'ready' && effectReadinessReason ? (
-              <p role="status" className="mb-3 text-xs text-warning">{effectReadinessReason}</p>
+              <p role="status" className="mb-3 text-xs text-warning-text">{effectReadinessReason}</p>
             ) : null}
             <ImageEditorEffectParametersV3
               controller={controller}

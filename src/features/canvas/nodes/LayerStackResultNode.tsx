@@ -108,7 +108,7 @@ export const LayerStackResultNode = memo(({ id, data, selected, width, height }:
         editable
         onTitleChange={(displayName) => updateNodeData(id, { displayName })}
       />
-      <div className="relative h-full w-full overflow-hidden rounded-[var(--node-radius)] bg-bg-dark">
+      <div className="relative h-full w-full overflow-hidden rounded-[var(--node-radius)] bg-gap">
         {generationError ? (
           <UiError
             title="多图层图片未能加载"
@@ -126,7 +126,7 @@ export const LayerStackResultNode = memo(({ id, data, selected, width, height }:
           <UiEmpty title="多图层图片暂不可用" size="xs" className="h-full" />
         )}
         {document?.status === 'degraded' && !isEditableV3 && (
-          <div className="absolute bottom-3 left-3 flex items-center gap-2 rounded-lg bg-overlay px-2.5 py-1.5 text-2xs text-text-soft">
+          <div className="absolute bottom-3 left-3 flex items-center gap-2 rounded-lg bg-overlay px-2.5 py-1.5 text-2xs text-text2">
             <span>部分图层资源缺失</span>
           </div>
         )}

@@ -26,18 +26,18 @@ export function ValueDisplay({ value, previousValue, record }: ValueDisplayProps
 
   return (
     <div className="flex flex-col gap-1">
-      <span className={hasChanged || hasTransform ? 'text-warning-text font-semibold' : 'text-text-muted'}>
+      <span className={hasChanged || hasTransform ? 'text-warning-text font-semibold' : 'text-text2'}>
         {formatValue(value)}
       </span>
 
       {hasTransform && (
-        <span className="text-xs text-text-faint">
+        <span className="text-xs text-text3">
           (转换前: {formatValue(record.transformedFrom)})
         </span>
       )}
 
       {hasChanged && !hasTransform && (
-        <span className="text-xs text-text-faint">
+        <span className="text-xs text-text3">
           (之前: {formatValue(previousValue)})
         </span>
       )}

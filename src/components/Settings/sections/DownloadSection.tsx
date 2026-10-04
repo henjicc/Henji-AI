@@ -118,7 +118,7 @@ const DownloadSection: React.FC<DownloadSectionProps> = ({
         <div className="space-y-1.5">
           {presetPaths.map((path) => (
             <div key={path} className="flex items-center gap-2">
-              <FolderOpen className="h-3.5 w-3.5 shrink-0 text-text-muted" />
+              <FolderOpen className="h-3.5 w-3.5 shrink-0 text-text2" />
               {/* 明文本地路径，观察截图时需要遮罩 */}
               <span data-observation-sensitive className="min-w-0 flex-1 truncate text-sm" title={path}>
                 {path}

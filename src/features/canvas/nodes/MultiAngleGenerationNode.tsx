@@ -100,7 +100,7 @@ export const MultiAngleGenerationNode = memo(({
       onSelect={() => setSelectedNode(id)}
       onTitleChange={(displayName) => updateNodeData(id, { displayName })}
       rightSlot={priceModel && <div className="flex items-center gap-2">
-        <span className="max-w-36 truncate text-2xs text-text-muted">{getI18nText(priceModel.meta.name, i18n.language)}</span>
+        <span className="max-w-36 truncate text-2xs text-text2">{getI18nText(priceModel.meta.name, i18n.language)}</span>
         <PriceEstimate providerId={priceModel.meta.provider} modelId={priceModel.meta.id} params={priceParams}
           requestCount={config.views.length} variant="badge" />
       </div>}

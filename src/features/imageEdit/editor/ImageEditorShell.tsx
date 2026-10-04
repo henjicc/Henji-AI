@@ -100,8 +100,8 @@ export function ImageEditorShell({ toolbar, canvas, sidePanel, className = '' }:
           className={`group relative z-raised flex w-2 shrink-0 items-center justify-center ${collapsed ? 'pointer-events-none opacity-0' : 'cursor-col-resize'}`}
           style={{ touchAction: 'none' }}
         >
-          <span className="h-full w-px bg-border-dark transition-colors group-hover:bg-accent group-focus-visible:bg-accent" />
-          <GripVertical className="absolute h-4 w-4 text-text-muted opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100" />
+          <span className="h-full w-px bg-line transition-colors group-hover:bg-accent group-focus-visible:bg-accent" />
+          <GripVertical className="absolute h-4 w-4 text-text2 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100" />
         </div>
         <aside
           className="relative flex min-h-0 shrink-0 flex-col overflow-hidden border-l border-gap bg-panel"

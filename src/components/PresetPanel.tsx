@@ -198,7 +198,7 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
                 <div className="p-4 h-full flex flex-col max-h-[500px]">
                     {/* 顶部区域：快速保存或输入名称 */}
                     <div className="mb-4 space-y-2">
-                        <div className="text-xs text-text-muted mb-2">
+                        <div className="text-xs text-text2 mb-2">
                             {isSaving ? t('ui:presets.inputNameToSave') : t('ui:presets.quickSave')}
                         </div>
                         <div className="h-[60px] relative">
@@ -291,7 +291,7 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
                     <div className="my-3 h-px bg-line"></div>
                     {/* 预设列表 */}
                     <div className="flex-1 overflow-y-auto">
-                        <div className="text-xs text-text-muted mb-2 flex items-center justify-between">
+                        <div className="text-xs text-text2 mb-2 flex items-center justify-between">
                             <span>{t('ui:presets.myPresets', { count: presets.length })}</span>
                         </div>
                         {presets.length === 0 ? (
@@ -317,7 +317,7 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
                                             </div>
                                             <div className="flex items-center gap-2 flex-shrink-0">
                                                 {/* 时间戳 */}
-                                                <span className="text-xs text-text-faint">
+                                                <span className="text-xs text-text3">
                                                     {formatTimeAgo(preset.updatedAt)}
                                                 </span>
                                                 {/* 删除按钮 */}
@@ -334,7 +334,7 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
                                             </div>
                                         </div>
                                         {/* 预览信息 */}
-                                        <div className="mt-1 text-xs text-text-faint truncate">
+                                        <div className="mt-1 text-xs text-text3 truncate">
                                             {preset.prompt.substring(0, 50)}{preset.prompt.length > 50 ? '...' : ''}
                                         </div>
                                         {/* 删除确认弹窗 - 使用 portal 渲染到 body */}

@@ -65,19 +65,20 @@ export function AssistantTraceDetail({
 
   return (
     <div className="flex h-full flex-col overflow-hidden rounded-lg bg-panel">
-      <div className="shrink-0 border-b border-border-dark/40 bg-panel/70 px-3 py-2">
+      <div className="shrink-0 border-b border-line/40 bg-panel/70 px-3 py-2">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-sm font-semibold text-text-dark">{getTraceStepLabel(summary)}</span>
-              <span className="rounded border border-border-dark/50 bg-window/40 px-1.5 py-0.5 font-mono text-2xs text-text-muted">
+              <span className="text-sm font-semibold text-text1">{getTraceStepLabel(summary)}</span>
+              {/* ui-surface-allow 日志窗口内嵌块：4.1 迁移为 bg-window/40 后被 4.2 补全的表面规则识别；去描边属视觉改动，交 5.7 核对 */}
+              <span className="rounded border border-line/50 bg-window/40 px-1.5 py-0.5 font-mono text-2xs text-text2">
                 {summary.providerId}/{summary.modelId}
               </span>
               <span className={`rounded px-1.5 py-0.5 text-2xs ${statusClass(summary.status)}`}>
                 {statusLabel(summary.status)}
               </span>
             </div>
-            <div className="mt-1 font-mono text-2xs text-text-muted">
+            <div className="mt-1 font-mono text-2xs text-text2">
               {summary.stepId} · {new Date(summary.startedAt).toLocaleString('zh-CN')}
             </div>
           </div>
@@ -150,13 +151,13 @@ function TraceVisualDetail({ detail }: { detail: NonNullable<AgentTraceDetailRes
           <Metric label="压缩状态" value={context?.compacted ? '已压缩' : '未压缩'} />
         </div>
         {context?.layerReports && context.layerReports.length > 0 && (
-          <div className="mt-2 overflow-hidden rounded border border-border-dark/40">
+          <div className="mt-2 overflow-hidden rounded border border-line/40">
             {context.layerReports.map((layer) => (
-              <div key={layer.id} className="grid grid-cols-[110px_70px_80px_minmax(0,1fr)] gap-2 border-b border-border-dark/30 px-2 py-1.5 text-2xs last:border-b-0">
-                <span className="font-mono text-text-dark">{layer.id}</span>
-                <span className={layer.included ? 'text-success-text' : 'text-text-muted'}>{layer.included ? '已注入' : '未注入'}</span>
-                <span className="font-mono text-text-muted">{formatTraceTokens(layer.estimatedTokens)}</span>
-                <span className="truncate text-text-muted" title={layer.reason}>{layer.reason}</span>
+              <div key={layer.id} className="grid grid-cols-[110px_70px_80px_minmax(0,1fr)] gap-2 border-b border-line/30 px-2 py-1.5 text-2xs last:border-b-0">
+                <span className="font-mono text-text1">{layer.id}</span>
+                <span className={layer.included ? 'text-success-text' : 'text-text2'}>{layer.included ? '已注入' : '未注入'}</span>
+                <span className="font-mono text-text2">{formatTraceTokens(layer.estimatedTokens)}</span>
+                <span className="truncate text-text2" title={layer.reason}>{layer.reason}</span>
               </div>
             ))}
           </div>
@@ -183,8 +184,8 @@ function TraceVisualDetail({ detail }: { detail: NonNullable<AgentTraceDetailRes
         {detail.httpRequest ? (
           <div className="space-y-2">
             <div className="grid gap-2 text-xs md:grid-cols-[100px_minmax(0,1fr)]">
-              <span className="text-text-muted">请求方法</span><span className="font-mono text-text-dark">{detail.httpRequest.method}</span>
-              <span className="text-text-muted">最终地址</span><span className="break-all font-mono text-text-dark">{detail.httpRequest.url}</span>
+              <span className="text-text2">请求方法</span><span className="font-mono text-text1">{detail.httpRequest.method}</span>
+              <span className="text-text2">最终地址</span><span className="break-all font-mono text-text1">{detail.httpRequest.url}</span>
             </div>
             <JsonTree value={{ headers: detail.httpRequest.headers, body: detail.httpRequest.body }} />
           </div>
@@ -217,13 +218,13 @@ function TraceSection({ title, badge, defaultOpen = false, children }: { title: 
   return (
     <section className={`overflow-hidden rounded-lg ${UI_INSET_SURFACE_CLASS}`}>
       <UiButton type="button" size="lg" className="w-full justify-between" onClick={() => setOpen(!open)}>
-        <span className="flex items-center gap-2 text-xs font-medium text-text-dark">
+        <span className="flex items-center gap-2 text-xs font-medium text-text1">
           {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
           {title}
         </span>
-        {badge && <span className="rounded bg-window/40 px-1.5 py-0.5 font-mono text-2xs text-text-muted">{badge}</span>}
+        {badge && <span className="rounded bg-window/40 px-1.5 py-0.5 font-mono text-2xs text-text2">{badge}</span>}
       </UiButton>
-      {open && <div className="border-t border-border-dark/35 p-3">{children}</div>}
+      {open && <div className="border-t border-line/35 p-3">{children}</div>}
     </section>
   )
 }
@@ -234,15 +235,15 @@ function MessageCard({ message, index }: { message: ModelStepMessage; index: num
       <div className="flex items-center justify-between border-b border-current/15 px-2 py-1 text-2xs font-semibold uppercase tracking-wider">
         <span>{message.role}</span><span className="font-mono opacity-60">#{index + 1}</span>
       </div>
-      <div className="bg-window/40 p-2 text-xs text-text-dark">
+      <div className="bg-window/40 p-2 text-xs text-text1">
         {typeof message.content === 'string' ? <TextBlock value={message.content} /> : <JsonTree value={message.content} />}
       </div>
     </div>
   )
 }
 
-function Metric({ label, value }: { label: string; value: string }): JSX.Element {
-  return <div className="rounded border border-border-dark/35 bg-window/40 px-2 py-1.5"><div className="text-2xs uppercase tracking-wider text-text-muted">{label}</div><div className="mt-0.5 truncate font-mono text-2xs text-text-dark" title={value}>{value}</div></div>
+function Metric({ label, value }: { label: string; value: string }): JSX.Element { // ui-surface-allow 日志窗口内嵌块：4.1 迁移为 bg-window/40 后被 4.2 补全的表面规则识别；去描边属视觉改动，交 5.7 核对
+  return <div className="rounded border border-line/35 bg-window/40 px-2 py-1.5"><div className="text-2xs uppercase tracking-wider text-text2">{label}</div><div className="mt-0.5 truncate font-mono text-2xs text-text1" title={value}>{value}</div></div>
 }
 
 function CopyButton({ label, copied, disabled, onClick, icon = 'copy' }: { label: string; copied: boolean; disabled?: boolean; onClick: () => void; icon?: 'copy' | 'terminal' }): JSX.Element {
@@ -251,11 +252,11 @@ function CopyButton({ label, copied, disabled, onClick, icon = 'copy' }: { label
 }
 
 function LabeledBlock({ label, children }: { label: string; children: ReactNode }): JSX.Element {
-  return <div><div className="mb-1 text-2xs font-medium uppercase tracking-wider text-text-muted">{label}</div>{children}</div>
+  return <div><div className="mb-1 text-2xs font-medium uppercase tracking-wider text-text2">{label}</div>{children}</div>
 }
 
-function TextBlock({ value }: { value: string }): JSX.Element {
-  return <pre className="max-h-[440px] overflow-auto whitespace-pre-wrap break-words rounded border border-border-dark/35 bg-window/40 p-2 font-mono text-2xs leading-relaxed text-text-dark">{value}</pre>
+function TextBlock({ value }: { value: string }): JSX.Element { // ui-surface-allow 日志窗口内嵌块：4.1 迁移为 bg-window/40 后被 4.2 补全的表面规则识别；去描边属视觉改动，交 5.7 核对
+  return <pre className="max-h-[440px] overflow-auto whitespace-pre-wrap break-words rounded border border-line/35 bg-window/40 p-2 font-mono text-2xs leading-relaxed text-text1">{value}</pre>
 }
 
 function roleClass(role: ModelStepMessage['role']): string {

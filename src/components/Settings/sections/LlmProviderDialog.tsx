@@ -466,7 +466,7 @@ const LlmProviderDialog = ({
                 <span className="min-w-0 text-left">
                   <span className="block truncate text-sm">{provider.displayName}</span>
                 </span>
-                <span className="text-xs text-text-soft">
+                <span className="text-xs text-text2">
                   {provider.enabled ? t('llmProvider.status.on') : t('llmProvider.status.off')}
                 </span>
               </UiOptionButton>

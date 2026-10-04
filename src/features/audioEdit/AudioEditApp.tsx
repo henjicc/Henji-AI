@@ -369,7 +369,7 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
   const selectedSeconds = selectedBlocks.reduce((total, block) => total + Math.max(0, block.endFrame - block.startFrame), 0) / project.source.sampleRate
   const enabledCuts = (project.cuts ?? []).filter((cut) => cut.enabled)
   const allLocked = selectedBlocks.length > 0 && selectedBlocks.every((block) => block.locked)
-  return <div ref={editorRoot} className="flex h-full min-h-0 flex-col bg-app" onKeyDown={(event) => {
+  return <div ref={editorRoot} className="flex h-full min-h-0 flex-col bg-window" onKeyDown={(event) => {
     if ((event.ctrlKey || event.metaKey) && ['f', 'h'].includes(event.key.toLowerCase())) { event.preventDefault(); textSearch.open(event.key.toLowerCase() === 'h'); return }
     if (event.target instanceof HTMLElement && (event.target.closest('input,textarea,[contenteditable="true"]'))) return
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') { event.preventDefault(); if (event.shiftKey) state.redo(); else state.undo() }

@@ -160,14 +160,14 @@ const EmptyUploadNode = memo(({ id, data, selected, width, height }: UniversalUp
         editable
         onTitleChange={(displayName) => updateNodeData(id, { displayName })}
       />
-      <div className="flex h-full w-full cursor-pointer flex-col items-center justify-center gap-2 rounded-[var(--node-radius)] bg-bg-dark px-5 text-center">
-        <BodyIcon className="h-7 w-7 text-text-muted" />
-        <span className="text-sm font-medium text-text-dark">
+      <div className="flex h-full w-full cursor-pointer flex-col items-center justify-center gap-2 rounded-[var(--node-radius)] bg-gap px-5 text-center">
+        <BodyIcon className="h-7 w-7 text-text2" />
+        <span className="text-sm font-medium text-text1">
           {showPreparing
             ? t('node.universalUpload.preparing')
             : t(`node.universalUpload.action.${lockedKind ?? 'any'}`)}
         </span>
-        <span className="text-2xs leading-5 text-text-muted">
+        <span className="text-2xs leading-5 text-text2">
           {t(`node.universalUpload.hint.${lockedKind ?? 'any'}`)}
         </span>
         {data.uploadError ? (

@@ -113,7 +113,7 @@ export function ImageMarkToolV3ToolbarActions({
           {exportReason ? (
             <span
               role="status"
-              className="hidden max-w-64 truncate text-xs text-warning xl:inline"
+              className="hidden max-w-64 truncate text-xs text-warning-text xl:inline"
               title={exportReason}
             >
               {exportReason}

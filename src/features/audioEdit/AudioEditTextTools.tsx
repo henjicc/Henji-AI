@@ -85,7 +85,7 @@ export function AudioEditFindReplace({ search, disabled }: { search: AudioEditTe
       <UiIconButton title="上一处 · Shift+Enter" disabled={!search.matches.length} onClick={() => search.navigate(-1)}><ArrowUp size={16} /></UiIconButton>
       <UiIconButton title="下一处 · Enter" disabled={!search.matches.length} onClick={() => search.navigate(1)}><ArrowDown size={16} /></UiIconButton>
       <span className="text-xs tabular-nums text-text3" aria-live="polite">{search.matches.length ? `${search.currentIndex + 1} / ${search.matches.length} 处` : search.query ? '无匹配' : ''}</span>
-      {search.error && <span role="alert" className="text-xs text-warning">{search.error}</span>}
+      {search.error && <span role="alert" className="text-xs text-warning-text">{search.error}</span>}
       {!search.showReplace && search.message && <span className="text-xs text-text3" aria-live="polite">{search.message}</span>}
       <UiIconButton aria-label="关闭查找替换" title="关闭查找替换 · Esc" className="ml-auto" onClick={search.close}><X size={16} /></UiIconButton>
     </div>
@@ -106,7 +106,7 @@ export function AudioEditMatchedText({ block, search }: { block: AudioEditTransc
   if (!fragments) return <>{block.text}</>
   return <>{fragments.map((fragment, index) => fragment.matchIndex === undefined ? <span key={index}>{fragment.text}</span> : <span key={index}
     data-audio-search-current={fragment.matchIndex === search.currentIndex ? 'true' : undefined}
-    className={fragment.matchIndex === search.currentIndex ? 'rounded-sm bg-warning/30 text-text1 ring-1 ring-accent-ring' : 'rounded-sm bg-warning/20 text-text1'}>
+    className={fragment.matchIndex === search.currentIndex ? 'rounded-sm bg-warning-text/30 text-text1 ring-1 ring-accent-ring' : 'rounded-sm bg-warning-text/20 text-text1'}>
     {fragment.replacement === undefined ? fragment.text : <><del className="text-text3">{fragment.text}</del>{fragment.replacement && <ins className="ml-1 bg-accent-tint font-medium text-accent-text no-underline">{fragment.replacement}</ins>}</>}
   </span>)}</>
 }

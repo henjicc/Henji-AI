@@ -69,7 +69,7 @@ export function ModelInputRow({
       <div className={NODE_ROW_CONTROL_SLOT_CLASS}>
         {overrideModelId ? (
           <span
-            className="min-w-0 truncate text-xs text-text-dark"
+            className="min-w-0 truncate text-xs text-text1"
             title={t('node.modelRow.linked')}
           >
             {overrideModel ? getI18nText(overrideModel.meta.name, i18n.language) : overrideModelId}

@@ -198,7 +198,7 @@ export function UiGroup({
 }: UiGroupProps): JSX.Element {
   const hasHeader = Boolean(title || description || actions);
   const titleClass = titleTone === 'overline'
-    ? 'text-xs font-medium uppercase tracking-wider text-text-muted'
+    ? 'text-xs font-medium uppercase tracking-wider text-text2'
     : titleTone === 'compact'
       ? 'text-xs font-semibold text-text2'
       : UI_TEXT_SECTION_CLASS;

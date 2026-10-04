@@ -35,7 +35,7 @@ export function ImageMarkToolV3Host(props: ImageMarkToolV3HostProps): JSX.Elemen
     return (
       <div
         data-image-editor-v3-host-state={host.bootstrap.kind}
-        className="flex h-full flex-col overflow-hidden bg-app p-6"
+        className="flex h-full flex-col overflow-hidden bg-window p-6"
       >
         <UiRegion maxWidthClassName="max-w-6xl" className="mx-auto w-full">
           <UiPageHeader

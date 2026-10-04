@@ -52,7 +52,7 @@ const TimeRuler: React.FC<TimeRulerProps> = ({
     <div
       ref={rulerRef}
       data-timeline-ruler="true"
-      className="relative cursor-ew-resize select-none bg-surface-dark"
+      className="relative cursor-ew-resize select-none bg-raised"
       style={{ width: contentWidth, height: TIMELINE_RULER_HEIGHT }}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
@@ -68,7 +68,7 @@ const TimeRuler: React.FC<TimeRulerProps> = ({
           }}
         >
           {tick.label && (
-            <span className="absolute left-1 top-0 whitespace-nowrap text-3xs leading-none text-text-muted">
+            <span className="absolute left-1 top-0 whitespace-nowrap text-3xs leading-none text-text2">
               {formatLabel ? formatLabel(tick.time) : tick.label}
             </span>
           )}

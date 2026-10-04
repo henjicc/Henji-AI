@@ -135,7 +135,7 @@ export default function AgentUserInstructionsSection(): JSX.Element {
           showCharacterCount
           error={warnings.length > 0}
           errorMessage={warnings.join('；')}
-          editorShellClassName="bg-surface-dark"
+          editorShellClassName="bg-raised"
           editorClassName={`ui-scrollbar min-h-[220px] max-h-[360px] px-3 py-2.5 ${UI_TEXT_BODY_CLASS}`}
         />
         <p className={`mt-3 leading-5 ${UI_TEXT_META_CLASS}`}>

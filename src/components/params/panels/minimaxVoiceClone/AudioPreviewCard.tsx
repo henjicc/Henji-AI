@@ -72,7 +72,7 @@ export function AudioPreviewCard({
   }
 
   return (
-    <div className="rounded-lg border border-border-dark/80 bg-surface-dark/20 p-2.5">
+    <div className="rounded-lg border border-line/80 bg-raised/20 p-2.5">
       {(title || subtitle || headerAction) && (
         <div className="mb-2 flex items-start justify-between gap-2">
           <div className="min-w-0 space-y-1">
@@ -99,7 +99,7 @@ export function AudioPreviewCard({
         <div
           className={`rounded-lg border border-dashed px-3 text-center text-xs ${compact ? 'h-[88px]' : 'h-[132px]'} ${dragActive
             ? 'border-accent bg-accent-tint text-accent-text'
-            : 'border-border-dark/70 text-text-faint'
+            : 'border-line/70 text-text3'
             }`}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}

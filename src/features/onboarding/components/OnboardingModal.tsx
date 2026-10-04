@@ -60,7 +60,7 @@ function ProviderConnectionResult({
   const positive = value.verified || value.status === 'connected'
   return (
     <UiPanel variant="inset" className="mt-4 p-4" role="status" aria-live="polite">
-      <div className={`flex items-center gap-2 ${positive ? 'text-success' : value.status === 'saved_unverified' ? 'text-warning' : 'text-danger'}`}>
+      <div className={`flex items-center gap-2 ${positive ? 'text-success-text' : value.status === 'saved_unverified' ? 'text-warning-text' : 'text-danger-text'}`}>
         <CheckCircle2 className="h-4 w-4 shrink-0" />
         <span className="text-sm font-medium">{t(`apiKey.results.${value.status}`)}</span>
       </div>
@@ -99,10 +99,10 @@ function WelcomeStep(): JSX.Element {
           <div className={`text-xs font-medium uppercase tracking-wider ${UI_COLOR_ACCENT_TEXT_CLASS}`}>
             {t('welcome.eyebrow')}
           </div>
-          <div className="mt-1 text-2xl font-semibold text-text-dark">{t('productName')}</div>
+          <div className="mt-1 text-2xl font-semibold text-text1">{t('productName')}</div>
         </div>
       </div>
-      <h3 className="max-w-xl text-2xl font-semibold leading-tight text-text-dark">{t('welcome.headline')}</h3>
+      <h3 className="max-w-xl text-2xl font-semibold leading-tight text-text1">{t('welcome.headline')}</h3>
       <p className={`mt-3 max-w-xl leading-6 ${UI_TEXT_BODY_CLASS}`}>{t('welcome.description')}</p>
       <div className="mt-7 space-y-3">
         {features.map(({ icon: Icon, text }) => (
@@ -228,7 +228,7 @@ function FirstTaskStep({
         <div className={UI_TEXT_META_CLASS}>{t('firstTask.promptLabel')}</div>
         <p className={`mt-2 leading-6 ${UI_TEXT_BODY_CLASS}`}>{t('firstTask.prompt')}</p>
       </UiPanel>
-      <div className={`mt-5 flex items-center gap-2 ${configured ? 'text-success' : 'text-warning'}`}>
+      <div className={`mt-5 flex items-center gap-2 ${configured ? 'text-success-text' : 'text-warning-text'}`}>
         {configured ? <CheckCircle2 className="h-4 w-4" /> : <KeyRound className="h-4 w-4" />}
         <span className="text-sm">{t(configured ? 'firstTask.ready' : 'firstTask.notReady', { provider: providerName })}</span>
       </div>
@@ -435,7 +435,7 @@ export function OnboardingModal(): JSX.Element {
           current: stepIndex + 1,
           total: ONBOARDING_STEP_IDS.length,
         })}</span>
-        <div className="h-1 flex-1 overflow-hidden rounded-full bg-layer">
+        <div className="h-1 flex-1 overflow-hidden rounded-full bg-hover">
           <div
             className="h-full rounded-full bg-accent transition-[width] duration-180"
             style={{ width: `${((stepIndex + 1) / ONBOARDING_STEP_IDS.length) * 100}%` }}

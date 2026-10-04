@@ -91,7 +91,7 @@ export function NodeDownloadMenu({
               }}
               title={path}
             >
-              <FolderOpen className="h-3.5 w-3.5 shrink-0 text-text-muted" />
+              <FolderOpen className="h-3.5 w-3.5 shrink-0 text-text2" />
               <span className="truncate">{path}</span>
             </UiOptionButton>
           ))}

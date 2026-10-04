@@ -133,7 +133,7 @@ function LegacyMaskEditorModal({
         <Lasso className="h-4 w-4" />
         自由框选
       </UiChipButton>
-      <div className="ml-1 flex items-center gap-1 border-l border-border-dark pl-2">
+      <div className="ml-1 flex items-center gap-1 border-l border-line pl-2">
         <UiIconButton size="lg"
           type="button"
           disabled={history.undoStack.length === 0}

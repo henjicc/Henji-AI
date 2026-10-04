@@ -29,7 +29,7 @@ export function CameraStagePreviewPanel({
       : 'node.cameraStage.rendering';
 
   return (
-    <div className="relative h-full w-full overflow-hidden rounded-[var(--node-radius)] bg-bg-dark">
+    <div className="relative h-full w-full overflow-hidden rounded-[var(--node-radius)] bg-gap">
       {imageSource ? (
         <CanvasNodeImage
           src={imageSource}
@@ -47,13 +47,13 @@ export function CameraStagePreviewPanel({
 
       {rendering && (
         <>
-          <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-bg-dark/65">
-            <div className="flex items-center gap-2 rounded-lg bg-surface-dark/90 px-3 py-2 text-xs text-text-dark">
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-gap/65">
+            <div className="flex items-center gap-2 rounded-lg bg-raised/90 px-3 py-2 text-xs text-text1">
               <LoaderCircle className="h-4 w-4 animate-spin text-accent" />
               {t(progressKey, { progress: Math.round((renderProgress ?? 0) * 100) })}
             </div>
           </div>
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-1.5 bg-layer">
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-1.5 bg-hover">
             <div className="h-full origin-left bg-accent transition-transform duration-120" style={{ transform: `scaleX(${renderProgress ?? 0})` }} />
           </div>
         </>
@@ -61,11 +61,11 @@ export function CameraStagePreviewPanel({
 
       {!rendering && renderError && (
         <div
-          className="pointer-events-none absolute inset-0 flex items-center justify-center bg-bg-dark/70"
+          className="pointer-events-none absolute inset-0 flex items-center justify-center bg-gap/70"
           title={renderError}
         >
-          <div className="flex max-w-[80%] items-center gap-2 rounded-lg bg-surface-dark/90 px-3 py-2 text-xs text-text-dark">
-            <AlertCircle className="h-4 w-4 shrink-0 text-danger" />
+          <div className="flex max-w-[80%] items-center gap-2 rounded-lg bg-raised/90 px-3 py-2 text-xs text-text1">
+            <AlertCircle className="h-4 w-4 shrink-0 text-danger-text" />
             <span className="truncate">{t('node.cameraStage.renderFailed')}</span>
           </div>
         </div>

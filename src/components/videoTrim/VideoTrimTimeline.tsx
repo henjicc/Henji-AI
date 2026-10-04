@@ -104,7 +104,7 @@ export function VideoTrimTimeline({
 
   return (
     <div className="flex flex-col gap-2">
-      <div ref={trackRef} className="relative h-10 rounded-md bg-surface-dark">
+      <div ref={trackRef} className="relative h-10 rounded-md bg-raised">
         <div
           className={`absolute top-0 h-full rounded-md ${UI_COLOR_ACCENT_BG_CLASS} opacity-40`}
           style={{ left: `${startPct}%`, width: `${Math.max(0, endPct - startPct)}%` }}
@@ -120,14 +120,14 @@ export function VideoTrimTimeline({
           onMouseDown={(event) => handlePointerDown('end', event)}
         />
         <div
-          className="absolute top-0 z-raised h-full w-0.5 -translate-x-1/2 cursor-ew-resize bg-text-dark"
+          className="absolute top-0 z-raised h-full w-0.5 -translate-x-1/2 cursor-ew-resize bg-text1"
           style={{ left: `${playheadPct}%` }}
           onMouseDown={(event) => handlePointerDown('playhead', event)}
         >
-          <div className="absolute -top-1 left-1/2 h-2 w-2 -translate-x-1/2 rounded-full bg-text-dark" />
+          <div className="absolute -top-1 left-1/2 h-2 w-2 -translate-x-1/2 rounded-full bg-text1" />
         </div>
       </div>
-      <div className="flex items-center justify-between text-2xs text-text-muted">
+      <div className="flex items-center justify-between text-2xs text-text2">
         <span>{formatSeconds(start)}</span>
         <span>{formatSeconds(end - start)} / {formatSeconds(maxClipSeconds)}</span>
         <span>{formatSeconds(end)}</span>

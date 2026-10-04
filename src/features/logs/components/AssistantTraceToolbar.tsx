@@ -50,7 +50,7 @@ export function AssistantTraceToolbar({
   onClear,
 }: AssistantTraceToolbarProps): JSX.Element {
   return (
-    <div className="flex flex-wrap items-center gap-2 border-b border-border-dark/50 bg-panel/60 px-3 py-2">
+    <div className="flex flex-wrap items-center gap-2 border-b border-line/50 bg-panel/60 px-3 py-2">
       <div className={UI_SEGMENTED_TRACK_CLASS}>
         <UiOptionButton type="button" variant="segment" active={mode === 'live'} aria-pressed={mode === 'live'} onClick={() => onModeChange('live')}>实时</UiOptionButton>
         <UiOptionButton type="button" variant="segment" active={mode === 'history'} aria-pressed={mode === 'history'} onClick={() => onModeChange('history')}>历史</UiOptionButton>
@@ -81,7 +81,7 @@ export function AssistantTraceToolbar({
           {historyDates.length === 0 ? <option value="">暂无历史</option> : historyDates.map((date) => <option key={date} value={date}>{date}</option>)}
         </UiSelect>
       )}
-      <label className="flex items-center gap-1.5 text-2xs text-text-muted" title="完整上下文只保存在本机，并自动脱敏">
+      <label className="flex items-center gap-1.5 text-2xs text-text2" title="完整上下文只保存在本机，并自动脱敏">
         <UiCheckbox checked={captureMode === 'detailed'} onCheckedChange={(checked) => onCaptureModeChange(checked ? 'detailed' : 'summary')} />
         助手详细追踪
       </label>

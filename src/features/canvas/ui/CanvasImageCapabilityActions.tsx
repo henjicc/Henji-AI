@@ -224,7 +224,7 @@ export function CanvasImageCapabilityActions({
                           <span className="flex min-w-0 items-center gap-1.5">
                             <span className="truncate">{t(capability.titleKey)}</span>
                             {capability.availability.releaseStage === 'experimental' && (
-                              <span className="shrink-0 rounded border border-border-dark px-1 py-0.5 text-2xs leading-none text-text-muted">
+                              <span className="shrink-0 rounded border border-line px-1 py-0.5 text-2xs leading-none text-text2">
                                 {t('imageCapabilities.status.experimental')}
                               </span>
                             )}

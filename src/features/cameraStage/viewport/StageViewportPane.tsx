@@ -110,7 +110,7 @@ const StageViewportPane: React.FC<StageViewportPaneProps> = ({ viewportId, captu
     <div
       data-camera-stage-viewport-id={viewportId}
       data-camera-stage-render-style={overlayCameraId ? renderStyle : 'beauty'}
-      className={`relative min-h-0 min-w-0 overflow-hidden border ${active ? 'border-accent' : 'border-border-dark'}`}
+      className={`relative min-h-0 min-w-0 overflow-hidden border ${active ? 'border-accent' : 'border-line'}`}
       onPointerDownCapture={(event) => {
         activateViewport()
         if (event.button === 1) {

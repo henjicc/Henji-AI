@@ -52,7 +52,7 @@ const CanvasWorkspace = (): JSX.Element => {
 
   return (
     <ReactFlowProvider>
-      <div className="h-full min-h-0 w-full bg-app text-text-dark">
+      <div className="h-full min-h-0 w-full bg-window text-text1">
         {!isHydrated && <UiLoading className="h-full" message={t('common.loading')} />}
 
         {isHydrated && !currentProjectId && !isOpeningProject && <ProjectManager />}

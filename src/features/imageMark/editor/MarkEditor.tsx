@@ -335,7 +335,7 @@ export function MarkEditor({
 
   if (!image) {
     return (
-      <div className={`flex items-center justify-center rounded-xl border border-border-dark bg-bg-dark/85 ${className}`}>
+      <div className={`flex items-center justify-center rounded-xl border border-line bg-gap/85 ${className}`}>
         <span className={UI_TEXT_BODY_CLASS}>{loadFailed ? '图片加载失败' : '图片加载中…'}</span>
       </div>
     );

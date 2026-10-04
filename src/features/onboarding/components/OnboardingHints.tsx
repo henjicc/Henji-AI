@@ -151,7 +151,7 @@ export function OnboardingHints(): JSX.Element | null {
         role="status"
         aria-live="polite"
       >
-        <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-success" />
+        <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-success-text" />
         <div className="min-w-0 flex-1">
           <div className={UI_TEXT_PANEL_TITLE_CLASS}>{t('coach.successTitle')}</div>
           <p className={`mt-1 leading-5 ${UI_TEXT_META_CLASS}`}>{t('coach.successDescription')}</p>

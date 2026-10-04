@@ -87,7 +87,7 @@ const CameraStageAppInner: React.FC<CameraStageAppProps> = ({ onBackToToolbox })
   }, [lastProjectId, setAppView, setLastProjectId, view])
 
   if (restoring) {
-    return <div className="flex h-full items-center justify-center bg-app text-sm text-text-muted">恢复上次视图中…</div>
+    return <div className="flex h-full items-center justify-center bg-window text-sm text-text2">恢复上次视图中…</div>
   }
 
   if (view === 'editor') {

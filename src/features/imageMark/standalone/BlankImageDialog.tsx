@@ -174,7 +174,7 @@ export function BlankImageDialog({ isOpen, onClose, onCreate }: BlankImageDialog
                 {COLOR_LABELS[index]}
               </UiOptionButton>
             ))}
-            <label className="ml-auto flex items-center gap-2 text-sm text-text-muted">
+            <label className="ml-auto flex items-center gap-2 text-sm text-text2">
               自定义
               <UiColorInput
                 value={backgroundColor}
@@ -185,7 +185,7 @@ export function BlankImageDialog({ isOpen, onClose, onCreate }: BlankImageDialog
           </div>
         </section>
 
-        <div className={`min-h-5 ${validationError ? 'text-danger' : UI_TEXT_META_CLASS}`}>
+        <div className={`min-h-5 ${validationError ? 'text-danger-text' : UI_TEXT_META_CLASS}`}>
           {validationError ?? `将创建 ${width} × ${height} 像素的空白 PNG`}
         </div>
       </div>

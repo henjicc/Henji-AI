@@ -59,7 +59,7 @@ const CustomAspectRatioInputs: React.FC<{ ratio: number; onChange: (ratio: numbe
           commit(next, height)
         }}
       />
-      <span className="text-xs text-text-muted">:</span>
+      <span className="text-xs text-text2">:</span>
       <NumberInput
         value={height}
         min={1}
@@ -77,7 +77,7 @@ const CustomAspectRatioInputs: React.FC<{ ratio: number; onChange: (ratio: numbe
 }
 
 const SectionTitle: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <div className="text-xs font-medium uppercase tracking-wide text-text-muted">{children}</div>
+  <div className="text-xs font-medium uppercase tracking-wide text-text2">{children}</div>
 )
 
 const Vec3NumberRow: React.FC<{
@@ -87,7 +87,7 @@ const Vec3NumberRow: React.FC<{
   onChange: (next: StageVec3) => void
 }> = ({ label, value, axes = AXES, onChange }) => (
   <div>
-    <div className="mb-1 text-xs text-text-muted">{label}</div>
+    <div className="mb-1 text-xs text-text2">{label}</div>
     <div className="flex gap-1.5">
       {axes.map((axis) => (
         <NumberInput
@@ -201,17 +201,17 @@ const CameraSettingsSection: React.FC<{ object: StageCameraObject }> = ({ object
     return (
       <div className="flex flex-col gap-1.5">
         <div className="flex items-center justify-between">
-          <span className="text-xs text-text-muted">{label}</span>
+          <span className="text-xs text-text2">{label}</span>
           <UiSwitch checked={value.enabled} onCheckedChange={(enabled) => updateEffector(kind, { enabled })} />
         </div>
         {value.enabled && (
           <>
-            <label className="flex items-center gap-2 text-xs text-text-muted">
+            <label className="flex items-center gap-2 text-xs text-text2">
               <span className="w-10 shrink-0">强度</span>
               <UiRangeInput min={0} max={2} step={0.05} value={value.intensity}
                 onChange={(event) => updateEffector(kind, { intensity: Number(event.target.value) })} />
             </label>
-            <label className="flex items-center gap-2 text-xs text-text-muted">
+            <label className="flex items-center gap-2 text-xs text-text2">
               <span className="w-10 shrink-0">频率</span>
               <UiRangeInput min={0.05} max={3} step={0.05} value={value.frequency}
                 onChange={(event) => updateEffector(kind, { frequency: Number(event.target.value) })} />
@@ -226,7 +226,7 @@ const CameraSettingsSection: React.FC<{ object: StageCameraObject }> = ({ object
     <div className="flex flex-col gap-3">
       <SectionTitle>相机</SectionTitle>
       <div className="flex flex-col gap-1.5">
-        <div className="text-xs text-text-muted">旋转（°）</div>
+        <div className="text-xs text-text2">旋转（°）</div>
         <Vec3NumberRow
           label="X / Y / Z"
           value={cameraRotation}
@@ -234,7 +234,7 @@ const CameraSettingsSection: React.FC<{ object: StageCameraObject }> = ({ object
         />
       </div>
       <div className="flex flex-col gap-1.5">
-        <div className="text-xs text-text-muted">焦距（mm，全画幅等效）</div>
+        <div className="text-xs text-text2">焦距（mm，全画幅等效）</div>
         <div className="flex items-center gap-1.5">
           <UiRangeInput
             min={10}
@@ -259,7 +259,7 @@ const CameraSettingsSection: React.FC<{ object: StageCameraObject }> = ({ object
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <div className="text-xs text-text-muted">画幅比例</div>
+        <div className="text-xs text-text2">画幅比例</div>
         <div className="flex items-center gap-1.5">
           <Dropdown<StageCameraAspectRatioPreset>
             value={object.aspectRatio.preset}
@@ -279,12 +279,12 @@ const CameraSettingsSection: React.FC<{ object: StageCameraObject }> = ({ object
           )}
         </div>
         {!isPrimaryCamera && (
-          <div className="text-2xs text-text-muted">画幅由首个摄像机决定，如需更改请编辑首个摄像机</div>
+          <div className="text-2xs text-text2">画幅由首个摄像机决定，如需更改请编辑首个摄像机</div>
         )}
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <div className="text-xs text-text-muted">注视目标</div>
+        <div className="text-xs text-text2">注视目标</div>
         <Dropdown<LookAtMode>
           value={object.lookAt.mode}
           display={getLookAtModeDisplay(object.lookAt.mode)}
@@ -306,7 +306,7 @@ const CameraSettingsSection: React.FC<{ object: StageCameraObject }> = ({ object
         />
       ) : (
         <div className="flex flex-col gap-1.5">
-          <div className="text-xs text-text-muted">锁定对象</div>
+          <div className="text-xs text-text2">锁定对象</div>
           <Dropdown<string>
             value={selectedTarget?.id}
             display={selectedTarget?.name ?? '选择对象'}

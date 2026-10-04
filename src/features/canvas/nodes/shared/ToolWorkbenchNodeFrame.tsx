@@ -84,7 +84,7 @@ export function ToolWorkbenchNodeFrame({
         rightSlot={rightSlot}
       />
       <NodeLodPlaceholder title={title} icon={icon} />
-      <div className="canvas-node-lod-detail nodrag nowheel flex min-h-0 min-w-0 flex-1 overflow-hidden rounded-lg bg-bg-dark/45">
+      <div className="canvas-node-lod-detail nodrag nowheel flex min-h-0 min-w-0 flex-1 overflow-hidden rounded-lg bg-gap/45">
         {children}
       </div>
       {/* 图片输入属于节点外壳，不随内部编辑器的选中状态或模式卸载。 */}
@@ -144,13 +144,13 @@ export function ToolWorkbenchSourcePreview({
           draggable={false}
         />
       ) : (
-        <div className="flex flex-col items-center gap-2 px-6 text-center text-text-muted">
+        <div className="flex flex-col items-center gap-2 px-6 text-center text-text2">
           {icon}
           <span className="text-xs">{emptyText}</span>
         </div>
       )}
       {summary && (
-        <div className="pointer-events-none absolute bottom-2 left-2 right-2 rounded-lg bg-overlay px-2.5 py-1.5 text-2xs text-text-soft">
+        <div className="pointer-events-none absolute bottom-2 left-2 right-2 rounded-lg bg-overlay px-2.5 py-1.5 text-2xs text-text2">
           {summary}
         </div>
       )}

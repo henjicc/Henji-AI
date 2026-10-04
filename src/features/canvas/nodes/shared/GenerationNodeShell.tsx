@@ -418,7 +418,7 @@ export const GenerationNodeShell = memo(({
       <NodeLodPlaceholder title={resolvedTitle} icon={icon ?? <Sparkles className="h-6 w-6" />} />
 
       {resolvedLayoutMode === 'workbench' ? (
-        <div className="canvas-node-lod-detail grid min-h-0 min-w-0 flex-1 grid-cols-[minmax(0,1.35fr)_minmax(240px,0.65fr)] overflow-hidden rounded-lg bg-bg-dark/45"
+        <div className="canvas-node-lod-detail grid min-h-0 min-w-0 flex-1 grid-cols-[minmax(0,1.35fr)_minmax(240px,0.65fr)] overflow-hidden rounded-lg bg-gap/45"
           style={workbenchStageAspectRatio
             ? { gridTemplateColumns: `${Math.max(1, resolvedHeight - 18) * workbenchStageAspectRatio}px minmax(0,1fr)` }
             : workbenchInspectorWidth ? { gridTemplateColumns: `minmax(0,1fr) ${workbenchInspectorWidth}px` } : undefined}>

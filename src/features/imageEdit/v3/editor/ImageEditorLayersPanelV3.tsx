@@ -232,7 +232,7 @@ export function ImageEditorLayersPanelV3({
     <section data-layers-panel className="flex min-h-0 flex-1 flex-col">
       <div className="flex h-10 shrink-0 items-center gap-1 px-3">
         {embedded ? <div className="min-w-0 flex-1" /> : (
-          <h2 className="min-w-0 flex-1 truncate text-xs font-medium uppercase tracking-wider text-text-muted">
+          <h2 className="min-w-0 flex-1 truncate text-xs font-medium uppercase tracking-wider text-text2">
             {t('imageEditor.v3.layers.title')}
           </h2>
         )}
@@ -356,7 +356,7 @@ export function ImageEditorLayersPanelV3({
         className="ui-scrollbar min-h-0 flex-1 overflow-y-auto"
       >
         {rows.length === 0 ? (
-          <p className="px-4 py-8 text-center text-xs text-text-muted">
+          <p className="px-4 py-8 text-center text-xs text-text2">
             {t('imageEditor.v3.layers.empty')}
           </p>
         ) : rows.length > 50 ? (

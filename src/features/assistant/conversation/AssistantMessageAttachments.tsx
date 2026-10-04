@@ -17,7 +17,7 @@ export function AssistantMessageAttachments({ attachments }: { attachments: Agen
         const asset = resolved[index]?.asset
         const unavailable = !asset || asset.inspectionStatus !== 'ready'
         return (
-          <div key={attachment.mediaRef} className="min-w-0 overflow-hidden rounded-lg border border-border-dark bg-surface-dark">
+          <div key={attachment.mediaRef} className="min-w-0 overflow-hidden rounded-lg border border-line bg-raised">
             {!unavailable && attachment.modality === 'image' ? (
               <img src={asset.displayUrl} alt={attachment.displayName} className="h-24 w-full object-cover" />
             ) : !unavailable && attachment.modality === 'video' ? (

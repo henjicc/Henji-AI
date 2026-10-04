@@ -134,7 +134,7 @@ function ParameterSlider({
           }}
           onBlur={commit}
         />
-        <span className="w-14 shrink-0 text-right text-xs tabular-nums text-text-muted">
+        <span className="w-14 shrink-0 text-right text-xs tabular-nums text-text2">
           {draft.toFixed(2)}
         </span>
       </div>

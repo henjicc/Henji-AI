@@ -292,7 +292,7 @@ function CompactPanelControl({
   const display = formatPanelDisplayValue(value, param.panel ?? 'composite', i18n.language, param.config);
 
   if (!PanelComponent) {
-    return <span className="text-xs text-text-muted">{display}</span>;
+    return <span className="text-xs text-text2">{display}</span>;
   }
 
   const panelWidth = resolvePanelWidth(param.config, param.panel === 'resolution' ? 400 : 320);

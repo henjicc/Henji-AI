@@ -87,7 +87,7 @@ function GlowRangeField({
           onBlur={onCommit}
           onChange={(event) => onChange(Number(event.currentTarget.value))}
         />
-        <span className={`w-10 shrink-0 text-right text-text-dark ${UI_TEXT_META_CLASS}`}>
+        <span className={`w-10 shrink-0 text-right text-text1 ${UI_TEXT_META_CLASS}`}>
           {Math.round(value * 100)}%
         </span>
       </div>

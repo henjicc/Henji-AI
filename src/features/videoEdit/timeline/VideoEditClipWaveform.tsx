@@ -26,6 +26,6 @@ export const VideoEditClipWaveform = memo(function VideoEditClipWaveform({ clipI
     {ready && <div className={`pointer-events-none absolute bottom-0 flex flex-col ${lane === 'lower' ? 'h-1/2 bg-media-scrim' : 'top-0'}`} data-video-edit-waveform={clipId} data-waveform-lanes={lanes} style={{ left, width }}>
       {states.map((state, index) => <WaveformView key={index} waveform={state} startSeconds={startSeconds} endSeconds={endSeconds} tone="clip" className="min-h-0 flex-1" />)}
     </div>}
-    {error && <span className="pointer-events-none absolute bottom-0 text-2xs text-danger" title={error}>波形未能读取</span>}
+    {error && <span className="pointer-events-none absolute bottom-0 text-2xs text-danger-text" title={error}>波形未能读取</span>}
   </>
 })

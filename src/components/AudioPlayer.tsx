@@ -378,7 +378,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
         >
           {/* 音量数值 tooltip 是浮层，边框背景是其在波形上可读所必需的 */}
           {showVolumeValueTip && (
-            <div className="pointer-events-none absolute -top-6 left-1/2 -translate-x-1/2 rounded-md border border-border-dark/70 bg-surface-dark/95 px-1.5 py-0.5 text-2xs text-text-dark">
+            <div className="pointer-events-none absolute -top-6 left-1/2 -translate-x-1/2 rounded-md border border-line/70 bg-raised/95 px-1.5 py-0.5 text-2xs text-text1">
               {volumePercent}%
             </div>
           )}
@@ -438,7 +438,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
       tabIndex={0}
       onKeyDown={keyboardToggle}
     >
-      <div className={`${compact ? 'mb-1.5' : 'mb-2'} flex items-center justify-between text-xs text-text-soft`}>
+      <div className={`${compact ? 'mb-1.5' : 'mb-2'} flex items-center justify-between text-xs text-text2`}>
         <span>{format(currentTime)}</span>
         <span>{format(waveDuration ?? duration)}</span>
       </div>

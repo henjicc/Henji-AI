@@ -110,7 +110,7 @@ const ToolboxHome: React.FC = () => {
   }
 
   return (
-    <div className="h-full overflow-y-auto bg-app">
+    <div className="h-full overflow-y-auto bg-window">
       <UiRegion maxWidthClassName="max-w-5xl" className="mx-auto flex flex-col gap-10 p-10">
         <UiPageHeader title="工具" description="不依赖生成和画布、可以单独打开的处理工具" />
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -179,7 +179,7 @@ const ToolboxWorkspace: React.FC = () => {
           : activeTool.id === 'audioEdit'
             ? 'tool.audio_edit'
             : 'tool.image_edit'}
-        className="flex h-full flex-col bg-app"
+        className="flex h-full flex-col bg-window"
       >
         <div className="min-h-0 flex-1">
           <Suspense fallback={<UiLoading className="h-full" />}>

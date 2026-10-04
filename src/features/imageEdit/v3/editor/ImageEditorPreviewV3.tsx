@@ -513,9 +513,9 @@ export function ImageEditorPreviewV3({
       {!previewRenderer && (viewportComposite.diagnostic || managedPreview.diagnostic) ? (
         <div
           role="status"
-          className="ui-glass absolute left-1/2 top-3 flex max-w-[min(34rem,calc(100%-1.5rem))] -translate-x-1/2 items-start gap-2 rounded-lg px-3 py-2 text-xs text-text-dark"
+          className="ui-glass absolute left-1/2 top-3 flex max-w-[min(34rem,calc(100%-1.5rem))] -translate-x-1/2 items-start gap-2 rounded-lg px-3 py-2 text-xs text-text1"
         >
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning-text" aria-hidden="true" />
           <span className="whitespace-pre-line">
             {viewportComposite.diagnostic ?? managedPreview.diagnostic}
           </span>
@@ -525,9 +525,9 @@ export function ImageEditorPreviewV3({
         && layerMoveHandlers.unavailableReason !== 'select-one' ? (
         <div
           role="status"
-          className="ui-glass pointer-events-none absolute left-1/2 top-3 flex max-w-[min(34rem,calc(100%-1.5rem))] -translate-x-1/2 items-start gap-2 rounded-lg px-3 py-2 text-xs text-text-dark"
+          className="ui-glass pointer-events-none absolute left-1/2 top-3 flex max-w-[min(34rem,calc(100%-1.5rem))] -translate-x-1/2 items-start gap-2 rounded-lg px-3 py-2 text-xs text-text1"
         >
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning-text" aria-hidden="true" />
           <span>{t(`imageEditor.v3.moveTool.${layerMoveHandlers.unavailableReason}`)}</span>
         </div>
       ) : null}

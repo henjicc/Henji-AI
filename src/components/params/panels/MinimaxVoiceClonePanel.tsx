@@ -482,7 +482,7 @@ export const MinimaxVoiceClonePanel: React.FC<MinimaxVoiceClonePanelProps> = ({
           </div>
         </div>
 
-        <div className="mt-3 shrink-0 border-t border-border-dark pt-3">
+        <div className="mt-3 shrink-0 border-t border-line pt-3">
           <AudioPreviewCard
             title="试听结果预览"
             subtitle={hasResultPreview ? '克隆完成，已保存到音色库，可在“音色 ID”中选择使用' : undefined}

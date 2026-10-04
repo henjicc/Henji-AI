@@ -66,7 +66,7 @@ function SelectionShapeV3({ draft }: { draft: SelectionDraftV3 }): JSX.Element {
   const width = Math.abs(draft.end.x - draft.start.x)
   const height = Math.abs(draft.end.y - draft.start.y)
   const common = {
-    className: 'fill-brand-500/10 stroke-brand-300',
+    className: 'fill-accent/10 stroke-accent-text',
     strokeWidth: 1.5,
     strokeDasharray: '6 4',
     vectorEffect: 'non-scaling-stroke' as const,
@@ -318,7 +318,7 @@ export function ImageEditorSelectionMaskOverlayV3({
       {failure ? (
         <div
           role="alert"
-          className="ui-glass pointer-events-none absolute left-1/2 top-3 max-w-[min(34rem,calc(100%-1.5rem))] -translate-x-1/2 rounded-lg px-3 py-2 text-xs text-text-dark"
+          className="ui-glass pointer-events-none absolute left-1/2 top-3 max-w-[min(34rem,calc(100%-1.5rem))] -translate-x-1/2 rounded-lg px-3 py-2 text-xs text-text1"
         >
           {failure}
         </div>

@@ -87,7 +87,7 @@ export function openVideoEditPopoutWindow(panelKey: string, options: OpenVideoEd
   let closed = false
   const mirrored = new Map<Element, Element>()
   const container = target.createElement('div')
-  container.className = 'fixed inset-0 flex min-h-0 flex-col bg-app text-text-dark outline-none'
+  container.className = 'fixed inset-0 flex min-h-0 flex-col bg-window text-text1 outline-none'
   // 键盘事件必须从 portal 内的 React 节点发出，才能沿 React 树冒泡到剪辑工作区唯一的快捷键
   // 处理器；焦点落在子窗 body 时 Ctrl+Z 会走浏览器原生撤销，改写输入框产生新编辑。容器本身
   // 不是 React 节点（以它为目标的事件不会分发给 React），只在内容挂载前兜底可聚焦。

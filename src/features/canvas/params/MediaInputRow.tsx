@@ -352,7 +352,7 @@ export function MediaInputRow({
               />
             ) : mediaKind === 'video' ? (
               <span
-                className="flex h-7 cursor-pointer items-center gap-1 rounded-md border border-line bg-bg-dark/60 px-1.5 text-2xs text-text-muted"
+                className="flex h-7 cursor-pointer items-center gap-1 rounded-md border border-line bg-gap/60 px-1.5 text-2xs text-text2"
                 onDoubleClick={(event) => {
                   event.stopPropagation();
                   setViewerVideoUrl(resolveImageDisplayUrl(url));
@@ -362,7 +362,7 @@ export function MediaInputRow({
                 {resolveFileName(url)}
               </span>
             ) : (
-              <span className="flex h-7 items-center gap-1 rounded-md border border-line bg-bg-dark/60 px-1.5 text-2xs text-text-muted">
+              <span className="flex h-7 items-center gap-1 rounded-md border border-line bg-gap/60 px-1.5 text-2xs text-text2">
                 <Icon className="h-3 w-3 shrink-0" />
                 {resolveFileName(url)}
               </span>

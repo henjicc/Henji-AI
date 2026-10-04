@@ -281,10 +281,10 @@ export default function AgentSkillsSection(): JSX.Element {
           onDragLeave={() => setDragging(false)}
           onDrop={handleDrop}
           className={`rounded-lg px-3 py-4 text-center transition-colors ${
-            dragging ? 'bg-layer' : 'bg-app/40'
+            dragging ? 'bg-hover' : 'bg-window/40'
           }`}
         >
-          <Package size={18} className="mx-auto mb-2 text-text-muted" />
+          <Package size={18} className="mx-auto mb-2 text-text2" />
           <p className={UI_TEXT_META_CLASS}>
             把 .md 或 .zip 拖到这里，或点下面的按钮选择文件。只有 .md 与 .txt 会被安装，脚本和二进制文件一律丢弃。
           </p>

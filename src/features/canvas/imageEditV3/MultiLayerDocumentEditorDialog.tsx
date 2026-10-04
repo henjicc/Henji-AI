@@ -228,7 +228,7 @@ export function MultiLayerDocumentEditorDialog({
           </UiIconButton>
         )}
         toolbarActions={closing ? (
-          <span role="status" className="text-xs text-text-muted">
+          <span role="status" className="text-xs text-text2">
             {t('toolDialog.imageEditorV3.closing')}
           </span>
         ) : (

@@ -112,7 +112,7 @@ export function VideoViewerControls({
               style={{
                 left: `${(trimRange.start / videoDuration) * 100}%`,
                 width: `${((trimRange.end - trimRange.start) / videoDuration) * 100}%`,
-                background: 'rgba(var(--text1-rgb),0.25)',
+                background: 'rgb(var(--on-media-rgb) / 0.25)',
               }}
             />
           )}
@@ -204,7 +204,7 @@ export function VideoViewerControls({
         </div>
       </div>
       {isBuffering && (
-        <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-xs text-text-soft">
+        <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-xs text-text2">
           {t('ui:workspace.status.buffering')}
         </div>
       )}

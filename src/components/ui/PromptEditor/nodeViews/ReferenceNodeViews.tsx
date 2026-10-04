@@ -71,7 +71,7 @@ export function MediaReferenceNodeView({
           ? 'border-accent bg-accent-tint text-text1'
           : reference
             ? 'border-transparent bg-selected text-text2'
-            : 'border-danger/50 bg-raised text-danger-text'
+            : 'border-danger-text/50 bg-raised text-danger-text'
       }`}
       data-prompt-media-reference=""
       data-reference-id={attrs.resourceId}
@@ -87,7 +87,7 @@ export function MediaReferenceNodeView({
           draggable={false}
         />
       ) : (
-        <span className="inline-flex h-[1.25em] min-w-[1.25em] items-center justify-center rounded bg-surface-dark px-1 text-[0.65em] text-text-muted">
+        <span className="inline-flex h-[1.25em] min-w-[1.25em] items-center justify-center rounded bg-raised px-1 text-[0.65em] text-text2">
           {attrs.mediaType}
         </span>
       )}
@@ -115,7 +115,7 @@ export function TemplateVariableNodeView({
           ? 'border-accent bg-accent-tint text-text1'
           : variable
             ? 'border-transparent bg-selected text-text2'
-            : 'border-danger/50 bg-raised text-danger-text'
+            : 'border-danger-text/50 bg-raised text-danger-text'
       }`}
       data-prompt-template-variable=""
       data-variable-key={attrs.key}

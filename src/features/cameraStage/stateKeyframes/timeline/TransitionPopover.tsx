@@ -74,19 +74,19 @@ const TransitionPopover: React.FC<TransitionPopoverProps> = ({
 
   return (
     <div className="flex max-h-full flex-col gap-3 overflow-y-auto p-3">
-      <div className="text-xs font-medium text-text-dark">
+      <div className="text-xs font-medium text-text1">
         关键帧 {stateKeyframeIndex + 1} → 关键帧 {stateKeyframeIndex + 2}
       </div>
 
       {camerasDiffer && (
-        <div className="rounded-md border border-border-dark bg-layer/60 px-2 py-1.5 text-2xs leading-5 text-text-muted">
+        <div className="rounded-md border border-line bg-hover/60 px-2 py-1.5 text-2xs leading-5 text-text2">
           机位切换：{cameraDisplayName(objects, stateKeyframe.cameraId)} → {cameraDisplayName(objects, nextStateKeyframe.cameraId)}。
           区间末端执行硬切；需要连续运镜时，请把两侧机位改为相同。
         </div>
       )}
 
       <div className="flex flex-wrap items-end gap-3">
-        <label className="flex flex-col gap-1 text-2xs text-text-muted">
+        <label className="flex flex-col gap-1 text-2xs text-text2">
           时长（帧）
           <UiInput
             type="number"
@@ -108,25 +108,25 @@ const TransitionPopover: React.FC<TransitionPopoverProps> = ({
       </div>
 
       {!camerasDiffer && durationFrames === 0 && (
-        <div className="text-2xs leading-5 text-text-muted">
+        <div className="text-2xs leading-5 text-text2">
           0 帧表示硬切；增加时长后即可编辑过渡路径。
         </div>
       )}
 
-      <div className="border-t border-border-dark pt-2">
-        <div className="mb-1 text-2xs text-text-muted">变化对象</div>
+      <div className="border-t border-line pt-2">
+        <div className="mb-1 text-2xs text-text2">变化对象</div>
         {changedObjects.length === 0 ? (
-          <div className="py-3 text-center text-xs text-text-muted">这两个关键帧之间没有变化</div>
+          <div className="py-3 text-center text-xs text-text2">这两个关键帧之间没有变化</div>
         ) : (
           <div className="grid gap-1">
             {changedObjects.map((object) => {
               const Icon = object.type === 'camera' ? Camera : object.type === 'character' ? UserRound : Cuboid
               return (
-                <div key={object.id} className="flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-layer/60">
-                  <Icon size={13} className="shrink-0 text-text-muted" />
+                <div key={object.id} className="flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-hover/60">
+                  <Icon size={13} className="shrink-0 text-text2" />
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-xs text-text-dark">{object.name}</div>
-                    <div className="truncate text-2xs text-text-muted">
+                    <div className="truncate text-xs text-text1">{object.name}</div>
+                    <div className="truncate text-2xs text-text2">
                       {detailSummary(stateKeyframe.transition.perObject[object.id] ?? {})}
                     </div>
                   </div>

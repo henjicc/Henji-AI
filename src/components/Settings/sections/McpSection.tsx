@@ -49,7 +49,7 @@ export default function McpSection(): React.JSX.Element {
       </UiFormRow>
       {status.connections.map((connection) => <UiFormRow key={connection.id} label={connection.name} inline>
         <div className="flex items-center gap-2">
-          <span className="text-xs text-text-muted">{[t(connection.allowDestructive ? 'mcp.accessDelete' : connection.allowWrites ? 'mcp.accessWrite' : 'mcp.accessRead'), ...(connection.allowPaid ? [t('mcp.accessPaid')] : [])].join(' · ')}</span>
+          <span className="text-xs text-text2">{[t(connection.allowDestructive ? 'mcp.accessDelete' : connection.allowWrites ? 'mcp.accessWrite' : 'mcp.accessRead'), ...(connection.allowPaid ? [t('mcp.accessPaid')] : [])].join(' · ')}</span>
           <UiButton variant="secondary" disabled={busy} onClick={() => void act(async () => {
             const value = await getMcpConnectionService().connectionConfig({ id: connection.id })
             setConfig(value)
@@ -58,7 +58,7 @@ export default function McpSection(): React.JSX.Element {
           <UiButton variant="secondary" disabled={busy} onClick={() => void act(async () => { await getMcpConnectionService().revoke({ id: connection.id }); setConfig('') })}>{t('mcp.revoke')}</UiButton>
         </div>
       </UiFormRow>)}
-      {config && <pre data-observation-sensitive className="overflow-auto whitespace-pre-wrap break-all text-xs text-text-muted">{config}</pre>}
+      {config && <pre data-observation-sensitive className="overflow-auto whitespace-pre-wrap break-all text-xs text-text2">{config}</pre>}
     </>}
   </>
 }

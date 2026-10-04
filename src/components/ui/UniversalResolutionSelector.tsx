@@ -287,7 +287,7 @@ const UniversalResolutionSelector: React.FC<UniversalResolutionSelectorProps> = 
                   }}
                   size="lg"
                 />
-                <span className="text-xs text-text-muted whitespace-nowrap">PX</span>
+                <span className="text-xs text-text2 whitespace-nowrap">PX</span>
               </div>
               <div className={`mt-1 ${UI_TEXT_META_CLASS}`}>
                 {t('resolutionPanel.baseSizeHint', { min: baseSizeMin, max: baseSizeMax })}
@@ -376,7 +376,7 @@ const UniversalResolutionSelector: React.FC<UniversalResolutionSelectorProps> = 
                     max={8192}
                   />
                 </div>
-                <ArrowLeftRight className="w-4 h-4 text-text-muted" />
+                <ArrowLeftRight className="w-4 h-4 text-text2" />
                 <div className="flex-1">
                   <UiInput
                     type="number"
@@ -389,7 +389,7 @@ const UniversalResolutionSelector: React.FC<UniversalResolutionSelectorProps> = 
                     max={8192}
                   />
                 </div>
-                <span className="text-xs text-text-muted">PX</span>
+                <span className="text-xs text-text2">PX</span>
               </div>
             </div>
           )}

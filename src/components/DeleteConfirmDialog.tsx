@@ -41,7 +41,7 @@ export function DeleteConfirmDialog({
         </>
       }
     >
-      <div className="text-sm text-text-dark">{message}</div>
+      <div className="text-sm text-text1">{message}</div>
     </UiModal>
   );
 }

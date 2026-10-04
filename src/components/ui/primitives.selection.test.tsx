@@ -52,8 +52,8 @@ describe('Ui primitives 选中态词汇表', () => {
     expectClasses(vertical, UI_NAV_INDICATOR_END_CLASS);
     expectClasses(horizontal, UI_NAV_ITEM_ACTIVE_CLASS);
     expectClasses(horizontal, UI_NAV_INDICATOR_BOTTOM_CLASS);
-    expect(vertical.classList.contains('bg-surface-dark')).toBe(false);
-    expect(horizontal.classList.contains('bg-surface-dark')).toBe(false);
+    expect(vertical.classList.contains('bg-raised')).toBe(false);
+    expect(horizontal.classList.contains('bg-raised')).toBe(false);
   });
 
   it('克制型横向导航只收紧自身底色与指示条', () => {
@@ -71,7 +71,7 @@ describe('Ui primitives 选中态词汇表', () => {
 
     expectClasses(defaultNavigation, UI_NAV_ITEM_ACTIVE_CLASS);
     expectClasses(defaultNavigation, UI_NAV_INDICATOR_BOTTOM_CLASS);
-    expect(defaultNavigation.classList.contains('bg-surface-dark')).toBe(false);
+    expect(defaultNavigation.classList.contains('bg-raised')).toBe(false);
     expectClasses(subtleNavigation, UI_NAV_ITEM_ACTIVE_SUBTLE_CLASS);
     expectClasses(subtleNavigation, UI_NAV_INDICATOR_BOTTOM_SUBTLE_CLASS);
     expect(subtleNavigation.className).not.toMatch(/(?:^|\s)bg-/);
@@ -205,7 +205,7 @@ describe('Ui primitives 选中态词汇表', () => {
     const idleOption = view.getByRole('button', { name: '静息选项' });
     expect(idleOption.classList.contains(UI_GLASS_ADAPTIVE_OPTION_CLASS)).toBe(true);
     expect(idleOption.classList.contains(UI_GLASS_ADAPTIVE_CONTROL_CLASS)).toBe(false);
-    expect(idleOption.classList.contains('bg-surface-dark')).toBe(false);
+    expect(idleOption.classList.contains('bg-raised')).toBe(false);
     expect(view.getByRole('button', { name: '选中选项' }).classList.contains(UI_GLASS_ADAPTIVE_CONTROL_CLASS)).toBe(false);
     // 纯文字标签：静息一圈发丝线，悬停交给玻璃自适应的 option 底（不铺控件实底）
     expect(view.getByRole('button', { name: '静息标签' }).classList.contains(UI_GLASS_ADAPTIVE_OPTION_CLASS)).toBe(true);

@@ -222,9 +222,9 @@ export function ModelPickerList({
           </div>
         </div>
       )}
-      <div data-model-picker-static-header className="shrink-0 space-y-2 border-b border-border-dark/70 pb-2">
+      <div data-model-picker-static-header className="shrink-0 space-y-2 border-b border-line/70 pb-2">
         <div className="relative">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text-muted" />
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text2" />
           <UiInput
             ref={searchInputRef}
             type="text"
@@ -450,7 +450,7 @@ export function ModelPickerList({
           );
         })}
         {filteredModels.length === 0 && (
-          <div className="px-3 py-8 text-center text-xs text-text-muted">
+          <div className="px-3 py-8 text-center text-xs text-text2">
             {emptyMessage ?? t('modelParams.noModels', { defaultValue: '没有匹配的模型' })}
           </div>
         )}

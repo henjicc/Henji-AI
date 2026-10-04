@@ -419,7 +419,7 @@ export function ImageEditorRasterBrushOverlayV3({
       {failure ? (
         <div
           role="alert"
-          className="ui-glass pointer-events-none absolute left-1/2 top-3 max-w-[min(34rem,calc(100%-1.5rem))] -translate-x-1/2 rounded-lg px-3 py-2 text-xs text-text-dark"
+          className="ui-glass pointer-events-none absolute left-1/2 top-3 max-w-[min(34rem,calc(100%-1.5rem))] -translate-x-1/2 rounded-lg px-3 py-2 text-xs text-text1"
         >
           {failure}
         </div>

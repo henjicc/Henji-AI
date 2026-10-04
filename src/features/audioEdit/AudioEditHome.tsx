@@ -42,7 +42,7 @@ export function AudioEditHome({ projects, loading, loadFailed, disabled, onBack,
   )
 
   return (
-    <div className="h-full overflow-y-auto bg-app p-6">
+    <div className="h-full overflow-y-auto bg-window p-6">
       <UiRegion maxWidthClassName="max-w-6xl" className="mx-auto flex min-h-full flex-col">
         <UiPageHeader
           title="口播剪辑"
@@ -68,7 +68,7 @@ export function AudioEditHome({ projects, loading, loadFailed, disabled, onBack,
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h3 className={UI_TEXT_LABEL_CLASS}>我的工程 <span className={UI_TEXT_META_CLASS}>（{projects.length}）</span></h3>
               <div className="relative w-full sm:w-72">
-                <Search size={16} aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
+                <Search size={16} aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text2" />
                 <UiInput aria-label="搜索工程" placeholder="搜索工程" className="pl-9" value={query} onChange={(event) => { setQuery(event.target.value); setPage(0) }} />
               </div>
             </div>

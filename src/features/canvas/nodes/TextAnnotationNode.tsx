@@ -167,26 +167,26 @@ export const TextAnnotationNode = memo(({
           textHistory={contentTextHistory}
           onBlur={() => setIsEditing(false)}
           placeholder={t('node.textAnnotation.placeholder')}
-          className="nodrag nowheel h-full w-full border-none bg-transparent px-1 py-0.5 text-sm leading-6 text-text-dark outline-none placeholder:text-text3"
+          className="nodrag nowheel h-full w-full border-none bg-transparent px-1 py-0.5 text-sm leading-6 text-text1 outline-none placeholder:text-text3"
         />
       ) : (
         <div
-          className="nodrag nowheel h-full w-full overflow-auto px-1 py-0.5 text-sm leading-6 text-text-dark"
+          className="nodrag nowheel h-full w-full overflow-auto px-1 py-0.5 text-sm leading-6 text-text1"
           onClick={handleContentClick}
         >
           {reasoningContent.trim().length > 0 ? (
             <div className="space-y-3">
               <section aria-label={t('node.textAnnotation.reasoning')}>
-                <div className="sticky top-0 flex items-center gap-1.5 bg-surface-dark/95 py-0.5 text-xs text-text-muted">
+                <div className="sticky top-0 flex items-center gap-1.5 bg-raised/95 py-0.5 text-xs text-text2">
                   <LoaderCircle className="h-3.5 w-3.5 shrink-0 animate-spin" />
                   <span>{t('node.textAnnotation.reasoning')}</span>
                 </div>
-                <div className="mt-1 whitespace-pre-wrap break-words text-text-muted">
+                <div className="mt-1 whitespace-pre-wrap break-words text-text2">
                   {reasoningContent}
                 </div>
               </section>
               {displayContent.trim().length > 0 && (
-                <div className="border-t border-border-dark pt-2 text-text-dark">
+                <div className="border-t border-line pt-2 text-text1">
                   {shouldRenderMarkdown ? (
                     <TextAnnotationMarkdown content={displayContent} />
                   ) : (
@@ -202,12 +202,12 @@ export const TextAnnotationNode = memo(({
               <div className="whitespace-pre-wrap break-words">{displayContent}</div>
             )
           ) : isGenerating ? (
-            <div className="flex h-full items-center justify-center gap-2 text-text-muted">
+            <div className="flex h-full items-center justify-center gap-2 text-text2">
               <LoaderCircle className="h-4 w-4 animate-spin" />
               <span>{t('node.textAnnotation.generating')}</span>
             </div>
           ) : (
-            <div className="pt-1 text-text-muted">{t('node.textAnnotation.empty')}</div>
+            <div className="pt-1 text-text2">{t('node.textAnnotation.empty')}</div>
           )}
         </div>
       )}

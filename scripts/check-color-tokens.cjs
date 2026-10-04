@@ -90,13 +90,13 @@ const SEMANTIC_RULES = {
 };
 
 /** 已清零、不可再登记的语义规则：登记文件里出现即失败。 */
-const NON_REGISTRABLE_RULES = new Set(['palette', 'mono', 'named']);
+const NON_REGISTRABLE_RULES = new Set(['palette', 'mono', 'named', 'legacy']);
 /**
  * 可登记规则的登记总数上限（只能下调）。
- * - rgba：剪辑引擎验收探针里的着色器源码文本（非界面色）；
- * - legacy：4.2 别名迁移前的过渡存量（迁移完成后改为 0 并移入 NON_REGISTRABLE_RULES）。
+ * - rgba：剪辑引擎验收探针里的着色器源码文本（非界面色）。
+ * legacy 已在 4.2 迁移清零并移入 NON_REGISTRABLE_RULES，上限为 0。
  */
-const ALLOWLIST_CEILING = { rgba: 1, legacy: 632 };
+const ALLOWLIST_CEILING = { rgba: 1, legacy: 0 };
 
 // 已删除的旧 CSS 变量别名（1.1 第七节 → 4.2 删除）。--danger/success/warning-rgb 现在是实底三元组，不在此列。
 const legacyCssVarPattern =

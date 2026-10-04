@@ -66,7 +66,7 @@ function LegacyViewerMarkEditor({
 
   return (
     /* 全屏编辑宿主:编辑器铺满,不靠外层留白把它衬成一张浮起来的卡 */
-    <div className="h-full w-full bg-app">
+    <div className="h-full w-full bg-window">
       <ImageEditor
         key={sourceUrl}
         sourceImageUrl={sourceUrl}

@@ -124,7 +124,7 @@ export function ImageEditorLayerTransformPropertiesV3({
         ))}
       </div>
       {invalid ? (
-        <p role="status" className="text-xs text-warning">
+        <p role="status" className="text-xs text-warning-text">
           {t('imageEditor.v3.properties.transformSingular')}
         </p>
       ) : null}

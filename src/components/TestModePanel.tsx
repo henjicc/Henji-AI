@@ -115,7 +115,7 @@ const TestModePanel: React.FC<TestModePanelProps> = ({
 
         {/* 测试模式开关 */}
         <div className="mb-6">
-          <div className="flex items-center justify-between p-4 rounded-lg bg-app/40">
+          <div className="flex items-center justify-between p-4 rounded-lg bg-window/40">
             <div>
               <div className={UI_TEXT_PANEL_TITLE_CLASS}>{t('testMode.enable.title')}</div>
               <div className={`mt-1 ${UI_TEXT_META_CLASS}`}>
@@ -135,7 +135,7 @@ const TestModePanel: React.FC<TestModePanelProps> = ({
         {/* 标签页切换 */}
         {state.enabled && (
           <div className="mb-6">
-            <div className="flex gap-2 border-b border-border-dark/50">
+            <div className="flex gap-2 border-b border-line/50">
               <UiChipButton
                 type="button"
                 active={activeTab === 'options'}
@@ -165,7 +165,7 @@ const TestModePanel: React.FC<TestModePanelProps> = ({
             <div className="space-y-3">
               {/* 跳过请求 */}
               <div
-                className="flex items-center justify-between p-3 rounded-lg bg-app/40 cursor-pointer hover:bg-app/60 transition-colors"
+                className="flex items-center justify-between p-3 rounded-lg bg-window/40 cursor-pointer hover:bg-window/60 transition-colors"
                 onClick={() => handleToggleOption('skipRequest')}
               >
                 <div>
@@ -183,7 +183,7 @@ const TestModePanel: React.FC<TestModePanelProps> = ({
 
               {/* 输出参数 */}
               <div
-                className="flex items-center justify-between p-3 rounded-lg bg-app/40 cursor-pointer hover:bg-app/60 transition-colors"
+                className="flex items-center justify-between p-3 rounded-lg bg-window/40 cursor-pointer hover:bg-window/60 transition-colors"
                 onClick={() => handleToggleOption('logParams')}
               >
                 <div>
@@ -201,7 +201,7 @@ const TestModePanel: React.FC<TestModePanelProps> = ({
 
               {/* 开发者工具 */}
               <div
-                className="flex items-center justify-between p-3 rounded-lg bg-app/40 cursor-pointer hover:bg-app/60 transition-colors"
+                className="flex items-center justify-between p-3 rounded-lg bg-window/40 cursor-pointer hover:bg-window/60 transition-colors"
                 onClick={() => handleToggleOption('enableDevTools')}
               >
                 <div>
@@ -219,7 +219,7 @@ const TestModePanel: React.FC<TestModePanelProps> = ({
 
               {/* 参数流转追踪 */}
               <div
-                className="flex items-center justify-between p-3 rounded-lg bg-app/40 cursor-pointer hover:bg-app/60 transition-colors"
+                className="flex items-center justify-between p-3 rounded-lg bg-window/40 cursor-pointer hover:bg-window/60 transition-colors"
                 onClick={() => setShowFlowTracking(prev => !prev)}
               >
                 <div>
@@ -263,7 +263,7 @@ const TestModePanel: React.FC<TestModePanelProps> = ({
         {state.enabled && activeTab === 'options' && (
           <div>
             <h3 className={`mb-3 ${UI_TEXT_SECTION_CLASS}`}>{t('testMode.logsWindow.title')}</h3>
-            <div className="flex items-center justify-between p-3 rounded-lg bg-app/40">
+            <div className="flex items-center justify-between p-3 rounded-lg bg-window/40">
               <div className={UI_TEXT_META_CLASS}>{t('testMode.logsWindow.description')}</div>
               <UiButton variant="secondary" type="button" onClick={() => void openLogWindow()}>
                 {t('testMode.logsWindow.openButton')}

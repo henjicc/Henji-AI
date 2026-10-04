@@ -221,7 +221,7 @@ const ProviderCenterSection = ({ llm }: ProviderCenterSectionProps): JSX.Element
       <UiPanel variant="inset" className="flex min-h-0 flex-col overflow-hidden p-2">
         <div className="flex min-h-0 flex-1 flex-col gap-2">
           <div className="relative">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-soft" />
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text2" />
             <UiInput value={providerSearch} onChange={event => setProviderSearch(event.target.value)} className="pl-9" placeholder={t('providerCenter.searchPlaceholder')} />
           </div>
           <div className="ui-scrollbar min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain">
@@ -231,7 +231,7 @@ const ProviderCenterSection = ({ llm }: ProviderCenterSectionProps): JSX.Element
               </UiOptionButton>
             ))}
           </div>
-          <div className="border-t border-border-dark pt-2">
+          <div className="border-t border-line pt-2">
             <UiButton type="button" variant="primary" className="w-full" onClick={() => { setProviderDialogCreate(true); setProviderDialogOpen(true) }}>
               <Plus size={15} className="mr-1.5" />
               {t('providerCenter.actions.addProvider')}
@@ -268,7 +268,7 @@ const ProviderCenterSection = ({ llm }: ProviderCenterSectionProps): JSX.Element
             </div>
           </div>
 
-          <div className="border-t border-border-dark pt-5">
+          <div className="border-t border-line pt-5">
             <div className={`mb-3 ${UI_TEXT_LABEL_CLASS}`}>{t('providerCenter.apiKey')}</div>
             {(selected.generationProviders?.length ?? 0) > 1 ? (
               <div className="space-y-4">
@@ -304,7 +304,7 @@ const ProviderCenterSection = ({ llm }: ProviderCenterSectionProps): JSX.Element
             ) : <div className={UI_TEXT_BODY_CLASS}>{t('providerCenter.noCredential')}</div>}
           </div>
 
-          <div className="border-t border-border-dark pt-5">
+          <div className="border-t border-line pt-5">
             <div className="mb-4 flex items-center justify-between gap-3">
               <div className={UI_TEXT_LABEL_CLASS}>{t('providerCenter.models')}</div>
               <div className="flex items-center gap-2">

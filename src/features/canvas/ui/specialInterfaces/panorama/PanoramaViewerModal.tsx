@@ -194,7 +194,7 @@ export function PanoramaViewerModal({
       ref={rootRef}
       data-panorama-viewer="true"
       data-panorama-view-mode={renderSphere ? 'sphere' : 'flat'}
-      className={/* ui-surface-allow: 全屏沉浸式媒体查看器，铺满视口，不是 UiModal 的居中卡片语义 */ `fixed ${UI_CONTENT_OVERLAY_INSET_CLASS} z-viewer overflow-hidden bg-bg-dark`}
+      className={/* ui-surface-allow: 全屏沉浸式媒体查看器，铺满视口，不是 UiModal 的居中卡片语义 */ `fixed ${UI_CONTENT_OVERLAY_INSET_CLASS} z-viewer overflow-hidden bg-gap`}
       style={{
         opacity: overlayOpacity,
         transition: uiTransition(['opacity'], UI_DURATION.viewer),
@@ -231,7 +231,7 @@ export function PanoramaViewerModal({
         ) : null}
 
         {viewMode === 'sphere' && resource.status === 'loading' ? (
-          <UiLoading message={t('viewer.panorama.loading')} className="h-full text-text-muted" />
+          <UiLoading message={t('viewer.panorama.loading')} className="h-full text-text2" />
         ) : null}
 
         {viewMode === 'sphere' && resource.status === 'error' ? (
@@ -347,7 +347,7 @@ export function PanoramaViewerModal({
       ) : null}
 
       {downloadFailed ? (
-        <div className="ui-glass pointer-events-none absolute bottom-5 right-5 z-sticky rounded-full px-4 py-2 text-xs text-danger">
+        <div className="ui-glass pointer-events-none absolute bottom-5 right-5 z-sticky rounded-full px-4 py-2 text-xs text-danger-text">
           {t('viewer.panorama.downloadFailed')}
         </div>
       ) : null}

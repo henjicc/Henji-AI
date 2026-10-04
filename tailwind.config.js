@@ -166,8 +166,8 @@ export default {
       // 例如 --control-hover → bg-control-hover、--text2 → text-text2、--on-accent → text-on-accent、
       // --media-line → border-media-line。唯一例外见 clip.title。
       //
-      // 旧类名（bg-app / bg-surface-dark / text-text-muted / bg-brand-500 …）保留为别名，直接指向
-      // 1.1 映射表里的新令牌；调用点迁移由 2.x/3.x 按用途完成，4.2 删除别名。
+      // 1.3 的旧类名别名（bg-app / bg-surface-dark / text-text-muted / bg-brand-500 …）已在 4.2 删除，
+      // check:colors 的 legacy 规则拦截它们再次出现。
       colors: {
         // —— 表面 ——
         gap: withOpacity('--gap-rgb'),
@@ -210,25 +210,7 @@ export default {
         text2: withOpacity('--text2-rgb'),
         text3: withOpacity('--text3-rgb'),
         text: {
-          // 旧别名：text-text-dark → text1
-          DEFAULT: withOpacity('--text1-rgb'),
-          dark: withOpacity('--text1-rgb'),
           disabled: withOpacity('--text-disabled-rgb'),
-        },
-        // 旧别名：说明/图标默认色 → text2；元信息与占位应由调用点改 text3
-        'text-muted': {
-          DEFAULT: withOpacity('--text2-rgb'),
-          dark: withOpacity('--text2-rgb'),
-        },
-        // 旧别名：次要正文 → text2
-        'text-soft': {
-          DEFAULT: withOpacity('--text2-rgb'),
-          dark: withOpacity('--text2-rgb'),
-        },
-        // 旧别名：占位、弱提示 → text3
-        'text-faint': {
-          DEFAULT: withOpacity('--text3-rgb'),
-          dark: withOpacity('--text3-rgb'),
         },
         // —— 强调 ——（accent 实底不能直接压文字，文字用 accent-text，实底上的字用 on-accent）
         accent: {
@@ -242,10 +224,9 @@ export default {
           tint: cssVar('--accent-tint'),
         },
         // —— 状态 ——
-        // 过渡期：danger/success/warning 的 DEFAULT 是旧别名，指向 *-text（旧用法以文字为主），
-        // 实底用 *-solid。4.2 删除旧别名后 DEFAULT 回到实底（与 --danger 同名），*-solid 随之合并。
+        // 不设 DEFAULT：实底用 *-solid，文字用 *-text，浅底用 *-tint（4.2 删除了指向 *-text 的过渡别名，
+        // 不恢复为实底，避免不带后缀的 text-danger 一类写法在旧义“文字色”与新义“实底”之间混淆）。
         danger: {
-          DEFAULT: withOpacity('--danger-text-rgb'),
           solid: cssVar('--danger'),
           hi: withOpacity('--danger-hi-rgb'),
           hover: withOpacity('--danger-hover-rgb'),
@@ -255,13 +236,11 @@ export default {
           tint: cssVar('--danger-tint'),
         },
         success: {
-          DEFAULT: withOpacity('--success-text-rgb'),
           solid: cssVar('--success'),
           text: withOpacity('--success-text-rgb'),
           tint: cssVar('--success-tint'),
         },
         warning: {
-          DEFAULT: withOpacity('--warning-text-rgb'),
           solid: cssVar('--warning'),
           text: withOpacity('--warning-text-rgb'),
           tint: cssVar('--warning-tint'),
@@ -290,32 +269,6 @@ export default {
           DEFAULT: withOpacity('--wave-rgb'),
           played: withOpacity('--wave-played-rgb'),
           cut: withOpacity('--wave-cut-rgb'),
-        },
-        // —— 旧别名（1.1 第七节映射；4.2 删除）——
-        // bg-bg-dark → gap（媒体/视口由调用点改 media）
-        bg: {
-          DEFAULT: withOpacity('--gap-rgb'),
-          dark: withOpacity('--gap-rgb'),
-        },
-        // bg-surface-dark → raised（按钮由 2.1 改 control，悬停改 hover）
-        surface: {
-          DEFAULT: withOpacity('--raised-rgb'),
-          dark: withOpacity('--raised-rgb'),
-        },
-        // border-border-dark → line（更强分区由调用点改 line-strong）
-        border: {
-          DEFAULT: withOpacity('--line-rgb'),
-          dark: withOpacity('--line-rgb'),
-        },
-        // bg-app → window
-        app: withOpacity('--window-rgb'),
-        // bg-layer → hover（选中由调用点改 selected）
-        layer: withOpacity('--hover-rgb'),
-        brand: {
-          300: withOpacity('--accent-text-rgb'),
-          500: withOpacity('--accent-rgb'),
-          600: withOpacity('--accent-pressed-rgb'),
-          700: withOpacity('--accent-pressed-rgb'),
         },
         // 白色半透明「薄纱」层：画布节点边框、玻璃质感底色、渐变高光统一走这套档位。
         // 固定白色，只适合压在媒体/深色画布上；界面面上的边与底由 2.x/3.6 按位置改

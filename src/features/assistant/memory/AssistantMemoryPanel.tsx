@@ -96,7 +96,7 @@ export function AssistantMemoryPanel(): JSX.Element {
 
   return (
     <section className="flex min-h-0 flex-1 flex-col">
-      <div className="flex h-10 shrink-0 items-center gap-2 border-b border-border-dark px-3">
+      <div className="flex h-10 shrink-0 items-center gap-2 border-b border-line px-3">
         <BrainCircuit className="h-3.5 w-3.5 text-accent" />
         <span className={`flex-1 ${UI_TEXT_PANEL_TITLE_CLASS}`}>助手记忆</span>
         <UiIconButton
@@ -130,7 +130,7 @@ export function AssistantMemoryPanel(): JSX.Element {
                   disabled={busyId !== null}
                 />
               </div>
-              <div className="mt-2 flex items-center justify-between gap-3 border-t border-border-dark pt-2">
+              <div className="mt-2 flex items-center justify-between gap-3 border-t border-line pt-2">
                 <span className={UI_TEXT_META_CLASS}>历史条目默认保留时间</span>
                 <Dropdown<number>
                   value={state.settings.defaultTtlDays}

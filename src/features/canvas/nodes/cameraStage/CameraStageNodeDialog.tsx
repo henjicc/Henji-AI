@@ -121,12 +121,12 @@ export function CameraStageNodeDialog(): JSX.Element | null {
     >
       <div className="h-full overflow-hidden">
         {loading ? (
-          <div className="flex h-full items-center justify-center text-sm text-text-muted">
+          <div className="flex h-full items-center justify-center text-sm text-text2">
             加载 3D 镜头参考…
           </div>
         ) : (
           <Suspense fallback={(
-            <div className="flex h-full items-center justify-center text-sm text-text-muted">
+            <div className="flex h-full items-center justify-center text-sm text-text2">
               加载 3D 镜头参考…
             </div>
           )}>

@@ -77,7 +77,7 @@ const UpdateDialog: React.FC<UpdateDialogProps> = ({ releaseInfo, currentVersion
   // 解析更新说明（Markdown 格式）
   const renderReleaseNotes = () => {
     if (!releaseInfo.body) {
-      return <p className="text-text-muted text-sm">{t('updateDialog.noNotes')}</p>
+      return <p className="text-text2 text-sm">{t('updateDialog.noNotes')}</p>
     }
 
     // 简单的 Markdown 解析（支持标题、列表、粗体）
@@ -103,7 +103,7 @@ const UpdateDialog: React.FC<UpdateDialogProps> = ({ releaseInfo, currentVersion
           // 列表项
           if (line.startsWith('- ') || line.startsWith('* ')) {
             return (
-              <div key={index} className="flex items-start gap-2 text-text-soft ml-2">
+              <div key={index} className="flex items-start gap-2 text-text2 ml-2">
                 <span className="text-accent mt-1">•</span>
                 <span>{line.replace(/^[-*] /, '')}</span>
               </div>
@@ -115,7 +115,7 @@ const UpdateDialog: React.FC<UpdateDialogProps> = ({ releaseInfo, currentVersion
           }
           // 普通文本
           return (
-            <p key={index} className="text-text-soft">
+            <p key={index} className="text-text2">
               {line}
             </p>
           )
@@ -134,29 +134,29 @@ const UpdateDialog: React.FC<UpdateDialogProps> = ({ releaseInfo, currentVersion
       contentClassName="overflow-y-auto"
     >
         {/* 头部 */}
-        <div className="bg-gradient-to-r from-accent/10 to-transparent p-6 border-b border-border-dark/50">
+        <div className="bg-gradient-to-r from-accent/10 to-transparent p-6 border-b border-line/50">
           <div className="flex items-start justify-between">
             <div className="flex-1">
               <div className="flex items-center gap-3 mb-2">
                 <CloudUpload className="h-8 w-8 text-accent" />
                 <div>
                   <h2 className="text-xl font-bold text-text1">{t('updateDialog.title')}</h2>
-                  <p className="text-sm text-text-muted mt-1">
+                  <p className="text-sm text-text2 mt-1">
                     {releaseInfo.name || t('updateDialog.versionFallback', { version: releaseInfo.version })}
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-4 text-xs text-text-faint mt-3">
+              <div className="flex items-center gap-4 text-xs text-text3 mt-3">
                 <span className="flex items-center gap-1">
-                  <span className="text-text-muted">{t('updateDialog.currentVersionLabel')}</span>
-                  <span className="font-mono text-text-soft">{currentVersion}</span>
+                  <span className="text-text2">{t('updateDialog.currentVersionLabel')}</span>
+                  <span className="font-mono text-text2">{currentVersion}</span>
                 </span>
-                <span className="text-text-faint">→</span>
+                <span className="text-text3">→</span>
                 <span className="flex items-center gap-1">
-                  <span className="text-text-muted">{t('updateDialog.latestVersionLabel')}</span>
+                  <span className="text-text2">{t('updateDialog.latestVersionLabel')}</span>
                   <span className="font-mono text-accent">{releaseInfo.version}</span>
                 </span>
-                <span className="text-text-faint">•</span>
+                <span className="text-text3">•</span>
                 <span>{formatReleaseDate(releaseInfo.publishedAt)}</span>
               </div>
             </div>
@@ -170,14 +170,14 @@ const UpdateDialog: React.FC<UpdateDialogProps> = ({ releaseInfo, currentVersion
 
         {/* 更新说明 */}
         <div className="p-6 max-h-[400px] overflow-y-auto">
-          <h3 className="text-sm font-semibold text-text-muted uppercase tracking-wider mb-3">
+          <h3 className="text-sm font-semibold text-text2 uppercase tracking-wider mb-3">
             {t('updateDialog.notesTitle')}
           </h3>
           {renderReleaseNotes()}
         </div>
 
         {/* 底部按钮 */}
-        <div className="p-6 border-t border-border-dark flex items-center justify-end gap-3">
+        <div className="p-6 border-t border-line flex items-center justify-end gap-3">
           <UiButton
             onClick={handleIgnore}
             variant="secondary"

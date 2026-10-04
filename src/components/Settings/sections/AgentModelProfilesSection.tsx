@@ -319,7 +319,7 @@ const AgentModelProfilesSection = ({ config, saveConfig }: AgentModelProfilesSec
                       <div>某个模态显示“失败”表示智能助手当前的请求协议带不了它，模型本身仍可能支持——画布文本处理等功能不受影响。</div>
                       <div>Token：输入 {verification.usage.inputTokens ?? '未知'} / 输出 {verification.usage.outputTokens ?? '未知'} / 思考 {verification.usage.reasoningTokens ?? '未知'}</div>
                     </div>
-                  ) : <div className="text-xs text-danger">尚未进行动态能力验证</div>}
+                  ) : <div className="text-xs text-danger-text">尚未进行动态能力验证</div>}
                   {effectiveReference ? (
                     <UiButton type="button" variant="secondary" disabled={verifyingKey !== null} onClick={() => void verify(effectiveReference)}>
                       <RefreshCw size={14} className={`mr-1.5 ${verifyingKey === key ? 'animate-spin' : ''}`} />

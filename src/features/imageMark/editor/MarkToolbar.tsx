@@ -85,7 +85,7 @@ function ColorPicker({
 }): JSX.Element {
   return (
     <div className="flex items-center gap-1" aria-label={label}>
-      <span className="mr-1 text-xs text-text-muted">{label}</span>
+      <span className="mr-1 text-xs text-text2">{label}</span>
       {IMAGE_EDITOR_PRESET_COLORS.map((presetColor, index) => (
         <UiIconButton shape="circle"
           key={presetColor}
@@ -190,7 +190,7 @@ export function MarkToolbar({
 
           {!annotationOnly && (
             <>
-              <span className="mx-1 h-5 w-px bg-border-dark" />
+              <span className="mx-1 h-5 w-px bg-line" />
               {ORIENTATION_BUTTONS.map((button) => {
                 const Icon = button.icon;
                 return (
@@ -208,7 +208,7 @@ export function MarkToolbar({
             </>
           )}
 
-          <span className="mx-1 h-5 w-px bg-border-dark" />
+          <span className="mx-1 h-5 w-px bg-line" />
 
           {/* 历史动作是动作不是选项:走 hover-only 图标,既不与工具组抢视觉权重,
               也让工具组窄下来后能真正居中 */}
@@ -293,7 +293,7 @@ export function MarkToolbar({
               高斯模糊
             </UiOptionButton>
             <div ref={mosaicSliderRef} className="flex items-center gap-2" title="滚轮可调">
-              <span className="text-xs text-text-muted">强度</span>
+              <span className="text-xs text-text2">强度</span>
               <UiRangeInput
                 min={MIN_MOSAIC_STRENGTH_PERCENT}
                 max={MAX_MOSAIC_STRENGTH_PERCENT}
@@ -302,15 +302,15 @@ export function MarkToolbar({
                 onChange={(event) => onStylePatch({ mosaicStrengthPercent: Number(event.target.value) })}
                 className="!w-36"
               />
-              <span className="w-9 text-xs text-text-muted">{style.mosaicStrengthPercent.toFixed(1)}%</span>
+              <span className="w-9 text-xs text-text2">{style.mosaicStrengthPercent.toFixed(1)}%</span>
             </div>
-            <span className="text-xs text-text-muted">拖拽框选需要打码的区域</span>
+            <span className="text-xs text-text2">拖拽框选需要打码的区域</span>
           </>
         ) : (
           <>
             {tool === 'callout' && (
               <div className="mr-1 flex items-center gap-1">
-                <span className="text-xs text-text-muted">形状</span>
+                <span className="text-xs text-text2">形状</span>
                 <UiOptionButton
                   type="button"
                   variant="flat"
@@ -344,7 +344,7 @@ export function MarkToolbar({
             {canSetTextBackground && (
               <>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-text-muted">背景</span>
+                  <span className="text-xs text-text2">背景</span>
                   <UiSwitch
                     checked={style.textBackgroundEnabled}
                     onCheckedChange={(textBackgroundEnabled) => onStylePatch({ textBackgroundEnabled })}
@@ -362,7 +362,7 @@ export function MarkToolbar({
             )}
             {showWidth && (
               <div ref={widthSliderRef} className="flex items-center gap-2" title="滚轮可调;选中图形后在画布上滚轮也可调">
-                <span className="text-xs text-text-muted">线宽</span>
+                <span className="text-xs text-text2">线宽</span>
                 <UiRangeInput
                   min={MIN_LINE_WIDTH_PERCENT}
                   max={MAX_LINE_WIDTH_PERCENT}
@@ -371,12 +371,12 @@ export function MarkToolbar({
                   onChange={(event) => onStylePatch({ lineWidthPercent: Number(event.target.value) })}
                   className="!w-36"
                 />
-                <span className="w-9 text-xs text-text-muted">{style.lineWidthPercent.toFixed(1)}%</span>
+                <span className="w-9 text-xs text-text2">{style.lineWidthPercent.toFixed(1)}%</span>
               </div>
             )}
             {showTextSize && (
               <div ref={textSizeSliderRef} className="flex items-center gap-2" title="滚轮可调">
-                <span className="text-xs text-text-muted">字号</span>
+                <span className="text-xs text-text2">字号</span>
                 <UiRangeInput
                   min={MIN_TEXT_SIZE_PERCENT}
                   max={MAX_TEXT_SIZE_PERCENT}
@@ -385,7 +385,7 @@ export function MarkToolbar({
                   onChange={(event) => onStylePatch({ textSizePercent: Number(event.target.value) })}
                   className="!w-36"
                 />
-                <span className="w-9 text-xs text-text-muted">{style.textSizePercent.toFixed(1)}%</span>
+                <span className="w-9 text-xs text-text2">{style.textSizePercent.toFixed(1)}%</span>
               </div>
             )}
           </>

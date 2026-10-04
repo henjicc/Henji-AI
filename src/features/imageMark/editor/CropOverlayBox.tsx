@@ -205,7 +205,7 @@ export function CropOverlayBox({
           <div
             key={handle.type}
             data-crop-handle={handle.type}
-            className={`absolute h-2.5 w-2.5 border ${appearance === 'expand' ? 'rounded-hairline border-accent bg-text-dark' : `rounded-sm border-media-scrim bg-on-media ${handle.className}`} before:absolute before:-inset-2 before:content-['']`}
+            className={`absolute h-2.5 w-2.5 border ${appearance === 'expand' ? 'rounded-hairline border-accent bg-text1' : `rounded-sm border-media-scrim bg-on-media ${handle.className}`} before:absolute before:-inset-2 before:content-['']`}
             style={{ cursor: handle.cursor, ...(appearance === 'expand' ? {
               left: handle.type.includes('w') ? 0 : handle.type.includes('e') ? 'calc(100% - 10px)' : 'calc(50% - 5px)',
               top: handle.type.includes('n') ? 0 : handle.type.includes('s') ? 'calc(100% - 10px)' : 'calc(50% - 5px)',

@@ -72,7 +72,7 @@ const StateKeyframeClipTrack: React.FC<StateKeyframeClipTrackProps> = ({
   return (
     <div className="relative shrink-0" style={{ width: contentWidth, height: STATE_KEYFRAME_CLIP_TRACK_HEIGHT }}>
       {stateKeyframes.length === 0 && (
-        <div className="absolute inset-0 flex items-center justify-center text-xs text-text-muted">
+        <div className="absolute inset-0 flex items-center justify-center text-xs text-text2">
           移动播放头后点击工具栏「+」记录状态
         </div>
       )}

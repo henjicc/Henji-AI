@@ -134,7 +134,7 @@ export const AssetGroupFocusOverlay = memo(({ groupId, onClose }: AssetGroupFocu
   return (
     <section
       aria-label={t('canvas.assetGroup.manager.label')}
-      className="absolute inset-0 z-panel flex min-h-0 flex-col bg-app text-text-dark"
+      className="absolute inset-0 z-panel flex min-h-0 flex-col bg-window text-text1"
       onDragEnter={(event) => {
         if (!isSupportedDrag(event)) return;
         event.preventDefault();
@@ -176,8 +176,8 @@ export const AssetGroupFocusOverlay = memo(({ groupId, onClose }: AssetGroupFocu
         void importFiles(Array.from(event.dataTransfer.files));
       }}
     >
-      <header className="flex h-12 shrink-0 items-center gap-3 border-b border-border-dark bg-panel px-4">
-        <ICON_NODE_ASSET_GROUP className="h-5 w-5 shrink-0 text-text-soft" />
+      <header className="flex h-12 shrink-0 items-center gap-3 border-b border-line bg-panel px-4">
+        <ICON_NODE_ASSET_GROUP className="h-5 w-5 shrink-0 text-text2" />
         <div className="min-w-0">
           <h2 className={`truncate ${UI_TEXT_TITLE_CLASS}`}>
             {resolveNodeDisplayName(node.type, node.data)}
@@ -218,7 +218,7 @@ export const AssetGroupFocusOverlay = memo(({ groupId, onClose }: AssetGroupFocu
 
       <div className="nowheel relative min-h-0 flex-1 overflow-y-auto p-4">
         {isDraggingMedia && (
-          <div className="pointer-events-none absolute inset-3 z-raised flex items-center justify-center rounded-xl border border-dashed border-accent bg-app/85 text-sm font-medium text-accent">
+          <div className="pointer-events-none absolute inset-3 z-raised flex items-center justify-center rounded-xl border border-dashed border-accent bg-window/85 text-sm font-medium text-accent">
             {t('canvas.assetGroup.manager.dropMedia')}
           </div>
         )}
@@ -266,15 +266,15 @@ export const AssetGroupFocusOverlay = memo(({ groupId, onClose }: AssetGroupFocu
       </div>
 
       {node.data.bindings.length > 0 && (
-        <footer className="flex shrink-0 flex-wrap items-center gap-3 border-t border-border-dark bg-panel px-4 py-2">
-          <span className="text-xs font-medium text-text-soft">
+        <footer className="flex shrink-0 flex-wrap items-center gap-3 border-t border-line bg-panel px-4 py-2">
+          <span className="text-xs font-medium text-text2">
             {t('canvas.assetGroup.manager.connections')}
           </span>
           {node.data.bindings.map((binding) => {
             const status = summarizeAssetGroupBinding(graph.nodes, graph.edges, node.id, binding);
             const target = graph.nodes.find((item) => item.id === binding.targetNodeId);
             return (
-              <div key={binding.id} className="flex min-w-0 items-center gap-2 text-xs text-text-muted">
+              <div key={binding.id} className="flex min-w-0 items-center gap-2 text-xs text-text2">
                 <span className="max-w-48 truncate">
                   {target ? resolveNodeDisplayName(target.type, target.data) : t('canvas.assetGroup.manager.unknownTarget')}
                 </span>
@@ -315,7 +315,7 @@ export const AssetGroupFocusOverlay = memo(({ groupId, onClose }: AssetGroupFocu
         )}
       >
         <p className={UI_TEXT_BODY_CLASS}>{t('canvas.assetGroup.manager.removeConfirmMessage')}</p>
-        <label className="mt-4 flex cursor-pointer items-center gap-2 text-sm text-text-soft">
+        <label className="mt-4 flex cursor-pointer items-center gap-2 text-sm text-text2">
           <UiCheckbox
             checked={skipCheckedInDialog}
             onCheckedChange={setSkipCheckedInDialog}

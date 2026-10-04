@@ -88,14 +88,14 @@ export const ModelscopeCustomModelPanel: React.FC<ModelscopeCustomModelPanelProp
         />
         {selectedModel && (
           <div className={`mt-2 ${UI_TEXT_META_CLASS}`}>
-            <span className="text-text-muted">{t('modelscopeCustomModelPanel.modelIdLabel')}</span>
+            <span className="text-text2">{t('modelscopeCustomModelPanel.modelIdLabel')}</span>
             <span className="break-all">{selectedModel.id}</span>
           </div>
         )}
       </div>
 
       <div className="px-4">
-        <div className="border-t border-border-dark/50" />
+        <div className="border-t border-line/50" />
       </div>
 
       <div className="flex-1 min-h-0 px-4 pb-4 pt-3 overflow-hidden">

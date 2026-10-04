@@ -128,7 +128,7 @@ export function LogsPanel(): JSX.Element {
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <div className="flex shrink-0 items-center gap-1 border-b border-border-dark/50 bg-panel px-3 py-1.5">
+      <div className="flex shrink-0 items-center gap-1 border-b border-line/50 bg-panel px-3 py-1.5">
         <div className={UI_SEGMENTED_TRACK_CLASS}>
           <UiOptionButton type="button" variant="segment" active={surface === 'events'} aria-pressed={surface === 'events'} onClick={() => setSurface('events')}>
             <ListTree className="mr-1.5 h-3.5 w-3.5" />事件日志

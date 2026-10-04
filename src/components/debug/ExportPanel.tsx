@@ -118,7 +118,7 @@ export const ExportPanel: React.FC<ExportPanelProps> = ({ modelId, params, conte
           ].map((option) => (
             <label
               key={option.key}
-              className="flex items-center gap-2 text-sm text-text-soft cursor-pointer"
+              className="flex items-center gap-2 text-sm text-text2 cursor-pointer"
             >
               <UiCheckbox
                 checked={Boolean(cleanOptions[option.key as keyof CleanOptions])}

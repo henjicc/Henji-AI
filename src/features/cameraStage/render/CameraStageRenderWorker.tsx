@@ -279,7 +279,7 @@ export default function CameraStageRenderWorker(): JSX.Element {
   }, [request])
 
   return (
-    <div className="h-screen w-screen overflow-hidden bg-app">
+    <div className="h-screen w-screen overflow-hidden bg-window">
       {sceneRequestId && (
         <StageScene
           key={sceneRequestId}

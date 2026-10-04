@@ -98,7 +98,7 @@ function CodeAssetPreview({ asset, onClose }: { asset: AssetRecord; onClose: () 
           <UiError size="sm" message={state.message} onRetry={() => setAttempt(value => value + 1)} retryLabel={t('assetLibrary.retry')} />
         ) : (
           <>
-            <div className="flex items-center gap-3"><ICON_ASSET_CODE className="h-8 w-8 shrink-0 text-text-muted" /><div className="min-w-0"><div className={`break-words ${UI_TEXT_BODY_CLASS}`}>{state.result.manifest.name}</div><div className={UI_TEXT_META_CLASS}>{t('assetLibrary.codeParameters', { count: Object.keys(state.result.manifest.parameters).length })}</div></div></div>
+            <div className="flex items-center gap-3"><ICON_ASSET_CODE className="h-8 w-8 shrink-0 text-text2" /><div className="min-w-0"><div className={`break-words ${UI_TEXT_BODY_CLASS}`}>{state.result.manifest.name}</div><div className={UI_TEXT_META_CLASS}>{t('assetLibrary.codeParameters', { count: Object.keys(state.result.manifest.parameters).length })}</div></div></div>
             <p className={UI_TEXT_META_CLASS}>{t('assetLibrary.codeEditableHint')}</p>
             {state.result.manifest.images.length > 0 && <p className={UI_TEXT_META_CLASS}>{t('assetLibrary.codeImages', { count: state.result.manifest.images.length })}</p>}
             {!owner && <UiEmpty size="xs" title={t('assetLibrary.codeOpenProject')} />}

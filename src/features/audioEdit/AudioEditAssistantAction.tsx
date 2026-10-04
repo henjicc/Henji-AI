@@ -15,7 +15,7 @@ export function AudioEditAssistantAction({ disabled }: { disabled: boolean }) {
   return <div className="space-y-2 px-3 pt-3">
     <UiButton className="gap-2" disabled={disabled || processing || !project.transcript.length}
       onClick={() => optimizeAudioEditWithAssistant(project.id, hint)}><Sparkles size={16} />一键优化口播</UiButton>
-    <details className="text-xs text-text-muted"><summary className="cursor-pointer">纠错提示（可选）</summary>
+    <details className="text-xs text-text2"><summary className="cursor-pointer">纠错提示（可选）</summary>
       <UiTextArea aria-label="口播纠错提示" rows={2} value={hint} onChange={(event) => setHint(event.target.value)} placeholder="无；仅填写需要核对的同音或近音词" className="mt-2" />
     </details>
   </div>

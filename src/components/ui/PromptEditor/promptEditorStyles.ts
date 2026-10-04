@@ -1,16 +1,16 @@
 import type { PromptEditorLayout } from './types'
 
 export const PROMPT_EDITOR_CONTENT_CLASS = [
-  'whitespace-pre-wrap break-words px-3 py-2.5 text-sm leading-6 text-text-dark outline-none',
+  'whitespace-pre-wrap break-words px-3 py-2.5 text-sm leading-6 text-text1 outline-none',
   '[&_.is-editor-empty:first-child::before]:pointer-events-none',
   '[&_.is-editor-empty:first-child::before]:float-left',
   '[&_.is-editor-empty:first-child::before]:h-0',
-  '[&_.is-editor-empty:first-child::before]:text-text-muted',
+  '[&_.is-editor-empty:first-child::before]:text-text2',
   '[&_.is-editor-empty:first-child::before]:content-[attr(data-placeholder)]',
 ].join(' ')
 
 export const PROMPT_EDITOR_SHELL_CLASS =
-  'rounded-lg border bg-surface-dark transition-shadow'
+  'rounded-lg border bg-raised transition-shadow'
 
 /** 无框编辑器（`frame="none"`）：外层输入卡片已经画了表面与边界，编辑器只负责文字。 */
 export const PROMPT_EDITOR_FRAMELESS_SHELL_CLASS = 'rounded-none border-0 bg-transparent'
@@ -47,6 +47,6 @@ export const PROMPT_MEDIA_ATOM_CLASS = `${PROMPT_ATOM_CLASS} gap-1`
 
 export function getPromptEditorShellStateClass(error: boolean): string {
   return error
-    ? 'border-danger/70'
-    : 'border-border-dark focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-accent'
+    ? 'border-danger-text/70'
+    : 'border-line focus-within:border-accent focus-within:ring-2 focus-within:ring-accent'
 }

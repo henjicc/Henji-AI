@@ -26,7 +26,7 @@ export const LicenseTextBlock: React.FC<{ texts: readonly string[] }> = ({ texts
   <div className="space-y-3">
     {texts.map((text, index) => (
       <UiPanel key={index} variant="inset" className="p-3">
-        <pre className="whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-text-soft">{text}</pre>
+        <pre className="whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-text2">{text}</pre>
       </UiPanel>
     ))}
   </div>
@@ -140,7 +140,7 @@ const LicenseViewerDialog: React.FC<LicenseViewerDialogProps> = ({ open, notices
       <div className="flex min-h-0 flex-1">
         <div className="flex w-72 shrink-0 flex-col gap-2 border-r border-line p-3">
           <div className="relative">
-            <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
+            <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text2" />
             <UiInput
               value={keyword}
               onChange={(event) => setKeyword(event.target.value)}

@@ -6,7 +6,7 @@ import type { StageGroundPattern, StageVec3 } from '../domain/sceneTypes'
 import { useCameraStageStore } from '../store/cameraStageStore'
 
 const SectionTitle: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <div className="text-xs font-medium uppercase tracking-wide text-text-muted">{children}</div>
+  <div className="text-xs font-medium uppercase tracking-wide text-text2">{children}</div>
 )
 
 function formatTimeOfDayLabel(value: number): string {
@@ -52,14 +52,14 @@ const SceneSettingsPanel: React.FC = () => {
   const labelSettings = sceneSettings.display.nameLabel
 
   return (
-    <div className="flex h-full w-full flex-col overflow-y-auto bg-surface-dark">
-      <div className="px-3 pb-2 pt-3 text-sm font-medium text-text-dark">场景设置</div>
+    <div className="flex h-full w-full flex-col overflow-y-auto bg-raised">
+      <div className="px-3 pb-2 pt-3 text-sm font-medium text-text1">场景设置</div>
       <div className="flex flex-col gap-4 px-3 pb-4">
         <div className="flex flex-col gap-3">
           <SectionTitle>地面</SectionTitle>
           {sceneSettings.ground.pattern !== 'checker' ? (
             <div className="flex items-center justify-between gap-2">
-              <span className="text-xs text-text-muted">底色</span>
+              <span className="text-xs text-text2">底色</span>
               <UiColorInput
                 value={sceneSettings.ground.color}
                 onChange={(event) => setSceneGroundColor(event.target.value)}
@@ -67,7 +67,7 @@ const SceneSettingsPanel: React.FC = () => {
             </div>
           ) : null}
           <div className="flex flex-col gap-1.5">
-            <div className="text-xs text-text-muted">样式</div>
+            <div className="text-xs text-text2">样式</div>
             <Dropdown<StageGroundPattern>
               value={sceneSettings.ground.pattern}
               display={GROUND_PATTERN_OPTIONS.find((item) => item.value === sceneSettings.ground.pattern)?.label ?? '纯色'}
@@ -103,14 +103,14 @@ const SceneSettingsPanel: React.FC = () => {
           {sceneSettings.ground.pattern === 'grid' && (
             <>
               <div className="flex items-center justify-between gap-2">
-                <span className="text-xs text-text-muted">线色</span>
+                <span className="text-xs text-text2">线色</span>
                 <UiColorInput
                   value={sceneSettings.ground.gridLineColor}
                   onChange={(event) => setSceneGroundGridLineColor(event.target.value)}
                 />
               </div>
               <div className="flex flex-col gap-1.5">
-                <div className="text-xs text-text-muted">线粗</div>
+                <div className="text-xs text-text2">线粗</div>
                 <div className="flex items-center gap-1.5">
                   <UiRangeInput
                     min={0.2}
@@ -138,14 +138,14 @@ const SceneSettingsPanel: React.FC = () => {
           {sceneSettings.ground.pattern === 'checker' && (
             <>
               <div className="flex items-center justify-between gap-2">
-                <span className="text-xs text-text-muted">亮色</span>
+                <span className="text-xs text-text2">亮色</span>
                 <UiColorInput
                   value={sceneSettings.ground.checkerLightColor}
                   onChange={(event) => setSceneGroundCheckerLightColor(event.target.value)}
                 />
               </div>
               <div className="flex items-center justify-between gap-2">
-                <span className="text-xs text-text-muted">暗色</span>
+                <span className="text-xs text-text2">暗色</span>
                 <UiColorInput
                   value={sceneSettings.ground.checkerDarkColor}
                   onChange={(event) => setSceneGroundCheckerDarkColor(event.target.value)}
@@ -158,7 +158,7 @@ const SceneSettingsPanel: React.FC = () => {
         <div className="flex flex-col gap-3">
           <SectionTitle>天空</SectionTitle>
           <div className="flex items-center justify-between gap-2">
-            <span className="text-xs text-text-muted">颜色</span>
+            <span className="text-xs text-text2">颜色</span>
             <UiColorInput
               value={sceneSettings.sky.color}
               onChange={(event) => setSceneSkyColor(event.target.value)}
@@ -172,7 +172,7 @@ const SceneSettingsPanel: React.FC = () => {
             <UiSwitch checked={sceneSettings.sunlight.enabled} onCheckedChange={setSceneSunlightEnabled} />
           </div>
           <div className="flex flex-col gap-1.5">
-            <div className="text-xs text-text-muted">时间</div>
+            <div className="text-xs text-text2">时间</div>
             <div className="flex items-center gap-1.5">
               <UiRangeInput
                 min={0}
@@ -181,13 +181,13 @@ const SceneSettingsPanel: React.FC = () => {
                 value={sceneSettings.sunlight.timeOfDay}
                 onChange={(event) => setSceneSunlightTimeOfDay(Number(event.target.value))}
               />
-              <div className="w-16 shrink-0 text-right text-xs text-text-muted">
+              <div className="w-16 shrink-0 text-right text-xs text-text2">
                 {formatTimeOfDayLabel(sceneSettings.sunlight.timeOfDay)}
               </div>
             </div>
           </div>
           <div className="flex flex-col gap-1.5">
-            <div className="text-xs text-text-muted">亮度</div>
+            <div className="text-xs text-text2">亮度</div>
             <div className="flex items-center gap-1.5">
               <UiRangeInput
                 min={0}
@@ -218,7 +218,7 @@ const SceneSettingsPanel: React.FC = () => {
             <UiSwitch checked={sceneSettings.fog.enabled} onCheckedChange={setSceneFogEnabled} />
           </div>
           <div className="flex flex-col gap-1.5">
-            <div className="text-xs text-text-muted">淡出距离</div>
+            <div className="text-xs text-text2">淡出距离</div>
             <div className="flex items-center gap-1.5">
               <UiRangeInput
                 min={30}
@@ -248,20 +248,20 @@ const SceneSettingsPanel: React.FC = () => {
             <SectionTitle>显示</SectionTitle>
           </div>
           <div className="flex items-center justify-between gap-2">
-            <span className="text-xs text-text-muted">名称标签</span>
+            <span className="text-xs text-text2">名称标签</span>
             <UiSwitch checked={sceneSettings.display.showNameLabels} onCheckedChange={setSceneShowNameLabels} />
           </div>
           {sceneSettings.display.showNameLabels && (
             <>
               <div className="flex items-center justify-between gap-2">
-                <span className="text-xs text-text-muted">文字颜色</span>
+                <span className="text-xs text-text2">文字颜色</span>
                 <UiColorInput
                   value={labelSettings.textColor}
                   onChange={(event) => setSceneNameLabelTextColor(event.target.value)}
                 />
               </div>
               <div className="flex items-center justify-between gap-2">
-                <span className="text-xs text-text-muted">背景跟随对象色</span>
+                <span className="text-xs text-text2">背景跟随对象色</span>
                 <UiSwitch
                   checked={labelSettings.followObjectColor}
                   onCheckedChange={setSceneNameLabelFollowObjectColor}
@@ -269,7 +269,7 @@ const SceneSettingsPanel: React.FC = () => {
               </div>
               {!labelSettings.followObjectColor && (
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs text-text-muted">背景颜色</span>
+                  <span className="text-xs text-text2">背景颜色</span>
                   <UiColorInput
                     value={labelSettings.backgroundColor}
                     onChange={(event) => setSceneNameLabelBackgroundColor(event.target.value)}
@@ -277,7 +277,7 @@ const SceneSettingsPanel: React.FC = () => {
                 </div>
               )}
               <div className="flex flex-col gap-1.5">
-                <div className="text-xs text-text-muted">背景透明度</div>
+                <div className="text-xs text-text2">背景透明度</div>
                 <div className="flex items-center gap-1.5">
                   <UiRangeInput
                     min={0}
@@ -301,7 +301,7 @@ const SceneSettingsPanel: React.FC = () => {
                 </div>
               </div>
               <div className="flex flex-col gap-1.5">
-                <div className="text-xs text-text-muted">整体大小</div>
+                <div className="text-xs text-text2">整体大小</div>
                 <div className="flex items-center gap-1.5">
                   <UiRangeInput
                     min={0.5}
@@ -325,11 +325,11 @@ const SceneSettingsPanel: React.FC = () => {
                 </div>
               </div>
               <div className="flex flex-col gap-1.5">
-                <div className="text-xs text-text-muted">位置偏移</div>
+                <div className="text-xs text-text2">位置偏移</div>
                 <div className="flex gap-1.5">
                   {LABEL_OFFSET_AXES.map((axis) => (
                     <div key={axis.key} className="min-w-0 flex-1">
-                      <div className="mb-1 text-2xs text-text-muted">{axis.label}</div>
+                      <div className="mb-1 text-2xs text-text2">{axis.label}</div>
                       <NumberInput
                         value={labelSettings.offset[axis.key]}
                         min={-3}
@@ -350,16 +350,16 @@ const SceneSettingsPanel: React.FC = () => {
                 </div>
               </div>
               <div className="flex flex-col gap-3">
-                <div className="text-xs text-text-muted">文字阴影</div>
+                <div className="text-xs text-text2">文字阴影</div>
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs text-text-muted">阴影颜色</span>
+                  <span className="text-xs text-text2">阴影颜色</span>
                   <UiColorInput
                     value={labelSettings.shadowColor}
                     onChange={(event) => setSceneNameLabelShadowColor(event.target.value)}
                   />
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  <div className="text-xs text-text-muted">阴影透明度</div>
+                  <div className="text-xs text-text2">阴影透明度</div>
                   <div className="flex items-center gap-1.5">
                     <UiRangeInput
                       min={0}
@@ -383,7 +383,7 @@ const SceneSettingsPanel: React.FC = () => {
                   </div>
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  <div className="text-xs text-text-muted">阴影模糊</div>
+                  <div className="text-xs text-text2">阴影模糊</div>
                   <div className="flex items-center gap-1.5">
                     <UiRangeInput
                       min={0}
@@ -407,7 +407,7 @@ const SceneSettingsPanel: React.FC = () => {
                   </div>
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  <div className="text-xs text-text-muted">阴影距离</div>
+                  <div className="text-xs text-text2">阴影距离</div>
                   <div className="flex items-center gap-1.5">
                     <UiRangeInput
                       min={0}
@@ -431,7 +431,7 @@ const SceneSettingsPanel: React.FC = () => {
                   </div>
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  <div className="text-xs text-text-muted">阴影方向</div>
+                  <div className="text-xs text-text2">阴影方向</div>
                   <div className="flex items-center gap-1.5">
                     <UiRangeInput
                       min={0}

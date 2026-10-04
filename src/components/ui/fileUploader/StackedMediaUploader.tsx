@@ -322,7 +322,7 @@ export const StackedMediaUploader = forwardRef<StackedMediaUploaderHandle, Stack
       {/* 拖拽高亮写成三元互斥：此前是一层固定灰底再叠一层拖拽灰底，
           两个 bg 同属性打架，而前者在 Tailwind 产物里排在后者之后，
           所以底色永远赢——拖拽高亮其实一直没显示出来 */}
-      <div className={`relative min-h-[82px] rounded-2xl p-1.5 transition-colors ${isDragging ? 'bg-surface-dark/55' : 'bg-panel/30'}`}>
+      <div className={`relative min-h-[82px] rounded-2xl p-1.5 transition-colors ${isDragging ? 'bg-raised/55' : 'bg-panel/30'}`}>
         <div className="relative h-[66px] overflow-visible">
           {files.map((file, index) => {
             const isVideo = fileTypes ? fileTypes[index] === 'video' : false
@@ -364,7 +364,7 @@ export const StackedMediaUploader = forwardRef<StackedMediaUploaderHandle, Stack
                 <UiButton
                   type="button"
                   variant="secondary"
-                  className={`relative h-[64px] w-[48px] overflow-hidden ${UI_UPLOADER_CARD_BORDER_CLASS} bg-surface-dark/35 p-0 shadow-thumb transition-transform duration-180 ease-out hover:scale-[1.1]`}
+                  className={`relative h-[64px] w-[48px] overflow-hidden ${UI_UPLOADER_CARD_BORDER_CLASS} bg-raised/35 p-0 shadow-thumb transition-transform duration-180 ease-out hover:scale-[1.1]`}
                   onClick={(event) => {
                     event.stopPropagation()
                     onFileClick?.(file, files)
@@ -440,9 +440,9 @@ export const StackedMediaUploader = forwardRef<StackedMediaUploaderHandle, Stack
               <UiButton
                 type="button"
                 variant="secondary"
-                className={`p-0 text-text-dark ${plusUseCardShape
+                className={`p-0 text-text1 ${plusUseCardShape
                   ? `h-[64px] w-[48px] ${UI_UPLOADER_CARD_BORDER_OVERRIDE_CLASS} !bg-panel text-2xl shadow-thumb transition-transform duration-180 ease-out hover:scale-[1.1]`
-                  : 'h-[29px] w-[29px] aspect-square !rounded-full border-line-strong bg-layer/80 text-base shadow-thumb-sm transition-transform duration-180 ease-out hover:scale-[1.1]'
+                  : 'h-[29px] w-[29px] aspect-square !rounded-full border-line-strong bg-hover/80 text-base shadow-thumb-sm transition-transform duration-180 ease-out hover:scale-[1.1]'
                   }`}
                 onClick={(event) => {
                   event.stopPropagation()
@@ -457,7 +457,7 @@ export const StackedMediaUploader = forwardRef<StackedMediaUploaderHandle, Stack
         </div>
 
         {!hoverCapable && (
-          <div className="pointer-events-none absolute bottom-1 left-2 text-2xs text-text-faint">
+          <div className="pointer-events-none absolute bottom-1 left-2 text-2xs text-text3">
             点按展开
           </div>
         )}
@@ -489,7 +489,7 @@ export const StackedMediaUploader = forwardRef<StackedMediaUploaderHandle, Stack
 
   return (
     <Tooltip
-      content={<span className="block text-text-soft">{hintText}</span>}
+      content={<span className="block text-text2">{hintText}</span>}
       delay={250}
     >
       {uploaderContent}

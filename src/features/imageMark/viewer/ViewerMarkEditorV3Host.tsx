@@ -21,9 +21,9 @@ function SessionStateShell({
   const { t } = useTranslation('ui')
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-app">
-      <header className="flex h-12 shrink-0 items-center border-b border-border-dark bg-panel px-3">
-        <span className="text-sm font-medium text-text-dark">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-window">
+      <header className="flex h-12 shrink-0 items-center border-b border-line bg-panel px-3">
+        <span className="text-sm font-medium text-text1">
           {t('imageEditor.v3.viewer.title')}
         </span>
         <UiButton variant="secondary" className="ml-auto" onClick={onClose}>

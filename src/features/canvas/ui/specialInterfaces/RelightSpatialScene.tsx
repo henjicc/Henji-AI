@@ -78,7 +78,7 @@ export function RelightSpatialScene({ main, rim, view, color, intensity, sourceI
       </g>)}
       {lights.filter(light => light.position.z < 0).map(lamp)}
       {size.sides.map((points, index) => <polygon key={`edge-${index}`} points={points} data-image-thickness="true"
-        className="fill-text-muted stroke-text3/50" strokeWidth="0.15" />)}
+        className="fill-text2 stroke-text3/50" strokeWidth="0.15" />)}
       <g transform={matrix} data-relight-image-plane="true" data-image-aspect={size.width / size.height}>
         {sourceImage ? <foreignObject x={-size.width * 50} y={-size.height * 50} width={size.width * 100} height={size.height * 100}>
           <img src={sourceImage} alt={sourceAlt} draggable={false} className="block h-full w-full"
@@ -86,7 +86,7 @@ export function RelightSpatialScene({ main, rim, view, color, intensity, sourceI
             onLoad={event => { const image = event.currentTarget; if (image.naturalWidth && image.naturalHeight)
               setImageSize({ source: sourceImage, aspect: image.naturalWidth / image.naturalHeight }) }} />
         </foreignObject> : <rect x={-size.width * 50} y={-size.height * 50} width={size.width * 100} height={size.height * 100}
-          className="fill-surface-dark stroke-text3/50" strokeWidth="0.8" />}
+          className="fill-raised stroke-text3/50" strokeWidth="0.8" />}
       </g>
       {lights.filter(light => light.position.z >= 0).map(lamp)}
       {(activeLamp === 'rim' ? RIM_DIRECTION_ORDER.map(direction => ({ pose: poseForRim(direction), label: RIM_DIRECTION_LABELS[direction] }))
@@ -97,12 +97,12 @@ export function RelightSpatialScene({ main, rim, view, color, intensity, sourceI
         return <g key={label} data-light-stop={label} data-snap-active={active}>
           <circle cx={point.x} cy={point.y} r={active ? 4 : 0.65} fill="none"
             className={active ? 'stroke-accent' : 'stroke-text3/50'} strokeWidth={active ? 0.5 : 0.3} />
-          {active && <text x={point.x} y={point.y - 5.5} textAnchor="middle" fontSize="3" className="fill-text-dark">{label}</text>}
+          {active && <text x={point.x} y={point.y - 5.5} textAnchor="middle" fontSize="3" className="fill-text1">{label}</text>}
         </g>
       })}
       {view !== 'front' && [{ z: -1, label: '背面' }, { z: 1, label: '正面' }].map(({ z, label }) => {
         const p = project({ x: 0, y: -0.78, z: z * 0.72 })
-        return <text key={label} x={p.x} y={p.y} textAnchor="middle" fontSize="2.7" className="fill-text-muted">{label}</text>
+        return <text key={label} x={p.x} y={p.y} textAnchor="middle" fontSize="2.7" className="fill-text2">{label}</text>
       })}
     </svg>
   )

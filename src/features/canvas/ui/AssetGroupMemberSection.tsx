@@ -73,7 +73,7 @@ export const AssetGroupMemberSection = memo(({
   return (
     <section data-asset-group-kind={kind}>
       <div className="mb-2 flex items-center gap-2">
-        <KindIcon className="h-4 w-4 text-text-muted" />
+        <KindIcon className="h-4 w-4 text-text2" />
         <h3 className={UI_TEXT_LABEL_CLASS}>{title}</h3>
         <span className={UI_TEXT_META_CLASS}>{members.length}</span>
       </div>
@@ -103,14 +103,14 @@ export const AssetGroupMemberSection = memo(({
               onMouseDown={(event) => handleMouseDown(index, event)}
             >
               <div
-                className="relative aspect-video overflow-hidden bg-app"
+                className="relative aspect-video overflow-hidden bg-window"
                 title={labels.openViewer}
                 onDoubleClick={() => onOpenViewer(member.id)}
               >
                 {preview ? (
                   <AssetGroupPreview items={[preview]} showKindBadge={false} />
                 ) : (
-                  <div className="flex h-full items-center justify-center text-text-faint">
+                  <div className="flex h-full items-center justify-center text-text3">
                     <KindIcon className="h-10 w-10" />
                   </div>
                 )}
@@ -126,9 +126,9 @@ export const AssetGroupMemberSection = memo(({
                 )}
               </div>
               <div className="flex min-w-0 items-center gap-2 p-3">
-                <GripVertical className="h-4 w-4 shrink-0 text-text-faint" aria-hidden="true" />
-                <KindIcon className="h-4 w-4 shrink-0 text-text-muted" />
-                <span className="min-w-0 flex-1 truncate text-sm text-text-dark">
+                <GripVertical className="h-4 w-4 shrink-0 text-text3" aria-hidden="true" />
+                <KindIcon className="h-4 w-4 shrink-0 text-text2" />
+                <span className="min-w-0 flex-1 truncate text-sm text-text1">
                   {resolveNodeDisplayName(member.type, member.data)}
                 </span>
                 <div className="flex shrink-0 items-center gap-1">

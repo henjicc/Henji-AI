@@ -350,7 +350,7 @@ export const UploadNode = memo(({ id, data, selected, width, height }: UploadNod
 
       {data.imageUrl || transientPreviewUrl ? (
         <div
-          className="block h-full w-full overflow-hidden rounded-[var(--node-radius)] bg-bg-dark"
+          className="block h-full w-full overflow-hidden rounded-[var(--node-radius)] bg-gap"
         >
           <CanvasNodeImage
             src={imageSource ?? ''}
@@ -362,7 +362,7 @@ export const UploadNode = memo(({ id, data, selected, width, height }: UploadNod
         </div>
       ) : (
         <label
-          className="block h-full w-full overflow-hidden rounded-[var(--node-radius)] bg-bg-dark"
+          className="block h-full w-full overflow-hidden rounded-[var(--node-radius)] bg-gap"
         >
           <div className="flex h-full w-full cursor-pointer flex-col items-center justify-center gap-2 text-text2">
             <ImageUploadIcon className="h-7 w-7 opacity-60" />

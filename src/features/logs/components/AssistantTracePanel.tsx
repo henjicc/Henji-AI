@@ -221,7 +221,7 @@ export function AssistantTracePanel({ refreshToken }: AssistantTracePanelProps):
           详细追踪已开启：从下一次模型请求开始，完整提示词、消息、工具和脱敏后的 HTTP 请求会保存在本机；应用重启后自动关闭。
         </div>
       )}
-      <div className="grid shrink-0 grid-cols-3 gap-2 border-b border-border-dark/35 px-3 py-2 sm:grid-cols-6 xl:grid-cols-9">
+      <div className="grid shrink-0 grid-cols-3 gap-2 border-b border-line/35 px-3 py-2 sm:grid-cols-6 xl:grid-cols-9">
         <SummaryMetric label="请求" value={String(totals.requests)} />
         <SummaryMetric label="完成" value={String(totals.completed)} />
         <SummaryMetric label="失败" value={String(totals.failed)} />
@@ -253,7 +253,7 @@ export function AssistantTracePanel({ refreshToken }: AssistantTracePanelProps):
         size="compact"
         footer={<><UiButton type="button" variant="secondary" onClick={() => setClearConfirmOpen(false)}>取消</UiButton><UiButton type="button" variant="dangerSolid" onClick={() => void handleClear()}>确认清空</UiButton></>}
       >
-        <div className="text-sm text-text-muted">
+        <div className="text-sm text-text2">
           {mode === 'history' ? `将删除 ${selectedDate} 的助手追踪记录。` : '将删除当前保存的全部助手追踪记录。'}此操作不会影响助手对话和普通日志。
         </div>
       </UiModal>
@@ -366,5 +366,5 @@ function findPreviousPrimaryStep(runs: AgentTraceRunSummary[], traceId: string):
 }
 
 function SummaryMetric({ label, value }: { label: string; value: string }): JSX.Element {
-  return <div className="rounded border border-border-dark/35 bg-window/40 px-2 py-1"><div className="text-2xs uppercase tracking-wider text-text-muted">{label}</div><div className="mt-0.5 truncate font-mono text-2xs text-text-dark">{value}</div></div>
+  return <div className="rounded border border-line/35 bg-window/40 px-2 py-1"><div className="text-2xs uppercase tracking-wider text-text2">{label}</div><div className="mt-0.5 truncate font-mono text-2xs text-text1">{value}</div></div>
 }

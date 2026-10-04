@@ -292,11 +292,11 @@ export function ImageEditorFloatingPanelsV3({
         <header
           data-editor-panel-handle
           data-floating-panel-handle
-          className="relative z-raised flex h-8 shrink-0 cursor-grab items-center gap-2 border-b border-border-dark/60 px-2 active:cursor-grabbing"
+          className="relative z-raised flex h-8 shrink-0 cursor-grab items-center gap-2 border-b border-line/60 px-2 active:cursor-grabbing"
           onPointerDown={(event) => startPanelDrag(panelId, event)}
         >
-          <GripHorizontal className="h-3.5 w-3.5 text-text-muted" aria-hidden="true" />
-          <span className="min-w-0 flex-1 truncate text-xs font-medium text-text-dark">{title}</span>
+          <GripHorizontal className="h-3.5 w-3.5 text-text2" aria-hidden="true" />
+          <span className="min-w-0 flex-1 truncate text-xs font-medium text-text1">{title}</span>
           <UiIconButton size="sm"
             aria-label={collapsed[panelId]
               ? t('imageEditor.v3.panels.expand', { title })
@@ -413,7 +413,7 @@ export function ImageEditorFloatingPanelsV3({
                 adjustSplit(edge, event.key === 'ArrowDown' ? 0.05 : -0.05)
               }}
             >
-              <span className="absolute inset-x-0 top-1/2 h-px bg-border-dark group-hover:bg-accent group-focus-visible:bg-accent" />
+              <span className="absolute inset-x-0 top-1/2 h-px bg-line group-hover:bg-accent group-focus-visible:bg-accent" />
             </div>
           )]
         })}

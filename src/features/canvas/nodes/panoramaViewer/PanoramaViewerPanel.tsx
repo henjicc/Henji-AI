@@ -110,7 +110,7 @@ export function PanoramaViewerPanel({
   }, []);
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-[var(--node-radius)] bg-bg-dark">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-[var(--node-radius)] bg-gap">
       <div
         ref={surfaceRef}
         className="nodrag nopan nowheel relative min-h-0 flex-1 overflow-hidden touch-none"
@@ -206,7 +206,7 @@ export function PanoramaViewerPanel({
         ) : null}
 
         {viewMode === 'sphere' && resource.status === 'loading' ? (
-          <UiLoading message={t('viewer.panorama.loading')} className="h-full text-text-muted" />
+          <UiLoading message={t('viewer.panorama.loading')} className="h-full text-text2" />
         ) : null}
 
         {resource.status === 'idle' && !isGenerating && !generationError ? (
@@ -214,7 +214,7 @@ export function PanoramaViewerPanel({
             size="sm"
             title={t('viewer.panorama.emptyTitle')}
             description={t('viewer.panorama.emptyDescription')}
-            className="h-full px-6 text-text-muted"
+            className="h-full px-6 text-text2"
           />
         ) : null}
 
@@ -229,7 +229,7 @@ export function PanoramaViewerPanel({
         ) : null}
 
         {isGenerating && !resource.displayUrl ? (
-          <UiLoading message={t('viewer.panorama.generating')} className="h-full text-text-muted" />
+          <UiLoading message={t('viewer.panorama.generating')} className="h-full text-text2" />
         ) : null}
 
         {isReady && !resource.isEquirectangular ? (
@@ -246,7 +246,7 @@ export function PanoramaViewerPanel({
           </div>
         ) : null}
 
-        {isGenerating ? <div className="pointer-events-none absolute inset-0 bg-bg-dark/55" /> : null}
+        {isGenerating ? <div className="pointer-events-none absolute inset-0 bg-gap/55" /> : null}
         {generationError ? <NodeGenerationError message={generationError} /> : null}
       </div>
 

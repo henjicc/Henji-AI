@@ -239,7 +239,7 @@ export function VideoTrimModal({
           </div>
         </div>
         {isProbing ? (
-          <div className="text-xs text-text-muted">{t('common:loading')}</div>
+          <div className="text-xs text-text2">{t('common:loading')}</div>
         ) : durationSeconds > 0 ? (
           <VideoTrimTimeline
             durationSeconds={durationSeconds}

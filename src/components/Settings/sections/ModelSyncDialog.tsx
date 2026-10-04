@@ -112,7 +112,7 @@ export function ModelSyncDialog({
     >
       <div className="space-y-3">
         <div className="relative">
-          <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
+          <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text2" />
           <UiInput
             value={keyword}
             onChange={(event) => setKeyword(event.target.value)}
@@ -147,7 +147,7 @@ export function ModelSyncDialog({
                       >
                         <ChevronRight
                           size={14}
-                          className={`shrink-0 text-text-muted transition-transform ${row.collapsed ? '' : 'rotate-90'}`}
+                          className={`shrink-0 text-text2 transition-transform ${row.collapsed ? '' : 'rotate-90'}`}
                         />
                         <span className={`truncate ${UI_TEXT_LABEL_CLASS}`}>{row.group}</span>
                         <span className={UI_TEXT_META_CLASS}>{row.models.length}</span>
@@ -169,7 +169,7 @@ export function ModelSyncDialog({
 
                 const added = addedModelIds.has(row.model.modelId)
                 return (
-                  <div className="flex items-center gap-2 rounded-lg py-1.5 pl-5 pr-1 transition-colors hover:bg-layer">
+                  <div className="flex items-center gap-2 rounded-lg py-1.5 pl-5 pr-1 transition-colors hover:bg-hover">
                     <div className="min-w-0 flex-1">
                       <div className={`truncate ${UI_TEXT_LABEL_CLASS}`}>{row.model.displayName}</div>
                       {row.model.displayName !== row.model.modelId && (

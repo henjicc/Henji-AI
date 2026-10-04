@@ -36,7 +36,7 @@ const AssetGroupPreviewTile = memo(({
   return (
     <div
       data-asset-group-preview-member={item.id}
-      className={`relative min-h-0 min-w-0 overflow-hidden bg-app ${className}`}
+      className={`relative min-h-0 min-w-0 overflow-hidden bg-window ${className}`}
     >
       {source && !failed ? (
         <img
@@ -47,17 +47,17 @@ const AssetGroupPreviewTile = memo(({
           onError={() => setFailed(true)}
         />
       ) : (
-        <div className="flex h-full items-center justify-center text-text-faint" aria-hidden="true">
+        <div className="flex h-full items-center justify-center text-text3" aria-hidden="true">
           <FallbackIcon className="h-6 w-6" />
         </div>
       )}
       {showKindBadge && item.kind === 'video' && (
-        <span className="ui-glass pointer-events-none absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-lg text-text-dark">
+        <span className="ui-glass pointer-events-none absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-lg text-text1">
           <ICON_MEDIA_VIDEO className="h-3 w-3" />
         </span>
       )}
       {overflowCount > 0 && (
-        <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-app/65 text-13 font-medium text-text-dark">
+        <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-window/65 text-13 font-medium text-text1">
           +{overflowCount}
         </span>
       )}
@@ -79,7 +79,7 @@ export const AssetGroupPreview = memo(({
 
   if (visibleItems.length === 0) {
     return (
-      <div className="flex h-full items-center justify-center bg-app text-text-faint">
+      <div className="flex h-full items-center justify-center bg-window text-text3">
         <ICON_NODE_ASSET_GROUP className="h-8 w-8" />
       </div>
     );

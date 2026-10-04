@@ -50,7 +50,7 @@ const ModelAliasPanel: React.FC = () => {
   }
 
   return (
-    <div className="divide-y divide-border-dark/60">
+    <div className="divide-y divide-line/60">
       {aliasableModels.map(entry => (
         <div
           key={entry.canonicalModelId}

@@ -117,7 +117,7 @@ export function ImageEditorAnnotationPropertiesV3({
       title={t('imageEditor.v3.annotation.properties')}
       gap="stack"
     >
-      <p className="text-xs text-text-muted">
+      <p className="text-xs text-text2">
         {t(`imageEditor.v3.annotation.type.${annotation.type}`)}
       </p>
       {annotation.type === 'text' || 'label' in annotation ? (
@@ -185,7 +185,7 @@ export function ImageEditorAnnotationPropertiesV3({
                 }
               }}
             />
-            <span className="w-10 shrink-0 text-right text-xs tabular-nums text-text-muted">
+            <span className="w-10 shrink-0 text-right text-xs tabular-nums text-text2">
               {lineWidthPercent.toFixed(1)}%
             </span>
           </div>
@@ -216,7 +216,7 @@ export function ImageEditorAnnotationPropertiesV3({
                 }
               }}
             />
-            <span className="w-10 shrink-0 text-right text-xs tabular-nums text-text-muted">
+            <span className="w-10 shrink-0 text-right text-xs tabular-nums text-text2">
               {textSizePercent.toFixed(1)}%
             </span>
           </div>

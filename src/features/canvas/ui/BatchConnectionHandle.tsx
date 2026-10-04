@@ -95,7 +95,7 @@ export function BatchConnectionHandle({ nodes, onConnect }: BatchConnectionHandl
             stroke="currentColor"
             strokeWidth={2}
             strokeLinecap="round"
-            className="text-brand-300"
+            className="text-accent-text"
           />
         </svg>,
         document.body,

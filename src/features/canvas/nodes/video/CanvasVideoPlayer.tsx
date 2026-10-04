@@ -104,7 +104,7 @@ export function CanvasVideoPlayer({
   return (
     <div
       ref={playerRef}
-      className="group/player relative h-full w-full overflow-hidden bg-bg-dark"
+      className="group/player relative h-full w-full overflow-hidden bg-gap"
     >
       <video
         ref={videoRef}

@@ -162,7 +162,7 @@ export function SplitStoryboardToolEditor({ sourceImageUrl, options, onOptionsCh
         </div>
 
         <div
-          className={`ui-scrollbar flex ${PREVIEW_VIEWPORT_HEIGHT} items-center justify-center overflow-auto rounded-xl border border-line bg-bg-dark/70 p-3`}
+          className={`ui-scrollbar flex ${PREVIEW_VIEWPORT_HEIGHT} items-center justify-center overflow-auto rounded-xl border border-line bg-gap/70 p-3`}
         >
           <div className="relative inline-flex items-center justify-center">
             <img
@@ -218,7 +218,7 @@ export function SplitStoryboardToolEditor({ sourceImageUrl, options, onOptionsCh
         </div>
       </div>
 
-      <div className="space-y-4 rounded-xl border border-line bg-bg-dark/75 p-3.5">
+      <div className="space-y-4 rounded-xl border border-line bg-gap/75 p-3.5">
         <div className={UI_TEXT_PANEL_TITLE_CLASS}>切割参数</div>
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-1">
@@ -265,10 +265,10 @@ export function SplitStoryboardToolEditor({ sourceImageUrl, options, onOptionsCh
           />
         </div>
 
-        <div className={`rounded-lg border border-line bg-bg-dark/80 px-3 py-2 ${UI_TEXT_META_CLASS}`}>
+        <div className={`rounded-lg border border-line bg-gap/80 px-3 py-2 ${UI_TEXT_META_CLASS}`}>
           <div className="flex items-center justify-between">
             <span>输出小格数量</span>
-            <span className="font-medium text-text-dark">{rows * cols}</span>
+            <span className="font-medium text-text1">{rows * cols}</span>
           </div>
           {layout && (
             <>

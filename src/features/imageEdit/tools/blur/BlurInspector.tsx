@@ -66,7 +66,7 @@ export function BlurInspector(): JSX.Element {
           <label className="block space-y-1.5">
             <span className={`flex items-center justify-between gap-3 ${UI_TEXT_META_CLASS}`}>
               <span>强度</span>
-              <span className="shrink-0 text-text-dark">{Math.round(params.strength * 100)}%</span>
+              <span className="shrink-0 text-text1">{Math.round(params.strength * 100)}%</span>
             </span>
             <UiRangeInput
               value={params.strength}

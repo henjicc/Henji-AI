@@ -96,7 +96,7 @@ export function LogFilterToolbar({
   }, [])
 
   return (
-    <div className="flex flex-wrap items-center gap-2 border-b border-border-dark/50 bg-panel/60 px-3 py-2">
+    <div className="flex flex-wrap items-center gap-2 border-b border-line/50 bg-panel/60 px-3 py-2">
       <div className={UI_SEGMENTED_TRACK_CLASS}>
         <UiOptionButton
           type="button"
@@ -157,7 +157,7 @@ export function LogFilterToolbar({
         className="min-w-[220px] flex-1"
       />
 
-      <label className="flex items-center gap-1.5 text-xs text-text-muted">
+      <label className="flex items-center gap-1.5 text-xs text-text2">
         <UiCheckbox checked={errorOnly} onCheckedChange={onErrorOnlyChange} />
         {t('logsWindow.toolbar.errorOnly')}
       </label>
@@ -212,7 +212,7 @@ export function LogFilterToolbar({
         </UiButton>
       </div>
 
-      <label className="flex items-center gap-1.5 text-xs text-text-muted" title={t('logsWindow.toolbar.captureMode.description')}>
+      <label className="flex items-center gap-1.5 text-xs text-text2" title={t('logsWindow.toolbar.captureMode.description')}>
         <UiCheckbox
           checked={captureMode === 'full'}
           onCheckedChange={(checked) => setCaptureMode(checked ? 'full' : 'standard')}

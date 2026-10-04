@@ -120,9 +120,9 @@ export function CustomModelManager(): JSX.Element {
               <div className="flex-1">
                 <div className="font-medium">{model.name}</div>
                 {model.description && (
-                  <div className="text-sm text-text-faint">{model.description}</div>
+                  <div className="text-sm text-text3">{model.description}</div>
                 )}
-                <div className="text-xs text-text-muted mt-1">
+                <div className="text-xs text-text2 mt-1">
                   {model.modelUrl}
                 </div>
               </div>

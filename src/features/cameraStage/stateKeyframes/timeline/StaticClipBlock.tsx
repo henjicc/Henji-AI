@@ -84,8 +84,8 @@ const StaticClipBlock: React.FC<StaticClipBlockProps> = ({
           <div className="grid gap-3 p-3">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <div className="text-xs font-medium text-text-dark">状态关键帧</div>
-                <div className="mt-0.5 font-mono text-2xs text-text-muted">
+                <div className="text-xs font-medium text-text1">状态关键帧</div>
+                <div className="mt-0.5 font-mono text-2xs text-text2">
                   {formatStateKeyframeTimecode(stateKeyframe.time, 'secondsFrames', fps)}
                 </div>
               </div>
@@ -97,7 +97,7 @@ const StaticClipBlock: React.FC<StaticClipBlockProps> = ({
                 <Trash2 size={13} />
               </UiIconButton>
             </div>
-            <label className="grid gap-1 text-2xs text-text-muted">
+            <label className="grid gap-1 text-2xs text-text2">
               名称
               <UiInput
                 value={draftName}
@@ -155,7 +155,7 @@ const StaticClipBlock: React.FC<StaticClipBlockProps> = ({
           >
             <Diamond
               size={selected || isPlayhead ? 16 : 14}
-              className={selected || isPlayhead ? 'fill-accent text-accent' : 'fill-surface-dark text-text-muted'}
+              className={selected || isPlayhead ? 'fill-accent text-accent' : 'fill-raised text-text2'}
             />
           </div>
         )}

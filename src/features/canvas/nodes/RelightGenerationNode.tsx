@@ -121,7 +121,7 @@ export const RelightGenerationNode = memo(({
       onSelect={() => setSelectedNode(id)}
       onTitleChange={(displayName) => updateNodeData(id, { displayName })}
       rightSlot={route.model && <div className="flex items-center gap-2">
-        <span className="max-w-36 truncate text-2xs text-text-muted">{getI18nText(route.model.meta.name, 'zh-CN')}</span>
+        <span className="max-w-36 truncate text-2xs text-text2">{getI18nText(route.model.meta.name, 'zh-CN')}</span>
         <PriceEstimate providerId={route.model.meta.provider} modelId={route.model.meta.id} params={priceParams} variant="badge" />
       </div>}
       dataAttributes={{

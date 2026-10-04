@@ -68,7 +68,7 @@ export function RelightLightingControls({ value, brightnessTitle, colorTitle, on
       <div key={control.name} className="space-y-1">
         <div className="flex items-center justify-between gap-3">
           {control.title}
-          <span className="text-xs text-text-soft" aria-hidden="true">{control.labels[control.index]}</span>
+          <span className="text-xs text-text2" aria-hidden="true">{control.labels[control.index]}</span>
         </div>
         <UiRangeInput
           aria-label={control.name}

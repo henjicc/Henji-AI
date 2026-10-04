@@ -50,7 +50,7 @@ export function ImageEditorToolParametersV3({
   return (
     <div data-tool-parameters className="flex h-full min-w-max items-center gap-4">
       {moveLike ? (
-        <label className="flex shrink-0 items-center gap-2 text-xs text-text-muted">
+        <label className="flex shrink-0 items-center gap-2 text-xs text-text2">
           <span>{t('imageEditor.v3.toolSettings.snapping')}</span>
           <UiSwitch
             aria-label={t('imageEditor.v3.toolSettings.snapping')}
@@ -89,7 +89,7 @@ export function ImageEditorToolParametersV3({
             ['opacity', 0, 1, 0.01, session.toolSettings.brushOpacity],
             ['hardness', 0, 1, 0.01, session.toolSettings.brushHardness],
           ] as const).map(([key, min, max, step, value]) => (
-            <label key={key} className="flex shrink-0 items-center gap-2 text-xs text-text-muted">
+            <label key={key} className="flex shrink-0 items-center gap-2 text-xs text-text2">
               <span>{t(`imageEditor.v3.toolSettings.${key}`)}</span>
               <UiRangeInput
                 className="!w-24"
@@ -106,7 +106,7 @@ export function ImageEditorToolParametersV3({
                   Number(event.currentTarget.value),
                 )}
               />
-              <span className="w-9 text-right tabular-nums text-text-dark">
+              <span className="w-9 text-right tabular-nums text-text1">
                 {key === 'size' ? Math.round(value) : `${Math.round(value * 100)}%`}
               </span>
             </label>

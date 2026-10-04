@@ -32,7 +32,7 @@ export const MultiAngleOrbitScene = memo(function MultiAngleOrbitScene({ views, 
     <svg viewBox="0 0 100 100" className="pointer-events-none absolute inset-0 h-full w-full" aria-hidden={onDiscretePresetChange ? undefined : true}
       data-multi-angle-image-block="true" data-block-azimuth={pose.azimuth} data-block-elevation={pose.elevation} data-image-aspect={aspect}>
       {block.faces.map(face => <g key={face.name} data-block-face={face.name} visibility={face.visible ? 'visible' : 'hidden'}>
-        <polygon points={face.points} className={`${face.name === 'top' ? 'fill-text-muted' : face.name === 'bottom' ? 'fill-surface-dark' : face.name === 'back' ? 'fill-layer' : 'fill-panel'} stroke-line-strong`} strokeWidth="0.3" strokeLinejoin="round" />
+        <polygon points={face.points} className={`${face.name === 'top' ? 'fill-text2' : face.name === 'bottom' ? 'fill-raised' : face.name === 'back' ? 'fill-hover' : 'fill-panel'} stroke-line-strong`} strokeWidth="0.3" strokeLinejoin="round" />
         {face.name !== 'front' && textures && <image data-block-texture={face.name} href={textures[face.name]}
           width="1" height="1" preserveAspectRatio="none" transform={face.textureMatrix} opacity={face.name === 'bottom' ? 0.65 : face.name === 'back' ? 0.8 : 0.9} />}
         {face.name === 'front' && sourceImage && <foreignObject transform={block.matrix} width={block.width} height={block.height}>

@@ -6,7 +6,7 @@ import { UI_SCALE_MODES, type UiScaleMode } from '@/core/theme/uiScale'
 export function AudioEditViewSettings({ open, onClose, value, onChange }: { open: boolean; onClose: () => void; value: ViewSettings; onChange: (value: ViewSettings) => void }) {
   const scale = useSettingsStore((state) => state.uiScaleMode)
   return <UiModal isOpen={open} onClose={onClose} title="口播界面设置" size="compact">
-    <div className="space-y-5 text-sm text-text-muted">
+    <div className="space-y-5 text-sm text-text2">
       <label className="block space-y-2"><span>文字大小 · {value.textSize}</span><UiRangeInput aria-label="文字大小" min={14} max={36} step={1} value={value.textSize} onChange={(event) => onChange({ ...value, textSize: Number(event.target.value) })} /></label>
       <label className="block space-y-2"><span>文字左右留白 · {value.sidePadding}</span><UiRangeInput aria-label="文字左右留白" min={16} max={240} step={8} value={value.sidePadding} onChange={(event) => onChange({ ...value, sidePadding: Number(event.target.value) })} /></label>
       <label className="flex items-center justify-between gap-3">波形上方显示字幕<UiSwitch aria-label="波形上方显示字幕" checked={value.timelineCaptions} onCheckedChange={(timelineCaptions) => onChange({ ...value, timelineCaptions })} /></label>

@@ -21,7 +21,7 @@ export function NodeGenerationError({ message }: NodeGenerationErrorProps) {
     <div
       role="button"
       tabIndex={0}
-      className="nodrag absolute inset-0 flex cursor-pointer flex-col items-center justify-center gap-2 bg-bg-dark px-4 text-center"
+      className="nodrag absolute inset-0 flex cursor-pointer flex-col items-center justify-center gap-2 bg-gap px-4 text-center"
       onClick={(event) => {
         event.stopPropagation();
         showAlertDialog({

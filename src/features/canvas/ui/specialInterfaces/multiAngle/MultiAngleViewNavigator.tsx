@@ -33,7 +33,7 @@ export const MultiAngleViewNavigator = memo(function MultiAngleViewNavigator({
           <g key={view.preset} className="group/direction">
           <circle cx={x} cy={y} r={size / 2} opacity={opacity}
             data-multi-angle-direction-dot={view.preset} visibility={occluded ? 'hidden' : 'visible'}
-            aria-hidden="true" className={`pointer-events-none ${active ? 'fill-accent' : 'fill-text-muted group-hover/direction:fill-text group-focus-within/direction:fill-text'}`} />
+            aria-hidden="true" className={`pointer-events-none ${active ? 'fill-accent' : 'fill-text2 group-hover/direction:fill-text1 group-focus-within/direction:fill-text1'}`} />
           <foreignObject x={x - 3} y={y - 3} width="6" height="6"
             visibility={occluded ? 'hidden' : 'visible'} data-direction-depth={depth}>
             {/* ui-surface-allow 6px 方向点的透明命中区（外观由 SVG 圆点表达），不是按钮档位 */}
@@ -49,7 +49,7 @@ export const MultiAngleViewNavigator = memo(function MultiAngleViewNavigator({
           </foreignObject>
           <text x={labelX} y={labelY} fontSize="3" textAnchor="middle" aria-hidden="true"
             data-multi-angle-direction-label={view.preset} visibility={occluded ? 'hidden' : 'visible'}
-            className={`pointer-events-none stroke-panel ${active ? 'fill-text font-medium' : 'fill-text-soft'}`}
+            className={`pointer-events-none stroke-panel ${active ? 'fill-text1 font-medium' : 'fill-text2'}`}
             strokeWidth="0.8" strokeLinejoin="round" paintOrder="stroke">{label}</text>
           </g>
         )

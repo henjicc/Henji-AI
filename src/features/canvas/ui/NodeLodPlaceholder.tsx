@@ -18,7 +18,7 @@ interface NodeLodPlaceholderProps {
 export function NodeLodPlaceholder({ title, icon }: NodeLodPlaceholderProps): JSX.Element {
   return (
     <div className="canvas-node-lod-placeholder pointer-events-none absolute inset-0 z-raised flex-col gap-1.5 p-2">
-      <div className="flex shrink-0 items-center gap-2 px-1 py-0.5 text-text-dark">
+      <div className="flex shrink-0 items-center gap-2 px-1 py-0.5 text-text1">
         {icon}
         <span className="truncate text-xl font-medium leading-tight">{title}</span>
       </div>

@@ -79,7 +79,7 @@ export function MaskEditorInspector({
             <div className="space-y-2">
               <div className={`flex items-center justify-between gap-3 ${UI_TEXT_META_CLASS}`}>
                 <span>大小</span>
-                <span className="text-text-dark">{Math.round(brushSize)} px</span>
+                <span className="text-text1">{Math.round(brushSize)} px</span>
               </div>
               <UiRangeInput
                 aria-label="画笔大小"
@@ -93,7 +93,7 @@ export function MaskEditorInspector({
             <div className="space-y-2">
               <div className={`flex items-center justify-between gap-3 ${UI_TEXT_META_CLASS}`}>
                 <span>硬度</span>
-                <span className="text-text-dark">{hardnessPercent}%</span>
+                <span className="text-text1">{hardnessPercent}%</span>
               </div>
               <UiRangeInput
                 aria-label="画笔硬度"

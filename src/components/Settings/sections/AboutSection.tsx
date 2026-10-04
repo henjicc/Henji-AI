@@ -100,12 +100,12 @@ const AboutSection: React.FC = () => {
                 onClick={() => setViewer({ open: true, componentId: component.id })}
               >
                 <span className="flex min-w-0 items-baseline gap-2">
-                  <span className="truncate text-sm text-text-dark">{component.name}</span>
+                  <span className="truncate text-sm text-text1">{component.name}</span>
                   {component.version ? <span className={`truncate font-mono ${UI_TEXT_META_CLASS}`}>{component.version}</span> : null}
                 </span>
                 <span className="flex shrink-0 items-center gap-1.5">
                   <span className={UI_TEXT_META_CLASS}>{component.license}</span>
-                  <ChevronRight className="h-3.5 w-3.5 text-text-muted" />
+                  <ChevronRight className="h-3.5 w-3.5 text-text2" />
                 </span>
               </UiOptionButton>
             ))}

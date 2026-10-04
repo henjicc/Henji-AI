@@ -139,7 +139,7 @@ export const UI_ROW_GAP_CLASS = 'space-y-3';
 export const UI_FORM_ROW_GAP_CLASS = 'space-y-5';
 
 /** 唯一允许的分隔线写法：一条线，不是一个框 */
-export const UI_DIVIDER_CLASS = 'border-t border-border-dark/60';
+export const UI_DIVIDER_CLASS = 'border-t border-line/60';
 
 /**
  * 分区堆叠间距：去掉分区卡片后，靠这个间距 + 组标签建立层级。
@@ -149,16 +149,16 @@ export const UI_DIVIDER_CLASS = 'border-t border-border-dark/60';
 export const UI_SECTION_STACK_CLASS = 'space-y-8';
 
 export const UI_PANEL_SURFACE_CLASS =
-  'bg-panel border border-border-dark text-text-dark shadow-panel';
+  'bg-panel border border-line text-text1 shadow-panel';
 
 /**
  * 内嵌表面（五级容器词汇表的第 4 级 Surface）。
  *
  * 只用更暗的底色做层次，不画边框不画阴影——内层背景只能比外层更暗，不能更亮。
  * `<UiPanel variant="inset">` 就是它，元素类型不是 div（如 `<details>`/`<section>`）
- * 时可以直接消费这个类串，不要另写一套 `bg-layer`/`bg-surface-dark` 的浅色底。
+ * 时可以直接消费这个类串，不要另写一套 `bg-hover`/`bg-raised` 的浅色底。
  */
-export const UI_INSET_SURFACE_CLASS = 'bg-app/40 text-text-dark';
+export const UI_INSET_SURFACE_CLASS = 'bg-window/40 text-text1';
 
 /**
  * 元信息徽标（类型/尺寸/时长/时间这类只读标签）。
@@ -167,7 +167,7 @@ export const UI_INSET_SURFACE_CLASS = 'bg-app/40 text-text-dark';
 export const UI_META_BADGE_CLASS = 'bg-hover border border-line px-2 py-0.5 rounded';
 
 export const UI_META_BADGE_ACCENT_CLASS =
-  'bg-accent/10 border border-accent/40 text-brand-300 px-2 py-0.5 rounded';
+  'bg-accent/10 border border-accent/40 text-accent-text px-2 py-0.5 rounded';
 
 /*
  * 这里曾经有过 UI_LIST_ITEM_SKIP_TALL_CLASS
@@ -371,7 +371,7 @@ export const UI_LIGHTING_BRIGHTNESS_GRADIENT = `linear-gradient(90deg, ${CANVAS_
 export const UI_LIGHTING_COLOR_GRADIENT = `linear-gradient(90deg, ${Object.values(UI_LIGHTING_COLORS).join(', ')})`
 
 /** 滑块：白边 + 外圈固定深色细线（shadow-thumb-ring），压在任何内容色（含纯白端）上都有可辨轮廓。 */
-export const UI_LIGHTING_RANGE_CLASS = `rounded-full focus-visible:ring-2 focus-visible:ring-brand-300
+export const UI_LIGHTING_RANGE_CLASS = `rounded-full focus-visible:ring-2 focus-visible:ring-accent-text
   [&::-webkit-slider-runnable-track]:!h-2.5 [&::-moz-range-track]:!h-2.5
   [&::-webkit-slider-runnable-track]:[background:var(--lighting-track)] [&::-moz-range-track]:[background:var(--lighting-track)]
   [&::-webkit-slider-thumb]:!mt-[-3px] [&::-webkit-slider-thumb]:!h-4 [&::-webkit-slider-thumb]:!w-7

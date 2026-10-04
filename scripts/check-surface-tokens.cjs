@@ -124,8 +124,11 @@ function tokenizeClassValue(value) {
 /** `border` / `border-2` / `border-[1.5px]` / `border-x` 这类真正给出边框宽度的 token */
 const BORDER_WIDTH_PATTERN = /^border(?:-[xytrbl])?(?:-(?:[0-8]|\[[^\]]+\]))?$/;
 const BORDER_NOOP_TOKENS = new Set(['border-0', 'border-none', 'border-transparent']);
-/** 表面色背景（允许 /40 这类透明度后缀） */
-const SURFACE_BG_PATTERN = /^bg-(?:panel|surface|surface-dark|app|layer)(?:\/\d{1,3})?$/;
+/**
+ * 表面色背景（允许 /40 这类透明度后缀）。语义令牌：panel 面板、raised 内嵌/字段、window 窗口、hover 悬停底
+ * （4.2 删除旧别名 surface/surface-dark/app/layer 后对应的新名，覆盖范围不变）。
+ */
+const SURFACE_BG_PATTERN = /^bg-(?:panel|raised|window|hover)(?:\/\d{1,3})?$/;
 const PANEL_BG_PATTERN = /^bg-panel(?:\/\d{1,3})?$/;
 const ROUNDED_PATTERN = /^rounded(?:-.+)?$/;
 

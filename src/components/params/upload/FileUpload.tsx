@@ -68,9 +68,9 @@ export function FileUpload({
       )}
       <div className="flex flex-wrap items-center gap-2">
         {safeValue.map((source, index) => (
-          <div key={`${source}-${index}`} className={`flex ${toolbar ? 'h-8' : 'h-9'} min-w-0 items-center gap-1.5 rounded-lg bg-app/40 px-2`}>
-            <FileText className="h-4 w-4 shrink-0 text-text-muted" />
-            <span className="max-w-32 truncate text-xs text-text-soft">{displayFilename(source, index)}</span>
+          <div key={`${source}-${index}`} className={`flex ${toolbar ? 'h-8' : 'h-9'} min-w-0 items-center gap-1.5 rounded-lg bg-window/40 px-2`}>
+            <FileText className="h-4 w-4 shrink-0 text-text2" />
+            <span className="max-w-32 truncate text-xs text-text2">{displayFilename(source, index)}</span>
             <UiIconButton size="sm"
               type="button"
               className="shrink-0"

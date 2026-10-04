@@ -46,7 +46,7 @@ export function AssistantTraceDiffDialog({
             {diff.messages.changed.length > 0 && (
               <div className="mt-2 space-y-2">
                 {diff.messages.changed.map((item) => (
-                  <div key={item.index} className="grid gap-2 rounded border border-border-dark/40 p-2 md:grid-cols-2">
+                  <div key={item.index} className="grid gap-2 rounded border border-line/40 p-2 md:grid-cols-2">
                     <div><div className="mb-1 text-2xs text-danger-text">上一轮 #{item.index + 1}</div><JsonTree value={item.previous} /></div>
                     <div><div className="mb-1 text-2xs text-success-text">当前轮 #{item.index + 1}</div><JsonTree value={item.current} /></div>
                   </div>
@@ -61,7 +61,7 @@ export function AssistantTraceDiffDialog({
                 <TextCompare label="上一轮" value={diff.previousSystem} tone="removed" />
                 <TextCompare label="当前轮" value={diff.currentSystem} tone="added" />
               </div>
-            ) : <div className="text-xs text-text-muted">系统提示词保持不变，共 {diff.currentSystem.length} 个字符。</div>}
+            ) : <div className="text-xs text-text2">系统提示词保持不变，共 {diff.currentSystem.length} 个字符。</div>}
           </DiffBlock>
 
           <DiffBlock title="工具变化">
@@ -86,13 +86,13 @@ export function AssistantTraceDiffDialog({
   )
 }
 
-function DiffBlock({ title, badge, children }: { title: string; badge?: string; children: ReactNode }): JSX.Element {
-  return <section className="rounded-lg border border-border-dark/45 bg-window/40"><div className="flex items-center justify-between border-b border-border-dark/35 px-3 py-2"><span className="text-xs font-medium text-text-dark">{title}</span>{badge && <span className="rounded bg-hover px-1.5 py-0.5 text-2xs text-text-muted">{badge}</span>}</div><div className="p-3">{children}</div></section>
+function DiffBlock({ title, badge, children }: { title: string; badge?: string; children: ReactNode }): JSX.Element { // ui-surface-allow 日志窗口内嵌块：4.1 迁移为 bg-window/40 后被 4.2 补全的表面规则识别；去描边属视觉改动，交 5.7 核对
+  return <section className="rounded-lg border border-line/45 bg-window/40"><div className="flex items-center justify-between border-b border-line/35 px-3 py-2"><span className="text-xs font-medium text-text1">{title}</span>{badge && <span className="rounded bg-hover px-1.5 py-0.5 text-2xs text-text2">{badge}</span>}</div><div className="p-3">{children}</div></section>
 }
 
 function DeltaMetric({ label, value }: { label: string; value: number }): JSX.Element {
-  const tone = value > 0 ? 'text-warning-text' : value < 0 ? 'text-success-text' : 'text-text-muted'
-  return <div className="rounded border border-border-dark/40 bg-window/40 p-2"><div className="text-2xs text-text-muted">{label}</div><div className={`mt-1 font-mono text-sm ${tone}`}>{value > 0 ? '+' : ''}{formatTraceTokens(value)}</div></div>
+  const tone = value > 0 ? 'text-warning-text' : value < 0 ? 'text-success-text' : 'text-text2' // ui-surface-allow 日志窗口内嵌块：4.1 迁移为 bg-window/40 后被 4.2 补全的表面规则识别；去描边属视觉改动，交 5.7 核对
+  return <div className="rounded border border-line/40 bg-window/40 p-2"><div className="text-2xs text-text2">{label}</div><div className={`mt-1 font-mono text-sm ${tone}`}>{value > 0 ? '+' : ''}{formatTraceTokens(value)}</div></div>
 }
 
 function ChangeList({ title, values, tone }: { title: string; values: string[]; tone: 'added' | 'removed' | 'changed' | 'neutral' }): JSX.Element {
@@ -107,7 +107,7 @@ function toneClass(tone: 'added' | 'removed' | 'changed' | 'neutral'): string {
   if (tone === 'added') return 'border-success-text/30 bg-success-tint text-success-text'
   if (tone === 'removed') return 'border-danger-text/30 bg-danger-tint text-danger-text'
   if (tone === 'changed') return 'border-warning-text/30 bg-warning-tint text-warning-text'
-  return 'border-border-dark/40 bg-hover text-text-muted'
+  return 'border-line/40 bg-hover text-text2'
 }
 
 function messageSummary(content: unknown): string {

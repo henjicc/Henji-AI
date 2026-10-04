@@ -34,7 +34,7 @@ const MOTION_OPTIONS: Array<{ label: string; value: CharacterMotionValue }> = [
 ]
 
 const SectionTitle: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <div className="text-xs font-medium uppercase tracking-wide text-text-muted">{children}</div>
+  <div className="text-xs font-medium uppercase tracking-wide text-text2">{children}</div>
 )
 
 interface JointSlidersProps {
@@ -48,12 +48,12 @@ const JointSliders: React.FC<JointSlidersProps> = ({ jointName, value, jointId, 
   const basePath = poseJointPath(jointId)
   return (
     <div className="flex flex-col gap-1">
-      <div className="text-xs text-text-muted">{jointName}</div>
+      <div className="text-xs text-text2">{jointName}</div>
       {AXES.map((axis) => {
         const path = `${basePath}.${axis}`
         return (
           <div key={axis} className="flex items-center gap-1.5">
-            <span className="w-3 shrink-0 text-center text-2xs text-text-muted">{AXIS_LABELS[axis]}</span>
+            <span className="w-3 shrink-0 text-center text-2xs text-text2">{AXIS_LABELS[axis]}</span>
             <UiRangeInput
               min={-180}
               max={180}

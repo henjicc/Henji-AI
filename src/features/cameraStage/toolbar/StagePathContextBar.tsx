@@ -115,7 +115,7 @@ const StagePathContextBar: React.FC = () => {
   }
 
   const parameterInput = (label: string, value: number, onChange: (value: number) => void): React.ReactNode => (
-    <label className="flex items-center justify-between gap-3 text-xs text-text-muted">
+    <label className="flex items-center justify-between gap-3 text-xs text-text2">
       <span className="shrink-0">{label}</span>
       <UiInput
         type="number"
@@ -165,7 +165,7 @@ const StagePathContextBar: React.FC = () => {
         renderPanel={() => (
           <div className="flex flex-col gap-3">
             <div className="flex flex-col gap-1.5">
-              <label className="flex items-center justify-between gap-3 text-xs text-text-muted">
+              <label className="flex items-center justify-between gap-3 text-xs text-text2">
                 <span className="shrink-0">起步延迟</span>
                 <div className="flex items-center gap-1.5">
                   <UiInput
@@ -176,10 +176,10 @@ const StagePathContextBar: React.FC = () => {
                     className="w-20 px-2 text-right tabular-nums"
                     onChange={(event) => updateDetail({ delay: Math.max(0, Number(event.target.value)) })}
                   />
-                  <span className="text-2xs text-text-muted">秒</span>
+                  <span className="text-2xs text-text2">秒</span>
                 </div>
               </label>
-              <p className="text-2xs leading-4 text-text-muted">
+              <p className="text-2xs leading-4 text-text2">
                 本段过渡开始后，等待这段时间再让当前对象开始移动。
               </p>
             </div>
@@ -187,7 +187,7 @@ const StagePathContextBar: React.FC = () => {
             {activePreset?.kind === 'orbit' && (
               <>
                 {parameterInput('环绕角度', activePreset.degrees, (degrees) => updatePreset({ ...activePreset, degrees }))}
-                <div className="flex items-center justify-between gap-3 text-xs text-text-muted">
+                <div className="flex items-center justify-between gap-3 text-xs text-text2">
                   <span>环绕方向</span>
                   <Dropdown<'cw' | 'ccw'>
                     value={activePreset.direction}
@@ -206,7 +206,7 @@ const StagePathContextBar: React.FC = () => {
               && parameterInput('升降高度', activePreset.height, (height) => updatePreset({ ...activePreset, height }))}
 
             {object.type === 'character' && (
-              <div className="flex items-center justify-between gap-3 text-xs text-text-muted">
+              <div className="flex items-center justify-between gap-3 text-xs text-text2">
                 <span>角色动作</span>
                 <Dropdown<string>
                   value={motionValue}

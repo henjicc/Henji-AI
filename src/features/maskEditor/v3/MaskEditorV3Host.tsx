@@ -289,8 +289,8 @@ export const MaskEditorV3Host = forwardRef<MaskEditorV3HostHandle, MaskEditorV3H
         onReloadEditor={() => setAttempt((value) => value + 1)}
         toolbarActions={(
           <>
-            {saving ? <span role="status" className="text-xs text-text-muted">正在保存…</span> : null}
-            {saveError ? <span role="alert" className="text-xs text-danger">自动保存失败，请重试</span> : null}
+            {saving ? <span role="status" className="text-xs text-text2">正在保存…</span> : null}
+            {saveError ? <span role="alert" className="text-xs text-danger-text">自动保存失败，请重试</span> : null}
             {toolbarActions}
           </>
         )}

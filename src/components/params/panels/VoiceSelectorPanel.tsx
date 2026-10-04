@@ -461,7 +461,7 @@ export const VoiceSelectorPanel: React.FC<VoiceSelectorPanelProps> = ({
       {remoteStatus === 'failed' && <UiError size="xs" message={remoteError} onRetry={() => void loadRemoteVoices(true)} />}
       {libraryError && <UiError size="xs" message={libraryError} />}
       {config?.customIdHint && voices.length === 0 && remoteStatus !== 'loading' && (
-        <p className="mb-2 text-xs text-text-muted">{config.customIdHint}</p>
+        <p className="mb-2 text-xs text-text2">{config.customIdHint}</p>
       )}
 
       <div className="min-h-0 flex-1 overflow-hidden">
@@ -490,9 +490,9 @@ export const VoiceSelectorPanel: React.FC<VoiceSelectorPanelProps> = ({
                     }`}
                   >
                     <span className="w-full truncate text-left text-sm leading-tight">{voice.name}</span>
-                    {(training || failed || expired) && <span className="text-xs text-text-muted">{failed ? '训练失败或音色已失效' : expired ? '有效期已过，请刷新确认' : '等待训练结果'}</span>}
+                    {(training || failed || expired) && <span className="text-xs text-text2">{failed ? '训练失败或音色已失效' : expired ? '有效期已过，请刷新确认' : '等待训练结果'}</span>}
                     {hasDescription && (
-                      <span className="w-full truncate text-left text-xs text-text-muted">{voice.description}</span>
+                      <span className="w-full truncate text-left text-xs text-text2">{voice.description}</span>
                     )}
                   </UiOptionButton>
                   {canDelete && (

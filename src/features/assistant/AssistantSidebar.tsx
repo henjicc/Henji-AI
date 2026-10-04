@@ -122,14 +122,14 @@ export function AssistantSidebar({ workspaceRef }: AssistantSidebarProps): JSX.E
           onKeyDown={handleHeaderKeyDown}
         >
           <div className="flex min-w-0 flex-1 items-center gap-2 px-1">
-            <Sparkles className="h-4 w-4 shrink-0 text-text-muted" />
+            <Sparkles className="h-4 w-4 shrink-0 text-text2" />
             <div className={`min-w-0 truncate ${UI_TEXT_LABEL_CLASS}`}>智能助手</div>
             <GripHorizontal
               aria-hidden="true"
               className={`h-4 w-4 shrink-0 transition-opacity duration-120 ${
                 interaction.dragging
                   ? `${UI_COLOR_ACCENT_TEXT_CLASS} opacity-100`
-                  : 'text-text-faint opacity-0 group-hover:opacity-100'
+                  : 'text-text3 opacity-0 group-hover:opacity-100'
               }`}
             />
           </div>

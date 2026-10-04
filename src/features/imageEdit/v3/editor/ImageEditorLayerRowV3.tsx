@@ -208,12 +208,12 @@ export function ImageEditorLayerRowV3({
           onClick={(event) => onSelect(row, event)}
           onKeyDown={handleKeyDown}
         >
-          <span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded bg-surface-dark text-text-muted">
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded bg-raised text-text2">
             <LayerIcon className="h-3.5 w-3.5" />
           </span>
           <span
             data-layer-name
-            className="min-w-0 flex-1 truncate text-xs text-text-dark"
+            className="min-w-0 flex-1 truncate text-xs text-text1"
             onDoubleClick={(event) => {
               event.stopPropagation()
               if (!editable) return
@@ -225,7 +225,7 @@ export function ImageEditorLayerRowV3({
           </span>
           {row.layer.mask ? (
             <CircleDashed
-              className="h-3.5 w-3.5 shrink-0 text-text-muted"
+              className="h-3.5 w-3.5 shrink-0 text-text2"
               aria-label={t('imageEditor.v3.layers.hasMask')}
             />
           ) : null}

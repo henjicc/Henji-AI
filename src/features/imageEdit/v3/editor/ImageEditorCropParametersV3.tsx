@@ -215,7 +215,7 @@ export function ImageEditorCropParametersV3({
       >
         <FlipHorizontal className="h-4 w-4" />
       </UiIconButton>
-      <div className="mx-0.5 h-5 w-px shrink-0 bg-border-dark" aria-hidden="true" />
+      <div className="mx-0.5 h-5 w-px shrink-0 bg-line" aria-hidden="true" />
       <PanelTrigger
         className="shrink-0"
         panelWidth={278}
@@ -279,7 +279,7 @@ export function ImageEditorCropParametersV3({
         )}
       </PanelTrigger>
       {(['x', 'y', 'width', 'height'] as const).map((key) => (
-        <label key={key} className="flex shrink-0 items-center gap-1.5 text-xs text-text-muted">
+        <label key={key} className="flex shrink-0 items-center gap-1.5 text-xs text-text2">
           <span>{t(`imageEditor.v3.crop.${key}`)}</span>
           <UiInput
             className="!w-16 !px-2 tabular-nums"

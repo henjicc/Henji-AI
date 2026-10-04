@@ -376,10 +376,10 @@ export default function FileUploader({
                 <UiButton
                     type="button"
                     variant="secondary"
-                    className={`${itemFrameClass} border-2 border-dashed p-0 shadow-thumb ${isDragging ? 'border-accent bg-layer/90' : 'border-border-dark/50 bg-layer/80 hover:border-border-dark/50'} flex-shrink-0`}
+                    className={`${itemFrameClass} border-2 border-dashed p-0 shadow-thumb ${isDragging ? 'border-accent bg-hover/90' : 'border-line/50 bg-hover/80 hover:border-line/50'} flex-shrink-0`}
                     onClick={() => !disabled && inputRef.current?.click()}
                 >
-                    <Plus className={`h-5 w-5 ${isDragging ? 'text-accent' : 'text-text-muted'}`} />
+                    <Plus className={`h-5 w-5 ${isDragging ? 'text-accent' : 'text-text2'}`} />
                 </UiButton>
             )}
 

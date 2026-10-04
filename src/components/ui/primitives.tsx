@@ -221,16 +221,16 @@ export const UiTextToken = forwardRef<HTMLButtonElement, UiTextTokenProps>(
     const fillClass = excluded
       ? chip
         ? 'bg-danger-tint text-danger-text line-through'
-        : `${current ? 'bg-selected' : 'bg-danger-tint'} text-text3 line-through decoration-danger`
+        : `${current ? 'bg-selected' : 'bg-danger-tint'} text-text3 line-through decoration-danger-text`
       : current
         ? 'bg-selected text-text1'
         : selected
           ? 'bg-accent-tint text-text1'
           : chip
-            ? `bg-raised hover:bg-hover hover:text-text1 ${flagged ? 'text-warning' : 'text-text2'}`
+            ? `bg-raised hover:bg-hover hover:text-text1 ${flagged ? 'text-warning-text' : 'text-text2'}`
             : 'text-text1 hover:bg-hover';
     const flagClass = flagged && !excluded
-      ? 'underline decoration-warning decoration-dotted underline-offset-4'
+      ? 'underline decoration-warning-text decoration-dotted underline-offset-4'
       : '';
     const ringClass = selected ? 'ring-1 ring-inset ring-accent-ring' : '';
     return (

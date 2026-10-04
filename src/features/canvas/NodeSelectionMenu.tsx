@@ -216,17 +216,17 @@ export function NodeSelectionMenu({
       }}
       onKeyDown={handleKeyDown}
     >
-      <div className="relative px-3 pb-2 pt-1 text-sm font-semibold text-text-dark">
+      <div className="relative px-3 pb-2 pt-1 text-sm font-semibold text-text1">
         {t('node.menuTitle')}
       </div>
       {sections.map(({ section, items }, sectionIndex) => (
         <div
           key={section}
           className={sectionIndex > 0
-            ? 'relative mt-1 border-t border-border-dark/60 pt-1'
+            ? 'relative mt-1 border-t border-line/60 pt-1'
             : 'relative'}
         >
-          <div className="px-3 pb-1 pt-1 text-2xs font-medium tracking-wide text-text-muted">
+          <div className="px-3 pb-1 pt-1 text-2xs font-medium tracking-wide text-text2">
             {t(NODE_MENU_SECTION_LABEL_KEY[section])}
           </div>
           {items.map((item) => {
@@ -248,10 +248,10 @@ export function NodeSelectionMenu({
                   selectItem(item)
                 }}
               >
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-layer/70">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-hover/70">
                   <Icon className="h-4 w-4 text-accent" />
                 </span>
-                <span className="text-sm font-medium text-text-dark">{t(item.menuLabelKey)}</span>
+                <span className="text-sm font-medium text-text1">{t(item.menuLabelKey)}</span>
               </UiOptionButton>
             )
           })}
