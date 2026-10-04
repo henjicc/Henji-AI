@@ -15,7 +15,7 @@ export function VideoEditProjectEditDialog({ value, bins, onClose, onSubmit }: {
       {single && <UiFormRow label="名称"><UiInput aria-label="项目项名称" className="w-full" value={name} maxLength={200} onChange={event => setName(event.target.value)} /></UiFormRow>}
       <UiFormRow label={value.kind === 'items' ? '移动到素材箱' : '上级素材箱'}><UiSelect aria-label="移动到素材箱" className="w-full" value={binId} onChange={event => setBinId(event.target.value)}><option value="">工程根目录</option>{bins.filter(bin => value.kind !== 'bin' || bin.id !== value.bin.id).map(bin => <option key={bin.id} value={bin.id}>{bin.name}</option>)}</UiSelect></UiFormRow>
       {value.kind === 'items' && <UiFormRow label={single ? '标签' : '批量设置标签'}><UiInput aria-label="项目项标签" className="w-full" value={single || tagsEdited ? tags : ''} placeholder={single ? '用逗号分隔' : '留空保留原标签；修改后应用到全部选中项'} onChange={event => { setTags(event.target.value); setTagsEdited(true) }} /></UiFormRow>}
-      {error && <UiError message={error} size="xs" />}
+      {error && <UiError size="xs" align="start" title={error} message="" />}
     </div>
   </UiModal>
 }

@@ -81,7 +81,7 @@ function SourceDraft({ editor }: { editor: VideoEditCodeEditorState }): React.Re
       {busy && <UiButton onClick={invalidate}>取消检查</UiButton>}
     </div>
     {busy && <UiLoading size="xs" message="正在检查源码并生成预览" />}
-    {error && <UiError size="xs" message={error} />}
+    {error && <UiError size="xs" align="start" title={error} message="" />}
     {candidate && <UiGroup title="候选画面" gap="row">
       <CandidatePreview candidate={candidate} onError={reason => { invalidate(); setError(reason instanceof Error ? reason.message : '候选画面无法显示。') }} />
       <span className="text-xs text-text3">将应用到 {candidate.clipCount} 个片段</span>

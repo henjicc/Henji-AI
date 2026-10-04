@@ -111,6 +111,7 @@ npm run check:ui-visual -- --steps scripts/ui-review/generation-seedance-kie.jso
 | `seedHistory` | `{ "rows": [{ "id": "single", "type": "image", "file"?: "image"/"images"/"video"/"audio"/"missing"/"none", "status"?: "success"/"error", "prompt"?, "error"? }] }` | 生成记录夹具（`__review_common_<id>`）：仓库图片 / 视频与现生成的低音量 WAV，`missing` 是不存在的长路径（走复制失败等正式提示）；写完重载，场景结束删除（需 `writesUserData: true`）。媒体查看器、结果菜单、通知提示用 |
 | `logsWindow` / `mainWindow` | `{}` | 打开独立日志窗口（与主窗口同尺寸），之后的步骤都在日志窗口里执行与截图；`mainWindow` 切回主窗口，场景结束关闭日志窗口 |
 | `seedAudioEdit` | `{ "name": "核对-口播", "transcript": true }` | 口播剪辑夹具工程：系统临时目录生成 12 秒 WAV，经正式接口建工程，`transcript` 时写入固定逐字稿（含已删除句与语气词），不走语音识别、不产生费用；要在进入口播剪辑前执行，场景结束删除工程与临时文件（需 `writesUserData: true`） |
+| `seedVideoEdit` | `{ "name": "核对-剪辑", "captions": 6 }` | 剪辑夹具工程：系统临时目录用本机 FFmpeg 生成 6 秒测试 MP4，写两序列工程（画面、声音、文字片段，字幕与标记，两个素材箱），并把“打开”对话框换成直接返回它；之后点“打开工程”进入。场景结束还原对话框并删临时文件（需 `writesUserData: true`） |
 | `stubDialogs` | `{}`，或 `{ "save": false, "open": ["docs/ref/test01.jpg"] }` | 在主进程替换系统保存/打开对话框：保存落到系统临时目录 `henji-ui-review/<场景 id>/`（沿用默认文件名），打开返回仓库内文件；场景结束自动还原。用于导出、另存为这类会弹系统对话框的流程，只写本机临时文件 |
 | `setFiles` | `{ "target": 定位, "files": ["resources/icons/icon.png"] }` | 给文件输入（默认可定位隐藏元素）设值，等同用户选了文件；路径相对仓库根目录 |
 | `capture` | `"后缀"` 或 `{ "name": "后缀", "metrics": 指标目标? }` | 正式截屏；带 metrics 时同时记自动指标 |

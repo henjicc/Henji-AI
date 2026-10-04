@@ -337,7 +337,7 @@ function createVideoEditMonitorScene() {
         fs.writeFileSync(vttInput, 'WEBVTT\n\n00:00:02.000 --> 00:00:02.500\nWebVTT 精确边界\n')
         await button(page, '面板').click(); await button(page, '字幕与标记').click()
         const content = panel(page, 'content'); await content.waitFor({ state: 'visible' })
-        const importCaption = async input => { await dialogs(app, [input], file); await button(content, '导入字幕').click(); await content.getByLabel('节目偏移（帧）', { exact: true }).fill('0'); await button(content, '选择字幕文件').click() }
+        const importCaption = async input => { await dialogs(app, [input], file); await button(content, '导入或导出字幕').click(); await page.getByRole('menuitem', { name: '导入字幕…', exact: true }).click(); await content.getByLabel('节目偏移（帧）', { exact: true }).fill('0'); await button(content, '选择字幕文件').click() }
         await importCaption(srtInput); document = await saved(page, file, value => value.sequences[0].captions.length === 1)
         const caption = document.sequences[0].captions[0]; assert.equal(caption.start, 30); assert.equal(caption.duration, 60); assert.equal(caption.clipId, undefined)
         await content.locator(`[data-video-edit-timed-entry="${caption.id}"]`).click()
@@ -353,12 +353,12 @@ function createVideoEditMonitorScene() {
         const anchored = document.sequences[0].captions.find(caption => caption.clipId === baseVideo.id)
         await content.locator(`[data-video-edit-timed-entry="${anchored.id}"]`).click(); await button(content, '删除').click(); await saved(page, file, value => value.sequences[0].captions.length === 2)
         await button(page, '撤销').click(); await saved(page, file, value => value.sequences[0].captions.some(caption => caption.id === anchored.id))
-        await button(content, '标记').click(); await button(content, '新增标记').click(); await content.getByLabel('标记名称', { exact: true }).fill('音画检查点'); await content.getByLabel('标记帧', { exact: true }).fill('45'); await button(content, '添加').click()
+        await content.getByRole('tab', { name: '标记', exact: true }).click(); await button(content, '新增标记').click(); await content.getByLabel('标记名称', { exact: true }).fill('音画检查点'); await content.getByLabel('标记帧', { exact: true }).fill('45'); await button(content, '添加').click()
         document = await saved(page, file, value => value.sequences[0].markers.length === 1)
         const marker = document.sequences[0].markers[0]; const markerRef = { kind: 'video_edit.marker', id: `${project.id}:${marker.id}` }; const captionRef = { kind: 'video_edit.caption', id: `${project.id}:${caption.id}` }
         await change(markerRef, { 'video_edit.marker.name': 'Agent 标记回环', 'video_edit.marker.frame': 46 }); await change(captionRef, { 'video_edit.caption.text': 'Agent 字幕 · 中文验收' })
         await button(page, '关闭字幕与标记').click(); await focus(markerRef); await content.waitFor({ state: 'visible' }); await presented(page, 46)
-        await focus(captionRef); await presented(page, 32); await button(content, '字幕').click()
+        await focus(captionRef); await presented(page, 32); await content.getByRole('tab', { name: '字幕', exact: true }).click()
         assert.equal((await read(captionRef, ['video_edit.caption.start', 'video_edit.caption.duration', 'video_edit.caption.text'])).data.properties['video_edit.caption.text'], 'Agent 字幕 · 中文验收')
         const beforeDraft = readProject(file)
         await button(content, '新增字幕').click(); await content.getByLabel('字幕文字', { exact: true }).fill('隐藏面板不得提交此草稿'); await button(page, '关闭字幕与标记').click(); await focus(captionRef); await content.waitFor({ state: 'visible' })
@@ -374,7 +374,7 @@ function createVideoEditMonitorScene() {
           else assert.ok(difference.equal, '半开字幕范围的前一帧和出点帧不能残留字幕')
         }
         const srtOutput = path.join(root, 'captions.srt'); const vttOutput = path.join(root, 'captions.vtt')
-        await dialogs(app, [file], srtOutput); await content.getByLabel('导出字幕格式', { exact: true }).click(); await page.getByRole('option', { name: '导出 SRT', exact: true }).click()
+        await dialogs(app, [file], srtOutput); await button(content, '导入或导出字幕').click(); await page.getByRole('menuitem', { name: '导出 SRT', exact: true }).click()
         await poll(page, async () => fs.existsSync(srtOutput) ? fs.readFileSync(srtOutput, 'utf8') : '', value => value.includes('Agent 字幕 · 中文验收'), '手动SRT导出未写出')
         await dialogs(app, [file], vttOutput)
         const subtitleExport = await callTool(client, 'export_video_edit', operationEnvelope([await read(projectRef, ['video_edit.project.name'])], { projectRef, format: 'vtt' }))

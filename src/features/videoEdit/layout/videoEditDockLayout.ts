@@ -104,6 +104,12 @@ export function showVideoEditPanel(api: DockviewApi, id: VideoEditPanelId): IDoc
   const existing = api.getPanel(id)
   if (existing) { existing.api.setActive(); return existing }
   const definition = VIDEO_EDIT_PANELS.find(panel => panel.id === id)!
+  // 字幕与标记是和效果控件同类的侧栏检查器：作为标签并入效果控件那一组，不再在节目画面右侧另开一列——
+  // 960 窗口下另开的一列只剩约 120px，标签与列表都被挤成竖排（界面重设计 5.5 第三批）。
+  const inspector = id === 'content' ? api.getPanel('effects') : undefined
+  if (inspector && inspector.api.location.type === 'grid') {
+    return api.addPanel({ id, component: id, title: definition.title, renderer: 'always', position: { referencePanel: inspector, direction: 'within' } })
+  }
   const reference = api.getPanel('program') ?? api.panels.find(panel => panel.api.location.type === 'grid')
   return api.addPanel({ id, component: id, title: definition.title, renderer: 'always',
     ...(reference ? { position: { referencePanel: reference, direction: id === 'timeline' ? 'below' : id === 'project' || id === 'source' ? 'left' : 'right' } } : {}),

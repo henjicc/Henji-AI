@@ -24,6 +24,7 @@ const { normalizeSeedAssistant, seedAssistantFixture } = require('./uiReviewAssi
 const { blockPaidGeneration } = require('./uiReviewPaidGuard.cjs')
 const { normalizeSeedHistory, seedHistoryFixture } = require('./uiReviewHistoryFixture.cjs')
 const { normalizeSeedAudioEdit, seedAudioEditFixture } = require('./uiReviewAudioEditFixture.cjs')
+const { normalizeSeedVideoEdit, seedVideoEditFixture } = require('./uiReviewVideoEditFixture.cjs')
 
 const ROOT = path.resolve(__dirname, '..', '..')
 const WORKSPACES = Object.freeze(['generation', 'canvas', 'toolbox', 'assets'])
@@ -64,6 +65,8 @@ const STEP_ACTIONS = Object.freeze({
   seedHistory: (value) => normalizeSeedHistory(value),
   // 口播剪辑夹具工程（临时 WAV + 固定逐字稿，不走语音识别；需 writesUserData: true），见 uiReviewAudioEditFixture.cjs
   seedAudioEdit: (value) => normalizeSeedAudioEdit(value),
+  // 剪辑夹具工程（临时 MP4 + 两序列工程文件，主进程“打开”对话框直接返回它；需 writesUserData: true），见 uiReviewVideoEditFixture.cjs
+  seedVideoEdit: (value) => normalizeSeedVideoEdit(value),
   click: (value) => ({ target: normalizeTarget(value?.target ?? value), button: value?.button ?? 'left' }),
   doubleClick: (value) => ({ target: normalizeTarget(value?.target ?? value) }),
   rightClick: (value) => ({ target: normalizeTarget(value?.target ?? value) }),
@@ -520,6 +523,10 @@ async function runStep(page, step, runtime) {
       }, { save: step.save, openPaths, outputDir, sep: path.sep })
       runtime.dialogsStubbed = true
       console.log(`  系统对话框已替换：保存到 ${outputDir}`)
+      return
+    }
+    case 'seedVideoEdit': {
+      runtime.audioEditFixtures.push(await seedVideoEditFixture(runtime, step))
       return
     }
     case 'seedAudioEdit': {

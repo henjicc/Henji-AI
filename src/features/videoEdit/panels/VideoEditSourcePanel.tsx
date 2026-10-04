@@ -111,6 +111,6 @@ export function VideoEditSourcePanel({ instance, onError, visible = true }: { in
       {media?.kind !== 'audio' && <Dropdown<'fit' | 'actual'> ariaLabel="源显示比例" appearance="text" size="sm" value={display} options={[{ value: 'fit', label: '适应' }, { value: 'actual', label: '100%' }]} onSelect={setDisplay} />}
       <UiIconButton aria-label="关闭源素材" title="关闭源素材" onClick={() => run({ itemId: '', timeUs: 0, playing: false })}><X size={15} /></UiIconButton>
     </div>}
-    {state.error && <UiError message={state.error} />}
+    {state.error && <UiError size="sm" title={state.error} message="" />}
   </div>
 }

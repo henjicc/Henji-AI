@@ -58,7 +58,7 @@ export function VideoEditCodeCreateDialog({ projectId, binId, mode = 'generator'
       <p className="text-xs text-text3">{mode === 'filter' ? '编写处理输入画面的滤镜源码。检查通过后保存在工程中，再选择“添加到片段”试渲染并应用；添加失败仍可复用这份源码。' : '编写图形或动态标题的源码。检查通过后成为工程素材，可拖入时间线与视频混合剪辑。'}</p>
       <UiFormRow label={mode === 'filter' ? '滤镜名称' : '素材名称'}><UiInput aria-label={mode === 'filter' ? '滤镜源码名称' : '代码素材名称'} placeholder="使用源码中的名称" maxLength={200} value={name} disabled={checking} onChange={event => setName(event.target.value)} /></UiFormRow>
       <UiFormRow label="作者源码"><UiTextArea aria-label="作者源码" className="h-80 font-mono text-xs" spellCheck={false} value={source} maxLength={65536} disabled={checking} onChange={event => setSource(event.target.value)} /></UiFormRow>
-      {error && <UiError size="xs" message={error} />}
+      {error && <UiError size="xs" align="start" title={error} message="" />}
     </div>
   </UiModal>
 }

@@ -81,7 +81,7 @@ export function VideoEditAudioChannelsDialog({ projectId, target, onClose }: { p
         </div>
       </UiGroup>}
       {streams && target.kind === 'items' && <p className={UI_TEXT_META_CLASS}>只影响之后放入序列的片段，已在序列中的片段保持不变。</p>}
-      {error && <UiError message={error} size="xs" />}
+      {error && <UiError size="xs" align="start" title={error} message="" />}
     </div>
   </UiModal>
 }

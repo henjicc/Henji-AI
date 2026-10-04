@@ -1,0 +1,598 @@
+[
+  {
+    "id": "review-video-edit",
+    "surface": "剪辑",
+    "name": "核对-剪辑工作区（命令栏、停靠面板、项目、源/节目监视器、时间线、效果控件、字幕与标记、弹窗、空序列）",
+    "checklist": [
+      "V01.1",
+      "V01.2",
+      "V01.3",
+      "V01.5",
+      "V02.2",
+      "V02.3",
+      "V02.4",
+      "V03.1",
+      "V03.4",
+      "V04.2",
+      "V04.3",
+      "V04.5",
+      "V04.6",
+      "V05.1",
+      "V06.1",
+      "V06.2",
+      "V06.3",
+      "V08.1",
+      "V08.2"
+    ],
+    "writesUserData": true,
+    "steps": [
+      {
+        "enter": {
+          "surface": "workspace.video_edit"
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "关闭工程"
+        },
+        "ifPresent": {
+          "role": "button",
+          "name": "关闭工程"
+        }
+      },
+      {
+        "waitFor": {
+          "role": "button",
+          "name": "/^打开工程$/"
+        },
+        "timeout": 12000
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "empty"
+      },
+      {
+        "seedVideoEdit": {
+          "name": "核对-剪辑",
+          "captions": 6
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/^打开工程$/"
+        }
+      },
+      {
+        "waitFor": {
+          "selector": "canvas[aria-label=\"剪辑画面\"][data-presented-frame]"
+        },
+        "timeout": 30000
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": {
+          "name": "editor",
+          "metrics": {
+            "selector": "[data-command-bar]"
+          }
+        }
+      },
+      {
+        "open": {
+          "trigger": {
+            "role": "button",
+            "name": "面板菜单",
+            "nth": 0
+          },
+          "expect": {
+            "selector": "[data-panel-scroll-region]"
+          }
+        },
+        "optional": true
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "dock-panel-menu"
+      },
+      {
+        "escape": {}
+      },
+      {
+        "open": {
+          "trigger": {
+            "role": "button",
+            "name": "面板"
+          },
+          "expect": {
+            "selector": "[data-panel-scroll-region]"
+          }
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "layout-menu"
+      },
+      {
+        "escape": {}
+      },
+      {
+        "open": {
+          "trigger": {
+            "role": "button",
+            "name": "/^工程 /"
+          },
+          "expect": {
+            "selector": "[data-panel-scroll-region]"
+          }
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "project-name-menu"
+      },
+      {
+        "escape": {}
+      },
+      {
+        "rightClick": {
+          "selector": "[data-video-edit-project-entry][aria-label=\"核对素材\"]"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "project-context-menu"
+      },
+      {
+        "escape": {}
+      },
+      {
+        "open": {
+          "trigger": {
+            "role": "button",
+            "name": "视图与排序"
+          },
+          "expect": {
+            "selector": "[data-panel-scroll-region]"
+          }
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "project-view-menu"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/缩略图视图/"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "project-grid"
+      },
+      {
+        "open": {
+          "trigger": {
+            "role": "button",
+            "name": "视图与排序"
+          },
+          "expect": {
+            "selector": "[data-panel-scroll-region]"
+          }
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/列表视图/"
+        }
+      },
+      {
+        "open": {
+          "trigger": {
+            "role": "button",
+            "name": "新建项目项"
+          },
+          "expect": {
+            "selector": "[data-panel-scroll-region]"
+          }
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "project-new-menu"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/新建序列/"
+        }
+      },
+      {
+        "waitFor": {
+          "role": "dialog"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "dialog-sequence"
+      },
+      {
+        "fill": {
+          "target": {
+            "role": "textbox",
+            "name": "序列名称"
+          },
+          "text": ""
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/^确定$/",
+          "within": {
+            "role": "dialog"
+          }
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "dialog-sequence-error"
+      },
+      {
+        "escape": {}
+      },
+      {
+        "click": {
+          "selector": "[data-video-edit-project-entry][aria-label=\"核对素材\"]"
+        }
+      },
+      {
+        "press": {
+          "key": "F2",
+          "target": {
+            "selector": "[aria-label=\"工程素材\"]"
+          }
+        }
+      },
+      {
+        "waitFor": {
+          "role": "dialog"
+        },
+        "optional": true
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "dialog-item-edit"
+      },
+      {
+        "escape": {}
+      },
+      {
+        "doubleClick": {
+          "selector": "[data-video-edit-project-entry][aria-label=\"核对素材\"]"
+        }
+      },
+      {
+        "waitFor": {
+          "role": "region",
+          "name": "源监视器"
+        },
+        "optional": true,
+        "timeout": 15000
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "source-monitor"
+      },
+      {
+        "open": {
+          "trigger": {
+            "role": "button",
+            "name": "更多节目操作"
+          },
+          "expect": {
+            "selector": "[data-panel-scroll-region]"
+          }
+        },
+        "optional": true
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "program-more-menu"
+      },
+      {
+        "escape": {}
+      },
+      {
+        "click": {
+          "selector": "[data-video-edit-clip$=\"-picture\"]",
+          "at": {
+            "x": 30,
+            "y": 12
+          }
+        },
+        "optional": true
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": {
+          "name": "timeline-clip-selected",
+          "metrics": {
+            "role": "toolbar",
+            "name": "时间线工具栏"
+          }
+        }
+      },
+      {
+        "rightClick": {
+          "selector": "[data-video-edit-clip$=\"-picture\"]",
+          "at": {
+            "x": 30,
+            "y": 12
+          }
+        },
+        "optional": true
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "timeline-context-menu"
+      },
+      {
+        "escape": {}
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "放大时间线"
+        },
+        "optional": true
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "放大时间线"
+        },
+        "optional": true
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "timeline-zoomed"
+      },
+      {
+        "click": {
+          "selector": ".dv-tab",
+          "hasText": "效果控件"
+        },
+        "optional": true
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "effects-panel"
+      },
+      {
+        "open": {
+          "trigger": {
+            "role": "button",
+            "name": "面板"
+          },
+          "expect": {
+            "selector": "[data-panel-scroll-region]"
+          }
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/重置布局/"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "open": {
+          "trigger": {
+            "role": "button",
+            "name": "面板"
+          },
+          "expect": {
+            "selector": "[data-panel-scroll-region]"
+          }
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/字幕与标记/"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "waitFor": {
+          "selector": "[data-video-edit-timed-content-sequence]"
+        },
+        "timeout": 10000
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "content-captions"
+      },
+      {
+        "click": {
+          "selector": "[data-video-edit-timed-entry]",
+          "nth": 1
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "content-caption-edit"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/^取消$/",
+          "within": {
+            "selector": "[data-video-edit-timed-content-sequence]"
+          }
+        }
+      },
+      {
+        "click": {
+          "role": "tab",
+          "name": "/^标记$/",
+          "within": {
+            "selector": "[data-video-edit-timed-content-sequence]"
+          }
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "content-markers"
+      },
+      {
+        "fill": {
+          "target": {
+            "role": "textbox",
+            "name": "搜索字幕或标记"
+          },
+          "text": "不存在的关键词"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "content-empty-search"
+      },
+      {
+        "fill": {
+          "target": {
+            "role": "textbox",
+            "name": "搜索字幕或标记"
+          },
+          "text": ""
+        }
+      },
+      {
+        "click": {
+          "selector": "[data-video-edit-project-entry][aria-label=\"备用序列\"]"
+        },
+        "optional": true
+      },
+      {
+        "doubleClick": {
+          "selector": "[data-video-edit-project-entry][aria-label=\"备用序列\"]"
+        },
+        "optional": true
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "sequence-empty"
+      },
+      {
+        "open": {
+          "trigger": {
+            "role": "button",
+            "name": "/^工程 /"
+          },
+          "expect": {
+            "selector": "[data-panel-scroll-region]"
+          }
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/剪辑快捷键/"
+        }
+      },
+      {
+        "waitFor": {
+          "role": "dialog"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "dialog-shortcuts"
+      },
+      {
+        "escape": {}
+      },
+      {
+        "press": {
+          "key": "Space",
+          "target": {
+            "selector": "[aria-label=\"剪辑时间线\"]"
+          }
+        },
+        "optional": true
+      },
+      {
+        "wait": 400
+      },
+      {
+        "capture": "playing"
+      },
+      {
+        "press": {
+          "key": "Space",
+          "target": {
+            "selector": "[aria-label=\"剪辑时间线\"]"
+          }
+        },
+        "optional": true
+      }
+    ]
+  }
+]

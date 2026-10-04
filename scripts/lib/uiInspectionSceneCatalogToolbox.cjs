@@ -827,6 +827,12 @@ function createToolboxScenes(context) {
         if (!initialFeedbackBox || !initialViewportContentBox || !initialTransparencyBox) {
           throw new Error('移动 JPG 前无法读取稳定画面边界')
         }
+        // 拖动位移按视口自适应：1440 下仍是 (42, -180)；960 下图片区只有约 330 高，固定上移 180 会把所有特征角
+        // 都移出图片区，判定无从下手。只缩小位移，“画面跟随指针”的容差与判据不变（5.5 第三批）。
+        const moveDelta = {
+          x: 42,
+          y: -Math.min(180, Math.round(initialViewportContentBox.height * 0.24)),
+        }
         // 与 ImageEditorPreviewV3 的 gpuPresentationActive 同一判据：GPU 合成 + GPU 呈现时，拖动只改 GPU 场景的
         // 临时变换，DOM 反馈层不动（9d719232）。这时“画面跟随指针”按正式截屏的合成结果判定，判据与 DOM 路径同一容差。
         const moveBackends = await preview.evaluate((element) => ({
@@ -848,7 +854,7 @@ function createToolboxScenes(context) {
             anchorBox: initialViewportContentBox,
             visibleBox: intersectBoxes(initialViewportContentBox, moveClip),
             anchors: RELEASE_FIXTURE_FEATURE_ANCHORS,
-            delta: { x: 42, y: -180 },
+            delta: moveDelta,
           })
           if (!movePatch) {
             throw new Error(`GPU 拖动判定找不到移动前后都可见的特征区域：${JSON.stringify({ initialViewportContentBox, moveClip })}`)
@@ -915,8 +921,8 @@ function createToolboxScenes(context) {
         }
         const interactionSequenceBeforeMove = gpuMove ? await readInteractionSequence() : null
         for (let step = 1; step <= 6; step += 1) {
-          const expectedX = 42 * step / 6
-          const expectedY = -180 * step / 6
+          const expectedX = moveDelta.x * step / 6
+          const expectedY = moveDelta.y * step / 6
           await page.mouse.move(startX + expectedX, startY + expectedY)
           await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => resolve())))
           const [
@@ -989,7 +995,7 @@ function createToolboxScenes(context) {
         // GPU 路径下 DOM 反馈层不跟随图层，图层位置取已由合成画面验证过的位移（夹具图片铺满文档）
         const [movedImageBox, currentDocumentBox] = await Promise.all([
           gpuMove
-            ? Promise.resolve({ ...initialViewportContentBox, x: initialViewportContentBox.x + 42, y: initialViewportContentBox.y - 180 })
+            ? Promise.resolve({ ...initialViewportContentBox, x: initialViewportContentBox.x + moveDelta.x, y: initialViewportContentBox.y + moveDelta.y })
             : feedback.locator('img').boundingBox(),
           viewportContent.boundingBox(),
         ])
@@ -1189,8 +1195,11 @@ function createToolboxScenes(context) {
         const beforeFirstAnnotation = await readRevision()
         await annotationTool.click()
         const commandBarStructure = await editor.locator('[data-command-bar]').evaluate((commandBar) => {
-          const parameters = commandBar.querySelector('[data-tool-parameters]')
-          const toolGroup = commandBar.querySelector('[role="group"][aria-label="标注类型"], [role="group"][aria-label="Annotation type"]')
+          // 参数属于命令带：1440 下在命令带同一行；中间放不下时（960）整组在同一命令带的从属带里
+          // （同一个 data-command-stack，共用底色与下边框，不是另起的上下文条，5.5 IE-08）
+          const commandStack = commandBar.closest('[data-command-stack]') ?? commandBar
+          const parameters = commandStack.querySelector('[data-tool-parameters]')
+          const toolGroup = commandStack.querySelector('[role="group"][aria-label="标注类型"], [role="group"][aria-label="Annotation type"]')
           return {
             commandBarCount: document.querySelectorAll('[data-command-bar]').length,
             contextBarCount: document.querySelectorAll('[data-context-bar]').length,
@@ -1658,7 +1667,8 @@ function createToolboxScenes(context) {
         await cropRatioMenu.getByRole('menuitemradio', { name: '1:1', exact: true }).click()
         await cropRatioMenu.waitFor({ state: 'hidden', timeout: 3000 })
         const cropLayout = await editor.locator('[data-crop-parameters]').evaluate((parameters) => {
-          const commandBar = parameters.closest('[data-command-bar]')
+          // 命令带同一行或同一命令带的从属带（960 下放不下时整组下移，IE-08）都算在命令带内
+          const commandBar = parameters.closest('[data-command-bar]') ?? parameters.closest('[data-command-stack]')
           const viewport = parameters.closest('[data-tool-parameter-viewport]')
           const inputWidths = [...parameters.querySelectorAll('input')]
             .filter((element) => element instanceof HTMLInputElement)

@@ -59,7 +59,7 @@ it('真实片段字幕创建、整笔编辑、定位和撤销使用同一工程�
 
 it('标记可改为序列锚定、编辑整数帧、定位和删除，一次操作一次历史', async () => {
   const view = render(<View />)
-  fireEvent.click(view.getByRole('button', { name: '标记' })); fireEvent.click(view.getByRole('button', { name: '新增标记' }))
+  fireEvent.click(view.getByRole('tab', { name: '标记' })); fireEvent.click(view.getByRole('button', { name: '新增标记' }))
   fireEvent.click(view.getByRole('button', { name: '内容锚定' })); fireEvent.click(view.getByRole('button', { name: '序列时钟' }))
   fireEvent.change(view.getByLabelText('标记名称'), { target: { value: '段落开始' } })
   fireEvent.change(view.getByLabelText('标记帧'), { target: { value: '60' } })
@@ -107,7 +107,7 @@ it('隐藏、切序列和同工程重开清除原草稿，不提交到新目标'
 it('真实SRT导入按节目偏移并锚定片段，不猜源入点', async () => {
   files.set('D:/source.srt', '1\n00:00:02,000 --> 00:00:03,000\n文件字幕')
   vi.mocked(getPlatform().system.dialog.open).mockResolvedValue('D:/source.srt')
-  const view = render(<View />); fireEvent.click(view.getByRole('button', { name: '导入字幕' }))
+  const view = render(<View />); fireEvent.click(view.getByRole('button', { name: '导入或导出字幕' })); fireEvent.click(await view.findByRole('menuitem', { name: /导入字幕/ }))
   fireEvent.change(view.getByLabelText('节目偏移（帧）'), { target: { value: '-15' } })
   fireEvent.click(view.getByRole('button', { name: '内容锚定' })); fireEvent.click(await view.findByRole('button', { name: '锚定片段：片段一' }))
   const history = owner.past.length; fireEvent.click(view.getByRole('button', { name: '选择字幕文件' }))
@@ -120,7 +120,7 @@ it.each(['hidden', 'sequence'] as const)('在途文件读取在%s时取消，不
   vi.mocked(getPlatform().system.dialog.open).mockResolvedValue('D:/late.srt')
   let finish!: (value: string) => void
   vi.mocked(getPlatform().system.fs.readTextFile).mockImplementationOnce(() => new Promise<string>(resolve => { finish = resolve }))
-  const view = render(<View />); fireEvent.click(view.getByRole('button', { name: '导入字幕' })); fireEvent.click(view.getByRole('button', { name: '选择字幕文件' }))
+  const view = render(<View />); fireEvent.click(view.getByRole('button', { name: '导入或导出字幕' })); fireEvent.click(await view.findByRole('menuitem', { name: /导入字幕/ })); fireEvent.click(view.getByRole('button', { name: '选择字幕文件' }))
   await waitFor(() => expect(finish).toBeTypeOf('function'))
   if (mode === 'hidden') view.rerender(<View visible={false} />)
   else act(() => switchVideoEditSequence(owner.document.id, second))
@@ -131,7 +131,7 @@ it.each(['hidden', 'sequence'] as const)('在途文件读取在%s时取消，不
 it('字幕导出走实际文件写入和回读，输出保持序列帧边界', async () => {
   createVideoEditCaption(owner.document.id, sequence().id, { start: 15, duration: 30, text: '导出字幕' })
   vi.mocked(getPlatform().system.dialog.save).mockResolvedValue('D:/output.srt')
-  const view = render(<View />); fireEvent.click(view.getByRole('button', { name: '导出字幕格式' })); fireEvent.click(view.getByText('导出 SRT'))
+  const view = render(<View />); fireEvent.click(view.getByRole('button', { name: '导入或导出字幕' })); fireEvent.click(await view.findByRole('menuitem', { name: '导出 SRT' }))
   await waitFor(() => expect(files.get('D:/output.srt')).toContain('00:00:00,500 --> 00:00:01,500\n导出字幕'))
   await waitFor(() => expect(getPlatform().system.fs.readTextFile).toHaveBeenCalledWith('D:/output.srt')); expect(onError).not.toHaveBeenCalled()
 })

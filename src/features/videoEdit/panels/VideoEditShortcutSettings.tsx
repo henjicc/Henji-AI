@@ -51,7 +51,7 @@ export function VideoEditShortcutDialog({ open, onClose }: { open: boolean; onCl
             <UiButton aria-label={`清除${command.title}键位`} onClick={() => { setCapture(null); change({ ...draft, [command.id]: null }) }}>清除</UiButton>
           </div>)}
         </div>
-        {error && <UiError size="xs" message={error} />}
+        {error && <UiError size="xs" align="start" title={error} message="" />}
       </div>
     </UiModal>
   </>

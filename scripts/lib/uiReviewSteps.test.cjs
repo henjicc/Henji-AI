@@ -97,6 +97,15 @@ test('步骤：seedAudioEdit 需要工程名，默认带逐字稿', () => {
   assert.throws(() => normalizeStep({ seedAudioEdit: {} }, 's'), /需要 name/)
 })
 
+test('步骤：seedVideoEdit 需要工程名，字幕条数有上下限', () => {
+  const step = normalizeStep({ seedVideoEdit: { name: '核对-剪辑' } }, 's')
+  assert.equal(step.name, '核对-剪辑')
+  assert.equal(step.captions, 6)
+  assert.equal(normalizeStep({ seedVideoEdit: { name: '空', captions: 0 } }, 's').captions, 0)
+  assert.throws(() => normalizeStep({ seedVideoEdit: {} }, 's'), /需要 name/)
+  assert.throws(() => normalizeStep({ seedVideoEdit: { name: 'x', captions: 999 } }, 's'), /captions/)
+})
+
 test('定位：/正则/ 字符串解析为 RegExp，其余原样', () => {
   assert.deepEqual(parsePattern('/^模型：/i'), /^模型：/i)
   assert.equal(parsePattern('生成'), '生成')

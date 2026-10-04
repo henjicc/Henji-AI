@@ -64,6 +64,6 @@ export function CodeImageParameterControl({ target, parameterKey, title, value }
       {busy && <UiButton onClick={cancel}>取消选择</UiButton>}
     </div>
     {busy && <UiLoading size="xs" message="正在应用图片" />}
-    {error && <UiError size="xs" message={error} />}
+    {error && <UiError size="xs" align="start" title={error} message="" />}
   </div>
 }
