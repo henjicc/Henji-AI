@@ -20,7 +20,7 @@ describe('GlobalAlertDialog', () => {
   it('二次确认只显示明确的确认和取消动作，取消后不能趁退出动画确认', async () => {
     const pending = requestAlertConfirmation({ title: '克隆费用', message: '首次正式合成另收 138 元', confirmLabel: '确认费用，开始克隆' })
     render(<GlobalAlertDialog onAskAssistant={() => undefined} />)
-    expect(screen.getAllByRole('button').map(button => button.textContent)).toEqual(['确认费用，开始克隆', '取消'])
+    expect(screen.getAllByRole('button').map(button => button.textContent)).toEqual(['取消', '确认费用，开始克隆'])
     fireEvent.click(screen.getByRole('button', { name: '取消' }))
     expect(screen.queryByRole('button', { name: '确认费用，开始克隆' })).toBeNull()
     await expect(pending).resolves.toBe(false)
@@ -57,7 +57,7 @@ describe('GlobalAlertDialog', () => {
     render(<GlobalAlertDialog onAskAssistant={() => undefined} />)
 
     expect(screen.getAllByRole('button').map((button) => button.textContent))
-      .toEqual(['去配置', '关闭'])
+      .toEqual(['关闭', '去配置'])
 
     fireEvent.click(screen.getByRole('button', { name: '去配置' }))
     expect(useUiStore.getState()).toMatchObject({
@@ -65,5 +65,19 @@ describe('GlobalAlertDialog', () => {
       settingsTarget: { tab: 'models', sectionId: 'models-providers' },
     })
     expect(useAlertDialogStore.getState().queue).toHaveLength(0)
+  })
+  it('多个动作时关闭在最左、主动作固定在最右，错误用圆形警示图标（任务 5.7）', () => {
+    showAlertDialog({
+      title: '生成失败',
+      message: '供应商返回错误',
+      type: 'error',
+      detail: 'stack',
+      settingsTarget: { tab: 'models', sectionId: 'models-providers' },
+    })
+    render(<GlobalAlertDialog onAskAssistant={() => undefined} />)
+    const labels = screen.getAllByRole('button').map((button) => button.textContent)
+    expect(labels[0]).toBe('关闭')
+    expect(labels.at(-1)).toBe('去配置')
+    expect(screen.getByRole('alertdialog').querySelector('.lucide-circle-alert')).not.toBeNull()
   })
 })

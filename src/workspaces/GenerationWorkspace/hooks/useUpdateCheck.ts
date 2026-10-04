@@ -5,6 +5,8 @@ import { checkForUpdates, getCurrentVersion } from '@/services/updateChecker'
 import { detectShell, getPlatform } from '@/platform/runtime'
 import type { UpdaterCheckResult, UpdaterEvent } from '@/platform/contracts/updater'
 import { isVersionIgnored, shouldCheckForUpdates, updateLastCheckTime } from '@/utils/updateConfig'
+import { readDevelopmentLaunchOptions } from '@/core/development/developmentLaunch'
+import { createUpdatePreviewRelease } from '@/core/development/updatePreviewFixture'
 
 const logger = createLogger('workspaces.GenerationWorkspace.hooks.useUpdateCheck')
 const GITHUB_RELEASES_URL = 'https://github.com/henjicc/Henji-AI/releases'
@@ -17,9 +19,13 @@ export interface UseUpdateCheckReturn {
 }
 
 export function useUpdateCheck(): UseUpdateCheckReturn {
-  const [showUpdateDialog, setShowUpdateDialog] = useState(false)
-  const [releaseInfo, setReleaseInfo] = useState<ReleaseInfo | null>(null)
   const [currentVersion] = useState(() => getCurrentVersion())
+  // 开发预览（--dev-update-preview，界面核对用）：直接打开弹窗，不订阅更新器、不检查更新
+  const [updatePreview] = useState(() => readDevelopmentLaunchOptions().updatePreview)
+  const [showUpdateDialog, setShowUpdateDialog] = useState(() => updatePreview !== null)
+  const [releaseInfo, setReleaseInfo] = useState<ReleaseInfo | null>(
+    () => updatePreview ? createUpdatePreviewRelease(updatePreview, currentVersion) : null
+  )
 
   const applyUpdaterResult = (result: UpdaterCheckResult): void => {
     if (!result.releaseInfo && !result.hasUpdate) return
@@ -39,22 +45,26 @@ export function useUpdateCheck(): UseUpdateCheckReturn {
   }
 
   useEffect(() => {
-    if (detectShell() !== 'electron') return
+    if (updatePreview || detectShell() !== 'electron') return
 
     const unsubscribe = getPlatform().updater.onEvent((event: UpdaterEvent) => {
       if (event.type === 'error') {
         logger.error('[Workspace] Electron 更新器事件失败', event.result.errorMessage)
+        // 弹窗已打开（下载中）时把失败原因交给弹窗显示，用户可以直接重试
+        setReleaseInfo((previous) => previous
+          ? { ...previous, updateStatus: 'error', errorMessage: event.result.errorMessage }
+          : previous)
         return
       }
       applyUpdaterResult(event.result)
     })
 
     return unsubscribe
-  }, [])
+  }, [updatePreview])
 
   useEffect(() => {
     const run = async (): Promise<void> => {
-      if (!shouldCheckForUpdates()) return
+      if (updatePreview || !shouldCheckForUpdates()) return
 
       try {
         logger.info('[Workspace] 开始检查更新...', {})
@@ -80,7 +90,7 @@ export function useUpdateCheck(): UseUpdateCheckReturn {
     }, 2000)
 
     return () => window.clearTimeout(timer)
-  }, [])
+  }, [updatePreview])
 
   return {
     showUpdateDialog,

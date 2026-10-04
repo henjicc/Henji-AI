@@ -211,6 +211,10 @@ export const THEME_TEXT_MIN_CONTRAST = 4.5;
 
 /** 深色玻璃底（黑）的不透明度：保证辅助文字在玻璃上 ≥ 4.5:1（任务 4.3，主控决定 ≥ 0.70）。 */
 export const DARK_GLASS_TINT_ALPHA = 0.72;
+/** 浅色玻璃底：面板色 82%（纸白下查看器、画布上的玻璃浮层） */
+export const LIGHT_GLASS_TINT_ALPHA = 0.82;
+/** 玻璃上的强调选中底透明度（深色 / 浅色） */
+const GLASS_SELECTED_ACCENT_ALPHA = { dark: 0.28, light: 0.18 } as const;
 
 /** 选中淡强调底的强调色透明度（重要记录 012，任务 4.3）。 */
 export const SELECTED_ACCENT_ALPHA = { dark: 0.2, light: 0.18 } as const;
@@ -364,13 +368,35 @@ export interface SolidRampResult {
   on: string;
 }
 
-/** 实底按钮上文字实际所在处的颜色：静息与悬停渐变的 OKLab 中点（标签垂直居中，渐变顶端高光不参与判定）。 */
-export function solidLabelBeds(L: number, chroma: number, hue: number): [string, string] {
+/**
+ * 实底按钮标签所占的竖向区间（相对按钮高度，自上而下）。28–36 高的按钮里 11–14 号字的行框约占中间 60%，
+ * 像素审计取文字区域最差 10% 分位，落在行框上端附近。
+ */
+export const SOLID_LABEL_BAND = { top: 0.2, bottom: 0.8 } as const;
+
+/**
+ * 判定实底上文字对比度时取哪些位置：
+ * - `midpoint`：静息、悬停两条渐变的 OKLab 中点（强调色主按钮，主控 2026-10-03 修订版）；
+ * - `labelBand`：两条渐变在标签区间上下两端的实际颜色（CSS 渐变按 sRGB 插值）。危险确认按钮用它：
+ *   只判中点会漏掉悬停渐变上半段，5.3 / 5.6 像素审计实测悬停白字只有 4.28–4.43:1（任务 5.7）。
+ */
+export type SolidLabelCoverage = 'midpoint' | 'labelBand';
+
+/** CSS `linear-gradient` 默认在 sRGB 空间插值：from → to 之间位置 t 处的颜色。 */
+function gradientAt(from: string, to: string, t: number): string {
+  return compositeOver(withAlpha(from, 1 - t), to);
+}
+
+/** 实底按钮上文字实际所在处的颜色（顶端 1px 高光不参与判定；渐变上亮下暗，白字最差在上端、墨水最差在下端）。 */
+export function solidLabelBeds(L: number, chroma: number, hue: number, coverage: SolidLabelCoverage = 'midpoint'): string[] {
   const at = (offset: number) => oklchToHex(L + offset, chroma, hue);
-  return [
-    mixOklab(at(SOLID_RAMP_OFFSETS.hi), at(0)),
-    mixOklab(at(SOLID_RAMP_OFFSETS.hoverHi), at(SOLID_RAMP_OFFSETS.hover)),
-  ];
+  const rest: [string, string] = [at(SOLID_RAMP_OFFSETS.hi), at(0)];
+  const hover: [string, string] = [at(SOLID_RAMP_OFFSETS.hoverHi), at(SOLID_RAMP_OFFSETS.hover)];
+  if (coverage === 'midpoint') {
+    return [mixOklab(...rest), mixOklab(...hover)];
+  }
+  const { top, bottom } = SOLID_LABEL_BAND;
+  return [rest, hover].flatMap(([from, to]) => [gradientAt(from, to, top), gradientAt(from, to, bottom)]);
 }
 
 /** 在 [low, high] 内找满足 ok 的、离 from 最近的亮度（ok 在区间上单调）。 */
@@ -389,7 +415,30 @@ function bisectLightness(from: number, to: number, ok: (L: number) => boolean): 
 }
 
 /**
- * 实底按钮亮度与其上文字（主控决定 2026-10-03 修订版）：判定位置为静息、悬停两个渐变中点，均需 ≥ 4.5。
+ * 白字实底的悬停渐变上端提亮幅度（相对静息亮度）：默认 `SOLID_RAMP_OFFSETS.hoverHi`；
+ * 白字在悬停渐变标签区间（`SOLID_LABEL_BAND` 上下两端）不足 4.5 时，收敛到刚好达标的最大幅度。
+ * 只动悬停一档，静息渐变、实底亮度与“最多压暗”上限都不变；墨水字（上端更亮反而更清楚）保持默认（任务 5.7）。
+ */
+export function solveSolidHoverHiOffset(L: number, chroma: number, hue: number, on: string): number {
+  const fallback = SOLID_RAMP_OFFSETS.hoverHi;
+  if (on !== WHITE) {
+    return fallback;
+  }
+  const hover = oklchToHex(L + SOLID_RAMP_OFFSETS.hover, chroma, hue);
+  const ok = (offset: number) => {
+    const top = oklchToHex(L + offset, chroma, hue);
+    const { top: t0, bottom: t1 } = SOLID_LABEL_BAND;
+    return minContrast(WHITE, [gradientAt(top, hover, t0), gradientAt(top, hover, t1)]) >= THEME_TEXT_MIN_CONTRAST;
+  };
+  if (ok(fallback)) {
+    return fallback;
+  }
+  return bisectLightness(fallback, SOLID_RAMP_OFFSETS.hover, ok);
+}
+
+
+/**
+ * 实底按钮亮度与其上文字（主控决定 2026-10-03 修订版）：判定位置由 `coverage` 决定（默认静息、悬停两个渐变中点，危险确认按钮取标签区间上下两端），均需 ≥ 4.5。
  * - 白字优先：起点已达标不动；否则在 [floorL, 起点] 内整体压暗到刚好达标（只降 L，色相、彩度、偏移不变）；
  * - 压到 floorL 仍不达标：`allowInk` 时改用墨水（起点达标不动，否则往亮处求解到刚好达标）；
  *   不允许墨水（危险确认按钮）时 floorL 应为 0，结果总能让白字达标。
@@ -401,9 +450,11 @@ export function solveSolidRamp(options: {
   hue: number;
   ink: string;
   allowInk: boolean;
+  coverage?: SolidLabelCoverage;
 }): SolidRampResult {
-  const { startL, floorL, chroma, hue, ink, allowInk } = options;
-  const passes = (text: string, L: number) => minContrast(text, solidLabelBeds(L, chroma, hue)) >= THEME_TEXT_MIN_CONTRAST;
+  const { startL, floorL, chroma, hue, ink, allowInk, coverage = 'midpoint' } = options;
+  const passes = (text: string, L: number) =>
+    minContrast(text, solidLabelBeds(L, chroma, hue, coverage)) >= THEME_TEXT_MIN_CONTRAST;
 
   if (passes(WHITE, startL)) {
     return { L: startL, on: WHITE };
@@ -486,13 +537,14 @@ export function deriveThemeTokens(seedInput: Partial<ThemeSeed>, overrides?: The
     allowInk: true,
   });
   const aL = accentRamp.L;
+  const accentHoverHiOffset = solveSolidHoverHiOffset(aL, a.C, a.H, accentRamp.on);
   const A = (L: number, C: number = a.C) => oklchToHex(L, C, a.H);
   const accentTextChroma = dark ? Math.min(a.C, 0.13) : a.C;
   Object.assign(t, {
     accent: A(aL),
     accentHi: A(aL + SOLID_RAMP_OFFSETS.hi),
     accentHover: A(aL + SOLID_RAMP_OFFSETS.hover),
-    accentHoverHi: A(aL + SOLID_RAMP_OFFSETS.hoverHi),
+    accentHoverHi: A(aL + accentHoverHiOffset),
     accentPressed: A(aL + SOLID_RAMP_OFFSETS.pressed),
     accentRing: A(dark ? 0.7 : 0.62),
   });
@@ -535,12 +587,27 @@ export function deriveThemeTokens(seedInput: Partial<ThemeSeed>, overrides?: The
     textChroma.text2
   );
 
+  // 强调文字还会压在两类更深的选中底上（任务 5.7，5.4 转交的纸白 4.36 / 3.77）：
+  // ① 控件层表面上的选中淡底（芯片、触发器在控件底或悬停底上被选中）；
+  // ② 玻璃浮层压在媒体上时的选中淡底（查看器对比分段：浅色玻璃叠在固定深色媒体底上是中灰）。
+  // 只加进强调文字的底集，三档中性文字不受影响。
+  const glassOverMedia = compositeOver(
+    dark ? `rgba(0,0,0,${DARK_GLASS_TINT_ALPHA})` : withAlpha(t.panel, LIGHT_GLASS_TINT_ALPHA),
+    t.media
+  );
+  const accentTextBeds = [
+    ...textBeds,
+    ...[t.selectedAccent, t.selectedAccentHover]
+      .flatMap((tint) => [t.control, t.controlHover, t.hover].map((bed) => compositeOver(tint, bed))),
+    ...[t.selectedAccent, t.selectedAccentHover, withAlpha(t.accent, GLASS_SELECTED_ACCENT_ALPHA[dark ? 'dark' : 'light'])]
+      .map((tint) => compositeOver(tint, glassOverMedia)),
+  ];
   t.accentText = A(
     solveLightnessForContrast({
       startL: dark ? 0.8 : 0.5,
       chroma: accentTextChroma,
       hue: a.H,
-      beds: textBeds,
+      beds: accentTextBeds,
       target: THEME_TEXT_MIN_CONTRAST,
       direction,
     }),
@@ -560,15 +627,25 @@ export function deriveThemeTokens(seedInput: Partial<ThemeSeed>, overrides?: The
       hue
     );
   };
-  // 危险确认按钮（dangerSolid）必须白字：按需压暗到静息/悬停中点刚好达标，不设降幅上限
-  const dangerRamp = solveSolidRamp({ startL: dark ? 0.6 : 0.55, floorL: 0, chroma: 0.19, hue: 25, ink, allowInk: false });
+  // 危险确认按钮（dangerSolid）必须白字：按需压暗到静息、悬停渐变在标签区间内处处达标，不设降幅上限
+  const dangerRamp = solveSolidRamp({
+    startL: dark ? 0.6 : 0.55,
+    floorL: 0,
+    chroma: 0.19,
+    hue: 25,
+    ink,
+    allowInk: false,
+    coverage: 'labelBand',
+  });
   const D = (offset: number) => oklchToHex(dangerRamp.L + offset, 0.19, 25);
   t.danger = D(0);
   t.dangerHi = D(SOLID_RAMP_OFFSETS.hi);
   t.dangerHover = D(SOLID_RAMP_OFFSETS.hover);
   t.dangerHoverHi = D(SOLID_RAMP_OFFSETS.hoverHi);
   t.dangerPressed = D(SOLID_RAMP_OFFSETS.pressed);
-  t.dangerTint = withAlpha(t.danger, statusTintAlpha);
+  // 危险浅底（危险文字、静默危险按钮悬停、状态块）不是确认按钮实底，沿用中点求解的色值，不随标签区间判定加深（5.7）
+  const dangerTintRamp = solveSolidRamp({ startL: dark ? 0.6 : 0.55, floorL: 0, chroma: 0.19, hue: 25, ink, allowInk: false });
+  t.dangerTint = withAlpha(oklchToHex(dangerTintRamp.L, 0.19, 25), statusTintAlpha);
   t.dangerText = statusText(dark ? 0.74 : 0.5, 25, t.dangerTint);
   t.onDanger = dangerRamp.on;
   t.success = oklchToHex(solveSolidFillL(dark ? 0.76 : 0.55, 0.15, 155, ink), 0.15, 155);
@@ -607,7 +684,7 @@ export function deriveThemeTokens(seedInput: Partial<ThemeSeed>, overrides?: The
       glassHover: 'rgba(255,255,255,0.14)',
       glassPressed: 'rgba(255,255,255,0.22)',
       glassSelected: 'rgba(255,255,255,0.18)',
-      glassSelectedAccent: withAlpha(t.accent, 0.28),
+      glassSelectedAccent: withAlpha(t.accent, GLASS_SELECTED_ACCENT_ALPHA.dark),
       glassDivider: 'rgba(255,255,255,0.12)',
       glassControlTint: 'rgba(255,255,255,0.08)',
       glassRegionTint: withAlpha(t.window, 0.18),
@@ -618,13 +695,13 @@ export function deriveThemeTokens(seedInput: Partial<ThemeSeed>, overrides?: The
     });
   } else {
     Object.assign(t, {
-      glassTint: withAlpha(t.panel, 0.82),
+      glassTint: withAlpha(t.panel, LIGHT_GLASS_TINT_ALPHA),
       glassEdge: withAlpha(t.text1, 0.12),
       glassSheen: 'rgba(255,255,255,0.6)',
       glassHover: withAlpha(t.text1, 0.06),
       glassPressed: withAlpha(t.text1, 0.12),
       glassSelected: withAlpha(t.text1, 0.09),
-      glassSelectedAccent: withAlpha(t.accent, 0.18),
+      glassSelectedAccent: withAlpha(t.accent, GLASS_SELECTED_ACCENT_ALPHA.light),
       glassDivider: withAlpha(t.text1, 0.1),
       glassControlTint: withAlpha(t.text1, 0.04),
       glassRegionTint: withAlpha(t.window, 0.35),

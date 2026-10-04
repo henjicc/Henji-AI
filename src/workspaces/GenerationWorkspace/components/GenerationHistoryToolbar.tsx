@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { MoreHorizontal, Search, Trash2 } from 'lucide-react'
 import { useI18n } from '@/hooks/useI18n'
 import PanelTrigger from '@/components/ui/PanelTrigger'
@@ -16,6 +17,8 @@ export interface GenerationHistoryToolbarProps {
   matchedCount: number
   totalCount: number
   onOpenClearHistory: () => void
+  /** 命令带右端、搜索之前的状态入口（开发用的测试模式徽标，任务 5.7：原为浮在右上角的固定定位，窄窗口下压住搜索按钮）。 */
+  trailingStatus?: ReactNode
 }
 
 /**
@@ -32,6 +35,7 @@ export function GenerationHistoryToolbar({
   matchedCount,
   totalCount,
   onOpenClearHistory,
+  trailingStatus,
 }: GenerationHistoryToolbarProps): JSX.Element {
   const { t } = useI18n()
   const filtering = searchOpen || hasActiveFilters
@@ -54,6 +58,7 @@ export function GenerationHistoryToolbar({
         ))}
       </div>
       <div className="flex shrink-0 items-center gap-0.5">
+        {trailingStatus ? <span className="mr-1.5 flex items-center">{trailingStatus}</span> : null}
         {filtering && (
           <span className={`mr-1.5 tabular-nums ${UI_TEXT_META_CLASS}`}>
             {t('ui:workspaceFilters.resultsCount', { matched: matchedCount, total: totalCount })}

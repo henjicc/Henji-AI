@@ -1,14 +1,14 @@
+/**
+ * 更新提示对话框：检测到新版本时显示，提供跳过此版本、稍后提醒、立即更新。
+ *
+ * 外观（任务 5.7 重做）：标准 `UiModal` 骨架（标题栏 + 正文 + 底部动作区），不再自画渐变头带与关闭按钮；
+ * 版本行用图标而不是符号字符；下载中显示进度；下载或打开失败时在正文给出原因，主动作即重试。
+ */
+import React, { useState } from 'react'
+import { ArrowRight } from 'lucide-react'
+
 import { createLogger } from '@/core/logging'
 import { getPlatform } from '@/platform/runtime'
-import { CloudUpload, X } from 'lucide-react'
-
-const logger = createLogger('components.UpdateDialog')
-/**
- * 更新提示对话框组件
- * 当检测到新版本时显示，提供更新、忽略或取消选项
- */
-
-import React, { useState } from 'react'
 import {
   ReleaseInfo,
   downloadElectronUpdate,
@@ -17,7 +17,17 @@ import {
 } from '../services/updateChecker'
 import { addIgnoredVersion } from '../utils/updateConfig'
 import { useI18n } from '@/hooks/useI18n'
-import { UiButton, UiIconButton, UiModal } from '@/components/ui'
+import { ProgressBar } from '@/components/ui/ProgressBar'
+import {
+  UI_TEXT_BODY_CLASS,
+  UI_TEXT_LABEL_CLASS,
+  UI_TEXT_META_CLASS,
+  UI_TEXT_TIMECODE_CLASS,
+  UiButton,
+  UiModal,
+} from '@/components/ui'
+
+const logger = createLogger('components.UpdateDialog')
 
 interface UpdateDialogProps {
   releaseInfo: ReleaseInfo
@@ -25,16 +35,50 @@ interface UpdateDialogProps {
   onClose: () => void
 }
 
+/** 更新说明（Markdown 子集：二三级标题、列表、段落）。 */
+function ReleaseNotes({ body, emptyText }: { body: string; emptyText: string }): JSX.Element {
+  if (!body.trim()) {
+    return <p className="text-13 text-text2">{emptyText}</p>
+  }
+  const blocks: JSX.Element[] = []
+  let list: string[] = []
+  const flushList = (): void => {
+    if (list.length === 0) return
+    blocks.push(
+      <ul key={`list-${blocks.length}`} className="list-disc space-y-1 pl-5 text-text2 marker:text-text3">
+        {list.map((item, index) => <li key={index}>{item}</li>)}
+      </ul>
+    )
+    list = []
+  }
+  for (const line of body.split('\n')) {
+    if (/^[-*] /.test(line)) {
+      list.push(line.replace(/^[-*] /, ''))
+      continue
+    }
+    flushList()
+    if (line.trim() === '') continue
+    const heading = /^(#{2,3}) (.*)$/.exec(line)
+    if (heading) {
+      blocks.push(<h4 key={`h-${blocks.length}`} className="pt-1 text-13 font-medium text-text1">{heading[2]}</h4>)
+      continue
+    }
+    blocks.push(<p key={`p-${blocks.length}`} className="text-text2">{line}</p>)
+  }
+  flushList()
+  return <div className="space-y-2 text-13">{blocks}</div>
+}
+
 const UpdateDialog: React.FC<UpdateDialogProps> = ({ releaseInfo, currentVersion, onClose }) => {
   const { t } = useI18n('ui')
   const [isUpdating, setIsUpdating] = useState(false)
-
-  // 关闭动画由 UiModal 的 useDialogTransition 负责，这里直接回调
-  const handleClose = () => {
-    onClose()
-  }
+  // 本次点击产生的失败；更新器推送的失败（下载中断）从 releaseInfo 读取
+  const [localFailure, setLocalFailure] = useState<string | null>(null)
+  const failure = localFailure
+    ?? (releaseInfo.updateStatus === 'error' ? releaseInfo.errorMessage || t('updateDialog.failedUnknown') : null)
 
   const handleUpdate = async () => {
+    setLocalFailure(null)
     try {
       if (releaseInfo.source === 'electron-updater') {
         if (releaseInfo.updateStatus === 'downloaded') {
@@ -45,162 +89,92 @@ const UpdateDialog: React.FC<UpdateDialogProps> = ({ releaseInfo, currentVersion
         const result = await downloadElectronUpdate()
         if (result.status === 'downloaded') {
           await installElectronUpdate()
+          return
+        }
+        if (result.status === 'error') {
+          setLocalFailure(result.errorMessage || t('updateDialog.failedUnknown'))
         }
         return
       }
       // 打开 GitHub Release 页面
       await getPlatform().system.shell.openExternal(releaseInfo.htmlUrl)
-      handleClose()
+      onClose()
     } catch (error) {
-      logger.error('打开更新页面失败:', error)
+      logger.error('更新失败', error)
+      setLocalFailure(error instanceof Error && error.message ? error.message : t('updateDialog.failedUnknown'))
     } finally {
       setIsUpdating(false)
     }
   }
 
   const handleIgnore = () => {
-    // 将此版本添加到忽略列表
     addIgnoredVersion(releaseInfo.version)
-    handleClose()
+    onClose()
   }
 
-  const actionLabel = releaseInfo.source === 'electron-updater'
-    ? releaseInfo.updateStatus === 'downloaded'
-      ? t('updateDialog.actions.installNow', { defaultValue: '重启安装' })
-      : releaseInfo.updateStatus === 'downloading'
-        ? t('updateDialog.actions.downloading', {
-            defaultValue: `下载中 ${Math.round(releaseInfo.progressPercent || 0)}%`
-          })
+  const downloading = isUpdating || releaseInfo.updateStatus === 'downloading'
+  const progress = releaseInfo.updateStatus === 'downloading' ? releaseInfo.progressPercent : undefined
+  const actionLabel = releaseInfo.source === 'electron-updater' && releaseInfo.updateStatus === 'downloaded'
+    ? t('updateDialog.actions.installNow')
+    : downloading
+      ? t('updateDialog.actions.downloading')
+      : failure
+        ? t('updateDialog.actions.retry')
         : t('updateDialog.actions.updateNow')
-    : t('updateDialog.actions.updateNow')
-
-  // 解析更新说明（Markdown 格式）
-  const renderReleaseNotes = () => {
-    if (!releaseInfo.body) {
-      return <p className="text-text2 text-sm">{t('updateDialog.noNotes')}</p>
-    }
-
-    // 简单的 Markdown 解析（支持标题、列表、粗体）
-    const lines = releaseInfo.body.split('\n')
-    return (
-      <div className="space-y-2 text-sm">
-        {lines.map((line, index) => {
-          // 标题
-          if (line.startsWith('### ')) {
-            return (
-              <h4 key={index} className="text-text1 font-semibold mt-3 mb-1">
-                {line.replace('### ', '')}
-              </h4>
-            )
-          }
-          if (line.startsWith('## ')) {
-            return (
-              <h3 key={index} className="text-text1 font-bold text-base mt-4 mb-2">
-                {line.replace('## ', '')}
-              </h3>
-            )
-          }
-          // 列表项
-          if (line.startsWith('- ') || line.startsWith('* ')) {
-            return (
-              <div key={index} className="flex items-start gap-2 text-text2 ml-2">
-                <span className="text-accent mt-1">•</span>
-                <span>{line.replace(/^[-*] /, '')}</span>
-              </div>
-            )
-          }
-          // 空行
-          if (line.trim() === '') {
-            return <div key={index} className="h-1" />
-          }
-          // 普通文本
-          return (
-            <p key={index} className="text-text2">
-              {line}
-            </p>
-          )
-        })}
-      </div>
-    )
-  }
 
   return (
     <UiModal
       isOpen
-      title={t('update.title')}
-      onClose={handleClose}
-      hideHeader
+      title={t('updateDialog.title')}
+      onClose={onClose}
       size="form"
-      contentClassName="overflow-y-auto"
+      contentClassName="min-h-0 overflow-y-auto px-4 py-4"
+      footer={
+        <>
+          <UiButton onClick={handleIgnore} variant="secondary">
+            {t('updateDialog.actions.skip')}
+          </UiButton>
+          <UiButton onClick={onClose} variant="secondary">
+            {t('updateDialog.actions.remindLater')}
+          </UiButton>
+          <UiButton onClick={() => void handleUpdate()} disabled={downloading} variant="primary">
+            {actionLabel}
+          </UiButton>
+        </>
+      }
     >
-        {/* 头部 */}
-        <div className="bg-gradient-to-r from-accent/10 to-transparent p-6 border-b border-line/50">
-          <div className="flex items-start justify-between">
-            <div className="flex-1">
-              <div className="flex items-center gap-3 mb-2">
-                <CloudUpload className="h-8 w-8 text-accent" />
-                <div>
-                  <h2 className="text-xl font-bold text-text1">{t('updateDialog.title')}</h2>
-                  <p className="text-sm text-text2 mt-1">
-                    {releaseInfo.name || t('updateDialog.versionFallback', { version: releaseInfo.version })}
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-4 text-xs text-text3 mt-3">
-                <span className="flex items-center gap-1">
-                  <span className="text-text2">{t('updateDialog.currentVersionLabel')}</span>
-                  <span className="font-mono text-text2">{currentVersion}</span>
-                </span>
-                <span className="text-text3">→</span>
-                <span className="flex items-center gap-1">
-                  <span className="text-text2">{t('updateDialog.latestVersionLabel')}</span>
-                  <span className="font-mono text-accent">{releaseInfo.version}</span>
-                </span>
-                <span className="text-text3">•</span>
-                <span>{formatReleaseDate(releaseInfo.publishedAt)}</span>
-              </div>
-            </div>
-            <UiIconButton shape="circle" size="lg"
-              onClick={handleClose}
-            >
-              <X className="h-5 w-5" />
-            </UiIconButton>
+      <div className="space-y-4">
+        <div className="space-y-1">
+          <div className={`${UI_TEXT_BODY_CLASS} font-medium text-text1`}>
+            {releaseInfo.name || t('updateDialog.versionFallback', { version: releaseInfo.version })}
+          </div>
+          <div className={`flex flex-wrap items-center gap-x-2 gap-y-1 ${UI_TEXT_META_CLASS}`}>
+            <span className={UI_TEXT_TIMECODE_CLASS}>{currentVersion}</span>
+            <ArrowRight aria-hidden="true" className="h-3.5 w-3.5 text-text3" />
+            <span className={`${UI_TEXT_TIMECODE_CLASS} text-accent-text`}>{releaseInfo.version}</span>
+            <span>{formatReleaseDate(releaseInfo.publishedAt)}</span>
           </div>
         </div>
 
-        {/* 更新说明 */}
-        <div className="p-6 max-h-[400px] overflow-y-auto">
-          <h3 className="text-sm font-semibold text-text2 uppercase tracking-wider mb-3">
-            {t('updateDialog.notesTitle')}
-          </h3>
-          {renderReleaseNotes()}
-        </div>
+        {downloading ? (
+          <ProgressBar
+            progress={progress ?? 0}
+            showPercentage={progress !== undefined}
+            height="h-1.5"
+          />
+        ) : null}
 
-        {/* 底部按钮 */}
-        <div className="p-6 border-t border-line flex items-center justify-end gap-3">
-          <UiButton
-            onClick={handleIgnore}
-            variant="secondary"
-            className="px-5"
-          >
-            {t('updateDialog.actions.skip')}
-          </UiButton>
-          <UiButton
-            onClick={handleClose}
-            variant="secondary"
-            className="px-5"
-          >
-            {t('updateDialog.actions.remindLater')}
-          </UiButton>
-          <UiButton
-            onClick={handleUpdate}
-            disabled={isUpdating || releaseInfo.updateStatus === 'downloading'}
-            variant="primary"
-            className="px-5"
-          >
-            {isUpdating ? t('updateDialog.actions.downloading', { defaultValue: '下载中' }) : actionLabel}
-          </UiButton>
-        </div>
+        {failure ? (
+          <p role="alert" className="text-13 text-danger-text">
+            {t('updateDialog.failed', { reason: failure })}
+          </p>
+        ) : null}
+
+        <section className="space-y-2">
+          <h3 className={UI_TEXT_LABEL_CLASS}>{t('updateDialog.notesTitle')}</h3>
+          <ReleaseNotes body={releaseInfo.body} emptyText={t('updateDialog.noNotes')} />
+        </section>
+      </div>
     </UiModal>
   )
 }

@@ -6,7 +6,8 @@
 import React, { useState, useEffect } from 'react'
 import { isTestModeEnabled } from '@/utils/testMode'
 import { useI18n } from '@/hooks/useI18n'
-import { Lightbulb } from 'lucide-react'
+import { FlaskConical } from 'lucide-react'
+import { UiButton } from '@/components/ui'
 
 interface TestModeIndicatorProps {
   onOpenPanel: () => void
@@ -34,15 +35,12 @@ const TestModeIndicator: React.FC<TestModeIndicatorProps> = ({ onOpenPanel }) =>
 
   if (!enabled) return null
 
+  // 开发用徽标（任务 5.7）：放进生成页命令带右端（搜索之前），是可聚焦的按钮；警示色只进图标，不画实底抢主动作
   return (
-    <div
-      onClick={onOpenPanel}
-      className="fixed top-4 right-4 z-toast px-3 py-1.5 bg-warning-solid text-on-warning hover:opacity-90 rounded-lg cursor-pointer transition-opacity duration-180 shadow-panel flex items-center gap-2 text-sm font-medium"
-      title={t('testMode.indicatorTitle')}
-    >
-      <Lightbulb className="h-4 w-4" />
+    <UiButton variant="secondary" size="sm" onClick={onOpenPanel} title={t('testMode.indicatorTitle')}>
+      <FlaskConical aria-hidden="true" className="mr-1.5 h-3.5 w-3.5 text-warning-text" />
       {t('testMode.indicatorLabel')}
-    </div>
+    </UiButton>
   )
 }
 

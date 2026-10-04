@@ -144,7 +144,8 @@ export function ImageInfoPanel({ open, imageSource }: ImageInfoPanelProps): JSX.
             <div className="space-y-1 text-xs leading-5">
               {infoRows.map((item) => (
                 <p key={item.label} className="break-words text-text1">
-                  <span className="mr-2 text-text3">{item.label}</span>
+                  {/* 玻璃压在任意图片上：白底图时辅助文字（text3）只有约 3.1:1，标签用次要文字（四预设白/黑底都 ≥ 4.8，任务 5.7） */}
+                  <span className="mr-2 text-text2">{item.label}</span>
                   <span>{item.value}</span>
                 </p>
               ))}

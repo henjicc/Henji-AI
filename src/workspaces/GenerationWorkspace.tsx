@@ -13,7 +13,7 @@ import { useOnboardingState } from '@/features/onboarding/application/useOnboard
 import { getModelDisplayName } from '@/utils/modelHelpers'
 import { FloatingInputPanel } from './GenerationWorkspace/components/FloatingInputPanel'
 import { GenerationHistoryToolbar } from './GenerationWorkspace/components/GenerationHistoryToolbar'
-import { NotificationToast } from './GenerationWorkspace/components/NotificationToast'
+import { UiToast } from '@/components/ui/UiToast'
 import { ClearHistoryDialog } from './GenerationWorkspace/components/ClearHistoryDialog'
 import { ImageViewerModal } from '@/components/mediaViewer/ImageViewerModal'
 import { VideoViewerModal } from '@/components/mediaViewer/VideoViewerModal'
@@ -234,7 +234,7 @@ const GenerationWorkspace: React.FC = () => {
   }
   return (
     <div className="relative flex h-full flex-1 flex-col overflow-hidden bg-window text-text1">
-      <NotificationToast notification={notification} visible={notificationVisible} />
+      {notification && <UiToast message={notification.message} tone={notification.type} visible={notificationVisible} />}
       <main className="relative z-raised flex min-h-0 flex-1 flex-col">
         {/* 命令带：类型分段 + 搜索 + 更多；搜索展开时筛选条作为从属带紧贴其下（不另画底色与边框） */}
         <div className={`mx-auto w-full ${GENERATION_COLUMN_MAX_WIDTH_CLASS} shrink-0 px-6 pt-3`}>
@@ -248,6 +248,7 @@ const GenerationWorkspace: React.FC = () => {
             matchedCount={matchedCount}
             totalCount={tasks.length}
             onOpenClearHistory={() => setIsClearDialogOpen(true)}
+            trailingStatus={<TestModeIndicator onOpenPanel={() => setIsTestPanelOpen(true)} />}
           />
           {isSearchOpen && (
             <div ref={searchStripRef} className="pb-1 pt-1">
@@ -384,7 +385,6 @@ const GenerationWorkspace: React.FC = () => {
           onClose={closeUpdateDialog}
         />
       )}
-      <TestModeIndicator onOpenPanel={() => setIsTestPanelOpen(true)} />
       <TestModePanel isOpen={isTestPanelOpen} onClose={() => setIsTestPanelOpen(false)} />
     </div>
   )

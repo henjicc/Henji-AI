@@ -20,6 +20,7 @@ const TAB_NAMES = Object.freeze({
 /** 步骤动作依赖的助手；缺任何一个都说明正式场景的 attach 改了名字，应同步这里。 */
 const REQUIRED_REVIEW_HELPERS = Object.freeze([
   'closeTransientUi', 'openWorkspace', 'openGenerationModelPanel', 'setupCanvas', 'reopenCanvasProjectFromStorage',
+  'setupGeneration',
 ])
 
 function createReviewStepContext({ canvasFixtureProjectId, settlePage }) {

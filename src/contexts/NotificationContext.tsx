@@ -1,15 +1,16 @@
-import React, { createContext, useContext, useState, useCallback, useRef } from 'react'
-import { useThemeTokens } from '@/hooks/useThemeTokens'
+import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react'
+import { UI_TOAST_DISPLAY_MS, UI_TOAST_EXIT_MS } from '@/components/ui/motion'
+import { UiToast, type UiToastTone } from '@/components/ui/UiToast'
 
 interface NotificationState {
     message: string
-    type: 'success' | 'error'
+    type: UiToastTone
 }
 
 interface NotificationContextValue {
     notification: NotificationState | null
     notificationVisible: boolean
-    showNotification: (message: string, type?: 'success' | 'error') => void
+    showNotification: (message: string, type?: UiToastTone) => void
 }
 
 const NotificationContext = createContext<NotificationContextValue | null>(null)
@@ -27,48 +28,36 @@ interface NotificationProviderProps {
 }
 
 export const NotificationProvider: React.FC<NotificationProviderProps> = ({ children }) => {
-    // 底色与文字取主题状态令牌：success/danger 实底 + onSuccess/onDanger（按对比度自动黑白）
-    const { colors: themeColors } = useThemeTokens()
     const [notification, setNotification] = useState<NotificationState | null>(null)
     const [notificationVisible, setNotificationVisible] = useState(false)
-    const notificationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+    const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+    const clearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-    const showNotification = useCallback((message: string, type: 'success' | 'error' = 'success') => {
-        // 清除之前的定时器
-        if (notificationTimeoutRef.current) {
-            clearTimeout(notificationTimeoutRef.current)
-        }
+    const clearTimers = useCallback(() => {
+        if (hideTimerRef.current) clearTimeout(hideTimerRef.current)
+        if (clearTimerRef.current) clearTimeout(clearTimerRef.current)
+        hideTimerRef.current = null
+        clearTimerRef.current = null
+    }, [])
 
-        // 设置新通知
+    const showNotification = useCallback((message: string, type: UiToastTone = 'success') => {
+        clearTimers()
         setNotification({ message, type })
         setNotificationVisible(true)
-
-        // 2秒后开始淡出
-        notificationTimeoutRef.current = setTimeout(() => {
+        // 停留后淡出，淡出结束再卸载（时长与 UiToast 的 duration-240 同档）
+        hideTimerRef.current = setTimeout(() => {
             setNotificationVisible(false)
-            // 淡出动画后清除通知
-            setTimeout(() => {
-                setNotification(null)
-            }, 300)
-        }, 2000)
-    }, [])
+            clearTimerRef.current = setTimeout(() => setNotification(null), UI_TOAST_EXIT_MS)
+        }, UI_TOAST_DISPLAY_MS)
+    }, [clearTimers])
+
+    useEffect(() => clearTimers, [clearTimers])
 
     return (
         <NotificationContext.Provider value={{ notification, notificationVisible, showNotification }}>
             {children}
-            {/* 通知 UI */}
             {notification && (
-                <div
-                    className={`fixed top-20 left-1/2 transform -translate-x-1/2 px-6 py-3 rounded-lg shadow-panel z-toast transition-opacity duration-240 ${notificationVisible ? 'opacity-100' : 'opacity-0'
-                        }`}
-                    style={{
-                        backgroundColor: notification.type === 'success' ? themeColors.success : themeColors.danger,
-                        color: notification.type === 'success' ? themeColors.onSuccess : themeColors.onDanger,
-                        pointerEvents: 'none'
-                    }}
-                >
-                    {notification.message}
-                </div>
+                <UiToast message={notification.message} tone={notification.type} visible={notificationVisible} />
             )}
         </NotificationContext.Provider>
     )

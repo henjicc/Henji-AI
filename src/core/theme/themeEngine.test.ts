@@ -8,9 +8,12 @@ import {
   THEME_CONTRAST_LEVELS,
   THEME_PRESETS,
   THEME_PRESET_IDS,
+  SOLID_LABEL_BAND,
   THEME_TEXT_MIN_CONTRAST,
   deriveThemeTokens,
   normalizeThemeSeed,
+  solidLabelBeds,
+  solveSolidRamp,
   type ThemeColorTokens,
   type ThemeSeed,
 } from './themeEngine'
@@ -158,8 +161,61 @@ describe('themeEngine 对比度（重要记录 010）', () => {
       expect(hexToOklch(t.accent).L).toBeGreaterThanOrEqual(referenceL - 0.04 - 0.003)
       expect(t.onDanger).toBe(WHITE)
     }
-    // 危险只压到刚好达标：纸白原值已达标则不动
-    expect(tokens('paper').danger).toBe(referenceDerive(REFERENCE_PRESETS.paper).danger)
+  })
+
+  it.each(THEME_PRESET_IDS)('%s：危险确认按钮（dangerSolid）白字在静息与悬停渐变的整个标签区间内 ≥ 4.5（5.7）', (id) => {
+    const t = deriveThemeTokens(THEME_PRESETS[id].seed).colors
+    const { top, bottom } = SOLID_LABEL_BAND
+    // CSS 渐变按 sRGB 插值；像素审计取文字区域最差 10% 分位，落在标签区间上端附近
+    const at = (from: string, to: string, pos: number) => compositeOver(withAlpha(from, 1 - pos), to)
+    const beds = [
+      at(t.dangerHi, t.danger, top),
+      at(t.dangerHi, t.danger, bottom),
+      at(t.dangerHoverHi, t.dangerHover, top),
+      at(t.dangerHoverHi, t.dangerHover, bottom),
+    ]
+    expect(t.onDanger).toBe(WHITE)
+    expect(minContrast(t.onDanger, beds)).toBeGreaterThanOrEqual(THEME_TEXT_MIN_CONTRAST)
+  })
+
+  it.each(THEME_PRESET_IDS)('%s：强调色主按钮悬停渐变的整个标签区间内文字 ≥ 4.5；静息与深色字预设不变（5.7）', (id) => {
+    const t = deriveThemeTokens(THEME_PRESETS[id].seed).colors
+    const { top, bottom } = SOLID_LABEL_BAND
+    const at = (from: string, to: string, pos: number) => compositeOver(withAlpha(from, 1 - pos), to)
+    const hoverBeds = [at(t.accentHoverHi, t.accentHover, top), at(t.accentHoverHi, t.accentHover, bottom)]
+    expect(minContrast(t.onAccent, hoverBeds)).toBeGreaterThanOrEqual(THEME_TEXT_MIN_CONTRAST)
+    // 悬停仍可见：悬停渐变中点比静息中点亮
+    expect(hoverLift(t, 'accent')).toBeGreaterThan(0)
+    const L = hexToOklch(t.accent).L
+    if (t.onAccent === WHITE) {
+      // 只收敛悬停上端：静息渐变的偏移不变
+      expect(hexToOklch(t.accentHi).L - L).toBeCloseTo(0.035, 2)
+      expect(hexToOklch(t.accentHoverHi).L - L).toBeLessThan(0.07)
+    } else {
+      // 深色字：上端更亮反而更清楚，保持默认提亮幅度
+      expect(hexToOklch(t.accentHoverHi).L - L).toBeCloseTo(0.07, 2)
+    }
+  })
+
+  it.each(THEME_PRESET_IDS)('%s：强调文字压在控件层与玻璃（叠在媒体上）的选中淡底上 ≥ 4.5（5.7，纸白曾 4.36 / 3.77）', (id) => {
+    const seed = THEME_PRESETS[id].seed
+    const t = deriveThemeTokens(seed).colors
+    const glassOverMedia = compositeOver(t.glassTint, t.media)
+    const beds = [
+      ...[t.selectedAccent, t.selectedAccentHover].flatMap((tint) => [t.control, t.controlHover, t.hover].map((bed) => compositeOver(tint, bed))),
+      ...[t.selectedAccent, t.selectedAccentHover, t.glassSelectedAccent].map((tint) => compositeOver(tint, glassOverMedia)),
+    ]
+    expect(minContrast(t.accentText, beds)).toBeGreaterThanOrEqual(THEME_TEXT_MIN_CONTRAST)
+  })
+
+  it('回归基线：危险实底只判渐变中点时，悬停渐变的标签上端达不到 4.5（5.3 / 5.6 实测 4.28–4.43）', () => {
+    const options = { startL: 0.6, floorL: 0, chroma: 0.19, hue: 25, ink: WHITE, allowInk: false } as const
+    const midpointOnly = solveSolidRamp(options)
+    const band = solveSolidRamp({ ...options, coverage: 'labelBand' })
+    const worst = (L: number) => minContrast(WHITE, solidLabelBeds(L, 0.19, 25, 'labelBand'))
+    expect(worst(midpointOnly.L)).toBeLessThan(THEME_TEXT_MIN_CONTRAST)
+    expect(worst(band.L)).toBeGreaterThanOrEqual(THEME_TEXT_MIN_CONTRAST)
+    expect(band.L).toBeLessThan(midpointOnly.L)
   })
 
   it('悬停中点相对静息中点的亮度提升 ≤ 0.02（预设与任意强调色）', () => {

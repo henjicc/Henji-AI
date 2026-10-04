@@ -9,7 +9,13 @@ describe('readDevelopmentLaunchOptions', () => {
       surfaceId: null,
       mediaPath: null,
       themePresetId: null,
+      updatePreview: null,
     })
+  })
+
+  it('读取更新提示弹窗预览状态，无效值忽略', () => {
+    expect(readDevelopmentLaunchOptions('?henjiDevUpdatePreview=downloading').updatePreview).toBe('downloading')
+    expect(readDevelopmentLaunchOptions('?henjiDevUpdatePreview=install').updatePreview).toBeNull()
   })
 
   it('读取开发启动页面和素材', () => {
@@ -20,6 +26,7 @@ describe('readDevelopmentLaunchOptions', () => {
       surfaceId: 'tool.image_edit',
       mediaPath: '/tmp/test.jpg',
       themePresetId: 'paper',
+      updatePreview: null,
     })
   })
 })

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { UI_TEXT_TITLE_CLASS, UiButton, UiInput, UiModal } from '@/components/ui';
+import { UiButton, UiInput, UiModal } from '@/components/ui';
 
 interface RenameDialogProps {
   isOpen: boolean;
@@ -46,9 +46,7 @@ export function RenameDialog({
       isOpen={isOpen}
       title={title}
       onClose={onClose}
-      hideHeader
       size="compact"
-      contentClassName="p-6"
       footer={
         <>
           <UiButton onClick={onClose} variant="secondary">
@@ -60,13 +58,11 @@ export function RenameDialog({
         </>
       }
     >
-      <h2 className={`mb-4 ${UI_TEXT_TITLE_CLASS}`}>{title}</h2>
       <UiInput
         value={name}
         onChange={(e) => setName(e.target.value)}
         onKeyDown={handleKeyDown}
         placeholder={placeholder ?? t('project.namePlaceholder')}
-        size="lg"
         autoFocus
       />
     </UiModal>

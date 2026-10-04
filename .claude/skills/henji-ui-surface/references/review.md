@@ -92,13 +92,13 @@ npm run check:ui-visual -- --steps scripts/ui-review/generation-seedance-kie.jso
 
 | 动作 | 参数 | 说明 |
 |---|---|---|
-| `enter` | `"generation"`/`"canvas"`/`"toolbox"`/`"assets"`，或 `{ "surface": "tool.image_edit", "media": "docs/ref/test01.jpg" }` | 工作区标签页；surface 走开发导航参数重载渲染层 |
+| `enter` | `"generation"`/`"canvas"`/`"toolbox"`/`"assets"`，或 `{ "surface": "tool.image_edit", "media": "docs/ref/test01.jpg" }`，或 `{ "surface": "workspace.generation", "updatePreview": "available" }` | 工作区标签页；surface 走开发导航参数重载渲染层；`updatePreview`（`available`/`downloading`/`failed`）直接打开更新提示弹窗的预览状态（与 `--dev-update-preview` 同一入口，不访问更新服务器） |
 | `click` / `doubleClick` / `rightClick` / `hover` | 定位 | |
 | `focus` | 定位，或 `{ "target": 定位, "keyboard": false }` | 默认先按一次 Shift，让 `:focus-visible` 生效 |
 | `press` | `"Escape"` 或 `{ "key", "target"? }` | |
 | `fill` | `{ "target": 定位, "text": "…" }` | |
 | `open` | 触发器定位，或 `{ "trigger": 定位, "expect": 定位? }` | 点开浮层并等它出现（默认等任一菜单/列表/面板/对话框） |
-| `drag` | `{ "from": 定位, "to": 定位 或 { "dx", "dy" }, "steps": 8, "release": true }` | `release: false` 时按住不放，可截拖动中状态，再用 `release` |
+| `drag` | `{ "from": 定位, "to": 定位 或 { "dx", "dy" }, "steps": 8, "release": true, "modifiers": [] }` | `release: false` 时按住不放，可截拖动中状态，再用 `release`；`modifiers`（`Control`/`Shift`/`Alt`/`Meta`）拖动全程按住，如画布框选要按住 `Control`（空白处直接拖是平移） |
 | `scroll` | `{ "target": 定位, "dy": 240 }` | 鼠标滚轮 |
 | `waitFor` | 定位，或 `{ "target", "state": "visible"/"hidden" }` | |
 | `waitStable` | `{}` 或 `{ "target": 定位 }` | 字体就绪、图片解码完、有限次动画与过渡结束、目标几何连续两次一致 |
@@ -108,11 +108,13 @@ npm run check:ui-visual -- --steps scripts/ui-review/generation-seedance-kie.jso
 | `seedCanvas` | `{ "nodes": [...], "edges": [], "viewport": {…} }` | 把节点写进巡检专用画布工程并打开（需 `writesUserData: true`） |
 | `seedAssistant` | `{ "replies": [...], "capabilities"?: ["image"], "memory"?: "…", "newConversation"?: true }` | 本机流式模型替身 + 隔离助手模型配置（不访问外部模型、不产生费用）；每轮回复可含 `thinking`、`partial`（暂停前先流出的半截正文）、`content`、`tool`（只读工具）、`error`（HTTP 状态）、`hold`（暂停到 `releaseAssistant`）。要在打开助手侧栏前执行；场景结束自动停止助手、关闭替身、恢复模型配置（需 `writesUserData: true`） |
 | `releaseAssistant` | `{}` | 放行 `hold` 暂停中的那一轮回复 |
+| `seedHistory` | `{ "rows": [{ "id": "single", "type": "image", "file"?: "image"/"images"/"video"/"audio"/"missing"/"none", "status"?: "success"/"error", "prompt"?, "error"? }] }` | 生成记录夹具（`__review_common_<id>`）：仓库图片 / 视频与现生成的低音量 WAV，`missing` 是不存在的长路径（走复制失败等正式提示）；写完重载，场景结束删除（需 `writesUserData: true`）。媒体查看器、结果菜单、通知提示用 |
+| `logsWindow` / `mainWindow` | `{}` | 打开独立日志窗口（与主窗口同尺寸），之后的步骤都在日志窗口里执行与截图；`mainWindow` 切回主窗口，场景结束关闭日志窗口 |
 | `setFiles` | `{ "target": 定位, "files": ["resources/icons/icon.png"] }` | 给文件输入（默认可定位隐藏元素）设值，等同用户选了文件；路径相对仓库根目录 |
 | `capture` | `"后缀"` 或 `{ "name": "后缀", "metrics": 指标目标? }` | 正式截屏；带 metrics 时同时记自动指标 |
 | `metrics` | `{ "name": "后缀", …指标目标 }` | 只记指标不截图 |
 
-**定位**（优先 role + name，最后才用 selector）：`role`、`name`（字符串或 `"/正则/i"`）、`exact`、`text`、`label`、`placeholder`、`selector`、`hasText`、`within`（在另一个定位里找）、`nth`（序号或 `"last"`，默认第一个可见的）、`closest`（向上找最近的 CSS 匹配祖先）、`commonAncestorWith`（与另一个定位的最近公共祖先，适合“包含模型触发器和生成按钮的那一条底栏”）、`includeHidden`。
+**定位**（优先 role + name，最后才用 selector）：`role`、`name`（字符串或 `"/正则/i"`）、`exact`、`text`、`label`、`placeholder`、`selector`、`hasText`、`within`（在另一个定位里找）、`nth`（序号或 `"last"`，默认第一个可见的）、`closest`（向上找最近的 CSS 匹配祖先）、`commonAncestorWith`（与另一个定位的最近公共祖先，适合“包含模型触发器和生成按钮的那一条底栏”）、`includeHidden`、`at`（`{ "x", "y" }`，相对目标左上角的像素点；`click` / `doubleClick` / `rightClick` / `hover` / `scroll` / `drag` 的起止点落在这里而不是中心，用于画布空白处这类中心常被节点占住的大目标）。
 
 **指标目标**：定位字段 + `maxRows`（默认 1：工具条、底栏、命令带必须单行；表单、菜单传 `null` 不判行数）。自动指标包括：视觉行数（可交互件按竖直重叠分行）、容器与件超出容器/窗口、文字截断（并区分悬停能否看全）、≤12 字短标签折行。可疑项列在 `index.md` 最前面，先看这些截图；指标只用来筛，不能替代目视。
 

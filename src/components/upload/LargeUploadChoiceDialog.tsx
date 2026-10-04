@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 
-import { UiButton, UiModal } from '@/components/ui'
+import { UI_TEXT_TITLE_CLASS, UiButton, UiModal } from '@/components/ui'
 import Toggle from '@/components/ui/Toggle'
 import { useI18n } from '@/hooks/useI18n'
 import { useLargeUploadPromptStore } from '@/services/largeUploadPolicy'
@@ -35,19 +35,21 @@ export const LargeUploadChoiceDialog: React.FC = () => {
       onClose={() => { /* 必须做出选择，不允许关闭 */ }}
       hideHeader
       size="compact"
-      contentClassName="space-y-4 p-5"
+      contentClassName="space-y-4 p-4"
     >
-        <h3 className="text-base font-semibold text-text1">
+        {/* 不能关闭的强制选择：不用标准标题栏（它带关闭按钮），标题与 AlertDialog 同档（任务 5.7） */}
+        <h3 className={UI_TEXT_TITLE_CLASS}>
           {t('largeUpload.title')}
         </h3>
-        <p className="text-sm leading-relaxed text-text2">
+        <p className="text-13 leading-relaxed text-text2">
           {t('largeUpload.message', { name: current.fileName, size: current.sizeMB })}
         </p>
 
         <div className="space-y-2">
           <UiButton
             variant="primary"
-            className="w-full justify-start !py-2.5"
+            size="lg"
+            className="w-full justify-start"
             onClick={() => settleCurrent('copy', remember)}
           >
             {t('largeUpload.copyButton')}
@@ -56,7 +58,8 @@ export const LargeUploadChoiceDialog: React.FC = () => {
 
           <UiButton
             variant="secondary"
-            className="w-full justify-start !py-2.5"
+            size="lg"
+            className="w-full justify-start"
             onClick={() => settleCurrent('reference', remember)}
           >
             {t('largeUpload.referenceButton')}

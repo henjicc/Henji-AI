@@ -126,23 +126,26 @@ export function LogsPanel(): JSX.Element {
     [liveEvents]
   )
 
+  // 视图切换注入到各自命令带的最左端：窗口标题栏下只有一条命令带 + 一条过滤从属带（任务 5.7）
+  const surfaceSwitch = (
+    <div className={UI_SEGMENTED_TRACK_CLASS}>
+      <UiOptionButton type="button" variant="segment" active={surface === 'events'} aria-pressed={surface === 'events'} onClick={() => setSurface('events')}>
+        <ListTree className="mr-1.5 h-3.5 w-3.5" />事件日志
+      </UiOptionButton>
+      <UiOptionButton type="button" variant="segment" active={surface === 'assistant'} aria-pressed={surface === 'assistant'} onClick={() => setSurface('assistant')}>
+        <BrainCircuit className="mr-1.5 h-3.5 w-3.5" />助手追踪
+      </UiOptionButton>
+    </div>
+  )
+
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <div className="flex shrink-0 items-center gap-1 border-b border-line/50 bg-panel px-3 py-1.5">
-        <div className={UI_SEGMENTED_TRACK_CLASS}>
-          <UiOptionButton type="button" variant="segment" active={surface === 'events'} aria-pressed={surface === 'events'} onClick={() => setSurface('events')}>
-            <ListTree className="mr-1.5 h-3.5 w-3.5" />事件日志
-          </UiOptionButton>
-          <UiOptionButton type="button" variant="segment" active={surface === 'assistant'} aria-pressed={surface === 'assistant'} onClick={() => setSurface('assistant')}>
-            <BrainCircuit className="mr-1.5 h-3.5 w-3.5" />助手追踪
-          </UiOptionButton>
-        </div>
-      </div>
       {surface === 'assistant' ? (
-        <div className="min-h-0 flex-1"><AssistantTracePanel refreshToken={traceRefreshToken} /></div>
+        <div className="min-h-0 flex-1"><AssistantTracePanel refreshToken={traceRefreshToken} surfaceSwitch={surfaceSwitch} /></div>
       ) : (
         <>
           <LogFilterToolbar
+            surfaceSwitch={surfaceSwitch}
             mode={mode}
             onModeChange={setMode}
             sourceFilter={sourceFilter}

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { downloadAudioFile, saveAudioFromUrl } from '@/utils/save'
-import { UiIconButton, UiRangeInput, UI_PANEL_SURFACE_CLASS } from '@/components/ui'
+import { UiIconButton, UiRangeInput, UI_PANEL_SURFACE_CLASS, UI_TEXT_TIMECODE_CLASS } from '@/components/ui'
 import { WaveformView } from './waveform/WaveformView'
 import { useI18n } from '@/hooks/useI18n'
 import { useWaveformData } from '@/hooks/useWaveformData'
@@ -325,7 +325,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
   }
 
   const volumePercent = Math.round(volume * 100)
-  const volumeSliderWidthClass = compact ? 'w-[6.75rem]' : 'w-32'
+  const volumeSliderWidthClass = compact ? 'w-28' : 'w-32'
 
   const keyboardToggle = (e: React.KeyboardEvent): void => {
     if (e.key === ' ' || e.code === 'Space') {
@@ -334,7 +334,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
       togglePlay()
     }
   }
-  const iconSize = compact || layout === 'inline' ? 'h-[18px] w-[18px]' : 'h-5 w-5'
+  const iconSize = compact || layout === 'inline' ? 'h-4 w-4' : 'h-5 w-5'
   const buttonSize = compact || layout === 'inline' ? 'md' : 'lg'
   const playButton = (
     <UiIconButton disabled={!active || controlledPlayback?.disabled} onClick={togglePlay} size={buttonSize} title={t('ui:audioPlayer.playPause')}>
@@ -369,7 +369,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
         disabled={!active || controlledPlayback?.disabled}
         onClick={() => setShowVolumeSlider((value) => !value)}
       >
-        {volume <= 0 ? <VolumeX className="h-[18px] w-[18px]" /> : <Volume2 className="h-[18px] w-[18px]" />}
+        {volume <= 0 ? <VolumeX className={iconSize} /> : <Volume2 className={iconSize} />}
       </UiIconButton>
       {showVolumeSlider && (
         <div
@@ -420,7 +420,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
             ? <UiRangeInput aria-label="音频播放位置" className="w-full" min={0} max={duration} step={0.001} value={currentTime} disabled={!active || controlledPlayback.disabled} onChange={event => controlledPlayback.onSeek(Number(event.target.value))} />
             : waveformView(28, 'mini')}
         </div>
-        <span className="shrink-0 font-mono text-xs tabular-nums text-text2">
+        <span className={`shrink-0 text-xs text-text2 ${UI_TEXT_TIMECODE_CLASS}`}>
           {format(currentTime)} / {format(waveDuration ?? duration)}
         </span>
         {volumeControl}
@@ -438,11 +438,11 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
       tabIndex={0}
       onKeyDown={keyboardToggle}
     >
-      <div className={`${compact ? 'mb-1.5' : 'mb-2'} flex items-center justify-between text-xs text-text2`}>
+      <div className={`${compact ? 'mb-1.5' : 'mb-2'} flex items-center justify-between text-xs text-text2 ${UI_TEXT_TIMECODE_CLASS}`}>
         <span>{format(currentTime)}</span>
         <span>{format(waveDuration ?? duration)}</span>
       </div>
-      <div className={controlled ? 'mb-2' : `${compact ? 'mb-2 h-[48px]' : 'mb-3 h-[72px]'}`}>
+      <div className={controlled ? 'mb-2' : `${compact ? 'mb-2 h-12' : 'mb-3 h-[72px]'}`}>
         {controlledPlayback ? <UiRangeInput aria-label="音频播放位置" className="w-full" min={0} max={duration} step={0.001} value={currentTime} disabled={!active || controlledPlayback.disabled} onChange={event => controlledPlayback.onSeek(Number(event.target.value))} /> : waveformView(waveformHeight)}
       </div>
       <div className={`${compact ? 'mt-2' : 'mt-3'} flex items-center justify-between`}>

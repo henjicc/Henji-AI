@@ -23,11 +23,13 @@ describe('resolveDevelopmentLaunchQuery', () => {
       '--dev-surface=tool.image_edit',
       '--dev-media=docs/ref/test01.jpg',
       '--dev-theme-preset=paper',
+      '--dev-update-preview=failed',
     ], '/project')).toEqual({
       query: {
         henjiDevSkipOnboarding: '1',
         henjiDevSurface: 'tool.image_edit',
         henjiDevThemePreset: 'paper',
+        henjiDevUpdatePreview: 'failed',
         henjiDevMedia: path.resolve('/project', 'docs/ref/test01.jpg'),
       },
       warnings: [],
@@ -40,10 +42,11 @@ describe('resolveDevelopmentLaunchQuery', () => {
       '--dev-surface=bad value',
       '--dev-media=missing.jpg',
       '--dev-theme-preset=sepia',
+      '--dev-update-preview=install',
     ], '/project')
 
     expect(result.query).toEqual({})
-    expect(result.warnings).toHaveLength(3)
+    expect(result.warnings).toHaveLength(4)
   })
 })
 
@@ -55,6 +58,7 @@ describe('resolveSecondaryWindowLaunchQuery', () => {
       '--dev-surface=tool.image_edit',
       '--dev-media=docs/ref/test01.jpg',
       '--dev-theme-preset=paper',
+      '--dev-update-preview=available',
     ], '/project')).toEqual({ henjiDevThemePreset: 'paper' })
   })
 

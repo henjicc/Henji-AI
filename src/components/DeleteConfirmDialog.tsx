@@ -1,4 +1,4 @@
-import { UiButton, UiModal } from '@/components/ui';
+import { UI_TEXT_BODY_CLASS, UiButton, UiModal } from '@/components/ui';
 
 interface DeleteConfirmDialogProps {
   isOpen: boolean;
@@ -41,7 +41,7 @@ export function DeleteConfirmDialog({
         </>
       }
     >
-      <div className="text-sm text-text1">{message}</div>
+      <div className={`whitespace-pre-line break-words ${UI_TEXT_BODY_CLASS}`}>{message}</div>
     </UiModal>
   );
 }

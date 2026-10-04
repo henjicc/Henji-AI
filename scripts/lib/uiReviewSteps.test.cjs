@@ -11,6 +11,7 @@ const {
   normalizeStep,
   normalizeStepSpec,
   parsePattern,
+  pointInBox,
   sanitizeSuffix,
   variantId,
 } = require('./uiReviewSteps.cjs')
@@ -251,4 +252,38 @@ test('付费保护：步骤场景里点“生成”与续查真实任务都到�
   await assert.rejects(compileStepScene(failing, { closeTransientUi: async () => undefined }).setup(brokenPage, electron.app, {}), /点不到/)
   for (const channel of PAID_GENERATION_CHANNELS) assert.equal(electron.handlers.get(channel), electron.production[channel])
   await assert.rejects(compileStepScene(failing, {}).setup(page, null, {}), /无法加付费保护/)
+})
+
+test('定位的 at：点在目标内指定点（相对左上角），非法值报错，缺省为中心', () => {
+  const step = normalizeStep({ rightClick: { selector: '.react-flow__pane', at: { x: 40, y: 500 } } }, 's')
+  assert.deepEqual(step.target.at, { x: 40, y: 500 })
+  assert.deepEqual(pointInBox({ x: 10, y: 20, width: 300, height: 600 }, step.target), { x: 50, y: 520 })
+  assert.deepEqual(pointInBox({ x: 10, y: 20, width: 300, height: 600 }, { selector: 'x' }), { x: 160, y: 320 })
+  assert.throws(() => normalizeStep({ click: { selector: 'x', at: { x: -1, y: 0 } } }, 's'), /at 需要/)
+  const drag = normalizeStep({ drag: { from: { selector: 'a', at: { x: 1, y: 2 } }, to: { dx: 5, dy: 0 } } }, 's')
+  assert.deepEqual(drag.from.at, { x: 1, y: 2 })
+})
+
+test('drag.modifiers：拖动全程按住修饰键（画布框选按住 Control），非法键报错', () => {
+  const drag = normalizeStep({ drag: { from: { selector: '.react-flow__pane', at: { x: 60, y: 140 } }, to: { dx: 300, dy: 120 }, modifiers: ['Control'] } }, 's')
+  assert.deepEqual(drag.modifiers, ['Control'])
+  assert.deepEqual(normalizeStep({ drag: { from: { selector: 'a' }, to: { dx: 1, dy: 0 } } }, 's').modifiers, [])
+  assert.throws(() => normalizeStep({ drag: { from: { selector: 'a' }, to: { dx: 1, dy: 0 }, modifiers: ['Ctrl'] } }, 's'), /drag.modifiers/)
+})
+
+test('5.7 新动作：enter.updatePreview 写进 URL，logsWindow / mainWindow / seedHistory 参数校验', () => {
+  const url = buildDevSurfaceUrl('file:///app/index.html?henjiDevThemePreset=paper',
+    { surface: 'workspace.generation', updatePreview: 'failed' })
+  assert.equal(new URL(url).searchParams.get('henjiDevUpdatePreview'), 'failed')
+  assert.equal(new URL(buildDevSurfaceUrl(url, { surface: 'workspace.generation' })).searchParams.has('henjiDevUpdatePreview'), false)
+  assert.deepEqual(normalizeStep({ enter: { surface: 'workspace.generation', updatePreview: 'downloading' } }, 't').updatePreview, 'downloading')
+  assert.throws(() => normalizeStep({ enter: { workspace: 'generation', updatePreview: 'available' } }, 't'), /updatePreview/)
+  assert.throws(() => normalizeStep({ enter: { surface: 'workspace.generation', updatePreview: 'install' } }, 't'), /updatePreview/)
+  assert.equal(normalizeStep({ logsWindow: {} }, 't').action, 'logsWindow')
+  assert.equal(normalizeStep({ mainWindow: {} }, 't').action, 'mainWindow')
+  const seed = normalizeStep({ seedHistory: { rows: [{ id: 'img', type: 'image' }, { id: 'bad', type: 'image', status: 'error' }] } }, 't')
+  assert.deepEqual(seed.rows.map((row) => [row.file, row.status]), [['image', 'success'], ['none', 'error']])
+  assert.throws(() => normalizeStep({ seedHistory: { rows: [] } }, 't'), /非空/)
+  assert.throws(() => normalizeStep({ seedHistory: { rows: [{ id: 'x', type: 'pdf' }] } }, 't'), /type/)
+  assert.throws(() => normalizeStep({ seedHistory: { rows: [{ id: 'x', type: 'image', file: 'web' }] } }, 't'), /file/)
 })

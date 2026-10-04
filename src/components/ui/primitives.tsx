@@ -621,11 +621,13 @@ UiSwitch.displayName = 'UiSwitch';
  * 选项的底与字再显式取 raised / text1，纸白等浅色主题下弹出列表不再是深色。
  */
 export function UiSelect({ className = '', children, size = 'md', ...props }: UiSelectProps) {
+  // className 只放布局（宽度、伸缩），落在外层：原来与内层的 w-full 叠在同一元素上，
+  // 宽度类被 w-full 覆盖，选择框按最长选项撑开（日志窗口历史模式“全部域”撑满整行，任务 5.7）
   return (
-    <div className="relative">
+    <div className={`relative min-w-0 ${className}`}>
       <select
         data-size={size}
-        className={`w-full appearance-none py-0 pr-8 [color-scheme:inherit] [&_option]:bg-raised [&_option]:text-text1 ${UI_FIELD_SIZE_CLASS[size]} ${UI_FIELD_PADDING_CLASS[size]} ${UI_FIELD_SURFACE_CLASS} ${UI_FIELD_FOCUS_CLASS} ${UI_FIELD_DISABLED_CLASS} ${className}`}
+        className={`w-full appearance-none truncate py-0 pr-8 [color-scheme:inherit] [&_option]:bg-raised [&_option]:text-text1 ${UI_FIELD_SIZE_CLASS[size]} ${UI_FIELD_PADDING_CLASS[size]} ${UI_FIELD_SURFACE_CLASS} ${UI_FIELD_FOCUS_CLASS} ${UI_FIELD_DISABLED_CLASS}`}
         {...props}
       >
         {children}

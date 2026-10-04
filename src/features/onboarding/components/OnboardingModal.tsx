@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   CheckCircle2,
+  CircleAlert,
   ExternalLink,
   KeyRound,
   Layers3,
@@ -15,6 +16,7 @@ import {
   UI_TEXT_BODY_CLASS,
   UI_TEXT_META_CLASS,
   UI_TEXT_PANEL_TITLE_CLASS,
+  UI_TEXT_SECTION_CLASS,
   UI_TEXT_TITLE_CLASS,
   Dropdown,
   UiButton,
@@ -22,6 +24,7 @@ import {
   UiOptionButton,
   UiPanel,
 } from '@/components/ui'
+import { ProgressBar } from '@/components/ui/ProgressBar'
 import ApiKeyInput from '@/components/Settings/components/ApiKeyInput'
 import { useDataPath } from '@/components/Settings/hooks/useDataPath'
 import { aiGetProviderApiKey, aiSetProviderApiKey, aiTestProviderConnection } from '@/commands/aiRuntime'
@@ -32,6 +35,7 @@ import { registry } from '@/core/ModelRegistry'
 import type { ProviderConnectionTestResultDto } from '@/platform/contracts/aiRuntime'
 import { openExternal } from '@/platform/desktopApi'
 import { useSettingsStore } from '@/stores/settingsStore'
+import { useUiStore } from '@/stores/uiStore'
 import { switchWorkspace } from '@/stores/navigationStore'
 import { changeLanguage, getCurrentLanguage, type LanguageOption } from '@/utils/language'
 import { getProviderDisplayName } from '@/utils/modelHelpers'
@@ -61,7 +65,7 @@ function ProviderConnectionResult({
   return (
     <UiPanel variant="inset" className="mt-4 p-4" role="status" aria-live="polite">
       <div className={`flex items-center gap-2 ${positive ? 'text-success-text' : value.status === 'saved_unverified' ? 'text-warning-text' : 'text-danger-text'}`}>
-        <CheckCircle2 className="h-4 w-4 shrink-0" />
+        {positive ? <CheckCircle2 className="h-4 w-4 shrink-0" /> : <CircleAlert className="h-4 w-4 shrink-0" />}
         <span className="text-sm font-medium">{t(`apiKey.results.${value.status}`)}</span>
       </div>
       <div className={`mt-3 grid gap-1 sm:grid-cols-2 ${UI_TEXT_META_CLASS}`}>
@@ -92,17 +96,17 @@ function WelcomeStep(): JSX.Element {
     { icon: ShieldCheck, text: t('welcome.features.local') },
   ]
   return (
-    <div className="flex min-h-[25rem] flex-col justify-center">
+    <div className="flex min-h-96 flex-col justify-center">
       <div className="mb-7 flex items-center gap-4">
         <img src={appIconUrl} alt="" className="h-16 w-16 rounded-2xl" />
         <div>
           <div className={`text-xs font-medium uppercase tracking-wider ${UI_COLOR_ACCENT_TEXT_CLASS}`}>
             {t('welcome.eyebrow')}
           </div>
-          <div className="mt-1 text-2xl font-semibold text-text1">{t('productName')}</div>
+          <div className={`mt-1 ${UI_TEXT_TITLE_CLASS}`}>{t('productName')}</div>
         </div>
       </div>
-      <h3 className="max-w-xl text-2xl font-semibold leading-tight text-text1">{t('welcome.headline')}</h3>
+      <h3 className={`max-w-xl ${UI_TEXT_SECTION_CLASS}`}>{t('welcome.headline')}</h3>
       <p className={`mt-3 max-w-xl leading-6 ${UI_TEXT_BODY_CLASS}`}>{t('welcome.description')}</p>
       <div className="mt-7 space-y-3">
         {features.map(({ icon: Icon, text }) => (
@@ -123,8 +127,8 @@ function ProviderStep({
 }): JSX.Element {
   const { t } = useI18n('onboarding')
   return (
-    <div className="min-h-[25rem]">
-      <h3 className={UI_TEXT_TITLE_CLASS}>{t('provider.headline')}</h3>
+    <div className="min-h-96">
+      <h3 className={UI_TEXT_SECTION_CLASS}>{t('provider.headline')}</h3>
       <p className={`mt-2 leading-6 ${UI_TEXT_BODY_CLASS}`}>{t('provider.description')}</p>
       <div className="mt-6 grid grid-cols-2 gap-3">
         {PRIMARY_PROVIDER_IDS.map((providerId) => (
@@ -179,8 +183,8 @@ function ApiKeyStep({
   const providerName = getProviderDisplayName(providerId)
   const provider = API_KEY_PROVIDERS.find(item => item.id === providerId)
   return (
-    <div className="min-h-[25rem]">
-      <h3 className={UI_TEXT_TITLE_CLASS}>{t('apiKey.headline', { provider: providerName })}</h3>
+    <div className="min-h-96">
+      <h3 className={UI_TEXT_SECTION_CLASS}>{t('apiKey.headline', { provider: providerName })}</h3>
       <p className={`mt-2 leading-6 ${UI_TEXT_BODY_CLASS}`}>{t('apiKey.description')}</p>
       <div className="mt-7">
         <ApiKeyInput
@@ -221,8 +225,8 @@ function FirstTaskStep({
   const { t } = useI18n('onboarding')
   const providerName = getProviderDisplayName(providerId)
   return (
-    <div className="min-h-[25rem]">
-      <h3 className={UI_TEXT_TITLE_CLASS}>{t('firstTask.headline')}</h3>
+    <div className="min-h-96">
+      <h3 className={UI_TEXT_SECTION_CLASS}>{t('firstTask.headline')}</h3>
       <p className={`mt-2 leading-6 ${UI_TEXT_BODY_CLASS}`}>{t('firstTask.description')}</p>
       <UiPanel variant="inset" className="mt-7 p-4">
         <div className={UI_TEXT_META_CLASS}>{t('firstTask.promptLabel')}</div>
@@ -342,6 +346,8 @@ export function OnboardingModal(): JSX.Element {
       })
     }
     switchWorkspace('generation')
+    // 从“设置 → 重新运行首次设置”进入时设置弹窗还开着，会挡住提示气泡指向的模型选择（任务 5.7）
+    useUiStore.getState().closeSettings()
     onboardingManager.prepareFirstTask()
   }
 
@@ -435,12 +441,12 @@ export function OnboardingModal(): JSX.Element {
           current: stepIndex + 1,
           total: ONBOARDING_STEP_IDS.length,
         })}</span>
-        <div className="h-1 flex-1 overflow-hidden rounded-full bg-hover">
-          <div
-            className="h-full rounded-full bg-accent transition-[width] duration-180"
-            style={{ width: `${((stepIndex + 1) / ONBOARDING_STEP_IDS.length) * 100}%` }}
-          />
-        </div>
+        <ProgressBar
+          className="flex-1"
+          height="h-1"
+          showPercentage={false}
+          progress={((stepIndex + 1) / ONBOARDING_STEP_IDS.length) * 100}
+        />
         <span className={`shrink-0 ${UI_TEXT_META_CLASS}`}>{t(`steps.${state.activeStepId}`)}</span>
       </div>
       {step}

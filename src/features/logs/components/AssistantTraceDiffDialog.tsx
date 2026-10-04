@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { UiEmpty, UiLoading, UiModal } from '@/components/ui'
+import { UI_INSET_SURFACE_CLASS, UiEmpty, UiLoading, UiModal } from '@/components/ui'
 import type { AgentTraceDiff } from '../assistantTraceUtils'
 import { formatTraceTokens } from '../assistantTraceUtils'
 import { JsonTree } from './JsonTree'
@@ -86,17 +86,18 @@ export function AssistantTraceDiffDialog({
   )
 }
 
-function DiffBlock({ title, badge, children }: { title: string; badge?: string; children: ReactNode }): JSX.Element { // ui-surface-allow 日志窗口内嵌块：4.1 迁移为 bg-window/40 后被 4.2 补全的表面规则识别；去描边属视觉改动，交 5.7 核对
-  return <section className="rounded-lg border border-line/45 bg-window/40"><div className="flex items-center justify-between border-b border-line/35 px-3 py-2"><span className="text-xs font-medium text-text1">{title}</span>{badge && <span className="rounded bg-hover px-1.5 py-0.5 text-2xs text-text2">{badge}</span>}</div><div className="p-3">{children}</div></section>
+/** 对比分区：弹窗里的内嵌下沉面（无描边，与追踪详情的分区同一做法，任务 5.7）。 */
+function DiffBlock({ title, badge, children }: { title: string; badge?: string; children: ReactNode }): JSX.Element {
+  return <section className={`rounded-lg ${UI_INSET_SURFACE_CLASS}`}><div className="flex items-center justify-between border-b border-line/35 px-3 py-2"><span className="text-xs font-medium text-text1">{title}</span>{badge && <span className="rounded bg-hover px-1.5 py-0.5 text-2xs text-text2">{badge}</span>}</div><div className="p-3">{children}</div></section>
 }
 
 function DeltaMetric({ label, value }: { label: string; value: number }): JSX.Element {
-  const tone = value > 0 ? 'text-warning-text' : value < 0 ? 'text-success-text' : 'text-text2' // ui-surface-allow 日志窗口内嵌块：4.1 迁移为 bg-window/40 后被 4.2 补全的表面规则识别；去描边属视觉改动，交 5.7 核对
-  return <div className="rounded border border-line/40 bg-window/40 p-2"><div className="text-2xs text-text2">{label}</div><div className={`mt-1 font-mono text-sm ${tone}`}>{value > 0 ? '+' : ''}{formatTraceTokens(value)}</div></div>
+  const tone = value > 0 ? 'text-warning-text' : value < 0 ? 'text-success-text' : 'text-text2'
+  return <div className={`rounded-md p-2 ${UI_INSET_SURFACE_CLASS}`}><div className="text-2xs text-text2">{label}</div><div className={`mt-1 font-mono text-sm ${tone}`}>{value > 0 ? '+' : ''}{formatTraceTokens(value)}</div></div>
 }
 
 function ChangeList({ title, values, tone }: { title: string; values: string[]; tone: 'added' | 'removed' | 'changed' | 'neutral' }): JSX.Element {
-  return <div className={`rounded border p-2 ${toneClass(tone)}`}><div className="mb-1 text-2xs font-medium uppercase tracking-wider">{title} · {values.length}</div>{values.length === 0 ? <div className="text-2xs opacity-60">无</div> : <div className="space-y-1">{values.map((value, index) => <div key={`${value}-${index}`} className="break-all rounded bg-window/40 px-1.5 py-1 font-mono text-2xs">{value}</div>)}</div>}</div>
+  return <div className={`rounded border p-2 ${toneClass(tone)}`}><div className="mb-1 text-2xs font-medium uppercase tracking-wider">{title} · {values.length}</div>{values.length === 0 ? <div className="text-2xs">无</div> : <div className="space-y-1">{values.map((value, index) => <div key={`${value}-${index}`} className="break-all rounded bg-window/40 px-1.5 py-1 font-mono text-2xs">{value}</div>)}</div>}</div>
 }
 
 function TextCompare({ label, value, tone }: { label: string; value: string; tone: 'added' | 'removed' }): JSX.Element {

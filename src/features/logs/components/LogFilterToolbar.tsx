@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { useI18n } from '@/hooks/useI18n'
 import { getLogCaptureMode } from '@/commands/logging'
 import { useSettingsStore } from '@/stores/settingsStore'
-import { UiButton, UiCheckbox, UiInput, UiOptionButton, UiSelect, UI_SEGMENTED_TRACK_CLASS } from '@/components/ui'
+import { UiButton, UiCheckbox, UiInput, UiOptionButton, UiSelect, UiToolbar, UI_SEGMENTED_TRACK_CLASS } from '@/components/ui'
 import type { LogLevel } from '../eventDisplay'
 
 export type SourceFilter = 'all' | 'frontend' | 'backend'
@@ -13,6 +13,8 @@ export type LogViewMode = 'live' | 'history'
 const LEVEL_VALUES: LogLevel[] = ['trace', 'debug', 'info', 'warn', 'error']
 
 interface LogFilterToolbarProps {
+  /** 日志窗口顶层的“事件日志 / 助手追踪”切换，放在命令带最左端（任务 5.7：不再单独占一条带）。 */
+  surfaceSwitch: ReactNode
   mode: LogViewMode
   onModeChange: (mode: LogViewMode) => void
   sourceFilter: SourceFilter
@@ -44,8 +46,12 @@ interface LogFilterToolbarProps {
  * 日志窗口工具栏：来源/级别/domain/关键词过滤 + 只看错误 + 暂停恢复 + 清空 +
  * 完整捕获开关 + requestId 链路查询。完整捕获开关（原挂在 TestModePanel）在此落地，
  * 交互与状态读写方式不变（见 2.1 decisions.md）。
+ *
+ * 骨架（任务 5.7）：一条命令带（视图切换、实时/历史、模式相关动作、完整捕获）+ 从属带（过滤条件），
+ * 共用同一块底色与下边框。
  */
 export function LogFilterToolbar({
+  surfaceSwitch,
   mode,
   onModeChange,
   sourceFilter,
@@ -96,7 +102,112 @@ export function LogFilterToolbar({
   }, [])
 
   return (
-    <div className="flex flex-wrap items-center gap-2 border-b border-line/50 bg-panel/60 px-3 py-2">
+    <UiToolbar
+      variant="command"
+      trailing={
+        <>
+          {mode === 'live' ? (
+            <>
+              <UiButton type="button" onClick={onTogglePause}>
+                {paused ? t('logsWindow.toolbar.resume') : t('logsWindow.toolbar.pause')}
+              </UiButton>
+              <UiButton type="button" onClick={onClear}>
+                {t('logsWindow.toolbar.clear')}
+              </UiButton>
+            </>
+          ) : (
+            <>
+              <UiSelect
+                value={selectedHistoryDate}
+                onChange={(event) => onSelectedHistoryDateChange(event.target.value)}
+                className="w-40"
+                disabled={historyDates.length === 0}
+              >
+                {historyDates.length === 0 ? (
+                  <option value="">{t('logsWindow.toolbar.historyDate.empty')}</option>
+                ) : (
+                  historyDates.map((date) => (
+                    <option key={date} value={date}>{date}</option>
+                  ))
+                )}
+              </UiSelect>
+              {historyCorruptedLines > 0 && (
+                <span className="text-2xs text-warning-text">
+                  {t('logsWindow.toolbar.historyDate.corrupted', { count: historyCorruptedLines })}
+                </span>
+              )}
+            </>
+          )}
+          <label className="flex shrink-0 items-center gap-1.5 whitespace-nowrap text-xs text-text2" title={t('logsWindow.toolbar.captureMode.description')}>
+            <UiCheckbox
+              checked={captureMode === 'full'}
+              onCheckedChange={(checked) => setCaptureMode(checked ? 'full' : 'standard')}
+            />
+            {t('logsWindow.toolbar.captureMode.title')}
+          </label>
+        </>
+      }
+      subordinate={
+        <>
+          <UiSelect
+            value={sourceFilter}
+            onChange={(event) => onSourceFilterChange(event.target.value as SourceFilter)}
+            className="w-28"
+          >
+            <option value="all">{t('logsWindow.toolbar.source.all')}</option>
+            <option value="frontend">{t('logsWindow.toolbar.source.frontend')}</option>
+            <option value="backend">{t('logsWindow.toolbar.source.backend')}</option>
+          </UiSelect>
+          <UiSelect
+            value={levelFilter}
+            onChange={(event) => onLevelFilterChange(event.target.value as LevelFilter)}
+            className="w-28"
+          >
+            <option value="all">{t('logsWindow.toolbar.level.all')}</option>
+            {LEVEL_VALUES.map((level) => (
+              <option key={level} value={level}>{level.toUpperCase()}</option>
+            ))}
+          </UiSelect>
+          <UiSelect
+            value={domainFilter}
+            onChange={(event) => onDomainFilterChange(event.target.value)}
+            className="w-40"
+          >
+            <option value="all">{t('logsWindow.toolbar.domain.all')}</option>
+            {domainOptions.map((domain) => (
+              <option key={domain} value={domain}>{domain}</option>
+            ))}
+          </UiSelect>
+          <UiInput
+            value={keyword}
+            onChange={(event) => onKeywordChange(event.target.value)}
+            placeholder={t('logsWindow.toolbar.keywordPlaceholder')}
+            className="min-w-40 flex-1"
+          />
+          <label className="flex shrink-0 items-center gap-1.5 whitespace-nowrap text-xs text-text2">
+            <UiCheckbox checked={errorOnly} onCheckedChange={onErrorOnlyChange} />
+            {t('logsWindow.toolbar.errorOnly')}
+          </label>
+          <div className="flex shrink-0 items-center gap-1">
+            <UiInput
+              value={chainQuery}
+              onChange={(event) => setChainQuery(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  handleChainLookup()
+                }
+              }}
+              placeholder={t('logsWindow.toolbar.chainLookupPlaceholder')}
+              className="w-36"
+            />
+            <UiButton type="button" className="shrink-0" onClick={handleChainLookup}>
+              {t('logsWindow.chain.viewButton')}
+            </UiButton>
+          </div>
+        </>
+      }
+    >
+      {surfaceSwitch}
       <div className={UI_SEGMENTED_TRACK_CLASS}>
         <UiOptionButton
           type="button"
@@ -117,108 +228,6 @@ export function LogFilterToolbar({
           {t('logsWindow.toolbar.mode.history')}
         </UiOptionButton>
       </div>
-
-      <UiSelect
-        value={sourceFilter}
-        onChange={(event) => onSourceFilterChange(event.target.value as SourceFilter)}
-        className="w-32"
-      >
-        <option value="all">{t('logsWindow.toolbar.source.all')}</option>
-        <option value="frontend">{t('logsWindow.toolbar.source.frontend')}</option>
-        <option value="backend">{t('logsWindow.toolbar.source.backend')}</option>
-      </UiSelect>
-
-      <UiSelect
-        value={levelFilter}
-        onChange={(event) => onLevelFilterChange(event.target.value as LevelFilter)}
-        className="w-32"
-      >
-        <option value="all">{t('logsWindow.toolbar.level.all')}</option>
-        {LEVEL_VALUES.map((level) => (
-          <option key={level} value={level}>{level.toUpperCase()}</option>
-        ))}
-      </UiSelect>
-
-      <UiSelect
-        value={domainFilter}
-        onChange={(event) => onDomainFilterChange(event.target.value)}
-        className="w-44"
-      >
-        <option value="all">{t('logsWindow.toolbar.domain.all')}</option>
-        {domainOptions.map((domain) => (
-          <option key={domain} value={domain}>{domain}</option>
-        ))}
-      </UiSelect>
-
-      <UiInput
-        value={keyword}
-        onChange={(event) => onKeywordChange(event.target.value)}
-        placeholder={t('logsWindow.toolbar.keywordPlaceholder')}
-        className="min-w-[220px] flex-1"
-      />
-
-      <label className="flex items-center gap-1.5 text-xs text-text2">
-        <UiCheckbox checked={errorOnly} onCheckedChange={onErrorOnlyChange} />
-        {t('logsWindow.toolbar.errorOnly')}
-      </label>
-
-      {mode === 'live' ? (
-        <>
-          <UiButton type="button" onClick={onTogglePause}>
-            {paused ? t('logsWindow.toolbar.resume') : t('logsWindow.toolbar.pause')}
-          </UiButton>
-          <UiButton type="button" onClick={onClear}>
-            {t('logsWindow.toolbar.clear')}
-          </UiButton>
-        </>
-      ) : (
-        <>
-          <UiSelect
-            value={selectedHistoryDate}
-            onChange={(event) => onSelectedHistoryDateChange(event.target.value)}
-            className="w-40"
-            disabled={historyDates.length === 0}
-          >
-            {historyDates.length === 0 ? (
-              <option value="">{t('logsWindow.toolbar.historyDate.empty')}</option>
-            ) : (
-              historyDates.map((date) => (
-                <option key={date} value={date}>{date}</option>
-              ))
-            )}
-          </UiSelect>
-          {historyCorruptedLines > 0 && (
-            <span className="text-2xs text-warning-text">
-              {t('logsWindow.toolbar.historyDate.corrupted', { count: historyCorruptedLines })}
-            </span>
-          )}
-        </>
-      )}
-
-      <div className="flex items-center gap-1">
-        <UiInput
-          value={chainQuery}
-          onChange={(event) => setChainQuery(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter') {
-              handleChainLookup()
-            }
-          }}
-          placeholder={t('logsWindow.toolbar.chainLookupPlaceholder')}
-          className="w-40"
-        />
-        <UiButton type="button" className="shrink-0" onClick={handleChainLookup}>
-          {t('logsWindow.chain.viewButton')}
-        </UiButton>
-      </div>
-
-      <label className="flex items-center gap-1.5 text-xs text-text2" title={t('logsWindow.toolbar.captureMode.description')}>
-        <UiCheckbox
-          checked={captureMode === 'full'}
-          onCheckedChange={(checked) => setCaptureMode(checked ? 'full' : 'standard')}
-        />
-        {t('logsWindow.toolbar.captureMode.title')}
-      </label>
-    </div>
+    </UiToolbar>
   )
 }

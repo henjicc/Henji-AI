@@ -1,7 +1,10 @@
 import { existsSync, statSync } from 'node:fs'
 import path from 'node:path'
 
-import { DEVELOPMENT_LAUNCH_QUERY_KEYS } from '../../src/core/development/developmentLaunchContract'
+import {
+  DEVELOPMENT_LAUNCH_QUERY_KEYS,
+  isDevelopmentUpdatePreviewState,
+} from '../../src/core/development/developmentLaunchContract'
 import { THEME_PRESET_IDS } from '../../src/core/theme/themeEngine'
 
 export interface DevelopmentLaunchQuery {
@@ -46,6 +49,16 @@ export function resolveDevelopmentLaunchQuery(
       query[DEVELOPMENT_LAUNCH_QUERY_KEYS.themePreset] = themePreset
     } else {
       warnings.push('开发启动主题预设无效，已忽略。')
+    }
+  }
+
+  // 更新提示弹窗预览（界面核对用）：只在主窗口打开弹窗，不访问更新服务器
+  const updatePreview = readOption(argv, '--dev-update-preview')
+  if (updatePreview) {
+    if (isDevelopmentUpdatePreviewState(updatePreview)) {
+      query[DEVELOPMENT_LAUNCH_QUERY_KEYS.updatePreview] = updatePreview
+    } else {
+      warnings.push('开发启动更新预览状态无效，已忽略。')
     }
   }
 

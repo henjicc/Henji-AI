@@ -5,7 +5,7 @@ import { UI_DIALOG_TRANSITION_MS, uiTransition } from './motion'
 import { useDialogFocusTrap } from './useDialogFocusTrap'
 import { UiOverlayLayerProvider, useUiOverlayLayer } from './overlayOwnership'
 import { UI_MODAL_SIZE_CLASS, UI_TEXT_BODY_CLASS, UI_TEXT_TITLE_CLASS } from './styleTokens'
-import { Info, TriangleAlert, X } from 'lucide-react'
+import { CircleAlert, Info, TriangleAlert } from 'lucide-react'
 
 /** 弹窗底部的一个动作按钮 */
 export interface AlertDialogAction {
@@ -21,6 +21,11 @@ function resolveAlertActionVariant(action: AlertDialogAction): 'primary' | 'seco
   const variant = action.variant ?? 'secondary'
   if (action.tone !== 'danger') return variant
   return variant === 'primary' ? 'dangerSolid' : 'danger'
+}
+
+/** 主动作排到最后（最右），其余保持调用方顺序。 */
+function orderAlertActions(actions: readonly AlertDialogAction[]): AlertDialogAction[] {
+  return [...actions.filter((action) => action.variant !== 'primary'), ...actions.filter((action) => action.variant === 'primary')]
 }
 
 interface AlertDialogProps {
@@ -88,7 +93,7 @@ export default function AlertDialog({
       case 'error':
         return {
           icon: (
-            <X className="h-5 w-5" />
+            <CircleAlert className="h-5 w-5" />
           ),
           color: 'text-danger-text'
         }
@@ -137,7 +142,7 @@ export default function AlertDialog({
 
       {/* 弹窗内容 */}
       <UiPanel
-        className={`relative max-h-[calc(100vh-2rem)] overflow-hidden p-4 shadow-panel ${UI_MODAL_SIZE_CLASS.compact}`}
+        className={`relative max-h-[calc(100vh-2rem)] overflow-hidden p-4 ${UI_MODAL_SIZE_CLASS.compact}`}
         style={{
           opacity,
           transform: `scale(${0.97 + 0.03 * opacity})`,
@@ -151,31 +156,29 @@ export default function AlertDialog({
         </div>
 
         {/* 消息内容 */}
-        <div id={messageId} className={`ui-scrollbar mt-2 max-h-[280px] overflow-y-auto whitespace-pre-line break-words ${UI_TEXT_BODY_CLASS}`}>
+        <div id={messageId} className={`ui-scrollbar mt-2 max-h-72 overflow-y-auto whitespace-pre-line break-words ${UI_TEXT_BODY_CLASS}`}>
           {message}
         </div>
 
-        {/* 动作按钮：额外动作在左，关闭在右 */}
-        <div className="mt-4 flex justify-end gap-2">
-          {actions?.map((action) => (
+        {/* 动作按钮：与 UiModal 底部同一顺序——关闭/取消在左，其余动作在右，主动作固定在最右（任务 5.7） */}
+        <div className="mt-4 flex flex-wrap justify-end gap-2">
+          <UiButton
+            type="button"
+            variant="secondary"
+            onClick={handleClose}
+          >
+            {closeLabel ?? t('close')}
+          </UiButton>
+          {orderAlertActions(actions ?? []).map((action) => (
             <UiButton
               key={action.label}
               type="button"
-              size="lg"
               variant={resolveAlertActionVariant(action)}
               onClick={action.onClick}
             >
               {action.label}
             </UiButton>
           ))}
-          <UiButton
-            type="button"
-            size="lg"
-            variant="secondary"
-            onClick={handleClose}
-          >
-            {closeLabel ?? t('close')}
-          </UiButton>
         </div>
       </UiPanel>
       </UiOverlayLayerProvider>

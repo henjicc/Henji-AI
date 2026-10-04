@@ -1,0 +1,1030 @@
+[
+  {
+    "id": "review-common-titlebar",
+    "surface": "通用",
+    "name": "核对-标题栏、工作区导航、窗口控件与悬停说明",
+    "checklist": [
+      "U01.1",
+      "U01.2",
+      "U01.3",
+      "U01.4",
+      "U01.6",
+      "U05.1",
+      "U05.3"
+    ],
+    "steps": [
+      {
+        "enter": "generation"
+      },
+      {
+        "hover": {
+          "role": "banner"
+        },
+        "optional": true
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "rest"
+      },
+      {
+        "hover": {
+          "role": "button",
+          "name": "/^(画布|Canvas)$/"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "nav-hover"
+      },
+      {
+        "focus": {
+          "role": "button",
+          "name": "/^(生成|Generation)$/"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "nav-focus"
+      },
+      {
+        "hover": {
+          "role": "button",
+          "name": "设置",
+          "exact": true
+        }
+      },
+      {
+        "wait": 600
+      },
+      {
+        "capture": "tooltip-edge"
+      },
+      {
+        "hover": {
+          "role": "button",
+          "name": "关闭",
+          "exact": true
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "close-hover"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/^(资产|Assets)$/"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "assets-toggle-on"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/^(资产|Assets)$/"
+        }
+      },
+      {
+        "waitStable": {}
+      }
+    ]
+  },
+  {
+    "id": "review-common-text-menu",
+    "surface": "通用",
+    "name": "核对-全局文本右键菜单（打开、悬停项、禁用项）",
+    "checklist": [
+      "U04.1",
+      "U04.2",
+      "U04.3",
+      "U04.4"
+    ],
+    "steps": [
+      {
+        "enter": "generation"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "搜索历史"
+        }
+      },
+      {
+        "rightClick": {
+          "placeholder": "搜索提示词、模型或错误信息"
+        }
+      },
+      {
+        "waitFor": {
+          "role": "menu"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "text-menu"
+      },
+      {
+        "hover": {
+          "role": "menuitem",
+          "nth": "last"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "text-menu-hover"
+      },
+      {
+        "press": "Escape"
+      },
+      {
+        "waitFor": {
+          "target": {
+            "role": "menu"
+          },
+          "state": "hidden"
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "搜索历史"
+        },
+        "optional": true
+      }
+    ]
+  },
+  {
+    "id": "review-common-media",
+    "surface": "通用",
+    "name": "核对-成功通知、结果菜单、图片与视频查看器、音频迷你条（生成记录夹具）",
+    "checklist": [
+      "U02.1",
+      "U04.1",
+      "U09.1",
+      "U09.2",
+      "U09.4",
+      "U09.7",
+      "U10.1",
+      "U10.2",
+      "U10.3",
+      "U11.3"
+    ],
+    "writesUserData": true,
+    "steps": [
+      {
+        "enter": "generation"
+      },
+      {
+        "escape": {}
+      },
+      {
+        "seedHistory": {
+          "rows": [
+            {
+              "id": "audio",
+              "type": "audio",
+              "prompt": "欢迎来到痕迹AI，今天我们来聊一聊通用查看器。"
+            },
+            {
+              "id": "video",
+              "type": "video",
+              "prompt": "海浪拍打礁石的慢镜头"
+            },
+            {
+              "id": "multi",
+              "type": "image",
+              "file": "images",
+              "prompt": "同一角色的四个表情：开心、惊讶、生气、困倦"
+            },
+            {
+              "id": "single",
+              "type": "image",
+              "prompt": "一只橘猫趴在窗台上晒太阳，柔和的午后光线"
+            }
+          ]
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "seeded"
+      },
+      {
+        "rightClick": {
+          "selector": "[data-generation-task-id=\"__review_common_single\"] [data-generation-result]"
+        }
+      },
+      {
+        "waitFor": {
+          "role": "menu"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "result-menu"
+      },
+      {
+        "click": {
+          "role": "menuitem",
+          "name": "添加到资产库"
+        }
+      },
+      {
+        "waitFor": {
+          "role": "status",
+          "hasText": "/资产/"
+        },
+        "optional": true
+      },
+      {
+        "waitFor": {
+          "target": {
+            "role": "menu"
+          },
+          "state": "hidden"
+        }
+      },
+      {
+        "wait": 300
+      },
+      {
+        "capture": "toast-success"
+      },
+      {
+        "waitFor": {
+          "target": {
+            "role": "status",
+            "hasText": "/资产/"
+          },
+          "state": "hidden"
+        },
+        "timeout": 6000,
+        "optional": true
+      },
+      {
+        "click": {
+          "selector": "[data-generation-task-id=\"__review_common_single\"] [data-generation-result]"
+        }
+      },
+      {
+        "waitFor": {
+          "selector": "[data-image-viewer=\"true\"]"
+        }
+      },
+      {
+        "waitStable": {
+          "target": {
+            "selector": "[data-image-viewer=\"true\"] img"
+          }
+        }
+      },
+      {
+        "capture": "image-viewer"
+      },
+      {
+        "scroll": {
+          "target": {
+            "selector": "[data-image-viewer=\"true\"] img"
+          },
+          "dy": -600
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "image-zoom"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/图片信息/"
+        },
+        "optional": true
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "image-info"
+      },
+      {
+        "press": "Escape"
+      },
+      {
+        "waitFor": {
+          "target": {
+            "selector": "[data-image-viewer=\"true\"]"
+          },
+          "state": "hidden"
+        }
+      },
+      {
+        "click": {
+          "selector": "[data-generation-task-id=\"__review_common_multi\"] [data-generation-result]",
+          "nth": 1
+        }
+      },
+      {
+        "waitFor": {
+          "selector": "[data-image-viewer=\"true\"]"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "image-viewer-multi"
+      },
+      {
+        "press": "Escape"
+      },
+      {
+        "waitFor": {
+          "target": {
+            "selector": "[data-image-viewer=\"true\"]"
+          },
+          "state": "hidden"
+        }
+      },
+      {
+        "click": {
+          "selector": "[data-generation-task-id=\"__review_common_video\"] video"
+        }
+      },
+      {
+        "waitFor": {
+          "role": "button",
+          "name": "播放速度"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "video-viewer"
+      },
+      {
+        "open": {
+          "trigger": {
+            "role": "button",
+            "name": "播放速度"
+          }
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "video-speed-menu"
+      },
+      {
+        "press": "Escape"
+      },
+      {
+        "hover": {
+          "role": "slider",
+          "name": "音量"
+        },
+        "optional": true
+      },
+      {
+        "capture": "video-volume"
+      },
+      {
+        "press": "Escape"
+      }
+    ]
+  },
+  {
+    "id": "review-common-update-dialog",
+    "surface": "通用",
+    "name": "核对-更新提示弹窗（有新版本长说明、下载中、失败）",
+    "checklist": [
+      "G21.1",
+      "G21.2",
+      "G21.3"
+    ],
+    "steps": [
+      {
+        "enter": {
+          "surface": "workspace.generation",
+          "updatePreview": "available"
+        }
+      },
+      {
+        "waitFor": {
+          "role": "dialog",
+          "hasText": "发现新版本"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "available"
+      },
+      {
+        "hover": {
+          "role": "button",
+          "name": "立即更新"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "available-primary-hover"
+      },
+      {
+        "enter": {
+          "surface": "workspace.generation",
+          "updatePreview": "downloading"
+        }
+      },
+      {
+        "waitFor": {
+          "role": "dialog",
+          "hasText": "发现新版本"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "downloading"
+      },
+      {
+        "enter": {
+          "surface": "workspace.generation",
+          "updatePreview": "failed"
+        }
+      },
+      {
+        "waitFor": {
+          "role": "dialog",
+          "hasText": "发现新版本"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "failed"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "稍后提醒"
+        }
+      },
+      {
+        "enter": {
+          "surface": "workspace.generation"
+        }
+      }
+    ]
+  },
+  {
+    "id": "review-common-onboarding",
+    "surface": "通用",
+    "name": "核对-首次设置各步骤与提示气泡（设置里重新运行）",
+    "checklist": [
+      "U12.1",
+      "U12.2",
+      "U12.3"
+    ],
+    "writesUserData": true,
+    "steps": [
+      {
+        "enter": {
+          "surface": "settings.general.onboarding"
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "重新运行首次设置"
+        }
+      },
+      {
+        "waitFor": {
+          "role": "dialog",
+          "hasText": "开始设置"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "welcome"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "开始设置"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "basics"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "继续",
+          "exact": true
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "provider"
+      },
+      {
+        "hover": {
+          "selector": "[role=\"dialog\"] [data-option-variant=\"card\"], [role=\"dialog\"] button[aria-pressed]",
+          "nth": 1
+        },
+        "optional": true
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "provider-hover"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "继续",
+          "exact": true
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "api-key"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "跳过此步"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "first-task"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "准备首个任务"
+        }
+      },
+      {
+        "waitFor": {
+          "target": {
+            "role": "dialog",
+            "hasText": "准备首个任务"
+          },
+          "state": "hidden"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "hint"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "知道了"
+        },
+        "optional": true
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "escape": {}
+      }
+    ]
+  },
+  {
+    "id": "review-common-test-mode",
+    "surface": "通用",
+    "name": "核对-测试模式面板与徽标（开发）",
+    "checklist": [
+      "G22.1",
+      "G22.2"
+    ],
+    "writesUserData": true,
+    "steps": [
+      {
+        "enter": "generation"
+      },
+      {
+        "press": "Control+Alt+Shift+T"
+      },
+      {
+        "waitFor": {
+          "role": "dialog",
+          "hasText": "测试模式"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "panel-off"
+      },
+      {
+        "click": {
+          "role": "switch",
+          "name": "启用测试模式"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "panel-on"
+      },
+      {
+        "hover": {
+          "selector": "[role=\"dialog\"] label",
+          "nth": 0
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "panel-row-hover"
+      },
+      {
+        "press": "Escape"
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "waitFor": {
+          "target": {
+            "role": "dialog"
+          },
+          "state": "hidden"
+        }
+      },
+      {
+        "capture": "indicator"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/测试模式/"
+        }
+      },
+      {
+        "waitFor": {
+          "role": "dialog",
+          "hasText": "测试模式"
+        }
+      },
+      {
+        "click": {
+          "role": "switch",
+          "name": "启用测试模式"
+        }
+      },
+      {
+        "press": "Escape"
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "escape": {}
+      }
+    ]
+  },
+  {
+    "id": "review-common-logs-window",
+    "surface": "通用",
+    "name": "核对-日志窗口（事件列表与详情、请求链、历史、清空、助手追踪）",
+    "checklist": [
+      "U13.1",
+      "U13.2",
+      "U13.3",
+      "U13.4",
+      "U13.5",
+      "U13.6",
+      "U13.8"
+    ],
+    "steps": [
+      {
+        "enter": "generation"
+      },
+      {
+        "logsWindow": {}
+      },
+      {
+        "mainWindow": {}
+      },
+      {
+        "enter": "canvas"
+      },
+      {
+        "enter": "generation"
+      },
+      {
+        "logsWindow": {}
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/工作区切换完成|信息事件|工作区事件/",
+          "nth": 0
+        },
+        "optional": true
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": {
+          "name": "events",
+          "metrics": {
+            "selector": "[data-command-bar]",
+            "maxRows": 1
+          }
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "查看完整链路",
+          "nth": "last"
+        },
+        "optional": true
+      },
+      {
+        "waitFor": {
+          "role": "dialog"
+        },
+        "optional": true
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "chain"
+      },
+      {
+        "press": "Escape"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "历史",
+          "exact": true
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "history"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "实时",
+          "exact": true
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "清空",
+          "exact": true
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "events-cleared"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "助手追踪"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": {
+          "name": "assistant-trace",
+          "metrics": {
+            "selector": "[data-command-bar]",
+            "maxRows": 1
+          }
+        }
+      },
+      {
+        "mainWindow": {}
+      }
+    ]
+  },
+  {
+    "id": "review-common-name-dialogs",
+    "surface": "通用",
+    "name": "核对-新建/重命名弹窗与删除确认（画布工程列表）",
+    "checklist": [
+      "U07.1",
+      "U07.2",
+      "U07.3",
+      "U03.2"
+    ],
+    "writesUserData": true,
+    "steps": [
+      {
+        "seedCanvas": {
+          "nodes": [
+            {
+              "id": "__review_common_text",
+              "type": "stringSourceNode",
+              "position": {
+                "x": 0,
+                "y": 0
+              },
+              "width": 240,
+              "height": 96,
+              "data": {
+                "displayName": "通用弹窗核对",
+                "value": "工程列表夹具"
+              }
+            }
+          ],
+          "edges": [],
+          "viewport": {
+            "x": 320,
+            "y": 60,
+            "zoom": 0.8
+          }
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/返回项目|Back to Projects/"
+        }
+      },
+      {
+        "waitFor": {
+          "selector": "[data-project-id]"
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/^新建/"
+        }
+      },
+      {
+        "waitFor": {
+          "role": "dialog"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "create-open"
+      },
+      {
+        "fill": {
+          "target": {
+            "role": "textbox",
+            "within": {
+              "role": "dialog"
+            }
+          },
+          "text": ""
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "create-empty"
+      },
+      {
+        "fill": {
+          "target": {
+            "role": "textbox",
+            "within": {
+              "role": "dialog"
+            }
+          },
+          "text": "一个名字非常非常长的画布工程用来检查弹窗里的输入框与按钮在长文本下是否还能对齐和完整显示"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "create-long"
+      },
+      {
+        "press": "Escape"
+      },
+      {
+        "waitFor": {
+          "target": {
+            "role": "dialog"
+          },
+          "state": "hidden"
+        }
+      },
+      {
+        "rightClick": {
+          "selector": "[data-project-id]"
+        }
+      },
+      {
+        "waitFor": {
+          "role": "menu"
+        }
+      },
+      {
+        "click": {
+          "role": "menuitem",
+          "name": "/删除/"
+        }
+      },
+      {
+        "waitFor": {
+          "role": "dialog"
+        }
+      },
+      {
+        "hover": {
+          "role": "button",
+          "name": "/删除/",
+          "within": {
+            "role": "dialog"
+          }
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "delete-confirm-hover"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "取消",
+          "within": {
+            "role": "dialog"
+          }
+        }
+      },
+      {
+        "escape": {}
+      }
+    ]
+  }
+]

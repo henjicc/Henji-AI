@@ -11,6 +11,7 @@ vi.mock('@/components/waveform/WaveformView', () => ({ WaveformView: () => null 
 vi.mock('@/utils/save', () => ({ downloadAudioFile: vi.fn(), saveAudioFromUrl: vi.fn() }))
 vi.mock('@/components/ui', () => ({
   UI_PANEL_SURFACE_CLASS: '',
+  UI_TEXT_TIMECODE_CLASS: '',
   UiIconButton: ({ size: _size, tone: _tone, on: _on, shape: _shape, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & { size?: string; tone?: string; on?: boolean; shape?: string }) => React.createElement('button', props),
   UiRangeInput: (props: React.InputHTMLAttributes<HTMLInputElement>) => React.createElement('input', props),
 }))

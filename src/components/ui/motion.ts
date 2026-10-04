@@ -84,6 +84,12 @@ export function uiTransition(
 /** 弹窗（UiModal / AlertDialog / 设置）的进出场时长 */
 export const UI_DIALOG_TRANSITION_MS = UI_DURATION.base;
 
+/** 通知提示（`UiToast`）停留时长，之后按 `UI_TOAST_EXIT_MS` 淡出；全局通知与生成页通知共用（任务 5.7）。 */
+export const UI_TOAST_DISPLAY_MS = 3000;
+
+/** 通知提示淡出时长，与 `UiToast` 的 `duration-240` 同档。 */
+export const UI_TOAST_EXIT_MS = UI_DURATION.slow;
+
 /** 浮层（下拉、右键菜单、节点菜单）的进出场时长 */
 export const UI_POPOVER_TRANSITION_MS = UI_DURATION.fast;
 

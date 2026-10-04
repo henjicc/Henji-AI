@@ -1,12 +1,15 @@
+import type { ReactNode } from 'react'
 import { RefreshCw, Trash2 } from 'lucide-react'
 
-import { UiButton, UiCheckbox, UiInput, UiOptionButton, UiSelect, UI_SEGMENTED_TRACK_CLASS } from '@/components/ui'
+import { UiCheckbox, UiIconButton, UiInput, UiOptionButton, UiSelect, UiToolbar, UI_SEGMENTED_TRACK_CLASS } from '@/components/ui'
 import type { AgentTraceCaptureMode, AgentTraceStatus } from '@/core/assistant/trace'
 
 export type AssistantTraceViewMode = 'live' | 'history'
 export type AssistantTraceStatusFilter = 'all' | AgentTraceStatus
 
 interface AssistantTraceToolbarProps {
+  /** 日志窗口顶层的“事件日志 / 助手追踪”切换，放在命令带最左端（任务 5.7）。 */
+  surfaceSwitch: ReactNode
   mode: AssistantTraceViewMode
   onModeChange: (mode: AssistantTraceViewMode) => void
   keyword: string
@@ -28,7 +31,9 @@ interface AssistantTraceToolbarProps {
   onClear: () => void
 }
 
+/** 骨架与事件日志相同：命令带（视图切换、实时/历史、详细追踪、刷新、清空）+ 从属带（过滤条件），任务 5.7。 */
 export function AssistantTraceToolbar({
+  surfaceSwitch,
   mode,
   onModeChange,
   keyword,
@@ -50,43 +55,54 @@ export function AssistantTraceToolbar({
   onClear,
 }: AssistantTraceToolbarProps): JSX.Element {
   return (
-    <div className="flex flex-wrap items-center gap-2 border-b border-line/50 bg-panel/60 px-3 py-2">
+    <UiToolbar
+      variant="command"
+      trailing={
+        <>
+          <label className="flex shrink-0 items-center gap-1.5 whitespace-nowrap text-xs text-text2" title="完整上下文只保存在本机，并自动脱敏">
+            <UiCheckbox checked={captureMode === 'detailed'} onCheckedChange={(checked) => onCaptureModeChange(checked ? 'detailed' : 'summary')} />
+            助手详细追踪
+          </label>
+          <UiIconButton type="button" onClick={onRefresh} title="刷新" aria-label="刷新"><RefreshCw className="h-4 w-4" /></UiIconButton>
+          <UiIconButton type="button" tone="danger" onClick={onClear} title="清空助手追踪" aria-label="清空助手追踪"><Trash2 className="h-4 w-4" /></UiIconButton>
+        </>
+      }
+      subordinate={
+        <>
+          <UiInput value={keyword} onChange={(event) => onKeywordChange(event.target.value)} placeholder="搜索目标、运行、模型或请求标识" className="min-w-40 flex-1" />
+          <UiSelect value={providerId} onChange={(event) => onProviderChange(event.target.value)} className="w-36">
+            <option value="all">全部供应商</option>
+            {providers.map((value) => <option key={value} value={value}>{value}</option>)}
+          </UiSelect>
+          <UiSelect value={modelId} onChange={(event) => onModelChange(event.target.value)} className="w-44">
+            <option value="all">全部模型</option>
+            {models.map((value) => <option key={value} value={value}>{value}</option>)}
+          </UiSelect>
+          <UiSelect
+            value={status}
+            onChange={(event) => onStatusChange(event.target.value as AssistantTraceStatusFilter)}
+            className="w-28"
+          >
+            <option value="all">全部状态</option>
+            <option value="running">运行中</option>
+            <option value="completed">已完成</option>
+            <option value="failed">失败</option>
+            <option value="cancelled">已取消</option>
+            <option value="interrupted">已中断</option>
+          </UiSelect>
+          {mode === 'history' && (
+            <UiSelect value={selectedDate} onChange={(event) => onDateChange(event.target.value)} className="w-36" disabled={historyDates.length === 0}>
+              {historyDates.length === 0 ? <option value="">暂无历史</option> : historyDates.map((date) => <option key={date} value={date}>{date}</option>)}
+            </UiSelect>
+          )}
+        </>
+      }
+    >
+      {surfaceSwitch}
       <div className={UI_SEGMENTED_TRACK_CLASS}>
         <UiOptionButton type="button" variant="segment" active={mode === 'live'} aria-pressed={mode === 'live'} onClick={() => onModeChange('live')}>实时</UiOptionButton>
         <UiOptionButton type="button" variant="segment" active={mode === 'history'} aria-pressed={mode === 'history'} onClick={() => onModeChange('history')}>历史</UiOptionButton>
       </div>
-      <UiInput value={keyword} onChange={(event) => onKeywordChange(event.target.value)} placeholder="搜索目标、运行、模型或请求标识" className="min-w-[210px] flex-1" />
-      <UiSelect value={providerId} onChange={(event) => onProviderChange(event.target.value)} className="w-36">
-        <option value="all">全部供应商</option>
-        {providers.map((value) => <option key={value} value={value}>{value}</option>)}
-      </UiSelect>
-      <UiSelect value={modelId} onChange={(event) => onModelChange(event.target.value)} className="w-44">
-        <option value="all">全部模型</option>
-        {models.map((value) => <option key={value} value={value}>{value}</option>)}
-      </UiSelect>
-      <UiSelect
-        value={status}
-        onChange={(event) => onStatusChange(event.target.value as AssistantTraceStatusFilter)}
-        className="w-28"
-      >
-        <option value="all">全部状态</option>
-        <option value="running">运行中</option>
-        <option value="completed">已完成</option>
-        <option value="failed">失败</option>
-        <option value="cancelled">已取消</option>
-        <option value="interrupted">已中断</option>
-      </UiSelect>
-      {mode === 'history' && (
-        <UiSelect value={selectedDate} onChange={(event) => onDateChange(event.target.value)} className="w-36" disabled={historyDates.length === 0}>
-          {historyDates.length === 0 ? <option value="">暂无历史</option> : historyDates.map((date) => <option key={date} value={date}>{date}</option>)}
-        </UiSelect>
-      )}
-      <label className="flex items-center gap-1.5 text-2xs text-text2" title="完整上下文只保存在本机，并自动脱敏">
-        <UiCheckbox checked={captureMode === 'detailed'} onCheckedChange={(checked) => onCaptureModeChange(checked ? 'detailed' : 'summary')} />
-        助手详细追踪
-      </label>
-      <UiButton type="button" variant="secondary" onClick={onRefresh} title="刷新"><RefreshCw className="h-3.5 w-3.5" /></UiButton>
-      <UiButton type="button" variant="secondary" onClick={onClear} title="清空助手追踪"><Trash2 className="h-3.5 w-3.5" /></UiButton>
-    </div>
+    </UiToolbar>
   )
 }

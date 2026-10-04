@@ -21,11 +21,15 @@ const path = require('node:path')
 const { analyzeLayoutMetrics, collectLayoutMeasurements } = require('./uiReviewMetrics.cjs')
 const { normalizeSeedAssistant, seedAssistantFixture } = require('./uiReviewAssistantFixture.cjs')
 const { blockPaidGeneration } = require('./uiReviewPaidGuard.cjs')
+const { normalizeSeedHistory, seedHistoryFixture } = require('./uiReviewHistoryFixture.cjs')
 
 const ROOT = path.resolve(__dirname, '..', '..')
 const WORKSPACES = Object.freeze(['generation', 'canvas', 'toolbox', 'assets'])
 const TARGET_KEYS = Object.freeze(['role', 'name', 'exact', 'text', 'label', 'placeholder', 'selector', 'hasText',
-  'within', 'nth', 'closest', 'commonAncestorWith', 'includeHidden'])
+  'within', 'nth', 'closest', 'commonAncestorWith', 'includeHidden', 'at'])
+const DRAG_MODIFIER_KEYS = Object.freeze(['Control', 'Shift', 'Alt', 'Meta'])
+/** 与 src/core/development/developmentLaunchContract.ts 的 DEVELOPMENT_UPDATE_PREVIEW_STATES 一致 */
+const UPDATE_PREVIEW_STATES = Object.freeze(['available', 'downloading', 'failed'])
 const OVERLAY_SELECTOR = '[role="menu"]:visible, [role="listbox"]:visible, [role="dialog"]:visible, '
   + '[data-panel-scroll-region]:visible, [data-dropdown-portal="true"]:visible'
 
@@ -44,8 +48,18 @@ const STEP_ACTIONS = Object.freeze({
       throw new Error(`enter.surface 不是已登记格式的 Surface ID：${value.surface}`)
     }
     if (!value.workspace && !value.surface) throw new Error('enter 需要 workspace 或 surface')
-    return { workspace: value.workspace ?? null, surface: value.surface ?? null, media: value.media ?? null }
+    // updatePreview：随 surface 一起重载，直接打开更新提示弹窗的预览状态（--dev-update-preview 同一条入口）
+    if (value.updatePreview !== undefined && (!value.surface || !UPDATE_PREVIEW_STATES.includes(value.updatePreview))) {
+      throw new Error(`enter.updatePreview 需要同时给 surface，取值 ${UPDATE_PREVIEW_STATES.join('、')}`)
+    }
+    return { workspace: value.workspace ?? null, surface: value.surface ?? null, media: value.media ?? null,
+      ...(value.updatePreview ? { updatePreview: value.updatePreview } : {}) }
   },
+  // 打开独立日志窗口，之后的步骤都在日志窗口里执行与截图，直到 mainWindow（任务 5.7）
+  logsWindow: () => ({}),
+  mainWindow: () => ({}),
+  // 生成记录夹具（媒体查看器、结果菜单、通知提示用；需 writesUserData: true），见 uiReviewHistoryFixture.cjs
+  seedHistory: (value) => normalizeSeedHistory(value),
   click: (value) => ({ target: normalizeTarget(value?.target ?? value), button: value?.button ?? 'left' }),
   doubleClick: (value) => ({ target: normalizeTarget(value?.target ?? value) }),
   rightClick: (value) => ({ target: normalizeTarget(value?.target ?? value) }),
@@ -69,8 +83,13 @@ const STEP_ACTIONS = Object.freeze({
     const to = value.to && (value.to.dx !== undefined || value.to.dy !== undefined)
       ? { dx: Number(value.to.dx ?? 0), dy: Number(value.to.dy ?? 0) }
       : normalizeTarget(value.to)
+    // modifiers：拖动全程按住的修饰键（如画布框选要按住 Control；空白处直接拖是平移）
+    const modifiers = value.modifiers ?? []
+    if (!Array.isArray(modifiers) || modifiers.some((key) => !DRAG_MODIFIER_KEYS.includes(key))) {
+      throw new Error(`drag.modifiers 只能是 ${DRAG_MODIFIER_KEYS.join('、')} 的数组`)
+    }
     return { from: normalizeTarget(value.from), to, steps: positiveInteger(value.steps ?? 8, 'drag.steps'),
-      release: value.release !== false }
+      release: value.release !== false, modifiers }
   },
   release: () => ({}),
   // 文件选择框不可点：直接给（通常隐藏的）文件输入设值，走与用户选文件相同的 change 事件。路径相对仓库根目录。
@@ -128,6 +147,11 @@ function normalizeTarget(raw) {
   }
   if (raw.nth !== undefined && raw.nth !== 'last' && !(Number.isInteger(raw.nth) && raw.nth >= 0)) {
     throw new Error('nth 只能是非负整数或 "last"')
+  }
+  // at：点击/悬停/拖动落在目标内的哪个点（相对目标左上角的 CSS 像素），默认目标中心。
+  // 画布空白处这类大目标的中心常被节点或连线占住，需要指定一个确定为空的点。
+  if (raw.at !== undefined && !(raw.at && Number.isFinite(raw.at.x) && Number.isFinite(raw.at.y) && raw.at.x >= 0 && raw.at.y >= 0)) {
+    throw new Error('at 需要 { "x": 非负像素, "y": 非负像素 }（相对目标左上角）')
   }
   return {
     ...raw,
@@ -277,15 +301,34 @@ const VARIANT_SOURCES = Object.freeze({
 })
 
 /** `enter.surface`：用开发导航参数重载渲染层（与 --dev-surface 同一条正式入口），保留主题预设等其余参数。 */
-function buildDevSurfaceUrl(currentUrl, { surface, media }, root = ROOT) {
+function buildDevSurfaceUrl(currentUrl, { surface, media, updatePreview }, root = ROOT) {
   const url = new URL(currentUrl)
   url.searchParams.set('henjiDevSurface', surface)
   if (media) url.searchParams.set('henjiDevMedia', path.isAbsolute(media) ? media : path.resolve(root, media))
   else url.searchParams.delete('henjiDevMedia')
+  if (updatePreview) url.searchParams.set('henjiDevUpdatePreview', updatePreview)
+  else url.searchParams.delete('henjiDevUpdatePreview')
   return url.toString()
 }
 
 /** 定位 → Playwright Locator。默认只取可见元素的第一个；commonAncestorWith / closest 取最深的匹配祖先。 */
+async function releaseModifiers(page, runtime) {
+  const keys = runtime.heldModifiers ?? []
+  runtime.heldModifiers = []
+  for (const key of keys.reverse()) await page.keyboard.up(key)
+}
+
+/** 定位上的 at（相对左上角像素）转成 Playwright 的 position 选项；没有 at 时点在中心。 */
+function pointOption(target) {
+  return target?.at ? { position: { x: target.at.x, y: target.at.y } } : {}
+}
+
+function pointInBox(box, target) {
+  return target?.at
+    ? { x: box.x + target.at.x, y: box.y + target.at.y }
+    : { x: box.x + box.width / 2, y: box.y + box.height / 2 }
+}
+
 function resolveTarget(page, target) {
   const base = target.within ? resolveTarget(page, target.within) : page
   const name = parsePattern(target.name)
@@ -386,16 +429,16 @@ async function runStep(page, step, runtime) {
       }
       return
     case 'click':
-      await resolveTarget(page, step.target).click({ timeout, button: step.button })
+      await resolveTarget(page, step.target).click({ timeout, button: step.button, ...pointOption(step.target) })
       return
     case 'doubleClick':
-      await resolveTarget(page, step.target).dblclick({ timeout })
+      await resolveTarget(page, step.target).dblclick({ timeout, ...pointOption(step.target) })
       return
     case 'rightClick':
-      await resolveTarget(page, step.target).click({ timeout, button: 'right' })
+      await resolveTarget(page, step.target).click({ timeout, button: 'right', ...pointOption(step.target) })
       return
     case 'hover':
-      await resolveTarget(page, step.target).hover({ timeout })
+      await resolveTarget(page, step.target).hover({ timeout, ...pointOption(step.target) })
       return
     case 'focus':
       // 先产生一次键盘交互，focus() 才会命中 :focus-visible（键盘聚焦样式）
@@ -418,27 +461,31 @@ async function runStep(page, step, runtime) {
     case 'drag': {
       const fromBox = await resolveTarget(page, step.from).boundingBox({ timeout })
       if (!fromBox) throw new Error('拖动起点不可见')
-      const start = { x: fromBox.x + fromBox.width / 2, y: fromBox.y + fromBox.height / 2 }
+      const start = pointInBox(fromBox, step.from)
       let end
       if (step.to.dx !== undefined) end = { x: start.x + step.to.dx, y: start.y + step.to.dy }
       else {
         const toBox = await resolveTarget(page, step.to).boundingBox({ timeout })
         if (!toBox) throw new Error('拖动终点不可见')
-        end = { x: toBox.x + toBox.width / 2, y: toBox.y + toBox.height / 2 }
+        end = pointInBox(toBox, step.to)
       }
       await page.mouse.move(start.x, start.y)
+      for (const key of step.modifiers) await page.keyboard.down(key)
+      runtime.heldModifiers = [...step.modifiers]
       await page.mouse.down()
       runtime.mouseDown = true
       await page.mouse.move(end.x, end.y, { steps: step.steps })
       if (step.release) {
         await page.mouse.up()
         runtime.mouseDown = false
+        await releaseModifiers(page, runtime)
       }
       return
     }
     case 'release':
       await page.mouse.up()
       runtime.mouseDown = false
+      await releaseModifiers(page, runtime)
       return
     case 'setFiles':
       await resolveTarget(page, step.target).setInputFiles(
@@ -447,7 +494,8 @@ async function runStep(page, step, runtime) {
     case 'scroll': {
       const box = await resolveTarget(page, step.target).boundingBox({ timeout })
       if (!box) throw new Error('滚动目标不可见')
-      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+      const point = pointInBox(box, step.target)
+      await page.mouse.move(point.x, point.y)
       await page.mouse.wheel(step.dx, step.dy)
       return
     }
@@ -490,10 +538,40 @@ async function runStep(page, step, runtime) {
       if (!runtime.assistantFixture) throw new Error('releaseAssistant 之前需要 seedAssistant')
       runtime.assistantFixture.release()
       return
+    case 'seedHistory': {
+      if (runtime.historyFixture) await runtime.historyFixture.cleanup()
+      runtime.historyFixture = await seedHistoryFixture(runtime.mainPage, context, step)
+      return
+    }
+    case 'logsWindow': {
+      if (!runtime.logsPage || runtime.logsPage.isClosed()) {
+        const opened = runtime.app.waitForEvent('window', {
+          predicate: (candidate) => candidate.url().includes('view=logs'), timeout: 15000,
+        })
+        await runtime.mainPage.evaluate(() => window.henjiNative.logging.openLogWindow())
+        runtime.logsPage = await opened
+        await runtime.logsPage.waitForLoadState('domcontentloaded')
+        await runtime.logsPage.locator('header').first().waitFor({ state: 'visible', timeout: 15000 })
+        // 与主窗口同尺寸（窗口内容区），960 / 1440 两档截图都落在日志窗口自己的布局上
+        const size = await runtime.mainPage.evaluate(() => ({ width: window.innerWidth, height: window.innerHeight }))
+        await runtime.app.evaluate(({ BrowserWindow }, target) => {
+          const logs = BrowserWindow.getAllWindows().find((win) => win.webContents.getURL().includes('view=logs'))
+          if (logs) logs.setContentSize(target.width, target.height)
+        }, size)
+        await runtime.logsPage.waitForFunction((target) => window.innerWidth === target.width, size, { timeout: 5000 })
+          .catch(() => undefined)
+      }
+      runtime.activePage = runtime.logsPage
+      await context.settlePage(runtime.logsPage)
+      return
+    }
+    case 'mainWindow':
+      runtime.activePage = null
+      return
     case 'capture':
     case 'metrics': {
       const suffix = prefix ? `${prefix}-${step.name}` : step.name
-      if (step.action === 'capture') await ctx.capture(suffix)
+      if (step.action === 'capture') await ctx.capture(suffix, runtime.activePage ? { page: runtime.activePage } : undefined)
       if (step.metrics) {
         const metrics = await measureTarget(page, step.metrics)
         ctx.recordMetrics?.({ suffix, variant: variant?.id ?? null, metrics })
@@ -505,8 +583,10 @@ async function runStep(page, step, runtime) {
   }
 }
 
-async function runSteps(page, steps, runtime) {
+async function runSteps(mainPage, steps, runtime) {
   for (const step of steps) {
+    // logsWindow 之后的步骤在日志窗口里执行
+    const page = runtime.activePage ?? mainPage
     if (step.ifPresent && !(await resolveTarget(page, step.ifPresent).isVisible())) continue
     try {
       await runStep(page, step, runtime)
@@ -536,7 +616,8 @@ function compileStepScene(spec, context) {
       // 付费保护：步骤场景里任何误触的“生成”或对真实任务的续查都到不了供应商（uiReviewPaidGuard.cjs）
       if (!electronApp || typeof electronApp.evaluate !== 'function') throw new Error('步骤场景缺少 Electron 应用，无法加付费保护')
       const unblockPaidGeneration = await blockPaidGeneration(electronApp)
-      const runtime = { context, ctx, prefix: '', variant: null, skipped: [], mouseDown: false, assistantFixture: null }
+      const runtime = { context, ctx, prefix: '', variant: null, skipped: [], mouseDown: false, assistantFixture: null,
+        app: electronApp, mainPage: page, activePage: null, logsPage: null, historyFixture: null }
       try {
         await runSteps(page, spec.prepare, runtime)
         if (!spec.variants) {
@@ -562,6 +643,7 @@ function compileStepScene(spec, context) {
               await page.mouse.up().catch(() => undefined)
               runtime.mouseDown = false
             }
+            await releaseModifiers(page, runtime).catch(() => undefined)
             await context.closeTransientUi(page).catch(() => undefined)
           }
         }
@@ -569,7 +651,10 @@ function compileStepScene(spec, context) {
         if (failures.length) throw new Error(`${failures.length}/${variants.length} 个变体失败：${failures.slice(0, 10).join('；')}`)
       } finally {
         if (runtime.mouseDown) await page.mouse.up().catch(() => undefined)
+        await releaseModifiers(page, runtime).catch(() => undefined)
         if (runtime.assistantFixture) await runtime.assistantFixture.cleanup().catch(() => undefined)
+        if (runtime.logsPage && !runtime.logsPage.isClosed()) await runtime.logsPage.close().catch(() => undefined)
+        if (runtime.historyFixture) await runtime.historyFixture.cleanup().catch(() => undefined)
         await unblockPaidGeneration()
         if (runtime.skipped.length) console.log(`  可选步骤跳过 ${runtime.skipped.length} 个：${runtime.skipped.slice(0, 5).join('；')}`)
       }
@@ -607,6 +692,7 @@ module.exports = {
   normalizeStepSpec,
   normalizeTarget,
   parsePattern,
+  pointInBox,
   resolveTarget,
   sanitizeSuffix,
   variantId,

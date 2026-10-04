@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 
 import { UiButton, UiModal } from '@/components/ui'
 import {
@@ -30,9 +30,11 @@ const logger = createLogger('features.logs.AssistantTracePanel')
 
 interface AssistantTracePanelProps {
   refreshToken: number
+  /** 日志窗口顶层视图切换，注入到本面板命令带左端（任务 5.7）。 */
+  surfaceSwitch: ReactNode
 }
 
-export function AssistantTracePanel({ refreshToken }: AssistantTracePanelProps): JSX.Element {
+export function AssistantTracePanel({ refreshToken, surfaceSwitch }: AssistantTracePanelProps): JSX.Element {
   const [mode, setMode] = useState<AssistantTraceViewMode>('live')
   const [keyword, setKeyword] = useState('')
   const [providerId, setProviderId] = useState('all')
@@ -196,6 +198,7 @@ export function AssistantTracePanel({ refreshToken }: AssistantTracePanelProps):
   return (
     <div className="flex h-full flex-col overflow-hidden">
       <AssistantTraceToolbar
+        surfaceSwitch={surfaceSwitch}
         mode={mode}
         onModeChange={setMode}
         keyword={keyword}
@@ -221,7 +224,8 @@ export function AssistantTracePanel({ refreshToken }: AssistantTracePanelProps):
           详细追踪已开启：从下一次模型请求开始，完整提示词、消息、工具和脱敏后的 HTTP 请求会保存在本机；应用重启后自动关闭。
         </div>
       )}
-      <div className="grid shrink-0 grid-cols-3 gap-2 border-b border-line/35 px-3 py-2 sm:grid-cols-6 xl:grid-cols-9">
+      {/* 汇总读数：一行只读状态（任务 5.7：原为 9 个描边小格，窄窗口下折成两行） */}
+      <div className="flex shrink-0 flex-wrap items-center gap-x-5 gap-y-1 border-b border-line/35 px-3 py-2">
         <SummaryMetric label="请求" value={String(totals.requests)} />
         <SummaryMetric label="完成" value={String(totals.completed)} />
         <SummaryMetric label="失败" value={String(totals.failed)} />
@@ -366,5 +370,5 @@ function findPreviousPrimaryStep(runs: AgentTraceRunSummary[], traceId: string):
 }
 
 function SummaryMetric({ label, value }: { label: string; value: string }): JSX.Element {
-  return <div className="rounded border border-line/35 bg-window/40 px-2 py-1"><div className="text-2xs uppercase tracking-wider text-text2">{label}</div><div className="mt-0.5 truncate font-mono text-2xs text-text1">{value}</div></div>
+  return <span className="flex items-baseline gap-1.5 whitespace-nowrap text-2xs"><span className="text-text2">{label}</span><span className="font-mono tabular-nums text-text1">{value}</span></span>
 }

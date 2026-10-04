@@ -18,16 +18,32 @@ import { openLogWindow } from '@/commands/logging'
 import {
   UI_TEXT_BODY_CLASS,
   UI_TEXT_META_CLASS,
-  UI_TEXT_PANEL_TITLE_CLASS, UI_TEXT_SECTION_CLASS,
-  UI_TEXT_TITLE_CLASS,
+  UI_TEXT_PANEL_TITLE_CLASS,
   UiButton,
   UiCheckbox,
   UiChipButton,
-  UiIconButton,
+  UiGroup,
   UiModal,
 } from '@/components/ui'
 import Toggle from '@/components/ui/Toggle'
-import { X } from 'lucide-react'
+
+/** 一个可勾选的测试选项：整行是 label，点哪里都切换，悬停只出中性底（任务 5.7：原为带底色的可点击 div）。 */
+function TestOptionRow({ title, description, checked, onChange }: {
+  title: string
+  description: string
+  checked: boolean
+  onChange: (checked: boolean) => void
+}): JSX.Element {
+  return (
+    <label className="-mx-2 flex cursor-pointer items-center justify-between gap-3 rounded-lg px-2 py-2 transition-colors duration-120 hover:bg-hover">
+      <span className="min-w-0">
+        <span className={`block ${UI_TEXT_BODY_CLASS}`}>{title}</span>
+        <span className={`mt-0.5 block ${UI_TEXT_META_CLASS}`}>{description}</span>
+      </span>
+      <UiCheckbox checked={checked} onCheckedChange={onChange} />
+    </label>
+  )
+}
 
 interface TestModePanelProps {
   isOpen: boolean
@@ -80,168 +96,88 @@ const TestModePanel: React.FC<TestModePanelProps> = ({
     onClose()
   }
 
+  const kbdClass = 'rounded-control bg-raised px-1.5 py-0.5 font-mono text-2xs text-text1'
+  const options = [
+    { key: 'skipRequest' as const, checked: state.options.skipRequest, onChange: () => handleToggleOption('skipRequest') },
+    { key: 'logParams' as const, checked: state.options.logParams, onChange: () => handleToggleOption('logParams') },
+    { key: 'enableDevTools' as const, checked: state.options.enableDevTools, onChange: () => handleToggleOption('enableDevTools') },
+  ]
+
   return (
     <UiModal
       isOpen={isOpen}
       title={t('testMode.title')}
       onClose={handleClose}
-      hideHeader
       size="form"
-      contentClassName="overflow-y-auto p-6"
+      contentClassName="overflow-y-auto px-4 py-4"
     >
-        {/* 标题栏 */}
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-3">
-            <div className="w-3 h-3 bg-warning-solid rounded-full animate-pulse" />
-            <h2 className={UI_TEXT_TITLE_CLASS}>{t('testMode.title')}</h2>
-          </div>
-          <UiIconButton size="lg"
-            type="button"
-            onClick={handleClose}
-          >
-            <X className="h-5 w-5" />
-          </UiIconButton>
-        </div>
-
-        {/* 快捷键提示 */}
-        <div className="mb-6 p-3 bg-warning-tint rounded-lg">
-          <div className={UI_TEXT_BODY_CLASS}>
-            {t('testMode.shortcutLabel')} <kbd className="rounded-control bg-raised px-2 py-1">Ctrl</kbd> +{' '}
-            <kbd className="rounded-control bg-raised px-2 py-1">Alt</kbd> +{' '}
-            <kbd className="rounded-control bg-raised px-2 py-1">Shift</kbd> +{' '}
-            <kbd className="rounded-control bg-raised px-2 py-1">T</kbd>
-          </div>
-        </div>
-
-        {/* 测试模式开关 */}
-        <div className="mb-6">
-          <div className="flex items-center justify-between p-4 rounded-lg bg-window/40">
-            <div>
-              <div className={UI_TEXT_PANEL_TITLE_CLASS}>{t('testMode.enable.title')}</div>
-              <div className={`mt-1 ${UI_TEXT_META_CLASS}`}>
-                {t('testMode.enable.description')}
-              </div>
+      <div className="space-y-5">
+        {/* 开关 + 快捷键 */}
+        <div className="flex items-center justify-between gap-4">
+          <div className="min-w-0">
+            <div className={UI_TEXT_PANEL_TITLE_CLASS}>{t('testMode.enable.title')}</div>
+            <div className={`mt-1 ${UI_TEXT_META_CLASS}`}>{t('testMode.enable.description')}</div>
+            <div className={`mt-2 flex flex-wrap items-center gap-1 ${UI_TEXT_META_CLASS}`}>
+              <span>{t('testMode.shortcutLabel')}</span>
+              {['Ctrl', 'Alt', 'Shift', 'T'].map((key) => <kbd key={key} className={kbdClass}>{key}</kbd>)}
             </div>
-            <Toggle
-              checked={state.enabled}
-              onChange={handleToggleTestMode}
-              onText={t('testMode.enable.title')}
-              offText={t('testMode.enable.title')}
-              ariaLabel={t('testMode.enable.title')}
-            />
           </div>
+          <Toggle
+            checked={state.enabled}
+            onChange={handleToggleTestMode}
+            onText={t('testMode.enable.title')}
+            offText={t('testMode.enable.title')}
+            ariaLabel={t('testMode.enable.title')}
+          />
         </div>
 
-        {/* 标签页切换 */}
         {state.enabled && (
-          <div className="mb-6">
-            <div className="flex gap-2 border-b border-line/50">
-              <UiChipButton
-                type="button"
-                active={activeTab === 'options'}
-                selectionRole="navigation"
-                onClick={() => setActiveTab('options')}
-                className="px-4 py-2"
-              >
-                {t('testMode.tabs.options')}
-              </UiChipButton>
-              <UiChipButton
-                type="button"
-                active={activeTab === 'export'}
-                selectionRole="navigation"
-                onClick={() => setActiveTab('export')}
-                className="px-4 py-2"
-              >
-                {t('testMode.tabs.export')}
-              </UiChipButton>
-            </div>
+          <div className="flex gap-1 border-b border-line">
+            <UiChipButton
+              type="button"
+              active={activeTab === 'options'}
+              selectionRole="navigation"
+              selectionAppearance="subtle"
+              onClick={() => setActiveTab('options')}
+            >
+              {t('testMode.tabs.options')}
+            </UiChipButton>
+            <UiChipButton
+              type="button"
+              active={activeTab === 'export'}
+              selectionRole="navigation"
+              selectionAppearance="subtle"
+              onClick={() => setActiveTab('export')}
+            >
+              {t('testMode.tabs.export')}
+            </UiChipButton>
           </div>
         )}
 
-        {/* 测试选项 */}
         {state.enabled && activeTab === 'options' && (
-          <div className="mb-6">
-            <h3 className={`mb-3 ${UI_TEXT_SECTION_CLASS}`}>{t('testMode.options.title')}</h3>
-            <div className="space-y-3">
-              {/* 跳过请求 */}
-              <div
-                className="flex items-center justify-between p-3 rounded-lg bg-window/40 cursor-pointer hover:bg-window/60 transition-colors"
-                onClick={() => handleToggleOption('skipRequest')}
-              >
-                <div>
-                  <div className={UI_TEXT_BODY_CLASS}>{t('testMode.options.skipRequest.title')}</div>
-                  <div className={`mt-1 ${UI_TEXT_META_CLASS}`}>
-                    {t('testMode.options.skipRequest.description')}
-                  </div>
-                </div>
-                <UiCheckbox
-                  checked={state.options.skipRequest}
-                  onCheckedChange={() => handleToggleOption('skipRequest')}
-                  onClick={(event) => event.stopPropagation()}
+          <UiGroup title={t('testMode.options.title')} titleTone="compact">
+            <div>
+              {options.map((option) => (
+                <TestOptionRow
+                  key={option.key}
+                  title={t(`testMode.options.${option.key}.title`)}
+                  description={t(`testMode.options.${option.key}.description`)}
+                  checked={option.checked}
+                  onChange={option.onChange}
                 />
-              </div>
-
-              {/* 输出参数 */}
-              <div
-                className="flex items-center justify-between p-3 rounded-lg bg-window/40 cursor-pointer hover:bg-window/60 transition-colors"
-                onClick={() => handleToggleOption('logParams')}
-              >
-                <div>
-                  <div className={UI_TEXT_BODY_CLASS}>{t('testMode.options.logParams.title')}</div>
-                  <div className={`mt-1 ${UI_TEXT_META_CLASS}`}>
-                    {t('testMode.options.logParams.description')}
-                  </div>
-                </div>
-                <UiCheckbox
-                  checked={state.options.logParams}
-                  onCheckedChange={() => handleToggleOption('logParams')}
-                  onClick={(event) => event.stopPropagation()}
-                />
-              </div>
-
-              {/* 开发者工具 */}
-              <div
-                className="flex items-center justify-between p-3 rounded-lg bg-window/40 cursor-pointer hover:bg-window/60 transition-colors"
-                onClick={() => handleToggleOption('enableDevTools')}
-              >
-                <div>
-                  <div className={UI_TEXT_BODY_CLASS}>{t('testMode.options.enableDevTools.title')}</div>
-                  <div className={`mt-1 ${UI_TEXT_META_CLASS}`}>
-                    {t('testMode.options.enableDevTools.description')}
-                  </div>
-                </div>
-                <UiCheckbox
-                  checked={state.options.enableDevTools}
-                  onCheckedChange={() => handleToggleOption('enableDevTools')}
-                  onClick={(event) => event.stopPropagation()}
-                />
-              </div>
-
-              {/* 参数流转追踪 */}
-              <div
-                className="flex items-center justify-between p-3 rounded-lg bg-window/40 cursor-pointer hover:bg-window/60 transition-colors"
-                onClick={() => setShowFlowTracking(prev => !prev)}
-              >
-                <div>
-                  <div className={UI_TEXT_BODY_CLASS}>{t('testMode.options.flowTracking.title')}</div>
-                  <div className={`mt-1 ${UI_TEXT_META_CLASS}`}>
-                    {t('testMode.options.flowTracking.description')}
-                  </div>
-                </div>
-                <UiCheckbox
-                  checked={showFlowTracking}
-                  onCheckedChange={setShowFlowTracking}
-                  onClick={(event) => event.stopPropagation()}
-                />
-              </div>
+              ))}
+              <TestOptionRow
+                title={t('testMode.options.flowTracking.title')}
+                description={t('testMode.options.flowTracking.description')}
+                checked={showFlowTracking}
+                onChange={setShowFlowTracking}
+              />
             </div>
-          </div>
+          </UiGroup>
         )}
 
-        {/* 参数流转追踪可视化 */}
         {state.enabled && activeTab === 'options' && showFlowTracking && flowRecords.length > 0 && (
-          <div className="mb-6">
-            <h3 className={`mb-3 ${UI_TEXT_SECTION_CLASS}`}>{t('testMode.flowTracking.title')}</h3>
+          <UiGroup title={t('testMode.flowTracking.title')} titleTone="compact">
             {flowRecords.map((record, index) => (
               <ParamFlowViewer
                 key={index}
@@ -249,28 +185,25 @@ const TestModePanel: React.FC<TestModePanelProps> = ({
                 onExport={onExportFlowRecord ? () => onExportFlowRecord(record) : undefined}
               />
             ))}
-          </div>
+          </UiGroup>
         )}
 
-        {/* 配置导出面板 */}
         {state.enabled && activeTab === 'export' && modelId && params && (
-          <div className="mb-6">
-            <ExportPanel modelId={modelId} params={params} context={context} />
-          </div>
+          <ExportPanel modelId={modelId} params={params} context={context} />
         )}
 
         {/* 独立日志窗口入口：日志完整捕获开关已移至日志窗口工具栏（见 2.1 decisions.md） */}
         {state.enabled && activeTab === 'options' && (
-          <div>
-            <h3 className={`mb-3 ${UI_TEXT_SECTION_CLASS}`}>{t('testMode.logsWindow.title')}</h3>
-            <div className="flex items-center justify-between p-3 rounded-lg bg-window/40">
+          <UiGroup title={t('testMode.logsWindow.title')} titleTone="compact" divided>
+            <div className="flex items-center justify-between gap-3">
               <div className={UI_TEXT_META_CLASS}>{t('testMode.logsWindow.description')}</div>
-              <UiButton variant="secondary" type="button" onClick={() => void openLogWindow()}>
+              <UiButton variant="secondary" type="button" className="shrink-0" onClick={() => void openLogWindow()}>
                 {t('testMode.logsWindow.openButton')}
               </UiButton>
             </div>
-          </div>
+          </UiGroup>
         )}
+      </div>
     </UiModal>
   )
 }

@@ -4,7 +4,7 @@ import {
   UI_COLOR_ACCENT_TEXT_CLASS,
   UI_TEXT_BODY_CLASS,
   UI_TEXT_META_CLASS,
-  UI_TEXT_TITLE_CLASS,
+  UI_TEXT_SECTION_CLASS,
   UiButton,
   UiInput,
   UiPanel,
@@ -17,8 +17,8 @@ import { useI18n } from '@/hooks/useI18n'
 export function OnboardingBasicsStep({ dataPath }: { dataPath: UseDataPathResult }): JSX.Element {
   const { t } = useI18n('onboarding')
   return (
-    <div className="min-h-[25rem]">
-      <h3 className={UI_TEXT_TITLE_CLASS}>{t('basics.headline')}</h3>
+    <div className="min-h-96">
+      <h3 className={UI_TEXT_SECTION_CLASS}>{t('basics.headline')}</h3>
       <p className={`mt-2 leading-6 ${UI_TEXT_BODY_CLASS}`}>{t('basics.description')}</p>
       <UiPanel variant="inset" className="mt-7 p-4">
         <div className="flex items-start gap-3">
@@ -35,8 +35,7 @@ export function OnboardingBasicsStep({ dataPath }: { dataPath: UseDataPathResult
               />
               <UiButton
                 variant="secondary"
-                size="lg"
-                className="shrink-0 whitespace-nowrap px-4"
+                className="shrink-0"
                 disabled={dataPath.isMigrating}
                 onClick={() => void dataPath.selectDirectory()}
               >

@@ -70,8 +70,7 @@ export function AssistantTraceDetail({
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-sm font-semibold text-text1">{getTraceStepLabel(summary)}</span>
-              {/* ui-surface-allow 日志窗口内嵌块：4.1 迁移为 bg-window/40 后被 4.2 补全的表面规则识别；去描边属视觉改动，交 5.7 核对 */}
-              <span className="rounded border border-line/50 bg-window/40 px-1.5 py-0.5 font-mono text-2xs text-text2">
+              <span className="rounded bg-window/40 px-1.5 py-0.5 font-mono text-2xs text-text2">
                 {summary.providerId}/{summary.modelId}
               </span>
               <span className={`rounded px-1.5 py-0.5 text-2xs ${statusClass(summary.status)}`}>
@@ -233,7 +232,7 @@ function MessageCard({ message, index }: { message: ModelStepMessage; index: num
   return (
     <div className={`overflow-hidden rounded-md border ${roleClass(message.role)}`}>
       <div className="flex items-center justify-between border-b border-current/15 px-2 py-1 text-2xs font-semibold uppercase tracking-wider">
-        <span>{message.role}</span><span className="font-mono opacity-60">#{index + 1}</span>
+        <span>{message.role}</span><span className="font-mono">#{index + 1}</span>
       </div>
       <div className="bg-window/40 p-2 text-xs text-text1">
         {typeof message.content === 'string' ? <TextBlock value={message.content} /> : <JsonTree value={message.content} />}
@@ -242,8 +241,9 @@ function MessageCard({ message, index }: { message: ModelStepMessage; index: num
   )
 }
 
-function Metric({ label, value }: { label: string; value: string }): JSX.Element { // ui-surface-allow 日志窗口内嵌块：4.1 迁移为 bg-window/40 后被 4.2 补全的表面规则识别；去描边属视觉改动，交 5.7 核对
-  return <div className="rounded border border-line/35 bg-window/40 px-2 py-1.5"><div className="text-2xs uppercase tracking-wider text-text2">{label}</div><div className="mt-0.5 truncate font-mono text-2xs text-text1" title={value}>{value}</div></div>
+/** 读数格：内嵌下沉面（无描边），任务 5.7 去掉 4.1 遗留的描边。 */
+function Metric({ label, value }: { label: string; value: string }): JSX.Element {
+  return <div className={`rounded-md px-2 py-1.5 ${UI_INSET_SURFACE_CLASS}`}><div className="text-2xs uppercase tracking-wider text-text2">{label}</div><div className="mt-0.5 truncate font-mono text-2xs text-text1" title={value}>{value}</div></div>
 }
 
 function CopyButton({ label, copied, disabled, onClick, icon = 'copy' }: { label: string; copied: boolean; disabled?: boolean; onClick: () => void; icon?: 'copy' | 'terminal' }): JSX.Element {
@@ -255,8 +255,8 @@ function LabeledBlock({ label, children }: { label: string; children: ReactNode 
   return <div><div className="mb-1 text-2xs font-medium uppercase tracking-wider text-text2">{label}</div>{children}</div>
 }
 
-function TextBlock({ value }: { value: string }): JSX.Element { // ui-surface-allow 日志窗口内嵌块：4.1 迁移为 bg-window/40 后被 4.2 补全的表面规则识别；去描边属视觉改动，交 5.7 核对
-  return <pre className="max-h-[440px] overflow-auto whitespace-pre-wrap break-words rounded border border-line/35 bg-window/40 p-2 font-mono text-2xs leading-relaxed text-text1">{value}</pre>
+function TextBlock({ value }: { value: string }): JSX.Element {
+  return <pre className={`max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-md p-2 font-mono text-2xs leading-relaxed ${UI_INSET_SURFACE_CLASS}`}>{value}</pre>
 }
 
 function roleClass(role: ModelStepMessage['role']): string {

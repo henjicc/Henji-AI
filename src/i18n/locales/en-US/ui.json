@@ -346,16 +346,17 @@
     "title": "New Version Available",
     "noNotes": "No release notes available",
     "versionFallback": "Version {{version}}",
-    "currentVersionLabel": "Current:",
-    "latestVersionLabel": "Latest:",
     "notesTitle": "What's New",
     "actions": {
       "skip": "Skip this version",
       "remindLater": "Remind me later",
       "updateNow": "Update now",
       "downloading": "Downloading",
-      "installNow": "Restart to install"
-    }
+      "installNow": "Restart to install",
+      "retry": "Retry"
+    },
+    "failed": "Update failed: {{reason}}",
+    "failedUnknown": "Unknown error, please try again later"
   },
   "viewer": {
     "swapImages": "Click again to swap original and upscaled images",

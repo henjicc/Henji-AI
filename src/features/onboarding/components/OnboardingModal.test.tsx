@@ -12,6 +12,7 @@ import {
 import { API_KEY_PROVIDERS } from '@/core/config/providers'
 import { UI_META_BADGE_CLASS } from '@/components/ui/styleTokens'
 import { openExternal } from '@/platform/desktopApi'
+import { useUiStore } from '@/stores/uiStore'
 import { onboardingManager } from '../application/onboardingManager'
 import { OnboardingModal } from './OnboardingModal'
 
@@ -105,6 +106,14 @@ describe('OnboardingModal', () => {
     expect(aiTestProviderConnection).toHaveBeenCalledWith('fal')
     expect(await screen.findByText('连接成功，密钥有效')).toBeTruthy()
     expect(screen.getByText('HTTP 状态：200')).toBeTruthy()
+  })
+
+  it('从设置里重新运行时，准备首个任务会关掉设置弹窗，提示气泡指向的模型选择不被挡住（5.7）', async () => {
+    useUiStore.setState({ isSettingsOpen: true })
+    onboardingManager.goToStep('first-task')
+    render(<OnboardingModal />)
+    fireEvent.click(await screen.findByRole('button', { name: '准备首个任务' }))
+    expect(useUiStore.getState().isSettingsOpen).toBe(false)
   })
 
   it('预制生成供应商只显示 SDK 官网入口，不显示管理地址', async () => {

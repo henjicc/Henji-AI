@@ -20,6 +20,8 @@ export interface ReleaseInfo {
   source?: 'github-release' | 'electron-updater'
   updateStatus?: UpdaterCheckResult['status']
   progressPercent?: number
+  /** 下载或安装失败的原因（`updateStatus === 'error'` 时在弹窗正文显示） */
+  errorMessage?: string
 }
 
 export interface UpdateCheckResult {

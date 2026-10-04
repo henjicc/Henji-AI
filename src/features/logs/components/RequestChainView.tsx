@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useI18n } from '@/hooks/useI18n'
-import { UiButton, UiEmpty, UiModal } from '@/components/ui'
+import { UI_INSET_SURFACE_CLASS, UiButton, UiEmpty, UiModal, UiNavButton } from '@/components/ui'
 import { compactId, getDomainHint, getEventDisplay, type DisplayLogEvent } from '../eventDisplay'
 import { chainToJson, chainToMarkdown, copyTextToClipboard } from '../copyFormats'
 import { JsonTree } from './JsonTree'
@@ -79,25 +79,27 @@ export function RequestChainView({ isOpen, onClose, requestId, events }: Request
                 <span
                   className={`absolute -left-[5px] top-2 h-2.5 w-2.5 rounded-full ${isError ? 'bg-danger-solid' : 'bg-accent'}`}
                 />
-                {/* ui-surface-allow 链路事件卡（多行内容的可展开条目），日志窗口外观归 4.1 */}
-                <UiButton
+                {/* 链路事件行：与事件列表同一种多行列表项（UiNavButton size=auto），展开中用选中态（任务 5.7） */}
+                <UiNavButton
                   type="button"
-                  variant="secondary"
-                  className="h-auto w-full flex-col items-stretch justify-start border-line/40 bg-hover px-2 py-1.5 text-left font-normal"
+                  active={isExpanded}
+                  aria-expanded={isExpanded}
+                  size="auto"
+                  className="flex-col items-stretch justify-start font-normal"
                   onClick={() => setExpandedId(isExpanded ? '' : event.id)}
                 >
                   <div className="flex items-center justify-between gap-2">
                     <span className="truncate text-text1">
                       <display.icon aria-hidden="true" className="mr-1 inline h-3.5 w-3.5 align-[-2px]" />{display.title}
                     </span>
-                    <span className="shrink-0 text-2xs opacity-70">+{deltaMs}ms</span>
+                    <span className="shrink-0 text-2xs text-text3">+{deltaMs}ms</span>
                   </div>
-                  <div className="mt-0.5 truncate text-2xs opacity-70">
+                  <div className="mt-0.5 truncate text-2xs text-text3">
                     {getDomainHint(event.domain)} · {event.source} · {new Date(event.timestamp).toLocaleTimeString('zh-CN')}
                   </div>
-                </UiButton>
+                </UiNavButton>
                 {isExpanded && (
-                  <div className="mt-1 rounded-md border border-line/40 bg-window/40 p-2">
+                  <div className={`mt-1 rounded-md p-2 ${UI_INSET_SURFACE_CLASS}`}>
                     <JsonTree value={event} />
                   </div>
                 )}
