@@ -2,12 +2,13 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ exportProject: vi.fn(), importProject: vi.fn() }));
+const mocks = vi.hoisted(() => ({ exportProject: vi.fn(), importProject: vi.fn(), notify: vi.fn(), renameProject: vi.fn() }));
 
 vi.mock('react-i18next', async (importOriginal) => ({
   ...await importOriginal<typeof import('react-i18next')>(),
   useTranslation: () => ({ t: (key: string) => key }),
 }));
+vi.mock('@/contexts/NotificationContext', () => ({ useNotification: () => ({ showNotification: mocks.notify }) }));
 vi.mock('@/core/logging', () => ({ createLogger: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }) }));
 vi.mock('@/services/projectPackage/exportProject', () => ({ exportProjectToPackage: mocks.exportProject }));
 vi.mock('@/services/projectPackage/importProject', () => ({ importProjectFromPackage: mocks.importProject }));
@@ -18,7 +19,7 @@ vi.mock('@/stores/projectStore', () => ({
       { id: 'p2', name: '产品主图', nodeCount: 1, updatedAt: 1, createdAt: 2, coverPath: null },
     ],
     isOpeningProject: false, openError: null, persistenceError: null,
-    createProject: vi.fn(), deleteProject: vi.fn(), renameProject: vi.fn(), openProject: vi.fn(), hydrate: vi.fn(),
+    createProject: vi.fn(), deleteProject: vi.fn(), renameProject: mocks.renameProject, openProject: vi.fn(), hydrate: vi.fn(),
   }),
 }));
 
@@ -65,5 +66,18 @@ describe('ProjectManager 导出项目包（5.6 第二批 B-40）', () => {
     expect(alert.textContent).toContain('project.exportFailed');
     expect(alert.textContent).toContain('磁盘已满');
     expect(screen.queryByRole('status')).toBeNull();
+  });
+});
+
+describe('ProjectManager 写入失败要提示（任务 5.8：原来 .catch(() => undefined) 吞掉了）', () => {
+  it('改名保存失败时弹出失败通知，而不是列表上看起来已经改好', async () => {
+    mocks.renameProject.mockRejectedValueOnce(new Error('磁盘已满'));
+    render(<ProjectManager />);
+    fireEvent.click(within(openMenu(0)).getByText('project.rename'));
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.change(within(dialog).getByRole('textbox'), { target: { value: '新名字' } });
+    fireEvent.keyDown(within(dialog).getByRole('textbox'), { key: 'Enter' });
+    await waitFor(() => expect(mocks.renameProject).toHaveBeenCalledWith('p1', '新名字'));
+    await waitFor(() => expect(mocks.notify).toHaveBeenCalledWith('project.persistenceFailed', 'error'));
   });
 });

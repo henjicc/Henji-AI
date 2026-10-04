@@ -66,6 +66,20 @@ interface PendingProgressSampleContext {
 }
 
 
+/**
+ * 生成失败：`message` 就是供应商或运行时给出的原因，可以直接展示给用户（任务 5.8）。
+ * 原来抛 `Generation failed for <modelId>: <原因>`，克隆面板、画布节点等直接展示 error.message 的地方
+ * 把英文前缀与模型 ID 带进了正式界面；模型 ID 已写进结构化日志，这里单独挂在 modelId 上。
+ */
+export class GenerationFailedError extends Error {
+  readonly modelId: string
+  constructor(modelId: string, reason: string) {
+    super(reason)
+    this.name = 'GenerationFailedError'
+    this.modelId = modelId
+  }
+}
+
 export class GenerationService {
   private static instance: GenerationService | null = null
 
@@ -263,7 +277,7 @@ export class GenerationService {
         },
       })
       progressTracker?.fail(message)
-      throw new Error(`Generation failed for ${modelId}: ${message}`)
+      throw new GenerationFailedError(modelId, message)
     }
   }
 

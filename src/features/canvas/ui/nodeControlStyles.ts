@@ -70,6 +70,12 @@ export const NODE_SELECTED_BORDER_CLASS = 'border-accent shadow-node-selected';
  */
 export const NODE_IDLE_BORDER_CLASS = 'border-text3/30 hover:border-text3/50';
 
+/**
+ * 上传类节点被文件拖到上面时铺的一层淡强调底（任务 5.8，N03.2）：描边同选中态，内层淡强调底表示“松手即接住”。
+ * 叠在节点内容之上、不接收指针。
+ */
+export const NODE_DROP_TARGET_OVERLAY_CLASS = 'pointer-events-none absolute inset-0 rounded-[var(--node-radius)] bg-selected-accent';
+
 /** 不需要 hover 反馈的节点（如分组节点）用这个 */
 export const NODE_IDLE_BORDER_STATIC_CLASS = 'border-text3/30';
 

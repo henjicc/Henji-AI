@@ -1,4 +1,4 @@
-import { createContext, createElement, useContext, useId, useLayoutEffect, type ReactElement, type ReactNode } from 'react'
+import { createContext, createElement, useContext, useId, useLayoutEffect, useSyncExternalStore, type ReactElement, type ReactNode } from 'react'
 
 import { elementOfEventTarget } from '@/utils/crossRealmDom'
 import { UiFormRowLabelContext } from './formRowLabel'
@@ -33,6 +33,15 @@ const overlayParents = new Map<string, string | null>()
 const openOverlayStack: string[] = []
 /** 打开中的模态层（全屏查看器等）：其内容可能不在层根节点 DOM 内，打开期间祖先层不响应点外关闭。 */
 const openModalOverlays = new Set<string>()
+/** 模态层开合的订阅者：从浮层里打开弹窗时，父浮层要让开（见 useHasOpenModalUiOverlayDescendant）。 */
+const modalOverlayListeners = new Set<() => void>()
+function notifyModalOverlayListeners(): void {
+  for (const listener of modalOverlayListeners) listener()
+}
+function subscribeModalOverlays(listener: () => void): () => void {
+  modalOverlayListeners.add(listener)
+  return () => { modalOverlayListeners.delete(listener) }
+}
 
 export interface UiOverlayLayer {
   id: string
@@ -64,11 +73,14 @@ export function useUiOverlayLayer(open: boolean, options?: { modal?: boolean }):
     const firstDescendant = openOverlayStack.findIndex((openId) => isAncestorOverlay(id, openId))
     if (firstDescendant >= 0) openOverlayStack.splice(firstDescendant, 0, id)
     else openOverlayStack.push(id)
-    if (modal) openModalOverlays.add(id)
+    if (modal) {
+      openModalOverlays.add(id)
+      notifyModalOverlayListeners()
+    }
     return () => {
       const index = openOverlayStack.lastIndexOf(id)
       if (index >= 0) openOverlayStack.splice(index, 1)
-      openModalOverlays.delete(id)
+      if (openModalOverlays.delete(id)) notifyModalOverlayListeners()
     }
   }, [id, modal, open])
 
@@ -129,6 +141,15 @@ export function hasOpenUiOverlayDescendant(overlayId: string): boolean {
 /** 是否有打开中的模态后代层（祖先层在此期间不响应点外关闭）。 */
 export function hasOpenModalUiOverlayDescendant(overlayId: string): boolean {
   return [...openModalOverlays].some((id) => isAncestorOverlay(overlayId, id))
+}
+
+/**
+ * 订阅版：本层的模态后代（从浮层里打开的弹窗、查看器）是否打开中（任务 5.8）。
+ * 浮层层级（popover 75）高于弹窗（modal 50），父浮层若照常显示会压在它打开的弹窗上；
+ * 打开期间父浮层隐藏但保持挂载，弹窗关闭后原样回来。
+ */
+export function useHasOpenModalUiOverlayDescendant(overlayId: string): boolean {
+  return useSyncExternalStore(subscribeModalOverlays, () => hasOpenModalUiOverlayDescendant(overlayId))
 }
 
 /** 是否有任何打开中的浮层。 */

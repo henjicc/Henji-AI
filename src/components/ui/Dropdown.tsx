@@ -14,7 +14,7 @@ import { useUiFormRowLabelling } from './formRowLabel'
 import { UiFieldTrigger, UiOptionButton } from './primitives'
 import { UI_DURATION } from './motion'
 import { resolveDropdownDisplay, resolveDropdownMenuWidth } from './dropdownUtils'
-import { resolveUiOverlayTarget, UiOverlayLayerProvider, useUiOverlayLayer } from './overlayOwnership'
+import { resolveUiOverlayTarget, UiOverlayLayerProvider, useHasOpenModalUiOverlayDescendant, useUiOverlayLayer } from './overlayOwnership'
 import { measureElementTextWidth } from './textMeasurement'
 import { Check } from 'lucide-react'
 import { Z_LAYERS } from '@/core/theme/zLayers'
@@ -115,6 +115,8 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
   }, [finishClose])
   const [activeOptionIndex, setActiveOptionIndex] = useState(-1)
   const overlay = useUiOverlayLayer(open)
+  // 从下拉面板里打开的弹窗期间面板让开（同 PanelTrigger，任务 5.8）
+  const yieldToModal = useHasOpenModalUiOverlayDescendant(overlay.id)
   const onOpenChangeRef = useRef(onOpenChange)
   onOpenChangeRef.current = onOpenChange
   const menuShown = open && !closing
@@ -451,7 +453,8 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
                 width: optionsPanelWidth !== null
                   ? Math.max(fixedPos.width, optionsPanelWidth)
                   : fixedPos.width,
-                zIndex
+                zIndex,
+                ...(yieldToModal ? { visibility: 'hidden' as const } : {}),
               }}
               data-dropdown-portal="true"
               data-dropdown-placement={fixedPos.placement}

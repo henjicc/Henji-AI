@@ -1,0 +1,252 @@
+[
+  {
+    "id": "review-misc-states-transcribe",
+    "surface": "工具",
+    "name": "核对-口播转写中与转写失败（5.8 补截；语音识别通道替身，不发真实请求）",
+    "checklist": [
+      "T03.2"
+    ],
+    "writesUserData": true,
+    "steps": [
+      {
+        "stubIpc": {
+          "channel": "audioEdit:asr:list",
+          "mode": "resolve",
+          "data": [
+            {
+              "id": "review-asr",
+              "providerId": "bailian",
+              "configured": true,
+              "timestamps": true,
+              "longAudio": true
+            }
+          ]
+        }
+      },
+      {
+        "stubIpc": {
+          "channel": "audioEdit:asr:transcribe",
+          "mode": "hold"
+        }
+      },
+      {
+        "enter": "toolbox"
+      },
+      {
+        "seedAudioEdit": {
+          "name": "核对-口播 未转写",
+          "transcript": false
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/^口播剪辑/"
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/核对-口播 未转写/"
+        },
+        "timeout": 12000
+      },
+      {
+        "waitFor": {
+          "role": "slider",
+          "name": "口播波形定位"
+        },
+        "timeout": 15000
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "开始转写"
+        }
+      },
+      {
+        "wait": 600
+      },
+      {
+        "capture": "transcribing"
+      },
+      {
+        "releaseIpc": {
+          "channel": "audioEdit:asr:transcribe",
+          "release": "reject",
+          "message": "核对夹具：语音识别服务返回音频格式不支持。"
+        }
+      },
+      {
+        "wait": 800
+      },
+      {
+        "capture": "transcribe-failed"
+      }
+    ]
+  },
+  {
+    "id": "review-misc-states-audio-viewer",
+    "surface": "通用",
+    "name": "核对-音频查看器播放（5.8 补截；生成页参考音频）",
+    "checklist": [
+      "U11.1"
+    ],
+    "writesUserData": true,
+    "steps": [
+      {
+        "enter": "generation"
+      },
+      {
+        "selectModel": {
+          "modelId": "kie-seedance-2.5",
+          "providerId": "kie",
+          "search": "Seedance 2.5"
+        }
+      },
+      {
+        "setFiles": {
+          "target": {
+            "selector": "input[type=\"file\"][accept*=\"audio\"]"
+          },
+          "files": [
+            "@generated:audio:6"
+          ]
+        },
+        "timeout": 20000
+      },
+      {
+        "waitFor": {
+          "selector": "[data-uploader-item=\"0\"]"
+        },
+        "timeout": 20000
+      },
+      {
+        "hover": {
+          "selector": "[data-uploader-item=\"0\"]"
+        }
+      },
+      {
+        "click": {
+          "selector": "[data-uploader-item=\"0\"] button",
+          "nth": 0
+        }
+      },
+      {
+        "waitFor": {
+          "selector": "[data-viewer-controls], .fixed.inset-0.z-viewer"
+        },
+        "timeout": 8000,
+        "optional": true
+      },
+      {
+        "wait": 3000
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/播放/",
+          "within": {
+            "selector": ".z-viewer"
+          }
+        },
+        "optional": true
+      },
+      {
+        "wait": 600
+      },
+      {
+        "capture": "audio-viewer-playing"
+      }
+    ]
+  },
+  {
+    "id": "review-misc-states-sync",
+    "surface": "设置",
+    "name": "核对-同步模型中与同步失败（5.8 补截；模型发现通道替身，不联网）",
+    "checklist": [
+      "A14.4",
+      "A14.5"
+    ],
+    "writesUserData": false,
+    "expectedLogEvents": [
+      "fetchopenaicompatiblemodels_failed"
+    ],
+    "steps": [
+      {
+        "enter": {
+          "surface": "settings.general.basic"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "供应商与模型",
+          "exact": true,
+          "within": {
+            "role": "navigation",
+            "name": "设置"
+          }
+        }
+      },
+      {
+        "wait": 500
+      },
+      {
+        "fill": {
+          "target": {
+            "placeholder": "/搜索供应商/"
+          },
+          "text": "DeepSeek"
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/DeepSeek/",
+          "within": {
+            "selector": "[data-settings-section], .settings-scroll-body"
+          }
+        },
+        "timeout": 12000
+      },
+      {
+        "wait": 400
+      },
+      {
+        "stubIpc": {
+          "channel": "llm:discoverModels",
+          "mode": "hold"
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/同步模型/"
+        }
+      },
+      {
+        "wait": 600
+      },
+      {
+        "capture": "sync-running"
+      },
+      {
+        "releaseIpc": {
+          "channel": "llm:discoverModels",
+          "release": "reject",
+          "message": "核对夹具：接口返回 401，请检查密钥。"
+        }
+      },
+      {
+        "wait": 800
+      },
+      {
+        "capture": "sync-failed"
+      }
+    ]
+  }
+]

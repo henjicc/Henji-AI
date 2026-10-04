@@ -13,6 +13,7 @@ import {
   type SyntheticEvent,
 } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
+import { useNodeFileDragOver } from './shared/useNodeFileDragOver';
 import { useTranslation } from 'react-i18next';
 
 const logger = createLogger('features.canvas.nodes.UploadNode')
@@ -39,6 +40,7 @@ import {
   NODE_IDLE_BORDER_CLASS,
   NODE_PORT_NODE_CLASS,
   NODE_PORT_VISIBLE_CLASS,
+  NODE_DROP_TARGET_OVERLAY_CLASS,
   NODE_SELECTED_BORDER_CLASS,
   NODE_SURFACE_CLASS,
 } from '@/features/canvas/ui/nodeControlStyles';
@@ -326,20 +328,25 @@ export const UploadNode = memo(({ id, data, selected, width, height }: UploadNod
     preferMicroImage && !transientPreviewUrl
   );
   const imageSource = useDecodedImageSource(microImageSource ?? baseImageSource);
+  const { isDragOver, dragOverProps, resetDragOver } = useNodeFileDragOver();
 
   return (
     <div
       className={`
         group relative overflow-visible rounded-[var(--node-radius)] border ${NODE_SURFACE_CLASS} p-0 transition-colors duration-120
-        ${selected
+        ${selected || isDragOver
           ? NODE_SELECTED_BORDER_CLASS
           : NODE_IDLE_BORDER_CLASS}
       `}
       style={{ width: resolvedWidth, height: resolvedHeight }}
       onClick={handleNodeClick}
-      onDrop={handleDrop}
+      data-drag-over={isDragOver || undefined}
+      {...dragOverProps}
+      onDrop={(event) => { resetDragOver(); handleDrop(event); }}
       onDragOver={(event) => { event.preventDefault(); event.stopPropagation(); }}
     >
+      {/* 文件拖到节点上：描边与选中同档 + 淡强调底（任务 5.8，N03.2） */}
+      {isDragOver ? <div aria-hidden="true" className={`${NODE_DROP_TARGET_OVERLAY_CLASS} z-raised`} /> : null}
       <NodeHeader
         className={NODE_HEADER_FLOATING_POSITION_CLASS}
         icon={<ImageUploadIcon className="h-4 w-4" />}

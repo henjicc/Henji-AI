@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useNotification } from '@/contexts/NotificationContext';
 import { FolderOpen, LoaderCircle, PackageCheck, PackageOpen } from 'lucide-react';
 import { type ProjectCardGridItem } from '@/components/ProjectCardGrid';
 import { ProjectLibraryPage, type ProjectLibraryLabels } from '@/components/ProjectLibraryPage';
@@ -68,6 +69,10 @@ function buildLabels(t: Translate): ProjectLibraryLabels {
 
 export function ProjectManager(): JSX.Element {
   const { t } = useTranslation();
+  const { showNotification } = useNotification();
+  // 写入失败要让用户知道（任务 5.8：原来三处 .catch(() => undefined) 吞掉了，改名失败时列表上看起来已改好）；
+  // 失败细节已由 projectStore 写进结构化日志
+  const reportPersistenceFailure = (): void => showNotification(t('project.persistenceFailed'), 'error');
   const [packagingProjectId, setPackagingProjectId] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   // 同步守卫：状态更新前的连续触发（如菜单项被连点）也只导出一次
@@ -152,10 +157,10 @@ export function ProjectManager(): JSX.Element {
           },
         ]}
         onOpen={(item) => openProject(item.id)}
-        onCreate={(name) => { void createProject(name).catch(() => undefined) }}
-        onRename={(item, name) => { void renameProject(item.id, name).catch(() => undefined) }}
+        onCreate={(name) => { void createProject(name).catch(reportPersistenceFailure) }}
+        onRename={(item, name) => { void renameProject(item.id, name).catch(reportPersistenceFailure) }}
         onDelete={async (items) => {
-          await Promise.all(items.map((item) => deleteProject(item.id))).catch(() => undefined)
+          await Promise.all(items.map((item) => deleteProject(item.id))).catch(reportPersistenceFailure)
         }}
       />
     </>

@@ -6,6 +6,7 @@ import {
   isTopmostUiOverlay,
   resolveUiOverlayTarget,
   UiOverlayLayerProvider,
+  useHasOpenModalUiOverlayDescendant,
   useUiOverlayLayer,
 } from './overlayOwnership'
 import {
@@ -99,6 +100,22 @@ export type PanelTriggerControls = {
   togglePanel: () => void
 }
 
+/**
+ * 排到当前事件分发结束之后执行（宏任务）。MessageChannel 不像 setTimeout 那样在后台窗口被节流到秒级。
+ */
+function runAfterCurrentEvent(callback: () => void): void {
+  if (typeof MessageChannel === 'undefined') {
+    window.setTimeout(callback, 0)
+    return
+  }
+  const channel = new MessageChannel()
+  channel.port1.onmessage = () => {
+    channel.port1.close()
+    callback()
+  }
+  channel.port2.postMessage(null)
+}
+
 const PANEL_VIEWPORT_GUTTER_PX = 8
 const PANEL_VIEWPORT_TOP_INSET_PX = 48
 // 标准文字菜单：列表内边距 p-1（8）+ 菜单项留白 + 边框（2）+ 取整余量。
@@ -154,6 +171,8 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
   const [open, setOpen] = useState(false)
   const [closing, setClosing] = useState(false)
   const overlay = useUiOverlayLayer(open)
+  // 从面板里打开的弹窗期间面板让开（浮层层级高于弹窗，否则压在弹窗上），保持挂载，弹窗关闭后原样回来（任务 5.8）
+  const yieldToModal = useHasOpenModalUiOverlayDescendant(overlay.id)
   const [pos, setPos] = useState<FloatingPanelPosition | null>(null)
   const ref = useRef<HTMLDivElement | null>(null)
   const panelRef = useRef<HTMLDivElement | null>(null)
@@ -346,19 +365,24 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
         closePanel()
       }
     }
-    // 面板内点击：选项自己的 onClick 先执行，冒泡到文档后再按 closeOnPanelClick 收起
-    const clickHandler = (e: MouseEvent) => {
+    // 面板内点击：选项自己的 onClick 先执行，这次点击分发完再按 closeOnPanelClick 收起（5.5 VE-06）。
+    // 在捕获阶段判定、点击分发结束后执行（任务 5.8）：不能等点击冒泡到文档——面板所在的 React 树里
+    // 祖先常有 onClick 阻止冒泡（生成输入卡片），文档根本收不到，生成页选完模型面板就不收起；
+    // 选项的 onClick 也可能同步重渲染，把被点的节点换掉，冒泡时再判“是否在本面板内”会落空。
+    // 用 MessageChannel 排到本次事件之后：不受后台窗口计时器节流影响。
+    const clickCaptureHandler = (e: MouseEvent) => {
       if (!open || !isDomNode(e.target)) return
       if (resolveUiOverlayTarget(e.target, overlay.id) !== 'self') return
-      if (shouldClosePanelAfterInternalClick(closeOnPanelClick, e.target)) closePanel()
+      if (!shouldClosePanelAfterInternalClick(closeOnPanelClick, e.target)) return
+      runAfterCurrentEvent(closePanel)
     }
     // 按触发器所在文档监听：浮窗中的面板在浮窗内打开与关闭，主窗口行为不变。
     const ownerDocument = ownerDocumentOf(ref.current)
     ownerDocument.addEventListener('mousedown', handler, true)
-    ownerDocument.addEventListener('click', clickHandler)
+    ownerDocument.addEventListener('click', clickCaptureHandler, true)
     return () => {
       ownerDocument.removeEventListener('mousedown', handler, true)
-      ownerDocument.removeEventListener('click', clickHandler)
+      ownerDocument.removeEventListener('click', clickCaptureHandler, true)
     }
   }, [closePanel, open, closeOnPanelClick, overlay.id])
 
@@ -479,7 +503,7 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
             minHeight: stableHeight && maxHeightRef.current ? Math.min(maxHeightRef.current, pos.maxHeight) : undefined,
             zIndex,
             opacity: ready ? 1 : 0,
-            visibility: ready ? 'visible' : 'hidden'
+            visibility: ready && !yieldToModal ? 'visible' : 'hidden'
           }}
           data-panel-placement={pos.placement}
           {...overlay.layerProps}

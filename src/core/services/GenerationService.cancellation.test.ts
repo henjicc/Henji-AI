@@ -116,3 +116,12 @@ it('仅将供应商确认的训练失败写回音色库，网络错误仍可重�
   await expect(service.continuePolling('cancel-fixture', 'voice-task')).rejects.toThrow('网络暂不可用')
   expect(save).not.toHaveBeenCalled()
 })
+
+it('生成失败抛出的错误文案就是失败原因，不带英文前缀与模型 ID（任务 5.8，克隆面板与画布节点直接展示它）', async () => {
+  vi.mocked(aiGenerate).mockRejectedValueOnce(new Error('供应商返回音频时长不足 10 秒'))
+  await expect(service.generate('cancel-fixture', {})).rejects.toMatchObject({
+    name: 'GenerationFailedError',
+    message: '供应商返回音频时长不足 10 秒',
+    modelId: 'cancel-fixture',
+  })
+})

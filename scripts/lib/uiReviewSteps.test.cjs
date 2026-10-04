@@ -315,3 +315,35 @@ test('5.7 新动作：enter.updatePreview 写进 URL，logsWindow / mainWindow /
   assert.throws(() => normalizeStep({ seedHistory: { rows: [{ id: 'x', type: 'pdf' }] } }, 't'), /type/)
   assert.throws(() => normalizeStep({ seedHistory: { rows: [{ id: 'x', type: 'image', file: 'web' }] } }, 't'), /file/)
 })
+
+test('步骤：dropFiles 默认只悬停，drop 显式开启（任务 5.8）', () => {
+  const hover = normalizeStep({ dropFiles: { target: { selector: '[data-x]' }, files: ['resources/icons/icon.png'] } }, 't')
+  assert.equal(hover.drop, false)
+  assert.deepEqual(hover.files, ['resources/icons/icon.png'])
+  assert.equal(normalizeStep({ dropFiles: { target: { selector: 'x' }, files: ['a.png'], drop: true } }, 't').drop, true)
+  assert.throws(() => normalizeStep({ dropFiles: { target: { selector: 'x' }, files: [] } }, 't'), /files/)
+})
+
+test('步骤：stubIpc 付费与模型通道只允许挂起和拒绝，放行只能拒绝（任务 5.8）', () => {
+  const hold = normalizeStep({ stubIpc: { channel: 'media:copy' } }, 't')
+  assert.equal(hold.mode, 'hold')
+  assert.equal(hold.shape, 'envelope')
+  assert.equal(normalizeStep({ stubIpc: { channel: 'media:copy', mode: 'delay', ms: 2000 } }, 't').ms, 2000)
+  assert.equal(normalizeStep({ stubIpc: { channel: 'ai:generate', mode: 'hold', shape: 'throw' } }, 't').paid, true)
+  assert.throws(() => normalizeStep({ stubIpc: { channel: 'ai:generate', mode: 'delay' } }, 't'), /付费/)
+  assert.deepEqual(normalizeStep({ stubIpc: { channel: 'ai:getRuntimeProviderKeyStatus', mode: 'resolve', data: [1] } }, 't').data, [1])
+  assert.throws(() => normalizeStep({ stubIpc: { channel: 'llm:chatStream', mode: 'delay' } }, 't'), /付费/)
+  assert.throws(() => normalizeStep({ releaseIpc: { channel: 'embedded-agent:prompt', release: 'original' } }, 't'), /付费/)
+  assert.equal(normalizeStep({ releaseIpc: { channel: 'media:copy', release: 'original' } }, 't').release, 'original')
+  assert.throws(() => normalizeStep({ stubIpc: { channel: 'nocolon' } }, 't'), /channel/)
+  assert.throws(() => normalizeStep({ stubIpc: { channel: 'a:b', mode: 'delay', ms: 0 } }, 't'), /ms/)
+})
+
+test('步骤：seedSettings 需要非空 values 与合法键名，reload 无参数（任务 5.8）', () => {
+  const seed = normalizeStep({ seedSettings: { values: { voice_library_records: [] }, clearLocalStorage: ['voice_cache'] } }, 't')
+  assert.deepEqual(seed.clearLocalStorage, ['voice_cache'])
+  assert.throws(() => normalizeStep({ seedSettings: { values: {} } }, 't'), /非空/)
+  assert.throws(() => normalizeStep({ seedSettings: { values: { 'bad key': 1 } } }, 't'), /键名/)
+  assert.equal(normalizeStep({ reload: {} }, 't').action, 'reload')
+  assert.throws(() => normalizeStep({ stubIpc: { channel: 'audioEdit:asr:transcribe', mode: 'delay' } }, 't'), /付费/)
+})

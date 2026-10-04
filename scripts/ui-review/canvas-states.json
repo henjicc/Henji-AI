@@ -1,0 +1,890 @@
+[
+  {
+    "id": "review-canvas-states-media",
+    "surface": "画布",
+    "name": "核对-视频/音频结果播放与选中、生成节点选中、长文本与编辑、数值编辑、拖入悬停、3D 预览悬停（5.8 补截）",
+    "checklist": [
+      "N02.2",
+      "N05.2",
+      "N05.3",
+      "N05.4",
+      "N06.2",
+      "N06.3",
+      "N07.2",
+      "N08.2",
+      "N08.3",
+      "N10.2",
+      "N20.2",
+      "N20.3",
+      "N21.2",
+      "N03.2"
+    ],
+    "writesUserData": true,
+    "steps": [
+      {
+        "seedCanvas": {
+          "viewport": {
+            "x": 40,
+            "y": 40,
+            "zoom": 0.62
+          },
+          "nodes": [
+            {
+              "id": "__s_video_gen",
+              "type": "videoGenNode",
+              "position": {
+                "x": 0,
+                "y": 0
+              },
+              "data": {
+                "displayName": "视频生成",
+                "prompt": "镜头缓慢推进的雨夜街景",
+                "modelId": "kie-kling-3.0",
+                "params": {},
+                "mediaInputs": {},
+                "isGenerating": false,
+                "generationStartedAt": null
+              }
+            },
+            {
+              "id": "__s_audio_gen",
+              "type": "audioGenNode",
+              "position": {
+                "x": 420,
+                "y": 0
+              },
+              "data": {
+                "displayName": "音频生成",
+                "prompt": "",
+                "modelId": "ppio-minimax-speech",
+                "params": {},
+                "mediaInputs": {},
+                "isGenerating": false,
+                "generationStartedAt": null
+              }
+            },
+            {
+              "id": "__s_video_result",
+              "type": "exportVideoNode",
+              "position": {
+                "x": 840,
+                "y": 0
+              },
+              "data": {
+                "displayName": "视频结果",
+                "videoUrl": "{{media:video}}",
+                "previewImageUrl": null,
+                "aspectRatio": "16:9",
+                "durationSec": 2,
+                "isSizeManuallyAdjusted": false,
+                "isGenerating": false,
+                "generationStartedAt": null
+              }
+            },
+            {
+              "id": "__s_audio_result",
+              "type": "exportAudioNode",
+              "position": {
+                "x": 1260,
+                "y": 0
+              },
+              "data": {
+                "displayName": "音频结果",
+                "audioUrl": "{{media:audio}}",
+                "durationSec": 3
+              }
+            },
+            {
+              "id": "__s_text_long",
+              "type": "textAnnotationNode",
+              "position": {
+                "x": 0,
+                "y": 520
+              },
+              "width": 360,
+              "height": 260,
+              "data": {
+                "displayName": "长文本",
+                "content": "# 分镜说明\n\n第一幕：雨夜街头，霓虹倒映在积水里，镜头从低角度缓慢推进。\n\n- 主角撑着透明雨伞穿过人群\n- 远处电车驶过，灯光扫过画面\n- 背景音：雨声、电车铃声\n\n第二幕：室内咖啡馆，暖色灯光，窗外仍是雨夜。主角坐下，望向窗外，镜头切到窗上的雨滴特写。\n\n第三幕：清晨，雨停了，街道被洗得发亮。主角走出咖啡馆，抬头看天，阳光从云缝里落下来。\n\n> 注意：三幕的色调从冷到暖，节奏从慢到快。"
+              }
+            },
+            {
+              "id": "__s_int",
+              "type": "intSourceNode",
+              "position": {
+                "x": 420,
+                "y": 520
+              },
+              "data": {
+                "displayName": "整数",
+                "value": 3
+              }
+            },
+            {
+              "id": "__s_string",
+              "type": "stringSourceNode",
+              "position": {
+                "x": 660,
+                "y": 520
+              },
+              "data": {
+                "displayName": "文本",
+                "value": "核对用文本"
+              }
+            },
+            {
+              "id": "__s_text_processing",
+              "type": "textProcessingNode",
+              "position": {
+                "x": 420,
+                "y": 700
+              },
+              "width": 360,
+              "height": 230,
+              "data": {
+                "displayName": "文本处理",
+                "prompt": "把输入整理成一句画面描述",
+                "systemPromptTemplateId": "text-processing-image-optimizer",
+                "mediaInputs": {},
+                "lastOutput": ""
+              }
+            },
+            {
+              "id": "__s_storyboard_gen",
+              "type": "storyboardGenNode",
+              "position": {
+                "x": 900,
+                "y": 520
+              },
+              "data": {
+                "displayName": "分镜生成",
+                "gridRows": 2,
+                "gridCols": 2,
+                "frames": [],
+                "modelId": "kie-nano-banana-2",
+                "params": {},
+                "mediaInputs": {},
+                "imageUrl": null,
+                "previewImageUrl": null,
+                "aspectRatio": "1:1",
+                "isGenerating": false,
+                "generationStartedAt": null
+              }
+            },
+            {
+              "id": "__s_upload",
+              "type": "universalUploadNode",
+              "position": {
+                "x": 1320,
+                "y": 520
+              },
+              "data": {}
+            },
+            {
+              "id": "__s_camera",
+              "type": "cameraStageNode",
+              "position": {
+                "x": 1320,
+                "y": 1000
+              },
+              "data": {
+                "displayName": "3D 镜头参考",
+                "projectId": null,
+                "imageUrl": "{{media:image}}",
+                "previewImageUrl": "{{media:image}}",
+                "videoUrl": null,
+                "aspectRatio": "16:9",
+                "durationSec": null,
+                "selectedTimeSec": 0,
+                "imageExporting": false,
+                "imageRenderRequestId": null,
+                "imageRenderError": null,
+                "videoProgress": null,
+                "videoExporting": false,
+                "videoRenderPhase": null,
+                "videoRenderRequestId": null,
+                "videoRenderError": null,
+                "outputKind": "image",
+                "renderTask": null
+              }
+            }
+          ]
+        }
+      },
+      {
+        "click": {
+          "selector": "[data-node-header-drag-surface=\"__s_video_gen\"]"
+        }
+      },
+      {
+        "wait": 400
+      },
+      {
+        "capture": "video-gen-selected"
+      },
+      {
+        "click": {
+          "selector": "[data-node-header-drag-surface=\"__s_audio_gen\"]"
+        }
+      },
+      {
+        "wait": 400
+      },
+      {
+        "capture": "audio-gen-selected"
+      },
+      {
+        "click": {
+          "selector": "[data-node-header-drag-surface=\"__s_video_result\"]"
+        }
+      },
+      {
+        "wait": 400
+      },
+      {
+        "capture": "video-result-selected"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/^(播放|Play)$/",
+          "within": {
+            "selector": ".react-flow__node[data-id=\"__s_video_result\"]"
+          }
+        },
+        "optional": true
+      },
+      {
+        "wait": 600
+      },
+      {
+        "capture": "video-result-playing"
+      },
+      {
+        "drag": {
+          "from": {
+            "role": "slider",
+            "within": {
+              "selector": ".react-flow__node[data-id=\"__s_video_result\"]"
+            }
+          },
+          "to": {
+            "dx": 60,
+            "dy": 0
+          },
+          "steps": 6,
+          "release": false
+        },
+        "optional": true
+      },
+      {
+        "capture": "video-result-scrubbing"
+      },
+      {
+        "release": {}
+      },
+      {
+        "click": {
+          "selector": "[data-node-header-drag-surface=\"__s_audio_result\"]"
+        }
+      },
+      {
+        "wait": 300
+      },
+      {
+        "capture": "audio-result-selected"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/^(播放|Play)$/",
+          "within": {
+            "selector": ".react-flow__node[data-id=\"__s_audio_result\"]"
+          }
+        },
+        "optional": true
+      },
+      {
+        "wait": 600
+      },
+      {
+        "capture": "audio-result-playing"
+      },
+      {
+        "click": {
+          "selector": "[data-node-header-drag-surface=\"__s_text_processing\"]"
+        }
+      },
+      {
+        "wait": 300
+      },
+      {
+        "capture": "text-processing-selected"
+      },
+      {
+        "click": {
+          "selector": "[data-node-header-drag-surface=\"__s_storyboard_gen\"]"
+        }
+      },
+      {
+        "wait": 300
+      },
+      {
+        "capture": "storyboard-gen-selected"
+      },
+      {
+        "click": {
+          "selector": "[data-node-header-drag-surface=\"__s_int\"]"
+        }
+      },
+      {
+        "wait": 300
+      },
+      {
+        "capture": "value-selected"
+      },
+      {
+        "click": {
+          "selector": ".react-flow__node[data-id=\"__s_int\"] input"
+        },
+        "optional": true
+      },
+      {
+        "wait": 300
+      },
+      {
+        "capture": "value-editing"
+      },
+      {
+        "press": "Escape"
+      },
+      {
+        "click": {
+          "selector": "[data-node-header-drag-surface=\"__s_text_long\"]"
+        }
+      },
+      {
+        "wait": 300
+      },
+      {
+        "capture": "markdown-long"
+      },
+      {
+        "click": {
+          "selector": ".react-flow__node[data-id=\"__s_text_long\"]",
+          "at": {
+            "x": 120,
+            "y": 120
+          }
+        }
+      },
+      {
+        "wait": 400
+      },
+      {
+        "capture": "markdown-editing"
+      },
+      {
+        "click": {
+          "selector": ".react-flow__pane",
+          "at": {
+            "x": 24,
+            "y": 600
+          }
+        }
+      },
+      {
+        "dropFiles": {
+          "target": {
+            "text": "/^(上传文件|Upload file)/",
+            "within": {
+              "selector": ".react-flow__node[data-id=\"__s_upload\"]"
+            }
+          },
+          "files": [
+            "resources/icons/icon.png"
+          ]
+        }
+      },
+      {
+        "wait": 300
+      },
+      {
+        "capture": "upload-drop-hover"
+      },
+      {
+        "dropFiles": {
+          "target": {
+            "text": "/^(上传文件|Upload file)/",
+            "within": {
+              "selector": ".react-flow__node[data-id=\"__s_upload\"]"
+            }
+          },
+          "files": [
+            "resources/icons/icon.png"
+          ],
+          "leave": true
+        }
+      },
+      {
+        "hover": {
+          "selector": ".react-flow__node[data-id=\"__s_camera\"] img"
+        },
+        "optional": true
+      },
+      {
+        "wait": 400
+      },
+      {
+        "capture": "camera-preview-hover"
+      }
+    ]
+  },
+  {
+    "id": "review-canvas-states-running",
+    "surface": "画布",
+    "name": "核对-分镜生成与图层拆分的运行中 / 失败、图片生成后结果节点生成中、文本处理失败（5.8 补截；生成通道替身挂起或拒绝，不发真实请求）",
+    "checklist": [
+      "N10.3",
+      "N10.5",
+      "N18.1",
+      "N18.2",
+      "N18.3",
+      "N18.5",
+      "N07.5",
+      "C05.4"
+    ],
+    "writesUserData": true,
+    "expectedLogEvents": [
+      "canvas.execution.failed",
+      "canvas.generationTask.failed",
+      "canvas.text_processing.failed",
+      "llm_runtime.chat_stream.invoke_failed",
+      "llm_runtime.chat_stream.failed",
+      "generation.generate.failed"
+    ],
+    "steps": [
+      {
+        "stubIpc": {
+          "channel": "ai:getRuntimeProviderKeyStatus",
+          "mode": "resolve",
+          "data": [
+            {
+              "providerId": "kie",
+              "configured": true
+            },
+            {
+              "providerId": "volcengine",
+              "configured": true
+            },
+            {
+              "providerId": "ui-review",
+              "configured": true
+            }
+          ]
+        }
+      },
+      {
+        "reload": {}
+      },
+      {
+        "seedAssistant": {
+          "replies": [
+            {
+              "error": {
+                "status": 500
+              }
+            }
+          ]
+        }
+      },
+      {
+        "seedCanvas": {
+          "viewport": {
+            "x": 40,
+            "y": 60,
+            "zoom": 0.7
+          },
+          "nodes": [
+            {
+              "id": "__r_source",
+              "type": "uploadNode",
+              "position": {
+                "x": 0,
+                "y": 0
+              },
+              "width": 240,
+              "height": 200,
+              "data": {
+                "displayName": "源图",
+                "imageUrl": "{{media:image}}",
+                "previewImageUrl": "{{media:image}}",
+                "aspectRatio": "1:1"
+              }
+            },
+            {
+              "id": "__r_layers",
+              "type": "layerSeparationGenNode",
+              "position": {
+                "x": 320,
+                "y": 0
+              },
+              "data": {
+                "displayName": "图层拆分",
+                "prompt": "",
+                "modelId": "volcengine-seedream-5.0-pro",
+                "params": {},
+                "mediaInputs": {},
+                "isGenerating": false,
+                "generationStartedAt": null
+              }
+            },
+            {
+              "id": "__r_storyboard_gen",
+              "type": "storyboardGenNode",
+              "position": {
+                "x": 760,
+                "y": 0
+              },
+              "data": {
+                "displayName": "分镜生成",
+                "prompt": "四格分镜：雨夜街头",
+                "gridRows": 2,
+                "gridCols": 2,
+                "frames": [],
+                "modelId": "kie-nano-banana-2",
+                "params": {},
+                "mediaInputs": {},
+                "imageUrl": null,
+                "previewImageUrl": null,
+                "aspectRatio": "1:1",
+                "isGenerating": false,
+                "generationStartedAt": null
+              }
+            },
+            {
+              "id": "__r_image_gen",
+              "type": "imageNode",
+              "position": {
+                "x": 0,
+                "y": 460
+              },
+              "data": {
+                "displayName": "图片生成",
+                "prompt": "cinematic portrait",
+                "modelId": "kie-nano-banana-2",
+                "params": {},
+                "mediaInputs": {},
+                "imageUrl": null,
+                "previewImageUrl": null,
+                "aspectRatio": "1:1",
+                "isGenerating": false,
+                "generationStartedAt": null
+              }
+            },
+            {
+              "id": "__r_text",
+              "type": "textProcessingNode",
+              "position": {
+                "x": 760,
+                "y": 460
+              },
+              "width": 360,
+              "height": 230,
+              "data": {
+                "displayName": "文本处理（失败）",
+                "prompt": "把输入整理成一句画面描述",
+                "systemPromptTemplateId": "text-processing-image-optimizer",
+                "mediaInputs": {},
+                "providerId": "ui-review",
+                "modelId": "fixture-text",
+                "lastOutput": ""
+              }
+            }
+          ],
+          "edges": [
+            {
+              "id": "__r_edge",
+              "source": "__r_source",
+              "target": "__r_layers",
+              "sourceHandle": "source",
+              "targetHandle": "param:__image"
+            }
+          ]
+        }
+      },
+      {
+        "click": {
+          "selector": "[data-node-header-drag-surface=\"__r_layers\"]"
+        }
+      },
+      {
+        "wait": 400
+      },
+      {
+        "capture": "layers-selected"
+      },
+      {
+        "click": {
+          "selector": ".react-flow__pane",
+          "at": {
+            "x": 24,
+            "y": 600
+          }
+        }
+      },
+      {
+        "wait": 300
+      },
+      {
+        "capture": "layers-rest"
+      },
+      {
+        "stubIpc": {
+          "channel": "ai:generate",
+          "mode": "hold"
+        }
+      },
+      {
+        "click": {
+          "selector": "[data-node-header-drag-surface=\"__r_layers\"]"
+        }
+      },
+      {
+        "waitFor": {
+          "selector": "[data-node-toolbar-panel]"
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/^(生成|Generate)$/",
+          "within": {
+            "selector": "[data-node-toolbar-panel]"
+          }
+        }
+      },
+      {
+        "wait": 800
+      },
+      {
+        "capture": "layers-running"
+      },
+      {
+        "click": {
+          "selector": "[data-node-header-drag-surface=\"__r_storyboard_gen\"]"
+        }
+      },
+      {
+        "waitFor": {
+          "selector": "[data-node-toolbar-panel]"
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/^(生成|Generate)$/",
+          "within": {
+            "selector": "[data-node-toolbar-panel]"
+          }
+        }
+      },
+      {
+        "wait": 800
+      },
+      {
+        "capture": "storyboard-running"
+      },
+      {
+        "click": {
+          "selector": "[data-node-header-drag-surface=\"__r_image_gen\"]"
+        }
+      },
+      {
+        "waitFor": {
+          "selector": "[data-node-toolbar-panel]"
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/^(生成|Generate)$/",
+          "within": {
+            "selector": "[data-node-toolbar-panel]"
+          }
+        }
+      },
+      {
+        "wait": 3000
+      },
+      {
+        "click": {
+          "selector": ".react-flow__pane",
+          "at": {
+            "x": 24,
+            "y": 600
+          }
+        }
+      },
+      {
+        "wait": 400
+      },
+      {
+        "capture": "image-result-generating"
+      },
+      {
+        "releaseIpc": {
+          "channel": "ai:generate",
+          "release": "reject",
+          "message": "核对夹具：供应商返回内容审核未通过，请修改提示词后重试。"
+        }
+      },
+      {
+        "wait": 2500
+      },
+      {
+        "capture": "generation-failed"
+      },
+      {
+        "click": {
+          "selector": "[data-node-header-drag-surface=\"__r_text\"]"
+        }
+      },
+      {
+        "waitFor": {
+          "selector": "[data-node-toolbar-panel]"
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/^(生成|Generate)$/",
+          "within": {
+            "selector": "[data-node-toolbar-panel]"
+          }
+        }
+      },
+      {
+        "wait": 2500
+      },
+      {
+        "click": {
+          "selector": ".react-flow__pane",
+          "at": {
+            "x": 24,
+            "y": 600
+          }
+        }
+      },
+      {
+        "capture": "text-processing-failed"
+      }
+    ]
+  },
+  {
+    "id": "review-canvas-states-persistence",
+    "surface": "画布",
+    "name": "核对-画布工程保存失败提示（5.8 补截；工程写入通道替身拒绝）",
+    "checklist": [
+      "C01.9"
+    ],
+    "writesUserData": true,
+    "expectedLogEvents": [
+      "failed_to_rename_project_record",
+      "failed_to_persist_project_save"
+    ],
+    "steps": [
+      {
+        "seedCanvas": {
+          "nodes": [
+            {
+              "id": "__p_text",
+              "type": "stringSourceNode",
+              "position": {
+                "x": 0,
+                "y": 0
+              },
+              "width": 240,
+              "height": 96,
+              "data": {
+                "displayName": "文本",
+                "value": "移动我触发保存"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/^(返回项目|Back to Projects)$/"
+        }
+      },
+      {
+        "waitFor": {
+          "selector": "[data-project-id]"
+        },
+        "timeout": 12000
+      },
+      {
+        "stubIpc": {
+          "channel": "storyboardProjects:upsert",
+          "mode": "reject",
+          "message": "核对夹具：磁盘空间不足，无法写入工程文件。"
+        }
+      },
+      {
+        "rightClick": {
+          "selector": "[data-project-id]"
+        }
+      },
+      {
+        "click": {
+          "role": "menuitem",
+          "name": "/重命名|Rename/"
+        }
+      },
+      {
+        "fill": {
+          "target": {
+            "role": "textbox",
+            "within": {
+              "role": "dialog"
+            }
+          },
+          "text": "核对-改名触发保存失败"
+        }
+      },
+      {
+        "press": "Enter"
+      },
+      {
+        "wait": 1200
+      },
+      {
+        "capture": "rename-failed"
+      },
+      {
+        "escape": {}
+      },
+      {
+        "click": {
+          "selector": "[data-project-id]"
+        }
+      },
+      {
+        "waitFor": {
+          "role": "alert"
+        },
+        "timeout": 15000,
+        "optional": true
+      },
+      {
+        "wait": 800
+      },
+      {
+        "capture": "persistence-failed"
+      }
+    ]
+  }
+]

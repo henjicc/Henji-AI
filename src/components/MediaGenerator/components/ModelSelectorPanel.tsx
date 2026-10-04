@@ -5,8 +5,7 @@ import { getAvailableProviders } from '@/utils/modelHelpers'
 import { providerBrandId } from '@/core/config/providerBrands'
 import { getHiddenProviders, getHiddenTypes, getHiddenModels, getVisibleProviders } from '@/config/providers'
 import {
-  UiIconButton,
-  UiInput,
+  UiSearchInput,
   UiMarqueeText,
   UiOptionButton,
   UI_TEXT_BODY_CLASS,
@@ -17,7 +16,6 @@ import PinyinMatch from 'pinyin-match'
 import { PROVIDER_ORDER, compareModelsBySeries, getModelTypeGroup, getModelTypeOrder } from '@/core/modelSortOrder'
 import type { ModelType } from '@/core/types'
 import type { GenerationModelFilterType } from '@/features/generation/domain/generationDraft'
-import { X } from 'lucide-react'
 import { ICON_PRESET } from '@/core/theme/icons'
 interface ModelSelectorPanelProps {
   selectedProvider: string
@@ -253,26 +251,15 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
         {/* 搜索框 */}
         <div className="mb-3">
           <div className={`mb-2 ${UI_TEXT_LABEL_CLASS}`}>{t('search.label')}</div>
-          <div className="relative">
-            <UiInput
-              ref={searchInputRef}
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder={t('selectModel')}
-              className="pr-8"
-            />
-            {searchQuery && (
-              <UiIconButton
-                type="button"
-                onClick={() => setSearchQuery('')}
-                className="absolute right-1.5 top-1/2 -translate-y-1/2"
-                title={t('search.clear')}
-              >
-                <X className="w-4 h-4" />
-              </UiIconButton>
-            )}
-          </div>
+          <UiSearchInput
+            ref={searchInputRef}
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder={t('selectModel')}
+            aria-label={t('search.label')}
+            clearLabel={t('search.clear')}
+            onClear={() => setSearchQuery('')}
+          />
         </div>
         {/* 供应商 / 类型筛选 */}
         <div className="mb-3">

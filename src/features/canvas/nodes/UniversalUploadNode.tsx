@@ -1,5 +1,6 @@
 import { memo, useCallback, useEffect, useRef, useState, type ChangeEvent, type DragEvent } from 'react'
 import { Handle, Position, type NodeProps } from '@xyflow/react'
+import { useNodeFileDragOver } from './shared/useNodeFileDragOver'
 import { useTranslation } from 'react-i18next'
 
 import { UiInput } from '@/components/ui'
@@ -33,6 +34,7 @@ import {
   NODE_IDLE_BORDER_CLASS,
   NODE_PORT_NODE_CLASS,
   NODE_PORT_VISIBLE_CLASS,
+  NODE_DROP_TARGET_OVERLAY_CLASS,
   NODE_SELECTED_BORDER_CLASS,
   NODE_SURFACE_CLASS,
 } from '@/features/canvas/ui/nodeControlStyles'
@@ -133,12 +135,16 @@ const EmptyUploadNode = memo(({ id, data, selected, width, height }: UniversalUp
   const hasConnection = edges.some((edge) => edge.source === id)
   const handleSocketType = lockedKind ? MEDIA_SOCKET_TYPE[lockedKind] : '*'
   const handleLabelKey = lockedKind ?? 'any'
+  const { isDragOver, dragOverProps, resetDragOver } = useNodeFileDragOver(!isImporting)
 
   return (
+    // 文件拖到节点上：描边与选中同档 + 淡强调底（任务 5.8，N03.2）
     <div
       className={`group relative overflow-visible rounded-[var(--node-radius)] border ${NODE_SURFACE_CLASS} transition-colors duration-120 ${
-        selected ? NODE_SELECTED_BORDER_CLASS : NODE_IDLE_BORDER_CLASS
+        selected || isDragOver ? NODE_SELECTED_BORDER_CLASS : NODE_IDLE_BORDER_CLASS
       }`}
+      data-drag-over={isDragOver || undefined}
+      {...dragOverProps}
       style={{ width: width || defaultSize.width, height: height || defaultSize.height }}
       onClick={() => {
         setSelectedNode(id)
@@ -146,13 +152,17 @@ const EmptyUploadNode = memo(({ id, data, selected, width, height }: UniversalUp
           inputRef.current?.click()
         }
       }}
-      onDrop={handleDrop}
+      onDrop={(event) => {
+        resetDragOver()
+        handleDrop(event)
+      }}
       onDragOver={(event) => {
         event.preventDefault()
         event.stopPropagation()
       }}
       aria-busy={isImporting}
     >
+      {isDragOver ? <div aria-hidden="true" className={NODE_DROP_TARGET_OVERLAY_CLASS} /> : null}
       <NodeHeader
         className={NODE_HEADER_FLOATING_POSITION_CLASS}
         icon={<UniversalUploadIcon className="h-4 w-4" />}

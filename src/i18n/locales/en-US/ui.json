@@ -22,6 +22,7 @@
     }
   },
   "inputArea": {
+    "importingVideo": "Importing video…",
     "unit": {
       "images": "images",
       "videos": "videos"

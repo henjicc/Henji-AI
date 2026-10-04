@@ -342,6 +342,8 @@ export const StackedMediaUploader = forwardRef<StackedMediaUploaderHandle, Stack
             return (
               <div
                 key={`${file}-${index}`}
+                // 稳定定位钩子：核对步骤按序号拖动排序（任务 5.8，G13.4）
+                data-uploader-item={index}
                 ref={(element) => {
                   itemRefs.current[index] = element
                 }}

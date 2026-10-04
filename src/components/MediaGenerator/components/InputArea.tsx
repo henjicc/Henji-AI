@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { showAlertDialog } from '@/stores/alertDialogStore'
-import { PromptEditor, StackedMediaUploader, UiIconButton } from '@/components/ui'
+import { PromptEditor, StackedMediaUploader, UiIconButton, UiLoading } from '@/components/ui'
 import type {
   PromptEditorHandle,
   PromptReferenceItem,
@@ -44,6 +44,8 @@ interface InputAreaProps {
   onDragStateChange: (isDragging: boolean) => void
   uploadedVideos?: string[]
   onVideoUpload?: (files: File[]) => void
+  /** 视频正在导入（探测时长、取封面）：大文件要数秒，参考素材行显示加载态，不留一段空白（任务 5.8，G13.5） */
+  importingMedia?: boolean
   onVideoRemove?: (index: number) => void
   onVideoReplace?: (index: number, file: File) => void
   onVideoTrim?: (index: number) => void
@@ -106,6 +108,7 @@ const InputArea: React.FC<InputAreaProps> = ({
   onDragStateChange,
   uploadedVideos = [],
   onVideoUpload,
+  importingMedia = false,
   onVideoRemove,
   onVideoReplace,
   onVideoTrim,
@@ -315,7 +318,7 @@ const InputArea: React.FC<InputAreaProps> = ({
     : 'min-h-[72px] max-h-[260px]'
   const uploaderRef = useRef<StackedMediaUploaderHandle>(null)
   const dragInProgress = useMediaDragInProgress()
-  const showReferenceRow = mixedFiles.length > 0 || dragInProgress
+  const showReferenceRow = mixedFiles.length > 0 || dragInProgress || importingMedia
   const canAddReference = !shouldHideUploadButton && !isLoading && (!mixedMaxCount || mixedFiles.length < mixedMaxCount)
   useEffect(() => {
     if (!renderPromptOptimizationPreview) {
@@ -391,6 +394,7 @@ const InputArea: React.FC<InputAreaProps> = ({
               disabled={isLoading}
               hintText={needsVideoUpload ? uploadHint : undefined}
             />
+            {importingMedia && <UiLoading size="xs" message={t('inputArea.importingVideo')} />}
           </div>
         )}
 

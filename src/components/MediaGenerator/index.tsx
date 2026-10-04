@@ -340,6 +340,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
           maxImageCount
         )}
         onVideoUpload={videoUpload.handleVideoUpload}
+        importingMedia={videoUpload.isProcessingVideo}
         onAudioUpload={audioUpload.handleAudioUpload}
         onImageRemove={imageUpload.removeImage}
         onVideoRemove={videoUpload.handleVideoRemove}

@@ -105,7 +105,7 @@ npm run check:ui-visual -- --steps scripts/ui-review/generation-seedance-kie.jso
 | `wait` | 毫秒 | 只用于确实没有可等条件的场合 |
 | `escape` | `{}` | 关闭浮层与弹窗（与正式场景同一实现） |
 | `selectModel` | `{ "modelId", "providerId", "search"? }` | 生成页模型面板里按 `data-model-id` / `data-provider-id` 点选 |
-| `seedCanvas` | `{ "nodes": [...], "edges": [], "viewport": {…} }` | 把节点写进巡检专用画布工程并打开（需 `writesUserData: true`） |
+| `seedCanvas` | `{ "nodes": [...], "edges": [], "viewport": {…} }` | 把节点写进巡检专用画布工程并打开（需 `writesUserData: true`）；节点数据里的 `{{media:image|video|audio}}` 换成夹具媒体的 data URL，用来摆出“有结果、可播放”的结果节点 |
 | `seedAssistant` | `{ "replies": [...], "capabilities"?: ["image"], "memory"?: "…", "newConversation"?: true }` | 本机流式模型替身 + 隔离助手模型配置（不访问外部模型、不产生费用）；每轮回复可含 `thinking`、`partial`（暂停前先流出的半截正文）、`content`、`tool`（只读工具）、`error`（HTTP 状态）、`hold`（暂停到 `releaseAssistant`）。要在打开助手侧栏前执行；场景结束自动停止助手、关闭替身、恢复模型配置（需 `writesUserData: true`） |
 | `releaseAssistant` | `{}` | 放行 `hold` 暂停中的那一轮回复 |
 | `seedHistory` | `{ "rows": [{ "id": "single", "type": "image", "file"?: "image"/"images"/"video"/"audio"/"missing"/"none", "status"?: "success"/"error", "prompt"?, "error"? }] }` | 生成记录夹具（`__review_common_<id>`）：仓库图片 / 视频与现生成的低音量 WAV，`missing` 是不存在的长路径（走复制失败等正式提示）；写完重载，场景结束删除（需 `writesUserData: true`）。媒体查看器、结果菜单、通知提示用 |
@@ -113,7 +113,12 @@ npm run check:ui-visual -- --steps scripts/ui-review/generation-seedance-kie.jso
 | `seedAudioEdit` | `{ "name": "核对-口播", "transcript": true }` | 口播剪辑夹具工程：系统临时目录生成 12 秒 WAV，经正式接口建工程，`transcript` 时写入固定逐字稿（含已删除句与语气词），不走语音识别、不产生费用；要在进入口播剪辑前执行，场景结束删除工程与临时文件（需 `writesUserData: true`） |
 | `seedVideoEdit` | `{ "name": "核对-剪辑", "captions": 6 }` | 剪辑夹具工程：系统临时目录用本机 FFmpeg 生成 6 秒测试 MP4，写两序列工程（画面、声音、文字片段，字幕与标记，两个素材箱），并把“打开”对话框换成直接返回它；之后点“打开工程”进入。场景结束还原对话框并删临时文件（需 `writesUserData: true`） |
 | `stubDialogs` | `{}`，或 `{ "save": false, "open": ["docs/ref/test01.jpg"] }` | 在主进程替换系统保存/打开对话框：保存落到系统临时目录 `henji-ui-review/<场景 id>/`（沿用默认文件名），打开返回仓库内文件；场景结束自动还原。用于导出、另存为这类会弹系统对话框的流程，只写本机临时文件 |
-| `setFiles` | `{ "target": 定位, "files": ["resources/icons/icon.png"] }` | 给文件输入（默认可定位隐藏元素）设值，等同用户选了文件；路径相对仓库根目录 |
+| `setFiles` | `{ "target": 定位, "files": ["resources/icons/icon.png"] }` | 给文件输入（默认可定位隐藏元素）设值，等同用户选了文件；路径相对仓库根目录。`@generated:video:<秒>` / `@generated:audio:<秒>` 用本机 FFmpeg 现生成测试视频 / WAV（系统临时目录按时长缓存），用来截“长视频”“声音样本”这类仓库夹具给不了的状态 |
+| `dropFiles` | `{ "target": 定位, "files": [...], "drop"?: false, "leave"?: false }` | 系统文件拖入：在目标上派发带文件的 `dragenter` / `dragover`（`drop: true` 再派发 `drop`），截“拖入悬停”；截完用 `leave: true` 派发 `dragleave` 复位 |
+| `stubIpc` | `{ "channel", "mode": "hold"/"reject"/"delay"/"resolve", "message"?, "ms"?, "data"?, "shape"?: "envelope"/"throw" }` | 主进程 IPC 替身：`hold` 挂起（截“上传中 / 同步中 / 克隆中 / 生成中”）、`reject` 以给定文案失败（走正式失败提示）、`delay` 延迟后照常执行、`resolve` 直接返回 `data`（如“供应商密钥已配置”）。默认按结果信封返回失败（`registerIpcHandler` 的通道）。`ai:` / `llm:` / `embedded-agent:` 与语音识别 `audioEdit:asr:` 这类付费与模型通道禁止 `delay`、放行只能 `reject`，生成通道外层仍有付费保护；场景结束自动恢复，先于付费保护撤销 |
+| `releaseIpc` | `{ "channel", "release": "reject"/"original", "message"? }` | 放行 `hold` 挂起中的调用：`reject` 以文案失败，`original` 交给替换前的处理器（付费与模型通道不允许） |
+| `reload` | `{}` | 重载渲染层；启动时才读取的状态（如供应商密钥是否已配置）在 `stubIpc` 之后重新读一次 |
+| `seedSettings` | `{ "values": { "设置键": JSON 值 }, "clearLocalStorage"?: ["缓存键"] }` | 设置表夹具（音色库这类只存在设置表里的数据）：写入后清掉渲染层缓存并重载，场景结束按原值恢复；值里的 `{{file:image|audio|video}}` 换成写进应用数据目录的夹具媒体路径（需 `writesUserData: true`） |
 | `capture` | `"后缀"` 或 `{ "name": "后缀", "metrics": 指标目标? }` | 正式截屏；带 metrics 时同时记自动指标 |
 | `metrics` | `{ "name": "后缀", …指标目标 }` | 只记指标不截图 |
 
@@ -125,4 +130,4 @@ npm run check:ui-visual -- --steps scripts/ui-review/generation-seedance-kie.jso
 
 **变体来源** `generation-models`：从真实模型选择面板读出全部可选的“模型 × 渠道”，每个变体带 `modelId`、`providerId`、`name`、`id`（截图后缀前缀）。单个变体失败不中断其余变体，最后汇总报失败。有变体时 `ui:tour` 另写 `variants.md`：按“变体 × 尺寸”列出底栏行数、收纳行空余、底栏可见参数、收进“更多参数”的参数与可疑原因（折行、溢出、截断、短标签折行、收纳行空余 ≥ 120px 却仍把选择器收进“更多参数”）。指标名约定 `bar` / `row` / `more` / `first-menu`；对旧输出目录补汇总用 `node scripts/lib/uiReviewSummary.cjs <输出目录>`。
 
-样例：`scripts/ui-review/assistant-sidebar.json`（助手侧栏空态、思考中、工具调用、长 Markdown、流式、排队、错误、历史、记忆、附件，用 `seedAssistant` 夹具）、`scripts/ui-review/generation-seedance-kie.json`（底栏、模式触发器悬停、模式菜单、960 的“更多参数”）、`canvas-image-node-rows.json`（画布图片生成节点的行悬停、触发器悬停、选中后行悬停、参数菜单）、`generation-all-models.json`（全部模型底栏行数与首个参数菜单截断）、`generation-key-samples.json`（15 个重点样本与可疑模型，首个参数菜单也截图）、`generation-input.json`（输入卡片、参考素材、@ 引用、模型面板、预设、优化入口）、`generation-panels.json`（复合面板、音色、自定义模型、比例分辨率、长选项、展示分组）。需要夹具数据或本机替身的状态写成正式场景：`uiInspectionSceneGenerationReview.cjs`（生成记录各状态与命令带浮层、提示词优化的方案选择 / 流式预览 / 失败，`--only generation-review`）。步骤与场景里**禁止点生成、禁止在提示词里按 Enter**（Enter 即提交生成）；付费保护见 `uiReviewPaidGuard.cjs`。
+样例：`scripts/ui-review/assistant-sidebar.json`（助手侧栏空态、思考中、工具调用、长 Markdown、流式、排队、错误、历史、记忆、附件，用 `seedAssistant` 夹具）、`scripts/ui-review/generation-seedance-kie.json`（底栏、模式触发器悬停、模式菜单、960 的“更多参数”）、`canvas-image-node-rows.json`（画布图片生成节点的行悬停、触发器悬停、选中后行悬停、参数菜单）、`generation-all-models.json`（全部模型底栏行数与首个参数菜单截断）、`generation-key-samples.json`（15 个重点样本与可疑模型，首个参数菜单也截图）、`generation-input.json`（输入卡片、参考素材、@ 引用、模型面板、预设、优化入口）、`generation-panels.json`（复合面板、音色、自定义模型、比例分辨率、长选项、展示分组）。需要夹具数据或本机替身的状态写成正式场景：`uiInspectionSceneGenerationReview.cjs`（生成记录各状态与命令带浮层、提示词优化的方案选择 / 流式预览 / 失败，`--only generation-review`）。步骤与场景里**禁止点生成、禁止在提示词里按 Enter**（Enter 即提交生成）；付费保护见 `uiReviewPaidGuard.cjs`。唯一例外：先用 `stubIpc` 把 `ai:generate` 换成 `hold` / `reject`（画布节点、克隆面板的“运行中 / 失败”），文本处理等模型调用只走 `seedAssistant` 本机替身。“入口缺失”的状态先找能不能用 `stubIpc` / `seedSettings` / `dropFiles` / `@generated` 摆出来；5.8 的补截步骤在 `generation-states.json`、`canvas-states.json`、`settings-states.json`、`misc-states.json`。

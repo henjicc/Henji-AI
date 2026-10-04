@@ -22,7 +22,9 @@ const path = require('node:path')
 const { analyzeLayoutMetrics, collectLayoutMeasurements } = require('./uiReviewMetrics.cjs')
 const { normalizeSeedAssistant, seedAssistantFixture } = require('./uiReviewAssistantFixture.cjs')
 const { blockPaidGeneration } = require('./uiReviewPaidGuard.cjs')
-const { normalizeSeedHistory, seedHistoryFixture } = require('./uiReviewHistoryFixture.cjs')
+const { createWaveFixture, normalizeSeedHistory, seedHistoryFixture } = require('./uiReviewHistoryFixture.cjs')
+const { normalizeReleaseIpc, normalizeStubIpc, releaseIpc, restoreIpcStubs, stubIpc } = require('./uiReviewIpcStub.cjs')
+const { normalizeSeedSettings, seedSettingsFixture } = require('./uiReviewSettingsFixture.cjs')
 const { normalizeSeedAudioEdit, seedAudioEditFixture } = require('./uiReviewAudioEditFixture.cjs')
 const { normalizeSeedVideoEdit, seedVideoEditFixture } = require('./uiReviewVideoEditFixture.cjs')
 
@@ -99,6 +101,21 @@ const STEP_ACTIONS = Object.freeze({
       release: value.release !== false, modifiers }
   },
   release: () => ({}),
+  // 系统文件拖入（任务 5.8）：在目标上派发带文件的 dragenter / dragover（drop: true 时再派发 drop），
+  // 截“拖入素材悬停”这类状态。文件路径相对仓库根目录；只构造浏览器 File，不经过系统拖放。
+  dropFiles: (value) => {
+    if (!Array.isArray(value?.files) || value.files.length === 0) throw new Error('dropFiles 需要 files 数组')
+    // leave: true 只派发 dragleave，结束悬停态（截完图要恢复，否则后续步骤一直处在拖入中）
+    if (value.drop && value.leave) throw new Error('dropFiles 的 drop 与 leave 不能同时为 true')
+    return { target: normalizeTarget(value.target), files: value.files.map(String), drop: value.drop === true, leave: value.leave === true }
+  },
+  // 主进程 IPC 替身（任务 5.8）：hold 挂起 / reject 失败 / delay 延迟后照常执行，见 uiReviewIpcStub.cjs
+  stubIpc: (value) => normalizeStubIpc(value),
+  // 设置表夹具（音色库等只存在设置表里的数据；需 writesUserData: true），见 uiReviewSettingsFixture.cjs
+  seedSettings: (value) => normalizeSeedSettings(value),
+  releaseIpc: (value) => normalizeReleaseIpc(value),
+  // 重载渲染层（任务 5.8）：启动时才读取的状态（如供应商密钥是否已配置）在 IPC 替身装好后重新读一次
+  reload: () => ({}),
   // 系统保存/打开对话框不可点：在主进程把 dialog.showSaveDialog / showOpenDialog 换成直接返回。
   // 保存一律落到系统临时目录 henji-ui-review/<场景 id>/ 下（沿用请求里的默认文件名），打开返回仓库内文件；
   // 场景结束自动还原。用于导出、另存为等会弹系统对话框的流程（只写本机临时文件，不产生费用）。
@@ -121,6 +138,8 @@ const STEP_ACTIONS = Object.freeze({
     if (!value?.modelId || !value?.providerId) throw new Error('selectModel 需要 modelId 与 providerId')
     return { modelId: String(value.modelId), providerId: String(value.providerId), search: value.search ?? null }
   },
+  // nodes 里的 "{{media:image}}" / "{{media:video}}" / "{{media:audio}}" 换成仓库夹具媒体的 data URL（任务 5.8），
+  // 用来摆出图片 / 视频 / 音频结果节点的“有结果、可播放”状态
   seedCanvas: (value) => {
     if (!Array.isArray(value?.nodes) || value.nodes.length === 0) throw new Error('seedCanvas 需要 nodes')
     return { nodes: value.nodes, edges: value.edges ?? [], viewport: value.viewport ?? { x: 120, y: 80, zoom: 0.9 } }
@@ -242,7 +261,7 @@ function normalizeStepSpec(raw, sourceFile = '<内联>') {
 
 function normalizeExpectedLogEvents(value, sourceFile) {
   if (value === undefined) return undefined
-  if (!Array.isArray(value) || value.some((item) => typeof item !== 'string' || !/^[a-z0-9_.]+$/.test(item))) {
+  if (!Array.isArray(value) || value.some((item) => typeof item !== 'string' || !/^[a-zA-Z0-9_.]+$/.test(item))) {
     throw new Error(`${sourceFile}：expectedLogEvents 必须是日志事件名数组`)
   }
   return value
@@ -410,7 +429,76 @@ async function measureTarget(page, spec) {
   return analyzeLayoutMetrics(raw, { maxRows: spec.maxRows })
 }
 
-async function seedCanvasFixture(page, context, { nodes, edges, viewport }) {
+const MEDIA_PLACEHOLDER_PATTERN = /\{\{media:(image|video|audio)\}\}/g
+const MIME_BY_EXTENSION = Object.freeze({ '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp',
+  '.gif': 'image/gif', '.mp4': 'video/mp4', '.mov': 'video/quicktime', '.wav': 'audio/wav', '.mp3': 'audio/mpeg', '.txt': 'text/plain' })
+
+/** 夹具媒体的 data URL：图片取应用图标，视频取仓库 6KB 测试片，音频现生成一段低音量 WAV。 */
+function canvasMediaDataUrls() {
+  const read = (file) => fs.readFileSync(path.join(ROOT, file)).toString('base64')
+  return {
+    image: `data:image/png;base64,${read('resources/icons/icon.png')}`,
+    video: `data:video/mp4;base64,${read('scripts/fixtures/plain_video.mp4')}`,
+    audio: `data:audio/wav;base64,${Buffer.from(createWaveFixture()).toString('base64')}`,
+  }
+}
+
+function expandMediaPlaceholders(value, media) {
+  if (typeof value === 'string') return value.replace(MEDIA_PLACEHOLDER_PATTERN, (_match, kind) => media[kind])
+  if (Array.isArray(value)) return value.map((item) => expandMediaPlaceholders(item, media))
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, expandMediaPlaceholders(item, media)]))
+  }
+  return value
+}
+
+/**
+ * 现生成的夹具文件（任务 5.8）：`@generated:video:<秒>` / `@generated:audio:<秒>` 用本机 FFmpeg 生成测试视频（测试图案 + 正弦音）或 WAV，
+ * 放在系统临时目录并按时长缓存。仓库里只有 2 秒的视频夹具，“长视频”这类状态靠它截。
+ */
+function resolveFixtureFile(file) {
+  const generated = /^@generated:(video|audio):(\d+)$/.exec(file)
+  if (!generated) return path.isAbsolute(file) ? file : path.resolve(ROOT, file)
+  const [, kind, rawSeconds] = generated
+  const seconds = Number(rawSeconds)
+  if (!(seconds >= 1 && seconds <= 600)) throw new Error('@generated 时长需在 1–600 秒')
+  const output = path.join(os.tmpdir(), 'henji-ui-review', `generated-${kind}-${seconds}s.${kind === 'video' ? 'mp4' : 'wav'}`)
+  if (!fs.existsSync(output)) {
+    fs.mkdirSync(path.dirname(output), { recursive: true })
+    const { ffmpegPath } = require('./mediaBinaries.cjs')
+    const args = kind === 'video'
+      ? ['-f', 'lavfi', '-i', 'testsrc2=size=640x360:rate=24', '-f', 'lavfi', '-i', 'sine=frequency=330:sample_rate=48000',
+        '-t', String(seconds), '-c:v', 'libx264', '-preset', 'veryfast', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-shortest']
+      : ['-f', 'lavfi', '-i', 'sine=frequency=220:sample_rate=24000', '-t', String(seconds), '-af', 'volume=0.2']
+    require('node:child_process').execFileSync(ffmpegPath, ['-v', 'error', '-y', ...args, output], { windowsHide: true, timeout: 120000 })
+  }
+  return output
+}
+
+async function dispatchFileDrag(page, step) {
+  const files = step.files.map((file) => {
+    const absolute = path.isAbsolute(file) ? file : path.resolve(ROOT, file)
+    return { name: path.basename(absolute), type: MIME_BY_EXTENSION[path.extname(absolute).toLowerCase()] ?? 'application/octet-stream',
+      bytes: [...fs.readFileSync(absolute)] }
+  })
+  const dataTransfer = await page.evaluateHandle((items) => {
+    const transfer = new DataTransfer()
+    for (const item of items) transfer.items.add(new File([new Uint8Array(item.bytes)], item.name, { type: item.type }))
+    return transfer
+  }, files)
+  const target = resolveTarget(page, step.target)
+  if (step.leave) {
+    await target.dispatchEvent('dragleave', { dataTransfer })
+  } else {
+    await target.dispatchEvent('dragenter', { dataTransfer })
+    await target.dispatchEvent('dragover', { dataTransfer })
+    if (step.drop) await target.dispatchEvent('drop', { dataTransfer })
+  }
+  await dataTransfer.dispose()
+}
+
+async function seedCanvasFixture(page, context, { nodes: rawNodes, edges, viewport }) {
+  const nodes = JSON.stringify(rawNodes).includes('{{media:') ? expandMediaPlaceholders(rawNodes, canvasMediaDataUrls()) : rawNodes
   await context.setupCanvas(page)
   if (await page.locator('.react-flow').count()) {
     await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
@@ -502,6 +590,30 @@ async function runStep(page, step, runtime) {
       runtime.mouseDown = false
       await releaseModifiers(page, runtime)
       return
+    case 'seedSettings':
+      runtime.audioEditFixtures.push(await seedSettingsFixture(page, context, step))
+      return
+    case 'dropFiles':
+      await dispatchFileDrag(page, step)
+      return
+    case 'reload': {
+      const url = new URL(page.url())
+      for (const key of ['henjiDevSurface', 'henjiDevMedia', 'henjiDevUpdatePreview']) url.searchParams.delete(key)
+      await page.goto(url.toString(), { waitUntil: 'domcontentloaded' })
+      await page.waitForFunction(() => Boolean(window.henjiNative), null, { timeout: 30000 })
+      await context.settlePage(page)
+      return
+    }
+    case 'stubIpc':
+      await stubIpc(runtime.app, step)
+      runtime.ipcStubbed = true
+      console.log(`  IPC 替身：${step.channel} → ${step.mode}`)
+      return
+    case 'releaseIpc': {
+      const count = await releaseIpc(runtime.app, step)
+      console.log(`  IPC 放行：${step.channel}（${count} 个挂起调用 → ${step.release}）`)
+      return
+    }
     case 'stubDialogs': {
       const outputDir = path.join(os.tmpdir(), 'henji-ui-review', runtime.sceneId || 'scene')
       fs.mkdirSync(outputDir, { recursive: true })
@@ -535,8 +647,7 @@ async function runStep(page, step, runtime) {
       return
     }
     case 'setFiles':
-      await resolveTarget(page, step.target).setInputFiles(
-        step.files.map((file) => (path.isAbsolute(file) ? file : path.resolve(ROOT, file))), { timeout })
+      await resolveTarget(page, step.target).setInputFiles(step.files.map(resolveFixtureFile), { timeout })
       return
     case 'scroll': {
       const box = await resolveTarget(page, step.target).boundingBox({ timeout })
@@ -712,6 +823,8 @@ function compileStepScene(spec, context) {
             delete globalThis.__henjiUiReviewDialogs
           }).catch(() => undefined)
         }
+        // IPC 替身先于付费保护恢复：生成通道替身保存的“替换前处理器”就是付费保护的拒绝处理器
+        if (runtime.ipcStubbed) await restoreIpcStubs(electronApp)
         await unblockPaidGeneration()
         if (runtime.skipped.length) console.log(`  可选步骤跳过 ${runtime.skipped.length} 个：${runtime.skipped.slice(0, 5).join('；')}`)
       }

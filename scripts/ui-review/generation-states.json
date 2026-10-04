@@ -1,0 +1,652 @@
+[
+  {
+    "id": "review-generation-states-upload",
+    "surface": "生成",
+    "name": "核对-拖入悬停、视频处理中、参考素材排序拖动（5.8 补截；不点生成）",
+    "checklist": [
+      "G05.3",
+      "G13.2",
+      "G13.4",
+      "G13.5"
+    ],
+    "writesUserData": true,
+    "steps": [
+      {
+        "enter": "generation"
+      },
+      {
+        "selectModel": {
+          "modelId": "kie-gemini-omni-video",
+          "providerId": "kie",
+          "search": "Gemini Omni"
+        }
+      },
+      {
+        "dropFiles": {
+          "target": {
+            "selector": "[data-onboarding-target=\"prompt\"]"
+          },
+          "files": [
+            "resources/icons/icon.png"
+          ]
+        }
+      },
+      {
+        "wait": 400
+      },
+      {
+        "capture": "drop-hover"
+      },
+      {
+        "dropFiles": {
+          "target": {
+            "selector": "[data-onboarding-target=\"prompt\"]"
+          },
+          "files": [
+            "resources/icons/icon.png"
+          ],
+          "leave": true
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "stubIpc": {
+          "channel": "media:importFromPath",
+          "mode": "hold"
+        }
+      },
+      {
+        "stubIpc": {
+          "channel": "media:importFromBytes",
+          "mode": "hold"
+        }
+      },
+      {
+        "setFiles": {
+          "target": {
+            "selector": "input[type=\"file\"][accept*=\"video\"]"
+          },
+          "files": [
+            "scripts/fixtures/plain_video.mp4"
+          ]
+        }
+      },
+      {
+        "wait": 600
+      },
+      {
+        "capture": "video-processing"
+      },
+      {
+        "releaseIpc": {
+          "channel": "media:importFromPath",
+          "release": "original"
+        }
+      },
+      {
+        "releaseIpc": {
+          "channel": "media:importFromBytes",
+          "release": "original"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "setFiles": {
+          "target": {
+            "selector": "input[type=\"file\"][accept*=\"image\"]"
+          },
+          "files": [
+            "resources/icons/icon.png",
+            "resources/icons/128x128@2x.png",
+            "resources/icons/icon.png"
+          ]
+        }
+      },
+      {
+        "waitFor": {
+          "selector": "[data-uploader-item=\"2\"]"
+        },
+        "timeout": 12000
+      },
+      {
+        "hover": {
+          "selector": "[data-uploader-item=\"0\"]"
+        }
+      },
+      {
+        "wait": 400
+      },
+      {
+        "drag": {
+          "from": {
+            "selector": "[data-uploader-item=\"0\"]"
+          },
+          "to": {
+            "dx": 70,
+            "dy": 0
+          },
+          "steps": 10,
+          "release": false
+        }
+      },
+      {
+        "wait": 200
+      },
+      {
+        "capture": "reorder-dragging"
+      },
+      {
+        "release": {}
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "reorder-done"
+      }
+    ]
+  },
+  {
+    "id": "review-generation-states-panels",
+    "surface": "生成",
+    "name": "核对-模型列表滚动、参数名说明、长视频裁剪（5.8 补截；不点生成）",
+    "checklist": [
+      "G06.6",
+      "G07.6",
+      "G20.3"
+    ],
+    "writesUserData": true,
+    "steps": [
+      {
+        "enter": "generation"
+      },
+      {
+        "selectModel": {
+          "modelId": "apimart-gpt-image-2.5",
+          "providerId": "apimart",
+          "search": "GPT Image 2.5"
+        }
+      },
+      {
+        "hover": {
+          "text": "/^(版本|Version)$/",
+          "within": {
+            "selector": "[data-ui-overflow-row]"
+          }
+        }
+      },
+      {
+        "waitFor": {
+          "role": "tooltip"
+        },
+        "timeout": 4000
+      },
+      {
+        "capture": "param-tooltip"
+      },
+      {
+        "escape": {}
+      },
+      {
+        "open": {
+          "trigger": {
+            "selector": "[data-onboarding-target=\"model\"] [data-panel-trigger-button]"
+          },
+          "expect": {
+            "selector": "[data-model-selector-panel]"
+          }
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "scroll": {
+          "target": {
+            "selector": "[data-model-selector-panel] [data-model-id]",
+            "nth": 4
+          },
+          "dy": 900
+        }
+      },
+      {
+        "wait": 300
+      },
+      {
+        "capture": "model-list-scrolled"
+      },
+      {
+        "escape": {}
+      },
+      {
+        "selectModel": {
+          "modelId": "apimart-kling-3.0-omni",
+          "providerId": "apimart",
+          "search": "可灵 3.0 Omni"
+        }
+      },
+      {
+        "setFiles": {
+          "target": {
+            "selector": "input[type=\"file\"][accept*=\"video\"]"
+          },
+          "files": [
+            "@generated:video:75"
+          ]
+        },
+        "timeout": 30000
+      },
+      {
+        "waitFor": {
+          "role": "alertdialog"
+        },
+        "timeout": 30000
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "long-video-rejected"
+      },
+      {
+        "escape": {}
+      },
+      {
+        "selectModel": {
+          "modelId": "kie-gemini-omni-video",
+          "providerId": "kie",
+          "search": "Gemini Omni"
+        }
+      },
+      {
+        "setFiles": {
+          "target": {
+            "selector": "input[type=\"file\"][accept*=\"video\"]"
+          },
+          "files": [
+            "@generated:video:25"
+          ]
+        },
+        "timeout": 30000
+      },
+      {
+        "waitFor": {
+          "selector": "[data-uploader-item=\"0\"]"
+        },
+        "timeout": 30000
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "long-video-added"
+      },
+      {
+        "hover": {
+          "selector": "[data-uploader-item=\"0\"]"
+        }
+      },
+      {
+        "click": {
+          "selector": "button[title=\"裁剪\"]"
+        },
+        "optional": true
+      },
+      {
+        "waitFor": {
+          "role": "dialog"
+        },
+        "optional": true
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "long-video-trim"
+      }
+    ]
+  },
+  {
+    "id": "review-generation-states-mask",
+    "surface": "生成",
+    "name": "核对-遮罩编辑器空遮罩、绘制中、保存后缩略（5.8 补截；不点生成）",
+    "checklist": [
+      "G14.2",
+      "G14.3",
+      "G14.4"
+    ],
+    "writesUserData": true,
+    "steps": [
+      {
+        "enter": "generation"
+      },
+      {
+        "selectModel": {
+          "modelId": "apimart-gpt-image-2",
+          "providerId": "apimart",
+          "search": "GPT Image 2"
+        }
+      },
+      {
+        "open": {
+          "trigger": {
+            "selector": "[data-ui-overflow-row] [data-dropdown-button]",
+            "nth": 0
+          }
+        }
+      },
+      {
+        "click": {
+          "role": "option",
+          "name": "/^(官方|Official)$/"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "setFiles": {
+          "target": {
+            "selector": "input[type=\"file\"][accept*=\"image\"]"
+          },
+          "files": [
+            "resources/icons/128x128@2x.png"
+          ]
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/^更多参数/"
+        },
+        "ifPresent": {
+          "role": "button",
+          "name": "/^更多参数/"
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/^(绘制|Draw)$/"
+        }
+      },
+      {
+        "waitFor": {
+          "role": "dialog",
+          "name": "/绘制局部重绘遮罩|Draw Inpainting Mask/"
+        },
+        "timeout": 12000
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "mask-empty"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/^(完成|Done)$/",
+          "within": {
+            "role": "dialog",
+            "name": "/绘制局部重绘遮罩|Draw Inpainting Mask/"
+          }
+        },
+        "optional": true
+      },
+      {
+        "wait": 400
+      },
+      {
+        "capture": "mask-empty-done"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/^(绘制|Draw|编辑|Edit)$/"
+        },
+        "ifPresent": {
+          "role": "button",
+          "name": "/^(绘制|Draw|编辑|Edit)$/"
+        }
+      },
+      {
+        "waitFor": {
+          "selector": "[data-application-observation-region=\"mask_editor.canvas\"]"
+        },
+        "timeout": 12000
+      },
+      {
+        "drag": {
+          "from": {
+            "selector": "[data-application-observation-region=\"mask_editor.canvas\"]",
+            "at": {
+              "x": 260,
+              "y": 220
+            }
+          },
+          "to": {
+            "dx": 160,
+            "dy": 90
+          },
+          "steps": 12,
+          "release": false
+        }
+      },
+      {
+        "capture": "mask-drawing"
+      },
+      {
+        "release": {}
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/^(完成|Done)$/",
+          "within": {
+            "role": "dialog"
+          }
+        }
+      },
+      {
+        "waitFor": {
+          "target": {
+            "role": "dialog",
+            "name": "/绘制局部重绘遮罩|Draw Inpainting Mask/"
+          },
+          "state": "hidden"
+        },
+        "timeout": 12000
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "mask-saved-thumbnail"
+      }
+    ]
+  },
+  {
+    "id": "review-generation-states-voice",
+    "surface": "生成",
+    "name": "核对-音色试听中、声音克隆中与失败（5.8 补截；音色库夹具 + 生成通道替身，不发真实请求）",
+    "checklist": [
+      "G15.4",
+      "G16.3",
+      "G16.4"
+    ],
+    "writesUserData": true,
+    "steps": [
+      {
+        "enter": "generation"
+      },
+      {
+        "seedSettings": {
+          "values": {
+            "voice_library_records": [
+              {
+                "voiceId": "review-cloned-voice",
+                "voiceName": "核对-我的解说声音",
+                "description": "夹具：已训练完成的克隆音色",
+                "providerId": "ppio",
+                "modelId": "ppio-minimax-speech",
+                "createdAt": "2026-10-01T08:00:00.000Z",
+                "updatedAt": "2026-10-01T08:00:00.000Z",
+                "previewPath": "{{file:audio}}",
+                "status": "ready"
+              }
+            ]
+          },
+          "clearLocalStorage": [
+            "voice_library_records_cache_v1"
+          ]
+        }
+      },
+      {
+        "selectModel": {
+          "modelId": "ppio-minimax-speech",
+          "providerId": "ppio",
+          "search": "Minimax Speech"
+        }
+      },
+      {
+        "open": {
+          "trigger": {
+            "selector": "[data-param-id=\"minimaxVoiceId\"] [data-panel-trigger-button]"
+          }
+        }
+      },
+      {
+        "waitFor": {
+          "text": "核对-我的解说声音"
+        },
+        "timeout": 12000
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "试听"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "voice-preview-playing"
+      },
+      {
+        "escape": {}
+      },
+      {
+        "click": {
+          "selector": "[data-more-params-trigger]"
+        },
+        "ifPresent": {
+          "selector": "[data-more-params-trigger]"
+        }
+      },
+      {
+        "open": {
+          "trigger": {
+            "selector": "[data-param-id=\"minimaxVoiceClonePanel\"] [data-panel-trigger-button]"
+          }
+        }
+      },
+      {
+        "fill": {
+          "target": {
+            "placeholder": "必填，用于保存到音色库"
+          },
+          "text": "核对-新克隆音色"
+        }
+      },
+      {
+        "fill": {
+          "target": {
+            "placeholder": "输入用于试听合成的文本"
+          },
+          "text": "你好，这是一段克隆试听。"
+        }
+      },
+      {
+        "setFiles": {
+          "target": {
+            "selector": "[data-panel-scroll-region] input[type=\"file\"]",
+            "nth": 0
+          },
+          "files": [
+            "@generated:audio:12"
+          ]
+        },
+        "optional": true
+      },
+      {
+        "stubIpc": {
+          "channel": "ai:getRuntimeProviderKeyStatus",
+          "mode": "resolve",
+          "shape": "envelope",
+          "data": [
+            {
+              "providerId": "ppio",
+              "configured": true
+            }
+          ]
+        }
+      },
+      {
+        "stubIpc": {
+          "channel": "ai:generate",
+          "mode": "hold",
+          "shape": "envelope"
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "开始克隆"
+        }
+      },
+      {
+        "waitFor": {
+          "role": "button",
+          "name": "克隆中..."
+        },
+        "timeout": 12000
+      },
+      {
+        "capture": "voice-clone-running"
+      },
+      {
+        "releaseIpc": {
+          "channel": "ai:generate",
+          "release": "reject",
+          "shape": "envelope",
+          "message": "核对夹具：供应商返回音频时长不足 10 秒，请换一段更长的样本。"
+        }
+      },
+      {
+        "waitFor": {
+          "role": "alert"
+        },
+        "timeout": 12000
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "voice-clone-failed"
+      }
+    ],
+    "expectedLogEvents": [
+      "generation.generate.failed",
+      "error.event"
+    ]
+  }
+]

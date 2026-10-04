@@ -22,6 +22,7 @@
     }
   },
   "inputArea": {
+    "importingVideo": "正在导入视频…",
     "unit": {
       "images": "张图片",
       "videos": "个视频"

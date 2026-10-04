@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Dropdown from '@/components/ui/Dropdown'
 import Toggle from '@/components/ui/Toggle'
-import { UI_TEXT_LABEL_CLASS, UiButton, UiInput } from '@/components/ui'
+import { UI_TEXT_LABEL_CLASS, UiButton, UiError, UiInput } from '@/components/ui'
 import NumberInput from '@/components/ui/NumberInput'
 import { showAlertDialog } from '@/stores/alertDialogStore'
 import { createLogger } from '@/core/logging'
@@ -509,9 +509,8 @@ export const MinimaxVoiceClonePanel: React.FC<MinimaxVoiceClonePanelProps> = ({
           />
 
           {statusMessage?.type === 'error' && (
-            <div role="alert" className="mt-3 rounded-lg bg-danger-tint px-3 py-2 text-xs text-danger-text">
-              {statusMessage.text}
-            </div>
+            // 失败统一走 UiError（任务 5.8，G16.4 补截时发现手写的危险底色块）
+            <UiError size="xs" align="start" className="mt-3" message={statusMessage.text} />
           )}
         </div>
       </div>

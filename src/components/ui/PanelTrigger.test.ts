@@ -10,6 +10,17 @@ import { UiModal } from './UiModal'
 
 const TARGET = {} as Node
 
+/** 面板内点击在本次事件分发结束后才收起（MessageChannel 宏任务，任务 5.8）：等它跑完 */
+async function flushAfterEvent(): Promise<void> {
+  await act(async () => {
+    await new Promise<void>((resolve) => {
+      const channel = new MessageChannel()
+      channel.port1.onmessage = () => { channel.port1.close(); resolve() }
+      channel.port2.postMessage(null)
+    })
+  })
+}
+
 afterEach(() => {
   cleanup()
   vi.unstubAllGlobals()
@@ -150,7 +161,7 @@ describe('PanelTrigger 面板内部点击关闭策略', () => {
     // 82 + 8 + 内边距 20 + 勾槽 22 + 2 + 2（4.3：原 30 未计勾槽）
     expect(panel?.style.width).toBe('136px')
   })
-  it('收起动画期间再次点触发器会重新打开，收起计时器不会把它关掉', () => {
+  it('收起动画期间再次点触发器会重新打开，收起计时器不会把它关掉', async () => {
     vi.useFakeTimers()
     try {
       vi.stubGlobal('ResizeObserver', class { observe(): void {} disconnect(): void {} })
@@ -163,6 +174,7 @@ describe('PanelTrigger 面板内部点击关闭策略', () => {
       fireEvent.click(trigger)
       // 面板内选项：click 后收起（动画进行中）
       fireEvent.click(view.getByText('新建矩形'))
+      await flushAfterEvent()
       expect(trigger.getAttribute('aria-expanded')).toBe('false')
       // 动画结束前再次点触发器
       fireEvent.click(trigger)
@@ -175,7 +187,7 @@ describe('PanelTrigger 面板内部点击关闭策略', () => {
     }
   })
 
-  it('closeOnPanelClick：按下时面板保持可交互，选项 onClick 先执行再收起（界面重设计 5.5 VE-06）', () => {
+  it('closeOnPanelClick：按下时面板保持可交互，选项 onClick 先执行再收起（界面重设计 5.5 VE-06）', async () => {
     vi.useFakeTimers()
     try {
       vi.stubGlobal('ResizeObserver', class { observe(): void {} disconnect(): void {} })
@@ -195,10 +207,39 @@ describe('PanelTrigger 面板内部点击关闭策略', () => {
       expect(panel.hasAttribute('inert')).toBe(false)
       fireEvent.click(option)
       expect(onCreate).toHaveBeenCalledTimes(1)
+      await flushAfterEvent()
       expect(trigger.getAttribute('aria-expanded')).toBe('false')
       expect(panel.hasAttribute('inert')).toBe(true)
       act(() => { vi.advanceTimersByTime(1000) })
       expect(view.queryByText('新建素材箱')).toBeNull()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('祖先阻止点击冒泡、选项点击后被重渲染替换，仍按点下时的判定收起（任务 5.8：选完模型面板不收起）', async () => {
+    vi.useFakeTimers()
+    try {
+      vi.stubGlobal('ResizeObserver', class { observe(): void {} disconnect(): void {} })
+      const Options = (): React.ReactElement => {
+        const [selected, setSelected] = React.useState('a')
+        // 选中后换 key：被点的节点被卸载，冒泡到文档时已脱离面板
+        return React.createElement('div', null, ['a', 'b'].map(id => React.createElement('button', {
+          key: `${id}-${selected === id ? 'on' : 'off'}`, type: 'button', 'data-close-on-select': '', onClick: () => setSelected(id),
+        }, `选项 ${id}`)))
+      }
+      // 生成输入卡片这类祖先：React onClick 里 stopPropagation，文档收不到这次点击
+      const view = render(React.createElement('div', { onClick: (event: React.MouseEvent) => event.stopPropagation() },
+        React.createElement(PanelTrigger, {
+          display: '模型',
+          closeOnPanelClick: (target: Node) => Boolean((target as HTMLElement).closest('[data-close-on-select]')),
+          renderPanel: () => React.createElement(Options),
+        })))
+      const trigger = view.getAllByRole('button')[0]
+      fireEvent.click(trigger)
+      fireEvent.click(view.getByText('选项 b'))
+      await flushAfterEvent()
+      expect(trigger.getAttribute('aria-expanded')).toBe('false')
     } finally {
       vi.useRealTimers()
     }
@@ -292,12 +333,20 @@ describe('PanelTrigger 面板内部点击关闭策略', () => {
       }))
       const outerTrigger = view.getAllByRole('button')[0]
       fireEvent.click(outerTrigger)
+      act(() => { vi.advanceTimersByTime(1000) })
+      const panel = document.querySelector<HTMLElement>('[data-panel-placement]')!
+      const visibilityBefore = panel.style.visibility
       fireEvent.click(view.getByText('打开遮罩编辑'))
       act(() => { vi.advanceTimersByTime(1000) })
+      // 浮层层级高于弹窗：弹窗打开期间父面板让开，不压在弹窗上（任务 5.8）
+      expect(panel.style.visibility).toBe('hidden')
       fireEvent.mouseDown(view.getByText('画笔'))
       fireEvent.keyDown(document, { key: 'Escape' })
       act(() => { vi.advanceTimersByTime(1000) })
       expect(outerTrigger.getAttribute('aria-expanded')).toBe('true')
+      // 弹窗关闭后面板原样回来
+      expect(panel.style.visibility).toBe(visibilityBefore)
+      expect(visibilityBefore).toBe('visible')
     } finally {
       vi.useRealTimers()
     }
