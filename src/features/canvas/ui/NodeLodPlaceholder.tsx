@@ -22,7 +22,7 @@ export function NodeLodPlaceholder({ title, icon }: NodeLodPlaceholderProps): JS
         {icon}
         <span className="truncate text-xl font-medium leading-tight">{title}</span>
       </div>
-      <div className={`min-h-[48px] flex-1 ${NODE_ROW_CARD_CLASS}`} />
+      <div className={`min-h-12 flex-1 ${NODE_ROW_CARD_CLASS}`} />
       <div className={`h-9 shrink-0 ${NODE_ROW_CARD_CLASS}`} />
       <div className={`h-9 shrink-0 ${NODE_ROW_CARD_CLASS}`} />
     </div>

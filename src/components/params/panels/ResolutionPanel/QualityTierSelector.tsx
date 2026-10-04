@@ -59,8 +59,8 @@ export const QualityTierSelector: React.FC<QualityTierSelectorProps> = ({
               key={option.value}
               onClick={() => onChange(option.value)}
               size="lg"
-              className="w-[78px] px-2 py-1.5 justify-center"
-              style={{ height: description ? '52px' : '42px' }}
+              gridCell={description ? 'tier-detail' : 'tier'}
+              className="px-2 py-1.5 justify-center"
             >
               <span className="font-medium leading-none">{label}</span>
               {description && (

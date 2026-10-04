@@ -57,7 +57,7 @@ description: Henji-AI 新建或改造任何界面/页面骨架/面板/弹窗/侧
 | 骨架 | 一个视图一条命令带：`UiToolbar variant="command"`（左端 / `center` / `trailing` / `subordinate`），一个表面一个主动作 | 本文「页面骨架」 |
 | 字体 | 拉丁与数字 Geist，时间码与数值 Geist Mono（`UI_TEXT_TIMECODE_CLASS`），中文系统字体 | `references/typography-and-tokens.md` |
 
-这些约束大多已进门禁：`check:colors`（调色板/黑白/rgba/命名色/旧别名）、`check:surface:strict`（规则 A–E，E = 调用点覆盖组件外观）、`check:icons:strict`（规则 A–C）、ESLint 令牌规则；对比度由 `check:ui-visual` 按渲染后像素审计。
+这些约束大多已进门禁：`check:colors`（调色板/黑白/rgba/命名色/旧别名/未定义颜色类）、`check:surface:strict`（规则 A–E，E = 调用点覆盖组件外观）、`check:icons:strict`（规则 A–C）、`check:ui-residue`（任意值类与内联尺寸口径、私有样式、零引用、旧文案）、ESLint 令牌规则；对比度、条带数、折行、截断、选中态差异、浮层裁切由 `check:ui-visual` 在真实 DOM 上判。
 
 ## 五级容器词汇表（先背这张表）
 
@@ -455,18 +455,18 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 |---|---|---|
 | 弹窗 | `UiModal` | 手写 `fixed inset-0` + `bg-black/…` + 卡片（存量已全部清零，`check:surface` 规则 C 会拦，别再加） |
 | 分组 | `UiGroup` | 手写 `border + bg` 的 div |
-| 页面标题区 | `UiPageHeader`（标题旁的数量等用 `meta`，与标题基线对齐） | 手写 h2 + p；把数量塞进标题文字 |
+| 页面标题区 | `UiPageHeader`（标题旁的数量等用 `meta`，与标题基线对齐；页头兼作页面顶带时用 `divider` 画自适应下分隔线） | 手写 h2 + p；把数量塞进标题文字；调用点给页头写 `border-b` |
 | 封面内容卡（项目卡、工程卡、资产卡） | `UiOptionButton variant="cover"` + 封面框 `UI_COVER_FRAME_CLASS`；不是按钮的根元素（可拖拽的资产卡）加 `UI_COVER_GROUP_CLASS` 与 `data-selected` | 给整张卡铺底描边，或在调用点手写悬停描边/选中环 |
 | 工具页 / 全屏工作面的命令带 | `UiToolbar variant="command"`：左端 children（返回、文件上下文、主工具组）/ `center`（视图切换、随工具变化的参数）/ `trailing`（次要动作 + 唯一主动作）/ 可选 `subordinate` 从属带（共用底色与下边框）；状态写进 `barProps` 的 `data-*` | 每个工具自己画 `h-11 border-b bg-*` 头带；从属带另画底色或边框 |
 | 可点的文字记号（逐字稿词块、时间轴字幕块） | `UiTextToken`（`appearance` inline/chip；`current` 播放中、`selected` 已选、`excluded` 已删除、`flagged` 待留意） | 用 `UiButton` 加 className 覆盖底色、圆角、划线 |
 | 表单行 | `UiFormRow`（窄停靠面板 `density="compact"`，配 `UiGroup titleTone="compact"`）；行内的 `Ui*` 控件没有自己的名称时自动 `aria-labelledby` 行标签、`aria-describedby` 说明（下拉读作“标签 + 当前值”，任务 5.8） | 手写 label + 间距；调用点改标签字号；给行内控件再手写一遍同样的 `aria-label` |
-| 字段 | `UiInput` / `UiSelect` / `UiTextArea` / `NumberInput`（数值拖动：读数或标签上左右拖，Shift 精细、Alt 粗调，单击编辑）；高度只用 `size`；直接落在所在表面上编辑的多行文本用 `UiTextArea frame="none"` | 手写数值拖动、自绘步进器；调用点改高度；调用点给文本框去边框去底 |
+| 字段 | `UiInput` / `UiSelect` / `UiTextArea` / `NumberInput`（数值拖动：读数或标签上左右拖，Shift 精细、Alt 粗调，单击编辑）；高度只用 `size`；直接落在所在表面上编辑的多行文本用 `UiTextArea frame="none"`；复合字段（表面与焦点环画在外壳上）的内层输入用 `UiInput frame="inner"` | 手写数值拖动、自绘步进器；调用点改高度；调用点给文本框去边框去底（`!bg-transparent !ring-0`） |
 | 搜索框 | `UiSearchInput`（前置放大镜、`size`、可选 `onClear` + `clearLabel` 清除按钮；`className` 落在外层只放宽度） | 自己摆一个绝对定位的放大镜再给 `UiInput` 补 `pl-8` |
 | 下拉 / 面板触发器 | `Dropdown` / `PanelTrigger`（按钮是 `UiFieldTrigger`：`appearance` field/quiet、`size`；浮层 `surface` solid/glass、`panelPadding`）；一行参数条用 `UiFieldLayoutContext` = `toolbar` | 自己写触发器按钮或浮层外壳；`buttonClassName` 里改外观 |
 | 浮层归属（点外关闭、Escape） | `useUiOverlayLayer` + `UiOverlayLayerProvider` + `resolveUiOverlayTarget` / `isTopmostUiOverlay`（`@/components/ui/overlayOwnership`，语义同 Floating UI FloatingTree）：子浮层里的点击不关父层，Escape 只关最上层，模态层（查看器、弹窗）打开期间祖先层不响应点外；不在同一 React 树的浮层根节点写 `data-ui-overlay-detached` | 每个浮层各写一份 portal 选择器白名单或只认自身 refs |
 | 右键菜单、按钮弹出的动作菜单、锚定外部元素或指针的浮层 | 动作列表用 `ContextMenu` + `useContextMenu`（`showMenu` 跟随指针，`showMenuAt` 贴按钮右缘；压在画布/媒体上传 `surface="glass"`；菜单项是 `UiOptionButton variant="menu"`，方向键与 Enter 可用，宽度按内容）；需要表单内容的锚定浮层用 `PanelTrigger` 的 `anchor`（元素或矩形）+ `open` / `onOpenChange`，自定义触发器用 children 渲染函数（任务 5.9） | 自己 `createPortal` 画菜单或面板、手算视口夹取、各写一份点外关闭与 Escape、用私有 CSS 画菜单项 |
 | 一行放不下就收进“更多” | `UiOverflowRow`（`items` 带 `priority`/`pinned`，`renderOverflow`，`alwaysShowOverflow`；收起项不挂载）；生成底栏由 `ParameterPanel` 在 `toolbar` 排布下接入 | 让参数条 `flex-wrap` 换成两行；收起项留在 DOM 里只隐藏 |
-| 分段 / 网格 / 小样 / 色样选择 | `UiOptionButton variant="segment"`（放在 `UI_SEGMENTED_TRACK_CLASS` 里）/ `grid` / `tile` / `swatch` | 手写 `bg-veil-faint` 格子、强调色实底的分段 |
+| 分段 / 网格 / 小样 / 色样选择 | `UiOptionButton variant="segment"`（放在 `UI_SEGMENTED_TRACK_CLASS` 里）/ `grid` / `tile` / `swatch`；网格格子要等大时用 `gridCell`（`ratio` 78×92、`tier` 78×42、`tier-detail` 78×52、`preset` 120×52） | 手写 `bg-veil-faint` 格子、强调色实底的分段；用内联 `style={{ height }}` 定格子高度 |
 | 开关、复选框、图标开关 | `UiSwitch` / `UiCheckbox` / `UiIconButton on` | 用整行实底或强调色文字表达“已开启” |
 | 标签栏、导航 | `UiNavButton`（侧栏）/ `UiChipButton selectionRole="navigation"`（`selectionAppearance` default / `subtle` 面板标签 / `workspace` 标题栏工作区，后者同栏浮层开关用 `on`） | 手写指示条、选中底 |
 | 无边框窗口的最小化/最大化/还原/关闭 | `UiWindowControl`（`action`、`platform` windows/mac；主窗口与日志窗口共用） | 用 `UiIconButton` 加覆盖拼交通灯或关闭红底 |
@@ -599,15 +599,16 @@ npm run check:ui-visual -- --theme-preset all --only <受影响场景>
 聚焦 / 下拉 / 右键状态；`check:ui-visual` 只输出规则结论与 `.ui-audit/audit.json`，
 不做像素差异。两者共用场景配置但职责分离，截图差异不作为 CI 门禁。
 
-### 已知门禁缺口：条带数量还没进自动检查
+### 条带数量已进自动检查（5.8）
 
-「页面骨架：横向条带」那节的规则**目前全靠人看**——`check:surface` 只看单元素的
-`border + bg + rounded` 组合与调用点外观覆盖，`check:ui-visual` 的十一条规则里也没有数条带的那条。
-所以 4 条带的图片编辑页在两个门禁下都是全绿的。新工具页统一用 `UiToolbar variant="command"` 能从源头避免大部分条带问题。
+「页面骨架：横向条带」那节的规则曾经全靠人看（4 条带的图片编辑页在 `check:surface` 与 `check:ui-visual` 下都是全绿）。
+5.8 起 `check:ui-visual` 的 `stackedBands` 在真实 DOM 里数条带：不在滚动区里、几乎占满父容器宽、自己画了分隔线或底色
+（或是命令带 / 从属带 / 工具条 / 页头）的 24–64 高块上下相接超过 2 条即命中；同批还有工具条折行、短文案截断、
+选中态与静息态差异不足、浮层被裁切四条，判据与断牙样例见 [references/review.md](references/review.md) 第 7 节。
+新工具页仍统一用 `UiToolbar variant="command"`，从源头避免条带问题；规则只在场景覆盖到的界面上生效，没有场景的新页面照样要人工数一遍。
 
-这条其实**可判定**：在真实 DOM 里沿主轴找连续的 `border-bottom` 兄弟条带，
-数量 > 2 即报错；同理可判「铺满剩余空间且带 `border-radius` 的容器」。
-补这条规则前，看整页时必须人工数一遍，别因为门禁全绿就认为骨架没问题。
+代码残留同样进了门禁：`npm run check:ui-residue`（任意值类、内联尺寸与颜色、调用点覆盖、豁免理由、私有样式、零引用、旧文案），
+口径与登记方式见 references/review.md 第 3 节。
 
 `check:surface` 报五类问题：
 

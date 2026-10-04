@@ -379,25 +379,6 @@
   }
 
   /*
-   * 玻璃元素自身可交互时（按钮、菜单条目所在的那块玻璃）的 hover / 按下反馈。
-   *
-   * 关键：不能用 `hover:bg-white/10` 这类工具类——那会把 background-color 整个换掉，
-   * 连同 `--ui-glass-tint` 的黑底一起丢，玻璃在亮图片上瞬间失去可读性。
-   * 这里改用 background-image 叠一层纯色渐变，压在 tint 之上而不是替换它。
-   */
-  .ui-glass-interactive {
-    transition: background-image 120ms ease-out;
-  }
-
-  .ui-glass-interactive:hover:not(:disabled) {
-    background-image: linear-gradient(var(--ui-glass-hover), var(--ui-glass-hover));
-  }
-
-  .ui-glass-interactive:active:not(:disabled) {
-    background-image: linear-gradient(var(--ui-glass-press), var(--ui-glass-press));
-  }
-
-  /*
    * 玻璃容器里的中性实底按钮随材质开关联动：开启时融入玻璃，关闭时由
    * data-ui-blur='off' 上面的变量恢复为原来的 surface / border / layer 实底。
    * 品牌选中态和主按钮不会带这个标记，因此不会被冲淡。

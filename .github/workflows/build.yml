@@ -22,7 +22,7 @@ env:
 jobs:
   # ---------------------------------------------------------------------------
   # 质量门禁：每次 push / PR 都跑。速度快、无需签名凭据。
-  # 这是 UI 规范（check:colors / check:surface / check:icons / skill 同步）与类型、测试的统一入口。
+  # 这是 UI 规范（check:colors / check:surface / check:icons / check:ui-residue / skill 同步）与类型、测试的统一入口。
   # ---------------------------------------------------------------------------
   checks:
     name: 代码检查
@@ -54,6 +54,10 @@ jobs:
 
       - name: 图标令牌检查
         run: npm run check:icons:strict
+
+      # 旧界面代码残留（任意值类、内联尺寸/颜色、私有样式、零引用、旧文案）；例外登记在 scripts/ui-residue.allowlist.json。
+      - name: 界面残留检查
+        run: npm run check:ui-residue
 
       - name: 模型 i18n 检查
         run: npm run check:model-i18n

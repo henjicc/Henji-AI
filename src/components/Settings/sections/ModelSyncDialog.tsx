@@ -130,7 +130,7 @@ export function ModelSyncDialog({
           )
           : (
             <Virtuoso
-              style={{ height: 420 }}
+              className="h-[420px]"
               data={rows}
               computeItemKey={(_, row) => row.key}
               itemContent={(_, row) => {

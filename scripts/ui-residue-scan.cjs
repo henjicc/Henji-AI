@@ -1,21 +1,25 @@
 /**
- * 旧界面代码残留扫描（报告模式，任务 5.2；5.8 再把需要的类别接进门禁）。
+ * 旧界面代码残留扫描（任务 5.2 建立，5.8 接入门禁）。
  *
  * 按 skill henji-ui-surface references/review.md 第 3 节“代码残留”逐类统计，按文件与 5.1 盘点的区域、界面编号出报告：
  *   npm run ui:residue                         # 写 .ui-tour/residue/residue-report.{md,json}
  *   npm run ui:residue -- --out .ui-tour/residue-after-4.2
  *   npm run ui:residue -- --region 5.3         # 只看一个区域
  *   npm run ui:residue -- --files src/a.tsx,src/b.tsx
+ *   npm run check:ui-residue                   # 门禁：--strict --no-report，build / electron:build / CI
  *
- * 退出码恒为 0（读文件失败除外）：它是盘点工具，不是门禁。
+ * 每条命中按门禁口径（uiResidueRules.cjs 的 RESIDUE_CATEGORIES）判定为违规 / 待登记 / 合规 / 报告视图；
+ * 待登记的只有在 scripts/ui-residue.allowlist.json 写了理由才放行。--strict 下有违规、未登记或过期登记即退出 1。
  */
 const fs = require('node:fs')
 const path = require('node:path')
 const {
   RESIDUE_CATEGORIES,
+  applyResidueAllowlist,
   classReferencePattern,
   extractCssClassNames,
   extractImportSpecifiers,
+  finding,
   parseRegionInventory,
   resolveImport,
   resolveRegion,
@@ -27,26 +31,32 @@ const {
 const ROOT = path.resolve(__dirname, '..')
 const INVENTORY_FILE = 'docs/task/界面重设计与主题引擎/任务/第五阶段-全界面核对与旧界面清零/5.1-全界面清单与残留盘点.md'
 const COLOR_ALLOWLIST_FILE = 'scripts/check-color-tokens.allowlist.json'
+const RESIDUE_ALLOWLIST_FILE = 'scripts/ui-residue.allowlist.json'
+/** 共享样式表：其中的 ui-* 是共享组件类，不算私有（仍查零引用）。 */
+const SHARED_CSS_FILE = 'src/index.css'
 /** 从这些目录导入 src 的文件也算“被引用”（主进程与 preload 会引用 src/core 等共享模块）。 */
 const IMPORTER_ROOTS = ['src', 'electron']
 /** 只经 HTML 或构建配置进入的入口，不按 import 判死代码。 */
 const ENTRY_PATTERNS = [/^src\/main\.tsx$/, /^src\/[\w-]+\/main\.tsx$/, /\.d\.ts$/, /^src\/vite-env/, /\.worker\.ts$/]
 
 function printHelp() {
-  console.log(`旧界面代码残留扫描（报告模式）
+  console.log(`旧界面代码残留扫描
 
 用法：
   npm run ui:residue [-- --out <目录>] [--region 5.3] [--files a,b] [--top 15]
+  npm run check:ui-residue                     # 门禁（--strict --no-report）
 
   --out <目录>     报告目录，默认 .ui-tour/residue（不进仓库）
   --region <编号>  只输出某个区域（5.3 生成 / 5.4 画布 / 5.5 工具与剪辑 / 5.6 资产设置与助手 / 5.7 通用）
   --files <列表>   只扫描这些文件（逗号分隔，仓库相对路径），死代码与零引用类不统计
   --top <数量>     每个类别列出的文件数，默认 15
+  --strict         有违规、未登记或过期登记时退出码 1（不能与 --region / --files 同用：局部扫描判不了过期登记）
+  --no-report      不写报告文件，只在终端输出
 `)
 }
 
 function parseArgs(argv) {
-  const options = { outDir: '.ui-tour/residue', region: null, files: [], top: 15, help: false }
+  const options = { outDir: '.ui-tour/residue', region: null, files: [], top: 15, help: false, strict: false, report: true }
   for (let index = 0; index < argv.length; index += 1) {
     const token = argv[index]
     const value = () => {
@@ -60,9 +70,12 @@ function parseArgs(argv) {
     else if (token === '--region') options.region = value()
     else if (token === '--files') options.files.push(...value().split(',').map((item) => item.trim()).filter(Boolean))
     else if (token === '--top') options.top = Number(value())
+    else if (token === '--strict') options.strict = true
+    else if (token === '--no-report') options.report = false
     else throw new Error(`未知参数：${token}`)
   }
   if (!Number.isInteger(options.top) || options.top < 1) throw new Error('--top 必须是正整数')
+  if (options.strict && (options.region || options.files.length)) throw new Error('--strict 只能全量扫描，不能与 --region / --files 同用')
   return options
 }
 
@@ -112,20 +125,28 @@ function collectFindings(options) {
     if (!inScope(file)) continue
     for (const [rule, count] of Object.entries(entry.counts ?? {})) {
       if (rule === 'legacy' || !count) continue
-      add(file, Array.from({ length: count }, () => ({ category: 'colorAllowlist', line: 0, text: `${rule}（登记）` })))
+      add(file, Array.from({ length: count }, () => finding('colorAllowlist', 0, `${rule}（登记）`, { rule: entry.category })))
     }
   }
 
   // 私有 CSS 类：定义在 css 里的类，在哪些源文件里用到；零引用的作为候选
   const sourceTexts = new Map(allSources.map((file) => [file, readText(file)]))
+  // 其他样式表在选择器里引用共享类（`.storyboard-frame-actions .ui-glass`）不算定义私有类
+  const sharedNames = new Set(cssFiles.includes(SHARED_CSS_FILE)
+    ? extractCssClassNames(readText(SHARED_CSS_FILE), { includeShared: true }) : [])
   for (const cssFile of cssFiles) {
-    for (const name of extractCssClassNames(readText(cssFile))) {
+    for (const name of extractCssClassNames(readText(cssFile), { includeShared: true })) {
+      if (cssFile !== SHARED_CSS_FILE && sharedNames.has(name)) continue
       const pattern = classReferencePattern(name)
       const users = [...sourceTexts].filter(([, text]) => pattern.test(text)).map(([file]) => file)
-      for (const user of users.filter(inScope)) {
-        add(user, [{ category: 'privateCssClass', line: 0, text: `.${name}（${cssFile}）` }])
+      const shared = cssFile === SHARED_CSS_FILE && name.startsWith('ui-')
+      if (!shared) {
+        for (const user of users.filter(inScope)) {
+          add(user, [finding('privateCssClass', 0, `.${name}（${cssFile}）`, { value: name, definedIn: cssFile })])
+        }
       }
-      if (!scoped && users.length === 0) add(cssFile, [{ category: 'unusedCssClass', line: 0, text: `.${name}` }])
+      // 共享类也可能只在样式表内部组合使用（`.ui-glass .ui-btn-quiet`），源码零引用才是死样式
+      if (!scoped && users.length === 0) add(cssFile, [finding('unusedCssClass', 0, `.${name}`)])
     }
   }
 
@@ -150,7 +171,7 @@ function collectFindings(options) {
     // 只统计界面代码（组件与界面目录里的 .tsx、组件/工作区目录的 .ts）；core 与应用服务的死代码不属于本扫描
     for (const file of allSources.filter(isUiSource)) {
       if (referencedByCode.has(file) || ENTRY_PATTERNS.some((pattern) => pattern.test(file))) continue
-      add(file, [{ category: referencedByTests.has(file) ? 'testOnlyCode' : 'deadCode', line: 0, text: file }])
+      add(file, [finding(referencedByTests.has(file) ? 'testOnlyCode' : 'deadCode', 0, file)])
     }
   }
   return byFile
@@ -188,13 +209,17 @@ function renderMarkdown(summary, options, inventoryCount) {
     `- 生成时间：${new Date().toISOString()}`,
     `- 范围：${options.files.length ? `${options.files.length} 个指定文件` : 'src/ 全部非测试源码、样式与语言包'}${options.region ? `；区域 ${options.region}` : ''}`,
     `- 区域依据：5.1 盘点界面表（${inventoryCount} 个界面），未登记的文件按目录归区域`,
-    '- 模式：报告（不阻断）。内联 style、私有 CSS 类与零引用候选需要逐条判定，计数不等于都要删',
+    `- 门禁：违规 ${summary.gate.violations.length}，未登记 ${summary.gate.unregistered.length}，登记文件问题 ${summary.gate.allowlistErrors.length}`
+      + `（\`npm run check:ui-residue\` 严格模式；登记文件 ${RESIDUE_ALLOWLIST_FILE}）`,
     '',
     '## 分类汇总',
     '',
-    '| 类别 | 处数 | 文件数 | 收口方式 |',
-    '|---|---:|---:|---|',
-    ...RESIDUE_CATEGORIES.map(({ key, label, gate }) => `| ${label} | ${summary.totals[key].count} | ${summary.totals[key].files} | ${gate} |`),
+    '| 类别 | 处数 | 文件数 | 违规 | 未登记 | 已登记 | 按口径合规 | 门禁口径 |',
+    '|---|---:|---:|---:|---:|---:|---:|---|',
+    ...RESIDUE_CATEGORIES.map(({ key, label, gate }) => {
+      const verdicts = summary.verdicts[key]
+      return `| ${label} | ${summary.totals[key].count} | ${summary.totals[key].files} | ${verdicts.violation} | ${verdicts.register} | ${verdicts.registered} | ${verdicts.allowed} | ${gate} |`
+    }),
     '',
     '## 按区域',
     '',
@@ -202,6 +227,12 @@ function renderMarkdown(summary, options, inventoryCount) {
     `|---|${RESIDUE_CATEGORIES.map(() => '---:').join('|')}|`,
     ...Object.entries(summary.regions).map(([region, row]) => `| ${region} | ${RESIDUE_CATEGORIES.map(({ key }) => row[key]).join(' | ')} |`),
   ]
+  const gateItems = [...summary.gate.violations, ...summary.gate.unregistered]
+  if (gateItems.length || summary.gate.allowlistErrors.length) {
+    lines.push('', '## 门禁未通过', '')
+    for (const item of summary.gate.allowlistErrors) lines.push(`- 登记文件：${escapeCell(item)}`)
+    for (const item of gateItems) lines.push(`- ${escapeCell(formatGateItem(item))}`)
+  }
   lines.push('', '## 各类别文件排行', '')
   for (const { key, label } of RESIDUE_CATEGORIES) {
     const ranked = summary.files.filter((entry) => entry.counts[key] > 0)
@@ -223,6 +254,26 @@ function renderMarkdown(summary, options, inventoryCount) {
   return `${lines.join('\n')}\n`
 }
 
+function formatGateItem(item) {
+  const kind = item.verdict === 'violation' ? '违规' : '未登记'
+  return `${kind} ${item.file}${item.line ? `:${item.line}` : ''} [${item.category}] ${item.rule ? `${item.rule}：` : ''}${item.value}`
+}
+
+/** 门禁结论：违规与未登记逐条列出；登记文件的格式、理由与过期问题单列。 */
+function evaluateGate(byFile, options) {
+  const allowlist = JSON.parse(readText(RESIDUE_ALLOWLIST_FILE))
+  const { errors } = applyResidueAllowlist(byFile, allowlist)
+  // 局部扫描（--files / --region）看不到全部使用方，过期登记判不了，只保留格式与理由问题
+  const scoped = options.files.length > 0 || Boolean(options.region)
+  const allowlistErrors = scoped ? errors.filter((error) => !/已不存在|已没有使用方/.test(error)) : errors
+  const items = [...byFile].flatMap(([file, findings]) => findings.map((item) => ({ file, ...item })))
+  return {
+    violations: items.filter((item) => item.verdict === 'violation'),
+    unregistered: items.filter((item) => item.verdict === 'register'),
+    allowlistErrors,
+  }
+}
+
 function main() {
   const options = parseArgs(process.argv.slice(2))
   if (options.help) {
@@ -230,19 +281,48 @@ function main() {
     return
   }
   const inventory = fs.existsSync(path.join(ROOT, INVENTORY_FILE)) ? parseRegionInventory(readText(INVENTORY_FILE)) : []
-  const summary = summarize(collectFindings(options), inventory, options)
-  const outDir = path.isAbsolute(options.outDir) ? options.outDir : path.join(ROOT, options.outDir)
-  fs.mkdirSync(outDir, { recursive: true })
-  const markdown = renderMarkdown(summary, options, inventory.length)
-  fs.writeFileSync(path.join(outDir, 'residue-report.md'), markdown, 'utf8')
-  fs.writeFileSync(path.join(outDir, 'residue-report.json'), JSON.stringify({
-    generatedAt: new Date().toISOString(), options, categories: RESIDUE_CATEGORIES, ...summary,
-  }, null, 2), 'utf8')
-  console.log('旧界面代码残留（报告模式）')
-  for (const { key, label } of RESIDUE_CATEGORIES) {
-    console.log(`  ${label}：${summary.totals[key].count} 处 / ${summary.totals[key].files} 个文件`)
+  const byFile = collectFindings(options)
+  const gate = evaluateGate(byFile, options)
+  const summary = summarize(byFile, inventory, options)
+  const inRegion = (item) => summary.files.some((entry) => entry.file === item.file)
+  summary.gate = options.region
+    ? { ...gate, violations: gate.violations.filter(inRegion), unregistered: gate.unregistered.filter(inRegion) }
+    : gate
+  summary.verdicts = Object.fromEntries(RESIDUE_CATEGORIES.map(({ key }) => {
+    const counts = { violation: 0, register: 0, registered: 0, allowed: 0, info: 0 }
+    for (const entry of summary.files) for (const item of entry.findings) if (item.category === key) counts[item.verdict] += 1
+    return [key, counts]
+  }))
+  if (options.report) {
+    const outDir = path.isAbsolute(options.outDir) ? options.outDir : path.join(ROOT, options.outDir)
+    fs.mkdirSync(outDir, { recursive: true })
+    fs.writeFileSync(path.join(outDir, 'residue-report.md'), renderMarkdown(summary, options, inventory.length), 'utf8')
+    fs.writeFileSync(path.join(outDir, 'residue-report.json'), JSON.stringify({
+      generatedAt: new Date().toISOString(), options, categories: RESIDUE_CATEGORIES, ...summary,
+    }, null, 2), 'utf8')
+    console.log('旧界面代码残留')
+    for (const { key, label } of RESIDUE_CATEGORIES) {
+      const verdicts = summary.verdicts[key]
+      console.log(`  ${label}：${summary.totals[key].count} 处 / ${summary.totals[key].files} 个文件`
+        + `（违规 ${verdicts.violation}，未登记 ${verdicts.register}，已登记 ${verdicts.registered}，合规 ${verdicts.allowed}）`)
+    }
+    console.log(`\n报告：${path.join(outDir, 'residue-report.md')}`)
   }
-  console.log(`\n报告：${path.join(outDir, 'residue-report.md')}`)
+  const failing = summary.gate.violations.length + summary.gate.unregistered.length + summary.gate.allowlistErrors.length
+  if (!failing) {
+    console.log('[ui-residue] 门禁通过：无违规、无未登记、登记文件无过期条目。')
+    return
+  }
+  const list = [...summary.gate.allowlistErrors.map((item) => `登记文件：${item}`),
+    ...[...summary.gate.violations, ...summary.gate.unregistered].map(formatGateItem)]
+  const print = options.strict ? console.error : console.log
+  print(`\n[ui-residue] 门禁未通过 ${failing} 项${options.strict ? '' : '（报告模式不阻断）'}：`)
+  for (const item of options.strict ? list : list.slice(0, 20)) print(`  ${item}`)
+  if (!options.strict && list.length > 20) print(`  …其余 ${list.length - 20} 项见报告`)
+  if (options.strict) {
+    print(`\n违规必须改掉；固定几何尺寸、字面量内联尺寸、私有 CSS 变量/写死值与私有 CSS 类确有理由时登记到 ${RESIDUE_ALLOWLIST_FILE}（理由 ≥ 8 字）。`)
+    process.exitCode = 1
+  }
 }
 
 try {

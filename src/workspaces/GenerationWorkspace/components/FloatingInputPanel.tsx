@@ -52,14 +52,12 @@ export function FloatingInputPanel({
       data-layout-density={compact ? 'compact' : 'comfortable'}
     >
       {/* 一整块实底输入卡片（设计稿 Generation）：浮在记录列表之上，是这页唯一的卡片 */}
+      {/* 收起 48 高（一行提示）↔ 展开最高 600：max-height 过渡做收起动画 */}
       <UiPanel
-        className="relative cursor-pointer overflow-hidden"
+        className={`relative cursor-pointer overflow-hidden ${isCollapsed || isCollapsing ? 'max-h-12 min-h-12' : 'max-h-[600px]'} ${compact ? 'p-2' : 'px-2.5 pb-2 pt-2.5'}`}
         style={{
           transition: uiTransition(['max-height'], UI_DURATION.slow),
-          maxHeight: isCollapsed || isCollapsing ? '48px' : '600px',
-          minHeight: isCollapsed || isCollapsing ? '48px' : 'auto',
           opacity: 1,
-          padding: compact ? '8px' : '10px 10px 8px',
           overflow: isCollapsed && !isCollapsing ? 'visible' : 'hidden',
         }}
         onClick={() => {
@@ -67,7 +65,7 @@ export function FloatingInputPanel({
         }}
       >
         <div
-          className="absolute left-0 right-0"
+          className={`absolute left-0 right-0 ${isCollapsed || isCollapsing ? 'px-4' : 'px-3'}`}
           style={{
             // 位移走 transform 而不是过渡 top：top 是布局属性，过渡期间每帧重排；
             // translateY 只走合成器。12px → -60px 等价于位移 -72px。
@@ -75,7 +73,6 @@ export function FloatingInputPanel({
             transform: isCollapsed || isCollapsing ? 'translateY(0)' : 'translateY(-72px)',
             opacity: isCollapsed || isCollapsing ? 1 : 0,
             transition: uiTransition(['opacity', 'transform'], UI_DURATION.slow),
-            padding: isCollapsed || isCollapsing ? '0 16px' : '0 12px',
           }}
         >
           <div className="flex items-center justify-between gap-4">

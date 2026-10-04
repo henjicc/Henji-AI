@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { FolderPlus, GripVertical, LoaderCircle, Settings2, X } from 'lucide-react'
-import { Dropdown, PanelTrigger, UI_FIELD_LABEL_CLASS, UI_GLASS_ADAPTIVE_DIVIDER_CLASS, UI_GLASS_ADAPTIVE_REGION_CLASS, UI_SEGMENTED_TRACK_CLASS, UI_TEXT_META_CLASS, UiButton, UiEmpty, UiError, UiIconButton, UiSearchInput, UiOptionButton, UiPageHeader, UiRangeInput, UiSharedGlassHost } from '@/components/ui'
+import { Dropdown, PanelTrigger, UI_FIELD_LABEL_CLASS, UI_GLASS_ADAPTIVE_REGION_CLASS, UI_SEGMENTED_TRACK_CLASS, UI_TEXT_META_CLASS, UiButton, UiEmpty, UiError, UiIconButton, UiSearchInput, UiOptionButton, UiPageHeader, UiRangeInput, UiSharedGlassHost } from '@/components/ui'
 import type { AssetLibraryRecord, AssetMediaType, AssetPage, AssetRecord } from '@/platform/contracts/assetLibrary'
 import { addAssetToLibrary, createAssetLibrary, deleteAsset, deleteAssetLibrary, inspectAssets, listAssetLibraries, listAssetTags, queryAssets, removeAssetFromLibrary, renameAssetLibrary, setAssetTags, updateAsset } from '@/commands/assetLibrary'
 import { ICON_MULTI_SELECT } from '@/core/theme/icons'
@@ -301,7 +301,8 @@ export const AssetLibrarySurface: React.FC<Props> = ({ mode, active = true, onCl
     <div className={`relative flex h-full min-h-0 flex-col overflow-hidden text-text1 ${mode === 'floating' ? `z-raised ${UI_GLASS_ADAPTIVE_REGION_CLASS}` : 'bg-window'}`}>
       {mode === 'workspace' && (
         <UiPageHeader
-          className={`h-14 shrink-0 border-b px-4 ${UI_GLASS_ADAPTIVE_DIVIDER_CLASS}`}
+          divider
+          className="h-14 shrink-0 px-4"
           title={t('assetLibrary.categories')}
           meta={t('assetLibrary.count', { count: page.total })}
           onBack={onClose}

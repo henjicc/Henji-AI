@@ -88,7 +88,7 @@ const CameraStageAppInner: React.FC<CameraStageAppProps> = ({ onBackToToolbox })
   }, [lastProjectId, setAppView, setLastProjectId, view])
 
   if (restoring) {
-    return <UiLoading className="h-full bg-window" message="正在打开上次的工程…" />
+    return <div className="h-full bg-window"><UiLoading className="h-full" message="正在打开上次的工程…" /></div>
   }
 
   if (view === 'editor') {

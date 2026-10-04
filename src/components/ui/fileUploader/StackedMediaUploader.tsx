@@ -366,7 +366,7 @@ export const StackedMediaUploader = forwardRef<StackedMediaUploaderHandle, Stack
                 <UiButton
                   type="button"
                   variant="secondary"
-                  className={`relative h-[64px] w-[48px] overflow-hidden ${UI_UPLOADER_CARD_BORDER_CLASS} bg-raised/35 p-0 shadow-thumb transition-transform duration-180 ease-out hover:scale-[1.1]`}
+                  className={`relative h-16 w-12 overflow-hidden ${UI_UPLOADER_CARD_BORDER_CLASS} bg-raised/35 p-0 shadow-thumb transition-transform duration-180 ease-out hover:scale-[1.1]`}
                   onClick={(event) => {
                     event.stopPropagation()
                     onFileClick?.(file, files)
@@ -443,7 +443,7 @@ export const StackedMediaUploader = forwardRef<StackedMediaUploaderHandle, Stack
                 type="button"
                 variant="secondary"
                 className={`p-0 text-text1 ${plusUseCardShape
-                  ? `h-[64px] w-[48px] ${UI_UPLOADER_CARD_BORDER_OVERRIDE_CLASS} !bg-panel text-2xl shadow-thumb transition-transform duration-180 ease-out hover:scale-[1.1]`
+                  ? `h-16 w-12 ${UI_UPLOADER_CARD_BORDER_OVERRIDE_CLASS} !bg-panel text-2xl shadow-thumb transition-transform duration-180 ease-out hover:scale-[1.1]`
                   : 'h-[29px] w-[29px] aspect-square !rounded-full border-line-strong bg-hover/80 text-base shadow-thumb-sm transition-transform duration-180 ease-out hover:scale-[1.1]'
                   }`}
                 onClick={(event) => {

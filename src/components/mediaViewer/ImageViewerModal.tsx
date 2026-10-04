@@ -373,7 +373,7 @@ export function ImageViewerModal({
               </>
             )}
             {mode === 'overlay' && (
-              // ui-surface-allow 对比分界线拖动柄：满高透明命中区借用按钮语义，不是按钮外观（交 3.x 查看器重做时换成拖动柄组件）
+              // ui-surface-allow 对比分界线拖动柄：满高透明命中区（role=slider，方向键可调）借用按钮的焦点与键盘语义，外观是分界线不是按钮档位（5.8 复核保留：全仓只此一处拖动柄，不另建组件）
               <UiButton
                 ref={dividerRef}
                 role="slider"

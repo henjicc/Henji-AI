@@ -231,7 +231,7 @@ function TraceSection({ title, badge, defaultOpen = false, children }: { title: 
 function MessageCard({ message, index }: { message: ModelStepMessage; index: number }): JSX.Element {
   return (
     <div className={`overflow-hidden rounded-md border ${roleClass(message.role)}`}>
-      <div className="flex items-center justify-between border-b border-current/15 px-2 py-1 text-2xs font-semibold uppercase tracking-wider">
+      <div className="flex items-center justify-between border-b border-inherit px-2 py-1 text-2xs font-semibold uppercase tracking-wider">
         <span>{message.role}</span><span className="font-mono">#{index + 1}</span>
       </div>
       <div className="bg-window/40 p-2 text-xs text-text1">

@@ -192,7 +192,7 @@ export function useImageMarkToolV3Host(
             || snapshot.revision !== sessionToRestore.revision
             || snapshot.document.revision !== sessionToRestore.revision
             || snapshot.previewRef !== sessionToRestore.previewRef) {
-            throw new Error('图片编辑 V3 工具箱会话与权威快照不一致')
+            throw new Error('图片编辑工具的会话与已保存的内容不一致')
           }
           document = snapshot.document
           documentIdRef.current = document.id

@@ -39,9 +39,8 @@ const PANEL_SIDE_PADDING = 16
 const PANEL_MIN_WIDTH = 196
 const PANEL_MAX_WIDTH = 400
 const ROW_GAP = 8
+/** 与 UiOptionButton gridCell 的格宽一致（ratio / tier 都是 78），用于估算面板宽度 */
 const OPTION_ITEM_WIDTH = 78
-const ASPECT_ITEM_HEIGHT = 92
-const RESOLUTION_ITEM_HEIGHT = 42
 const ASPECT_ITEMS_PER_ROW = 4
 const RESOLUTION_ITEMS_PER_ROW = 4
 
@@ -432,8 +431,8 @@ export const AspectResolutionPanel: React.FC<AspectResolutionPanelProps> = ({
                         }}
                         variant="grid"
                         size="sm"
-                        className="w-[78px] flex-col justify-center gap-2 px-2 py-2"
-                        style={{ height: `${ASPECT_ITEM_HEIGHT}px` }}
+                        gridCell="ratio"
+                        className="flex-col justify-center gap-2 px-2 py-2"
                       >
                         <div className="h-8 flex items-center justify-center">
                           {option.smart ? (
@@ -497,8 +496,8 @@ export const AspectResolutionPanel: React.FC<AspectResolutionPanelProps> = ({
                         }}
                         variant="grid"
                         size="lg"
-                        className="w-[78px] justify-center px-2 py-1.5"
-                        style={{ height: `${RESOLUTION_ITEM_HEIGHT}px` }}
+                        gridCell="tier"
+                        className="justify-center px-2 py-1.5"
                       >
                         {option.label}
                       </UiOptionButton>

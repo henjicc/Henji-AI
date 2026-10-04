@@ -190,15 +190,16 @@ UI 真实性测试不能只证明“脚本点完了”或“截图生成了”�
 npm run check:colors
 npm run check:surface
 npm run check:icons
+npm run check:ui-residue
 ```
 
-`check:colors`、`check:surface:strict`、`check:icons:strict` 已接入 `build` / `electron:build` 与 CI 代码检查。确需例外时加**行级** `ui-surface-allow` 注释并写明理由，文件级 `ui-surface-allow-file` 会被判违规；`check:colors` 的登记文件只能下调（已清零的规则不可再登记，其余总数受脚本上限约束）。改了 `.claude/skills` 或 `.codex/skills` 任一侧时跑 `npm run check:skill-sync`（CI 门禁，两份 skill 必须逐字一致）。
+`check:colors`、`check:surface:strict`、`check:icons:strict`、`check:ui-residue` 已接入 `build` / `electron:build` 与 CI 代码检查。`check:colors` 含未定义颜色类规则（按 Tailwind 实际配置判定 `bg-overlay`、`bg-selected-accent/50` 这类不生成样式的类，不可登记）。`check:ui-residue` 是代码残留门禁：任意值类、内联尺寸与颜色、调用点覆盖、豁免理由、私有样式、零引用与旧文案按 skill `henji-ui-surface` 的 `references/review.md` 第 3 节口径判为违规 / 待登记 / 合规，固定几何尺寸等例外登记在 `scripts/ui-residue.allowlist.json`（≥ 8 字理由，过期登记同样失败）。确需例外时加**行级** `ui-surface-allow` 注释并写明理由，文件级 `ui-surface-allow-file` 会被判违规；`check:colors` 的登记文件只能下调（已清零的规则不可再登记，其余总数受脚本上限约束）。改了 `.claude/skills` 或 `.codex/skills` 任一侧时跑 `npm run check:skill-sync`（CI 门禁，两份 skill 必须逐字一致）。
 
 - 局部样式/文案：专项静态检查 + 用户人工验证即可，不要求 `electron:build`、`ui:tour` 或全量 Vitest
 - 共享页面骨架、设计令牌、弹窗/滚动/溢出机制：再考虑构建后运行相关视觉检查
 - `ui:tour` 必须用 `--only` 和必要的 `--size` 缩小场景；只有全局 UI 改造才跑全部场景
 - 改了主题引擎、语义令牌或跨主题外观：按预设运行。`--theme-preset` 可重复或逗号分隔（`graphite`/`ocean`/`film`/`paper`，`all` = 四个），每个预设单独启动一次应用，结果分到 `<输出目录>/<预设>/`，`ui:tour` 另写汇总 `index.md`；`test:reality --suite ui|ui-audit` 透传该参数。视觉验收至少看“石墨”“纸白”两个预设
-- 界面视觉验收与全界面核对的判据、旧界面残留的定义和操作规范以 skill `henji-ui-surface` 的 `references/review.md` 为准。需要截交互态或数据变体（悬停、菜单打开、逐个模型）时用一份步骤描述驱动 `ui:tour -- --steps <文件>`，配合 `--matrix review|screen`（四预设 + 960 / 石墨双尺寸）、`--contrast`（像素对比度）与自动指标（行数、溢出、截断）；代码残留用 `npm run ui:residue` 出按文件与区域的报告（报告模式，不阻断）。步骤解析、矩阵、指标与扫描规则的改动跑 `npm run test:ui-inspection`
+- 界面视觉验收与全界面核对的判据、旧界面残留的定义和操作规范以 skill `henji-ui-surface` 的 `references/review.md` 为准。需要截交互态或数据变体（悬停、菜单打开、逐个模型）时用一份步骤描述驱动 `ui:tour -- --steps <文件>`，配合 `--matrix review|screen`（四预设 + 960 / 石墨双尺寸）、`--contrast`（像素对比度）与自动指标（行数、溢出、截断）；代码残留用 `npm run ui:residue` 出按文件与区域的报告（门禁结论另由 `check:ui-residue` 给出）。步骤解析、矩阵、指标、残留扫描与未定义颜色类规则的改动跑 `npm run test:ui-inspection`
 
 ```bash
 npm run ui:tour -- --only 设置 --size 960x640
@@ -209,6 +210,8 @@ npm run ui:residue
 ```
 
 `check:ui-visual` 的对比度规则（`lowContrast`）按**渲染后像素**判定：隐藏文字与 lucide 图标截一张只有背景的图，在每个候选区域取样并合成前景，取最差 10% 分位；正文与辅助文字 ≥ 4.5:1，大字（≥ 24px，或 ≥ 18.66px 且粗体）与图标 ≥ 3:1；禁用控件、`aria-hidden`、被遮挡或不可见部分不判。场景终态审全部规则，中途 `capture()` 的状态只审对比度。合理例外登记在 `scripts/ui-visual-contrast-exceptions.json`（唯一 `id`、≥ 8 字理由、`text`/`element` 正则，可限定 `scene`/`presets`/`minRatio`），只给装饰、品牌或用户内容色；界面色不达标改令牌，不登记。审计逻辑改动跑 `npm run test:validation-tools`（含 `uiContrastAudit.test.cjs`）。
+
+`check:ui-visual` 另有 5.8 起的五条结构规则：`stackedBands`（横向条带连续 > 2）、`toolbarWrap`（工具条或底栏折行）、`shortTextTruncated`（≤ 16 字的界面文案被省略号截断）、`selectedStateWeak`（选中与静息的底色、文字色、描边 OKLab 距离都 < 0.03 且无其他差异）、`overlayClipped`（浮层伸出窗口或被祖先裁切），判据见 `references/review.md` 第 7 节。改这些规则的判据时跑 `npm run test:ui-visual-rules`（需要最新 `electron:bundle` 产物）：把“未修复 / 已修复”样例注入真实 Electron 窗口逐条对账，未修复必须命中、已修复不得命中；应用界面不误报再用 `check:ui-visual` 的相关场景确认。
 
 ### 画布
 

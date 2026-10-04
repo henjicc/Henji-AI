@@ -89,6 +89,13 @@ function formatIssue(ruleKey, issue) {
     nestedScroll: (value) => `${value.inner} 嵌套于 ${value.outer}`,
     hardTextClip: (value) => `"${value.text}" ${value.scrollWidth}>${value.clientWidth}`,
     smallTargets: (value) => `${value.width}x${value.height} ${value.element}`,
+    nestedSameBackground: (value) => `ΔE ${value.deltaE} ${value.element} 在 ${value.container}`,
+    menuOptionTruncated: (value) => `"${value.text}" ${value.scrollWidth}>${value.clientWidth} ${value.element}`,
+    stackedBands: (value) => `${value.count} 条（顶 ${value.top}px）：${value.bands.join(' / ')}`,
+    toolbarWrap: (value) => value.reason === 'items' ? `子项排成 ${value.rows} 行 ${value.element}` : `文字折行 "${value.text}" ${value.element}`,
+    shortTextTruncated: (value) => `"${value.text}" ${value.scrollWidth}>${value.clientWidth} ${value.element}`,
+    selectedStateWeak: (value) => `ΔE ${value.deltaE} ${value.element} vs ${value.rest}`,
+    overlayClipped: (value) => `${value.reason === 'viewport' ? '超出窗口' : '被祖先裁切'} ${value.points}/25 点 [${value.bounds.join(',')}] ${value.element}`,
     pageTitleInconsistency: (value) => value.titles
       .map((title) => `${title.surface}=${title.fontSize}px`)
       .join('，'),

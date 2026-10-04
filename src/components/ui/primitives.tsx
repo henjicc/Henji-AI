@@ -346,6 +346,13 @@ const UI_OPTION_NEUTRAL_VARIANT_CLASS = {
 } as const;
 
 /** 选项的高度与字号档（default / card / flat / menu / grid）。不传 size 时高度随内容。 */
+const UI_OPTION_GRID_CELL_CLASS: Record<NonNullable<UiOptionButtonProps['gridCell']>, string> = {
+  ratio: 'w-[78px] h-[92px]',
+  tier: 'w-[78px] h-[42px]',
+  'tier-detail': 'w-[78px] h-[52px]',
+  preset: 'w-[120px] min-h-[52px]',
+};
+
 const UI_OPTION_SIZE_CLASS: Record<UiControlSize | 'auto', string> = {
   auto: 'px-2.5 py-2',
   sm: 'min-h-control-sm px-2 py-1 text-xs',
@@ -358,7 +365,7 @@ const UI_OPTION_SIZE_CLASS: Record<UiControlSize | 'auto', string> = {
  * 外观只由 variant / size / active / selection 决定，className 只放布局（check:surface 规则 E）。
  */
 export const UiOptionButton = forwardRef<HTMLButtonElement, UiOptionButtonProps>(
-  ({ className = '', active = false, variant = 'default', size, selection = 'single', highlighted = false, ...props }, ref) => {
+  ({ className = '', active = false, variant = 'default', size, gridCell, selection = 'single', highlighted = false, ...props }, ref) => {
     if (variant === 'cover') {
       // 封面内容卡：状态全部由子元素封面框（UI_COVER_FRAME_CLASS）经 `ui-cover-group` + data-selected 表达，
       // 按钮本身不画底、框与焦点环（焦点环画在封面框上，避免被封面盖住）。
@@ -405,7 +412,7 @@ export const UiOptionButton = forwardRef<HTMLButtonElement, UiOptionButtonProps>
       <button
         ref={ref}
         data-size={size ?? 'auto'}
-        className={`inline-flex items-center rounded-lg border text-left transition-colors ${UI_OPTION_SIZE_CLASS[size ?? 'auto']} ${UI_BUTTON_RESET_CLASS} ${UI_FIELD_DISABLED_CLASS} ${UI_ITEM_FOCUS_RING_CLASS} ${active ? activeClass : restClass} ${className}`}
+        className={`inline-flex items-center rounded-lg border text-left transition-colors ${UI_OPTION_SIZE_CLASS[size ?? 'auto']} ${gridCell ? UI_OPTION_GRID_CELL_CLASS[gridCell] : ''} ${UI_BUTTON_RESET_CLASS} ${UI_FIELD_DISABLED_CLASS} ${UI_ITEM_FOCUS_RING_CLASS} ${active ? activeClass : restClass} ${className}`}
         {...props}
       />
     );
@@ -464,20 +471,21 @@ UiTextAreaField.displayName = 'UiTextAreaField';
  * 单行输入。raised 字段表面、无边框，聚焦一圈强调色焦点环；高度与字号只由 `size` 决定（sm 28 / md 32 / lg 36）。
  */
 export const UiInput = forwardRef<HTMLInputElement, UiInputProps>(
-  ({ className = '', textHistory, value, size = 'md', ...props }, ref) => {
+  ({ className = '', textHistory, value, size = 'md', frame = 'field', ...props }, ref) => {
     const historyProps = useScopedTextHistoryProps(
       resolveTextHistoryValue(value),
       textHistory,
       props
     );
     const rowLabelling = resolveFormRowLabelling(useUiFormRowLabelling(), props);
+    const frameClass = frame === 'inner' ? 'bg-transparent text-text1 outline-none' : `${UI_FIELD_SURFACE_CLASS} ${UI_FIELD_FOCUS_CLASS}`;
     return (
       <input
         ref={ref}
         value={value}
         data-size={size}
         {...rowLabelling}
-        className={`w-full py-0 leading-5 ${UI_FIELD_SIZE_CLASS[size]} ${UI_FIELD_PADDING_CLASS[size]} ${UI_FIELD_PLACEHOLDER_CLASS} ${UI_FIELD_SURFACE_CLASS} ${UI_FIELD_FOCUS_CLASS} ${UI_FIELD_DISABLED_CLASS} ${className}`}
+        className={`w-full py-0 leading-5 ${UI_FIELD_SIZE_CLASS[size]} ${UI_FIELD_PADDING_CLASS[size]} ${UI_FIELD_PLACEHOLDER_CLASS} ${frameClass} ${UI_FIELD_DISABLED_CLASS} ${className}`}
         {...props}
         {...historyProps}
       />
@@ -541,7 +549,7 @@ export const UiRangeInput = forwardRef<HTMLInputElement, UiRangeInputProps>(
       type="range"
       className={`h-6 w-full cursor-pointer appearance-none bg-transparent focus-visible:outline-none
       [&::-webkit-slider-runnable-track]:h-1.5 [&::-webkit-slider-runnable-track]:rounded-full
-      [&::-webkit-slider-thumb]:mt-[-4px] [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-0 [&::-webkit-slider-thumb]:bg-text1 [&::-webkit-slider-thumb]:shadow-thumb-sm
+      [&::-webkit-slider-thumb]:-mt-1 [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-0 [&::-webkit-slider-thumb]:bg-text1 [&::-webkit-slider-thumb]:shadow-thumb-sm
       [&::-moz-range-track]:h-1.5 [&::-moz-range-track]:rounded-full
       [&::-moz-range-thumb]:h-3.5 [&::-moz-range-thumb]:w-3.5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-text1
       focus-visible:[&::-webkit-slider-thumb]:ring-2 focus-visible:[&::-webkit-slider-thumb]:ring-accent-ring

@@ -35,7 +35,19 @@
 - **代码残留**（脚本可数，`npm run ui:residue` 出报告）：旧 Tailwind 别名类与旧 CSS 变量；`text-[Npx]`、`h-[37px]` 这类任意值类；内联 `style` 写颜色或尺寸；调用点覆盖组件外观；`ui-surface-allow` 行级豁免（逐条复核理由）；`check:colors` 登记项；组件自带 CSS 里的私有变量与写死值；旧组件、平行实现与死代码；旧文案（如“工具箱”）。
 - **视觉残留**（只能看出来）：仍是旧布局（卡片套卡片、多条带、逐项描边的选项）、旧按钮外观、蓝色实底选中、与同类新界面长得不一样、与设计稿关键结构不符。
 
-`ui:residue` 按类别、按文件、按区域（依据界面计划 5.1 盘点的界面表，未登记文件按目录归区域）输出 `.ui-tour/residue/residue-report.{md,json}`。它是报告模式：内联 style（端口类型色、拖动尺寸等动态值）、私有 CSS 类（画布 LOD/性能机制类）、零引用候选都要逐条判定，计数不等于都要删。
+`ui:residue` 按类别、按文件、按区域（依据界面计划 5.1 盘点的界面表，未登记文件按目录归区域）输出 `.ui-tour/residue/residue-report.{md,json}`；`npm run check:ui-residue`（`--strict --no-report`）是门禁，已接入 `build` / `electron:build` 与 CI。每条命中按下面的口径判定：
+
+| 类别 | 合规（不用管） | 违规（必须改，不可登记） | 待登记（`scripts/ui-residue.allowlist.json` 写理由才放行） |
+|---|---|---|---|
+| 任意值类 `x-[…]` | 引用变量 `[var(--…)]`（主题令牌或运行时写入）；CSS 关键字（`inherit` 等）；相对值（`%`、`vw/vh`、`em/lh`、`cq*`、`calc/min/max/clamp`） | 视觉档位写死：字号、行高、字距、圆角、内外边距、间距、层级、动效、阴影、模糊、透明度、边框宽；任意颜色（`bg-[#…]`、`text-[rgb…]`）；几何值与 Tailwind 标准档等值（`h-[64px]` 写 `h-16`，`max-w-[20rem]` 写 `max-w-80`） | 不在标准档上的固定几何尺寸（宽高、最值、定位偏移）；原生滑块部件（`::-webkit-slider-thumb` 等）的外边距按几何算 |
+| 内联 `style` 尺寸 | 运行时计算的值（拖动尺寸、测量结果、百分比定位、虚拟列表、引用共享常量）；`0` | — | 字面量（`height: '92px'`、`height: 420`、`padding: '10px 10px 8px'`、三元里的字面量分支）：先改成类名或组件枚举，确实不行再登记 |
+| 内联 `style` 颜色 | 运行时数据（端口类型色、用户选的颜色）、令牌变量字符串 | 字面量颜色 | — |
+| 调用点覆盖外观 | 开始标签内（或上一行）有写了理由的 `ui-surface-allow` | 其余全部（加组件枚举或把表面交给宿主容器） | — |
+| `ui-surface-allow` | 写了 ≥ 8 字理由 | 缺理由 | — |
+| 私有 CSS | 第三方库主题变量接令牌（`--xy-*`、`--dv-*`） | 零引用的类（含 `ui-*`：共享类只在 `src/index.css` 里算共享，别的样式表里的 `ui-*` 是私有类） | 私有变量、写死尺寸；私有类按类名登记（画布 LOD/性能机制、关键帧、伪元素、第三方主题挂点） |
+| 其余 | — | 旧别名、旧变量、零引用 / 仅测试引用的界面源文件、旧文案 | — |
+
+登记规则：每条 `{ file, category, values[], reason }`（私有类 `{ definedIn, names[], reason }`），理由写清“为什么不能用令牌或标准类”；值在代码里消失后必须删掉这条（过期登记让门禁失败）。新增固定几何尺寸前先问：能不能用标准档、组件枚举（如 `UiOptionButton gridCell`）或相对值表达？内联 style 里写字面量尺寸来绕开 `check:surface` 规则 E 是残留，不是例外。
 
 ## 4. 操作规范
 
@@ -131,3 +143,26 @@ npm run check:ui-visual -- --steps scripts/ui-review/generation-seedance-kie.jso
 **变体来源** `generation-models`：从真实模型选择面板读出全部可选的“模型 × 渠道”，每个变体带 `modelId`、`providerId`、`name`、`id`（截图后缀前缀）。单个变体失败不中断其余变体，最后汇总报失败。有变体时 `ui:tour` 另写 `variants.md`：按“变体 × 尺寸”列出底栏行数、收纳行空余、底栏可见参数、收进“更多参数”的参数与可疑原因（折行、溢出、截断、短标签折行、收纳行空余 ≥ 120px 却仍把选择器收进“更多参数”）。指标名约定 `bar` / `row` / `more` / `first-menu`；对旧输出目录补汇总用 `node scripts/lib/uiReviewSummary.cjs <输出目录>`。
 
 样例：`scripts/ui-review/assistant-sidebar.json`（助手侧栏空态、思考中、工具调用、长 Markdown、流式、排队、错误、历史、记忆、附件，用 `seedAssistant` 夹具）、`scripts/ui-review/generation-seedance-kie.json`（底栏、模式触发器悬停、模式菜单、960 的“更多参数”）、`canvas-image-node-rows.json`（画布图片生成节点的行悬停、触发器悬停、选中后行悬停、参数菜单）、`generation-all-models.json`（全部模型底栏行数与首个参数菜单截断）、`generation-key-samples.json`（15 个重点样本与可疑模型，首个参数菜单也截图）、`generation-input.json`（输入卡片、参考素材、@ 引用、模型面板、预设、优化入口）、`generation-panels.json`（复合面板、音色、自定义模型、比例分辨率、长选项、展示分组）。需要夹具数据或本机替身的状态写成正式场景：`uiInspectionSceneGenerationReview.cjs`（生成记录各状态与命令带浮层、提示词优化的方案选择 / 流式预览 / 失败，`--only generation-review`）。步骤与场景里**禁止点生成、禁止在提示词里按 Enter**（Enter 即提交生成）；付费保护见 `uiReviewPaidGuard.cjs`。唯一例外：先用 `stubIpc` 把 `ai:generate` 换成 `hold` / `reject`（画布节点、克隆面板的“运行中 / 失败”），文本处理等模型调用只走 `seedAssistant` 本机替身。“入口缺失”的状态先找能不能用 `stubIpc` / `seedSettings` / `dropFiles` / `@generated` 摆出来；5.8 的补截步骤在 `generation-states.json`、`canvas-states.json`、`settings-states.json`、`misc-states.json`。
+
+## 7. 可判定规则：`check:ui-visual` 与 `check:colors`
+
+`check:ui-visual` 在真实 Electron DOM 上跑规则（`scripts/lib/uiAuditDom.cjs`），任一命中退出码 1。核对时反复出现、能用 DOM 或像素判定的问题都收进这里；判据改动同时改本节与 `UI_AUDIT_THRESHOLDS`。
+
+| 规则 | 判据 |
+|---|---|
+| `surfaceStacks` | 自己画了边框 + 底色的表面嵌套 ≥ 3 层（输入控件不算一层） |
+| `lowContrast` | 渲染后像素对比度：正文 ≥ 4.5、大字与图标 ≥ 3（见 testing.md） |
+| `oversizedRadius` / `shadowOutsideOverlay` / `hiddenPositioning` | 内层圆角大于外层；非浮层用阴影；定位只写在 CSS 里 |
+| `insetEscape` / `horizontalOverflow` / `nestedScroll` / `hardTextClip` / `smallTargets` | 逃出助手插入量；横向溢出；双层竖向滚动；无省略号的硬裁切；命中区 < 24px |
+| `pageTitleInconsistency` | 跨界面页面标题字号不一致 |
+| `nestedSameBackground` | 悬停或选中的容器里，行内控件与容器底 OKLab 距离 < 0.02（玻璃上不判） |
+| `menuOptionTruncated` | `role=option` 里的文字被截断（不留容差） |
+| `stackedBands` | **条带数 > 2**：不在滚动区里、高 24–64、占父容器宽 ≥ 90%、自己画了上/下边线或不同底色（或是命令带 / 从属带 / 工具条 / 页头）的块，上下相接（缝 ≤ 2px）连成一串超过 2 条。画布视口内不判 |
+| `toolbarWrap` | 工具条（`data-command-bar`、`data-command-subordinate`、`role=toolbar`、`UiToolbar`、`UiOverflowRow`）的直接子项排成多行（竖排工具条看是否排成多列），或其中文字折成两行 |
+| `shortTextTruncated` | 全文 ≤ 16 字的文字被省略号截断（按钮、标签、标题、芯片这类界面文案放不下）。用户内容（`data-observation-sensitive` / `data-user-content`）与菜单选项不在此判 |
+| `selectedStateWeak` | 同组兄弟选项（`aria-selected` / `aria-current` / `data-selected` / 单选 `aria-checked`；`aria-pressed` 只在 group / toolbar / radiogroup / tablist 里算多选一）里，选中项与静息项的底色、文字色、描边 OKLab 距离都 < 0.03，且勾、阴影、轮廓、字重、伪元素都相同、按结构序号比较的后代也没有差异（选中态画在行内按钮上的图层行不误报）；悬停中的项不参与比较 |
+| `overlayClipped` | 浮层（对话框、菜单、列表框、提示，或 z-index ≥ 30 的绝对/固定定位块，不含满屏层与画布视口内）框内 5 × 5 取点（内缩到圆角弧线以内）：点在窗口外，或该点的命中栈里没有这个浮层（被祖先 `overflow` 裁掉）。被别的浮层压住不算 |
+
+新规则的断牙证据：`npm run test:ui-visual-rules` 把 `scripts/lib/uiVisualRuleSamples.cjs` 的“未修复 / 已修复”样例注入真实 Electron 窗口，跑同一个 `auditUiDom` 逐条对账（未修复必须命中、已修复不得命中）；应用自己的界面不误报由 `check:ui-visual` 的场景全量跑证明。改规则判据先改样例再改规则。
+
+`check:colors` 另有**未定义颜色类**规则（不可登记）：`bg-overlay`、`text-error`、`bg-selected-accent/50`（自带透明度的令牌不能再加 `/透明度`）、`border-current/15` 这类 Tailwind 按实际配置不生成样式的颜色类。用 Tailwind 自己的生成器判定，只看类名语境的字符串（`className=`、`*Class =` 常量、多数词是有效类的类名列表）；样式表里定义的同名类算已定义。

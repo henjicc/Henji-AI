@@ -83,7 +83,7 @@ export const TextInput: React.FC<TextInputProps> = ({
           disabled={disabled}
           placeholder={placeholder}
           rows={param.rows || 4}
-          className="min-h-[80px] resize-y"
+          className="min-h-20 resize-y"
         />
       </ParamField>
     )

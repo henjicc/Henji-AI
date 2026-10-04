@@ -314,7 +314,7 @@ const InputArea: React.FC<InputAreaProps> = ({
   // 紧凑模式由生成工作区的真实可用尺寸决定，CSS 像素已包含系统缩放与应用缩放。
   // 长提示词在编辑区内部滚动。
   const promptHeightClass = compact
-    ? 'min-h-[48px] max-h-[176px]'
+    ? 'min-h-12 max-h-44'
     : 'min-h-[72px] max-h-[260px]'
   const uploaderRef = useRef<StackedMediaUploaderHandle>(null)
   const dragInProgress = useMediaDragInProgress()

@@ -1,0 +1,321 @@
+{
+  "version": 1,
+  "description": [
+    "ui:residue 门禁（npm run check:ui-residue，build / electron:build / CI）的例外登记。口径见 skill henji-ui-surface references/review.md 第 3 节。",
+    "只有判定为“待登记”的命中可以登记：固定几何尺寸的任意值类、字面量内联尺寸、私有 CSS 变量与写死值、私有 CSS 类。违规（视觉档位写死、与标准档等值、任意颜色、调用点覆盖外观、旧别名、旧文案、零引用）不可登记。",
+    "entries：{ file, category, values[], reason }，按文件 + 类别 + 值放行；cssClasses：{ definedIn, names[], reason }，按类名放行。",
+    "理由至少 8 个字，写清为什么不能用令牌或标准类；登记的值在代码里消失后必须删掉这条（过期登记会让门禁失败）。"
+  ],
+  "entries": [
+    {
+      "file": "src/components/AudioPlayer.tsx",
+      "category": "arbitraryValue",
+      "values": ["max-w-[32.5rem]", "w-[36rem]", "h-[72px]"],
+      "reason": "音频播放器的固定版式：控制条最宽 520、非紧凑卡片宽 576、非紧凑波形区 72 高（紧凑档用标准 h-12），三档都不在标准间距档上"
+    },
+    {
+      "file": "src/components/MediaGenerator/components/InputArea.tsx",
+      "category": "arbitraryValue",
+      "values": ["min-h-[72px]", "max-h-[260px]", "h-[18px]", "w-[18px]"],
+      "reason": "生成输入卡片：提示词区展开后 72–260 高（再高滚动）；卡片动作按钮（添加、发送、处理中）的图标 18，Tailwind 无 4.5 档"
+    },
+    {
+      "file": "src/components/MediaGenerator/components/PromptOptimizationProfilesPanel.tsx",
+      "category": "arbitraryValue",
+      "values": ["min-h-[120px]"],
+      "reason": "多行指令编辑区的最小高度按 5 行正文（5 × 24）定，与参数面板 TextInput 的长文本档一致"
+    },
+    {
+      "file": "src/components/mediaViewer/AudioViewerModal.tsx",
+      "category": "arbitraryValue",
+      "values": ["w-[44rem]"],
+      "reason": "音频查看器里播放器的固定宽 704（设计稿 Viewer），配合 max-w-[92vw] 在窄窗口收缩"
+    },
+    {
+      "file": "src/components/mediaViewer/ImageViewerModal.tsx",
+      "category": "arbitraryValue",
+      "values": ["min-w-[74px]"],
+      "reason": "缩放比例读数的最小宽度：容纳“1600%”等宽数字，切换倍率时相邻控件不跳动"
+    },
+    {
+      "file": "src/components/params/base/NumberInput.tsx",
+      "category": "arbitraryValue",
+      "values": ["min-w-[200px]"],
+      "reason": "带刻度的数值参数：滑杆刻度标签需要 200 宽才能不重叠，低于此宽度刻度文字互相压住"
+    },
+    {
+      "file": "src/components/params/base/RadioInput.tsx",
+      "category": "arbitraryValue",
+      "values": ["w-[18px]", "h-[18px]", "min-w-[18px]"],
+      "reason": "参数单选圆点 18（含 2px 描边），与选项文字首行对齐（mt-0.5），Tailwind 无 4.5 档"
+    },
+    {
+      "file": "src/components/params/base/TextInput.tsx",
+      "category": "arbitraryValue",
+      "values": ["min-h-[120px]", "min-h-[92px]", "max-h-[360px]"],
+      "reason": "长文本参数编辑区按行数定高：rows > 4 为 5 行正文 120，其余 92（与 PromptEditor content 档一致），最高 360 后滚动"
+    },
+    {
+      "file": "src/components/params/panels/minimaxVoiceClone/AudioPreviewCard.tsx",
+      "category": "arbitraryValue",
+      "values": ["h-[88px]", "h-[132px]"],
+      "reason": "音色克隆样本的拖放区：紧凑 88 / 常规 132 高，与旁边的样本波形卡等高，两档都不在标准间距档上"
+    },
+    {
+      "file": "src/components/params/panels/MinimaxVoiceClonePanel.tsx",
+      "category": "arbitraryValue",
+      "values": ["h-[820px]", "min-h-[660px]", "min-w-[760px]", "max-w-[960px]", "w-[92px]"],
+      "reason": "音色克隆弹窗的固定版式：左右两栏同时放样本、参数与试听需要 760–960 宽、660–820 高（max-h-[96vh] 兜底小窗口）；数值框 92 宽容纳 4 位数与单位"
+    },
+    {
+      "file": "src/components/params/panels/VoiceSelectorPanel.tsx",
+      "category": "arbitraryValue",
+      "values": ["h-[460px]", "min-w-[520px]", "max-w-[720px]", "min-h-[58px]", "min-h-[52px]"],
+      "reason": "音色选择浮层：固定 460 高让分类切换时浮层不跳，宽 520–720 放两列音色卡；音色卡单行 52 / 带说明 58 高，保证一列里卡片等高"
+    },
+    {
+      "file": "src/components/params/ParamGroupTrigger.tsx",
+      "category": "arbitraryValue",
+      "values": ["min-w-[180px]", "min-w-[108px]", "max-w-[116px]"],
+      "reason": "底栏参数触发器的宽度档：分组触发器至少 180、单参数至少 108，紧凑底栏最宽 116 后截断；按底栏实测内容定，不在标准档上"
+    },
+    {
+      "file": "src/components/params/ParamRenderer.tsx",
+      "category": "arbitraryValue",
+      "values": ["min-w-[100px]"],
+      "reason": "非底栏布局里下拉参数的最小宽度：容纳 4 个汉字的选项名与展开箭头"
+    },
+    {
+      "file": "src/components/PresetPanel.tsx",
+      "category": "arbitraryValue",
+      "values": ["max-h-[500px]", "h-[60px]"],
+      "reason": "预设面板：面板最高 500 后滚动；快速保存区的两种状态（保存按钮 / 名称输入）叠放切换，容器固定 60 高避免切换时跳动"
+    },
+    {
+      "file": "src/components/projectGridLayout.ts",
+      "category": "arbitraryValue",
+      "values": ["max-w-[70rem]"],
+      "reason": "项目网格内容区最宽 1120（设计稿 Home：4 列封面卡 + 间距），三个项目列表共用这一个常量"
+    },
+    {
+      "file": "src/components/Settings/sections/ModelSyncDialog.tsx",
+      "category": "arbitraryValue",
+      "values": ["h-[420px]"],
+      "reason": "虚拟列表（Virtuoso）必须给定高度才能计算可见行；420 是弹窗内列表区的固定高度"
+    },
+    {
+      "file": "src/components/ui/fileUploader/StackedMediaUploader.tsx",
+      "category": "arbitraryValue",
+      "values": ["min-h-[82px]", "h-[66px]", "h-[29px]", "w-[29px]"],
+      "reason": "参考素材堆叠上传：轨道 66 高放 64 高缩略图与 1px 描边，外框 82 含内边距；收起态压在缩略图角上的圆形“+”为 29（位置由 plusCollapsedLeft/Top 常量配套计算）"
+    },
+    {
+      "file": "src/components/ui/primitives.tsx",
+      "category": "arbitraryValue",
+      "values": ["w-[78px]", "h-[92px]", "h-[42px]", "h-[52px]", "w-[120px]", "min-h-[52px]"],
+      "reason": "UiOptionButton gridCell 的格子尺寸（比例 78×92、档位 78×42/52、预设 120×52）：网格格子必须等大，原来散在 5 个调用点的内联 style 收进这一处"
+    },
+    {
+      "file": "src/components/ui/PromptEditor/promptEditorStyles.ts",
+      "category": "arbitraryValue",
+      "values": ["min-h-[92px]", "max-w-[180px]"],
+      "reason": "提示词编辑器：正文区最少 92 高（约 4 行 13/22 正文 + 内边距）；行内引用芯片最宽 180 后省略"
+    },
+    {
+      "file": "src/components/ui/styleTokens.ts",
+      "category": "arbitraryValue",
+      "values": ["h-[1.5px]", "mt-[-3px]"],
+      "reason": "导航当前项下划线 1.5px（与 borderWidth 1.5 令牌同值）；打光滑杆拇指居中偏移 (轨道 10 − 拇指 16) / 2 = −3，Tailwind 无 0.75 档"
+    },
+    {
+      "file": "src/components/ui/TaskHistoryFilterBar.tsx",
+      "category": "arbitraryValue",
+      "values": ["w-[120px]"],
+      "reason": "记录筛选条的两个下拉固定 120 宽：切换选项时筛选条不重排"
+    },
+    {
+      "file": "src/components/ui/UiDatePicker.tsx",
+      "category": "arbitraryValue",
+      "values": ["w-[248px]"],
+      "reason": "日期面板宽度按 7 列 32 宽日期格加 6 个 4px 间距（= 248）定，由日历网格决定"
+    },
+    {
+      "file": "src/features/audioEdit/AudioEditTimeline.tsx",
+      "category": "arbitraryValue",
+      "values": ["-left-[5px]", "w-[11px]"],
+      "reason": "音频时间轴源位置游标的命中区 11 宽、左移 5 让 1px 游标线居中，由游标线宽推出"
+    },
+    {
+      "file": "src/features/canvas/nodes/AssetGroupNode.tsx",
+      "category": "arbitraryValue",
+      "values": ["min-w-[220px]"],
+      "reason": "素材组节点的最小宽度：两层偏移投影的叠放表达需要 220 宽才看得出是一叠"
+    },
+    {
+      "file": "src/features/canvas/nodes/ImageNode.tsx",
+      "category": "arbitraryValue",
+      "values": ["max-w-[220px]"],
+      "reason": "图片节点浮动标题最宽 220 后省略，与素材组节点最小宽度一致，标题不超出常见节点宽"
+    },
+    {
+      "file": "src/features/canvas/params/ModelPickerList.tsx",
+      "category": "arbitraryValue",
+      "values": ["h-[300px]"],
+      "reason": "节点模型选择浮层里模型列表的固定高度（内嵌形态改为 flex-1）：切换供应商或搜索时浮层不跳"
+    },
+    {
+      "file": "src/features/canvas/params/NodeModelParamsControls.tsx",
+      "category": "arbitraryValue",
+      "values": ["max-w-[260px]"],
+      "reason": "节点里模型芯片最宽 260 后截断，与 NODE_CONTROL_MODEL_CHIP_CLASS 同值"
+    },
+    {
+      "file": "src/features/canvas/params/NodeParamControl.tsx",
+      "category": "arbitraryValue",
+      "values": ["w-[72px]"],
+      "reason": "节点内数值参数框 72 宽：容纳 4 位数与步进箭头，节点参数行对齐成一列"
+    },
+    {
+      "file": "src/features/canvas/ui/nodeControlStyles.ts",
+      "category": "arbitraryValue",
+      "values": ["max-w-[260px]", "max-w-[120px]"],
+      "reason": "节点控件芯片的宽度上限：模型芯片 260、参数芯片 120 后截断，芯片不撑开节点"
+    },
+    {
+      "file": "src/features/canvas/ui/NodeHeader.tsx",
+      "category": "arbitraryValue",
+      "values": ["min-w-[70px]"],
+      "reason": "节点标题改名输入框的最小宽度：短标题时仍能看到光标与 4 个字"
+    },
+    {
+      "file": "src/features/imageEdit/editor/ImageToolRail.tsx",
+      "category": "arbitraryValue",
+      "values": ["w-[52px]"],
+      "reason": "图片编辑工具栏竖条 52 宽 = 36 工具按钮 + 两侧 8 内边距，与 IMAGE_EDITOR_TOOL_RAIL_WIDTH 一致"
+    },
+    {
+      "file": "src/features/imageEdit/v3/editor/ImageEditorFloatingPanelsV3.tsx",
+      "category": "arbitraryValue",
+      "values": ["w-[25rem]"],
+      "reason": "图片编辑浮动面板：除图层面板（w-60）外默认 400 宽，拖动停靠时的预览框与面板同宽"
+    },
+    {
+      "file": "src/features/logs/components/RequestChainView.tsx",
+      "category": "arbitraryValue",
+      "values": ["-left-[5px]"],
+      "reason": "请求链时间线节点圆点 10 宽，左移 5 让圆点中心压在 1px 竖线上"
+    },
+    {
+      "file": "src/features/videoEdit/panels/VideoEditProjectPanel.tsx",
+      "category": "arbitraryValue",
+      "values": ["h-[30px]", "w-[52px]"],
+      "reason": "剪辑素材面板列表视图的缩略图 52 × 30（约 16:9），网格视图用标准 h-16"
+    },
+    {
+      "file": "src/workspaces/GenerationWorkspace/components/FloatingInputPanel.tsx",
+      "category": "arbitraryValue",
+      "values": ["max-h-[600px]"],
+      "reason": "生成输入卡片展开时的高度上限，同时是 max-height 收起动画的终点（48 ↔ 600）"
+    },
+    {
+      "file": "src/features/canvas/storyboard.css",
+      "category": "privateCssVar",
+      "values": [
+        "--canvas-node-paint-top: 36px;",
+        "--canvas-node-paint-right: 24px;",
+        "--canvas-node-paint-bottom: 28px;",
+        "--canvas-node-paint-left: 24px;"
+      ],
+      "reason": "画布节点绘制隔离（paint containment）的扩展余量：覆盖浮动标题、端口与缩放手柄，注册点按节点单独加大；是性能机制的几何，不是主题令牌"
+    },
+    {
+      "file": "src/features/canvas/storyboard.css",
+      "category": "privateCssLiteral",
+      "values": [
+        "top: calc(var(--canvas-node-paint-top) - 5px);",
+        "right: calc(var(--canvas-node-paint-right) - 5px);",
+        "bottom: calc(var(--canvas-node-paint-bottom) - 5px);",
+        "left: calc(var(--canvas-node-paint-left) - 5px);",
+        "border-radius: calc(var(--node-radius) + 5px);",
+        "min-height: var(--generation-node-min-height, 160px);"
+      ],
+      "reason": "运行中虚线环离节点边 5px（任务 5.4-35，与选中描边区分）由绘制余量推出；生成节点最小高度由节点根运行时写入，160 只是首帧回退值"
+    }
+  ],
+  "cssClasses": [
+    {
+      "definedIn": "src/features/canvas/storyboard.css",
+      "names": [
+        "canvas-lod-low",
+        "canvas-node-lod-detail",
+        "canvas-node-lod-placeholder",
+        "canvas-viewport-moving",
+        "canvas-glass-density-high",
+        "canvas-node-paint-frame",
+        "canvas-node-paint-frame--executing",
+        "canvas-node-header-editing",
+        "canvas-node-dynamic-min-height",
+        "canvas-edge-flow-layer",
+        "storyboard-frame-actions",
+        "storyboard-frame-card"
+      ],
+      "reason": "画布性能与 LOD 机制：缩放档隐藏正文、平移期暂停滤镜、绘制隔离与运行环，都要组合 React Flow 外壳选择器（:has、后代、伪元素与关键帧），工具类表达不了；懒加载只在画布生效"
+    },
+    {
+      "definedIn": "src/features/canvas/storyboard.css",
+      "names": ["canvas-minimap"],
+      "reason": "React Flow 小地图的内部 SVG 由库渲染，只能用后代选择器接主题令牌"
+    },
+    {
+      "definedIn": "src/index.css",
+      "names": ["animate-scale-in", "animate-scale-out", "animate-fade-in", "animate-fade-out"],
+      "reason": "共享浮层（Dropdown / PanelTrigger / Tooltip）的进出场关键帧，时长与 UI_DURATION 同档；关键帧只能写在样式表"
+    },
+    {
+      "definedIn": "src/index.css",
+      "names": ["dockview-theme-abyss", "henji-cameraStage-dock", "henji-videoEdit-dock"],
+      "reason": "第三方 dockview 的主题挂点：用 --dv-* 变量把停靠面板接到主题令牌，并控制面板头按钮的悬停显隐，库内部 DOM 无法加工具类"
+    },
+    {
+      "definedIn": "src/index.css",
+      "names": [
+        "prompt-optimize-preview",
+        "prompt-optimize-preview__content",
+        "prompt-optimize-preview__reasoning",
+        "prompt-optimize-preview__stream",
+        "prompt-optimize-preview__glyph"
+      ],
+      "reason": "提示词优化流式预览的逐字淡入：每个字形一个 span、数量随流式增长，关键帧与延迟只能写在样式表"
+    },
+    {
+      "definedIn": "src/index.css",
+      "names": ["project-cover-placeholder"],
+      "reason": "项目封面占位的画布点阵（radial-gradient 背景平铺），工具类写不出可随令牌变色的点阵"
+    },
+    {
+      "definedIn": "src/index.css",
+      "names": ["settings-scroll-body"],
+      "reason": "设置内容区固定滚动条占位（scrollbar-gutter），避免切换分区时内容宽度跳动"
+    },
+    {
+      "definedIn": "src/index.css",
+      "names": ["asset-group-node-stack"],
+      "reason": "素材组节点的两层偏移投影（多重 box-shadow 叠放），表达“多张叠放”而不制造卡片层级"
+    },
+    {
+      "definedIn": "src/index.css",
+      "names": ["image-editor-transparency-grid"],
+      "reason": "透明像素棋盘格（repeating-conic-gradient 平铺，媒体固定色），图片编辑器与扩图节点共用"
+    },
+    {
+      "definedIn": "src/index.css",
+      "names": ["canvas-video-progress"],
+      "reason": "画布视频进度条：原生 range 的轨道与拇指伪元素（-webkit-slider-*），已播放段用渐变变量"
+    },
+    {
+      "definedIn": "src/index.css",
+      "names": ["model-provider-scrollbar", "model-provider-scroll-thumb", "model-provider-scroll-viewport"],
+      "reason": "节点模型选择的供应商横向滚动：隐藏原生横向滚动条（::-webkit-scrollbar）改画细滚动指示"
+    }
+  ]
+}

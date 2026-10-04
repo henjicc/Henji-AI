@@ -136,3 +136,144 @@ test('区域：仓库里的 5.1 盘点能解析出全部 117 个界面', () => {
   assert.equal(inventory.length, 117)
   assert.deepEqual([...new Set(inventory.map((entry) => entry.region))], ['5.3', '5.4', '5.5', '5.6', '5.7'])
 })
+
+// —— 5.8 门禁口径：每类规则一组断牙用例（坏样本必须判违规/待登记，好样本必须放行）——
+
+const {
+  applyResidueAllowlist,
+  classReferencePattern,
+  classifyArbitraryValue,
+  inlineStyleLiterals,
+  surfaceAllowHasReason,
+} = require('./uiResidueRules.cjs')
+
+const verdictOf = (token) => classifyArbitraryValue(token).verdict
+
+test('任意值类口径：变量、关键字与相对值合规', () => {
+  for (const token of ['rounded-[var(--node-radius)]', 'bg-[var(--lighting-color)]', 'rounded-[inherit]', 'text-[length:inherit]',
+    'max-h-[calc(100vh-2rem)]', 'w-[min(92vw,34rem)]', 'h-[1.25em]', 'max-w-[45%]', 'h-[1lh]', 'top-[calc(100%+6px)]']) {
+    assert.equal(verdictOf(token), 'allowed', token)
+  }
+})
+
+test('任意值类口径：视觉档位写死、任意颜色、与标准档等值都是违规（不可登记）', () => {
+  for (const token of ['text-[13px]', 'leading-[22px]', 'rounded-[10px]', 'mt-[-4px]', 'gap-[6px]', 'z-[9999]', 'duration-[300ms]',
+    'shadow-[0_0_4px_black]', 'bg-[rgb(1,2,3)]', 'text-[#fff]', 'h-[64px]', 'w-[48px]', 'max-w-[20rem]', 'min-w-[14px]',
+    '[&::-webkit-slider-thumb]:mt-[-4px]']) {
+    assert.equal(verdictOf(token), 'violation', token)
+  }
+})
+
+test('任意值类口径：固定几何尺寸待登记；rem 不算相对值；原生滑块部件的外边距按几何判', () => {
+  for (const token of ['w-[78px]', 'h-[18px]', 'w-[25rem]', 'max-w-[32.5rem]', '-left-[5px]', 'sm:min-h-[52px]',
+    '[&::-webkit-slider-thumb]:!mt-[-3px]']) {
+    assert.equal(verdictOf(token), 'register', token)
+  }
+  assert.equal(classifyArbitraryValue('hover:!-mt-[3px]').value, '-mt-[3px]')
+})
+
+test('扫描时带上任意变体判定（正则命中不含 [&::…]: 前缀）', () => {
+  const [item] = scanSourceText('const c = "[&::-webkit-slider-thumb]:!mt-[-3px]"').filter((entry) => entry.category === 'arbitraryValue')
+  assert.equal(item.verdict, 'register')
+  assert.equal(item.value, 'mt-[-3px]')
+})
+
+test('内联尺寸口径：字面量（含简写串与三元分支）待登记，运行时值与 0 合规', () => {
+  assert.deepEqual(inlineStyleLiterals("height: '92px'").sizes, ["height: '92px'"])
+  assert.deepEqual(inlineStyleLiterals('height: 420').sizes, ['height: 420'])
+  assert.equal(inlineStyleLiterals("padding: compact ? '8px' : '10px 10px 8px'").sizes.length, 1)
+  assert.equal(inlineStyleLiterals("padding: open ? '0 16px' : '0 12px'").sizes.length, 1)
+  assert.deepEqual(inlineStyleLiterals("width: size.width, height: `${h}px`, left: 0, top: '0px', minHeight: GEN_MIN").sizes, [])
+  assert.deepEqual(inlineStyleLiterals("height: tick.major ? '100%' : '40%', width: 'min(100cqw, 100cqh)'").sizes, [])
+  const findings = scanSourceText('<div style={{ width: drag.width, height: 92 }} />\n<div style={{ width: drag.width }} />')
+  assert.deepEqual(findings.filter((item) => item.category === 'inlineStyleSize').map((item) => item.verdict), ['register', 'allowed'])
+})
+
+test('内联颜色口径：字面量颜色违规，运行时数据与令牌变量合规', () => {
+  assert.equal(inlineStyleLiterals("color: 'red', background: 'rgb(1 2 3)'").colors.length, 2)
+  assert.deepEqual(inlineStyleLiterals("stroke: selected ? 'rgb(var(--accent-rgb))' : 'transparent', background: getSocketColor('IMAGE'), color: settings.textColor").colors, [])
+  const findings = scanSourceText("<i style={{ color: 'white' }} />\n<i style={{ color: port.color }} />")
+  assert.deepEqual(findings.filter((item) => item.category === 'inlineStyleColor').map((item) => item.verdict), ['violation', 'allowed'])
+})
+
+test('调用点覆盖外观：标签内（开始标签到 className 之间）的豁免注释生效，标签外的不生效', () => {
+  const inside = scanSourceText([
+    '<UiButton',
+    '  // ui-surface-allow 上传占位卡：拖放目标表面，不是按钮档位',
+    '  type="button"',
+    '  onClick={pick}',
+    '  className="border-2 border-dashed"',
+    '/>',
+  ].join('\n'))
+  assert.equal(count(inside, 'appearanceOverride'), 0)
+  const outside = scanSourceText(['// ui-surface-allow 很早以前的一条豁免，和下面无关', 'const a = 1', 'const b = 2', '<UiButton className="bg-panel" />'].join('\n'))
+  assert.equal(count(outside, 'appearanceOverride'), 1)
+  assert.equal(outside.find((item) => item.category === 'appearanceOverride').verdict, 'violation')
+})
+
+test('行级豁免必须写理由（≥ 8 字），缺理由判违规', () => {
+  assert.equal(surfaceAllowHasReason('{/* ui-surface-allow 同上：字幕区间条 */}'), false)
+  assert.equal(surfaceAllowHasReason('// ui-surface-allow 字幕区间条：时间轴记号的命中区，不是按钮档位'), true)
+  const [item] = scanSourceText('{/* ui-surface-allow 同上 */}')
+  assert.equal(item.verdict, 'violation')
+})
+
+test('私有 CSS 变量：第三方库主题变量接令牌合规，其余待登记；写死尺寸待登记', () => {
+  const findings = scanCssText('.react-flow {\n  --xy-edge-stroke: rgb(var(--text3-rgb));\n  --my-gap: 4px;\n  width: 12px;\n}', 'src/features/a/a.css')
+  assert.deepEqual(findings.map((item) => [item.category, item.verdict]), [
+    ['privateCssVar', 'allowed'], ['privateCssVar', 'register'], ['privateCssLiteral', 'register'],
+  ])
+})
+
+test('CSS 类名：includeShared 时 ui-* 也提取（其他样式表里的 ui-* 是私有类，5.4-10）', () => {
+  const css = '.ui-panel { } .ui-field { } .speed-option { }'
+  assert.deepEqual(extractCssClassNames(css), ['speed-option'])
+  assert.deepEqual(extractCssClassNames(css, { includeShared: true }), ['speed-option', 'ui-field', 'ui-panel'])
+})
+
+test('类名引用：模板里直接拼状态后缀也算引用（零引用不误报）', () => {
+  assert.ok(classReferencePattern('canvas-node-paint-frame').test("className={`canvas-node-paint-frame${active ? ' x' : ''}`}"))
+  assert.ok(!classReferencePattern('canvas-node').test('className="canvas-node-paint-frame"'))
+})
+
+test('登记文件：按文件 + 类别 + 值放行；过期、违规、不可登记类别、理由过短都报错', () => {
+  const build = () => new Map([
+    ['src/a.tsx', [
+      { category: 'arbitraryValue', value: 'w-[78px]', verdict: 'register' },
+      { category: 'arbitraryValue', value: 'text-[13px]', verdict: 'violation', rule: '视觉档位' },
+    ]],
+    ['src/b.tsx', [{ category: 'privateCssClass', value: 'canvas-lod-low', definedIn: 'src/x.css', verdict: 'register' }]],
+  ])
+  const ok = build()
+  assert.deepEqual(applyResidueAllowlist(ok, {
+    version: 1,
+    entries: [{ file: 'src/a.tsx', category: 'arbitraryValue', values: ['w-[78px]'], reason: '比例格子固定宽度，网格需等宽' }],
+    cssClasses: [{ definedIn: 'src/x.css', names: ['canvas-lod-low'], reason: '画布 LOD 机制，工具类写不出' }],
+  }).errors, [])
+  assert.equal(ok.get('src/a.tsx')[0].verdict, 'registered')
+  assert.equal(ok.get('src/a.tsx')[1].verdict, 'violation')
+  assert.equal(ok.get('src/b.tsx')[0].verdict, 'registered')
+
+  const { errors } = applyResidueAllowlist(build(), {
+    version: 1,
+    entries: [
+      { file: 'src/a.tsx', category: 'arbitraryValue', values: ['w-[99px]', 'text-[13px]'], reason: '短' },
+      { file: 'src/a.tsx', category: 'legacyCopy', values: ['x'], reason: '旧文案也想登记一下试试' },
+    ],
+    cssClasses: [{ definedIn: 'src/x.css', names: ['gone-class'], reason: '已经没人用的类还登记着' }],
+  })
+  assert.equal(errors.length, 5)
+  assert.ok(errors.some((error) => /理由少于/.test(error)))
+  assert.ok(errors.some((error) => /w-\[99px\].*已不存在/.test(error)))
+  assert.ok(errors.some((error) => /text-\[13px\].*不可登记/.test(error)))
+  assert.ok(errors.some((error) => /legacyCopy 不可登记/.test(error)))
+  assert.ok(errors.some((error) => /gone-class.*已没有使用方/.test(error)))
+  assert.equal(applyResidueAllowlist(new Map(), { version: 2 }).errors.length, 1)
+})
+
+test('仓库登记文件：每条理由都够长、类别可登记（门禁本身由 check:ui-residue 全量跑）', () => {
+  const allowlist = JSON.parse(fs.readFileSync(path.join(ROOT, 'scripts/ui-residue.allowlist.json'), 'utf8'))
+  const { errors } = applyResidueAllowlist(new Map(), allowlist)
+  // 空命中表下只剩“过期”类错误；格式、理由与类别问题必须为零
+  assert.deepEqual(errors.filter((error) => !/已不存在|已没有使用方/.test(error)), [])
+})

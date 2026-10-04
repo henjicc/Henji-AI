@@ -40,7 +40,7 @@ export function rememberImageMarkToolWorkspaceSessionV3(
 ): boolean {
   if (!rememberedSource || rememberedSource.sessionKey !== sessionKey) return false
   const session = parseImageEditSessionReferenceV3(value, rememberedSource.url)
-  if (!session) throw new TypeError('工具箱图片编辑会话引用无效')
+  if (!session) throw new TypeError('图片编辑工具的会话引用无效')
   rememberedSource = {
     ...rememberedSource,
     url: session.sourceUrl,

@@ -1,5 +1,7 @@
 const fs = require('fs');
 const path = require('path');
+const { createTailwindClassProbe, extractColorClassCandidates } = require('./lib/undefinedColorClasses.cjs');
+const { extractCssClassNames } = require('./lib/uiResidueRules.cjs');
 
 /*
  * 颜色令牌检查（npm run check:colors，build / electron:build / CI 门禁）。
@@ -19,7 +21,12 @@ const path = require('path');
  *   界面色改用语义令牌类（bg-panel、text-text2、text-on-accent、bg-danger-solid、border-media-line …，
  *   见 tailwind.config.js）；内容色（标注默认色、导出图配色、算法遮罩等）在 colorTokens.ts 登记常量。
  *
- * 三、存量登记 scripts/check-color-tokens.allowlist.json（每条写明归属与类别）：
+ * 三、未定义颜色类（ts/tsx，非测试文件；任务 5.8，不可登记）：
+ *   `bg-overlay`、`text-error`、`bg-selected-accent/50`（自带透明度的令牌加透明度修饰）这类 Tailwind 不生成样式的颜色类。
+ *   按 tailwind.config.js 实际配置用 Tailwind 自己的生成器判定，样式表里定义的同名类算已定义；
+ *   只看类名语境里的字符串（className= / *Class = / 多数词是有效类的类名列表），见 scripts/lib/undefinedColorClasses.cjs。
+ *
+ * 四、存量登记 scripts/check-color-tokens.allowlist.json（每条写明归属与类别）：
  *   - 某文件某规则的数量超过登记数即失败；低于登记数时提示下调，`--shrink-allowlist` 只会往下收；
  *   - 已清零的规则（NON_REGISTRABLE_RULES）不可再登记，登记文件里出现即失败；
  *   - 其余规则的登记总数不得超过本文件的 ALLOWLIST_CEILING（只能下调；调高必须改本脚本，评审可见）。
@@ -298,6 +305,27 @@ if (shrinkAllowlist) {
   console.log(`[check-color-tokens] 已收紧登记：${shrinkable.length} 项下调，未放宽任何条目。`);
 }
 
+/** 未定义颜色类：Tailwind 按实际配置不生成任何样式的颜色类（硬性规则，不可登记）。 */
+async function collectUndefinedColorClasses() {
+  const cssClassNames = allSourceFiles
+    .filter((file) => path.extname(file) === '.css')
+    .flatMap((file) => extractCssClassNames(fs.readFileSync(file, 'utf8'), { includeShared: true }));
+  const isGenerated = await createTailwindClassProbe(projectRoot, cssClassNames);
+  /** @type {string[]} */
+  const found = [];
+  for (const file of allSourceFiles) {
+    if (!isSemanticRuleTarget(file)) continue;
+    const text = fs.readFileSync(file, 'utf8');
+    for (const { token, line } of extractColorClassCandidates(text, isGenerated)) {
+      if (!isGenerated(token)) found.push(formatViolation(file, line, text.split(/\r?\n/)[line - 1] ?? '', `未定义颜色类 ${token}：Tailwind 不生成样式（颜色名不在 tailwind.config.js，或自带透明度的令牌加了 /透明度）`));
+    }
+  }
+  return found;
+}
+
+async function report() {
+violations.push(...await collectUndefinedColorClasses());
+
 if (violations.length > 0 || semanticViolations.length > 0) {
   if (violations.length > 0) {
     console.error('\n[check-color-tokens] 检测到颜色规范违规：\n');
@@ -327,4 +355,10 @@ const registered = Object.values(allowlist.files).reduce(
   (sum, entry) => sum + Object.values(entry.counts ?? {}).reduce((a, b) => a + b, 0),
   0
 );
-console.log(`[check-color-tokens] 通过：无硬编码颜色；不随主题的写法未超出存量登记（登记 ${registered} 处，${Object.keys(allowlist.files).length} 个文件）。`);
+console.log(`[check-color-tokens] 通过：无硬编码颜色、无未定义颜色类；不随主题的写法未超出存量登记（登记 ${registered} 处，${Object.keys(allowlist.files).length} 个文件）。`);
+}
+
+report().catch((error) => {
+  console.error(`[check-color-tokens] 失败：${error instanceof Error ? error.stack || error.message : String(error)}`);
+  process.exit(1);
+});

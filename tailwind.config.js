@@ -69,6 +69,11 @@ export default {
         14: '14px',
         15: '15px',
       },
+      // 行高令牌：Tailwind 只有 20 / 24 两档贴近正文。14px 正文的记录行（生成记录的提示词，设计稿 Generation 14 / 22）
+      // 需要 22px，用具名档 leading-5.5，不写 leading-[22px]（ui:residue 门禁把写死的行高判为违规）。
+      lineHeight: {
+        5.5: '1.375rem',
+      },
       // 浮层阴影唯一档位。内容区一律不用阴影，层次靠间距与排版建立。
       // 几何取值与 Tailwind shadow-2xl 一致；颜色走主题 shade 令牌（深色下仍是黑 25%，像素不变）。
       //

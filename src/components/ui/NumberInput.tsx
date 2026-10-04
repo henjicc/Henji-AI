@@ -296,8 +296,9 @@ export default function NumberInput(props: NumberInputProps): ReactElement {
           textHistory={scopedTextHistory}
           aria-label={ariaLabel ?? label}
           placeholder={placeholder}
-          // 外框已经画了字段表面与焦点环：内层输入框只负责文字，铺满高度、透明、不再画环
-          className={`!h-full min-w-0 flex-1 appearance-none !bg-transparent tabular-nums !ring-0 ${NUMBER_FIELD_INPUT_PADDING_CLASS[size]} ${alignClass} ${scrubCursorClass}`}
+          // 外框已经画了字段表面与焦点环：内层输入框只负责文字，铺满高度
+          frame="inner"
+          className={`!h-full min-w-0 flex-1 appearance-none tabular-nums ${NUMBER_FIELD_INPUT_PADDING_CLASS[size]} ${alignClass} ${scrubCursorClass}`}
           min={min}
           max={max}
           step={step}

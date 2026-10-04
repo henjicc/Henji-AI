@@ -271,7 +271,7 @@ export function PanoramaViewerModal({
             >
               <ChevronLeft className="h-4 w-4" />
             </UiIconButton>
-            <span className="min-w-[44px] text-center text-xs text-text2">
+            <span className="min-w-11 text-center text-xs text-text2">
               {currentIndex + 1} / {imageList.length}
             </span>
             <UiIconButton size="lg" tone="media" shape="circle"

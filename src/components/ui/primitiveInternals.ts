@@ -184,6 +184,13 @@ export interface UiOptionButtonProps extends ButtonHTMLAttributes<HTMLButtonElem
    * sm / md / lg 是最小高度 28 / 32 / 36（字号 12 / 13 / 13），多行内容仍可撑高。segment / tile / swatch 尺寸固定。
    */
   size?: UiControlSize
+  /**
+   * `grid` 变体的固定格子尺寸（宽 × 高）：同一面板里的格子必须等大才能排成网格，高度不随内容。
+   * - `ratio`：画面比例格 78 × 92（32 高的比例小样 + 名称）；
+   * - `tier`：档位 / 分辨率格 78 × 42（单行）；`tier-detail`：带说明的档位格 78 × 52；
+   * - `preset`：预设分辨率格 120 宽、至少 52 高（名称 + 比例）。
+   */
+  gridCell?: 'ratio' | 'tier' | 'tier-detail' | 'preset'
   /** 选中语义：默认 `single`（单选，中性抬升）；`multiple` 表示多选集合中已选（强调描边 + 强调文字）。 */
   selection?: 'single' | 'multiple'
   /** 键盘导航当前项（下拉 aria-activedescendant、模型网格方向键指向的项），未选中时显示悬停底。 */
@@ -194,6 +201,11 @@ export interface UiInputProps extends Omit<InputHTMLAttributes<HTMLInputElement>
   textHistory?: ScopedTextHistoryBinding
   /** 高度档，默认 md 32（字号 sm 12 / md、lg 13）。 */
   size?: UiControlSize
+  /**
+   * `field`（默认）：raised 字段表面 + 焦点环。
+   * `inner`：复合字段（数值框、带按钮的输入）的内层文字框——表面与焦点环由外壳画（UI_FIELD_FOCUS_WITHIN_CLASS），自己透明不画环。
+   */
+  frame?: 'field' | 'inner'
 }
 
 /**

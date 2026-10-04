@@ -98,6 +98,6 @@ export default function VideoEditApp(): React.ReactElement {
       {listVideoEditInstances().map(item => <UiButton key={item.document.id} onClick={() => focusVideoEdit(item.document.id)}>{item.document.name}</UiButton>)}
     </UiRegion>}
     {/* 操作失败与保存状态：底部状态带（不挤占面板区的大块居中提示），重试成功或下一次操作后清除。 */}
-    {(error || instance?.error) && <UiError size="xs" align="start" className="shrink-0 border-t border-gap bg-panel px-3" message={error || instance?.error || ''} />}
+    {(error || instance?.error) && <div className="shrink-0 border-t border-gap bg-panel px-3"><UiError size="xs" align="start" message={error || instance?.error || ''} /></div>}
   </div>
 }

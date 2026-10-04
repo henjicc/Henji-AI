@@ -86,7 +86,7 @@ export function GeneratorConfigurationBar({
             data-panel-trigger-button
             aria-expanded={open}
             aria-label={`${t('title')}：${currentProvider?.name ? `${currentProvider.name} ` : ''}${modelName}`}
-            className="max-w-[20rem] cursor-pointer"
+            className="max-w-80 cursor-pointer"
           >
             <span className="text-text1">{modelName}</span>
             {currentProvider?.name ? <span className="ml-1.5 text-text3">{currentProvider.name}</span> : null}

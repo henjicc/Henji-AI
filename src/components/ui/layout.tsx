@@ -20,6 +20,7 @@ import { UiFormRowLabelContext } from './formRowLabel';
 import { UiIconButton } from './primitives';
 import {
   UI_DIVIDER_CLASS,
+  UI_GLASS_ADAPTIVE_DIVIDER_CLASS,
   UI_ROW_GAP_CLASS,
   UI_STACK_GAP_CLASS,
   UI_TEXT_META_CLASS,
@@ -76,6 +77,8 @@ interface UiPageHeaderProps extends Omit<HTMLAttributes<HTMLDivElement>, 'title'
   onBack?: () => void;
   /** 返回按钮的无障碍名称与悬浮提示，如「返回工具」 */
   backLabel?: string;
+  /** 页头作为页面顶带时的下分隔线（自适应：普通表面用 line，玻璃里换成白纱）。调用点不要自己写 border-b。 */
+  divider?: boolean;
 }
 
 interface UiFormRowProps extends Omit<HTMLAttributes<HTMLDivElement>, 'title'> {
@@ -242,11 +245,12 @@ export function UiPageHeader({
   actions,
   onBack,
   backLabel,
+  divider = false,
   ...props
 }: UiPageHeaderProps): JSX.Element {
   return (
     // 没有说明行时标题只有一行，与右侧 32 高的动作垂直居中；有说明时标题区两行，动作贴顶。
-    <div data-ui-page-header className={`flex ${description ? 'items-start' : 'items-center'} gap-2 ${className}`} {...props}>
+    <div data-ui-page-header className={`flex ${description ? 'items-start' : 'items-center'} gap-2 ${divider ? `border-b ${UI_GLASS_ADAPTIVE_DIVIDER_CLASS}` : ''} ${className}`} {...props}>
       {onBack ? (
         // -ml-1.5 让图标的视觉左边缘与标题文字对齐（按钮自带内边距）
         <UiIconButton
@@ -394,7 +398,7 @@ export function UiToolbar({
     );
   }
   return (
-    <div className={`flex items-center justify-between gap-3 ${className}`} {...props}>
+    <div data-ui-toolbar className={`flex items-center justify-between gap-3 ${className}`} {...props}>
       <div className="flex min-w-0 items-center gap-2">{children}</div>
       {trailing ? <div className="flex shrink-0 items-center gap-2">{trailing}</div> : null}
     </div>

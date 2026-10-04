@@ -38,8 +38,8 @@ export const PresetResolutionSelector: React.FC<PresetResolutionSelectorProps> =
               key={option.value}
               onClick={() => onChange(option.value)}
               size="lg"
-              className="w-[120px] px-2 py-2 flex-col justify-center gap-1"
-              style={{ minHeight: '52px' }}
+              gridCell="preset"
+              className="px-2 py-2 flex-col justify-center gap-1"
             >
               <span className="font-medium leading-none">{label}</span>
               {option.aspectRatio && (

@@ -288,7 +288,9 @@ export const UiSharedGlassHost = forwardRef<HTMLDivElement, UiSharedGlassHostPro
     return (
       <div
         ref={hostRef}
-        className={`relative isolate ${className}`}
+        // ui-shared-glass-host 是 index.css 里共享层规则的挂点：此前宿主没挂这个类，active 时共享层不显示、
+        // 目标玻璃也没让出滤镜，合并优化从未生效（5.8 残留扫描“零引用 CSS 类”发现）。
+        className={`ui-shared-glass-host relative isolate ${className}`}
         data-ui-shared-glass-active="false"
         {...props}
       >
