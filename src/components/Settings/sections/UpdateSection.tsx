@@ -83,7 +83,7 @@ const UpdateSection: React.FC = () => {
         className={config.enabled ? '' : 'opacity-50'}
         aria-disabled={!config.enabled || undefined}
       >
-        {/* 检查频率是单选：分段选择（中性抬升） */}
+        {/* 检查频率是单选：分段选择（选中为淡强调底，重要记录 012） */}
         <div className={UI_SEGMENTED_TRACK_CLASS}>
           {frequencies.map((freq) => (
             <UiOptionButton
@@ -116,7 +116,7 @@ const UpdateSection: React.FC = () => {
         info={t('sections.updates.clearIgnoredHint')}
         inline
       >
-        <UiButton onClick={clearIgnored} variant="secondary" className="px-4">
+        <UiButton onClick={clearIgnored} variant="secondary">
           {t('sections.updates.clearIgnoredAction')}
         </UiButton>
       </UiFormRow>

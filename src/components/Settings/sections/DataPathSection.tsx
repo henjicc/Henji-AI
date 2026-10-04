@@ -34,12 +34,14 @@ const DataPathSection: React.FC = () => {
     <>
       {/* 常驻说明：改了会自动迁移全部数据，属于「不看就可能误操作」那一档 */}
       <UiFormRow label={t('sections.dataPath.pathLabel')} hint={t('sections.dataPath.pathHint')}>
-        <div className="flex items-stretch gap-2">
+        {/* 按钮与输入框同为 32 高（同一行控件同一外框高度） */}
+        <div className="flex items-center gap-2">
           {/* 这里是明文本地绝对路径（不像密钥框那样自带掩码），
               助手观察截图时必须遮住，否则路径会原样进模型。 */}
           <UiInput
             data-observation-sensitive
             value={currentPath}
+            title={currentPath}
             readOnly
             className={`flex-1 font-mono`}
           />
@@ -47,8 +49,7 @@ const DataPathSection: React.FC = () => {
             onClick={selectDirectory}
             disabled={isMigrating}
             variant="secondary"
-            size="lg"
-            className="shrink-0 whitespace-nowrap"
+            className="shrink-0"
           >
             {t('actions.select')}
           </UiButton>
@@ -56,8 +57,7 @@ const DataPathSection: React.FC = () => {
             onClick={openResetConfirm}
             disabled={isMigrating}
             variant="secondary"
-            size="lg"
-            className="shrink-0 whitespace-nowrap"
+            className="shrink-0"
           >
             {t('actions.resetDefault')}
           </UiButton>

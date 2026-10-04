@@ -3,7 +3,7 @@ import { getAvailableProviders } from '../utils/modelHelpers'
 import { compareModelNamesForSettings } from '../utils/modelNameSort'
 import { getModelAliases, setModelAlias } from '../config/modelAliases'
 import { useI18n } from '@/hooks/useI18n'
-import { UI_TEXT_BODY_CLASS, UI_TEXT_META_CLASS, UiInput } from '@/components/ui'
+import { UI_TEXT_BODY_CLASS, UI_TEXT_META_CLASS, UiEmpty, UiInput } from '@/components/ui'
 import ModelTypeBadge, { type ModelMediaType } from './ModelTypeBadge'
 
 interface AliasableModel {
@@ -49,6 +49,10 @@ const ModelAliasPanel: React.FC = () => {
     setAliasDrafts(getModelAliases())
   }
 
+  if (aliasableModels.length === 0) {
+    return <UiEmpty size="sm" title={t('modelSettings.alias.empty')} />
+  }
+
   return (
     <div className="divide-y divide-line/60">
       {aliasableModels.map(entry => (
@@ -57,7 +61,7 @@ const ModelAliasPanel: React.FC = () => {
           className="flex min-h-12 items-center justify-between gap-4 py-2.5"
         >
           <div className="flex min-w-0 flex-1 items-center gap-3">
-            <span className={`truncate ${UI_TEXT_BODY_CLASS}`}>{entry.originalName}</span>
+            <span className={`truncate ${UI_TEXT_BODY_CLASS}`} title={entry.originalName}>{entry.originalName}</span>
             <ModelTypeBadge type={entry.type} />
           </div>
           <span
@@ -78,7 +82,6 @@ const ModelAliasPanel: React.FC = () => {
                 if (e.key === 'Enter') e.currentTarget.blur()
               }}
               placeholder={entry.originalName}
-              
               aria-label={t('modelSettings.alias.inputLabel', { name: entry.originalName })}
             />
           </div>

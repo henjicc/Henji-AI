@@ -288,7 +288,7 @@
     "empty": "资产库还是空的",
     "noResults": "没有符合条件的资产",
     "error": "资产加载失败",
-    "restartRequired": "资产库后端尚未加载，请重启 Electron 开发进程后重试",
+    "restartRequired": "资产库暂时无法读取，请重启痕迹AI后重试",
     "retry": "重试",
     "count": "共 {{count}} 项",
     "loadedCount": "已加载 {{loaded}} / {{count}} 项",
@@ -331,7 +331,11 @@
     "batchPartialFailure": "{{count}} 项处理失败，请重试",
     "batchEmptyMenu": "管理多个资产",
     "close": "关闭资产库",
-    "confirm": "确定"
+    "confirm": "确定",
+    "resizeSidebar": "调整资产库侧栏宽度",
+    "selectAsset": "选中“{{name}}”",
+    "noLibraries": "还没有资产库，可在侧栏“资产库”旁新建",
+    "emptyHint": "生成结果和画布节点都可以“添加到资产库”"
   },
   "windowControls": {
     "appName": "痕迹AI",

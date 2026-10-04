@@ -37,7 +37,8 @@ const ExternalLinkButton: React.FC<{ url: string; label?: string }> = ({ url, la
   return (
     <UiButton
       type="button"
-      className="max-w-full justify-start gap-1.5 !px-2"
+      size="sm"
+      className="max-w-full justify-start"
       onClick={() => void openExternal(url)}
     >
       <span className="truncate">{label ?? url}</span>
@@ -140,13 +141,13 @@ const LicenseViewerDialog: React.FC<LicenseViewerDialogProps> = ({ open, notices
       <div className="flex min-h-0 flex-1">
         <div className="flex w-72 shrink-0 flex-col gap-2 border-r border-line p-3">
           <div className="relative">
-            <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text2" />
+            <Search aria-hidden="true" className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-text3" />
             <UiInput
               value={keyword}
               onChange={(event) => setKeyword(event.target.value)}
               placeholder={t('sections.about.viewer.searchPlaceholder')}
               aria-label={t('sections.about.viewer.searchPlaceholder')}
-              className="pl-9"
+              className="pl-8"
             />
           </div>
           <p className={`px-1 ${UI_TEXT_META_CLASS}`}>{t('sections.about.allComponentsCount', { count: filtered.length })}</p>

@@ -3,9 +3,10 @@ import { Plus, RefreshCw, Search, Settings2 } from 'lucide-react'
 import {
   UI_TEXT_BODY_CLASS,
   UI_TEXT_LABEL_CLASS,
-  UI_TEXT_TITLE_CLASS,
+  UI_TEXT_SECTION_CLASS,
   UiButton,
   UiEmpty,
+  UiError,
   UiInput,
   UiLoading,
   UiOptionButton,
@@ -20,6 +21,7 @@ import type { LlmModelConfig, LlmProviderConfig } from '@henjicc/ai-sdk'
 import { findProviderMetadata } from '@henjicc/ai-sdk'
 import { createModelFromInput, fetchOpenAiCompatibleModels } from '@/services/llm/llmDiscoveryService'
 import { useI18n } from '@/hooks/useI18n'
+import { createLogger } from '@/core/logging'
 import { useApiKeys } from '../hooks/useApiKeys'
 import type { UseLlmSettingsResult } from '../hooks/useLlmSettings'
 import { useExternalLink } from '../hooks/useExternalLink'
@@ -44,6 +46,8 @@ interface DiscoveredModelDraft {
   maxOutputTokens: number | null
 }
 
+const logger = createLogger('components.Settings.sections.ProviderCenterSection')
+
 const apiKeyProviderIds = new Set<string>(API_KEY_PROVIDERS.map(provider => provider.id))
 
 const ProviderCenterSection = ({ llm }: ProviderCenterSectionProps): JSX.Element => {
@@ -63,6 +67,8 @@ const ProviderCenterSection = ({ llm }: ProviderCenterSectionProps): JSX.Element
   const [modelDraft, setModelDraft] = useState<LlmModelConfig | null>(null)
   const [modelDialogOpen, setModelDialogOpen] = useState(false)
   const [fetchingModels, setFetchingModels] = useState(false)
+  // 同步模型失败（密钥、地址或网络）要留在原位说明原因，否则按钮恢复后像什么都没发生
+  const [fetchError, setFetchError] = useState<string | null>(null)
   const [syncProvider, setSyncProvider] = useState<LlmProviderConfig | null>(null)
   const [syncDiscovered, setSyncDiscovered] = useState<DiscoveredModelDraft[]>([])
 
@@ -177,6 +183,7 @@ const ProviderCenterSection = ({ llm }: ProviderCenterSectionProps): JSX.Element
   const fetchModels = async (): Promise<void> => {
     if (!selected?.llmProvider || fetchingModels) return
     setFetchingModels(true)
+    setFetchError(null)
     try {
       const discovered = await fetchOpenAiCompatibleModels(selected.llmProvider)
       setSyncProvider(selected.llmProvider)
@@ -186,6 +193,9 @@ const ProviderCenterSection = ({ llm }: ProviderCenterSectionProps): JSX.Element
         contextWindow: item.contextWindow,
         maxOutputTokens: item.maxOutputTokens,
       })))
+    } catch (error) {
+      logger.warn('供应商模型列表同步失败', { event: 'provider_center.sync_models.failed', error, context: { providerId: selected.llmProvider.providerId } })
+      setFetchError(error instanceof Error && error.message ? error.message : t('providerCenter.syncFailedHint'))
     } finally {
       setFetchingModels(false)
     }
@@ -221,19 +231,19 @@ const ProviderCenterSection = ({ llm }: ProviderCenterSectionProps): JSX.Element
       <UiPanel variant="inset" className="flex min-h-0 flex-col overflow-hidden p-2">
         <div className="flex min-h-0 flex-1 flex-col gap-2">
           <div className="relative">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text2" />
-            <UiInput value={providerSearch} onChange={event => setProviderSearch(event.target.value)} className="pl-9" placeholder={t('providerCenter.searchPlaceholder')} />
+            <Search aria-hidden="true" className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-text3" />
+            <UiInput value={providerSearch} onChange={event => setProviderSearch(event.target.value)} className="pl-8" placeholder={t('providerCenter.searchPlaceholder')} aria-label={t('providerCenter.searchPlaceholder')} />
           </div>
           <div className="ui-scrollbar min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain">
             {filteredGroups.map(group => (
-              <UiOptionButton key={group.id} type="button" variant="menu" active={group.id === selected?.id} className="w-full px-3 py-2.5 text-left" onClick={() => { setSelectedId(group.id); setCategory('all') }}>
+              <UiOptionButton key={group.id} type="button" variant="menu" size="lg" active={group.id === selected?.id} className="w-full text-left" onClick={() => { setSelectedId(group.id); setCategory('all'); setFetchError(null) }}>
                 <span className="block truncate text-sm font-medium">{group.displayName}</span>
               </UiOptionButton>
             ))}
           </div>
           <div className="border-t border-line pt-2">
             <UiButton type="button" variant="primary" className="w-full" onClick={() => { setProviderDialogCreate(true); setProviderDialogOpen(true) }}>
-              <Plus size={15} className="mr-1.5" />
+              <Plus className="h-4 w-4" />
               {t('providerCenter.actions.addProvider')}
             </UiButton>
           </div>
@@ -244,11 +254,12 @@ const ProviderCenterSection = ({ llm }: ProviderCenterSectionProps): JSX.Element
         <div className="ui-scrollbar min-w-0 space-y-5 overflow-y-auto overscroll-contain pr-2">
           <div>
             <div className="flex items-start justify-between gap-4">
-              <h3 className={UI_TEXT_TITLE_CLASS}>{selected.displayName}</h3>
+              {/* 分节标题“供应商与模型”已是 20 号，供应商名降一档（16），层级才读得出来 */}
+              <h3 className={UI_TEXT_SECTION_CLASS}>{selected.displayName}</h3>
               <div className="flex shrink-0 items-center gap-2">
                 {selected.llmProvider ? (
                   <UiButton type="button" variant="secondary" onClick={() => { setProviderDialogCreate(false); setProviderDialogOpen(true) }}>
-                    <Settings2 size={14} className="mr-1.5" />
+                    <Settings2 className="h-4 w-4" />
                     {t('providerCenter.actions.connectionSettings')}
                   </UiButton>
                 ) : null}
@@ -311,15 +322,18 @@ const ProviderCenterSection = ({ llm }: ProviderCenterSectionProps): JSX.Element
                 {selected.llmProvider ? (
                   <>
                     <UiButton type="button" variant="secondary" disabled={fetchingModels} onClick={() => void fetchModels()}>
-                      <RefreshCw size={14} className="mr-1.5" />{t('providerCenter.actions.syncModels')}
+                      <RefreshCw className={`h-4 w-4 ${fetchingModels ? 'motion-safe:animate-spin' : ''}`} />{fetchingModels ? t('providerCenter.actions.syncingModels') : t('providerCenter.actions.syncModels')}
                     </UiButton>
                     <UiButton type="button" variant="secondary" onClick={() => openModelDialog()}>
-                      <Plus size={14} className="mr-1.5" />{t('providerCenter.actions.addModel')}
+                      <Plus className="h-4 w-4" />{t('providerCenter.actions.addModel')}
                     </UiButton>
                   </>
                 ) : null}
               </div>
             </div>
+            {fetchError ? (
+              <UiError size="xs" align="start" className="pt-0" title={t('providerCenter.syncFailed')} message={fetchError} />
+            ) : null}
             <ProviderCenterModelList
               group={selected}
               category={category}

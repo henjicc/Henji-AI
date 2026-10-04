@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Pencil, Trash2 } from 'lucide-react'
-import { PanelTrigger, UI_FIELD_LABEL_CLASS, UI_TEXT_PANEL_TITLE_CLASS, UiButton, UiChipButton, UiError, UiIconButton, UiInput } from '@/components/ui'
+import { PanelTrigger, UI_FIELD_LABEL_CLASS, UI_TEXT_META_CLASS, UI_TEXT_PANEL_TITLE_CLASS, UiButton, UiChipButton, UiError, UiIconButton, UiInput } from '@/components/ui'
 import { ICON_MULTI_SELECT } from '@/core/theme/icons'
 import type { AssetLibraryRecord, AssetRecord } from '@/platform/contracts/assetLibrary'
 import { useI18n } from '@/hooks/useI18n'
@@ -115,7 +115,8 @@ export const AssetCardMenu: React.FC<Props> = ({ asset, anchor, libraries, avail
       open={open}
       onOpenChange={(next) => { if (!next) onClose() }}
       alignment={anchoredToButton ? 'bottomRight' : 'bottomLeft'}
-      surface="glass"
+      // 面板里是输入框与标签芯片（表单内容）：玻璃压在亮色封面上时占位文字只有 2.5:1，改实底（5.6 第二批 B-45）
+      surface="solid"
       panelPadding="content"
       panelWidth={320}
       renderPanel={() => (
@@ -124,7 +125,7 @@ export const AssetCardMenu: React.FC<Props> = ({ asset, anchor, libraries, avail
         {editingName ? (
           <UiInput autoFocus disabled={pendingAction !== null} className="min-w-0 flex-1" aria-label={t('assetLibrary.renameAsset')} value={nameDraft} onChange={(event) => setNameDraft(event.target.value)} onBlur={() => void applyName()} onKeyDown={(event) => { if (event.key === 'Enter') void applyName(); if (event.key === 'Escape') { setEditingName(false); setNameDraft(name) } }} />
         ) : (
-          <div className={`min-w-0 flex-1 truncate ${UI_TEXT_PANEL_TITLE_CLASS}`} title={t('assetLibrary.renameAsset')} onDoubleClick={() => setEditingName(true)}>{name}</div>
+          <div className={`min-w-0 flex-1 truncate ${UI_TEXT_PANEL_TITLE_CLASS}`} title={name} onDoubleClick={() => setEditingName(true)}>{name}</div>
         )}
         {!editingName && <UiIconButton className="shrink-0" onClick={() => setEditingName(true)} title={t('assetLibrary.renameAsset')} aria-label={t('assetLibrary.renameAsset')}><Pencil className="h-3.5 w-3.5" /></UiIconButton>}
       </div>
@@ -133,8 +134,9 @@ export const AssetCardMenu: React.FC<Props> = ({ asset, anchor, libraries, avail
       <div className="mt-2 flex flex-wrap gap-1.5"><UiChipButton active disabled size="sm">{t(`assetLibrary.${asset.mediaType}`)}</UiChipButton>{tags.map((tag) => <UiChipButton key={tag} active disabled={pendingAction !== null} size="sm" onClick={() => void applyTags(tags.filter((item) => item !== tag))}>{tag}</UiChipButton>)}{tagDraft && suggestions.map((tag) => <UiChipButton key={tag} disabled={pendingAction !== null} size="sm" onClick={() => { setTagDraft(''); void applyTags([...tags, tag]) }}>{tag}</UiChipButton>)}</div>
       <div className={`mt-4 ${UI_FIELD_LABEL_CLASS}`}>{t('assetLibrary.membership')}</div>
       {libraries.length > 6 && <UiInput className="mb-2" aria-label={t('assetLibrary.searchLibraries')} value={librarySearch} onChange={(event) => setLibrarySearch(event.target.value)} placeholder={t('assetLibrary.searchLibraries')} />}
+      {libraries.length === 0 ? <p className={UI_TEXT_META_CLASS}>{t('assetLibrary.noLibraries')}</p> : null}
       <div className="max-h-32 overflow-y-auto"><div className="flex flex-wrap gap-1.5">{filteredLibraries.map((library) => <UiChipButton key={library.id} active={libraryIds.includes(library.id)} disabled={pendingAction !== null} size="sm" onClick={() => void toggleLibrary(library.id)}>{library.name}</UiChipButton>)}</div></div>
-      {actionError ? <UiError size="xs" message={actionError} /> : null}
+      {actionError ? <UiError size="xs" align="start" className="pb-0" title={actionError} message="" /> : null}
       {/* 菜单里的动作同为辅助档：批量管理是进入一种模式，删除是危险档（静息中性、悬停显红） */}
       <div className="mt-4 flex justify-between gap-2">
         <UiButton disabled={pendingAction !== null} onClick={() => { requestClose(); onOpenBatchManagement() }}><ICON_MULTI_SELECT className="h-4 w-4" />{t('assetLibrary.batchManage')}</UiButton>

@@ -35,7 +35,20 @@ describe('AssetCard', () => {
   it('菜单打开后离开悬浮区域仍保持菜单按钮可见', () => {
     renderCard({ menuOpen: true })
 
-    expect(screen.getByRole('button', { name: 'menu' }).classList.contains('opacity-100')).toBe(true)
+    expect(screen.getByRole('button', { name: 'workspaceFilters.moreActions' }).classList.contains('opacity-100')).toBe(true)
+  })
+
+  it('“更多”按钮有可读名称，截断的名称悬停可看全名', () => {
+    renderCard()
+
+    expect(screen.getByRole('button', { name: 'workspaceFilters.moreActions' }).getAttribute('title')).toBe('workspaceFilters.moreActions')
+    expect(screen.getByText('测试资产').getAttribute('title')).toBe('测试资产')
+  })
+
+  it('批量模式的复选框名称是“选中该资产”，不是“批量管理”', () => {
+    renderCard({ batchMode: true })
+
+    expect(screen.getByRole('checkbox', { name: 'assetLibrary.selectAsset' })).toBeTruthy()
   })
 
   it('右键资产打开同一个资产菜单并使用鼠标坐标定位', () => {

@@ -98,11 +98,11 @@ const LlmModelDialog = ({ isOpen, model, onChange, onClose, onSave }: LlmModelDi
       <div className="min-h-0 space-y-3 overflow-y-auto pr-1">
         <div className="space-y-1.5">
           <div className={UI_TEXT_LABEL_CLASS}>模型 ID</div>
-          <UiInput value={model?.modelId ?? ''} onChange={event => updateModelId(event.target.value)} placeholder="例如 deepseek-v4-flash" />
+          <UiInput aria-label="模型 ID" value={model?.modelId ?? ''} onChange={event => updateModelId(event.target.value)} placeholder="例如 deepseek-v4-flash" />
         </div>
         <div className="space-y-1.5">
           <div className={UI_TEXT_LABEL_CLASS}>模型名称</div>
-          <UiInput value={model?.displayName ?? ''} onChange={event => update({ displayName: event.target.value })} placeholder="例如 DeepSeek V4 Flash" />
+          <UiInput aria-label="模型名称" value={model?.displayName ?? ''} onChange={event => update({ displayName: event.target.value })} placeholder="例如 DeepSeek V4 Flash" />
         </div>
         {catalogEntry ? (
           <div className={`space-y-1 ${UI_TEXT_META_CLASS}`}>
@@ -113,37 +113,54 @@ const LlmModelDialog = ({ isOpen, model, onChange, onClose, onSave }: LlmModelDi
             {catalogEntry.note ? <div>{catalogEntry.note}</div> : null}
           </div>
         ) : null}
-        <div className={`grid grid-cols-2 gap-2 ${UI_TEXT_BODY_CLASS}`}>
-          {capabilityItems.map(item => (
-            <label key={item.id} className="inline-flex items-center gap-2 rounded-lg border border-line bg-window px-3 py-2">
-              <UiCheckbox checked={model?.capabilities[item.id] === true} onCheckedChange={checked => updateCapabilities({ [item.id]: checked })} />
-              {item.label}
-            </label>
-          ))}
+        {/* 能力复选是同质选项集合：静息不描边、不铺底（复选框本体已是命中区），只靠排布成格 */}
+        <div className="space-y-1.5">
+          <div className={UI_TEXT_LABEL_CLASS}>模型能力</div>
+          <div className={`grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3 ${UI_TEXT_BODY_CLASS}`}>
+            {capabilityItems.map(item => (
+              <label key={item.id} className="inline-flex min-h-7 cursor-pointer items-center gap-2">
+                <UiCheckbox checked={model?.capabilities[item.id] === true} onCheckedChange={checked => updateCapabilities({ [item.id]: checked })} />
+                {item.label}
+              </label>
+            ))}
+          </div>
         </div>
+        {/* 三个字段各自带标签：原来只有占位文字，填上数字后就看不出是哪一项 */}
         <div className="grid gap-3 sm:grid-cols-3">
-          <Dropdown<LlmCapabilities['structuredOutputMode']>
-            value={structuredOutputMode}
-            display={structuredOutputOptions.find(option => option.value === structuredOutputMode)?.label ?? structuredOutputMode}
-            options={structuredOutputOptions}
-            className="w-full"
-            buttonClassName="w-full"
-            onSelect={mode => updateCapabilities({ structuredOutputMode: mode, jsonOutput: mode !== 'none' })}
-          />
-          <UiInput
-            type="number"
-            min={1}
-            value={model?.capabilities.contextWindow ?? ''}
-            onChange={event => updateCapabilities({ contextWindow: parseOptionalPositiveInteger(event.target.value) })}
-            placeholder="上下文 Token（未知）"
-          />
-          <UiInput
-            type="number"
-            min={1}
-            value={model?.capabilities.maxOutputTokens ?? ''}
-            onChange={event => updateCapabilities({ maxOutputTokens: parseOptionalPositiveInteger(event.target.value) })}
-            placeholder="最大输出 Token（未知）"
-          />
+          <div className="min-w-0 space-y-1.5">
+            <div className={UI_TEXT_LABEL_CLASS}>结构化输出</div>
+            <Dropdown<LlmCapabilities['structuredOutputMode']>
+              value={structuredOutputMode}
+              display={structuredOutputOptions.find(option => option.value === structuredOutputMode)?.label ?? structuredOutputMode}
+              options={structuredOutputOptions}
+              ariaLabel="结构化输出"
+              className="w-full"
+              buttonClassName="w-full"
+              onSelect={mode => updateCapabilities({ structuredOutputMode: mode, jsonOutput: mode !== 'none' })}
+            />
+          </div>
+          <div className="min-w-0 space-y-1.5">
+            <div className={UI_TEXT_LABEL_CLASS}>上下文 Token</div>
+            <UiInput
+              type="number"
+              min={1}
+              aria-label="上下文 Token"
+              value={model?.capabilities.contextWindow ?? ''}
+              onChange={event => updateCapabilities({ contextWindow: parseOptionalPositiveInteger(event.target.value) })}
+              placeholder="未知"
+            />
+          </div>
+          <div className="min-w-0 space-y-1.5">
+            <div className={UI_TEXT_LABEL_CLASS}>最大输出 Token</div>
+            <UiInput
+              type="number"
+              min={1}
+              aria-label="最大输出 Token"
+              value={model?.capabilities.maxOutputTokens ?? ''}
+              onChange={event => updateCapabilities({ maxOutputTokens: parseOptionalPositiveInteger(event.target.value) })}
+              placeholder="未知"
+            />
+          </div>
         </div>
       </div>
     </UiModal>

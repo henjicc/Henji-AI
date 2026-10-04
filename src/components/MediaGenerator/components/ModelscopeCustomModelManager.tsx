@@ -1,11 +1,12 @@
 import { createLogger } from '@/core/logging'
 import React, { useState, useEffect } from 'react'
 import TextInput from '@/components/ui/TextInput'
-import { showAlertDialog } from '@/stores/alertDialogStore'
+import { requestAlertConfirmation, showAlertDialog } from '@/stores/alertDialogStore'
 import {
   UI_TEXT_BODY_CLASS,
   UI_TEXT_LABEL_CLASS,
   UI_TEXT_META_CLASS,
+  UI_SEGMENTED_TRACK_CLASS,
   UiButton,
   UiEmpty,
   UiIconButton,
@@ -142,7 +143,14 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
     }
   }
   const handleDelete = async (id: string): Promise<void> => {
-    if (confirm(t('modelscopeCustomModel.confirmDelete'))) {
+    // 走应用统一的确认弹窗（随主题），不用浏览器原生 confirm()
+    const confirmed = await requestAlertConfirmation({
+      title: t('modelscopeCustomModel.actions.deleteTitle'),
+      message: t('modelscopeCustomModel.confirmDelete'),
+      type: 'warning',
+      confirmLabel: t('common:delete'),
+    })
+    if (confirmed) {
       try {
         await modelscopeCustomModelService.deleteModel(id)
         await loadModels()
@@ -233,7 +241,7 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
               onChange={setNewModelId}
               placeholder={t('modelscopeCustomModel.form.placeholders.modelId')}
               className="w-full"
-              inputClassName="w-full text-sm"
+              inputClassName="w-full"
             />
             <TextInput
               label={t('modelscopeCustomModel.form.displayName')}
@@ -241,16 +249,16 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
               onChange={setNewModelName}
               placeholder={t('modelscopeCustomModel.form.placeholders.displayName')}
               className="w-full"
-              inputClassName="w-full text-sm"
+              inputClassName="w-full"
             />
             <div className="flex flex-col gap-2">
               <div className={UI_TEXT_LABEL_CLASS}>{t('modelscopeCustomModel.form.modelType')}</div>
-              <div className="grid grid-cols-2 gap-2">
+              <div className={`${UI_SEGMENTED_TRACK_CLASS} w-full`}>
                 <UiOptionButton
                   type="button"
                   variant="segment"
                   active={newModelType === 'imageGeneration'}
-                  className="justify-center"
+                  className="flex-1 justify-center"
                   onClick={() => setNewModelType('imageGeneration')}
                 >
                   {t('modelscopeCustomModel.types.imageGeneration')}
@@ -259,7 +267,7 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
                   type="button"
                   variant="segment"
                   active={newModelType === 'imageEditing'}
-                  className="justify-center"
+                  className="flex-1 justify-center"
                   onClick={() => setNewModelType('imageEditing')}
                 >
                   {t('modelscopeCustomModel.types.imageEditing')}
@@ -315,16 +323,16 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
                       value={editName}
                       onChange={setEditName}
                       className="w-full"
-                      inputClassName="w-full text-sm"
+                      inputClassName="w-full"
                     />
                     <div className="flex flex-col gap-2">
                       <div className={UI_TEXT_LABEL_CLASS}>{t('modelscopeCustomModel.form.modelType')}</div>
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className={`${UI_SEGMENTED_TRACK_CLASS} w-full`}>
                         <UiOptionButton
                           type="button"
                           variant="segment"
                           active={editModelType === 'imageGeneration'}
-                          className="justify-center"
+                          className="flex-1 justify-center"
                           onClick={() => setEditModelType('imageGeneration')}
                         >
                           {t('modelscopeCustomModel.types.imageGeneration')}
@@ -333,7 +341,7 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
                           type="button"
                           variant="segment"
                           active={editModelType === 'imageEditing'}
-                          className="justify-center"
+                          className="flex-1 justify-center"
                           onClick={() => setEditModelType('imageEditing')}
                         >
                           {t('modelscopeCustomModel.types.imageEditing')}

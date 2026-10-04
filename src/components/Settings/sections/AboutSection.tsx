@@ -78,7 +78,6 @@ const AboutSection: React.FC = () => {
         <UiButton
           type="button"
           variant="secondary"
-          className="px-4"
           disabled={!projectLicenseText}
           onClick={() => setProjectLicenseOpen(true)}
         >
@@ -88,7 +87,7 @@ const AboutSection: React.FC = () => {
 
       <UiFormRow label={t('sections.about.componentsLabel')} info={t('sections.about.componentsInfo')}>
         {state.status === 'loading' ? <UiLoading size="xs" message={t('sections.about.loading')} /> : null}
-        {state.status === 'unavailable' ? <UiError size="sm" message={t('sections.about.unavailable')} /> : null}
+        {state.status === 'unavailable' ? <UiError size="xs" align="start" title={t('sections.about.unavailable')} message="" /> : null}
         {notices ? (
           <div className="-mx-3 space-y-0.5">
             {highlights.map((component) => (
@@ -96,7 +95,8 @@ const AboutSection: React.FC = () => {
                 key={component.id}
                 type="button"
                 variant="menu"
-                className="w-full justify-between gap-3 !px-3"
+                size="lg"
+                className="w-full justify-between gap-3"
                 onClick={() => setViewer({ open: true, componentId: component.id })}
               >
                 <span className="flex min-w-0 items-baseline gap-2">
@@ -122,7 +122,6 @@ const AboutSection: React.FC = () => {
           <UiButton
             type="button"
             variant="secondary"
-            className="px-4"
             onClick={() => setViewer({ open: true, componentId: null })}
           >
             {t('sections.about.viewAll')}

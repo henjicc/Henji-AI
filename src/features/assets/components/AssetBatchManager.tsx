@@ -56,7 +56,7 @@ export const AssetBatchManager: React.FC<Props> = ({
     // 标题、已选数量与“完成”都在页头命令带里，这里不再重复一条头带。
     <aside aria-label={t('assetLibrary.batchManage')} aria-busy={busy} className={`flex w-80 shrink-0 flex-col border-l ${UI_GLASS_ADAPTIVE_DIVIDER_CLASS}`}>
       <div className="ui-scrollbar min-h-0 flex-1 overflow-y-auto p-4">
-        <p className={`mb-3 flex items-center gap-1.5 ${UI_TEXT_META_CLASS}`}>{busy ? <LoaderCircle className="h-3.5 w-3.5 shrink-0 animate-spin" /> : null}{t('assetLibrary.batchHint')}</p>
+        <p className={`mb-3 flex items-center gap-1.5 ${UI_TEXT_META_CLASS}`}>{busy ? <LoaderCircle className="h-3.5 w-3.5 shrink-0 motion-safe:animate-spin" /> : null}{t('assetLibrary.batchHint')}</p>
         <div className="mb-5 flex gap-2">
           <UiButton className="flex-1" disabled={busy || loadedCount === 0} onClick={onSelectAll}>{t('assetLibrary.batchSelectAll')}</UiButton>
           <UiButton className="flex-1" disabled={busy || selectedCount === 0} onClick={onClear}>{t('assetLibrary.batchClear')}</UiButton>
@@ -88,8 +88,9 @@ export const AssetBatchManager: React.FC<Props> = ({
         </UiGroup>
 
         <UiGroup divided className="mt-5">
-          {error ? <UiError size="xs" message={error} /> : null}
-          <UiButton variant={deleteArmed ? 'dangerSolid' : 'danger'}
+          {error ? <UiError size="xs" align="start" className="pt-0" title={error} message="" /> : null}
+          {/* 二次确认靠文案提示，保持 danger 档：危险实底只用于确认弹窗（同 A-28） */}
+          <UiButton variant="danger"
             className="w-full"
             disabled={disabled}
             onClick={() => {
@@ -98,7 +99,7 @@ export const AssetBatchManager: React.FC<Props> = ({
               void onDelete()
             }}
           >
-            <Trash2 className="mr-2 h-4 w-4" />
+            <Trash2 className="h-4 w-4" />
             {deleteArmed ? t('assetLibrary.batchConfirmDelete') : t('assetLibrary.batchDelete')}
           </UiButton>
         </UiGroup>

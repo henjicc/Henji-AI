@@ -29,6 +29,11 @@ import SettingsDialog from '../components/SettingsDialog'
 
 const logger = createLogger('components.Settings.AgentSkillsSection')
 
+/** 状态行：失败用危险文字色，与进行中、已完成的提示区分开（5.6 第二批）。 */
+interface StatusLine { text: string; failed: boolean }
+const info = (text: string): StatusLine => ({ text, failed: false })
+const failure = (text: string): StatusLine => ({ text, failed: true })
+
 const EMPTY_MANIFEST: AssistantSkillManifest = {
   schemaVersion: 'assistant-skill/v1',
   skills: [],
@@ -57,7 +62,7 @@ export default function AgentSkillsSection(): JSX.Element {
   const [manifest, setManifest] = useState<AssistantSkillManifest>(EMPTY_MANIFEST)
   const [busy, setBusy] = useState(false)
   const [dragging, setDragging] = useState(false)
-  const [status, setStatus] = useState('正在读取技能清单…')
+  const [status, setStatus] = useState<StatusLine>(info('正在读取技能清单…'))
   const [skipped, setSkipped] = useState<AssistantSkillInstallResult['skippedFiles']>([])
   const [confirm, setConfirm] = useState<PendingConfirm | null>(null)
 
@@ -75,9 +80,9 @@ export default function AgentSkillsSection(): JSX.Element {
     try {
       const next = await listAssistantSkills()
       setManifest(next)
-      setStatus(`共 ${next.skills.length} 个技能，其中 ${next.skills.filter((skill) => !skill.enabled).length} 个已停用。`)
+      setStatus(info(`共 ${next.skills.length} 个技能，其中 ${next.skills.filter((skill) => !skill.enabled).length} 个已停用。`))
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : '读取技能清单失败')
+      setStatus(failure(error instanceof Error ? error.message : '读取技能清单失败'))
       logger.error('读取助手技能清单失败', error, { event: 'settings.agent_skills.read.failed' })
     } finally {
       setBusy(false)
@@ -91,7 +96,7 @@ export default function AgentSkillsSection(): JSX.Element {
   const runInstall = useCallback(async (sourcePath: string, overwrite: boolean): Promise<void> => {
     setBusy(true)
     setSkipped([])
-    setStatus('正在安装…')
+    setStatus(info('正在安装…'))
     logger.info('安装助手技能开始', {
       event: 'settings.agent_skills.install.start',
       context: { extension: extname(sourcePath) },
@@ -99,7 +104,7 @@ export default function AgentSkillsSection(): JSX.Element {
     try {
       const result = await installAssistantSkill({ sourcePath, overwrite })
       setSkipped(result.skippedFiles)
-      setStatus(describeInstallResult(result))
+      setStatus(info(describeInstallResult(result)))
       await load()
       logger.info('安装助手技能完成', {
         event: 'settings.agent_skills.install.completed',
@@ -108,7 +113,7 @@ export default function AgentSkillsSection(): JSX.Element {
     } catch (error) {
       const message = error instanceof Error ? error.message : '安装技能失败'
       if (message.includes('同名技能已存在')) {
-        setStatus('')
+        setStatus(info(''))
         setConfirm({
           kind: 'overwrite',
           title: '替换同名技能',
@@ -118,7 +123,7 @@ export default function AgentSkillsSection(): JSX.Element {
         })
         return
       }
-      setStatus(message)
+      setStatus(failure(message))
       logger.error('安装助手技能失败', error, { event: 'settings.agent_skills.install.failed' })
     } finally {
       setBusy(false)
@@ -141,7 +146,7 @@ export default function AgentSkillsSection(): JSX.Element {
     if (!file) return
     const sourcePath = getPathForFile(file).trim()
     if (!sourcePath) {
-      setStatus('无法读取拖入文件的路径，请改用“选择文件”。')
+      setStatus(failure('无法读取拖入文件的路径，请改用“选择文件”。'))
       return
     }
     void runInstall(sourcePath, false)
@@ -152,9 +157,9 @@ export default function AgentSkillsSection(): JSX.Element {
       setBusy(true)
       try {
         setManifest(await setAssistantSkillEnabled({ name: skill.name, enabled: !skill.enabled }))
-        setStatus(`已${skill.enabled ? '停用' : '启用'}技能 ${skill.name}。下一次助手任务生效。`)
+        setStatus(info(`已${skill.enabled ? '停用' : '启用'}技能 ${skill.name}。下一次助手任务生效。`))
       } catch (error) {
-        setStatus(error instanceof Error ? error.message : '更新技能状态失败')
+        setStatus(failure(error instanceof Error ? error.message : '更新技能状态失败'))
       } finally {
         setBusy(false)
       }
@@ -185,10 +190,10 @@ export default function AgentSkillsSection(): JSX.Element {
         setBusy(true)
         try {
           await uninstallAssistantSkill(skill.name)
-          setStatus(`已删除技能 ${skill.name}。`)
+          setStatus(info(`已删除技能 ${skill.name}。`))
           await load()
         } catch (error) {
-          setStatus(error instanceof Error ? error.message : '删除技能失败')
+          setStatus(failure(error instanceof Error ? error.message : '删除技能失败'))
         } finally {
           setBusy(false)
         }
@@ -200,9 +205,9 @@ export default function AgentSkillsSection(): JSX.Element {
     try {
       await openAssistantSkillsDirectory()
       // 刻意不显示目录的绝对路径：这段文本会被 Surface 观察截图原样带给模型。
-      setStatus('已在文件管理器中打开技能目录。改完文件后点“重新读取”。')
+      setStatus(info('已在文件管理器中打开技能目录。改完文件后点“重新读取”。'))
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : '打开技能目录失败')
+      setStatus(failure(error instanceof Error ? error.message : '打开技能目录失败'))
     }
   }, [])
 
@@ -228,13 +233,15 @@ export default function AgentSkillsSection(): JSX.Element {
           aria-label={`启用技能 ${skill.name}`}
         />
         {skill.source === 'user' ? (
-          <UiIconButton size="lg"
+          <UiIconButton
             type="button"
+            tone="danger"
             disabled={busy}
+            title={`删除技能 ${skill.name}`}
             aria-label={`删除技能 ${skill.name}`}
             onClick={() => removeSkill(skill)}
           >
-            <Trash2 size={14} />
+            <Trash2 className="h-4 w-4" />
           </UiIconButton>
         ) : null}
       </div>
@@ -248,6 +255,7 @@ export default function AgentSkillsSection(): JSX.Element {
           ? userSkills.map(renderSkillRow)
           : (
             <UiEmpty
+              size="sm"
               title="还没有自己的技能"
               description="技能是一段按需加载的提示词。安装后助手会在相关场景自己读取它，不会改变权限和审批规则。"
             />
@@ -290,16 +298,17 @@ export default function AgentSkillsSection(): JSX.Element {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <UiButton type="button" variant="primary" disabled={busy} onClick={() => void pickAndInstall()}>
-            <Upload size={14} className="mr-1.5" />
+          {/* 助手大类整页只留一个实底主动作（“保存指令”），安装技能用次级档 */}
+          <UiButton type="button" variant="secondary" disabled={busy} onClick={() => void pickAndInstall()}>
+            <Upload className="h-4 w-4" />
             选择文件安装
           </UiButton>
           <UiButton type="button" variant="secondary" disabled={busy} onClick={() => void load()}>
-            <RefreshCw size={14} className="mr-1.5" />
+            <RefreshCw className="h-4 w-4" />
             重新读取
           </UiButton>
           <UiButton type="button" variant="secondary" disabled={busy} onClick={() => void openDirectory()}>
-            <FolderOpen size={14} className="mr-1.5" />
+            <FolderOpen className="h-4 w-4" />
             打开技能目录
           </UiButton>
         </div>
@@ -313,7 +322,7 @@ export default function AgentSkillsSection(): JSX.Element {
             ))}
           </div>
         ) : null}
-        <p className={`leading-5 ${UI_TEXT_META_CLASS}`}>{status}</p>
+        <p className={`leading-5 ${status.failed ? 'text-2xs font-medium text-danger-text' : UI_TEXT_META_CLASS}`}>{status.text}</p>
       </UiGroup>
 
       <SettingsDialog

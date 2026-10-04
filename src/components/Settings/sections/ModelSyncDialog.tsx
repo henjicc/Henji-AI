@@ -112,12 +112,13 @@ export function ModelSyncDialog({
     >
       <div className="space-y-3">
         <div className="relative">
-          <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text2" />
+          <Search aria-hidden="true" className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-text3" />
           <UiInput
             value={keyword}
             onChange={(event) => setKeyword(event.target.value)}
             placeholder="搜索模型…"
-            className="pl-9"
+            aria-label="搜索模型"
+            className="pl-8"
           />
         </div>
 
@@ -154,6 +155,7 @@ export function ModelSyncDialog({
                       </UiOptionButton>
                       <UiIconButton size="lg"
                         type="button"
+                        title={allAdded ? `移除 ${row.group} 全部模型` : `添加 ${row.group} 全部模型`}
                         aria-label={allAdded ? `移除 ${row.group} 全部模型` : `添加 ${row.group} 全部模型`}
                         onClick={() => {
                           const ids = row.models.map(item => item.modelId)
@@ -178,6 +180,7 @@ export function ModelSyncDialog({
                     </div>
                     <UiIconButton size="lg"
                       type="button"
+                      title={added ? `移除 ${row.model.modelId}` : `添加 ${row.model.modelId}`}
                       aria-label={added ? `移除 ${row.model.modelId}` : `添加 ${row.model.modelId}`}
                       onClick={() => {
                         if (added) void onRemove([row.model.modelId])

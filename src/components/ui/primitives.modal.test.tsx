@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { UiButton, UiInput } from './primitives';
 import { UiModal } from './UiModal';
+import Dropdown from './Dropdown';
 import { UI_MODAL_SIZE_CLASS, type UiModalSize } from './styleTokens';
 
 afterEach(cleanup);
@@ -52,6 +53,24 @@ describe('UiModal', () => {
 
     expect(closeChild).toHaveBeenCalledTimes(1);
     expect(closeParent).not.toHaveBeenCalled();
+  });
+
+  it('弹窗里打开的下拉按 Esc 只收起下拉，不连带关掉弹窗（5.6 第二批 B-41）', async () => {
+    const onClose = vi.fn();
+    const view = render(
+      <UiModal isOpen title="设置" onClose={onClose}>
+        <Dropdown value="a" options={[{ value: 'a', label: '自动' }, { value: 'b', label: '简体中文' }]} onSelect={vi.fn()} />
+      </UiModal>,
+    );
+    const trigger = view.getByRole('button', { name: /自动/ });
+    fireEvent.click(trigger);
+    expect(await view.findByRole('listbox')).toBeTruthy();
+
+    fireEvent.keyDown(trigger, { key: 'Escape' });
+    expect(onClose).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 
   it('在首尾可聚焦元素之间循环 Tab', async () => {

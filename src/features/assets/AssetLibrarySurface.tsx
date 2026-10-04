@@ -62,7 +62,9 @@ export const AssetLibrarySurface: React.FC<Props> = ({ mode, active = true, onCl
   const [page, setPage] = useState<AssetPage>(EMPTY_PAGE)
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  // 失败分两类：列表读取失败（标题“资产加载失败”）与改名、建库等操作失败（标题“错误”）；正文是原因。
+  // UiError 没有标题时只剩弱化文字，失败语义不可辨（5.6 第二批 S-xx，同 A-12）。
+  const [error, setError] = useState<{ title: string; detail: string } | null>(null)
   const [menuState, setMenuState] = useState<{ asset: AssetRecord; anchor: Element | AssetMenuAnchor } | null>(null)
   const [previewAsset, setPreviewAsset] = useState<AssetRecord | null>(null)
   const [availableTags, setAvailableTags] = useState<string[]>([])
@@ -129,7 +131,7 @@ export const AssetLibrarySurface: React.FC<Props> = ({ mode, active = true, onCl
       void settlePendingInspections(result.items, version)
     } catch (cause) {
       logger.error('资产查询失败', cause, { event: 'asset.ui.query.failed' })
-      if (version === queryVersionRef.current) setError(isMissingAssetLibraryHandler(cause) ? t('assetLibrary.restartRequired') : cause instanceof Error ? cause.message : t('assetLibrary.error'))
+      if (version === queryVersionRef.current) setError({ title: t('assetLibrary.error'), detail: isMissingAssetLibraryHandler(cause) ? t('assetLibrary.restartRequired') : cause instanceof Error ? cause.message : '' })
     } finally {
       if (replace && version === queryVersionRef.current) setLoading(false)
       if (!replace) {
@@ -142,7 +144,7 @@ export const AssetLibrarySurface: React.FC<Props> = ({ mode, active = true, onCl
   useEffect(() => {
     void refreshLibraries().catch((cause) => {
       logger.error('资产库查询失败', cause, { event: 'asset.ui.libraries.failed' })
-      if (isMissingAssetLibraryHandler(cause)) setError(t('assetLibrary.restartRequired'))
+      if (isMissingAssetLibraryHandler(cause)) setError({ title: t('assetLibrary.error'), detail: t('assetLibrary.restartRequired') })
     })
   }, [refreshLibraries, t])
   useEffect(() => {
@@ -174,7 +176,7 @@ export const AssetLibrarySurface: React.FC<Props> = ({ mode, active = true, onCl
       if (refreshLibraryList) await refreshLibraries()
       await loadAssets(1, true)
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : t('assetLibrary.error'))
+      setError({ title: t('common:error'), detail: cause instanceof Error ? cause.message : '' })
     }
   }
   const rename = async (asset: AssetRecord, name: string): Promise<void> => { await mutate(() => updateAsset(asset.id, name)) }
@@ -230,7 +232,7 @@ export const AssetLibrarySurface: React.FC<Props> = ({ mode, active = true, onCl
   // 视图控制（静默触发器）：工作区放在页头命令带，浮动面板放在网格上方那一条。
   const viewControls = (
     <>
-      <div className={`relative ${mode === 'workspace' ? 'w-56 shrink' : 'min-w-[150px] flex-1'}`}>
+      <div className={`relative ${mode === 'workspace' ? 'w-56 shrink' : 'min-w-36 flex-1'}`}>
         <Search aria-hidden="true" className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-text3" />
         <UiInput className="pl-8" value={keyword} onChange={(event) => setKeyword(event.target.value)} placeholder={t('assetLibrary.search')} aria-label={t('assetLibrary.search')} />
       </div>
@@ -334,7 +336,7 @@ export const AssetLibrarySurface: React.FC<Props> = ({ mode, active = true, onCl
           <div
             role="separator"
             aria-orientation="vertical"
-            aria-label="调整资产库侧栏宽度"
+            aria-label={t('assetLibrary.resizeSidebar')}
             tabIndex={0}
             onPointerDown={startSidebarResize}
             onKeyDown={resizeSidebarByKeyboard}
@@ -356,12 +358,13 @@ export const AssetLibrarySurface: React.FC<Props> = ({ mode, active = true, onCl
           <UiSharedGlassHost ref={scrollRef} minTargets={4} onContextMenu={handleBlankContextMenu} className={`min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable] ${mode === 'workspace' ? 'p-4' : 'px-3 pb-3 pt-1'}`}>
             {loading && page.items.length === 0 ? (
               <div className={`absolute overflow-hidden ${mode === 'workspace' ? 'inset-4' : 'inset-3'}`} aria-busy="true">
-                <div className="grid gap-x-3 gap-y-4" style={{ gridTemplateColumns: `repeat(auto-fill,minmax(${cardSize}px,1fr))` }}>{Array.from({ length: 12 }).map((_, index) => <div key={index} className="aspect-square animate-pulse rounded-lg bg-panel" />)}</div>
+                <div className="grid gap-x-3 gap-y-4" style={{ gridTemplateColumns: `repeat(auto-fill,minmax(${cardSize}px,1fr))` }}>{Array.from({ length: 12 }).map((_, index) => <div key={index} className="aspect-square rounded-lg bg-panel motion-safe:animate-pulse" />)}</div>
               </div>
             ) : error ? (
               <UiError
                 className="h-full"
-                message={error}
+                title={error.title}
+                message={error.detail}
                 onRetry={() => void loadAssets(1, true)}
                 retryLabel={t('assetLibrary.retry')}
               />
@@ -369,7 +372,8 @@ export const AssetLibrarySurface: React.FC<Props> = ({ mode, active = true, onCl
               <UiEmpty
                 className="h-full"
                 icon={<FolderPlus className="h-10 w-10" />}
-                title={keyword || mediaType || libraryId ? t('assetLibrary.noResults') : t('assetLibrary.empty')}
+                title={keyword || mediaType || libraryId || selectedTag ? t('assetLibrary.noResults') : t('assetLibrary.empty')}
+                description={keyword || mediaType || libraryId || selectedTag ? undefined : t('assetLibrary.emptyHint')}
               />
             ) : (
               <>
@@ -393,7 +397,7 @@ export const AssetLibrarySurface: React.FC<Props> = ({ mode, active = true, onCl
                     />
                   ))}
                 </div>
-                <div ref={loadMoreRef} className={`flex h-14 items-center justify-center ${UI_TEXT_META_CLASS}`}>{loadingMore ? <><LoaderCircle className="mr-2 h-4 w-4 animate-spin" />{t('assetLibrary.loadingMore')}</> : page.items.length < page.total ? t('assetLibrary.scrollForMore') : t('assetLibrary.allLoaded')}</div>
+                <div ref={loadMoreRef} className={`flex h-14 items-center justify-center ${UI_TEXT_META_CLASS}`}>{loadingMore ? <><LoaderCircle className="mr-2 h-4 w-4 motion-safe:animate-spin" />{t('assetLibrary.loadingMore')}</> : page.items.length < page.total ? t('assetLibrary.scrollForMore') : t('assetLibrary.allLoaded')}</div>
               </>
             )}
           </UiSharedGlassHost>

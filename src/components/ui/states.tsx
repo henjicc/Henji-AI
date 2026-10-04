@@ -123,7 +123,8 @@ export function UiError({
       role="alert"
     >
       {title ? <div className="text-sm font-medium text-danger-text">{title}</div> : null}
-      <p className={`mt-1.5 max-w-md break-words ${UI_TEXT_META_CLASS}`}>{message}</p>
+      {/* 标题已经是完整的失败说明时，调用方传空正文，这里不再留一行空白 */}
+      {message ? <p className={`mt-1.5 max-w-md break-words ${UI_TEXT_META_CLASS}`}>{message}</p> : null}
       {(actions || onRetry) && (
         <div className={`flex items-center gap-2 ${start ? 'mt-2' : 'mt-4 justify-center'}`}>
           {actions}

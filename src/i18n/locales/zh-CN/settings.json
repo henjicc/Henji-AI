@@ -136,6 +136,8 @@
     "emptyProvidersHint": "添加供应商后即可统一管理密钥和模型。",
     "emptyModels": "这个分类还没有模型",
     "emptyModelsHint": "可添加模型或切换其他能力分类。",
+    "syncFailed": "同步模型失败",
+    "syncFailedHint": "请检查密钥与接口地址后重试。",
     "providers": { "bigmodel": "智谱" },
     "categories": {
       "all": "全部", "image-generation": "图片生成", "video-generation": "视频生成",
@@ -150,7 +152,7 @@
       "beforeWebsite": "先去", "afterWebsite": "注册或登录，再去", "onlyApiKey": "前往", "afterApiKey": "获取密钥。"
     },
     "actions": {
-      "addProvider": "添加供应商", "connectionSettings": "连接设置", "syncModels": "同步模型", "addModel": "添加模型",
+      "addProvider": "添加供应商", "connectionSettings": "连接设置", "syncModels": "同步模型", "syncingModels": "正在同步…", "addModel": "添加模型",
       "editModel": "编辑模型", "deleteModel": "删除模型"
     }
   },
@@ -184,8 +186,8 @@
       "preset": "预设会自动填写连接信息，已添加的供应商不会重复显示。",
       "keyUrl": "用于显示“获取/管理 API Key”入口；不填写时不显示。",
       "protocol": "按自定义接口实际支持的请求方式选择。",
-      "presetProtocol": "保持“自动选择”时，SDK 会按具体模型选择请求方式；手动修改后将对该供应商的全部模型生效。",
-      "presetBaseUrl": "保持默认时使用 SDK 维护的供应商地址；修改后将使用新的 API 地址。"
+      "presetProtocol": "保持“自动选择”时，会按具体模型选择请求方式；手动修改后将对该供应商的全部模型生效。",
+      "presetBaseUrl": "保持默认时使用内置的供应商地址；修改后将使用新的 API 地址。"
     },
     "preview": "预览：{{value}}",
     "previewEmpty": "请先填写 API 地址",
@@ -220,7 +222,7 @@
   "reset": "重置设置",
   "confirmReset": "确定要重置所有设置吗？",
   "actions": {
-    "close": "确定",
+    "close": "关闭",
     "select": "选择",
     "resetDefault": "恢复默认",
     "cancel": "取消",
@@ -552,7 +554,8 @@
     "visibleCount": "({{visible}}/{{total}} 可见)",
     "alias": {
       "sectionDescription": "同一模型无论由哪些供应商提供，只需设置一次，别名统一生效",
-      "inputLabel": "{{name}} 的别名"
+      "inputLabel": "{{name}} 的别名",
+      "empty": "还没有可设置别名的模型"
     },
     "status": {
       "hidden": "已隐藏",

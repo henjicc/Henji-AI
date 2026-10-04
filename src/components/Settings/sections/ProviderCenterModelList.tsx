@@ -92,21 +92,23 @@ const ProviderCenterModelList = ({
       {filtered.length === 0 ? (
         <UiEmpty size="sm" title={t('providerCenter.emptyModels')} description={t('providerCenter.emptyModelsHint')} />
       ) : (
+        // 第三列定宽：可编辑的模型多了编辑、删除两个按钮，`auto` 列会让每行的“能力”列左缘各不相同
         <div className="divide-y divide-line">
-          <div className={`grid grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto] gap-4 px-1 pb-2 ${UI_TEXT_META_CLASS}`}>
+          <div className={`grid grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_8rem] gap-4 px-1 pb-2 ${UI_TEXT_META_CLASS}`}>
             <span>{t('providerCenter.columns.model')}</span>
             <span>{t('providerCenter.columns.capability')}</span>
-            <span>{t('providerCenter.columns.visibility')}</span>
+            <span className="text-right">{t('providerCenter.columns.visibility')}</span>
           </div>
           {filtered.map(model => (
-            <div key={model.id} className="grid min-h-14 grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto] items-center gap-4 px-1 py-2.5">
+            <div key={model.id} className="grid min-h-14 grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_8rem] items-center gap-4 px-1 py-2.5">
               <div className="min-w-0">
                 <div className={`truncate ${UI_TEXT_BODY_CLASS}`}>{model.name}</div>
                 <div className={`truncate ${UI_TEXT_META_CLASS}`}>{model.modelId}</div>
               </div>
               <div className="flex min-w-0 flex-wrap gap-1.5">
                 {model.capabilityIds.slice(0, 4).map(capability => (
-                  <span key={capability} className={`rounded-full bg-hover px-2 py-1 ${UI_TEXT_META_CLASS}`}>
+                  // 与同一分区里的类型徽标（ModelTypeBadge）同一写法：中性 raised 浅底、圆角 4、12 号次要文字
+                  <span key={capability} className="shrink-0 rounded bg-raised px-2 py-0.5 text-xs text-text2">
                     {t(`providerCenter.capabilities.${capability}`, { defaultValue: capability })}
                   </span>
                 ))}
@@ -120,7 +122,7 @@ const ProviderCenterModelList = ({
                       title={t('providerCenter.actions.editModel')}
                       onClick={() => onEditModel(model)}
                     >
-                      <Pencil size={15} />
+                      <Pencil className="h-4 w-4" />
                     </UiIconButton>
                     <UiIconButton size="lg" tone="danger"
                       type="button"
@@ -128,7 +130,7 @@ const ProviderCenterModelList = ({
                       title={t('providerCenter.actions.deleteModel')}
                       onClick={() => void onDeleteModel(model)}
                     >
-                      <Trash2 size={15} />
+                      <Trash2 className="h-4 w-4" />
                     </UiIconButton>
                   </>
                 ) : null}

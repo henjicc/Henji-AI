@@ -58,7 +58,11 @@ export function useUiOverlayLayer(open: boolean, options?: { modal?: boolean }):
 
   useLayoutEffect(() => {
     if (!open) return
-    openOverlayStack.push(id)
+    // 同一次提交里父子层一起打开时，子层的 layout effect 先执行、先入栈；父层必须插在已打开的后代层之下，
+    // 否则父层成了栈顶，子层（如资产预览里的全屏查看器）永远收不到 Escape（5.6 第二批 B-43）
+    const firstDescendant = openOverlayStack.findIndex((openId) => isAncestorOverlay(id, openId))
+    if (firstDescendant >= 0) openOverlayStack.splice(firstDescendant, 0, id)
+    else openOverlayStack.push(id)
     if (modal) openModalOverlays.add(id)
     return () => {
       const index = openOverlayStack.lastIndexOf(id)

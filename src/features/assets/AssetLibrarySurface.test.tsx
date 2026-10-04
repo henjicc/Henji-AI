@@ -178,3 +178,27 @@ describe('资产后台检查（3.7：视频封面）', () => {
     expect(view.container.querySelector('[data-asset-id="video-1"] img')).toBeNull()
   })
 })
+
+describe('资产库空态与失败态（5.6 第二批）', () => {
+  it('只按标签筛选且没有命中时显示“没有符合条件”，不是“资产库还是空的”', async () => {
+    mocks.tags.mockResolvedValue(['猫'])
+    render(<AssetLibrarySurface mode="workspace" />)
+    await screen.findByText('assetLibrary.empty')
+    fireEvent.click(screen.getByRole('button', { name: 'assetLibrary.allTags' }))
+    fireEvent.click(await screen.findByRole('option', { name: '猫' }))
+    await waitFor(() => expect(mocks.query).toHaveBeenLastCalledWith(expect.objectContaining({ tag: '猫' })))
+    expect(await screen.findByText('assetLibrary.noResults')).toBeTruthy()
+    expect(screen.queryByText('assetLibrary.empty')).toBeNull()
+  })
+
+  it('列表读取失败有危险色标题与原因，并可重试', async () => {
+    mocks.query.mockRejectedValueOnce(new Error('磁盘不可读'))
+    render(<AssetLibrarySurface mode="workspace" />)
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toContain('assetLibrary.error')
+    expect(alert.textContent).toContain('磁盘不可读')
+    expect(alert.querySelector('.text-danger-text')?.textContent).toBe('assetLibrary.error')
+    fireEvent.click(screen.getByRole('button', { name: 'assetLibrary.retry' }))
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull())
+  })
+})

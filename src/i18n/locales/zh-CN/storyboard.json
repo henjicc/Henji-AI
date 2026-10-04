@@ -818,6 +818,7 @@
     "exportPackage": "导出项目包",
     "importPackage": "导入项目",
     "importing": "导入中…",
+    "exporting": "正在导出…",
     "exportFailed": "项目导出失败",
     "importFailed": "项目导入失败",
     "persistenceFailed": "画布项目保存失败，请检查磁盘空间后重试",

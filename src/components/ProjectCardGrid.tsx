@@ -166,7 +166,8 @@ export const ProjectCardGrid: React.FC<ProjectCardGridProps> = ({
                 <ProjectCardCover coverPath={item.coverPath} icon={Icon} alt={item.name} />
               </span>
               <span className="flex min-w-0 flex-col gap-0.5 px-0.5">
-                <span className="truncate text-13 font-medium text-text1">{item.name}</span>
+                {/* 长名称会截断：悬停名称看全名（A01.7） */}
+                <span className="truncate text-13 font-medium text-text1" title={item.name}>{item.name}</span>
                 <span className="truncate text-xs text-text3">{item.metaLine}</span>
               </span>
             </UiOptionButton>

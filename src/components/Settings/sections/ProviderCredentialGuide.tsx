@@ -26,7 +26,7 @@ const ProviderCredentialGuide = ({
           {t('providerCenter.guide.beforeWebsite')}{' '}
           <UiButton type="button" variant="link" className="align-baseline" onClick={() => onOpenUrl(websiteUrl)}>
             {t('apiKeys.providerGuideLinks.website', { provider: providerName })}
-            <ExternalLink className="ml-1 h-3 w-3" />
+            <ExternalLink className="h-3 w-3" />
           </UiButton>{' '}
           {t('providerCenter.guide.afterWebsite')}{' '}
         </>
@@ -36,7 +36,7 @@ const ProviderCredentialGuide = ({
           {websiteUrl ? null : <>{t('providerCenter.guide.onlyApiKey')}{' '}</>}
           <UiButton type="button" variant="link" className="align-baseline" onClick={() => onOpenUrl(apiKeyUrl)}>
             {t('apiKeys.providerGuideLinks.apiKey')}
-            <ExternalLink className="ml-1 h-3 w-3" />
+            <ExternalLink className="h-3 w-3" />
           </UiButton>{' '}
           {t('providerCenter.guide.afterApiKey')}
         </>

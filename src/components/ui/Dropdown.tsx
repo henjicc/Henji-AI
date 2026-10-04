@@ -197,6 +197,8 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
     }
     if (event.key === 'Escape' && open) {
       event.preventDefault()
+      // 这次 Escape 只属于打开中的下拉：不再冒泡到文档，否则外层弹窗（设置等）的焦点陷阱会把整个弹窗一起关掉
+      event.stopPropagation()
       closePanel(true)
       return
     }

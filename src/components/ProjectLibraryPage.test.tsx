@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 import React from 'react';
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ProjectLibraryPage, type ProjectLibraryLabels } from './ProjectLibraryPage';
 import type { ProjectCardGridItem } from './ProjectCardGrid';
@@ -58,6 +58,12 @@ describe('ProjectLibraryPage', () => {
     expect(visibleProjectIds()).toEqual(['p1', 'p2']);
   });
 
+  it('长名称截断后悬停名称可看全名', () => {
+    const longName = '分镜 10 用来检查截断效果的一个非常非常长的项目名称';
+    renderPage([{ id: 'long', name: longName, metaLine: '0 个节点' }]);
+    expect(screen.getByText(longName).getAttribute('title')).toBe(longName);
+  });
+
   it('空状态不再放第二个新建按钮，也不显示搜索与排序', () => {
     renderPage([]);
     expect(screen.getByText('暂无项目')).toBeTruthy();
@@ -85,6 +91,21 @@ describe('ProjectLibraryPage', () => {
     const menu = document.querySelector('[data-context-menu]') as HTMLElement;
     expect(within(menu).getByText('重命名')).toBeTruthy();
     expect(within(menu).getByText('删除项目')).toBeTruthy();
+  });
+
+  it('多选删除确认后退出多选，页头回到常规动作', async () => {
+    const onDelete = vi.fn();
+    render(
+      <ProjectLibraryPage title="项目管理" items={items} labels={labels} onOpen={vi.fn()} onCreate={vi.fn()} onRename={vi.fn()} onDelete={onDelete} />,
+    );
+    fireEvent.contextMenu(document.querySelector('[data-project-id="p1"]')!);
+    fireEvent.click(within(document.querySelector('[data-context-menu]') as HTMLElement).getByText('多选'));
+    fireEvent.click(await screen.findByRole('button', { name: '全选' }));
+    fireEvent.click(screen.getByRole('button', { name: '删除所选' }));
+    fireEvent.click(await screen.findByRole('button', { name: '删除' }));
+    await waitFor(() => expect(onDelete).toHaveBeenCalledOnce());
+    await waitFor(() => expect(screen.queryByText(/已选择/)).toBeNull());
+    expect(screen.getByRole('button', { name: '新建项目' })).toBeTruthy();
   });
 
   it('多选时命令带换成多选工具条，删除为危险档且没有主按钮', async () => {

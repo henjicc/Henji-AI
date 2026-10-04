@@ -6,7 +6,7 @@ import { ImageViewerModal } from '@/components/mediaViewer/ImageViewerModal'
 import { VideoViewerModal } from '@/components/mediaViewer/VideoViewerModal'
 import type { AssetRecord } from '@/platform/contracts/assetLibrary'
 import { UiButton, UiEmpty, UiError, UiLoading, UiModal, UI_TEXT_BODY_CLASS, UI_TEXT_META_CLASS } from '@/components/ui'
-import { useUiOverlayLayer } from '@/components/ui/overlayOwnership'
+import { UiOverlayLayerProvider, useUiOverlayLayer } from '@/components/ui/overlayOwnership'
 import { ICON_ASSET_CODE } from '@/core/theme/icons'
 import { createLogger } from '@/core/logging'
 import { useI18n } from '@/hooks/useI18n'
@@ -127,6 +127,8 @@ export const AssetPreviewOverlay: React.FC<Props> = ({ asset, onClose }) => {
 
   return createPortal(
     <div className="contents" data-asset-preview={asset ? 'open' : 'closed'} {...overlay.layerProps}>
+      {/* 查看器是预览层的子层：栈里排在预览层之上，Escape 由查看器处理（5.6 第二批 B-43） */}
+      <UiOverlayLayerProvider id={overlay.id}>
       <ImageViewerModal
         open={asset?.mediaType === 'image'}
         imageUrl={media?.mediaType === 'image' ? media.displayUrl : ''}
@@ -151,6 +153,7 @@ export const AssetPreviewOverlay: React.FC<Props> = ({ asset, onClose }) => {
         onClose={onClose}
       />
       {asset?.mediaType === 'code' && <CodeAssetPreview key={JSON.stringify([asset.id, asset.filePath, asset.contentIdentity])} asset={asset} onClose={onClose} />}
+      </UiOverlayLayerProvider>
     </div>,
     document.body,
   )

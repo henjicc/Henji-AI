@@ -11,9 +11,9 @@ import {
   UiDisclosurePanel,
   UiFormRow,
   UiGroup,
-  UiInput,
   UiPanel,
 } from '@/components/ui'
+import NumberInput from '@/components/ui/NumberInput'
 import { SETTINGS_INLINE_CONTROL_CLASS } from '../settingsLayout'
 import { findAgentModelVerification } from '@/core/llm/agentProfiles'
 import { applyCapabilitySmokeToCapabilities } from '@/core/llm/capabilitySmokeCapabilities'
@@ -266,11 +266,9 @@ const AgentModelProfilesSection = ({ config, saveConfig }: AgentModelProfilesSec
      * 而且内层的 layer 比外层更亮——正好踩中"内层背景只能比外层更暗"那条。
      * 现在外层降成零装饰分组，四个角色块用 inset（更暗、无边框、无阴影）。
      */
-    <UiGroup
-      title="智能助手模型"
-      info="复用下方供应商与密钥；动态验证会发起最小真实请求，价格无可靠来源时保持未知。"
-      gap="stack"
-    >
+    // 分节标题“助手模型”已由 SettingsSection 渲染，这里不再叠一个“智能助手模型”分组标题；
+    // 原 info 里的费用提示移到“验证此模型”按钮旁（费用信息放在会产生费用的动作处）。
+    <UiGroup gap="stack">
       <div className="grid gap-3 sm:grid-cols-2">
         {(Object.keys(roleLabels) as AgentModelRole[]).map(role => {
           const options = createOptions(models, role)
@@ -289,11 +287,13 @@ const AgentModelProfilesSection = ({ config, saveConfig }: AgentModelProfilesSec
                 {/* 能力/验证详情过于专业，普通用户选好模型就够了，折叠掉默认不显示 */}
                 <UiButton
                   type="button"
+                  size="sm"
+                  aria-expanded={detailsOpen}
                   onClick={() => toggleRoleDetails(role)}
-                  className="shrink-0 gap-0.5 px-1.5"
+                  className="shrink-0"
                 >
                   详情
-                  {detailsOpen ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                  {detailsOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
                 </UiButton>
               </div>
               <Dropdown<string>
@@ -319,12 +319,15 @@ const AgentModelProfilesSection = ({ config, saveConfig }: AgentModelProfilesSec
                       <div>某个模态显示“失败”表示智能助手当前的请求协议带不了它，模型本身仍可能支持——画布文本处理等功能不受影响。</div>
                       <div>Token：输入 {verification.usage.inputTokens ?? '未知'} / 输出 {verification.usage.outputTokens ?? '未知'} / 思考 {verification.usage.reasoningTokens ?? '未知'}</div>
                     </div>
-                  ) : <div className="text-xs text-danger-text">尚未进行动态能力验证</div>}
+                  ) : <div className={UI_TEXT_META_CLASS}>尚未进行动态能力验证</div>}
                   {effectiveReference ? (
-                    <UiButton type="button" variant="secondary" disabled={verifyingKey !== null} onClick={() => void verify(effectiveReference)}>
-                      <RefreshCw size={14} className={`mr-1.5 ${verifyingKey === key ? 'animate-spin' : ''}`} />
-                      {verifyingKey === key ? '验证中' : '验证此模型'}
-                    </UiButton>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <UiButton type="button" variant="secondary" disabled={verifyingKey !== null} onClick={() => void verify(effectiveReference)}>
+                        <RefreshCw className={`h-4 w-4 ${verifyingKey === key ? 'motion-safe:animate-spin' : ''}`} />
+                        {verifyingKey === key ? '验证中' : '验证此模型'}
+                      </UiButton>
+                      <span className={UI_TEXT_META_CLASS}>会向该模型发起一次最小真实请求</span>
+                    </div>
                   ) : null}
                 </div>
               </UiDisclosurePanel>
@@ -337,23 +340,27 @@ const AgentModelProfilesSection = ({ config, saveConfig }: AgentModelProfilesSec
       <div>
         <UiButton
           type="button"
+          size="sm"
+          aria-expanded={advancedOpen}
           onClick={() => setAdvancedOpen(prev => !prev)}
-          className="gap-1 px-1.5"
+          className="-ml-2"
         >
           高级设置
-          {advancedOpen ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+          {advancedOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
         </UiButton>
         <UiDisclosurePanel open={advancedOpen}>
           <div className={`pt-4 ${UI_FORM_ROW_GAP_CLASS}`}>
             {RUNTIME_SETTING_FIELDS.map(field => (
               <UiFormRow key={field.key} label={field.label} info={field.info} inline>
-                <UiInput
-                  type="number"
+                {/* 与设置里其他数值项同一个控件（NumberInput：拖动改值、步进、范围夹取） */}
+                <NumberInput
+                  value={profile.settings[field.key]}
                   min={field.min}
                   max={field.max}
-                  value={profile.settings[field.key]}
-                  onChange={event => void updateSetting(field.key, Number(event.target.value))}
-                  className={`${SETTINGS_INLINE_CONTROL_CLASS}`}
+                  step={1}
+                  ariaLabel={field.label}
+                  onChange={value => void updateSetting(field.key, value)}
+                  widthClassName={SETTINGS_INLINE_CONTROL_CLASS}
                 />
               </UiFormRow>
             ))}

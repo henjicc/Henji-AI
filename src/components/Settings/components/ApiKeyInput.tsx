@@ -64,7 +64,7 @@ const ApiKeyInput: React.FC<ApiKeyInputProps> = ({
                 onClick={() => onOpenUrl(websiteUrl)}
               >
                 {websiteLabel}
-                <ExternalLink className="ml-1 h-3.5 w-3.5" />
+                <ExternalLink className="h-3.5 w-3.5" />
               </UiButton>
             ) : null}
             {managementUrl && managementLabel && onOpenUrl ? (
@@ -75,7 +75,7 @@ const ApiKeyInput: React.FC<ApiKeyInputProps> = ({
                 onClick={() => onOpenUrl(managementUrl)}
               >
                 {managementLabel}
-                <ExternalLink className="ml-1 h-3.5 w-3.5" />
+                <ExternalLink className="h-3.5 w-3.5" />
               </UiButton>
             ) : null}
           </div>

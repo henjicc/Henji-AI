@@ -93,7 +93,7 @@ export const AssetCard: React.FC<AssetCardProps> = ({ asset, selected, eager = f
           <UiCheckbox
             checked={batchSelected}
             disabled={batchDisabled}
-            aria-label={t('assetLibrary.batchManage')}
+            aria-label={t('assetLibrary.selectAsset', { name: asset.displayName })}
             className="absolute left-2 top-2 z-raised"
             onClick={(event) => event.stopPropagation()}
             onCheckedChange={() => { if (!batchDisabled) onToggleBatch?.(asset) }}
@@ -101,14 +101,15 @@ export const AssetCard: React.FC<AssetCardProps> = ({ asset, selected, eager = f
         )}
         <UiIconButton tone="media"
           data-ui-shared-glass="exclude"
-          aria-label="menu"
+          title={t('workspaceFilters.moreActions')}
+          aria-label={t('workspaceFilters.moreActions')}
           className={`absolute right-2 top-2 transition-opacity duration-120 group-hover:opacity-100 focus-visible:opacity-100 ${menuOpen ? 'opacity-100' : 'opacity-0'}`}
           onClick={(event) => { event.stopPropagation(); onMenu(asset, event.currentTarget, true) }}
         ><MoreHorizontal className="h-4 w-4" /></UiIconButton>
         {(asset.mediaType === 'video' || asset.mediaType === 'audio') && <UiIconButton shape="circle" size="xl" tone="media" aria-label={t('audioPlayer.playPause')} className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2" onClick={(event) => { event.stopPropagation(); onPreview(asset) }}><Play className="h-4 w-4" /></UiIconButton>}
       </div>
       <div className="flex min-w-0 flex-col gap-0.5 px-0.5">
-        {editing ? <UiInput autoFocus size="sm" value={draft} aria-label={t('assetLibrary.renameAsset')} onChange={(event) => setDraft(event.target.value)} onBlur={() => void submitRename()} onKeyDown={(event) => { if (event.key === 'Enter') void submitRename(); if (event.key === 'Escape') { setDraft(asset.displayName); setEditing(false) } }} onClick={(event) => event.stopPropagation()} /> : <div className="truncate text-13 font-medium text-text1" title={t('assetLibrary.renameAsset')} onDoubleClick={(event) => { if (batchMode) return; event.stopPropagation(); setDraft(asset.displayName); setEditing(true) }}>{asset.displayName}</div>}
+        {editing ? <UiInput autoFocus size="sm" value={draft} aria-label={t('assetLibrary.renameAsset')} onChange={(event) => setDraft(event.target.value)} onBlur={() => void submitRename()} onKeyDown={(event) => { if (event.key === 'Enter') void submitRename(); if (event.key === 'Escape') { setDraft(asset.displayName); setEditing(false) } }} onClick={(event) => event.stopPropagation()} /> : <div className="truncate text-13 font-medium text-text1" title={asset.displayName} onDoubleClick={(event) => { if (batchMode) return; event.stopPropagation(); setDraft(asset.displayName); setEditing(true) }}>{asset.displayName}</div>}
         <div className="flex min-w-0 items-center gap-1 text-xs text-text3">
           <span className="shrink-0">{t(`assetLibrary.${asset.mediaType}`)}</span>
           {asset.tags[0] && <><span aria-hidden="true">·</span><span className="min-w-0 truncate">{asset.tags[0]}</span></>}

@@ -136,6 +136,8 @@
     "emptyProvidersHint": "Add a provider to manage its key and models together.",
     "emptyModels": "No models in this category",
     "emptyModelsHint": "Add a model or choose another capability category.",
+    "syncFailed": "Model sync failed",
+    "syncFailedHint": "Check the API key and endpoint, then try again.",
     "providers": { "bigmodel": "Zhipu AI" },
     "categories": {
       "all": "All", "image-generation": "Image generation", "video-generation": "Video generation",
@@ -150,7 +152,7 @@
       "beforeWebsite": "First visit", "afterWebsite": "to register or sign in, then open", "onlyApiKey": "Open", "afterApiKey": "to get your key."
     },
     "actions": {
-      "addProvider": "Add provider", "connectionSettings": "Connection settings", "syncModels": "Sync models", "addModel": "Add model",
+      "addProvider": "Add provider", "connectionSettings": "Connection settings", "syncModels": "Sync models", "syncingModels": "Syncing…", "addModel": "Add model",
       "editModel": "Edit model", "deleteModel": "Delete model"
     }
   },
@@ -184,8 +186,8 @@
       "preset": "Presets fill in connection details automatically. Providers already added are not shown again.",
       "keyUrl": "Used for the Get/Manage API Key link. No link is shown when empty.",
       "protocol": "Choose the request format supported by the custom endpoint.",
-      "presetProtocol": "Automatic lets the SDK choose per model. A manual selection overrides every model under this provider.",
-      "presetBaseUrl": "The SDK-maintained provider URL is used by default. Editing this field switches to the new API URL."
+      "presetProtocol": "Automatic picks the request format per model. A manual selection overrides every model under this provider.",
+      "presetBaseUrl": "The built-in provider URL is used by default. Editing this field switches to the new API URL."
     },
     "preview": "Preview: {{value}}",
     "previewEmpty": "Enter an API URL first",
@@ -552,7 +554,8 @@
     "visibleCount": "({{visible}}/{{total}} visible)",
     "alias": {
       "sectionDescription": "Set once per model — it applies across every provider that offers it",
-      "inputLabel": "Alias for {{name}}"
+      "inputLabel": "Alias for {{name}}",
+      "empty": "No models to alias yet"
     },
     "status": {
       "hidden": "Hidden",

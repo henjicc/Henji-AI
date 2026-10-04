@@ -123,7 +123,7 @@ describe('LlmProviderDialog', () => {
     fireEvent.click(screen.getByRole('option', { name: '派欧云' }))
     expect(screen.getByText('接口协议')).toBeTruthy()
     expect(screen.getByRole('button', { name: '接口协议' }).textContent).toContain('自动选择（推荐）')
-    expect(screen.getByText(/SDK 会按具体模型选择请求方式/)).toBeTruthy()
+    expect(screen.getByText(/会按具体模型选择请求方式/)).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: '访问官网' }))
     expect(openExternal).toHaveBeenCalledWith(preset.websiteUrl)
     fireEvent.click(screen.getByRole('button', { name: '获取/管理 API Key' }))

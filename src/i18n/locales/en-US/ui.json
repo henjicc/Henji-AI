@@ -288,7 +288,7 @@
     "empty": "Your asset library is empty",
     "noResults": "No matching assets",
     "error": "Failed to load assets",
-    "restartRequired": "The asset library backend is not loaded. Restart the Electron development process and retry.",
+    "restartRequired": "The asset library is not available right now. Restart Henji AI and try again.",
     "retry": "Retry",
     "count": "{{count}} items",
     "loadedCount": "Loaded {{loaded}} of {{count}}",
@@ -331,7 +331,11 @@
     "batchPartialFailure": "{{count}} items failed. Please retry.",
     "batchEmptyMenu": "Manage multiple assets",
     "close": "Close asset library",
-    "confirm": "Confirm"
+    "confirm": "Confirm",
+    "resizeSidebar": "Resize asset library sidebar",
+    "selectAsset": "Select \"{{name}}\"",
+    "noLibraries": "No asset libraries yet. Create one from the sidebar.",
+    "emptyHint": "Generation results and canvas nodes can be saved with \"Add to asset library\"."
   },
   "windowControls": {
     "appName": "Henji AI",

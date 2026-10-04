@@ -1,10 +1,13 @@
 import React, { useEffect, useState } from 'react'
-import { UiButton, UiError, UiFormRow, UiInput, UiLoading, UiSwitch } from '@/components/ui'
+import { UiButton, UiError, UiFormRow, UiInput, UiLoading, UiPanel, UiSwitch } from '@/components/ui'
 import NumberInput from '@/components/ui/NumberInput'
 import { getMcpConnectionService } from '@/commands/mcp'
 import { writeClipboardText } from '@/commands/clipboard'
 import { DEFAULT_MCP_PREFERENCES, type McpStatus, type McpPreferences } from '@/core/application-control/localHostContracts'
 import { useI18n } from '@/hooks/useI18n'
+import { SETTINGS_INLINE_CONTROL_CLASS } from '../settingsLayout'
+
+const describeMcpError = (cause: unknown): string => cause instanceof Error ? cause.message : String(cause)
 
 export default function McpSection(): React.JSX.Element {
   const { t } = useI18n('settings')
@@ -17,20 +20,20 @@ export default function McpSection(): React.JSX.Element {
   const { allowWrites, allowPaid, allowDestructive } = status?.defaultAccess ?? DEFAULT_MCP_PREFERENCES.defaultAccess
   const saveAccess = (defaultAccess: McpPreferences['defaultAccess']): void => { void act(() => getMcpConnectionService().configure({ enabled: status!.enabled, port, defaultAccess })) }
   const refresh = async (): Promise<void> => { const next = await getMcpConnectionService().status(); setStatus(next); setPort(next.port) }
-  useEffect(() => { void refresh().catch((cause) => setError(String(cause))) }, [])
+  useEffect(() => { void refresh().catch((cause) => setError(describeMcpError(cause))) }, [])
   const act = async (action: () => Promise<unknown>): Promise<void> => {
     setBusy(true); setError('')
-    try { await action(); await refresh() } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)) }
+    try { await action(); await refresh() } catch (cause) { setError(describeMcpError(cause)) }
     finally { setBusy(false) }
   }
   return <>
-    {error && <UiError message={error} onRetry={() => void act(refresh)} />}
-    {!status ? <UiLoading message={t('mcp.loading')} /> : <>
+    {error && <UiError size="xs" align="start" title={error} message="" onRetry={() => void act(refresh)} />}
+    {!status ? <UiLoading size="sm" message={t('mcp.loading')} /> : <>
       <UiFormRow label={t('mcp.enable')} inline info={t('mcp.readOnly')}>
         <UiSwitch checked={status.enabled} disabled={busy} onCheckedChange={(enabled) => void act(() => getMcpConnectionService().configure({ enabled, port }))} />
       </UiFormRow>
       <UiFormRow label={t('mcp.port')} inline>
-        <NumberInput value={port} onChange={setPort} min={1024} max={65535} disabled={status.enabled || busy} />
+        <NumberInput value={port} onChange={setPort} min={1024} max={65535} disabled={status.enabled || busy} widthClassName={SETTINGS_INLINE_CONTROL_CLASS} />
       </UiFormRow>
       <UiFormRow label={t('mcp.name')}>
         <div className="flex items-center gap-2">
@@ -55,10 +58,11 @@ export default function McpSection(): React.JSX.Element {
             setConfig(value)
             await writeClipboardText(value)
           })}>{t('mcp.copy')}</UiButton>
-          <UiButton variant="secondary" disabled={busy} onClick={() => void act(async () => { await getMcpConnectionService().revoke({ id: connection.id }); setConfig('') })}>{t('mcp.revoke')}</UiButton>
+          <UiButton variant="danger" disabled={busy} onClick={() => void act(async () => { await getMcpConnectionService().revoke({ id: connection.id }); setConfig('') })}>{t('mcp.revoke')}</UiButton>
         </div>
       </UiFormRow>)}
-      {config && <pre data-observation-sensitive className="overflow-auto whitespace-pre-wrap break-all text-xs text-text2">{config}</pre>}
+      {/* 复制出的连接配置是只读预览：下沉为 inset 面，等宽字体 */}
+      {config && <UiPanel variant="inset" className="p-3"><pre data-observation-sensitive className="overflow-auto whitespace-pre-wrap break-all font-mono text-xs text-text2">{config}</pre></UiPanel>}
     </>}
   </>
 }

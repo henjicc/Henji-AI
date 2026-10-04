@@ -398,7 +398,7 @@ const LlmProviderDialog = ({
               disabled={saving}
               onClick={() => void handleReset()}
             >
-              <RefreshCw size={14} className="mr-1.5" />
+              <RefreshCw className="h-4 w-4" />
               {t('llmProvider.actions.reset')}
             </UiButton>
           ) : (
@@ -408,7 +408,7 @@ const LlmProviderDialog = ({
               disabled={saving}
               onClick={() => void handleDelete()}
             >
-              <Trash2 size={14} className="mr-1.5" />
+              <Trash2 className="h-4 w-4" />
               {t('llmProvider.actions.delete')}
             </UiButton>
           )}
@@ -460,7 +460,8 @@ const LlmProviderDialog = ({
                 type="button"
                 active={draft.providerId === provider.providerId}
                 variant="menu"
-                className="flex w-full items-center justify-between gap-2 px-3 py-2.5"
+                size="lg"
+                className="flex w-full items-center justify-between gap-2"
                 onClick={() => selectExisting(provider)}
               >
                 <span className="min-w-0 text-left">
@@ -472,7 +473,7 @@ const LlmProviderDialog = ({
               </UiOptionButton>
             ))}
             <UiButton type="button" variant="secondary" className="w-full" onClick={startNew}>
-              <Plus size={14} className="mr-1.5" />
+              <Plus className="h-4 w-4" />
               {t('llmProvider.actions.new')}
             </UiButton>
           </div>

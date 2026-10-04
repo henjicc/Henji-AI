@@ -143,6 +143,8 @@ export function ProjectLibraryPage({
     setDeleting(true);
     try {
       await onDelete(pendingDelete);
+      // 删完所选就退出多选：否则删光后页头仍是“已选择 0 项”工具条，连“新建”都看不到（5.6 第二批 B-54）
+      if (selection.active) selection.exit();
     } finally {
       setDeleting(false);
       setPendingDelete(null);

@@ -818,6 +818,7 @@
     "exportPackage": "Export Package",
     "importPackage": "Import Project",
     "importing": "Importing…",
+    "exporting": "Exporting…",
     "exportFailed": "Failed to export project",
     "importFailed": "Failed to import project",
     "persistenceFailed": "Failed to save the canvas project. Check available disk space and try again.",

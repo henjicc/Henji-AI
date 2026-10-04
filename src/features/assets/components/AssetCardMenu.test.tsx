@@ -48,14 +48,16 @@ describe('资产卡片菜单', () => {
     vi.unstubAllGlobals()
   })
 
-  it('走共享浮层：玻璃表面、浮层层级高于悬浮面板与弹窗，并登记为浮层层', () => {
+  it('走共享浮层：实底表面（表单内容不压玻璃）、浮层层级高于悬浮面板与弹窗，并登记为浮层层', () => {
     render(<AssetCardMenu asset={asset} anchor={new DOMRect(100, 100, 28, 28)} libraries={[]} availableTags={[]} onToggleLibrary={vi.fn()} onSetTags={vi.fn()} onRename={vi.fn()} onDelete={vi.fn()} onOpenBatchManagement={vi.fn()} onClose={vi.fn()} />)
 
     const panel = document.querySelector('[data-asset-card-menu]')?.closest<HTMLElement>('[data-panel-placement]')
     expect(panel).toBeTruthy()
     expect(Number(panel?.style.zIndex)).toBe(Z_LAYERS.popover)
     expect(Number(panel?.style.zIndex)).toBeGreaterThan(Z_LAYERS.modal)
-    expect(panel?.classList.contains('ui-glass')).toBe(true)
+    expect(panel?.classList.contains('ui-glass')).toBe(false)
+    // 资产库为空时说明可去侧栏新建，而不是留一个空的“所属资产库”
+    expect(document.body.textContent).toContain('assetLibrary.noLibraries')
     expect(panel?.hasAttribute('data-ui-overlay-id')).toBe(true)
   })
 

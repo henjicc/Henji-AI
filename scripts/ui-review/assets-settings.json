@@ -1,0 +1,1871 @@
+[
+  {
+    "id": "review-assets-projects",
+    "surface": "画布",
+    "name": "核对-画布项目页（空、多项目、悬停、更多菜单、排序、搜索、长名称、多选）",
+    "checklist": [
+      "A01.1",
+      "A01.2",
+      "A01.3",
+      "A01.4",
+      "A01.5",
+      "A01.6",
+      "A01.7"
+    ],
+    "writesUserData": true,
+    "steps": [
+      {
+        "enter": "canvas"
+      },
+      {
+        "waitFor": {
+          "selector": "[data-ui-page-header]"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "新建项目",
+          "exact": true,
+          "within": {
+            "selector": "[data-ui-page-header]"
+          }
+        }
+      },
+      {
+        "waitFor": {
+          "role": "dialog"
+        }
+      },
+      {
+        "fill": {
+          "target": {
+            "placeholder": "请输入项目名称"
+          },
+          "text": "分镜 10 · 江南雨夜长镜头与人物特写的完整分镜项目（检查长名称截断）"
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "确认",
+          "exact": true,
+          "within": {
+            "role": "dialog",
+            "nth": "last"
+          }
+        }
+      },
+      {
+        "waitFor": {
+          "role": "button",
+          "name": "返回项目",
+          "exact": true
+        },
+        "timeout": 15000
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "返回项目",
+          "exact": true
+        }
+      },
+      {
+        "waitFor": {
+          "selector": "[data-ui-page-header]"
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "新建项目",
+          "exact": true,
+          "within": {
+            "selector": "[data-ui-page-header]"
+          }
+        }
+      },
+      {
+        "waitFor": {
+          "role": "dialog"
+        }
+      },
+      {
+        "fill": {
+          "target": {
+            "placeholder": "请输入项目名称"
+          },
+          "text": "分镜 2"
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "确认",
+          "exact": true,
+          "within": {
+            "role": "dialog",
+            "nth": "last"
+          }
+        }
+      },
+      {
+        "waitFor": {
+          "role": "button",
+          "name": "返回项目",
+          "exact": true
+        },
+        "timeout": 15000
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "返回项目",
+          "exact": true
+        }
+      },
+      {
+        "waitFor": {
+          "selector": "[data-ui-page-header]"
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "新建项目",
+          "exact": true,
+          "within": {
+            "selector": "[data-ui-page-header]"
+          }
+        }
+      },
+      {
+        "waitFor": {
+          "role": "dialog"
+        }
+      },
+      {
+        "fill": {
+          "target": {
+            "placeholder": "请输入项目名称"
+          },
+          "text": "海报草稿"
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "确认",
+          "exact": true,
+          "within": {
+            "role": "dialog",
+            "nth": "last"
+          }
+        }
+      },
+      {
+        "waitFor": {
+          "role": "button",
+          "name": "返回项目",
+          "exact": true
+        },
+        "timeout": 15000
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "返回项目",
+          "exact": true
+        }
+      },
+      {
+        "waitFor": {
+          "selector": "[data-ui-page-header]"
+        }
+      },
+      {
+        "waitFor": {
+          "selector": "[data-project-id]"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": {
+          "name": "projects-list",
+          "metrics": {
+            "selector": "[data-ui-page-header]",
+            "maxRows": 1
+          }
+        }
+      },
+      {
+        "hover": {
+          "selector": "[data-project-id]",
+          "nth": 0
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "projects-card-hover"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "项目操作",
+          "nth": 0
+        }
+      },
+      {
+        "waitFor": {
+          "role": "menu"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "projects-more-menu"
+      },
+      {
+        "press": "Escape"
+      },
+      {
+        "open": {
+          "role": "button",
+          "name": "排序",
+          "exact": true
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "projects-sort-menu"
+      },
+      {
+        "press": "Escape"
+      },
+      {
+        "fill": {
+          "target": {
+            "role": "textbox",
+            "name": "搜索项目"
+          },
+          "text": "海报"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "projects-search"
+      },
+      {
+        "fill": {
+          "target": {
+            "role": "textbox",
+            "name": "搜索项目"
+          },
+          "text": "不存在的项目"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "projects-search-empty"
+      },
+      {
+        "fill": {
+          "target": {
+            "role": "textbox",
+            "name": "搜索项目"
+          },
+          "text": ""
+        }
+      },
+      {
+        "waitFor": {
+          "selector": "[data-project-id]"
+        }
+      },
+      {
+        "rightClick": {
+          "selector": "[data-project-id]",
+          "nth": 0
+        }
+      },
+      {
+        "waitFor": {
+          "role": "menu"
+        }
+      },
+      {
+        "click": {
+          "role": "menuitem",
+          "name": "多选"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": {
+          "name": "projects-multi",
+          "metrics": {
+            "selector": "[data-ui-page-header]",
+            "maxRows": 1
+          }
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "全选",
+          "exact": true
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": {
+          "name": "projects-multi-all",
+          "metrics": {
+            "selector": "[data-ui-page-header]",
+            "maxRows": 1
+          }
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "删除所选",
+          "exact": true
+        }
+      },
+      {
+        "waitFor": {
+          "role": "dialog"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "projects-delete-confirm"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "删除",
+          "exact": true,
+          "within": {
+            "role": "dialog",
+            "nth": "last"
+          }
+        }
+      },
+      {
+        "waitFor": {
+          "text": "暂无项目",
+          "exact": true
+        },
+        "timeout": 10000
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": {
+          "name": "projects-empty",
+          "metrics": {
+            "selector": "[data-ui-page-header]",
+            "maxRows": 1
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "review-assets-library",
+    "surface": "资产库",
+    "name": "核对-资产浮动面板与资产库页（空、多资产、悬停、选中、筛选、显示设置、卡片菜单、侧栏分类、搜索无结果、批量、预览）",
+    "checklist": [
+      "A02.1",
+      "A02.2",
+      "A02.3",
+      "A02.4",
+      "A02.5",
+      "A02.6",
+      "A03.1",
+      "A04.1",
+      "A05.1",
+      "A05.2",
+      "A05.3",
+      "A06.1",
+      "A06.2",
+      "A06.3"
+    ],
+    "writesUserData": true,
+    "steps": [
+      {
+        "enter": "assets"
+      },
+      {
+        "waitFor": {
+          "selector": "[data-asset-floating-panel]"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "floating-empty"
+      },
+      {
+        "press": "Escape"
+      },
+      {
+        "enter": "generation"
+      },
+      {
+        "seedHistory": {
+          "rows": [
+            {
+              "id": "asset-audio",
+              "type": "audio",
+              "prompt": "资产核对：一段口播音频"
+            },
+            {
+              "id": "asset-video",
+              "type": "video",
+              "prompt": "资产核对：海浪拍打礁石的慢镜头"
+            },
+            {
+              "id": "asset-multi",
+              "type": "image",
+              "file": "images",
+              "prompt": "资产核对：同一角色的四个表情"
+            },
+            {
+              "id": "asset-image",
+              "type": "image",
+              "prompt": "资产核对：一只橘猫趴在窗台上晒太阳"
+            }
+          ]
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "rightClick": {
+          "selector": "[data-generation-task-id=\"__review_common_asset-image\"] [data-generation-result]"
+        }
+      },
+      {
+        "waitFor": {
+          "role": "menu"
+        }
+      },
+      {
+        "click": {
+          "role": "menuitem",
+          "name": "添加到资产库"
+        }
+      },
+      {
+        "wait": 400
+      },
+      {
+        "rightClick": {
+          "selector": "[data-generation-task-id=\"__review_common_asset-multi\"] [data-generation-result]"
+        }
+      },
+      {
+        "waitFor": {
+          "role": "menu"
+        }
+      },
+      {
+        "click": {
+          "role": "menuitem",
+          "name": "添加到资产库"
+        }
+      },
+      {
+        "wait": 400
+      },
+      {
+        "scroll": {
+          "target": {
+            "selector": "[data-generation-history-scroll]"
+          },
+          "dy": -4000
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "rightClick": {
+          "selector": "[data-generation-task-id=\"__review_common_asset-video\"] video"
+        }
+      },
+      {
+        "waitFor": {
+          "role": "menu"
+        }
+      },
+      {
+        "click": {
+          "role": "menuitem",
+          "name": "添加到资产库"
+        }
+      },
+      {
+        "wait": 400
+      },
+      {
+        "rightClick": {
+          "selector": "[data-generation-task-id=\"__review_common_asset-audio\"] span.tabular-nums"
+        }
+      },
+      {
+        "waitFor": {
+          "role": "menu"
+        }
+      },
+      {
+        "click": {
+          "role": "menuitem",
+          "name": "添加到资产库"
+        }
+      },
+      {
+        "wait": 400
+      },
+      {
+        "wait": 3600
+      },
+      {
+        "enter": "assets"
+      },
+      {
+        "waitFor": {
+          "selector": "[data-asset-floating-panel] [data-asset-card]"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": {
+          "name": "floating-list",
+          "metrics": {
+            "selector": "[data-asset-floating-panel] main > header",
+            "maxRows": 1
+          }
+        }
+      },
+      {
+        "hover": {
+          "selector": "[data-asset-floating-panel] [data-asset-kind=\"image\"]",
+          "nth": 0
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "floating-card-hover"
+      },
+      {
+        "open": {
+          "role": "button",
+          "name": "全部类型",
+          "exact": true
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "floating-type-menu"
+      },
+      {
+        "press": "Escape"
+      },
+      {
+        "open": {
+          "trigger": {
+            "role": "button",
+            "name": "显示设置",
+            "exact": true
+          },
+          "expect": {
+            "selector": "[data-asset-view-settings]"
+          }
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "floating-view-settings"
+      },
+      {
+        "press": "Escape"
+      },
+      {
+        "hover": {
+          "selector": "[data-asset-floating-panel] [data-asset-kind=\"image\"]",
+          "nth": 0
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "更多操作",
+          "within": {
+            "selector": "[data-asset-floating-panel] [data-asset-kind=\"image\"]",
+            "nth": 0
+          }
+        }
+      },
+      {
+        "waitFor": {
+          "selector": "[data-asset-card-menu]"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "card-menu"
+      },
+      {
+        "press": "Escape"
+      },
+      {
+        "wait": 400
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "完整管理",
+          "exact": true
+        }
+      },
+      {
+        "waitFor": {
+          "selector": "[data-ui-page-header]"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": {
+          "name": "workspace-list",
+          "metrics": {
+            "selector": "[data-ui-page-header]",
+            "maxRows": 1
+          }
+        }
+      },
+      {
+        "click": {
+          "selector": "[data-asset-kind=\"image\"]",
+          "nth": 0
+        }
+      },
+      {
+        "hover": {
+          "selector": "[data-asset-kind=\"video\"]",
+          "nth": 0
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "workspace-selected-hover"
+      },
+      {
+        "open": {
+          "role": "button",
+          "name": "全部标签",
+          "exact": true
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "workspace-tag-menu"
+      },
+      {
+        "press": "Escape"
+      },
+      {
+        "open": {
+          "role": "button",
+          "name": "最新加入",
+          "exact": true
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "workspace-sort-menu"
+      },
+      {
+        "press": "Escape"
+      },
+      {
+        "wait": 400
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "新建资产库",
+          "exact": true
+        }
+      },
+      {
+        "fill": {
+          "target": {
+            "role": "textbox",
+            "name": "资产库名称"
+          },
+          "text": "人物设定"
+        }
+      },
+      {
+        "press": {
+          "key": "Enter",
+          "target": {
+            "role": "textbox",
+            "name": "资产库名称"
+          }
+        }
+      },
+      {
+        "waitFor": {
+          "role": "button",
+          "name": "人物设定",
+          "exact": true
+        }
+      },
+      {
+        "hover": {
+          "role": "button",
+          "name": "人物设定",
+          "exact": true
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "workspace-sidebar-library-hover"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "人物设定",
+          "exact": true
+        }
+      },
+      {
+        "hover": {
+          "role": "button",
+          "name": "人物设定",
+          "exact": true
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "workspace-sidebar-current-hover"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "全部资产",
+          "exact": true
+        }
+      },
+      {
+        "waitFor": {
+          "selector": "[data-asset-card]"
+        }
+      },
+      {
+        "fill": {
+          "target": {
+            "role": "textbox",
+            "name": "搜索资产"
+          },
+          "text": "不存在的资产"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "workspace-search-empty"
+      },
+      {
+        "fill": {
+          "target": {
+            "role": "textbox",
+            "name": "搜索资产"
+          },
+          "text": ""
+        }
+      },
+      {
+        "waitFor": {
+          "selector": "[data-asset-card]"
+        }
+      },
+      {
+        "doubleClick": {
+          "selector": "[data-asset-kind=\"image\"] .aspect-square",
+          "nth": 0
+        }
+      },
+      {
+        "waitFor": {
+          "selector": "[data-image-viewer=\"true\"]"
+        }
+      },
+      {
+        "waitStable": {
+          "target": {
+            "selector": "[data-image-viewer=\"true\"] img"
+          }
+        }
+      },
+      {
+        "capture": "preview-image"
+      },
+      {
+        "press": "Escape"
+      },
+      {
+        "wait": 600
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "播放/暂停",
+          "within": {
+            "selector": "[data-asset-kind=\"video\"]",
+            "nth": 0
+          }
+        }
+      },
+      {
+        "wait": 1200
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "preview-video"
+      },
+      {
+        "press": "Escape"
+      },
+      {
+        "wait": 600
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "播放/暂停",
+          "within": {
+            "selector": "[data-asset-kind=\"audio\"]",
+            "nth": 0
+          }
+        }
+      },
+      {
+        "wait": 1200
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "preview-audio"
+      },
+      {
+        "press": "Escape"
+      },
+      {
+        "wait": 600
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "批量管理",
+          "exact": true
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": {
+          "name": "batch-enter",
+          "metrics": {
+            "selector": "[data-ui-page-header]",
+            "maxRows": 1
+          }
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "全选已加载",
+          "exact": true
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": {
+          "name": "batch-selected",
+          "metrics": {
+            "selector": "[data-ui-page-header]",
+            "maxRows": 1
+          }
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "删除所选资产",
+          "exact": true
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "batch-delete-armed"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "再次点击确认删除",
+          "exact": true
+        }
+      },
+      {
+        "waitFor": {
+          "text": "资产库还是空的",
+          "exact": true
+        },
+        "timeout": 10000
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "完成",
+          "exact": true
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": {
+          "name": "workspace-empty",
+          "metrics": {
+            "selector": "[data-ui-page-header]",
+            "maxRows": 1
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "review-settings-general",
+    "surface": "设置",
+    "name": "核对-设置外壳与通用大类（基础、首次设置、数据与下载、行为、更新维护、外部连接、关于与许可）",
+    "checklist": [
+      "A07.1",
+      "A07.2",
+      "A07.3",
+      "A08.1",
+      "A08.2",
+      "A08.3",
+      "A09.1",
+      "A09.4",
+      "A11.1",
+      "A12.1",
+      "A12.2",
+      "A13.1",
+      "A13.3"
+    ],
+    "writesUserData": true,
+    "steps": [
+      {
+        "enter": {
+          "surface": "settings.general.basic"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "general-top"
+      },
+      {
+        "hover": {
+          "role": "button",
+          "name": "供应商与模型",
+          "exact": true,
+          "within": {
+            "role": "navigation",
+            "name": "设置"
+          }
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "nav-hover"
+      },
+      {
+        "focus": {
+          "role": "button",
+          "name": "关闭",
+          "exact": true,
+          "within": {
+            "selector": "[data-application-surface-id^=\"settings.\"]"
+          }
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "close-focus"
+      },
+      {
+        "open": {
+          "role": "button",
+          "name": "/^(自动 \\/ Auto|简体中文|English)$/"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "language-menu"
+      },
+      {
+        "press": "Escape"
+      },
+      {
+        "wait": 400
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "默认项与首次设置",
+          "exact": true,
+          "within": {
+            "role": "navigation",
+            "name": "设置"
+          }
+        }
+      },
+      {
+        "wait": 500
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "onboarding"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "数据与下载",
+          "exact": true,
+          "within": {
+            "role": "navigation",
+            "name": "设置"
+          }
+        }
+      },
+      {
+        "wait": 500
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "storage"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "行为与并发",
+          "exact": true,
+          "within": {
+            "role": "navigation",
+            "name": "设置"
+          }
+        }
+      },
+      {
+        "wait": 500
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "behavior"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "更新维护",
+          "exact": true,
+          "within": {
+            "role": "navigation",
+            "name": "设置"
+          }
+        }
+      },
+      {
+        "wait": 500
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "maintenance"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "外部智能体连接",
+          "exact": true,
+          "within": {
+            "role": "navigation",
+            "name": "设置"
+          }
+        }
+      },
+      {
+        "wait": 500
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "mcp-on"
+      },
+      {
+        "fill": {
+          "target": {
+            "placeholder": "例如：Codex"
+          },
+          "text": "巡检连接"
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "创建授权",
+          "exact": true
+        }
+      },
+      {
+        "waitFor": {
+          "role": "button",
+          "name": "撤销",
+          "exact": true
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "mcp-connection"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "撤销",
+          "exact": true
+        }
+      },
+      {
+        "waitFor": {
+          "target": {
+            "role": "button",
+            "name": "撤销",
+            "exact": true
+          },
+          "state": "hidden"
+        }
+      },
+      {
+        "click": {
+          "selector": "#general-mcp [role=\"switch\"]",
+          "nth": 0
+        }
+      },
+      {
+        "wait": 1200
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "mcp-off"
+      },
+      {
+        "click": {
+          "selector": "#general-mcp [role=\"switch\"]",
+          "nth": 0
+        }
+      },
+      {
+        "wait": 1200
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "关于",
+          "exact": true,
+          "within": {
+            "role": "navigation",
+            "name": "设置"
+          }
+        }
+      },
+      {
+        "wait": 500
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "about"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "查看全部",
+          "exact": true
+        }
+      },
+      {
+        "waitFor": {
+          "role": "dialog"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "licenses"
+      },
+      {
+        "fill": {
+          "target": {
+            "role": "textbox",
+            "name": "/搜索/",
+            "within": {
+              "role": "dialog",
+              "nth": "last"
+            }
+          },
+          "text": "zzzz-不存在"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "licenses-empty"
+      },
+      {
+        "press": "Escape"
+      },
+      {
+        "wait": 400
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "查看全文",
+          "exact": true
+        }
+      },
+      {
+        "waitFor": {
+          "role": "dialog"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "project-license"
+      },
+      {
+        "press": "Escape"
+      }
+    ]
+  },
+  {
+    "id": "review-settings-models",
+    "surface": "设置",
+    "name": "核对-设置模型大类（供应商与密钥、模型列表与可见性、助手模型、上传策略、别名、LLM 弹窗）",
+    "checklist": [
+      "A14.1",
+      "A14.2",
+      "A14.3",
+      "A14.6",
+      "A16.2",
+      "A17.1",
+      "A17.2",
+      "A17.3",
+      "A17.4",
+      "A10.1",
+      "A10.2"
+    ],
+    "writesUserData": true,
+    "steps": [
+      {
+        "enter": {
+          "surface": "settings.providers_models"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "providers"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "派欧云",
+          "exact": true
+        },
+        "optional": true
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "provider-models"
+      },
+      {
+        "fill": {
+          "target": {
+            "selector": "[data-application-surface-id^=\"settings.\"] input[type=\"password\"]",
+            "nth": 0
+          },
+          "text": "sk-review-test-0000"
+        },
+        "optional": true
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/^显示/",
+          "nth": 0
+        },
+        "optional": true
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "key-visible"
+      },
+      {
+        "fill": {
+          "target": {
+            "selector": "[data-application-surface-id^=\"settings.\"] input[data-observation-sensitive=\"true\"]",
+            "nth": 0
+          },
+          "text": ""
+        },
+        "optional": true
+      },
+      {
+        "fill": {
+          "target": {
+            "role": "textbox",
+            "name": "/搜索供应商/"
+          },
+          "text": "zzzz"
+        },
+        "optional": true
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "provider-search-empty"
+      },
+      {
+        "fill": {
+          "target": {
+            "role": "textbox",
+            "name": "/搜索供应商/"
+          },
+          "text": ""
+        },
+        "optional": true
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "添加供应商",
+          "exact": true
+        }
+      },
+      {
+        "waitFor": {
+          "role": "dialog"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "llm-provider-add"
+      },
+      {
+        "press": "Escape"
+      },
+      {
+        "wait": 400
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "DeepSeek",
+          "exact": true
+        },
+        "optional": true
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "连接设置",
+          "exact": true
+        },
+        "optional": true
+      },
+      {
+        "waitFor": {
+          "role": "dialog"
+        },
+        "optional": true
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "llm-provider-settings"
+      },
+      {
+        "press": "Escape"
+      },
+      {
+        "wait": 400
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "添加模型",
+          "exact": true
+        },
+        "optional": true
+      },
+      {
+        "waitFor": {
+          "role": "dialog"
+        },
+        "optional": true
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "llm-model-dialog"
+      },
+      {
+        "press": "Escape"
+      },
+      {
+        "wait": 400
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "助手模型",
+          "exact": true,
+          "within": {
+            "role": "navigation",
+            "name": "设置"
+          }
+        }
+      },
+      {
+        "wait": 500
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "assistant-models"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "详情",
+          "nth": 0
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "assistant-models-details"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "高级设置",
+          "exact": true
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "assistant-models-advanced"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "上传策略",
+          "exact": true,
+          "within": {
+            "role": "navigation",
+            "name": "设置"
+          }
+        }
+      },
+      {
+        "wait": 500
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "upload"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "别名",
+          "exact": true,
+          "within": {
+            "role": "navigation",
+            "name": "设置"
+          }
+        }
+      },
+      {
+        "wait": 500
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "alias"
+      }
+    ]
+  },
+  {
+    "id": "review-settings-assistant-interface",
+    "surface": "设置",
+    "name": "核对-设置助手与界面大类（用户指令、技能、布局行为与剪辑快捷键、资产库、画布、主题）",
+    "checklist": [
+      "A18.1",
+      "A18.3",
+      "A19.1",
+      "A20.1",
+      "A20.2"
+    ],
+    "writesUserData": false,
+    "steps": [
+      {
+        "enter": {
+          "surface": "settings.assistant_preferences"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "instructions"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "助手技能",
+          "exact": true,
+          "within": {
+            "role": "navigation",
+            "name": "设置"
+          }
+        }
+      },
+      {
+        "wait": 500
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "skills"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "布局行为",
+          "exact": true,
+          "within": {
+            "role": "navigation",
+            "name": "设置"
+          }
+        }
+      },
+      {
+        "wait": 500
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "layout"
+      },
+      {
+        "open": {
+          "role": "button",
+          "name": "/^(自动|90%|100%|110%)$/"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "layout-menu"
+      },
+      {
+        "press": "Escape"
+      },
+      {
+        "wait": 400
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "编辑快捷键",
+          "exact": true
+        }
+      },
+      {
+        "waitFor": {
+          "role": "dialog"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "shortcuts-dialog"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "取消",
+          "exact": true,
+          "within": {
+            "role": "dialog",
+            "nth": "last"
+          }
+        }
+      },
+      {
+        "wait": 400
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "资产库",
+          "exact": true,
+          "within": {
+            "role": "navigation",
+            "name": "设置"
+          }
+        }
+      },
+      {
+        "wait": 500
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "interface-assets"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "画布",
+          "exact": true,
+          "within": {
+            "role": "navigation",
+            "name": "设置"
+          }
+        }
+      },
+      {
+        "wait": 500
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "interface-canvas"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "主题外观",
+          "exact": true,
+          "within": {
+            "role": "navigation",
+            "name": "设置"
+          }
+        }
+      },
+      {
+        "wait": 500
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "theme"
+      }
+    ]
+  },
+  {
+    "id": "review-assets-modelscope-custom",
+    "surface": "生成",
+    "name": "核对-魔搭自定义模型管理（空、添加表单）",
+    "checklist": [
+      "A15"
+    ],
+    "writesUserData": false,
+    "steps": [
+      {
+        "enter": "generation"
+      },
+      {
+        "selectModel": {
+          "modelId": "modelscope-custom",
+          "providerId": "modelscope"
+        }
+      },
+      {
+        "waitStable": {
+          "target": {
+            "role": "button",
+            "name": "/^模型：/"
+          }
+        }
+      },
+      {
+        "open": {
+          "trigger": {
+            "selector": "[data-param-id=\"modelscopeCustomModel\"] [data-panel-trigger-button]"
+          }
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "manager-empty"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "添加新模型",
+          "exact": true
+        }
+      },
+      {
+        "fill": {
+          "target": {
+            "placeholder": "例如：Tongyi-MAI/Z-Image-Turbo"
+          },
+          "text": "review/not-a-real-model"
+        }
+      },
+      {
+        "fill": {
+          "target": {
+            "placeholder": "例如：Z-Image Turbo"
+          },
+          "text": "巡检用名称"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "manager-add-form"
+      },
+      {
+        "press": "Escape"
+      }
+    ]
+  }
+]

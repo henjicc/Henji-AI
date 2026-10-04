@@ -87,7 +87,7 @@ const DownloadSection: React.FC<DownloadSectionProps> = ({
         className={enableQuickDownload ? '' : 'opacity-50'}
         aria-disabled={!enableQuickDownload || undefined}
       >
-        <div className="flex items-stretch gap-2">
+        <div className="flex items-center gap-2">
           {/* 明文本地路径，观察截图时需要遮罩；密钥类输入自带 password 掩码，无需标注。 */}
           <UiInput
             data-observation-sensitive
@@ -101,8 +101,7 @@ const DownloadSection: React.FC<DownloadSectionProps> = ({
             onClick={handleSelectPath}
             disabled={!enableQuickDownload}
             variant="secondary"
-            size="lg"
-            className="shrink-0 whitespace-nowrap"
+            className="shrink-0"
           >
             {t('actions.select')}
           </UiButton>
@@ -123,12 +122,14 @@ const DownloadSection: React.FC<DownloadSectionProps> = ({
               <span data-observation-sensitive className="min-w-0 flex-1 truncate text-sm" title={path}>
                 {path}
               </span>
-              <UiIconButton size="lg"
+              <UiIconButton
                 type="button"
+                tone="danger"
+                title={t('sections.download.presetPathsRemove', { path })}
                 aria-label={t('sections.download.presetPathsRemove', { path })}
                 onClick={() => handleRemovePresetPath(path)}
               >
-                <Trash2 size={14} />
+                <Trash2 className="h-4 w-4" />
               </UiIconButton>
             </div>
           ))}
@@ -137,9 +138,9 @@ const DownloadSection: React.FC<DownloadSectionProps> = ({
               onClick={handleAddPresetPath}
               disabled={presetPaths.length >= DOWNLOAD_PRESET_PATH_LIMIT}
               variant="secondary"
-              className="shrink-0 gap-1.5 whitespace-nowrap"
+              className="shrink-0"
             >
-              <Plus className="h-3.5 w-3.5" />
+              <Plus className="h-4 w-4" />
               {t('sections.download.presetPathsAdd')}
             </UiButton>
             <span className={UI_TEXT_META_CLASS}>
