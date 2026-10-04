@@ -7,7 +7,7 @@ import { createEmptyImageEditDocument } from '@/core/imageEdit'
 import { ViewerMarkEditor } from './ViewerMarkEditor'
 
 vi.mock('@/features/imageEdit/editor/ImageEditor', () => ({
-  ImageEditor: () => <div data-testid="legacy-viewer-editor" />,
+  ImageEditor: () => <div data-testid="quick-mark-editor" />,
 }))
 
 vi.mock('@/features/imageEdit/execution/browserImageEditExecution', () => ({
@@ -29,7 +29,7 @@ describe('ViewerMarkEditor 发布路由', () => {
       />,
     )
 
-    expect(screen.getByTestId('legacy-viewer-editor')).toBeTruthy()
+    expect(screen.getByTestId('quick-mark-editor')).toBeTruthy()
     expect(screen.queryByTestId('v3-viewer-editor')).toBeNull()
   })
 
@@ -43,6 +43,6 @@ describe('ViewerMarkEditor 发布路由', () => {
       />,
     )
 
-    expect(screen.getByTestId('legacy-viewer-editor')).toBeTruthy()
+    expect(screen.getByTestId('quick-mark-editor')).toBeTruthy()
   })
 })

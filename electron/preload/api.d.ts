@@ -49,9 +49,6 @@ export interface HenjiNativeApi {
     uiInspectionActive: boolean
     uiInspectionGpuInitializationFailure: boolean
     uiInspectionReadOnly: boolean
-    featureFlags: {
-      imageEditorV3: boolean
-    }
   }
   assistant: HenjiAssistantApi
   ai: HenjiAiApi

@@ -25,9 +25,9 @@ export interface ViewerMarkEditorProps {
 }
 
 /**
- * 查看器编辑模式兼容宿主：全屏挂载共享 ImageEditor，保留原公开组件名。
+ * 查看器编辑模式宿主：全屏挂载快速标记编辑器（共享 ImageEditor）。
  */
-function LegacyViewerMarkEditor({
+function QuickMarkViewerEditor({
   imageUrl,
   session,
   onClose,
@@ -91,5 +91,5 @@ function LegacyViewerMarkEditor({
 }
 
 export function ViewerMarkEditor(props: ViewerMarkEditorProps): JSX.Element {
-  return <LegacyViewerMarkEditor {...props} />;
+  return <QuickMarkViewerEditor {...props} />;
 }

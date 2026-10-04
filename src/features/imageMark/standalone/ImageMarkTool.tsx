@@ -1,34 +1,22 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
-import { ArrowLeft, ClipboardCopy, ClipboardPaste, FilePlus2, FolderOpen, ImagePlus, Save } from 'lucide-react';
+import { ClipboardPaste, FilePlus2, FolderOpen, ImagePlus } from 'lucide-react';
 import { createLogger } from '@/core/logging';
 import { createEmptyImageEditDocument, type ImageEditDocument } from '@/core/imageEdit';
 import {
   UI_TEXT_BODY_CLASS,
   UI_TEXT_META_CLASS,
   UiButton,
-  UiIconButton,
   UiLoading,
   UiPageHeader,
   UiRegion,
 } from '@/components/ui';
 import { readClipboardImage } from '@/commands/clipboard';
-import { ICON_ASSET_LIBRARY } from '@/core/theme/icons';
 import { useNotification } from '@/contexts/NotificationContext';
-import { useAddToAssetLibrary } from '@/features/assets/hooks/useAddToAssetLibrary';
-import { allowMediaRoot, basename, dirname, getPathForFile, openDialog, saveDialog } from '@/platform/desktopApi';
-import {
-  copyImageSourceToClipboard,
-  persistImageSource,
-  saveImageSourceToPath,
-} from '@/commands/image';
+import { allowMediaRoot, basename, dirname, getPathForFile, openDialog } from '@/platform/desktopApi';
 import { isLikelyLocalImagePath, readFileAsDataUrl } from '@/services/imageSource';
-import { isImageEditorV3Enabled } from '@/platform/runtime';
-import { exportImageEditDocument } from '@/features/imageEdit/execution/browserImageEditExecution';
-import { ImageEditor } from '@/features/imageEdit/editor/ImageEditor';
 import { useImageEditorHandoffStore } from '@/features/imageEdit/store/imageEditorHandoffStore';
 import { BlankImageDialog } from './BlankImageDialog';
-import { applyPngDpi, createBlankImageDataUrl, type BlankImageSpec } from './blankImage';
-import { ImageMarkSourceMenu } from './ImageMarkSourceMenu';
+import { createBlankImageDataUrl, type BlankImageSpec } from './blankImage';
 import { readDevelopmentLaunchOptions } from '@/core/development/developmentLaunch';
 import {
   readImageMarkToolWorkspaceSourceV3,
@@ -62,17 +50,11 @@ export interface ImageMarkToolProps {
 export function ImageMarkTool({ onBack }: ImageMarkToolProps = {}): JSX.Element {
   const developmentLaunch = readDevelopmentLaunchOptions();
   const { showNotification } = useNotification();
-  const { addMedia, collecting } = useAddToAssetLibrary();
-  const [source, setSource] = useState<ImageMarkSource | null>(() => (
-    isImageEditorV3Enabled() ? readImageMarkToolWorkspaceSourceV3() : null
-  ));
-  const [isBusy, setIsBusy] = useState(false);
+  const [source, setSource] = useState<ImageMarkSource | null>(() => readImageMarkToolWorkspaceSourceV3());
   const [isDragOver, setIsDragOver] = useState(false);
   const [isBlankDialogOpen, setIsBlankDialogOpen] = useState(false);
-  const [legacyFallbackSessionKey, setLegacyFallbackSessionKey] = useState<number | null>(null);
   const pendingHandoff = useImageEditorHandoffStore((state) => state.pending);
   const consumeHandoff = useImageEditorHandoffStore((state) => state.consume);
-  const documentRef = useRef<ImageEditDocument>(createEmptyImageEditDocument());
   const sourceSequenceRef = useRef(source?.sessionKey ?? 0);
   const acceptingHandoffRef = useRef<string | null>(null);
   const acceptedDevelopmentMediaRef = useRef(false);
@@ -84,7 +66,6 @@ export function ImageMarkTool({ onBack }: ImageMarkToolProps = {}): JSX.Element 
     dpi?: number,
     returnTo?: string
   ) => {
-    documentRef.current = document;
     // 打开/拖入的本地图片可能在媒体协议默认白名单之外,先授权其所在目录,
     // 否则 henji-media:// 会 403,编辑器会一直卡在"图片加载中"
     if (isLikelyLocalImagePath(url)) {
@@ -106,7 +87,7 @@ export function ImageMarkTool({ onBack }: ImageMarkToolProps = {}): JSX.Element 
       ...(returnTo ? { returnTo } : {}),
     };
     setSource(nextSource);
-    if (isImageEditorV3Enabled()) rememberImageMarkToolWorkspaceSourceV3(nextSource);
+    rememberImageMarkToolWorkspaceSourceV3(nextSource);
     logger.info('image_mark.standalone.open.completed', { name });
   }, []);
 
@@ -268,67 +249,6 @@ export function ImageMarkTool({ onBack }: ImageMarkToolProps = {}): JSX.Element 
     });
   }, [acceptFile, showNotification]);
 
-  const runExport = useCallback(async (action: 'copy' | 'save' | 'collect') => {
-    if (!source || isBusy) {
-      return;
-    }
-    setIsBusy(true);
-    logger.debug('image_mark.standalone.export.start', { action });
-    try {
-      const exportedDataUrl = await exportImageEditDocument(source.url, documentRef.current);
-      const dataUrl = source.dpi ? applyPngDpi(exportedDataUrl, source.dpi) : exportedDataUrl;
-      if (action === 'copy') {
-        await copyImageSourceToClipboard(dataUrl);
-        logger.info('image_mark.standalone.copy.completed', { name: source.name });
-        showNotification('已复制到剪贴板');
-      } else if (action === 'save') {
-        const defaultName = source.name.replace(/\.[^.]+$/, '') || 'image';
-        const targetPath = await saveDialog({
-          defaultPath: `${defaultName}-标记.png`,
-          filters: [{ name: 'PNG 图片', extensions: ['png'] }],
-        });
-        if (!targetPath) {
-          return;
-        }
-        await saveImageSourceToPath(dataUrl, targetPath);
-        logger.info('image_mark.standalone.save.completed');
-        showNotification('已保存');
-      } else {
-        const filePath = await persistImageSource(dataUrl);
-        await addMedia({
-          filePath,
-          mediaType: 'image',
-          source: 'imported',
-          displayName: source.name,
-        });
-        logger.info('image_mark.standalone.collect.completed', { name: source.name });
-        showNotification('已加入资产库');
-      }
-    } catch (error) {
-      logger.error('image_mark.standalone.export.failed', {
-        action,
-        error: error instanceof Error ? error.message : String(error),
-      });
-      showNotification(
-        action === 'copy' ? '复制失败' : action === 'save' ? '保存失败' : '加入资产库失败',
-        'error'
-      );
-    } finally {
-      setIsBusy(false);
-    }
-  }, [addMedia, isBusy, showNotification, source]);
-
-  const backButton = onBack ? (
-    <UiIconButton
-      size="lg"
-      title="返回工具"
-      aria-label="返回工具"
-      onClick={onBack}
-    >
-      <ArrowLeft size={16} />
-    </UiIconButton>
-  ) : null;
-
   if (!source) {
     return (
       <>
@@ -380,43 +300,6 @@ export function ImageMarkTool({ onBack }: ImageMarkToolProps = {}): JSX.Element 
     );
   }
 
-  if (isImageEditorV3Enabled() && legacyFallbackSessionKey !== source.sessionKey) {
-    return (
-      <>
-        <div
-          className="flex h-full flex-col"
-          onDragOver={(event) => event.preventDefault()}
-          onDrop={handleDrop}
-        >
-          <Suspense fallback={<UiLoading message="正在打开图片编辑器…" className="h-full" />}>
-            <ImageMarkToolV3Host
-              key={source.sessionKey}
-              sourceImageUrl={source.url}
-              sourceName={source.name}
-              sourceSessionKey={source.sessionKey}
-              initialDocument={source.initialDocument}
-              initialSession={source.session}
-              videoEditReturn={source.returnTo}
-              onSessionReferenceChange={(session) => {
-                rememberV3Session(source.sessionKey, session);
-              }}
-              onBack={onBack}
-              onOpenFile={handleOpenFile}
-              onPasteFromClipboard={handlePasteFromClipboard}
-              onCreateBlank={() => setIsBlankDialogOpen(true)}
-              onFallback={() => setLegacyFallbackSessionKey(source.sessionKey)}
-            />
-          </Suspense>
-        </div>
-        <BlankImageDialog
-          isOpen={isBlankDialogOpen}
-          onClose={() => setIsBlankDialogOpen(false)}
-          onCreate={handleCreateBlank}
-        />
-      </>
-    );
-  }
-
   return (
     <>
       <div
@@ -424,45 +307,24 @@ export function ImageMarkTool({ onBack }: ImageMarkToolProps = {}): JSX.Element 
         onDragOver={(event) => event.preventDefault()}
         onDrop={handleDrop}
       >
-        <ImageEditor
-        key={source.sessionKey}
-        sourceImageUrl={source.url}
-        initialDocument={source.initialDocument}
-        onDocumentChange={(document) => {
-          documentRef.current = document;
-        }}
-        toolbarLeading={backButton}
-        toolbarActions={
-          <>
-            {/* 打开动作与导出动作同侧,左侧只留返回,工具组才能真正居中 */}
-            <ImageMarkSourceMenu
-              disabled={isBusy}
-              onOpenFile={() => void handleOpenFile()}
-              onPasteFromClipboard={() => void handlePasteFromClipboard()}
-              onCreateBlank={() => setIsBlankDialogOpen(true)}
-            />
-            {/* 「打开」与右侧三个导出动作都是动作，只是方向相反，用间距分组即可。
-                分隔线留给交互语义根本不同的两侧（如工具 vs 动作），一条带上最多一条。 */}
-            <UiButton variant="secondary" className="ml-2" disabled={isBusy} onClick={() => void runExport('copy')}>
-              <ClipboardCopy size={15} className="mr-1.5" />
-              复制
-            </UiButton>
-            <UiButton
-              variant="secondary"
-              disabled={isBusy || collecting}
-              onClick={() => void runExport('collect')}
-            >
-              <ICON_ASSET_LIBRARY size={15} className="mr-1.5" />
-              加入资产库
-            </UiButton>
-            <UiButton variant="primary" disabled={isBusy} onClick={() => void runExport('save')}>
-              <Save size={15} className="mr-1.5" />
-              {isBusy ? '处理中…' : '另存为…'}
-            </UiButton>
-          </>
-        }
-        className="min-h-0 flex-1"
-        />
+        <Suspense fallback={<UiLoading message="正在打开图片编辑器…" className="h-full" />}>
+          <ImageMarkToolV3Host
+            key={source.sessionKey}
+            sourceImageUrl={source.url}
+            sourceName={source.name}
+            sourceSessionKey={source.sessionKey}
+            initialDocument={source.initialDocument}
+            initialSession={source.session}
+            videoEditReturn={source.returnTo}
+            onSessionReferenceChange={(session) => {
+              rememberV3Session(source.sessionKey, session);
+            }}
+            onBack={onBack}
+            onOpenFile={handleOpenFile}
+            onPasteFromClipboard={handlePasteFromClipboard}
+            onCreateBlank={() => setIsBlankDialogOpen(true)}
+          />
+        </Suspense>
       </div>
       <BlankImageDialog
         isOpen={isBlankDialogOpen}

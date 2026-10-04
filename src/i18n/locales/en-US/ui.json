@@ -651,8 +651,7 @@
         "reload": "Reload editor",
         "exportDiagnostics": "Export diagnostics",
         "exporting": "Exporting…",
-        "diagnosticFailed": "The diagnostic bundle could not be exported. You can still reload the editor and continue.",
-        "openLegacy": "Open in legacy editor"
+        "diagnosticFailed": "The diagnostic bundle could not be exported. You can still reload the editor and continue."
       },
       "readiness": {
         "unavailable": "{{label}} (unavailable)",
@@ -669,7 +668,6 @@
           "hdrExport": "HDR content uses an SDR proxy for preview and remains in editable files, but cannot be exported as a raster image yet.",
           "quickHdr": "Quick Edit does not accept HDR documents yet.",
           "exportDocumentNotReady": "The image editing document is not ready yet.",
-          "viewerDocumentNotReady": "The Quick Edit document is not ready yet.",
           "exportHdrMetadata": "This version cannot preserve HDR metadata reliably, so export to a downgraded SDR image was blocked.",
           "exportHdrPixelLimit": "HDR AVIF currently supports up to 9 megapixels of output. Crop the image first, or wait for tiled AVIF encoding support.",
           "exportBitDepth": "The selected format cannot preserve this document's precision, so silent precision reduction was blocked.",
@@ -680,9 +678,8 @@
         "backToToolbox": "Back to Tools",
         "loading": "Preparing the editable image…",
         "bootstrapError": {
-          "title": "Could not open the new image editor",
-          "message": "This image could not be imported. Try again or continue with the compatible editor.",
-          "fallback": "Use compatible editor"
+          "title": "Could not open the image editor",
+          "message": "This image could not be imported. Please try again."
         },
         "sourceMenu": {
           "openFile": "Open from file",
@@ -736,34 +733,6 @@
           "fallbackStem": "image",
           "editable": "{{stem}}-editable.henjiimg",
           "edited": "{{stem}}-edited.{{extension}}"
-        }
-      },
-      "viewer": {
-        "title": "Quick Edit",
-        "close": "Close",
-        "loading": "Preparing Quick Edit…",
-        "bootstrapErrorTitle": "Could not open Quick Edit",
-        "bootstrapUnknown": "Could not prepare the Quick Edit document",
-        "replaceTitle": "Replace the image in the viewer with the current edit",
-        "replaceUnavailable": "This document cannot safely replace the image in the viewer yet.",
-        "replaceUnavailableWithReason": "This document cannot safely replace the image in the viewer: {{reason}}",
-        "cancelling": "Cancelling…",
-        "cancelProgress": "Cancel replacement {{completed}}/{{total}}",
-        "cancel": "Cancel replacement",
-        "replace": "Replace image",
-        "replacing": "Replacing…",
-        "preserving": "Saving…",
-        "finish": "Done",
-        "errors": {
-          "saveUnavailable": "The Quick Edit host does not allow managed document saving.",
-          "savedDocumentNotFound": "The saved Quick Edit document could not be found.",
-          "staleSessionReference": "The saved Quick Edit document is older than the current session reference."
-        },
-        "notifications": {
-          "autosaveFailed": "Quick Edit autosave failed. Try again.",
-          "replaceCancelled": "Image replacement cancelled",
-          "replaceFailed": "Could not replace the image in the viewer. Try again.",
-          "finishSaveFailed": "Could not preserve the Quick Edit changes. Try again."
         }
       },
       "tools": {

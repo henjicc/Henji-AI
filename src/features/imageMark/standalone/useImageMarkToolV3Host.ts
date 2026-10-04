@@ -59,7 +59,6 @@ export interface ImageMarkToolV3HostProps {
   onOpenFile: () => void | Promise<void>
   onPasteFromClipboard: () => void | Promise<void>
   onCreateBlank: () => void
-  onFallback: () => void
 }
 
 export type ImageMarkV3BootstrapState =

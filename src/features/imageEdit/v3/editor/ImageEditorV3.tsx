@@ -120,22 +120,15 @@ function ImageEditorRecoveryFallbackV3({
       retryLabel={t('imageEditor.v3.recovery.reload')}
       onRetry={retry}
       actions={(
-        <>
-          <UiButton
-            variant="secondary"
-            disabled={exporting}
-            onClick={() => { void exportDiagnostics() }}
-          >
-            {exporting
-              ? t('imageEditor.v3.recovery.exporting')
-              : t('imageEditor.v3.recovery.exportDiagnostics')}
-          </UiButton>
-          {props.onOpenLegacyEditor ? (
-            <UiButton variant="secondary" onClick={props.onOpenLegacyEditor}>
-              {t('imageEditor.v3.recovery.openLegacy')}
-            </UiButton>
-          ) : null}
-        </>
+        <UiButton
+          variant="secondary"
+          disabled={exporting}
+          onClick={() => { void exportDiagnostics() }}
+        >
+          {exporting
+            ? t('imageEditor.v3.recovery.exporting')
+            : t('imageEditor.v3.recovery.exportDiagnostics')}
+        </UiButton>
       )}
     />
   )

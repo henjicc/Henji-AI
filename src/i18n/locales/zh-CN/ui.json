@@ -651,8 +651,7 @@
         "reload": "重新载入编辑器",
         "exportDiagnostics": "导出诊断包",
         "exporting": "正在导出…",
-        "diagnosticFailed": "诊断包导出失败。你仍可重新载入编辑器继续使用。",
-        "openLegacy": "用旧版打开"
+        "diagnosticFailed": "诊断包导出失败。你仍可重新载入编辑器继续使用。"
       },
       "readiness": {
         "unavailable": "{{label}}（暂不可用）",
@@ -669,7 +668,6 @@
           "hdrExport": "HDR 内容会以 SDR 代理预览并保留到可编辑文件，但当前不能导出栅格图片。",
           "quickHdr": "快速编辑暂不接收 HDR 文档。",
           "exportDocumentNotReady": "图片编辑文档尚未准备完成。",
-          "viewerDocumentNotReady": "快速编辑文档尚未准备完成。",
           "exportHdrMetadata": "当前版本还不能可靠保留 HDR 元数据，已阻止降级导出为 SDR 图片。",
           "exportHdrPixelLimit": "HDR AVIF 当前最多支持 900 万输出像素；请先裁剪图片，或等待后续的分块 AVIF 编码支持。",
           "exportBitDepth": "所选格式不能保留当前文档精度，已阻止静默降位导出。",
@@ -680,9 +678,8 @@
         "backToToolbox": "返回工具",
         "loading": "正在准备可编辑图片…",
         "bootstrapError": {
-          "title": "无法打开新版图片编辑器",
-          "message": "这张图片暂时无法导入。你可以重试，或继续使用兼容编辑器。",
-          "fallback": "使用兼容编辑器"
+          "title": "无法打开图片编辑器",
+          "message": "这张图片暂时无法导入，请重试。"
         },
         "sourceMenu": {
           "openFile": "从文件打开",
@@ -736,34 +733,6 @@
           "fallbackStem": "图片",
           "editable": "{{stem}}-可编辑.henjiimg",
           "edited": "{{stem}}-已编辑.{{extension}}"
-        }
-      },
-      "viewer": {
-        "title": "快速编辑",
-        "close": "关闭",
-        "loading": "正在准备快速编辑…",
-        "bootstrapErrorTitle": "无法打开快速编辑",
-        "bootstrapUnknown": "无法准备快速编辑文档",
-        "replaceTitle": "将当前编辑结果替换到查看器",
-        "replaceUnavailable": "当前文档还不能安全替换查看器图片。",
-        "replaceUnavailableWithReason": "当前文档还不能安全替换查看器图片：{{reason}}",
-        "cancelling": "正在取消…",
-        "cancelProgress": "取消替换 {{completed}}/{{total}}",
-        "cancel": "取消替换",
-        "replace": "替换图片",
-        "replacing": "替换中…",
-        "preserving": "保留中…",
-        "finish": "完成",
-        "errors": {
-          "saveUnavailable": "快速编辑宿主未开放受管文档保存。",
-          "savedDocumentNotFound": "找不到已保存的快速编辑文档。",
-          "staleSessionReference": "已保存的快速编辑文档版本早于当前会话引用。"
-        },
-        "notifications": {
-          "autosaveFailed": "快速编辑自动保存失败，请重试",
-          "replaceCancelled": "已取消替换图片",
-          "replaceFailed": "替换查看器图片失败，请重试",
-          "finishSaveFailed": "保留快速编辑内容失败，请重试"
         }
       },
       "tools": {

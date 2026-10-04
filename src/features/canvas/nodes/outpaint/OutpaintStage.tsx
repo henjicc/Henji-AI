@@ -4,7 +4,7 @@ import { UiError, UiLoading } from '@/components/ui'
 import { UI_OUTPAINT_FEATHER_MASK } from '@/components/ui/styleTokens'
 import { createLogger } from '@/core/logging'
 import { resolveImageDisplayUrl } from '@/services/imageSource'
-import { CropOverlayBox } from '@/features/imageMark/editor/CropOverlayBox'
+import { CropOverlayBox } from '@/features/imageMark/shared/CropOverlayBox'
 import { createOutpaintScene, moveOutpaintImage, outpaintSceneToMargins, resizeOutpaintScene, resolveOutpaintMargins, zoomOutpaintImage, type OutpaintImageSize, type OutpaintMargins, type OutpaintScene } from '../../domain/outpaintGeometry'
 import { getOutpaintPreview } from '../../application/outpaintPreviewTexture'
 

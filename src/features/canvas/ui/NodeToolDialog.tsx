@@ -25,7 +25,6 @@ import { getToolPlugin, type ToolOptions } from '@/features/canvas/tools';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { UiButton, UiError, UiModal } from '@/components/ui';
 import { UI_DIALOG_TRANSITION_MS } from '@/components/ui/motion';
-import { isImageEditorV3Enabled } from '@/platform/runtime';
 import { FormToolEditor } from './tool-editors/FormToolEditor';
 import { EditToolEditor } from './tool-editors/EditToolEditor';
 import { SplitStoryboardToolEditor } from './tool-editors/SplitStoryboardToolEditor';
@@ -370,7 +369,6 @@ export function NodeToolDialog() {
             onClick={handleApply}
             disabled={isProcessing || !sourceImageUrl || (
               activePlugin?.editor === 'edit'
-              && isImageEditorV3Enabled()
               && readyEditorKey !== editorKey
             )}
           >

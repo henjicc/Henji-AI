@@ -15,12 +15,12 @@ import {
 } from '../domain/metrics';
 import { isLabeledMark, type ImageMarkDoc, type LabeledMark, type MarkItem, type MarkToolType } from '../domain/types';
 import { resolveNumberValues } from '../render/drawMarks';
-import { CropOverlayBox } from './CropOverlayBox';
-import { MarkShapeNode } from './markShapes';
-import { applyNodeDragToMark, applyNodeTransformToMark } from './nodeSync';
-import { TextEditOverlay } from './TextEditOverlay';
-import type { TextEditorState } from './shared';
-import { ArrowCurveControl } from './ArrowCurveControl';
+import { CropOverlayBox } from '../shared/CropOverlayBox';
+import { MarkShapeNode } from '../shared/markShapes';
+import { applyNodeDragToMark, applyNodeTransformToMark } from '../shared/nodeSync';
+import { TextEditOverlay } from '../shared/TextEditOverlay';
+import type { TextEditorState } from '../shared/textEditorState';
+import { ArrowCurveControl } from '../shared/ArrowCurveControl';
 
 interface MarkCanvasProps {
   orientedCanvas: HTMLCanvasElement | null;

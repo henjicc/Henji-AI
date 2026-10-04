@@ -24,7 +24,7 @@ import type { MarkEditorContextValue } from './markEditorContextValue';
 import { useMarkController } from './useMarkController';
 import { useMarkHistory, type MarkHistoryController } from './useMarkHistory';
 import { useNonPassiveWheel } from './useNonPassiveWheel';
-import { ImageEditorShell } from '@/features/imageEdit/editor/ImageEditorShell';
+import { ImageEditorShell } from '@/features/imageEdit/shell/ImageEditorShell';
 import {
   CROP_RATIO_OPTIONS,
   VIEWPORT_MIN_HEIGHT_PX,
@@ -59,11 +59,11 @@ export interface MarkEditorProps {
   toolbarActions?: React.ReactNode;
   /** 根容器高度控制,默认适配对话框;全屏宿主传 h-full */
   className?: string;
-  /** legacy 保持旧纵向布局；shell 使用顶部标注栏与右侧工具面板。 */
-  layout?: 'legacy' | 'shell';
+  /** stacked 为纵向布局；shell 使用顶部标注栏与右侧工具面板。 */
+  layout?: 'stacked' | 'shell';
   /** shell 布局的右侧工具与参数面板，内容位于 MarkEditor 上下文内。 */
   rightPanel?: React.ReactNode;
-  /** 受控文档控制器；统一图片编辑器通过此边界接入 V2 会话。 */
+  /** 受控文档控制器；快速标记编辑器通过此边界接入 V2 文档会话。 */
   documentController?: MarkEditorDocumentController;
 }
 
@@ -91,7 +91,7 @@ export function MarkEditor({
   toolbarLeading,
   toolbarActions,
   className = 'h-[min(70vh,760px)]',
-  layout = 'legacy',
+  layout = 'stacked',
   rightPanel,
   documentController,
 }: MarkEditorProps): JSX.Element {
@@ -343,7 +343,7 @@ export function MarkEditor({
 
   const toolbar = (
     <MarkToolbar
-        variant={layout === 'shell' ? 'annotation' : 'legacy'}
+        variant={layout === 'shell' ? 'annotation' : 'stacked'}
         tool={tool}
         setTool={controller.selectTool}
         style={style}

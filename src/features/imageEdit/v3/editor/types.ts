@@ -82,8 +82,6 @@ export interface ImageEditorV3Props {
   onPackageThumbnailChange?: (thumbnail: ImageEditorV3PackageThumbnailSnapshot) => void
   /** 局部错误恢复时从宿主的最新权威 revision 重新挂载。 */
   onReloadEditor?: () => void
-  /** 仅当当前 V3 文档可无损回退时提供。 */
-  onOpenLegacyEditor?: () => void
   recoveryKey?: string | number
   className?: string
 }

@@ -1,0 +1,226 @@
+{
+  "id": "review-quick-mark-viewer",
+  "surface": "生成",
+  "name": "核对-生成工作区上传图 → 查看器 → 编辑（快速标记编辑器：箭头弯曲手柄、文字原位输入、裁剪框）",
+  "checklist": [
+    "T08.1"
+  ],
+  "writesUserData": true,
+  "steps": [
+    {
+      "enter": "generation"
+    },
+    {
+      "selectModel": {
+        "modelId": "kie-nano-banana-2",
+        "providerId": "kie",
+        "search": "Nano Banana 2"
+      }
+    },
+    {
+      "waitStable": {
+        "target": {
+          "role": "button",
+          "name": "/^模型：/"
+        }
+      }
+    },
+    {
+      "setFiles": {
+        "target": {
+          "selector": "input[type=\"file\"][accept*=\"image\"]"
+        },
+        "files": [
+          "resources/icons/icon.png"
+        ]
+      }
+    },
+    {
+      "waitFor": {
+        "selector": "img[alt=\"参考 1\"]"
+      },
+      "timeout": 10000
+    },
+    {
+      "click": {
+        "selector": "img[alt=\"参考 1\"]"
+      }
+    },
+    {
+      "waitFor": {
+        "role": "dialog",
+        "name": "图片"
+      },
+      "timeout": 10000
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "viewer"
+    },
+    {
+      "click": {
+        "role": "button",
+        "name": "编辑",
+        "exact": true,
+        "within": {
+          "role": "dialog",
+          "name": "图片"
+        }
+      }
+    },
+    {
+      "waitFor": {
+        "selector": "[data-application-observation-region=\"image_edit.canvas_observer\"]"
+      },
+      "timeout": 15000
+    },
+    {
+      "wait": 800
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "editor-rest"
+    },
+    {
+      "press": "a"
+    },
+    {
+      "drag": {
+        "from": {
+          "selector": "[data-application-observation-region=\"image_edit.canvas_observer\"] canvas",
+          "nth": "last",
+          "at": {
+            "x": 120,
+            "y": 160
+          }
+        },
+        "to": {
+          "dx": 200,
+          "dy": 0
+        },
+        "steps": 12
+      }
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "arrow-selected"
+    },
+    {
+      "drag": {
+        "from": {
+          "selector": "[data-application-observation-region=\"image_edit.canvas_observer\"] canvas",
+          "nth": "last",
+          "at": {
+            "x": 220,
+            "y": 160
+          }
+        },
+        "to": {
+          "dx": 0,
+          "dy": -70
+        },
+        "steps": 12
+      }
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "arrow-curved"
+    },
+    {
+      "press": "t"
+    },
+    {
+      "click": {
+        "selector": "[data-application-observation-region=\"image_edit.canvas_observer\"] canvas",
+        "nth": "last",
+        "at": {
+          "x": 140,
+          "y": 260
+        }
+      }
+    },
+    {
+      "waitFor": {
+        "selector": "[data-application-observation-region=\"image_edit.canvas_observer\"] textarea"
+      },
+      "timeout": 5000
+    },
+    {
+      "fill": {
+        "target": {
+          "selector": "[data-application-observation-region=\"image_edit.canvas_observer\"] textarea"
+        },
+        "text": "快速标记文字"
+      }
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "text-inline"
+    },
+    {
+      "press": "Escape"
+    },
+    {
+      "press": "c"
+    },
+    {
+      "waitFor": {
+        "selector": "[data-crop-frame]"
+      },
+      "optional": true,
+      "timeout": 5000
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "crop"
+    },
+    {
+      "click": {
+        "role": "button",
+        "name": "取消",
+        "exact": true,
+        "within": {
+          "role": "dialog",
+          "name": "图片"
+        }
+      }
+    },
+    {
+      "waitFor": {
+        "role": "button",
+        "name": "编辑",
+        "exact": true,
+        "within": {
+          "role": "dialog",
+          "name": "图片"
+        }
+      },
+      "timeout": 5000
+    },
+    {
+      "press": "Escape"
+    },
+    {
+      "waitFor": {
+        "target": {
+          "role": "dialog",
+          "name": "图片"
+        },
+        "state": "hidden"
+      },
+      "timeout": 5000
+    }
+  ]
+}

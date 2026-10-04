@@ -177,8 +177,8 @@
       "layoutError": "分割线过粗，可切割区域不够。请减小线宽或减少行列数。"
     },
     "imageEditorV3": {
-      "loading": "正在准备新版图片编辑器...",
-      "openFailed": "无法打开新版图片编辑器",
+      "loading": "正在准备图片编辑器...",
+      "openFailed": "无法打开图片编辑器",
       "openFailedDescription": "图片与已保存的编辑版本不匹配，或相关资源暂时不可用。请重试。",
       "saving": "正在保存编辑...",
       "retrySave": "重试保存",

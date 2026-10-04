@@ -17,7 +17,7 @@ import {
   percentToLineWidth,
 } from '@/features/imageMark/domain/metrics'
 import { resolveNumberValues } from '@/features/imageMark/render/drawMarks'
-import { TextEditOverlay } from '@/features/imageMark/editor/TextEditOverlay'
+import { TextEditOverlay } from '@/features/imageMark/shared/TextEditOverlay'
 
 import { useImageEditorInteractionStoreV3, useImageEditorSessionStoreV3 } from '../store'
 import {

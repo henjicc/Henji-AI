@@ -1,0 +1,142 @@
+{
+  "id": "review-image-editor-v3-annotation",
+  "surface": "工具箱",
+  "name": "核对-图片编辑 V3 标注：箭头弯曲手柄与文字原位输入（共享图元迁到 imageMark/shared 后回归）",
+  "checklist": [
+    "T08"
+  ],
+  "writesUserData": true,
+  "steps": [
+    {
+      "enter": {
+        "surface": "tool.image_edit",
+        "media": "resources/icons/icon.png"
+      }
+    },
+    {
+      "waitFor": {
+        "selector": "[data-document-transparency-grid]"
+      },
+      "timeout": 30000
+    },
+    {
+      "wait": 1200
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "rest"
+    },
+    {
+      "click": {
+        "selector": "[data-tool-id=\"annotation\"]"
+      }
+    },
+    {
+      "waitFor": {
+        "role": "button",
+        "name": "/^(箭头标注|Arrow annotation)$/i"
+      },
+      "timeout": 5000
+    },
+    {
+      "click": {
+        "role": "button",
+        "name": "/^(箭头标注|Arrow annotation)$/i"
+      }
+    },
+    {
+      "drag": {
+        "from": {
+          "selector": "[data-document-transparency-grid]",
+          "at": {
+            "x": 80,
+            "y": 100
+          }
+        },
+        "to": {
+          "dx": 220,
+          "dy": 0
+        },
+        "steps": 12
+      }
+    },
+    {
+      "waitFor": {
+        "selector": "[data-annotation-editor-overlay][data-selected-annotation-type=\"arrow\"]"
+      },
+      "timeout": 5000
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "arrow-selected"
+    },
+    {
+      "drag": {
+        "from": {
+          "selector": "[data-document-transparency-grid]",
+          "at": {
+            "x": 190,
+            "y": 100
+          }
+        },
+        "to": {
+          "dx": 0,
+          "dy": -70
+        },
+        "steps": 12
+      }
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "arrow-curved"
+    },
+    {
+      "click": {
+        "role": "button",
+        "name": "/^(文字标注|Text annotation)$/i"
+      }
+    },
+    {
+      "drag": {
+        "from": {
+          "selector": "[data-document-transparency-grid]",
+          "at": {
+            "x": 100,
+            "y": 330
+          }
+        },
+        "to": {
+          "dx": 0,
+          "dy": 0
+        },
+        "steps": 1
+      }
+    },
+    {
+      "waitFor": {
+        "selector": "[data-annotation-editor-overlay] textarea"
+      },
+      "timeout": 5000
+    },
+    {
+      "fill": {
+        "target": {
+          "selector": "[data-annotation-editor-overlay] textarea"
+        },
+        "text": "V3 原位文字"
+      }
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "text-inline"
+    }
+  ]
+}

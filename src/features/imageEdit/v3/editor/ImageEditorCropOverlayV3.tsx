@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import type { ImageEditCropRectV3, ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
-import { CropOverlayBox } from '@/features/imageMark/editor/CropOverlayBox'
+import { CropOverlayBox } from '@/features/imageMark/shared/CropOverlayBox'
 
 import type { AnnotationOutputGeometryV3 } from './annotationGeometryV3'
 import type { ImageEditorV3Controller } from './types'

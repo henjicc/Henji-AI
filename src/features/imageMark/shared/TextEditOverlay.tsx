@@ -6,7 +6,7 @@ import {
   estimateTextWidth,
   resolveTextBackgroundPadding,
 } from '../domain/metrics';
-import type { TextEditorState } from './shared';
+import type { TextEditorState } from './textEditorState';
 
 interface TextEditOverlayProps {
   state: TextEditorState;

@@ -2,7 +2,6 @@ import { ArrowLeft } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import {
-  UiButton,
   UiError,
   UiIconButton,
   UiLoading,
@@ -10,7 +9,6 @@ import {
   UiRegion,
 } from '@/components/ui'
 import { ImageEditorV3 } from '@/features/imageEdit/v3/editor'
-import { isImageEditDocumentLegacyExpressibleV3 } from '@/core/imageEdit/v3/legacyCompatibility'
 import { ImageMarkToolV3ToolbarActions } from './ImageMarkToolV3ToolbarActions'
 import {
   useImageMarkToolV3Host,
@@ -28,7 +26,6 @@ export function ImageMarkToolV3Host(props: ImageMarkToolV3HostProps): JSX.Elemen
     onOpenFile,
     onPasteFromClipboard,
     onCreateBlank,
-    onFallback,
   } = props
 
   if (host.bootstrap.kind !== 'ready') {
@@ -54,11 +51,6 @@ export function ImageMarkToolV3Host(props: ImageMarkToolV3HostProps): JSX.Elemen
             className="min-h-0 flex-1"
             title={t('imageEditor.v3.host.bootstrapError.title')}
             message={t('imageEditor.v3.host.bootstrapError.message')}
-            actions={(
-              <UiButton variant="secondary" onClick={onFallback}>
-                {t('imageEditor.v3.host.bootstrapError.fallback')}
-              </UiButton>
-            )}
             onRetry={host.retryBootstrap}
           />
         )}
@@ -90,9 +82,6 @@ export function ImageMarkToolV3Host(props: ImageMarkToolV3HostProps): JSX.Elemen
       persistenceHost={host.persistenceHost}
       onPackageThumbnailChange={host.handlePackageThumbnailChange}
       onReloadEditor={host.retryBootstrap}
-      onOpenLegacyEditor={isImageEditDocumentLegacyExpressibleV3(host.bootstrap.document)
-        ? onFallback
-        : undefined}
       recoveryKey={props.sourceSessionKey}
       toolbarLeading={backButton}
       toolbarActions={(

@@ -24,7 +24,7 @@ interface LabelTextNodeProps {
   imageHeight: number;
   opacity: number;
   listening: boolean;
-  /** 默认沿用旧编辑器的屏幕恒定描边；V3 文档画布按图片比例缩放描边。 */
+  /** 默认沿用快速标记编辑器的屏幕恒定描边；V3 文档画布按图片比例缩放描边。 */
   strokeScaleEnabled?: boolean;
   bindRef?: (id: string, node: Konva.Node | null) => void;
   onSelect?: (id: string) => void;

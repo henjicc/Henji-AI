@@ -106,12 +106,10 @@ function managedSource(): ImageEditorV3ManagedSource {
 }
 
 function renderHost(options: {
-  onFallback?: () => void
   initialSession?: ImageEditSessionReferenceV3
   onSessionReferenceChange?: (session: ImageEditSessionReferenceV3) => void
   strictMode?: boolean
 } = {}) {
-  const onFallback = options.onFallback ?? vi.fn()
   const host = (
     <NotificationProvider>
       <div style={{ width: 1_200, height: 800 }}>
@@ -125,15 +123,11 @@ function renderHost(options: {
           onOpenFile={() => undefined}
           onPasteFromClipboard={() => undefined}
           onCreateBlank={() => undefined}
-          onFallback={onFallback}
         />
       </div>
     </NotificationProvider>
   )
-  return {
-    onFallback,
-    ...render(options.strictMode ? <StrictMode>{host}</StrictMode> : host),
-  }
+  return render(options.strictMode ? <StrictMode>{host}</StrictMode> : host)
 }
 
 async function startRasterExport(formatLabel = 'PNG（8 位）'): Promise<void> {
@@ -266,15 +260,13 @@ describe('ImageMarkToolV3Host', () => {
     expect(rendered.container.querySelector('[data-image-editor-v3-host-state="failed"]')).toBeNull()
   })
 
-  it('导入失败时提供重试和显式兼容回退，不伪造旧文档结果', async () => {
+  it('导入失败时只提供重试，不伪造文档结果', async () => {
     mocks.ingest.mockRejectedValueOnce(new Error('unsupported source'))
-    const onFallback = vi.fn()
-    renderHost({ onFallback })
+    renderHost()
 
-    expect((await screen.findByRole('alert')).textContent).toContain('无法打开新版图片编辑器')
+    expect((await screen.findByRole('alert')).textContent).toContain('无法打开图片编辑器')
     expect(screen.queryByText('unsupported source')).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: '使用兼容编辑器' }))
-    expect(onFallback).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('button', { name: '使用兼容编辑器' })).toBeNull()
     expect(mocks.save).not.toHaveBeenCalled()
   })
 

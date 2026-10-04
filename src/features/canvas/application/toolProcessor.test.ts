@@ -1,17 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-  createEmptyImageEditDocument,
-  imageEditDocumentToMarkDoc,
-  stringifyImageEditDocument,
-  stringifyMarkDoc,
-  type ImageMarkDoc,
-} from '@/core/imageEdit';
 import { NODE_TOOL_TYPES, type NodeToolType } from '../domain/canvasNodes';
 import type { ImageSplitGateway } from './ports';
 import { CanvasToolProcessor } from './toolProcessor';
 
 const v3Mocks = vi.hoisted(() => ({
-  enabled: false,
   loadDocument: vi.fn(),
   materialize: vi.fn(),
 }));
@@ -33,7 +25,6 @@ vi.mock('@/commands/image', () => ({
 
 vi.mock('@/platform/runtime', () => ({
   isDesktopRuntime: vi.fn(() => false),
-  isImageEditorV3Enabled: vi.fn(() => v3Mocks.enabled),
 }));
 
 vi.mock('@/commands/imageEditorV3', () => ({
@@ -45,48 +36,19 @@ vi.mock('../imageEditV3/canvasEditV3Materialization', () => ({
   materializeCanvasEditV3Snapshot: v3Mocks.materialize,
 }));
 
-vi.mock('@/features/imageEdit/execution/browserImageEditExecution', () => ({
-  exportImageEditDocument: vi.fn(async (_source: string, _document: unknown) => 'rendered-image'),
-}));
-
 describe('CanvasToolProcessor 图片编辑分发', () => {
   let processor: CanvasToolProcessor;
   let splitGateway: ImageSplitGateway;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    v3Mocks.enabled = false;
     v3Mocks.loadDocument.mockReset();
     v3Mocks.materialize.mockReset();
     splitGateway = { split: vi.fn(async () => []) };
     processor = new CanvasToolProcessor(splitGateway, { next: () => 'node-id' });
   });
 
-  it('优先读取 V2 document 并通过统一浏览器执行端口输出结果', async () => {
-    const document = createEmptyImageEditDocument();
-    const result = await processor.process(NODE_TOOL_TYPES.edit, 'source-image', {
-      document: stringifyImageEditDocument(document),
-      markDoc: 'should-not-be-read',
-    });
-
-    expect(result).toEqual({ outputImageUrl: 'rendered-image' });
-    const { persistImageLocally } = await import('./imageData');
-    const { exportImageEditDocument } = await import('@/features/imageEdit/execution/browserImageEditExecution');
-    expect(vi.mocked(persistImageLocally)).toHaveBeenCalledWith('source-image');
-    expect(vi.mocked(exportImageEditDocument)).toHaveBeenCalledWith('local:source-image', document);
-  });
-
-  it('旧画布只提供 markDoc 时仍能迁移并执行', async () => {
-    const markDoc: ImageMarkDoc = imageEditDocumentToMarkDoc(createEmptyImageEditDocument());
-    const result = await processor.process(NODE_TOOL_TYPES.edit, 'legacy-source', {
-      markDoc: stringifyMarkDoc(markDoc),
-    });
-
-    expect(result.outputImageUrl).toBe('rendered-image');
-  });
-
-  it('开关开启后只加载同 revision 权威快照并返回受管媒体与稳定会话', async () => {
-    v3Mocks.enabled = true;
+  it('只加载同 revision 权威快照并返回受管媒体与稳定会话', async () => {
     const sourceRef = `sha256:${'a'.repeat(64)}` as const;
     const previewRef = `sha256:${'b'.repeat(64)}` as const;
     const fingerprint = `sha256:${'c'.repeat(64)}` as const;
@@ -153,8 +115,7 @@ describe('CanvasToolProcessor 图片编辑分发', () => {
     expect(vi.mocked(persistImageLocally)).not.toHaveBeenCalledWith('source-image');
   });
 
-  it('开关开启后拒绝缺失或 stale 会话，并把取消信号传到权威加载', async () => {
-    v3Mocks.enabled = true;
+  it('拒绝缺失或 stale 会话，并把取消信号传到权威加载', async () => {
     await expect(processor.process(NODE_TOOL_TYPES.edit, 'source-image', {}))
       .rejects.toThrow('缺少已保存的权威会话引用');
 

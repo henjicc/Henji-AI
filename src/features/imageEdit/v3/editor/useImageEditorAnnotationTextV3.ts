@@ -11,7 +11,7 @@ import {
   resolveLabelPlacement,
   resolveTextBaseSize,
 } from '@/features/imageMark/domain/metrics'
-import type { TextEditorState } from '@/features/imageMark/editor/shared'
+import type { TextEditorState } from '@/features/imageMark/shared/textEditorState'
 
 import type { ImageEditorToolSettingsV3 } from '../store/imageEditorSessionStoreV3'
 import { mapAnnotationPointV3, type AnnotationMatrixV3 } from './annotationGeometryV3'

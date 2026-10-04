@@ -2,7 +2,7 @@ import { useCallback, useState, type MutableRefObject } from 'react';
 import { createMarkId } from '../domain/codec';
 import { resolveLabelPlacement } from '../domain/metrics';
 import { isLabeledMark, type ImageMarkDoc, type LabeledMark, type MarkItem } from '../domain/types';
-import type { TextEditorState } from './shared';
+import type { TextEditorState } from '../shared/textEditorState';
 
 export interface UseMarkTextEditingParams {
   docRef: MutableRefObject<ImageMarkDoc>;

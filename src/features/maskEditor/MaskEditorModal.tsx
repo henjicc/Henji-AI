@@ -8,7 +8,7 @@ import {
   UiLoading,
   UiModal,
 } from '@/components/ui';
-import { ImageEditorShell } from '@/features/imageEdit';
+import { ImageEditorShell } from '@/features/imageEdit/shell/ImageEditorShell';
 import { MaskEditorCanvas } from './MaskEditorCanvas';
 import { MaskEditorInspector } from './MaskEditorInspector';
 import { hasPaintedMask } from './maskDocument';
@@ -27,7 +27,7 @@ interface MaskEditorModalBaseProps {
   onCancel: () => void;
 }
 
-export interface LegacyMaskEditorModalProps extends MaskEditorModalBaseProps {
+export interface QuickMaskEditorModalProps extends MaskEditorModalBaseProps {
   initialDocument?: MaskEditorDocument | null;
   onConfirm: (result: MaskEditorResult) => void | Promise<void>;
   v3Session?: never;
@@ -44,7 +44,7 @@ export interface V3MaskEditorModalProps extends MaskEditorModalBaseProps {
   onConfirmV3: (result: MaskEditorV3Result) => void | Promise<void>;
 }
 
-export type MaskEditorModalProps = LegacyMaskEditorModalProps | V3MaskEditorModalProps;
+export type MaskEditorModalProps = QuickMaskEditorModalProps | V3MaskEditorModalProps;
 
 export function MaskEditorModal(props: MaskEditorModalProps): JSX.Element {
   if (props.v3Session) {
@@ -59,10 +59,10 @@ export function MaskEditorModal(props: MaskEditorModalProps): JSX.Element {
       />
     );
   }
-  return <LegacyMaskEditorModal {...props} />;
+  return <QuickMaskEditorModal {...props} />;
 }
 
-function LegacyMaskEditorModal({
+function QuickMaskEditorModal({
   isOpen,
   sourceImage,
   initialDocument,

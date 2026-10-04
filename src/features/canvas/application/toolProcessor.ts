@@ -11,9 +11,7 @@ import {
   persistImageLocally,
 } from './imageData';
 import { readStoryboardImageMetadata } from '@/commands/image';
-import { isDesktopRuntime, isImageEditorV3Enabled } from '@/platform/runtime';
-import { parseImageEditDocument } from '@/core/imageEdit';
-import { exportImageEditDocument } from '@/features/imageEdit/execution/browserImageEditExecution';
+import { isDesktopRuntime } from '@/platform/runtime';
 import type {
   IdGenerator,
   ImageSplitGateway,
@@ -25,7 +23,8 @@ const logger = createLogger('features.canvas.application.toolProcessor');
 
 type ToolProcessingHandler = (
   sourceImageUrl: string,
-  options: DynamicValueMap
+  options: DynamicValueMap,
+  signal?: AbortSignal,
 ) => Promise<ToolProcessorResult>;
 
 export class CanvasToolProcessor implements ToolProcessor {
@@ -36,7 +35,7 @@ export class CanvasToolProcessor implements ToolProcessor {
     private readonly idGenerator: IdGenerator
   ) {
     this.handlers = new Map<NodeToolType, ToolProcessingHandler>([
-      [NODE_TOOL_TYPES.edit, this.processImageEdit.bind(this)],
+      [NODE_TOOL_TYPES.edit, this.processImageEditV3.bind(this)],
       [NODE_TOOL_TYPES.splitStoryboard, this.processStoryboardSplit.bind(this)],
     ]);
   }
@@ -52,9 +51,7 @@ export class CanvasToolProcessor implements ToolProcessor {
 
     logger.debug('canvas.tool.execute.start', { toolId: toolType });
     try {
-      const result = toolType === NODE_TOOL_TYPES.edit && isImageEditorV3Enabled()
-        ? await this.processImageEditV3(sourceImageUrl, options, signal)
-        : await handler(sourceImageUrl, options);
+      const result = await handler(sourceImageUrl, options, signal);
       logger.info('canvas.tool.execute.completed', { toolId: toolType });
       return result;
     } catch (error) {
@@ -64,17 +61,6 @@ export class CanvasToolProcessor implements ToolProcessor {
       });
       throw error;
     }
-  }
-
-  private async processImageEdit(
-    sourceImageUrl: string,
-    options: DynamicValueMap
-  ): Promise<ToolProcessorResult> {
-    const localSource = await persistImageLocally(sourceImageUrl);
-    const document = parseImageEditDocument(options.document ?? options.markDoc);
-    return {
-      outputImageUrl: await exportImageEditDocument(localSource, document),
-    };
   }
 
   private async processImageEditV3(

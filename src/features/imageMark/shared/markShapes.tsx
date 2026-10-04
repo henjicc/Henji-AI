@@ -51,7 +51,7 @@ interface MarkShapeNodeProps {
   blurSource?: HTMLCanvasElement | null;
   draggable: boolean;
   listening: boolean;
-  /** 默认沿用旧编辑器的屏幕恒定描边；嵌入 V3 时按文档比例缩放。 */
+  /** 默认沿用快速标记编辑器的屏幕恒定描边；嵌入 V3 时按文档比例缩放。 */
   strokeScaleEnabled?: boolean;
   opacity?: number;
   /** 标签正在原位编辑时隐藏已渲染的标签文字 */

@@ -1,6 +1,6 @@
 export { MaskEditorModal } from './MaskEditorModal';
 export type {
-  LegacyMaskEditorModalProps,
+  QuickMaskEditorModalProps,
   MaskEditorModalProps,
   V3MaskEditorModalProps,
 } from './MaskEditorModal';

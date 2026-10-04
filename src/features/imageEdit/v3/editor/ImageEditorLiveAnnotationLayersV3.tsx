@@ -11,10 +11,10 @@ import {
   resolveLabelFontSize,
   resolveTextBaseSize,
 } from '@/features/imageMark/domain/metrics'
-import { ArrowCurveControl } from '@/features/imageMark/editor/ArrowCurveControl'
-import { MarkShapeNode } from '@/features/imageMark/editor/markShapes'
-import { applyNodeDragToMark, applyNodeTransformToMark } from '@/features/imageMark/editor/nodeSync'
-import type { TextEditorState } from '@/features/imageMark/editor/shared'
+import { ArrowCurveControl } from '@/features/imageMark/shared/ArrowCurveControl'
+import { MarkShapeNode } from '@/features/imageMark/shared/markShapes'
+import { applyNodeDragToMark, applyNodeTransformToMark } from '@/features/imageMark/shared/nodeSync'
+import type { TextEditorState } from '@/features/imageMark/shared/textEditorState'
 
 import type { ImageEditorToolIdV3 } from '../application/imageEditorHostProfiles'
 import {

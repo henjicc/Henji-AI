@@ -34,7 +34,7 @@ import { useNonPassiveWheel } from './useNonPassiveWheel';
 import type { NumericStyleKey } from './useMarkController';
 
 interface MarkToolbarProps {
-  variant?: 'legacy' | 'annotation';
+  variant?: 'stacked' | 'annotation';
   tool: MarkToolType;
   setTool: (tool: MarkToolType) => void;
   style: MarkEditorStyleState;
@@ -114,7 +114,7 @@ function ColorPicker({
 }
 
 export function MarkToolbar({
-  variant = 'legacy',
+  variant = 'stacked',
   tool,
   setTool,
   style,

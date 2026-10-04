@@ -177,8 +177,8 @@
       "layoutError": "Dividers are too thick to leave room for cells. Reduce the thickness or the number of rows and columns."
     },
     "imageEditorV3": {
-      "loading": "Preparing the new image editor...",
-      "openFailed": "Could not open the new image editor",
+      "loading": "Preparing the image editor...",
+      "openFailed": "Could not open the image editor",
       "openFailedDescription": "The image does not match its saved edit version, or a required resource is unavailable. Try again.",
       "saving": "Saving edits...",
       "retrySave": "Retry save",

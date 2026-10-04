@@ -16,7 +16,6 @@ import {
 import { EXPORT_RESULT_DISPLAY_NAME } from '../domain/nodeDisplay';
 import type { CanvasToolPlugin, ToolOptions } from './types';
 import { ANNOTATION_DEFAULT_STROKE_HEX } from '@/core/theme/colorTokens';
-import { isImageEditorV3Enabled } from '@/platform/runtime';
 import { CANVAS_EDIT_V3_SESSION_OPTION } from '../imageEditV3/canvasEditV3Contracts';
 import {
   CANVAS_EDIT_V3_LAYER_STACK_OPTION,
@@ -40,21 +39,17 @@ export const imageEditToolPlugin: CanvasToolPlugin = {
   operationIds: Object.values(IMAGE_EDIT_OPERATION_IDS),
   supportsNode: (node) => (
     supportsImageSourceNode(node)
-    || (isImageEditorV3Enabled() && isLayerStackResultNode(node))
+    || isLayerStackResultNode(node)
   ) && Boolean(node.data.imageUrl),
   createInitialOptions: (node): ToolOptions => {
-    if (
-      isImageEditorV3Enabled()
-      && isLayerStackResultNode(node)
-      && node.data.layerStackDocument
-    ) {
+    if (isLayerStackResultNode(node) && node.data.layerStackDocument) {
       return {
         [CANVAS_EDIT_V3_LAYER_STACK_OPTION]: serializeLayerStackV1ForImageEditor(
           node.data.layerStackDocument,
         ),
       };
     }
-    if (isImageEditorV3Enabled() && node.data.imageEditSession !== undefined) {
+    if (node.data.imageEditSession !== undefined) {
       return {
         [CANVAS_EDIT_V3_SESSION_OPTION]: JSON.stringify(node.data.imageEditSession),
       };

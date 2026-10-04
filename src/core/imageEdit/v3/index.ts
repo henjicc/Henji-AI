@@ -4,7 +4,6 @@ export * from './layerTypes';
 export * from './documentFactory';
 export * from './documentCodec';
 export * from './legacyMigration';
-export * from './legacyCompatibility';
 export * from './commandTypes';
 export * from './commandReducer';
 export * from './commandHistory';
