@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 
 import React from 'react'
-import { fireEvent, render } from '@testing-library/react'
+import { act, fireEvent, render } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import Dropdown from './Dropdown'
 import { DROPDOWN_MENU_MAX_WIDTH_PX, resolveDropdownDisplay, resolveDropdownMenuWidth } from './dropdownUtils'
@@ -53,6 +53,42 @@ describe('Dropdown 键盘交互', () => {
     fireEvent.keyDown(trigger, { key: 'Enter' })
 
     expect(onSelect).toHaveBeenCalledWith('white_mist')
+  })
+
+  it('选完立即重新打开：上一次的收起计时器不会关掉新面板；收起中的面板不可交互，动画结束即卸载（界面重设计 5.5 VE-06）', () => {
+    vi.useFakeTimers()
+    try {
+      const onSelect = vi.fn()
+      // 只看本用例自己的面板（前面用例挂到 body 的面板可能还在）
+      const ownPanel = (): HTMLElement | null => document.getElementById(trigger.getAttribute('aria-controls') ?? '')?.closest<HTMLElement>('[data-dropdown-portal]') ?? null
+      const rendered = render(React.createElement(Dropdown, {
+        ariaLabel: '整个界面缩放',
+        value: '100',
+        options: [{ value: '100', label: '100%' }, { value: '150', label: '150%' }],
+        onSelect,
+      }))
+      const trigger = rendered.getByRole('button', { name: '整个界面缩放' })
+      fireEvent.click(trigger)
+      fireEvent.click(rendered.getByRole('option', { name: '150%' }))
+      expect(onSelect).toHaveBeenCalledWith('150')
+      const closingPanel = ownPanel() as HTMLElement
+      expect(closingPanel.getAttribute('aria-hidden')).toBe('true')
+      expect(closingPanel.hasAttribute('inert')).toBe(true)
+      expect(rendered.queryByRole('option', { name: '150%' })).toBeNull()
+
+      // 收起尚未完成就再次打开：旧计时器到点后，新面板仍然打开
+      fireEvent.click(trigger)
+      act(() => { vi.advanceTimersByTime(1000) })
+      expect(trigger.getAttribute('aria-expanded')).toBe('true')
+      expect(rendered.getByRole('option', { name: '100%' })).toBeTruthy()
+
+      // 再次选择后，收起动画结束即卸载，不依赖计时器
+      fireEvent.click(rendered.getByRole('option', { name: '100%' }))
+      fireEvent.animationEnd(ownPanel() as HTMLElement)
+      expect(ownPanel()).toBeNull()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('触发器下方空间不足时自动向上展开', () => {

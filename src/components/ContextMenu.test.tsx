@@ -116,3 +116,21 @@ it('浮层内的输入框阻止按键冒泡时，Escape 仍能收起浮层', () 
   act(() => { vi.advanceTimersByTime(UI_DURATION.base + 10) })
   expect(close).toHaveBeenCalledTimes(1)
 })
+
+// 5.5 VE-06：窗口在后台或被遮挡时计时器会被节流，已关闭的菜单不能停在收起态、继续被点中或与新菜单并存
+it('收起中的菜单不再可交互、不按角色暴露；收起动画结束即卸载，不依赖计时器', () => {
+  vi.useFakeTimers()
+  const close = vi.fn()
+  const host = (visible: boolean) => <ContextMenu visible={visible} onClose={close} position={{ x: 20, y: 20 }} items={[{ id: 'a', label: '音频声道…', icon: null, onClick: () => {} }]} />
+  const view = render(host(true))
+  expect(screen.getByRole('menuitem', { name: '音频声道…' })).toBeTruthy()
+  view.rerender(host(false))
+  const panel = document.querySelector<HTMLElement>('[data-panel-placement]')!
+  expect(panel.getAttribute('aria-hidden')).toBe('true')
+  expect(panel.hasAttribute('inert')).toBe(true)
+  expect(screen.queryByRole('menuitem', { name: '音频声道…' })).toBeNull()
+  // 不推进计时器（模拟被节流），只靠收起动画结束
+  act(() => { fireEvent.animationEnd(panel) })
+  expect(document.querySelector('[data-panel-placement]')).toBeNull()
+  expect(close).toHaveBeenCalledTimes(1)
+})

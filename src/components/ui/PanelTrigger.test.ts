@@ -161,8 +161,8 @@ describe('PanelTrigger 面板内部点击关闭策略', () => {
       }))
       const trigger = view.getAllByRole('button')[0]
       fireEvent.click(trigger)
-      // 面板内选项：mousedown 触发收起（动画进行中）
-      fireEvent.mouseDown(view.getByText('新建矩形'))
+      // 面板内选项：click 后收起（动画进行中）
+      fireEvent.click(view.getByText('新建矩形'))
       expect(trigger.getAttribute('aria-expanded')).toBe('false')
       // 动画结束前再次点触发器
       fireEvent.click(trigger)
@@ -170,6 +170,35 @@ describe('PanelTrigger 面板内部点击关闭策略', () => {
       act(() => { vi.advanceTimersByTime(1000) })
       expect(trigger.getAttribute('aria-expanded')).toBe('true')
       expect(view.queryByText('新建矩形')).not.toBeNull()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('closeOnPanelClick：按下时面板保持可交互，选项 onClick 先执行再收起（界面重设计 5.5 VE-06）', () => {
+    vi.useFakeTimers()
+    try {
+      vi.stubGlobal('ResizeObserver', class { observe(): void {} disconnect(): void {} })
+      const onCreate = vi.fn()
+      const view = render(React.createElement(PanelTrigger, {
+        display: '新建',
+        closeOnPanelClick: true,
+        renderPanel: () => React.createElement('button', { type: 'button', onClick: onCreate }, '新建素材箱'),
+      }))
+      const trigger = view.getAllByRole('button')[0]
+      fireEvent.click(trigger)
+      const option = view.getByText('新建素材箱')
+      const panel = option.parentElement?.closest('[aria-hidden], .animate-scale-in') as HTMLElement
+      // 按下不收起：收起态不可交互，若按下就收起，随后的 click 会落空
+      fireEvent.mouseDown(option)
+      expect(trigger.getAttribute('aria-expanded')).toBe('true')
+      expect(panel.hasAttribute('inert')).toBe(false)
+      fireEvent.click(option)
+      expect(onCreate).toHaveBeenCalledTimes(1)
+      expect(trigger.getAttribute('aria-expanded')).toBe('false')
+      expect(panel.hasAttribute('inert')).toBe(true)
+      act(() => { vi.advanceTimersByTime(1000) })
+      expect(view.queryByText('新建素材箱')).toBeNull()
     } finally {
       vi.useRealTimers()
     }

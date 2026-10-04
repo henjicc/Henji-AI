@@ -148,9 +148,9 @@ function createAudioEditInteractionScene({ setupToolbox, clickNamedButton }) {
       await page.getByRole('switch', { name: '波形上方显示字幕', exact: true }).click()
       assert.equal(await page.locator('[data-audio-captions]').count(), 0)
       await page.getByRole('switch', { name: '波形上方显示字幕', exact: true }).click()
-      await page.getByRole('combobox', { name: '整个界面缩放', exact: true }).selectOption('150')
+      await pickUiScale(page, '150')
       await page.waitForFunction(() => document.documentElement.dataset.uiScale === '150')
-      await page.getByRole('combobox', { name: '整个界面缩放', exact: true }).selectOption(initialScale)
+      await pickUiScale(page, initialScale)
       await page.waitForFunction((scale) => document.documentElement.dataset.uiScale === scale, initialScale)
       await page.keyboard.press('Escape')
       await page.waitForFunction(() => !document.querySelector('[role="dialog"]'))
@@ -161,7 +161,7 @@ function createAudioEditInteractionScene({ setupToolbox, clickNamedButton }) {
       await page.keyboard.down('Control'); await page.mouse.wheel(0, -300); await page.keyboard.up('Control')
       await page.waitForFunction((scale) => document.documentElement.dataset.uiScale !== scale, initialScale)
       await page.getByTitle('界面设置', { exact: true }).click()
-      await page.getByRole('combobox', { name: '整个界面缩放', exact: true }).selectOption(initialScale)
+      await pickUiScale(page, initialScale)
       await page.waitForFunction((scale) => document.documentElement.dataset.uiScale === scale, initialScale)
       await page.keyboard.press('Escape')
       await waveform.hover()
@@ -184,4 +184,10 @@ function createAudioEditInteractionScene({ setupToolbox, clickNamedButton }) {
     },
   }
 }
+// 界面设置里的“整个界面缩放”是共享下拉（第二批由原生选择改成 Dropdown）：点开后按选项名称选择
+async function pickUiScale(page, mode) {
+  await page.getByRole('button', { name: '整个界面缩放', exact: true }).click()
+  await page.getByRole('option', { name: mode === 'auto' ? '自动' : `${mode}%`, exact: true }).click()
+}
+
 module.exports = { createAudioEditInteractionScene }

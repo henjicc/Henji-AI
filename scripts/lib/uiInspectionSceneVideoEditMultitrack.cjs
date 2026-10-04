@@ -244,6 +244,8 @@ function createVideoEditMultitrackScene() {
           await playhead(frame)
           await entry(page, items[key].id).click(); await entry(page, items[key].id).click({ button: 'right' }); await menuItem(page, '添加到当前序列').click()
           const value = await saved(page, file, document => document.sequences[0].clips.length === before + count, `${samples[key].file} 放入后应新增 ${count} 个片段`)
+          // 5.5 VE-06：执行过的菜单必须立即退出交互（收起动画可能因窗口在后台被节流而停住，但不得再被点中）
+          assert.equal(await page.evaluate(() => [...document.querySelectorAll('[role="menu"]')].filter(menu => !menu.closest('[inert]')).length), 0, '菜单项执行后菜单仍可交互')
           return { project: value, group: value.sequences[0].clips.filter(clip => clip.itemId === items[key].id && clip.start === frame) }
         }
         const assertGroup = (group, expected, label) => {

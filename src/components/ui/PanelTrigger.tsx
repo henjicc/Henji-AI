@@ -241,16 +241,22 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
   const closeTimerRef = useRef<number | undefined>(undefined)
   useEffect(() => () => window.clearTimeout(closeTimerRef.current), [])
 
+  // 收起完成：计时器或收起动画结束，谁先到算谁（界面重设计 5.5 VE-06）。窗口在后台或被遮挡时 Chromium 会把
+  // 计时器节流到秒级甚至分钟级，只靠计时器时，已经关掉的菜单会长时间停在收起态、仍挂在页面上。
+  const finishClose = useCallback((): void => {
+    if (closeTimerRef.current === undefined) return
+    window.clearTimeout(closeTimerRef.current)
+    closeTimerRef.current = undefined
+    setOpen(false)
+    setClosing(false)
+    onOpenChangeRef.current?.(false)
+  }, [])
+
   const closePanel = useCallback((): void => {
     setClosing(true)
     window.clearTimeout(closeTimerRef.current)
-    closeTimerRef.current = window.setTimeout(() => {
-      closeTimerRef.current = undefined
-      setOpen(false)
-      setClosing(false)
-      onOpenChangeRef.current?.(false)
-    }, UI_DURATION.base)
-  }, [])
+    closeTimerRef.current = window.setTimeout(finishClose, UI_DURATION.base)
+  }, [finishClose])
 
   const openPanel = useCallback((): void => {
     if (disabled) return
@@ -258,6 +264,15 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
     setOpen(true)
     onOpenChangeRef.current?.(true)
   }, [computePanelPosition, disabled])
+
+  // 收起动画结束即完成收起（原生事件监听：与 React 的动画事件名探测无关，jsdom 与 Chromium 一致）
+  useEffect(() => {
+    const panel = panelRef.current
+    if (!closing || !panel) return
+    const onEnd = (event: Event): void => { if (event.target === panel) finishClose() }
+    panel.addEventListener('animationend', onEnd)
+    return () => panel.removeEventListener('animationend', onEnd)
+  }, [closing, finishClose])
 
   // 受控开合：父组件打开、关闭，或在打开期间换锚点（在另一处再次右键）。
   const openStateRef = useRef({ open, closing })
@@ -320,20 +335,26 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
       if (relation === 'descendant') return
       // 从面板里打开的模态层（弹窗、查看器）期间，面板不响应点外关闭
       if (hasOpenModalUiOverlayDescendant(overlay.id)) return
-      if (relation === 'self') {
-        if (open && shouldClosePanelAfterInternalClick(closeOnPanelClick, target)) {
-          closePanel()
-        }
-        return
-      }
+      // 面板内的点击在 click 冒泡阶段才收起（见下）：按下时就收起会让面板先进入不可交互的收起态，选项收不到 click
+      if (relation === 'self') return
       if (open) {
         closePanel()
       }
     }
+    // 面板内点击：选项自己的 onClick 先执行，冒泡到文档后再按 closeOnPanelClick 收起
+    const clickHandler = (e: MouseEvent) => {
+      if (!open || !isDomNode(e.target)) return
+      if (resolveUiOverlayTarget(e.target, overlay.id) !== 'self') return
+      if (shouldClosePanelAfterInternalClick(closeOnPanelClick, e.target)) closePanel()
+    }
     // 按触发器所在文档监听：浮窗中的面板在浮窗内打开与关闭，主窗口行为不变。
     const ownerDocument = ownerDocumentOf(ref.current)
     ownerDocument.addEventListener('mousedown', handler, true)
-    return () => ownerDocument.removeEventListener('mousedown', handler, true)
+    ownerDocument.addEventListener('click', clickHandler)
+    return () => {
+      ownerDocument.removeEventListener('mousedown', handler, true)
+      ownerDocument.removeEventListener('click', clickHandler)
+    }
   }, [closePanel, open, closeOnPanelClick, overlay.id])
 
   useEffect(() => {
@@ -436,7 +457,10 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
       {(open || closing) && pos && createPortal(
         <div
           ref={panelRef}
-          className={`${UI_TRIGGER_PANEL_SURFACE_CLASS[surface]} ${UI_TRIGGER_PANEL_PADDING_CLASS[panelPadding]} flex flex-col ${contentWidth ? 'w-max' : ''} ${closing ? 'animate-scale-out' : 'animate-scale-in'}`}
+          className={`${UI_TRIGGER_PANEL_SURFACE_CLASS[surface]} ${UI_TRIGGER_PANEL_PADDING_CLASS[panelPadding]} flex flex-col ${contentWidth ? 'w-max' : ''} ${closing ? 'pointer-events-none animate-scale-out' : 'animate-scale-in'}`}
+          // 收起中的面板已经关闭：不再接收指针与键盘，也不再暴露给读屏与按角色查找（否则会和新打开的菜单并存、被点中）
+          aria-hidden={closing || undefined}
+          {...(closing ? { inert: '' } : {})}
           style={{
             position: 'fixed',
             top: pos.placement === 'above' ? undefined : pos.top,

@@ -92,6 +92,26 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
   const appearance = appearanceOverride ?? (toolbarLayout ? 'text' : 'field')
   const [open, setOpen] = useState(false)
   const [closing, setClosing] = useState(false)
+  // 收起计时器（界面重设计 5.5 VE-06）：重新打开时必须取消上一次收起，否则窗口在后台被节流时，
+  // 迟到的计时器会把刚打开的面板关掉；收起动画结束也算收起完成，不只依赖计时器。
+  const closeTimerRef = useRef<number | undefined>(undefined)
+  const restoreFocusOnCloseRef = useRef(false)
+  useEffect(() => () => window.clearTimeout(closeTimerRef.current), [])
+  const finishClose = useCallback((): void => {
+    if (closeTimerRef.current === undefined) return
+    window.clearTimeout(closeTimerRef.current)
+    closeTimerRef.current = undefined
+    setOpen(false)
+    setClosing(false)
+    if (restoreFocusOnCloseRef.current) triggerRef.current?.focus()
+    restoreFocusOnCloseRef.current = false
+  }, [])
+  const scheduleClose = useCallback((restoreFocus = false): void => {
+    setClosing(true)
+    restoreFocusOnCloseRef.current = restoreFocus
+    window.clearTimeout(closeTimerRef.current)
+    closeTimerRef.current = window.setTimeout(finishClose, UI_DURATION.base)
+  }, [finishClose])
   const [activeOptionIndex, setActiveOptionIndex] = useState(-1)
   const overlay = useUiOverlayLayer(open)
   const onOpenChangeRef = useRef(onOpenChange)
@@ -106,6 +126,14 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
   const ref = useRef<HTMLDivElement | null>(null)
   const triggerRef = useRef<HTMLButtonElement | null>(null)
   const panelRef = useRef<HTMLDivElement | null>(null)
+  // 收起动画结束即完成收起（原生事件监听，jsdom 与 Chromium 一致）
+  useEffect(() => {
+    const panel = panelRef.current
+    if (!closing || !panel) return
+    const onEnd = (event: Event): void => { if (event.target === panel) finishClose() }
+    panel.addEventListener('animationend', onEnd)
+    return () => panel.removeEventListener('animationend', onEnd)
+  }, [closing, finishClose])
   const dropdownId = useId().replace(/:/g, '')
   const panelId = `dropdown-panel-${dropdownId}`
   const [fixedPos, setFixedPos] = useState<{
@@ -133,23 +161,19 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
   const selectOption = (option: DropdownOption<T>): void => {
     if (option.disabled) return
     onSelect?.(option.value)
-    setClosing(true)
-    setTimeout(() => { setOpen(false); setClosing(false) }, UI_DURATION.base)
+    scheduleClose()
   }
   const openPanel = (): void => {
     const selectedIndex = (options || []).findIndex((option) => isSelectedOption(option.value) && !option.disabled)
     setActiveOptionIndex(selectedIndex >= 0 ? selectedIndex : (enabledOptionIndices()[0] ?? -1))
+    window.clearTimeout(closeTimerRef.current)
+    closeTimerRef.current = undefined
     setClosing(false)
     setOpen(true)
   }
   const closePanel = (restoreFocus = false): void => {
     if (!open) return
-    setClosing(true)
-    setTimeout(() => {
-      setOpen(false)
-      setClosing(false)
-      if (restoreFocus) triggerRef.current?.focus()
-    }, 200)
+    scheduleClose(restoreFocus)
   }
   const moveActiveOption = (direction: 1 | -1): void => {
     const indices = enabledOptionIndices()
@@ -164,22 +188,22 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
     if (disabled) return
     if (event.key === 'ArrowDown') {
       event.preventDefault()
-      if (!open) openPanel()
+      if (!menuShown) openPanel()
       else moveActiveOption(1)
       return
     }
     if (event.key === 'ArrowUp') {
       event.preventDefault()
-      if (!open) openPanel()
+      if (!menuShown) openPanel()
       else moveActiveOption(-1)
       return
     }
-    if (event.key === 'Home' && open) {
+    if (event.key === 'Home' && menuShown) {
       event.preventDefault()
       setActiveOptionIndex(enabledOptionIndices()[0] ?? -1)
       return
     }
-    if (event.key === 'End' && open) {
+    if (event.key === 'End' && menuShown) {
       event.preventDefault()
       const indices = enabledOptionIndices()
       setActiveOptionIndex(indices[indices.length - 1] ?? -1)
@@ -187,7 +211,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
     }
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault()
-      if (!open) {
+      if (!menuShown) {
         openPanel()
         return
       }
@@ -195,14 +219,14 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
       if (option) selectOption(option)
       return
     }
-    if (event.key === 'Escape' && open) {
+    if (event.key === 'Escape' && menuShown) {
       event.preventDefault()
       // 这次 Escape 只属于打开中的下拉：不再冒泡到文档，否则外层弹窗（设置等）的焦点陷阱会把整个弹窗一起关掉
       event.stopPropagation()
       closePanel(true)
       return
     }
-    if (event.key === 'Tab' && open) closePanel()
+    if (event.key === 'Tab' && menuShown) closePanel()
   }
   const getOptionLabels = useCallback((source?: DropdownOption<T>[]): string[] => {
     return (source || []).map((option) => String(option.label))
@@ -229,10 +253,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
       const inPanel = (panelRef.current?.contains(target) ?? false)
         || resolveUiOverlayTarget(target, overlay.id) !== 'outside'
       if (!inTrigger && !inPanel) {
-        if (open) {
-          setClosing(true)
-          setTimeout(() => { setOpen(false); setClosing(false) }, UI_DURATION.base)
-        }
+        if (open) scheduleClose()
       }
     }
     // 捕获阶段监听：画布内多处控件会在冒泡阶段 stopPropagation（避免触发节点拖拽），
@@ -241,7 +262,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
     const ownerDocument = ownerDocumentOf(ref.current)
     ownerDocument.addEventListener('mousedown', handler, true)
     return () => ownerDocument.removeEventListener('mousedown', handler, true)
-  }, [open, overlay.id])
+  }, [open, overlay.id, scheduleClose])
 
   useLayoutEffect(() => {
     if (!ref.current) return
@@ -388,7 +409,8 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
         open={open && !closing}
         onClick={() => {
           if (disabled) return
-          if (open) {
+          // 收起中再次点击触发器视为重新打开（与 PanelTrigger 一致）
+          if (menuShown) {
             closePanel()
           } else {
             openPanel()
@@ -412,7 +434,10 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
           createPortal(
             <div
               ref={panelRef}
-              className={`${UI_TRIGGER_PANEL_SURFACE_CLASS[surface]} ${UI_TRIGGER_PANEL_PADDING_CLASS[panelPadding]} ${closing ? 'animate-scale-out' : 'animate-scale-in'}`}
+              className={`${UI_TRIGGER_PANEL_SURFACE_CLASS[surface]} ${UI_TRIGGER_PANEL_PADDING_CLASS[panelPadding]} ${closing ? 'pointer-events-none animate-scale-out' : 'animate-scale-in'}`}
+              // 收起中的面板已经关闭：不再接收指针与键盘，也不再按角色暴露（与 PanelTrigger 一致）
+              aria-hidden={closing || undefined}
+              {...(closing ? { inert: '' } : {})}
               style={{
                 position: 'fixed',
                 top: fixedPos.top,
@@ -435,7 +460,10 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
           <div
             ref={panelRef}
             // 非 portal 面板在触发器所在的层叠上下文里展开，只需盖住同一上下文里的兄弟内容：下拉档即可
-            className={`absolute left-0 z-dropdown ${fixedPos?.placement === 'above' ? 'bottom-full mb-2' : 'top-full mt-2'} ${panelWidthStrategy === 'options' ? 'w-auto' : 'w-full'} ${UI_TRIGGER_PANEL_SURFACE_CLASS[surface]} ${UI_TRIGGER_PANEL_PADDING_CLASS[panelPadding]} ${closing ? 'animate-scale-out' : 'animate-scale-in'}`}
+            className={`absolute left-0 z-dropdown ${fixedPos?.placement === 'above' ? 'bottom-full mb-2' : 'top-full mt-2'} ${panelWidthStrategy === 'options' ? 'w-auto' : 'w-full'} ${UI_TRIGGER_PANEL_SURFACE_CLASS[surface]} ${UI_TRIGGER_PANEL_PADDING_CLASS[panelPadding]} ${closing ? 'pointer-events-none animate-scale-out' : 'animate-scale-in'}`}
+              // 收起中的面板已经关闭：不再接收指针与键盘，也不再按角色暴露（与 PanelTrigger 一致）
+              aria-hidden={closing || undefined}
+              {...(closing ? { inert: '' } : {})}
             // 非 portal 面板与触发器同一定位上下文：不窄于触发器（100%），选项更长时按内容加宽
             style={optionsPanelWidth !== null ? { minWidth: `max(100%, ${optionsPanelWidth}px)` } : undefined}
             data-dropdown-portal="true"
