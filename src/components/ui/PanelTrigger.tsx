@@ -1,9 +1,13 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { shouldClosePanelAfterInternalClick } from './panelTriggerClosePolicy'
 import {
-  isPanelInteractionPortalTarget,
-  shouldClosePanelAfterInternalClick,
-} from './panelTriggerClosePolicy'
+  hasOpenModalUiOverlayDescendant,
+  isTopmostUiOverlay,
+  resolveUiOverlayTarget,
+  UiOverlayLayerProvider,
+  useUiOverlayLayer,
+} from './overlayOwnership'
 import {
   resolveFloatingPanelPosition,
   type FloatingPanelPosition,
@@ -11,10 +15,11 @@ import {
 import { UI_FIELD_INLINE_ROW_CLASS, UI_FIELD_LABEL_CLASS, UI_FIELD_LABEL_INLINE_CLASS, UI_TRIGGER_PANEL_PADDING_CLASS, UI_TRIGGER_PANEL_SURFACE_CLASS, type UiFieldSize, type UiTriggerPanelPadding, type UiTriggerPanelSurface } from './styleTokens'
 import { UiFieldLayoutContext, useUiFieldLayout } from './fieldLayout'
 import { measureElementTextWidth } from './textMeasurement'
+import { MENU_TEXT_ROUNDING_SLACK_PX, UI_MENU_ITEM_HORIZONTAL_CHROME_PX } from './dropdownUtils'
 import { UiFieldTrigger } from './primitives'
 import { UI_DURATION } from './motion'
 import { Z_LAYERS } from '@/core/theme/zLayers'
-import { elementOfEventTarget, isDomNode, ownerDocumentOf, ownerWindowOf } from '@/utils/crossRealmDom'
+import { isDomNode, ownerDocumentOf, ownerWindowOf } from '@/utils/crossRealmDom'
 
 type PanelTriggerProps = {
   label?: string
@@ -54,9 +59,11 @@ type PanelTriggerProps = {
   stableHeightKey?: string | number
   freezePositionOnOpen?: boolean
   children?: (controls: PanelTriggerControls) => React.ReactNode
+  /** 受控打开：父组件需要从外部打开浮层（如生成前校验失败时定位到收起的参数）时使用。 */
+  controlsRef?: React.MutableRefObject<PanelTriggerControls | null>
 }
 
-type PanelTriggerControls = {
+export type PanelTriggerControls = {
   open: boolean
   openPanel: () => void
   closePanel: () => void
@@ -65,8 +72,9 @@ type PanelTriggerControls = {
 
 const PANEL_VIEWPORT_GUTTER_PX = 8
 const PANEL_VIEWPORT_TOP_INSET_PX = 48
-// 标准文字菜单：外层 panelPadding="menu" p-1（8）+ 菜单项 px-2.5（20）+ 玻璃边框（2）。
-const PANEL_TEXT_MENU_HORIZONTAL_CHROME_PX = 30
+// 标准文字菜单：外层 panelPadding="menu" p-1（8）+ 菜单项留白（含选中勾槽，见 UI_MENU_ITEM_HORIZONTAL_CHROME_PX）+ 边框（2）。
+// 4.3：原值 30 没算选中勾（gap 8 + 勾 14），选中项会被截断。
+const PANEL_TEXT_MENU_HORIZONTAL_CHROME_PX = 8 + UI_MENU_ITEM_HORIZONTAL_CHROME_PX.md + 2 + MENU_TEXT_ROUNDING_SLACK_PX
 
 export default function PanelTrigger(props: PanelTriggerProps): React.ReactElement {
   const {
@@ -92,6 +100,7 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
     stableHeightKey,
     freezePositionOnOpen = false,
     children,
+    controlsRef,
   } = props
   const fieldLayout = useUiFieldLayout()
   const toolbarLayout = fieldLayout === 'toolbar'
@@ -100,6 +109,7 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
   const gapProp = gapOverride ?? (toolbarLayout ? 8 : 45)
   const [open, setOpen] = useState(false)
   const [closing, setClosing] = useState(false)
+  const overlay = useUiOverlayLayer(open)
   const [pos, setPos] = useState<FloatingPanelPosition | null>(null)
   const ref = useRef<HTMLDivElement | null>(null)
   const panelRef = useRef<HTMLDivElement | null>(null)
@@ -209,17 +219,24 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
   }, [closePanel, closing, disabled, open, openPanel])
 
   useEffect(() => {
+    if (!controlsRef) return
+    controlsRef.current = { open, openPanel, closePanel, togglePanel }
+    return () => { controlsRef.current = null }
+  }, [closePanel, controlsRef, open, openPanel, togglePanel])
+
+  useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (!isDomNode(e.target)) return
       const target = e.target
       // 触发器可能挂在系统浮窗（另一 realm）里，不能用 instanceof 判定。
-      const targetElement = elementOfEventTarget(target)
       const inTrigger = !!ref.current && ref.current.contains(target)
-      const inPanel = !!panelRef.current && panelRef.current.contains(target)
-      const inPortaledPanelControl = isPanelInteractionPortalTarget(targetElement)
+      const relation = resolveUiOverlayTarget(target, overlay.id)
       if (inTrigger) return
-      if (inPortaledPanelControl) return
-      if (inPanel) {
+      // 子浮层（嵌套的 PanelTrigger / Dropdown / 弹窗 / 提示词候选）里的点击归属本面板，不关闭
+      if (relation === 'descendant') return
+      // 从面板里打开的模态层（弹窗、查看器）期间，面板不响应点外关闭
+      if (hasOpenModalUiOverlayDescendant(overlay.id)) return
+      if (relation === 'self') {
         if (open && shouldClosePanelAfterInternalClick(closeOnPanelClick, target)) {
           closePanel()
         }
@@ -233,18 +250,20 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
     const ownerDocument = ownerDocumentOf(ref.current)
     ownerDocument.addEventListener('mousedown', handler, true)
     return () => ownerDocument.removeEventListener('mousedown', handler, true)
-  }, [closePanel, open, closeOnPanelClick])
+  }, [closePanel, open, closeOnPanelClick, overlay.id])
 
   useEffect(() => {
     if (!open) return
     const handler = (event: KeyboardEvent): void => {
       if (event.key !== 'Escape') return
+      // 嵌套时只关最上层
+      if (!isTopmostUiOverlay(overlay.id)) return
       closePanel()
     }
     const ownerDocument = ownerDocumentOf(ref.current)
     ownerDocument.addEventListener('keydown', handler)
     return () => ownerDocument.removeEventListener('keydown', handler)
-  }, [closePanel, open])
+  }, [closePanel, open, overlay.id])
 
   useEffect(() => {
     const updateAnchor = (reveal: boolean) => {
@@ -336,15 +355,18 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
             visibility: ready ? 'visible' : 'hidden'
           }}
           data-panel-placement={pos.placement}
+          {...overlay.layerProps}
         >
           <div
             data-panel-scroll-region
             className="ui-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain"
           >
             {/* 浮层里的字段一律按表单排布，不继承触发器所在工具条的排布 */}
-            <UiFieldLayoutContext.Provider value="form">
-              {renderPanel()}
-            </UiFieldLayoutContext.Provider>
+            <UiOverlayLayerProvider id={overlay.id}>
+              <UiFieldLayoutContext.Provider value="form">
+                {renderPanel()}
+              </UiFieldLayoutContext.Provider>
+            </UiOverlayLayerProvider>
           </div>
         </div>,
         // 面板挂到触发器所在文档：系统浮窗里的菜单留在浮窗内。

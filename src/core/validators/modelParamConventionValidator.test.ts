@@ -134,6 +134,36 @@ describe('模型共享参数约定', () => {
     ])).toThrow(`Param named "${zh}" must declare role 'mode'`)
   })
 
+  it.each(['mode', 'version', 'variant'])('拒绝用共享词表 params.fields.%s 命名却没声明 role 的顶层选择器', (field) => {
+    // 断牙：sharedFieldText 产出的是 key 形式名称，没有 zh 字面量；只认字面量时 38 个模式参数漏网（任务 4.3）
+    expect(() => validate([
+      {
+        id: 'someSelector',
+        type: 'dropdown',
+        order: 1,
+        name: { key: `params.fields.${field}`, absolute: true, fallback: 'Mode' },
+        default: 'a',
+        options: [{ value: 'a', label: 'A' }],
+      },
+      resolutionParam,
+    ])).toThrow(`Param using the shared label "params.fields.${field}" must declare role 'mode'`)
+  })
+
+  it('共享词表命名的模式选择器声明 role 后通过', () => {
+    expect(() => validate([
+      {
+        id: 'someSelector',
+        type: 'dropdown',
+        order: 1,
+        role: 'mode',
+        name: { key: 'params.fields.mode', absolute: true },
+        default: 'a',
+        options: [{ value: 'a', label: 'A' }],
+      },
+      resolutionParam,
+    ])).not.toThrow()
+  })
+
   it('模式类主选择器不要求排在所有参数之前', () => {
     expect(() => validate([
       { ...resolutionParam, order: 1 },

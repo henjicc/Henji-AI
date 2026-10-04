@@ -50,14 +50,33 @@ function attachUiInspectionGeneration(context) {
     return expected
   }
 
+  /**
+   * 生成底栏单行（任务 4.3）：放不下的参数与展示分组收进行末“更多参数”。参数在行内就直接返回；
+   * 否则按正式交互先展开“更多参数”，再在浮层里等到该参数。判据不放宽：两处都找不到即失败。
+   */
+  async function revealGenerationParam(page, labelPattern) {
+    const inline = page.locator('[data-ui-overflow-row]').getByText(labelPattern).filter({ visible: true }).first()
+    if (await inline.count()) return { inMorePanel: false }
+    const more = page.locator('[data-more-params-trigger]').filter({ visible: true }).first()
+    await more.waitFor({ state: 'visible', timeout: 8000 })
+    if (await more.getAttribute('aria-expanded') !== 'true') await more.click()
+    const panel = page.locator('[data-panel-scroll-region]:visible').last()
+    await panel.getByText(labelPattern).filter({ visible: true }).first().waitFor({ state: 'visible', timeout: 8000 })
+    return { inMorePanel: true, panel }
+  }
+
   async function setupGenerationMidjourneySettings(page, withCharacterReference) {
     // 生成页草稿是内存态；真实资料巡检时 ImageUpload 也会切换为 data URL 预览，
     // 不会把夹具导入用户媒体目录。
     await selectGenerationModel(page, 'Midjourney', 'apimart-midjourney')
-    const settingsField = paramFieldFromLabel(page, /^(MJ 设置|MJ Settings)$/i)
-    await settingsField.waitFor({ state: 'visible', timeout: 8000 })
-    await settingsField.locator('[data-panel-trigger-button]').click()
-    const panel = page.locator('[data-panel-scroll-region]:visible').last()
+    // “MJ 设置”是展示分组：行内放得下时是参数组触发器；收进“更多参数”时以分组标题展开为分节
+    const revealed = await revealGenerationParam(page, /^(MJ 设置|MJ Settings)$/i)
+    let panel = revealed.panel
+    if (!revealed.inMorePanel) {
+      const settingsField = paramFieldFromLabel(page, /^(MJ 设置|MJ Settings)$/i)
+      await settingsField.locator('[data-panel-trigger-button]').click()
+      panel = page.locator('[data-panel-scroll-region]:visible').last()
+    }
     await panel.waitFor({ state: 'visible', timeout: 8000 })
     await panel.getByText(/^(参考控制|References)$/i).waitFor({ state: 'visible', timeout: 8000 })
     if (withCharacterReference) {
@@ -77,6 +96,7 @@ function attachUiInspectionGeneration(context) {
 
     const promptArea = page.locator('[data-onboarding-target="prompt"]').first().locator('..')
     await promptArea.locator('input[type="file"]').first().setInputFiles(REFERENCE_FIXTURE_IMAGE)
+    await revealGenerationParam(page, /^(局部重绘遮罩|Inpainting Mask)$/i)
     const maskLabel = page.getByText(/^(局部重绘遮罩|Inpainting Mask)$/i).filter({ visible: true }).first()
     await maskLabel.waitFor({ state: 'visible', timeout: 8000 })
     if (await page.getByText('定义基于首张参考图创建的局部重绘区域；遮罩与源图同尺寸并使用 Alpha 通道。').count()) {
@@ -146,6 +166,7 @@ function attachUiInspectionGeneration(context) {
     setupGenerationModelSearch,
     setupGenerationMidjourneySettings,
     setupGenerationGptMask,
+    revealGenerationParam,
   })
 }
 

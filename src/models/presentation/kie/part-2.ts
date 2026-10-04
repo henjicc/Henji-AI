@@ -75,6 +75,7 @@ export const kiePresentationPart2: Record<string, ModelPresentation> = {
     params: {
       "kieHailuo23Mode": {
         name: sharedFieldText('mode'),
+        role: 'mode',
         optionLabels: Object.fromEntries((
           [
         { value: 'standard', label: sharedOptionText('standard') },
@@ -139,6 +140,7 @@ export const kiePresentationPart2: Record<string, ModelPresentation> = {
     params: {
       "kieKling30OmniMode": {
         name: sharedFieldText('mode'),
+        role: 'mode',
         optionLabels: Object.fromEntries((
           [
         { value: 'text-to-video', label: sharedModeText('textToVideo') },

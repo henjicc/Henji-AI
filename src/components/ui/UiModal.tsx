@@ -6,6 +6,7 @@ import { UI_CONTENT_OVERLAY_INSET_CLASS, UI_DIALOG_TRANSITION_MS } from './motio
 import { UiIconButton, UiPanel } from './primitives';
 import { useDialogFocusTrap } from './useDialogFocusTrap';
 import { useDialogTransition } from './useDialogTransition';
+import { UiOverlayLayerProvider, useUiOverlayLayer } from './overlayOwnership';
 import { ownerDocumentOf } from '@/utils/crossRealmDom';
 import {
   UI_MODAL_SIZE_CLASS,
@@ -71,6 +72,8 @@ export function UiModal({
     setHost(previous => previous === next ? previous : next);
   }, [shouldRender]);
   const titleId = useId();
+  // 模态层（任务 4.3 浮层归属）：从浮层里打开的弹窗内点击不关闭那个浮层，打开期间父浮层不响应点外与 Escape
+  const overlay = useUiOverlayLayer(isOpen && shouldRender, { modal: true });
   const resolvedAriaLabel = hideHeader || ariaLabel ? ariaLabel ?? title : undefined;
   useDialogFocusTrap({
     active: isOpen && shouldRender && host !== null,
@@ -99,7 +102,9 @@ export function UiModal({
       aria-labelledby={resolvedAriaLabel ? undefined : titleId}
       tabIndex={-1}
       className={`fixed ${UI_CONTENT_OVERLAY_INSET_CLASS} z-modal flex items-center justify-center outline-none ${overlayClassName}`}
+      {...overlay.layerProps}
     >
+      <UiOverlayLayerProvider id={overlay.id}>
       <div
         className={`ui-glass-scrim ${isGlass ? 'ui-glass-scrim-soft' : ''} absolute inset-0 transition-opacity duration-180 ${isVisible ? 'opacity-100' : 'opacity-0'}`}
         onClick={onClose}
@@ -131,6 +136,7 @@ export function UiModal({
           </div>
         )}
       </UiPanel>
+      </UiOverlayLayerProvider>
     </div>,
     host.body
   )}

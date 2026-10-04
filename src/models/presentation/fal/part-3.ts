@@ -13,6 +13,7 @@ export const falPresentationPart3: Record<string, ModelPresentation> = {
     params: {
       "falLtx2Mode": {
         name: sharedFieldText('mode'),
+        role: 'mode',
         optionLabels: Object.fromEntries((
           [
         { value: 'text-to-video', label: sharedModeText('textToVideo') },
@@ -113,6 +114,7 @@ export const falPresentationPart3: Record<string, ModelPresentation> = {
     params: {
       "falMiniMaxH3Mode": {
         name: sharedFieldText('mode'),
+        role: 'mode',
         optionLabels: Object.fromEntries((
           [
         { value: 'text-image-to-video', label: sharedModeText('textImageToVideo') },

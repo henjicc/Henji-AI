@@ -649,7 +649,7 @@
       "owner": "4.2 规范、技能与检查脚本",
       "category": "旧令牌别名类（1.3 过渡别名），按 1:1 映射迁移到新语义类后删除本条",
       "counts": {
-        "legacy": 5
+        "legacy": 2
       }
     },
     "src/features/canvas/nodes/cameraStage/CameraStageNodeDialog.tsx": {
@@ -663,14 +663,14 @@
       "owner": "4.2 规范、技能与检查脚本",
       "category": "旧令牌别名类（1.3 过渡别名），按 1:1 映射迁移到新语义类后删除本条",
       "counts": {
-        "legacy": 10
+        "legacy": 9
       }
     },
     "src/features/canvas/nodes/ImageNode.tsx": {
       "owner": "4.2 规范、技能与检查脚本",
       "category": "旧令牌别名类（1.3 过渡别名），按 1:1 映射迁移到新语义类后删除本条",
       "counts": {
-        "legacy": 3
+        "legacy": 2
       }
     },
     "src/features/canvas/nodes/LayerStackResultNode.tsx": {
@@ -736,13 +736,6 @@
         "legacy": 3
       }
     },
-    "src/features/canvas/nodes/StoryboardNode.tsx": {
-      "owner": "4.2 规范、技能与检查脚本",
-      "category": "旧令牌别名类（1.3 过渡别名），按 1:1 映射迁移到新语义类后删除本条",
-      "counts": {
-        "legacy": 1
-      }
-    },
     "src/features/canvas/nodes/storyboardSplit/ExportSettingsPanel.tsx": {
       "owner": "4.2 规范、技能与检查脚本",
       "category": "旧令牌别名类（1.3 过渡别名），按 1:1 映射迁移到新语义类后删除本条",
@@ -768,7 +761,7 @@
       "owner": "4.2 规范、技能与检查脚本",
       "category": "旧令牌别名类（1.3 过渡别名），按 1:1 映射迁移到新语义类后删除本条",
       "counts": {
-        "legacy": 10
+        "legacy": 9
       }
     },
     "src/features/canvas/nodes/UniversalUploadNode.tsx": {
@@ -782,7 +775,7 @@
       "owner": "4.2 规范、技能与检查脚本",
       "category": "旧令牌别名类（1.3 过渡别名），按 1:1 映射迁移到新语义类后删除本条",
       "counts": {
-        "legacy": 3
+        "legacy": 2
       }
     },
     "src/features/canvas/nodes/value/ValueSourceNodes.tsx": {
@@ -803,7 +796,7 @@
       "owner": "4.2 规范、技能与检查脚本",
       "category": "旧令牌别名类（1.3 过渡别名），按 1:1 映射迁移到新语义类后删除本条",
       "counts": {
-        "legacy": 4
+        "legacy": 2
       }
     },
     "src/features/canvas/NodeSelectionMenu.tsx": {
@@ -838,7 +831,7 @@
       "owner": "4.2 规范、技能与检查脚本",
       "category": "旧令牌别名类（1.3 过渡别名），按 1:1 映射迁移到新语义类后删除本条",
       "counts": {
-        "legacy": 2
+        "legacy": 1
       }
     },
     "src/features/canvas/params/NodeParamControl.tsx": {
@@ -866,7 +859,7 @@
       "owner": "4.2 规范、技能与检查脚本",
       "category": "旧令牌别名类（1.3 过渡别名），按 1:1 映射迁移到新语义类后删除本条",
       "counts": {
-        "legacy": 7
+        "legacy": 6
       }
     },
     "src/features/canvas/ui/BatchConnectionHandle.tsx": {
@@ -901,7 +894,7 @@
       "owner": "4.2 规范、技能与检查脚本",
       "category": "旧令牌别名类（1.3 过渡别名），按 1:1 映射迁移到新语义类后删除本条",
       "counts": {
-        "legacy": 2
+        "legacy": 1
       }
     },
     "src/features/canvas/ui/NodeLodPlaceholder.tsx": {

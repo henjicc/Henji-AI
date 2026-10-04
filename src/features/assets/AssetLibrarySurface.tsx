@@ -415,7 +415,7 @@ export const AssetLibrarySurface: React.FC<Props> = ({ mode, active = true, onCl
         )}
       </div>
       <AssetPreviewOverlay asset={active ? previewAsset : null} onClose={() => setPreviewAsset(null)} />
-      <ContextMenu owner="assets" items={blankMenuItems} position={blankMenuPosition} onClose={hideBlankMenu} visible={blankMenuVisible} />
+      <ContextMenu items={blankMenuItems} position={blankMenuPosition} onClose={hideBlankMenu} visible={blankMenuVisible} />
       {menuState && <AssetCardMenu key={menuState.asset.id} asset={menuState.asset} anchor={menuState.anchor} libraries={libraries} availableTags={availableTags} onClose={() => setMenuState(null)} onToggleLibrary={async (nextLibraryId, included) => { await (included ? addAssetToLibrary(nextLibraryId, menuState.asset.id) : removeAssetFromLibrary(nextLibraryId, menuState.asset.id)); await loadAssets(1, true) }} onSetTags={async (tags) => { await setAssetTags(menuState.asset.id, tags); await refreshLibraries(); await loadAssets(1, true) }} onRename={async (name) => { await rename(menuState.asset, name) }} onDelete={async () => { const assetId = menuState.asset.id; await deleteAsset(assetId); if (selected?.id === assetId) setSelected(null); await loadAssets(1, true) }} onOpenBatchManagement={() => startBatchManagement([menuState.asset.id])} />}
     </div>
   )

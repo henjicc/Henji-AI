@@ -465,7 +465,7 @@ test('输出目录相对项目根解析且绝对路径保持不变', () => {
   assert.equal(resolveOutputDir(root, absolute), absolute)
 })
 
-test('场景覆盖应用界面和原生窗口且规则数固定为十一条', () => {
+test('场景覆盖应用界面和原生窗口且规则数固定为十三条', () => {
   // 界面名是固定词汇表：新增界面要在这里登记，拼错或漏登记必须红。
   assert.deepEqual([...new Set(UI_INSPECTION_SCENES.map((scene) => scene.surface))].sort(), [
     '剪贴板',
@@ -479,8 +479,9 @@ test('场景覆盖应用界面和原生窗口且规则数固定为十一条', ()
     '诊断',
     '资产库',
   ])
-  assert.equal(UI_AUDIT_RULES.length, 11)
-  assert.equal(new Set(UI_AUDIT_RULES.map((rule) => rule.key)).size, 11)
+  // 4.3 新增 nestedSameBackground、menuOptionTruncated
+  assert.equal(UI_AUDIT_RULES.length, 13)
+  assert.equal(new Set(UI_AUDIT_RULES.map((rule) => rule.key)).size, 13)
   const sceneIds = new Set(UI_INSPECTION_SCENES.map((scene) => scene.id))
   assert.equal(sceneIds.has('generation-model-panel'), true)
   assert.equal(sceneIds.has('generation-midjourney-settings'), true)

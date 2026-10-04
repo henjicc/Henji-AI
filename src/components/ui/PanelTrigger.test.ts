@@ -4,10 +4,9 @@ import React from 'react'
 import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import PanelTrigger from './PanelTrigger'
-import {
-  isPanelInteractionPortalTarget,
-  shouldClosePanelAfterInternalClick,
-} from './panelTriggerClosePolicy'
+import { shouldClosePanelAfterInternalClick } from './panelTriggerClosePolicy'
+import Dropdown from './Dropdown'
+import { UiModal } from './UiModal'
 
 const TARGET = {} as Node
 
@@ -31,17 +30,6 @@ describe('PanelTrigger 面板内部点击关闭策略', () => {
 
     expect(shouldClosePanelAfterInternalClick(policy, TARGET)).toBe(true)
     expect(policy).toHaveBeenCalledWith(TARGET)
-  })
-
-  it('下拉和提示词候选 portal 仍归属于当前面板', () => {
-    const dropdown = document.createElement('div')
-    dropdown.dataset.dropdownPortal = 'true'
-    const suggestion = document.createElement('div')
-    suggestion.dataset.promptSuggestionPortal = 'true'
-
-    expect(isPanelInteractionPortalTarget(dropdown)).toBe(true)
-    expect(isPanelInteractionPortalTarget(suggestion)).toBe(true)
-    expect(isPanelInteractionPortalTarget(document.createElement('div'))).toBe(false)
   })
 
   it('可用高度不足时由共享内容区滚动，不让长面板溢出外壳', () => {
@@ -141,7 +129,8 @@ describe('PanelTrigger 面板内部点击关闭策略', () => {
     fireEvent.click(trigger)
 
     const panel = document.querySelector<HTMLElement>('[data-panel-placement]')
-    expect(panel?.style.width).toBe('112px')
+    // 82 文字 + 浮层 p-1 8 + 菜单项留白含选中勾槽 42 + 边框 2 + 取整余量 2（4.3：原 30 未计勾槽）
+    expect(panel?.style.width).toBe('136px')
   })
   it('收起动画期间再次点触发器会重新打开，收起计时器不会把它关掉', () => {
     vi.useFakeTimers()
@@ -163,6 +152,105 @@ describe('PanelTrigger 面板内部点击关闭策略', () => {
       act(() => { vi.advanceTimersByTime(1000) })
       expect(trigger.getAttribute('aria-expanded')).toBe('true')
       expect(view.queryByText('新建矩形')).not.toBeNull()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('嵌套浮层：子浮层内点击不关闭父浮层，外部点击全部关闭，Escape 只关最上层', () => {
+    vi.useFakeTimers()
+    try {
+      vi.stubGlobal('ResizeObserver', class { observe(): void {} disconnect(): void {} })
+      const view = render(React.createElement(PanelTrigger, {
+        display: '更多参数',
+        renderPanel: () => React.createElement(PanelTrigger, {
+          display: '比例',
+          renderPanel: () => React.createElement('button', { type: 'button' }, '16:9'),
+        }),
+      }))
+      const outerTrigger = view.getAllByRole('button')[0]
+      fireEvent.click(outerTrigger)
+      const innerTrigger = view.getByText('比例').closest('button') as HTMLButtonElement
+      fireEvent.click(innerTrigger)
+      expect(view.queryByText('16:9')).not.toBeNull()
+
+      // 子浮层 portal 到 body，不在父面板 DOM 内，仍算父面板内部
+      fireEvent.mouseDown(view.getByText('16:9'))
+      act(() => { vi.advanceTimersByTime(1000) })
+      expect(outerTrigger.getAttribute('aria-expanded')).toBe('true')
+      expect(view.queryByText('16:9')).not.toBeNull()
+
+      // Escape 只关最上层（子浮层）
+      fireEvent.keyDown(document, { key: 'Escape' })
+      act(() => { vi.advanceTimersByTime(1000) })
+      expect(view.queryByText('16:9')).toBeNull()
+      expect(outerTrigger.getAttribute('aria-expanded')).toBe('true')
+
+      // 重新打开子浮层后在所有浮层外点击：两层都关
+      fireEvent.click(view.getByText('比例').closest('button') as HTMLButtonElement)
+      fireEvent.mouseDown(document.body)
+      act(() => { vi.advanceTimersByTime(1000) })
+      expect(outerTrigger.getAttribute('aria-expanded')).toBe('false')
+      expect(view.queryByText('16:9')).toBeNull()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('面板里的下拉菜单选项点击不关闭父面板', () => {
+    vi.useFakeTimers()
+    try {
+      vi.stubGlobal('ResizeObserver', class { observe(): void {} disconnect(): void {} })
+      const onSelect = vi.fn()
+      const view = render(React.createElement(PanelTrigger, {
+        display: '更多参数',
+        renderPanel: () => React.createElement(Dropdown<string>, {
+          value: 'a',
+          options: [{ value: 'a', label: '文生视频' }, { value: 'b', label: '参考生视频' }],
+          onSelect,
+        }),
+      }))
+      const outerTrigger = view.getAllByRole('button')[0]
+      fireEvent.click(outerTrigger)
+      fireEvent.click(view.getByRole('button', { name: '文生视频' }))
+      const option = view.getByRole('option', { name: '参考生视频' })
+      fireEvent.mouseDown(option)
+      fireEvent.click(option)
+      act(() => { vi.advanceTimersByTime(1000) })
+      expect(onSelect).toHaveBeenCalledWith('b')
+      expect(outerTrigger.getAttribute('aria-expanded')).toBe('true')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('从面板里打开的弹窗是模态层：弹窗内点击与 Escape 都不关闭面板', () => {
+    vi.useFakeTimers()
+    try {
+      vi.stubGlobal('ResizeObserver', class { observe(): void {} disconnect(): void {} })
+      const PanelWithDialog = (): React.ReactElement => {
+        const [dialogOpen, setDialogOpen] = React.useState(false)
+        return React.createElement(React.Fragment, null,
+          React.createElement('button', { type: 'button', onClick: () => setDialogOpen(true) }, '打开遮罩编辑'),
+          React.createElement(UiModal, {
+            isOpen: dialogOpen,
+            title: '遮罩编辑',
+            onClose: () => setDialogOpen(false),
+            children: React.createElement('button', { type: 'button' }, '画笔'),
+          }))
+      }
+      const view = render(React.createElement(PanelTrigger, {
+        display: '更多参数',
+        renderPanel: () => React.createElement(PanelWithDialog),
+      }))
+      const outerTrigger = view.getAllByRole('button')[0]
+      fireEvent.click(outerTrigger)
+      fireEvent.click(view.getByText('打开遮罩编辑'))
+      act(() => { vi.advanceTimersByTime(1000) })
+      fireEvent.mouseDown(view.getByText('画笔'))
+      fireEvent.keyDown(document, { key: 'Escape' })
+      act(() => { vi.advanceTimersByTime(1000) })
+      expect(outerTrigger.getAttribute('aria-expanded')).toBe('true')
     } finally {
       vi.useRealTimers()
     }

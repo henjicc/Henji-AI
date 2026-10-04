@@ -72,7 +72,7 @@ export const PromptSuggestionList = forwardRef<
     return (
       <div
         className={`rounded-lg border border-border-dark bg-panel px-3 py-2 shadow-panel ${UI_TEXT_META_CLASS}`}
-        data-prompt-suggestion-portal="true"
+        data-ui-overlay-detached="prompt-suggestion"
       >
         没有匹配项
       </div>
@@ -82,7 +82,7 @@ export const PromptSuggestionList = forwardRef<
   return (
     <div
       className="inline-flex w-max max-w-[calc(100vw-32px)] flex-col gap-1 rounded-lg border border-border-dark bg-panel p-1.5 shadow-panel"
-      data-prompt-suggestion-portal="true"
+      data-ui-overlay-detached="prompt-suggestion"
       role="listbox"
       aria-label={items[0]?.kind === 'reference' ? '媒体引用候选' : '模板变量候选'}
     >

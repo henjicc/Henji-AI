@@ -181,6 +181,7 @@ export const kiePresentationPart1: Record<string, ModelPresentation> = {
       },
       "kieGrokImagineVideoMode": {
         name: sharedFieldText('mode'),
+        role: 'mode',
         optionLabels: Object.fromEntries((
           [
         { value: 'fun', label: sharedOptionText('fun') },

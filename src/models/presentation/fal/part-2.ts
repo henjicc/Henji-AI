@@ -150,6 +150,7 @@ export const falPresentationPart2: Record<string, ModelPresentation> = {
     params: {
       "falKlingVideoO1Mode": {
         name: sharedFieldText('mode'),
+        role: 'mode',
         optionLabels: Object.fromEntries((
           [
         { value: 'image-to-video', label: sharedModeText('imageToVideo') },
@@ -211,6 +212,7 @@ export const falPresentationPart2: Record<string, ModelPresentation> = {
     params: {
       "falKlingV26ProMode": {
         name: sharedFieldText('mode'),
+        role: 'mode',
         optionLabels: Object.fromEntries((
           [
         { value: 'text-image-to-video', label: sharedModeText('textImageToVideo') },

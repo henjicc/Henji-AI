@@ -13,6 +13,7 @@ export const kiePresentationPart4: Record<string, ModelPresentation> = {
     params: {
       "kieQwenImage30Variant": {
         name: sharedFieldText('variant'),
+        role: 'mode',
         optionLabels: Object.fromEntries((
           [
         { value: 'standard', label: { zh: '标准版', en: 'Standard' } },
@@ -141,6 +142,7 @@ export const kiePresentationPart4: Record<string, ModelPresentation> = {
     params: {
       "kieSeedance20FastMode": {
         name: sharedFieldText('mode'),
+        role: 'mode',
         optionLabels: Object.fromEntries((
           [
         { value: 'text-image-to-video', label: sharedModeText('textImageToVideo') },
@@ -212,6 +214,7 @@ export const kiePresentationPart4: Record<string, ModelPresentation> = {
     params: {
       "kieSeedance20MiniMode": {
         name: sharedFieldText('mode'),
+        role: 'mode',
         optionLabels: Object.fromEntries((
           [
         { value: 'text-image-to-video', label: sharedModeText('textImageToVideo') },

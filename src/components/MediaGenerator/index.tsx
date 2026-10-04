@@ -20,6 +20,7 @@ import { useReeditContent } from './hooks/useReeditContent'
 import { PresetManager } from './preset/PresetManager'
 import InputArea from './components/InputArea'
 import { GeneratorConfigurationBar } from './components/GeneratorConfigurationBar'
+import type { ParameterPanelController } from './components/ParameterPanel'
 import { PromptOptimizeButton } from './components/PromptOptimizeButton'
 import { UiFieldLayoutContext, type PromptEditorHandle } from '@/components/ui'
 import { resolveInputLimits } from '@/core/inputs/inputLimits'
@@ -65,6 +66,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
     content: '',
   })
   const promptEditorRef = useRef<PromptEditorHandle>(null)
+  const parameterPanelRef = useRef<ParameterPanelController>(null)
 
   // 2. 模型参数管理（使用新系统）
   const modelState = useModelState(uiState.selectedModel, uiState)
@@ -259,6 +261,9 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
     const isInputBusy = isSubmittingGenerate || (isLoading && !isGenerating)
     if (isInputBusy) return
 
+    // 必填参数未填：直接打开其所在的“更多参数”浮层（或行内控件）并聚焦，不提交（任务 4.3）
+    if (parameterPanelRef.current?.revealFirstMissingRequired()) return
+
     const requirementCheck = validateGenerationRequirements(
       uiState.selectedModel,
       modelState.params,
@@ -380,7 +385,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         promptOptimizationPreview={promptOptimizationPreview}
         promptEditorRef={promptEditorRef}
         onGenerate={handleGenerate}
-        footerStart={<GeneratorConfigurationBar uiState={uiState} modelState={modelState} />}
+        footerStart={<GeneratorConfigurationBar uiState={uiState} modelState={modelState} parameterPanelRef={parameterPanelRef} />}
         footerEnd={(
           <UiFieldLayoutContext.Provider value="toolbar">
             <PriceEstimate

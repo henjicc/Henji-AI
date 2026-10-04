@@ -288,10 +288,7 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
           mediaType="image"
           modelId={selectedModelId}
           overrideModelId={overrideModelId}
-          storedParams={nodeData.params}
           onModelChange={handleModelChange}
-          onParamsChange={handleParamsChange}
-          incomingImages={effectiveImages}
               requiredTags={STORYBOARD_IMAGE_EDIT_REQUIRED_TAGS}
         />
         {imageRowMax > 0 && (

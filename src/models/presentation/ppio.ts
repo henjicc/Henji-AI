@@ -187,6 +187,7 @@ export const ppioPresentation: Record<string, ModelPresentation> = {
     params: {
       ppioKling30Mode: {
         name: sharedFieldText('mode'),
+        role: 'mode',
         optionLabels: {
           'text-image-to-video': { label: sharedModeText('textImageToVideo') },
           'motion-control': { label: sharedModeText('motionControl') },
@@ -364,6 +365,7 @@ export const ppioPresentation: Record<string, ModelPresentation> = {
     params: {
       ppioWan26Mode: {
         name: sharedFieldText('mode'),
+        role: 'mode',
         optionLabels: {
           'text-image-to-video': { label: sharedModeText('textImageToVideo') },
           'reference-to-video': { label: sharedModeText('referenceToVideo') },
@@ -420,6 +422,7 @@ export const ppioPresentation: Record<string, ModelPresentation> = {
     params: {
       ppioWan27Mode: {
         name: sharedFieldText('mode'),
+        role: 'mode',
         optionLabels: {
           'text-image-to-video': { label: sharedModeText('textImageToVideo') },
           'reference-to-video': { label: sharedModeText('referenceToVideo') },

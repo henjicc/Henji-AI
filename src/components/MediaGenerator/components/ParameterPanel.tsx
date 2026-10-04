@@ -1,25 +1,35 @@
 /**
- * ParameterPanel - 新架构参数面板
+ * ParameterPanel - 生成参数面板
  *
- * 基于 ModelRegistry 和 ParamRenderer 的全新实现
- * 完全消除硬编码，支持所有 41 个模型
+ * 基于 ModelRegistry 与 ParamRenderer 按模型 schema 渲染参数；顺序见 `resolveParameterPanelLayout`。
+ * 工具条排布（生成底栏）下是一行：放不下的参数按优先级收进行末“更多参数”浮层（任务 4.3）。
  */
 
-import React, { useMemo } from 'react'
+import React, { useCallback, useImperativeHandle, useMemo, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 import { registry } from '@/core/ModelRegistry'
 import { getI18nText, type ParamDef } from '@/core/types'
 import { LinkageEngine } from '@/core/linkage'
 import { ParamRenderer } from '@/components/params/ParamRenderer'
-import { isParamDisabled, isParamVisible } from '@/components/params/paramVisibility'
-import { analyzeRatioResolutionParams } from '@/core/params/ratioResolution'
 import {
-  buildParamPresentationItems,
-  getPresentedParamIds,
-} from '@/core/params/paramPresentation'
-import { ParamGroupTrigger } from '@/components/params/ParamGroupTrigger'
-import { useUiFieldLayout } from '@/components/ui'
+  countChangedParams,
+  findMissingRequiredParams,
+  isParamDisabled,
+  isParamVisible,
+} from '@/components/params/paramVisibility'
+import { analyzeRatioResolutionParams } from '@/core/params/ratioResolution'
+import { ParamGroupSections, ParamGroupTrigger } from '@/components/params/ParamGroupTrigger'
+import { UiFieldTrigger, UiGroup, UiOverflowRow, useUiFieldLayout, type UiOverflowRowItem } from '@/components/ui'
+import PanelTrigger, { type PanelTriggerControls } from '@/components/ui/PanelTrigger'
+import Tooltip from '@/components/ui/Tooltip'
 import AspectResolutionPanel from './AspectResolutionPanel'
-import { isPrimarySelectorParam } from './parameterOrder'
+import { isToolbarBlockParam, resolveParameterPanelLayout } from './parameterOrder'
+
+/** 生成前定位参数用的控制句柄（MediaGenerator 点生成时调用）。 */
+export interface ParameterPanelController {
+  /** 有必填未填的可见参数时打开所在浮层并聚焦，返回 true；没有则返回 false。 */
+  revealFirstMissingRequired: () => boolean
+}
 
 interface ParameterPanelProps {
   currentModel: DynamicValue
@@ -29,47 +39,60 @@ interface ParameterPanelProps {
   values: DynamicValueMap
   onChange: (id: string, value: DynamicValue) => void
   onChanges: (changes: DynamicValueMap) => void
+  /** 工具条排布下排在最前、永不收起的项（生成底栏的模型选择） */
+  toolbarLeading?: React.ReactNode
+  controllerRef?: React.Ref<ParameterPanelController>
 }
 
-const DURATION_PARAM_HINT = /(duration|video[_\s-]?length|时长|秒)/i
+const SPECIAL_PANEL_ITEM_ID = 'special:aspect-resolution'
+const LEADING_ITEM_ID = 'leading'
 
-function isDurationParam(param: ParamDef): boolean {
-  const searchText = [
-    param.id,
-    param.apiField,
-    String(getI18nText(param.name, 'zh') || ''),
-    String(getI18nText(param.name, 'en') || ''),
-  ]
-    .filter(Boolean)
-    .join(' ')
-  return DURATION_PARAM_HINT.test(searchText)
+/** 行内项优先级：越大越晚收起；同档按文档顺序从尾部收起。 */
+const PRIORITY = { leading: 4000, primary: 3000, special: 2000, param: 1000, group: 100 } as const
+
+type OverflowEntry =
+  | { id: string; kind: 'param'; param: ParamDef }
+  | { id: string; kind: 'special' }
+  | { id: string; kind: 'group'; item: Extract<ReturnType<typeof resolveParameterPanelLayout>['items'][number], { kind: 'group' }> }
+
+/** “更多参数”浮层宽度：只有零散参数时窄一些，含展示分组或大块控件时按分组声明的宽度。 */
+function resolveMorePanelWidth(entries: OverflowEntry[]): number {
+  const groupWidths = entries.flatMap((entry) => entry.kind === 'group' ? [entry.item.group.panelWidth ?? 440] : [])
+  const hasBlock = entries.some((entry) => entry.kind === 'param' && isToolbarBlockParam(entry.param))
+  if (groupWidths.length > 0) return Math.max(...groupWidths)
+  return hasBlock ? 440 : 360
 }
 
-/**
- * 参数配置面板
- * 根据当前选择的模型从 ModelRegistry 获取参数定义并自动渲染
- *
- * 注意：对于还未迁移到 ModelRegistry 的旧模型，此组件会返回 null
- * 保持向后兼容性，不显示错误消息
- */
+function focusFirstControl(root: ParentNode | null | undefined, paramId: string): void {
+  // 不用 CSS.escape（jsdom 等环境没有）：按属性逐个比对
+  const container = Array.from(root?.querySelectorAll<HTMLElement>('[data-param-id]') ?? [])
+    .find((element) => element.getAttribute('data-param-id') === paramId)
+  const target = container?.querySelector<HTMLElement>(
+    'button:not([disabled]), input:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"]), [contenteditable="true"]'
+  )
+  ;(target ?? container)?.focus()
+}
+
 const ParameterPanel: React.FC<ParameterPanelProps> = ({
   selectedModel,
   uploadedImages,
   uploadedVideos,
   values,
   onChange,
-  onChanges
+  onChanges,
+  toolbarLeading,
+  controllerRef,
 }) => {
-  // 工具条排布（生成底栏）下参数直接参与宿主那一行的换行；表单排布（画布节点等）保留自身的换行容器
+  const { i18n } = useTranslation()
+  const zh = i18n.language.startsWith('zh')
   const toolbarLayout = useUiFieldLayout() === 'toolbar'
-  // 从 ModelRegistry 获取模型定义
   const modelDef = registry.getModel(selectedModel)
+  const rowRef = useRef<HTMLDivElement | null>(null)
+  const moreControlsRef = useRef<PanelTriggerControls | null>(null)
+  const hiddenIdsRef = useRef<readonly string[]>([])
 
-  // 获取参数定义（按 order 排序，便于统一处理）
   const params = useMemo(() => {
-    if (!modelDef) {
-      return []
-    }
+    if (!modelDef) return []
     return [...registry.getSchema(selectedModel)].sort((a, b) => {
       const orderA = a.order ?? Number.MAX_SAFE_INTEGER
       const orderB = b.order ?? Number.MAX_SAFE_INTEGER
@@ -78,18 +101,12 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
   }, [modelDef, selectedModel])
 
   const linkageEngine = useMemo(() => {
-    if (!modelDef?.linkages || modelDef.linkages.length === 0) {
-      return null
-    }
+    if (!modelDef?.linkages || modelDef.linkages.length === 0) return null
     return new LinkageEngine(modelDef.linkages)
   }, [modelDef?.linkages])
 
   const runtimeValues = useMemo(
-    () => ({
-      ...values,
-      uploadedImages,
-      uploadedVideos,
-    }),
+    () => ({ ...values, uploadedImages, uploadedVideos }),
     [uploadedImages, uploadedVideos, values]
   )
 
@@ -99,105 +116,261 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
   )
 
   const filteredParams = useMemo(() => {
-    if (!linkageEngine) {
-      return visibleParams
-    }
+    if (!linkageEngine) return visibleParams
     return visibleParams.map((param): ParamDef => {
-      if (param.type !== 'dropdown' && param.type !== 'radio') {
-        return param
-      }
+      if (param.type !== 'dropdown' && param.type !== 'radio') return param
       const options = linkageEngine.getFilteredOptions(param.id, runtimeValues, params)
-      if (!options.length || options === param.options) {
-        return param
-      }
+      if (!options.length || options === param.options) return param
       return { ...param, options } as ParamDef
     })
   }, [linkageEngine, params, runtimeValues, visibleParams])
 
   const specialPanelSpec = useMemo(() => {
-    if (!modelDef || modelDef.meta.provider === 'modelscope') {
-      return null
-    }
+    if (!modelDef || modelDef.meta.provider === 'modelscope') return null
     return analyzeRatioResolutionParams(filteredParams, uploadedImages)
   }, [modelDef, filteredParams, uploadedImages])
 
-  const consumedParamIds = new Set(specialPanelSpec?.consumedParamIds || [])
-  const renderParams = filteredParams.filter((param) => !consumedParamIds.has(param.id))
-  const presentedParamIds = useMemo(
-    () => getPresentedParamIds(modelDef?.paramPresentation),
-    [modelDef?.paramPresentation]
-  )
-  const primarySelectorParams = useMemo(
-    () => renderParams.filter((param) => (
-      !presentedParamIds.has(param.id) && isPrimarySelectorParam(param)
-    )),
-    [presentedParamIds, renderParams]
-  )
-  const remainingParams = useMemo(
-    () => renderParams.filter((param) => (
-      presentedParamIds.has(param.id) || !isPrimarySelectorParam(param)
-    )),
-    [presentedParamIds, renderParams]
-  )
-  const orderedRenderParams = useMemo(() => {
-    if (!specialPanelSpec) {
-      return remainingParams
-    }
-    const durationParams = remainingParams.filter(isDurationParam)
-    const normalParams = remainingParams.filter((param) => !isDurationParam(param))
-    return [...durationParams, ...normalParams]
-  }, [remainingParams, specialPanelSpec])
-  const presentationItems = useMemo(
-    () => modelDef?.paramPresentation
-      ? buildParamPresentationItems(remainingParams, modelDef.paramPresentation)
-      : orderedRenderParams.map((param) => ({ kind: 'param' as const, order: param.order, param })),
-    [modelDef?.paramPresentation, orderedRenderParams, remainingParams]
+  const layout = useMemo(() => {
+    const consumed = new Set(specialPanelSpec?.consumedParamIds || [])
+    return resolveParameterPanelLayout(
+      filteredParams.filter((param) => !consumed.has(param.id)),
+      modelDef?.paramPresentation,
+      Boolean(specialPanelSpec),
+    )
+  }, [filteredParams, modelDef?.paramPresentation, specialPanelSpec])
+
+  const missingRequired = useMemo(
+    () => findMissingRequiredParams(params, runtimeValues, linkageEngine),
+    [linkageEngine, params, runtimeValues]
   )
 
-  // 模型未在 ModelRegistry 中注册（可能是旧模型）或没有参数 - 静默返回 null
-  if (!modelDef || params.length === 0) {
-    return null
+  const renderParam = useCallback((param: ParamDef) => (
+    <ParamRenderer
+      param={param}
+      value={values[param.id]}
+      onChange={(value) => onChange(param.id, value)}
+      allValues={runtimeValues}
+      uploadedImages={uploadedImages}
+      uploadedVideos={uploadedVideos}
+      onParamChange={onChange}
+      onParamChanges={onChanges}
+      disabled={isParamDisabled(param, runtimeValues, linkageEngine)}
+    />
+  ), [linkageEngine, onChange, onChanges, runtimeValues, uploadedImages, uploadedVideos, values])
+
+  const specialPanel = specialPanelSpec ? (
+    <AspectResolutionPanel
+      aspectParam={specialPanelSpec.aspectParam}
+      resolutionParam={specialPanelSpec.resolutionParam}
+      values={values}
+      uploadedImages={uploadedImages}
+      onChange={onChange}
+    />
+  ) : null
+
+  // 工具条排布：行内项 + 固定收纳进“更多参数”的大块控件
+  const { rowItems, overflowEntries, panelOnlyIds } = useMemo(() => {
+    const row: Array<Omit<UiOverflowRowItem, 'node'> & { entry: OverflowEntry | null }> = []
+    const entries: OverflowEntry[] = []
+    const panelOnly: string[] = []
+    if (toolbarLeading !== undefined) row.push({ id: LEADING_ITEM_ID, priority: PRIORITY.leading, pinned: true, entry: null })
+    for (const param of layout.primary) {
+      const entry: OverflowEntry = { id: `param:${param.id}`, kind: 'param', param }
+      entries.push(entry)
+      row.push({ id: entry.id, priority: PRIORITY.primary, pinned: true, entry })
+    }
+    if (layout.hasSpecialPanel) {
+      const entry: OverflowEntry = { id: SPECIAL_PANEL_ITEM_ID, kind: 'special' }
+      entries.push(entry)
+      row.push({ id: entry.id, priority: PRIORITY.special, entry })
+    }
+    layout.items.forEach((item) => {
+      if (item.kind === 'param') {
+        const entry: OverflowEntry = { id: `param:${item.param.id}`, kind: 'param', param: item.param }
+        entries.push(entry)
+        if (isToolbarBlockParam(item.param)) panelOnly.push(entry.id)
+        else row.push({ id: entry.id, priority: PRIORITY.param, entry })
+        return
+      }
+      const entry: OverflowEntry = { id: `group:${item.group.id}`, kind: 'group', item }
+      entries.push(entry)
+      row.push({ id: entry.id, priority: PRIORITY.group, entry })
+    })
+    return { rowItems: row, overflowEntries: entries, panelOnlyIds: panelOnly }
+  }, [layout, toolbarLeading])
+
+  const entryParams = useCallback((entry: OverflowEntry): ParamDef[] => {
+    if (entry.kind === 'param') return [entry.param]
+    if (entry.kind === 'group') return entry.item.params
+    return [specialPanelSpec?.aspectParam, specialPanelSpec?.resolutionParam]
+      .flatMap((descriptor) => descriptor ? params.filter((param) => param.id === descriptor.id) : [])
+  }, [params, specialPanelSpec])
+
+  const collapsedEntries = useCallback((hiddenIds: readonly string[]): OverflowEntry[] => {
+    const collapsed = new Set([...hiddenIds, ...panelOnlyIds])
+    return overflowEntries.filter((entry) => collapsed.has(entry.id))
+  }, [overflowEntries, panelOnlyIds])
+
+  const renderOverflowPanel = (entries: OverflowEntry[]): React.ReactNode => (
+    // 表单排布：参数按行流式排列（与参数组浮层同法），展示分组独占一行
+    <div className="flex flex-wrap items-start gap-x-4 gap-y-3 p-3">
+      {entries.map((entry, index) => {
+        if (entry.kind === 'param') {
+          return (
+            <div
+              key={entry.id}
+              data-param-id={entry.param.id}
+              className={isToolbarBlockParam(entry.param) ? 'basis-full' : ''}
+            >
+              {renderParam(entry.param)}
+            </div>
+          )
+        }
+        if (entry.kind === 'special') return <div key={entry.id}>{specialPanel}</div>
+        return (
+          // 收起的展示分组保留分组名（如“MJ 设置”）作标题，分节直接展开，不再嵌一层参数组触发器
+          <UiGroup
+            key={entry.id}
+            data-param-group-id={entry.item.group.id}
+            title={getI18nText(entry.item.group.name, i18n.language) || entry.item.group.id}
+            divided={index > 0}
+            gap="none"
+            className="basis-full"
+          >
+            <ParamGroupSections
+              group={entry.item.group}
+              params={entry.item.params}
+              values={runtimeValues}
+              onChange={onChange}
+              onChanges={onChanges}
+              linkageEngine={linkageEngine}
+              uploadedImages={uploadedImages}
+              uploadedVideos={uploadedVideos}
+              sectionTitleTone="compact"
+            />
+          </UiGroup>
+        )
+      })}
+    </div>
+  )
+
+  const renderMoreTrigger = (hiddenIds: readonly string[]): React.ReactNode => {
+    hiddenIdsRef.current = hiddenIds
+    const entries = collapsedEntries(hiddenIds)
+    const collapsedParams = entries.flatMap(entryParams)
+    const collapsedIds = new Set(collapsedParams.map((param) => param.id))
+    const missingCount = missingRequired.filter((param) => collapsedIds.has(param.id)).length
+    const changedCount = countChangedParams(collapsedParams, runtimeValues)
+    const label = zh ? '更多参数' : 'More'
+    const status = missingCount > 0
+      ? (zh ? '需填写' : 'Required')
+      : changedCount > 0
+        ? (zh ? `已调整 ${changedCount}` : `${changedCount} changed`)
+        : String(entries.length)
+    const names = collapsedParams.map((param) => getI18nText(param.name, i18n.language)).filter(Boolean)
+    return (
+      <PanelTrigger
+        controlsRef={moreControlsRef}
+        panelWidth={resolveMorePanelWidth(entries)}
+        alignment="aboveCenter"
+        closeOnPanelClick={false}
+        renderPanel={() => renderOverflowPanel(entries)}
+      >
+        {({ open, togglePanel }) => {
+          const trigger = (
+          <UiFieldTrigger
+            appearance="quiet"
+            open={open}
+            onClick={togglePanel}
+            data-panel-trigger-button
+            data-more-params-trigger
+            data-missing-required={missingCount > 0 ? 'true' : undefined}
+            aria-expanded={open}
+            aria-label={`${label}：${status}`}
+          >
+            <span className="text-text2">{label}</span>
+            {/* 必填未填用状态色（警示文字令牌），不用图标或 emoji */}
+            <span className={`ml-1.5 ${missingCount > 0 ? 'text-warning-text' : 'text-text3'}`}>{status}</span>
+          </UiFieldTrigger>
+          )
+          // 悬停提示列出被收起的参数名；包裹结构保持稳定，避免开合时触发器重新挂载
+          // 浮层打开时不再提示（hidden 只隐藏提示框，包裹结构不变）
+          return names.length > 0
+            ? <Tooltip content={names.join(zh ? '、' : ', ')} className={open ? 'hidden' : undefined}>{trigger}</Tooltip>
+            : trigger
+        }}
+      </PanelTrigger>
+    )
   }
 
-  // 渲染参数：渠道最优先，其次是模式/版本/变体；分辨率/比例面板保持其余参数前置
+  useImperativeHandle(controllerRef, () => ({
+    revealFirstMissingRequired: () => {
+      const missing = missingRequired[0]
+      if (!missing) return false
+      const collapsed = collapsedEntries(hiddenIdsRef.current)
+      const inPanel = collapsed.some((entry) => entryParams(entry).some((param) => param.id === missing.id))
+      if (inPanel && moreControlsRef.current) {
+        const controls = moreControlsRef.current
+        if (!controls.open) controls.openPanel()
+        // 浮层挂载与定位需要一帧
+        window.requestAnimationFrame(() => window.requestAnimationFrame(() => focusFirstControl(document, missing.id)))
+        return true
+      }
+      focusFirstControl(rowRef.current, missing.id)
+      return true
+    },
+  }), [collapsedEntries, entryParams, missingRequired])
+
+  if (!modelDef || params.length === 0) {
+    if (!toolbarLayout || toolbarLeading === undefined) return null
+    return (
+      <div ref={rowRef} className="flex min-w-0 flex-1">
+        <UiOverflowRow className="flex-1 gap-x-3" items={[{ id: LEADING_ITEM_ID, priority: PRIORITY.leading, pinned: true, node: toolbarLeading }]} renderOverflow={() => null} />
+      </div>
+    )
+  }
+
+  if (toolbarLayout) {
+    const items: UiOverflowRowItem[] = rowItems.map(({ entry, ...item }) => ({
+      ...item,
+      node: entry === null
+        ? toolbarLeading
+        : entry.kind === 'param'
+          ? <div data-param-id={entry.param.id} className="contents">{renderParam(entry.param)}</div>
+          : entry.kind === 'special'
+            ? specialPanel
+            : (
+              <ParamGroupTrigger
+                group={entry.item.group}
+                params={entry.item.params}
+                values={runtimeValues}
+                onChange={onChange}
+                onChanges={onChanges}
+                linkageEngine={linkageEngine}
+                uploadedImages={uploadedImages}
+                uploadedVideos={uploadedVideos}
+              />
+            ),
+    }))
+    return (
+      <div ref={rowRef} className="flex min-w-0 flex-1">
+        <UiOverflowRow
+          className="flex-1 gap-x-3"
+          items={items}
+          alwaysShowOverflow={panelOnlyIds.length > 0}
+          renderOverflow={renderMoreTrigger}
+        />
+      </div>
+    )
+  }
+
+  // 表单排布：渠道最优先，其次是模式/版本/变体；分辨率/比例面板保持其余参数前置
   return (
-    <div className={toolbarLayout ? 'contents' : 'flex flex-wrap items-end gap-x-3 gap-y-2'}>
-      {primarySelectorParams.map((param) => (
-        <ParamRenderer
-          key={param.id}
-          param={param}
-          value={values[param.id]}
-          onChange={(value) => onChange(param.id, value)}
-          allValues={runtimeValues}
-          uploadedImages={uploadedImages}
-          uploadedVideos={uploadedVideos}
-          onParamChange={onChange}
-          onParamChanges={onChanges}
-          disabled={isParamDisabled(param, runtimeValues, linkageEngine)}
-        />
-      ))}
-      {specialPanelSpec && (
-        <AspectResolutionPanel
-          aspectParam={specialPanelSpec.aspectParam}
-          resolutionParam={specialPanelSpec.resolutionParam}
-          values={values}
-          uploadedImages={uploadedImages}
-          onChange={onChange}
-        />
-      )}
-      {presentationItems.map((item) => item.kind === 'param' ? (
-        <ParamRenderer
-          key={item.param.id}
-          param={item.param}
-          value={values[item.param.id]}
-          onChange={(value) => onChange(item.param.id, value)}
-          allValues={runtimeValues}
-          uploadedImages={uploadedImages}
-          uploadedVideos={uploadedVideos}
-          onParamChange={onChange}
-          onParamChanges={onChanges}
-          disabled={isParamDisabled(item.param, runtimeValues, linkageEngine)}
-        />
+    <div className="flex flex-wrap items-end gap-x-3 gap-y-2">
+      {layout.primary.map((param) => <React.Fragment key={param.id}>{renderParam(param)}</React.Fragment>)}
+      {specialPanel}
+      {layout.items.map((item) => item.kind === 'param' ? (
+        <React.Fragment key={item.param.id}>{renderParam(item.param)}</React.Fragment>
       ) : (
         <ParamGroupTrigger
           key={item.group.id}

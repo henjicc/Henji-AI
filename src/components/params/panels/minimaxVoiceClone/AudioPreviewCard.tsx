@@ -98,7 +98,7 @@ export function AudioPreviewCard({
       ) : (
         <div
           className={`rounded-lg border border-dashed px-3 text-center text-xs ${compact ? 'h-[88px]' : 'h-[132px]'} ${dragActive
-            ? 'border-accent bg-accent/10 text-accent'
+            ? 'border-accent bg-accent-tint text-accent-text'
             : 'border-border-dark/70 text-text-faint'
             }`}
           onDragOver={handleDragOver}

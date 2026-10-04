@@ -6,6 +6,7 @@ import { ImageViewerModal } from '@/components/mediaViewer/ImageViewerModal'
 import { VideoViewerModal } from '@/components/mediaViewer/VideoViewerModal'
 import type { AssetRecord } from '@/platform/contracts/assetLibrary'
 import { UiButton, UiEmpty, UiError, UiLoading, UiModal, UI_TEXT_BODY_CLASS, UI_TEXT_META_CLASS } from '@/components/ui'
+import { useUiOverlayLayer } from '@/components/ui/overlayOwnership'
 import { ICON_ASSET_CODE } from '@/core/theme/icons'
 import { createLogger } from '@/core/logging'
 import { useI18n } from '@/hooks/useI18n'
@@ -121,9 +122,11 @@ export const AssetPreviewOverlay: React.FC<Props> = ({ asset, onClose }) => {
     }
   }, [asset])
   const media = asset ?? lastAsset
+  // 预览是资产面板的子浮层：打开期间入栈，面板的点外关闭与 Escape 让位（任务 4.3 浮层归属）
+  const overlay = useUiOverlayLayer(Boolean(asset), { modal: true })
 
   return createPortal(
-    <div className="contents" data-asset-preview={asset ? 'open' : 'closed'}>
+    <div className="contents" data-asset-preview={asset ? 'open' : 'closed'} {...overlay.layerProps}>
       <ImageViewerModal
         open={asset?.mediaType === 'image'}
         imageUrl={media?.mediaType === 'image' ? media.displayUrl : ''}

@@ -10,6 +10,10 @@ const UI_AUDIT_RULES = Object.freeze([
   Object.freeze({ key: 'hardTextClip', label: '文本硬裁切' }),
   Object.freeze({ key: 'smallTargets', label: '命中区小于 24px' }),
   Object.freeze({ key: 'pageTitleInconsistency', label: '页面标题字号不一致' }),
+  // 4.3（重要记录 012）：悬停/选中的容器里，行内控件与容器底同色，控件边界消失
+  Object.freeze({ key: 'nestedSameBackground', label: '悬停或选中的容器里控件与容器同色' }),
+  // 4.3：菜单选项被省略号截断（hardTextClip 豁免 ellipsis，菜单项单独判）
+  Object.freeze({ key: 'menuOptionTruncated', label: '菜单选项文字被截断' }),
 ])
 
 /**
@@ -28,6 +32,8 @@ function auditUiDom(context = {}) {
     hardTextClip: [],
     smallTargets: [],
     pageTitleInconsistency: [],
+    nestedSameBackground: [],
+    menuOptionTruncated: [],
     pageTitles: [],
     notes: [],
   }
@@ -271,6 +277,103 @@ function auditUiDom(context = {}) {
     }
   }
 
+  // —— 悬停/选中的容器里控件与容器同色（4.3）——
+  // 只判“自己画了底”的交互控件：沿祖先合成出控件的实际底色，与最近一层画了底的祖先合成色比较 OKLab 距离。
+  // 容器须处于悬停（:hover 链）或选中（aria-selected / aria-current / data-selected）状态；
+  // 链上有 backdrop-filter（玻璃）时实际底色取决于背后内容，DOM 估算不可靠，跳过并计数。
+  const srgbToLinear = (v) => {
+    const c = v / 255
+    return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4
+  }
+  const toOklab = ({ r, g, b }) => {
+    const lr = srgbToLinear(r); const lg = srgbToLinear(g); const lb = srgbToLinear(b)
+    const l = Math.cbrt(0.4122214708 * lr + 0.5363325363 * lg + 0.0514459929 * lb)
+    const m = Math.cbrt(0.2119034982 * lr + 0.6806995451 * lg + 0.1073969566 * lb)
+    const s2 = Math.cbrt(0.0883024619 * lr + 0.2817188376 * lg + 0.6299787005 * lb)
+    return {
+      L: 0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s2,
+      a: 1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s2,
+      b: 0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s2,
+    }
+  }
+  const deltaE = (x, y) => {
+    const p = toOklab(x); const q = toOklab(y)
+    return Math.hypot(p.L - q.L, p.a - q.a, p.b - q.b)
+  }
+  const ownBackground = (element) => {
+    const color = parseRgb(getComputedStyle(element).backgroundColor)
+    return color && color.a > 0.01 ? color : null
+  }
+  const effectiveBackground = (element) => {
+    const layers = []
+    let node = element
+    let glass = false
+    while (node && node.nodeType === 1) {
+      const style = getComputedStyle(node)
+      if (style.backdropFilter && style.backdropFilter !== 'none') glass = true
+      const color = ownBackground(node)
+      if (color) {
+        layers.push(color)
+        if (color.a >= 0.999) break
+      }
+      node = node.parentElement
+    }
+    let result = { r: 0, g: 0, b: 0 }
+    for (const layer of layers.reverse()) {
+      result = {
+        r: layer.r * layer.a + result.r * (1 - layer.a),
+        g: layer.g * layer.a + result.g * (1 - layer.a),
+        b: layer.b * layer.a + result.b * (1 - layer.a),
+      }
+    }
+    return { color: result, glass }
+  }
+  const isActiveContainer = (element) => element.matches(':hover')
+    || element.getAttribute('aria-selected') === 'true'
+    || element.getAttribute('aria-current') === 'true'
+    || element.getAttribute('aria-current') === 'page'
+    || element.getAttribute('data-selected') === 'true'
+  const controlSelector = 'button, [role="button"], [data-panel-trigger-button], [data-dropdown-button], input, select, textarea'
+  let glassSkipped = 0
+  for (const control of Array.from(document.querySelectorAll(controlSelector)).filter(isVisible)) {
+    if (!ownBackground(control)) continue
+    let container = control.parentElement
+    while (container && container !== document.body && !ownBackground(container)) container = container.parentElement
+    if (!container || container === document.body || !isActiveContainer(container)) continue
+    const inner = effectiveBackground(control)
+    const outer = effectiveBackground(container)
+    if (inner.glass || outer.glass) {
+      glassSkipped += 1
+      continue
+    }
+    const distance = deltaE(inner.color, outer.color)
+    if (distance < 0.02) {
+      out.nestedSameBackground.push({
+        deltaE: Math.round(distance * 1000) / 1000,
+        element: label(control),
+        container: label(container),
+      })
+    }
+  }
+  if (glassSkipped > 0) out.notes.push(`nestedSameBackground：${glassSkipped} 个控件在玻璃上，底色取决于背后内容，未判`)
+
+  // —— 菜单选项被截断（4.3）——
+  for (const option of Array.from(document.querySelectorAll('[role="option"]')).filter(isVisible)) {
+    const candidates = [option, ...Array.from(option.querySelectorAll('*'))]
+    const clipped = candidates.find((element) => directText(element)
+      && element.clientWidth > 0
+      // 不留 1px 容差：选中项差一个亚像素就会被画成省略号（4.3 实测“休闲”→“休…”）
+      && element.scrollWidth > element.clientWidth)
+    if (clipped) {
+      out.menuOptionTruncated.push({
+        text: directText(clipped).slice(0, 42),
+        scrollWidth: clipped.scrollWidth,
+        clientWidth: clipped.clientWidth,
+        element: label(option),
+      })
+    }
+  }
+
   for (const element of Array.from(document.querySelectorAll('[data-ui-page-title]')).filter(isVisible)) {
     const style = getComputedStyle(element)
     out.pageTitles.push({
@@ -293,6 +396,8 @@ function auditUiDom(context = {}) {
   out.nestedScroll = dedupe(out.nestedScroll, (item) => `${item.inner}|${item.outer}`)
   out.hardTextClip = dedupe(out.hardTextClip, (item) => item.element)
   out.smallTargets = dedupe(out.smallTargets, (item) => item.element)
+  out.nestedSameBackground = dedupe(out.nestedSameBackground, (item) => `${item.element}|${item.container}`)
+  out.menuOptionTruncated = dedupe(out.menuOptionTruncated, (item) => item.element)
   out.notes.push(`扫描可见元素 ${all.length}`)
   return out
 }

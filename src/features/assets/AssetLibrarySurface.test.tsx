@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AssetRecord } from '@/platform/contracts/assetLibrary'
 import { AssetLibrarySurface } from './AssetLibrarySurface'
 import { useAssetLibraryStore } from './store/assetLibraryStore'
-import { isAssetChildOverlayTarget } from './assetOverlayOwnership'
+import { resolveUiOverlayTarget, UiOverlayLayerProvider, useUiOverlayLayer } from '@/components/ui/overlayOwnership'
 
 const mocks = vi.hoisted(() => ({
   query: vi.fn(), inspect: vi.fn(), readCode: vi.fn(), touch: vi.fn(), libraries: vi.fn(), tags: vi.fn(), t: (key: string) => key,
@@ -106,11 +106,18 @@ describe('资产库命令带（界面重设计 3.3）', () => {
 
   it('显示设置收进浮层：缩略图显示方式是单选分段，浮层算作资产面板的子浮层', async () => {
     vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} })
-    render(<AssetLibrarySurface mode="floating" />)
+    // 模拟资产浮动面板这一层：显示设置浮层应被识别为它的后代层（任务 4.3 浮层归属）
+    let panelLayerId = ''
+    function PanelLayer(): React.ReactElement {
+      const layer = useUiOverlayLayer(true)
+      panelLayerId = layer.id
+      return <div {...layer.layerProps}><UiOverlayLayerProvider id={layer.id}><AssetLibrarySurface mode="floating" /></UiOverlayLayerProvider></div>
+    }
+    render(<PanelLayer />)
     await waitFor(() => expect(mocks.query).toHaveBeenCalled())
     fireEvent.click(screen.getByRole('button', { name: 'assetLibrary.viewSettings' }))
     const group = await screen.findByRole('radiogroup', { name: 'assetLibrary.thumbnailFit' })
-    expect(isAssetChildOverlayTarget(group)).toBe(true)
+    expect(resolveUiOverlayTarget(group, panelLayerId)).toBe('descendant')
     fireEvent.click(screen.getByRole('radio', { name: 'assetLibrary.fitContain' }))
     expect(mocks.settings.setAssetThumbnailFit).toHaveBeenCalledWith('contain')
   })

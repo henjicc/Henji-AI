@@ -18,6 +18,7 @@ export const apimartPresentationPart2: Record<string, ModelPresentation> = {
     params: {
       "apimartKling30OmniMode": {
         name: sharedFieldText('mode'),
+        role: 'mode',
         optionLabels: Object.fromEntries((
           [
         { value: 'text-image-to-video', label: { zh: '文生 / 首尾帧', en: 'Text / Start-End Frame' } },

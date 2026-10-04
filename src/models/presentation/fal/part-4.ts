@@ -166,6 +166,7 @@ export const falPresentationPart4: Record<string, ModelPresentation> = {
     params: {
       "falSeedance20FastMode": {
         name: sharedFieldText('mode'),
+        role: 'mode',
         optionLabels: Object.fromEntries((
           [
         { value: 'text-image-to-video', label: sharedModeText('textImageToVideo') },
@@ -235,6 +236,7 @@ export const falPresentationPart4: Record<string, ModelPresentation> = {
     params: {
       "falSeedance20MiniMode": {
         name: sharedFieldText('mode'),
+        role: 'mode',
         optionLabels: Object.fromEntries((
           [
         { value: 'text-image-to-video', label: sharedModeText('textImageToVideo') },

@@ -15,8 +15,8 @@ afterEach(() => { cleanup(); limits.images.max = 1 })
 const props: Parameters<typeof NodeInputRows>[0] = {
   nodeId: 'node', modelId: 'model', mediaType: 'image', acceptedMediaKinds: ['image'],
   externalMediaHandle: 'image', schema: [], values: {}, setParam: vi.fn(), setParams: vi.fn(),
-  mediaInputs: {}, onMediaInputChange: vi.fn(), overrideModelId: null, storedParams: {},
-  onModelChange: vi.fn(), onParamsChange: vi.fn(), incomingImages: ['source.png'],
+  mediaInputs: {}, onMediaInputChange: vi.fn(), overrideModelId: null,
+  onModelChange: vi.fn(), incomingImages: ['source.png'],
 }
 describe('工作面单图输入不重复显示', () => {
   it('已有工作面时，连线和本地单图都隐藏参数行', () => {

@@ -48,6 +48,7 @@ export const THEME_COMPONENT_CSS_VARS: readonly ThemeComponentCssVar[] = [
   { name: '--ui-glass-hover', token: 'glassHover', note: '玻璃上的悬停' },
   { name: '--ui-glass-press', token: 'glassPressed', note: '玻璃上的按下' },
   { name: '--ui-glass-selected', token: 'glassSelected', note: '玻璃上的选中' },
+  { name: '--ui-glass-selected-accent', token: 'glassSelectedAccent', note: '玻璃上的选中淡强调底（重要记录 012）' },
   { name: '--ui-glass-divider', token: 'glassDivider', note: '玻璃内分隔' },
   { name: '--ui-glass-control-tint', token: 'glassControlTint', note: '玻璃内控件纱' },
   { name: '--ui-glass-region-tint', token: 'glassRegionTint', note: '玻璃内连续区域' },

@@ -23,8 +23,10 @@ export const NODE_PORT_NODE_CLASS =
  * 圆角、边框、背景固定不变，行内具体控件（下拉/开关/数值）各自保持自身样式，
  * 避免"不同控件类型各自圆角"导致的不统一感。
  */
+// 行底取 window（4.3）：原 gap/45 在纸白下与行内取值触发器（raised）只差 ΔE 0.013，触发器边界看不清；
+// window 在四个预设下与 raised 都 ≥ 0.024，且仍比节点面板（panel）沉一级。
 export const NODE_ROW_CARD_CLASS =
-  'rounded-lg border border-line bg-gap/45 transition-colors';
+  'rounded-lg border border-line bg-window transition-colors';
 
 export const NODE_ROW_CLASS =
   `group/row relative flex min-h-10 items-center gap-3 px-3 py-1.5 ${NODE_ROW_CARD_CLASS}`;
@@ -34,8 +36,12 @@ export const NODE_ROW_LABEL_CLASS =
 
 export const NODE_ROW_CONTROL_SLOT_CLASS = 'ml-auto flex min-w-0 items-center justify-end';
 
-/** 未连线行的悬停提示（连线行改用插槽色底色，不叠加该 hover） */
-export const NODE_ROW_HOVER_CLASS = 'hover:bg-hover';
+/**
+ * 未连线行的悬停提示（连线行改用插槽色底色，不叠加该 hover）。
+ * 只加强描边、不换底色（任务 4.3，重要记录 012）：行底换成 hover 后与行内取值触发器（raised / 悬停同为 hover）
+ * 同色，触发器边界消失。同一处的交互层级不得同色。
+ */
+export const NODE_ROW_HOVER_CLASS = 'hover:border-line-strong';
 
 /** 行与行之间的间隙（替代旧版贴边 divide-y），让每行读成独立卡片 */
 export const NODE_ROW_GAP_CLASS = 'gap-1.5';

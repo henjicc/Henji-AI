@@ -12,7 +12,7 @@
 - `PanelTrigger` 的 `closeOnPanelClick`：面板内只承载**单一类型**可选项（如纯比例选择、纯预设列表）时传 `closeOnPanelClick`，选完即收起；面板内并列**多种类型**独立选项（如比例+分辨率+自定义尺寸的复合面板）时保持默认 `false`，选完不收起，让用户接着调下一组
 - **新增通用组件的门槛**（与 `AGENTS.md` 一致，Agent 自行判断）：先确认没有可复用或可扩展的组件，优先给现有 `Ui*` 加**有限枚举**变体；只有加变体会让参数语义变乱时才新建职责单一的组件，放在 `@/components/ui`、登记进 skill `henji-ui-surface` 的「必须复用」表并纳入 `check:surface` 规则 E，选型依据写进任务记录或提交正文
 - 组件外观只由枚举决定（`variant`/`size`/`tone`/`on`/`shape`/`active`/`appearance` 等），调用点 `className` 只放布局；按钮、选项、标签、导航、字段触发器的调用点外观覆盖由 `check:surface` 规则 E 拦截
-- 按钮五档 + `link` + `media`，**默认静默**（`quiet`）；选中态用中性抬升；完整词汇表、必须复用的组件与新枚举（`UiToolbar variant="command"`、`UiTextToken`、`UiWindowControl`、`UiFieldTrigger`、`UiOptionButton` 的 `segment/grid/tile/swatch/cover`、`UiGroup titleTone="compact"`、`UiFormRow density="compact"`、`WaveformView` 等）见 skill `henji-ui-surface`
+- 按钮五档 + `link` + `media`，**默认静默**（`quiet`）；选中态用淡强调底（`selected-accent`，重要记录 012），悬停只用中性抬升且不得与选中同色；完整词汇表、必须复用的组件与新枚举（`UiToolbar variant="command"`、`UiTextToken`、`UiWindowControl`、`UiFieldTrigger`、`UiOptionButton` 的 `segment/grid/tile/swatch/cover`、`UiGroup titleTone="compact"`、`UiFormRow density="compact"`、`WaveformView` 等）见 skill `henji-ui-surface`
 - 状态展示统一用 `UiEmpty`/`UiLoading`/`UiError`，禁止页面内联手写状态块
 - 弹窗统一走 `UiModal` 或 `AlertDialog`，禁止手写 `fixed inset-0` + 遮罩 + 卡片外壳（全屏媒体查看器是已确认的例外）
 

@@ -138,6 +138,8 @@ export const THEME_COLOR_TOKEN_NAMES = [
   'accentText',
   'accentRing',
   'accentTint',
+  'selectedAccent',
+  'selectedAccentHover',
   'onAccent',
   // 状态
   'danger',
@@ -174,6 +176,7 @@ export const THEME_COLOR_TOKEN_NAMES = [
   'glassHover',
   'glassPressed',
   'glassSelected',
+  'glassSelectedAccent',
   'glassDivider',
   'glassControlTint',
   'glassRegionTint',
@@ -205,6 +208,14 @@ export interface ThemeTokens {
 
 /** 文字类令牌的最低对比度（WCAG AA 正文）。 */
 export const THEME_TEXT_MIN_CONTRAST = 4.5;
+
+/** 深色玻璃底（黑）的不透明度：保证辅助文字在玻璃上 ≥ 4.5:1（任务 4.3，主控决定 ≥ 0.70）。 */
+export const DARK_GLASS_TINT_ALPHA = 0.72;
+
+/** 选中淡强调底的强调色透明度（重要记录 012，任务 4.3）。 */
+export const SELECTED_ACCENT_ALPHA = { dark: 0.2, light: 0.18 } as const;
+/** 选中项悬停：在选中底上再加一档，不回落中性悬停。 */
+export const SELECTED_ACCENT_HOVER_ALPHA = { dark: 0.26, light: 0.22 } as const;
 
 /**
  * 文字求解起点：设计稿“标准”档（contrast = 1）的文字亮度，对所有档位相同。
@@ -460,9 +471,42 @@ export function deriveThemeTokens(seedInput: Partial<ThemeSeed>, overrides?: The
   }
   t.canvas = t.window;
 
-  // ── 文字（010：按目标对比度求解） ──
-  const textBeds = [t.window, t.panel, t.raised, t.hover, t.selected, t.control, t.controlHover];
+  // ── 强调（先于文字：选中淡底参与文字求解） ──
   const direction = dark ? 'up' : 'down';
+  const ink = N(0.17, 0.01);
+  const a = hexToOklch(s.accent);
+  const accentRange = dark ? ACCENT_L_RANGE.dark : ACCENT_L_RANGE.light;
+  const accentStartL = clamp(a.L, accentRange.min, accentRange.max);
+  const accentRamp = solveSolidRamp({
+    startL: accentStartL,
+    floorL: accentStartL - ACCENT_MAX_DARKEN,
+    chroma: a.C,
+    hue: a.H,
+    ink,
+    allowInk: true,
+  });
+  const aL = accentRamp.L;
+  const A = (L: number, C: number = a.C) => oklchToHex(L, C, a.H);
+  const accentTextChroma = dark ? Math.min(a.C, 0.13) : a.C;
+  Object.assign(t, {
+    accent: A(aL),
+    accentHi: A(aL + SOLID_RAMP_OFFSETS.hi),
+    accentHover: A(aL + SOLID_RAMP_OFFSETS.hover),
+    accentHoverHi: A(aL + SOLID_RAMP_OFFSETS.hoverHi),
+    accentPressed: A(aL + SOLID_RAMP_OFFSETS.pressed),
+    accentRing: A(dark ? 0.7 : 0.62),
+  });
+  // 选中淡强调底（重要记录 012，任务 4.3）：强调色低透明度，叠在窗口/面板/抬升面上都与悬停、静息可分。
+  // 档位依据见 4.3 执行记录：深色 0.20 / 浅色 0.18（浅色 0.12 时与悬停几乎同色）；选中项悬停再加一档。
+  t.selectedAccent = withAlpha(t.accent, SELECTED_ACCENT_ALPHA[dark ? 'dark' : 'light']);
+  t.selectedAccentHover = withAlpha(t.accent, SELECTED_ACCENT_HOVER_ALPHA[dark ? 'dark' : 'light']);
+  // 文字也会压在选中淡底上（导航/菜单选中项的主要与辅助文字、分段与格子的强调文字）：
+  // 三档文字与强调文字的求解底集都加入这些合成色，四个预设下保证 ≥ 4.5（4.3：辅助文字在选中导航项上曾 4.17）
+  const selectedBeds = [t.selectedAccent, t.selectedAccentHover]
+    .flatMap((tint) => [t.window, t.panel, t.raised].map((bed) => compositeOver(tint, bed)));
+  // ── 文字（010：按目标对比度求解） ──
+  const surfaceTextBeds = [t.window, t.panel, t.raised, t.hover, t.selected, t.control, t.controlHover];
+  const textBeds = [...surfaceTextBeds, ...selectedBeds];
   const textChroma = dark
     ? { text1: s.tint * 0.5, text2: s.tint * 0.8, text3: s.tint }
     : { text1: s.tint * 2, text2: s.tint * 2, text3: s.tint * 2 };
@@ -491,48 +535,25 @@ export function deriveThemeTokens(seedInput: Partial<ThemeSeed>, overrides?: The
     textChroma.text2
   );
 
-  // ── 强调 ──
-  const ink = N(0.17, 0.01);
-  const a = hexToOklch(s.accent);
-  const accentRange = dark ? ACCENT_L_RANGE.dark : ACCENT_L_RANGE.light;
-  const accentStartL = clamp(a.L, accentRange.min, accentRange.max);
-  const accentRamp = solveSolidRamp({
-    startL: accentStartL,
-    floorL: accentStartL - ACCENT_MAX_DARKEN,
-    chroma: a.C,
-    hue: a.H,
-    ink,
-    allowInk: true,
-  });
-  const aL = accentRamp.L;
-  const A = (L: number, C: number = a.C) => oklchToHex(L, C, a.H);
-  const accentTextChroma = dark ? Math.min(a.C, 0.13) : a.C;
-  Object.assign(t, {
-    accent: A(aL),
-    accentHi: A(aL + SOLID_RAMP_OFFSETS.hi),
-    accentHover: A(aL + SOLID_RAMP_OFFSETS.hover),
-    accentHoverHi: A(aL + SOLID_RAMP_OFFSETS.hoverHi),
-    accentPressed: A(aL + SOLID_RAMP_OFFSETS.pressed),
-    accentText: A(
-      solveLightnessForContrast({
-        startL: dark ? 0.8 : 0.5,
-        chroma: accentTextChroma,
-        hue: a.H,
-        beds: textBeds,
-        target: THEME_TEXT_MIN_CONTRAST,
-        direction,
-      }),
-      accentTextChroma
-    ),
-    accentRing: A(dark ? 0.7 : 0.62),
-  });
+  t.accentText = A(
+    solveLightnessForContrast({
+      startL: dark ? 0.8 : 0.5,
+      chroma: accentTextChroma,
+      hue: a.H,
+      beds: textBeds,
+      target: THEME_TEXT_MIN_CONTRAST,
+      direction,
+    }),
+    accentTextChroma
+  );
   t.accentTint = withAlpha(t.accent, dark ? 0.2 : 0.12);
   t.onAccent = accentRamp.on;
 
   // ── 状态（固定色相、统一亮度） ──
   const statusTintAlpha = dark ? 0.16 : 0.1;
   const statusText = (startL: number, hue: number, tint: string) => {
-    const beds = [...textBeds, compositeOver(tint, t.window), compositeOver(tint, t.panel), compositeOver(tint, t.raised)];
+    // 状态文字不压在选中淡底上：沿用表面底集，状态色取值不受 4.3 选中底影响
+    const beds = [...surfaceTextBeds, compositeOver(tint, t.window), compositeOver(tint, t.panel), compositeOver(tint, t.raised)];
     return oklchToHex(
       solveLightnessForContrast({ startL, chroma: 0.15, hue, beds, target: THEME_TEXT_MIN_CONTRAST, direction }),
       0.15,
@@ -578,12 +599,15 @@ export function deriveThemeTokens(seedInput: Partial<ThemeSeed>, overrides?: The
   // ── 玻璃与遮罩（深色保持现有 index.css 数值；浅色反向派生） ──
   if (dark) {
     Object.assign(t, {
-      glassTint: 'rgba(0,0,0,0.66)',
+      // 4.3：0.66 时辅助文字压在玻璃上只有 4.16–4.44:1（设置弹窗、画布“更多”菜单、资产浮动面板），提到 0.72，
+      // 玻璃下是中灰内容（#808080）时 text3 仍 ≥ 4.5（themeEngine.test 断言）；纸白不变。
+      glassTint: `rgba(0,0,0,${DARK_GLASS_TINT_ALPHA})`,
       glassEdge: 'rgba(255,255,255,0.16)',
       glassSheen: 'rgba(255,255,255,0.1)',
       glassHover: 'rgba(255,255,255,0.14)',
       glassPressed: 'rgba(255,255,255,0.22)',
       glassSelected: 'rgba(255,255,255,0.18)',
+      glassSelectedAccent: withAlpha(t.accent, 0.28),
       glassDivider: 'rgba(255,255,255,0.12)',
       glassControlTint: 'rgba(255,255,255,0.08)',
       glassRegionTint: withAlpha(t.window, 0.18),
@@ -600,6 +624,7 @@ export function deriveThemeTokens(seedInput: Partial<ThemeSeed>, overrides?: The
       glassHover: withAlpha(t.text1, 0.06),
       glassPressed: withAlpha(t.text1, 0.12),
       glassSelected: withAlpha(t.text1, 0.09),
+      glassSelectedAccent: withAlpha(t.accent, 0.18),
       glassDivider: withAlpha(t.text1, 0.1),
       glassControlTint: withAlpha(t.text1, 0.04),
       glassRegionTint: withAlpha(t.window, 0.35),

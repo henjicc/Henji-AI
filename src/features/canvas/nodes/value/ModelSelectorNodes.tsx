@@ -40,7 +40,6 @@ type ModelSelectorNodeProps = NodeProps & {
   height?: number;
 };
 
-const NOOP_PARAMS_CHANGE = (): void => {};
 
 // 节点壳体内边距 + chip 自身的内边距/边框，叠加在模型 chip 内容实测宽度之上，得到不裁切内容所需的最小宽度
 const MODEL_CHIP_WIDTH_CHROME = 64;
@@ -103,12 +102,9 @@ function ModelSelectorCollapsedBody({
     <NodeModelParamsControls
       mediaType={mediaType}
       modelId={data.modelId}
-      storedParams={undefined}
       onModelChange={setModelId}
-      onParamsChange={NOOP_PARAMS_CHANGE}
       chipClassName={NODE_CONTROL_CHIP_CLASS}
       modelChipClassName={MODEL_SELECTOR_CHIP_CLASS}
-      showParamsChip={false}
       onModelChipContentWidthChange={onContentWidthChange}
     />
   );

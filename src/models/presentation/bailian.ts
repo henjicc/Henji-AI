@@ -12,6 +12,7 @@ export const bailianPresentation: Record<string, ModelPresentation> = {
     params: {
       bailianQwenImage30Variant: {
         name: sharedFieldText('variant'),
+        role: 'mode',
         optionLabels: {
           standard: { label: { zh: '标准版', en: 'Standard' } },
           pro: { label: 'Pro' },

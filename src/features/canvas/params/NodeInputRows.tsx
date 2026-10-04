@@ -42,9 +42,7 @@ interface NodeInputRowsProps {
   mediaInputs: Partial<Record<RowMediaKind, string[]>>;
   onMediaInputChange: (kind: RowMediaKind, next: string[]) => void;
   overrideModelId: string | null;
-  storedParams: DynamicValueMap | undefined;
   onModelChange: (modelId: string) => void;
-  onParamsChange: (params: DynamicValueMap) => void;
   incomingImages?: string[];
   /** 能力节点的模型白名单；省略时保持普通生成节点行为。 */
   modelPolicy?: CanvasImageCapabilityModelPolicy;
@@ -81,9 +79,7 @@ export function NodeInputRows({
   mediaInputs,
   onMediaInputChange,
   overrideModelId,
-  storedParams,
   onModelChange,
-  onParamsChange,
   incomingImages,
   modelPolicy,
   showModelInput = true,
@@ -134,10 +130,7 @@ export function NodeInputRows({
           mediaType={mediaType}
           modelId={modelId}
           overrideModelId={overrideModelId}
-          storedParams={storedParams}
           onModelChange={onModelChange}
-          onParamsChange={onParamsChange}
-          incomingImages={incomingImages}
           modelPolicy={modelPolicy}
         />
       )}

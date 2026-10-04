@@ -4,7 +4,7 @@ import React from 'react'
 import { fireEvent, render } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import Dropdown from './Dropdown'
-import { resolveDropdownDisplay } from './dropdownUtils'
+import { DROPDOWN_MENU_MAX_WIDTH_PX, resolveDropdownDisplay, resolveDropdownMenuWidth } from './dropdownUtils'
 
 describe('Dropdown 显示文本', () => {
   const options = [
@@ -147,5 +147,44 @@ describe('Dropdown 字段触发器与浮层（任务 2.2）', () => {
     fireEvent.keyDown(rendered.getByRole('button', { name: '层级' }), { key: 'ArrowDown' })
     const panel = document.querySelector<HTMLElement>('[data-dropdown-portal="true"]')
     expect(panel?.style.zIndex).toBe('75')
+  })
+})
+
+describe('Dropdown 菜单宽度（任务 4.3）', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('菜单宽度按菜单项自己的留白计算，含选中勾槽，并封顶', () => {
+    // 文字 65 + 菜单项（md：左右 20 + 间距 8 + 勾 14）+ 浮层（边框 2 + p-1 8）+ 取整余量 2
+    expect(resolveDropdownMenuWidth(65, 'md')).toBe(119)
+    expect(resolveDropdownMenuWidth(65, 'sm')).toBe(115)
+    expect(resolveDropdownMenuWidth(65, 'lg')).toBe(123)
+    expect(resolveDropdownMenuWidth(1000, 'md')).toBe(DROPDOWN_MENU_MAX_WIDTH_PX)
+  })
+
+  it('静默触发器（工具条）下，选中项“参考生视频”的菜单宽度足够放下文字与勾', () => {
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      font: '',
+      measureText: (text: string) => ({ width: text.length * 13 }),
+    } as unknown as CanvasRenderingContext2D)
+    const rendered = render(React.createElement(Dropdown, {
+      ariaLabel: '模式',
+      appearance: 'text',
+      value: 'reference',
+      options: [
+        { value: 'text', label: '文生视频' },
+        { value: 'reference', label: '参考生视频' },
+      ],
+      panelWidthStrategy: 'options',
+      buttonClassName: 'w-auto',
+      onSelect: () => {},
+    }))
+    const trigger = rendered.getByRole('button', { name: '模式' })
+    fireEvent.click(trigger)
+    const panel = document.getElementById(trigger.getAttribute('aria-controls') ?? '')
+      ?.closest<HTMLElement>('[data-dropdown-portal="true"]')
+    // 5 字 × 13 = 65，需要 119；修复前按触发器留白算只有 65 + 16 + 24 = 105
+    expect(Number.parseFloat(panel?.style.width ?? '0')).toBeGreaterThanOrEqual(119)
   })
 })

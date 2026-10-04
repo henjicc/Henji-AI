@@ -3,6 +3,7 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { MenuItem } from '../hooks/useContextMenu'
 import { isDomNode, ownerDocumentOf } from '@/utils/crossRealmDom'
+import { resolveUiOverlayTarget, useUiOverlayLayer } from '@/components/ui/overlayOwnership'
 
 const logger = createLogger('components.ContextMenu')
 
@@ -12,11 +13,12 @@ interface ContextMenuProps {
 
     onClose: () => void
     visible: boolean
-    owner?: 'assets'
 }
 
-const ContextMenu: React.FC<ContextMenuProps> = ({ items, position, onClose, visible, owner }) => {
+const ContextMenu: React.FC<ContextMenuProps> = ({ items, position, onClose, visible }) => {
     const menuRef = useRef<HTMLDivElement>(null)
+    // 右键菜单是一层浮层：所在面板（如资产面板）据此认出它是自己的子浮层（任务 4.3）
+    const overlay = useUiOverlayLayer(visible)
     // 菜单没有触发元素：可见期间在原位放一个隐藏锚点，得知自己处在主窗口还是剪辑系统浮窗，
     // 再挂到该文档的 body 并在该文档监听外部点击。
     const anchorRef = useRef<HTMLSpanElement>(null)
@@ -31,7 +33,7 @@ const ContextMenu: React.FC<ContextMenuProps> = ({ items, position, onClose, vis
         if (!visible || !host) return
 
         const handleClickOutside = (e: MouseEvent) => {
-            if (menuRef.current && (!isDomNode(e.target) || !menuRef.current.contains(e.target))) {
+            if (menuRef.current && (!isDomNode(e.target) || resolveUiOverlayTarget(e.target, overlay.id) === 'outside')) {
                 onClose()
             }
         }
@@ -45,7 +47,7 @@ const ContextMenu: React.FC<ContextMenuProps> = ({ items, position, onClose, vis
             clearTimeout(timer)
             host.removeEventListener('mousedown', handleClickOutside)
         }
-    }, [visible, onClose, host])
+    }, [visible, onClose, host, overlay.id])
 
     if (!visible) return null
 
@@ -56,7 +58,7 @@ const ContextMenu: React.FC<ContextMenuProps> = ({ items, position, onClose, vis
             ref={menuRef}
             role="menu"
             data-context-menu
-            data-asset-context-menu={owner === 'assets' ? 'true' : undefined}
+            {...overlay.layerProps}
             className="ui-glass context-menu animate-scale-in"
             style={{
                 left: `${position.x}px`,

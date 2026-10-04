@@ -45,6 +45,7 @@ const {
 const { attachUiInspectionSupport } = require('./uiInspectionSceneSupport.cjs')
 const { createGenerationSettingsScenes } = require('./uiInspectionSceneCatalogGeneration.cjs')
 const { createCanvasScenes } = require('./uiInspectionSceneCatalogCanvas.cjs')
+const { createSelectionFeedbackScenes } = require('./uiInspectionSceneSelectionFeedback.cjs')
 const { createToolboxScenes } = require('./uiInspectionSceneCatalogToolbox.cjs')
 const {
   createCameraStagePlaybackScenes,
@@ -141,6 +142,7 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
     ...createMcpMediaChainScenes(context),
     ...createGenerationSettingsScenes(context),
     ...createCanvasScenes(context),
+    ...createSelectionFeedbackScenes(context),
     ...createToolboxScenes(context),
     ...createCameraStagePlaybackScenes(context),
     ...createGpuRasterScenes(context),

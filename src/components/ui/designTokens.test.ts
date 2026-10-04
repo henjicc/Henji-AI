@@ -60,7 +60,7 @@ describe('设计令牌：Tailwind ↔ CSS 变量', () => {
     }
     const notExposed = new Set([
       // 材质与遮罩由 .ui-glass / .ui-glass-scrim 类消费，阴影色由 shadow-* 档位消费
-      'shade', 'glassTint', 'glassEdge', 'glassSheen', 'glassHover', 'glassPressed', 'glassSelected',
+      'shade', 'glassTint', 'glassEdge', 'glassSheen', 'glassHover', 'glassPressed', 'glassSelected', 'glassSelectedAccent',
       'glassDivider', 'glassControlTint', 'glassRegionTint', 'glassSurfaceTint',
     ])
     const missing = THEME_COLOR_TOKEN_NAMES.filter((name) => {

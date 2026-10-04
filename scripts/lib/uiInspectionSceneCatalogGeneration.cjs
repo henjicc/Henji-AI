@@ -112,6 +112,8 @@ function createGenerationSettingsScenes(context) {
         })
         try {
           await context.selectGenerationModel(page, 'Qwen Audio', 'bailian-qwen-audio-3.1-tts-flash', 'bailian')
+          // 生成底栏单行：参数可能收在“更多参数”里（任务 4.3），按正式交互先展开
+          await context.revealGenerationParam(page, /^(音色|Voice)\s*\*?$/i)
           await paramFieldFromLabel(page, /^(音色|Voice)\s*\*?$/i).locator('[data-panel-trigger-button]').click()
           const panel = page.locator('[data-voice-selector-panel]:visible')
           await panel.getByText('龙安欢_v3.1', { exact: true }).waitFor()
@@ -160,6 +162,7 @@ function createGenerationSettingsScenes(context) {
         try {
           await page.reload()
           await context.selectGenerationModel(page, '豆包语音', 'volcengine-seed-icl-2.0', 'volcengine-speech')
+          await context.revealGenerationParam(page, /^(音色|Voice)\s*\*?$/i)
           await paramFieldFromLabel(page, /^(音色|Voice)\s*\*?$/i).locator('[data-panel-trigger-button]').click()
           await page.getByText('云舟 2.0', { exact: true }).waitFor({ state: 'visible' })
           await settlePage(page)
@@ -168,13 +171,18 @@ function createGenerationSettingsScenes(context) {
           const mode = paramFieldFromLabel(page, /^(模式|Mode)$/i)
           await mode.locator('[data-dropdown-button]').click()
           await page.getByRole('option', { name: /^(克隆声音|Clone voice)$/i }).click()
+          await context.revealGenerationParam(page, /^(音色名称|Voice name)\s*\*?$/i)
           const name = page.getByText(/^(音色名称|Voice name)\s*\*?$/i).filter({ visible: true }).first().locator('xpath=ancestor::div[.//input][1]')
           await name.locator('input').fill('我的解说声音')
+          await context.revealGenerationParam(page, /^(声音样本|Voice sample)\s*\*?$/i)
           const audio = page.getByText(/^(声音样本|Voice sample)\s*\*?$/i).filter({ visible: true }).first().locator('xpath=ancestor::div[.//input[@type="file"]][1]')
           await audio.locator('input[type="file"]').setInputFiles({ name: 'voice-sample.wav', mimeType: 'audio/wav', buffer: Buffer.from('RIFFfixture') })
           await page.getByText('voice-sample.wav', { exact: true }).or(page.getByText('文件 1', { exact: true })).waitFor({ state: 'visible', timeout: 8000 })
-          await page.locator('[data-param-group-id="voice-clone-options"] [data-panel-trigger-button]').click()
-          await page.getByText(/^(录音原文（可选）|Transcript \(optional\))$/i).first().waitFor({ state: 'visible', timeout: 8000 })
+          // 克隆选项分组：行内是参数组触发器；收进“更多参数”时已作为分节展开
+          const optionsTrigger = page.locator('[data-ui-overflow-row] [data-param-group-id="voice-clone-options"] [data-panel-trigger-button]')
+          if (await optionsTrigger.count()) await optionsTrigger.click()
+          else await context.revealGenerationParam(page, /^(录音原文（可选）|Transcript \(optional\))$/i)
+          await page.getByText(/^(录音原文（可选）|Transcript \(optional\))$/i).filter({ visible: true }).first().waitFor({ state: 'visible', timeout: 8000 })
           await page.keyboard.press('Escape')
           await settlePage(page)
           await page.locator('[contenteditable="true"]').first().fill('你好，这是我的声音克隆试听。')

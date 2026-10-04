@@ -132,6 +132,17 @@ describe('Ui primitives 选中态词汇表', () => {
     expectClasses(chip, UI_MULTISELECT_ITEM_ACTIVE_CLASS);
   });
 
+  it('网格/卡片格的单选选中用淡强调底 + 强调文字，菜单项保持主要文字（重要记录 012）', () => {
+    const view = render(
+      <>
+        <UiOptionButton active variant="grid">选中网格</UiOptionButton>
+        <UiOptionButton active variant="menu">选中菜单项</UiOptionButton>
+      </>,
+    );
+    expectClasses(view.getByRole('button', { name: '选中网格' }), `${UI_GLASS_ADAPTIVE_SELECTED_CLASS} text-accent-text border-transparent`);
+    expectClasses(view.getByRole('button', { name: '选中菜单项' }), UI_OPTION_ITEM_ACTIVE_CLASS);
+  });
+
   it('grid 选项格静息铺底不描边，键盘当前项显示悬停底', () => {
     const view = render(
       <>
@@ -149,7 +160,7 @@ describe('Ui primitives 选中态词汇表', () => {
     expect(compact.dataset.size).toBe('sm');
   });
 
-  it('分段、选项格与色样的选中是中性抬升，不用强调色实底（重要记录 003）', () => {
+  it('分段、选项格与色样的选中是淡强调底 + 强调文字，不用强调色实底（重要记录 012）', () => {
     const view = render(
       <>
         <UiOptionButton variant="segment" active>选中段</UiOptionButton>
@@ -167,9 +178,11 @@ describe('Ui primitives 选中态词汇表', () => {
     const activeSwatch = view.getByRole('button', { name: '选中色样' });
     const restSwatch = view.getByRole('button', { name: '静息色样' });
 
+    // 重要记录 012（任务 4.3）：选中 = 淡强调底（ui-glass-adaptive-selected → --selected-accent）+ 强调文字，
+    // 不用强调色实底，也不描强调边
     for (const active of [activeSegment, activeTile]) {
-      expectClasses(active, `${UI_GLASS_ADAPTIVE_SELECTED_CLASS} text-text1 border-transparent`);
-      expect(active.className).not.toMatch(/(^| )(bg|text|border)-(accent|brand)/);
+      expectClasses(active, `${UI_GLASS_ADAPTIVE_SELECTED_CLASS} text-accent-text border-transparent`);
+      expect(active.className).not.toMatch(/(^| )(bg-accent|border-accent|bg-brand)/);
     }
     expectClasses(restSegment, `${UI_GLASS_ADAPTIVE_OPTION_CLASS} text-text2`);
     expect(restSegment.classList.contains(UI_GLASS_ADAPTIVE_SELECTED_CLASS)).toBe(false);
@@ -242,7 +255,7 @@ describe('Ui primitives 选中态词汇表', () => {
 
     expect(pill.classList.contains('rounded-full')).toBe(true);
     expect(pill.classList.contains('bg-control-pressed')).toBe(true);
-    // 双段外观与分段选择同一套中性抬升：轨道更暗、滑块是选中底，不用强调色
+    // 双段外观与分段选择同一套选中：轨道更暗、滑块是淡强调底、当前侧文字为强调文字，不用强调色实底（重要记录 012）
     expect(segmentedOff.classList.contains('rounded-lg')).toBe(true);
     expect(segmentedOff.classList.contains('bg-gap/60')).toBe(true);
     expect(segmentedOff.textContent).toBe('关开');
@@ -250,7 +263,9 @@ describe('Ui primitives 选中态词汇表', () => {
     expect(segmentedOff.firstElementChild?.classList.contains('translate-x-0')).toBe(true);
     expect(segmentedOff.firstElementChild?.classList.contains('duration-180')).toBe(true);
     expect(segmentedOn.firstElementChild?.classList.contains(UI_GLASS_ADAPTIVE_SELECTED_CLASS)).toBe(true);
-    expect(segmentedOn.firstElementChild?.className).not.toMatch(/(^| )(bg|text)-accent/);
+    expect(segmentedOn.firstElementChild?.className).not.toMatch(/(^| )bg-accent/);
+    expect(segmentedOn.lastElementChild?.classList.contains('text-accent-text')).toBe(true);
+    expect(segmentedOff.children[1]?.classList.contains('text-accent-text')).toBe(true);
     expect(segmentedOn.firstElementChild?.classList.contains('translate-x-full')).toBe(true);
     expect(segmentedOn.classList.contains('h-control-sm')).toBe(true);
     expect(segmentedOn.classList.contains('w-20')).toBe(true);

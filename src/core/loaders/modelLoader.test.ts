@@ -8,16 +8,17 @@ import { loadAllModels } from '@/core/loaders/modelLoader'
 import { CONTROLLED_EXECUTION_MODELS } from '@/core/modelCatalog/controlledExecutionModels'
 import type { ParamDef } from '@/core/types'
 
+// 4.3：bailian-qwen-image-3.0 / apimart-midjourney / fal-ai-veo-3.1 的模式参数补声明 role: 'mode'，摘要随之更新（其余结构不变）。
 const migratedStructureDigests = {
   'volcengine-seedream-5.0-lite': '5b060b0992c57ff55750651ec2c8cc138dd952f2c466ab291a489e765d73501f',
-  'bailian-qwen-image-3.0': '55fa864900323f9f66ee4fba37e60fe3e364af06c8192c9d0d3e4140ac029ccf',
+  'bailian-qwen-image-3.0': 'cd635ced8523673ce8513f97b9d60fca0f9f93d8806d8d53ad215d97c7641463',
   'grsai-nano-banana-pro': 'e52830a6cb080856d94df10c4a533a0af900aa7a18b625d68d9a16080fbfecf8',
   'modelscope-custom': '86170711fc0071d456c669aa62cf02b5adb69d891561975402c549bd8c5dd487',
-  'apimart-midjourney': 'd9bf786e99f81885a6d8a3a108368cf2a62578a35a4fa4b7e24f69ae70a7c422',
+  'apimart-midjourney': '312ea93ff803907b899deab277270360d529f2a3f0d03922002cf0da9f5abad0',
   'apimart-midjourney-video': 'c93fe905c5c068a4861127084cd1cdaa92bdc856cb7cca09377b04bf96f87370',
   'kie-hailuo-02': '1edabcf7784e28a1ca2eaecc34a280f59a36b9f08d715d81797ec81d0e2d67f7',
   'fal-ai-bytedance-seedream-v4': 'e6b4de37bf188bb20170d6623d5f559fa694a3c535210aaa27f990d38ec5d224',
-  'fal-ai-veo-3.1': '5b0a294db374a4bda194baf589cb7b30e7c4bfd80b8ddd406d38c37111f03222',
+  'fal-ai-veo-3.1': 'f0a2630e6b5c92b520ed15ba17e60b1f2c5a2b2247128f6f18f350e00aa85224',
 } as const
 
 function normalizeModelStructure(value: unknown): unknown {

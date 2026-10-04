@@ -13,6 +13,7 @@ export const kiePresentationPart5: Record<string, ModelPresentation> = {
     params: {
       "kieSeedance20Mode": {
         name: sharedFieldText('mode'),
+        role: 'mode',
         optionLabels: Object.fromEntries((
           [
         { value: 'text-image-to-video', label: sharedModeText('textImageToVideo') },
@@ -86,6 +87,7 @@ export const kiePresentationPart5: Record<string, ModelPresentation> = {
     params: {
       "kieSeedance25Mode": {
         name: sharedFieldText('mode'),
+        role: 'mode',
         optionLabels: Object.fromEntries((
           [
         { value: 'text-image-to-video', label: sharedModeText('textImageToVideo') },
@@ -161,6 +163,7 @@ export const kiePresentationPart5: Record<string, ModelPresentation> = {
     params: {
       "kieSeedanceV1Version": {
         name: sharedFieldText('variant'),
+        role: 'mode',
         optionLabels: Object.fromEntries((
           [
         { value: 'lite', label: 'Lite' },

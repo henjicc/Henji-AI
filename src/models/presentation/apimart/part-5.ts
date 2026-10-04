@@ -13,6 +13,7 @@ export const apimartPresentationPart5: Record<string, ModelPresentation> = {
     params: {
       "apimartSeedance20Mode": {
         name: sharedFieldText('mode'),
+        role: 'mode',
         optionLabels: Object.fromEntries((
           [
         { value: 'text-image-to-video', label: sharedModeText('textImageToVideo') },
@@ -73,6 +74,7 @@ export const apimartPresentationPart5: Record<string, ModelPresentation> = {
     params: {
       "apimartSeedance25Mode": {
         name: sharedFieldText('mode'),
+        role: 'mode',
         optionLabels: Object.fromEntries((
           [
         { value: 'text-image-to-video', label: sharedModeText('textImageToVideo') },

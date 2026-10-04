@@ -456,9 +456,10 @@ const InputArea: React.FC<InputAreaProps> = ({
           ) : null}
         </div>
 
-        {/* 底栏：添加素材 · 模型 · 参数 ｜ 预计费用 · 预设 · 优化 · 生成（设计稿 Generation） */}
-        <div className="flex flex-wrap items-end justify-between gap-x-3 gap-y-1.5">
-          <div className="flex min-w-0 flex-1 flex-wrap items-end gap-x-3 gap-y-1.5">
+        {/* 底栏：添加素材 · 模型 · 参数 ｜ 预计费用 · 预设 · 优化 · 生成（设计稿 Generation）。
+            始终单行：参数放不下时由 footerStart 内的溢出收纳收进“更多参数”（任务 4.3），不换行 */}
+        <div className="flex flex-nowrap items-center justify-between gap-x-3">
+          <div className="flex min-w-0 flex-1 flex-nowrap items-center gap-x-3">
             {shouldShowUpload && (
               <UiIconButton size="lg"
                 type="button"

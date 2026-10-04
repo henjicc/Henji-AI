@@ -13,6 +13,7 @@ export const kiePresentationPart3: Record<string, ModelPresentation> = {
     params: {
       "kieKlingV26Mode": {
         name: sharedFieldText('mode'),
+        role: 'mode',
         optionLabels: Object.fromEntries((
           [
         { value: 'text-image-to-video', label: sharedModeText('textImageToVideo') },
@@ -102,6 +103,7 @@ export const kiePresentationPart3: Record<string, ModelPresentation> = {
     params: {
       "kieMiniMaxH3Mode": {
         name: sharedFieldText('mode'),
+        role: 'mode',
         optionLabels: Object.fromEntries((
           [
         { value: 'text-image-to-video', label: sharedModeText('textImageToVideo') },

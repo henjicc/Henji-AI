@@ -182,6 +182,11 @@ export default {
         },
         hover: withOpacity('--hover-rgb'),
         selected: withOpacity('--selected-rgb'),
+        // 选中淡强调底（重要记录 012，任务 4.3）：bg-selected-accent / bg-selected-accent-hover
+        'selected-accent': {
+          DEFAULT: cssVar('--selected-accent'),
+          hover: cssVar('--selected-accent-hover'),
+        },
         line: {
           DEFAULT: withOpacity('--line-rgb'),
           strong: withOpacity('--line-strong-rgb'),

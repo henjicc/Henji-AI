@@ -111,6 +111,7 @@ export const falPresentationPart6: Record<string, ModelPresentation> = {
     params: {
       "falVeo31Mode": {
         name: sharedFieldText('mode'),
+        role: 'mode',
         optionLabels: Object.fromEntries((
           [
         { value: 'text-image-to-video', label: sharedModeText('textImageToVideo') },
@@ -214,6 +215,7 @@ export const falPresentationPart6: Record<string, ModelPresentation> = {
     params: {
       "viduQ2Mode": {
         name: sharedFieldText('mode'),
+        role: 'mode',
         optionLabels: Object.fromEntries((
           [
         { value: 'text-to-video', label: sharedModeText('textToVideo') },

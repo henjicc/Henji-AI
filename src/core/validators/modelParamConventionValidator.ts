@@ -17,8 +17,9 @@ function i18nKey(value: unknown): string | undefined {
 
 /**
  * 读取内联字面中文名。刻意不走 getI18nText：那会把 i18n 实例拉进模型注册链路
- * （modelText.ts 顶部已说明这里存在循环 barrel 导入风险），而且 key 形式的名称
- * 由下面的共享词表检查单独覆盖，这里只需要认出手写字面量。
+ * （modelText.ts 顶部已说明这里存在循环 barrel 导入风险）。key 形式的名称
+ * （sharedFieldText）由 SHARED_KEY_ROLE_HINTS 单独识别，两条路径缺一不可：
+ * 2026-08 只认字面量时，38 个用共享词表命名的模式参数漏写 role 而未被拦下（任务 4.3）。
  */
 function literalZhName(value: unknown): string | undefined {
   if (!value || typeof value !== 'object' || !('zh' in value)) return undefined
@@ -31,6 +32,13 @@ const ROLE_HINTS: ReadonlyArray<{ zh: string; role: 'channel' | 'mode' }> = [
   { zh: '模式', role: 'mode' },
   { zh: '版本', role: 'mode' },
   { zh: '变体', role: 'mode' },
+]
+
+/** 共享词表 key -> 期望的 role。与字面量名一样，命中即必须声明角色。 */
+const SHARED_KEY_ROLE_HINTS: ReadonlyArray<{ key: string; role: 'channel' | 'mode' }> = [
+  { key: 'params.fields.mode', role: 'mode' },
+  { key: 'params.fields.version', role: 'mode' },
+  { key: 'params.fields.variant', role: 'mode' },
 ]
 
 /** 验证跨模型共享参数的产品约定。 */
@@ -71,6 +79,11 @@ export function validateModelParamConventions(
     const hint = ROLE_HINTS.find((item) => item.zh === zhName)
     if (hint) {
       fail(`Param named "${zhName}" must declare role '${hint.role}': ${param.id}`)
+    }
+    const nameKey = i18nKey(param.name)
+    const keyHint = SHARED_KEY_ROLE_HINTS.find((item) => item.key === nameKey)
+    if (keyHint) {
+      fail(`Param using the shared label "${nameKey}" must declare role '${keyHint.role}': ${param.id}`)
     }
   })
 

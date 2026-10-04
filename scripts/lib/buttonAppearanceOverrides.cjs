@@ -34,6 +34,8 @@ const CHECKED_ATTRIBUTES = {
   UiFieldTrigger: 'className',
   UiWindowControl: 'className',
   UiTextToken: 'className',
+  // 4.3：单行溢出收纳，className 只放布局（间距、弹性）
+  UiOverflowRow: 'className',
   Dropdown: 'buttonClassName',
   PanelTrigger: 'buttonClassName',
 };

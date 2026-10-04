@@ -3,6 +3,7 @@ import { UiButton, UiPanel } from './primitives'
 import { useI18n } from '@/hooks/useI18n'
 import { UI_DIALOG_TRANSITION_MS, uiTransition } from './motion'
 import { useDialogFocusTrap } from './useDialogFocusTrap'
+import { UiOverlayLayerProvider, useUiOverlayLayer } from './overlayOwnership'
 import { UI_MODAL_SIZE_CLASS, UI_TEXT_BODY_CLASS, UI_TEXT_TITLE_CLASS } from './styleTokens'
 import { Info, TriangleAlert, X } from 'lucide-react'
 
@@ -59,6 +60,8 @@ export default function AlertDialog({
   const dialogRef = useRef<HTMLDivElement>(null)
   const titleId = useId()
   const messageId = useId()
+  // 模态层：从浮层里打开的确认弹窗内点击不关闭那个浮层，打开期间父浮层不响应点外（任务 4.3）
+  const overlay = useUiOverlayLayer(isOpen, { modal: true })
 
   useEffect(() => {
     if (isOpen) {
@@ -122,7 +125,9 @@ export default function AlertDialog({
       aria-describedby={messageId}
       tabIndex={-1}
       className={`${rootClassName} outline-none`}
+      {...overlay.layerProps}
     >
+      <UiOverlayLayerProvider id={overlay.id}>
       {/* 背景遮罩 */}
       <div
         className="ui-glass-scrim absolute inset-0"
@@ -173,6 +178,7 @@ export default function AlertDialog({
           </UiButton>
         </div>
       </UiPanel>
+      </UiOverlayLayerProvider>
     </div>
   )
 }

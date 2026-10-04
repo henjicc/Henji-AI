@@ -1,7 +1,8 @@
-let measureContext: CanvasRenderingContext2D | null | undefined
+let measureContext: CanvasRenderingContext2D | null = null
 
 function getMeasureContext(): CanvasRenderingContext2D | null {
-  if (measureContext === undefined) {
+  // 取不到上下文时不缓存失败结果，下次再试（环境就绪前的首次调用不应让之后的测量永久失效）
+  if (!measureContext) {
     measureContext = document.createElement('canvas').getContext('2d')
   }
   return measureContext

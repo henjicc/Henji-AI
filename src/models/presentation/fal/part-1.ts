@@ -13,6 +13,7 @@ export const falPresentationPart1: Record<string, ModelPresentation> = {
     params: {
       "falGeminiOmniFlashMode": {
         name: sharedFieldText('mode'),
+        role: 'mode',
         optionLabels: Object.fromEntries((
           [
         { value: 'image-to-video', label: sharedModeText('imageToVideo') },
@@ -215,6 +216,7 @@ export const falPresentationPart1: Record<string, ModelPresentation> = {
     params: {
       "falHailuo02Version": {
         name: sharedFieldText('version'),
+        role: 'mode',
         optionLabels: Object.fromEntries((
           [
         { value: 'standard', label: 'Standard' },
@@ -275,6 +277,7 @@ export const falPresentationPart1: Record<string, ModelPresentation> = {
     params: {
       "falHailuo23Version": {
         name: sharedFieldText('version'),
+        role: 'mode',
         optionLabels: Object.fromEntries((
           [
         { value: 'standard', label: 'Standard' },
@@ -320,6 +323,7 @@ export const falPresentationPart1: Record<string, ModelPresentation> = {
     params: {
       "falKling30OmniMode": {
         name: sharedFieldText('mode'),
+        role: 'mode',
         optionLabels: Object.fromEntries((
           [
         { value: 'text-image-to-video', label: sharedModeText('textImageToVideo') },

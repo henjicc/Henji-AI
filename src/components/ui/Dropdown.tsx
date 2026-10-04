@@ -12,7 +12,8 @@ import { UI_FIELD_INLINE_ROW_CLASS, UI_FIELD_LABEL_CLASS, UI_FIELD_LABEL_INLINE_
 import { UiFieldLayoutContext, useUiFieldLayout } from './fieldLayout'
 import { UiFieldTrigger, UiOptionButton } from './primitives'
 import { UI_DURATION } from './motion'
-import { resolveDropdownDisplay } from './dropdownUtils'
+import { resolveDropdownDisplay, resolveDropdownMenuWidth } from './dropdownUtils'
+import { resolveUiOverlayTarget, UiOverlayLayerProvider, useUiOverlayLayer } from './overlayOwnership'
 import { measureElementTextWidth } from './textMeasurement'
 import { Check } from 'lucide-react'
 import { Z_LAYERS } from '@/core/theme/zLayers'
@@ -84,6 +85,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
   const [open, setOpen] = useState(false)
   const [closing, setClosing] = useState(false)
   const [activeOptionIndex, setActiveOptionIndex] = useState(-1)
+  const overlay = useUiOverlayLayer(open)
   const ref = useRef<HTMLDivElement | null>(null)
   const triggerRef = useRef<HTMLButtonElement | null>(null)
   const panelRef = useRef<HTMLDivElement | null>(null)
@@ -200,7 +202,9 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
       if (!ref.current || !isDomNode(e.target)) return
       const target = e.target
       const inTrigger = ref.current.contains(target)
-      const inPanel = panelRef.current?.contains(target) ?? false
+      // 自身面板与在面板里打开的子浮层都算内部（浮层归属，任务 4.3）
+      const inPanel = (panelRef.current?.contains(target) ?? false)
+        || resolveUiOverlayTarget(target, overlay.id) !== 'outside'
       if (!inTrigger && !inPanel) {
         if (open) {
           setClosing(true)
@@ -214,7 +218,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
     const ownerDocument = ownerDocumentOf(ref.current)
     ownerDocument.addEventListener('mousedown', handler, true)
     return () => ownerDocument.removeEventListener('mousedown', handler, true)
-  }, [open])
+  }, [open, overlay.id])
 
   useLayoutEffect(() => {
     if (!ref.current) return
@@ -248,14 +252,16 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
       }
 
       const panelLabels = optionLabels.length > 0 ? optionLabels : [displayText]
-      const nextPanelMinWidth = measureTextMinWidth(btn, panelLabels)
+      // 菜单宽度按菜单项自己的留白（含选中勾槽）计算，不借用触发器留白（任务 4.3）
+      const textWidth = measureElementTextWidth(btn, panelLabels, 0)
+      const nextPanelMinWidth = textWidth === null ? null : resolveDropdownMenuWidth(textWidth, size)
       if (nextPanelMinWidth !== null && lastPanelMinWidthRef.current !== nextPanelMinWidth) {
         lastPanelMinWidthRef.current = nextPanelMinWidth
         setPanelMinWidthPx(nextPanelMinWidth)
       }
     }
     computeMinWidth()
-  }, [buttonMinWidthPx, getOptionLabels, minWidthStrategy, options, panelMinWidthPx, panelWidthStrategy, resolvedDisplay])
+  }, [buttonMinWidthPx, getOptionLabels, minWidthStrategy, options, panelMinWidthPx, panelWidthStrategy, resolvedDisplay, size])
 
   useLayoutEffect(() => {
     const updatePos = () => {
@@ -293,7 +299,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
     }
   }, [open, panelMinWidthPx, panelWidthStrategy])
 
-  const menuContent = renderPanel ? (
+  const menuBody = renderPanel ? (
     <div id={panelId} className="max-h-60 overflow-y-auto">
       {/* 浮层里的字段一律按表单排布，不继承触发器所在工具条的排布 */}
       <UiFieldLayoutContext.Provider value="form">{renderPanel()}</UiFieldLayoutContext.Provider>
@@ -325,13 +331,14 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
             onClick={() => selectOption(option)}
           >
             <span className="block min-w-0 truncate whitespace-nowrap">{option.label}</span>
-            {/* 当前值：中性选中底 + 强调色勾（重要记录 001：强调色只用于选中指示） */}
+            {/* 当前值：淡强调底 + 强调色勾（重要记录 012），标签保持主要文字 */}
             {selected ? <Check aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-accent-text" /> : null}
           </UiOptionButton>
         )
       })}
     </div>
   )
+  const menuContent = <UiOverlayLayerProvider id={overlay.id}>{menuBody}</UiOverlayLayerProvider>
 
   return (
     <div className={`relative ${toolbarLayout ? UI_FIELD_INLINE_ROW_CLASS : 'inline-block'} ${className || ''}`} ref={ref}>
@@ -380,6 +387,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
               }}
               data-dropdown-portal="true"
               data-dropdown-placement={fixedPos.placement}
+              {...overlay.layerProps}
             >
               {menuContent}
             </div>,
@@ -394,6 +402,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
             style={panelWidthStrategy === 'options' && panelMinWidthPx ? { minWidth: `${panelMinWidthPx}px` } : undefined}
             data-dropdown-portal="true"
             data-dropdown-placement={fixedPos?.placement ?? 'below'}
+            {...overlay.layerProps}
           >
             {menuContent}
           </div>

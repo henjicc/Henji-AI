@@ -40,10 +40,10 @@
   --shade: rgba(0,0,0,0.5);
   --text1: #EDEEF0;
   --text1-rgb: 237 238 240;
-  --text2: #B2B4B7;
-  --text2-rgb: 178 180 183;
-  --text3: #8A8C8F;
-  --text3-rgb: 138 140 143;
+  --text2: #B9BBBE;
+  --text2-rgb: 185 187 190;
+  --text3: #939699;
+  --text3-rgb: 147 150 153;
   --text-disabled: #3E4043;
   --text-disabled-rgb: 62 64 67;
   --accent: #3266D6;
@@ -61,6 +61,8 @@
   --accent-ring: #6A9BFE;
   --accent-ring-rgb: 106 155 254;
   --accent-tint: rgba(50,102,214,0.2);
+  --selected-accent: rgba(50,102,214,0.2);
+  --selected-accent-hover: rgba(50,102,214,0.26);
   --on-accent: #FFFFFF;
   --on-accent-rgb: 255 255 255;
   --danger: #CB3135;
@@ -112,12 +114,13 @@
   --wave-played-rgb: 237 238 240;
   --wave-cut: #773733;
   --wave-cut-rgb: 119 55 51;
-  --glass-tint: rgba(0,0,0,0.66);
+  --glass-tint: rgba(0,0,0,0.72);
   --glass-edge: rgba(255,255,255,0.16);
   --glass-sheen: rgba(255,255,255,0.1);
   --glass-hover: rgba(255,255,255,0.14);
   --glass-pressed: rgba(255,255,255,0.22);
   --glass-selected: rgba(255,255,255,0.18);
+  --glass-selected-accent: rgba(50,102,214,0.28);
   --glass-divider: rgba(255,255,255,0.12);
   --glass-control-tint: rgba(255,255,255,0.08);
   --glass-region-tint: rgba(14,15,18,0.18);
@@ -144,6 +147,7 @@
   --ui-glass-hover: var(--glass-hover);
   --ui-glass-press: var(--glass-pressed);
   --ui-glass-selected: var(--glass-selected);
+  --ui-glass-selected-accent: var(--glass-selected-accent);
   --ui-glass-divider: var(--glass-divider);
   --ui-glass-control-tint: var(--glass-control-tint);
   --ui-glass-region-tint: var(--glass-region-tint);
@@ -190,7 +194,7 @@
   /*
    * 玻璃的底、受光边、高光、交互态（--ui-glass-tint/edge/sheen/hover/press/selected/divider/control-tint/
    * region-tint/surface-tint）与遮罩（--ui-scrim-tint/-soft）都在上方别名块，由主题引擎按模式派生：
-   * 深色沿用原数值（黑 66% 底 + 白纱，层次只能靠加白——灰色会被黑 tint 吃掉）；浅色改为浅底 + 深色纱。
+   * 深色为黑 72% 底 + 白纱（4.3 由 66% 提高，保证辅助文字 ≥ 4.5），层次只能靠加白——灰色会被黑 tint 吃掉）；浅色改为浅底 + 深色纱。
    */
   --ui-glass-control-border: var(--ui-glass-divider);
   --ui-glass-control-hover: var(--ui-glass-hover);
@@ -198,7 +202,7 @@
   /* 弹窗遮罩用更浅的一档：它覆盖整个视口，半径给太大既糊又贵 */
   --ui-scrim-blur: 10px;
   /*
-   * 弹窗**自身**是玻璃时用 --ui-scrim-tint-soft：遮罩与玻璃 tint 相乘，0.42 的遮罩叠 0.66 的玻璃，
+   * 弹窗**自身**是玻璃时用 --ui-scrim-tint-soft：遮罩与玻璃 tint 相乘，0.42 的遮罩叠 0.72 的玻璃，
    * 背后只剩约 20% 透光率——玻璃只会更脏。所以走 `surface="glass"` 的弹窗必须换用 soft 档。
    */
   /* 组件级令牌（第三层）：仅供无法使用 Tailwind 类的纯 CSS 文件消费；颜色类已改为上方别名 */
@@ -266,7 +270,7 @@
 
 /*
  * 关闭毛玻璃：整套材质一起退化成不透明底色。
- * 注意不能只把 blur 置 0——那样 66% 的黑底叠在清晰背景上仍会透出干扰，
+ * 注意不能只把 blur 置 0——那样 72% 的黑底叠在清晰背景上仍会透出干扰，
  * 所以外壳及其内部的 region / surface / control tint 都必须切成 100% 实体色，
  * 噪点与提亮也一并关掉。
  */
@@ -464,15 +468,21 @@
   }
 
   /*
-   * 中性抬升选中（UiOptionButton segment/tile）与选项格静息底（tile）。玻璃里同样不能盖实心色：
-   * 选中加白（--ui-glass-selected），静息用控件纱（关闭毛玻璃时变量退化为 raised）。
+   * 单选选中底（UiOptionButton menu/grid/segment/tile、下拉当前项、UiSwitch segmented 滑块）：
+   * 淡强调底（重要记录 012，任务 4.3；修订 003 的中性抬升——中性 selected 与 hover 只差 0.03，看不清）。
+   * 选中项悬停再加一档淡强调，不回落中性悬停；玻璃里用 --ui-glass-selected-accent，同样不盖实心色。
+   * 类名沿用 adaptive-selected（styleTokens 的令牌名与注释随 4.3 第二批改动一并更新）。
    */
   .ui-glass-adaptive-selected {
-    background-color: rgb(var(--selected-rgb));
+    background-color: var(--selected-accent);
+  }
+
+  .ui-glass-adaptive-selected:hover:not(:disabled):not([aria-disabled='true']) {
+    background-color: var(--selected-accent-hover);
   }
 
   .ui-glass .ui-glass-adaptive-selected {
-    background-color: var(--ui-glass-selected);
+    background-color: var(--ui-glass-selected-accent);
   }
 
   .ui-glass-adaptive-tile {
@@ -608,18 +618,18 @@
     color: rgb(var(--text-disabled-rgb));
   }
 
-  /* 图标按钮 on（开关开启）：selected 底 + 强调文字。 */
+  /* 图标按钮 on（开关开启）：淡强调底 + 强调文字（重要记录 012，任务 4.3）；悬停再加一档淡强调。 */
   .ui-btn-on {
-    background-color: rgb(var(--selected-rgb));
+    background-color: var(--selected-accent);
     color: rgb(var(--accent-text-rgb));
   }
 
   .ui-btn-on:hover:not(:disabled) {
-    background-color: rgb(var(--control-hover-rgb));
+    background-color: var(--selected-accent-hover);
   }
 
   .ui-glass .ui-btn-on {
-    background-color: var(--ui-glass-selected);
+    background-color: var(--ui-glass-selected-accent);
   }
 
   .ui-btn-on:disabled {
@@ -1480,7 +1490,7 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
 
 /* accent 是填充色，作文字色对比度不足；玻璃上更糟，改用 accent-text */
 .speed-option.active {
-  background: var(--ui-glass-selected);
+  background: var(--ui-glass-selected-accent);
   color: rgb(var(--accent-text-rgb));
 }
 

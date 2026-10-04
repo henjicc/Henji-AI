@@ -142,6 +142,7 @@ export const apimartPresentationPart4: Record<string, ModelPresentation> = {
     params: {
       "apimartQwenImage30Variant": {
         name: sharedFieldText('variant'),
+        role: 'mode',
         optionLabels: Object.fromEntries((
           [
         { value: 'standard', label: { zh: '标准版', en: 'Standard' } },
@@ -196,6 +197,7 @@ export const apimartPresentationPart4: Record<string, ModelPresentation> = {
     params: {
       "apimartSeedance20FastMode": {
         name: sharedFieldText('mode'),
+        role: 'mode',
         optionLabels: Object.fromEntries((
           [
         { value: 'text-image-to-video', label: sharedModeText('textImageToVideo') },
@@ -256,6 +258,7 @@ export const apimartPresentationPart4: Record<string, ModelPresentation> = {
     params: {
       "apimartSeedance20MiniMode": {
         name: sharedFieldText('mode'),
+        role: 'mode',
         optionLabels: Object.fromEntries((
           [
         { value: 'text-image-to-video', label: sharedModeText('textImageToVideo') },

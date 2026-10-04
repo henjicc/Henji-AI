@@ -319,19 +319,20 @@ export const UiPanel = forwardRef<HTMLDivElement, UiPanelProps>(
 UiPanel.displayName = 'UiPanel';
 
 /**
- * 中性抬升三档（segment / tile / swatch）各自的尺寸与状态；颜色在玻璃内外由 `ui-glass-adaptive-*` 统一切换。
- * 来源：1.4 外观设置为主题预设与强调色新增，2.2 接管为全局分段选择（重要记录 003）。
+ * 分段 / 小样 / 色样三档（segment / tile / swatch）各自的尺寸与状态；颜色在玻璃内外由 `ui-glass-adaptive-*` 统一切换。
+ * 来源：1.4 外观设置为主题预设与强调色新增，2.2 接管为全局分段选择；4.3 按重要记录 012 改为淡强调底 + 强调文字
+ * （色样仍用主要文字色外圈：强调色外圈压在强调色样上看不清）。
  */
 const UI_OPTION_NEUTRAL_VARIANT_CLASS = {
   segment: {
     layout: `${UI_CONTROL_HEIGHT_CLASS.sm} justify-center whitespace-nowrap rounded-md px-3 text-xs font-medium`,
     rest: `border-transparent text-text2 hover:text-text1 ${UI_GLASS_ADAPTIVE_OPTION_CLASS}`,
-    active: `border-transparent text-text1 ${UI_GLASS_ADAPTIVE_SELECTED_CLASS}`,
+    active: `border-transparent text-accent-text ${UI_GLASS_ADAPTIVE_SELECTED_CLASS}`,
   },
   tile: {
     layout: 'h-11 gap-2.5 rounded-lg px-2.5 text-13',
     rest: `border-transparent text-text2 hover:text-text1 ${UI_GLASS_ADAPTIVE_TILE_CLASS} ${UI_GLASS_ADAPTIVE_OPTION_CLASS}`,
-    active: `border-transparent text-text1 ${UI_GLASS_ADAPTIVE_SELECTED_CLASS}`,
+    active: `border-transparent text-accent-text ${UI_GLASS_ADAPTIVE_SELECTED_CLASS}`,
   },
   // 色样：颜色由调用点经 style.backgroundColor / backgroundImage 传入，bg-clip-content 让它只铺内圈；
   // 外圈 2px 边框 + 2px 间隙表达选中（按钮重置类会清掉 outline/ring，所以不用它们，也不会被父级裁切）。
@@ -379,7 +380,11 @@ export const UiOptionButton = forwardRef<HTMLButtonElement, UiOptionButtonProps>
       );
     }
 
-    const activeClass = selection === 'multiple' ? UI_MULTISELECT_ITEM_ACTIVE_CLASS : UI_OPTION_ITEM_ACTIVE_CLASS;
+    // 单选：菜单项标签保持主要文字（勾用强调色）；网格/卡片格用强调文字（重要记录 012，任务 4.3）
+    const singleActiveClass = variant === 'grid' || variant === 'card'
+      ? `border-transparent ${UI_GLASS_ADAPTIVE_SELECTED_CLASS} text-accent-text`
+      : UI_OPTION_ITEM_ACTIVE_CLASS;
+    const activeClass = selection === 'multiple' ? UI_MULTISELECT_ITEM_ACTIVE_CLASS : singleActiveClass;
     // 静息态的 hover 一律交给 UI_GLASS_ADAPTIVE_OPTION_CLASS：写成 `hover:bg-hover` 在玻璃里会赢，
     // 把半透明选项盖成一块实心贴片。menu 静息不描边不铺底；grid / card / flat 铺 raised 撑出格子（玻璃内换控件纱）；
     // 默认变体是纯文字 chip 组，保留一圈发丝线。
@@ -568,14 +573,14 @@ export const UiSwitch = forwardRef<HTMLButtonElement, UiSwitchProps>(
           />
           <span
             className={`pointer-events-none relative flex min-w-0 items-center justify-center transition-colors duration-180 ${
-              checked ? 'text-text2' : 'text-text1'
+              checked ? 'text-text2' : 'text-accent-text'
             }`}
           >
             {offLabel}
           </span>
           <span
             className={`pointer-events-none relative flex min-w-0 items-center justify-center transition-colors duration-180 ${
-              checked ? 'text-text1' : 'text-text2'
+              checked ? 'text-accent-text' : 'text-text2'
             }`}
           >
             {onLabel}
@@ -635,7 +640,8 @@ function resolveFieldTriggerClass(size: UiControlSize, appearance: 'field' | 'qu
   if (appearance === 'quiet') {
     return `ui-btn ui-btn-quiet ${UI_FIELD_SIZE_CLASS[size]} px-2`;
   }
-  return `${UI_FIELD_SURFACE_CLASS} ${UI_FIELD_SIZE_CLASS[size]} ${UI_FIELD_PADDING_CLASS[size]} hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-ring`;
+  // 悬停取 control-hover 而不是 hover：raised 与 hover 只差 0.012–0.017，且与悬停容器同色时触发器边界消失（4.3）
+  return `${UI_FIELD_SURFACE_CLASS} ${UI_FIELD_SIZE_CLASS[size]} ${UI_FIELD_PADDING_CLASS[size]} hover:bg-control-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-ring`;
 }
 
 /**
@@ -684,7 +690,7 @@ export function UiNumberStepper({
   onStep,
 }: UiNumberStepperProps): JSX.Element {
   const iconClass = size === 'sm' ? 'h-2.5 w-2.5' : 'h-3 w-3';
-  const buttonClass = 'flex h-1/2 w-full items-center justify-center text-text3 transition-colors duration-120 hover:bg-hover hover:text-text1 disabled:cursor-not-allowed disabled:text-text-disabled disabled:hover:bg-transparent';
+  const buttonClass = 'flex h-1/2 w-full items-center justify-center text-text3 transition-colors duration-120 hover:bg-control-hover hover:text-text1 disabled:cursor-not-allowed disabled:text-text-disabled disabled:hover:bg-transparent';
   const renderButton = (direction: 1 | -1) => (
     <button
       type="button"

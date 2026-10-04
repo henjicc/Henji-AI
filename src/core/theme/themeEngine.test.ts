@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { WHITE, compositeOver, contrastRatio, hexToOklch, minContrast, mixOklab, oklchToHex, parseColor } from './themeColor'
+import { WHITE, compositeOver, contrastRatio, deltaEOK, hexToOklch, minContrast, mixOklab, oklchToHex, parseColor, withAlpha } from './themeColor'
 import {
   DEFAULT_THEME_SEED,
   MEDIA_OVERLAY_TOKENS,
@@ -256,7 +256,7 @@ describe('themeEngine 令牌集合', () => {
 
   it('深色玻璃与遮罩保持现有 index.css 数值（第二段接线不改深色观感）', () => {
     const t = deriveThemeTokens(DEFAULT_THEME_SEED).colors
-    expect(t.glassTint).toBe('rgba(0,0,0,0.66)')
+    expect(t.glassTint).toBe('rgba(0,0,0,0.72)') // 4.3：由 0.66 提到 0.72，辅助文字在玻璃上 ≥ 4.5
     expect(t.glassEdge).toBe('rgba(255,255,255,0.16)')
     expect(t.glassHover).toBe('rgba(255,255,255,0.14)')
     expect(t.scrim).toBe('rgba(0,0,0,0.42)')
@@ -280,5 +280,44 @@ describe('themeEngine 令牌集合', () => {
       contrast: DEFAULT_THEME_SEED.contrast,
     })
     expect(normalizeThemeSeed(null)).toEqual(DEFAULT_THEME_SEED)
+  })
+})
+
+describe('选中淡强调底（重要记录 012，任务 4.3）', () => {
+  it.each(THEME_PRESET_IDS)('%s：选中与悬停、静息一眼可辨，选中文字 ≥ 4.5，字段悬停与静息可辨', (id) => {
+    const t = deriveThemeTokens(THEME_PRESETS[id].seed).colors
+    for (const bed of [t.panel, t.raised]) {
+      const selected = compositeOver(t.selectedAccent, bed)
+      const selectedHover = compositeOver(t.selectedAccentHover, bed)
+      // 悬停只用中性抬升；选中与悬停不得同色
+      expect(deltaEOK(selected, t.hover)).toBeGreaterThanOrEqual(0.03)
+      expect(deltaEOK(selected, bed)).toBeGreaterThanOrEqual(0.06)
+      expect(deltaEOK(selectedHover, selected)).toBeGreaterThanOrEqual(0.015)
+      for (const surface of [selected, selectedHover]) {
+        expect(contrastRatio(t.accentText, surface)).toBeGreaterThanOrEqual(THEME_TEXT_MIN_CONTRAST)
+        expect(contrastRatio(t.text1, surface)).toBeGreaterThanOrEqual(THEME_TEXT_MIN_CONTRAST)
+        // 选中导航/菜单项里的次要与辅助文字（如许可列表的版本号）
+        expect(contrastRatio(t.text2, surface)).toBeGreaterThanOrEqual(THEME_TEXT_MIN_CONTRAST)
+        expect(contrastRatio(t.text3, surface)).toBeGreaterThanOrEqual(THEME_TEXT_MIN_CONTRAST)
+      }
+    }
+    // 字段触发器悬停改 control-hover：与 raised 静息拉开（原 hover 只差 0.012–0.017）
+    expect(deltaEOK(t.raised, t.controlHover)).toBeGreaterThanOrEqual(0.03)
+  })
+})
+
+describe('深色玻璃面辅助文字（任务 4.3）', () => {
+  it.each(THEME_PRESET_IDS)('%s：玻璃下是中灰内容时，辅助文字在玻璃上 ≥ 4.5（纸白玻璃为浅底，另行断言不变）', (id) => {
+    const t = deriveThemeTokens(THEME_PRESETS[id].seed).colors
+    if (THEME_PRESETS[id].seed.mode === 'dark') {
+      // 中灰内容（OKLab L 0.6 ≈ sRGB #808080）压在玻璃下
+      const glassBed = compositeOver(t.glassTint, oklchToHex(0.6, 0, 0))
+      expect(contrastRatio(t.text3, glassBed)).toBeGreaterThanOrEqual(THEME_TEXT_MIN_CONTRAST)
+      for (const surface of [t.window, t.panel, t.raised, t.selected]) {
+        expect(contrastRatio(t.text3, compositeOver(t.glassTint, surface))).toBeGreaterThanOrEqual(THEME_TEXT_MIN_CONTRAST)
+      }
+    } else {
+      expect(t.glassTint).toBe(withAlpha(t.panel, 0.82))
+    }
   })
 })

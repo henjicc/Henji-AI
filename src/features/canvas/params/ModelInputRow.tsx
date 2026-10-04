@@ -25,10 +25,7 @@ interface ModelInputRowProps {
   modelId: string;
   /** 已连线的模型选择器解析出的覆盖模型 id；非空时节点内选择只读 */
   overrideModelId: string | null;
-  storedParams: DynamicValueMap | undefined;
   onModelChange: (modelId: string) => void;
-  onParamsChange: (params: DynamicValueMap) => void;
-  incomingImages?: string[];
   /** 限定可选模型必须同时具备的标签（如仅展示支持图片编辑的模型） */
   requiredTags?: ModelTag[];
   /** 可选的能力级模型约束；省略时保持历史模型列表行为 */
@@ -44,10 +41,7 @@ export function ModelInputRow({
   mediaType,
   modelId,
   overrideModelId,
-  storedParams,
   onModelChange,
-  onParamsChange,
-  incomingImages,
   requiredTags,
   modelPolicy,
 }: ModelInputRowProps) {
@@ -84,15 +78,11 @@ export function ModelInputRow({
           <NodeModelParamsControls
             mediaType={mediaType}
             modelId={modelId}
-            storedParams={storedParams}
             onModelChange={onModelChange}
-            onParamsChange={onParamsChange}
-            incomingImages={incomingImages}
             requiredTags={requiredTags}
             modelPolicy={modelPolicy}
             chipClassName={NODE_CONTROL_CHIP_CLASS}
             modelChipClassName={NODE_CONTROL_MODEL_CHIP_CLASS}
-            showParamsChip={false}
           />
         )}
       </div>

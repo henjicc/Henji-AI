@@ -18,6 +18,7 @@ export const apimartPresentationPart3: Record<string, ModelPresentation> = {
     params: {
       "apimartMidjourneyMode": {
         name: sharedFieldText('mode'),
+        role: 'mode',
         optionLabels: Object.fromEntries((
           [
         { value: 'imagine', label: { zh: '生成', en: 'Generate' } },
@@ -274,6 +275,7 @@ export const apimartPresentationPart3: Record<string, ModelPresentation> = {
     params: {
       "apimartMiniMaxH3Mode": {
         name: sharedFieldText('mode'),
+        role: 'mode',
         optionLabels: Object.fromEntries((
           [
         { value: 'text-image-to-video', label: sharedModeText('textImageToVideo') },

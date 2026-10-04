@@ -16,19 +16,21 @@ export const UI_WHITE_HEX = WHITE_HEX;
 export const UI_TEXT_LIGHT_HEX = TEXT_LIGHT_HEX;
 
 /* ---------------------------------------------------------------------------
- * 选中态词汇表（重要记录 001/003，任务 2.2）
+ * 选中态词汇表（重要记录 001/012，任务 2.2 → 4.3）
  *
- * 1. 导航“正在看哪里”：中性选中底 + 主要文字（图标强调色）+ 方向指示条（面板标签：主要文字 + 底部细线）
- * 2. 单选“值是什么”：中性抬升（selected 底 + 主要文字），不用强调色实底
- * 3. 多选“集合里哪些已选”：强调描边 + 中性选中底 + 强调文字
+ * 选中必须一眼可辨：淡强调底（`selected-accent`，强调色低透明度）+ 强调文字/勾/指示条；
+ * 强调色实底只给唯一主动作；悬停只用中性抬升，悬停与选中不得同色（012 修订 003 的中性抬升）。
+ * 1. 导航“正在看哪里”：淡强调底 + 主要文字（图标强调色）+ 强调色方向指示条（面板标签：主要文字 + 强调色底部细线）
+ * 2. 单选“值是什么”：淡强调底；分段/格子用强调文字，菜单项保持主要文字 + 强调色勾
+ * 3. 多选“集合里哪些已选”：强调描边 + 淡强调底 + 强调文字
  * 4. 布尔“是否开启”：强调色只进入开关轨道或复选框本体，整行保持静息
  *
  * 令牌只负责状态，不和静息态类叠加同一 CSS 属性。调用组件必须用互斥分支，
  * 否则 Tailwind 产物顺序会让选中态静默失效。业务调用点只传 active / checked，不直接拼这些类。
  * ------------------------------------------------------------------------- */
 
-/** 导航选中：中性选中底 + 主要文字，图标取强调文字色（设计稿列表行选中）。指示条由导航组件按方向补充。 */
-export const UI_NAV_ITEM_ACTIVE_CLASS = 'bg-selected text-text1 [&_svg]:text-accent-text';
+/** 导航选中：淡强调底 + 主要文字，图标取强调文字色。指示条由导航组件按方向补充（重要记录 012）。 */
+export const UI_NAV_ITEM_ACTIVE_CLASS = 'bg-selected-accent text-text1 [&_svg]:text-accent-text';
 
 /** 面板标签（设计稿面板头）：选中只换成主要文字 + 底部细线，背景保持透明。 */
 export const UI_NAV_ITEM_ACTIVE_SUBTLE_CLASS = 'text-text1';
@@ -45,12 +47,12 @@ export const UI_NAV_INDICATOR_BOTTOM_CLASS =
 export const UI_NAV_INDICATOR_BOTTOM_SHORT_CLASS =
   "after:absolute after:bottom-0.5 after:left-1/2 after:h-0.5 after:w-3 after:-translate-x-1/2 after:rounded-full after:bg-accent after:content-['']";
 
-/** 面板标签的底部细线（设计稿 1.5px 主要文字色）。 */
+/** 面板标签的底部细线（1.5px 强调色，重要记录 012：选中指示用强调色）。 */
 export const UI_NAV_INDICATOR_BOTTOM_SUBTLE_CLASS =
-  "after:absolute after:bottom-0 after:left-2 after:right-2 after:h-[1.5px] after:bg-text1 after:content-['']";
+  "after:absolute after:bottom-0 after:left-2 after:right-2 after:h-[1.5px] after:bg-accent after:content-['']";
 
-/** 多选/标签选中：强调描边 + 中性选中底 + 强调文字。 */
-export const UI_MULTISELECT_ITEM_ACTIVE_CLASS = 'border-accent bg-selected text-accent-text';
+/** 多选/标签选中：强调描边 + 淡强调底 + 强调文字。 */
+export const UI_MULTISELECT_ITEM_ACTIVE_CLASS = 'border-accent bg-selected-accent text-accent-text';
 
 /** 布尔控件开态：强调色只用于开关轨道或复选框本体；其上的勾/滑块用 on-accent。 */
 export const UI_BOOLEAN_CONTROL_ACTIVE_CLASS = 'border-accent bg-accent text-on-accent';
@@ -303,8 +305,8 @@ export const UI_GLASS_ADAPTIVE_NAV_CLASS = 'ui-glass-adaptive-nav'
 export const UI_GLASS_ADAPTIVE_OPTION_CLASS = 'ui-glass-adaptive-option';
 
 /**
- * 中性抬升的选中底（单选、分段选择、主题预设格、下拉当前项）：普通面板上是 `selected` 实底，玻璃里换成
- * `--ui-glass-selected`。重要记录 003：单选选中不用强调色实底。
+ * 单选选中底（菜单、网格、分段选择、主题预设格、下拉当前项、双段开关滑块）：淡强调底 `--selected-accent`
+ * （选中项悬停再加一档），玻璃里换成 `--ui-glass-selected-accent`。重要记录 012：选中用强调色指示，不用实底。
  */
 export const UI_GLASS_ADAPTIVE_SELECTED_CLASS = 'ui-glass-adaptive-selected';
 
@@ -326,7 +328,7 @@ export const UI_SEGMENTED_TRACK_CLASS = 'inline-flex w-fit gap-0.5 rounded-lg bg
 export const UI_COVER_GROUP_CLASS = 'ui-cover-group';
 export const UI_COVER_FRAME_CLASS = 'ui-cover-frame';
 
-/** 单选选中：中性抬升（选中底 + 主要文字），玻璃内自适应。 */
+/** 单选选中（菜单项）：淡强调底 + 主要文字（勾用强调色），玻璃内自适应；网格/格子在组件里改强调文字。 */
 export const UI_OPTION_ITEM_ACTIVE_CLASS =
   `border-transparent ${UI_GLASS_ADAPTIVE_SELECTED_CLASS} text-text1`;
 
