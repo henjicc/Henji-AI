@@ -281,9 +281,9 @@ const GenerationWorkspace: React.FC = () => {
         <UiSharedGlassHost
           ref={listContainerRef}
           minTargets={4}
-          // 滚动条与其他主滚动区同一套（ui-scrollbar，任务 5.9）；关闭滚动锚定，虚拟列表测高后不跳动
+          // 滚动条与其他主滚动区同一套（全局细滚动条，任务 5.8）；关闭滚动锚定，虚拟列表测高后不跳动
           data-generation-history-scroll
-          className="ui-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain scroll-auto [overflow-anchor:none] [scrollbar-gutter:stable] pt-4"
+          className="min-h-0 flex-1 overflow-y-auto overscroll-contain scroll-auto [overflow-anchor:none] [scrollbar-gutter:stable] pt-4"
           style={{ paddingBottom: inputPadding }}
         >
           <div ref={contentRef}>

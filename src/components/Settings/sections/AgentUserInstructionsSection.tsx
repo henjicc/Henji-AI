@@ -25,6 +25,7 @@ import {
   type PromptDocumentV1,
 } from '@/core/inputs/promptDocument'
 import { createLogger } from '@/core/logging'
+import { useI18n } from '@/hooks/useI18n'
 import SettingsDialog from '../components/SettingsDialog'
 
 const logger = createLogger('components.Settings.AgentUserInstructionsSection')
@@ -35,11 +36,12 @@ const info = (text: string): StatusLine => ({ text, failed: false })
 const failure = (text: string): StatusLine => ({ text, failed: true })
 
 export default function AgentUserInstructionsSection(): JSX.Element {
+  const { t } = useI18n('settings')
   const [document, setDocument] = useState<PromptDocumentV1>(
     createPlainTextPromptDocument('')
   )
   const [busy, setBusy] = useState(false)
-  const [status, setStatus] = useState<StatusLine>(info('正在读取用户指令…'))
+  const [status, setStatus] = useState<StatusLine>(() => info(t('agentInstructions.reading')))
   const [confirmReset, setConfirmReset] = useState(false)
   const content = useMemo(() => toModelPromptText(document), [document])
   const warnings = useMemo(
@@ -61,7 +63,7 @@ export default function AgentUserInstructionsSection(): JSX.Element {
         event: 'settings.agent_user_instructions.read.completed',
       })
     } catch (error) {
-      setStatus(failure(error instanceof Error ? error.message : '读取用户指令失败'))
+      setStatus(failure(error instanceof Error ? error.message : t('agentInstructions.readFailed')))
       logger.error('读取智能助手用户指令失败', error, {
         event: 'settings.agent_user_instructions.read.failed',
       })
@@ -72,23 +74,25 @@ export default function AgentUserInstructionsSection(): JSX.Element {
 
   useEffect(() => {
     void load()
+    // 只在打开分节时读取一次；切换界面语言不应重新读取并覆盖正在编辑的指令
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const save = async (): Promise<void> => {
     setBusy(true)
-    setStatus(info('正在保存…'))
+    setStatus(info(t('agentInstructions.saving')))
     logger.info('保存智能助手用户指令开始', {
       event: 'settings.agent_user_instructions.save.start',
     })
     try {
       const instructions = await updateAssistantUserInstructions({ content })
       setDocument(createPlainTextPromptDocument(instructions.content))
-      setStatus(info('已保存。新指令会从下一次助手任务开始生效。'))
+      setStatus(info(t('agentInstructions.saved')))
       logger.info('保存智能助手用户指令完成', {
         event: 'settings.agent_user_instructions.save.completed',
       })
     } catch (error) {
-      setStatus(failure(error instanceof Error ? error.message : '保存用户指令失败'))
+      setStatus(failure(error instanceof Error ? error.message : t('agentInstructions.saveFailed')))
       logger.error('保存智能助手用户指令失败', error, {
         event: 'settings.agent_user_instructions.save.failed',
       })
@@ -102,9 +106,9 @@ export default function AgentUserInstructionsSection(): JSX.Element {
     try {
       const instructions = await resetAssistantUserInstructions()
       setDocument(createPlainTextPromptDocument(instructions.content))
-      setStatus(info('已清空用户指令。'))
+      setStatus(info(t('agentInstructions.cleared')))
     } catch (error) {
-      setStatus(failure(error instanceof Error ? error.message : '清空用户指令失败'))
+      setStatus(failure(error instanceof Error ? error.message : t('agentInstructions.clearFailed')))
     } finally {
       setBusy(false)
     }
@@ -113,9 +117,9 @@ export default function AgentUserInstructionsSection(): JSX.Element {
   const openFile = async (): Promise<void> => {
     try {
       const filePath = await openAssistantUserInstructionsFile()
-      setStatus(info(`已打开用户指令文件：${filePath}。编辑保存后请点击“重新读取”。`))
+      setStatus(info(t('agentInstructions.fileOpened', { path: filePath })))
     } catch (error) {
-      setStatus(failure(error instanceof Error ? error.message : '打开用户指令文件失败'))
+      setStatus(failure(error instanceof Error ? error.message : t('agentInstructions.openFileFailed')))
     }
   }
 
@@ -127,8 +131,8 @@ export default function AgentUserInstructionsSection(): JSX.Element {
         第二段是"这里会保存什么、不会保存什么"的隐私边界（也常驻——不看可能误填密钥）。
       */}
       <UiFormRow
-        label="用户指令"
-        hint="直接用自然语言描述长期偏好和工作习惯。除安全、权限、审批、真实能力和当前明确要求等硬约束外，用户指令优先于产品默认与模型描述。"
+        label={t('agentInstructions.label')}
+        hint={t('agentInstructions.hint')}
       >
         <PromptEditor
           mode="edit"
@@ -136,37 +140,35 @@ export default function AgentUserInstructionsSection(): JSX.Element {
           layout="fill-scroll"
           value={document}
           onChange={setDocument}
-          ariaLabel="智能助手用户指令"
-          placeholder={'例如：\n图片生成优先使用派欧云；兼容时优先质量。\n回答尽量简洁，修改代码后先完成自动化检查。'}
+          ariaLabel={t('agentInstructions.editorLabel')}
+          placeholder={t('agentInstructions.placeholder')}
           disabled={busy}
           maxCharacters={ASSISTANT_USER_INSTRUCTIONS_MAX_CHARACTERS}
           showCharacterCount
           error={warnings.length > 0}
-          errorMessage={warnings.join('；')}
-          editorClassName={`ui-scrollbar min-h-56 max-h-96 px-3 py-2.5 ${UI_TEXT_BODY_CLASS}`}
+          errorMessage={warnings.join(t('agentInstructions.warningSeparator'))}
+          editorClassName={`min-h-56 max-h-96 px-3 py-2.5 ${UI_TEXT_BODY_CLASS}`}
         />
-        <p className={`mt-3 leading-5 ${UI_TEXT_META_CLASS}`}>
-          这里只保存你主动填写或明确要求助手修改的内容。密钥、令牌、授权头和密码会在进入模型前自动脱敏；其他正常内容会完整传递。助手不会自动把对话、推断、日志或文件写入这里。
-        </p>
+        <p className={`mt-3 leading-5 ${UI_TEXT_META_CLASS}`}>{t('agentInstructions.privacy')}</p>
       </UiFormRow>
 
       <div className="flex flex-wrap items-center gap-2">
         <UiButton type="button" variant="primary" disabled={busy} onClick={() => void save()}>
           <Save className="h-4 w-4" />
-          保存指令
+          {t('agentInstructions.save')}
         </UiButton>
         <UiButton type="button" variant="secondary" disabled={busy} onClick={() => void load()}>
           <RefreshCw className="h-4 w-4" />
-          重新读取
+          {t('agentInstructions.reload')}
         </UiButton>
         <UiButton type="button" variant="secondary" disabled={busy} onClick={() => void openFile()}>
           <ExternalLink className="h-4 w-4" />
-          打开指令文件
+          {t('agentInstructions.openFile')}
         </UiButton>
         {/* 清空会丢掉已写的全部指令：危险档（静息静默、悬停显红），点后二次确认 */}
         <UiButton type="button" variant="danger" disabled={busy} onClick={() => setConfirmReset(true)}>
           <RotateCcw className="h-4 w-4" />
-          清空指令
+          {t('agentInstructions.clear')}
         </UiButton>
       </div>
       {/* 「打开指令文件」的状态行会带出本地绝对路径，它不是输入控件，必须显式声明为
@@ -177,12 +179,12 @@ export default function AgentUserInstructionsSection(): JSX.Element {
 
       <SettingsDialog
         open={confirmReset}
-        title="清空用户指令"
-        description="会清空已保存的全部用户指令，此操作不可撤销。"
+        title={t('agentInstructions.clearTitle')}
+        description={t('agentInstructions.clearDescription')}
         onClose={() => setConfirmReset(false)}
         actions={[
-          { label: '取消', onClick: () => setConfirmReset(false), variant: 'secondary' },
-          { label: '清空', variant: 'danger', onClick: () => { setConfirmReset(false); void reset() } },
+          { label: t('agentInstructions.cancel'), onClick: () => setConfirmReset(false), variant: 'secondary' },
+          { label: t('agentInstructions.clearConfirm'), variant: 'danger', onClick: () => { setConfirmReset(false); void reset() } },
         ]}
       />
     </div>

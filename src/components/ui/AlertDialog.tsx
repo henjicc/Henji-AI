@@ -62,6 +62,10 @@ export default function AlertDialog({
 }: AlertDialogProps): JSX.Element | null {
   const { t } = useI18n('common')
   const [opacity, setOpacity] = useState(0)
+  // 收起中（任务 5.8，同 VE-06）：已关闭、只是在播退出过渡——不可点击、对读屏隐藏，
+  // 过渡结束或计时器先到即通知调用方，避免退出动画期间再次点到确认或计时器被后台节流后迟迟不关
+  const [closing, setClosing] = useState(false)
+  const closeNotifiedRef = useRef(false)
   const dialogRef = useRef<HTMLDivElement>(null)
   const titleId = useId()
   const messageId = useId()
@@ -70,14 +74,27 @@ export default function AlertDialog({
 
   useEffect(() => {
     if (isOpen) {
+      setClosing(false)
+      closeNotifiedRef.current = false
       requestAnimationFrame(() => setOpacity(1))
     }
   }, [isOpen])
 
+  const finishClose = (): void => {
+    if (closeNotifiedRef.current) return
+    closeNotifiedRef.current = true
+    onClose()
+  }
+
   const handleClose = () => {
+    if (closing) return
     setOpacity(0)
-    if (closeImmediately) onClose()
-    else setTimeout(() => onClose(), UI_DIALOG_TRANSITION_MS)
+    if (closeImmediately) {
+      finishClose()
+      return
+    }
+    setClosing(true)
+    setTimeout(finishClose, UI_DIALOG_TRANSITION_MS)
   }
   useDialogFocusTrap({
     active: isOpen,
@@ -130,6 +147,8 @@ export default function AlertDialog({
       aria-describedby={messageId}
       tabIndex={-1}
       className={`${rootClassName} outline-none`}
+      aria-hidden={closing || undefined}
+      {...(closing ? { inert: '' } : {})}
       {...overlay.layerProps}
     >
       <UiOverlayLayerProvider id={overlay.id}>
@@ -148,6 +167,9 @@ export default function AlertDialog({
           transform: `scale(${0.97 + 0.03 * opacity})`,
           transition: uiTransition(['opacity', 'transform'], UI_DIALOG_TRANSITION_MS)
         }}
+        onTransitionEnd={(event) => {
+          if (closing && event.target === event.currentTarget && event.propertyName === 'opacity') finishClose()
+        }}
       >
         {/* 标题 */}
         <div className="flex items-center gap-2">
@@ -156,7 +178,7 @@ export default function AlertDialog({
         </div>
 
         {/* 消息内容 */}
-        <div id={messageId} className={`ui-scrollbar mt-2 max-h-72 overflow-y-auto whitespace-pre-line break-words ${UI_TEXT_BODY_CLASS}`}>
+        <div id={messageId} className={`mt-2 max-h-72 overflow-y-auto whitespace-pre-line break-words ${UI_TEXT_BODY_CLASS}`}>
           {message}
         </div>
 

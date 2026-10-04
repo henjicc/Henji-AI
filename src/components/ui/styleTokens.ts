@@ -232,7 +232,11 @@ export const UI_FIELD_FOCUS_WITHIN_CLASS =
 /** 占位文字：辅助文字档（保证 ≥ 4.5:1）。 */
 export const UI_FIELD_PLACEHOLDER_CLASS = 'placeholder:text-text3';
 
-export const UI_FIELD_DISABLED_CLASS = 'disabled:opacity-50 disabled:cursor-not-allowed';
+/**
+ * 禁用态：原生 `disabled` 与 `aria-disabled="true"` 同一外观。
+ * 菜单项为保留可聚焦与原因说明会只写 `aria-disabled`（画布能力菜单），不能让调用点各自补 opacity（5.8，5.4-14）。
+ */
+export const UI_FIELD_DISABLED_CLASS = 'disabled:opacity-50 disabled:cursor-not-allowed aria-disabled:opacity-50 aria-disabled:cursor-not-allowed';
 
 export const UI_BUTTON_RESET_CLASS =
   '!outline-none focus:!outline-none focus-visible:!outline-none !ring-0 focus:!ring-0 focus-visible:!ring-0 shadow-none focus:shadow-none';

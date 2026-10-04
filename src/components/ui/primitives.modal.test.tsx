@@ -137,3 +137,30 @@ describe('UiModal', () => {
     }
   });
 });
+
+describe('UiModal 收起（任务 5.8，同 VE-06）', () => {
+  it('收起中不可点击、对读屏隐藏；退出过渡结束即卸载，不必等计时器', () => {
+    vi.useFakeTimers();
+    try {
+      const onClose = vi.fn();
+      const view = render(
+        <UiModal isOpen title="确认" onClose={onClose}>
+          <UiButton>确定</UiButton>
+        </UiModal>,
+      );
+      view.rerender(
+        <UiModal isOpen={false} title="确认" onClose={onClose}>
+          <UiButton>确定</UiButton>
+        </UiModal>,
+      );
+      const root = document.body.querySelector('[data-dialog="true"]') as HTMLElement;
+      expect(root.getAttribute('aria-hidden')).toBe('true');
+      expect(root.hasAttribute('inert')).toBe(true);
+      const panel = root.querySelector('.transition-opacity.duration-180:not(.ui-glass-scrim)') as HTMLElement;
+      fireEvent.transitionEnd(panel);
+      expect(document.body.querySelector('[data-dialog="true"]')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

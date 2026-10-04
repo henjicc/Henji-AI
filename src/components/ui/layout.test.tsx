@@ -68,3 +68,43 @@ describe('工具页命令带骨架', () => {
     expect(rendered.container.querySelector('[data-command-stack]')).toBeNull()
   })
 })
+
+describe('UiFormRow 标签关联到行内控件（任务 5.8，B-50）', () => {
+  it('开关、输入框与下拉没有自己的名称时，读作行标签；下拉读作“标签 + 当前值”', async () => {
+    const { UiInput, UiSwitch } = await import('./primitives')
+    const { default: Dropdown } = await import('./Dropdown')
+    render(
+      <>
+        <UiFormRow label="允许外部智能体连接" hint="关闭后外部客户端无法连接" inline>
+          <UiSwitch checked={false} onCheckedChange={() => undefined} />
+        </UiFormRow>
+        <UiFormRow label="保存目录">
+          <UiInput value="D:/out" readOnly />
+        </UiFormRow>
+        <UiFormRow label="语言">
+          <Dropdown value="zh" options={[{ value: 'zh', label: '中文' }]} onSelect={() => undefined} />
+        </UiFormRow>
+      </>,
+    )
+    const toggle = screen.getByRole('switch', { name: '允许外部智能体连接' })
+    expect(toggle.getAttribute('aria-describedby')).toBeTruthy()
+    expect(document.getElementById(toggle.getAttribute('aria-describedby') ?? '')?.textContent).toBe('关闭后外部客户端无法连接')
+    expect(screen.getByRole('textbox', { name: '保存目录' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '语言 中文' })).toBeTruthy()
+  })
+
+  it('控件自己带名称时以自己的为准；行外的控件不受影响', async () => {
+    const { UiSwitch } = await import('./primitives')
+    render(
+      <>
+        <UiFormRow label="行标签" inline>
+          <UiSwitch aria-label="自定义名称" checked onCheckedChange={() => undefined} />
+        </UiFormRow>
+        <UiSwitch checked onCheckedChange={() => undefined} />
+      </>,
+    )
+    expect(screen.getByRole('switch', { name: '自定义名称' })).toBeTruthy()
+    const switches = screen.getAllByRole('switch')
+    expect(switches[1].getAttribute('aria-labelledby')).toBeNull()
+  })
+})

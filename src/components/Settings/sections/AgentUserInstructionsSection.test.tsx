@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+
+import i18n from '@/i18n/config'
 
 const mocks = vi.hoisted(() => ({
   get: vi.fn(),
@@ -18,6 +20,11 @@ vi.mock('@/commands/assistant', () => ({
 vi.mock('@/core/logging', () => ({ createLogger: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }) }))
 
 import AgentUserInstructionsSection from './AgentUserInstructionsSection'
+
+// 文案走 i18n（任务 5.8，B-39）：断言按中文界面
+beforeAll(async () => {
+  await i18n.changeLanguage('zh-CN')
+})
 
 beforeEach(() => {
   vi.clearAllMocks()

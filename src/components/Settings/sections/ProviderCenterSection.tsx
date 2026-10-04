@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Plus, RefreshCw, Search, Settings2 } from 'lucide-react'
+import { Plus, RefreshCw, Settings2 } from 'lucide-react'
 import {
   UI_TEXT_BODY_CLASS,
   UI_TEXT_LABEL_CLASS,
@@ -7,11 +7,11 @@ import {
   UiButton,
   UiEmpty,
   UiError,
-  UiInput,
   UiLoading,
   UiOptionButton,
   UiPanel,
   UiSwitch,
+  UiSearchInput,
 } from '@/components/ui'
 import { API_KEY_PROVIDERS, type ApiKeyProvider } from '@/core/config/providers'
 import { providerServiceLabel } from '@/core/config/providerBrands'
@@ -227,14 +227,16 @@ const ProviderCenterSection = ({ llm }: ProviderCenterSectionProps): JSX.Element
   if (llm.loading) return <UiLoading message={t('providerCenter.loading')} />
 
   return (
-    <div className="grid h-[calc(min(88vh,64rem)-8.5rem)] min-h-0 grid-cols-[220px_minmax(0,1fr)] gap-5 overflow-hidden">
-      <UiPanel variant="inset" className="flex min-h-0 flex-col overflow-hidden p-2">
+    /*
+     * 整页只有设置内容区一条竖向滚动（任务 5.8，B-49）：原来这里固定高度、左右两栏各自滚动，
+     * 960 下和外层设置页并排出现两条竖向滚动条。现在详情栏随内容自然增高、跟着设置页滚动；
+     * 供应商列表吸顶，只有它在供应商很多时自己滚动（左侧的局部列表，不与页面滚动条并排）。
+     */
+    <div className="grid grid-cols-[220px_minmax(0,1fr)] items-start gap-5">
+      <UiPanel variant="inset" className="sticky top-0 flex max-h-[calc(min(88vh,64rem)-8.5rem)] min-h-0 flex-col overflow-hidden p-2">
         <div className="flex min-h-0 flex-1 flex-col gap-2">
-          <div className="relative">
-            <Search aria-hidden="true" className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-text3" />
-            <UiInput value={providerSearch} onChange={event => setProviderSearch(event.target.value)} className="pl-8" placeholder={t('providerCenter.searchPlaceholder')} aria-label={t('providerCenter.searchPlaceholder')} />
-          </div>
-          <div className="ui-scrollbar min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain">
+          <UiSearchInput value={providerSearch} onChange={event => setProviderSearch(event.target.value)} placeholder={t('providerCenter.searchPlaceholder')} aria-label={t('providerCenter.searchPlaceholder')} />
+          <div className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain">
             {filteredGroups.map(group => (
               <UiOptionButton key={group.id} type="button" variant="menu" size="lg" active={group.id === selected?.id} className="w-full text-left" onClick={() => { setSelectedId(group.id); setCategory('all'); setFetchError(null) }}>
                 <span className="block truncate text-sm font-medium">{group.displayName}</span>
@@ -251,7 +253,7 @@ const ProviderCenterSection = ({ llm }: ProviderCenterSectionProps): JSX.Element
       </UiPanel>
 
       {selected ? (
-        <div className="ui-scrollbar min-w-0 space-y-5 overflow-y-auto overscroll-contain pr-2">
+        <div className="min-w-0 space-y-5">
           <div>
             <div className="flex items-start justify-between gap-4">
               {/* 分节标题“供应商与模型”已是 20 号，供应商名降一档（16），层级才读得出来 */}

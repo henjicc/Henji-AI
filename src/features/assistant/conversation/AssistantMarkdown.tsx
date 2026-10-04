@@ -11,7 +11,7 @@ interface AssistantMarkdownProps {
 
 const markdownComponents: Components = {
   table: ({ children }) => (
-    <div className="ui-scrollbar my-2 max-w-full overflow-x-auto" data-assistant-markdown-table>
+    <div className="my-2 max-w-full overflow-x-auto" data-assistant-markdown-table>
       <table>{children}</table>
     </div>
   ),

@@ -1,8 +1,11 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { afterEach, beforeEach, expect, it } from 'vitest'
+import { afterEach, beforeAll, beforeEach, expect, it } from 'vitest'
+import i18n from '@/i18n/config'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { VideoEditShortcutSettings } from './VideoEditShortcutSettings'
+// 文案走 i18n（任务 5.8，B-39）：断言按中文界面
+beforeAll(async () => { await i18n.changeLanguage('zh-CN') })
 beforeEach(() => { useSettingsStore.getState().setVideoEditShortcuts({}) })
 afterEach(cleanup)
 it('实际录入保存、冲突保护及恢复默认共用持久设置', () => {

@@ -85,9 +85,6 @@ export const apimartPresentationPart1: Record<string, ModelPresentation> = {
           }]
         })),
       },
-      "apimartGeminiOmniFlashExtendTaskId": {
-        name: { zh: '延续任务 ID', en: 'Extend From Task ID' },
-      },
     },
     linkages: [{
     trigger: 'apimartGeminiOmniFlashChannel',

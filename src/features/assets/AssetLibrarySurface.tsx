@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { FolderPlus, GripVertical, LoaderCircle, Search, Settings2, X } from 'lucide-react'
-import { Dropdown, PanelTrigger, UI_FIELD_LABEL_CLASS, UI_GLASS_ADAPTIVE_DIVIDER_CLASS, UI_GLASS_ADAPTIVE_REGION_CLASS, UI_SEGMENTED_TRACK_CLASS, UI_TEXT_META_CLASS, UiButton, UiEmpty, UiError, UiIconButton, UiInput, UiOptionButton, UiPageHeader, UiRangeInput, UiSharedGlassHost } from '@/components/ui'
+import { FolderPlus, GripVertical, LoaderCircle, Settings2, X } from 'lucide-react'
+import { Dropdown, PanelTrigger, UI_FIELD_LABEL_CLASS, UI_GLASS_ADAPTIVE_DIVIDER_CLASS, UI_GLASS_ADAPTIVE_REGION_CLASS, UI_SEGMENTED_TRACK_CLASS, UI_TEXT_META_CLASS, UiButton, UiEmpty, UiError, UiIconButton, UiSearchInput, UiOptionButton, UiPageHeader, UiRangeInput, UiSharedGlassHost } from '@/components/ui'
 import type { AssetLibraryRecord, AssetMediaType, AssetPage, AssetRecord } from '@/platform/contracts/assetLibrary'
 import { addAssetToLibrary, createAssetLibrary, deleteAsset, deleteAssetLibrary, inspectAssets, listAssetLibraries, listAssetTags, queryAssets, removeAssetFromLibrary, renameAssetLibrary, setAssetTags, updateAsset } from '@/commands/assetLibrary'
 import { ICON_MULTI_SELECT } from '@/core/theme/icons'
@@ -232,10 +232,7 @@ export const AssetLibrarySurface: React.FC<Props> = ({ mode, active = true, onCl
   // 视图控制（静默触发器）：工作区放在页头命令带，浮动面板放在网格上方那一条。
   const viewControls = (
     <>
-      <div className={`relative ${mode === 'workspace' ? 'w-56 shrink' : 'min-w-36 flex-1'}`}>
-        <Search aria-hidden="true" className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-text3" />
-        <UiInput className="pl-8" value={keyword} onChange={(event) => setKeyword(event.target.value)} placeholder={t('assetLibrary.search')} aria-label={t('assetLibrary.search')} />
-      </div>
+      <UiSearchInput className={mode === 'workspace' ? 'w-56 shrink' : 'min-w-36 flex-1'} value={keyword} onChange={(event) => setKeyword(event.target.value)} placeholder={t('assetLibrary.search')} aria-label={t('assetLibrary.search')} />
       <Dropdown<'all' | AssetMediaType> appearance="text" value={mediaType ?? 'all'} options={[{ value: 'all', label: t('assetLibrary.allTypes') }, { value: 'image', label: t('assetLibrary.image') }, { value: 'video', label: t('assetLibrary.video') }, { value: 'audio', label: t('assetLibrary.audio') }, { value: 'code', label: t('assetLibrary.code') }]} onSelect={(value) => setMediaType(value === 'all' ? null : value)} className="shrink-0" buttonClassName="w-auto" minWidthStrategy="options" panelWidthStrategy="options" />
       <Dropdown<'created' | 'recent'> appearance="text" value={sort} options={[{ value: 'created', label: t('assetLibrary.newest') }, { value: 'recent', label: t('assetLibrary.recent') }]} onSelect={setSort} className="shrink-0" buttonClassName="w-auto" minWidthStrategy="options" panelWidthStrategy="options" />
       <Dropdown<string> appearance="text" value={selectedTag ?? ''} options={[{ value: '', label: t('assetLibrary.allTags') }, ...availableTags.map((tag) => ({ value: tag, label: tag }))]} onSelect={(value) => setSelectedTag(value || null)} className="shrink-0" buttonClassName="w-auto max-w-40" minWidthStrategy="options" panelWidthStrategy="options" />

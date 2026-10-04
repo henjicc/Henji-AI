@@ -424,7 +424,7 @@ const InputArea: React.FC<InputAreaProps> = ({
             }
             className="relative isolate"
             // 内容基础类已有 px-3 py-2.5 text-sm：这里用 pl/pr/pt/pb 与 text-14（产物中排在其后）收紧，不与之抢同一属性的同名档
-            editorClassName={`ui-scrollbar w-full pl-2 pr-2 pt-1 pb-1 text-14 ${promptHeightClass}`}
+            editorClassName={`w-full pl-2 pr-2 pt-1 pb-1 text-14 ${promptHeightClass}`}
             disabled={isLoading || isPromptOptimizing || renderPromptOptimizationPreview}
           />
           {renderPromptOptimizationPreview ? (

@@ -97,20 +97,19 @@ describe('packages/ai-sdk/docs/model-adaptation APIMart 视频模型', () => {
       model: 'gemini-omni-flash-preview', image_urls: ['a.png'], video_urls: ['v.mp4'],
       resolution: '720p'
     })
-    expect(apimartGeminiOmniFlashModel.request?.builder?.({
+    // 延续任务 ID 用户拿不到：不注册、不下发（界面计划 5.8，P-17）；旧工程里残留的值也不进请求
+    const continued = apimartGeminiOmniFlashModel.request?.builder?.({
       prompt: 'continue', apimartGeminiOmniFlashExtendTaskId: ' task-1 '
-    })).toMatchObject({
-      model: 'gemini-omni-flash-preview', extend_from_task_id: 'task-1', resolution: '720p'
-    })
+    }) as Record<string, unknown>
+    expect(continued).toMatchObject({ model: 'gemini-omni-flash-preview', resolution: '720p' })
+    expect(continued).not.toHaveProperty('extend_from_task_id')
+    expect(apimartGeminiOmniFlashModel.params.map((param) => param.id)).not.toContain('apimartGeminiOmniFlashExtendTaskId')
   })
 
-  it('Gemini Omni Flash 官方渠道最多支持 4 图并拦截视频与延续任务冲突', () => {
+  it('Gemini Omni Flash 官方渠道最多支持 4 图', () => {
     // 官方模型页原文："最多 4 张参考图"（apimart.ai/zh/model/gemini-omni-flash-preview）
     const images = Array.from({ length: 16 }, (_, index) => `${index}.png`)
     expect(apimartGeminiOmniFlashModel.request?.builder?.({ prompt: 'group', images })).toMatchObject({ image_urls: images.slice(0, 4) })
-    expect(() => apimartGeminiOmniFlashModel.request?.builder?.({
-      prompt: 'conflict', videos: ['source.mp4'], apimartGeminiOmniFlashExtendTaskId: 'task-1'
-    })).toThrow(/video|task|\u89c6频|\u4efb务/u)
   })
 
   it('Gemini Omni Flash 在统一模型中切换普通渠道的离散时长、图片约束和价格', async () => {

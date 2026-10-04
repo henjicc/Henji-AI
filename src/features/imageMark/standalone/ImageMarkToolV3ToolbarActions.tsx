@@ -163,7 +163,7 @@ export function ImageMarkToolV3ToolbarActions({
                 data-panel-trigger-button
                 data-export-readiness={host.rasterExportReadiness.state}
                 variant="primary"
-                className="shrink-0 whitespace-nowrap"
+                className="shrink-0"
                 disabled={host.isHostBusy || exportUnavailable}
                 title={exportReason}
                 aria-expanded={open}

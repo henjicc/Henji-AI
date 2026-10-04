@@ -58,7 +58,7 @@ export function AssistantSidebar({ workspaceRef }: AssistantSidebarProps): JSX.E
   const setMode = useAssistantUiStore((state) => state.setMode)
   const setFloatingPosition = useAssistantUiStore((state) => state.setFloatingPosition)
   const setSize = useAssistantUiStore((state) => state.setSize)
-  const { shouldRender, isVisible } = useDialogTransition(open, UI_DIALOG_TRANSITION_MS)
+  const { shouldRender, isVisible, closing, onTransitionEnd } = useDialogTransition(open, UI_DIALOG_TRANSITION_MS)
   const interaction = useAssistantPanelInteraction({
     enabled: open,
     mode,
@@ -114,6 +114,9 @@ export function AssistantSidebar({ workspaceRef }: AssistantSidebarProps): JSX.E
         data-application-surface-id="overlay.assistant"
         aria-label="智能助手"
         aria-hidden={!open}
+        // 收起中不可点击；过渡结束即卸载，不只依赖计时器（任务 5.8）
+        {...(closing ? { inert: '' } : {})}
+        onTransitionEnd={onTransitionEnd}
         className={`relative flex h-full min-h-0 w-full flex-col overflow-hidden ${UI_PANEL_SURFACE_CLASS} transition-[opacity,transform] duration-180 ease-out ${
           interaction.dragging ? SURFACE_BY_MODE.floating : SURFACE_BY_MODE[mode]
         } ${isVisible ? 'pointer-events-auto translate-x-0 translate-y-0 scale-100 opacity-100' : `pointer-events-none ${hiddenTransform}`}`}

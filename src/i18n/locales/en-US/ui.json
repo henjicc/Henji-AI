@@ -380,10 +380,15 @@
     "volume": "Volume"
   },
   "errorState": {
-    "title": "Something went wrong",
-    "details": "View details"
+    "title": "Couldn't complete this",
+    "details": "View details",
+    "retry": "Retry"
   },
   "workspace": {
+    "resultMissing": {
+      "title": "Result file missing",
+      "message": "The file was moved or deleted, so it can't be previewed or downloaded. Regenerate it, or delete this record."
+    },
     "inputImageAlt": "Input image {{index}}",
     "panelHint": "Hover here to expand the input panel…",
     "actions": {

@@ -10,10 +10,16 @@
  * 它已经处在某个容器内部，再套一层边框背景就是卡片套卡片。
  */
 import type { ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 import { UiButton } from './primitives';
 import { UI_TEXT_META_CLASS, UI_TEXT_PANEL_TITLE_CLASS, UI_TEXT_SECTION_CLASS } from './styleTokens';
 
 type StateSize = 'xs' | 'sm' | 'md';
+/**
+ * `node`：画布节点内容区的空占位（“等待结果”等）。铺满节点内容区、图标 + 12 号次要文字，
+ * 比 xs 档更贴合节点的小尺寸；图标尺寸由调用点按节点类型传入（5.8，5.4-36）。
+ */
+type EmptySize = StateSize | 'node';
 
 interface UiEmptyProps {
   /** 图标节点（建议传 lucide 图标）；不传则不显示 */
@@ -22,7 +28,7 @@ interface UiEmptyProps {
   description?: ReactNode;
   /** 主操作 */
   action?: ReactNode;
-  size?: StateSize;
+  size?: EmptySize;
   className?: string;
 }
 
@@ -35,6 +41,7 @@ interface UiLoadingProps {
 }
 
 interface UiErrorProps {
+  /** 失败标题（危险色）。不传时用缺省标题“操作未完成”（5.8，B-36）；调用点有更具体的说法就传入。 */
   title?: ReactNode;
   message: ReactNode;
   /** 操作区，通常是重试按钮 */
@@ -65,6 +72,16 @@ export function UiEmpty({
   size = 'md',
   className = '',
 }: UiEmptyProps): JSX.Element {
+  if (size === 'node') {
+    return (
+      <div className={`flex h-full w-full flex-col items-center justify-center gap-2 text-center ${className}`}>
+        {icon ? <div className="text-text3">{icon}</div> : null}
+        <div className="px-4 text-xs leading-6 text-text2">{title}</div>
+        {description ? <p className={`px-4 ${UI_TEXT_META_CLASS}`}>{description}</p> : null}
+        {action ? <div className="mt-1 flex items-center gap-2">{action}</div> : null}
+      </div>
+    );
+  }
   return (
     <div className={`flex flex-col items-center justify-center text-center ${resolvePadding(size)} ${className}`}>
       {icon ? <div className="mb-3 text-text3">{icon}</div> : null}
@@ -116,13 +133,16 @@ export function UiError({
   align = 'center',
   className = '',
 }: UiErrorProps): JSX.Element {
+  const { t } = useTranslation('ui');
   const start = align === 'start';
+  // 失败必须一眼可辨：没有标题时正文只是弱化小字，看不出是错误，所以总有一行危险色标题
+  const resolvedTitle = title ?? t('errorState.title', '操作未完成');
   return (
     <div
       className={`flex flex-col ${start ? 'items-start text-left' : 'items-center justify-center text-center'} ${resolvePadding(size)} ${className}`}
       role="alert"
     >
-      {title ? <div className="text-sm font-medium text-danger-text">{title}</div> : null}
+      <div className="text-sm font-medium text-danger-text">{resolvedTitle}</div>
       {/* 标题已经是完整的失败说明时，调用方传空正文，这里不再留一行空白 */}
       {message ? <p className={`mt-1.5 max-w-md break-words ${UI_TEXT_META_CLASS}`}>{message}</p> : null}
       {(actions || onRetry) && (
@@ -130,7 +150,7 @@ export function UiError({
           {actions}
           {onRetry ? (
             <UiButton variant="secondary" onClick={onRetry}>
-              {retryLabel ?? '重试'}
+              {retryLabel ?? t('errorState.retry', '重试')}
             </UiButton>
           ) : null}
         </div>

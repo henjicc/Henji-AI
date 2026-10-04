@@ -1,5 +1,5 @@
 /** @vitest-environment jsdom */
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 
 /*
@@ -13,7 +13,13 @@ vi.mock('react-virtuoso', () => ({
   }) => <div>{data.map((item, index) => <div key={index}>{itemContent(index, item)}</div>)}</div>,
 }))
 
+import i18n from '@/i18n/config'
 import { ModelSyncDialog } from './ModelSyncDialog'
+
+// 文案走 i18n（任务 5.8，B-39）：断言按中文界面
+beforeAll(async () => {
+  await i18n.changeLanguage('zh-CN')
+})
 
 afterEach(cleanup)
 

@@ -89,12 +89,9 @@ export const apimartGeminiOmniFlashModel = defineModel({
         { value: 'reference' },
         { value: 'frame' }
       ]
-    },
-    {
-      id: 'apimartGeminiOmniFlashExtendTaskId', type: 'text', order: 5,
-      default: '',
-      visible: { condition: (params) => params.apimartGeminiOmniFlashChannel !== 'ext' }
     }
+    // extend_from_task_id（多轮延续）要填供应商侧的上一次任务 ID，界面不展示任务 ID、用户也拿不到：
+    // 按“不显示且不请求”处理（界面计划 5.8，P-17）；以后做成生成记录上的“继续编辑”动作再接入
   ],
   endpoints: '/v1/videos/generations',
   request: {
@@ -138,13 +135,7 @@ export const apimartGeminiOmniFlashModel = defineModel({
         return body
       }
 
-      const extendTaskId = typeof params.apimartGeminiOmniFlashExtendTaskId === 'string'
-        ? params.apimartGeminiOmniFlashExtendTaskId.trim()
-        : ''
-      if (videos.length > 0 && extendTaskId) {
-        throw new Error('Gemini Omni Flash 官方渠道不能同时传入参考视频和延续任务 ID')
-      }
-      if (!prompt && images.length + videos.length === 0 && !extendTaskId) {
+      if (!prompt && images.length + videos.length === 0) {
         throw new Error('Gemini Omni Flash 官方渠道至少需要提示词或一份参考素材')
       }
       const body: JsonObject = {
@@ -156,7 +147,6 @@ export const apimartGeminiOmniFlashModel = defineModel({
       }
       if (images.length > 0) body.image_urls = images.slice(0, 4)
       if (videos.length > 0) body.video_urls = videos.slice(0, 1)
-      if (extendTaskId) body.extend_from_task_id = extendTaskId
       return body
     }
   },

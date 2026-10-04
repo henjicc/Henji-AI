@@ -112,7 +112,7 @@ export function AssistantMemoryPanel(): JSX.Element {
   return (
     <section
       aria-label="助手记忆"
-      className="ui-scrollbar min-h-0 flex-1 overflow-y-auto px-3 pb-3 pt-2 [contain:layout_paint_style]"
+      className="min-h-0 flex-1 overflow-y-auto px-3 pb-3 pt-2 [contain:layout_paint_style]"
     >
       {loading && !state ? (
         <UiLoading size="sm" message="正在读取" />

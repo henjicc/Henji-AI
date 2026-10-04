@@ -168,7 +168,7 @@ export function SplitStoryboardToolEditor({ sourceImageUrl, options, onOptionsCh
         </div>
 
         <div
-          className={`ui-scrollbar flex ${PREVIEW_VIEWPORT_HEIGHT} items-center justify-center overflow-auto rounded-lg bg-gap p-3`}
+          className={`flex ${PREVIEW_VIEWPORT_HEIGHT} items-center justify-center overflow-auto rounded-lg bg-gap p-3`}
         >
           <div className="relative inline-flex items-center justify-center">
             <img
@@ -295,7 +295,7 @@ export function SplitStoryboardToolEditor({ sourceImageUrl, options, onOptionsCh
         </UiPanel>
 
         {hasLayoutError && (
-          <UiError size="xs" align="start" message={t('toolDialog.split.layoutError')} />
+          <UiError size="xs" align="start" title={t('toolDialog.split.layoutError')} message="" />
         )}
       </UiGroup>
     </div>

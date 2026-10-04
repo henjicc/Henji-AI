@@ -21,7 +21,7 @@ export function EmbeddedHistory({ visible, onOpen }: { visible: boolean; onOpen(
       .finally(() => { if (!disposed) setLoading(false) })
     return () => { disposed = true }
   }, [visible, replying])
-  return <div className="ui-scrollbar flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto p-2">
+  return <div className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto p-2">
     {state.error ? <UiError size="xs" align="start" title="操作未完成" message={assistantErrorMessage(state.error)} className="px-2" /> : null}
     {replying ? <p className={`px-2 py-1.5 ${UI_TEXT_SECONDARY_CLASS}`}>请先停止当前回复，再打开其他对话。</p> : null}
     {loading && !sessions.length ? <UiLoading size="xs" message="正在读取对话" />

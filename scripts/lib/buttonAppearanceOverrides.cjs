@@ -36,6 +36,10 @@ const CHECKED_ATTRIBUTES = {
   UiTextToken: 'className',
   // 4.3：单行溢出收纳，className 只放布局（间距、弹性）
   UiOverflowRow: 'className',
+  // 5.8：搜索框（B-35）className 落在外层，只放宽度与伸缩；文本框无框形态用 frame="none"，不在调用点去边框去底
+  UiSearchInput: 'className',
+  UiTextArea: 'className',
+  UiTextAreaField: 'className',
   Dropdown: 'buttonClassName',
   PanelTrigger: 'buttonClassName',
 };
@@ -43,6 +47,8 @@ const CHECKED_COMPONENTS = new Set(Object.keys(CHECKED_ATTRIBUTES));
 /** 内容随网格拉伸或随内容撑高的条目类组件：只禁止固定高度。 */
 const ITEM_COMPONENTS = new Set(['UiOptionButton', 'UiChipButton', 'UiNavButton']);
 const ITEM_FLEXIBLE_HEIGHT = /^(?:h-full|h-auto|min-h-.+|max-h-.+)$/;
+/** 多行文本框没有高度档：高度（行数、铺满）是布局，只禁外观。 */
+const TEXT_AREA_COMPONENTS = new Set(['UiTextArea', 'UiTextAreaField']);
 
 const LINE_ALLOW_MARKER = 'ui-surface-allow';
 
@@ -72,6 +78,7 @@ function classifyToken(token, component) {
   if (/^(ui-glass|backdrop-|brightness-|saturate-|contrast-)/.test(token)) return '材质';
   if (token === 'underline' || /^(underline-offset|decoration)-/.test(token)) return '下划线（用 variant="link"）';
   if (/^(h|min-h|max-h)-/.test(token)) {
+    if (TEXT_AREA_COMPONENTS.has(component)) return null;
     if (ITEM_COMPONENTS.has(component) && ITEM_FLEXIBLE_HEIGHT.test(token)) return null;
     return '高度（用 size）';
   }

@@ -45,6 +45,8 @@ export interface GenerationTask {
   uploadedVideoFilePaths?: string[]
   uploadedAudioFilePaths?: string[]
   serverTaskId?: string
+  /** 记录里有结果文件路径，但文件已被移动或删除（历史加载时检查，任务 5.8 / 5.7-24） */
+  resultFileMissing?: boolean
 
   dimensions?: string
   duration?: string

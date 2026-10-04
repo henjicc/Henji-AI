@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Pencil, Trash2 } from 'lucide-react'
-import { PanelTrigger, UI_FIELD_LABEL_CLASS, UI_TEXT_META_CLASS, UI_TEXT_PANEL_TITLE_CLASS, UiButton, UiChipButton, UiError, UiIconButton, UiInput } from '@/components/ui'
+import { PanelTrigger, UI_FIELD_LABEL_CLASS, UI_TEXT_META_CLASS, UI_TEXT_PANEL_TITLE_CLASS, UiButton, UiChipButton, UiError, UiIconButton, UiInput, UiSearchInput } from '@/components/ui'
 import { ICON_MULTI_SELECT } from '@/core/theme/icons'
 import type { AssetLibraryRecord, AssetRecord } from '@/platform/contracts/assetLibrary'
 import { useI18n } from '@/hooks/useI18n'
@@ -133,7 +133,7 @@ export const AssetCardMenu: React.FC<Props> = ({ asset, anchor, libraries, avail
       <UiInput disabled={pendingAction !== null} aria-label={t('assetLibrary.tags')} value={tagDraft} onChange={(event) => setTagDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void addDraftTag() }} placeholder={t('assetLibrary.tagPlaceholder')} />
       <div className="mt-2 flex flex-wrap gap-1.5"><UiChipButton active disabled size="sm">{t(`assetLibrary.${asset.mediaType}`)}</UiChipButton>{tags.map((tag) => <UiChipButton key={tag} active disabled={pendingAction !== null} size="sm" onClick={() => void applyTags(tags.filter((item) => item !== tag))}>{tag}</UiChipButton>)}{tagDraft && suggestions.map((tag) => <UiChipButton key={tag} disabled={pendingAction !== null} size="sm" onClick={() => { setTagDraft(''); void applyTags([...tags, tag]) }}>{tag}</UiChipButton>)}</div>
       <div className={`mt-4 ${UI_FIELD_LABEL_CLASS}`}>{t('assetLibrary.membership')}</div>
-      {libraries.length > 6 && <UiInput className="mb-2" aria-label={t('assetLibrary.searchLibraries')} value={librarySearch} onChange={(event) => setLibrarySearch(event.target.value)} placeholder={t('assetLibrary.searchLibraries')} />}
+      {libraries.length > 6 && <UiSearchInput className="mb-2" aria-label={t('assetLibrary.searchLibraries')} value={librarySearch} onChange={(event) => setLibrarySearch(event.target.value)} placeholder={t('assetLibrary.searchLibraries')} />}
       {libraries.length === 0 ? <p className={UI_TEXT_META_CLASS}>{t('assetLibrary.noLibraries')}</p> : null}
       <div className="max-h-32 overflow-y-auto"><div className="flex flex-wrap gap-1.5">{filteredLibraries.map((library) => <UiChipButton key={library.id} active={libraryIds.includes(library.id)} disabled={pendingAction !== null} size="sm" onClick={() => void toggleLibrary(library.id)}>{library.name}</UiChipButton>)}</div></div>
       {actionError ? <UiError size="xs" align="start" className="pb-0" title={actionError} message="" /> : null}

@@ -223,6 +223,17 @@ const TaskCard = React.memo(function TaskCard({
         </div>
       )
     }
+    if (task.status === 'success' && task.resultFileMissing) {
+      // 结果文件被移动或删除（5.7-24）：说明后果与可做的事，不让记录只剩标题和元信息
+      return (
+        <UiError
+          size="xs"
+          align="start"
+          title={t("ui:workspace.resultMissing.title")}
+          message={t("ui:workspace.resultMissing.message")}
+        />
+      )
+    }
     if (task.status !== "success" || !task.result) return null
 
     if (task.result.type === "image") {

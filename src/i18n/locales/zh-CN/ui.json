@@ -380,10 +380,15 @@
     "volume": "音量"
   },
   "errorState": {
-    "title": "出错了",
-    "details": "查看详情"
+    "title": "操作未完成",
+    "details": "查看详情",
+    "retry": "重试"
   },
   "workspace": {
+    "resultMissing": {
+      "title": "结果文件已丢失",
+      "message": "文件已被移动或删除，无法预览和下载。可以重新生成，或删除这条记录。"
+    },
     "inputImageAlt": "输入图片 {{index}}",
     "panelHint": "移到这里展开输入面板…",
     "actions": {

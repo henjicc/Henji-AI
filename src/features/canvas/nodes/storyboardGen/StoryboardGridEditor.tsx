@@ -62,7 +62,7 @@ function FrameDescriptionEditor({
         placeholder={`分镜 ${String(index + 1).padStart(2, '0')} 描述`}
         className="nodrag nowheel relative h-full min-h-0 w-full cursor-text"
         editorShellClassName="relative h-full min-h-0 w-full cursor-text overflow-visible !rounded-none !border-0 !bg-transparent !shadow-none focus-within:!ring-0"
-        editorClassName="ui-scrollbar nodrag nowheel h-full min-h-0 overflow-y-auto overflow-x-hidden !px-1.5 !py-1 text-left !text-[length:var(--storyboard-frame-font-size)] !leading-[var(--storyboard-frame-line-height)]"
+        editorClassName="nodrag nowheel h-full min-h-0 overflow-y-auto overflow-x-hidden !px-1.5 !py-1 text-left !text-[length:var(--storyboard-frame-font-size)] !leading-[var(--storyboard-frame-line-height)]"
       />
     </div>
   )

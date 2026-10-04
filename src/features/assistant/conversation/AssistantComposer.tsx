@@ -168,10 +168,10 @@ export function AssistantComposer({
         }}
       /> : null}
       {attachmentError ? <UiError size="xs" align="start" message={attachmentError} /> : null}
-      {unavailable ? <UiError size="xs" align="start" message="当前模型无法读取部分附件，请移除这些附件或切换模型。" /> : null}
+      {unavailable ? <UiError size="xs" align="start" title="当前模型无法读取部分附件" message="请移除这些附件或切换模型。" /> : null}
       <div data-assistant-composer-field className={`rounded-lg ${UI_FIELD_SURFACE_CLASS} ${UI_FIELD_FOCUS_WITHIN_CLASS} ${submitting ? 'opacity-70' : ''}`}>
         {attachments.length > 0 ? (
-          <div className="ui-scrollbar flex gap-2 overflow-x-auto px-2 pb-1 pt-2">
+          <div className="flex gap-2 overflow-x-auto px-2 pb-1 pt-2">
             {attachments.map(item => (
               <div key={item.attachment.mediaRef} className="relative w-20 shrink-0">
                 {item.attachment.modality === 'image' ? (
@@ -217,7 +217,7 @@ export function AssistantComposer({
           submitShortcut="enter"
           onSubmit={submit}
           // 内容基础类已有 px-3 py-2.5 text-sm：这里用 pt/pb 与 text-13（产物中排在其后）收紧，不与之抢同一属性的同名档
-          editorClassName="ui-scrollbar max-h-32 min-h-16 pt-2 pb-1 text-13"
+          editorClassName="max-h-32 min-h-16 pt-2 pb-1 text-13"
         />
         {/* 底栏始终单行：左侧附件与权限，右侧停止与唯一主动作“发送”（强调色实底圆钮，与生成页一致） */}
         <div className="flex flex-nowrap items-center gap-1 px-1.5 pb-1.5">

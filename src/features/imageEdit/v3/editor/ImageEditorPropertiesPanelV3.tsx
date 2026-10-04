@@ -222,7 +222,7 @@ export function ImageEditorPropertiesPanelV3({
         id={`image-editor-properties-${activeTab}`}
         role="tabpanel"
         data-properties-tab-panel={activeTab}
-        className={`ui-scrollbar min-h-0 flex-1 overflow-y-auto ${embedded ? 'px-3 py-3' : 'px-4 py-3'}`}
+        className={`min-h-0 flex-1 overflow-y-auto ${embedded ? 'px-3 py-3' : 'px-4 py-3'}`}
       >
       {activeTab === 'basics' ? (
       <UiGroup titleTone="compact" gap="stack">

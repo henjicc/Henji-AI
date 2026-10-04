@@ -61,8 +61,10 @@ export function TextEditOverlay({
   };
 
   return (
+    // ui-surface-allow 文字图层就地编辑：字号、底色、内边距来自图层内容（见 style），强调色外框是编辑态指示，不是字段外观（5.8 复核保留）
     <UiTextAreaField
       ref={textInputRef}
+      frame="none"
       value={state.value}
       placeholder={isLabel ? '输入文字' : ''}
       spellCheck={false}
@@ -87,9 +89,7 @@ export function TextEditOverlay({
         }
       }}
       rows={1}
-      className={`absolute z-sticky !min-h-0 resize-none overflow-hidden whitespace-pre !rounded-sm !border-0 font-semibold caret-accent outline outline-2 outline-accent/90 focus:!ring-0 ${
-        state.backgroundColor ? '' : '!bg-transparent'
-      }`}
+      className="absolute z-sticky !min-h-0 resize-none overflow-hidden whitespace-pre !rounded-sm font-semibold caret-accent outline outline-2 outline-accent/90"
       style={{
         left: `${position.x - backgroundPadding}px`,
         top: `${position.y - backgroundPadding}px`,

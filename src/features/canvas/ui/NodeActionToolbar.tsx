@@ -295,7 +295,7 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
       className={NODE_TOOLBAR_CLASS}
     >
       {/* 工具条浮在画布/图片节点之上，背后是用户内容而非纯色 UI，走玻璃材质 */}
-      <UiPanel ref={toolbarPanelRef} variant="glass" data-node-toolbar-panel className="ui-scrollbar flex w-max items-center gap-1 overflow-x-auto p-1 [&>*]:shrink-0">
+      <UiPanel ref={toolbarPanelRef} variant="glass" data-node-toolbar-panel className="flex w-max items-center gap-1 overflow-x-auto p-1 [&>*]:shrink-0">
         {canTriggerGeneration && (
           <UiButton
             key="node-generate"

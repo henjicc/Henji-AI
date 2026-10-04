@@ -87,7 +87,7 @@ export const OutpaintStage = memo(function OutpaintStage({ source, params, maxim
   return (
     <div ref={host} className="nowheel relative min-h-0 w-full flex-1 overflow-hidden" data-outpaint-stage style={{ containerType: 'size' }}
       onMouseLeave={() => { if (wheelTimer.current) commitRef.current?.() }}>
-      {failed ? <UiError message={t('node.outpaint.loadFailed')} /> : !image && <UiLoading />}
+      {failed ? <UiError title={t('node.outpaint.loadFailed')} message="" /> : !image && <UiLoading />}
       <div className="absolute left-0 top-0 origin-top-left" style={{ width: viewport.width, height: viewport.height, transform: `scale(calc(100cqw / ${viewport.width}px))` }}>
       {scene && <div className={`pointer-events-none absolute overflow-hidden ${texture ? '' : 'image-editor-transparency-grid'}`}
         data-outpaint-preview={texture ? 'ready' : 'pending'}

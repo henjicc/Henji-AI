@@ -127,11 +127,13 @@ describe('catalog consumer contract', () => {
         fields: ['apiField', 'default', 'id', 'order', 'transferKey', 'type', 'valueType', 'visible'],
       },
       text: {
-        count: 15,
+        // 5.8（P-17）：删掉用户拿不到的“延续任务 ID”
+        count: 14,
         fields: ['default', 'id', 'maxLength', 'order', 'required', 'type', 'visible'],
       },
       textarea: {
-        count: 4,
+        // 5.8（P-17）：删掉用户拿不到的 KIE 音频 / 角色资产 ID
+        count: 2,
         fields: ['default', 'id', 'order', 'type', 'visible'],
       },
     })
@@ -165,14 +167,14 @@ describe('catalog consumer contract', () => {
     }
   })
 
-  it('编译并执行真实 catalog 的全部 189 条显隐/inputLimits/requirement 条件', () => {
+  it('编译并执行真实 catalog 的全部 188 条显隐/inputLimits/requirement 条件', () => {
     const conditions = collectCatalogConditions()
     const stringConditions = conditions.filter((item) => typeof item.condition === 'string')
     const functionConditions = conditions.filter((item) => typeof item.condition === 'function')
 
-    expect(conditions).toHaveLength(189)
+    expect(conditions).toHaveLength(188)
     expect(stringConditions).toHaveLength(126)
-    expect(functionConditions).toHaveLength(63)
+    expect(functionConditions).toHaveLength(62)
 
     for (const { modelId, condition } of conditions) {
       if (typeof condition === 'string') expect(() => compileRuntimeCondition(condition)).not.toThrow()

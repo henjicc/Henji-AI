@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Plus, Search } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import ContextMenu from '@/components/ContextMenu';
 import { DeleteConfirmDialog } from '@/components/DeleteConfirmDialog';
@@ -14,7 +14,7 @@ import {
   type ProjectSelectionToolbarLabels,
 } from '@/components/ProjectSelectionToolbar';
 import { RenameDialog } from '@/components/RenameDialog';
-import { Dropdown, UiButton, UiInput, UiPageHeader, UiRegion } from '@/components/ui';
+import { Dropdown, UiButton, UiSearchInput, UiPageHeader, UiRegion } from '@/components/ui';
 import { PROJECT_GRID_MAX_WIDTH_CLASS } from '@/components/projectGridLayout';
 import {
   PROJECT_LIBRARY_SORT_ORDER,
@@ -154,7 +154,7 @@ export function ProjectLibraryPage({
   return (
     // 列数由窗口宽度算出（见 projectGridLayout.ts），左右留白交给这里的横向 padding。
     // 最大宽度封顶列数，标题区与网格共用它，否则宽屏上「新建」按钮会飞到网格右边之外。
-    <div className="ui-scrollbar h-full w-full overflow-auto bg-window px-6 py-8 xl:px-10">
+    <div className="h-full w-full overflow-auto bg-window px-6 py-8 xl:px-10">
       <UiRegion maxWidthClassName={PROJECT_GRID_MAX_WIDTH_CLASS} className="mx-auto">
         <UiPageHeader
           className="mb-7"
@@ -173,17 +173,14 @@ export function ProjectLibraryPage({
             <>
               {items.length > 0 ? (
                 <>
-                  <div className="relative w-56">
-                    <Search aria-hidden="true" className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-text3" />
-                    <UiInput
-                      className="pl-8"
+                  <UiSearchInput
+                      className="w-56"
                       value={query}
                       aria-label={labels.searchPlaceholder}
                       placeholder={labels.searchPlaceholder}
                       onChange={(event) => setQuery(event.target.value)}
                       onKeyDown={(event) => { if (event.key === 'Escape') setQuery('') }}
                     />
-                  </div>
                   <Dropdown<ProjectLibrarySort>
                     appearance="text"
                     value={sort}

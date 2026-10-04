@@ -1,7 +1,7 @@
 import { memo, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { Virtuoso } from 'react-virtuoso'
 import { FileInput, FileOutput, MoreHorizontal, Plus } from 'lucide-react'
-import { Dropdown, PanelTrigger, UiButton, UiChipButton, UiEmpty, UiError, UiFormRow, UiGroup, UiIconButton, UiInput, UiOptionButton, UiTextAreaField } from '@/components/ui'
+import { Dropdown, PanelTrigger, UiButton, UiChipButton, UiEmpty, UiError, UiFormRow, UiGroup, UiIconButton, UiSearchInput, UiOptionButton, UiTextAreaField } from '@/components/ui'
 import { Z_LAYERS } from '@/core/theme/zLayers'
 import NumberInput from '@/components/ui/NumberInput'
 import { UI_TEXT_META_CLASS } from '@/components/ui/styleTokens'
@@ -23,7 +23,7 @@ function ContentAnchor({ clips, value, disabled, onChange }: { clips: VideoEditC
   const choices = useMemo(() => clips.filter(clip => clip.name.toLocaleLowerCase().includes(search.toLocaleLowerCase())), [clips, search])
   const selected = clips.find(clip => clip.id === value)
   return <Dropdown key={value} ariaLabel="内容锚定" size="sm" className="w-full" display={value ? selected?.name ?? '所属片段已移除' : '序列时钟'} disabled={disabled} renderPanel={() => <div className="flex h-64 min-w-48 flex-col gap-2 p-2">
-    <UiInput aria-label="搜索锚定片段" placeholder="搜索片段" value={search} onChange={event => setSearch(event.target.value)} />
+    <UiSearchInput aria-label="搜索锚定片段" placeholder="搜索片段" value={search} onChange={event => setSearch(event.target.value)} />
     <UiOptionButton variant="menu" active={!value} className="w-full" onClick={() => onChange('')}>序列时钟</UiOptionButton>
     <Virtuoso className="min-h-0 flex-1" data={choices} fixedItemHeight={30} computeItemKey={(_index, clip) => clip.id} itemContent={(_index, clip) => <div className="pb-0.5"><UiOptionButton variant="menu" active={value === clip.id} size="sm" className="w-full min-w-0" aria-label={`锚定片段：${clip.name}`} onClick={() => onChange(clip.id)}><span className="truncate">{clip.name}</span></UiOptionButton></div>} />
   </div>} />
@@ -124,7 +124,7 @@ function ContentWorkspace({ instance, sequence, onError }: { instance: VideoEdit
       </div>
     </div>
     <div className="shrink-0 px-2 py-1.5">
-      <UiInput aria-label="搜索字幕或标记" placeholder="搜索文字或片段" size="sm" className="w-full" value={keyword} onChange={event => setKeyword(event.target.value)} />
+      <UiSearchInput aria-label="搜索字幕或标记" placeholder="搜索文字或片段" size="sm" className="w-full" value={keyword} onChange={event => setKeyword(event.target.value)} />
     </div>
     <div className="min-h-0 flex-1 px-2" aria-label={kind === 'caption' ? '字幕列表' : '标记列表'}>
       {entries.length ? <Virtuoso className="h-full" data={entries} fixedItemHeight={56} increaseViewportBy={96} computeItemKey={(_index, entry) => entry.value.id} itemContent={(_index, entry) => <UiOptionButton variant="menu" active={selectedId === entry.value.id} disabled={busy} className="w-full min-w-0 flex-col !items-start" aria-label={`${entry.kind === 'caption' ? '字幕' : '标记'}：${entryText(entry)}`} data-video-edit-timed-entry={entry.value.id} data-entry-kind={entry.kind}

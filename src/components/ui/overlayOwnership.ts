@@ -1,6 +1,7 @@
 import { createContext, createElement, useContext, useId, useLayoutEffect, type ReactElement, type ReactNode } from 'react'
 
 import { elementOfEventTarget } from '@/utils/crossRealmDom'
+import { UiFormRowLabelContext } from './formRowLabel'
 
 /**
  * 浮层归属（任务 4.3，语义参照 Floating UI 的 FloatingTree）。
@@ -75,7 +76,12 @@ export function useUiOverlayLayer(open: boolean, options?: { modal?: boolean }):
 }
 
 export function UiOverlayLayerProvider({ id, children }: { id: string; children?: ReactNode }): ReactElement {
-  return createElement(UiOverlayParentContext.Provider, { value: id }, children)
+  // 浮层内容不继承打开它的那一行表单标签（portal 仍在同一棵 React 树里，上下文会穿透过来，任务 5.8）
+  return createElement(
+    UiOverlayParentContext.Provider,
+    { value: id },
+    createElement(UiFormRowLabelContext.Provider, { value: null }, children),
+  )
 }
 
 /** 当前所在的浮层（无则为 null）。 */

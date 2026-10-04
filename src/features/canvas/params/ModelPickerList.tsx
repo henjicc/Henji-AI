@@ -1,11 +1,10 @@
 import { useCallback, useLayoutEffect, useRef, useState, type RefObject } from 'react';
-import { Check, Search, X } from 'lucide-react';
+import { Check } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import {
-  UiIconButton,
-  UiInput,
   UiOptionButton,
+  UiSearchInput,
 } from '@/components/ui';
 import type { ModelPickerOption, ProviderFilterOption } from './useModelPickerList';
 
@@ -89,8 +88,8 @@ export function ModelPickerList({
   const searchPlaceholder = t('modelParams.searchPlaceholder', { defaultValue: '搜索模型名称、供应商或描述' });
   const measuredModels = modelsForWidthMeasurement ?? filteredModels;
   const listClassName = variant === 'inline'
-    ? 'ui-scrollbar mt-2 min-h-0 flex-1 space-y-1 overflow-y-auto pr-1'
-    : 'ui-scrollbar mt-2 h-[300px] min-h-0 shrink space-y-1 overflow-y-auto overscroll-contain pr-1';
+    ? 'mt-2 min-h-0 flex-1 space-y-1 overflow-y-auto pr-1'
+    : 'mt-2 h-[300px] min-h-0 shrink space-y-1 overflow-y-auto overscroll-contain pr-1';
 
   const updateProviderScrollMetrics = useCallback(() => {
     const providerList = providerListRef.current;
@@ -223,32 +222,17 @@ export function ModelPickerList({
         </div>
       )}
       <div data-model-picker-static-header className="shrink-0 space-y-2 border-b border-line/70 pb-2">
-        <div className="relative">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text2" />
-          <UiInput
+        <UiSearchInput
             ref={searchInputRef}
-            type="text"
             value={modelSearchQuery}
             onChange={(event) => onSearchChange(event.target.value)}
             textHistory={{ onValueChange: onSearchChange }}
             onKeyDown={(event) => event.stopPropagation()}
             placeholder={searchPlaceholder}
-            size="sm" className="pl-8 pr-8"
+            size="sm"
+            clearLabel={t('modelParams.clearSearch', { defaultValue: '清空搜索' })}
+            onClear={() => onSearchChange('')}
           />
-          {modelSearchQuery && (
-            <UiIconButton size="xs"
-              type="button"
-              onClick={(event) => {
-                event.stopPropagation();
-                onSearchChange('');
-              }}
-              className="absolute right-1 top-1/2 -translate-y-1/2"
-              title={t('modelParams.clearSearch', { defaultValue: '清空搜索' })}
-            >
-              <X className="h-3 w-3" />
-            </UiIconButton>
-          )}
-        </div>
         {/* 浮动面板的供应商行：28px 选项 + 常驻横向滑块，行高 44 让滑块与上方选项、下方分区边的间距相等
             （2.2 起选项为 sm 28，原 h-10 使滑块上方只剩约 5px、下方 8px） */}
         <div className={variant === 'floating' ? 'relative h-11' : 'relative'}>
@@ -256,7 +240,7 @@ export function ModelPickerList({
             ref={providerListRef}
             className={variant === 'floating'
               ? 'model-provider-scroll-viewport flex max-w-full gap-1 overflow-x-auto overscroll-x-contain'
-              : 'ui-scrollbar flex max-w-full gap-1 overflow-x-scroll overscroll-x-contain pb-2'}
+              : 'flex max-w-full gap-1 overflow-x-scroll overscroll-x-contain pb-2'}
             onScroll={updateProviderScrollMetrics}
             onWheel={(event) => {
               const providerList = event.currentTarget;

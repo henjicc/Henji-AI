@@ -8,7 +8,7 @@ import { hasOpenModalUiOverlayDescendant, resolveUiOverlayTarget, UiOverlayLayer
 interface Props { open: boolean; position: 'top' | 'left' | 'right'; onClose: () => void; onOpenWorkspace: () => void }
 
 export const AssetLibraryFloatingPanel: React.FC<Props> = ({ open, position, onClose, onOpenWorkspace }) => {
-  const { shouldRender, isVisible } = useDialogTransition(open, UI_DIALOG_TRANSITION_MS)
+  const { shouldRender, isVisible, onTransitionEnd } = useDialogTransition(open, UI_DIALOG_TRANSITION_MS)
   const panelRef = useRef<HTMLDivElement>(null)
   const overlay = useUiOverlayLayer(open)
 
@@ -31,5 +31,5 @@ export const AssetLibraryFloatingPanel: React.FC<Props> = ({ open, position, onC
     : position === 'left'
       ? isVisible ? 'translate-x-0 opacity-100' : '-translate-x-2 opacity-0'
       : isVisible ? 'translate-x-0 opacity-100' : 'translate-x-2 opacity-0'
-  return <UiPanel ref={panelRef} variant="glass" aria-hidden={!open} className={`fixed z-panel overflow-hidden transition-[opacity,transform] duration-180 ease-out ${isVisible ? 'pointer-events-auto' : 'pointer-events-none'} ${shouldRender ? 'visible' : 'invisible'} ${positionClass} ${motionClass}`} data-asset-floating-panel data-application-surface-id="overlay.assets" {...overlay.layerProps}><UiOverlayLayerProvider id={overlay.id}>{shouldRender ? <AssetLibrarySurface mode="floating" active={open} onClose={onClose} onOpenWorkspace={onOpenWorkspace} /> : null}</UiOverlayLayerProvider></UiPanel>
+  return <UiPanel ref={panelRef} variant="glass" aria-hidden={!open} {...(!open ? { inert: '' } : {})} onTransitionEnd={onTransitionEnd} className={`fixed z-panel overflow-hidden transition-[opacity,transform] duration-180 ease-out ${isVisible ? 'pointer-events-auto' : 'pointer-events-none'} ${shouldRender ? 'visible' : 'invisible'} ${positionClass} ${motionClass}`} data-asset-floating-panel data-application-surface-id="overlay.assets" {...overlay.layerProps}><UiOverlayLayerProvider id={overlay.id}>{shouldRender ? <AssetLibrarySurface mode="floating" active={open} onClose={onClose} onOpenWorkspace={onOpenWorkspace} /> : null}</UiOverlayLayerProvider></UiPanel>
 }

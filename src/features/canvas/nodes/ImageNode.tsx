@@ -39,6 +39,7 @@ import { useMicroThumbnail } from '@/features/canvas/nodes/shared/useMicroThumbn
 import { useDecodedImageSource } from '@/features/canvas/nodes/shared/useDecodedImageSource';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { uiTransition } from '@/components/ui/motion';
+import { UiEmpty } from '@/components/ui';
 
 type ImageNodeProps = NodeProps & {
   id: string;
@@ -142,16 +143,11 @@ export const ImageNode = memo(({ id, data, selected, type, width, height }: Imag
             className="h-full w-full object-contain"
           />
         ) : (
-          <div className="flex h-full w-full flex-col items-center justify-center gap-2 text-text2">
-            {isExportResultNode ? (
-              <ImageIcon className="h-7 w-7 text-text3" />
-            ) : (
-              <Sparkles className="h-7 w-7 text-text3" />
-            )}
-            <span className="px-4 text-center text-xs leading-6">
-              {isExportResultNode ? t('node.imageNode.waitingResult') : t('node.imageNode.selectToEdit')}
-            </span>
-          </div>
+          <UiEmpty
+            size="node"
+            icon={isExportResultNode ? <ImageIcon className="h-7 w-7" /> : <Sparkles className="h-7 w-7" />}
+            title={isExportResultNode ? t('node.imageNode.waitingResult') : t('node.imageNode.selectToEdit')}
+          />
         )}
 
         {isGenerating && (

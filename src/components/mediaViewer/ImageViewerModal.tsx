@@ -173,9 +173,10 @@ export function ImageViewerModal({
     }
     if (!isVisible) return;
     setOverlayOpacity(0);
+    // 与退出过渡同档（UI_DURATION.viewer）；过渡结束先到时由 onTransitionEnd 卸载（任务 5.8）
     closeTimerRef.current = window.setTimeout(() => {
       setIsVisible(false);
-    }, 400);
+    }, UI_DURATION.viewer);
     return () => {
       if (closeTimerRef.current) {
         clearTimeout(closeTimerRef.current);
@@ -236,6 +237,11 @@ export function ImageViewerModal({
         opacity: overlayOpacity,
         transition: uiTransition(['opacity'], UI_DURATION.viewer),
         pointerEvents: open ? 'auto' : 'none',
+      }}
+      aria-hidden={!open || undefined}
+      {...(!open ? { inert: '' } : {})}
+      onTransitionEnd={(event) => {
+        if (!open && event.target === event.currentTarget) setIsVisible(false);
       }}
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
@@ -429,7 +435,7 @@ export function ImageViewerModal({
 
           {failedOriginal && (
             <div className="absolute bottom-24 left-1/2 z-sticky -translate-x-1/2">
-              <UiError size="xs" message={t('viewer.originalUnavailable', '原图无法加载，仍可查看放大结果')} />
+              <UiError size="xs" title={t('viewer.originalUnavailable', '原图无法加载，仍可查看放大结果')} message="" />
             </div>
           )}
           <div data-viewer-controls="true" className="absolute bottom-8 left-1/2 z-sticky flex max-w-[calc(100%_-_2rem)] -translate-x-1/2 items-center gap-3 overflow-x-auto">
@@ -443,7 +449,6 @@ export function ImageViewerModal({
                     active={(comparisonAvailable ? requestedMode : 'single') === value}
                     aria-pressed={(comparisonAvailable ? requestedMode : 'single') === value}
                     disabled={value !== 'single' && !comparisonAvailable}
-                    className="whitespace-nowrap"
                     title={value !== 'single' && requestedMode === value
                       ? t('viewer.swapImages', '再次点击交换原图与放大图') : undefined}
                     onClick={() => {

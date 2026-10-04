@@ -44,7 +44,7 @@ export function TextProcessingSystemPromptEditor({
           onEditEnd={onEditEnd}
           className="nodrag nowheel relative cursor-text !rounded-md !border-0 !bg-transparent !p-0 !shadow-none"
           editorShellClassName="relative cursor-text !rounded-md !border-0 !bg-transparent !shadow-none focus-within:!ring-0"
-          editorClassName="ui-scrollbar nodrag nowheel !px-1.5 !py-1 !text-sm !leading-6"
+          editorClassName="nodrag nowheel !px-1.5 !py-1 !text-sm !leading-6"
         />
       </div>
     </div>

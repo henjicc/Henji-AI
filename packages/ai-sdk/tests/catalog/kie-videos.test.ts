@@ -249,24 +249,27 @@ describe('packages/ai-sdk/docs/model-adaptation KIE 视频模型', () => {
     })).toMatchObject({ input: { aspect_ratio: 'auto', duration: 7 } })
   })
 
-  it('Gemini Omni 传递音频/角色资产并校验共享图片槽位', () => {
-    expect(kieGeminiOmniVideoModel.request?.builder?.({
+  it('Gemini Omni 不注册、不下发用户拿不到的音频/角色资产 ID，并校验共享图片槽位', () => {
+    // 资产 ID 要先经 omni/audio、omni/character 创建，本应用没有该入口（界面计划 5.8，P-17）
+    const input = (kieGeminiOmniVideoModel.request?.builder?.({
       prompt: 'character',
       images: ['a.png', 'b.png'],
       kieGeminiOmniVideoAudioIds: 'voice-1\nvoice-2',
       kieGeminiOmniVideoCharacterIds: 'character-1, character-2'
-    })).toMatchObject({
-      input: {
-        image_urls: ['a.png', 'b.png'],
-        audio_ids: ['voice-1', 'voice-2'],
-        character_ids: ['character-1', 'character-2']
-      }
-    })
+    }) as { input: Record<string, unknown> }).input
+    expect(input).toMatchObject({ image_urls: ['a.png', 'b.png'] })
+    expect(input).not.toHaveProperty('audio_ids')
+    expect(input).not.toHaveProperty('character_ids')
+    expect(kieGeminiOmniVideoModel.params.map((param) => param.id)).not.toContain('kieGeminiOmniVideoAudioIds')
     expect(() => kieGeminiOmniVideoModel.request?.builder?.({
       prompt: 'too many slots',
-      images: Array.from({ length: 6 }, (_, index) => `${index}.png`),
-      kieGeminiOmniVideoCharacterIds: 'character-1\ncharacter-2'
+      images: Array.from({ length: 8 }, (_, index) => `${index}.png`),
     })).toThrow(/7/)
+    expect(() => kieGeminiOmniVideoModel.request?.builder?.({
+      prompt: 'video takes two slots',
+      images: Array.from({ length: 6 }, (_, index) => `${index}.png`),
+      videos: ['v.mp4'],
+    })).toThrow(/5/)
   })
 
   it('Seedance 2.5 支持 30/10/10 参考输入上限并按视频输入计价', () => {

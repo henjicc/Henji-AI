@@ -60,7 +60,7 @@ export function UiModal({
   surface = 'panel',
 }: UiModalProps): JSX.Element | null {
   const isGlass = surface === 'glass';
-  const { shouldRender, isVisible } = useDialogTransition(isOpen, UI_DIALOG_TRANSITION_MS);
+  const { shouldRender, isVisible, closing, onTransitionEnd } = useDialogTransition(isOpen, UI_DIALOG_TRANSITION_MS);
   const dialogRef = useRef<HTMLDivElement>(null);
   // 弹窗没有触发元素：用原位的隐藏锚点得知自己处在哪个文档（主窗口或剪辑系统浮窗），
   // 再挂到该文档的 body。锚点只在弹窗渲染期间存在。
@@ -102,6 +102,9 @@ export function UiModal({
       aria-labelledby={resolvedAriaLabel ? undefined : titleId}
       tabIndex={-1}
       className={`fixed ${UI_CONTENT_OVERLAY_INSET_CLASS} z-modal flex items-center justify-center outline-none ${overlayClassName}`}
+      // 收起中的弹窗已经关闭：不再接收指针与键盘、对读屏隐藏（同 PanelTrigger / Dropdown，任务 5.8）
+      aria-hidden={closing || undefined}
+      {...(closing ? { inert: '' } : {})}
       {...overlay.layerProps}
     >
       <UiOverlayLayerProvider id={overlay.id}>
@@ -112,6 +115,7 @@ export function UiModal({
       <UiPanel
         variant={isGlass ? 'glass' : 'panel'}
         className={`relative flex max-h-[calc(100vh-2rem)] flex-col overflow-hidden transition-opacity duration-180 ${isVisible ? 'opacity-100' : 'opacity-0'} ${UI_MODAL_SIZE_CLASS[size]} ${panelClassName}`}
+        onTransitionEnd={onTransitionEnd}
       >
         {!hideHeader && (
           <div className="flex items-center justify-between border-b border-line px-4 py-3">

@@ -154,7 +154,7 @@ export function TextProcessingPromptTemplateManager({
               ariaLabel={t('node.templateManager.systemPrompt')}
               placeholder={t('node.templateManager.systemPromptPlaceholder')}
               className="min-h-0 flex-1"
-              editorClassName="ui-scrollbar min-h-0"
+              editorClassName="min-h-0"
             />
             <div className="flex items-center justify-between gap-3">
               <span className={UI_TEXT_META_CLASS}>{t('node.templateManager.plainTextOnly')}</span>

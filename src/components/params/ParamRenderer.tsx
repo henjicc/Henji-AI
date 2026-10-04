@@ -138,7 +138,7 @@ export const ParamRenderer: React.FC<ParamRendererProps> = React.memo(({
           <ParamField className="flex min-w-0 flex-col">
             <ParamLabel param={param} language={i18n.language} />
             <PanelTrigger
-              display={formatPanelDisplayValue(value, compositeParam.panel, i18n.language, compositeParam.config)}
+              display={formatPanelDisplayValue(value, compositeParam.panel, i18n.language, compositeParam.config, compositeParam.default)}
               // 工具条（生成底栏）里触发器宽度随取值：固定最小宽会让“Vivi 2.0”“未设置”后面空出一段才是箭头（任务 5.3）
               className={toolbarLayout ? 'w-auto' : 'w-auto min-w-[100px]'}
               buttonClassName={toolbarLayout ? 'w-auto' : undefined}

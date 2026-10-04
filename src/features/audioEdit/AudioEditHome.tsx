@@ -1,16 +1,16 @@
 import { useState } from 'react'
-import { FolderOpen, Search } from 'lucide-react'
+import { FolderOpen } from 'lucide-react'
 import {
   UI_TEXT_LABEL_CLASS,
   UI_TEXT_META_CLASS,
   UiButton,
   UiEmpty,
   UiError,
-  UiInput,
   UiLoading,
   UiOptionButton,
   UiPageHeader,
   UiRegion,
+  UiSearchInput,
 } from '@/components/ui'
 import type { AudioEditProjectSummary } from '@/core/audioEdit/types'
 import { ICON_TOOL_AUDIO_EDIT as AudioEditIcon } from '@/core/theme/icons'
@@ -67,10 +67,7 @@ export function AudioEditHome({ projects, loading, loadFailed, disabled, onBack,
           <section aria-label="口播工程" className="mt-8">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h3 className={UI_TEXT_LABEL_CLASS}>我的工程 <span className={UI_TEXT_META_CLASS}>（{projects.length}）</span></h3>
-              <div className="relative w-full sm:w-72">
-                <Search size={16} aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text2" />
-                <UiInput aria-label="搜索工程" placeholder="搜索工程" className="pl-9" value={query} onChange={(event) => { setQuery(event.target.value); setPage(0) }} />
-              </div>
+              <UiSearchInput className="w-full sm:w-72" aria-label="搜索工程" placeholder="搜索工程" value={query} onChange={(event) => { setQuery(event.target.value); setPage(0) }} />
             </div>
             {filtered.length === 0 ? (
               <UiEmpty title="没有找到匹配的工程" description="试试其他名称，或清除搜索查看全部工程。" action={<UiButton variant="secondary" onClick={() => { setQuery(''); setPage(0) }}>清除搜索</UiButton>} />

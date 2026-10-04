@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { shouldClosePanelAfterInternalClick } from './panelTriggerClosePolicy'
 import {
@@ -15,6 +15,7 @@ import {
 } from './floatingPanelPosition'
 import { UI_FIELD_INLINE_ROW_CLASS, UI_FIELD_LABEL_CLASS, UI_FIELD_LABEL_INLINE_CLASS, UI_TRIGGER_PANEL_PADDING_CLASS, UI_TRIGGER_PANEL_SURFACE_CLASS, type UiFieldSize, type UiTriggerPanelPadding, type UiTriggerPanelSurface } from './styleTokens'
 import { UiFieldLayoutContext, useUiFieldLayout } from './fieldLayout'
+import { useUiFormRowLabelling } from './formRowLabel'
 import { measureElementTextWidth } from './textMeasurement'
 import { MENU_TEXT_ROUNDING_SLACK_PX, resolveMenuItemHorizontalChrome, type UiMenuSelection } from './dropdownUtils'
 import { UiFieldTrigger } from './primitives'
@@ -142,6 +143,10 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
   onOpenChangeRef.current = onOpenChange
   const anchorKey = anchorDependencyKey(anchor)
   const fieldLayout = useUiFieldLayout()
+  // 放在 UiFormRow 里的内置触发器：读作“行标签 + 当前值”（任务 5.8，B-50）
+  const triggerId = `panel-trigger-${useId().replace(/:/g, '')}`
+  const formRowLabelling = useUiFormRowLabelling()
+  const rowLabelledBy = !label && formRowLabelling ? `${formRowLabelling.labelId} ${triggerId}` : undefined
   const toolbarLayout = fieldLayout === 'toolbar'
   const resolvedAppearance = appearance ?? (toolbarLayout ? 'quiet' : 'field')
   // 表单排布的触发器在输入区顶部，浮层要越过整块输入区；工具条里的触发器就近弹出。
@@ -448,6 +453,8 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
           open={open && !closing}
           onClick={togglePanel}
           data-panel-trigger-button
+          id={triggerId}
+          aria-labelledby={rowLabelledBy}
           aria-expanded={open && !closing}
           className={`${disabled ? '' : 'cursor-pointer'} ${buttonClassName || 'w-full'}`}
         >
@@ -479,7 +486,7 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
         >
           <div
             data-panel-scroll-region
-            className="ui-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain"
+            className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
           >
             {/* 浮层里的字段一律按表单排布，不继承触发器所在工具条的排布 */}
             <UiOverlayLayerProvider id={overlay.id}>

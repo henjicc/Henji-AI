@@ -60,16 +60,6 @@ export const kiePresentationPart1: Record<string, ModelPresentation> = {
           }]
         })),
       },
-      "kieGeminiOmniVideoAudioIds": {
-        name: { zh: '音频资产 ID', en: 'Audio Asset IDs' },
-        description: { zh: '每行一个，最多 3 个', en: 'One per line, up to 3' },
-        rows: 3,
-      },
-      "kieGeminiOmniVideoCharacterIds": {
-        name: { zh: '角色资产 ID', en: 'Character Asset IDs' },
-        description: { zh: '每行一个，与图片共享 7 个槽位', en: 'One per line; shares 7 slots with images' },
-        rows: 3,
-      },
     },
     linkages: [],
   },

@@ -153,6 +153,8 @@ async function mapHistoryRecordToTask(
     uploadedVideoFilePaths: uploadedVideoFilePathsAbs,
     uploadedAudioFilePaths: uploadedAudioFilePathsAbs,
     serverTaskId: record.taskId ?? undefined,
+    // 成功记录有结果路径却解析不出可显示的文件：文件被移走或删掉了，卡片要给出提示而不是只剩标题
+    ...(normalizedStatus === 'success' && absoluteResultFilePath && !resolvedResultUrl ? { resultFileMissing: true } : {}),
     options,
   }
 }

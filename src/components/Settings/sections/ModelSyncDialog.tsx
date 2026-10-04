@@ -1,4 +1,4 @@
-import { ChevronRight, Minus, Plus, Search } from 'lucide-react'
+import { ChevronRight, Minus, Plus } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Virtuoso } from 'react-virtuoso'
 
@@ -8,10 +8,11 @@ import {
   UiButton,
   UiEmpty,
   UiIconButton,
-  UiInput,
   UiModal,
   UiOptionButton,
+  UiSearchInput,
 } from '@/components/ui'
+import { useI18n } from '@/hooks/useI18n'
 
 export interface DiscoveredModelOption {
   modelId: string
@@ -38,9 +39,9 @@ type Row =
  * 厂商前缀：`moonshotai/Kimi-K2.7-Code` → `moonshotai`。
  * 没有斜杠的（`deepseek-v4-flash`）归到「其他」，不硬拆——拆错比不拆更难认。
  */
-function groupOf(modelId: string): string {
+function groupOf(modelId: string, otherLabel: string): string {
   const index = modelId.indexOf('/')
-  return index > 0 ? modelId.slice(0, index) : '其他'
+  return index > 0 ? modelId.slice(0, index) : otherLabel
 }
 
 export function ModelSyncDialog({
@@ -52,6 +53,8 @@ export function ModelSyncDialog({
   onAdd,
   onRemove,
 }: ModelSyncDialogProps) {
+  const { t } = useI18n('settings')
+  const otherLabel = t('modelSync.otherGroup')
   const [keyword, setKeyword] = useState('')
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set())
 
@@ -68,13 +71,13 @@ export function ModelSyncDialog({
   const groups = useMemo(() => {
     const map = new Map<string, DiscoveredModelOption[]>()
     for (const model of filtered) {
-      const group = groupOf(model.modelId)
+      const group = groupOf(model.modelId, otherLabel)
       const list = map.get(group)
       if (list) list.push(model)
       else map.set(group, [model])
     }
     return [...map.entries()].sort(([left], [right]) => left.localeCompare(right))
-  }, [filtered])
+  }, [filtered, otherLabel])
 
   // 搜索时一律展开：搜到的东西藏在折叠组里等于没搜到。
   const rows = useMemo<Row[]>(() => groups.flatMap(([group, models]) => {
@@ -99,34 +102,30 @@ export function ModelSyncDialog({
     <UiModal
       isOpen={open}
       onClose={onClose}
-      title={`${providerName} 模型`}
+      title={t('modelSync.title', { provider: providerName })}
       size="form"
       footer={(
         <div className="flex items-center gap-3">
           <span className={UI_TEXT_META_CLASS}>
-            已添加 {addedCount} / 共 {discovered.length}
+            {t('modelSync.addedCount', { added: addedCount, total: discovered.length })}
           </span>
-          <UiButton type="button" variant="primary" className="ml-auto" onClick={onClose}>完成</UiButton>
+          <UiButton type="button" variant="primary" className="ml-auto" onClick={onClose}>{t('modelSync.done')}</UiButton>
         </div>
       )}
     >
       <div className="space-y-3">
-        <div className="relative">
-          <Search aria-hidden="true" className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-text3" />
-          <UiInput
-            value={keyword}
-            onChange={(event) => setKeyword(event.target.value)}
-            placeholder="搜索模型…"
-            aria-label="搜索模型"
-            className="pl-8"
-          />
-        </div>
+        <UiSearchInput
+          value={keyword}
+          onChange={(event) => setKeyword(event.target.value)}
+          placeholder={t('modelSync.searchPlaceholder')}
+          aria-label={t('modelSync.searchLabel')}
+        />
 
         {rows.length === 0
           ? (
             <UiEmpty
-              title={normalized ? '没有匹配的模型' : '远端没有返回模型'}
-              description={normalized ? '换个关键词试试。' : '确认密钥与接口地址是否正确。'}
+              title={normalized ? t('modelSync.noMatchTitle') : t('modelSync.emptyTitle')}
+              description={normalized ? t('modelSync.noMatchDescription') : t('modelSync.emptyDescription')}
             />
           )
           : (
@@ -155,8 +154,8 @@ export function ModelSyncDialog({
                       </UiOptionButton>
                       <UiIconButton size="lg"
                         type="button"
-                        title={allAdded ? `移除 ${row.group} 全部模型` : `添加 ${row.group} 全部模型`}
-                        aria-label={allAdded ? `移除 ${row.group} 全部模型` : `添加 ${row.group} 全部模型`}
+                        title={t(allAdded ? 'modelSync.removeGroup' : 'modelSync.addGroup', { group: row.group })}
+                        aria-label={t(allAdded ? 'modelSync.removeGroup' : 'modelSync.addGroup', { group: row.group })}
                         onClick={() => {
                           const ids = row.models.map(item => item.modelId)
                           if (allAdded) void onRemove(ids)
@@ -180,8 +179,8 @@ export function ModelSyncDialog({
                     </div>
                     <UiIconButton size="lg"
                       type="button"
-                      title={added ? `移除 ${row.model.modelId}` : `添加 ${row.model.modelId}`}
-                      aria-label={added ? `移除 ${row.model.modelId}` : `添加 ${row.model.modelId}`}
+                      title={t(added ? 'modelSync.removeModel' : 'modelSync.addModel', { model: row.model.modelId })}
+                      aria-label={t(added ? 'modelSync.removeModel' : 'modelSync.addModel', { model: row.model.modelId })}
                       onClick={() => {
                         if (added) void onRemove([row.model.modelId])
                         else void onAdd([row.model.modelId])

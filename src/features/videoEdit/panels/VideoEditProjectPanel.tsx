@@ -3,7 +3,7 @@ import { Virtuoso, VirtuosoGrid } from 'react-virtuoso'
 import { ChevronDown, ChevronRight, Folder, FolderPlus, Import, List, Grid2X2, Plus, Pencil, Trash2, RefreshCw, Play, Settings2, Code2, AudioLines } from 'lucide-react'
 import { ICON_WORKSPACE_VIDEO_EDIT as SequenceIcon, ICON_ASSET_LIBRARY as AssetLibraryIcon, ICON_VIDEO_EDIT_GRAPHIC as GraphicIcon } from '@/core/theme/icons'
 import ContextMenu from '@/components/ContextMenu'
-import { PanelTrigger, UiChipButton, UiEmpty, UiIconButton, UiInput, UiOptionButton } from '@/components/ui'
+import { PanelTrigger, UiChipButton, UiEmpty, UiIconButton, UiSearchInput, UiOptionButton } from '@/components/ui'
 import { UI_DIVIDER_CLASS } from '@/components/ui/styleTokens'
 import { Z_LAYERS } from '@/core/theme/zLayers'
 import { useContextMenu, type MenuItem } from '@/hooks/useContextMenu'
@@ -161,7 +161,7 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
     {/* 一行：搜索 + 视图与排序 + 资产库 + 新建 + 导入（设计稿 VideoEdit 项目面板；新建类入口收进“新建”菜单） */}
     {/* 窄面板（960 窗口下约 160px）时图标组整体换到第二行，不被裁掉。 */}
     <div className="flex min-h-10 shrink-0 flex-wrap items-center gap-0.5 px-2 py-1">
-      <div className="mr-1 min-w-28 flex-1"><UiInput aria-label="搜索项目素材" placeholder="搜索素材" size="sm" value={keyword} onChange={event => setKeyword(event.target.value)} /></div>
+      <UiSearchInput className="mr-1 min-w-28 flex-1" aria-label="搜索项目素材" placeholder="搜索素材" size="sm" value={keyword} onChange={event => setKeyword(event.target.value)} />
       <div className="ml-auto flex shrink-0 items-center gap-0.5">
       <PanelTrigger panelWidth={168} zIndex={Z_LAYERS.dropdown} closeOnPanelClick panelPadding="menu" renderPanel={() => <div className="flex flex-col gap-1">
         <UiOptionButton variant="menu" size="sm" className="gap-2" active={view === 'list'} onClick={() => setView('list')}><List size={14} />列表视图</UiOptionButton>

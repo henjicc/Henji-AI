@@ -204,7 +204,7 @@ export const FrameCard = memo(({
             editorShellClassName="relative h-full min-h-0 w-full cursor-text overflow-visible !rounded-none !border-0 !bg-transparent !shadow-none focus-within:!ring-0"
             // 描述压在固定深色的媒体渐变上：占位字（静态态的 span、编辑态的 ::before）也取媒体叠层文字色，
             // 默认的主题次要文字色在纸白下是深灰，压在深色渐变上只有 3:1（5.2 转交，任务 5.4）
-            editorClassName="ui-scrollbar nodrag nowheel h-full min-h-0 overflow-y-auto !px-2 !py-1 text-left !text-[length:var(--storyboard-note-font-size)] !leading-[var(--storyboard-note-line-height)] !text-on-media [&>span]:!text-on-media/70 [&_.is-editor-empty:first-child::before]:!text-on-media/70"
+            editorClassName="nodrag nowheel h-full min-h-0 overflow-y-auto !px-2 !py-1 text-left !text-[length:var(--storyboard-note-font-size)] !leading-[var(--storyboard-note-line-height)] !text-on-media [&>span]:!text-on-media/70 [&_.is-editor-empty:first-child::before]:!text-on-media/70"
           />
         </div>
       </div>

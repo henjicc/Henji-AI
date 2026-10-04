@@ -1,7 +1,9 @@
 /** @vitest-environment jsdom */
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+
+import i18n from '@/i18n/config'
 
 import type {
   AssistantSkillManifest,
@@ -51,6 +53,11 @@ function skill(
 function manifest(skills: AssistantSkillMetadata[], invalid: { path: string; reason: string }[] = []): AssistantSkillManifest {
   return { schemaVersion: 'assistant-skill/v1', skills, invalid }
 }
+
+// 文案走 i18n（任务 5.8，B-39）：断言按中文界面
+beforeAll(async () => {
+  await i18n.changeLanguage('zh-CN')
+})
 
 beforeEach(() => {
   listSkills.mockResolvedValue(manifest([

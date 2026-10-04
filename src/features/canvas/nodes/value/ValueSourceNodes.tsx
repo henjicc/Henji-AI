@@ -150,7 +150,7 @@ export const StringSourceNode = memo(({ id, data, selected, width, height }: Val
         onChange={(event) => textHistory.onValueChange(event.target.value)}
         textHistory={textHistory}
         onMouseDown={(event) => event.stopPropagation()}
-        className="ui-scrollbar min-h-0 flex-1 resize-none"
+        className="min-h-0 flex-1 resize-none"
       />
     </ValueSourceShell>
   );

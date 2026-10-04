@@ -353,7 +353,7 @@ export function ImageEditorLayersPanelV3({
         role="tree"
         aria-label={t('imageEditor.v3.layers.title')}
         aria-multiselectable="true"
-        className="ui-scrollbar min-h-0 flex-1 overflow-y-auto"
+        className="min-h-0 flex-1 overflow-y-auto"
       >
         {rows.length === 0 ? (
           <p className="px-4 py-8 text-center text-xs text-text2">

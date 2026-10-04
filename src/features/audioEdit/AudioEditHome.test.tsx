@@ -1,10 +1,13 @@
 /** @vitest-environment jsdom */
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import i18n from '@/i18n/config'
 import { AudioEditHome } from './AudioEditHome'
 import type { AudioEditProjectSummary } from '@/core/audioEdit/types'
 
 afterEach(cleanup)
+// UiError 的“重试”走 i18n（任务 5.8）：断言按中文界面
+beforeAll(async () => { await i18n.changeLanguage('zh-CN') })
 const callbacks = () => ({ onImport: vi.fn(), onOpen: vi.fn(), onRetry: vi.fn() })
 const projects: AudioEditProjectSummary[] = Array.from({ length: 13 }, (_, index) => ({
   id: String(index), name: `口播 ${index + 1}`, mediaType: 'audio', durationFrames: 48000, sampleRate: 48000, updatedAt: 1,

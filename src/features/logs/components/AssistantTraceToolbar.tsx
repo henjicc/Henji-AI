@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { RefreshCw, Trash2 } from 'lucide-react'
 
-import { UiCheckbox, UiIconButton, UiInput, UiOptionButton, UiSelect, UiToolbar, UI_SEGMENTED_TRACK_CLASS } from '@/components/ui'
+import { UiCheckbox, UiIconButton, UiSearchInput, UiOptionButton, UiSelect, UiToolbar, UI_SEGMENTED_TRACK_CLASS } from '@/components/ui'
 import type { AgentTraceCaptureMode, AgentTraceStatus } from '@/core/assistant/trace'
 
 export type AssistantTraceViewMode = 'live' | 'history'
@@ -69,7 +69,7 @@ export function AssistantTraceToolbar({
       }
       subordinate={
         <>
-          <UiInput value={keyword} onChange={(event) => onKeywordChange(event.target.value)} placeholder="搜索目标、运行、模型或请求标识" className="min-w-40 flex-1" />
+          <UiSearchInput value={keyword} onChange={(event) => onKeywordChange(event.target.value)} placeholder="搜索目标、运行、模型或请求标识" aria-label="搜索链路" className="min-w-40 flex-1" />
           <UiSelect value={providerId} onChange={(event) => onProviderChange(event.target.value)} className="w-36">
             <option value="all">全部供应商</option>
             {providers.map((value) => <option key={value} value={value}>{value}</option>)}

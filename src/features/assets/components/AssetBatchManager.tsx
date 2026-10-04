@@ -55,7 +55,7 @@ export const AssetBatchManager: React.FC<Props> = ({
     // 批量操作侧栏：与左侧资产库侧栏同级，只用一条分隔线，不另铺更亮的底（那会浮成一张卡）。
     // 标题、已选数量与“完成”都在页头命令带里，这里不再重复一条头带。
     <aside aria-label={t('assetLibrary.batchManage')} aria-busy={busy} className={`flex w-80 shrink-0 flex-col border-l ${UI_GLASS_ADAPTIVE_DIVIDER_CLASS}`}>
-      <div className="ui-scrollbar min-h-0 flex-1 overflow-y-auto p-4">
+      <div className="min-h-0 flex-1 overflow-y-auto p-4">
         <p className={`mb-3 flex items-center gap-1.5 ${UI_TEXT_META_CLASS}`}>{busy ? <LoaderCircle className="h-3.5 w-3.5 shrink-0 motion-safe:animate-spin" /> : null}{t('assetLibrary.batchHint')}</p>
         <div className="mb-5 flex gap-2">
           <UiButton className="flex-1" disabled={busy || loadedCount === 0} onClick={onSelectAll}>{t('assetLibrary.batchSelectAll')}</UiButton>

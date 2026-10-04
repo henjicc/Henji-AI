@@ -3,6 +3,7 @@ import type {
   HTMLAttributes,
   InputHTMLAttributes,
   ReactNode,
+  Ref,
   SelectHTMLAttributes,
   TextareaHTMLAttributes,
 } from 'react'
@@ -195,8 +196,26 @@ export interface UiInputProps extends Omit<InputHTMLAttributes<HTMLInputElement>
   size?: UiControlSize
 }
 
+/**
+ * 搜索框（任务 5.8，B-35）：前置放大镜 + 可选清除按钮，全仓搜索框只此一种写法。
+ * `className` 落在外层（只放宽度、伸缩等布局）；图标尺寸与内边距随 `size`。
+ */
+export interface UiSearchInputProps extends Omit<UiInputProps, 'type'> {
+  /** 传入时，有内容时在右端显示清除按钮 */
+  onClear?: () => void
+  /** 清除按钮的名称（传了 onClear 时必填） */
+  clearLabel?: string
+  /** 放大镜图标的引用（筛选面板把它当作展开动画的锚点） */
+  iconRef?: Ref<SVGSVGElement>
+}
+
 export interface UiTextAreaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
   textHistory?: ScopedTextHistoryBinding
+  /**
+   * `field`（默认）：raised 字段表面 + 焦点环。
+   * `none`：无框，直接落在所在表面上编辑（画布文本展示节点的编辑态，与静态正文同字号行高，对齐 `PromptEditor frame="none"`）。
+   */
+  frame?: 'field' | 'none'
 }
 
 export type UiPanelVariant = 'panel' | 'inset' | 'bare' | 'glass'

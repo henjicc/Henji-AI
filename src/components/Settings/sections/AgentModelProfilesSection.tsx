@@ -1,5 +1,6 @@
 import { ChevronDown, ChevronUp, RefreshCw } from 'lucide-react'
 import { useMemo, useState } from 'react'
+import type { TFunction } from 'i18next'
 
 import { llmVerifyModelCapabilities } from '@/commands/llmRuntime'
 import {
@@ -18,6 +19,7 @@ import { SETTINGS_INLINE_CONTROL_CLASS } from '../settingsLayout'
 import { findAgentModelVerification } from '@/core/llm/agentProfiles'
 import { applyCapabilitySmokeToCapabilities } from '@/core/llm/capabilitySmokeCapabilities'
 import { createLogger } from '@/core/logging'
+import { useI18n } from '@/hooks/useI18n'
 import type {
   AgentModelProfile,
   AgentModelReference,
@@ -42,32 +44,20 @@ interface ModelOption {
   reference?: AgentModelReference
 }
 
-const roleLabels: Record<AgentModelRole, string> = {
-  primary: '主模型',
-  router: '路由模型',
-  summarizer: '摘要模型',
-  fallback: '备用模型',
-  observer: '观察模型',
-}
+const AGENT_MODEL_ROLES: AgentModelRole[] = ['primary', 'router', 'summarizer', 'fallback', 'observer']
 
 interface RuntimeSettingField {
   key: keyof AgentModelProfile['settings']
-  label: string
-  info: string
   min: number
   max?: number
 }
 
+// 文案在 settings.agentModels.settings.<key>.label / info
 const RUNTIME_SETTING_FIELDS: RuntimeSettingField[] = [
-  { key: 'timeoutMs', label: '超时', info: '单次请求的最长等待时间，单位毫秒。', min: 1000 },
-  { key: 'maxRetries', label: '重试次数', info: '请求失败后自动重试的次数。', min: 0, max: 5 },
-  { key: 'maxOutputTokens', label: '期望输出 Token', info: '单次期望输出的 Token 数。已配置模型优先使用各自的能力上限。', min: 1 },
-  {
-    key: 'contextWindowBudget',
-    label: '上下文回退 Token',
-    info: '模型没有登记上下文窗口时使用的回退值。已配置模型优先使用各自的能力上限。',
-    min: 1,
-  },
+  { key: 'timeoutMs', min: 1000 },
+  { key: 'maxRetries', min: 0, max: 5 },
+  { key: 'maxOutputTokens', min: 1 },
+  { key: 'contextWindowBudget', min: 1 },
 ]
 
 function modelKey(reference: AgentModelReference): string {
@@ -97,65 +87,73 @@ function getRoleValue(profile: AgentModelProfile, role: AgentModelRole): string 
  * 模型能力现在由内置目录自动标注（`src/core/llm/modelCatalog.ts`），所以这些标注是可信的：
  * 执行类角色要能调工具和出结构化结果，观察模型则只看它能接收哪些媒体输入。
  */
-function describeRoleSuitability(model: LlmModelConfig, role: AgentModelRole): string {
+function describeRoleSuitability(model: LlmModelConfig, role: AgentModelRole, t: TFunction): string {
   if (role === 'observer') {
     const modalities = [
-      ...(model.capabilities.image ? ['图片'] : []),
-      ...(model.capabilities.video ? ['视频'] : []),
-      ...(model.capabilities.audio ? ['音频'] : []),
+      ...(model.capabilities.image ? [t('agentModels.modality.image')] : []),
+      ...(model.capabilities.video ? [t('agentModels.modality.video')] : []),
+      ...(model.capabilities.audio ? [t('agentModels.modality.audio')] : []),
     ]
-    return modalities.length ? ` · 可看${modalities.join('/')}` : ' · 不支持媒体输入'
+    return modalities.length ? t('agentModels.canSee', { modalities: modalities.join('/') }) : t('agentModels.noMediaInput')
   }
   const missing = [
-    ...(model.capabilities.toolCall ? [] : ['工具调用']),
-    ...(model.capabilities.structuredOutputMode === 'none' ? ['结构化输出'] : []),
-    ...(model.capabilities.streaming ? [] : ['流式输出']),
+    ...(model.capabilities.toolCall ? [] : [t('agentModels.capability.toolCall')]),
+    ...(model.capabilities.structuredOutputMode === 'none' ? [t('agentModels.capability.structuredOutput')] : []),
+    ...(model.capabilities.streaming ? [] : [t('agentModels.capability.streaming')]),
   ]
-  return missing.length ? ` · 不支持${missing.join('、')}` : ''
+  return missing.length ? t('agentModels.unsupported', { items: missing.join(t('agentModels.listSeparator')) }) : ''
 }
 
-function isRoleUsable(model: LlmModelConfig, role: AgentModelRole): boolean {
-  return describeRoleSuitability(model, role) === ''
+function isRoleUsable(model: LlmModelConfig, role: AgentModelRole, t: TFunction): boolean {
+  return describeRoleSuitability(model, role, t) === ''
     || (role === 'observer' && (model.capabilities.image || model.capabilities.video || model.capabilities.audio))
 }
 
-function createOptions(models: LlmModelConfig[], role: AgentModelRole): ModelOption[] {
+function createOptions(models: LlmModelConfig[], role: AgentModelRole, t: TFunction): ModelOption[] {
   // 能胜任该角色的排前面，省得用户在一长串里挨个点开详情才知道哪个能用。
   const choices = models
     .filter(model => model.enabled)
     .slice()
-    .sort((left, right) => Number(isRoleUsable(right, role)) - Number(isRoleUsable(left, role)))
+    .sort((left, right) => Number(isRoleUsable(right, role, t)) - Number(isRoleUsable(left, role, t)))
     .map(model => ({
       value: modelKey(model),
-      label: `${model.displayName} · ${model.providerId}${describeRoleSuitability(model, role)}`,
+      label: `${model.displayName} · ${model.providerId}${describeRoleSuitability(model, role, t)}`,
       reference: { providerId: model.providerId, modelId: model.modelId },
     }))
   if (role === 'router' || role === 'summarizer') {
-    return [{ value: REUSE_PRIMARY, label: '复用主模型' }, ...choices]
+    return [{ value: REUSE_PRIMARY, label: t('agentModels.reusePrimary') }, ...choices]
   }
   if (role === 'fallback') {
-    return [{ value: NO_FALLBACK, label: '不配置备用模型' }, ...choices]
+    return [{ value: NO_FALLBACK, label: t('agentModels.noFallback') }, ...choices]
   }
   if (role === 'observer') {
-    return [{ value: NO_OBSERVER, label: '不配置观察模型' }, ...choices]
+    return [{ value: NO_OBSERVER, label: t('agentModels.noObserver') }, ...choices]
   }
   return choices
 }
 
-function capabilitySummary(model: LlmModelConfig | undefined): string {
-  if (!model) return '模型不存在或已删除'
+function capabilitySummary(model: LlmModelConfig | undefined, t: TFunction): string {
+  if (!model) return t('agentModels.missingModel')
   const capabilities = model.capabilities
+  const yesNo = (value: boolean): string => t(value ? 'agentModels.yes' : 'agentModels.no')
+  const unknown = t('agentModels.unknown')
+  const inputs = [
+    capabilities.image && t('agentModels.modality.image'),
+    capabilities.video && t('agentModels.modality.video'),
+    capabilities.audio && t('agentModels.modality.audio'),
+  ].filter(Boolean).join(t('agentModels.listSeparator'))
   return [
-    `工具 ${capabilities.toolCall ? '是' : '否'}`,
-    `并行 ${capabilities.parallelTools ? '是' : '否'}`,
-    `结构化 ${capabilities.structuredOutputMode}`,
-    `输入 ${[capabilities.image && '图片', capabilities.video && '视频', capabilities.audio && '音频'].filter(Boolean).join('、') || '仅文字'}`,
-    `上下文 ${capabilities.contextWindow ?? '未知'}`,
-    `输出 ${capabilities.maxOutputTokens ?? '未知'}`,
+    t('agentModels.summary.tools', { value: yesNo(capabilities.toolCall) }),
+    t('agentModels.summary.parallel', { value: yesNo(capabilities.parallelTools) }),
+    t('agentModels.summary.structured', { value: capabilities.structuredOutputMode }),
+    t('agentModels.summary.input', { value: inputs || t('agentModels.textOnly') }),
+    t('agentModels.summary.context', { value: capabilities.contextWindow ?? unknown }),
+    t('agentModels.summary.output', { value: capabilities.maxOutputTokens ?? unknown }),
   ].join(' · ')
 }
 
 const AgentModelProfilesSection = ({ config, saveConfig }: AgentModelProfilesSectionProps): JSX.Element | null => {
+  const { t } = useI18n('settings')
   const profile = config.agentProfiles.find(item => item.id === config.selectedAgentProfileId) ?? config.agentProfiles[0]
   const [verifyingKey, setVerifyingKey] = useState<string | null>(null)
   const [expandedRoles, setExpandedRoles] = useState<Set<AgentModelRole>>(new Set())
@@ -178,7 +176,7 @@ const AgentModelProfilesSection = ({ config, saveConfig }: AgentModelProfilesSec
   }
 
   const updateRole = async (role: AgentModelRole, value: string): Promise<void> => {
-    const option = createOptions(models, role).find(item => item.value === value)
+    const option = createOptions(models, role, t).find(item => item.value === value)
     if (!option) return
     const nextProfile = { ...profile, [role]: option.reference, updatedAt: new Date().toISOString() }
     await saveProfile(nextProfile)
@@ -270,20 +268,21 @@ const AgentModelProfilesSection = ({ config, saveConfig }: AgentModelProfilesSec
     // 原 info 里的费用提示移到“验证此模型”按钮旁（费用信息放在会产生费用的动作处）。
     <UiGroup gap="stack">
       <div className="grid gap-3 sm:grid-cols-2">
-        {(Object.keys(roleLabels) as AgentModelRole[]).map(role => {
-          const options = createOptions(models, role)
+        {AGENT_MODEL_ROLES.map(role => {
+          const options = createOptions(models, role, t)
+          const roleLabel = t(`agentModels.roles.${role}`)
           const configuredReference = getRoleReference(profile, role)
           const effectiveReference = configuredReference ?? (role === 'router' || role === 'summarizer' ? profile.primary : undefined)
           const model = findModel(models, effectiveReference)
           const verification = effectiveReference ? findAgentModelVerification(profile, effectiveReference) : undefined
           const value = getRoleValue(profile, role)
-          const display = options.find(item => item.value === value)?.label ?? '请选择模型'
+          const display = options.find(item => item.value === value)?.label ?? t('agentModels.choose')
           const key = effectiveReference ? modelKey(effectiveReference) : ''
           const detailsOpen = expandedRoles.has(role)
           return (
             <UiPanel key={role} variant="inset" className="space-y-2 p-3">
               <div className="flex items-center justify-between gap-2">
-                <div className={UI_TEXT_LABEL_CLASS}>{roleLabels[role]}</div>
+                <div className={UI_TEXT_LABEL_CLASS}>{roleLabel}</div>
                 {/* 能力/验证详情过于专业，普通用户选好模型就够了，折叠掉默认不显示 */}
                 <UiButton
                   type="button"
@@ -292,13 +291,14 @@ const AgentModelProfilesSection = ({ config, saveConfig }: AgentModelProfilesSec
                   onClick={() => toggleRoleDetails(role)}
                   className="shrink-0"
                 >
-                  详情
+                  {t('agentModels.details')}
                   {detailsOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
                 </UiButton>
               </div>
               <Dropdown<string>
                 value={value}
                 display={display}
+                ariaLabel={roleLabel}
                 options={options}
                 className="w-full"
                 buttonClassName="w-full"
@@ -306,27 +306,27 @@ const AgentModelProfilesSection = ({ config, saveConfig }: AgentModelProfilesSec
               />
               <UiDisclosurePanel open={detailsOpen}>
                 <div className="space-y-2 pt-2">
-                  <div className={UI_TEXT_META_CLASS}>{capabilitySummary(model)}</div>
+                  <div className={UI_TEXT_META_CLASS}>{capabilitySummary(model, t)}</div>
                   {verification ? (
                     <div className={`space-y-1 ${UI_TEXT_META_CLASS}`}>
-                      <div>验证于 {new Date(verification.verifiedAt).toLocaleString()} · {verification.totalLatencyMs} ms · 费用{verification.cost.status === 'known' ? `${verification.cost.amount} ${verification.cost.currency}` : '未知'}</div>
-                      <div>{verification.checks.map(check => `${check.id}:${check.status === 'passed' ? '通过' : check.status === 'skipped' ? (check.errorCode === 'manual_declaration_only' ? '仅声明' : '未声明') : '失败'}`).join(' · ')}</div>
-                      <div>图片、视频与音频由配置声明；“仅声明”表示协议可表达但尚未用真实媒体验证。</div>
+                      <div>{t('agentModels.verifiedAt', { time: new Date(verification.verifiedAt).toLocaleString(), latency: verification.totalLatencyMs, cost: verification.cost.status === 'known' ? `${verification.cost.amount} ${verification.cost.currency}` : t('agentModels.unknown') })}</div>
+                      <div>{verification.checks.map(check => `${check.id}:${t(check.status === 'passed' ? 'agentModels.check.passed' : check.status === 'skipped' ? (check.errorCode === 'manual_declaration_only' ? 'agentModels.check.declaredOnly' : 'agentModels.check.undeclared') : 'agentModels.check.failed')}`).join(' · ')}</div>
+                      <div>{t('agentModels.declaredNote')}</div>
                       {/*
                         视频最容易出现"模型支持但这里判失败"：智能助手走 AI SDK 模型步骤，
                         该协议目前只能表达图片和音频，而画布文本处理走的是另一条原生流式路径，能发视频。
                       */}
-                      <div>某个模态显示“失败”表示智能助手当前的请求协议带不了它，模型本身仍可能支持——画布文本处理等功能不受影响。</div>
-                      <div>Token：输入 {verification.usage.inputTokens ?? '未知'} / 输出 {verification.usage.outputTokens ?? '未知'} / 思考 {verification.usage.reasoningTokens ?? '未知'}</div>
+                      <div>{t('agentModels.failedNote')}</div>
+                      <div>{t('agentModels.usage', { input: verification.usage.inputTokens ?? t('agentModels.unknown'), output: verification.usage.outputTokens ?? t('agentModels.unknown'), reasoning: verification.usage.reasoningTokens ?? t('agentModels.unknown') })}</div>
                     </div>
-                  ) : <div className={UI_TEXT_META_CLASS}>尚未进行动态能力验证</div>}
+                  ) : <div className={UI_TEXT_META_CLASS}>{t('agentModels.notVerified')}</div>}
                   {effectiveReference ? (
                     <div className="flex flex-wrap items-center gap-2">
                       <UiButton type="button" variant="secondary" disabled={verifyingKey !== null} onClick={() => void verify(effectiveReference)}>
                         <RefreshCw className={`h-4 w-4 ${verifyingKey === key ? 'motion-safe:animate-spin' : ''}`} />
-                        {verifyingKey === key ? '验证中' : '验证此模型'}
+                        {verifyingKey === key ? t('agentModels.verifying') : t('agentModels.verify')}
                       </UiButton>
-                      <span className={UI_TEXT_META_CLASS}>会向该模型发起一次最小真实请求</span>
+                      <span className={UI_TEXT_META_CLASS}>{t('agentModels.verifyCost')}</span>
                     </div>
                   ) : null}
                 </div>
@@ -345,20 +345,20 @@ const AgentModelProfilesSection = ({ config, saveConfig }: AgentModelProfilesSec
           onClick={() => setAdvancedOpen(prev => !prev)}
           className="-ml-2"
         >
-          高级设置
+          {t('agentModels.advanced')}
           {advancedOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
         </UiButton>
         <UiDisclosurePanel open={advancedOpen}>
           <div className={`pt-4 ${UI_FORM_ROW_GAP_CLASS}`}>
             {RUNTIME_SETTING_FIELDS.map(field => (
-              <UiFormRow key={field.key} label={field.label} info={field.info} inline>
+              <UiFormRow key={field.key} label={t(`agentModels.settings.${field.key}.label`)} info={t(`agentModels.settings.${field.key}.info`)} inline>
                 {/* 与设置里其他数值项同一个控件（NumberInput：拖动改值、步进、范围夹取） */}
                 <NumberInput
                   value={profile.settings[field.key]}
                   min={field.min}
                   max={field.max}
                   step={1}
-                  ariaLabel={field.label}
+                  ariaLabel={t(`agentModels.settings.${field.key}.label`)}
                   onChange={value => void updateSetting(field.key, value)}
                   widthClassName={SETTINGS_INLINE_CONTROL_CLASS}
                 />

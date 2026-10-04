@@ -33,7 +33,7 @@ import { importCanvasMediaFile } from '@/features/canvas/application/mediaImport
 import { ICON_NODE_AUDIO_GENERATION, ICON_NODE_AUDIO_UPLOAD } from '@/core/theme/icons';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { useSettingsStore } from '@/stores/settingsStore';
-import { UiIconButton, UiInput } from '@/components/ui';
+import { UiEmpty, UiIconButton, UiInput } from '@/components/ui';
 import { AudioViewerModal } from '@/components/mediaViewer/AudioViewerModal';
 import { WaveformView } from '@/components/waveform/WaveformView';
 import { uiTransition } from '@/components/ui/motion';
@@ -326,10 +326,7 @@ export const AudioNode = memo(({ id, data, selected, type, width, height }: Audi
             <span className="text-2xs">{t('node.audioNode.uploadHint')}</span>
           </div>
         ) : (
-          <div className="flex h-full w-full flex-col items-center justify-center gap-1.5 text-text2">
-            <AudioGenerationIcon className="h-6 w-6 text-text3" />
-            <span className="text-2xs">{t('node.audioNode.waitingResult')}</span>
-          </div>
+          <UiEmpty size="node" icon={<AudioGenerationIcon className="h-6 w-6" />} title={t('node.audioNode.waitingResult')} />
         )}
 
         {isGenerating && (

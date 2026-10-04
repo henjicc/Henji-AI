@@ -16,6 +16,7 @@
 import { useId, type HTMLAttributes, type ReactNode } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import Tooltip, { type TooltipPlacement } from './Tooltip';
+import { UiFormRowLabelContext } from './formRowLabel';
 import { UiIconButton } from './primitives';
 import {
   UI_DIVIDER_CLASS,
@@ -291,26 +292,33 @@ export function UiFormRow({
   children,
   ...props
 }: UiFormRowProps): JSX.Element {
+  const baseId = useId();
+  const labelId = `${baseId}-label`;
+  const hintId = hint ? `${baseId}-hint` : undefined;
   const labelNode = <UiTooltipText tooltip={info}>{label}</UiTooltipText>;
   const labelClass = density === 'compact' ? 'text-xs text-text2' : UI_TEXT_PANEL_TITLE_CLASS;
+  // 行内控件没有自己的名称时，用 aria-labelledby 指向这行标签（B-50）
+  const labelling = { labelId, hintId };
 
   if (inline) {
     return (
       <div className={`flex items-center justify-between gap-4 ${className}`} {...props}>
         <div className="min-w-0">
-          <div className={labelClass}>{labelNode}</div>
-          {hint ? <p className={`mt-0.5 ${UI_TEXT_META_CLASS}`}>{hint}</p> : null}
+          <div id={labelId} className={labelClass}>{labelNode}</div>
+          {hint ? <p id={hintId} className={`mt-0.5 ${UI_TEXT_META_CLASS}`}>{hint}</p> : null}
         </div>
-        <div className="flex shrink-0 items-center gap-2">{children}</div>
+        <div className="flex shrink-0 items-center gap-2">
+          <UiFormRowLabelContext.Provider value={labelling}>{children}</UiFormRowLabelContext.Provider>
+        </div>
       </div>
     );
   }
 
   return (
     <div className={className} {...props}>
-      <div className={labelClass}>{labelNode}</div>
-      {hint ? <p className={`mt-0.5 mb-1.5 ${UI_TEXT_META_CLASS}`}>{hint}</p> : <div className={density === 'compact' ? 'h-1' : 'h-1.5'} />}
-      {children}
+      <div id={labelId} className={labelClass}>{labelNode}</div>
+      {hint ? <p id={hintId} className={`mt-0.5 mb-1.5 ${UI_TEXT_META_CLASS}`}>{hint}</p> : <div className={density === 'compact' ? 'h-1' : 'h-1.5'} />}
+      <UiFormRowLabelContext.Provider value={labelling}>{children}</UiFormRowLabelContext.Provider>
     </div>
   );
 }

@@ -101,6 +101,12 @@ export function AudioViewerModal({ open, audioUrl, filePath, onClose, autoPlay =
         transition: uiTransition(['opacity'], UI_DURATION.viewer),
         pointerEvents: open ? 'auto' : 'none',
       }}
+      // 收起中不可点击、对读屏隐藏；过渡结束即卸载，不只依赖计时器（任务 5.8）
+      aria-hidden={!open || undefined}
+      {...(!open ? { inert: '' } : {})}
+      onTransitionEnd={(event) => {
+        if (!open && event.target === event.currentTarget) setVisible(false)
+      }}
       onClick={(event) => {
         if (event.target === event.currentTarget) {
           onClose()

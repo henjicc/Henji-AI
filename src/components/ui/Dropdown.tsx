@@ -10,6 +10,7 @@ import React, {
 import { createPortal } from 'react-dom'
 import { UI_FIELD_INLINE_ROW_CLASS, UI_FIELD_LABEL_CLASS, UI_FIELD_LABEL_INLINE_CLASS, UI_TRIGGER_PANEL_PADDING_CLASS, UI_TRIGGER_PANEL_SURFACE_CLASS, type UiFieldSize, type UiTriggerPanelPadding, type UiTriggerPanelSurface } from './styleTokens'
 import { UiFieldLayoutContext, useUiFieldLayout } from './fieldLayout'
+import { useUiFormRowLabelling } from './formRowLabel'
 import { UiFieldTrigger, UiOptionButton } from './primitives'
 import { UI_DURATION } from './motion'
 import { resolveDropdownDisplay, resolveDropdownMenuWidth } from './dropdownUtils'
@@ -136,6 +137,10 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
   }, [closing, finishClose])
   const dropdownId = useId().replace(/:/g, '')
   const panelId = `dropdown-panel-${dropdownId}`
+  const triggerId = `dropdown-trigger-${dropdownId}`
+  // 放在 UiFormRow 里且没有自己的名称：读作“行标签 + 当前值”（任务 5.8，B-50）
+  const formRowLabelling = useUiFormRowLabelling()
+  const rowLabelledBy = !ariaLabel && !label && !ariaLabelledBy && formRowLabelling ? `${formRowLabelling.labelId} ${triggerId}` : undefined
   const [fixedPos, setFixedPos] = useState<{
     top: number
     left: number
@@ -422,8 +427,9 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
         aria-expanded={open && !closing}
         aria-controls={panelId}
         aria-activedescendant={open && activeOptionIndex >= 0 ? `${panelId}-option-${activeOptionIndex}` : undefined}
-        aria-label={ariaLabelledBy ? undefined : ariaLabel ?? label ?? resolvedDisplay}
-        aria-labelledby={ariaLabelledBy}
+        id={triggerId}
+        aria-label={ariaLabelledBy || rowLabelledBy ? undefined : ariaLabel ?? label ?? resolvedDisplay}
+        aria-labelledby={ariaLabelledBy ?? rowLabelledBy}
         className={`${disabled ? '' : 'cursor-pointer'} ${buttonClassName || 'w-full'}`}
         style={buttonMinWidthPx ? { minWidth: `${buttonMinWidthPx}px` } : undefined}
       >

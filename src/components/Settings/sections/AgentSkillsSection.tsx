@@ -1,5 +1,6 @@
 import { FolderOpen, Package, RefreshCw, Trash2, Upload } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import type { TFunction } from 'i18next'
 
 import {
   installAssistantSkill,
@@ -24,6 +25,7 @@ import type {
   AssistantSkillMetadata,
 } from '@/core/assistant/skills'
 import { createLogger } from '@/core/logging'
+import { useI18n } from '@/hooks/useI18n'
 import { extname, getPathForFile, openDialog } from '@/platform/desktopApi'
 import SettingsDialog from '../components/SettingsDialog'
 
@@ -48,21 +50,23 @@ interface PendingConfirm {
   run: () => Promise<void>
 }
 
-function describeInstallResult(result: AssistantSkillInstallResult): string {
+function describeInstallResult(result: AssistantSkillInstallResult, t: TFunction): string {
   const parts: string[] = []
-  if (result.installed.length > 0) parts.push(`已安装 ${result.installed.join('、')}`)
-  if (result.replaced.length > 0) parts.push(`其中替换了 ${result.replaced.join('、')}`)
+  const separator = t('agentSkills.listSeparator')
+  if (result.installed.length > 0) parts.push(t('agentSkills.installed', { names: result.installed.join(separator) }))
+  if (result.replaced.length > 0) parts.push(t('agentSkills.replaced', { names: result.replaced.join(separator) }))
   if (result.skippedFiles.length > 0) {
-    parts.push(`跳过 ${result.skippedFiles.length} 个非纯文本文件`)
+    parts.push(t('agentSkills.skippedCount', { count: result.skippedFiles.length }))
   }
-  return parts.length > 0 ? `${parts.join('，')}。` : '没有可安装的技能。'
+  return parts.length > 0 ? t('agentSkills.installSummary', { parts: parts.join(t('agentSkills.clauseSeparator')) }) : t('agentSkills.nothingToInstall')
 }
 
 export default function AgentSkillsSection(): JSX.Element {
+  const { t } = useI18n('settings')
   const [manifest, setManifest] = useState<AssistantSkillManifest>(EMPTY_MANIFEST)
   const [busy, setBusy] = useState(false)
   const [dragging, setDragging] = useState(false)
-  const [status, setStatus] = useState<StatusLine>(info('正在读取技能清单…'))
+  const [status, setStatus] = useState<StatusLine>(() => info(t('agentSkills.reading')))
   const [skipped, setSkipped] = useState<AssistantSkillInstallResult['skippedFiles']>([])
   const [confirm, setConfirm] = useState<PendingConfirm | null>(null)
 
@@ -80,14 +84,14 @@ export default function AgentSkillsSection(): JSX.Element {
     try {
       const next = await listAssistantSkills()
       setManifest(next)
-      setStatus(info(`共 ${next.skills.length} 个技能，其中 ${next.skills.filter((skill) => !skill.enabled).length} 个已停用。`))
+      setStatus(info(t('agentSkills.summary', { total: next.skills.length, disabled: next.skills.filter((skill) => !skill.enabled).length })))
     } catch (error) {
-      setStatus(failure(error instanceof Error ? error.message : '读取技能清单失败'))
+      setStatus(failure(error instanceof Error ? error.message : t('agentSkills.readFailed')))
       logger.error('读取助手技能清单失败', error, { event: 'settings.agent_skills.read.failed' })
     } finally {
       setBusy(false)
     }
-  }, [])
+  }, [t])
 
   useEffect(() => {
     void load()
@@ -96,7 +100,7 @@ export default function AgentSkillsSection(): JSX.Element {
   const runInstall = useCallback(async (sourcePath: string, overwrite: boolean): Promise<void> => {
     setBusy(true)
     setSkipped([])
-    setStatus(info('正在安装…'))
+    setStatus(info(t('agentSkills.installing')))
     logger.info('安装助手技能开始', {
       event: 'settings.agent_skills.install.start',
       context: { extension: extname(sourcePath) },
@@ -104,21 +108,21 @@ export default function AgentSkillsSection(): JSX.Element {
     try {
       const result = await installAssistantSkill({ sourcePath, overwrite })
       setSkipped(result.skippedFiles)
-      setStatus(info(describeInstallResult(result)))
+      setStatus(info(describeInstallResult(result, t)))
       await load()
       logger.info('安装助手技能完成', {
         event: 'settings.agent_skills.install.completed',
         context: { installedCount: result.installed.length },
       })
     } catch (error) {
-      const message = error instanceof Error ? error.message : '安装技能失败'
+      const message = error instanceof Error ? error.message : t('agentSkills.installFailed')
       if (message.includes('同名技能已存在')) {
         setStatus(info(''))
         setConfirm({
           kind: 'overwrite',
-          title: '替换同名技能',
-          description: '数据目录里已经有同名技能了。继续会整个文件夹替换，原来的正文和引用文件不会保留。',
-          confirmLabel: '替换',
+          title: t('agentSkills.overwriteTitle'),
+          description: t('agentSkills.overwriteDescription'),
+          confirmLabel: t('agentSkills.overwriteConfirm'),
           run: () => runInstall(sourcePath, true),
         })
         return
@@ -128,16 +132,16 @@ export default function AgentSkillsSection(): JSX.Element {
     } finally {
       setBusy(false)
     }
-  }, [load])
+  }, [load, t])
 
   const pickAndInstall = useCallback(async (): Promise<void> => {
     const selected = await openDialog({
-      filters: [{ name: '技能文件', extensions: ['md', 'zip'] }],
+      filters: [{ name: t('agentSkills.fileFilter'), extensions: ['md', 'zip'] }],
     })
     const sourcePath = Array.isArray(selected) ? selected[0] : selected
     if (!sourcePath) return
     await runInstall(sourcePath, false)
-  }, [runInstall])
+  }, [runInstall, t])
 
   const handleDrop = useCallback((event: React.DragEvent<HTMLDivElement>): void => {
     event.preventDefault()
@@ -146,20 +150,20 @@ export default function AgentSkillsSection(): JSX.Element {
     if (!file) return
     const sourcePath = getPathForFile(file).trim()
     if (!sourcePath) {
-      setStatus(failure('无法读取拖入文件的路径，请改用“选择文件”。'))
+      setStatus(failure(t('agentSkills.dropPathFailed')))
       return
     }
     void runInstall(sourcePath, false)
-  }, [runInstall])
+  }, [runInstall, t])
 
   const toggleSkill = useCallback((skill: AssistantSkillMetadata): void => {
     const apply = async (): Promise<void> => {
       setBusy(true)
       try {
         setManifest(await setAssistantSkillEnabled({ name: skill.name, enabled: !skill.enabled }))
-        setStatus(info(`已${skill.enabled ? '停用' : '启用'}技能 ${skill.name}。下一次助手任务生效。`))
+        setStatus(info(t(skill.enabled ? 'agentSkills.disabledNotice' : 'agentSkills.enabledNotice', { name: skill.name })))
       } catch (error) {
-        setStatus(failure(error instanceof Error ? error.message : '更新技能状态失败'))
+        setStatus(failure(error instanceof Error ? error.message : t('agentSkills.toggleFailed')))
       } finally {
         setBusy(false)
       }
@@ -170,46 +174,46 @@ export default function AgentSkillsSection(): JSX.Element {
     if (skill.enabled && skill.source === 'builtin') {
       setConfirm({
         kind: 'disable-builtin',
-        title: `停用内置技能「${skill.name}」`,
-        description: '这是随应用发布的内置技能。停用后助手在对应场景会失去这部分操作指导，可能给出更笼统的结果。你可以随时重新启用。',
-        confirmLabel: '停用',
+        title: t('agentSkills.disableBuiltinTitle', { name: skill.name }),
+        description: t('agentSkills.disableBuiltinDescription'),
+        confirmLabel: t('agentSkills.disableConfirm'),
         run: apply,
       })
       return
     }
     void apply()
-  }, [])
+  }, [t])
 
   const removeSkill = useCallback((skill: AssistantSkillMetadata): void => {
     setConfirm({
       kind: 'uninstall',
-      title: `删除技能「${skill.name}」`,
-      description: '会从数据目录里删除这个技能文件夹，包含它的引用文件。此操作不可撤销。',
-      confirmLabel: '删除',
+      title: t('agentSkills.uninstallTitle', { name: skill.name }),
+      description: t('agentSkills.uninstallDescription'),
+      confirmLabel: t('agentSkills.uninstallConfirm'),
       run: async () => {
         setBusy(true)
         try {
           await uninstallAssistantSkill(skill.name)
-          setStatus(info(`已删除技能 ${skill.name}。`))
+          setStatus(info(t('agentSkills.uninstalled', { name: skill.name })))
           await load()
         } catch (error) {
-          setStatus(failure(error instanceof Error ? error.message : '删除技能失败'))
+          setStatus(failure(error instanceof Error ? error.message : t('agentSkills.uninstallFailed')))
         } finally {
           setBusy(false)
         }
       },
     })
-  }, [load])
+  }, [load, t])
 
   const openDirectory = useCallback(async (): Promise<void> => {
     try {
       await openAssistantSkillsDirectory()
       // 刻意不显示目录的绝对路径：这段文本会被 Surface 观察截图原样带给模型。
-      setStatus(info('已在文件管理器中打开技能目录。改完文件后点“重新读取”。'))
+      setStatus(info(t('agentSkills.directoryOpened')))
     } catch (error) {
-      setStatus(failure(error instanceof Error ? error.message : '打开技能目录失败'))
+      setStatus(failure(error instanceof Error ? error.message : t('agentSkills.openDirectoryFailed')))
     }
-  }, [])
+  }, [t])
 
   const renderSkillRow = (skill: AssistantSkillMetadata): JSX.Element => (
     <div key={`${skill.source}:${skill.name}`} className="flex items-start gap-3 py-1.5">
@@ -217,10 +221,10 @@ export default function AgentSkillsSection(): JSX.Element {
         <div className="flex flex-wrap items-center gap-2">
           <span className={UI_TEXT_BODY_CLASS}>{skill.name}</span>
           {skill.overridesBuiltin ? (
-            <span className={UI_TEXT_META_CLASS}>已覆盖同名内置技能</span>
+            <span className={UI_TEXT_META_CLASS}>{t('agentSkills.overridesBuiltin')}</span>
           ) : null}
           {skill.referencePaths.length > 0 ? (
-            <span className={UI_TEXT_META_CLASS}>{skill.referencePaths.length} 个引用文件</span>
+            <span className={UI_TEXT_META_CLASS}>{t('agentSkills.referenceCount', { count: skill.referencePaths.length })}</span>
           ) : null}
         </div>
         <p className={`mt-0.5 leading-5 ${UI_TEXT_META_CLASS}`}>{skill.description}</p>
@@ -230,15 +234,15 @@ export default function AgentSkillsSection(): JSX.Element {
           checked={skill.enabled}
           disabled={busy}
           onCheckedChange={() => toggleSkill(skill)}
-          aria-label={`启用技能 ${skill.name}`}
+          aria-label={t('agentSkills.enableSkill', { name: skill.name })}
         />
         {skill.source === 'user' ? (
           <UiIconButton
             type="button"
             tone="danger"
             disabled={busy}
-            title={`删除技能 ${skill.name}`}
-            aria-label={`删除技能 ${skill.name}`}
+            title={t('agentSkills.removeSkill', { name: skill.name })}
+            aria-label={t('agentSkills.removeSkill', { name: skill.name })}
             onClick={() => removeSkill(skill)}
           >
             <Trash2 className="h-4 w-4" />
@@ -250,26 +254,26 @@ export default function AgentSkillsSection(): JSX.Element {
 
   return (
     <div className={UI_FORM_ROW_GAP_CLASS}>
-      <UiGroup title="我的技能">
+      <UiGroup title={t('agentSkills.userGroup')}>
         {userSkills.length > 0
           ? userSkills.map(renderSkillRow)
           : (
             <UiEmpty
               size="sm"
-              title="还没有自己的技能"
-              description="技能是一段按需加载的提示词。安装后助手会在相关场景自己读取它，不会改变权限和审批规则。"
+              title={t('agentSkills.userEmptyTitle')}
+              description={t('agentSkills.userEmptyDescription')}
             />
           )}
       </UiGroup>
 
-      <UiGroup title="内置技能" divided>
+      <UiGroup title={t('agentSkills.builtinGroup')} divided>
         {builtinSkills.length > 0
           ? builtinSkills.map(renderSkillRow)
-          : <p className={UI_TEXT_META_CLASS}>没有读取到内置技能。</p>}
+          : <p className={UI_TEXT_META_CLASS}>{t('agentSkills.builtinEmpty')}</p>}
       </UiGroup>
 
       {manifest.invalid.length > 0 ? (
-        <UiGroup title="解析失败" divided>
+        <UiGroup title={t('agentSkills.invalidGroup')} divided>
           {manifest.invalid.map((entry) => (
             /* 失败条目会带出技能文件夹的本地绝对路径，必须声明为观察敏感区域。 */
             <div key={entry.path} data-observation-sensitive className="py-1">
@@ -280,7 +284,7 @@ export default function AgentSkillsSection(): JSX.Element {
         </UiGroup>
       ) : null}
 
-      <UiGroup title="安装技能" divided>
+      <UiGroup title={t('agentSkills.installGroup')} divided>
         <div
           onDragOver={(event) => {
             event.preventDefault()
@@ -293,28 +297,26 @@ export default function AgentSkillsSection(): JSX.Element {
           }`}
         >
           <Package size={18} className="mx-auto mb-2 text-text2" />
-          <p className={UI_TEXT_META_CLASS}>
-            把 .md 或 .zip 拖到这里，或点下面的按钮选择文件。只有 .md 与 .txt 会被安装，脚本和二进制文件一律丢弃。
-          </p>
+          <p className={UI_TEXT_META_CLASS}>{t('agentSkills.dropHint')}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {/* 助手大类整页只留一个实底主动作（“保存指令”），安装技能用次级档 */}
           <UiButton type="button" variant="secondary" disabled={busy} onClick={() => void pickAndInstall()}>
             <Upload className="h-4 w-4" />
-            选择文件安装
+            {t('agentSkills.pickFile')}
           </UiButton>
           <UiButton type="button" variant="secondary" disabled={busy} onClick={() => void load()}>
             <RefreshCw className="h-4 w-4" />
-            重新读取
+            {t('agentSkills.reload')}
           </UiButton>
           <UiButton type="button" variant="secondary" disabled={busy} onClick={() => void openDirectory()}>
             <FolderOpen className="h-4 w-4" />
-            打开技能目录
+            {t('agentSkills.openDirectory')}
           </UiButton>
         </div>
         {skipped.length > 0 ? (
           <div>
-            <p className={UI_TEXT_META_CLASS}>以下文件因为不是纯文本被丢弃：</p>
+            <p className={UI_TEXT_META_CLASS}>{t('agentSkills.skippedHeading')}</p>
             {skipped.map((file) => (
               <p key={file.path} className={`break-all leading-5 ${UI_TEXT_META_CLASS}`}>
                 {file.path} —— {file.reason}
@@ -331,9 +333,9 @@ export default function AgentSkillsSection(): JSX.Element {
         description={confirm?.description ?? ''}
         onClose={() => setConfirm(null)}
         actions={[
-          { label: '取消', onClick: () => setConfirm(null), variant: 'secondary' },
+          { label: t('agentSkills.cancel'), onClick: () => setConfirm(null), variant: 'secondary' },
           {
-            label: confirm?.confirmLabel ?? '确定',
+            label: confirm?.confirmLabel ?? t('agentSkills.confirm'),
             variant: confirm?.kind === 'uninstall' ? 'danger' : 'primary',
             onClick: () => {
               const pending = confirm

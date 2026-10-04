@@ -259,7 +259,6 @@ function CompactTextControl({
               autoFocus
               maxCharacters={param.maxLength}
               showCharacterCount={param.maxLength !== undefined}
-              editorClassName="ui-scrollbar"
             />
           </div>
         )}
@@ -289,7 +288,7 @@ function CompactPanelControl({
 }: { param: CompositePanelDef; value: DynamicValue; onChange: (value: DynamicValue) => void; disabled?: boolean }) {
   const { i18n } = useTranslation();
   const PanelComponent = param.panel ? panelRegistry.get(param.panel) : undefined;
-  const display = formatPanelDisplayValue(value, param.panel ?? 'composite', i18n.language, param.config);
+  const display = formatPanelDisplayValue(value, param.panel ?? 'composite', i18n.language, param.config, param.default);
 
   if (!PanelComponent) {
     return <span className="text-xs text-text2">{display}</span>;

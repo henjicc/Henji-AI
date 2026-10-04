@@ -134,7 +134,7 @@ const AboutSection: React.FC = () => {
         title={t('sections.about.projectLicenseTitle', { license: notices?.project.license ?? 'Apache-2.0' })}
         onClose={() => setProjectLicenseOpen(false)}
         size="editor"
-        contentClassName="ui-scrollbar min-h-0 flex-1 overflow-y-auto p-4"
+        contentClassName="min-h-0 flex-1 overflow-y-auto p-4"
       >
         {projectLicenseText ? <LicenseTextBlock texts={[projectLicenseText]} /> : null}
       </UiModal>

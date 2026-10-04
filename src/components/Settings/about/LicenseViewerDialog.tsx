@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { ExternalLink, Search } from 'lucide-react'
+import { ExternalLink } from 'lucide-react'
 import { Virtuoso } from 'react-virtuoso'
 import {
   UI_TEXT_BODY_CLASS,
@@ -8,10 +8,10 @@ import {
   UI_TEXT_TITLE_CLASS,
   UiButton,
   UiEmpty,
-  UiInput,
   UiModal,
   UiNavButton,
   UiPanel,
+  UiSearchInput,
 } from '@/components/ui'
 import { useI18n } from '@/hooks/useI18n'
 import { useExternalLink } from '../hooks/useExternalLink'
@@ -140,22 +140,18 @@ const LicenseViewerDialog: React.FC<LicenseViewerDialogProps> = ({ open, notices
     >
       <div className="flex min-h-0 flex-1">
         <div className="flex w-72 shrink-0 flex-col gap-2 border-r border-line p-3">
-          <div className="relative">
-            <Search aria-hidden="true" className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-text3" />
-            <UiInput
-              value={keyword}
-              onChange={(event) => setKeyword(event.target.value)}
-              placeholder={t('sections.about.viewer.searchPlaceholder')}
-              aria-label={t('sections.about.viewer.searchPlaceholder')}
-              className="pl-8"
-            />
-          </div>
+          <UiSearchInput
+            value={keyword}
+            onChange={(event) => setKeyword(event.target.value)}
+            placeholder={t('sections.about.viewer.searchPlaceholder')}
+            aria-label={t('sections.about.viewer.searchPlaceholder')}
+          />
           <p className={`px-1 ${UI_TEXT_META_CLASS}`}>{t('sections.about.allComponentsCount', { count: filtered.length })}</p>
           {filtered.length === 0 ? (
             <UiEmpty size="sm" title={t('sections.about.viewer.empty')} description={t('sections.about.viewer.emptyHint')} />
           ) : (
             <Virtuoso
-              className="ui-scrollbar min-h-0 flex-1"
+              className="min-h-0 flex-1"
               data={filtered}
               initialTopMostItemIndex={initialIndex}
               computeItemKey={(_, component) => component.id}
@@ -177,7 +173,7 @@ const LicenseViewerDialog: React.FC<LicenseViewerDialogProps> = ({ open, notices
             />
           )}
         </div>
-        <div className="ui-scrollbar min-w-0 flex-1 overflow-y-auto p-4">
+        <div className="min-w-0 flex-1 overflow-y-auto p-4">
           {selected ? <ComponentDetail component={selected} texts={notices.texts} /> : null}
         </div>
       </div>

@@ -404,6 +404,12 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
         transition: uiTransition(['opacity'], UI_DURATION.viewer),
         pointerEvents: open ? 'auto' : 'none',
       }}
+      // 收起中不可点击、对读屏隐藏；过渡结束即卸载，不只依赖计时器（任务 5.8）
+      aria-hidden={!open || undefined}
+      {...(!open ? { inert: '' } : {})}
+      onTransitionEnd={(event) => {
+        if (!open && event.target === event.currentTarget) setIsVisible(false)
+      }}
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose()
       }}

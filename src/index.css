@@ -801,6 +801,15 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/*
+ * 文字选区随主题（任务 5.8，5.4-41）：系统默认选区色在纸白下只有 3.36:1。
+ * 用选中淡强调底的悬停档——主题引擎求解三档文字时已把它叠在窗口/面板/抬升面上的合成色计入底集，
+ * 只设底色、不改文字色，选中后文字仍 ≥ 4.5:1。
+ */
+::selection {
+  background-color: var(--selected-accent-hover);
+}
+
 /* 禁用浏览器默认的聚焦样式（白色 ring） */
 /* 这解决了桌面 WebView/Chromium 中输入框等元素点击时出现白色边框的问题 */
 *:focus,
@@ -808,53 +817,29 @@ body {
   outline: none !important;
 }
 
-/* 滚动条样式 */
+/* 滚动条：全应用只有一种细滚动条（任务 5.8，P-22 / 5.4-43）。
+   只用 ::-webkit-scrollbar 伪元素，不写标准属性 scrollbar-width / scrollbar-color：
+   Chromium 121 起元素上一旦生效标准属性，伪元素规则整体失效，Windows 下回落成两端带箭头的系统滚动条。
+   伪元素滚动条不定义 ::-webkit-scrollbar-button 就没有箭头。命中区 8px，滑块用透明边框内缩到 4px，悬停加深。
+   隐藏滚动条的局部例外只写 scrollbar-width: none（标准属性只在“隐藏”时使用）。 */
 ::-webkit-scrollbar {
-  width: 4px;
-  height: 4px;
+  width: 8px;
+  height: 8px;
 }
 
-::-webkit-scrollbar-track {
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
   background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgb(var(--text2-rgb) / 0.4);
+  border: 2px solid transparent;
   border-radius: 999px;
+  background: rgb(var(--text2-rgb) / 0.45) padding-box;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgb(var(--text2-rgb) / 0.65);
-}
-
-* {
-  scrollbar-width: thin;
-  scrollbar-color: rgb(var(--text2-rgb) / 0.5) transparent;
-}
-
-/* PromptEditor 等跨工作区输入面使用的可交互滚动条，必须常驻全局样式；
-   放在画布懒加载样式里会导致用户打开画布前其他界面拿不到该样式。 */
-.ui-scrollbar {
-  scrollbar-width: thin;
-  scrollbar-color: rgb(var(--text2-rgb) / 0.56) transparent;
-}
-
-.ui-scrollbar::-webkit-scrollbar {
-  width: 7px;
-  height: 7px;
-}
-
-.ui-scrollbar::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.ui-scrollbar::-webkit-scrollbar-thumb {
-  border-radius: 9999px;
-  background: rgb(var(--text2-rgb) / 0.5);
-}
-
-.ui-scrollbar:hover::-webkit-scrollbar-thumb {
-  background: rgb(var(--text2-rgb) / 0.72);
+  background: rgb(var(--text2-rgb) / 0.72) padding-box;
 }
 
 /* 模型选择器的供应商栏使用常驻的自定义横向滚动条，隐藏会受系统设置自动消失的原生滚动条。 */
@@ -867,10 +852,10 @@ body {
   display: none;
 }
 
-/* 保留原 ui-scrollbar 的粗细与颜色，只把横向滑块改成常驻，避免系统自动隐藏。 */
+/* 与全局滚动条同一观感（4px 可见滑块、同色），只把横向滑块改成常驻，避免系统自动隐藏。 */
 .model-provider-scroll-thumb {
-  height: 7px;
-  background: rgb(var(--text2-rgb) / 0.5);
+  height: 4px;
+  background: rgb(var(--text2-rgb) / 0.45);
 }
 
 .model-provider-scrollbar:hover .model-provider-scroll-thumb {
@@ -1056,26 +1041,6 @@ body {
 html,
 body {
   scroll-behavior: auto;
-}
-
-/* 自定义滚动条样式 */
-::-webkit-scrollbar {
-  width: 4px;
-  height: 4px;
-}
-
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-::-webkit-scrollbar-thumb {
-  background: rgb(var(--text2-rgb) / 0.4);
-  border-radius: 999px;
-  transition: background 180ms;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: rgb(var(--text2-rgb) / 0.65);
 }
 
 /* Number input spinner removal */

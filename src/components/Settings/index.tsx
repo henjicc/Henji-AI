@@ -191,7 +191,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, target }) => {
           */}
           <nav
             aria-label={t('title')}
-            className={`ui-scrollbar w-52 shrink-0 overflow-y-auto border-r p-2 ${UI_GLASS_ADAPTIVE_DIVIDER_CLASS} ${UI_GLASS_ADAPTIVE_SURFACE_CLASS}`}
+            className={`w-52 shrink-0 overflow-y-auto border-r p-2 ${UI_GLASS_ADAPTIVE_DIVIDER_CLASS} ${UI_GLASS_ADAPTIVE_SURFACE_CLASS}`}
           >
             <div className="space-y-1">
               {tabs.map(tab => {

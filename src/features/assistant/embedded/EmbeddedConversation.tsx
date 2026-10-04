@@ -95,7 +95,7 @@ export function EmbeddedConversation(): JSX.Element {
   const canRetry = Boolean(state.error && lastUser && !lastTurnAnswered && !busy && selectedModel)
   const retry = (): void => { if (lastUser) send(lastUser.text, lastUser.attachments ?? [], {}) }
   return <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-    <div ref={scroll.viewportRef} onScroll={scroll.onScroll} onWheel={scroll.onWheel} onKeyDown={scroll.onKeyDown} className="ui-scrollbar min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 py-4" role="log" aria-label="助手对话">
+    <div ref={scroll.viewportRef} onScroll={scroll.onScroll} onWheel={scroll.onWheel} onKeyDown={scroll.onKeyDown} className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 py-4" role="log" aria-label="助手对话">
       <div ref={scroll.contentRef} className="space-y-5">
       {isEmpty ? (needsModel
         ? <UiEmpty size="sm" icon={<Sparkles aria-hidden="true" className="h-5 w-5" />} title="先设置助手模型"

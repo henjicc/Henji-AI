@@ -1,4 +1,5 @@
 import { AlertCircle, LoaderCircle } from 'lucide-react';
+import { UiEmpty } from '@/components/ui';
 import { useTranslation } from 'react-i18next';
 
 import { CanvasNodeImage } from '@/features/canvas/ui/CanvasNodeImage';
@@ -39,10 +40,7 @@ export function CameraStagePreviewPanel({
           disableViewer
         />
       ) : (
-        <div className="flex h-full w-full flex-col items-center justify-center gap-2 text-text2">
-          <ICON_TOOL_CAMERA_STAGE className="h-7 w-7 text-text3" />
-          <span className="px-4 text-center text-xs leading-6">{t('node.cameraStage.empty')}</span>
-        </div>
+        <UiEmpty size="node" icon={<ICON_TOOL_CAMERA_STAGE className="h-7 w-7" />} title={t('node.cameraStage.empty')} />
       )}
 
       {rendering && (

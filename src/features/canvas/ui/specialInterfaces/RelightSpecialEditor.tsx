@@ -137,7 +137,7 @@ export function RelightWorkbench({
                 role="radio"
                 aria-checked={settings.lightingMode === mode}
                 active={settings.lightingMode === mode}
-                className="flex-1 justify-center whitespace-nowrap"
+                className="flex-1"
                 onClick={() => updateSettings({ ...settings, lightingMode: mode })}
               >
                 {t(`node.relightGeneration.editor.${mode}`)}

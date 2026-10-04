@@ -8,6 +8,7 @@ import {
   UiInput,
   UiModal,
 } from '@/components/ui'
+import { useI18n } from '@/hooks/useI18n'
 import {
   applyLlmModelCatalogEntry,
   describeCatalogInputModalities,
@@ -15,26 +16,12 @@ import {
 } from '@henjicc/ai-sdk'
 import type { LlmCapabilities, LlmModelConfig } from '@henjicc/ai-sdk'
 
-const capabilityItems: Array<{
-  id: keyof Pick<LlmCapabilities, 'image' | 'video' | 'audio' | 'streaming' | 'toolCall' | 'parallelTools' | 'reasoning' | 'sampling' | 'usage'>
-  label: string
-}> = [
-  { id: 'image', label: '图片输入' },
-  { id: 'video', label: '视频输入' },
-  { id: 'audio', label: '音频输入' },
-  { id: 'streaming', label: '流式输出' },
-  { id: 'toolCall', label: '工具调用' },
-  { id: 'parallelTools', label: '并行工具' },
-  { id: 'reasoning', label: '思考输出' },
-  { id: 'sampling', label: '采样参数' },
-  { id: 'usage', label: 'Token 用量' },
+// 文案在 settings.llmModelDialog.capabilities.<id> / structured.<mode>
+const capabilityItems: Array<keyof Pick<LlmCapabilities, 'image' | 'video' | 'audio' | 'streaming' | 'toolCall' | 'parallelTools' | 'reasoning' | 'sampling' | 'usage'>> = [
+  'image', 'video', 'audio', 'streaming', 'toolCall', 'parallelTools', 'reasoning', 'sampling', 'usage',
 ]
 
-const structuredOutputOptions: Array<{ value: LlmCapabilities['structuredOutputMode']; label: string }> = [
-  { value: 'none', label: '不支持结构化输出' },
-  { value: 'json', label: 'JSON 模式' },
-  { value: 'schema', label: 'JSON Schema 模式' },
-]
+const structuredOutputModes: Array<LlmCapabilities['structuredOutputMode']> = ['none', 'json', 'schema']
 
 interface LlmModelDialogProps {
   isOpen: boolean
@@ -51,6 +38,8 @@ function parseOptionalPositiveInteger(value: string): number | null {
 }
 
 const LlmModelDialog = ({ isOpen, model, onChange, onClose, onSave }: LlmModelDialogProps): JSX.Element => {
+  const { t } = useI18n('settings')
+  const structuredOutputOptions = structuredOutputModes.map(value => ({ value, label: t(`llmModelDialog.structured.${value}`) }))
   const update = (patch: Partial<LlmModelConfig>): void => {
     if (model) onChange({ ...model, ...patch })
   }
@@ -85,42 +74,41 @@ const LlmModelDialog = ({ isOpen, model, onChange, onClose, onSave }: LlmModelDi
   return (
     <UiModal
       isOpen={isOpen}
-      title={model?.modelId ? '编辑模型' : '添加模型'}
+      title={model?.modelId ? t('llmModelDialog.editTitle') : t('llmModelDialog.addTitle')}
       onClose={onClose}
       size="form"
       footer={(
         <>
-          <UiButton type="button" variant="secondary" onClick={onClose}>取消</UiButton>
-          <UiButton type="button" variant="primary" onClick={() => void onSave()}>确定</UiButton>
+          <UiButton type="button" variant="secondary" onClick={onClose}>{t('llmModelDialog.cancel')}</UiButton>
+          <UiButton type="button" variant="primary" onClick={() => void onSave()}>{t('llmModelDialog.confirm')}</UiButton>
         </>
       )}
     >
       <div className="min-h-0 space-y-3 overflow-y-auto pr-1">
         <div className="space-y-1.5">
-          <div className={UI_TEXT_LABEL_CLASS}>模型 ID</div>
-          <UiInput aria-label="模型 ID" value={model?.modelId ?? ''} onChange={event => updateModelId(event.target.value)} placeholder="例如 deepseek-v4-flash" />
+          <div className={UI_TEXT_LABEL_CLASS}>{t('llmModelDialog.modelId')}</div>
+          <UiInput aria-label={t('llmModelDialog.modelId')} value={model?.modelId ?? ''} onChange={event => updateModelId(event.target.value)} placeholder={t('llmModelDialog.modelIdPlaceholder')} />
         </div>
         <div className="space-y-1.5">
-          <div className={UI_TEXT_LABEL_CLASS}>模型名称</div>
-          <UiInput aria-label="模型名称" value={model?.displayName ?? ''} onChange={event => update({ displayName: event.target.value })} placeholder="例如 DeepSeek V4 Flash" />
+          <div className={UI_TEXT_LABEL_CLASS}>{t('llmModelDialog.displayName')}</div>
+          <UiInput aria-label={t('llmModelDialog.displayName')} value={model?.displayName ?? ''} onChange={event => update({ displayName: event.target.value })} placeholder={t('llmModelDialog.displayNamePlaceholder')} />
         </div>
         {catalogEntry ? (
           <div className={`space-y-1 ${UI_TEXT_META_CLASS}`}>
             <div>
-              已按内置目录标注（{catalogEntry.vendor} · {catalogEntry.displayName}）；
-              支持输入：{describeCatalogInputModalities(catalogEntry)}。下面的选项仍可手动修改。
+              {t('llmModelDialog.catalogNote', { vendor: catalogEntry.vendor, name: catalogEntry.displayName, inputs: describeCatalogInputModalities(catalogEntry) })}
             </div>
             {catalogEntry.note ? <div>{catalogEntry.note}</div> : null}
           </div>
         ) : null}
         {/* 能力复选是同质选项集合：静息不描边、不铺底（复选框本体已是命中区），只靠排布成格 */}
         <div className="space-y-1.5">
-          <div className={UI_TEXT_LABEL_CLASS}>模型能力</div>
+          <div className={UI_TEXT_LABEL_CLASS}>{t('llmModelDialog.capabilitiesLabel')}</div>
           <div className={`grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3 ${UI_TEXT_BODY_CLASS}`}>
-            {capabilityItems.map(item => (
-              <label key={item.id} className="inline-flex min-h-7 cursor-pointer items-center gap-2">
-                <UiCheckbox checked={model?.capabilities[item.id] === true} onCheckedChange={checked => updateCapabilities({ [item.id]: checked })} />
-                {item.label}
+            {capabilityItems.map(id => (
+              <label key={id} className="inline-flex min-h-7 cursor-pointer items-center gap-2">
+                <UiCheckbox aria-label={t(`llmModelDialog.capabilities.${id}`)} checked={model?.capabilities[id] === true} onCheckedChange={checked => updateCapabilities({ [id]: checked })} />
+                {t(`llmModelDialog.capabilities.${id}`)}
               </label>
             ))}
           </div>
@@ -128,37 +116,37 @@ const LlmModelDialog = ({ isOpen, model, onChange, onClose, onSave }: LlmModelDi
         {/* 三个字段各自带标签：原来只有占位文字，填上数字后就看不出是哪一项 */}
         <div className="grid gap-3 sm:grid-cols-3">
           <div className="min-w-0 space-y-1.5">
-            <div className={UI_TEXT_LABEL_CLASS}>结构化输出</div>
+            <div className={UI_TEXT_LABEL_CLASS}>{t('llmModelDialog.structuredLabel')}</div>
             <Dropdown<LlmCapabilities['structuredOutputMode']>
               value={structuredOutputMode}
               display={structuredOutputOptions.find(option => option.value === structuredOutputMode)?.label ?? structuredOutputMode}
               options={structuredOutputOptions}
-              ariaLabel="结构化输出"
+              ariaLabel={t('llmModelDialog.structuredLabel')}
               className="w-full"
               buttonClassName="w-full"
               onSelect={mode => updateCapabilities({ structuredOutputMode: mode, jsonOutput: mode !== 'none' })}
             />
           </div>
           <div className="min-w-0 space-y-1.5">
-            <div className={UI_TEXT_LABEL_CLASS}>上下文 Token</div>
+            <div className={UI_TEXT_LABEL_CLASS}>{t('llmModelDialog.contextWindow')}</div>
             <UiInput
               type="number"
               min={1}
-              aria-label="上下文 Token"
+              aria-label={t('llmModelDialog.contextWindow')}
               value={model?.capabilities.contextWindow ?? ''}
               onChange={event => updateCapabilities({ contextWindow: parseOptionalPositiveInteger(event.target.value) })}
-              placeholder="未知"
+              placeholder={t('llmModelDialog.unknown')}
             />
           </div>
           <div className="min-w-0 space-y-1.5">
-            <div className={UI_TEXT_LABEL_CLASS}>最大输出 Token</div>
+            <div className={UI_TEXT_LABEL_CLASS}>{t('llmModelDialog.maxOutput')}</div>
             <UiInput
               type="number"
               min={1}
-              aria-label="最大输出 Token"
+              aria-label={t('llmModelDialog.maxOutput')}
               value={model?.capabilities.maxOutputTokens ?? ''}
               onChange={event => updateCapabilities({ maxOutputTokens: parseOptionalPositiveInteger(event.target.value) })}
-              placeholder="未知"
+              placeholder={t('llmModelDialog.unknown')}
             />
           </div>
         </div>

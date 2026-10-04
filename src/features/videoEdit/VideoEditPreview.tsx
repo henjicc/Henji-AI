@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import { Dropdown, PanelTrigger, UiButton, UiError, UiIconButton, UiInput, UiOptionButton, UiPanel } from '@/components/ui'
+import { Dropdown, PanelTrigger, UiButton, UiEmpty, UiError, UiIconButton, UiInput, UiOptionButton, UiPanel } from '@/components/ui'
 import { ImagePlus, MapPin, MoreHorizontal, MousePointer2, Move, PenLine, RotateCcw, SquareDashed } from 'lucide-react'
 import { Z_LAYERS } from '@/core/theme/zLayers'
 import { audibleVideoEditClips, videoEditDuration } from '@/core/videoEdit/document'
@@ -286,7 +286,7 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
       </div>}
       {(renderFailure || (mode !== 'select' && !instance.selection)) && <div className="pointer-events-none absolute inset-x-6 bottom-3 flex justify-center">
         <UiPanel className="pointer-events-auto max-w-md px-3 py-2">
-          {renderFailure ? <UiError title="节目画面无法显示" message={renderFailure} /> : <UiError message="请先选择要编辑的片段" />}
+          {renderFailure ? <UiError title="节目画面无法显示" message={renderFailure} /> : <UiEmpty size="xs" title="请先选择要编辑的片段" />}
         </UiPanel>
       </div>}
     </div>

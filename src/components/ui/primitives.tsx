@@ -3,7 +3,7 @@ import {
   type ButtonHTMLAttributes,
   type InputHTMLAttributes,
 } from 'react';
-import { Check, ChevronDown, Copy, Minus, Square, X } from 'lucide-react';
+import { Check, ChevronDown, Copy, Minus, Search, Square, X } from 'lucide-react';
 import {
   UI_BOOLEAN_CONTROL_ACTIVE_CLASS,
   UI_BUTTON_RESET_CLASS,
@@ -30,6 +30,7 @@ import {
   UI_OPTION_ITEM_CLASS,
   UI_RADIUS_CLASS,
 } from './styleTokens';
+import { resolveFormRowLabelling, useUiFormRowLabelling } from './formRowLabel';
 import { useScopedTextHistoryProps } from './useScopedTextHistory';
 import {
   type UiButtonProps,
@@ -43,6 +44,7 @@ import {
   type UiOptionButtonProps,
   type UiPanelProps,
   type UiRangeInputProps,
+  type UiSearchInputProps,
   type UiSelectProps,
   type UiSwitchProps,
   type UiTextAreaProps,
@@ -412,18 +414,23 @@ export const UiOptionButton = forwardRef<HTMLButtonElement, UiOptionButtonProps>
 
 UiOptionButton.displayName = 'UiOptionButton';
 
-const UI_TEXT_AREA_CLASS = `w-full resize-none ${UI_RADIUS_CLASS.field} px-2.5 py-2 text-13 leading-5 ${UI_FIELD_PLACEHOLDER_CLASS} ${UI_FIELD_SURFACE_CLASS} ${UI_FIELD_FOCUS_CLASS} ${UI_FIELD_DISABLED_CLASS}`;
+const UI_TEXT_AREA_FRAME_CLASS: Record<NonNullable<UiTextAreaProps['frame']>, string> = {
+  field: `w-full resize-none ${UI_RADIUS_CLASS.field} px-2.5 py-2 text-13 leading-5 ${UI_FIELD_PLACEHOLDER_CLASS} ${UI_FIELD_SURFACE_CLASS} ${UI_FIELD_FOCUS_CLASS} ${UI_FIELD_DISABLED_CLASS}`,
+  none: `w-full resize-none border-0 bg-transparent p-0 text-sm leading-6 text-text1 outline-none ${UI_FIELD_PLACEHOLDER_CLASS} ${UI_FIELD_DISABLED_CLASS}`,
+};
 
-export function UiTextArea({ className = '', textHistory, value, ...props }: UiTextAreaProps): JSX.Element {
+export function UiTextArea({ className = '', textHistory, value, frame = 'field', ...props }: UiTextAreaProps): JSX.Element {
   const historyProps = useScopedTextHistoryProps(
     resolveTextHistoryValue(value),
     textHistory,
     props
   );
+  const rowLabelling = resolveFormRowLabelling(useUiFormRowLabelling(), props);
   return (
     <textarea
       value={value}
-      className={`${UI_TEXT_AREA_CLASS} ${className}`}
+      className={`${UI_TEXT_AREA_FRAME_CLASS[frame]} ${className}`}
+      {...rowLabelling}
       {...props}
       {...historyProps}
     />
@@ -431,17 +438,19 @@ export function UiTextArea({ className = '', textHistory, value, ...props }: UiT
 }
 
 export const UiTextAreaField = forwardRef<HTMLTextAreaElement, UiTextAreaProps>(
-  ({ className = '', textHistory, value, ...props }, ref) => {
+  ({ className = '', textHistory, value, frame = 'field', ...props }, ref) => {
     const historyProps = useScopedTextHistoryProps(
       resolveTextHistoryValue(value),
       textHistory,
       props
     );
+    const rowLabelling = resolveFormRowLabelling(useUiFormRowLabelling(), props);
     return (
       <textarea
         ref={ref}
         value={value}
-        className={`${UI_TEXT_AREA_CLASS} ${className}`}
+        className={`${UI_TEXT_AREA_FRAME_CLASS[frame]} ${className}`}
+        {...rowLabelling}
         {...props}
         {...historyProps}
       />
@@ -461,11 +470,13 @@ export const UiInput = forwardRef<HTMLInputElement, UiInputProps>(
       textHistory,
       props
     );
+    const rowLabelling = resolveFormRowLabelling(useUiFormRowLabelling(), props);
     return (
       <input
         ref={ref}
         value={value}
         data-size={size}
+        {...rowLabelling}
         className={`w-full py-0 leading-5 ${UI_FIELD_SIZE_CLASS[size]} ${UI_FIELD_PADDING_CLASS[size]} ${UI_FIELD_PLACEHOLDER_CLASS} ${UI_FIELD_SURFACE_CLASS} ${UI_FIELD_FOCUS_CLASS} ${UI_FIELD_DISABLED_CLASS} ${className}`}
         {...props}
         {...historyProps}
@@ -476,10 +487,57 @@ export const UiInput = forwardRef<HTMLInputElement, UiInputProps>(
 
 UiInput.displayName = 'UiInput';
 
+/**
+ * 搜索框（任务 5.8，B-35）：全仓唯一写法——前置放大镜（辅助文字色）、可选右端清除按钮。
+ * 原来 8 个文件各写一份，图标位置、尺寸、颜色有三种。`className` 落在外层，只放宽度与伸缩。
+ */
+export const UiSearchInput = forwardRef<HTMLInputElement, UiSearchInputProps>(
+  ({ className = '', size = 'md', onClear, clearLabel, iconRef, value, ...props }, ref) => {
+    const small = size === 'sm';
+    const hasValue = value !== undefined && value !== null && String(value).length > 0;
+    return (
+      <div className={`relative min-w-0 ${className}`} data-ui-search-input>
+        <Search
+          ref={iconRef}
+          aria-hidden="true"
+          className={`pointer-events-none absolute top-1/2 -translate-y-1/2 text-text3 ${small ? 'left-2 h-3.5 w-3.5' : 'left-2.5 h-4 w-4'}`}
+        />
+        <UiInput
+          ref={ref}
+          type="text"
+          size={size}
+          value={value}
+          className={`${small ? 'pl-7' : 'pl-8'} ${onClear ? (small ? 'pr-7' : 'pr-8') : ''}`}
+          {...props}
+        />
+        {onClear && hasValue ? (
+          <UiIconButton
+            size="xs"
+            className="absolute right-1 top-1/2 -translate-y-1/2"
+            aria-label={clearLabel}
+            title={clearLabel}
+            onClick={(event) => {
+              event.stopPropagation();
+              onClear();
+            }}
+          >
+            <X className="h-3 w-3" />
+          </UiIconButton>
+        ) : null}
+      </div>
+    );
+  }
+);
+
+UiSearchInput.displayName = 'UiSearchInput';
+
 export const UiRangeInput = forwardRef<HTMLInputElement, UiRangeInputProps>(
-  ({ className = '', trackTone = 'neutral', ...props }, ref) => (
+  ({ className = '', trackTone = 'neutral', ...props }, ref) => {
+    const rowLabelling = resolveFormRowLabelling(useUiFormRowLabelling(), props);
+    return (
     <input
       ref={ref}
+      {...rowLabelling}
       type="range"
       className={`h-6 w-full cursor-pointer appearance-none bg-transparent focus-visible:outline-none
       [&::-webkit-slider-runnable-track]:h-1.5 [&::-webkit-slider-runnable-track]:rounded-full
@@ -491,7 +549,8 @@ export const UiRangeInput = forwardRef<HTMLInputElement, UiRangeInputProps>(
       ${className}`}
       {...props}
     />
-  )
+    );
+  }
 );
 
 UiRangeInput.displayName = 'UiRangeInput';
@@ -511,12 +570,15 @@ UiColorInput.displayName = 'UiColorInput';
 
 /** 复选框：强调色只进入框体本身（开态强调实底 + on-accent 勾），整行保持静息。 */
 export const UiCheckbox = forwardRef<HTMLButtonElement, UiCheckboxProps>(
-  ({ className = '', checked, onCheckedChange, onClick, ...props }, ref) => (
+  ({ className = '', checked, onCheckedChange, onClick, ...props }, ref) => {
+    const rowLabelling = resolveFormRowLabelling(useUiFormRowLabelling(), props);
+    return (
     <button
       ref={ref}
       type="button"
       role="checkbox"
       aria-checked={checked}
+      {...rowLabelling}
       className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border transition-colors duration-120 ${UI_FIELD_DISABLED_CLASS} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-ring ${
         checked
           ? UI_BOOLEAN_CONTROL_ACTIVE_CLASS
@@ -532,7 +594,8 @@ export const UiCheckbox = forwardRef<HTMLButtonElement, UiCheckboxProps>(
     >
       <Check className="h-3.5 w-3.5" strokeWidth={2.5} />
     </button>
-  )
+    );
+  }
 );
 
 UiCheckbox.displayName = 'UiCheckbox';
@@ -543,6 +606,7 @@ UiCheckbox.displayName = 'UiCheckbox';
  */
 export const UiSwitch = forwardRef<HTMLButtonElement, UiSwitchProps>(
   ({ className = '', checked, onCheckedChange, onClick, appearance = 'pill', offLabel, onLabel, size = 'field', ...props }, ref) => {
+    const rowLabelling = resolveFormRowLabelling(useUiFormRowLabelling(), props);
     const handleClick: ButtonHTMLAttributes<HTMLButtonElement>['onClick'] = (event) => {
       onClick?.(event);
       if (!event.defaultPrevented) {
@@ -561,6 +625,7 @@ export const UiSwitch = forwardRef<HTMLButtonElement, UiSwitchProps>(
           type="button"
           role="switch"
           aria-checked={checked}
+          {...rowLabelling}
           className={`relative inline-grid grid-cols-2 items-stretch rounded-lg bg-gap/60 p-0.5 font-medium transition-colors duration-120 ${UI_BUTTON_RESET_CLASS} ${UI_FIELD_DISABLED_CLASS} focus-visible:!ring-2 focus-visible:!ring-accent-ring ${sizeClass} ${className}`}
           onClick={handleClick}
           {...props}
@@ -595,6 +660,7 @@ export const UiSwitch = forwardRef<HTMLButtonElement, UiSwitchProps>(
         type="button"
         role="switch"
         aria-checked={checked}
+        {...rowLabelling}
         className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border-0 transition-colors duration-120 ${
           checked
             ? UI_BOOLEAN_CONTROL_ACTIVE_CLASS
@@ -621,12 +687,14 @@ UiSwitch.displayName = 'UiSwitch';
  * 选项的底与字再显式取 raised / text1，纸白等浅色主题下弹出列表不再是深色。
  */
 export function UiSelect({ className = '', children, size = 'md', ...props }: UiSelectProps) {
+  const rowLabelling = resolveFormRowLabelling(useUiFormRowLabelling(), props);
   // className 只放布局（宽度、伸缩），落在外层：原来与内层的 w-full 叠在同一元素上，
   // 宽度类被 w-full 覆盖，选择框按最长选项撑开（日志窗口历史模式“全部域”撑满整行，任务 5.7）
   return (
     <div className={`relative min-w-0 ${className}`}>
       <select
         data-size={size}
+        {...rowLabelling}
         className={`w-full appearance-none truncate py-0 pr-8 [color-scheme:inherit] [&_option]:bg-raised [&_option]:text-text1 ${UI_FIELD_SIZE_CLASS[size]} ${UI_FIELD_PADDING_CLASS[size]} ${UI_FIELD_SURFACE_CLASS} ${UI_FIELD_FOCUS_CLASS} ${UI_FIELD_DISABLED_CLASS}`}
         {...props}
       >

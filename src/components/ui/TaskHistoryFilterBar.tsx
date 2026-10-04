@@ -5,7 +5,7 @@ import type {
   GenerationHistoryTimePreset,
 } from '@/stores/generationHistoryFilterStore.ts'
 import { useI18n } from '@/hooks/useI18n'
-import { UiIconButton, UiInput } from './primitives'
+import { UiIconButton, UiSearchInput } from './primitives'
 import Dropdown from './Dropdown'
 import { UiDatePicker } from './UiDatePicker'
 import { UI_TEXT_META_CLASS } from './styleTokens'
@@ -69,7 +69,7 @@ export function UiTaskHistoryFilterBar({
   const panelVisible = isAlwaysVisible || isExpanded
   const panelRef = useRef<HTMLDivElement | null>(null)
   const triggerRef = useRef<HTMLDivElement | null>(null)
-  const iconAnchorRef = useRef<HTMLSpanElement | null>(null)
+  const iconAnchorRef = useRef<SVGSVGElement | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
   const [triggerShiftX, setTriggerShiftX] = useState<number>(0)
   const timeOptions: Array<{ label: string; value: GenerationHistoryTimePreset }> = [
@@ -231,30 +231,20 @@ export function UiTaskHistoryFilterBar({
           : 'relative flex flex-col items-end gap-1 rounded-lg border border-line-strong bg-panel px-2 py-1.5'}
         >
           <div className={`relative flex flex-wrap items-center gap-1 ${isAlwaysVisible ? 'justify-start' : 'justify-end'}`}>
-            <div className="relative shrink-0">
-              <span ref={iconAnchorRef} className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2" />
-              <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text2" />
-              <UiInput
-                ref={inputRef}
-                value={keyword}
-                onChange={(event) => onKeywordChange(event.target.value)}
-                placeholder={t('workspaceFilters.searchPlaceholder')}
-                className="w-[300px] pl-7 pr-7"
-              />
-              <UiIconButton size="xs"
-                type="button"
-                className={`absolute right-0.5 top-1/2 -translate-y-1/2 transition-opacity duration-120 ${
-                  keyword.length > 0 ? 'opacity-100' : 'pointer-events-none opacity-0'
-                }`}
-                onClick={() => {
-                  onKeywordChange('')
-                  window.setTimeout(() => inputRef.current?.focus(), 0)
-                }}
-                title={t('workspaceFilters.clearSearch')}
-              >
-                <X className="h-3 w-3" />
-              </UiIconButton>
-            </div>
+            <UiSearchInput
+              ref={inputRef}
+              iconRef={iconAnchorRef}
+              className="w-72 shrink-0"
+              value={keyword}
+              onChange={(event) => onKeywordChange(event.target.value)}
+              placeholder={t('workspaceFilters.searchPlaceholder')}
+              aria-label={t('workspaceFilters.searchPlaceholder')}
+              clearLabel={t('workspaceFilters.clearSearch')}
+              onClear={() => {
+                onKeywordChange('')
+                window.setTimeout(() => inputRef.current?.focus(), 0)
+              }}
+            />
 
             <Dropdown
               value={timePreset}

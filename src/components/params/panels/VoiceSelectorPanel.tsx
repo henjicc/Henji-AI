@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { UiButton, UiEmpty, UiError, UiLoading, UiInput, UiOptionButton } from '@/components/ui'
+import { UiButton, UiEmpty, UiError, UiLoading, UiInput, UiSearchInput, UiOptionButton } from '@/components/ui'
 import Dropdown from '@/components/ui/Dropdown'
 import AudioPlayer from '@/components/AudioPlayer'
 import { toFetchableMediaUrl, isLikelyLocalImagePath } from '@/services/imageSource'
@@ -433,12 +433,12 @@ export const VoiceSelectorPanel: React.FC<VoiceSelectorPanelProps> = ({
     >
       <div className="mb-3 shrink-0 space-y-2" data-voice-toolbar>
         <div className="flex items-center gap-2">
-          {config?.allowSearch !== false && <UiInput
+          {config?.allowSearch !== false && <UiSearchInput
             value={keyword}
             onChange={(event) => setKeyword(event.target.value)}
             placeholder="搜索音色名称或描述"
             aria-label="搜索音色"
-            className={`min-w-0 flex-1`}
+            className="flex-1"
           />}
           {remoteModelId && <UiButton type="button" variant="secondary" disabled={remoteStatus === 'loading'} onClick={() => void loadRemoteVoices(true)}>
             刷新音色

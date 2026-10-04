@@ -212,7 +212,7 @@ export function CanvasImageCapabilityActions({
                         data-image-capability-placement="overflow"
                         title={t(capability.descriptionKey)}
                         size="lg"
-                        className={`min-h-12 w-full items-start gap-2 px-2 py-2 text-left ${disabled ? 'cursor-not-allowed opacity-50' : ''}`}
+                        className="min-h-12 w-full items-start gap-2 px-2 py-2 text-left"
                         onClick={(event) => {
                           event.stopPropagation()
                           if (disabled) return
