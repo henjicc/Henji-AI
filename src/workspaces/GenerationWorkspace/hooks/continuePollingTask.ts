@@ -9,7 +9,7 @@ import { getMediaDimensions, getMediaDurationFormatted } from '@/utils/mediaDime
 import type { GenerationTask } from '../types'
 import { splitMulti } from '../utils/multiFile'
 import { resolveProgressSettleDelayMs } from '../utils/progressAnimation'
-import { extractServerTaskIdFromErrorMessage, extractServerTaskIdFromMetadata } from '@/features/generation/application/taskServerId'
+import { extractServerTaskIdFromErrorMessage, resolveResumableServerTaskId } from '@/features/generation/application/taskServerId'
 import { normalizeMediaResultForDesktop } from '../utils/mediaResult'
 import { useGenerationTaskProgressStore } from '@/stores/generationTaskProgressStore'
 import { getPlatform } from '@/platform'
@@ -42,9 +42,7 @@ export async function continuePollingTask({
   updateProgress,
   toUserMessage,
 }: ContinuePollingTaskParams): Promise<void> {
-  const serverTaskId = task.serverTaskId
-    ?? extractServerTaskIdFromErrorMessage(task.error ?? '')
-    ?? extractServerTaskIdFromMetadata(task.result as DynamicValue)
+  const serverTaskId = resolveResumableServerTaskId(task)
 
   if (!serverTaskId) {
     logger.error('[Workspace] 再次轮询失败：缺少有效任务ID', { taskId: task.id, model: task.model, error: task.error })

@@ -43,7 +43,7 @@ export function ClearHistoryDialog({ open, onClose, onClearFailed, onClearAll }:
             close()
           }}
         >
-          <TriangleAlert className="mr-2 h-4 w-4" />
+          <TriangleAlert className="h-4 w-4" />
           {t('ui:workspace.clearDialog.failedOnly')}
         </UiButton>
 
@@ -56,13 +56,12 @@ export function ClearHistoryDialog({ open, onClose, onClearFailed, onClearAll }:
             }
             setNeedsConfirm(true)
           }}
-          className={needsConfirm ? 'animate-pulse-scale' : ''}
         >
-          <Trash2 className="mr-2 h-4 w-4" />
+          <Trash2 className="h-4 w-4" />
           {needsConfirm ? t('ui:workspace.clearDialog.confirmDelete') : t('ui:workspace.clearDialog.deleteAll')}
         </UiButton>
 
-        <UiButton size="lg" onClick={close} variant="secondary">
+        <UiButton size="lg" onClick={close}>
           {t('common:cancel')}
         </UiButton>
       </div>

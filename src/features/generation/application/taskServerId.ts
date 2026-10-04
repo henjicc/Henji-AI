@@ -65,3 +65,19 @@ export function extractServerTaskIdFromErrorMessage(message: string): string | u
 
   return undefined
 }
+
+/**
+ * 能否继续向供应商获取这条任务的结果：供应商任务号的唯一口径。自动恢复、手动“继续获取结果”、
+ * 记录卡是否显示该按钮都用它。任务号可能在 serverTaskId、错误文本或结果元数据里——
+ * 曾经三处各取各的，任务号只留在元数据里的任务自动恢复悄悄跳过，用户手点却能续上。
+ */
+export function resolveResumableServerTaskId(task: {
+  serverTaskId?: string
+  error?: string
+  result?: unknown
+}): string | undefined {
+  const direct = task.serverTaskId?.trim()
+  if (direct) return direct
+  return extractServerTaskIdFromErrorMessage(task.error ?? '')
+    ?? extractServerTaskIdFromMetadata(task.result as DynamicValue)
+}

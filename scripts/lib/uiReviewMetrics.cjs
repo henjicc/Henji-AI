@@ -66,11 +66,22 @@ function collectLayoutMeasurements(element) {
     const text = ownText(node)
     if (!text) continue
     const style = getComputedStyle(node)
+    // 只量自身的文字节点：按整个元素取 range 会把同一行里的图标（svg）也算进来，
+    // 图标与文字顶边不同就被误判成“折行”（5.3：带上传图标的“上传 PDF”按钮）。
+    // 顶边按半个行高聚类，同一行里不同字体的基线差不算新行。
     const range = document.createRange()
-    range.selectNodeContents(node)
-    const lineTops = [...range.getClientRects()].filter((rect) => rect.width > 0 && rect.height > 0)
-      .map((rect) => Math.round(rect.top))
+    const rects = []
+    for (const child of node.childNodes) {
+      if (child.nodeType !== Node.TEXT_NODE || !child.textContent.trim()) continue
+      range.selectNodeContents(child)
+      rects.push(...[...range.getClientRects()].filter((rect) => rect.width > 0 && rect.height > 0))
+    }
     range.detach?.()
+    const lineTops = []
+    for (const rect of rects.sort((a, b) => a.top - b.top)) {
+      const last = lineTops[lineTops.length - 1]
+      if (last === undefined || rect.top - last > rect.height / 2) lineTops.push(rect.top)
+    }
     // 悬停可看全：自身或祖先带 title / aria-label（UiMarqueeText 默认把全文写进 title）
     const titled = node.closest('[title],[aria-label]')
     texts.push({
@@ -85,7 +96,7 @@ function collectLayoutMeasurements(element) {
       textOverflow: style.textOverflow,
       lineClamp: style.webkitLineClamp || style.getPropertyValue('-webkit-line-clamp') || 'none',
       whiteSpace: style.whiteSpace,
-      lineCount: new Set(lineTops).size,
+      lineCount: lineTops.length,
       hasFullTextHint: Boolean(titled),
       label: describe(node),
     })

@@ -4,6 +4,7 @@ import { useI18n } from '@/hooks/useI18n'
 import type { MenuItem } from '@/hooks/useContextMenu'
 import { UiEmpty, UiRegion } from '@/components/ui'
 import type { GenerationTask, ResultImageDimensions } from '../types'
+import { GENERATION_COLUMN_MAX_WIDTH_CLASS } from '../generationColumn'
 import TaskCard, { type TaskCardProps } from './TaskCard'
 import { TaskListRetentionContext, type TaskListRetention } from '../hooks/useTaskListRetention'
 import { useVirtualTaskList } from '../hooks/useVirtualTaskList'
@@ -60,9 +61,9 @@ export function TaskList({
   }
 
   return (
-    // 记录列：与命令带同宽同边距（max-w-4xl + px-6）。页面不再单独画“历史记录”标题，
+    // 记录列：与命令带同宽同边距（generationColumn + px-6）。页面不再单独画“历史记录”标题，
     // 命中数在筛选生效时显示在命令带右侧。
-    <UiRegion maxWidthClassName="max-w-4xl" className="mx-auto px-6">
+    <UiRegion maxWidthClassName={GENERATION_COLUMN_MAX_WIDTH_CLASS} className="mx-auto px-6">
       {totalCount === 0 && (
         <UiEmpty
           icon={<History className="h-8 w-8" />}

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { UI_COLOR_ACCENT_BG_CLASS } from '@/components/ui/styleTokens';
+import { UI_COLOR_ACCENT_BG_CLASS, UI_TEXT_TIMECODE_CLASS } from '@/components/ui/styleTokens';
 
 // 拖拽粒度收敛到整秒：一是配合 API 只接受整秒的 ends 字段，二是用户反馈小数秒在交互上没有意义。
 const MIN_GAP_SECONDS = 1;
@@ -127,7 +127,7 @@ export function VideoTrimTimeline({
           <div className="absolute -top-1 left-1/2 h-2 w-2 -translate-x-1/2 rounded-full bg-text1" />
         </div>
       </div>
-      <div className="flex items-center justify-between text-2xs text-text2">
+      <div className={`flex items-center justify-between text-2xs text-text2 ${UI_TEXT_TIMECODE_CLASS}`}>
         <span>{formatSeconds(start)}</span>
         <span>{formatSeconds(end - start)} / {formatSeconds(maxClipSeconds)}</span>
         <span>{formatSeconds(end)}</span>

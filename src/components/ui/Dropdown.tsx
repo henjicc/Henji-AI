@@ -49,6 +49,11 @@ type DropdownProps<T extends string | number | boolean> = {
   portal?: boolean
   zIndex?: number
   minWidthStrategy?: 'options' | 'display' | 'none'
+  /**
+   * 菜单宽度：`options`（默认）= 不窄于触发器，选项更长时按最长选项（含选中勾槽与滚动条）加宽，封顶 360 再截断；
+   * `button` = 严格等于触发器宽度，只给“菜单必须与触发器对齐”的场合。
+   * 任务 5.3 改默认值：触发器按当前值定宽（minWidthStrategy="display"）时，按触发器宽度的菜单必然截断更长的选项。
+   */
   panelWidthStrategy?: 'button' | 'options'
   /**
    * `text` 用于标题栏等弱化入口：静息态只有文字与箭头，浮层仍使用统一菜单表面。
@@ -78,7 +83,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
     portal = true,
     zIndex = Z_LAYERS.popover,
     minWidthStrategy = 'display',
-    panelWidthStrategy = 'button',
+    panelWidthStrategy = 'options',
     appearance: appearanceOverride,
     onOpenChange,
   } = props
@@ -113,6 +118,10 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
   const [panelMinWidthPx, setPanelMinWidthPx] = useState<number | null>(null)
   const lastButtonMinWidthRef = useRef<number | null>(null)
   const lastPanelMinWidthRef = useRef<number | null>(null)
+  const listRef = useRef<HTMLDivElement | null>(null)
+  // 选项超过可视高度时列表出现竖向滚动条，它占用的宽度要加到菜单宽度上，
+  // 否则带勾的选中项会被挤成“5.”“智…”（任务 5.3）。打开后、绘制前测量一次。
+  const [scrollGutterPx, setScrollGutterPx] = useState(0)
   const resolvedDisplay = resolveDropdownDisplay(display, value, options)
   const isSelectedOption = (optValue: T): boolean => {
     if (value === undefined) return false
@@ -284,7 +293,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
       const rect = target.getBoundingClientRect()
       const panelHeight = panelRef.current?.getBoundingClientRect().height ?? 0
       const panelWidth = panelWidthStrategy === 'options' && panelMinWidthPx
-        ? Math.max(rect.width, panelMinWidthPx)
+        ? Math.max(rect.width, panelMinWidthPx + scrollGutterPx)
         : rect.width
       const viewportPadding = 8
       const viewport = ownerWindowOf(ref.current)
@@ -310,7 +319,19 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
         ownerWindow.removeEventListener('resize', onScrollOrResize)
       }
     }
-  }, [open, panelMinWidthPx, panelWidthStrategy])
+  }, [open, panelMinWidthPx, panelWidthStrategy, scrollGutterPx])
+
+  useLayoutEffect(() => {
+    if (!open) return
+    const list = listRef.current
+    if (!list) return
+    const gutter = Math.max(0, list.offsetWidth - list.clientWidth)
+    if (gutter !== scrollGutterPx) setScrollGutterPx(gutter)
+  }, [fixedPos, open, options, scrollGutterPx])
+
+  const optionsPanelWidth = panelWidthStrategy === 'options' && panelMinWidthPx
+    ? panelMinWidthPx + scrollGutterPx
+    : null
 
   const menuBody = renderPanel ? (
     <div id={panelId} className="max-h-60 overflow-y-auto">
@@ -319,6 +340,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
     </div>
   ) : (
     <div
+      ref={listRef}
       id={panelId}
       role="listbox"
       aria-label={ariaLabel ?? label ?? resolvedDisplay}
@@ -393,8 +415,8 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
                 position: 'fixed',
                 top: fixedPos.top,
                 left: fixedPos.left,
-                width: panelWidthStrategy === 'options' && panelMinWidthPx
-                  ? Math.max(fixedPos.width, panelMinWidthPx)
+                width: optionsPanelWidth !== null
+                  ? Math.max(fixedPos.width, optionsPanelWidth)
                   : fixedPos.width,
                 zIndex
               }}
@@ -412,7 +434,8 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
             ref={panelRef}
             // 非 portal 面板在触发器所在的层叠上下文里展开，只需盖住同一上下文里的兄弟内容：下拉档即可
             className={`absolute left-0 z-dropdown ${fixedPos?.placement === 'above' ? 'bottom-full mb-2' : 'top-full mt-2'} ${panelWidthStrategy === 'options' ? 'w-auto' : 'w-full'} ${UI_TRIGGER_PANEL_SURFACE_CLASS[surface]} ${UI_TRIGGER_PANEL_PADDING_CLASS[panelPadding]} ${closing ? 'animate-scale-out' : 'animate-scale-in'}`}
-            style={panelWidthStrategy === 'options' && panelMinWidthPx ? { minWidth: `${panelMinWidthPx}px` } : undefined}
+            // 非 portal 面板与触发器同一定位上下文：不窄于触发器（100%），选项更长时按内容加宽
+            style={optionsPanelWidth !== null ? { minWidth: `max(100%, ${optionsPanelWidth}px)` } : undefined}
             data-dropdown-portal="true"
             data-dropdown-placement={fixedPos?.placement ?? 'below'}
             {...overlay.layerProps}

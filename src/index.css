@@ -965,34 +965,19 @@ body {
   scroll-padding-top: 16px;
 }
 
-/* 脉动缩放动画 - 用于强调按钮 */
-@keyframes pulseScale {
-
-  0%,
-  100% {
-    transform: scale(1);
-  }
-
-  50% {
-    transform: scale(1.05);
-  }
-}
-
-.animate-pulse-scale {
-  animation: pulseScale 1s ease-in-out infinite;
-}
-
+/* 提示词优化流式预览：逐字淡入只能写在 CSS 里（每个字形一个 span，数量随流式增长）；
+   时长取动效档 180 / 240 / 500（任务 5.3）。 */
 .prompt-optimize-preview {
   animation: promptOptimizePreviewIn 180ms ease-out both;
 }
 
 .prompt-optimize-preview.is-closing {
-  animation: promptOptimizePreviewOut 220ms ease-in both;
+  animation: promptOptimizePreviewOut 240ms ease-in both;
   pointer-events: none;
 }
 
 .prompt-optimize-preview__stream {
-  animation: promptOptimizeStreamRise 520ms ease-out both;
+  animation: promptOptimizeStreamRise 500ms ease-out both;
   overscroll-behavior: contain;
   scrollbar-width: none;
   -ms-overflow-style: none;
@@ -1004,7 +989,6 @@ body {
 
 .prompt-optimize-preview__reasoning {
   display: inline;
-  opacity: 0.72;
 }
 
 .prompt-optimize-preview__content {

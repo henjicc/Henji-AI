@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { extractServerTaskIdFromErrorMessage, extractServerTaskIdFromMetadata } from '@/features/generation/application/taskServerId'
+import { resolveResumableServerTaskId as resumableServerTaskId } from '@/features/generation/application/taskServerId'
 import type { GenerationTask } from '../types'
 
 export interface UseAutoResumePollingParams {
@@ -11,19 +11,6 @@ export interface UseAutoResumePollingParams {
 }
 
 const RUNNING_STATUSES: ReadonlySet<GenerationTask['status']> = new Set(['generating', 'pending', 'queued'])
-
-/**
- * 供应商任务号的唯一口径，和 `continuePollingTask` 抄同一份。
- *
- * 这里原来只看 `task.serverTaskId`，但手动「继续轮询」还会从错误文本和结果元数据里捞。
- * 两处口径不一致的后果是：任务号只留在元数据里的任务，自动恢复悄悄跳过，用户手点却能续上。
- */
-function resumableServerTaskId(task: GenerationTask): string | undefined {
-  const direct = task.serverTaskId?.trim()
-  if (direct) return direct
-  return extractServerTaskIdFromErrorMessage(task.error ?? '')
-    ?? extractServerTaskIdFromMetadata(task.result as DynamicValue)
-}
 
 export function useAutoResumePolling({
   tasks,

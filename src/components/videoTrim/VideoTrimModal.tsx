@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Pause, Play, Volume2, VolumeX } from 'lucide-react';
 import { createLogger } from '@/core/logging';
-import { UiButton, UiError, UiIconButton, UiModal } from '@/components/ui';
+import { UiButton, UiError, UiIconButton, UiLoading, UiModal } from '@/components/ui';
 import { compressVideoToFit } from '@/commands/video';
 import { VideoTrimTimeline } from './VideoTrimTimeline';
 
@@ -211,12 +211,14 @@ export function VideoTrimModal({
         </>
       )}
     >
-      <div className="flex flex-col gap-3">
-        <div className="flex flex-col gap-1.5">
+      {/* 视频占弹窗剩余高度、可收缩，裁剪条与播放控制始终在可见区：原来视频固定 max-h-60vh，
+          1440×900 下把裁剪条挤到弹窗滚动区外，要滚动才找得到（任务 5.3） */}
+      <div className="flex min-h-0 flex-1 flex-col gap-3">
+        <div className="flex min-h-0 flex-1 flex-col gap-1.5">
           <video
             ref={attachVideo}
             src={previewUrl}
-            className="max-h-[60vh] w-full rounded-md bg-media object-contain"
+            className="min-h-0 w-full flex-1 rounded-md bg-media object-contain"
             preload="metadata"
             muted={muted}
             playsInline
@@ -239,7 +241,7 @@ export function VideoTrimModal({
           </div>
         </div>
         {isProbing ? (
-          <div className="text-xs text-text2">{t('common:loading')}</div>
+          <UiLoading size="xs" message={t('common:loading')} />
         ) : durationSeconds > 0 ? (
           <VideoTrimTimeline
             durationSeconds={durationSeconds}

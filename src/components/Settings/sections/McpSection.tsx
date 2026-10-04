@@ -35,7 +35,7 @@ export default function McpSection(): React.JSX.Element {
       <UiFormRow label={t('mcp.name')}>
         <div className="flex items-center gap-2">
           <UiInput className="min-w-0 flex-1" value={name} onChange={(event) => setName(event.target.value)} maxLength={80} placeholder={t('mcp.namePlaceholder')} />
-          <UiButton className="shrink-0 whitespace-nowrap" variant="secondary" disabled={busy || !name.trim()} onClick={() => void act(async () => { await getMcpConnectionService().authorize({ name, allowWrites, allowDestructive, allowPaid }); setName('') })}>{t('mcp.authorize')}</UiButton>
+          <UiButton className="shrink-0" variant="secondary" disabled={busy || !name.trim()} onClick={() => void act(async () => { await getMcpConnectionService().authorize({ name, allowWrites, allowDestructive, allowPaid }); setName('') })}>{t('mcp.authorize')}</UiButton>
         </div>
       </UiFormRow>
       <UiFormRow label={t('mcp.allowWrites')} inline info={t('mcp.writeScope')}>

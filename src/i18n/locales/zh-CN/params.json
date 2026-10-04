@@ -23,7 +23,7 @@
     "baseSize": "基础尺寸",
     "bitrate": "比特率",
     "cameraFixed": "固定相机",
-    "cfgScale": "CFG Scale",
+    "cfgScale": "引导系数",
     "channel": "声道",
     "characterOrientation": "人物朝向",
     "duration": "时长",
@@ -69,7 +69,7 @@
     "turboMode": "快速模式",
     "version": "版本",
     "variant": "版本",
-    "voiceId": "音色 ID",
+    "voiceId": "音色",
     "volume": "音量"
   },
   "options": {

@@ -61,11 +61,14 @@ function createGenerationPerformanceScenes(context) {
               await window.henjiNative.db.execute('INSERT INTO history (id,provider_id,model_id,type,prompt,params,file_path,status,created_at) VALUES ' + values.join(','), params)
             }
           }, { count, image })
-          if (backgroundCount) await page.evaluate(async backgroundCount => {
+          // 进行中的任务是最新提交的：时间排在全部历史之后。生成记录首屏定位到最新记录（4a368bea），
+          // 进度细线要在用户实际看到的位置被观察到；排在最旧处时它们从不挂载，场景观察不到任何进度（任务 5.3）。
+          if (backgroundCount) await page.evaluate(async ({ backgroundCount, count }) => {
             for (let i = 0; i < backgroundCount; i++) await window.henjiNative.db.execute(
-              'UPDATE history SET status=?,file_path=NULL,task_id=? WHERE id=?',
-              ['generating', `__generation_background_${i}`, `__generation_bench_${i}`])
-          }, backgroundCount)
+              'UPDATE history SET status=?,file_path=NULL,task_id=?,created_at=? WHERE id=?',
+              ['generating', `__generation_background_${i}`, new Date(1700000000000 + (count + i) * 1000).toISOString(), `__generation_bench_${i}`])
+          }, { backgroundCount, count })
+          const latestId = backgroundCount ? `__generation_bench_${backgroundCount - 1}` : `__generation_bench_${count - 1}`
           const loadSession = report.loadProfileDiagnostic ? await page.context().newCDPSession(page) : null
           let loadMs
           try {
@@ -75,7 +78,7 @@ function createGenerationPerformanceScenes(context) {
             }
             const began = performance.now()
             await page.reload({ waitUntil: 'domcontentloaded' })
-            await page.locator(`[data-generation-task-id="__generation_bench_${count - 1}"]`).waitFor({ timeout: 180000 })
+            await page.locator(`[data-generation-task-id="${latestId}"]`).waitFor({ timeout: 180000 })
             loadMs = performance.now() - began
             if (loadSession) {
               const { profile } = await loadSession.send('Profiler.stop')

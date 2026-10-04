@@ -36,7 +36,7 @@ export function AudioEditHome({ projects, loading, loadFailed, disabled, onBack,
   const currentPage = Math.min(page, Math.max(0, pageCount - 1))
   const hasProjects = projects.length > 0
   const importButton = (
-    <UiButton variant="primary" className="shrink-0 gap-2 whitespace-nowrap" disabled={disabled} onClick={onImport}>
+    <UiButton variant="primary" className="shrink-0 gap-2" disabled={disabled} onClick={onImport}>
       <FolderOpen size={16} aria-hidden="true" />导入音频或视频
     </UiButton>
   )

@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react'
+import { UI_DURATION } from '@/components/ui/motion'
 
-const PREVIEW_CLOSE_MS = 220
+// 与 index.css 里 .prompt-optimize-preview.is-closing 的收起动画同档（240），否则收尾被硬切
+const PREVIEW_CLOSE_MS = UI_DURATION.slow
 const GLYPH_REVEAL_INTERVAL_MS = 18
 
 export interface PromptOptimizationPreviewSource {

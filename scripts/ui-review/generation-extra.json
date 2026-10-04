@@ -1,0 +1,327 @@
+{
+  "id": "review-generation-extra",
+  "surface": "生成",
+  "name": "核对-视频参考上传拒绝与裁剪、长提示词、数值拖动（不点生成、提示词里不按 Enter）",
+  "checklist": [
+    "G07.4",
+    "G07.6",
+    "G12.6",
+    "G13.6",
+    "G15.3",
+    "G20"
+  ],
+  "writesUserData": false,
+  "steps": [
+    {
+      "enter": "generation"
+    },
+    {
+      "selectModel": {
+        "modelId": "apimart-kling-3.0-omni",
+        "providerId": "apimart",
+        "search": "可灵 3.0 Omni"
+      }
+    },
+    {
+      "waitStable": {
+        "target": {
+          "role": "button",
+          "name": "/^模型：/"
+        }
+      }
+    },
+    {
+      "setFiles": {
+        "target": {
+          "selector": "input[type=\"file\"][accept*=\"video\"]"
+        },
+        "files": [
+          "scripts/fixtures/plain_video.mp4"
+        ]
+      }
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "waitFor": {
+        "role": "alertdialog"
+      },
+      "timeout": 8000
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "upload-rejected"
+    },
+    {
+      "click": {
+        "role": "button",
+        "name": "关闭",
+        "within": {
+          "role": "alertdialog"
+        }
+      }
+    },
+    {
+      "waitFor": {
+        "target": {
+          "role": "alertdialog"
+        },
+        "state": "hidden"
+      }
+    },
+    {
+      "wait": 300
+    },
+    {
+      "selectModel": {
+        "modelId": "kie-gemini-omni-video",
+        "providerId": "kie",
+        "search": "Gemini Omni"
+      }
+    },
+    {
+      "waitStable": {
+        "target": {
+          "role": "button",
+          "name": "/^模型：/"
+        }
+      }
+    },
+    {
+      "setFiles": {
+        "target": {
+          "selector": "input[type=\"file\"][accept*=\"video\"]"
+        },
+        "files": [
+          "scripts/fixtures/plain_video.mp4"
+        ]
+      }
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": {
+        "name": "video-reference",
+        "metrics": {
+          "target": {
+            "role": "button",
+            "name": "/^模型：/",
+            "commonAncestorWith": {
+              "selector": "[data-onboarding-target=\"generate\"]"
+            }
+          },
+          "maxRows": 1
+        }
+      }
+    },
+    {
+      "hover": {
+        "selector": "button[title=\"裁剪\"]",
+        "includeHidden": true,
+        "closest": "div.shrink-0"
+      }
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "click": {
+        "selector": "button[title=\"裁剪\"]"
+      }
+    },
+    {
+      "waitFor": {
+        "role": "dialog"
+      },
+      "timeout": 10000
+    },
+    {
+      "wait": 800
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "trim-open"
+    },
+    {
+      "drag": {
+        "from": {
+          "selector": "[role=\"dialog\"] .cursor-ew-resize",
+          "nth": 1
+        },
+        "to": {
+          "dx": -80,
+          "dy": 0
+        },
+        "release": false
+      },
+      "optional": true
+    },
+    {
+      "capture": "trim-dragging"
+    },
+    {
+      "release": {},
+      "optional": true
+    },
+    {
+      "escape": {}
+    },
+    {
+      "waitFor": {
+        "target": {
+          "role": "dialog"
+        },
+        "state": "hidden"
+      },
+      "optional": true
+    },
+    {
+      "fill": {
+        "target": {
+          "selector": "[data-onboarding-target=\"prompt\"] [contenteditable=\"true\"]"
+        },
+        "text": "黄昏时分的海港，渔船缓缓驶入，远处灯塔亮起第一束光；镜头从高处俯拍逐渐推近到甲板上的人物，人物回头看向镜头，海风吹起衣角与发丝，水面反射橙紫色的晚霞，远景的城市灯火一盏盏亮起。保持人物服装与配色一致，动作连贯自然，不要出现文字、水印或闪烁。黄昏时分的海港，渔船缓缓驶入，远处灯塔亮起第一束光；镜头从高处俯拍逐渐推近到甲板上的人物，人物回头看向镜头，海风吹起衣角与发丝，水面反射橙紫色的晚霞，远景的城市灯火一盏盏亮起。保持人物服装与配色一致，动作连贯自然，不要出现文字、水印或闪烁。"
+      }
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "long-prompt"
+    },
+    {
+      "selectModel": {
+        "modelId": "fal-ai-z-image-turbo",
+        "providerId": "fal",
+        "search": "Z-Image Turbo"
+      }
+    },
+    {
+      "waitStable": {
+        "target": {
+          "role": "button",
+          "name": "/^模型：/"
+        }
+      }
+    },
+    {
+      "drag": {
+        "from": {
+          "selector": "[data-ui-overflow-row] [data-ui-field-control]"
+        },
+        "to": {
+          "dx": 60,
+          "dy": 0
+        },
+        "release": false
+      },
+      "optional": true
+    },
+    {
+      "capture": "number-dragging"
+    },
+    {
+      "release": {},
+      "optional": true
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "selectModel": {
+        "modelId": "volcengine-seed-icl-2.0",
+        "providerId": "volcengine-speech",
+        "search": "豆包语音"
+      }
+    },
+    {
+      "waitStable": {
+        "target": {
+          "role": "button",
+          "name": "/^模型：/"
+        }
+      }
+    },
+    {
+      "open": {
+        "trigger": {
+          "selector": "[data-param-id=\"volcSeedIclSpeaker\"] [data-panel-trigger-button]"
+        }
+      }
+    },
+    {
+      "fill": {
+        "target": {
+          "placeholder": "搜索音色名称或描述"
+        },
+        "text": "不存在的音色zzz"
+      }
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "voice-search-empty"
+    },
+    {
+      "escape": {}
+    },
+    {
+      "selectModel": {
+        "modelId": "apimart-gpt-image-2",
+        "providerId": "apimart",
+        "search": "GPT Image 2"
+      }
+    },
+    {
+      "waitStable": {
+        "target": {
+          "role": "button",
+          "name": "/^模型：/"
+        }
+      }
+    },
+    {
+      "open": {
+        "trigger": {
+          "role": "button",
+          "name": "/^更多参数/"
+        }
+      },
+      "ifPresent": {
+        "role": "button",
+        "name": "/^更多参数/"
+      }
+    },
+    {
+      "hover": {
+        "selector": "[data-param-id=\"apimartGptImage2MaskUrl\"] [tabindex=\"0\"]"
+      },
+      "optional": true
+    },
+    {
+      "wait": 600
+    },
+    {
+      "capture": "param-tooltip"
+    },
+    {
+      "escape": {}
+    },
+    {
+      "capture": "end"
+    }
+  ]
+}

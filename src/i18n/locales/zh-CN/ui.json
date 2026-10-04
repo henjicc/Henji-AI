@@ -6,7 +6,7 @@
   "download": "下载",
   "delete": "删除",
   "upload": "上传",
-  "retry": "再次轮询",
+  "retry": "继续获取结果",
   "priceEstimate": {
     "label": "预估"
   },
@@ -46,7 +46,8 @@
     "button": {
       "queue": "加入队列",
       "generate": "开始生成",
-      "addReference": "添加参考素材"
+      "addReference": "添加参考素材",
+      "referenceUnsupported": "当前模型不使用参考素材"
     },
     "alerts": {
       "videoSize": {
@@ -379,7 +380,7 @@
   },
   "workspace": {
     "inputImageAlt": "输入图片 {{index}}",
-    "panelHint": "鼠标移动到此处来展开面板......",
+    "panelHint": "移到这里展开输入面板…",
     "actions": {
       "regenerate": "重新生成",
       "reedit": "重新编辑",
@@ -433,7 +434,7 @@
     "typeTabs": "筛选类型",
     "searchHistory": "搜索历史",
     "moreActions": "更多操作",
-    "searchPlaceholder": "搜索提示词 / 模型 / 提供商 / 错误信息",
+    "searchPlaceholder": "搜索提示词、模型或错误信息",
     "clearSearch": "清空搜索",
     "expandSearch": "展开搜索",
     "collapseSearch": "收起搜索",

@@ -6,7 +6,7 @@
   "download": "Download",
   "delete": "Delete",
   "upload": "Upload",
-  "retry": "Poll Again",
+  "retry": "Fetch Result Again",
   "priceEstimate": {
     "label": "Estimate"
   },
@@ -46,7 +46,8 @@
     "button": {
       "queue": "Add to queue",
       "generate": "Generate",
-      "addReference": "Add reference media"
+      "addReference": "Add reference media",
+      "referenceUnsupported": "This model does not use reference media"
     },
     "alerts": {
       "videoSize": {
@@ -379,7 +380,7 @@
   },
   "workspace": {
     "inputImageAlt": "Input image {{index}}",
-    "panelHint": "Move here to expand the panel...",
+    "panelHint": "Hover here to expand the input panel…",
     "actions": {
       "regenerate": "Regenerate",
       "reedit": "Re-edit",

@@ -56,6 +56,18 @@ export function isToolbarBlockParam(param: ParamDef): boolean {
   }
 }
 
+/**
+ * 生成底栏单行收纳的优先级：越大越晚收起；同档按文档顺序从尾部收起（`UiOverflowRow`）。
+ * 比例/分辨率属于主要参数（用户决定，任务 5.3）：放不下时开关先收，其次普通取值参数，最后才收合并面板；
+ * 开关单独一档，避免排在前面的开关比后面的时长等取值参数更晚收起。
+ */
+export const TOOLBAR_OVERFLOW_PRIORITY = { leading: 4000, primary: 3000, special: 2000, param: 1000, toggle: 500, group: 100 } as const
+
+/** 普通参数（非主选择器、非大块控件）在底栏里的收纳优先级。 */
+export function resolveToolbarParamPriority(param: ParamDef): number {
+  return param.type === 'switch' ? TOOLBAR_OVERFLOW_PRIORITY.toggle : TOOLBAR_OVERFLOW_PRIORITY.param
+}
+
 export interface ParameterPanelLayout {
   /** 渠道 / 模式等主选择器，排在最前 */
   primary: ParamDef[]

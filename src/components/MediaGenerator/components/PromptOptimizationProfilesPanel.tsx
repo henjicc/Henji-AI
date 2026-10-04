@@ -63,6 +63,12 @@ function createProfile(
   })
 }
 
+function describeProfileModel(config: LlmConfigState, profile: PromptOptimizationProfile): string {
+  const providerName = config.providers.find(provider => provider.providerId === profile.providerId)?.displayName
+  const modelName = config.models.find(model => model.providerId === profile.providerId && model.modelId === profile.modelId)?.displayName
+  return [providerName ?? profile.providerId, modelName ?? profile.modelId].join(' / ')
+}
+
 function buildProviderOptions(config: LlmConfigState): LlmProviderConfig[] {
   const referencedProviderIds = new Set(config.promptProfiles.map(profile => profile.providerId))
   referencedProviderIds.add(DEFAULT_DEEPSEEK_PROVIDER_ID)
@@ -238,14 +244,15 @@ export function PromptOptimizationProfilesPanel({
               <span className="min-w-0">
                 <span className="block truncate text-sm">{profile.name}</span>
                 <span className={`block truncate text-xs text-text3`}>
-                  {profile.modelId ? `${profile.providerId} / ${profile.modelId}` : '未选择模型'}
+                  {/* 显示供应商与模型的名称，不显示内部 id（任务 5.3，信息准入） */}
+                  {profile.modelId ? describeProfileModel(activeConfig, profile) : '未选择模型'}
                 </span>
               </span>
               {profile.isDefault ? <Star size={14} className="text-text2" /> : null}
             </UiOptionButton>
           ))}
           <UiButton type="button" variant="secondary" className="w-full" onClick={addProfile}>
-            <Plus size={15} className="mr-2" />
+            <Plus size={15} />
             新增配置
           </UiButton>
         </div>

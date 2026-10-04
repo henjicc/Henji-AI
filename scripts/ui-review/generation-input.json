@@ -1,0 +1,351 @@
+{
+  "id": "review-generation-input",
+  "surface": "生成",
+  "name": "核对-输入卡片、参考素材、@ 引用与底栏浮层（不点生成、提示词里不按 Enter）",
+  "checklist": [
+    "G05",
+    "G06",
+    "G08",
+    "G10",
+    "G11",
+    "G12",
+    "G13",
+    "G19"
+  ],
+  "writesUserData": true,
+  "steps": [
+    {
+      "enter": "generation"
+    },
+    {
+      "selectModel": {
+        "modelId": "kie-nano-banana-2",
+        "providerId": "kie",
+        "search": "Nano Banana 2"
+      }
+    },
+    {
+      "waitStable": {
+        "target": {
+          "role": "button",
+          "name": "/^模型：/"
+        }
+      }
+    },
+    {
+      "hover": {
+        "selector": "[data-onboarding-target=\"generate\"]"
+      }
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": {
+        "name": "rest",
+        "metrics": {
+          "target": {
+            "role": "button",
+            "name": "/^模型：/",
+            "commonAncestorWith": {
+              "selector": "[data-onboarding-target=\"generate\"]"
+            }
+          },
+          "maxRows": 1
+        }
+      }
+    },
+    {
+      "focus": {
+        "target": {
+          "selector": "[data-onboarding-target=\"prompt\"] [contenteditable=\"true\"]"
+        },
+        "keyboard": false
+      }
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "prompt-focus"
+    },
+    {
+      "setFiles": {
+        "target": {
+          "selector": "input[type=\"file\"][accept*=\"image\"]"
+        },
+        "files": [
+          "resources/icons/icon.png",
+          "resources/icons/icon.png",
+          "resources/icons/icon.png"
+        ]
+      }
+    },
+    {
+      "waitFor": {
+        "selector": "[data-onboarding-target=\"prompt\"] img, img[alt]"
+      },
+      "optional": true,
+      "timeout": 8000
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": {
+        "name": "references",
+        "metrics": {
+          "target": {
+            "role": "button",
+            "name": "/^模型：/",
+            "commonAncestorWith": {
+              "selector": "[data-onboarding-target=\"generate\"]"
+            }
+          },
+          "maxRows": 1
+        }
+      }
+    },
+    {
+      "click": {
+        "selector": "[data-onboarding-target=\"prompt\"] [contenteditable=\"true\"]"
+      }
+    },
+    {
+      "press": "@"
+    },
+    {
+      "waitFor": {
+        "role": "listbox"
+      },
+      "optional": true,
+      "timeout": 4000
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "mention-list"
+    },
+    {
+      "click": {
+        "role": "option"
+      },
+      "optional": true,
+      "timeout": 3000
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "mention-chip"
+    },
+    {
+      "hover": {
+        "selector": "[data-onboarding-target=\"generate\"]"
+      }
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "generate-enabled"
+    },
+    {
+      "open": {
+        "trigger": {
+          "role": "button",
+          "name": "/^模型：/"
+        }
+      }
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "model-panel"
+    },
+    {
+      "hover": {
+        "selector": "[data-model-selector-panel] [data-model-id]",
+        "nth": 2
+      },
+      "optional": true
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "model-panel-hover"
+    },
+    {
+      "fill": {
+        "target": {
+          "selector": "[data-model-selector-panel] input"
+        },
+        "text": "Seedance"
+      }
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "model-search"
+    },
+    {
+      "fill": {
+        "target": {
+          "selector": "[data-model-selector-panel] input"
+        },
+        "text": "不存在的模型zzz"
+      }
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "model-search-empty"
+    },
+    {
+      "escape": {}
+    },
+    {
+      "open": {
+        "trigger": {
+          "selector": "[data-ui-overflow-row] [data-panel-trigger-button]",
+          "hasText": "/:|智能/"
+        }
+      },
+      "optional": true
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "aspect-panel"
+    },
+    {
+      "escape": {}
+    },
+    {
+      "open": {
+        "trigger": {
+          "role": "button",
+          "name": "/^预设/"
+        }
+      }
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "preset-empty"
+    },
+    {
+      "click": {
+        "role": "button",
+        "name": "仅提示词",
+        "exact": true
+      }
+    },
+    {
+      "waitFor": {
+        "placeholder": "输入预设名称"
+      }
+    },
+    {
+      "fill": {
+        "target": {
+          "placeholder": "输入预设名称"
+        },
+        "text": "海边日落 · 竖屏"
+      }
+    },
+    {
+      "click": {
+        "role": "button",
+        "name": "/^(确认|确定)$/"
+      }
+    },
+    {
+      "waitFor": {
+        "selector": "[data-preset-item]"
+      },
+      "timeout": 8000
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "preset-list"
+    },
+    {
+      "hover": {
+        "selector": "[data-preset-item]"
+      },
+      "optional": true
+    },
+    {
+      "click": {
+        "selector": "[data-preset-delete]"
+      },
+      "optional": true
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "preset-delete-confirm"
+    },
+    {
+      "escape": {}
+    },
+    {
+      "escape": {}
+    },
+    {
+      "hover": {
+        "role": "button",
+        "name": "/优化/"
+      }
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "optimize-hover"
+    },
+    {
+      "rightClick": {
+        "role": "button",
+        "name": "/优化/"
+      }
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "optimize-profiles"
+    },
+    {
+      "escape": {}
+    },
+    {
+      "escape": {}
+    },
+    {
+      "hover": {
+        "selector": "[data-onboarding-target=\"prompt\"]"
+      }
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "end"
+    }
+  ]
+}

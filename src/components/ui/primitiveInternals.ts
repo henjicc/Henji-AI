@@ -232,10 +232,12 @@ export const UI_BUTTON_VARIANT_CLASS: Record<ButtonVariant, string> = {
 }
 
 /** 高度 / 字号 / 圆角 / 间距。静默档（quiet、danger）左右内边距少 2px，与设计稿一致。 */
+// 按钮是固定高度的一行控件：文字不换行（任务 5.3：“上传 PDF”在流式浮层里被挤成两行，溢出按钮框）。
+// 此前个别调用点自己补 whitespace-nowrap，统一收进尺寸档。
 const UI_BUTTON_SIZE_CLASS: Record<ButtonSize, { box: string; padding: string; quietPadding: string }> = {
-  sm: { box: `${UI_CONTROL_HEIGHT_CLASS.sm} gap-1.5 text-xs ${UI_RADIUS_CLASS.control}`, padding: 'px-2.5', quietPadding: 'px-2' },
-  md: { box: `${UI_CONTROL_HEIGHT_CLASS.md} gap-1.5 text-13 ${UI_RADIUS_CLASS.control}`, padding: 'px-3', quietPadding: 'px-2.5' },
-  lg: { box: `${UI_CONTROL_HEIGHT_CLASS.lg} gap-2 text-sm ${UI_RADIUS_CLASS.field}`, padding: 'px-4', quietPadding: 'px-3.5' },
+  sm: { box: `${UI_CONTROL_HEIGHT_CLASS.sm} gap-1.5 whitespace-nowrap text-xs ${UI_RADIUS_CLASS.control}`, padding: 'px-2.5', quietPadding: 'px-2' },
+  md: { box: `${UI_CONTROL_HEIGHT_CLASS.md} gap-1.5 whitespace-nowrap text-13 ${UI_RADIUS_CLASS.control}`, padding: 'px-3', quietPadding: 'px-2.5' },
+  lg: { box: `${UI_CONTROL_HEIGHT_CLASS.lg} gap-2 whitespace-nowrap text-sm ${UI_RADIUS_CLASS.field}`, padding: 'px-4', quietPadding: 'px-3.5' },
 }
 
 export function resolveButtonVariant(variant: ButtonVariant): string {

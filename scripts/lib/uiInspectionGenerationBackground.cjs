@@ -49,7 +49,17 @@ async function finishGenerationResults(page, fixture, progress, count, historyCo
   const before = await fixture.evaluate(state => state.snapshot())
   assert.equal(before.requests.length, count, '后台任务没有全部进入正式续查链路')
   assert.equal(before.waiting, count, '取样期间后台任务提前结束')
-  const observed = await progress.evaluate(state => state.snapshot())
+  // 性能取样把列表滚到了中段；回到最新记录（进行中任务所在处，也是首屏位置）再观察进度细线。
+  // 判据不变：至少一张进行中任务卡的进度被真实刷新两次以上。
+  await page.evaluate(() => {
+    const scroller = document.querySelector('[data-generation-history-scroll]')
+    scroller.scrollTop = scroller.scrollHeight
+  })
+  let observed = await progress.evaluate(state => state.snapshot())
+  for (let waited = 0; waited < 10000 && !Object.values(observed.updates).some(value => value >= 2); waited += 250) {
+    await page.waitForTimeout(250)
+    observed = await progress.evaluate(state => state.snapshot())
+  }
   assert.ok(Object.values(observed.updates).some(value => value >= 2), `未观察到真实进度更新：${JSON.stringify(observed)}`)
   const completion = await page.evaluateHandle(() => {
     const start = performance.now(), frames = [], longTasks = []
@@ -80,10 +90,11 @@ async function finishGenerationResults(page, fixture, progress, count, historyCo
       return rows.length === count && Array.from({ length: count }, (_, i) => rows.find(row => row.id === `__generation_bench_${i}`))
         .every(row => row && ['success', 'completed'].includes(row.status) && row.file_path)
     }, count, { timeout: 15000, polling: 200 })
-    await page.waitForFunction(() => {
-      const image = document.querySelector('[data-generation-task-id="__generation_bench_0"] img')
+    // 最新的进行中任务在首屏底部，完成后它的结果图应当出现
+    await page.waitForFunction(latestId => {
+      const image = document.querySelector(`[data-generation-task-id="${latestId}"] img`)
       return image?.complete && image.naturalWidth > 0
-    })
+    }, `__generation_bench_${count - 1}`)
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
     completionFrames = await completion.evaluate(state => state.stop())
   } finally { await completion.evaluate(state => state.dispose()); await completion.dispose() }
@@ -103,13 +114,15 @@ async function finishGenerationResults(page, fixture, progress, count, historyCo
 }
 
 async function verifyGenerationReload(page, fixture, count, historyCount, inspection) {
+  // 重载后首屏定位到最新记录：即刚完成的后台任务（historyCount 只用于确认总数未变，由调用方断言）
+  void historyCount
+  const latestId = `__generation_bench_${count - 1}`
   await page.reload({ waitUntil: 'domcontentloaded' })
-  await page.locator(`[data-generation-task-id="__generation_bench_${historyCount - 1}"]`).waitFor()
-  await page.evaluate(() => { document.querySelector('[data-generation-history-scroll]').scrollTop = 0 })
-  await page.waitForFunction(() => {
-    const image = document.querySelector('[data-generation-task-id="__generation_bench_0"] img')
+  await page.locator(`[data-generation-task-id="${latestId}"]`).waitFor()
+  await page.waitForFunction(latestId => {
+    const image = document.querySelector(`[data-generation-task-id="${latestId}"] img`)
     return image?.complete && image.naturalWidth > 0
-  })
+  }, latestId)
   assert.equal((await fixture.evaluate(state => state.snapshot())).requests.length, count, '重载错误地再次恢复已完成任务')
   await inspection.capture(`background-completed-${count}`)
 }

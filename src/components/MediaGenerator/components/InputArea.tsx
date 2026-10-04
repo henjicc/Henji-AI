@@ -460,17 +460,19 @@ const InputArea: React.FC<InputAreaProps> = ({
             始终单行：参数放不下时由 footerStart 内的溢出收纳收进“更多参数”（任务 4.3），不换行 */}
         <div className="flex flex-nowrap items-center justify-between gap-x-3">
           <div className="flex min-w-0 flex-1 flex-nowrap items-center gap-x-3">
-            {shouldShowUpload && (
-              <UiIconButton size="lg"
-                type="button"
-                disabled={!canAddReference}
-                onClick={() => uploaderRef.current?.openFilePicker()}
-                title={needsVideoUpload ? uploadHint : t('inputArea.button.addReference')}
-                aria-label={t('inputArea.button.addReference')}
-              >
-                <Plus className="h-[18px] w-[18px]" />
-              </UiIconButton>
-            )}
+            {/* 添加素材始终占住行首：不用参考素材的模型（语音、部分文生模型）显示为禁用，
+                模型选择与参数不随模型左右跳动（任务 5.3） */}
+            <UiIconButton size="lg"
+              type="button"
+              disabled={!shouldShowUpload || !canAddReference}
+              onClick={() => uploaderRef.current?.openFilePicker()}
+              title={!shouldShowUpload
+                ? t('inputArea.button.referenceUnsupported')
+                : (needsVideoUpload ? uploadHint : t('inputArea.button.addReference'))}
+              aria-label={t('inputArea.button.addReference')}
+            >
+              <Plus className="h-[18px] w-[18px]" />
+            </UiIconButton>
             {footerStart}
           </div>
           <div className="ml-auto flex shrink-0 items-center gap-1">

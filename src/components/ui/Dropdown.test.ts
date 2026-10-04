@@ -189,4 +189,58 @@ describe('Dropdown 菜单宽度（任务 4.3）', () => {
     // 5 字 × 13 = 65，需要 119；修复前按触发器留白算只有 65 + 16 + 24 = 105
     expect(Number.parseFloat(panel?.style.width ?? '0')).toBeGreaterThanOrEqual(119)
   })
+
+  it('选项超出可视高度出现竖向滚动条时，菜单加上滚动条宽度，选中项不被挤成“5.”（任务 5.3）', () => {
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      font: '',
+      // 与上一条用例同一换算（测字上下文在模块内缓存，先创建的替身会被沿用）
+      measureText: (text: string) => ({ width: text.length * 13 }),
+    } as unknown as CanvasRenderingContext2D)
+    // 列表（role=listbox）模拟 11px 的滚动条：offsetWidth 比 clientWidth 大 11
+    vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockImplementation(function (this: HTMLElement) {
+      return this.getAttribute('role') === 'listbox' ? 100 : 0
+    })
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(function (this: HTMLElement) {
+      return this.getAttribute('role') === 'listbox' ? 89 : 0
+    })
+    const options = Array.from({ length: 13 }, (_, index) => ({ value: String(index + 3), label: `${index + 3}s` }))
+    const rendered = render(React.createElement(Dropdown, {
+      ariaLabel: '时长',
+      appearance: 'text',
+      value: '5',
+      options,
+      panelWidthStrategy: 'options',
+      buttonClassName: 'w-auto',
+      onSelect: () => {},
+    }))
+    const trigger = rendered.getByRole('button', { name: '时长' })
+    fireEvent.click(trigger)
+    const panel = document.getElementById(trigger.getAttribute('aria-controls') ?? '')
+      ?.closest<HTMLElement>('[data-dropdown-portal="true"]')
+    // 最长“15s” 3 × 13 = 39 → 菜单 39 + 42 + 10 + 2 = 93，再加滚动条 11
+    expect(Number.parseFloat(panel?.style.width ?? '0')).toBe(resolveDropdownMenuWidth(39, 'md') + 11)
+  })
+
+  it('默认按选项内容定宽：不传 panelWidthStrategy 时，比触发器长的选项也不被截断（任务 5.3）', () => {
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      font: '',
+      measureText: (text: string) => ({ width: text.length * 13 }),
+    } as unknown as CanvasRenderingContext2D)
+    const rendered = render(React.createElement(Dropdown, {
+      ariaLabel: '来源',
+      value: 'all',
+      options: [
+        { value: 'all', label: '全部' },
+        { value: 'library', label: '我的音色库与克隆音色' },
+      ],
+      buttonClassName: 'w-auto',
+      onSelect: () => {},
+    }))
+    const trigger = rendered.getByRole('button', { name: '来源' })
+    fireEvent.click(trigger)
+    const panel = document.getElementById(trigger.getAttribute('aria-controls') ?? '')
+      ?.closest<HTMLElement>('[data-dropdown-portal="true"]')
+    // 最长选项 10 字 × 13 = 130 → 菜单 130 + 42 + 10 + 2 = 184
+    expect(Number.parseFloat(panel?.style.width ?? '0')).toBeGreaterThanOrEqual(resolveDropdownMenuWidth(130, 'md'))
+  })
 })

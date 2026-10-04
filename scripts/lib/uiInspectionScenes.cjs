@@ -65,6 +65,7 @@ const { createMcpMediaChainScenes } = require('./uiInspectionSceneMcpMediaChain.
 const { createNetworkScenes } = require('./uiInspectionSceneNetwork.cjs')
 const { createGenerationPerformanceScenes } = require('./uiInspectionGenerationPerformance.cjs')
 const { createGenerationVirtualizationScenes } = require('./uiInspectionGenerationVirtualization.cjs')
+const { createGenerationReviewScenes } = require('./uiInspectionSceneGenerationReview.cjs')
 const { createCanvasScalePerformanceScenes } = require('./uiInspectionCanvasScalePerformance.cjs')
 
 const TAB_NAMES = Object.freeze({
@@ -141,6 +142,7 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
     ...createMcpResourceScenes(context),
     ...createMcpMediaChainScenes(context),
     ...createGenerationSettingsScenes(context),
+    ...createGenerationReviewScenes(context),
     ...createCanvasScenes(context),
     ...createSelectionFeedbackScenes(context),
     ...createToolboxScenes(context),

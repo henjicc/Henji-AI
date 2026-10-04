@@ -23,7 +23,7 @@ import { UiFieldTrigger, UiGroup, UiOverflowRow, useUiFieldLayout, type UiOverfl
 import PanelTrigger, { type PanelTriggerControls } from '@/components/ui/PanelTrigger'
 import Tooltip from '@/components/ui/Tooltip'
 import AspectResolutionPanel from './AspectResolutionPanel'
-import { isToolbarBlockParam, resolveParameterPanelLayout } from './parameterOrder'
+import { isToolbarBlockParam, resolveParameterPanelLayout, resolveToolbarParamPriority, TOOLBAR_OVERFLOW_PRIORITY as PRIORITY } from './parameterOrder'
 
 /** 生成前定位参数用的控制句柄（MediaGenerator 点生成时调用）。 */
 export interface ParameterPanelController {
@@ -47,20 +47,32 @@ interface ParameterPanelProps {
 const SPECIAL_PANEL_ITEM_ID = 'special:aspect-resolution'
 const LEADING_ITEM_ID = 'leading'
 
-/** 行内项优先级：越大越晚收起；同档按文档顺序从尾部收起。 */
-const PRIORITY = { leading: 4000, primary: 3000, special: 2000, param: 1000, group: 100 } as const
-
 type OverflowEntry =
   | { id: string; kind: 'param'; param: ParamDef }
   | { id: string; kind: 'special' }
   | { id: string; kind: 'group'; item: Extract<ReturnType<typeof resolveParameterPanelLayout>['items'][number], { kind: 'group' }> }
 
-/** “更多参数”浮层宽度：只有零散参数时窄一些，含展示分组或大块控件时按分组声明的宽度。 */
-function resolveMorePanelWidth(entries: OverflowEntry[]): number {
+/**
+ * “更多参数”浮层宽度：含展示分组时按分组声明的宽度，含大块控件（多行文本、上传等）时 440；
+ * 只有零散参数时按内容（列网格的自然宽度），不再固定 360 留出大片空白（任务 5.3）。
+ */
+function resolveMorePanelWidth(entries: OverflowEntry[]): number | 'content' {
   const groupWidths = entries.flatMap((entry) => entry.kind === 'group' ? [entry.item.group.panelWidth ?? 440] : [])
   const hasBlock = entries.some((entry) => entry.kind === 'param' && isToolbarBlockParam(entry.param))
   if (groupWidths.length > 0) return Math.max(...groupWidths)
-  return hasBlock ? 440 : 360
+  return hasBlock ? 440 : 'content'
+}
+
+/** 零散参数的列数：≤3 项一行排完，4 项两两成行，更多时三列，列宽按每列最宽项对齐。 */
+function resolveMorePanelColumns(simpleCount: number): number {
+  if (simpleCount <= 3) return Math.max(1, simpleCount)
+  return simpleCount === 4 ? 2 : 3
+}
+
+const MORE_PANEL_GRID_CLASS: Record<number, string> = {
+  1: 'grid-cols-1',
+  2: 'grid-cols-[repeat(2,auto)]',
+  3: 'grid-cols-[repeat(3,auto)]',
 }
 
 function focusFirstControl(root: ParentNode | null | undefined, paramId: string): void {
@@ -189,7 +201,7 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
         const entry: OverflowEntry = { id: `param:${item.param.id}`, kind: 'param', param: item.param }
         entries.push(entry)
         if (isToolbarBlockParam(item.param)) panelOnly.push(entry.id)
-        else row.push({ id: entry.id, priority: PRIORITY.param, entry })
+        else row.push({ id: entry.id, priority: resolveToolbarParamPriority(item.param), entry })
         return
       }
       const entry: OverflowEntry = { id: `group:${item.group.id}`, kind: 'group', item }
@@ -211,16 +223,19 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
     return overflowEntries.filter((entry) => collapsed.has(entry.id))
   }, [overflowEntries, panelOnlyIds])
 
-  const renderOverflowPanel = (entries: OverflowEntry[]): React.ReactNode => (
-    // 表单排布：参数按行流式排列（与参数组浮层同法），展示分组独占一行
-    <div className="flex flex-wrap items-start gap-x-4 gap-y-3 p-3">
+  const renderOverflowPanel = (entries: OverflowEntry[]): React.ReactNode => {
+    // 表单排布：零散参数按列网格对齐（列宽取该列最宽项），大块控件与展示分组独占一行
+    const simpleCount = entries.filter((entry) => entry.kind === 'special' || (entry.kind === 'param' && !isToolbarBlockParam(entry.param))).length
+    const columns = resolveMorePanelColumns(simpleCount)
+    return (
+    <div className={`grid ${MORE_PANEL_GRID_CLASS[columns]} items-start justify-start gap-x-6 gap-y-3 p-3`}>
       {entries.map((entry, index) => {
         if (entry.kind === 'param') {
           return (
             <div
               key={entry.id}
               data-param-id={entry.param.id}
-              className={isToolbarBlockParam(entry.param) ? 'basis-full' : ''}
+              className={isToolbarBlockParam(entry.param) ? 'col-span-full' : 'min-w-0'}
             >
               {renderParam(entry.param)}
             </div>
@@ -235,7 +250,7 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
             title={getI18nText(entry.item.group.name, i18n.language) || entry.item.group.id}
             divided={index > 0}
             gap="none"
-            className="basis-full"
+            className="col-span-full"
           >
             <ParamGroupSections
               group={entry.item.group}
@@ -252,7 +267,8 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
         )
       })}
     </div>
-  )
+    )
+  }
 
   const renderMoreTrigger = (hiddenIds: readonly string[]): React.ReactNode => {
     hiddenIdsRef.current = hiddenIds

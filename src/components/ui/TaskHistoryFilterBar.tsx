@@ -171,6 +171,33 @@ export function UiTaskHistoryFilterBar({
       panelVisible ? 'opacity-100 scale-x-100 translate-x-0' : 'pointer-events-none opacity-0 scale-x-[0.35] translate-x-2'
     }`
 
+  // 自定义时间的起止日期：常驻的从属筛选带里与时间下拉同一行（单行，不折到第二行，任务 5.3）；折叠面板里仍放在下方
+  const customDateRange = timePreset === 'custom' ? (
+    <div className={`flex items-center gap-1 ${UI_TEXT_META_CLASS}`}>
+      <UiDatePicker
+        value={startDate}
+        onChange={onStartDateChange}
+        locale={i18n.language}
+        placeholder={t('workspaceFilters.time.datePlaceholder')}
+        ariaLabel={t('workspaceFilters.time.startDate')}
+        clearLabel={t('workspaceFilters.time.clear')}
+        todayLabel={t('workspaceFilters.time.today')}
+        className="w-[120px]"
+      />
+      <span>-</span>
+      <UiDatePicker
+        value={endDate}
+        onChange={onEndDateChange}
+        locale={i18n.language}
+        placeholder={t('workspaceFilters.time.datePlaceholder')}
+        ariaLabel={t('workspaceFilters.time.endDate')}
+        clearLabel={t('workspaceFilters.time.clear')}
+        todayLabel={t('workspaceFilters.time.today')}
+        className="w-[120px]"
+      />
+    </div>
+  ) : null
+
   return (
     <div className={`relative flex items-start ${isAlwaysVisible ? 'justify-start' : 'justify-end'}`}>
       {!isAlwaysVisible && (
@@ -241,6 +268,8 @@ export function UiTaskHistoryFilterBar({
               panelWidthStrategy="options"
             />
 
+            {isAlwaysVisible && customDateRange}
+
             {showMediaType && (
               <Dropdown
                 value={mediaType}
@@ -290,31 +319,7 @@ export function UiTaskHistoryFilterBar({
             )}
           </div>
 
-          {timePreset === 'custom' && (
-            <div className={`flex items-center gap-1 ${UI_TEXT_META_CLASS}`}>
-              <UiDatePicker
-                value={startDate}
-                onChange={onStartDateChange}
-                locale={i18n.language}
-                placeholder={t('workspaceFilters.time.datePlaceholder')}
-                ariaLabel={t('workspaceFilters.time.startDate')}
-                clearLabel={t('workspaceFilters.time.clear')}
-                todayLabel={t('workspaceFilters.time.today')}
-                className="w-[120px]"
-              />
-              <span>-</span>
-              <UiDatePicker
-                value={endDate}
-                onChange={onEndDateChange}
-                locale={i18n.language}
-                placeholder={t('workspaceFilters.time.datePlaceholder')}
-                ariaLabel={t('workspaceFilters.time.endDate')}
-                clearLabel={t('workspaceFilters.time.clear')}
-                todayLabel={t('workspaceFilters.time.today')}
-                className="w-[120px]"
-              />
-            </div>
-          )}
+          {!isAlwaysVisible && customDateRange}
         </div>
       </div>
     </div>

@@ -2,7 +2,8 @@ import { createLogger } from '@/core/logging'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { LoaderCircle, WandSparkles } from 'lucide-react'
 import PanelTrigger from '@/components/ui/PanelTrigger'
-import { AlertDialog, UI_TEXT_META_CLASS, UiButton } from '@/components/ui'
+import { UI_DURATION } from '@/components/ui/motion'
+import { AlertDialog, UI_TEXT_META_CLASS, UiButton, UiPanel } from '@/components/ui'
 import { LLM_CONFIG_CHANGED_EVENT } from '@/core/llm/events'
 import {
   renderPromptOptimizationTemplate,
@@ -32,8 +33,10 @@ import {
   buildPromptOptimizationUserMessageWithAttachments,
   resolvePromptOptimizationProfile,
 } from './promptOptimizeRequest'
+import { describeLlmProviderError } from '@/core/llm/providerErrorMessage'
 const logger = createLogger('components.MediaGenerator.PromptOptimizeButton')
-const PANEL_SWITCH_ANIMATION_MS = 220
+// 先等 PanelTrigger 的收起动画（UI_DURATION.base）走完再换内容重开，与共享浮层同档
+const PANEL_SWITCH_ANIMATION_MS = UI_DURATION.base
 
 type PromptOptimizationGuidance = Exclude<PromptOptimizationReadiness['status'], 'ready'>
 
@@ -258,6 +261,8 @@ export const PromptOptimizeButton: React.FC<PromptOptimizeButtonProps> = ({
     cancelledRequestIdRef.current = null
     let nextOutput = ''
     let nextReasoning = ''
+    // 流内 Error 事件之后 chatStream 还会以同一错误拒绝：只提示一次（任务 5.3：失败时连弹两个提示框）
+    let failureReported = false
     onStreamPreviewChange?.({ active: true, reasoning: '', content: '' })
 
     try {
@@ -330,7 +335,9 @@ export const PromptOptimizeButton: React.FC<PromptOptimizeButtonProps> = ({
           }
           finishStreaming()
         } else if (event.type === 'Error') {
-          onAlert('提示词优化失败', event.data, 'error')
+          // 失败事实由主进程 llm_runtime.chat_stream.failed 记录，这里只给用户看可理解的原因
+          failureReported = true
+          onAlert('提示词优化失败', describeLlmProviderError(event.data), 'error')
           finishStreaming()
         }
       })
@@ -341,7 +348,7 @@ export const PromptOptimizeButton: React.FC<PromptOptimizeButtonProps> = ({
         return false
       }
       const message = error instanceof Error ? error.message : String(error)
-      onAlert('提示词优化失败', message, 'error')
+      if (!failureReported) onAlert('提示词优化失败', describeLlmProviderError(message), 'error')
       finishStreaming()
       return false
     }
@@ -435,9 +442,9 @@ export const PromptOptimizeButton: React.FC<PromptOptimizeButtonProps> = ({
                   onConfigChange={setConfig}
                 />
                 {streaming && output ? (
-                  <div className={`mx-4 mb-4 rounded-lg bg-window/40 p-3 leading-5 ${UI_TEXT_META_CLASS}`}>
-                    {output}
-                  </div>
+                  <UiPanel variant="inset" className="mx-4 mb-4 p-3">
+                    <p className={`m-0 leading-5 ${UI_TEXT_META_CLASS}`}>{output}</p>
+                  </UiPanel>
                 ) : null}
               </div>
               )

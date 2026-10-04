@@ -3,6 +3,7 @@ import { toDisplaySrc } from '@/platform/desktopApi'
 import { useI18n } from "@/hooks/useI18n"
 import type { MenuItem } from "@/hooks/useContextMenu"
 import { ProgressBar } from "@/components/ui/ProgressBar"
+import { resolveResumableServerTaskId } from "@/features/generation/application/taskServerId"
 import { getProgressTransitionDurationMs } from "@/core/progress/progressTracker"
 import { useGenerationTaskProgressStore } from "@/stores/generationTaskProgressStore"
 import {
@@ -192,7 +193,8 @@ const TaskCard = React.memo(function TaskCard({
           align="start"
           title={t("common:error")}
           message={task.error || t("common:status.failed")}
-          onRetry={() => void onRetryPolling(task)}
+          // 只有拿得到供应商任务号时“继续获取结果”才有意义；没有任务号的失败（如提交即被拒）用工具条的“重新生成”
+          onRetry={resolveResumableServerTaskId(task) ? () => void onRetryPolling(task) : undefined}
           retryLabel={t("ui:retry")}
           actions={
             <UiButton
@@ -227,9 +229,10 @@ const TaskCard = React.memo(function TaskCard({
       const urls = splitMulti(task.result.url)
       const filePaths = task.result.filePath ? splitMulti(task.result.filePath) : []
 
-      // 图片网格平铺：每格按结果比例占位（未知比例先按方形），不加卡片背景
+      // 图片网格平铺：每格按结果比例占位（未知比例先按方形），不加卡片背景。
+      // 网格宽度封顶 896（原记录列宽）：记录列随窗口加宽后，四宫格不跟着放大成整屏大图（任务 5.3）
       return (
-        <div className="grid grid-cols-4 items-start gap-1.5">
+        <div className="grid max-w-4xl grid-cols-4 items-start gap-1.5">
           {urls.map((url, index) => {
             const filePath = filePaths[index]
             const imageDimensions = resolveResultImageDimensions(task, index)

@@ -207,7 +207,7 @@ export function LogFilterToolbar({
           placeholder={t('logsWindow.toolbar.chainLookupPlaceholder')}
           className="w-40"
         />
-        <UiButton type="button" className="shrink-0 whitespace-nowrap" onClick={handleChainLookup}>
+        <UiButton type="button" className="shrink-0" onClick={handleChainLookup}>
           {t('logsWindow.chain.viewButton')}
         </UiButton>
       </div>

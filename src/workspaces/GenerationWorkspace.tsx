@@ -30,10 +30,11 @@ import { useGenerationHistoryFiltering } from './GenerationWorkspace/hooks/useGe
 import { useGenerationAutoScroll } from './GenerationWorkspace/hooks/useGenerationAutoScroll'
 import { useGenerationImageViewer } from './GenerationWorkspace/hooks/useGenerationImageViewer'
 import { splitMulti } from './GenerationWorkspace/utils/multiFile'
+import { GENERATION_COLUMN_MAX_WIDTH_CLASS, GENERATION_COLUMN_MAX_WIDTH_PX } from './GenerationWorkspace/generationColumn'
 import { Copy, Download } from 'lucide-react'
 
-// 与历史列的外框（max-w-4xl = 896）同宽：输入卡片两侧比记录文字各宽出一档留白（设计稿 Generation）
-const FLOATING_INPUT_PANEL_MAX_WIDTH_PX = 896
+// 与历史列的外框同宽：输入卡片两侧比记录文字各宽出一档留白（设计稿 Generation）；列宽随窗口变宽，见 generationColumn
+const FLOATING_INPUT_PANEL_MAX_WIDTH_PX = GENERATION_COLUMN_MAX_WIDTH_PX
 const FLOATING_INPUT_PANEL_GUTTER_PX = 24
 
 // 稳定引用：删除/清空任务时清掉对应的瞬态进度，避免 store 里残留已结束任务的条目
@@ -236,7 +237,7 @@ const GenerationWorkspace: React.FC = () => {
       <NotificationToast notification={notification} visible={notificationVisible} />
       <main className="relative z-raised flex min-h-0 flex-1 flex-col">
         {/* 命令带：类型分段 + 搜索 + 更多；搜索展开时筛选条作为从属带紧贴其下（不另画底色与边框） */}
-        <div className="mx-auto w-full max-w-4xl shrink-0 px-6 pt-3">
+        <div className={`mx-auto w-full ${GENERATION_COLUMN_MAX_WIDTH_CLASS} shrink-0 px-6 pt-3`}>
           <GenerationHistoryToolbar
             mediaType={filterMediaType}
             mediaOptions={mediaFilterOptions}

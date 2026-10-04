@@ -1,0 +1,138 @@
+{
+  "id": "review-generation-panels",
+  "surface": "生成",
+  "name": "核对-底栏参数浮层（复合面板、音色、自定义模型、比例分辨率、长选项、分组）",
+  "checklist": [
+    "G07.2",
+    "G08",
+    "G09",
+    "G15",
+    "G17",
+    "G18"
+  ],
+  "prepare": [
+    {
+      "enter": "generation"
+    }
+  ],
+  "variants": [
+    {
+      "id": "minimax-advanced",
+      "modelId": "ppio-minimax-speech",
+      "providerId": "ppio",
+      "trig": "[data-param-id=\"minimaxAdvancedSettings\"] [data-panel-trigger-button], [data-param-id=\"minimaxAdvancedSettings\"] [data-dropdown-button]",
+      "pre": "[data-more-params-trigger]"
+    },
+    {
+      "id": "minimax-voice",
+      "modelId": "ppio-minimax-speech",
+      "providerId": "ppio",
+      "trig": "[data-param-id=\"minimaxVoiceId\"] [data-panel-trigger-button]",
+      "pre": "[data-review-none]"
+    },
+    {
+      "id": "minimax-language",
+      "modelId": "ppio-minimax-speech",
+      "providerId": "ppio",
+      "trig": "[data-param-id=\"minimaxLanguageBoost\"] [data-dropdown-button]",
+      "pre": "[data-more-params-trigger]"
+    },
+    {
+      "id": "modelscope-custom",
+      "modelId": "modelscope-custom",
+      "providerId": "modelscope",
+      "trig": "[data-param-id=\"modelscopeCustomModel\"] [data-panel-trigger-button]",
+      "pre": "[data-review-none]"
+    },
+    {
+      "id": "wan25-aspect",
+      "modelId": "ppio-wan-2.5-preview",
+      "providerId": "ppio",
+      "trig": "[data-overflow-item=\"special:aspect-resolution\"] [data-panel-trigger-button]",
+      "pre": "[data-review-none]"
+    },
+    {
+      "id": "seedream-lite-aspect",
+      "modelId": "fal-ai-seedream-5.0-lite",
+      "providerId": "fal",
+      "trig": "[data-overflow-item=\"special:aspect-resolution\"] [data-panel-trigger-button]",
+      "pre": "[data-review-none]"
+    },
+    {
+      "id": "topaz-model",
+      "modelId": "fal-ai-topaz-image-upscale",
+      "providerId": "fal",
+      "trig": "[data-param-id=\"falTopazPrecisionModel\"] [data-dropdown-button]",
+      "pre": "[data-review-none]"
+    },
+    {
+      "id": "seed-icl-voice",
+      "modelId": "volcengine-seed-icl-2.0",
+      "providerId": "volcengine-speech",
+      "trig": "[data-param-id=\"volcSeedIclSpeaker\"] [data-panel-trigger-button]",
+      "pre": "[data-review-none]"
+    },
+    {
+      "id": "midjourney-group",
+      "modelId": "apimart-midjourney",
+      "providerId": "apimart",
+      "trig": "[data-overflow-item^=\"group:\"] [data-panel-trigger-button], [data-more-params-trigger]",
+      "pre": "[data-review-none]"
+    }
+  ],
+  "steps": [
+    {
+      "selectModel": {
+        "modelId": "{{modelId}}",
+        "providerId": "{{providerId}}"
+      }
+    },
+    {
+      "waitStable": {
+        "target": {
+          "role": "button",
+          "name": "/^模型：/"
+        }
+      }
+    },
+    {
+      "open": {
+        "trigger": {
+          "selector": "{{pre}}"
+        }
+      },
+      "ifPresent": {
+        "selector": "{{pre}}"
+      }
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "open": {
+        "trigger": {
+          "selector": "{{trig}}"
+        }
+      },
+      "ifPresent": {
+        "selector": "{{trig}}"
+      }
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": {
+        "name": "panel",
+        "metrics": {
+          "selector": "[data-panel-scroll-region], [role=\"listbox\"]",
+          "nth": "last",
+          "maxRows": null
+        }
+      }
+    },
+    {
+      "escape": {}
+    }
+  ]
+}

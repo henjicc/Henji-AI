@@ -90,6 +90,8 @@ export const apimartPresentationPart5: Record<string, ModelPresentation> = {
       },
       "apimartSeedance25TaskType": {
         name: { zh: '任务类型', en: 'Task Type' },
+        // 决定是否必须有参考视频、比例是否强制自适应、时长是否失效（编辑/延长），属于模式级选择（任务 5.3）
+        role: 'mode',
         optionLabels: Object.fromEntries((
           [
         { value: 'auto', label: { zh: '自动判断', en: 'Automatic' } },

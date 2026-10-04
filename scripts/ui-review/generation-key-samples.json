@@ -1,0 +1,142 @@
+{
+  "id": "review-generation-key-samples",
+  "surface": "生成",
+  "name": "核对-15 个重点样本与可疑模型（四预设 + 960）",
+  "checklist": [
+    "G07.1",
+    "G07.2",
+    "G07.7",
+    "G07.8"
+  ],
+  "prepare": [
+    {
+      "enter": "generation"
+    }
+  ],
+  "variants": {
+    "source": "generation-models",
+    "include": [
+      "/^apimart-apimart-midjourney\\s/",
+      "/^kie-kie-seedance-2-0\\s/",
+      "/^apimart-apimart-seedance-2-5\\s/",
+      "/^kie-kie-seedance-2-5\\s/",
+      "/^fal-fal-ai-veo-3-1\\s/",
+      "/^ppio-ppio-wan-2-7\\s/",
+      "/^fal-fal-ai-ltx-2\\s/",
+      "/^fal-fal-ai-topaz-image-upscale\\s/",
+      "/^apimart-apimart-gpt-image-2-5\\s/",
+      "/^apimart-apimart-gemini-omni-flash\\s/",
+      "/^fal-fal-ai-z-image-turbo\\s/",
+      "/^ppio-ppio-minimax-speech\\s/",
+      "/^volcengine-speech-volcengine-seed-icl-2-0\\s/",
+      "/^modelscope-modelscope-custom\\s/",
+      "/^fal-fal-ai-seedream-5-0-lite\\s/",
+      "/^kie-kie-kling-3-0\\s/",
+      "/^modelscope-qwen-qwen-image-edit-2509\\s/",
+      "/^fal-fal-ai-nano-banana-2\\s/",
+      "/^apimart-apimart-kling-3-0-omni\\s/"
+    ],
+    "exclude": [],
+    "limit": 0
+  },
+  "steps": [
+    {
+      "selectModel": {
+        "modelId": "{{modelId}}",
+        "providerId": "{{providerId}}"
+      }
+    },
+    {
+      "waitStable": {
+        "target": {
+          "role": "button",
+          "name": "/^模型：/"
+        }
+      }
+    },
+    {
+      "capture": {
+        "name": "bar",
+        "metrics": {
+          "target": {
+            "role": "button",
+            "name": "/^模型：/",
+            "commonAncestorWith": {
+              "selector": "[data-onboarding-target=\"generate\"]"
+            }
+          },
+          "maxRows": 1
+        }
+      }
+    },
+    {
+      "metrics": {
+        "name": "row",
+        "selector": "[data-ui-overflow-row]",
+        "maxRows": 1
+      }
+    },
+    {
+      "open": {
+        "trigger": {
+          "role": "button",
+          "name": "/^更多参数/"
+        }
+      },
+      "ifPresent": {
+        "role": "button",
+        "name": "/^更多参数/"
+      }
+    },
+    {
+      "waitStable": {},
+      "ifPresent": {
+        "role": "button",
+        "name": "/^更多参数/"
+      }
+    },
+    {
+      "capture": {
+        "name": "more",
+        "metrics": {
+          "selector": "[data-panel-scroll-region]",
+          "nth": "last",
+          "maxRows": null
+        }
+      },
+      "ifPresent": {
+        "selector": "[data-panel-scroll-region]"
+      }
+    },
+    {
+      "escape": {}
+    },
+    {
+      "open": {
+        "trigger": {
+          "selector": "[data-param-id] [data-dropdown-button]"
+        }
+      },
+      "optional": true,
+      "timeout": 2000
+    },
+    {
+      "waitStable": {},
+      "optional": true
+    },
+    {
+      "capture": {
+        "name": "first-menu",
+        "metrics": {
+          "selector": "[role=\"listbox\"]",
+          "nth": "last",
+          "maxRows": null
+        }
+      },
+      "optional": true
+    },
+    {
+      "escape": {}
+    }
+  ]
+}

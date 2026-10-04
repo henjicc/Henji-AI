@@ -199,7 +199,6 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
                                     variant="primary"
                                     onClick={handleConfirmSave}
                                     disabled={!presetName.trim()}
-                                    className="whitespace-nowrap"
                                 >
                                     {t('common:confirm')}
                                 </UiButton>
@@ -207,7 +206,6 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
                                     type="button"
                                     variant="secondary"
                                     onClick={handleCancelSave}
-                                    className="whitespace-nowrap"
                                 >
                                     {t('common:cancel')}
                                 </UiButton>
