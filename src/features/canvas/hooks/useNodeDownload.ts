@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type RefObject } from 'react';
+import { createElement, useCallback, useMemo, type MouseEvent } from 'react';
+import { Download, FolderOpen } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { openDialog } from '@/platform/desktopApi';
 import type { CanvasNode } from '@/features/canvas/domain/canvasNodes';
@@ -13,21 +14,15 @@ import {
   QUICK_DOWNLOAD_SETTING_SPECS,
   readLocalStorageSettings,
 } from '@/hooks/useLocalStorageSetting';
-import { UI_POPOVER_TRANSITION_MS } from '@/components/ui/motion';
-
-interface DownloadMenuPosition {
-  x: number;
-  y: number;
-}
+import { useContextMenu, type MenuItem, type MenuPosition } from '@/hooks/useContextMenu';
 
 type DownloadDirectoryMode = 'quick' | 'preset';
 
 export interface UseNodeDownloadResult {
   canDownload: boolean;
   downloadCount: number;
-  downloadMenu: DownloadMenuPosition | null;
-  isDownloadMenuVisible: boolean;
-  downloadMenuRef: RefObject<HTMLDivElement>;
+  /** 下载位置菜单（另存为 + 预设目录），交给共享 `ContextMenu` 渲染（任务 5.9）。 */
+  downloadMenu: { visible: boolean; position: MenuPosition; items: MenuItem[] };
   closeDownloadMenu: () => void;
   handleDownloadClick: (event: MouseEvent<HTMLElement>) => void;
   handleDownloadSaveAs: () => Promise<void>;
@@ -43,51 +38,8 @@ export function useNodeDownload(
     () => resolveNodeDownloadTargets(Array.isArray(nodeOrNodes) ? nodeOrNodes : [nodeOrNodes]),
     [nodeOrNodes]
   );
-  const [downloadMenu, setDownloadMenu] = useState<DownloadMenuPosition | null>(null);
-  const [isDownloadMenuVisible, setIsDownloadMenuVisible] = useState(false);
-  const downloadMenuRef = useRef<HTMLDivElement>(null);
-  const downloadMenuCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const closeDownloadMenu = useCallback((): void => {
-    setIsDownloadMenuVisible(false);
-    if (downloadMenuCloseTimerRef.current) {
-      clearTimeout(downloadMenuCloseTimerRef.current);
-    }
-    downloadMenuCloseTimerRef.current = setTimeout(() => {
-      setDownloadMenu(null);
-      downloadMenuCloseTimerRef.current = null;
-    }, UI_POPOVER_TRANSITION_MS);
-  }, []);
-
-  useEffect(() => {
-    if (!downloadMenu) {
-      return;
-    }
-
-    const onPointerDown = (event: PointerEvent): void => {
-      const menuElement = downloadMenuRef.current;
-      if (!menuElement || !menuElement.contains(event.target as Node)) {
-        closeDownloadMenu();
-      }
-    };
-
-    window.addEventListener('pointerdown', onPointerDown, true);
-    return () => window.removeEventListener('pointerdown', onPointerDown, true);
-  }, [closeDownloadMenu, downloadMenu]);
-
-  useEffect(() => {
-    if (!downloadMenu) {
-      return;
-    }
-    const frameId = requestAnimationFrame(() => setIsDownloadMenuVisible(true));
-    return () => cancelAnimationFrame(frameId);
-  }, [downloadMenu]);
-
-  useEffect(() => () => {
-    if (downloadMenuCloseTimerRef.current) {
-      clearTimeout(downloadMenuCloseTimerRef.current);
-    }
-  }, []);
+  const menu = useContextMenu();
+  const { showMenuAt, hideMenu: closeDownloadMenu } = menu;
 
   const showBatchResult = useCallback((summary: CanvasMediaDownloadSummary): void => {
     if (summary.requestedCount <= 1) {
@@ -169,21 +121,45 @@ export function useNodeDownload(
       void handleDownloadSaveAs();
       return;
     }
-    setDownloadMenu({ x: event.clientX, y: event.clientY });
-    setIsDownloadMenuVisible(false);
+    // 再点一次下载按钮收起菜单（按钮是菜单锚点，点它不算点外）
+    if (menu.menuVisible) {
+      closeDownloadMenu();
+      return;
+    }
+    // 菜单贴着下载按钮弹出（右缘对齐），菜单项与其他菜单同一套外观
+    const icon = (Icon: typeof Download) => createElement(Icon, { className: 'h-4 w-4' });
+    showMenuAt(event.currentTarget, [
+      {
+        id: 'save-as',
+        label: t(downloadTargets.length > 1 ? 'nodeToolbar.chooseDownloadFolder' : 'nodeToolbar.saveAs'),
+        icon: icon(Download),
+        divider: true,
+        onClick: () => { void handleDownloadSaveAs(); },
+      },
+      ...downloadPresetPaths.map((path) => ({
+        id: `preset:${path}`,
+        label: path,
+        title: path,
+        icon: icon(FolderOpen),
+        onClick: () => { void handleDownloadToPreset(path); },
+      })),
+    ]);
   }, [
-    downloadPresetPaths.length,
+    closeDownloadMenu,
+    downloadPresetPaths,
     downloadTargets,
     handleDownloadSaveAs,
     handleDownloadToDirectory,
+    handleDownloadToPreset,
+    menu.menuVisible,
+    showMenuAt,
+    t,
   ]);
 
   return {
     canDownload: downloadTargets.length > 0,
     downloadCount: downloadTargets.length,
-    downloadMenu,
-    isDownloadMenuVisible,
-    downloadMenuRef,
+    downloadMenu: { visible: menu.menuVisible, position: menu.menuPosition, items: menu.menuItems },
     closeDownloadMenu,
     handleDownloadClick,
     handleDownloadSaveAs,

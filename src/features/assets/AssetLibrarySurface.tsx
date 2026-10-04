@@ -63,7 +63,7 @@ export const AssetLibrarySurface: React.FC<Props> = ({ mode, active = true, onCl
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [menuState, setMenuState] = useState<{ asset: AssetRecord; anchor: AssetMenuAnchor } | null>(null)
+  const [menuState, setMenuState] = useState<{ asset: AssetRecord; anchor: Element | AssetMenuAnchor } | null>(null)
   const [previewAsset, setPreviewAsset] = useState<AssetRecord | null>(null)
   const [availableTags, setAvailableTags] = useState<string[]>([])
   const [selectedTag, setSelectedTag] = useState<string | null>(null)

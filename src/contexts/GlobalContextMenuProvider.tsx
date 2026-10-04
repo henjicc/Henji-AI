@@ -1,7 +1,7 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createLogger } from '@/core/logging'
 import React, { useEffect, useState, useCallback } from 'react'
-import ReactDOM from 'react-dom'
+import ContextMenu from '@/components/ContextMenu'
 import { useI18n } from '@/hooks/useI18n'
 import { getPlatform, isDesktopRuntime } from '@/platform/runtime'
 import { Clipboard } from 'lucide-react'
@@ -185,84 +185,29 @@ const GlobalContextMenuProvider: React.FC<{ children: React.ReactNode }> = ({ ch
          textareaElement.placeholder?.includes('描述想要生成的内容') ||
          textareaElement.placeholder?.includes('输入要合成的文本'))
 
-      // 计算菜单位置
-      const menuWidth = 180
-      const menuHeight = 48
-      const viewportWidth = window.innerWidth
-      const viewportHeight = window.innerHeight
-
-      let x = e.clientX
-      let y = e.clientY
-
-      // 边界检查
-      if (x + menuWidth > viewportWidth - 10) {
-        x = viewportWidth - menuWidth - 10
-      }
-      if (y + menuHeight > viewportHeight - 10) {
-        y = y - menuHeight
-      }
-      x = Math.max(10, x)
-      y = Math.max(10, y)
-
       setTargetElement(inputElement)
       setIsPromptTextarea(isPrompt)
-      setMenuPosition({ x, y })
+      setMenuPosition({ x: e.clientX, y: e.clientY })
       setMenuVisible(true)
     }
 
-    const handleClick = (e: MouseEvent) => {
-      if (!menuVisible) return
-
-      const target = e.target as HTMLElement
-      if (!target.closest('[data-global-context-menu]')) {
-        hideMenu()
-      }
-    }
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && menuVisible) {
-        hideMenu()
-      }
-    }
-
     document.addEventListener('contextmenu', handleContextMenu, true)
-    document.addEventListener('mousedown', handleClick)
-    document.addEventListener('keydown', handleKeyDown)
-
     return () => {
       document.removeEventListener('contextmenu', handleContextMenu, true)
-      document.removeEventListener('mousedown', handleClick)
-      document.removeEventListener('keydown', handleKeyDown)
     }
-  }, [menuVisible, hideMenu])
+  }, [])
 
   return (
     <>
       {children}
 
-      {/* 全局右键菜单 */}
-      {menuVisible && ReactDOM.createPortal(
-        <div
-          data-global-context-menu
-          className="ui-glass context-menu animate-scale-in"
-          style={{
-            left: `${menuPosition.x}px`,
-            top: `${menuPosition.y}px`,
-          }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div
-            className="context-menu-item"
-            onClick={handlePaste}
-          >
-            <div className="context-menu-icon">
-              <Clipboard className="w-4 h-4" />
-            </div>
-            <span>{t('actions.paste')}</span>
-          </div>
-        </div>,
-        document.body
-      )}
+      {/* 全局文本粘贴菜单：与其他右键菜单同一个共享组件（任务 5.9），点外、Escape 与定位由它处理 */}
+      <ContextMenu
+        visible={menuVisible}
+        position={menuPosition}
+        onClose={hideMenu}
+        items={[{ id: 'paste', label: t('actions.paste'), icon: <Clipboard className="h-4 w-4" />, onClick: handlePaste }]}
+      />
     </>
   )
 }

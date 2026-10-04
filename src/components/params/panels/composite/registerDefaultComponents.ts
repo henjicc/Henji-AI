@@ -7,7 +7,6 @@
 import { componentRegistry } from './ComponentRegistry'
 import { AspectRatioSelector } from '../ResolutionPanel/AspectRatioSelector'
 import { QualityTierSelector } from '../ResolutionPanel/QualityTierSelector'
-import { CustomSizeInput } from '../ResolutionPanel/CustomSizeInput'
 import { PresetResolutionSelector } from '../ResolutionPanel/PresetResolutionSelector'
 import {
   CompositeDropdown,
@@ -25,7 +24,6 @@ export function registerDefaultComponents(): void {
   // 注册分辨率相关组件
   componentRegistry.register('aspect-ratio', AspectRatioSelector)
   componentRegistry.register('quality-tier', QualityTierSelector)
-  componentRegistry.register('custom-size', CustomSizeInput)
   componentRegistry.register('preset-resolution', PresetResolutionSelector)
   componentRegistry.register('text-input', CompositeTextInput)
   componentRegistry.register('number-input', CompositeNumberInput)

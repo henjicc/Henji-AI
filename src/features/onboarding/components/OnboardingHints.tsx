@@ -10,6 +10,7 @@ import {
   UiPanel,
 } from '@/components/ui'
 import { useI18n } from '@/hooks/useI18n'
+import { resolveFloatingPanelPosition } from '@/components/ui/floatingPanelPosition'
 import { onboardingManager } from '../application/onboardingManager'
 import { useOnboardingState } from '../application/useOnboardingState'
 
@@ -48,6 +49,11 @@ interface HighlightGeometry {
   popoverAbove: boolean
 }
 
+/**
+ * 引导卡片的位置与其他浮层共用一套定位（`resolveFloatingPanelPosition`，任务 5.9）：优先放在目标上方，
+ * 放不下时翻到下方，并收进视口安全区。引导卡片不登记为浮层层——它不响应点外与 Escape，
+ * 登记后会成为“最上层”，反而挡住用户在引导期间打开的菜单与面板的 Escape。
+ */
 function measureTarget(target: Element): HighlightGeometry | null {
   const rect = target.getBoundingClientRect()
   if (rect.width <= 0 || rect.height <= 0) return null
@@ -56,21 +62,21 @@ function measureTarget(target: Element): HighlightGeometry | null {
   const viewportPadding = 16
   const popoverGap = 14
   const estimatedPopoverHeight = 172
-  const popoverWidth = Math.min(360, window.innerWidth - viewportPadding * 2)
-  const popoverAbove = rect.top >= estimatedPopoverHeight + popoverGap + viewportPadding
-  const popoverTop = popoverAbove
-    ? Math.max(viewportPadding, rect.top - estimatedPopoverHeight - popoverGap)
-    : Math.min(window.innerHeight - estimatedPopoverHeight - viewportPadding, rect.bottom + popoverGap)
-  const popoverLeft = Math.max(
-    viewportPadding,
-    Math.min(
-      rect.left + rect.width / 2 - popoverWidth / 2,
-      window.innerWidth - popoverWidth - viewportPadding,
-    ),
-  )
+  const position = resolveFloatingPanelPosition({
+    anchor: rect,
+    panelWidth: 360,
+    panelHeight: estimatedPopoverHeight,
+    viewportWidth: window.innerWidth,
+    viewportHeight: window.innerHeight,
+    preferredPlacement: 'above',
+    horizontalAlign: 'center',
+    gap: popoverGap,
+    viewportGutter: viewportPadding,
+  })
+  const popoverAbove = position.placement === 'above'
   const arrowLeft = Math.max(24, Math.min(
-    rect.left + rect.width / 2 - popoverLeft - 8,
-    popoverWidth - 40,
+    rect.left + rect.width / 2 - position.left - 8,
+    position.width - 40,
   ))
 
   return {
@@ -78,9 +84,9 @@ function measureTarget(target: Element): HighlightGeometry | null {
     left: rect.left - highlightPadding,
     width: rect.width + highlightPadding * 2,
     height: rect.height + highlightPadding * 2,
-    popoverTop,
-    popoverLeft,
-    popoverWidth,
+    popoverTop: position.top,
+    popoverLeft: position.left,
+    popoverWidth: position.width,
     arrowLeft,
     popoverAbove,
   }

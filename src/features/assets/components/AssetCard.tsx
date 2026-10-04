@@ -18,7 +18,8 @@ interface AssetCardProps {
   batchMode?: boolean
   batchSelected?: boolean
   batchDisabled?: boolean
-  onMenu: (asset: AssetRecord, anchor: AssetMenuAnchor, toggle?: boolean) => void
+  /** 打开卡片菜单：从“更多”按钮打开时传按钮本身（菜单随按钮定位），右键时传指针位置。 */
+  onMenu: (asset: AssetRecord, anchor: Element | AssetMenuAnchor, toggle?: boolean) => void
   onToggleBatch?: (asset: AssetRecord) => void
   onPreview: (asset: AssetRecord) => void
   onRename: (asset: AssetRecord, name: string) => Promise<void>
@@ -100,10 +101,9 @@ export const AssetCard: React.FC<AssetCardProps> = ({ asset, selected, eager = f
         )}
         <UiIconButton tone="media"
           data-ui-shared-glass="exclude"
-          data-asset-card-menu-trigger
           aria-label="menu"
           className={`absolute right-2 top-2 transition-opacity duration-120 group-hover:opacity-100 focus-visible:opacity-100 ${menuOpen ? 'opacity-100' : 'opacity-0'}`}
-          onClick={(event) => { event.stopPropagation(); onMenu(asset, event.currentTarget.getBoundingClientRect(), true) }}
+          onClick={(event) => { event.stopPropagation(); onMenu(asset, event.currentTarget, true) }}
         ><MoreHorizontal className="h-4 w-4" /></UiIconButton>
         {(asset.mediaType === 'video' || asset.mediaType === 'audio') && <UiIconButton shape="circle" size="xl" tone="media" aria-label={t('audioPlayer.playPause')} className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2" onClick={(event) => { event.stopPropagation(); onPreview(asset) }}><Play className="h-4 w-4" /></UiIconButton>}
       </div>

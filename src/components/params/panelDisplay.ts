@@ -4,7 +4,6 @@
  * NodeParamControl（画布逐行模式）共同复用，避免同功能多份实现。
  */
 
-import { formatAspectRatioDisplayLabel } from '@/core/params/ratioResolution'
 import { getI18nText, type I18nText } from '@/core/types/I18nText'
 import { getModelscopeCustomModel } from '@henjicc/ai-sdk'
 import { voiceLibraryService } from '@/services/voiceLibrary/VoiceLibraryService'
@@ -29,26 +28,6 @@ export function formatPanelDisplayValue(
   config?: DynamicValue
 ): string {
   if (value === undefined || value === null || value === '') return '未设置'
-
-  // ResolutionPanel 的显示逻辑
-  if (panel === 'resolution') {
-    const record = typeof value === 'object' && value !== null
-      ? (value as DynamicValueMap)
-      : null
-    if (!record) {
-      return '未设置'
-    }
-    const quality = typeof record.quality === 'string' ? record.quality : ''
-    const joinQuality = (label: string): string => quality ? `${label} / ${quality}` : label
-    if (record.aspectRatio === 'smart') return joinQuality('智能')
-    if (record.aspectRatio) {
-      return joinQuality(formatAspectRatioDisplayLabel(String(record.aspectRatio), String(record.aspectRatio)))
-    }
-    if (typeof record.preset === 'string') return joinQuality(record.preset)
-    if (typeof record.width === 'number' && typeof record.height === 'number') {
-      return `${record.width}×${record.height}`
-    }
-  }
 
   if (panel === 'modelscope-custom-model') {
     if (typeof value !== 'string') return '未设置'

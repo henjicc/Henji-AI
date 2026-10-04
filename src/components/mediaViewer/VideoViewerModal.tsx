@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useI18n } from '@/hooks/useI18n'
-import { UiIconButton, UiSharedGlassHost } from '@/components/ui'
+import { isTopmostUiOverlay, UiIconButton, UiOverlayLayerProvider, UiSharedGlassHost, useUiOverlayLayer } from '@/components/ui'
 import { readVideoInfo } from '@/commands/video'
 import { Volume2, VolumeX, X } from 'lucide-react'
 import { VideoViewerControls } from './VideoViewerControls'
@@ -29,6 +29,9 @@ export interface VideoViewerModalProps {
 export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload, trimRange }: VideoViewerModalProps): JSX.Element | null {
   const { t } = useI18n()
   const [isVisible, setIsVisible] = useState(open)
+  // 全屏查看器是模态浮层层：查看器里打开的子浮层（倍速菜单）归属它，Escape 只关最上层；
+  // 从某个面板里打开查看器时，查看器内的点击也不会关掉那个面板（任务 4.3 / 5.9）
+  const overlay = useUiOverlayLayer(open, { modal: true })
   const [overlayOpacity, setOverlayOpacity] = useState(0)
   const videoRef = useRef<HTMLVideoElement>(null)
   const videoViewportRef = useRef<HTMLDivElement>(null)
@@ -51,7 +54,6 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
   const [isBuffering, setIsBuffering] = useState(false)
   const [isControlsVisible, setIsControlsVisible] = useState(true)
   const [isSpeedMenuOpen, setIsSpeedMenuOpen] = useState(false)
-  const [isVolumeMenuOpen, setIsVolumeMenuOpen] = useState(false)
   const [showVolumeIndicator, setShowVolumeIndicator] = useState(false)
   const [isDraggingProgress, setIsDraggingProgress] = useState(false)
   const [autoPlayOnOpen, setAutoPlayOnOpen] = useState(false)
@@ -95,7 +97,6 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
     setIsBuffering(false)
     setIsControlsVisible(true)
     setIsSpeedMenuOpen(false)
-    setIsVolumeMenuOpen(false)
     setIsDraggingProgress(false)
     setAutoPlayOnOpen(true)
     return () => {
@@ -112,7 +113,6 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
       (info) => {
         if (cancelled) return
         setHasAudio(info.hasAudio)
-        if (!info.hasAudio) setIsVolumeMenuOpen(false)
       },
       () => {
         if (!cancelled) setHasAudio(null)
@@ -153,6 +153,8 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
     if (!open) return
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        // 查看器里打开的倍速菜单等子浮层先处理 Escape（只关最上层，任务 5.9）
+        if (!isTopmostUiOverlay(overlay.id)) return
         onClose()
       } else if (e.key === ' ') {
         e.preventDefault()
@@ -179,7 +181,7 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [open, onClose, isVideoPlaying])
+  }, [open, onClose, isVideoPlaying, overlay.id])
 
   useEffect(() => {
     if (!open) return
@@ -324,14 +326,14 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
       clearTimeout(controlsHideTimer.current)
       controlsHideTimer.current = null
     }
-    if (isVideoPlaying && !isSpeedMenuOpen && !isVolumeMenuOpen) {
+    if (isVideoPlaying && !isSpeedMenuOpen) {
       controlsHideTimer.current = window.setTimeout(() => {
-        if (!isSpeedMenuOpen && !isVolumeMenuOpen) {
+        if (!isSpeedMenuOpen) {
           setIsControlsVisible(false)
         }
       }, 1500)
     }
-  }, [isSpeedMenuOpen, isVideoPlaying, isVolumeMenuOpen])
+  }, [isSpeedMenuOpen, isVideoPlaying])
 
   const handleProgressAt = useCallback((clientX: number): void => {
     const el = progressBarRef.current
@@ -389,13 +391,14 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
     }
   }, [isVisible, updateRenderedVideoRect])
 
-  const isOverlayControlsVisible = isSpeedMenuOpen || isVolumeMenuOpen || isControlsVisible
+  const isOverlayControlsVisible = isSpeedMenuOpen || isControlsVisible
 
   if (!isVisible) return null
 
   return createPortal(
     <div
       className={/* ui-surface-allow: 全屏沉浸式媒体查看器，铺满视口，不是 UiModal 的居中卡片语义（见重要记录 003） */ "fixed inset-0 z-viewer bg-media flex items-center justify-center p-6"}
+      {...overlay.layerProps}
       style={{
         opacity: overlayOpacity,
         transition: uiTransition(['opacity'], UI_DURATION.viewer),
@@ -405,6 +408,7 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
         if (e.target === e.currentTarget) onClose()
       }}
     >
+      <UiOverlayLayerProvider id={overlay.id}>
       <UiSharedGlassHost
         minTargets={2}
         className="relative w-[92vw] h-[90vh] flex items-center justify-center"
@@ -421,7 +425,7 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
             clearTimeout(controlsHideTimer.current)
             controlsHideTimer.current = null
           }
-          if (!isSpeedMenuOpen && !isVolumeMenuOpen) {
+          if (!isSpeedMenuOpen) {
             setIsControlsVisible(false)
           }
         }}
@@ -521,8 +525,6 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
           isControlsVisible={isControlsVisible}
           isSpeedMenuOpen={isSpeedMenuOpen}
           setIsSpeedMenuOpen={setIsSpeedMenuOpen}
-          isVolumeMenuOpen={isVolumeMenuOpen}
-          setIsVolumeMenuOpen={setIsVolumeMenuOpen}
           isDraggingProgress={isDraggingProgress}
           setIsDraggingProgress={setIsDraggingProgress}
           handleProgressAt={handleProgressAt}
@@ -545,6 +547,7 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
           trimRange={trimRange}
         />
       </UiSharedGlassHost>
+      </UiOverlayLayerProvider>
     </div>,
     document.body,
   )

@@ -28,9 +28,8 @@ vi.mock('@/features/canvas/hooks/useNodeDownload', () => ({
   useNodeDownload: () => ({
     canDownload: true,
     downloadCount: 2,
-    downloadMenu: null,
-    isDownloadMenuVisible: false,
-    downloadMenuRef: { current: null },
+    downloadMenu: { visible: false, position: { x: 0, y: 0 }, items: [] },
+    closeDownloadMenu: vi.fn(),
     handleDownloadClick: vi.fn(),
     handleDownloadSaveAs: vi.fn(),
     handleDownloadToPreset: vi.fn(),

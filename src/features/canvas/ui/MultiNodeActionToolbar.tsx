@@ -10,7 +10,7 @@ import { ICON_NODE_ASSET_GROUP } from '@/core/theme/icons'
 import { resolveAssetGroupMemberKind } from '@/features/canvas/application/assetGroupGraph'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useNodeDownload } from '@/features/canvas/hooks/useNodeDownload'
-import { NodeDownloadMenu } from './NodeDownloadMenu'
+import ContextMenu from '@/components/ContextMenu'
 import { BatchConnectionHandle } from './BatchConnectionHandle'
 import {
   NODE_TOOLBAR_ALIGN,
@@ -38,11 +38,8 @@ export const MultiNodeActionToolbar = memo(({
     canDownload,
     downloadCount,
     downloadMenu,
-    isDownloadMenuVisible,
-    downloadMenuRef,
+    closeDownloadMenu,
     handleDownloadClick,
-    handleDownloadSaveAs,
-    handleDownloadToPreset,
   } = useNodeDownload(nodes, downloadPresetPaths)
   const selectedGroup = nodes.find(isAssetGroupNode)
   const mediaNodes = nodes.filter((node) => !isAssetGroupNode(node) && Boolean(resolveAssetGroupMemberKind(node)))
@@ -92,16 +89,12 @@ export const MultiNodeActionToolbar = memo(({
             )}
           </UiPanel>
 
-          <NodeDownloadMenu
-            menu={downloadMenu}
-            isVisible={isDownloadMenuVisible}
-            menuRef={downloadMenuRef}
-          boundaryRef={toolbarPanelRef}
-            downloadPresetPaths={downloadPresetPaths}
-            saveAsLabel={t('nodeToolbar.chooseDownloadFolder')}
-            noPresetHintLabel={t('nodeToolbar.noDownloadPresetPathsHint')}
-            onSaveAs={() => void handleDownloadSaveAs()}
-            onSaveToPreset={(path) => void handleDownloadToPreset(path)}
+          <ContextMenu
+            visible={downloadMenu.visible}
+            position={downloadMenu.position}
+            items={downloadMenu.items}
+            onClose={closeDownloadMenu}
+            surface="glass"
           />
         </ReactFlowNodeToolbar>
       )}

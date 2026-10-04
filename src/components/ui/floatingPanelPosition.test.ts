@@ -72,3 +72,10 @@ it('画布内菜单避开侧栏并按宿主范围限制宽高', () => {
   expect(result.top).toBe(92)
   expect(result.maxHeight).toBe(500)
 })
+
+it('右缘对齐（卡片角上的按钮菜单）：面板右缘贴齐锚点右缘，越界时收回视口', () => {
+  const below = { ...baseOptions, preferredPlacement: 'below' as const, horizontalAlign: 'right' as const }
+  expect(resolveFloatingPanelPosition(below).left).toBe(400 + 160 - 320)
+  const nearLeft = resolveFloatingPanelPosition({ ...below, anchor: { ...below.anchor, left: 20, width: 28 } })
+  expect(nearLeft.left).toBe(12)
+})

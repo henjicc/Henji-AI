@@ -8,11 +8,6 @@ export interface IncomingImageItem {
   label: string;
 }
 
-export interface PanelAnchor {
-  left: number;
-  top: number;
-}
-
 export const STORYBOARD_NODE_WIDTH_PX = 318;
 export const STORYBOARD_NODE_MIN_HEIGHT_PX = 320;
 export const STORYBOARD_GRID_GAP_PX = 1;
@@ -49,18 +44,6 @@ export function toCssAspectRatio(aspectRatio: string): string {
   }
 
   return `${width} / ${height}`;
-}
-
-export function resolvePanelAnchor(triggerElement: HTMLDivElement | null): PanelAnchor | null {
-  if (!triggerElement) {
-    return null;
-  }
-
-  const rect = triggerElement.getBoundingClientRect();
-  return {
-    left: rect.left + rect.width / 2,
-    top: rect.top - 8,
-  };
 }
 
 function createDefaultExportOptions(): StoryboardExportOptions {

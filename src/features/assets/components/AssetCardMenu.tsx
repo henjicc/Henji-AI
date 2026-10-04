@@ -1,21 +1,19 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
 import { Pencil, Trash2 } from 'lucide-react'
-import { UI_FIELD_LABEL_CLASS, UI_TEXT_PANEL_TITLE_CLASS, UiButton, UiChipButton, UiError, UiIconButton, UiInput, UiPanel } from '@/components/ui'
+import { PanelTrigger, UI_FIELD_LABEL_CLASS, UI_TEXT_PANEL_TITLE_CLASS, UiButton, UiChipButton, UiError, UiIconButton, UiInput } from '@/components/ui'
 import { ICON_MULTI_SELECT } from '@/core/theme/icons'
-import { UI_DURATION } from '@/components/ui/motion'
 import type { AssetLibraryRecord, AssetRecord } from '@/platform/contracts/assetLibrary'
 import { useI18n } from '@/hooks/useI18n'
 import { createLogger } from '@/core/logging'
-import { isAssetCardMenuTriggerTarget } from '../assetOverlayOwnership'
-import { resolveUiOverlayTarget, UiOverlayLayerProvider, useUiOverlayLayer } from '@/components/ui/overlayOwnership'
+import { isElementNode } from '@/utils/crossRealmDom'
 import type { AssetMenuAnchor } from './AssetCard'
 
 const logger = createLogger('features.assets')
 
 interface Props {
   asset: AssetRecord
-  anchor: AssetMenuAnchor
+  /** 卡片角上的“更多”按钮（菜单右缘对齐按钮、随按钮位置定位），或右键的指针位置 */
+  anchor: Element | AssetMenuAnchor
   libraries: AssetLibraryRecord[]
   availableTags: string[]
   onToggleLibrary: (libraryId: string, included: boolean) => Promise<void>
@@ -28,11 +26,10 @@ interface Props {
 
 export const AssetCardMenu: React.FC<Props> = ({ asset, anchor, libraries, availableTags, onToggleLibrary, onSetTags, onRename, onDelete, onOpenBatchManagement, onClose }) => {
   const { t } = useI18n('ui')
-  const ref = useRef<HTMLDivElement>(null)
-  const closeTimerRef = useRef<number | null>(null)
   const pendingActionRef = useRef(false)
-  const [visible, setVisible] = useState(false)
-  const overlay = useUiOverlayLayer(true)
+  // 浮层外壳是共享 PanelTrigger 的锚点模式（任务 5.9）：定位、玻璃表面、点外与 Escape（只关最上层）、
+  // 子浮层归属与收起动画都由它处理；收起动画结束后回调 onClose。
+  const [open, setOpen] = useState(true)
   const [librarySearch, setLibrarySearch] = useState('')
   const [tagDraft, setTagDraft] = useState('')
   const [libraryIds, setLibraryIds] = useState(asset.libraryIds)
@@ -44,50 +41,24 @@ export const AssetCardMenu: React.FC<Props> = ({ asset, anchor, libraries, avail
   const [nameDraft, setNameDraft] = useState(asset.displayName)
   const filteredLibraries = useMemo(() => libraries.filter((library) => library.name.toLocaleLowerCase().includes(librarySearch.trim().toLocaleLowerCase())), [libraries, librarySearch])
   const suggestions = useMemo(() => availableTags.filter((tag) => !tags.includes(tag) && tag.toLocaleLowerCase().includes(tagDraft.trim().toLocaleLowerCase())).slice(0, 8), [availableTags, tagDraft, tags])
-  const menuWidth = 320
-  const menuHeight = Math.min(460, window.innerHeight - 24)
-  const spaceBelow = window.innerHeight - anchor.bottom
-  const placeAbove = spaceBelow < menuHeight + 12 && anchor.top > spaceBelow
-  const left = Math.max(12, Math.min(anchor.left + anchor.width / 2 - menuWidth / 2, window.innerWidth - menuWidth - 12))
-  const top = placeAbove ? Math.max(12, anchor.top - menuHeight - 8) : Math.max(12, Math.min(anchor.bottom + 8, window.innerHeight - menuHeight - 12))
+  const anchoredToButton = isElementNode(anchor)
 
-  const requestClose = useCallback((): void => {
-    setVisible(false)
-    if (closeTimerRef.current) window.clearTimeout(closeTimerRef.current)
-    closeTimerRef.current = window.setTimeout(onClose, UI_DURATION.fast)
-  }, [onClose])
+  const requestClose = useCallback((): void => setOpen(false), [])
 
+  // 右键打开（指针位置）时，页面滚动或窗口尺寸变化后菜单不再贴着目标：直接收起；按钮锚点随按钮重新定位
   useEffect(() => {
-    const frame = window.requestAnimationFrame(() => setVisible(true))
-    return () => {
-      window.cancelAnimationFrame(frame)
-      if (closeTimerRef.current) window.clearTimeout(closeTimerRef.current)
-    }
-  }, [])
-
-  useEffect(() => {
-    const handlePointerDown = (event: PointerEvent): void => {
-      if (isAssetCardMenuTriggerTarget(event.target)) return
-      // 菜单里打开的子浮层（下拉等）归属本菜单（任务 4.3 浮层归属）
-      if (resolveUiOverlayTarget(event.target, overlay.id) !== 'outside') return
-      if (!ref.current?.contains(event.target as Node)) requestClose()
-    }
-    const handleKeyDown = (event: KeyboardEvent): void => { if (event.key === 'Escape') requestClose() }
+    if (anchoredToButton) return
     const handleViewportChange = (event: Event): void => {
-      if (event.type === 'scroll' && ref.current?.contains(event.target as Node)) return
+      if (event.type === 'scroll' && event.target instanceof Element && event.target.closest('[data-asset-card-menu]')) return
       requestClose()
     }
-    document.addEventListener('pointerdown', handlePointerDown)
-    window.addEventListener('keydown', handleKeyDown)
     window.addEventListener('scroll', handleViewportChange, true)
     window.addEventListener('resize', handleViewportChange)
     return () => {
-      document.removeEventListener('pointerdown', handlePointerDown)
-      window.removeEventListener('keydown', handleKeyDown)
       window.removeEventListener('scroll', handleViewportChange, true)
       window.removeEventListener('resize', handleViewportChange)
     }
-  }, [overlay.id, requestClose])
+  }, [anchoredToButton, requestClose])
 
   const runAction = async (action: string, operation: () => Promise<void>): Promise<boolean> => {
     if (pendingActionRef.current) return false
@@ -138,9 +109,17 @@ export const AssetCardMenu: React.FC<Props> = ({ asset, anchor, libraries, avail
     }
   }
 
-  return createPortal(
-    <UiPanel ref={ref} variant="glass" className={`fixed z-modal w-80 overflow-y-auto p-3 transition-[opacity,transform] duration-120 ease-out motion-reduce:transition-none ${visible ? 'translate-y-0 scale-100 opacity-100' : `${placeAbove ? 'translate-y-1' : '-translate-y-1'} scale-[0.98] opacity-0`}`} style={{ left, top, maxHeight: menuHeight, transformOrigin: placeAbove ? 'bottom center' : 'top center' }} data-asset-card-menu {...overlay.layerProps}>
-      <UiOverlayLayerProvider id={overlay.id}>
+  return (
+    <PanelTrigger
+      anchor={anchor}
+      open={open}
+      onOpenChange={(next) => { if (!next) onClose() }}
+      alignment={anchoredToButton ? 'bottomRight' : 'bottomLeft'}
+      surface="glass"
+      panelPadding="content"
+      panelWidth={320}
+      renderPanel={() => (
+    <div data-asset-card-menu>
       <div className="mb-3 flex min-w-0 items-center gap-1">
         {editingName ? (
           <UiInput autoFocus disabled={pendingAction !== null} className="min-w-0 flex-1" aria-label={t('assetLibrary.renameAsset')} value={nameDraft} onChange={(event) => setNameDraft(event.target.value)} onBlur={() => void applyName()} onKeyDown={(event) => { if (event.key === 'Enter') void applyName(); if (event.key === 'Escape') { setEditingName(false); setNameDraft(name) } }} />
@@ -161,7 +140,8 @@ export const AssetCardMenu: React.FC<Props> = ({ asset, anchor, libraries, avail
         <UiButton disabled={pendingAction !== null} onClick={() => { requestClose(); onOpenBatchManagement() }}><ICON_MULTI_SELECT className="h-4 w-4" />{t('assetLibrary.batchManage')}</UiButton>
         <UiButton variant="danger" disabled={pendingAction !== null} onClick={() => void deleteCurrentAsset()}><Trash2 className="h-4 w-4" />{t('assetLibrary.deleteAsset')}</UiButton>
       </div>
-      </UiOverlayLayerProvider>
-    </UiPanel>, document.body,
+    </div>
+      )}
+    />
   )
 }

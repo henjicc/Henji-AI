@@ -5,6 +5,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AssetRecord } from '@/platform/contracts/assetLibrary'
 import { AssetCardMenu } from './AssetCardMenu'
+import { Z_LAYERS } from '@/core/theme/zLayers'
 
 vi.mock('@/hooks/useI18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }))
 vi.mock('@/core/logging', () => ({ createLogger: () => ({ error: vi.fn() }) }))
@@ -47,13 +48,23 @@ describe('资产卡片菜单', () => {
     vi.unstubAllGlobals()
   })
 
-  it('Portal 菜单层级高于悬浮面板', () => {
+  it('走共享浮层：玻璃表面、浮层层级高于悬浮面板与弹窗，并登记为浮层层', () => {
     render(<AssetCardMenu asset={asset} anchor={new DOMRect(100, 100, 28, 28)} libraries={[]} availableTags={[]} onToggleLibrary={vi.fn()} onSetTags={vi.fn()} onRename={vi.fn()} onDelete={vi.fn()} onOpenBatchManagement={vi.fn()} onClose={vi.fn()} />)
 
-    const menu = document.querySelector('[data-asset-card-menu]')
-    expect(menu?.classList.contains('z-modal')).toBe(true)
-    expect(menu?.classList.contains('z-dropdown')).toBe(false)
-    expect(menu?.classList.contains('ui-glass')).toBe(true)
+    const panel = document.querySelector('[data-asset-card-menu]')?.closest<HTMLElement>('[data-panel-placement]')
+    expect(panel).toBeTruthy()
+    expect(Number(panel?.style.zIndex)).toBe(Z_LAYERS.popover)
+    expect(Number(panel?.style.zIndex)).toBeGreaterThan(Z_LAYERS.modal)
+    expect(panel?.classList.contains('ui-glass')).toBe(true)
+    expect(panel?.hasAttribute('data-ui-overlay-id')).toBe(true)
+  })
+
+  it('Escape 收起菜单，收起动画结束后回调 onClose', async () => {
+    const onClose = vi.fn()
+    render(<AssetCardMenu asset={asset} anchor={new DOMRect(100, 100, 28, 28)} libraries={[]} availableTags={[]} onToggleLibrary={vi.fn()} onSetTags={vi.fn()} onRename={vi.fn()} onDelete={vi.fn()} onOpenBatchManagement={vi.fn()} onClose={onClose} />)
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1))
   })
 
   it('普通菜单可以进入批量管理', () => {

@@ -29,7 +29,7 @@ interface FrameCardProps {
   dropTargetFrameId: string | null;
   onSortStart: (frameId: string) => void;
   onSortHover: (frameId: string) => void;
-  onTogglePicker: (frameId: string, x: number, y: number) => void;
+  onTogglePicker: (frameId: string, anchor: Element) => void;
   onEditFrame: (frame: StoryboardFrameItem) => void;
   onSelectNode: () => void;
 }
@@ -160,7 +160,7 @@ export const FrameCard = memo(({
             onPointerDown={(event) => event.stopPropagation()}
             onClick={(event) => {
               event.stopPropagation();
-              onTogglePicker(frame.id, event.clientX, event.clientY);
+              onTogglePicker(frame.id, event.currentTarget);
             }}
             title="从输入图片替换"
           >

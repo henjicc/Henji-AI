@@ -12,7 +12,6 @@ import { useTranslation } from 'react-i18next'
 import { componentRegistry } from './composite/ComponentRegistry'
 import type { CompositePanelConfig, ComponentConfig } from '@/core/types/CompositePanel'
 import { getI18nText } from '@/core/types'
-import './composite/styles.css'
 
 export interface CompositePanelProps {
   config: CompositePanelConfig
@@ -78,9 +77,9 @@ export const CompositePanel: React.FC<CompositePanelProps> = ({
     }
 
     return (
-      <div key={componentConfig.id} className="composite-panel-component">
+      <div key={componentConfig.id} className="flex flex-col gap-2">
         {componentConfig.label && (
-          <label className="composite-component-label">
+          <label className="text-xs font-medium text-text2">
             {getI18nText(componentConfig.label, i18n.language)}
           </label>
         )}
@@ -113,7 +112,7 @@ export const CompositePanel: React.FC<CompositePanelProps> = ({
   }, [config.layout, config.gap, config.gridColumns, config.padding])
 
   return (
-    <div className="composite-panel" style={layoutStyle}>
+    <div style={layoutStyle}>
       {config.components.map(renderComponent)}
     </div>
   )

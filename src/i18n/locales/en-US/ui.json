@@ -370,7 +370,8 @@
     "speed": "Playback speed",
     "loop": "Loop",
     "mute": "Mute",
-    "unmute": "Unmute"
+    "unmute": "Unmute",
+    "volume": "Volume"
   },
   "errorState": {
     "title": "Something went wrong",

@@ -130,9 +130,6 @@ export const ParamRenderer: React.FC<ParamRendererProps> = React.memo(({
           if (compositeParam.panel === 'modelscope-custom-model') {
             return 520
           }
-          if (compositeParam.panel === 'resolution') {
-            return 400
-          }
           return 320
         })()
         const panelWidth = resolvePanelWidth(compositeParam.config, defaultPanelWidth)

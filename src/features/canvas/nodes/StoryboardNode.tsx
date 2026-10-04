@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useMemo, useRef, useState } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { Download, SlidersHorizontal } from 'lucide-react';
 import { useStoreWithEqualityFn } from 'zustand/traditional';
@@ -9,7 +9,9 @@ import type { StoryboardExportOptions, StoryboardFrameItem, StoryboardSplitNodeD
 import { CANVAS_NODE_TYPES } from '@/features/canvas/domain/canvasNodes';
 import { EXPORT_RESULT_DISPLAY_NAME, resolveNodeDisplayName } from '@/features/canvas/domain/nodeDisplay';
 import { prepareNodeImage, resolveImageDisplayUrl } from '@/features/canvas/application/imageData';
-import { type PromptReferenceItem, UiButton, UiChipButton } from '@/components/ui';
+import { PanelTrigger, type PromptReferenceItem, UiButton, UiChipButton } from '@/components/ui';
+import ContextMenu from '@/components/ContextMenu';
+import { useContextMenu } from '@/hooks/useContextMenu';
 import { createLegacyPromptMediaLabels, createPromptMediaLabel } from '@/core/inputs/promptDocument';
 import { createCanvasOutputPromptResourceId } from '@/features/canvas/application/generationPromptDocument';
 import { areMediaOutputListsEqual, collectInputMediaByKind } from '@/features/canvas/application/graphMediaResolver';
@@ -26,11 +28,11 @@ import { getSocketColor, mediaPortId } from '@/features/canvas/domain/socketType
 import { canvasViewStore, useCanvasStore } from '@/stores/canvasStore';
 import { FrameCard } from '@/features/canvas/nodes/storyboardSplit/FrameCard';
 import { StoryboardExportSettingsPanel } from '@/features/canvas/nodes/storyboardSplit/ExportSettingsPanel';
-import { IncomingImagePicker } from '@/features/canvas/nodes/storyboardSplit/IncomingImagePicker';
+import { buildIncomingImagePickerItems } from '@/features/canvas/nodes/storyboardSplit/IncomingImagePicker';
 import { exportStoryboardImages } from '@/features/canvas/nodes/storyboardSplit/exporting';
 import { useStoryboardSort } from '@/features/canvas/nodes/storyboardSplit/useStoryboardSort';
 import { buildFrameViewerImageList, buildIncomingImageItems } from '@/features/canvas/nodes/storyboardSplit/data';
-import { type PanelAnchor, resolveExportOptions, resolvePanelAnchor, STORYBOARD_GRID_GAP_PX } from '@/features/canvas/nodes/storyboardSplit/shared';
+import { resolveExportOptions, STORYBOARD_GRID_GAP_PX } from '@/features/canvas/nodes/storyboardSplit/shared';
 import { ICON_STORYBOARD } from '@/core/theme/icons';
 import { computeStoryboardSplitBaseLayout, computeStoryboardSplitFrameLayout } from '@/features/canvas/nodes/storyboardSplit/layout';
 
@@ -40,17 +42,12 @@ type StoryboardNodeProps = NodeProps & {
   selected?: boolean;
 };
 
-interface PickerState {
-  frameId: string;
-  x: number;
-  y: number;
-}
-
 export const StoryboardNode = memo(({ id, data, selected, width, height }: StoryboardNodeProps) => {
   const rootRef = useRef<HTMLDivElement>(null);
-  const pickerMenuRef = useRef<HTMLDivElement>(null);
-  const exportSettingsTriggerRef = useRef<HTMLDivElement>(null);
-  const exportSettingsPanelRef = useRef<HTMLDivElement>(null);
+  // “从输入图片替换”菜单：共享 ContextMenu，贴着格子上的按钮弹出（任务 5.9）
+  const picker = useContextMenu();
+  const { showMenuAt: showPickerAt, hideMenu: hidePicker } = picker;
+  const pickerFrameIdRef = useRef<string | null>(null);
 
   const setSelectedNode = useCanvasStore((state) => state.setSelectedNode);
   // 本节点只需要"上游连了哪些图片"这一派生结果，不需要整个 nodes/edges 数组；
@@ -72,12 +69,8 @@ export const StoryboardNode = memo(({ id, data, selected, width, height }: Story
   const updateStoryboardFrame = useCanvasStore((state) => state.updateStoryboardFrame);
   const updateNodeData = useCanvasStore((state) => state.updateNodeData);
 
-  const [pickerState, setPickerState] = useState<PickerState | null>(null);
   const [isExporting, setIsExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
-  const [isExportPanelOpen, setIsExportPanelOpen] = useState(false);
-  const [isExportPanelVisible, setIsExportPanelVisible] = useState(false);
-  const [exportPanelAnchor, setExportPanelAnchor] = useState<PanelAnchor | null>(null);
 
   const {
     draggedFrameId,
@@ -87,7 +80,7 @@ export const StoryboardNode = memo(({ id, data, selected, width, height }: Story
   } = useStoryboardSort({
     nodeId: id,
     reorderStoryboardFrame,
-    onSortStart: () => setPickerState(null),
+    onSortStart: hidePicker,
   });
 
   const orderedFrames = useMemo(() => [...data.frames].sort((a, b) => a.order - b.order), [data.frames]);
@@ -130,54 +123,6 @@ export const StoryboardNode = memo(({ id, data, selected, width, height }: Story
   );
   const frameViewerImageList = useMemo(() => buildFrameViewerImageList(orderedFrames), [orderedFrames]);
   const incomingImageViewerList = useMemo(() => incomingImageItems.map((item) => resolveImageDisplayUrl(item.imageUrl)), [incomingImageItems]);
-
-  useEffect(() => {
-    const handleOutsidePointerDown = (event: PointerEvent) => {
-      if (!rootRef.current) {
-        return;
-      }
-
-      const target = event.target as Node;
-      const insideRoot = rootRef.current.contains(target);
-      const insidePickerMenu = pickerMenuRef.current?.contains(target) ?? false;
-      const insideExportPanel = exportSettingsPanelRef.current?.contains(target) ?? false;
-      const insideExportTrigger = exportSettingsTriggerRef.current?.contains(target) ?? false;
-
-      if (!insideRoot && !insidePickerMenu) {
-        setPickerState(null);
-      }
-
-      if (!insideExportPanel && !insideExportTrigger) {
-        setIsExportPanelOpen(false);
-      }
-    };
-
-    document.addEventListener('pointerdown', handleOutsidePointerDown, true);
-    return () => {
-      document.removeEventListener('pointerdown', handleOutsidePointerDown, true);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!isExportPanelOpen) {
-      setIsExportPanelVisible(false);
-      return;
-    }
-
-    let raf2: number | null = null;
-    const raf1 = requestAnimationFrame(() => {
-      raf2 = requestAnimationFrame(() => {
-        setIsExportPanelVisible(true);
-      });
-    });
-
-    return () => {
-      cancelAnimationFrame(raf1);
-      if (raf2 !== null) {
-        cancelAnimationFrame(raf2);
-      }
-    };
-  }, [isExportPanelOpen]);
 
   const patchExportOptions = useCallback((patch: Partial<StoryboardExportOptions>) => {
     updateNodeData(id, {
@@ -256,15 +201,6 @@ export const StoryboardNode = memo(({ id, data, selected, width, height }: Story
     }
   }, [createExportNode, exportOptions, gridCols, gridRows, id, isExporting, linkExportNode, orderedFrames]);
 
-  const handleTogglePicker = useCallback((frameId: string, x: number, y: number) => {
-    setPickerState((previous) => {
-      if (previous?.frameId === frameId) {
-        return null;
-      }
-      return { frameId, x, y };
-    });
-  }, []);
-
   const handleReplaceFromInput = useCallback((frameId: string, imageUrl: string) => {
     setExportError(null);
     const matched = incomingImageItems.find((item) => item.imageUrl === imageUrl);
@@ -272,8 +208,22 @@ export const StoryboardNode = memo(({ id, data, selected, width, height }: Story
       imageUrl: matched?.imageUrl ?? imageUrl,
       previewImageUrl: matched?.previewImageUrl ?? matched?.imageUrl ?? imageUrl,
     });
-    setPickerState(null);
   }, [id, incomingImageItems, updateStoryboardFrame]);
+
+  const pickerVisible = picker.menuVisible;
+  const handleTogglePicker = useCallback((frameId: string, anchor: Element) => {
+    if (pickerVisible && pickerFrameIdRef.current === frameId) {
+      hidePicker();
+      return;
+    }
+    pickerFrameIdRef.current = frameId;
+    showPickerAt(anchor, buildIncomingImagePickerItems({
+      frameId,
+      incomingImageItems,
+      incomingImageViewerList,
+      onReplaceFromInput: handleReplaceFromInput,
+    }));
+  }, [handleReplaceFromInput, hidePicker, incomingImageItems, incomingImageViewerList, pickerVisible, showPickerAt]);
 
   return (
     <div
@@ -333,35 +283,48 @@ export const StoryboardNode = memo(({ id, data, selected, width, height }: Story
         </div>
       </div>
 
-      <IncomingImagePicker
-        pickerState={pickerState}
-        pickerMenuRef={pickerMenuRef}
-        incomingImageItems={incomingImageItems}
-        incomingImageViewerList={incomingImageViewerList}
-        onReplaceFromInput={handleReplaceFromInput}
+      <ContextMenu
+        visible={picker.menuVisible}
+        position={picker.menuPosition}
+        items={picker.menuItems}
+        onClose={hidePicker}
+        surface="glass"
       />
 
       <div className="mt-2 flex shrink-0 items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
-          <div ref={exportSettingsTriggerRef} className="nodrag relative flex">
-            <UiChipButton
-              active={isExportPanelOpen}
-              size="sm"
-              className={NODE_CONTROL_CHIP_CLASS}
-              onClick={(event) => {
-                event.stopPropagation();
-                if (isExportPanelOpen) {
-                  setIsExportPanelOpen(false);
-                  return;
-                }
-                setExportPanelAnchor(resolvePanelAnchor(exportSettingsTriggerRef.current));
-                setIsExportPanelOpen(true);
-              }}
-            >
-              <SlidersHorizontal className={`${NODE_CONTROL_ICON_CLASS} shrink-0`} />
-              <span>导出设置</span>
-            </UiChipButton>
-          </div>
+          {/* 导出设置：共享浮层（压在画布上用玻璃），点外、Escape 与嵌套归属由 PanelTrigger 处理（任务 5.9） */}
+          <PanelTrigger
+            className="nodrag"
+            surface="glass"
+            panelPadding="content"
+            panelWidth={340}
+            alignment="aboveCenter"
+            gap={8}
+            renderPanel={() => (
+              <StoryboardExportSettingsPanel
+                exportOptions={exportOptions}
+                onPatch={patchExportOptions}
+              />
+            )}
+          >
+            {({ open, togglePanel }) => (
+              <UiChipButton
+                active={open}
+                size="sm"
+                aria-expanded={open}
+                data-panel-trigger-button
+                className={NODE_CONTROL_CHIP_CLASS}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  togglePanel();
+                }}
+              >
+                <SlidersHorizontal className={`${NODE_CONTROL_ICON_CLASS} shrink-0`} />
+                <span>导出设置</span>
+              </UiChipButton>
+            )}
+          </PanelTrigger>
 
           <div className="truncate text-2xs text-text2">
             {gridRows} x {gridCols} | {totalFrames} 格
@@ -382,15 +345,6 @@ export const StoryboardNode = memo(({ id, data, selected, width, height }: Story
           {isExporting ? '导出中...' : '合并导出'}
         </UiButton>
       </div>
-
-      <StoryboardExportSettingsPanel
-        isOpen={isExportPanelOpen}
-        isVisible={isExportPanelVisible}
-        anchor={exportPanelAnchor}
-        panelRef={exportSettingsPanelRef}
-        exportOptions={exportOptions}
-        onPatch={patchExportOptions}
-      />
 
       {exportError && <div className="mt-2 shrink-0 text-xs text-danger-text">{exportError}</div>}
 

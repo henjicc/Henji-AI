@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ChevronLeft, ChevronRight, RotateCcw, X, GripVertical } from 'lucide-react';
 
-import { UiButton, UiIconButton, UiOptionButton, UiError, UiSharedGlassHost } from '@/components/ui';
+import { isTopmostUiOverlay, UiButton, UiIconButton, UiOptionButton, UiError, UiOverlayLayerProvider, UiSharedGlassHost, useUiOverlayLayer } from '@/components/ui';
 import { UI_CONTENT_OVERLAY_INSET_CLASS, UI_DURATION, uiTransition } from '@/components/ui/motion';
 import type {
   ImageEditSessionData,
@@ -92,6 +92,8 @@ export function ImageViewerModal({
 }: ImageViewerModalProps): JSX.Element | null {
   const { t } = useTranslation();
   const [isVisible, setIsVisible] = useState(false);
+  // 全屏查看器是模态浮层层（任务 4.3 / 5.9）：其上的子浮层先处理 Escape，查看器内点击不关掉打开它的面板
+  const overlay = useUiOverlayLayer(open, { modal: true });
   const [overlayOpacity, setOverlayOpacity] = useState(0);
   const [requestedMode, setRequestedMode] = useState<ImageComparisonMode>('single');
   const [swappedModes, setSwappedModes] = useState({ 'side-by-side': true, overlay: true });
@@ -205,6 +207,8 @@ export function ImageViewerModal({
       } else if (e.key === 'ArrowRight') {
         onNavigate('next');
       } else if (e.key === 'Escape') {
+        // 查看器上打开的右键菜单等浮层先处理 Escape（只关最上层，任务 5.9）
+        if (!isTopmostUiOverlay(overlay.id)) return;
         onClose();
       } else if (e.key === ' ') {
         e.preventDefault();
@@ -212,7 +216,7 @@ export function ImageViewerModal({
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [open, isEditorMode, onNavigate, onClose]);
+  }, [open, isEditorMode, onNavigate, onClose, overlay.id]);
 
   if (!isVisible) return null;
 
@@ -236,7 +240,9 @@ export function ImageViewerModal({
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
+      {...overlay.layerProps}
     >
+      <UiOverlayLayerProvider id={overlay.id}>
       {editorAvailable && !isEditorMode && (
         <div className="absolute top-12 left-1/2 z-raised -translate-x-1/2">
           <UiButton
@@ -497,6 +503,7 @@ export function ImageViewerModal({
           </div>
         </UiSharedGlassHost>
       )}
+      </UiOverlayLayerProvider>
     </div>
   );
 }

@@ -33,8 +33,9 @@ describe('节点参数右键菜单', () => {
     await waitFor(() => expect(save).toHaveBeenCalledWith(expect.objectContaining({ type: node.type }), { value: 7 }))
     expect(toast).toHaveBeenCalledWith('canvas/toast', expect.objectContaining({ type: 'success' }))
     fireEvent.contextMenu(screen.getByTestId('node'))
-    fireEvent.keyDown(window, { key: 'Escape' })
-    expect(screen.queryByText(/设置默认值|Set as defaults/)).toBeNull()
+    // 共享菜单在文档上处理 Escape，收起动画结束后移除
+    fireEvent.keyDown(document, { key: 'Escape' })
+    await waitFor(() => expect(screen.queryByText(/设置默认值|Set as defaults/)).toBeNull())
     view.unmount()
   })
 
@@ -48,7 +49,7 @@ describe('节点参数右键菜单', () => {
     await waitFor(() => expect(toast).toHaveBeenCalledWith('canvas/toast', expect.objectContaining({ type: 'error' })))
     view.rerender(<Harness target={{ ...node, type: CANVAS_NODE_TYPES.stringSource }} />)
     fireEvent.contextMenu(screen.getByTestId('node'))
-    expect(screen.queryByText(/设置默认值|Set as defaults/)).toBeNull()
+    await waitFor(() => expect(screen.queryByText(/设置默认值|Set as defaults/)).toBeNull())
     view.unmount()
   })
 })

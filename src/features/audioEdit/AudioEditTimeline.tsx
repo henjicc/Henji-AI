@@ -1,6 +1,5 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { Expand, Keyboard, Minus, Pause, Play, Plus, RotateCcw, Trash2, Volume2, VolumeX } from 'lucide-react'
-import { createPortal } from 'react-dom'
 import ContextMenu from '@/components/ContextMenu'
 import { useContextMenu } from '@/hooks/useContextMenu'
 import { ICON_SETTINGS as SettingsIcon } from '@/core/theme/icons'
@@ -305,7 +304,7 @@ export const AudioEditTimeline = memo(function AudioEditTimeline({ project, deli
           </div>
         </div>}
       </div>
-      {createPortal(<ContextMenu visible={menu.menuVisible} position={menu.menuPosition} items={menu.menuItems} onClose={menu.hideMenu} />, document.body)}
+      <ContextMenu visible={menu.menuVisible} position={menu.menuPosition} items={menu.menuItems} onClose={menu.hideMenu} />
     </section>
   )
 })

@@ -1,5 +1,4 @@
-import { useCallback, useEffect, type MouseEvent } from 'react'
-import { createPortal } from 'react-dom'
+import { useCallback, type MouseEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import ContextMenu from '@/components/ContextMenu'
 import { useContextMenu } from '@/hooks/useContextMenu'
@@ -13,14 +12,6 @@ export function useNodeParameterContextMenu(closeAddMenu: () => void) {
   const { t } = useTranslation()
   const menu = useContextMenu()
   const { showMenu, hideMenu } = menu
-  useEffect(() => {
-    if (!menu.menuVisible) return
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') hideMenu()
-    }
-    window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
-  }, [hideMenu, menu.menuVisible])
 
   const onNodeContextMenu = useCallback((event: MouseEvent, node: CanvasNode) => {
     event.preventDefault()
@@ -55,9 +46,9 @@ export function useNodeParameterContextMenu(closeAddMenu: () => void) {
   return {
     onNodeContextMenu,
     hideNodeContextMenu: hideMenu,
-    nodeContextMenu: menu.menuVisible ? createPortal(
-      <ContextMenu visible position={menu.menuPosition} items={menu.menuItems} onClose={hideMenu} />,
-      document.body,
-    ) : null,
+    // 菜单压在画布上：玻璃表面；Escape、点外关闭与定位由共享 ContextMenu 处理（任务 5.9）
+    nodeContextMenu: (
+      <ContextMenu visible={menu.menuVisible} position={menu.menuPosition} items={menu.menuItems} onClose={hideMenu} surface="glass" />
+    ),
   }
 }

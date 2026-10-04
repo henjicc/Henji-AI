@@ -12,7 +12,6 @@ import type { I18nText } from './I18nText'
 export type ComponentType =
   | 'aspect-ratio'
   | 'quality-tier'
-  | 'custom-size'
   | 'preset-resolution'
   | 'text-input'
   | 'number-input'

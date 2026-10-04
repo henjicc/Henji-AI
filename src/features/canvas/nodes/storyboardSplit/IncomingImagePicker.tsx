@@ -1,82 +1,39 @@
-import { createPortal } from 'react-dom';
+import { createElement } from 'react';
+import type { MenuItem } from '@/hooks/useContextMenu';
 import { CanvasNodeImage } from '@/features/canvas/ui/CanvasNodeImage';
 import { resolveImageDisplayUrl } from '@/features/canvas/application/imageData';
-import {
-  UiOptionButton,
-  UiPanel,
-} from '@/components/ui';
 import type { IncomingImageItem } from './shared';
 
-interface PickerState {
-  frameId: string;
-  x: number;
-  y: number;
-}
-
-interface IncomingImagePickerProps {
-  pickerState: PickerState | null;
-  pickerMenuRef: { current: HTMLDivElement | null };
-  incomingImageItems: IncomingImageItem[];
-  incomingImageViewerList: string[];
-  onReplaceFromInput: (frameId: string, imageUrl: string) => void;
-}
-
-export function IncomingImagePicker({
-  pickerState,
-  pickerMenuRef,
+/**
+ * “从输入图片替换”菜单的菜单项（任务 5.9）：菜单本身是共享 `ContextMenu`（贴着格子上的按钮弹出、玻璃表面），
+ * 这里只把上游输入图片转成带缩略图的菜单项；没有输入图片时给一条禁用的说明项。
+ */
+export function buildIncomingImagePickerItems({
+  frameId,
   incomingImageItems,
   incomingImageViewerList,
   onReplaceFromInput,
-}: IncomingImagePickerProps): JSX.Element | null {
-  if (!pickerState || typeof document === 'undefined') {
-    return null;
+}: {
+  frameId: string;
+  incomingImageItems: IncomingImageItem[];
+  incomingImageViewerList: string[];
+  onReplaceFromInput: (frameId: string, imageUrl: string) => void;
+}): MenuItem[] {
+  if (incomingImageItems.length === 0) {
+    return [{ id: 'empty', label: '暂无输入图片', icon: null, disabled: true, onClick: () => {} }];
   }
-
-  return createPortal(
-    <div
-      ref={pickerMenuRef}
-      className="nowheel fixed z-dropdown w-[120px] overflow-hidden"
-      style={{ left: `${pickerState.x}px`, top: `${pickerState.y}px` }}
-      onMouseDown={(event) => event.stopPropagation()}
-      onWheelCapture={(event) => event.stopPropagation()}
-    >
-      <UiPanel>
-        {incomingImageItems.length > 0 ? (
-          <div
-            className="ui-scrollbar nowheel max-h-[180px] overflow-y-auto"
-            onWheelCapture={(event) => event.stopPropagation()}
-          >
-            {incomingImageItems.map((item) => (
-              <UiOptionButton
-                key={`${pickerState.frameId}-${item.imageUrl}`}
-                type="button"
-                variant="menu"
-                size="md" className="w-full gap-2 px-2 py-2"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onReplaceFromInput(pickerState.frameId, item.imageUrl);
-                }}
-                title={item.label}
-              >
-                <CanvasNodeImage
-                  src={item.displayUrl}
-                  alt={item.label}
-                  viewerSourceUrl={resolveImageDisplayUrl(item.imageUrl)}
-                  viewerImageList={incomingImageViewerList}
-                  className="h-8 w-8 rounded object-cover"
-                  draggable={false}
-                />
-                <span className="truncate">{item.label}</span>
-              </UiOptionButton>
-            ))}
-          </div>
-        ) : (
-          <div className="px-2 py-2 text-sm text-text2">
-            暂无输入图片
-          </div>
-        )}
-      </UiPanel>
-    </div>,
-    document.body
-  );
+  return incomingImageItems.map((item) => ({
+    id: `${frameId}-${item.imageUrl}`,
+    label: item.label,
+    title: item.label,
+    icon: createElement(CanvasNodeImage, {
+      src: item.displayUrl,
+      alt: item.label,
+      viewerSourceUrl: resolveImageDisplayUrl(item.imageUrl),
+      viewerImageList: incomingImageViewerList,
+      className: 'h-6 w-6 rounded-control object-cover',
+      draggable: false,
+    }),
+    onClick: () => onReplaceFromInput(frameId, item.imageUrl),
+  }));
 }

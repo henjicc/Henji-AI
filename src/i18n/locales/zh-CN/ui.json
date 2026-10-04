@@ -370,7 +370,8 @@
     "speed": "播放速度",
     "loop": "循环播放",
     "mute": "静音",
-    "unmute": "取消静音"
+    "unmute": "取消静音",
+    "volume": "音量"
   },
   "errorState": {
     "title": "出错了",

@@ -129,7 +129,25 @@ describe('PanelTrigger 面板内部点击关闭策略', () => {
     fireEvent.click(trigger)
 
     const panel = document.querySelector<HTMLElement>('[data-panel-placement]')
-    // 82 文字 + 浮层 p-1 8 + 菜单项留白含选中勾槽 42 + 边框 2 + 取整余量 2（4.3：原 30 未计勾槽）
+    // 动作菜单（默认）：82 文字 + 浮层 p-1 8 + 菜单项内边距 20 + 边框 2 + 取整余量 2，不留选中勾槽（5.9：原 56 留白超过 40 上限）
+    expect(panel?.style.width).toBe('114px')
+  })
+
+  it('选值菜单（menuSelection="single"）额外预留选中勾槽', () => {
+    vi.stubGlobal('ResizeObserver', class { observe(): void {} disconnect(): void {} })
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      font: '',
+      measureText: () => ({ width: 82 }),
+    } as unknown as CanvasRenderingContext2D)
+    const view = render(React.createElement(PanelTrigger, {
+      display: '模式',
+      menuSelection: 'single',
+      panelWidthLabels: ['参考生视频'],
+      renderPanel: () => React.createElement('div', null, '参考生视频'),
+    }))
+    fireEvent.click(view.getByRole('button'))
+    const panel = document.querySelector<HTMLElement>('[data-panel-placement]')
+    // 82 + 8 + 内边距 20 + 勾槽 22 + 2 + 2（4.3：原 30 未计勾槽）
     expect(panel?.style.width).toBe('136px')
   })
   it('收起动画期间再次点触发器会重新打开，收起计时器不会把它关掉', () => {
@@ -254,5 +272,83 @@ describe('PanelTrigger 面板内部点击关闭策略', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+  it('锚点模式（任务 5.9）：无内置触发器，按外部元素定位；点锚点元素不算点外，点外收起后回调 onOpenChange(false)', () => {
+    vi.useFakeTimers()
+    try {
+      vi.stubGlobal('ResizeObserver', class { observe(): void {} disconnect(): void {} })
+      const anchor = document.createElement('button')
+      anchor.getBoundingClientRect = () => ({ left: 300, top: 100, bottom: 128, right: 328, width: 28, height: 28, x: 300, y: 100, toJSON: () => ({}) })
+      document.body.append(anchor)
+      const onOpenChange = vi.fn()
+      const view = render(React.createElement(PanelTrigger, {
+        anchor,
+        open: true,
+        onOpenChange,
+        alignment: 'bottomRight',
+        panelWidth: 200,
+        renderPanel: () => React.createElement('div', null, '菜单内容'),
+      }))
+      expect(view.container.querySelector('button')).toBeNull()
+      const panel = view.getByText('菜单内容').closest('[data-panel-placement]') as HTMLElement
+      // 右缘对齐锚点：328 - 200
+      expect(panel.style.left).toBe('128px')
+      expect(panel.style.top).toBe('132px')
+      expect(panel.hasAttribute('data-ui-overlay-id')).toBe(true)
+
+      fireEvent.mouseDown(anchor)
+      act(() => { vi.advanceTimersByTime(1000) })
+      expect(onOpenChange).not.toHaveBeenCalled()
+
+      fireEvent.mouseDown(document.body)
+      expect(onOpenChange).not.toHaveBeenCalled()
+      act(() => { vi.advanceTimersByTime(1000) })
+      expect(onOpenChange).toHaveBeenCalledWith(false)
+      expect(view.queryByText('菜单内容')).toBeNull()
+      anchor.remove()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('受控开合：父组件关闭时播放收起动画；收起中再次打开（换锚点）会取消收起并就位', () => {
+    vi.useFakeTimers()
+    try {
+      vi.stubGlobal('ResizeObserver', class { observe(): void {} disconnect(): void {} })
+      const props = (open: boolean, x: number) => ({
+        anchor: { left: x, top: 50, bottom: 50, width: 0 },
+        open,
+        panelWidth: 120,
+        renderPanel: () => React.createElement('div', null, '右键菜单'),
+      })
+      const view = render(React.createElement(PanelTrigger, props(true, 40)))
+      expect(view.getByText('右键菜单')).toBeTruthy()
+      view.rerender(React.createElement(PanelTrigger, props(false, 40)))
+      // 收起动画期间仍在
+      expect(view.queryByText('右键菜单')).not.toBeNull()
+      view.rerender(React.createElement(PanelTrigger, props(true, 90)))
+      act(() => { vi.advanceTimersByTime(1000) })
+      const panel = view.getByText('右键菜单').closest('[data-panel-placement]') as HTMLElement
+      expect(panel.style.left).toBe('90px')
+      view.rerender(React.createElement(PanelTrigger, props(false, 90)))
+      act(() => { vi.advanceTimersByTime(1000) })
+      expect(view.queryByText('右键菜单')).toBeNull()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('内容宽度：panelWidth="content" 时面板不写死宽度，按视口限制最大宽度', () => {
+    vi.stubGlobal('ResizeObserver', class { observe(): void {} disconnect(): void {} })
+    const view = render(React.createElement(PanelTrigger, {
+      anchor: { left: 40, top: 50, bottom: 50, width: 0 },
+      open: true,
+      panelWidth: 'content',
+      renderPanel: () => React.createElement('div', null, '内容宽度'),
+    }))
+    const panel = view.getByText('内容宽度').closest('[data-panel-placement]') as HTMLElement
+    expect(panel.style.width).toBe('')
+    expect(panel.className).toContain('w-max')
+    expect(panel.style.maxWidth).toBe(`${window.innerWidth - 16}px`)
   })
 })

@@ -4,7 +4,7 @@ import React from 'react'
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import { UiOverlayLayerProvider, useUiOverlayLayer } from '@/components/ui/overlayOwnership'
-import { hasOpenAssetChildOverlay, isAssetCardMenuTriggerTarget } from './assetOverlayOwnership'
+import { hasOpenAssetChildOverlay } from './assetOverlayOwnership'
 
 afterEach(cleanup)
 
@@ -23,14 +23,5 @@ describe('资产面板子浮层归属', () => {
     view.rerender(React.createElement(Layer, { open: true, panel: true },
       React.createElement(Layer, { open: true })))
     expect(hasOpenAssetChildOverlay()).toBe(true)
-  })
-
-  it('识别卡片菜单触发器的后代节点', () => {
-    const trigger = document.createElement('button')
-    trigger.dataset.assetCardMenuTrigger = ''
-    const icon = document.createElement('span')
-    trigger.appendChild(icon)
-
-    expect(isAssetCardMenuTriggerTarget(icon)).toBe(true)
   })
 })

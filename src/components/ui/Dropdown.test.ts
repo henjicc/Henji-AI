@@ -161,6 +161,8 @@ describe('Dropdown 菜单宽度（任务 4.3）', () => {
     expect(resolveDropdownMenuWidth(65, 'sm')).toBe(115)
     expect(resolveDropdownMenuWidth(65, 'lg')).toBe(123)
     expect(resolveDropdownMenuWidth(1000, 'md')).toBe(DROPDOWN_MENU_MAX_WIDTH_PX)
+    // 自定义面板（动作菜单）不留勾槽：65 + 20 + 10 + 2
+    expect(resolveDropdownMenuWidth(65, 'md', 'none')).toBe(97)
   })
 
   it('静默触发器（工具条）下，选中项“参考生视频”的菜单宽度足够放下文字与勾', () => {

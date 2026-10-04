@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { toDisplaySrc } from '@/platform/desktopApi'
 import AudioPlayer from '@/components/AudioPlayer'
 import { UI_DURATION, uiTransition } from '@/components/ui/motion'
+import { isTopmostUiOverlay, UiOverlayLayerProvider, useUiOverlayLayer } from '@/components/ui'
 
 export interface AudioViewerModalProps {
   open: boolean
@@ -13,6 +14,8 @@ export interface AudioViewerModalProps {
 
 export function AudioViewerModal({ open, audioUrl, filePath, onClose, autoPlay = false }: AudioViewerModalProps): JSX.Element | null {
   const [visible, setVisible] = useState(open)
+  // 全屏查看器是模态浮层层（任务 4.3 / 5.9）：其上的子浮层先处理 Escape，查看器内点击不关掉打开它的面板
+  const overlay = useUiOverlayLayer(open, { modal: true })
   const [overlayOpacity, setOverlayOpacity] = useState(0)
   const [playerOpacity, setPlayerOpacity] = useState(0)
   const closeTimerRef = useRef<number | null>(null)
@@ -73,11 +76,11 @@ export function AudioViewerModal({ open, audioUrl, filePath, onClose, autoPlay =
   useEffect(() => {
     if (!open) return
     const handleKeyDown = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') onClose()
+      if (event.key === 'Escape' && isTopmostUiOverlay(overlay.id)) onClose()
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [open, onClose])
+  }, [open, onClose, overlay.id])
 
   useEffect(() => {
     return () => {
@@ -103,7 +106,9 @@ export function AudioViewerModal({ open, audioUrl, filePath, onClose, autoPlay =
           onClose()
         }
       }}
+      {...overlay.layerProps}
     >
+      <UiOverlayLayerProvider id={overlay.id}>
       <div
         style={{
           opacity: playerOpacity * overlayOpacity,
@@ -113,6 +118,7 @@ export function AudioViewerModal({ open, audioUrl, filePath, onClose, autoPlay =
       >
         <AudioPlayer src={playbackUrl} filePath={filePath} autoPlay={autoPlay} active={open} compact className="!w-[44rem] !max-w-[92vw]" />
       </div>
+      </UiOverlayLayerProvider>
     </div>
   )
 }

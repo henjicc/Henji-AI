@@ -55,6 +55,8 @@ type DropdownProps<T extends string | number | boolean> = {
    * 不传时随字段排布：`UiFieldLayoutContext` 为 `toolbar` 时取 `text`，否则 `field`。
    */
   appearance?: 'field' | 'text'
+  /** 菜单开合通知（宿主需要在菜单打开期间保持自身可见时用，如视频查看器的控制条）。 */
+  onOpenChange?: (open: boolean) => void
 }
 
 export default function Dropdown<T extends string | number | boolean>(props: DropdownProps<T>) {
@@ -78,6 +80,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
     minWidthStrategy = 'display',
     panelWidthStrategy = 'button',
     appearance: appearanceOverride,
+    onOpenChange,
   } = props
   const fieldLayout = useUiFieldLayout()
   const toolbarLayout = fieldLayout === 'toolbar'
@@ -86,6 +89,15 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
   const [closing, setClosing] = useState(false)
   const [activeOptionIndex, setActiveOptionIndex] = useState(-1)
   const overlay = useUiOverlayLayer(open)
+  const onOpenChangeRef = useRef(onOpenChange)
+  onOpenChangeRef.current = onOpenChange
+  const menuShown = open && !closing
+  const notifiedOpenRef = useRef(false)
+  useEffect(() => {
+    if (notifiedOpenRef.current === menuShown) return
+    notifiedOpenRef.current = menuShown
+    onOpenChangeRef.current?.(menuShown)
+  }, [menuShown])
   const ref = useRef<HTMLDivElement | null>(null)
   const triggerRef = useRef<HTMLButtonElement | null>(null)
   const panelRef = useRef<HTMLDivElement | null>(null)
@@ -254,14 +266,15 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
       const panelLabels = optionLabels.length > 0 ? optionLabels : [displayText]
       // 菜单宽度按菜单项自己的留白（含选中勾槽）计算，不借用触发器留白（任务 4.3）
       const textWidth = measureElementTextWidth(btn, panelLabels, 0)
-      const nextPanelMinWidth = textWidth === null ? null : resolveDropdownMenuWidth(textWidth, size)
+      // 自定义面板（renderPanel）没有选中勾，按动作菜单留白；选项列表是选值菜单，预留勾槽
+      const nextPanelMinWidth = textWidth === null ? null : resolveDropdownMenuWidth(textWidth, size, renderPanel ? 'none' : 'single')
       if (nextPanelMinWidth !== null && lastPanelMinWidthRef.current !== nextPanelMinWidth) {
         lastPanelMinWidthRef.current = nextPanelMinWidth
         setPanelMinWidthPx(nextPanelMinWidth)
       }
     }
     computeMinWidth()
-  }, [buttonMinWidthPx, getOptionLabels, minWidthStrategy, options, panelMinWidthPx, panelWidthStrategy, resolvedDisplay, size])
+  }, [buttonMinWidthPx, getOptionLabels, minWidthStrategy, options, panelMinWidthPx, panelWidthStrategy, renderPanel, resolvedDisplay, size])
 
   useLayoutEffect(() => {
     const updatePos = () => {

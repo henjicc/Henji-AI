@@ -14,7 +14,8 @@ interface ResolveFloatingPanelPositionOptions {
   viewportWidth: number
   viewportHeight: number
   preferredPlacement: FloatingPanelPlacement
-  horizontalAlign: 'left' | 'center'
+  /** left：左缘对齐锚点；center：居中；right：右缘对齐锚点（卡片上的“更多”按钮菜单）。 */
+  horizontalAlign: 'left' | 'center' | 'right'
   gap: number
   viewportGutter?: number
   viewportTopInset?: number
@@ -54,7 +55,11 @@ export function resolveFloatingPanelPosition({
   const viewportBottom = Math.max(viewportTop, Math.min(viewportHeight, boundary ? boundary.top + boundary.height : viewportHeight) - viewportGutter)
   const width = Math.min(Math.max(0, panelWidth), Math.max(0, viewportRight - viewportLeft))
   const centeredLeft = anchor.left + anchor.width / 2 - width / 2
-  const preferredLeft = horizontalAlign === 'center' ? centeredLeft : anchor.left
+  const preferredLeft = horizontalAlign === 'center'
+    ? centeredLeft
+    : horizontalAlign === 'right'
+      ? anchor.left + anchor.width - width
+      : anchor.left
   const maxLeft = Math.max(viewportLeft, viewportRight - width)
   const left = Math.min(Math.max(viewportLeft, preferredLeft), maxLeft)
   const spaceAbove = Math.max(0, anchor.top - gap - viewportTop)

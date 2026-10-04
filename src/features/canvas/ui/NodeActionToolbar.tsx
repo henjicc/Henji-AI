@@ -49,7 +49,7 @@ import {
   NODE_TOOLBAR_OFFSET,
   NODE_TOOLBAR_POSITION,
 } from './nodeToolbarConfig';
-import { NodeDownloadMenu } from './NodeDownloadMenu';
+import ContextMenu from '@/components/ContextMenu';
 import { useAddToAssetLibrary } from '@/features/assets/hooks/useAddToAssetLibrary';
 import { resolveLocalAssetPath } from '@/features/assets/services/assetCollectionService';
 import { checkAssetPaths } from '@/commands/assetLibrary';
@@ -104,12 +104,8 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
   const {
     canDownload,
     downloadMenu,
-    isDownloadMenuVisible,
-    downloadMenuRef,
     closeDownloadMenu,
     handleDownloadClick,
-    handleDownloadSaveAs,
-    handleDownloadToPreset,
   } = useNodeDownload(node, downloadPresetPaths);
   const ignoreAtTagWhenCopyingAndGenerating = useSettingsStore(
     (state) => state.ignoreAtTagWhenCopyingAndGenerating
@@ -473,20 +469,12 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
       </UiPanel>
 
       {canDownload && (
-        <NodeDownloadMenu
-          menu={downloadMenu}
-          isVisible={isDownloadMenuVisible}
-          menuRef={downloadMenuRef}
-          boundaryRef={toolbarPanelRef}
-          downloadPresetPaths={downloadPresetPaths}
-          saveAsLabel={t('nodeToolbar.saveAs')}
-          noPresetHintLabel={t('nodeToolbar.noDownloadPresetPathsHint')}
-          onSaveAs={() => {
-            void handleDownloadSaveAs();
-          }}
-          onSaveToPreset={(path) => {
-            void handleDownloadToPreset(path);
-          }}
+        <ContextMenu
+          visible={downloadMenu.visible}
+          position={downloadMenu.position}
+          items={downloadMenu.items}
+          onClose={closeDownloadMenu}
+          surface="glass"
         />
       )}
     </ReactFlowNodeToolbar>

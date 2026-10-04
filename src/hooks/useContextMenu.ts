@@ -1,5 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
-import { elementOfEventTarget, ownerDocumentOf, ownerWindowOf } from '@/utils/crossRealmDom'
+import { useState, useCallback } from 'react'
 
 export interface MenuItem {
     id: string
@@ -8,16 +7,23 @@ export interface MenuItem {
     onClick: () => void
     disabled?: boolean
     divider?: boolean
+    /** 悬停可看全的完整文字（如被截断的路径）。 */
+    title?: string
 }
 
-interface Position {
+/**
+ * 菜单锚点：右键时是指针位置；从按钮打开（`showMenuAt`）时带上按钮元素，菜单右缘对齐按钮、贴在下方，
+ * 并按按钮实时位置定位。视口夹取、上下翻转与宽度都由 `ContextMenu`（共享浮层 `PanelTrigger` 锚点模式）负责。
+ */
+export interface MenuPosition {
     x: number
     y: number
+    anchor?: Element
 }
 
 interface UseContextMenuReturn {
     menuVisible: boolean
-    menuPosition: Position
+    menuPosition: MenuPosition
     menuItems: MenuItem[]
     showMenu: (e: React.MouseEvent, items: MenuItem[]) => void
     /** 从按钮（如卡片上的“更多”）打开同一份菜单：右缘对齐按钮、贴在按钮下方，键盘触发也能定位。 */
@@ -25,99 +31,33 @@ interface UseContextMenuReturn {
     hideMenu: () => void
 }
 
+/**
+ * 右键菜单状态。点外关闭、Escape、所在文档（主窗口或剪辑系统浮窗）由 `ContextMenu` 统一处理（任务 5.9），
+ * 这里只记录菜单项与锚点。
+ */
 export const useContextMenu = (): UseContextMenuReturn => {
     const [menuVisible, setMenuVisible] = useState(false)
-    const [menuPosition, setMenuPosition] = useState<Position>({ x: 0, y: 0 })
+    const [menuPosition, setMenuPosition] = useState<MenuPosition>({ x: 0, y: 0 })
     const [menuItems, setMenuItems] = useState<MenuItem[]>([])
-    const menuRef = useRef<{ width: number; height: number }>({ width: 200, height: 0 })
-    /** 打开菜单的文档：剪辑系统浮窗中右键时，关闭监听与视口都取浮窗本身。 */
-    const ownerRef = useRef<Document>(document)
-
-    const openAt = useCallback((clientX: number, clientY: number, target: Element | null, items: MenuItem[]) => {
-        setMenuItems(items)
-        ownerRef.current = ownerDocumentOf(target)
-        const viewport = ownerWindowOf(target)
-
-        // 计算菜单高度（估算）
-        const itemHeight = 40 // 每个菜单项的大概高度
-        const padding = 8 // 菜单的上下 padding
-        const estimatedHeight = Math.min(items.length * itemHeight + padding, Math.max(0, viewport.innerHeight - 20))
-        const menuWidth = menuRef.current.width
-
-        // 获取视口尺寸
-        const viewportWidth = viewport.innerWidth
-        const viewportHeight = viewport.innerHeight
-
-        // 使用 clientX/clientY（相对于视口的坐标）
-        let x = clientX
-        let y = clientY
-
-        // 如果菜单会超出右边界，向左偏移
-        if (x + menuWidth > viewportWidth - 10) {
-            x = viewportWidth - menuWidth - 10
-        }
-
-        // 如果菜单会超出底部边界，向上显示
-        if (y + estimatedHeight > viewportHeight - 10) {
-            y = viewportHeight - estimatedHeight - 10
-        }
-
-        // 确保不会超出左边界和顶部
-        x = Math.max(10, x)
-        y = Math.max(10, y)
-
-        setMenuPosition({ x, y })
-        setMenuVisible(true)
-    }, [])
 
     const showMenu = useCallback((e: React.MouseEvent, items: MenuItem[]) => {
         e.preventDefault()
         e.stopPropagation()
-        openAt(e.clientX, e.clientY, elementOfEventTarget(e.target), items)
-    }, [openAt])
+        setMenuItems(items)
+        setMenuPosition({ x: e.clientX, y: e.clientY })
+        setMenuVisible(true)
+    }, [])
 
     const showMenuAt = useCallback((anchor: Element, items: MenuItem[]) => {
         const rect = anchor.getBoundingClientRect()
-        openAt(rect.right - menuRef.current.width, rect.bottom + 4, anchor, items)
-    }, [openAt])
+        setMenuItems(items)
+        setMenuPosition({ x: rect.right, y: rect.bottom, anchor })
+        setMenuVisible(true)
+    }, [])
 
     const hideMenu = useCallback(() => {
         setMenuVisible(false)
     }, [])
-
-    // 点击外部关闭菜单
-    useEffect(() => {
-        if (!menuVisible) return
-
-        const handleClick = (e: MouseEvent) => {
-            const target = elementOfEventTarget(e.target)
-            // 如果点击的不是菜单内部，关闭菜单
-            if (!target?.closest('[data-context-menu]')) {
-                hideMenu()
-            }
-        }
-
-        const handleContextMenu = (e: MouseEvent) => {
-            const target = elementOfEventTarget(e.target)
-            // 如果右键点击的不是菜单本身，关闭菜单
-            if (!target?.closest('[data-context-menu]')) {
-                hideMenu()
-            }
-        }
-
-        // 延迟添加事件监听器，避免立即触发
-        const owner = ownerRef.current
-        const timer = setTimeout(() => {
-            owner.addEventListener('mousedown', handleClick)
-            owner.addEventListener('contextmenu', handleContextMenu)
-        }, 10)
-
-        return () => {
-            clearTimeout(timer)
-            owner.removeEventListener('mousedown', handleClick)
-            owner.removeEventListener('contextmenu', handleContextMenu)
-        }
-    }, [menuVisible, hideMenu])
 
     return {
         menuVisible,

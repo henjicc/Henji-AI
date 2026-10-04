@@ -1,116 +1,127 @@
 import { createLogger } from '@/core/logging'
-import React, { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
-import { MenuItem } from '../hooks/useContextMenu'
-import { isDomNode, ownerDocumentOf } from '@/utils/crossRealmDom'
-import { resolveUiOverlayTarget, useUiOverlayLayer } from '@/components/ui/overlayOwnership'
+import React, { useEffect, useRef, type KeyboardEvent } from 'react'
+import type { MenuItem, MenuPosition } from '../hooks/useContextMenu'
+import PanelTrigger from '@/components/ui/PanelTrigger'
+import { UiOptionButton } from '@/components/ui/primitives'
+import { UI_GLASS_ADAPTIVE_DIVIDER_CLASS, type UiTriggerPanelSurface } from '@/components/ui/styleTokens'
 
 const logger = createLogger('components.ContextMenu')
 
 interface ContextMenuProps {
     items: MenuItem[]
-    position: { x: number; y: number }
+    position: MenuPosition
 
     onClose: () => void
     visible: boolean
+    /** 浮层表面：默认实底；菜单压在画布、图片、视频上时传 `glass`（与 `PanelTrigger` / `Dropdown` 同一枚举）。 */
+    surface?: UiTriggerPanelSurface
 }
 
-const ContextMenu: React.FC<ContextMenuProps> = ({ items, position, onClose, visible }) => {
-    const menuRef = useRef<HTMLDivElement>(null)
-    // 右键菜单是一层浮层：所在面板（如资产面板）据此认出它是自己的子浮层（任务 4.3）
-    const overlay = useUiOverlayLayer(visible)
-    // 菜单没有触发元素：可见期间在原位放一个隐藏锚点，得知自己处在主窗口还是剪辑系统浮窗，
-    // 再挂到该文档的 body 并在该文档监听外部点击。
-    const anchorRef = useRef<HTMLSpanElement>(null)
-    const [host, setHost] = useState<Document | null>(null)
-    useLayoutEffect(() => {
-        if (!visible || !anchorRef.current) return
-        const next = ownerDocumentOf(anchorRef.current)
-        setHost(previous => previous === next ? previous : next)
-    }, [visible])
+const ENABLED_ITEM_SELECTOR = '[role="menuitem"]:not(:disabled)'
 
+function MenuList({ items, onClose }: { items: MenuItem[]; onClose: () => void }): React.ReactElement {
+    const listRef = useRef<HTMLDivElement>(null)
+
+    // 打开即让菜单获得焦点：方向键可选择、Enter 执行（菜单本身不显示焦点环，避免鼠标打开时出现框）。
+    // 文本框里的右键（全局粘贴菜单）不抢走输入焦点，粘贴后仍可接着输入。
     useEffect(() => {
-        if (!visible || !host) return
+        const list = listRef.current
+        const active = list?.ownerDocument.activeElement as HTMLElement | null | undefined
+        if (active && (active.isContentEditable || active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) return
+        list?.focus({ preventScroll: true })
+    }, [])
 
-        const handleClickOutside = (e: MouseEvent) => {
-            if (menuRef.current && (!isDomNode(e.target) || resolveUiOverlayTarget(e.target, overlay.id) === 'outside')) {
-                onClose()
-            }
-        }
+    const moveFocus = (event: KeyboardEvent<HTMLDivElement>): void => {
+        const list = listRef.current
+        if (!list) return
+        const enabled = Array.from(list.querySelectorAll<HTMLElement>(ENABLED_ITEM_SELECTOR))
+        if (enabled.length === 0) return
+        const current = enabled.indexOf(list.ownerDocument.activeElement as HTMLElement)
+        let next: number | null = null
+        if (event.key === 'ArrowDown') next = current < 0 ? 0 : (current + 1) % enabled.length
+        else if (event.key === 'ArrowUp') next = current < 0 ? enabled.length - 1 : (current - 1 + enabled.length) % enabled.length
+        else if (event.key === 'Home') next = 0
+        else if (event.key === 'End') next = enabled.length - 1
+        if (next === null) return
+        event.preventDefault()
+        enabled[next]?.focus()
+    }
 
-        // 延迟添加监听器，避免立即触发
-        const timer = setTimeout(() => {
-            host.addEventListener('mousedown', handleClickOutside)
-        }, 0)
+    const run = async (item: MenuItem): Promise<void> => {
+        if (item.disabled) return
+        logger.info('[ContextMenu] 执行菜单项', { label: item.label })
+        onClose()
+        // 先让菜单收起一帧，再执行（动作可能打开弹窗或做重活）
+        await new Promise(resolve => setTimeout(resolve, 16))
+        await item.onClick()
+    }
 
-        return () => {
-            clearTimeout(timer)
-            host.removeEventListener('mousedown', handleClickOutside)
-        }
-    }, [visible, onClose, host, overlay.id])
-
-    if (!visible) return null
-
-    return <>
-        <span ref={anchorRef} hidden />
-        {host && createPortal(
+    return (
         <div
-            ref={menuRef}
+            ref={listRef}
             role="menu"
+            tabIndex={-1}
             data-context-menu
-            {...overlay.layerProps}
-            className="ui-glass context-menu animate-scale-in"
-            style={{
-                left: `${position.x}px`,
-                top: `${position.y}px`,
-                maxHeight: 'calc(100vh - 20px)',
-                maxWidth: 'calc(100vw - 20px)',
-                overflowY: 'auto'
-            }}
+            className="flex min-w-44 max-w-sm flex-col outline-none"
+            onKeyDown={moveFocus}
         >
             {items.map((item, index) => (
                 <React.Fragment key={item.id}>
-                    <div
+                    <UiOptionButton
+                        type="button"
                         role="menuitem"
+                        variant="menu"
+                        size="md"
+                        disabled={item.disabled === true}
                         aria-disabled={item.disabled === true}
-                        tabIndex={item.disabled ? -1 : 0}
-                        className={`context-menu-item ${item.disabled ? 'disabled' : ''}`}
-                        onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.currentTarget.click() } }}
-                        onClick={async (e) => {
-                            const t0 = performance.now()
-                            logger.info('[ContextMenu] 点击菜单项', { label: item.label, t0 })
-
-                            e.preventDefault()
-                            e.stopPropagation()
-                            if (!item.disabled) {
-                                onClose()
-                                const t1 = performance.now()
-                                logger.info('[ContextMenu] 菜单关闭, 等待 16ms', { 耗时: `${(t1 - t0).toFixed(2)}ms` })
-
-                                // 菜单关闭后立即执行，16ms 足够一帧渲染
-                                await new Promise(resolve => setTimeout(resolve, 16))
-
-                                const t2 = performance.now()
-                                logger.info('[ContextMenu] 16ms 等待结束, 执行 onClick', { 等待耗时: `${(t2 - t1).toFixed(2)}ms` })
-
-                                await item.onClick()
-
-                                const t3 = performance.now()
-                                logger.info('[ContextMenu] onClick 执行完成', { onClick耗时: `${(t3 - t2).toFixed(2)}ms`, 总耗时: `${(t3 - t0).toFixed(2)}ms` })
-                            }
+                        title={item.title}
+                        className="w-full gap-2.5"
+                        onKeyDown={event => {
+                            if (event.key !== 'Enter' && event.key !== ' ') return
+                            // 阻止按钮原生激活，避免同一次按键执行两遍
+                            event.preventDefault()
+                            event.stopPropagation()
+                            void run(item)
+                        }}
+                        onClick={event => {
+                            event.preventDefault()
+                            event.stopPropagation()
+                            void run(item)
                         }}
                     >
-                        <div className="context-menu-icon">{item.icon}</div>
-                        <span>{item.label}</span>
-                    </div>
+                        {item.icon ? <span aria-hidden="true" className="flex shrink-0 items-center text-text2">{item.icon}</span> : null}
+                        <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                    </UiOptionButton>
                     {item.divider && index < items.length - 1 && (
-                        <div className="context-menu-divider" />
+                        <div role="separator" className={`my-1 border-t ${UI_GLASS_ADAPTIVE_DIVIDER_CLASS}`} />
                     )}
                 </React.Fragment>
             ))}
-        </div>, host.body
-    )}
-    </>
+        </div>
+    )
+}
+
+/**
+ * 右键菜单与按钮菜单（任务 5.9 收敛）：浮层本身走 `PanelTrigger` 的锚点模式，与下拉、参数面板共用
+ * 定位（视口夹取、上下翻转）、浮层归属（子浮层与模态层）、Escape 只关最上层、跨文档挂载；
+ * 菜单项是 `UiOptionButton variant="menu"`，悬停、禁用、玻璃自适应与其他菜单一致。宽度按内容（176–384）。
+ */
+const ContextMenu: React.FC<ContextMenuProps> = ({ items, position, onClose, visible, surface = 'solid' }) => {
+    const anchor = position.anchor ?? { left: position.x, top: position.y, bottom: position.y, width: 0 }
+    const onCloseRef = useRef(onClose)
+    onCloseRef.current = onClose
+    return (
+        <PanelTrigger
+            anchor={anchor}
+            open={visible}
+            onOpenChange={next => { if (!next) onCloseRef.current() }}
+            alignment={position.anchor ? 'bottomRight' : 'bottomLeft'}
+            surface={surface}
+            panelPadding="menu"
+            panelWidth="content"
+            renderPanel={() => <MenuList items={items} onClose={onClose} />}
+        />
+    )
 }
 
 export default ContextMenu

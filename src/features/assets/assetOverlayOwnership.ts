@@ -15,8 +15,3 @@ export function hasOpenAssetChildOverlay(root: ParentNode = document): boolean {
   // 资产工作区（非浮动面板）没有面板层：任一打开中的浮层都优先处理 Escape
   return panelId ? hasOpenUiOverlayDescendant(panelId) : hasAnyOpenUiOverlay()
 }
-
-/** 切换卡片菜单时，旧菜单的外部点击监听不能把新菜单延迟关闭。 */
-export function isAssetCardMenuTriggerTarget(target: EventTarget | null): boolean {
-  return target instanceof Element && Boolean(target.closest('[data-asset-card-menu-trigger]'))
-}
