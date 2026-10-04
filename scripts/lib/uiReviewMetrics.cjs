@@ -37,17 +37,32 @@ function collectLayoutMeasurements(element) {
     .filter((child) => child.nodeType === Node.TEXT_NODE)
     .map((child) => child.textContent ?? '').join('').replace(/\s+/g, ' ').trim()
 
+  // 被滚动容器（目标自身或其内部的 overflow 非 visible 祖先）整块裁掉的项，是“滚动后才看得到”，不是溢出
+  const scrolledOut = (node) => {
+    const rect = node.getBoundingClientRect()
+    for (let ancestor = node.parentElement; ancestor; ancestor = ancestor.parentElement) {
+      const style = getComputedStyle(ancestor)
+      if (style.overflowX !== 'visible' || style.overflowY !== 'visible') {
+        const clip = ancestor.getBoundingClientRect()
+        if (rect.bottom <= clip.top || rect.top >= clip.bottom || rect.right <= clip.left || rect.left >= clip.right) return true
+      }
+      if (ancestor === element) break
+    }
+    return false
+  }
   const container = rectOf(element)
   const containerStyle = getComputedStyle(element)
-  const allAtoms = [...element.querySelectorAll(ATOM_SELECTOR)].filter(isVisible)
+  const allAtoms = [...element.querySelectorAll(ATOM_SELECTOR)].filter((node) => isVisible(node) && !scrolledOut(node))
   // 只取最外层的可交互件：触发器里的图标按钮不再单独算一项
   const atoms = allAtoms.filter((node) => !allAtoms.some((other) => other !== node && other.contains(node)))
   const items = (atoms.length > 0 ? atoms : [...element.children].filter(isVisible))
-    .map((node) => ({ label: describe(node), rect: rectOf(node) }))
+    .map((node) => ({ label: describe(node), rect: rectOf(node),
+      // 下拉 / 面板触发器：参数选择器；“更多参数”里出现它说明收起的不只是只能放浮层的大块控件
+      trigger: node.matches('[data-dropdown-button],[data-panel-trigger-button],[role="combobox"]') }))
 
   const texts = []
   for (const node of [element, ...element.querySelectorAll('*')]) {
-    if (!isVisible(node)) continue
+    if (!isVisible(node) || (node !== element && scrolledOut(node))) continue
     const text = ownText(node)
     if (!text) continue
     const style = getComputedStyle(node)
@@ -83,6 +98,8 @@ function collectLayoutMeasurements(element) {
     containerOverflowX: containerStyle.overflowX,
     viewport: { width: window.innerWidth, height: window.innerHeight },
     items,
+    // 直接子元素的宽度：单行收纳容器（UiOverflowRow）的子元素就是各参数项与“更多参数”入口
+    childWidths: [...element.children].filter(isVisible).map((node) => round(node.getBoundingClientRect().width)),
     texts,
   }
 }
@@ -137,7 +154,10 @@ function analyzeLayoutMetrics(raw, expect = {}) {
     rect.left < -OVERFLOW_TOLERANCE_PX || rect.right > raw.viewport.width + OVERFLOW_TOLERANCE_PX
     || rect.bottom > raw.viewport.height + OVERFLOW_TOLERANCE_PX
   )).map((item) => item.label)
-  const containerOverflow = raw.containerScroll.scrollWidth > raw.containerScroll.clientWidth + OVERFLOW_TOLERANCE_PX
+  // 只有会裁切/滚动的容器才算“横向溢出”；overflow: visible 的容器里向外凸出的件（如节点端口）是有意设计，
+  // 真正挤出容器的件由下面的 overflowingItems 按几何判断
+  const containerOverflow = raw.containerOverflowX !== 'visible'
+    && raw.containerScroll.scrollWidth > raw.containerScroll.clientWidth + OVERFLOW_TOLERANCE_PX
   const truncated = raw.texts
     .map((text) => ({ text, kind: isTruncated(text) }))
     .filter(({ kind }) => kind)
@@ -156,9 +176,14 @@ function analyzeLayoutMetrics(raw, expect = {}) {
   if (truncated.length > unhinted.length) reasons.push(`截断（有悬停提示）：${truncated.length - unhinted.length} 处`)
   if (wrappedLabels.length) reasons.push(`短标签折行：${wrappedLabels.slice(0, 3).map((item) => item.text).join('、')}`)
 
+  // 未占用宽度：容器宽减去直接子元素宽度之和（不扣间距）。单行收纳容器里它很大却仍有收起项，就是可疑
+  const slack = Math.round(container.width - (raw.childWidths ?? []).reduce((sum, width) => sum + width, 0))
   return {
     rows,
     itemCount: raw.items.length,
+    triggerCount: raw.items.filter((item) => item.trigger).length,
+    slack,
+    childWidths: raw.childWidths ?? [],
     width: container.width,
     height: container.height,
     containerOverflow,
@@ -166,6 +191,8 @@ function analyzeLayoutMetrics(raw, expect = {}) {
     offscreenItems,
     truncated,
     wrappedLabels,
+    // 目标里可见的文字（去重、按文档顺序），用于汇总“哪些参数在底栏 / 被收进更多参数”
+    texts: [...new Set(raw.texts.map((text) => text.text))].slice(0, 60),
     suspicious: reasons.length > 0,
     reasons,
   }

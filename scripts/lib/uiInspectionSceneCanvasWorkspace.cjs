@@ -264,7 +264,12 @@ function attachUiInspectionCanvasWorkspace(context) {
     await reopenCanvasProjectFromStorage(page, projectId)
     const emptyNode = page.locator('.react-flow__node[data-id="__ui_empty_image_source"]')
     await emptyNode.waitFor({ state: 'visible', timeout: 12000 })
-    await emptyNode.click()
+    // 只选中节点：点节点标题拖动条。点空上传节点的中部会打开系统文件选择框（原生模态），
+    // 它一直留着会让主窗口处于禁用态，1440 整批里后面的 window-startup 就最小化超时（5.2 二分定位）。
+    await page.locator('[data-node-header-drag-surface="__ui_empty_image_source"]').click()
+    if (!(await emptyNode.evaluate((element) => element.classList.contains('selected')))) {
+      throw new Error('点击标题拖动条没有选中等待图片的节点')
+    }
     await page.locator('[data-image-capability-more="true"]:visible').click()
     const disabledMenu = page.locator('[data-image-capability-menu="true"]:visible')
     await disabledMenu.waitFor({ state: 'visible', timeout: 8000 })
@@ -397,7 +402,8 @@ function attachUiInspectionCanvasWorkspace(context) {
     await page.keyboard.press('Escape')
     await settlePage(page, 250)
     await page.locator('[data-node-toolbar-panel]').getByRole('button', { name: /^(下载|Download)$/i }).click()
-    await assertInside('[data-node-download-menu]')
+    // 下载菜单改由共享 ContextMenu 绘制（5.9）
+    await assertInside('[data-context-menu]')
     await page.screenshot({ path: `.ui-tour/${size}-toolbar-download.png` })
     await source.click()
     await other.click({ modifiers: ['Meta'] })

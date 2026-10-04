@@ -112,6 +112,8 @@ npm run check:ui-visual -- --steps scripts/ui-review/generation-seedance-kie.jso
 
 **指标目标**：定位字段 + `maxRows`（默认 1：工具条、底栏、命令带必须单行；表单、菜单传 `null` 不判行数）。自动指标包括：视觉行数（可交互件按竖直重叠分行）、容器与件超出容器/窗口、文字截断（并区分悬停能否看全）、≤12 字短标签折行。可疑项列在 `index.md` 最前面，先看这些截图；指标只用来筛，不能替代目视。
 
-**变体来源** `generation-models`：从真实模型选择面板读出全部可选的“模型 × 渠道”，每个变体带 `modelId`、`providerId`、`name`、`id`（截图后缀前缀）。单个变体失败不中断其余变体，最后汇总报失败。
+每项指标还带 `texts`（目标里可见文字，用来列出“底栏上有哪些参数 / 收进更多参数的是哪些”）、`triggerCount`（下拉与面板触发器个数）和 `slack`（容器宽减去直接子元素宽度之和，单行收纳容器 `[data-ui-overflow-row]` 上就是还空着的宽度）。
+
+**变体来源** `generation-models`：从真实模型选择面板读出全部可选的“模型 × 渠道”，每个变体带 `modelId`、`providerId`、`name`、`id`（截图后缀前缀）。单个变体失败不中断其余变体，最后汇总报失败。有变体时 `ui:tour` 另写 `variants.md`：按“变体 × 尺寸”列出底栏行数、收纳行空余、底栏可见参数、收进“更多参数”的参数与可疑原因（折行、溢出、截断、短标签折行、收纳行空余 ≥ 120px 却仍把选择器收进“更多参数”）。指标名约定 `bar` / `row` / `more` / `first-menu`；对旧输出目录补汇总用 `node scripts/lib/uiReviewSummary.cjs <输出目录>`。
 
 样例：`scripts/ui-review/generation-seedance-kie.json`（底栏、模式触发器悬停、模式菜单、960 的“更多参数”）、`canvas-image-node-rows.json`（画布图片生成节点的行悬停、触发器悬停、选中后行悬停、参数菜单）、`generation-all-models.json`（全部模型底栏行数与首个参数菜单截断）。

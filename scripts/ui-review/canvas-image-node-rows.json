@@ -26,7 +26,7 @@
       "within": { "selector": ".react-flow__node:has([data-generation-node-model-id=\"apimart-gpt-image-2.5\"])" } } },
     { "waitStable": {} },
     { "capture": "trigger-hover" },
-    { "click": { "text": "核对样例", "within": { "selector": ".react-flow__node:has([data-generation-node-model-id=\"apimart-gpt-image-2.5\"])" } } },
+    { "click": { "selector": "[data-node-header-drag-surface=\"__ui_review_image_node\"]" } },
     { "hover": { "text": "/^(版本|Version)$/", "within": { "selector": ".react-flow__node:has([data-generation-node-model-id=\"apimart-gpt-image-2.5\"])" } } },
     { "waitStable": {} },
     { "capture": "selected-row-hover" },

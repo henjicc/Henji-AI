@@ -1,5 +1,18 @@
 const assert = require('node:assert/strict')
 
+/** Windows 最大化窗口外框超出工作区的不可见缩放边上限（DIP）；系统缩放 100%–200% 下为 7–9。 */
+const WINDOWS_MAX_FRAME_INSET_DIP = 10
+
+/** 最大化窗口外框相对工作区四边各向外多出的量（正数 = 超出工作区）。 */
+function maximizedFrameInsets(bounds, workArea) {
+  return {
+    left: workArea.x - bounds.x,
+    top: workArea.y - bounds.y,
+    right: bounds.x + bounds.width - (workArea.x + workArea.width),
+    bottom: bounds.y + bounds.height - (workArea.y + workArea.height),
+  }
+}
+
 /**
  * 窗口首次展开与再次恢复。
  *
@@ -68,8 +81,14 @@ async function inspectRestore(electronApp, page, { initial = false } = {}) {
     for (const bounds of result.moves) {
       assert.deepEqual(bounds, result.after, `首次展开期间窗口经过了中间位置（二次移动）：${JSON.stringify(result)}`)
     }
-    assert.ok(result.after.y >= result.workArea.y, `首次展开的窗口侵入菜单栏区域：${JSON.stringify(result)}`)
-    assert.ok(result.after.x >= result.workArea.x, `首次展开的窗口超出工作区左侧：${JSON.stringify(result)}`)
+    // 最大化后应恰好铺满工作区。Windows 的无边框 + thickFrame 窗口最大化时，四周各有一圈不可见缩放边
+    // （实测 150% 缩放下左上 7、右下 9 DIP），外框因此比工作区大一圈且大致对称；macOS 没有这圈，必须为 0，
+    // 否则就是侵入菜单栏（79543863 修过的问题）。
+    const insets = maximizedFrameInsets(result.after, result.workArea)
+    const maxInset = process.platform === 'win32' ? WINDOWS_MAX_FRAME_INSET_DIP : 0
+    assert.ok(Object.values(insets).every((value) => value >= 0 && value <= maxInset)
+      && Math.abs(insets.left - insets.right) <= 2 && Math.abs(insets.top - insets.bottom) <= 2,
+    `首次展开的最大化窗口没有恰好铺满工作区（或侵入菜单栏）：${JSON.stringify({ insets, maxInset, result })}`)
     assert.ok(result.before.y >= result.initialWorkArea.y, `后台窗口的普通尺寸侵入菜单栏区域：${JSON.stringify(result)}`)
     assert.ok(result.before.x >= result.initialWorkArea.x, '后台窗口的普通尺寸超出工作区左侧')
     return result
@@ -90,4 +109,4 @@ function createWindowStartupScene() {
   }
 }
 
-module.exports = { createWindowStartupScene, inspectRestore }
+module.exports = { WINDOWS_MAX_FRAME_INSET_DIP, createWindowStartupScene, inspectRestore, maximizedFrameInsets }

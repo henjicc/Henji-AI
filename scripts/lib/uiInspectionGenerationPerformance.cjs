@@ -90,7 +90,7 @@ function createGenerationPerformanceScenes(context) {
           try {
             for (let round = 0; round < 5; round++) {
               await page.evaluate(() => {
-                const scroller = document.querySelector('.app-scroll-container')
+                const scroller = document.querySelector('[data-generation-history-scroll]')
                 scroller.scrollTop = scroller.scrollHeight * 0.45
               })
               await page.waitForTimeout(250)
@@ -100,7 +100,7 @@ function createGenerationPerformanceScenes(context) {
               }
               const before = await session.send('Performance.getMetrics')
               const sample = await page.evaluate(async () => {
-                const element = document.querySelector('.app-scroll-container')
+                const element = document.querySelector('[data-generation-history-scroll]')
                 const frames = [], longTasks = []
                 const observer = new PerformanceObserver(list => longTasks.push(...list.getEntries().map(entry => entry.duration)))
                 observer.observe({ type: 'longtask' })

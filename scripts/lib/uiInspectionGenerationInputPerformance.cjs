@@ -62,7 +62,7 @@ async function ensureHistorySearchOpen(page) {
 async function measureGenerationFiltering(page, count, inspection) {
   const search = await ensureHistorySearchOpen(page)
   await search.focus()
-  await page.evaluate(() => { document.querySelector('.app-scroll-container').scrollTop = 0 })
+  await page.evaluate(() => { document.querySelector('[data-generation-history-scroll]').scrollTop = 0 })
   await page.waitForTimeout(400)
   const counter = page.getByText(new RegExp(`^(显示 ${count} / ${count} 条|Showing ${count} / ${count})$`))
   await counter.waitFor()

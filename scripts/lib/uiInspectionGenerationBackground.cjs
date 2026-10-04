@@ -39,7 +39,7 @@ async function observeGenerationProgress(page, count) {
         updates.set(id, (updates.get(id) ?? 0) + 1)
       }
     })
-    observer.observe(document.querySelector('.app-scroll-container'), { subtree: true, attributes: true, attributeFilter: ['style'] })
+    observer.observe(document.querySelector('[data-generation-history-scroll]'), { subtree: true, attributes: true, attributeFilter: ['style'] })
     return { snapshot: () => ({ updates: Object.fromEntries(updates), last: Object.fromEntries(last) }),
       dispose: () => observer.disconnect() }
   }, count)
@@ -105,7 +105,7 @@ async function finishGenerationResults(page, fixture, progress, count, historyCo
 async function verifyGenerationReload(page, fixture, count, historyCount, inspection) {
   await page.reload({ waitUntil: 'domcontentloaded' })
   await page.locator(`[data-generation-task-id="__generation_bench_${historyCount - 1}"]`).waitFor()
-  await page.evaluate(() => { document.querySelector('.app-scroll-container').scrollTop = 0 })
+  await page.evaluate(() => { document.querySelector('[data-generation-history-scroll]').scrollTop = 0 })
   await page.waitForFunction(() => {
     const image = document.querySelector('[data-generation-task-id="__generation_bench_0"] img')
     return image?.complete && image.naturalWidth > 0

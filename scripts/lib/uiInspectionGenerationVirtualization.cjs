@@ -39,7 +39,7 @@ function createGenerationVirtualizationScenes(context) {
       await last.waitFor({ timeout: 30000 })
       await context.settlePage(page)
       const initial = await page.evaluate(() => {
-        const scroller = document.querySelector('.app-scroll-container')
+        const scroller = document.querySelector('[data-generation-history-scroll]')
         return { remaining: scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop,
           oldestMounted: Boolean(scroller.querySelector('[data-generation-task-id="__virtual_check_0"]')) }
       })
@@ -49,14 +49,14 @@ function createGenerationVirtualizationScenes(context) {
       const scroll = async fraction => {
         await page.evaluate(fraction => {
           document.activeElement?.blur?.()
-          const element = document.querySelector('.app-scroll-container')
+          const element = document.querySelector('[data-generation-history-scroll]')
           element.scrollTop = (element.scrollHeight - element.clientHeight) * fraction
         }, fraction)
         await page.waitForTimeout(500)
       }
       await scroll(0.4)
       const geometry = await page.evaluate(() => {
-        const scroller = document.querySelector('.app-scroll-container')
+        const scroller = document.querySelector('[data-generation-history-scroll]')
         const top = scroller.getBoundingClientRect().top
         const rows = [...scroller.querySelectorAll('[data-index]')]
         const anchor = rows.find(row => row.getBoundingClientRect().bottom > top)
@@ -76,7 +76,7 @@ function createGenerationVirtualizationScenes(context) {
       await page.waitForTimeout(300)
       const focus = await page.locator(`[data-index="${geometry.anchor}"] button`).first().elementHandle()
       await focus.focus()
-      await page.evaluate(() => { document.querySelector('.app-scroll-container').scrollTop = 0 })
+      await page.evaluate(() => { document.querySelector('[data-generation-history-scroll]').scrollTop = 0 })
       await page.waitForTimeout(300)
       assert.equal(await focus.evaluate(element => document.activeElement === element && element.isConnected), true, '离屏卡片丢失焦点')
       await focus.evaluate(element => element.blur())

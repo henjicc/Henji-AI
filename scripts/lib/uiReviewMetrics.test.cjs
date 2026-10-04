@@ -4,11 +4,11 @@ const { analyzeLayoutMetrics, countVisualRows, isTruncated } = require('./uiRevi
 
 const rect = (left, top, width, height) => ({ left, top, width, height, right: left + width, bottom: top + height })
 
-function rawWith({ items = [], texts = [], container = rect(0, 0, 600, 40), scroll = { scrollWidth: 600, clientWidth: 600 } } = {}) {
+function rawWith({ items = [], texts = [], container = rect(0, 0, 600, 40), scroll = { scrollWidth: 600, clientWidth: 600 }, overflowX = 'visible' } = {}) {
   return {
     container,
     containerScroll: { ...scroll, scrollHeight: container.height, clientHeight: container.height },
-    containerOverflowX: 'visible',
+    containerOverflowX: overflowX,
     viewport: { width: 960, height: 640 },
     items: items.map((value, index) => ({ label: `item${index}`, rect: value })),
     texts,
@@ -47,7 +47,9 @@ test('指标：单行底栏无可疑；折行、溢出、截断与短标签折�
   assert.match(wrapped.reasons.join(), /折行：2 行（上限 1）/)
   assert.equal(analyzeLayoutMetrics(rawWith({ items: [rect(0, 0, 32, 32), rect(0, 40, 32, 32)] }), { maxRows: null }).suspicious, false)
 
-  const overflow = analyzeLayoutMetrics(rawWith({ items: [rect(560, 4, 80, 32)], scroll: { scrollWidth: 640, clientWidth: 600 } }))
+  const overflow = analyzeLayoutMetrics(rawWith({ items: [rect(560, 4, 80, 32)], scroll: { scrollWidth: 640, clientWidth: 600 }, overflowX: 'hidden' }))
+  // overflow: visible 的容器里凸出的端口不算容器溢出
+  assert.equal(analyzeLayoutMetrics(rawWith({ scroll: { scrollWidth: 611, clientWidth: 600 } })).containerOverflow, false)
   assert.deepEqual(overflow.overflowingItems, ['item0'])
   assert.equal(overflow.containerOverflow, true)
 

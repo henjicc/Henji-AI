@@ -1077,7 +1077,7 @@ function createToolboxScenes(context) {
             commitToSettledDiff,
           })}`)
         }
-        const clippingState = await displayFrame.evaluate((frame) => {
+        const clippingState = await displayFrame.evaluate((frame, gpuPresentation) => {
           const frameRect = frame.getBoundingClientRect()
           const documentFrame = document.querySelector('[data-viewport-content]')
           const documentRect = documentFrame?.getBoundingClientRect()
@@ -1086,10 +1086,24 @@ function createToolboxScenes(context) {
           const canvases = [...frame.querySelectorAll('canvas')]
           let outsideSamples = 0
           let maxOutsideAlpha = 0
+          // GPU 呈现时画布已 transferControlToOffscreen，读不到 2D 像素；这种画布改由下方按合成截屏判定
+          let transferredCanvasCount = 0
+          let hiddenCanvasCount = 0
           if (documentRect) {
             for (const canvas of canvases) {
               if (!(canvas instanceof HTMLCanvasElement) || canvas.width < 1 || canvas.height < 1) continue
-              const context = canvas.getContext('2d', { willReadFrequently: true })
+              // GPU 呈现时 CPU 代理画布留在 DOM 里但不可见（看不见就漏不出画面），只查真正显示的画布
+              if (gpuPresentation && !canvas.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })) {
+                hiddenCanvasCount += 1
+                continue
+              }
+              let context = null
+              try {
+                context = canvas.getContext('2d', { willReadFrequently: true })
+              } catch {
+                transferredCanvasCount += 1
+                continue
+              }
               if (!context) continue
               for (let row = 0; row < 12; row += 1) {
                 for (let column = 0; column < 18; column += 1) {
@@ -1126,13 +1140,48 @@ function createToolboxScenes(context) {
               && Math.abs(presentationRect.height - frameRect.height) <= 0.5,
             outsideSamples,
             maxOutsideAlpha,
+            transferredCanvasCount,
+            hiddenCanvasCount,
+            frameRect: { x: frameRect.left, y: frameRect.top, width: frameRect.width, height: frameRect.height },
+            documentRect: documentRect
+              ? { x: documentRect.left, y: documentRect.top, width: documentRect.width, height: documentRect.height }
+              : null,
           }
-        })
+        }, gpuMove)
+        if (gpuMove) {
+          // 合成结果判定裁切：文档外的取样点在移动前后必须一模一样（图层移出文档的部分不得画出来）
+          const settledComposite = await captureRegionPixels(app, page, moveClip)
+          clippingState.compositeOutsideSamples = 0
+          clippingState.compositeOutsideChanged = []
+          const { frameRect, documentRect } = clippingState
+          for (let row = 0; documentRect && row < 12; row += 1) {
+            for (let column = 0; column < 18; column += 1) {
+              const clientX = frameRect.x + (column + 0.5) / 18 * frameRect.width
+              const clientY = frameRect.y + (row + 0.5) / 12 * frameRect.height
+              const outsideDocument = clientX < documentRect.x - 2 || clientX > documentRect.x + documentRect.width + 2
+                || clientY < documentRect.y - 2 || clientY > documentRect.y + documentRect.height + 2
+              const insideClip = clientX >= moveClip.x && clientX < moveClip.x + moveClip.width
+                && clientY >= moveClip.y && clientY < moveClip.y + moveClip.height
+              if (!outsideDocument || !insideClip) continue
+              clippingState.compositeOutsideSamples += 1
+              const px = Math.floor((clientX - moveClip.x) * moveBaseline.scale)
+              const py = Math.floor((clientY - moveClip.y) * moveBaseline.scale)
+              const offset = (py * moveBaseline.width + px) * moveBaseline.channels
+              const delta = Math.max(...[0, 1, 2].map((channel) => Math.abs(
+                moveBaseline.data[offset + channel] - settledComposite.data[offset + channel])))
+              if (delta > 10) clippingState.compositeOutsideChanged.push({ clientX, clientY, delta })
+            }
+          }
+        }
         if (clippingState.overflow !== 'hidden'
-          || clippingState.canvasCount !== 2
+          // DOM 路径固定两张画布；GPU 路径另有一张交给离屏 Worker 的呈现画布
+          || clippingState.canvasCount !== (gpuMove ? 2 + clippingState.transferredCanvasCount : 2)
+          || (gpuMove && clippingState.transferredCanvasCount !== 1)
           || !clippingState.hasSinglePresentation
           || !clippingState.surfaceMatchesFrame
-          || (clippingState.outsideSamples > 0 && clippingState.maxOutsideAlpha !== 0)) {
+          || (clippingState.outsideSamples > 0 && clippingState.maxOutsideAlpha !== 0)
+          || (!gpuMove && clippingState.transferredCanvasCount !== 0)
+          || (gpuMove && (clippingState.compositeOutsideSamples === 0 || clippingState.compositeOutsideChanged.length !== 0))) {
           throw new Error(`移动后的常驻表面没有严格裁切：${JSON.stringify(clippingState)}`)
         }
 

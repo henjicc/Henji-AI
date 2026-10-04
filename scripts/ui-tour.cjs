@@ -13,6 +13,7 @@ const path = require('node:path')
 const { captureInspectionPage } = require('./lib/uiInspectionCapture.cjs')
 const { auditPageContrast, loadContrastExceptions } = require('./lib/uiContrastAudit.cjs')
 const { createRuntimeEvidenceCollector, finalizeSceneEvidence } = require('./lib/runtimeEvidence.cjs')
+const { renderVariantSummary, summarizeVariantMetrics } = require('./lib/uiReviewSummary.cjs')
 const {
   filterScenes,
   formatWindowSize,
@@ -75,6 +76,7 @@ function createIndex(rows, failures, metadata) {
     `- 数据模式：${metadata.profile === 'real' ? '真实用户数据' : '隔离临时数据'}`,
     ...(metadata.themePreset ? [`- 主题预设：${metadata.themePreset}（开发启动参数，未写入设置）`] : []),
     ...(metadata.contrast ? [`- 对比度审计：${metadata.contrast.issueCount} 处不达标，${metadata.contrast.exempted} 处登记例外（详见 contrast.json）`] : []),
+    ...(metadata.variantSummary ? [`- 数据变体：${metadata.variantSummary.rows} 行（变体 × 尺寸），可疑 ${metadata.variantSummary.suspicious} 行（详见 [variants.md](variants.md)）`] : []),
     ...(metadata.metrics.length ? [`- 自动指标：${metadata.metrics.length} 项，可疑 ${metadata.metrics.filter((item) => item.metrics.suspicious).length} 项（详见 metrics.json）`] : []),
     `- 结构化日志：通过应用查询接口按场景起始时间截取`,
     '',
@@ -284,6 +286,13 @@ async function tourPresetRun({ run, scenes, options, selection, exceptions }) {
     displayPoint: options.displayPoint, steps: options.steps, metrics, contrast }
   fs.writeFileSync(path.join(outDir, 'evidence.json'), JSON.stringify({ metadata: { ...metadata, metrics: undefined, contrast: undefined }, scenes: evidence }, null, 2), 'utf8')
   if (metrics.length) fs.writeFileSync(path.join(outDir, 'metrics.json'), JSON.stringify(metrics, null, 2), 'utf8')
+  // 数据变体（如全部模型）：按“变体 × 尺寸”汇总可疑清单
+  if (metrics.some((item) => item.variant)) {
+    const captured = new Set(rows.map((row) => row.file))
+    const summary = summarizeVariantMetrics(metrics.filter((item) => item.variant), { captured })
+    fs.writeFileSync(path.join(outDir, 'variants.md'), `# 数据变体汇总\n\n${renderVariantSummary(summary)}`, 'utf8')
+    metadata.variantSummary = { rows: summary.length, suspicious: summary.filter((row) => row.suspicious).length }
+  }
   if (contrast) fs.writeFileSync(path.join(outDir, 'contrast.json'), JSON.stringify(contrast, null, 2), 'utf8')
   const index = createIndex(rows, failures, metadata)
   const indexPath = path.join(outDir, 'index.md')

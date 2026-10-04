@@ -67,12 +67,13 @@ function createCanvasNodeInteractionsScene(context) {
         const node = page.locator(`.react-flow__node[data-id="${id}"]`)
         const trigger = node.getByText('模型', { exact: true }).locator('..').getByRole('button')
         await trigger.click()
-        const panel = page.locator('[data-model-panel-placement]:visible')
+        // 5.9 起节点模型面板走共享 PanelTrigger（锚点模式），放置方向在 data-panel-placement；以模型列表区分于其他浮层
+        const panel = page.locator('[data-panel-placement]:visible').filter({ has: page.locator('[data-model-list-scroll-region]') })
         await panel.waitFor()
         await page.waitForTimeout(300)
         const assertAnchor = async () => {
           const anchor = await trigger.boundingBox(), box = await panel.boundingBox()
-          const placement = await panel.getAttribute('data-model-panel-placement')
+          const placement = await panel.getAttribute('data-panel-placement')
           const gap = placement === 'above' ? anchor.y - box.y - box.height : box.y - anchor.y - anchor.height
           if (Math.abs(gap - 8) > 2) throw new Error(`模型面板偏离当前节点：${JSON.stringify({ id, gap, anchor, box, placement })}`)
         }
