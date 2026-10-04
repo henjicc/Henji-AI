@@ -10,7 +10,7 @@ import { CANVAS_NODE_TYPES, type TextAnnotationNodeData } from '@/features/canva
 import { resolveNodeDisplayName } from '@/features/canvas/domain/nodeDisplay';
 import { NodeHeader, NODE_HEADER_FLOATING_POSITION_CLASS } from '@/features/canvas/ui/NodeHeader';
 import { NodeResizeHandle } from '@/features/canvas/ui/NodeResizeHandle';
-import { UiTextArea } from '@/components/ui';
+import { UiLoading, UiTextArea } from '@/components/ui';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { useCanvasTextStreamStore } from '@/stores/canvasTextStreamStore';
 import { createCanvasTextHistoryGroup, useCanvasTextHistory } from '@/features/canvas/hooks/useCanvasTextHistory';
@@ -177,7 +177,7 @@ export const TextAnnotationNode = memo(({
           {reasoningContent.trim().length > 0 ? (
             <div className="space-y-3">
               <section aria-label={t('node.textAnnotation.reasoning')}>
-                <div className="sticky top-0 flex items-center gap-1.5 bg-raised/95 py-0.5 text-xs text-text2">
+                <div className="sticky top-0 flex items-center gap-1.5 bg-panel py-0.5 text-xs text-text2">
                   <LoaderCircle className="h-3.5 w-3.5 shrink-0 animate-spin" />
                   <span>{t('node.textAnnotation.reasoning')}</span>
                 </div>
@@ -202,10 +202,7 @@ export const TextAnnotationNode = memo(({
               <div className="whitespace-pre-wrap break-words">{displayContent}</div>
             )
           ) : isGenerating ? (
-            <div className="flex h-full items-center justify-center gap-2 text-text2">
-              <LoaderCircle className="h-4 w-4 animate-spin" />
-              <span>{t('node.textAnnotation.generating')}</span>
-            </div>
+            <UiLoading size="xs" className="h-full" message={t('node.textAnnotation.generating')} />
           ) : (
             <div className="pt-1 text-text2">{t('node.textAnnotation.empty')}</div>
           )}

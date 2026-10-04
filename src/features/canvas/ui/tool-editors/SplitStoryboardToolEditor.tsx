@@ -1,20 +1,23 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import {
   UI_TEXT_META_CLASS,
-  UI_TEXT_PANEL_TITLE_CLASS,
-  UiInput,
+  UI_TEXT_NUMERIC_CLASS,
+  UiError,
+  UiFormRow,
+  UiGroup,
+  UiPanel,
   UiRangeInput,
 } from '@/components/ui';
+import NumberField from '@/components/ui/NumberInput';
 import { resolveImageDisplayUrl } from '@/features/canvas/application/imageData';
 import type { VisualToolEditorProps } from './types';
-import { NumberStepper } from './splitStoryboard/NumberStepper';
 import {
   clampDecimal,
   clampInteger,
   computeSplitLayout,
   DEFAULT_LINE_THICKNESS_PERCENT,
-  formatPercent,
   LEGACY_DEFAULT_LINE_THICKNESS_PX,
   MAX_GRID_SIZE,
   MAX_LINE_THICKNESS_PERCENT,
@@ -29,6 +32,7 @@ import {
 } from './splitStoryboard/shared';
 
 export function SplitStoryboardToolEditor({ sourceImageUrl, options, onOptionsChange }: VisualToolEditorProps): JSX.Element {
+  const { t } = useTranslation();
   const [naturalSize, setNaturalSize] = useState<{ width: number; height: number } | null>(null);
   const displaySourceImageUrl = useMemo(() => resolveImageDisplayUrl(sourceImageUrl), [sourceImageUrl]);
 
@@ -149,26 +153,28 @@ export function SplitStoryboardToolEditor({ sourceImageUrl, options, onOptionsCh
 
   const hasLayoutError = Boolean(naturalSize && !layout);
 
+  // 弹窗内两列：左侧是会随窗口长大的预览工作面（沉一级、不描边），右侧是参数分组。
+  // 原来右列整块是带描边的卡片、里面的统计又是一层卡片，加上弹窗本身共三层边框（任务 5.4）。
   return (
-    <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+    <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
       <div className="space-y-2">
         <div className={`flex items-center justify-between ${UI_TEXT_META_CLASS}`}>
-          <span>原图 + 切割预览</span>
+          <span>{t('toolDialog.split.preview')}</span>
           {naturalSize && (
-            <span>
-              {naturalSize.width} x {naturalSize.height}px
+            <span className={UI_TEXT_NUMERIC_CLASS}>
+              {t('toolDialog.split.sourceSize', { width: naturalSize.width, height: naturalSize.height })}
             </span>
           )}
         </div>
 
         <div
-          className={`ui-scrollbar flex ${PREVIEW_VIEWPORT_HEIGHT} items-center justify-center overflow-auto rounded-xl border border-line bg-gap/70 p-3`}
+          className={`ui-scrollbar flex ${PREVIEW_VIEWPORT_HEIGHT} items-center justify-center overflow-auto rounded-lg bg-gap p-3`}
         >
           <div className="relative inline-flex items-center justify-center">
             <img
               src={displaySourceImageUrl}
-              alt="split-preview"
-              className="max-h-full w-auto max-w-full rounded-lg border border-line object-contain"
+              alt={t('toolDialog.split.preview')}
+              className="max-h-full w-auto max-w-full object-contain"
               onLoad={(event) => {
                 const target = event.currentTarget;
                 setNaturalSize({
@@ -179,7 +185,7 @@ export function SplitStoryboardToolEditor({ sourceImageUrl, options, onOptionsCh
             />
 
             {naturalSize && layout && (
-              <div className="pointer-events-none absolute inset-0 rounded-lg">
+              <div className="pointer-events-none absolute inset-0">
                 {layout.lineRects.map((rect, index) => (
                   <div
                     key={`line-${index}`}
@@ -210,86 +216,88 @@ export function SplitStoryboardToolEditor({ sourceImageUrl, options, onOptionsCh
           </div>
         </div>
 
-        <div className={`flex items-center gap-3 ${UI_TEXT_META_CLASS}`}>
-          <div className="inline-flex items-center gap-2">
-            <span className="h-2.5 w-2.5 rounded-sm bg-danger-hi/70" />
-            红色区域为切割时会丢弃的分割线像素
-          </div>
+        <div className={`inline-flex items-center gap-2 ${UI_TEXT_META_CLASS}`}>
+          <span aria-hidden="true" className="h-2.5 w-2.5 rounded-sm bg-danger-hi/70" />
+          {t('toolDialog.split.discardLegend')}
         </div>
       </div>
 
-      <div className="space-y-4 rounded-xl border border-line bg-gap/75 p-3.5">
-        <div className={UI_TEXT_PANEL_TITLE_CLASS}>切割参数</div>
-
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-1">
-          <NumberStepper
-            label="行数"
+      <UiGroup title={t('toolDialog.split.settings')}>
+        <UiFormRow label={t('toolDialog.split.rows')} inline>
+          <NumberField
             value={rows}
             min={MIN_GRID_SIZE}
             max={MAX_GRID_SIZE}
+            step={1}
+            align="center"
+            widthClassName="w-24"
+            ariaLabel={t('toolDialog.split.rows')}
             onChange={(value) => updateOptions({ rows: value })}
           />
-          <NumberStepper
-            label="列数"
+        </UiFormRow>
+        <UiFormRow label={t('toolDialog.split.cols')} inline>
+          <NumberField
             value={cols}
             min={MIN_GRID_SIZE}
             max={MAX_GRID_SIZE}
+            step={1}
+            align="center"
+            widthClassName="w-24"
+            ariaLabel={t('toolDialog.split.cols')}
             onChange={(value) => updateOptions({ cols: value })}
           />
-        </div>
-
-        <div className="space-y-2">
-          <div className={`flex items-center justify-between ${UI_TEXT_META_CLASS}`}>
-            <span>分割线粗细</span>
-            <span>
-              {formatPercent(lineThicknessPercent)}
-              {naturalSize ? ` (${lineThicknessPx}px)` : ''}
-            </span>
+        </UiFormRow>
+        <UiFormRow
+          label={t('toolDialog.split.lineThickness')}
+          hint={naturalSize ? t('toolDialog.split.lineThicknessPx', { px: lineThicknessPx }) : undefined}
+        >
+          <div className="flex items-center gap-3">
+            <UiRangeInput
+              className="min-w-0 flex-1"
+              min={0}
+              max={Math.max(0, maxLineThicknessPercent)}
+              step={0.1}
+              value={lineThicknessPercent}
+              aria-label={t('toolDialog.split.lineThickness')}
+              onChange={(event) => updateOptions({ lineThicknessPercent: Number(event.target.value) })}
+            />
+            <NumberField
+              value={lineThicknessPercent}
+              min={0}
+              max={Math.max(0, maxLineThicknessPercent)}
+              step={0.1}
+              precision={1}
+              align="center"
+              widthClassName="w-24"
+              ariaLabel={t('toolDialog.split.lineThickness')}
+              onChange={(value) => updateOptions({ lineThicknessPercent: value })}
+            />
           </div>
-          <UiRangeInput
-            min={0}
-            max={Math.max(0, maxLineThicknessPercent)}
-            step={0.1}
-            value={lineThicknessPercent}
-            onChange={(event) => updateOptions({ lineThicknessPercent: Number(event.target.value) })}
-          />
-          <UiInput
-            type="number"
-            value={lineThicknessPercent}
-            min={0}
-            max={Math.max(0, maxLineThicknessPercent)}
-            step={0.1}
-            onChange={(event) => updateOptions({ lineThicknessPercent: Number(event.target.value) })}
-            textHistory={{ onValueChange: (value) => updateOptions({ lineThicknessPercent: Number(value) }) }}
-            size="lg"
-          />
-        </div>
+        </UiFormRow>
 
-        <div className={`rounded-lg border border-line bg-gap/80 px-3 py-2 ${UI_TEXT_META_CLASS}`}>
+        <UiPanel variant="inset" className={`space-y-1 px-3 py-2 ${UI_TEXT_META_CLASS}`}>
           <div className="flex items-center justify-between">
-            <span>输出小格数量</span>
-            <span className="font-medium text-text1">{rows * cols}</span>
+            <span>{t('toolDialog.split.cellCount')}</span>
+            <span className={`font-medium text-text1 ${UI_TEXT_NUMERIC_CLASS}`}>{rows * cols}</span>
           </div>
           {layout && (
             <>
-              <div className="mt-1 flex items-center justify-between">
-                <span>单格宽度(px)</span>
-                <span>{splitSizeLabel(layout.minCellWidth, layout.maxCellWidth)}</span>
+              <div className="flex items-center justify-between">
+                <span>{t('toolDialog.split.cellWidth')}</span>
+                <span className={UI_TEXT_NUMERIC_CLASS}>{splitSizeLabel(layout.minCellWidth, layout.maxCellWidth)}</span>
               </div>
-              <div className="mt-1 flex items-center justify-between">
-                <span>单格高度(px)</span>
-                <span>{splitSizeLabel(layout.minCellHeight, layout.maxCellHeight)}</span>
+              <div className="flex items-center justify-between">
+                <span>{t('toolDialog.split.cellHeight')}</span>
+                <span className={UI_TEXT_NUMERIC_CLASS}>{splitSizeLabel(layout.minCellHeight, layout.maxCellHeight)}</span>
               </div>
             </>
           )}
-        </div>
+        </UiPanel>
 
         {hasLayoutError && (
-          <div className="rounded-lg bg-danger-tint px-3 py-2 text-xs text-danger-text">
-            当前分割线过粗，导致可切割区域不足。请减少线宽或降低行列数。
-          </div>
+          <UiError size="xs" align="start" message={t('toolDialog.split.layoutError')} />
         )}
-      </div>
+      </UiGroup>
     </div>
   );
 }

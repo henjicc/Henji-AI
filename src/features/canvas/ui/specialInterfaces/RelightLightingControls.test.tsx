@@ -2,6 +2,8 @@
 import { useState } from 'react'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+// 组件文案走 i18n：加载正式语言资源，断言按中英两种文案匹配
+import '@/i18n/config'
 import { compileManualRelightPrompt, DEFAULT_RELIGHT_SETTINGS } from '@/features/canvas/capabilities/relightPolicy'
 import { RelightLightingControls, type RelightLightingDraft } from './RelightLightingControls'
 import { RelightDirectionVisualizer } from './RelightDirectionVisualizer'
@@ -24,7 +26,7 @@ describe('打光滑条与光束预览', () => {
     const commit = vi.fn()
     render(<Harness onCommit={commit} />)
     const brightness = screen.getByRole('slider', { name: '亮度' })
-    const stage = screen.getByRole('slider', { name: '主光方向' })
+    const stage = screen.getByRole('slider', { name: /^(主光方向|Key light direction)$/ })
     brightness.setPointerCapture = vi.fn()
     fireEvent.pointerDown(brightness, { button: 0, pointerId: 1 })
     fireEvent.change(brightness, { target: { value: '3' } })
@@ -49,7 +51,7 @@ describe('打光滑条与光束预览', () => {
     fireEvent.change(screen.getByRole('slider', { name: '亮度' }), { target: { value: '0' } })
     expect(screen.getByRole('slider', { name: '色调' }).getAttribute('aria-valuetext')).toBe('暖白')
     expect(screen.getByRole('slider', { name: '亮度' }).getAttribute('aria-valuetext')).toBe('很暗')
-    expect(screen.getByRole('slider', { name: '主光方向' }).getAttribute('data-relight-color')).toBe('warm')
+    expect(screen.getByRole('slider', { name: /^(主光方向|Key light direction)$/ }).getAttribute('data-relight-color')).toBe('warm')
     const value = commit.mock.lastCall?.[0] as RelightLightingDraft
     expect(value).toEqual({ brightness: -2, colorPreset: 'warm' })
     const prompt = compileManualRelightPrompt({ ...DEFAULT_RELIGHT_SETTINGS, manual: { ...DEFAULT_RELIGHT_SETTINGS.manual, ...value } })

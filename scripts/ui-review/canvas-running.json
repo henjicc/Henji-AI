@@ -1,0 +1,36 @@
+{
+  "id": "review-canvas-running",
+  "surface": "画布",
+  "name": "核对-节点运行中与选中的区分（5.4-35）",
+  "checklist": ["C05.4", "N07.3", "N07.4"],
+  "writesUserData": true,
+  "steps": [
+    { "seedAssistant": { "replies": [ { "partial": "整理中：雨夜街头，", "hold": true, "content": "雨夜街头的电影感人像，霓虹反光，浅景深。" } ] } },
+    { "seedCanvas": {
+      "viewport": { "x": 80, "y": 90, "zoom": 0.9 },
+      "nodes": [
+        { "id": "__run_text", "type": "textProcessingNode", "position": { "x": 0, "y": 0 }, "width": 360, "height": 230,
+          "data": { "displayName": "文本处理（运行中）", "prompt": "把输入整理成一句画面描述", "systemPromptTemplateId": "text-processing-image-optimizer",
+            "mediaInputs": {}, "providerId": "ui-review", "modelId": "fixture-text", "lastOutput": "" } },
+        { "id": "__run_peer", "type": "stringSourceNode", "position": { "x": 460, "y": 0 }, "width": 240, "height": 96,
+          "data": { "displayName": "对照：选中节点", "value": "选中描边对照" } }
+      ]
+    } },
+    { "click": { "selector": "[data-node-header-drag-surface=\"__run_text\"]" } },
+    { "waitFor": { "selector": "[data-node-toolbar-panel]" } },
+    { "click": { "role": "button", "name": "/^(生成|Generate)$/", "within": { "selector": "[data-node-toolbar-panel]" } } },
+    { "waitFor": { "selector": "[data-node-executing=\"true\"]" }, "timeout": 15000 },
+    { "wait": 400 },
+    { "capture": "running-selected" },
+    { "click": { "selector": ".react-flow__node[data-id=\"__run_peer\"]", "at": { "x": 12, "y": 12 } } },
+    { "wait": 400 },
+    { "capture": "running-vs-selected" },
+    { "click": { "selector": ".react-flow__pane", "at": { "x": 20, "y": 520 } } },
+    { "wait": 400 },
+    { "capture": "running-unselected" },
+    { "releaseAssistant": {} },
+    { "waitFor": { "target": { "selector": "[data-node-executing=\"true\"]" }, "state": "hidden" }, "timeout": 15000 },
+    { "waitStable": {} },
+    { "capture": "text-processing-completed" }
+  ]
+}

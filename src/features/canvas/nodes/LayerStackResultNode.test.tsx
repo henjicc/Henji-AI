@@ -135,8 +135,8 @@ describe('LayerStackResultNode V3 编辑入口', () => {
 
   it('未完成的多图层节点显示准备中，不误报不可用', () => {
     renderNode(data({ imageUrl: null, previewImageUrl: null, imageEditSession: undefined, isGenerating: true }))
-    expect(screen.getByRole('status').textContent).toContain('正在准备多图层图片')
-    expect(screen.queryByText('多图层图片暂不可用')).toBeNull()
+    expect(screen.getByRole('status').textContent).toMatch(/正在准备多图层图片|Preparing the multi-layer image/)
+    expect(screen.queryByText(/多图层图片暂不可用|Multi-layer image unavailable/)).toBeNull()
     expect(screen.queryByRole('button', { name: '编辑' })).toBeNull()
   })
 
@@ -156,8 +156,8 @@ describe('LayerStackResultNode V3 编辑入口', () => {
     } })
     renderNode(failed)
     expect(screen.getByRole('alert').textContent).toContain('下载未完成')
-    expect(screen.queryByText('多图层图片暂不可用')).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: '重新获取结果' }))
+    expect(screen.queryByText(/多图层图片暂不可用|Multi-layer image unavailable/)).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /^(重新获取结果|Fetch result again)$/ }))
     expect(useCanvasStore.getState().nodes[0]?.data).toMatchObject({
       isGenerating: true, generationError: null, serverTaskId: 'existing-kie-task',
       serverTaskModelId: 'kie-seedream-5.0-pro',
@@ -202,7 +202,7 @@ describe('LayerStackResultNode V3 编辑入口', () => {
       </ReactFlowProvider>,
     )
 
-    const preview = screen.getByRole('img', { name: '多图层图片预览' })
+    const preview = screen.getByRole('img', { name: /^(多图层图片预览|Multi-layer image preview)$/ })
     expect(preview.getAttribute('src')).toBe('henji-media://multi-layer/preview.webp')
     expect(preview.getAttribute('src')).not.toContain('legacy-preview')
   })

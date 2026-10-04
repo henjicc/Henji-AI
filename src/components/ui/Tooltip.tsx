@@ -1,7 +1,15 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react'
+import React, { useState, useRef, useEffect, useCallback, useLayoutEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { ownerDocumentOf, ownerWindowOf } from '@/utils/crossRealmDom'
 import { UI_DURATION } from './motion'
+import {
+    resolveTooltipPosition,
+    TOOLTIP_PLACEMENT_TRANSFORM_CLASS,
+    type ResolvedTooltipPlacement,
+    type TooltipPlacement,
+} from './tooltipPosition'
+
+export type { TooltipPlacement } from './tooltipPosition'
 
 type TooltipProps = {
     children: React.ReactElement
@@ -11,6 +19,8 @@ type TooltipProps = {
     className?: string
     contentId?: string
     anchor?: 'trigger-center' | 'pointer-start'
+    /** 只对 `trigger-center` 生效，见 `TooltipPlacement`。 */
+    placement?: TooltipPlacement
 }
 
 export default function Tooltip({
@@ -20,12 +30,15 @@ export default function Tooltip({
     className,
     contentId,
     anchor = 'trigger-center',
+    placement = 'top',
 }: TooltipProps): JSX.Element {
     const [visible, setVisible] = useState(false)
     const [closing, setClosing] = useState(false)
     const [coords, setCoords] = useState({ top: 0, left: 0 })
+    const [resolvedPlacement, setResolvedPlacement] = useState<ResolvedTooltipPlacement>('top')
     const timerRef = useRef<number | null>(null)
     const triggerRef = useRef<HTMLElement>(null)
+    const tooltipRef = useRef<HTMLSpanElement>(null)
     const pointerRef = useRef<{ clientX: number; clientY: number } | null>(null)
 
     const updatePosition = useCallback(() => {
@@ -37,13 +50,23 @@ export default function Tooltip({
             return
         }
         if (triggerRef.current) {
-            const rect = triggerRef.current.getBoundingClientRect()
-            setCoords({
-                top: rect.top - 8, // 8px gap
-                left: rect.left + rect.width / 2
+            const next = resolveTooltipPosition({
+                rect: triggerRef.current.getBoundingClientRect(),
+                placement,
+                // 提示框隐藏时量不到宽度（display:none），先按 0 放到首选侧；显示后布局阶段再量一次纠正
+                tooltipWidth: tooltipRef.current?.offsetWidth ?? 0,
+                viewportWidth: ownerWindowOf(triggerRef.current).innerWidth,
             })
+            setResolvedPlacement(next.placement)
+            setCoords({ top: next.top, left: next.left })
         }
-    }, [anchor])
+    }, [anchor, placement])
+
+    // 侧向放置依赖提示框自身宽度：显示后（已可测量）在绘制前再定一次位
+    useLayoutEffect(() => {
+        if (!visible || closing || anchor !== 'trigger-center' || placement === 'top') return
+        updatePosition()
+    }, [anchor, closing, placement, updatePosition, visible])
 
     const handleMouseEnter = (event: React.MouseEvent) => {
         pointerRef.current = { clientX: event.clientX, clientY: event.clientY }
@@ -117,10 +140,12 @@ export default function Tooltip({
 
     const tooltipContent = (
         <span
+            ref={tooltipRef}
             id={contentId}
             role="tooltip"
             aria-hidden={!visible}
-            className={`fixed z-tooltip w-max max-w-[min(320px,calc(100vw-32px))] whitespace-normal text-left leading-5 bg-raised border border-line rounded-field shadow-panel text-xs text-text1 px-2.5 py-1.5 pointer-events-none ${anchor === 'trigger-center' ? '-translate-x-1/2 -translate-y-full' : ''} ${visible ? (closing ? 'animate-fade-out' : 'animate-fade-in') : 'hidden'
+            data-tooltip-placement={anchor === 'trigger-center' ? resolvedPlacement : undefined}
+            className={`fixed z-tooltip w-max max-w-[min(320px,calc(100vw-32px))] whitespace-normal text-left leading-5 bg-raised border border-line rounded-field shadow-panel text-xs text-text1 px-2.5 py-1.5 pointer-events-none ${anchor === 'trigger-center' ? TOOLTIP_PLACEMENT_TRANSFORM_CLASS[resolvedPlacement] : ''} ${visible ? (closing ? 'animate-fade-out' : 'animate-fade-in') : 'hidden'
                 } ${className || ''}`}
             style={{
                 top: coords.top,

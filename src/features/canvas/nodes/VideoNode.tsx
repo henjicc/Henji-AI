@@ -246,12 +246,12 @@ export const VideoNode = memo(({ id, data, selected, type, width, height }: Vide
             onDrop={handleDrop}
             onDragOver={(event) => event.preventDefault()}
           >
-            <VideoUploadIcon className="h-7 w-7 opacity-60" />
+            <VideoUploadIcon className="h-7 w-7 text-text3" />
             <span className="px-3 text-center text-xs leading-6">{t('node.videoNode.uploadHint')}</span>
           </label>
         ) : (
           <div className="flex h-full w-full flex-col items-center justify-center gap-2 text-text2">
-            <VideoGenerationIcon className="h-7 w-7 opacity-60" />
+            <VideoGenerationIcon className="h-7 w-7 text-text3" />
             <span className="px-4 text-center text-xs leading-6">{t('node.videoNode.waitingResult')}</span>
           </div>
         )}

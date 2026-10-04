@@ -144,9 +144,9 @@ export const ImageNode = memo(({ id, data, selected, type, width, height }: Imag
         ) : (
           <div className="flex h-full w-full flex-col items-center justify-center gap-2 text-text2">
             {isExportResultNode ? (
-              <ImageIcon className="h-7 w-7 opacity-60" />
+              <ImageIcon className="h-7 w-7 text-text3" />
             ) : (
-              <Sparkles className="h-7 w-7 opacity-60" />
+              <Sparkles className="h-7 w-7 text-text3" />
             )}
             <span className="px-4 text-center text-xs leading-6">
               {isExportResultNode ? t('node.imageNode.waitingResult') : t('node.imageNode.selectToEdit')}

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 
 import {
   PromptEditor,
@@ -23,12 +24,12 @@ interface TextProcessingPromptTemplateManagerProps {
   onSave: (templates: TextProcessingPromptTemplate[]) => Promise<boolean>
 }
 
-function createTemplate(): TextProcessingPromptTemplate {
+function createTemplate(name: string, systemPrompt: string): TextProcessingPromptTemplate {
   const now = new Date().toISOString()
   return {
     id: `text-processing-template-${crypto.randomUUID()}`,
-    name: '新的提示词模板',
-    systemPrompt: '你是提示词优化助手。只输出优化后的提示词。',
+    name,
+    systemPrompt,
     createdAt: now,
     updatedAt: now,
   }
@@ -40,6 +41,7 @@ export function TextProcessingPromptTemplateManager({
   onClose,
   onSave,
 }: TextProcessingPromptTemplateManagerProps): JSX.Element {
+  const { t } = useTranslation()
   const [drafts, setDrafts] = useState<TextProcessingPromptTemplate[]>(templates)
   const [selectedId, setSelectedId] = useState(templates[0]?.id ?? '')
   const [saving, setSaving] = useState(false)
@@ -70,7 +72,7 @@ export function TextProcessingPromptTemplateManager({
   }
 
   const addTemplate = (): void => {
-    const template = createTemplate()
+    const template = createTemplate(t('node.templateManager.defaultName'), t('node.templateManager.defaultSystemPrompt'))
     setDrafts((current) => [...current, template])
     setSelectedId(template.id)
   }
@@ -100,16 +102,16 @@ export function TextProcessingPromptTemplateManager({
     <UiModal
       isOpen={isOpen}
       onClose={onClose}
-      title="管理提示词模板"
+      title={t('node.templateManager.title')}
       size="editor"
       contentClassName="overflow-hidden p-4"
       footer={(
         <>
           <UiButton type="button" variant="secondary" onClick={onClose} disabled={saving}>
-            取消
+            {t('common.cancel')}
           </UiButton>
           <UiButton type="button" variant="primary" onClick={() => void save()} disabled={!canSave || saving}>
-            {saving ? '保存中…' : '保存'}
+            {saving ? t('node.templateManager.saving') : t('node.templateManager.save')}
           </UiButton>
         </>
       )}
@@ -132,7 +134,7 @@ export function TextProcessingPromptTemplateManager({
           </div>
           <UiButton type="button" variant="secondary" size="lg" onClick={addTemplate}>
             <Plus className="mr-2 h-4 w-4" />
-            新增模板
+            {t('node.templateManager.add')}
           </UiButton>
         </div>
 
@@ -141,32 +143,32 @@ export function TextProcessingPromptTemplateManager({
             <UiInput
               value={selectedTemplate.name}
               onChange={(event) => patchSelected({ name: event.target.value })}
-              placeholder="模板名称"
-              aria-label="模板名称"
+              placeholder={t('node.templateManager.name')}
+              aria-label={t('node.templateManager.name')}
             />
             <PromptEditor
               value={createPlainTextPromptDocument(selectedTemplate.systemPrompt)}
               onChange={(document) => patchSelected({ systemPrompt: toLegacyPromptString(document) })}
               preset="plain"
               layout="fill-scroll"
-              ariaLabel="系统提示词"
-              placeholder="输入这个模板使用的系统提示词"
+              ariaLabel={t('node.templateManager.systemPrompt')}
+              placeholder={t('node.templateManager.systemPromptPlaceholder')}
               className="min-h-0 flex-1"
               editorClassName="ui-scrollbar min-h-0"
             />
             <div className="flex items-center justify-between gap-3">
-              <span className={UI_TEXT_META_CLASS}>模板仅包含纯文本，不支持变量。</span>
-              <UiButton type="button" onClick={deleteSelected}>
+              <span className={UI_TEXT_META_CLASS}>{t('node.templateManager.plainTextOnly')}</span>
+              <UiButton type="button" variant="danger" onClick={deleteSelected}>
                 <Trash2 className="mr-2 h-4 w-4" />
-                删除模板
+                {t('node.templateManager.delete')}
               </UiButton>
             </div>
           </div>
         ) : (
           <UiEmpty
             size="sm"
-            title="还没有提示词模板"
-            description="点击左下角新增模板开始创建。"
+            title={t('node.templateManager.emptyTitle')}
+            description={t('node.templateManager.emptyDescription')}
           />
         )}
       </div>

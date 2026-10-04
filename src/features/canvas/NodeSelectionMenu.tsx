@@ -1,4 +1,5 @@
 import {
+  Fragment,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -10,8 +11,14 @@ import {
 } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { UiInput, UiOptionButton, UiPanel } from '@/components/ui'
-import { UI_POPOVER_TRANSITION_MS } from '@/components/ui/motion'
+import {
+  PanelTrigger,
+  UI_GLASS_ADAPTIVE_DIVIDER_CLASS,
+  UI_TEXT_META_CLASS,
+  UiInput,
+  UiOptionButton,
+} from '@/components/ui'
+import type { FloatingPanelAnchorRect } from '@/components/ui/floatingPanelPosition'
 import {
   ICON_NODE_AUDIO_GENERATION,
   ICON_NODE_AUDIO_MODEL,
@@ -39,15 +46,14 @@ import { CANVAS_NODE_TYPES, type CanvasNodeType } from '@/features/canvas/domain
 import {
   type CanvasNodeDefinition,
   type MenuIconKey,
+  type NodeMenuSection,
 } from '@/features/canvas/domain/nodeRegistry'
 import { nodeCatalog } from '@/features/canvas/application/nodeCatalog'
 import {
   getSortedNodeMenuDefinitions,
   getUploadAccept,
-  NODE_MENU_MAX_HEIGHT,
   NODE_MENU_SECTION_LABEL_KEY,
   NODE_MENU_SECTION_ORDER,
-  resolveNodeMenuLayout,
 } from '@/features/canvas/application/nodeMenuLayout'
 
 interface NodeSelectionMenuProps {
@@ -81,92 +87,41 @@ const iconMap: Record<MenuIconKey, typeof ICON_NODE_UPLOAD> = {
   assetGroup: ICON_NODE_ASSET_GROUP,
 }
 
-export function NodeSelectionMenu({
-  position,
-  allowedTypes,
-  uploadKinds,
-  onSelect,
-  onClose,
-}: NodeSelectionMenuProps) {
+const MENU_ITEM_SELECTOR = '[role="menuitem"]'
+
+interface NodeMenuSectionEntry {
+  section: NodeMenuSection
+  items: CanvasNodeDefinition[]
+}
+
+interface NodeMenuListProps {
+  sections: NodeMenuSectionEntry[]
+  allowedTypes?: CanvasNodeType[]
+  uploadKinds: CanvasMediaKind[]
+  onChoose: (item: CanvasNodeDefinition, file?: File) => void
+}
+
+/** 菜单正文：分区标题 + 菜单项；方向键 / Home / End 移动焦点，Enter 执行（Escape 由共享浮层处理）。 */
+function NodeMenuList({ sections, allowedTypes, uploadKinds, onChoose }: NodeMenuListProps): JSX.Element {
   const { t } = useTranslation()
-  const menuRef = useRef<HTMLDivElement>(null)
+  const listRef = useRef<HTMLDivElement>(null)
   const uploadInputRef = useRef<HTMLInputElement>(null)
-  const [isVisible, setIsVisible] = useState(false)
-  const [layout, setLayout] = useState({
-    left: position.x,
-    top: position.y,
-    maxHeight: NODE_MENU_MAX_HEIGHT,
-    transformOrigin: 'top left',
-  })
 
-  const menuItems = useMemo(() => {
-    const candidates = allowedTypes
-      ? Array.from(new Set(allowedTypes)).map((type) => nodeCatalog.getDefinition(type))
-      : nodeCatalog.getMenuDefinitions()
-    return getSortedNodeMenuDefinitions(candidates)
-  }, [allowedTypes])
-
-  const sections = useMemo(() => NODE_MENU_SECTION_ORDER
-    .map((section) => ({
-      section,
-      items: menuItems.filter((item) => (item.menuSection ?? 'extensions') === section),
-    }))
-    .filter((entry) => entry.items.length > 0), [menuItems])
-
-  const closeWithAnimation = useCallback((afterClose?: () => void) => {
-    setIsVisible(false)
-    window.setTimeout(() => {
-      onClose()
-      afterClose?.()
-    }, UI_POPOVER_TRANSITION_MS)
-  }, [onClose])
-
-  const selectItem = useCallback((item: CanvasNodeDefinition, file?: File) => {
-    closeWithAnimation(() => onSelect(item.type, file))
-  }, [closeWithAnimation, onSelect])
-
+  // 浮层定位完成才可见，隐藏态的元素拿不到焦点：等两帧再聚焦首项
   useEffect(() => {
-    const frame = requestAnimationFrame(() => {
-      setIsVisible(true)
-      menuRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus()
+    let second = 0
+    const first = requestAnimationFrame(() => {
+      second = requestAnimationFrame(() => {
+        listRef.current?.querySelector<HTMLButtonElement>(MENU_ITEM_SELECTOR)?.focus({ preventScroll: true })
+      })
     })
-    return () => cancelAnimationFrame(frame)
+    return () => {
+      cancelAnimationFrame(first)
+      cancelAnimationFrame(second)
+    }
   }, [])
 
-  useLayoutEffect(() => {
-    const menu = menuRef.current
-    const parent = menu?.offsetParent as HTMLElement | null
-    if (!menu || !parent) {
-      return
-    }
-    setLayout(resolveNodeMenuLayout({
-      position,
-      parentWidth: parent.clientWidth,
-      parentHeight: parent.clientHeight,
-      menuWidth: menu.offsetWidth,
-      menuHeight: menu.scrollHeight,
-    }))
-  }, [position, sections])
-
-  useEffect(() => {
-    const onPointerDown = (event: MouseEvent) => {
-      if (event.button !== 0) {
-        return
-      }
-      if (!menuRef.current?.contains(event.target as Node)) {
-        closeWithAnimation()
-      }
-    }
-    document.addEventListener('mousedown', onPointerDown, true)
-    return () => document.removeEventListener('mousedown', onPointerDown, true)
-  }, [closeWithAnimation])
-
   const handleKeyDown = useCallback((event: KeyboardEvent<HTMLDivElement>) => {
-    if (event.key === 'Escape') {
-      event.preventDefault()
-      closeWithAnimation()
-      return
-    }
     if (event.key === 'Enter') {
       const activeItem = document.activeElement as HTMLButtonElement | null
       if (activeItem?.getAttribute('role') === 'menuitem') {
@@ -175,58 +130,49 @@ export function NodeSelectionMenu({
       }
       return
     }
-    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') {
+    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp' && event.key !== 'Home' && event.key !== 'End') {
       return
     }
-    event.preventDefault()
-    const items = Array.from(
-      menuRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? []
-    )
+    const items = Array.from(listRef.current?.querySelectorAll<HTMLButtonElement>(MENU_ITEM_SELECTOR) ?? [])
     if (items.length === 0) {
       return
     }
+    event.preventDefault()
     const currentIndex = items.indexOf(document.activeElement as HTMLButtonElement)
-    const delta = event.key === 'ArrowDown' ? 1 : -1
-    items[(currentIndex + delta + items.length) % items.length]?.focus()
-  }, [closeWithAnimation])
+    const nextIndex = event.key === 'Home'
+      ? 0
+      : event.key === 'End'
+        ? items.length - 1
+        : (currentIndex + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length
+    items[nextIndex]?.focus()
+  }, [])
 
   const handleUploadFile = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     event.target.value = ''
-    const uploadItem = menuItems.find((item) => item.type === CANVAS_NODE_TYPES.universalUpload)
+    const uploadItem = sections
+      .flatMap((entry) => entry.items)
+      .find((item) => item.type === CANVAS_NODE_TYPES.universalUpload)
     if (file && uploadItem) {
-      selectItem(uploadItem, file)
+      onChoose(uploadItem, file)
     }
-  }, [menuItems, selectItem])
+  }, [onChoose, sections])
 
   return (
-    <UiPanel
-      ref={menuRef}
-      variant="glass"
+    <div
+      ref={listRef}
       role="menu"
       aria-label={t('node.menuTitle')}
-      className={`ui-scrollbar absolute z-dropdown w-[284px] overflow-y-auto overflow-x-hidden p-2 transition-[opacity,transform] duration-120 ease-out ${
-        isVisible ? 'translate-y-0 scale-100 opacity-100' : 'translate-y-1 scale-[0.98] opacity-0'
-      }`}
-      style={{
-        left: layout.left,
-        top: layout.top,
-        maxHeight: layout.maxHeight,
-        transformOrigin: layout.transformOrigin,
-      }}
+      tabIndex={-1}
+      className="flex min-w-44 max-w-sm flex-col outline-none"
       onKeyDown={handleKeyDown}
     >
-      <div className="relative px-3 pb-2 pt-1 text-sm font-semibold text-text1">
-        {t('node.menuTitle')}
-      </div>
       {sections.map(({ section, items }, sectionIndex) => (
-        <div
-          key={section}
-          className={sectionIndex > 0
-            ? 'relative mt-1 border-t border-line/60 pt-1'
-            : 'relative'}
-        >
-          <div className="px-3 pb-1 pt-1 text-2xs font-medium tracking-wide text-text2">
+        <Fragment key={section}>
+          {sectionIndex > 0 && (
+            <div role="separator" className={`my-1 border-t ${UI_GLASS_ADAPTIVE_DIVIDER_CLASS}`} />
+          )}
+          <div className={`px-2 pb-1 pt-1.5 ${UI_TEXT_META_CLASS}`}>
             {t(NODE_MENU_SECTION_LABEL_KEY[section])}
           </div>
           {items.map((item) => {
@@ -236,26 +182,26 @@ export function NodeSelectionMenu({
             return (
               <UiOptionButton
                 key={item.type}
+                type="button"
                 role="menuitem"
                 tabIndex={-1}
                 variant="menu"
-                size="lg" className="w-full gap-3 px-3 !transition-none"
+                size="md"
+                className="w-full gap-2.5"
                 onClick={() => {
                   if (chooseFileFirst) {
                     uploadInputRef.current?.click()
                     return
                   }
-                  selectItem(item)
+                  onChoose(item)
                 }}
               >
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-hover/70">
-                  <Icon className="h-4 w-4 text-accent" />
-                </span>
-                <span className="text-sm font-medium text-text1">{t(item.menuLabelKey)}</span>
+                <Icon aria-hidden="true" className="h-4 w-4 shrink-0 text-text2" />
+                <span className="min-w-0 flex-1 truncate">{t(item.menuLabelKey)}</span>
               </UiOptionButton>
             )
           })}
-        </div>
+        </Fragment>
       ))}
       <UiInput
         ref={uploadInputRef}
@@ -264,6 +210,97 @@ export function NodeSelectionMenu({
         className="hidden"
         onChange={handleUploadFile}
       />
-    </UiPanel>
+    </div>
+  )
+}
+
+/**
+ * 画布“添加节点”菜单（右键空白、双击空白、拖线落空）。浮层走共享 `PanelTrigger` 锚点模式（任务 5.4）：
+ * 定位与视口夹取、点外与 Escape（只关最上层）、玻璃表面、收起动画都与其他画布菜单一致，
+ * 菜单项与右键菜单同为 `UiOptionButton variant="menu"`，宽度按内容。
+ *
+ * `position` 是相对画布容器的坐标：在容器里放一个零尺寸锚点读出屏幕矩形。父级每次打开都给出新的
+ * position 对象，浮层随之重建；旧菜单正在收起时在别处再右键，不会被旧菜单的收起回调关掉。
+ */
+export function NodeSelectionMenu({
+  position,
+  allowedTypes,
+  uploadKinds,
+  onSelect,
+  onClose,
+}: NodeSelectionMenuProps) {
+  const anchorRef = useRef<HTMLDivElement>(null)
+  const [anchor, setAnchor] = useState<{ rect: FloatingPanelAnchorRect; id: number } | null>(null)
+  const [open, setOpen] = useState(true)
+  const pendingSelectionRef = useRef<{ item: CanvasNodeDefinition; file?: File } | null>(null)
+  const callbacksRef = useRef({ onSelect, onClose })
+  callbacksRef.current = { onSelect, onClose }
+
+  const sections = useMemo<NodeMenuSectionEntry[]>(() => {
+    const candidates = allowedTypes
+      ? Array.from(new Set(allowedTypes)).map((type) => nodeCatalog.getDefinition(type))
+      : nodeCatalog.getMenuDefinitions()
+    const menuItems = getSortedNodeMenuDefinitions(candidates)
+    return NODE_MENU_SECTION_ORDER
+      .map((section) => ({
+        section,
+        items: menuItems.filter((item) => (item.menuSection ?? 'extensions') === section),
+      }))
+      .filter((entry) => entry.items.length > 0)
+  }, [allowedTypes])
+
+  useLayoutEffect(() => {
+    const rect = anchorRef.current?.getBoundingClientRect()
+    if (!rect) return
+    pendingSelectionRef.current = null
+    setAnchor((previous) => ({
+      rect: { left: rect.left, top: rect.top, bottom: rect.bottom, width: 0 },
+      id: (previous?.id ?? 0) + 1,
+    }))
+    setOpen(true)
+  }, [position])
+
+  const handleOpenChange = useCallback((next: boolean) => {
+    if (next) return
+    const pending = pendingSelectionRef.current
+    pendingSelectionRef.current = null
+    callbacksRef.current.onClose()
+    if (pending) callbacksRef.current.onSelect(pending.item.type, pending.file)
+  }, [])
+
+  const choose = useCallback((item: CanvasNodeDefinition, file?: File) => {
+    pendingSelectionRef.current = { item, file }
+    setOpen(false)
+  }, [])
+
+  return (
+    <>
+      <div
+        ref={anchorRef}
+        aria-hidden="true"
+        className="pointer-events-none absolute h-0 w-0"
+        style={{ left: position.x, top: position.y }}
+      />
+      {anchor && (
+        <PanelTrigger
+          key={anchor.id}
+          anchor={anchor.rect}
+          open={open}
+          onOpenChange={handleOpenChange}
+          alignment="bottomLeft"
+          surface="glass"
+          panelPadding="menu"
+          panelWidth="content"
+          renderPanel={() => (
+            <NodeMenuList
+              sections={sections}
+              allowedTypes={allowedTypes}
+              uploadKinds={uploadKinds}
+              onChoose={choose}
+            />
+          )}
+        />
+      )}
+    </>
   )
 }

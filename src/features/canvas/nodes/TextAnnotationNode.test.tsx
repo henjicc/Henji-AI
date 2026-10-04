@@ -35,6 +35,7 @@ vi.mock('@/components/ui', () => ({
   UiTextArea: ({ textHistory: _textHistory, ...props }: { textHistory?: unknown }) => (
     <textarea aria-label="text-editor" {...props} />
   ),
+  UiLoading: ({ message }: { message?: string }) => <div role="status">{message}</div>,
 }))
 
 vi.mock('@/stores/canvasStore', () => ({

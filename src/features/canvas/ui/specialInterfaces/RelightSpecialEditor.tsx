@@ -9,6 +9,7 @@ import { UiModal } from '@/components/ui/UiModal'
 import {
   UI_GLASS_ADAPTIVE_DIVIDER_CLASS,
   UI_GLASS_ADAPTIVE_REGION_CLASS,
+  UI_SEGMENTED_TRACK_CLASS,
   UI_TEXT_LABEL_CLASS,
   UI_TEXT_META_CLASS,
 } from '@/components/ui/styleTokens'
@@ -27,10 +28,8 @@ import { defaultRimDirection } from './relightRimLightState'
 import { buildRelightEditorDraft } from './relightEditorDraft'
 import type { CanvasSpecialEditorSurfaceProps } from './specialEditorRegistry'
 
-const SMART_LABELS: Record<RelightSmartPreset, string> = {
-  'natural-studio': '自然影棚', 'soft-window': '柔和窗光', 'golden-hour': '黄金时刻',
-  overcast: '阴天柔光', 'hard-studio': '硬光影棚', moonlight: '月光夜景',
-  neon: '霓虹氛围', dramatic: '戏剧光影',
+function smartPresetLabelKey(preset: RelightSmartPreset): string {
+  return `node.relightGeneration.editor.presets.${preset}`
 }
 
 function sourceImageFromState(state: Readonly<DynamicValueMap>): string | null {
@@ -128,42 +127,37 @@ export function RelightWorkbench({
         <div data-relight-inspector="true" className={`min-h-0 min-w-0 overflow-y-auto ${settings.lightingMode === 'manual' ? `border-l ${UI_GLASS_ADAPTIVE_DIVIDER_CLASS}` : ''} ${embedded ? 'p-3' : `p-5 ${UI_GLASS_ADAPTIVE_REGION_CLASS}`}`}>
           <div className="flex min-h-full flex-col">
           {sourceControl ? <div className="mb-3">{sourceControl}</div> : null}
-          <section aria-label="打光模式">
-            <div className="grid grid-cols-2 gap-2">
+          {/* 二选一模式用分段选择（淡强调底选中），不是两颗菜单项（任务 5.4） */}
+          <div role="radiogroup" aria-label={t('node.relightGeneration.editor.mode')} className={`${UI_SEGMENTED_TRACK_CLASS} !w-full`}>
+            {(['manual', 'smart'] as const).map((mode) => (
               <UiOptionButton
+                key={mode}
                 type="button"
-                variant="menu"
-                active={settings.lightingMode === 'manual'}
-                size="lg" className="justify-center whitespace-nowrap !px-2"
-                onClick={() => updateSettings({ ...settings, lightingMode: 'manual' })}
+                variant="segment"
+                role="radio"
+                aria-checked={settings.lightingMode === mode}
+                active={settings.lightingMode === mode}
+                className="flex-1 justify-center whitespace-nowrap"
+                onClick={() => updateSettings({ ...settings, lightingMode: mode })}
               >
-                手动打光
+                {t(`node.relightGeneration.editor.${mode}`)}
               </UiOptionButton>
-              <UiOptionButton
-                type="button"
-                variant="menu"
-                active={settings.lightingMode === 'smart'}
-                size="lg" className="justify-center whitespace-nowrap !px-2"
-                onClick={() => updateSettings({ ...settings, lightingMode: 'smart' })}
-              >
-                智能打光
-              </UiOptionButton>
-            </div>
-          </section>
+            ))}
+          </div>
 
           {settings.lightingMode === 'manual' ? (
             <div className="mt-4 flex flex-1 flex-col gap-3">
               <RelightLightingControls
                 value={lighting}
-                brightnessTitle={<FieldTitle tooltip="拖动选择五档明暗；光束为示意，实际效果由模型生成。">亮度</FieldTitle>}
-                colorTitle={<FieldTitle tooltip="拖动选择灯光色调，光束同步显示所选颜色。">色调</FieldTitle>}
+                brightnessTitle={<FieldTitle tooltip={t('node.relightGeneration.editor.brightnessTip')}>{t('node.relightGeneration.editor.brightness')}</FieldTitle>}
+                colorTitle={<FieldTitle tooltip={t('node.relightGeneration.editor.colorTip')}>{t('node.relightGeneration.editor.color')}</FieldTitle>}
                 onPreview={setLightingDraft}
                 onCommit={patchManual}
               />
               <div className="flex items-center justify-between gap-3">
-                <FieldTitle tooltip="开启后拖动小光点选择轮廓光方向。它用于勾勒主体边缘，主光方向仍可独立调整；实际效果由模型生成。">轮廓光</FieldTitle>
+                <FieldTitle tooltip={t('node.relightGeneration.editor.rimTip')}>{t('node.relightGeneration.editor.rim')}</FieldTitle>
                 <div className="flex items-center gap-3">
-                  <UiSwitch aria-label="轮廓光" checked={settings.manual.rimDirection !== 'off'}
+                  <UiSwitch aria-label={t('node.relightGeneration.editor.rim')} checked={settings.manual.rimDirection !== 'off'}
                     onCheckedChange={(enabled) => {
                       if (!enabled) lastRimDirection.current = settings.manual.rimDirection
                       changeRimDirection(enabled
@@ -173,13 +167,13 @@ export function RelightWorkbench({
                 </div>
               </div>
               <section className="flex min-h-24 flex-1 flex-col gap-2">
-                <FieldTitle tooltip="补充需要保留的细节或希望达到的光照效果。">补充要求</FieldTitle>
+                <FieldTitle tooltip={t('node.relightGeneration.editor.extraManualTip')}>{t('node.relightGeneration.editor.extra')}</FieldTitle>
                 <UiTextAreaField
                   value={settings.manual.extraPrompt}
                   rows={3}
                   className="min-h-16 flex-1"
                   maxLength={32 * 1024}
-                  placeholder="例如：保留商品标签清晰可读"
+                  placeholder={t('node.relightGeneration.editor.extraManualPlaceholder')}
                   onChange={(event) => patchManual({ extraPrompt: event.target.value })}
                 />
               </section>
@@ -187,18 +181,18 @@ export function RelightWorkbench({
           ) : (
             <div className="mt-3 flex flex-1 flex-col gap-3">
               <div className="flex items-center justify-between gap-3">
-                <FieldTitle tooltip="选择希望营造的光照氛围。">氛围预设</FieldTitle>
+                <FieldTitle tooltip={t('node.relightGeneration.editor.presetTip')}>{t('node.relightGeneration.editor.preset')}</FieldTitle>
                 <Dropdown
-                  ariaLabel="氛围预设"
+                  ariaLabel={t('node.relightGeneration.editor.preset')}
                   className="w-36"
                   value={settings.smart.preset}
-                  options={RELIGHT_SMART_PRESETS.map((value) => ({ value, label: SMART_LABELS[value] }))}
+                  options={RELIGHT_SMART_PRESETS.map((value) => ({ value, label: t(smartPresetLabelKey(value)) }))}
                   onSelect={(preset) => patchSmart({ preset })}
                 />
               </div>
 
               <section className="space-y-2">
-                <FieldTitle tooltip="模型只借用参考图的光感和氛围，不保证复制相同光场。">光照参考图</FieldTitle>
+                <FieldTitle tooltip={t('node.relightGeneration.editor.referenceTip')}>{t('node.relightGeneration.editor.reference')}</FieldTitle>
                 <FileUploader
                   density="compact"
                   files={referenceFiles}
@@ -211,13 +205,13 @@ export function RelightWorkbench({
               </section>
 
               <section className="flex min-h-24 flex-1 flex-col gap-2">
-                <FieldTitle tooltip="描述希望达到的光照效果和需要保留的细节。">补充要求</FieldTitle>
+                <FieldTitle tooltip={t('node.relightGeneration.editor.extraSmartTip')}>{t('node.relightGeneration.editor.extra')}</FieldTitle>
                 <UiTextAreaField
                   value={settings.smart.prompt}
                   rows={2}
                   className="min-h-16 flex-1"
                   maxLength={32 * 1024}
-                  placeholder="例如：在保留背景布局的前提下增强商品高光"
+                  placeholder={t('node.relightGeneration.editor.extraSmartPlaceholder')}
                   onChange={(event) => patchSmart({ prompt: event.target.value })}
                 />
               </section>
@@ -238,28 +232,29 @@ export default function RelightSpecialEditor({
   onDiscard,
 }: CanvasSpecialEditorSurfaceProps): JSX.Element {
   const settings = useMemo(() => readSettings(session.draftState), [session.draftState])
+  const { t } = useTranslation()
   const sourceImage = sourceImageFromState(session.draftState)
   const close = (): void => { onCancel() }
   return (
     <UiModal
       isOpen
-      title="图片打光"
+      title={t('node.relightGeneration.editor.title')}
       size="workspace"
       surface="glass"
       contentClassName="min-h-0 p-0"
       onClose={close}
       footer={session.discardConfirmationRequested ? (
         <div className="flex w-full items-center justify-between gap-3">
-          <p className={UI_TEXT_META_CLASS}>有尚未确认的打光设置，确定放弃吗？</p>
+          <p className={UI_TEXT_META_CLASS}>{t('node.relightGeneration.editor.discardPrompt')}</p>
           <div className="flex items-center gap-2">
-            <UiButton type="button" variant="secondary" onClick={onKeepEditing}>继续编辑</UiButton>
-            <UiButton type="button" variant="dangerSolid" onClick={onDiscard}>放弃更改</UiButton>
+            <UiButton type="button" variant="secondary" onClick={onKeepEditing}>{t('node.relightGeneration.editor.keepEditing')}</UiButton>
+            <UiButton type="button" variant="dangerSolid" onClick={onDiscard}>{t('node.relightGeneration.editor.discard')}</UiButton>
           </div>
         </div>
       ) : (
         <>
-          <UiButton type="button" variant="secondary" onClick={close}>取消</UiButton>
-          <UiButton type="button" variant="primary" onClick={onConfirm}>应用设置</UiButton>
+          <UiButton type="button" variant="secondary" onClick={close}>{t('common.cancel')}</UiButton>
+          <UiButton type="button" variant="primary" onClick={onConfirm}>{t('node.relightGeneration.editor.apply')}</UiButton>
         </>
       )}
     >

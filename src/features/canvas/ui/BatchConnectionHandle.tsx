@@ -95,7 +95,8 @@ export function BatchConnectionHandle({ nodes, onConnect }: BatchConnectionHandl
             stroke="currentColor"
             strokeWidth={2}
             strokeLinecap="round"
-            className="text-accent-text"
+            // 与单条拖线（storyboard.css 的 --xy-connectionline-stroke）同色：拖线不是选中指示，不用强调色
+            className="text-text2"
           />
         </svg>,
         document.body,

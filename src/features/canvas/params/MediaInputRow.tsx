@@ -79,11 +79,6 @@ async function fileToMediaUrl(file: File, kind: RowMediaKind): Promise<UploadedM
     : { url: imported.fullPath };
 }
 
-function resolveFileName(url: string): string {
-  const normalized = url.split(/[\\/]/).pop() ?? url;
-  return normalized.length > 18 ? `${normalized.slice(0, 18)}…` : normalized;
-}
-
 function moveArrayItem<T>(list: T[], fromIndex: number, toIndex: number): T[] {
   const next = [...list];
   const [moved] = next.splice(fromIndex, 1);
@@ -359,12 +354,12 @@ export function MediaInputRow({
                 }}
               >
                 <Icon className="h-3 w-3 shrink-0" />
-                {resolveFileName(url)}
+                {t('node.mediaRow.itemLabel', { kind: t(`node.mediaRow.${mediaKind}`), index: index + 1 })}
               </span>
             ) : (
               <span className="flex h-7 items-center gap-1 rounded-md border border-line bg-gap/60 px-1.5 text-2xs text-text2">
                 <Icon className="h-3 w-3 shrink-0" />
-                {resolveFileName(url)}
+                {t('node.mediaRow.itemLabel', { kind: t(`node.mediaRow.${mediaKind}`), index: index + 1 })}
               </span>
             )}
             {!isConnected && mediaKind === 'video' && videoTrimMaxClipSeconds && (
@@ -386,6 +381,8 @@ export function MediaInputRow({
                   event.stopPropagation();
                   handleRemove(index);
                 }}
+                aria-label={t('node.mediaRow.remove')}
+                title={t('node.mediaRow.remove')}
                 className="absolute -right-1.5 -top-1.5 opacity-0 transition-opacity group-hover:opacity-100"
                 type="button"
               >

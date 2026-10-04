@@ -34,7 +34,47 @@
     "splitStoryboard": "切割",
     "generate": "生成",
     "emptyHintTitle": "双击或右键添加节点",
-    "emptyHintSubtitle": "Double-click or right-click to add a node",
+    "emptyHintSubtitle": "也可以把图片、视频或音频文件直接拖到画布上",
+    "storyboardExport": {
+      "open": "导出设置",
+      "showIndex": "显示分镜序号",
+      "showNote": "显示分镜描述",
+      "imageFit": "图片填充",
+      "fitCover": "填满格子",
+      "fitContain": "完整显示",
+      "notePlacement": "描述位置",
+      "noteOverlay": "图上遮罩",
+      "noteBottom": "图下文字",
+      "indexPrefix": "序号前缀",
+      "gap": "间距",
+      "fontSize": "字号（%）",
+      "background": "背景色",
+      "textColor": "文字色"
+    },
+    "storyboardGrid": {
+      "rows": "行",
+      "cols": "列",
+      "decrease": "{{label}}数减少",
+      "increase": "{{label}}数增加",
+      "summary": "{{rows}}×{{cols}} · {{count}} 格",
+      "count": "{{count}} 格",
+      "fixed": "固定 {{rows}}×{{cols}}"
+    },
+    "storyboardFrame": {
+      "empty": "空分镜",
+      "replaceFromInput": "从输入图片替换",
+      "editFrame": "单独编辑此格",
+      "note": "分镜 {{index}} 描述"
+    },
+    "backToProjects": "返回项目",
+    "minimap": "画布小地图",
+    "edge": {
+      "disconnect": "断开连线",
+      "disconnectAssetGroup": "解除素材组绑定",
+      "bundleConnected": "{{count}} 已连接",
+      "bundlePending": "{{count}} 待连接",
+      "bundleExcluded": "{{count}} 已排除"
+    },
     "mediaDrop": {
       "imported": "已导入 {{count}} 个媒体文件",
       "importedWithSkipped": "已导入 {{count}} 个媒体文件，跳过 {{skipped}} 个不支持的文件",
@@ -122,6 +162,20 @@
     "processing": "处理中...",
     "apply": "应用",
     "editResultTitle": "编辑结果",
+    "split": {
+      "preview": "原图与切割预览",
+      "sourceSize": "{{width}} × {{height}} px",
+      "discardLegend": "红色区域是切割时会丢弃的分割线像素",
+      "settings": "切割参数",
+      "rows": "行数",
+      "cols": "列数",
+      "lineThickness": "分割线粗细（%）",
+      "lineThicknessPx": "约 {{px}} px",
+      "cellCount": "输出小格数量",
+      "cellWidth": "单格宽度（px）",
+      "cellHeight": "单格高度（px）",
+      "layoutError": "分割线过粗，可切割区域不够。请减小线宽或减少行列数。"
+    },
     "imageEditorV3": {
       "loading": "正在准备新版图片编辑器...",
       "openFailed": "无法打开新版图片编辑器",
@@ -252,6 +306,55 @@
   "node": {
     "outpaint": { "promptPlaceholder": "描述希望补画的内容（可选）", "chooseSource": "请选择一张原图", "loadFailed": "原图加载失败，请检查图片是否仍然可用。" },
     "missing": "节点缺失",
+    "backToCanvas": "返回画布",
+    "layerStackView": {
+      "title": "多图层图片文档",
+      "loadFailed": "多图层图片未能加载",
+      "retryHint": "请检查网络或生成设置后重试。",
+      "retry": "重新获取结果",
+      "preparing": "正在准备多图层图片…",
+      "previewAlt": "多图层图片预览",
+      "unavailable": "多图层图片暂不可用",
+      "degraded": "部分图层资源缺失"
+    },
+    "templateManager": {
+      "title": "管理提示词模板",
+      "saving": "保存中…",
+      "save": "保存",
+      "add": "新增模板",
+      "defaultName": "新的提示词模板",
+      "defaultSystemPrompt": "你是提示词优化助手。只输出优化后的提示词。",
+      "name": "模板名称",
+      "systemPrompt": "系统提示词",
+      "systemPromptPlaceholder": "输入这个模板使用的系统提示词",
+      "plainTextOnly": "模板仅包含纯文本，不支持变量。",
+      "delete": "删除模板",
+      "emptyTitle": "还没有提示词模板",
+      "emptyDescription": "点击左下角“新增模板”开始创建。"
+    },
+    "videoPlayer": {
+      "play": "播放",
+      "pause": "暂停",
+      "progress": "视频进度",
+      "mute": "静音",
+      "unmute": "取消静音",
+      "openViewer": "打开大播放器"
+    },
+    "elementEditEditor": {
+      "title": "局部重绘",
+      "openFailed": "无法打开遮罩编辑器",
+      "sourceRequired": "局部重绘必须且只能连接一张源图。"
+    },
+    "relightDirection": {
+      "view": "视角",
+      "key": "主光方向",
+      "rim": "轮廓光方向",
+      "keyHint": "拖动选择高亮灯位；方向键调整，Home 不指定方向",
+      "rimHint": "拖动选择图片背后的轮廓光方位；方向键调整",
+      "perspective": "透视",
+      "front": "正面"
+    },
+    "cameraStageLoading": "加载 3D 镜头参考…",
     "missingDescription": "此功能或模型已不可用。原节点和连线已保留，可删除此节点或用其他节点替换。",
     "menuTitle": "添加节点",
     "menuSections": {
@@ -321,6 +424,8 @@
       }
     },
     "mediaRow": {
+      "itemLabel": "{{kind}} {{index}}",
+      "remove": "移除",
       "image": "图片",
       "video": "视频",
       "audio": "音频",
@@ -366,6 +471,41 @@
       "workbenchSummary": "围绕源图或文字生成可浏览的全景画面"
     },
     "relightGeneration": {
+      "editor": {
+        "title": "图片打光",
+        "mode": "打光模式",
+        "manual": "手动打光",
+        "smart": "智能打光",
+        "brightness": "亮度",
+        "brightnessTip": "拖动选择五档明暗；光束为示意，实际效果由模型生成。",
+        "color": "色调",
+        "colorTip": "拖动选择灯光色调，光束同步显示所选颜色。",
+        "rim": "轮廓光",
+        "rimTip": "开启后拖动小光点选择轮廓光方向。它用于勾勒主体边缘，主光方向仍可独立调整；实际效果由模型生成。",
+        "extra": "补充要求",
+        "extraManualTip": "补充需要保留的细节或希望达到的光照效果。",
+        "extraManualPlaceholder": "例如：保留商品标签清晰可读",
+        "preset": "氛围预设",
+        "presetTip": "选择希望营造的光照氛围。",
+        "reference": "光照参考图",
+        "referenceTip": "模型只借用参考图的光感和氛围，不保证复制相同光场。",
+        "extraSmartTip": "描述希望达到的光照效果和需要保留的细节。",
+        "extraSmartPlaceholder": "例如：在保留背景布局的前提下增强商品高光",
+        "discardPrompt": "有尚未确认的打光设置，确定放弃吗？",
+        "keepEditing": "继续编辑",
+        "discard": "放弃更改",
+        "apply": "应用设置",
+        "presets": {
+          "natural-studio": "自然影棚",
+          "soft-window": "柔和窗光",
+          "golden-hour": "黄金时刻",
+          "overcast": "阴天柔光",
+          "hard-studio": "硬光影棚",
+          "moonlight": "月光夜景",
+          "neon": "霓虹氛围",
+          "dramatic": "戏剧光影"
+        }
+      },
       "apiKeyRequired": "请先配置当前打光模式所需的供应商 API Key",
       "resultTitle": "打光结果",
       "sourceImage": "源图",

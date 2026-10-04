@@ -7,19 +7,6 @@
  * 这两个设置项完全不生效——已全部迁到 `src/index.css`。
  */
 
-.ui-panel {
-  background: var(--panel);
-  border-color: var(--line);
-  border-radius: var(--ui-radius-xl);
-  box-shadow: var(--ui-shadow-panel);
-}
-
-.ui-field {
-  background: var(--raised);
-  border-color: var(--line);
-  border-radius: var(--ui-radius-lg);
-}
-
 /* 节点绘制隔离：透明 padding 扩展 paint containment 的裁剪框，等量负 margin
    抵消布局占位，因此 React Flow 自己测量的 `.react-flow__node` 尺寸不变。
    默认余量覆盖浮动标题、端口和 resize 手柄；少数正文确实出框的节点由注册点
@@ -75,18 +62,20 @@
   }
 }
 
+/* 运行中与选中要一眼分开（任务 5.4-35 截图核对）：选中是贴着节点边的实线强调描边；运行中改为
+   离开节点边 5px 的虚线环 + 呼吸，不再叠实线描边与强调色光晕（原来两者同色同位，未选中的运行节点像被选中）。
+   两者同时存在时（选中的节点在运行）实线描边与外圈虚线并存，仍可分辨。 */
 .canvas-node-paint-frame--executing::before {
   content: '';
   pointer-events: none;
   position: absolute;
-  top: var(--canvas-node-paint-top);
-  right: var(--canvas-node-paint-right);
-  bottom: var(--canvas-node-paint-bottom);
-  left: var(--canvas-node-paint-left);
+  top: calc(var(--canvas-node-paint-top) - 5px);
+  right: calc(var(--canvas-node-paint-right) - 5px);
+  bottom: calc(var(--canvas-node-paint-bottom) - 5px);
+  left: calc(var(--canvas-node-paint-left) - 5px);
   z-index: 1;
-  border: 2px solid rgb(var(--accent-rgb) / 0.86);
-  border-radius: var(--node-radius);
-  box-shadow: 0 0 18px rgb(var(--accent-rgb) / 0.38);
+  border: 2px dashed rgb(var(--accent-rgb) / 0.9);
+  border-radius: calc(var(--node-radius) + 5px);
   animation: canvas-node-executing-pulse 1.5s ease-out infinite;
 }
 

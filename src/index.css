@@ -493,13 +493,16 @@
     background-color: var(--ui-glass-control-tint);
   }
 
-  /* 图片区域内的透明像素网格；工作区本身仍保持无限且使用画布底色。 */
+  /* 图片区域内的透明像素网格；工作区本身仍保持无限且使用画布底色。
+     透明是图片内容的属性，和媒体底一样不随主题：只用固定媒体令牌合成纯中性灰（白底压两层/三层
+     media-scrim，约 52 与 23 两档灰）。原来取 raised/hover，主题引擎接入后两格只差约 3 级且带底色色相，
+     石墨下几乎看不出棋盘格（任务 5.4，canvas-gpu-sourcefree-fallback 透明像素判据失败的根因）。 */
   .image-editor-transparency-grid {
-    background-color: rgb(var(--raised-rgb));
-    background-image: repeating-conic-gradient(
-      rgb(var(--hover-rgb) / 0.72) 0 25%,
-      transparent 0 50%
-    );
+    background-color: rgb(var(--on-media-rgb));
+    background-image:
+      repeating-conic-gradient(var(--media-scrim) 0 25%, transparent 0 50%),
+      linear-gradient(var(--media-scrim), var(--media-scrim)),
+      linear-gradient(var(--media-scrim), var(--media-scrim));
     background-position: 0 0;
     background-size: 16px 16px;
   }

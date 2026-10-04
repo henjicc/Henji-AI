@@ -229,7 +229,8 @@ export function CanvasImageCapabilityActions({
                               </span>
                             )}
                           </span>
-                          <span className={`mt-0.5 block whitespace-normal leading-4 ${UI_TEXT_META_CLASS}`}>
+                          {/* 说明取次要文字色：菜单是玻璃，压在白底图片上时辅助文字色只有 3.3:1（任务 5.4 截图审计） */}
+                          <span className="mt-0.5 block whitespace-normal text-2xs leading-4 text-text2">
                             {disabledReasonKey
                               ? t(disabledReasonKey)
                               : t(capability.descriptionKey)}

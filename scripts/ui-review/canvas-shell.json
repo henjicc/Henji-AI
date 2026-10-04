@@ -1,0 +1,568 @@
+{
+  "id": "review-canvas-shell",
+  "surface": "画布",
+  "name": "核对-画布外壳与浮层（5.4 第一批）",
+  "checklist": [
+    "C01",
+    "C02",
+    "C03",
+    "C04",
+    "C09",
+    "C10.4",
+    "C12.1"
+  ],
+  "writesUserData": true,
+  "steps": [
+    {
+      "seedCanvas": {
+        "viewport": {
+          "x": 320,
+          "y": 60,
+          "zoom": 0.6
+        },
+        "nodes": [
+          {
+            "id": "__review_shell_only",
+            "type": "stringSourceNode",
+            "position": {
+              "x": 0,
+              "y": 0
+            },
+            "width": 240,
+            "height": 96,
+            "data": {
+              "displayName": "将被删除",
+              "value": "空画布夹具"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "click": {
+        "selector": ".react-flow__node[data-id=\"__review_shell_only\"]",
+        "at": {
+          "x": 20,
+          "y": 8
+        }
+      }
+    },
+    {
+      "click": {
+        "role": "button",
+        "name": "/^(删除|Delete)$/",
+        "within": {
+          "selector": "[data-node-toolbar-panel]"
+        }
+      }
+    },
+    {
+      "waitFor": {
+        "target": {
+          "selector": ".react-flow__node"
+        },
+        "state": "hidden"
+      }
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "empty"
+    },
+    {
+      "hover": {
+        "role": "button",
+        "name": "/^(返回项目|Back to Projects)$/"
+      }
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "back-hover"
+    },
+    {
+      "rightClick": {
+        "selector": ".react-flow__pane",
+        "at": {
+          "x": 120,
+          "y": 140
+        }
+      }
+    },
+    {
+      "waitFor": {
+        "role": "menu",
+        "name": "/^(添加节点|Add Node)$/"
+      }
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": {
+        "name": "add-menu",
+        "metrics": {
+          "role": "menu",
+          "name": "/^(添加节点|Add Node)$/",
+          "maxRows": null
+        }
+      }
+    },
+    {
+      "hover": {
+        "role": "menuitem",
+        "name": "/^(视频生成|Video Generation)$/"
+      }
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "add-menu-hover"
+    },
+    {
+      "scroll": {
+        "target": {
+          "role": "menu",
+          "name": "/^(添加节点|Add Node)$/"
+        },
+        "dy": 600
+      }
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "add-menu-scrolled"
+    },
+    {
+      "press": "Escape"
+    },
+    {
+      "waitFor": {
+        "target": {
+          "role": "menu",
+          "name": "/^(添加节点|Add Node)$/"
+        },
+        "state": "hidden"
+      }
+    },
+    {
+      "seedCanvas": {
+        "viewport": {
+          "x": 300,
+          "y": 50,
+          "zoom": 0.5
+        },
+        "nodes": [
+          {
+            "id": "__review_text",
+            "type": "stringSourceNode",
+            "position": {
+              "x": 0,
+              "y": 0
+            },
+            "width": 240,
+            "height": 96,
+            "data": {
+              "displayName": "提示词",
+              "value": "雨夜街头的电影感人像"
+            }
+          },
+          {
+            "id": "__review_upload_a",
+            "type": "universalUploadNode",
+            "position": {
+              "x": 0,
+              "y": 160
+            },
+            "data": {}
+          },
+          {
+            "id": "__review_upload_b",
+            "type": "universalUploadNode",
+            "position": {
+              "x": 440,
+              "y": 160
+            },
+            "data": {}
+          },
+          {
+            "id": "__review_image",
+            "type": "imageNode",
+            "position": {
+              "x": 900,
+              "y": 0
+            },
+            "data": {
+              "displayName": "核对样例",
+              "prompt": "",
+              "modelId": "apimart-gpt-image-2.5",
+              "params": {},
+              "mediaInputs": {},
+              "imageUrl": null,
+              "previewImageUrl": null,
+              "aspectRatio": "1:1",
+              "isGenerating": false,
+              "generationStartedAt": null
+            }
+          }
+        ],
+        "edges": [
+          {
+            "id": "__review_edge",
+            "source": "__review_text",
+            "target": "__review_image",
+            "sourceHandle": "source",
+            "targetHandle": "param:__prompt",
+            "type": "disconnectableEdge"
+          }
+        ]
+      }
+    },
+    {
+      "setFiles": {
+        "target": {
+          "selector": ".react-flow__node[data-id=\"__review_upload_a\"] input[type=\"file\"]"
+        },
+        "files": [
+          "resources/icons/icon.png"
+        ]
+      }
+    },
+    {
+      "setFiles": {
+        "target": {
+          "selector": ".react-flow__node[data-id=\"__review_upload_b\"] input[type=\"file\"]"
+        },
+        "files": [
+          "resources/icons/icon.png"
+        ]
+      }
+    },
+    {
+      "waitFor": {
+        "selector": ".react-flow__node[data-id=\"__review_upload_b\"] img"
+      },
+      "timeout": 15000
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "multi"
+    },
+    {
+      "click": {
+        "selector": ".react-flow__edge[data-id=\"__review_edge\"] .react-flow__edge-interaction"
+      },
+      "optional": true
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "edge-selected"
+    },
+    {
+      "hover": {
+        "role": "button",
+        "name": "/^(断开连线|Disconnect)$/"
+      },
+      "optional": true
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "edge-disconnect-hover"
+    },
+    {
+      "click": {
+        "selector": ".react-flow__pane",
+        "at": {
+          "x": 120,
+          "y": 480
+        }
+      }
+    },
+    {
+      "drag": {
+        "from": {
+          "selector": ".react-flow__node[data-id=\"__review_text\"] .react-flow__handle.source",
+          "includeHidden": true
+        },
+        "to": {
+          "dx": -300,
+          "dy": 320
+        },
+        "steps": 12,
+        "release": false
+      }
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "line-drag"
+    },
+    {
+      "release": {}
+    },
+    {
+      "waitFor": {
+        "role": "menu",
+        "name": "/^(添加节点|Add Node)$/"
+      }
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": {
+        "name": "line-drop-menu",
+        "metrics": {
+          "role": "menu",
+          "name": "/^(添加节点|Add Node)$/",
+          "maxRows": null
+        }
+      }
+    },
+    {
+      "press": "Escape"
+    },
+    {
+      "waitFor": {
+        "target": {
+          "role": "menu",
+          "name": "/^(添加节点|Add Node)$/"
+        },
+        "state": "hidden"
+      }
+    },
+    {
+      "drag": {
+        "from": {
+          "selector": ".react-flow__pane",
+          "at": {
+            "x": 60,
+            "y": 140
+          }
+        },
+        "to": {
+          "dx": 560,
+          "dy": 200
+        },
+        "steps": 12,
+        "release": false,
+        "modifiers": [
+          "Control"
+        ]
+      }
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "box-select"
+    },
+    {
+      "release": {}
+    },
+    {
+      "waitFor": {
+        "selector": "[data-node-toolbar-panel]"
+      }
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": {
+        "name": "multi-toolbar",
+        "metrics": {
+          "selector": "[data-node-toolbar-panel]"
+        }
+      }
+    },
+    {
+      "drag": {
+        "from": {
+          "role": "button",
+          "name": "/^(批量连接所选素材|Connect selected media)$/i"
+        },
+        "to": {
+          "selector": ".react-flow__node[data-id=\"__review_image\"]"
+        },
+        "steps": 16,
+        "release": false
+      }
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "batch-connect-drag"
+    },
+    {
+      "release": {}
+    },
+    {
+      "wait": 250
+    },
+    {
+      "capture": "connect-toast"
+    },
+    {
+      "click": {
+        "selector": ".react-flow__pane",
+        "at": {
+          "x": 120,
+          "y": 480
+        }
+      }
+    },
+    {
+      "click": {
+        "selector": ".react-flow__node[data-id=\"__review_upload_a\"]"
+      }
+    },
+    {
+      "waitFor": {
+        "selector": "[data-node-toolbar-panel]"
+      }
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": {
+        "name": "node-toolbar",
+        "metrics": {
+          "selector": "[data-node-toolbar-panel]"
+        }
+      }
+    },
+    {
+      "open": {
+        "role": "button",
+        "name": "/^(更多图片功能|More image tools)$/i"
+      },
+      "ifPresent": {
+        "role": "button",
+        "name": "/^(更多图片功能|More image tools)$/i"
+      }
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "capability-menu"
+    },
+    {
+      "escape": {}
+    },
+    {
+      "click": {
+        "selector": "[data-node-model-trigger]",
+        "within": {
+          "selector": ".react-flow__node[data-id=\"__review_image\"]"
+        }
+      }
+    },
+    {
+      "waitFor": {
+        "selector": "[data-model-list-scroll-region]"
+      }
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "model-panel"
+    },
+    {
+      "escape": {}
+    },
+    {
+      "rightClick": {
+        "selector": "[data-node-header-drag-surface=\"__review_image\"]"
+      }
+    },
+    {
+      "waitFor": {
+        "selector": "[data-context-menu]"
+      }
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "node-context-menu"
+    },
+    {
+      "hover": {
+        "role": "menuitem",
+        "name": "/^(设置默认值|Set as defaults)$/"
+      }
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "node-context-menu-hover"
+    },
+    {
+      "press": "Escape"
+    },
+    {
+      "waitFor": {
+        "target": {
+          "selector": "[data-context-menu]"
+        },
+        "state": "hidden"
+      }
+    },
+    {
+      "doubleClick": {
+        "selector": ".react-flow__node[data-id=\"__review_upload_a\"] img"
+      },
+      "optional": true
+    },
+    {
+      "waitFor": {
+        "role": "dialog"
+      },
+      "optional": true
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "image-viewer"
+    },
+    {
+      "escape": {}
+    },
+    {
+      "scroll": {
+        "target": {
+          "selector": ".react-flow__pane",
+          "at": {
+            "x": 120,
+            "y": 480
+          }
+        },
+        "dy": 1600
+      }
+    },
+    {
+      "waitStable": {}
+    },
+    {
+      "capture": "zoomed-out-lod"
+    }
+  ]
+}

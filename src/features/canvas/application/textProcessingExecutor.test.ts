@@ -116,3 +116,13 @@ it('未配置模型时仅通知已附着页面，后台执行仍返回同一业�
   expect(notify).toHaveBeenCalledTimes(1)
   expect(llmChatStream).not.toHaveBeenCalled()
 })
+
+it('供应商错误只把面向用户的原因写进节点，请求 ID 等内部字段不进界面（5.3 P-23 转交）', async () => {
+  const raw = '[provider_error]{"code":"rate_limited","category":"rate_limit","status":429,"providerId":"fixture","modelId":"text","requestId":"req_internal_123","message":"请求太频繁，请稍后再试"}'
+  vi.mocked(llmChatStream).mockImplementation(async (_request, emit) => { emit({ type: 'Error', data: raw }) })
+  await expect(runCanvasNode(nodeId)).rejects.toThrow('请求太频繁，请稍后再试')
+  const saved = await readPersistedCanvasProjectSnapshot(projectId)
+  const display = saved.nodes.find(node => node.type === CANVAS_NODE_TYPES.textAnnotation)?.data
+  expect(display?.generationError).toBe('请求太频繁，请稍后再试')
+  expect(JSON.stringify(saved.nodes)).not.toContain('req_internal_123')
+})

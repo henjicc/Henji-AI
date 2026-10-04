@@ -218,7 +218,7 @@ export const AssetGroupFocusOverlay = memo(({ groupId, onClose }: AssetGroupFocu
 
       <div className="nowheel relative min-h-0 flex-1 overflow-y-auto p-4">
         {isDraggingMedia && (
-          <div className="pointer-events-none absolute inset-3 z-raised flex items-center justify-center rounded-xl border border-dashed border-accent bg-window/85 text-sm font-medium text-accent">
+          <div className="pointer-events-none absolute inset-3 z-raised flex items-center justify-center rounded-xl border border-dashed border-accent bg-window/85 text-sm font-medium text-accent-text">
             {t('canvas.assetGroup.manager.dropMedia')}
           </div>
         )}

@@ -40,8 +40,10 @@ export const NODE_ROW_CONTROL_SLOT_CLASS = 'ml-auto flex min-w-0 items-center ju
  * 未连线行的悬停提示（连线行改用插槽色底色，不叠加该 hover）。
  * 只加强描边、不换底色（任务 4.3，重要记录 012）：行底换成 hover 后与行内取值触发器（raised / 悬停同为 hover）
  * 同色，触发器边界消失。同一处的交互层级不得同色。
+ * 描边取辅助文字色的低透明度（与节点外壳悬停同一做法）：原 `line-strong` 在石墨下只比 `line` 亮 9 级，
+ * 1px 描边上几乎看不出悬停（5.2 转交，任务 5.4）。
  */
-export const NODE_ROW_HOVER_CLASS = 'hover:border-line-strong';
+export const NODE_ROW_HOVER_CLASS = 'hover:border-text3/45';
 
 /** 行与行之间的间隙（替代旧版贴边 divide-y），让每行读成独立卡片 */
 export const NODE_ROW_GAP_CLASS = 'gap-1.5';

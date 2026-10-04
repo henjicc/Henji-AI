@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ReactFlowProvider } from '@xyflow/react';
 import { useTranslation } from 'react-i18next';
-import { UiButton, UiError, UiLoading } from '@/components/ui';
+import { UiButton, UiError, UiLoading, UiPanel } from '@/components/ui';
 import { Canvas } from '@/features/canvas/Canvas';
 import { updateCanvasProjectCover } from '@/features/canvas/application/canvasProjectCover';
 import { useCanvasProjectCoverAutosave } from '@/features/canvas/application/useCanvasProjectCoverAutosave';
@@ -69,22 +69,26 @@ const CanvasWorkspace = (): JSX.Element => {
                   disabled={isOpeningProject && Boolean(currentProjectId)}
                   size="sm"
                 >
-                  返回项目
+                  {t('canvas.backToProjects')}
                 </UiButton>
               </div>
             )}
             {(persistenceError || openError) && (
-              <UiError
-                className="absolute left-1/2 top-3 z-sticky -translate-x-1/2"
-                message={t(openError ?? 'project.persistenceFailed')}
-                size="xs"
-                onRetry={!openError && currentProjectId
-                  ? () => { void confirmCanvasPersistence(currentProjectId).catch(() => undefined); } : undefined}
-              />
+              /* 保存/打开失败提示悬在画布与节点之上：放进玻璃面板，压在节点内容上也能读 */
+              <UiPanel variant="glass" className="absolute left-1/2 top-3 z-sticky -translate-x-1/2 px-3">
+                <UiError
+                  message={t(openError ?? 'project.persistenceFailed')}
+                  size="xs"
+                  onRetry={!openError && currentProjectId
+                    ? () => { void confirmCanvasPersistence(currentProjectId).catch(() => undefined); } : undefined}
+                />
+              </UiPanel>
             )}
             {currentProjectId && <Canvas />}
             {isOpeningProject && (
-              <UiLoading className="absolute inset-0 z-raised bg-canvas" message={t('common.loading')} />
+              <div className="absolute inset-0 z-raised bg-canvas">
+                <UiLoading className="h-full" message={t('common.loading')} />
+              </div>
             )}
           </div>
         )}

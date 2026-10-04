@@ -21,6 +21,7 @@ vi.mock('@/components/ui', () => ({
   UiButton: ({ variant: _variant, size: _size, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: string; size?: string }) => <button {...props} />,
   UiLoading: ({ message }: { message: string }) => <div role="status">{message}</div>,
   UiError: ({ message }: { message: string }) => <div role="alert">{message}</div>,
+  UiPanel: ({ variant: _variant, ...props }: React.HTMLAttributes<HTMLDivElement> & { variant?: string }) => <div {...props} />,
 }));
 vi.mock('@/features/project/ProjectManager', () => ({ ProjectManager: () => {
   const state = useProjectStore();
@@ -75,7 +76,7 @@ describe('画布项目打开反馈', () => {
     render(<CanvasWorkspace />);
     fireEvent.click(screen.getByText('open'));
     await act(async () => { await vi.advanceTimersByTimeAsync(17); });
-    await act(async () => { fireEvent.click(screen.getByText('返回项目')); });
+    await act(async () => { fireEvent.click(screen.getByText('canvas.backToProjects')); });
     expect(screen.getByTestId('projects')).toBeTruthy();
     await act(async () => { finish(record); });
     expect(screen.queryByTestId('canvas')).toBeNull();
@@ -105,7 +106,7 @@ describe('画布项目打开反馈', () => {
     await act(async () => { await useProjectStore.getState().closeProject(); });
     commands.get.mockClear();
     fireEvent.click(screen.getByText('open'));
-    await act(async () => { fireEvent.click(screen.getByText('返回项目')); });
+    await act(async () => { fireEvent.click(screen.getByText('canvas.backToProjects')); });
     await act(async () => { await vi.advanceTimersByTimeAsync(100); });
     expect(commands.get).not.toHaveBeenCalled();
     expect(screen.getByTestId('projects')).toBeTruthy();

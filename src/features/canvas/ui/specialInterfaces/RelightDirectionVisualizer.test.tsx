@@ -2,6 +2,8 @@
 
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+// 组件文案走 i18n：加载正式语言资源，断言按中英两种文案匹配
+import '@/i18n/config'
 
 import { RelightDirectionVisualizer } from './RelightDirectionVisualizer'
 
@@ -19,7 +21,7 @@ describe('打光方向可视化控件', () => {
       />,
     )
 
-    const control = screen.getByRole('slider', { name: '主光方向' })
+    const control = screen.getByRole('slider', { name: /^(主光方向|Key light direction)$/ })
     expect(control.getAttribute('aria-valuetext')).toBe('不指定')
     fireEvent.keyDown(control, { key: 'ArrowRight' })
     expect(onDirectionChange).toHaveBeenCalledWith('right')
@@ -49,7 +51,7 @@ describe('打光方向可视化控件', () => {
       />,
     )
 
-    const control = screen.getByRole('slider', { name: '主光方向' })
+    const control = screen.getByRole('slider', { name: /^(主光方向|Key light direction)$/ })
     control.parentElement!.getBoundingClientRect = () => ({
       x: 0,
       y: 0,

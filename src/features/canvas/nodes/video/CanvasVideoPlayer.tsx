@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { Maximize2, Pause, Play, Volume2, VolumeX } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 import { UiIconButton, UiRangeInput } from '@/components/ui';
 import { readVideoInfo } from '@/commands/video';
@@ -28,6 +29,7 @@ export function CanvasVideoPlayer({
   onOpenViewer,
   autoPlayOnMount = false,
 }: CanvasVideoPlayerProps): JSX.Element {
+  const { t } = useTranslation();
   const playerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [playing, setPlaying] = useState(false);
@@ -137,7 +139,7 @@ export function CanvasVideoPlayer({
       {!playing && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
           <UiIconButton shape="circle" size="xl" tone="media"
-            aria-label="播放"
+            aria-label={t('node.videoPlayer.play')}
             className="nodrag nowheel pointer-events-auto"
             onPointerDown={(event) => event.stopPropagation()}
             onClick={(event) => {
@@ -163,7 +165,7 @@ export function CanvasVideoPlayer({
             max={Math.max(duration, 0.01)}
             step={0.01}
             value={Math.min(currentTime, Math.max(duration, 0.01))}
-            aria-label="视频进度"
+            aria-label={t('node.videoPlayer.progress')}
             className="canvas-video-progress h-2.5 min-w-0"
             style={{ '--video-progress': `${progressPercent}%` } as CSSProperties}
             onChange={(event) => seekTo(Number(event.target.value))}
@@ -171,7 +173,7 @@ export function CanvasVideoPlayer({
           />
           <div className="flex h-6 min-w-0 items-center gap-1">
             <UiIconButton size="sm" tone="media"
-              aria-label={playing ? '暂停' : '播放'}
+              aria-label={playing ? t('node.videoPlayer.pause') : t('node.videoPlayer.play')}
               onClick={(event) => {
                 event.stopPropagation();
                 togglePlayback();
@@ -185,7 +187,7 @@ export function CanvasVideoPlayer({
             <span className="min-w-0 flex-1" />
             {!compactControls && hasAudio !== false && (
               <UiIconButton size="sm" tone="media"
-                aria-label={muted ? '取消静音' : '静音'}
+                aria-label={muted ? t('node.videoPlayer.unmute') : t('node.videoPlayer.mute')}
                 onClick={(event) => {
                   event.stopPropagation();
                   const video = videoRef.current;
@@ -198,7 +200,7 @@ export function CanvasVideoPlayer({
               </UiIconButton>
             )}
             <UiIconButton size="sm" tone="media"
-              aria-label="打开大播放器"
+              aria-label={t('node.videoPlayer.openViewer')}
               onClick={(event) => {
                 event.stopPropagation();
                 videoRef.current?.pause();

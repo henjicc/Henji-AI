@@ -322,12 +322,12 @@ export const AudioNode = memo(({ id, data, selected, type, width, height }: Audi
           </div>
         ) : isUploadVariant ? (
           <div className="flex h-full w-full cursor-pointer flex-col items-center justify-center gap-1.5 text-text2">
-            <AudioUploadIcon className="h-6 w-6 opacity-60" />
+            <AudioUploadIcon className="h-6 w-6 text-text3" />
             <span className="text-2xs">{t('node.audioNode.uploadHint')}</span>
           </div>
         ) : (
           <div className="flex h-full w-full flex-col items-center justify-center gap-1.5 text-text2">
-            <AudioGenerationIcon className="h-6 w-6 opacity-60" />
+            <AudioGenerationIcon className="h-6 w-6 text-text3" />
             <span className="text-2xs">{t('node.audioNode.waitingResult')}</span>
           </div>
         )}

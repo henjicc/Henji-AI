@@ -180,7 +180,3 @@ export function splitSizeLabel(min: number, max: number): string {
   }
   return `${min} - ${max}`;
 }
-
-export function formatPercent(value: number): string {
-  return `${Number.isInteger(value) ? value.toFixed(0) : value.toFixed(1)}%`;
-}

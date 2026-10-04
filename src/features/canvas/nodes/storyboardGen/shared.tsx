@@ -2,6 +2,7 @@ import { Minus, Plus } from 'lucide-react'
 import type { StoryboardGenNodeData } from '@/features/canvas/domain/canvasNodes'
 import { AUTO_REQUEST_ASPECT_RATIO } from '@/features/canvas/domain/canvasNodes'
 import { parseAspectRatio } from '@/features/canvas/application/imageData'
+import { useTranslation } from 'react-i18next'
 import { UiIconButton } from '@/components/ui'
 import { BLACK_HEX, WHITE_HEX } from '@/core/theme/colorTokens'
 
@@ -90,6 +91,7 @@ export function GridStepperControl({
   onDecrease,
   onIncrease,
 }: GridStepperControlProps): JSX.Element {
+  const { t } = useTranslation()
   return (
     <div className={GRID_CONTROL_CONTAINER_CLASS}>
       <span className={GRID_CONTROL_LABEL_CLASS}>{label}</span>
@@ -97,7 +99,7 @@ export function GridStepperControl({
         type="button"
         size="xs"
         disabled={disabled}
-        aria-label={`${label}数减少`}
+        aria-label={t('canvas.storyboardGrid.decrease', { label })}
         onClick={(event) => {
           event.stopPropagation()
           onDecrease()
@@ -110,7 +112,7 @@ export function GridStepperControl({
         type="button"
         size="xs"
         disabled={disabled}
-        aria-label={`${label}数增加`}
+        aria-label={t('canvas.storyboardGrid.increase', { label })}
         onClick={(event) => {
           event.stopPropagation()
           onIncrease()

@@ -1,5 +1,5 @@
 import { memo, useMemo } from 'react';
-import { CircleX } from 'lucide-react'
+import { useTranslation } from 'react-i18next';
 import {
   BaseEdge,
   EdgeLabelRenderer,
@@ -9,8 +9,8 @@ import {
 
 import { getNodeIndexById } from '@/features/canvas/domain/connectionIndex';
 import { getNodeDefinition } from '@/features/canvas/domain/nodeRegistry';
-import { UiIconButton } from '@/components/ui';
 import { useCanvasStore } from '@/stores/canvasStore';
+import { EdgeDisconnectButton } from './EdgeDisconnectButton';
 import { EdgeFlowPulse } from './EdgeFlowPulse';
 
 export const DisconnectableEdge = memo(function DisconnectableEdge(props: EdgeProps) {
@@ -27,6 +27,7 @@ export const DisconnectableEdge = memo(function DisconnectableEdge(props: EdgePr
     markerEnd,
     style,
   } = props;
+  const { t } = useTranslation();
   const deleteEdge = useCanvasStore((state) => state.deleteEdge);
   // 生成中判定：下游是结果展示节点且正在生成（按注册表 media.role 泛化，无节点类型特判）
   const isProcessingEdge = useCanvasStore((state) => {
@@ -64,21 +65,15 @@ export const DisconnectableEdge = memo(function DisconnectableEdge(props: EdgePr
       {isProcessingEdge && <EdgeFlowPulse path={edgePath} edgeId={id} />}
       {selected && (
         <EdgeLabelRenderer>
-          <UiIconButton shape="circle" size="sm" tone="media"
-            type="button"
+          <div
             className="nodrag nopan absolute"
             style={{
               transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
               pointerEvents: 'all',
             }}
-            onClick={(event) => {
-              event.stopPropagation();
-              deleteEdge(id);
-            }}
-            aria-label="断开连线"
           >
-            <CircleX className="h-5 w-5" />
-          </UiIconButton>
+            <EdgeDisconnectButton label={t('canvas.edge.disconnect')} onDisconnect={() => deleteEdge(id)} />
+          </div>
         </EdgeLabelRenderer>
       )}
     </>

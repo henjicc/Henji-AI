@@ -15,6 +15,14 @@ interface NodeGenerationErrorProps {
  */
 export function NodeGenerationError({ message }: NodeGenerationErrorProps) {
   const { t } = useTranslation();
+  const openDetail = (): void => {
+    showAlertDialog({
+      title: t('common:error'),
+      message,
+      type: 'error',
+      detail: message,
+    });
+  };
 
   return (
     /* 底色必须不透明：节点底层还在渲染"等待输出结果"占位，半透明会让两层文字叠在一起 */
@@ -24,12 +32,14 @@ export function NodeGenerationError({ message }: NodeGenerationErrorProps) {
       className="nodrag absolute inset-0 flex cursor-pointer flex-col items-center justify-center gap-2 bg-gap px-4 text-center"
       onClick={(event) => {
         event.stopPropagation();
-        showAlertDialog({
-          title: t('common:error'),
-          message,
-          type: 'error',
-          detail: message,
-        });
+        openDetail();
+      }}
+      // role=button 必须键盘可用（任务 5.4）：聚焦后 Enter / 空格同样打开详情
+      onKeyDown={(event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        event.stopPropagation();
+        openDetail();
       }}
     >
       <div className="pointer-events-none absolute inset-0 bg-danger-tint" />

@@ -23,7 +23,7 @@ import { commitGridSplitResult } from '@/features/canvas/application/gridSplitAp
 import { readStoryboardImageMetadata } from '@/commands/image';
 import { getToolPlugin, type ToolOptions } from '@/features/canvas/tools';
 import { useCanvasStore } from '@/stores/canvasStore';
-import { UiButton, UiModal } from '@/components/ui';
+import { UiButton, UiError, UiModal } from '@/components/ui';
 import { UI_DIALOG_TRANSITION_MS } from '@/components/ui/motion';
 import { isImageEditorV3Enabled } from '@/platform/runtime';
 import { FormToolEditor } from './tool-editors/FormToolEditor';
@@ -379,9 +379,10 @@ export function NodeToolDialog() {
         </>
       }
     >
-      <div className="space-y-3 max-h-[82vh] overflow-y-auto pr-1">
+      {/* 滚动只交给弹窗正文（contentClassName 已是 overflow-y-auto）；这里再限高滚动会出现双滚动条（任务 5.4） */}
+      <div className="space-y-3">
         {editorContent}
-        {error && <div className="text-xs text-danger-text">{error}</div>}
+        {error && <UiError size="xs" align="start" message={error} />}
       </div>
     </UiModal>
   );

@@ -1,6 +1,6 @@
 import { reportCanvasOperationFailure } from '@/features/canvas/application/canvasOperationFeedback';
 import { memo, useMemo } from 'react';
-import { CircleX } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import {
   BaseEdge,
   EdgeLabelRenderer,
@@ -8,9 +8,9 @@ import {
   type EdgeProps,
 } from '@xyflow/react';
 
-import { UiIconButton } from '@/components/ui';
 import type { CanvasEdge } from '@/features/canvas/domain/canvasNodes';
 import { disconnectAssetGroup } from '@/features/canvas/application/assetGroupApplicationService';
+import { EdgeDisconnectButton } from './EdgeDisconnectButton';
 
 export const AssetGroupBundleEdge = memo(function AssetGroupBundleEdge(props: EdgeProps<CanvasEdge>) {
   const {
@@ -25,6 +25,7 @@ export const AssetGroupBundleEdge = memo(function AssetGroupBundleEdge(props: Ed
     markerEnd,
     data,
   } = props;
+  const { t } = useTranslation();
   const [path, labelX, labelY] = useMemo(
     () => getBezierPath({ sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition }),
     [sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition],
@@ -32,14 +33,21 @@ export const AssetGroupBundleEdge = memo(function AssetGroupBundleEdge(props: Ed
   const bundle = data?.assetGroupBundle;
   if (!bundle) return <BaseEdge id={id} path={path} markerEnd={markerEnd} />;
 
+  const summary = [
+    t('canvas.edge.bundleConnected', { count: bundle.connected }),
+    bundle.pending > 0 ? t('canvas.edge.bundlePending', { count: bundle.pending }) : null,
+    bundle.excluded > 0 ? t('canvas.edge.bundleExcluded', { count: bundle.excluded }) : null,
+  ].filter(Boolean).join(' · ');
+
   return (
     <>
       <BaseEdge
         id={id}
         path={path}
         markerEnd={markerEnd}
+        // 强调色只表达选中（与普通连线一致）；素材组连线静息用次要文字色 + 加粗，与普通连线区分
         style={{
-          stroke: 'rgb(var(--accent-rgb) / 0.9)',
+          stroke: selected ? 'rgb(var(--accent-rgb))' : 'rgb(var(--text2-rgb))',
           strokeWidth: selected ? 3.2 : 2.7,
         }}
       />
@@ -53,20 +61,15 @@ export const AssetGroupBundleEdge = memo(function AssetGroupBundleEdge(props: Ed
         >
           {/* 连接摘要是只读标签（压在画布上，走玻璃），不是按钮 */}
           <span className="ui-glass inline-flex h-6 items-center rounded-full px-2 text-2xs text-text1">
-            {bundle.connected} 已连接
-            {bundle.pending > 0 ? ` · ${bundle.pending} 待连接` : ''}
-            {bundle.excluded > 0 ? ` · ${bundle.excluded} 已排除` : ''}
+            {summary}
           </span>
           {selected && (
-            <UiIconButton shape="circle" size="sm" tone="media"
-              aria-label="解除素材组绑定"
-              onClick={(event) => {
-                event.stopPropagation();
+            <EdgeDisconnectButton
+              label={t('canvas.edge.disconnectAssetGroup')}
+              onDisconnect={() => {
                 void disconnectAssetGroup({ groupId: bundle.groupId, targetNodeId: bundle.targetNodeId }).catch(reportCanvasOperationFailure);
               }}
-            >
-              <CircleX className="h-4 w-4" />
-            </UiIconButton>
+            />
           )}
         </div>
       </EdgeLabelRenderer>

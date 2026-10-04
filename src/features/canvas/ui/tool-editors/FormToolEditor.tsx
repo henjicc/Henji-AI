@@ -1,7 +1,8 @@
 import { useCallback } from 'react';
 
 import type { ToolFieldSchema, ToolOptions } from '@/features/canvas/tools';
-import { UI_TEXT_LABEL_CLASS, UiColorInput, UiInput, UiSelect } from '@/components/ui';
+import { UiColorInput, UiFormRow, UiInput, UiSelect } from '@/components/ui';
+import NumberField from '@/components/ui/NumberInput';
 import type { FormToolEditorProps } from './types';
 
 function readTextOption(options: ToolOptions, key: string): string {
@@ -14,6 +15,10 @@ function readNumberOption(options: ToolOptions, key: string): number {
   return typeof value === 'number' ? value : Number(value ?? 0);
 }
 
+/**
+ * 没有专属编辑器的节点工具用的通用表单（扩展点）。字段统一走 `UiFormRow` 与默认尺寸档：
+ * 数值用带拖动的 `NumberInput`，不再用原生数字框；颜色、下拉不在调用点改高度（任务 5.4）。
+ */
 export function FormToolEditor({ fields, options, onOptionsChange }: FormToolEditorProps) {
   const updateOption = useCallback(
     (key: string, value: string | number) => {
@@ -35,20 +40,20 @@ export function FormToolEditor({ fields, options, onOptionsChange }: FormToolEdi
             onChange={(event) => updateOption(field.key, event.target.value)}
             textHistory={{ onValueChange: (value) => updateOption(field.key, value) }}
             placeholder={field.placeholder}
+            aria-label={field.label}
           />
         );
       }
 
       if (field.type === 'number') {
         return (
-          <UiInput
-            type="number"
+          <NumberField
             value={readNumberOption(options, field.key)}
             min={field.min}
             max={field.max}
             step={field.step ?? 1}
-            onChange={(event) => updateOption(field.key, Number(event.target.value))}
-            textHistory={{ onValueChange: (value) => updateOption(field.key, Number(value)) }}
+            ariaLabel={field.label}
+            onChange={(value) => updateOption(field.key, value)}
           />
         );
       }
@@ -58,7 +63,7 @@ export function FormToolEditor({ fields, options, onOptionsChange }: FormToolEdi
           <UiColorInput
             value={readTextOption(options, field.key)}
             onChange={(event) => updateOption(field.key, event.target.value)}
-            className="h-10 w-full"
+            aria-label={field.label}
           />
         );
       }
@@ -67,7 +72,7 @@ export function FormToolEditor({ fields, options, onOptionsChange }: FormToolEdi
         <UiSelect
           value={readTextOption(options, field.key)}
           onChange={(event) => updateOption(field.key, event.target.value)}
-          size="lg"
+          aria-label={field.label}
         >
           {field.options.map((option) => (
             <option key={option.value} value={option.value}>
@@ -83,10 +88,9 @@ export function FormToolEditor({ fields, options, onOptionsChange }: FormToolEdi
   return (
     <div className="space-y-4">
       {fields.map((field) => (
-        <div key={field.key}>
-          <label className={`mb-1 block ${UI_TEXT_LABEL_CLASS}`}>{field.label}</label>
+        <UiFormRow key={field.key} label={field.label} inline={field.type === 'color'}>
           {renderField(field)}
-        </div>
+        </UiFormRow>
       ))}
     </div>
   );

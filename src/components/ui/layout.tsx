@@ -15,7 +15,7 @@
  */
 import { useId, type HTMLAttributes, type ReactNode } from 'react';
 import { ArrowLeft } from 'lucide-react';
-import Tooltip from './Tooltip';
+import Tooltip, { type TooltipPlacement } from './Tooltip';
 import { UiIconButton } from './primitives';
 import {
   UI_DIVIDER_CLASS,
@@ -135,6 +135,8 @@ interface UiTooltipTextProps {
   tooltip?: ReactNode;
   children: ReactNode;
   className?: string;
+  /** 提示框位置，默认上方；一列紧挨着的表单行（画布节点参数行）用 `left`，避免盖住上一行。 */
+  placement?: TooltipPlacement;
 }
 
 /**
@@ -142,11 +144,11 @@ interface UiTooltipTextProps {
  * 有说明时文字可聚焦、悬停或聚焦显示 tooltip，用一道点状下划线提示“这里有说明”；
  * 不在名称旁加 ⓘ / 问号图标，也不把整个控件包进 Tooltip。没有说明时就是普通文字。
  */
-export function UiTooltipText({ tooltip, children, className = '' }: UiTooltipTextProps): JSX.Element {
+export function UiTooltipText({ tooltip, children, className = '', placement }: UiTooltipTextProps): JSX.Element {
   const tooltipId = useId();
   if (!tooltip) return className ? <span className={className}>{children}</span> : <>{children}</>;
   return (
-    <Tooltip content={tooltip} contentId={tooltipId} delay={200}>
+    <Tooltip content={tooltip} contentId={tooltipId} delay={200} placement={placement}>
       <span
         tabIndex={0}
         aria-describedby={tooltipId}

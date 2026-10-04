@@ -1,4 +1,5 @@
 import { memo, type CSSProperties } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { PromptReferenceItem } from '@/components/ui'
 import type { PromptDocumentV1 } from '@/core/inputs/promptDocument'
 import type { StoryboardGenNodeData } from '@/features/canvas/domain/canvasNodes'
@@ -81,6 +82,7 @@ export const StoryboardGridEditor = memo(({
   onColChange,
   onFrameDescriptionChange,
 }: StoryboardGridEditorProps): JSX.Element => {
+  const { t } = useTranslation()
   // 字号/行高直接走 inline style：Tailwind 任意值 class 与 UiTextAreaField 自带的
   // text-sm/px-3 等基础样式同优先级，谁生效取决于编译后样式表顺序，不可控；
   // inline style 的优先级始终高于普通 class，可以彻底绕开这个问题。
@@ -96,14 +98,14 @@ export const StoryboardGridEditor = memo(({
       <div className="canvas-node-lod-detail mb-2.5 flex shrink-0 items-center justify-between gap-2">
         <div className="flex items-center gap-1.5">
           <GridStepperControl
-            label="行"
+            label={t('canvas.storyboardGrid.rows')}
             value={nodeData.gridRows}
             disabled={gridLocked}
             onDecrease={() => onRowChange(-1)}
             onIncrease={() => onRowChange(1)}
           />
           <GridStepperControl
-            label="列"
+            label={t('canvas.storyboardGrid.cols')}
             value={nodeData.gridCols}
             disabled={gridLocked}
             onDecrease={() => onColChange(-1)}
@@ -112,7 +114,9 @@ export const StoryboardGridEditor = memo(({
         </div>
 
         <div className={GRID_SUMMARY_CLASS}>
-          {gridLocked ? `固定 ${nodeData.gridRows}×${nodeData.gridCols}` : `${totalFrames} 格`}
+          {gridLocked
+            ? t('canvas.storyboardGrid.fixed', { rows: nodeData.gridRows, cols: nodeData.gridCols })
+            : t('canvas.storyboardGrid.count', { count: totalFrames })}
         </div>
       </div>
 

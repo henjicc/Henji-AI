@@ -40,7 +40,7 @@ export function CameraStagePreviewPanel({
         />
       ) : (
         <div className="flex h-full w-full flex-col items-center justify-center gap-2 text-text2">
-          <ICON_TOOL_CAMERA_STAGE className="h-7 w-7 opacity-60" />
+          <ICON_TOOL_CAMERA_STAGE className="h-7 w-7 text-text3" />
           <span className="px-4 text-center text-xs leading-6">{t('node.cameraStage.empty')}</span>
         </div>
       )}
@@ -48,8 +48,8 @@ export function CameraStagePreviewPanel({
       {rendering && (
         <>
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-gap/65">
-            <div className="flex items-center gap-2 rounded-lg bg-raised/90 px-3 py-2 text-xs text-text1">
-              <LoaderCircle className="h-4 w-4 animate-spin text-accent" />
+            <div className="ui-glass flex items-center gap-2 rounded-lg px-3 py-2 text-xs text-text1">
+              <LoaderCircle className="h-4 w-4 animate-spin text-accent-text" />
               {t(progressKey, { progress: Math.round((renderProgress ?? 0) * 100) })}
             </div>
           </div>
@@ -64,7 +64,7 @@ export function CameraStagePreviewPanel({
           className="pointer-events-none absolute inset-0 flex items-center justify-center bg-gap/70"
           title={renderError}
         >
-          <div className="flex max-w-[80%] items-center gap-2 rounded-lg bg-raised/90 px-3 py-2 text-xs text-text1">
+          <div className="ui-glass flex max-w-[80%] items-center gap-2 rounded-lg px-3 py-2 text-xs text-text1">
             <AlertCircle className="h-4 w-4 shrink-0 text-danger-text" />
             <span className="truncate">{t('node.cameraStage.renderFailed')}</span>
           </div>

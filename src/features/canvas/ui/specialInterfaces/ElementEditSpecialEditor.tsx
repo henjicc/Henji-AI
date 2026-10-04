@@ -1,4 +1,5 @@
 import { useStoreWithEqualityFn } from 'zustand/traditional'
+import { useTranslation } from 'react-i18next'
 
 import { UiButton, UiError } from '@/components/ui'
 import { UiModal } from '@/components/ui/UiModal'
@@ -29,6 +30,7 @@ export default function ElementEditSpecialEditor({
   onConfirm,
   onCancel,
 }: CanvasSpecialEditorSurfaceProps): JSX.Element {
+  const { t } = useTranslation()
   const incomingImages = useStoreWithEqualityFn(
     canvasViewStore,
     (state) => collectInputMediaUrls(session.nodeId, state.nodes, state.edges, 'image'),
@@ -41,12 +43,12 @@ export default function ElementEditSpecialEditor({
     return (
       <UiModal
         isOpen
-        title="局部重绘"
+        title={t('node.elementEditEditor.title')}
         size="compact"
         onClose={onCancel}
-        footer={<UiButton type="button" variant="primary" onClick={onCancel}>返回画布</UiButton>}
+        footer={<UiButton type="button" variant="secondary" onClick={onCancel}>{t('node.backToCanvas')}</UiButton>}
       >
-        <UiError title="无法打开遮罩编辑器" message="局部重绘必须且只能连接一张源图。" />
+        <UiError title={t('node.elementEditEditor.openFailed')} message={t('node.elementEditEditor.sourceRequired')} />
       </UiModal>
     )
   }

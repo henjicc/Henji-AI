@@ -206,7 +206,7 @@ export function PanoramaViewerPanel({
         ) : null}
 
         {viewMode === 'sphere' && resource.status === 'loading' ? (
-          <UiLoading message={t('viewer.panorama.loading')} className="h-full text-text2" />
+          <UiLoading message={t('viewer.panorama.loading')} className="h-full" />
         ) : null}
 
         {resource.status === 'idle' && !isGenerating && !generationError ? (
@@ -214,7 +214,7 @@ export function PanoramaViewerPanel({
             size="sm"
             title={t('viewer.panorama.emptyTitle')}
             description={t('viewer.panorama.emptyDescription')}
-            className="h-full px-6 text-text2"
+            className="h-full px-6"
           />
         ) : null}
 
@@ -229,7 +229,7 @@ export function PanoramaViewerPanel({
         ) : null}
 
         {isGenerating && !resource.displayUrl ? (
-          <UiLoading message={t('viewer.panorama.generating')} className="h-full text-text2" />
+          <UiLoading message={t('viewer.panorama.generating')} className="h-full" />
         ) : null}
 
         {isReady && !resource.isEquirectangular ? (

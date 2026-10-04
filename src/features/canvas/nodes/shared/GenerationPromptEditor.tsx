@@ -18,6 +18,10 @@ import {
 import { useCanvasContentLod } from './useCanvasContentLod'
 import { GENERATION_PROMPT_MIN_HEIGHT_PX } from './useGenerationNodeMinimumHeight'
 
+/** 缺提示词时的占位字：静态态的直接子 span 与编辑态空段落的 ::before 都标危险色。 */
+const PROMPT_INVALID_PLACEHOLDER_CLASS =
+  '[&>span]:!text-danger-text [&_.is-editor-empty:first-child::before]:!text-danger-text'
+
 export interface GenerationPromptEditorProps {
   nodeId: string
   selected: boolean
@@ -160,9 +164,11 @@ export function GenerationPromptEditor({
           onReady={handleEditorReady}
           onEditEnd={handleEditEnd}
           onActivate={canActivate ? handleActivate : undefined}
-          className={`nodrag nowheel relative cursor-text !rounded-md !border-0 !bg-transparent !p-0 !shadow-none ${invalid ? '[&>span]:!text-danger-text' : ''}`}
+          className="nodrag nowheel relative cursor-text !rounded-md !border-0 !bg-transparent !p-0 !shadow-none"
           editorShellClassName="relative cursor-text !rounded-md !border-0 !bg-transparent !shadow-none focus-within:!ring-0"
-          editorClassName={`ui-scrollbar nodrag nowheel !px-1.5 !py-1 !text-sm !leading-6 ${invalid ? '[&.is-editor-empty:first-child::before]:!text-danger-text' : ''}`}
+          // 缺提示词时占位字标红：静态态占位是内容层的直接子 span，编辑态是空段落的 ::before。
+          // 原来分别写在外层（span 不是它的直接子元素）和内容层自身（is-editor-empty 在段落上），两种状态都不生效
+          editorClassName={`ui-scrollbar nodrag nowheel !px-1.5 !py-1 !text-sm !leading-6 ${invalid ? PROMPT_INVALID_PLACEHOLDER_CLASS : ''}`}
         />
       </div>
     </div>

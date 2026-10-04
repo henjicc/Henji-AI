@@ -134,7 +134,7 @@ export const LocalRedrawWorkbenchStage = memo(function LocalRedrawWorkbenchStage
         </div>
       </div>
 
-      <div className="absolute bottom-2 left-2 right-2 flex items-center gap-2 rounded-lg bg-overlay p-2">
+      <div className="absolute bottom-2 left-2 right-2 flex items-center gap-2 ui-glass rounded-lg p-2">
         <span className="shrink-0 text-2xs text-text2">
           {t('node.elementEditGeneration.brushSize', { size: Math.round(editor.brushSize) })}
         </span>

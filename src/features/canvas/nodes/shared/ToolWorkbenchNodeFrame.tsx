@@ -150,7 +150,7 @@ export function ToolWorkbenchSourcePreview({
         </div>
       )}
       {summary && (
-        <div className="pointer-events-none absolute bottom-2 left-2 right-2 rounded-lg bg-overlay px-2.5 py-1.5 text-2xs text-text2">
+        <div className="pointer-events-none absolute bottom-2 left-2 right-2 ui-glass rounded-lg px-2.5 py-1.5 text-2xs text-text2">
           {summary}
         </div>
       )}

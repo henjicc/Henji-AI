@@ -2,6 +2,7 @@ import { memo, useCallback, useMemo, useRef, useState } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { Download, SlidersHorizontal } from 'lucide-react';
 import { useStoreWithEqualityFn } from 'zustand/traditional';
+import { useTranslation } from 'react-i18next';
 
 import { NodeHeader, NODE_HEADER_FLOATING_POSITION_CLASS } from '@/features/canvas/ui/NodeHeader';
 import { NodeResizeHandle } from '@/features/canvas/ui/NodeResizeHandle';
@@ -43,6 +44,7 @@ type StoryboardNodeProps = NodeProps & {
 };
 
 export const StoryboardNode = memo(({ id, data, selected, width, height }: StoryboardNodeProps) => {
+  const { t } = useTranslation();
   const rootRef = useRef<HTMLDivElement>(null);
   // “从输入图片替换”菜单：共享 ContextMenu，贴着格子上的按钮弹出（任务 5.9）
   const picker = useContextMenu();
@@ -321,13 +323,13 @@ export const StoryboardNode = memo(({ id, data, selected, width, height }: Story
                 }}
               >
                 <SlidersHorizontal className={`${NODE_CONTROL_ICON_CLASS} shrink-0`} />
-                <span>导出设置</span>
+                <span>{t('canvas.storyboardExport.open')}</span>
               </UiChipButton>
             )}
           </PanelTrigger>
 
           <div className="truncate text-2xs text-text2">
-            {gridRows} x {gridCols} | {totalFrames} 格
+            {t('canvas.storyboardGrid.summary', { rows: gridRows, cols: gridCols, count: totalFrames })}
           </div>
         </div>
 

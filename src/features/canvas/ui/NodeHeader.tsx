@@ -14,8 +14,6 @@ import { useInternalNode, useNodeId, useStoreApi } from '@xyflow/react';
 import { useCanvasViewportPortal } from '../nodes/shared/useCanvasViewSubscriptions';
 import { observeNodeTitleFade } from './nodeTitleFade';
 import {
-  UI_FIELD_FOCUS_CLASS,
-  UI_FIELD_SURFACE_CLASS,
   UiButton,
   UiInput,
 } from '@/components/ui';
@@ -221,6 +219,7 @@ export function NodeHeader({
       return (
         <UiInput
           ref={inputRef}
+          size="sm"
           value={draftTitle}
           onChange={(event) => setDraftTitle(event.target.value)}
           textHistory={{ onValueChange: setDraftTitle }}
@@ -240,7 +239,7 @@ export function NodeHeader({
             }
           }}
           className={joinClasses(
-            `nodrag nowheel h-6 min-w-[70px] w-full max-w-full rounded px-2 text-13 font-normal ${UI_FIELD_SURFACE_CLASS} ${UI_FIELD_FOCUS_CLASS}`,
+            'nodrag nowheel min-w-[70px] max-w-full font-normal',
             titleClassName
           )}
         />

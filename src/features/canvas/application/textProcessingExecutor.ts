@@ -3,6 +3,7 @@ import type { TextProcessingPromptTemplate } from '@henjicc/ai-sdk'
 
 import { llmCancelTask, llmChatStream } from '@/commands/llmRuntime'
 import { createLogger } from '@/core/logging'
+import { describeLlmProviderError } from '@/core/llm/providerErrorMessage'
 import {
   createPlainTextPromptDocument,
   readPromptDocument,
@@ -194,9 +195,11 @@ export function createTextProcessingExecutor(
         useCanvasTextStreamStore.getState().setPreview(displayNodeId, null, execution.runId)
       }
     }
-    const finishFailure = (message: string): void => {
+    // 节点上只显示面向用户的失败原因；供应商错误的请求 ID、状态码等只进日志（信息准入，5.3 P-23 转交）
+    const finishFailure = (rawMessage: string): void => {
       if (failureHandled) return
       failureHandled = true
+      const message = describeLlmProviderError(rawMessage)
       failureMessage = message
       updateNodeData(nodeId, { lastExecutionStatus: 'failed' }, { skipHistory: true })
       commitDisplays({
@@ -205,7 +208,7 @@ export function createTextProcessingExecutor(
         generationError: message,
         syncedInputRevision: `${nodeId}:${latestData?.lastOutputRevision ?? 0}`,
       })
-      logger.error('文本处理失败', new Error(message), {
+      logger.error('文本处理失败', new Error(rawMessage), {
         event: 'canvas.text_processing.failed',
         requestId,
         nodeId,

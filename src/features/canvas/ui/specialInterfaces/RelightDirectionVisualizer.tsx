@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type PointerEvent } from 'react'
-import { UiChipButton } from '@/components/ui/primitives'
-import { UI_LIGHTING_COLORS, UI_TEXT_LABEL_CLASS } from '@/components/ui/styleTokens'
+import { useTranslation } from 'react-i18next'
+import { UiOptionButton } from '@/components/ui/primitives'
+import { UI_LIGHTING_COLORS, UI_SEGMENTED_TRACK_CLASS, UI_TEXT_LABEL_CLASS } from '@/components/ui/styleTokens'
 import type { RelightBrightness, RelightColorPreset, RelightKeyDirection, RelightRimDirection } from '@/features/canvas/capabilities/relightPolicy'
 import { RELIGHT_DIRECTION_LABELS, RELIGHT_DIRECTION_ORDER, type RelightVisualizerView } from './relightDirectionVisualizerState'
 import { RIM_DIRECTION_LABELS, RIM_DIRECTION_ORDER } from './relightRimLightState'
@@ -21,6 +22,7 @@ interface Props {
 
 export function RelightDirectionVisualizer({ direction, brightness = 0, colorPreset = 'neutral', rimDirection = 'off',
   onRimDirectionChange, sourceImage, sourceAlt, onDirectionChange }: Props): JSX.Element {
+  const { t } = useTranslation()
   const stageRef = useRef<HTMLDivElement>(null)
   const [view, setView] = useState<RelightVisualizerView>('perspective')
   const [poses, setPoses] = useState(() => ({ main: poseForMain(direction), rim: poseForRim(rimDirection) }))
@@ -69,7 +71,7 @@ export function RelightDirectionVisualizer({ direction, brightness = 0, colorPre
     const point = projectSpatialPoint(lightPosition(poses[lamp]), view)
     const currentMain = mainDirectionForPose(drag.current?.lamp === 'main' ? drag.current.target : poses.main)
     const currentRim = rimDirectionForPose(drag.current?.lamp === 'rim' ? drag.current.target : poses.rim)
-    return <div key={lamp} role="slider" tabIndex={0} aria-label={isMain ? '主光方向' : '轮廓光方向'}
+    return <div key={lamp} role="slider" tabIndex={0} aria-label={isMain ? t('node.relightDirection.key') : t('node.relightDirection.rim')}
       aria-valuemin={0} aria-valuemax={isMain ? 4 : 7}
       aria-valuenow={isMain ? RELIGHT_DIRECTION_ORDER.indexOf(currentMain) : RIM_DIRECTION_ORDER.indexOf(currentRim)}
       aria-valuetext={isMain ? RELIGHT_DIRECTION_LABELS[currentMain] : RIM_DIRECTION_LABELS[currentRim]}
@@ -77,7 +79,7 @@ export function RelightDirectionVisualizer({ direction, brightness = 0, colorPre
       data-relight-brightness={isMain ? brightness : undefined} data-relight-color={isMain ? colorPreset : undefined}
       data-relight-rim-control={!isMain ? 'true' : undefined} data-relight-rim-light={!isMain ? currentRim : undefined}
       data-light-z={lightPosition(poses[lamp]).z}
-      title={isMain ? '拖动选择高亮灯位；方向键调整，Home 不指定方向' : '拖动选择图片背后的轮廓光方位；方向键调整'}
+      title={isMain ? t('node.relightDirection.keyHint') : t('node.relightDirection.rimHint')}
       className={`nodrag nowheel absolute touch-none outline-none ${!dragging ? 'focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent' : ''} ${dragging ? 'cursor-grabbing' : 'cursor-grab'} ${isMain ? 'inset-0 rounded-lg' : 'h-8 w-8 -translate-x-1/2 -translate-y-1/2 rounded-full'}`}
       style={isMain ? undefined : { left: `${point.x}%`, top: `${point.y}%` }}
       onPointerDown={event => {
@@ -114,12 +116,13 @@ export function RelightDirectionVisualizer({ direction, brightness = 0, colorPre
   }
   return <section className="flex min-h-0 min-w-0 w-full flex-col gap-2">
     <div className="flex shrink-0 items-center justify-between gap-2">
-      <h3 className={UI_TEXT_LABEL_CLASS}>主光方向</h3>
-      <div className="grid grid-cols-2 gap-1">
-        {(['perspective', 'front'] as const).map(value => <UiChipButton key={value} type="button" selectionRole="navigation"
-          active={view === value} size="md" className="justify-center !px-3 !py-0" onClick={() => setView(value)}>
-          {value === 'perspective' ? '透视' : '正面'}
-        </UiChipButton>)}
+      <h3 className={UI_TEXT_LABEL_CLASS}>{t('node.relightDirection.key')}</h3>
+      {/* 两种视角二选一：分段选择（淡强调底选中），不在调用点改按钮内边距（任务 5.4） */}
+      <div role="radiogroup" aria-label={t('node.relightDirection.view')} className={UI_SEGMENTED_TRACK_CLASS}>
+        {(['perspective', 'front'] as const).map(value => <UiOptionButton key={value} type="button" variant="segment"
+          role="radio" aria-checked={view === value} active={view === value} onClick={() => setView(value)}>
+          {t(`node.relightDirection.${value}`)}
+        </UiOptionButton>)}
       </div>
     </div>
     <div className="flex min-h-0 flex-1 items-center justify-center [container-type:size]">

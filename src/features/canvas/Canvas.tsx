@@ -20,6 +20,8 @@ import {
 } from '@xyflow/react';
 import { useTranslation } from 'react-i18next';
 import '@xyflow/react/dist/style.css';
+import { UiToast, type UiToastTone } from '@/components/ui';
+import { UI_TOAST_DISPLAY_MS, UI_TOAST_EXIT_MS } from '@/components/ui/motion';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { useProjectStore } from '@/stores/projectStore';
 import { canvasEventBus } from '@/features/canvas/application/canvasServices';
@@ -58,8 +60,7 @@ import { CanvasViewportFlow } from './ui/CanvasViewportFlow';
 
 interface CanvasToastState {
   message: string;
-  id: number;
-  type: 'success' | 'error';
+  type: UiToastTone;
 }
 
 // 静态配置项提升到模块作用域：避免每次 Canvas 渲染都重建新引用传给 <ReactFlow>，
@@ -80,33 +81,17 @@ function CanvasGridBackground() {
   return <Background variant={BackgroundVariant.Dots} gap={20} size={1} color={CANVAS_GRID_DOT_COLOR} />;
 }
 
-function CanvasConnectionToast({ toast }: { toast: CanvasToastState | null }) {
-  if (!toast) {
-    return null;
-  }
-
-  return (
-    <div className="pointer-events-none absolute left-1/2 top-4 z-toast -translate-x-1/2">
-      <div
-        key={toast.id}
-        className={`rounded-lg bg-panel px-4 py-2 text-sm font-medium shadow-panel ${
-          toast.type === 'success' ? 'text-success-text' : 'text-danger-text'
-        }`}
-      >
-        {toast.message}
-      </div>
-    </div>
-  );
-}
-
 export function Canvas() {
   const { t } = useTranslation();
   const reactFlowInstance = useReactFlow<CanvasNode, CanvasEdge>();
   const wrapperRef = useRef<HTMLDivElement>(null);
   const handleMediaDrag = useCanvasMediaDrag();
   const { prepareGlassGesture, clearGlassGesture } = useCanvasGlassPerformance(wrapperRef);
-  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 画布提示走共享 UiToast（任务 5.7 收敛）：压在画布上用玻璃、相对画布容器定位；停留与淡出时长同全局通知
+  const toastHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const toastClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [connectionToast, setConnectionToast] = useState<CanvasToastState | null>(null);
+  const [connectionToastVisible, setConnectionToastVisible] = useState(false);
   const nodes = useCanvasStore((state) => state.nodes);
   const edges = useCanvasStore((state) => state.edges);
   const applyNodesChange = useCanvasStore((state) => state.onNodesChange);
@@ -136,23 +121,25 @@ export function Canvas() {
     inspectionReadOnly,
   } = useCanvasPersistence(wrapperRef, reactFlowInstance);
 
-  const showConnectionToast = useCallback((message: string, type: CanvasToastState['type'] = 'error') => {
-    if (toastTimerRef.current) {
-      clearTimeout(toastTimerRef.current);
-    }
-    setConnectionToast({ message, id: Date.now(), type });
-    toastTimerRef.current = setTimeout(() => {
-      setConnectionToast(null);
-      toastTimerRef.current = null;
-    }, 2400);
+  const clearToastTimers = useCallback(() => {
+    if (toastHideTimerRef.current) clearTimeout(toastHideTimerRef.current);
+    if (toastClearTimerRef.current) clearTimeout(toastClearTimerRef.current);
+    toastHideTimerRef.current = null;
+    toastClearTimerRef.current = null;
   }, []);
 
-  useEffect(() => () => {
-    if (toastTimerRef.current) {
-      clearTimeout(toastTimerRef.current);
-      toastTimerRef.current = null;
-    }
-  }, []);
+  const showConnectionToast = useCallback((message: string, type: UiToastTone = 'error') => {
+    // 新提示到来时取消上一条的淡出与清除，避免上一条的清除计时器把新提示立刻清掉
+    clearToastTimers();
+    setConnectionToast({ message, type });
+    setConnectionToastVisible(true);
+    toastHideTimerRef.current = setTimeout(() => {
+      setConnectionToastVisible(false);
+      toastClearTimerRef.current = setTimeout(() => setConnectionToast(null), UI_TOAST_EXIT_MS);
+    }, UI_TOAST_DISPLAY_MS);
+  }, [clearToastTimers]);
+
+  useEffect(() => clearToastTimers, [clearToastTimers]);
 
   useEffect(() => {
     const unsubscribeToast = canvasEventBus.subscribe('canvas/toast', ({ message, type }) => {
@@ -488,7 +475,15 @@ export function Canvas() {
       <NodeToolDialogRouter />
       {nodeContextMenu}
       <CameraStageNodeDialog />
-      <CanvasConnectionToast toast={connectionToast} />
+      {connectionToast && (
+        <UiToast
+          message={connectionToast.message}
+          tone={connectionToast.type}
+          visible={connectionToastVisible}
+          surface="glass"
+          placement="container"
+        />
+      )}
       {activeGroupId && (
         <AssetGroupFocusOverlay groupId={activeGroupId} onClose={closeAssetGroup} />
       )}

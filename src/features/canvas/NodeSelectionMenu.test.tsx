@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
-import { act, fireEvent, render, waitFor } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { CANVAS_NODE_TYPES } from './domain/canvasNodes'
 import { nodeCatalog } from './application/nodeCatalog'
@@ -18,10 +18,11 @@ import {
 import {
   getSortedNodeMenuDefinitions,
   getUploadAccept,
-  resolveNodeMenuLayout,
 } from './application/nodeMenuLayout'
 
 describe('NodeSelectionMenu', () => {
+  afterEach(() => cleanup())
+
   it('按分区与顺序组织菜单，并把上传聚合为单项', () => {
     const items = getSortedNodeMenuDefinitions(nodeCatalog.getMenuDefinitions())
     expect(items.map((item) => item.type)).toEqual([
@@ -45,19 +46,8 @@ describe('NodeSelectionMenu', () => {
     expect(items.filter((item) => item.menuAggregationKey === 'upload')).toHaveLength(1)
   })
 
-  it('为快捷上传限制兼容媒体类型，并在右下边缘向内翻转', () => {
+  it('为快捷上传限制兼容媒体类型', () => {
     expect(getUploadAccept(['image', 'audio'])).toBe('image/*,audio/*')
-    expect(resolveNodeMenuLayout({
-      position: { x: 790, y: 590 },
-      parentWidth: 800,
-      parentHeight: 600,
-      menuWidth: 284,
-      menuHeight: 500,
-    })).toMatchObject({
-      left: 504,
-      top: 88,
-      transformOrigin: 'bottom right',
-    })
   })
 
   it('连接快捷菜单把兼容的具体上传节点聚合为单一上传项', () => {
@@ -149,6 +139,28 @@ describe('NodeSelectionMenu', () => {
     )
     fireEvent.keyDown(getByRole('menu'), { key: 'Escape' })
     await waitFor(() => expect(onClose).toHaveBeenCalled())
+  })
+
+  it('挂在共享浮层上：玻璃表面、登记浮层归属，点外收起后回调关闭且不选择', async () => {
+    const onSelect = vi.fn()
+    const onClose = vi.fn()
+    const { getAllByRole } = render(
+      <NodeSelectionMenu
+        position={{ x: 20, y: 20 }}
+        allowedTypes={[CANVAS_NODE_TYPES.intSource]}
+        uploadKinds={[]}
+        onSelect={onSelect}
+        onClose={onClose}
+      />
+    )
+    const menu = getAllByRole('menu').at(-1)
+    const panel = menu?.closest('[data-ui-overlay-id]')
+    expect(panel?.className).toContain('ui-glass')
+    // 菜单项与右键菜单同一组件，不再有强调色图标块
+    expect(menu?.querySelector('[role="menuitem"] .text-accent')).toBeNull()
+    fireEvent.mouseDown(document.body, { button: 0 })
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1))
+    expect(onSelect).not.toHaveBeenCalled()
   })
 
   it('菜单打开时再次右键空白区域不会触发旧菜单关闭', () => {

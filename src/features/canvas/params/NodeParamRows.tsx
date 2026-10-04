@@ -127,6 +127,7 @@ export const NodeParamRows = memo(({
           param={param}
           language={i18n.language}
           className={`${NODE_ROW_LABEL_CLASS} !mb-0`}
+          tooltipPlacement="left"
         />
         <div className={NODE_ROW_CONTROL_SLOT_CLASS}>
           <NodeParamControl

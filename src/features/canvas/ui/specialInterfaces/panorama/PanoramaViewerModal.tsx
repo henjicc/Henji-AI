@@ -231,7 +231,7 @@ export function PanoramaViewerModal({
         ) : null}
 
         {viewMode === 'sphere' && resource.status === 'loading' ? (
-          <UiLoading message={t('viewer.panorama.loading')} className="h-full text-text2" />
+          <UiLoading message={t('viewer.panorama.loading')} className="h-full" />
         ) : null}
 
         {viewMode === 'sphere' && resource.status === 'error' ? (

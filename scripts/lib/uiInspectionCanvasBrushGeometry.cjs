@@ -248,6 +248,10 @@ function createCanvasBrushGeometryScenes(context) {
       if (!documentBox || !contentBox || ['x', 'y', 'width', 'height'].some((key) => Math.abs(documentBox[key] - contentBox[key]) > 1)) {
         throw new Error(`截图内容区域与真实文档投影不一致：${JSON.stringify({ documentBox, contentBox })}`)
       }
+      // 像素判据只针对文档画面：移动工具在选中栅格层上会画变换控制框与控制点（压在内容区上），
+      // 撤销/重做后选中层会在效果层与栅格层之间回落，控制框时有时无。所有像素采样统一在抓手工具下进行，
+      // 不画任何编辑控件，判据本身不变。
+      await editor.locator('[data-tool-id="hand"]').click()
       const initialPixels = await waitPixels(null,
         { mode: 'initial-white', label: '初始白色原图尚未实际显示' }, 'initial')
       await editor.locator('[data-layer-id="reality-gpu-source-layer"] [data-layer-select]').click()
@@ -274,7 +278,7 @@ function createCanvasBrushGeometryScenes(context) {
       }
       const painted = await settleMutation()
       const brushEvidence = assertBrushGeometryState(painted, fixture, scenario, true)
-      await editor.locator('[data-tool-id="move"]').click()
+      await editor.locator('[data-tool-id="hand"]').click()
       const paintedPixels = await waitPixels(initialPixels,
         { mode: 'changed', label: '真实下笔没有改变原图外/大原图右侧可见像素' }, 'brush')
       const paintChanged = changedPixels(initialPixels, paintedPixels)
@@ -332,6 +336,7 @@ function createCanvasBrushGeometryScenes(context) {
       await node.dblclick()
       await dialog.waitFor({ state: 'visible', timeout: 15000 })
       await waitForGpu(page, editor)
+      await editor.locator('[data-tool-id="hand"]').click()
       const reopened = await readDocumentState(page, fixture)
       assertBrushGeometryState(reopened, fixture, scenario, true)
       if (reopened.revision !== revision || JSON.stringify(reopened.document.layers) !== JSON.stringify(redone.document.layers)) {

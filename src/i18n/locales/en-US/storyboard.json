@@ -34,7 +34,47 @@
     "splitStoryboard": "Split Storyboard",
     "generate": "Generate",
     "emptyHintTitle": "Double-click or right-click to add a node",
-    "emptyHintSubtitle": "Double-click or right-click to add a node",
+    "emptyHintSubtitle": "You can also drop image, video or audio files onto the canvas",
+    "storyboardExport": {
+      "open": "Export settings",
+      "showIndex": "Show frame numbers",
+      "showNote": "Show frame descriptions",
+      "imageFit": "Image fit",
+      "fitCover": "Fill cell",
+      "fitContain": "Show whole image",
+      "notePlacement": "Description position",
+      "noteOverlay": "Over image",
+      "noteBottom": "Below image",
+      "indexPrefix": "Number prefix",
+      "gap": "Spacing",
+      "fontSize": "Font size (%)",
+      "background": "Background",
+      "textColor": "Text color"
+    },
+    "storyboardGrid": {
+      "rows": "Rows",
+      "cols": "Columns",
+      "decrease": "Fewer {{label}}",
+      "increase": "More {{label}}",
+      "summary": "{{rows}} × {{cols}} · {{count}} frames",
+      "count": "{{count}} frames",
+      "fixed": "Fixed {{rows}} × {{cols}}"
+    },
+    "storyboardFrame": {
+      "empty": "Empty frame",
+      "replaceFromInput": "Replace from input images",
+      "editFrame": "Edit this frame",
+      "note": "Frame {{index}} description"
+    },
+    "backToProjects": "Back to Projects",
+    "minimap": "Canvas minimap",
+    "edge": {
+      "disconnect": "Disconnect",
+      "disconnectAssetGroup": "Unbind asset group",
+      "bundleConnected": "{{count}} connected",
+      "bundlePending": "{{count}} pending",
+      "bundleExcluded": "{{count}} excluded"
+    },
     "mediaDrop": {
       "imported": "Imported {{count}} media file(s)",
       "importedWithSkipped": "Imported {{count}} media file(s); skipped {{skipped}} unsupported file(s)",
@@ -122,6 +162,20 @@
     "processing": "Processing...",
     "apply": "Apply",
     "editResultTitle": "Edit Result",
+    "split": {
+      "preview": "Source and split preview",
+      "sourceSize": "{{width}} × {{height}} px",
+      "discardLegend": "Red areas are divider pixels that will be discarded",
+      "settings": "Split settings",
+      "rows": "Rows",
+      "cols": "Columns",
+      "lineThickness": "Divider thickness (%)",
+      "lineThicknessPx": "About {{px}} px",
+      "cellCount": "Output cells",
+      "cellWidth": "Cell width (px)",
+      "cellHeight": "Cell height (px)",
+      "layoutError": "Dividers are too thick to leave room for cells. Reduce the thickness or the number of rows and columns."
+    },
     "imageEditorV3": {
       "loading": "Preparing the new image editor...",
       "openFailed": "Could not open the new image editor",
@@ -252,6 +306,55 @@
   "node": {
     "outpaint": { "promptPlaceholder": "Describe what to add around the image (optional)", "chooseSource": "Choose a source image", "loadFailed": "Could not load the source image. Check that it is still available." },
     "missing": "Missing node",
+    "backToCanvas": "Back to canvas",
+    "layerStackView": {
+      "title": "Multi-layer image",
+      "loadFailed": "Couldn't load the multi-layer image",
+      "retryHint": "Check your network or generation settings and try again.",
+      "retry": "Fetch result again",
+      "preparing": "Preparing the multi-layer image…",
+      "previewAlt": "Multi-layer image preview",
+      "unavailable": "Multi-layer image unavailable",
+      "degraded": "Some layer resources are missing"
+    },
+    "templateManager": {
+      "title": "Manage prompt templates",
+      "saving": "Saving…",
+      "save": "Save",
+      "add": "New template",
+      "defaultName": "New prompt template",
+      "defaultSystemPrompt": "You are a prompt optimization assistant. Output only the optimized prompt.",
+      "name": "Template name",
+      "systemPrompt": "System prompt",
+      "systemPromptPlaceholder": "Enter the system prompt for this template",
+      "plainTextOnly": "Templates are plain text and don't support variables.",
+      "delete": "Delete template",
+      "emptyTitle": "No prompt templates yet",
+      "emptyDescription": "Click “New template” at the bottom left to create one."
+    },
+    "videoPlayer": {
+      "play": "Play",
+      "pause": "Pause",
+      "progress": "Video progress",
+      "mute": "Mute",
+      "unmute": "Unmute",
+      "openViewer": "Open large player"
+    },
+    "elementEditEditor": {
+      "title": "Local redraw",
+      "openFailed": "Can't open the mask editor",
+      "sourceRequired": "Local redraw needs exactly one connected source image."
+    },
+    "relightDirection": {
+      "view": "View",
+      "key": "Key light direction",
+      "rim": "Rim light direction",
+      "keyHint": "Drag to choose the key light position; arrow keys adjust, Home clears the direction",
+      "rimHint": "Drag to choose the rim light position behind the image; arrow keys adjust",
+      "perspective": "Perspective",
+      "front": "Front"
+    },
+    "cameraStageLoading": "Loading 3D camera reference…",
     "missingDescription": "This feature or model is unavailable. Its data and connections are preserved. Delete this node or replace it with another.",
     "menuTitle": "Add Node",
     "menuSections": {
@@ -321,6 +424,8 @@
       }
     },
     "mediaRow": {
+      "itemLabel": "{{kind}} {{index}}",
+      "remove": "Remove",
       "image": "Image",
       "video": "Video",
       "audio": "Audio",
@@ -366,6 +471,41 @@
       "workbenchSummary": "Generate a browsable panorama from a source image or text"
     },
     "relightGeneration": {
+      "editor": {
+        "title": "Relight",
+        "mode": "Lighting mode",
+        "manual": "Manual",
+        "smart": "Smart",
+        "brightness": "Brightness",
+        "brightnessTip": "Drag to pick one of five brightness levels. The beam is illustrative; the model produces the actual result.",
+        "color": "Tone",
+        "colorTip": "Drag to pick the light tone; the beam shows the selected color.",
+        "rim": "Rim light",
+        "rimTip": "When on, drag the small dot to set the rim light direction. It outlines the subject edges and is independent of the key light; the model produces the actual result.",
+        "extra": "Additional notes",
+        "extraManualTip": "Details to keep or the lighting effect you want.",
+        "extraManualPlaceholder": "e.g. keep the product label legible",
+        "preset": "Mood preset",
+        "presetTip": "Choose the lighting mood you want.",
+        "reference": "Lighting reference",
+        "referenceTip": "The model only borrows the look and mood of the reference; it does not copy the exact light field.",
+        "extraSmartTip": "Describe the lighting effect you want and details to keep.",
+        "extraSmartPlaceholder": "e.g. enhance product highlights while keeping the background layout",
+        "discardPrompt": "You have unapplied lighting settings. Discard them?",
+        "keepEditing": "Keep editing",
+        "discard": "Discard changes",
+        "apply": "Apply",
+        "presets": {
+          "natural-studio": "Natural studio",
+          "soft-window": "Soft window",
+          "golden-hour": "Golden hour",
+          "overcast": "Overcast",
+          "hard-studio": "Hard studio",
+          "moonlight": "Moonlight",
+          "neon": "Neon",
+          "dramatic": "Dramatic"
+        }
+      },
       "apiKeyRequired": "Configure the provider API key required by the current relighting mode",
       "resultTitle": "Relighting Result",
       "sourceImage": "Source image",

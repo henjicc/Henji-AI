@@ -57,7 +57,7 @@ const AssetGroupPreviewTile = memo(({
         </span>
       )}
       {overflowCount > 0 && (
-        <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-window/65 text-13 font-medium text-text1">
+        <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-media-scrim text-13 font-medium text-on-media">
           +{overflowCount}
         </span>
       )}

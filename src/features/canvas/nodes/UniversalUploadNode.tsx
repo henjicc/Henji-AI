@@ -171,7 +171,7 @@ const EmptyUploadNode = memo(({ id, data, selected, width, height }: UniversalUp
           {t(`node.universalUpload.hint.${lockedKind ?? 'any'}`)}
         </span>
         {data.uploadError ? (
-          <span className="text-xs text-error">
+          <span className="text-xs text-danger-text">
             {t(`node.universalUpload.errors.${data.uploadError}`)}
           </span>
         ) : null}

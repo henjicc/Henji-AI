@@ -1,7 +1,7 @@
 import { Suspense, lazy, useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { UiModal } from '@/components/ui';
+import { UiLoading, UiModal } from '@/components/ui';
 import { canvasEventBus } from '@/features/canvas/application/canvasServices';
 import { isCameraStageNode } from '@/features/canvas/domain/canvasNodes';
 // 静态引入会把整个 three.js 场景（约 2.7MB）钉进画布 chunk，切到画布就要下载并编译一遍；
@@ -121,18 +121,14 @@ export function CameraStageNodeDialog(): JSX.Element | null {
     >
       <div className="h-full overflow-hidden">
         {loading ? (
-          <div className="flex h-full items-center justify-center text-sm text-text2">
-            加载 3D 镜头参考…
-          </div>
+          <UiLoading className="h-full" message={t('node.cameraStageLoading')} />
         ) : (
           <Suspense fallback={(
-            <div className="flex h-full items-center justify-center text-sm text-text2">
-              加载 3D 镜头参考…
-            </div>
+            <UiLoading className="h-full" message={t('node.cameraStageLoading')} />
           )}>
           <CameraStageEditor
             onBackToList={close}
-            backLabel="返回画布"
+            backLabel={t('node.backToCanvas')}
             embeddedOutput={{
               assetTarget: {
                 enabled: node.data.assetCollectionEnabled === true,

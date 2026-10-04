@@ -26,7 +26,7 @@ async function readRelightLayout(page, nodeId) {
 
 async function switchRelightMode(page, nodeId, label) {
   const before = await readRelightLayout(page, nodeId)
-  await page.locator(`[data-relight-node-id="${nodeId}"]`).getByRole('button', { name: label, exact: true }).click()
+  await page.locator(`[data-relight-node-id="${nodeId}"]`).getByRole('radio', { name: label, exact: true }).click()
   const after = await readRelightLayout(page, nodeId)
   if (Math.abs(before.right - after.right) > 1) throw new Error(`模式切换未固定右边缘：${before.right} → ${after.right}`)
   if (label === '智能打光' && after.sourceImages) throw new Error('智能打光仍重复显示原图')

@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, type CSSProperties } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ImagePlus, SquareArrowOutUpRight } from 'lucide-react';
 import type { StoryboardExportOptions, StoryboardFrameItem } from '@/features/canvas/domain/canvasNodes';
 import type { PromptDocumentV1 } from '@/core/inputs/promptDocument';
@@ -53,6 +54,7 @@ export const FrameCard = memo(({
   onEditFrame,
   onSelectNode,
 }: FrameCardProps): JSX.Element => {
+  const { t } = useTranslation();
   const updateStoryboardFrame = useCanvasStore((state) => state.updateStoryboardFrame);
   const preferOriginalImage = useOriginalImageLod();
   const noteHistoryGroup = createCanvasTextHistoryGroup(nodeId, `frames.${frame.id}.note`);
@@ -149,7 +151,7 @@ export const FrameCard = memo(({
           />
         ) : (
           <div className="flex h-full w-full items-center justify-center text-2xs text-text2">
-            空分镜
+            {t('canvas.storyboardFrame.empty')}
           </div>
         )}
 
@@ -162,7 +164,8 @@ export const FrameCard = memo(({
               event.stopPropagation();
               onTogglePicker(frame.id, event.currentTarget);
             }}
-            title="从输入图片替换"
+            title={t('canvas.storyboardFrame.replaceFromInput')}
+            aria-label={t('canvas.storyboardFrame.replaceFromInput')}
           >
             <ImagePlus className="h-3 w-3" />
           </UiIconButton>
@@ -175,7 +178,8 @@ export const FrameCard = memo(({
               event.stopPropagation();
               onEditFrame(frame);
             }}
-            title="单独编辑此格"
+            title={t('canvas.storyboardFrame.editFrame')}
+            aria-label={t('canvas.storyboardFrame.editFrame')}
           >
             <SquareArrowOutUpRight className="h-3 w-3" />
           </UiIconButton>
@@ -194,11 +198,13 @@ export const FrameCard = memo(({
             onEditEnd={editHistory.onEditEnd}
             preset="media-references"
             references={referenceItems}
-            ariaLabel={`分镜 ${String(index + 1).padStart(2, '0')} 描述`}
-            placeholder={`分镜 ${String(index + 1).padStart(2, '0')} 描述`}
+            ariaLabel={t('canvas.storyboardFrame.note', { index: String(index + 1).padStart(2, '0') })}
+            placeholder={t('canvas.storyboardFrame.note', { index: String(index + 1).padStart(2, '0') })}
             className="nodrag nowheel relative h-full min-h-0 w-full cursor-text"
             editorShellClassName="relative h-full min-h-0 w-full cursor-text overflow-visible !rounded-none !border-0 !bg-transparent !shadow-none focus-within:!ring-0"
-            editorClassName="ui-scrollbar nodrag nowheel h-full min-h-0 overflow-y-auto !px-2 !py-1 text-left !text-[length:var(--storyboard-note-font-size)] !leading-[var(--storyboard-note-line-height)] !text-on-media"
+            // 描述压在固定深色的媒体渐变上：占位字（静态态的 span、编辑态的 ::before）也取媒体叠层文字色，
+            // 默认的主题次要文字色在纸白下是深灰，压在深色渐变上只有 3:1（5.2 转交，任务 5.4）
+            editorClassName="ui-scrollbar nodrag nowheel h-full min-h-0 overflow-y-auto !px-2 !py-1 text-left !text-[length:var(--storyboard-note-font-size)] !leading-[var(--storyboard-note-line-height)] !text-on-media [&>span]:!text-on-media/70 [&_.is-editor-empty:first-child::before]:!text-on-media/70"
           />
         </div>
       </div>

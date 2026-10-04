@@ -15,6 +15,7 @@ import {
   type InternalNode,
   type Node,
 } from '@xyflow/react';
+import { useTranslation } from 'react-i18next';
 
 import type { CanvasEdge, CanvasNode } from '@/features/canvas/domain/canvasNodes';
 import { CANVAS_MINIMAP_Z_INDEX } from '@/features/canvas/canvasUtils';
@@ -147,6 +148,7 @@ export function CanvasMiniMap(): JSX.Element {
   const flowHeight = useStore((state) => state.height);
   const minZoom = useStore((state) => state.minZoom);
   const maxZoom = useStore((state) => state.maxZoom);
+  const { t } = useTranslation();
   const titleId = useId();
   const activePointerIdRef = useRef<number | null>(null);
   const previousPointerRef = useRef({ x: 0, y: 0 });
@@ -248,7 +250,7 @@ export function CanvasMiniMap(): JSX.Element {
         onPointerCancel={finishPointerGesture}
         onWheel={handleWheel}
       >
-        <title id={titleId}>画布小地图</title>
+        <title id={titleId}>{t('canvas.minimap')}</title>
         <MiniMapNodes rects={nodeRects} />
         <path
           className="react-flow__minimap-mask"

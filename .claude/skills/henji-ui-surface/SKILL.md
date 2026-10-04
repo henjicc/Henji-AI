@@ -468,7 +468,7 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 | 标签栏、导航 | `UiNavButton`（侧栏）/ `UiChipButton selectionRole="navigation"`（`selectionAppearance` default / `subtle` 面板标签 / `workspace` 标题栏工作区，后者同栏浮层开关用 `on`） | 手写指示条、选中底 |
 | 无边框窗口的最小化/最大化/还原/关闭 | `UiWindowControl`（`action`、`platform` windows/mac；主窗口与日志窗口共用） | 用 `UiIconButton` 加覆盖拼交通灯或关闭红底 |
 | 通知提示（操作反馈的短暂提示） | `UiToast`（`tone` success/error，状态只进图标颜色；`surface` solid 默认 / 压在画布与媒体上用 `glass`；`placement` window 标题栏下居中 / container 画布内）；全局用 `useNotification().showNotification`，停留与淡出时长用 `motion.ts` 的 `UI_TOAST_DISPLAY_MS` / `UI_TOAST_EXIT_MS`（任务 5.7 把三套实现收敛到这里） | 自己画 `fixed top-*` 浮条、用危险实底或成功实底铺满通知、各写一份显示时长 |
-| 悬停说明 | `Tooltip`（300ms、raised 实底）；参数名、设置项标签用 `UiTooltipText` | 自己写 title 浮层或 ⓘ 图标 |
+| 悬停说明 | `Tooltip`（300ms、raised 实底）；参数名、设置项标签用 `UiTooltipText`；`placement` 默认 `top`，一列紧挨着的表单行（画布节点参数行名称，经 `ParamLabel tooltipPlacement`）用 `left`，放不下依次退到右侧、上方，避免盖住上一行 | 自己写 title 浮层或 ⓘ 图标；为躲开相邻行另写定位 |
 | 音频波形（任何位置：口播剪辑、剪辑时间线与源监视器、画布音频节点、资产卡、音频播放器、生成记录） | `WaveformView`（`@/components/waveform/WaveformView`，`tier` mini/standard、`tone` neutral/clip）+ `useWaveformData` / `useWaveformDataList`（`@/hooks/useWaveformData`，多精度峰值、磁盘缓存，放大到采样点） | 自己解码音频、自写峰值缓存或 Canvas 波形绘制 |
 | 剪辑片段的视频缩略帧条 | `useFilmstripFrames` + `src/services/videoFilmstrip/filmstripFrameService.ts`（主进程 `electron/main/services/video/filmstrip.ts` 成批取帧、磁盘缓存） | 逐帧走原生解码或另建缩略图通道 |
 | 参数帮助说明 | 参数名称文本本身的 hover / focus tooltip | 加 Info 等额外图标、把 `description` 渲染成控件下方正文，或用 Tooltip 包住整个控件 |

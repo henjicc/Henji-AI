@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+// 组件文案走 i18n：加载正式语言资源，断言按中英两种文案匹配
+import '@/i18n/config'
 import { RelightDirectionVisualizer } from './RelightDirectionVisualizer'
 
 afterEach(cleanup)
@@ -11,9 +13,9 @@ describe('轮廓光灯位交互', () => {
     const onRim = vi.fn()
     render(<RelightDirectionVisualizer direction="right" rimDirection="top-left" sourceImage={null}
       sourceAlt="源图" onDirectionChange={onMain} onRimDirectionChange={onRim} />)
-    fireEvent.click(screen.getByRole('button', { name: '正面' }))
-    const main = screen.getByRole('slider', { name: '主光方向' })
-    const rim = screen.getByRole('slider', { name: '轮廓光方向' })
+    fireEvent.click(screen.getByRole('radio', { name: /^(正面|Front)$/ }))
+    const main = screen.getByRole('slider', { name: /^(主光方向|Key light direction)$/ })
+    const rim = screen.getByRole('slider', { name: /^(轮廓光方向|Rim light direction)$/ })
     main.parentElement!.getBoundingClientRect = () => ({
       x: 0, y: 0, width: 200, height: 200, top: 0, right: 200, bottom: 200, left: 0, toJSON: () => ({}),
     })
@@ -48,11 +50,11 @@ describe('轮廓光灯位交互', () => {
     const onRim = vi.fn()
     const props = { direction: 'none' as const, sourceImage: null, sourceAlt: '源图', onDirectionChange: vi.fn(), onRimDirectionChange: onRim }
     const view = render(<RelightDirectionVisualizer {...props} rimDirection="top-left" />)
-    fireEvent.keyDown(screen.getByRole('slider', { name: '轮廓光方向' }), { key: 'ArrowRight' })
+    fireEvent.keyDown(screen.getByRole('slider', { name: /^(轮廓光方向|Rim light direction)$/ }), { key: 'ArrowRight' })
     expect(onRim).toHaveBeenCalledWith('top')
     expect(props.onDirectionChange).not.toHaveBeenCalled()
     view.rerender(<RelightDirectionVisualizer {...props} rimDirection="off" />)
-    expect(screen.queryByRole('slider', { name: '轮廓光方向' })).toBeNull()
+    expect(screen.queryByRole('slider', { name: /^(轮廓光方向|Rim light direction)$/ })).toBeNull()
     expect(view.container.querySelector('[data-relight-rim-light]')).toBeNull()
   })
 })
