@@ -632,6 +632,7 @@
     "v3": {
       "title": "图片编辑",
       "previewAlt": "图片编辑预览",
+      "previewRenderFailed": "预览暂时没能刷新，编辑内容不受影响。继续编辑或重新打开图片即可恢复。",
       "zoomIn": "放大",
       "zoomOut": "缩小",
       "panels": {

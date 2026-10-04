@@ -1813,13 +1813,15 @@ function createToolboxScenes(context) {
         const finalAnnotationBox = await finalAnnotationOverlay.boundingBox()
         if (!finalAnnotationBox) throw new Error('控制点视觉验收无法读取标注画布')
         const beforeFinalAnnotation = await readRevision()
+        // 前面的“向右旋转 90° + 1:1 裁剪”把箭头转成左上→右下的对角线，箭头头部落在右下角附近；
+        // 在已有标注上按下是“选中它”而不是新画（正式交互），所以椭圆从左下角的空白处起笔（5.5 IE-09）。
         await page.mouse.move(
-          finalAnnotationBox.x + finalAnnotationBox.width * 0.82,
+          finalAnnotationBox.x + finalAnnotationBox.width * 0.1,
           finalAnnotationBox.y + finalAnnotationBox.height * 0.72,
         )
         await page.mouse.down()
         await page.mouse.move(
-          finalAnnotationBox.x + finalAnnotationBox.width * 0.95,
+          finalAnnotationBox.x + finalAnnotationBox.width * 0.26,
           finalAnnotationBox.y + finalAnnotationBox.height * 0.9,
           { steps: 6 },
         )

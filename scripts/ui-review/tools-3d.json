@@ -1,0 +1,796 @@
+[
+  {
+    "id": "review-tools-home",
+    "surface": "工具",
+    "name": "核对-工具首页（静息、卡片悬停、最近文件空）",
+    "checklist": [
+      "T01.1",
+      "T01.2",
+      "T01.3"
+    ],
+    "writesUserData": false,
+    "steps": [
+      {
+        "enter": "toolbox"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/^(返回工程列表|返回列表)$/"
+        },
+        "ifPresent": {
+          "role": "button",
+          "name": "/^(返回工程列表|返回列表)$/"
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/^返回工具$/"
+        },
+        "ifPresent": {
+          "role": "button",
+          "name": "/^返回工具$/"
+        }
+      },
+      {
+        "waitFor": {
+          "selector": "[data-ui-page-header]"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "home"
+      },
+      {
+        "hover": {
+          "role": "button",
+          "name": "/^3D 镜头参考/"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "home-card-hover"
+      }
+    ]
+  },
+  {
+    "id": "review-tools-camera-stage",
+    "surface": "工具",
+    "name": "核对-3D 镜头参考（工程列表、命令带、停靠面板、状态关键帧、路径、输出与导出中/完成）",
+    "checklist": [
+      "T01.4",
+      "T09.1",
+      "T09.2",
+      "T09.3",
+      "T10.1",
+      "T10.2",
+      "T10.3",
+      "T10.4",
+      "T10.5",
+      "T11.1",
+      "T11.2",
+      "T11.3",
+      "T11.4",
+      "T11.5",
+      "T12.1",
+      "T12.2",
+      "T12.3",
+      "T12.4",
+      "T12.5"
+    ],
+    "writesUserData": true,
+    "steps": [
+      {
+        "enter": "toolbox"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/^(返回工程列表|返回列表)$/"
+        },
+        "ifPresent": {
+          "role": "button",
+          "name": "/^(返回工程列表|返回列表)$/"
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/^返回工具$/"
+        },
+        "ifPresent": {
+          "role": "button",
+          "name": "/^返回工具$/"
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/^3D 镜头参考/"
+        }
+      },
+      {
+        "waitFor": {
+          "role": "button",
+          "name": "/^新建工程$/"
+        },
+        "timeout": 12000
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "list-initial"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/^新建工程$/"
+        }
+      },
+      {
+        "waitFor": {
+          "role": "dialog"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "list-create-dialog"
+      },
+      {
+        "fill": {
+          "target": {
+            "role": "textbox",
+            "within": {
+              "role": "dialog"
+            }
+          },
+          "text": "核对-3D镜头 第一批"
+        }
+      },
+      {
+        "press": {
+          "key": "Enter",
+          "target": {
+            "role": "textbox",
+            "within": {
+              "role": "dialog"
+            }
+          }
+        }
+      },
+      {
+        "waitFor": {
+          "role": "button",
+          "name": "/^添加球体$/"
+        },
+        "timeout": 15000
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": {
+          "name": "editor-empty-scene",
+          "metrics": {
+            "selector": "[data-command-bar]"
+          }
+        }
+      },
+      {
+        "open": {
+          "trigger": {
+            "role": "button",
+            "name": "/^面板菜单$/",
+            "nth": 0
+          },
+          "expect": {
+            "role": "menu",
+            "name": "面板菜单"
+          }
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "dock-panel-menu"
+      },
+      {
+        "escape": {}
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/^添加立方体$/"
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/^添加球体$/"
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/^添加角色$/"
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/^添加摄像机$/"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": {
+          "name": "editor-objects",
+          "metrics": {
+            "selector": "[data-command-bar]"
+          }
+        }
+      },
+      {
+        "hover": {
+          "role": "button",
+          "name": "/球体/",
+          "within": {
+            "role": "list",
+            "name": "场景对象"
+          }
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "objects-row-hover"
+      },
+      {
+        "doubleClick": {
+          "role": "button",
+          "name": "/球体/",
+          "within": {
+            "role": "list",
+            "name": "场景对象"
+          }
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "press": {
+          "key": "End",
+          "target": {
+            "role": "textbox",
+            "name": "对象名称"
+          }
+        }
+      },
+      {
+        "capture": "objects-rename"
+      },
+      {
+        "press": "Escape"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/立方体/",
+          "within": {
+            "role": "list",
+            "name": "场景对象"
+          }
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "property-primitive"
+      },
+      {
+        "focus": {
+          "role": "spinbutton",
+          "name": "位置 X"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "property-field-focus"
+      },
+      {
+        "press": "Escape"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/^旋转，快捷键 E$/"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": {
+          "name": "tool-rotate-selected",
+          "metrics": {
+            "selector": "[data-command-bar]"
+          }
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/^移动，快捷键 W$/"
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/角色/",
+          "within": {
+            "role": "list",
+            "name": "场景对象"
+          }
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "property-character"
+      },
+      {
+        "open": {
+          "trigger": {
+            "role": "button",
+            "name": "动作"
+          },
+          "expect": {
+            "role": "listbox"
+          }
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "property-character-dropdown"
+      },
+      {
+        "escape": {}
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/^身体$/"
+        },
+        "optional": true
+      },
+      {
+        "scroll": {
+          "target": {
+            "text": "姿态调节"
+          },
+          "dy": 400
+        },
+        "optional": true
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "property-character-pose"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/摄像机/",
+          "within": {
+            "role": "list",
+            "name": "场景对象"
+          },
+          "nth": "last"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "property-camera"
+      },
+      {
+        "scroll": {
+          "target": {
+            "text": "效果器"
+          },
+          "dy": 400
+        },
+        "optional": true
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "property-camera-effectors"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/^添加关键帧$/"
+        }
+      },
+      {
+        "click": {
+          "selector": "[data-timeline-ruler]",
+          "at": {
+            "x": 120,
+            "y": 10
+          }
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/立方体/",
+          "within": {
+            "role": "list",
+            "name": "场景对象"
+          }
+        }
+      },
+      {
+        "fill": {
+          "target": {
+            "role": "spinbutton",
+            "name": "位置 X"
+          },
+          "text": "2"
+        }
+      },
+      {
+        "press": {
+          "key": "Enter",
+          "target": {
+            "role": "spinbutton",
+            "name": "位置 X"
+          }
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/^添加关键帧$/"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "timeline-two-keyframes"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/^关键帧 /",
+          "nth": 0
+        }
+      },
+      {
+        "waitFor": {
+          "role": "textbox",
+          "name": "关键帧名称"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "timeline-keyframe-popover"
+      },
+      {
+        "escape": {}
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/^过渡参数：/"
+        }
+      },
+      {
+        "waitFor": {
+          "role": "spinbutton",
+          "name": "过渡时长（帧）"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "timeline-transition-popover"
+      },
+      {
+        "escape": {}
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/^编辑路径，快捷键 G$/"
+        }
+      },
+      {
+        "waitFor": {
+          "role": "button",
+          "name": "/^更多路径参数$/"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": {
+          "name": "path-context-bar",
+          "metrics": {
+            "selector": "[data-command-bar]"
+          }
+        }
+      },
+      {
+        "open": {
+          "trigger": {
+            "role": "button",
+            "name": "/^更多路径参数$/"
+          },
+          "expect": {
+            "role": "spinbutton",
+            "name": "起步延迟（秒）"
+          }
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "path-more-params"
+      },
+      {
+        "escape": {}
+      },
+      {
+        "open": {
+          "trigger": {
+            "role": "button",
+            "name": "/^路径$/"
+          },
+          "expect": {
+            "role": "listbox"
+          }
+        },
+        "ifPresent": {
+          "role": "button",
+          "name": "/^路径$/"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "path-choice-menu"
+      },
+      {
+        "escape": {}
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/^移动，快捷键 W$/"
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/^播放$/"
+        }
+      },
+      {
+        "wait": 200
+      },
+      {
+        "capture": "timeline-playing"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/^暂停$/"
+        },
+        "optional": true
+      },
+      {
+        "open": {
+          "trigger": {
+            "role": "button",
+            "name": "/^导出视频$/"
+          },
+          "expect": {
+            "role": "button",
+            "name": "/^导出 MP4$/"
+          }
+        },
+        "optional": true
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "output-video-panel"
+      },
+      {
+        "stubDialogs": {}
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/^导出 MP4$/"
+        }
+      },
+      {
+        "waitFor": {
+          "text": "/^(导出|编码) \\d+\\/\\d+$/"
+        },
+        "timeout": 15000,
+        "optional": true
+      },
+      {
+        "capture": {
+          "name": "output-video-exporting",
+          "metrics": {
+            "selector": "[data-command-bar]"
+          }
+        }
+      },
+      {
+        "waitFor": {
+          "text": "/^视频已导出/"
+        },
+        "timeout": 120000
+      },
+      {
+        "capture": "output-video-done"
+      },
+      {
+        "open": {
+          "trigger": {
+            "role": "button",
+            "name": "/^导出后加入资产库/"
+          }
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "output-asset-target"
+      },
+      {
+        "escape": {}
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/^返回工程列表$/"
+        }
+      },
+      {
+        "waitFor": {
+          "role": "button",
+          "name": "/^新建工程$/"
+        },
+        "timeout": 12000
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/^新建工程$/"
+        }
+      },
+      {
+        "waitFor": {
+          "role": "dialog"
+        }
+      },
+      {
+        "fill": {
+          "target": {
+            "role": "textbox",
+            "within": {
+              "role": "dialog"
+            }
+          },
+          "text": "核对-3D镜头 名称很长的第二个工程用来看截断"
+        }
+      },
+      {
+        "press": {
+          "key": "Enter",
+          "target": {
+            "role": "textbox",
+            "within": {
+              "role": "dialog"
+            }
+          }
+        }
+      },
+      {
+        "waitFor": {
+          "role": "button",
+          "name": "/^添加球体$/"
+        },
+        "timeout": 15000
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/^返回工程列表$/"
+        }
+      },
+      {
+        "waitFor": {
+          "role": "button",
+          "name": "/^新建工程$/"
+        },
+        "timeout": 12000
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "list-multiple"
+      },
+      {
+        "hover": {
+          "role": "button",
+          "name": "/核对-3D镜头 第一批/"
+        },
+        "optional": true
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "list-card-hover"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/^返回工具$/"
+        }
+      },
+      {
+        "waitFor": {
+          "selector": "[data-ui-page-header]"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "home-recent-files"
+      }
+    ]
+  }
+]

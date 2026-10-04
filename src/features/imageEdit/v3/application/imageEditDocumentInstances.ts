@@ -5,6 +5,8 @@ import { ImageEditPersistenceOwnerV3, type ImageEditPersistenceHostV3 } from './
 import { ImageEditPersistenceV3Queue, type ImageEditPersistenceV3Options } from './imageEditPersistenceQueue'
 import { createLogger } from '@/core/logging'
 import type { ImageEditorV3ResourceDescriptor } from '@/platform/contracts/imageEditorV3'
+import { collectImageEditResourceRolesV3 } from '@/core/imageEdit/v3/resourceRoles'
+import { IMAGE_EDITOR_V3_BRUSH_TILE_MEDIA_TYPE } from './imageEditorResourceDescriptorsV3'
 import { assertApplicationWritesAllowed } from '@/core/applicationLifecycle/applicationWriteBarrier'
 
 const logger = createLogger('features.imageEdit.v3.document_instances')
@@ -60,8 +62,12 @@ export function readImageEditDocumentInstanceV3(documentId: string) {
   if (!instance?.persistenceOwner) return undefined
   const persistence = instance.bus.getPersistenceSnapshot()
   const resourceByteSizes = instance.bus.getResourceByteSizes()
+  // 内存中的实例只有字节数；画笔/蒙版瓦片按文档与历史的稀疏角色补上 brush 媒体类型，
+  // 否则重开编辑器时视口合成会因“画笔瓦片媒体类型不匹配”失败（5.5 IE-11）。其余资源类型未知仍为 null。
+  const sparse = collectImageEditResourceRolesV3(persistence.document, persistence.history).sparse
   const resourceDescriptors: ImageEditorV3ResourceDescriptor[] = Object.entries(resourceByteSizes).map(([resourceRef, byteLength]) => ({
-    resourceRef: resourceRef as ImageEditorV3ResourceDescriptor['resourceRef'], byteLength, mediaType: null,
+    resourceRef: resourceRef as ImageEditorV3ResourceDescriptor['resourceRef'], byteLength,
+    mediaType: sparse.has(resourceRef) ? IMAGE_EDITOR_V3_BRUSH_TILE_MEDIA_TYPE : null,
   }))
   return { persistence, document: persistence.document, history: persistence.history,
     reference: instance.persistenceOwner.getReference(), resourceByteSizes, resourceDescriptors }

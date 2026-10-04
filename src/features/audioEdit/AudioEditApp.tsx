@@ -17,17 +17,20 @@ import {
   UI_TEXT_PANEL_TITLE_CLASS,
   UI_TEXT_SECONDARY_CLASS,
   UI_TEXT_META_CLASS,
+  Dropdown,
   UiButton,
   UiChipButton,
+  UiEmpty,
+  UiFormRow,
+  UiGroup,
   UiIconButton,
   UiSwitch,
   UiTextArea,
   UiTextToken,
   UiToolbar,
-  UiInput,
-  UiSelect,
   UiRangeInput,
 } from '@/components/ui'
+import NumberInput from '@/components/ui/NumberInput'
 import type { AudioEditAsrModel } from '@/platform/contracts/audioEdit'
 import type { AudioEditProcessorDescriptor, AudioEditProjectDocument, AudioEditProjectSummary, AudioEditTask, AudioEditRange } from '@/core/audioEdit/types'
 import { useNotification } from '@/contexts/NotificationContext'
@@ -136,11 +139,12 @@ function Transcript({
       onTouchMove={() => { followPausedUntilRef.current = Date.now() + 2500 }}
     >
       {project.transcript.length === 0 ? (
-        <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
-          <FileAudio className="h-10 w-10 text-text3" />
-          <div className={UI_TEXT_PANEL_TITLE_CLASS}>等待转写</div>
-          <div className={UI_TEXT_SECONDARY_CLASS}>选择已配置的语音识别模型，获得可剪辑的时间戳文本。</div>
-        </div>
+        <UiEmpty
+          className="h-full"
+          icon={<FileAudio size={40} strokeWidth={1.5} aria-hidden="true" />}
+          title="等待转写"
+          description="在右栏开始转写，得到可逐词剪辑的时间戳文本。"
+        />
       ) : (
         <Virtuoso
           ref={listRef}
@@ -197,6 +201,11 @@ function Transcript({
       )}
     </div>
   )
+}
+
+/** 滑杆行标签：名称 + 当前读数（读数用等宽数字，拖动时不跳宽）。 */
+function RangeLabel({ name, value }: { name: string; value: string }): JSX.Element {
+  return <span className="flex items-baseline justify-between gap-2"><span>{name}</span><span className="tabular-nums text-text3">{value}</span></span>
 }
 
 /** 逐字稿首尾留白（虚拟列表内部，避免外层 padding 把滚动条也推进来）。 */
@@ -406,7 +415,7 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
     </UiToolbar>
     <div className="flex min-h-0 flex-1">
       <main className="min-h-0 min-w-0 flex-1"><Transcript project={project} onSeek={navigateToFrame} onEdit={setEditingBlockId} onDelete={deleteBlock} disabled={disabled} search={textSearch} /></main>
-      <aside aria-label="处理" className="w-[clamp(15rem,26vw,18.75rem)] shrink-0 overflow-y-auto border-l border-gap bg-panel p-4">
+      <aside aria-label="处理" className="w-64 shrink-0 overflow-y-auto border-l border-gap bg-panel p-4 xl:w-72">
         <fieldset disabled={disabled} className="flex min-w-0 flex-col gap-5">
           {!project.transcript.length && <section className="flex flex-col gap-2.5">
             <h2 className={UI_TEXT_PANEL_TITLE_CLASS}>语音识别</h2>
@@ -420,17 +429,17 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
             <p className={`leading-normal ${UI_TEXT_SECONDARY_CLASS}`}>压缩停顿、清理语气词。黄色区域预览将要删除的声音，处理后仍可逐词调整。</p>
             <UiButton variant="secondary" className="w-full gap-1.5" disabled={Boolean(sourceError)} onClick={() => void run(async () => { const result = await quickProcessAudioEdit(project.id, range); showNotification(`已处理停顿和所选语气词，缩短 ${(result.shortenedMs / 1000).toFixed(2)} 秒，可整批撤销`) })}><Sparkles size={15} />快速处理</UiButton>
           </section>
-          <div className="flex flex-col border-t border-line pt-2">
+          <UiGroup divided titleTone="compact" gap="none">
             <AudioEditDisclosure title="自定义处理参数" value={`停顿 ≥ ${settings.silenceThresholdMs} 毫秒`}>
-              <label className={`flex items-center justify-between gap-2 ${UI_TEXT_SECONDARY_CLASS}`}>仅处理选区<UiSwitch checked={selectionOnly} disabled={!selectedBlocks.length && !waveSelection} onCheckedChange={setSelectionOnly} /></label>
-              <label className={`flex flex-col gap-1.5 ${UI_TEXT_SECONDARY_CLASS}`}>最短停顿 · {settings.silenceThresholdMs} 毫秒<UiRangeInput aria-label="最短停顿" min={100} max={3000} step={50} value={settings.silenceThresholdMs} onChange={(event) => { const value = Number(event.target.value); update({ batchSettings: { ...settings, silenceThresholdMs: value, retainedSilenceMs: Math.min(settings.retainedSilenceMs, value - 50) } }) }} /></label>
-              <label className={`flex flex-col gap-1.5 ${UI_TEXT_SECONDARY_CLASS}`}>保留时长 · {settings.retainedSilenceMs} 毫秒<UiRangeInput aria-label="保留时长" min={0} max={settings.silenceThresholdMs - 50} step={50} value={settings.retainedSilenceMs} onChange={(event) => update({ batchSettings: { ...settings, retainedSilenceMs: Number(event.target.value) } })} /></label>
-              <label className={`flex flex-col gap-1.5 ${UI_TEXT_SECONDARY_CLASS}`}>静音阈值 · {settings.noiseDb} dB<UiRangeInput aria-label="静音阈值" min={-80} max={-10} step={1} value={settings.noiseDb} onChange={(event) => update({ batchSettings: { ...settings, noiseDb: Number(event.target.value) } })} /></label>
-              <label className={`flex items-center justify-between gap-2 ${UI_TEXT_SECONDARY_CLASS}`}>包括片头片尾<UiSwitch checked={settings.trimEdges} onCheckedChange={(value) => update({ batchSettings: { ...settings, trimEdges: value } })} /></label>
-              <UiButton className="w-full" disabled={Boolean(sourceError)} onClick={() => void run(async () => { const result = await compressAudioEditSilence(project.id, range); showNotification(`处理 ${result.count} 处停顿，缩短 ${(result.shortenedMs / 1000).toFixed(2)} 秒`) })}>压缩停顿</UiButton>
+              <UiFormRow label="仅处理选区" density="compact" inline><UiSwitch aria-label="仅处理选区" checked={selectionOnly} disabled={!selectedBlocks.length && !waveSelection} onCheckedChange={setSelectionOnly} /></UiFormRow>
+              <UiFormRow label={<RangeLabel name="最短停顿" value={`${settings.silenceThresholdMs} 毫秒`} />} density="compact"><UiRangeInput aria-label="最短停顿" min={100} max={3000} step={50} value={settings.silenceThresholdMs} onChange={(event) => { const value = Number(event.target.value); update({ batchSettings: { ...settings, silenceThresholdMs: value, retainedSilenceMs: Math.min(settings.retainedSilenceMs, value - 50) } }) }} /></UiFormRow>
+              <UiFormRow label={<RangeLabel name="保留时长" value={`${settings.retainedSilenceMs} 毫秒`} />} density="compact"><UiRangeInput aria-label="保留时长" min={0} max={settings.silenceThresholdMs - 50} step={50} value={settings.retainedSilenceMs} onChange={(event) => update({ batchSettings: { ...settings, retainedSilenceMs: Number(event.target.value) } })} /></UiFormRow>
+              <UiFormRow label={<RangeLabel name="静音阈值" value={`${settings.noiseDb} dB`} />} density="compact"><UiRangeInput aria-label="静音阈值" min={-80} max={-10} step={1} value={settings.noiseDb} onChange={(event) => update({ batchSettings: { ...settings, noiseDb: Number(event.target.value) } })} /></UiFormRow>
+              <UiFormRow label="包括片头片尾" density="compact" inline><UiSwitch aria-label="包括片头片尾" checked={settings.trimEdges} onCheckedChange={(value) => update({ batchSettings: { ...settings, trimEdges: value } })} /></UiFormRow>
+              <UiButton variant="secondary" className="w-full" disabled={Boolean(sourceError)} onClick={() => void run(async () => { const result = await compressAudioEditSilence(project.id, range); showNotification(`处理 ${result.count} 处停顿，缩短 ${(result.shortenedMs / 1000).toFixed(2)} 秒`) })}>压缩停顿</UiButton>
               <p className={UI_TEXT_META_CLASS}>选择需要清理的词类；可能有语义的词默认保留。</p>
               <div role="group" aria-label="语气词" className="flex flex-wrap gap-1">{['嗯', '呃', '额', '那个', '就是', '啊'].map((word) => <UiChipButton key={word} size="sm" active={settings.fillers.includes(word)} aria-pressed={settings.fillers.includes(word)} onClick={() => update({ batchSettings: { ...settings, fillers: settings.fillers.includes(word) ? settings.fillers.filter((value) => value !== word) : [...settings.fillers, word] } })}>{word}</UiChipButton>)}</div>
-              <UiButton className="w-full" onClick={() => void run(async () => showNotification(`清理 ${await cleanProjectAudioEditFillers(project.id, range)} 处语气词，可撤销或逐处恢复`))}>清理语气词</UiButton>
+              <UiButton variant="secondary" className="w-full" onClick={() => void run(async () => showNotification(`清理 ${await cleanProjectAudioEditFillers(project.id, range)} 处语气词，可撤销或逐处恢复`))}>清理语气词</UiButton>
             </AudioEditDisclosure>
             {enabledCuts.length > 0 && <AudioEditDisclosure title="已处理区间" value={`${enabledCuts.length} 处`}>
               <div className="flex flex-col">{enabledCuts.map((cut) => <div key={cut.id} className="flex items-center justify-between gap-2">
@@ -444,27 +453,33 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
               <UiButton className="self-start" onClick={() => void run(async () => { const value = await openDialog({ multiple: false, filters: [{ name: '文本', extensions: ['txt', 'md'] }] }); const path = Array.isArray(value) ? value[0] : value; if (path) state.setReferenceScript(await readTextFile(path)) })}>导入参考稿</UiButton>
             </AudioEditDisclosure>
             <AudioEditDisclosure title="声音处理" value={project.vstEnabled ? '试听已启用' : '关闭'}>
-              <label className={`flex items-center justify-between gap-2 ${UI_TEXT_SECONDARY_CLASS}`}>剪后试听启用<UiSwitch checked={project.vstEnabled} disabled={!plugins.length} onCheckedChange={(value) => void run(async () => { if (value) await prepareAudioEditProcessing(project.id, crypto.randomUUID()); state.setVstEnabled(value) })} /></label>
+              <UiFormRow label="剪后试听启用" density="compact" inline><UiSwitch aria-label="剪后试听启用" checked={project.vstEnabled} disabled={!plugins.length} onCheckedChange={(value) => void run(async () => { if (value) await prepareAudioEditProcessing(project.id, crypto.randomUUID()); state.setVstEnabled(value) })} /></UiFormRow>
               {!plugins.length && <p className={UI_TEXT_META_CLASS}>未发现兼容插件，可继续基础剪辑。</p>}
-              {plugins.map((plugin) => { const entry = project.processorChain?.find((item) => item.id === plugin.id); return <div key={plugin.id} className="flex flex-col gap-2"><label className="flex items-center justify-between gap-2 text-13 text-text1">{plugin.name}<UiSwitch checked={Boolean(entry?.enabled)} onCheckedChange={(enabled) => update({ vstEnabled: false, processorChain: [...(project.processorChain ?? []).filter((item) => item.id !== plugin.id).map((item) => processors.find((p) => p.id === item.id)?.semanticRole === plugin.semanticRole ? { ...item, enabled: false } : item), { id: plugin.id, enabled, parameters: entry?.parameters ?? {} }] })} /></label>{entry?.enabled && plugin.parameters?.map((parameter) => <label key={parameter.id} className={`flex flex-col gap-1 ${UI_TEXT_SECONDARY_CLASS}`}>{parameter.name}<UiInput size="sm" type="number" min={0} max={1} step={0.01} value={entry.parameters[parameter.name] ?? parameter.normalizedValue} onChange={(event) => update({ vstEnabled: false, processorChain: project.processorChain?.map((item) => item.id === plugin.id ? { ...item, parameters: { ...item.parameters, [parameter.name]: Number(event.target.value) } } : item) })} /></label>)}</div> })}
+              {plugins.map((plugin) => { const entry = project.processorChain?.find((item) => item.id === plugin.id); return <div key={plugin.id} className="flex flex-col gap-2"><UiFormRow label={plugin.name} density="compact" inline><UiSwitch aria-label={plugin.name} checked={Boolean(entry?.enabled)} onCheckedChange={(enabled) => update({ vstEnabled: false, processorChain: [...(project.processorChain ?? []).filter((item) => item.id !== plugin.id).map((item) => processors.find((p) => p.id === item.id)?.semanticRole === plugin.semanticRole ? { ...item, enabled: false } : item), { id: plugin.id, enabled, parameters: entry?.parameters ?? {} }] })} /></UiFormRow>{entry?.enabled && plugin.parameters?.map((parameter) => <UiFormRow key={parameter.id} label={parameter.name} density="compact" inline><NumberInput ariaLabel={parameter.name} size="sm" min={0} max={1} step={0.01} precision={2} widthClassName="w-20" align="right" commitOnChange value={entry.parameters[parameter.name] ?? parameter.normalizedValue} onChange={(next) => update({ vstEnabled: false, processorChain: project.processorChain?.map((item) => item.id === plugin.id ? { ...item, parameters: { ...item.parameters, [parameter.name]: next } } : item) })} /></UiFormRow>)}</div> })}
               <p className={UI_TEXT_META_CLASS}>配方随工程保存。更改后重新启用试听；切换到原始试听可旁路对比。</p>
             </AudioEditDisclosure>
             <AudioEditDisclosure title="交付设置" value={format === 'xml' ? 'XML' : 'WAV'}>
-              <UiSelect aria-label="导出格式" value={format} onChange={(event) => setFormat(event.target.value as 'xml' | 'wav')}><option value="xml">XML · 继续剪辑</option><option value="wav">WAV · 剪后音频</option></UiSelect>
-              {project.source.mediaType === 'audio' && format === 'xml' && <label className={`flex flex-col gap-1.5 ${UI_TEXT_SECONDARY_CLASS}`}>XML 帧率<UiSelect value={project.xmlFrameRate?.numerator ?? 25} onChange={(event) => update({ xmlFrameRate: { numerator: Number(event.target.value), denominator: 1 } })}>{[24, 25, 30, 50, 60].map((fps) => <option key={fps} value={fps}>{fps} fps</option>)}</UiSelect></label>}
-              <label className={`flex items-center justify-between gap-2 ${UI_TEXT_SECONDARY_CLASS}`}>附带 SRT 字幕<UiSwitch checked={withSrt} onCheckedChange={setWithSrt} /></label>
-              <label className={`flex items-center justify-between gap-2 ${UI_TEXT_SECONDARY_CLASS}`}>包含声音处理<UiSwitch checked={withRx} disabled={!plugins.length} onCheckedChange={setWithRx} /></label>
+              <UiFormRow label="导出格式" density="compact">
+                <Dropdown<'xml' | 'wav'> ariaLabel="导出格式" size="sm" className="w-full" minWidthStrategy="none" value={format} display={format === 'xml' ? 'XML · 继续剪辑' : 'WAV · 剪后音频'}
+                  options={[{ label: 'XML · 继续剪辑', value: 'xml' }, { label: 'WAV · 剪后音频', value: 'wav' }]} onSelect={setFormat} />
+              </UiFormRow>
+              {project.source.mediaType === 'audio' && format === 'xml' && <UiFormRow label="XML 帧率" density="compact">
+                <Dropdown<number> ariaLabel="XML 帧率" size="sm" className="w-full" minWidthStrategy="none" value={project.xmlFrameRate?.numerator ?? 25} display={`${project.xmlFrameRate?.numerator ?? 25} fps`}
+                  options={[24, 25, 30, 50, 60].map((fps) => ({ label: `${fps} fps`, value: fps }))} onSelect={(fps) => update({ xmlFrameRate: { numerator: fps, denominator: 1 } })} />
+              </UiFormRow>}
+              <UiFormRow label="附带 SRT 字幕" density="compact" inline><UiSwitch aria-label="附带 SRT 字幕" checked={withSrt} onCheckedChange={setWithSrt} /></UiFormRow>
+              <UiFormRow label="包含声音处理" density="compact" inline><UiSwitch aria-label="包含声音处理" checked={withRx} disabled={!plugins.length} onCheckedChange={setWithRx} /></UiFormRow>
               <p className={UI_TEXT_META_CLASS}>{withRx ? '同时保存全长处理音轨，XML 引用该音轨。' : 'XML 直接引用原文件；切点按视频帧向外对齐。XML 交付试听可核对差异。'}</p>
             </AudioEditDisclosure>
-          </div>
-          {selectedBlocks.length > 0 && <section className="flex flex-col gap-2 border-t border-line pt-3.5">
+          </UiGroup>
+          {selectedBlocks.length > 0 && <UiGroup divided titleTone="compact">
             <div className="text-xs tabular-nums text-text3">已选 {selectedBlocks.length} 个词 · {selectedSeconds.toFixed(1)} 秒</div>
             <div className="-mx-2 flex flex-wrap gap-0.5">
               <UiButton size="sm" variant="danger" onClick={() => state.setBlocksIncluded(selectedBlockIds, false)}><Trash2 size={14} className="mr-1" />删除声音</UiButton>
               <UiButton size="sm" onClick={() => state.setBlocksIncluded(selectedBlockIds, true)}><RotateCcw size={14} className="mr-1" />恢复</UiButton>
               <UiButton size="sm" onClick={() => update({ transcript: project.transcript.map((block) => selectedBlockIds.includes(block.id) ? { ...block, locked: !allLocked } : block) })}>{allLocked ? <LockOpen size={14} className="mr-1" /> : <Lock size={14} className="mr-1" />}{allLocked ? '解锁' : '锁定'}</UiButton>
             </div>
-          </section>}
+          </UiGroup>}
         </fieldset>
       </aside>
     </div>

@@ -1117,7 +1117,8 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
   /* 彻底中和 abyss 紫色强调色：所有引用它的地方（sash / 选中描边等）改用项目 accent */
   /*
    * 面板标签（设计稿面板头，任务 2.2）：标签条与面板同底（panel），32 高、12/500；
-   * 选中的可见标签 = 主要文字 + 底部 1.5px 主要文字色细线，其余标签辅助文字；不再用底色块区分标签。
+   * 选中的可见标签 = 主要文字 + 底部 1.5px 强调色细线（重要记录 012，与 UiChipButton subtle 面板标签一致；
+   * 非激活分组里的当前标签降为 line-strong 细线），其余标签辅助文字；不再用底色块区分标签。
    * 与 UiChipButton selectionRole="navigation" selectionAppearance="subtle" 是同一套面板标签外观。
    */
   --dv-color-abyss-accent: rgb(var(--accent-rgb));
@@ -1150,7 +1151,7 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
 }
 
 .henji-cameraStage-dock.dockview-theme-abyss .dv-groupview > .dv-tabs-and-actions-container .dv-tab.dv-active-tab {
-  box-shadow: inset 0 -1.5px 0 rgb(var(--text1-rgb));
+  box-shadow: inset 0 -1.5px 0 rgb(var(--accent-rgb));
 }
 
 .henji-cameraStage-dock.dockview-theme-abyss .dv-groupview.dv-inactive-group > .dv-tabs-and-actions-container .dv-tab.dv-active-tab {

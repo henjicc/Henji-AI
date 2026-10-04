@@ -50,6 +50,8 @@ const TransitionClipBlock: React.FC<TransitionClipBlockProps> = ({
   const left = isHardCut ? block.x - HARD_CUT_HIT_WIDTH / 2 : block.x
   const width = isHardCut ? HARD_CUT_HIT_WIDTH : Math.max(block.width, MIN_TRANSITION_WIDTH)
 
+  const transitionLabel = `过渡参数：关键帧 ${stateKeyframeIndex + 1} → 关键帧 ${stateKeyframeIndex + 2}`
+
   const handleDurationFramesChange = (frames: number): void => {
     updateStateKeyframeTiming(stateKeyframe.id, { transitionDuration: frames / Math.max(1, fps) })
   }
@@ -86,6 +88,7 @@ const TransitionClipBlock: React.FC<TransitionClipBlockProps> = ({
               role="button"
               tabIndex={0}
               data-panel-trigger-button
+              aria-label={transitionLabel}
               title={
                 camerasDiffer
                   ? '机位切换（强制硬切），点击查看详情'
@@ -106,6 +109,7 @@ const TransitionClipBlock: React.FC<TransitionClipBlockProps> = ({
               role="button"
               tabIndex={0}
               data-panel-trigger-button
+              aria-label={transitionLabel}
               title="区间末端切换机位，点击查看详情"
               className="flex h-full w-full cursor-pointer items-center justify-center gap-1 overflow-hidden border-y border-dashed border-line bg-hover/40 px-1 text-2xs text-text2 hover:bg-hover/70"
               onClick={togglePanel}
@@ -119,6 +123,7 @@ const TransitionClipBlock: React.FC<TransitionClipBlockProps> = ({
               role="button"
               tabIndex={0}
               data-panel-trigger-button
+              aria-label={transitionLabel}
               title={`过渡 ${stateKeyframe.transitionDuration.toFixed(2)}s`}
               className="flex h-full w-full cursor-pointer flex-col items-center justify-center gap-0.5 overflow-hidden border-y border-line bg-hover/50 px-1 text-2xs text-text2 transition-colors hover:bg-hover/80"
               onClick={togglePanel}

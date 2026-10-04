@@ -1,0 +1,816 @@
+[
+  {
+    "id": "review-tools-audio-edit",
+    "surface": "工具",
+    "name": "核对-口播剪辑（工程列表、未转写/已转写、逐字稿、波形区与选区、右栏、查找替换、撤销菜单、界面设置、文件菜单、导出）",
+    "checklist": [
+      "T02.1",
+      "T02.2",
+      "T02.3",
+      "T02.4",
+      "T03.1",
+      "T03.3",
+      "T03.4",
+      "T03.5",
+      "T03.6",
+      "T04.1",
+      "T04.2",
+      "T04.3"
+    ],
+    "writesUserData": true,
+    "steps": [
+      {
+        "enter": "toolbox"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/^返回工程列表$/"
+        },
+        "ifPresent": {
+          "role": "button",
+          "name": "/^返回工程列表$/"
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/^返回工具$/"
+        },
+        "ifPresent": {
+          "role": "button",
+          "name": "/^返回工具$/"
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/^口播剪辑/"
+        }
+      },
+      {
+        "waitFor": {
+          "role": "button",
+          "name": "/^导入音频或视频$/"
+        },
+        "timeout": 12000
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "audio-home-empty"
+      },
+      {
+        "seedAudioEdit": {
+          "name": "核对-口播 已转写",
+          "transcript": true
+        }
+      },
+      {
+        "seedAudioEdit": {
+          "name": "核对-口播 未转写",
+          "transcript": false
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/^返回工具$/"
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/^口播剪辑/"
+        }
+      },
+      {
+        "waitFor": {
+          "role": "button",
+          "name": "/核对-口播 已转写/"
+        },
+        "timeout": 12000
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "audio-home-projects"
+      },
+      {
+        "hover": {
+          "role": "button",
+          "name": "/核对-口播 已转写/"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "audio-home-card-hover"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/核对-口播 未转写/"
+        }
+      },
+      {
+        "waitFor": {
+          "role": "slider",
+          "name": "口播波形定位"
+        },
+        "timeout": 15000
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": {
+          "name": "audio-untranscribed",
+          "metrics": {
+            "selector": "[data-command-bar]"
+          }
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/^返回工程列表$/"
+        }
+      },
+      {
+        "waitFor": {
+          "role": "button",
+          "name": "/核对-口播 已转写/"
+        },
+        "timeout": 12000
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/核对-口播 已转写/"
+        }
+      },
+      {
+        "waitFor": {
+          "selector": "[data-audio-word=\"middle\"]"
+        },
+        "timeout": 15000
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": {
+          "name": "audio-editor",
+          "metrics": {
+            "selector": "[data-command-bar]"
+          }
+        }
+      },
+      {
+        "metrics": {
+          "name": "audio-transport",
+          "selector": "[data-audio-timeline] [data-ui-overflow-row]"
+        }
+      },
+      {
+        "click": {
+          "selector": "[data-audio-word=\"middle\"]"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "audio-word-selected"
+      },
+      {
+        "drag": {
+          "from": {
+            "role": "slider",
+            "name": "口播波形定位",
+            "at": {
+              "x": 160,
+              "y": 90
+            }
+          },
+          "to": {
+            "dx": 220,
+            "dy": 0
+          }
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": {
+          "name": "audio-wave-selection",
+          "metrics": {
+            "selector": "[data-audio-timeline] [data-ui-overflow-row]"
+          }
+        }
+      },
+      {
+        "click": {
+          "text": "自定义处理参数"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "audio-disclosure-open"
+      },
+      {
+        "click": {
+          "text": "交付设置"
+        }
+      },
+      {
+        "scroll": {
+          "target": {
+            "role": "complementary",
+            "name": "处理"
+          },
+          "dy": 600
+        }
+      },
+      {
+        "open": {
+          "trigger": {
+            "role": "button",
+            "name": "导出格式"
+          },
+          "expect": {
+            "role": "listbox"
+          }
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "audio-delivery-format-menu"
+      },
+      {
+        "escape": {}
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "查找与替换"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "audio-find"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "展开替换"
+        },
+        "optional": true
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "audio-find-replace"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "关闭查找替换"
+        }
+      },
+      {
+        "rightClick": {
+          "role": "button",
+          "name": "/^撤销/"
+        }
+      },
+      {
+        "waitFor": {
+          "role": "menu"
+        },
+        "optional": true
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "audio-undo-menu"
+      },
+      {
+        "escape": {}
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "快捷键与图例"
+        },
+        "ifPresent": {
+          "role": "button",
+          "name": "快捷键与图例"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "audio-shortcuts"
+      },
+      {
+        "escape": {}
+      },
+      {
+        "open": {
+          "trigger": {
+            "role": "button",
+            "name": "更多播放控制"
+          },
+          "expect": {
+            "selector": "[data-panel-scroll-region]"
+          }
+        },
+        "ifPresent": {
+          "role": "button",
+          "name": "更多播放控制"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "audio-transport-more"
+      },
+      {
+        "escape": {}
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "界面设置"
+        },
+        "ifPresent": {
+          "role": "button",
+          "name": "界面设置"
+        }
+      },
+      {
+        "waitFor": {
+          "role": "dialog"
+        },
+        "optional": true
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "audio-view-settings"
+      },
+      {
+        "escape": {}
+      },
+      {
+        "open": {
+          "trigger": {
+            "role": "button",
+            "name": "/核对-口播 已转写/",
+            "within": {
+              "selector": "[data-command-bar]"
+            }
+          },
+          "expect": {
+            "role": "menu",
+            "name": "工程"
+          }
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "audio-file-menu"
+      },
+      {
+        "escape": {}
+      },
+      {
+        "stubDialogs": {}
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/^导出$/"
+        }
+      },
+      {
+        "waitFor": {
+          "text": "/^已导出/"
+        },
+        "timeout": 30000
+      },
+      {
+        "capture": "audio-export-done"
+      }
+    ]
+  },
+  {
+    "id": "review-tools-image-edit",
+    "surface": "工具",
+    "name": "核对-图片编辑（空态、空白图弹窗、命令带、打开菜单、画笔/蒙版/选区/裁剪参数、标注、图层、混合模式、导出菜单）",
+    "checklist": [
+      "T05.1",
+      "T05.2",
+      "T05.3",
+      "T06.1",
+      "T06.2",
+      "T06.4",
+      "T06.5",
+      "T07.1",
+      "T07.2",
+      "T07.3",
+      "T07.4"
+    ],
+    "writesUserData": true,
+    "steps": [
+      {
+        "enter": "toolbox"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/^返回工程列表$/"
+        },
+        "ifPresent": {
+          "role": "button",
+          "name": "/^返回工程列表$/"
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/^返回工具$/"
+        },
+        "ifPresent": {
+          "role": "button",
+          "name": "/^返回工具$/"
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/^图片编辑/"
+        }
+      },
+      {
+        "waitFor": {
+          "role": "button",
+          "name": "/^从文件打开$/"
+        },
+        "timeout": 12000,
+        "optional": true
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "image-empty",
+        "ifPresent": {
+          "role": "button",
+          "name": "/^从文件打开$/"
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/^新建空白图片$/"
+        },
+        "ifPresent": {
+          "role": "button",
+          "name": "/^从文件打开$/"
+        }
+      },
+      {
+        "waitFor": {
+          "role": "dialog"
+        },
+        "optional": true
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "image-blank-dialog",
+        "ifPresent": {
+          "role": "dialog"
+        }
+      },
+      {
+        "escape": {}
+      },
+      {
+        "enter": {
+          "surface": "tool.image_edit",
+          "media": "resources/icons/icon.png"
+        }
+      },
+      {
+        "waitFor": {
+          "role": "button",
+          "name": "/^裁剪$/"
+        },
+        "timeout": 20000
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": {
+          "name": "image-editor",
+          "metrics": {
+            "selector": "[data-command-bar]"
+          }
+        }
+      },
+      {
+        "open": {
+          "trigger": {
+            "role": "button",
+            "name": "/^打开$/",
+            "within": {
+              "selector": "[data-command-bar]"
+            }
+          },
+          "expect": {
+            "role": "menu"
+          }
+        },
+        "optional": true
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "image-source-menu"
+      },
+      {
+        "escape": {}
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/^栅格画笔$/"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": {
+          "name": "image-tool-brush",
+          "metrics": {
+            "selector": "[data-command-bar]"
+          }
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/^编辑蒙版$/"
+        },
+        "optional": true
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "image-tool-mask"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/^矩形选择$/"
+        },
+        "optional": true
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": {
+          "name": "image-tool-select",
+          "metrics": {
+            "selector": "[data-command-bar]"
+          }
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/^裁剪$/"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": {
+          "name": "image-tool-crop",
+          "metrics": {
+            "selector": "[data-command-bar]"
+          }
+        }
+      },
+      {
+        "open": {
+          "trigger": {
+            "selector": "[data-crop-parameters] button[aria-haspopup=\"menu\"]"
+          },
+          "expect": {
+            "selector": "[data-crop-ratio-menu]"
+          }
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "image-crop-ratio-menu"
+      },
+      {
+        "escape": {}
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/^取消$/",
+          "within": {
+            "selector": "[data-crop-parameters]"
+          }
+        },
+        "optional": true
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/^标注工具$/"
+        },
+        "optional": true
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/^圆形标注$/"
+        },
+        "optional": true
+      },
+      {
+        "drag": {
+          "from": {
+            "selector": "[data-preview-surface]",
+            "at": {
+              "x": 80,
+              "y": 80
+            }
+          },
+          "to": {
+            "dx": 120,
+            "dy": 80
+          }
+        },
+        "optional": true
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": {
+          "name": "image-annotation-ellipse",
+          "metrics": {
+            "selector": "[data-command-bar]"
+          }
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/^箭头标注$/"
+        },
+        "optional": true
+      },
+      {
+        "drag": {
+          "from": {
+            "selector": "[data-preview-surface]",
+            "at": {
+              "x": 260,
+              "y": 220
+            }
+          },
+          "to": {
+            "dx": 140,
+            "dy": -60
+          }
+        },
+        "optional": true
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "image-annotation-arrow"
+      },
+      {
+        "hover": {
+          "selector": "[data-layers-panel] [role=\"treeitem\"], [data-layers-panel] [data-layer-row]",
+          "nth": 0
+        },
+        "optional": true
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "image-layers-hover"
+      },
+      {
+        "open": {
+          "trigger": {
+            "role": "button",
+            "name": "/^添加图层$/"
+          },
+          "expect": {
+            "selector": "[data-layer-add-menu]"
+          }
+        },
+        "optional": true
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "image-layer-add-menu"
+      },
+      {
+        "escape": {}
+      },
+      {
+        "click": {
+          "selector": "[data-properties-tab=\"basics\"]"
+        },
+        "optional": true
+      },
+      {
+        "open": {
+          "trigger": {
+            "role": "button",
+            "name": "混合模式"
+          },
+          "expect": {
+            "role": "listbox"
+          }
+        },
+        "optional": true
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "image-blend-mode-menu"
+      },
+      {
+        "escape": {}
+      },
+      {
+        "open": {
+          "trigger": {
+            "role": "button",
+            "name": "/^导出…$/"
+          },
+          "expect": {
+            "role": "menu"
+          }
+        },
+        "optional": true
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "image-export-menu"
+      },
+      {
+        "escape": {}
+      }
+    ]
+  }
+]

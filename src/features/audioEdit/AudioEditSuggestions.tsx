@@ -27,7 +27,7 @@ function ClueGroupRows({ group, project, onSeek, onResolve }: {
     </div>
     {group.items.slice(current * pageSize, (current + 1) * pageSize).map((item) => <div key={item.id} className="py-1">
       {/* 可定位的建议列表行（多行文字）：menu 选项，高度随内容 */}
-      <UiOptionButton variant="menu" className="w-full !justify-start !px-1" title="定位到这段声音" onClick={() => onSeek(item.startFrame)}>
+      <UiOptionButton variant="menu" className="w-full" title="定位到这段声音" onClick={() => onSeek(item.startFrame)}>
         <span className="mr-2 shrink-0 font-mono text-xs tabular-nums text-text3">{time(item.startFrame)}</span><span className="line-clamp-2 break-all text-xs text-text1">{context(item) || item.title}</span>
       </UiOptionButton>
       <div className="flex gap-1"><UiButton size="sm" onClick={() => onResolve([item.id], true)}>{item.kind === 'long_silence' ? '压缩' : '删除'}</UiButton><UiButton size="sm" onClick={() => onResolve([item.id], false)}>隐藏</UiButton></div>

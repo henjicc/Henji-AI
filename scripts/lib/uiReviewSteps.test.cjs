@@ -78,6 +78,25 @@ test('步骤：拖动、指标与 ifPresent 的参数校验', () => {
   assert.equal(normalizeStep({ capture: 'more', ifPresent: { role: 'button', name: '更多' } }, 's').ifPresent.name, '更多')
 })
 
+test('步骤：stubDialogs 默认替换保存对话框，open 需要非空文件数组', () => {
+  const plain = normalizeStep({ stubDialogs: {} }, 's')
+  assert.equal(plain.save, true)
+  assert.equal(plain.open, null)
+  const withOpen = normalizeStep({ stubDialogs: { save: false, open: ['docs/ref/test01.jpg'] } }, 's')
+  assert.equal(withOpen.save, false)
+  assert.deepEqual(withOpen.open, ['docs/ref/test01.jpg'])
+  assert.throws(() => normalizeStep({ stubDialogs: { open: [] } }, 's'), /非空文件数组/)
+})
+
+test('步骤：seedAudioEdit 需要工程名，默认带逐字稿', () => {
+  assert.deepEqual(
+    { name: normalizeStep({ seedAudioEdit: { name: '核对-口播' } }, 's').name, transcript: normalizeStep({ seedAudioEdit: { name: '核对-口播' } }, 's').transcript },
+    { name: '核对-口播', transcript: true },
+  )
+  assert.equal(normalizeStep({ seedAudioEdit: { name: '空', transcript: false } }, 's').transcript, false)
+  assert.throws(() => normalizeStep({ seedAudioEdit: {} }, 's'), /需要 name/)
+})
+
 test('定位：/正则/ 字符串解析为 RegExp，其余原样', () => {
   assert.deepEqual(parsePattern('/^模型：/i'), /^模型：/i)
   assert.equal(parsePattern('生成'), '生成')

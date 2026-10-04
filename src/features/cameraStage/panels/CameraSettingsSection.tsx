@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import NumberInput from '@/components/ui/NumberInput'
-import { Dropdown, UiRangeInput, UiSwitch } from '@/components/ui'
+import { Dropdown, UiFormRow, UiGroup } from '@/components/ui'
 import {
   cameraTargetFromRotation,
   getObjectLookAtPoint,
@@ -18,10 +18,10 @@ import type {
 } from '../domain/sceneTypes'
 import type { StageCameraEffector } from '../domain/stateKeyframeTypes'
 import { useCameraStageStore } from '../store/cameraStageStore'
+import { SliderNumberRow, SwitchRow, Vec3Row } from './panelFields'
 
 type LookAtMode = StageCameraLookAt['mode']
 
-const AXES: Array<keyof StageVec3> = ['x', 'y', 'z']
 const LOOK_AT_MODE_OPTIONS: Array<{ label: string; value: LookAtMode; disabled?: boolean }> = [
   { label: '手动坐标', value: 'manual' },
   { label: '锁定对象', value: 'object' },
@@ -48,6 +48,8 @@ const CustomAspectRatioInputs: React.FC<{ ratio: number; onChange: (ratio: numbe
   return (
     <div className="flex items-center gap-1.5">
       <NumberInput
+        ariaLabel="画幅宽"
+        size="sm"
         value={width}
         min={1}
         precision={0}
@@ -59,8 +61,10 @@ const CustomAspectRatioInputs: React.FC<{ ratio: number; onChange: (ratio: numbe
           commit(next, height)
         }}
       />
-      <span className="text-xs text-text2">:</span>
+      <span aria-hidden="true" className="text-xs text-text3">:</span>
       <NumberInput
+        ariaLabel="画幅高"
+        size="sm"
         value={height}
         min={1}
         precision={0}
@@ -75,36 +79,6 @@ const CustomAspectRatioInputs: React.FC<{ ratio: number; onChange: (ratio: numbe
     </div>
   )
 }
-
-const SectionTitle: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <div className="text-xs font-medium uppercase tracking-wide text-text2">{children}</div>
-)
-
-const Vec3NumberRow: React.FC<{
-  label: string
-  value: StageVec3
-  axes?: Array<keyof StageVec3>
-  onChange: (next: StageVec3) => void
-}> = ({ label, value, axes = AXES, onChange }) => (
-  <div>
-    <div className="mb-1 text-xs text-text2">{label}</div>
-    <div className="flex gap-1.5">
-      {axes.map((axis) => (
-        <NumberInput
-          key={axis}
-          value={value[axis]}
-          step={0.1}
-          precision={2}
-          widthClassName="w-full"
-          className="min-w-0 flex-1"
-          commitOnChange
-          wheelStep
-          onChange={(next) => onChange({ ...value, [axis]: next })}
-        />
-      ))}
-    </div>
-  </div>
-)
 
 function getLookAtModeDisplay(mode: LookAtMode): string {
   return mode === 'manual' ? '手动坐标' : '锁定对象'
@@ -199,129 +173,113 @@ const CameraSettingsSection: React.FC<{ object: StageCameraObject }> = ({ object
     const effector = object.effectors.find((item) => item.kind === kind)
     const value = effector ?? { id: `camera-${kind}`, kind, ...EFFECTOR_DEFAULTS[kind] }
     return (
-      <div className="flex flex-col gap-1.5">
-        <div className="flex items-center justify-between">
-          <span className="text-xs text-text2">{label}</span>
-          <UiSwitch checked={value.enabled} onCheckedChange={(enabled) => updateEffector(kind, { enabled })} />
-        </div>
+      <>
+        <SwitchRow label={label} checked={value.enabled} onChange={(enabled) => updateEffector(kind, { enabled })} />
         {value.enabled && (
           <>
-            <label className="flex items-center gap-2 text-xs text-text2">
-              <span className="w-10 shrink-0">强度</span>
-              <UiRangeInput min={0} max={2} step={0.05} value={value.intensity}
-                onChange={(event) => updateEffector(kind, { intensity: Number(event.target.value) })} />
-            </label>
-            <label className="flex items-center gap-2 text-xs text-text2">
-              <span className="w-10 shrink-0">频率</span>
-              <UiRangeInput min={0.05} max={3} step={0.05} value={value.frequency}
-                onChange={(event) => updateEffector(kind, { frequency: Number(event.target.value) })} />
-            </label>
+            <SliderNumberRow label="强度" ariaLabel={`${label}强度`} min={0} max={2} step={0.05} precision={2}
+              value={value.intensity} onChange={(intensity) => updateEffector(kind, { intensity })} />
+            <SliderNumberRow label="频率" ariaLabel={`${label}频率`} min={0.05} max={3} step={0.05} precision={2}
+              value={value.frequency} onChange={(frequency) => updateEffector(kind, { frequency })} />
           </>
         )}
-      </div>
+      </>
     )
   }
 
   return (
-    <div className="flex flex-col gap-3">
-      <SectionTitle>相机</SectionTitle>
-      <div className="flex flex-col gap-1.5">
-        <div className="text-xs text-text2">旋转（°）</div>
-        <Vec3NumberRow
-          label="X / Y / Z"
+    <>
+      <UiGroup title="相机" titleTone="compact" divided>
+        <Vec3Row
+          label="旋转（°）"
+          name="旋转"
           value={cameraRotation}
-          onChange={handleRotationChange}
+          step={0.1}
+          precision={2}
+          onAxisChange={(axis, next) => handleRotationChange({ ...cameraRotation, [axis]: next })}
         />
-      </div>
-      <div className="flex flex-col gap-1.5">
-        <div className="text-xs text-text2">焦距（mm，全画幅等效）</div>
-        <div className="flex items-center gap-1.5">
-          <UiRangeInput
-            min={10}
-            max={200}
-            step={1}
-            value={focalLength}
-            onChange={(event) => handleFocalLengthChange(Number(event.target.value))}
-          />
-          <NumberInput
-            value={focalLength}
-            step={1}
-            min={10}
-            max={200}
-            precision={0}
-            widthClassName="w-16"
-            className="shrink-0"
-            commitOnChange
-            wheelStep
-            onChange={handleFocalLengthChange}
-          />
-        </div>
-      </div>
-
-      <div className="flex flex-col gap-1.5">
-        <div className="text-xs text-text2">画幅比例</div>
-        <div className="flex items-center gap-1.5">
-          <Dropdown<StageCameraAspectRatioPreset>
-            value={object.aspectRatio.preset}
-            display={aspectPresetLabel}
-            options={CAMERA_ASPECT_RATIO_PRESETS.map((item) => ({ label: item.label, value: item.value }))}
-            onSelect={handleAspectPresetSelect}
-            className="w-full"
-            minWidthStrategy="none"
-            disabled={!isPrimaryCamera}
-          />
-          {isPrimaryCamera && object.aspectRatio.preset === 'custom' && (
-            <CustomAspectRatioInputs
-              key={object.id}
-              ratio={object.aspectRatio.ratio}
-              onChange={handleCustomRatioChange}
+        <SliderNumberRow
+          label="焦距（mm）"
+          info="按全画幅等效焦距计算：数值越小视野越广，越大越像长焦特写。"
+          ariaLabel="焦距"
+          min={10}
+          max={200}
+          step={1}
+          precision={0}
+          value={focalLength}
+          onChange={handleFocalLengthChange}
+        />
+        <UiFormRow
+          label="画幅比例"
+          density="compact"
+          hint={isPrimaryCamera ? undefined : '画幅由首个摄像机决定，如需更改请编辑首个摄像机'}
+        >
+          <div className="flex items-center gap-1.5">
+            <Dropdown<StageCameraAspectRatioPreset>
+              ariaLabel="画幅比例"
+              value={object.aspectRatio.preset}
+              display={aspectPresetLabel}
+              options={CAMERA_ASPECT_RATIO_PRESETS.map((item) => ({ label: item.label, value: item.value }))}
+              onSelect={handleAspectPresetSelect}
+              className="min-w-0 flex-1"
+              size="sm"
+              minWidthStrategy="none"
+              disabled={!isPrimaryCamera}
             />
-          )}
-        </div>
-        {!isPrimaryCamera && (
-          <div className="text-2xs text-text2">画幅由首个摄像机决定，如需更改请编辑首个摄像机</div>
-        )}
-      </div>
-
-      <div className="flex flex-col gap-1.5">
-        <div className="text-xs text-text2">注视目标</div>
-        <Dropdown<LookAtMode>
-          value={object.lookAt.mode}
-          display={getLookAtModeDisplay(object.lookAt.mode)}
-          options={LOOK_AT_MODE_OPTIONS.map((option) => ({
-            ...option,
-            disabled: option.value === 'object' && lockableTargets.length === 0,
-          }))}
-          onSelect={handleModeSelect}
-          className="w-full"
-          minWidthStrategy="none"
-        />
-      </div>
-
-      {object.lookAt.mode === 'manual' ? (
-        <Vec3NumberRow
-          label="目标坐标"
-          value={object.lookAt.target}
-          onChange={handleManualTargetChange}
-        />
-      ) : (
-        <div className="flex flex-col gap-1.5">
-          <div className="text-xs text-text2">锁定对象</div>
-          <Dropdown<string>
-            value={selectedTarget?.id}
-            display={selectedTarget?.name ?? '选择对象'}
-            options={lockableTargets.map((target) => ({ label: target.name, value: target.id }))}
-            onSelect={handleTargetSelect}
+            {isPrimaryCamera && object.aspectRatio.preset === 'custom' && (
+              <CustomAspectRatioInputs
+                key={object.id}
+                ratio={object.aspectRatio.ratio}
+                onChange={handleCustomRatioChange}
+              />
+            )}
+          </div>
+        </UiFormRow>
+        <UiFormRow label="注视目标" density="compact">
+          <Dropdown<LookAtMode>
+            ariaLabel="注视目标"
+            value={object.lookAt.mode}
+            display={getLookAtModeDisplay(object.lookAt.mode)}
+            options={LOOK_AT_MODE_OPTIONS.map((option) => ({
+              ...option,
+              disabled: option.value === 'object' && lockableTargets.length === 0,
+            }))}
+            onSelect={handleModeSelect}
             className="w-full"
+            size="sm"
             minWidthStrategy="none"
           />
-        </div>
-      )}
+        </UiFormRow>
+        {lookAt.mode === 'manual' ? (
+          <Vec3Row
+            label="目标坐标"
+            name="目标坐标"
+            value={lookAt.target}
+            step={0.1}
+            precision={2}
+            onAxisChange={(axis, next) => handleManualTargetChange({ ...lookAt.target, [axis]: next })}
+          />
+        ) : (
+          <UiFormRow label="锁定对象" density="compact">
+            <Dropdown<string>
+              ariaLabel="锁定对象"
+              value={selectedTarget?.id}
+              display={selectedTarget?.name ?? '选择对象'}
+              options={lockableTargets.map((target) => ({ label: target.name, value: target.id }))}
+              onSelect={handleTargetSelect}
+              className="w-full"
+              size="sm"
+              minWidthStrategy="none"
+            />
+          </UiFormRow>
+        )}
+      </UiGroup>
 
-      <SectionTitle>效果器</SectionTitle>
-      {renderEffector('handheld', '手持晃动')}
-      {renderEffector('breathing', '呼吸推拉')}
-    </div>
+      <UiGroup title="效果器" titleTone="compact" divided>
+        {renderEffector('handheld', '手持晃动')}
+        {renderEffector('breathing', '呼吸推拉')}
+      </UiGroup>
+    </>
   )
 }
 

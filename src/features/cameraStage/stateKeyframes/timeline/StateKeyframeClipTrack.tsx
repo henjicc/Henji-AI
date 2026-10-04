@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react'
+import { UiEmpty } from '@/components/ui'
 import { getCameraObjects } from '../../domain/cameraUtils'
 import type { StageObject } from '../../domain/sceneTypes'
 import type { StageStateKeyframe } from '../../domain/stateKeyframeTypes'
@@ -72,9 +73,11 @@ const StateKeyframeClipTrack: React.FC<StateKeyframeClipTrackProps> = ({
   return (
     <div className="relative shrink-0" style={{ width: contentWidth, height: STATE_KEYFRAME_CLIP_TRACK_HEIGHT }}>
       {stateKeyframes.length === 0 && (
-        <div className="absolute inset-0 flex items-center justify-center text-xs text-text2">
-          移动播放头后点击工具栏「+」记录状态
-        </div>
+        <UiEmpty
+          size="xs"
+          className="pointer-events-none absolute inset-0"
+          title="还没有关键帧：移动播放头，点“添加关键帧”记录当前场景状态"
+        />
       )}
       {layout.map((block) => {
         const stateKeyframe = layoutStateKeyframes[block.index]

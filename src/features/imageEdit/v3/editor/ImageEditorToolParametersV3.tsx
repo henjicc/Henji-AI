@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { UiChipButton, UiRangeInput, UiSwitch } from '@/components/ui'
+import { UI_SEGMENTED_TRACK_CLASS, UiOptionButton, UiRangeInput, UiSwitch } from '@/components/ui'
 import type { ImageEditCommandBusV3 } from '../application/imageEditCommandBus'
 import { useImageEditorSessionStoreV3 } from '../store'
 import { ImageEditorAnnotationParametersV3 } from './ImageEditorAnnotationParametersV3'
@@ -69,18 +69,18 @@ export function ImageEditorToolParametersV3({
             <div
               role="group"
               aria-label={t('imageEditor.v3.toolSettings.maskMode')}
-              className="flex shrink-0 items-center gap-1"
+              className={`shrink-0 ${UI_SEGMENTED_TRACK_CLASS}`}
             >
               {(['paint', 'erase'] as const).map((mode) => (
-                <UiChipButton
+                <UiOptionButton
                   key={mode}
-                  size="md" className="!px-2"
-                  selectionRole="navigation"
+                  variant="segment"
                   active={session.toolSettings.maskMode === mode}
+                  aria-pressed={session.toolSettings.maskMode === mode}
                   onClick={() => setToolSetting(controller.sessionId, 'maskMode', mode)}
                 >
                   {t(`imageEditor.v3.toolSettings.mask${mode === 'paint' ? 'Paint' : 'Erase'}`)}
-                </UiChipButton>
+                </UiOptionButton>
               ))}
             </div>
           ) : null}
@@ -118,22 +118,22 @@ export function ImageEditorToolParametersV3({
         <div
           role="group"
           aria-label={t('imageEditor.v3.selection.combineMode')}
-          className="flex shrink-0 items-center gap-1"
+          className={`shrink-0 ${UI_SEGMENTED_TRACK_CLASS}`}
         >
           {(['replace', 'add', 'subtract', 'intersect'] as const).map((mode) => {
             const disabled = !allowedSelectionModes.includes(mode)
             return (
-              <UiChipButton
+              <UiOptionButton
                 key={mode}
-                size="md" className="!px-2"
-                selectionRole="navigation"
+                variant="segment"
                 active={session.toolSettings.selectionCombineMode === mode}
+                aria-pressed={session.toolSettings.selectionCombineMode === mode}
                 disabled={disabled}
                 title={disabled ? t('imageEditor.v3.selection.replaceOnly') : undefined}
                 onClick={() => setToolSetting(controller.sessionId, 'selectionCombineMode', mode)}
               >
                 {t(`imageEditor.v3.selection.${mode}`)}
-              </UiChipButton>
+              </UiOptionButton>
             )
           })}
         </div>

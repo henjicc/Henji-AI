@@ -11,7 +11,7 @@ import {
 import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { UiChipButton, UiColorInput, UiIconButton, UiRangeInput, UiSwitch } from '@/components/ui'
+import { UI_SEGMENTED_TRACK_CLASS, UiColorInput, UiIconButton, UiOptionButton, UiRangeInput, UiSwitch } from '@/components/ui'
 import {
   MAX_MOSAIC_STRENGTH_PERCENT,
   MIN_MOSAIC_STRENGTH_PERCENT,
@@ -90,19 +90,17 @@ function ColorPicker({
       {IMAGE_EDITOR_PRESET_COLORS.map((color) => {
         const active = value.toLowerCase() === color.toLowerCase()
         return (
-          <UiIconButton shape="circle" size="sm"
+          <UiOptionButton
             key={color}
-            on={active}
-            className="p-1"
+            variant="swatch"
+            active={active}
+            aria-pressed={active}
             aria-label={`${label} ${color}`}
             title={`${label} ${color}`}
+            // 标注颜色是用户内容色（登记在 colorTokens），色样只能内联
+            style={{ backgroundColor: color }}
             onClick={() => onChange(color)}
-          >
-            <span
-              className="block h-full w-full rounded-full border border-line-strong"
-              style={{ backgroundColor: color }}
-            />
-          </UiIconButton>
+          />
         )
       })}
       <UiColorInput
@@ -343,17 +341,17 @@ export function ImageEditorAnnotationParametersV3({
       ) : null}
       {showMosaic ? (
         <>
-          <div role="group" aria-label={t('imageEditor.v3.toolSettings.mosaicMode')} className="flex gap-1">
+          <div role="group" aria-label={t('imageEditor.v3.toolSettings.mosaicMode')} className={`shrink-0 ${UI_SEGMENTED_TRACK_CLASS}`}>
             {(['pixel', 'blur'] as const).map((mode) => (
-              <UiChipButton
+              <UiOptionButton
                 key={mode}
-                size="md" className="!px-2"
-                selectionRole="navigation"
+                variant="segment"
                 active={mosaicMode === mode}
+                aria-pressed={mosaicMode === mode}
                 onClick={() => applyAndCommit({ mosaicMode: mode })}
               >
                 {t(`imageEditor.v3.toolSettings.mosaic${mode === 'pixel' ? 'Pixel' : 'Blur'}`)}
-              </UiChipButton>
+              </UiOptionButton>
             ))}
           </div>
           <label className="flex shrink-0 items-center gap-2 text-xs text-text2">

@@ -1,5 +1,5 @@
 import { Redo2, Undo2 } from 'lucide-react'
-import { useEffect, useRef } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { UiIconButton, UiToolbar } from '@/components/ui'
@@ -17,8 +17,9 @@ interface ImageEditorCommandBarV3Props {
 
 /**
  * 图片编辑器的单条命令带（工具页统一骨架 `UiToolbar variant="command"`）：
- * 左端 = 宿主注入的返回 + 编辑器名 + 撤销/重做；中间 = 随当前工具变化的参数（超宽时横向滚动）；
- * 右端 = 宿主注入的打开/发送/导出等动作。参数刻意留在同一行，不另开从属带。
+ * 左端 = 宿主注入的返回 + 编辑器名 + 撤销/重做；中间 = 随当前工具变化的参数；
+ * 右端 = 宿主注入的打开/发送/导出等动作。参数默认留在同一行；中间放不下时（960、展开助手侧栏）
+ * 整组移到紧贴命令带的从属带（共用底色与下边框），宽度够了再移回，不再横向滚动藏参数（5.5 IE-08）。
  */
 export function ImageEditorCommandBarV3({
   controller,
@@ -31,24 +32,59 @@ export function ImageEditorCommandBarV3({
     (state) => state.sessions[controller.sessionId]?.activeTool,
   )
   const parameterViewportRef = useRef<HTMLDivElement | null>(null)
+  const centerSlotRef = useRef<HTMLDivElement | null>(null)
+  // 参数在命令带中间放不下时移到从属带；neededWidth 记下放不下那一刻参数的完整宽度，
+  // 中间槽位宽度够了再移回，避免来回跳动。
+  const [stacked, setStacked] = useState(false)
+  const neededWidthRef = useRef(0)
 
   useEffect(() => {
     if (parameterViewportRef.current) parameterViewportRef.current.scrollLeft = 0
   }, [activeTool])
 
+  useLayoutEffect(() => {
+    const viewport = parameterViewportRef.current
+    const slot = centerSlotRef.current
+    const target = stacked ? slot : viewport
+    if (!target) return undefined
+    const evaluate = (): void => {
+      if (!stacked && viewport) {
+        if (viewport.scrollWidth > viewport.clientWidth + 1) {
+          neededWidthRef.current = viewport.scrollWidth
+          setStacked(true)
+        }
+        return
+      }
+      if (stacked && slot && slot.clientWidth >= neededWidthRef.current) setStacked(false)
+    }
+    evaluate()
+    const ResizeObserverCtor = target.ownerDocument.defaultView?.ResizeObserver
+    if (!ResizeObserverCtor) return undefined
+    const observer = new ResizeObserverCtor(evaluate)
+    observer.observe(target)
+    if (!stacked && viewport?.firstElementChild) observer.observe(viewport.firstElementChild)
+    return () => observer.disconnect()
+  }, [activeTool, stacked])
+
+  const parameters = (
+    <div
+      ref={parameterViewportRef}
+      data-tool-parameter-viewport
+      data-stacked={stacked ? 'true' : undefined}
+      className={stacked
+        ? 'flex min-h-10 min-w-0 flex-wrap items-center gap-y-1.5'
+        : 'flex h-10 min-w-0 max-w-full items-center overflow-hidden px-1'}
+    >
+      <ImageEditorToolParametersV3 controller={controller} bus={bus} />
+    </div>
+  )
+
   return (
     <UiToolbar
       variant="command"
       barProps={{ 'data-document-revision': controller.document.revision }}
-      center={(
-        <div
-          ref={parameterViewportRef}
-          data-tool-parameter-viewport
-          className="flex h-10 min-w-0 max-w-full items-center overflow-x-auto px-1"
-        >
-          <ImageEditorToolParametersV3 controller={controller} bus={bus} />
-        </div>
-      )}
+      center={stacked ? <div ref={centerSlotRef} aria-hidden="true" className="h-10 w-full" /> : parameters}
+      subordinate={stacked ? parameters : undefined}
       trailing={(
         <div
           data-command-bar-actions

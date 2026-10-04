@@ -1,6 +1,7 @@
 import { AlertTriangle, LoaderCircle } from 'lucide-react'
-import { useCallback, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
+import { createLogger } from '@/core/logging'
 
 import type { ImageEditCommandBusSnapshotV3, ImageEditCommandBusV3 } from '../application/imageEditCommandBus'
 import { useImageEditorInteractionStoreV3, useImageEditorSessionStoreV3 } from '../store'
@@ -56,6 +57,7 @@ interface ImageEditorPreviewV3Props extends Pick<
   controller: ImageEditorV3Controller
 }
 
+const logger = createLogger('imageEditor.preview')
 const ZERO_VIEWPORT_PAN_V3: ImageEditorViewportPanV3 = { x: 0, y: 0 }
 const EMPTY_PREVIEW_OVERRIDES_V3: ImageEditCommandBusSnapshotV3['previewOverrides'] = Object.freeze({})
 const EMPTY_SELECTED_LAYERS_V3: readonly string[] = []
@@ -199,6 +201,11 @@ export function ImageEditorPreviewV3({
     viewportLayout,
   )
   const { managedPreview, viewportComposite, viewportResult } = displayPipeline
+  const previewDiagnostic = previewRenderer ? null : viewportComposite.diagnostic ?? managedPreview.diagnostic
+  // 渲染失败的原始原因（设备丢失、着色器或解码错误）只进日志；界面只给出可行动的后果文案
+  useEffect(() => {
+    if (previewDiagnostic) logger.warn('图片编辑预览渲染失败', { event: 'image_editor.preview.render_failed', diagnostic: previewDiagnostic })
+  }, [previewDiagnostic])
   const gpuPresentationActive = viewportComposite.compositionBackend === 'gpu' && ['webgpu-surface', 'gpu-image-bitmap'].includes(viewportComposite.presentationBackend)
   const thumbnailDisplayReady = Boolean(
     viewportResult
@@ -507,18 +514,17 @@ export function ImageEditorPreviewV3({
         && !viewportResult
         && !managedPreview.result ? (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center" aria-hidden="true">
-          <LoaderCircle className="h-6 w-6 animate-spin text-text-dark-muted" />
+          <LoaderCircle className="h-6 w-6 animate-spin text-text3" />
         </div>
       ) : null}
-      {!previewRenderer && (viewportComposite.diagnostic || managedPreview.diagnostic) ? (
+      {previewDiagnostic ? (
         <div
           role="status"
           className="ui-glass absolute left-1/2 top-3 flex max-w-[min(34rem,calc(100%-1.5rem))] -translate-x-1/2 items-start gap-2 rounded-lg px-3 py-2 text-xs text-text1"
         >
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning-text" aria-hidden="true" />
-          <span className="whitespace-pre-line">
-            {viewportComposite.diagnostic ?? managedPreview.diagnostic}
-          </span>
+          {/* 原始渲染错误只进日志（见上方 effect），界面只说用户能据此行动的后果 */}
+          <span>{t('imageEditor.v3.previewRenderFailed')}</span>
         </div>
       ) : null}
       {navigation.effectiveTool === 'move' && layerMoveHandlers.unavailableReason

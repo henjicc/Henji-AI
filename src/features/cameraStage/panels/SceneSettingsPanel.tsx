@@ -1,13 +1,9 @@
 import React from 'react'
-import NumberInput from '@/components/ui/NumberInput'
-import { Dropdown, UiColorInput, UiRangeInput, UiSwitch } from '@/components/ui'
+import { Dropdown, UiFormRow, UiGroup, UiSwitch } from '@/components/ui'
 import { GROUND_PATTERN_OPTIONS } from '../domain/sceneDefaults'
-import type { StageGroundPattern, StageVec3 } from '../domain/sceneTypes'
+import type { StageGroundPattern } from '../domain/sceneTypes'
 import { useCameraStageStore } from '../store/cameraStageStore'
-
-const SectionTitle: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <div className="text-xs font-medium uppercase tracking-wide text-text2">{children}</div>
-)
+import { ColorRow, SliderNumberRow, SwitchRow, Vec3Row } from './panelFields'
 
 function formatTimeOfDayLabel(value: number): string {
   const normalized = Math.max(0, Math.min(24, value))
@@ -15,12 +11,6 @@ function formatTimeOfDayLabel(value: number): string {
   const minutes = Math.round((normalized - hours) * 60)
   return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
 }
-
-const LABEL_OFFSET_AXES: Array<{ key: keyof StageVec3; label: string }> = [
-  { key: 'x', label: 'X' },
-  { key: 'y', label: 'Y' },
-  { key: 'z', label: 'Z' },
-]
 
 const SceneSettingsPanel: React.FC = () => {
   const sceneSettings = useCameraStageStore((state) => state.sceneSettings)
@@ -52,413 +42,126 @@ const SceneSettingsPanel: React.FC = () => {
   const labelSettings = sceneSettings.display.nameLabel
 
   return (
-    <div className="flex h-full w-full flex-col overflow-y-auto bg-raised">
-      <div className="px-3 pb-2 pt-3 text-sm font-medium text-text1">场景设置</div>
-      <div className="flex flex-col gap-4 px-3 pb-4">
-        <div className="flex flex-col gap-3">
-          <SectionTitle>地面</SectionTitle>
-          {sceneSettings.ground.pattern !== 'checker' ? (
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-xs text-text2">底色</span>
-              <UiColorInput
-                value={sceneSettings.ground.color}
-                onChange={(event) => setSceneGroundColor(event.target.value)}
-              />
-            </div>
-          ) : null}
-          <div className="flex flex-col gap-1.5">
-            <div className="text-xs text-text2">样式</div>
-            <Dropdown<StageGroundPattern>
-              value={sceneSettings.ground.pattern}
-              display={GROUND_PATTERN_OPTIONS.find((item) => item.value === sceneSettings.ground.pattern)?.label ?? '纯色'}
-              options={GROUND_PATTERN_OPTIONS}
-              onSelect={setSceneGroundPattern}
-              className="w-full"
-              minWidthStrategy="none"
+    // 未选中对象时属性面板显示场景设置；面板标题由停靠标签给出，这里不再重复一条标题带
+    <div className="flex h-full w-full flex-col gap-3 overflow-y-auto overflow-x-hidden px-3 py-2.5">
+      <UiGroup title="地面" titleTone="compact">
+        <UiFormRow label="样式" density="compact">
+          <Dropdown<StageGroundPattern>
+            ariaLabel="地面样式"
+            value={sceneSettings.ground.pattern}
+            display={GROUND_PATTERN_OPTIONS.find((item) => item.value === sceneSettings.ground.pattern)?.label ?? '纯色'}
+            options={GROUND_PATTERN_OPTIONS}
+            onSelect={setSceneGroundPattern}
+            className="w-full"
+            size="sm"
+            minWidthStrategy="none"
+          />
+        </UiFormRow>
+        {sceneSettings.ground.pattern !== 'checker' && (
+          <ColorRow label="底色" value={sceneSettings.ground.color} onChange={setSceneGroundColor} />
+        )}
+        {sceneSettings.ground.pattern !== 'none' && (
+          <SliderNumberRow label="密度" ariaLabel="地面密度" min={1} max={64} step={1} precision={0}
+            value={sceneSettings.ground.density} onChange={setSceneGroundDensity} />
+        )}
+        {sceneSettings.ground.pattern === 'grid' && (
+          <>
+            <ColorRow label="线色" value={sceneSettings.ground.gridLineColor} onChange={setSceneGroundGridLineColor} />
+            <SliderNumberRow label="线粗" ariaLabel="网格线粗" min={0.2} max={3} step={0.05} precision={2}
+              value={sceneSettings.ground.gridLineThickness} onChange={setSceneGroundGridLineThickness} />
+          </>
+        )}
+        {sceneSettings.ground.pattern === 'checker' && (
+          <>
+            <ColorRow label="亮色" value={sceneSettings.ground.checkerLightColor} onChange={setSceneGroundCheckerLightColor} />
+            <ColorRow label="暗色" value={sceneSettings.ground.checkerDarkColor} onChange={setSceneGroundCheckerDarkColor} />
+          </>
+        )}
+      </UiGroup>
+
+      <UiGroup title="天空" titleTone="compact" divided>
+        <ColorRow label="颜色" value={sceneSettings.sky.color} onChange={setSceneSkyColor} />
+      </UiGroup>
+
+      <UiGroup
+        title="阳光"
+        titleTone="compact"
+        divided
+        actions={<UiSwitch aria-label="阳光" checked={sceneSettings.sunlight.enabled} onCheckedChange={setSceneSunlightEnabled} />}
+      >
+        <SliderNumberRow
+          label="时间"
+          ariaLabel="阳光时间"
+          min={0}
+          max={24}
+          step={0.5}
+          precision={1}
+          value={sceneSettings.sunlight.timeOfDay}
+          onChange={setSceneSunlightTimeOfDay}
+          readout={(
+            <span className="w-16 shrink-0 text-right font-mono text-xs tabular-nums text-text2">
+              {formatTimeOfDayLabel(sceneSettings.sunlight.timeOfDay)}
+            </span>
+          )}
+        />
+        <SliderNumberRow label="亮度" ariaLabel="阳光亮度" min={0} max={3} step={0.05} precision={2}
+          value={sceneSettings.sunlight.intensity} onChange={setSceneSunlightIntensity} />
+      </UiGroup>
+
+      <UiGroup
+        title="雾"
+        titleTone="compact"
+        divided
+        actions={<UiSwitch aria-label="雾" checked={sceneSettings.fog.enabled} onCheckedChange={setSceneFogEnabled} />}
+      >
+        <SliderNumberRow label="淡出距离" ariaLabel="雾淡出距离" min={30} max={200} step={1} precision={0}
+          value={sceneSettings.fog.distance} onChange={setSceneFogDistance} />
+      </UiGroup>
+
+      <UiGroup
+        title="名称标签"
+        titleTone="compact"
+        divided
+        actions={<UiSwitch aria-label="名称标签" checked={sceneSettings.display.showNameLabels} onCheckedChange={setSceneShowNameLabels} />}
+      >
+        {sceneSettings.display.showNameLabels && (
+          <>
+            <ColorRow label="文字颜色" value={labelSettings.textColor} onChange={setSceneNameLabelTextColor} />
+            <SwitchRow label="背景跟随对象色" checked={labelSettings.followObjectColor} onChange={setSceneNameLabelFollowObjectColor} />
+            {!labelSettings.followObjectColor && (
+              <ColorRow label="背景颜色" value={labelSettings.backgroundColor} onChange={setSceneNameLabelBackgroundColor} />
+            )}
+            <SliderNumberRow label="背景透明度" ariaLabel="标签背景透明度" min={0} max={1} step={0.05} precision={2}
+              value={labelSettings.backgroundOpacity} onChange={setSceneNameLabelBackgroundOpacity} />
+            <SliderNumberRow label="整体大小" ariaLabel="标签整体大小" min={0.5} max={2.5} step={0.05} precision={2}
+              value={labelSettings.scale} onChange={setSceneNameLabelScale} />
+            <Vec3Row
+              label="位置偏移"
+              name="标签偏移"
+              value={labelSettings.offset}
+              step={0.05}
+              precision={2}
+              min={-3}
+              max={3}
+              onAxisChange={(axis, next) => setSceneNameLabelOffset({ ...labelSettings.offset, [axis]: next })}
             />
-          </div>
-          {sceneSettings.ground.pattern !== 'none' && (
-            <div className="flex items-center gap-1.5">
-              <UiRangeInput
-                min={1}
-                max={64}
-                step={1}
-                value={sceneSettings.ground.density}
-                onChange={(event) => setSceneGroundDensity(Number(event.target.value))}
-              />
-              <NumberInput
-                value={sceneSettings.ground.density}
-                min={1}
-                max={64}
-                step={1}
-                precision={0}
-                widthClassName="w-16"
-                className="shrink-0"
-                commitOnChange
-                wheelStep
-                onChange={setSceneGroundDensity}
-              />
-            </div>
-          )}
-          {sceneSettings.ground.pattern === 'grid' && (
-            <>
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-xs text-text2">线色</span>
-                <UiColorInput
-                  value={sceneSettings.ground.gridLineColor}
-                  onChange={(event) => setSceneGroundGridLineColor(event.target.value)}
-                />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <div className="text-xs text-text2">线粗</div>
-                <div className="flex items-center gap-1.5">
-                  <UiRangeInput
-                    min={0.2}
-                    max={3}
-                    step={0.05}
-                    value={sceneSettings.ground.gridLineThickness}
-                    onChange={(event) => setSceneGroundGridLineThickness(Number(event.target.value))}
-                  />
-                  <NumberInput
-                    value={sceneSettings.ground.gridLineThickness}
-                    min={0.2}
-                    max={3}
-                    step={0.05}
-                    precision={2}
-                    widthClassName="w-16"
-                    className="shrink-0"
-                    commitOnChange
-                    wheelStep
-                    onChange={setSceneGroundGridLineThickness}
-                  />
-                </div>
-              </div>
-            </>
-          )}
-          {sceneSettings.ground.pattern === 'checker' && (
-            <>
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-xs text-text2">亮色</span>
-                <UiColorInput
-                  value={sceneSettings.ground.checkerLightColor}
-                  onChange={(event) => setSceneGroundCheckerLightColor(event.target.value)}
-                />
-              </div>
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-xs text-text2">暗色</span>
-                <UiColorInput
-                  value={sceneSettings.ground.checkerDarkColor}
-                  onChange={(event) => setSceneGroundCheckerDarkColor(event.target.value)}
-                />
-              </div>
-            </>
-          )}
-        </div>
+          </>
+        )}
+      </UiGroup>
 
-        <div className="flex flex-col gap-3">
-          <SectionTitle>天空</SectionTitle>
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-xs text-text2">颜色</span>
-            <UiColorInput
-              value={sceneSettings.sky.color}
-              onChange={(event) => setSceneSkyColor(event.target.value)}
-            />
-          </div>
-        </div>
-
-        <div className="flex flex-col gap-3">
-          <div className="flex items-center justify-between gap-2">
-            <SectionTitle>阳光</SectionTitle>
-            <UiSwitch checked={sceneSettings.sunlight.enabled} onCheckedChange={setSceneSunlightEnabled} />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <div className="text-xs text-text2">时间</div>
-            <div className="flex items-center gap-1.5">
-              <UiRangeInput
-                min={0}
-                max={24}
-                step={0.5}
-                value={sceneSettings.sunlight.timeOfDay}
-                onChange={(event) => setSceneSunlightTimeOfDay(Number(event.target.value))}
-              />
-              <div className="w-16 shrink-0 text-right text-xs text-text2">
-                {formatTimeOfDayLabel(sceneSettings.sunlight.timeOfDay)}
-              </div>
-            </div>
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <div className="text-xs text-text2">亮度</div>
-            <div className="flex items-center gap-1.5">
-              <UiRangeInput
-                min={0}
-                max={3}
-                step={0.05}
-                value={sceneSettings.sunlight.intensity}
-                onChange={(event) => setSceneSunlightIntensity(Number(event.target.value))}
-              />
-              <NumberInput
-                value={sceneSettings.sunlight.intensity}
-                min={0}
-                max={3}
-                step={0.05}
-                precision={2}
-                widthClassName="w-16"
-                className="shrink-0"
-                commitOnChange
-                wheelStep
-                onChange={setSceneSunlightIntensity}
-              />
-            </div>
-          </div>
-        </div>
-
-        <div className="flex flex-col gap-3">
-          <div className="flex items-center justify-between gap-2">
-            <SectionTitle>雾</SectionTitle>
-            <UiSwitch checked={sceneSettings.fog.enabled} onCheckedChange={setSceneFogEnabled} />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <div className="text-xs text-text2">淡出距离</div>
-            <div className="flex items-center gap-1.5">
-              <UiRangeInput
-                min={30}
-                max={200}
-                step={1}
-                value={sceneSettings.fog.distance}
-                onChange={(event) => setSceneFogDistance(Number(event.target.value))}
-              />
-              <NumberInput
-                value={sceneSettings.fog.distance}
-                min={30}
-                max={200}
-                step={1}
-                precision={0}
-                widthClassName="w-16"
-                className="shrink-0"
-                commitOnChange
-                wheelStep
-                onChange={setSceneFogDistance}
-              />
-            </div>
-          </div>
-        </div>
-
-        <div className="flex flex-col gap-3">
-          <div className="flex items-center justify-between gap-2">
-            <SectionTitle>显示</SectionTitle>
-          </div>
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-xs text-text2">名称标签</span>
-            <UiSwitch checked={sceneSettings.display.showNameLabels} onCheckedChange={setSceneShowNameLabels} />
-          </div>
-          {sceneSettings.display.showNameLabels && (
-            <>
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-xs text-text2">文字颜色</span>
-                <UiColorInput
-                  value={labelSettings.textColor}
-                  onChange={(event) => setSceneNameLabelTextColor(event.target.value)}
-                />
-              </div>
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-xs text-text2">背景跟随对象色</span>
-                <UiSwitch
-                  checked={labelSettings.followObjectColor}
-                  onCheckedChange={setSceneNameLabelFollowObjectColor}
-                />
-              </div>
-              {!labelSettings.followObjectColor && (
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs text-text2">背景颜色</span>
-                  <UiColorInput
-                    value={labelSettings.backgroundColor}
-                    onChange={(event) => setSceneNameLabelBackgroundColor(event.target.value)}
-                  />
-                </div>
-              )}
-              <div className="flex flex-col gap-1.5">
-                <div className="text-xs text-text2">背景透明度</div>
-                <div className="flex items-center gap-1.5">
-                  <UiRangeInput
-                    min={0}
-                    max={1}
-                    step={0.05}
-                    value={labelSettings.backgroundOpacity}
-                    onChange={(event) => setSceneNameLabelBackgroundOpacity(Number(event.target.value))}
-                  />
-                  <NumberInput
-                    value={labelSettings.backgroundOpacity}
-                    min={0}
-                    max={1}
-                    step={0.05}
-                    precision={2}
-                    widthClassName="w-16"
-                    className="shrink-0"
-                    commitOnChange
-                    wheelStep
-                    onChange={setSceneNameLabelBackgroundOpacity}
-                  />
-                </div>
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <div className="text-xs text-text2">整体大小</div>
-                <div className="flex items-center gap-1.5">
-                  <UiRangeInput
-                    min={0.5}
-                    max={2.5}
-                    step={0.05}
-                    value={labelSettings.scale}
-                    onChange={(event) => setSceneNameLabelScale(Number(event.target.value))}
-                  />
-                  <NumberInput
-                    value={labelSettings.scale}
-                    min={0.5}
-                    max={2.5}
-                    step={0.05}
-                    precision={2}
-                    widthClassName="w-16"
-                    className="shrink-0"
-                    commitOnChange
-                    wheelStep
-                    onChange={setSceneNameLabelScale}
-                  />
-                </div>
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <div className="text-xs text-text2">位置偏移</div>
-                <div className="flex gap-1.5">
-                  {LABEL_OFFSET_AXES.map((axis) => (
-                    <div key={axis.key} className="min-w-0 flex-1">
-                      <div className="mb-1 text-2xs text-text2">{axis.label}</div>
-                      <NumberInput
-                        value={labelSettings.offset[axis.key]}
-                        min={-3}
-                        max={3}
-                        step={0.05}
-                        precision={2}
-                        widthClassName="w-full"
-                        className="min-w-0"
-                        commitOnChange
-                        wheelStep
-                        onChange={(next) => setSceneNameLabelOffset({
-                          ...labelSettings.offset,
-                          [axis.key]: next,
-                        })}
-                      />
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <div className="flex flex-col gap-3">
-                <div className="text-xs text-text2">文字阴影</div>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs text-text2">阴影颜色</span>
-                  <UiColorInput
-                    value={labelSettings.shadowColor}
-                    onChange={(event) => setSceneNameLabelShadowColor(event.target.value)}
-                  />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <div className="text-xs text-text2">阴影透明度</div>
-                  <div className="flex items-center gap-1.5">
-                    <UiRangeInput
-                      min={0}
-                      max={1}
-                      step={0.05}
-                      value={labelSettings.shadowOpacity}
-                      onChange={(event) => setSceneNameLabelShadowOpacity(Number(event.target.value))}
-                    />
-                    <NumberInput
-                      value={labelSettings.shadowOpacity}
-                      min={0}
-                      max={1}
-                      step={0.05}
-                      precision={2}
-                      widthClassName="w-16"
-                      className="shrink-0"
-                      commitOnChange
-                      wheelStep
-                      onChange={setSceneNameLabelShadowOpacity}
-                    />
-                  </div>
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <div className="text-xs text-text2">阴影模糊</div>
-                  <div className="flex items-center gap-1.5">
-                    <UiRangeInput
-                      min={0}
-                      max={24}
-                      step={1}
-                      value={labelSettings.shadowBlur}
-                      onChange={(event) => setSceneNameLabelShadowBlur(Number(event.target.value))}
-                    />
-                    <NumberInput
-                      value={labelSettings.shadowBlur}
-                      min={0}
-                      max={24}
-                      step={1}
-                      precision={0}
-                      widthClassName="w-16"
-                      className="shrink-0"
-                      commitOnChange
-                      wheelStep
-                      onChange={setSceneNameLabelShadowBlur}
-                    />
-                  </div>
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <div className="text-xs text-text2">阴影距离</div>
-                  <div className="flex items-center gap-1.5">
-                    <UiRangeInput
-                      min={0}
-                      max={24}
-                      step={1}
-                      value={labelSettings.shadowDistance}
-                      onChange={(event) => setSceneNameLabelShadowDistance(Number(event.target.value))}
-                    />
-                    <NumberInput
-                      value={labelSettings.shadowDistance}
-                      min={0}
-                      max={24}
-                      step={1}
-                      precision={0}
-                      widthClassName="w-16"
-                      className="shrink-0"
-                      commitOnChange
-                      wheelStep
-                      onChange={setSceneNameLabelShadowDistance}
-                    />
-                  </div>
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <div className="text-xs text-text2">阴影方向</div>
-                  <div className="flex items-center gap-1.5">
-                    <UiRangeInput
-                      min={0}
-                      max={360}
-                      step={1}
-                      value={labelSettings.shadowAngle}
-                      onChange={(event) => setSceneNameLabelShadowAngle(Number(event.target.value))}
-                    />
-                    <NumberInput
-                      value={labelSettings.shadowAngle}
-                      min={0}
-                      max={360}
-                      step={1}
-                      precision={0}
-                      widthClassName="w-16"
-                      className="shrink-0"
-                      commitOnChange
-                      wheelStep
-                      onChange={setSceneNameLabelShadowAngle}
-                    />
-                  </div>
-                </div>
-              </div>
-            </>
-          )}
-        </div>
-      </div>
+      {sceneSettings.display.showNameLabels && (
+        <UiGroup title="标签文字阴影" titleTone="compact" divided>
+          <ColorRow label="阴影颜色" value={labelSettings.shadowColor} onChange={setSceneNameLabelShadowColor} />
+          <SliderNumberRow label="阴影透明度" ariaLabel="阴影透明度" min={0} max={1} step={0.05} precision={2}
+            value={labelSettings.shadowOpacity} onChange={setSceneNameLabelShadowOpacity} />
+          <SliderNumberRow label="阴影模糊" ariaLabel="阴影模糊" min={0} max={24} step={1} precision={0}
+            value={labelSettings.shadowBlur} onChange={setSceneNameLabelShadowBlur} />
+          <SliderNumberRow label="阴影距离" ariaLabel="阴影距离" min={0} max={24} step={1} precision={0}
+            value={labelSettings.shadowDistance} onChange={setSceneNameLabelShadowDistance} />
+          <SliderNumberRow label="阴影方向" ariaLabel="阴影方向" min={0} max={360} step={1} precision={0}
+            value={labelSettings.shadowAngle} onChange={setSceneNameLabelShadowAngle} />
+        </UiGroup>
+      )}
     </div>
   )
 }

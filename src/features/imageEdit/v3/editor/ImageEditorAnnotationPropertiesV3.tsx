@@ -111,7 +111,7 @@ export function ImageEditorAnnotationPropertiesV3({
   }
 
   return (
-    <UiGroup
+    <UiGroup titleTone="compact"
       divided
       className="mt-5"
       title={t('imageEditor.v3.annotation.properties')}
@@ -121,7 +121,7 @@ export function ImageEditorAnnotationPropertiesV3({
         {t(`imageEditor.v3.annotation.type.${annotation.type}`)}
       </p>
       {annotation.type === 'text' || 'label' in annotation ? (
-        <UiFormRow label={t('imageEditor.v3.annotation.text')}>
+        <UiFormRow density="compact" label={t('imageEditor.v3.annotation.text')}>
           <UiTextArea
             aria-label={t('imageEditor.v3.annotation.text')}
             rows={3}
@@ -142,7 +142,7 @@ export function ImageEditorAnnotationPropertiesV3({
         </UiFormRow>
       ) : null}
       {'stroke' in annotation || 'color' in annotation ? (
-        <UiFormRow label={t('imageEditor.v3.toolSettings.color')} inline>
+        <UiFormRow density="compact" label={t('imageEditor.v3.toolSettings.color')} inline>
           <UiInput
             className="!h-8 !w-10 !p-1"
             type="color"
@@ -161,7 +161,7 @@ export function ImageEditorAnnotationPropertiesV3({
         </UiFormRow>
       ) : null}
       {annotationHasStrokeV3(annotation) && lineWidthPercent !== null ? (
-        <UiFormRow label={t('imageEditor.v3.toolSettings.strokeWidth')}>
+        <UiFormRow density="compact" label={t('imageEditor.v3.toolSettings.strokeWidth')}>
           <div className="flex items-center gap-2">
             <UiRangeInput
               aria-label={t('imageEditor.v3.toolSettings.strokeWidth')}
@@ -192,7 +192,7 @@ export function ImageEditorAnnotationPropertiesV3({
         </UiFormRow>
       ) : null}
       {annotationHasFontSizeV3(annotation) && textSizePercent !== null ? (
-        <UiFormRow label={t('imageEditor.v3.toolSettings.fontSize')}>
+        <UiFormRow density="compact" label={t('imageEditor.v3.toolSettings.fontSize')}>
           <div className="flex items-center gap-2">
             <UiRangeInput
               aria-label={t('imageEditor.v3.toolSettings.fontSize')}

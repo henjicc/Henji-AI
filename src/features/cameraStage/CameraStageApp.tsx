@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
+import { UiLoading } from '@/components/ui'
 import CameraStageEditor from './CameraStageEditor'
 import CameraStageErrorBoundary from './CameraStageErrorBoundary'
 import CameraStageProjectList from './projects/CameraStageProjectList'
@@ -13,7 +14,7 @@ import { useCameraStageStore } from './store/cameraStageStore'
  */
 
 interface CameraStageAppProps {
-  /** 返回工具箱；由工具箱外壳注入，最终落在列表页标题左侧的返回按钮上 */
+  /** 返回工具首页；由工具外壳注入，最终落在列表页标题左侧的返回按钮上 */
   onBackToToolbox?: () => void
 }
 
@@ -87,7 +88,7 @@ const CameraStageAppInner: React.FC<CameraStageAppProps> = ({ onBackToToolbox })
   }, [lastProjectId, setAppView, setLastProjectId, view])
 
   if (restoring) {
-    return <div className="flex h-full items-center justify-center bg-window text-sm text-text2">恢复上次视图中…</div>
+    return <UiLoading className="h-full bg-window" message="正在打开上次的工程…" />
   }
 
   if (view === 'editor') {

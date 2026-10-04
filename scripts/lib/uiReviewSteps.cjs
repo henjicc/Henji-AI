@@ -17,11 +17,13 @@
  * }
  */
 const fs = require('node:fs')
+const os = require('node:os')
 const path = require('node:path')
 const { analyzeLayoutMetrics, collectLayoutMeasurements } = require('./uiReviewMetrics.cjs')
 const { normalizeSeedAssistant, seedAssistantFixture } = require('./uiReviewAssistantFixture.cjs')
 const { blockPaidGeneration } = require('./uiReviewPaidGuard.cjs')
 const { normalizeSeedHistory, seedHistoryFixture } = require('./uiReviewHistoryFixture.cjs')
+const { normalizeSeedAudioEdit, seedAudioEditFixture } = require('./uiReviewAudioEditFixture.cjs')
 
 const ROOT = path.resolve(__dirname, '..', '..')
 const WORKSPACES = Object.freeze(['generation', 'canvas', 'toolbox', 'assets'])
@@ -60,6 +62,8 @@ const STEP_ACTIONS = Object.freeze({
   mainWindow: () => ({}),
   // 生成记录夹具（媒体查看器、结果菜单、通知提示用；需 writesUserData: true），见 uiReviewHistoryFixture.cjs
   seedHistory: (value) => normalizeSeedHistory(value),
+  // 口播剪辑夹具工程（临时 WAV + 固定逐字稿，不走语音识别；需 writesUserData: true），见 uiReviewAudioEditFixture.cjs
+  seedAudioEdit: (value) => normalizeSeedAudioEdit(value),
   click: (value) => ({ target: normalizeTarget(value?.target ?? value), button: value?.button ?? 'left' }),
   doubleClick: (value) => ({ target: normalizeTarget(value?.target ?? value) }),
   rightClick: (value) => ({ target: normalizeTarget(value?.target ?? value) }),
@@ -92,6 +96,14 @@ const STEP_ACTIONS = Object.freeze({
       release: value.release !== false, modifiers }
   },
   release: () => ({}),
+  // 系统保存/打开对话框不可点：在主进程把 dialog.showSaveDialog / showOpenDialog 换成直接返回。
+  // 保存一律落到系统临时目录 henji-ui-review/<场景 id>/ 下（沿用请求里的默认文件名），打开返回仓库内文件；
+  // 场景结束自动还原。用于导出、另存为等会弹系统对话框的流程（只写本机临时文件，不产生费用）。
+  stubDialogs: (value) => {
+    const open = value?.open ?? null
+    if (open !== null && (!Array.isArray(open) || open.length === 0)) throw new Error('stubDialogs.open 需要非空文件数组')
+    return { save: value?.save !== false, open: open ? open.map(String) : null }
+  },
   // 文件选择框不可点：直接给（通常隐藏的）文件输入设值，走与用户选文件相同的 change 事件。路径相对仓库根目录。
   setFiles: (value) => {
     if (!Array.isArray(value?.files) || value.files.length === 0) throw new Error('setFiles 需要 files 数组')
@@ -487,6 +499,34 @@ async function runStep(page, step, runtime) {
       runtime.mouseDown = false
       await releaseModifiers(page, runtime)
       return
+    case 'stubDialogs': {
+      const outputDir = path.join(os.tmpdir(), 'henji-ui-review', runtime.sceneId || 'scene')
+      fs.mkdirSync(outputDir, { recursive: true })
+      const openPaths = step.open ? step.open.map((file) => (path.isAbsolute(file) ? file : path.resolve(ROOT, file))) : null
+      await runtime.app.evaluate(({ dialog }, values) => {
+        const store = globalThis.__henjiUiReviewDialogs ?? (globalThis.__henjiUiReviewDialogs = {
+          save: dialog.showSaveDialog, open: dialog.showOpenDialog,
+        })
+        dialog.showSaveDialog = values.save
+          ? async (...args) => {
+            const options = args.find((arg) => arg && typeof arg === 'object' && ('defaultPath' in arg || 'filters' in arg)) ?? {}
+            const name = String(options.defaultPath || 'output').split(/[\\/]/).pop() || 'output'
+            return { canceled: false, filePath: `${values.outputDir}${values.sep}${name}` }
+          }
+          : store.save
+        dialog.showOpenDialog = values.openPaths
+          ? async () => ({ canceled: false, filePaths: values.openPaths })
+          : store.open
+      }, { save: step.save, openPaths, outputDir, sep: path.sep })
+      runtime.dialogsStubbed = true
+      console.log(`  系统对话框已替换：保存到 ${outputDir}`)
+      return
+    }
+    case 'seedAudioEdit': {
+      const fixture = await seedAudioEditFixture(page, step)
+      runtime.audioEditFixtures.push(fixture)
+      return
+    }
     case 'setFiles':
       await resolveTarget(page, step.target).setInputFiles(
         step.files.map((file) => (path.isAbsolute(file) ? file : path.resolve(ROOT, file))), { timeout })
@@ -616,7 +656,7 @@ function compileStepScene(spec, context) {
       // 付费保护：步骤场景里任何误触的“生成”或对真实任务的续查都到不了供应商（uiReviewPaidGuard.cjs）
       if (!electronApp || typeof electronApp.evaluate !== 'function') throw new Error('步骤场景缺少 Electron 应用，无法加付费保护')
       const unblockPaidGeneration = await blockPaidGeneration(electronApp)
-      const runtime = { context, ctx, prefix: '', variant: null, skipped: [], mouseDown: false, assistantFixture: null,
+      const runtime = { context, ctx, prefix: '', variant: null, skipped: [], mouseDown: false, assistantFixture: null, sceneId: spec.id, dialogsStubbed: false, audioEditFixtures: [],
         app: electronApp, mainPage: page, activePage: null, logsPage: null, historyFixture: null }
       try {
         await runSteps(page, spec.prepare, runtime)
@@ -655,6 +695,16 @@ function compileStepScene(spec, context) {
         if (runtime.assistantFixture) await runtime.assistantFixture.cleanup().catch(() => undefined)
         if (runtime.logsPage && !runtime.logsPage.isClosed()) await runtime.logsPage.close().catch(() => undefined)
         if (runtime.historyFixture) await runtime.historyFixture.cleanup().catch(() => undefined)
+        for (const fixture of runtime.audioEditFixtures) await fixture.cleanup().catch(() => undefined)
+        if (runtime.dialogsStubbed) {
+          await electronApp.evaluate(({ dialog }) => {
+            const store = globalThis.__henjiUiReviewDialogs
+            if (!store) return
+            dialog.showSaveDialog = store.save
+            dialog.showOpenDialog = store.open
+            delete globalThis.__henjiUiReviewDialogs
+          }).catch(() => undefined)
+        }
         await unblockPaidGeneration()
         if (runtime.skipped.length) console.log(`  可选步骤跳过 ${runtime.skipped.length} 个：${runtime.skipped.slice(0, 5).join('；')}`)
       }

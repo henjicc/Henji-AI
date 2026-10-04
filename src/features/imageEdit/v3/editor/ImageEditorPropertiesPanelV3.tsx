@@ -9,7 +9,7 @@ import {
   UiGroup,
   UiInput,
   UiRangeInput,
-  UiSelect,
+  Dropdown,
   UiSwitch,
 } from '@/components/ui'
 import {
@@ -51,7 +51,7 @@ function LayerNameField({ controller, layer, disabled }: {
     else setName(layer.name)
   }
   return (
-    <UiFormRow label={t('imageEditor.v3.properties.name')}>
+    <UiFormRow density="compact" label={t('imageEditor.v3.properties.name')}>
       <UiInput
         aria-label={t('imageEditor.v3.properties.name')}
         value={name}
@@ -107,7 +107,7 @@ function OpacityControl({ controller, layer, disabled }: {
     controller.commitLayerCommonPreview(previewId, layer.id, { opacity: draftRef.current })
   }
   return (
-    <UiFormRow label={t('imageEditor.v3.properties.opacity')}>
+    <UiFormRow density="compact" label={t('imageEditor.v3.properties.opacity')}>
       <div className="flex items-center gap-2">
         <UiRangeInput
           aria-label={t('imageEditor.v3.properties.opacity')}
@@ -163,7 +163,7 @@ export function ImageEditorPropertiesPanelV3({
     return (
       <section data-properties-panel className="min-h-0 flex-1 px-4 py-8">
         {!embedded ? (
-          <h2 className="text-xs font-medium uppercase tracking-wider text-text2">
+          <h2 className="text-xs font-semibold text-text2">
             {t('imageEditor.v3.properties.title')}
           </h2>
         ) : null}
@@ -191,7 +191,7 @@ export function ImageEditorPropertiesPanelV3({
       className="flex min-h-0 flex-1 flex-col overflow-hidden"
     >
       {!embedded ? (
-        <h2 className="mb-4 text-xs font-medium uppercase tracking-wider text-text2">
+        <h2 className="mb-4 text-xs font-semibold text-text2">
           {t('imageEditor.v3.properties.title')}
         </h2>
       ) : null}
@@ -225,9 +225,9 @@ export function ImageEditorPropertiesPanelV3({
         className={`ui-scrollbar min-h-0 flex-1 overflow-y-auto ${embedded ? 'px-3 py-3' : 'px-4 py-3'}`}
       >
       {activeTab === 'basics' ? (
-      <UiGroup gap="stack">
+      <UiGroup titleTone="compact" gap="stack">
         <LayerNameField controller={controller} layer={selected} disabled={contentLocked} />
-        <UiFormRow label={t('imageEditor.v3.properties.visible')} inline>
+        <UiFormRow density="compact" label={t('imageEditor.v3.properties.visible')} inline>
           <UiSwitch
             aria-label={t('imageEditor.v3.properties.visible')}
             checked={selected.visible}
@@ -237,7 +237,7 @@ export function ImageEditorPropertiesPanelV3({
             }}
           />
         </UiFormRow>
-        <UiFormRow label={t('imageEditor.v3.properties.locked')} inline>
+        <UiFormRow density="compact" label={t('imageEditor.v3.properties.locked')} inline>
           <UiSwitch
             aria-label={t('imageEditor.v3.properties.locked')}
             checked={selected.locked}
@@ -249,27 +249,23 @@ export function ImageEditorPropertiesPanelV3({
         </UiFormRow>
         <OpacityControl controller={controller} layer={selected} disabled={contentLocked} />
         {controller.profile.layerControls.includes('blend-mode') ? (
-          <UiFormRow label={t('imageEditor.v3.properties.blendMode')}>
-            <UiSelect
-              aria-label={t('imageEditor.v3.properties.blendMode')}
+          <UiFormRow density="compact" label={t('imageEditor.v3.properties.blendMode')}>
+            <Dropdown<ImageEditLayerV3['blendMode']>
+              ariaLabel={t('imageEditor.v3.properties.blendMode')}
+              className="w-full"
+              minWidthStrategy="none"
               value={selected.blendMode}
               disabled={contentLocked}
-              onChange={(event) => {
-                if (!contentLocked) {
-                  controller.updateLayerCommon(selected.id, {
-                    blendMode: event.currentTarget.value as ImageEditLayerV3['blendMode'],
-                  })
-                }
+              display={t(`imageEditor.v3.blendMode.${selected.blendMode}`)}
+              options={IMAGE_EDIT_BLEND_MODES_V3.map((mode) => ({ label: t(`imageEditor.v3.blendMode.${mode}`), value: mode }))}
+              onSelect={(blendMode) => {
+                if (!contentLocked) controller.updateLayerCommon(selected.id, { blendMode })
               }}
-            >
-              {IMAGE_EDIT_BLEND_MODES_V3.map((mode) => (
-                <option key={mode} value={mode}>{t(`imageEditor.v3.blendMode.${mode}`)}</option>
-              ))}
-            </UiSelect>
+            />
           </UiFormRow>
         ) : null}
         {selected.type === 'group' && controller.profile.layerKinds.includes('group') ? (
-          <UiFormRow
+          <UiFormRow density="compact"
             label={t('imageEditor.v3.properties.groupIsolation')}
             info={t('imageEditor.v3.properties.groupIsolationInfo')}
             inline
@@ -320,10 +316,10 @@ export function ImageEditorPropertiesPanelV3({
         ) : null}
 
         {controller.profile.layerControls.includes('mask') ? (
-          <UiGroup divided className="mt-5" title={t('imageEditor.v3.properties.mask')} gap="stack">
+          <UiGroup titleTone="compact" divided className="mt-5" title={t('imageEditor.v3.properties.mask')} gap="stack">
           {selected.mask ? (
             <>
-              <UiFormRow label={t('imageEditor.v3.properties.maskInverted')} inline>
+              <UiFormRow density="compact" label={t('imageEditor.v3.properties.maskInverted')} inline>
                 <UiSwitch
                   aria-label={t('imageEditor.v3.properties.maskInverted')}
                   checked={selected.mask.inverted}

@@ -85,16 +85,26 @@ function createAudioEditScene({ setupToolbox, clickNamedButton }) {
       })
       const boosted = await outputRms()
       assert.ok(boosted > 0.1, `小声素材应被实际放大，输出 RMS=${boosted}`)
+      // 播放条放不下时（窄窗口）自动增益与音量收进“更多播放控制”，先展开再操作（界面重设计 5.5 AE-02）
+      const revealTransport = async (locator) => {
+        if (await locator.isVisible()) return
+        await page.getByRole('button', { name: '更多播放控制' }).click()
+        await locator.waitFor({ state: 'visible' })
+      }
+      await revealTransport(page.getByRole('switch', { name: '试听自动增益' }))
       await page.getByRole('switch', { name: '试听自动增益' }).click()
       await page.waitForTimeout(300)
       const originalLevel = await outputRms()
       assert.ok(boosted > originalLevel * 3, '关闭自动增益应恢复较小音量')
       await page.getByRole('switch', { name: '试听自动增益' }).click()
+      await revealTransport(page.getByRole('slider', { name: '试听音量', exact: true }))
       await page.getByRole('slider', { name: '试听音量', exact: true }).focus()
       await page.keyboard.press('Home')
       await page.waitForTimeout(400)
       assert.ok(await outputRms() < 0.001, '音量归零后应静音')
       await page.keyboard.press('End')
+      // 收纳浮层若展开，关掉它，免得盖住后面要点的波形
+      if (await page.getByRole('button', { name: '更多播放控制', pressed: true }).isVisible().catch(() => false)) await page.keyboard.press('Escape')
       await page.getByTitle('暂停', { exact: true }).click()
       const paused = await waveform.getAttribute('aria-valuenow')
       await page.waitForTimeout(250)

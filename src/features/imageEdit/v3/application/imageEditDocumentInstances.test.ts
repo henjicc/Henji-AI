@@ -9,8 +9,9 @@ import {
   attachImageEditDocumentInstanceV3, getOrCreateImageEditDocumentInstanceV3,
   getOrCreateImageEditPersistenceQueueV3, releaseImageEditDocumentInstanceV3,
   requireImageEditDocumentInstanceV3, saveImageEditDocumentInstanceV3,
-  deleteIdleImageEditDocumentV3, leaseImageEditDocumentInstanceV3,
+  deleteIdleImageEditDocumentV3, leaseImageEditDocumentInstanceV3, readImageEditDocumentInstanceV3,
 } from './imageEditDocumentInstances'
+import { IMAGE_EDITOR_V3_BRUSH_TILE_MEDIA_TYPE } from './imageEditorResourceDescriptorsV3'
 import { useImageEditorControllerV3 } from '../editor/useImageEditorControllerV3'
 
 afterEach(() => { cleanup(); vi.useRealTimers() })
@@ -30,6 +31,28 @@ function setup(id: string, save?: ImageEditDocumentRepositoryV3['save']) {
 }
 
 describe('图片文档应用实例', () => {
+
+  it('重开已加载的文档时，画笔瓦片的资源描述带 brush 媒体类型（IE-11）', () => {
+    const brush = `sha256:${'b'.repeat(64)}`
+    const source = `sha256:${'a'.repeat(64)}`
+    const document = createImageEditDocumentV3({ width: 8, height: 8, documentId: 'reopen-brush' })
+    const raster = createImageEditRasterLayerV3('layer', '画笔', source)
+    raster.tiles['0/0/0'] = brush
+    document.layers = [raster]
+    const initial = new ImageEditCommandBusV3(document).getPersistenceSnapshot()
+    const queue = getOrCreateImageEditPersistenceQueueV3({
+      repository: { save: vi.fn(async (next) => ({ documentId: next.id, revision: next.revision, previewRef: null })) },
+      initialReference: { documentId: 'reopen-brush', revision: 0, previewRef: null }, initialHistory: initial.history,
+    })
+    getOrCreateImageEditDocumentInstanceV3(document, {
+      historySnapshot: initial.history, resourceByteSizes: { [brush]: 256, [source]: 4_096 },
+    }, { getQueue: () => queue })
+    const read = readImageEditDocumentInstanceV3('reopen-brush')
+    expect(read?.resourceDescriptors).toEqual(expect.arrayContaining([
+      { resourceRef: brush, byteLength: 256, mediaType: IMAGE_EDITOR_V3_BRUSH_TILE_MEDIA_TYPE },
+      { resourceRef: source, byteLength: 4_096, mediaType: null },
+    ]))
+  })
   it('回收跳过打开的文档、活动任务、脏状态与未确认保存', async () => {
     const state = setup('retained')
     const remove = vi.fn(async () => true)

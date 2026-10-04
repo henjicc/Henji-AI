@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, FolderSearch, PencilLine, Trash2, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, FolderSearch, PencilLine, Regex, Trash2, X } from 'lucide-react'
 import { AlertDialog, PanelTrigger, UiButton, UiIconButton, UiInput, UiModal, UiOptionButton, UiTextArea } from '@/components/ui'
 import type { AudioEditTranscriptBlock } from '@/core/audioEdit/types'
 import type { AudioEditTextSearch } from './useAudioEditTextSearch'
@@ -41,9 +41,11 @@ export function AudioEditFileMenu({ name, disabled, onRename, onRelink, onDelete
           <UiOptionButton role="menuitem" variant="menu" size="md" className="w-full gap-2" onClick={onRelink}>
             <FolderSearch size={14} />重新定位原素材
           </UiOptionButton>
-          <UiButton role="menuitem" variant="danger" className="w-full justify-start gap-2 px-2.5" onClick={() => setConfirmDelete(true)}>
+          {/* 删除与其他菜单项同一组件；破坏性由二次确认弹窗承担，菜单项本身保持静默 */}
+          <div role="separator" className="my-1 border-t border-line" />
+          <UiOptionButton role="menuitem" variant="menu" size="md" className="w-full gap-2" onClick={() => setConfirmDelete(true)}>
             <Trash2 size={14} />删除工程
-          </UiButton>
+          </UiOptionButton>
         </div>
       )}
     >
@@ -81,7 +83,7 @@ export function AudioEditFindReplace({ search, disabled }: { search: AudioEditTe
     <div className="flex flex-wrap items-center gap-1.5">
       <UiIconButton title={search.showReplace ? '收起替换' : '展开替换'} aria-expanded={search.showReplace} onClick={search.toggleReplace}>{search.showReplace ? <ChevronDown size={16} /> : <ChevronRight size={16} />}</UiIconButton>
       <UiInput ref={inputRef} autoFocus size="sm" aria-label="查找文字" aria-invalid={Boolean(search.error)} className="min-w-32 max-w-sm flex-1" placeholder={search.regex ? '正则表达式' : '查找文字'} value={search.query} onChange={(event) => search.setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); search.navigate(event.shiftKey ? -1 : 1) } }} />
-      <UiIconButton title="使用正则表达式" on={search.regex} onClick={search.toggleRegex}><span className="font-mono text-xs">.*</span></UiIconButton>
+      <UiIconButton title="使用正则表达式" aria-label="使用正则表达式" on={search.regex} onClick={search.toggleRegex}><Regex size={16} /></UiIconButton>
       <UiIconButton title="上一处 · Shift+Enter" disabled={!search.matches.length} onClick={() => search.navigate(-1)}><ArrowUp size={16} /></UiIconButton>
       <UiIconButton title="下一处 · Enter" disabled={!search.matches.length} onClick={() => search.navigate(1)}><ArrowDown size={16} /></UiIconButton>
       <span className="text-xs tabular-nums text-text3" aria-live="polite">{search.matches.length ? `${search.currentIndex + 1} / ${search.matches.length} 处` : search.query ? '无匹配' : ''}</span>
@@ -89,7 +91,9 @@ export function AudioEditFindReplace({ search, disabled }: { search: AudioEditTe
       {!search.showReplace && search.message && <span className="text-xs text-text3" aria-live="polite">{search.message}</span>}
       <UiIconButton aria-label="关闭查找替换" title="关闭查找替换 · Esc" className="ml-auto" onClick={search.close}><X size={16} /></UiIconButton>
     </div>
-    {search.showReplace && <div className="flex flex-wrap items-center gap-1.5 pl-[34px]">
+    {search.showReplace && <div className="flex flex-wrap items-center gap-1.5">
+      {/* 与上一行展开按钮同宽的占位，让两行输入框左缘对齐 */}
+      <span aria-hidden="true" className="w-7 shrink-0" />
       <UiInput size="sm" aria-label="替换为" className="min-w-32 max-w-sm flex-1" placeholder={search.regex ? '替换为（支持 $1 等捕获组）' : '替换为'} value={search.replacement} onChange={(event) => search.setReplacement(event.target.value)} />
       {!search.preview ? <UiButton size="sm" disabled={!search.matches.length || disabled} onClick={search.startPreview}>预览替换</UiButton> : <>
         <UiButton size="sm" disabled={disabled || !search.currentCanChange} onClick={() => search.confirm(false)}>确认当前</UiButton>
@@ -106,7 +110,7 @@ export function AudioEditMatchedText({ block, search }: { block: AudioEditTransc
   if (!fragments) return <>{block.text}</>
   return <>{fragments.map((fragment, index) => fragment.matchIndex === undefined ? <span key={index}>{fragment.text}</span> : <span key={index}
     data-audio-search-current={fragment.matchIndex === search.currentIndex ? 'true' : undefined}
-    className={fragment.matchIndex === search.currentIndex ? 'rounded-sm bg-warning-text/30 text-text1 ring-1 ring-accent-ring' : 'rounded-sm bg-warning-text/20 text-text1'}>
+    className={fragment.matchIndex === search.currentIndex ? 'rounded-sm bg-warning-tint text-text1 ring-1 ring-accent-ring' : 'rounded-sm bg-warning-tint text-text1'}>
     {fragment.replacement === undefined ? fragment.text : <><del className="text-text3">{fragment.text}</del>{fragment.replacement && <ins className="ml-1 bg-accent-tint font-medium text-accent-text no-underline">{fragment.replacement}</ins>}</>}
   </span>)}</>
 }

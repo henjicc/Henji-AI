@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react'
 import { Diamond, Trash2 } from 'lucide-react'
-import { Dropdown, PanelTrigger, UiIconButton, UiInput } from '@/components/ui'
+import { Dropdown, PanelTrigger, UiFormRow, UiIconButton, UiInput } from '@/components/ui'
 import type { StageCameraObject } from '../../domain/sceneTypes'
 import type { StageStateKeyframe } from '../../domain/stateKeyframeTypes'
 import type { StateKeyframeClipBlock } from './stateKeyframeClipGeometry'
@@ -78,55 +78,67 @@ const StaticClipBlock: React.FC<StaticClipBlockProps> = ({
       <PanelTrigger
         alignment="aboveCenter"
         gap={8}
-        panelWidth={292}
+        panelWidth={280}
         className="h-full w-full"
+        panelPadding="content"
         renderPanel={() => (
-          <div className="grid gap-3 p-3">
+          <div className="flex flex-col gap-3">
             <div className="flex items-center justify-between gap-3">
-              <div>
-                <div className="text-xs font-medium text-text1">状态关键帧</div>
-                <div className="mt-0.5 font-mono text-2xs text-text2">
+              <div className="min-w-0">
+                <div className="text-xs font-semibold text-text1">状态关键帧</div>
+                <div className="mt-0.5 font-mono text-2xs tabular-nums text-text2">
                   {formatStateKeyframeTimecode(stateKeyframe.time, 'secondsFrames', fps)}
                 </div>
               </div>
-              <UiIconButton tone="danger"
-                className="shrink-0"
+              <UiIconButton
+                tone="danger"
                 title="删除关键帧"
+                aria-label="删除关键帧"
                 onClick={onRemove}
               >
-                <Trash2 size={13} />
+                <Trash2 size={14} />
               </UiIconButton>
             </div>
-            <label className="grid gap-1 text-2xs text-text2">
-              名称
+            <UiFormRow label="名称" density="compact">
               <UiInput
+                aria-label="关键帧名称"
+                size="sm"
                 value={draftName}
-                
                 onChange={(event) => setDraftName(event.target.value)}
                 onBlur={commitName}
                 onKeyDown={(event) => {
                   if (event.key === 'Enter') event.currentTarget.blur()
                 }}
               />
-            </label>
-            <Dropdown<string>
-              label="拍摄机位"
-              value={stateKeyframe.cameraId ?? DEFAULT_CAMERA_OPTION_VALUE}
-              display={cameraLabel}
-              options={cameraOptions}
-              onSelect={(value) => onSelectCamera(value === DEFAULT_CAMERA_OPTION_VALUE ? null : value)}
-              disabled={cameras.length === 0}
-            />
-            <Dropdown<StageStateKeyframe['continuity']>
-              label="经过本关键帧时"
-              value={stateKeyframe.continuity}
-              display={stateKeyframe.continuity === 'smooth' ? '无缝通过' : '停靠'}
-              options={[
-                { label: '停靠（速度降为 0）', value: 'stop' },
-                { label: '无缝通过（保持速度连续）', value: 'smooth' },
-              ]}
-              onSelect={onUpdateContinuity}
-            />
+            </UiFormRow>
+            <UiFormRow label="拍摄机位" density="compact">
+              <Dropdown<string>
+                ariaLabel="拍摄机位"
+                value={stateKeyframe.cameraId ?? DEFAULT_CAMERA_OPTION_VALUE}
+                display={cameraLabel}
+                options={cameraOptions}
+                onSelect={(value) => onSelectCamera(value === DEFAULT_CAMERA_OPTION_VALUE ? null : value)}
+                disabled={cameras.length === 0}
+                className="w-full"
+                size="sm"
+                minWidthStrategy="none"
+              />
+            </UiFormRow>
+            <UiFormRow label="经过本关键帧时" density="compact">
+              <Dropdown<StageStateKeyframe['continuity']>
+                ariaLabel="经过本关键帧时"
+                value={stateKeyframe.continuity}
+                display={stateKeyframe.continuity === 'smooth' ? '无缝通过' : '停靠'}
+                options={[
+                  { label: '停靠（速度降为 0）', value: 'stop' },
+                  { label: '无缝通过（保持速度连续）', value: 'smooth' },
+                ]}
+                onSelect={onUpdateContinuity}
+                className="w-full"
+                size="sm"
+                minWidthStrategy="none"
+              />
+            </UiFormRow>
           </div>
         )}
       >
@@ -135,7 +147,8 @@ const StaticClipBlock: React.FC<StaticClipBlockProps> = ({
             role="button"
             tabIndex={0}
             data-panel-trigger-button
-            className={`flex h-full w-full cursor-grab items-center justify-center rounded-full transition-transform hover:scale-110 ${dragging ? 'cursor-grabbing opacity-70' : ''}`}
+            aria-label={`关键帧 ${stateKeyframe.name}`}
+            className={`flex h-full w-full cursor-grab items-center justify-center rounded-full outline-none transition-transform hover:scale-110 focus-visible:ring-2 focus-visible:ring-accent-ring ${dragging ? 'cursor-grabbing opacity-70' : ''}`}
             onPointerDown={dragHandlers.onPointerDown}
             onPointerMove={dragHandlers.onPointerMove}
             onPointerUp={dragHandlers.onPointerUp}
@@ -153,9 +166,10 @@ const StaticClipBlock: React.FC<StaticClipBlockProps> = ({
             }}
             title={`${stateKeyframe.name} · ${formatStateKeyframeTimecode(stateKeyframe.time, 'secondsFrames', fps)}`}
           >
+            {/* 选中 = 强调色实心；只是播放头停在这里 = 强调色描边空心；其余中性。三者一眼可辨。 */}
             <Diamond
               size={selected || isPlayhead ? 16 : 14}
-              className={selected || isPlayhead ? 'fill-accent text-accent' : 'fill-raised text-text2'}
+              className={selected ? 'fill-accent text-accent' : isPlayhead ? 'fill-raised text-accent' : 'fill-raised text-text2'}
             />
           </div>
         )}

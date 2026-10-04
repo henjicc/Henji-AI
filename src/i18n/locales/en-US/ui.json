@@ -632,6 +632,7 @@
     "v3": {
       "title": "Image Editor",
       "previewAlt": "Image editor preview",
+      "previewRenderFailed": "The preview could not refresh. Your edits are safe; keep editing or reopen the image to recover.",
       "zoomIn": "Zoom in",
       "zoomOut": "Zoom out",
       "panels": {

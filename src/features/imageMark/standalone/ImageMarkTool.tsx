@@ -339,8 +339,8 @@ export function ImageMarkTool({ onBack }: ImageMarkToolProps = {}): JSX.Element 
           </UiRegion>
           <div className="flex min-h-0 flex-1 items-center justify-center p-8">
             <div
-              className={`flex w-full max-w-xl flex-col items-center gap-4 rounded-2xl border-2 border-dashed p-12 transition-colors ${
-                isDragOver ? 'border-accent bg-accent/10' : 'border-line bg-raised/40'
+              className={`flex w-full max-w-xl flex-col items-center gap-4 rounded-overlay border-2 border-dashed p-12 transition-colors ${
+                isDragOver ? 'border-accent bg-accent-tint' : 'border-line bg-raised/40'
               }`}
               onDragOver={(event) => {
                 event.preventDefault();

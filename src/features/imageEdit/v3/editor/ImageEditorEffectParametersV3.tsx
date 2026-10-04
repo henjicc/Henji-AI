@@ -7,7 +7,7 @@ import {
   UiGroup,
   UiOptionButton,
   UiRangeInput,
-  UiSelect,
+  Dropdown,
   UiSwitch,
 } from '@/components/ui'
 import {
@@ -109,7 +109,7 @@ function ParameterSlider({
   }
 
   return (
-    <UiFormRow label={label}>
+    <UiFormRow density="compact" label={label}>
       <div className="flex items-center gap-2">
         <UiRangeInput
           aria-label={label}
@@ -266,7 +266,7 @@ export function ImageEditorEffectParametersV3({
           </div>
         </UiGroup>
         <UiGroup title={t('imageEditor.v3.parameters.glowHalo')} titleTone="overline" divided gap="stack">
-          <UiFormRow label={t('imageEditor.v3.parameters.tintEnabled')} inline>
+          <UiFormRow density="compact" label={t('imageEditor.v3.parameters.tintEnabled')} inline>
             <div className="flex items-center gap-2">
               <UiSwitch
                 checked={glow.tintEnabled}
@@ -286,7 +286,7 @@ export function ImageEditorEffectParametersV3({
           {slider('intensity')}
           {slider('chromaticAberration')}
           {([0, 1] as const).map((index) => (
-            <UiFormRow
+            <UiFormRow density="compact"
               key={index}
               label={t(`imageEditor.v3.parameters.chromaticSide${index === 0 ? 'Left' : 'Right'}`)}
             >
@@ -341,21 +341,20 @@ export function ImageEditorEffectParametersV3({
     })
     return (
       <>
-        <UiFormRow label={t('imageEditor.v3.parameters.curveChannel')}>
-          <UiSelect
-            aria-label={t('imageEditor.v3.parameters.curveChannel')}
+        <UiFormRow density="compact" label={t('imageEditor.v3.parameters.curveChannel')}>
+          <Dropdown<'master' | 'red' | 'green' | 'blue'>
+            ariaLabel={t('imageEditor.v3.parameters.curveChannel')}
+            className="w-full"
+            minWidthStrategy="none"
             value={curveChannel}
             disabled={disabled}
-            onChange={(event) => setCurveChannel(
-              event.currentTarget.value as 'master' | 'red' | 'green' | 'blue',
-            )}
-          >
-            {(['master', 'red', 'green', 'blue'] as const).map((channel) => (
-              <option key={channel} value={channel}>
-                {t(`imageEditor.v3.parameters.curveChannels.${channel}`)}
-              </option>
-            ))}
-          </UiSelect>
+            display={t(`imageEditor.v3.parameters.curveChannels.${curveChannel}`)}
+            options={(['master', 'red', 'green', 'blue'] as const).map((channel) => ({
+              label: t(`imageEditor.v3.parameters.curveChannels.${channel}`),
+              value: channel,
+            }))}
+            onSelect={setCurveChannel}
+          />
         </UiFormRow>
         <ParameterSlider
           controller={controller}

@@ -1,6 +1,7 @@
 import React from 'react'
 import { RotateCcw, SlidersHorizontal, Spline } from 'lucide-react'
-import { Dropdown, PanelTrigger, UiButton, UiIconButton, UiInput } from '@/components/ui'
+import NumberInput from '@/components/ui/NumberInput'
+import { Dropdown, PanelTrigger, UiButton, UiFormRow, UiIconButton, UiOverflowRow, type UiOverflowRowItem } from '@/components/ui'
 import {
   CHARACTER_ANIMATION_CLIPS,
   createClipMotion,
@@ -115,16 +116,20 @@ const StagePathContextBar: React.FC = () => {
   }
 
   const parameterInput = (label: string, value: number, onChange: (value: number) => void): React.ReactNode => (
-    <label className="flex items-center justify-between gap-3 text-xs text-text2">
-      <span className="shrink-0">{label}</span>
-      <UiInput
-        type="number"
-        step={0.1}
+    <UiFormRow label={label} density="compact" inline>
+      <NumberInput
+        ariaLabel={label}
+        size="sm"
         value={value}
-        className="w-24 px-2 text-right tabular-nums"
-        onChange={(event) => onChange(Number(event.target.value))}
+        step={0.1}
+        precision={2}
+        widthClassName="w-24"
+        align="right"
+        commitOnChange
+        wheelStep
+        onChange={onChange}
       />
-    </label>
+    </UiFormRow>
   )
 
   const pathOptions = object.type === 'camera' ? CAMERA_PATH_OPTIONS : BASE_PATH_OPTIONS
@@ -132,70 +137,117 @@ const StagePathContextBar: React.FC = () => {
   const speedPreset = detail.speedPreset ?? 'easeInOut'
   const speedLabel = SPEED_OPTIONS.find((option) => option.value === speedPreset)?.label ?? '平滑'
 
+  // 命令带中间放不下时（960、展开助手侧栏），按优先级把对象标签、速度、路径、重置收进“更多路径参数”，
+  // 命令带不溢出、不压住右端动作（5.5 3D-13）。
+  const items: UiOverflowRowItem[] = [
+    {
+      id: 'label',
+      priority: 10,
+      node: (
+        <div
+          className="mr-1.5 flex min-w-0 items-center gap-1.5 text-xs text-text1"
+          title={`${object.name}，关键帧 ${stateKeyframeIndex + 1} 到 ${stateKeyframeIndex + 2}`}
+        >
+          <Spline aria-hidden="true" size={16} className="text-accent-text" />
+          <span className="max-w-24 truncate font-medium">{object.name}</span>
+          <span className="text-text3">{stateKeyframeIndex + 1} → {stateKeyframeIndex + 2}</span>
+        </div>
+      ),
+    },
+    {
+      id: 'path',
+      priority: 40,
+      node: (
+        <Dropdown<PathChoice>
+          value={pathChoice}
+          ariaLabel="路径"
+          display={`路径 · ${pathLabel}`}
+          options={pathOptions}
+          onSelect={handlePathChoice}
+          size="md" buttonClassName="w-36"
+          panelWidthStrategy="options"
+        />
+      ),
+    },
+    {
+      id: 'speed',
+      priority: 30,
+      node: (
+        <Dropdown<StageSpeedPreset>
+          value={speedPreset}
+          ariaLabel="速度"
+          display={`速度 · ${speedLabel}`}
+          options={SPEED_OPTIONS}
+          onSelect={(nextSpeedPreset) => updateDetail({ speedPreset: nextSpeedPreset })}
+          size="md" buttonClassName="w-28"
+        />
+      ),
+    },
+    ...(path ? [{
+      id: 'reset',
+      priority: 20,
+      node: (
+        <UiIconButton size="lg"
+          title="重置为直线"
+          aria-label="重置为直线"
+          onClick={() => setStateKeyframeSpatialPath(stateKeyframe.id, object.id, undefined)}
+        >
+          <RotateCcw size={16} />
+        </UiIconButton>
+      ),
+    }] : []),
+  ]
+
   return (
-    <div className="pointer-events-auto flex min-w-0 items-center gap-1.5 whitespace-nowrap">
-      <div
-        className="mr-1.5 flex min-w-0 items-center gap-1.5 text-xs text-text1"
-        title={`${object.name}，关键帧 ${stateKeyframeIndex + 1} 到 ${stateKeyframeIndex + 2}`}
-      >
-        <Spline size={14} className="text-accent-text" />
-        <span className="max-w-24 truncate font-medium">{object.name}</span>
-        <span className="text-text3">{stateKeyframeIndex + 1} → {stateKeyframeIndex + 2}</span>
-      </div>
-
-      <Dropdown<PathChoice>
-        value={pathChoice}
-        display={`路径 · ${pathLabel}`}
-        options={pathOptions}
-        onSelect={handlePathChoice}
-        size="md" buttonClassName="w-36"
-        panelWidthStrategy="options"
-      />
-      <Dropdown<StageSpeedPreset>
-        value={speedPreset}
-        display={`速度 · ${speedLabel}`}
-        options={SPEED_OPTIONS}
-        onSelect={(nextSpeedPreset) => updateDetail({ speedPreset: nextSpeedPreset })}
-        size="md" buttonClassName="w-28"
-      />
-
+    <UiOverflowRow
+      className="pointer-events-auto w-full justify-center gap-1.5 whitespace-nowrap"
+      items={items}
+      alwaysShowOverflow
+      renderOverflow={(hiddenIds) => (
       <PanelTrigger
-        panelWidth={272}
+        panelWidth={288}
         panelPadding="content"
         renderPanel={() => (
           <div className="flex flex-col gap-3">
-            <div className="flex flex-col gap-1.5">
-              <label className="flex items-center justify-between gap-3 text-xs text-text2">
-                <span className="shrink-0">起步延迟</span>
-                <div className="flex items-center gap-1.5">
-                  <UiInput
-                    type="number"
-                    min={0}
-                    step={0.1}
-                    value={detail.delay ?? 0}
-                    className="w-20 px-2 text-right tabular-nums"
-                    onChange={(event) => updateDetail({ delay: Math.max(0, Number(event.target.value)) })}
-                  />
-                  <span className="text-2xs text-text2">秒</span>
-                </div>
-              </label>
-              <p className="text-2xs leading-4 text-text2">
-                本段过渡开始后，等待这段时间再让当前对象开始移动。
-              </p>
-            </div>
+            {hiddenIds.length > 0 ? (
+              <div className="flex flex-wrap items-center gap-1.5">
+                {items.filter((item) => hiddenIds.includes(item.id)).map((item) => <div key={item.id} className="flex items-center">{item.node}</div>)}
+              </div>
+            ) : null}
+            <UiFormRow
+              label="起步延迟（秒）"
+              info="本段过渡开始后，等待这段时间再让当前对象开始移动。"
+              density="compact"
+              inline
+            >
+              <NumberInput
+                ariaLabel="起步延迟（秒）"
+                size="sm"
+                value={detail.delay ?? 0}
+                min={0}
+                step={0.1}
+                precision={1}
+                widthClassName="w-24"
+                align="right"
+                commitOnChange
+                wheelStep
+                onChange={(delay) => updateDetail({ delay: Math.max(0, delay) })}
+              />
+            </UiFormRow>
 
             {activePreset?.kind === 'orbit' && (
               <>
                 {parameterInput('环绕角度', activePreset.degrees, (degrees) => updatePreset({ ...activePreset, degrees }))}
-                <div className="flex items-center justify-between gap-3 text-xs text-text2">
-                  <span>环绕方向</span>
+                <UiFormRow label="环绕方向" density="compact" inline>
                   <Dropdown<'cw' | 'ccw'>
+                    ariaLabel="环绕方向"
                     value={activePreset.direction}
+                    display={activePreset.direction === 'cw' ? '顺时针' : '逆时针'}
                     options={[{ label: '顺时针', value: 'cw' }, { label: '逆时针', value: 'ccw' }]}
                     onSelect={(direction) => updatePreset({ ...activePreset, direction })}
-                    size="md" buttonClassName="w-24"
+                    size="sm" buttonClassName="w-24"
                   />
-                </div>
+                </UiFormRow>
               </>
             )}
             {(activePreset?.kind === 'dollyIn' || activePreset?.kind === 'dollyOut')
@@ -206,9 +258,9 @@ const StagePathContextBar: React.FC = () => {
               && parameterInput('升降高度', activePreset.height, (height) => updatePreset({ ...activePreset, height }))}
 
             {object.type === 'character' && (
-              <div className="flex items-center justify-between gap-3 text-xs text-text2">
-                <span>角色动作</span>
+              <UiFormRow label="角色动作" density="compact" inline>
                 <Dropdown<string>
+                  ariaLabel="角色动作"
                   value={motionValue}
                   options={MOTION_OPTIONS}
                   onSelect={(value) => updateDetail({
@@ -218,19 +270,20 @@ const StagePathContextBar: React.FC = () => {
                         ? createPoseMotion()
                         : createClipMotion(value),
                   })}
-                  size="md" buttonClassName="w-36"
+                  size="sm" buttonClassName="w-36"
                   panelWidthStrategy="options"
                 />
-              </div>
+              </UiFormRow>
             )}
 
             {originPreset && (
               <UiButton
-                className="justify-start px-2"
+                size="sm"
+                className="justify-start gap-1.5"
                 title="丢弃手动修改并重新生成预设路径"
                 onClick={() => updatePreset(originPreset)}
               >
-                <RotateCcw size={13} className="mr-1.5" />重新应用原预设
+                <RotateCcw size={14} />重新应用原预设
               </UiButton>
             )}
           </div>
@@ -244,21 +297,12 @@ const StagePathContextBar: React.FC = () => {
             onClick={togglePanel}
             data-panel-trigger-button
           >
-            <SlidersHorizontal size={14} />
+            <SlidersHorizontal size={16} />
           </UiIconButton>
         )}
       </PanelTrigger>
-
-      {path && (
-        <UiIconButton size="lg"
-          title="重置为直线"
-          aria-label="重置为直线"
-          onClick={() => setStateKeyframeSpatialPath(stateKeyframe.id, object.id, undefined)}
-        >
-          <RotateCcw size={14} />
-        </UiIconButton>
       )}
-    </div>
+    />
   )
 }
 

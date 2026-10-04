@@ -159,7 +159,8 @@ const StateKeyframeTimelinePanel: React.FC = () => {
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-window" onKeyDown={handlePanelKeyDown}>
-      <div className="flex h-9 shrink-0 items-center gap-3 border-b border-line bg-raised px-2">
+      {/* 面板自己的工具条：与面板同底（不再抬一级 raised），面板名称由停靠标签给出，不在右端重复 */}
+      <div className="flex h-9 shrink-0 items-center gap-3 border-b border-line bg-panel px-2">
         <PlaybackButtons canPlay={stateKeyframes.length > 0 && duration > 0} />
         <StateKeyframeTimecodeText
           currentTime={currentTime}
@@ -169,13 +170,12 @@ const StateKeyframeTimelinePanel: React.FC = () => {
           onModeChange={setTimecodeMode}
         />
         <UiIconButton
-          className="ml-4"
           title="在播放头位置添加关键帧"
+          aria-label="添加关键帧"
           onClick={addStateKeyframe}
         >
           <Plus size={16} />
         </UiIconButton>
-        <span className="ml-auto text-xs text-text2">状态关键帧</span>
       </div>
 
       <div

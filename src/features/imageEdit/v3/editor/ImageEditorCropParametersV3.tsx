@@ -263,7 +263,7 @@ export function ImageEditorCropParametersV3({
             type="button"
             data-panel-trigger-button
             variant="secondary"
-            className="w-24 justify-between !px-2"
+            className="w-24 justify-between"
             aria-label={`${t('imageEditor.v3.crop.aspectRatio')}: ${cropAspectRatioLabel}`}
             title={`${t('imageEditor.v3.crop.aspectRatio')}: ${cropAspectRatioLabel}`}
             aria-haspopup="menu"
@@ -282,7 +282,7 @@ export function ImageEditorCropParametersV3({
         <label key={key} className="flex shrink-0 items-center gap-1.5 text-xs text-text2">
           <span>{t(`imageEditor.v3.crop.${key}`)}</span>
           <UiInput
-            className="!w-16 !px-2 tabular-nums"
+            className="!w-16 tabular-nums"
             type="number"
             min={0}
             step={1}

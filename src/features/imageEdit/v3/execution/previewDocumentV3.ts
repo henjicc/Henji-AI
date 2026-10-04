@@ -247,7 +247,7 @@ function addBrushRequest(
   const descriptor = descriptors.get(resourceId)
   if (!descriptor) throw new Error(`图片预览缺少画笔瓦片资源描述：${tileKey}`)
   if (descriptor.mediaType !== IMAGE_EDITOR_V3_BRUSH_TILE_MEDIA_TYPE) {
-    throw new Error(`图片预览画笔瓦片媒体类型不匹配：${tileKey}`)
+    throw new Error(`图片预览画笔瓦片媒体类型不匹配：${tileKey}（${String(descriptor.mediaType)}）`)
   }
   if (descriptor.byteLength < BRUSH_TILE_MIN_RESOURCE_BYTES
     || descriptor.byteLength > BRUSH_TILE_MAX_RESOURCE_BYTES) {

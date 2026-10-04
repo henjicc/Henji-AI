@@ -1,9 +1,9 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
-import { Expand, Keyboard, Minus, Pause, Play, Plus, RotateCcw, Trash2, Volume2, VolumeX } from 'lucide-react'
+import { Expand, Keyboard, Minus, MoreHorizontal, Pause, Play, Plus, RotateCcw, Trash2, Volume2, VolumeX } from 'lucide-react'
 import ContextMenu from '@/components/ContextMenu'
 import { useContextMenu } from '@/hooks/useContextMenu'
 import { ICON_SETTINGS as SettingsIcon } from '@/core/theme/icons'
-import { PanelTrigger, UiButton, UiIconButton, UiOptionButton, UiRangeInput, UiSwitch, UiTextToken, UI_SEGMENTED_TRACK_CLASS } from '@/components/ui'
+import { PanelTrigger, UiButton, UiIconButton, UiLoading, UiOptionButton, UiOverflowRow, UiRangeInput, UiSwitch, UiTextToken, UI_SEGMENTED_TRACK_CLASS, type UiOverflowRowItem } from '@/components/ui'
 import { buildProjectAudioEditTimeline, editedDurationFrames } from '@/core/audioEdit/timeline'
 import type { AudioEditXmlTimeline } from '@/core/audioEdit/xml'
 import type { AudioEditProjectDocument, AudioEditRange } from '@/core/audioEdit/types'
@@ -56,7 +56,7 @@ const SHORTCUTS: Array<[string, string]> = [
 ]
 
 const LEGEND: Array<[string, string]> = [
-  ['bg-warning-text/40', '待处理'],
+  ['bg-warning-tint', '待处理'],
   ['bg-danger-tint', '已删除'],
   ['bg-text3/30', '已静音'],
 ]
@@ -179,54 +179,79 @@ export const AudioEditTimeline = memo(function AudioEditTimeline({ project, deli
   }, [duration, length, playing, sourceFrame, view])
 
   const statusText = previewError || (previewPending ? '正在更新停顿预览…' : '')
+  const readouts = [
+    mode !== 'source' && removedFrames > 0 ? `已剪去 ${(removedFrames / rate).toFixed(1)} 秒` : '',
+    preparing ? '正在准备预览…' : '',
+    statusText,
+  ].filter(Boolean)
+  // 播放条右侧控件：priority 越小越早收进“更多”；试听错误常驻（pinned，放不下时自身截断）
+  const transportItems: UiOverflowRowItem[] = [
+    ...(readouts.length ? [{ id: 'readouts', priority: 10, node: <span className="max-w-56 truncate whitespace-nowrap text-xs text-text3" aria-live="polite" title={readouts.join(' · ')}>{readouts.join(' · ')}</span> }] : []),
+    ...(error ? [{ id: 'error', priority: 100, pinned: true, node: <span role="alert" className="min-w-0 truncate text-xs text-danger-text" title={error}>{error}</span> }] : []),
+    ...(selection ? [{ id: 'selection', priority: 90, node: <div className="flex items-center gap-1" aria-label="波形选区操作">
+      <span className="mr-1 whitespace-nowrap font-mono text-xs tabular-nums text-text2">选区 {time(selection.startFrame, rate)} – {time(selection.endFrame, rate)}</span>
+      <UiButton size="sm" variant="danger" disabled={disabled} title="删除选区 · Delete" onClick={() => onEditSelection('delete')}><Trash2 size={14} className="mr-1" />删除</UiButton>
+      <UiButton size="sm" disabled={disabled} title="静音选区 · M" onClick={() => onEditSelection('mute')}><VolumeX size={14} className="mr-1" />静音</UiButton>
+      <UiButton size="sm" disabled={disabled} onClick={() => onEditSelection('restore')}><RotateCcw size={14} className="mr-1" />恢复选区</UiButton>
+      <UiButton size="sm" onClick={() => onSelection(null)}>取消选区</UiButton>
+    </div> }] : []),
+    { id: 'gain', priority: 40, node: <label className="flex shrink-0 items-center gap-2 whitespace-nowrap text-xs text-text2" title="自动放大小声录音，仅影响试听，不改变导出音量">
+      <UiSwitch checked={mode !== 'delivery' && autoGain} disabled={mode === 'delivery'} onCheckedChange={setAutoGain} aria-label="试听自动增益" />自动增益
+    </label> },
+    { id: 'volume', priority: 50, node: <label className="flex shrink-0 items-center gap-1.5 whitespace-nowrap text-xs text-text2" title={`试听音量 ${Math.round(volume * 100)}%`}>
+      <Volume2 size={14} aria-hidden="true" className="text-text3" />
+      <UiRangeInput className="!w-20 shrink-0" aria-label="试听音量" min={0} max={100} step={1} value={Math.round(volume * 100)} onChange={(event) => setVolume(Number(event.target.value) / 100)} />
+    </label> },
+    { id: 'zoom', priority: 60, node: <div className="flex items-center gap-1.5" role="group" aria-label="波形缩放控制">
+      <UiIconButton aria-label="显示全部" title="显示全部" onClick={() => { pauseFollow(); setView({ start: 0, end: duration }) }}><Expand size={16} /></UiIconButton>
+      <UiIconButton aria-label="缩小波形" title="缩小波形" disabled={zoomLevel <= 0} onClick={() => zoomTo(zoomLevel - 10)}><Minus size={16} /></UiIconButton>
+      <UiRangeInput className="!w-24 shrink-0" aria-label="波形缩放" min={0} max={ZOOM_STEPS} step={1} value={Math.max(0, Math.min(ZOOM_STEPS, zoomLevel))} onChange={(event) => zoomTo(Number(event.target.value))} />
+      <UiIconButton aria-label="放大波形" title="放大波形" disabled={zoomLevel >= ZOOM_STEPS} onClick={() => zoomTo(zoomLevel + 10)}><Plus size={16} /></UiIconButton>
+    </div> },
+    { id: 'help', priority: 30, node: <PanelTrigger
+      panelWidth={248}
+      panelPadding="content"
+      renderPanel={() => (
+        <div className="flex flex-col gap-3 text-xs">
+          <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1.5">
+            {SHORTCUTS.map(([key, label]) => <div key={key} className="contents"><dt className="font-mono text-text1">{key}</dt><dd className="text-text2">{label}</dd></div>)}
+          </dl>
+          <div className="flex flex-wrap gap-x-3 gap-y-1 border-t border-line pt-2.5 text-text2">
+            {LEGEND.map(([swatch, label]) => <span key={label} className="flex items-center gap-1.5"><span aria-hidden="true" className={`h-2.5 w-2.5 rounded-sm ${swatch}`} />{label}</span>)}
+          </div>
+        </div>
+      )}
+    >
+      {({ open, togglePanel }) => <UiIconButton aria-label="快捷键与图例" title="快捷键与图例" on={open} aria-expanded={open} onClick={togglePanel} data-panel-trigger-button><Keyboard size={16} /></UiIconButton>}
+    </PanelTrigger> },
+    { id: 'settings', priority: 70, node: <UiIconButton title="界面设置" aria-label="界面设置" onClick={onSettings}><SettingsIcon size={16} /></UiIconButton> },
+  ]
 
   return (
     <section ref={wheelRegion} aria-label="波形" data-audio-timeline className="shrink-0 border-t border-gap bg-panel">
-      <div className="flex min-h-10 flex-wrap items-center gap-1.5 px-2.5 py-1">
-        <UiIconButton size="lg" disabled={!ready || playDuration === 0} onClick={() => void onToggle()} title={playing ? '暂停' : '播放'}>{playing ? <Pause size={16} /> : <Play size={16} />}</UiIconButton>
-        <span className="font-mono text-13 tabular-nums" data-audio-edit-time>
+      {/* 播放条：放不下时按优先级把右侧控件收进“更多”（UiOverflowRow），任何宽度下都不折行 */}
+      <div className="flex min-h-10 items-center gap-1.5 px-2.5 py-1">
+        <UiIconButton size="lg" disabled={!ready || playDuration === 0} onClick={() => void onToggle()} title={playing ? '暂停' : '播放'} aria-label={playing ? '暂停' : '播放'}>{playing ? <Pause size={16} /> : <Play size={16} />}</UiIconButton>
+        <span className="shrink-0 whitespace-nowrap font-mono text-13 tabular-nums" data-audio-edit-time>
           <span className="text-text1">{preciseTime(outputFrame, rate)}</span><span className="text-text3"> / {preciseTime(playDuration, rate)}</span>
         </span>
-        {mode !== 'source' && removedFrames > 0 && <span className="ml-1.5 text-xs text-text3">已剪去 {(removedFrames / rate).toFixed(1)} 秒</span>}
-        {preparing && <span className="ml-1.5 text-xs text-text3">正在准备预览…</span>}
-        {error && <span role="alert" className="ml-1.5 text-xs text-danger-text">{error}</span>}
-        {selection && <div className="ml-2 flex items-center gap-1" aria-label="波形选区操作">
-          <span className="mr-1 font-mono text-xs tabular-nums text-text2">选区 {time(selection.startFrame, rate)} – {time(selection.endFrame, rate)}</span>
-          <UiButton size="sm" variant="danger" disabled={disabled} title="删除选区 · Delete" onClick={() => onEditSelection('delete')}><Trash2 size={14} className="mr-1" />删除</UiButton>
-          <UiButton size="sm" disabled={disabled} title="静音选区 · M" onClick={() => onEditSelection('mute')}><VolumeX size={14} className="mr-1" />静音</UiButton>
-          <UiButton size="sm" disabled={disabled} onClick={() => onEditSelection('restore')}><RotateCcw size={14} className="mr-1" />恢复选区</UiButton>
-          <UiButton size="sm" onClick={() => onSelection(null)}>取消选区</UiButton>
-        </div>}
-        <span className="ml-auto max-w-56 truncate text-xs text-text3" aria-live="polite" title={statusText}>{statusText}</span>
-        <label className="ml-1.5 flex shrink-0 items-center gap-2 whitespace-nowrap text-xs text-text2" title="自动放大小声录音，仅影响试听，不改变导出音量">
-          <UiSwitch checked={mode !== 'delivery' && autoGain} disabled={mode === 'delivery'} onCheckedChange={setAutoGain} aria-label="试听自动增益" />自动增益
-        </label>
-        <label className="ml-1.5 flex shrink-0 items-center gap-1.5 whitespace-nowrap text-xs text-text2" title={`试听音量 ${Math.round(volume * 100)}%`}>
-          <Volume2 size={14} aria-hidden="true" className="text-text3" />
-          <UiRangeInput className="!w-20 shrink-0" aria-label="试听音量" min={0} max={100} step={1} value={Math.round(volume * 100)} onChange={(event) => setVolume(Number(event.target.value) / 100)} />
-        </label>
-        <span aria-hidden="true" className="mx-1.5 h-4 w-px shrink-0 bg-line" />
-        <UiIconButton aria-label="显示全部" title="显示全部" onClick={() => { pauseFollow(); setView({ start: 0, end: duration }) }}><Expand size={15} /></UiIconButton>
-        <UiIconButton aria-label="缩小波形" title="缩小波形" disabled={zoomLevel <= 0} onClick={() => zoomTo(zoomLevel - 10)}><Minus size={14} /></UiIconButton>
-        <UiRangeInput className="!w-24 shrink-0" aria-label="波形缩放" min={0} max={ZOOM_STEPS} step={1} value={Math.max(0, Math.min(ZOOM_STEPS, zoomLevel))} onChange={(event) => zoomTo(Number(event.target.value))} />
-        <UiIconButton aria-label="放大波形" title="放大波形" disabled={zoomLevel >= ZOOM_STEPS} onClick={() => zoomTo(zoomLevel + 10)}><Plus size={14} /></UiIconButton>
-        <PanelTrigger
-          panelWidth={248}
-          panelPadding="content"
-          renderPanel={() => (
-            <div className="flex flex-col gap-3 text-xs">
-              <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1.5">
-                {SHORTCUTS.map(([key, label]) => <div key={key} className="contents"><dt className="font-mono text-text1">{key}</dt><dd className="text-text2">{label}</dd></div>)}
-              </dl>
-              <div className="flex flex-wrap gap-x-3 gap-y-1 border-t border-line pt-2.5 text-text2">
-                {LEGEND.map(([swatch, label]) => <span key={label} className="flex items-center gap-1.5"><span aria-hidden="true" className={`h-2.5 w-2.5 rounded-sm ${swatch}`} />{label}</span>)}
-              </div>
-            </div>
+        <UiOverflowRow
+          className="flex-1 justify-end gap-1.5"
+          items={transportItems}
+          renderOverflow={(hiddenIds) => (
+            <PanelTrigger
+              panelWidth={280}
+              panelPadding="content"
+              renderPanel={() => (
+                <div className="flex flex-col items-start gap-3">
+                  {transportItems.filter((item) => hiddenIds.includes(item.id)).map((item) => <div key={item.id} className="flex flex-wrap items-center gap-1.5">{item.node}</div>)}
+                </div>
+              )}
+            >
+              {({ open, togglePanel }) => <UiIconButton aria-label="更多播放控制" title="更多播放控制" on={open} aria-expanded={open} onClick={togglePanel} data-panel-trigger-button><MoreHorizontal size={16} /></UiIconButton>}
+            </PanelTrigger>
           )}
-        >
-          {({ open, togglePanel }) => <UiIconButton aria-label="快捷键与图例" title="快捷键与图例" aria-expanded={open} onClick={togglePanel} data-panel-trigger-button><Keyboard size={16} /></UiIconButton>}
-        </PanelTrigger>
-        <UiIconButton title="界面设置" aria-label="界面设置" onClick={onSettings}><SettingsIcon size={16} /></UiIconButton>
+        />
       </div>
       <div className="flex flex-col gap-1.5 px-2.5 pb-2.5">
         <div ref={container} role="slider" tabIndex={0} aria-label="口播波形定位" aria-valuemin={0} aria-valuemax={duration} aria-valuenow={sourceFrame} aria-valuetext={time(sourceFrame, rate)}
@@ -288,9 +313,11 @@ export const AudioEditTimeline = memo(function AudioEditTimeline({ project, deli
           {removed.filter((range) => range.end > view.start && range.start < view.end).map((range) => (
             <div key={range.start} data-audio-deleted className="pointer-events-none absolute inset-y-5 border-x border-danger-text bg-danger-tint" style={{ left: `${position(Math.max(view.start, range.start))}%`, width: `${(Math.min(view.end, range.end) - Math.max(view.start, range.start)) / length * 100}%` }} />
           ))}
-          {[...spans.filter((span) => span.muted).map((span) => ({ startFrame: span.sourceStartFrame, endFrame: span.sourceEndFrame, kind: 'mute' })), ...previewRanges.map((range) => ({ ...range, kind: 'preview' })), ...(selection ? [{ ...selection, kind: 'selection' }] : [])].filter((range) => range.endFrame > view.start && range.startFrame < view.end).map((range, index) => <div key={`${range.kind}:${index}`} data-audio-overlay={range.kind} className={`pointer-events-none absolute inset-y-5 border-x ${range.kind === 'preview' ? 'border-warning-text bg-warning-text/20' : range.kind === 'mute' ? 'border-text3 bg-text3/20' : 'border-accent-ring bg-accent-tint'}`} style={{ left: `${position(Math.max(view.start, range.startFrame))}%`, width: `${(Math.min(view.end, range.endFrame) - Math.max(view.start, range.startFrame)) / length * 100}%` }} />)}
+          {[...spans.filter((span) => span.muted).map((span) => ({ startFrame: span.sourceStartFrame, endFrame: span.sourceEndFrame, kind: 'mute' })), ...previewRanges.map((range) => ({ ...range, kind: 'preview' })), ...(selection ? [{ ...selection, kind: 'selection' }] : [])].filter((range) => range.endFrame > view.start && range.startFrame < view.end).map((range, index) => <div key={`${range.kind}:${index}`} data-audio-overlay={range.kind} className={`pointer-events-none absolute inset-y-5 border-x ${range.kind === 'preview' ? 'border-warning-text bg-warning-tint' : range.kind === 'mute' ? 'border-text3 bg-text3/20' : 'border-accent-ring bg-accent-tint'}`} style={{ left: `${position(Math.max(view.start, range.startFrame))}%`, width: `${(Math.min(view.end, range.endFrame) - Math.max(view.start, range.startFrame)) / length * 100}%` }} />)}
           {sourceFrame >= view.start && sourceFrame <= view.end && <div aria-hidden="true" className="pointer-events-none absolute inset-y-0 w-px bg-accent-ring" style={{ left: `${Math.min(99.95, position(sourceFrame))}%` }}><span className="absolute -left-[5px] -top-0.5 h-2.5 w-[11px] rounded-b-md bg-accent-ring" /></div>}
-          {!waveform.data && <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-xs text-text3">{waveform.status === 'error' ? waveform.error : '正在准备波形…'}</div>}
+          {!waveform.data && (waveform.status === 'error'
+            ? <div role="alert" className="pointer-events-none absolute inset-0 flex items-center justify-center text-xs text-danger-text">{waveform.error}</div>
+            : <UiLoading size="xs" message="正在准备波形…" className="pointer-events-none absolute inset-0" />)}
         </div>
         <AudioEditOverview duration={duration} sampleRate={rate} sourceFrame={sourceFrame} waveform={waveform} view={view} onChange={(next) => { pauseFollow(); setView(next) }} />
         {waveform.data && <div className="grid grid-cols-[96px_minmax(0,1fr)] items-stretch gap-2.5" data-audio-detail>
