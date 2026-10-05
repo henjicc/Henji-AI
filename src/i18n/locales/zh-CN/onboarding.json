@@ -23,7 +23,6 @@
     "visitWebsite": "访问官网",
     "language": "切换语言",
     "chooseDirectory": "选择其他位置",
-    "openApiSettings": "打开平台密钥",
     "rerun": "重新运行首次设置",
     "dismiss": "知道了"
   },
@@ -128,7 +127,6 @@
     "successDescription": "接下来可以切换模型、添加参考图，或把生成流程放进画布继续组合。"
   },
   "settings": {
-    "statusLabel": "首次设置状态",
     "primaryProvider": "默认供应商",
     "primaryProviderHint": "新建节点时优先使用这个供应商；如果它不提供某类模型，会回退到其他可用供应商。",
     "defaultsTitle": "新节点默认项",
@@ -147,12 +145,6 @@
     "notSet": "未设置",
     "defaultsCleared": "新供应商不提供原先的{{types}}默认模型，相关设置已清空，请重新选择。",
     "onboardingTitle": "首次设置引导",
-    "status": {
-      "not_started": "尚未开始",
-      "in_progress": "进行中",
-      "completed": "已完成",
-      "skipped": "已跳过"
-    },
     "description": "重新打开欢迎流程。已保存的默认项和平台密钥不会被清除。"
   }
 }

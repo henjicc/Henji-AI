@@ -1,5 +1,5 @@
 {
-  "mcp": { "loading": "正在读取连接设置…", "enable": "允许外部智能体连接", "readOnly": "连接授权有效期为 30 天；开关、端口和新连接权限会保存，重启后恢复。内置助手使用聊天框中的操作权限。", "port": "连接端口", "name": "连接名称", "namePlaceholder": "例如：Codex", "authorize": "创建授权", "copy": "复制连接配置", "revoke": "撤销", "allowWrites": "允许新连接修改内容", "allowDelete": "允许新连接删除内容", "writeScope": "可修改设置、模型显示、素材和画布；不包含付费生成。", "accessRead": "仅查询", "accessWrite": "可修改", "accessDelete": "可修改和删除", "allowPaid": "允许新连接付费生成", "paidScope": "允许使用已配置供应商生成图片、视频和音频，费用由供应商收取。", "accessPaid": "可付费生成" },
+  "mcp": { "loading": "正在读取连接设置…", "enable": "允许外部智能体连接", "readOnly": "连接授权有效期为 30 天；开关、端口和新连接权限会保存，重启后恢复。内置助手使用聊天框中的操作权限。", "port": "连接端口", "portHint": "关闭外部连接后才能修改端口。", "newConnectionTitle": "新建连接", "connectionsTitle": "已授权的连接", "noConnections": "还没有授权任何连接。", "name": "连接名称", "namePlaceholder": "例如：Codex", "authorize": "创建授权", "copy": "复制连接配置", "revoke": "撤销", "allowWrites": "允许修改内容", "allowDelete": "允许删除内容", "writeScope": "可修改设置、模型显示、素材和画布；不包含付费生成。", "accessRead": "仅查询", "accessWrite": "可修改", "accessDelete": "可修改和删除", "allowPaid": "允许付费生成", "paidScope": "允许使用已配置供应商生成图片、视频和音频，费用由供应商收取。", "accessPaid": "可付费生成" },
   "title": "设置",
   "language": "语言",
   "theme": "主题",
@@ -247,10 +247,6 @@
       "label": "通用",
       "title": "通用设置",
       "description": "配置应用的基本设置和行为。",
-      "maxHistoryCount": {
-        "label": "历史记录数量",
-        "description": "保留的最大历史记录数"
-      },
       "showPriceEstimate": {
         "label": "显示价格估算",
         "description": "在生成前显示预估价格"
@@ -287,11 +283,6 @@
         "zhCN": "简体中文",
         "enUS": "English"
       }
-    },
-    "history": {
-      "title": "历史记录",
-      "limitLabel": "保存数量限制",
-      "limitHint": "最多保存 1-500 条历史记录，超出后将自动删除最旧的记录"
     },
     "dataPath": {
       "title": "数据目录",
@@ -367,15 +358,13 @@
     },
     "updates": {
       "title": "更新检测",
-      "enableLabel": "启用更新检测",
-      "enableHint": "自动检查应用是否有新版本可用",
-      "frequencyLabel": "检测频率",
-      "frequencyHint": "选择自动检查更新的频率",
+      "autoCheckLabel": "自动检查更新",
+      "autoCheckHint": "按选定的频率在后台检查是否有新版本；关闭后仍可手动检查。",
       "frequency": {
-        "startup": "每次启动时",
+        "startup": "每次启动",
         "daily": "每天",
         "weekly": "每周",
-        "never": "从不"
+        "never": "关闭"
       },
       "currentVersionLabel": "当前版本",
       "clearIgnoredLabel": "已忽略的版本",
@@ -422,12 +411,15 @@
     },
     "interface": {
       "bottomPanelTitle": "底部面板",
-      "autoCollapseLabel": "智能折叠",
-      "autoCollapseHint": "浏览历史记录时自动折叠底部面板，节省显示空间",
-      "collapseDelayLabel": "折叠延迟 (ms)",
-      "collapseDelayHint": "鼠标离开面板后等待多久自动折叠",
-      "collapseOnScrollLabel": "仅滚动时折叠",
-      "collapseOnScrollHint": "开启后，只在浏览历史记录时折叠面板，鼠标移出时不会折叠",
+      "autoCollapseLabel": "生成页底部面板自动折叠",
+      "autoCollapseHint": "浏览历史记录时自动收起生成页底部的参数面板，腾出空间看结果。",
+      "autoCollapseModes": {
+        "off": "关闭",
+        "scroll": "浏览历史时",
+        "scrollOrLeave": "浏览或移出时"
+      },
+      "collapseDelayLabel": "移出后等待（{{value}} 秒）",
+      "collapseDelayHint": "鼠标离开面板后等多久再收起。",
       "startupTitle": "启动",
       "uiScaleLabel": "界面缩放",
       "uiScaleHint": "自动模式会根据窗口可用空间调整界面大小，小屏幕优先显示更多完整内容。",

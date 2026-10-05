@@ -1,5 +1,7 @@
 # 智能助手现状台账
 
+2026-10-05：关闭 09-14 记下的欠账 `general.max_history_count`：该设置自 2026-01 历史记录改存 SQLite 后已无任何消费者，界面却承诺“超出后自动删除最旧记录”。选择删除而非补齐：按默认 50 条补齐会静默删除存量作品，与当时记下的边界要求冲突。设置页条目、助手可写属性与界面文案一并移除；本地残留的旧键不再读取，不做迁移。
+
 2026-10-03：`create_camera_stage_project` 经现代 MCP（及同一操作协调器）调用时，工程已创建并落盘，但处理器结果没有核实回执，公共操作恒为 `completed/unresolved` 并投影成失败（与 09-20 三维取消回执同类）。现与新建画布项目同一契约：从持久存储回读工程、默认摄像机与 0 秒状态关键帧后返回 `verification`，回读不符如实报未核实。精确测试 2 项及能力相关 4 文件 23 项通过；正式副屏 Electron 场景 `canvas-camera-stage-assistant-render-capability` 改走真实 MCP 后通过（新建→运镜→图片渲染 completed→视频活动取消 cancelled）。未改其他三维能力；Pi 走同一协调器，未单独实跑。
 
 2026-10-02：剪辑智能体回环打通。新增只读`observe_video_edit_frame`，按固定工程版本离屏渲染序列帧或源素材指定微秒画面并收录为资产，模型经`read_application_media`读图；复用唯一有界试渲染队列，不改播放头、不弹对话框。宿主上下文新增剪辑块（工程/序列/播放头/入出点/焦点面板/多选/目标轨道），Pi提示在剪辑界面携带该块；Pi新增`workspace.video_edit`披露档，首轮含观察与读图。`video_edit.track`公开只读轨道号与类型。运行时技能`video-edit-code-creation`由`agentSkills.ts`唯一准入，Pi与外部MCP（只读`load_assistant_skill`+契约`skills`索引）双端发现，越界参考路径拒绝。正式副屏1 Electron：无历史Modern MCP发现技能→提交新原创源码→插入→调参→像素级观察→界面撤销→保存重开；只读连接可观察、写入`PERMISSION_DENIED`；真实Pi（本地受控视觉模型，零付费）加载技能参考→调参→观察→读图→结论，界面撤销撤回；错误警告0，证据`node_modules/.cache/video-edit-agent-loop/evidence.json`。同日剪辑新增`place_video_edit_creative_result`（生成/画布/图片编辑/口播/三维结果固定落点回填，`video-edit-creative-results`场景通过）与独立浮窗（同进程子窗portal，`video-edit-popout`场景通过）。未验证：真实付费模型按技能独立创作与视觉判断（未授权、未调用）；Pi/MCP只准入四项技能，旧协议三项中文技能与用户自装技能不对智能体开放。

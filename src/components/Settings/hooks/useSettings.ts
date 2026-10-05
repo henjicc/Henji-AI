@@ -24,7 +24,6 @@ import {
 import { APPLICATION_SETTINGS_CHANGED_EVENT } from '@/core/settings/events'
 
 interface Settings {
-  maxHistoryCount: number
   showPriceEstimate: boolean
   priceEstimateCurrencyMode: PriceEstimateCurrencyMode
   usdToCnyRate: number
@@ -40,7 +39,6 @@ interface Settings {
 }
 
 const DEFAULT_SETTINGS: Settings = {
-  maxHistoryCount: 50,
   showPriceEstimate: true,
   priceEstimateCurrencyMode: 'auto',
   usdToCnyRate: DEFAULT_USD_TO_CNY_RATE,
@@ -84,7 +82,6 @@ export function useSettings(): UseSettingsResult {
       const collapseSettings = readLocalStorageSettings(COLLAPSE_SETTING_SPECS)
       const quickDownloadSettings = readLocalStorageSettings(QUICK_DOWNLOAD_SETTING_SPECS)
       const loaded: Settings = {
-        maxHistoryCount: parseInt(localStorage.getItem('max_history_count') || '50', 10),
         showPriceEstimate: priceSettings.showPriceEstimate,
         priceEstimateCurrencyMode: priceSettings.currencyMode,
         usdToCnyRate: priceSettings.usdToCnyRate,

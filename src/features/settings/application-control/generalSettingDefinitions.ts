@@ -61,11 +61,6 @@ export const GENERAL_APPLICATION_SETTING_DEFINITIONS: ApplicationSettingDefiniti
     aliases: ['语言', '中文', '英文'], schema: z.enum(['auto', 'zh-CN', 'en-US']), defaultValue: 'auto',
     target: { tab: 'general', sectionId: 'general-basic' }, requiresReload: false, requiresRestart: false, sensitive: false,
   }, getCurrentLanguage, changeLanguage),
-  storageSetting({
-    id: 'general.max_history_count', title: '历史记录保留数量', description: '设置生成历史最多保留多少条。',
-    aliases: ['历史数量', '保留记录'], schema: z.number().int().min(1).max(1_000), defaultValue: 50,
-    target: { tab: 'general', sectionId: 'general-basic' }, requiresReload: false, requiresRestart: false, sensitive: false,
-  }, 'max_history_count', (raw) => Number.parseInt(raw ?? '50', 10)),
   storeSetting({
     id: 'diagnostics.log_capture_mode', title: '日志捕获范围', description: '设置本次运行记录标准信息或完整诊断内容。',
     aliases: ['完整日志', '日志捕获', '诊断模式'], schema: z.enum(['standard', 'full']), defaultValue: 'standard',

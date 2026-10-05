@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { UI_SEGMENTED_TRACK_CLASS, UI_TEXT_META_CLASS, UiButton, UiFormRow, UiOptionButton, UiSwitch } from '@/components/ui'
+import { UI_SEGMENTED_TRACK_CLASS, UI_TEXT_META_CLASS, UiButton, UiFormRow, UiOptionButton } from '@/components/ui'
 import SettingsDialog from '../components/SettingsDialog'
 import { useUpdateConfig } from '../hooks/useUpdateConfig'
 import { useExternalLink } from '../hooks/useExternalLink'
@@ -24,6 +24,11 @@ const UpdateSection: React.FC = () => {
   const [showResult, setShowResult] = useState(false)
 
   const frequencies: Array<typeof config.frequency> = ['startup', 'daily', 'weekly', 'never']
+  const activeFrequency: typeof config.frequency = config.enabled ? config.frequency : 'never'
+  const selectFrequency = (freq: typeof config.frequency): void => {
+    updateEnabled(freq !== 'never')
+    updateFrequency(freq)
+  }
 
   const handleCheck = async () => {
     try {
@@ -73,26 +78,21 @@ const UpdateSection: React.FC = () => {
 
   return (
     <>
-      <UiFormRow label={t('sections.updates.enableLabel')} info={t('sections.updates.enableHint')} inline>
-        <UiSwitch checked={config.enabled} onCheckedChange={updateEnabled} />
-      </UiFormRow>
-
-      <UiFormRow
-        label={t('sections.updates.frequencyLabel')}
-        info={t('sections.updates.frequencyHint')}
-        className={config.enabled ? '' : 'opacity-50'}
-        aria-disabled={!config.enabled || undefined}
-      >
-        {/* 检查频率是单选：分段选择（选中为淡强调底，重要记录 012） */}
-        <div className={UI_SEGMENTED_TRACK_CLASS}>
+      {/*
+        开关与频率合成一项：原来开关是一个"关"，频率里的「从不」又是一个"关"。
+        存储仍是 enabled + frequency 两个维度（助手按这两项读写），这里只是合并呈现。
+      */}
+      <UiFormRow label={t('sections.updates.autoCheckLabel')} info={t('sections.updates.autoCheckHint')} inline>
+        <div role="radiogroup" aria-label={t('sections.updates.autoCheckLabel')} className={UI_SEGMENTED_TRACK_CLASS}>
           {frequencies.map((freq) => (
             <UiOptionButton
               key={freq}
+              type="button"
               variant="segment"
-              onClick={() => updateFrequency(freq)}
-              disabled={!config.enabled}
-              active={config.frequency === freq}
-              aria-pressed={config.frequency === freq}
+              role="radio"
+              aria-checked={activeFrequency === freq}
+              active={activeFrequency === freq}
+              onClick={() => selectFrequency(freq)}
             >
               {t(`sections.updates.frequency.${freq}`)}
             </UiOptionButton>
@@ -111,15 +111,19 @@ const UpdateSection: React.FC = () => {
         </UiButton>
       </UiFormRow>
 
-      <UiFormRow
-        label={t('sections.updates.clearIgnoredLabel')}
-        info={t('sections.updates.clearIgnoredHint')}
-        inline
-      >
-        <UiButton onClick={clearIgnored} variant="secondary">
-          {t('sections.updates.clearIgnoredAction')}
-        </UiButton>
-      </UiFormRow>
+      {/* 没有忽略过任何版本时这一行没有可做的事，不显示 */}
+      {config.ignoredVersions.length > 0 ? (
+        <UiFormRow
+          label={t('sections.updates.clearIgnoredLabel')}
+          info={t('sections.updates.clearIgnoredHint')}
+          inline
+        >
+          <span className={`font-mono ${UI_TEXT_META_CLASS}`}>{config.ignoredVersions.join('、')}</span>
+          <UiButton onClick={clearIgnored} variant="secondary">
+            {t('sections.updates.clearIgnoredAction')}
+          </UiButton>
+        </UiFormRow>
+      ) : null}
 
       <SettingsDialog
         open={showResult}

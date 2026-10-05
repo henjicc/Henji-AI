@@ -4,7 +4,6 @@ import SettingsSection from '../components/SettingsSection'
 import { SETTINGS_CONTENT_CLASS, SETTINGS_CONTENT_MAX_WIDTH_CLASS } from '../settingsLayout'
 import { useSettings } from '../hooks/useSettings'
 import LanguageSection from '../sections/LanguageSection'
-import HistorySection from '../sections/HistorySection'
 import DataPathSection from '../sections/DataPathSection'
 import LargeUploadSection from '../sections/LargeUploadSection'
 import ConcurrencySection from '../sections/ConcurrencySection'
@@ -23,10 +22,6 @@ const GeneralTab: React.FC = () => {
     <UiRegion maxWidthClassName={SETTINGS_CONTENT_MAX_WIDTH_CLASS} className={SETTINGS_CONTENT_CLASS}>
       <SettingsSection id="general-basic">
         <LanguageSection />
-        <HistorySection
-          maxHistoryCount={settings.maxHistoryCount}
-          onChange={(value) => updateSetting('maxHistoryCount', value)}
-        />
       </SettingsSection>
 
       <SettingsSection id="general-onboarding">

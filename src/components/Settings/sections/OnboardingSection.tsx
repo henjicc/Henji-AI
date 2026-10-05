@@ -5,13 +5,11 @@ import { UI_TEXT_META_CLASS, UiButton, UiFormRow, UiGroup } from '@/components/u
 import { API_KEY_PROVIDERS, type ApiKeyProvider } from '@/core/config/providers'
 import { getI18nText } from '@/core/types/I18nText'
 import { onboardingManager } from '@/features/onboarding/application/onboardingManager'
-import { useOnboardingState } from '@/features/onboarding/application/useOnboardingState'
 import {
   modelDefaultsManager,
   type DefaultModelMediaType,
 } from '@/features/settings/modelDefaultsManager'
 import { useI18n } from '@/hooks/useI18n'
-import { openSettingsPanel } from '@/stores/uiStore'
 import { getProviderDisplayName } from '@/utils/modelHelpers'
 import { SETTINGS_INLINE_CONTROL_CLASS } from '../settingsLayout'
 
@@ -19,7 +17,6 @@ const DEFAULT_MODEL_MEDIA_TYPES: DefaultModelMediaType[] = ['image', 'video', 'a
 
 export default function OnboardingSection(): JSX.Element {
   const { t, currentLanguage } = useI18n('onboarding')
-  const state = useOnboardingState()
   const defaults = useSyncExternalStore(
     modelDefaultsManager.subscribe,
     modelDefaultsManager.getSnapshot,
@@ -104,22 +101,15 @@ export default function OnboardingSection(): JSX.Element {
         ) : null}
       </UiGroup>
 
-      <UiGroup title={t('settings.onboardingTitle')} description={t('settings.description')}>
-        <UiFormRow label={t('settings.statusLabel')} inline>
-          <span className={UI_TEXT_META_CLASS}>{t(`settings.status.${state.status}`)}</span>
-        </UiFormRow>
-        <div className="flex flex-wrap gap-2">
-          <UiButton variant="secondary" onClick={() => onboardingManager.restart()}>
-            {t('actions.rerun')}
-          </UiButton>
-          <UiButton
-            variant="secondary"
-            onClick={() => openSettingsPanel({ tab: 'models', sectionId: 'models-providers' })}
-          >
-            {t('actions.openApiSettings')}
-          </UiButton>
-        </div>
-      </UiGroup>
+      {/*
+        只留「重新运行」一个动作：原来的「首次设置状态：已跳过」看了也做不了什么，
+        「打开平台密钥」只是从设置跳到设置里的另一处。
+      */}
+      <UiFormRow label={t('settings.onboardingTitle')} info={t('settings.description')} inline>
+        <UiButton variant="secondary" onClick={() => onboardingManager.restart()}>
+          {t('actions.rerun')}
+        </UiButton>
+      </UiFormRow>
     </>
   )
 }

@@ -23,7 +23,6 @@
     "visitWebsite": "Visit website",
     "language": "Change language",
     "chooseDirectory": "Choose another location",
-    "openApiSettings": "Open provider keys",
     "rerun": "Run first-time setup again",
     "dismiss": "Got it"
   },
@@ -128,7 +127,6 @@
     "successDescription": "Next, try another model, add a reference image, or continue the workflow on Canvas."
   },
   "settings": {
-    "statusLabel": "First-time setup status",
     "primaryProvider": "Default provider",
     "primaryProviderHint": "New nodes prefer this provider. If it has no model for a media type, Henji AI falls back to another available provider.",
     "defaultsTitle": "Defaults for new nodes",
@@ -147,12 +145,6 @@
     "notSet": "Not set",
     "defaultsCleared": "The new provider does not offer the previous default {{types}} model. The affected defaults were cleared; choose replacements if needed.",
     "onboardingTitle": "First-time setup guide",
-    "status": {
-      "not_started": "Not started",
-      "in_progress": "In progress",
-      "completed": "Completed",
-      "skipped": "Skipped"
-    },
     "description": "Reopen the welcome flow. Saved defaults and provider keys are preserved."
   }
 }
