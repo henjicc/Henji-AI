@@ -16,6 +16,7 @@ import {
 import { API_KEY_PROVIDERS, type ApiKeyProvider } from '@/core/config/providers'
 import { providerServiceLabel } from '@/core/config/providerBrands'
 import { getProviders } from '@/config/providers'
+import { setModelAlias } from '@/config/modelAliases'
 import type { LlmCredentialMutationDto } from '@/platform/contracts/llmRuntime'
 import type { LlmModelConfig, LlmProviderConfig } from '@henjicc/ai-sdk'
 import { findProviderMetadata } from '@henjicc/ai-sdk'
@@ -53,10 +54,13 @@ const apiKeyProviderIds = new Set<string>(API_KEY_PROVIDERS.map(provider => prov
 const ProviderCenterSection = ({ llm }: ProviderCenterSectionProps): JSX.Element => {
   const { t, currentLanguage } = useI18n('settings')
   const { openExternal } = useExternalLink()
+  // 改名后模型名称要重新解析：版本号跟着语言一起作为重新读取目录的依据
+  const [aliasRevision, setAliasRevision] = useState(0)
   const generationProviders = useMemo(() => {
     void currentLanguage
+    void aliasRevision
     return getProviders()
-  }, [currentLanguage])
+  }, [aliasRevision, currentLanguage])
   const generationKeys = useApiKeys()
   const generationVisibility = useGenerationModelVisibility(generationProviders)
   const [selectedId, setSelectedId] = useState('')
@@ -344,6 +348,12 @@ const ProviderCenterSection = ({ llm }: ProviderCenterSectionProps): JSX.Element
               onModelEnabledChange={setModelEnabled}
               onSetFilteredEnabled={setFilteredEnabled}
               onEditModel={openModelDialog}
+              onRenameModel={(model, name) => {
+                const canonicalModelId = model.generationModel?.canonicalModelId
+                if (!canonicalModelId) return
+                setModelAlias(canonicalModelId, name === model.generationModel?.originalName ? '' : name)
+                setAliasRevision(value => value + 1)
+              }}
               onDeleteModel={async model => {
                 await llm.saveConfig({ ...llm.config, models: llm.config.models.filter(item => !(item.providerId === model.providerId && item.modelId === model.modelId)) })
               }}

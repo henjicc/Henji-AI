@@ -19,8 +19,7 @@
     "interface-layout": "布局行为",
     "interface-assets": "资产库",
     "interface-canvas": "画布",
-    "interface-theme": "主题外观",
-    "models-alias": "别名"
+    "interface-theme": "主题外观"
   },
   "apiKeys": {
     "title": "API 密钥设置",
@@ -137,6 +136,8 @@
     "searchNoResults": "没有匹配的供应商",
     "emptyModels": "这个分类还没有模型",
     "emptyModelsHint": "可添加模型或切换其他能力分类。",
+    "renameHint": "同一模型在所有供应商下同步改名，留空恢复原名",
+    "originalName": "原名 {{name}}",
     "syncFailed": "同步模型失败",
     "syncFailedHint": "请检查密钥与接口地址后重试。",
     "providers": { "bigmodel": "智谱" },
@@ -154,7 +155,7 @@
     },
     "actions": {
       "addProvider": "添加供应商", "connectionSettings": "连接设置", "syncModels": "同步模型", "syncingModels": "正在同步…", "addModel": "添加模型",
-      "editModel": "编辑模型", "deleteModel": "删除模型"
+      "renameModel": "改名", "editModel": "编辑模型", "deleteModel": "删除模型"
     }
   },
   "llmProvider": {
@@ -550,11 +551,6 @@
     "byType": "按类型：",
     "listTitle": "模型列表",
     "visibleCount": "({{visible}}/{{total}} 可见)",
-    "alias": {
-      "sectionDescription": "同一模型无论由哪些供应商提供，只需设置一次，别名统一生效",
-      "inputLabel": "{{name}} 的别名",
-      "empty": "还没有可设置别名的模型"
-    },
     "status": {
       "hidden": "已隐藏",
       "visible": "显示中"

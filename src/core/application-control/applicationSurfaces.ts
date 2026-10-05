@@ -4,7 +4,7 @@ export const APPLICATION_SURFACE_IDS = [
   'settings.general', 'settings.general.basic', 'settings.general.onboarding', 'settings.storage', 'settings.providers_models', 'settings.upload',
   'settings.general.behavior', 'settings.general.maintenance', 'settings.general.mcp', 'settings.general.about',
   'settings.models.assistant', 'settings.assistant_preferences', 'settings.assistant_skills',
-  'settings.models.alias', 'settings.interface', 'settings.interface.layout', 'settings.interface.theme',
+  'settings.interface', 'settings.interface.layout', 'settings.interface.theme',
   'settings.interface.assets', 'settings.interface.canvas', 'overlay.assets', 'overlay.assistant',
 ] as const
 

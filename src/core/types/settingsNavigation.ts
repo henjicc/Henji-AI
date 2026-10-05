@@ -21,7 +21,6 @@ export const SETTINGS_SECTION_IDS = [
   'models-providers',
   'models-assistant',
   'models-upload',
-  'models-alias',
   'assistant-preferences',
   'assistant-skills',
   'interface-layout',

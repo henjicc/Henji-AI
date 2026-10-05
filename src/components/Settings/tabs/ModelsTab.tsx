@@ -7,7 +7,6 @@ import { useLlmSettings } from '../hooks/useLlmSettings'
 import ProviderCenterSection from '../sections/ProviderCenterSection'
 import AgentModelProfilesSection from '../sections/AgentModelProfilesSection'
 import UploadSection from '../sections/UploadSection'
-import ModelAliasPanel from '../../ModelAliasPanel'
 
 /**
  * 模型大类的模型列表需要横向铺开，所以不套 `SETTINGS_CONTENT_MAX_WIDTH_CLASS` 的限宽。
@@ -26,9 +25,6 @@ const ModelsTab: React.FC = () => {
       </SettingsSection>
       <SettingsSection id="models-upload">
         <UploadSection />
-      </SettingsSection>
-      <SettingsSection id="models-alias" description={t('modelSettings.alias.sectionDescription')}>
-        <ModelAliasPanel />
       </SettingsSection>
     </div>
   )

@@ -101,7 +101,6 @@ const surfaceDefinitions = [
   { id: 'settings.upload', kind: 'settings', settingsTarget: { tab: 'models', sectionId: 'models-upload' }, ...immediate },
   { id: 'settings.assistant_preferences', kind: 'settings', settingsTarget: { tab: 'assistant', sectionId: 'assistant-preferences' }, ...immediate },
   { id: 'settings.assistant_skills', kind: 'settings', settingsTarget: { tab: 'assistant', sectionId: 'assistant-skills' }, ...immediate },
-  { id: 'settings.models.alias', kind: 'settings', settingsTarget: { tab: 'models', sectionId: 'models-alias' }, ...immediate },
   { id: 'settings.interface', kind: 'settings', settingsTarget: { tab: 'interface' }, ...immediate },
   { id: 'settings.interface.layout', kind: 'settings', settingsTarget: { tab: 'interface', sectionId: 'interface-layout' }, ...immediate },
   { id: 'settings.interface.theme', kind: 'settings', settingsTarget: { tab: 'interface', sectionId: 'interface-theme' }, ...immediate },

@@ -1,3 +1,4 @@
+import { useRef, useState } from 'react'
 import { Pencil, Trash2 } from 'lucide-react'
 import {
   UI_TEXT_BODY_CLASS,
@@ -6,6 +7,7 @@ import {
   UiChipButton,
   UiEmpty,
   UiIconButton,
+  UiInput,
   UiSwitch,
 } from '@/components/ui'
 import { useI18n } from '@/hooks/useI18n'
@@ -24,6 +26,8 @@ interface ProviderCenterModelListProps {
   onSetFilteredEnabled: (models: ProviderCenterModelItem[], enabled: boolean) => void | Promise<void>
   onEditModel: (model: ProviderCenterModelItem) => void
   onDeleteModel: (model: ProviderCenterModelItem) => void | Promise<void>
+  /** 生成模型改名：按模型本身生效，同一模型在所有供应商下同步；空字符串恢复原名 */
+  onRenameModel: (model: ProviderCenterModelItem, name: string) => void
 }
 
 const CATEGORY_ORDER: ProviderCenterCategory[] = [
@@ -47,8 +51,18 @@ const ProviderCenterModelList = ({
   onSetFilteredEnabled,
   onEditModel,
   onDeleteModel,
+  onRenameModel,
 }: ProviderCenterModelListProps): JSX.Element => {
   const { t } = useI18n('settings')
+  // 正在改名的行与草稿。改名就地进行，不再另开一个"别名"分区把全部模型重新列一遍。
+  const [renaming, setRenaming] = useState<{ id: string; draft: string } | null>(null)
+  // Esc 取消后输入框卸载；个别环境卸载时仍会触发 blur，用它挡住那次提交
+  const cancelledRef = useRef(false)
+  const commitRename = (model: ProviderCenterModelItem): void => {
+    if (cancelledRef.current || renaming?.id !== model.id) return
+    onRenameModel(model, renaming.draft)
+    setRenaming(null)
+  }
   const counts = countProviderCategories(group.models)
   const categories = CATEGORY_ORDER.filter(item => (counts[item] ?? 0) > 0)
   const filtered = category === 'all' ? group.models : group.models.filter(model => model.category === category)
@@ -102,8 +116,28 @@ const ProviderCenterModelList = ({
           {filtered.map(model => (
             <div key={model.id} className="grid min-h-14 grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_8rem] items-center gap-4 px-1 py-2.5">
               <div className="min-w-0">
-                <div className={`truncate ${UI_TEXT_BODY_CLASS}`}>{model.name}</div>
-                <div className={`truncate ${UI_TEXT_META_CLASS}`}>{model.modelId}</div>
+                {renaming?.id === model.id ? (
+                  <UiInput
+                    autoFocus
+                    value={renaming.draft}
+                    placeholder={model.generationModel?.originalName}
+                    title={t('providerCenter.renameHint')}
+                    aria-label={t('providerCenter.actions.renameModel')}
+                    onChange={(event) => setRenaming({ id: model.id, draft: event.target.value })}
+                    onBlur={() => commitRename(model)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') event.currentTarget.blur()
+                      if (event.key === 'Escape') { event.stopPropagation(); cancelledRef.current = true; setRenaming(null) }
+                    }}
+                  />
+                ) : (
+                  <div className={`truncate ${UI_TEXT_BODY_CLASS}`}>{model.name}</div>
+                )}
+                <div className={`truncate ${UI_TEXT_META_CLASS}`}>
+                  {model.generationModel && model.name !== model.generationModel.originalName
+                    ? `${t('providerCenter.originalName', { name: model.generationModel.originalName })} · ${model.modelId}`
+                    : model.modelId}
+                </div>
               </div>
               <div className="flex min-w-0 flex-wrap gap-1.5">
                 {model.capabilityIds.slice(0, 4).map(capability => (
@@ -133,7 +167,19 @@ const ProviderCenterModelList = ({
                       <Trash2 className="h-4 w-4" />
                     </UiIconButton>
                   </>
-                ) : null}
+                ) : (
+                  <UiIconButton size="lg"
+                    type="button"
+                    aria-label={t('providerCenter.actions.renameModel')}
+                    title={t('providerCenter.renameHint')}
+                    onClick={() => { cancelledRef.current = false; setRenaming({
+                      id: model.id,
+                      draft: model.name === model.generationModel?.originalName ? '' : model.name,
+                    }) }}
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </UiIconButton>
+                )}
                 <span className="ml-1">
                   <UiSwitch
                     checked={model.enabled}

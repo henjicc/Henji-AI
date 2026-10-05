@@ -19,8 +19,7 @@
     "interface-layout": "Layout Behavior",
     "interface-assets": "Asset Library",
     "interface-canvas": "Canvas",
-    "interface-theme": "Theme & Appearance",
-    "models-alias": "Aliases"
+    "interface-theme": "Theme & Appearance"
   },
   "apiKeys": {
     "title": "API Key Settings",
@@ -137,6 +136,8 @@
     "searchNoResults": "No matching providers",
     "emptyModels": "No models in this category",
     "emptyModelsHint": "Add a model or choose another capability category.",
+    "renameHint": "Renames this model for every provider. Leave empty to restore the original name.",
+    "originalName": "Original: {{name}}",
     "syncFailed": "Model sync failed",
     "syncFailedHint": "Check the API key and endpoint, then try again.",
     "providers": { "bigmodel": "Zhipu AI" },
@@ -154,7 +155,7 @@
     },
     "actions": {
       "addProvider": "Add provider", "connectionSettings": "Connection settings", "syncModels": "Sync models", "syncingModels": "Syncing…", "addModel": "Add model",
-      "editModel": "Edit model", "deleteModel": "Delete model"
+      "renameModel": "Rename", "editModel": "Edit model", "deleteModel": "Delete model"
     }
   },
   "llmProvider": {
@@ -550,11 +551,6 @@
     "byType": "By type:",
     "listTitle": "Model list",
     "visibleCount": "({{visible}}/{{total}} visible)",
-    "alias": {
-      "sectionDescription": "Set once per model — it applies across every provider that offers it",
-      "inputLabel": "Alias for {{name}}",
-      "empty": "No models to alias yet"
-    },
     "status": {
       "hidden": "Hidden",
       "visible": "Visible"
