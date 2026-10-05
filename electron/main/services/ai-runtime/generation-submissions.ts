@@ -1,21 +1,25 @@
 import { operationDigest } from '../application-control/operationDigest'
-import type Database from 'better-sqlite3'
 import type { AiGenerateRequestDto, AiGenerateResponseDto } from '@henjicc/ai-sdk'
 import { getDb } from '../db'
+import { databaseLocations } from '../db-locations'
 
-function database(): Database.Database {
-  const db = getDb()
-  db.exec(`CREATE TABLE IF NOT EXISTS generation_submissions (
-    request_id TEXT PRIMARY KEY, input_digest TEXT NOT NULL, response_json TEXT, created_at INTEGER NOT NULL)`)
-  const columns = db.prepare('PRAGMA table_info(generation_submissions)').all() as Array<{ name: string }>
-  if (!columns.some((column) => column.name === 'phase')) db.exec("ALTER TABLE generation_submissions ADD COLUMN phase TEXT NOT NULL DEFAULT 'provider'")
-  if (!columns.some((column) => column.name === 'model_id')) db.exec('ALTER TABLE generation_submissions ADD COLUMN model_id TEXT')
-  return db
+/*
+ * 生成提交账本（generation_submissions，迁移账本第 11 项）的唯一读写入口。
+ * 回执里的文件位置整份按位置写法存储（实施方案 2.5），读出时换回绝对路径。
+ */
+
+function encodeResponse(response: AiGenerateResponseDto): string {
+  return databaseLocations.use((scope) => JSON.stringify(scope.encodeValue(response)))
+}
+
+function decodeResponse(text: string): AiGenerateResponseDto {
+  const parsed = JSON.parse(text) as unknown
+  return databaseLocations.use((scope) => scope.decodeValue(parsed)) as AiGenerateResponseDto
 }
 
 /** 先记录意图，再允许供应商调用；缺回执始终未知，不重新提交。 */
 export function claimGenerationSubmission(requestId: string, request: AiGenerateRequestDto): AiGenerateResponseDto | null {
-  const db = database()
+  const db = getDb()
   const { requestId: _requestId, ...businessInput } = request
   const digest = operationDigest(businessInput)
   return db.transaction(() => {
@@ -23,7 +27,7 @@ export function claimGenerationSubmission(requestId: string, request: AiGenerate
     if (prior) {
       if (prior.input_digest !== digest) throw new Error('GENERATION_INPUT_CONFLICT:原生成标识已绑定其他输入')
       if (!prior.response_json) throw new Error('GENERATION_OUTCOME_UNKNOWN:原生成已经派发，结果尚待核对，禁止重复提交')
-      return JSON.parse(prior.response_json) as AiGenerateResponseDto
+      return decodeResponse(prior.response_json)
     }
     db.prepare('INSERT INTO generation_submissions(request_id,input_digest,response_json,created_at,model_id) VALUES (?, ?, NULL, ?, ?)').run(requestId, digest, Date.now(), request.modelId)
     return null
@@ -31,14 +35,25 @@ export function claimGenerationSubmission(requestId: string, request: AiGenerate
 }
 
 export function completeGenerationSubmission(requestId: string, response: AiGenerateResponseDto, phase: 'provider' | 'media' | 'completed' = 'completed'): void {
-  database().prepare('UPDATE generation_submissions SET response_json = ?, phase = ? WHERE request_id = ?').run(JSON.stringify(response), phase, requestId)
+  getDb().prepare('UPDATE generation_submissions SET response_json = ?, phase = ? WHERE request_id = ?').run(encodeResponse(response), phase, requestId)
 }
 
 export function readGenerationSubmissionStage(requestId: string): { phase: string; modelId: string | null } | undefined {
-  return database().prepare('SELECT phase, model_id AS modelId FROM generation_submissions WHERE request_id = ?').get(requestId) as { phase: string; modelId: string | null } | undefined
+  return getDb().prepare('SELECT phase, model_id AS modelId FROM generation_submissions WHERE request_id = ?').get(requestId) as { phase: string; modelId: string | null } | undefined
 }
 
 export function readGenerationSubmission(requestId: string): AiGenerateResponseDto | null {
-  const row = database().prepare('SELECT response_json FROM generation_submissions WHERE request_id = ?').get(requestId) as { response_json: string | null } | undefined
-  return row?.response_json ? JSON.parse(row.response_json) as AiGenerateResponseDto : null
+  const row = getDb().prepare('SELECT response_json FROM generation_submissions WHERE request_id = ?').get(requestId) as { response_json: string | null } | undefined
+  return row?.response_json ? decodeResponse(row.response_json) : null
+}
+
+/** 删除一条提交记录（测试夹具清理自己造的数据用）；返回是否删除。 */
+export function deleteGenerationSubmission(requestId: string): boolean {
+  return getDb().prepare('DELETE FROM generation_submissions WHERE request_id = ?').run(requestId).changes > 0
+}
+
+/** 一条提交记录的状态摘要（测试夹具核对幂等用）：不存在返回 null。 */
+export function inspectGenerationSubmission(requestId: string): { phase: string; createdAt: number; hasResponse: boolean } | null {
+  const row = getDb().prepare('SELECT phase, created_at AS createdAt, response_json IS NOT NULL AS hasResponse FROM generation_submissions WHERE request_id = ?').get(requestId) as { phase: string; createdAt: number; hasResponse: number } | undefined
+  return row ? { phase: row.phase, createdAt: row.createdAt, hasResponse: row.hasResponse === 1 } : null
 }

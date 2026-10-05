@@ -29,5 +29,4 @@ export interface AssetLibraryPlatform {
   removeFromLibrary(libraryId: string, assetId: string): Promise<void>
   listTags(): Promise<string[]>
   setAssetTags(assetId: string, tags: string[]): Promise<AssetRecord>
-  rebaseDataRoot(oldRoot: string, newRoot: string): Promise<number>
 }

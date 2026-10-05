@@ -11,7 +11,6 @@ const mocks = vi.hoisted(() => ({
   canvas: { selectedNodeId: 'selected-1' as string | null },
 }))
 vi.mock('@/services/database/index', () => ({ databaseService: { init: vi.fn(), getHistoryById: mocks.history } }))
-vi.mock('@/utils/dataPath', () => ({ getDataRoot: async () => 'C:/data', convertPathString: async (value: string) => value }))
 vi.mock('@/commands/image', () => ({ readImageInfo: async () => ({ width: 800, height: 600 }), persistImageSource: mocks.persist }))
 vi.mock('@/features/imageEdit/execution/browserImageEditExecution', () => ({ exportImageEditDocument: mocks.render }))
 vi.mock('@/features/assets/services/assetCollectionService', () => ({ addMediaReferenceToLibrary: mocks.collect }))
@@ -36,7 +35,7 @@ describe('generation result canvas bridge', () => {
   beforeEach(() => { vi.clearAllMocks(); mocks.history.mockResolvedValue(null) })
 
   it('历史结果不在页面内存中仍能直接放入原项目，不需要先打开生成页', async () => {
-    mocks.history.mockResolvedValue({ id: 'saved', type: 'image', status: 'success', filePath: 'C:/history/result.png', params: {}, prompt: '历史图片' })
+    mocks.history.mockResolvedValue({ id: 'saved', type: 'image', status: 'success', resultPaths: ['C:/history/result.png'], params: {}, prompt: '历史图片' })
     mocks.getResult.mockImplementationOnce(() => { throw new Error('生成页未挂载') })
     mocks.addTrustedMediaCanvasNode.mockResolvedValue({ projectId: 'canvas-1', nodeId: 'node-1', nodeType: 'uploadNode' })
     await addGenerationResultToCanvas({ projectId: 'canvas-1', resultRef: { kind: 'generation.result', id: 'saved' } })

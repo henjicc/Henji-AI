@@ -173,7 +173,6 @@ class ModelscopeCustomModelService {
   }
 
   private async ensureReady(): Promise<void> {
-    await databaseService.init()
     await this.migrateLegacyModels()
   }
 

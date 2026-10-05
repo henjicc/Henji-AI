@@ -7,7 +7,6 @@ const imageInfo = vi.hoisted(() => vi.fn())
 vi.mock('@/features/imageEdit/application/imageEditApplicationService', () => ({ materializeImageEditPreview: async () => 'C:/data/images/result.png' }))
 vi.mock('@/services/database', () => ({ databaseService: { init: vi.fn(), getHistoryById: history } }))
 vi.mock('@/commands/image', () => ({ readImageInfo: imageInfo }))
-vi.mock('@/utils/dataPath', () => ({ getDataRoot: async () => 'C:/data', convertPathString: async (path: string) => path.replace('images/', 'C:/data/images/') }))
 vi.mock('@/commands/assetLibrary', () => ({ inspectAsset: inspect }))
 vi.mock('@/platform/runtime', () => ({ isDesktopRuntime: () => true }))
 vi.mock('@/platform/desktopApi', () => ({ toDisplaySrc: (path: string) => `henji-media://local/${encodeURIComponent(path)}` }))
@@ -15,7 +14,7 @@ beforeEach(() => { inspect.mockReset(); history.mockReset(); imageInfo.mockReset
 it('每种正式媒体来源都必须有可执行解析样例，新增声明不能只更新工具说明', async () => {
   const examples: Record<typeof APPLICATION_MEDIA_REFERENCE_KINDS[number], () => void> = {
     asset: () => { inspect.mockResolvedValue({ mediaType: 'image', filePath: 'C:/data/images/result.png' }) },
-    'generation.result': () => { history.mockResolvedValue({ id: 'result', type: 'image', status: 'success', filePath: 'images/result.png', params: {} }) },
+    'generation.result': () => { history.mockResolvedValue({ id: 'result', type: 'image', status: 'success', resultPaths: ['C:/data/images/result.png'], params: {} }) },
     'image_edit.preview': () => {},
   }
   expect(Object.keys(examples).sort()).toEqual([...APPLICATION_MEDIA_REFERENCE_KINDS].sort())
@@ -43,14 +42,14 @@ it.each([
   ['uploadedVideos', 'uploadedVideoFilePaths', 'video'],
   ['uploadedAudios', 'uploadedAudioFilePaths', 'audio'],
 ])('未加入素材库的历史结果直接进入 %s', async (uploaded, paths, type) => {
-  history.mockResolvedValue({ id: 'saved', type, status: 'success', filePath: 'images/result.png', params: {} })
+  history.mockResolvedValue({ id: 'saved', type, status: 'success', resultPaths: ['C:/data/images/result.png'], params: {} })
   const result = await resolveGenerationMediaReferences({ [uploaded]: [{ kind: 'generation.result', id: 'saved' }] })
   expect(history).toHaveBeenCalledWith('saved')
   expect(result[paths]).toEqual(['C:/data/images/result.png'])
   expect(inspect).not.toHaveBeenCalled()
 })
 it('历史图片本地副本失效时复用可读远程结果，不丢掉参考图', async () => {
-  history.mockResolvedValue({ id: 'saved', type: 'image', status: 'completed', filePath: 'missing.png', params: { __resultUrl: 'https://example.com/result.png' } })
+  history.mockResolvedValue({ id: 'saved', type: 'image', status: 'completed', resultPaths: ['missing.png'], params: { __resultUrl: 'https://example.com/result.png' } })
   imageInfo.mockRejectedValueOnce(new Error('missing'))
   const result = await resolveGenerationMediaReferences({ uploadedImages: [{ kind: 'generation.result', id: 'saved' }] })
   expect(result.uploadedFilePaths).toEqual(['https://example.com/result.png'])

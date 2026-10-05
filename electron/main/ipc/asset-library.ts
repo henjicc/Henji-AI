@@ -1,5 +1,5 @@
 import { parseRecord, parseStringField, parseVoid, registerIpcHandler } from './registry'
-import { addAssetToLibrary, checkAssetPaths, createAsset, createLibrary, deleteAsset, deleteLibrary, inspectAsset, inspectAssetFileContent, inspectAssets, inspectLibrary, listLibraries, listTags, queryAssets, rebaseAssetDataRoot, relocateAsset, removeAssetFromLibrary, renameLibrary, restoreLibrary, setAssetTags, touchAsset, updateAsset } from '../services/asset-library'
+import { addAssetToLibrary, checkAssetPaths, createAsset, createLibrary, deleteAsset, deleteLibrary, inspectAsset, inspectAssetFileContent, inspectAssets, inspectLibrary, listLibraries, listTags, queryAssets, relocateAsset, removeAssetFromLibrary, renameLibrary, restoreLibrary, setAssetTags, touchAsset, updateAsset } from '../services/asset-library'
 import type { AssetLibrarySnapshotDto, AssetMediaType, AssetQuery, AssetSource, CreateAssetRequest } from '../services/asset-library/types'
 import { createMainLogger } from '../services/logging'
 import { assertTrustedApplicationSender } from './application-control'
@@ -61,7 +61,6 @@ export function registerAssetLibraryIpc(): void {
   registerIpcHandler('assetLibrary:removeFromLibrary', parsePair, ({ libraryId, assetId }) => removeAssetFromLibrary(libraryId, assetId))
   registerIpcHandler('assetLibrary:listTags', parseVoid, listTags)
   registerIpcHandler('assetLibrary:setAssetTags', parseAssetTags, ({ assetId, tags }) => setAssetTags(assetId, tags))
-  registerIpcHandler('assetLibrary:rebaseDataRoot', (input) => { const record = parseRecord(input); return { oldRoot: requiredString(record, 'oldRoot'), newRoot: requiredString(record, 'newRoot') } }, ({ oldRoot, newRoot }) => rebaseAssetDataRoot(oldRoot, newRoot))
   logger.info('资产库 IPC 注册完成', {
     event: 'asset_library.ipc.register.completed',
     context: { handlerCount: 20 },

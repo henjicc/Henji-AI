@@ -2,7 +2,8 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { z } from 'zod'
 import { inferMimeFromPath, isPathWithinAllowedMediaRoots } from '../../protocol'
-import { getDb } from '../db'
+import { getAssetFilePath } from '../asset-library'
+import { getGenerationHistoryStore } from '../generation-history/store'
 import { getDataRootDir } from '../image/path-utils'
 import { normalizeLocalSource } from '../image/source'
 import { createMainLogger } from '../logging'
@@ -25,13 +26,16 @@ const inputSchema = z.object({
 }).strict()
 
 function sources(ref: z.infer<typeof inputSchema>['ref']): string[] {
-  if (ref.kind === 'asset' || ref.kind === 'generation.result') {
-    // 参数只作为完整业务主键绑定，绝不作为文件路径或 SQL 片段。
-    const row = getDb().prepare(ref.kind === 'asset'
-      ? 'SELECT file_path FROM assets WHERE id = ?'
-      : 'SELECT file_path FROM history WHERE id = ?').get(ref.id) as { file_path: string | null } | undefined
-    if (!row?.file_path) failure('MEDIA_NOT_PERSISTED', '媒体尚未保存或原记录不存在，请先查询原任务结果。')
-    return ref.kind === 'generation.result' ? row.file_path.split('|||') : [row.file_path]
+  // 参数只作为完整业务主键交给各自的仓库，绝不作为文件路径或 SQL 片段；仓库返回已换回的绝对路径。
+  if (ref.kind === 'asset') {
+    const filePath = getAssetFilePath(ref.id)
+    if (!filePath) failure('MEDIA_NOT_PERSISTED', '媒体尚未保存或原记录不存在，请先查询原任务结果。')
+    return [filePath]
+  }
+  if (ref.kind === 'generation.result') {
+    const resultPaths = getGenerationHistoryStore().get(ref.id)?.resultPaths ?? []
+    if (resultPaths.length === 0) failure('MEDIA_NOT_PERSISTED', '媒体尚未保存或原记录不存在，请先查询原任务结果。')
+    return resultPaths
   }
   const separator = ref.id.indexOf(':')
   if (separator < 1 || separator === ref.id.length - 1) failure('INVALID_REFERENCE', '请使用包含原工程的完整画布节点引用。')

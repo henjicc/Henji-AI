@@ -60,8 +60,9 @@ async function seedCanvasFixture(page, name, tasks) {
         ...(kind === 'completed' ? { imageUrl: mediaPath, generationOutputCommitId: `commit-${taskId}` } : {}),
       } })
       edges.push({ id: `edge-${taskId}`, source: nodeId, target: resultId })
-      await window.henjiNative.db.execute('INSERT INTO history (id,provider_id,model_id,type,prompt,params,file_path,status) VALUES (?,?,?,?,?,?,?,?)',
-        [taskId, 'fixture', modelId, 'image', '重启存储样本', JSON.stringify({ __canvasGeneration: { version: 2, projectId, nodeId } }), null, 'pending'])
+      await window.henjiNative.generationHistory.insert({ id: taskId, providerId: 'fixture', modelId, type: 'image', prompt: '重启存储样本',
+        params: { __canvasGeneration: { version: 2, projectId, nodeId } }, resultPaths: [], taskId: null, status: 'pending',
+        errorMessage: null, cost: null, duration: null })
     }
     await window.henjiNative.storyboardProjects.upsertProjectRecord({
       id: projectId, name: projectName, createdAt: now, updatedAt: now, nodeCount: nodes.length,
@@ -71,7 +72,7 @@ async function seedCanvasFixture(page, name, tasks) {
   }, { projectId: FIXTURE_PROJECT_ID, creativeProjectId: CREATIVE_PROJECT_ID, projectName: name, tasks, mediaPath: path.join(ROOT, 'resources/icons/32x32.png') })
 }
 
-const readHistoryCount = (page) => page.evaluate(async () => (await window.henjiNative.db.select('SELECT COUNT(*) AS total FROM history'))[0].total)
+const readHistoryCount = (page) => page.evaluate(() => window.henjiNative.generationHistory.count())
 const readProjectName = (page) => page.evaluate((id) => window.henjiNative.storyboardProjects.getProjectRecord(id).then((record) => record?.name ?? null), FIXTURE_PROJECT_ID)
 
 async function main() {
@@ -232,10 +233,10 @@ async function main() {
           }
           evidence.secondRun.generation[kind] = { status: task.status, resultAvailable: task.resultAvailable, errorCode: task.errorCode }
         }
-        const stored = await second.page.evaluate(ids => window.henjiNative.db.select('SELECT id,status,file_path FROM history WHERE id IN (?,?,?)', Object.values(ids)), generationTasks)
+        const stored = await second.page.evaluate(async ids => (await Promise.all(Object.values(ids).map(id => window.henjiNative.generationHistory.get(id)))).filter(Boolean), generationTasks)
         assert.equal(stored.find(row => row.id === generationTasks.unknown)?.status, 'pending', '未知记录不能被查询改写成已失败或可重放')
         assert.equal(stored.find(row => row.id === generationTasks.completed)?.status, 'success', '已保存结果必须真实修复历史状态')
-        assert.equal(stored.find(row => row.id === generationTasks.completed)?.file_path, path.join(ROOT, 'resources/icons/32x32.png'))
+        assert.deepEqual(stored.find(row => row.id === generationTasks.completed)?.resultPaths, [path.join(ROOT, 'resources/icons/32x32.png')])
         // 已完成操作：重启后仍然是同一条事实，不需要重新执行。
         const completedFact = await callTool(client, 'get_application_operation', { operationId: completedOperationId })
         evidence.secondRun.completed = { executionState: completedFact.executionState, verificationState: completedFact.verificationState }

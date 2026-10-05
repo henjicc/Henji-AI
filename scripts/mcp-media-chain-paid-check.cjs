@@ -262,9 +262,9 @@ async function main() {
         // ——— 4. 结果确实落盘，并且是视频 ———
         const dataRoot = await resolveDataRootDir(page)
         for (const taskId of created.historyIds) {
-          const row = (await page.evaluate((id) => window.henjiNative.db.select('SELECT file_path, type FROM history WHERE id = ?', [id]), taskId))[0]
-          assert.ok(row?.file_path, `任务 ${taskId} 没有落盘`)
-          for (const value of String(row.file_path).split('|||')) created.mediaPaths.push(toAbsoluteMediaPath(dataRoot, value))
+          const row = await page.evaluate((id) => window.henjiNative.generationHistory.get(id), taskId)
+          assert.ok(row?.resultPaths.length, `任务 ${taskId} 没有落盘`)
+          for (const value of row.resultPaths) created.mediaPaths.push(toAbsoluteMediaPath(dataRoot, value))
         }
         const videoPath = created.mediaPaths[created.mediaPaths.length - 1]
         const videoBytes = await fsp.readFile(videoPath)
@@ -335,8 +335,8 @@ async function main() {
     }
     for (const taskId of created.historyIds) {
       await attempt('history', async () => {
-        await page.evaluate((id) => window.henjiNative.db.execute('DELETE FROM history WHERE id = ?', [id]), taskId)
-        await page.evaluate((id) => window.henjiNative.db.execute('DELETE FROM generation_submissions WHERE request_id = ?', [id]), taskId)
+        await page.evaluate((id) => window.henjiNative.generationHistory.delete(id), taskId)
+        await page.evaluate((id) => window.henjiNative.testFixtures.deleteGenerationSubmission(id), taskId)
         cleanup.history.push(taskId)
       })
     }

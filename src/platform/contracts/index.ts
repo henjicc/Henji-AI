@@ -1,6 +1,6 @@
 import type { AiRuntimePlatform } from './aiRuntime'
 import type { LlmRuntimePlatform } from './llmRuntime'
-import type { DbPlatform } from './db'
+import type { GenerationHistoryPlatform, PresetsPlatform, SettingsPlatform } from './localRecords'
 import type { CanvasProjectsPlatform } from './canvasProjects'
 import type { CustomModelsPlatform } from './customModels'
 import type { SystemPlatform } from './system'
@@ -33,7 +33,9 @@ export interface PlatformRuntime {
   mcp: McpPlatform
   aiRuntime: AiRuntimePlatform
   llmRuntime: LlmRuntimePlatform
-  db: DbPlatform
+  generationHistory: GenerationHistoryPlatform
+  presets: PresetsPlatform
+  settings: SettingsPlatform
   canvasProjects: CanvasProjectsPlatform
   customModels: CustomModelsPlatform
   system: SystemPlatform
@@ -62,7 +64,9 @@ export interface PlatformRuntime {
 export type {
   AiRuntimePlatform,
   LlmRuntimePlatform,
-  DbPlatform,
+  GenerationHistoryPlatform,
+  PresetsPlatform,
+  SettingsPlatform,
   CanvasProjectsPlatform,
   CustomModelsPlatform,
   SystemPlatform,
@@ -89,7 +93,7 @@ export type {
 }
 export * from './aiRuntime'
 export * from './llmRuntime'
-export * from './db'
+export * from './localRecords'
 export * from './canvasProjects'
 export * from './customModels'
 export * from './system'

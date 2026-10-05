@@ -105,7 +105,6 @@ export async function resolveCanvasGenerationOptions(input: GenerationPreparatio
 
 export async function submitCanvasGenerationTask(input: GenerationPreparationInput, destination: CanvasDestination, taskId: string) {
   const instance = await getCanvasProjectInstance(destination.projectId)
-  await databaseService.init()
   if (await databaseService.getHistoryById(taskId)) throw new Error('此生成任务已登记，请查询原任务，不要重新提交。')
   const model = registry.getModel(input.modelId)
   if (!model) throw new Error('生成模型不存在。')
@@ -160,7 +159,6 @@ async function registerCanvasGenerationTask(input: GenerationPreparationInput, d
   nodeId: string, taskId: string, inputFingerprint: (store?: typeof useCanvasStore) => string, releaseNode: () => void) {
   const { fingerprint } = await (async () => {
     const fingerprint = inputFingerprint()
-    await databaseService.init()
     if (await databaseService.getHistoryById(taskId)) throw new Error(`此任务已经登记，请查询原任务 ${taskId}。`)
     const model = registry.getModel(input.modelId)
     if (!model) throw new Error('生成模型不存在。')
@@ -189,7 +187,6 @@ async function registerCanvasGenerationTask(input: GenerationPreparationInput, d
 }
 
 export async function getCanvasGenerationTask(taskId: string): Promise<Record<string, unknown> | null> {
-  await databaseService.init()
   const record = await databaseService.getHistoryById(taskId)
   const value = record?.params[marker]
   if (!record || !value || typeof value !== 'object' || Array.isArray(value)) return null
@@ -233,13 +230,12 @@ export async function getCanvasGenerationTask(taskId: string): Promise<Record<st
   // 仅从本任务带身份的、完整持久化的原子输出修复历史。旧无身份结果不能冒认。
   const completedOutputs = version === 2 ? completedTaskOutputPaths(savedNodes, taskId, nodeId) : []
   if (!hasActiveWork && ['pending', 'queued', 'generating', 'error', 'timeout'].includes(recordedStatus ?? '') && completedOutputs.length > 0) {
-    const filePath = completedOutputs.join('|||')
-    await databaseService.updateHistory(taskId, { status: 'success', filePath, errorMessage: null })
-    record.status = 'success'; record.filePath = filePath; record.errorMessage = null
+    await databaseService.updateHistory(taskId, { status: 'success', resultPaths: completedOutputs, errorMessage: null })
+    record.status = 'success'; record.resultPaths = completedOutputs; record.errorMessage = null
     recordedStatus = 'success'
     logger.info('原画布任务已按保存结果对账', { event: 'canvas.generationTask.reconciled', taskId, projectId, nodeId })
   }
-  const resultAvailable = recordedStatus === 'success' && Boolean(record.filePath)
+  const resultAvailable = recordedStatus === 'success' && record.resultPaths.length > 0
   const waitingExternal = !resultAvailable && hasActiveWork
   const activeStatus = activeTasks.has(taskId) && recordedStatus === 'queued' ? 'queued' : 'generating'
   const status = resultAvailable ? 'success' : waitingExternal ? activeStatus

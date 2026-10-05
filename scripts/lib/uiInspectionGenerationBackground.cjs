@@ -86,9 +86,10 @@ async function finishGenerationResults(page, fixture, progress, count, historyCo
   try {
     await fixture.evaluate(state => state.release())
     await page.waitForFunction(async count => {
-      const rows = await window.henjiNative.db.select("SELECT id,status,file_path FROM history WHERE task_id GLOB '__generation_background_*'", [])
+      const rows = (await window.henjiNative.generationHistory.list({ idPrefix: '__generation_bench_' }))
+        .filter(row => row.taskId?.startsWith('__generation_background_'))
       return rows.length === count && Array.from({ length: count }, (_, i) => rows.find(row => row.id === `__generation_bench_${i}`))
-        .every(row => row && ['success', 'completed'].includes(row.status) && row.file_path)
+        .every(row => row && ['success', 'completed'].includes(row.status) && row.resultPaths.length > 0)
     }, count, { timeout: 15000, polling: 200 })
     // 最新的进行中任务在首屏底部，完成后它的结果图应当出现
     await page.waitForFunction(latestId => {
@@ -99,12 +100,11 @@ async function finishGenerationResults(page, fixture, progress, count, historyCo
     completionFrames = await completion.evaluate(state => state.stop())
   } finally { await completion.evaluate(state => state.dispose()); await completion.dispose() }
   const settleMs = performance.now() - started
-  const rows = await page.evaluate(() => window.henjiNative.db.select(
-    "SELECT id,status,file_path,task_id,prompt FROM history WHERE id GLOB '__generation_bench_*'", []))
+  const rows = await page.evaluate(() => window.henjiNative.generationHistory.list({ idPrefix: '__generation_bench_' }))
   assert.equal(rows.length, historyCount)
   for (let i = 0; i < count; i++) {
     const row = rows.find(row => row.id === `__generation_bench_${i}`)
-    assert.equal(row.task_id, `__generation_background_${i}`)
+    assert.equal(row.taskId, `__generation_background_${i}`)
     assert.ok(row.prompt.startsWith(`性能样本 ${i}：`))
   }
   const after = await fixture.evaluate(state => state.snapshot())

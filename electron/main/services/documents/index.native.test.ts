@@ -17,11 +17,12 @@ describe.skipIf(!process.versions.electron)('统一迁移账本', () => {
   it('首批迁移建立作品索引表并记账；重复执行不再迁移', () => {
     const db = new Database(':memory:')
     try {
-      expect(runSchemaMigrations(db)).toEqual({ applied: [1], currentVersion: 1 })
-      expect(runSchemaMigrations(db)).toEqual({ applied: [], currentVersion: 1 })
+      const all = SCHEMA_MIGRATIONS.map((migration) => migration.version)
+      expect(runSchemaMigrations(db)).toEqual({ applied: all, currentVersion: all.length, backupPath: null })
+      expect(runSchemaMigrations(db)).toEqual({ applied: [], currentVersion: all.length, backupPath: null })
       const tables = (db.prepare("SELECT name FROM sqlite_schema WHERE type='table' ORDER BY name").all() as Array<{ name: string }>).map((row) => row.name)
-      expect(tables).toEqual(['document_external_locations', 'document_index_documents', 'document_index_projects', 'schema_migrations'])
-      expect(db.prepare('SELECT version, name FROM schema_migrations').all()).toEqual([{ version: 1, name: 'document_index' }])
+      expect(tables).toEqual(expect.arrayContaining(['document_external_locations', 'document_index_documents', 'document_index_projects', 'schema_migrations']))
+      expect(db.prepare('SELECT version, name FROM schema_migrations WHERE version = 1').all()).toEqual([{ version: 1, name: 'document_index' }])
     } finally { db.close() }
   })
 
@@ -29,14 +30,15 @@ describe.skipIf(!process.versions.electron)('统一迁移账本', () => {
     const db = new Database(':memory:')
     try {
       runSchemaMigrations(db)
-      const failing: SchemaMigration = { version: 2, name: 'broken', up: (conn) => { conn.exec('CREATE TABLE half_done (id TEXT)'); throw new Error('boom') } }
+      const next = SCHEMA_MIGRATIONS.length + 1
+      const failing: SchemaMigration = { version: next, name: 'broken', up: (conn) => { conn.exec('CREATE TABLE half_done (id TEXT)'); throw new Error('boom') } }
       expect(() => runSchemaMigrations(db, [...SCHEMA_MIGRATIONS, failing])).toThrow('boom')
       expect(db.prepare("SELECT name FROM sqlite_schema WHERE name='half_done'").get()).toBeUndefined()
-      expect(db.prepare('SELECT max(version) AS version FROM schema_migrations').get()).toEqual({ version: 1 })
-      const next: SchemaMigration = { version: 2, name: 'second', up: (conn) => conn.exec('CREATE TABLE second_table (id TEXT)') }
-      expect(runSchemaMigrations(db, [...SCHEMA_MIGRATIONS, next]).applied).toEqual([2])
-      expect(() => runSchemaMigrations(db, [...SCHEMA_MIGRATIONS, { ...next, name: 'renamed' }])).toThrow('迁移账本与程序不一致')
-      expect(runSchemaMigrations(db).currentVersion).toBe(2)
+      expect(db.prepare('SELECT max(version) AS version FROM schema_migrations').get()).toEqual({ version: next - 1 })
+      const second: SchemaMigration = { version: next, name: 'second', up: (conn) => conn.exec('CREATE TABLE second_table (id TEXT)') }
+      expect(runSchemaMigrations(db, [...SCHEMA_MIGRATIONS, second]).applied).toEqual([next])
+      expect(() => runSchemaMigrations(db, [...SCHEMA_MIGRATIONS, { ...second, name: 'renamed' }])).toThrow('迁移账本与程序不一致')
+      expect(runSchemaMigrations(db).currentVersion).toBe(next)
       expect(() => runSchemaMigrations(db, [{ ...SCHEMA_MIGRATIONS[0], version: 2 }])).toThrow('连续递增')
     } finally { db.close() }
   })

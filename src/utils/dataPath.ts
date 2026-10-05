@@ -1,7 +1,6 @@
 import { createLogger } from '@/core/logging'
 import { getPlatform, isDesktopRuntime } from '@/platform/runtime'
-import { databaseService } from '@/services/database/DatabaseService'
-import { rebaseAssetDataRoot } from '@/commands/assetLibrary'
+import { deleteAppSetting, getAppSetting, setAppSetting } from '@/commands/appSettings'
 import i18n from 'i18next'
 import type { AppDirectories } from '@/platform/contracts/system'
 import {
@@ -36,9 +35,9 @@ async function migrateLegacyCustomDataRoot(): Promise<void> {
   if (!legacy || !legacy.trim()) return
 
   try {
-    const existing = await databaseService.getSetting(CUSTOM_DATA_DIR_SETTING_KEY)
+    const existing = await getAppSetting(CUSTOM_DATA_DIR_SETTING_KEY)
     if (!existing) {
-      await databaseService.setSetting(CUSTOM_DATA_DIR_SETTING_KEY, legacy.trim())
+      await setAppSetting(CUSTOM_DATA_DIR_SETTING_KEY, legacy.trim())
     }
     localStorage.removeItem(CUSTOM_DATA_DIR_SETTING_KEY)
   } catch (error) {
@@ -68,7 +67,6 @@ export async function getDefaultDataRoot(): Promise<string> {
  * 获取当前用户目录（默认或自定义）；生成记录等保存的相对路径以它为基准
  */
 export async function getDataRoot(): Promise<string> {
-  await databaseService.init()
   await migrateLegacyCustomDataRoot()
   return (await getAppDirectories()).userRoot
 }
@@ -84,7 +82,6 @@ export async function getProgramDataRoot(): Promise<string> {
  * 获取生成结果目录路径
  */
 export async function getMediaPath(): Promise<string> {
-  await databaseService.init()
   await migrateLegacyCustomDataRoot()
   return (await getAppDirectories()).folders.generated
 }
@@ -100,7 +97,6 @@ export async function getThumbnailsPath(): Promise<string> {
  * 获取上传素材目录路径
  */
 export async function getUploadsPath(): Promise<string> {
-  await databaseService.init()
   await migrateLegacyCustomDataRoot()
   return (await getAppDirectories()).folders.uploads
 }
@@ -145,16 +141,14 @@ export async function initializeDataDirectory(rootPath: string): Promise<void> {
  * @param customPath 自定义目录路径
  */
 export async function setCustomDataRoot(customPath: string): Promise<void> {
-  await databaseService.init()
-  await databaseService.setSetting(CUSTOM_DATA_DIR_SETTING_KEY, customPath)
+  await setAppSetting(CUSTOM_DATA_DIR_SETTING_KEY, customPath)
 }
 
 /**
  * 恢复到默认数据根目录
  */
 export async function resetToDefaultDataRoot(): Promise<void> {
-  await databaseService.init()
-  await databaseService.deleteSetting(CUSTOM_DATA_DIR_SETTING_KEY)
+  await deleteAppSetting(CUSTOM_DATA_DIR_SETTING_KEY)
 }
 
 // ==================== 验证和检查 ====================
@@ -386,10 +380,7 @@ export async function migrateData(
     // 8. 删除迁移标记
     await removeMigrationMarker(newPath)
 
-    // 应用内资产保存绝对路径；文件复制完成、旧目录删除前同步重写，外部引用不会被改动。
-    if (oldPath !== newPath) {
-      await rebaseAssetDataRoot(oldPath, newPath)
-    }
+    // 数据库记录里的位置都按作品目录相对记录（存储底座 2.3），换目录不需要改写记录。
 
     // 9. 自动删除旧数据（根据用户决策）
     if (oldPath !== newPath) {
@@ -424,113 +415,4 @@ export async function cleanupOldData(oldPath: string): Promise<void> {
   }
 }
 
-// ==================== 路径转换工具 ====================
-
-/**
- * 判断路径是否为绝对路径
- * @param filePath 文件路径
- * @returns 是否为绝对路径
- */
-export function isAbsolutePath(filePath: string): boolean {
-  // Windows: C:\ 或 D:\ 等
-  // Unix/Mac: / 开头
-  return /^[a-zA-Z]:[\\/]/.test(filePath) || filePath.startsWith('/')
-}
-
-/**
- * 将绝对路径转换为相对于数据根目录的相对路径
- * @param absolutePath 绝对路径
- * @param dataRoot 数据根目录
- * @returns 相对路径
- */
-export async function toRelativePath(absolutePath: string, dataRoot: string): Promise<string> {
-  if (!absolutePath) return absolutePath
-
-  // 如果已经是相对路径，直接返回
-  if (!isAbsolutePath(absolutePath)) {
-    return absolutePath
-  }
-
-  // 标准化路径分隔符
-  const normalizedAbsolute = absolutePath.replace(/\\/g, '/')
-  const normalizedRoot = dataRoot.replace(/\\/g, '/')
-
-  // 如果路径在数据根目录下，返回相对路径
-  if (normalizedAbsolute.startsWith(normalizedRoot)) {
-    const relativePath = normalizedAbsolute.substring(normalizedRoot.length)
-    // 移除开头的斜杠
-    return relativePath.replace(/^\/+/, '')
-  }
-
-  // 如果路径不在数据根目录下，返回原路径
-  // 这种情况可能发生在旧数据或外部文件
-  return absolutePath
-}
-
-/**
- * 将相对路径转换为绝对路径
- * @param relativePath 相对路径
- * @param dataRoot 数据根目录
- * @returns 绝对路径
- */
-export async function toAbsolutePath(relativePath: string, dataRoot: string): Promise<string> {
-  if (!relativePath) return relativePath
-
-  // 如果已经是绝对路径，直接返回
-  if (isAbsolutePath(relativePath)) {
-    return relativePath
-  }
-
-  // 拼接为绝对路径
-  return await join(dataRoot, relativePath)
-}
-
-/**
- * 转换路径字符串（支持 ||| 分隔的多路径）
- * @param pathString 路径字符串（可能包含 ||| 分隔符）
- * @param dataRoot 数据根目录
- * @param toRelative 是否转换为相对路径（true）或绝对路径（false）
- * @returns 转换后的路径字符串
- */
-export async function convertPathString(
-  pathString: string | undefined,
-  dataRoot: string,
-  toRelative: boolean
-): Promise<string | undefined> {
-  if (!pathString) return pathString
-
-  // 检查是否包含多路径分隔符
-  if (pathString.includes('|||')) {
-    const paths = pathString.split('|||')
-    const convertedPaths = await Promise.all(
-      paths.map(p => toRelative ? toRelativePath(p, dataRoot) : toAbsolutePath(p, dataRoot))
-    )
-    return convertedPaths.join('|||')
-  }
-
-  // 单个路径
-  return toRelative ? toRelativePath(pathString, dataRoot) : toAbsolutePath(pathString, dataRoot)
-}
-
-/**
- * 转换路径数组
- * @param paths 路径数组
- * @param dataRoot 数据根目录
- * @param toRelative 是否转换为相对路径（true）或绝对路径（false）
- * @returns 转换后的路径数组
- */
-export async function convertPathArray(
-  paths: string[] | undefined,
-  dataRoot: string,
-  toRelative: boolean
-): Promise<string[] | undefined> {
-  if (!paths || paths.length === 0) return paths
-
-  // 过滤空字符串，避免后续处理空路径
-  const validPaths = paths.filter(p => p && p.trim() !== '')
-  if (validPaths.length === 0) return undefined
-
-  return Promise.all(
-    validPaths.map(p => toRelative ? toRelativePath(p, dataRoot) : toAbsolutePath(p, dataRoot))
-  )
-}
+// 生成记录等数据库记录里的路径换算在主进程仓库完成（存储底座 2.3），渲染层只处理绝对路径。

@@ -36,7 +36,6 @@ beforeEach(async () => {
   projectId = await useProjectStore.getState().createProject('特殊生成原项目')
   useSettingsStore.setState({ providerKeyStatus: { ...useSettingsStore.getState().providerKeyStatus, apimart: true, volcengine: true } })
   vi.spyOn(GenerationService.getInstance(), 'getProgressEstimate').mockResolvedValue(null)
-  vi.spyOn(databaseService, 'init').mockResolvedValue()
   vi.spyOn(databaseService, 'getHistoryById').mockImplementation(async id => records.get(id) ?? null)
   vi.spyOn(databaseService, 'insertHistory').mockImplementation(async row => { records.set(row.id, { ...row, createdAt: 'now', updatedAt: 'now' }) })
   vi.spyOn(databaseService, 'updateHistory').mockImplementation(async (id, patch) => { Object.assign(records.get(id)!, patch) })
@@ -139,7 +138,7 @@ it.each([
     expect(results).toHaveLength(1)
     if (!cancel) {
       expect(results[0].data).toMatchObject({ imageUrl: 'C:/composite.png', isGenerating: false })
-      expect(records.get(taskId)?.filePath).toBe('C:/composite.png')
+      expect(records.get(taskId)?.resultPaths).toEqual(['C:/composite.png'])
       expect(generate.mock.calls[0][3]).toMatchObject({ requestId: taskId })
     }
     expect(await getCanvasGenerationTask(taskId)).toMatchObject({ resultAvailable: !cancel, cancellable: false })

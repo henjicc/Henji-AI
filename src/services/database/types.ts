@@ -1,52 +1,32 @@
 /**
- * Database Type Definitions
+ * 渲染层本地记录类型（生成记录、预设、设置、自定义模型）。
  *
- * TypeScript interfaces for SQLite database tables
+ * 表都归主进程仓库所有（存储底座 2.3），渲染层经 `src/commands/` 访问，不执行 SQL；
+ * 数据形态来自共享的 `src/core/localRecords/types.ts`，这里只把参数收窄为渲染层的动态值类型。
  */
+
+import type {
+  GenerationHistoryMediaType,
+  GenerationHistoryQuery,
+  GenerationHistoryRecordDto,
+  GenerationHistoryStatus,
+  PresetQuery,
+  PresetRecordDto,
+  SettingValueType,
+} from '@/core/localRecords/types'
 
 // ==================== 历史记录类型 ====================
 
-export type HistoryStatus =
-  | 'queued'
-  | 'pending'
-  | 'generating'
-  | 'success'
-  | 'error'
-  | 'timeout'
-  | 'cancelled'
-  // 兼容旧版本数据库字段值
-  | 'completed'
-  | 'failed'
+export type HistoryStatus = GenerationHistoryStatus
 
-export interface HistoryRecord {
-  id: string
-  providerId: string
-  modelId: string
-  type: 'image' | 'video' | 'audio'
-  prompt: string | null
+export interface HistoryRecord extends Omit<GenerationHistoryRecordDto, 'params'> {
   params: DynamicValueMap
-  filePath: string | null
-  taskId: string | null
-  status: HistoryStatus
-  errorMessage: string | null
-  cost: number | null
-  duration: number | null
-  createdAt: string
-  updatedAt: string
 }
 
 // ==================== 预设类型 ====================
 
-export interface PresetRecord {
-  id: string
-  name: string
-  description: string | null
-  modelId: string | null  // null = 全局预设
+export interface PresetRecord extends Omit<PresetRecordDto, 'params'> {
   params: DynamicValueMap
-  isFavorite: boolean
-  useCount: number
-  createdAt: string
-  updatedAt: string
 }
 
 // ==================== 设置类型 ====================
@@ -54,9 +34,7 @@ export interface PresetRecord {
 export interface SettingRecord {
   key: string
   value: string
-  type: 'string' | 'number' | 'boolean' | 'json'
-  description: string | null
-  updatedAt: string
+  type: SettingValueType
 }
 
 // ==================== 自定义模型类型 ====================
@@ -74,33 +52,18 @@ export interface CustomModelRecord {
 
 // ==================== 查询选项 ====================
 
-export interface HistoryQueryOptions {
-  providerId?: string
-  modelId?: string
-  type?: 'image' | 'video' | 'audio'
-  status?: HistoryStatus
-  limit?: number
-  offset?: number
-  searchPrompt?: string
-}
-
-export interface PresetQueryOptions {
-  modelId?: string | null
-  onlyFavorites?: boolean
-  limit?: number
-  offset?: number
-}
+export type HistoryQueryOptions = GenerationHistoryQuery
+export type PresetQueryOptions = PresetQuery
+export type HistoryMediaType = GenerationHistoryMediaType
 
 // ==================== 数据库服务接口 ====================
 
 export interface DatabaseService {
-  // 初始化
-  init(): Promise<void>
-
   // 历史记录
   insertHistory(record: Omit<HistoryRecord, 'createdAt' | 'updatedAt'>): Promise<void>
   getHistory(options?: HistoryQueryOptions): Promise<HistoryRecord[]>
   getHistoryById(id: string): Promise<HistoryRecord | null>
+  updateHistory(id: string, updates: Partial<Omit<HistoryRecord, 'id' | 'createdAt' | 'updatedAt'>>): Promise<void>
   deleteHistory(id: string): Promise<void>
   clearHistory(olderThan?: Date): Promise<number>  // 返回删除数量
 
@@ -123,8 +86,4 @@ export interface DatabaseService {
   getCustomModelById(id: string): Promise<CustomModelRecord | null>
   updateCustomModel(id: string, updates: Partial<CustomModelRecord>): Promise<void>
   deleteCustomModel(id: string): Promise<void>
-
-  // 工具方法
-  vacuum(): Promise<void>  // 数据库优化
-  backup(): Promise<string>  // 备份数据库，返回备份文件路径
 }

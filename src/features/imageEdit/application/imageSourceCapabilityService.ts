@@ -23,7 +23,6 @@ interface ResolvedImageSource {
 
 async function resolveImageSource(ref: ApplicationRef): Promise<ResolvedImageSource> {
   if (ref.kind === 'generation.result') {
-    await databaseService.init()
     const record = await databaseService.getHistoryById(ref.id)
     if (
       !record

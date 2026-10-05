@@ -1,10 +1,21 @@
 import { getDb } from '../db'
+import { databaseLocations } from '../db-locations'
 import crypto from 'node:crypto'
 import type { AudioEditTask } from '../../../../src/core/audioEdit/types'
 import { createMainLogger } from '../logging'
 
 const logger = createMainLogger('main.audio_edit.tasks')
 const active = new Map<string, { controller: AbortController; projectId: string; progress?: number; readOnly: boolean }>()
+
+/** 任务结果里的文件位置整份按位置写法存储（实施方案 2.5）；表结构随口播工程表在 3.x 删除。 */
+function encodeTaskResult(result: unknown): string {
+  return databaseLocations.use((scope) => JSON.stringify(scope.encodeValue(result)))
+}
+
+function decodeTaskResult(text: string): unknown {
+  const parsed = JSON.parse(text) as unknown
+  return databaseLocations.use((scope) => scope.decodeValue(parsed))
+}
 
 export type AudioEditTaskState = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
 
@@ -48,7 +59,7 @@ export async function runAudioEditTask<T>(projectId: string, kind: string, opera
   const existing = getDb().prepare('SELECT project_id,kind,state,result_json,input_digest FROM audio_edit_tasks WHERE request_id = ?').get(requestId) as { project_id: string; kind: string; state: string; result_json: string | null; input_digest: string } | undefined
   if (existing) {
     if (existing.project_id !== projectId || existing.kind !== kind || existing.input_digest !== inputDigest) throw new Error('任务引用与当前工程不匹配。')
-    if (existing.state === 'completed' && existing.result_json) return JSON.parse(existing.result_json) as T
+    if (existing.state === 'completed' && existing.result_json) return decodeTaskResult(existing.result_json) as T
     throw new Error('该任务已提交，请查询原任务状态。')
   }
   if (!readOnly) assertAudioEditProjectIdle(projectId)
@@ -92,7 +103,7 @@ export function updateAudioEditTask(requestId: string, update: {
   `).run(
     update.state,
     update.providerTaskId ?? null,
-    update.result === undefined ? null : JSON.stringify(update.result),
+    update.result === undefined ? null : encodeTaskResult(update.result),
     update.errorMessage ?? null,
     Date.now(),
     requestId,
@@ -110,6 +121,7 @@ export function findActiveAudioEditTask(projectId: string, kind: string, inputDi
 
 export interface AudioEditStoredTask { request_id: string; state: AudioEditTaskState; provider_task_id: string | null; input_digest: string; result_json: string | null }
 export function findAudioEditTranscription(projectId: string): AudioEditStoredTask | undefined {
-  return getDb().prepare("SELECT request_id,state,provider_task_id,input_digest,result_json FROM audio_edit_tasks WHERE project_id = ? AND kind = 'transcription' ORDER BY created_at DESC LIMIT 1").get(projectId) as AudioEditStoredTask | undefined
+  const row = getDb().prepare("SELECT request_id,state,provider_task_id,input_digest,result_json FROM audio_edit_tasks WHERE project_id = ? AND kind = 'transcription' ORDER BY created_at DESC LIMIT 1").get(projectId) as AudioEditStoredTask | undefined
+  return row?.result_json ? { ...row, result_json: JSON.stringify(decodeTaskResult(row.result_json)) } : row
 }
 export function isAudioEditTaskActive(requestId: string): boolean { return active.has(requestId) }

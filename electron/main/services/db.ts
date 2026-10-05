@@ -1,12 +1,9 @@
 import path from 'node:path'
 import fs from 'node:fs'
 import Database from 'better-sqlite3'
-import { initializeAssistantMemorySchema } from './assistant/storageSchema'
-import { initializeApplicationOperationSchema } from './application-runtime/operationStore'
 import { initializeAudioEditSchema } from './audio-edit/schema'
-import { upgradeAssetSources } from './asset-library/schema'
 import { getProgramDataDir } from './appBasePaths'
-import { runSchemaMigrations } from './db-migrations'
+import { runSchemaMigrations, type SchemaMigrationOptions } from './db-migrations'
 
 export type SqlBindValue = string | number | boolean | null | Uint8Array
 
@@ -18,6 +15,17 @@ export interface SqlExecuteResult {
 const DB_FILE_NAME = 'henji.db'
 
 let db: Database.Database | null = null
+
+/**
+ * 正式运行环境的迁移参数（位置换算上下文、备份目录）由主进程入口在启动时登记（db-locations.ts 提供），
+ * 本模块不直接依赖作品目录（appPaths → 设置 → 本模块会形成循环）。
+ * 未登记时需要位置换算的迁移会失败而不是猜一个作品目录。
+ */
+let migrationOptionsProvider: (conn: Database.Database) => SchemaMigrationOptions = () => ({})
+
+export function configureDatabaseMigrations(provider: (conn: Database.Database) => SchemaMigrationOptions): void {
+  migrationOptionsProvider = provider
+}
 
 /** 程序目录（数据库、密钥、日志与内部存储），唯一来源见 `appPaths.ts`。 */
 export function getHenjiDataDir(): string {
@@ -51,73 +59,14 @@ function ensureReadStatement(sql: string): void {
   }
 }
 
-export function initializeSchema(conn: Database.Database): void {
+/**
+ * 即将被文档文件取代的工程表（画布两张、镜头参考、口播及其任务表）。
+ *
+ * 它们不进迁移账本，结构保持 2.3 之前的样子（`IF NOT EXISTS` + 补列）；
+ * 3.x 各工具接入文档文件时连同这里的定义一起删除（删除前先备份 henji.db），不迁移内容（重要记录 008）。
+ */
+export function initializeLegacyProjectTables(conn: Database.Database): void {
   conn.exec(`
-    CREATE TABLE IF NOT EXISTS history (
-      id TEXT PRIMARY KEY,
-      provider_id TEXT NOT NULL,
-      model_id TEXT NOT NULL,
-      type TEXT NOT NULL,
-      prompt TEXT,
-      params TEXT NOT NULL,
-      file_path TEXT,
-      task_id TEXT,
-      status TEXT NOT NULL,
-      error_message TEXT,
-      cost REAL,
-      duration INTEGER,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-
-    CREATE TABLE IF NOT EXISTS presets (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      description TEXT,
-      model_id TEXT,
-      params TEXT NOT NULL,
-      is_favorite INTEGER DEFAULT 0,
-      use_count INTEGER DEFAULT 0,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-
-    CREATE TABLE IF NOT EXISTS settings (
-      key TEXT PRIMARY KEY,
-      value TEXT NOT NULL,
-      type TEXT NOT NULL,
-      description TEXT,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-
-    CREATE TABLE IF NOT EXISTS custom_models (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      provider_id TEXT NOT NULL,
-      base_model TEXT,
-      config TEXT NOT NULL,
-      is_enabled INTEGER DEFAULT 1,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-
-    CREATE TABLE IF NOT EXISTS progress_samples (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      model_id TEXT NOT NULL,
-      provider_id TEXT NOT NULL,
-      media_type TEXT NOT NULL,
-      profile_key TEXT NOT NULL,
-      time_bucket TEXT NOT NULL,
-      duration_ms INTEGER NOT NULL,
-      started_at_ms INTEGER NOT NULL,
-      finished_at_ms INTEGER NOT NULL,
-      source TEXT NOT NULL,
-      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_progress_samples_lookup
-      ON progress_samples (model_id, profile_key, time_bucket, finished_at_ms DESC);
-
     CREATE TABLE IF NOT EXISTS storyboard_projects (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
@@ -160,90 +109,28 @@ export function initializeSchema(conn: Database.Database): void {
 
     CREATE INDEX IF NOT EXISTS idx_canvas_projects_updated_at
       ON canvas_projects(updated_at DESC);
-
-    CREATE TABLE IF NOT EXISTS pending_task_results (
-      server_task_id TEXT PRIMARY KEY,
-      result_json TEXT NOT NULL,
-      completed_at INTEGER NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS assets (
-      id TEXT PRIMARY KEY,
-      media_type TEXT NOT NULL CHECK (media_type IN ('image', 'video', 'audio', 'code')),
-      display_name TEXT NOT NULL,
-      file_path TEXT NOT NULL UNIQUE,
-      source TEXT NOT NULL CHECK (source IN ('generated', 'canvas', 'camera-stage', 'imported', 'external', 'video-edit')),
-      mime_type TEXT,
-      size_bytes INTEGER,
-      width INTEGER,
-      height INTEGER,
-      duration_seconds REAL,
-      thumbnail_path TEXT,
-      inspection_status TEXT NOT NULL DEFAULT 'pending' CHECK (inspection_status IN ('pending', 'ready', 'missing', 'failed')),
-      inspection_error TEXT,
-      file_modified_at INTEGER,
-      content_identity TEXT,
-      last_used_at INTEGER,
-      created_at INTEGER NOT NULL,
-      updated_at INTEGER NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS asset_libraries (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL COLLATE NOCASE UNIQUE,
-      created_at INTEGER NOT NULL,
-      updated_at INTEGER NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS asset_library_items (
-      library_id TEXT NOT NULL REFERENCES asset_libraries(id) ON DELETE CASCADE,
-      asset_id TEXT NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
-      added_at INTEGER NOT NULL,
-      sort_order INTEGER,
-      PRIMARY KEY (library_id, asset_id)
-    );
-
-    CREATE TABLE IF NOT EXISTS asset_tags (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL COLLATE NOCASE UNIQUE,
-      created_at INTEGER NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS asset_tag_items (
-      tag_id TEXT NOT NULL REFERENCES asset_tags(id) ON DELETE CASCADE,
-      asset_id TEXT NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
-      PRIMARY KEY (tag_id, asset_id)
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_assets_media_type ON assets(media_type);
-    CREATE INDEX IF NOT EXISTS idx_assets_updated_at ON assets(updated_at DESC);
-    CREATE INDEX IF NOT EXISTS idx_assets_last_used_at ON assets(last_used_at DESC);
-    CREATE INDEX IF NOT EXISTS idx_asset_library_items_asset ON asset_library_items(asset_id);
-    CREATE INDEX IF NOT EXISTS idx_asset_tag_items_asset ON asset_tag_items(asset_id);
   `)
-  ensureColumn(conn, 'storyboard_projects', 'cover_path', 'TEXT')
-  ensureColumn(conn, 'camera_stage_projects', 'cover_path', 'TEXT')
-  ensureColumn(conn, 'assets', 'content_identity', 'TEXT')
-  upgradeAssetSources(conn)
-  initializeAssistantMemorySchema(conn)
-  initializeApplicationOperationSchema(conn)
+  ensureLegacyProjectColumn(conn, 'storyboard_projects', 'cover_path', 'TEXT')
+  ensureLegacyProjectColumn(conn, 'camera_stage_projects', 'cover_path', 'TEXT')
   initializeAudioEditSchema(conn)
-  // 新表一律走统一版本化迁移账本（db-migrations.ts）；上面的老表由 2.3 数据库收口逐步并入。
-  runSchemaMigrations(conn)
 }
 
-/**
- * 给本文件用 `CREATE TABLE IF NOT EXISTS` 维护的老表补列。
- *
- * 这些老表还没并入统一版本化迁移账本 `schema_migrations`（db-migrations.ts，2.3 数据库收口时并入），
- * 而 `IF NOT EXISTS` 对已存在的库不会追加新列，所以旧库必须在这里显式补。新表与改表不要再走这里。
- */
-function ensureColumn(conn: Database.Database, table: string, column: string, definition: string): void {
+/** 只给上面的工程表补列（3.x 随表删除）；其他表的结构变化一律写成迁移账本里的编号迁移。 */
+function ensureLegacyProjectColumn(conn: Database.Database, table: string, column: string, definition: string): void {
   const columns = conn.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>
   if (columns.some((item) => item.name === column)) {
     return
   }
   conn.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`)
+}
+
+/**
+ * 打开 henji.db 后的结构初始化：先维持工程表原样，再执行统一版本化迁移账本（db-migrations.ts）。
+ * 测试传入自己的位置换算上下文；正式运行环境由 getDb 提供作品目录与备份目录。
+ */
+export function initializeSchema(conn: Database.Database, options: SchemaMigrationOptions = {}): void {
+  initializeLegacyProjectTables(conn)
+  runSchemaMigrations(conn, undefined, options)
 }
 
 export function getDb(): Database.Database {
@@ -252,13 +139,25 @@ export function getDb(): Database.Database {
   }
 
   fs.mkdirSync(getHenjiDataDir(), { recursive: true })
-  db = new Database(getHenjiDbPath())
-  db.pragma('journal_mode = WAL')
-  db.pragma('foreign_keys = ON')
-  initializeSchema(db)
-  return db
+  const connection = new Database(getHenjiDbPath())
+  connection.pragma('journal_mode = WAL')
+  connection.pragma('foreign_keys = ON')
+  // 迁移期间解析作品目录会经 settings 读回本连接，所以先登记连接再初始化。
+  db = connection
+  try {
+    initializeSchema(connection, migrationOptionsProvider(connection))
+  } catch (error) {
+    db = null
+    connection.close()
+    throw error
+  }
+  return connection
 }
 
+/*
+ * 原始 SQL 通道：生产代码不再使用，只在自动化 / 隔离测试模式下注册 IPC（ipc/db.ts），
+ * 留给尚未改写的画布造数据脚本（写 storyboard_projects）。3.4 画布接入后连同通道一起删除。
+ */
 export function executeSql(sql: string, params?: SqlBindValue[]): SqlExecuteResult {
   ensureWriteStatement(sql)
   const result = getDb().prepare(sql).run(...normalizeParams(params))

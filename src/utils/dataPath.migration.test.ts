@@ -14,7 +14,6 @@ const fs = vi.hoisted(() => ({
 vi.mock('@/core/logging', () => ({ createLogger: () => ({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }) }))
 vi.mock('@/platform/runtime', () => ({ isDesktopRuntime: () => false, getPlatform: () => ({}) }))
 vi.mock('@/services/database/DatabaseService', () => ({ databaseService: { getSetting: vi.fn(), setSetting: vi.fn() } }))
-vi.mock('@/commands/assetLibrary', () => ({ rebaseAssetDataRoot: vi.fn(async () => undefined) }))
 vi.mock('@/platform/desktopApi', () => {
   const norm = (value: string) => value.replace(/\\/g, '/').replace(/\/+$/, '')
   const parent = (value: string) => norm(value).split('/').slice(0, -1).join('/')

@@ -48,26 +48,27 @@ function createGenerationPerformanceScenes(context) {
         const background = backgroundCount ? await holdGenerationResults(app, image, backgroundCount) : null
         let progress
         try {
-          await page.evaluate(async ({ count, image }) => {
-            await window.henjiNative.db.execute("DELETE FROM history WHERE id GLOB '__generation_bench_*'", [])
-            for (let start = 0; start < count; start += 100) {
-              const values = [], params = []
-              for (let i = start; i < Math.min(count, start + 100); i++) {
-                values.push('(?,?,?,?,?,?,?,?,?)')
-                params.push(`__generation_bench_${i}`, 'kie', 'kie-z-image', 'image',
-                  `性能样本 ${i}：保留图像构图、细节和颜色。${'自然光与真实质感。'.repeat(i % 5)}`,
-                  JSON.stringify({ aspect_ratio: '1:1' }), image, 'success', new Date(1700000000000 + i * 1000).toISOString())
-              }
-              await window.henjiNative.db.execute('INSERT INTO history (id,provider_id,model_id,type,prompt,params,file_path,status,created_at) VALUES ' + values.join(','), params)
-            }
-          }, { count, image })
+          // 经正式生成记录接口造数据（存储底座 2.3 起渲染层不执行 SQL）。
           // 进行中的任务是最新提交的：时间排在全部历史之后。生成记录首屏定位到最新记录（4a368bea），
           // 进度细线要在用户实际看到的位置被观察到；排在最旧处时它们从不挂载，场景观察不到任何进度（任务 5.3）。
-          if (backgroundCount) await page.evaluate(async ({ backgroundCount, count }) => {
-            for (let i = 0; i < backgroundCount; i++) await window.henjiNative.db.execute(
-              'UPDATE history SET status=?,file_path=NULL,task_id=?,created_at=? WHERE id=?',
-              ['generating', `__generation_background_${i}`, new Date(1700000000000 + (count + i) * 1000).toISOString(), `__generation_bench_${i}`])
-          }, { backgroundCount, count })
+          await page.evaluate(async ({ count, image, backgroundCount }) => {
+            const history = window.henjiNative.generationHistory
+            const stale = (await history.list({ idPrefix: '__generation_bench_' })).map(row => row.id)
+            if (stale.length) await history.deleteMany(stale)
+            for (let start = 0; start < count; start += 100) {
+              const records = []
+              for (let i = start; i < Math.min(count, start + 100); i++) {
+                const background = i < backgroundCount
+                records.push({ id: `__generation_bench_${i}`, providerId: 'kie', modelId: 'kie-z-image', type: 'image',
+                  prompt: `性能样本 ${i}：保留图像构图、细节和颜色。${'自然光与真实质感。'.repeat(i % 5)}`,
+                  params: { aspect_ratio: '1:1' }, resultPaths: background ? [] : [image],
+                  taskId: background ? `__generation_background_${i}` : null, status: background ? 'generating' : 'success',
+                  errorMessage: null, cost: null, duration: null,
+                  createdAt: new Date(1700000000000 + (background ? count + i : i) * 1000).toISOString() })
+              }
+              await history.insertMany(records)
+            }
+          }, { count, image, backgroundCount })
           const latestId = backgroundCount ? `__generation_bench_${backgroundCount - 1}` : `__generation_bench_${count - 1}`
           const loadSession = report.loadProfileDiagnostic ? await page.context().newCDPSession(page) : null
           let loadMs

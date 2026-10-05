@@ -167,7 +167,6 @@ class VoiceLibraryService {
     }
 
     this.loadingPromise = (async () => {
-      await databaseService.init()
       const raw = await databaseService.getSetting(VOICE_LIBRARY_SETTING_KEY)
       const records = parseVoiceRecords(raw)
       this.cache = records
@@ -179,7 +178,6 @@ class VoiceLibraryService {
   }
 
   private async persist(records: VoiceLibraryRecord[]): Promise<void> {
-    await databaseService.init()
     await databaseService.setSetting(
       VOICE_LIBRARY_SETTING_KEY,
       JSON.stringify(records),

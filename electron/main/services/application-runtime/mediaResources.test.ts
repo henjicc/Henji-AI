@@ -4,7 +4,12 @@ import os from 'node:os'
 import path from 'node:path'
 
 const state = vi.hoisted(() => ({ root: '', rows: new Map<string, { file_path: string }>(), project: null as unknown }))
-vi.mock('../db', () => ({ getDb: () => ({ prepare: (sql: string) => ({ get: (id: string) => state.rows.get(`${sql.includes('assets') ? 'asset' : 'generation.result'}:${id}`) }) }) }))
+// 资产与生成记录各由自己的仓库返回已换回的绝对路径；多结果按保存顺序成数组。
+vi.mock('../asset-library', () => ({ getAssetFilePath: (id: string) => state.rows.get(`asset:${id}`)?.file_path ?? null }))
+vi.mock('../generation-history/store', () => ({ getGenerationHistoryStore: () => ({ get: (id: string) => {
+  const row = state.rows.get(`generation.result:${id}`)
+  return row ? { resultPaths: row.file_path.split('|||') } : null
+} }) }))
 vi.mock('../image/path-utils', () => ({ getDataRootDir: () => state.root }))
 vi.mock('../logging', () => ({ createMainLogger: () => ({ debug: vi.fn(), warn: vi.fn() }) }))
 vi.mock('../storyboard-projects', () => ({ getStoryboardProject: (id: string) => id === 'project' ? state.project : null }))

@@ -9,7 +9,6 @@ const mocks = vi.hoisted(() => ({
 }))
 vi.mock('@/services/database/index', () => ({ databaseService: { init: vi.fn(), getHistoryById: mocks.history } }))
 vi.mock('@/commands/image', () => ({ readImageInfo: async () => ({ fileName: 'result.png' }) }))
-vi.mock('@/utils/dataPath', () => ({ getDataRoot: async () => '/data', convertPathString: async (value: string) => value }))
 
 vi.mock('@/features/generation/application/generationApplicationService', () => ({
   generationApplicationService: {
@@ -92,7 +91,7 @@ describe('generation capability handlers（5.4：放宽提交）', () => {
   })
 
   it.each(['prepare_generation_task', 'create_visible_generation_task'])('%s 通过正式解析器复用历史结果', async name => {
-    mocks.history.mockResolvedValue({ id: 'previous', type: 'image', status: 'success', filePath: '/history/result.png', params: {} })
+    mocks.history.mockResolvedValue({ id: 'previous', type: 'image', status: 'success', resultPaths: ['/history/result.png'], params: {} })
     const handler = registeredHandlers().get(name)!
     await handler({ modelId: testModel.meta.id, prompt: '把上一张改成立体风格', mediaType: 'image', params: { uploadedImages: [{ kind: 'generation.result', id: 'previous' }] } }, context)
     const operation = name === 'prepare_generation_task' ? mocks.prepare : mocks.submit

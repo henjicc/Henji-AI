@@ -6,7 +6,7 @@ vi.mock('electron', () => ({ ipcMain: { handle: (channel: string, handler: Handl
 vi.mock('./application-control', () => ({ assertTrustedApplicationSender: boundary.trusted }))
 vi.mock('../services/logging', () => ({ createMainLogger: () => ({ info: vi.fn() }) }))
 vi.mock('../services/asset-library', () => ({
-  ...Object.fromEntries(['addAssetToLibrary', 'checkAssetPaths', 'createAsset', 'createLibrary', 'deleteAsset', 'deleteLibrary', 'inspectAsset', 'inspectAssets', 'inspectLibrary', 'listLibraries', 'listTags', 'queryAssets', 'rebaseAssetDataRoot', 'relocateAsset', 'removeAssetFromLibrary', 'renameLibrary', 'restoreLibrary', 'setAssetTags', 'touchAsset', 'updateAsset'].map(name => [name, vi.fn()])),
+  ...Object.fromEntries(['addAssetToLibrary', 'checkAssetPaths', 'createAsset', 'createLibrary', 'deleteAsset', 'deleteLibrary', 'inspectAsset', 'inspectAssets', 'inspectLibrary', 'listLibraries', 'listTags', 'queryAssets', 'relocateAsset', 'removeAssetFromLibrary', 'renameLibrary', 'restoreLibrary', 'setAssetTags', 'touchAsset', 'updateAsset'].map(name => [name, vi.fn()])),
   inspectAssetFileContent: boundary.content,
 }))
 import { registerAssetLibraryIpc } from './asset-library'

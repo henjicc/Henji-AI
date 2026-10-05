@@ -5,7 +5,7 @@ import type React from 'react'
 import { useCallback, useEffect } from 'react'
 import { databaseService } from '@/services/database/DatabaseService'
 import type { HistoryRecord } from '@/services/database/types'
-import { getDataRoot, getThumbnailsPath, convertPathArray, convertPathString } from '@/utils/dataPath'
+import { getThumbnailsPath } from '@/utils/dataPath'
 import { isDesktop } from '@/utils/save'
 import type { GenerationTask, GeneratorOptions, TaskStatus } from '../types'
 import { joinMulti, splitMulti } from '../utils/multiFile'
@@ -33,16 +33,18 @@ function parseHistoryTimestamp(value?: string | null): Date {
   return new Date(value)
 }
 
+/** 本地显示地址（结果已在 resultPaths 里时不必另存）。 */
+const LOCAL_DISPLAY_URL = /^(?:henji-media:|file:)/i
+
 async function mapHistoryRecordToTask(
   record: HistoryRecord,
-  dataRoot: string,
   resolveDisplayUrls: ReturnType<typeof createHistoryMediaResolver>,
 ): Promise<GenerationTask> {
   const createdAt = parseHistoryTimestamp(record.createdAt)
   const rawParams: DynamicValue = record.params
   const safeParams: DynamicValueMap = isRecord(rawParams) ? rawParams : {}
   // 只读取原请求回执；同步完成直接恢复结果，绝不伪造供应商任务号。
-  if (!record.taskId && !record.filePath && !safeParams['__resultUrl'] && ['pending', 'queued', 'generating'].includes(record.status)) {
+  if (!record.taskId && record.resultPaths.length === 0 && !safeParams['__resultUrl'] && ['pending', 'queued', 'generating'].includes(record.status)) {
     const recovered = await aiReadSavedResult(record.id).catch((error: unknown) => {
       logger.warn('原生成结果仍待保存，保留历史状态', { event: 'generation.history.recovery_pending', taskId: record.id, error })
       return null
@@ -50,9 +52,9 @@ async function mapHistoryRecordToTask(
     if (recovered?.status === 'completed' && recovered.url && recovered.filePath) {
       safeParams['__resultUrl'] = recovered.url
       record = { ...record, status: 'completed', params: safeParams as HistoryRecord['params'],
-        filePath: recovered.filePath ? (await convertPathString(recovered.filePath, dataRoot, true)) ?? null : null,
+        resultPaths: splitMulti(recovered.filePath).map((item) => item.trim()).filter(Boolean),
         taskId: recovered.taskId ?? null }
-      await databaseService.updateHistory(record.id, record)
+      await databaseService.updateHistory(record.id, { status: record.status, params: record.params, resultPaths: record.resultPaths, taskId: record.taskId })
     } else if (recovered?.taskId) {
       record = { ...record, taskId: recovered.taskId }
       await databaseService.updateHistory(record.id, { taskId: recovered.taskId })
@@ -68,21 +70,14 @@ async function mapHistoryRecordToTask(
   const uploadedVideoFilePathsRaw = safeParams['uploadedVideoFilePaths']
   const uploadedAudioFilePathsRaw = safeParams['uploadedAudioFilePaths']
 
-  const uploadedFilePathsRel = isStringArray(uploadedFilePathsRaw) ? uploadedFilePathsRaw : undefined
-  const uploadedVideoFilePathsRel = isStringArray(uploadedVideoFilePathsRaw) ? uploadedVideoFilePathsRaw : undefined
-  const uploadedAudioFilePathsRel = isStringArray(uploadedAudioFilePathsRaw) ? uploadedAudioFilePathsRaw : undefined
-
-  const uploadedFilePathsAbs = uploadedFilePathsRel
-    ? await convertPathArray(uploadedFilePathsRel, dataRoot, false)
-    : undefined
-
-  const uploadedVideoFilePathsAbs = uploadedVideoFilePathsRel
-    ? await convertPathArray(uploadedVideoFilePathsRel, dataRoot, false)
-    : undefined
-
-  const uploadedAudioFilePathsAbs = uploadedAudioFilePathsRel
-    ? await convertPathArray(uploadedAudioFilePathsRel, dataRoot, false)
-    : undefined
+  // 记录里的路径已由主进程换回绝对路径（存储底座 2.3），这里只去掉空项。
+  const nonEmpty = (value: string[] | undefined): string[] | undefined => {
+    const list = value?.filter((item) => item.trim() !== '')
+    return list && list.length > 0 ? list : undefined
+  }
+  const uploadedFilePathsAbs = nonEmpty(isStringArray(uploadedFilePathsRaw) ? uploadedFilePathsRaw : undefined)
+  const uploadedVideoFilePathsAbs = nonEmpty(isStringArray(uploadedVideoFilePathsRaw) ? uploadedVideoFilePathsRaw : undefined)
+  const uploadedAudioFilePathsAbs = nonEmpty(isStringArray(uploadedAudioFilePathsRaw) ? uploadedAudioFilePathsRaw : undefined)
 
   const imageResolution = uploadedFilePathsAbs
     ? await resolveDisplayUrls(uploadedFilePathsAbs, 'image')
@@ -101,9 +96,7 @@ async function mapHistoryRecordToTask(
   const images = imageResolution?.urls
   const videos = videoResolution?.urls
 
-  const absoluteResultFilePath = record.filePath
-    ? await convertPathString(record.filePath, dataRoot, false)
-    : null
+  const absoluteResultFilePath = record.resultPaths.length > 0 ? joinMulti(record.resultPaths) : null
 
   // Dimensions and duration are no longer pre-computed during initial load.
   // Loading media dimensions requires decoding every image, which blocks
@@ -111,7 +104,7 @@ async function mapHistoryRecordToTask(
   // They can be lazily computed when the user opens the viewer.
 
   const resolvedResultUrl = absoluteResultFilePath
-    ? await resolveDisplayUrls(splitMulti(absoluteResultFilePath), record.type)
+    ? await resolveDisplayUrls(record.resultPaths, record.type)
       .then(({ urls }) => urls.length > 0 ? joinMulti(urls) : null)
     : resultUrlFromParams
 
@@ -160,22 +153,7 @@ async function mapHistoryRecordToTask(
 }
 
 async function loadHistoryWithRetries(): Promise<HistoryRecord[]> {
-  const maxRetries = 10
-  for (let retries = 0; retries < maxRetries; retries++) {
-
-    try {
-      return await databaseService.getHistory()
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error)
-      if (msg.includes('Database not initialized')) {
-        if (retries === maxRetries - 1) throw error
-        await new Promise((r) => setTimeout(r, 100))
-        continue
-      }
-      throw error
-    }
-  }
-  return []
+  return await databaseService.getHistory()
 }
 
 export interface UseLoadTaskHistoryParams {
@@ -198,9 +176,8 @@ export function useLoadTaskHistory({
 
     try {
       const historyRecords = await loadHistoryWithRetries()
-      const dataRoot = await getDataRoot()
       const resolveMedia = createHistoryMediaResolver(await getThumbnailsPath())
-      const loadedTasks = await Promise.all(historyRecords.map((r) => mapHistoryRecordToTask(r, dataRoot, resolveMedia)))
+      const loadedTasks = await Promise.all(historyRecords.map((r) => mapHistoryRecordToTask(r, resolveMedia)))
       setTasks(loadedTasks.reverse())
       logger.info('[Workspace] 历史记录加载完成', { count: loadedTasks.length })
     } catch (error) {
@@ -289,7 +266,6 @@ export function createPersistedGenerationTask(task: GenerationTask): Promise<voi
 
 async function writeGenerationTask(task: GenerationTask, createOnly = false): Promise<void> {
   if (!isDesktop()) return
-  const dataRoot = await getDataRoot()
   const optionsCopy: DynamicValueMap = { ...(task.options ?? {}) }
   deleteKeys(optionsCopy, [
     'images',
@@ -301,20 +277,22 @@ async function writeGenerationTask(task: GenerationTask, createOnly = false): Pr
     'video',
   ])
 
-  const relativeFilePath = task.result?.filePath
-    ? (await convertPathString(task.result.filePath, dataRoot, true)) ?? null
-    : null
+  // 路径一律传绝对路径；写入数据库时由主进程换成位置写法（存储底座 2.3）。
+  const resultPaths = task.result?.filePath
+    ? splitMulti(task.result.filePath).map((item) => item.trim()).filter(Boolean)
+    : []
 
   if (task.uploadedFilePaths?.length) {
-    optionsCopy['uploadedFilePaths'] = await convertPathArray(task.uploadedFilePaths, dataRoot, true)
+    optionsCopy['uploadedFilePaths'] = task.uploadedFilePaths.filter((item) => item.trim() !== '')
   }
   if (task.uploadedVideoFilePaths?.length) {
-    optionsCopy['uploadedVideoFilePaths'] = await convertPathArray(task.uploadedVideoFilePaths, dataRoot, true)
+    optionsCopy['uploadedVideoFilePaths'] = task.uploadedVideoFilePaths.filter((item) => item.trim() !== '')
   }
   if (task.uploadedAudioFilePaths?.length) {
-    optionsCopy['uploadedAudioFilePaths'] = await convertPathArray(task.uploadedAudioFilePaths, dataRoot, true)
+    optionsCopy['uploadedAudioFilePaths'] = task.uploadedAudioFilePaths.filter((item) => item.trim() !== '')
   }
-  if (task.result?.url) {
+  // 本地显示地址可由结果文件重新得出，不重复保存；远程结果地址保留，供本地副本缺失时回退。
+  if (task.result?.url && !(resultPaths.length > 0 && LOCAL_DISPLAY_URL.test(task.result.url))) {
     optionsCopy['__resultUrl'] = task.result.url
   }
   if (task.dimensions) {
@@ -328,7 +306,7 @@ async function writeGenerationTask(task: GenerationTask, createOnly = false): Pr
     type: task.type,
     prompt: task.prompt,
     params: optionsCopy as DynamicValue as HistoryRecord['params'],
-    filePath: relativeFilePath,
+    resultPaths,
     taskId: task.serverTaskId ?? null,
     status: task.status,
     errorMessage: task.error ?? null,

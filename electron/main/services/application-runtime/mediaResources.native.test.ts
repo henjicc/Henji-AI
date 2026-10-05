@@ -36,7 +36,7 @@ beforeAll(async () => {
   initializeSchema(fixture.db)
   file = path.join(fixture.root, 'downloads', 'result.png')
   await fs.writeFile(file, bytes)
-  fixture.db.prepare('INSERT INTO history (id,provider_id,model_id,type,params,file_path,status) VALUES (?,?,?,?,?,?,?)').run('generation-result', 'fixture', 'fixture', 'image', '{}', file, 'success')
+  fixture.db.prepare('INSERT INTO history (id,provider_id,model_id,type,params,result_paths,status) VALUES (?,?,?,?,?,?,?)').run('generation-result', 'fixture', 'fixture', 'image', '{}', JSON.stringify([file]), 'success')
   fixture.db.prepare('INSERT INTO assets (id,media_type,display_name,file_path,source,created_at,updated_at) VALUES (?,?,?,?,?,?,?)').run('asset-result', 'image', '实际媒体', file, 'imported', 1, 1)
   upsertStoryboardProject({ id: 'media-project', name: '媒体项目', createdAt: 1, updatedAt: 1, nodeCount: 1,
     nodesJson: JSON.stringify([{ id: 'media-node', type: 'image', position: { x: 0, y: 0 }, data: { imageUrl: '__img_ref__:0' } }]),

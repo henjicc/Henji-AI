@@ -193,7 +193,6 @@ class GenerationReflectionProvider implements ApplicationEntityProvider {
     let task = readGenerationTaskStatusSnapshot(id)
     let record: HistoryRecord | null | undefined
     if (!task || task.origin === 'canvas') {
-      await databaseService.init()
       record = await databaseService.getHistoryById(id)
       // 普通历史结果不加载画布运行时；仅带画布身份的记录需要恢复任务事实。
       if (record?.params.__canvasGeneration) {
@@ -223,7 +222,7 @@ class GenerationReflectionProvider implements ApplicationEntityProvider {
 
 function historyHasResult(record: HistoryRecord): boolean {
   const storedResultUrl = record.params['__resultUrl']
-  return Boolean(record.filePath || (typeof storedResultUrl === 'string' && storedResultUrl.trim()))
+  return Boolean(record.resultPaths.length > 0 || (typeof storedResultUrl === 'string' && storedResultUrl.trim()))
     && (record.status === 'success' || record.status === 'completed')
 }
 
@@ -248,12 +247,11 @@ function historyProperties(record: HistoryRecord): Record<string, JsonValue> {
   }
 }
 
-/** SQLite 生成历史的只读反射；不得暴露 filePath、远程结果 URL 或原始 params。 */
+/** SQLite 生成历史的只读反射；不得暴露结果路径、远程结果 URL 或原始 params。 */
 class GenerationHistoryReflectionProvider implements ApplicationEntityProvider {
   readonly entityType = GENERATION_ENTITY_TYPES.record
 
   async listEntities(request: { cursor?: string; limit: number }) {
-    await databaseService.init()
     const offset = Math.max(0, Number.parseInt(request.cursor ?? '0', 10) || 0)
     const records = await databaseService.getHistory({ offset, limit: request.limit + 1 })
     const page = records.slice(0, request.limit)
@@ -266,7 +264,6 @@ class GenerationHistoryReflectionProvider implements ApplicationEntityProvider {
 
   async readEntity(ref: ApplicationRef, request: { propertyIds?: string[] }) {
     if (ref.kind !== this.entityType) throw new Error('NOT_FOUND')
-    await databaseService.init()
     const record = await databaseService.getHistoryById(ref.id)
     if (!record) throw new Error('NOT_FOUND')
     const values = historyProperties(record)

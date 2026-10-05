@@ -5,28 +5,22 @@ const {
   offerImageEditorHandoff,
   openApplicationSurface,
   readImageInfo,
-  getDataRoot,
-  convertPathString,
   createImageEditPreview,
   getStoredImageEditPreview,
 } = vi.hoisted(() => ({
   database: {
-    init: vi.fn(async () => undefined),
     getHistory: vi.fn(),
     getHistoryById: vi.fn(),
   },
   offerImageEditorHandoff: vi.fn(),
   openApplicationSurface: vi.fn(),
   readImageInfo: vi.fn(),
-  getDataRoot: vi.fn(),
-  convertPathString: vi.fn(),
   createImageEditPreview: vi.fn(),
   getStoredImageEditPreview: vi.fn(),
 }))
 
 vi.mock('@/services/database/DatabaseService', () => ({ databaseService: database }))
 vi.mock('@/commands/image', () => ({ readImageInfo }))
-vi.mock('@/utils/dataPath', () => ({ getDataRoot, convertPathString }))
 vi.mock('@/features/imageEdit/store/imageEditorHandoffStore', () => ({
   offerImageEditorHandoff,
 }))
@@ -50,7 +44,7 @@ const successfulImage = {
   type: 'image' as const,
   prompt: '测试图片',
   params: {},
-  filePath: 'Media/generated.png',
+  resultPaths: ['C:/Henji-AI/Media/generated.png'],
   taskId: 'task-1',
   status: 'success' as const,
   errorMessage: null,
@@ -65,8 +59,6 @@ describe('generation application capabilities', () => {
     vi.clearAllMocks()
     database.getHistory.mockResolvedValue([successfulImage])
     database.getHistoryById.mockResolvedValue(successfulImage)
-    getDataRoot.mockResolvedValue('C:/Henji-AI')
-    convertPathString.mockResolvedValue('C:/Henji-AI/Media/generated.png')
     readImageInfo.mockResolvedValue({
       source: 'C:/Henji-AI/Media/generated.png',
       fileName: 'generated.png',
@@ -91,11 +83,11 @@ describe('generation application capabilities', () => {
     expect(JSON.stringify(result)).not.toContain('Media/generated.png')
   })
 
-  it('冷读取初始化失败明确返回错误，不冒充没有生成结果', async () => {
-    database.init.mockRejectedValueOnce(new Error('历史数据库不可用'))
+  it('冷读取历史失败明确返回错误，不冒充没有生成结果', async () => {
+    database.getHistoryById.mockRejectedValueOnce(new Error('历史数据库不可用'))
     const provider = createGenerationReflectionRegistrations().find(item => item.entity.id === GENERATION_ENTITY_TYPES.result)!.provider!
     await expect(provider.readEntity({ kind: GENERATION_ENTITY_TYPES.result, id: 'cold-result' }, {})).rejects.toThrow('历史数据库不可用')
-    expect(database.getHistoryById).not.toHaveBeenCalled()
+    expect(database.getHistoryById).toHaveBeenCalledTimes(1)
   })
 
   it('生成历史返回的 generation.record 引用可通过通用反射读取', async () => {
@@ -134,7 +126,6 @@ describe('generation application capabilities', () => {
     ))
     if (!resultRegistration?.provider) throw new Error('GENERATION_RESULT_PROVIDER_MISSING')
     database.getHistoryById.mockClear()
-    database.init.mockClear()
     await expect(resultRegistration.provider.readEntity(resultRef as {
       kind: typeof GENERATION_ENTITY_TYPES.result
       id: string
@@ -148,20 +139,14 @@ describe('generation application capabilities', () => {
       },
     })
     expect(database.getHistoryById).toHaveBeenCalledTimes(1)
-    expect(database.init.mock.invocationCallOrder[0]).toBeLessThan(database.getHistoryById.mock.invocationCallOrder[0])
     expect(JSON.stringify(recordSnapshot)).not.toContain('Media/generated.png')
   })
 
-  it('先按当前数据根目录还原并验证图片，再进入图片编辑', async () => {
+  it('按保存的结果路径验证图片，再进入图片编辑', async () => {
     const result = await openImageEditorWithSource({
       kind: 'generation.result',
       id: 'history-1',
     })
-    expect(convertPathString).toHaveBeenCalledWith(
-      successfulImage.filePath,
-      'C:/Henji-AI',
-      false
-    )
     expect(readImageInfo).toHaveBeenCalledWith('C:/Henji-AI/Media/generated.png')
     expect(openApplicationSurface).toHaveBeenCalledWith('tool.image_edit', {})
     expect(offerImageEditorHandoff).toHaveBeenCalledWith(expect.objectContaining({

@@ -2,7 +2,7 @@ import { createElectronApplicationControl } from './applicationControl'
 import type { PlatformRuntime } from '@/platform/contracts'
 import { createElectronAiRuntime } from './aiRuntime'
 import { createElectronLlmRuntime } from './llmRuntime'
-import { createElectronDb } from './db'
+import { createElectronGenerationHistory, createElectronPresets, createElectronSettings } from './localRecords'
 import { createElectronCanvasProjects } from './canvasProjects'
 import { createElectronCustomModels } from './customModels'
 import { createElectronSystem } from './system'
@@ -36,7 +36,9 @@ export function createElectronPlatform(): PlatformRuntime {
     applicationControl: createElectronApplicationControl(),
     aiRuntime: createElectronAiRuntime(),
     llmRuntime: createElectronLlmRuntime(),
-    db: createElectronDb(),
+    generationHistory: createElectronGenerationHistory(),
+    presets: createElectronPresets(),
+    settings: createElectronSettings(),
     canvasProjects: createElectronCanvasProjects(),
     customModels: createElectronCustomModels(),
     system: createElectronSystem(),

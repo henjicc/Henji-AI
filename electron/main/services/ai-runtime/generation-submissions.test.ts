@@ -6,8 +6,14 @@ import type { AiGenerateRequestDto } from '@henjicc/ai-sdk'
 if (!process.versions.electron) throw new Error('本测试必须由正式 Electron SQLite 原生运行器执行。')
 const state = vi.hoisted(() => ({ db: null as Database.Database | null }))
 vi.mock('../db', () => ({ getDb: () => state.db! }))
+vi.mock('../db-locations', async () => ({ databaseLocations: (await import('../db-locations-identity.test-support')).identityDatabaseLocations }))
 import { claimGenerationSubmission, completeGenerationSubmission, readGenerationSubmission } from './generation-submissions'
 import { recoverPersistedGenerationOperation } from '../application-runtime/persistedOperationRecovery'
+import { createGenerationSubmissionsTableV1 } from './schema'
+import { createGenerationHistoryTablesV1 } from '../generation-history/schema'
+import { GenerationHistoryStore } from '../generation-history/store'
+import { identityDatabaseLocations } from '../db-locations-identity.test-support'
+import { createApplicationOperationTablesV1 } from '../application-runtime/operationStore'
 import type { OperationRecord } from '../application-runtime/operationStore'
 import { ApplicationOperationStore } from '../application-runtime/operationStore'
 import { ApplicationOperationCoordinator } from '../application-runtime/operationCoordinator'
@@ -17,9 +23,28 @@ import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '../../../../src/core/ap
 const HOST_REVISIONS = { revision: 7, scopeRevisions: { generation: 3, canvas: 2 } }
 afterEach(() => { state.db?.close(); state.db = null })
 
+/** 提交账本测试：建本表（迁移账本第 11 项）。 */
+function openSubmissions(): Database.Database {
+  const db = new Database(':memory:')
+  createGenerationSubmissionsTableV1(db)
+  return db
+}
+
+/** 重启核对测试：只建生成记录表，按正式仓库写入与查询。 */
+function openHistory(): { db: Database.Database; store: GenerationHistoryStore; find: (id: string) => ReturnType<GenerationHistoryStore['getStatus']> } {
+  const db = new Database(':memory:')
+  createGenerationHistoryTablesV1(db)
+  const store = new GenerationHistoryStore(() => db, identityDatabaseLocations)
+  return { db, store, find: (id) => store.getStatus(id) }
+}
+
+function historyRow(id: string, status: 'completed' | 'queued' | 'success', taskId: string | null, resultPaths: string[]) {
+  return { id, providerId: 'fixture', modelId: 'model', type: 'image' as const, prompt: 'test', params: {}, resultPaths, taskId, status, errorMessage: null, cost: null, duration: null }
+}
+
 describe('原生生成提交事实', () => {
   it('同业务字段乱序重传复用回执，新请求独立；未知原请求不能二次派发', () => {
-    state.db = new Database(':memory:')
+    state.db = openSubmissions()
     const request: AiGenerateRequestDto = { requestId: 'original', modelId: 'model', params: { prompt: 'test', width: 2 } }
     expect(claimGenerationSubmission('original', request)).toBeNull()
     expect(() => claimGenerationSubmission('original', request)).toThrow('GENERATION_OUTCOME_UNKNOWN')
@@ -30,7 +55,7 @@ describe('原生生成提交事实', () => {
     expect(claimGenerationSubmission('new-request', request)).toBeNull()
   })
   it('同步结果可反复核对，读取不消费原事实或伪造供应商任务号', () => {
-    state.db = new Database(':memory:')
+    state.db = openSubmissions()
     claimGenerationSubmission('sync', { modelId: 'model', params: {} })
     completeGenerationSubmission('sync', { status: 'completed', url: 'https://example.com/result.png', filePath: '/managed/result.png' })
     expect(readGenerationSubmission('sync')).toEqual(readGenerationSubmission('sync'))
@@ -38,14 +63,13 @@ describe('原生生成提交事实', () => {
     expect(readGenerationSubmission('missing')).toBeNull()
   })
   it('重启核对只关联原历史主键；排队无供应商号也不自动提交，不同目标不能解除未知', () => {
-    state.db = new Database(':memory:')
-    state.db.exec('CREATE TABLE history(id TEXT PRIMARY KEY, model_id TEXT, prompt TEXT, status TEXT, task_id TEXT, file_path TEXT)')
+    const history = openHistory(); state.db = history.db
     const record: OperationRecord = { operationId: 'original', callerId: 'client', capabilityId: 'create_visible_generation_task',
       state: 'unknown', inputDigest: 'digest', input: { modelId: 'model', prompt: 'test' }, expectedRevisions: {} }
-    state.db.prepare('INSERT INTO history VALUES(?,?,?,?,?,?)').run('other', 'model', 'test', 'completed', null, '/other.png')
-    expect(recoverPersistedGenerationOperation(state.db, record)).toBeUndefined()
-    state.db.prepare('INSERT INTO history VALUES(?,?,?,?,?,?)').run(applicationGenerationTaskId(applicationInvocationId('client', 'original')), 'model', 'test', 'queued', null, null)
-    const recovered = recoverPersistedGenerationOperation(state.db, record, () => HOST_REVISIONS)
+    history.store.insert(historyRow('other', 'completed', null, ['/other.png']))
+    expect(recoverPersistedGenerationOperation(history.find, record)).toBeUndefined()
+    history.store.insert(historyRow(applicationGenerationTaskId(applicationInvocationId('client', 'original')), 'queued', null, []))
+    const recovered = recoverPersistedGenerationOperation(history.find, record, () => HOST_REVISIONS)
     expect(recovered).toMatchObject({ state: 'completed', verificationState: 'verified', result: { data: { observedStatus: 'queued', serverTaskId: null } } })
     expect(state.db.prepare("SELECT count(*) AS count FROM sqlite_master WHERE name='generation_submissions'").get()).toEqual({ count: 0 })
   })
@@ -57,29 +81,29 @@ describe('原生生成提交事实', () => {
    * Pi 不做 schema 校验，所以这条缺陷只会在真实外部客户端上暴露——必须由门禁盯住。
    */
   it('恢复回执符合能力自己公布的输出 schema；修订号拿不到时宁可不重建', () => {
-    state.db = new Database(':memory:')
-    state.db.exec('CREATE TABLE history(id TEXT PRIMARY KEY, model_id TEXT, prompt TEXT, status TEXT, task_id TEXT, file_path TEXT)')
+    const history = openHistory(); state.db = history.db
     const record: OperationRecord = { operationId: 'original', callerId: 'client', capabilityId: 'create_visible_generation_task',
       state: 'completed', inputDigest: 'digest', input: { modelId: 'model', prompt: 'test' }, expectedRevisions: {} }
-    state.db.prepare('INSERT INTO history VALUES(?,?,?,?,?,?)').run(applicationGenerationTaskId(applicationInvocationId('client', 'original')), 'model', 'test', 'success', 'provider-9', '/managed/result.png')
+    history.store.insert(historyRow(applicationGenerationTaskId(applicationInvocationId('client', 'original')), 'success', 'provider-9', ['/managed/result.png']))
 
     const outputSchema = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get('create_visible_generation_task')!.outputSchema
-    const recovered = recoverPersistedGenerationOperation(state.db, record, () => HOST_REVISIONS)
+    const recovered = recoverPersistedGenerationOperation(history.find, record, () => HOST_REVISIONS)
     const parsed = outputSchema.safeParse((recovered!.result as { data: unknown }).data)
     expect(parsed.success, JSON.stringify(parsed.error?.issues ?? [])).toBe(true)
     expect(recovered!.result).toMatchObject({ data: { revision: 7, scopeRevisions: { generation: 3, canvas: 2 }, resultRef: { kind: 'generation.result', id: applicationGenerationTaskId(applicationInvocationId('client', 'original')) } } })
 
     // 原回执里的修订号优先于宿主当前快照：重新报告同一次操作不能把别人的推进算到它头上。
-    const withPrevious = recoverPersistedGenerationOperation(state.db,
+    const withPrevious = recoverPersistedGenerationOperation(history.find,
       { ...record, result: { ok: true, data: { revision: 2, scopeRevisions: { generation: 1 } } } }, () => HOST_REVISIONS)
     expect(withPrevious!.result).toMatchObject({ data: { revision: 2, scopeRevisions: { generation: 1 } } })
 
     // 两个来源都没有时不发违反自己契约的回执，交回原状态让调用方稍后再查。
-    expect(recoverPersistedGenerationOperation(state.db, record, () => undefined)).toBeUndefined()
-    expect(recoverPersistedGenerationOperation(state.db, record)).toBeUndefined()
+    expect(recoverPersistedGenerationOperation(history.find, record, () => undefined)).toBeUndefined()
+    expect(recoverPersistedGenerationOperation(history.find, record)).toBeUndefined()
   })
   it('未知原创建不得重放，但同模型的独立新业务请求不被只读依赖误封', () => {
     state.db = new Database(':memory:')
+    createApplicationOperationTablesV1(state.db)
     const store = new ApplicationOperationStore(state.db)
     const coordinator = new ApplicationOperationCoordinator(store)
     const baseline = store.baseline('caller', [{ kind: 'generation.model', id: 'model' }], { generation: 1 }, 'host')

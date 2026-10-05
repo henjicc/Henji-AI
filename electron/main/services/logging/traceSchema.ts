@@ -1,6 +1,7 @@
 import type Database from 'better-sqlite3'
 
-export function initializeModelTraceSchema(database: Database.Database): void {
+/** 模型调用追踪的表（迁移账本第 13 项），唯一读写入口是 agent-trace-store.ts。2.3 之前已存在的表与数据原样保留。 */
+export function createModelTraceTablesV1(database: Database.Database): void {
   database.exec(`
     CREATE TABLE IF NOT EXISTS model_trace_contexts (run_id TEXT PRIMARY KEY, thread_id TEXT, goal TEXT, status TEXT);
 

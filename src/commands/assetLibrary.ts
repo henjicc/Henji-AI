@@ -27,4 +27,3 @@ export function addAssetToLibrary(libraryId: string, assetId: string): Promise<v
 export function removeAssetFromLibrary(libraryId: string, assetId: string): Promise<void> { return assetWrite(() => getPlatform().assetLibrary.removeFromLibrary(libraryId, assetId)) }
 export function listAssetTags(): Promise<string[]> { return getPlatform().assetLibrary.listTags() }
 export function setAssetTags(assetId: string, tags: string[]): Promise<AssetRecord> { return assetWrite(() => getPlatform().assetLibrary.setAssetTags(assetId, tags)) }
-export function rebaseAssetDataRoot(oldRoot: string, newRoot: string): Promise<number> { return assetWrite(() => getPlatform().assetLibrary.rebaseDataRoot(oldRoot, newRoot)) }

@@ -5,7 +5,7 @@ import { unlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { ApplicationOperationStore } from './operationStore'
+import { ApplicationOperationStore, createApplicationOperationTablesV1 } from './operationStore'
 import { ApplicationOperationCoordinator } from './operationCoordinator'
 import { ApplicationHostBridge } from './applicationHostBridge'
 import type { LocalHostRequest } from '../../../../src/core/application-control/localHostContracts'
@@ -18,7 +18,7 @@ if (!process.versions.electron) throw new Error('本测试必须由正式 Electr
 const opened: Database.Database[] = []
 afterEach(() => { for (const db of opened.splice(0)) db.close() })
 function fixture(): { db: Database.Database; store: ApplicationOperationStore; coordinator: ApplicationOperationCoordinator; callerId: string; rendererEpoch: string; baseline: string } {
-  const db = new Database(':memory:'); opened.push(db)
+  const db = new Database(':memory:'); opened.push(db); createApplicationOperationTablesV1(db)
   db.exec("CREATE TABLE existing_business(id TEXT PRIMARY KEY, value TEXT); INSERT INTO existing_business VALUES('old','keep');")
   const store = new ApplicationOperationStore(db)
   // 公开写入范围由宿主从反射注册表派生后送来；原生用例显式给出本用例涉及的实体。
@@ -413,6 +413,7 @@ describe('应用原生操作记录与恢复', () => {
     const filename = join(tmpdir(), `henji-mcp-${randomUUID()}.sqlite`)
     const callerId = randomUUID(); const operationId = randomUUID()
     let db = new Database(filename)
+    createApplicationOperationTablesV1(db)
     try {
       const store = new ApplicationOperationStore(db)
       const record = store.prepare({ operationId, callerId, capabilityId: 'change_application_entities', inputDigest: 'input', input: {}, expectedRevisions: {}, state: 'prepared' })

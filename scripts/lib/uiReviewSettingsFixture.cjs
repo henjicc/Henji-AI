@@ -63,12 +63,10 @@ async function seedSettingsFixture(page, context, { values, clearLocalStorage })
   const previous = await page.evaluate(async ({ rows, clearLocalStorage }) => {
     const before = []
     for (const [key, value] of rows) {
-      const found = await window.henjiNative.db.select('SELECT value, type FROM settings WHERE key = ?', [key])
-      before.push([key, found?.[0] ?? null])
-      await window.henjiNative.db.execute(
-        'INSERT INTO settings (key, value, type) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = ?, type = ?',
-        [key, value, 'json', value, 'json'],
-      )
+      // 经正式设置接口读写（存储底座 2.3 起渲染层不执行 SQL）。
+      const found = await window.henjiNative.settings.get(key)
+      before.push([key, found])
+      await window.henjiNative.settings.set(key, value, 'json')
     }
     for (const key of clearLocalStorage) window.localStorage.removeItem(key)
     return before
@@ -79,9 +77,9 @@ async function seedSettingsFixture(page, context, { values, clearLocalStorage })
       await page.evaluate(async ({ previous, clearLocalStorage, files }) => {
         for (const [key, row] of previous) {
           if (row) {
-            await window.henjiNative.db.execute('UPDATE settings SET value = ?, type = ? WHERE key = ?', [row.value, row.type, key])
+            await window.henjiNative.settings.set(key, row.value, row.type)
           } else {
-            await window.henjiNative.db.execute('DELETE FROM settings WHERE key = ?', [key])
+            await window.henjiNative.settings.delete(key)
           }
         }
         for (const key of clearLocalStorage) window.localStorage.removeItem(key)

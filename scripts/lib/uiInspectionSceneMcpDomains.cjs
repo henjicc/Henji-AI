@@ -134,8 +134,8 @@ function createMcpDomainScenes({ setupSettings, canvasFixtureProjectId, REFERENC
       try {
         // 只植入已完成结果，不调用供应商；重载后由正式生成历史加载器恢复它。
         await page.evaluate(async ({ historyId, projectId, mediaPath }) => {
-          await window.henjiNative.db.execute('INSERT INTO history (id,provider_id,model_id,type,prompt,params,file_path,status) VALUES (?,?,?,?,?,?,?,?)',
-            [historyId, 'kie', 'kie-z-image', 'image', 'MCP落图夹具', '{}', mediaPath, 'success'])
+          await window.henjiNative.generationHistory.insert({ id: historyId, providerId: 'kie', modelId: 'kie-z-image', type: 'image',
+            prompt: 'MCP落图夹具', params: {}, resultPaths: [mediaPath], taskId: null, status: 'success', errorMessage: null, cost: null, duration: null })
           const now = Date.now()
           await window.henjiNative.storyboardProjects.upsertProjectRecord({ id: projectId, name: 'MCP结果后台画布',
             createdAt: now, updatedAt: now, nodeCount: 0, nodesJson: '[]', edgesJson: '[]',
@@ -178,7 +178,7 @@ function createMcpDomainScenes({ setupSettings, canvasFixtureProjectId, REFERENC
         if (client) await client.close()
         await page.evaluate(async ({ historyId, projectId }) => {
           await window.henjiNative.storyboardProjects.deleteProjectRecord(projectId)
-          await window.henjiNative.db.execute('DELETE FROM history WHERE id = ?', [historyId])
+          await window.henjiNative.generationHistory.delete(historyId)
         }, { historyId, projectId })
         await fsp.rm(mediaPath, { force: true })
         await disableMcp(page)
@@ -193,7 +193,7 @@ function createMcpDomainScenes({ setupSettings, canvasFixtureProjectId, REFERENC
       const nonce = marker()
       const identity = await authorizeMcpConnection(page, { name: `领域边界验收-${nonce}`, allowWrites: true })
       const client = await connectMcpClient(identity.config, 'Henji domain Reality')
-      const historyBefore = await page.evaluate(() => window.henjiNative.db.select('SELECT COUNT(*) AS total FROM history'))
+      const historyBefore = await page.evaluate(() => window.henjiNative.generationHistory.count())
       try {
         // 1. 按域发现：点名四个域，必须拿到实体清单与只读原因，而不是一份空壳。
         const contract = await callTool(client, 'describe_application_contract', { domains: ['image_edit', 'camera_stage', 'generation', 'assets'] })
@@ -272,8 +272,8 @@ function createMcpDomainScenes({ setupSettings, canvasFixtureProjectId, REFERENC
         assert.equal(hidden?.tier, 'paid', `缺席工具必须说得出缺哪一档：${JSON.stringify(contract.data.access.hiddenTools)}`)
 
         // 整场只读＋非付费：生成历史一条都不该多出来，这是"没有偷偷发起生成"的硬证据。
-        const historyAfter = await page.evaluate(() => window.henjiNative.db.select('SELECT COUNT(*) AS total FROM history'))
-        assert.equal(historyAfter[0].total, historyBefore[0].total, '未授权付费的连接期间生成历史发生了变化')
+        const historyAfter = await page.evaluate(() => window.henjiNative.generationHistory.count())
+        assert.equal(historyAfter, historyBefore, '未授权付费的连接期间生成历史发生了变化')
 
         // 清理本次自己建的夹具：素材记录、媒体文件与三维工程，用户原有数据一律不动。
         await page.evaluate((id) => window.henjiNative.assetLibrary.deleteAsset(id), asset.id)

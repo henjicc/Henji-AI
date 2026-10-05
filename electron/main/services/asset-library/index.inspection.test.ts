@@ -8,6 +8,8 @@ const mocks = vi.hoisted(() => ({
 }))
 vi.mock('node:fs/promises', () => ({ default: { stat: mocks.stat, realpath: mocks.realpath } }))
 vi.mock('../db', () => ({ getDb: mocks.getDb }))
+vi.mock('../db-locations', async () => ({ databaseLocations: (await import('../db-locations-identity.test-support')).identityDatabaseLocations }))
+vi.mock('../appPaths', () => ({ getProgramStoreDir: () => '/program/thumbnails' }))
 vi.mock('../../protocol', () => ({ allowMediaRoot: mocks.allowRoot, isPathWithinAllowedMediaRoots: mocks.allowed }))
 vi.mock('../logging', () => ({ createMainLogger: () => ({ info: mocks.info, warn: mocks.warn, error: mocks.error }) }))
 vi.mock('./mediaInspection', () => ({ inspectMedia: mocks.probe, normalizeAssetPath: (value: string) => value }))
@@ -18,14 +20,14 @@ import { deleteAsset, inspectAsset, inspectAssetFileContent, relocateAsset, touc
 interface TestAssetRow {
   id: string; media_type: string; display_name: string; file_path: string; source: string;
   mime_type: string | null; size_bytes: number | null; width: number | null; height: number | null;
-  duration_seconds: number | null; thumbnail_path: string | null; inspection_status: string;
+  duration_seconds: number | null; thumbnail_name: string | null; inspection_status: string;
   inspection_error: string | null; file_modified_at: number | null; content_identity: string | null; last_used_at: number | null;
   created_at: number; updated_at: number;
 }
 function assetRow(): TestAssetRow {
   return { id: 'asset-1', media_type: 'video', display_name: '素材', file_path: 'D:/a.mp4', source: 'imported',
     mime_type: null, size_bytes: null, width: null, height: null, duration_seconds: null,
-    thumbnail_path: null, inspection_status: 'pending', inspection_error: null,
+    thumbnail_name: null, inspection_status: 'pending', inspection_error: null,
     file_modified_at: null, content_identity: null, last_used_at: null, created_at: 1, updated_at: 1 }
 }
 class InspectionDb {
@@ -126,7 +128,7 @@ describe('资产检查与原文件内容归属', () => {
 
   it('正常检查发布当前媒体元数据与缩略图', async () => {
     const result = await inspectAsset('asset-1')
-    expect(result).toMatchObject({ filePath: 'D:/a.mp4', inspectionStatus: 'ready', width: 1920, sizeBytes: 100, fileModifiedAt: 42, thumbnailPath: 'D:/a.mp4.thumbnail.webp' })
+    expect(result).toMatchObject({ filePath: 'D:/a.mp4', inspectionStatus: 'ready', width: 1920, sizeBytes: 100, fileModifiedAt: 42, thumbnailPath: path.join('/program/thumbnails', 'a.mp4.thumbnail.webp') })
     expect(result.contentIdentity).toMatch(/^[a-f0-9]{64}$/)
     expect(result.contentIdentity).toBe(database.asset().content_identity)
     expect(mocks.probe).toHaveBeenCalledTimes(1)
@@ -315,7 +317,7 @@ describe('资产检查与原文件内容归属', () => {
     await relocateAsset('asset-1', 'D:/b.mp4')
     expect(originalSignal.aborted).toBe(true)
     thumbnail.reject(new Error('旧缩略图失败'))
-    expect(await checking).toMatchObject({ filePath: 'D:/b.mp4', inspectionStatus: 'ready', thumbnailPath: 'D:/b.mp4.thumbnail.webp' })
+    expect(await checking).toMatchObject({ filePath: 'D:/b.mp4', inspectionStatus: 'ready', thumbnailPath: path.join('/program/thumbnails', 'b.mp4.thumbnail.webp') })
     expect(mocks.warn).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ event: 'asset.thumbnail.failed', context: { assetId: 'asset-1', stale: true } }))
   })
 

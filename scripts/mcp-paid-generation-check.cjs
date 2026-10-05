@@ -84,11 +84,11 @@ async function countProviderRequests(page, afterTimestamp, { requestId = null } 
   return counts
 }
 
-const readHistoryCount = (page) => page.evaluate(async () => (await window.henjiNative.db.select('SELECT COUNT(*) AS total FROM history'))[0].total)
+const readHistoryCount = (page) => page.evaluate(() => window.henjiNative.generationHistory.count())
 
 /**
- * 生成结果的 `history.file_path` 相对的是**用户目录**（默认“文档/痕迹AI”），不是脚本的工作目录，
- * 也不是 `paths.appLocalDataDir()`。直接向主进程要同一份目录快照。
+ * 生成记录接口返回的结果路径已是绝对路径（存储底座 2.3 起由主进程换算）；这里保留作品目录快照，
+ * 只为兼容个别仍是相对写法的值（相对作品目录，与 appPaths 同一份结果）。
  */
 async function resolveDataRootDir(page) {
   // 与主进程 electron/main/services/appPaths.ts 同一份结果：自定义数据目录优先，否则默认用户目录。
@@ -189,11 +189,11 @@ async function main() {
        * 排练用用户既有的一条成功生成记录，只读，不写、不删、不改。
        */
       const dataRoot = await resolveDataRootDir(page)
-      const sample = (await page.evaluate(() => window.henjiNative.db.select(
-        "SELECT id, file_path FROM history WHERE file_path IS NOT NULL AND file_path <> '' AND (status = 'success' OR status = 'completed') AND type = 'image' ORDER BY created_at DESC LIMIT 1")))[0]
+      const sample = (await page.evaluate(async () => (await window.henjiNative.generationHistory.list({ type: 'image' }))
+        .find((record) => record.resultPaths.length > 0 && (record.status === 'success' || record.status === 'completed')) ?? null))
       evidence.rehearsal = { dataRoot, sampleFound: Boolean(sample) }
       if (sample) {
-        const diskPath = toAbsoluteMediaPath(dataRoot, String(sample.file_path).split('|||')[0])
+        const diskPath = toAbsoluteMediaPath(dataRoot, sample.resultPaths[0])
         evidence.rehearsal.diskPath = diskPath
         if (fs.existsSync(diskPath)) {
           const probeClient = await connectMcpClient(config(unpaid), 'Henji paid rehearsal')
@@ -258,10 +258,10 @@ async function main() {
         evidence.providerRequestsAfterSubmit = afterSubmit
 
         // ——— 5. 媒体真实获取：分块读回并与磁盘文件逐字节对齐 ———
-        const row = (await page.evaluate((id) => window.henjiNative.db.select('SELECT file_path FROM history WHERE id = ?', [id]), taskId))[0]
-        assert.ok(row?.file_path, '生成结果没有落盘，无法核对媒体字节')
+        const row = await page.evaluate((id) => window.henjiNative.generationHistory.get(id), taskId)
+        assert.ok(row?.resultPaths.length, '生成结果没有落盘，无法核对媒体字节')
         const dataRoot = await resolveDataRootDir(page)
-        created.mediaPaths = String(row.file_path).split('|||').map((value) => toAbsoluteMediaPath(dataRoot, value))
+        created.mediaPaths = row.resultPaths.map((value) => toAbsoluteMediaPath(dataRoot, value))
         const diskBytes = await fsp.readFile(created.mediaPaths[0])
         const media = await readAllMedia(client, task.resultRef)
         assert.equal(media.totalBytes, diskBytes.length, '声明总长度与磁盘文件不符')
@@ -314,8 +314,11 @@ async function main() {
         const afterReplay = await countProviderRequests(page, evidence.startedAt, { requestId: taskId })
         assert.deepEqual(afterReplay, afterSubmit, `同 operationId 重传产生了第二次供应商请求：${JSON.stringify({ afterSubmit, afterReplay })}`)
         assert.equal(await readHistoryCount(page), historyBefore + 1, '重传后生成历史多出了额外记录')
-        const readLedger = async () => (await page.evaluate((id) => window.henjiNative.db.select(
-          'SELECT COUNT(*) AS total, MAX(phase) AS phase, MAX(created_at) AS createdAt FROM generation_submissions WHERE request_id = ?', [id]), taskId))[0]
+        // 生成提交账本没有正式界面入口：经自动化模式的测试夹具由拥有该表的仓库读取（请求 ID 是主键，至多一条）。
+        const readLedger = async () => {
+          const record = await page.evaluate((id) => window.henjiNative.testFixtures.inspectGenerationSubmission(id), taskId)
+          return { total: record ? 1 : 0, phase: record?.phase ?? null, createdAt: record?.createdAt ?? null }
+        }
         const ledger = await readLedger()
         assert.equal(ledger.total, 1, `生成提交账本对同一请求留下了 ${ledger.total} 条记录`)
         evidence.replay = { taskId: replay.structuredContent.result.data.taskId, providerRequests: afterReplay, ledgerRows: ledger.total, ledgerPhase: ledger.phase }
@@ -381,8 +384,8 @@ async function main() {
         if (!['success', 'completed', 'failed', 'error', 'cancelled'].includes(evidence.task?.normalizedStatus ?? evidence.task?.status)) {
           throw new Error('生成终态未确认，保留该任务与账本供恢复核对')
         }
-        await page.evaluate((id) => window.henjiNative.db.execute('DELETE FROM history WHERE id = ?', [id]), created.historyId)
-        await page.evaluate((id) => window.henjiNative.db.execute('DELETE FROM generation_submissions WHERE request_id = ?', [id]), created.historyId)
+        await page.evaluate((id) => window.henjiNative.generationHistory.delete(id), created.historyId)
+        await page.evaluate((id) => window.henjiNative.testFixtures.deleteGenerationSubmission(id), created.historyId)
         cleanup.history = true
       })
     }

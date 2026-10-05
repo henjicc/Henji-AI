@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { initializeAssistantMemorySchema } from './storageSchema'
+import { createAssistantMemoryTablesV1 } from './storageSchema'
 import { AgentMemoryStore } from './memory-store'
 
 const describeWithElectronSqlite = process.versions.electron ? describe : describe.skip
@@ -13,7 +13,7 @@ describeWithElectronSqlite('AgentMemoryStore', () => {
   beforeEach(() => {
     database = new Database(':memory:')
     database.pragma('foreign_keys = ON')
-    initializeAssistantMemorySchema(database)
+    createAssistantMemoryTablesV1(database)
     store = new AgentMemoryStore(database)
   })
 

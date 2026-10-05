@@ -386,8 +386,7 @@ function createEmbeddedAgentScenes(context) {
         // 真实节点按钮再次生成：验证 UI 与 MCP 读取的是同一份 SQLite 任务。
         await page.keyboard.press('Control+Shift+A')
         await page.waitForFunction(async taskId => {
-          const rows = await window.henjiNative.db.select('SELECT status FROM history WHERE id=?', [taskId])
-          return rows[0]?.status === 'success'
+          return (await window.henjiNative.generationHistory.get(taskId))?.status === 'success'
         }, generatedRequest.requestId)
         await app.evaluate(() => { globalThis.__canvasGenerationRequest = null })
         const generatorNode = page.locator(`.react-flow__node[data-id="${generator.id}"]`)
@@ -399,7 +398,7 @@ function createEmbeddedAgentScenes(context) {
           if (Date.now() > uiDeadline) {
             await capture('ui-task-stalled')
             const diagnostics = await page.evaluate(async () => ({
-              history: await window.henjiNative.db.select('SELECT id,status,params FROM history'),
+              history: (await window.henjiNative.generationHistory.list()).map(({ id, status, params }) => ({ id, status, params })),
               logs: await window.henjiNative.logging.queryLogEvents({ date: new Date().toISOString().slice(0, 10), domainPrefix: 'features.canvas', limit: 25 }),
             }))
             throw new Error('界面生成按钮没有发出正式请求：' + JSON.stringify(diagnostics))
@@ -409,11 +408,11 @@ function createEmbeddedAgentScenes(context) {
         const uiRequest = await app.evaluate(() => globalThis.__canvasGenerationRequest)
         const uiTaskId = uiRequest.requestId
         assert.ok(uiTaskId && uiTaskId !== generatedRequest.requestId, '界面新请求必须有独立任务标识')
-        const rows = await page.evaluate(() => window.henjiNative.db.select('SELECT id,status,params FROM history'))
+        const rows = await page.evaluate(() => window.henjiNative.generationHistory.list())
         assert.equal(rows.filter(row => row.id === uiTaskId).length, 1, '界面生成只能登记一条历史')
         const storedTask = rows.find(row => row.id === uiTaskId)
-        assert.equal(JSON.parse(storedTask.params).__canvasGeneration.projectId, projectId)
-        assert.equal(JSON.parse(storedTask.params).__canvasGeneration.nodeId, generator.id)
+        assert.equal(storedTask.params.__canvasGeneration.projectId, projectId)
+        assert.equal(storedTask.params.__canvasGeneration.nodeId, generator.id)
         const identity = await authorizeMcpConnection(page, { name: '界面任务只读验收' })
         const client = await connectMcpClient(identity.config, 'Henji UI generation task')
         try {
@@ -433,15 +432,15 @@ function createEmbeddedAgentScenes(context) {
           assert.equal(task.cancellable, false)
           const saved = await page.evaluate(async ({ projectId, taskId }) => {
             const project = await window.henjiNative.storyboardProjects.getProjectRecord(projectId)
-            const rows = await window.henjiNative.db.select('SELECT status,file_path FROM history WHERE id=?', [taskId])
-            return { history: rows[0], imagePool: JSON.parse(project.historyJson).imagePool,
+            const history = await window.henjiNative.generationHistory.get(taskId)
+            return { history, imagePool: JSON.parse(project.historyJson).imagePool,
               results: JSON.parse(project.nodesJson).filter(node => node.data.generationTaskId === taskId) }
           }, { projectId, taskId: uiTaskId })
           assert.equal(saved.history.status, 'success')
           assert.equal(saved.results.length, 1)
           const imageRef = saved.results[0].data.imageUrl
           assert.match(imageRef, /^__img_ref__:\d+$/)
-          assert.equal(saved.imagePool[Number(imageRef.slice('__img_ref__:'.length))], saved.history.file_path)
+          assert.deepEqual([saved.imagePool[Number(imageRef.slice('__img_ref__:'.length))]], saved.history.resultPaths)
           assert.equal(saved.results[0].data.isGenerating, false)
           await capture('ui-task-completed')
         } finally { await client.close() }

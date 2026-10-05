@@ -60,6 +60,8 @@ class FakeAssetLibraryDb {
 const mocks = vi.hoisted(() => ({ getDb: vi.fn() }))
 
 vi.mock('../db', () => ({ getDb: mocks.getDb }))
+vi.mock('../db-locations', async () => ({ databaseLocations: (await import('../db-locations-identity.test-support')).identityDatabaseLocations }))
+vi.mock('../appPaths', () => ({ getProgramStoreDir: () => '/program/thumbnails' }))
 vi.mock('../../protocol', () => ({ allowMediaRoot: vi.fn() }))
 vi.mock('../logging', () => ({
   createMainLogger: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }),

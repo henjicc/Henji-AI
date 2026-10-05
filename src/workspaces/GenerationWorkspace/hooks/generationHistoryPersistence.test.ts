@@ -13,7 +13,7 @@ vi.mock('@/services/database/DatabaseService', () => ({ databaseService: {
   deleteHistory: vi.fn(async (id: string) => { storage.rows.delete(id) }),
 } }))
 vi.mock('@/utils/save', () => ({ isDesktop: () => true }))
-vi.mock('@/utils/dataPath', () => ({ getDataRoot: async () => '/data', getThumbnailsPath: async () => '/program/Thumbnails', convertPathArray: async (value: string[]) => value, convertPathString: async (value: string) => value }))
+vi.mock('@/utils/dataPath', () => ({ getThumbnailsPath: async () => '/program/Thumbnails' }))
 vi.mock('@/core/logging', () => ({ createLogger: () => ({ info: vi.fn(), error: vi.fn() }) }))
 vi.mock('@/utils/historyThumbnail', () => ({ prepareHistoryThumbnails: vi.fn(async () => undefined) }))
 import { databaseService } from '@/services/database/DatabaseService'
@@ -52,7 +52,7 @@ it('后台缩略图按唯一结果路径提交，更新或卸载会取消旧批�
 it('已停止画布任务加载为非活动历史，保留说明且不重新保存或排队', async () => {
   const value = task()
   const record: HistoryRecord = { id: value.id, providerId: 'fixture', modelId: value.model, type: 'image', prompt: value.prompt,
-    params: {}, filePath: null, taskId: null, status: 'cancelled', errorMessage: '本地任务已停止',
+    params: {}, resultPaths: [], taskId: null, status: 'cancelled', errorMessage: '本地任务已停止',
     cost: null, duration: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
   vi.mocked(databaseService.getHistory).mockResolvedValueOnce([record])
   const setTasks = vi.fn()
@@ -76,7 +76,7 @@ it('跨任务延迟和旧防抖快照不覆盖后来的成功状态，数据库�
   act(() => { vi.advanceTimersByTime(1000); result.current.updateTask(b.id, { status: 'success', result: { id: b.id, type: 'image', prompt: b.prompt, createdAt: new Date(), url: '/result.png', filePath: '/result.png' } }) })
   blocked.release()
   await act(async () => { await awaitGenerationTaskPersistence(b.id); vi.advanceTimersByTime(1000) })
-  expect(saved(b.id)).toMatchObject({ status: 'success', filePath: '/result.png', params: { __resultUrl: '/result.png' } })
+  expect(saved(b.id)).toMatchObject({ status: 'success', resultPaths: ['/result.png'], params: { __resultUrl: '/result.png' } })
   expect(databaseService.getHistory).not.toHaveBeenCalled()
 })
 

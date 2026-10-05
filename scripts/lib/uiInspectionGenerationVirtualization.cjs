@@ -22,16 +22,19 @@ function createGenerationVirtualizationScenes(context) {
         const image = await window.henjiNative.image.persistImageBinary(new Uint8Array(imageBytes), 'png')
         const audio = image.replace(/\.[^.]+$/, '-virtual-test.wav')
         await window.henjiNative.fs.writeFile(audio, new Uint8Array(waveBytes))
-        await window.henjiNative.db.execute("DELETE FROM history WHERE id GLOB '__virtual_check_*'", [])
+        // 经正式生成记录接口造数据（存储底座 2.3 起渲染层不执行 SQL）。
+        const history = window.henjiNative.generationHistory
+        const stale = (await history.list({ idPrefix: '__virtual_check_' })).map(row => row.id)
+        if (stale.length) await history.deleteMany(stale)
         for (let start = 0; start < 1000; start += 100) {
-          const values = [], params = []
+          const records = []
           for (let i = start; i < start + 100; i++) {
-            values.push('(?,?,?,?,?,?,?,?,?)')
-            params.push(`__virtual_check_${i}`, 'kie', 'kie-z-image', i === 999 ? 'audio' : 'image',
-              `交互样本 ${i}。${'保留原始内容与阅读位置。'.repeat(i % 7)}`, '{}', i === 999 ? audio : image,
-              'success', new Date(1700000000000 + i * 1000).toISOString())
+            records.push({ id: `__virtual_check_${i}`, providerId: 'kie', modelId: 'kie-z-image', type: i === 999 ? 'audio' : 'image',
+              prompt: `交互样本 ${i}。${'保留原始内容与阅读位置。'.repeat(i % 7)}`, params: {}, resultPaths: [i === 999 ? audio : image],
+              taskId: null, status: 'success', errorMessage: null, cost: null, duration: null,
+              createdAt: new Date(1700000000000 + i * 1000).toISOString() })
           }
-          await window.henjiNative.db.execute('INSERT INTO history (id,provider_id,model_id,type,prompt,params,file_path,status,created_at) VALUES ' + values.join(','), params)
+          await history.insertMany(records)
         }
       }, { imageBytes, waveBytes: [...wave] })
       await page.reload({ waitUntil: 'domcontentloaded' })

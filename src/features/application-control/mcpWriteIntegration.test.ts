@@ -14,7 +14,7 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/client'
 import { LocalMcpServer } from '../../../electron/main/services/mcp/server'
 import { McpConnections } from '../../../electron/main/services/mcp/connections'
 import { ApplicationHostBridge } from '../../../electron/main/services/application-runtime/applicationHostBridge'
-import { ApplicationOperationStore } from '../../../electron/main/services/application-runtime/operationStore'
+import { ApplicationOperationStore, createApplicationOperationTablesV1 } from '../../../electron/main/services/application-runtime/operationStore'
 import { ApplicationOperationCoordinator } from '../../../electron/main/services/application-runtime/operationCoordinator'
 import type { ApplicationHostPlatform, LocalHostRequest } from '@/core/application-control/localHostContracts'
 if (!process.versions.electron) throw new Error('本测试必须由正式 Electron SQLite 原生运行器执行，不能跳过原生边界。')
@@ -36,6 +36,7 @@ it('真实 MCP 与 Pi 写入经过授权、SQLite账本、正式Session及设置
   const connections = new McpConnections({ read: () => null, write: () => {} })
   const identity = connections.create('受控集成客户端', { allowWrites: true })
   const db = new Database(':memory:')
+  createApplicationOperationTablesV1(db)
   // 写入范围经真实宿主注册从反射注册表派生，主进程不再维护 entityType 前缀白名单。
   const operations = new ApplicationOperationCoordinator(new ApplicationOperationStore(db), undefined, () => bridge.writableEntityTypes())
   const bridge: ApplicationHostBridge = new ApplicationHostBridge((id) => connections.assertActive(id), operations)
@@ -184,6 +185,7 @@ it('关闭现代 HTTP 监听只结束等待，已登记写入仍可完成并从�
   const connections = new McpConnections({ read: () => null, write: () => {} })
   const caller = connections.create('断线写入验收', { allowWrites: true })
   const db = new Database(':memory:')
+  createApplicationOperationTablesV1(db)
   const operations = new ApplicationOperationCoordinator(new ApplicationOperationStore(db), undefined, () => new Set(['settings.registry']))
   const host = new ApplicationHostBridge(id => connections.assertActive(id), operations)
   const requests: LocalHostRequest[] = []

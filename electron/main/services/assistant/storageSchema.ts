@@ -1,6 +1,7 @@
 import type Database from 'better-sqlite3'
 
-export function initializeAssistantMemorySchema(database: Database.Database): void {
+/** 助手记忆的表（迁移账本第 9 项），唯一读写入口是 memory-store.ts。2.3 之前已存在的表与数据原样保留。 */
+export function createAssistantMemoryTablesV1(database: Database.Database): void {
   database.exec(`
         CREATE TABLE IF NOT EXISTS agent_memory_settings (
           id INTEGER PRIMARY KEY CHECK (id = 1),

@@ -2,7 +2,9 @@ import crypto from 'node:crypto'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { allowMediaRoot, isPathWithinAllowedMediaRoots } from '../../protocol'
+import { getProgramStoreDir } from '../appPaths'
 import { getDb } from '../db'
+import { databaseLocations } from '../db-locations'
 import { createMainLogger } from '../logging'
 import { inspectMedia, normalizeAssetPath } from './mediaInspection'
 import { ensureAssetThumbnail } from './thumbnailService'
@@ -11,6 +13,23 @@ import type { AssetDto, AssetFileContent, AssetLibraryDto, AssetLibrarySnapshotD
 const logger = createMainLogger('main.asset-library')
 type AssetRow = { id: string; media_type: AssetDto['mediaType']; display_name: string; file_path: string; source: AssetDto['source']; mime_type: string | null; size_bytes: number | null; width: number | null; height: number | null; duration_seconds: number | null; thumbnail_path: string | null; inspection_status: AssetDto['inspectionStatus']; inspection_error: string | null; file_modified_at: number | null; content_identity?: string | null; last_used_at: number | null; created_at: number; updated_at: number }
 type LibraryRow = { id: string; name: string; created_at: number; updated_at: number }
+/** 表里的原始行：文件位置是位置写法（实施方案 2.5），缩略图只存文件名（迁移账本第 8、14 项）。 */
+type StoredAssetRow = Omit<AssetRow, 'thumbnail_path'> & { thumbnail_name: string | null }
+
+function thumbnailPathFor(name: string | null): string | null {
+  return name ? path.join(getProgramStoreDir('thumbnails'), name) : null
+}
+/** 读出：文件位置换回绝对路径，缩略图按当前程序目录拼出。 */
+function decodeAssetRows(rows: StoredAssetRow[]): AssetRow[] {
+  if (rows.length === 0) return []
+  return databaseLocations.use((scope) => rows.map(({ thumbnail_name: thumbnailName, ...row }) => ({
+    ...row, file_path: scope.decodePath(row.file_path), thumbnail_path: thumbnailPathFor(thumbnailName),
+  })))
+}
+/** 写入与按位置查找：绝对路径 → 位置写法。 */
+function encodeAssetPath(filePath: string): string {
+  return databaseLocations.use((scope) => scope.encodePath(filePath))
+}
 
 function mediaUrl(filePath: string): string { return `henji-media://local/${encodeURIComponent(filePath)}` }
 function mapAsset(row: AssetRow): AssetDto {
@@ -18,7 +37,10 @@ function mapAsset(row: AssetRow): AssetDto {
   const libraryIds = (getDb().prepare('SELECT library_id FROM asset_library_items WHERE asset_id=?').all(row.id) as Array<{ library_id: string }>).map((item) => item.library_id)
   return { id: row.id, mediaType: row.media_type, displayName: row.display_name, filePath: row.file_path, displayUrl: mediaUrl(row.file_path), source: row.source, mimeType: row.mime_type, sizeBytes: row.size_bytes, width: row.width, height: row.height, durationSeconds: row.duration_seconds, thumbnailPath: row.thumbnail_path, thumbnailUrl: row.thumbnail_path ? mediaUrl(row.thumbnail_path) : null, inspectionStatus: row.inspection_status, inspectionError: row.inspection_error, fileModifiedAt: row.file_modified_at, contentIdentity: row.content_identity ?? null, lastUsedAt: row.last_used_at, createdAt: row.created_at, updatedAt: row.updated_at, tags, libraryIds }
 }
-function getAssetRow(id: string): AssetRow | undefined { return getDb().prepare('SELECT * FROM assets WHERE id = ?').get(id) as AssetRow | undefined }
+function getAssetRow(id: string): AssetRow | undefined {
+  const row = getDb().prepare('SELECT * FROM assets WHERE id = ?').get(id) as StoredAssetRow | undefined
+  return row ? decodeAssetRows([row])[0] : undefined
+}
 function getAsset(id: string): AssetDto { const row = getAssetRow(id); if (!row) throw new Error('资产不存在'); return mapAsset(row) }
 
 interface AssetFileIdentity { size: number; modifiedAt: number; changedAt: number; device: number; inode: number }
@@ -115,7 +137,7 @@ async function runAssetInspection(job: AssetInspection, preflight?: InspectionPr
     const afterThumbnail = await readAssetFileIdentity(asset.filePath)
     if (!ownsAssetInspection(job)) { logDiscardedAssetInspection(job); return }
     if (!sameAssetFileIdentity(identity, afterThumbnail)) { markChangedAssetFile(job); return }
-    getDb().prepare(`UPDATE assets SET mime_type=?, size_bytes=?, width=?, height=?, duration_seconds=?, thumbnail_path=?, inspection_status='ready', inspection_error=NULL, file_modified_at=?, content_identity=?, updated_at=? WHERE id=?`).run(info.mimeType, info.sizeBytes, info.width, info.height, info.durationSeconds, thumbnailPath, info.fileModifiedAt, contentIdentity, Date.now(), asset.id)
+    getDb().prepare(`UPDATE assets SET mime_type=?, size_bytes=?, width=?, height=?, duration_seconds=?, thumbnail_name=?, inspection_status='ready', inspection_error=NULL, file_modified_at=?, content_identity=?, updated_at=? WHERE id=?`).run(info.mimeType, info.sizeBytes, info.width, info.height, info.durationSeconds, thumbnailPath ? path.basename(thumbnailPath) : null, info.fileModifiedAt, contentIdentity, Date.now(), asset.id)
     if (thumbnailPath) allowMediaRoot(path.dirname(thumbnailPath))
     logger.info('资产检查完成', { event: 'asset.inspect.completed', context: { assetId: asset.id, reused: false } })
   } catch (error) {
@@ -146,12 +168,13 @@ function startAssetInspection(asset: AssetDto, preflight?: InspectionPreflight):
 
 export function createAsset(input: CreateAssetRequest): AssetDto {
   const filePath = normalizeAssetPath(input.filePath)
+  const storedPath = encodeAssetPath(filePath)
   const now = Date.now()
   logger.info('开始登记资产', { event: 'asset.create.start', context: { mediaType: input.mediaType, source: input.source } })
   const transaction = getDb().transaction(() => {
-    const existing = getDb().prepare('SELECT * FROM assets WHERE file_path = ?').get(filePath) as AssetRow | undefined
+    const existing = getDb().prepare('SELECT id FROM assets WHERE file_path = ?').get(storedPath) as { id: string } | undefined
     const id = existing?.id ?? crypto.randomUUID()
-    if (!existing) getDb().prepare('INSERT INTO assets (id, media_type, display_name, file_path, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(id, input.mediaType, input.displayName?.trim() || path.basename(filePath), filePath, input.source, now, now)
+    if (!existing) getDb().prepare('INSERT INTO assets (id, media_type, display_name, file_path, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(id, input.mediaType, input.displayName?.trim() || path.basename(filePath), storedPath, input.source, now, now)
     const insertItem = getDb().prepare('INSERT OR IGNORE INTO asset_library_items (library_id, asset_id, added_at) VALUES (?, ?, ?)')
     for (const libraryId of input.libraryIds ?? []) insertItem.run(libraryId, id, now)
     return { id, wasExisting: Boolean(existing) }
@@ -187,15 +210,15 @@ export async function inspectAsset(id: string): Promise<AssetDto> {
 }
 
 export async function inspectAssets(ids: string[]): Promise<AssetDto[]> { return await Promise.all(ids.map(inspectAsset)) }
-export async function relocateAsset(id: string, nextPath: string): Promise<AssetDto> { const filePath = normalizeAssetPath(nextPath); invalidateAssetInspection(id); getDb().prepare(`UPDATE assets SET file_path=?, inspection_status='pending', inspection_error=NULL, content_identity=NULL, updated_at=? WHERE id=?`).run(filePath, Date.now(), id); return await inspectAsset(id) }
+export async function relocateAsset(id: string, nextPath: string): Promise<AssetDto> { const filePath = normalizeAssetPath(nextPath); invalidateAssetInspection(id); getDb().prepare(`UPDATE assets SET file_path=?, inspection_status='pending', inspection_error=NULL, content_identity=NULL, updated_at=? WHERE id=?`).run(encodeAssetPath(filePath), Date.now(), id); return await inspectAsset(id) }
 export function updateAsset(input: UpdateAssetRequest): AssetDto { getDb().prepare('UPDATE assets SET display_name=?, updated_at=? WHERE id=?').run(input.displayName.trim(), Date.now(), input.id); return getAsset(input.id) }
 export function deleteAsset(id: string): void { invalidateAssetInspection(id); getDb().prepare('DELETE FROM assets WHERE id=?').run(id) }
 export function touchAsset(id: string): void { getDb().prepare('UPDATE assets SET last_used_at=?, updated_at=? WHERE id=?').run(Date.now(), Date.now(), id) }
 export function checkAssetPaths(filePaths: string[]): boolean[] {
   const find = getDb().prepare('SELECT 1 FROM assets WHERE file_path=? LIMIT 1')
-  return filePaths.map((filePath) => {
-    try { return Boolean(find.get(normalizeAssetPath(filePath))) } catch { return false }
-  })
+  return databaseLocations.use((scope) => filePaths.map((filePath) => {
+    try { return Boolean(find.get(scope.encodePath(normalizeAssetPath(filePath)))) } catch { return false }
+  }))
 }
 
 /**
@@ -293,30 +316,6 @@ export function setAssetTags(assetId: string, tags: string[]): AssetDto {
   return getAsset(assetId)
 }
 
-export function rebaseAssetDataRoot(oldRoot: string, newRoot: string): number {
-  const oldResolved = path.resolve(oldRoot)
-  const newResolved = path.resolve(newRoot)
-  const rows = getDb().prepare('SELECT id, file_path, thumbnail_path FROM assets').all() as Array<{ id: string; file_path: string; thumbnail_path: string | null }>
-  const rebase = (filePath: string | null): string | null => {
-    if (!filePath) return null
-    const relative = path.relative(oldResolved, path.resolve(filePath))
-    return relative.startsWith('..') || path.isAbsolute(relative) ? filePath : path.join(newResolved, relative)
-  }
-  const update = getDb().prepare('UPDATE assets SET file_path=?, thumbnail_path=?, updated_at=? WHERE id=?')
-  let changed = 0
-  getDb().transaction(() => {
-    for (const row of rows) {
-      const filePath = rebase(row.file_path) ?? row.file_path
-      const thumbnailPath = rebase(row.thumbnail_path)
-      if (filePath === row.file_path && thumbnailPath === row.thumbnail_path) continue
-      update.run(filePath, thumbnailPath, Date.now(), row.id)
-      changed += 1
-    }
-  })()
-  logger.info('资产数据根目录迁移完成', { event: 'asset.data_root.rebased', context: { changed } })
-  return changed
-}
-
 export function queryAssets(query: AssetQuery): AssetPageDto {
   const where: string[] = []; const params: Array<string | number> = []
   let join = ''
@@ -328,10 +327,15 @@ export function queryAssets(query: AssetQuery): AssetPageDto {
   const total = (getDb().prepare(`SELECT COUNT(*) total FROM assets a${join}${clause}`).get(...params) as { total: number }).total
   const offset = (query.page - 1) * query.pageSize
   const order = query.sort === 'recent' ? 'COALESCE(a.last_used_at,0) DESC, a.created_at DESC' : 'a.created_at DESC'
-  const rows = getDb().prepare(`SELECT a.* FROM assets a${join}${clause} ORDER BY ${order} LIMIT ? OFFSET ?`).all(...params, query.pageSize, offset) as AssetRow[]
+  const rows = decodeAssetRows(getDb().prepare(`SELECT a.* FROM assets a${join}${clause} ORDER BY ${order} LIMIT ? OFFSET ?`).all(...params, query.pageSize, offset) as StoredAssetRow[])
   for (const row of rows) {
     allowMediaRoot(path.dirname(row.file_path))
     if (row.thumbnail_path) allowMediaRoot(path.dirname(row.thumbnail_path))
   }
   return { items: rows.map(mapAsset), total, page: query.page, pageSize: query.pageSize }
+}
+
+/** 资产原文件的绝对路径（MCP 媒体读取用）；资产不存在返回 null。 */
+export function getAssetFilePath(id: string): string | null {
+  return getAssetRow(id)?.file_path ?? null
 }

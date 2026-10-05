@@ -24,7 +24,6 @@ const cancel = vi.fn(async () => ({ taskId: task.taskId, status: 'cancelled' }))
 let dispose: () => void
 beforeEach(() => {
   installHarnessNativeStorage()
-  vi.spyOn(databaseService, 'init').mockResolvedValue()
   vi.spyOn(databaseService, 'getHistoryById').mockResolvedValue(null)
   replaceGenerationTaskStatusSnapshots([task])
   dispose = registerVisibleGenerationTaskHandler({ create: async () => null, get: () => task,

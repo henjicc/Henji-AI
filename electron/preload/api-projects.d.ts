@@ -52,6 +52,13 @@ export interface HenjiSqlExecuteResult {
   lastInsertId?: number
 }
 
+/** 测试夹具（只在自动化 / 隔离测试模式下存在）：核对或清理正式界面没有入口的记录。 */
+export interface HenjiTestFixturesApi {
+  inspectGenerationSubmission(requestId: string): Promise<{ phase: string; createdAt: number; hasResponse: boolean } | null>
+  deleteGenerationSubmission(requestId: string): Promise<boolean>
+}
+
+/** 原始 SQL 通道（测试专用，只在自动化 / 隔离测试模式下存在；3.4 删除）。 */
 export interface HenjiDbApi {
   execute(sql: string, params?: HenjiSqlBindValue[]): Promise<HenjiSqlExecuteResult>
   select<T = unknown>(sql: string, params?: HenjiSqlBindValue[]): Promise<T[]>

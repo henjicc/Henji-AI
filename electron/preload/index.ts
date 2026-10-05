@@ -16,6 +16,7 @@ import type {
   HenjiClipboardApi,
   HenjiCustomModelsApi,
   HenjiDbApi,
+  HenjiTestFixturesApi,
   HenjiDialogApi,
   HenjiDragApi,
   HenjiFsApi,
@@ -47,6 +48,7 @@ import { createMcpApi } from './mcp-api'
 import { createVideoFramesApi } from './video-frames-api'
 import { createVideoDecoderApi } from './video-decoder-api'
 import { createDocumentsApi } from './documents-api'
+import { createGenerationHistoryApi, createPresetsApi, createSettingsApi } from './local-records-api'
 
 type IpcResultEnvelope<T> =
   | { ok: true; data: T }
@@ -131,6 +133,18 @@ const diagnosticsApi: HenjiDiagnosticsApi = {
       await nativeInvoke('diagnostics:cancelStream', { streamId })
     }
   },
+}
+
+/**
+ * 原始 SQL 通道（测试专用）：主进程只在自动化 / 隔离测试模式下注册对应 IPC（见 electron/main/ipc/db.ts），
+ * 这里用同样的判断决定是否暴露，正常启动的渲染层没有 `henjiNative.db`。3.4 删除。
+ */
+const automationTestMode = process.env['HENJI_AUTOMATION'] === '1' || Boolean(process.env['HENJI_ISOLATED_APP_DATA']?.trim())
+
+/** 测试夹具（测试专用，与原始 SQL 通道同样只在自动化模式下存在）：经拥有该表的仓库核对或清理记录。 */
+const testFixturesApi: HenjiTestFixturesApi = {
+  inspectGenerationSubmission: (requestId) => nativeInvoke('testFixtures:generationSubmission:inspect', { requestId }),
+  deleteGenerationSubmission: (requestId) => nativeInvoke('testFixtures:generationSubmission:delete', { requestId }),
 }
 
 const dbApi: HenjiDbApi = {
@@ -357,7 +371,6 @@ const assetLibraryApi: HenjiAssetLibraryApi = {
   removeFromLibrary: (libraryId, assetId) => nativeInvoke('assetLibrary:removeFromLibrary', { libraryId, assetId }),
   listTags: () => nativeInvoke('assetLibrary:listTags'),
   setAssetTags: (assetId, tags) => nativeInvoke('assetLibrary:setAssetTags', { assetId, tags }),
-  rebaseDataRoot: (oldRoot, newRoot) => nativeInvoke('assetLibrary:rebaseDataRoot', { oldRoot, newRoot }),
 }
 
 const cameraStageRenderApi: HenjiCameraStageRenderApi = {
@@ -467,7 +480,10 @@ const api: HenjiNativeApi = {
   assistant: assistantApi,
   ai: aiApi,
   llm: llmApi,
-  db: dbApi,
+  ...(automationTestMode ? { db: dbApi, testFixtures: testFixturesApi } : {}),
+  generationHistory: createGenerationHistoryApi(nativeInvoke),
+  presets: createPresetsApi(nativeInvoke),
+  settings: createSettingsApi(nativeInvoke),
   canvasProjects: canvasProjectsApi,
   storyboardProjects: storyboardProjectsApi,
   cameraStageProjects: cameraStageProjectsApi,

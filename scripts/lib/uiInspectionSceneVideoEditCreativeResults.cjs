@@ -70,7 +70,12 @@ function createVideoEditCreativeResultsScene(context) {
         if (process.env.HENJI_DEV_DISPLAY_POINT) { assert.equal(evidence.display.id, evidence.display.preferredId); assert.equal(evidence.display.primary, false) }
         // Controlled producer records: completed local files, no paid request.
         await page.evaluate(async rows => {
-          for (const row of rows) await window.henjiNative.db.execute('INSERT OR REPLACE INTO history (id, provider_id, model_id, type, prompt, params, file_path, task_id, status) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?)', [row.id, 'fixture', 'fixture-image', 'image', row.prompt, '{}', row.file, 'success'])
+          // 经正式生成记录接口造数据（存储底座 2.3 起渲染层不执行 SQL）；同 ID 先删再写等同原来的覆盖。
+          for (const row of rows) {
+            await window.henjiNative.generationHistory.delete(row.id)
+            await window.henjiNative.generationHistory.insert({ id: row.id, providerId: 'fixture', modelId: 'fixture-image', type: 'image', prompt: row.prompt,
+              params: {}, resultPaths: [row.file], taskId: null, status: 'success', errorMessage: null, cost: null, duration: null })
+          }
         }, [{ id: 'creative-generation-a', prompt: '受控生成结果A', file: generatedA }, { id: 'creative-generation-b', prompt: '受控生成结果B', file: generatedB }])
         // History is read when the generation workspace mounts; reload so the seeded rows are the formal list.
         await page.reload({ waitUntil: 'domcontentloaded' }); await button(page, '剪辑').waitFor({ state: 'visible', timeout: 30000 })

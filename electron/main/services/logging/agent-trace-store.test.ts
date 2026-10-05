@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { initializeModelTraceSchema } from './traceSchema'
+import { createModelTraceTablesV1 } from './traceSchema'
 import { AgentTraceStore } from './agent-trace-store'
 
 const describeWithElectronSqlite = process.versions.electron ? describe : describe.skip
@@ -24,7 +24,7 @@ describeWithElectronSqlite('AgentTraceStore', () => {
   beforeEach(() => {
     database = new Database(':memory:')
     database.pragma('foreign_keys = ON')
-    initializeModelTraceSchema(database)
+    createModelTraceTablesV1(database)
     database.prepare(`INSERT INTO model_trace_contexts (run_id, thread_id, goal, status) VALUES ('run-1', 'thread-1', '检查模型上下文', 'running')`).run()
     store = new AgentTraceStore(database)
   })

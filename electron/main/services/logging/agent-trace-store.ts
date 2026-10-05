@@ -1,5 +1,4 @@
 import type Database from 'better-sqlite3'
-import { initializeModelTraceSchema } from './traceSchema'
 
 import {
   agentTraceCompleteInputSchema,
@@ -185,7 +184,8 @@ function statusFromRuntime(
 }
 
 export class AgentTraceStore {
-  constructor(private readonly database: Database.Database) { initializeModelTraceSchema(database) }
+  /** 表由迁移账本第 13 项创建（traceSchema.ts）。 */
+  constructor(private readonly database: Database.Database) {}
 
   start(rawInput: AgentTraceStartInput): void {
     const input = agentTraceStartInputSchema.parse(rawInput)

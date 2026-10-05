@@ -1,5 +1,11 @@
 import { readGenerationSubmission } from './generation-submissions'
 import { getDb } from '../db'
+import { databaseLocations } from '../db-locations'
+
+/*
+ * 待取结果回执（pending_task_results，迁移账本第 7 项）的唯一读写入口。
+ * 回执里的文件位置整份按位置写法存储（实施方案 2.5），读出时换回绝对路径。
+ */
 
 const TTL_MS = 24 * 60 * 60 * 1000
 
@@ -20,11 +26,11 @@ interface PendingResultRow {
 
 export function savePendingResult(serverTaskId: string, result: PendingResultPayload): void {
   try {
-    const db = getDb()
-    db.prepare(`
+    const stored = databaseLocations.use((scope) => JSON.stringify(scope.encodeValue(result)))
+    getDb().prepare(`
       INSERT OR REPLACE INTO pending_task_results (server_task_id, result_json, completed_at)
       VALUES (?, ?, ?)
-    `).run(serverTaskId.trim(), JSON.stringify(result), Date.now())
+    `).run(serverTaskId.trim(), stored, Date.now())
   } catch {
     // Best-effort: never throw from save to avoid breaking the generation response
   }
@@ -43,7 +49,8 @@ export function consumePendingResult(serverTaskId: string): PendingResultPayload
   // 读取不是确认保存；保留回执直到过期清理，重载可再次核对。
 
   try {
-    return JSON.parse(row.result_json) as PendingResultPayload
+    const parsed = JSON.parse(row.result_json) as unknown
+    return databaseLocations.use((scope) => scope.decodeValue(parsed)) as PendingResultPayload
   } catch {
     return null
   }

@@ -27,7 +27,6 @@ let nodeId: string
 let options: GenerationNodeExecutionOptions
 beforeEach(async () => {
   const records = new Map<string, HistoryRecord>()
-  vi.spyOn(databaseService, 'init').mockResolvedValue()
   vi.spyOn(databaseService, 'getHistoryById').mockImplementation(async id => records.get(id) ?? null)
   vi.spyOn(databaseService, 'insertHistory').mockImplementation(async row => { records.set(row.id, { ...row, createdAt: 'now', updatedAt: 'now' }) })
   vi.spyOn(databaseService, 'updateHistory').mockImplementation(async (id, patch) => { Object.assign(records.get(id)!, patch) })

@@ -312,5 +312,4 @@ export interface HenjiAssetLibraryApi {
   removeFromLibrary(libraryId: string, assetId: string): Promise<void>
   listTags(): Promise<string[]>
   setAssetTags(assetId: string, tags: string[]): Promise<HenjiAssetRecord>
-  rebaseDataRoot(oldRoot: string, newRoot: string): Promise<number>
 }

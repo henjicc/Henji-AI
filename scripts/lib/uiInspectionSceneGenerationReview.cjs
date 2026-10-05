@@ -80,27 +80,27 @@ function createGenerationReviewScenes(context) {
       const audio = image.replace(/\.[^.]+$/, '-review.wav')
       await window.henjiNative.fs.writeFile(video, new Uint8Array(videoBytes))
       await window.henjiNative.fs.writeFile(audio, new Uint8Array(waveBytes))
-      await window.henjiNative.db.execute(`DELETE FROM history WHERE id GLOB '${prefix}*'`, [])
+      // 经正式生成记录接口造数据（存储底座 2.3 起渲染层不执行 SQL）；多个结果是路径数组。
+      const history = window.henjiNative.generationHistory
+      const stale = (await history.list({ idPrefix: prefix })).map(row => row.id)
+      if (stale.length) await history.deleteMany(stale)
       const longPrompt = '黄昏时分的海港，渔船缓缓驶入，远处灯塔亮起第一束光；保留参考图的人物服装与配色，镜头从高处俯拍逐渐推近到甲板上的人物，'
         .repeat(4)
       const rows = [
-        // id 后缀, type, model, prompt, params, file_path, status, task_id
-        ['image-single', 'image', 'kie-z-image', '一只橘猫趴在窗台上晒太阳，柔和的午后光线', {}, image, 'success', null],
-        ['image-multi', 'image', 'kie-z-image', '同一角色的四个表情：开心、惊讶、生气、困倦', {}, [image, image, image, image].join('|||'), 'success', null],
-        ['long-prompt', 'image', 'kie-z-image', longPrompt, { uploadedFilePaths: [image, image, image, image, image] }, image, 'success', null],
-        ['video', 'video', 'kie-z-image', '海浪拍打礁石的慢镜头', {}, video, 'success', null],
-        ['audio', 'audio', 'kie-z-image', '欢迎来到痕迹AI，今天我们来聊一聊生成工作区。', {}, audio, 'success', null],
-        ['failed', 'image', 'kie-z-image', '赛博朋克风格的城市夜景', {}, null, 'error', null],
-        ['generating', 'image', 'kie-z-image', '雪山下的湖泊倒映着星空', {}, null, 'generating', '__generation_background_0'],
+        // id 后缀, type, model, prompt, params, resultPaths, status, task_id
+        ['image-single', 'image', 'kie-z-image', '一只橘猫趴在窗台上晒太阳，柔和的午后光线', {}, [image], 'success', null],
+        ['image-multi', 'image', 'kie-z-image', '同一角色的四个表情：开心、惊讶、生气、困倦', {}, [image, image, image, image], 'success', null],
+        ['long-prompt', 'image', 'kie-z-image', longPrompt, { uploadedFilePaths: [image, image, image, image, image] }, [image], 'success', null],
+        ['video', 'video', 'kie-z-image', '海浪拍打礁石的慢镜头', {}, [video], 'success', null],
+        ['audio', 'audio', 'kie-z-image', '欢迎来到痕迹AI，今天我们来聊一聊生成工作区。', {}, [audio], 'success', null],
+        ['failed', 'image', 'kie-z-image', '赛博朋克风格的城市夜景', {}, [], 'error', null],
+        ['generating', 'image', 'kie-z-image', '雪山下的湖泊倒映着星空', {}, [], 'generating', '__generation_background_0'],
       ]
-      for (const [index, [suffix, type, model, prompt, params, filePath, status, taskId]] of rows.entries()) {
-        await window.henjiNative.db.execute(
-          'INSERT INTO history (id,provider_id,model_id,type,prompt,params,file_path,status,task_id,error_message,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
-          [`${prefix}${suffix}`, 'kie', model, type, prompt, JSON.stringify(params), filePath, status, taskId,
-            status === 'error' ? '供应商返回：内容审核未通过，请调整提示词后重试。' : null,
-            new Date(Date.now() - (rows.length - index) * 60000).toISOString()],
-        )
-      }
+      await history.insertMany(rows.map(([suffix, type, model, prompt, params, resultPaths, status, taskId], index) => ({
+        id: `${prefix}${suffix}`, providerId: 'kie', modelId: model, type, prompt, params, resultPaths, status, taskId,
+        errorMessage: status === 'error' ? '供应商返回：内容审核未通过，请调整提示词后重试。' : null, cost: null, duration: null,
+        createdAt: new Date(Date.now() - (rows.length - index) * 60000).toISOString(),
+      })))
       return image
     }, { prefix: PREFIX, imageBytes, videoBytes, waveBytes })
   }

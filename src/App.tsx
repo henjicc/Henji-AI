@@ -234,7 +234,6 @@ const App: React.FC = () => {
       await Promise.all([
         step('app.startup.models.completed', loadAllModels),
         step('app.startup.database.completed', async () => {
-          await databaseService.init()
           await canvasProjectService.init()
         }),
       ])

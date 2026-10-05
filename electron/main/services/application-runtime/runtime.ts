@@ -5,6 +5,7 @@ import { ApplicationOperationStore } from './operationStore'
 import { recoverPersistedGenerationOperation } from './persistedOperationRecovery'
 import type { ApplicationAccess } from './toolCatalog'
 import { getDb } from '../db'
+import { getGenerationHistoryStore } from '../generation-history/store'
 
 const embeddedCallers = new Map<string, ApplicationAccess>()
 let externalAuthority: ((id: string) => void) | undefined
@@ -16,7 +17,7 @@ export function initializeApplicationRuntime() {
   const operations: ApplicationOperationCoordinator = new ApplicationOperationCoordinator(new ApplicationOperationStore(getDb()),
     // 第三个参数不是可选装饰：恢复回执必须带上 revision/scopeRevisions，否则按 schema
     // 校验的标准 MCP 客户端会拒收整条结果。原回执没有时用宿主当前快照兜住。
-    record => recoverPersistedGenerationOperation(getDb(), record, () => {
+    record => recoverPersistedGenerationOperation(id => getGenerationHistoryStore().getStatus(id), record, () => {
       const context = host.getContext()
       return context ? { revision: context.revision, scopeRevisions: context.scopeRevisions } : undefined
     }), () => host.writableEntityTypes())

@@ -30,8 +30,8 @@ export interface ReadBaseline {
   rendererEpoch: string
 }
 
-/** 新应用账本与旧数据独立；只初始化新格式，不迁移或删除历史资料。 */
-export function initializeApplicationOperationSchema(db: Database.Database): void {
+/** 应用操作账本的表（迁移账本第 10 项），唯一读写入口是本文件的 ApplicationOperationStore。 */
+export function createApplicationOperationTablesV1(db: Database.Database): void {
   db.exec(`CREATE TABLE IF NOT EXISTS application_invocations (
     operation_id TEXT NOT NULL, caller_id TEXT NOT NULL, state TEXT NOT NULL,
     request_id TEXT UNIQUE, renderer_epoch TEXT, record_json TEXT NOT NULL, updated_at INTEGER NOT NULL,
@@ -41,7 +41,8 @@ export function initializeApplicationOperationSchema(db: Database.Database): voi
 }
 
 export class ApplicationOperationStore {
-  constructor(private readonly db: Database.Database) { initializeApplicationOperationSchema(db) }
+  /** 表由迁移账本第 10 项创建。 */
+  constructor(private readonly db: Database.Database) {}
   recoverInterrupted(): void {
     // 准备阶段尚未派发业务；进程退出后可明确终止，不能自动重新提交。
     const preparing = this.db.prepare("SELECT record_json FROM application_invocations WHERE state = 'preparing'").all() as Array<{ record_json: string }>

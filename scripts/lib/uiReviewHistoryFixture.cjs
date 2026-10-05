@@ -67,16 +67,17 @@ async function seedHistoryFixture(page, context, { rows }) {
     await window.henjiNative.fs.writeFile(audio, new Uint8Array(waveBytes))
     // 不存在的长路径：复制、打开所在位置等动作走正式失败提示
     const missing = image.replace(/[^\\/]+$/, `${'一个名字很长的已被移动或删除的生成结果文件'.repeat(3)}.png`)
-    const files = { image, images: [image, image, image, image].join('|||'), video, audio, missing, none: null }
-    await window.henjiNative.db.execute(`DELETE FROM history WHERE id GLOB '${prefix}*'`, [])
-    for (const [index, row] of rows.entries()) {
-      await window.henjiNative.db.execute(
-        'INSERT INTO history (id,provider_id,model_id,type,prompt,params,file_path,status,task_id,error_message,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
-        [`${prefix}${row.id}`, 'kie', 'kie-z-image', row.type, row.prompt, '{}', files[row.file], row.status, null,
-          row.status === 'error' ? (row.error ?? '供应商返回：内容审核未通过，请调整提示词后重试。') : null,
-          new Date(Date.now() - (rows.length - index) * 60000).toISOString()],
-      )
-    }
+    // 多个结果是路径数组；经正式生成记录接口造数据（存储底座 2.3 起渲染层不执行 SQL）。
+    const files = { image: [image], images: [image, image, image, image], video: [video], audio: [audio], missing: [missing], none: [] }
+    const history = window.henjiNative.generationHistory
+    const stale = (await history.list({ idPrefix: prefix })).map(record => record.id)
+    if (stale.length) await history.deleteMany(stale)
+    await history.insertMany(rows.map((row, index) => ({
+      id: `${prefix}${row.id}`, providerId: 'kie', modelId: 'kie-z-image', type: row.type, prompt: row.prompt, params: {},
+      resultPaths: files[row.file], taskId: null, status: row.status,
+      errorMessage: row.status === 'error' ? (row.error ?? '供应商返回：内容审核未通过，请调整提示词后重试。') : null,
+      cost: null, duration: null, createdAt: new Date(Date.now() - (rows.length - index) * 60000).toISOString(),
+    })))
     return { image, video, audio }
   }, { prefix: PREFIX, rows, imageBytes, videoBytes, waveBytes })
   // 重载时去掉之前步骤留在地址里的一次性开发参数（页面定位、更新预览），否则重载会重新打开设置等界面
@@ -91,7 +92,9 @@ async function seedHistoryFixture(page, context, { rows }) {
     prefix: PREFIX,
     cleanup: async () => {
       await page.evaluate(async ({ prefix, written }) => {
-        await window.henjiNative.db.execute(`DELETE FROM history WHERE id GLOB '${prefix}*'`, [])
+        const history = window.henjiNative.generationHistory
+        const ids = (await history.list({ idPrefix: prefix })).map(record => record.id)
+        if (ids.length) await history.deleteMany(ids)
         for (const file of [written.video, written.audio]) {
           await window.henjiNative.fs.remove(file).catch(() => undefined)
         }

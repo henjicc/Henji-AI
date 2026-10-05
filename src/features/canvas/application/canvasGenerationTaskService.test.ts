@@ -48,7 +48,6 @@ beforeEach(async () => {
   vi.spyOn(GenerationService.getInstance(), 'getProgressEstimate').mockResolvedValue(null)
   vi.spyOn(GenerationService.getInstance(), 'generate').mockResolvedValue({ status: 'completed', url: 'C:/result.png', filePath: 'C:/result.png' })
   vi.spyOn(databaseService, 'getHistoryById').mockImplementation(async id => records.get(id) ?? null)
-  vi.spyOn(databaseService, 'init').mockResolvedValue()
   vi.spyOn(databaseService, 'insertHistory').mockImplementation(async row => { records.set(row.id, { ...row, createdAt: 'now', updatedAt: 'now' }) })
   vi.spyOn(databaseService, 'updateHistory').mockImplementation(async (id, patch) => { Object.assign(records.get(id)!, patch) })
   registry.register({ meta: { id: 'canvas-task-fixture', canonicalModelId: 'nano-banana', provider: 'fixture', type: 'image', name: { zh: '测试', en: 'Test' } }, params: [], endpoints: '/fixture',
@@ -125,7 +124,7 @@ it('无需挂载节点即可生成，页面中途挂载不会替换任务执行�
   unmount()
   expect(await getCanvasGenerationTask(taskId)).toMatchObject({ status: 'success', resultAvailable: true, progress: 100 })
   expect(readGenerationTaskStatusSnapshot(taskId)).toMatchObject({ status: 'success', resultAvailable: true })
-  expect(records.get(taskId)?.filePath).toBe('C:/result.png')
+  expect(records.get(taskId)?.resultPaths).toEqual(['C:/result.png'])
   expect(useCanvasStore.getState().nodes.find(item => item.data.generationSourceNodeId === node.id)?.data.generationTaskId).toBe(taskId)
 })
 
@@ -182,7 +181,7 @@ async function restoredTask(extra: Record<string, unknown> = {}, version = 2) {
   const resultId = `result-${taskId}`
   await databaseService.insertHistory({ id: taskId, providerId: 'fixture', modelId: 'canvas-task-fixture', type: 'image',
     prompt: '恢复原图', params: { __canvasGeneration: { version, projectId, nodeId } },
-    filePath: null, taskId: null, status: 'pending', errorMessage: null, cost: null, duration: null })
+    resultPaths: [], taskId: null, status: 'pending', errorMessage: null, cost: null, duration: null })
   useCanvasStore.getState().setCanvasData([
     { id: nodeId, type: CANVAS_NODE_TYPES.imageEdit, position: { x: 0, y: 0 }, data: { modelId: 'canvas-task-fixture', prompt: '恢复原图', params: {} } },
     { id: resultId, type: CANVAS_NODE_TYPES.exportImage, position: { x: 400, y: 0 },
@@ -513,7 +512,7 @@ it.each([false, true])('续查失败对账并保留原任务，明确恢复后�
   expect(polling).toHaveBeenCalledTimes(1)
   expect(await execute('resume_canvas_generation_task', input)).toMatchObject({ ok: true })
   await vi.waitFor(async () => expect(await getCanvasGenerationTask(taskId)).toMatchObject({ status: 'success', resultAvailable: true, errorMessage: null }))
-  expect(records.get(taskId)?.filePath).toBe('C:/retry-original.png')
+  expect(records.get(taskId)?.resultPaths).toEqual(['C:/retry-original.png'])
   expect(polling.mock.calls.map(call => call[1])).toEqual(['retry-original-task', 'retry-original-task'])
   expect(GenerationService.getInstance().generate).not.toHaveBeenCalled()
 })
@@ -530,7 +529,7 @@ it('界面正式恢复入口完成后也清除已对账的旧错误，历史保�
   })
   expect(resumeCanvasProjectGeneration(projectId, undefined, { retryFailed: true })).toBe(1)
   await vi.waitFor(async () => expect(await getCanvasGenerationTask(taskId)).toMatchObject({ status: 'success', errorMessage: null, resultAvailable: true }))
-  expect(records.get(taskId)).toMatchObject({ status: 'success', errorMessage: null, filePath: 'C:/ui-recovered.png' })
+  expect(records.get(taskId)).toMatchObject({ status: 'success', errorMessage: null, resultPaths: ['C:/ui-recovered.png'] })
   expect(polling).toHaveBeenCalledTimes(1)
   expect(GenerationService.getInstance().generate).not.toHaveBeenCalled()
 })
@@ -563,7 +562,7 @@ it('MCP 使用原任务返回的恢复参数续查，错误目标不执行，重
   expect(polling).toHaveBeenCalledTimes(1)
   release()
   await vi.waitFor(async () => expect(await getCanvasGenerationTask(taskId)).toMatchObject({ status: 'success', resultAvailable: true }))
-  expect(records.get(taskId)?.filePath).toBe('C:/mcp-resumed.png')
+  expect(records.get(taskId)?.resultPaths).toEqual(['C:/mcp-resumed.png'])
   expect(GenerationService.getInstance().generate).not.toHaveBeenCalled()
 })
 
@@ -584,7 +583,7 @@ it('冷启动后通用实体读取按原任务已保存结果恢复历史，后�
     ref: { kind: 'generation.task', id: taskId }, propertyIds: ['generation.task.status', 'generation.task.waiting_external'],
   } }, { requestId: crypto.randomUUID(), signal: new AbortController().signal })
   expect(read).toMatchObject({ ok: true, data: { properties: { 'generation.task.status': 'success', 'generation.task.waiting_external': false } } })
-  expect(records.get(taskId)).toMatchObject({ status: 'success', filePath: 'C:/recovered-original.png' })
+  expect(records.get(taskId)).toMatchObject({ status: 'success', resultPaths: ['C:/recovered-original.png'] })
   replaceGenerationTaskStatusSnapshots([{ taskId, modelId: 'canvas-task-fixture', mediaType: 'image',
     status: 'generating', progress: 0, resultAvailable: false, errorCode: null, errorMessage: null }])
   const refreshed = await session.execute({ id: 'read_application_entity', version: 1, input: {
@@ -594,7 +593,7 @@ it('冷启动后通用实体读取按原任务已保存结果恢复历史，后�
   useCanvasStore.getState().setCanvasData([], [])
   await confirmCanvasPersistence(projectId)
   expect(await getCanvasGenerationTask(taskId)).toMatchObject({ status: 'success', resultAvailable: true, waitingExternal: false })
-  expect(records.get(taskId)?.filePath).toBe('C:/recovered-original.png')
+  expect(records.get(taskId)?.resultPaths).toEqual(['C:/recovered-original.png'])
   expect(GenerationService.getInstance().generate).not.toHaveBeenCalled()
 })
 
@@ -769,7 +768,7 @@ it('供应商任务已保存后切换项目，持续轮询并保存原项目，�
   await openCanvasProject(projectId, new AbortController().signal)
   expect(useCanvasStore.getState().nodes.find(node => node.data.generationTaskId === taskId)?.data.imageUrl).toBe('C:/original.png')
   await vi.waitFor(async () => expect(await getCanvasGenerationTask(taskId)).toMatchObject({ status: 'success', waitingExternal: false }))
-  expect(records.get(taskId)).toMatchObject({ status: 'success', filePath: 'C:/original.png' })
+  expect(records.get(taskId)).toMatchObject({ status: 'success', resultPaths: ['C:/original.png'] })
   expect(GenerationService.getInstance().generate).toHaveBeenCalledTimes(1)
   expect(polling).toHaveBeenCalledTimes(1)
   expect(polling.mock.calls.every(call => call[1] === 'persisted-provider-task')).toBe(true)

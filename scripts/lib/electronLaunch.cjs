@@ -32,6 +32,8 @@ function createElectronEnv(extra = {}) {
   const env = {
     ...process.env,
     ELECTRON_DISABLE_SECURITY_WARNINGS: 'true',
+    // 自动化测试模式：主进程据此只在测试启动时开放测试专用通道（原始 SQL、测试夹具），正常启动不可用。
+    HENJI_AUTOMATION: '1',
     ...extra,
   }
   delete env.ELECTRON_RUN_AS_NODE

@@ -7,6 +7,7 @@ import type {
   HenjiCanvasProjectsApi,
   HenjiCustomModelsApi,
   HenjiDbApi,
+  HenjiTestFixturesApi,
   HenjiDiagnosticsApi,
   HenjiProjectCoversApi,
   HenjiStoryboardProjectsApi,
@@ -32,6 +33,7 @@ import type { HenjiImageEditorV3Api } from './image-editor-v3-api'
 import type { HenjiVideoFramesApi } from './api-video-frames'
 import type { HenjiVideoDecoderApi } from './api-video-decoder'
 import type { HenjiDocumentsApi } from './api-documents'
+import type { HenjiGenerationHistoryApi, HenjiPresetsApi, HenjiSettingsApi } from './api-local-records'
 
 export * from './api-assistant'
 export * from './api-projects'
@@ -42,6 +44,7 @@ export type { HenjiImageEditorV3Api } from './image-editor-v3-api'
 export type { HenjiVideoFramesApi } from './api-video-frames'
 export type { HenjiVideoDecoderApi } from './api-video-decoder'
 export type { HenjiDocumentsApi } from './api-documents'
+export type { HenjiGenerationHistoryApi, HenjiPresetsApi, HenjiSettingsApi } from './api-local-records'
 
 export interface HenjiNativeApi {
   embeddedAgent: EmbeddedAgentPlatform
@@ -55,7 +58,13 @@ export interface HenjiNativeApi {
   assistant: HenjiAssistantApi
   ai: HenjiAiApi
   llm: HenjiLlmApi
-  db: HenjiDbApi
+  /** 原始 SQL 通道：只在自动化 / 隔离测试模式下存在（测试脚本造画布数据用），生产代码不得使用；3.4 删除。 */
+  db?: HenjiDbApi
+  /** 测试夹具：只在自动化 / 隔离测试模式下存在。 */
+  testFixtures?: HenjiTestFixturesApi
+  generationHistory: HenjiGenerationHistoryApi
+  presets: HenjiPresetsApi
+  settings: HenjiSettingsApi
   canvasProjects: HenjiCanvasProjectsApi
   storyboardProjects: HenjiStoryboardProjectsApi
   cameraStageProjects: HenjiCameraStageProjectsApi

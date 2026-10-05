@@ -33,13 +33,12 @@ export async function createCanvasGenerationTaskRecord(input: GenerationPreparat
   if (existing && existing !== taskId) throw new Error(`此节点已有任务 ${existing}，请查询原任务；其他节点可以独立生成。`)
   canvasGenerationNodeTasks.set(nodeKey, taskId)
   try {
-    await databaseService.init()
     if (await databaseService.getHistoryById(taskId)) throw new Error(`此任务已经登记，请查询原任务 ${taskId}。`)
     const model = registry.getModel(input.modelId)
     if (!model) throw new Error('生成模型不存在。')
     await databaseService.insertHistory({ id: taskId, modelId: input.modelId, providerId: model.meta.provider, type: input.mediaType,
       prompt: input.prompt, params: { ...input.options, [CANVAS_GENERATION_TASK_MARKER]: { version: 2, projectId, nodeId } },
-      filePath: null, taskId: null, status: 'pending', errorMessage: null, cost: null, duration: null })
+      resultPaths: [], taskId: null, status: 'pending', errorMessage: null, cost: null, duration: null })
   } catch (error) {
     if (canvasGenerationNodeTasks.get(nodeKey) === taskId) canvasGenerationNodeTasks.delete(nodeKey)
     throw error
@@ -69,7 +68,7 @@ export async function createCanvasGenerationTaskRecord(input: GenerationPreparat
         const snapshot = await readPersistedCanvasProjectSnapshot(projectId)
         const outputs = completedTaskOutputPaths(snapshot.nodes, taskId, nodeId)
         if (!outputs.length) throw new Error('生成结束但结果尚未保存，请在原画布检查。')
-        await databaseService.updateHistory(taskId, { status: 'success', filePath: outputs.join('|||'), errorMessage: null })
+        await databaseService.updateHistory(taskId, { status: 'success', resultPaths: outputs, errorMessage: null })
         publish('success', true)
         logger.info('画布生成结果已保存', { event: 'canvas.generationTask.completed', taskId, nodeId })
         return { status: 'completed', resultNodeIds: completed.resultNodeIds }
@@ -80,7 +79,7 @@ export async function createCanvasGenerationTaskRecord(input: GenerationPreparat
         })
         const outputs = completedTaskOutputPaths(persisted?.nodes ?? [], taskId, nodeId)
         if (outputs.length) {
-          await databaseService.updateHistory(taskId, { status: 'success', filePath: outputs.join('|||'), errorMessage: null })
+          await databaseService.updateHistory(taskId, { status: 'success', resultPaths: outputs, errorMessage: null })
           publish('success', true)
           logger.warn('生成结果已保存，后续执行信息未能完整发布', { event: 'canvas.generationTask.publication_incomplete', requestId: taskId, taskId,
             reason: error instanceof Error ? error.message : String(error) })

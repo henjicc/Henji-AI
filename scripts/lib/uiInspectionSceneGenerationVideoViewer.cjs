@@ -57,29 +57,28 @@ function createGenerationVideoViewerTrimScene({ openWorkspace, settlePage }) {
       if (!current) return
       await page.keyboard.press('Escape').catch(() => undefined)
       try {
-        await page.evaluate((id) => window.henjiNative.db.execute('DELETE FROM history WHERE id = ?', [id]), HISTORY_ID)
+        await page.evaluate((id) => window.henjiNative.generationHistory.delete(id), HISTORY_ID)
       } finally {
         await fsp.rm(current.filePath, { force: true })
       }
     },
     setup: async (page, app) => {
       await openWorkspace(page, 'generation')
-      // 生成记录的相对路径以用户目录为基准（唯一来源 electron/main/services/appPaths.ts）。
+      // 素材放在作品目录的上传素材文件夹（唯一来源 electron/main/services/appPaths.ts）；
+      // 记录里传绝对路径，写入数据库时由主进程换成位置写法（存储底座 2.3）。
       const directories = await page.evaluate(() => window.henjiNative.paths.appDirectories())
       const name = `ui-viewer-trim-${randomUUID()}.mp4`
-      const relativePath = `${directories.folderNames.uploads}/${name}`
-      const filePath = path.join(directories.userRoot, relativePath)
+      const filePath = path.join(directories.folders.uploads, name)
       await fsp.mkdir(path.dirname(filePath), { recursive: true })
       await fsp.copyFile(VIDEO_FIXTURE, filePath)
       fixture = { filePath }
       // 夹具视频 2 s，选区 0.5–1.5 s：高亮应占进度条中间一半。
-      const params = { uploadedVideoFilePaths: [relativePath], uploadedVideoTrimStart: 0.5, uploadedVideoTrimEnd: 1.5 }
+      const params = { uploadedVideoFilePaths: [filePath], uploadedVideoTrimStart: 0.5, uploadedVideoTrimEnd: 1.5 }
       await page.evaluate(async ({ id, params }) => {
-        await window.henjiNative.db.execute('DELETE FROM history WHERE id = ?', [id])
-        await window.henjiNative.db.execute(
-          'INSERT INTO history (id,provider_id,model_id,type,prompt,params,file_path,status,created_at) VALUES (?,?,?,?,?,?,?,?,?)',
-          [id, 'kie', 'kie-seedance-2.0', 'video', '裁剪选区查看器验收', JSON.stringify(params), null, 'failed', new Date().toISOString()],
-        )
+        await window.henjiNative.generationHistory.delete(id)
+        await window.henjiNative.generationHistory.insert({ id, providerId: 'kie', modelId: 'kie-seedance-2.0', type: 'video',
+          prompt: '裁剪选区查看器验收', params, resultPaths: [], taskId: null, status: 'failed', errorMessage: null, cost: null, duration: null,
+          createdAt: new Date().toISOString() })
       }, { id: HISTORY_ID, params })
       await page.reload({ waitUntil: 'domcontentloaded' })
       await openWorkspace(page, 'generation')

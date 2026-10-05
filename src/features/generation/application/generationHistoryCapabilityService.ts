@@ -17,7 +17,7 @@ function getStoredResultUrl(record: HistoryRecord): string | null {
 }
 
 function publicHistoryRecord(record: Awaited<ReturnType<typeof databaseService.getHistory>>[number]): Record<string, unknown> {
-  const hasResult = Boolean(record.filePath || getStoredResultUrl(record))
+  const hasResult = Boolean(record.resultPaths.length > 0 || getStoredResultUrl(record))
     && (record.status === 'success' || record.status === 'completed')
   return {
     ref: {
@@ -71,7 +71,6 @@ export async function listGenerationHistory(input: {
     limit: input.limit,
   })
   try {
-    await databaseService.init()
     const criteria: GenerationHistoryFilterCriteria = {
       keyword: input.keyword,
       providerId: input.providerId,

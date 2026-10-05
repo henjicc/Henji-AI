@@ -12,6 +12,10 @@ import { registerCanvasProjectsIpc } from './ipc/canvas-projects'
 import { registerClipboardIpc } from './ipc/clipboard'
 import { registerCustomModelsIpc } from './ipc/custom-models'
 import { registerDbIpc } from './ipc/db'
+import { registerLocalRecordsIpc } from './ipc/local-records'
+import { registerTestFixturesIpc } from './ipc/test-fixtures'
+import { configureDatabaseMigrations } from './services/db'
+import { databaseMigrationOptions } from './services/db-locations'
 import { registerDocumentsIpc } from './ipc/documents'
 import { registerDragIpc } from './ipc/drag'
 import { registerImageIpc } from './ipc/image'
@@ -67,6 +71,9 @@ if (isolatedAppData) {
   app.setPath('appData', isolatedAppData)
 }
 
+// henji.db 第一次打开时执行迁移账本；位置换算与备份目录在这里登记（数据库模块本身不依赖作品目录）。
+configureDatabaseMigrations(databaseMigrationOptions)
+
 registerMediaProtocolScheme()
 if (!isAssistantCliMode()) {
   configureChromiumDevelopmentCache()
@@ -100,6 +107,8 @@ app.whenReady().then(() => {
   registerClipboardIpc()
   registerCustomModelsIpc()
   registerDbIpc()
+  registerLocalRecordsIpc()
+  registerTestFixturesIpc()
   registerDocumentsIpc()
   registerDragIpc()
   registerImageIpc()
