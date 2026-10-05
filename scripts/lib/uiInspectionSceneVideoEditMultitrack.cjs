@@ -8,6 +8,7 @@ const { ffmpegPath, ffprobePath } = require('./mediaBinaries.cjs')
 const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
 const { dialogs, presented } = require('./uiInspectionSceneVideoEditMonitor.cjs')
 const { installNativeMixHarness } = require('./uiInspectionSceneVideoEditNativeAudio.cjs')
+const { adoptNewVideoEditProject, leaveVideoEditProject, openVideoEditFile, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
 
 /**
  * 多音轨展开与声道类型（2.6，参照 Premiere Pro“使用文件 / 修改音频声道”）在真实 Electron 中的端到端验收：
@@ -42,7 +43,8 @@ const clipNode = (page, id) => page.locator(`[data-video-edit-clip="${id}"]`)
 const trackRow = (page, index) => page.locator(`[data-video-edit-track][data-track-index="${index}"]`)
 /** Scrolls the timeline vertically so a track row is at the top: clips mount only inside the viewport (few rows fit at 960x640). */
 const showTrack = (page, index) => page.locator('[data-video-edit-timeline-viewport]').evaluate((host, index) => { const row = host.querySelector(`[data-track-index="${index}"]`); host.scrollTop = Math.max(0, row.offsetTop - 28) }, index)
-const readProject = file => JSON.parse(fs.readFileSync(file, 'utf8'))
+// 3.1：剪辑是项目里的文档文件，按旧工程形状读出（夹具路径读它对应的实际剪辑）
+const readProject = readVideoEditFile
 const hash = file => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex')
 const mono = (stream, channel = 0) => ({ format: 'mono', sources: [{ stream, channel }] })
 const stereo = (left, right) => ({ format: 'stereo', sources: [{ stream: left[0], channel: left[1] }, { stream: right[0], channel: right[1] }] })
@@ -217,7 +219,7 @@ function createVideoEditMultitrackScene() {
         previousLayout = await page.evaluate(() => localStorage.getItem('henji.videoEdit.dockLayout.v1'))
         await page.evaluate(() => localStorage.removeItem('henji.videoEdit.dockLayout.v1'))
         await dialogs(app, Object.values(samples).map(sample => sample.path), file)
-        await button(page, '新建项目').click(); await button(page, '导入').click()
+        await button(page, '新建项目').click(); await adoptNewVideoEditProject(page, file); await button(page, '导入').click()
         let project = await saved(page, file, value => value.media.length === 4, '四个多音轨样本未全部导入')
         const itemOf = key => { const media = project.media.find(media => path.resolve(media.path).toLowerCase() === path.resolve(samples[key].path).toLowerCase()); return project.items.find(item => item.mediaId === media.id) }
         const items = Object.fromEntries(SAMPLES.map(sample => [sample.key, itemOf(sample.key)]))
@@ -431,7 +433,7 @@ function createVideoEditMultitrackScene() {
             clips: [{ id: 'legacy-clip', itemId: 'legacy-item', name: samples.mxf.file, kind: 'video', track: 1, start: 0, duration: 120, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, brightness: 1, text: '' }], annotations: [] }],
         }
         fs.writeFileSync(legacyFile, JSON.stringify(legacy)); const legacyHash = hash(legacyFile)
-        await dialogs(app, [legacyFile], legacyFile); await button(page, '打开项目文件').click(); await presented(page, 0)
+        await dialogs(app, [legacyFile], legacyFile); await openVideoEditFile(page, legacyFile); await presented(page, 0)
         await page.waitForTimeout(1500)
         assert.equal(hash(legacyFile), legacyHash, '打开旧工程不应改写文件')
         const legacyComposition = composition(legacy, legacy.sequences[0], ++revision)

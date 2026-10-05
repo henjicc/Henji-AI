@@ -139,3 +139,41 @@ describe('项目：外部位置与回收站', () => {
     expect(fs.existsSync(path.join(folder, '.henji', 'project.json'))).toBe(true)
   })
 })
+
+describe('项目：主剪辑（3.1）', () => {
+  beforeEach(() => { env = createTestEnvironment() })
+  afterEach(async () => { await env.cleanup() })
+
+  it('设置主剪辑写进项目说明，只能是本项目里的剪辑；清除后为空', async () => {
+    const { service } = env.services
+    const project = await service.createProject({ name: '短片' })
+    const other = await service.createProject({ name: '别的' })
+    const edit = await service.createDocument({ kind: 'video_edit', container: { kind: 'project', projectId: project.id }, name: '短片' })
+    const foreign = await service.createDocument({ kind: 'video_edit', container: { kind: 'project', projectId: other.id }, name: '别的' })
+    const canvas = await service.createDocument({ kind: 'canvas', container: { kind: 'project', projectId: project.id }, name: '画布' })
+    const updated = await service.setProjectMainDocument({ projectId: project.id, documentId: edit.meta.id })
+    expect(updated.mainVideoEditId).toBe(edit.meta.id)
+    const manifest = JSON.parse(fs.readFileSync(path.join(project.path, '.henji', 'project.json'), 'utf8')) as Record<string, unknown>
+    expect(manifest.mainVideoEditId).toBe(edit.meta.id)
+    expect((await service.listProjects()).find((item) => item.id === project.id)?.mainVideoEditId).toBe(edit.meta.id)
+    await expect(service.setProjectMainDocument({ projectId: project.id, documentId: foreign.meta.id })).rejects.toMatchObject({ name: 'DocumentLocationError' })
+    await expect(service.setProjectMainDocument({ projectId: project.id, documentId: canvas.meta.id })).rejects.toMatchObject({ name: 'DocumentLocationError' })
+    expect((await service.setProjectMainDocument({ projectId: project.id, documentId: null })).mainVideoEditId).toBeNull()
+  })
+})
+
+describe('项目：新建与扫描并发（3.1 真实验收发现）', () => {
+  beforeEach(() => { env = createTestEnvironment() })
+  afterEach(async () => { await env.cleanup() })
+
+  it('新建草稿项目时同时扫描：扫描不会把半建好的文件夹当成手动建的项目补写说明（ID 与草稿标记不变）', async () => {
+    const { service } = env.services
+    for (let round = 0; round < 8; round += 1) {
+      const [project] = await Promise.all([service.createProject(), service.refreshIndex(), service.refreshIndex()])
+      const manifest = await manifestOf(project.path)
+      expect(manifest).toMatchObject({ id: project.id, draft: true })
+      expect((await service.listProjects()).find((item) => item.id === project.id)?.draft).toBe(true)
+    }
+    expect(fs.readdirSync(path.join(env.workRoot, '项目')).some((name) => name.startsWith('.henji-new-'))).toBe(false)
+  })
+})

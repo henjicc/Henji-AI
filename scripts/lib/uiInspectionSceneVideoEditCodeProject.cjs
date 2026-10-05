@@ -7,6 +7,7 @@ const { createHash } = require('node:crypto')
 const sharp = require('sharp')
 const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
 const { observeWorkers, workerSnapshot, waitReleased } = require('./uiInspectionSceneVideoEditLayout.cjs')
+const { adoptNewVideoEditProject, leaveVideoEditProject, openVideoEditFile, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
 const button = (page, name) => page.getByRole('button', { name, exact: true })
 async function dialogs(app, openPaths, savePath) {
   await app.evaluate(({ dialog }, values) => {
@@ -16,7 +17,7 @@ async function dialogs(app, openPaths, savePath) {
 }
 async function saved(page, file, condition) {
   for (let attempt = 0; attempt < 200; attempt++) {
-    const document = JSON.parse(fs.readFileSync(file, 'utf8'))
+    const document = readVideoEditFile(file)
     if (condition(document)) return document
     await page.waitForTimeout(50)
   }
@@ -80,7 +81,7 @@ function createVideoEditCodeProjectScene({ controls = false } = {}) {
       let client
       await observeWorkers(page)
       try {
-        await button(page, '剪辑').click(); await dialogs(app, [video, picture, audio], file); await button(page, '新建项目').click()
+        await button(page, '剪辑').click(); await dialogs(app, [video, picture, audio], file); await button(page, '新建项目').click(); await adoptNewVideoEditProject(page, file)
         await button(page, '导入').click()
         let document = await saved(page, file, document => document.media.length === 3)
         const projectRef = { kind: 'video_edit.project', id: document.id }
@@ -154,13 +155,13 @@ function createVideoEditCodeProjectScene({ controls = false } = {}) {
         assert.equal(document.items.find(item => item.id === dynamicItem.id).code.parameters.speed, 80, '实例参数不改项目默认值')
         await button(page, '撤销').click(); await saved(page, file, value => value.sequences[0].clips.find(clip => clip.id === dynamicClip.id).code.parameters.speed === 80)
         await page.waitForFunction(previous => document.querySelector('canvas[aria-label="剪辑画面"]').toDataURL('image/png') === previous, snapshots[120], { timeout: 10000 })
-        const beforeRejected = JSON.parse(fs.readFileSync(file, 'utf8'))
+        const beforeRejected = readVideoEditFile(file)
         await button(page, '新建项目项').click(); await button(page, '新建代码素材').click()
         await page.getByLabel('作者源码', { exact: true }).fill(dynamicSource.replace('const x=', 'while(true){} const x='))
         await button(page, '检查并创建').click()
         const rejection = page.getByText(/render 中仅允许 const 和最后一个 return/)
         await rejection.waitFor({ state: 'visible' }); evidence.refusedSource = await rejection.innerText()
-        assert.deepEqual(JSON.parse(fs.readFileSync(file, 'utf8')), beforeRejected, '非法候选不得改变有效工程')
+        assert.deepEqual(readVideoEditFile(file), beforeRejected, '非法候选不得改变有效工程')
         await capture('code-invalid-source-preserved'); await button(page, '取消').click()
         const split = await callTool(client, 'split_video_edit', operationEnvelope([await callTool(client, 'read_application_entity', { ref: projectRef, propertyIds: ['video_edit.project.name'] })], { projectRef, clipRef: dynamicRef, frame: 90 }))
         assert.equal(split.executionState, 'completed')
@@ -232,7 +233,7 @@ function createVideoEditCodeProjectScene({ controls = false } = {}) {
         const pcm = execFileSync(ffmpegPath, ['-v', 'error', '-i', output, '-vn', '-f', 'f32le', '-ac', '1', '-ar', '48000', '-'], { windowsHide: true, maxBuffer: 4e6 })
         const samples = new Float32Array(pcm.buffer, pcm.byteOffset, pcm.byteLength / 4)
         evidence.export.audioRms = Math.sqrt(samples.reduce((sum, sample) => sum + sample * sample, 0) / samples.length); assert.ok(evidence.export.audioRms > .01)
-        const savedContent = JSON.parse(fs.readFileSync(file, 'utf8'))
+        const savedContent = readVideoEditFile(file)
         assert.ok(!/"(program|shader|instructions)"/.test(JSON.stringify(savedContent))); assert.deepEqual(savedContent.codeMaterials.map(definition => definition.versions[0].source), [dynamicSource, staticSource])
         await button(page, '关闭项目').click(); await waitReleased(page)
         evidence.released = await workerSnapshot(page)
@@ -252,8 +253,8 @@ function createVideoEditCodeProjectScene({ controls = false } = {}) {
         assert.equal(first.gpu.externalCopies, last.gpu.externalCopies, '热帧不能重复上传字形'); assert.equal(first.gpu.textureAllocations, last.gpu.textureAllocations)
         if (control) { assert.equal(first.images.uploads, last.images.uploads, '同图代码/普通片段热帧不能重复上传'); assert.equal(first.decodedImages, 1); assert.equal(last.decodedImages, 1) }
         evidence.codeHotResources = { first, last }
-        await dialogs(app, [file], output); await button(page, '打开项目文件').click(); await presented(page, 0); await seek(page, 120)
-        const reopened = JSON.parse(fs.readFileSync(file, 'utf8')); assert.deepEqual(reopened, savedContent)
+        await dialogs(app, [file], output); await openVideoEditFile(page, file); await presented(page, 0); await seek(page, 120)
+        const reopened = readVideoEditFile(file); assert.deepEqual(reopened, savedContent)
         assert.equal(await page.getByLabel('剪辑画面', { exact: true }).evaluate(canvas => canvas.toDataURL('image/png')), snapshots[120], '保存重开后固定代码画面保持一致')
         await capture('code-mixed-reopened')
         for (const original of originals) { assert.equal(fs.statSync(original.file).size, original.size); assert.equal(fs.statSync(original.file).mtimeMs, original.mtime) }

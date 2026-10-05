@@ -5,6 +5,8 @@ import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/te
 import { getPlatform } from '@/platform/runtime'
 import { appendVideoEditSequence, duplicateVideoEditSequence, deleteVideoEditSequence, switchVideoEditSequence, updateVideoEditSequenceSettings, getActiveVideoEditSequence, editVideoSequence, createVideoEditProject, appendVideoEditClip, appendVideoEditMedia, closeVideoEditProject, editVideoProject, listVideoEditInstances, openVideoEditProject, saveVideoEdit, undoVideoEdit, videoEditDomainRevision, setVideoEditView, subscribeVideoEdit, subscribeVideoEditView } from './videoEditService'
 import { splitVideoEditClip, clipSourceSeconds, adjustVideoEditClip } from '@/core/videoEdit/document'
+import { closeAllVideoEdits, failVideoEditSaves, reopenVideoEdit, savedVideoEdit, videoEditWrites } from './videoEditDocumentTestKit'
+import { harnessDocumentStore } from '@/tests/harnessNativeStorage'
 import { dropVideoEditInput, videoEditDropPaths } from './videoEditDrop'
 import { importVideoEditPaths, sameVideoEditMediaPath } from './videoEditMedia'
 import { getApplicationControlExecutionEngine } from '@/features/application-control/capabilities/applicationControlRegistry'
@@ -16,8 +18,6 @@ import { beginVideoEditGesture, finishVideoEditGesture, updateVideoEditPicturePo
 import { createVideoEditGraphic } from '@/core/videoEdit/graphics'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 
-const files = new Map<string, string>()
-let failSave = false
 it('原生图形和调整范围独立持久，复制序列重映射转场，错误草稿不改变历史', async () => {
   const owner = (await createVideoEditProject())!; const id = owner.document.id; const sequenceId = owner.activeSequenceId
   editVideoProject(id, document => {
@@ -47,8 +47,8 @@ it('原生图形和调整范围独立持久，复制序列重映射转场，错�
   expect(() => editVideoSequence(id, duplicateId, sequence => { sequence.clips[0].duration--; return sequence })).toThrow('紧邻')
   expect(owner.document).toBe(beforeReject); expect(owner.past).toHaveLength(history)
   await saveVideoEdit(id); const saved = structuredClone(owner.document)
-  await closeVideoEditProject(id); const reopened = (await openVideoEditProject(owner.path))!
-  expect(reopened.document).toEqual(saved)
+  const reopened = await reopenVideoEdit(id)
+  expect(reopened.document).toEqual({ ...saved, revision: 0 })
 })
 it('受限画面位置草稿保留时间及锚定对象，保存等待释放并只记录一笔历史', async () => {
   const owner = (await createVideoEditProject())!; const id = owner.document.id; const sequenceId = owner.activeSequenceId
@@ -56,7 +56,7 @@ it('受限画面位置草稿保留时间及锚定对象，保存等待释放并�
   editVideoSequence(id, sequenceId, sequence => ({ ...sequence, captions: [{ id: 'position-caption', clipId, start: 1, duration: 3, text: '跟随' }], markers: [{ id: 'position-marker', clipId, frame: 2, name: '时刻' }] }))
   await saveVideoEdit(id)
   const before = owner.document; const sequence = getActiveVideoEditSequence(owner); const history = owner.past.length
-  const write = vi.spyOn(getPlatform().system.fs, 'writeTextFile'); write.mockClear()
+  const writes = videoEditWrites()
   const gesture = beginVideoEditGesture(id)
   for (let step = 1; step <= 60; step++) updateVideoEditPicturePosition(gesture, sequenceId, clipId, { x: step / 120, y: -step / 120 })
   const moved = getActiveVideoEditSequence(owner)
@@ -65,13 +65,13 @@ it('受限画面位置草稿保留时间及锚定对象，保存等待释放并�
   expect(owner.document.media).toBe(before.media); expect(owner.document.items).toBe(before.items); expect(owner.past).toHaveLength(history)
   let resolved = false
   const saving = saveVideoEdit(id).then(() => { resolved = true })
-  await new Promise(resolve => setTimeout(resolve, 10)); expect(resolved).toBe(false); expect(write).not.toHaveBeenCalled()
+  await new Promise(resolve => setTimeout(resolve, 10)); expect(resolved).toBe(false); expect(videoEditWrites()).toBe(writes)
   const current = owner.document
   updateVideoEditPicturePosition(gesture, sequenceId, clipId, { x: .5, y: -.5 }); expect(owner.document).toBe(current)
   finishVideoEditGesture(gesture); await saving
-  expect(write).toHaveBeenCalledTimes(1); expect(owner.past).toHaveLength(history + 1)
+  expect(videoEditWrites()).toBe(writes + 1); expect(owner.past).toHaveLength(history + 1)
   expect(owner.past.at(-1)).toBe(before); expect(before.sequences[0].clips[0].x).toBe(0)
-  expect(JSON.parse(files.get(owner.path)!).sequences[0].clips).toEqual(moved.clips)
+  expect(savedVideoEdit(owner).sequences[0].clips).toEqual(moved.clips)
   editVideoSequence(id, sequenceId, draft => { draft.captions![0].text = '普通编辑'; return draft })
   expect(moved.captions![0].text).toBe('跟随'); expect(sequence.captions![0].text).toBe('跟随')
   undoVideoEdit(id); expect(getActiveVideoEditSequence(owner).clips).toEqual(moved.clips)
@@ -130,24 +130,24 @@ it('序列切换和选区刷新助手上下文，控制改变并发基线而逐�
 it('编辑与撤销在页面外静默自动保存，播放和定位不写工程', async () => {
   const instance = (await createVideoEditProject())!
   appendVideoEditClip(instance.document.id)
-  await vi.waitFor(() => expect(JSON.parse(files.get(instance.path)!).sequences[0].clips).toHaveLength(1))
+  await vi.waitFor(() => expect(savedVideoEdit(instance).sequences[0].clips).toHaveLength(1), { timeout: 3000 })
   undoVideoEdit(instance.document.id)
-  await vi.waitFor(() => expect(JSON.parse(files.get(instance.path)!).sequences[0].clips).toHaveLength(0))
-  const write = vi.spyOn(getPlatform().system.fs, 'writeTextFile')
+  await vi.waitFor(() => expect(savedVideoEdit(instance).sequences[0].clips).toHaveLength(0), { timeout: 3000 })
+  const writes = videoEditWrites()
   setVideoEditView(instance.document.id, { frame: 15, playing: false })
-  await new Promise(resolve => setTimeout(resolve, 10))
-  expect(write).not.toHaveBeenCalled()
+  await new Promise(resolve => setTimeout(resolve, 900))
+  expect(videoEditWrites()).toBe(writes); expect(instance.dirty).toBe(false)
 })
 it('自动保存失败保留修改并在磁盘恢复后只重试保存，不重放编辑', async () => {
   vi.useFakeTimers()
   try {
     const instance = (await createVideoEditProject())!
-    failSave = true; appendVideoEditClip(instance.document.id)
-    await vi.advanceTimersByTimeAsync(1)
-    expect(instance.dirty).toBe(true); expect(instance.error).toContain('修改仍保留在当前项目')
+    failVideoEditSaves(true); appendVideoEditClip(instance.document.id)
+    await vi.advanceTimersByTimeAsync(800)
+    expect(instance.dirty).toBe(true); expect(instance.error).toContain('修改仍保留在当前剪辑')
     const history = instance.past.length
-    failSave = false; await vi.advanceTimersByTimeAsync(2000)
-    expect(JSON.parse(files.get(instance.path)!).sequences[0].clips).toHaveLength(1)
+    failVideoEditSaves(false); await vi.advanceTimersByTimeAsync(2000)
+    expect(savedVideoEdit(instance).sequences[0].clips).toHaveLength(1)
     expect(instance.dirty).toBe(false); expect(instance.past).toHaveLength(history)
   } finally { vi.useRealTimers() }
 })
@@ -165,15 +165,12 @@ it('素材库规范化的 Windows 路径与原引用是同一素材，拖放不�
   expect(sameVideoEditMediaPath('/media/Card.png', '/media/card.png')).toBe(false)
 })
 beforeEach(() => {
-  installHarnessNativeStorage(); files.clear(); failSave = false
+  installHarnessNativeStorage()
   const platform = getPlatform()
   vi.spyOn(platform.system.paths, 'dirname').mockImplementation(async path => path.replace(/[\\/][^\\/]+$/, ''))
   vi.spyOn(platform.media, 'allowRoot').mockResolvedValue(undefined)
-  vi.spyOn(platform.system.dialog, 'save').mockResolvedValue('D:/fixture/test.henji-video')
-  vi.spyOn(platform.system.fs, 'writeTextFile').mockImplementation(async (path, value) => { if (failSave) throw new Error('disk full'); files.set(path, value) })
-  vi.spyOn(platform.system.fs, 'readTextFile').mockImplementation(async path => { const value = files.get(path); if (!value) throw new Error('missing'); return value })
 })
-afterEach(async () => { failSave = false; for (const instance of listVideoEditInstances()) await closeVideoEditProject(instance.document.id); vi.restoreAllMocks(); uninstallHarnessNativeStorage() })
+afterEach(async () => { await closeAllVideoEdits(); vi.restoreAllMocks(); uninstallHarnessNativeStorage() })
 
 it('公共修改与手动编辑共用历史并可保存重开', async () => {
   const instance = (await createVideoEditProject())!
@@ -189,8 +186,7 @@ it('公共修改与手动编辑共用历史并可保存重开', async () => {
     undoVideoEdit(instance.document.id)
     expect(getActiveVideoEditSequence(instance).clips[0].text).toBe('输入文字')
     await saveVideoEdit(instance.document.id)
-    await closeVideoEditProject(instance.document.id)
-    const restored = (await openVideoEditProject('D:/fixture/test.henji-video'))!
+    const restored = await reopenVideoEdit(instance.document.id)
     expect(getActiveVideoEditSequence(restored).clips).toHaveLength(1)
     expect(getActiveVideoEditSequence(restored).clips[0].text).toBe('输入文字')
   } finally { app.dispose() }
@@ -199,16 +195,20 @@ it('保存失败保留助手修改且恢复不会重放编辑', async () => {
   const instance = (await createVideoEditProject())!
   const app = createApplicationHarness()
   try {
-    failSave = true
-    const result = await app.change({ kind: 'video_edit.project', id: instance.document.id }, { 'video_edit.project.name': '保留修改' })
+    // 剪辑名就是文件名，内容能力不改名：改名属性只读并点名通用文档属性
+    const renamed = await app.change({ kind: 'video_edit.project', id: instance.document.id }, { 'video_edit.project.name': '改名' })
+    expect(renamed.ok).toBe(false); expect(JSON.stringify(renamed)).toContain('documents.document')
+    failVideoEditSaves(true)
+    const sequenceRef = { kind: 'video_edit.sequence', id: `${instance.document.id}:${instance.activeSequenceId}` }
+    const result = await app.change(sequenceRef, { 'video_edit.sequence.name': '保留修改' })
     expect(result.ok).toBe(false)
-    expect(instance.document.name).toBe('保留修改'); expect(instance.dirty).toBe(true)
-    await expect(saveVideoEdit(instance.document.id)).rejects.toThrow('修改仍保留在当前项目')
-    expect(instance.error).toContain('请检查项目文件是否只读'); expect(instance.error).not.toContain('disk full')
+    expect(instance.document.sequences[0].name).toBe('保留修改'); expect(instance.dirty).toBe(true)
+    await expect(saveVideoEdit(instance.document.id)).rejects.toThrow('修改仍保留在当前剪辑')
+    expect(instance.error).toContain('请检查项目文件夹是否只读'); expect(instance.error).not.toContain('磁盘已满')
     const historyLength = instance.past.length
-    failSave = false; await saveVideoEdit(instance.document.id)
+    failVideoEditSaves(false); await saveVideoEdit(instance.document.id)
     expect(instance.past).toHaveLength(historyLength)
-    expect(JSON.parse(files.get(instance.path)!).name).toBe('保留修改'); expect(instance.error).toBeNull()
+    expect(savedVideoEdit(instance).sequences[0].name).toBe('保留修改'); expect(instance.error).toBeNull()
   } finally { app.dispose() }
 })
 it('公共集合新增标注并拒绝跨工程引用', async () => {
@@ -227,16 +227,17 @@ it('公共集合新增标注并拒绝跨工程引用', async () => {
 })
 it('保存中发生新修改时继续写入最新版本而不提前清除脏状态', async () => {
   const instance = (await createVideoEditProject())!
-  editVideoProject(instance.document.id, document => ({ ...document, name: '第一版' }))
+  const rename = (name: string) => editVideoProject(instance.document.id, document => ({ ...document, sequences: document.sequences.map((sequence, index) => index ? sequence : { ...sequence, name }) }))
+  rename('第一版')
   let unblock!: () => void
-  const blocked = new Promise<void>(resolve => { unblock = resolve })
-  vi.mocked(getPlatform().system.fs.writeTextFile).mockImplementationOnce(async (path, value) => { await blocked; files.set(path, value) })
+  harnessDocumentStore().saveGate = new Promise<void>(resolve => { unblock = resolve })
   const saving = saveVideoEdit(instance.document.id)
-  editVideoProject(instance.document.id, document => ({ ...document, name: '保存期间的修改' }))
+  await new Promise(resolve => setTimeout(resolve, 0))
+  rename('保存期间的修改')
   expect(instance.dirty).toBe(true)
-  unblock(); await saving
+  harnessDocumentStore().saveGate = null; unblock(); await saving
   expect(instance.dirty).toBe(false)
-  expect(JSON.parse(files.get(instance.path)!).name).toBe('保存期间的修改')
+  expect(savedVideoEdit(instance).sequences[0].name).toBe('保存期间的修改')
 })
 it('手动定位推进并发版本，播放观察不推进版本，拆分保持源时间连续', async () => {
   const instance = (await createVideoEditProject())!; appendVideoEditClip(instance.document.id)
@@ -257,7 +258,7 @@ it('公共拆分从磁盘回读核实片段边界', async () => {
   try {
     const result = await app.requireResult('split_video_edit', { projectRef: { kind: 'video_edit.project', id: instance.document.id }, clipRef: { kind: 'video_edit.clip', id: `${instance.document.id}:${getActiveVideoEditSequence(instance).clips[0].id}` }, frame: 30 })
     expect(result.verification).toMatchObject({ verified: true })
-    const saved = JSON.parse(files.get(instance.path)!)
+    const saved = savedVideoEdit(instance)
     expect(saved.sequences[0].clips.map((clip: { start: number; duration: number }) => [clip.start, clip.duration])).toEqual([[0, 30], [30, 60]])
   } finally { app.dispose() }
 })
@@ -272,7 +273,7 @@ it('播放与拖动只通知瞬态叶子，相等写入不通知，也不污染�
     expect(videoEditDomainRevision()).toBe(revision + 1); expect(instance.dirty).toBe(false); expect(instance.past).toHaveLength(0)
     setVideoEditView(id, { frame: 16 }, true)
     expect(videoEditDomainRevision()).toBe(revision + 1); expect(editor).not.toHaveBeenCalled()
-    await saveVideoEdit(id); expect(JSON.parse(files.get(instance.path)!)).not.toHaveProperty('scrubbing')
+    await saveVideoEdit(id); expect(savedVideoEdit(instance)).not.toHaveProperty('scrubbing')
     appendVideoEditClip(id); setVideoEditView(id, { selection: null })
     editor.mockClear(); setVideoEditView(id, { selection: getActiveVideoEditSequence(instance).clips[0].id }); expect(editor).toHaveBeenCalledOnce()
   } finally { offEditor(); offView() }
@@ -285,7 +286,7 @@ it('拖放固定到原工程与轨道，直接引用源路径，并复用撤销�
   await dropVideoEditInput(a.document.id, { kind: 'sources', sources: [{ path: media.path }] }, { frame: 90, track: 4 })
   expect(getActiveVideoEditSequence(a).clips[0]).toMatchObject({ itemId: a.document.items[0].id, start: 90, track: 4 })
   expect(getActiveVideoEditSequence(b).clips).toHaveLength(0); expect(a.document.media).toHaveLength(1)
-  await saveVideoEdit(a.document.id); expect(JSON.parse(files.get(a.path)!).media[0].path).toBe(media.path)
+  await saveVideoEdit(a.document.id); expect(savedVideoEdit(a).media[0].path).toBe(media.path)
   undoVideoEdit(a.document.id); expect(getActiveVideoEditSequence(a).clips).toHaveLength(0); expect(a.document.media[0]).toEqual(media)
 })
 it('磁盘文件拖入只取 PAL 原始路径，禁止没有本地路径的内存文件', () => {
@@ -320,8 +321,7 @@ it('两个不同设置的序列保存冷重开，切换只保留会话，不写�
   switchVideoEditSequence(id, first); expect(instance.frame).toBe(23); expect(instance.selection).toBe(firstClip)
   switchVideoEditSequence(id, second); expect(instance.frame).toBe(47)
   expect(instance.document).toBe(before); expect(instance.past).toHaveLength(history); expect(videoEditDomainRevision()).toBe(revision + 2); expect(instance.dirty).toBe(false)
-  await closeVideoEditProject(id)
-  const reopened = (await openVideoEditProject('D:/fixture/test.henji-video'))!
+  const reopened = await reopenVideoEdit(id)
   expect(reopened.document.sequences).toHaveLength(2)
   expect(reopened.document.sequences[1]).toMatchObject({ name: '竖屏', width: 2160, height: 3840, sampleRate: 44100, channels: 1, frameRate: { numerator: 30000, denominator: 1001 } })
   expect(reopened.document.media[0].path).toBe('E:/original/image.png')

@@ -9,6 +9,7 @@ import { rememberVideoEditCodeMetadata, readVideoEditCodeMetadata } from './vide
 import { addVideoEditCodeKeyframe, deleteVideoEditCodeKeyframe, readVideoEditCodeEditor, readVideoEditGraphicEditor, resetVideoEditCodeParameter, setVideoEditCodeParameter, updateVideoEditCodeKeyframe } from './videoEditCodeParameters'
 import { createVideoEditGraphicItem, appendVideoEditItems } from './videoEditProjectItems'
 import { createVideoEditGraphicObject, deleteVideoEditGraphicObjects, renameVideoEditGraphicObject, reorderVideoEditGraphicObjects } from './videoEditGraphics'
+import { savedVideoEdit } from './videoEditDocumentTestKit'
 
 const source = `export default {apiVersion:1,name:"参数",kind:"generator",mode:"dynamic",width:3840,height:2160,durationSeconds:10,seed:1,parameters:{amount:{type:"number",title:"强度",default:5,min:0,max:10,step:1,animatable:true},other:{type:"boolean",title:"开关",default:false}},render(ctx){return [rect({x:ctx.params.amount,y:0,width:100,height:100,fill:[1,0,0,1]})];}}`
 const files = new Map<string, string>()
@@ -68,7 +69,7 @@ it('命名图形对象复用参数曲线和单笔手势，不伪造代码版本�
   expect(readVideoEditGraphicEditor(id, sequenceId, clipId, objectId).curves.width).toHaveLength(3)
   expect(() => setVideoEditCodeParameter({ ...target, objectId: 'missing' }, 'width', 1)).toThrow('图形对象')
   expect(() => setVideoEditCodeParameter(target, 'versionId', 'fake')).toThrow('没有声明')
-  await saveVideoEdit(id); expect(JSON.parse(files.get(owner.path)!).sequences[0].clips[0].graphic.objects[0].curves.width).toHaveLength(3)
+  await saveVideoEdit(id); expect(savedVideoEdit(owner).sequences[0].clips[0].graphic!.objects[0].curves!.width).toHaveLength(3)
 })
 it('同片段多个效果按稳定id分别调参、动画和撤销，静态效果保留长源入点', async () => {
   const owner = (await createVideoEditProject())!; const id = owner.document.id; const sequenceId = owner.activeSequenceId
@@ -135,7 +136,7 @@ it('关键帧添加/移动/删除与当前时刻修改共用求值，重置一�
   const history = owner.past.length; resetVideoEditCodeParameter(target, 'amount')
   expect(owner.past).toHaveLength(history + 1); expect(readVideoEditCodeEditor(target.projectId, target.sequenceId, target.clipId).curves).toEqual({})
   undoVideoEdit(target.projectId); expect(readVideoEditCodeEditor(target.projectId, target.sequenceId, target.clipId).curves.amount).toHaveLength(2)
-  await saveVideoEdit(target.projectId); expect(JSON.parse(files.get(owner.path)!).sequences[0].clips[0].code.curves.amount).toHaveLength(2)
+  await saveVideoEdit(target.projectId); expect(savedVideoEdit(owner).sequences[0].clips[0].code!.curves!.amount).toHaveLength(2)
 })
 
 it('显式原目标不跟随活动序列，版本切换和旧选区手势失效后拒绝迟到写入', async () => {

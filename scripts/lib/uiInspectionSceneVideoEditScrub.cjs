@@ -4,6 +4,7 @@ const path = require('node:path')
 const os = require('node:os')
 const { execFileSync, execFile } = require('node:child_process')
 const { observeWorkers, workerSnapshot, waitReleased } = require('./uiInspectionSceneVideoEditLayout.cjs')
+const { adoptNewVideoEditProject, leaveVideoEditProject, openVideoEditFile, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
 const button = (page, name) => page.getByRole('button', { name, exact: true })
 const quantile = (values, q) => [...values].sort((a, b) => a - b)[Math.min(values.length - 1, Math.floor(values.length * q))] ?? 0
 
@@ -26,7 +27,7 @@ function createVideoEditScrubScene() {
       const file = path.join(root, 'scrub.henji-video'); fs.writeFileSync(file, JSON.stringify(project))
       await app.evaluate(({ dialog }, file) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] }) }, file)
       await observeWorkers(page)
-      await button(page, '剪辑').click(); const openedAt = performance.now(); await button(page, '打开项目文件').click()
+      await button(page, '剪辑').click(); const openedAt = performance.now(); await openVideoEditFile(page, file)
       const canvas = page.getByLabel('剪辑画面', { exact: true })
       try {
         await page.waitForFunction(() => document.querySelector('canvas[aria-label="剪辑画面"]')?.dataset.presentedFrame === '0', null, { timeout: 90000 })
@@ -60,7 +61,7 @@ function createVideoEditScrubScene() {
           const longFile = path.join(root, 'boundary.henji-video'); fs.writeFileSync(longFile, JSON.stringify(longProject))
           await button(page, '关闭项目').click()
           await app.evaluate(({ dialog }, file) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] }) }, longFile)
-          await button(page, '打开项目文件').click(); await waitPresented(0, 'segment-start-failed')
+          await openVideoEditFile(page, longFile); await waitPresented(0, 'segment-start-failed')
           await page.getByLabel('时间线缩放', { exact: true }).focus(); await page.getByLabel('时间线缩放', { exact: true }).press('Home')
           // The timeline draws 60 x zoom / fps pixels per frame; read the zoom the control actually reached.
           pixels = 60 * Number(await page.getByLabel('时间线缩放', { exact: true }).inputValue()) / 60
@@ -121,7 +122,7 @@ function createVideoEditScrubScene() {
       // Playback measures completed video frames, never animation callback counts.
       await button(page, '关闭项目').click()
       await app.evaluate(({ dialog }, file) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] }) }, file)
-      await button(page, '打开项目文件').click()
+      await openVideoEditFile(page, file)
       await page.waitForFunction(() => document.querySelector('canvas[aria-label="剪辑画面"]')?.dataset.presentedFrame === '0', null, { timeout: 90000 })
       await canvas.evaluate(canvas => {
         window.__playFrames = []

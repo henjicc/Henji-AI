@@ -44,7 +44,7 @@
       {
         "waitFor": {
           "role": "button",
-          "name": "/^打开项目文件$/"
+          "name": "/^新建项目$/"
         },
         "timeout": 12000
       },
@@ -58,12 +58,6 @@
         "seedVideoEdit": {
           "name": "核对-剪辑",
           "captions": 6
-        }
-      },
-      {
-        "click": {
-          "role": "button",
-          "name": "/^打开项目文件$/"
         }
       },
       {

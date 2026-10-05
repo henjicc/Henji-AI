@@ -5,11 +5,12 @@ const { execFileSync } = require('node:child_process')
 const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
 const { clickOutsideFloatingAssets, observeWorkers, workerSnapshot, waitReleased } = require('./uiInspectionSceneVideoEditLayout.cjs')
 const { dialogs, saved, presented, png, pixelDifference, mediaProbe, trackBanks } = require('./uiInspectionSceneVideoEditMonitor.cjs')
+const { adoptNewVideoEditProject, leaveVideoEditProject, openVideoEditFile, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
 
 const source = `export default {apiVersion:1,name:"跨工程代码资产",kind:"generator",mode:"dynamic",width:3840,height:2160,durationSeconds:3,seed:77,parameters:{amount:{type:"number",title:"图形透明度",default:.5,min:0,max:1,step:.01,animatable:true},logo:{type:"image",title:"原图片",default:null,animatable:false},label:{type:"text",title:"标题内容",default:"跨工程代码资产",maxLength:64}},render(ctx){return [rect({x:130+ctx.time*100,y:500,width:1000,height:500,fill:[0,.6,1,ctx.params.amount]}),image({source:ctx.params.logo,x:1800,y:300,width:1000,height:600}),text({x:200,y:1500,text:ctx.params.label,fontSize:130,color:[1,1,1,1]})];}}`
 const filterSource = `export default {apiVersion:1,name:"可编辑资产滤镜",kind:"filter",mode:"static",width:3840,height:2160,durationSeconds:3,seed:8,parameters:{gain:{type:"number",title:"红色强度",default:1,min:0,max:1,step:.01}},render(ctx){const c=sample(ctx.u,ctx.v);return rgba(c.r*ctx.params.gain,c.g,c.b,c.a);}}`
 const button = (page, name) => page.getByRole('button', { name, exact: true })
-const read = file => JSON.parse(fs.readFileSync(file, 'utf8'))
+const read = file => readVideoEditFile(file)
 const normalized = value => value.replaceAll('/', '\\').toLowerCase()
 const checked = result => { assert.equal(result.executionState, 'completed', JSON.stringify(result)); assert.equal(result.verificationState, 'verified', JSON.stringify(result)); return result }
 
@@ -42,7 +43,7 @@ function createVideoEditCodeAssetsScene() {
         await button(page, '剪辑').click(); if (await button(page, '关闭项目').isVisible()) await button(page, '关闭项目').click()
         await button(page, '生成').click(); previousLayout = await page.evaluate(() => localStorage.getItem('henji.videoEdit.dockLayout.v1'))
         await page.evaluate(() => localStorage.removeItem('henji.videoEdit.dockLayout.v1')); await observeWorkers(page); observed = true; await button(page, '剪辑').click()
-        const open = async file => { await dialogs(app, [file], file); await button(page, '打开项目文件').click(); await presented(page, 0) }
+        const open = async file => { await dialogs(app, [file], file); await openVideoEditFile(page, file); await presented(page, 0) }
         await open(originFile)
         const identity = await authorizeMcpConnection(page, { name: '代码资产真实工程验收', allowWrites: true }); client = await connectMcpClient(identity.config, 'Henji editable code assets Reality')
         const change = async changes => {

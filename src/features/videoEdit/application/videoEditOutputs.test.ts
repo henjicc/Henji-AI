@@ -15,6 +15,8 @@ import { appendVideoEditCaptionText, exportVideoEditSubtitles } from './videoEdi
 import { captureVideoEditProgramFrame, registerVideoEditProgramCapture } from './videoEditProgramCapture'
 import { collectVideoEditOutput, publishVideoEditOutput } from './videoEditOutputs'
 import { cancelVideoEditExport, exportVideoEdit, videoEditExportTask } from './videoEditExport'
+import { reopenVideoEdit } from './videoEditDocumentTestKit'
+import { harnessDocumentStore } from '@/tests/harnessNativeStorage'
 
 // Only codec/pixel and native I/O boundaries are replaced. Services, ownership,
 // capability permission/registration, collection and project persistence are real.
@@ -65,7 +67,7 @@ it('收录失败保留PNG；同节目帧重试复用已发布文件，不再次�
   expect(media.has(output.path)).toBe(true); expect(platform.system.fs.remove).not.toHaveBeenCalled()
   const again = await captureVideoEditProgramFrame(id)
   expect(again).toBe(output); expect(capture).toHaveBeenCalledOnce(); expect(platform.system.fs.writeFile).toHaveBeenCalledOnce()
-  expect(vi.mocked(platform.system.dialog.save).mock.calls).toHaveLength(2) // project creation + first PNG
+  expect(vi.mocked(platform.system.dialog.save).mock.calls).toHaveLength(1) // 只有第一张 PNG 选了路径（新建项目不再弹另存为）
   const asset = await collectVideoEditOutput(output); expect(asset.filePath).toBe(output.path); expect(asset.source).toBe('video-edit')
   expect(owner.past).toHaveLength(0); expect(owner.document.media).toHaveLength(0); unregister()
 })
@@ -124,11 +126,11 @@ it.each(['dialog', 'save'] as const)('导出提交前%s等待期间取消不创�
   vi.mocked(getPlatform().system.dialog.save).mockClear(); vi.mocked(getPlatform().system.fs.writeTextFile).mockClear()
   const dialog = deferred<string | null>(); const saving = deferred<void>()
   if (waiting === 'dialog') vi.mocked(getPlatform().system.dialog.save).mockReturnValueOnce(dialog.promise)
-  else { editVideoSequence(id, owner.activeSequenceId, sequence => ({ ...sequence, name: '待保存修改' })); vi.mocked(getPlatform().system.fs.writeTextFile).mockImplementationOnce(async (path, text) => { await saving.promise; files.set(path, text) }) }
+  else { editVideoSequence(id, owner.activeSequenceId, sequence => ({ ...sequence, name: '待保存修改' })); harnessDocumentStore().saveGate = saving.promise }
   const operation = exportVideoEdit(id, waiting === 'save' ? 'D:/cancelled.mp4' : undefined, true, controller.signal)
   const rejected = expect(operation).rejects.toThrow()
-  await vi.waitFor(() => expect(waiting === 'dialog' ? getPlatform().system.dialog.save : getPlatform().system.fs.writeTextFile).toHaveBeenCalled())
-  controller.abort(); dialog.resolve('D:/cancelled.mp4'); saving.resolve(); await rejected
+  await vi.waitFor(() => waiting === 'dialog' ? expect(getPlatform().system.dialog.save).toHaveBeenCalled() : expect(harnessDocumentStore().activeSaves).toBe(1))
+  controller.abort(); dialog.resolve('D:/cancelled.mp4'); harnessDocumentStore().saveGate = null; saving.resolve(); await rejected
   expect(videoEditExportTask(id)).toBeUndefined(); expect(owner.busy).toBe(false); expect(getPlatform().system.fs.writeFile).not.toHaveBeenCalled(); expect(encoder.render).not.toHaveBeenCalled()
 })
 
@@ -142,7 +144,7 @@ it.each(['frame', 'revision', 'command', 'cancel', 'reopen'] as const)('等待�
   if (change === 'revision') editVideoSequence(id, owner.activeSequenceId, sequence => ({ ...sequence, name: '新序列名' }))
   if (change === 'command') { setVideoEditView(id, { frame: 1 }); setVideoEditView(id, { frame: 0 }) }
   if (change === 'cancel') controller.abort()
-  if (change === 'reopen') { await closeVideoEditProject(id); await openVideoEditProject(owner.path) }
+  if (change === 'reopen') { await closeVideoEditProject(id); await reopenVideoEdit(owner.document.id) }
   gate.resolve(png()); await rejected
   expect(getPlatform().system.fs.writeFile).not.toHaveBeenCalled(); expect(getPlatform().assetLibrary.createAsset).not.toHaveBeenCalled(); unregister()
 })
@@ -152,7 +154,7 @@ it('发布后原文件改变、取消或原工程关闭，收录均拒绝；同I
   vi.mocked(getPlatform().assetLibrary.inspectFileContent).mockResolvedValueOnce({ ...content, contentIdentity: 'b'.repeat(64) })
   await expect(collectVideoEditOutput(output)).rejects.toThrow('已改变')
   const controller = new AbortController(); controller.abort(); await expect(collectVideoEditOutput(output, {}, controller.signal)).rejects.toThrow()
-  await closeVideoEditProject(owner.document.id); await openVideoEditProject(owner.path)
+  await closeVideoEditProject(owner.document.id); await reopenVideoEdit(owner.document.id)
   await expect(collectVideoEditOutput(output)).rejects.toThrow('原工程已关闭'); expect(getPlatform().assetLibrary.createAsset).not.toHaveBeenCalled()
 })
 
@@ -187,7 +189,7 @@ it('导出回执冻结原序列；成片收录失败可重试且不会重新编�
   vi.mocked(getPlatform().assetLibrary.createAsset).mockRejectedValueOnce(new Error('not available'))
   await expect(collectVideoEditOutput(task.output!)).rejects.toThrow('not available'); expect(media.has('D:/finished.mp4')).toBe(true)
   await collectVideoEditOutput(task.output!); expect(encoder.finalize).toHaveBeenCalledOnce(); expect(encoder.dispose).toHaveBeenCalledOnce(); expect(task.output!.revision).toBe(0)
-  await closeVideoEditProject(id); await openVideoEditProject(owner.path); expect(videoEditExportTask(id)).toBeUndefined()
+  await closeVideoEditProject(id); await reopenVideoEdit(owner.document.id); expect(videoEditExportTask(id)).toBeUndefined()
 })
 
 it('编码完成后内容核验失败仍保留成片并释放忙状态', async () => {

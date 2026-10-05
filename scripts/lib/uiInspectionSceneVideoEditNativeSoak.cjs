@@ -5,6 +5,7 @@ const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operatio
 const { waitReleased } = require('./uiInspectionSceneVideoEditLayout.cjs')
 const { dialogs, presented } = require('./uiInspectionSceneVideoEditMonitor.cjs')
 const { videoEditResourceCycle, memoryInfraSnapshot } = require('./uiInspectionSceneVideoEditPerformance.cjs')
+const { adoptNewVideoEditProject, leaveVideoEditProject, openVideoEditFile, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
 
 /**
  * 原生解码长时资源曲线（3.1）：4K60 专业格式素材（默认 ProRes 422 HQ，走原生解码）在节目监视器持续播放，总时长
@@ -105,7 +106,7 @@ function createVideoEditNativeSoakScene() {
         evidence.runtime = await app.evaluate(async ({ app }) => ({ electron: process.versions.electron, chrome: process.versions.chrome, gpu: (await app.getGPUInfo('basic')).gpuDevice }))
         await button(page, '剪辑').first().click(); if (await button(page, '关闭项目').isVisible()) await button(page, '关闭项目').click()
         await observeWorkerCount(page)
-        await dialogs(app, [file], file); await button(page, '打开项目文件').click(); await presented(page, 0)
+        await dialogs(app, [file], file); await openVideoEditFile(page, file); await presented(page, 0)
         const identity = await authorizeMcpConnection(page, { name: '长时资源曲线', allowWrites: true }); client = await connectMcpClient(identity.config, 'Henji soak Reality')
         const startedAt = Date.now()
         for (let segment = 0; segment < SEGMENTS; segment++) {

@@ -6,22 +6,24 @@ const sharp = require('sharp')
 const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, expectToolRefusal, operationEnvelope, readAllMedia } = require('./uiInspectionMcpClient.cjs')
 const { observeWorkers, workerSnapshot, waitReleased } = require('./uiInspectionSceneVideoEditLayout.cjs')
 const { dialogs, presented } = require('./uiInspectionSceneVideoEditMonitor.cjs')
+const { leaveVideoEditProject, openVideoEditProjectCard, readVideoEditFile, seedVideoEditProject, showVideoEditProjects } = require('./uiInspectionVideoEditDocuments.cjs')
 const button = (page, name) => page.getByRole('button', { name, exact: true })
 const ORIGINAL = 'D:/视频制作/0A0片头片尾和素材/2021片头V2 4K 60FPS.mp4'
-const PROJECT_ID = 'video-edit-agent-loop'
+const FIXTURE_ID = 'video-edit-agent-loop'
 // Original source written for this acceptance: not a template parameter change.
 const SOURCE = 'export default {apiVersion:1,name:"智能体原创色块",kind:"generator",mode:"static",width:3840,height:2160,durationSeconds:5,seed:3,parameters:{red:{type:"number",title:"红色",default:.2,min:0,max:1,step:.01,animatable:true}},render(ctx){return [rect({x:960,y:540,width:1920,height:1080,fill:[ctx.params.red,.3,.8,1]})];}}'
 
 function fixture() {
   const track = (index, kind, name) => ({ id: `${kind[0]}${index}`, name, index, kind, locked: false, enabled: true, muted: false, solo: false })
-  return { format: 'henji-video-project', version: 2, id: PROJECT_ID, name: '智能体剪辑回环', revision: 0,
+  return { format: 'henji-video-project', version: 2, id: FIXTURE_ID, name: '智能体剪辑回环', revision: 0,
     media: [{ id: 'original', name: '原4K60片头', path: ORIGINAL, kind: 'video', durationSeconds: 7, width: 3840, height: 2160, hasAudio: false, frameRate: { numerator: 60, denominator: 1 }, frameRateMode: 'sampled-constant' }],
     bins: [], items: [{ id: 'original-item', name: '原4K60片头', kind: 'video', mediaId: 'original' }],
     sequences: [{ id: 'main', name: '序列 1', width: 3840, height: 2160, frameRate: { numerator: 60, denominator: 1 }, pixelAspectRatio: { numerator: 1, denominator: 1 }, sampleRate: 48000, channels: 2,
       tracks: [track(0, 'audio', '音频 1'), track(1, 'video', '视频 1'), track(2, 'video', '视频 2')],
       clips: [{ id: 'base', itemId: 'original-item', name: '原4K60片头', kind: 'video', track: 1, start: 0, duration: 420, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, brightness: 1, text: '' }], annotations: [] }] }
 }
-const readProject = file => JSON.parse(fs.readFileSync(file, 'utf8'))
+// 3.1：剪辑是项目里的文档文件，按旧工程形状读出（项目内相对写法换回绝对路径）
+const readProject = readVideoEditFile
 async function centerPixel(bytes) {
   const image = sharp(bytes); const { width, height } = await image.metadata()
   const { data } = await image.extract({ left: Math.floor(width / 2), top: Math.floor(height / 2), width: 1, height: 1 }).removeAlpha().raw().toBuffer({ resolveWithObject: true })
@@ -34,7 +36,8 @@ function createVideoEditAgentLoopScene() {
   return { id: 'video-edit-agent-loop', surface: '剪辑', name: '剪辑-MCP与Pi原创代码素材创作调参观察撤销保存回环', writesUserData: true,
     setup: async (page, app, { capture }) => {
       const root = path.resolve('node_modules/.cache/video-edit-agent-loop'); fs.rmSync(root, { recursive: true, force: true }); fs.mkdirSync(root, { recursive: true })
-      const file = path.join(root, 'agent-loop.henji-video'); fs.writeFileSync(file, JSON.stringify(fixture()))
+      // 3.1：经正式文档接口建项目与主剪辑，文档 ID 由仓库生成
+      let file; let seeded; let PROJECT_ID = FIXTURE_ID
       const evidence = { completed: false, phases: [], captures: [], timings: {}, pi: {} }
       const store = () => fs.writeFileSync(path.join(root, 'evidence.json'), JSON.stringify(evidence, null, 2))
       const phase = name => { evidence.currentPhase = name; store() }
@@ -53,9 +56,11 @@ function createVideoEditAgentLoopScene() {
       }
       try {
         phase('open-project')
-        await button(page, '剪辑').first().click(); if (await button(page, '关闭项目').isVisible()) await button(page, '关闭项目').click()
+        await showVideoEditProjects(page)
+        seeded = await seedVideoEditProject(page, fixture()); file = seeded.file; PROJECT_ID = seeded.documentId
+        projectRef.id = PROJECT_ID; sequenceRef.id = `${PROJECT_ID}:main`
         await observeWorkers(page); observed = true
-        await dialogs(app, [file], file); await button(page, '打开项目文件').click(); await presented(page, 0)
+        await openVideoEditProjectCard(page, seeded.projectId); await presented(page, 0)
         const identity = await authorizeMcpConnection(page, { name: '智能体剪辑回环', allowWrites: true }); client = await connectMcpClient(identity.config, 'Henji agent loop Reality')
 
         phase('mcp-discover')
@@ -115,12 +120,12 @@ function createVideoEditAgentLoopScene() {
         // A read-only connection may observe but never write; the refusal must leave the saved project untouched.
         const readOnly = await authorizeMcpConnection(page, { name: '只读剪辑观察', allowWrites: false }); const viewer = await connectMcpClient(readOnly.config, 'Henji read-only viewer')
         try {
-          const before = fs.readFileSync(file, 'utf8')
+          const before = JSON.stringify(readVideoEditFile(file))
           const viewed = await callTool(viewer, 'observe_video_edit_frame', { projectRef, target: { kind: 'program', sequenceRef, frame: 60 }, maxWidth: 256 })
           assert.equal((viewed.result?.data ?? viewed.data).verification.verified, true)
           const readClip = await callTool(viewer, 'read_application_entity', { ref: clipRef })
           evidence.readOnlyRefusal = await expectToolRefusal(viewer, 'change_application_entities', operationEnvelope([readClip], { summary: '只读连接越权调参', changes: [{ kind: 'set_properties', entityType: 'video_edit.clip', target: clipRef, properties: { 'video_edit.clip.code_parameters': { red: 0.1 } } }] }))
-          assert.equal(fs.readFileSync(file, 'utf8'), before, '只读连接的拒绝不得改变工程')
+          assert.equal(JSON.stringify(readVideoEditFile(file)), before, '只读连接的拒绝不得改变工程')
         } finally { await viewer.close() }
         evidence.phases.push('只读MCP连接可观察指定帧，写入被权限拒绝且工程不变')
 
@@ -193,8 +198,8 @@ function createVideoEditAgentLoopScene() {
         evidence.phases.push('真实Pi(本地受控视觉模型)以剪辑首轮工具读取→调参→观察→读取图像→结论；手动撤销撤回Pi修改')
 
         phase('reopen')
-        await button(page, '关闭项目').click(); await waitReleased(page)
-        await dialogs(app, [file], file); await button(page, '打开项目文件').click(); await presented(page, 0)
+        await leaveVideoEditProject(page, null); await waitReleased(page)
+        await openVideoEditProjectCard(page, seeded.projectId); await presented(page, 0)
         const reopened = readProject(file); assert.equal(reopened.codeMaterials[0].versions[0].source, SOURCE)
         const after = await observe({ kind: 'program', sequenceRef, frame: 60 }); assert.ok(near(after.pixel.rgb, [51, 77, 204]))
         await button(page, '关闭项目').click(); await waitReleased(page)

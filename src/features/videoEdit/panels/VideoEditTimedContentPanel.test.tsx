@@ -9,6 +9,7 @@ import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { appendVideoEditSequence, closeVideoEditProject, createVideoEditProject, editVideoProject, listVideoEditInstances, openVideoEditProject, saveVideoEdit, setVideoEditView, subscribeVideoEdit, switchVideoEditSequence, undoVideoEdit, videoEditRevision, type VideoEditInstance } from '../application/videoEditService'
 import { createVideoEditCaption, updateVideoEditTimedContent } from '../application/videoEditTimedContent'
 import { VideoEditTimedContentPanel } from './VideoEditTimedContentPanel'
+import { reopenVideoEdit } from '../application/videoEditDocumentTestKit'
 
 const files = new Map<string, string>()
 let owner: VideoEditInstance
@@ -100,7 +101,7 @@ it('隐藏、切序列和同工程重开清除原草稿，不提交到新目标'
   expect((view.getByLabelText('字幕文字') as HTMLTextAreaElement).value).toBe('')
   view.rerender(<View visible={false} />); view.rerender(<View />); expect(view.queryByLabelText('字幕文字')).toBeNull()
   fireEvent.click(view.getByRole('button', { name: '新增字幕' })); fireEvent.change(view.getByLabelText('字幕文字'), { target: { value: '旧owner草稿' } })
-  await act(async () => { await saveVideoEdit(owner.document.id); await closeVideoEditProject(owner.document.id); owner = (await openVideoEditProject('D:/timed-panel.henji-video'))! })
+  await act(async () => { await saveVideoEdit(owner.document.id); owner = await reopenVideoEdit(owner.document.id) })
   view.rerender(<View instance={owner} />); expect(view.queryByLabelText('字幕文字')).toBeNull(); expect(sequence().captions).toBeUndefined()
 })
 

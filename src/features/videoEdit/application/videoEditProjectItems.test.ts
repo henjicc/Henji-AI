@@ -11,6 +11,7 @@ import { VideoEditMutationExecutor, VideoEditCollectionExecutor } from './videoE
 import type { ApplicationPlannedStep } from '@/core/application-control'
 import { readVideoEditSource, updateVideoEditSource, registerVideoEditSourcePresenter } from './videoEditSource'
 import { editVideoSequence, editVideoProject } from './videoEditService'
+import { savedVideoEdit, reopenVideoEdit } from './videoEditDocumentTestKit'
 const files = new Map<string, string>()
 it('原生项目项使用真实图形、素材箱与历史，调整层默认选择有下方画面的轨道', async () => {
   const owner = (await createVideoEditProject())!; const id = owner.document.id; const sequenceId = owner.activeSequenceId
@@ -33,7 +34,7 @@ it('原生项目项使用真实图形、素材箱与历史，调整层默认选�
   appendVideoEditItems(id, [adjustmentId], sequenceId, { frame: 0 })
   expect(getActiveVideoEditSequence(owner).clips.at(-1)).toMatchObject({ kind: 'adjustment', track: 2, adjustment: { fromTrack: 1 }, volume: 0 })
   undoVideoEdit(id); expect(getActiveVideoEditSequence(owner).clips.map(clip => clip.id)).toEqual([clipId])
-  await saveVideoEdit(id); const reopened = (await openVideoEditProject(owner.path))!
+  await saveVideoEdit(id); const reopened = await reopenVideoEdit(owner.document.id)
   expect(reopened.document.items.find(item => item.id === graphicId)?.graphic).toEqual(item.graphic)
 })
 it('公共移除项目项与手动删除同样清除孤儿媒体，并以声明级联撤销恢复', async () => {
@@ -88,7 +89,7 @@ it('按素材建序列与插入是一步撤销并持久保存有理帧率，未�
   expect(getActiveVideoEditSequence(instance)).toMatchObject({ id: sequenceId, width: 3840, height: 2160, frameRate: { numerator: 60000, denominator: 1001 } })
   expect(getActiveVideoEditSequence(instance).clips[0].itemId).toBe(item.id)
   await saveVideoEdit(id); await closeVideoEditProject(id)
-  const reopened = (await openVideoEditProject(instance.path))!
+  const reopened = await reopenVideoEdit(instance.document.id)
   expect(reopened.document.sequences[1].frameRate).toEqual({ numerator: 60000, denominator: 1001 })
   appendVideoEditMedia(id, { id: 'vfr', name: 'variable', path: 'D:/media/vfr.mp4', kind: 'video', width: 1920, height: 1080, durationSeconds: 2, frameRateMode: 'variable' })
   const vfr = reopened.document.items.at(-1)!
@@ -99,11 +100,11 @@ it('项目浏览选区和标签经通用写入共用状态，不保存且不进�
   const instance = await fixture(); const id = instance.document.id; const app = createApplicationHarness()
   try {
     const second = appendVideoEditSequence(id)
-    await saveVideoEdit(id); const history = instance.past.length; const saved = files.get(instance.path)
+    await saveVideoEdit(id); const history = instance.past.length; const saved = JSON.stringify(savedVideoEdit(instance))
     const changed = await app.change({ kind: 'video_edit.project', id }, { 'video_edit.project.selected_item_ids': [instance.document.items[0].id], 'video_edit.project.open_sequence_ids': [second] })
     expect(changed, JSON.stringify(changed)).toMatchObject({ ok: true })
     expect(getVideoEditProjectView(id)).toMatchObject({ selectedItemIds: [instance.document.items[0].id], openSequenceIds: [second] })
-    expect(instance.activeSequenceId).toBe(second); expect(instance.past).toHaveLength(history); expect(files.get(instance.path)).toBe(saved)
+    expect(instance.activeSequenceId).toBe(second); expect(instance.past).toHaveLength(history); expect(JSON.stringify(savedVideoEdit(instance))).toBe(saved)
     setVideoEditProjectView(id, { selectedItemIds: [] })
     expect((await app.read({ kind: 'video_edit.project', id }, ['video_edit.project.selected_item_ids']) as { properties: Record<string, unknown> }).properties['video_edit.project.selected_item_ids']).toEqual([])
   } finally { app.dispose() }
@@ -142,10 +143,9 @@ it('项目会话撤销恢复原活动序列，后续手动选区不被旧撤销�
   await expect(executor.undo(stale.undoToken!)).rejects.toThrow('后续修改')
   expect(instance.activeSequenceId).toBe(second)
   const nameStep = { ...step, mutations: [{ propertyId: 'video_edit.project.name', operation: 'set' as const, value: '改名' }] }
-  const beforeName = instance.document.name; const renamed = await executor.apply(nameStep)
-  setVideoEditProjectView(id, { selectedItemIds: [] })
-  await executor.undo(renamed.undoToken!); expect(instance.document.name).toBe(beforeName)
-  expect(getVideoEditProjectView(id).selectedItemIds).toEqual([])
+  // 剪辑名就是文件名（3.1）：内容执行器不改名，改名走通用文档属性
+  const beforeName = instance.document.name
+  await expect(executor.apply(nameStep)).rejects.toThrow('不可写'); expect(instance.document.name).toBe(beforeName)
 })
 it('缺失源帧率读回明确未知值，删除最后项目引用释放工程媒体容量且可撤销', async () => {
   const instance = await fixture(); const id = instance.document.id; const app = createApplicationHarness()
@@ -192,7 +192,7 @@ it('重新定位只更新原工程引用并关闭旧源；关闭重开不会接�
   vi.stubGlobal('createImageBitmap', vi.fn(() => new Promise(resolve => { finish = resolve })))
   const stale = relinkVideoEditMedia(firstId, image.id).catch(error => error as Error)
   await vi.waitFor(() => expect(finish).toBeTypeOf('function'))
-  await closeVideoEditProject(firstId); const reopened = (await openVideoEditProject(first.path))!
+  await closeVideoEditProject(firstId); const reopened = await reopenVideoEdit(first.document.id)
   finish({ width: 1280, height: 720, close: closeBitmap })
   expect(await stale).toBeInstanceOf(Error); expect(reopened.document.media.at(-1)?.width).toBe(640)
 })

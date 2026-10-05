@@ -16,6 +16,8 @@ import type {
   DuplicateDocumentRequest,
   FinalizeDocumentRequest,
   FinalizeProjectRequest,
+  ImportFileRequest,
+  ImportFileResult,
   MoveDocumentRequest,
   NameCheckRequest,
   NameCheckResult,
@@ -25,6 +27,7 @@ import type {
   RenameProjectRequest,
   SaveDocumentCoverRequest,
   SaveDocumentRequest,
+  SetProjectMainDocumentRequest,
 } from '@/platform/contracts/documents'
 
 /*
@@ -84,6 +87,16 @@ export async function revealDocument(target: DocumentTarget): Promise<void> {
   await documents().revealDocument(target)
 }
 
+/** 收集素材：外部与别处的文件复制进文档所在容器的“素材”并改写引用。 */
+export async function collectDocumentMedia(target: DocumentTarget): Promise<DocumentTransferResult> {
+  return await documents().collectDocumentMedia(target)
+}
+
+/** 把文件复制进容器的“生成结果”或“素材”；已在容器里的原样返回。 */
+export async function importFileToContainer(request: ImportFileRequest): Promise<ImportFileResult> {
+  return await documents().importFile(request)
+}
+
 export async function resolveDocumentLink(link: DocumentLink): Promise<DocumentLinkResolution> {
   return await documents().resolveDocumentLink(link)
 }
@@ -118,6 +131,10 @@ export async function renameProject(request: RenameProjectRequest): Promise<Proj
 
 export async function finalizeProject(request: FinalizeProjectRequest): Promise<ProjectSummary> {
   return await documents().finalizeProject(request)
+}
+
+export async function setProjectMainDocument(request: SetProjectMainDocumentRequest): Promise<ProjectSummary> {
+  return await documents().setProjectMainDocument(request)
 }
 
 export async function trashProject(projectId: string): Promise<void> {

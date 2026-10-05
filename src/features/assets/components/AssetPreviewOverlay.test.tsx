@@ -40,7 +40,7 @@ const manifest: CodeAsset = {
 function owner(id = 'project-a'): VideoEditInstance {
   const document = { ...createVideoEditDocument('原工程'), id }
   return {
-    document, path: 'C:/project.henji-video', activeSequenceId: document.sequences[0].id,
+    document, session: {} as VideoEditInstance['session'], activeSequenceId: document.sequences[0].id,
     sequenceViews: new Map(), selectedItemIds: [], selectedBinId: 'bin-a', openSequenceIds: [],
     selectedClipIds: ['clip-a'], targetTrackIds: [], tool: 'select', snapping: true, zoom: 1, inFrame: null, outFrame: null,
     dirty: false, error: null, past: [], future: [], selection: 'clip-a', frame: 0, playing: false, playbackDirection: 1,

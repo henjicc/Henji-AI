@@ -6,10 +6,13 @@ import type {
   DocumentKindId,
   DocumentListQuery,
   DocumentMeta,
+  DocumentReadResult,
   DocumentSummary,
   DocumentTarget,
   DocumentTransferResult,
   DuplicateDocumentRequest,
+  ImportFileRequest,
+  ImportFileResult,
   MoveDocumentRequest,
   NameCheckResult,
   NameConflictPolicy,
@@ -17,6 +20,7 @@ import type {
   ProjectSummary,
   RenameDocumentRequest,
   RenameProjectRequest,
+  SetProjectMainDocumentRequest,
 } from '@/core/documents/types'
 import { createLogger, type Logger } from '@/core/logging/logger'
 
@@ -48,6 +52,11 @@ export interface DocumentOperationCommands extends DocumentSessionCommands {
   refreshIndex(): Promise<DocumentIndexScanReport>
   renameProject(request: RenameProjectRequest): Promise<ProjectSummary>
   revealProject(projectId: string): Promise<void>
+  collectDocumentMedia(target: DocumentTarget): Promise<DocumentTransferResult>
+  importFile(request: ImportFileRequest): Promise<ImportFileResult>
+  setProjectMainDocument(request: SetProjectMainDocumentRequest): Promise<ProjectSummary>
+  registerExternalProject(folderPath: string): Promise<ProjectSummary>
+  forgetExternalLocation(folderPath: string): Promise<void>
 }
 
 /** 打开一份文档（进入对应工具的编辑界面）。由各工具在接入通用文档时登记。 */
@@ -64,6 +73,14 @@ export class DocumentInUseError extends Error {
   constructor(name: string) {
     super(`“${name}”正在编辑，请先关闭后再移到回收站。`)
     this.name = 'DocumentInUseError'
+  }
+}
+
+/** 项目里有正在编辑的文档时不能移到回收站。 */
+export class ProjectInUseError extends Error {
+  constructor(name: string) {
+    super(`项目“${name}”里有正在编辑的文档，请先关闭后再移到回收站。`)
+    this.name = 'ProjectInUseError'
   }
 }
 
@@ -118,6 +135,11 @@ export const defaultDocumentOperationCommands: DocumentOperationCommands = {
   refreshIndex: documentCommands.refreshDocumentIndex,
   renameProject: documentCommands.renameProject,
   revealProject: documentCommands.revealProject,
+  collectDocumentMedia: documentCommands.collectDocumentMedia,
+  importFile: documentCommands.importFileToContainer,
+  setProjectMainDocument: documentCommands.setProjectMainDocument,
+  registerExternalProject: documentCommands.registerExternalProject,
+  forgetExternalLocation: documentCommands.forgetExternalLocation,
 }
 
 /** 名称重名错误（主进程报 DocumentNameConflictError）：移动、复制时据此询问“两个都保留”。 */
@@ -179,6 +201,11 @@ export class DocumentOperations {
 
   async listDocuments(query: DocumentListQuery = {}): Promise<DocumentSummary[]> {
     return await this.commands.listDocuments(query)
+  }
+
+  /** 从文件读一份文档（内容为内存形态）；不打开会话。用于写入后的回读核实。 */
+  async readDocument(target: DocumentTarget): Promise<DocumentReadResult> {
+    return await this.commands.readDocument(target)
   }
 
   async listProjects(query: ProjectListQuery = {}): Promise<ProjectSummary[]> {
@@ -328,6 +355,56 @@ export class DocumentOperations {
     await this.commands.revealProject(projectId)
   }
 
+  /**
+   * 收集素材（3.1）：外部与别处的文件复制进文档所在容器的“素材”并改写引用。
+   * 正在编辑的文档先写完最后一次，收集后会话按新版本重新载入（工具实例拿到改写后的引用）。
+   */
+  async collectDocumentMedia(target: DocumentTarget): Promise<DocumentTransferResult> {
+    return await this.write('collect_media', target.id, async () => {
+      const session = this.registry().get(target.id)
+      if (session) await session.flush()
+      const result = await this.commands.collectDocumentMedia(session?.target ?? target)
+      if (session && !session.isEnded) await session.applyTransfer(result)
+      return result
+    })
+  }
+
+  /** 把文件复制进容器的“生成结果”或“素材”（如其他工具的结果放进项目）；已在容器里的原样返回。 */
+  async importFile(request: ImportFileRequest): Promise<ImportFileResult> {
+    return await this.commands.importFile(request)
+  }
+
+  /** 设置项目的主剪辑（打开项目时打开它）。 */
+  async setProjectMainDocument(projectId: string, documentId: string | null): Promise<ProjectSummary> {
+    return await this.write('set_project_main', projectId, async () => await this.commands.setProjectMainDocument({ projectId, documentId }))
+  }
+
+  /** 打开作品目录之外的项目文件夹并登记为外部位置。 */
+  async registerExternalProject(folderPath: string): Promise<ProjectSummary> {
+    return await this.write('register_external_project', folderPath, async () => await this.commands.registerExternalProject(folderPath))
+  }
+
+  /**
+   * 整个项目文件夹移到系统回收站。项目里有正在编辑的文档时拒绝（先请工具释放后台持有的会话）。
+   */
+  async trashProject(project: Pick<ProjectSummary, 'id' | 'name'>): Promise<void> {
+    await this.write('trash_project', project.id, async () => {
+      for (const session of this.registry().list()) {
+        const container = session.documentMeta.container
+        if (container.kind !== 'project' || container.projectId !== project.id) continue
+        if (!await this.release(session.documentMeta.kind, session.id)) throw new ProjectInUseError(project.name)
+      }
+      await this.commands.trashProject(project.id)
+    })
+  }
+
+  /** 从列表移除找不到文件夹的外部项目（只改作品索引，不动磁盘）。 */
+  async forgetExternalProject(project: Pick<ProjectSummary, 'path'>): Promise<void> {
+    await this.write('forget_external_project', project.path, async () => {
+      await this.commands.forgetExternalLocation(project.path)
+    })
+  }
+
   /** 请工具释放后台持有的会话；没有登记释放方式或释放失败时按“仍在使用”处理。 */
   private async release(kind: DocumentKindId, id: string): Promise<boolean> {
     const releaser = this.releasers.get(kind)
@@ -355,7 +432,7 @@ export class DocumentOperations {
     } catch (raw) {
       const error = toError(raw)
       // 重名、正在编辑这类用户可处理的失败记 warn
-      const expected = ['DocumentNameConflictError', 'DocumentNameInvalidError', 'DocumentInUseError', 'DocumentStandaloneNotAllowedError'].includes(error.name)
+      const expected = ['DocumentNameConflictError', 'DocumentNameInvalidError', 'DocumentInUseError', 'ProjectInUseError', 'DocumentStandaloneNotAllowedError'].includes(error.name)
       this.logger[expected ? 'warn' : 'error']('文档操作失败', { event: `${event}.failed`, error, context: { subjectId } })
       throw error
     }

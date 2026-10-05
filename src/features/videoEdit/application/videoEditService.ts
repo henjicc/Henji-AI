@@ -2,15 +2,20 @@ import { createLogger } from '@/core/logging'
 import { reconcileVideoEditTimedContent } from '@/core/videoEdit/timedContent'
 import { assertApplicationWritesAllowed } from '@/core/applicationLifecycle/applicationWriteBarrier'
 import { registerApplicationCloseGuard } from '@/core/applicationLifecycle/applicationCloseGuards'
-import { createVideoEditDocument, createVideoEditSequence, changeVideoEditSequenceSettings, videoEditComposition, videoEditDuration, videoEditDocumentSchema, videoEditClipSchema, type VideoEditClip, type VideoEditComposition, type VideoEditDocument, type VideoEditSequence, type VideoEditMedia } from '@/core/videoEdit/document'
+import { createVideoEditSequence, changeVideoEditSequenceSettings, videoEditComposition, videoEditDuration, videoEditDocumentSchema, videoEditClipSchema, type VideoEditClip, type VideoEditComposition, type VideoEditDocument, type VideoEditSequence, type VideoEditMedia } from '@/core/videoEdit/document'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { rescaleVideoEditFrame } from '@/core/videoEdit/time'
 import { assertVideoEditLockedTracks, assertVideoEditClipsEditable } from '@/core/videoEdit/lockedTracks'
 import { expandVideoEditSelection, videoEditPickRelations, type VideoEditTimelineTool } from '@/core/videoEdit/timelineSelection'
-import { getPlatform } from '@/platform/runtime'
 import { validateCodeMaterialDocument } from '@/core/videoEdit/codeMaterialDocument'
-import { installVideoEditCodeMetadata, prepareVideoEditCodeMetadata, readVideoEditCodeMetadata, releaseVideoEditCodeCompiler } from './videoEditCodeState'
-import type { VideoEditCodeMetadata } from './videoEditCodeState'
+import type { DocumentTarget, ProjectSummary } from '@/core/documents/types'
+import type { VideoEditDocumentContent } from '@/core/documents/kinds/videoEdit'
+import { isDocumentServiceError, toError } from '@/features/documents/documentErrors'
+import type { DocumentSession } from '@/features/documents/documentSession'
+import { getDocumentSessionRegistry, parentFolderOf, type DocumentSessionRegistry } from '@/features/documents/documentSessionRegistry'
+import type { DocumentContentAdapter, DocumentLeaveOutcome } from '@/features/documents/documentSessionTypes'
+import { getDocumentOperations, type DocumentOperations } from '@/features/documents/documentOperations'
+import { ensureVideoEditCodeDocumentMetadata, installVideoEditCodeMetadata, prepareVideoEditCodeMetadata, readVideoEditCodeMetadata, releaseVideoEditCodeCompiler } from './videoEditCodeState'
 import { validateVideoEditGraphicTextBudget } from './videoEditGraphicTextBudget'
 
 const logger = createLogger('features.videoEdit')
@@ -32,9 +37,12 @@ export interface VideoEditInstance extends VideoEditTimelineView {
   selectedItemIds: string[]
   selectedBinId: string
   openSequenceIds: string[]
-  path: string
-  dirty: boolean
-  error: string | null
+  /** 剪辑文档会话（存储底座 2.4）：自动保存、草稿、离开与冲突都由它负责。 */
+  session: DocumentSession
+  /** 有尚未写入剪辑文件的修改（来自会话保存状态；只读）。 */
+  readonly dirty: boolean
+  /** 自动保存失败时给用户的说明（来自会话保存状态；只读）。 */
+  readonly error: string | null
   past: VideoEditDocument[]
   future: VideoEditDocument[]
   selection: string | null
@@ -46,7 +54,6 @@ export interface VideoEditInstance extends VideoEditTimelineView {
   activePanel: 'project' | 'source' | 'program' | 'timeline' | 'effects' | 'content'
   panelFocusVersion?: number
   version: number
-  saving?: Promise<void>
 }
 const instances = new Map<string, VideoEditInstance>()
 const listeners = new Set<() => void>()
@@ -56,10 +63,22 @@ let viewRevision = 0
 let revision = 0
 let domainRevision = 0
 let activeId: string | null = null
-const autosaves = new Map<string, ReturnType<typeof setTimeout>>()
-const retryDelays = new Map<string, number>()
+/** 内容变化（进撤销的修改、撤销 / 重做、参数调整提交）时通知会话标脏并防抖保存。 */
+const contentListeners = new WeakMap<VideoEditInstance, Set<() => void>>()
+const disposers = new WeakMap<VideoEditInstance, () => void>()
+const leaving = new Map<string, Promise<DocumentLeaveOutcome>>()
+let registryOverride: DocumentSessionRegistry | null = null
+let operationsOverride: DocumentOperations | null = null
+
+/** 仅供测试：换成内存替身的会话登记表与通用文档操作；传 null 恢复应用唯一的那一个。 */
+export function setVideoEditDocumentServicesForTests(services: { registry: DocumentSessionRegistry; operations: DocumentOperations } | null): void {
+  registryOverride = services?.registry ?? null
+  operationsOverride = services?.operations ?? null
+}
+function documentRegistry(): DocumentSessionRegistry { return registryOverride ?? getDocumentSessionRegistry() }
+function documentOperations(): DocumentOperations { return operationsOverride ?? getDocumentOperations() }
 export interface VideoEditGesture { readonly projectId: string; readonly token: string }
-interface GestureState { handle: VideoEditGesture; before: VideoEditDocument; dirty: boolean; finished: Promise<void>; release: () => void }
+interface GestureState { handle: VideoEditGesture; before: VideoEditDocument; finished: Promise<void>; release: () => void }
 const gestures = new WeakMap<VideoEditInstance, GestureState>()
 const closing = new WeakMap<VideoEditInstance, Promise<void>>()
 const programCommands = new WeakMap<VideoEditInstance, object>()
@@ -82,7 +101,7 @@ export function beginVideoEditGesture(projectId: string): VideoEditGesture {
   const handle = Object.freeze({ projectId, token: crypto.randomUUID() })
   let release!: () => void
   const finished = new Promise<void>(resolve => { release = resolve })
-  gestures.set(owner, { handle, before: owner.document, dirty: owner.dirty, finished, release })
+  gestures.set(owner, { handle, before: owner.document, finished, release })
   return handle
 }
 function sameDocumentContent(left: VideoEditDocument, right: VideoEditDocument): boolean { return JSON.stringify({ ...left, revision: 0 }) === JSON.stringify({ ...right, revision: 0 }) }
@@ -114,29 +133,20 @@ export function finishVideoEditGesture(handle: VideoEditGesture, commit = true):
   if (!owner || !state || state.handle !== handle) return
   if (commit) assertApplicationWritesAllowed()
   gestures.delete(owner)
-  if (commit && !sameDocumentContent(owner.document, state.before)) {
+  const committed = commit && !sameDocumentContent(owner.document, state.before)
+  if (committed) {
     owner.past = [...owner.past.slice(-49), state.before]; owner.future = []
   } else {
     const before = owner.document
-    owner.document = { ...state.before, revision: before.revision + 1 }; owner.version++; owner.dirty = state.dirty
+    owner.document = { ...state.before, name: before.name, revision: before.revision + 1 }; owner.version++
     rescaleSequenceViews(owner, before); reconcileSequenceView(owner)
   }
   state.release(); publishVideoEdit(true)
-  if (owner.dirty) scheduleVideoEditSave(handle.projectId)
+  if (committed) notifyVideoEditContent(owner)
 }
 function cancelVideoEditGesture(owner: VideoEditInstance): void { const state = gestures.get(owner); if (state) finishVideoEditGesture(state.handle, false) }
-function scheduleVideoEditSave(id: string, delay = 0): void {
-  const existing = autosaves.get(id)
-  if (existing !== undefined) clearTimeout(existing)
-  autosaves.set(id, setTimeout(() => {
-    autosaves.delete(id)
-    if (!instances.get(id)?.dirty) return
-    void saveVideoEdit(id).then(() => retryDelays.delete(id)).catch(() => {
-      if (!instances.get(id)?.dirty) return
-      const retry = Math.min(30000, (retryDelays.get(id) ?? 1000) * 2)
-      retryDelays.set(id, retry); scheduleVideoEditSave(id, retry)
-    })
-  }, delay))
+function notifyVideoEditContent(instance: VideoEditInstance): void {
+  for (const listener of contentListeners.get(instance) ?? []) listener()
 }
 export function subscribeVideoEdit(listener: () => void): () => void { listeners.add(listener); return () => { listeners.delete(listener) } }
 export function videoEditRevision(): number { return revision }
@@ -147,7 +157,7 @@ export function videoEditDomainRevision(): number { return domainRevision }
 export function subscribeVideoEditDomain(listener: () => void): () => void { domainListeners.add(listener); return () => { domainListeners.delete(listener) } }
 export function listVideoEditInstances(): VideoEditInstance[] { return [...instances.values()] }
 export function activeVideoEditInstance(): VideoEditInstance | undefined { return activeId ? instances.get(activeId) : undefined }
-export function requireVideoEditInstance(id: string): VideoEditInstance { const instance = instances.get(id); if (!instance) throw new Error('请先从本地打开目标剪辑项目。'); return instance }
+export function requireVideoEditInstance(id: string): VideoEditInstance { const instance = instances.get(id); if (!instance) throw new Error('请先打开目标剪辑：在剪辑页打开所在项目，或用 open_document 打开这份剪辑（文档 ID 取自 list_documents）。'); return instance }
 export function publishVideoEdit(changed = false): void { revision++; if (changed) { domainRevision++; for (const listener of domainListeners) listener() } for (const listener of listeners) listener(); publishView() }
 export function focusVideoEdit(id: string): void { requireVideoEditInstance(id); if (activeId && activeId !== id) { const previous = instances.get(activeId); if (previous) cancelVideoEditGesture(previous) } activeId = id; publishVideoEdit() }
 const compositions = new WeakMap<VideoEditDocument, Map<string, VideoEditComposition>>()
@@ -256,11 +266,12 @@ function publishVideoEditDocument(instance: VideoEditInstance, next: VideoEditDo
   validateVideoEditGraphicTextBudget(next, instance.document)
   if (recordHistory) { instance.past = [...instance.past.slice(-49), instance.document]; instance.future = [] }
   const before = instance.document
-  instance.document = { ...next, revision: instance.document.revision + 1 }
+  // 剪辑名就是文件名，由文档会话同步；内容修改不能改名
+  instance.document = { ...next, id: before.id, name: before.name, revision: instance.document.revision + 1 }
   rescaleSequenceViews(instance, before)
   reconcileSequenceView(instance)
-  instance.dirty = true; instance.error = null; instance.version++; publishVideoEdit(true)
-  if (recordHistory) scheduleVideoEditSave(instance.document.id)
+  instance.version++; publishVideoEdit(true)
+  if (recordHistory) notifyVideoEditContent(instance)
   return instance.document
 }
 export function undoVideoEdit(id: string, redo = false): void {
@@ -272,11 +283,11 @@ export function undoVideoEdit(id: string, redo = false): void {
   if (!target) return
   if (redo) instance.past.push(instance.document); else instance.future.unshift(instance.document)
   const before = instance.document
-  instance.document = { ...target, revision: instance.document.revision + 1 }; instance.version++; instance.dirty = true
+  instance.document = { ...target, name: before.name, revision: instance.document.revision + 1 }; instance.version++
   rescaleSequenceViews(instance, before)
   reconcileSequenceView(instance)
   publishVideoEdit(true)
-  scheduleVideoEditSave(id)
+  notifyVideoEditContent(instance)
 }
 type VideoEditProgramControl = Partial<Pick<VideoEditInstance, 'frame' | 'playing' | 'playbackDirection'>>
 export function validateVideoEditProgramControl(id: string, values: VideoEditProgramControl): void {
@@ -365,88 +376,309 @@ export function setVideoEditProjectView(id: string, values: Partial<VideoEditPro
   if (!next.openSequenceIds.includes(instance.activeSequenceId)) switchVideoEditSequence(id, next.openSequenceIds.at(-1)!)
   publishVideoEdit(true)
 }
-const VIDEO_EDIT_SAVE_FAILED = '项目未能保存到磁盘：修改仍保留在当前项目，并会自动重试。请检查项目文件是否只读、被其他程序占用或磁盘空间不足。'
+const VIDEO_EDIT_SAVE_FAILED = '剪辑未能保存到磁盘：修改仍保留在当前剪辑，并会自动重试。请检查项目文件夹是否只读、被其他程序占用或磁盘空间不足。'
+/** 保存屏障：写完当前全部修改（文档会话的 flush）。失败时修改保留，会话按退避自动重试。 */
 export async function saveVideoEdit(id: string): Promise<void> {
   const instance = requireVideoEditInstance(id)
-  if (instance.saving) return instance.saving
-  logger.info('保存剪辑工程', { event: 'video_edit.save.start', context: { projectId: id } })
-  const saving = (async () => {
-    while (instance.dirty) {
-      const gesture = gestures.get(instance)
-      if (gesture) { await gesture.finished; continue }
-      const version = instance.version
-      await getPlatform().system.fs.writeTextFile(instance.path, JSON.stringify(instance.document))
-      instance.dirty = version !== instance.version
-    }
-    instance.error = null
-    logger.info('剪辑工程已保存', { event: 'video_edit.save.completed', context: { projectId: id } })
-  })()
-  instance.saving = saving
-  try { await saving } catch (error) {
-    // The raw file-system reason goes to the log; the user learns what is kept and what to check.
-    instance.error = VIDEO_EDIT_SAVE_FAILED
-    logger.error('剪辑工程保存失败', error, { event: 'video_edit.save.failed', context: { projectId: id } }); throw new Error(VIDEO_EDIT_SAVE_FAILED, { cause: error })
-  } finally { instance.saving = undefined; publishVideoEdit() }
+  // 参数调整进行中时等它结束再写，保存的是调整后的结果
+  for (let gesture = gestures.get(instance); gesture; gesture = gestures.get(instance)) await gesture.finished
+  try { await instance.session.flush() } catch (error) {
+    // 原始文件系统原因进日志；用户只需要知道修改保留了、该检查什么
+    logger.error('剪辑保存失败', error, { event: 'video_edit.save.failed', context: { projectId: id } })
+    throw new Error(VIDEO_EDIT_SAVE_FAILED, { cause: error })
+  } finally { publishVideoEdit() }
 }
-function attach(document: VideoEditDocument, path: string, dirty: boolean, codeMetadata: VideoEditCodeMetadata = new Map()): VideoEditInstance {
-  const existing = instances.get(document.id)
-  if (existing) { if (existing.path !== path) throw new Error('此项目已从另一位置打开，请先关闭后再打开副本。'); focusVideoEdit(document.id); return existing }
-  const instance: VideoEditInstance = { document, activeSequenceId: document.sequences[0].id, sequenceViews: new Map(), selectedItemIds: [], selectedBinId: '', openSequenceIds: [document.sequences[0].id], path, dirty, error: null, past: [], future: [], ...defaultSequenceView(document.sequences[0]), playing: false, playbackDirection: 1, activePanel: 'timeline', busy: false, version: 0 }
-  installVideoEditCodeMetadata(instance, codeMetadata)
-  instances.set(document.id, instance); activeId = document.id; publishVideoEdit(true); return instance
+
+/** 文档内容（剪辑工程的持久部分）：去掉外壳表达的 format / version / id / name / revision。 */
+export function videoEditDocumentContent(document: VideoEditDocument): VideoEditDocumentContent {
+  const { format: _format, version: _version, id: _id, name: _name, revision: _revision, ...content } = document
+  return content as VideoEditDocumentContent
 }
-export async function createVideoEditProject(): Promise<VideoEditInstance | null> {
-  const path = await getPlatform().system.dialog.save({ defaultPath: '未命名剪辑.henji-video', filters: [{ name: '痕迹剪辑项目', extensions: ['henji-video'] }] })
-  if (!path) return null
-  const name = path.split(/[\\/]/).at(-1)?.replace(/\.henji-video$/i, '') || '未命名剪辑'
-  const instance = attach(createVideoEditDocument(name), path, true)
-  await saveVideoEdit(instance.document.id); return instance
-}
-export async function openVideoEditProject(path?: string): Promise<VideoEditInstance | null> {
-  const chosen = path ?? await getPlatform().system.dialog.open({ filters: [{ name: '痕迹剪辑项目', extensions: ['henji-video'] }] })
-  if (!chosen || Array.isArray(chosen)) return null
-  const existing = listVideoEditInstances().find(instance => instance.path === chosen)
-  if (existing) { focusVideoEdit(existing.document.id); return existing }
-  const text = await getPlatform().system.fs.readTextFile(chosen)
-  let raw: unknown
-  try { raw = JSON.parse(text) } catch (error) {
-    logger.warn('剪辑工程文件不是有效 JSON', { event: 'video_edit.project.open.invalid_json', error })
-    throw new Error('项目文件已损坏，无法打开；原文件未被修改。')
-  }
-  if (typeof raw === 'object' && raw !== null && 'version' in raw && raw.version !== 2) throw new Error('此项目使用不支持的旧格式。请保留原文件并新建项目。')
+/** 文档内容 → 剪辑工程（完整 schema 校验）；内容读不懂时报错，原文件不动。 */
+export function videoEditDocumentFromContent(content: unknown, meta: { id: string; name: string }, revision = 0): VideoEditDocument {
+  const raw = { format: 'henji-video-project', version: 2, id: meta.id, name: meta.name, revision, ...(typeof content === 'object' && content !== null ? content : {}) }
   const parsed = videoEditDocumentSchema.safeParse(raw)
-  // Schema paths are diagnostics, not user language; they go to the log only.
+  // schema 路径是诊断信息，不是用户语言，只进日志
   if (!parsed.success) {
-    logger.warn('剪辑工程文件内容不完整', { event: 'video_edit.project.open.invalid_document', context: { issues: parsed.error.issues.slice(0, 10).map(issue => ({ path: issue.path.join('.'), message: issue.message })) } })
-    throw new Error('项目文件内容不完整或已损坏，无法打开；原文件未被修改。')
+    logger.warn('剪辑文件内容不完整', { event: 'video_edit.document.invalid', context: { docId: meta.id, issues: parsed.error.issues.slice(0, 10).map(issue => ({ path: issue.path.join('.'), message: issue.message })) } })
+    throw new Error('剪辑文件内容不完整或已损坏，无法打开；原文件未被修改。')
   }
-  const document = parsed.data
-  try {
-    validateVideoEditGraphicTextBudget(document)
-    const codeMetadata = await prepareVideoEditCodeMetadata(document)
-    for (const media of document.media) await getPlatform().media.allowRoot(await getPlatform().system.paths.dirname(media.path))
-    return attach(document, chosen, false, codeMetadata)
-  } catch (error) {
+  return parsed.data
+}
+
+/**
+ * 项目文件夹里的素材只按位置引用（重要记录 006）：素材库的内容快照含原位置，项目被拷走、收集素材或移动后
+ * 位置变了就永远对不上，会被误判为“源文件已改变”。所以落在剪辑所在项目文件夹里的素材去掉素材库关联，
+ * 外部素材照旧按素材库快照核对。返回去掉后的剪辑；没有可去掉的返回 null。
+ */
+function detachProjectMediaAssets(document: VideoEditDocument, projectRoot: string): VideoEditDocument | null {
+  const normalize = (value: string): string => value.replaceAll('\\', '/').replace(/\/+$/, '').toLowerCase()
+  const root = `${normalize(projectRoot)}/`
+  let changed = false
+  const media = document.media.map(item => {
+    if (!item.assetId && !item.assetContent) return item
+    if (!normalize(item.path).startsWith(root)) return item
+    changed = true
+    const { assetId: _assetId, assetContent: _assetContent, ...rest } = item
+    return rest
+  })
+  return changed ? { ...document, media } : null
+}
+function projectRootOf(session: DocumentSession): string | null {
+  return session.documentMeta.container.kind === 'project' ? parentFolderOf(session.documentMeta.path) : null
+}
+
+function sessionError(session: DocumentSession): string | null {
+  return session.getState().status === 'failed' ? VIDEO_EDIT_SAVE_FAILED : null
+}
+
+/** 把一个已打开的剪辑文档会话接成实例：附着内容、同步名称，会话结束时自动拆掉。 */
+async function bindVideoEditSession(session: DocumentSession, focus: boolean): Promise<VideoEditInstance> {
+  const existing = instances.get(session.id)
+  if (existing && existing.session === session && !session.isEnded) { if (focus) focusVideoEdit(session.id); return existing }
+  const loaded = videoEditDocumentFromContent(session.getContent(), session.documentMeta)
+  const root = projectRootOf(session)
+  const detached = root ? detachProjectMediaAssets(loaded, root) : null
+  const document = detached ?? loaded
+  validateVideoEditGraphicTextBudget(document)
+  const codeMetadata = await prepareVideoEditCodeMetadata(document)
+  if (session.isEnded) throw new Error('剪辑在打开期间已关闭。')
+  const view = defaultSequenceView(document.sequences[0])
+  const instance = {
+    document, activeSequenceId: document.sequences[0].id, sequenceViews: new Map(), selectedItemIds: [], selectedBinId: '', openSequenceIds: [document.sequences[0].id],
+    session, past: [], future: [], ...view, playing: false, playbackDirection: 1, activePanel: 'timeline', busy: false, version: 0,
+  } as unknown as VideoEditInstance
+  Object.defineProperties(instance, {
+    dirty: { get: () => session.dirty, enumerable: true },
+    error: { get: () => sessionError(session), enumerable: true },
+  })
+  installVideoEditCodeMetadata(instance, codeMetadata)
+  const listeners = new Set<() => void>()
+  contentListeners.set(instance, listeners)
+  const adapter: DocumentContentAdapter<VideoEditDocumentContent> = {
+    // 参数调整进行中时写调整前的内容；提交后再标脏保存
+    getContent: () => videoEditDocumentContent(gestures.get(instance)?.before ?? instance.document),
+    receiveContent: (content) => {
+      // 冲突后“重新载入”、收集素材改写了引用：按新内容重建，撤销历史不跨版本
+      cancelVideoEditGesture(instance)
+      const before = instance.document
+      const received = videoEditDocumentFromContent(content, { id: before.id, name: session.documentMeta.name }, before.revision + 1)
+      const receivedRoot = projectRootOf(session)
+      const receivedDetached = receivedRoot ? detachProjectMediaAssets(received, receivedRoot) : null
+      instance.document = receivedDetached ?? received
+      if (receivedDetached) queueMicrotask(() => notifyVideoEditContent(instance))
+      instance.past = []; instance.future = []; instance.playing = false; instance.version++
+      reconcileSequenceView(instance)
+      void ensureVideoEditCodeDocumentMetadata(instance, instance.document).catch(error => logger.warn('重新载入后代码素材检查未完成', { event: 'video_edit.document.code_metadata_failed', error }))
+      publishVideoEdit(true)
+    },
+    subscribe: (onChange) => { listeners.add(onChange); return () => { listeners.delete(onChange) } },
+  }
+  const detach = session.attach(adapter as DocumentContentAdapter)
+  let disposed = false
+  const dispose = (): void => {
+    if (disposed) return
+    disposed = true
+    unsubscribe(); detach(); cancelVideoEditGesture(instance); instance.playing = false
+    if (instances.get(session.id) === instance) instances.delete(session.id)
+    if (activeId === session.id) activeId = instances.keys().next().value ?? null
+    if (!instances.size) releaseVideoEditCodeCompiler()
+    publishVideoEdit(true)
+  }
+  const unsubscribe = session.subscribe(() => {
+    if (session.isEnded) { dispose(); return }
+    const name = session.documentMeta.name
+    if (instance.document.name !== name) { instance.document = { ...instance.document, name }; publishVideoEdit(true) } else publishVideoEdit()
+  })
+  disposers.set(instance, dispose)
+  instances.set(session.id, instance)
+  // 去掉了项目内素材的素材库关联：写回剪辑文件
+  if (detached) session.markChanged()
+  if (focus || !activeId) activeId = session.id
+  publishVideoEdit(true)
+  logger.info('剪辑已打开', { event: 'video_edit.document.open.completed', context: { docId: session.id, missing: session.getState().missingPaths.length } })
+  return instance
+}
+
+async function openSessionInstance(open: () => Promise<DocumentSession>, focus: boolean): Promise<VideoEditInstance> {
+  const session = await open()
+  try { return await bindVideoEditSession(session, focus) } catch (error) {
+    // 内容读不懂（文件被手工改坏）：不留一个没有实例附着的会话
+    if (!instances.has(session.id) && !session.isEnded) await session.discard()
     if (!instances.size) releaseVideoEditCodeCompiler()
     throw error
   }
 }
-export async function closeVideoEditProject(id: string): Promise<void> {
+
+/** 打开一份剪辑文档（按 ID，可带位置）；已打开时切到它。 */
+export async function openVideoEditDocument(target: DocumentTarget, options: { focus?: boolean } = {}): Promise<VideoEditInstance> {
+  assertApplicationWritesAllowed()
+  const focus = options.focus ?? true
+  const existing = instances.get(target.id)
+  if (existing && !existing.session.isEnded) { if (focus) focusVideoEdit(target.id); return existing }
+  if (leaving.has(target.id)) throw new Error('这份剪辑正在关闭，请稍后再打开。')
+  try {
+    return await openSessionInstance(() => documentRegistry().open(target), focus)
+  } catch (error) {
+    if (isDocumentServiceError(error, 'DocumentNotFoundError')) throw new Error('找不到这份剪辑文件，它可能已被移动或删除。')
+    throw error
+  }
+}
+
+/**
+ * 新建项目（实施方案 2.2、2.8）：以草稿状态在“项目”文件夹里建项目，并在其中建同名主剪辑，
+ * 登记为项目的主剪辑后打开。离开时按草稿项目询问“保存 / 不保存 / 取消”。
+ */
+export async function createVideoEditProject(): Promise<VideoEditInstance> {
+  assertApplicationWritesAllowed()
+  const registry = documentRegistry()
+  const project = await registry.createProject()
+  try {
+    const instance = await openSessionInstance(() => registry.create({ kind: 'video_edit', container: { kind: 'project', projectId: project.id }, name: project.name, draft: false }), true)
+    await documentOperations().setProjectMainDocument(project.id, instance.document.id)
+    logger.info('新建剪辑项目', { event: 'video_edit.project.create.completed', context: { projectId: project.id, docId: instance.document.id } })
+    return instance
+  } catch (error) {
+    // 建主剪辑失败时不留下空的草稿项目
+    await documentOperations().trashProject(project).catch(cleanup => logger.warn('新建失败后清理草稿项目未完成', { event: 'video_edit.project.create.cleanup_failed', error: toError(cleanup) }))
+    throw error
+  }
+}
+
+/** 项目的主剪辑：项目说明登记的那份（须确在本项目里），否则最近编辑的一份，都没有时新建同名剪辑并登记。 */
+async function ensureMainVideoEdit(project: ProjectSummary): Promise<DocumentTarget> {
+  const operations = documentOperations()
+  const list = () => operations.listDocuments({ kind: 'video_edit', container: { kind: 'project', projectId: project.id }, includeDrafts: true, includeMissing: false })
+  let edits = await list()
+  // 刚登记的外部项目（拷来的项目文件夹）里的文档要等扫描进索引：先扫描一次，避免误建一份同名主剪辑
+  if (!edits.length) { await operations.refreshIndex(); edits = await list() }
+  // 拷贝出来的项目里，项目说明记的可能还是原项目那份的 ID（副本已换新 ID）：只认本项目里真有的
+  let main = edits.find(document => document.id === project.mainVideoEditId) ?? edits[0]
+  if (!main) {
+    const created = await operations.createDocument({ kind: 'video_edit', container: { kind: 'project', projectId: project.id }, name: project.name })
+    main = await operations.findDocument(created.id)
+  }
+  if (main.id !== project.mainVideoEditId) await operations.setProjectMainDocument(project.id, main.id)
+  return { id: main.id, path: main.path }
+}
+
+/** 打开项目 = 打开它的主剪辑（没有就建一个）。 */
+export async function openVideoEditProject(project: ProjectSummary): Promise<VideoEditInstance> {
+  if (project.missing) throw new Error('找不到这个项目的文件夹，它可能已被移动、删除，或所在的盘没有连接。')
+  return await openVideoEditDocument(await ensureMainVideoEdit(project))
+}
+
+/** 打开作品目录之外的项目文件夹：登记为外部位置后打开它的主剪辑。 */
+export async function openVideoEditProjectFolder(folderPath: string): Promise<VideoEditInstance> {
+  const project = await documentOperations().registerExternalProject(folderPath)
+  return await openVideoEditProject(project)
+}
+
+/** 剪辑所在的项目（剪辑始终在项目里）。 */
+export async function videoEditProjectOf(id: string): Promise<ProjectSummary> {
+  const container = requireVideoEditInstance(id).session.documentMeta.container
+  if (container.kind !== 'project') throw new Error('剪辑不在任何项目里。')
+  return await documentOperations().findProject(container.projectId)
+}
+
+/**
+ * 离开剪辑（返回项目列表）：等导出结束，草稿项目走通用的项目离开流程
+ * （空项目直接移到回收站；有内容询问“保存 / 不保存 / 取消”，保存时起名、可另选位置），
+ * 保存后主剪辑随项目改名；已保存的项目直接写完关闭。cancelled 时留在剪辑里，修改保留。
+ */
+export async function leaveVideoEditProject(id: string): Promise<DocumentLeaveOutcome> {
+  const instance = requireVideoEditInstance(id)
+  const previous = leaving.get(id)
+  if (previous) return await previous
+  if (instance.busy) throw new Error('请等待导出完成或取消导出。')
+  const operation = (async (): Promise<DocumentLeaveOutcome> => {
+    cancelVideoEditGesture(instance); instance.playing = false; publishVideoEdit()
+    const registry = documentRegistry()
+    const container = instance.session.documentMeta.container
+    const project = container.kind === 'project' ? await documentOperations().findProject(container.projectId).catch(() => null) : null
+    let outcome: DocumentLeaveOutcome
+    if (project?.draft) {
+      const documents = await documentOperations().listDocuments({ container: { kind: 'project', projectId: project.id }, includeDrafts: true, includeMissing: false })
+      const isEmpty = documents.every(document => document.id === id) && instance.session.isEmpty()
+      outcome = await registry.leaveProject({ project, isEmpty })
+      if (outcome === 'saved') await renameMainAfterSave(project, id)
+    } else outcome = await registry.leave(id)
+    if (outcome !== 'cancelled') disposers.get(instance)?.()
+    logger.info('离开剪辑', { event: 'video_edit.project.leave.completed', context: { docId: id, outcome, draftProject: Boolean(project?.draft) } })
+    return outcome
+  })()
+  leaving.set(id, operation)
+  try { return await operation } catch (error) {
+    logger.warn('离开剪辑失败，修改已保留', { event: 'video_edit.project.leave.failed', error: toError(error), context: { docId: id } })
+    throw error
+  } finally { if (leaving.get(id) === operation) leaving.delete(id) }
+}
+
+/** 草稿项目保存（起名）后，原本与项目同名的主剪辑跟着改成新的项目名。 */
+async function renameMainAfterSave(previous: ProjectSummary, mainId: string): Promise<void> {
+  try {
+    const operations = documentOperations()
+    const saved = await operations.findProject(previous.id)
+    const main = await operations.findDocument(mainId)
+    if (main.name === previous.name && main.name !== saved.name) await operations.renameDocument({ id: main.id, path: main.path }, saved.name)
+  } catch (error) {
+    logger.warn('项目已保存，主剪辑未能随项目改名', { event: 'video_edit.project.rename_main_failed', error: toError(error), context: { projectId: previous.id } })
+  }
+}
+
+/**
+ * 写完并关闭剪辑（不询问；草稿项目保留草稿标记，下次在项目页提示恢复）。
+ * 界面返回列表用 leaveVideoEditProject；这里供后台释放、测试与内部收尾。
+ */
+export function closeVideoEditProject(id: string): Promise<void> {
   const instance = requireVideoEditInstance(id)
   const previous = closing.get(instance)
   if (previous) return previous
-  if (instance.busy) throw new Error('请等待导出完成或取消导出。')
+  if (instance.busy) return Promise.reject(new Error('请等待导出完成或取消导出。'))
+  // 关闭期间拒绝新的修改与参数调整（assertVideoEditWritable）；并发关闭合并为一次；失败时留在原处、修改保留
   const operation = Promise.resolve().then(async () => {
     cancelVideoEditGesture(instance); instance.playing = false
-    await saveVideoEdit(id)
-    const timer = autosaves.get(id); if (timer !== undefined) clearTimeout(timer)
-    autosaves.delete(id); retryDelays.delete(id)
-    instances.delete(id); if (activeId === id) activeId = instances.keys().next().value ?? null; publishVideoEdit(true)
-    if (!instances.size) releaseVideoEditCodeCompiler()
+    try { await instance.session.close() } catch (error) {
+      logger.error('剪辑关闭前保存失败', error, { event: 'video_edit.close.failed', context: { projectId: id } })
+      throw new Error(VIDEO_EDIT_SAVE_FAILED, { cause: error })
+    }
+    disposers.get(instance)?.()
   }).finally(() => { closing.delete(instance) })
   closing.set(instance, operation)
   return operation
 }
+
+/** 释放只为后台读写持有的剪辑（通用文档操作移到回收站前调用）：界面正在显示、导出中或正在离开时拒绝。 */
+export async function releaseVideoEditDocument(id: string): Promise<boolean> {
+  const instance = instances.get(id)
+  if (!instance || instance.session.isEnded) return true
+  if (instance.busy || leaving.has(id) || activeId === id) return false
+  await closeVideoEditProject(id)
+  return true
+}
+
+/** 收集素材：把剪辑引用的外部文件复制进所在项目的“素材”并改写引用，返回复制与找不到的数量。 */
+export async function collectVideoEditMedia(id: string): Promise<{ copiedFiles: number; missing: number }> {
+  const instance = requireVideoEditInstance(id)
+  if (instance.busy) throw new Error('请等待导出完成或取消导出。')
+  if (gestures.has(instance)) throw new Error('请先完成当前参数调整。')
+  const result = await documentOperations().collectDocumentMedia(instance.session.target)
+  logger.info('剪辑素材已收集', { event: 'video_edit.media.collect.completed', context: { docId: id, copiedFiles: result.copiedFiles, missing: result.missingPaths.length } })
+  return { copiedFiles: result.copiedFiles, missing: result.missingPaths.length }
+}
+
+/**
+ * 从剪辑文件回读并核对：磁盘上的内容是否就是 expected（默认当前内存里的剪辑）。
+ * 两边都按完整 schema 规范化后比较（主进程保存的是类型 schema 的解析结果，字段顺序可能不同）。
+ */
+export async function verifyVideoEditSaved(id: string, expected?: VideoEditDocument): Promise<boolean> {
+  const instance = requireVideoEditInstance(id)
+  const read = await documentOperations().readDocument(instance.session.target)
+  const meta = { id: instance.document.id, name: instance.document.name }
+  const normalize = (content: unknown): string => JSON.stringify(videoEditDocumentFromContent(content, meta))
+  return normalize(read.content) === normalize(videoEditDocumentContent(expected ?? instance.document))
+}
+
 export function appendVideoEditMedia(id: string, media: VideoEditMedia): void {
   editVideoProject(id, document => ({ ...document, media: [...document.media, media], items: [...document.items, { id: crypto.randomUUID(), name: media.name, kind: media.kind, mediaId: media.id }] }))
 }
@@ -462,6 +694,7 @@ export function appendVideoEditClip(id: string, mediaId?: string, placement?: { 
   editVideoProject(id, document => ({ ...document, items: existingItem ? document.items : [...document.items, item], sequences: document.sequences.map(sequence => sequence.id === targetSequenceId ? { ...sequence, clips: [...sequence.clips, clip] } : sequence) }))
   if (instance.activeSequenceId === targetSequenceId) setVideoEditView(id, { selection: clip.id })
 }
+// 剪辑内容由文档会话登记表在退出屏障里写完；这里只拦住进行中的导出并收起参数调整与播放
 registerApplicationCloseGuard(async () => {
-  for (const instance of instances.values()) { if (instance.busy) throw new Error('剪辑项目正在导出，请等待或取消。'); cancelVideoEditGesture(instance); instance.playing = false; await saveVideoEdit(instance.document.id) }
+  for (const instance of instances.values()) { if (instance.busy) throw new Error('剪辑项目正在导出，请等待或取消。'); cancelVideoEditGesture(instance); instance.playing = false }
 })

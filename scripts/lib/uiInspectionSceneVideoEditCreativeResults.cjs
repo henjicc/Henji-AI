@@ -6,15 +6,16 @@ const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operatio
 const { observeWorkers, workerSnapshot, waitReleased } = require('./uiInspectionSceneVideoEditLayout.cjs')
 const { dialogs, presented, png, pixelDifference, mediaProbe, trackBanks } = require('./uiInspectionSceneVideoEditMonitor.cjs')
 const { createPlaybackFixture, seedCameraStageDocument } = require('./uiInspectionCameraStagePlayback.cjs')
+const { leaveVideoEditProject, openVideoEditProjectCard, readVideoEditFile, seedVideoEditProject } = require('./uiInspectionVideoEditDocuments.cjs')
 const button = (page, name) => page.getByRole('button', { name, exact: true })
 const normalized = value => value.replaceAll('/', '\\').toLowerCase()
 const ORIGINAL = 'D:/视频制作/0A0片头片尾和素材/2021片头V2 4K 60FPS.mp4'
-const PROJECT_ID = 'video-edit-creative-results'
+const FIXTURE_ID = 'video-edit-creative-results'
 const STAGE_NODE_ID = '__video_edit_creative_stage'
 
 function project(root) {
   const video = (index, name) => ({ id: `v${index}`, name, index, kind: 'video', locked: false, enabled: true, muted: false, solo: false })
-  return { format: 'henji-video-project', version: 2, id: PROJECT_ID, name: '创作结果回填验收', revision: 0,
+  return { format: 'henji-video-project', version: 2, id: FIXTURE_ID, name: '创作结果回填验收', revision: 0,
     media: [{ id: 'original', name: '原4K60片头', path: ORIGINAL, kind: 'video', durationSeconds: 7, width: 3840, height: 2160, hasAudio: false, frameRate: { numerator: 60, denominator: 1 }, frameRateMode: 'sampled-constant' }],
     bins: [], items: [{ id: 'original-item', name: '原4K60片头', kind: 'video', mediaId: 'original' }],
     sequences: [{ id: 'main', name: '序列 1', width: 3840, height: 2160, frameRate: { numerator: 60, denominator: 1 }, pixelAspectRatio: { numerator: 1, denominator: 1 }, sampleRate: 48000, channels: 2,
@@ -22,7 +23,8 @@ function project(root) {
       clips: [{ id: 'base', itemId: 'original-item', name: '原4K60片头', kind: 'video', track: 1, start: 0, duration: 420, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, brightness: 1, text: '' }], annotations: [] }],
     _root: root }
 }
-const readProject = file => JSON.parse(fs.readFileSync(file, 'utf8'))
+// 3.1：剪辑是项目里的文档文件，按旧工程形状读出（项目内相对写法换回绝对路径）
+const readProject = readVideoEditFile
 async function savedClip(page, file, predicate, message) {
   for (let attempt = 0; attempt < 400; attempt++) {
     const current = fs.existsSync(file) ? readProject(file) : null
@@ -45,21 +47,23 @@ function createVideoEditCreativeResultsScene(context) {
       ffmpeg(['-f', 'lavfi', '-i', 'smptehdbars=size=3840x2160:rate=1', '-frames:v', '1', generatedB])
       ffmpeg(['-f', 'lavfi', '-i', 'sine=frequency=330:duration=5:sample_rate=48000', '-ac', '2', '-c:a', 'pcm_s16le', voice])
       const fixture = project(root); delete fixture._root
-      const file = path.join(root, 'creative-results.henji-video'); fs.writeFileSync(file, JSON.stringify(fixture))
+      // 3.1：经正式文档接口建项目与主剪辑（文档 ID 由仓库生成）
+      let file; let PROJECT_ID; let projectRef; let editProject
       const original = { size: fs.statSync(ORIGINAL).size, mtimeMs: fs.statSync(ORIGINAL).mtimeMs }
       const evidence = { completed: false, phases: [], captures: [], timings: {} }
       const sceneStart = new Date().toISOString()
       const store = () => fs.writeFileSync(path.join(root, 'evidence.json'), JSON.stringify(evidence, null, 2))
       const shot = async name => { evidence.captures.push({ name, result: await capture(name) }); store() }
       const phase = name => { evidence.currentPhase = name; store() }
-      const projectRef = { kind: 'video_edit.project', id: PROJECT_ID }
       let client; let observed = false; let audioProjectId
       const playhead = async frame => {
         const read = await callTool(client, 'read_application_entity', { ref: projectRef, propertyIds: ['video_edit.project.program_playback'] })
         await callTool(client, 'change_application_entities', operationEnvelope([read], { summary: '定位回填播放头', changes: [{ kind: 'set_properties', entityType: 'video_edit.project', target: projectRef, properties: { 'video_edit.project.program_playback': { frame, playing: false, playbackDirection: 1 } } }] }))
       }
-      const openEdit = async () => { await button(page, '剪辑').first().click(); await button(page, '关闭项目').or(button(page, '打开项目文件')).first().waitFor({ state: 'visible', timeout: 30000 }) }
+      const openEdit = async () => { await button(page, '剪辑').first().click(); await button(page, '关闭项目').or(button(page, '新建项目')).first().waitFor({ state: 'visible', timeout: 30000 }) }
       try {
+        editProject = await seedVideoEditProject(page, fixture); file = editProject.file; PROJECT_ID = editProject.documentId
+        projectRef = { kind: 'video_edit.project', id: PROJECT_ID }; evidence.project = { projectPath: editProject.projectPath, file }
         evidence.display = await app.evaluate(({ BrowserWindow, screen }, { point, hostContentsId }) => {
           const host = (BrowserWindow.getAllWindows().find(window => window.webContents.id === hostContentsId) ?? BrowserWindow.getAllWindows()[0])
           const bounds = host.getBounds(); const current = screen.getDisplayMatching(bounds); const coordinates = point?.split(',').map(Number)
@@ -116,7 +120,7 @@ function createVideoEditCreativeResultsScene(context) {
         phase('open-project')
         await openEdit(); if (await button(page, '关闭项目').isVisible()) await button(page, '关闭项目').click()
         await observeWorkers(page); observed = true
-        await dialogs(app, [file], file); await button(page, '打开项目文件').click(); await presented(page, 0)
+        await openVideoEditProjectCard(page, editProject.projectId); await presented(page, 0)
         const identity = await authorizeMcpConnection(page, { name: '创作结果回填验收', allowWrites: true }); client = await connectMcpClient(identity.config, 'Henji creative results Reality')
         evidence.trackBanks = await trackBanks(page)
 
@@ -132,7 +136,10 @@ function createVideoEditCreativeResultsScene(context) {
         evidence.timings.generationAddMs = performance.now() - at
         assert.equal(generated.clip.start, 120); assert.ok(generated.clip.track >= 2, '加入播放头不得覆盖原片段所在轨道')
         const generatedMedia = generated.document.media.find(media => media.id === generated.document.items.find(item => item.id === generated.clip.itemId).mediaId)
-        assert.ok([generatedA, generatedB].map(normalized).includes(normalized(generatedMedia.path)), '回填必须引用生成结果原文件')
+        // 3.1：其他工具的结果复制进项目“生成结果”再引用（重要记录 006），原文件保留
+        assert.equal(normalized(path.dirname(generatedMedia.path)), normalized(path.join(editProject.projectPath, '生成结果')), `回填必须引用项目“生成结果”里的副本：${generatedMedia.path}`)
+        assert.ok(['generated-a.png', 'generated-b.png'].includes(path.basename(generatedMedia.path)), '副本须沿用生成结果的文件名')
+        assert.ok(fs.existsSync(generatedA) && fs.existsSync(generatedMedia.path), '原文件与项目副本都应存在')
         evidence.generation = { clip: generated.clip, media: generatedMedia }; evidence.phases.push('生成页右键加入播放头，固定原工程/序列并保存')
 
         phase('mcp-replace-generation')
@@ -149,7 +156,7 @@ function createVideoEditCreativeResultsScene(context) {
         await openEdit(); await playhead(300); await presented(page, 300)
         const before = await png(page, path.join(root, 'program-300-before.png'))
         const framePath = path.join(root, `frame-300-${Date.now()}.png`)
-        await dialogs(app, [file], framePath); at = performance.now(); await button(page, '更多节目操作').click(); await button(page, '编辑当前帧').click()
+        await dialogs(app, [], framePath); at = performance.now(); await button(page, '更多节目操作').click(); await button(page, '编辑当前帧').click()
         const sendMenu = page.getByRole('button', { name: /加入剪辑/ })
         await page.locator('[data-image-editor-v3-host-state]').waitFor({ state: 'detached', timeout: 60000 })
         await sendMenu.waitFor({ state: 'visible', timeout: 60000 })
@@ -188,7 +195,7 @@ function createVideoEditCreativeResultsScene(context) {
         await playhead(60)
         await context.setupToolbox(page); await context.clickNamedButton(page, /^(口播剪辑)/)
         await page.getByRole('button', { name: /回填口播/ }).first().click()
-        const wavPath = path.join(root, `voice-cut-${Date.now()}.wav`); await dialogs(app, [file], wavPath)
+        const wavPath = path.join(root, `voice-cut-${Date.now()}.wav`); await dialogs(app, [], wavPath)
         await page.getByRole('button', { name: /加入剪辑/ }).click(); const voiceAdd = page.getByRole('menuitem', { name: /加入播放头/ })
         await voiceAdd.waitFor({ state: 'visible' }); evidence.voiceLabel = await voiceAdd.innerText(); at = performance.now(); await voiceAdd.click()
         const voiced = await savedClip(page, file, clip => clip.creativeSource?.kind === 'audio_edit.project', '口播结果没有回填序列')
@@ -226,13 +233,13 @@ function createVideoEditCreativeResultsScene(context) {
 
         phase('reopen-export')
         await openEdit(); const persisted = readProject(file)
-        await button(page, '关闭项目').click(); await waitReleased(page)
-        await dialogs(app, [file], file); await button(page, '打开项目文件').click(); await presented(page, 0)
+        await leaveVideoEditProject(page, null); await waitReleased(page)
+        await openVideoEditProjectCard(page, editProject.projectId); await presented(page, 0)
         const reopened = readProject(file); assert.deepEqual(reopened.sequences[0].clips, persisted.sequences[0].clips)
         await playhead(300); await presented(page, 300)
         const reopenedFrame = await png(page, path.join(root, 'program-300-reopened.png'))
         evidence.reopenDifference = await pixelDifference(afterImage.file, reopenedFrame.file); assert.ok(evidence.reopenDifference.equal)
-        const exportPath = path.join(root, `creative-${Date.now()}.mp4`); await dialogs(app, [file], exportPath); at = performance.now(); await button(page, '导出视频').click()
+        const exportPath = path.join(root, `creative-${Date.now()}.mp4`); await dialogs(app, [], exportPath); at = performance.now(); await button(page, '导出视频').click()
         let task
         for (let attempt = 0; attempt < 6000; attempt++) { task = await callTool(client, 'query_video_edit_export', { projectRef }); if (['completed', 'failed', 'cancelled'].includes(task.data.task?.state)) break; await page.waitForTimeout(50) }
         assert.equal(task.data.task?.state, 'completed', JSON.stringify(task))

@@ -162,7 +162,8 @@ export class VideoEditMutationExecutor implements ApplicationMutationExecutor {
     }
     const update = (document: VideoEditDocument): VideoEditDocument => {
       if (VIDEO_EDIT_COMPOSITE_TYPES.some(type => type === this.entityType)) return updateVideoEditCompositeEntity(document, this.entityType as VideoEditCompositeEntityType, childId, data)
-      if (this.entityType === 'video_edit.project') return { ...document, name: String(data.name) }
+      // 剪辑名是文件名，不在内容里改（name 只读）；其余工程视图属性在上面直接写入实例
+      if (this.entityType === 'video_edit.project') return document
       if (this.entityType === 'video_edit.bin') return { ...document, bins: document.bins.map(item => item.id === childId ? videoEditBinSchema.parse(data) : item) }
       if (this.entityType === 'video_edit.item') return { ...document, items: document.items.map(item => item.id === childId ? videoEditItemSchema.parse(data) : item) }
       if (this.entityType === 'video_edit.code_material') return { ...document, codeMaterials: document.codeMaterials?.map(definition => definition.id === childId ? { ...definition, name: String(data.name) } : definition) }

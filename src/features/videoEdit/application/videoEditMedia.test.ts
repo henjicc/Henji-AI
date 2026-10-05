@@ -10,6 +10,7 @@ import { ensureVideoEditMediaAudioStreams, importVideoEditSources, relinkVideoEd
 import { inferLocalMediaKind } from '@/services/localMediaImport'
 import { videoEditNativeMediaProbe } from './videoEditMediaProbe'
 import { dropVideoEditInput, readVideoEditDrop, videoEditDropPaths } from './videoEditDrop'
+import { savedVideoEdit, reopenVideoEdit } from './videoEditDocumentTestKit'
 
 const files = new Map<string, string>()
 const video = vi.hoisted(() => ({ duration: 3, fps: 60, hasAudio: false, decodable: true }))
@@ -58,19 +59,19 @@ it('拖包路径不能覆盖正式assetId；导入落点与来源一次历史并
   expect(owner.document.media[0]).toMatchObject({ path: 'D:/media/original.png', assetId: 'image-asset', assetContent: { sizeBytes: 4096, fileModifiedAt: 1000, contentIdentity: 'a'.repeat(64) } })
   expect(owner.document.sequences[0].clips[0]).toMatchObject({ start: 12, track: 1, itemId: owner.document.items[0].id })
   await saveVideoEdit(id); const snapshot = structuredClone(owner.document)
-  await closeVideoEditProject(id); const reopened = (await openVideoEditProject(owner.path))!
-  expect(reopened.document).toEqual(snapshot)
+  await closeVideoEditProject(id); const reopened = await reopenVideoEdit(owner.document.id)
+  expect(reopened.document).toEqual({ ...snapshot, revision: 0 })
   await importVideoEditSources(id, [{ assetId: 'image-asset', path: 'E:/different.png' }])
   expect(reopened.document.media).toHaveLength(1); expect(reopened.document.items).toHaveLength(1)
 })
 
 it.each(['content', 'path', 'pending', 'deleted'] as const)('最终%s改变拒绝整批发布，不留导入、片段或保存', async change => {
-  const owner = (await createVideoEditProject())!; const baseline = owner.document; const history = owner.past.length; const saved = files.get(owner.path)
+  const owner = (await createVideoEditProject())!; const baseline = owner.document; const history = owner.past.length; const saved = JSON.stringify(savedVideoEdit(owner))
   const inspect = vi.spyOn(getPlatform().assetLibrary, 'inspectAsset').mockResolvedValueOnce(asset())
   if (change === 'deleted') inspect.mockRejectedValueOnce(new Error('资产不存在'))
   else inspect.mockResolvedValueOnce(asset(change === 'content' ? { contentIdentity: 'b'.repeat(64) } : change === 'path' ? { filePath: 'D:/media/relocated.png' } : { inspectionStatus: 'pending' }))
   await expect(dropVideoEditInput(owner.document.id, { kind: 'sources', sources: [{ assetId: 'image-asset' }] }, { frame: 0, track: 1 })).rejects.toThrow()
-  expect(owner.document).toBe(baseline); expect(owner.past).toHaveLength(history); expect(files.get(owner.path)).toBe(saved)
+  expect(owner.document).toBe(baseline); expect(owner.past).toHaveLength(history); expect(JSON.stringify(savedVideoEdit(owner))).toBe(saved)
 })
 
 it('改名标签与最近使用允许复核；首次绑定旧路径刷新资源身份且可撤销', async () => {
@@ -108,7 +109,7 @@ it('关闭同ID重开与取消不能接收晚到解析，元数据队列继续�
   const inspect = vi.spyOn(getPlatform().assetLibrary, 'inspectAsset').mockImplementationOnce(() => pending.promise).mockResolvedValue(asset())
   const late = importVideoEditSources(id, [{ assetId: 'image-asset' }]).catch(error => error)
   await vi.waitFor(() => expect(inspect).toHaveBeenCalledOnce())
-  await closeVideoEditProject(id); const reopened = (await openVideoEditProject(owner.path))!
+  await closeVideoEditProject(id); const reopened = await reopenVideoEdit(owner.document.id)
   pending.resolve(asset()); expect(await late).toBeInstanceOf(Error); expect(reopened.document.media).toHaveLength(0)
   const controller = new AbortController()
   const cancelled = importVideoEditSources(id, [{ assetId: 'image-asset' }], undefined, controller.signal); controller.abort()
@@ -138,7 +139,7 @@ it('候选处理和最终解析期间的手动修改保留，不被旧草稿覆�
   const inspect = vi.spyOn(getPlatform().assetLibrary, 'inspectAsset').mockResolvedValueOnce(asset()).mockImplementationOnce(() => pending.promise)
   const importing = importVideoEditSources(id, [{ assetId: 'image-asset' }]).catch(error => error)
   await vi.waitFor(() => expect(inspect).toHaveBeenCalledTimes(2))
-  editVideoProject(id, document => ({ ...document, name: '新手动编辑' })); const baseline = owner.document
+  editVideoProject(id, document => ({ ...document, sequences: document.sequences.map((sequence, index) => index ? sequence : { ...sequence, name: '新手动编辑' }) })); const baseline = owner.document
   pending.resolve(asset()); expect(await importing).toBeInstanceOf(Error); expect(owner.document).toBe(baseline); expect(owner.document.media).toHaveLength(0)
 })
 
@@ -149,7 +150,7 @@ it('公共导入使用同一可信解析与静默保存', async () => {
   try {
     const result = await app.call('import_video_edit_asset', { projectRef: { kind: 'video_edit.project', id }, assetRef: { kind: 'asset', id: 'image-asset' } })
     expect(result).toMatchObject({ ok: true }); expect(owner.document.media).toHaveLength(1)
-    expect(JSON.parse(files.get(owner.path)!).media[0].assetContent.contentIdentity).toBe('a'.repeat(64))
+    expect(savedVideoEdit(owner).media[0].assetContent!.contentIdentity).toBe('a'.repeat(64))
   } finally { app.dispose() }
 })
 
@@ -222,7 +223,7 @@ it('多音轨 MXF（2.6）：导入记录四条单声道流，拖入时间线铺
   expect(owner.document.sequences).toEqual(before.sequences)
   undoVideoEdit(id, true)
   await saveVideoEdit(id); await closeVideoEditProject(id)
-  const reopened = (await openVideoEditProject(owner.path))!
+  const reopened = await reopenVideoEdit(owner.document.id)
   expect(getActiveVideoEditSequence(reopened).clips).toEqual(sequence.clips)
   expect(getActiveVideoEditSequence(reopened).tracks).toHaveLength(11)
 })

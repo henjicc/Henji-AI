@@ -3,6 +3,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const { execFileSync } = require('node:child_process')
 const { videoEditFixtureProject } = require('./uiInspectionSceneVideoEditProbe.cjs')
+const { adoptNewVideoEditProject, leaveVideoEditProject, openVideoEditFile, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
 
 const STORAGE_KEY = 'henji.videoEdit.dockLayout.v1'
 const button = (page, name) => page.getByRole('button', { name, exact: true })
@@ -138,7 +139,7 @@ function createVideoEditLayoutScene() {
         const picture = { ...title, id: 'layout-original', itemId: 'layout-source-item', kind: 'video', name: '原素材主画面', track: 1, scale: 1, text: '', sourceRemainder: { numerator: 0, denominator: 1 } }
         project.sequences[0].clips.unshift(picture, { ...picture, id: 'layout-overlay', name: '原素材叠加', track: 2, sourceInUs: 1000000, x: .3, y: .3, scale: .3 })
       }
-      const originalJson = JSON.stringify(project); fs.writeFileSync(file, originalJson)
+      const originalJson = JSON.stringify(project); fs.writeFileSync(file, originalJson); let openedJson = null
       const evidence = { project: file, renderSize: { width: 3840, height: 2160, fps: 60 }, fixture: originalSource ? '原路径4K60双视频与文字' : '本地文字工程，无媒体解码或转码', steps: [], restoration: { pageRoundTrip: false, coldRestart: '未运行；页面往返不替代冷启动' } }
       await button(page, '生成').click()
       const previousLayout = await page.evaluate(key => localStorage.getItem(key), STORAGE_KEY)
@@ -151,7 +152,9 @@ function createVideoEditLayoutScene() {
       try {
         await app.evaluate(({ dialog }, file) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] }) }, file)
         await button(page, '剪辑').click()
-        const openedAt = performance.now(); await button(page, '打开项目文件').click(); await presented(page, 0)
+        const openedAt = performance.now(); await openVideoEditFile(page, file); await presented(page, 0)
+        // 3.1：剪辑存成项目里的文档；以打开后的剪辑文件为基线核对“不改写”
+        openedJson = JSON.stringify(readVideoEditFile(file))
         evidence.firstPresentedMs = performance.now() - openedAt
         await page.evaluate(() => window.__videoLayoutWatchCanvas(document.querySelector('canvas[aria-label="剪辑画面"]')))
         await page.getByTitle('布局验收文字', { exact: true }).click()
@@ -167,7 +170,7 @@ function createVideoEditLayoutScene() {
           assert.equal(await page.getByRole('slider', { name: '剪辑时间定位', includeHidden: true }).getAttribute('aria-valuenow'), baseline.frame, `${name} 保持播放位置`)
           assert.equal(await page.getByLabel('片段名称', { exact: true }).inputValue(), baseline.selection, `${name} 保持片段选区`)
           assert.equal(await button(page, '撤销').isDisabled(), true, `${name} 不产生剪辑历史`)
-          assert.equal(fs.readFileSync(file, 'utf8'), originalJson, `${name} 不修改工程 JSON`)
+          assert.equal(JSON.stringify(readVideoEditFile(file)), openedJson, `${name} 不修改工程 JSON`)
           const worker = await workerSnapshot(page)
           assert.equal(worker.live, 1, `${name} 保持一个真实渲染 Worker`)
           assert.equal(worker.peakLive, 1, `${name} 不并行运行重复预览`)
@@ -273,7 +276,7 @@ function createVideoEditLayoutScene() {
         evidence.resources = await workerSnapshot(page)
         assert.equal(evidence.resources.live, 0); assert.equal(evidence.resources.peakLive, 1)
         assert.ok(evidence.resources.workers.every(worker => worker.disposedAt && worker.terminatedAt), '所有节目 Worker 均完成资源释放与终止')
-        assert.equal(fs.readFileSync(file, 'utf8'), originalJson, '完整布局场景没有改写工程')
+        assert.equal(JSON.stringify(readVideoEditFile(file)), openedJson, '完整布局场景没有改写工程')
         evidence.completed = true
       } catch (error) {
         evidence.failed = String(error)

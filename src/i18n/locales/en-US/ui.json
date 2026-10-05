@@ -1118,7 +1118,10 @@
       "metaInProject": "Edited {{time}} · {{project}}",
       "recover": "Continue Editing",
       "discard": "Move to Recycle Bin",
-      "discardFailed": "Couldn't move to the Recycle Bin: {{message}}"
+      "discardFailed": "Couldn't move to the Recycle Bin: {{message}}",
+      "projectTitle": "{{count}} unsaved draft project(s)",
+      "projectDescription": "Draft projects left from the last session. Continue editing, or move the whole project folder to the Recycle Bin.",
+      "projectMeta": "Created {{time}}"
     }
   },
   "documentLibrary": {
@@ -1215,5 +1218,44 @@
       "forget": "Couldn't remove from the list: {{message}}",
       "createProject": "Couldn't create the project: {{message}}"
     }
+  },
+  "projectLibrary": {
+    "title": "Edit",
+    "description": "Each project is a folder that holds its edits, generated results and collected media. Copy the folder anywhere and it still opens.",
+    "create": "New Project",
+    "openFolder": "Open Project Folder…",
+    "count": "{{count}} projects",
+    "searchPlaceholder": "Search projects",
+    "noResults": "No matching projects",
+    "emptyTitle": "Start with a project",
+    "emptyDescription": "Create a project, or open a project folder from elsewhere.",
+    "renameTitle": "Rename Project",
+    "duplicate": "A folder with this name already exists here. Choose another name.",
+    "deleteConfirmSingle": "Move the whole folder of project “{{name}}” to the Recycle Bin? You can restore it from the system Recycle Bin.",
+    "deleteConfirmMultiple": "Move the folders of the {{count}} selected projects to the Recycle Bin? You can restore them from the system Recycle Bin.",
+    "chooseFolder": "Choose a project folder",
+    "failed": {
+      "open": "Couldn't open the project: {{message}}",
+      "openFolder": "Couldn't open this folder: {{message}}",
+      "create": "Couldn't create the project: {{message}}",
+      "rename": "Couldn't rename: {{message}}",
+      "delete": "Couldn't move to the Recycle Bin: {{message}}",
+      "reveal": "Couldn't show in folder: {{message}}",
+      "forget": "Couldn't remove from the list: {{message}}"
+    }
+  },
+  "videoEditProject": {
+    "back": "Close Project",
+    "menu": "Project {{name}}",
+    "shortcuts": "Edit Shortcuts…",
+    "switchTo": "Switch to {{name}}",
+    "collect": "Collect Media into Project",
+    "revealProject": "Show Project in Folder",
+    "collectDone": "Copied {{count}} file(s) into the project's media folder.",
+    "collectNone": "All media used is already in the project folder.",
+    "collectMissing": "{{count}} media file(s) could not be found and were not collected.",
+    "otherDocuments": "Other documents in this project",
+    "otherDocumentsEmpty": "No other documents in this project yet.",
+    "otherDocumentsMissing": "File not found"
   }
 }

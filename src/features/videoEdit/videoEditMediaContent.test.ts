@@ -9,6 +9,7 @@ import { closeVideoEditSource, registerVideoEditSourcePresenter, updateVideoEdit
 import { VideoEditRenderSession } from './engine/videoEditRenderSession'
 import type { RenderRequest, RenderResponse } from './engine/videoEditWorker'
 import { VideoEditMediaContentVerifier } from './videoEditMediaContent'
+import { reopenVideoEdit } from './application/videoEditDocumentTestKit'
 
 const original: VideoEditMedia = { id: 'original', path: 'D:/original.png', name: '原图', kind: 'image', width: 3840, height: 2160, durationSeconds: 0, assetId: 'deleted-asset', sourceRevision: 'fixed-source', assetContent: { sizeBytes: 4096, fileModifiedAt: 1000, contentIdentity: 'a'.repeat(64) } }
 const files = new Map<string, string>()
@@ -52,7 +53,7 @@ afterEach(async () => {
 it('保存关闭后同大小同mtime替换：允许打开恢复工程，Source在消费前拒绝新文件', async () => {
   const owner = (await createVideoEditProject())!; appendVideoEditMedia(owner.document.id, structuredClone(original))
   await saveVideoEdit(owner.document.id); await closeVideoEditProject(owner.document.id)
-  const reopened = (await openVideoEditProject(owner.path))!; const baseline = reopened.document
+  const reopened = await reopenVideoEdit(owner.document.id); const baseline = reopened.document
   const inspect = vi.spyOn(getPlatform().assetLibrary, 'inspectFileContent').mockResolvedValue({ ...original.assetContent!, contentIdentity: 'b'.repeat(64) })
   const presenter = vi.fn(async (request: VideoEditSourceRequest) => ({ ...request, presentedTimeUs: request.timeUs }))
   const off = registerVideoEditSourcePresenter(reopened.document.id, presenter)

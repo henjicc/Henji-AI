@@ -4,6 +4,7 @@ const path = require('node:path')
 const { execFileSync } = require('node:child_process')
 const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp } = require('./uiInspectionMcpClient.cjs')
 const { dialogs, presented } = require('./uiInspectionSceneVideoEditMonitor.cjs')
+const { adoptNewVideoEditProject, leaveVideoEditProject, openVideoEditFile, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
 
 /**
  * 剪辑片段链接（2.5，参照 Premiere Pro）在真实 Electron 时间线中的鼠标与键盘交互：
@@ -18,7 +19,8 @@ const FPS = 30
 const button = (page, name) => page.getByRole('button', { name, exact: true })
 const clipNode = (page, id) => page.locator(`[data-video-edit-clip="${id}"]`)
 const label = (page, id, name) => clipNode(page, id).getByRole('button', { name: `选择片段 ${name}`, exact: true })
-const readProject = file => JSON.parse(fs.readFileSync(file, 'utf8'))
+// 3.1：剪辑是项目里的文档文件，按旧工程形状读出（夹具路径读它对应的实际剪辑）
+const readProject = readVideoEditFile
 async function saved(page, file, matches, message) {
   for (let attempt = 0; attempt < 160; attempt++) {
     const value = readProject(file)
@@ -83,7 +85,7 @@ function createVideoEditLinksScene() {
       try {
         await button(page, '剪辑').click()
         if (await button(page, '关闭项目').isVisible()) await button(page, '关闭项目').click()
-        await dialogs(app, [file], file); await button(page, '打开项目文件').click(); await presented(page, 0)
+        await dialogs(app, [file], file); await openVideoEditFile(page, file); await presented(page, 0)
         const identity = await authorizeMcpConnection(page, { name: '剪辑链接验收', allowWrites: false, allowDestructive: false })
         client = await connectMcpClient(identity.config, 'Henji links Reality')
         const view = async () => (await callTool(client, 'read_application_entity', { ref: { kind: 'video_edit.project', id: project.id }, propertyIds: ['video_edit.project.timeline_view'] })).data.properties['video_edit.project.timeline_view']

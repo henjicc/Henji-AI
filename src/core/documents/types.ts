@@ -146,6 +146,11 @@ export interface CreateDocumentRequest {
   name?: string
   /** 默认：没给名字时为 true，给了名字时为 false。 */
   draft?: boolean
+  /**
+   * 沿用给定的文档 ID（导入、恢复与自动化造数据时保留原 ID，跨文档引用与外部引用照旧可用）；
+   * 省略时生成新 ID。作品索引里已有同 ID 的文档时报 DocumentLocationError。
+   */
+  id?: string
 }
 
 export interface SaveDocumentRequest {
@@ -214,6 +219,29 @@ export interface CreateProjectRequest {
 export interface RenameProjectRequest {
   projectId: string
   name: string
+}
+
+export interface SetProjectMainDocumentRequest {
+  projectId: string
+  /** 项目里的一份剪辑；null 表示清除（项目没有主剪辑）。 */
+  documentId: string | null
+}
+
+/** 复制进容器的哪个固定子文件夹：生成结果，或素材（作品目录为“上传素材”）。 */
+export type ContainerFileFolder = 'generated' | 'materials'
+
+export interface ImportFileRequest {
+  container: DocumentContainerRef
+  /** 要复制进来的文件（绝对路径）。已在容器里的文件原样返回、不复制。 */
+  sourcePath: string
+  folder: ContainerFileFolder
+}
+
+export interface ImportFileResult {
+  /** 容器里的位置（绝对路径）。 */
+  path: string
+  /** 真的复制了；同名且内容相同时复用已有文件，为 false。 */
+  copied: boolean
 }
 
 export interface FinalizeProjectRequest {

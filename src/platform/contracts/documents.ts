@@ -15,6 +15,8 @@ import type {
   DuplicateDocumentRequest,
   FinalizeDocumentRequest,
   FinalizeProjectRequest,
+  ImportFileRequest,
+  ImportFileResult,
   MoveDocumentRequest,
   NameCheckRequest,
   NameCheckResult,
@@ -24,6 +26,7 @@ import type {
   RenameProjectRequest,
   SaveDocumentCoverRequest,
   SaveDocumentRequest,
+  SetProjectMainDocumentRequest,
 } from '../../core/documents/types'
 
 /*
@@ -57,6 +60,13 @@ export interface DocumentsPlatform {
   /** 从列表移除找不到文件的文档（只改作品索引，不动磁盘）；文件还在时报 DocumentLocationError。 */
   forgetDocument(docId: string): Promise<void>
   revealDocument(target: DocumentTarget): Promise<void>
+  /**
+   * 收集素材：把文档引用到的、不在所在容器里的文件（外部文件、作品目录或别的项目里的文件）
+   * 复制进容器的“素材”文件夹并改写引用，版本加一。其他文档文件不复制。
+   */
+  collectDocumentMedia(target: DocumentTarget): Promise<DocumentTransferResult>
+  /** 把一个文件复制进容器的“生成结果”或“素材”（同名且内容相同时复用，不同则加序号，从不覆盖）。 */
+  importFile(request: ImportFileRequest): Promise<ImportFileResult>
   resolveDocumentLink(link: DocumentLink): Promise<DocumentLinkResolution>
   /** 名称检查：只在同一个文件夹里查重，返回可用 / 重名 / 非法。 */
   checkName(request: NameCheckRequest): Promise<NameCheckResult>
@@ -71,6 +81,8 @@ export interface DocumentsPlatform {
   renameProject(request: RenameProjectRequest): Promise<ProjectSummary>
   /** 项目第一次保存：起名、去掉草稿标记，可另选父文件夹（整体移过去并登记为外部位置）。 */
   finalizeProject(request: FinalizeProjectRequest): Promise<ProjectSummary>
+  /** 设置项目说明里的主剪辑（打开项目时打开它）；只能是该项目里的剪辑。 */
+  setProjectMainDocument(request: SetProjectMainDocumentRequest): Promise<ProjectSummary>
   trashProject(projectId: string): Promise<void>
   /** 打开作品目录之外的项目文件夹并登记为外部位置。 */
   registerExternalProject(folderPath: string): Promise<ProjectSummary>
@@ -93,6 +105,8 @@ export const DOCUMENT_IPC_CHANNELS = {
   deleteEmptyDraft: 'documents:deleteEmptyDraft',
   forgetDocument: 'documents:forget',
   revealDocument: 'documents:reveal',
+  collectDocumentMedia: 'documents:collectMedia',
+  importFile: 'documents:importFile',
   resolveDocumentLink: 'documents:resolveLink',
   checkName: 'documents:checkName',
   getDocumentCover: 'documents:cover:get',
@@ -102,6 +116,7 @@ export const DOCUMENT_IPC_CHANNELS = {
   createProject: 'documents:projects:create',
   renameProject: 'documents:projects:rename',
   finalizeProject: 'documents:projects:finalize',
+  setProjectMainDocument: 'documents:projects:setMain',
   trashProject: 'documents:projects:trash',
   registerExternalProject: 'documents:projects:registerExternal',
   forgetExternalLocation: 'documents:locations:forget',

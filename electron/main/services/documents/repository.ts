@@ -21,6 +21,8 @@ import type {
   DocumentTransferResult,
   DuplicateDocumentRequest,
   FinalizeDocumentRequest,
+  ImportFileRequest,
+  ImportFileResult,
   MoveDocumentRequest,
   NameCheckRequest,
   NameCheckResult,
@@ -57,7 +59,7 @@ import {
   isInUseError,
   ProjectNotFoundError,
 } from './errors'
-import { rewriteContentPaths, transferContainerMedia } from './media-transfer'
+import { collectContainerMedia, copyKeepingBoth, rewriteContentPaths, transferContainerMedia } from './media-transfer'
 import { checkEntryName, readEntryNameKeys, requireEntryName } from './name-check'
 import type { PackageAdapterRegistry, PackageDocumentAdapter, PackageDocumentHeaderPatch } from './package-adapters'
 import type { DocumentWorkspace, ResolvedContainer } from './workspace'
@@ -168,7 +170,8 @@ export class DocumentRepository {
       const draft = request.draft ?? userName === null
       const encoded = this.encode(container, content)
       const now = this.workspace.now().toISOString()
-      const id = this.workspace.randomId()
+      if (request.id !== undefined && this.workspace.catalog.getDocument(request.id)) throw new DocumentLocationError('已有同一 ID 的文档。')
+      const id = request.id ?? this.workspace.randomId()
       const written = await this.writeNewDocumentFile(folder, kind, (name) => buildDocumentEnvelope({
         kind: kind.id, kindVersion: kind.version, id, name, createdAt: now, updatedAt: now, revision: 0, draft, content: encoded.content,
       }), userName === null ? { mode: 'untitled', base: kind.untitledNames[container.locale] } : { mode: 'exact', name: userName })
@@ -340,6 +343,60 @@ export class DocumentRepository {
       this.workspace.catalog.removeDocument(documentId)
       await this.options.removeCover?.(documentId)
     }))
+  }
+
+  /**
+   * 收集素材：文档引用到的、不在所在容器里的文件复制进容器的“素材”文件夹并改写引用（版本加一）。
+   * 打开中的会话据版本变化重新载入。没有可收集的文件时不写文件、版本不变。
+   */
+  async collectMedia(target: DocumentTarget): Promise<DocumentTransferResult> {
+    return await this.exclusive(target.id, async () => await this.logged('collect_media', { documentId: target.id }, async () => {
+      const file = await this.locate(target)
+      if (!file.envelope) throw new DocumentUnsupportedError('这种文档请在它自己的编辑器里收集素材。')
+      const container = await this.workspace.containerForPath(file.path)
+      const decoded = await this.decode(file, container)
+      const collected = await collectContainerMedia({
+        style: this.workspace.style,
+        references: decoded.report.references,
+        programReferences: decoded.report.programReferences,
+        to: container,
+        isDocumentFile: (candidate) => Boolean(this.options.kinds.forFileName(path.basename(candidate))),
+      })
+      if (!collected.mapping.size) return { meta: metaFromFile(file, container), copiedFiles: 0, missingPaths: collected.missingPaths }
+      const content = this.validateContent(file.kind, rewriteContentPaths(decoded.content, collected.mapping, this.workspace.style))
+      const encoded = this.encode(container, content)
+      const envelope = this.withHeader(file.envelope, {
+        name: documentNameOf(file.kind, file.path),
+        kindVersion: file.kind.version,
+        updatedAt: this.workspace.now().toISOString(),
+        revision: file.header.revision + 1,
+        content: encoded.content,
+      })
+      await writeBufferAtomically(file.path, this.bytes(envelope))
+      const saved = await describeWrittenDocument(file.kind, file.path, envelope)
+      this.workspace.catalog.upsertDocument(indexedFromFile(saved, container, file.kind.summarize(content)))
+      this.logger.info('素材已收集进容器', {
+        event: 'documents.collect_media.copied',
+        context: { documentId: file.header.id, collected: collected.mapping.size, copiedFiles: collected.copied, missing: collected.missingPaths.length },
+      })
+      return { meta: metaFromFile(saved, container), copiedFiles: collected.copied, missingPaths: collected.missingPaths }
+    }))
+  }
+
+  /** 把一个文件复制进容器的“生成结果”或“素材”；已在容器里的原样返回。 */
+  async importFile(request: ImportFileRequest): Promise<ImportFileResult> {
+    return await this.logged('import_file', { container: request.container, folder: request.folder }, async () => {
+      if (!path.isAbsolute(request.sourcePath)) throw new DocumentLocationError('文件位置无效。')
+      const source = path.resolve(request.sourcePath)
+      const stat = await fsp.stat(source).catch(() => null)
+      if (!stat?.isFile()) throw new DocumentLocationError('要放进项目的文件不存在。')
+      const container = await this.resolveContainer(request.container)
+      if (isPathInside(this.workspace.style, container.root, source)) return { path: source, copied: false }
+      const folder = request.folder === 'generated' ? container.generatedDir : container.materialsDir
+      const result = await copyKeepingBoth(source, path.join(folder, path.basename(source)))
+      if (!isPathInside(this.workspace.style, this.workspace.layout().root, container.root)) this.options.grantMediaRoots([container.root])
+      return result
+    })
   }
 
   async reveal(target: DocumentTarget): Promise<void> {

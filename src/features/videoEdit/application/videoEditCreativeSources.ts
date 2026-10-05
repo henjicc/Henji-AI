@@ -21,7 +21,12 @@ import { sameVideoEditAssetContent } from './videoEditAssetReferences'
 import type { VideoEditCreativeResult } from './videoEditResultTarget'
 
 export type { VideoEditCreativeSourceRequest } from '@/core/videoEdit/creativeResult'
-export interface VideoEditCreativeSourceOptions { signal?: AbortSignal; assertTarget: () => void }
+export interface VideoEditCreativeSourceOptions {
+  signal?: AbortSignal
+  assertTarget: () => void
+  /** 把完成的结果文件放进目标剪辑所在项目（复制进“生成结果”），返回之后引用的位置；省略时引用原文件。 */
+  place?: (path: string) => Promise<string>
+}
 type MediaKind = 'image' | 'video' | 'audio'
 interface PublishedSource {
   path: string
@@ -189,14 +194,22 @@ export async function prepareVideoEditCreativeResult(input: VideoEditCreativeSou
     const platform = getPlatform()
     mark('produced')
     const output = published
-    const parent = await guarded(options, () => platform.system.paths.dirname(output.path))
-    await guarded(options, () => platform.media.allowRoot(parent))
-    const content = await guarded(options, () => platform.assetLibrary.inspectFileContent(output.path, output.mediaType))
     await guarded(options, output.recheck)
-    const created = await guarded(options, () => addMediaReferenceToLibrary({ filePath: output.path, mediaType: output.mediaType, source: output.librarySource, displayName: output.name }))
+    // 复制进目标项目的“生成结果”后引用副本：项目文件夹拷走也带着结果（重要记录 006）
+    const filePath = options.place ? await guarded(options, () => options.place!(output.path)) : output.path
+    if (!sameVideoEditMediaPath(filePath, output.path)) mark('placed')
+    const parent = await guarded(options, () => platform.system.paths.dirname(filePath))
+    await guarded(options, () => platform.media.allowRoot(parent))
+    const content = await guarded(options, () => platform.assetLibrary.inspectFileContent(filePath, output.mediaType))
+    await guarded(options, output.recheck)
+    const created = await guarded(options, () => addMediaReferenceToLibrary({ filePath, mediaType: output.mediaType, source: output.librarySource, displayName: output.name }))
     referenced = true; mark('collected')
     const asset = await guarded(options, () => assetApplicationService.inspect(created.id))
-    if (asset.id !== created.id || asset.mediaType !== output.mediaType || !sameVideoEditMediaPath(asset.filePath, output.path) || !sameContent(content, contentOf(asset))) conflict()
+    if (asset.id !== created.id || asset.mediaType !== output.mediaType || !sameVideoEditMediaPath(asset.filePath, filePath) || !sameContent(content, contentOf(asset))) {
+      // 诊断：哪一项对不上（路径与内容身份只进日志）
+      logger.warn('收录后的资产与结果文件不一致', { event: 'video_edit.creative_source.asset_mismatch', context: { kind: source.kind, sameId: asset.id === created.id, sameType: asset.mediaType === output.mediaType, samePath: sameVideoEditMediaPath(asset.filePath, filePath), assetPath: asset.filePath, filePath, content, asset: { sizeBytes: asset.sizeBytes, fileModifiedAt: asset.fileModifiedAt, contentIdentity: asset.contentIdentity, inspectionStatus: asset.inspectionStatus } } })
+      conflict()
+    }
     if (output.dimensions && (asset.width !== output.dimensions.width || asset.height !== output.dimensions.height)) throw new Error('原创作结果的实际尺寸与完成回执不一致，请检查原输出。')
     await guarded(options, output.recheck)
     const current = await guarded(options, () => assetApplicationService.inspect(asset.id))

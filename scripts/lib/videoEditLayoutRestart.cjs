@@ -5,6 +5,7 @@ const { videoEditFixtureProject } = require('./uiInspectionSceneVideoEditProbe.c
 const { setInspectionWindowSize } = require('./uiInspection.cjs')
 const { captureInspectionPage } = require('./uiInspectionCapture.cjs')
 const { createRuntimeEvidenceCollector, queryApplicationLogs } = require('./runtimeEvidence.cjs')
+const { adoptNewVideoEditProject, leaveVideoEditProject, openVideoEditFile, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
 
 const STORAGE_KEY = 'henji.videoEdit.dockLayout.v1'
 const WINDOW_SIZE = { width: 1440, height: 900 }
@@ -62,7 +63,7 @@ async function openProject(instance, file) {
     dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] })
   }, file)
   await button(page, '剪辑').click()
-  await button(page, '打开项目文件').click()
+  await openVideoEditFile(page, file)
   await page.waitForFunction(() => {
     const canvas = document.querySelector('canvas[aria-label="剪辑画面"]')
     return canvas?.dataset.presentedFrame === '0' && canvas.dataset.scrubbing === 'false'
@@ -129,7 +130,9 @@ async function runVideoEditLayoutRestart({ launch, userDataDir, outDir }) {
   const evidence = { target: 'video-edit-layout', userDataDir, project: file, fixture: '真实 v2 文字工程；没有媒体解码或转码',
     renderSize: { width: 3840, height: 2160, fps: 60 }, passed: false, firstRun: {}, secondRun: {} }
   const save = () => fs.writeFileSync(evidenceFile, JSON.stringify(evidence, null, 2))
-  const unchanged = () => assert.equal(fs.readFileSync(file, 'utf8'), originalJson, '布局修改或启动恢复不能改写工程 JSON')
+  // 3.1：剪辑存成项目里的文档；以第一次打开后的剪辑文件为基线核对“不改写”
+  let openedJson = null
+  const unchanged = () => assert.equal(JSON.stringify(readVideoEditFile(file)), openedJson, '布局修改或启动恢复不能改写工程 JSON')
   let current = null
   let collector = null
   let currentRun = evidence.firstRun
@@ -150,6 +153,7 @@ async function runVideoEditLayoutRestart({ launch, userDataDir, outDir }) {
     collector.begin('video-edit-layout-restart-first')
     currentRun.window = await setInspectionWindowSize(current, WINDOW_SIZE)
     await limited(() => openProject(current, file), 30000, '第一次打开剪辑工程')
+    openedJson = JSON.stringify(readVideoEditFile(file))
     currentRun.initialRender = await renderState(current.page)
     await button(current.page, '关闭效果控件').click()
     await group(current.page, '项目素材').getByRole('button', { name: '面板菜单', exact: true }).click()

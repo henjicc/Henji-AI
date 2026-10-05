@@ -10,6 +10,7 @@ import {
   duplicateDocumentRequestSchema,
   finalizeDocumentRequestSchema,
   finalizeProjectRequestSchema,
+  importFileRequestSchema,
   moveDocumentRequestSchema,
   nameCheckRequestSchema,
   pathRequestSchema,
@@ -19,6 +20,7 @@ import {
   renameProjectRequestSchema,
   saveDocumentCoverRequestSchema,
   saveDocumentRequestSchema,
+  setProjectMainDocumentRequestSchema,
 } from '../../../src/core/documents/requests'
 import { DOCUMENT_IPC_CHANNELS, type DocumentsPlatform } from '../../../src/platform/contracts/documents'
 import { getDocumentService } from '../services/documents/runtime'
@@ -48,6 +50,8 @@ export function registerDocumentsIpc(): void {
   registerIpcHandler(c.deleteEmptyDraft, parseWith(documentTargetSchema), (target) => service().deleteEmptyDraft(target))
   registerIpcHandler(c.forgetDocument, parseWith(documentIdRequestSchema), ({ docId }) => service().forgetDocument(docId))
   registerIpcHandler(c.revealDocument, parseWith(documentTargetSchema), (target) => service().revealDocument(target))
+  registerIpcHandler(c.collectDocumentMedia, parseWith(documentTargetSchema), (target) => service().collectDocumentMedia(target))
+  registerIpcHandler(c.importFile, parseWith(importFileRequestSchema), (request) => service().importFile(request))
   registerIpcHandler(c.resolveDocumentLink, parseWith(documentLinkSchema), (link) => service().resolveDocumentLink(link))
   registerIpcHandler(c.checkName, parseWith(nameCheckRequestSchema), (request) => service().checkName(request))
   registerIpcHandler(c.getDocumentCover, parseWith(documentIdRequestSchema), ({ docId }) => service().getDocumentCover(docId))
@@ -57,6 +61,7 @@ export function registerDocumentsIpc(): void {
   registerIpcHandler(c.createProject, parseWith(createProjectRequestSchema, true), (request) => service().createProject(request))
   registerIpcHandler(c.renameProject, parseWith(renameProjectRequestSchema), (request) => service().renameProject(request))
   registerIpcHandler(c.finalizeProject, parseWith(finalizeProjectRequestSchema), (request) => service().finalizeProject(request))
+  registerIpcHandler(c.setProjectMainDocument, parseWith(setProjectMainDocumentRequestSchema), (request) => service().setProjectMainDocument(request))
   registerIpcHandler(c.trashProject, parseWith(projectIdRequestSchema), ({ projectId }) => service().trashProject(projectId))
   registerIpcHandler(c.registerExternalProject, parseWith(pathRequestSchema), ({ path }) => service().registerExternalProject(path))
   registerIpcHandler(c.forgetExternalLocation, parseWith(pathRequestSchema), ({ path }) => service().forgetExternalLocation(path))

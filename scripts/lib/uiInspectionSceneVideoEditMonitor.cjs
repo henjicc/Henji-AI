@@ -7,11 +7,13 @@ const sharp = require('sharp')
 const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
 const { observeWorkers, workerSnapshot, waitReleased } = require('./uiInspectionSceneVideoEditLayout.cjs')
 const { observeNativeWaveforms, nativeWaveformSnapshot, waitNativeWaveformsReleased, restoreNativeWaveformObservers } = require('./uiInspectionSceneVideoEditMonitorResources.cjs')
+const { adoptNewVideoEditProject, leaveVideoEditProject, openVideoEditFile, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
 
 const button = (page, name) => page.getByRole('button', { name, exact: true })
 const panel = (page, id) => page.locator(`[data-video-edit-panel="${id}"]`).first()
 const quantile = (values, fraction) => [...values].sort((a, b) => a - b)[Math.min(values.length - 1, Math.floor(values.length * fraction))] ?? 0
-const readProject = file => JSON.parse(fs.readFileSync(file, 'utf8'))
+// 3.1：剪辑是项目里的文档文件，按旧工程形状读出（夹具路径读它对应的实际剪辑）
+const readProject = readVideoEditFile
 async function trackBanks(page) {
   const rows = await page.locator('[data-video-edit-track]').evaluateAll(nodes => nodes.map(node => ({ id: node.dataset.videoEditTrack, index: Number(node.dataset.trackIndex), kind: node.dataset.trackKind, top: node.getBoundingClientRect().top })))
   const video = rows.filter(row => row.kind === 'video'); const audio = rows.filter(row => row.kind === 'audio')
@@ -155,7 +157,7 @@ function createVideoEditMonitorScene() {
         pressureSequence.clips.push(...Array.from({ length: 497 }, (_, index) => ({ ...pressureSequence.clips[0], id: `monitor-offscreen-${index}`, start: 3600 + index * 4, duration: 2, track: 31 })))
         pressureSequence.captions = Array.from({ length: 500 }, (_, index) => ({ id: `monitor-caption-${index}`, start: 7200 + index * 2, duration: 1, text: `范围字幕 ${index}` }))
         fs.writeFileSync(pressureFile, JSON.stringify(pressure))
-        const open = async target => { await dialogs(app, [target], target); await button(page, '打开项目文件').click(); await presented(page, 0) }
+        const open = async target => { await dialogs(app, [target], target); await openVideoEditFile(page, target); await presented(page, 0) }
         await button(page, '剪辑').click()
         if (await button(page, '关闭项目').isVisible()) await button(page, '关闭项目').click()
         await button(page, '生成').click()

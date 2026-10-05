@@ -45,7 +45,7 @@
 
       { "enter": { "surface": "workspace.video_edit" } },
       { "click": { "role": "button", "name": "关闭项目" }, "ifPresent": { "role": "button", "name": "关闭项目" } },
-      { "waitFor": { "role": "button", "name": "/^打开项目文件$/" }, "timeout": 12000 },
+      { "waitFor": { "role": "button", "name": "/^新建项目$/" }, "timeout": 12000 },
       { "waitStable": {} },
       { "capture": "video-edit-empty" }
     ]

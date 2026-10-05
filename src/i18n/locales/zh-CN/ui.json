@@ -1117,7 +1117,10 @@
       "metaInProject": "{{time}} 编辑 · {{project}}",
       "recover": "继续编辑",
       "discard": "移到回收站",
-      "discardFailed": "没能移到回收站：{{message}}"
+      "discardFailed": "没能移到回收站：{{message}}",
+      "projectTitle": "有 {{count}} 个草稿项目没有保存",
+      "projectDescription": "上次退出前留下的草稿项目，可以继续编辑，或把整个项目文件夹移到回收站。",
+      "projectMeta": "{{time}} 创建"
     }
   },
   "documentLibrary": {
@@ -1214,5 +1217,44 @@
       "forget": "没能从列表移除：{{message}}",
       "createProject": "没能新建项目：{{message}}"
     }
+  },
+  "projectLibrary": {
+    "title": "剪辑",
+    "description": "每个项目是一个文件夹，剪辑、生成结果和收集的素材都在里面，整个文件夹拷走也能打开。",
+    "create": "新建项目",
+    "openFolder": "打开项目文件夹…",
+    "count": "{{count}} 个项目",
+    "searchPlaceholder": "搜索项目",
+    "noResults": "没有符合条件的项目",
+    "emptyTitle": "从一个项目开始",
+    "emptyDescription": "新建项目，或打开别处的项目文件夹。",
+    "renameTitle": "重命名项目",
+    "duplicate": "这个位置已有同名文件夹，请换一个名称。",
+    "deleteConfirmSingle": "把项目“{{name}}”整个文件夹移到回收站？之后可以从系统回收站找回。",
+    "deleteConfirmMultiple": "把选中的 {{count}} 个项目整个文件夹移到回收站？之后可以从系统回收站找回。",
+    "chooseFolder": "选择项目文件夹",
+    "failed": {
+      "open": "没能打开项目：{{message}}",
+      "openFolder": "没能打开这个文件夹：{{message}}",
+      "create": "没能新建项目：{{message}}",
+      "rename": "没能重命名：{{message}}",
+      "delete": "没能移到回收站：{{message}}",
+      "reveal": "没能在文件夹中显示：{{message}}",
+      "forget": "没能从列表移除：{{message}}"
+    }
+  },
+  "videoEditProject": {
+    "back": "关闭项目",
+    "menu": "项目 {{name}}",
+    "shortcuts": "剪辑快捷键…",
+    "switchTo": "切换到 {{name}}",
+    "collect": "收集素材到项目",
+    "revealProject": "在文件夹中显示项目",
+    "collectDone": "已把 {{count}} 个文件复制进项目的素材文件夹。",
+    "collectNone": "用到的素材都已在项目文件夹里。",
+    "collectMissing": "有 {{count}} 个素材找不到，未能收集。",
+    "otherDocuments": "本项目里的其他文档",
+    "otherDocumentsEmpty": "项目里还没有其他文档。",
+    "otherDocumentsMissing": "文件不存在"
   }
 }

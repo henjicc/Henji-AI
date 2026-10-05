@@ -3,14 +3,15 @@ import { ApplicationPersistenceFailure, type ApplicationPersistenceParticipant }
 import { createVideoEditRegistrations } from './videoEditReflection'
 import { VideoEditCollectionExecutor, VideoEditMutationExecutor } from './videoEditExecutors'
 import { VIDEO_EDIT_COMPOSITE_TYPES } from './videoEditCompositeEntities'
-import { requireVideoEditInstance, saveVideoEdit, type VideoEditInstance } from './videoEditService'
+import { openVideoEditDocument, releaseVideoEditDocument, requireVideoEditInstance, saveVideoEdit, verifyVideoEditSaved, type VideoEditInstance } from './videoEditService'
+import { registerDocumentOpener, registerDocumentReleaser } from '@/features/documents/documentOperations'
+import { openApplicationSurface } from '@/features/navigation/application/surfaceCapabilityService'
 import { undoVideoEdit } from './videoEditService'
 import { executeVideoEditTimelineEdit } from './videoEditTimeline'
 import { videoEditPickRelations } from '@/core/videoEdit/timelineSelection'
 import { splitVideoEditRef } from './videoEditReflection'
 import { VIDEO_EDIT_APPLICATION_CAPABILITIES, collectVideoEditOutputCapability, collectVideoEditCodeAssetCapability, placeVideoEditCreativeResultCapability, observeVideoEditFrameCapability } from '@/core/application-control/domains/videoEdit/videoEditApplicationCapabilities'
 import { exportVideoEdit, cancelVideoEditExport, videoEditExportTask } from './videoEditExport'
-import { getPlatform } from '@/platform/runtime'
 import { VideoEditSourceExecutor } from './videoEditSourceExecutor'
 import { importVideoEditSources } from './videoEditMedia'
 import { exportVideoEditSubtitles } from './videoEditTimedContent'
@@ -31,6 +32,13 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
     for (const entityType of ['video_edit.sequence', 'video_edit.bin', 'video_edit.item', 'video_edit.clip', 'video_edit.annotation', 'video_edit.code_material', 'video_edit.code_version', 'video_edit.marker', 'video_edit.caption', ...VIDEO_EDIT_COMPOSITE_TYPES] as const) engine.registerCollectionExecutor(new VideoEditCollectionExecutor(entityType))
   },
   registerCapabilities(registrar) {
+    // 剪辑文档的通用打开与后台释放（3.1）：项目与文档的列出、新建、移动、删除走通用文档能力，
+    // 这里只登记“打开到哪里”（剪辑工作区）和“后台持有的实例怎么释放”。
+    registerDocumentOpener('video_edit', async (document) => {
+      await openVideoEditDocument({ id: document.id, path: document.path })
+      openApplicationSurface('workspace.video_edit')
+    })
+    registerDocumentReleaser('video_edit', releaseVideoEditDocument)
     for (const definition of VIDEO_EDIT_APPLICATION_CAPABILITIES) registrar.registerHandler(definition.id, async (raw, context) => {
       if (definition.id === observeVideoEditFrameCapability.id) {
         const input = observeVideoEditFrameCapability.inputSchema.parse(raw); const id = input.projectRef.id
@@ -116,8 +124,8 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
       if (requireVideoEditInstance(id) !== owner) throw new Error('原工程已关闭，操作回执不会写入重新打开的工程。')
       const task = videoEditExportTask(id)
       const instance = requireVideoEditInstance(id)
-      const verified = definition.id.includes('export') ? Boolean(task) : JSON.stringify(JSON.parse(await getPlatform().system.fs.readTextFile(instance.path))) === JSON.stringify(instance.document)
-      return { resultRef: input.projectRef, verification: { verified, target: input.projectRef, condition: definition.id.includes('export') ? '已回读原工程的导出任务状态；请求提交不等于视频导出完成。' : '已从本地工程文件回读并核对编辑内容。' }, message: definition.id.includes('export') ? task ? `导出状态：${task.state}。请查询导出状态确认完成。` : '尚无导出任务或已取消文件选择。' : '操作已完成，请回读工程核对结果。', ...(task ? { task: { id: task.id, state: task.state, progress: task.progress, revision: task.revision, startFrame: task.startFrame, endFrame: task.endFrame } } : {}) }
+      const verified = definition.id.includes('export') ? Boolean(task) : await verifyVideoEditSaved(id, instance.document)
+      return { resultRef: input.projectRef, verification: { verified, target: input.projectRef, condition: definition.id.includes('export') ? '已回读原工程的导出任务状态；请求提交不等于视频导出完成。' : '已从剪辑文件回读并核对编辑内容。' }, message: definition.id.includes('export') ? task ? `导出状态：${task.state}。请查询导出状态确认完成。` : '尚无导出任务或已取消文件选择。' : '操作已完成，请回读工程核对结果。', ...(task ? { task: { id: task.id, state: task.state, progress: task.progress, revision: task.revision, startFrame: task.startFrame, endFrame: task.endFrame } } : {}) }
     })
   },
   resolvePersistenceParticipants(steps) {

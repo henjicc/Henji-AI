@@ -5,6 +5,7 @@ const { execFileSync } = require('node:child_process')
 const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
 const { dialogs, presented } = require('./uiInspectionSceneVideoEditMonitor.cjs')
 const matrix = require('./videoEditFormatMatrix.cjs')
+const { adoptNewVideoEditProject, leaveVideoEditProject, openVideoEditFile, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
 
 /**
  * 专业格式矩阵（任务 3.2）在真实 Electron 中逐格验收。样本由 scripts/lib/videoEditFormatMatrix.cjs 生成（帧号条码、BT.709
@@ -30,7 +31,8 @@ const PHASES = new Set((process.env.HENJI_FORMAT_MATRIX_PHASES || 'formats,tripo
 const button = (scope, name) => scope.getByRole('button', { name, exact: true })
 const menuItem = (page, name) => page.getByRole('menuitem', { name, exact: true })
 const entry = (page, id) => page.locator(`[data-video-edit-project-entry="${id}"]`)
-const readProject = file => JSON.parse(fs.readFileSync(file, 'utf8'))
+// 3.1：剪辑是项目里的文档文件，按旧工程形状读出（夹具路径读它对应的实际剪辑）
+const readProject = readVideoEditFile
 const same = (a, b) => path.resolve(a).toLowerCase() === path.resolve(b).toLowerCase()
 const quantile = (values, q) => values.length ? [...values].sort((a, b) => a - b)[Math.min(values.length - 1, Math.floor(values.length * q))] : null
 const round = (value, digits = 3) => value === null || value === undefined || !Number.isFinite(value) ? value : Math.round(value * 10 ** digits) / 10 ** digits
@@ -181,7 +183,7 @@ function createVideoEditFormatMatrixScene() {
           const described = matrix.ensureSamples({ only: definitions.map(sample => sample.id) })
           await page.evaluate(dir => window.henjiNative.media.allowRoot(dir), matrix.ROOT)
           const importFile = path.join(ROOT, `import-${forced ?? 'auto'}-${Date.now()}.henji-video`)
-          await dialogs(app, [], importFile); await button(page, '新建项目').click()
+          await dialogs(app, [], importFile); await button(page, '新建项目').click(); await adoptNewVideoEditProject(page, importFile)
           await saved(page, importFile, () => true, '新建工程未保存')
 
           for (const sample of described) {
@@ -192,10 +194,10 @@ function createVideoEditFormatMatrixScene() {
             const fps = sample.video.fps
             // ---- 导入（每格回到同一个导入工程）
             if (await button(page, '关闭项目').isVisible()) await button(page, '关闭项目').click()
-            await dialogs(app, [importFile], importFile); await button(page, '打开项目文件').click()
+            await dialogs(app, [importFile], importFile); await openVideoEditFile(page, importFile)
             await button(page, '导入').waitFor({ state: 'visible', timeout: 30000 })
             await page.waitForTimeout(300)
-            const before = fs.readFileSync(importFile, 'utf8')
+            const before = JSON.stringify(readVideoEditFile(importFile))
             const importedAt = new Date().toISOString()
             await dialogs(app, [sample.path], importFile); await button(page, '导入').click()
             let media
@@ -214,7 +216,7 @@ function createVideoEditFormatMatrixScene() {
             if (!media) {
               record.import.message = inspect?.error ?? null
               await page.waitForTimeout(300)
-              assert.equal(fs.readFileSync(importFile, 'utf8'), before, `${sample.id} 被拒绝后工程不能改变`)
+              assert.equal(JSON.stringify(readVideoEditFile(importFile)), before, `${sample.id} 被拒绝后工程不能改变`)
               assert.ok(inspect?.event === 'video_edit.media.inspect.undecodable', `${sample.id} 未导入且没有无法解码日志`)
               assert.doesNotMatch(String(record.import.message), /原生|浏览器|native|browser|mediabunny|webcodecs|ffmpeg/i, '提示不能出现实现名称')
               assert.ok(forced === 'browser' && sample.browser !== true, `${sample.id} 应能导入，实际被拒绝：${record.import.message}`)
@@ -271,7 +273,7 @@ function createVideoEditFormatMatrixScene() {
 
             evidence.currentPhase = `${sample.id}：节目监视器`; store()
             if (await button(page, '关闭项目').isVisible()) await button(page, '关闭项目').click()
-            await dialogs(app, [projectFile], output); await button(page, '打开项目文件').click()
+            await dialogs(app, [projectFile], output); await openVideoEditFile(page, projectFile)
             try { await presented(page, 0) } catch (error) { record.failedPrompt = await programPrompt(); await capture(`matrix-${sample.id}-open-failed`); throw error }
             const canvasData = () => page.locator('canvas[aria-label="剪辑画面"]').evaluate(canvas => ({ ...canvas.dataset, width: canvas.width, height: canvas.height }))
             exactAt(0, (await canvasData()).sourceTimestamps, '首帧')
@@ -493,7 +495,7 @@ function createVideoEditFormatMatrixScene() {
           const tripoFile = path.join(ROOT, `tripo-${forced ?? 'auto'}-${Date.now()}.henji-video`)
           if (await button(page, '关闭项目').isVisible()) await button(page, '关闭项目').click()
           await page.evaluate(dir => window.henjiNative.media.allowRoot(dir), TRIPO)
-          await dialogs(app, [], tripoFile); await button(page, '新建项目').click(); await saved(page, tripoFile, () => true, 'Tripo 工程未保存')
+          await dialogs(app, [], tripoFile); await button(page, '新建项目').click(); await adoptNewVideoEditProject(page, tripoFile); await saved(page, tripoFile, () => true, 'Tripo 工程未保存')
           const importedAt = Date.now()
           await dialogs(app, files, tripoFile); await button(page, '导入').click()
           const project = await saved(page, tripoFile, value => value.media.length === files.length, `Tripo 素材未全部导入（${files.length} 个）`, 2400)

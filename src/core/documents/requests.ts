@@ -13,6 +13,7 @@ import {
   type DuplicateDocumentRequest,
   type FinalizeDocumentRequest,
   type FinalizeProjectRequest,
+  type ImportFileRequest,
   type MoveDocumentRequest,
   type NameCheckRequest,
   type ProjectListQuery,
@@ -20,6 +21,7 @@ import {
   type RenameProjectRequest,
   type SaveDocumentCoverRequest,
   type SaveDocumentRequest,
+  type SetProjectMainDocumentRequest,
 } from './types'
 
 /*
@@ -66,6 +68,7 @@ export const createDocumentRequestSchema: z.ZodType<CreateDocumentRequest> = z.o
   content: z.unknown().optional(),
   name: nameSchema.optional(),
   draft: z.boolean().optional(),
+  id: documentIdSchema.optional(),
 }).strict()
 
 export const saveDocumentRequestSchema: z.ZodType<SaveDocumentRequest> = z.object({
@@ -143,3 +146,14 @@ export const finalizeProjectRequestSchema: z.ZodType<FinalizeProjectRequest> = z
 export const projectIdRequestSchema = z.object({ projectId: documentIdSchema }).strict()
 export const documentIdRequestSchema = z.object({ docId: documentIdSchema }).strict()
 export const pathRequestSchema = z.object({ path: pathSchema }).strict()
+
+export const setProjectMainDocumentRequestSchema: z.ZodType<SetProjectMainDocumentRequest> = z.object({
+  projectId: documentIdSchema,
+  documentId: documentIdSchema.nullable(),
+}).strict()
+
+export const importFileRequestSchema: z.ZodType<ImportFileRequest> = z.object({
+  container: containerRefSchema,
+  sourcePath: pathSchema,
+  folder: z.enum(['generated', 'materials']),
+}).strict()

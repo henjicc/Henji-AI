@@ -33,6 +33,7 @@ export {
   DocumentInUseError,
   DocumentNotOpenableError,
   DocumentStandaloneNotAllowedError,
+  ProjectInUseError,
   getDocumentOperations,
   isDocumentNameConflict,
   registerDocumentOpener,

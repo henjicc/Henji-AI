@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import { PanelTrigger, UiButton, UiError, UiIconButton, UiOptionButton, UiToolbar } from '@/components/ui'
 import { VideoEditProjectsPage } from './VideoEditProjectsPage'
-import { ChevronDown, ChevronLeft, Download, Keyboard, Redo2, Undo2 } from 'lucide-react'
+import { ChevronDown, ChevronLeft, Download, FolderInput, FolderOpen, Keyboard, Redo2, Undo2 } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { Z_LAYERS } from '@/core/theme/zLayers'
 import type { DockviewApi } from 'dockview-react'
-import { activeVideoEditInstance, closeVideoEditProject, createVideoEditProject, getActiveVideoEditSequence, listVideoEditInstances, openVideoEditProject, subscribeVideoEdit, subscribeVideoEditView, videoEditViewRevision, videoEditRevision, focusVideoEdit, focusVideoEditPanel, videoEditExportRange, type VideoEditInstance } from './application/videoEditService'
+import { activeVideoEditInstance, collectVideoEditMedia, createVideoEditProject, getActiveVideoEditSequence, leaveVideoEditProject, listVideoEditInstances, openVideoEditProject, openVideoEditProjectFolder, subscribeVideoEdit, subscribeVideoEditView, videoEditViewRevision, videoEditRevision, focusVideoEdit, focusVideoEditPanel, videoEditExportRange, type VideoEditInstance } from './application/videoEditService'
 import { videoEditFrameTimecode } from '@/core/videoEdit/timecode'
 import { cancelVideoEditExport, videoEditExportTask } from './application/videoEditExport'
 import { VideoEditDock } from './layout/VideoEditDock'
@@ -19,13 +20,16 @@ import type { VideoEditCommandId } from '@/core/videoEdit/commands'
 import { collectVideoEditOutput } from './application/videoEditOutputs'
 import { useAssetLibraryStore } from '@/features/assets/store/assetLibraryStore'
 import { openAssetLibrary } from '@/stores/navigationStore'
+import { openDialog } from '@/platform/desktopApi'
+import { getDocumentOperations } from '@/features/documents/documentOperations'
 
 /**
  * 剪辑命令带（界面重设计 3.5，设计稿 VideoEdit）：一条带。左端关闭项目、项目名菜单与序列规格；右端撤销/重做、
  * 面板布局，唯一一条分隔线后是成片收录与唯一主动作“导出”。拆分、删除、文字移入时间线工具栏。
  */
-function VideoEditToolbar({ instance, api, run }: { instance: VideoEditInstance; api: DockviewApi | null; run: (operation: () => unknown | Promise<unknown>) => void }): React.ReactElement {
+function VideoEditToolbar({ instance, api, run, onNotice }: { instance: VideoEditInstance; api: DockviewApi | null; run: (operation: () => unknown | Promise<unknown>) => void; onNotice: (message: string) => void }): React.ReactElement {
   useSyncExternalStore(subscribeVideoEditView, videoEditViewRevision)
+  const { t } = useTranslation('ui')
   const sequence = getActiveVideoEditSequence(instance); const projectId = instance.document.id
   const task = videoEditExportTask(projectId)
   const marked = instance.inFrame !== null || instance.outFrame !== null ? (() => { try { return videoEditExportRange(instance) } catch { return undefined } })() : undefined
@@ -53,12 +57,17 @@ function VideoEditToolbar({ instance, api, run }: { instance: VideoEditInstance;
     })}>{collecting ? '正在收录成片…' : '成片加入资产库'}</UiButton>}
     {task?.state === 'running' ? <UiButton onClick={() => cancelVideoEditExport(projectId)}>取消导出 {Math.round(task.progress * 100)}%</UiButton> : <UiButton variant="primary" aria-label="导出视频" title={exporting.tooltip} disabled={!exporting.enabled} onClick={() => command('export')}><Download size={15} />导出</UiButton>}
   </>}>
-    <UiIconButton size="lg" aria-label="关闭项目" title="关闭项目" onClick={() => run(() => closeVideoEditProject(projectId))}><ChevronLeft size={18} /></UiIconButton>
-    <PanelTrigger panelWidth={200} zIndex={Z_LAYERS.dropdown} closeOnPanelClick panelPadding="menu" renderPanel={() => <div className="flex flex-col gap-1">
-      <UiOptionButton variant="menu" size="sm" className="gap-2" onClick={() => setShortcutsOpen(true)}><Keyboard size={14} />剪辑快捷键…</UiOptionButton>
-      {others.map(item => <UiOptionButton key={item.document.id} variant="menu" size="sm" className="min-w-0" onClick={() => focusVideoEdit(item.document.id)}><span className="truncate" data-observation-sensitive>切换到 {item.document.name}</span></UiOptionButton>)}
+    <UiIconButton size="lg" aria-label={t('videoEditProject.back')} title={t('videoEditProject.back')} onClick={() => run(() => leaveVideoEditProject(projectId))}><ChevronLeft size={18} /></UiIconButton>
+    <PanelTrigger panelWidth={220} zIndex={Z_LAYERS.dropdown} closeOnPanelClick panelPadding="menu" renderPanel={() => <div className="flex flex-col gap-1">
+      <UiOptionButton variant="menu" size="sm" className="gap-2" onClick={() => run(async () => {
+        const result = await collectVideoEditMedia(projectId)
+        onNotice(result.missing ? t('videoEditProject.collectMissing', { count: result.missing }) : result.copiedFiles ? t('videoEditProject.collectDone', { count: result.copiedFiles }) : t('videoEditProject.collectNone'))
+      })}><FolderInput size={14} />{t('videoEditProject.collect')}</UiOptionButton>
+      <UiOptionButton variant="menu" size="sm" className="gap-2" onClick={() => run(() => getDocumentOperations().revealDocument(instance.session.target))}><FolderOpen size={14} />{t('videoEditProject.revealProject')}</UiOptionButton>
+      <UiOptionButton variant="menu" size="sm" className="gap-2" onClick={() => setShortcutsOpen(true)}><Keyboard size={14} />{t('videoEditProject.shortcuts')}</UiOptionButton>
+      {others.map(item => <UiOptionButton key={item.document.id} variant="menu" size="sm" className="min-w-0" onClick={() => focusVideoEdit(item.document.id)}><span className="truncate" data-observation-sensitive>{t('videoEditProject.switchTo', { name: item.document.name })}</span></UiOptionButton>)}
     </div>}>
-      {({ open, togglePanel }) => <UiButton size="sm" className="min-w-0 max-w-56" aria-label={`项目 ${instance.document.name}`} aria-expanded={open} data-panel-trigger-button onClick={togglePanel}>
+      {({ open, togglePanel }) => <UiButton size="sm" className="min-w-0 max-w-56" aria-label={t('videoEditProject.menu', { name: instance.document.name })} aria-expanded={open} data-panel-trigger-button onClick={togglePanel}>
         <span className="truncate" data-observation-sensitive>{instance.document.name}</span><ChevronDown size={14} className="shrink-0 text-text3" />
       </UiButton>}
     </PanelTrigger>
@@ -72,10 +81,16 @@ export default function VideoEditApp(): React.ReactElement {
   useSyncExternalStore(subscribeVideoEdit, videoEditRevision)
   const instance = activeVideoEditInstance()
   const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
   const [dockApi, setDockApi] = useState<DockviewApi | null>(null)
   // The project's own save status is shown once and clears itself when the retry succeeds.
   const onError = useCallback((reason: unknown): void => { const message = reason instanceof Error ? reason.message : String(reason); setError(message === activeVideoEditInstance()?.error ? null : message) }, [])
-  const run = (operation: () => unknown | Promise<unknown>): void => { setError(null); void Promise.resolve().then(operation).catch(onError) }
+  const run = (operation: () => unknown | Promise<unknown>): void => { setError(null); setNotice(null); void Promise.resolve().then(operation).catch(onError) }
+  const chooseProjectFolder = async (): Promise<void> => {
+    const selected = await openDialog({ directory: true, multiple: false })
+    const folder = Array.isArray(selected) ? selected[0] : selected
+    if (folder) await openVideoEditProjectFolder(folder)
+  }
   const projectId = instance?.document.id
   const sequence = instance ? getActiveVideoEditSequence(instance) : undefined
   const focusPanel = (target: EventTarget | null): void => {
@@ -91,18 +106,18 @@ export default function VideoEditApp(): React.ReactElement {
     event.preventDefault(); event.stopPropagation(); run(() => executeVideoEditCommand(context, binding.id))
   }}>
     {instance && sequence ? <>
-      <VideoEditToolbar instance={instance} api={dockApi} run={run} />
+      <VideoEditToolbar instance={instance} api={dockApi} run={run} onNotice={setNotice} />
       <div className="min-h-0 flex-1" aria-label="剪辑面板工作区"><VideoEditDock instance={instance} onError={onError} onApiChange={setDockApi} /></div>
     </> : <div className="min-h-0 flex-1">
-      {/* 项目来源暂为本次已打开的项目；2.2 换成持久化最近列表时只替换 projects */}
+      {/* 剪辑页 = 项目列表（作品索引）；打开项目 = 打开它的主剪辑 */}
       <VideoEditProjectsPage
-        projects={listVideoEditInstances().map(item => ({ id: item.document.id, name: item.document.name, path: item.path }))}
         onCreate={() => run(createVideoEditProject)}
-        onOpenFile={() => run(() => openVideoEditProject())}
-        onOpen={entry => run(() => focusVideoEdit(entry.id))}
+        onOpenFolder={() => run(chooseProjectFolder)}
+        onOpen={project => run(() => openVideoEditProject(project))}
       />
     </div>}
     {/* 操作失败与保存状态：底部状态带（不挤占面板区的大块居中提示），重试成功或下一次操作后清除。 */}
-    {(error || instance?.error) && <div className="shrink-0 border-t border-gap bg-panel px-3"><UiError size="xs" align="start" message={error || instance?.error || ''} /></div>}
+    {(error || instance?.error) ? <div className="shrink-0 border-t border-gap bg-panel px-3"><UiError size="xs" align="start" message={error || instance?.error || ''} /></div>
+      : notice && instance ? <div role="status" className="shrink-0 border-t border-gap bg-panel px-3 py-1.5 text-xs text-text2">{notice}</div> : null}
   </div>
 }

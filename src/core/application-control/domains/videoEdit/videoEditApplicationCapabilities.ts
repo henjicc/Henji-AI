@@ -80,7 +80,7 @@ export const observeVideoEditFrameCapability = defineApplicationCapability({
   resolveObservedEffects: (_input, result) => [{ effect: 'observe', entityTypes: ['asset'], propertyIds: [], targetRefs: [result.resultRef], count: 1, verified: result.verification.verified, evidence: result.verification.verified ? [result.verification.condition] : [] }],
 })
 export const VIDEO_EDIT_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinition[] = [...[
-  ['save_video_edit', '保存剪辑工程', '将当前修改保存到用户为工程选择的本地文件。失败后只重试保存，不重复修改。'],
+  ['save_video_edit', '保存剪辑工程', '立即把剪辑的当前修改写入它在项目文件夹里的剪辑文件（平时会自动保存）。失败后只重试保存，不重复修改。projectRef 的 id 即剪辑的文档 ID（取自 list_documents）。'],
   ['undo_video_edit', '撤销剪辑修改', '撤销目标工程的一步手动或助手修改。'],
   ['redo_video_edit', '重做剪辑修改', '恢复目标工程刚撤销的一步修改。'],
   ['split_video_edit', '拆分剪辑片段', '在指定工程帧拆分片段，正确换算源时间并迁移后半段标注。'],

@@ -5,10 +5,12 @@ const { isDeepStrictEqual } = require('node:util')
 const sharp = require('sharp')
 const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
 const { observeWorkers, workerSnapshot, waitReleased } = require('./uiInspectionSceneVideoEditLayout.cjs')
+const { adoptNewVideoEditProject, leaveVideoEditProject, openVideoEditFile, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
 
 const button = (page, name) => page.getByRole('button', { name, exact: true })
 const quantile = (values, q) => [...values].sort((a, b) => a - b)[Math.min(values.length - 1, Math.floor(values.length * q))] ?? 0
-const readProject = file => JSON.parse(fs.readFileSync(file, 'utf8'))
+// 3.1：剪辑是项目里的文档文件，按旧工程形状读出（夹具路径读它对应的实际剪辑）
+const readProject = readVideoEditFile
 async function saved(page, file, matches) {
   for (let attempt = 0; attempt < 160; attempt++) {
     const value = readProject(file)
@@ -136,7 +138,7 @@ function createVideoEditPictureGestureScene() {
         await observeSaves(app, file); savesObserved = true
         await button(page, '剪辑').click()
         await app.evaluate(({ dialog }, file) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] }) }, file)
-        const openedAt = performance.now(); await button(page, '打开项目文件').click(); await presented(page, 0)
+        const openedAt = performance.now(); await openVideoEditFile(page, file); await presented(page, 0)
         const canvas = page.getByLabel('剪辑画面', { exact: true })
         evidence.firstDecode = { openToPresentedMs: performance.now() - openedAt, ...(await canvas.evaluate(canvas => ({ width: canvas.width, height: canvas.height, ...canvas.dataset }))) }
         assert.equal(evidence.firstDecode.width, 3840); assert.equal(evidence.firstDecode.height, 2160)
@@ -158,7 +160,7 @@ function createVideoEditPictureGestureScene() {
         assert.deepEqual(selection.data.properties['video_edit.project.timeline_view'].selectedClipIds, [target.id])
         const program = page.locator('[data-video-edit-panel="program"]').first()
         await button(program, '移动画面').click(); await presented(page, 0)
-        const beforeFile = fs.readFileSync(file, 'utf8'); const before = readProject(file)
+        const beforeFile = JSON.stringify(readVideoEditFile(file)); const before = readProject(file)
         evidence.before = await png(page, path.join(root, 'before.png')); await shot('picture-gesture-before')
         evidence.resourcesBefore = await workerSnapshot(page)
         const baselineSaves = (await saveSnapshot(app)).length
@@ -205,10 +207,10 @@ function createVideoEditPictureGestureScene() {
           await input('mouseMoved', { x: start.x + box.width * .3 * index / inputCount, y: start.y + box.height * .2 * index / inputCount }, 1)
           const delay = cadenceStart + index * 1000 / 60 - performance.now()
           if (delay > 0) await new Promise(resolve => setTimeout(resolve, delay))
-          if (index % 60 === 0) assert.equal(fs.readFileSync(file, 'utf8'), beforeFile, '领域拖动草稿期间不能写入工程')
+          if (index % 60 === 0) assert.equal(JSON.stringify(readVideoEditFile(file)), beforeFile, '领域拖动草稿期间不能写入工程')
         }
         const endedAt = await page.evaluate(() => performance.now())
-        assert.equal(fs.readFileSync(file, 'utf8'), beforeFile)
+        assert.equal(JSON.stringify(readVideoEditFile(file)), beforeFile)
         assert.equal((await saveSnapshot(app)).length, baselineSaves, '连续更新期间原子发布次数必须为0')
         const lastInput = await page.evaluate(() => window.__pictureGestureEvidence.inputs.at(-1))
         assert.ok(lastInput)

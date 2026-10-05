@@ -1,14 +1,15 @@
 /**
  * 界面核对步骤 `seedVideoEdit`：剪辑夹具工程（界面重设计 5.5 第三批）。
- * 在系统临时目录用本机 FFmpeg 生成一段 6 秒 1280×720 测试画面 + 正弦声音的 MP4，写一个两序列的工程文件
- * （画面、声音、文字片段，若干字幕与时间标记，两个素材箱），并把主进程“打开”对话框换成直接返回这个工程文件。
- * 之后的步骤点“打开工程”即可进入；场景结束还原对话框并删除临时目录。只读写本机临时文件，不产生费用。
+ * 在系统临时目录用本机 FFmpeg 生成一段 6 秒 1280×720 测试画面 + 正弦声音的 MP4，经正式文档接口建一个项目，
+ * 放进两序列的剪辑（画面、声音、文字片段，若干字幕与时间标记，两个素材箱），并在剪辑页点开这个项目（3.1：剪辑是项目里的文档）。
+ * 场景结束删除临时素材目录（项目留在隔离资料目录里）。只读写本机临时文件，不产生费用。
  * 工程结构与 uiInspectionSceneVideoEditLinks.cjs 的夹具同一格式。
  */
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
 const { execFileSync } = require('node:child_process')
+const { openVideoEditFixture } = require('./uiInspectionVideoEditDocuments.cjs')
 
 const FPS = 30
 
@@ -65,16 +66,7 @@ async function seedVideoEditFixture(runtime, step) {
       '-t', '6', '-c:v', 'libx264', '-preset', 'veryfast', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-shortest', source], { windowsHide: true, timeout: 60000 })
     const id = `review-${runtime.sceneId || 'video'}`.replace(/[^a-z0-9-]/gi, '-')
     const project = buildProject({ id, name: step.name, source, captions: step.captions })
-    const file = path.join(root, 'review.henji-video')
-    fs.writeFileSync(file, JSON.stringify(project))
-    await runtime.app.evaluate(({ dialog }, values) => {
-      const store = globalThis.__henjiUiReviewDialogs ?? (globalThis.__henjiUiReviewDialogs = {
-        save: dialog.showSaveDialog, open: dialog.showOpenDialog,
-      })
-      dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [values.file] })
-      void store
-    }, { file })
-    runtime.dialogsStubbed = true
+    await openVideoEditFixture(runtime.activePage ?? runtime.mainPage, project)
   } catch (error) {
     fs.rmSync(root, { recursive: true, force: true })
     throw error

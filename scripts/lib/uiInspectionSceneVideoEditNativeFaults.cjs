@@ -4,6 +4,7 @@ const path = require('node:path')
 const { execFileSync } = require('node:child_process')
 const { dialogs, presented } = require('./uiInspectionSceneVideoEditMonitor.cjs')
 const { videoEditFixtureProject } = require('./uiInspectionSceneVideoEditProbe.cjs')
+const { adoptNewVideoEditProject, leaveVideoEditProject, openVideoEditFile, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
 
 /**
  * 原生解码故障回退（3.1）：在真实 Electron 中注入五类故障并核对用户看到的结果、回退与恢复、结构化日志。
@@ -108,7 +109,7 @@ async function waitNoPrompt(page, timeoutMs = 30000) {
 async function openProject(page, app, file) {
   if (await button(page, '关闭项目').isVisible().catch(() => false)) await button(page, '关闭项目').click()
   await dialogs(app, [file], file)
-  await button(page, '打开项目文件').click()
+  await openVideoEditFile(page, file)
 }
 /** Steps the paused program monitor `count` frames forward (each step is a single-frame read) and returns the frame. */
 async function stepFrames(page, count) {

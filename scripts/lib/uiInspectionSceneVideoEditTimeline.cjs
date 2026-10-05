@@ -3,13 +3,14 @@ const fs = require('node:fs')
 const path = require('node:path')
 const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
 const { observeWorkers, workerSnapshot, waitReleased } = require('./uiInspectionSceneVideoEditLayout.cjs')
+const { adoptNewVideoEditProject, leaveVideoEditProject, openVideoEditFile, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
 
 const button = (page, name) => page.getByRole('button', { name, exact: true })
 const clipNode = (page, id) => page.locator('[data-video-edit-clip="' + id + '"]')
 const quantile = (values, q) => [...values].sort((a, b) => a - b)[Math.min(values.length - 1, Math.floor(values.length * q))] ?? 0
 async function saved(page, file, matches) {
   for (let attempt = 0; attempt < 120; attempt++) {
-    const document = JSON.parse(fs.readFileSync(file, 'utf8'))
+    const document = readVideoEditFile(file)
     if (matches(document)) return document
     await page.waitForTimeout(50)
   }
@@ -28,7 +29,7 @@ function createVideoEditTimelineScene() {
     setup: async (page, app, { capture }) => {
       const root = path.resolve('node_modules/.cache/video-edit-timeline'); fs.mkdirSync(root, { recursive: true })
       const file = path.join(root, 'timeline.henji-video'); const pressureFile = path.join(root, 'pressure.henji-video')
-      const project = JSON.parse(fs.readFileSync('node_modules/.cache/video-edit-code-controls/code-project.henji-video', 'utf8'))
+      const project = readVideoEditFile('node_modules/.cache/video-edit-code-controls/code-project.henji-video')
       project.id = 'timeline-mixed'; project.name = '原生代码与关联混剪'; project.revision = 0
       project.sequences = [project.sequences[0]]; const sequence = project.sequences[0]
       sequence.id = 'timeline-mixed-sequence'; sequence.annotations = []
@@ -37,7 +38,7 @@ function createVideoEditTimelineScene() {
       const code = { ...sequence.clips.find(clip => clip.kind === 'code'), id: 'timeline-code', name: '原创代码', start: 0, duration: 180, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, track: 2 }
       sequence.clips = [video, audio, code]
       expandTracks(project); fs.writeFileSync(file, JSON.stringify(project))
-      const pressure = expandTracks(JSON.parse(fs.readFileSync('node_modules/.cache/video-edit-scrub-original/scrub.henji-video', 'utf8')))
+      const pressure = expandTracks(readVideoEditFile('node_modules/.cache/video-edit-scrub-original/scrub.henji-video'))
       pressure.id = 'timeline-pressure'; pressure.name = '32轨500片段原素材4K60'; pressure.revision = 0
       pressure.sequences[0].id = 'timeline-pressure-sequence'
       pressure.sequences[0].clips.push(...Array.from({ length: 497 }, (_, index) => ({ ...pressure.sequences[0].clips[0], id: 'offscreen-' + index, start: 3600 + index * 4, duration: 2, track: 31 })))
@@ -45,7 +46,7 @@ function createVideoEditTimelineScene() {
       const originals = [...new Set([...project.media, ...pressure.media].map(media => media.path))].map(file => ({ file, size: fs.statSync(file).size, mtime: fs.statSync(file).mtimeMs }))
       const evidence = { originalPaths: originals, phases: [] }; let client
       const store = () => fs.writeFileSync(path.join(root, 'evidence.json'), JSON.stringify(evidence, null, 2))
-      const open = async file => { await app.evaluate(({ dialog }, file) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] }) }, file); await button(page, '打开项目文件').click(); await presented(page, 0) }
+      const open = async file => { await app.evaluate(({ dialog }, file) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] }) }, file); await openVideoEditFile(page, file); await presented(page, 0) }
       await observeWorkers(page)
       try {
         await button(page, '剪辑').click(); await open(file)
@@ -64,9 +65,9 @@ function createVideoEditTimelineScene() {
         await clipNode(page, video.id).getByRole('button', { name: '选择片段 原视频', exact: true }).click()
         await clipNode(page, code.id).getByRole('button', { name: '选择片段 原创代码', exact: true }).click({ modifiers: ['Control'] })
         assert.deepEqual(new Set((await view()).selectedClipIds), new Set([video.id, audio.id, code.id]))
-        const box = await clipNode(page, video.id).boundingBox(); const beforeDrag = fs.readFileSync(file, 'utf8')
+        const box = await clipNode(page, video.id).boundingBox(); const beforeDrag = JSON.stringify(readVideoEditFile(file))
         await page.mouse.move(box.x + 50, box.y + 12); await page.mouse.down(); await page.mouse.move(box.x + 70, box.y + 12, { steps: 16 })
-        assert.equal(fs.readFileSync(file, 'utf8'), beforeDrag, '指针预览不能写工程')
+        assert.equal(JSON.stringify(readVideoEditFile(file)), beforeDrag, '指针预览不能写工程')
         await page.mouse.up()
         await saved(page, file, document => document.sequences[0].clips.every(clip => clip.start === 20))
         await button(page, '撤销').click(); await saved(page, file, document => document.sequences[0].clips.every(clip => clip.start === 0))
@@ -133,12 +134,12 @@ function createVideoEditTimelineScene() {
         await button(page, '视频 1锁定').click()
         await clipNode(page, video.id).getByRole('button', { name: '选择片段 原视频', exact: true }).click()
         await timeline.focus(); await timeline.press('Delete'); await page.waitForTimeout(100)
-        assert.equal(JSON.parse(fs.readFileSync(file, 'utf8')).sequences[0].clips.length, 3)
+        assert.equal(readVideoEditFile(file).sequences[0].clips.length, 3)
         await button(page, '视频 1锁定').click(); await saved(page, file, document => !document.sequences[0].tracks[1].locked)
         await capture('timeline-mixed-command-result')
         evidence.phases.push('关联多选移动一次历史、代码视频共同拆分、复制粘贴删除撤销、输入和IME保护、源I/O与J/K、锁定跨命令')
-        const savedBeforeReopen = JSON.parse(fs.readFileSync(file, 'utf8')); await button(page, '关闭项目').click(); await waitReleased(page); await open(file)
-        assert.deepEqual(JSON.parse(fs.readFileSync(file, 'utf8')), savedBeforeReopen)
+        const savedBeforeReopen = readVideoEditFile(file); await button(page, '关闭项目').click(); await waitReleased(page); await open(file)
+        assert.deepEqual(readVideoEditFile(file), savedBeforeReopen)
         assert.equal(await page.locator('[data-video-edit-track]').count(), 32)
         await button(page, '关闭项目').click(); await waitReleased(page)
         const openedAt = performance.now(); await open(pressureFile); evidence.firstFrameMs = performance.now() - openedAt

@@ -8,6 +8,7 @@ import { readVideoEditSource, updateVideoEditSource, registerVideoEditSourcePres
 import { VideoEditSourceExecutor } from './videoEditSourceExecutor'
 import { VideoEditMutationExecutor } from './videoEditExecutors'
 import type { ApplicationExecutionContext, ApplicationPlannedStep } from '@/core/application-control'
+import { reopenVideoEdit } from './videoEditDocumentTestKit'
 const files = new Map<string, string>()
 it('失败发布中的立即重试先退役旧请求，不被旧catch释放新宿主', async () => {
   const owner = await fixture(); const id = owner.document.id; const events: string[] = []; let attempt = 0
@@ -102,8 +103,8 @@ it('在途源暂停拒绝并行节目开播，原请求因工程修改失败时�
     await vi.waitFor(() => expect(pause).toBeTypeOf('function'))
     await expect(executor.apply(step, sourceContext())).rejects.toThrow('仍在确认')
     expect(owner.playing).toBe(false)
-    editVideoProject(id, document => ({ ...document, name: '新名称' })); pause(); await rejected
-    expect(owner.document.name).toBe('新名称'); expect(readVideoEditSource(id).playing).toBe(true); expect(matchesVideoEditSourceCommand(id, original)).toBe(true)
+    editVideoProject(id, document => ({ ...document, sequences: document.sequences.map((sequence, index) => index ? sequence : { ...sequence, name: '新名称' }) })); pause(); await rejected
+    expect(owner.document.sequences[0].name).toBe('新名称'); expect(readVideoEditSource(id).playing).toBe(true); expect(matchesVideoEditSourceCommand(id, original)).toBe(true)
   } finally { off() }
 })
 it('节目撤销恢复源期间改选区会取消旧恢复并保持单路播放', async () => {
@@ -175,7 +176,7 @@ it('外部取消传播到真实宿主，迟到确认不成功；旧宿主注销�
   expect(await pending).toBeInstanceOf(Error); expect(signal.aborted).toBe(true)
   finish({ timeUs: 0, presentedTimeUs: 0, playing: false, volume: 1 }); await Promise.resolve()
   expect(readVideoEditSource(id).status).toBe('error')
-  await closeVideoEditProject(id); const reopened = (await openVideoEditProject(instance.path))!
+  await closeVideoEditProject(id); const reopened = await reopenVideoEdit(instance.document.id)
   const offNew = registerVideoEditSourcePresenter(id, async request => ({ timeUs: request.timeUs, presentedTimeUs: request.timeUs, playing: request.playing, volume: request.volume }))
   await updateVideoEditSource(id, { itemId: reopened.document.items[0].id, timeUs: 2000000 })
   offOld(); expect(readVideoEditSource(id)).toMatchObject({ status: 'ready', timeUs: 2000000 }); offNew()
@@ -279,7 +280,7 @@ it('源补偿保留逆序命令链与真实播放观察，拒绝后续手动操�
   const stale = await executor.apply(step(1000000), context)
   await updateVideoEditSource(id, { timeUs: 3000000 }); await expect(executor.undo(stale.undoToken!)).rejects.toThrow('后续操作')
   const oldSession = await executor.apply(step(1000000), context)
-  await closeVideoEditProject(id); await openVideoEditProject(instance.path)
+  await closeVideoEditProject(id); await reopenVideoEdit(instance.document.id)
   const offNew = registerVideoEditSourcePresenter(id, presenter)
   await updateVideoEditSource(id, { itemId: instance.document.items[0].id, timeUs: 2000000 })
   await expect(executor.undo(oldSession.undoToken!)).rejects.toThrow('工程已重开')

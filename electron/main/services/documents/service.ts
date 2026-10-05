@@ -15,6 +15,8 @@ import type {
   DuplicateDocumentRequest,
   FinalizeDocumentRequest,
   FinalizeProjectRequest,
+  ImportFileRequest,
+  ImportFileResult,
   MoveDocumentRequest,
   NameCheckRequest,
   NameCheckResult,
@@ -24,6 +26,7 @@ import type {
   RenameProjectRequest,
   SaveDocumentCoverRequest,
   SaveDocumentRequest,
+  SetProjectMainDocumentRequest,
 } from '../../../../src/core/documents/types'
 import type { DocumentsPlatform } from '../../../../src/platform/contracts/documents'
 import { isPathInside } from '../../../../src/core/storage/pathSyntax'
@@ -124,6 +127,14 @@ export class DocumentService implements DocumentsPlatform {
     return this.parts.repository.reveal(target)
   }
 
+  collectDocumentMedia(target: DocumentTarget): Promise<DocumentTransferResult> {
+    return this.parts.repository.collectMedia(target)
+  }
+
+  importFile(request: ImportFileRequest): Promise<ImportFileResult> {
+    return this.parts.repository.importFile(request)
+  }
+
   resolveDocumentLink(link: DocumentLink): Promise<DocumentLinkResolution> {
     return this.parts.repository.resolveLink(link)
   }
@@ -158,6 +169,10 @@ export class DocumentService implements DocumentsPlatform {
 
   finalizeProject(request: FinalizeProjectRequest): Promise<ProjectSummary> {
     return this.parts.projects.finalize(request)
+  }
+
+  setProjectMainDocument(request: SetProjectMainDocumentRequest): Promise<ProjectSummary> {
+    return this.parts.projects.setMainDocument(request)
   }
 
   trashProject(projectId: string): Promise<void> {

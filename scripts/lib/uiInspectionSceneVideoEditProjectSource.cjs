@@ -5,6 +5,7 @@ const path = require('node:path')
 const { execFileSync } = require('node:child_process')
 const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
 const { observeWorkers, workerSnapshot, waitReleased } = require('./uiInspectionSceneVideoEditLayout.cjs')
+const { adoptNewVideoEditProject, leaveVideoEditProject, openVideoEditFile, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
 
 const button = (page, name) => page.getByRole('button', { name, exact: true })
 const menuItem = (page, name) => page.getByRole('menuitem', { name, exact: true })
@@ -18,7 +19,7 @@ async function dialogs(app, openPaths, savePath) {
 async function saved(page, file, test) {
   let document
   for (let attempt = 0; attempt < 100; attempt++) {
-    document = JSON.parse(fs.readFileSync(file, 'utf8'))
+    document = readVideoEditFile(file)
     if (test(document)) return document
     await page.waitForTimeout(50)
   }
@@ -86,7 +87,7 @@ function createVideoEditProjectSourceScene() {
         if (native) assert.equal(status.available, true, '本机原生解码服务应可用')
         evidence.sourceBackend = native ? 'native' : 'browser'
         const FRAME = 1 / 60
-        await button(page, '剪辑').click(); await dialogs(app, [video, audio], file); await button(page, '新建项目').click()
+        await button(page, '剪辑').click(); await dialogs(app, [video, audio], file); await button(page, '新建项目').click(); await adoptNewVideoEditProject(page, file)
         const list = page.getByLabel('项目项列表', { exact: true }); const listRect = await list.boundingBox()
         await list.dblclick({ position: { x: 24, y: listRect.height - 20 } })
         let document = await saved(page, file, value => value.media.length === 2)
@@ -121,7 +122,7 @@ function createVideoEditProjectSourceScene() {
         assert.equal(cached.cachePath, thumbnail.cachePath); assert.ok(evidence.thumbnailCache.preservedMtime)
 
         const programmeFrame = await page.getByRole('slider', { name: '剪辑时间定位' }).getAttribute('aria-valuenow')
-        const savedBeforePreview = fs.readFileSync(file, 'utf8')
+        const savedBeforePreview = JSON.stringify(readVideoEditFile(file))
         const openedAt = performance.now(); await entry(page, videoId).dblclick(); await ready(page, 'video')
         evidence.firstSourcePresentationMs = performance.now() - openedAt
         evidence.sourceVideo = await page.locator('[data-video-edit-source-media="video"]').evaluate(media => media instanceof HTMLVideoElement
@@ -185,7 +186,7 @@ function createVideoEditProjectSourceScene() {
         await entry(page, imageId).dblclick(); await ready(page, 'image'); await capture('video-project-source-image')
         await button(page, '关闭源监视器').click(); await page.waitForFunction(() => !document.querySelector('[data-video-edit-source-media]'))
         assert.equal(await page.getByRole('slider', { name: '剪辑时间定位' }).getAttribute('aria-valuenow'), programmeFrame)
-        assert.equal(fs.readFileSync(file, 'utf8'), savedBeforePreview, '源预览不写工程或改变节目会话')
+        assert.equal(JSON.stringify(readVideoEditFile(file)), savedBeforePreview, '源预览不写工程或改变节目会话')
         evidence.previewIsolation = { programmeFrame, projectUnchanged: true, audioDecoders: 1, hiddenSourceReleased: true }
 
         await page.locator(`[data-video-edit-bin="${binId}"]`).click()
@@ -207,7 +208,7 @@ function createVideoEditProjectSourceScene() {
         assert.equal(dropped.width, 3840); assert.deepEqual(dropped.frameRate, { numerator: 60, denominator: 1 }); assert.equal(dropped.clips[0].start, 0)
         evidence.emptyTimelineDrop = { newSequenceId: dropped.id, originalEmpty: document.sequences[0].clips.length === 0 }
         await button(page, '关闭项目').click(); await waitReleased(page)
-        await dialogs(app, [file], file); await button(page, '打开项目文件').click()
+        await dialogs(app, [file], file); await openVideoEditFile(page, file)
         await page.locator(`[data-video-edit-bin="${binId}"]`).click()
         await entry(page, sequence.id).dblclick(); await button(page, '序列设置').click()
         assert.equal(await page.getByLabel('音频采样率', { exact: true }).inputValue(), '44100'); assert.equal(await page.getByLabel('声道', { exact: true }).inputValue(), '1')
@@ -221,13 +222,13 @@ function createVideoEditProjectSourceScene() {
         await button(page, '关闭项目').click(); await waitReleased(page)
 
         // Maximum project-item and bin scale; all sources are existing original references.
-        const scale = JSON.parse(fs.readFileSync(file, 'utf8')); scale.id = 'project-source-scale'; scale.name = '500项目项压力工程'
+        const scale = readVideoEditFile(file); scale.id = 'project-source-scale'; scale.name = '500项目项压力工程'
         scale.bins = Array.from({ length: 200 }, (_, index) => ({ id: `scale-bin-${index}`, name: `素材箱 ${String(index).padStart(3, '0')}` }))
         const sourceItem = scale.items.find(item => item.id === videoId)
         scale.items = Array.from({ length: 500 }, (_, index) => ({ ...sourceItem, id: `scale-item-${index}`, name: `4K60 ${String(index).padStart(3, '0')}`, binId: undefined }))
         scale.sequences = [scale.sequences[0]]; scale.sequences[0].clips = []; scale.sequences[0].annotations = []
         const scaleFile = path.join(root, 'scale.henji-video'); fs.writeFileSync(scaleFile, JSON.stringify(scale))
-        const scaleStarted = performance.now(); await dialogs(app, [scaleFile], scaleFile); await button(page, '打开项目文件').click(); await entry(page, 'scale-item-0').waitFor({ state: 'visible' })
+        const scaleStarted = performance.now(); await dialogs(app, [scaleFile], scaleFile); await openVideoEditFile(page, scaleFile); await entry(page, 'scale-item-0').waitFor({ state: 'visible' })
         evidence.scale = { items: 500, bins: 200, firstVisibleMs: performance.now() - scaleStarted, mountedItems: await page.locator('[data-video-edit-project-entry]').count(), mountedBins: await page.locator('[data-video-edit-bin]').count() }
         assert.ok(evidence.scale.mountedItems < 80); assert.ok(evidence.scale.mountedBins < 80)
         await button(page, '视图与排序').click(); await button(page, '缩略图视图').click(); await page.waitForTimeout(500)

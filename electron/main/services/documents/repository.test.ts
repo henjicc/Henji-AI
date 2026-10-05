@@ -337,3 +337,67 @@ describe('名称检查', () => {
     expect(await service.checkName({ subject: { type: 'project' }, name: 'x', location: { container: { kind: 'project', projectId: project.id } } })).toMatchObject({ status: 'invalid', reason: 'location' })
   })
 })
+
+describe('文档仓库：收集素材与放进容器（3.1）', () => {
+  beforeEach(() => { env = createTestEnvironment() })
+  afterEach(async () => { await env.cleanup() })
+
+  it('收集素材：外部、作品目录与别的项目里的文件复制进项目“素材”并改写引用（原处保留），项目里的与其他文档不动；版本加一', async () => {
+    const { service } = env.services
+    const project = await service.createProject({ name: '短片' })
+    const other = await service.createProject({ name: '别的项目' })
+    const created = await service.createDocument({ kind: 'canvas', container: { kind: 'project', projectId: project.id } })
+    const inProject = write(path.join(project.path, '生成结果', '镜头.png'))
+    const inOther = write(path.join(other.path, '素材', '参考.jpg'), 'other')
+    const inWork = write(path.join(env.workRoot, '上传素材', 'bgm.mp3'), 'bgm')
+    const external = write(path.join(env.outside, '外部 视频.mp4'), 'video')
+    const sameName = write(path.join(env.outside, '另一处', '外部 视频.mp4'), 'different')
+    const missing = path.join(env.outside, '不在了.mp4')
+    const sibling = await service.createDocument({ kind: 'camera_stage', container: { kind: 'project', projectId: project.id }, name: '镜头' })
+    const content = { nodes: [{ a: inProject }, { b: inOther }, { c: inWork }, { d: external }, { e: sameName }, { f: missing }, { g: sibling.meta.path }] }
+    await service.saveDocument({ target: { id: created.meta.id }, expectedRevision: 0, content })
+
+    const result = await service.collectDocumentMedia({ id: created.meta.id })
+    expect(result.copiedFiles).toBe(4)
+    expect(result.missingPaths).toEqual([missing])
+    expect(result.meta.revision).toBe(2)
+    const materials = path.join(project.path, '素材')
+    expect((await listFiles(materials)).sort()).toEqual(['bgm.mp3', '参考.jpg', '外部 视频 (2).mp4', '外部 视频.mp4'].sort())
+    for (const original of [inOther, inWork, external, sameName]) expect(fs.existsSync(original)).toBe(true)
+    const read = await service.readDocument({ id: created.meta.id })
+    expect(read.content).toEqual({ nodes: [
+      { a: inProject }, { b: path.join(materials, '参考.jpg') }, { c: path.join(materials, 'bgm.mp3') },
+      { d: path.join(materials, '外部 视频.mp4') }, { e: path.join(materials, '外部 视频 (2).mp4') }, { f: missing }, { g: sibling.meta.path },
+    ] })
+    // 收集过的外部文件不再以外部绝对路径出现在文件里（找不到的那份原样保留）
+    const { text } = await readStored(created.meta.path)
+    for (const collected of [external, sameName]) expect(text).not.toContain(JSON.stringify(collected).slice(1, -1))
+    expect(text).toContain(JSON.stringify(missing).slice(1, -1))
+    // 再收集一次没有可收集的文件：不写文件、版本不变
+    const again = await service.collectDocumentMedia({ id: created.meta.id })
+    expect(again).toMatchObject({ copiedFiles: 0, meta: { revision: 2 } })
+  })
+
+  it('新建时可沿用给定 ID（导入、恢复与造数据）；索引里已有同 ID 时拒绝', async () => {
+    const { service } = env.services
+    const project = await service.createProject({ name: '短片' })
+    const created = await service.createDocument({ kind: 'video_edit', container: { kind: 'project', projectId: project.id }, name: '短片', id: 'fixed-edit-id' })
+    expect(created.meta.id).toBe('fixed-edit-id')
+    expect((await readStored(created.meta.path)).json).toMatchObject({ id: 'fixed-edit-id', kind: 'video_edit' })
+    await expect(service.createDocument({ kind: 'canvas', container: { kind: 'user' }, id: 'fixed-edit-id' })).rejects.toMatchObject({ name: 'DocumentLocationError' })
+  })
+
+  it('放进容器：复制进项目“生成结果”（同名同内容复用、不同内容加序号），已在项目里的原样返回；作品目录放进“上传素材”', async () => {
+    const { service } = env.services
+    const project = await service.createProject({ name: '短片' })
+    const source = write(path.join(env.outside, '结果.png'), 'png')
+    const first = await service.importFile({ container: { kind: 'project', projectId: project.id }, sourcePath: source, folder: 'generated' })
+    expect(first).toEqual({ path: path.join(project.path, '生成结果', '结果.png'), copied: true })
+    expect(await service.importFile({ container: { kind: 'project', projectId: project.id }, sourcePath: source, folder: 'generated' })).toEqual({ path: first.path, copied: false })
+    const changed = write(path.join(env.outside, '另一处', '结果.png'), 'other')
+    expect(await service.importFile({ container: { kind: 'project', projectId: project.id }, sourcePath: changed, folder: 'generated' })).toEqual({ path: path.join(project.path, '生成结果', '结果 (2).png'), copied: true })
+    expect(await service.importFile({ container: { kind: 'project', projectId: project.id }, sourcePath: first.path, folder: 'materials' })).toEqual({ path: first.path, copied: false })
+    expect(await service.importFile({ container: { kind: 'user' }, sourcePath: source, folder: 'materials' })).toEqual({ path: path.join(env.workRoot, '上传素材', '结果.png'), copied: true })
+    await expect(service.importFile({ container: { kind: 'project', projectId: project.id }, sourcePath: path.join(env.outside, '没有.png'), folder: 'generated' })).rejects.toMatchObject({ name: 'DocumentLocationError' })
+  })
+})

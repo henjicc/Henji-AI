@@ -74,7 +74,7 @@ function targetFor(rest: readonly string[], from: ResolvedContainer, to: Resolve
 }
 
 /** 复制到目标位置；重名且内容不同时依次改用“名称 (2)”。返回最终位置与是否真的复制了。 */
-async function copyKeepingBoth(source: string, desired: string): Promise<{ path: string; copied: boolean }> {
+export async function copyKeepingBoth(source: string, desired: string): Promise<{ path: string; copied: boolean }> {
   const directory = path.dirname(desired)
   const extension = path.extname(desired)
   const stem = path.basename(desired, extension)
@@ -126,4 +126,45 @@ export function rewriteContentPaths(content: unknown, mapping: ReadonlyMap<strin
     const key = pathKey(style, value)
     return key !== null ? mapping.get(key) ?? value : value
   })
+}
+
+export interface MediaCollectOptions {
+  style: PathStyle
+  /** 文档内容换算时得到的引用（scope 不是 container 的都要收集）。 */
+  references: readonly LocationReference[]
+  /** 落在程序目录里的路径（文档里本不该出现），能读到的文件一并收集。 */
+  programReferences: readonly string[]
+  to: ResolvedContainer
+  isDocumentFile(filePath: string): boolean
+}
+
+/**
+ * 收集素材（重要记录 006，实施方案 2.11）：把文档用到的、不在所在容器里的文件
+ * （外部文件、作品目录或别的项目里的文件、程序目录里的文件）复制进容器的“素材”文件夹，
+ * 返回原位置 → 新位置的映射。原文件保留；其他文档文件不复制（跨文档引用照旧）。
+ * 目标已有同名文件时内容相同就复用，不同则改用“名称 (2)”，从不覆盖。
+ */
+export async function collectContainerMedia(options: MediaCollectOptions): Promise<MediaTransferResult> {
+  const { style, to } = options
+  const mapping = new Map<string, string>()
+  const missingPaths: string[] = []
+  let copied = 0
+  const candidates = [
+    ...options.references.filter((reference) => reference.scope !== 'container').map((reference) => reference.path),
+    ...options.programReferences.filter((value) => parseAbsolutePath(style, value) !== null),
+  ]
+  for (const source of candidates) {
+    const key = pathKey(style, source)
+    if (!key || mapping.has(key) || options.isDocumentFile(source)) continue
+    const stat = await fsp.stat(source).catch(() => null)
+    if (!stat) {
+      if (!missingPaths.includes(source)) missingPaths.push(source)
+      continue
+    }
+    if (!stat.isFile()) continue
+    const result = await copyKeepingBoth(source, path.join(to.materialsDir, path.basename(source)))
+    mapping.set(key, result.path)
+    if (result.copied) copied += 1
+  }
+  return { mapping, copied, missingPaths }
 }

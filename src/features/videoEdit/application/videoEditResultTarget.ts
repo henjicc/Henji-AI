@@ -4,10 +4,10 @@ import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { importVideoEditCaptions } from '@/core/videoEdit/timedContent'
 import { videoEditFps } from '@/core/videoEdit/time'
 import type { AssetRecord } from '@/platform/contracts/assetLibrary'
-import { getPlatform } from '@/platform/runtime'
+import { getDocumentOperations } from '@/features/documents/documentOperations'
 import { videoEditResultPlacementSchema, type VideoEditResultPlacement } from '@/core/videoEdit/creativeResult'
 import { importVideoEditSources, sameVideoEditMediaPath } from './videoEditMedia'
-import { listVideoEditInstances, requireVideoEditInstance, saveVideoEdit, type VideoEditInstance } from './videoEditService'
+import { listVideoEditInstances, requireVideoEditInstance, saveVideoEdit, verifyVideoEditSaved, type VideoEditInstance } from './videoEditService'
 
 const logger = createLogger('features.videoEdit.results')
 export type { VideoEditResultPlacement } from '@/core/videoEdit/creativeResult'
@@ -58,12 +58,23 @@ function publishedClip(document: VideoEditDocument, sequenceId: string, clipId: 
   const clip = document.sequences.find(sequence => sequence.id === sequenceId)?.clips.find(clip => clip.id === clipId)
   return Boolean(clip) && JSON.stringify(videoEditClipSchema.parse(clip)) === expected
 }
+/**
+ * 结果文件放进目标剪辑所在项目的“生成结果”（重要记录 006：其他工具的结果复制进项目再引用；
+ * 同名同内容复用，从不覆盖）；返回剪辑里要引用的位置。已在项目里的原样返回。
+ */
+export async function placeVideoEditResultInProject(target: VideoEditResultTarget, filePath: string): Promise<string> {
+  const container = stateOf(target).owner.session.documentMeta.container
+  if (container.kind !== 'project') return filePath
+  const placed = await getDocumentOperations().importFile({ container, sourcePath: filePath, folder: 'generated' })
+  if (placed.copied) logger.info('创作结果已复制进项目生成结果', { event: 'video_edit.result.copied_to_project', context: { projectId: container.projectId } })
+  return placed.path
+}
 async function verifySaved(target: VideoEditResultTarget, state: TargetState): Promise<VideoEditResultReceipt> {
   await saveVideoEdit(target.projectId)
   assertVideoEditResultTarget(target)
-  const stored = JSON.parse(await getPlatform().system.fs.readTextFile(state.owner.path)) as unknown
+  const stored = await verifyVideoEditSaved(target.projectId, state.committed!.document)
   assertVideoEditResultTarget(target)
-  if (JSON.stringify(stored) !== JSON.stringify(state.committed!.document)) throw new Error('结果已加入原工程，但保存回读不一致，请重试保存。')
+  if (!stored) throw new Error('结果已加入原工程，但保存回读不一致，请重试保存。')
   return { ...state.committed!.receipt, verified: true }
 }
 

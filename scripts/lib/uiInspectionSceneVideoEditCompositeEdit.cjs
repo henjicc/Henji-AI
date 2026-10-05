@@ -5,8 +5,10 @@ const { execFileSync } = require('node:child_process')
 const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
 const { observeWorkers, workerSnapshot, waitReleased } = require('./uiInspectionSceneVideoEditLayout.cjs')
 const { dialogs, saved, presented, png, pixelDifference, mediaProbe, trackBanks, quantile } = require('./uiInspectionSceneVideoEditMonitor.cjs')
+const { adoptNewVideoEditProject, leaveVideoEditProject, openVideoEditFile, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
 const button = (page, name) => page.getByRole('button', { name, exact: true })
-const readFile = file => JSON.parse(fs.readFileSync(file, 'utf8'))
+// 3.1：剪辑是项目里的文档文件，按旧工程形状读出（夹具路径读它对应的实际剪辑）
+const readFile = readVideoEditFile
 const filterSource = 'export default {apiVersion:1,name:"原创红色处理",kind:"filter",mode:"static",width:3840,height:2160,durationSeconds:10,seed:21,parameters:{gain:{type:"number",title:"红色增益",default:.8,min:0,max:1,step:.01,animatable:true}},render(ctx){const c=sample(ctx.u,ctx.v);return rgba(c.r*ctx.params.gain,c.g,c.b,c.a);}}'
 
 /** Uses the formal Electron host, actual UI actions, and the same public Modern MCP registry. */
@@ -48,7 +50,7 @@ function createVideoEditCompositeEditScene({ pressureOnly = false } = {}) {
         previousLayout = await page.evaluate(() => localStorage.getItem('henji.videoEdit.dockLayout.v1'))
         await page.evaluate(() => localStorage.removeItem('henji.videoEdit.dockLayout.v1'))
         await observeWorkers(page); observed = true; await button(page, '剪辑').click()
-        const open = async target => { await dialogs(app, [target], target); await button(page, '打开项目文件').click(); await presented(page, 0) }
+        const open = async target => { await dialogs(app, [target], target); await openVideoEditFile(page, target); await presented(page, 0) }
         if (!pressureOnly) await open(file)
         const identity = await authorizeMcpConnection(page, { name: '原生图形滤镜转场验收', allowWrites: true, allowDestructive: true })
         client = await connectMcpClient(identity.config, 'Henji composite Reality')

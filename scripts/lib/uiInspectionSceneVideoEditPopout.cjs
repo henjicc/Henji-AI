@@ -4,6 +4,7 @@ const path = require('node:path')
 const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
 const { observeWorkers, workerSnapshot, waitReleased } = require('./uiInspectionSceneVideoEditLayout.cjs')
 const { dialogs, presented } = require('./uiInspectionSceneVideoEditMonitor.cjs')
+const { adoptNewVideoEditProject, leaveVideoEditProject, openVideoEditFile, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
 const button = (page, name) => page.getByRole('button', { name, exact: true })
 const group = (page, title) => page.locator('.dv-groupview').filter({ has: button(page, `关闭${title}`) })
 const ORIGINAL = 'D:/视频制作/0A0片头片尾和素材/2021片头V2 4K 60FPS.mp4'
@@ -18,7 +19,8 @@ function fixture() {
     sequences: [{ id: 'main', name: '序列 1', width: 3840, height: 2160, frameRate: { numerator: 60, denominator: 1 }, pixelAspectRatio: { numerator: 1, denominator: 1 }, sampleRate: 48000, channels: 2,
       tracks: [track(0, 'audio', '音频 1'), track(1, 'video', '视频 1'), track(2, 'video', '视频 2')], clips: [clip('a', 0), clip('b', 180)], annotations: [] }] }
 }
-const readProject = file => JSON.parse(fs.readFileSync(file, 'utf8'))
+// 3.1：剪辑是项目里的文档文件，按旧工程形状读出（夹具路径读它对应的实际剪辑）
+const readProject = readVideoEditFile
 async function saved(page, file, predicate, message) {
   for (let attempt = 0; attempt < 300; attempt++) { const value = readProject(file); if (predicate(value)) return value; await page.waitForTimeout(100) }
   throw new Error(message)
@@ -81,7 +83,7 @@ function createVideoEditPopoutScene() {
         await button(page, '剪辑').first().click(); if (await button(page, '关闭项目').isVisible()) await button(page, '关闭项目').click()
         await page.evaluate(() => localStorage.removeItem('henji.videoEdit.dockLayout.v1'))
         await observeWorkers(page); observed = true
-        await dialogs(app, [file], file); await button(page, '打开项目文件').click(); await presented(page, 0)
+        await dialogs(app, [file], file); await openVideoEditFile(page, file); await presented(page, 0)
         const identity = await authorizeMcpConnection(page, { name: '独立浮窗验收', allowWrites: true }); client = await connectMcpClient(identity.config, 'Henji popout Reality')
         await playback(0, false); await presented(page, 0)
 
@@ -157,7 +159,7 @@ function createVideoEditPopoutScene() {
         await observeWorkers(page)
         await button(page, '剪辑').first().click(); await dialogs(app, [file], file)
         const restoredWindows = []; const onWindow = child => restoredWindows.push(child); app.on('window', onWindow)
-        await button(page, '打开项目文件').click()
+        await openVideoEditFile(page, file)
         const expectedTitles = ['痕迹AI', '痕迹AI · 效果控件', '痕迹AI · 时间线', '痕迹AI · 节目画面'].sort()
         for (let attempt = 0; attempt < 200 && JSON.stringify((await windows()).map(window => window.title).sort()) !== JSON.stringify(expectedTitles); attempt++) await page.waitForTimeout(100)
         app.off('window', onWindow)

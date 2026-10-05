@@ -37,6 +37,11 @@ vi.mock('@/commands/documents', () => {
     finalizeProject: call('finalizeProject'),
     trashProject: call('trashProject'),
     revealProject: call('revealProject'),
+    collectDocumentMedia: call('collectDocumentMedia'),
+    importFileToContainer: call('importFile'),
+    setProjectMainDocument: call('setProjectMainDocument'),
+    registerExternalProject: call('registerExternalProject'),
+    forgetExternalLocation: call('forgetExternalLocation'),
   }
 })
 

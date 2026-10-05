@@ -4,6 +4,8 @@ import { getPlatform } from '@/platform/runtime'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { appendVideoEditClip, appendVideoEditSequence, beginVideoEditGesture, closeVideoEditProject, createVideoEditProject, editVideoProject, finishVideoEditGesture, getActiveVideoEditSequence, listVideoEditInstances, openVideoEditProject, saveVideoEdit, setVideoEditView, switchVideoEditSequence, undoVideoEdit, updateVideoEditGesture } from './videoEditService'
 import type { VideoEditDocument } from '@/core/videoEdit/document'
+import { savedVideoEdit, reopenVideoEdit } from './videoEditDocumentTestKit'
+import { harnessDocumentStore } from '@/tests/harnessNativeStorage'
 
 const files = new Map<string, string>()
 beforeEach(() => {
@@ -18,13 +20,13 @@ const position = (x: number) => (document: VideoEditDocument): VideoEditDocument
 it('连续预览只提交一次历史，保存等待结束且不落盘半段参数，撤销重做一致', async () => {
   const owner = (await createVideoEditProject())!; const id = owner.document.id
   appendVideoEditClip(id); await saveVideoEdit(id)
-  const history = owner.past.length; const saved = files.get(owner.path); const handle = beginVideoEditGesture(id)
+  const history = owner.past.length; const saved = JSON.stringify(savedVideoEdit(owner)); const handle = beginVideoEditGesture(id)
   for (let index = 1; index <= 8; index++) updateVideoEditGesture(handle, position(index / 10))
   expect(owner.past).toHaveLength(history); expect(getActiveVideoEditSequence(owner).clips[0].x).toBe(.8)
   let finished = false; const saving = saveVideoEdit(id).then(() => { finished = true })
-  await Promise.resolve(); expect(finished).toBe(false); expect(files.get(owner.path)).toBe(saved)
+  await Promise.resolve(); expect(finished).toBe(false); expect(JSON.stringify(savedVideoEdit(owner))).toBe(saved)
   finishVideoEditGesture(handle); await saving
-  expect(owner.past).toHaveLength(history + 1); expect(JSON.parse(files.get(owner.path)!).sequences[0].clips[0].x).toBe(.8)
+  expect(owner.past).toHaveLength(history + 1); expect(savedVideoEdit(owner).sequences[0].clips[0].x).toBe(.8)
   undoVideoEdit(id); expect(getActiveVideoEditSequence(owner).clips[0].x).toBe(0)
   undoVideoEdit(id, true); expect(getActiveVideoEditSequence(owner).clips[0].x).toBe(.8)
 })
@@ -59,7 +61,7 @@ it('关闭取消原预览并保存有效版本，同ID重开不接受旧句柄',
   const owner = (await createVideoEditProject())!; const id = owner.document.id
   appendVideoEditClip(id); await saveVideoEdit(id)
   const handle = beginVideoEditGesture(id); updateVideoEditGesture(handle, position(.8))
-  await closeVideoEditProject(id); const reopened = (await openVideoEditProject(owner.path))!
+  await closeVideoEditProject(id); const reopened = await reopenVideoEdit(owner.document.id)
   expect(getActiveVideoEditSequence(reopened).clips[0].x).toBe(0)
   expect(() => updateVideoEditGesture(handle, position(.1))).toThrow('原参数调整已结束')
   finishVideoEditGesture(handle); expect(getActiveVideoEditSequence(reopened).clips[0].x).toBe(0)
@@ -70,16 +72,16 @@ it('关闭保存期间拒绝新的手势和写入，合并并发关闭，失败�
   appendVideoEditClip(id); await saveVideoEdit(id); editVideoProject(id, position(.6))
   let release!: () => void
   const gate = new Promise<void>(resolve => { release = resolve })
-  const write = vi.spyOn(getPlatform().system.fs, 'writeTextFile').mockImplementationOnce(async (path, value) => { await gate; files.set(path, value) })
+  const store = harnessDocumentStore(); store.saveGate = gate
   const first = closeVideoEditProject(id); const second = closeVideoEditProject(id)
-  await vi.waitFor(() => expect(write).toHaveBeenCalledOnce())
+  await vi.waitFor(() => expect(store.activeSaves).toBe(1))
   expect(() => beginVideoEditGesture(id)).toThrow('项目正在关闭')
   expect(() => editVideoProject(id, position(.9))).toThrow('项目正在关闭')
-  release(); await Promise.all([first, second])
-  expect(listVideoEditInstances()).toEqual([]); expect(JSON.parse(files.get(owner.path)!).sequences[0].clips[0].x).toBe(.6)
-  const reopened = (await openVideoEditProject(owner.path))!; editVideoProject(id, position(.7))
-  write.mockRejectedValueOnce(new Error('disk denied'))
-  await expect(closeVideoEditProject(id)).rejects.toThrow('项目未能保存到磁盘')
+  store.saveGate = null; release(); await Promise.all([first, second])
+  expect(listVideoEditInstances()).toEqual([]); expect(savedVideoEdit(owner).sequences[0].clips[0].x).toBe(.6)
+  const reopened = await reopenVideoEdit(owner.document.id); editVideoProject(id, position(.7))
+  store.failSaves = 1
+  await expect(closeVideoEditProject(id)).rejects.toThrow('剪辑未能保存到磁盘')
   const handle = beginVideoEditGesture(id); finishVideoEditGesture(handle)
   expect(listVideoEditInstances()).toContain(reopened)
 })

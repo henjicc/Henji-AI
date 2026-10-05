@@ -6,6 +6,7 @@ const { execFileSync } = require('node:child_process')
 const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
 const { clickOutsideFloatingAssets, observeWorkers, workerSnapshot, waitReleased } = require('./uiInspectionSceneVideoEditLayout.cjs')
 const { dialogs, presented, png, pixelDifference, mediaProbe, trackBanks } = require('./uiInspectionSceneVideoEditMonitor.cjs')
+const { adoptNewVideoEditProject, leaveVideoEditProject, openVideoEditFile, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
 const button = (page, name) => page.getByRole('button', { name, exact: true })
 const normalized = value => value.replaceAll('/', '\\').toLowerCase()
 
@@ -14,7 +15,7 @@ function createVideoEditOutputsScene({ canvasFixtureProjectId }) {
   return { id: 'video-edit-outputs', surface: '剪辑', name: '剪辑-真实4K选帧成片同源资产收录与画布复用', writesUserData: true,
     setup: async (page, app, { capture }) => {
       const root = path.resolve('node_modules/.cache/video-edit-outputs'); fs.mkdirSync(root, { recursive: true })
-      const fixture = JSON.parse(fs.readFileSync(path.resolve('node_modules/.cache/video-edit-composite-edit/mixed.henji-video'), 'utf8'))
+      const fixture = readVideoEditFile(path.resolve('node_modules/.cache/video-edit-composite-edit/mixed.henji-video'))
       fixture.id = 'video-edit-output-collection'; fixture.name = '真实混剪输出收录'; fixture.revision = 0
       const file = path.join(root, 'outputs.henji-video'); fs.writeFileSync(file, JSON.stringify(fixture))
       const selectedPath = path.join(root, `program-90-${Date.now()}.png`); const exportPath = path.join(root, `mixed-${Date.now()}.mp4`)
@@ -35,7 +36,7 @@ function createVideoEditOutputsScene({ canvasFixtureProjectId }) {
         if (await button(page, '关闭项目').isVisible()) await button(page, '关闭项目').click()
         await button(page, '生成').click(); previousLayout = await page.evaluate(() => localStorage.getItem('henji.videoEdit.dockLayout.v1'))
         await page.evaluate(() => localStorage.removeItem('henji.videoEdit.dockLayout.v1')); await observeWorkers(page); observed = true; await button(page, '剪辑').click()
-        await dialogs(app, [file], file); await button(page, '打开项目文件').click(); await presented(page, 0)
+        await dialogs(app, [file], file); await openVideoEditFile(page, file); await presented(page, 0)
         const identity = await authorizeMcpConnection(page, { name: '剪辑输出收录验收', allowWrites: true }); client = await connectMcpClient(identity.config, 'Henji output collection Reality')
         const projectRef = { kind: 'video_edit.project', id: fixture.id }
         const baseline = await callTool(client, 'read_application_entity', { ref: projectRef, propertyIds: ['video_edit.project.program_playback'] })

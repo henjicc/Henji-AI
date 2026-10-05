@@ -7,6 +7,7 @@ import { createVideoEditProject, listVideoEditInstances, closeVideoEditProject, 
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { createVideoEditCaption, createVideoEditMarker, importVideoEditCaptionFile, exportVideoEditSubtitles, updateVideoEditTimedContent } from './videoEditTimedContent'
 import { executeVideoEditTimelineEdit } from './videoEditTimeline'
+import { reopenVideoEdit } from './videoEditDocumentTestKit'
 const files = new Map<string, string>()
 beforeEach(() => {
   installHarnessNativeStorage(); files.clear()
@@ -44,8 +45,8 @@ it('通用字幕/标记集合、修改、片段级联和手动撤销保存重开
     undoVideoEdit(projectId); expect(owner.document.sequences[0].captions![0].start).toBe(15)
     const detached = await app.change({ kind: 'video_edit.marker', id: `${projectId}:${marker.id}` }, { 'video_edit.marker.clip_id': '' })
     expect(detached, JSON.stringify(detached)).toMatchObject({ ok: true }); expect(owner.document.sequences[0].markers![0].clipId).toBeUndefined()
-    await saveVideoEdit(projectId); const snapshot = structuredClone(owner.document); await closeVideoEditProject(projectId)
-    const reopened = (await openVideoEditProject('D:/timed.henji-video'))!; expect(reopened.document).toEqual(snapshot)
+    await saveVideoEdit(projectId); const snapshot = structuredClone(owner.document)
+    const reopened = await reopenVideoEdit(projectId); expect(reopened.document).toEqual({ ...snapshot, revision: 0 })
   } finally { app.dispose() }
 })
 
@@ -117,7 +118,7 @@ it('字幕输出晚到时文件属于原快照，回执拒绝指认重新打开�
   })
   const pending = exportVideoEditSubtitles(projectId, 'srt'); const rejected = expect(pending).rejects.toThrow('原工程会话已关闭')
   await vi.waitFor(() => expect(finish).toBeTypeOf('function'))
-  await closeVideoEditProject(projectId); const reopened = (await openVideoEditProject(owner.path))!
+  await closeVideoEditProject(projectId); const reopened = await reopenVideoEdit(owner.document.id)
   finish(); await rejected
   expect(reopened.document.sequences[0].captions![0].text).toBe('原会话'); expect(files.get('D:/late.srt')).toContain('原会话')
 })

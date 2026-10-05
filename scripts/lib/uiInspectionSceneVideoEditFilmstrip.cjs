@@ -3,6 +3,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const os = require('node:os')
 const { execFileSync } = require('node:child_process')
+const { adoptNewVideoEditProject, leaveVideoEditProject, openVideoEditFile, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
 const button = (page, name) => page.getByRole('button', { name, exact: true })
 const quantile = (values, q) => [...values].sort((a, b) => a - b)[Math.min(values.length - 1, Math.floor(values.length * q))] ?? 0
 
@@ -43,7 +44,7 @@ function createVideoEditFilmstripScene() {
       }
       const open = async () => {
         await app.evaluate(({ dialog }, file) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] }) }, file)
-        await button(page, '打开项目文件').click(); await presented(0, 'filmstrip-open-failed')
+        await openVideoEditFile(page, file); await presented(0, 'filmstrip-open-failed')
       }
       const rewind = async label => {
         const ruler = page.getByRole('slider', { name: '剪辑时间定位' })

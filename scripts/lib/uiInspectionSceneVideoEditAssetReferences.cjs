@@ -5,6 +5,7 @@ const sharp = require('sharp')
 const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
 const { observeWorkers, workerSnapshot, waitReleased } = require('./uiInspectionSceneVideoEditLayout.cjs')
 const { dialogs, saved, presented, png, pixelDifference, trackBanks } = require('./uiInspectionSceneVideoEditMonitor.cjs')
+const { adoptNewVideoEditProject, leaveVideoEditProject, openVideoEditFile, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
 
 const button = (page, name) => page.getByRole('button', { name, exact: true })
 const entry = (page, id) => page.locator(`[data-video-edit-project-entry="${id}"]`)
@@ -23,7 +24,7 @@ function createVideoEditAssetReferencesScene() {
       for (const [target, color] of [[first, { r: 21, g: 80, b: 220 }], [second, { r: 35, g: 195, b: 87 }]]) {
         if (!fs.existsSync(target)) await sharp({ create: { width: 3840, height: 2160, channels: 3, background: color } }).png().toFile(target)
       }
-      const fixture = JSON.parse(fs.readFileSync(path.resolve('node_modules/.cache/video-edit-monitor/monitor.henji-video'), 'utf8'))
+      const fixture = readVideoEditFile(path.resolve('node_modules/.cache/video-edit-monitor/monitor.henji-video'))
       fixture.id = 'asset-fixed-reference'; fixture.name = '固定原路径资产引用'; fixture.revision = 0
       fixture.media = []; fixture.bins = []; fixture.items = []; fixture.codeMaterials = []; fixture.sequences = [fixture.sequences[0]]
       const sequence = fixture.sequences[0]
@@ -50,7 +51,7 @@ function createVideoEditAssetReferencesScene() {
         previousLayout = await page.evaluate(() => localStorage.getItem('henji.videoEdit.dockLayout.v1'))
         await page.evaluate(() => localStorage.removeItem('henji.videoEdit.dockLayout.v1'))
         await observeWorkers(page); observed = true; await button(page, '剪辑').click()
-        const open = async () => { await dialogs(app, [file], file); await button(page, '打开项目文件').click(); await button(page, '关闭项目').waitFor({ state: 'visible' }) }
+        const open = async () => { await dialogs(app, [file], file); await openVideoEditFile(page, file); await button(page, '关闭项目').waitFor({ state: 'visible' }) }
         await open()
         phase('原生资产核验与陈旧卡片路径的真实拖入')
         const asset = await page.evaluate(async filePath => {

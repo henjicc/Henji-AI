@@ -13,6 +13,7 @@ import { appendVideoEditItems, createVideoEditGraphicItem } from './videoEditPro
 import { renameVideoEditGraphicObject } from './videoEditGraphics'
 import { setVideoEditCodeParameter } from './videoEditCodeParameters'
 import { videoEditGraphicObjectId } from './videoEditCompositeEntities'
+import { openSeededVideoEdit } from './videoEditDocumentTestKit'
 
 const files = new Map<string, string>()
 let calls = 0
@@ -119,8 +120,7 @@ it('名称、形状位置和既有画面手势复用已验证绑定，不重新�
   expect(calls).toBe(0)
 })
 it('打开工程和新文字在缺失实际测量环境时拒绝，不安装损坏工程', async () => {
-  files.set('D:/bad-glyph.henji-video', JSON.stringify(videoEditDocumentSchema.parse(document('W'.repeat(2000), 512))))
-  await expect(openVideoEditProject('D:/bad-glyph.henji-video')).rejects.toThrow('8192')
+  await expect(openSeededVideoEdit(videoEditDocumentSchema.parse(document('W'.repeat(2000), 512)))).rejects.toThrow('8192')
   expect(listVideoEditInstances()).toEqual([])
   const owner = (await createVideoEditProject())!; const before = owner.document; const history = owner.past.length
   vi.stubGlobal('OffscreenCanvas', undefined)

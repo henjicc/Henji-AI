@@ -19,6 +19,7 @@ import { loadRealModelsIntoRegistry } from './loadRealModels';
 import { harnessDocumentStore, installHarnessNativeStorage, registerHarnessAudioEditProject, uninstallHarnessNativeStorage } from './harnessNativeStorage';
 import { createApplicationHarness } from './applicationHarness';
 import { closeVideoEditProject, createVideoEditProject } from '@/features/videoEdit/application/videoEditService';
+import { savedVideoEdit } from '@/features/videoEdit/application/videoEditDocumentTestKit';
 
 beforeAll(async () => { installHarnessNativeStorage(); await loadRealModelsIntoRegistry() })
 afterAll(() => uninstallHarnessNativeStorage())
@@ -47,11 +48,7 @@ it('所有已登记写域均经公共授权入口修改、正式读回并核对�
       createdAt: 1, updatedAt: 1, revision: 1,
     })
     // 剪辑工程保存在用户选择的本地文件；这里只替换文件 I/O 边界。
-    const videoFiles = new Map<string, string>()
-    vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/write-loop.henji-video')
-    vi.spyOn(getPlatform().system.fs, 'writeTextFile').mockImplementation(async (path, text) => { videoFiles.set(path, text) })
-    vi.spyOn(getPlatform().system.fs, 'readTextFile').mockImplementation(async path => videoFiles.get(path)!)
-    const video = (await createVideoEditProject())!
+    const video = await createVideoEditProject()
     // 作品文档（存储底座 2.5）：只替换 henjiNative.documents 背后的文件夹
     const documentMeta = harnessDocumentStore().seed({ name: '公共文档回环', content: { items: [] } })
     const first = async (entityType: string): Promise<ApplicationRef> => {
@@ -70,7 +67,8 @@ it('所有已登记写域均经公共授权入口修改、正式读回并核对�
       { domain: 'image_edit', ref: { kind: 'image_edit.layer', id: `v3:${document.id}:effect` }, property: 'image_edit.layer.opacity', value: 0.42 },
       { domain: 'assets', ref: (library.resultRefs as ApplicationRef[])[0], property: 'asset.library.name', value: '公共素材已改名' },
       { domain: 'audio_edit', ref: { kind: 'audio_edit.project', id: 'audio-loop' }, property: 'audio_edit.project.name', value: '公共口播已改名' },
-      { domain: 'video_edit', ref: { kind: 'video_edit.project', id: video.document.id }, property: 'video_edit.project.name', value: '公共剪辑已改名' },
+      // 剪辑名就是文件名（3.1，改名走 documents.document.name）；剪辑写域以序列名验证内容写入与持久化
+      { domain: 'video_edit', ref: { kind: 'video_edit.sequence', id: `${video.document.id}:${video.activeSequenceId}` }, property: 'video_edit.sequence.name', value: '公共剪辑已改名' },
       { domain: 'documents', ref: { kind: 'documents.document', id: documentMeta.id }, property: 'documents.document.name', value: '公共文档已改名' },
     ]
     const registry = getApplicationReflectionRegistry()
@@ -99,7 +97,7 @@ it('所有已登记写域均经公共授权入口修改、正式读回并核对�
     expect(cameraContent.sceneSettings.sky.color).toBe(BLACK_HEX)
     // 后台写入不切换界面上的三维场景
     expect(useCameraStageStore.getState().currentProjectId).not.toBe(cameraDocumentId)
-    expect(JSON.parse(videoFiles.get('D:/write-loop.henji-video')!).name).toBe('公共剪辑已改名')
+    expect(savedVideoEdit(video).sequences[0].name).toBe('公共剪辑已改名')
     expect(harnessDocumentStore().stored(documentMeta.id)?.meta.name).toBe('公共文档已改名')
     await closeVideoEditProject(video.document.id)
   } finally { vi.restoreAllMocks(); dispose(); app.dispose(); useSettingsStore.getState().setThemeContrast(originalContrast) }

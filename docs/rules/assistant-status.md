@@ -294,6 +294,12 @@ schema 校验所以看不见，MCP 侧测试又都跑在未授权付费的连接
 `writeExclusion.reason` 点名改道能力），场景、对象、摄像机、状态关键帧、轨迹、播放等内容能力与属性不变，`projectId` 字段收文档 ID。
 Pi 在三维界面的基础工具由 `get_camera_stage_project` 换成 `observe_camera_stage_scene`。
 
+2026-10-06 增量（3.1 剪辑接入文档底座）：剪辑存成项目里的 `.henji-video` 文档，`open_document` 对 `video_edit` 已可用
+（打开到剪辑工作区，登记了后台释放方式）；项目的列出、新建、改名、移到回收站与剪辑的移动、副本由通用文档能力承担。
+`video_edit.project` 的 id 即剪辑文档 ID，剪辑内容能力与属性不变（剪辑没打开时如实提示先用 `open_document` 打开）；
+`video_edit.project.name` 改为只读（剪辑名就是文件名，改名写 `documents.document.name`），`save_video_edit` 改为“立即写完自动保存”。
+其他工具的结果经 `place_video_edit_creative_result` 放进剪辑时先复制进所在项目的“生成结果”再引用。
+
 2026-10-06 增量（3.5 图片文档）：`.henjiimg` 成为正式文档（类型 `image_document`），列出、新建（经界面）、打开、移动、副本、
 回收站、改名由通用文档能力承担；`open_document` 对 `image_document` 已可用（交给工具箱图片编辑页打开，离开当前文档按草稿规则询问），
 并登记后台释放。`image_edit.*` 实体目录改为“作品索引里的图片文档 + 已载入的实例”，不再遍历程序目录的 V3 工作副本仓库；
@@ -466,6 +472,7 @@ HTTP 与插件两类适配器仍然不做，理由不变。
 
 格式：`日期 · 提交 · 推翻了什么 → 换成了什么 · 为什么旧的不能留`
 
+- **2026-10-06 · 3.1 剪辑接入** · 推翻 2026-09-30 起剪辑工程的“用户另存为选位置的单个 `.henji-video` 文件、渲染层直接写文件”与经 `video_edit.project.name` 通用属性改工程名 → 换成项目文件夹里的剪辑文档（文档会话自动保存、草稿项目离开询问），改名走 `documents.document.name`。旧做法每个工具各写一套存储与离开流程、素材写死绝对路径，项目拷走就断（项目体系第二版）。
 - **2026-10-06 · 3.5 图片文档** · 推翻 `image_edit.document` 实体目录“列出程序目录 V3 文档仓库里的全部文档”→ 换成作品索引里的图片文档（.henjiimg）加已载入的实例。旧目录混着画布节点、剪辑画面的受管文档，没有名称与归属，直接列给助手编辑会改动别处引用的内容；图片文档的工作副本 ID 就是文档 ID，按文档找即可。工具箱图片编辑旧的“只在内存里记住上一张”与“打开 / 保存可编辑文件”对话框入口一并删除。
 - **2026-10-06 · 3.2 镜头参考接入** · 推翻 2026-10-03 起 `create_camera_stage_project` 等镜头参考项目管理能力（含新建后从持久存储回读默认摄像机的核实回执）→ 换成通用 `create_document` / `list_documents` / `open_document` / `trash_document` 与 `documents.document.name`；默认摄像机与首关键帧改为第一次打开空文档时补上并落盘。旧能力读写的是已删除的 `camera_stage_projects` 表（项目体系第二版：作品文件是唯一真相），保留就是第二套文档管理入口。
 

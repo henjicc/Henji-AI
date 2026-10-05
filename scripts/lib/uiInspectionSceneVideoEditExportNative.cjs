@@ -5,6 +5,7 @@ const { execFileSync } = require('node:child_process')
 const { ffmpegPath, ffprobePath } = require('./mediaBinaries.cjs')
 const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
 const { dialogs, presented } = require('./uiInspectionSceneVideoEditMonitor.cjs')
+const { adoptNewVideoEditProject, leaveVideoEditProject, openVideoEditFile, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
 
 /**
  * 导出接入与预览一致性（2.4）在真实 Electron 中的闭环：
@@ -51,7 +52,8 @@ const FAILING_SOURCE_FRAME = 45
 const button = (scope, name) => scope.getByRole('button', { name, exact: true })
 const menuItem = (page, name) => page.getByRole('menuitem', { name, exact: true })
 const entry = (page, id) => page.locator(`[data-video-edit-project-entry="${id}"]`)
-const readProject = file => JSON.parse(fs.readFileSync(file, 'utf8'))
+// 3.1：剪辑是项目里的文档文件，按旧工程形状读出（夹具路径读它对应的实际剪辑）
+const readProject = readVideoEditFile
 const same = (a, b) => path.resolve(a).toLowerCase() === path.resolve(b).toLowerCase()
 const range = (from, to) => Array.from({ length: to - from }, (_, index) => from + index)
 const ffmpeg = (args, timeout = 900000) => execFileSync(ffmpegPath, ['-v', 'error', '-y', ...args], { windowsHide: true, stdio: 'pipe', timeout })
@@ -264,7 +266,7 @@ function createVideoEditExportNativeScene() {
         await page.evaluate(() => localStorage.removeItem('henji.videoEdit.dockLayout.v1'))
         const importFile = path.join(ROOT, `import-${Date.now()}.henji-video`)
         await dialogs(app, Object.values(samples).map(sample => sample.path), importFile)
-        await button(page, '新建项目').click(); await button(page, '导入').click()
+        await button(page, '新建项目').click(); await adoptNewVideoEditProject(page, importFile); await button(page, '导入').click()
         const imported = await saved(page, importFile, value => value.media.length === Object.keys(samples).length, '样本未全部导入')
         const identity = await authorizeMcpConnection(page, { name: '导出验收', allowWrites: true })
         client = await connectMcpClient(identity.config, 'Henji export Reality')
@@ -295,7 +297,7 @@ function createVideoEditExportNativeScene() {
         const open = async (document, output) => {
           if (await button(page, '关闭项目').isVisible()) await button(page, '关闭项目').click()
           const file = path.join(ROOT, `${document.id}.henji-video`); fs.writeFileSync(file, JSON.stringify(document))
-          await dialogs(app, [file], output); await button(page, '打开项目文件').click(); await presented(page, 0)
+          await dialogs(app, [file], output); await openVideoEditFile(page, file); await presented(page, 0)
           return file
         }
         const previewFrames = async (document, frames) => {

@@ -18,6 +18,8 @@ import type {
   DuplicateDocumentRequest,
   FinalizeDocumentRequest,
   FinalizeProjectRequest,
+  ImportFileRequest,
+  ImportFileResult,
   MoveDocumentRequest,
   NameCheckRequest,
   NameCheckResult,
@@ -27,6 +29,7 @@ import type {
   RenameDocumentRequest,
   RenameProjectRequest,
   SaveDocumentRequest,
+  SetProjectMainDocumentRequest,
 } from '@/core/documents/types'
 
 import type { DocumentOperationCommands } from './documentOperations'
@@ -170,7 +173,9 @@ export class FakeDocumentCommands implements DocumentOperationCommands {
     // 对齐主进程：给了名字按用户输入处理，同一文件夹重名报错不加后缀
     const folder = request.container.kind === 'project' ? this.projects.get(request.container.projectId)?.path ?? TEST_DOCUMENT_ROOT : TEST_DOCUMENT_ROOT
     if (request.name !== undefined && this.isTaken(folder, request.name, '')) throw namedError('DocumentNameConflictError', '已有同名文件。')
+    if (request.id !== undefined && this.documents.has(request.id)) throw namedError('DocumentLocationError', '已有同一 ID 的文档。')
     const meta = this.seed({
+      id: request.id,
       kind: request.kind,
       name,
       content: request.content ?? fakeKindOf(request.kind).createEmptyContent(),
@@ -293,7 +298,13 @@ export class FakeDocumentCommands implements DocumentOperationCommands {
 
   async createProject(request?: CreateProjectRequest): Promise<ProjectSummary> {
     this.calls.push('createProject')
-    return this.seedProject({ name: request?.name ?? '未命名项目 1', draft: request?.name === undefined })
+    // 对齐主进程：自动名“未命名项目 N”在“项目”文件夹里顺延
+    let name = request?.name
+    for (let index = 1; name === undefined; index += 1) {
+      const candidate = `未命名项目 ${index}`
+      if (![...this.projects.values()].some((project) => entryNameKey(project.name) === entryNameKey(candidate))) name = candidate
+    }
+    return this.seedProject({ name, draft: request?.name === undefined })
   }
 
   async finalizeProject(request: FinalizeProjectRequest): Promise<ProjectSummary> {
@@ -407,6 +418,65 @@ export class FakeDocumentCommands implements DocumentOperationCommands {
   async revealProject(projectId: string): Promise<void> {
     this.calls.push('revealProject')
     this.revealed.push(projectId)
+  }
+
+  /** 收集素材的替身：把 collectMapping 里登记的原位置换成项目“素材”里的新位置（对齐主进程：有变化才加版本）。 */
+  collectMapping = new Map<string, string>()
+  readonly imported: ImportFileRequest[] = []
+
+  async collectDocumentMedia(target: DocumentTarget): Promise<DocumentTransferResult> {
+    this.calls.push('collectDocumentMedia')
+    const stored = this.require(target.id)
+    const before = JSON.stringify(stored.content)
+    let after = before
+    for (const [from, to] of this.collectMapping) after = after.split(JSON.stringify(from).slice(1, -1)).join(JSON.stringify(to).slice(1, -1))
+    if (after === before) return { meta: stored.meta, copiedFiles: 0, missingPaths: [] }
+    stored.content = JSON.parse(after) as unknown
+    stored.meta = { ...stored.meta, revision: stored.meta.revision + 1, updatedAt: ++this.clock }
+    return { meta: stored.meta, copiedFiles: this.collectMapping.size, missingPaths: [] }
+  }
+
+  /** 对齐主进程：已在容器里的文件原样返回，否则放进容器的“生成结果 / 素材”。 */
+  async importFile(request: ImportFileRequest): Promise<ImportFileResult> {
+    this.calls.push('importFile')
+    this.imported.push(request)
+    const root = request.container.kind === 'project' ? this.projects.get(request.container.projectId)?.path : TEST_DOCUMENT_ROOT
+    if (!root) throw namedError('ProjectNotFoundError')
+    const source = request.sourcePath.replaceAll('\\', '/')
+    if (source.startsWith(`${root}/`)) return { path: request.sourcePath, copied: false }
+    const folder = request.folder === 'generated' ? '生成结果' : '素材'
+    return { path: `${root}/${folder}/${source.slice(source.lastIndexOf('/') + 1)}`, copied: true }
+  }
+
+  async setProjectMainDocument(request: SetProjectMainDocumentRequest): Promise<ProjectSummary> {
+    this.calls.push('setProjectMainDocument')
+    const project = this.projects.get(request.projectId)
+    if (!project) throw namedError('ProjectNotFoundError')
+    if (request.documentId !== null) {
+      const document = this.documents.get(request.documentId)
+      if (!document || document.meta.kind !== 'video_edit' || document.meta.container.kind !== 'project' || document.meta.container.projectId !== project.id) {
+        throw namedError('DocumentLocationError', '主剪辑必须是这个项目里的剪辑。')
+      }
+    }
+    const next = { ...project, mainVideoEditId: request.documentId }
+    this.projects.set(project.id, next)
+    return next
+  }
+
+  async registerExternalProject(folderPath: string): Promise<ProjectSummary> {
+    this.calls.push('registerExternalProject')
+    const existing = [...this.projects.values()].find((project) => project.path === folderPath)
+    if (existing) return existing
+    const name = folderPath.slice(folderPath.replaceAll('\\', '/').lastIndexOf('/') + 1)
+    const project = this.seedProject({ name })
+    const next = { ...project, path: folderPath, external: true }
+    this.projects.set(project.id, next)
+    return next
+  }
+
+  async forgetExternalLocation(folderPath: string): Promise<void> {
+    this.calls.push('forgetExternalLocation')
+    for (const [id, project] of this.projects) if (project.path === folderPath && project.external) this.projects.delete(id)
   }
 
   /** 把一份文档标为缺失（模拟文件被删或外部盘不在）。 */

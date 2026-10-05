@@ -144,7 +144,9 @@ describe.skipIf(!process.versions.electron)('作品索引（SQLite）与扫描',
     const media = path.join(project.path, '素材', 'clip.mp4')
     fs.mkdirSync(path.dirname(media), { recursive: true })
     fs.writeFileSync(media, 'x')
-    await service.saveDocument({ target: { id: edit.meta.id }, expectedRevision: 0, content: { media } })
+    // 3.1 起剪辑有真实内容 schema：在空内容上放一条引用项目素材的媒体
+    const mediaItem = { id: 'clip', name: 'clip.mp4', path: media, kind: 'video', durationSeconds: 1, width: 16, height: 16 }
+    await service.saveDocument({ target: { id: edit.meta.id }, expectedRevision: 0, content: { ...(edit.content as object), media: [mediaItem] } })
     await scanner.refresh()
 
     const copyRoot = path.join(env.workRoot, '项目', '原项目 - 副本')
@@ -158,7 +160,7 @@ describe.skipIf(!process.versions.electron)('作品索引（SQLite）与扫描',
     expect(copyManifest.mainVideoEditId).toBe(copyEdit?.id)
     expect(copyEdit?.projectId).toBe(copyManifest.id)
     const read = await service.readDocument({ id: copyEdit!.id })
-    expect(read.content).toEqual({ media: path.join(copyRoot, '素材', 'clip.mp4') })
+    expect((read.content as { media: Array<{ path: string }> }).media[0].path).toBe(path.join(copyRoot, '素材', 'clip.mp4'))
   })
 
   it('扫描范围：项目里的自建子文件夹会扫描，生成结果 / 素材 / .henji 与嵌套项目不扫；没有说明的项目文件夹补写；损坏的文件跳过', async () => {

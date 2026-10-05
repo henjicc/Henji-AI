@@ -10,6 +10,7 @@ import { VideoEditMutationExecutor } from './videoEditExecutors'
 import type { ApplicationPlannedStep } from '@/core/application-control'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { dropVideoEditInput } from './videoEditDrop'
+import { savedVideoEdit, reopenVideoEdit } from './videoEditDocumentTestKit'
 
 const files = new Map<string, string>()
 beforeEach(() => {
@@ -114,10 +115,10 @@ it('多选/工具/目标/范围按真实序列保存视图，兼容selection投�
 })
 it('64次指针预览不改工程/保存/历史，释放只提交一次且可撤销', async () => {
   const { owner, id, sequence } = await fixture(); await saveVideoEdit(id)
-  const baseline = owner.document; const past = owner.past.length; const saved = files.get(owner.path)
+  const baseline = owner.document; const past = owner.past.length; const saved = JSON.stringify(savedVideoEdit(owner))
   const handle = beginVideoEditTimelineDrag(id, sequence.id)
   for (let index = 0; index < 64; index++) expect(previewVideoEditTimelineDrag(handle, { mode: 'move', delta: index }).clips[0].start).toBe(index)
-  expect(owner.document).toBe(baseline); expect(owner.past.length).toBe(past); expect(owner.dirty).toBe(false); expect(files.get(owner.path)).toBe(saved)
+  expect(owner.document).toBe(baseline); expect(owner.past.length).toBe(past); expect(owner.dirty).toBe(false); expect(JSON.stringify(savedVideoEdit(owner))).toBe(saved)
   finishVideoEditTimelineDrag(handle, { mode: 'move', delta: 20 })
   expect(owner.past.length).toBe(past + 1); expect(getActiveVideoEditSequence(owner).clips.map(clip => clip.start)).toEqual([20, 220])
   undoVideoEdit(id); expect(getActiveVideoEditSequence(owner).clips.map(clip => clip.start)).toEqual([0, 200])
@@ -132,7 +133,7 @@ it('切换序列/选区/关闭重开后晚到释放不能修改新的目标', as
   setVideoEditTimelineView(id, { selectedClipIds: [ids[0]] })
   expect(() => finishVideoEditTimelineDrag(handle, { mode: 'move', delta: 2 })).toThrow('改变')
   handle = beginVideoEditTimelineDrag(id, sequence.id); await saveVideoEdit(id); await closeVideoEditProject(id)
-  await openVideoEditProject(owner.path)
+  await reopenVideoEdit(owner.document.id)
   expect(() => finishVideoEditTimelineDrag(handle, { mode: 'move', delta: 2 })).toThrow('改变')
 })
 it('领域锁定覆盖手动、公共字段与拖动入口，通用事务失败完整恢复锁和片段', async () => {
@@ -172,7 +173,7 @@ it('关联清除与声音分量通过同源属性/集合创建回读，保存重
     expect((await app.change(ref, { 'video_edit.clip.link_id': '' })).ok).toBe(true)
     expect((await app.read(ref, ['video_edit.clip.link_id', 'video_edit.clip.source_component'])).properties).toMatchObject({ 'video_edit.clip.link_id': '', 'video_edit.clip.source_component': 'audio' })
     await saveVideoEdit(id); await closeVideoEditProject(id)
-    const reopened = (await openVideoEditProject(owner.path))!
+    const reopened = await reopenVideoEdit(owner.document.id)
     expect(reopened.document.media).toHaveLength(1); expect(reopened.document.items).toHaveLength(1); expect(getActiveVideoEditSequence(reopened).clips[0].sourceComponent).toBe('audio')
   } finally { app.dispose() }
 })
@@ -199,7 +200,7 @@ it('旧工程拆音先检测真实音轨，检查期间文档变化/无音轨均
   let release!: (value: typeof owner.document.media[number]) => void
   inspect.mockImplementationOnce(() => new Promise(resolve => { release = resolve }))
   const pending = separateVideoEditAudio(id, sequence.id, [clip.id], 0)
-  editVideoProject(id, document => ({ ...document, name: '新编辑' })); release({ ...owner.document.media[0], hasAudio: true })
+  editVideoProject(id, document => ({ ...document, sequences: document.sequences.map((sequence, index) => index ? sequence : { ...sequence, name: '新编辑' }) })); release({ ...owner.document.media[0], hasAudio: true })
   await expect(pending).rejects.toThrow('已改变'); expect(getActiveVideoEditSequence(owner).clips).toHaveLength(1)
   inspect.mockResolvedValue({ ...owner.document.media[0], hasAudio: true })
   const before = owner.past.length; await separateVideoEditAudio(id, sequence.id, [clip.id], 0)

@@ -7,7 +7,7 @@ const path = require('node:path')
  * 两者都不产生付费请求，也不碰用户真实资料目录。
  */
 const SUITES = Object.freeze(['unit', 'integration', 'ui', 'ui-audit', 'restart', 'clients'])
-const RESTART_TARGETS = Object.freeze(['mcp', 'video-edit-layout', 'camera-stage-documents', 'image-documents'])
+const RESTART_TARGETS = Object.freeze(['mcp', 'video-edit-layout', 'camera-stage-documents', 'image-documents', 'video-edit-documents'])
 
 function readValue(argv, index, option) {
   const value = argv[index + 1]
@@ -129,6 +129,7 @@ function buildRealityTestPlan(options, root) {
       const labels = {
         'video-edit-layout': '剪辑布局完整退出重启恢复验收',
         'camera-stage-documents': '镜头参考文档（草稿、离开提示、重启、右键操作）真实验收',
+        'video-edit-documents': '剪辑项目（草稿项目、离开提示、重启、收集素材、拷贝项目文件夹）真实验收',
         'image-documents': '图片文档（.henjiimg 草稿、保存、关闭写回、重新打开、意外退出后恢复）真实验收',
       }
       plans.push({ label: labels[target] ?? '应用完整退出重启后的外部连接事实核对', command: process.execPath, args })

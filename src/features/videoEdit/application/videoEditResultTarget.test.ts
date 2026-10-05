@@ -8,6 +8,8 @@ import { createVideoEditProject, listVideoEditInstances, closeVideoEditProject, 
 import { VideoEditCollectionExecutor } from './videoEditExecutors'
 import { captureVideoEditResultTarget, commitVideoEditCreativeResult, type VideoEditCreativeResult } from './videoEditResultTarget'
 import { VIDEO_EDIT_FIELDS } from './videoEditFields'
+import { reopenVideoEdit, replaceSavedVideoEdit } from './videoEditDocumentTestKit'
+import { harnessDocumentStore } from '@/tests/harnessNativeStorage'
 
 const mediaMode = vi.hoisted(() => ({ video: false }))
 vi.mock('mediabunny', () => ({ ALL_FORMATS: [], UrlSource: class {}, Input: class {
@@ -52,21 +54,21 @@ it('切序列与选区后仍回原序列：一次媒体/片段历史、固定来
   expect(owner.document.sequences[1].clips).toHaveLength(0)
   expect(await commitVideoEditCreativeResult(target, result)).toEqual(receipt); expect(owner.past).toHaveLength(history + 1)
   undoVideoEdit(owner.document.id); expect(owner.document.media).toHaveLength(0); expect(owner.document.items).toHaveLength(0)
-  undoVideoEdit(owner.document.id, true); await saveVideoEdit(owner.document.id); await closeVideoEditProject(owner.document.id)
-  const reopened = (await openVideoEditProject('D:/result-target.henji-video'))!
+  undoVideoEdit(owner.document.id, true); await saveVideoEdit(owner.document.id)
+  const reopened = await reopenVideoEdit(owner.document.id)
   expect(reopened.document.sequences[0].clips[0].creativeSource).toEqual(origin)
   await expect(commitVideoEditCreativeResult(target, result)).rejects.toThrow('已关闭')
 })
 
 it('开始前已修改与读取中修改均拒绝迟到回填，既有修改不丢失', async () => {
   const { owner, target, result } = await setup()
-  editVideoProject(owner.document.id, doc => ({ ...doc, name: '新修改' }))
+  editVideoProject(owner.document.id, doc => ({ ...doc, sequences: doc.sequences.map((sequence, index) => index ? sequence : { ...sequence, name: '新修改' }) }))
   await expect(commitVideoEditCreativeResult(target, result)).rejects.toThrow('已有修改')
   const next = captureVideoEditResultTarget(owner.document.id, owner.activeSequenceId, { mode: 'add', frame: 0, trackId: owner.document.sequences[0].tracks[0].id })
   const pending = deferred<AssetRecord>(); vi.mocked(getPlatform().assetLibrary.inspectAsset).mockReturnValueOnce(pending.promise)
   const operation = commitVideoEditCreativeResult(next, result); const rejected = expect(operation).rejects.toThrow('已有修改')
-  editVideoProject(owner.document.id, doc => ({ ...doc, name: '读取中又修改' })); pending.resolve(asset()); await rejected
-  expect(owner.document.name).toBe('读取中又修改'); expect(owner.document.media).toHaveLength(0)
+  editVideoProject(owner.document.id, doc => ({ ...doc, sequences: doc.sequences.map((sequence, index) => index ? sequence : { ...sequence, name: '读取中又修改' }) })); pending.resolve(asset()); await rejected
+  expect(owner.document.sequences[0].name).toBe('读取中又修改'); expect(owner.document.media).toHaveLength(0)
 })
 
 it('资产重新定位或内容身份变化不能替换原结果；取消不创建历史', async () => {
@@ -83,8 +85,8 @@ it('资产重新定位或内容身份变化不能替换原结果；取消不创�
 
 it('保存失败后重试只保存，不重复导入、字幕或历史', async () => {
   const { owner, target, result } = await setup()
-  vi.mocked(getPlatform().system.fs.writeTextFile).mockRejectedValueOnce(new Error('磁盘不可写'))
-  await expect(commitVideoEditCreativeResult(target, result)).rejects.toThrow('项目未能保存到磁盘')
+  harnessDocumentStore().failSaves = 1
+  await expect(commitVideoEditCreativeResult(target, result)).rejects.toThrow('剪辑未能保存到磁盘')
   expect(owner.document.sequences[0].clips).toHaveLength(1); expect(owner.past).toHaveLength(1)
   const calls = vi.mocked(getPlatform().assetLibrary.inspectAsset).mock.calls.length
   expect((await commitVideoEditCreativeResult(target, result)).verified).toBe(true)
@@ -156,8 +158,9 @@ it('公共创建与属性修改都不能伪造创作来源', async () => {
 })
 
 it('损坏或字段缺失的工程文件给出可理解的拒绝，不向界面泄露 schema 路径', async () => {
-  files.set('D:/broken.henji-video', '{not json'); files.set('D:/partial.henji-video', JSON.stringify({ format: 'henji-video-project', version: 2, id: 'p', name: '缺字段', revision: 0, media: [], bins: [], items: [], sequences: [{ id: 's' }] }))
-  await expect(openVideoEditProject('D:/broken.henji-video')).rejects.toThrow('项目文件已损坏，无法打开')
-  const partial = openVideoEditProject('D:/partial.henji-video')
+  // 文件本身读不懂（不是 JSON、外壳损坏）由主进程文档仓库拒绝；这里是外壳完好、剪辑内容缺字段
+  const owner = await createVideoEditProject(); const id = owner.document.id; await closeVideoEditProject(id)
+  replaceSavedVideoEdit(id, { media: [], bins: [], items: [], sequences: [{ id: 's' }] })
+  const partial = reopenVideoEdit(id)
   await expect(partial).rejects.toThrow('内容不完整或已损坏'); await expect(partial).rejects.not.toThrow('sequences')
 })

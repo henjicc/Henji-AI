@@ -21,6 +21,7 @@ const button = (page, name) => page.getByRole('button', { name, exact: true })
 const ROOT = path.resolve('node_modules/.cache/video-edit-media-probe')
 const SAMPLES = path.resolve('node_modules/.cache/native-decode')
 const FFPROBE = path.join(require('./mediaBinaries.cjs').binDir, 'ffprobe.exe')
+const { adoptNewVideoEditProject, leaveVideoEditProject, openVideoEditFile, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
 const TRIPO_4444 = 'D:/视频制作/2026-09-19_Tripo/素材/010_荷花_高细节_独立透明缓转_v2.mov'
 const PROFESSIONAL = [
   { file: path.join(SAMPLES, 'prores422hq.mov'), label: 'Apple ProRes HQ，10 位 4:2:2' },
@@ -173,8 +174,8 @@ function createVideoEditMediaProbeScene() {
         await button(page, '剪辑').first().click()
         if (await button(page, '关闭项目').isVisible()) await button(page, '关闭项目').click()
         const projectPath = path.join(ROOT, `import-${forced ?? 'auto'}.henji-video`); fs.rmSync(projectPath, { force: true })
-        await dialogs(app, [CONTROL], projectPath); await button(page, '新建项目').click()
-        const snapshot = () => fs.existsSync(projectPath) ? fs.readFileSync(projectPath, 'utf8') : null
+        await dialogs(app, [CONTROL], projectPath); await button(page, '新建项目').click(); await adoptNewVideoEditProject(page, projectPath)
+        const snapshot = () => fs.existsSync(projectPath) ? JSON.stringify(readVideoEditFile(projectPath)) : null
         const project = () => JSON.parse(snapshot() ?? '{"media":[]}')
         for (let index = 0; index < 100 && !fs.existsSync(projectPath); index++) await page.waitForTimeout(50)
         for (const sample of samples) {
@@ -243,7 +244,7 @@ function createVideoEditMediaProbeScene() {
         for (const legacy of LEGACY) {
           const source = path.join(ROOT, 'legacy', `${legacy.name}.henji-video`); const mediaDir = path.join(ROOT, 'legacy', 'media', legacy.name)
           assert.ok(fs.existsSync(source) && fs.existsSync(mediaDir), `缺少旧工程快照 ${source}（本机证据，见 2.1 执行记录）`)
-          const document = JSON.parse(fs.readFileSync(source, 'utf8'))
+          const document = readVideoEditFile(source)
           for (const media of document.media) {
             const frozen = path.join(mediaDir, path.basename(media.path))
             assert.ok(fs.existsSync(frozen), `旧工程快照缺少素材 ${frozen}`)
@@ -252,7 +253,7 @@ function createVideoEditMediaProbeScene() {
           const target = path.join(ROOT, `legacy-open-${forced ?? 'auto'}-${legacy.name}.henji-video`); fs.writeFileSync(target, JSON.stringify(document))
           const hash = sha256(target)
           if (await button(page, '关闭项目').isVisible()) await button(page, '关闭项目').click()
-          await dialogs(app, [target], target); await button(page, '打开项目文件').click()
+          await dialogs(app, [target], target); await openVideoEditFile(page, target)
           let outcome = 'presented'
           if (legacy.fixedReference) {
             const refused = page.locator('body').getByText(/源文件已改变或丢失/).first()

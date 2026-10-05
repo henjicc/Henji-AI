@@ -5,6 +5,7 @@ const { execFile, execFileSync } = require('node:child_process')
 const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
 const { observeWorkers, workerSnapshot, waitReleased } = require('./uiInspectionSceneVideoEditLayout.cjs')
 const { dialogs, presented } = require('./uiInspectionSceneVideoEditMonitor.cjs')
+const { adoptNewVideoEditProject, leaveVideoEditProject, openVideoEditFile, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
 const button = (page, name) => page.getByRole('button', { name, exact: true })
 const group = (page, title) => page.locator('.dv-groupview').filter({ has: button(page, `关闭${title}`) })
 const ORIGINAL = process.env.HENJI_PERF_SOURCE || 'D:/视频制作/0A0片头片尾和素材/2021片头V2 4K 60FPS.mp4'
@@ -133,7 +134,7 @@ async function videoEditResourceCycle(page, app, file, frame) {
   await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find(window => window.getTitle() === '痕迹AI · 节目画面')?.close())
   await page.locator('canvas[aria-label="剪辑画面"]').waitFor({ state: 'visible', timeout: 60000 }); await presented(page, frame)
   await button(page, '关闭项目').click(); await waitReleased(page)
-  await dialogs(app, [file], file); await button(page, '打开项目文件').click(); await presented(page, 0)
+  await dialogs(app, [file], file); await openVideoEditFile(page, file); await presented(page, 0)
   await page.waitForTimeout(1500)
 }
 
@@ -155,13 +156,13 @@ function createVideoEditPerformanceScene() {
         await callTool(client, 'change_application_entities', operationEnvelope([read], { summary: '性能定位', changes: [{ kind: 'set_properties', entityType: 'video_edit.project', target: projectRef, properties: { 'video_edit.project.program_playback': { frame, playing, playbackDirection: 1 } } }] }))
       }
       const create = async (entityType, parent, items) => { const read = await callTool(client, 'read_application_entity', { ref: parent }); const result = await callTool(client, 'change_application_entities', operationEnvelope([read], { summary: `创建${entityType}`, changes: [{ kind: 'create_items', entityType, parent, items: items.map(properties => ({ properties })) }] })); assert.equal(result.verificationState, 'verified', JSON.stringify(result)); return result }
-      const readProject = () => JSON.parse(fs.readFileSync(file, 'utf8'))
+      const readProject = () => readVideoEditFile(file)
       try {
         evidence.runtime = await app.evaluate(async ({ app, screen, BrowserWindow }) => ({ versions: { electron: process.versions.electron, chrome: process.versions.chrome }, gpu: await app.getGPUInfo('basic'), window: BrowserWindow.getAllWindows()[0].getBounds(), display: screen.getDisplayMatching(BrowserWindow.getAllWindows()[0].getBounds()).id, primary: screen.getPrimaryDisplay().id }))
         phase('build-load')
         await button(page, '剪辑').first().click(); if (await button(page, '关闭项目').isVisible()) await button(page, '关闭项目').click()
         await observeWorkers(page); observed = true
-        await dialogs(app, [file], file); await button(page, '打开项目文件').click(); await presented(page, 0)
+        await dialogs(app, [file], file); await openVideoEditFile(page, file); await presented(page, 0)
         const identity = await authorizeMcpConnection(page, { name: '性能负载', allowWrites: true }); client = await connectMcpClient(identity.config, 'Henji performance Reality')
         await create('video_edit.code_material', projectRef, [{ 'video_edit.code_material.source': GENERATOR }, { 'video_edit.code_material.source': FILTER }])
         let document = readProject(); const generatorItem = document.items.find(item => item.code && document.codeMaterials.find(definition => definition.id === item.code.definitionId)?.versions[0].source === GENERATOR)

@@ -9,6 +9,7 @@ import type {
   ProjectListQuery,
   ProjectSummary,
   RenameProjectRequest,
+  SetProjectMainDocumentRequest,
 } from '../../../../src/core/documents/types'
 import { isPathInside, samePath } from '../../../../src/core/storage/pathSyntax'
 import { createDirectoryExclusively, EntryExistsError, moveDirectoryNoOverwrite } from '../fs/no-overwrite'
@@ -86,24 +87,24 @@ export class ProjectService {
         }
         const name = userName ?? untitledEntryName(UNTITLED_PROJECT_NAMES[layout.locale], (candidate) => taken.has(entryNameKey(candidate)))
         const root = path.join(layout.projectsDir, name)
-        try {
-          await createDirectoryExclusively(root)
-        } catch (error) {
-          if (!(error instanceof EntryExistsError)) throw error
-          if (userName !== null) throw new DocumentNameConflictError(error.path)
-          continue
-        }
         const manifest = buildProjectManifest({
           id: this.workspace.randomId(),
           createdAt: this.workspace.now().toISOString(),
           locale: layout.locale,
           draft,
         })
+        // 先在点开头的暂存文件夹里写好项目说明再改名到位：扫描跳过点开头的文件夹，
+        // 不会在“文件夹已建、说明还没写”的瞬间把它当成手动建的文件夹补写一份（换掉 ID、丢掉草稿标记）。
+        const staging = path.join(layout.projectsDir, `.henji-new-${manifest.id}`)
         try {
-          await this.workspace.writeManifest(root, manifest)
+          await createDirectoryExclusively(staging)
+          await this.workspace.writeManifest(staging, manifest)
+          await moveDirectoryNoOverwrite(staging, root)
         } catch (error) {
-          await fsp.rm(root, { recursive: true, force: true }).catch(() => undefined)
-          throw error
+          await fsp.rm(staging, { recursive: true, force: true }).catch(() => undefined)
+          if (!(error instanceof EntryExistsError)) throw error
+          if (userName !== null) throw new DocumentNameConflictError(error.path)
+          continue
         }
         const project = await this.workspace.describeProject(root, manifest)
         this.workspace.catalog.upsertProject(project)
@@ -137,6 +138,25 @@ export class ProjectService {
         if (await this.workspace.findProjectRoot(parent)) throw new DocumentLocationError('不能把项目放在另一个项目里。')
       }
       return await this.relocate(project, path.join(parent, name), { draft: false })
+    }))
+  }
+
+  /** 设置项目说明里的主剪辑（打开项目时打开它）；只能是这个项目里的剪辑，null 表示清除。 */
+  async setMainDocument(request: SetProjectMainDocumentRequest): Promise<ProjectSummary> {
+    return await this.executor.run(request.projectId, async () => await this.logged('set_main', { projectId: request.projectId, documentId: request.documentId }, async () => {
+      const project = await this.requireProject(request.projectId)
+      if (request.documentId !== null) {
+        const document = this.workspace.catalog.getDocument(request.documentId)
+        if (!document || document.projectId !== project.id || document.missing) throw new DocumentLocationError('主剪辑必须是这个项目里的剪辑。')
+        if (document.kind !== 'video_edit') throw new DocumentLocationError('只有剪辑可以作为项目的主文档。')
+      }
+      const current = await this.workspace.readManifest(project.path)
+      if (!current) throw new ProjectNotFoundError(project.id)
+      const manifest = buildProjectManifest({ ...current, draft: current.draft === true, mainVideoEditId: request.documentId })
+      if ((current.mainVideoEditId ?? null) !== request.documentId) await this.workspace.writeManifest(project.path, manifest)
+      const updated = await this.workspace.describeProject(project.path, manifest)
+      this.workspace.catalog.upsertProject(updated)
+      return this.summary(updated, this.countDocuments(updated.id))
     }))
   }
 
