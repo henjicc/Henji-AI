@@ -21,11 +21,12 @@ export function ImageMarkToolV3Host(props: ImageMarkToolV3HostProps): JSX.Elemen
   const { t } = useTranslation('ui')
   const host = useImageMarkToolV3Host(props)
   const {
-    sourceImageUrl,
     onBack,
     onOpenFile,
     onPasteFromClipboard,
     onCreateBlank,
+    onSave,
+    onSaveAs,
   } = props
 
   if (host.bootstrap.kind !== 'ready') {
@@ -38,7 +39,7 @@ export function ImageMarkToolV3Host(props: ImageMarkToolV3HostProps): JSX.Elemen
           <UiPageHeader
             title={t('imageEditor.v3.title')}
             onBack={onBack}
-            backLabel={t('imageEditor.v3.host.backToToolbox')}
+            backLabel={t('imageEditor.v3.host.backToList')}
           />
         </UiRegion>
         {host.bootstrap.kind === 'loading' ? (
@@ -61,9 +62,10 @@ export function ImageMarkToolV3Host(props: ImageMarkToolV3HostProps): JSX.Elemen
   const backButton = onBack ? (
     <UiIconButton
       size="lg"
-      title={t('imageEditor.v3.host.backToToolbox')}
-      aria-label={t('imageEditor.v3.host.backToToolbox')}
-      onClick={() => void host.runAfterSave(onBack)}
+      title={t('imageEditor.v3.host.backToList')}
+      aria-label={t('imageEditor.v3.host.backToList')}
+      disabled={host.isHostBusy}
+      onClick={onBack}
     >
       <ArrowLeft size={16} />
     </UiIconButton>
@@ -71,7 +73,7 @@ export function ImageMarkToolV3Host(props: ImageMarkToolV3HostProps): JSX.Elemen
 
   return (
     <ImageEditorV3
-      sourceImageUrl={sourceImageUrl}
+      sourceImageUrl={host.sourceImageUrl}
       document={host.bootstrap.document}
       historySnapshot={host.bootstrap.history}
       resourceByteSizes={host.bootstrap.resourceByteSizes}
@@ -82,7 +84,7 @@ export function ImageMarkToolV3Host(props: ImageMarkToolV3HostProps): JSX.Elemen
       persistenceHost={host.persistenceHost}
       onPackageThumbnailChange={host.handlePackageThumbnailChange}
       onReloadEditor={host.retryBootstrap}
-      recoveryKey={props.sourceSessionKey}
+      recoveryKey={props.document.id}
       toolbarLeading={backButton}
       toolbarActions={(
         <ImageMarkToolV3ToolbarActions
@@ -90,6 +92,8 @@ export function ImageMarkToolV3Host(props: ImageMarkToolV3HostProps): JSX.Elemen
           onOpenFile={onOpenFile}
           onPasteFromClipboard={onPasteFromClipboard}
           onCreateBlank={onCreateBlank}
+          onSave={onSave}
+          onSaveAs={onSaveAs}
           videoEditReturn={props.videoEditReturn}
         />
       )}

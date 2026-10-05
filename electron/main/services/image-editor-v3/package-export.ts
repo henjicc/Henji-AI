@@ -9,6 +9,7 @@ import { replaceFileAtomically } from '../fs/atomic-file'
 import type { ImageEditDocumentEnvelope, ResourceId } from './contracts'
 import type { ContentAddressedResourceStore } from './resource-store'
 import {
+  HENJI_IMAGE_DOCUMENT_HEADER_ENTRY,
   HENJI_IMAGE_PACKAGE_FORMAT,
   HENJI_IMAGE_PACKAGE_MANIFEST,
   HENJI_IMAGE_PACKAGE_VERSION,
@@ -29,6 +30,8 @@ export interface ExportHenjiImagePackageRequest {
   resources?: readonly HenjiImagePackageResourceInput[]
   thumbnail?: HenjiImagePackageThumbnailInput
   externalSources?: readonly HenjiImageExternalSource[]
+  /** 图片文档头（3.5）：序列化好的 `henji-document.json` 内容；省略时不写这个条目。 */
+  documentHeader?: string
   signal?: AbortSignal
   now?: Date
 }
@@ -134,6 +137,9 @@ async function writeArchive(
     request.signal?.addEventListener('abort', onAbort, { once: true })
     archive.pipe(output)
     archive.append(`${JSON.stringify(manifest)}\n`, { name: HENJI_IMAGE_PACKAGE_MANIFEST })
+    if (request.documentHeader !== undefined) {
+      archive.append(request.documentHeader, { name: HENJI_IMAGE_DOCUMENT_HEADER_ENTRY })
+    }
     for (const resource of manifest.resources) {
       // 图片/瓦片通常已经压缩，store 避免对 200MP 资源重复执行高成本 deflate。
       archive.append(request.resourceStore.openVerifiedReadStream(resource.resourceId), {
@@ -152,30 +158,21 @@ async function writeArchive(
   })
 }
 
-export async function exportHenjiImagePackage(
-  request: ExportHenjiImagePackageRequest,
+/**
+ * 把可编辑图片包完整写到暂存文件并刷盘，不发布（3.5 图片文档写回：先在锁外写好，
+ * 再在文档锁内核对版本后原子替换）。失败时删除暂存文件。返回写入的 manifest。
+ */
+export async function writeHenjiImagePackageStaged(
+  request: Omit<ExportHenjiImagePackageRequest, 'targetPath'>,
+  stagedPath: string,
 ): Promise<HenjiImagePackageManifest> {
-  const targetPath = request.targetPath.trim()
-  if (!targetPath) throw new Error('.henjiimg export target path is empty')
-  const resourceInputs = uniqueResourceInputs(request)
+  const resourceInputs = uniqueResourceInputs({ ...request, targetPath: stagedPath })
   const resourceIds = resourceInputs.map((resource) => resource.resourceId)
   const lease = await request.resourceStore.acquireLease(resourceIds)
-  const stagedPath = path.join(
-    path.dirname(targetPath),
-    `.${path.basename(targetPath)}.${crypto.randomUUID()}.tmp`,
-  )
-  logger.info('开始保存可编辑图片包', {
-    event: 'image_editor_v3.package.export.start',
-    context: {
-      documentId: request.document.documentId,
-      revision: request.document.revision,
-      resourceCount: resourceIds.length,
-    },
-  })
   try {
-    await fsp.mkdir(path.dirname(targetPath), { recursive: true })
-    const manifest = await buildManifest(request, resourceInputs)
-    await writeArchive(stagedPath, manifest, request)
+    await fsp.mkdir(path.dirname(stagedPath), { recursive: true })
+    const manifest = await buildManifest({ ...request, targetPath: stagedPath }, resourceInputs)
+    await writeArchive(stagedPath, manifest, { ...request, targetPath: stagedPath })
     // Windows 不允许通过只读句柄执行 FlushFileBuffers。
     const staged = await fsp.open(stagedPath, 'r+')
     try {
@@ -183,13 +180,45 @@ export async function exportHenjiImagePackage(
     } finally {
       await staged.close()
     }
+    return manifest
+  } catch (error) {
+    await fsp.rm(stagedPath, { force: true }).catch(() => undefined)
+    throw error
+  } finally {
+    await lease.release()
+  }
+}
+
+/** 暂存文件放在目标旁边（同一磁盘，替换是一次改名）；以点开头、`.tmp` 结尾，作品扫描不会把它当文档。 */
+export function stagedPackagePathFor(targetPath: string): string {
+  return path.join(
+    path.dirname(targetPath),
+    `.${path.basename(targetPath)}.${crypto.randomUUID()}.tmp`,
+  )
+}
+
+export async function exportHenjiImagePackage(
+  request: ExportHenjiImagePackageRequest,
+): Promise<HenjiImagePackageManifest> {
+  const targetPath = request.targetPath.trim()
+  if (!targetPath) throw new Error('.henjiimg export target path is empty')
+  const stagedPath = stagedPackagePathFor(targetPath)
+  logger.info('开始保存可编辑图片包', {
+    event: 'image_editor_v3.package.export.start',
+    context: {
+      documentId: request.document.documentId,
+      revision: request.document.revision,
+    },
+  })
+  try {
+    const manifest = await writeHenjiImagePackageStaged(request, stagedPath)
     await replaceFileAtomically(stagedPath, targetPath)
     logger.info('可编辑图片包保存完成', {
       event: 'image_editor_v3.package.export.completed',
       context: {
         documentId: request.document.documentId,
         revision: request.document.revision,
-        resourceCount: resourceIds.length,
+        resourceCount: manifest.resources.length,
       },
     })
     return manifest
@@ -201,7 +230,5 @@ export async function exportHenjiImagePackage(
       error,
     })
     throw error
-  } finally {
-    await lease.release()
   }
 }

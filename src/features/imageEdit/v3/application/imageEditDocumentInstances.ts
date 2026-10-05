@@ -191,6 +191,18 @@ export function releaseImageEditDocumentInstanceV3(documentId: string): boolean 
   return true
 }
 
+/**
+ * 丢弃一份没有界面在显示的内存实例与保存队列（图片文档按文件重新解包后用，3.5）：
+ * 工作副本已被文件内容替换，旧实例里的内容不能再写回去。有界面或任务在用时拒绝。
+ */
+export function discardImageEditDocumentInstanceV3(documentId: string): boolean {
+  const instance = instances.get(documentId)
+  if (instance && (instance.views || instance.leases || instance.closing)) return false
+  if (instance) dispose(instance)
+  queues.delete(documentId)
+  return true
+}
+
 export function assertImageEditDocumentAvailableV3(documentId: string): void {
   if (deleted.has(documentId)) throw new Error('DOCUMENT_DELETED：图片文档已删除')
   if (deleting.has(documentId)) throw new Error('DOCUMENT_CLOSING：图片文档正在关闭')

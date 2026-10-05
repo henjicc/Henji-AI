@@ -1,9 +1,9 @@
 import type { ImageEditDocumentV3 } from '../../core/imageEdit/v3/documentTypes'
 import type { ImageEditCommandHistorySnapshotV3 } from '../../core/imageEdit/v3/commandHistoryCodec'
+import type { DocumentContainerRef, DocumentMeta, DocumentReadResult } from '../../core/documents/types'
 
 export type ImageEditorV3DocumentRef = `image-edit-v3:${string}`
 export type ImageEditorV3ResourceRef = `sha256:${string}`
-export type ImageEditorV3OutputRef = `henjiimg:${string}@${number}`
 export type ImageEditorV3RasterOutputRef = `image-export-v3:${string}@${number}:${ImageEditorV3RasterExportFormat}`
 
 /**
@@ -198,38 +198,45 @@ export interface ImageEditorV3PackageThumbnail {
   mediaType: 'image/png' | 'image/webp'
 }
 
-export interface ImageEditorV3PackageReadyResult {
-  kind: 'ready'
-  snapshot: ImageEditorV3DocumentSnapshot
-  resources: ImageEditorV3ResourceDescriptor[]
-  thumbnail: ImageEditorV3PackageThumbnail | null
+/** 图片文档（.henjiimg，3.5）的位置：给了 path 先按位置找并核对 ID，找不到再按作品索引。 */
+export interface ImageEditorV3ImageDocumentTarget {
+  id: string
+  path?: string
 }
 
-export interface ImageEditorV3MissingExternalSource {
-  resourceRef: ImageEditorV3ResourceRef
-  fingerprint: { algorithm: 'sha256'; value: string }
-  byteLength: number | null
-  mediaType: string | null
-  pathHint: string | null
-  relinkHint: string | null
-}
-
-export interface ImageEditorV3PackageRelinkRequiredResult {
-  kind: 'relink-required'
-  /** 仅当前主渲染进程短期有效；不包含包路径或文件系统路径。 */
-  pendingPackageRef: `image-edit-package-open:${string}`
-  missingExternalSources: ImageEditorV3MissingExternalSource[]
-  thumbnail: ImageEditorV3PackageThumbnail | null
-}
-
-export type ImageEditorV3PackageOpenResult =
-  | ImageEditorV3PackageReadyResult
-  | ImageEditorV3PackageRelinkRequiredResult
-
-export interface ImageEditorV3PackageSaveResult {
-  outputRef: ImageEditorV3OutputRef
+/** 打开图片文档后编辑器要载入的工作副本（程序目录 V3 文档仓库里同 ID 的文档）。 */
+export interface ImageEditorV3ImageDocumentWorking {
   documentRef: ImageEditorV3DocumentRef
   revision: number
+  previewRef: ImageEditorV3ResourceRef | null
+  /** 底层原图的受管媒体地址（内容哈希能力 URL，不含路径）。 */
+  sourceUrl: string | null
+}
+
+export interface ImageEditorV3ImageDocumentReady {
+  status: 'ready'
+  read: DocumentReadResult
+  working: ImageEditorV3ImageDocumentWorking
+  /** 这次按文件重新解包；渲染层若还留着这份文档的旧实例要先丢弃。 */
+  imported: boolean
+}
+
+/** 工作副本里有没写回的修改（上次意外退出），等用户选择恢复或使用文件里的版本。 */
+export interface ImageEditorV3ImageDocumentRecoveryRequired {
+  status: 'recovery'
+  meta: DocumentMeta
+  workingSavedAt: number
+  fileSavedAt: number
+}
+
+export type ImageEditorV3ImageDocumentOpenResult =
+  | ImageEditorV3ImageDocumentReady
+  | ImageEditorV3ImageDocumentRecoveryRequired
+
+export interface ImageEditorV3ImageDocumentCommitResult {
+  meta: DocumentMeta
+  /** 工作副本与文件一致，没有写文件。 */
+  unchanged: boolean
 }
 
 export type ImageEditorV3RasterExportFormat =
@@ -382,22 +389,36 @@ export interface ImageEditorV3Platform {
     requestId: string
     tiles: Array<{ tileKey: string; resource: ImageEditorV3BrushTileResource }>
   }): Promise<{ tiles: ImageEditorV3LoadedBrushTile[] }>
-  openPackage(request: {
+  /**
+   * 打开图片文档：按需把 .henjiimg 解到程序目录的工作副本。recovery 为 ask 且工作副本有没写回的修改时
+   * 返回 recovery，由界面询问后带着 restore（用工作副本）或 discard（用文件里的版本）再打开。
+   */
+  openImageDocument(request: {
     requestId: string
-  }): Promise<ImageEditorV3DialogResult<ImageEditorV3PackageOpenResult>>
-  relinkPackageExternalSource(request: {
+    target: ImageEditorV3ImageDocumentTarget
+    recovery: 'ask' | 'restore' | 'discard'
+  }): Promise<ImageEditorV3ImageDocumentOpenResult>
+  /** 改名、移动、转正后重新定位，只描述工作副本，不重新解包。 */
+  describeImageDocument(request: {
     requestId: string
-    pendingPackageRef: `image-edit-package-open:${string}`
-    resourceRef: ImageEditorV3ResourceRef
-  }): Promise<ImageEditorV3DialogResult<ImageEditorV3PackageOpenResult>>
-  savePackageAs(request: {
+    target: ImageEditorV3ImageDocumentTarget
+  }): Promise<ImageEditorV3ImageDocumentReady>
+  /** 新建草稿：工作副本已按 documentId 保存，写出草稿包到它最终所在的文件夹。 */
+  createImageDocument(request: {
     requestId: string
-    documentRef: ImageEditorV3DocumentRef
-    revision: number
-    suggestedName?: string
-    /** 当前已合成预览的有界副本；不接收 Data URL 或完整文档像素。 */
+    documentId: string
+    container: DocumentContainerRef
+    emptyUntilRevision: number | null
+  }): Promise<ImageEditorV3ImageDocumentReady>
+  /** 写回：把工作副本原子写进 .henjiimg；文件版本与 expectedRevision 不一致时报冲突，force 覆盖。 */
+  commitImageDocument(request: {
+    requestId: string
+    target: ImageEditorV3ImageDocumentTarget
+    expectedRevision: number
+    force?: boolean
+    /** 当前已合成预览的有界副本，作为包内缩略图与列表封面；不接收 Data URL 或完整文档像素。 */
     thumbnail?: ImageEditorV3PackageThumbnail & { extension: 'png' | 'webp' }
-  }): Promise<ImageEditorV3DialogResult<ImageEditorV3PackageSaveResult>>
+  }): Promise<ImageEditorV3ImageDocumentCommitResult>
   /** 保存位置只由主进程原生对话框产生，渲染层不能注入输出路径。 */
   startRasterExport(request: {
     requestId: string

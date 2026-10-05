@@ -1,4 +1,8 @@
-import { exportHenjiImagePackage, type ExportHenjiImagePackageRequest } from './package-export'
+import {
+  exportHenjiImagePackage,
+  writeHenjiImagePackageStaged,
+  type ExportHenjiImagePackageRequest,
+} from './package-export'
 import {
   importHenjiImagePackage,
   relinkHenjiImageExternalSource,
@@ -20,6 +24,14 @@ export class HenjiImagePackageCodec {
     request: Omit<ExportHenjiImagePackageRequest, 'resourceStore'>,
   ): Promise<HenjiImagePackageManifest> {
     return exportHenjiImagePackage({ ...request, resourceStore: this.resourceStore })
+  }
+
+  /** 写到暂存文件但不发布（图片文档写回在文档锁内再原子替换）。 */
+  writeStaged(
+    request: Omit<ExportHenjiImagePackageRequest, 'resourceStore' | 'targetPath'>,
+    stagedPath: string,
+  ): Promise<HenjiImagePackageManifest> {
+    return writeHenjiImagePackageStaged({ ...request, resourceStore: this.resourceStore }, stagedPath)
   }
 
   import(

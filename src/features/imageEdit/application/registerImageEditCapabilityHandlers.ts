@@ -8,8 +8,20 @@ import type { ApplicationCapabilityHandlerRegistrar } from '@/features/applicati
 import { createImageEditPreviewFromRef } from '@/features/imageEdit/application/imageSourceCapabilityService'
 import { readImageEditPreview } from '@/features/imageEdit/application/imageEditSessionRegistry'
 import { parseCapabilityInput, throwIfCapabilityAborted } from '@/features/application-control/capabilities/handlerUtils'
+import { registerDocumentOpener, registerDocumentReleaser } from '@/features/documents/documentOperations'
+import { openApplicationSurface } from '@/features/navigation/application/surfaceCapabilityService'
+import { releaseImageDocument } from '@/features/imageEdit/documents/imageDocumentRuntime'
+import { requestImageDocumentInEditor } from '@/features/imageEdit/documents/imageDocumentWorkspace'
 
 export function registerImageEditCapabilityHandlers(registrar: ApplicationCapabilityHandlerRegistrar): void {
+  // 图片文档的通用打开与后台释放（3.5）：列出、新建、移动、副本、回收站、改名走通用文档能力，
+  // 这里只登记“打开到哪里”（工具箱图片编辑页接手，离开当前文档时按草稿规则询问）和后台会话怎么释放。
+  registerDocumentOpener('image_document', (document) => {
+    requestImageDocumentInEditor({ id: document.id, path: document.path })
+    openApplicationSurface('tool.image_edit')
+  })
+  registerDocumentReleaser('image_document', releaseImageDocument)
+
   registrar.registerHandler('create_image_edit_preview', async (input, context) => {
     throwIfCapabilityAborted(context.signal)
     const parsed = parseCapabilityInput<{

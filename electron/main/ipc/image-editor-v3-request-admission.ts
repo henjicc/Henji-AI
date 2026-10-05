@@ -16,8 +16,6 @@ const OPERATION_LIMITS_PER_SENDER: Readonly<Record<string, number>> = {
   'source.tile_batch': 2,
   'brush_tiles.persist': 1,
   'brush_tiles.read': 2,
-  'package.open': 1,
-  'package.save_as': 1,
   'raster_export.start': 1,
 }
 

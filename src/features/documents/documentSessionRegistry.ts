@@ -38,7 +38,7 @@ export interface DocumentSessionRegistryOptions {
 }
 
 export interface OpenDocumentOptions {
-  /** 单文件包类型必须提供（3.5）；JSON 类型省略即可。 */
+  /** 单文件包类型必须提供（3.5，打开与新建也由它读写）；JSON 类型省略即可。 */
   persistence?: DocumentPersistence
 }
 
@@ -118,7 +118,9 @@ export class DocumentSessionRegistry {
     const pending = this.opening.get(target.id)
     if (pending) return await pending
     const operation = (async () => {
-      const read = await this.commands.readDocument(target)
+      const read = options.persistence?.read
+        ? await options.persistence.read(target, 'open')
+        : await this.commands.readDocument(target)
       return this.adopt(read, options)
     })()
     this.opening.set(target.id, operation)
@@ -134,7 +136,9 @@ export class DocumentSessionRegistry {
 
   /** 新建文档：省略名称时得到草稿（以 draft 标记立即写进最终所在的文件夹）。 */
   async create(request: CreateDocumentRequest, options: OpenDocumentOptions = {}): Promise<DocumentSession> {
-    const read = await this.commands.createDocument(request)
+    const read = options.persistence?.create
+      ? await options.persistence.create(request)
+      : await this.commands.createDocument(request)
     this.logger.info('新建文档', { event: 'documents.session.create.completed', context: { docId: read.meta.id, kind: read.meta.kind, draft: read.meta.draft } })
     return this.adopt(read, options)
   }
@@ -167,7 +171,27 @@ export class DocumentSessionRegistry {
       await this.trashDraft(session)
       return 'discarded'
     }
-    const saved = await this.prompter.askSaveName({
+    if (!await this.promptFinalize(session)) return 'cancelled'
+    await session.close()
+    return 'saved'
+  }
+
+  /**
+   * 编辑器里的“保存”：草稿弹起名对话框（可更改位置），起名后转正并写回；已保存的文档直接写回。
+   * 返回 false 表示用户取消了起名。失败时抛错，修改保留。
+   */
+  async save(id: string): Promise<boolean> {
+    const session = this.sessions.get(id)
+    if (!session) return false
+    if (session.documentMeta.draft && !await this.promptFinalize(session)) return false
+    await session.commit('save')
+    return true
+  }
+
+  /** 起名并转正（离开时“保存”与编辑器里保存草稿共用）；用户取消返回 false。 */
+  private async promptFinalize(session: DocumentSession): Promise<boolean> {
+    const id = session.id
+    return await this.prompter.askSaveName({
       subject: { type: 'document', kind: session.kind.id },
       initialName: session.documentMeta.name,
       defaultFolder: parentFolderOf(session.documentMeta.path),
@@ -183,9 +207,6 @@ export class DocumentSessionRegistry {
         this.logger.info('草稿已保存', { event: 'documents.session.finalize.completed', context: { docId: id, movedFolder: Boolean(folder), copiedFiles: result.copiedFiles } })
       },
     })
-    if (!saved) return 'cancelled'
-    await session.close()
-    return 'saved'
   }
 
   /**
@@ -273,7 +294,7 @@ export class DocumentSessionRegistry {
   }
 
   /**
-   * 应用退出 / 窗口关闭屏障：空草稿直接删除；其余写完最后一次。
+   * 应用退出 / 窗口关闭屏障：空草稿直接删除；其余写完最后一次（单文件包类型再写回文档文件）。
    * 有内容的草稿保留草稿标记，下次在项目页提示恢复（重要记录 007、012）。任一保存失败都会阻止关闭。
    */
   async prepareApplicationClose(): Promise<void> {
@@ -285,7 +306,7 @@ export class DocumentSessionRegistry {
           this.logger.warn('退出时删除空草稿失败，保留为草稿', { event: 'documents.session.exit.delete_empty_failed', error: toError(error) })
         }
       }
-      await session.flush()
+      await session.commit('close')
     }
   }
 

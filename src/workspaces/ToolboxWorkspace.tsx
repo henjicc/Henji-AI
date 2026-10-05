@@ -13,7 +13,8 @@ import {
 } from '@/components/ui'
 import type { ToolboxToolId } from '@/core/types/workspace'
 import { useNotification } from '@/contexts/NotificationContext'
-import { readImageMarkToolWorkspaceSourceV3 } from '@/features/imageMark/standalone/imageMarkToolWorkspaceV3'
+import { getImageDocumentWorkspace } from '@/features/imageEdit/documents/imageDocumentWorkspace'
+import { findOpenImageDocument } from '@/features/imageEdit/documents/imageDocumentRuntime'
 import {
   TOOLBOX_RECENT_FILE_LIMIT,
   loadToolboxRecentFiles,
@@ -97,8 +98,10 @@ const ToolboxHome: React.FC = () => {
   const latestNameByTool = useMemo(() => {
     const latest = new Map<ToolboxToolId, string>()
     for (const file of recentFiles ?? []) if (!latest.has(file.toolId)) latest.set(file.toolId, file.name)
-    const imageSource = readImageMarkToolWorkspaceSourceV3()
-    if (imageSource) latest.set('imageMark', imageSource.name)
+    // 图片编辑正在编辑的文档（切到工具首页时会话仍开着）排在最前。
+    const current = getImageDocumentWorkspace().current
+    const editing = current ? findOpenImageDocument(current) : undefined
+    if (editing && !editing.session.isEnded) latest.set('imageMark', editing.session.documentMeta.name)
     return latest
   }, [recentFiles])
   const listed = recentFiles?.slice(0, TOOLBOX_RECENT_FILE_LIMIT) ?? []

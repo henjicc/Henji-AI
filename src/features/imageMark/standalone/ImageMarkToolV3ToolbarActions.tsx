@@ -21,7 +21,7 @@ const RELEASE_EXPORT_FORMATS = new Set<ImageEditorV3RasterExportFormat>([
 
 interface ImageMarkToolV3ToolbarActionsProps extends Pick<
   ImageMarkToolV3HostProps,
-  'onOpenFile' | 'onPasteFromClipboard' | 'onCreateBlank' | 'videoEditReturn'
+  'onOpenFile' | 'onPasteFromClipboard' | 'onCreateBlank' | 'onSave' | 'onSaveAs' | 'videoEditReturn'
 > {
   host: ImageMarkToolV3HostController
 }
@@ -48,6 +48,8 @@ export function ImageMarkToolV3ToolbarActions({
   onOpenFile,
   onPasteFromClipboard,
   onCreateBlank,
+  onSave,
+  onSaveAs,
   videoEditReturn,
 }: ImageMarkToolV3ToolbarActionsProps): JSX.Element {
   const { t } = useTranslation('ui')
@@ -68,6 +70,21 @@ export function ImageMarkToolV3ToolbarActions({
         onPasteFromClipboard={() => void host.runAfterSave(onPasteFromClipboard)}
         onCreateBlank={() => void host.runAfterSave(onCreateBlank)}
       />
+      {/* 保存 / 另存为：写回图片文档（草稿先起名）；与“打开”同属文件类动作，同档 */}
+      <UiButton
+        variant="secondary"
+        disabled={host.isHostBusy}
+        onClick={() => void onSave()}
+      >
+        {t('imageEditor.v3.host.toolbar.save')}
+      </UiButton>
+      <UiButton
+        variant="secondary"
+        disabled={host.isHostBusy}
+        onClick={() => void onSaveAs()}
+      >
+        {t('imageEditor.v3.host.toolbar.saveAs')}
+      </UiButton>
       {saveFailed ? (
         <UiButton
           variant="secondary"

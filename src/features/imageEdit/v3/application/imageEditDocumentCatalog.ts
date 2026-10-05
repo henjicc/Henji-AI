@@ -1,4 +1,5 @@
 import { listImageEditorV3Documents } from '@/commands/imageEditorV3'
+import { getDocumentOperations } from '@/features/documents/documentOperations'
 import type { ApplicationRef, ApplicationEntityListRequest, ApplicationEntityListResult } from '@/core/application-control'
 import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
 import { getImageEditDocumentCatalogRevisionV3, listImageEditDocumentInstancesV3, isImageEditDocumentRetiredV3 } from './imageEditDocumentInstances'
@@ -28,13 +29,24 @@ export async function listImageEditEntitySources(
   return { refs, revisions, nextCursor: index < sources.length ? JSON.stringify([index, null]) : null }
 }
 
+/**
+ * 图片编辑文档目录（3.5）：
+ * - 图片文档（.henjiimg，含项目里的与草稿）按作品索引列出，ID 即文档 ID（也是它工作副本的 ID）；
+ * - 画布多图层节点等内嵌的 V3 文档仍在程序目录仓库里（3.4 迁走之前），主进程列出时已去掉图片文档的工作副本，
+ *   已删除图片文档留下的工作副本因此不会再出现；
+ * - 加上当前已载入的实例。
+ */
 async function documentIds(): Promise<string[]> {
   const ids = new Set(listImageEditDocumentInstancesV3().map((instance) => instance.documentId))
+  const documents = await getDocumentOperations().listDocuments({
+    kind: 'image_document', container: { kind: 'any' }, includeDrafts: true, includeMissing: false,
+  })
+  for (const document of documents) ids.add(document.id)
   let cursor: string | undefined
   do {
     const page = await listImageEditorV3Documents({ requestId: `image-edit-catalog:${crypto.randomUUID()}`, cursor, limit: 100 })
     for (const ref of page.documentRefs) ids.add(ref.slice('image-edit-v3:'.length))
-    if (page.nextCursor !== null && (page.documentRefs.length === 0 || page.nextCursor === cursor)) throw new Error('图片文档目录分页未前进')
+    if (page.nextCursor !== null && page.nextCursor === cursor) throw new Error('图片文档目录分页未前进')
     cursor = page.nextCursor ?? undefined
   } while (cursor)
   return [...ids].filter((id) => !isImageEditDocumentRetiredV3(id)).sort()

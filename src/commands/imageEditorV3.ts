@@ -266,29 +266,29 @@ export function readImageEditorV3BrushTiles(
   })
 }
 
-export function openImageEditorV3Package(
-  request: Parameters<ImageEditorV3Platform['openPackage']>[0],
-  signal?: AbortSignal,
-): ReturnType<ImageEditorV3Platform['openPackage']> {
-  return runCancellable(request.requestId, signal, (platform) => platform.openPackage(request))
+/** 图片文档（.henjiimg，3.5）：打开 / 重新定位 / 新建草稿 / 写回。 */
+export function openImageEditorV3ImageDocument(
+  request: Parameters<ImageEditorV3Platform['openImageDocument']>[0],
+): ReturnType<ImageEditorV3Platform['openImageDocument']> {
+  return getPlatform().imageEditorV3.openImageDocument(request)
 }
 
-export function relinkImageEditorV3PackageExternalSource(
-  request: Parameters<ImageEditorV3Platform['relinkPackageExternalSource']>[0],
-  signal?: AbortSignal,
-): ReturnType<ImageEditorV3Platform['relinkPackageExternalSource']> {
-  return runCancellable(
-    request.requestId,
-    signal,
-    (platform) => platform.relinkPackageExternalSource(request),
-  )
+export function describeImageEditorV3ImageDocument(
+  request: Parameters<ImageEditorV3Platform['describeImageDocument']>[0],
+): ReturnType<ImageEditorV3Platform['describeImageDocument']> {
+  return getPlatform().imageEditorV3.describeImageDocument(request)
 }
 
-export function saveImageEditorV3PackageAs(
-  request: Parameters<ImageEditorV3Platform['savePackageAs']>[0],
-  signal?: AbortSignal,
-): ReturnType<ImageEditorV3Platform['savePackageAs']> {
-  return runCancellable(request.requestId, signal, (platform) => platform.savePackageAs(request))
+export function createImageEditorV3ImageDocument(
+  request: Parameters<ImageEditorV3Platform['createImageDocument']>[0],
+): ReturnType<ImageEditorV3Platform['createImageDocument']> {
+  return getPlatform().imageEditorV3.createImageDocument(request)
+}
+
+export function commitImageEditorV3ImageDocument(
+  request: Parameters<ImageEditorV3Platform['commitImageDocument']>[0],
+): ReturnType<ImageEditorV3Platform['commitImageDocument']> {
+  return getPlatform().imageEditorV3.commitImageDocument(request)
 }
 
 export function cancelImageEditorV3Request(requestId: string): Promise<{ cancelled: boolean }> {

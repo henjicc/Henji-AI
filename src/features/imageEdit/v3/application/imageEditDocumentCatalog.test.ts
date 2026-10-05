@@ -7,13 +7,22 @@ import { ImageEditCommandBusV3 } from './imageEditCommandBus'
 import { getOrCreateImageEditDocumentInstanceV3, listImageEditDocumentInstancesV3 } from './imageEditDocumentInstances'
 import { listImageEditEntitySources } from './imageEditDocumentCatalog'
 
-const io = vi.hoisted(() => ({ list: vi.fn(), load: vi.fn() }))
-vi.mock('@/commands/imageEditorV3', () => ({ listImageEditorV3Documents: io.list, loadImageEditorV3Document: io.load,
+const io = vi.hoisted(() => ({ list: vi.fn(), listWorking: vi.fn(), load: vi.fn() }))
+vi.mock('@/commands/imageEditorV3', () => ({ loadImageEditorV3Document: io.load, listImageEditorV3Documents: io.listWorking,
   ImageEditorV3CommandRepository: class { save = vi.fn() },
+}))
+// 图片文档目录来自作品索引（3.5）：列出的是图片文档，不再遍历程序目录的工作副本仓库。
+vi.mock('@/features/documents/documentOperations', () => ({
+  getDocumentOperations: () => ({ listDocuments: io.list }),
+}))
+vi.mock('@/features/imageEdit/documents/imageDocumentRuntime', () => ({
+  ensureImageDocumentOpenInBackground: async () => undefined,
 }))
 
 beforeEach(() => {
-  io.list.mockReset().mockResolvedValue({ documentRefs: ['image-edit-v3:a', 'image-edit-v3:a0'], nextCursor: null })
+  // 图片文档 a 来自作品索引；画布内嵌文档 a0 来自程序目录仓库（主进程已去掉图片文档的工作副本）
+  io.list.mockReset().mockResolvedValue([{ id: 'a' }])
+  io.listWorking.mockReset().mockResolvedValue({ documentRefs: ['image-edit-v3:a0'], nextCursor: null })
   io.load.mockReset().mockImplementation(async ({ documentRef }: { documentRef: string }) => {
     const id = documentRef.slice('image-edit-v3:'.length)
     const document = createImageEditDocumentV3({ documentId: id, width: 10, height: 10 })
@@ -30,6 +39,7 @@ it('文档发现合并磁盘和内存记录，不依赖编辑器，也不加载�
   expect(first.refs.map((ref) => ref.id)).toEqual(['v3:a', 'v3:a0'])
   expect((await provider.listEntities({ limit: 2, cursor: first.nextCursor! })).refs.map((ref) => ref.id)).toEqual(['v3:b'])
   expect(io.load).not.toHaveBeenCalled()
+  expect(io.list).toHaveBeenCalledWith(expect.objectContaining({ kind: 'image_document', includeMissing: false }))
   expect(listImageEditDocumentInstancesV3()).toHaveLength(1)
 })
 

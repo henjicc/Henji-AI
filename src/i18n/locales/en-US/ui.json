@@ -692,7 +692,6 @@
         },
         "sourceMenu": {
           "openFile": "Open image",
-          "openPackage": "Open editable file",
           "paste": "Paste image from clipboard",
           "createBlank": "Create blank image",
           "title": "Open image",
@@ -709,18 +708,19 @@
           "exportUnavailable": "Export unavailable",
           "export": "Export…",
           "exportMenuAria": "Choose raster export format",
-          "savePackage": "Save editable file…"
+          "save": "Save",
+          "saveAs": "Save As…"
         },
         "notifications": {
           "autosaveFailed": "Autosave failed. Try again.",
           "saveBeforeReplaceFailed": "Could not save the current edit. You remain on this page.",
-          "packageRelinkRequired": "This editable file references external originals. Choose each matching file when prompted.",
-          "packageOpenFailed": "Could not open the editable file. Relinked files must match the original fingerprint, size, and format.",
-          "packageSaved": "Editable file saved",
-          "packageSaveFailed": "Could not save the editable file",
           "exportCompleted": "Raster image exported",
           "exportCancelled": "Export cancelled",
-          "exportFailed": "Could not export the raster image: {{reason}}"
+          "exportFailed": "Could not export the raster image: {{reason}}",
+          "saveFailed": "Could not save: {{message}}",
+          "openFailed": "Could not open the image document: {{message}}",
+          "createFailed": "Could not create the image document: {{message}}",
+          "leaveFailed": "Could not save before leaving. Your changes are kept: {{message}}"
         },
         "export": {
           "defaultUnavailable": "This document cannot be exported as a raster image yet.",
@@ -742,6 +742,21 @@
           "fallbackStem": "image",
           "editable": "{{stem}}-editable.henjiimg",
           "edited": "{{stem}}-edited.{{extension}}"
+        },
+        "backToList": "Back to image documents",
+        "document": {
+          "title": "Image Edit",
+          "describe": "{{width}} × {{height}} · {{layers}} layers",
+          "emptyTitle": "Open an image, or create a blank one",
+          "emptyDescription": "You can also drop an image here. New images are saved as image documents you can come back to anytime.",
+          "recovery": {
+            "title": "Recover changes from last time?",
+            "message": "“{{name}}” was not closed properly. Changes from {{workingTime}} are still kept by the app; the file holds the version saved at {{fileTime}}.",
+            "restore": "Recover changes",
+            "discard": "Use the version in the file",
+            "cancel": "Cancel"
+          },
+          "pasteEmpty": "There is no image on the clipboard"
         }
       },
       "tools": {

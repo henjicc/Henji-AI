@@ -33,11 +33,10 @@ export function createElectronImageEditorV3(): ImageEditorV3Platform {
     },
     persistBrushTiles: (request) => getNativeImageEditorV3().persistBrushTiles(request),
     readBrushTiles: (request) => getNativeImageEditorV3().readBrushTiles(request),
-    openPackage: (request) => getNativeImageEditorV3().openPackage(request),
-    relinkPackageExternalSource: (request) => (
-      getNativeImageEditorV3().relinkPackageExternalSource(request)
-    ),
-    savePackageAs: (request) => getNativeImageEditorV3().savePackageAs(request),
+    openImageDocument: (request) => getNativeImageEditorV3().openImageDocument(request),
+    describeImageDocument: (request) => getNativeImageEditorV3().describeImageDocument(request),
+    createImageDocument: (request) => getNativeImageEditorV3().createImageDocument(request),
+    commitImageDocument: (request) => getNativeImageEditorV3().commitImageDocument(request),
     startRasterExport: (request) => getNativeImageEditorV3().startRasterExport(request),
     startManagedRasterExport: (request) => getNativeImageEditorV3().startManagedRasterExport(request),
     writeRasterExportTile: (request) => getNativeImageEditorV3().writeRasterExportTile(request),

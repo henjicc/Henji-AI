@@ -1,24 +1,39 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
-import { ClipboardPaste, FilePlus2, FolderOpen, ImagePlus } from 'lucide-react';
+import { ClipboardPaste, FilePlus2, FolderOpen } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { createLogger } from '@/core/logging';
-import { createEmptyImageEditDocument, type ImageEditDocument } from '@/core/imageEdit';
-import { UiLoading } from '@/components/ui';
-import { ProjectLibraryPage, type ProjectLibraryLabels } from '@/components/ProjectLibraryPage';
+import type { ImageEditDocument } from '@/core/imageEdit';
+import type { DocumentSummary, DocumentTarget } from '@/core/documents/types';
+import { AlertDialog, UiLoading } from '@/components/ui';
+import { DocumentLibraryPage } from '@/features/documents/DocumentLibraryPage';
 import { ICON_TOOL_IMAGE_EDIT } from '@/core/theme/icons';
 import { readClipboardImage } from '@/commands/clipboard';
 import { useNotification } from '@/contexts/NotificationContext';
-import { allowMediaRoot, basename, dirname, getPathForFile, openDialog } from '@/platform/desktopApi';
+import { allowMediaRoot, dirname, getPathForFile, openDialog } from '@/platform/desktopApi';
 import { isLikelyLocalImagePath, readFileAsDataUrl } from '@/services/imageSource';
 import { useImageEditorHandoffStore } from '@/features/imageEdit/store/imageEditorHandoffStore';
+import {
+  findOpenImageDocument,
+  leaveImageDocument,
+  openImageDocument,
+  saveImageDocument,
+  saveImageDocumentAs,
+  type OpenImageDocument,
+} from '@/features/imageEdit/documents/imageDocumentRuntime';
+import type {
+  ImageDocumentRecoveryChoice,
+  ImageDocumentRecoveryInfo,
+} from '@/features/imageEdit/documents/imageDocumentPersistence';
+import {
+  getImageDocumentWorkspace,
+  setCurrentImageDocument,
+  takePendingImageDocument,
+  useImageDocumentWorkspace,
+} from '@/features/imageEdit/documents/imageDocumentWorkspace';
 import { BlankImageDialog } from './BlankImageDialog';
 import { createBlankImageDataUrl, type BlankImageSpec } from './blankImage';
+import { createImageDocumentFromSource, type ImageDocumentSource } from './imageDocumentFromSource';
 import { readDevelopmentLaunchOptions } from '@/core/development/developmentLaunch';
-import {
-  readImageMarkToolWorkspaceSourceV3,
-  rememberImageMarkToolWorkspaceSessionV3,
-  rememberImageMarkToolWorkspaceSourceV3,
-  type ImageMarkToolWorkspaceSourceV3,
-} from './imageMarkToolWorkspaceV3';
 
 const ImageMarkToolV3Host = lazy(async () => {
   const module = await import('./ImageMarkToolV3Host');
@@ -29,24 +44,34 @@ const logger = createLogger('features.imageMark');
 
 const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'avif'];
 
-type ImageMarkSource = ImageMarkToolWorkspaceSourceV3;
+/** 从剪辑画面送来编辑的文档：记下回填位置，切走再回来仍能“送回原位”。 */
+const videoEditReturns = new Map<string, string>();
 
-/**
- * 图片编辑暂时没有项目列表（图片文档列表在 3.3 接入 .henjiimg 后提供），项目页只用到空态的新建提示。
- * 受管文档目录里混有画布节点、剪辑画面的文档，没有名称与归属，不能直接列给用户再独立编辑。
- */
-const EMPTY_PAGE_LABELS: ProjectLibraryLabels = {
-  createAction: '新建',
-  count: (count) => `${count} 张图片`,
-  searchPlaceholder: '搜索图片',
-  noResults: '没有符合条件的图片',
-  sortLabel: '排序',
-  sortOptions: { updated: '最近编辑', created: '最近创建', name: '名称' },
-  emptyTitle: '打开已有图片，或创建一张空白画布',
-  emptyDescription: '也可以把图片拖到这里；支持序号、框选、弯曲箭头、文字、画笔、打码与裁剪。',
-  cancel: '取消',
-  card: { open: '打开', more: '更多' },
-};
+interface ShownDocument {
+  document: OpenImageDocument;
+  returnTo?: string;
+}
+
+interface PendingRecovery {
+  info: ImageDocumentRecoveryInfo;
+  resolve: (choice: ImageDocumentRecoveryChoice) => void;
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function isCancelled(error: unknown): boolean {
+  return error instanceof Error && error.name === 'AbortError';
+}
+
+function initialShown(): ShownDocument | null {
+  const current = getImageDocumentWorkspace().current;
+  const document = current ? findOpenImageDocument(current) : undefined;
+  if (!document || document.session.isEnded) return null;
+  const returnTo = videoEditReturns.get(document.id);
+  return { document, ...(returnTo ? { returnTo } : {}) };
+}
 
 export interface ImageMarkToolProps {
   /** 返回“工具”首页。本工具自带命令带,返回按钮由它自己渲染,外层不再画标题带。 */
@@ -54,243 +79,230 @@ export interface ImageMarkToolProps {
 }
 
 /**
- * 工具箱独立形态:打开/粘贴/拖入图片 → 快速标记 → 复制/另存为。
- *
- * 骨架约定:整个视图只有一条命令带 —— 空态是"返回 + 标题"，有图时把
- * 返回/打开图片/文件名注入编辑器命令带左侧,不为它们单开一行。
+ * 工具箱“图片编辑”（3.5 图片文档）：
+ * - 列表页：全部图片文档（含项目里的），新建来源“打开图片 / 新建空白图片 / 粘贴”，也可拖入图片；
+ *   新建即草稿 `.henjiimg`，图片作为文档内容。
+ * - 编辑器：命令带左端返回列表（草稿离开三选一），右端“保存 / 另存为 / 导出”。
+ * 打开与离开都经图片文档运行时（文档会话）；别处请求打开的文档由这里接手。
  */
 export function ImageMarkTool({ onBack }: ImageMarkToolProps = {}): JSX.Element {
+  const { t } = useTranslation('ui');
   const developmentLaunch = readDevelopmentLaunchOptions();
   const { showNotification } = useNotification();
-  const [source, setSource] = useState<ImageMarkSource | null>(() => readImageMarkToolWorkspaceSourceV3());
+  const [shown, setShown] = useState<ShownDocument | null>(initialShown);
+  const [busy, setBusy] = useState(false);
+  const [recovery, setRecovery] = useState<PendingRecovery | null>(null);
   const [isBlankDialogOpen, setIsBlankDialogOpen] = useState(false);
+  const workspace = useImageDocumentWorkspace();
   const pendingHandoff = useImageEditorHandoffStore((state) => state.pending);
   const consumeHandoff = useImageEditorHandoffStore((state) => state.consume);
-  const sourceSequenceRef = useRef(source?.sessionKey ?? 0);
-  const acceptingHandoffRef = useRef<string | null>(null);
+  const shownRef = useRef(shown);
+  shownRef.current = shown;
+  const busyRef = useRef(false);
   const acceptedDevelopmentMediaRef = useRef(false);
+  const acceptingHandoffRef = useRef<string | null>(null);
 
-  const acceptSource = useCallback(async (
-    url: string,
-    name: string,
-    document: ImageEditDocument = createEmptyImageEditDocument(),
-    dpi?: number,
-    returnTo?: string
-  ) => {
-    // 打开/拖入的本地图片可能在媒体协议默认白名单之外,先授权其所在目录,
-    // 否则 henji-media:// 会 403,编辑器会一直卡在"图片加载中"
-    if (isLikelyLocalImagePath(url)) {
-      try {
-        await allowMediaRoot(await dirname(url));
-      } catch (error) {
-        logger.warn('image_mark.standalone.allow_root.failed', {
-          error: error instanceof Error ? error.message : String(error),
-        });
+  const show = useCallback((next: ShownDocument | null): void => {
+    setShown(next);
+    shownRef.current = next;
+    setCurrentImageDocument(next?.document.id ?? null);
+  }, []);
+
+  /** 同一时间只做一件文档操作（打开、新建、离开、保存）。 */
+  const exclusive = useCallback(async (failureKey: string, action: () => Promise<void>): Promise<void> => {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    setBusy(true);
+    try {
+      await action();
+    } catch (error) {
+      if (!isCancelled(error)) {
+        logger.error('image_document.toolbox.action.failed', { action: failureKey, error: errorMessage(error) });
+        showNotification(t(`imageEditor.v3.host.notifications.${failureKey}`, { message: errorMessage(error) }), 'error');
       }
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
     }
-    sourceSequenceRef.current += 1;
-    const nextSource: ImageMarkSource = {
-      url,
-      name,
-      sessionKey: sourceSequenceRef.current,
-      initialDocument: document,
-      ...(dpi ? { dpi } : {}),
-      ...(returnTo ? { returnTo } : {}),
-    };
-    setSource(nextSource);
-    rememberImageMarkToolWorkspaceSourceV3(nextSource);
-    logger.info('image_mark.standalone.open.completed', { name });
-  }, []);
+  }, [showNotification, t]);
 
-  const rememberV3Session = useCallback((
-    sessionKey: number,
-    session: NonNullable<ImageMarkSource['session']>,
-  ): void => {
-    rememberImageMarkToolWorkspaceSessionV3(sessionKey, session);
-  }, []);
+  /** 离开当前显示的文档：已保存的写回后关闭；草稿按“保存 / 不保存 / 取消”。取消返回 false。 */
+  const leaveShown = useCallback(async (): Promise<boolean> => {
+    const current = shownRef.current;
+    if (!current) return true;
+    const outcome = await leaveImageDocument(current.document.id);
+    if (outcome === 'cancelled') return false;
+    videoEditReturns.delete(current.document.id);
+    show(null);
+    return true;
+  }, [show]);
 
-  useEffect(() => {
-    if (!developmentLaunch.mediaPath || acceptedDevelopmentMediaRef.current) return;
-    acceptedDevelopmentMediaRef.current = true;
-    void acceptSource(
-      developmentLaunch.mediaPath,
-      basename(developmentLaunch.mediaPath)
-    ).catch((error) => {
-      logger.error('image_mark.development_launch.media.failed', {
-        error: error instanceof Error ? error.message : String(error),
+  const chooseRecovery = useCallback((info: ImageDocumentRecoveryInfo) => (
+    new Promise<ImageDocumentRecoveryChoice>((resolve) => setRecovery({ info, resolve }))
+  ), []);
+
+  const openTarget = useCallback((target: DocumentTarget) => exclusive('openFailed', async () => {
+    if (shownRef.current?.document.id === target.id) return;
+    if (!await leaveShown()) return;
+    const document = await openImageDocument(target, { chooseRecovery });
+    const returnTo = videoEditReturns.get(document.id);
+    show({ document, ...(returnTo ? { returnTo } : {}) });
+  }), [chooseRecovery, exclusive, leaveShown, show]);
+
+  const createFrom = useCallback((source: ImageDocumentSource, returnTo?: string) => exclusive('createFailed', async () => {
+    if (!await leaveShown()) return;
+    // 打开/拖入的本地图片可能在媒体协议默认白名单之外，先授权其所在目录。
+    if (isLikelyLocalImagePath(source.url)) {
+      await allowMediaRoot(await dirname(source.url)).catch((error: unknown) => {
+        logger.warn('image_mark.standalone.allow_root.failed', { error: errorMessage(error) });
       });
-    });
-  }, [acceptSource, developmentLaunch.mediaPath]);
+    }
+    const document = await createImageDocumentFromSource(source);
+    if (returnTo) videoEditReturns.set(document.id, returnTo);
+    show({ document, ...(returnTo ? { returnTo } : {}) });
+  }), [exclusive, leaveShown, show]);
 
+  // 别处请求打开的文档（列表右键、助手、通用打开方式）。
+  useEffect(() => {
+    const pending = workspace.pending;
+    if (!pending) return;
+    takePendingImageDocument(pending.key);
+    void openTarget(pending.target);
+  }, [openTarget, workspace.pending]);
+
+  // 其他工具送来的图片（剪辑画面、查看器、助手）：新建一份草稿图片文档。
   useEffect(() => {
     if (!pendingHandoff || acceptingHandoffRef.current === pendingHandoff.sessionRef) return;
     acceptingHandoffRef.current = pendingHandoff.sessionRef;
-    void acceptSource(
-      pendingHandoff.sourceUrl,
-      pendingHandoff.sourceName,
-      pendingHandoff.document,
-      undefined,
-      pendingHandoff.sessionRef
-    )
-      .then(() => consumeHandoff(pendingHandoff.sessionRef))
-      .catch((error) => {
-        logger.error('image_mark.standalone.handoff.failed', {
-          sessionRef: pendingHandoff.sessionRef,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      })
+    const document: ImageEditDocument = pendingHandoff.document;
+    void createFrom({ url: pendingHandoff.sourceUrl, document }, pendingHandoff.sessionRef)
       .finally(() => {
-        if (acceptingHandoffRef.current === pendingHandoff.sessionRef) {
-          acceptingHandoffRef.current = null;
-        }
+        consumeHandoff(pendingHandoff.sessionRef);
+        if (acceptingHandoffRef.current === pendingHandoff.sessionRef) acceptingHandoffRef.current = null;
       });
-  }, [acceptSource, consumeHandoff, pendingHandoff]);
+  }, [consumeHandoff, createFrom, pendingHandoff]);
+
+  // 开发启动参数 --dev-media：用这张图新建一份草稿。
+  useEffect(() => {
+    if (!developmentLaunch.mediaPath || acceptedDevelopmentMediaRef.current) return;
+    acceptedDevelopmentMediaRef.current = true;
+    void createFrom({ url: developmentLaunch.mediaPath });
+  }, [createFrom, developmentLaunch.mediaPath]);
 
   const acceptFile = useCallback(async (file: File) => {
     const nativePath = getPathForFile(file);
-    if (nativePath) {
-      await acceptSource(nativePath, basename(nativePath));
-      return;
-    }
-    const dataUrl = await readFileAsDataUrl(file);
-    await acceptSource(dataUrl, file.name || `image-${Date.now()}.png`);
-  }, [acceptSource]);
+    await createFrom({ url: nativePath || await readFileAsDataUrl(file) });
+  }, [createFrom]);
 
   const handlePasteFromClipboard = useCallback(async () => {
     const image = await readClipboardImage();
     if (!image) {
-      showNotification('剪贴板里没有图片', 'error');
+      showNotification(t('imageEditor.v3.host.document.pasteEmpty'), 'error');
       return;
     }
-    await acceptSource(image.dataUrl, image.name);
-  }, [acceptSource, showNotification]);
+    await createFrom({ url: image.dataUrl });
+  }, [createFrom, showNotification, t]);
 
   const handleOpenFile = useCallback(async () => {
-    logger.debug('image_mark.standalone.open.start');
-    try {
-      const selected = await openDialog({
-        multiple: false,
-        filters: [{ name: '图片', extensions: IMAGE_EXTENSIONS }],
-      });
-      const path = Array.isArray(selected) ? selected[0] : selected;
-      if (!path) {
-        return;
-      }
-      await acceptSource(path, basename(path));
-    } catch (error) {
-      logger.error('image_mark.standalone.open.failed', {
-        error: error instanceof Error ? error.message : String(error),
-      });
-      showNotification('打开图片失败', 'error');
-    }
-  }, [acceptSource, showNotification]);
+    const selected = await openDialog({
+      multiple: false,
+      filters: [{ name: '图片', extensions: IMAGE_EXTENSIONS }],
+    });
+    const path = Array.isArray(selected) ? selected[0] : selected;
+    if (path) await createFrom({ url: path });
+  }, [createFrom]);
 
   const handleCreateBlank = useCallback((spec: BlankImageSpec) => {
-    logger.debug('image_mark.blank.create.start', {
-      width: spec.width,
-      height: spec.height,
-      dpi: spec.dpi,
-    });
-    try {
-      const dataUrl = createBlankImageDataUrl(spec);
-      void acceptSource(
-        dataUrl,
-        `空白图片-${spec.width}x${spec.height}.png`,
-        createEmptyImageEditDocument(),
-        spec.dpi
-      ).then(() => {
-        setIsBlankDialogOpen(false);
-        logger.info('image_mark.blank.create.completed', {
-          width: spec.width,
-          height: spec.height,
-          dpi: spec.dpi,
-        });
-      }).catch((error) => {
-        logger.error('image_mark.blank.create.failed', {
-          error: error instanceof Error ? error.message : String(error),
-        });
-        showNotification('创建空白图片失败', 'error');
-      });
-    } catch (error) {
-      logger.error('image_mark.blank.create.failed', {
-        error: error instanceof Error ? error.message : String(error),
-      });
-      showNotification(error instanceof Error ? error.message : '创建空白图片失败', 'error');
-    }
-  }, [acceptSource, showNotification]);
+    setIsBlankDialogOpen(false);
+    logger.debug('image_mark.blank.create.start', { width: spec.width, height: spec.height, dpi: spec.dpi });
+    void createFrom({ url: createBlankImageDataUrl(spec), blank: true });
+  }, [createFrom]);
 
-  // 粘贴图片(截图或复制的图片文件)
+  // 列表页上粘贴图片（截图或复制的图片文件）新建图片文档；编辑器里的粘贴交给编辑器自己。
   useEffect(() => {
+    if (shown) return undefined;
     const handlePaste = (event: ClipboardEvent) => {
-      const files = event.clipboardData?.files;
-      if (!files || files.length === 0) {
-        return;
-      }
-      const imageFile = Array.from(files).find((file) => file.type.startsWith('image/'));
-      if (!imageFile) {
-        return;
-      }
+      const imageFile = Array.from(event.clipboardData?.files ?? []).find((file) => file.type.startsWith('image/'));
+      if (!imageFile) return;
       event.preventDefault();
-      void acceptFile(imageFile).catch((error) => {
-        logger.error('image_mark.standalone.paste.failed', {
-          error: error instanceof Error ? error.message : String(error),
-        });
-        showNotification('粘贴图片失败', 'error');
-      });
+      void acceptFile(imageFile);
     };
     window.addEventListener('paste', handlePaste);
     return () => window.removeEventListener('paste', handlePaste);
-  }, [acceptFile, showNotification]);
+  }, [acceptFile, shown]);
 
   const handleDropFiles = useCallback((files: File[]) => {
     const file = files.find((entry) =>
       entry.type.startsWith('image/') ||
       IMAGE_EXTENSIONS.some((extension) => entry.name.toLowerCase().endsWith(`.${extension}`))
     );
-    if (!file) {
-      return;
-    }
-    void acceptFile(file).catch((error) => {
-      logger.error('image_mark.standalone.drop.failed', {
-        error: error instanceof Error ? error.message : String(error),
-      });
-      showNotification('读取图片失败', 'error');
-    });
-  }, [acceptFile, showNotification]);
+    if (file) void acceptFile(file);
+  }, [acceptFile]);
 
-  const handleDrop = useCallback((event: React.DragEvent) => {
-    event.preventDefault();
-    handleDropFiles(Array.from(event.dataTransfer.files));
-  }, [handleDropFiles]);
+  const handleOpenDocument = useCallback((document: DocumentSummary) => openTarget({ id: document.id, path: document.path }), [openTarget]);
 
-  if (!source) {
+  const recoveryDialog = recovery ? (
+    <AlertDialog
+      isOpen
+      type="warning"
+      title={t('imageEditor.v3.host.document.recovery.title')}
+      message={t('imageEditor.v3.host.document.recovery.message', {
+        name: recovery.info.name,
+        workingTime: new Date(recovery.info.workingSavedAt).toLocaleString(),
+        fileTime: new Date(recovery.info.fileSavedAt).toLocaleString(),
+      })}
+      closeLabel={t('imageEditor.v3.host.document.recovery.cancel')}
+      closeImmediately
+      onClose={() => { recovery.resolve('cancel'); setRecovery(null); }}
+      actions={[
+        { label: t('imageEditor.v3.host.document.recovery.discard'), tone: 'danger', onClick: () => { recovery.resolve('discard'); setRecovery(null); } },
+        { label: t('imageEditor.v3.host.document.recovery.restore'), variant: 'primary', onClick: () => { recovery.resolve('restore'); setRecovery(null); } },
+      ]}
+    />
+  ) : null;
+
+  const blankDialog = (
+    <BlankImageDialog
+      isOpen={isBlankDialogOpen}
+      onClose={() => setIsBlankDialogOpen(false)}
+      onCreate={handleCreateBlank}
+    />
+  );
+
+  if (!shown) {
     return (
       <>
-        {/* 空态是五个模块共用的项目页：返回进标题左侧，新建来源平铺成按钮，可把图片拖进来 */}
-        <ProjectLibraryPage
-          title="图片编辑"
+        {/* 列表页：全部图片文档（含项目里的），返回进标题左侧，新建来源平铺，可把图片拖进来 */}
+        <DocumentLibraryPage
+          kind="image_document"
+          title={t('imageEditor.v3.host.document.title')}
           onBack={onBack}
-          backLabel="返回工具"
-          items={[]}
+          backLabel={t('imageEditor.v3.host.backToToolbox')}
           icon={ICON_TOOL_IMAGE_EDIT}
-          emptyIcon={<ImagePlus size={40} strokeWidth={1.5} aria-hidden="true" />}
-          labels={EMPTY_PAGE_LABELS}
+          busy={busy}
+          labels={{
+            emptyTitle: t('imageEditor.v3.host.document.emptyTitle'),
+            emptyDescription: t('imageEditor.v3.host.document.emptyDescription'),
+          }}
+          describe={(document) => {
+            const { width, height, layers } = document.summary;
+            return typeof width === 'number' && typeof height === 'number' && width > 0 && height > 0
+              ? t('imageEditor.v3.host.document.describe', { width, height, layers: typeof layers === 'number' ? layers : 0 })
+              : undefined;
+          }}
           create={{
             kind: 'menu',
             options: [
-              { id: 'open', label: '打开图片', icon: FolderOpen, onSelect: () => void handleOpenFile() },
-              { id: 'blank', label: '新建空白图片', icon: FilePlus2, onSelect: () => setIsBlankDialogOpen(true) },
-              { id: 'paste', label: '粘贴剪贴板图片', icon: ClipboardPaste, onSelect: () => void handlePasteFromClipboard() },
+              { id: 'open', label: t('imageEditor.v3.host.sourceMenu.openFile'), icon: FolderOpen, onSelect: () => void handleOpenFile() },
+              { id: 'blank', label: t('imageEditor.v3.host.sourceMenu.createBlank'), icon: FilePlus2, onSelect: () => setIsBlankDialogOpen(true) },
+              { id: 'paste', label: t('imageEditor.v3.host.sourceMenu.paste'), icon: ClipboardPaste, onSelect: () => void handlePasteFromClipboard() },
             ],
           }}
           onDropFiles={handleDropFiles}
-          onOpen={() => undefined}
+          onOpen={handleOpenDocument}
         />
-        <BlankImageDialog
-          isOpen={isBlankDialogOpen}
-          onClose={() => setIsBlankDialogOpen(false)}
-          onCreate={handleCreateBlank}
-        />
+        {blankDialog}
+        {recoveryDialog}
       </>
     );
   }
@@ -300,32 +312,33 @@ export function ImageMarkTool({ onBack }: ImageMarkToolProps = {}): JSX.Element 
       <div
         className="flex h-full flex-col"
         onDragOver={(event) => event.preventDefault()}
-        onDrop={handleDrop}
+        onDrop={(event) => {
+          event.preventDefault();
+          handleDropFiles(Array.from(event.dataTransfer.files));
+        }}
       >
-        <Suspense fallback={<UiLoading message="正在打开图片编辑器…" className="h-full" />}>
+        <Suspense fallback={<UiLoading message={t('imageEditor.v3.host.loading')} className="h-full" />}>
           <ImageMarkToolV3Host
-            key={source.sessionKey}
-            sourceImageUrl={source.url}
-            sourceName={source.name}
-            sourceSessionKey={source.sessionKey}
-            initialDocument={source.initialDocument}
-            initialSession={source.session}
-            videoEditReturn={source.returnTo}
-            onSessionReferenceChange={(session) => {
-              rememberV3Session(source.sessionKey, session);
-            }}
-            onBack={onBack}
+            key={shown.document.id}
+            document={shown.document}
+            sourceName={shown.document.session.documentMeta.name}
+            videoEditReturn={shown.returnTo}
+            onBack={() => void exclusive('leaveFailed', async () => { await leaveShown(); })}
             onOpenFile={handleOpenFile}
             onPasteFromClipboard={handlePasteFromClipboard}
             onCreateBlank={() => setIsBlankDialogOpen(true)}
+            onSave={() => exclusive('saveFailed', async () => {
+              await saveImageDocument(shown.document.id);
+            })}
+            onSaveAs={() => exclusive('saveFailed', async () => {
+              const saved = await saveImageDocumentAs(shown.document.id);
+              if (saved && saved.id !== shown.document.id) show({ document: saved });
+            })}
           />
         </Suspense>
       </div>
-      <BlankImageDialog
-        isOpen={isBlankDialogOpen}
-        onClose={() => setIsBlankDialogOpen(false)}
-        onCreate={handleCreateBlank}
-      />
+      {blankDialog}
+      {recoveryDialog}
     </>
   );
 }

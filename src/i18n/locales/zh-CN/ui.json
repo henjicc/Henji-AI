@@ -692,7 +692,6 @@
         },
         "sourceMenu": {
           "openFile": "打开图片",
-          "openPackage": "打开可编辑文件",
           "paste": "粘贴剪贴板图片",
           "createBlank": "新建空白图片",
           "title": "打开图片",
@@ -709,18 +708,19 @@
           "exportUnavailable": "暂不能导出",
           "export": "导出…",
           "exportMenuAria": "选择栅格导出格式",
-          "savePackage": "保存可编辑文件…"
+          "save": "保存",
+          "saveAs": "另存为…"
         },
         "notifications": {
           "autosaveFailed": "自动保存失败，请重试",
           "saveBeforeReplaceFailed": "保存当前编辑失败，已保留在当前页面",
-          "packageRelinkRequired": "可编辑文件引用了外部原图，请按提示重新选择对应文件",
-          "packageOpenFailed": "无法打开可编辑文件；外链文件必须匹配原始指纹、大小和格式",
-          "packageSaved": "可编辑文件已保存",
-          "packageSaveFailed": "保存可编辑文件失败",
           "exportCompleted": "栅格图片已导出",
           "exportCancelled": "已取消导出",
-          "exportFailed": "无法导出栅格图片：{{reason}}"
+          "exportFailed": "无法导出栅格图片：{{reason}}",
+          "saveFailed": "保存失败：{{message}}",
+          "openFailed": "无法打开图片文档：{{message}}",
+          "createFailed": "无法新建图片文档：{{message}}",
+          "leaveFailed": "离开前保存失败，修改已保留：{{message}}"
         },
         "export": {
           "defaultUnavailable": "当前文档暂时不能导出栅格图片。",
@@ -742,6 +742,21 @@
           "fallbackStem": "图片",
           "editable": "{{stem}}-可编辑.henjiimg",
           "edited": "{{stem}}-已编辑.{{extension}}"
+        },
+        "backToList": "返回图片文档列表",
+        "document": {
+          "title": "图片编辑",
+          "describe": "{{width}} × {{height}} · {{layers}} 个图层",
+          "emptyTitle": "打开已有图片，或创建一张空白图片",
+          "emptyDescription": "也可以把图片拖到这里。新建的图片会存成图片文档，可以随时回来继续编辑。",
+          "recovery": {
+            "title": "恢复上次没写回的修改？",
+            "message": "“{{name}}”上次没有正常关闭，程序里还留着 {{workingTime}} 的修改；文件里是 {{fileTime}} 保存的版本。",
+            "restore": "恢复修改",
+            "discard": "使用文件里的版本",
+            "cancel": "取消"
+          },
+          "pasteEmpty": "剪贴板里没有图片"
         }
       },
       "tools": {

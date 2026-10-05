@@ -69,17 +69,20 @@ describe('图片编辑 V3 preload 契约', () => {
     vi.unstubAllGlobals()
   })
 
-  it('源导入与包打开不接收渲染层本地路径', async () => {
+  it('源导入不接收渲染层本地路径；图片文档按文档 ID 与位置透传', async () => {
     const invoke = vi.fn(async () => undefined)
     const api = createImageEditorV3Api(
       invoke as unknown as Parameters<typeof createImageEditorV3Api>[0],
     )
+    const target = { id: 'doc-1', path: 'D:/作品/图片文档/a.henjiimg' }
 
     await api.importSource({ requestId: 'source-import' })
-    await api.openPackage({ requestId: 'package-open' })
+    await api.openImageDocument({ requestId: 'open', target, recovery: 'ask' })
+    await api.commitImageDocument({ requestId: 'commit', target, expectedRevision: 2 })
 
     expect(invoke).toHaveBeenNthCalledWith(1, 'imageEditorV3:source:import', { requestId: 'source-import' })
-    expect(invoke).toHaveBeenNthCalledWith(2, 'imageEditorV3:package:open', { requestId: 'package-open' })
+    expect(invoke).toHaveBeenNthCalledWith(2, 'imageEditorV3:imageDocument:open', { requestId: 'open', target, recovery: 'ask' })
+    expect(invoke).toHaveBeenNthCalledWith(3, 'imageEditorV3:imageDocument:commit', { requestId: 'commit', target, expectedRevision: 2 })
   })
 
   it('文档补偿只透传稳定引用和精确 revision', async () => {

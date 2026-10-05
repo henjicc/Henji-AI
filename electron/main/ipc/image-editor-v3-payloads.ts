@@ -34,7 +34,6 @@ const MAX_BRUSH_TILES_PER_REQUEST = 16
 const MAX_BRUSH_REQUEST_RAW_BYTES = 64 * 1024 * 1024
 const MAX_BRUSH_REQUEST_RESOURCE_BYTES = 64 * 1024 * 1024
 const BRUSH_TILE_KEY_PATTERN = /^(0|[1-9]\d*)\/(0|[1-9]\d*)\/(0|[1-9]\d*)$/
-const PENDING_PACKAGE_REF_PATTERN = /^image-edit-package-open:[a-f0-9-]{36}$/
 
 export interface BasePayload { requestId: string }
 export interface LoadDocumentPayload extends BasePayload { documentRef: string }
@@ -61,15 +60,6 @@ export interface TilePayload extends ResourcePayload {
   tileY: number
   halo: number
   bitDepth?: 8 | 16 | 32
-}
-export interface SavePackagePayload extends LoadDocumentPayload {
-  revision: number
-  suggestedName?: string
-  thumbnail?: { bytes: Uint8Array; extension: 'png' | 'webp'; mediaType: 'image/png' | 'image/webp' }
-}
-export interface RelinkPackageExternalSourcePayload extends BasePayload {
-  pendingPackageRef: `image-edit-package-open:${string}`
-  resourceRef: ResourceId
 }
 export interface GarbageCollectPayload extends BasePayload { retainedResourceRefs: ResourceId[] }
 export interface IngestSourcePayload extends BasePayload { source: ImageEditorV3SourceLocator }
@@ -363,59 +353,123 @@ export function parseImageEditorV3TilePayload(input: unknown): TilePayload {
 }
 
 
-export function parseImageEditorV3SavePackagePayload(input: unknown): SavePackagePayload {
-  const record = parseRecord(input)
-  assertExactKeys(record, [
-    'requestId', 'documentRef', 'revision', 'suggestedName', 'thumbnail',
-  ], 'save package payload')
-  const suggestedName = record.suggestedName
-  if (suggestedName !== undefined && (typeof suggestedName !== 'string' || suggestedName.length > 160)) {
-    throw new Error('Invalid suggestedName')
+export type ImageDocumentThumbnailPayload = {
+  bytes: Uint8Array
+  extension: 'png' | 'webp'
+  mediaType: 'image/png' | 'image/webp'
+}
+
+export interface ImageDocumentTargetPayload { id: string; path?: string }
+export interface OpenImageDocumentPayload extends BasePayload {
+  target: ImageDocumentTargetPayload
+  recovery: 'ask' | 'restore' | 'discard'
+}
+export interface DescribeImageDocumentPayload extends BasePayload { target: ImageDocumentTargetPayload }
+export interface CreateImageDocumentPayload extends BasePayload {
+  documentId: string
+  container: { kind: 'user' } | { kind: 'project'; projectId: string }
+  emptyUntilRevision: number | null
+}
+export interface CommitImageDocumentPayload extends BasePayload {
+  target: ImageDocumentTargetPayload
+  expectedRevision: number
+  force?: boolean
+  thumbnail?: ImageDocumentThumbnailPayload
+}
+
+function parseThumbnail(input: unknown): ImageDocumentThumbnailPayload | undefined {
+  if (input === undefined) return undefined
+  const value = parseRecord(input)
+  assertExactKeys(value, ['bytes', 'extension', 'mediaType'], 'package thumbnail')
+  if (!(value.bytes instanceof ArrayBuffer)
+    || value.bytes.byteLength < 1
+    || value.bytes.byteLength > IMAGE_EDITOR_V3_PACKAGE_THUMBNAIL_MAX_BYTES) {
+    throw new Error('Invalid or oversized package thumbnail bytes')
   }
-  const thumbnail: SavePackagePayload['thumbnail'] = record.thumbnail === undefined
-    ? undefined
-    : (() => {
-      const value = parseRecord(record.thumbnail)
-      assertExactKeys(value, ['bytes', 'extension', 'mediaType'], 'package thumbnail')
-      if (!(value.bytes instanceof ArrayBuffer)
-        || value.bytes.byteLength < 1
-        || value.bytes.byteLength > IMAGE_EDITOR_V3_PACKAGE_THUMBNAIL_MAX_BYTES) {
-        throw new Error('Invalid or oversized package thumbnail bytes')
-      }
-      const extension = value.extension
-      if ((extension !== 'png' && extension !== 'webp')
-        || value.mediaType !== `image/${extension}`) {
-        throw new Error('Invalid package thumbnail media type')
-      }
-      return {
-        bytes: new Uint8Array(value.bytes.slice(0)),
-        extension,
-        mediaType: extension === 'png' ? 'image/png' as const : 'image/webp' as const,
-      }
-    })()
+  const extension = value.extension
+  if ((extension !== 'png' && extension !== 'webp')
+    || value.mediaType !== `image/${extension}`) {
+    throw new Error('Invalid package thumbnail media type')
+  }
   return {
-    ...parseImageEditorV3LoadPayload(input),
-    revision: readSafeInteger(record, 'revision', 0, Number.MAX_SAFE_INTEGER),
-    suggestedName,
-    thumbnail,
+    bytes: new Uint8Array(value.bytes.slice(0)),
+    extension,
+    mediaType: extension === 'png' ? 'image/png' as const : 'image/webp' as const,
   }
 }
 
-export function parseImageEditorV3RelinkPackageExternalSourcePayload(
-  input: unknown,
-): RelinkPackageExternalSourcePayload {
+function readDocumentId(value: unknown, label: string): string {
+  if (typeof value !== 'string' || !DOCUMENT_ID_PATTERN.test(value)) throw new Error(`Invalid ${label}`)
+  return value
+}
+
+function parseImageDocumentTarget(input: unknown): ImageDocumentTargetPayload {
+  const value = parseRecord(input)
+  assertExactKeys(value, ['id', 'path'], 'image document target')
+  const id = readDocumentId(value.id, 'image document id')
+  if (value.path === undefined) return { id }
+  if (typeof value.path !== 'string'
+    || value.path.length === 0
+    || value.path.length > MAX_LOCAL_PATH_CHARACTERS
+    || value.path.includes('\0')
+    || !path.isAbsolute(value.path)) {
+    throw new Error('Invalid image document path')
+  }
+  return { id, path: value.path }
+}
+
+export function parseImageEditorV3OpenImageDocumentPayload(input: unknown): OpenImageDocumentPayload {
   const record = parseRecord(input)
-  assertExactKeys(record, [
-    'requestId', 'pendingPackageRef', 'resourceRef',
-  ], 'relink package external source payload')
-  if (typeof record.pendingPackageRef !== 'string'
-    || !PENDING_PACKAGE_REF_PATTERN.test(record.pendingPackageRef)) {
-    throw new Error('Invalid pendingPackageRef')
+  assertExactKeys(record, ['requestId', 'target', 'recovery'], 'open image document payload')
+  if (record.recovery !== 'ask' && record.recovery !== 'restore' && record.recovery !== 'discard') {
+    throw new Error('Invalid recovery choice')
+  }
+  return { requestId: readRequestId(record), target: parseImageDocumentTarget(record.target), recovery: record.recovery }
+}
+
+export function parseImageEditorV3DescribeImageDocumentPayload(input: unknown): DescribeImageDocumentPayload {
+  const record = parseRecord(input)
+  assertExactKeys(record, ['requestId', 'target'], 'describe image document payload')
+  return { requestId: readRequestId(record), target: parseImageDocumentTarget(record.target) }
+}
+
+export function parseImageEditorV3CreateImageDocumentPayload(input: unknown): CreateImageDocumentPayload {
+  const record = parseRecord(input)
+  assertExactKeys(record, ['requestId', 'documentId', 'container', 'emptyUntilRevision'], 'create image document payload')
+  const container = parseRecord(record.container)
+  let parsedContainer: CreateImageDocumentPayload['container']
+  if (container.kind === 'user') {
+    assertExactKeys(container, ['kind'], 'image document container')
+    parsedContainer = { kind: 'user' }
+  } else if (container.kind === 'project') {
+    assertExactKeys(container, ['kind', 'projectId'], 'image document container')
+    parsedContainer = { kind: 'project', projectId: readDocumentId(container.projectId, 'project id') }
+  } else {
+    throw new Error('Invalid image document container')
+  }
+  const emptyUntil = record.emptyUntilRevision
+  if (emptyUntil !== null && (!Number.isSafeInteger(emptyUntil) || (emptyUntil as number) < 0)) {
+    throw new Error('Invalid emptyUntilRevision')
   }
   return {
     requestId: readRequestId(record),
-    pendingPackageRef: record.pendingPackageRef as `image-edit-package-open:${string}`,
-    resourceRef: readResourceRef(record.resourceRef, 'resourceRef'),
+    documentId: readDocumentId(record.documentId, 'image document id'),
+    container: parsedContainer,
+    emptyUntilRevision: emptyUntil as number | null,
+  }
+}
+
+export function parseImageEditorV3CommitImageDocumentPayload(input: unknown): CommitImageDocumentPayload {
+  const record = parseRecord(input)
+  assertExactKeys(record, ['requestId', 'target', 'expectedRevision', 'force', 'thumbnail'], 'commit image document payload')
+  if (record.force !== undefined && typeof record.force !== 'boolean') throw new Error('Invalid force flag')
+  const thumbnail = parseThumbnail(record.thumbnail)
+  return {
+    requestId: readRequestId(record),
+    target: parseImageDocumentTarget(record.target),
+    expectedRevision: readSafeInteger(record, 'expectedRevision', 0, Number.MAX_SAFE_INTEGER),
+    ...(record.force === true ? { force: true } : {}),
+    ...(thumbnail ? { thumbnail } : {}),
   }
 }
 

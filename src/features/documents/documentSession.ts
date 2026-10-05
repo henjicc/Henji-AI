@@ -20,6 +20,7 @@ import type {
   DocumentConflictChoice,
   DocumentContentAdapter,
   DocumentPersistence,
+  DocumentReadPurpose,
   DocumentSessionCommands,
   DocumentSessionPrompter,
   DocumentSessionState,
@@ -41,7 +42,7 @@ const MAX_FLUSH_ROUNDS = 5
 export interface DocumentSessionTiming {
   /** 最后一次修改后多久保存。 */
   autosaveDelayMs: number
-  /** 单文件包类型：最后一次保存后空闲多久写回文档文件。 */
+  /** 单文件包类型：最后一次保存后空闲多久写回文档文件（工作副本已高频保存，写回整包较重）。 */
   idleCommitDelayMs: number
   retryBaseDelayMs: number
   retryMaxDelayMs: number
@@ -49,7 +50,7 @@ export interface DocumentSessionTiming {
 
 export const DEFAULT_DOCUMENT_SESSION_TIMING: DocumentSessionTiming = {
   autosaveDelayMs: 800,
-  idleCommitDelayMs: 5000,
+  idleCommitDelayMs: 30000,
   retryBaseDelayMs: 2000,
   retryMaxDelayMs: 30000,
 }
@@ -202,6 +203,17 @@ export class DocumentSession {
     throw new DocumentSessionBusyError(this.meta.name)
   }
 
+  /**
+   * 写回文档文件（单文件包类型的“保存”与退出屏障）：先写完最后一次，再把工作副本写回文件。
+   * JSON 类型没有写回，等同 flush。失败时抛错，修改保留。
+   */
+  async commit(reason: Exclude<DocumentCommitReason, 'idle'> = 'save'): Promise<void> {
+    await this.flush()
+    if (!this.persistence.commit || this.ended) return
+    this.clearIdleCommit()
+    await this.enqueue(() => this.writeBack(reason))
+  }
+
   /** 失败后手动重试。 */
   retry(): Promise<void> {
     return this.flush()
@@ -222,7 +234,7 @@ export class DocumentSession {
     return this.enqueue(async () => {
       this.ensureOpen()
       this.clearAutosave()
-      const read = await this.commands.readDocument(this.target)
+      const read = await this.readFor('reload', this.target)
       this.applyRead(read)
       this.receiveContent(read.content)
       this.savedSeq = this.changeSeq
@@ -241,7 +253,7 @@ export class DocumentSession {
     const operation = (async () => {
       await this.flush()
       this.clearIdleCommit()
-      if (this.persistence.commit) await this.enqueue(() => this.commit('close'))
+      if (this.persistence.commit) await this.enqueue(() => this.writeBack('close'))
       await this.end('closed')
     })()
     this.closing = operation
@@ -269,7 +281,7 @@ export class DocumentSession {
   relocate(): Promise<void> {
     return this.enqueue(async () => {
       this.ensureOpen()
-      const read = await this.commands.readDocument({ id: this.meta.id })
+      const read = await this.readFor('relocate', { id: this.meta.id })
       if (read.meta.revision === this.meta.revision) this.applyRead(read)
       else this.meta = { ...this.meta, path: read.meta.path, name: read.meta.name, container: read.meta.container }
       this.emit()
@@ -381,7 +393,12 @@ export class DocumentSession {
     }
   }
 
-  private async commit(reason: DocumentCommitReason): Promise<void> {
+  /** 按保存策略读取（单文件包类型由策略读取，JSON 类型走文档命令）。 */
+  private readFor(purpose: DocumentReadPurpose, target: DocumentTarget): Promise<DocumentReadResult> {
+    return this.persistence.read ? this.persistence.read(target, purpose) : this.commands.readDocument(target)
+  }
+
+  private async writeBack(reason: DocumentCommitReason): Promise<void> {
     if (!this.persistence.commit) return
     try {
       const meta = await this.persistence.commit(reason, this.meta)
@@ -428,7 +445,7 @@ export class DocumentSession {
     this.clearIdleCommit()
     this.idleTimer = setTimeout(() => {
       this.idleTimer = null
-      void this.enqueue(() => this.commit('idle')).catch(() => undefined)
+      void this.enqueue(() => this.writeBack('idle')).catch(() => undefined)
     }, this.timing.idleCommitDelayMs)
   }
 

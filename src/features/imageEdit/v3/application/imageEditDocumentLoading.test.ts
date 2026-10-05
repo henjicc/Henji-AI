@@ -16,6 +16,10 @@ vi.mock('@/commands/imageEditorV3', () => ({
   loadImageEditorV3Document: io.load,
   ImageEditorV3CommandRepository: class { save = io.save },
 }))
+// 不是图片文档（.henjiimg）的离屏文档：不需要先打开文档会话。
+vi.mock('@/features/imageEdit/documents/imageDocumentRuntime', () => ({
+  ensureImageDocumentOpenInBackground: async () => undefined,
+}))
 
 function snapshot(): ImageEditorV3DocumentSnapshot {
   const document = createImageEditDocumentV3({ width: 10, height: 10, documentId: 'unopened' })

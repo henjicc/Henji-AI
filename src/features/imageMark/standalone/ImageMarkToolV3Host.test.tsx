@@ -9,7 +9,8 @@ import { NotificationProvider } from '@/contexts/NotificationContext'
 import { createEmptyImageEditDocument } from '@/core/imageEdit'
 import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
 import { migrateImageEditDocumentV2ToV3 } from '@/core/imageEdit/v3/legacyMigration'
-import type { ImageEditSessionReferenceV3 } from '@/core/imageEdit/v3/sessionReference'
+import type { OpenImageDocument } from '@/features/imageEdit/documents/imageDocumentRuntime'
+import type { ImageDocumentWorkingHooks } from '@/features/imageEdit/documents/imageDocumentPersistence'
 import type { ImageEditDocumentReferenceV3 } from '@/core/imageEdit/v3/serviceContracts'
 import i18n from '@/i18n/config'
 import type {
@@ -19,10 +20,7 @@ import type {
 import { ImageMarkToolV3Host } from './ImageMarkToolV3Host'
 
 const mocks = vi.hoisted(() => ({
-  ingest: vi.fn(),
   save: vi.fn(),
-  savePackage: vi.fn(),
-  openPackage: vi.fn(),
   loadDocument: vi.fn(),
   exportRaster: vi.fn(),
   resolveExportReadiness: vi.fn(),
@@ -43,10 +41,7 @@ vi.mock('@/commands/imageEditorV3', () => ({
       return mocks.save(document, options) as Promise<ImageEditDocumentReferenceV3>
     }
   },
-  ingestImageEditorV3Source: mocks.ingest,
   loadImageEditorV3Document: mocks.loadDocument,
-  openImageEditorV3Package: mocks.openPackage,
-  saveImageEditorV3PackageAs: mocks.savePackage,
   readImageEditorV3FastProxy: mocks.readFastProxy,
   describeImageEditorV3SourcePyramid: mocks.describePyramid,
   prewarmImageEditorV3SourcePyramid: mocks.prewarmPyramid,
@@ -105,24 +100,59 @@ function managedSource(): ImageEditorV3ManagedSource {
   }
 }
 
+const DOCUMENT_ID = 'toolbox-document'
+const SOURCE_URL = `henji-media://image-editor-v3/${'a'.repeat(64)}?mediaType=image%2Fpng`
+
+function workingDocument(revision = 0): ImageEditDocumentV3 {
+  const source = managedSource()
+  const migrated = migrateImageEditDocumentV2ToV3(createEmptyImageEditDocument(), {
+    width: source.metadata.width,
+    height: source.metadata.height,
+    sourceResourceId: source.resource.resourceRef,
+    documentId: DOCUMENT_ID,
+  })
+  return { ...migrated, revision }
+}
+
+interface FakeOpenDocument extends OpenImageDocument {
+  hooks: ImageDocumentWorkingHooks | null
+}
+
+function fakeOpenDocument(): FakeOpenDocument {
+  let shown = false
+  const fake: FakeOpenDocument = {
+    id: DOCUMENT_ID,
+    hooks: null,
+    session: { documentMeta: { name: 'source' } } as unknown as OpenImageDocument['session'],
+    persistence: { onWorkingReplaced: () => () => undefined } as unknown as OpenImageDocument['persistence'],
+    working: () => ({ documentRef: `image-edit-v3:${DOCUMENT_ID}`, revision: persistedDocument?.revision ?? 0, previewRef: null, sourceUrl: SOURCE_URL }),
+    attachEditor: (hooks) => {
+      fake.hooks = hooks
+      return () => { if (fake.hooks === hooks) fake.hooks = null }
+    },
+    isShown: () => shown,
+    setShown: (value) => { shown = value },
+  }
+  return fake
+}
+
 function renderHost(options: {
-  initialSession?: ImageEditSessionReferenceV3
-  onSessionReferenceChange?: (session: ImageEditSessionReferenceV3) => void
   strictMode?: boolean
+  document?: FakeOpenDocument
+  onSave?: () => Promise<void>
+  onSaveAs?: () => Promise<void>
 } = {}) {
   const host = (
     <NotificationProvider>
       <div style={{ width: 1_200, height: 800 }}>
         <ImageMarkToolV3Host
-          sourceImageUrl="/private/tmp/source.png"
+          document={options.document ?? fakeOpenDocument()}
           sourceName="source.png"
-          sourceSessionKey={1}
-          initialDocument={createEmptyImageEditDocument()}
-          initialSession={options.initialSession}
-          onSessionReferenceChange={options.onSessionReferenceChange}
           onOpenFile={() => undefined}
           onPasteFromClipboard={() => undefined}
           onCreateBlank={() => undefined}
+          onSave={options.onSave ?? (async () => undefined)}
+          onSaveAs={options.onSaveAs ?? (async () => undefined)}
         />
       </div>
     </NotificationProvider>
@@ -147,8 +177,7 @@ describe('ImageMarkToolV3Host', () => {
   beforeEach(async () => {
     await i18n.changeLanguage('zh-CN')
     vi.stubGlobal('ResizeObserver', ResizeObserverStub)
-    mocks.ingest.mockReset().mockResolvedValue(managedSource())
-    persistedDocument = null
+    persistedDocument = workingDocument()
     mocks.save.mockReset().mockImplementation(async (document: ImageEditDocumentV3) => {
       persistedDocument = document
       return {
@@ -157,15 +186,6 @@ describe('ImageMarkToolV3Host', () => {
         previewRef: null,
       }
     })
-    mocks.savePackage.mockReset().mockResolvedValue({
-      status: 'completed',
-      value: {
-        outputRef: 'henjiimg:toolbox@1',
-        documentRef: 'image-edit-v3:toolbox-document',
-        revision: 1,
-      },
-    })
-    mocks.openPackage.mockReset().mockResolvedValue({ status: 'cancelled' })
     mocks.readFastProxy.mockReset()
     mocks.loadDocument.mockReset().mockImplementation(async ({ documentRef }): Promise<ImageEditorV3DocumentSnapshot> => {
       if (!persistedDocument) throw new Error('missing persisted document')
@@ -203,42 +223,23 @@ describe('ImageMarkToolV3Host', () => {
     vi.unstubAllGlobals()
   })
 
-  it('导入受管源、迁移旧文档并以 full profile 保存 V3 真相源', async () => {
+  it('从图片文档的工作副本载入（不重新导入图片），修改高频保存进工作副本', async () => {
     const rendered = renderHost()
 
     await waitFor(() => expect(rendered.container.querySelector('[data-image-editor-v3]')).toBeTruthy())
     expect(rendered.container.querySelector('[data-host-profile="full"]')).toBeTruthy()
-    expect(mocks.ingest).toHaveBeenCalledWith(
-      expect.objectContaining({
-        source: { kind: 'local-path', filePath: '/private/tmp/source.png' },
-      }),
-      expect.any(AbortSignal),
-    )
-    expect(mocks.save).toHaveBeenNthCalledWith(
-      1,
-      expect.objectContaining({
-        revision: 0,
-        geometry: expect.objectContaining({ width: 1_600, height: 900 }),
-        layers: [
-          expect.objectContaining({
-            type: 'raster',
-            source: { kind: 'resource', resourceId: RESOURCE_REF },
-          }),
-        ],
-      }),
-      expect.objectContaining({
-        expectedRevision: 0,
-        previewRef: null,
-        history: expect.objectContaining({ headRevision: 0, undo: [], redo: [] }),
-      }),
-    )
+    expect(mocks.loadDocument).toHaveBeenCalledWith({
+      requestId: expect.stringContaining('document-load'),
+      documentRef: `image-edit-v3:${DOCUMENT_ID}`,
+    }, expect.any(AbortSignal))
+    expect(mocks.save).not.toHaveBeenCalled()
 
     const opacity = await findLayerOpacity()
     fireEvent.change(opacity, { target: { value: '0.75' } })
     fireEvent.pointerUp(opacity)
-    await waitFor(() => expect(mocks.save).toHaveBeenCalledTimes(2), { timeout: 1_500 })
+    await waitFor(() => expect(mocks.save).toHaveBeenCalledTimes(1), { timeout: 1_500 })
     expect(mocks.save).toHaveBeenNthCalledWith(
-      2,
+      1,
       expect.objectContaining({ revision: 1 }),
       expect.objectContaining({
         expectedRevision: 0,
@@ -246,84 +247,61 @@ describe('ImageMarkToolV3Host', () => {
         history: expect.objectContaining({ headRevision: 1, undo: expect.any(Array) }),
       }),
     )
-
-    expect(screen.queryByRole('button', { name: '保存可编辑文件…' })).toBeNull()
-    expect(mocks.savePackage).not.toHaveBeenCalled()
+    expect(rendered.container.querySelector('[data-command-bar]')?.textContent).not.toMatch(/版本\s*\d+/)
   })
 
-  it('StrictMode 生命周期重放只发起一次 PNG 导入和初始保存', async () => {
+  it('StrictMode 生命周期重放只读取一次工作副本', async () => {
     const rendered = renderHost({ strictMode: true })
 
     await waitFor(() => expect(rendered.container.querySelector('[data-image-editor-v3]')).toBeTruthy())
-    expect(mocks.ingest).toHaveBeenCalledTimes(1)
-    expect(mocks.save).toHaveBeenCalledTimes(1)
+    expect(mocks.loadDocument).toHaveBeenCalledTimes(1)
     expect(rendered.container.querySelector('[data-image-editor-v3-host-state="failed"]')).toBeNull()
   })
 
-  it('导入失败时只提供重试，不伪造文档结果', async () => {
-    mocks.ingest.mockRejectedValueOnce(new Error('unsupported source'))
+  it('工作副本读取失败时只提供重试，不伪造文档结果', async () => {
+    mocks.loadDocument.mockRejectedValueOnce(new Error('missing working copy'))
     renderHost()
 
     expect((await screen.findByRole('alert')).textContent).toContain('无法打开图片编辑器')
-    expect(screen.queryByText('unsupported source')).toBeNull()
-    expect(screen.queryByRole('button', { name: '使用兼容编辑器' })).toBeNull()
+    expect(screen.queryByText('missing working copy')).toBeNull()
     expect(mocks.save).not.toHaveBeenCalled()
   })
 
-  it('发布入口不展示暂缓的可编辑交换包', async () => {
-    const rendered = renderHost()
+  it('命令带有保存与另存为；导出只列发布格式；来源菜单不再有打开可编辑文件', async () => {
+    const onSave = vi.fn(async () => undefined)
+    const onSaveAs = vi.fn(async () => undefined)
+    const rendered = renderHost({ onSave, onSaveAs })
     await waitFor(() => expect(rendered.container.querySelector('[data-image-editor-v3]')).toBeTruthy())
+
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+    fireEvent.click(screen.getByRole('button', { name: '另存为…' }))
+    expect(onSave).toHaveBeenCalledTimes(1)
+    expect(onSaveAs).toHaveBeenCalledTimes(1)
 
     fireEvent.click(screen.getByRole('button', { name: '打开' }))
     expect(screen.queryByRole('button', { name: '打开可编辑文件' })).toBeNull()
-    expect(mocks.openPackage).not.toHaveBeenCalled()
 
     fireEvent.click(screen.getByRole('button', { name: '选择栅格导出格式' }))
     expect(document.querySelectorAll('[data-export-format]')).toHaveLength(3)
-    expect(document.querySelector('[data-export-format="png8"]')).toBeTruthy()
-    expect(document.querySelector('[data-export-format="jpeg"]')).toBeTruthy()
-    expect(document.querySelector('[data-export-format="webp"]')).toBeTruthy()
     expect(document.querySelector('[data-export-format="tiff8"]')).toBeNull()
-    expect(document.querySelector('[data-export-format="bigtiff"]')).toBeNull()
   })
 
-  it('按稳定引用恢复权威快照，不重新导入或创建文档', async () => {
-    const restoredDocument = {
-      ...createEmptyImageEditDocument(),
-    }
-    const bootstrap = managedSource()
-    const migrated = migrateImageEditDocumentV2ToV3(
-      restoredDocument,
-      {
-        width: bootstrap.metadata.width,
-        height: bootstrap.metadata.height,
-        sourceResourceId: bootstrap.resource.resourceRef,
-        documentId: 'restored-toolbox-document',
-      },
-    )
-    persistedDocument = { ...migrated, revision: 4 }
-    const onSessionReferenceChange = vi.fn()
-    const initialSession = {
-      kind: 'image-edit-v3' as const,
-      sourceUrl: bootstrap.mediaUrl,
-      documentRef: 'image-edit-v3:restored-toolbox-document' as const,
-      revision: 4,
-      previewRef: null,
-    }
-
-    const rendered = renderHost({ initialSession, onSessionReferenceChange })
-
+  it('接到文档会话：会话保存时把待保存修改落进工作副本，卸载时解除', async () => {
+    const openDocument = fakeOpenDocument()
+    const rendered = renderHost({ document: openDocument })
     await waitFor(() => expect(rendered.container.querySelector('[data-image-editor-v3]')).toBeTruthy())
-    expect(mocks.loadDocument).toHaveBeenCalledWith({
-      requestId: expect.stringContaining('session-restore'),
-      documentRef: initialSession.documentRef,
-    }, expect.any(AbortSignal))
-    expect(mocks.ingest).not.toHaveBeenCalled()
-    expect(mocks.save).not.toHaveBeenCalled()
-    expect(onSessionReferenceChange).toHaveBeenCalledWith(initialSession)
-    expect(screen.queryByText('版本 4')).toBeNull()
-    expect(rendered.container.querySelector('[data-command-bar]')?.textContent)
-      .not.toMatch(/版本\s*\d+/)
+    expect(openDocument.isShown()).toBe(true)
+    expect(openDocument.hooks).toBeTruthy()
+
+    const opacity = await findLayerOpacity()
+    fireEvent.change(opacity, { target: { value: '0.5' } })
+    fireEvent.pointerUp(opacity)
+    await openDocument.hooks?.flush()
+    expect(mocks.save).toHaveBeenCalledWith(expect.objectContaining({ revision: 1 }), expect.anything())
+
+    rendered.unmount()
+    expect(openDocument.hooks).toBeNull()
+    expect(openDocument.isShown()).toBe(false)
   })
 
   it('自动保存期间不在右上角插入瞬时状态或推动操作按钮', async () => {
@@ -344,7 +322,7 @@ describe('ImageMarkToolV3Host', () => {
     const opacity = await findLayerOpacity()
     fireEvent.change(opacity, { target: { value: '0.7' } })
     fireEvent.pointerUp(opacity)
-    await waitFor(() => expect(mocks.save).toHaveBeenCalledTimes(2), { timeout: 1_500 })
+    await waitFor(() => expect(mocks.save).toHaveBeenCalledTimes(1), { timeout: 1_500 })
 
     expect(screen.queryByText('正在保存…')).toBeNull()
     expect(actions?.textContent).toBe(stableActionsText)
@@ -365,7 +343,7 @@ describe('ImageMarkToolV3Host', () => {
     await startRasterExport('JPEG（8 位，白色背景）')
 
     await waitFor(() => expect(mocks.exportRaster).toHaveBeenCalledTimes(1))
-    expect(mocks.save).toHaveBeenCalledTimes(2)
+    expect(mocks.save).toHaveBeenCalledTimes(1)
     expect(mocks.loadDocument).toHaveBeenCalledWith(expect.objectContaining({
       documentRef: expect.stringMatching(/^image-edit-v3:/),
     }), expect.any(AbortSignal))
@@ -379,8 +357,8 @@ describe('ImageMarkToolV3Host', () => {
     expect(exported.format).toBe('jpeg')
     expect(exported.suggestedName).toBe('source-已编辑.jpg')
     expect(exported.signal).toBeInstanceOf(AbortSignal)
-    expect(mocks.save.mock.invocationCallOrder[1]).toBeLessThan(mocks.loadDocument.mock.invocationCallOrder[0])
-    expect(mocks.loadDocument.mock.invocationCallOrder[0]).toBeLessThan(mocks.exportRaster.mock.invocationCallOrder[0])
+    expect(mocks.save.mock.invocationCallOrder[0]).toBeLessThan(mocks.loadDocument.mock.invocationCallOrder[1])
+    expect(mocks.loadDocument.mock.invocationCallOrder[1]).toBeLessThan(mocks.exportRaster.mock.invocationCallOrder[0])
     expect(await screen.findByText('栅格图片已导出')).toBeTruthy()
   })
 
@@ -433,7 +411,7 @@ describe('ImageMarkToolV3Host', () => {
       '当前版本还不能可靠保留 HDR 元数据，已阻止降级导出为 SDR 图片。',
     )
     fireEvent.click(exportButton)
-    expect(mocks.loadDocument).not.toHaveBeenCalled()
+    expect(mocks.loadDocument).toHaveBeenCalledTimes(1)
     expect(mocks.exportRaster).not.toHaveBeenCalled()
   })
 

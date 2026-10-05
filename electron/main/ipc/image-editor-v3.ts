@@ -42,11 +42,16 @@ import { ImageEditorV3RequestAdmission } from './image-editor-v3-request-admissi
 import { registerImageEditorV3SourceIpc } from './image-editor-v3-source'
 import { describeImageEditorV3DocumentResources } from '../services/image-editor-v3/snapshot-resources'
 export { describeImageEditorV3SnapshotResources } from '../services/image-editor-v3/snapshot-resources'
+import { registerImageEditorV3ImageDocumentIpc } from './image-editor-v3-package'
+import path from 'node:path'
+import { getProgramStoreDir } from '../services/appBasePaths'
+import { getUserDataLayout } from '../services/appPaths'
+import { getDocumentService } from '../services/documents/runtime'
 import {
-  abandonImageEditorV3PendingPackageImports,
-  disposeImageEditorV3PendingPackageImports,
-  registerImageEditorV3PackageIpc,
-} from './image-editor-v3-package'
+  createImageEditorV3ResourceMediaUrl,
+  imageEditorV3ResourceObjectPath,
+} from '../services/image-editor-v3/resource-media-url'
+import { ImageDocumentService, ImageDocumentWorkingCopyLinks } from '../services/image-editor-v3/image-document'
 
 export {
   parseImageEditorV3FastProxyPayload,
@@ -54,7 +59,6 @@ export {
   parseImageEditorV3LoadPayload,
   parseImageEditorV3DeleteIfRevisionPayload,
   parseImageEditorV3ForkPayload,
-  parseImageEditorV3RelinkPackageExternalSourcePayload,
   parseImageEditorV3SavePayload,
   parseImageEditorV3TilePayload,
 } from './image-editor-v3-payloads'
@@ -75,6 +79,7 @@ interface ImageEditorV3Runtime {
   brushTiles: ImageEditBrushTileStoreV3
   rasterExports: RasterExportSessionManager
   managedRaster: ManagedRasterMaterializer
+  imageDocuments: ImageDocumentService
 }
 let runtime: ImageEditorV3Runtime | undefined
 const requestAdmission = new ImageEditorV3RequestAdmission()
@@ -86,11 +91,12 @@ function getRuntime(): ImageEditorV3Runtime {
   const documents = new ImageEditDocumentRepository(paths.documentsDir)
   const sources = new SharpSourceProvider(resources)
   const rasterExports = new RasterExportSessionManager(documents, resources)
+  const packages = new HenjiImagePackageCodec(resources, sources)
   runtime = {
     documents,
     resources,
     sources,
-    packages: new HenjiImagePackageCodec(resources, sources),
+    packages,
     sourceIngestor: new ImageEditorV3SourceIngestor(resources, sources),
     brushTiles: new ImageEditBrushTileStoreV3(resources),
     rasterExports,
@@ -100,6 +106,31 @@ function getRuntime(): ImageEditorV3Runtime {
       resources,
       paths.materializationsDir,
     ),
+    // 图片文档（3.5）：.henjiimg 是正式文件，工作副本就是本仓库里同 ID 的文档；
+    // 锁与通用文档仓库共用（程序目录 DocumentStore/locks），写回与改名、移动互斥。
+    imageDocuments: new ImageDocumentService({
+      documents,
+      packages,
+      links: new ImageDocumentWorkingCopyLinks(path.join(paths.rootDir, 'document-links')),
+      catalog: {
+        listDocuments: (query) => getDocumentService().listDocuments(query),
+        listProjects: (query) => getDocumentService().listProjects(query),
+        refreshIndex: () => getDocumentService().refreshIndex(),
+        saveDocumentCover: (request) => getDocumentService().saveDocumentCover(request),
+        layout: () => {
+          const layout = getUserDataLayout()
+          return { root: layout.root, locale: layout.locale }
+        },
+      },
+      lockDirectory: path.join(getProgramStoreDir('documentStore'), 'locks'),
+      logger: createMainLogger('main.image_editor_v3.image_document'),
+      validateDocument: (document) => { validateSnapshotDocument(document) },
+      resourceFilePath: imageEditorV3ResourceObjectPath,
+      resourceMediaUrl: async (resourceId) => {
+        const descriptor = await resources.describe(resourceId)
+        return descriptor.mediaType ? createImageEditorV3ResourceMediaUrl(resourceId, descriptor.mediaType) : null
+      },
+    }),
   }
   return runtime
 }
@@ -114,7 +145,6 @@ function trackRendererLifetime(sender: WebContents): void {
   const abortRequests = (): void => {
     cleanup()
     requestAdmission.abortSender(sender.id)
-    void abandonImageEditorV3PendingPackageImports(sender.id)
   }
   sender.once('destroyed', abortRequests)
   sender.once('render-process-gone', abortRequests)
@@ -299,7 +329,13 @@ export function registerImageEditorV3Ipc(): void {
       throwIfAborted(signal)
       const result = await getRuntime().documents.listReferences(payload.cursor, payload.limit)
       throwIfAborted(signal)
-      return result
+      // 图片文档（.henjiimg，3.5）的工作副本不在这里列出：它们按作品索引以文档身份出现。
+      // 分页游标仍沿用未过滤的列表，过滤后的一页可能为空。
+      const documentRefs = []
+      for (const ref of result.documentRefs) {
+        if (!await getRuntime().imageDocuments.isWorkingCopy(parseDocumentRef(ref))) documentRefs.push(ref)
+      }
+      return { documentRefs, nextCursor: result.nextCursor }
     })
   ), guard)
   registerIpcHandler('imageEditorV3:document:load', parseImageEditorV3LoadPayload, (payload, event) => (
@@ -366,14 +402,10 @@ export function registerImageEditorV3Ipc(): void {
     runRequest,
     cancelRequest: (senderId, requestId) => requestAdmission.cancel(senderId, requestId),
   })
-  registerImageEditorV3PackageIpc({
-    documents: getRuntime().documents,
-    packages: getRuntime().packages,
+  registerImageEditorV3ImageDocumentIpc({
+    imageDocuments: () => getRuntime().imageDocuments,
     guard,
     runRequest,
-    toSnapshot,
-    assertHistoryResourceSizes,
-    validateSnapshotDocument: (document) => { validateSnapshotDocument(document) },
   })
   registerIpcHandler('imageEditorV3:resource:collectGarbage', parseImageEditorV3GarbageCollectPayload, (payload, event) => (
     runRequest('resource.collect_garbage', payload.requestId, event.sender.id, async () => {
@@ -393,7 +425,6 @@ export function registerImageEditorV3Ipc(): void {
 
 export async function disposeImageEditorV3Ipc(): Promise<void> {
   requestAdmission.abortAll()
-  await disposeImageEditorV3PendingPackageImports()
   const current = runtime
   runtime = undefined
   await current?.rasterExports.dispose()

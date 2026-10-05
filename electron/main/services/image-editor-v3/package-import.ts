@@ -16,6 +16,7 @@ import type {
 import type { ContentAddressedResourceStore } from './resource-store'
 import {
   DEFAULT_HENJI_IMAGE_PACKAGE_LIMITS,
+  HENJI_IMAGE_DOCUMENT_HEADER_ENTRY,
   HENJI_IMAGE_PACKAGE_MANIFEST,
   validateHenjiImagePackageManifest,
   validatePackageEntryPath,
@@ -47,6 +48,8 @@ export interface ImportedHenjiImagePackage {
   resources: ResourceDescriptor[]
   missingExternalSources: HenjiImageMissingExternalSource[]
   thumbnail?: Buffer
+  /** 图片文档头条目的原始字节（3.5）；旧包没有。由图片文档服务解析。 */
+  documentHeader?: Buffer
   /** 导入完成前即取得；调用方必须在文档引用原子落盘后释放。 */
   resourceLease: ResourceLease
 }
@@ -177,8 +180,11 @@ async function writeEntryToStage(
   }
 }
 
+const MAX_DOCUMENT_HEADER_BYTES = 64 * 1024
+
 function entryLimit(entryName: string, limits: HenjiImagePackageLimits): number {
   if (entryName === HENJI_IMAGE_PACKAGE_MANIFEST) return limits.maxManifestBytes
+  if (entryName === HENJI_IMAGE_DOCUMENT_HEADER_ENTRY) return MAX_DOCUMENT_HEADER_BYTES
   if (entryName.startsWith('thumbnail/')) return limits.maxThumbnailBytes
   return limits.maxSingleResourceBytes
 }
@@ -240,7 +246,7 @@ function verifyManifestEntries(
   manifest: HenjiImagePackageManifest,
   staged: ReadonlyMap<string, StagedEntry>,
 ): void {
-  const expectedPaths = new Set<string>([HENJI_IMAGE_PACKAGE_MANIFEST])
+  const expectedPaths = new Set<string>([HENJI_IMAGE_PACKAGE_MANIFEST, HENJI_IMAGE_DOCUMENT_HEADER_ENTRY])
   for (const resource of manifest.resources) {
     expectedPaths.add(resource.path)
     const entry = staged.get(resource.path)
@@ -320,6 +326,8 @@ export async function importHenjiImagePackage(
     const thumbnail = manifest.thumbnail
       ? await fsp.readFile(staged.get(manifest.thumbnail.path)?.filePath ?? '')
       : undefined
+    const headerEntry = staged.get(HENJI_IMAGE_DOCUMENT_HEADER_ENTRY)
+    const documentHeader = headerEntry ? await fsp.readFile(headerEntry.filePath) : undefined
     const resourceLease = await request.resourceStore.acquireLease(
       resources.map((resource) => resource.id),
     )
@@ -331,7 +339,7 @@ export async function importHenjiImagePackage(
         resourceCount: resources.length,
       },
     })
-    return { manifest, resources, missingExternalSources, thumbnail, resourceLease }
+    return { manifest, resources, missingExternalSources, thumbnail, documentHeader, resourceLease }
   } catch (error) {
     logger.error('可编辑图片包导入失败', {
       event: 'image_editor_v3.package.import.failed',

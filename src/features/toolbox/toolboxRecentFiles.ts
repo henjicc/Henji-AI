@@ -9,14 +9,13 @@ import { selectToolboxTool } from '@/stores/navigationStore'
  * 工具首页的“最近文件”（设计稿 Toolbox）：只汇总已有工程列表，按最近编辑排序，
  * 打开时复用各工具自己的正式打开入口，不新增数据、存储或通道。
  *
- * 图片编辑没有持久的最近文件记录（只在内存里记住当前会话），因此不进入这个列表。
- * 3D 镜头参考是通用文档（3.2）：列表查作品索引（已保存的、文件还在的），打开走它登记的打开入口，
- * 按需加载，工具首页本身不因此提前下载 3D 场景代码。
+ * 3D 镜头参考（3.2）与图片文档（3.5）是通用文档：列表查作品索引（已保存的、文件还在的），
+ * 打开走各自的打开入口，按需加载，工具首页本身不因此提前下载 3D 场景或图片编辑器代码。
  */
 
 const logger = createLogger('features.toolbox.recent')
 
-export type ToolboxRecentTool = Extract<ToolboxToolId, 'audioEdit' | 'cameraStage'>
+export type ToolboxRecentTool = Extract<ToolboxToolId, 'audioEdit' | 'cameraStage' | 'imageMark'>
 
 export interface ToolboxRecentFile {
   key: string
@@ -32,6 +31,7 @@ export function mergeToolboxRecentFiles(
   audioProjects: readonly AudioEditProjectSummary[],
   cameraDocuments: readonly Pick<DocumentSummary, 'id' | 'name' | 'updatedAt'>[],
   limit = TOOLBOX_RECENT_FILE_LIMIT,
+  imageDocuments: readonly Pick<DocumentSummary, 'id' | 'name' | 'updatedAt'>[] = [],
 ): ToolboxRecentFile[] {
   return [
     ...audioProjects.map((project) => ({
@@ -48,6 +48,13 @@ export function mergeToolboxRecentFiles(
       name: project.name,
       updatedAt: project.updatedAt,
     })),
+    ...imageDocuments.map((document) => ({
+      key: `imageMark:${document.id}`,
+      toolId: 'imageMark' as const,
+      projectId: document.id,
+      name: document.name,
+      updatedAt: document.updatedAt,
+    })),
   ]
     .filter((file) => Number.isFinite(file.updatedAt))
     .sort((left, right) => right.updatedAt - left.updatedAt)
@@ -56,14 +63,16 @@ export function mergeToolboxRecentFiles(
 
 /** 读取两个工具的工程摘要（全部，按最近编辑排序）；任一来源失败只记日志，不拖垮另一来源与首页。 */
 export async function loadToolboxRecentFiles(): Promise<ToolboxRecentFile[]> {
-  const [audio, camera] = await Promise.allSettled([
+  const listDocuments = (kind: 'camera_stage' | 'image_document') => import('@/features/documents/documentOperations')
+    .then(({ getDocumentOperations }) => getDocumentOperations().listDocuments({
+      kind, container: { kind: 'any' }, includeDrafts: false, includeMissing: false,
+    }))
+  const [audio, camera, image] = await Promise.allSettled([
     getPlatform().audioEdit.listProjects(),
-    import('@/features/documents/documentOperations')
-      .then(({ getDocumentOperations }) => getDocumentOperations().listDocuments({
-        kind: 'camera_stage', container: { kind: 'any' }, includeDrafts: false, includeMissing: false,
-      })),
+    listDocuments('camera_stage'),
+    listDocuments('image_document'),
   ])
-  for (const [source, result] of [['audioEdit', audio], ['cameraStage', camera]] as const) {
+  for (const [source, result] of [['audioEdit', audio], ['cameraStage', camera], ['imageMark', image]] as const) {
     if (result.status === 'rejected') {
       logger.warn('工具首页最近文件读取失败', {
         event: 'toolbox.recent_files.load.failed',
@@ -76,6 +85,7 @@ export async function loadToolboxRecentFiles(): Promise<ToolboxRecentFile[]> {
     audio.status === 'fulfilled' ? audio.value : [],
     camera.status === 'fulfilled' ? camera.value : [],
     Number.POSITIVE_INFINITY,
+    image.status === 'fulfilled' ? image.value : [],
   )
 }
 
@@ -91,6 +101,10 @@ export async function openToolboxRecentFile(file: ToolboxRecentFile): Promise<vo
         import('@/features/audioEdit/store/audioEditStore'),
       ])
       useAudioEditStore.getState().setProject((await loadAudioEditProject(file.projectId)).document)
+    } else if (file.toolId === 'imageMark') {
+      // 图片编辑页接手打开（离开当前文档时可能要询问保存），这里只递交请求。
+      const { requestImageDocumentInEditor } = await import('@/features/imageEdit/documents/imageDocumentWorkspace')
+      requestImageDocumentInEditor({ id: file.projectId })
     } else {
       const { openCameraStageDocument } = await import('@/features/cameraStage/projects/cameraStageProjectService')
       await openCameraStageDocument({ id: file.projectId })

@@ -9,6 +9,8 @@ import { getDb } from '../db'
 import { createMainLogger } from '../logging/main-logger'
 import { createDocumentServices, type DocumentServices } from './create-services'
 import { DocumentIndexStore } from './index-store'
+import { createPackageAdapterRegistry } from './package-adapters'
+import { createImageDocumentPackageAdapter } from '../image-editor-v3/image-document/package-adapter'
 import type { DocumentService } from './service'
 import type { WorkspaceLayout } from './workspace'
 
@@ -63,6 +65,8 @@ function getServices(): DocumentServices {
     grantMediaRoots,
     renderCover: renderCoverImage,
     hideDirectory,
+    // 单文件包适配器登记处：图片文档 .henjiimg（3.5）。
+    adapters: createPackageAdapterRegistry([createImageDocumentPackageAdapter()]),
   })
   return services
 }

@@ -1,4 +1,4 @@
-import { ClipboardPaste, FileArchive, FilePlus2, FolderOpen } from 'lucide-react'
+import { ClipboardPaste, FilePlus2, FolderOpen } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { PanelTrigger, UiButton, UiOptionButton } from '@/components/ui'
@@ -6,7 +6,6 @@ import { PanelTrigger, UiButton, UiOptionButton } from '@/components/ui'
 interface ImageMarkSourceMenuProps {
   disabled?: boolean
   onOpenFile: () => void
-  onOpenPackage?: () => void
   onPasteFromClipboard: () => void
   onCreateBlank: () => void
 }
@@ -15,7 +14,6 @@ interface ImageMarkSourceMenuProps {
 export function ImageMarkSourceMenu({
   disabled = false,
   onOpenFile,
-  onOpenPackage,
   onPasteFromClipboard,
   onCreateBlank,
 }: ImageMarkSourceMenuProps): JSX.Element {
@@ -37,17 +35,6 @@ export function ImageMarkSourceMenu({
             <FolderOpen size={15} />
             {t('imageEditor.v3.host.sourceMenu.openFile')}
           </UiOptionButton>
-          {onOpenPackage ? (
-            <UiOptionButton
-              type="button"
-              variant="menu"
-              size="md" className="gap-2"
-              onClick={onOpenPackage}
-            >
-              <FileArchive size={15} />
-              {t('imageEditor.v3.host.sourceMenu.openPackage')}
-            </UiOptionButton>
-          ) : null}
           <UiOptionButton
             type="button"
             variant="menu"

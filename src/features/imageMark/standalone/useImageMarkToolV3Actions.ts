@@ -1,28 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import {
-  loadImageEditorV3Document,
-  openImageEditorV3Package,
-  relinkImageEditorV3PackageExternalSource,
-  saveImageEditorV3PackageAs,
-} from '@/commands/imageEditorV3'
-import { ImageEditCommandHistoryV3 } from '@/core/imageEdit/v3/commandHistory'
-import type { ImageEditCommandHistorySnapshotV3 } from '@/core/imageEdit/v3/commandHistoryCodec'
+import { loadImageEditorV3Document } from '@/commands/imageEditorV3'
 import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
-import type {
-  ImageEditDocumentReferenceV3,
-  ImageEditPersistenceSnapshotV3,
-} from '@/core/imageEdit/v3/serviceContracts'
+import type { ImageEditDocumentReferenceV3 } from '@/core/imageEdit/v3/serviceContracts'
 import { createLogger } from '@/core/logging'
 import { useNotification } from '@/contexts/NotificationContext'
 import type { ImageEditorCapabilityReadinessV3 } from '@/features/imageEdit/v3/application/imageEditorHostProfiles'
 import { resolveImageEditorReadinessReasonV3 } from '@/features/imageEdit/v3/editor/readinessPresentationV3'
 import type {
   ImageEditorV3DocumentRef,
-  ImageEditorV3PackageThumbnail,
   ImageEditorV3RasterExportFormat,
-  ImageEditorV3ResourceDescriptor,
 } from '@/platform/contracts/imageEditorV3'
 import {
   exportImageMarkV3Raster,
@@ -50,23 +38,10 @@ export interface ImageMarkV3RasterExportOption {
   readiness: ImageEditorCapabilityReadinessV3
 }
 
-export interface OpenedImageMarkV3Package {
-  document: ImageEditDocumentV3
-  history: ImageEditCommandHistorySnapshotV3
-  persistence: ImageEditPersistenceSnapshotV3
-  reference: ImageEditDocumentReferenceV3
-  resourceByteSizes: Record<string, number>
-  resourceDescriptors: ImageEditorV3ResourceDescriptor[]
-}
-
 interface ImageMarkToolV3ActionsOptions {
   document: ImageEditDocumentV3 | null
   sourceName: string
   flushPending: () => Promise<ImageEditDocumentReferenceV3>
-  onPackageOpened: (opened: OpenedImageMarkV3Package) => void
-  getPackageThumbnail: () => (ImageEditorV3PackageThumbnail & {
-    extension: 'png' | 'webp'
-  }) | null
 }
 
 export interface ImageMarkToolV3ActionsController {
@@ -75,8 +50,6 @@ export interface ImageMarkToolV3ActionsController {
   rasterExportOptions: readonly ImageMarkV3RasterExportOption[]
   rasterExportReadiness: ImageEditorCapabilityReadinessV3
   runAfterSave: (action: () => void | Promise<void>) => Promise<void>
-  handleOpenPackage: () => Promise<void>
-  handleSavePackage: () => Promise<void>
   handleRasterExport: (format: ImageEditorV3RasterExportFormat) => Promise<void>
   handleCancelRasterExport: () => void
 }
@@ -100,8 +73,6 @@ export function useImageMarkToolV3Actions({
   document,
   sourceName,
   flushPending,
-  onPackageOpened,
-  getPackageThumbnail,
 }: ImageMarkToolV3ActionsOptions): ImageMarkToolV3ActionsController {
   const { t } = useTranslation('ui')
   const { showNotification } = useNotification()
@@ -134,97 +105,6 @@ export function useImageMarkToolV3Actions({
       if (mountedRef.current) setIsHostBusy(false)
     }
   }, [flushPending, isHostBusy, showNotification, t])
-
-  const handleOpenPackage = useCallback(async (): Promise<void> => {
-    await runAfterSave(async () => {
-      try {
-        let result = await openImageEditorV3Package({
-          requestId: createImageMarkToolV3RequestId('package-open'),
-        })
-        if (result.status !== 'completed') return
-        let relinkCount = 0
-        while (result.value.kind === 'relink-required') {
-          const missing = result.value.missingExternalSources[0]
-          if (!missing || relinkCount >= 64) {
-            throw new Error('可编辑文件包含无效或过多的外链资源')
-          }
-          if (relinkCount === 0) {
-            showNotification(t('imageEditor.v3.host.notifications.packageRelinkRequired'))
-          }
-          result = await relinkImageEditorV3PackageExternalSource({
-            requestId: createImageMarkToolV3RequestId('package-relink'),
-            pendingPackageRef: result.value.pendingPackageRef,
-            resourceRef: missing.resourceRef,
-          })
-          if (result.status !== 'completed') return
-          relinkCount += 1
-        }
-        const { snapshot, resources } = result.value
-        const historyState = new ImageEditCommandHistoryV3()
-        if (snapshot.history) historyState.restore(snapshot.document, snapshot.history)
-        else historyState.clear(snapshot.document)
-        const history = historyState.createSnapshot()
-        const persistence: ImageEditPersistenceSnapshotV3 = {
-          document: snapshot.document,
-          history,
-          retainedResources: historyState.getRetainedResources(),
-        }
-        const reference: ImageEditDocumentReferenceV3 = {
-          documentId: snapshot.document.id,
-          revision: snapshot.revision,
-          previewRef: snapshot.previewRef,
-        }
-        onPackageOpened({
-          document: snapshot.document,
-          history,
-          persistence,
-          reference,
-          resourceByteSizes: Object.fromEntries(
-            resources.map((resource) => [resource.resourceRef, resource.byteLength]),
-          ),
-          resourceDescriptors: snapshot.resources,
-        })
-        logger.info('图片编辑 V3 可编辑文件已打开', {
-          event: 'image_editor_v3.toolbox.package_open.completed',
-          context: { documentId: snapshot.document.id, revision: snapshot.revision },
-        })
-      } catch (error) {
-        logger.error('图片编辑 V3 可编辑文件打开或重链失败', {
-          event: 'image_editor_v3.toolbox.package_open.failed',
-          context: { errorName: error instanceof Error ? error.name : 'UnknownError' },
-        })
-        showNotification(t('imageEditor.v3.host.notifications.packageOpenFailed'), 'error')
-      }
-    })
-  }, [onPackageOpened, runAfterSave, showNotification, t])
-
-  const handleSavePackage = useCallback(async (): Promise<void> => {
-    if (isHostBusy) return
-    setIsHostBusy(true)
-    try {
-      const reference = await flushPending()
-      const result = await saveImageEditorV3PackageAs({
-        requestId: createImageMarkToolV3RequestId('package-save'),
-        documentRef: toDocumentRef(reference.documentId),
-        revision: reference.revision,
-        suggestedName: t('imageEditor.v3.host.fileNames.editable', {
-          stem: sourceStem(sourceName, t('imageEditor.v3.host.fileNames.fallbackStem')),
-        }),
-        thumbnail: getPackageThumbnail() ?? undefined,
-      })
-      if (result.status === 'completed') {
-        showNotification(t('imageEditor.v3.host.notifications.packageSaved'))
-      }
-    } catch (error) {
-      logger.error('图片编辑 V3 可编辑文件保存失败', {
-        event: 'image_editor_v3.toolbox.package_save.failed',
-        context: { errorName: error instanceof Error ? error.name : 'UnknownError' },
-      })
-      showNotification(t('imageEditor.v3.host.notifications.packageSaveFailed'), 'error')
-    } finally {
-      if (mountedRef.current) setIsHostBusy(false)
-    }
-  }, [flushPending, getPackageThumbnail, isHostBusy, showNotification, sourceName, t])
 
   const rasterExportOptions = useMemo<readonly ImageMarkV3RasterExportOption[]>(() => (
     document
@@ -358,8 +238,6 @@ export function useImageMarkToolV3Actions({
     rasterExportOptions,
     rasterExportReadiness,
     runAfterSave,
-    handleOpenPackage,
-    handleSavePackage,
     handleRasterExport,
     handleCancelRasterExport,
   }

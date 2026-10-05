@@ -12,6 +12,11 @@ import { parseResourceId } from './resource-store'
 export const HENJI_IMAGE_PACKAGE_FORMAT = 'henjiimg' as const
 export const HENJI_IMAGE_PACKAGE_VERSION = 1 as const
 export const HENJI_IMAGE_PACKAGE_MANIFEST = 'manifest.json' as const
+/**
+ * 图片文档头（3.5）：稳定 ID、草稿标记、版本与列表摘要，单独成一个小条目，
+ * 扫描作品目录时只读它，不必解压可能很大的 manifest。旧包没有这个条目，按 manifest 推出头信息。
+ */
+export const HENJI_IMAGE_DOCUMENT_HEADER_ENTRY = 'henji-document.json' as const
 
 const HASH_PATTERN = /^[a-f0-9]{64}$/
 const THUMBNAIL_PATH_PATTERN = /^thumbnail\/preview\.[a-z0-9]{1,8}$/
@@ -132,6 +137,7 @@ export function validatePackageEntryPath(entryName: string): string {
   }
   if (
     entryName !== HENJI_IMAGE_PACKAGE_MANIFEST
+    && entryName !== HENJI_IMAGE_DOCUMENT_HEADER_ENTRY
     && !/^resources\/[a-f0-9]{64}$/.test(entryName)
     && !THUMBNAIL_PATH_PATTERN.test(entryName)
   ) {

@@ -57,14 +57,26 @@ export interface DocumentContentAdapter<TContent = unknown> {
   isEmpty?(content: TContent): boolean
 }
 
-export type DocumentCommitReason = 'idle' | 'close'
+/** 写回原因：空闲、关闭（含应用退出）、用户点“保存”。 */
+export type DocumentCommitReason = 'idle' | 'close' | 'save'
+
+/**
+ * 读取目的（单文件包类型用）：open 打开、reload 冲突后按文件重新载入（放弃工作副本里的修改）、
+ * relocate 改名 / 移动 / 转正后只重新定位，不动内容。
+ */
+export type DocumentReadPurpose = 'open' | 'reload' | 'relocate'
 
 /**
  * 保存策略。JSON 类型每次保存直接写文档文件（`createJsonDocumentPersistence`）。
- * 单文件包类型（图片文档，3.5 实现）：save 写程序目录里的工作副本，commit 在空闲与关闭时写回 `.henjiimg`。
+ * 单文件包类型（图片文档，3.5）：save 写程序目录里的工作副本，commit 在保存、空闲与关闭时写回 `.henjiimg`；
+ * 通用仓库不读写包的内容，打开、新建与重新读取也由策略完成（read / create）。
  */
 export interface DocumentPersistence {
   readonly mode: 'json' | 'package'
+  /** 省略时用文档命令 readDocument（JSON 类型）。 */
+  read?(target: DocumentTarget, purpose: DocumentReadPurpose): Promise<DocumentReadResult>
+  /** 省略时用文档命令 createDocument（JSON 类型）。 */
+  create?(request: CreateDocumentRequest): Promise<DocumentReadResult>
   save(request: SaveDocumentRequest): Promise<DocumentSaveResult>
   /** 写回文档文件；返回新的元信息（没有变化时可不返回）。 */
   commit?(reason: DocumentCommitReason, meta: DocumentMeta): Promise<DocumentMeta | void>

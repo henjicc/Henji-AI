@@ -32,9 +32,10 @@ function createPlatform(): ImageEditorV3Platform {
     readSourceTile: vi.fn(),
     persistBrushTiles: vi.fn(),
     readBrushTiles: vi.fn(),
-    openPackage: vi.fn(),
-    relinkPackageExternalSource: vi.fn(),
-    savePackageAs: vi.fn(),
+    openImageDocument: vi.fn(),
+    describeImageDocument: vi.fn(),
+    createImageDocument: vi.fn(),
+    commitImageDocument: vi.fn(),
     startRasterExport: vi.fn(async () => ({
       status: 'completed' as const,
       value: {

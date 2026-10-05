@@ -327,6 +327,18 @@ export class ImageEditDocumentRepository {
     })
   }
 
+  /**
+   * 整份替换（不存在时新建）：图片文档打开时把 `.henjiimg` 的内容解到工作副本（3.5）。
+   * 只给图片文档服务用；它保证此时没有编辑中的实例持有这份文档。
+   */
+  async replace(envelope: ImageEditDocumentEnvelope): Promise<ImageEditDocumentEnvelope> {
+    const validated = validateImageEditDocumentEnvelope(envelope)
+    return this.executor.run(validated.documentId, () => this.withDocumentLock(validated.documentId, async () => {
+      await this.persist(validated, 'replace')
+      return validated
+    }))
+  }
+
   async list(): Promise<ImageEditDocumentEnvelope[]> {
     const entries = await fsp.readdir(this.rootDir, { withFileTypes: true }).catch(() => [])
     const envelopes: ImageEditDocumentEnvelope[] = []
@@ -390,7 +402,7 @@ export class ImageEditDocumentRepository {
     return new DocumentAutosaveScheduler(this, delayMs)
   }
 
-  private async persist(envelope: ImageEditDocumentEnvelope, action: 'create' | 'save'): Promise<void> {
+  private async persist(envelope: ImageEditDocumentEnvelope, action: 'create' | 'save' | 'replace'): Promise<void> {
     logger.info('开始保存图片编辑文档', {
       event: `image_editor_v3.document.${action}.start`,
       context: { documentId: envelope.documentId, revision: envelope.revision },
