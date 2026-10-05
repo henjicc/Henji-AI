@@ -5,7 +5,7 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { parseVideoEditShortcutOverrides, VIDEO_EDIT_COMMANDS, videoEditCommandShortcut, videoEditShortcutLabel, type VideoEditCommandId, type VideoEditShortcutOverrides } from '@/core/videoEdit/commands'
 
 /**
- * 设置行 + 弹窗（设置 → 界面 → 布局行为）。和同一分节的其他设置一样是“标签左、控件右”的一行，
+ * 设置行 + 弹窗（设置 → 通用 → 查看与快捷键）。和同一分节的其他设置一样是“标签左、控件右”的一行，
  * 不再是一个孤零零贴在左侧的按钮（5.6 第二批）。
  */
 export function VideoEditShortcutSettings(): React.ReactElement {

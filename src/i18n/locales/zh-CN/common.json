@@ -9,7 +9,7 @@
     "rememberLabel": "记住我的选择，之后不再询问",
     "rememberOn": "记住",
     "rememberOff": "不记住",
-    "rememberHint": "可随时在 设置 → 通用 → 存储 中修改。"
+    "rememberHint": "可随时在 设置 → 文件与下载 → 上传 中修改。"
   },
   "alertDialog": {
     "goToSettings": "去设置",

@@ -218,7 +218,7 @@
     "outputVideo": "Output Video",
     "ungroup": "Ungroup",
     "saveAs": "Save as...",
-    "noDownloadPresetPathsHint": "No preset path. Add one in Settings > General.",
+    "noDownloadPresetPathsHint": "No saved folders yet. Add one in Settings → Files & Downloads → Downloads.",
     "storyboardLine": "Storyboard {{index}}: {{content}}"
   },
   "modelParams": {

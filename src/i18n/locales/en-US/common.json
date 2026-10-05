@@ -9,7 +9,7 @@
     "rememberLabel": "Remember my choice and stop asking",
     "rememberOn": "Remember",
     "rememberOff": "Don't remember",
-    "rememberHint": "You can change this anytime in Settings → General → Storage."
+    "rememberHint": "You can change this anytime in Settings → Files & Downloads → Uploads."
   },
   "alertDialog": {
     "goToSettings": "Open Settings",

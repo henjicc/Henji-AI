@@ -218,7 +218,7 @@
     "outputVideo": "输出视频",
     "ungroup": "解散",
     "saveAs": "另存为...",
-    "noDownloadPresetPathsHint": "暂无预设路径，请在设置 - 通用中添加",
+    "noDownloadPresetPathsHint": "暂无常用保存位置，请在 设置 → 文件与下载 → 下载 中添加",
     "storyboardLine": "分镜 {{index}}：{{content}}"
   },
   "modelParams": {

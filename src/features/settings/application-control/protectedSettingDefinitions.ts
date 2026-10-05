@@ -28,19 +28,19 @@ export const PROTECTED_APPLICATION_SETTING_DEFINITIONS: Record<string, Record<st
     id: 'storage.download_paths', title: '下载目录',
     description: 'OS 文件选择器由系统弹出，不在渲染进程里，助手没有办法代替用户点选目录，'
       + '只能查询已配置几条；配置或删除下载预设路径请用 open_application_surface 把用户带到 '
-      + 'general-storage 分区的「下载预设路径」，由用户自己选择目录。',
+      + 'files-download 分区的「常用保存位置」，由用户自己选择目录。',
     aliases: ['下载路径', '保存目录', '本地路径', '下载预设路径'], target: { tab: 'files', sectionId: 'files-download' }, sensitive: true, writable: false,
   },
   'storage.data_path': {
     id: 'storage.data_path', title: '应用数据目录',
     description: 'OS 文件选择器由系统弹出，不在渲染进程里，迁移数据目录必须由用户在系统确认框里'
-      + '完成；助手可以用 open_application_surface 把用户带到 general-storage 分区定位到这一项。',
+      + '完成；助手可以用 open_application_surface 把用户带到 files-storage 分区定位到这一项。',
     aliases: ['数据目录', '迁移数据', '存储位置'], target: { tab: 'files', sectionId: 'files-storage' }, sensitive: true, writable: false,
   },
   'downloads.quick_path': {
     id: 'downloads.quick_path', title: '快速下载目录',
     description: 'OS 文件选择器由系统弹出，不在渲染进程里，助手没有办法代替用户点选目录，'
-      + '具体路径只能通过系统选择器确认；用 open_application_surface 把用户带到 general-storage '
+      + '具体路径只能通过系统选择器确认；用 open_application_surface 把用户带到 files-download '
       + '分区定位到这一项。',
     aliases: ['快速下载路径', '下载文件夹'], target: { tab: 'files', sectionId: 'files-download' }, sensitive: true, writable: false,
   },

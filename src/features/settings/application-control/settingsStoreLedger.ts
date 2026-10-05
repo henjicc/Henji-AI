@@ -65,7 +65,7 @@ export const SETTINGS_STORE_LEDGER: ApplicationStoreActionLedger<ActionName> = {
       category: 'user_only',
       reason: '添加预设路径要在系统目录选择器里选一个真实存在的目录，该对话框由 OS 弹出、'
         + '不在渲染进程里，助手无法代劳；凭空写路径只会造出点了就失败的菜单项。'
-        + '助手可用 open_application_surface 把用户带到 general-storage 分区自行配置。',
+        + '助手可用 open_application_surface 把用户带到 files-download 分区自行配置。',
     },
     setUseUploadFilenameAsNodeTitle: property('canvas.upload_filename_as_title'),
     setEnableImageViewerInfoPanel: property('generation.viewer_info'),
