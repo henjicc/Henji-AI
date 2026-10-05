@@ -1,11 +1,9 @@
-import { app } from 'electron'
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
-import { getCustomDataRoot } from '../dataRoot'
+import { getProgramStoreDir, getUserFolderDir, getUserRootDir } from '../appPaths'
 import { releaseManagedMediaFileLease } from './managed-media-leases'
 
-const APP_IDENTIFIER = 'com.henji.ai'
 const uploadImageLeaseCounts = new Map<string, number>()
 
 export function normalizeExtension(rawExt: string | undefined): string {
@@ -37,28 +35,26 @@ export function mimeFromExtension(extension: string | undefined): string {
   }
 }
 
+/**
+ * 用户目录根（默认“文档/痕迹AI”）。生成记录等保存的相对路径以它为基准。
+ * 目录唯一来源见 `../appPaths.ts`。
+ */
 export function getDataRootDir(): string {
-  const custom = getCustomDataRoot()
-  const root = custom
-    ? custom
-    : path.join(
-        process.platform === 'win32' && process.env.LOCALAPPDATA
-          ? path.join(process.env.LOCALAPPDATA, APP_IDENTIFIER)
-          : path.join(app.getPath('appData'), APP_IDENTIFIER),
-        'Henji-AI'
-      )
-  fs.mkdirSync(root, { recursive: true })
-  return root
+  return getUserRootDir()
 }
 
+/** 上传素材目录（导入与上传的文件）。 */
 export function getUploadsDir(): string {
-  const uploads = path.join(getDataRootDir(), 'Uploads')
-  fs.mkdirSync(uploads, { recursive: true })
-  return uploads
+  return getUserFolderDir('uploads')
+}
+
+/** 生成结果目录（独立使用生成、画布时的生成产物）。 */
+export function getGeneratedMediaDir(): string {
+  return getUserFolderDir('generated')
 }
 
 export function getDebugDir(category: string): string {
-  const debugDir = path.join(getDataRootDir(), 'debug', sanitizeFileStem(category))
+  const debugDir = path.join(getProgramStoreDir('debug'), sanitizeFileStem(category))
   fs.mkdirSync(debugDir, { recursive: true })
   return debugDir
 }
@@ -134,15 +130,15 @@ export function releaseManagedImagePaths(filePaths: readonly string[]): void {
   const prefix = `${uploadsDir}${path.sep}`
   for (const filePath of new Set(filePaths)) {
     const resolved = path.resolve(filePath)
-    if (!resolved.startsWith(prefix)) throw new Error('只能释放 Uploads 目录内的受管图片')
+    if (!resolved.startsWith(prefix)) throw new Error('只能释放上传素材目录（Uploads）内的受管图片')
     releaseUploadImageLease(resolved)
   }
 }
 
-/** 通用生成事务回滚入口；只接受应用数据根内的 Uploads/Media 受管文件。 */
+/** 通用生成事务回滚入口；只接受用户目录内上传素材/生成结果中的受管文件。 */
 export function releaseManagedGenerationMediaPaths(filePaths: readonly string[]): void {
-  const uploadsRoot = path.resolve(getDataRootDir(), 'Uploads')
-  const mediaRoot = path.resolve(getDataRootDir(), 'Media')
+  const uploadsRoot = path.resolve(getUploadsDir())
+  const mediaRoot = path.resolve(getGeneratedMediaDir())
   for (const filePath of new Set(filePaths)) {
     const resolved = path.resolve(filePath)
     const isUpload = resolved.startsWith(`${uploadsRoot}${path.sep}`)

@@ -13,7 +13,8 @@ import type {
   LocalMediaKind,
 } from '../../../../src/core/media/localMediaImportContracts'
 import { allowMediaRoot } from '../../protocol'
-import { getDataRootDir, getUploadsDir } from '../image/path-utils'
+import { getProgramStoreDir } from '../appPaths'
+import { getUploadsDir } from '../image/path-utils'
 import { loadSharp } from '../image/sharp-loader'
 import { createMainLogger } from '../logging'
 import { withMediaHeavyTask } from './concurrency'
@@ -205,7 +206,7 @@ async function prepareImage(
     if (Math.max(width, height) <= IMAGE_PREVIEW_MAX_SIZE) {
       return { previewPath: stored.fullPath, aspectRatio: aspectRatio(width, height), cacheHit: true }
     }
-    const thumbnailsDir = path.join(getDataRootDir(), 'Thumbnails')
+    const thumbnailsDir = getProgramStoreDir('thumbnails')
     await fsp.mkdir(thumbnailsDir, { recursive: true })
     const previewPath = path.join(thumbnailsDir, `image-${stored.cacheKey}.jpg`)
     try {

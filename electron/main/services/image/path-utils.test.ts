@@ -5,8 +5,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({ root: '' }))
 
-vi.mock('electron', () => ({ app: { getPath: () => mocks.root } }))
-vi.mock('../dataRoot', () => ({ getCustomDataRoot: () => mocks.root }))
+vi.mock('../appPaths', async () => {
+  const nodeFs = await import('node:fs')
+  const nodePath = await import('node:path')
+  const folderDir = (key: string): string => {
+    const dir = nodePath.join(mocks.root, key === 'uploads' ? 'Uploads' : key === 'generated' ? 'Media' : key)
+    nodeFs.mkdirSync(dir, { recursive: true })
+    return dir
+  }
+  return {
+    getUserRootDir: () => mocks.root,
+    getUserFolderDir: folderDir,
+    getProgramStoreDir: (store: string) => nodePath.join(mocks.root, store),
+  }
+})
 
 import {
   persistImageBytes,

@@ -1,6 +1,6 @@
 import path from 'node:path'
 
-import { getDataRootDir } from '../image/path-utils'
+import { getImageEditorV3StoragePaths } from './runtime-storage'
 import type { ResourceId } from './contracts'
 import { parseResourceId } from './resource-store'
 
@@ -23,9 +23,7 @@ function normalizeMediaType(value: string): string {
 export function imageEditorV3ResourceObjectPath(resourceId: ResourceId): string {
   const hash = parseResourceId(resourceId)
   return path.join(
-    getDataRootDir(),
-    'ImageEditorV3',
-    'resources',
+    getImageEditorV3StoragePaths().resourcesDir,
     'objects',
     hash.slice(0, 2),
     hash,

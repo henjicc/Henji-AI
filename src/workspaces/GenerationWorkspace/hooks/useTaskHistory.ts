@@ -5,7 +5,7 @@ import type React from 'react'
 import { useCallback, useEffect } from 'react'
 import { databaseService } from '@/services/database/DatabaseService'
 import type { HistoryRecord } from '@/services/database/types'
-import { getDataRoot, convertPathArray, convertPathString } from '@/utils/dataPath'
+import { getDataRoot, getThumbnailsPath, convertPathArray, convertPathString } from '@/utils/dataPath'
 import { isDesktop } from '@/utils/save'
 import type { GenerationTask, GeneratorOptions, TaskStatus } from '../types'
 import { joinMulti, splitMulti } from '../utils/multiFile'
@@ -199,7 +199,7 @@ export function useLoadTaskHistory({
     try {
       const historyRecords = await loadHistoryWithRetries()
       const dataRoot = await getDataRoot()
-      const resolveMedia = createHistoryMediaResolver(dataRoot)
+      const resolveMedia = createHistoryMediaResolver(await getThumbnailsPath())
       const loadedTasks = await Promise.all(historyRecords.map((r) => mapHistoryRecordToTask(r, dataRoot, resolveMedia)))
       setTasks(loadedTasks.reverse())
       logger.info('[Workspace] 历史记录加载完成', { count: loadedTasks.length })

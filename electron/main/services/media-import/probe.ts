@@ -2,7 +2,7 @@ import { execFile } from 'node:child_process'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 
-import { getDataRootDir } from '../image/path-utils'
+import { getProgramStoreDir } from '../appPaths'
 import { loadFfmpegPath, loadFfprobePath } from '../video/ffmpeg-loader'
 import { withMediaHeavyTask } from './concurrency'
 
@@ -66,7 +66,7 @@ export async function writeVideoPoster(
   cacheKey: string,
   durationSeconds: number,
 ): Promise<{ posterPath: string; cacheHit: boolean }> {
-  const thumbnailsDir = path.join(getDataRootDir(), 'Thumbnails')
+  const thumbnailsDir = getProgramStoreDir('thumbnails')
   await fs.mkdir(thumbnailsDir, { recursive: true })
   const posterPath = path.join(thumbnailsDir, `video-${cacheKey}.jpg`)
   try {

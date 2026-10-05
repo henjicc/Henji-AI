@@ -18,7 +18,6 @@ vi.mock('../../protocol', () => ({
 }))
 vi.mock('../image/path-utils', () => ({
   getUploadsDir: () => `${mocks.root}/Uploads`,
-  getDataRootDir: () => mocks.root,
 }))
 vi.mock('../image/sharp-loader', () => ({ loadSharp: mocks.loadSharp }))
 vi.mock('../logging', () => ({

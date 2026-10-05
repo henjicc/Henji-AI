@@ -96,7 +96,7 @@ describe('项目包原子性', () => {
     )
 
     const imported = await importProjectPackage(packagePath, {
-      dataRootDir: path.join(dir, 'legacy-target'),
+      uploadsDir: path.join(dir, 'legacy-target'),
     })
     expect(imported.imageEditReferences).toEqual([])
     expect(fs.readFileSync(imported.pathMap['media/legacy.png'], 'utf8')).toBe('legacy media')
@@ -180,7 +180,7 @@ describe('项目包原子性', () => {
     const targetResources = new ContentAddressedResourceStore(path.join(targetRoot, 'v3-resources'))
     const targetDocuments = new ImageEditDocumentRepository(path.join(targetRoot, 'v3-documents'))
     const imported = await importProjectPackage(packagePath, {
-      dataRootDir: targetRoot,
+      uploadsDir: targetRoot,
       imageEditorV3: {
         documents: targetDocuments,
         resources: targetResources,

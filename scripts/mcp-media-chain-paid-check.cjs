@@ -83,10 +83,8 @@ async function countProviderRequests(page, afterTimestamp) {
 }
 
 async function resolveDataRootDir(page) {
-  const custom = (await page.evaluate(() => window.henjiNative.db.select('SELECT value FROM settings WHERE key = ?', ['custom_data_directory'])))[0]
-  const trimmed = typeof custom?.value === 'string' ? custom.value.trim() : ''
-  if (trimmed) return trimmed
-  return path.join(await page.evaluate(() => window.henjiNative.paths.appLocalDataDir()), 'Henji-AI')
+  // 与主进程 electron/main/services/appPaths.ts 同一份结果：自定义数据目录优先，否则默认用户目录。
+  return (await page.evaluate(() => window.henjiNative.paths.appDirectories())).userRoot
 }
 
 const toAbsoluteMediaPath = (dataRoot, value) => (path.isAbsolute(value) ? value : path.resolve(dataRoot, value))

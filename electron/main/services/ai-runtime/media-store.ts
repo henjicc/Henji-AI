@@ -7,7 +7,7 @@ import {
   acquireManagedMediaFileLease,
   releaseManagedMediaFileLease,
 } from '../image/managed-media-leases'
-import { getDataRootDir } from '../image/path-utils'
+import { getGeneratedMediaDir } from '../image/path-utils'
 import { createMainLogger } from '../logging'
 
 const logger = createMainLogger('main.ai_runtime.media_download')
@@ -99,7 +99,7 @@ export async function saveMediaFromUrlTracked(
 
   const { bytes, contentType } = await downloadMedia(url, context)
   const fileName = buildFileName(url, bytes, contentType)
-  const mediaDir = path.join(getDataRootDir(), 'Media')
+  const mediaDir = getGeneratedMediaDir()
   await fs.mkdir(mediaDir, { recursive: true })
   const filePath = path.join(mediaDir, fileName)
   const leased = await acquireManagedMediaFileLease(filePath, async () => {

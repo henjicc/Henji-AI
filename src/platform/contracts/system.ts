@@ -36,8 +36,25 @@ export interface ShellPlatform {
   openExternal(url: string): Promise<void>
 }
 
+export type UserFolderKey = 'projects' | 'imageDocuments' | 'generated' | 'uploads' | 'exports' | 'skills'
+
+/** 程序目录与用户目录快照；唯一来源是主进程 `electron/main/services/appPaths.ts`。 */
+export interface AppDirectories {
+  /** 程序目录：数据库、密钥、日志、缩略图与各工具内部存储。 */
+  programDir: string
+  /** 当前用户目录（默认“文档/痕迹AI”，或设置里指定的数据目录）；记录里的相对路径以它为基准。 */
+  userRoot: string
+  defaultUserRoot: string
+  isCustomUserRoot: boolean
+  /** 分类文件夹名（首次创建时按语言确定）。 */
+  folderNames: Record<UserFolderKey, string>
+  folders: Record<UserFolderKey, string>
+  thumbnailsDir: string
+}
+
 export interface PathsPlatform {
   appLocalDataDir(): Promise<string>
+  appDirectories(options?: { uiLanguage?: string }): Promise<AppDirectories>
   downloadDir(): Promise<string>
   join(...parts: string[]): Promise<string>
   dirname(path: string): Promise<string>

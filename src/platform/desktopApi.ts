@@ -1,5 +1,5 @@
 import { getPlatform, isDesktopRuntime } from '@/platform/runtime'
-import type { DialogOpenOptions, DialogSaveOptions, FsDirEntry } from '@/platform/contracts/system'
+import type { AppDirectories, DialogOpenOptions, DialogSaveOptions, FsDirEntry } from '@/platform/contracts/system'
 
 export function isDesktopShell(): boolean {
   return isDesktopRuntime()
@@ -106,6 +106,10 @@ export async function remove(path: string, options?: { recursive?: boolean }): P
 
 export async function appLocalDataDir(): Promise<string> {
   return await getPlatform().system.paths.appLocalDataDir()
+}
+
+export async function appDirectories(options?: { uiLanguage?: string }): Promise<AppDirectories> {
+  return await getPlatform().system.paths.appDirectories(options)
 }
 
 export async function downloadDir(): Promise<string> {

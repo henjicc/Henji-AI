@@ -1,9 +1,7 @@
 import fs from 'node:fs/promises'
-import path from 'node:path'
 import { z } from 'zod'
 import { llmModelConfigSchema, llmProfileSchema } from '../../../src/core/llm/configSchema'
-import { getDb } from '../services/db'
-import { getAppLocalDataDir } from '../services/system'
+import { getProgramFilePath } from '../services/appPaths'
 
 const storedLlmConfigSchema = z.object({
   providers: z.array(z.object({
@@ -24,12 +22,9 @@ export async function loadStoredLlmConfigForCli(): Promise<StoredLlmConfig> {
   return await loadLlmConfig()
 }
 
+/** 与 `llm/provider-settings-storage.ts` 同一份程序目录配置。 */
 function resolveLlmConfigPath(): string {
-  const dataDirectoryRow = getDb().prepare(
-    "SELECT value FROM settings WHERE key = 'custom_data_directory'"
-  ).get() as { value: string } | undefined
-  const dataRoot = dataDirectoryRow?.value.trim() || path.join(getAppLocalDataDir(), 'Henji-AI')
-  return path.join(dataRoot, 'llm-config.json')
+  return getProgramFilePath('llm-config.json')
 }
 
 export async function saveStoredLlmConfigForCli(config: StoredLlmConfig): Promise<void> {
@@ -38,11 +33,7 @@ export async function saveStoredLlmConfigForCli(config: StoredLlmConfig): Promis
 }
 
 async function loadLlmConfig(): Promise<StoredLlmConfig> {
-  const dataDirectoryRow = getDb().prepare(
-    "SELECT value FROM settings WHERE key = 'custom_data_directory'"
-  ).get() as { value: string } | undefined
-  const dataRoot = dataDirectoryRow?.value.trim() || path.join(getAppLocalDataDir(), 'Henji-AI')
-  const filePath = path.join(dataRoot, 'llm-config.json')
+  const filePath = resolveLlmConfigPath()
   try {
     const raw = JSON.parse(await fs.readFile(filePath, 'utf8')) as unknown
     return storedLlmConfigSchema.parse(raw)

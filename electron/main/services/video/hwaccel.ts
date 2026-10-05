@@ -1,8 +1,7 @@
 import { execFile } from 'node:child_process'
 import fs from 'node:fs'
-import path from 'node:path'
 
-import { getDataRootDir } from '../image/path-utils'
+import { getProgramFilePath } from '../appPaths'
 import { loadFfmpegPath } from './ffmpeg-loader'
 
 export type HwEncoderId = 'h264_nvenc' | 'h264_qsv' | 'h264_amf' | 'h264_videotoolbox'
@@ -109,7 +108,7 @@ interface HwaccelCacheFile {
 const HWACCEL_PROBE_VERSION = 3
 
 function getCacheFilePath(): string {
-  return path.join(getDataRootDir(), 'hwaccel-cache.json')
+  return getProgramFilePath('hwaccel-cache.json')
 }
 
 function readCache(): HwaccelCacheFile | null {

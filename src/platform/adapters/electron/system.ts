@@ -73,6 +73,9 @@ function createPaths(): PathsPlatform {
     appLocalDataDir: async () => {
       return await getNative().paths.appLocalDataDir()
     },
+    appDirectories: async (options) => {
+      return await getNative().paths.appDirectories(options)
+    },
     downloadDir: async () => {
       return await getNative().paths.downloadDir()
     },

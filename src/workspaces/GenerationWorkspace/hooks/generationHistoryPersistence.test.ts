@@ -13,7 +13,7 @@ vi.mock('@/services/database/DatabaseService', () => ({ databaseService: {
   deleteHistory: vi.fn(async (id: string) => { storage.rows.delete(id) }),
 } }))
 vi.mock('@/utils/save', () => ({ isDesktop: () => true }))
-vi.mock('@/utils/dataPath', () => ({ getDataRoot: async () => '/data', convertPathArray: async (value: string[]) => value, convertPathString: async (value: string) => value }))
+vi.mock('@/utils/dataPath', () => ({ getDataRoot: async () => '/data', getThumbnailsPath: async () => '/program/Thumbnails', convertPathArray: async (value: string[]) => value, convertPathString: async (value: string) => value }))
 vi.mock('@/core/logging', () => ({ createLogger: () => ({ info: vi.fn(), error: vi.fn() }) }))
 vi.mock('@/utils/historyThumbnail', () => ({ prepareHistoryThumbnails: vi.fn(async () => undefined) }))
 import { databaseService } from '@/services/database/DatabaseService'

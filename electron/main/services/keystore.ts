@@ -1,14 +1,13 @@
-import { app, safeStorage } from 'electron'
+import { safeStorage } from 'electron'
 import fs from 'node:fs'
 import { randomUUID } from 'node:crypto'
 import path from 'node:path'
 
+import { getProgramDataDir, getProgramFilePath } from './appBasePaths'
 import { createMainLogger } from './logging'
 
 const logger = createMainLogger('main.services.keystore')
 
-const APP_IDENTIFIER = 'com.henji.ai'
-const DATA_DIR_NAME = 'Henji-AI'
 const KEYSTORE_FILE_NAME = 'provider-keys.enc.json'
 
 /**
@@ -36,20 +35,8 @@ type KeystoreFile = {
   keys: Record<string, string>
 }
 
-function getBaseLocalDataDir(): string {
-  if (process.platform === 'win32' && process.env.LOCALAPPDATA) {
-    return path.join(process.env.LOCALAPPDATA, APP_IDENTIFIER)
-  }
-
-  return path.join(app.getPath('appData'), APP_IDENTIFIER)
-}
-
-function getKeystoreDir(): string {
-  return path.join(getBaseLocalDataDir(), DATA_DIR_NAME)
-}
-
 function getKeystorePath(): string {
-  return path.join(getKeystoreDir(), KEYSTORE_FILE_NAME)
+  return getProgramFilePath(KEYSTORE_FILE_NAME)
 }
 
 function normalizeSegment(value: string, label: string): string {
@@ -93,7 +80,7 @@ function readKeystoreFile(): KeystoreFile {
 }
 
 function writeKeystoreFile(data: KeystoreFile): void {
-  const dir = getKeystoreDir()
+  const dir = getProgramDataDir()
   const target = getKeystorePath()
   const temporary = path.join(dir, `.${KEYSTORE_FILE_NAME}.${process.pid}.${randomUUID()}.tmp`)
   fs.mkdirSync(dir, { recursive: true })

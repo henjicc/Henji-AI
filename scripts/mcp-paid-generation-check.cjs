@@ -87,15 +87,12 @@ async function countProviderRequests(page, afterTimestamp, { requestId = null } 
 const readHistoryCount = (page) => page.evaluate(async () => (await window.henjiNative.db.select('SELECT COUNT(*) AS total FROM history'))[0].total)
 
 /**
- * 生成结果的 `history.file_path` 相对的是**应用数据根目录**，不是脚本的工作目录，也不是
- * `paths.appLocalDataDir()`（后者只到 `…/com.henji.ai`，少一层 `Henji-AI`）。这里按主进程
- * `getDataRootDir()` 的同一份规则解析：优先用户自定义数据目录，否则基准目录加 `Henji-AI`。
+ * 生成结果的 `history.file_path` 相对的是**用户目录**（默认“文档/痕迹AI”），不是脚本的工作目录，
+ * 也不是 `paths.appLocalDataDir()`。直接向主进程要同一份目录快照。
  */
 async function resolveDataRootDir(page) {
-  const custom = (await page.evaluate(() => window.henjiNative.db.select('SELECT value FROM settings WHERE key = ?', ['custom_data_directory'])))[0]
-  const trimmed = typeof custom?.value === 'string' ? custom.value.trim() : ''
-  if (trimmed) return trimmed
-  return path.join(await page.evaluate(() => window.henjiNative.paths.appLocalDataDir()), 'Henji-AI')
+  // 与主进程 electron/main/services/appPaths.ts 同一份结果：自定义数据目录优先，否则默认用户目录。
+  return (await page.evaluate(() => window.henjiNative.paths.appDirectories())).userRoot
 }
 
 const toAbsoluteMediaPath = (dataRoot, value) => (path.isAbsolute(value) ? value : path.resolve(dataRoot, value))

@@ -5,8 +5,7 @@ import path from 'node:path'
 import type { LlmConfigState } from '@henjicc/ai-sdk'
 
 import type { EncryptedKeySnapshot } from '../keystore'
-import { getCustomDataRoot } from '../dataRoot'
-import { getHenjiDataDir } from '../db'
+import { getProgramDataDir } from '../appPaths'
 
 const CONFIG_FILE_NAME = 'llm-config.json'
 const JOURNAL_FILE_NAME = '.llm-provider-settings.transaction.json'
@@ -27,7 +26,8 @@ export interface ProviderSettingsStorage {
 }
 
 function resolveDataRoot(): string {
-  return getCustomDataRoot() ?? getHenjiDataDir()
+  // 模型配置属于程序内部数据，固定在程序目录，不随用户目录移动（重要记录 002）。
+  return getProgramDataDir()
 }
 
 async function readJson<T>(filePath: string): Promise<T | null> {

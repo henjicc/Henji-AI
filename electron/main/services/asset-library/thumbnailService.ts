@@ -1,7 +1,7 @@
 import crypto from 'node:crypto'
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import { getHenjiDataDir } from '../db'
+import { getProgramStoreDir } from '../appPaths'
 import { generateImageThumbnailBytes } from '../image/ops'
 import { generateVideoThumbnailBytes } from '../video/ops'
 import type { AssetMediaType } from './types'
@@ -25,7 +25,7 @@ export async function ensureAssetThumbnail(filePath: string, mediaType: AssetMed
   const identity = await thumbnailIdentity(filePath)
   signal?.throwIfAborted()
   if (identity[1] !== modifiedAt) throw new Error('源文件已更新，请重新检查后生成缩略图。')
-  const dir = path.join(getHenjiDataDir(), 'Thumbnails')
+  const dir = getProgramStoreDir('thumbnails')
   const digest = crypto.createHash('sha256').update(JSON.stringify([filePath, mediaType, modifiedAt, ...identity, 'asset-v2'])).digest('hex')
   const target = path.join(dir, `${digest}.webp`)
   let job = thumbnailJobs.get(target)

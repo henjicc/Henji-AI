@@ -1,4 +1,3 @@
-import { app } from 'electron'
 import path from 'node:path'
 import fs from 'node:fs'
 import Database from 'better-sqlite3'
@@ -6,6 +5,7 @@ import { initializeAssistantMemorySchema } from './assistant/storageSchema'
 import { initializeApplicationOperationSchema } from './application-runtime/operationStore'
 import { initializeAudioEditSchema } from './audio-edit/schema'
 import { upgradeAssetSources } from './asset-library/schema'
+import { getProgramDataDir } from './appBasePaths'
 
 export type SqlBindValue = string | number | boolean | null | Uint8Array
 
@@ -14,26 +14,13 @@ export interface SqlExecuteResult {
   lastInsertId?: number
 }
 
-const APP_IDENTIFIER = 'com.henji.ai'
-const DATA_DIR_NAME = 'Henji-AI'
 const DB_FILE_NAME = 'henji.db'
 
 let db: Database.Database | null = null
 
-function getBaseLocalDataDir(): string {
-  if (process.platform === 'win32' && process.env.LOCALAPPDATA) {
-    return path.join(process.env.LOCALAPPDATA, APP_IDENTIFIER)
-  }
-
-  if (process.platform === 'darwin') {
-    return path.join(app.getPath('appData'), APP_IDENTIFIER)
-  }
-
-  return path.join(app.getPath('appData'), APP_IDENTIFIER)
-}
-
+/** 程序目录（数据库、密钥、日志与内部存储），唯一来源见 `appPaths.ts`。 */
 export function getHenjiDataDir(): string {
-  return path.join(getBaseLocalDataDir(), DATA_DIR_NAME)
+  return getProgramDataDir()
 }
 
 export function getHenjiDbPath(): string {

@@ -2,8 +2,10 @@ import { createLogger } from '@/core/logging'
 import { getPlatform, isDesktopRuntime } from '@/platform/runtime'
 import { databaseService } from '@/services/database/DatabaseService'
 import { rebaseAssetDataRoot } from '@/commands/assetLibrary'
+import i18n from 'i18next'
+import type { AppDirectories } from '@/platform/contracts/system'
 import {
-  appLocalDataDir,
+  appDirectories,
   basename,
   copyFile,
   dirname,
@@ -47,72 +49,79 @@ async function migrateLegacyCustomDataRoot(): Promise<void> {
 // ==================== 核心路径管理 ====================
 
 /**
- * 获取默认数据根目录
- * @returns 默认数据目录路径（AppLocalData/Henji-AI）
+ * 目录唯一来源在主进程 `electron/main/services/appPaths.ts`，这里只读取快照，不自行拼接目录名。
+ * 首次调用时把当前界面语言带给主进程，用于首次确定默认目录名称（痕迹AI / Henji AI）。
  */
-export async function getDefaultDataRoot(): Promise<string> {
-  const appDataDir = await appLocalDataDir()
-  return await join(appDataDir, 'Henji-AI')
+export async function getAppDirectories(): Promise<AppDirectories> {
+  const uiLanguage = i18n.resolvedLanguage ?? i18n.language
+  return await appDirectories(uiLanguage ? { uiLanguage } : undefined)
 }
 
 /**
- * 获取当前数据根目录（默认或自定义）
- * @returns 当前使用的数据根目录路径
+ * 获取默认用户目录（系统“文档”下的“痕迹AI”，首次创建后固定）
+ */
+export async function getDefaultDataRoot(): Promise<string> {
+  return (await getAppDirectories()).defaultUserRoot
+}
+
+/**
+ * 获取当前用户目录（默认或自定义）；生成记录等保存的相对路径以它为基准
  */
 export async function getDataRoot(): Promise<string> {
   await databaseService.init()
   await migrateLegacyCustomDataRoot()
-  const customPath = await databaseService.getSetting(CUSTOM_DATA_DIR_SETTING_KEY)
-  const root = customPath && customPath.trim() ? customPath : await getDefaultDataRoot()
-  if (isDesktopRuntime()) {
-    await getPlatform().media.allowRoot(root)
-  }
-  return root
+  return (await getAppDirectories()).userRoot
 }
 
 /**
- * 获取 Media 子目录路径
+ * 程序目录（数据库、日志、缩略图与内部存储，不随用户目录移动）
+ */
+export async function getProgramDataRoot(): Promise<string> {
+  return (await getAppDirectories()).programDir
+}
+
+/**
+ * 获取生成结果目录路径
  */
 export async function getMediaPath(): Promise<string> {
-  const root = await getDataRoot()
-  return await join(root, 'Media')
+  await databaseService.init()
+  await migrateLegacyCustomDataRoot()
+  return (await getAppDirectories()).folders.generated
 }
 
 /**
- * 获取 Thumbnails 子目录路径（图片和视频缩略图缓存）
+ * 获取缩略图缓存目录路径（程序目录内）
  */
 export async function getThumbnailsPath(): Promise<string> {
-  const root = await getDataRoot()
-  return await join(root, 'Thumbnails')
+  return (await getAppDirectories()).thumbnailsDir
 }
 
 /**
- * 获取 Uploads 子目录路径
+ * 获取上传素材目录路径
  */
 export async function getUploadsPath(): Promise<string> {
-  const root = await getDataRoot()
-  return await join(root, 'Uploads')
+  await databaseService.init()
+  await migrateLegacyCustomDataRoot()
+  return (await getAppDirectories()).folders.uploads
 }
 
 /**
- * 获取 history.json 文件路径
+ * 获取 history.json 文件路径（程序目录内）
  */
 export async function getHistoryFilePath(): Promise<string> {
-  const root = await getDataRoot()
-  return await join(root, 'history.json')
+  return await join(await getProgramDataRoot(), 'history.json')
 }
 
 /**
- * 获取 presets.json 文件路径
+ * 获取 presets.json 文件路径（程序目录内）
  */
 export async function getPresetsFilePath(): Promise<string> {
-  const root = await getDataRoot()
-  return await join(root, 'presets.json')
+  return await join(await getProgramDataRoot(), 'presets.json')
 }
 
 /**
- * 初始化数据目录（创建必要的子目录）
- * @param rootPath 数据根目录路径
+ * 初始化用户目录（创建分类文件夹）
+ * @param rootPath 用户目录路径
  */
 export async function initializeDataDirectory(rootPath: string): Promise<void> {
   try {
@@ -120,13 +129,11 @@ export async function initializeDataDirectory(rootPath: string): Promise<void> {
       await getPlatform().media.allowRoot(rootPath)
     }
 
-    // 创建根目录
     await mkdir(rootPath, { recursive: true })
-
-    // 创建子目录
-    await mkdir(await join(rootPath, 'Media'), { recursive: true })
-    await mkdir(await join(rootPath, 'Thumbnails'), { recursive: true })
-    await mkdir(await join(rootPath, 'Uploads'), { recursive: true })
+    const { folderNames } = await getAppDirectories()
+    for (const name of Object.values(folderNames)) {
+      await mkdir(await join(rootPath, name), { recursive: true })
+    }
   } catch (error) {
     logger.error('初始化数据目录失败:', error)
     throw new Error(`初始化数据目录失败: ${error}`)

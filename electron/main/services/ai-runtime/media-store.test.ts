@@ -5,8 +5,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({ dataDir: '' }))
 
-vi.mock('electron', () => ({ app: { getPath: () => mocks.dataDir } }))
-vi.mock('../dataRoot', () => ({ getCustomDataRoot: () => mocks.dataDir }))
+vi.mock('../appPaths', async () => {
+  const nodeFs = await import('node:fs')
+  const nodePath = await import('node:path')
+  const folderDir = (key: string): string => {
+    const dir = nodePath.join(mocks.dataDir, key === 'uploads' ? 'Uploads' : key === 'generated' ? 'Media' : key)
+    nodeFs.mkdirSync(dir, { recursive: true })
+    return dir
+  }
+  return {
+    getUserRootDir: () => mocks.dataDir,
+    getUserFolderDir: folderDir,
+    getProgramStoreDir: (store: string) => nodePath.join(mocks.dataDir, store),
+  }
+})
 vi.mock('../logging', () => ({ createMainLogger: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }) }))
 
 import { saveMediaFromUrlTracked } from './media-store'

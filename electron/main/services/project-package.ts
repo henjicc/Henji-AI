@@ -3,7 +3,7 @@ import crypto from 'node:crypto'
 import fs from 'node:fs'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
-import { getDataRootDir } from './image/path-utils'
+import { getUploadsDir } from './image/path-utils'
 import { iterateEntries, openZip, readEntryBytes } from './zip-archive'
 import { createMainLogger } from './logging'
 import {
@@ -48,7 +48,8 @@ export interface ImportedProjectPackageDto {
 }
 
 export interface ProjectPackageServiceDependencies {
-  dataRootDir?: string
+  /** 导入媒体落盘的上传素材目录；默认取用户目录下的上传素材文件夹。 */
+  uploadsDir?: string
   imageEditorV3?: ProjectImageEditorV3Dependencies
 }
 
@@ -56,7 +57,7 @@ function resolveImageEditorV3Dependencies(
   dependencies: ProjectPackageServiceDependencies,
 ): ProjectImageEditorV3Dependencies {
   if (dependencies.imageEditorV3) return dependencies.imageEditorV3
-  const paths = getImageEditorV3StoragePaths(dependencies.dataRootDir ?? getDataRootDir())
+  const paths = getImageEditorV3StoragePaths()
   return {
     documents: new ImageEditDocumentRepository(paths.documentsDir),
     resources: new ContentAddressedResourceStore(paths.resourcesDir),
@@ -211,8 +212,7 @@ export async function importProjectPackage(
       ? null
       : parseImageEditProjectPackageExtensionV3(rawImageEditorV3)
 
-    const dataRootDir = dependencies.dataRootDir ?? getDataRootDir()
-    const importedDir = path.join(dataRootDir, 'Uploads', 'imported')
+    const importedDir = path.join(dependencies.uploadsDir ?? getUploadsDir(), 'imported')
     await fsp.mkdir(importedDir, { recursive: true })
     const stagingDir = await fsp.mkdtemp(path.join(importedDir, '.project-v3-import-'))
     let importedMedia: Awaited<ReturnType<typeof importProjectMediaEntriesAtomically>> | undefined

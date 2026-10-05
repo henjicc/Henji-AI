@@ -6,7 +6,6 @@ import { embedPanoramaMetadataInImage } from './panorama-metadata'
 import {
   ensureOutputPathWithExtension,
   ensureUniquePath,
-  getDataRootDir,
   getDebugDir,
   mimeFromExtension,
   normalizeExtension,
@@ -15,6 +14,7 @@ import {
   sanitizeFileStem,
   writeBytesToPath,
 } from './path-utils'
+import { getProgramStoreDir } from '../appPaths'
 import { normalizeLocalSource, resolveSourceBytes } from './source'
 import type { PersistImageSourceTrackedResultDto } from './types'
 
@@ -48,7 +48,7 @@ export async function saveImageSourceToDownloads(
   source: string,
   suggestedFileName?: string,
 ): Promise<string> {
-  const targetDir = app.getPath('downloads') || path.join(getDataRootDir(), 'Downloads')
+  const targetDir = app.getPath('downloads') || getProgramStoreDir('downloads')
   return await saveImageSourceToDirectory(source, targetDir, suggestedFileName)
 }
 

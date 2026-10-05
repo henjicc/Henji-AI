@@ -2,8 +2,8 @@ import path from 'node:path'
 
 import { describe, expect, it, vi } from 'vitest'
 
-vi.mock('../image/path-utils', () => ({
-  getDataRootDir: () => '/managed-data',
+vi.mock('../appPaths', () => ({
+  getProgramStoreDir: () => '/managed-data/ImageEditorV3',
 }))
 
 import {

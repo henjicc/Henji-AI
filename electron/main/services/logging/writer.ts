@@ -1,21 +1,10 @@
-import { app } from 'electron'
 import fs from 'node:fs/promises'
 import path from 'node:path'
+import { getProgramStoreDir } from '../appBasePaths'
 import { MAIN_LOG_FILE_PREFIX, type MainLogEvent } from './types'
 
-const APP_IDENTIFIER = 'com.henji.ai'
-const LOG_DIR_NAME = 'logs'
-
-function getBaseLocalDataDir(): string {
-  if (process.platform === 'win32' && process.env.LOCALAPPDATA) {
-    return path.join(process.env.LOCALAPPDATA, APP_IDENTIFIER)
-  }
-
-  return path.join(app.getPath('appData'), APP_IDENTIFIER)
-}
-
 export function getLogDir(): string {
-  return path.join(getBaseLocalDataDir(), 'Henji-AI', LOG_DIR_NAME)
+  return getProgramStoreDir('logs')
 }
 
 export function getLogFilePath(date = new Date()): string {

@@ -3,8 +3,7 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { writeBufferAtomically } from './image-editor-v3/atomic-file'
-
-const APP_IDENTIFIER = 'com.henji.ai'
+import { getAppBaseDir } from './appBasePaths'
 
 export interface FsDirEntryDto {
   name: string
@@ -40,14 +39,6 @@ export interface NativeFetchResponseDto {
   statusText: string
   headers: Array<[string, string]>
   body: Uint8Array
-}
-
-function getBaseLocalDataDir(): string {
-  if (process.platform === 'win32' && process.env.LOCALAPPDATA) {
-    return path.join(process.env.LOCALAPPDATA, APP_IDENTIFIER)
-  }
-
-  return path.join(app.getPath('appData'), APP_IDENTIFIER)
 }
 
 function ensureValidPath(targetPath: string): void {
@@ -184,7 +175,7 @@ export async function openExternalUrl(url: string): Promise<void> {
 }
 
 export function getAppLocalDataDir(): string {
-  return getBaseLocalDataDir()
+  return getAppBaseDir()
 }
 
 export function getDownloadDir(): string {

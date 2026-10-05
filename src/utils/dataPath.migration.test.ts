@@ -19,7 +19,7 @@ vi.mock('@/platform/desktopApi', () => {
   const norm = (value: string) => value.replace(/\\/g, '/').replace(/\/+$/, '')
   const parent = (value: string) => norm(value).split('/').slice(0, -1).join('/')
   return {
-    appLocalDataDir: async () => '/app',
+    appDirectories: async () => ({ folderNames: { generated: '生成结果', uploads: '上传素材' } }),
     join: async (...parts: string[]) => parts.map(norm).join('/'),
     dirname: async (value: string) => parent(value),
     basename: (value: string, ext = '') => norm(value).split('/').pop()!.replace(ext, ''),

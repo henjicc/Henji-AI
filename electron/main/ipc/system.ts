@@ -23,7 +23,8 @@ import {
   type NativeFetchRequestDto,
   type NativeFetchResponseDto,
 } from '../services/system'
-import { parseRecord, parseStringField, parseVoid, registerIpcHandler } from './registry'
+import { getAppDirectories, setUserFolderLanguageHint, type AppDirectoriesDto } from '../services/appPaths'
+import { parseOptionalStringField, parseRecord, parseStringField, parseVoid, registerIpcHandler } from './registry'
 
 interface PathPayload {
   path: string
@@ -225,6 +226,14 @@ export function registerSystemIpc(): void {
   registerIpcHandler<string, void>('shell:openExternal', (input) => parseStringField(input, 'url'), (url) => openExternalUrl(url))
 
   registerIpcHandler('paths:appLocalDataDir', parseVoid, () => getAppLocalDataDir())
+  registerIpcHandler<string | undefined, AppDirectoriesDto>(
+    'paths:appDirectories',
+    (input) => (input === undefined ? undefined : parseOptionalStringField(input, 'uiLanguage')),
+    (uiLanguage) => {
+      setUserFolderLanguageHint(uiLanguage)
+      return getAppDirectories()
+    },
+  )
   registerIpcHandler('paths:downloadDir', parseVoid, () => getDownloadDir())
   registerIpcHandler<JoinPayload, string>('paths:join', parseJoinPayload, ({ parts }) => joinPath(parts))
   registerIpcHandler<string, string>('paths:dirname', (input) => parseStringField(input, 'path'), (targetPath) => dirnamePath(targetPath))

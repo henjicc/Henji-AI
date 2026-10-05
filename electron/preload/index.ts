@@ -280,6 +280,7 @@ const shellApi: HenjiShellApi = {
 
 const pathsApi: HenjiPathsApi = {
   appLocalDataDir: () => nativeInvoke('paths:appLocalDataDir'),
+  appDirectories: (options) => nativeInvoke('paths:appDirectories', options),
   downloadDir: () => nativeInvoke('paths:downloadDir'),
   join: (...parts) => nativeInvoke('paths:join', { parts }),
   dirname: (path) => nativeInvoke('paths:dirname', { path }),

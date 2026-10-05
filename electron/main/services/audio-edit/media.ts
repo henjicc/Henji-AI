@@ -5,7 +5,8 @@ import path from 'node:path'
 import type { AudioEditProjectCreateRequest, AudioEditProjectDocument, AudioEditSourceIdentity, AudioEditSourceMetadata } from '../../../../src/core/audioEdit/types'
 import { DEFAULT_AUDIO_EDIT_SETTINGS } from '../../../../src/core/audioEdit/edits'
 import { resolveLocalMediaPath } from '../media/shared'
-import { getDb, getHenjiDataDir } from '../db'
+import { getProgramStoreDir } from '../appPaths'
+import { getDb } from '../db'
 import { loadFfmpegPath, loadFfprobePath } from '../video/ffmpeg-loader'
 import { createMainLogger } from '../logging'
 import { requireAudioEditProject, saveAudioEditProject } from './project-store'
@@ -28,7 +29,7 @@ function streamDuration(stream: ProbeStream, fallback: number): number {
 }
 export function audioEditCacheDirectory(projectId: string): string {
   if (!/^[\w-]+$/.test(projectId)) throw new Error('工程引用无效')
-  return path.join(getHenjiDataDir(), 'AudioEdit', projectId, 'cache')
+  return path.join(getProgramStoreDir('audioEdit'), projectId, 'cache')
 }
 export async function identifyAudioEditSource(sourcePath: string): Promise<AudioEditSourceIdentity> {
   const before = await fs.stat(sourcePath)

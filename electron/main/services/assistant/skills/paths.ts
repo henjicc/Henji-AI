@@ -8,7 +8,7 @@ import {
   AssistantSkillError,
   isAssistantSkillTextFile,
 } from '../../../../../src/core/assistant/skills'
-import { getDataRootDir } from '../../image/path-utils'
+import { getUserDataLayout } from '../../appPaths'
 
 const BUILTIN_SKILLS_DIR_NAME = 'assistant-skills'
 
@@ -34,11 +34,10 @@ export function getBuiltinSkillsDir(): string {
 }
 
 /**
- * 用户技能目录。挂在 `getDataRootDir()` 下而不是应用本地目录，这样用户在设置里改数据
- * 目录时技能跟着走。目录不存在属于正常情况，这里不创建。
+ * 用户技能目录：用户目录下的“助手技能”分类文件夹，用户在设置里改数据目录时技能跟着走。
  */
 export function getUserSkillsDir(): string {
-  return path.join(getDataRootDir(), 'assistant', 'skills')
+  return getUserDataLayout().folders.skills
 }
 
 function reject(reason: string): AssistantSkillError {

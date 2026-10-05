@@ -1,13 +1,12 @@
-import { exists, join, toDisplaySrc } from '@/platform/desktopApi'
+import { exists, toDisplaySrc } from '@/platform/desktopApi'
 import { grantMediaAccessForReference } from '@/services/largeUploadPolicy'
 import { getHistoryThumbnailCachePath } from '@/utils/historyThumbnail'
 
 type MediaKind = 'image' | 'video' | 'audio'
 
-/** 一次历史加载共享结果；下次加载重新检查文件、权限和数据目录。 */
-export function createHistoryMediaResolver(dataRoot: string) {
+/** 一次历史加载共享结果；下次加载重新检查文件、权限和缩略图目录。 */
+export function createHistoryMediaResolver(thumbnailsDir: string) {
   const resolutions = new Map<string, Promise<string | null>>()
-  let thumbnailsDir: Promise<string> | undefined
   let active = 0
   const waiters = new Set<() => void>()
 
@@ -20,8 +19,7 @@ export function createHistoryMediaResolver(dataRoot: string) {
         await grantMediaAccessForReference(filePath)
         if (kind === 'image') {
           try {
-            thumbnailsDir ??= join(dataRoot, 'Thumbnails')
-            const cachePath = await getHistoryThumbnailCachePath(filePath, await thumbnailsDir)
+            const cachePath = await getHistoryThumbnailCachePath(filePath, thumbnailsDir)
             if (await exists(cachePath)) return toDisplaySrc(cachePath.replace(/\\/g, '/'))
           } catch {
             // 缓存不可用仍使用原图，与原加载契约一致。

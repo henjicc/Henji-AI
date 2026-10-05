@@ -4,7 +4,7 @@ import fsp from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { Readable } from 'node:stream'
-import { getCustomDataRoot } from './services/dataRoot'
+import { CONTENT_ADDRESSED_FOLDER_NAMES, getAppBaseDir, getUserRootDir } from './services/appPaths'
 import {
   IMAGE_EDITOR_V3_MEDIA_HOST,
   resolveImageEditorV3ResourceMediaUrl,
@@ -13,7 +13,6 @@ import { persistMediaRootGrant, restorePersistedMediaRoots } from './services/me
 
 const MEDIA_SCHEME = 'henji-media'
 const MEDIA_HOST = 'local'
-const APP_IDENTIFIER = 'com.henji.ai'
 const allowedMediaRoots = new Set<string>()
 
 interface ByteRange {
@@ -35,14 +34,6 @@ class MediaProtocolError extends Error {
     this.name = 'MediaProtocolError'
     this.status = status
   }
-}
-
-function getBaseLocalDataDir(): string {
-  if (process.platform === 'win32' && process.env.LOCALAPPDATA) {
-    return path.join(process.env.LOCALAPPDATA, APP_IDENTIFIER)
-  }
-
-  return path.join(app.getPath('appData'), APP_IDENTIFIER)
 }
 
 export function inferMimeFromPath(targetPath: string): string {
@@ -91,15 +82,13 @@ function isInsideRoot(targetPath: string, rootPath: string): boolean {
 
 function getAllowedMediaRoots(): string[] {
   const roots = [
-    getBaseLocalDataDir(),
+    getAppBaseDir(),
     app.getPath('downloads'),
     app.getPath('temp') || os.tmpdir(),
     ...allowedMediaRoots,
+    // 用户目录：默认“文档/痕迹AI”，或设置里指定的数据目录
+    getUserRootDir(),
   ]
-  const customRoot = getCustomDataRoot()
-  if (customRoot) {
-    roots.push(customRoot)
-  }
   return roots
 }
 
@@ -220,15 +209,13 @@ function streamFile(targetPath: string, range: ByteRange | null): ReadableStream
   return Readable.toWeb(stream) as ReadableStream<Uint8Array>
 }
 
-const CONTENT_ADDRESSED_DIR_NAMES = new Set(['Media', 'Thumbnails', 'Uploads'])
-
 /**
- * Media/Thumbnails/Uploads 下的文件名是内容哈希派生的，同路径不会被替换成不同内容，
+ * 生成结果/上传素材/缩略图目录下的文件名是内容哈希派生的，同路径不会被替换成不同内容，
  * 可以放心长期缓存；其他来源（如用户自定义授权目录）路径可能被外部编辑，保持不缓存。
  */
 function isContentAddressedPath(targetPath: string): boolean {
   const segments = targetPath.split(/[\\/]/)
-  return segments.some((segment) => CONTENT_ADDRESSED_DIR_NAMES.has(segment))
+  return segments.some((segment) => CONTENT_ADDRESSED_FOLDER_NAMES.has(segment))
 }
 
 function createHeaders(

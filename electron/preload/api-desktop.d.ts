@@ -48,8 +48,23 @@ export interface HenjiShellApi {
   openExternal(url: string): Promise<void>
 }
 
+export type HenjiUserFolderKey = 'projects' | 'imageDocuments' | 'generated' | 'uploads' | 'exports' | 'skills'
+
+/** 程序目录与用户目录快照，唯一来源为主进程 `services/appPaths.ts`。 */
+export interface HenjiAppDirectories {
+  programDir: string
+  userRoot: string
+  defaultUserRoot: string
+  isCustomUserRoot: boolean
+  folderNames: Record<HenjiUserFolderKey, string>
+  folders: Record<HenjiUserFolderKey, string>
+  thumbnailsDir: string
+}
+
 export interface HenjiPathsApi {
   appLocalDataDir(): Promise<string>
+  /** uiLanguage 只在首次确定默认用户目录名称时生效。 */
+  appDirectories(options?: { uiLanguage?: string }): Promise<HenjiAppDirectories>
   downloadDir(): Promise<string>
   join(...parts: string[]): Promise<string>
   dirname(path: string): Promise<string>

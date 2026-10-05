@@ -64,15 +64,16 @@ function createGenerationVideoViewerTrimScene({ openWorkspace, settlePage }) {
     },
     setup: async (page, app) => {
       await openWorkspace(page, 'generation')
-      // 生成记录的相对路径以数据根目录为基准（默认 = appLocalDataDir/Henji-AI，见 src/utils/dataPath.ts getDefaultDataRoot）。
-      const dataRoot = path.join(await page.evaluate(() => window.henjiNative.paths.appLocalDataDir()), 'Henji-AI')
+      // 生成记录的相对路径以用户目录为基准（唯一来源 electron/main/services/appPaths.ts）。
+      const directories = await page.evaluate(() => window.henjiNative.paths.appDirectories())
       const name = `ui-viewer-trim-${randomUUID()}.mp4`
-      const filePath = path.join(dataRoot, 'Uploads', name)
+      const relativePath = `${directories.folderNames.uploads}/${name}`
+      const filePath = path.join(directories.userRoot, relativePath)
       await fsp.mkdir(path.dirname(filePath), { recursive: true })
       await fsp.copyFile(VIDEO_FIXTURE, filePath)
       fixture = { filePath }
       // 夹具视频 2 s，选区 0.5–1.5 s：高亮应占进度条中间一半。
-      const params = { uploadedVideoFilePaths: [`Uploads/${name}`], uploadedVideoTrimStart: 0.5, uploadedVideoTrimEnd: 1.5 }
+      const params = { uploadedVideoFilePaths: [relativePath], uploadedVideoTrimStart: 0.5, uploadedVideoTrimEnd: 1.5 }
       await page.evaluate(async ({ id, params }) => {
         await window.henjiNative.db.execute('DELETE FROM history WHERE id = ?', [id])
         await window.henjiNative.db.execute(
