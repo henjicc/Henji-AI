@@ -18,7 +18,7 @@
     "providers": "供应商与模型",
     "workspace-generation": "生成",
     "workspace-canvas": "画布",
-    "workspace-assets": "资产库",
+    "workspace-assets": "资产",
     "files-storage": "数据目录",
     "files-upload": "上传",
     "files-download": "下载",
@@ -439,7 +439,9 @@
       "startupWorkspaceOptions": {
         "generation": "生成",
         "nodes": "画布",
-        "tools": "工具"
+        "videoEdit": "剪辑",
+        "tools": "工具",
+        "assets": "资产"
       }
     },
     "assetLibrary": {

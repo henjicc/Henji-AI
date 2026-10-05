@@ -5,12 +5,12 @@ export type ToolboxToolId = 'audioEdit' | 'cameraStage' | 'imageMark'
 export const DEFAULT_WORKSPACE_ID: WorkspaceId = 'generation'
 
 /**
- * 可作为启动默认页的工作区。
+ * 可作为启动默认页的工作区：标题栏的全部 Tab。
  *
- * 不含 `assets`：素材库那个 Tab 按设置走悬浮面板或工作区两种形态，不是单纯的工作区切换，
- * 拿它当启动页会和「素材库入口行为」设置打架。
+ * `assets` 不是导航工作区（资产走独立的打开状态，悬浮面板或完整工作区）：选它时底下停在默认工作区，
+ * 启动后直接打开完整资产工作区（见 App.tsx），不受「标题栏点击行为」影响。
  */
-export const STARTUP_WORKSPACE_IDS = ['generation', 'nodes', 'tools'] as const
+export const STARTUP_WORKSPACE_IDS = ['generation', 'nodes', 'videoEdit', 'tools', 'assets'] as const
 
 export type StartupWorkspaceId = (typeof STARTUP_WORKSPACE_IDS)[number]
 

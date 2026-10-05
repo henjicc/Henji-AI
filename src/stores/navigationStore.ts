@@ -32,7 +32,8 @@ interface NavigationState {
  */
 function resolveInitialWorkspace(): WorkspaceId {
   const configured = useSettingsStore.getState().startupWorkspace
-  return isStartupWorkspaceId(configured) ? configured : DEFAULT_WORKSPACE_ID
+  // 资产不是导航工作区：底下停在默认工作区，由 App 启动后打开完整资产工作区
+  return isStartupWorkspaceId(configured) && configured !== 'assets' ? configured : DEFAULT_WORKSPACE_ID
 }
 
 export const useNavigationStore = create<NavigationState>((set) => ({

@@ -151,6 +151,12 @@ const App: React.FC = () => {
     }
   }, [])
 
+  // 启动默认页选了“资产”：打开完整资产工作区（开发启动指定了页面时以开发参数为准）
+  useEffect(() => {
+    if (developmentLaunch.surfaceId) return
+    if (useSettingsStore.getState().startupWorkspace === 'assets') openAssetLibrary('workspace')
+  }, [])
+
   const openAssetFloating = React.useCallback((): void => {
     openAssetLibrary('floating')
   }, [])

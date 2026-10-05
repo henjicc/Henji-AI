@@ -18,7 +18,7 @@
     "providers": "Providers & Models",
     "workspace-generation": "Generate",
     "workspace-canvas": "Canvas",
-    "workspace-assets": "Asset Library",
+    "workspace-assets": "Assets",
     "files-storage": "Data Folder",
     "files-upload": "Uploads",
     "files-download": "Downloads",
@@ -439,7 +439,9 @@
       "startupWorkspaceOptions": {
         "generation": "Generate",
         "nodes": "Canvas",
-        "tools": "Tools"
+        "videoEdit": "Edit",
+        "tools": "Tools",
+        "assets": "Assets"
       }
     },
     "assetLibrary": {

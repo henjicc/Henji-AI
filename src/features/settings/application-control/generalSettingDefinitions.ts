@@ -13,6 +13,7 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { changeLanguage, getCurrentLanguage } from '@/utils/language'
 import { getUpdateConfig, setUpdateEnabled, setUpdateFrequency } from '@/utils/updateConfig'
 import { z } from 'zod'
+import { STARTUP_WORKSPACE_IDS } from '@/core/types/workspace'
 import { GENERATION_MODEL_DESCRIPTIONS } from '@/core/modelCatalog/generationModelDescriptions'
 import { API_KEY_PROVIDER_IDS } from '@/core/config/providers'
 import { modelDefaultsManager } from '@/features/settings/modelDefaultsManager'
@@ -51,8 +52,8 @@ export const GENERAL_APPLICATION_SETTING_DEFINITIONS: ApplicationSettingDefiniti
   }, () => modelDefaultsManager.getSnapshot().models.audio || 'auto',
   (value) => modelDefaultsManager.setDefaultModel('audio', value === 'auto' ? '' : value)),
   storeSetting({
-    id: 'general.startup_workspace', title: '启动工作区', description: '设置应用启动后默认显示生成、画布或工具。',
-    aliases: ['启动页面', '默认页面', 'startup'], schema: z.enum(['generation', 'nodes', 'tools']), defaultValue: 'generation',
+    id: 'general.startup_workspace', title: '启动工作区', description: '设置应用启动后默认显示生成、画布、剪辑、工具或资产。',
+    aliases: ['启动页面', '默认页面', 'startup'], schema: z.enum(STARTUP_WORKSPACE_IDS), defaultValue: 'generation',
     target: { tab: 'general', sectionId: 'general-basic' }, requiresReload: false, requiresRestart: false, sensitive: false,
   }, () => useSettingsStore.getState().startupWorkspace,
   (value) => useSettingsStore.getState().setStartupWorkspace(value)),

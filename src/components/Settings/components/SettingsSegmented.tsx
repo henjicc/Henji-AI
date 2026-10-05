@@ -11,7 +11,7 @@ interface SettingsSegmentedProps<T extends string> {
 /**
  * 设置里的单选分段控件。
  *
- * 统一写法：选项不超过 4 个、文字又短的单选一律用它，其余用下拉。
+ * 统一写法：选项不超过 5 个、每项只有两三个字的单选一律用它，其余用下拉。
  * 以前「层级对比」（三选一）是分段、紧挨着的「圆角尺寸」（也是三选一）却是下拉，同一页两种写法。
  */
 export default function SettingsSegmented<T extends string>({
