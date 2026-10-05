@@ -9,31 +9,33 @@ function attachUiInspectionSupport(context) {
 
   async function setupToolbox(page) {
     await openWorkspace(page, 'toolbox')
-    for (const title of ['返回项目列表', '返回工具']) {
+    for (const title of ['返回项目列表', '返回镜头参考列表', '返回工具']) {
       const back = page.locator(`[title="${title}"]:visible, [aria-label="${title}"]:visible`).first()
       if (await back.count()) {
         await back.click()
         await settlePage(page)
+        // 3.2：上一个场景留下的镜头参考草稿离开时会询问保存；巡检数据一律“不保存”（移到回收站）
+        const leavePrompt = page.getByRole('alertdialog').filter({ hasText: '要保存' })
+        if (await leavePrompt.count()) {
+          await leavePrompt.getByRole('button', { name: '不保存', exact: true }).click()
+          await settlePage(page)
+        }
       }
     }
     await waitForPageHeader(page)
   }
 
+  // 3.2：镜头参考页是通用文档页，新建按钮“新建镜头参考”直接以草稿进入编辑器（离开时再起名）
   async function setupCameraStageProjectList(page) {
     await setupToolbox(page)
     await clickNamedButton(page, /^(3D 镜头参考|3D Camera Reference)/i)
-    await page.getByRole('button', { name: /^(新建项目|New Project)$/i }).first()
+    await page.getByRole('button', { name: /^(新建镜头参考|New Camera Stage)$/i }).first()
       .waitFor({ state: 'visible', timeout: 12000 })
   }
 
   async function setupCameraStageStyledEditor(page) {
     await setupCameraStageProjectList(page)
-    await page.getByRole('button', { name: /^(新建项目|New Project)$/i }).first().click()
-    const dialog = page.getByRole('dialog').last()
-    await dialog.waitFor({ state: 'visible', timeout: 8000 })
-    const input = dialog.getByRole('textbox')
-    await input.fill('真实性巡检-3D镜头')
-    await input.press('Enter')
+    await page.getByRole('button', { name: /^(新建镜头参考|New Camera Stage)$/i }).first().click()
     await page.locator('[title="添加球体"]:visible').waitFor({ state: 'visible', timeout: 12000 })
     await page.locator('[title="添加球体"]:visible').click()
     await page.locator('[title="添加摄像机"]:visible').click()

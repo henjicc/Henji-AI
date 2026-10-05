@@ -5,7 +5,8 @@ export interface CameraStageRenderRequest {
   requestId: string
   canvasProjectId: string
   nodeId: string
-  cameraStageProjectId: string
+  /** 镜头参考文档 ID（`.henji-stage` 文件头里的稳定 ID，3.2 起取代旧工程 ID）。 */
+  cameraStageDocumentId: string
   resolutionPreset: CameraStageRenderResolutionPreset
   outputKind: CameraStageRenderOutputKind
   selectedTimeSec?: number
@@ -13,7 +14,8 @@ export interface CameraStageRenderRequest {
 
 /** 宿主在接受任务时固定的渲染投影，不能由工具参数提供。 */
 export interface CameraStageRenderWorkerJob extends CameraStageRenderRequest {
-  sceneJson: string
+  /** 镜头参考文档的场景内容（文档文件里的 content，路径为绝对路径）。 */
+  sceneContent: unknown
 }
 
 export interface CameraStageImageRenderResult {

@@ -3,7 +3,7 @@ import path from 'node:path'
 import { windowAppearance } from './window-appearance'
 import { cleanupAllVideoFrameExports } from './video/frame-export'
 import { cameraStageRenderTaskStorage } from './camera-stage-render-task-storage'
-import { getCameraStageProject } from './camera-stage-projects'
+import { getDocumentService } from './documents/runtime'
 import type { CameraStageRenderWorkerJob } from '../../../src/platform/contracts/cameraStageRender'
 import { createMainLogger } from './logging/main-logger'
 import {
@@ -108,7 +108,7 @@ function failActiveTask(message: string): void {
   logger.error('隐藏渲染任务失败', {
     event: 'camera_stage.background_render.failed',
     requestId: task.requestId,
-    context: { nodeId: task.nodeId, projectId: task.cameraStageProjectId, message },
+    context: { nodeId: task.nodeId, projectId: task.cameraStageDocumentId, message },
   })
   activeTask = null
   stopPowerSaveBlocker()
@@ -206,39 +206,47 @@ function dispatchNextTask(): void {
   logger.info('隐藏渲染任务开始', {
     event: 'camera_stage.background_render.start',
     requestId: task.requestId,
-    context: { nodeId: task.nodeId, projectId: task.cameraStageProjectId, outputKind: task.outputKind },
+    context: { nodeId: task.nodeId, projectId: task.cameraStageDocumentId, outputKind: task.outputKind },
   })
   win.webContents.send('cameraStageRender:workerJob', {
     requestId: task.requestId,
     nodeId: task.nodeId,
     canvasProjectId: task.canvasProjectId,
-    cameraStageProjectId: task.cameraStageProjectId,
+    cameraStageDocumentId: task.cameraStageDocumentId,
     resolutionPreset: task.resolutionPreset,
     outputKind: task.outputKind,
     selectedTimeSec: task.selectedTimeSec,
-    sceneJson: task.sceneJson,
+    sceneContent: task.sceneContent,
   } satisfies CameraStageRenderWorkerJob)
 }
 
-export function startCameraStageRenderTask(
+/**
+ * 接受渲染任务时固定场景快照：读镜头参考文档文件里的内容（3.2，渲染前渲染层已把修改写完），
+ * 之后再改文档也不影响这次输出。
+ */
+async function readCameraStageScene(documentId: string): Promise<unknown> {
+  const document = await getDocumentService().readDocument({ id: documentId })
+  if (document.meta.kind !== 'camera_stage') throw new Error('需要渲染的文档不是镜头参考')
+  return document.content
+}
+
+export async function startCameraStageRenderTask(
   request: CameraStageRenderRequestDto,
   ownerWebContentsId: number,
-): CameraStageRenderTaskRegistration {
+): Promise<CameraStageRenderTaskRegistration> {
   const registration = taskRegistry.register(request, ownerWebContentsId)
   if (registration.idempotent) return registration
 
-  let sceneJson: string
+  let sceneContent: unknown
   try {
-    const project = getCameraStageProject(request.cameraStageProjectId)
-    if (!project) throw new Error('未找到需要渲染的三维工程')
-    sceneJson = project.sceneJson
+    sceneContent = await readCameraStageScene(request.cameraStageDocumentId)
   } catch (error) {
     logger.error('固定三维渲染快照失败', { event: 'camera_stage.background_render.snapshot_failed', requestId: request.requestId, error })
     const failed = taskRegistry.applyEvent({ type: 'failed', requestId: request.requestId, nodeId: request.nodeId,
       message: error instanceof Error ? error.message : String(error) })
     return { task: failed, idempotent: false }
   }
-  const task: QueuedRenderTask = { ...request, ownerWebContentsId, sceneJson }
+  const task: QueuedRenderTask = { ...request, ownerWebContentsId, sceneContent }
   queue.push(task)
   sendToOwner(task, registration.task)
   ensureWorkerWindow()
@@ -327,7 +335,7 @@ export function handleCameraStageRenderWorkerEvent(
       requestId: task.requestId,
       context: {
         nodeId: task.nodeId,
-        projectId: task.cameraStageProjectId,
+        projectId: task.cameraStageDocumentId,
         outputKind: event.result.kind,
         frameCount: event.result.kind === 'video' ? event.result.frameCount : 1,
       },
@@ -336,13 +344,13 @@ export function handleCameraStageRenderWorkerEvent(
     logger.info('隐藏渲染任务已取消', {
       event: 'camera_stage.background_render.cancelled',
       requestId: task.requestId,
-      context: { nodeId: task.nodeId, projectId: task.cameraStageProjectId },
+      context: { nodeId: task.nodeId, projectId: task.cameraStageDocumentId },
     })
   } else {
     logger.error('隐藏渲染任务失败', {
       event: 'camera_stage.background_render.failed',
       requestId: task.requestId,
-      context: { nodeId: task.nodeId, projectId: task.cameraStageProjectId, message: event.message },
+      context: { nodeId: task.nodeId, projectId: task.cameraStageDocumentId, message: event.message },
     })
   }
   workerReady = false

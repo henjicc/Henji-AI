@@ -23,6 +23,7 @@ export function createElectronDocuments(): DocumentsPlatform {
     duplicateDocument: (request) => getNativeDocuments().duplicateDocument(request),
     trashDocument: (target) => getNativeDocuments().trashDocument(target),
     deleteEmptyDraft: (target) => getNativeDocuments().deleteEmptyDraft(target),
+    forgetDocument: (docId) => getNativeDocuments().forgetDocument(docId),
     revealDocument: (target) => getNativeDocuments().revealDocument(target),
     resolveDocumentLink: (link) => getNativeDocuments().resolveDocumentLink(link),
     checkName: (request) => getNativeDocuments().checkName(request),

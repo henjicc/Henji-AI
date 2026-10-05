@@ -71,6 +71,35 @@ describe('与打开的文档会话配合', () => {
     await kit.operations.trashDocument({ id: other.id, path: other.path })
     expect(kit.commands.trashed).toEqual([other.id])
   })
+
+  it('工具在后台持有的会话：先请工具释放再移到回收站；工具拒绝释放时照旧报正在编辑', async () => {
+    const kit = setup()
+    const { meta, session } = await openEdited(kit)
+    let allow = false
+    kit.operations.registerReleaser('canvas', async (id) => {
+      if (!allow) return false
+      await kit.registry.get(id)?.close()
+      return true
+    })
+    await expect(kit.operations.trashDocument({ id: meta.id, path: meta.path })).rejects.toMatchObject({ name: 'DocumentInUseError' })
+    expect(kit.commands.trashed).toEqual([])
+    allow = true
+    await kit.operations.trashDocument({ id: meta.id, path: meta.path })
+    expect(session.isEnded).toBe(true)
+    expect(kit.commands.trashed).toEqual([meta.id])
+  })
+
+  it('从列表移除只对找不到文件的文档生效，文件还在时拒绝', async () => {
+    const kit = setup()
+    const present = kit.commands.seed({ name: '还在', content: { items: [] } })
+    await expect(kit.operations.forgetDocument(present.id)).rejects.toMatchObject({ name: 'DocumentLocationError' })
+    const missing = kit.commands.seed({ name: '丢失', content: { items: [] } })
+    kit.commands.missingIds.add(missing.id)
+    const before = kit.operations.revision()
+    await kit.operations.forgetDocument(missing.id)
+    expect(kit.commands.stored(missing.id)).toBeUndefined()
+    expect(kit.operations.revision()).toBe(before + 1)
+  })
 })
 
 describe('名称与重名', () => {

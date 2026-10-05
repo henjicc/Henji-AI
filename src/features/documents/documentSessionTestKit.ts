@@ -1,11 +1,12 @@
 import { z } from 'zod'
 
-import type { DocumentKindDescriptor } from '@/core/documents/kinds'
+import { documentKindRegistry, type DocumentKindDescriptor } from '@/core/documents/kinds'
 import { entryNameKey, keepBothEntryName, normalizeEntryName } from '@/core/documents/naming'
 import type {
   CreateDocumentRequest,
   CreateProjectRequest,
   DocumentContainerRef,
+  DocumentKindId,
   DocumentIndexScanReport,
   DocumentListQuery,
   DocumentMeta,
@@ -78,6 +79,19 @@ function folderOf(path: string): string {
   return path.slice(0, path.lastIndexOf('/'))
 }
 
+/**
+ * 替身里的类型说明：'canvas' 用测试类型（会话测试沿用），其余类型用正式登记表（工具接入测试用真实内容规则）。
+ */
+export function fakeKindOf(kind: DocumentKindId): DocumentKindDescriptor {
+  return kind === testDocumentKind.id ? testDocumentKind as unknown as DocumentKindDescriptor : documentKindRegistry.require(kind)
+}
+
+function isFakeContentEmpty(kind: DocumentKindId, content: unknown): boolean {
+  const descriptor = fakeKindOf(kind)
+  const parsed = descriptor.contentSchema.safeParse(content)
+  return parsed.success ? descriptor.isEmptyContent(parsed.data) : false
+}
+
 export class FakeDocumentCommands implements DocumentOperationCommands {
   readonly documents = new Map<string, StoredDocument>()
   readonly projects = new Map<string, ProjectSummary>()
@@ -94,14 +108,15 @@ export class FakeDocumentCommands implements DocumentOperationCommands {
   private nextId = 1
   private clock = 1_000
 
-  seed(options: { name: string; content: TestContent; draft?: boolean; folder?: string; projectId?: string }): DocumentMeta {
-    const id = `doc-${this.nextId++}`
+  seed(options: { name: string; content: unknown; draft?: boolean; folder?: string; projectId?: string; kind?: DocumentKindId; id?: string }): DocumentMeta {
+    const id = options.id ?? `doc-${this.nextId++}`
+    const kind = options.kind ?? testDocumentKind.id
     const folder = options.folder ?? TEST_DOCUMENT_ROOT
     const meta: DocumentMeta = {
       id,
-      kind: testDocumentKind.id,
+      kind,
       name: options.name,
-      path: `${folder}/${options.name}${testDocumentKind.extension}`,
+      path: `${folder}/${options.name}${fakeKindOf(kind).extension}`,
       container: options.projectId ? { kind: 'project', projectId: options.projectId } : { kind: 'user' },
       draft: options.draft ?? false,
       revision: 1,
@@ -151,10 +166,14 @@ export class FakeDocumentCommands implements DocumentOperationCommands {
 
   async createDocument(request: CreateDocumentRequest): Promise<DocumentReadResult> {
     this.calls.push('createDocument')
-    const name = request.name ?? this.untitledName()
+    const name = request.name ?? this.untitledName(request.kind)
+    // 对齐主进程：给了名字按用户输入处理，同一文件夹重名报错不加后缀
+    const folder = request.container.kind === 'project' ? this.projects.get(request.container.projectId)?.path ?? TEST_DOCUMENT_ROOT : TEST_DOCUMENT_ROOT
+    if (request.name !== undefined && this.isTaken(folder, request.name, '')) throw namedError('DocumentNameConflictError', '已有同名文件。')
     const meta = this.seed({
+      kind: request.kind,
       name,
-      content: (request.content as TestContent | undefined) ?? testDocumentKind.createEmptyContent(),
+      content: request.content ?? fakeKindOf(request.kind).createEmptyContent(),
       draft: request.draft ?? request.name === undefined,
       projectId: request.container.kind === 'project' ? request.container.projectId : undefined,
       folder: request.container.kind === 'project' ? this.projects.get(request.container.projectId)?.path : undefined,
@@ -193,12 +212,12 @@ export class FakeDocumentCommands implements DocumentOperationCommands {
     stored.meta = {
       ...stored.meta,
       name: request.name,
-      path: `${folder}/${request.name}${testDocumentKind.extension}`,
+      path: `${folder}/${request.name}${fakeKindOf(stored.meta.kind).extension}`,
       draft: false,
       // 换位置时复制素材、改写引用，revision 加一
       revision: moved ? stored.meta.revision + 1 : stored.meta.revision,
     }
-    if (moved) stored.content = { items: [...(stored.content as TestContent).items, '已复制素材'] }
+    if (moved && stored.meta.kind === testDocumentKind.id) stored.content = { items: [...(stored.content as TestContent).items, '已复制素材'] }
     return { meta: stored.meta, copiedFiles: moved ? 1 : 0, missingPaths: [] }
   }
 
@@ -212,8 +231,17 @@ export class FakeDocumentCommands implements DocumentOperationCommands {
   async deleteEmptyDraft(target: DocumentTarget): Promise<void> {
     this.calls.push('deleteEmptyDraft')
     const stored = this.require(target.id)
-    if (!stored.meta.draft || (stored.content as TestContent).items.length > 0) throw namedError('DocumentNotEmptyError', '草稿不为空。')
+    if (!stored.meta.draft || !isFakeContentEmpty(stored.meta.kind, stored.content)) throw namedError('DocumentNotEmptyError', '草稿不为空。')
     this.documents.delete(target.id)
+  }
+
+  /** 对齐主进程：只有找不到文件（标为缺失）的文档能从列表移除，文件还在时报 DocumentLocationError。 */
+  async forgetDocument(docId: string): Promise<void> {
+    this.calls.push('forgetDocument')
+    if (!this.documents.has(docId)) return
+    if (!this.missingIds.has(docId)) throw namedError('DocumentLocationError', '这份文档的文件还在，不能只从列表移除。')
+    this.documents.delete(docId)
+    this.missingIds.delete(docId)
   }
 
   async listDocuments(query: DocumentListQuery = {}): Promise<DocumentSummary[]> {
@@ -254,7 +282,7 @@ export class FakeDocumentCommands implements DocumentOperationCommands {
       self = location.renaming
     } else folder = request.subject.type === 'project' ? TEST_PROJECT_ROOT : TEST_DOCUMENT_ROOT
     if (folder.startsWith('Z:')) return { status: 'invalid', reason: 'location', message: '位置不可用。' }
-    const suffix = request.subject.type === 'project' ? '' : testDocumentKind.extension
+    const suffix = request.subject.type === 'project' ? '' : fakeKindOf(request.subject.kind).extension
     const path = `${folder}/${check.name}${suffix}`
     const existing = this.entryPaths().find((entry) => entry !== self && folderOf(entry) === folder
       && entryNameKey(entry.slice(folder.length + 1)) === entryNameKey(`${check.name}${suffix}`))
@@ -310,7 +338,7 @@ export class FakeDocumentCommands implements DocumentOperationCommands {
     if (!check.ok) throw namedError('DocumentNameInvalidError', check.message)
     const folder = folderOf(stored.meta.path)
     if (this.isTaken(folder, check.name, stored.meta.id)) throw namedError('DocumentNameConflictError', '已有同名文件。')
-    stored.meta = { ...stored.meta, name: check.name, path: `${folder}/${check.name}${testDocumentKind.extension}` }
+    stored.meta = { ...stored.meta, name: check.name, path: `${folder}/${check.name}${fakeKindOf(stored.meta.kind).extension}` }
     return stored.meta
   }
 
@@ -324,7 +352,7 @@ export class FakeDocumentCommands implements DocumentOperationCommands {
       ...stored.meta,
       name,
       container: request.container,
-      path: `${folder}/${name}${testDocumentKind.extension}`,
+      path: `${folder}/${name}${fakeKindOf(stored.meta.kind).extension}`,
       // 换容器时复制素材、改写引用，revision 加一（对齐主进程）
       revision: projectChanged ? stored.meta.revision + 1 : stored.meta.revision,
     }
@@ -337,8 +365,9 @@ export class FakeDocumentCommands implements DocumentOperationCommands {
     const folder = folderOf(stored.meta.path)
     const name = this.pickName(folder, request.name ?? stored.meta.name, '', request.onConflict ?? 'fail')
     const copy = this.seed({
+      kind: stored.meta.kind,
       name,
-      content: structuredClone(stored.content) as TestContent,
+      content: structuredClone(stored.content),
       folder,
       projectId: stored.meta.container.kind === 'project' ? stored.meta.container.projectId : undefined,
     })
@@ -404,9 +433,9 @@ export class FakeDocumentCommands implements DocumentOperationCommands {
     return [...this.documents.values()].some(({ meta }) => meta.id !== selfId && folderOf(meta.path) === folder && entryNameKey(meta.name) === entryNameKey(name))
   }
 
-  private untitledName(): string {
+  private untitledName(kind: DocumentKindId = testDocumentKind.id): string {
     for (let index = 1; ; index += 1) {
-      const name = `${testDocumentKind.untitledNames.zh} ${index}`
+      const name = `${fakeKindOf(kind).untitledNames.zh} ${index}`
       if (![...this.documents.values()].some(({ meta }) => meta.name === name)) return name
     }
   }

@@ -5,6 +5,7 @@ import { applicationRefSchema } from '../../applicationCapabilities'
 import { capabilityOutputSchema, defineApplicationCapability } from '../shared/defineApplicationCapability'
 import {
   cameraStageBaseRevisionSchema,
+  cameraStageDocumentIdSchema,
   cameraStageControl,
   cameraStageMoveSchema,
   cameraStageTarget,
@@ -28,7 +29,7 @@ const applyCameraMove = defineApplicationCapability({
     '缺少目标、摄像机或有效时间范围时停止，重新观察场景后使用稳定引用；不得猜测名称。',
   ],
   inputSchema: z.object({
-    projectId: z.string().min(1), cameraId: z.string().min(1), baseRevision: cameraStageBaseRevisionSchema,
+    projectId: cameraStageDocumentIdSchema, cameraId: z.string().min(1), baseRevision: cameraStageBaseRevisionSchema,
     move: cameraStageMoveSchema, targetObjectId: z.string().min(1).optional(), targetPoint: cameraStageVec3Schema.optional(),
     startStateKeyframeId: z.string().min(1).optional(), endStateKeyframeId: z.string().min(1).optional(),
     duration: z.number().positive().max(3600), speed: z.enum(['uniform', 'easeInOut', 'fastStart', 'slowStart']).default('easeInOut'),
@@ -59,7 +60,7 @@ const verifyScene = defineApplicationCapability({
   requiredScopes: ['toolbox'], acceptsRefs: ['camera_stage.project', 'camera_stage.object', 'camera_stage.camera', 'camera_stage.trajectory', 'camera_stage.state_keyframe', 'camera_stage.playback'],
   producesRefs: ['camera_stage.project', 'camera_stage.object', 'camera_stage.camera', 'camera_stage.trajectory', 'camera_stage.state_keyframe', 'camera_stage.playback'],
   inputSchema: z.object({
-    projectId: z.string().min(1), expectedObjectIds: z.array(z.string().min(1)).max(128).default([]),
+    projectId: cameraStageDocumentIdSchema, expectedObjectIds: z.array(z.string().min(1)).max(128).default([]),
     expectedObjectRefs: z.array(applicationRefSchema.refine(
       (ref) => ref.kind === 'camera_stage.object',
       { message: 'expectedObjectRefs 只接受 camera_stage.object 稳定引用' },

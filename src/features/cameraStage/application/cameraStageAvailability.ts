@@ -5,7 +5,7 @@ import type {
   ApplicationRef,
 } from '@/core/application-control'
 
-import type { CameraStageProjectSnapshot } from '../projects/cameraStageProjectPersistence'
+import type { CameraStageProjectSnapshot } from './cameraStageProjectRuntime'
 
 const TYPES = {
   project: 'camera_stage.project',
@@ -14,7 +14,7 @@ const TYPES = {
   playback: 'camera_stage.playback',
 } as const
 
-export function cameraStageProjectIdFromRef(ref: ApplicationRef): string {
+export function cameraStageDocumentIdFromRef(ref: ApplicationRef): string {
   if (ref.kind === TYPES.project || ref.kind === TYPES.scene || ref.kind === TYPES.playback) return ref.id
   const separator = ref.id.indexOf(':')
   return separator > 0 ? ref.id.slice(0, separator) : ref.id

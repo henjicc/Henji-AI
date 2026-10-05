@@ -36,8 +36,10 @@ export {
   getDocumentOperations,
   isDocumentNameConflict,
   registerDocumentOpener,
+  registerDocumentReleaser,
   type CreateNamedDocumentRequest,
   type DocumentOpener,
+  type DocumentReleaser,
   type DocumentOperationCommands,
   type DocumentOperationsOptions,
 } from './documentOperations'

@@ -161,7 +161,7 @@ async function cameraSource(source: Extract<VideoEditCreativeSourceRequest, { ki
       return matching[0]
     })
     const receipt = output.node.data.cameraStageRenderReceipt
-    if (!receipt || receipt.requestId !== identity.requestId || receipt.canvasProjectId !== identity.canvasProjectId || receipt.nodeId !== identity.nodeId || receipt.cameraStageProjectId !== identity.cameraStageProjectId || receipt.outputKind !== identity.outputKind || receipt.resolutionPreset !== identity.resolutionPreset || (receipt.selectedTimeSec ?? null) !== (identity.selectedTimeSec ?? null) || output.mediaType !== identity.outputKind) throw new Error('三维渲染尚未正式完成，或持久结果与原任务不一致，请查询原任务。')
+    if (!receipt || receipt.requestId !== identity.requestId || receipt.canvasProjectId !== identity.canvasProjectId || receipt.nodeId !== identity.nodeId || receipt.cameraStageDocumentId !== identity.cameraStageDocumentId || receipt.outputKind !== identity.outputKind || receipt.resolutionPreset !== identity.resolutionPreset || (receipt.selectedTimeSec ?? null) !== (identity.selectedTimeSec ?? null) || output.mediaType !== identity.outputKind) throw new Error('三维渲染尚未正式完成，或持久结果与原任务不一致，请查询原任务。')
     return { ...output, name: identity.outputKind === 'image' ? '三维渲染图片' : '三维渲染视频' }
   }
   return canvasPublished(await guarded(options, read), 'camera-stage', identity.requestId, read)

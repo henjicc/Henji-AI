@@ -75,6 +75,11 @@ export async function deleteEmptyDraft(target: DocumentTarget): Promise<void> {
   await documents().deleteEmptyDraft(target)
 }
 
+/** 从列表移除找不到文件的文档（只改作品索引，不动磁盘）。 */
+export async function forgetDocument(docId: string): Promise<void> {
+  await documents().forgetDocument(docId)
+}
+
 export async function revealDocument(target: DocumentTarget): Promise<void> {
   await documents().revealDocument(target)
 }

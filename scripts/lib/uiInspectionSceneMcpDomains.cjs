@@ -10,9 +10,8 @@ const crypto = require('node:crypto')
 const fsp = require('node:fs/promises')
 const path = require('node:path')
 const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, expectToolRefusal, operationEnvelope, readAllMedia, waitMcpReady } = require('./uiInspectionMcpClient.cjs')
-const { createPlaybackFixture } = require('./uiInspectionCameraStagePlayback.cjs')
+const { createPlaybackFixture, seedCameraStageDocument } = require('./uiInspectionCameraStagePlayback.cjs')
 
-const CAMERA_STAGE_PROJECT_ID = '__mcp_reality_camera_stage__'
 
 function marker() {
   return `n${Math.random().toString(36).slice(2, 8)}`
@@ -32,12 +31,11 @@ function createMcpDomainScenes({ setupSettings, canvasFixtureProjectId, REFERENC
     setup: async (page) => {
       await setupSettings(page)
       const projectId = crypto.randomUUID()
-      const stageId = crypto.randomUUID()
+      // 3.2：镜头参考是作品目录里的文档文件，经正式文档接口造数据
+      const stageId = await seedCameraStageDocument(page, { name: 'MCP三维输出夹具', scene: createPlaybackFixture() })
       const nodeId = 'mcp-camera'
-      await page.evaluate(async ({ projectId, stageId, nodeId, sceneJson }) => {
+      await page.evaluate(async ({ projectId, stageId, nodeId }) => {
         const now = Date.now()
-        await window.henjiNative.cameraStageProjects.upsertProjectRecord({ id: stageId, name: 'MCP三维输出夹具',
-          createdAt: now, updatedAt: now, objectCount: 3, sceneJson })
         const node = { id: nodeId, type: 'cameraStageNode', position: { x: 0, y: 0 },
           width: 480, height: 320, data: { projectId: stageId, displayName: 'MCP镜头',
             selectedTimeSec: 0.25, aspectRatio: '16:9', mediaInputs: {}, environmentImageUrl: null,
@@ -45,7 +43,7 @@ function createMcpDomainScenes({ setupSettings, canvasFixtureProjectId, REFERENC
         await window.henjiNative.storyboardProjects.upsertProjectRecord({ id: projectId, name: 'MCP三维后台画布',
           createdAt: now, updatedAt: now, nodeCount: 1, nodesJson: JSON.stringify([node]), edgesJson: '[]',
           viewportJson: '{"x":0,"y":0,"zoom":1}', historyJson: '{"past":[],"future":[],"imagePool":[]}' })
-      }, { projectId, stageId, nodeId, sceneJson: JSON.stringify(createPlaybackFixture()) })
+      }, { projectId, stageId, nodeId })
       const identity = await authorizeMcpConnection(page, { name: '三维渲染验收', allowWrites: true, allowDestructive: true })
       const client = await connectMcpClient(identity.config, 'Henji camera render Reality')
       try {
@@ -223,24 +221,25 @@ function createMcpDomainScenes({ setupSettings, canvasFixtureProjectId, REFERENC
           '分块读回的字节与磁盘文件不是同一份内容')
         assert.ok(media.bytes.length > 4096, '夹具必须大于单块长度，否则分块协议没有被真正走到')
 
-        // 3. 三维：后台工程不打开也能改，结果落到正式存储；任务查询对未知引用是拒绝而不是崩溃。
-        await page.evaluate(async ({ projectId, sceneJson }) => {
-          const now = Date.now()
-          await window.henjiNative.cameraStageProjects.upsertProjectRecord({
-            id: projectId, name: 'MCP三维验收工程', createdAt: now, updatedAt: now, objectCount: 3, sceneJson,
-          })
-        }, { projectId: CAMERA_STAGE_PROJECT_ID, sceneJson: JSON.stringify(createPlaybackFixture()) })
-        const stageRef = { kind: 'camera_stage.project', id: CAMERA_STAGE_PROJECT_ID }
-        const stage = await callTool(client, 'read_application_entity', { ref: stageRef, propertyIds: ['camera_stage.project.name'] })
-        assert.equal(stage.data.properties['camera_stage.project.name'], 'MCP三维验收工程')
+        // 3. 三维：镜头参考是通用文档（3.2）。后台文档不打开也能改名（通用 documents.document.name），
+        //    文件名跟着变；三维实体读到同一个名称。任务查询对未知引用是拒绝而不是崩溃。
+        const stageDocumentId = await seedCameraStageDocument(page, { name: `MCP三维验收-${nonce}`, scene: createPlaybackFixture() })
+        const stageRef = { kind: 'documents.document', id: stageDocumentId }
+        const stage = await callTool(client, 'read_application_entity', { ref: stageRef, propertyIds: ['documents.document.name'] })
+        assert.equal(stage.data.properties['documents.document.name'], `MCP三维验收-${nonce}`)
         const renamed = `MCP三维已改名-${nonce}`
         const stageWrite = await callTool(client, 'change_application_entities', operationEnvelope([stage], {
-          summary: '三维后台改名',
-          changes: [{ kind: 'set_properties', entityType: stageRef.kind, target: stageRef, properties: { 'camera_stage.project.name': renamed } }],
+          summary: '镜头参考后台改名',
+          changes: [{ kind: 'set_properties', entityType: stageRef.kind, target: stageRef, properties: { 'documents.document.name': renamed } }],
         }))
         assert.equal(stageWrite.executionState, 'completed', JSON.stringify(stageWrite))
-        const storedStage = await page.evaluate((projectId) => window.henjiNative.cameraStageProjects.getProjectRecord(projectId), CAMERA_STAGE_PROJECT_ID)
-        assert.equal(storedStage.name, renamed, '三维改名没有落到正式存储')
+        const storedStage = await page.evaluate((id) => window.henjiNative.documents.readDocument({ id }), stageDocumentId)
+        assert.equal(storedStage.meta.name, renamed, '镜头参考改名没有落到文档文件')
+        assert.ok(storedStage.meta.path.endsWith(`${renamed}.henji-stage`), `文件名没有跟着改：${storedStage.meta.path}`)
+        const stageEntity = await callTool(client, 'read_application_entity', {
+          ref: { kind: 'camera_stage.project', id: stageDocumentId }, propertyIds: ['camera_stage.project.name'],
+        })
+        assert.equal(stageEntity.data.properties['camera_stage.project.name'], renamed, '三维实体读到的名称与文档不一致')
         /*
          * 三维后台任务不是反射实体，只能由 render_camera_stage_output 产生并按返回的稳定引用查询；
          * 客户端拿不到"自己编一个任务引用去列举"的口子。这里核对三件工具都在修改档目录里。
@@ -275,9 +274,9 @@ function createMcpDomainScenes({ setupSettings, canvasFixtureProjectId, REFERENC
         const historyAfter = await page.evaluate(() => window.henjiNative.generationHistory.count())
         assert.equal(historyAfter, historyBefore, '未授权付费的连接期间生成历史发生了变化')
 
-        // 清理本次自己建的夹具：素材记录、媒体文件与三维工程，用户原有数据一律不动。
+        // 清理本次自己建的夹具：素材记录、媒体文件与镜头参考文档（移到回收站），用户原有数据一律不动。
         await page.evaluate((id) => window.henjiNative.assetLibrary.deleteAsset(id), asset.id)
-        await page.evaluate((projectId) => window.henjiNative.cameraStageProjects.deleteProjectRecord(projectId), CAMERA_STAGE_PROJECT_ID)
+        await page.evaluate((id) => window.henjiNative.documents.trashDocument({ id }), stageDocumentId)
         await fsp.rm(mediaPath, { force: true })
       } finally {
         await client.close()

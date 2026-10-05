@@ -12,7 +12,7 @@ import { areCameraAspectRatiosConsistent, getCameraObjects } from '../domain/cam
 import { buildRenderCameraSchedule } from '../domain/renderCameraSchedule'
 import { exportCameraStageImage } from '../export/cameraStageImage'
 import { exportCameraStageVideo } from '../export/cameraStageVideo'
-import { deserializeScene } from '../domain/sceneSerialization'
+import { sceneFromDocumentContent } from '../domain/sceneSerialization'
 import StageScene from '../scene/StageScene'
 import type { StageCaptureFn } from '../scene/StageCaptureBridge'
 import { attachCameraStageStore, createCameraStageStore, useCameraStageStore } from '../store/cameraStageStore'
@@ -73,7 +73,7 @@ export default function CameraStageRenderWorker(): JSX.Element {
       logger.error('后台 3D 渲染失败', error, {
         event: 'camera_stage.background_worker.failed',
         requestId: request.requestId,
-        context: { nodeId: request.nodeId, projectId: request.cameraStageProjectId },
+        context: { nodeId: request.nodeId, projectId: request.cameraStageDocumentId },
       })
       await reportCameraStageRenderWorkerEvent({
         type: 'failed',
@@ -93,10 +93,10 @@ export default function CameraStageRenderWorker(): JSX.Element {
           phase: 'preparing',
           progress: 0.02,
         })
-        const snapshot = deserializeScene(request.sceneJson)
+        const snapshot = sceneFromDocumentContent(request.sceneContent)
         // 渲染宿主持有任务快照投影，不注册业务实例、不向工程反向保存采样状态。
         const projection = createCameraStageStore()
-        projection.getState().loadSnapshot(snapshot, { id: request.cameraStageProjectId, name: '渲染投影' })
+        projection.getState().loadSnapshot(snapshot, { id: request.cameraStageDocumentId, name: '渲染投影' })
         attachCameraStageStore(projection)
         if (cancelRef.current) {
           await reportCameraStageRenderWorkerEvent({
@@ -140,7 +140,7 @@ export default function CameraStageRenderWorker(): JSX.Element {
           logger.info('后台 3D 静态帧渲染开始', {
             event: 'camera_stage.background_worker.image_start',
             requestId: request.requestId,
-            context: { nodeId: request.nodeId, projectId: request.cameraStageProjectId, selectedTimeSec },
+            context: { nodeId: request.nodeId, projectId: request.cameraStageDocumentId, selectedTimeSec },
           })
           const capture = captureRef.current
           if (!capture) throw new Error('后台渲染场景未提供静态帧捕获能力')
@@ -184,7 +184,7 @@ export default function CameraStageRenderWorker(): JSX.Element {
           logger.info('后台 3D 静态帧渲染完成', {
             event: 'camera_stage.background_worker.image_completed',
             requestId: request.requestId,
-            context: { nodeId: request.nodeId, projectId: request.cameraStageProjectId, selectedTimeSec },
+            context: { nodeId: request.nodeId, projectId: request.cameraStageDocumentId, selectedTimeSec },
           })
           return
         }
@@ -202,7 +202,7 @@ export default function CameraStageRenderWorker(): JSX.Element {
           requestId: request.requestId,
           context: {
             nodeId: request.nodeId,
-            projectId: request.cameraStageProjectId,
+            projectId: request.cameraStageDocumentId,
             frameCount: Math.max(1, Math.round(exportState.animation.duration * exportState.animation.fps)),
           },
         })
@@ -257,7 +257,7 @@ export default function CameraStageRenderWorker(): JSX.Element {
         logger.info('后台 3D 视频渲染完成', {
           event: 'camera_stage.background_worker.completed',
           requestId: request.requestId,
-          context: { nodeId: request.nodeId, projectId: request.cameraStageProjectId, frameCount: result.frameCount },
+          context: { nodeId: request.nodeId, projectId: request.cameraStageDocumentId, frameCount: result.frameCount },
         })
       } catch (error) {
         if (!disposed) await reportFailure(error)

@@ -1,17 +1,6 @@
 import { loadCameraStageTestProject } from '@/tests/cameraStageProjectFixture'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const mocks = vi.hoisted(() => ({
-  writeProject: vi.fn().mockResolvedValue(undefined),
-  loadProjectIntoScene: vi.fn().mockResolvedValue(true),
-}))
-
-vi.mock('@/commands/cameraStageProjects', () => ({ upsertCameraStageProjectRecord: mocks.writeProject }))
-
-vi.mock('../projects/cameraStageProjectService', () => ({
-  loadProjectIntoScene: mocks.loadProjectIntoScene,
-}))
-
 import type { ApplicationPlannedStep } from '@/core/application-control'
 
 import { createDefaultAnimation } from '../domain/animationTypes'
@@ -58,7 +47,7 @@ describe('三维状态关键帧状态捕获（capture_object_refs）', () => {
   let cubeDefaultPosition: { x: number; y: number; z: number }
   let sphereDefaultPosition: { x: number; y: number; z: number }
 
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks()
     const camera = createCameraObject('摄像机01', pickDefaultColor(0))
     const cube = createPrimitiveObject('box', '立方体', pickDefaultColor(1))
@@ -67,7 +56,7 @@ describe('三维状态关键帧状态捕获（capture_object_refs）', () => {
     sphereId = sphere.id
     cubeDefaultPosition = { ...cube.transform.position }
     sphereDefaultPosition = { ...sphere.transform.position }
-    loadCameraStageTestProject({
+    await loadCameraStageTestProject({
       objects: [camera, cube, sphere],
       activeCameraId: camera.id,
       animation: createDefaultAnimation(),

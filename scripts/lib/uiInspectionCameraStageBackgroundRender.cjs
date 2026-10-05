@@ -1,24 +1,11 @@
-const { createPlaybackFixture } = require('./uiInspectionCameraStagePlayback.cjs')
+const { createPlaybackFixture, seedCameraStageDocument } = require('./uiInspectionCameraStagePlayback.cjs')
 
-const CAMERA_STAGE_BACKGROUND_PROJECT_ID = 'ui-camera-stage-background-render'
 const CAMERA_STAGE_NODE_ID = '__ui_camera_stage_background'
 
 async function setupCameraStageBackgroundRender(page, context, inspection = {}) {
   const { seedAndOpenCanvasPanoramaProject, settlePage, reopenCanvasProjectFromStorage } = context
-  await page.evaluate(async ({ stageProjectId, sceneJson }) => {
-    const now = Date.now()
-    await window.henjiNative.cameraStageProjects.upsertProjectRecord({
-      id: stageProjectId,
-      name: '真实性巡检-后台渲染生命周期',
-      createdAt: now,
-      updatedAt: now,
-      objectCount: 3,
-      sceneJson,
-    })
-  }, {
-    stageProjectId: CAMERA_STAGE_BACKGROUND_PROJECT_ID,
-    sceneJson: JSON.stringify(createPlaybackFixture()),
-  })
+  // 3.2：画布节点引用的是镜头参考文档 ID（作品目录里的 .henji-stage 文件）
+  const stageDocumentId = await seedCameraStageDocument(page, { name: '真实性巡检-后台渲染生命周期', scene: createPlaybackFixture() })
 
   const { projectId } = await seedAndOpenCanvasPanoramaProject(page)
   await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
@@ -33,7 +20,7 @@ async function setupCameraStageBackgroundRender(page, context, inspection = {}) 
     style: { width: 480, height: 320 },
     data: {
       displayName: '后台渲染镜头',
-      projectId: CAMERA_STAGE_BACKGROUND_PROJECT_ID,
+      projectId: stageDocumentId,
       imageUrl: null,
       previewImageUrl: null,
       videoUrl: null,

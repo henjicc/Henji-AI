@@ -12,11 +12,11 @@ import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/application-contr
 
 import type { StageObject, StageSceneSettings } from '../domain/sceneTypes'
 import { getAnimatablePropByPath } from '../domain/animatableProps'
-import type { CameraStageProjectSnapshot } from '../projects/cameraStageProjectPersistence'
+import type { CameraStageProjectSnapshot } from './cameraStageProjectRuntime'
 import { cameraStageApplicationService } from './cameraStageApplicationService'
 import {
   cameraStageCollectionAvailability,
-  cameraStageProjectIdFromRef,
+  cameraStageDocumentIdFromRef,
   cameraStagePropertyRestriction,
 } from './cameraStageAvailability'
 import {
@@ -26,7 +26,7 @@ import {
   OBJECT_FIELDS,
 } from './cameraStageObjectFields'
 import { SCENE_APPEARANCE_FIELDS, SCENE_TIMELINE_FIELDS } from './cameraStageSceneFields'
-import { PLAYBACK_FIELDS, PROJECT_FIELDS, STATE_KEYFRAME_FIELDS } from './cameraStageTimelineFields'
+import { PLAYBACK_FIELDS, STATE_KEYFRAME_FIELDS } from './cameraStageTimelineFields'
 import { TRAJECTORY_FIELDS } from './cameraStageTrajectoryFields'
 import { calculateStageObjectBounds } from './sceneAnalysis'
 
@@ -119,12 +119,18 @@ function property(
 }
 
 const STRING = { kind: 'string', maxLength: 500 } as const
+
+/** 3.2：camera_stage.project 就是一份镜头参考文档，文档本身的管理全部归通用文档能力。 */
+const PROJECT_NAME_READ_ONLY = '名称就是镜头参考文档的文件名：改名用 change_application_entities 写 documents.document.name（同一个 id）。'
+const PROJECT_WRITE_EXCLUSION = 'camera_stage.project 就是一份镜头参考文档（id 即文档 ID），本身只读：改名写 documents.document.name；'
+  + '移动、创建副本、移到回收站用 move_document / duplicate_document / trash_document；新建用 create_document（kind=camera_stage）。'
+  + '场景内容经 camera_stage.scene 及其对象、摄像机、状态关键帧等子实体写入。'
 const INTEGER = { kind: 'integer', hardRange: { min: 0 } } as const
 const VECTOR3 = { kind: 'vector3', unit: 'scene_unit' } as const
 
 const propertiesByEntity: Record<EntityType, ApplicationPropertyDescriptor[]> = {
   [ENTITY_TYPES.project]: [
-    ...fieldDescriptors(PROJECT_FIELDS),
+    property(ENTITY_TYPES.project, 'name', '名称', STRING, { readOnly: PROJECT_NAME_READ_ONLY }),
     property(ENTITY_TYPES.project, 'object_count', '对象数量', INTEGER, { readOnly: '对象数量由场景内容计算。' }),
     property(ENTITY_TYPES.project, 'state_keyframe_count', '状态关键帧数量', INTEGER, { readOnly: '数量由状态关键帧集合计算。' }),
   ],
@@ -225,7 +231,7 @@ class CameraStageReflectionProvider implements ApplicationEntityProvider {
   async getPropertyAvailability(ref: ApplicationRef, propertyIds: string[]) {
     const normalizedRef = await this.normalizeRef(ref)
     await this.readProperties(normalizedRef)
-    const snapshot = await cameraStageApplicationService.readSnapshot(cameraStageProjectIdFromRef(normalizedRef))
+    const snapshot = await cameraStageApplicationService.readSnapshot(cameraStageDocumentIdFromRef(normalizedRef))
     const descriptors = new Map(propertiesByEntity[this.entityType].map((item) => [item.id, item]))
     return propertyIds.map((propertyId) => {
       const descriptor = descriptors.get(propertyId)
@@ -245,7 +251,7 @@ class CameraStageReflectionProvider implements ApplicationEntityProvider {
   }
 
   async getCollectionAvailability(parent: ApplicationRef) {
-    const snapshot = await cameraStageApplicationService.readSnapshot(cameraStageProjectIdFromRef(parent))
+    const snapshot = await cameraStageApplicationService.readSnapshot(cameraStageDocumentIdFromRef(parent))
     return cameraStageCollectionAvailability(this.entityType, parent, snapshot, this.readRevision())
   }
 
@@ -333,7 +339,7 @@ class CameraStageReflectionProvider implements ApplicationEntityProvider {
 
   private projectProperties(snapshot: CameraStageProjectSnapshot): Record<string, JsonValue> {
     return {
-      ...fieldReadValues(PROJECT_FIELDS, snapshot),
+      [`${ENTITY_TYPES.project}.name`]: snapshot.name,
       [`${ENTITY_TYPES.project}.object_count`]: snapshot.objects.length,
       [`${ENTITY_TYPES.project}.state_keyframe_count`]: snapshot.stateKeyframes.length,
     }
@@ -394,7 +400,7 @@ class CameraStageReflectionProvider implements ApplicationEntityProvider {
 }
 
 const ENTITY_META: Record<EntityType, { title: string; description: string; parents: EntityType[]; queryIds: string[] }> = {
-  [ENTITY_TYPES.project]: { title: '三维工程', description: '可持久化的三维场景与运镜工程。', parents: [], queryIds: ['get_camera_stage_project'] },
+  [ENTITY_TYPES.project]: { title: '镜头参考文档', description: '一份镜头参考文档（.henji-stage）里的三维场景与运镜；id 即文档 ID。', parents: [], queryIds: ['observe_camera_stage_scene'] },
   [ENTITY_TYPES.scene]: { title: '三维场景', description: '工程中的对象、活动摄像机和状态关键帧集合。', parents: [ENTITY_TYPES.project], queryIds: ['observe_camera_stage_scene'] },
   [ENTITY_TYPES.object]: { title: '三维对象', description: '基础几何体或角色对象。', parents: [ENTITY_TYPES.scene], queryIds: ['observe_camera_stage_scene'] },
   [ENTITY_TYPES.camera]: { title: '三维摄像机', description: '具有取景、注视和轨迹控制的摄像机。', parents: [ENTITY_TYPES.scene], queryIds: ['observe_camera_stage_scene'] },
@@ -420,6 +426,7 @@ export function createCameraStageReflectionRegistrations(readRevision: RevisionR
         revisionScopes: [REVISION_SCOPE],
         queryCapabilityIds: meta.queryIds,
         schemaRef: schemaRef('entity', entityType),
+        ...(entityType === ENTITY_TYPES.project ? { writeExclusion: { reason: PROJECT_WRITE_EXCLUSION } } : {}),
         ...(entityType === ENTITY_TYPES.stateKeyframe ? {
           collectionWrite: {
             creatable: true,

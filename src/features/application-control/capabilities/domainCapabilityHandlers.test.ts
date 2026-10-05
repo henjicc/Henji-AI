@@ -12,17 +12,11 @@ const mocks = vi.hoisted(() => ({
   listToolboxTools: vi.fn(),
   cameraAdapter: {
     applyCameraStageCameraMove: vi.fn(),
-    createCameraStageProject: vi.fn(),
     deleteCameraStageObject: vi.fn(),
-    deleteCameraStageProject: vi.fn(),
     duplicateCameraStageObject: vi.fn(),
-    getCameraStageProject: vi.fn(),
-    listCameraStageProjects: vi.fn(),
     observeCameraStagePreview: vi.fn(),
     observeCameraStageScene: vi.fn(),
-    openCameraStageProject: vi.fn(),
     placeCameraStageObject: vi.fn(),
-    renameCameraStageProject: vi.fn(),
     updateCameraStageObject: vi.fn(),
     verifyCameraStage: vi.fn(),
   },
@@ -35,6 +29,7 @@ const mocks = vi.hoisted(() => ({
   },
   selectToolboxTool: vi.fn(),
   openApplicationSurface: vi.fn(),
+  openCameraStageDocument: vi.fn(),
   createImageEditPreviewFromRef: vi.fn(),
 }))
 
@@ -51,6 +46,7 @@ vi.mock('@/features/toolbox/application/toolboxApplicationService', () => ({
 }))
 vi.mock('@/features/cameraStage/application/cameraStageCapabilityAdapter', () => mocks.cameraAdapter)
 vi.mock('@/features/cameraStage/application/cameraStageRenderCapabilityAdapter', () => mocks.cameraRenderAdapter)
+vi.mock('@/features/cameraStage/projects/cameraStageProjectService', () => ({ openCameraStageDocument: mocks.openCameraStageDocument }))
 vi.mock('@/stores/navigationStore', () => ({ selectToolboxTool: mocks.selectToolboxTool }))
 vi.mock('@/features/navigation/application/surfaceCapabilityService', () => ({ openApplicationSurface: mocks.openApplicationSurface }))
 vi.mock('@/features/imageEdit/application/imageSourceCapabilityService', () => ({
@@ -59,6 +55,8 @@ vi.mock('@/features/imageEdit/application/imageSourceCapabilityService', () => (
 
 import type { CapabilityHandler } from '@/features/application-control/capabilities/handlerTypes'
 import { registerToolboxCapabilityHandlers } from '@/features/toolbox/application/registerToolboxCapabilityHandlers'
+import { getDocumentOperations } from '@/features/documents/documentOperations'
+import type { DocumentSummary } from '@/core/documents/types'
 
 const context = { signal: new AbortController().signal }
 
@@ -76,59 +74,27 @@ describe('toolbox capability handlers', () => {
     mocks.openApplicationSurface.mockImplementation((surfaceId: string) => ({ surfaceId }))
   })
 
-  it('打开 3D 工程成功后才进入已注册的 3D Surface', async () => {
-    mocks.cameraAdapter.openCameraStageProject.mockResolvedValue({
-      projectId: 'project-1',
-      name: '镜头工程',
-      objectCount: 2,
-      stateKeyframeCount: 1,
-    })
-    const handler = registeredHandlers().get('open_camera_stage_project')
+  it('镜头参考登记了通用打开方式：文档打开成功后才进入 3D Surface；失败时不切换界面', async () => {
+    registeredHandlers()
+    const document = { id: 'stage-1', kind: 'camera_stage', path: '/work/镜头参考/a.henji-stage' } as DocumentSummary
+    expect(getDocumentOperations().canOpen('camera_stage')).toBe(true)
+    mocks.openCameraStageDocument.mockResolvedValue(undefined)
+    await getDocumentOperations().openDocument(document)
+    expect(mocks.openCameraStageDocument).toHaveBeenCalledWith({ id: 'stage-1', path: '/work/镜头参考/a.henji-stage' })
+    expect(mocks.openApplicationSurface).toHaveBeenCalledWith('tool.camera_stage')
+    expect(mocks.openCameraStageDocument.mock.invocationCallOrder[0]).toBeLessThan(mocks.openApplicationSurface.mock.invocationCallOrder[0])
 
-    const result = await handler?.({ projectId: 'project-1' }, context)
-
-    expect(mocks.cameraAdapter.openCameraStageProject).toHaveBeenCalledWith('project-1')
-    expect(mocks.openApplicationSurface).toHaveBeenCalledWith('tool.camera_stage', context)
-    expect(result).toMatchObject({ projectId: 'project-1', surfaceId: 'tool.camera_stage' })
-    expect(
-      mocks.cameraAdapter.openCameraStageProject.mock.invocationCallOrder[0]
-    ).toBeLessThan(mocks.openApplicationSurface.mock.invocationCallOrder[0])
-  })
-
-  it('3D 工程加载失败时不提前切换界面', async () => {
-    mocks.cameraAdapter.openCameraStageProject.mockRejectedValue(new Error('NOT_FOUND'))
-    const handler = registeredHandlers().get('open_camera_stage_project')
-
-    await expect(handler?.({ projectId: 'missing' }, context)).rejects.toThrow('NOT_FOUND')
+    mocks.openApplicationSurface.mockClear()
+    mocks.openCameraStageDocument.mockRejectedValue(new Error('NOT_FOUND'))
+    await expect(getDocumentOperations().openDocument(document)).rejects.toThrow('NOT_FOUND')
     expect(mocks.openApplicationSurface).not.toHaveBeenCalled()
   })
 
-  it('创建 3D 工程只返回稳定工程结果，不抢占当前界面', async () => {
-    mocks.cameraAdapter.createCameraStageProject.mockResolvedValue({
-      projectId: 'project-created',
-      name: '后台工程',
-      defaultCameraId: 'camera-1',
-      defaultStateKeyframeId: 'state-keyframe-1',
-      resultRefs: [
-        { kind: 'camera_stage.project', id: 'project-created' },
-        { kind: 'camera_stage.camera', id: 'project-created:camera-1' },
-        { kind: 'camera_stage.state_keyframe', id: 'project-created:state-keyframe-1' },
-      ],
-    })
-    const handler = registeredHandlers().get('create_camera_stage_project')
-
-    const result = await handler?.({ name: '后台工程' }, context)
-
-    expect(result).toMatchObject({
-      projectId: 'project-created',
-      name: '后台工程',
-      resultRefs: [
-        { kind: 'camera_stage.project', id: 'project-created' },
-        { kind: 'camera_stage.camera', id: 'project-created:camera-1' },
-        { kind: 'camera_stage.state_keyframe', id: 'project-created:state-keyframe-1' },
-      ],
-    })
-    expect(mocks.openApplicationSurface).not.toHaveBeenCalled()
+  it('镜头参考不再有自己的项目管理能力（列出、新建、打开、改名、删除走通用文档能力）', () => {
+    const handlers = registeredHandlers()
+    for (const id of ['list_camera_stage_projects', 'get_camera_stage_project', 'open_camera_stage_project', 'create_camera_stage_project', 'rename_camera_stage_project', 'delete_camera_stage_project']) {
+      expect(handlers.has(id), id).toBe(false)
+    }
   })
 
   it('3D 输出任务处理器委托共享服务并保持稳定任务引用', async () => {

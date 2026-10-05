@@ -3,8 +3,8 @@ import '@/tests/cameraStageProjectFixture'
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 
-import { createStoredCameraStageProject, deleteProject as deleteStageProject, loadProjectIntoScene } from '@/features/cameraStage/projects/cameraStageProjectService'
-import { findCameraStageProjectInstance } from '@/features/cameraStage/application/cameraStageProjectRuntime'
+import { createNamedCameraStageDocument, loadProjectIntoScene } from '@/features/cameraStage/projects/cameraStageProjectService'
+import { findCameraStageProjectInstance, leaveCameraStageProject } from '@/features/cameraStage/application/cameraStageProjectRuntime'
 import { findCanvasProjectInstance } from '@/features/canvas/application/canvasProjectInstances'
 import { applyCameraStageRenderTask, resetCameraStageRenderTasksForTests, startCameraStageNodeRender } from '@/features/canvas/application/cameraStageRenderApplicationService'
 import { createCameraStageRenderTaskRef } from '@/features/cameraStage/application/cameraStageRenderCapabilityAdapter'
@@ -93,7 +93,7 @@ afterEach(async () => {
 it('公共应用入口 共用后台任务完成判据并只取消活动任务', async () => {
   const registry = new CameraStageRenderTaskRegistry()
   installTaskRegistryBridge(registry)
-  const stage = await createStoredCameraStageProject('助手后台镜头')
+  const stage = await createNamedCameraStageDocument('助手后台镜头')
   const canvasProjectId = await useProjectStore.getState().createProject('助手后台输出')
   const source: CanvasNode = {
     id: 'camera-node',
@@ -155,10 +155,10 @@ it('公共应用入口 共用后台任务完成判据并只取消活动任务', 
   expect(registry.require(secondTask, OWNER_ID)?.status).toBe('cancelled')
 })
 
-it.each(['canvas', 'cameraStage'] as const)('A 页面后台渲染 B，打开 B 不接管任务，删除 %s 等待原结果保存', async deleteTarget => {
+it.each(['canvas', 'cameraStage'] as const)('A 页面后台渲染 B，打开 B 不接管任务，删除画布 / 离开镜头参考（%s）等待原结果保存', async deleteTarget => {
   const registry = new CameraStageRenderTaskRegistry()
   installTaskRegistryBridge(registry)
-  const stage = await createStoredCameraStageProject('后台 B 场景')
+  const stage = await createNamedCameraStageDocument('后台 B 场景')
   const projectId = await useProjectStore.getState().createProject('后台 B 画布')
   useCanvasStore.getState().setCanvasData([{
     id: 'camera-node', type: CANVAS_NODE_TYPES.cameraStage, position: { x: 0, y: 0 },
@@ -169,7 +169,7 @@ it.each(['canvas', 'cameraStage'] as const)('A 页面后台渲染 B，打开 B �
   const stageInstance = findCameraStageProjectInstance(stage.id)!
   const visibleId = await useProjectStore.getState().createProject('用户编辑 A')
   const descriptor = await startCameraStageNodeRender('camera-node', 'image', {
-    expectedOwner: { canvasProjectId: projectId, cameraStageProjectId: stage.id },
+    expectedOwner: { canvasProjectId: projectId, cameraStageDocumentId: stage.id },
   })
   expect(descriptor).not.toBeNull()
   expect(useProjectStore.getState().currentProjectId).toBe(visibleId)
@@ -182,7 +182,7 @@ it.each(['canvas', 'cameraStage'] as const)('A 页面后台渲染 B，打开 B �
   expect(findCameraStageProjectInstance(stage.id)).toBe(stageInstance)
   await harness.requireResult('open_canvas_project', { projectId: visibleId })
   let deleted = false
-  const deleting = (deleteTarget === 'canvas' ? useProjectStore.getState().deleteProject(projectId) : deleteStageProject(stage.id))
+  const deleting = (deleteTarget === 'canvas' ? useProjectStore.getState().deleteProject(projectId) : leaveCameraStageProject(stage.id))
     .then(() => { deleted = true })
   await Promise.resolve()
   expect(deleted).toBe(false)
@@ -204,7 +204,7 @@ it('后台三维等待和恢复共用原任务，保存失败后重试只落一�
   const registry = new CameraStageRenderTaskRegistry()
   const register = vi.spyOn(registry, 'register')
   installTaskRegistryBridge(registry)
-  const stage = await createStoredCameraStageProject('恢复原三维')
+  const stage = await createNamedCameraStageDocument('恢复原三维')
   const projectId = await useProjectStore.getState().createProject('后台 B')
   useCanvasStore.getState().setCanvasData([{
     id: 'camera-node', type: CANVAS_NODE_TYPES.cameraStage, position: { x: 0, y: 0 },

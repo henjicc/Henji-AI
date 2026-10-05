@@ -11,7 +11,7 @@ import { useProjectStore } from '@/stores/projectStore'
 import { requireCanvasProjectInstance } from '@/features/canvas/application/canvasProjectInstances'
 import { CANVAS_NODE_TYPES } from '@/features/canvas/domain/canvasNodes'
 import { subscribeHostContext } from '@/features/application-control/hostContext/hostContext'
-import { createStoredCameraStageProject } from '@/features/cameraStage/projects/cameraStageProjectService'
+import { createNamedCameraStageDocument } from '@/features/cameraStage/projects/cameraStageProjectService'
 import { cameraStageProjectStore } from '@/features/cameraStage/application/cameraStageProjectRuntime'
 
 beforeEach(installHarnessNativeStorage)
@@ -22,7 +22,7 @@ it('工程、文档与设置资源目录通过正式注册表读取，后台修�
   await useProjectStore.getState().hydrate()
   const visibleId = await useProjectStore.getState().createProject('编辑 A')
   const backgroundId = await useProjectStore.getState().createProject('后台 B', { attach: false })
-  const stage = await createStoredCameraStageProject('后台三维')
+  const stage = await createNamedCameraStageDocument('后台三维')
   let notifications = 0
   const detach = subscribeHostContext(() => { notifications++ })
   try {

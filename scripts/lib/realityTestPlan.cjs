@@ -7,7 +7,7 @@ const path = require('node:path')
  * 两者都不产生付费请求，也不碰用户真实资料目录。
  */
 const SUITES = Object.freeze(['unit', 'integration', 'ui', 'ui-audit', 'restart', 'clients'])
-const RESTART_TARGETS = Object.freeze(['mcp', 'video-edit-layout'])
+const RESTART_TARGETS = Object.freeze(['mcp', 'video-edit-layout', 'camera-stage-documents'])
 
 function readValue(argv, index, option) {
   const value = argv[index + 1]
@@ -126,7 +126,11 @@ function buildRealityTestPlan(options, root) {
       const args = [path.join(root, 'scripts/mcp-restart-check.cjs')]
       if (options.only.length) args.push('--only', target)
       if (options.outDir) args.push('--out', options.outDir)
-      plans.push({ label: target === 'video-edit-layout' ? '剪辑布局完整退出重启恢复验收' : '应用完整退出重启后的外部连接事实核对', command: process.execPath, args })
+      const labels = {
+        'video-edit-layout': '剪辑布局完整退出重启恢复验收',
+        'camera-stage-documents': '镜头参考文档（草稿、离开提示、重启、右键操作）真实验收',
+      }
+      plans.push({ label: labels[target] ?? '应用完整退出重启后的外部连接事实核对', command: process.execPath, args })
     } else if (suite === 'clients') {
       const args = [path.join(root, 'scripts/mcp-external-client-check.cjs')]
       for (const value of options.only) args.push('--client', value)

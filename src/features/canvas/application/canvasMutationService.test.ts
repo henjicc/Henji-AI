@@ -105,7 +105,7 @@ describe('画布清空与解散分组', () => {
       const renderTask = {
         version: 1 as const,
         requestId: 'request-1', canvasProjectId: projectId, nodeId,
-        cameraStageProjectId: 'stage-1', resolutionPreset: '720p' as const, outputKind: 'image' as const,
+        cameraStageDocumentId: 'stage-1', resolutionPreset: '720p' as const, outputKind: 'image' as const,
       }
       useCanvasStore.getState().updateNodeData(nodeId, { renderTask })
 
@@ -122,7 +122,7 @@ describe('画布清空与解散分组', () => {
       const renderTask = {
         version: 1 as const,
         requestId: 'request-batch-success', canvasProjectId: projectId, nodeId,
-        cameraStageProjectId: 'stage-1', resolutionPreset: '720p' as const, outputKind: 'image' as const,
+        cameraStageDocumentId: 'stage-1', resolutionPreset: '720p' as const, outputKind: 'image' as const,
       }
       useCanvasStore.getState().updateNodeData(nodeId, { renderTask })
 
@@ -152,7 +152,7 @@ describe('画布清空与解散分组', () => {
       const renderTask = {
         version: 1 as const,
         requestId: 'request-batch-rollback', canvasProjectId: projectId, nodeId,
-        cameraStageProjectId: 'stage-1', resolutionPreset: '720p' as const, outputKind: 'image' as const,
+        cameraStageDocumentId: 'stage-1', resolutionPreset: '720p' as const, outputKind: 'image' as const,
       }
       useCanvasStore.getState().updateNodeData(nodeId, { renderTask })
 
@@ -173,7 +173,7 @@ describe('画布清空与解散分组', () => {
       const nodeId = String(created.nodeId)
       useCanvasStore.getState().updateNodeData(nodeId, { renderTask: {
         version: 1, requestId: 'request-save-failed', canvasProjectId: projectId, nodeId,
-        cameraStageProjectId: 'stage-1', resolutionPreset: '720p', outputKind: 'image',
+        cameraStageDocumentId: 'stage-1', resolutionPreset: '720p', outputKind: 'image',
       } })
       vi.mocked(upsertProjectRecord).mockRejectedValueOnce(new Error('disk full'))
 
@@ -193,7 +193,7 @@ describe('画布清空与解散分组', () => {
       const nodeId = String(created.nodeId)
       useCanvasStore.getState().updateNodeData(nodeId, { renderTask: {
         version: 1, requestId: 'request-cancel-failed', canvasProjectId: projectId, nodeId,
-        cameraStageProjectId: 'stage-1', resolutionPreset: '720p', outputKind: 'image',
+        cameraStageDocumentId: 'stage-1', resolutionPreset: '720p', outputKind: 'image',
       } })
       cancelCameraStageNodeTasks.mockRejectedValueOnce(new Error('ipc unavailable'))
 

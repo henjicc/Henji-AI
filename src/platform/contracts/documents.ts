@@ -54,6 +54,8 @@ export interface DocumentsPlatform {
   trashDocument(target: DocumentTarget): Promise<void>
   /** 只删除内容为空的草稿；不是空草稿时报 DocumentNotEmptyError。 */
   deleteEmptyDraft(target: DocumentTarget): Promise<void>
+  /** 从列表移除找不到文件的文档（只改作品索引，不动磁盘）；文件还在时报 DocumentLocationError。 */
+  forgetDocument(docId: string): Promise<void>
   revealDocument(target: DocumentTarget): Promise<void>
   resolveDocumentLink(link: DocumentLink): Promise<DocumentLinkResolution>
   /** 名称检查：只在同一个文件夹里查重，返回可用 / 重名 / 非法。 */
@@ -89,6 +91,7 @@ export const DOCUMENT_IPC_CHANNELS = {
   duplicateDocument: 'documents:duplicate',
   trashDocument: 'documents:trash',
   deleteEmptyDraft: 'documents:deleteEmptyDraft',
+  forgetDocument: 'documents:forget',
   revealDocument: 'documents:reveal',
   resolveDocumentLink: 'documents:resolveLink',
   checkName: 'documents:checkName',

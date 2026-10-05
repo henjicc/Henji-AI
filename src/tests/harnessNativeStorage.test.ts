@@ -33,7 +33,7 @@ describe('harness 内存 native 替身', () => {
     const native = (window as unknown as { henjiNative: Record<string, unknown> }).henjiNative
     expect(() => native.db).toThrowError(/henjiNative\.db 没有实现/)
     // 抛的错要能自纠：说清替身装了什么，以及该去哪里补。
-    expect(() => native.canvasProjects).toThrowError(/assetLibrary、cameraStageProjects、storyboardProjects/)
+    expect(() => native.canvasProjects).toThrowError(/assetLibrary、storyboardProjects/)
     expect(() => native.canvasProjects).toThrowError(/harnessNativeStorage\.ts/)
   })
 
@@ -61,17 +61,14 @@ describe('harness 内存 native 替身', () => {
     expect(await assetLibrary.listLibraries()).toEqual([])
   })
 
-  it('3D 工程 upsert 保留首次创建时间，与主进程的 ON CONFLICT 语义一致', async () => {
-    const projects = getPlatform().cameraStageProjects
-    await projects.upsertProjectRecord({
-      id: 'p1', name: '一', createdAt: 100, updatedAt: 100, objectCount: 0, sceneJson: '{}',
-    })
-    await projects.upsertProjectRecord({
-      id: 'p1', name: '二', createdAt: 900, updatedAt: 900, objectCount: 2, sceneJson: '{"a":1}',
-    })
-    expect(await projects.getProjectRecord('p1')).toMatchObject({
-      name: '二', createdAt: 100, updatedAt: 900, objectCount: 2,
-    })
+  it('镜头参考文档经真实电子适配器新建、保存并回读（3.2 起走通用文档）', async () => {
+    const documents = getPlatform().documents
+    const created = await documents.createDocument({ kind: 'camera_stage', container: { kind: 'user' }, name: '替身镜头' })
+    expect(created.meta).toMatchObject({ kind: 'camera_stage', name: '替身镜头', draft: false })
+    expect(created.content).toEqual({ objects: [], activeCameraId: null, sceneSettings: {}, stateKeyframes: [] })
+    const content = { objects: [{ id: 'cam', type: 'camera', name: '摄像机01' }], activeCameraId: 'cam', sceneSettings: {}, stateKeyframes: [] }
+    await documents.saveDocument({ target: { id: created.meta.id }, expectedRevision: created.meta.revision, content })
+    expect((await documents.readDocument({ id: created.meta.id })).content).toEqual(content)
   })
 
   it('画布工程可经真实电子适配器写入并回读', async () => {
@@ -87,13 +84,11 @@ describe('harness 内存 native 替身', () => {
   })
 
   it('交出的是副本，不是内部引用——真 IPC 上这一跳会做结构化克隆', async () => {
-    const projects = getPlatform().cameraStageProjects
-    await projects.upsertProjectRecord({
-      id: 'p2', name: '原名', createdAt: 1, updatedAt: 1, objectCount: 0, sceneJson: '{}',
-    })
-    const record = await projects.getProjectRecord('p2')
-    record!.name = '被调用方改掉了'
-    expect((await projects.getProjectRecord('p2'))!.name).toBe('原名')
+    const documents = getPlatform().documents
+    const created = await documents.createDocument({ kind: 'camera_stage', container: { kind: 'user' }, name: '原名' })
+    const read = await documents.readDocument({ id: created.meta.id })
+    read.meta.name = '被调用方改掉了'
+    expect((await documents.readDocument({ id: created.meta.id })).meta.name).toBe('原名')
   })
 
   it('图片文档保存执行存储 CAS，失败不替换已存快照，重试可保存最新内容', async () => {

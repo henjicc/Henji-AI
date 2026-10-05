@@ -16,6 +16,7 @@ export function createDocumentsApi(invoke: NativeInvoke): DocumentsPlatform {
     duplicateDocument: (request) => invoke(c.duplicateDocument, request),
     trashDocument: (target) => invoke(c.trashDocument, target),
     deleteEmptyDraft: (target) => invoke(c.deleteEmptyDraft, target),
+    forgetDocument: (docId) => invoke(c.forgetDocument, { docId }),
     revealDocument: (target) => invoke(c.revealDocument, target),
     resolveDocumentLink: (link) => invoke(c.resolveDocumentLink, link),
     checkName: (request) => invoke(c.checkName, request),

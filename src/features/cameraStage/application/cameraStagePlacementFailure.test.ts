@@ -1,16 +1,5 @@
-import { loadCameraStageTestProject } from '@/tests/cameraStageProjectFixture'
+import { cameraStageTestDocuments, loadCameraStageTestProject } from '@/tests/cameraStageProjectFixture'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-
-const mocks = vi.hoisted(() => ({
-  writeProject: vi.fn().mockResolvedValue(undefined),
-  loadProjectIntoScene: vi.fn().mockResolvedValue(true),
-}))
-
-vi.mock('@/commands/cameraStageProjects', () => ({ upsertCameraStageProjectRecord: mocks.writeProject }))
-
-vi.mock('../projects/cameraStageProjectService', () => ({
-  loadProjectIntoScene: mocks.loadProjectIntoScene,
-}))
 
 import { createDefaultAnimation } from '../domain/animationTypes'
 import { createCameraObject, createDefaultSceneSettings, createPrimitiveObject, pickDefaultColor } from '../domain/sceneDefaults'
@@ -28,11 +17,11 @@ import { cameraStageApplicationService } from './cameraStageApplicationService'
  * 于是"事务失败"与"场景已被改动"同时成立——模型据此判断该重试还是该补救，必然判错。
  */
 describe('三维布置失败不留残留', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks()
     const camera = createCameraObject('摄像机01', pickDefaultColor(0))
     const cube = createPrimitiveObject('box', '立方体', pickDefaultColor(1))
-    loadCameraStageTestProject({
+    await loadCameraStageTestProject({
       objects: [camera, cube],
       activeCameraId: camera.id,
       animation: createDefaultAnimation(),
@@ -52,7 +41,7 @@ describe('三维布置失败不留残留', () => {
 
     expect(useCameraStageStore.getState().objects).toHaveLength(before)
     // 没有发生写入，就不该落盘
-    expect(mocks.writeProject).not.toHaveBeenCalled()
+    expect(cameraStageTestDocuments()!.writes).toBe(0)
   })
 
   it('错误信息列出可用 id，模型才有可能自我修正', async () => {

@@ -45,7 +45,7 @@ const identity = {
   canvasProjectId: 'canvas-1',
   nodeId: 'stage-node',
   requestId: 'camera-stage-capability:tool-call-1',
-  cameraStageProjectId: 'stage-1',
+  cameraStageDocumentId: 'stage-1',
   resolutionPreset: '1080p' as const,
   outputKind: 'image' as const,
   selectedTimeSec: 1.25,
@@ -90,7 +90,7 @@ describe('cameraStageRenderCapabilityAdapter', () => {
       requestId: options.requestId,
       canvasProjectId: 'canvas-1',
       nodeId: 'stage-node',
-      cameraStageProjectId: 'stage-1',
+      cameraStageDocumentId: 'stage-1',
       resolutionPreset: options.resolutionPreset,
       outputKind,
       selectedTimeSec: options.selectedTimeSec,
@@ -125,7 +125,7 @@ describe('cameraStageRenderCapabilityAdapter', () => {
       canvasProjectId: '388d76c8-c141-4d2b-8b95-31d237dc42ae',
       nodeId: 'a7130971-bad8-4f6e-9fd3-9f9ea378cb02',
       requestId: 'camera-stage-capability:call_5d07865f-1f4a-4ead-82d5-99fd697960de',
-      cameraStageProjectId: '1e794d44-f753-4ac2-842b-4a4946878021',
+      cameraStageDocumentId: '1e794d44-f753-4ac2-842b-4a4946878021',
       resolutionPreset: '1080p',
       outputKind: 'video',
     })
@@ -141,7 +141,7 @@ describe('cameraStageRenderCapabilityAdapter', () => {
       requestId: 'camera-stage-capability:tool-call-1',
       resolutionPreset: '1080p',
       selectedTimeSec: 1.25,
-      expectedOwner: { canvasProjectId: 'canvas-1', cameraStageProjectId: 'stage-1' },
+      expectedOwner: { canvasProjectId: 'canvas-1', cameraStageDocumentId: 'stage-1' },
     })
     expect(parseCameraStageRenderTaskRef(result.taskRef as ReturnType<typeof createCameraStageRenderTaskRef>))
       .toEqual(identity)
@@ -171,7 +171,7 @@ describe('cameraStageRenderCapabilityAdapter', () => {
     finishRead()
 
     await expect(rendering).resolves.toMatchObject({ status: 'submitted' })
-    expect(mocks.start).toHaveBeenCalledWith('stage-node', 'image', expect.objectContaining({ expectedOwner: { canvasProjectId: 'canvas-1', cameraStageProjectId: 'stage-1' } }))
+    expect(mocks.start).toHaveBeenCalledWith('stage-node', 'image', expect.objectContaining({ expectedOwner: { canvasProjectId: 'canvas-1', cameraStageDocumentId: 'stage-1' } }))
   })
 
   it('does not submit after the source node is rebound during the persisted-result lookup', async () => {

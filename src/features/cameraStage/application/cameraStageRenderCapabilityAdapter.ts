@@ -53,7 +53,7 @@ export function createCameraStageRenderTaskRef(
     identity.canvasProjectId,
     identity.nodeId,
     identity.requestId,
-    identity.cameraStageProjectId,
+    identity.cameraStageDocumentId,
     identity.resolutionPreset,
     identity.outputKind,
     identity.selectedTimeSec ?? null,
@@ -89,7 +89,7 @@ export function parseCameraStageRenderTaskRef(
       canvasProjectId: requireString(parsed[0]),
       nodeId: requireString(parsed[1]),
       requestId: requireString(parsed[2]),
-      cameraStageProjectId: requireString(parsed[3]),
+      cameraStageDocumentId: requireString(parsed[3]),
       resolutionPreset,
       outputKind,
       ...(selectedTimeSec === null ? {} : { selectedTimeSec }),
@@ -106,7 +106,7 @@ function requestIdFor(context: CapabilityExecutionContext): string {
 
 async function requireCurrentTarget(input: RenderTargetInput): Promise<{
   nodeId: string
-  cameraStageProjectId: string | null
+  cameraStageDocumentId: string | null
   selectedTimeSec: number | undefined
 }> {
   const projectId = input.projectRef.id
@@ -120,7 +120,7 @@ async function requireCurrentTarget(input: RenderTargetInput): Promise<{
   if (!node || !isCameraStageNode(node)) throw new Error('INVALID_INPUT:目标节点不是 3D 镜头参考节点')
   return {
     nodeId,
-    cameraStageProjectId: node.data.projectId,
+    cameraStageDocumentId: node.data.projectId,
     selectedTimeSec: input.outputKind === 'image'
       ? input.selectedTimeSec ?? node.data.selectedTimeSec
       : undefined,
@@ -133,7 +133,7 @@ async function requireUnchangedTarget(
 ): Promise<void> {
   const current = await requireCurrentTarget(input)
   if (current.nodeId !== expected.nodeId
-    || current.cameraStageProjectId !== expected.cameraStageProjectId
+    || current.cameraStageDocumentId !== expected.cameraStageDocumentId
     || current.selectedTimeSec !== expected.selectedTimeSec) {
     throw new Error('CONFLICT:目标 3D 镜头节点已经变化，请重新读取节点后再输出')
   }
@@ -153,7 +153,7 @@ function parseCompletionReceipt(value: unknown): RenderTaskIdentity {
     || typeof receipt.requestId !== 'string'
     || typeof receipt.canvasProjectId !== 'string'
     || typeof receipt.nodeId !== 'string'
-    || typeof receipt.cameraStageProjectId !== 'string'
+    || typeof receipt.cameraStageDocumentId !== 'string'
     || (receipt.resolutionPreset !== '720p' && receipt.resolutionPreset !== '1080p')
     || (receipt.outputKind !== 'image' && receipt.outputKind !== 'video')
     || (receipt.outputKind === 'video' && receipt.selectedTimeSec !== undefined)
@@ -168,7 +168,7 @@ function sameRequest(left: RenderTaskIdentity, right: RenderTaskIdentity): boole
   return left.requestId === right.requestId
     && left.canvasProjectId === right.canvasProjectId
     && left.nodeId === right.nodeId
-    && left.cameraStageProjectId === right.cameraStageProjectId
+    && left.cameraStageDocumentId === right.cameraStageDocumentId
     && left.resolutionPreset === right.resolutionPreset
     && left.outputKind === right.outputKind
     && (left.selectedTimeSec ?? null) === (right.selectedTimeSec ?? null)
@@ -283,7 +283,7 @@ export async function renderCameraStageOutput(
     requestId,
     canvasProjectId: input.projectRef.id,
     nodeId: target.nodeId,
-    cameraStageProjectId: target.cameraStageProjectId ?? GENERATED_PROJECT_ID_PLACEHOLDER,
+    cameraStageDocumentId: target.cameraStageDocumentId ?? GENERATED_PROJECT_ID_PLACEHOLDER,
     resolutionPreset: input.resolutionPreset,
     outputKind: input.outputKind,
     ...(target.selectedTimeSec === undefined ? {} : { selectedTimeSec: target.selectedTimeSec }),
@@ -293,9 +293,9 @@ export async function renderCameraStageOutput(
   const existing = await readPersistedCompletion(input.projectRef.id, requestId)
   await requireUnchangedTarget(input, target)
   if (existing) {
-    const expected = target.cameraStageProjectId
+    const expected = target.cameraStageDocumentId
       ? requestedIdentity
-      : { ...requestedIdentity, cameraStageProjectId: existing.identity.cameraStageProjectId }
+      : { ...requestedIdentity, cameraStageDocumentId: existing.identity.cameraStageDocumentId }
     if (!sameRequest(existing.identity, expected)) {
       throw new Error(
         `CONFLICT:同一能力调用已经提交为${requestShape(existing.identity)}；`
@@ -312,13 +312,13 @@ export async function renderCameraStageOutput(
     selectedTimeSec: target.selectedTimeSec,
     expectedOwner: {
       canvasProjectId: input.projectRef.id,
-      cameraStageProjectId: target.cameraStageProjectId,
+      cameraStageDocumentId: target.cameraStageDocumentId,
     },
   })
   const submittedIdentity: RenderTaskIdentity | null = task ? { ...task } : null
-  const expected = target.cameraStageProjectId
+  const expected = target.cameraStageDocumentId
     ? requestedIdentity
-    : submittedIdentity && { ...requestedIdentity, cameraStageProjectId: submittedIdentity.cameraStageProjectId }
+    : submittedIdentity && { ...requestedIdentity, cameraStageDocumentId: submittedIdentity.cameraStageDocumentId }
   if (!submittedIdentity || !expected || !sameRequest(submittedIdentity, expected)) {
     const existingShape = submittedIdentity ? requestShape(submittedIdentity) : '另一项输出'
     throw new Error(

@@ -8,7 +8,7 @@ import {
 } from '../services/project-covers'
 import { parseRecord, registerIpcHandler } from './registry'
 
-const SCOPES: ProjectCoverScope[] = ['canvas', 'camera-stage']
+const SCOPES: ProjectCoverScope[] = ['canvas']
 const SOURCE_KINDS: ProjectCoverSourceKind[] = ['image', 'video']
 
 function parseSaveCoverPayload(input: unknown): SaveProjectCoverPayloadDto {

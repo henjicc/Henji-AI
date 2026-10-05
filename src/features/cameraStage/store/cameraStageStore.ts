@@ -793,7 +793,8 @@ export const createCameraStageStore = () => {
       },
     },
   ),
-  ['objects', 'animation', 'stateKeyframes', 'sceneSettings', 'activeCameraId', 'currentProjectName'],
+  // 名称是文档文件名，由文档会话同步（bindProject），不属于受写入屏障保护的场景内容
+  ['objects', 'animation', 'stateKeyframes', 'sceneSettings', 'activeCameraId'],
   ),
 )
 

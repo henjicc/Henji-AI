@@ -12,7 +12,7 @@
       { "capture": "canvas-projects" },
 
       { "enter": "toolbox" },
-      { "click": { "role": "button", "name": "/^返回项目列表$/" }, "ifPresent": { "role": "button", "name": "/^返回项目列表$/" } },
+      { "click": { "role": "button", "name": "/^返回(项目|镜头参考)列表$/" }, "ifPresent": { "role": "button", "name": "/^返回(项目|镜头参考)列表$/" } },
       { "click": { "role": "button", "name": "/^返回工具$/" }, "ifPresent": { "role": "button", "name": "/^返回工具$/" } },
       { "click": { "role": "button", "name": "/^口播剪辑/" } },
       { "waitFor": { "selector": "[data-project-library-state=\"empty\"]" }, "timeout": 12000 },

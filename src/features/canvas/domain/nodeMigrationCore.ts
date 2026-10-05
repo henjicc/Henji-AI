@@ -133,7 +133,7 @@ export function resetTransientNodeRuntimeState(
     && typeof task.requestId === 'string' && task.requestId.length > 0
     && typeof task.canvasProjectId === 'string' && task.canvasProjectId.length > 0
     && typeof task.nodeId === 'string' && task.nodeId.length > 0
-    && typeof task.cameraStageProjectId === 'string' && task.cameraStageProjectId.length > 0
+    && typeof task.cameraStageDocumentId === 'string' && task.cameraStageDocumentId.length > 0
     && (task.outputKind === 'image' || task.outputKind === 'video')
     && (task.resolutionPreset === '720p' || task.resolutionPreset === '1080p');
   if (hasPendingTask) {

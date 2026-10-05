@@ -6,37 +6,38 @@ export type CameraStageAppView = 'list' | 'editor'
 
 interface CameraStageSessionState {
   appView: CameraStageAppView
-  lastProjectId: string | null
+  /** 上次在编辑器里打开的镜头参考文档 ID（应用重启后恢复用）。 */
+  lastDocumentId: string | null
   stageViewMode: StageViewMode
-  /** 封面写盘完成后自增；工程列表据此重新拉取摘要，避免刚退出时还显示上一张封面 */
-  coverRevision: number
   setAppView: (view: CameraStageAppView) => void
-  setLastProjectId: (projectId: string | null) => void
+  setLastDocumentId: (documentId: string | null) => void
   setStageViewMode: (mode: StageViewMode) => void
-  markCoversChanged: () => void
 }
 
 export const useCameraStageSessionStore = create<CameraStageSessionState>()(
   persist(
     (set) => ({
       appView: 'list',
-      lastProjectId: null,
+      lastDocumentId: null,
       stageViewMode: 'director',
-      coverRevision: 0,
       setAppView: (appView) => set((state) => (state.appView === appView ? state : { appView })),
-      setLastProjectId: (lastProjectId) => set((state) => (
-        state.lastProjectId === lastProjectId ? state : { lastProjectId }
+      setLastDocumentId: (lastDocumentId) => set((state) => (
+        state.lastDocumentId === lastDocumentId ? state : { lastDocumentId }
       )),
       setStageViewMode: (stageViewMode) => set((state) => (
         state.stageViewMode === stageViewMode ? state : { stageViewMode }
       )),
-      markCoversChanged: () => set((state) => ({ coverRevision: state.coverRevision + 1 })),
     }),
     {
       name: 'camera-stage-session',
+      // 3.2 起记的是文档 ID（版本 1 记的是旧工程 ID，丢弃）
+      version: 2,
+      migrate: (): Pick<CameraStageSessionState, 'appView' | 'lastDocumentId' | 'stageViewMode'> => (
+        { appView: 'list', lastDocumentId: null, stageViewMode: 'director' }
+      ),
       partialize: (state) => ({
         appView: state.appView,
-        lastProjectId: state.lastProjectId,
+        lastDocumentId: state.lastDocumentId,
         stageViewMode: state.stageViewMode,
       }),
     },

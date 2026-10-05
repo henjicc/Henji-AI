@@ -60,10 +60,12 @@ function ensureReadStatement(sql: string): void {
 }
 
 /**
- * 即将被文档文件取代的工程表（画布两张、镜头参考、口播及其任务表）。
+ * 即将被文档文件取代的工程表（画布两张、口播及其任务表）。
  *
  * 它们不进迁移账本，结构保持 2.3 之前的样子（`IF NOT EXISTS` + 补列）；
- * 3.x 各工具接入文档文件时连同这里的定义一起删除（删除前先备份 henji.db），不迁移内容（重要记录 008）。
+ * 3.x 各工具接入文档文件时连同这里的定义一起删除，并在迁移账本追加一项退役迁移删表
+ * （legacy-project-tables.ts，有数据时账本先备份 henji.db），不迁移内容（重要记录 008）。
+ * 镜头参考已在 3.2 退役（账本第 15 项）。
  */
 export function initializeLegacyProjectTables(conn: Database.Database): void {
   conn.exec(`
@@ -83,19 +85,6 @@ export function initializeLegacyProjectTables(conn: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_storyboard_projects_updated_at
       ON storyboard_projects(updated_at DESC);
 
-    CREATE TABLE IF NOT EXISTS camera_stage_projects (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      created_at INTEGER NOT NULL,
-      updated_at INTEGER NOT NULL,
-      object_count INTEGER NOT NULL DEFAULT 0,
-      scene_json TEXT NOT NULL,
-      cover_path TEXT
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_camera_stage_projects_updated_at
-      ON camera_stage_projects(updated_at DESC);
-
     CREATE TABLE IF NOT EXISTS canvas_projects (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
@@ -111,7 +100,6 @@ export function initializeLegacyProjectTables(conn: Database.Database): void {
       ON canvas_projects(updated_at DESC);
   `)
   ensureLegacyProjectColumn(conn, 'storyboard_projects', 'cover_path', 'TEXT')
-  ensureLegacyProjectColumn(conn, 'camera_stage_projects', 'cover_path', 'TEXT')
   initializeAudioEditSchema(conn)
 }
 

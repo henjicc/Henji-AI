@@ -283,6 +283,23 @@ describe('文档仓库：改名、转正、移动、副本、删除', () => {
     expect(env.revealed).toEqual([saved.meta.path])
   })
 
+  it('从列表移除：文件还在时拒绝；文件不见了只删索引与封面，不动磁盘', async () => {
+    const { service } = env.services
+    const doc = await service.createDocument({ kind: 'camera_stage', container: { kind: 'user' }, name: '外出' })
+    await service.saveDocumentCover({ docId: doc.meta.id, sources: [{ source: 'x', sourceKind: 'image' }] })
+    await expect(service.forgetDocument(doc.meta.id)).rejects.toMatchObject({ name: 'DocumentLocationError' })
+    expect(env.catalog.getDocument(doc.meta.id)).not.toBeNull()
+    const elsewhere = path.join(env.outside, '外出.henji-stage')
+    await fsp.rename(doc.meta.path, elsewhere)
+    await service.forgetDocument(doc.meta.id)
+    expect(env.catalog.getDocument(doc.meta.id)).toBeNull()
+    expect(await service.getDocumentCover(doc.meta.id)).toBeNull()
+    expect(fs.existsSync(elsewhere)).toBe(true)
+    expect(env.trashed).toEqual([])
+    // 已经不在索引里：再移除一次什么也不做
+    await service.forgetDocument(doc.meta.id)
+  })
+
   it('跨文档引用：先按位置找，位置失效后按 ID 找，都找不到报缺失', async () => {
     const { service } = env.services
     const doc = await service.createDocument({ kind: 'camera_stage', container: { kind: 'user' }, name: '镜头' })

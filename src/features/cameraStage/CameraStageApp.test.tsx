@@ -13,14 +13,19 @@ const projectMocks = vi.hoisted(() => ({ loadProjectIntoScene: vi.fn() }))
 
 vi.mock('./projects/cameraStageProjectService', () => ({
   loadProjectIntoScene: projectMocks.loadProjectIntoScene,
+  CameraStageLeaveCancelledError: class extends Error {},
+  createDraftCameraStageDocument: vi.fn(),
+  leaveCameraStageEditor: vi.fn(),
+  openCameraStageDocument: vi.fn(),
 }))
 vi.mock('./scene/directorViewState', () => ({ persistDirectorView: vi.fn() }))
 vi.mock('./CameraStageErrorBoundary', () => ({
   default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }))
-vi.mock('./projects/CameraStageProjectList', () => ({
-  default: () => <div data-testid="project-list" />,
+vi.mock('@/features/documents/DocumentLibraryPage', () => ({
+  DocumentLibraryPage: () => <div data-testid="project-list" />,
 }))
+vi.mock('@/contexts/NotificationContext', () => ({ useNotification: () => ({ showNotification: vi.fn() }) }))
 vi.mock('./CameraStageEditor', async () => {
   const ReactModule = await import('react')
   const { useCameraStageSessionStore: useSession } = await import('./store/cameraStageSessionStore')
@@ -52,9 +57,8 @@ function startInCameraProject(projectId: string): void {
   useCameraStageStore.getState().setViewMode('camera')
   useCameraStageSessionStore.setState({
     appView: 'editor',
-    lastProjectId: projectId,
+    lastDocumentId: projectId,
     stageViewMode: 'camera',
-    coverRevision: 0,
   })
 }
 
@@ -74,7 +78,7 @@ describe('CameraStageApp 会话恢复', () => {
 
     act(() => {
       loadProject('project-b')
-      useCameraStageSessionStore.getState().setLastProjectId('project-b')
+      useCameraStageSessionStore.getState().setLastDocumentId('project-b')
     })
     await waitFor(() => {
       expect(useCameraStageStore.getState()).toMatchObject({
@@ -107,7 +111,7 @@ describe('CameraStageApp 会话恢复', () => {
         }
         loadProject(projectId)
         if (options.updateSession !== false) {
-          useCameraStageSessionStore.getState().setLastProjectId(projectId)
+          useCameraStageSessionStore.getState().setLastDocumentId(projectId)
         }
         resolve(true)
       })
@@ -115,10 +119,10 @@ describe('CameraStageApp 会话恢复', () => {
     render(<CameraStageApp />)
     await screen.findByTestId('camera-stage-editor')
 
-    act(() => useCameraStageSessionStore.getState().setLastProjectId('project-b'))
+    act(() => useCameraStageSessionStore.getState().setLastDocumentId('project-b'))
     await waitFor(() => expect(projectMocks.loadProjectIntoScene)
       .toHaveBeenCalledWith('project-b', { updateSession: false }))
-    act(() => useCameraStageSessionStore.getState().setLastProjectId('project-c'))
+    act(() => useCameraStageSessionStore.getState().setLastDocumentId('project-c'))
     expect(projectMocks.loadProjectIntoScene).toHaveBeenCalledTimes(1)
 
     await act(async () => resolvers.get('project-b')?.())
@@ -130,6 +134,6 @@ describe('CameraStageApp 会话恢复', () => {
       currentProjectId: 'project-c',
       viewMode: 'camera',
     }))
-    expect(useCameraStageSessionStore.getState().lastProjectId).toBe('project-c')
+    expect(useCameraStageSessionStore.getState().lastDocumentId).toBe('project-c')
   })
 })

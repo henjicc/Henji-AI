@@ -1,16 +1,5 @@
-import { loadCameraStageTestProject } from '@/tests/cameraStageProjectFixture'
+import { cameraStageTestDocuments, loadCameraStageTestProject } from '@/tests/cameraStageProjectFixture'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-
-const mocks = vi.hoisted(() => ({
-  writeProject: vi.fn().mockResolvedValue(undefined),
-  loadProjectIntoScene: vi.fn().mockResolvedValue(true),
-}))
-
-vi.mock('@/commands/cameraStageProjects', () => ({ upsertCameraStageProjectRecord: mocks.writeProject }))
-
-vi.mock('../projects/cameraStageProjectService', () => ({
-  loadProjectIntoScene: mocks.loadProjectIntoScene,
-}))
 
 import { createDefaultAnimation } from '../domain/animationTypes'
 import { createCameraObject, createDefaultSceneSettings, createPrimitiveObject, pickDefaultColor } from '../domain/sceneDefaults'
@@ -19,12 +8,12 @@ import { useCameraStageStore } from '../store/cameraStageStore'
 import { applyCameraStageMotion } from './cameraMotionService'
 
 describe('三维摄像机语义运镜', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks()
     const camera = createCameraObject('主摄像机', pickDefaultColor(0))
     const subject = createPrimitiveObject('sphere', '主体', pickDefaultColor(1))
     const objects = [camera, subject]
-    loadCameraStageTestProject({
+    await loadCameraStageTestProject({
       objects,
       activeCameraId: camera.id,
       animation: createDefaultAnimation(),
@@ -58,8 +47,7 @@ describe('三维摄像机语义运镜', () => {
     expect(updatedCamera?.type).toBe('camera')
     if (updatedCamera?.type !== 'camera') throw new Error('测试摄像机不存在')
     expect(updatedCamera.lookAt).toMatchObject({ mode: 'object', objectId: subject.id })
-    expect(mocks.writeProject).toHaveBeenCalledOnce()
-    expect(mocks.loadProjectIntoScene).not.toHaveBeenCalled()
+    expect(cameraStageTestDocuments()!.writes).toBe(1)
   })
 
   it('拒绝没有目标的非升降运镜', async () => {

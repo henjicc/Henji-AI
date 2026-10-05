@@ -1160,7 +1160,8 @@
       "moveToProject": "Move to Project…",
       "removeFromProject": "Remove from Project",
       "duplicate": "Duplicate",
-      "reveal": "Show in Folder"
+      "reveal": "Show in Folder",
+      "forget": "Remove from List"
     },
     "rename": {
       "title": "Rename",
@@ -1196,6 +1197,7 @@
       "reveal": "Couldn't show in folder: {{message}}",
       "delete": "Couldn't move to the Recycle Bin: {{message}}",
       "open": "Couldn't open: {{message}}",
+      "forget": "Couldn't remove from the list: {{message}}",
       "createProject": "Couldn't create the project: {{message}}"
     }
   }

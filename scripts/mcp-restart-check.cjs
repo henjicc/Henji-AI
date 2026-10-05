@@ -10,8 +10,8 @@
  *   4. 未知原请求换标识仍不能重放，独立追加可以继续；
  *   5. 重启后可区分待续查、未知和已保存结果；仅注入存储样本，不调用供应商。
  *
- * 用法：node scripts/mcp-restart-check.cjs [--out .mcp-restart] [--only mcp|video-edit-layout]
- * 默认仍核对 MCP；剪辑布局目标复用下面同一启动器与两次启动的隔离资料。
+ * 用法：node scripts/mcp-restart-check.cjs [--out .mcp-restart] [--only mcp|video-edit-layout|camera-stage-documents]
+ * 默认仍核对 MCP；剪辑布局与镜头参考文档目标复用下面同一启动器与两次启动的隔离资料。
  */
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
@@ -27,9 +27,9 @@ const MAIN_ENTRY = path.join(ROOT, 'out/main/index.cjs')
 const FIXTURE_PROJECT_ID = '__mcp_restart_canvas_fixture__'
 const CREATIVE_PROJECT_ID = '__mcp_restart_creative_fixture__'
 
-async function launch(userDataDir) {
+async function launch(userDataDir, { extraArgs = [] } = {}) {
   const app = await launchElectronApp({
-    mainEntry: MAIN_ENTRY, cwd: ROOT, useElectronApi: true, skipOnboarding: true, reuseUserDataDir: userDataDir,
+    mainEntry: MAIN_ENTRY, cwd: ROOT, useElectronApi: true, skipOnboarding: true, reuseUserDataDir: userDataDir, extraArgs,
   })
   await waitForApp(app.page)
   return app
@@ -80,6 +80,12 @@ async function main() {
   const outDir = path.isAbsolute(options.outDir) ? options.outDir : path.resolve(ROOT, options.outDir)
   fs.mkdirSync(outDir, { recursive: true })
   const userDataDir = createIsolatedUserDataDir()
+  if (options.target === 'camera-stage-documents') {
+    const { runCameraStageDocumentsRestart } = require('./lib/cameraStageDocumentsRestart.cjs')
+    try { await runCameraStageDocumentsRestart({ launch, userDataDir, outDir }) }
+    finally { await cleanupIsolatedUserDataDir(userDataDir) }
+    return
+  }
   if (options.target === 'video-edit-layout') {
     const { runVideoEditLayoutRestart } = require('./lib/videoEditLayoutRestart.cjs')
     try { await runVideoEditLayoutRestart({ launch, userDataDir, outDir }) }

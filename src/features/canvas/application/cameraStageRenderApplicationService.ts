@@ -10,7 +10,7 @@ import { collectCameraStageAsset } from '@/features/assets/services/cameraStageA
 import { leaseCameraStageProjectRuntime } from '@/features/cameraStage/application/cameraStageProjectRuntime';
 import {
   applyProjectEnvironmentImage,
-  createStoredCameraStageProject,
+  createNamedCameraStageDocument,
 } from '@/features/cameraStage/projects/cameraStageProjectService';
 import type {
   CameraStageRenderTaskScope,
@@ -37,7 +37,7 @@ const retainedTasks = new Map<string, Promise<RetainedTask>>();
 const acknowledgedRequests = new Map<string, string>();
 
 function taskIdentity(task: CameraStageRenderTaskDescriptor | CameraStageRenderTaskSnapshot): string {
-  return JSON.stringify([task.canvasProjectId, task.nodeId, task.cameraStageProjectId, task.outputKind, task.resolutionPreset, task.selectedTimeSec ?? null]);
+  return JSON.stringify([task.canvasProjectId, task.nodeId, task.cameraStageDocumentId, task.outputKind, task.resolutionPreset, task.selectedTimeSec ?? null]);
 }
 
 function retainRenderTask(task: CameraStageRenderTaskDescriptor): Promise<RetainedTask> {
@@ -49,7 +49,7 @@ function retainRenderTask(task: CameraStageRenderTaskDescriptor): Promise<Retain
   const pending = (async () => {
     const canvas = await acquireCanvasProjectRuntime(task.canvasProjectId);
     try {
-      const releaseStage = await leaseCameraStageProjectRuntime(task.cameraStageProjectId);
+      const releaseStage = await leaseCameraStageProjectRuntime(task.cameraStageDocumentId);
       return { identity: taskIdentity(task), runtime: canvas.runtime, release: () => { releaseStage(); canvas.release(); } };
     } catch (error) { canvas.release(); throw error; }
   })();
@@ -73,7 +73,7 @@ export interface CameraStageNodeRenderStartOptions {
   selectedTimeSec?: number;
   expectedOwner?: {
     canvasProjectId: string;
-    cameraStageProjectId: string | null;
+    cameraStageDocumentId: string | null;
   };
 }
 
@@ -104,7 +104,7 @@ function matchesTask(node: ReturnType<typeof useCanvasStore.getState>['nodes'][n
   return pending?.requestId === task.requestId
     && pending.canvasProjectId === task.canvasProjectId
     && pending.nodeId === node.id
-    && pending.cameraStageProjectId === task.cameraStageProjectId;
+    && pending.cameraStageDocumentId === task.cameraStageDocumentId;
 }
 
 function terminalPatch(task: CameraStageRenderTaskSnapshot): DynamicValueMap {
@@ -164,7 +164,7 @@ async function applyCompletedTask(task: CameraStageRenderTaskSnapshot, runtime: 
         requestId: task.requestId,
         canvasProjectId: task.canvasProjectId,
         nodeId: task.nodeId,
-        cameraStageProjectId: task.cameraStageProjectId,
+        cameraStageDocumentId: task.cameraStageDocumentId,
         resolutionPreset: task.resolutionPreset,
         outputKind: task.outputKind,
         selectedTimeSec: task.selectedTimeSec,
@@ -318,7 +318,7 @@ async function startRenderInRuntime(nodeId: string, outputKind: 'image' | 'video
   };
   if (startingNodes.has(startKey)) {
     const current = options.expectedOwner
-      ? requireUnchangedOwner(options.expectedOwner.cameraStageProjectId)
+      ? requireUnchangedOwner(options.expectedOwner.cameraStageDocumentId)
       : runtime.store.getState().nodes.find((candidate) => candidate.id === nodeId);
     return isCameraStageNode(current) ? current.data.renderTask ?? null : null;
   }
@@ -327,17 +327,17 @@ async function startRenderInRuntime(nodeId: string, outputKind: 'image' | 'video
   let ownedCameraStageProjectId = isCameraStageNode(node) ? node.data.projectId : null;
   try {
     if (!isCameraStageNode(node)) return null;
-    if (options.expectedOwner && node.data.projectId !== options.expectedOwner.cameraStageProjectId) {
+    if (options.expectedOwner && node.data.projectId !== options.expectedOwner.cameraStageDocumentId) {
       throw new Error('3D 镜头节点绑定的工程已经变化，请重新读取节点后再输出');
     }
     if (node.data.renderTask) return node.data.renderTask;
-    let cameraStageProjectId = node.data.projectId;
-    if (!cameraStageProjectId) {
-      cameraStageProjectId = (await createStoredCameraStageProject(node.data.displayName || '3D 镜头参考')).id;
+    let cameraStageDocumentId = node.data.projectId;
+    if (!cameraStageDocumentId) {
+      cameraStageDocumentId = (await createNamedCameraStageDocument(node.data.displayName || '3D 镜头参考')).id;
     }
     const latestNode = requireUnchangedOwner(ownedCameraStageProjectId);
     requireCurrentNode(canvasProjectId, nodeId, null, runtime);
-    await applyProjectEnvironmentImage(cameraStageProjectId, latestNode.data.environmentImageUrl ?? null);
+    await applyProjectEnvironmentImage(cameraStageDocumentId, latestNode.data.environmentImageUrl ?? null);
     requireUnchangedOwner(ownedCameraStageProjectId);
     requireCurrentNode(canvasProjectId, nodeId, null, runtime);
     const task: CameraStageRenderTaskDescriptor = {
@@ -345,7 +345,7 @@ async function startRenderInRuntime(nodeId: string, outputKind: 'image' | 'video
       requestId: options.requestId ?? crypto.randomUUID(),
       canvasProjectId,
       nodeId,
-      cameraStageProjectId,
+      cameraStageDocumentId,
       resolutionPreset: options.resolutionPreset ?? '720p',
       outputKind,
       selectedTimeSec: outputKind === 'image'
@@ -355,9 +355,9 @@ async function startRenderInRuntime(nodeId: string, outputKind: 'image' | 'video
     startingRequests.add(task.requestId);
     let preservePending = false;
     const pendingPatch = outputKind === 'image'
-      ? { projectId: cameraStageProjectId, renderTask: task, imageExporting: true, imageRenderRequestId: task.requestId, imageRenderError: null }
+      ? { projectId: cameraStageDocumentId, renderTask: task, imageExporting: true, imageRenderRequestId: task.requestId, imageRenderError: null }
       : {
-          projectId: cameraStageProjectId,
+          projectId: cameraStageDocumentId,
           renderTask: task,
           videoExporting: true,
           videoProgress: 0,
@@ -367,7 +367,7 @@ async function startRenderInRuntime(nodeId: string, outputKind: 'image' | 'video
         };
     try {
       await persistNodePatch(canvasProjectId, nodeId, pendingPatch, null, runtime);
-      ownedCameraStageProjectId = cameraStageProjectId;
+      ownedCameraStageProjectId = cameraStageDocumentId;
       await retainRenderTask(task);
       try {
         const registration = await startCameraStageRender(task);

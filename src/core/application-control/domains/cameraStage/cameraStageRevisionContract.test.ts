@@ -36,17 +36,17 @@ describe('三维写入的 revision 契约', () => {
     expect(cameraStageWrites.length).toBeGreaterThan(4)
   })
 
-  // 新建与打开工程不存在"读取之后被改动"的问题，天然没有基线可比。
+  // 新建与打开文档已归通用文档能力（3.2），三维写能力全部是对已有场景的修改。
   const revisionScoped = cameraStageSceneWrites.filter((capability) => (
     schemaKeys(capability.inputSchema).includes('baseRevision')
   ))
 
-  it('除新建与打开外的写能力都收 baseRevision', () => {
+  it('全部场景写能力都收 baseRevision', () => {
     const withoutBaseRevision = cameraStageSceneWrites
       .filter((capability) => !revisionScoped.includes(capability))
       .map((capability) => capability.id)
       .sort()
-    expect(withoutBaseRevision).toEqual(['create_camera_stage_project', 'open_camera_stage_project'])
+    expect(withoutBaseRevision).toEqual([])
   })
 
   it('每个写能力都回带 baseRevision，形状与读能力一致', () => {

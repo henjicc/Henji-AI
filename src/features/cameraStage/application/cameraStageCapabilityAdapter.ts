@@ -1,16 +1,13 @@
 import type { ApplicationTransactionResult, JsonValue } from '@/core/application-control/index'
 import { cameraStageApplicationService, type CameraStageObjectUpdate } from '@/features/cameraStage/application/cameraStageApplicationService'
 import { verifyCameraStageScene, type CameraStageVerificationRequest } from '@/features/cameraStage/application/cameraStageVerification'
-import { createStoredCameraStageProject } from '@/features/cameraStage/projects/cameraStageProjectService'
-import { getCameraStageProjectRecord } from '@/commands/cameraStageProjects'
-import { useCameraStageSessionStore } from '@/features/cameraStage/store/cameraStageSessionStore'
 
 import { getHostScopeRevisions, notifyHostScopeChanged } from '@/features/application-control/hostContext/hostContext'
 import { getApplicationControlExecutionEngine } from '@/features/application-control/capabilities/applicationControlRegistry'
 
 import type { CapabilityExecutionContext } from '@/features/application-control/capabilities/handlerTypes'
 
-const permissions = new Set(['camera_stage:read', 'camera_stage:write', 'camera_stage:open', 'camera_stage:delete'])
+const permissions = new Set(['camera_stage:read', 'camera_stage:write', 'camera_stage:delete'])
 
 function baseRevision(): number {
   return getHostScopeRevisions().toolbox
@@ -37,8 +34,8 @@ function idempotencyKey(capabilityId: string, revision: number, context: Capabil
 /**
  * 所有三维写入都必须回带写入后的 `baseRevision`。
  *
- * 走事务引擎的能力（摆放、运镜、改名、改属性）此前只返回 `resultingRevisions` 这个映射，
- * 而不走事务的能力（新建、复制、删除、打开）返回的是扁平的 `baseRevision`——同一个领域里
+ * 走事务引擎的能力（摆放、运镜、改属性）此前只返回 `resultingRevisions` 这个映射，
+ * 而不走事务的能力（复制、删除对象）返回的是扁平的 `baseRevision`——同一个领域里
  * 同一个概念两种形状。结果是模型每摆一个物体就得再读一次工程才能拿到下一次写入要用的
  * revision，本来一步的事变成两步。叠加单轮 8 个工具位的轮换，读的那个工具下一轮往往就
  * 不在了，任务就卡死在这里。
@@ -117,99 +114,9 @@ function vec3Value(value: { x: number; y: number; z: number }): JsonValue {
   return { x: value.x, y: value.y, z: value.z }
 }
 
-export async function listCameraStageProjects(): Promise<Record<string, unknown>> {
-  return { projects: await cameraStageApplicationService.listProjects(), baseRevision: baseRevision() }
-}
-
-export async function getCameraStageProject(projectId: string): Promise<Record<string, unknown>> {
-  const scene = await cameraStageApplicationService.observeProject(projectId)
-  return { project: { id: projectId, ...scene }, baseRevision: baseRevision() }
-}
-
 export async function observeCameraStageScene(projectId: string): Promise<Record<string, unknown>> {
   const scene = await cameraStageApplicationService.observeProject(projectId)
   return { scene: { projectId, ...scene }, baseRevision: baseRevision() }
-}
-
-export async function openCameraStageProject(projectId: string): Promise<Record<string, unknown>> {
-  const result = await cameraStageApplicationService.openProject(projectId)
-  useCameraStageSessionStore.getState().setAppView('editor')
-  notifyHostScopeChanged('toolbox')
-  return { ...result, baseRevision: baseRevision() }
-}
-
-export async function createCameraStageProject(name: string): Promise<Record<string, unknown>> {
-  const created = await createStoredCameraStageProject(name)
-  notifyHostScopeChanged('toolbox')
-  const {
-    id: projectId,
-    name: projectName,
-    defaultCameraId,
-    defaultStateKeyframeId,
-  } = created
-  if (!projectId || !defaultCameraId || !defaultStateKeyframeId) {
-    throw new Error('CAPABILITY_REJECTED')
-  }
-  return {
-    projectId,
-    name: projectName,
-    defaultCameraId,
-    defaultStateKeyframeId,
-    // 与新建画布项目同一契约：按正式存储回读确认后才声明已验证；外部连接据此判定写入成功。
-    verification: await verifyCreatedCameraStageProject(projectId, projectName, defaultCameraId, defaultStateKeyframeId),
-    resultRefs: [
-      { kind: 'camera_stage.project', id: projectId },
-      { kind: 'camera_stage.camera', id: `${projectId}:${defaultCameraId}` },
-      {
-        kind: 'camera_stage.state_keyframe',
-        id: `${projectId}:${defaultStateKeyframeId}`,
-      },
-    ],
-    baseRevision: baseRevision(),
-  }
-}
-
-async function verifyCreatedCameraStageProject(
-  projectId: string,
-  name: string,
-  cameraId: string,
-  stateKeyframeId: string,
-): Promise<{ verified: boolean; condition: string; target: { kind: 'camera_stage.project'; id: string } }> {
-  const record = await getCameraStageProjectRecord(projectId)
-  let verified = false
-  if (record?.id === projectId && record.name === name) {
-    try {
-      const scene = JSON.parse(record.sceneJson) as {
-        objects?: Array<{ id?: string; type?: string }>
-        stateKeyframes?: Array<{ id?: string; time?: number; cameraId?: string }>
-      }
-      verified = Boolean(scene.objects?.some((object) => object.id === cameraId && object.type === 'camera'))
-        && Boolean(scene.stateKeyframes?.some((keyframe) => (
-          keyframe.id === stateKeyframeId && keyframe.time === 0 && keyframe.cameraId === cameraId
-        )))
-    } catch {
-      verified = false
-    }
-  }
-  return {
-    verified,
-    condition: '新建 3D 工程及其默认摄像机与 0 秒状态关键帧已从持久存储回读确认',
-    target: { kind: 'camera_stage.project', id: projectId },
-  }
-}
-
-export async function renameCameraStageProject(input: { projectId: string; name: string; baseRevision: number }, context: CapabilityExecutionContext): Promise<Record<string, unknown>> {
-  return await executeMutation({
-    summary: '重命名三维工程', entityType: 'camera_stage.project', targetId: input.projectId, revision: input.baseRevision,
-    mutations: [mutation('camera_stage.project.name', input.name)],
-  }, context)
-}
-
-export async function deleteCameraStageProject(input: { projectId: string; baseRevision: number }): Promise<Record<string, unknown>> {
-  assertBaseRevision(input.baseRevision)
-  const result = await cameraStageApplicationService.deleteProject(input.projectId)
-  notifyHostScopeChanged('toolbox')
-  return { ...result, baseRevision: baseRevision() }
 }
 
 export async function placeCameraStageObject(input: Record<string, unknown> & { baseRevision: number }, context: CapabilityExecutionContext): Promise<Record<string, unknown>> {

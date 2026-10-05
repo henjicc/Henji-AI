@@ -33,6 +33,9 @@ import type { DocumentSessionCommands } from './documentSessionTypes'
  * - 每次写入推进本服务的版本号并通知订阅者：页面据此刷新，助手的 `documents` 作用域也取这个数。
  * - 打开方式由各工具登记（`registerDocumentOpener`，3.x 接入时登记）；没有登记的类型打开时报
  *   DocumentNotOpenableError，说明该类型还不能从通用入口打开。
+ * - 后台释放由各工具登记（`registerDocumentReleaser`，3.2 补）：工具可能为助手的后台读写持有会话
+ *   （没有界面在用），移到回收站前先请工具释放；界面正在编辑或有进行中的任务时工具拒绝，照旧报正在编辑。
+ * - 找不到文件的文档可以“从列表移除”（`forgetDocument`，3.2 补齐 2.5 遗留），只改作品索引。
  */
 
 /** 通用操作用到的文档命令；正式运行用 `@/commands/documents`，测试换成替身。 */
@@ -41,6 +44,7 @@ export interface DocumentOperationCommands extends DocumentSessionCommands {
   moveDocument(request: MoveDocumentRequest): Promise<DocumentTransferResult>
   duplicateDocument(request: DuplicateDocumentRequest): Promise<DocumentTransferResult>
   revealDocument(target: DocumentTarget): Promise<void>
+  forgetDocument(docId: string): Promise<void>
   refreshIndex(): Promise<DocumentIndexScanReport>
   renameProject(request: RenameProjectRequest): Promise<ProjectSummary>
   revealProject(projectId: string): Promise<void>
@@ -48,6 +52,12 @@ export interface DocumentOperationCommands extends DocumentSessionCommands {
 
 /** 打开一份文档（进入对应工具的编辑界面）。由各工具在接入通用文档时登记。 */
 export type DocumentOpener = (document: DocumentSummary) => Promise<void> | void
+
+/**
+ * 释放工具在后台持有的文档会话（界面没有在编辑、没有进行中的任务时写完并关闭）。
+ * 返回 true 表示会话已关闭；返回 false 表示仍在使用，不能释放。
+ */
+export type DocumentReleaser = (documentId: string) => Promise<boolean>
 
 /** 正在编辑的文档不能移到回收站。 */
 export class DocumentInUseError extends Error {
@@ -104,6 +114,7 @@ export const defaultDocumentOperationCommands: DocumentOperationCommands = {
   moveDocument: documentCommands.moveDocument,
   duplicateDocument: documentCommands.duplicateDocument,
   revealDocument: documentCommands.revealDocument,
+  forgetDocument: documentCommands.forgetDocument,
   refreshIndex: documentCommands.refreshDocumentIndex,
   renameProject: documentCommands.renameProject,
   revealProject: documentCommands.revealProject,
@@ -120,6 +131,7 @@ export class DocumentOperations {
   private readonly kinds: Pick<DocumentKindRegistry, 'require'>
   private readonly logger: Logger
   private readonly openers = new Map<DocumentKindId, DocumentOpener>()
+  private readonly releasers = new Map<DocumentKindId, DocumentReleaser>()
   private readonly listeners = new Set<() => void>()
   private currentRevision = 0
 
@@ -145,6 +157,14 @@ export class DocumentOperations {
     this.openers.set(kind, opener)
     return () => {
       if (this.openers.get(kind) === opener) this.openers.delete(kind)
+    }
+  }
+
+  /** 登记某类文档的后台释放方式；返回取消登记函数。同一类型只保留最后登记的那个。 */
+  registerReleaser(kind: DocumentKindId, releaser: DocumentReleaser): () => void {
+    this.releasers.set(kind, releaser)
+    return () => {
+      if (this.releasers.get(kind) === releaser) this.releasers.delete(kind)
     }
   }
 
@@ -249,12 +269,21 @@ export class DocumentOperations {
     })
   }
 
-  /** 移到系统回收站（可以从回收站找回）。正在编辑的文档拒绝。 */
+  /**
+   * 移到系统回收站（可以从回收站找回）。正在编辑的文档拒绝；只是被工具在后台持有的，先请工具释放再删。
+   */
   async trashDocument(target: DocumentTarget & { name?: string }): Promise<void> {
     await this.write('trash', target.id, async () => {
       const session = this.registry().get(target.id)
-      if (session) throw new DocumentInUseError(session.documentMeta.name)
+      if (session && !await this.release(session.documentMeta.kind, target.id)) throw new DocumentInUseError(session.documentMeta.name)
       await this.commands.trashDocument({ id: target.id, ...(target.path ? { path: target.path } : {}) })
+    })
+  }
+
+  /** 从列表移除找不到文件的文档（只改作品索引，不动磁盘）；文件还在时主进程报 DocumentLocationError。 */
+  async forgetDocument(id: string): Promise<void> {
+    await this.write('forget', id, async () => {
+      await this.commands.forgetDocument(id)
     })
   }
 
@@ -299,6 +328,18 @@ export class DocumentOperations {
     await this.commands.revealProject(projectId)
   }
 
+  /** 请工具释放后台持有的会话；没有登记释放方式或释放失败时按“仍在使用”处理。 */
+  private async release(kind: DocumentKindId, id: string): Promise<boolean> {
+    const releaser = this.releasers.get(kind)
+    if (!releaser) return false
+    try {
+      return await releaser(id) && !this.registry().get(id)
+    } catch (error) {
+      this.logger.warn('释放文档会话失败', { event: 'documents.operations.release.failed', error: toError(error), context: { docId: id, kind } })
+      return false
+    }
+  }
+
   private registry(): DocumentSessionRegistry {
     return this.providedRegistry ?? getDocumentSessionRegistry()
   }
@@ -337,4 +378,9 @@ export function getDocumentOperations(): DocumentOperations {
 /** 登记某类文档的打开方式（各工具接入通用文档时调用）。 */
 export function registerDocumentOpener(kind: DocumentKindId, opener: DocumentOpener): () => void {
   return getDocumentOperations().registerOpener(kind, opener)
+}
+
+/** 登记某类文档的后台释放方式（工具会为助手后台读写持有会话时调用）。 */
+export function registerDocumentReleaser(kind: DocumentKindId, releaser: DocumentReleaser): () => void {
+  return getDocumentOperations().registerReleaser(kind, releaser)
 }

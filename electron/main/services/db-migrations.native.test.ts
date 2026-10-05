@@ -75,6 +75,7 @@ describe.skipIf(!process.versions.electron)('统一迁移账本：旧库就地�
     db.prepare('INSERT INTO pending_task_results (server_task_id,result_json,completed_at) VALUES (?,?,?)').run('t1', JSON.stringify({ filePath: userFile }), 1)
     db.prepare('INSERT INTO generation_submissions (request_id,input_digest,response_json,created_at) VALUES (?,?,?,?)').run('r1', 'digest', JSON.stringify({ status: 'completed', filePath: userFile }), 1)
     db.prepare('INSERT INTO camera_stage_render_tasks (request_id,record_json) VALUES (?,?)').run('c1', JSON.stringify({ requestId: 'c1', outputPath: userFile }))
+    db.prepare('INSERT INTO camera_stage_projects (id,name,created_at,updated_at,object_count,scene_json) VALUES (?,?,?,?,?,?)').run('stage', '旧镜头', 1, 1, 1, '{}')
     db.prepare("INSERT INTO agent_memories (memory_id,scope_type,kind,content,source_label,sensitivity,status,created_at,updated_at) VALUES ('mem','global','fact','记住','测试','C0','active',1,1)").run()
     return { userFile, externalFile, thumbnail }
   }
@@ -123,7 +124,9 @@ describe.skipIf(!process.versions.electron)('统一迁移账本：旧库就地�
       expect(columns(db, 'generation_submissions')).toEqual(expect.arrayContaining(['phase', 'model_id']))
       expect(db.prepare('SELECT phase FROM generation_submissions').get()).toEqual({ phase: 'provider' })
       expect(JSON.parse((db.prepare('SELECT response_json FROM generation_submissions').get() as { response_json: string }).response_json)).toMatchObject({ filePath: 'henji://user/生成结果/a.png' })
-      expect(JSON.parse((db.prepare('SELECT record_json FROM camera_stage_render_tasks').get() as { record_json: string }).record_json)).toMatchObject({ outputPath: 'henji://user/生成结果/a.png' })
+      // 3.2 第 15 项：镜头参考旧工程表删除，引用旧工程 ID 的渲染回执清空（不迁移内容，重要记录 008）。
+      expect(db.prepare("SELECT name FROM sqlite_master WHERE name = 'camera_stage_projects'").get()).toBeUndefined()
+      expect(db.prepare('SELECT * FROM camera_stage_render_tasks').all()).toEqual([])
       expect(fs.existsSync(userFile)).toBe(false) // 只改记录，不碰文件
 
       // 再次初始化：账本已满，不再执行，也不再解析作品目录。
@@ -142,6 +145,28 @@ describe.skipIf(!process.versions.electron)('统一迁移账本：旧库就地�
       expect(result).toEqual({ applied: ALL_VERSIONS, currentVersion: ALL_VERSIONS.length, backupPath: null })
       expect(resolver).not.toHaveBeenCalled()
       expect(fs.existsSync(path.join(base, 'backups'))).toBe(false)
+    } finally { db.close() }
+  })
+
+  it('镜头参考退役（第 15 项）：已在第 14 项的库先备份再删旧工程表、清空旧回执；之前的回执换算照常', () => {
+    const file = path.join(base, 'henji-v14.db')
+    const db = new Database(file)
+    try {
+      const { userFile } = seedLegacy(db)
+      runSchemaMigrations(db, SCHEMA_MIGRATIONS.slice(0, 14), { locationContext: () => context, backupDirectory: path.join(base, 'backups-14') })
+      expect(JSON.parse((db.prepare('SELECT record_json FROM camera_stage_render_tasks').get() as { record_json: string }).record_json))
+        .toMatchObject({ outputPath: 'henji://user/生成结果/a.png' })
+      expect(fs.existsSync(userFile)).toBe(false)
+      const backupDirectory = path.join(base, 'backups')
+      const result = runSchemaMigrations(db, undefined, { locationContext: () => context, backupDirectory })
+      expect(result.applied).toEqual([15])
+      expect(fs.readdirSync(backupDirectory)).toEqual([expect.stringMatching(/-before-v15\.db$/)])
+      expect(db.prepare("SELECT name FROM sqlite_master WHERE name LIKE '%camera_stage_projects%'").all()).toEqual([])
+      expect(db.prepare('SELECT * FROM camera_stage_render_tasks').all()).toEqual([])
+      const copy = new Database(path.join(backupDirectory, fs.readdirSync(backupDirectory)[0]!), { readonly: true })
+      try {
+        expect(copy.prepare('SELECT name FROM camera_stage_projects').all()).toEqual([{ name: '旧镜头' }])
+      } finally { copy.close() }
     } finally { db.close() }
   })
 

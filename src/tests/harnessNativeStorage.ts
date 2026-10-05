@@ -31,10 +31,6 @@ import { FakeDocumentCommands } from '@/features/documents/documentSessionTestKi
 
 import type { AssetLibraryRecord, AssetLibrarySnapshot } from '@/platform/contracts/assetLibrary'
 import type {
-  CameraStageProjectPlatformRecord,
-  CameraStageProjectPlatformSummary,
-} from '@/platform/contracts/cameraStageProjects'
-import type {
   StoryboardProjectPlatformRecord,
   StoryboardProjectPlatformSummary,
   StoryboardProjectPlatformWrite,
@@ -125,43 +121,6 @@ const assetLibraryStorage = {
   },
 }
 
-/* ── 3D 工程存储 ────────────────────────────────────────────────────────── */
-
-const cameraStageProjects = new Map<string, CameraStageProjectPlatformRecord>()
-
-const cameraStageProjectsStorage = {
-  async listProjectSummaries(): Promise<CameraStageProjectPlatformSummary[]> {
-    return [...cameraStageProjects.values()]
-      .sort((left, right) => right.updatedAt - left.updatedAt)
-      .map(({ sceneJson: _sceneJson, ...summary }) => wire(summary))
-  },
-
-  async getProjectRecord(projectId: string): Promise<CameraStageProjectPlatformRecord | null> {
-    const record = cameraStageProjects.get(projectId)
-    return record ? wire(record) : null
-  },
-
-  async upsertProjectRecord(record: CameraStageProjectPlatformRecord): Promise<void> {
-    // `ON CONFLICT(id) DO UPDATE` 不覆盖 created_at，保留工程首次创建时间。
-    const existing = cameraStageProjects.get(record.id)
-    cameraStageProjects.set(record.id, wire({
-      ...record,
-      createdAt: existing ? existing.createdAt : record.createdAt,
-    }))
-  },
-
-  async renameProjectRecord(projectId: string, name: string, updatedAt: number): Promise<void> {
-    // 主进程是一条裸 `UPDATE ... WHERE id = ?`：命中不到行就是零行受影响，不报错。
-    const record = cameraStageProjects.get(projectId)
-    if (!record) return
-    cameraStageProjects.set(projectId, { ...record, name, updatedAt })
-  },
-
-  async deleteProjectRecord(projectId: string): Promise<void> {
-    cameraStageProjects.delete(projectId)
-  },
-}
-
 /* ── 画布工程存储 ───────────────────────────────────────────────────────── */
 
 const storyboardProjects = new Map<string, StoryboardProjectPlatformRecord>()
@@ -244,7 +203,7 @@ export function harnessDocumentStore(): FakeDocumentCommands {
 
 const DOCUMENT_METHODS = [
   'listDocuments', 'readDocument', 'createDocument', 'saveDocument', 'renameDocument', 'finalizeDocument',
-  'moveDocument', 'duplicateDocument', 'trashDocument', 'deleteEmptyDraft', 'revealDocument', 'checkName',
+  'moveDocument', 'duplicateDocument', 'trashDocument', 'deleteEmptyDraft', 'forgetDocument', 'revealDocument', 'checkName',
   'refreshIndex', 'listProjects', 'createProject', 'renameProject', 'finalizeProject', 'trashProject', 'revealProject',
 ] as const
 
@@ -262,7 +221,6 @@ const documentsStorage = Object.fromEntries(DOCUMENT_METHODS.map((method) => [
 const NAMESPACES: Record<string, object> = {
   runtimeInfo: { uiInspectionReadOnly: false },
   assetLibrary: assetLibraryStorage,
-  cameraStageProjects: cameraStageProjectsStorage,
   storyboardProjects: storyboardProjectsStorage,
   audio: audioEditStorage,
   documents: documentsStorage,
@@ -356,7 +314,6 @@ export function installHarnessNativeStorage(): void {
 export function resetHarnessNativeStorage(): void {
   imageDocuments.clear()
   libraries.clear()
-  cameraStageProjects.clear()
   storyboardProjects.clear()
   audioEditProjects.clear()
   documentStore = new FakeDocumentCommands()

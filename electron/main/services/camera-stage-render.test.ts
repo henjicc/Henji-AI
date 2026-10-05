@@ -4,7 +4,7 @@ const mocks = vi.hoisted(() => ({
   cleanupAllVideoFrameExports: vi.fn(() => Promise.resolve()),
   ownerSend: vi.fn(),
   workerSend: vi.fn(),
-  readProject: vi.fn(() => ({ sceneJson: '{"objects":[]}' })),
+  readDocument: vi.fn(async (_target: { id: string }) => ({ meta: { kind: 'camera_stage' }, content: { objects: [] } as Record<string, unknown> })),
   currentWindow: null as {
     destroyed: boolean
     webContents: { id: number }
@@ -86,7 +86,7 @@ vi.mock('./video/frame-export', () => ({
   cleanupAllVideoFrameExports: mocks.cleanupAllVideoFrameExports,
 }))
 
-vi.mock('./camera-stage-projects', () => ({ getCameraStageProject: mocks.readProject }))
+vi.mock('./documents/runtime', () => ({ getDocumentService: () => ({ readDocument: mocks.readDocument }) }))
 
 vi.mock('./logging/main-logger', () => ({
   createMainLogger: () => ({
@@ -102,7 +102,7 @@ function imageRequest(requestId: string) {
     requestId,
     canvasProjectId: 'canvas-project-1',
     nodeId: 'node-1',
-    cameraStageProjectId: 'project-1',
+    cameraStageDocumentId: 'project-1',
     resolutionPreset: '720p' as const,
     outputKind: 'image' as const,
     selectedTimeSec: 1,
@@ -118,26 +118,27 @@ describe('camera stage background render recovery', () => {
     mocks.workerSend.mockClear()
     mocks.currentWindow = null
     mocks.persistedTasks.length = 0
-    mocks.readProject.mockReset().mockReturnValue({ sceneJson: '{"objects":[]}' })
+    mocks.readDocument.mockReset().mockResolvedValue({ meta: { kind: 'camera_stage' }, content: { objects: [] } })
   })
 
-  it('固定提交时的场景快照，排队后修改原工程不改变输出，重复请求也不重取快照', async () => {
+  it('固定提交时的场景快照（读镜头参考文档），排队后修改原文档不改变输出，重复请求也不重取快照', async () => {
     const service = await import('./camera-stage-render')
-    mocks.readProject.mockReturnValue({ sceneJson: '{"name":"原场景"}' })
-    service.startCameraStageRenderTask(imageRequest('frozen-scene'), 1)
-    mocks.readProject.mockReturnValue({ sceneJson: '{"name":"后续编辑"}' })
-    expect(service.startCameraStageRenderTask(imageRequest('frozen-scene'), 1).idempotent).toBe(true)
+    mocks.readDocument.mockResolvedValue({ meta: { kind: 'camera_stage' }, content: { name: '原场景' } })
+    await service.startCameraStageRenderTask(imageRequest('frozen-scene'), 1)
+    mocks.readDocument.mockResolvedValue({ meta: { kind: 'camera_stage' }, content: { name: '后续编辑' } })
+    expect((await service.startCameraStageRenderTask(imageRequest('frozen-scene'), 1)).idempotent).toBe(true)
     service.markCameraStageRenderWorkerReady(mocks.currentWindow!.webContents.id)
-    expect(mocks.readProject).toHaveBeenCalledTimes(1)
-    expect(mocks.workerSend).toHaveBeenCalledWith('cameraStageRender:workerJob', expect.objectContaining({ sceneJson: '{"name":"原场景"}' }))
+    expect(mocks.readDocument).toHaveBeenCalledTimes(1)
+    expect(mocks.readDocument).toHaveBeenCalledWith({ id: imageRequest('frozen-scene').cameraStageDocumentId })
+    expect(mocks.workerSend).toHaveBeenCalledWith('cameraStageRender:workerJob', expect.objectContaining({ sceneContent: { name: '原场景' } }))
   })
 
   it('快照读取失败留下确定失败的任务，不能因重复请求重新输出', async () => {
     const service = await import('./camera-stage-render')
-    mocks.readProject.mockImplementationOnce(() => { throw new Error('storage-unavailable') })
+    mocks.readDocument.mockRejectedValueOnce(new Error('storage-unavailable'))
     const request = imageRequest('snapshot-failed')
-    expect(service.startCameraStageRenderTask(request, 1).task.status).toBe('failed')
-    const repeated = service.startCameraStageRenderTask(request, 1)
+    expect((await service.startCameraStageRenderTask(request, 1)).task.status).toBe('failed')
+    const repeated = await service.startCameraStageRenderTask(request, 1)
     expect(repeated.idempotent).toBe(true)
     expect(repeated.task.status).toBe('failed')
     expect(mocks.workerSend).not.toHaveBeenCalled()
@@ -145,7 +146,7 @@ describe('camera stage background render recovery', () => {
 
   it('fails an image task and recycles the worker after prolonged inactivity', async () => {
     const service = await import('./camera-stage-render')
-    service.startCameraStageRenderTask(imageRequest('request-timeout'), 1)
+    await service.startCameraStageRenderTask(imageRequest('request-timeout'), 1)
     expect(mocks.currentWindow).not.toBeNull()
     service.markCameraStageRenderWorkerReady(mocks.currentWindow!.webContents.id)
 
@@ -170,7 +171,7 @@ describe('camera stage background render recovery', () => {
 
   it('rejects a video result returned for an image request', async () => {
     const service = await import('./camera-stage-render')
-    service.startCameraStageRenderTask(imageRequest('request-mismatch'), 1)
+    await service.startCameraStageRenderTask(imageRequest('request-mismatch'), 1)
     expect(mocks.currentWindow).not.toBeNull()
     service.markCameraStageRenderWorkerReady(mocks.currentWindow!.webContents.id)
 

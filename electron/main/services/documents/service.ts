@@ -116,6 +116,10 @@ export class DocumentService implements DocumentsPlatform {
     return this.parts.repository.deleteEmptyDraft(target)
   }
 
+  forgetDocument(docId: string): Promise<void> {
+    return this.parts.repository.forget(docId)
+  }
+
   revealDocument(target: DocumentTarget): Promise<void> {
     return this.parts.repository.reveal(target)
   }

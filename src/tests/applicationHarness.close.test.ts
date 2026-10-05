@@ -3,14 +3,12 @@ import '@/tests/canvasProjectFixture'
 import '@/tests/cameraStageProjectFixture'
 import '@/tests/imageEditDocumentFixture'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { installHarnessNativeStorage, uninstallHarnessNativeStorage, readHarnessImageEditDocument } from './harnessNativeStorage'
+import { harnessDocumentStore, installHarnessNativeStorage, uninstallHarnessNativeStorage, readHarnessImageEditDocument } from './harnessNativeStorage'
 import { createAttachedImageEditPersistenceFixture } from './imageEditAttachedPersistenceFixture'
 import { closeApplication } from '@/features/application-control/applicationCloseService'
 import { leaseCanvasProject, requireCanvasProjectInstance } from '@/features/canvas/application/canvasProjectInstances'
 import { cameraStageProjectStore } from '@/features/cameraStage/application/cameraStageProjectRuntime'
-import { createStoredCameraStageProject } from '@/features/cameraStage/projects/cameraStageProjectService'
-import { deserializeScene } from '@/features/cameraStage/domain/sceneSerialization'
-import { getCameraStageProjectRecord } from '@/commands/cameraStageProjects'
+import { createNamedCameraStageDocument } from '@/features/cameraStage/projects/cameraStageProjectService'
 import { useProjectStore } from '@/stores/projectStore'
 import { getProjectRecord } from '@/commands/projectState'
 import { CANVAS_NODE_TYPES } from '@/features/canvas/domain/canvasNodes'
@@ -32,7 +30,7 @@ it('退出保存后台画布、三维与离屏图片文档及投影，最终确�
   background.store.getState().addNode(CANVAS_NODE_TYPES.textAnnotation, { x: 50, y: 60 })
   image.bus.dispatch({ type: 'layer.update-common', commandId: 'close-image-change', expectedRevision: 0,
     layerId: 'effect', patch: { opacity: 0.4 } })
-  const stage = await createStoredCameraStageProject('后台三维')
+  const stage = await createNamedCameraStageDocument('后台三维')
   const stageStore = cameraStageProjectStore(stage.id)
   stageStore.getState().addPrimitive('box')
   const confirm = vi.fn(async () => {
@@ -42,7 +40,7 @@ it('退出保存后台画布、三维与离屏图片文档及投影，最终确�
     expect(JSON.parse(record.historyJson).past.length).toBeGreaterThan(0)
     expect(readHarnessImageEditDocument(image.document.id)?.document.revision).toBe(1)
     expect(background.store.getState().nodes[0].data.imageEditSession?.revision).toBe(1)
-    expect(deserializeScene((await getCameraStageProjectRecord(stage.id))!.sceneJson).objects).toHaveLength(2)
+    expect((harnessDocumentStore().stored(stage.id)?.content as { objects: unknown[] }).objects).toHaveLength(2)
     expect(() => background.store.getState().addNode(CANVAS_NODE_TYPES.textAnnotation, { x: 0, y: 0 })).toThrow('APPLICATION_CLOSING')
     expect(() => stageStore.getState().addPrimitive('box')).toThrow('APPLICATION_CLOSING')
     const history = stageStore.temporal.getState().pastStates

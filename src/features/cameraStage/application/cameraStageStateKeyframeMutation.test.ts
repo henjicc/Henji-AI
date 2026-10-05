@@ -1,17 +1,6 @@
 import { loadCameraStageTestProject } from '@/tests/cameraStageProjectFixture'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const mocks = vi.hoisted(() => ({
-  writeProject: vi.fn().mockResolvedValue(undefined),
-  loadProjectIntoScene: vi.fn().mockResolvedValue(true),
-}))
-
-vi.mock('@/commands/cameraStageProjects', () => ({ upsertCameraStageProjectRecord: mocks.writeProject }))
-
-vi.mock('../projects/cameraStageProjectService', () => ({
-  loadProjectIntoScene: mocks.loadProjectIntoScene,
-}))
-
 import type { ApplicationPlannedStep } from '@/core/application-control'
 
 import { createDefaultAnimation } from '../domain/animationTypes'
@@ -52,11 +41,11 @@ function stateKeyframeTimes(): number[] {
 }
 
 describe('三维状态关键帧属性写入', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks()
     const camera = createCameraObject('摄像机01', pickDefaultColor(0))
     const cube = createPrimitiveObject('box', '立方体', pickDefaultColor(1))
-    loadCameraStageTestProject({
+    await loadCameraStageTestProject({
       objects: [camera, cube],
       activeCameraId: camera.id,
       animation: createDefaultAnimation(),

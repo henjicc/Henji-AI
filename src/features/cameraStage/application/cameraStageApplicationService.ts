@@ -1,5 +1,5 @@
-import type { CameraStageProjectSnapshot } from '../projects/cameraStageProjectPersistence'
-import { cameraStageProjectStore, ensureCameraStageProjectRuntime, saveCameraStageProjectRuntime, bindCameraStageProjectOperation, readCameraStageProjectInstance } from './cameraStageProjectRuntime'
+import { cameraStageProjectStore, ensureCameraStageProjectRuntime, findCameraStageProjectInstance, saveCameraStageProjectRuntime, bindCameraStageProjectOperation, readCameraStageProjectInstance, type CameraStageProjectSnapshot } from './cameraStageProjectRuntime'
+import { getDocumentOperations } from '@/features/documents/documentOperations'
 import { createLogger } from '@/core/logging'
 import { CAMERA_STAGE_NAME_MAX_LENGTH } from '@/core/application-control/domains/cameraStage/cameraStageCapabilitySchemas'
 
@@ -9,15 +9,7 @@ import type { StageCameraEffector, StageStateKeyframe, StageSpatialPath } from '
 import type { StageKeyframeValue, StagePlaybackState } from '../domain/animationTypes'
 import { POSE_PRESETS } from '../domain/posePresets.gen'
 import { markSpatialPathCustom } from '../domain/spatialPath'
-import {
-  createStoredCameraStageProject,
-  deleteProject as deleteStoredProject,
-  listProjects,
-  loadProjectIntoScene,
-  renameProject as renameStoredProject,
-} from '../projects/cameraStageProjectService'
 import { compileStateKeyframesToAnimation } from '../domain/stateKeyframeCompiler'
-import { useCameraStageStore } from '../store/cameraStageStore'
 import { captureObjectsIntoStateKeyframe } from '../store/stateKeyframeSlice'
 import {
   calculateStageObjectBounds,
@@ -255,9 +247,18 @@ async function readDomainSnapshot(projectId: string): Promise<CameraStageProject
   return readCameraStageProjectInstance(projectId)
 }
 
+/** 助手可见的镜头参考文档：已保存的（含项目里的），以及当前已打开的草稿；找不到文件的不列。 */
+export interface CameraStageDocumentListItem { id: string; name: string; path: string }
+
 const implementation = {
-  async listProjects(): Promise<Awaited<ReturnType<typeof listProjects>>> {
-    return await listProjects()
+  async listProjects(): Promise<CameraStageDocumentListItem[]> {
+    const documents = await getDocumentOperations().listDocuments({
+      kind: 'camera_stage', container: { kind: 'any' }, includeDrafts: true, includeMissing: false,
+    })
+    // 没打开的草稿不列：读它会打开会话，草稿区就看不到这份遗留草稿了
+    return documents
+      .filter((document) => !document.draft || findCameraStageProjectInstance(document.id))
+      .map((document) => ({ id: document.id, name: document.name, path: document.path }))
   },
 
   async observeProject(projectId: string): Promise<CameraStageSceneObservation> {
@@ -294,27 +295,6 @@ const implementation = {
       else state.pause()
     }
     return { projectId, playback: { ...cameraStageProjectStore(projectId).getState().playback } }
-  },
-
-  async createProject(name: string): Promise<{ projectId: string; name: string }> {
-    const project = await createStoredCameraStageProject(name.trim())
-    return { projectId: project.id, name: project.name }
-  },
-
-  async openProject(projectId: string): Promise<{ projectId: string; name: string; objectCount: number; stateKeyframeCount: number }> {
-    if (!await loadProjectIntoScene(projectId)) throw new Error('NOT_FOUND')
-    const state = useCameraStageStore.getState()
-    return { projectId, name: state.currentProjectName, objectCount: state.objects.length, stateKeyframeCount: state.stateKeyframes.length }
-  },
-
-  async renameProject(projectId: string, name: string): Promise<{ projectId: string; name: string }> {
-    await renameStoredProject(projectId, name)
-    return { projectId, name: name.trim() }
-  },
-
-  async deleteProject(projectId: string): Promise<{ projectId: string; status: 'deleted' }> {
-    await deleteStoredProject(projectId)
-    return { projectId, status: 'deleted' }
   },
 
   async placeObject(input: PlaceObjectInput): Promise<{

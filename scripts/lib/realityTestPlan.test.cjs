@@ -77,6 +77,14 @@ test('剪辑冷重启目标只路由到既有两次启动执行器', () => {
   assert.equal(options.profile, 'temporary')
 })
 
+test('镜头参考文档目标（3.2）复用同一两次启动执行器', () => {
+  const options = parseRealityTestArgs(['--suite', 'restart', '--only', 'camera-stage-documents', '--out', 'stage-evidence'])
+  const [step] = buildRealityTestPlan(options, '/workspace')
+  assert.match(step.label, /镜头参考文档/)
+  assert.match(step.args[0], /mcp-restart-check\.cjs$/)
+  assert.deepEqual(step.args.slice(1), ['--only', 'camera-stage-documents', '--out', 'stage-evidence'])
+})
+
 test('restart 不允许忽略未知目标或同时跑不同目标', () => {
   assert.equal(resolveRestartTarget(), 'mcp')
   assert.equal(resolveRestartTarget(['video-edit-layout', 'video-edit-layout']), 'video-edit-layout')

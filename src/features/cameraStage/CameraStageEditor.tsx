@@ -49,8 +49,8 @@ const VIDEO_RESOLUTION_OPTIONS: Array<{ label: string; value: CameraStageVideoRe
 const logger = createLogger('cameraStage.editor')
 
 interface CameraStageEditorProps {
-  /** 返回工程列表 */
-  onBackToList?: () => void
+  /** 返回镜头参考列表（离开当前文档；草稿会先询问保存，取消时留在编辑器） */
+  onBackToList?: () => Promise<void> | void
   backLabel?: string
   autoExportVideoRequest?: number
   embeddedOutput?: {
@@ -65,7 +65,7 @@ interface CameraStageEditorProps {
 
 const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
   onBackToList,
-  backLabel = '返回项目列表',
+  backLabel = '返回镜头参考列表',
   autoExportVideoRequest,
   embeddedOutput,
 }) => {
@@ -79,7 +79,7 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
   const duplicateObject = useCameraStageStore((state) => state.duplicateObject)
   const requestFocusSelected = useCameraStageStore((state) => state.requestFocusSelected)
   const projectName = useCameraStageStore((state) => state.currentProjectName)
-  const setSessionProjectId = useCameraStageSessionStore((state) => state.setLastProjectId)
+  const setSessionDocumentId = useCameraStageSessionStore((state) => state.setLastDocumentId)
   const setSessionViewMode = useCameraStageSessionStore((state) => state.setStageViewMode)
   const animation = useCameraStageStore((state) => state.animation)
   const stateKeyframeCount = useCameraStageStore((state) => state.stateKeyframes.length)
@@ -332,8 +332,8 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
   }, [stateKeyframeHint])
 
   useEffect(() => {
-    setSessionProjectId(currentProjectId)
-  }, [currentProjectId, setSessionProjectId])
+    if (currentProjectId) setSessionDocumentId(currentProjectId)
+  }, [currentProjectId, setSessionDocumentId])
 
   useEffect(() => {
     setSessionViewMode(viewMode)
@@ -351,17 +351,15 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
     redo,
   })
 
-  /** 退出前先把当前摄像机视图落成工程封面，再交回列表；封面失败不阻塞返回。 */
-  const handleBackToList = useCallback((): void => {
-    const projectId = useCameraStageStore.getState().currentProjectId
+  /** 离开前先把当前摄像机视图落成列表封面（Canvas 卸载后就截不到了），再离开文档；封面失败不阻塞返回。 */
+  const handleBackToList = useCallback(async (): Promise<void> => {
+    const documentId = useCameraStageStore.getState().currentProjectId
     const capture = captureRef.current
-    if (projectId && capture) {
-      void updateCameraStageProjectCover(projectId, () => capture())
-    }
-    onBackToList?.()
+    if (documentId && capture) await updateCameraStageProjectCover(documentId, () => capture())
+    await onBackToList?.()
   }, [onBackToList])
 
-  const autosaveErrorLabel = saveState === 'error' ? '自动保存失败' : null
+  const autosaveErrorLabel = saveState?.status === 'failed' ? '自动保存失败' : null
   const videoProgressLabel = videoProgress
     ? videoProgress.phase === 'encoding'
       ? `编码 ${videoProgress.doneFrames}/${videoProgress.totalFrames}`
@@ -560,7 +558,7 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
             size="lg"
             aria-label={backLabel}
             title={backLabel}
-            onClick={handleBackToList}
+            onClick={() => void handleBackToList()}
           >
             <ArrowLeft size={16} />
           </UiIconButton>

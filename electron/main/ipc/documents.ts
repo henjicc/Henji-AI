@@ -46,6 +46,7 @@ export function registerDocumentsIpc(): void {
   registerIpcHandler(c.duplicateDocument, parseWith(duplicateDocumentRequestSchema), (request) => service().duplicateDocument(request))
   registerIpcHandler(c.trashDocument, parseWith(documentTargetSchema), (target) => service().trashDocument(target))
   registerIpcHandler(c.deleteEmptyDraft, parseWith(documentTargetSchema), (target) => service().deleteEmptyDraft(target))
+  registerIpcHandler(c.forgetDocument, parseWith(documentIdRequestSchema), ({ docId }) => service().forgetDocument(docId))
   registerIpcHandler(c.revealDocument, parseWith(documentTargetSchema), (target) => service().revealDocument(target))
   registerIpcHandler(c.resolveDocumentLink, parseWith(documentLinkSchema), (link) => service().resolveDocumentLink(link))
   registerIpcHandler(c.checkName, parseWith(nameCheckRequestSchema), (request) => service().checkName(request))

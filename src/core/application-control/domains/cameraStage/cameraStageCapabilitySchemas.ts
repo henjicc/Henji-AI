@@ -2,7 +2,7 @@ import { z } from 'zod'
 
 import type { ApplicationCapabilityDefinition } from '../../applicationCapabilities'
 
-/** 三维工程、对象与镜头名称的契约上限，schema 与领域服务共用。 */
+/** 三维对象与镜头名称的契约上限，schema 与领域服务共用。 */
 export const CAMERA_STAGE_NAME_MAX_LENGTH = 120
 
 export const cameraStageVec3Schema = z.object({
@@ -12,6 +12,13 @@ export const cameraStageVec3Schema = z.object({
 }).strict()
 
 export const cameraStageBaseRevisionSchema = z.number().int().nonnegative()
+
+/**
+ * 镜头参考文档 ID（3.2）：取自 list_documents（kind=camera_stage）或 camera_stage.project 实体的 id。
+ * 字段名沿用 projectId（历史命名），指的是一份镜头参考文档，不是 documents 里装文档的“项目”。
+ */
+export const cameraStageDocumentIdSchema = z.string().min(1)
+  .describe('镜头参考文档 ID：取自 list_documents（kind=camera_stage）返回的 id，不是文档所在项目的 ID')
 
 export const cameraStageObjectUpdateSchema = z.object({
   name: z.string().trim().min(1).max(CAMERA_STAGE_NAME_MAX_LENGTH).optional(),
@@ -65,7 +72,7 @@ export const cameraStageTransactionResultShape = {
   transactionRef: z.string().min(1),
   /**
    * 写入后的并发基线，直接用于下一次写入，不必再读一遍工程。
-   * 与不走事务的三维能力（新建、复制、删除、打开）返回同名同形状的字段。
+   * 与不走事务的三维能力（复制、删除对象）返回同名同形状的字段。
    */
   baseRevision: cameraStageBaseRevisionSchema,
   resultingRevisions: z.record(z.string(), z.number().int().nonnegative()),

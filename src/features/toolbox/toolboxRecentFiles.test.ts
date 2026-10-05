@@ -6,18 +6,15 @@ const mocks = vi.hoisted(() => ({
   openCamera: vi.fn(),
   loadAudio: vi.fn(),
   setProject: vi.fn(),
-  setAppView: vi.fn(),
   selectTool: vi.fn(),
 }))
 
 vi.mock('@/platform/runtime', () => ({ getPlatform: () => ({ audioEdit: { listProjects: mocks.listAudio } }) }))
 vi.mock('@/stores/navigationStore', () => ({ selectToolboxTool: mocks.selectTool }))
-vi.mock('@/features/cameraStage/application/cameraStageApplicationService', () => ({
-  cameraStageApplicationService: { listProjects: mocks.listCamera, openProject: mocks.openCamera },
+vi.mock('@/features/documents/documentOperations', () => ({
+  getDocumentOperations: () => ({ listDocuments: mocks.listCamera }),
 }))
-vi.mock('@/features/cameraStage/store/cameraStageSessionStore', () => ({
-  useCameraStageSessionStore: { getState: () => ({ setAppView: mocks.setAppView }) },
-}))
+vi.mock('@/features/cameraStage/projects/cameraStageProjectService', () => ({ openCameraStageDocument: mocks.openCamera }))
 vi.mock('@/features/audioEdit/application/audioEditProjectInstances', () => ({ loadAudioEditProject: mocks.loadAudio }))
 vi.mock('@/features/audioEdit/store/audioEditStore', () => ({
   useAudioEditStore: { getState: () => ({ setProject: mocks.setProject }) },
@@ -26,7 +23,7 @@ vi.mock('@/features/audioEdit/store/audioEditStore', () => ({
 import { loadToolboxRecentFiles, mergeToolboxRecentFiles, openToolboxRecentFile } from './toolboxRecentFiles'
 
 const audio = (id: string, updatedAt: number) => ({ id, name: `${id}.wav`, mediaType: 'audio' as const, durationFrames: 48000, sampleRate: 48000, updatedAt })
-const camera = (id: string, updatedAt: number) => ({ id, name: id, createdAt: 0, updatedAt, objectCount: 1, coverPath: null })
+const camera = (id: string, updatedAt: number) => ({ id, name: id, updatedAt })
 
 describe('工具首页最近文件', () => {
   afterEach(() => { vi.clearAllMocks() })
@@ -40,13 +37,14 @@ describe('工具首页最近文件', () => {
     mocks.listAudio.mockRejectedValue(new Error('磁盘不可用'))
     mocks.listCamera.mockResolvedValue([camera('c1', 5)])
     expect((await loadToolboxRecentFiles()).map((file) => file.key)).toEqual(['cameraStage:c1'])
+    // 镜头参考是通用文档：只列已保存且文件还在的
+    expect(mocks.listCamera).toHaveBeenCalledWith({ kind: 'camera_stage', container: { kind: 'any' }, includeDrafts: false, includeMissing: false })
   })
 
-  it('打开 3D 工程走正式打开入口并进入编辑器，再切到该工具', async () => {
-    mocks.openCamera.mockResolvedValue({ projectId: 'c1' })
+  it('打开镜头参考走它的文档打开入口（进入编辑器），再切到该工具', async () => {
+    mocks.openCamera.mockResolvedValue(undefined)
     await openToolboxRecentFile({ key: 'cameraStage:c1', toolId: 'cameraStage', projectId: 'c1', name: 'c1', updatedAt: 1 })
-    expect(mocks.openCamera).toHaveBeenCalledWith('c1')
-    expect(mocks.setAppView).toHaveBeenCalledWith('editor')
+    expect(mocks.openCamera).toHaveBeenCalledWith({ id: 'c1' })
     expect(mocks.selectTool).toHaveBeenCalledWith('cameraStage')
   })
 

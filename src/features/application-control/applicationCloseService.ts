@@ -2,7 +2,8 @@ import { flushAllAudioEditProjects } from '@/features/audioEdit/application/audi
 import { runApplicationCloseGuards } from '@/core/applicationLifecycle/applicationCloseGuards'
 import { freezeApplicationWrites } from '@/core/applicationLifecycle/applicationWriteBarrier'
 import { hasActiveCanvasProjectWork, listCanvasProjectInstances } from '@/features/canvas/application/canvasProjectInstances'
-import { hasActiveCameraStageProjectWork, listCameraStageProjectInstances, saveCameraStageProjectRuntime } from '@/features/cameraStage/application/cameraStageProjectRuntime'
+import { hasActiveCameraStageProjectWork, listCameraStageProjectInstances } from '@/features/cameraStage/application/cameraStageProjectRuntime'
+import { getDocumentSessionRegistry } from '@/features/documents/documentSessionRegistry'
 import { hasActiveImageEditDocumentWorkV3, listImageEditDocumentInstancesV3, saveImageEditDocumentInstanceV3 } from '@/features/imageEdit/v3/application/imageEditDocumentInstances'
 import { hasLoadingImageEditDocumentsV3 } from '@/features/imageEdit/v3/application/imageEditDocumentLoading'
 import { flushCanvasProjectSnapshot } from '@/stores/projectStore'
@@ -48,7 +49,8 @@ export function closeApplication(confirmClose: () => Promise<void>): Promise<voi
         else if (instance.dirty) throw new Error('图片文档尚未保存，请先为文档选择保存位置。')
       }
       for (const instance of listCanvasProjectInstances()) await flushCanvasProjectSnapshot(instance.id)
-      for (const instance of listCameraStageProjectInstances()) await saveCameraStageProjectRuntime(instance.id)
+      // 通用文档会话的第二轮保存（3.2）：关闭屏障守卫跑完到冻结之间的修改也写完；各工具不再逐个保存
+      await getDocumentSessionRegistry().flushAll()
       await flushAllAudioEditProjects()
       await confirmClose()
     } finally { unfreeze() }

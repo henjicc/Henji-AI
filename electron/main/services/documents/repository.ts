@@ -325,6 +325,23 @@ export class DocumentRepository {
     }))
   }
 
+  /**
+   * 从作品索引里移除一份找不到文件的文档（列表右键“从列表移除”，3.2 补齐 2.5 遗留）。
+   * 只动索引与程序目录里的封面，不碰磁盘上的任何文件；文件还在原位置时拒绝（应该移到回收站）。
+   */
+  async forget(documentId: string): Promise<void> {
+    await this.exclusive(documentId, async () => await this.logged('forget', { documentId }, async () => {
+      const row = this.workspace.catalog.getDocument(documentId)
+      if (!row) return
+      const file = await this.tryLoad(row.path)
+      if (file && file.header.id === documentId) {
+        throw new DocumentLocationError('这份文档的文件还在，不能只从列表移除；如要删除请移到回收站。')
+      }
+      this.workspace.catalog.removeDocument(documentId)
+      await this.options.removeCover?.(documentId)
+    }))
+  }
+
   async reveal(target: DocumentTarget): Promise<void> {
     const file = await this.locate(target)
     this.options.showItemInFolder(file.path)

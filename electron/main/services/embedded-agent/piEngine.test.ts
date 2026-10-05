@@ -258,7 +258,7 @@ describe('Pi official SDK engine', () => {
     const editNames = (f.requests.at(-1)!.tools as unknown as Array<{ name: string }>).map(tool => tool.name)
     expect(editNames).toEqual(expect.arrayContaining(['observe_video_edit_frame', 'read_application_media', 'change_application_entities', 'load_application_tools']))
     expect(editNames).not.toContain('export_video_edit'); expect(editNames).not.toContain('get_canvas_project')
-    for (const [surface, basic] of [['tool.camera_stage', 'get_camera_stage_project'], ['workspace.generation', 'search_models'], ['settings.general', 'search_application_settings']]) {
+    for (const [surface, basic] of [['tool.camera_stage', 'observe_camera_stage_scene'], ['workspace.generation', 'search_models'], ['settings.general', 'search_application_settings']]) {
       await f.engine.command({ action: 'prompt', input: { text: '当前页面', context: JSON.stringify({ surface: { id: surface } }) } })
       const names = (f.requests.at(-1)!.tools as unknown as Array<{ name: string }>).map(tool => tool.name)
       expect(names).toHaveLength(6)
@@ -288,7 +288,7 @@ describe('Pi official SDK engine', () => {
     expect(f.requests).toHaveLength(3)
     expect(f.requests[1].messages.find(message => message.role === 'tool')?.content).toContain('原画布')
     await f.engine.command({ action: 'prompt', input: { text: '查看三维', context: '{"surface":{"id":"tool.camera_stage"}}' } })
-    expect(names(-1)).toContain('get_camera_stage_project')
+    expect(names(-1)).toContain('observe_camera_stage_scene')
     expect(names(-1)).not.toContain('create_visible_generation_task')
     await f.engine.command({ action: 'prompt', input: { text: '继续画布任务', context: canvas } })
     expect(names(-1)).toContain('create_visible_generation_task')

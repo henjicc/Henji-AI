@@ -9,7 +9,7 @@ import {
   type CanvasNode,
   type CanvasNodeType,
 } from '@/features/canvas/domain/canvasNodes'
-import { cloneCameraStageProject } from '@/features/cameraStage/projects/cameraStageProjectService'
+import { duplicateCameraStageDocument } from '@/features/cameraStage/projects/cameraStageProjectService'
 import { rebaseCanvasLocalPromptData } from '@/features/canvas/application/generationPromptDocument'
 import {
   cloneNodeData,
@@ -134,7 +134,7 @@ export function useCanvasDuplication(params: UseCanvasDuplicationParams) {
         if (sourceNode.type === CANVAS_NODE_TYPES.cameraStage) {
           const projectId = (data as { projectId?: DynamicValue }).projectId
           if (typeof projectId === 'string' && projectId) {
-            void cloneCameraStageProject(projectId).then((copied) => {
+            void duplicateCameraStageDocument(projectId).then((copied) => {
               if (copied) useCanvasStore.getState().updateNodeData(nextNodeId, { projectId: copied.id })
             })
           }

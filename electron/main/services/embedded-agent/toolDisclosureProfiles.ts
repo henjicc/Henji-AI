@@ -33,7 +33,7 @@ export function surfaceProfile(surface: string): { tools: string[]; guidance: st
   if (surface === 'workspace.canvas') return { tools: ['get_canvas_project'],
     guidance: '当前为画布。已有通用实体读写与项目查询；已有项目和选择摘要无需再查。生成加载 task=canvas_generation，节点详细操作加载 task=canvas_nodes；三维和生成页工具按需加载。' }
   if (surface === 'workspace.generation') return { tools: ['search_models'], guidance: '当前为生成页。生成任务加载 task=generation；模型参数按所选模型读取。' }
-  if (surface === 'tool.camera_stage') return { tools: ['get_camera_stage_project'], guidance: '当前为三维场景。普通属性走通用实体，场景算法与渲染按需加载 camera_stage 领域。' }
+  if (surface === 'tool.camera_stage') return { tools: ['observe_camera_stage_scene'], guidance: '当前为三维场景（一份镜头参考文档，id 即文档 ID）。普通属性走通用实体，场景算法与渲染按需加载 camera_stage 领域；文档的列出、新建、改名、移动、删除用通用文档能力。' }
   if (surface === 'tool.image_edit') return { tools: [], guidance: '当前为图片编辑。图层普通读写走通用实体，编辑算法、预览及保存按需加载 image_edit 领域。' }
   if (surface === 'workspace.video_edit') return { tools: ['observe_video_edit_frame', 'read_application_media'],
     guidance: '当前为剪辑。宿主上下文的 videoEdit 给出工程、序列、播放头、入出点与选区；工程、序列、项目项、片段、代码素材与参数关键帧走通用实体读改增删。修改后用 observe_video_edit_frame 取指定合成帧或源帧，再用 read_application_media 读取画面核对。保存、撤销、拆分、导出、收录与创作结果回填按需加载 video_edit 领域。' }

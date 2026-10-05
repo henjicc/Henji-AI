@@ -1,4 +1,4 @@
-export type ProjectCoverScope = 'canvas' | 'camera-stage'
+export type ProjectCoverScope = 'canvas'
 export type ProjectCoverSourceKind = 'image' | 'video'
 
 export interface ProjectCoverSource {

@@ -50,17 +50,15 @@ describe('application capability handler coverage', () => {
   })
 
   it('创建能力保持后台原子性，打开能力声明可验证 Surface', () => {
-    const createCamera = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get('create_camera_stage_project')
-    expect(createCamera?.requiredScopes).not.toContain('navigation')
-    expect(createCamera?.producesRefs).not.toContain('application.surface')
-    expect(createCamera?.description).toContain('不切换当前界面')
-    expect(createCamera?.version).toBe(4)
-    expect(createCamera?.inputSchema.safeParse({ name: '单一状态关键帧工程' }).success).toBe(true)
-    expect(createCamera?.inputSchema.safeParse({ name: '旧输入', mode: 'pro' }).success).toBe(false)
+    // 3.2：新建镜头参考是通用 create_document，同样后台完成、不切换界面
+    const createDocument = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get('create_document')
+    expect(createDocument?.requiredScopes).not.toContain('navigation')
+    expect(createDocument?.producesRefs).not.toContain('application.surface')
+    expect(BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get('create_camera_stage_project')).toBeUndefined()
+    expect(BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get('open_camera_stage_project')).toBeUndefined()
     expect(BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get('bake_camera_stage_to_pro')).toBeUndefined()
 
     for (const id of [
-      'open_camera_stage_project',
       'open_canvas_project',
       'focus_canvas_node',
       'open_multi_layer_document_node_editor',
@@ -178,47 +176,6 @@ describe('application capability handler coverage', () => {
     ))
     expect(missing).toEqual([])
 
-    const openCamera = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get('open_camera_stage_project')
-    const effects = openCamera?.resolveObservedEffects?.(
-      { projectId: 'project-1' },
-      { projectId: 'project-1', surfaceId: 'tool.camera_stage' },
-    ) ?? []
-    expect(effects.map((effect) => applicationObservedEffectSchema.parse(effect))).toEqual([
-      expect.objectContaining({
-        effect: 'navigate',
-        targetRefs: [{ kind: 'application.surface', id: 'tool.camera_stage' }],
-      }),
-    ])
-
-    const createCamera = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get('create_camera_stage_project')
-    expect(createCamera?.outputSchema.safeParse({
-      projectId: 'project-1', name: '缺少引用', defaultCameraId: 'camera-1',
-      defaultStateKeyframeId: 'state-1', baseRevision: 1, revision: 1,
-      scopeRevisions: { toolbox: 1 },
-    }).success).toBe(false)
-    const createdEffects = createCamera?.resolveObservedEffects?.(
-      { name: '稳定引用测试' },
-      {
-        projectId: 'project-1', name: '稳定引用测试', defaultCameraId: 'camera-1',
-        defaultStateKeyframeId: 'state-1', baseRevision: 1, revision: 1,
-        scopeRevisions: { toolbox: 1 },
-        resultRefs: [
-          { kind: 'camera_stage.project', id: 'project-1' },
-          { kind: 'camera_stage.camera', id: 'project-1:camera-1' },
-          { kind: 'camera_stage.state_keyframe', id: 'project-1:state-1' },
-        ],
-      },
-    ) ?? []
-    expect(createdEffects.map((effect) => applicationObservedEffectSchema.parse(effect))).toEqual([
-      expect.objectContaining({
-        effect: 'create',
-        targetRefs: [
-          { kind: 'camera_stage.project', id: 'project-1' },
-          { kind: 'camera_stage.camera', id: 'project-1:camera-1' },
-          { kind: 'camera_stage.state_keyframe', id: 'project-1:state-1' },
-        ],
-      }),
-    ])
   })
 
   it('所有有控制影响的能力都能产出强类型 Effect，画布读写使用完整稳定引用', () => {

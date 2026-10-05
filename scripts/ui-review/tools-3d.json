@@ -16,11 +16,11 @@
       {
         "click": {
           "role": "button",
-          "name": "/^(返回项目列表|返回列表)$/"
+          "name": "/^(返回项目列表|返回列表|返回镜头参考列表)$/"
         },
         "ifPresent": {
           "role": "button",
-          "name": "/^(返回项目列表|返回列表)$/"
+          "name": "/^(返回项目列表|返回列表|返回镜头参考列表)$/"
         }
       },
       {
@@ -91,11 +91,11 @@
       {
         "click": {
           "role": "button",
-          "name": "/^(返回项目列表|返回列表)$/"
+          "name": "/^(返回项目列表|返回列表|返回镜头参考列表)$/"
         },
         "ifPresent": {
           "role": "button",
-          "name": "/^(返回项目列表|返回列表)$/"
+          "name": "/^(返回项目列表|返回列表|返回镜头参考列表)$/"
         }
       },
       {
@@ -117,7 +117,7 @@
       {
         "waitFor": {
           "role": "button",
-          "name": "/^新建项目$/"
+          "name": "/^新建镜头参考$/"
         },
         "timeout": 12000
       },
@@ -130,40 +130,7 @@
       {
         "click": {
           "role": "button",
-          "name": "/^新建项目$/"
-        }
-      },
-      {
-        "waitFor": {
-          "role": "dialog"
-        }
-      },
-      {
-        "waitStable": {}
-      },
-      {
-        "capture": "list-create-dialog"
-      },
-      {
-        "fill": {
-          "target": {
-            "role": "textbox",
-            "within": {
-              "role": "dialog"
-            }
-          },
-          "text": "核对-3D镜头 第一批"
-        }
-      },
-      {
-        "press": {
-          "key": "Enter",
-          "target": {
-            "role": "textbox",
-            "within": {
-              "role": "dialog"
-            }
-          }
+          "name": "/^新建镜头参考$/"
         }
       },
       {
@@ -692,25 +659,35 @@
       {
         "click": {
           "role": "button",
-          "name": "/^返回项目列表$/"
+          "name": "/^返回镜头参考列表$/"
         }
       },
       {
         "waitFor": {
-          "role": "button",
-          "name": "/^新建项目$/"
-        },
-        "timeout": 12000
+          "role": "alertdialog"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "leave-draft-prompt"
       },
       {
         "click": {
           "role": "button",
-          "name": "/^新建项目$/"
+          "name": "/^保存$/",
+          "within": {
+            "role": "alertdialog"
+          }
         }
       },
       {
         "waitFor": {
-          "role": "dialog"
+          "role": "textbox",
+          "within": {
+            "role": "dialog"
+          }
         }
       },
       {
@@ -721,7 +698,89 @@
               "role": "dialog"
             }
           },
-          "text": "核对-3D镜头 名称很长的第二个工程用来看截断"
+          "text": "核对-3D镜头 第一批"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "save-name-dialog"
+      },
+      {
+        "press": {
+          "key": "Enter",
+          "target": {
+            "role": "textbox",
+            "within": {
+              "role": "dialog"
+            }
+          }
+        }
+      },
+      {
+        "waitFor": {
+          "role": "button",
+          "name": "/^新建镜头参考$/"
+        },
+        "timeout": 12000
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/^新建镜头参考$/"
+        }
+      },
+      {
+        "waitFor": {
+          "role": "button",
+          "name": "/^添加球体$/"
+        },
+        "timeout": 15000
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/^添加球体$/"
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/^返回镜头参考列表$/"
+        }
+      },
+      {
+        "waitFor": {
+          "role": "alertdialog"
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/^保存$/",
+          "within": {
+            "role": "alertdialog"
+          }
+        }
+      },
+      {
+        "waitFor": {
+          "role": "textbox",
+          "within": {
+            "role": "dialog"
+          }
+        }
+      },
+      {
+        "fill": {
+          "target": {
+            "role": "textbox",
+            "within": {
+              "role": "dialog"
+            }
+          },
+          "text": "核对-3D镜头 名称很长的第二个工程用来检查卡片标题截断"
         }
       },
       {
@@ -738,20 +797,7 @@
       {
         "waitFor": {
           "role": "button",
-          "name": "/^添加球体$/"
-        },
-        "timeout": 15000
-      },
-      {
-        "click": {
-          "role": "button",
-          "name": "/^返回项目列表$/"
-        }
-      },
-      {
-        "waitFor": {
-          "role": "button",
-          "name": "/^新建项目$/"
+          "name": "/^新建镜头参考$/"
         },
         "timeout": 12000
       },

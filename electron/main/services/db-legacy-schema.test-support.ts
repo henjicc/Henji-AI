@@ -65,6 +65,12 @@ export const LEGACY_SCHEMA_SQL = `
     request_id TEXT PRIMARY KEY, input_digest TEXT NOT NULL, response_json TEXT, created_at INTEGER NOT NULL
   );
   CREATE TABLE IF NOT EXISTS camera_stage_render_tasks (request_id TEXT PRIMARY KEY, record_json TEXT NOT NULL);
+  -- 3.2 退役的镜头参考工程表（2.3 之前的库里都有）
+  CREATE TABLE IF NOT EXISTS camera_stage_projects (
+    id TEXT PRIMARY KEY, name TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL,
+    object_count INTEGER NOT NULL DEFAULT 0, scene_json TEXT NOT NULL, cover_path TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_camera_stage_projects_updated_at ON camera_stage_projects(updated_at DESC);
 `
 
 export function createLegacyDatabase(db: Database.Database): void {

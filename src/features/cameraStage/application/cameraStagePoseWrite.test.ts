@@ -1,15 +1,6 @@
 import { loadCameraStageTestProject } from '@/tests/cameraStageProjectFixture'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const mocks = vi.hoisted(() => ({
-  writeProject: vi.fn().mockResolvedValue(undefined),
-  loadProjectIntoScene: vi.fn().mockResolvedValue(true),
-}))
-
-vi.mock('@/commands/cameraStageProjects', () => ({ upsertCameraStageProjectRecord: mocks.writeProject }))
-
-vi.mock('../projects/cameraStageProjectService', () => ({ loadProjectIntoScene: mocks.loadProjectIntoScene }))
-
 import type { ApplicationPlannedStep } from '@/core/application-control'
 
 import { poseJointPath } from '../domain/animatableProps'
@@ -43,7 +34,7 @@ describe('三维姿态状态关键帧写入', () => {
   let characterId: string
   let primitiveId: string
 
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks()
     revision = 1
     const camera = createCameraObject('摄像机01', pickDefaultColor(0))
@@ -52,7 +43,7 @@ describe('三维姿态状态关键帧写入', () => {
     characterId = character.id
     primitiveId = primitive.id
     const objects = [camera, character, primitive]
-    loadCameraStageTestProject({
+    await loadCameraStageTestProject({
       objects,
       activeCameraId: camera.id,
       animation: createDefaultAnimation(),

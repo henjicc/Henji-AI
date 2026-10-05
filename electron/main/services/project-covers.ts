@@ -11,13 +11,14 @@ import {
 export type { ProjectCoverSourceDto, ProjectCoverSourceKind } from './project-cover-layout'
 
 /**
- * 工程封面：画布工程与 3D 镜头参考工程共用同一套落盘、清理与登记逻辑。
+ * 画布工程封面（旧工程表 storyboard_projects）。
  *
- * 封面来源由渲染层决定（生成结果 / 视口截图）；转码与拼图在 covers/cover-render.ts（与通用文档封面共用），
- * 这里只负责写进程序目录、把路径登记回各自的工程表。画布与镜头参考接入文档底座（3.x）后改用通用封面。
+ * 封面来源由渲染层决定（生成结果）；转码与拼图在 covers/cover-render.ts（与通用文档封面共用），
+ * 这里只负责写进程序目录、把路径登记回工程表。镜头参考已在 3.2 改用通用文档封面
+ * （documents/covers.ts，按文档 ID），画布接入文档底座（3.4）时整个文件删除。
  */
 
-export type ProjectCoverScope = 'canvas' | 'camera-stage'
+export type ProjectCoverScope = 'canvas'
 
 export interface SaveProjectCoverPayloadDto {
   scope: ProjectCoverScope
@@ -33,7 +34,6 @@ export interface ProjectCoverResultDto {
 const COVER_DIR_NAME = 'ProjectCovers'
 const SCOPE_TABLES: Record<ProjectCoverScope, string> = {
   canvas: 'storyboard_projects',
-  'camera-stage': 'camera_stage_projects',
 }
 
 const logger = createMainLogger('main.project-covers')

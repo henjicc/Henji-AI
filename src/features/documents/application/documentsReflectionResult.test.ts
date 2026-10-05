@@ -28,6 +28,7 @@ vi.mock('@/commands/documents', () => {
     trashDocument: call('trashDocument'),
     deleteEmptyDraft: call('deleteEmptyDraft'),
     revealDocument: call('revealDocument'),
+    forgetDocument: call('forgetDocument'),
     checkDocumentName: call('checkName'),
     refreshDocumentIndex: call('refreshIndex'),
     listProjects: call('listProjects'),
@@ -73,26 +74,32 @@ it('新建项目、把文档移进去、创建副本再移到回收站，作品�
   const meta = fake.seed({ name: '分镜', content: { items: ['a'] } })
   const app = createApplicationHarness()
   try {
-    const created = await app.requireResult('create_project', { name: '宣传片' }) as { resultRef: { id: string } }
+    type Verified = { verification: { verified: boolean } }
+    const created = await app.requireResult('create_project', { name: '宣传片' }) as { resultRef: { id: string } } & Verified
     const projectId = created.resultRef.id
+    // 写入都带从作品索引回读的核实回执（外部智能体据此判定成功）
+    expect(created.verification.verified).toBe(true)
     expect(fake.projects.get(projectId)?.name).toBe('宣传片')
 
-    const moved = await app.requireResult('move_document', { documentId: meta.id, projectId }) as { projectId: string | null }
+    const moved = await app.requireResult('move_document', { documentId: meta.id, projectId }) as { projectId: string | null } & Verified
     expect(moved.projectId).toBe(projectId)
+    expect(moved.verification.verified).toBe(true)
     expect(fake.stored(meta.id)?.meta.container).toEqual({ kind: 'project', projectId })
 
     const listed = await app.requireResult('list_documents', { location: 'project', projectId }) as { documents: Array<{ name: string; projectName: string | null }> }
     expect(listed.documents).toEqual([expect.objectContaining({ name: '分镜', projectName: '宣传片' })])
     expect(JSON.stringify(listed)).not.toContain('D:/')
 
-    const copy = await app.requireResult('duplicate_document', { documentId: meta.id }) as { resultRef: { id: string }; name: string }
+    const copy = await app.requireResult('duplicate_document', { documentId: meta.id }) as { resultRef: { id: string }; name: string } & Verified
     expect(copy.name).toBe('分镜 (2)')
+    expect(copy.verification.verified).toBe(true)
     expect(fake.stored(copy.resultRef.id)?.meta.container).toEqual({ kind: 'project', projectId })
 
     // 移到回收站是破坏性操作：必须带上读取目标时拿到的基线
     const baseline = await app.read({ kind: 'documents.document', id: copy.resultRef.id }, ['documents.document.name'])
-    const trashed = await app.requireResult('trash_document', { documentId: copy.resultRef.id }, baseline.revisions as Record<string, number>) as { status: string }
+    const trashed = await app.requireResult('trash_document', { documentId: copy.resultRef.id }, baseline.revisions as Record<string, number>) as { status: string } & Verified
     expect(trashed.status).toBe('trashed')
+    expect(trashed.verification.verified).toBe(true)
     expect(fake.trashed).toContain(copy.resultRef.id)
     expect(fake.stored(copy.resultRef.id)).toBeUndefined()
   } finally {

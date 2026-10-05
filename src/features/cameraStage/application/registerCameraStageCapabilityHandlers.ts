@@ -7,7 +7,10 @@ import type { ApplicationCapabilityHandlerRegistrar } from '@/features/applicati
 
 import { parseCapabilityInput, throwIfCapabilityAborted } from '@/features/application-control/capabilities/handlerUtils'
 import { openApplicationSurface } from '@/features/navigation/application/surfaceCapabilityService'
-import { applyCameraStageCameraMove, createCameraStageProject, deleteCameraStageObject, deleteCameraStageProject, duplicateCameraStageObject, getCameraStageProject, listCameraStageProjects, observeCameraStageScene, openCameraStageProject, placeCameraStageObject, renameCameraStageProject, updateCameraStageObject, verifyCameraStage } from '@/features/cameraStage/application/cameraStageCapabilityAdapter'
+import { applyCameraStageCameraMove, deleteCameraStageObject, duplicateCameraStageObject, observeCameraStageScene, placeCameraStageObject, updateCameraStageObject, verifyCameraStage } from '@/features/cameraStage/application/cameraStageCapabilityAdapter'
+import { releaseCameraStageProjectInstance } from '@/features/cameraStage/application/cameraStageProjectRuntime'
+import { openCameraStageDocument } from '@/features/cameraStage/projects/cameraStageProjectService'
+import { registerDocumentOpener, registerDocumentReleaser } from '@/features/documents/documentOperations'
 import { cancelCameraStageRenderTask, getCameraStageRenderTask, renderCameraStageOutput, waitCameraStageRenderTask, recoverCameraStageRenderTask } from '@/features/cameraStage/application/cameraStageRenderCapabilityAdapter'
 
 interface ProjectInput {
@@ -23,44 +26,17 @@ export function registerCameraStageCapabilityHandlers(registrar: ApplicationCapa
     readRevision: () => getHostScopeRevisions().toolbox,
     bumpRevision: () => notifyHostScopeChanged('toolbox'),
   })
-  registrar.registerHandler('list_camera_stage_projects', async () => await listCameraStageProjects())
-
-  registrar.registerHandler('get_camera_stage_project', async (input) => {
-    const parsed = parseCapabilityInput<ProjectInput>('get_camera_stage_project', input)
-    return await getCameraStageProject(parsed.projectId)
+  // 镜头参考文档的通用打开与后台释放（3.2）：列表、管理与打开走通用文档能力（list_documents / open_document 等），
+  // 这里只登记“打开到哪里”和“后台持有的实例怎么释放”。
+  registerDocumentOpener('camera_stage', async (document) => {
+    await openCameraStageDocument({ id: document.id, path: document.path })
+    openApplicationSurface('tool.camera_stage')
   })
+  registerDocumentReleaser('camera_stage', releaseCameraStageProjectInstance)
 
   registrar.registerHandler('observe_camera_stage_scene', async (input) => {
     const parsed = parseCapabilityInput<ProjectInput>('observe_camera_stage_scene', input)
     return await observeCameraStageScene(parsed.projectId)
-  })
-
-  registrar.registerHandler('open_camera_stage_project', async (input, context) => {
-    throwIfCapabilityAborted(context.signal)
-    const parsed = parseCapabilityInput<ProjectInput>('open_camera_stage_project', input)
-    const project = await openCameraStageProject(parsed.projectId)
-    return { ...project, ...openApplicationSurface('tool.camera_stage', context) }
-  })
-
-  registrar.registerHandler('create_camera_stage_project', async (input, context) => {
-    throwIfCapabilityAborted(context.signal)
-    const parsed = parseCapabilityInput<{ name: string }>('create_camera_stage_project', input)
-    return await createCameraStageProject(parsed.name)
-  })
-
-  registrar.registerHandler('rename_camera_stage_project', async (input, context) => {
-    throwIfCapabilityAborted(context.signal)
-    const parsed = parseCapabilityInput<ProjectInput & { name: string; baseRevision: number }>(
-      'rename_camera_stage_project',
-      input
-    )
-    return await renameCameraStageProject(parsed, context)
-  })
-
-  registrar.registerHandler('delete_camera_stage_project', async (input, context) => {
-    throwIfCapabilityAborted(context.signal)
-    const parsed = parseCapabilityInput<ProjectInput & { baseRevision: number }>('delete_camera_stage_project', input)
-    return await deleteCameraStageProject(parsed)
   })
 
   registrar.registerHandler('place_camera_stage_object', async (input, context) => {

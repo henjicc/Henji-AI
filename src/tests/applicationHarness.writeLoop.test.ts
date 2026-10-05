@@ -13,6 +13,7 @@ import { useSettingsStore } from '@/stores/settingsStore';
 
 import { useCameraStageStore } from '@/features/cameraStage/store/cameraStageStore';
 import { getPlatform } from '@/platform/runtime';
+import { BLACK_HEX } from '@/core/theme/colorTokens';
 import { registerPersistedImageEditTestSession } from './imageEditPersistenceTestSession';
 import { loadRealModelsIntoRegistry } from './loadRealModels';
 import { harnessDocumentStore, installHarnessNativeStorage, registerHarnessAudioEditProject, uninstallHarnessNativeStorage } from './harnessNativeStorage';
@@ -33,7 +34,9 @@ it('所有已登记写域均经公共授权入口修改、正式读回并核对�
   try {
     setCanvasTestProjectState({ projects: [], currentProject: null, currentProjectId: null, isHydrated: true })
     const canvas = await app.requireResult('create_canvas_project', { name: '公共画布回环' })
-    const camera = await app.requireResult('create_camera_stage_project', { name: '公共三维回环' })
+    // 镜头参考是通用文档（3.2）：用通用 create_document 新建，内容实体的 id 就是文档 ID
+    const camera = await app.requireResult('create_document', { kind: 'camera_stage', name: '公共三维回环' })
+    const cameraDocumentId = (camera.resultRef as ApplicationRef).id
     const library = await app.requireResult('change_application_entities', { summary: '创建素材集合', changes: [{
       kind: 'create_items', entityType: 'asset.library', parent: { kind: 'asset.catalog', id: 'default' },
       items: [{ properties: { 'asset.library.name': '公共素材回环' } }],
@@ -61,7 +64,7 @@ it('所有已登记写域均经公共授权入口修改、正式读回并核对�
       { domain: 'settings', ref: { kind: 'settings.registry', id: 'singleton' }, property: 'interface.theme_contrast', value: 'strong' },
       { domain: 'generation', ref: { kind: 'generation.draft', id: 'singleton' }, property: 'generation.draft.prompt_text', value: '公共草稿回环' },
       { domain: 'canvas', ref: { kind: 'canvas.project', id: String(canvas.projectId) }, property: 'canvas.project.name', value: '公共画布已改名' },
-      { domain: 'camera_stage', ref: { kind: 'camera_stage.project', id: String(camera.projectId) }, property: 'camera_stage.project.name', value: '公共三维已改名' },
+      { domain: 'camera_stage', ref: { kind: 'camera_stage.scene', id: cameraDocumentId }, property: 'camera_stage.scene.sky_color', value: BLACK_HEX },
       { domain: 'models', ref: await first('generation.model'), property: 'generation.model.hidden', value: true },
       { domain: 'image_mark', ref: await first('image_mark.document'), property: 'image_mark.document.orientation_rotate', value: '90' },
       { domain: 'image_edit', ref: { kind: 'image_edit.layer', id: `v3:${document.id}:effect` }, property: 'image_edit.layer.opacity', value: 0.42 },
@@ -92,8 +95,10 @@ it('所有已登记写域均经公共授权入口修改、正式读回并核对�
     expect(bus.getSnapshot().document.layers[0].opacity).toBe(0.42)
     expect(imageEditDocumentToMarkDoc(useImageEditSessionStore.getState().sessions['application-mark-loop'].document).orientation.rotate).toBe(90)
     expect((await getPlatform().storyboardProjects.listProjectSummaries()).map(project => project.name)).toContain('公共画布已改名')
-    expect((await getPlatform().cameraStageProjects.listProjectSummaries()).map(project => project.name)).toContain('公共三维已改名')
-    expect(useCameraStageStore.getState().currentProjectName).not.toBe('公共三维已改名')
+    const cameraContent = harnessDocumentStore().stored(cameraDocumentId)?.content as { sceneSettings: { sky: { color: string } } }
+    expect(cameraContent.sceneSettings.sky.color).toBe(BLACK_HEX)
+    // 后台写入不切换界面上的三维场景
+    expect(useCameraStageStore.getState().currentProjectId).not.toBe(cameraDocumentId)
     expect(JSON.parse(videoFiles.get('D:/write-loop.henji-video')!).name).toBe('公共剪辑已改名')
     expect(harnessDocumentStore().stored(documentMeta.id)?.meta.name).toBe('公共文档已改名')
     await closeVideoEditProject(video.document.id)

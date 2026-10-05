@@ -34,7 +34,7 @@ function requestFingerprint(request: CameraStageRenderRequestDto): string {
   return JSON.stringify([
     request.canvasProjectId,
     request.nodeId,
-    request.cameraStageProjectId,
+    request.cameraStageDocumentId,
     request.resolutionPreset,
     request.outputKind,
     request.selectedTimeSec ?? null,

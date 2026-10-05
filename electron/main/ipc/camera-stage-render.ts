@@ -21,15 +21,15 @@ function parseRenderRequest(input: unknown): CameraStageRenderRequestDto {
   const requestId = record.requestId
   const nodeId = record.nodeId
   const canvasProjectId = record.canvasProjectId
-  const cameraStageProjectId = record.cameraStageProjectId
+  const cameraStageDocumentId = record.cameraStageDocumentId
   const resolutionPreset = record.resolutionPreset
   const outputKind = record.outputKind
   const selectedTimeSec = record.selectedTimeSec === undefined ? undefined : Number(record.selectedTimeSec)
   if (typeof requestId !== 'string' || !requestId) throw new Error('Expected render requestId')
   if (typeof nodeId !== 'string' || !nodeId) throw new Error('Expected render nodeId')
   if (typeof canvasProjectId !== 'string' || !canvasProjectId) throw new Error('Expected canvasProjectId')
-  if (typeof cameraStageProjectId !== 'string' || !cameraStageProjectId) {
-    throw new Error('Expected cameraStageProjectId')
+  if (typeof cameraStageDocumentId !== 'string' || !cameraStageDocumentId) {
+    throw new Error('Expected cameraStageDocumentId')
   }
   if (resolutionPreset !== '720p' && resolutionPreset !== '1080p') {
     throw new Error('Expected render resolutionPreset')
@@ -38,7 +38,7 @@ function parseRenderRequest(input: unknown): CameraStageRenderRequestDto {
   if (selectedTimeSec !== undefined && (!Number.isFinite(selectedTimeSec) || selectedTimeSec < 0)) {
     throw new Error('Expected non-negative render selectedTimeSec')
   }
-  return { requestId, nodeId, canvasProjectId, cameraStageProjectId, resolutionPreset, outputKind, selectedTimeSec }
+  return { requestId, nodeId, canvasProjectId, cameraStageDocumentId, resolutionPreset, outputKind, selectedTimeSec }
 }
 
 function parseTaskScope(input: unknown): CameraStageRenderTaskScopeDto {

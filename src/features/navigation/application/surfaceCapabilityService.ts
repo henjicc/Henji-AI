@@ -1,6 +1,5 @@
 import type { ApplicationRef } from '@/core/application-control/applicationCapabilities'
-import { cameraStageApplicationService } from '@/features/cameraStage/application/cameraStageApplicationService'
-import { useCameraStageSessionStore } from '@/features/cameraStage/store/cameraStageSessionStore'
+import { openCameraStageDocument } from '@/features/cameraStage/projects/cameraStageProjectService'
 import { useCameraStageStore } from '@/features/cameraStage/store/cameraStageStore'
 import { focusCanvasNode, openCanvasProject } from '@/features/canvas/application/canvasApplicationService'
 import { closeApplicationSurface as closeSurface, listApplicationSurfaces, openApplicationSurface as openSurface } from '@/features/navigation/application/index'
@@ -106,8 +105,7 @@ export async function focusApplicationEntity(
       ? ref.id
       : ref.id.slice(0, separator)
     if (!projectId) throw new Error('INVALID_INPUT')
-    await cameraStageApplicationService.openProject(projectId)
-    useCameraStageSessionStore.getState().setAppView('editor')
+    await openCameraStageDocument({ id: projectId })
     const childId = ref.kind === 'camera_stage.project' || ref.kind === 'camera_stage.scene'
       ? null
       : ref.id.slice(separator + 1)

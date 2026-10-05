@@ -9,7 +9,7 @@ import { isCameraStageNode } from '@/features/canvas/domain/canvasNodes';
 const CameraStageEditor = lazy(() => import('@/features/cameraStage/CameraStageEditor'));
 import {
   applyProjectEnvironmentImage,
-  createNewProject,
+  createNamedCameraStageDocumentInEditor,
   loadProjectIntoScene,
 } from '@/features/cameraStage/projects/cameraStageProjectService';
 import { saveCameraStageProjectRuntime } from '@/features/cameraStage/application/cameraStageProjectRuntime';
@@ -47,7 +47,8 @@ export function CameraStageNodeDialog(): JSX.Element | null {
           ? await loadProjectIntoScene(nodeProjectId)
           : false;
         if (!loaded) {
-          const created = await createNewProject(nodeDisplayName || '3D 镜头参考');
+          // 节点内嵌的镜头参考：已命名的独立文档（不是草稿），存进作品目录“镜头参考”文件夹
+          const created = await createNamedCameraStageDocumentInEditor(nodeDisplayName || '3D 镜头参考');
           if (!cancelled) updateNodeData(nodeId, { projectId: created.id });
         }
         logger.info('画布 3D 镜头参考已打开', {

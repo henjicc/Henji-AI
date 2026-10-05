@@ -1,4 +1,3 @@
-const CAMERA_STAGE_PLAYBACK_PROJECT_ID = 'ui-camera-stage-playback-clock'
 
 function transform(x, y, z) {
   return {
@@ -187,26 +186,32 @@ function assertReadableWebGlFrames(frames, phase) {
   }
 }
 
+/**
+ * 造一份镜头参考文档（3.2 起镜头参考是作品目录里的 .henji-stage 文件）：经正式文档接口写文件，不写 SQL。
+ * 返回文档 ID。同名已存在时（重复运行在同一资料目录）换一个带时间的名字。
+ */
+async function seedCameraStageDocument(page, { name, scene }) {
+  return await page.evaluate(async ({ name, scene }) => {
+    const documents = window.henjiNative?.documents
+    if (!documents) throw new Error('documents preload 不可用')
+    const { schemaVersion: _version, ...content } = scene
+    const create = (documentName) => documents.createDocument({ kind: 'camera_stage', container: { kind: 'user' }, name: documentName, content })
+    try {
+      return (await create(name)).meta.id
+    } catch (error) {
+      if (!String(error?.message ?? error).includes('同名')) throw error
+      return (await create(`${name} ${Date.now()}`)).meta.id
+    }
+  }, { name, scene })
+}
+
 async function setupCameraStagePlaybackClock(page, context, inspection = {}) {
   const { setupToolbox, clickNamedButton, settlePage } = context
   await setupToolbox(page)
-  const sceneJson = JSON.stringify(createPlaybackFixture())
-  await page.evaluate(async ({ projectId, serialized }) => {
-    const projects = window.henjiNative?.cameraStageProjects
-    if (!projects) throw new Error('cameraStageProjects preload 不可用')
-    const now = Date.now()
-    await projects.upsertProjectRecord({
-      id: projectId,
-      name: '真实性巡检-统一逐帧时钟',
-      createdAt: now,
-      updatedAt: now,
-      objectCount: 3,
-      sceneJson: serialized,
-    })
-  }, { projectId: CAMERA_STAGE_PLAYBACK_PROJECT_ID, serialized: sceneJson })
+  const documentId = await seedCameraStageDocument(page, { name: '真实性巡检-统一逐帧时钟', scene: createPlaybackFixture() })
 
   await clickNamedButton(page, /^(3D 镜头参考|3D Camera Reference)/i)
-  const project = page.locator(`[data-project-id="${CAMERA_STAGE_PLAYBACK_PROJECT_ID}"]`)
+  const project = page.locator(`[data-project-id="${documentId}"]`)
   await project.waitFor({ state: 'visible', timeout: 12000 })
   await project.click()
 
@@ -261,4 +266,4 @@ async function setupCameraStagePlaybackClock(page, context, inspection = {}) {
   await settlePage(page, 400)
 }
 
-module.exports = { createPlaybackFixture, setupCameraStagePlaybackClock }
+module.exports = { createPlaybackFixture, seedCameraStageDocument, setupCameraStagePlaybackClock }

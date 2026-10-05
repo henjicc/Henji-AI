@@ -1,8 +1,8 @@
 /**
- * 3D 镜头参考场景的序列化 / 反序列化（工程持久化用）。
- *
- * 开发阶段只接受当前 schema。旧记录可以继续留在数据库中，但不会进入工程列表、反射枚举、
- * 编辑器、复制或渲染链路；这里不再承担旧模式迁移，避免历史第二真相源污染当前模型。
+ * 3D 镜头参考场景的两种外部形态：
+ * - 文档内容（`.henji-stage` 文件的 content，3.2 起的唯一持久形态）：`sceneToDocumentContent` / `sceneFromDocumentContent`；
+ * - 场景 JSON 字符串（带 schemaVersion，只给后台渲染请求传场景投影用）：`serializeScene` / `deserializeScene`。
+ * 两者读取时走同一套逐字段规范化（`normalizeSceneRecord`），派生动画始终从状态关键帧重新编译。
  */
 
 import { normalizeCharacterMotion } from './characterMotion'
@@ -249,6 +249,50 @@ export function isCurrentCameraStageScene(sceneJson: string): boolean {
   }
 }
 
+/** 文档里存的场景内容：持久字段，不含 schemaVersion（由文档外壳的 kindVersion 表达）与派生动画。 */
+export type CameraStageSceneContent = StageSceneSnapshotInput
+
+export function sceneToDocumentContent(input: StageSceneSnapshotInput): CameraStageSceneContent {
+  return {
+    objects: input.objects,
+    activeCameraId: input.activeCameraId,
+    sceneSettings: input.sceneSettings,
+    stateKeyframes: input.stateKeyframes,
+  }
+}
+
+/** 文档内容 → 运行时快照：与旧工程数据相同的逐字段规范化，非法字段回退默认值。 */
+export function sceneFromDocumentContent(content: unknown): StageSceneRuntimeSnapshot {
+  if (!content || typeof content !== 'object') throw new Error('[cameraStage] 场景数据结构无效')
+  const { objects, activeCameraId, animation, sceneSettings, stateKeyframes } = normalizeSceneRecord(content as Record<string, unknown>)
+  return { objects, activeCameraId, animation, sceneSettings, stateKeyframes }
+}
+
+/** 场景是否完全空白（新建文档的空内容）：工具打开时补上默认摄像机与第一张状态关键帧。 */
+export function isBlankSceneContent(snapshot: StageSceneSnapshotInput): boolean {
+  return snapshot.objects.length === 0 && snapshot.stateKeyframes.length === 0
+}
+
+function normalizeSceneRecord(record: Record<string, unknown>): StageSceneSnapshot {
+  let objects = Array.isArray(record.objects) ? (record.objects as StageObject[]) : []
+  objects = withNormalizedCharacterMotion(objects)
+  objects = withDefaultCameraEffectors(objects)
+  objects = withNormalizedCameraRotations(objects)
+  const activeCameraId = typeof record.activeCameraId === 'string' ? record.activeCameraId : null
+  const sceneSettings = parseSceneSettings(record.sceneSettings)
+  const stateKeyframes = normalizeStateKeyframes(record.stateKeyframes)
+  const animation = compileStateKeyframesToAnimation(stateKeyframes, objects)
+
+  return {
+    schemaVersion: CAMERA_STAGE_SCENE_SCHEMA_VERSION,
+    objects,
+    activeCameraId,
+    animation,
+    sceneSettings,
+    stateKeyframes,
+  }
+}
+
 /** 只读取当前 schema；派生动画始终从状态关键帧重新编译。 */
 export function deserializeScene(sceneJson: string): StageSceneSnapshot {
   let parsed: unknown
@@ -269,22 +313,5 @@ export function deserializeScene(sceneJson: string): StageSceneSnapshot {
   if (version !== CAMERA_STAGE_SCENE_SCHEMA_VERSION) {
     throw new Error(`${UNSUPPORTED_CAMERA_STAGE_SCHEMA}:${version}`)
   }
-
-  let objects = Array.isArray(record.objects) ? (record.objects as StageObject[]) : []
-  objects = withNormalizedCharacterMotion(objects)
-  objects = withDefaultCameraEffectors(objects)
-  objects = withNormalizedCameraRotations(objects)
-  const activeCameraId = typeof record.activeCameraId === 'string' ? record.activeCameraId : null
-  const sceneSettings = parseSceneSettings(record.sceneSettings)
-  const stateKeyframes = normalizeStateKeyframes(record.stateKeyframes)
-  const animation = compileStateKeyframesToAnimation(stateKeyframes, objects)
-
-  return {
-    schemaVersion: CAMERA_STAGE_SCENE_SCHEMA_VERSION,
-    objects,
-    activeCameraId,
-    animation,
-    sceneSettings,
-    stateKeyframes,
-  }
+  return normalizeSceneRecord(record)
 }

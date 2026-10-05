@@ -16,8 +16,8 @@ vi.mock('@/features/canvas/application/canvasApplicationService', () => ({
 vi.mock('@/features/assets/application/assetApplicationService', () => ({
   assetApplicationService: { select: mocks.selectAssetFromAgent },
 }))
-vi.mock('@/features/cameraStage/application/cameraStageApplicationService', () => ({
-  cameraStageApplicationService: { openProject: mocks.openCameraStageProject },
+vi.mock('@/features/cameraStage/projects/cameraStageProjectService', () => ({
+  openCameraStageDocument: mocks.openCameraStageProject,
 }))
 
 import { useNavigationStore } from '@/stores/navigationStore'
@@ -46,15 +46,15 @@ describe('application surface registry', () => {
     })
   })
 
-  it('定位三维子实体时先按稳定引用载入工程，再打开 3D Surface', async () => {
-    mocks.openCameraStageProject.mockResolvedValue({ projectId: 'project-3' })
+  it('定位三维子实体时先按稳定引用打开镜头参考文档，再打开 3D Surface', async () => {
+    mocks.openCameraStageProject.mockResolvedValue(undefined)
 
     const result = await focusApplicationEntity(
       { kind: 'camera_stage.object', id: 'project-3:object-1' },
       new AbortController().signal
     )
 
-    expect(mocks.openCameraStageProject).toHaveBeenCalledWith('project-3')
+    expect(mocks.openCameraStageProject).toHaveBeenCalledWith({ id: 'project-3' })
     expect(result).toMatchObject({ surfaceId: 'tool.camera_stage' })
     expect(useNavigationStore.getState()).toMatchObject({ activeWorkspace: 'tools', activeToolId: 'cameraStage' })
   })

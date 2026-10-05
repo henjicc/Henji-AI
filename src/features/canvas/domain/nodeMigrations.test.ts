@@ -439,7 +439,7 @@ describe('resetTransientNodeRuntimeState', () => {
         requestId: 'request-1',
         canvasProjectId: 'canvas-1',
         nodeId: 'node-1',
-        cameraStageProjectId: 'stage-1',
+        cameraStageDocumentId: 'stage-1',
         resolutionPreset: '720p',
         outputKind: 'video',
       },

@@ -96,17 +96,18 @@ export const CAMERA_STAGE_STORE_LEDGER: ApplicationStoreActionLedger<ActionName>
       capabilityId: 'apply_camera_stage_camera_move',
     },
 
-    /* ── 工程 ──────────────────────────────────────────────── */
-    newScene: { kind: 'capability', capabilityId: 'create_camera_stage_project' },
+    /* ── 文档 ──────────────────────────────────────────────── */
+    // 新建镜头参考是通用文档能力（create_document，kind=camera_stage）；空文档打开时补默认摄像机
+    newScene: { kind: 'capability', capabilityId: 'create_document' },
     bindProject: {
       kind: 'excluded',
       category: 'internal',
-      reason: '保存或加载工程后由工程服务回填工程标识，不改动任何场景数据，不是用户在界面上的动作。',
+      reason: '打开文档或文档改名后由文档实例回填文档 ID 与名称（名称就是文件名），不改动任何场景数据，不是用户在界面上的动作。',
     },
     loadSnapshot: {
       kind: 'excluded',
       category: 'internal',
-      reason: '由工程加载链路整体重置场景，是 open_camera_stage_project 的内部步骤，不单独暴露。',
+      reason: '由文档实例在打开、重新载入时整体重置场景，是通用 open_document 的内部步骤，不单独暴露。',
     },
     prepareStateKeyframeEdit: {
       kind: 'excluded',

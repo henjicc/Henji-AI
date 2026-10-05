@@ -1159,7 +1159,8 @@
       "moveToProject": "移到项目…",
       "removeFromProject": "移出项目",
       "duplicate": "创建副本",
-      "reveal": "在文件夹中显示"
+      "reveal": "在文件夹中显示",
+      "forget": "从列表移除"
     },
     "rename": {
       "title": "重命名",
@@ -1195,6 +1196,7 @@
       "reveal": "没能在文件夹中显示：{{message}}",
       "delete": "没能移到回收站：{{message}}",
       "open": "没能打开：{{message}}",
+      "forget": "没能从列表移除：{{message}}",
       "createProject": "没能新建项目：{{message}}"
     }
   }

@@ -5,9 +5,10 @@ const {
   executeCapability,
   requireCancellationRequested,
   requireCompletedTask,
-  requirePersistedCreatedProject,
+  requireObservedDefaultScene,
+  requirePersistedCreatedDocument,
   requireSubmittedTask,
-  requireVideoReadyCameraStageProject,
+  requireVideoReadyCameraStageDocument,
   resolveCancelledTaskEvent,
 } = require('./uiInspectionCameraStageAssistantCapability.cjs')
 const {
@@ -45,7 +46,7 @@ test('能力经正式 MCP 入口调用：读取原样返回，写入带操作信
 
 test('MCP 调用失败不得被当成通过', async () => {
   const client = { callTool: async () => ({ isError: true, structuredContent: { ok: false } }) }
-  await assert.rejects(executeCapability(client, { id: 'create_camera_stage_project', input: { name: 'x' } }), /调用失败/)
+  await assert.rejects(executeCapability(client, { id: 'create_document', input: { kind: 'camera_stage', name: 'x' } }), /调用失败/)
 })
 
 test('Camera Stage 正式目录注册助手后台输出能力场景', () => {
@@ -78,66 +79,46 @@ test('场景只接受稳定 submitted、持久 completed 与活动取消回执',
   }), /没有接受取消/)
 })
 
-test('后台创建必须落盘默认相机和零秒关键帧并与稳定引用一致', () => {
-  const created = {
-    projectId: 'camera-project-1',
-    name: '后台工程',
-    defaultCameraId: 'camera-1',
-    defaultStateKeyframeId: 'state-1',
-    resultRefs: [
-      { kind: 'camera_stage.project', id: 'camera-project-1' },
-      { kind: 'camera_stage.camera', id: 'camera-project-1:camera-1' },
-      { kind: 'camera_stage.state_keyframe', id: 'camera-project-1:state-1' },
-    ],
-  }
-  const record = {
-    id: 'camera-project-1',
-    name: '后台工程',
-    objectCount: 1,
-    sceneJson: JSON.stringify({
+test('后台新建镜头参考必须按返回引用落成非草稿文档文件', () => {
+  const created = { resultRef: { kind: 'documents.document', id: 'doc-1' }, name: '后台镜头', kind: 'camera_stage' }
+  const read = { meta: { id: 'doc-1', kind: 'camera_stage', name: '后台镜头', draft: false, path: 'D:/文档/痕迹AI/镜头参考/后台镜头.henji-stage' } }
+  assert.equal(requirePersistedCreatedDocument(created, read), 'doc-1')
+  assert.throws(() => requirePersistedCreatedDocument(created, { meta: { ...read.meta, draft: true } }), /没有按返回引用落盘/)
+  assert.throws(() => requirePersistedCreatedDocument({ ...created, resultRef: { kind: 'camera_stage.project', id: 'doc-1' } }, read), /文档稳定引用/)
+})
+
+test('观察新建的镜头参考必须得到唯一默认相机与零秒关键帧', () => {
+  const observed = {
+    baseRevision: 3,
+    scene: {
+      projectId: 'doc-1',
       activeCameraId: 'camera-1',
       objects: [{ id: 'camera-1', type: 'camera' }],
       stateKeyframes: [{ id: 'state-1', time: 0, cameraId: 'camera-1' }],
-    }),
+    },
   }
-  assert.deepEqual(requirePersistedCreatedProject(created, record), {
-    cameraId: 'camera-1', stateKeyframeId: 'state-1',
-  })
-  assert.throws(() => requirePersistedCreatedProject(created, {
-    ...record,
-    sceneJson: JSON.stringify({
-      activeCameraId: 'other-camera',
-      objects: [{ id: 'camera-1', type: 'camera' }],
-      stateKeyframes: [{ id: 'state-1', time: 0, cameraId: 'camera-1' }],
-    }),
-  }), /默认相机、关键帧或稳定引用不一致/)
+  assert.deepEqual(requireObservedDefaultScene('doc-1', observed), { cameraId: 'camera-1', stateKeyframeId: 'state-1', baseRevision: 3 })
+  assert.throws(() => requireObservedDefaultScene('doc-1', { ...observed, scene: { ...observed.scene, activeCameraId: 'other' } }), /默认相机、关键帧或稳定引用不一致/)
+  assert.throws(() => requireObservedDefaultScene('doc-2', observed), /不一致/)
 })
 
-test('视频取消场景只接受正式运镜后持久化的第二个状态关键帧', () => {
-  const created = {
-    projectId: 'camera-project-1',
-    defaultCameraId: 'camera-1',
-    defaultStateKeyframeId: 'state-1',
-  }
-  const record = {
-    id: 'camera-project-1',
-    sceneJson: JSON.stringify({
+test('视频取消场景只接受正式运镜后持久化在文档里的第二个状态关键帧', () => {
+  const defaults = { documentId: 'doc-1', cameraId: 'camera-1', stateKeyframeId: 'state-1' }
+  const read = {
+    meta: { id: 'doc-1' },
+    content: {
       activeCameraId: 'camera-1',
       objects: [{ id: 'camera-1', type: 'camera' }],
       stateKeyframes: [
         { id: 'state-1', time: 0, cameraId: 'camera-1' },
         { id: 'state-2', time: 2, cameraId: 'camera-1' },
       ],
-    }),
+    },
   }
-  assert.equal(requireVideoReadyCameraStageProject(created, record), 2)
-  assert.throws(() => requireVideoReadyCameraStageProject(created, {
-    ...record,
-    sceneJson: JSON.stringify({
-      activeCameraId: 'camera-1',
-      objects: [{ id: 'camera-1', type: 'camera' }],
-      stateKeyframes: [{ id: 'state-1', time: 0, cameraId: 'camera-1' }],
-    }),
+  assert.equal(requireVideoReadyCameraStageDocument(defaults, read), 2)
+  assert.throws(() => requireVideoReadyCameraStageDocument(defaults, {
+    ...read,
+    content: { ...read.content, stateKeyframes: [{ id: 'state-1', time: 0, cameraId: 'camera-1' }] },
   }), /第二个状态关键帧/)
 })
 

@@ -5,12 +5,11 @@ const { execFileSync } = require('node:child_process')
 const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
 const { observeWorkers, workerSnapshot, waitReleased } = require('./uiInspectionSceneVideoEditLayout.cjs')
 const { dialogs, presented, png, pixelDifference, mediaProbe, trackBanks } = require('./uiInspectionSceneVideoEditMonitor.cjs')
-const { createPlaybackFixture } = require('./uiInspectionCameraStagePlayback.cjs')
+const { createPlaybackFixture, seedCameraStageDocument } = require('./uiInspectionCameraStagePlayback.cjs')
 const button = (page, name) => page.getByRole('button', { name, exact: true })
 const normalized = value => value.replaceAll('/', '\\').toLowerCase()
 const ORIGINAL = 'D:/视频制作/0A0片头片尾和素材/2021片头V2 4K 60FPS.mp4'
 const PROJECT_ID = 'video-edit-creative-results'
-const STAGE_PROJECT_ID = 'video-edit-creative-stage'
 const STAGE_NODE_ID = '__video_edit_creative_stage'
 
 function project(root) {
@@ -84,16 +83,17 @@ function createVideoEditCreativeResultsScene(context) {
         // 3D render first. The canvas record is written through the formal project-record API before any
         // canvas instance exists; its persisted completion node is consumed after the edit project is open.
         phase('camera-stage-render')
-        const stageCanvasId = await page.evaluate(async ({ stageProjectId, sceneJson, nodeId }) => {
+        // 3.2：镜头参考是作品目录里的文档文件，经正式文档接口造数据
+        const stageDocumentId = await seedCameraStageDocument(page, { name: '剪辑回填三维', scene: createPlaybackFixture() })
+        const stageCanvasId = await page.evaluate(async ({ stageProjectId, nodeId }) => {
           const now = Date.now()
-          await window.henjiNative.cameraStageProjects.upsertProjectRecord({ id: stageProjectId, name: '剪辑回填三维', createdAt: now, updatedAt: now, objectCount: 3, sceneJson })
           const node = { id: nodeId, type: 'cameraStageNode', position: { x: 220, y: 160 }, width: 480, height: 320, measured: { width: 480, height: 320 }, style: { width: 480, height: 320 },
             data: { displayName: '剪辑回填镜头', projectId: stageProjectId, imageUrl: null, previewImageUrl: null, videoUrl: null, aspectRatio: '16:9', durationSec: null, selectedTimeSec: 0.25, mediaInputs: {}, environmentImageUrl: null, imageExporting: false, imageRenderRequestId: null, imageRenderError: null, videoProgress: null, videoExporting: false, videoRenderPhase: null, videoRenderRequestId: null, videoRenderError: null, renderTask: null, outputKind: 'image' } }
           const id = crypto.randomUUID()
           await window.henjiNative.storyboardProjects.upsertProjectRecord({ id, name: '剪辑回填三维画布', createdAt: now, updatedAt: now, nodeCount: 1,
             nodesJson: JSON.stringify([node]), edgesJson: '[]', viewportJson: JSON.stringify({ x: 180, y: 100, zoom: 0.8 }), historyJson: '{"past":[],"future":[],"imagePool":[]}' })
           return id
-        }, { stageProjectId: STAGE_PROJECT_ID, sceneJson: JSON.stringify(createPlaybackFixture()), nodeId: STAGE_NODE_ID })
+        }, { stageProjectId: stageDocumentId, nodeId: STAGE_NODE_ID })
         await page.reload({ waitUntil: 'domcontentloaded' }); await button(page, '剪辑').waitFor({ state: 'visible', timeout: 30000 })
         await context.setupCanvas(page)
         if (await page.locator('.react-flow').count()) { await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click(); await context.settlePage(page) }

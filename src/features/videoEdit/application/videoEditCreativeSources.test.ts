@@ -73,9 +73,9 @@ it('画布节点首次读取固定完成身份，之后重新生成或仍在生�
 })
 
 it('三维结果在后台任务释放后仍读持久结果节点，回执不符或多份结果拒绝', async () => {
-  const identity = { version: 1 as const, canvasProjectId: 'canvas', nodeId: 'stage', requestId: 'req-1', cameraStageProjectId: 'stage-project', resolutionPreset: '1080p' as const, outputKind: 'video' as const }
+  const identity = { version: 1 as const, canvasProjectId: 'canvas', nodeId: 'stage', requestId: 'req-1', cameraStageDocumentId: 'stage-project', resolutionPreset: '1080p' as const, outputKind: 'video' as const }
   const taskRef = createCameraStageRenderTaskRef(identity).id
-  const receipt = { version: 1, requestId: 'req-1', canvasProjectId: 'canvas', nodeId: 'stage', cameraStageProjectId: 'stage-project', resolutionPreset: '1080p', outputKind: 'video' }
+  const receipt = { version: 1, requestId: 'req-1', canvasProjectId: 'canvas', nodeId: 'stage', cameraStageDocumentId: 'stage-project', resolutionPreset: '1080p', outputKind: 'video' }
   const node = (patch: Record<string, unknown> = {}) => canvasNode('result', { generationOutputCommitId: 'camera-stage-render:req-1', generationOutputDescriptor: { version: 1, outputId: 'o', mediaType: 'video' }, testOutput: { kind: 'video', url: 'D:/renders/stage.mp4' }, cameraStageRenderReceipt: receipt, ...patch })
   producers.canvas.mockResolvedValue({ nodes: [node()] })
   const result = await prepareVideoEditCreativeResult({ kind: 'camera_stage.render_task', taskRef }, options())

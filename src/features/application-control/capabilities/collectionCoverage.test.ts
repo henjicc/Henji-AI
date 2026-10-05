@@ -144,8 +144,11 @@ describe('集合写入覆盖一致', () => {
      * 防空转：这张表由能力目录派生，一旦派生逻辑坏掉（比如 impacts 结构变了）会静默变成空 Map，
      * 上面两条也就跟着失去意义。实体数量不该少于当前这些真正建/删得了的类型。
      */
-    expect(creators.size).toBeGreaterThanOrEqual(8)
-    expect(removers.size).toBeGreaterThanOrEqual(8)
+    // 3.2：镜头参考文档的新建 / 删除并入通用文档能力（camera_stage.project 不再单独计数）
+    expect(creators.get('documents.document')).toContain('create_document')
+    expect(removers.get('documents.document')).toContain('trash_document')
+    expect(creators.size).toBeGreaterThanOrEqual(7)
+    expect(removers.size).toBeGreaterThanOrEqual(7)
     for (const [entityType, ids] of creators) {
       expect(ids.length, entityType).toBeGreaterThan(0)
     }

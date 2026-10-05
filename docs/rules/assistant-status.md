@@ -288,6 +288,12 @@ schema 校验所以看不见，MCP 侧测试又都跑在未授权付费的连接
 `*_camera_stage_project` 等）仍在，3.x 各工具接入时删除；`open_document` 在对应工具登记打开方式前会如实拒绝。
 未做真实模型验收。上表是 2026-09-18 快照，未按新增写域重新取数。
 
+2026-10-06 增量（3.2 镜头参考接入文档底座）：镜头参考的 6 个项目管理能力 `list/get/open/create/rename/delete_camera_stage_project`
+删除，改由通用文档能力承担（`open_document` 对 `camera_stage` 已可用，登记了打开方式与后台释放方式）；
+`camera_stage.project` 的 id 即镜头参考文档 ID，实体本身改为只读（`name` 只读，改名写 `documents.document.name`，
+`writeExclusion.reason` 点名改道能力），场景、对象、摄像机、状态关键帧、轨迹、播放等内容能力与属性不变，`projectId` 字段收文档 ID。
+Pi 在三维界面的基础工具由 `get_camera_stage_project` 换成 `observe_camera_stage_scene`。
+
 ## 二、已经通了的
 
 对照 [assistant-goal.md](assistant-goal.md) 的四条判据：
@@ -453,6 +459,8 @@ HTTP 与插件两类适配器仍然不做，理由不变。
 以及把已经证伪的方案再试一遍。
 
 格式：`日期 · 提交 · 推翻了什么 → 换成了什么 · 为什么旧的不能留`
+
+- **2026-10-06 · 3.2 镜头参考接入** · 推翻 2026-10-03 起 `create_camera_stage_project` 等镜头参考项目管理能力（含新建后从持久存储回读默认摄像机的核实回执）→ 换成通用 `create_document` / `list_documents` / `open_document` / `trash_document` 与 `documents.document.name`；默认摄像机与首关键帧改为第一次打开空文档时补上并落盘。旧能力读写的是已删除的 `camera_stage_projects` 表（项目体系第二版：作品文件是唯一真相），保留就是第二套文档管理入口。
 
 - **2026-09-12 · MCP 语义操作补验** · 推翻 2.2/3.2「对外语义操作已具备可用基线」的判断：工程与生成实体的领域版本此前被误拿去比较助手界面计数，且三维任务查询不能产生取消所需的读取凭据。现语义写入按原目标反射版本核对；无版本任务读取仍绑定原任务与会话，取消由正式任务服务验证身份与实时状态。生成落图补回整批事务 undoRef，避免节点已存却返回失败。生成取消及落图由 mcpSemanticRevisions.test.ts 守，三维由 MCP Reality 守；这不代表两个真实 Agent 的业务链已验收。
 

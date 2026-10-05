@@ -15,7 +15,7 @@ vi.mock('@/stores/projectStore', () => ({ useProjectStore: { getState: () => moc
 vi.mock('../application/canvasMutationService', () => ({ commitCanvasNodeDuplication: mocks.fork }))
 vi.mock('../application/canvasOperationFeedback', () => ({ reportCanvasOperationFailure: mocks.feedback }))
 vi.mock('@/core/logging', () => ({ createLogger: () => ({ info: vi.fn(), error: vi.fn() }) }))
-vi.mock('@/features/cameraStage/projects/cameraStageProjectService', () => ({ cloneCameraStageProject: vi.fn() }))
+vi.mock('@/features/cameraStage/projects/cameraStageProjectService', () => ({ duplicateCameraStageDocument: vi.fn() }))
 vi.mock('../application/generationPromptDocument', () => ({ rebaseCanvasLocalPromptData: () => null }))
 vi.mock('../application/assetGroupGraph', () => ({ reconcileAssetGroupGraph: vi.fn() }))
 vi.mock('../application/canvasDuplicationExecutionState', () => ({ resetDuplicatedCanvasExecutionData: vi.fn() }))

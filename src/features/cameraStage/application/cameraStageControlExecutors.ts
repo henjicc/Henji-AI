@@ -23,16 +23,15 @@ import { CAMERA_STAGE_ENTITY_TYPES } from './cameraStageReflection'
 import { CAMERA_STAGE_SCENE_WRITERS } from './cameraStageSceneFields'
 import {
   CAMERA_STAGE_PLAYBACK_WRITERS,
-  CAMERA_STAGE_PROJECT_WRITERS,
   CAMERA_STAGE_STATE_KEYFRAME_WRITERS,
   type CameraStagePlaybackDraft,
-  type CameraStageProjectDraft,
   type CameraStageStateKeyframeDraft,
 } from './cameraStageTimelineFields'
 import { CAMERA_STAGE_TRAJECTORY_WRITERS, type CameraStageTrajectoryDraft } from './cameraStageTrajectoryFields'
 
 type MutationStep = Extract<ApplicationPlannedStep, { kind: 'mutation' }>
-type MutationEntityType = typeof CAMERA_STAGE_ENTITY_TYPES[keyof typeof CAMERA_STAGE_ENTITY_TYPES]
+/** 有写入执行器的实体；camera_stage.project（文档本身）只读，名称经通用 documents.document.name 改。 */
+type MutationEntityType = Exclude<typeof CAMERA_STAGE_ENTITY_TYPES[keyof typeof CAMERA_STAGE_ENTITY_TYPES], typeof CAMERA_STAGE_ENTITY_TYPES.project>
 
 export interface CameraStageControlExecutorDependencies {
   readRevision: () => number
@@ -47,7 +46,6 @@ function childTarget(id: string): { projectId: string; childId: string } {
 
 /** 每类公开实体各一张写入表；`writableProperties` 由它派生。 */
 const WRITER_TABLES = {
-  [CAMERA_STAGE_ENTITY_TYPES.project]: CAMERA_STAGE_PROJECT_WRITERS,
   [CAMERA_STAGE_ENTITY_TYPES.scene]: CAMERA_STAGE_SCENE_WRITERS,
   [CAMERA_STAGE_ENTITY_TYPES.object]: CAMERA_STAGE_OBJECT_WRITERS,
   [CAMERA_STAGE_ENTITY_TYPES.camera]: CAMERA_STAGE_CAMERA_WRITERS,
@@ -188,23 +186,12 @@ export class CameraStageMutationExecutor implements ApplicationMutationExecutor 
   }
 
   private async applyMutations(step: MutationStep): Promise<string> {
-    if (this.entityType === CAMERA_STAGE_ENTITY_TYPES.project) return await this.applyProject(step)
     if (this.entityType === CAMERA_STAGE_ENTITY_TYPES.scene) return await this.applyScene(step)
     if (this.entityType === CAMERA_STAGE_ENTITY_TYPES.object || this.entityType === CAMERA_STAGE_ENTITY_TYPES.camera) return await this.applyObject(step)
     if (this.entityType === CAMERA_STAGE_ENTITY_TYPES.stateKeyframe) return await this.applyStateKeyframe(step)
     if (this.entityType === CAMERA_STAGE_ENTITY_TYPES.playback) return await this.applyPlayback(step)
     if (this.entityType === CAMERA_STAGE_ENTITY_TYPES.trajectory) return await this.applyTrajectory(step)
     throw new Error('NOT_FOUND')
-  }
-
-  private async applyProject(step: MutationStep): Promise<string> {
-    const projectId = step.target.id
-    await ensureCameraStageProjectRuntime(projectId)
-    const undoToken = captureCameraStageUndo(projectId)
-    const draft: CameraStageProjectDraft = { projectId }
-    await applyWriterTable(CAMERA_STAGE_PROJECT_WRITERS, draft, step.mutations)
-    if (draft.rename !== undefined) await cameraStageApplicationService.renameProject(projectId, draft.rename)
-    return undoToken
   }
 
   private async applyScene(step: MutationStep): Promise<string> {
@@ -403,7 +390,6 @@ export class CameraStageMotionOperationExecutor implements ApplicationSemanticOp
 }
 
 export const CAMERA_STAGE_MUTATION_ENTITY_TYPES: MutationEntityType[] = [
-  CAMERA_STAGE_ENTITY_TYPES.project,
   CAMERA_STAGE_ENTITY_TYPES.scene,
   CAMERA_STAGE_ENTITY_TYPES.object,
   CAMERA_STAGE_ENTITY_TYPES.camera,

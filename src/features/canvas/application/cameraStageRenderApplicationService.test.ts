@@ -30,7 +30,7 @@ vi.mock('@/features/cameraStage/application/cameraStageProjectRuntime', () => ({
 }));
 vi.mock('@/features/cameraStage/projects/cameraStageProjectService', () => ({
   applyProjectEnvironmentImage: mocks.applyEnvironment,
-  createStoredCameraStageProject: mocks.createProject,
+  createNamedCameraStageDocument: mocks.createProject,
   saveCurrentProject: mocks.saveProject,
 }));
 vi.mock('@/features/cameraStage/store/cameraStageStore', () => ({
@@ -85,7 +85,7 @@ function descriptor() {
     requestId: 'request-1',
     canvasProjectId: 'canvas-1',
     nodeId: 'node-1',
-    cameraStageProjectId: 'stage-1',
+    cameraStageDocumentId: 'stage-1',
     resolutionPreset: '720p' as const,
     outputKind: 'image' as const,
     selectedTimeSec: 1,
@@ -156,10 +156,10 @@ describe('cameraStageRenderApplicationService', () => {
     });
     expect(order).toEqual(['persist', 'start']);
     expect(reference).toMatchObject({
-      canvasProjectId: 'canvas-1', nodeId: 'node-1', cameraStageProjectId: 'stage-1', outputKind: 'image',
+      canvasProjectId: 'canvas-1', nodeId: 'node-1', cameraStageDocumentId: 'stage-1', outputKind: 'image',
     });
     expect(mocks.start).toHaveBeenCalledWith(expect.objectContaining({
-      canvasProjectId: 'canvas-1', nodeId: 'node-1', cameraStageProjectId: 'stage-1',
+      canvasProjectId: 'canvas-1', nodeId: 'node-1', cameraStageDocumentId: 'stage-1',
       requestId: 'capability-call-1', resolutionPreset: '1080p', selectedTimeSec: 2,
     }));
   });
@@ -172,7 +172,7 @@ describe('cameraStageRenderApplicationService', () => {
 
     expect(mocks.createProject).toHaveBeenCalledWith('镜头');
     expect(mocks.start).toHaveBeenCalledWith(expect.objectContaining({
-      cameraStageProjectId: 'stage-created',
+      cameraStageDocumentId: 'stage-created',
     }));
   });
 
@@ -180,7 +180,7 @@ describe('cameraStageRenderApplicationService', () => {
     mocks.projectState = { currentProjectId: 'canvas-2', currentProject: { id: 'canvas-2', nodes: mocks.nodes } };
 
     await expect(startCameraStageNodeRender('node-1', 'image', {
-      expectedOwner: { canvasProjectId: 'canvas-1', cameraStageProjectId: 'stage-1' },
+      expectedOwner: { canvasProjectId: 'canvas-1', cameraStageDocumentId: 'stage-1' },
     })).rejects.toThrow('当前画布项目已切换');
 
     expect(mocks.updateNodeData).not.toHaveBeenCalled();
@@ -194,7 +194,7 @@ describe('cameraStageRenderApplicationService', () => {
       finishCreate = () => resolve({ id: 'stage-created' });
     }));
     const rendering = startCameraStageNodeRender('node-1', 'image', {
-      expectedOwner: { canvasProjectId: 'canvas-1', cameraStageProjectId: null },
+      expectedOwner: { canvasProjectId: 'canvas-1', cameraStageDocumentId: null },
     });
     await vi.waitFor(() => expect(finishCreate).toBeTypeOf('function'));
     (mocks.nodes[0].data as Record<string, unknown>).projectId = 'stage-user-selected';

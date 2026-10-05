@@ -1,29 +1,23 @@
 import { createLogger } from '@/core/logging'
-import { saveProjectCover } from '@/commands/projectCovers'
-import { useCameraStageSessionStore } from '../store/cameraStageSessionStore'
+import { saveDocumentCover } from '@/commands/documents'
 
-const logger = createLogger('cameraStage.projects.cover')
+const logger = createLogger('features.cameraStage.documents.cover')
 
 /**
- * 3D 镜头参考工程封面：始终取摄像机视图当前画面。
+ * 镜头参考的列表封面：始终取摄像机视图当前画面，存成通用文档封面（程序目录，按文档 ID，3.2）。
+ * 文档文件里不写任何封面路径；文档移到回收站或空草稿删除时主进程一并清掉封面。
  *
- * 与画布不同，这里没有"生成结果"的概念，工程本身就是一套镜头，视口画面即内容。
- * 退出编辑器时调用一次；截图必须在 Canvas 还挂载时读，卸载后 WebGL 上下文已经没了。
+ * 截图必须在 Canvas 还挂载时读，卸载后 WebGL 上下文已经没了；所以离开编辑器前先等这次保存完成。
  */
 export async function updateCameraStageProjectCover(
-  projectId: string,
+  documentId: string,
   captureViewport: () => string | null,
 ): Promise<void> {
   try {
     const dataUrl = captureViewport()
     if (!dataUrl) return
-    await saveProjectCover({
-      scope: 'camera-stage',
-      projectId,
-      sources: [{ source: dataUrl, sourceKind: 'image' }],
-    })
-    useCameraStageSessionStore.getState().markCoversChanged()
+    await saveDocumentCover({ docId: documentId, sources: [{ source: dataUrl, sourceKind: 'image' }] })
   } catch (error) {
-    logger.warn('3D 镜头参考工程封面更新失败', { projectId, error: String(error) })
+    logger.warn('镜头参考封面更新失败', { event: 'camera_stage.document.cover.failed', context: { docId: documentId }, error: String(error) })
   }
 }

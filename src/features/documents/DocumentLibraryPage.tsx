@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Copy, FolderInput, FolderOpen, FolderOutput } from 'lucide-react'
+import { Copy, FolderInput, FolderOpen, FolderOutput, ListX } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
 import type { ProjectCardGridExtraAction, ProjectCardGridItem } from '@/components/ProjectCardGrid'
@@ -34,6 +34,7 @@ import {
  * 3.x 各工具切换时只换成 <DocumentLibraryPage kind="…" …/>，不再自己取数、自己写重命名 / 删除。
  *
  * 右键：打开、重命名（实时查重，重名不加后缀）、移到项目…、移出项目、创建副本、在文件夹中显示、删除（移到回收站）。
+ * 找不到文件的文档只有“从列表移除”（只改作品索引，不动磁盘）。
  * 移动遇到重名时询问“两个都保留 / 取消”；创建副本与原件在同一文件夹，按“两个都保留”自动加序号，不再询问。
  * 草稿不进网格，放在页头下方的草稿区（DocumentDraftRecoveryNotice）。
  */
@@ -157,7 +158,14 @@ export function DocumentLibraryPage({
   const canStandalone = operations.canStandalone(kind)
   const extraActions = useCallback((item: ProjectCardGridItem): ProjectCardGridExtraAction[] => {
     const document = asDocumentItem(item).document
-    if (document.missing) return []
+    if (document.missing) {
+      return [{
+        id: 'forget',
+        label: t('documentLibrary.actions.forget'),
+        icon: <ListX className="h-4 w-4" />,
+        onClick: () => { void run('forget', () => operations.forgetDocument(document.id)) },
+      }]
+    }
     const inProject = document.container.kind === 'project'
     return [
       { id: 'move-to-project', label: t('documentLibrary.actions.moveToProject'), icon: <FolderInput className="h-4 w-4" />, onClick: () => setMoving(document) },

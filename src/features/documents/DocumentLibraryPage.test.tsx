@@ -69,7 +69,7 @@ describe('通用数据源', () => {
     expect(card(standalone.id)).toBeTruthy()
   })
 
-  it('文件不存在的文档显示状态，没有重命名、删除等操作', async () => {
+  it('文件不存在的文档显示状态，只能从列表移除（不动磁盘），没有重命名、删除等操作', async () => {
     const kit = createTestRegistry()
     const missing = kit.commands.seed({ name: '丢失的', content: { items: [] } })
     kit.commands.missingIds.add(missing.id)
@@ -77,7 +77,13 @@ describe('通用数据源', () => {
     render(<DocumentLibraryPage kind="canvas" title="画布" operations={operations} registry={kit.registry} onOpen={vi.fn()} create={{ kind: 'direct', onCreate: vi.fn() }} />)
     await waitFor(() => expect(card(missing.id)).toBeTruthy())
     expect(card(missing.id).textContent).toContain('文件不存在')
-    expect(screen.queryByRole('button', { name: '更多' })).toBeNull()
+    fireEvent.contextMenu(card(missing.id))
+    expect(screen.queryByText('重命名')).toBeNull()
+    expect(screen.queryByText('删除')).toBeNull()
+    fireEvent.click(await screen.findByText('从列表移除'))
+    await waitFor(() => expect(card(missing.id)).toBeNull())
+    expect(kit.commands.calls).toContain('forgetDocument')
+    expect(kit.commands.trashed).toEqual([])
   })
 
   it('草稿不进网格，放在草稿区；继续编辑走同一个打开入口', async () => {

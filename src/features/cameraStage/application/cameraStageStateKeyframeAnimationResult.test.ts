@@ -1,20 +1,9 @@
 import { loadCameraStageTestProject } from '@/tests/cameraStageProjectFixture'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const projectMocks = vi.hoisted(() => ({
-  writeProject: vi.fn().mockResolvedValue(undefined),
-  loadProjectIntoScene: vi.fn().mockResolvedValue(true),
-}))
-
 const reflectionRuntime = vi.hoisted(() => ({
   registry: undefined as unknown,
   engine: undefined as unknown,
-}))
-
-vi.mock('@/commands/cameraStageProjects', () => ({ upsertCameraStageProjectRecord: projectMocks.writeProject }))
-
-vi.mock('../projects/cameraStageProjectService', () => ({
-  loadProjectIntoScene: projectMocks.loadProjectIntoScene,
 }))
 
 vi.mock('@/features/application-control/capabilities/applicationControlRegistry', () => ({
@@ -38,13 +27,13 @@ describe('状态关键帧模式动画的正式反射结果', () => {
   let revision: number
   let objectId: string
 
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks()
     revision = 1
     const camera = createCameraObject('摄像机01', pickDefaultColor(0))
     const object = createPrimitiveObject('sphere', '浮动球', pickDefaultColor(1))
     objectId = object.id
-    loadCameraStageTestProject({
+    await loadCameraStageTestProject({
       objects: [camera, object],
       activeCameraId: camera.id,
       animation: createDefaultAnimation(),
@@ -213,7 +202,6 @@ describe('状态关键帧模式动画的正式反射结果', () => {
     )).toEqual([[0, 0.5], [1, 1.5], [2, 0.25]])
     expect(useCameraStageStore.getState().playback.playing).toBe(true)
     expect(useCameraStageStore.getState().playback.loop).toBe(true)
-    expect(projectMocks.loadProjectIntoScene).not.toHaveBeenCalled()
     const cascadingEffects = result.effects.flatMap((item) => {
       const origin = item.origin as { kind?: string }
       return origin.kind === 'cascade' && item.entityType === CAMERA_STAGE_ENTITY_TYPES.stateKeyframe

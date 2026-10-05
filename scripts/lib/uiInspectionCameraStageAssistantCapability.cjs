@@ -3,13 +3,14 @@ const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operatio
 
 const CAMERA_NODE_ID = '__ui_camera_stage_assistant_capability'
 const REQUIRED_CAPABILITY_IDS = [
-  'create_camera_stage_project',
+  'create_document',
+  'observe_camera_stage_scene',
   'render_camera_stage_output',
   'get_camera_stage_render_task',
   'cancel_camera_stage_render_task',
   'apply_camera_stage_camera_move',
 ]
-const READ_CAPABILITY_IDS = new Set(['get_camera_stage_render_task'])
+const READ_CAPABILITY_IDS = new Set(['get_camera_stage_render_task', 'observe_camera_stage_scene'])
 
 /**
  * 能力经正式外部入口（现代 MCP）调用。
@@ -28,63 +29,58 @@ async function readCapabilityBaseline(client, taskRef) {
   return await callTool(client, 'get_camera_stage_render_task', { taskRef })
 }
 
-function requirePersistedCreatedProject(created, record) {
-  if (!record || record.id !== created.projectId || record.name !== created.name) {
-    throw new Error(`后台创建的 3D 工程没有按返回引用落盘：${JSON.stringify(record)}`)
+/**
+ * 3.2：镜头参考是通用文档。后台新建走通用 create_document（已命名、非草稿、不切换界面），
+ * 文件立即落在作品目录“镜头参考”文件夹里；内容是空场景，第一次打开（观察）时补默认摄像机与首关键帧。
+ */
+function requirePersistedCreatedDocument(created, read) {
+  const documentId = created?.resultRef?.id
+  if (created?.resultRef?.kind !== 'documents.document' || !documentId) {
+    throw new Error(`create_document 没有返回文档稳定引用：${JSON.stringify(created)}`)
   }
-  let scene
-  try {
-    scene = JSON.parse(record.sceneJson)
-  } catch {
-    throw new Error('后台创建的 3D 工程场景不是有效 JSON')
+  if (!read || read.meta?.id !== documentId || read.meta.kind !== 'camera_stage'
+    || read.meta.name !== created.name || read.meta.draft !== false
+    || !String(read.meta.path ?? '').endsWith(`${created.name}.henji-stage`)) {
+    throw new Error(`后台创建的镜头参考没有按返回引用落盘：${JSON.stringify(read?.meta ?? null)}`)
   }
-  const cameraRef = created.resultRefs?.[1]
-  const stateKeyframeRef = created.resultRefs?.[2]
-  const camera = scene.objects?.find((object) => object.id === created.defaultCameraId)
-  const stateKeyframe = scene.stateKeyframes?.find(
-    (candidate) => candidate.id === created.defaultStateKeyframeId
-  )
-  const valid = record.objectCount === 1
-    && scene.objects?.length === 1
-    && camera?.type === 'camera'
-    && scene.activeCameraId === created.defaultCameraId
-    && scene.stateKeyframes?.length === 1
-    && stateKeyframe?.time === 0
-    && stateKeyframe?.cameraId === created.defaultCameraId
-    && created.resultRefs?.[0]?.kind === 'camera_stage.project'
-    && created.resultRefs[0].id === created.projectId
-    && cameraRef?.kind === 'camera_stage.camera'
-    && cameraRef.id === `${created.projectId}:${created.defaultCameraId}`
-    && stateKeyframeRef?.kind === 'camera_stage.state_keyframe'
-    && stateKeyframeRef.id === `${created.projectId}:${created.defaultStateKeyframeId}`
-  if (!valid) {
-    throw new Error(`后台创建的默认相机、关键帧或稳定引用不一致：${JSON.stringify({
-      objectCount: record.objectCount,
-      activeCameraId: scene.activeCameraId,
-      cameraId: camera?.id ?? null,
-      cameraType: camera?.type ?? null,
-      stateKeyframeId: stateKeyframe?.id ?? null,
-      stateKeyframeTime: stateKeyframe?.time ?? null,
-      stateKeyframeCameraId: stateKeyframe?.cameraId ?? null,
-      resultRefs: created.resultRefs ?? null,
-    })}`)
-  }
-  return { cameraId: camera.id, stateKeyframeId: stateKeyframe.id }
+  return documentId
 }
 
-function requireVideoReadyCameraStageProject(created, record) {
-  if (!record || record.id !== created.projectId) {
-    throw new Error('运镜后的 3D 工程没有按返回引用落盘')
+/** 观察结果必须给出唯一的默认摄像机与 0 秒状态关键帧，且引用的是同一份文档。 */
+function requireObservedDefaultScene(documentId, observed) {
+  const scene = observed?.scene
+  const camera = scene?.objects?.find((object) => object.id === scene.activeCameraId)
+  const stateKeyframe = scene?.stateKeyframes?.[0]
+  const valid = scene?.projectId === documentId
+    && scene.objects?.length === 1
+    && camera?.type === 'camera'
+    && scene.stateKeyframes?.length === 1
+    && stateKeyframe?.time === 0
+    && stateKeyframe?.cameraId === camera.id
+    && Number.isInteger(observed.baseRevision)
+  if (!valid) {
+    throw new Error(`新建镜头参考的默认相机、关键帧或稳定引用不一致：${JSON.stringify({
+      projectId: scene?.projectId ?? null,
+      activeCameraId: scene?.activeCameraId ?? null,
+      objects: scene?.objects?.map((object) => ({ id: object.id, type: object.type })) ?? null,
+      stateKeyframes: scene?.stateKeyframes?.map((item) => ({ id: item.id, time: item.time, cameraId: item.cameraId })) ?? null,
+    })}`)
   }
-  const scene = JSON.parse(record.sceneJson)
-  const camera = scene.objects?.find((object) => object.id === created.defaultCameraId)
-  if (camera?.type !== 'camera'
-    || scene.activeCameraId !== created.defaultCameraId
+  return { cameraId: camera.id, stateKeyframeId: stateKeyframe.id, baseRevision: observed.baseRevision }
+}
+
+/** 运镜后文档文件里必须有默认摄像机与第二个状态关键帧（视频输出需要时长）。 */
+function requireVideoReadyCameraStageDocument(defaults, read) {
+  const scene = read?.content
+  const camera = scene?.objects?.find((object) => object.id === defaults.cameraId)
+  if (read?.meta?.id !== defaults.documentId
+    || camera?.type !== 'camera'
+    || scene.activeCameraId !== defaults.cameraId
     || !Array.isArray(scene.stateKeyframes)
     || scene.stateKeyframes.length < 2
-    || scene.stateKeyframes[0]?.id !== created.defaultStateKeyframeId
+    || scene.stateKeyframes[0]?.id !== defaults.stateKeyframeId
     || !scene.stateKeyframes.some((stateKeyframe) => stateKeyframe.time > 0)) {
-    throw new Error('正式运镜能力没有持久化视频所需的第二个状态关键帧')
+    throw new Error('正式运镜能力没有在镜头参考文档里持久化视频所需的第二个状态关键帧')
   }
   return scene.stateKeyframes.length
 }
@@ -266,37 +262,37 @@ async function setupCameraStageAssistantCapability(page, context, inspection = {
 
 async function runCameraStageCapabilityChain(page, client, { canvasProjectId, settlePage, reopenCanvasProjectFromStorage }) {
   const created = requireCapabilitySuccess(await executeCapability(client, {
-    id: 'create_camera_stage_project',
-    input: { name: '真实性巡检-助手后台3D工程' },
-  }), 'create_camera_stage_project')
+    id: 'create_document',
+    input: { kind: 'camera_stage', name: `真实性巡检-助手后台镜头参考-${randomUUID().slice(0, 8)}` },
+  }), 'create_document')
   if (!await page.locator('.react-flow:visible').count()) {
-    throw new Error('后台创建 3D 工程不应离开当前画布')
+    throw new Error('后台创建镜头参考不应离开当前画布')
   }
   if (await page.locator('[data-camera-stage-editor]:visible').count()) {
-    throw new Error('后台创建 3D 工程不应打开 3D 编辑器')
+    throw new Error('后台创建镜头参考不应打开 3D 编辑器')
   }
-  const persistedCameraProject = await page.evaluate(
-    async (projectId) => await window.henjiNative.cameraStageProjects.getProjectRecord(projectId),
-    created.projectId
-  )
-  requirePersistedCreatedProject(created, persistedCameraProject)
+  const readDocument = async (id) => await page.evaluate(async (documentId) => await window.henjiNative.documents.readDocument({ id: documentId }), id)
+  const documentId = requirePersistedCreatedDocument(created, await readDocument(created.resultRef.id))
+  const defaults = {
+    documentId,
+    ...requireObservedDefaultScene(documentId, requireCapabilitySuccess(await executeCapability(client, {
+      id: 'observe_camera_stage_scene',
+      input: { projectId: documentId },
+    }), 'observe_camera_stage_scene')),
+  }
   requireCapabilitySuccess(await executeCapability(client, {
     id: 'apply_camera_stage_camera_move',
     input: {
-      projectId: created.projectId,
-      cameraId: created.defaultCameraId,
-      baseRevision: created.baseRevision,
+      projectId: documentId,
+      cameraId: defaults.cameraId,
+      baseRevision: defaults.baseRevision,
       move: { kind: 'truck', offset: 1.5 },
       targetPoint: { x: 0, y: 0, z: 0 },
       duration: 2,
       speed: 'uniform',
     },
   }), 'apply_camera_stage_camera_move')
-  const videoReadyProject = await page.evaluate(
-    async (projectId) => await window.henjiNative.cameraStageProjects.getProjectRecord(projectId),
-    created.projectId
-  )
-  requireVideoReadyCameraStageProject(created, videoReadyProject)
+  requireVideoReadyCameraStageDocument(defaults, await readDocument(documentId))
   if (!await page.locator('.react-flow:visible').count()
     || await page.locator('[data-camera-stage-editor]:visible').count()) {
     throw new Error('后台准备视频关键帧不应离开当前画布或打开 3D 编辑器')
@@ -304,7 +300,7 @@ async function runCameraStageCapabilityChain(page, client, { canvasProjectId, se
 
   await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
   await settlePage(page, 400)
-  const cameraNode = createCameraStageNode(created.projectId)
+  const cameraNode = createCameraStageNode(documentId)
   await page.evaluate(async ({ projectId, node }) => {
     await window.henjiNative.db.execute(
       'UPDATE storyboard_projects SET node_count = 1, nodes_json = ?, edges_json = ?, viewport_json = ?, history_json = ? WHERE id = ?',
@@ -368,9 +364,10 @@ module.exports = {
   executeCapability,
   requireCancellationRequested,
   requireCompletedTask,
-  requirePersistedCreatedProject,
+  requireObservedDefaultScene,
+  requirePersistedCreatedDocument,
   requireSubmittedTask,
-  requireVideoReadyCameraStageProject,
+  requireVideoReadyCameraStageDocument,
   resolveCancelledTaskEvent,
   setupCameraStageAssistantCapability,
 }

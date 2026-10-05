@@ -135,7 +135,7 @@ describe('encodeProjectAsRecord', () => {
           requestId: 'request-1',
           canvasProjectId: 'canvas-1',
           nodeId: 'camera-stage-node',
-          cameraStageProjectId: 'camera-project-1',
+          cameraStageDocumentId: 'camera-project-1',
           resolutionPreset: '1080p',
           outputKind: 'image',
           selectedTimeSec: 1.25,

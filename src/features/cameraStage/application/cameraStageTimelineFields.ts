@@ -5,7 +5,6 @@ import { CAMERA_STAGE_NAME_MAX_LENGTH } from '@/core/application-control/domains
 
 import type { StageObject } from '../domain/sceneTypes'
 import type { StageStateKeyframe } from '../domain/stateKeyframeTypes'
-import type { CameraStageProjectSnapshot } from '../projects/cameraStageProjectPersistence'
 import type { CameraStageStateKeyframeUpdate } from './cameraStageApplicationService'
 import {
   booleanCodec, enumCodec, nameCodec, numberCodec, refIdCodec, stageDescriptor, stageField,
@@ -15,36 +14,18 @@ import {
 /*
  * 三维 project / stateKeyframe / playback 可写属性的统一定义。
  *
- * 三类实体各自的写入目标（draft）形态都不同：project 是一次性 rename 累积器，stateKeyframe 是整份补丁，
+ * 两类实体各自的写入目标（draft）形态不同：stateKeyframe 是整份补丁，
  * playback 是三项累积成一次提交，keyframe 的 draft 只带上下文（objectId/path/currentTime）、
  * 真正的写入落在全局 store（time 的顺序依赖、value/easing 需要查当前关键帧）。
  */
 
-const PROJECT_ENTITY_TYPE = 'camera_stage.project' as const
 const STATE_KEYFRAME_ENTITY_TYPE = 'camera_stage.state_keyframe' as const
 const PLAYBACK_ENTITY_TYPE = 'camera_stage.playback' as const
 const CAMERA_ENTITY_TYPE = 'camera_stage.camera' as const
 const OBJECT_ENTITY_TYPE = 'camera_stage.object' as const
 
-/* ── 工程 ─────────────────────────────────────────────────────────────── */
-
-export interface CameraStageProjectDraft {
-  readonly projectId: string
-  rename?: string
-}
-
-export const PROJECT_FIELDS = [
-  stageField<CameraStageProjectSnapshot, CameraStageProjectDraft, string, never>(
-    PROJECT_ENTITY_TYPE, 'name', '工程名称', nameCodec(CAMERA_STAGE_NAME_MAX_LENGTH),
-    {
-      read: (snapshot) => snapshot.name,
-      write: (draft, value) => { draft.rename = value },
-      storeActions: [],
-    },
-  ),
-]
-
-export const CAMERA_STAGE_PROJECT_WRITERS = fieldWriterTable(PROJECT_FIELDS)
+/* ── 文档 ───────────────────────────────────────────────────────────────
+ * 名称就是文档文件名（3.2）：改名走通用 documents.document.name，这里不再有可写属性。 */
 
 /* ── 状态关键帧 ───────────────────────────────────────────────────────────── */
 

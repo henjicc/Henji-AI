@@ -18,7 +18,7 @@ import { registerDocumentsIpc } from './documents'
 
 const METHODS: Array<keyof DocumentsPlatform> = [
   'listDocuments', 'readDocument', 'createDocument', 'saveDocument', 'renameDocument', 'finalizeDocument', 'moveDocument',
-  'duplicateDocument', 'trashDocument', 'deleteEmptyDraft', 'revealDocument', 'resolveDocumentLink', 'checkName',
+  'duplicateDocument', 'trashDocument', 'deleteEmptyDraft', 'forgetDocument', 'revealDocument', 'resolveDocumentLink', 'checkName',
   'getDocumentCover', 'saveDocumentCover', 'refreshIndex', 'listProjects', 'createProject', 'renameProject', 'finalizeProject',
   'trashProject', 'registerExternalProject', 'forgetExternalLocation', 'revealProject',
 ]
@@ -53,6 +53,7 @@ describe('文档底座 IPC 契约（preload 桥 → 主进程校验 → Document
       ['duplicateDocument', [{ target }], [{ target }]],
       ['trashDocument', [target], [target]],
       ['deleteEmptyDraft', [target], [target]],
+      ['forgetDocument', ['doc-1'], ['doc-1']],
       ['revealDocument', [target], [target]],
       ['resolveDocumentLink', [{ docId: 'doc-1', path: '/work/a.henji-canvas' }], [{ docId: 'doc-1', path: '/work/a.henji-canvas' }]],
       ['checkName', [{ subject: { type: 'project' }, name: 'x', location: { container: { kind: 'user' } } }], [{ subject: { type: 'project' }, name: 'x', location: { container: { kind: 'user' } } }]],
