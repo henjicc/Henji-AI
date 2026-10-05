@@ -144,7 +144,7 @@ it('自动保存失败保留修改并在磁盘恢复后只重试保存，不重�
     const instance = (await createVideoEditProject())!
     failSave = true; appendVideoEditClip(instance.document.id)
     await vi.advanceTimersByTimeAsync(1)
-    expect(instance.dirty).toBe(true); expect(instance.error).toContain('修改仍保留在当前工程')
+    expect(instance.dirty).toBe(true); expect(instance.error).toContain('修改仍保留在当前项目')
     const history = instance.past.length
     failSave = false; await vi.advanceTimersByTimeAsync(2000)
     expect(JSON.parse(files.get(instance.path)!).sequences[0].clips).toHaveLength(1)
@@ -203,8 +203,8 @@ it('保存失败保留助手修改且恢复不会重放编辑', async () => {
     const result = await app.change({ kind: 'video_edit.project', id: instance.document.id }, { 'video_edit.project.name': '保留修改' })
     expect(result.ok).toBe(false)
     expect(instance.document.name).toBe('保留修改'); expect(instance.dirty).toBe(true)
-    await expect(saveVideoEdit(instance.document.id)).rejects.toThrow('修改仍保留在当前工程')
-    expect(instance.error).toContain('请检查工程文件是否只读'); expect(instance.error).not.toContain('disk full')
+    await expect(saveVideoEdit(instance.document.id)).rejects.toThrow('修改仍保留在当前项目')
+    expect(instance.error).toContain('请检查项目文件是否只读'); expect(instance.error).not.toContain('disk full')
     const historyLength = instance.past.length
     failSave = false; await saveVideoEdit(instance.document.id)
     expect(instance.past).toHaveLength(historyLength)
