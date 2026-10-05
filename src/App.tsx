@@ -22,6 +22,7 @@ import { NotificationProvider } from '@/contexts/NotificationContext'
 import { useUiStore } from '@/stores/uiStore'
 import { syncProviderKeyStatuses } from '@/services/providerKeyStatus'
 import { GlobalAlertDialog } from '@/components/ui/GlobalAlertDialog'
+import { DocumentSessionDialogs } from '@/features/documents/DocumentSessionDialogs'
 import {
   closeAssetLibrary,
   openAssetLibrary,
@@ -323,6 +324,7 @@ const App: React.FC = () => {
         </Suspense>
         <LargeUploadChoiceDialog />
         <GlobalAlertDialog />
+        <DocumentSessionDialogs />
         <OnboardingHints />
         <OnboardingModal />
       </div>

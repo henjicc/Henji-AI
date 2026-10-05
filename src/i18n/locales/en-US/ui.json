@@ -1057,5 +1057,53 @@
       "imageEditing": "Image Edit",
       "unknown": "Unlabeled"
     }
+  },
+  "documentSession": {
+    "leave": {
+      "title": "Save \"{{name}}\"?",
+      "messageDocument": "If you don't save, this draft will be moved to the Recycle Bin.",
+      "messageProject": "If you don't save, the whole project folder will be moved to the Recycle Bin.",
+      "save": "Save",
+      "discard": "Don't Save",
+      "cancel": "Cancel"
+    },
+    "nameDialog": {
+      "titleDocument": "Save",
+      "titleProject": "Save Project",
+      "nameLabel": "Name",
+      "locationLabel": "Location",
+      "changeLocation": "Change Location…",
+      "defaultLocation": "Use Default Location",
+      "confirm": "Save",
+      "cancel": "Cancel",
+      "duplicateDocument": "A file with this name already exists here. Choose another name.",
+      "duplicateProject": "A folder with this name already exists here. Choose another name.",
+      "checkFailed": "Couldn't check the name right now. Try again later.",
+      "saveFailed": "Couldn't save: {{message}}",
+      "invalid": {
+        "empty": "Enter a name.",
+        "too_long": "Names can be at most {{max}} characters.",
+        "illegal_characters": "Names can't contain \\ / : * ? \" < > |.",
+        "reserved": "This name can't be used as a file name. Choose another one.",
+        "location": "You can't save to this location. Choose another folder."
+      }
+    },
+    "conflict": {
+      "title": "File Changed Elsewhere",
+      "message": "\"{{name}}\" was changed elsewhere while you were editing. Reload discards the unsaved changes here; Overwrite replaces the version on disk with this one.",
+      "reload": "Reload",
+      "overwrite": "Overwrite",
+      "later": "Decide Later"
+    },
+    "recovery": {
+      "title_one": "{{count}} unsaved draft",
+      "title_other": "{{count}} unsaved drafts",
+      "description": "Drafts left from the last session. Continue editing them, or move them to the Recycle Bin.",
+      "meta": "Edited {{time}}",
+      "metaInProject": "Edited {{time}} · {{project}}",
+      "recover": "Continue Editing",
+      "discard": "Move to Recycle Bin",
+      "discardFailed": "Couldn't move to the Recycle Bin: {{message}}"
+    }
   }
 }

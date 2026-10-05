@@ -1057,5 +1057,52 @@
       "imageEditing": "图片编辑",
       "unknown": "未标注"
     }
+  },
+  "documentSession": {
+    "leave": {
+      "title": "要保存“{{name}}”吗？",
+      "messageDocument": "不保存的话，这份草稿会移到回收站。",
+      "messageProject": "不保存的话，整个项目文件夹会移到回收站。",
+      "save": "保存",
+      "discard": "不保存",
+      "cancel": "取消"
+    },
+    "nameDialog": {
+      "titleDocument": "保存",
+      "titleProject": "保存项目",
+      "nameLabel": "名称",
+      "locationLabel": "位置",
+      "changeLocation": "更改位置…",
+      "defaultLocation": "恢复默认位置",
+      "confirm": "保存",
+      "cancel": "取消",
+      "duplicateDocument": "这个位置已有同名文件，请换一个名称。",
+      "duplicateProject": "这个位置已有同名文件夹，请换一个名称。",
+      "checkFailed": "暂时无法检查名称，请稍后重试。",
+      "saveFailed": "没能保存：{{message}}",
+      "invalid": {
+        "empty": "请输入名称。",
+        "too_long": "名称最多 {{max}} 个字符。",
+        "illegal_characters": "名称不能包含 \\ / : * ? \" < > | 等字符。",
+        "reserved": "这个名称不能用作文件名，请换一个。",
+        "location": "不能保存到这个位置，请换一个文件夹。"
+      }
+    },
+    "conflict": {
+      "title": "文件已在别处被修改",
+      "message": "“{{name}}”在编辑期间被别处改过。重新载入会放弃这里尚未保存的修改；覆盖会用这里的内容替换磁盘上的版本。",
+      "reload": "重新载入",
+      "overwrite": "覆盖",
+      "later": "稍后处理"
+    },
+    "recovery": {
+      "title": "有 {{count}} 份草稿没有保存",
+      "description": "上次退出前留下的草稿，可以继续编辑，或移到回收站。",
+      "meta": "{{time}} 编辑",
+      "metaInProject": "{{time}} 编辑 · {{project}}",
+      "recover": "继续编辑",
+      "discard": "移到回收站",
+      "discardFailed": "没能移到回收站：{{message}}"
+    }
   }
 }
