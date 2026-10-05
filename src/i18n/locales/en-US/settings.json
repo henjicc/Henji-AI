@@ -145,6 +145,7 @@
     "deleteTitle": "Delete provider \"{{name}}\"",
     "deleteMessage": "This removes the provider's connection, key and its models. This cannot be undone.",
     "menuHint": "Right-click to edit or delete",
+    "builtinNoEdit": "Built-in provider; cannot be edited or deleted",
     "renameHint": "Renames this model for every provider. Leave empty to restore the original name.",
     "originalName": "Original: {{name}}",
     "syncFailed": "Model sync failed",

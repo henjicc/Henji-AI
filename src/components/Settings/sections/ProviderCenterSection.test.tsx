@@ -74,3 +74,14 @@ describe('供应商中心：右键编辑与删除', () => {
     await waitFor(() => expect(llm.deleteProviderSettings).toHaveBeenCalledWith('custom-relay'))
   })
 })
+
+describe('供应商中心：内置供应商右键', () => {
+  it('内置供应商右键也有反馈：一条灰掉的说明', async () => {
+    const builtin = { ...provider, providerId: 'deepseek', displayName: '内置DS', setup: { kind: 'preset', presetId: 'deepseek', lifecycle: 'builtin' } } as LlmProviderConfig
+    render(<ProviderCenterSection llm={{ ...llm, config: { ...llm.config, providers: [builtin] } } as UseLlmSettingsResult} />)
+    fireEvent.contextMenu(await screen.findByRole('button', { name: '内置DS' }))
+    const item = await screen.findByRole('menuitem', { name: /providerCenter.builtinNoEdit/ })
+    expect((item as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.queryByRole('menuitem', { name: /deleteProvider/ })).toBeNull()
+  })
+})

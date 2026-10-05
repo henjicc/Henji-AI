@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type MouseEvent } from 'react'
-import { Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react'
+import { Lock, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react'
 import ContextMenu from '@/components/ContextMenu'
 import { DeleteConfirmDialog } from '@/components/DeleteConfirmDialog'
 import { useContextMenu } from '@/hooks/useContextMenu'
@@ -240,11 +240,14 @@ const ProviderCenterSection = ({ llm }: ProviderCenterSectionProps): JSX.Element
    */
   const openProviderMenu = (event: MouseEvent, group: (typeof groups)[number]): void => {
     const provider = group.llmProvider
-    if (!provider) return
-    const editable = provider.setup?.kind === 'custom'
-    const deletable = !(provider.setup?.kind === 'preset' && provider.setup.lifecycle === 'builtin')
-    if (!editable && !deletable) return
+    const editable = provider?.setup?.kind === 'custom'
+    const deletable = provider !== undefined && !(provider.setup?.kind === 'preset' && provider.setup.lifecycle === 'builtin')
     setSelectedId(group.id)
+    // 内置供应商也弹菜单，只放一条灰掉的说明：右键没反应会让人以为功能坏了
+    if (!provider || (!editable && !deletable)) {
+      providerMenu.showMenu(event, [{ id: 'builtin', label: t('providerCenter.builtinNoEdit'), icon: <Lock className="h-4 w-4" />, onClick: () => {}, disabled: true }])
+      return
+    }
     providerMenu.showMenu(event, [
       ...(editable ? [{
         id: 'edit', label: t('providerCenter.actions.editConnection'), icon: <Pencil className="h-4 w-4" />,

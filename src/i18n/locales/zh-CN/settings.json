@@ -145,6 +145,7 @@
     "deleteTitle": "删除供应商「{{name}}」",
     "deleteMessage": "会删除这个供应商的连接、密钥和它下面的模型。此操作不可撤销。",
     "menuHint": "右键可编辑或删除",
+    "builtinNoEdit": "内置供应商，不能编辑或删除",
     "renameHint": "同一模型在所有供应商下同步改名，留空恢复原名",
     "originalName": "原名 {{name}}",
     "syncFailed": "同步模型失败",
