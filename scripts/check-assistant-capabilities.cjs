@@ -199,6 +199,8 @@ const ASSISTANT_BLIND_FEATURES = {
     + 'API 密钥继续走受保护的 security.provider_keys，步骤进度与提示显隐属于 view_state，'
     + '不为助手另建专用能力或伪造 StoreLedger。',
   toolbox: '工具目录由正式工具注册表定义，属于应用结构而非用户数据，已有 toolbox.tool 的 writeExclusion。',
+  devGallery: '开发模式组件样张页只在开发构建中挂载，用于目视检查界面组件与主题组合，'
+    + '不承载用户数据、不出现在正式界面，助手无需观察或操作。',
   maskEditor: '蒙版编辑器只管理本次面板内的位图绘制与未确认草稿，没有独立持久化实体或 zustand store；'
     + '确认后的蒙版引用和编辑文档由画布节点与派生媒体服务持有，入口由画布专用编辑器会话统一编排。'
     + '助手可读写最终画布节点，但不伪造逐像素鼠标绘制能力。',
@@ -344,9 +346,10 @@ for (const field of [
 ]) {
   if (!surfaceRegistrySource.includes(field)) failures.push(`Surface 观察契约缺少字段：${field}`)
 }
+// 分区唯一来源是按大类分组的 SETTINGS_TAB_SECTIONS（SETTINGS_SECTION_IDS 由它展开），按对象字面量解析
 const settingsSectionBlock = settingsNavigationSource
-  .split('export const SETTINGS_SECTION_IDS = [')[1]
-  ?.split(']')[0] ?? ''
+  .split('export const SETTINGS_TAB_SECTIONS = {')[1]
+  ?.split('} as const')[0] ?? ''
 const settingsSectionIds = [...settingsSectionBlock.matchAll(/'([^']+)'/g)].map((match) => match[1])
 if (settingsSectionIds.length === 0) failures.push('未能解析设置分区清单 SETTINGS_SECTION_IDS')
 for (const sectionId of settingsSectionIds) {
