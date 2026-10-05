@@ -64,8 +64,13 @@ async function readAssetFileIdentity(filePath: string): Promise<AssetFileIdentit
 function sameAssetFileIdentity(left: AssetFileIdentity, right: AssetFileIdentity): boolean {
   return left.size === right.size && left.modifiedAt === right.modifiedAt && left.changedAt === right.changedAt && left.device === right.device && left.inode === right.inode
 }
+/**
+ * 内容身份按规范化后的路径计算：库里的路径存成位置写法（存储底座 2.3），读出时作品目录部分保留原大小写，
+ * 而按路径核对（inspectAssetFileContent）用的是规范化（Windows 上全小写）的路径；两边必须用同一种写法，
+ * 否则作品目录里的文件（生成结果、编辑帧渲染等）每次核对都被判为“内容已改变”。
+ */
 function assetContentIdentity(asset: Pick<AssetDto, 'filePath' | 'mediaType'>, identity: AssetFileIdentity): string {
-  return crypto.createHash('sha256').update(JSON.stringify([asset.filePath, asset.mediaType, identity.size, identity.modifiedAt, identity.changedAt, identity.device, identity.inode])).digest('hex')
+  return crypto.createHash('sha256').update(JSON.stringify([normalizeAssetPath(asset.filePath), asset.mediaType, identity.size, identity.modifiedAt, identity.changedAt, identity.device, identity.inode])).digest('hex')
 }
 let fileContentActive = 0
 const fileContentQueue: Array<() => void> = []
