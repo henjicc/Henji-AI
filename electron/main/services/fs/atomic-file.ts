@@ -4,7 +4,11 @@ import path from 'node:path'
 
 import { createMainLogger } from '../logging'
 
-const logger = createMainLogger('main.image_editor_v3.atomic_file')
+/*
+ * 原子文件写入：所有需要“写完整再发布、失败不留半成品”的落盘共用这一份实现
+ * （文档仓库、图片编辑器、系统写文件、窗口外观缓存等）。
+ */
+const logger = createMainLogger('main.fs.atomic_file')
 
 export interface AtomicFileOperations {
   rename(source: string, target: string): Promise<void>
@@ -49,7 +53,7 @@ async function syncPublishedDirectory(
     // rename 已经提交，目录 fsync 失败只代表断电耐久性无法确认；此时回滚或报告
     // “保存失败”都会与磁盘上的新目标相矛盾。保留新目标并记录明确的降级证据。
     logger.warn('文件已原子发布，但目录耐久化无法确认', {
-      event: 'image_editor_v3.atomic_file.durability_uncertain',
+      event: 'fs.atomic_file.durability_uncertain',
       context: { targetPath },
       error,
     })
@@ -117,7 +121,7 @@ export async function writeBufferAtomically(
       // A same-directory hard link publishes the complete closed file without
       // overwriting a racing target. Failed writes only ever touch our staging.
       await fs.link(stagedPath, targetPath)
-      await operations.remove(stagedPath).catch(error => logger.warn('文件已发布，暂存文件清理失败', { event: 'image_editor_v3.atomic_file.staging_cleanup_failed', error, context: { targetPath } }))
+      await operations.remove(stagedPath).catch(error => logger.warn('文件已发布，暂存文件清理失败', { event: 'fs.atomic_file.staging_cleanup_failed', error, context: { targetPath } }))
       await syncPublishedDirectory(targetPath, operations)
     } else await replaceFileAtomically(stagedPath, targetPath, operations)
   } catch (error) {

@@ -1,9 +1,7 @@
 import fsp from 'node:fs/promises'
 import path from 'node:path'
+import { renderCoverImage } from './covers/cover-render'
 import { getDb, getHenjiDataDir } from './db'
-import { loadSharp } from './image/sharp-loader'
-import { resolveSourceBytes } from './image/source'
-import { generateVideoThumbnailBytes } from './video/ops'
 import { createMainLogger } from './logging'
 import {
   selectProjectCoverSources,
@@ -15,8 +13,8 @@ export type { ProjectCoverSourceDto, ProjectCoverSourceKind } from './project-co
 /**
  * 工程封面：画布工程与 3D 镜头参考工程共用同一套落盘、清理与登记逻辑。
  *
- * 封面来源由渲染层决定（生成结果 / 视口截图），这里只负责统一转码成小尺寸 webp、
- * 写进数据目录、把路径登记回各自的工程表——两个工程列表因此不会长出两份缩略图实现。
+ * 封面来源由渲染层决定（生成结果 / 视口截图）；转码与拼图在 covers/cover-render.ts（与通用文档封面共用），
+ * 这里只负责写进程序目录、把路径登记回各自的工程表。画布与镜头参考接入文档底座（3.x）后改用通用封面。
  */
 
 export type ProjectCoverScope = 'canvas' | 'camera-stage'
@@ -32,9 +30,6 @@ export interface ProjectCoverResultDto {
   coverPath: string | null
 }
 
-/** 项目卡封面固定 4:3；640 宽能覆盖常见 2x DPR，同时控制单张文件体积。 */
-const COVER_WIDTH = 640
-const COVER_HEIGHT = 480
 const COVER_DIR_NAME = 'ProjectCovers'
 const SCOPE_TABLES: Record<ProjectCoverScope, string> = {
   canvas: 'storyboard_projects',
@@ -70,48 +65,6 @@ async function removeFileQuietly(target: string | null): Promise<void> {
   }
 }
 
-async function renderSourceTile(
-  source: ProjectCoverSourceDto,
-  width: number,
-  height: number,
-): Promise<Buffer> {
-  const input = source.sourceKind === 'video'
-    ? await generateVideoThumbnailBytes(source.source, Math.max(width, height))
-    : (await resolveSourceBytes(source.source)).bytes
-  const sharp = await loadSharp()
-  return await sharp(input)
-    .resize(width, height, { fit: 'cover', position: 'centre' })
-    .webp({ quality: 80 })
-    .toBuffer()
-}
-
-async function renderProjectCover(sources: ProjectCoverSourceDto[]): Promise<Buffer> {
-  const selected = sources
-  if (selected.length === 0) throw new Error('Project cover requires at least one source')
-  if (selected.length === 1) {
-    return await renderSourceTile(selected[0], COVER_WIDTH, COVER_HEIGHT)
-  }
-
-  const columns = 2
-  const rows = selected.length === 4 ? 2 : 1
-  const tileWidth = COVER_WIDTH / columns
-  const tileHeight = COVER_HEIGHT / rows
-  const tiles = await Promise.all(selected.map(async (source, index) => ({
-    input: await renderSourceTile(source, tileWidth, tileHeight),
-    left: (index % columns) * tileWidth,
-    top: Math.floor(index / columns) * tileHeight,
-  })))
-  const sharp = await loadSharp()
-  return await sharp({
-    create: {
-      width: COVER_WIDTH,
-      height: COVER_HEIGHT,
-      channels: 4,
-      background: { r: 0, g: 0, b: 0, alpha: 1 },
-    },
-  }).composite(tiles).webp({ quality: 80 }).toBuffer()
-}
-
 /**
  * 落盘一张工程封面并登记到工程表。
  *
@@ -120,8 +73,7 @@ async function renderProjectCover(sources: ProjectCoverSourceDto[]): Promise<Buf
  */
 async function persistProjectCover(payload: SaveProjectCoverPayloadDto): Promise<ProjectCoverResultDto> {
   const { scope, projectId, sources } = payload
-  const selectedSources = selectProjectCoverSources(sources)
-  const bytes = await renderProjectCover(selectedSources)
+  const { bytes } = await renderCoverImage(sources)
 
   const directory = coverDir()
   await fsp.mkdir(directory, { recursive: true })

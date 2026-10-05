@@ -6,6 +6,7 @@ import { initializeApplicationOperationSchema } from './application-runtime/oper
 import { initializeAudioEditSchema } from './audio-edit/schema'
 import { upgradeAssetSources } from './asset-library/schema'
 import { getProgramDataDir } from './appBasePaths'
+import { runSchemaMigrations } from './db-migrations'
 
 export type SqlBindValue = string | number | boolean | null | Uint8Array
 
@@ -227,13 +228,15 @@ export function initializeSchema(conn: Database.Database): void {
   initializeAssistantMemorySchema(conn)
   initializeApplicationOperationSchema(conn)
   initializeAudioEditSchema(conn)
+  // 新表一律走统一版本化迁移账本（db-migrations.ts）；上面的老表由 2.3 数据库收口逐步并入。
+  runSchemaMigrations(conn)
 }
 
 /**
  * 给本文件用 `CREATE TABLE IF NOT EXISTS` 维护的老表补列。
  *
- * 这些表不走 `app_schema_migrations` 版本账本（那是主进程 agent 侧的），
- * 而 `IF NOT EXISTS` 对已存在的库不会追加新列，所以旧库必须在这里显式补。
+ * 这些老表还没并入统一版本化迁移账本 `schema_migrations`（db-migrations.ts，2.3 数据库收口时并入），
+ * 而 `IF NOT EXISTS` 对已存在的库不会追加新列，所以旧库必须在这里显式补。新表与改表不要再走这里。
  */
 function ensureColumn(conn: Database.Database, table: string, column: string, definition: string): void {
   const columns = conn.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>

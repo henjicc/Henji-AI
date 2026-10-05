@@ -27,6 +27,7 @@ import { createElectronMcp } from './mcp'
 import { createElectronAudioEdit } from './audioEdit'
 import { createElectronVideoFrames } from './videoFrames'
 import { createElectronVideoDecoder } from './videoDecoder'
+import { createElectronDocuments } from './documents'
 
 export function createElectronPlatform(): PlatformRuntime {
   return {
@@ -58,5 +59,6 @@ export function createElectronPlatform(): PlatformRuntime {
     audioEdit: createElectronAudioEdit(),
     videoFrames: createElectronVideoFrames(),
     videoDecoder: createElectronVideoDecoder(),
+    documents: createElectronDocuments(),
   }
 }

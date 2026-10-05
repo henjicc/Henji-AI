@@ -34,10 +34,14 @@ export {
  */
 
 export type UserFolderLocale = 'zh' | 'en'
-export type UserFolderKey = 'projects' | 'imageDocuments' | 'generated' | 'uploads' | 'exports' | 'skills'
+export type UserFolderKey = 'projects' | 'generated' | 'uploads' | 'exports' | 'skills'
 
+/**
+ * 首次需要用户目录时就建好的分类文件夹。各类文档独立存放的文件夹（画布、口播、镜头参考、图片文档）
+ * 与作品目录的 `.henji/` 由文档底座按文档类型登记在用到时才建（src/core/documents/kinds）。
+ */
 export const USER_FOLDER_KEYS: readonly UserFolderKey[] = [
-  'projects', 'imageDocuments', 'generated', 'uploads', 'exports', 'skills',
+  'projects', 'generated', 'uploads', 'exports', 'skills',
 ]
 
 export const USER_ROOT_FOLDER_NAMES: Readonly<Record<UserFolderLocale, string>> = {
@@ -48,7 +52,6 @@ export const USER_ROOT_FOLDER_NAMES: Readonly<Record<UserFolderLocale, string>> 
 export const USER_FOLDER_NAMES: Readonly<Record<UserFolderLocale, Readonly<Record<UserFolderKey, string>>>> = {
   zh: {
     projects: '项目',
-    imageDocuments: '图片文档',
     generated: '生成结果',
     uploads: '上传素材',
     exports: '导出',
@@ -56,7 +59,6 @@ export const USER_FOLDER_NAMES: Readonly<Record<UserFolderLocale, Readonly<Recor
   },
   en: {
     projects: 'Projects',
-    imageDocuments: 'Image Documents',
     generated: 'Generated',
     uploads: 'Uploads',
     exports: 'Exports',

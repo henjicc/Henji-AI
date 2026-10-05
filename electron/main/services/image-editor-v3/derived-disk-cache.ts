@@ -4,7 +4,7 @@ import fsp from 'node:fs/promises'
 import path from 'node:path'
 
 import { createMainLogger } from '../logging'
-import { writeBufferAtomically } from './atomic-file'
+import { writeBufferAtomically } from '../fs/atomic-file'
 import { KeyedSerialExecutor } from './serial-executor'
 
 export const DEFAULT_DERIVED_CACHE_QUOTA_BYTES = 8 * 1024 * 1024 * 1024

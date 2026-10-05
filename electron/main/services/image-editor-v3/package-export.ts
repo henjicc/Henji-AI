@@ -5,7 +5,7 @@ import fsp from 'node:fs/promises'
 import path from 'node:path'
 
 import { createMainLogger } from '../logging'
-import { replaceFileAtomically } from './atomic-file'
+import { replaceFileAtomically } from '../fs/atomic-file'
 import type { ImageEditDocumentEnvelope, ResourceId } from './contracts'
 import type { ContentAddressedResourceStore } from './resource-store'
 import {

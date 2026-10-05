@@ -25,6 +25,7 @@ import type { ApplicationHostPlatform, McpPlatform } from '@/core/application-co
 import type { AudioEditPlatform } from './audioEdit'
 import type { VideoFramesPlatform } from './videoFrames'
 import type { VideoDecoderPlatform } from './videoDecoder'
+import type { DocumentsPlatform } from './documents'
 
 export interface PlatformRuntime {
   embeddedAgent: EmbeddedAgentPlatform
@@ -55,6 +56,7 @@ export interface PlatformRuntime {
   audioEdit: AudioEditPlatform
   videoFrames: VideoFramesPlatform
   videoDecoder: VideoDecoderPlatform
+  documents: DocumentsPlatform
 }
 
 export type {
@@ -83,6 +85,7 @@ export type {
   AudioEditPlatform,
   VideoFramesPlatform,
   VideoDecoderPlatform,
+  DocumentsPlatform,
 }
 export * from './aiRuntime'
 export * from './llmRuntime'
@@ -107,3 +110,4 @@ export * from './updater'
 export * from './assetLibrary'
 export * from './assistant'
 export * from './audioEdit'
+export * from './documents'

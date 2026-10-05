@@ -6,7 +6,7 @@ function compatibilityError(): Error & { code: string } {
   return Object.assign(new Error('replace unsupported'), { code: 'EPERM' })
 }
 
-describe('图片编辑 V3 原子文件替换', () => {
+describe('原子文件替换', () => {
   it('新目标发布后即使旧备份删除失败也保持成功且不回滚', async () => {
     const renames: Array<[string, string]> = []
     let first = true

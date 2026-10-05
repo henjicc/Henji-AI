@@ -12,6 +12,7 @@ import { registerCanvasProjectsIpc } from './ipc/canvas-projects'
 import { registerClipboardIpc } from './ipc/clipboard'
 import { registerCustomModelsIpc } from './ipc/custom-models'
 import { registerDbIpc } from './ipc/db'
+import { registerDocumentsIpc } from './ipc/documents'
 import { registerDragIpc } from './ipc/drag'
 import { registerImageIpc } from './ipc/image'
 import { disposeImageEditorV3Ipc, registerImageEditorV3Ipc } from './ipc/image-editor-v3'
@@ -42,6 +43,7 @@ import { getAiProviderApiKey } from './services/keystore'
 import { createMainLogger, runLogRetention } from './services/logging'
 import { bindApplicationShutdown } from './application-shutdown'
 import { initializeUpdater } from './services/updater'
+import { scheduleStartupDocumentIndexScan } from './services/documents/runtime'
 import { createWindow } from './window'
 import { resolveWindowPresentationMode } from './window-presentation'
 import {
@@ -98,6 +100,7 @@ app.whenReady().then(() => {
   registerClipboardIpc()
   registerCustomModelsIpc()
   registerDbIpc()
+  registerDocumentsIpc()
   registerDragIpc()
   registerImageIpc()
   registerImageEditorV3Ipc()
@@ -164,6 +167,8 @@ app.whenReady().then(() => {
   }
 
   createWindow({ presentation: resolveWindowPresentationMode() })
+  // 作品索引在后台扫描，不阻塞启动（文件才是唯一真相，索引随时可以重建）。
+  scheduleStartupDocumentIndexScan()
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

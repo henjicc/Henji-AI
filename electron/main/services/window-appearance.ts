@@ -134,7 +134,7 @@ export const windowAppearance: WindowAppearanceStore = createWindowAppearanceSto
     }
   },
   async writeFile(content) {
-    const { writeBufferAtomically } = await import('./image-editor-v3/atomic-file')
+    const { writeBufferAtomically } = await import('./fs/atomic-file')
     await writeBufferAtomically(appearanceFilePath(), new TextEncoder().encode(content))
   },
   listWindows: () => BrowserWindow.getAllWindows(),

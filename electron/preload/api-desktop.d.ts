@@ -48,7 +48,7 @@ export interface HenjiShellApi {
   openExternal(url: string): Promise<void>
 }
 
-export type HenjiUserFolderKey = 'projects' | 'imageDocuments' | 'generated' | 'uploads' | 'exports' | 'skills'
+export type HenjiUserFolderKey = 'projects' | 'generated' | 'uploads' | 'exports' | 'skills'
 
 /** 程序目录与用户目录快照，唯一来源为主进程 `services/appPaths.ts`。 */
 export interface HenjiAppDirectories {

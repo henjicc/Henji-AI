@@ -36,7 +36,7 @@ export interface ShellPlatform {
   openExternal(url: string): Promise<void>
 }
 
-export type UserFolderKey = 'projects' | 'imageDocuments' | 'generated' | 'uploads' | 'exports' | 'skills'
+export type UserFolderKey = 'projects' | 'generated' | 'uploads' | 'exports' | 'skills'
 
 /** 程序目录与用户目录快照；唯一来源是主进程 `electron/main/services/appPaths.ts`。 */
 export interface AppDirectories {

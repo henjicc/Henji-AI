@@ -38,8 +38,8 @@ import {
   setUserFolderLanguageHint,
 } from './appPaths'
 
-const ZH_FOLDERS = ['项目', '图片文档', '生成结果', '上传素材', '导出', '助手技能']
-const EN_FOLDERS = ['Projects', 'Image Documents', 'Generated', 'Uploads', 'Exports', 'Assistant Skills']
+const ZH_FOLDERS = ['项目', '生成结果', '上传素材', '导出', '助手技能']
+const EN_FOLDERS = ['Projects', 'Generated', 'Uploads', 'Exports', 'Assistant Skills']
 
 describe('应用目录唯一来源', () => {
   beforeEach(() => {

@@ -5,7 +5,7 @@ import path from 'node:path'
 
 import { createMainLogger } from '../logging'
 import type { SourceImageMetadata } from './contracts'
-import { replaceFileAtomically } from './atomic-file'
+import { replaceFileAtomically } from '../fs/atomic-file'
 import { readAssociatedNclxCicp } from './isobmff-cicp'
 import { rewriteMetaWithAssociatedNclx, type FileBoxRange } from './isobmff-cicp-writer-layout'
 

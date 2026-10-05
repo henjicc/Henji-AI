@@ -3,7 +3,7 @@ import fsp from 'node:fs/promises'
 import path from 'node:path'
 
 import { createMainLogger } from '../logging'
-import { replaceFileAtomically } from './atomic-file'
+import { replaceFileAtomically } from '../fs/atomic-file'
 import type { OutputTile, TileOutputDescription, TileOutputSink } from './contracts'
 
 const logger = createMainLogger('main.image_editor_v3.output')

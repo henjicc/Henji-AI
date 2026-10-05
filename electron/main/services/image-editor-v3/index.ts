@@ -1,5 +1,4 @@
 export * from './contracts'
-export * from './atomic-file'
 export * from './resource-store'
 export * from './document-repository'
 export * from './history-persistence'

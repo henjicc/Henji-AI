@@ -3,7 +3,8 @@ import fsp from 'node:fs/promises'
 import path from 'node:path'
 
 import { createMainLogger } from '../logging'
-import { writeBufferAtomically } from './atomic-file'
+import { writeBufferAtomically } from '../fs/atomic-file'
+import { withFileLock } from '../fs/file-lock'
 import {
   IMAGE_EDIT_DOCUMENT_FORMAT,
   IMAGE_EDIT_DOCUMENT_REF_PREFIX,
@@ -415,39 +416,11 @@ export class ImageEditDocumentRepository {
   }
 
   private async withDocumentLock<T>(documentId: string, operation: () => Promise<T>): Promise<T> {
-    const lockDir = path.join(this.rootDir, '.locks')
-    const lockPath = path.join(lockDir, `${documentId}.lock`)
-    await fsp.mkdir(lockDir, { recursive: true })
-    const deadline = Date.now() + DOCUMENT_LOCK_TIMEOUT_MS
-    let lock: fsp.FileHandle | undefined
-    while (!lock) {
-      try {
-        const candidate = await fsp.open(lockPath, 'wx', 0o600)
-        try {
-          await candidate.writeFile(`${process.pid} ${Date.now()}\n`, 'utf8')
-          lock = candidate
-        } catch (error) {
-          await candidate.close().catch(() => undefined)
-          await fsp.rm(lockPath, { force: true }).catch(() => undefined)
-          throw error
-        }
-      } catch (error) {
-        if (!(error instanceof Error) || !('code' in error) || error.code !== 'EEXIST') throw error
-        const stats = await fsp.stat(lockPath).catch(() => undefined)
-        if (stats && Date.now() - stats.mtimeMs > DOCUMENT_LOCK_STALE_MS) {
-          await fsp.rm(lockPath, { force: true }).catch(() => undefined)
-          continue
-        }
-        if (Date.now() >= deadline) throw new Error(`Timed out acquiring document lock: ${documentId}`)
-        await new Promise<void>((resolve) => setTimeout(resolve, 10))
-      }
-    }
-    try {
-      return await operation()
-    } finally {
-      await lock.close().catch(() => undefined)
-      await fsp.rm(lockPath, { force: true }).catch(() => undefined)
-    }
+    return await withFileLock(path.join(this.rootDir, '.locks', `${documentId}.lock`), operation, {
+      timeoutMs: DOCUMENT_LOCK_TIMEOUT_MS,
+      staleMs: DOCUMENT_LOCK_STALE_MS,
+      timeoutMessage: `Timed out acquiring document lock: ${documentId}`,
+    })
   }
 }
 

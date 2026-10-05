@@ -46,6 +46,7 @@ import { createEmbeddedAgentApi } from './embedded-agent-api'
 import { createMcpApi } from './mcp-api'
 import { createVideoFramesApi } from './video-frames-api'
 import { createVideoDecoderApi } from './video-decoder-api'
+import { createDocumentsApi } from './documents-api'
 
 type IpcResultEnvelope<T> =
   | { ok: true; data: T }
@@ -494,6 +495,7 @@ const api: HenjiNativeApi = {
   window: windowApi,
   diagnostics: diagnosticsApi,
   assetLibrary: assetLibraryApi,
+  documents: createDocumentsApi(nativeInvoke),
 }
 
 contextBridge.exposeInMainWorld('henjiNative', api)

@@ -16,13 +16,15 @@ export const APP_IDENTIFIER = 'com.henji.ai'
 export const PROGRAM_DATA_DIR_NAME = 'Henji-AI'
 
 /** 程序目录下的内部存储；名称沿用现有目录，保证已有缓存与文档继续可用。 */
-export type ProgramStoreKey = 'logs' | 'thumbnails' | 'imageEditor' | 'audioEdit' | 'debug' | 'downloads'
+export type ProgramStoreKey = 'logs' | 'thumbnails' | 'imageEditor' | 'audioEdit' | 'documentStore' | 'debug' | 'downloads'
 
 export const PROGRAM_STORE_NAMES: Readonly<Record<ProgramStoreKey, string>> = {
   logs: 'logs',
   thumbnails: 'Thumbnails',
   imageEditor: 'ImageEditorV3',
   audioEdit: 'AudioEdit',
+  /** 文档底座的内部存储：跨进程文档锁、通用封面（按文档 ID）。 */
+  documentStore: 'DocumentStore',
   debug: 'debug',
   downloads: 'Downloads',
 }

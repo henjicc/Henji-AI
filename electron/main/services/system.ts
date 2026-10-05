@@ -2,7 +2,7 @@ import { app, dialog, shell } from 'electron'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { writeBufferAtomically } from './image-editor-v3/atomic-file'
+import { writeBufferAtomically } from './fs/atomic-file'
 import { getAppBaseDir } from './appBasePaths'
 
 export interface FsDirEntryDto {

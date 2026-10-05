@@ -12,7 +12,7 @@ import {
 } from '../../../../src/core/imageEdit/v3/documentFactory'
 import type { ImageEditDocumentV3 } from '../../../../src/core/imageEdit/v3/documentTypes'
 
-import { writeBufferAtomically } from './atomic-file'
+import { writeBufferAtomically } from '../fs/atomic-file'
 import {
   DocumentRevisionConflictError,
   ImageEditDocumentRepository,
