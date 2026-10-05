@@ -264,7 +264,8 @@ const ProviderCenterSection = ({ llm }: ProviderCenterSectionProps): JSX.Element
               {/* 分节标题“供应商与模型”已是 20 号，供应商名降一档（16），层级才读得出来 */}
               <h3 className={UI_TEXT_SECTION_CLASS}>{selected.displayName}</h3>
               <div className="flex shrink-0 items-center gap-2">
-                {selected.llmProvider ? (
+                {/* 只有用户自定义的供应商可改连接（名称、协议、地址）或删除；内置与预设的连接由软件维护 */}
+                {selected.llmProvider?.setup?.kind === 'custom' ? (
                   <UiButton type="button" variant="secondary" onClick={() => { setProviderDialogCreate(false); setProviderDialogOpen(true) }}>
                     <Settings2 className="h-4 w-4" />
                     {t('providerCenter.actions.connectionSettings')}

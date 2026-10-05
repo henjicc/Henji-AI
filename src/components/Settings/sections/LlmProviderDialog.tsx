@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Info, Plus, RefreshCw, Trash2 } from 'lucide-react'
+import { Info, RefreshCw, Trash2 } from 'lucide-react'
 
 import {
   Dropdown,
@@ -9,8 +9,6 @@ import {
   UiGroup,
   UiInput,
   UiModal,
-  UiOptionButton,
-  UiSwitch,
 } from '@/components/ui'
 import { useI18n } from '@/hooks/useI18n'
 import { useExternalLink } from '../hooks/useExternalLink'
@@ -119,13 +117,6 @@ const LlmProviderDialog = ({
   const selectExisting = (provider: LlmProviderConfig): void => {
     setDraft({ ...provider })
     setPresetId(setupPresetId(provider))
-    resetSensitiveDraft()
-    setError(null)
-  }
-
-  const startNew = (): void => {
-    setDraft(createDefaultProvider())
-    setPresetId(CUSTOM_PRESET)
     resetSensitiveDraft()
     setError(null)
   }
@@ -250,7 +241,7 @@ const LlmProviderDialog = ({
     setError(null)
     try {
       await onSave(provider, seedModels, credential)
-      startNew()
+      handleClose()
     } catch (saveError) {
       setError(describeError(saveError))
     } finally {
@@ -283,7 +274,7 @@ const LlmProviderDialog = ({
     setError(null)
     try {
       await onDelete(draft.providerId)
-      startNew()
+      handleClose()
     } catch (deleteError) {
       setError(describeError(deleteError))
     } finally {
@@ -379,15 +370,6 @@ const LlmProviderDialog = ({
         </UiFormRow>
       ) : null}
 
-      {startInCreateMode ? null : (
-        <UiFormRow label={t('llmProvider.fields.enabled')} inline>
-          <UiSwitch
-            checked={draft.enabled !== false}
-            onCheckedChange={checked => patch({ enabled: checked })}
-          />
-        </UiFormRow>
-      )}
-
       {error ? <div role="alert" className="text-sm text-danger-text">{error}</div> : null}
 
       {isExisting ? (
@@ -422,7 +404,8 @@ const LlmProviderDialog = ({
       isOpen={isOpen}
       title={t(startInCreateMode ? 'llmProvider.addTitle' : 'llmProvider.title')}
       onClose={handleClose}
-      size="editor"
+      // 单列表单：内容只有一列字段，用表单宽度，不铺满编辑器尺寸
+      size="form"
       footer={(
         <>
           <UiButton type="button" variant="secondary" onClick={handleClose}>
@@ -443,43 +426,19 @@ const LlmProviderDialog = ({
         </>
       )}
     >
-      {startInCreateMode ? (
-        <div className="flex min-h-0 flex-1 flex-col gap-4">
+      {/*
+        编辑现有供应商只显示它自己的表单：以前左侧还有一份供应商列表，与供应商中心的列表重复；
+        现在只有用户自定义的供应商才有“连接设置”入口，内置与预设供应商只需在中心填密钥、开关启用。
+      */}
+      <div className="flex min-h-0 flex-1 flex-col gap-4">
+        {startInCreateMode ? (
           <div className={`flex items-start gap-2 ${UI_TEXT_META_CLASS}`}>
             <Info className="mt-0.5 h-4 w-4 shrink-0" />
             <span>{t('llmProvider.addHint')}</span>
           </div>
-          {providerForm}
-        </div>
-      ) : (
-        <div className="grid min-h-0 flex-1 grid-cols-[240px_minmax(0,1fr)] gap-4 overflow-hidden">
-          <div className="min-h-0 space-y-2 overflow-y-auto pr-1">
-            {providers.map(provider => (
-              <UiOptionButton
-                key={provider.providerId}
-                type="button"
-                active={draft.providerId === provider.providerId}
-                variant="menu"
-                size="lg"
-                className="flex w-full items-center justify-between gap-2"
-                onClick={() => selectExisting(provider)}
-              >
-                <span className="min-w-0 text-left">
-                  <span className="block truncate text-sm">{provider.displayName}</span>
-                </span>
-                <span className="text-xs text-text2">
-                  {provider.enabled ? t('llmProvider.status.on') : t('llmProvider.status.off')}
-                </span>
-              </UiOptionButton>
-            ))}
-            <UiButton type="button" variant="secondary" className="w-full" onClick={startNew}>
-              <Plus className="h-4 w-4" />
-              {t('llmProvider.actions.new')}
-            </UiButton>
-          </div>
-          {providerForm}
-        </div>
-      )}
+        ) : null}
+        {providerForm}
+      </div>
     </UiModal>
   )
 }

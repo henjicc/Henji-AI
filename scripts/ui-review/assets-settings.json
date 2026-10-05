@@ -1501,40 +1501,6 @@
       {
         "click": {
           "role": "button",
-          "name": "DeepSeek",
-          "exact": true
-        },
-        "optional": true
-      },
-      {
-        "click": {
-          "role": "button",
-          "name": "连接设置",
-          "exact": true
-        },
-        "optional": true
-      },
-      {
-        "waitFor": {
-          "role": "dialog"
-        },
-        "optional": true
-      },
-      {
-        "waitStable": {}
-      },
-      {
-        "capture": "llm-provider-settings"
-      },
-      {
-        "press": "Escape"
-      },
-      {
-        "wait": 400
-      },
-      {
-        "click": {
-          "role": "button",
           "name": "添加模型",
           "exact": true
         },
