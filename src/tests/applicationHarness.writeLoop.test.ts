@@ -15,7 +15,7 @@ import { useCameraStageStore } from '@/features/cameraStage/store/cameraStageSto
 import { getPlatform } from '@/platform/runtime';
 import { registerPersistedImageEditTestSession } from './imageEditPersistenceTestSession';
 import { loadRealModelsIntoRegistry } from './loadRealModels';
-import { installHarnessNativeStorage, registerHarnessAudioEditProject, uninstallHarnessNativeStorage } from './harnessNativeStorage';
+import { harnessDocumentStore, installHarnessNativeStorage, registerHarnessAudioEditProject, uninstallHarnessNativeStorage } from './harnessNativeStorage';
 import { createApplicationHarness } from './applicationHarness';
 import { closeVideoEditProject, createVideoEditProject } from '@/features/videoEdit/application/videoEditService';
 
@@ -49,6 +49,8 @@ it('所有已登记写域均经公共授权入口修改、正式读回并核对�
     vi.spyOn(getPlatform().system.fs, 'writeTextFile').mockImplementation(async (path, text) => { videoFiles.set(path, text) })
     vi.spyOn(getPlatform().system.fs, 'readTextFile').mockImplementation(async path => videoFiles.get(path)!)
     const video = (await createVideoEditProject())!
+    // 作品文档（存储底座 2.5）：只替换 henjiNative.documents 背后的文件夹
+    const documentMeta = harnessDocumentStore().seed({ name: '公共文档回环', content: { items: [] } })
     const first = async (entityType: string): Promise<ApplicationRef> => {
       const result = await app.requireResult('list_application_entities', { entityType })
       const refs = result.refs as ApplicationRef[]
@@ -66,6 +68,7 @@ it('所有已登记写域均经公共授权入口修改、正式读回并核对�
       { domain: 'assets', ref: (library.resultRefs as ApplicationRef[])[0], property: 'asset.library.name', value: '公共素材已改名' },
       { domain: 'audio_edit', ref: { kind: 'audio_edit.project', id: 'audio-loop' }, property: 'audio_edit.project.name', value: '公共口播已改名' },
       { domain: 'video_edit', ref: { kind: 'video_edit.project', id: video.document.id }, property: 'video_edit.project.name', value: '公共剪辑已改名' },
+      { domain: 'documents', ref: { kind: 'documents.document', id: documentMeta.id }, property: 'documents.document.name', value: '公共文档已改名' },
     ]
     const registry = getApplicationReflectionRegistry()
     const engine = getApplicationControlExecutionEngine() as unknown as {
@@ -92,6 +95,7 @@ it('所有已登记写域均经公共授权入口修改、正式读回并核对�
     expect((await getPlatform().cameraStageProjects.listProjectSummaries()).map(project => project.name)).toContain('公共三维已改名')
     expect(useCameraStageStore.getState().currentProjectName).not.toBe('公共三维已改名')
     expect(JSON.parse(videoFiles.get('D:/write-loop.henji-video')!).name).toBe('公共剪辑已改名')
+    expect(harnessDocumentStore().stored(documentMeta.id)?.meta.name).toBe('公共文档已改名')
     await closeVideoEditProject(video.document.id)
   } finally { vi.restoreAllMocks(); dispose(); app.dispose(); useSettingsStore.getState().setThemeContrast(originalContrast) }
 })

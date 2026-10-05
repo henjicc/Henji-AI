@@ -1105,5 +1105,98 @@
       "discard": "Move to Recycle Bin",
       "discardFailed": "Couldn't move to the Recycle Bin: {{message}}"
     }
+  },
+  "documentLibrary": {
+    "kinds": {
+      "video_edit": "Edit",
+      "canvas": "Canvas",
+      "audio_edit": "Voiceover",
+      "camera_stage": "Camera Stage",
+      "image_document": "Image Document"
+    },
+    "create": "New {{kind}}",
+    "count": "{{count}} total",
+    "searchPlaceholder": "Search",
+    "noResults": "Nothing matches",
+    "emptyTitle": "No {{kind}} yet",
+    "loading": "Loading…",
+    "loadFailed": "Couldn't load the list",
+    "sortLabel": "Sort",
+    "sortOptions": {
+      "updated": "Last modified",
+      "created": "Date created",
+      "name": "Name"
+    },
+    "filterLabel": "Filter",
+    "filter": {
+      "all": "All",
+      "standalone": "Not in a project"
+    },
+    "location": {
+      "standalone": "Not in a project"
+    },
+    "status": {
+      "missing": "File not found",
+      "missingFolder": "Folder not found"
+    },
+    "projectDocumentCount": "{{count}} documents",
+    "card": {
+      "open": "Open",
+      "rename": "Rename",
+      "delete": "Delete",
+      "more": "More",
+      "selectMultiple": "Select multiple",
+      "selectItem": "Select",
+      "deselectItem": "Deselect"
+    },
+    "selection": {
+      "selectedCount": "{{count}} selected",
+      "selectAll": "Select all",
+      "clearSelection": "Select none",
+      "deleteSelected": "Delete",
+      "exit": "Done"
+    },
+    "actions": {
+      "moveToProject": "Move to Project…",
+      "removeFromProject": "Remove from Project",
+      "duplicate": "Duplicate",
+      "reveal": "Show in Folder"
+    },
+    "rename": {
+      "title": "Rename",
+      "duplicate": "A file with this name already exists here. Choose another name.",
+      "checkFailed": "Can't check the name right now. Try again later."
+    },
+    "delete": {
+      "title": "Move to Recycle Bin",
+      "confirmSingle": "Move “{{name}}” to the Recycle Bin? You can restore it from the system Recycle Bin.",
+      "confirmMultiple": "Move the {{count}} selected items to the Recycle Bin? You can restore them from the system Recycle Bin.",
+      "confirm": "Move to Recycle Bin",
+      "cancel": "Cancel"
+    },
+    "move": {
+      "title": "Move to Project",
+      "newProject": "New Project",
+      "newProjectName": "New project name",
+      "confirm": "Move",
+      "cancel": "Cancel",
+      "noProjects": "There are no other projects yet. You can create one.",
+      "duplicateProject": "A project with this name already exists. Choose another name."
+    },
+    "conflict": {
+      "title": "“{{name}}” already exists",
+      "message": "The destination already has a file with this name. If you keep both, the moved one gets a number added.",
+      "keepBoth": "Keep Both",
+      "cancel": "Cancel"
+    },
+    "failed": {
+      "rename": "Couldn't rename: {{message}}",
+      "move": "Couldn't move: {{message}}",
+      "duplicate": "Couldn't duplicate: {{message}}",
+      "reveal": "Couldn't show in folder: {{message}}",
+      "delete": "Couldn't move to the Recycle Bin: {{message}}",
+      "open": "Couldn't open: {{message}}",
+      "createProject": "Couldn't create the project: {{message}}"
+    }
   }
 }

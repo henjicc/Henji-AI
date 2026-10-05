@@ -10,6 +10,7 @@ import { memoryApplicationDomain } from '@/features/assistant/application/applic
 import { navigationApplicationDomain } from '@/features/navigation/application/applicationDomain'
 import { audioEditApplicationDomain } from '@/features/audioEdit/application/applicationDomain'
 import { videoEditApplicationDomain } from '@/features/videoEdit/application/applicationDomain'
+import { documentsApplicationDomain } from '@/features/documents/application/applicationDomain'
 import type { ApplicationDomainModule } from './domainModule'
 import { configureImageEditDocumentProjectionResolverV3 } from '@/features/imageEdit/v3/application/imageEditDocumentBindings'
 import { resolveCanvasImageEditDocumentProjection } from '@/features/canvas/application/imageEditDocumentProjectionBinding'
@@ -27,6 +28,7 @@ export const APPLICATION_DOMAINS: readonly ApplicationDomainModule[] = [
   toolboxApplicationDomain,
   audioEditApplicationDomain,
   videoEditApplicationDomain,
+  documentsApplicationDomain,
   memoryApplicationDomain,
   navigationApplicationDomain,
 ]

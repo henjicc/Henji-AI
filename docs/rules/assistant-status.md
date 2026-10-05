@@ -280,6 +280,14 @@ schema 校验所以看不见，MCP 侧测试又都跑在未授权付费的连接
 与 2026-08-31 快照的差异来自应用能力重构，不是能力退化：`artifacts`、`assistant_runtime`
 两个只读域随旧自研助手运行时一并删除（域 12→11，只读域 4→2），`memory` 成为可写域（写域 8→9）。
 
+2026-10-06 增量（存储底座 2.5）：新增写域 `documents`——实体 `documents.document`、`documents.project`
+（名称经 `change_application_entities` 可写，其余只读并在只读理由里点名改道能力），以及 8 个通用能力
+`list_documents` / `list_projects` / `create_document` / `open_document` / `move_document` /
+`duplicate_document` / `trash_document` / `create_project`，与项目页右键共用 `src/features/documents/documentOperations.ts`。
+结果场景见 `resultBehaviorCoverage.test.ts` 的 `documents` 组。各工具旧的项目管理能力（`list_canvas_projects`、
+`*_camera_stage_project` 等）仍在，3.x 各工具接入时删除；`open_document` 在对应工具登记打开方式前会如实拒绝。
+未做真实模型验收。上表是 2026-09-18 快照，未按新增写域重新取数。
+
 ## 二、已经通了的
 
 对照 [assistant-goal.md](assistant-goal.md) 的四条判据：

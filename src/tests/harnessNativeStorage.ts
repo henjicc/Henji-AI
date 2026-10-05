@@ -27,6 +27,7 @@
  * 都抛一条说得清的错，并列出已实现的名字。门禁见 `harnessNativeStorage.test.ts`。
  */
 import { v4 as uuidv4 } from 'uuid'
+import { FakeDocumentCommands } from '@/features/documents/documentSessionTestKit'
 
 import type { AssetLibraryRecord, AssetLibrarySnapshot } from '@/platform/contracts/assetLibrary'
 import type {
@@ -228,6 +229,34 @@ const audioEditStorage = {
   },
 }
 
+/* ── 作品文档与项目（存储底座 2.2 的 henjiNative.documents） ──────────────── */
+
+/*
+ * 复用文档会话测试的内存仓库（FakeDocumentCommands）：它只模拟文件夹里的“唯一文件名”与版本号这类
+ * 存储语义（重名报错、keepBoth 加序号、写前核对版本），不模拟素材复制、引用换算与扫描。
+ */
+let documentStore = new FakeDocumentCommands()
+
+/** 当前用例的作品文档仓库（造数据与断言“磁盘”状态用）。 */
+export function harnessDocumentStore(): FakeDocumentCommands {
+  return documentStore
+}
+
+const DOCUMENT_METHODS = [
+  'listDocuments', 'readDocument', 'createDocument', 'saveDocument', 'renameDocument', 'finalizeDocument',
+  'moveDocument', 'duplicateDocument', 'trashDocument', 'deleteEmptyDraft', 'revealDocument', 'checkName',
+  'refreshIndex', 'listProjects', 'createProject', 'renameProject', 'finalizeProject', 'trashProject', 'revealProject',
+] as const
+
+const documentsStorage = Object.fromEntries(DOCUMENT_METHODS.map((method) => [
+  method,
+  async (...args: unknown[]) => {
+    const target = documentStore as unknown as Record<string, (...input: unknown[]) => Promise<unknown>>
+    const result = await target[method](...args.map((arg) => (arg === undefined ? arg : wire(arg))))
+    return result === undefined ? undefined : wire(result)
+  },
+]))
+
 /* ── 装配与安装 ─────────────────────────────────────────────────────────── */
 
 const NAMESPACES: Record<string, object> = {
@@ -236,6 +265,7 @@ const NAMESPACES: Record<string, object> = {
   cameraStageProjects: cameraStageProjectsStorage,
   storyboardProjects: storyboardProjectsStorage,
   audio: audioEditStorage,
+  documents: documentsStorage,
   imageEditorV3: {
     async listDocuments(request: Parameters<ImageEditorV3Platform['listDocuments']>[0]) {
       const refs = [...imageDocuments.keys()].sort().map((id) => `image-edit-v3:${id}` as const)
@@ -329,6 +359,7 @@ export function resetHarnessNativeStorage(): void {
   cameraStageProjects.clear()
   storyboardProjects.clear()
   audioEditProjects.clear()
+  documentStore = new FakeDocumentCommands()
 }
 
 export function uninstallHarnessNativeStorage(): void {

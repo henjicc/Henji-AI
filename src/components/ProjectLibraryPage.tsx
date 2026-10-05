@@ -84,6 +84,18 @@ export type ProjectLibraryCreate =
   | { kind: 'direct'; icon?: LucideIcon; onCreate: () => void }
   | { kind: 'menu'; options: ProjectLibraryCreateOption[] };
 
+/**
+ * 列表筛选（如文档页的“全部 / 不在项目里 / 某个项目”）：页头排序旁的一个下拉。
+ * 数据由调用方按筛选取好再传 `items`；筛选不在默认值时，列表为空显示“没有符合条件的”，不显示新建提示。
+ */
+export interface ProjectLibraryFilter {
+  value: string;
+  defaultValue: string;
+  options: { value: string; label: string }[];
+  label: string;
+  onChange: (value: string) => void;
+}
+
 /** 页头与空态里排在「新建」旁边的次要动作（如“打开项目文件”“导入项目包”）。 */
 export interface ProjectLibrarySecondaryAction {
   label: string;
@@ -115,8 +127,13 @@ interface ProjectLibraryPageProps {
   backLabel?: string;
   extraActions?: (item: ProjectCardGridItem) => ProjectCardGridExtraAction[];
   onOpen: (item: ProjectCardGridItem) => void;
-  /** 不传 = 不支持重命名 */
-  onRename?: (item: ProjectCardGridItem, name: string) => void;
+  /** 不传 = 不支持重命名。返回 Promise 时对话框等完成再关；失败时显示原因并保持打开 */
+  onRename?: (item: ProjectCardGridItem, name: string) => void | Promise<void>;
+  /** 可选的名称实时检查（新建与重命名共用）：返回提示原因，null 表示可用 */
+  validateName?: (name: string, context: { mode: 'create' } | { mode: 'rename'; item: ProjectCardGridItem }) => Promise<string | null>;
+  /** 逐项判断能否重命名、删除、多选（如文件不存在的项）；不传 = 都能 */
+  canManage?: (item: ProjectCardGridItem) => boolean;
+  filter?: ProjectLibraryFilter;
   /** 不传 = 不支持删除，也就没有多选 */
   onDelete?: (items: ProjectCardGridItem[]) => void | Promise<void>;
 }
@@ -157,6 +174,9 @@ export function ProjectLibraryPage({
   onOpen,
   onRename,
   onDelete,
+  validateName,
+  canManage,
+  filter,
 }: ProjectLibraryPageProps): JSX.Element {
   const [nameDialog, setNameDialog] = useState<NameDialogState>(null);
   const [pendingDelete, setPendingDelete] = useState<ProjectCardGridItem[] | null>(null);
@@ -173,17 +193,21 @@ export function ProjectLibraryPage({
   const visibleIds = useMemo(() => visibleItems.map((item) => item.id), [visibleItems]);
   const selection = useMultiSelect(visibleIds);
   const searching = query.trim().length > 0;
+  const filtering = Boolean(filter && filter.value !== filter.defaultValue);
   const settled = !loading && !loadError;
-  const empty = settled && items.length === 0;
+  // 筛选下没有结果不是“还没有任何项目”：保留页头与筛选，网格里说明没有符合条件的
+  const empty = settled && items.length === 0 && !filtering;
 
-  const handleNameConfirm = (name: string): void => {
+  const handleNameConfirm = (name: string): void | Promise<void> => {
     if (!nameDialog) return;
-    if (nameDialog.mode === 'rename') {
-      onRename?.(nameDialog.item, name);
-      return;
-    }
+    if (nameDialog.mode === 'rename') return onRename?.(nameDialog.item, name);
     if (create.kind === 'named') create.onCreate(name);
   };
+  const dialogValidate = useMemo(() => {
+    if (!validateName || !nameDialog) return undefined;
+    const context = nameDialog.mode === 'rename' ? { mode: 'rename' as const, item: nameDialog.item } : { mode: 'create' as const };
+    return (name: string) => validateName(name, context);
+  }, [validateName, nameDialog]);
 
   const startCreate = (anchor: Element): void => {
     if (create.kind === 'named') setNameDialog({ mode: 'create' });
@@ -322,6 +346,19 @@ export function ProjectLibraryPage({
                 minWidthStrategy="options"
                 panelWidthStrategy="options"
               />
+              {filter ? (
+                <Dropdown<string>
+                  appearance="text"
+                  value={filter.value}
+                  ariaLabel={filter.label}
+                  options={filter.options}
+                  onSelect={filter.onChange}
+                  className="shrink-0"
+                  buttonClassName="w-auto"
+                  minWidthStrategy="options"
+                  panelWidthStrategy="options"
+                />
+              ) : null}
               {/* 视图控制（搜索、排序）与动作（打开、导入、新建）语义不同：这条带唯一的分隔线 */}
               <span aria-hidden="true" className="mx-1 h-4 w-px bg-line" />
               {secondaryButton('quiet')}
@@ -355,11 +392,12 @@ export function ProjectLibraryPage({
             icon={icon}
             selection={selection}
             labels={labels.card}
-            emptyTitle={searching ? labels.noResults : labels.emptyTitle}
+            emptyTitle={searching || filtering ? labels.noResults : labels.emptyTitle}
             onOpen={onOpen}
             onRename={onRename ? (item) => setNameDialog({ mode: 'rename', item }) : undefined}
             onDeleteRequest={onDelete ? (targets) => setPendingDelete(targets) : undefined}
             extraActions={extraActions}
+            canManage={canManage}
             showMenu={showMenu}
             showMenuAt={showMenuAt}
           />
@@ -373,6 +411,7 @@ export function ProjectLibraryPage({
         placeholder={labels.namePlaceholder}
         onClose={() => setNameDialog(null)}
         onConfirm={handleNameConfirm}
+        validate={dialogValidate}
       />
 
       {onDelete ? (

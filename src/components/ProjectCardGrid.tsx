@@ -70,6 +70,11 @@ interface ProjectCardGridProps {
   /** 不传 = 该模块不支持删除，菜单里没有删除与多选 */
   onDeleteRequest?: (items: ProjectCardGridItem[]) => void;
   extraActions?: (item: ProjectCardGridItem) => ProjectCardGridExtraAction[];
+  /**
+   * 逐项判断能否重命名、删除、多选（如“文件不存在”的文档不能）；不传 = 都能。
+   * 不能管理的项只保留“打开”与它自己的 extraActions。
+   */
+  canManage?: (item: ProjectCardGridItem) => boolean;
   showMenu: (event: React.MouseEvent, items: MenuItem[]) => void;
   showMenuAt: (anchor: Element, items: MenuItem[]) => void;
 }
@@ -99,9 +104,11 @@ export const ProjectCardGrid: React.FC<ProjectCardGridProps> = ({
   onRename,
   onDeleteRequest,
   extraActions,
+  canManage,
   showMenu,
   showMenuAt,
 }) => {
+  const manageable = (item: ProjectCardGridItem): boolean => canManage?.(item) ?? true;
   const buildMenuItems = (item: ProjectCardGridItem): MenuItem[] => {
     if (selection.active) {
       const selected = selection.isSelected(item.id);
@@ -118,7 +125,8 @@ export const ProjectCardGrid: React.FC<ProjectCardGridProps> = ({
     const menu: MenuItem[] = [
       { id: 'open', label: labels.open, icon: <FolderOpen className="h-4 w-4" />, onClick: () => onOpen(item) },
     ];
-    if (onRename) {
+    const manage = manageable(item);
+    if (onRename && manage) {
       menu.push({ id: 'rename', label: labels.rename ?? '', icon: <Pencil className="h-4 w-4" />, onClick: () => onRename(item) });
     }
     menu.push(...actions.map((action) => ({
@@ -128,7 +136,7 @@ export const ProjectCardGrid: React.FC<ProjectCardGridProps> = ({
       onClick: () => action.onClick(item),
       disabled: action.disabled,
     })));
-    if (onDeleteRequest) {
+    if (onDeleteRequest && manage) {
       menu.push(
         {
           id: 'delete',
@@ -148,7 +156,9 @@ export const ProjectCardGrid: React.FC<ProjectCardGridProps> = ({
     return menu;
   };
   // 只有“打开”一项时不放“更多”与右键菜单：单击卡片就是打开，菜单不再提供新的动作
-  const hasMenu = Boolean(onRename || onDeleteRequest || extraActions);
+  const hasMenu = (item: ProjectCardGridItem): boolean => (
+    (manageable(item) && Boolean(onRename || onDeleteRequest)) || (extraActions?.(item).length ?? 0) > 0
+  );
 
   if (loading) {
     return <UiLoading size="sm" message={loadingMessage} />;
@@ -169,6 +179,7 @@ export const ProjectCardGrid: React.FC<ProjectCardGridProps> = ({
     <div className={`grid ${PROJECT_GRID_COLUMNS_CLASS}`}>
       {items.map((item) => {
         const selected = selection.isSelected(item.id);
+        const itemHasMenu = hasMenu(item);
         return (
           <div key={item.id} className="group relative min-w-0">
             <UiOptionButton
@@ -180,7 +191,7 @@ export const ProjectCardGrid: React.FC<ProjectCardGridProps> = ({
               aria-pressed={selection.active ? selected : undefined}
               className="w-full"
               onClick={() => (selection.active ? selection.toggle(item.id) : onOpen(item))}
-              onContextMenu={hasMenu ? (event) => showMenu(event, buildMenuItems(item)) : undefined}
+              onContextMenu={itemHasMenu ? (event) => showMenu(event, buildMenuItems(item)) : undefined}
               disabled={busy}
             >
               <span className={`${UI_COVER_FRAME_CLASS} aspect-[16/10] w-full`}>
@@ -205,7 +216,7 @@ export const ProjectCardGrid: React.FC<ProjectCardGridProps> = ({
                   onCheckedChange={() => selection.toggle(item.id)}
                 />
               </div>
-            ) : hasMenu ? (
+            ) : itemHasMenu ? (
               <UiIconButton
                 tone="media"
                 title={labels.more}

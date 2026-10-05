@@ -28,6 +28,7 @@ import {
   ASSISTANT_SKILL_APPLICATION_CAPABILITIES,
 } from './domains/assistantSkill/assistantSkillApplicationCapabilities'
 import { IMAGE_MARK_APPLICATION_CAPABILITIES } from './domains/imageMark/imageMarkApplicationCapabilities'
+import { DOCUMENTS_APPLICATION_CAPABILITIES } from './domains/documents/documentsApplicationCapabilities'
 
 export const BUILTIN_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinition[] = [
   getCurrentApplicationContextCapability,
@@ -53,6 +54,8 @@ export const BUILTIN_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinition[]
   ...AUDIO_EDIT_APPLICATION_CAPABILITIES,
   ...VIDEO_EDIT_APPLICATION_CAPABILITIES,
   ...ASSISTANT_SKILL_APPLICATION_CAPABILITIES,
+  // 通用文档与项目（存储底座 2.5）：各工具的项目管理能力在 3.x 接入时删除，统一走这里
+  ...DOCUMENTS_APPLICATION_CAPABILITIES,
 ]
 
 export const BUILTIN_APPLICATION_CAPABILITY_REGISTRY = new ApplicationCapabilityRegistry()

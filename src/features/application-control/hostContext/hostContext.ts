@@ -1,4 +1,5 @@
 import { getAudioEditRevision } from '@/features/audioEdit/application/audioEditProjectInstances'
+import { getDocumentOperations } from '@/features/documents/documentOperations'
 import { activeVideoEditInstance, videoEditDomainRevision, subscribeVideoEdit } from '@/features/videoEdit/application/videoEditService'
 import {
   APPLICATION_HOST_CONTRACT_VERSION,
@@ -49,6 +50,7 @@ const scopeRevisions: HostScopeRevisions = {
   image_edit: 0,
   audio_edit: 0,
   video_edit: 0,
+  documents: 0,
 }
 
 const listeners = new Set<() => void>()
@@ -83,6 +85,7 @@ function syncPulledRevisions(): void {
   scopeRevisions.image_edit = getImageEditDocumentCatalogRevisionV3()
   scopeRevisions.audio_edit = getAudioEditRevision()
   scopeRevisions.video_edit = videoEditDomainRevision()
+  scopeRevisions.documents = getDocumentOperations().revision()
 }
 
 /**
@@ -182,6 +185,8 @@ function startTracking(): () => void {
       revision += 1
       for (const listener of listeners) listener()
     }),
+    // 文档与项目（改名、移动、副本、回收站、新建）：documents 作用域在读取时拉取，这里只刷新订阅
+    getDocumentOperations().subscribe(() => { revision += 1; for (const listener of listeners) listener() }),
     // 编辑、选区和序列切换更新宿主上下文；逐帧播放只发布 view，不触发助手快照。
     subscribeVideoEdit(() => { revision += 1; for (const listener of listeners) listener() }),
   ]

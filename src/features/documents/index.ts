@@ -26,3 +26,34 @@ export type * from './documentSessionTypes'
 export { useDocumentSessionState } from './useDocumentSessionState'
 export { DocumentSessionDialogs } from './DocumentSessionDialogs'
 export { DocumentDraftRecoveryNotice, type DocumentDraftRecoveryNoticeProps } from './DocumentDraftRecoveryNotice'
+
+// 通用文档操作与项目页通用数据源（存储底座 2.5）
+export {
+  DocumentOperations,
+  DocumentInUseError,
+  DocumentNotOpenableError,
+  DocumentStandaloneNotAllowedError,
+  getDocumentOperations,
+  isDocumentNameConflict,
+  registerDocumentOpener,
+  type CreateNamedDocumentRequest,
+  type DocumentOpener,
+  type DocumentOperationCommands,
+  type DocumentOperationsOptions,
+} from './documentOperations'
+export { documentKindPresentation, type DocumentKindPresentation } from './documentKindPresentation'
+export {
+  ALL_DOCUMENTS_FILTER,
+  documentLibraryFilterToContainer,
+  toDocumentCardItems,
+  toProjectCardItems,
+  useDocumentLibrary,
+  useProjectLibrary,
+  type DocumentCardItem,
+  type DocumentLibraryFilter,
+  type DocumentLibraryState,
+  type ProjectCardItem,
+  type ProjectLibraryState,
+} from './useDocumentLibrary'
+export { DocumentLibraryPage, type DocumentLibraryPageProps } from './DocumentLibraryPage'
+export { MoveToProjectDialog, type MoveToProjectChoice } from './MoveToProjectDialog'

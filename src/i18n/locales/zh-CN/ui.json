@@ -1104,5 +1104,98 @@
       "discard": "移到回收站",
       "discardFailed": "没能移到回收站：{{message}}"
     }
+  },
+  "documentLibrary": {
+    "kinds": {
+      "video_edit": "剪辑",
+      "canvas": "画布",
+      "audio_edit": "口播",
+      "camera_stage": "镜头参考",
+      "image_document": "图片文档"
+    },
+    "create": "新建{{kind}}",
+    "count": "{{count}} 个{{kind}}",
+    "searchPlaceholder": "搜索{{kind}}",
+    "noResults": "没有符合条件的{{kind}}",
+    "emptyTitle": "还没有{{kind}}",
+    "loading": "正在读取…",
+    "loadFailed": "没能读取{{kind}}列表",
+    "sortLabel": "排序",
+    "sortOptions": {
+      "updated": "最近修改",
+      "created": "创建时间",
+      "name": "名称"
+    },
+    "filterLabel": "筛选",
+    "filter": {
+      "all": "全部",
+      "standalone": "不在项目里"
+    },
+    "location": {
+      "standalone": "不在项目里"
+    },
+    "status": {
+      "missing": "文件不存在",
+      "missingFolder": "文件夹不存在"
+    },
+    "projectDocumentCount": "{{count}} 份文档",
+    "card": {
+      "open": "打开",
+      "rename": "重命名",
+      "delete": "删除",
+      "more": "更多",
+      "selectMultiple": "多选",
+      "selectItem": "选择",
+      "deselectItem": "取消选择"
+    },
+    "selection": {
+      "selectedCount": "已选择 {{count}} 项",
+      "selectAll": "全选",
+      "clearSelection": "全不选",
+      "deleteSelected": "删除",
+      "exit": "完成"
+    },
+    "actions": {
+      "moveToProject": "移到项目…",
+      "removeFromProject": "移出项目",
+      "duplicate": "创建副本",
+      "reveal": "在文件夹中显示"
+    },
+    "rename": {
+      "title": "重命名",
+      "duplicate": "这个位置已有同名文件，请换一个名称。",
+      "checkFailed": "暂时无法检查名称，请稍后重试。"
+    },
+    "delete": {
+      "title": "移到回收站",
+      "confirmSingle": "把“{{name}}”移到回收站？之后可以从系统回收站找回。",
+      "confirmMultiple": "把选中的 {{count}} 项移到回收站？之后可以从系统回收站找回。",
+      "confirm": "移到回收站",
+      "cancel": "取消"
+    },
+    "move": {
+      "title": "移到项目",
+      "newProject": "新建项目",
+      "newProjectName": "新项目名称",
+      "confirm": "移入",
+      "cancel": "取消",
+      "noProjects": "还没有其他项目，可以新建一个。",
+      "duplicateProject": "已有同名项目，请换一个名称。"
+    },
+    "conflict": {
+      "title": "已有同名的“{{name}}”",
+      "message": "目标位置已有同名文件。两个都保留时，移过去的这份会自动加上序号。",
+      "keepBoth": "两个都保留",
+      "cancel": "取消"
+    },
+    "failed": {
+      "rename": "没能重命名：{{message}}",
+      "move": "没能移动：{{message}}",
+      "duplicate": "没能创建副本：{{message}}",
+      "reveal": "没能在文件夹中显示：{{message}}",
+      "delete": "没能移到回收站：{{message}}",
+      "open": "没能打开：{{message}}",
+      "createProject": "没能新建项目：{{message}}"
+    }
   }
 }

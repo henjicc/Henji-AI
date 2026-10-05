@@ -1,10 +1,12 @@
 import { z } from 'zod'
 
 import type { DocumentKindDescriptor } from '@/core/documents/kinds'
-import { entryNameKey, normalizeEntryName } from '@/core/documents/naming'
+import { entryNameKey, keepBothEntryName, normalizeEntryName } from '@/core/documents/naming'
 import type {
   CreateDocumentRequest,
   CreateProjectRequest,
+  DocumentContainerRef,
+  DocumentIndexScanReport,
   DocumentListQuery,
   DocumentMeta,
   DocumentReadResult,
@@ -12,22 +14,27 @@ import type {
   DocumentSummary,
   DocumentTarget,
   DocumentTransferResult,
+  DuplicateDocumentRequest,
   FinalizeDocumentRequest,
   FinalizeProjectRequest,
+  MoveDocumentRequest,
   NameCheckRequest,
   NameCheckResult,
+  NameConflictPolicy,
   ProjectListQuery,
   ProjectSummary,
+  RenameDocumentRequest,
+  RenameProjectRequest,
   SaveDocumentRequest,
 } from '@/core/documents/types'
 
+import type { DocumentOperationCommands } from './documentOperations'
 import { DocumentSessionRegistry } from './documentSessionRegistry'
 import type {
   DocumentConflictChoice,
   DocumentContentAdapter,
   DocumentLeaveChoice,
   DocumentSaveNamePromptInfo,
-  DocumentSessionCommands,
   DocumentSessionPrompter,
 } from './documentSessionTypes'
 
@@ -71,7 +78,7 @@ function folderOf(path: string): string {
   return path.slice(0, path.lastIndexOf('/'))
 }
 
-export class FakeDocumentCommands implements DocumentSessionCommands {
+export class FakeDocumentCommands implements DocumentOperationCommands {
   readonly documents = new Map<string, StoredDocument>()
   readonly projects = new Map<string, ProjectSummary>()
   readonly trashed: string[] = []
@@ -214,11 +221,18 @@ export class FakeDocumentCommands implements DocumentSessionCommands {
     return [...this.documents.values()]
       .filter(({ meta }) => !query.kind || meta.kind === query.kind)
       .filter(({ meta }) => query.includeDrafts !== false || !meta.draft)
+      .filter(({ meta }) => query.includeMissing !== false || !this.missingIds.has(meta.id))
+      .filter(({ meta }) => {
+        const filter = query.container ?? { kind: 'any' }
+        if (filter.kind === 'any') return true
+        if (filter.kind === 'user') return meta.container.kind === 'user'
+        return meta.container.kind === 'project' && meta.container.projectId === filter.projectId
+      })
       .map(({ meta }) => ({
         ...meta,
         projectName: meta.container.kind === 'project' ? this.projects.get(meta.container.projectId)?.name ?? null : null,
         external: false,
-        missing: false,
+        missing: this.missingIds.has(meta.id),
         fileModifiedAt: meta.updatedAt,
         sizeBytes: 1,
         coverPath: null,
@@ -282,6 +296,104 @@ export class FakeDocumentCommands implements DocumentSessionCommands {
   async listProjects(query: ProjectListQuery = {}): Promise<ProjectSummary[]> {
     this.calls.push('listProjects')
     return [...this.projects.values()].filter((project) => query.includeDrafts !== false || !project.draft)
+  }
+
+  // ---- 通用文档操作（2.5）用到的命令：行为对齐主进程仓库（用户输入的名字重名报错，keepBoth 加序号） ----
+
+  readonly revealed: string[] = []
+  refreshCount = 0
+
+  async renameDocument(request: RenameDocumentRequest): Promise<DocumentMeta> {
+    this.calls.push('renameDocument')
+    const stored = this.require(request.target.id)
+    const check = normalizeEntryName(request.name)
+    if (!check.ok) throw namedError('DocumentNameInvalidError', check.message)
+    const folder = folderOf(stored.meta.path)
+    if (this.isTaken(folder, check.name, stored.meta.id)) throw namedError('DocumentNameConflictError', '已有同名文件。')
+    stored.meta = { ...stored.meta, name: check.name, path: `${folder}/${check.name}${testDocumentKind.extension}` }
+    return stored.meta
+  }
+
+  async moveDocument(request: MoveDocumentRequest): Promise<DocumentTransferResult> {
+    this.calls.push('moveDocument')
+    const stored = this.require(request.target.id)
+    const folder = this.folderFor(request.container)
+    const name = this.pickName(folder, stored.meta.name, stored.meta.id, request.onConflict ?? 'fail')
+    const projectChanged = JSON.stringify(stored.meta.container) !== JSON.stringify(request.container)
+    stored.meta = {
+      ...stored.meta,
+      name,
+      container: request.container,
+      path: `${folder}/${name}${testDocumentKind.extension}`,
+      // 换容器时复制素材、改写引用，revision 加一（对齐主进程）
+      revision: projectChanged ? stored.meta.revision + 1 : stored.meta.revision,
+    }
+    return { meta: stored.meta, copiedFiles: projectChanged ? 1 : 0, missingPaths: [] }
+  }
+
+  async duplicateDocument(request: DuplicateDocumentRequest): Promise<DocumentTransferResult> {
+    this.calls.push('duplicateDocument')
+    const stored = this.require(request.target.id)
+    const folder = folderOf(stored.meta.path)
+    const name = this.pickName(folder, request.name ?? stored.meta.name, '', request.onConflict ?? 'fail')
+    const copy = this.seed({
+      name,
+      content: structuredClone(stored.content) as TestContent,
+      folder,
+      projectId: stored.meta.container.kind === 'project' ? stored.meta.container.projectId : undefined,
+    })
+    return { meta: copy, copiedFiles: 0, missingPaths: [] }
+  }
+
+  async revealDocument(target: DocumentTarget): Promise<void> {
+    this.calls.push('revealDocument')
+    this.require(target.id)
+    this.revealed.push(target.id)
+  }
+
+  async refreshIndex(): Promise<DocumentIndexScanReport> {
+    this.calls.push('refreshIndex')
+    this.refreshCount += 1
+    return { startedAt: 0, durationMs: 0, projects: this.projects.size, documents: this.documents.size, readDocuments: 0, reassignedIds: 0, moved: 0, missing: 0, invalid: 0 }
+  }
+
+  async renameProject(request: RenameProjectRequest): Promise<ProjectSummary> {
+    this.calls.push('renameProject')
+    const project = this.projects.get(request.projectId)
+    if (!project) throw namedError('ProjectNotFoundError')
+    if ([...this.projects.values()].some((other) => other.id !== project.id && entryNameKey(other.name) === entryNameKey(request.name))) {
+      throw namedError('DocumentNameConflictError', '已有同名文件夹。')
+    }
+    const path = `${folderOf(project.path)}/${request.name}`
+    const next = { ...project, name: request.name, path }
+    this.projects.set(project.id, next)
+    for (const stored of this.documents.values()) {
+      if (stored.meta.container.kind === 'project' && stored.meta.container.projectId === project.id) {
+        stored.meta = { ...stored.meta, path: stored.meta.path.replace(project.path, path) }
+      }
+    }
+    return next
+  }
+
+  async revealProject(projectId: string): Promise<void> {
+    this.calls.push('revealProject')
+    this.revealed.push(projectId)
+  }
+
+  /** 把一份文档标为缺失（模拟文件被删或外部盘不在）。 */
+  missingIds = new Set<string>()
+
+  private folderFor(container: DocumentContainerRef): string {
+    if (container.kind === 'user') return TEST_DOCUMENT_ROOT
+    const project = this.projects.get(container.projectId)
+    if (!project) throw namedError('ProjectNotFoundError')
+    return project.path
+  }
+
+  private pickName(folder: string, name: string, selfId: string, policy: NameConflictPolicy): string {
+    if (!this.isTaken(folder, name, selfId)) return name
+    if (policy === 'fail') throw namedError('DocumentNameConflictError', '目标位置已有同名文件。')
+    return keepBothEntryName(name, (candidate) => this.isTaken(folder, candidate, selfId))
   }
 
   private entryPaths(): string[] {
