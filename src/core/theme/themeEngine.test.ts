@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { WHITE, compositeOver, contrastRatio, deltaEOK, hexToOklch, minContrast, mixOklab, oklchToHex, parseColor, withAlpha } from './themeColor'
+import { WHITE, compositeOver, contrastRatio, deltaEOK, hexToOklch, minContrast, oklchToHex, parseColor, withAlpha } from './themeColor'
 import {
   DEFAULT_THEME_SEED,
   MEDIA_OVERLAY_TOKENS,
@@ -8,7 +8,7 @@ import {
   THEME_CONTRAST_LEVELS,
   THEME_PRESETS,
   THEME_PRESET_IDS,
-  SOLID_LABEL_BAND,
+  FLAT_SOLID_STATE_DELTA,
   THEME_TEXT_MIN_CONTRAST,
   deriveThemeTokens,
   normalizeThemeSeed,
@@ -44,15 +44,16 @@ const CORRECTED_TOKENS = new Set([
   'danger', 'dangerHi', 'dangerTint',
 ])
 
-/** 实底按钮上文字实际所在处：静息、悬停渐变的 OKLab 中点（按下态瞬态、顶端高光不计）。 */
+/** 扁平实底按钮（重要记录 016）上文字实际所在处：静息、悬停、按下三种纯色。 */
 const visibleSolid = (t: ThemeColorTokens, kind: 'accent' | 'danger') =>
   kind === 'accent'
-    ? [mixOklab(t.accentHi, t.accent), mixOklab(t.accentHoverHi, t.accentHover)]
-    : [mixOklab(t.dangerHi, t.danger), mixOklab(t.dangerHoverHi, t.dangerHover)]
+    ? [t.accent, t.accentHover, t.accentPressed]
+    : [t.danger, t.dangerHover, t.dangerPressed]
 
-const hoverLift = (t: ThemeColorTokens, kind: 'accent' | 'danger') => {
+/** 悬停相对静息的亮度变化幅度（扁平按钮的悬停只靠底色变化，必须一眼可见） */
+const hoverShift = (t: ThemeColorTokens, kind: 'accent' | 'danger') => {
   const [rest, hover] = visibleSolid(t, kind)
-  return hexToOklch(hover).L - hexToOklch(rest).L
+  return Math.abs(hexToOklch(hover).L - hexToOklch(rest).L)
 }
 
 /** 文字会压上的表面（含按钮静息/悬停；按下态是瞬态，不计入）。 */
@@ -122,7 +123,7 @@ describe('themeEngine 对比度（重要记录 010）', () => {
     }
   })
 
-  it.each(COMBOS)('$id/$level：强调/危险实底按钮在静息与悬停渐变中点上、成功/警示实底上的文字 ≥ 4.5', ({ seed }) => {
+  it.each(COMBOS)('$id/$level：强调/危险实底按钮在静息、悬停、按下底色上，成功/警示实底上的文字 ≥ 4.5', ({ seed }) => {
     const t = deriveThemeTokens(seed).colors
     expect(minContrast(t.onAccent, visibleSolid(t, 'accent'))).toBeGreaterThanOrEqual(THEME_TEXT_MIN_CONTRAST)
     expect(minContrast(t.onDanger, visibleSolid(t, 'danger'))).toBeGreaterThanOrEqual(THEME_TEXT_MIN_CONTRAST)
@@ -153,7 +154,6 @@ describe('themeEngine 对比度（重要记录 010）', () => {
       expect(tokens(id).onAccent).toBe(reference.onAccent)
       expect(tokens(id).accent).toBe(reference.accent)
       expect(tokens(id).accentHi).toBe(reference.accentHi)
-      expect(tokens(id).accentPressed).toBe(reference.accentPressed)
     }
     for (const id of THEME_PRESET_IDS) {
       const t = tokens(id)
@@ -163,38 +163,19 @@ describe('themeEngine 对比度（重要记录 010）', () => {
     }
   })
 
-  it.each(THEME_PRESET_IDS)('%s：危险确认按钮（dangerSolid）白字在静息与悬停渐变的整个标签区间内 ≥ 4.5（5.7）', (id) => {
+  it.each(THEME_PRESET_IDS)('%s：危险确认按钮（dangerSolid）白字在静息、悬停、按下底色上 ≥ 4.5', (id) => {
     const t = deriveThemeTokens(THEME_PRESETS[id].seed).colors
-    const { top, bottom } = SOLID_LABEL_BAND
-    // CSS 渐变按 sRGB 插值；像素审计取文字区域最差 10% 分位，落在标签区间上端附近
-    const at = (from: string, to: string, pos: number) => compositeOver(withAlpha(from, 1 - pos), to)
-    const beds = [
-      at(t.dangerHi, t.danger, top),
-      at(t.dangerHi, t.danger, bottom),
-      at(t.dangerHoverHi, t.dangerHover, top),
-      at(t.dangerHoverHi, t.dangerHover, bottom),
-    ]
     expect(t.onDanger).toBe(WHITE)
-    expect(minContrast(t.onDanger, beds)).toBeGreaterThanOrEqual(THEME_TEXT_MIN_CONTRAST)
+    expect(minContrast(t.onDanger, visibleSolid(t, 'danger'))).toBeGreaterThanOrEqual(THEME_TEXT_MIN_CONTRAST)
   })
 
-  it.each(THEME_PRESET_IDS)('%s：强调色主按钮悬停渐变的整个标签区间内文字 ≥ 4.5；静息与深色字预设不变（5.7）', (id) => {
+  it.each(THEME_PRESET_IDS)('%s：扁平主按钮悬停、按下逐档变化且朝文字更清楚的方向走（重要记录 016）', (id) => {
     const t = deriveThemeTokens(THEME_PRESETS[id].seed).colors
-    const { top, bottom } = SOLID_LABEL_BAND
-    const at = (from: string, to: string, pos: number) => compositeOver(withAlpha(from, 1 - pos), to)
-    const hoverBeds = [at(t.accentHoverHi, t.accentHover, top), at(t.accentHoverHi, t.accentHover, bottom)]
-    expect(minContrast(t.onAccent, hoverBeds)).toBeGreaterThanOrEqual(THEME_TEXT_MIN_CONTRAST)
-    // 悬停仍可见：悬停渐变中点比静息中点亮
-    expect(hoverLift(t, 'accent')).toBeGreaterThan(0)
-    const L = hexToOklch(t.accent).L
-    if (t.onAccent === WHITE) {
-      // 只收敛悬停上端：静息渐变的偏移不变
-      expect(hexToOklch(t.accentHi).L - L).toBeCloseTo(0.035, 2)
-      expect(hexToOklch(t.accentHoverHi).L - L).toBeLessThan(0.07)
-    } else {
-      // 深色字：上端更亮反而更清楚，保持默认提亮幅度
-      expect(hexToOklch(t.accentHoverHi).L - L).toBeCloseTo(0.07, 2)
-    }
+    const [rest, hover, pressed] = visibleSolid(t, 'accent').map((hex) => hexToOklch(hex).L)
+    const direction = t.onAccent === WHITE ? -1 : 1
+    expect((hover - rest) * direction).toBeGreaterThanOrEqual(FLAT_SOLID_STATE_DELTA.hover - 0.005)
+    expect((pressed - hover) * direction).toBeGreaterThan(0)
+    expect(minContrast(t.onAccent, visibleSolid(t, 'accent'))).toBeGreaterThanOrEqual(THEME_TEXT_MIN_CONTRAST)
   })
 
   it.each(THEME_PRESET_IDS)('%s：强调文字压在控件层与玻璃（叠在媒体上）的选中淡底上 ≥ 4.5（5.7，纸白曾 4.36 / 3.77）', (id) => {
@@ -218,18 +199,18 @@ describe('themeEngine 对比度（重要记录 010）', () => {
     expect(band.L).toBeLessThan(midpointOnly.L)
   })
 
-  it('悬停中点相对静息中点的亮度提升 ≤ 0.02（预设与任意强调色）', () => {
+  it('扁平实底的悬停一眼可见：亮度变化 ≥ 0.05（预设与任意强调色，重要记录 016）', () => {
     for (const { seed } of COMBOS) {
       const t = deriveThemeTokens(seed).colors
-      expect(hoverLift(t, 'accent')).toBeLessThanOrEqual(0.02)
-      expect(hoverLift(t, 'danger')).toBeLessThanOrEqual(0.02)
-      expect(hoverLift(t, 'accent')).toBeGreaterThan(0)
+      expect(hoverShift(t, 'accent')).toBeGreaterThanOrEqual(0.05)
+      expect(hoverShift(t, 'danger')).toBeGreaterThanOrEqual(0.05)
     }
     for (const mode of ['dark', 'light'] as const) {
       for (let hue = 0; hue < 360; hue += 30) {
         for (const L of [0.45, 0.55, 0.62, 0.7]) {
           const t = deriveThemeTokens({ ...DEFAULT_THEME_SEED, mode, base: mode === 'dark' ? 0.17 : 0.975, accent: oklchToHex(L, 0.15, hue) }).colors
-          expect(hoverLift(t, 'accent')).toBeLessThanOrEqual(0.02)
+          expect(hoverShift(t, 'accent')).toBeGreaterThanOrEqual(0.05)
+          expect(minContrast(t.onAccent, visibleSolid(t, 'accent'))).toBeGreaterThanOrEqual(THEME_TEXT_MIN_CONTRAST)
         }
       }
     }

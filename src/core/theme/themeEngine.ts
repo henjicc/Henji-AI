@@ -369,6 +369,19 @@ export function solveSolidFillL(startL: number, chroma: number, hue: number, ink
  */
 export const SOLID_RAMP_OFFSETS = { hi: 0.035, hover: 0, hoverHi: 0.07, pressed: -0.045 } as const;
 
+/**
+ * 扁平实底按钮（重要记录 016）的悬停、按下亮度变化幅度（OKLCH L）。
+ * 按钮不再有渐变高光，悬停只能靠底色本身变化表达，必须一眼可见：白字实底往暗走（白字对比只会更高），
+ * 墨水字实底往亮走（墨水对比只会更高）——两个方向都不会让文字变得更难读，无需再求解。
+ */
+export const FLAT_SOLID_STATE_DELTA = { hover: 0.06, pressed: 0.11 } as const;
+
+/** 扁平实底按钮悬停、按下的亮度：朝“让文字更清楚”的方向走。 */
+export function flatSolidStateL(L: number, on: string, state: keyof typeof FLAT_SOLID_STATE_DELTA): number {
+  const delta = FLAT_SOLID_STATE_DELTA[state];
+  return on === WHITE ? Math.max(0, L - delta) : Math.min(1, L + delta);
+}
+
 export interface SolidRampResult {
   /** 静息实底亮度（OKLCH L） */
   L: number;
@@ -401,7 +414,8 @@ export function solidLabelBeds(L: number, chroma: number, hue: number, coverage:
   const rest: [string, string] = [at(SOLID_RAMP_OFFSETS.hi), at(0)];
   const hover: [string, string] = [at(SOLID_RAMP_OFFSETS.hoverHi), at(SOLID_RAMP_OFFSETS.hover)];
   if (coverage === 'midpoint') {
-    return [mixOklab(...rest), mixOklab(...hover)];
+    // 扁平实底（重要记录 016）文字直接压在静息纯色上：白字时它比中点更暗（不改变结论），墨水字时它更严格
+    return [mixOklab(...rest), mixOklab(...hover), rest[1]];
   }
   const { top, bottom } = SOLID_LABEL_BAND;
   return [rest, hover].flatMap(([from, to]) => [gradientAt(from, to, top), gradientAt(from, to, bottom)]);
@@ -594,9 +608,9 @@ export function deriveThemeTokens(seedInput: Partial<ThemeSeed>, overrides?: The
   Object.assign(t, {
     accent: A(aL),
     accentHi: A(aL + SOLID_RAMP_OFFSETS.hi),
-    accentHover: A(aL + SOLID_RAMP_OFFSETS.hover),
+    accentHover: A(flatSolidStateL(aL, accentRamp.on, 'hover')),
     accentHoverHi: A(aL + accentHoverHiOffset),
-    accentPressed: A(aL + SOLID_RAMP_OFFSETS.pressed),
+    accentPressed: A(flatSolidStateL(aL, accentRamp.on, 'pressed')),
     accentRing: A(dark ? 0.7 : 0.62),
   });
   // 选中淡强调底（重要记录 012，任务 4.3）：强调色低透明度，叠在窗口/面板/抬升面上都与悬停、静息可分。
@@ -701,9 +715,9 @@ export function deriveThemeTokens(seedInput: Partial<ThemeSeed>, overrides?: The
   const D = (offset: number) => oklchToHex(dangerRamp.L + offset, 0.19, 25);
   t.danger = D(0);
   t.dangerHi = D(SOLID_RAMP_OFFSETS.hi);
-  t.dangerHover = D(SOLID_RAMP_OFFSETS.hover);
+  t.dangerHover = oklchToHex(flatSolidStateL(dangerRamp.L, dangerRamp.on, 'hover'), 0.19, 25);
   t.dangerHoverHi = D(SOLID_RAMP_OFFSETS.hoverHi);
-  t.dangerPressed = D(SOLID_RAMP_OFFSETS.pressed);
+  t.dangerPressed = oklchToHex(flatSolidStateL(dangerRamp.L, dangerRamp.on, 'pressed'), 0.19, 25);
   // 危险浅底（危险文字、静默危险按钮悬停、状态块）不是确认按钮实底，沿用中点求解的色值，不随标签区间判定加深（5.7）
   const dangerTintRamp = solveSolidRamp({ startL: dark ? 0.6 : 0.55, floorL: 0, chroma: 0.19, hue: 25, ink, allowInk: false });
   t.dangerTint = withAlpha(oklchToHex(dangerTintRamp.L, 0.19, 25), statusTintAlpha);

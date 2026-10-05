@@ -6,8 +6,8 @@
  * 门槛与 themeEngine 求解共用（文字 THEME_TEXT_MIN_CONTRAST、选中/悬停色差 SELECTION_MIN_DELTA），这里只把判定
  * 从“四个预设”推广到任意“预设 × 强调色 × 层级对比度”组合。
  */
-import { compositeOver, contrastRatio, deltaEOK, hexToOklch, mixOklab, oklchToHex, withAlpha } from './themeColor'
-import { SELECTION_MIN_DELTA, SOLID_LABEL_BAND, THEME_TEXT_MIN_CONTRAST, type ThemeColorTokens, type ThemeTokens } from './themeEngine'
+import { compositeOver, contrastRatio, deltaEOK, hexToOklch, oklchToHex } from './themeColor'
+import { SELECTION_MIN_DELTA, THEME_TEXT_MIN_CONTRAST, type ThemeColorTokens, type ThemeTokens } from './themeEngine'
 
 export interface ThemeCombinationViolation {
   check: string
@@ -17,10 +17,6 @@ export interface ThemeCombinationViolation {
 const SURFACE_TEXT_BEDS = ['window', 'panel', 'raised', 'hover', 'selected', 'control', 'controlHover'] as const
 const TEXTS = ['text1', 'text2', 'text3'] as const
 
-/** CSS `linear-gradient` 按 sRGB 插值：from → to 位置 pos 处的颜色。 */
-const gradientAt = (from: string, to: string, pos: number) => compositeOver(withAlpha(from, 1 - pos), to)
-
-const bandEnds = (from: string, to: string) => [gradientAt(from, to, SOLID_LABEL_BAND.top), gradientAt(from, to, SOLID_LABEL_BAND.bottom)]
 
 export function checkThemeCombination(tokens: ThemeTokens): ThemeCombinationViolation[] {
   const t: ThemeColorTokens = tokens.colors
@@ -66,14 +62,9 @@ export function checkThemeCombination(tokens: ThemeTokens): ThemeCombinationViol
     ])
   }
   // 实底按钮：强调主按钮静息渐变中点 + 悬停渐变标签区间两端；危险确认按钮静息、悬停都取两端
-  need('onAccent 实底', t.onAccent, [
-    ['静息中点', mixOklab(t.accentHi, t.accent)],
-    ...bandEnds(t.accentHoverHi, t.accentHover).map((bed, i) => [`悬停${i ? '下端' : '上端'}`, bed] as [string, string]),
-  ])
-  need('onDanger 实底', t.onDanger, [
-    ...bandEnds(t.dangerHi, t.danger).map((bed, i) => [`静息${i ? '下端' : '上端'}`, bed] as [string, string]),
-    ...bandEnds(t.dangerHoverHi, t.dangerHover).map((bed, i) => [`悬停${i ? '下端' : '上端'}`, bed] as [string, string]),
-  ])
+  // 扁平实底（重要记录 016）：静息、悬停、按下三种纯色
+  need('onAccent 实底', t.onAccent, [['静息', t.accent], ['悬停', t.accentHover], ['按下', t.accentPressed]])
+  need('onDanger 实底', t.onDanger, [['静息', t.danger], ['悬停', t.dangerHover], ['按下', t.dangerPressed]])
   need('onSuccess', t.onSuccess, [['success', t.success]])
   need('onWarning', t.onWarning, [['warning', t.warning]])
 
@@ -91,9 +82,9 @@ export function checkThemeCombination(tokens: ThemeTokens): ThemeCombinationViol
       if (delta < min) violations.push({ check, detail: `ΔE ${delta.toFixed(4)} < ${min}` })
     }
   }
-  // 实底主按钮悬停可见：悬停渐变中点比静息中点亮
-  const lift = hexToOklch(mixOklab(t.accentHoverHi, t.accentHover)).L - hexToOklch(mixOklab(t.accentHi, t.accent)).L
-  if (!(lift > 0)) violations.push({ check: '实底悬停可见', detail: `悬停中点亮度提升 ${lift.toFixed(4)}` })
+  // 扁平实底主按钮悬停一眼可见：悬停与静息的亮度差 ≥ 0.05（重要记录 016）
+  const shift = Math.abs(hexToOklch(t.accentHover).L - hexToOklch(t.accent).L)
+  if (!(shift >= 0.05)) violations.push({ check: '实底悬停可见', detail: `悬停亮度变化 ${shift.toFixed(4)}` })
 
   return violations
 }
