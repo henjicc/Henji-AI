@@ -27,7 +27,7 @@ description: Henji-AI 新建或改造任何界面/页面骨架/面板/弹窗/侧
 | 定字号/圆角/阴影/层级/间距 | `references/typography-and-tokens.md` |
 | 界面卡顿、拖动掉帧、长列表 | `references/performance.md` |
 | "我改了但没生效" | `references/pitfalls.md` |
-| 改完界面做视觉验收、按区域核对全界面、判断旧界面残留、写操作步骤截图 | `references/review.md` |
+| 改完界面做视觉验收、按区域核对全界面、判断旧界面残留、写操作步骤截图；改公共组件或令牌后的默认验收（组件样张页 + 主题组合测试） | `references/review.md` |
 
 ## 三条铁律（先记住这三句）
 
@@ -577,7 +577,11 @@ npm run check:icons
 npx vitest run src/components/ui/motion.test.ts
 ```
 
-只有共享页面骨架、设计令牌、浮层/滚动/溢出机制等高影响界面改动，才先构建并按场景缩小范围运行截图巡检与规则审计：
+**改公共组件（`@/components/ui`、`styleTokens.ts`、`index.css` 组件皮肤）或令牌 / 主题引擎时，默认验收 = 组件样张页 + 主题组合测试**（`references/review.md` 第 8 节）：
+跑 `npx vitest run src/core/theme`（含 `themeCombination.test.ts` 属性测试），再只截样张页（`ui:tour --steps scripts/ui-review/ui-gallery.json --matrix review --contrast`，四预设 1440 + 石墨 960 共 5 张）并跑同一步骤的 `check:ui-visual`，逐张目视。
+不再为公共组件或令牌改动按界面大范围截图；新增 `@/components/ui` 导出组件要同时在样张页补样本（`uiGalleryCoverage.test.ts` 会提醒）。
+
+只有共享页面骨架、浮层/滚动/溢出机制等高影响界面改动，才先构建并按场景缩小范围运行截图巡检与规则审计：
 
 ```bash
 npm run ui:tour -- --only <受影响场景> --size <受影响尺寸>

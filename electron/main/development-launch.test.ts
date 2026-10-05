@@ -48,6 +48,13 @@ describe('resolveDevelopmentLaunchQuery', () => {
     expect(result.query).toEqual({})
     expect(result.warnings).toHaveLength(4)
   })
+
+  it('接受只供开发的 dev.* 页面（组件样张页，任务 5.11）', () => {
+    expect(resolveDevelopmentLaunchQuery(['electron', '--dev-surface=dev.ui_gallery'], '/project')).toEqual({
+      query: { henjiDevSurface: 'dev.ui_gallery' },
+      warnings: [],
+    })
+  })
 })
 
 describe('resolveSecondaryWindowLaunchQuery', () => {

@@ -112,4 +112,4 @@
 
 ## 界面改动后的检查
 
-见 [docs/rules/testing.md](../../docs/rules/testing.md) 的「界面改动」一节。改主题引擎推导规则或令牌后跑 `src/core/theme` 的测试，并按四个预设复跑相关场景的 `npm run check:ui-visual -- --theme-preset all --only <场景>`（对比度按渲染后像素审计，例外登记见 testing.md）。
+见 [docs/rules/testing.md](../../docs/rules/testing.md) 的「界面改动」一节。改公共组件、主题引擎推导规则或令牌后，默认验收是 `src/core/theme` 的测试（含主题组合属性测试）+ 组件样张页四预设截图与 `check:ui-visual`（testing.md「界面改动」、skill `henji-ui-surface` 的 `references/review.md` 第 8 节）；改动涉及具体页面骨架时再按四个预设复跑相关场景的 `npm run check:ui-visual -- --theme-preset all --only <场景>`（对比度按渲染后像素审计，例外登记见 testing.md）。

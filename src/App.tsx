@@ -37,6 +37,7 @@ import { OnboardingModal } from '@/features/onboarding/components/OnboardingModa
 import { OnboardingHints } from '@/features/onboarding/components/OnboardingHints'
 import { getPlatform } from '@/platform/runtime'
 import { readDevelopmentLaunchOptions } from '@/core/development/developmentLaunch'
+import { DEVELOPMENT_SURFACE_IDS, isDevelopmentSurfaceId } from '@/core/development/developmentLaunchContract'
 import { openApplicationSurface } from '@/features/navigation/application/surfaceNavigationService'
 import { showAlertDialog } from '@/stores/alertDialogStore'
 import { CameraStageRenderLifecycleHost } from '@/features/canvas/application/CameraStageRenderLifecycleHost'
@@ -69,6 +70,9 @@ const AssetLibraryFloatingPanel = lazy(() =>
  * 所以在启动之后的空闲时间把这两块 chunk 先取回来，用户真正点击时 import() 直接命中缓存。
  * 顺序按点击概率排：设置 > 资产面板；助手入口当前隐藏，不预取。
  */
+// 组件样张页（任务 5.11）：只经 `--dev-surface=dev.ui_gallery` 进入，正式界面没有入口；单独 chunk，不进启动图
+const UiGalleryPage = lazy(() => import('@/features/devGallery/UiGalleryPage').then((m) => ({ default: m.UiGalleryPage })))
+
 const overlayPrefetchOrder = [loadSettingsModal, loadAssetLibraryFloatingPanel]
 
 /*
@@ -135,7 +139,8 @@ const App: React.FC = () => {
   const [assetPanelMounted, setAssetPanelMounted] = useState(false)
 
   useEffect(() => {
-    if (!developmentLaunch.surfaceId) return
+    // dev.* 是开发页面，不是应用 Surface：由下方直接渲染，不走正式导航
+    if (!developmentLaunch.surfaceId || isDevelopmentSurfaceId(developmentLaunch.surfaceId)) return
     try {
       openApplicationSurface(developmentLaunch.surfaceId, { requestId: 'development-launch' })
     } catch (error) {
@@ -283,13 +288,19 @@ const App: React.FC = () => {
 
         />
 
-        {/* 工作区容器 */}
-        <TabContainer
-          containerRef={assistantWorkspaceRef}
-          activeTab={activeWorkspace}
-          insetLeft={assistantOpen && assistantMode === 'left' ? assistantSize.width : 0}
-          insetRight={assistantOpen && assistantMode === 'right' ? assistantSize.width : 0}
-        />
+        {/* 工作区容器；开发样张页启动时占用这块区域 */}
+        {developmentLaunch.surfaceId === DEVELOPMENT_SURFACE_IDS.uiGallery ? (
+          <Suspense fallback={null}>
+            <UiGalleryPage />
+          </Suspense>
+        ) : (
+          <TabContainer
+            containerRef={assistantWorkspaceRef}
+            activeTab={activeWorkspace}
+            insetLeft={assistantOpen && assistantMode === 'left' ? assistantSize.width : 0}
+            insetRight={assistantOpen && assistantMode === 'right' ? assistantSize.width : 0}
+          />
+        )}
         {/* 三个懒加载浮层必须各有各的 Suspense 边界。共用一个时，任意一个 chunk 首次挂起
             都会让整个边界回落到 fallback，React 会把边界内**已经挂载**的兄弟一起写成
             display:none 再恢复——表现就是"第一次打开设置，助手闪一下"。 */}

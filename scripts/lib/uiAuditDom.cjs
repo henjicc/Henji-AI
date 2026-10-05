@@ -181,6 +181,8 @@ function auditUiDom(context = {}) {
     const style = getComputedStyle(element)
     if (style.boxShadow === 'none' || style.boxShadow.includes('inset')) continue
     if (/rgba?\([^)]*\)\s+0px\s+0px\s+0px\s+0px/.test(style.boxShadow)) continue
+    // 键盘焦点环（ring 用 box-shadow 画）不是表面层级阴影；组件样张页的强制聚焦态等同真实聚焦（任务 5.11）
+    if (element.matches(':focus-visible, .henji-gallery-force-focus')) continue
     let node = element
     let floating = false
     while (node && node !== document.body) {
@@ -288,6 +290,8 @@ function auditUiDom(context = {}) {
     // 数字输入框的竖排步进箭头共享 38px/28px 字段高度，单个箭头无法达到 24px；
     // 同一控件仍提供满足尺寸要求的直接输入区与 ArrowUp/ArrowDown 等价操作，仅豁免这两个附属按钮。
     if (element.matches('[data-ui-compact-stepper-button]')) continue
+    // WCAG 2.5.8 行内例外：句子里的链接档按钮与逐字稿行内词块，高度受行高约束（任务 5.11 样张页首次覆盖到）
+    if (element.matches('[data-variant="link"], [data-text-token="inline"]')) continue
     // 画布视口里的控件会随缩放矩阵一起缩放，getBoundingClientRect 不是其 CSS 命中区尺寸。
     if (element.closest('.react-flow__viewport')) continue
     const rect = element.getBoundingClientRect()

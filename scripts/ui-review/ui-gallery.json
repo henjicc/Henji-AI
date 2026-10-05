@@ -1,0 +1,11 @@
+{
+  "id": "review-ui-gallery",
+  "surface": "开发",
+  "name": "核对-组件样张页（改公共组件或令牌的默认验收）",
+  "steps": [
+    { "enter": { "surface": "dev.ui_gallery" } },
+    { "waitFor": { "selector": "[data-gallery-section]" } },
+    { "waitStable": {} },
+    { "capture": "gallery" }
+  ]
+}

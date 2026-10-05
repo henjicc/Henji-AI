@@ -173,14 +173,14 @@ exports[`themeEngine 与设计稿参考实现对照 > 被修正令牌的取值�
     "accentHover": "#3266D6",
     "accentHoverHi": "#3F74E5",
     "accentPressed": "#2658C6",
-    "accentText": "#1142AE",
+    "accentText": "#1041AD",
     "accentTint": "rgba(50,102,214,0.12)",
     "danger": "#C3292E",
     "dangerHi": "#D03739",
     "dangerTint": "rgba(201,47,51,0.1)",
     "onAccent": "#FFFFFF",
-    "text2": "#484B51",
-    "text3": "#55595E",
+    "text2": "#474B50",
+    "text3": "#55585E",
   },
 }
 `;

@@ -278,12 +278,13 @@ export const UiWindowControl = forwardRef<HTMLButtonElement, UiWindowControlProp
   ({ className = '', action, platform = 'windows', type = 'button', ...props }, ref) => {
     const { Icon, size, strokeWidth } = UI_WINDOW_CONTROL_ICON[action];
     if (platform === 'mac') {
+      // 命中区 24×24（WCAG 2.5.8 下限）：原 20 宽相邻排列时中心距 20，样张页 check:ui-visual 的 smallTargets 命中（任务 5.11）
       return (
         <button
           ref={ref}
           type={type}
           data-window-control={action}
-          className={`group/window-control inline-flex h-6 w-5 shrink-0 items-center justify-center border-0 bg-transparent p-0 ${UI_BUTTON_RESET_CLASS} focus-visible:!ring-2 focus-visible:!ring-accent-ring ${className}`}
+          className={`group/window-control inline-flex h-6 w-6 shrink-0 items-center justify-center border-0 bg-transparent p-0 ${UI_BUTTON_RESET_CLASS} focus-visible:!ring-2 focus-visible:!ring-accent-ring ${className}`}
           {...props}
         >
           <span className={`flex h-3 w-3 items-center justify-center rounded-full ${UI_WINDOW_CONTROL_MAC_DOT_CLASS[action]}`}>

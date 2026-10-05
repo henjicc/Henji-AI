@@ -3,6 +3,7 @@ import path from 'node:path'
 
 import {
   DEVELOPMENT_LAUNCH_QUERY_KEYS,
+  DEVELOPMENT_LAUNCH_SURFACE_PATTERN,
   isDevelopmentUpdatePreviewState,
 } from '../../src/core/development/developmentLaunchContract'
 import { THEME_PRESET_IDS } from '../../src/core/theme/themeEngine'
@@ -19,7 +20,7 @@ function readOption(argv: readonly string[], name: string): string | null {
 }
 
 function isValidSurfaceId(value: string): boolean {
-  return /^(workspace|tool|settings|overlay)\.[a-z0-9_.-]+$/.test(value)
+  return DEVELOPMENT_LAUNCH_SURFACE_PATTERN.test(value)
 }
 
 export function resolveDevelopmentLaunchQuery(

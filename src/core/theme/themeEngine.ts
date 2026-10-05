@@ -15,6 +15,7 @@ import { THEME_SEED_ACCENT_HEX } from './colorTokens';
 import {
   WHITE,
   compositeOver,
+  deltaEOK,
   hexToOklch,
   minContrast,
   mixOklab,
@@ -220,6 +221,13 @@ const GLASS_SELECTED_ACCENT_ALPHA = { dark: 0.28, light: 0.18 } as const;
 export const SELECTED_ACCENT_ALPHA = { dark: 0.2, light: 0.18 } as const;
 /** 选中项悬停：在选中底上再加一档，不回落中性悬停。 */
 export const SELECTED_ACCENT_HOVER_ALPHA = { dark: 0.26, light: 0.22 } as const;
+/**
+ * 选中淡底必须与悬停、静息一眼可辨（重要记录 012；OKLab ΔE 门槛，四预设的 4.3 断言与 5.11 组合测试共用）：
+ * 选中 vs 中性悬停 ≥ vsHover、选中 vs 所在表面 ≥ vsRest、选中项悬停 vs 选中 ≥ hoverVsSelected。
+ */
+export const SELECTION_MIN_DELTA = { vsHover: 0.03, vsRest: 0.06, hoverVsSelected: 0.015 } as const;
+/** 低彩度/很暗的强调色或极端层级对比度下，选中透明度最多提到这里（再高就接近实底，与主动作抢权重）。 */
+const SELECTED_ACCENT_ALPHA_MAX = 0.6;
 
 /**
  * 文字求解起点：设计稿“标准”档（contrast = 1）的文字亮度，对所有档位相同。
@@ -453,8 +461,17 @@ export function solveSolidRamp(options: {
   coverage?: SolidLabelCoverage;
 }): SolidRampResult {
   const { startL, floorL, chroma, hue, ink, allowInk, coverage = 'midpoint' } = options;
+  // 墨水字的最差处在渐变下端（更暗）。白字的悬停区间由 solveSolidHoverHiOffset 收敛上端保证；墨水字不能靠收上端，
+  // 只判中点会漏掉悬停渐变下端（任务 5.11 组合测试：深海 + 亮紫强调色悬停下端 4.47:1），因此墨水还要覆盖悬停标签区间。
+  const inkBeds = (L: number) => {
+    const beds = solidLabelBeds(L, chroma, hue, coverage);
+    if (coverage !== 'midpoint') return beds;
+    const top = oklchToHex(L + SOLID_RAMP_OFFSETS.hoverHi, chroma, hue);
+    const bottom = oklchToHex(L + SOLID_RAMP_OFFSETS.hover, chroma, hue);
+    return [...beds, gradientAt(top, bottom, SOLID_LABEL_BAND.top), gradientAt(top, bottom, SOLID_LABEL_BAND.bottom)];
+  };
   const passes = (text: string, L: number) =>
-    minContrast(text, solidLabelBeds(L, chroma, hue, coverage)) >= THEME_TEXT_MIN_CONTRAST;
+    minContrast(text, text === WHITE ? solidLabelBeds(L, chroma, hue, coverage) : inkBeds(L)) >= THEME_TEXT_MIN_CONTRAST;
 
   if (passes(WHITE, startL)) {
     return { L: startL, on: WHITE };
@@ -470,6 +487,40 @@ export function solveSolidRamp(options: {
   }
   const maxL = 1 - SOLID_RAMP_OFFSETS.hoverHi;
   return passes(ink, maxL) ? { L: bisectLightness(startL, maxL, (L) => passes(ink, L)), on: ink } : { L: startL, on: ink };
+}
+
+/**
+ * 选中淡底与选中项悬停的强调色透明度：默认档位（SELECTED_ACCENT_ALPHA / _HOVER_ALPHA）已满足
+ * SELECTION_MIN_DELTA 时原样返回（四个预设取值不变）；否则按 0.01 步进往上找第一个满足的透明度，
+ * 上限 SELECTED_ACCENT_ALPHA_MAX。只在强调色彩度很低或很暗、或层级对比度很高（中性悬停被拉亮/拉暗）时触发（任务 5.11）。
+ */
+export function solveSelectedAccentAlpha(options: {
+  accent: string;
+  /** 选中项会落在的表面（面板、抬升面） */
+  beds: readonly string[];
+  hover: string;
+  base: number;
+  hoverBase: number;
+}): { alpha: number; hoverAlpha: number } {
+  const { accent, beds, hover, base, hoverBase } = options;
+  const over = (alpha: number, bed: string) => compositeOver(withAlpha(accent, alpha), bed);
+  const selectedOk = (alpha: number) =>
+    beds.every((bed) => {
+      const selected = over(alpha, bed);
+      return deltaEOK(selected, hover) >= SELECTION_MIN_DELTA.vsHover && deltaEOK(selected, bed) >= SELECTION_MIN_DELTA.vsRest;
+    });
+  const hoverOk = (alpha: number, hoverAlpha: number) =>
+    beds.every((bed) => deltaEOK(over(hoverAlpha, bed), over(alpha, bed)) >= SELECTION_MIN_DELTA.hoverVsSelected);
+  const step = 0.01;
+  let alpha = base;
+  while (!selectedOk(alpha) && alpha + step <= SELECTED_ACCENT_ALPHA_MAX + 1e-9) {
+    alpha = Math.round((alpha + step) * 100) / 100;
+  }
+  let hoverAlpha = Math.round((alpha + (hoverBase - base)) * 100) / 100;
+  while (!hoverOk(alpha, hoverAlpha) && hoverAlpha + step <= SELECTED_ACCENT_ALPHA_MAX + (hoverBase - base) + 1e-9) {
+    hoverAlpha = Math.round((hoverAlpha + step) * 100) / 100;
+  }
+  return { alpha, hoverAlpha };
 }
 
 /** 从种子推导全部令牌；overrides 按令牌名逐个覆盖最终值（不再参与派生）。 */
@@ -550,15 +601,25 @@ export function deriveThemeTokens(seedInput: Partial<ThemeSeed>, overrides?: The
   });
   // 选中淡强调底（重要记录 012，任务 4.3）：强调色低透明度，叠在窗口/面板/抬升面上都与悬停、静息可分。
   // 档位依据见 4.3 执行记录：深色 0.20 / 浅色 0.18（浅色 0.12 时与悬停几乎同色）；选中项悬停再加一档。
-  t.selectedAccent = withAlpha(t.accent, SELECTED_ACCENT_ALPHA[dark ? 'dark' : 'light']);
-  t.selectedAccentHover = withAlpha(t.accent, SELECTED_ACCENT_HOVER_ALPHA[dark ? 'dark' : 'light']);
+  // 5.11：低彩度/很暗的强调色或极端层级对比度下默认档位与悬停难分，按 SELECTION_MIN_DELTA 求解透明度（预设不变）。
+  const selectedAlpha = solveSelectedAccentAlpha({
+    accent: t.accent,
+    beds: [t.panel, t.raised],
+    hover: t.hover,
+    base: SELECTED_ACCENT_ALPHA[dark ? 'dark' : 'light'],
+    hoverBase: SELECTED_ACCENT_HOVER_ALPHA[dark ? 'dark' : 'light'],
+  });
+  t.selectedAccent = withAlpha(t.accent, selectedAlpha.alpha);
+  t.selectedAccentHover = withAlpha(t.accent, selectedAlpha.hoverAlpha);
   // 文字也会压在选中淡底上（导航/菜单选中项的主要与辅助文字、分段与格子的强调文字）：
   // 三档文字与强调文字的求解底集都加入这些合成色，四个预设下保证 ≥ 4.5（4.3：辅助文字在选中导航项上曾 4.17）
   const selectedBeds = [t.selectedAccent, t.selectedAccentHover]
     .flatMap((tint) => [t.window, t.panel, t.raised].map((bed) => compositeOver(tint, bed)));
   // ── 文字（010：按目标对比度求解） ──
   const surfaceTextBeds = [t.window, t.panel, t.raised, t.hover, t.selected, t.control, t.controlHover];
-  const textBeds = [...surfaceTextBeds, ...selectedBeds];
+  // 深色玻璃（黑 72%）压在中灰内容上时辅助文字也须达标（4.3 只对标准档断言；5.11 组合测试：柔和档 4.44–4.48）
+  const glassTextBeds = dark ? [compositeOver(`rgba(0,0,0,${DARK_GLASS_TINT_ALPHA})`, oklchToHex(0.6, 0, 0))] : [];
+  const textBeds = [...surfaceTextBeds, ...selectedBeds, ...glassTextBeds];
   const textChroma = dark
     ? { text1: s.tint * 0.5, text2: s.tint * 0.8, text3: s.tint }
     : { text1: s.tint * 2, text2: s.tint * 2, text3: s.tint * 2 };

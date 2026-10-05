@@ -50,7 +50,7 @@ const STEP_ACTIONS = Object.freeze({
     if (value.workspace && !WORKSPACES.includes(value.workspace)) {
       throw new Error(`enter.workspace 仅支持 ${WORKSPACES.join('、')}`)
     }
-    if (value.surface && !/^(workspace|tool|settings|overlay)\.[a-z0-9_.-]+$/.test(value.surface)) {
+    if (value.surface && !/^(workspace|tool|settings|overlay|dev)\.[a-z0-9_.-]+$/.test(value.surface)) {
       throw new Error(`enter.surface 不是已登记格式的 Surface ID：${value.surface}`)
     }
     if (!value.workspace && !value.surface) throw new Error('enter 需要 workspace 或 surface')

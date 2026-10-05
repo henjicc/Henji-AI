@@ -167,3 +167,20 @@ npm run check:ui-visual -- --steps scripts/ui-review/generation-seedance-kie.jso
 新规则的断牙证据：`npm run test:ui-visual-rules` 把 `scripts/lib/uiVisualRuleSamples.cjs` 的“未修复 / 已修复”样例注入真实 Electron 窗口，跑同一个 `auditUiDom` 逐条对账（未修复必须命中、已修复不得命中）；应用自己的界面不误报由 `check:ui-visual` 的场景全量跑证明。改规则判据先改样例再改规则。
 
 `check:colors` 另有**未定义颜色类**规则（不可登记）：`bg-overlay`、`text-error`、`bg-selected-accent/50`（自带透明度的令牌不能再加 `/透明度`）、`border-current/15` 这类 Tailwind 按实际配置不生成样式的颜色类。用 Tailwind 自己的生成器判定，只看类名语境的字符串（`className=`、`*Class =` 常量、多数词是有效类的类名列表）；样式表里定义的同名类算已定义。
+
+## 8. 改公共组件或令牌的默认验收：组件样张页 + 主题组合测试（任务 5.11）
+
+改 `@/components/ui` 的共享组件、`styleTokens.ts`、`src/index.css` 的组件皮肤或主题引擎 / 语义令牌时，**默认**用下面两道验收，替代按界面大范围截图；只有改动同时涉及某个页面的骨架或业务布局，才再按第 5 节截那个页面。
+
+1. **主题组合测试**（代码保证主题适配）：`npx vitest run src/core/theme`。其中 `themeCombination.test.ts` 用固定随机种子覆盖“四预设（深浅两种模式）× 任意强调色 × 层级对比度全范围”与预设附近的自定义底色，判三档文字、强调文字、选中淡底上的文字、实底按钮（静息与悬停渐变两端）上的文字、玻璃面上的文字、状态文字 ≥ 4.5:1，选中与悬停、静息可辨（`SELECTION_MIN_DELTA`）；失败时 fast-check 输出收缩后的最小反例。判定集合在 `themeCombinationTestFixture.ts`，门槛与引擎求解共用常量。**发现不达标修引擎求解，不放宽门槛**；四个预设的取值由 `themeEngine.test.ts` 快照锁定，必须变化时在任务记录写明。
+2. **组件样张页**（看一页就知道共享组件在四个预设下的样子）：`--dev-surface=dev.ui_gallery` 进入（开发页面，正式界面、助手与 MCP 都没有入口），`@/components/ui` 全部导出组件与静息、悬停、聚焦、选中、禁用、错误、加载、空等状态一页铺开；悬停、聚焦用强制状态类展示（`src/features/devGallery/forcedPseudoStates.ts`，同 Storybook pseudo-states 的做法），不依赖鼠标。
+
+```bash
+npm run electron:bundle
+npm run ui:tour -- --steps scripts/ui-review/ui-gallery.json --matrix review --contrast --out .ui-tour/review/ui-gallery
+npm run check:ui-visual -- --steps scripts/ui-review/ui-gallery.json --matrix review
+```
+
+`--matrix review` 正好是四个预设 1440 各一张 + 石墨 960 一张；Agent 逐张目视（第 2 节核对项，重点看状态可辨、对比度、尺寸与对齐），再看 `contrast.json` 与 `check:ui-visual` 结论。
+
+`@/components/ui` 新增导出组件而没有上样张页时，`src/features/devGallery/uiGalleryCoverage.test.ts`（普通单测，进 CI）会失败并列出组件名：在 `gallerySections.tsx` 补一个样本（含它的关键状态），确实不是可见组件的在该测试的 `NON_VISUAL` 写理由。
