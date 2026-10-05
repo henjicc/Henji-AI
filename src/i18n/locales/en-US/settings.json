@@ -4,22 +4,21 @@
   "language": "Language",
   "theme": "Theme",
   "navSections": {
-    "general-basic": "Basics",
-    "general-onboarding": "Defaults & First-time Setup",
-    "general-storage": "Data & Downloads",
-    "general-behavior": "Behavior & Concurrency",
-    "general-maintenance": "Updates",
-    "general-mcp": "External agent connections",
-    "general-about": "About",
-    "models-providers": "Providers & Models",
-    "models-assistant": "Assistant Models",
-    "models-upload": "Upload Strategy",
-    "assistant-preferences": "Assistant Instructions",
-    "assistant-skills": "Assistant Skills",
-    "interface-layout": "Layout Behavior",
-    "interface-assets": "Asset Library",
-    "interface-canvas": "Canvas",
-    "interface-theme": "Theme & Appearance"
+    "general-basic": "Language & Startup",
+    "general-view": "Viewing & Shortcuts",
+    "general-appearance": "Appearance",
+    "general-about": "About & Updates",
+    "providers": "Providers & Models",
+    "workspace-generation": "Generate",
+    "workspace-canvas": "Canvas",
+    "workspace-assets": "Asset Library",
+    "files-storage": "Data Folder",
+    "files-upload": "Uploads",
+    "files-download": "Downloads",
+    "assistant-models": "Assistant Models",
+    "assistant-preferences": "User Instructions",
+    "assistant-mcp": "External Agents",
+    "assistant-skills": "Assistant Skills"
   },
   "apiKeys": {
     "title": "API Key Settings",
@@ -245,33 +244,22 @@
   },
   "tabs": {
     "general": {
-      "label": "General",
-      "title": "General Settings",
-      "description": "Configure the app's basic settings and behavior.",
-      "showPriceEstimate": {
-        "label": "Show price estimate",
-        "description": "Show estimated price before generation"
-      },
-      "maxConcurrentTasks": {
-        "label": "Max concurrent tasks",
-        "description": "Maximum number of tasks running at the same time"
-      }
+      "label": "General"
     },
-    "api": {
-      "label": "API Keys"
+    "providers": {
+      "label": "Providers & Models"
+    },
+    "workspace": {
+      "label": "Workspaces"
+    },
+    "files": {
+      "label": "Files & Downloads"
     },
     "assistant": {
       "label": "Assistant"
     },
-    "interface": {
-      "label": "Interface",
-      "title": "Interface Settings",
-      "description": "Customize the app's appearance and interaction."
-    },
-    "models": {
-      "label": "Models",
-      "title": "Model Settings",
-      "description": "Manage providers, keys, and all models in one place."
+    "skills": {
+      "label": "Assistant Skills"
     }
   },
   "sections": {
@@ -312,7 +300,13 @@
       "autoFocusLabel": "Auto-focus model search",
       "autoFocusHint": "Focus the search box when opening the model selector"
     },
+    "generation": {
+      "taskGroup": "Tasks & pricing",
+      "inputGroup": "Input & panel"
+    },
     "canvas": {
+      "displayGroup": "Display & nodes",
+      "storyboardGroup": "Storyboards & prompts",
       "title": "Canvas Behavior",
       "autoInsertTextDisplayLabel": "Auto-insert Text Display",
       "autoInsertTextDisplayHint": "Route new text-processing connections through one shared, editable Text Display node. Existing connections stay unchanged.",
@@ -351,7 +345,7 @@
       "pathLabel": "Quick download path",
       "pathPlaceholder": "Select a folder",
       "pathHint": "All quick downloads will be saved here",
-      "presetPathsLabel": "Download preset folders",
+      "presetPathsLabel": "Saved folders",
       "presetPathsHint": "These folders appear in the canvas node download menu for one-click saving; independent of quick download.",
       "presetPathsAdd": "Add folder",
       "presetPathsCount": "{{count}} / {{limit}} added",
@@ -381,7 +375,6 @@
       }
     },
     "about": {
-      "productName": "Henji AI",
       "authorLabel": "Author",
       "homepageLabel": "Project homepage",
       "licenseLabel": "License",
@@ -450,7 +443,7 @@
       "edgeTrigger": "Allow pointer or drag edge trigger",
       "edgeHint": "When off, only the Assets button in the title bar opens the panel. When on, dwelling or dragging at the chosen window edge also opens it.",
       "triggerEdge": "Trigger edge",
-      "delay": "Trigger delay ({{value}} ms)"
+      "delay": "Wait before opening ({{value}} s)"
     },
     "theme": {
       "title": "Theme Appearance",
@@ -498,7 +491,7 @@
     "largeUpload": {
       "title": "Large File Handling",
       "description": "When uploading local video/audio, files up to 100 MB are always copied into the data folder; larger files follow this strategy.",
-      "strategyLabel": "For files over 100 MB",
+      "strategyLabel": "Large files (over 100 MB)",
       "options": {
         "ask": "Ask every time",
         "copy": "Copy into data folder",
@@ -509,8 +502,8 @@
     "upload": {
       "title": "Generic Upload Service",
       "description": "Provide file hosting for models without native uploads (e.g., ModelScope, PPIO).",
-      "providerLabel": "Default upload provider",
-      "fallbackLabel": "Enable fallback",
+      "providerLabel": "File hosting service",
+      "fallbackLabel": "Use another service if it fails",
       "fallbackHint": "Try other configured providers when the primary fails.",
       "providers": {
         "kie": "KIE",

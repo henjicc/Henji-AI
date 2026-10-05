@@ -9,16 +9,18 @@ import {
   UiNavButton,
 } from '@/components/ui'
 import { UI_DIALOG_TRANSITION_MS } from '@/components/ui/motion'
-import { Bot, LayoutGrid, Settings2, SlidersHorizontal, X } from 'lucide-react'
+import { Bot, FolderOpen, KeyRound, LayoutGrid, Package, Settings2, X } from 'lucide-react'
 import GeneralTab from './tabs/GeneralTab'
+import ProvidersTab from './tabs/ProvidersTab'
+import WorkspaceTab from './tabs/WorkspaceTab'
+import FilesTab from './tabs/FilesTab'
 import AssistantTab from './tabs/AssistantTab'
-import InterfaceTab from './tabs/InterfaceTab'
-import ModelsTab from './tabs/ModelsTab'
+import SkillsTab from './tabs/SkillsTab'
 import { useSettingsScrollSpy } from './hooks/useSettingsScrollSpy'
 import { useI18n } from '@/hooks/useI18n'
 import { useUiStore } from '@/stores/uiStore'
 import { resolveSettingsSurfaceId } from '@/features/navigation/application/surfaceCatalog'
-import type { SettingsNavigationTarget, SettingsTabId } from '@/core/types/settingsNavigation'
+import { SETTINGS_TAB_SECTIONS, type SettingsNavigationTarget, type SettingsTabId } from '@/core/types/settingsNavigation'
 
 interface SettingsModalProps {
   onClose: () => void
@@ -29,16 +31,11 @@ interface SettingsModalProps {
 type SettingsTab = SettingsTabId
 
 /*
- * 静态导航结构，提到模块作用域后初始 state 可以直接查表定位到目标分节。
+ * 静态导航结构，唯一来源在 settingsNavigation.ts，初始 state 可以直接查表定位到目标分节。
  * 只存 id：标题文案统一由 `navSections.<id>` 提供，目录和内容区标题共用同一个 key，
  * 不会再出现两边对不上、或者内容区根本没有标题的情况。
  */
-const SECTION_MAP: Record<SettingsTab, string[]> = {
-  general: ['general-basic', 'general-onboarding', 'general-storage', 'general-behavior', 'general-maintenance', 'general-mcp', 'general-about'],
-  models: ['models-providers', 'models-assistant', 'models-upload'],
-  assistant: ['assistant-preferences', 'assistant-skills'],
-  interface: ['interface-layout', 'interface-assets', 'interface-canvas', 'interface-theme'],
-}
+const SECTION_MAP: Record<SettingsTab, readonly string[]> = SETTINGS_TAB_SECTIONS
 
 /** 切换大类后，异步加载的分区（密钥状态、LLM 配置）会改变上方高度，需要补一次定位 */
 const DEEP_LINK_RESCROLL_MS = 320
@@ -93,9 +90,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, target }) => {
 
   const tabs = [
     { id: 'general' as const, label: t('tabs.general.label'), icon: Settings2, component: GeneralTab },
-    { id: 'models' as const, label: t('tabs.models.label'), icon: SlidersHorizontal, component: ModelsTab },
+    { id: 'providers' as const, label: t('tabs.providers.label'), icon: KeyRound, component: ProvidersTab },
+    { id: 'workspace' as const, label: t('tabs.workspace.label'), icon: LayoutGrid, component: WorkspaceTab },
+    { id: 'files' as const, label: t('tabs.files.label'), icon: FolderOpen, component: FilesTab },
     { id: 'assistant' as const, label: t('tabs.assistant.label'), icon: Bot, component: AssistantTab },
-    { id: 'interface' as const, label: t('tabs.interface.label'), icon: LayoutGrid, component: InterfaceTab },
+    { id: 'skills' as const, label: t('tabs.skills.label'), icon: Package, component: SkillsTab },
   ]
 
   const ActiveTabComponent = tabs.find(tab => tab.id === activeTab)?.component

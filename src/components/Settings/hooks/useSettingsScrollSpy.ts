@@ -23,7 +23,7 @@ interface UseSettingsScrollSpyOptions {
    */
   container: HTMLElement | null
   /** 当前大类下的分节 id，顺序即渲染顺序；用于在结构变化后重新测量 */
-  sectionIds: string[]
+  sectionIds: readonly string[]
   onActiveSectionChange: (sectionId: string) => void
 }
 

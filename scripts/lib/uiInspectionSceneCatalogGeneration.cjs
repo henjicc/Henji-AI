@@ -28,7 +28,7 @@ function createGenerationSettingsScenes(context) {
   }
 
   async function setAboutAppearance(page, { preset, blur }) {
-    await clickNamedButton(page, /^主题外观$/)
+    await clickNamedButton(page, /^(外观|Appearance)$/i)
     await chooseThemeRadio(page, preset)
     const blurRow = page.getByText('毛玻璃效果', { exact: true }).locator('xpath=ancestor::div[contains(@class, "justify-between")][1]')
     const blurSwitch = blurRow.getByRole('switch')
@@ -47,11 +47,11 @@ function createGenerationSettingsScenes(context) {
 
   /**
    * 目录点击是平滑滚动；滚动未停就去点单选，Playwright 只会把目标滚到可见边缘，
-   * 分区停在视口底部。先等滚动停稳，再把“主题外观”分区顶到内容区顶部。
+   * 分区停在视口底部。先等滚动停稳，再把“外观”分区顶到内容区顶部。
    */
   async function showThemeSection(page) {
     await page.waitForTimeout(400)
-    await page.evaluate(() => document.getElementById('interface-theme')?.scrollIntoView({ block: 'start', behavior: 'instant' }))
+    await page.evaluate(() => document.getElementById('general-appearance')?.scrollIntoView({ block: 'start', behavior: 'instant' }))
     await page.waitForTimeout(150)
   }
 
@@ -71,7 +71,7 @@ function createGenerationSettingsScenes(context) {
 
   /** 设置弹窗里定位到“关于”分区，等第三方清单加载、平滑滚动停稳后再截图。 */
   async function openAboutSection(page) {
-    await clickNamedButton(page, /^(关于|About)$/i)
+    await clickNamedButton(page, /^(关于与更新|About & Updates)$/i)
     // 第三方清单惰性加载，等重点组件列表出现；目录点击是平滑滚动，再等分区停到内容区顶部才截图
     await page.locator('#general-about').getByRole('button', { name: /FFmpeg/ }).waitFor({ state: 'visible', timeout: 8000 })
     await page.waitForFunction(() => {
@@ -303,7 +303,7 @@ function createGenerationSettingsScenes(context) {
         await settlePage(page)
       },
     },
-    { id: 'settings-general', surface: '设置', name: '设置-基础设置', setup: setupSettings },
+    { id: 'settings-general', surface: '设置', name: '设置-通用', setup: setupSettings },
     {
       id: 'settings-about',
       surface: '设置',
@@ -334,7 +334,7 @@ function createGenerationSettingsScenes(context) {
       setup: async (page) => {
         await setupSettings(page)
         await restoreDefaultAboutAppearance(page)
-        await clickNamedButton(page, /^(关于|About)$/i)
+        await clickNamedButton(page, /^(关于与更新|About & Updates)$/i)
         await page.locator('#general-about').getByRole('button', { name: /FFmpeg/ }).click({ timeout: 8000 })
         await page.getByRole('dialog', { name: /第三方开源组件|Third-party open source components/ })
           .getByText(/GNU GENERAL PUBLIC LICENSE/).first().waitFor({ state: 'visible', timeout: 8000 })
@@ -344,7 +344,7 @@ function createGenerationSettingsScenes(context) {
     {
       id: 'settings-theme',
       surface: '设置',
-      name: '设置-主题外观',
+      name: '设置-外观',
       writesUserData: true,
       /*
        * 种子式外观（1.4）：先选中本次运行的预设截图，再依次切换预设、强调色、层级对比，
@@ -353,8 +353,7 @@ function createGenerationSettingsScenes(context) {
        */
       setup: async (page, _app, { capture }) => {
         await setupSettings(page)
-        await clickNamedButton(page, /^(界面|Interface)$/i)
-        await clickNamedButton(page, /^主题外观$/)
+        await clickNamedButton(page, /^(外观|Appearance)$/i)
         const runPreset = await page.evaluate(() => new URLSearchParams(location.search).get('henjiDevThemePreset') ?? 'graphite')
         const presetName = { graphite: '石墨', ocean: '深海', film: '胶片', paper: '纸白' }
         const otherPreset = runPreset === 'paper' ? 'film' : 'paper'
@@ -396,7 +395,7 @@ function createGenerationSettingsScenes(context) {
       name: '设置-供应商与模型',
       setup: async (page) => {
         await setupSettings(page)
-        await clickNamedButton(page, /^(模型|Models)$/i)
+        await clickNamedButton(page, /^(供应商与模型|Providers & Models)$/i)
         await clickNamedButton(page, /^KIE$/)
         await settlePage(page)
       },
@@ -407,7 +406,6 @@ function createGenerationSettingsScenes(context) {
       name: '设置-助手模型',
       setup: async (page) => {
         await setupSettings(page)
-        await clickNamedButton(page, /^(模型|Models)$/i)
         await clickNamedButton(page, /^(助手模型|Assistant Models)$/i)
         await settlePage(page, 700)
       },
@@ -418,7 +416,7 @@ function createGenerationSettingsScenes(context) {
       name: '设置-添加供应商',
       setup: async (page) => {
         await setupSettings(page)
-        await clickNamedButton(page, /^(模型|Models)$/i)
+        await clickNamedButton(page, /^(供应商与模型|Providers & Models)$/i)
         await clickNamedButton(page, /^(添加供应商|Add provider)$/i)
         const dialog = page.getByRole('dialog', { name: /添加大语言模型供应商|Add LLM Provider/i })
         await dialog.waitFor({ state: 'visible' })
@@ -433,19 +431,17 @@ function createGenerationSettingsScenes(context) {
       name: '设置-助手技能',
       setup: async (page) => {
         await setupSettings(page)
-        await clickNamedButton(page, /^(助手|Assistant)$/i)
         await clickNamedButton(page, /^(助手技能|Assistant Skills)$/i)
         await settlePage(page, 700)
       },
     },
     {
-      id: 'settings-interface-layout',
+      id: 'settings-workspace',
       surface: '设置',
-      name: '设置-界面布局',
+      name: '设置-工作区',
       setup: async (page) => {
         await setupSettings(page)
-        await clickNamedButton(page, /^(界面|Interface)$/i)
-        await clickNamedButton(page, /^(布局行为|Layout Behavior)$/i)
+        await clickNamedButton(page, /^(工作区|Workspaces)$/i)
         await settlePage(page)
       },
     },

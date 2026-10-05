@@ -66,7 +66,7 @@ describe('GlobalAlertDialog', () => {
       title: '还没有配置密钥',
       message: '你还没有配置密钥，你需要去配置一下。',
       type: 'info',
-      settingsTarget: { tab: 'models', sectionId: 'models-providers' },
+      settingsTarget: { tab: 'providers', sectionId: 'providers' },
     })
     render(<GlobalAlertDialog onAskAssistant={() => undefined} />)
 
@@ -76,7 +76,7 @@ describe('GlobalAlertDialog', () => {
     fireEvent.click(screen.getByRole('button', { name: '去配置' }))
     expect(useUiStore.getState()).toMatchObject({
       isSettingsOpen: true,
-      settingsTarget: { tab: 'models', sectionId: 'models-providers' },
+      settingsTarget: { tab: 'providers', sectionId: 'providers' },
     })
     expect(useAlertDialogStore.getState().queue).toHaveLength(0)
   })
@@ -86,7 +86,7 @@ describe('GlobalAlertDialog', () => {
       message: '供应商返回错误',
       type: 'error',
       detail: 'stack',
-      settingsTarget: { tab: 'models', sectionId: 'models-providers' },
+      settingsTarget: { tab: 'providers', sectionId: 'providers' },
     })
     render(<GlobalAlertDialog onAskAssistant={() => undefined} />)
     const labels = screen.getAllByRole('button').map((button) => button.textContent)

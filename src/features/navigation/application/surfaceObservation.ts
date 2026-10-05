@@ -39,12 +39,20 @@ function integerCaptureRect(rect: DOMRect): SurfaceCaptureRect {
   }
 }
 
+/**
+ * 设置大类 Surface（只登记了 tab、没有 sectionId）覆盖该大类下的全部分区：
+ * 设置弹窗按当前可见分区标注 Surface，观察大类时任一分区可见都算命中。
+ */
+function isSettingsTabSurfaceOf(surfaceId: string, registeredId: string): boolean {
+  const tab = getApplicationSurface(surfaceId)?.settingsTarget
+  if (!tab || tab.sectionId) return false
+  return getApplicationSurface(registeredId)?.settingsTarget?.tab === tab.tab
+}
+
 function findVisibleSurface(surfaceId: string): Element | null {
   return [...document.querySelectorAll('[data-application-surface-id]')].find((element) => {
     const registeredId = element.getAttribute('data-application-surface-id') ?? ''
-    const matches = registeredId === surfaceId
-      || (surfaceId === 'settings.general' && registeredId.startsWith('settings.general.'))
-      || (surfaceId === 'settings.interface' && registeredId.startsWith('settings.interface.'))
+    const matches = registeredId === surfaceId || isSettingsTabSurfaceOf(surfaceId, registeredId)
     if (!matches) return false
     const rect = element.getBoundingClientRect()
     const style = window.getComputedStyle(element)

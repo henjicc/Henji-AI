@@ -10,9 +10,9 @@ const WRITE_TOOLS = ['change_application_entities', 'create_visible_generation_t
 
 function createMcpScenes({ setupSettings, canvasFixtureProjectId }) {
   const setSwitch = async (page, index, value) => {
-    const control = page.locator('#general-mcp').getByRole('switch').nth(index)
+    const control = page.locator('#assistant-mcp').getByRole('switch').nth(index)
     if ((await control.getAttribute('aria-checked')) !== String(value)) await control.click()
-    await page.waitForFunction(({ index, value }) => document.querySelectorAll('#general-mcp [role="switch"]')[index]?.getAttribute('aria-checked') === String(value), { index, value })
+    await page.waitForFunction(({ index, value }) => document.querySelectorAll('#assistant-mcp [role="switch"]')[index]?.getAttribute('aria-checked') === String(value), { index, value })
   }
   /** 进场前的默认授权快照；收尾要原样还回去。 */
   const captureDefaultAccess = (page) => page.evaluate(async () => (await window.henjiNative.mcp.status()).defaultAccess)
@@ -67,7 +67,7 @@ function createMcpScenes({ setupSettings, canvasFixtureProjectId }) {
       const initial = await page.evaluate(() => window.henjiNative.mcp.status())
       const enteringAccess = initial.defaultAccess
       assert.deepEqual(initial.defaultAccess, { allowWrites: true, allowDestructive: true, allowPaid: true })
-      const section = page.locator('#general-mcp')
+      const section = page.locator('#assistant-mcp')
       if (!initial.enabled) await section.getByRole('switch').first().click()
       await setSwitch(page, 1, false)
       await page.keyboard.press('Escape')
@@ -128,14 +128,14 @@ function createMcpScenes({ setupSettings, canvasFixtureProjectId }) {
       }
       await setupSettings(page)
       await page.getByRole('button', { name: '外部智能体连接', exact: true }).click()
-      await page.locator('#general-mcp').scrollIntoViewIfNeeded()
+      await page.locator('#assistant-mcp').scrollIntoViewIfNeeded()
       await page.waitForTimeout(350)
     },
   }, { id: 'mcp-write-recovery', surface: '设置', name: '外部连接-受控写入与事实保留', writesUserData: true,
     setup: async (page) => {
       await setupSettings(page)
       await page.getByRole('button', { name: '外部智能体连接', exact: true }).click()
-      const section = page.locator('#general-mcp')
+      const section = page.locator('#assistant-mcp')
       const enteringAccess = await captureDefaultAccess(page)
       await setSwitch(page, 0, true)
       await setSwitch(page, 1, true)
@@ -229,13 +229,13 @@ function createMcpScenes({ setupSettings, canvasFixtureProjectId }) {
       }
       await setupSettings(page)
       await page.getByRole('button', { name: '外部智能体连接', exact: true }).click()
-      await page.locator('#general-mcp').scrollIntoViewIfNeeded()
+      await page.locator('#assistant-mcp').scrollIntoViewIfNeeded()
     },
   }, { id: 'mcp-background-crossdomain', surface: '设置', name: '外部连接-后台任务与跨域保存', writesUserData: true,
     setup: async (page) => {
       await setupSettings(page)
       await page.getByRole('button', { name: '外部智能体连接', exact: true }).click()
-      const section = page.locator('#general-mcp')
+      const section = page.locator('#assistant-mcp')
       const enteringAccess = await captureDefaultAccess(page)
       // 只开「修改」，不开删除、不开付费生成：本场景禁止任何供应商请求。
       await setSwitch(page, 0, true)
@@ -341,7 +341,7 @@ function createMcpScenes({ setupSettings, canvasFixtureProjectId }) {
       }
       await setupSettings(page)
       await page.getByRole('button', { name: '外部智能体连接', exact: true }).click()
-      await page.locator('#general-mcp').scrollIntoViewIfNeeded()
+      await page.locator('#assistant-mcp').scrollIntoViewIfNeeded()
       await page.waitForTimeout(350)
     },
   }]

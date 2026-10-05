@@ -1,7 +1,6 @@
 import React from 'react'
-import Dropdown from '@/components/ui/Dropdown'
 import { UiFormRow, UiSwitch } from '@/components/ui'
-import { SETTINGS_INLINE_CONTROL_CLASS } from '../settingsLayout'
+import SettingsSegmented from '../components/SettingsSegmented'
 import { useUploadSettings } from '../hooks/useUploadSettings'
 import { UPLOAD_PROVIDERS, type UploadProvider } from '@/core/config/providers'
 import { useI18n } from '@/hooks/useI18n'
@@ -23,12 +22,11 @@ const UploadSection: React.FC = () => {
         hint={t('sections.upload.description')}
         inline
       >
-        <Dropdown
+        <SettingsSegmented<UploadProvider>
           value={provider}
-          display={options.find(option => option.value === provider)?.label}
           options={options}
-          onSelect={(value) => setProvider(value as UploadProvider)}
-          className={SETTINGS_INLINE_CONTROL_CLASS}
+          onChange={setProvider}
+          ariaLabel={t('sections.upload.providerLabel')}
         />
       </UiFormRow>
 

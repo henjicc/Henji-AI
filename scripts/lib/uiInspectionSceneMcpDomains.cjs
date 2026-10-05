@@ -23,7 +23,7 @@ function createMcpDomainScenes({ setupSettings, canvasFixtureProjectId, REFERENC
   const returnToSettings = async (page) => {
     await setupSettings(page)
     await page.getByRole('button', { name: '外部智能体连接', exact: true }).click()
-    await page.locator('#general-mcp').scrollIntoViewIfNeeded()
+    await page.locator('#assistant-mcp').scrollIntoViewIfNeeded()
     await page.waitForTimeout(300)
   }
 

@@ -40,7 +40,7 @@ export function ensureGenerationProviderConfigured(
     title: messages.title,
     message: messages.message,
     type: 'info',
-    settingsTarget: { tab: 'models', sectionId: 'models-providers' },
+    settingsTarget: { tab: 'providers', sectionId: 'providers' },
   })
   throw new Error(messages.error)
 }

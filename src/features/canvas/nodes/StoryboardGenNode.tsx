@@ -71,7 +71,7 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
   const projectId = useProjectStore(state => state.currentProjectId)
   useEffect(() => projectId ? attachCanvasGenerationFeedback(projectId, id, () => undefined, () => showAlertDialog({
     title: t('common:providerKeyRequired.title'), message: t('common:providerKeyRequired.message'),
-    type: 'info', settingsTarget: { tab: 'models', sectionId: 'models-providers' },
+    type: 'info', settingsTarget: { tab: 'providers', sectionId: 'providers' },
   }), setError) : undefined, [projectId, id, t])
   const resolvedTitle = useMemo(
     () => resolveNodeDisplayName(CANVAS_NODE_TYPES.storyboardGen, nodeData),

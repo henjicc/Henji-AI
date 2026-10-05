@@ -1,5 +1,6 @@
 import React from 'react'
-import { UI_SEGMENTED_TRACK_CLASS, UiFormRow, UiOptionButton, UiRangeInput } from '@/components/ui'
+import { UiFormRow, UiRangeInput } from '@/components/ui'
+import SettingsSegmented from '../components/SettingsSegmented'
 import { SETTINGS_INLINE_CONTROL_CLASS } from '../settingsLayout'
 import SettingsDependentRows from '../components/SettingsDependentRows'
 import { useI18n } from '@/hooks/useI18n'
@@ -42,21 +43,12 @@ const BottomPanelSection: React.FC<BottomPanelSectionProps> = ({
   return (
     <>
       <UiFormRow label={t('sections.interface.autoCollapseLabel')} info={t('sections.interface.autoCollapseHint')} inline>
-        <div role="radiogroup" aria-label={t('sections.interface.autoCollapseLabel')} className={UI_SEGMENTED_TRACK_CLASS}>
-          {modes.map((item) => (
-            <UiOptionButton
-              key={item}
-              type="button"
-              variant="segment"
-              role="radio"
-              aria-checked={mode === item}
-              active={mode === item}
-              onClick={() => selectMode(item)}
-            >
-              {t(`sections.interface.autoCollapseModes.${item}`)}
-            </UiOptionButton>
-          ))}
-        </div>
+        <SettingsSegmented
+          value={mode}
+          options={modes.map((item) => ({ value: item, label: t(`sections.interface.autoCollapseModes.${item}`) }))}
+          onChange={selectMode}
+          ariaLabel={t('sections.interface.autoCollapseLabel')}
+        />
       </UiFormRow>
 
       <SettingsDependentRows open={mode === 'scrollOrLeave'}>

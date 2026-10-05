@@ -22,7 +22,7 @@
       {
         "click": {
           "role": "button",
-          "name": "更新维护",
+          "name": "关于与更新",
           "exact": true,
           "within": {
             "role": "navigation",
@@ -90,7 +90,7 @@
       {
         "click": {
           "role": "button",
-          "name": "助手用户指令",
+          "name": "用户指令",
           "exact": true,
           "within": {
             "role": "navigation",

@@ -4,7 +4,7 @@ import {
   APPLICATION_SURFACE_IDS,
   resolveSurfaceObservationProfile,
 } from '@/core/application-control/applicationSurfaces'
-import { SETTINGS_SECTION_IDS } from '@/core/types/settingsNavigation'
+import { SETTINGS_SECTION_IDS, SETTINGS_TAB_IDS, SETTINGS_TAB_SECTIONS } from '@/core/types/settingsNavigation'
 import {
   decideSurfacePresentation,
   getApplicationSurface,
@@ -44,13 +44,10 @@ describe('surface presentation policy', () => {
   })
 
   it('每个设置分区都能解析出专属 Surface，且大类不会串到无关分区', () => {
-    const resolved = SETTINGS_SECTION_IDS.map((sectionId) => {
-      const tab = sectionId.startsWith('general-')
-        ? 'general' as const
-        : sectionId.startsWith('assistant-') ? 'assistant' as const
-          : sectionId.startsWith('interface-') ? 'interface' as const : 'models' as const
-      return { sectionId, surfaceId: resolveSettingsSurfaceId(tab, sectionId) }
-    })
+    const resolved = SETTINGS_TAB_IDS.flatMap((tab) => SETTINGS_TAB_SECTIONS[tab].map((sectionId) => (
+      { sectionId, surfaceId: resolveSettingsSurfaceId(tab, sectionId) }
+    )))
+    expect(resolved.map((item) => item.sectionId)).toEqual(SETTINGS_SECTION_IDS)
     for (const item of resolved) {
       expect(item.surfaceId, item.sectionId).not.toBeNull()
       expect(getApplicationSurface(item.surfaceId ?? '')?.settingsTarget?.sectionId, item.sectionId)
@@ -58,9 +55,12 @@ describe('surface presentation policy', () => {
     }
     expect(new Set(resolved.map((item) => item.surfaceId)).size).toBe(resolved.length)
     expect(resolveSettingsSurfaceId('general')).toBe('settings.general')
-    expect(resolveSettingsSurfaceId('interface')).toBe('settings.interface')
-    expect(resolveSettingsSurfaceId('models')).toBe('settings.providers_models')
-    expect(resolveSettingsSurfaceId('assistant')).toBe('settings.assistant_preferences')
+    expect(resolveSettingsSurfaceId('workspace')).toBe('settings.workspace')
+    expect(resolveSettingsSurfaceId('files')).toBe('settings.files')
+    expect(resolveSettingsSurfaceId('assistant')).toBe('settings.assistant')
+    // 只有一个分区的大类没有单独的大类 Surface，退回那个分区
+    expect(resolveSettingsSurfaceId('providers')).toBe('settings.providers_models')
+    expect(resolveSettingsSurfaceId('skills')).toBe('settings.assistant_skills')
   })
 
   it('立即展示普通工作区和设置 Surface', () => {
@@ -68,7 +68,7 @@ describe('surface presentation policy', () => {
       surfaceId: 'workspace.generation', hasStableTarget: false, alreadyActive: false, userTookOver: false,
     })).toBe('show_now')
     expect(decideSurfacePresentation({
-      surfaceId: 'settings.interface', hasStableTarget: false, alreadyActive: false, userTookOver: false,
+      surfaceId: 'settings.workspace', hasStableTarget: false, alreadyActive: false, userTookOver: false,
     })).toBe('show_now')
   })
 

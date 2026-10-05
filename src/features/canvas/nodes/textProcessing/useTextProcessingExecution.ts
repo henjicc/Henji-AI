@@ -17,6 +17,6 @@ export function useTextProcessingExecution({ nodeId, setPromptInvalid }: {
     invalid => latest.current.setPromptInvalid(invalid), () => showAlertDialog({
       title: latest.current.t('common:error'),
       message: latest.current.t('node.textProcessing.noModelConfigured'),
-      type: 'warning', settingsTarget: { tab: 'models', sectionId: 'models-providers' },
+      type: 'warning', settingsTarget: { tab: 'providers', sectionId: 'providers' },
     })) : undefined, [projectId, nodeId])
 }

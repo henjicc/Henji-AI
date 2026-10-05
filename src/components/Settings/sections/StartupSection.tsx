@@ -1,7 +1,6 @@
 import React from 'react'
-import Dropdown from '@/components/ui/Dropdown'
 import { UiFormRow } from '@/components/ui'
-import { SETTINGS_INLINE_CONTROL_CLASS } from '../settingsLayout'
+import SettingsSegmented from '../components/SettingsSegmented'
 import { useI18n } from '@/hooks/useI18n'
 import { STARTUP_WORKSPACE_IDS, type StartupWorkspaceId } from '@/core/types/workspace'
 import { useSettingsStore } from '@/stores/settingsStore'
@@ -22,12 +21,11 @@ const StartupSection: React.FC = () => {
       info={t('sections.interface.startupWorkspaceHint')}
       inline
     >
-      <Dropdown
+      <SettingsSegmented<StartupWorkspaceId>
         value={startupWorkspace}
         options={options}
-        display={options.find((option) => option.value === startupWorkspace)?.label}
-        onSelect={(value) => setStartupWorkspace(value as StartupWorkspaceId)}
-        className={SETTINGS_INLINE_CONTROL_CLASS}
+        onChange={setStartupWorkspace}
+        ariaLabel={t('sections.interface.startupWorkspaceLabel')}
       />
     </UiFormRow>
   )

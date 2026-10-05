@@ -59,7 +59,6 @@ describe('AboutSection', () => {
     loadNotices.mockResolvedValue(notices)
     render(<AboutSection />)
 
-    expect(screen.getByText('痕迹AI')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: /痕继痕迹/ }))
     expect(openExternal).toHaveBeenCalledWith('https://space.bilibili.com/39337803')
     fireEvent.click(screen.getByRole('button', { name: /github\.com\/henjicc\/Henji-AI/ }))

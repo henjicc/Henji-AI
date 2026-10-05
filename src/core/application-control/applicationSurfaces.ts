@@ -1,11 +1,12 @@
 export const APPLICATION_SURFACE_IDS = [
   'workspace.generation', 'workspace.canvas', 'workspace.video_edit', 'workspace.tools', 'workspace.assets',
   'tool.image_edit', 'tool.camera_stage', 'tool.audio_edit',
-  'settings.general', 'settings.general.basic', 'settings.general.onboarding', 'settings.storage', 'settings.providers_models', 'settings.upload',
-  'settings.general.behavior', 'settings.general.maintenance', 'settings.general.mcp', 'settings.general.about',
-  'settings.models.assistant', 'settings.assistant_preferences', 'settings.assistant_skills',
-  'settings.interface', 'settings.interface.layout', 'settings.interface.theme',
-  'settings.interface.assets', 'settings.interface.canvas', 'overlay.assets', 'overlay.assistant',
+  'settings.general', 'settings.general.basic', 'settings.general.view', 'settings.general.appearance', 'settings.general.about',
+  'settings.providers_models',
+  'settings.workspace', 'settings.workspace.generation', 'settings.workspace.canvas', 'settings.workspace.assets',
+  'settings.files', 'settings.storage', 'settings.upload', 'settings.files.download',
+  'settings.assistant', 'settings.assistant.models', 'settings.assistant_preferences', 'settings.assistant.mcp',
+  'settings.assistant_skills', 'overlay.assets', 'overlay.assistant',
 ] as const
 
 export type ApplicationSurfaceId = (typeof APPLICATION_SURFACE_IDS)[number]

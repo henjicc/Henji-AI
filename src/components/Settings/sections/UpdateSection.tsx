@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
-import { UI_SEGMENTED_TRACK_CLASS, UI_TEXT_META_CLASS, UiButton, UiFormRow, UiOptionButton } from '@/components/ui'
+import { UI_TEXT_META_CLASS, UiButton, UiFormRow } from '@/components/ui'
 import SettingsDialog from '../components/SettingsDialog'
+import SettingsSegmented from '../components/SettingsSegmented'
 import { useUpdateConfig } from '../hooks/useUpdateConfig'
 import { useExternalLink } from '../hooks/useExternalLink'
 import { useI18n } from '@/hooks/useI18n'
@@ -78,28 +79,6 @@ const UpdateSection: React.FC = () => {
 
   return (
     <>
-      {/*
-        开关与频率合成一项：原来开关是一个"关"，频率里的「从不」又是一个"关"。
-        存储仍是 enabled + frequency 两个维度（助手按这两项读写），这里只是合并呈现。
-      */}
-      <UiFormRow label={t('sections.updates.autoCheckLabel')} info={t('sections.updates.autoCheckHint')} inline>
-        <div role="radiogroup" aria-label={t('sections.updates.autoCheckLabel')} className={UI_SEGMENTED_TRACK_CLASS}>
-          {frequencies.map((freq) => (
-            <UiOptionButton
-              key={freq}
-              type="button"
-              variant="segment"
-              role="radio"
-              aria-checked={activeFrequency === freq}
-              active={activeFrequency === freq}
-              onClick={() => selectFrequency(freq)}
-            >
-              {t(`sections.updates.frequency.${freq}`)}
-            </UiOptionButton>
-          ))}
-        </div>
-      </UiFormRow>
-
       <UiFormRow label={t('sections.updates.currentVersionLabel')} inline>
         <span className={`font-mono ${UI_TEXT_META_CLASS}`}>{currentVersion}</span>
         <UiButton
@@ -109,6 +88,19 @@ const UpdateSection: React.FC = () => {
         >
           {isChecking ? t('actions.checking') : t('actions.checkUpdate')}
         </UiButton>
+      </UiFormRow>
+
+      {/*
+        开关与频率合成一项：原来开关是一个"关"，频率里的「从不」又是一个"关"。
+        存储仍是 enabled + frequency 两个维度（助手按这两项读写），这里只是合并呈现。
+      */}
+      <UiFormRow label={t('sections.updates.autoCheckLabel')} info={t('sections.updates.autoCheckHint')} inline>
+        <SettingsSegmented
+          value={activeFrequency}
+          options={frequencies.map((freq) => ({ value: freq, label: t(`sections.updates.frequency.${freq}`) }))}
+          onChange={selectFrequency}
+          ariaLabel={t('sections.updates.autoCheckLabel')}
+        />
       </UiFormRow>
 
       {/* 没有忽略过任何版本时这一行没有可做的事，不显示 */}

@@ -164,7 +164,7 @@ export function useTaskGeneration({
       title: messages.providerKeyRequiredTitle,
       message: messages.providerKeyRequiredMessage,
       type: 'info',
-      settingsTarget: { tab: 'models', sectionId: 'models-providers' },
+      settingsTarget: { tab: 'providers', sectionId: 'providers' },
     })
   }, [messages.providerKeyRequiredMessage, messages.providerKeyRequiredTitle])
 

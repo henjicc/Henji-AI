@@ -4,22 +4,21 @@
   "language": "语言",
   "theme": "主题",
   "navSections": {
-    "general-basic": "基础设置",
-    "general-onboarding": "默认项与首次设置",
-    "general-storage": "数据与下载",
-    "general-behavior": "行为与并发",
-    "general-maintenance": "更新维护",
-    "general-mcp": "外部智能体连接",
-    "general-about": "关于",
-    "models-providers": "供应商与模型",
-    "models-assistant": "助手模型",
-    "models-upload": "上传策略",
-    "assistant-preferences": "助手用户指令",
-    "assistant-skills": "助手技能",
-    "interface-layout": "布局行为",
-    "interface-assets": "资产库",
-    "interface-canvas": "画布",
-    "interface-theme": "主题外观"
+    "general-basic": "语言与启动",
+    "general-view": "查看与快捷键",
+    "general-appearance": "外观",
+    "general-about": "关于与更新",
+    "providers": "供应商与模型",
+    "workspace-generation": "生成",
+    "workspace-canvas": "画布",
+    "workspace-assets": "资产库",
+    "files-storage": "数据目录",
+    "files-upload": "上传",
+    "files-download": "下载",
+    "assistant-models": "助手模型",
+    "assistant-preferences": "用户指令",
+    "assistant-mcp": "外部智能体连接",
+    "assistant-skills": "助手技能"
   },
   "apiKeys": {
     "title": "API 密钥设置",
@@ -245,33 +244,22 @@
   },
   "tabs": {
     "general": {
-      "label": "通用",
-      "title": "通用设置",
-      "description": "配置应用的基本设置和行为。",
-      "showPriceEstimate": {
-        "label": "显示价格估算",
-        "description": "在生成前显示预估价格"
-      },
-      "maxConcurrentTasks": {
-        "label": "最大并发任务数",
-        "description": "同时运行的最大任务数"
-      }
+      "label": "通用"
     },
-    "api": {
-      "label": "密钥"
+    "providers": {
+      "label": "供应商与模型"
+    },
+    "workspace": {
+      "label": "工作区"
+    },
+    "files": {
+      "label": "文件与下载"
     },
     "assistant": {
-      "label": "助手"
+      "label": "智能助手"
     },
-    "interface": {
-      "label": "界面",
-      "title": "界面设置",
-      "description": "自定义应用的外观和交互行为。"
-    },
-    "models": {
-      "label": "模型",
-      "title": "模型设置",
-      "description": "统一管理供应商、密钥和全部模型。"
+    "skills": {
+      "label": "助手技能"
     }
   },
   "sections": {
@@ -312,7 +300,13 @@
       "autoFocusLabel": "模型面板自动聚焦搜索框",
       "autoFocusHint": "打开模型选择面板时自动聚焦到搜索输入框"
     },
+    "generation": {
+      "taskGroup": "任务与价格",
+      "inputGroup": "输入与面板"
+    },
     "canvas": {
+      "displayGroup": "显示与节点",
+      "storyboardGroup": "分镜与提示词",
       "title": "画布行为",
       "autoInsertTextDisplayLabel": "自动插入文本展示",
       "autoInsertTextDisplayHint": "连接文本处理节点到生成节点时，通过一个共享、可编辑的文本展示节点中转。已有连线不会被改写。",
@@ -351,7 +345,7 @@
       "pathLabel": "快速下载保存路径",
       "pathPlaceholder": "选择保存目录",
       "pathHint": "所有快速下载的文件将保存到此目录",
-      "presetPathsLabel": "下载预设路径",
+      "presetPathsLabel": "常用保存位置",
       "presetPathsHint": "画布节点的下载菜单里会列出这些目录，一键保存过去；与快速下载相互独立",
       "presetPathsAdd": "添加目录",
       "presetPathsCount": "已添加 {{count}} / {{limit}}",
@@ -381,7 +375,6 @@
       }
     },
     "about": {
-      "productName": "痕迹AI",
       "authorLabel": "作者",
       "homepageLabel": "项目主页",
       "licenseLabel": "开源协议",
@@ -450,7 +443,7 @@
       "edgeTrigger": "允许鼠标或拖拽触边唤起",
       "edgeHint": "关闭时仅点击标题栏的资产入口才会打开；开启后，鼠标停留或拖拽到指定窗口边缘也会打开。",
       "triggerEdge": "触发边缘",
-      "delay": "触发延迟（{{value}} ms）"
+      "delay": "唤起前等待（{{value}} 秒）"
     },
     "theme": {
       "title": "主题外观",
@@ -498,7 +491,7 @@
     "largeUpload": {
       "title": "大文件处理",
       "description": "上传本地视频/音频时，100MB 及以下的文件总是复制到数据目录；超过 100MB 的文件按此策略处理。",
-      "strategyLabel": "超过 100MB 时",
+      "strategyLabel": "大文件（超过 100MB）",
       "options": {
         "ask": "每次询问",
         "copy": "复制到数据目录",
@@ -509,8 +502,8 @@
     "upload": {
       "title": "通用文件上传服务",
       "description": "为魔搭、派欧云等不具备原生文件上传功能的模型提供文件托管服务。",
-      "providerLabel": "默认上传提供商",
-      "fallbackLabel": "启用自动回退",
+      "providerLabel": "文件托管服务",
+      "fallbackLabel": "失败时换用其他服务",
       "fallbackHint": "当首选提供商不可用或上传失败时，尝试使用其他已配置的提供商。",
       "providers": {
         "kie": "KIE",

@@ -1,8 +1,6 @@
 import React from 'react';
-import Dropdown from '@/components/ui/Dropdown';
 import {
   UI_FORM_ROW_GAP_CLASS,
-  UI_SEGMENTED_TRACK_CLASS,
   UiButton,
   UiColorInput,
   UiFormRow,
@@ -11,7 +9,8 @@ import {
   UiOptionButton,
   UiSwitch,
 } from '@/components/ui';
-import { SETTINGS_INLINE_CONTROL_CLASS } from '../settingsLayout';
+import SettingsSegmented from '../components/SettingsSegmented';
+import UiScaleSection from './UiScaleSection';
 import { useI18n } from '@/hooks/useI18n';
 import type { UiRadiusPreset } from '@/core/theme/runtimeTheme';
 import {
@@ -226,32 +225,24 @@ const ThemeSection: React.FC<ThemeSectionProps> = ({ onExportTheme, onImportThem
 
       <div className={UI_FORM_ROW_GAP_CLASS}>
         <UiFormRow label={t('sections.theme.contrast.label')} info={t('sections.theme.contrast.info')} inline>
-          <div role="radiogroup" aria-label={t('sections.theme.contrast.label')} className={UI_SEGMENTED_TRACK_CLASS}>
-            {THEME_CONTRAST_LEVEL_IDS.map((level) => (
-              <UiOptionButton
-                key={level}
-                type="button"
-                variant="segment"
-                role="radio"
-                aria-checked={selection.contrast === level}
-                active={selection.contrast === level}
-                onClick={() => setThemeContrast(level)}
-              >
-                {contrastLabels[level]}
-              </UiOptionButton>
-            ))}
-          </div>
+          <SettingsSegmented<ThemeContrastLevel>
+            value={selection.contrast}
+            options={THEME_CONTRAST_LEVEL_IDS.map((level) => ({ value: level, label: contrastLabels[level] }))}
+            onChange={setThemeContrast}
+            ariaLabel={t('sections.theme.contrast.label')}
+          />
         </UiFormRow>
 
         <UiFormRow label={t('sections.theme.radius.label')} inline>
-          <Dropdown
+          <SettingsSegmented<UiRadiusPreset>
             value={uiRadiusPreset}
             options={radiusOptions}
-            display={radiusOptions.find((option) => option.value === uiRadiusPreset)?.label}
-            onSelect={(value) => setUiRadiusPreset(value as UiRadiusPreset)}
-            className={SETTINGS_INLINE_CONTROL_CLASS}
+            onChange={setUiRadiusPreset}
+            ariaLabel={t('sections.theme.radius.label')}
           />
         </UiFormRow>
+
+        <UiScaleSection />
 
         {/* 常驻说明：关掉不只是"没模糊"，还会少一层合成开销，是有取舍的选择 */}
         <UiFormRow

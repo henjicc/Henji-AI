@@ -84,7 +84,7 @@ export function EmbeddedConversation(): JSX.Element {
   }, [modelsLoaded, pendingGoal, selectedModel, send, submitting])
   const isEmpty = !state.messages.length && !state.sendingMessage && !optimistic && !state.pendingMessages?.length
   const needsModel = modelsLoaded && models.length === 0
-  const openModelSettings = (): void => useUiStore.getState().openSettings({ tab: 'models', sectionId: 'models-assistant' })
+  const openModelSettings = (): void => useUiStore.getState().openSettings({ tab: 'assistant', sectionId: 'assistant-models' })
   /*
    * 失败后重试：完全复用发送链路，把上一条用户消息（原文与附件）按“等待”语义重新提交一次，不新增运行时协议；
    * 不清空输入框里正在写的草稿。只在最后一轮还没有任何结论时提供——已有结论说明这轮已经答完，错误来自别的操作。

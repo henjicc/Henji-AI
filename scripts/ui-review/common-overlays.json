@@ -517,7 +517,7 @@
     "steps": [
       {
         "enter": {
-          "surface": "settings.general.onboarding"
+          "surface": "settings.general.basic"
         }
       },
       {

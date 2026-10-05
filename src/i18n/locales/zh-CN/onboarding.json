@@ -129,8 +129,8 @@
   "settings": {
     "primaryProvider": "默认供应商",
     "primaryProviderHint": "新建节点时优先使用这个供应商；如果它不提供某类模型，会回退到其他可用供应商。",
-    "defaultsTitle": "新节点默认项",
-    "defaultsDescription": "默认模型按图片、视频和音频分别设置。相同模型在不同供应商之间会自动对应。",
+    "defaultsTitle": "默认模型",
+    "defaultsDescription": "新建生成任务和画布节点时使用。图片、视频、音频分别设置，同一模型在不同供应商之间会自动对应。",
     "defaultModelHint": "保存的是模型本身，而不是某个供应商的接口。留空时由当前默认供应商自动选择。",
     "defaultModels": {
       "image": "默认图片模型",

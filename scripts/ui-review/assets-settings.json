@@ -1008,7 +1008,7 @@
   {
     "id": "review-settings-general",
     "surface": "设置",
-    "name": "核对-设置外壳与通用大类（基础、首次设置、数据与下载、行为、更新维护、外部连接、关于与许可）",
+    "name": "核对-设置外壳与通用、工作区、文件与下载、外部连接、关于与更新",
     "checklist": [
       "A07.1",
       "A07.2",
@@ -1091,7 +1091,7 @@
       {
         "click": {
           "role": "button",
-          "name": "默认项与首次设置",
+          "name": "工作区",
           "exact": true,
           "within": {
             "role": "navigation",
@@ -1106,12 +1106,12 @@
         "waitStable": {}
       },
       {
-        "capture": "onboarding"
+        "capture": "workspace-generation"
       },
       {
         "click": {
           "role": "button",
-          "name": "数据与下载",
+          "name": "画布",
           "exact": true,
           "within": {
             "role": "navigation",
@@ -1126,12 +1126,12 @@
         "waitStable": {}
       },
       {
-        "capture": "storage"
+        "capture": "workspace-canvas"
       },
       {
         "click": {
           "role": "button",
-          "name": "行为与并发",
+          "name": "文件与下载",
           "exact": true,
           "within": {
             "role": "navigation",
@@ -1146,12 +1146,12 @@
         "waitStable": {}
       },
       {
-        "capture": "behavior"
+        "capture": "files"
       },
       {
         "click": {
           "role": "button",
-          "name": "更新维护",
+          "name": "下载",
           "exact": true,
           "within": {
             "role": "navigation",
@@ -1166,7 +1166,7 @@
         "waitStable": {}
       },
       {
-        "capture": "maintenance"
+        "capture": "files-download"
       },
       {
         "click": {
@@ -1235,7 +1235,7 @@
       },
       {
         "click": {
-          "selector": "#general-mcp [role=\"switch\"]",
+          "selector": "#assistant-mcp [role=\"switch\"]",
           "nth": 0
         }
       },
@@ -1250,7 +1250,7 @@
       },
       {
         "click": {
-          "selector": "#general-mcp [role=\"switch\"]",
+          "selector": "#assistant-mcp [role=\"switch\"]",
           "nth": 0
         }
       },
@@ -1260,7 +1260,7 @@
       {
         "click": {
           "role": "button",
-          "name": "关于",
+          "name": "关于与更新",
           "exact": true,
           "within": {
             "role": "navigation",
@@ -1346,7 +1346,7 @@
   {
     "id": "review-settings-models",
     "surface": "设置",
-    "name": "核对-设置模型大类（供应商与密钥、模型列表与可见性、助手模型、上传策略、别名、LLM 弹窗）",
+    "name": "核对-设置供应商与模型（供应商与密钥、模型列表与可见性、助手模型、上传、LLM 弹窗）",
     "checklist": [
       "A14.1",
       "A14.2",
@@ -1580,7 +1580,7 @@
       {
         "click": {
           "role": "button",
-          "name": "上传策略",
+          "name": "上传",
           "exact": true,
           "within": {
             "role": "navigation",
@@ -1596,33 +1596,13 @@
       },
       {
         "capture": "upload"
-      },
-      {
-        "click": {
-          "role": "button",
-          "name": "别名",
-          "exact": true,
-          "within": {
-            "role": "navigation",
-            "name": "设置"
-          }
-        }
-      },
-      {
-        "wait": 500
-      },
-      {
-        "waitStable": {}
-      },
-      {
-        "capture": "alias"
       }
     ]
   },
   {
     "id": "review-settings-assistant-interface",
     "surface": "设置",
-    "name": "核对-设置助手与界面大类（用户指令、技能、布局行为与剪辑快捷键、资产库、画布、主题）",
+    "name": "核对-设置助手、外观与工作区（用户指令、技能、外观与界面缩放、剪辑快捷键、资产库、画布）",
     "checklist": [
       "A18.1",
       "A18.3",
@@ -1666,7 +1646,7 @@
       {
         "click": {
           "role": "button",
-          "name": "布局行为",
+          "name": "外观",
           "exact": true,
           "within": {
             "role": "navigation",
@@ -1681,7 +1661,7 @@
         "waitStable": {}
       },
       {
-        "capture": "layout"
+        "capture": "appearance"
       },
       {
         "open": {
@@ -1693,13 +1673,30 @@
         "waitStable": {}
       },
       {
-        "capture": "layout-menu"
+        "capture": "appearance-scale"
       },
       {
         "press": "Escape"
       },
       {
         "wait": 400
+      },
+      {
+        "wait": 400
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "查看与快捷键",
+          "exact": true,
+          "within": {
+            "role": "navigation",
+            "name": "设置"
+          }
+        }
+      },
+      {
+        "wait": 500
       },
       {
         "click": {
@@ -1776,7 +1773,7 @@
       {
         "click": {
           "role": "button",
-          "name": "主题外观",
+          "name": "外观",
           "exact": true,
           "within": {
             "role": "navigation",

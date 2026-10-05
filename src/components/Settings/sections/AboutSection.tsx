@@ -10,7 +10,6 @@ import {
   UiOptionButton,
 } from '@/components/ui'
 import { useI18n } from '@/hooks/useI18n'
-import { getCurrentVersion } from '@/services/updateChecker'
 import { useExternalLink } from '../hooks/useExternalLink'
 import {
   ABOUT_AUTHOR_NAME,
@@ -55,10 +54,7 @@ const AboutSection: React.FC = () => {
 
   return (
     <>
-      <UiFormRow label={t('sections.about.productName')} inline>
-        <span className={`font-mono ${UI_TEXT_META_CLASS}`}>{getCurrentVersion()}</span>
-      </UiFormRow>
-
+      {/* 当前版本由同一分节上方的「当前版本 / 检查更新」那一行展示，这里不再重复一行 */}
       <UiFormRow label={t('sections.about.authorLabel')} inline>
         <UiButton type="button" className="-mr-3 gap-1.5" onClick={() => void openExternal(ABOUT_AUTHOR_URL)}>
           {ABOUT_AUTHOR_NAME}

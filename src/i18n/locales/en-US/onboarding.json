@@ -129,8 +129,8 @@
   "settings": {
     "primaryProvider": "Default provider",
     "primaryProviderHint": "New nodes prefer this provider. If it has no model for a media type, Henji AI falls back to another available provider.",
-    "defaultsTitle": "Defaults for new nodes",
-    "defaultsDescription": "Choose separate default models for images, video, and audio. The same model is matched automatically across providers.",
+    "defaultsTitle": "Default models",
+    "defaultsDescription": "Used for new generation tasks and canvas nodes. Set images, video and audio separately; the same model is matched automatically across providers.",
     "defaultModelHint": "This saves the model itself, not a provider-specific endpoint. Leave it unset to let the default provider choose.",
     "defaultModels": {
       "image": "Default image model",

@@ -141,7 +141,7 @@ const ProviderCenterModelList = ({
               </div>
               <div className="flex min-w-0 flex-wrap gap-1.5">
                 {model.capabilityIds.slice(0, 4).map(capability => (
-                  // 与同一分区里的类型徽标（ModelTypeBadge）同一写法：中性 raised 浅底、圆角 4、12 号次要文字
+                  // 能力徽标：中性 raised 浅底、圆角 4、12 号次要文字
                   <span key={capability} className="shrink-0 rounded bg-raised px-2 py-0.5 text-xs text-text2">
                     {t(`providerCenter.capabilities.${capability}`, { defaultValue: capability })}
                   </span>

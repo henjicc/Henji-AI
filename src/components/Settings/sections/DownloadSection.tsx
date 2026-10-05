@@ -10,6 +10,7 @@ import {
   UiSwitch,
 } from '@/components/ui'
 import { useI18n } from '@/hooks/useI18n'
+import SettingsDependentRows from '../components/SettingsDependentRows'
 import { DOWNLOAD_PRESET_PATH_LIMIT, useSettingsStore } from '@/stores/settingsStore'
 
 interface DownloadSectionProps {
@@ -67,46 +68,27 @@ const DownloadSection: React.FC<DownloadSectionProps> = ({
         <UiSwitch checked={enableQuickDownload} onCheckedChange={onToggleQuickDownload} />
       </UiFormRow>
 
-      <UiFormRow
-        label={t('sections.download.buttonOnlyLabel')}
-        info={t('sections.download.buttonOnlyHint')}
-        inline
-        className={enableQuickDownload ? '' : 'opacity-50'}
-        aria-disabled={!enableQuickDownload || undefined}
-      >
-        <UiSwitch
-          checked={quickDownloadButtonOnly}
-          onCheckedChange={onToggleButtonOnly}
-          disabled={!enableQuickDownload}
-        />
-      </UiFormRow>
+      <SettingsDependentRows open={enableQuickDownload}>
+        <UiFormRow label={t('sections.download.pathLabel')} info={t('sections.download.pathHint')}>
+          <div className="flex items-center gap-2">
+            {/* 明文本地路径，观察截图时需要遮罩；密钥类输入自带 password 掩码，无需标注。 */}
+            <UiInput
+              data-observation-sensitive
+              value={quickDownloadPath}
+              onChange={(e) => onChangePath(e.target.value)}
+              placeholder={t('sections.download.pathPlaceholder')}
+              className="flex-1"
+            />
+            <UiButton onClick={handleSelectPath} variant="secondary" className="shrink-0">
+              {t('actions.select')}
+            </UiButton>
+          </div>
+        </UiFormRow>
 
-      <UiFormRow
-        label={t('sections.download.pathLabel')}
-        info={t('sections.download.pathHint')}
-        className={enableQuickDownload ? '' : 'opacity-50'}
-        aria-disabled={!enableQuickDownload || undefined}
-      >
-        <div className="flex items-center gap-2">
-          {/* 明文本地路径，观察截图时需要遮罩；密钥类输入自带 password 掩码，无需标注。 */}
-          <UiInput
-            data-observation-sensitive
-            value={quickDownloadPath}
-            onChange={(e) => onChangePath(e.target.value)}
-            placeholder={t('sections.download.pathPlaceholder')}
-            disabled={!enableQuickDownload}
-            className={`flex-1`}
-          />
-          <UiButton
-            onClick={handleSelectPath}
-            disabled={!enableQuickDownload}
-            variant="secondary"
-            className="shrink-0"
-          >
-            {t('actions.select')}
-          </UiButton>
-        </div>
-      </UiFormRow>
+        <UiFormRow label={t('sections.download.buttonOnlyLabel')} info={t('sections.download.buttonOnlyHint')} inline>
+          <UiSwitch checked={quickDownloadButtonOnly} onCheckedChange={onToggleButtonOnly} />
+        </UiFormRow>
+      </SettingsDependentRows>
 
       {/* 预设路径与快速下载是两件事：前者供画布节点的"保存到…"菜单，关掉快速下载也仍然有效，
           所以这一行不跟随 enableQuickDownload 变灰。 */}
