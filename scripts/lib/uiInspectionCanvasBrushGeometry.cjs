@@ -322,8 +322,8 @@ function createCanvasBrushGeometryScenes(context) {
       // doc-only autosave 合法地保存 previewRef:null；关闭屏障才物化预览，必须重读此时的权威引用。
       const closed = await readDocumentState(page, fixture)
       const nodeState = await page.evaluate(async ({ id, nodeId }) => {
-        const rows = await window.henjiNative.db.select('SELECT nodes_json FROM storyboard_projects WHERE id = ? LIMIT 1', [id])
-        return JSON.parse(rows[0].nodes_json).find((entry) => entry.id === nodeId)?.data?.imageEditSession
+        const stored = await window.henjiNative.testFixtures.readCanvas(id)
+        return (stored?.nodes ?? []).find((entry) => entry.id === nodeId)?.data?.imageEditSession
       }, { id: projectId, nodeId: fixture.nodeId })
       assertClosedDocumentProjection(initial, redone, closed, nodeState, fixture.documentRef)
       const nodePixels = await readPreviewResourcePixels(page, closed.previewRef)

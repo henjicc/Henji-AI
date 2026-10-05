@@ -73,7 +73,7 @@
     {
       "hover": {
         "role": "button",
-        "name": "/^(返回项目|Back to Projects)$/"
+        "name": "/^(返回画布列表|Back to Canvases)$/"
       }
     },
     {

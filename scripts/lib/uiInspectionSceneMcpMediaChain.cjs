@@ -62,12 +62,7 @@ function createMcpMediaChainScenes(context) {
 
       const projectB = crypto.randomUUID()
       await page.evaluate(async (projectId) => {
-        const now = Date.now()
-        await window.henjiNative.storyboardProjects.upsertProjectRecord({
-          id: projectId, name: 'MCP链路后台工程', createdAt: now, updatedAt: now, nodeCount: 0,
-          nodesJson: '[]', edgesJson: '[]', viewportJson: '{"x":0,"y":0,"zoom":1}',
-          historyJson: '{"past":[],"future":[],"imagePool":[]}',
-        })
+        await window.henjiNative.testFixtures.createCanvas({ id: projectId, name: 'MCP链路后台工程', replace: true })
       }, projectB)
 
       // 图片替身产物：每次生成给一份独立副本，避免和原始夹具同路径混淆。
@@ -196,10 +191,11 @@ function createMcpMediaChainScenes(context) {
         const saved = await callTool(client, 'commit_image_edit', operationEnvelope([], { previewRef: previewRef.id, displayName: '链路编辑首帧' }))
         assert.equal(saved.verificationState, 'verified', '素材已保存时必须返回核实成功')
         const assetRef = saved.result.data.resultRefs[0]
-        const projectRef = { kind: 'canvas.project', id: projectB }
+        // 3.4 起画布名就是文档名：跨域整理里的改名落在画布文档（documents.document.name）上
+        const projectRef = { kind: 'documents.document', id: projectB }
         const changed = await callTool(client, 'change_application_entities', operationEnvelope([], {
           summary: '跨工程与素材一起整理', changes: [
-            { kind: 'set_properties', entityType: 'canvas.project', target: projectRef, properties: { 'canvas.project.name': '链路后台工程已整理' } },
+            { kind: 'set_properties', entityType: 'documents.document', target: projectRef, properties: { 'documents.document.name': '链路后台工程已整理' } },
             { kind: 'set_properties', entityType: 'asset', target: assetRef, properties: { 'asset.tags': ['镜头首帧', 'MCP创作', '晨光咖啡馆'] } },
           ],
         }))
@@ -208,7 +204,7 @@ function createMcpMediaChainScenes(context) {
         assert.deepEqual([...assetRead.data.properties['asset.tags']].sort(), ['镜头首帧', 'MCP创作', '晨光咖啡馆'].sort())
         const next = await callTool(client, 'change_application_entities', operationEnvelope([], {
           summary: '再次修改同一工程，确认没有遗留屏障', changes: [
-            { kind: 'set_properties', entityType: 'canvas.project', target: projectRef, properties: { 'canvas.project.name': 'MCP链路后台工程' } },
+            { kind: 'set_properties', entityType: 'documents.document', target: projectRef, properties: { 'documents.document.name': 'MCP链路后台工程' } },
           ],
         }))
         assert.equal(next.verificationState, 'verified')
@@ -222,13 +218,13 @@ function createMcpMediaChainScenes(context) {
 
       // ——— 4. 打开 B：两段结果都在，且视频节点确实拿到了视频 ———
       await setupCanvas(page)
-      await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
+      await page.getByRole('button', { name: /返回画布列表|Back to Canvases/ }).click()
       await settlePage(page, 600)
       await page.locator(`[data-project-id="${projectB}"]:visible`).click()
       await settlePage(page, 1200)
       const stored = await page.evaluate(async (projectId) => {
-        const record = await window.henjiNative.storyboardProjects.getProjectRecord(projectId)
-        const nodes = JSON.parse(record.nodesJson)
+        const record = await window.henjiNative.testFixtures.readCanvas(projectId)
+        const nodes = record.nodes
         return {
           name: record.name,
           images: nodes.filter((node) => typeof node.data?.imageUrl === 'string' && node.data.imageUrl).length,

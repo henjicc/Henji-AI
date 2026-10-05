@@ -38,17 +38,17 @@ async function checkCanvasViewport(page, session, inspection, context, projectId
   if (!(await resetViewport(page, session, { x: 125, y: 95, zoom: original.zoom })).ok) throw new Error('视口交互后无法平移复位')
 
   const expected = await readCanvasState(page)
-  await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
+  await page.getByRole('button', { name: /返回画布列表|Back to Canvases/ }).click()
   await page.locator(`[data-project-id="${projectId}"]`).waitFor()
   const matchesSaved = () => page.evaluate(async ({ projectId, expected }) => {
-    const rows = await window.henjiNative.db.select('SELECT viewport_json FROM storyboard_projects WHERE id = ?', [projectId])
-    const saved = JSON.parse(rows[0]?.viewport_json || '{}')
+    const stored = await window.henjiNative.testFixtures.readCanvas(projectId)
+    const saved = (stored?.viewport ?? {})
     return Math.abs(saved.x - expected.x) < 2 && Math.abs(saved.y - expected.y) < 2 && Math.abs(saved.zoom - expected.zoom) < 0.0001
   }, { projectId, expected })
   const deadline = Date.now() + 3000
   while (!(await matchesSaved()) && Date.now() < deadline) await page.waitForTimeout(100)
   if (!(await matchesSaved())) {
-    const saved = await page.evaluate(async projectId => window.henjiNative.db.select('SELECT viewport_json FROM storyboard_projects WHERE id = ?', [projectId]), projectId)
+    const saved = await page.evaluate(async projectId => window.henjiNative.testFixtures.readCanvas(projectId), projectId)
     throw new Error(`视口保存未匹配：${JSON.stringify({ expected, saved })}`)
   }
   await page.reload({ waitUntil: 'domcontentloaded' })
@@ -60,7 +60,7 @@ async function checkCanvasViewport(page, session, inspection, context, projectId
     const matrix = new DOMMatrixReadOnly(getComputedStyle(element).transform)
     return Math.abs(matrix.m41 - expected.x) < 2 && Math.abs(matrix.m42 - expected.y) < 2 && Math.abs(matrix.a - expected.zoom) < 0.0001
   }, expected, { timeout: 30000 }).catch(async error => {
-    const saved = await page.evaluate(async projectId => window.henjiNative.db.select('SELECT viewport_json FROM storyboard_projects WHERE id = ?', [projectId]), projectId)
+    const saved = await page.evaluate(async projectId => window.henjiNative.testFixtures.readCanvas(projectId), projectId)
     throw new Error(`视口重开未匹配：${JSON.stringify({ original, minimapMoved, expected, saved, actual: await readCanvasState(page) })}；${error.message}`)
   })
   await inspection.capture(`viewport-restored-${original.nodeCount}`)

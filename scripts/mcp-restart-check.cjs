@@ -37,18 +37,13 @@ async function launch(userDataDir, { extraArgs = [] } = {}) {
 
 async function seedCanvasFixture(page, name, tasks) {
   await page.evaluate(async ({ projectId, creativeProjectId, projectName, tasks, mediaPath }) => {
-    const now = Date.now()
     const nodes = []
     const edges = []
     const creativeNodes = ['character', 'shot-one', 'shot-two'].map((id, index) => ({
       id, type: 'textAnnotationNode', position: { x: 800, y: index * 200 },
       data: { displayName: id, content: id === 'character' ? '角色：灰色外套' : `${id}：原始说明` },
     }))
-    await window.henjiNative.storyboardProjects.upsertProjectRecord({
-      id: creativeProjectId, name: '创作续做', createdAt: now, updatedAt: now, nodeCount: creativeNodes.length,
-      nodesJson: JSON.stringify(creativeNodes), edgesJson: '[]', viewportJson: JSON.stringify({ x: 0, y: 0, zoom: 1 }),
-      historyJson: JSON.stringify({ past: [], future: [], imagePool: [] }),
-    })
+    await window.henjiNative.testFixtures.createCanvas({ id: creativeProjectId, name: '创作续做', nodes: creativeNodes, replace: true })
     for (const [kind, taskId] of Object.entries(tasks)) {
       const nodeId = `source-${taskId}`
       const resultId = `result-${taskId}`
@@ -64,16 +59,12 @@ async function seedCanvasFixture(page, name, tasks) {
         params: { __canvasGeneration: { version: 2, projectId, nodeId } }, resultPaths: [], taskId: null, status: 'pending',
         errorMessage: null, cost: null, duration: null })
     }
-    await window.henjiNative.storyboardProjects.upsertProjectRecord({
-      id: projectId, name: projectName, createdAt: now, updatedAt: now, nodeCount: nodes.length,
-      nodesJson: JSON.stringify(nodes), edgesJson: JSON.stringify(edges), viewportJson: JSON.stringify({ x: 0, y: 0, zoom: 1 }),
-      historyJson: JSON.stringify({ past: [], future: [], imagePool: [] }),
-    })
+    await window.henjiNative.testFixtures.createCanvas({ id: projectId, name: projectName, nodes, edges, replace: true })
   }, { projectId: FIXTURE_PROJECT_ID, creativeProjectId: CREATIVE_PROJECT_ID, projectName: name, tasks, mediaPath: path.join(ROOT, 'resources/icons/32x32.png') })
 }
 
 const readHistoryCount = (page) => page.evaluate(() => window.henjiNative.generationHistory.count())
-const readProjectName = (page) => page.evaluate((id) => window.henjiNative.storyboardProjects.getProjectRecord(id).then((record) => record?.name ?? null), FIXTURE_PROJECT_ID)
+const readProjectName = (page) => page.evaluate((id) => window.henjiNative.testFixtures.readCanvas(id).then((record) => record?.name ?? null), FIXTURE_PROJECT_ID)
 
 async function main() {
   const options = parseRestartCheckArgs(process.argv.slice(2))
@@ -142,11 +133,12 @@ async function main() {
       const config = { url: `http://127.0.0.1:${port}/mcp`, headers: identity.config.headers }
       const client = await connectMcpClient(config, 'Henji restart first')
       try {
-        const projectRef = { kind: 'canvas.project', id: FIXTURE_PROJECT_ID }
-        const read = await callTool(client, 'read_application_entity', { ref: projectRef, propertyIds: ['canvas.project.name'] })
+        // 3.4 起画布名就是文档名：改名落在画布文档（documents.document.name）上
+        const projectRef = { kind: 'documents.document', id: FIXTURE_PROJECT_ID }
+        const read = await callTool(client, 'read_application_entity', { ref: projectRef, propertyIds: ['documents.document.name'] })
         const completed = operationEnvelope([read], {
           summary: '重启前写入',
-          changes: [{ kind: 'set_properties', entityType: projectRef.kind, target: projectRef, properties: { 'canvas.project.name': renamed } }],
+          changes: [{ kind: 'set_properties', entityType: projectRef.kind, target: projectRef, properties: { 'documents.document.name': renamed } }],
         })
         const applied = await callTool(client, 'change_application_entities', completed)
         assert.equal(applied.executionState, 'completed', JSON.stringify(applied))
@@ -155,7 +147,7 @@ async function main() {
         evidence.firstRun.storedName = await readProjectName(first.page)
         evidence.firstRun.historyAfter = await readHistoryCount(first.page)
         assert.equal(evidence.firstRun.storedName, renamed, '重启前的写入没有落到正式存储')
-        await callTool(client, 'open_canvas_project', operationEnvelope([], { projectId: CREATIVE_PROJECT_ID }))
+        await callTool(client, 'open_document', operationEnvelope([], { documentId: CREATIVE_PROJECT_ID }))
         const shotRef = { kind: 'canvas.node', id: `${CREATIVE_PROJECT_ID}:shot-one` }
         const shot = await callTool(client, 'read_application_entity', { ref: shotRef, propertyIds: ['canvas.node.text_content'] })
         const creative = await callTool(client, 'change_application_entities', operationEnvelope([shot], {
@@ -220,7 +212,7 @@ async function main() {
         })
         const shot = await readCreative('shot-one')
         assert.equal(shot.data.properties['canvas.node.text_content'], '镜头一：转身，手握信封。')
-        await callTool(client, 'open_canvas_project', operationEnvelope([], { projectId: CREATIVE_PROJECT_ID }))
+        await callTool(client, 'open_document', operationEnvelope([], { documentId: CREATIVE_PROJECT_ID }))
         const repaired = await callTool(client, 'change_application_entities', operationEnvelope([shot], {
           summary: '局部修改第一镜头', changes: [{ kind: 'set_properties', entityType: 'canvas.node',
             target: { kind: 'canvas.node', id: `${CREATIVE_PROJECT_ID}:shot-one` },

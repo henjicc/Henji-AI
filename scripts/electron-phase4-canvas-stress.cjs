@@ -5,6 +5,7 @@
  *   BENCH_MULT=4 npm run electron:pan-bench
  */
 const fs = require('node:fs')
+const { removeCanvasDocuments } = require('./lib/canvasDocumentFixture.cjs')
 const path = require('node:path')
 const { launchElectronApp: launchElectronAppBase, waitForApp, assert } = require('./lib/electronLaunch.cjs')
 const { buildNodes, buildEdges, computeFitViewport } = require('./lib/canvasStressFixtures.cjs')
@@ -39,19 +40,16 @@ async function launchElectronApp() {
 
 async function ensureProjectListVisible(page) {
   if (await page.locator('.react-flow').count() > 0) {
-    await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
+    await page.getByRole('button', { name: /返回画布列表|Back to Canvases/ }).click()
     await page.waitForTimeout(500)
   }
 }
 
+/** 造一份空画布（经测试夹具的正式文档接口，落在作品目录“画布/”），列表刷新后可见。 */
 async function createEmptyProject(page, projectName) {
-  await page.getByRole('button', { name: /新建项目|New Project/ }).filter({ visible: true }).first().click()
-  const nameInput = page.getByRole('textbox')
-  await nameInput.fill(projectName)
-  await nameInput.press('Enter')
-  await page.waitForSelector('.react-flow', { timeout: 15000 })
-  await page.waitForTimeout(500)
-  await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
+  await page.evaluate((name) => window.henjiNative.testFixtures.createCanvas({ name }), projectName)
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await page.getByRole('button', { name: /画布|Canvas/ }).click()
   await page.waitForTimeout(700)
 }
 
@@ -59,14 +57,11 @@ async function injectStressNodes(page, projectName, nodes, edges, viewport, samp
   return await page.evaluate(async ({ tinyPngDataUrl, samplePngVideoBase64, projectName, nodes, edges, viewport }) => {
     const native = window.henjiNative
 
-    const rows = await native.db.select(
-      'SELECT id FROM storyboard_projects WHERE name = ? ORDER BY created_at DESC LIMIT 1',
-      [projectName]
-    )
-    if (!rows.length) {
-      throw new Error('stress project not found in storyboard_projects')
+    const found = await native.testFixtures.findCanvasByName(projectName)
+    if (!found) {
+      throw new Error('stress canvas not found')
     }
-    const projectId = rows[0].id
+    const projectId = found.id
 
     const tempDir = await native.paths.tempDir()
     const workDir = await native.paths.join(tempDir, `henji-canvas-stress-${Date.now()}`)
@@ -89,19 +84,7 @@ async function injectStressNodes(page, projectName, nodes, edges, viewport, samp
       return node
     })
 
-    await native.db.execute(
-      `UPDATE storyboard_projects
-       SET nodes_json = ?, edges_json = ?, viewport_json = ?, node_count = ?, updated_at = ?
-       WHERE id = ?`,
-      [
-        JSON.stringify(resolvedNodes),
-        JSON.stringify(edges),
-        JSON.stringify(viewport),
-        resolvedNodes.length,
-        Date.now(),
-        projectId,
-      ]
-    )
+    await native.testFixtures.writeCanvas(projectId, { nodes: resolvedNodes, edges, viewport })
 
     return { projectId, workDir, nodeCount: resolvedNodes.length }
   }, {
@@ -115,8 +98,8 @@ async function injectStressNodes(page, projectName, nodes, edges, viewport, samp
 }
 
 async function cleanupStressData(page, projectId, workDir) {
-  await page.evaluate(async ({ projectId, workDir }) => {
-    await window.henjiNative?.db.execute('DELETE FROM storyboard_projects WHERE id = ?', [projectId])
+  await removeCanvasDocuments(page, [projectId]).catch(() => undefined)
+  await page.evaluate(async ({ workDir }) => {
     await window.henjiNative?.fs.remove(workDir, { recursive: true })
   }, { projectId, workDir }).catch(() => undefined)
 }

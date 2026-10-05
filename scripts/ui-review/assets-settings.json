@@ -2,7 +2,7 @@
   {
     "id": "review-assets-projects",
     "surface": "画布",
-    "name": "核对-画布项目页（空、多项目、悬停、更多菜单、排序、搜索、长名称、多选）",
+    "name": "核对-画布列表页（空、多项目、悬停、更多菜单、排序、搜索、长名称、多选）",
     "checklist": [
       "A01.1",
       "A01.2",
@@ -26,53 +26,25 @@
         "waitStable": {}
       },
       {
-        "click": {
-          "role": "button",
-          "name": "新建项目",
-          "exact": true,
-          "within": {
-            "selector": "[data-ui-page-header]"
-          }
+        "seedCanvasDocuments": {
+          "names": [
+            "分镜 10 · 江南雨夜长镜头与人物特写的完整分镜项目（检查长名称截断）",
+            "分镜 2",
+            "海报草稿"
+          ]
         }
+      },
+      {
+        "reload": {}
+      },
+      {
+        "enter": "canvas"
       },
       {
         "waitFor": {
-          "role": "dialog"
-        }
-      },
-      {
-        "fill": {
-          "target": {
-            "placeholder": "请输入项目名称"
-          },
-          "text": "分镜 10 · 江南雨夜长镜头与人物特写的完整分镜项目（检查长名称截断）"
-        }
-      },
-      {
-        "click": {
-          "role": "button",
-          "name": "确认",
-          "exact": true,
-          "within": {
-            "role": "dialog",
-            "nth": "last"
-          }
-        }
-      },
-      {
-        "waitFor": {
-          "role": "button",
-          "name": "返回项目",
-          "exact": true
+          "selector": "[data-project-id]"
         },
-        "timeout": 15000
-      },
-      {
-        "click": {
-          "role": "button",
-          "name": "返回项目",
-          "exact": true
-        }
+        "timeout": 12000
       },
       {
         "waitFor": {
@@ -80,106 +52,8 @@
         }
       },
       {
-        "click": {
-          "role": "button",
-          "name": "新建项目",
-          "exact": true,
-          "within": {
-            "selector": "[data-ui-page-header]"
-          }
-        }
-      },
-      {
-        "waitFor": {
-          "role": "dialog"
-        }
-      },
-      {
-        "fill": {
-          "target": {
-            "placeholder": "请输入项目名称"
-          },
-          "text": "分镜 2"
-        }
-      },
-      {
-        "click": {
-          "role": "button",
-          "name": "确认",
-          "exact": true,
-          "within": {
-            "role": "dialog",
-            "nth": "last"
-          }
-        }
-      },
-      {
-        "waitFor": {
-          "role": "button",
-          "name": "返回项目",
-          "exact": true
-        },
-        "timeout": 15000
-      },
-      {
-        "click": {
-          "role": "button",
-          "name": "返回项目",
-          "exact": true
-        }
-      },
-      {
         "waitFor": {
           "selector": "[data-ui-page-header]"
-        }
-      },
-      {
-        "click": {
-          "role": "button",
-          "name": "新建项目",
-          "exact": true,
-          "within": {
-            "selector": "[data-ui-page-header]"
-          }
-        }
-      },
-      {
-        "waitFor": {
-          "role": "dialog"
-        }
-      },
-      {
-        "fill": {
-          "target": {
-            "placeholder": "请输入项目名称"
-          },
-          "text": "海报草稿"
-        }
-      },
-      {
-        "click": {
-          "role": "button",
-          "name": "确认",
-          "exact": true,
-          "within": {
-            "role": "dialog",
-            "nth": "last"
-          }
-        }
-      },
-      {
-        "waitFor": {
-          "role": "button",
-          "name": "返回项目",
-          "exact": true
-        },
-        "timeout": 15000
-      },
-      {
-        "click": {
-          "role": "button",
-          "name": "返回项目",
-          "exact": true
         }
       },
       {
@@ -219,7 +93,7 @@
       {
         "click": {
           "role": "button",
-          "name": "项目操作",
+          "name": "更多",
           "nth": 0
         }
       },
@@ -257,7 +131,7 @@
         "fill": {
           "target": {
             "role": "textbox",
-            "name": "搜索项目"
+            "name": "搜索画布"
           },
           "text": "海报"
         }
@@ -272,7 +146,7 @@
         "fill": {
           "target": {
             "role": "textbox",
-            "name": "搜索项目"
+            "name": "搜索画布"
           },
           "text": "不存在的项目"
         }
@@ -287,7 +161,7 @@
         "fill": {
           "target": {
             "role": "textbox",
-            "name": "搜索项目"
+            "name": "搜索画布"
           },
           "text": ""
         }

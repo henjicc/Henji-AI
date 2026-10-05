@@ -40,16 +40,13 @@ function escapeCssAttribute(value) {
 
 async function fingerprintProjectRow(page, projectId) {
   return page.evaluate(async (targetProjectId) => {
-    const rows = await window.henjiNative.db.select(
-      `SELECT nodes_json, edges_json, viewport_json, history_json, updated_at
-       FROM storyboard_projects WHERE id = ? LIMIT 1`,
-      [targetProjectId]
-    )
-    const row = rows[0]
-    if (!row) return null
+    const stored = await window.henjiNative.testFixtures.readCanvas(targetProjectId)
+    if (!stored) return null
+    // 画布文档内容：节点、连线、媒体池（内嵌包位置 layerPackages 是存储位置，不算内容）
+    const row = { nodes: stored.nodes, edges: stored.edges, imagePool: stored.imagePool }
     const result = {}
     for (const [field, value] of Object.entries(row)) {
-      const encoded = new TextEncoder().encode(String(value ?? ''))
+      const encoded = new TextEncoder().encode(JSON.stringify(value ?? null))
       const digest = await crypto.subtle.digest('SHA-256', encoded)
       result[field] = [...new Uint8Array(digest)]
         .map((byte) => byte.toString(16).padStart(2, '0'))
@@ -61,11 +58,8 @@ async function fingerprintProjectRow(page, projectId) {
 
 async function readTargetDocument(page, target) {
   return page.evaluate(async ({ projectId, nodeId }) => {
-    const rows = await window.henjiNative.db.select(
-      'SELECT nodes_json FROM storyboard_projects WHERE id = ? LIMIT 1',
-      [projectId]
-    )
-    const nodes = JSON.parse(rows[0]?.nodes_json ?? '[]')
+    const stored = await window.henjiNative.testFixtures.readCanvas(projectId)
+    const nodes = (stored?.nodes ?? [])
     const node = nodes.find((candidate) => candidate.id === nodeId)
     const session = node?.data?.imageEditSession
     if (!session?.documentRef) {
@@ -284,7 +278,7 @@ function attachUiInspectionCanvasExistingMultiLayer(context) {
       `[data-layer-stack-node-id="${escapeCssAttribute(target.nodeId)}"]:visible`
     )
     if (!(await targetNode.count()) && await page.locator('.react-flow:visible').count()) {
-      await page.getByRole('button', { name: /返回项目|Back to Projects/i }).click()
+      await page.getByRole('button', { name: /返回画布列表|Back to Canvases/i }).click()
       await settlePage(page, 350)
     }
 
@@ -302,7 +296,7 @@ function attachUiInspectionCanvasExistingMultiLayer(context) {
       const afterOpen = await readTargetDocument(page, target)
       const afterOpenFingerprint = await fingerprintProjectRow(page, target.projectId)
       const changedContentFields = Object.keys(beforeFingerprint).filter((field) => (
-        ['nodes_json', 'edges_json', 'history_json'].includes(field)
+        ['nodes', 'edges', 'imagePool'].includes(field)
         && beforeFingerprint[field] !== afterOpenFingerprint?.[field]
       ))
       if (afterOpen.loadedRevision !== initial.loadedRevision || changedContentFields.length > 0) {
@@ -343,7 +337,7 @@ function attachUiInspectionCanvasExistingMultiLayer(context) {
       (field) => beforeFingerprint[field] !== afterFingerprint?.[field]
     )
     const changedContentFields = changedProjectFields.filter(
-      (field) => ['nodes_json', 'edges_json', 'history_json'].includes(field)
+      (field) => ['nodes', 'edges', 'imagePool'].includes(field)
     )
     if (final.loadedRevision !== initial.loadedRevision
       || (preserveProjectContent && changedContentFields.length > 0)) {

@@ -1,5 +1,7 @@
 'use strict'
 
+const { createCanvasDocument, findCanvasDocumentByName, readCanvasDocument, writeCanvasDocument } = require('./canvasDocumentFixture.cjs')
+
 const SELECTOR_TYPES = [
   'imageModelSelectorNode',
   'videoModelSelectorNode',
@@ -46,42 +48,26 @@ function buildSyntheticVisualSourceNodes() {
  * 返回的临时源项目名带 FIXTURE_PREFIX，由调用方统一清理。
  */
 async function ensureVisualSourceProject(page, requestedName, fixturePrefix) {
-  const existing = await page.evaluate(async (projectName) => {
-    const rows = await window.henjiNative.db.select(
-      'SELECT id, name FROM storyboard_projects WHERE name = ? ORDER BY updated_at DESC LIMIT 1',
-      [projectName]
-    )
-    return rows.length ? rows[0] : null
-  }, requestedName)
+  const existing = await findCanvasDocumentByName(page, requestedName)
   if (existing) {
     return { sourceProject: requestedName, created: false, projectId: existing.id }
   }
 
   const sourceProject = `${fixturePrefix}visual_source_${Date.now()}`
-  const nodes = buildSyntheticVisualSourceNodes()
-  const projectId = await page.evaluate(async (payload) => {
-    const id = `visual-source-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-    const now = Date.now()
-    await window.henjiNative.db.execute(
-      `INSERT INTO storyboard_projects
-       (id, name, created_at, updated_at, node_count, nodes_json, edges_json, viewport_json, history_json)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        id,
-        payload.name,
-        now,
-        now,
-        payload.nodes.length,
-        JSON.stringify(payload.nodes),
-        '[]',
-        JSON.stringify({ x: 120, y: 120, zoom: 0.8 }),
-        JSON.stringify({ past: [], future: [], imagePool: [] }),
-      ]
-    )
-    return id
-  }, { name: sourceProject, nodes })
+  const created = await createCanvasDocument(page, {
+    id: `visual-source-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    name: sourceProject,
+    nodes: buildSyntheticVisualSourceNodes(),
+    viewport: { x: 120, y: 120, zoom: 0.8 },
+  })
+  return { sourceProject, requestedSourceProject: requestedName, created: true, projectId: created.id }
+}
 
-  return { sourceProject, requestedSourceProject: requestedName, created: true, projectId }
+/** 读临时画布的节点；找不到时报错。 */
+async function readFixtureNodes(page, projectId) {
+  const document = await readCanvasDocument(page, projectId)
+  if (!document) throw new Error(`找不到临时画布：${projectId}`)
+  return document.nodes
 }
 
 const MISSING_TYPE_FIXTURES = {
@@ -249,105 +235,82 @@ const MISSING_TYPE_FIXTURES = {
  */
 async function prepareModelSelectorFixture(page, fixture, state) {
   if (!['collapsed', 'expanded'].includes(state)) return fixture
-  const result = await page.evaluate(async ({ projectId, selectorTypes, defaultModelIds, expanded }) => {
-    const rows = await window.henjiNative.db.select(
-      'SELECT nodes_json FROM storyboard_projects WHERE id = ? LIMIT 1',
-      [projectId]
-    )
-    if (!rows.length) throw new Error(`找不到临时项目：${projectId}`)
-    const nodes = JSON.parse(rows[0].nodes_json)
-    const template = nodes.find((node) => selectorTypes.includes(node.type))
-    if (!template) throw new Error('源项目中没有可用于补齐模型选择器的模板节点')
-    for (const [index, type] of selectorTypes.entries()) {
-      let matchingNodes = nodes.filter((candidate) => candidate.type === type)
-      if (!matchingNodes.length) {
-        const node = {
-          ...template,
-          id: `__visual_${type}`,
-          type,
-          parentId: undefined,
-          extent: undefined,
-          position: {
-            x: (template.position?.x ?? 0) + 600 + index * 80,
-            y: (template.position?.y ?? 0) + 120 + index * 80,
-          },
-          data: {
-            ...template.data,
-            displayName: type,
-            modelId: defaultModelIds[type],
-          },
-          selected: false,
-        }
-        nodes.push(node)
-        matchingNodes = [node]
+  const nodes = await readFixtureNodes(page, fixture.projectId)
+  const selectorTypes = SELECTOR_TYPES
+  const defaultModelIds = DEFAULT_MODEL_IDS
+  const expanded = state === 'expanded'
+  const template = nodes.find((node) => selectorTypes.includes(node.type))
+  if (!template) throw new Error('源项目中没有可用于补齐模型选择器的模板节点')
+  for (const [index, type] of selectorTypes.entries()) {
+    let matchingNodes = nodes.filter((candidate) => candidate.type === type)
+    if (!matchingNodes.length) {
+      const node = {
+        ...template,
+        id: `__visual_${type}`,
+        type,
+        parentId: undefined,
+        extent: undefined,
+        position: {
+          x: (template.position?.x ?? 0) + 600 + index * 80,
+          y: (template.position?.y ?? 0) + 120 + index * 80,
+        },
+        data: {
+          ...template.data,
+          displayName: type,
+          modelId: defaultModelIds[type],
+        },
+        selected: false,
       }
-      for (const node of matchingNodes) {
-        const width = expanded ? 320 : 240
-        const height = expanded ? 380 : 44
-        node.data = { ...node.data, isExpanded: expanded }
-        node.width = width
-        node.height = height
-        node.measured = { width, height }
-        node.style = { ...(node.style ?? {}), width, height }
-      }
+      nodes.push(node)
+      matchingNodes = [node]
     }
-
-    await window.henjiNative.db.execute(
-      'UPDATE storyboard_projects SET node_count = ?, nodes_json = ? WHERE id = ?',
-      [nodes.length, JSON.stringify(nodes), projectId]
-    )
-    return { nodeCount: nodes.length }
-  }, {
-    projectId: fixture.projectId,
-    selectorTypes: SELECTOR_TYPES,
-    defaultModelIds: DEFAULT_MODEL_IDS,
-    expanded: state === 'expanded',
-  })
+    for (const node of matchingNodes) {
+      const width = expanded ? 320 : 240
+      const height = expanded ? 380 : 44
+      node.data = { ...node.data, isExpanded: expanded }
+      node.width = width
+      node.height = height
+      node.measured = { width, height }
+      node.style = { ...(node.style ?? {}), width, height }
+    }
+  }
+  await writeCanvasDocument(page, fixture.projectId, { nodes: JSON.parse(JSON.stringify(nodes)) })
+  const result = { nodeCount: nodes.length }
   return { ...fixture, nodeCount: result.nodeCount, selectorState: state }
 }
 
 /** 补齐源项目缺少的内置节点类型，用于真正执行全注册表几何与裁剪检查。 */
 async function prepareFullTypeFixture(page, fixture, enabled) {
   if (!enabled) return fixture
-  const result = await page.evaluate(async ({ projectId, fixtures }) => {
-    const rows = await window.henjiNative.db.select(
-      'SELECT nodes_json FROM storyboard_projects WHERE id = ? LIMIT 1',
-      [projectId]
-    )
-    if (!rows.length) throw new Error(`找不到临时项目：${projectId}`)
-    const nodes = JSON.parse(rows[0].nodes_json)
-    const anchor = nodes.find((node) => node.type === 'imageModelSelectorNode') ?? nodes[0]
-    let added = 0
-    for (const [type, fixtureConfig] of Object.entries(fixtures)) {
-      if (nodes.some((node) => node.type === type)) continue
-      const width = fixtureConfig.width
-      const height = fixtureConfig.height
-      const column = added % 3
-      const row = Math.floor(added / 3)
-      nodes.push({
-        id: `__visual_${type}`,
-        type,
-        position: {
-          x: (anchor.position?.x ?? 0) + 420 + column * 420,
-          y: (anchor.position?.y ?? 0) + 520 + row * 300,
-        },
-        data: fixtureConfig.data,
-        selected: false,
-        ...(width && height ? {
-          width,
-          height,
-          measured: { width, height },
-          style: { width, height },
-        } : {}),
-      })
-      added += 1
-    }
-    await window.henjiNative.db.execute(
-      'UPDATE storyboard_projects SET node_count = ?, nodes_json = ? WHERE id = ?',
-      [nodes.length, JSON.stringify(nodes), projectId]
-    )
-    return { nodeCount: nodes.length }
-  }, { projectId: fixture.projectId, fixtures: MISSING_TYPE_FIXTURES })
+  const nodes = await readFixtureNodes(page, fixture.projectId)
+  const anchor = nodes.find((node) => node.type === 'imageModelSelectorNode') ?? nodes[0]
+  let added = 0
+  for (const [type, fixtureConfig] of Object.entries(MISSING_TYPE_FIXTURES)) {
+    if (nodes.some((node) => node.type === type)) continue
+    const width = fixtureConfig.width
+    const height = fixtureConfig.height
+    const column = added % 3
+    const row = Math.floor(added / 3)
+    nodes.push({
+      id: `__visual_${type}`,
+      type,
+      position: {
+        x: (anchor.position?.x ?? 0) + 420 + column * 420,
+        y: (anchor.position?.y ?? 0) + 520 + row * 300,
+      },
+      data: fixtureConfig.data,
+      selected: false,
+      ...(width && height ? {
+        width,
+        height,
+        measured: { width, height },
+        style: { width, height },
+      } : {}),
+    })
+    added += 1
+  }
+  await writeCanvasDocument(page, fixture.projectId, { nodes })
+  const result = { nodeCount: nodes.length }
   return { ...fixture, nodeCount: result.nodeCount, fullTypeFixture: true }
 }
 

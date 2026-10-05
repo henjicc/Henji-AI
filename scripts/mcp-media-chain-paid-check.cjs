@@ -19,6 +19,7 @@
  *   node scripts/mcp-media-chain-paid-check.cjs --paid    # 已获授权后，发起 2 次真实生成
  */
 const assert = require('node:assert/strict')
+const { removeCanvasDocuments } = require('./lib/canvasDocumentFixture.cjs')
 const fs = require('node:fs')
 const fsp = require('node:fs/promises')
 const path = require('node:path')
@@ -135,11 +136,10 @@ async function main() {
     assert.equal(providerBefore, 0, '运行开始前已存在本轮供应商请求，计数不可信')
 
     /*
-     * 连删除授权一起要：夹具工程必须经正式的 delete_canvas_project 删掉。
-     * 原生 deleteProjectRecord 绕过渲染层的工程持久化队列——正式删除会先取消定时器、
-     * 等在途写入落定、把工程标记成 deleted 再删，此后的保存一律拒绝；原生删除没有这层
-     * 保护，后台落图排的保存会在删除之后把整行写回来。本轮 6 次运行就这样在真实库里
-     * 留下了 6 个夹具工程，而每次清理都因为"删完当场读不到"而报了成功。
+     * 连删除授权一起要：夹具画布必须经正式的 trash_document 移到回收站。
+     * 它先请画布释放后台会话（写完在途保存再关闭），之后不会再被写回；直接经文档接口删文件
+     * 没有这层保护，后台落图排的保存会在删除之后把文件写回来（曾在真实库里留下夹具工程，
+     * 而每次清理都因为"删完当场读不到"而报了成功）。
      */
     const paid = await authorizeMcpConnection(page, { name: `链路付费验收-${randomUUID().slice(0, 8)}`, allowWrites: true, allowDestructive: true, allowPaid: true })
     created.connections.push(paid.id)
@@ -147,12 +147,7 @@ async function main() {
     const client = await connectMcpClient({ url: `http://127.0.0.1:${port}/mcp`, headers: paid.config.headers }, 'Henji chain paid')
     try {
       await page.evaluate(async ({ projectId }) => {
-        const now = Date.now()
-        await window.henjiNative.storyboardProjects.upsertProjectRecord({
-          id: projectId, name: 'MCP链路付费夹具', createdAt: now, updatedAt: now, nodeCount: 0,
-          nodesJson: '[]', edgesJson: '[]', viewportJson: '{"x":0,"y":0,"zoom":1}',
-          historyJson: '{"past":[],"future":[],"imagePool":[]}',
-        })
+        await window.henjiNative.testFixtures.createCanvas({ id: projectId, name: 'MCP链路付费夹具', replace: true })
       }, { projectId: FIXTURE_PROJECT_ID })
       created.project = true
       const destination = { mode: 'canvas', projectId: FIXTURE_PROJECT_ID, sourceNodeIds: [] }
@@ -280,8 +275,8 @@ async function main() {
 
         // ——— 6. 两个结果都在夹具工程里 ———
         const stored = await page.evaluate(async (projectId) => {
-          const record = await window.henjiNative.storyboardProjects.getProjectRecord(projectId)
-          const nodes = JSON.parse(record.nodesJson)
+          const record = await window.henjiNative.testFixtures.readCanvas(projectId)
+          const nodes = record.nodes
           return {
             images: nodes.filter((node) => typeof node.data?.imageUrl === 'string' && node.data.imageUrl).length,
             videos: nodes.filter((node) => typeof node.data?.videoUrl === 'string' && node.data.videoUrl).length,
@@ -295,11 +290,11 @@ async function main() {
         evidence.passed = true
       }
     } finally {
-      // 趁客户端还在，走正式能力删夹具工程；它会等在途保存落定并封住后续写入。
+      // 趁客户端还在，走正式能力把夹具画布移到回收站；它会等在途保存落定并关闭后台会话。
       if (created.project) {
         try {
-          const projectRead = await callTool(client, 'read_application_entity', { ref: { kind: 'canvas.project', id: FIXTURE_PROJECT_ID }, propertyIds: [] })
-          await callTool(client, 'delete_canvas_project', operationEnvelope([projectRead], { projectId: FIXTURE_PROJECT_ID }))
+          const projectRead = await callTool(client, 'read_application_entity', { ref: { kind: 'documents.document', id: FIXTURE_PROJECT_ID }, propertyIds: [] })
+          await callTool(client, 'trash_document', operationEnvelope([projectRead], { documentId: FIXTURE_PROJECT_ID }))
           created.project = false
           evidence.fixtureDeletedViaCapability = true
         } catch (error) {
@@ -324,9 +319,9 @@ async function main() {
          * 兜底路径：正式删除没跑成时才走到这里。原生删除挡不住在途保存，所以删完要
          * **等一段时间再确认一次**——只看"删完当场读不到"会把随后被写回来的残留报成成功。
          */
-        const gone = async () => !(await page.evaluate((projectId) => window.henjiNative.storyboardProjects.getProjectRecord(projectId), FIXTURE_PROJECT_ID))
+        const gone = async () => !(await page.evaluate((projectId) => window.henjiNative.testFixtures.readCanvas(projectId), FIXTURE_PROJECT_ID))
         for (let round = 0; round < 4; round += 1) {
-          await page.evaluate((projectId) => window.henjiNative.storyboardProjects.deleteProjectRecord(projectId), FIXTURE_PROJECT_ID)
+          await removeCanvasDocuments(page, [FIXTURE_PROJECT_ID])
           await page.waitForTimeout(1500)
           if (await gone()) { cleanup.project = true; return }
         }

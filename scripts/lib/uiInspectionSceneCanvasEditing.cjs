@@ -84,15 +84,12 @@ function attachUiInspectionCanvasEditing(context) {
     await activePrompt.blur()
     await settlePage(page, 800)
 
-    await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
+    await page.getByRole('button', { name: /返回画布列表|Back to Canvases/ }).click()
     await settlePage(page, 500)
     const persisted = await page.evaluate(async ({ targetProjectId, targetNodeId, source }) => {
-      const rows = await window.henjiNative.db.select(
-        'SELECT nodes_json, edges_json FROM storyboard_projects WHERE id = ? LIMIT 1',
-        [targetProjectId]
-      )
-      const nodes = JSON.parse(rows[0]?.nodes_json ?? '[]')
-      const edges = JSON.parse(rows[0]?.edges_json ?? '[]')
+      const stored = await window.henjiNative.testFixtures.readCanvas(targetProjectId)
+      const nodes = (stored?.nodes ?? [])
+      const edges = (stored?.edges ?? [])
       const target = nodes.find((candidate) => candidate.id === targetNodeId)
       const maskSource = target?.data?.localRedrawMaskSource
       const document = target?.data?.localRedrawMaskDocument
@@ -118,7 +115,7 @@ function attachUiInspectionCanvasEditing(context) {
       || persisted.prompt !== '将选区替换为柔和的云层'
       || !persisted.hasManagedMask
       || persisted.documentVersion !== 1
-      || !String(persisted.documentSourceRef ?? '').startsWith('__img_ref__:')
+      || !String(persisted.documentSourceRef ?? '') || String(persisted.documentSourceRef).startsWith('blob:')
       || persisted.strokeCount < 1
       || persisted.registrationQuality !== 'precise'
       || persisted.manuallyResized !== true
@@ -129,12 +126,9 @@ function attachUiInspectionCanvasEditing(context) {
     }
 
     await page.evaluate(async ({ targetProjectId, targetNodeId, resultSource }) => {
-      const rows = await window.henjiNative.db.select(
-        'SELECT nodes_json, edges_json FROM storyboard_projects WHERE id = ? LIMIT 1',
-        [targetProjectId]
-      )
-      const nodes = JSON.parse(rows[0]?.nodes_json ?? '[]')
-      const edges = JSON.parse(rows[0]?.edges_json ?? '[]')
+      const stored = await window.henjiNative.testFixtures.readCanvas(targetProjectId)
+      const nodes = (stored?.nodes ?? [])
+      const edges = (stored?.edges ?? [])
       const generator = nodes.find((candidate) => candidate.id === targetNodeId)
       nodes.push({
         id: '__ui_element_edit_result', type: 'exportImageNode',
@@ -149,10 +143,7 @@ function attachUiInspectionCanvasEditing(context) {
         id: `__ui_element_edit_result_edge_${targetNodeId}`,
         source: targetNodeId, target: '__ui_element_edit_result', sourceHandle: 'source', targetHandle: 'target',
       })
-      await window.henjiNative.db.execute(
-        'UPDATE storyboard_projects SET node_count = ?, nodes_json = ?, edges_json = ?, viewport_json = ? WHERE id = ?',
-        [nodes.length, JSON.stringify(nodes), JSON.stringify(edges), JSON.stringify({ x: 60, y: 80, zoom: 0.82 }), targetProjectId]
-      )
+      await window.henjiNative.testFixtures.writeCanvas(targetProjectId, { nodes: nodes, edges: edges, viewport: { x: 60, y: 80, zoom: 0.82 } })
     }, { targetProjectId: projectId, targetNodeId: nodeId, resultSource: panoramaSource })
 
     await reopenCanvasProjectFromStorage(page, projectId)
@@ -211,15 +202,12 @@ function attachUiInspectionCanvasEditing(context) {
 
   async function setupCanvasMultiLayerDocumentEditor(page, _app, inspection) {
     const { panoramaSource, projectId } = await seedAndOpenCanvasPanoramaProject(page)
-    await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
+    await page.getByRole('button', { name: /返回画布列表|Back to Canvases/ }).click()
     await settlePage(page, 700)
     const fixture = await page.evaluate(async ({ targetProjectId, source }) => {
-      const rows = await window.henjiNative.db.select(
-        'SELECT nodes_json, edges_json FROM storyboard_projects WHERE id = ? LIMIT 1',
-        [targetProjectId]
-      )
-      const nodes = JSON.parse(rows[0]?.nodes_json ?? '[]')
-      const edges = JSON.parse(rows[0]?.edges_json ?? '[]')
+      const stored = await window.henjiNative.testFixtures.readCanvas(targetProjectId)
+      const nodes = (stored?.nodes ?? [])
+      const edges = (stored?.edges ?? [])
       const documentId = `ui-multi-layer-${crypto.randomUUID()}`
       const fixtureCanvas = document.createElement('canvas')
       fixtureCanvas.width = 320
@@ -465,16 +453,7 @@ function attachUiInspectionCanvasEditing(context) {
         sourceHandle: 'source',
         targetHandle: 'target',
       })
-      await window.henjiNative.db.execute(
-        'UPDATE storyboard_projects SET node_count = ?, nodes_json = ?, edges_json = ?, viewport_json = ? WHERE id = ?',
-        [
-          nodes.length,
-          JSON.stringify(nodes),
-          JSON.stringify(edges),
-          JSON.stringify({ x: 50, y: 120, zoom: 0.7 }),
-          targetProjectId,
-        ]
-      )
+      await window.henjiNative.testFixtures.writeCanvas(targetProjectId, { nodes: nodes, edges: edges, viewport: { x: 50, y: 120, zoom: 0.7 } })
       return {
         documentRef: saved.documentRef,
         initialRevision: saved.revision,
@@ -522,12 +501,9 @@ function attachUiInspectionCanvasEditing(context) {
     if (!(await dialog.isVisible())) throw new Error('导出图层后多图层图片编辑器被意外关闭')
     await settlePage(page, 900)
     const exportEvidence = await page.evaluate(async ({ targetProjectId, sourceNodeId, documentRef }) => {
-      const rows = await window.henjiNative.db.select(
-        'SELECT nodes_json, edges_json FROM storyboard_projects WHERE id = ? LIMIT 1',
-        [targetProjectId]
-      )
-      const nodes = JSON.parse(rows[0]?.nodes_json ?? '[]')
-      const edges = JSON.parse(rows[0]?.edges_json ?? '[]')
+      const stored = await window.henjiNative.testFixtures.readCanvas(targetProjectId)
+      const nodes = (stored?.nodes ?? [])
+      const edges = (stored?.edges ?? [])
       const sourceNode = nodes.find((candidate) => candidate.id === sourceNodeId)
       const exportedNodes = nodes.filter((candidate) => (
         candidate.type === 'exportImageNode'
@@ -613,18 +589,12 @@ function attachUiInspectionCanvasEditing(context) {
 
     await settlePage(page, 900)
     const persistedProjection = await page.evaluate(async ({ targetProjectId, targetNodeId }) => {
-      const rows = await window.henjiNative.db.select(
-        'SELECT nodes_json, edges_json, history_json FROM storyboard_projects WHERE id = ? LIMIT 1',
-        [targetProjectId]
-      )
-      const nodes = JSON.parse(rows[0]?.nodes_json ?? '[]')
-      const edges = JSON.parse(rows[0]?.edges_json ?? '[]')
-      const history = JSON.parse(rows[0]?.history_json ?? '{}')
+      const stored = await window.henjiNative.testFixtures.readCanvas(targetProjectId)
+      const nodes = (stored?.nodes ?? [])
+      const edges = (stored?.edges ?? [])
       const node = nodes.find((candidate) => candidate.id === targetNodeId)
+      // 3.4 起画布文档直接存媒体位置（只有缺失模型的不透明参数才用媒体池引用）
       const imageRef = String(node?.data?.imageUrl ?? '')
-      const imageIndex = imageRef.startsWith('__img_ref__:')
-        ? Number.parseInt(imageRef.slice('__img_ref__:'.length), 10)
-        : -1
       return {
         nodeCount: nodes.length,
         matchingNodeCount: nodes.filter((candidate) => candidate.id === targetNodeId).length,
@@ -633,7 +603,7 @@ function attachUiInspectionCanvasEditing(context) {
         previewRef: node?.data?.imageEditSession?.previewRef,
         sourceUrl: node?.data?.imageEditSession?.sourceUrl,
         imageRef,
-        persistedImageUrl: history.imagePool?.[imageIndex] ?? null,
+        persistedImageUrl: imageRef || null,
         previewImageRef: node?.data?.previewImageUrl,
         sourceEdges: edges.filter((edge) => edge.source === '__ui_panorama_source' && edge.target === targetNodeId).length,
       }
@@ -650,7 +620,7 @@ function attachUiInspectionCanvasEditing(context) {
       throw new Error(`多图层文档节点投影没有原位、原子持久化：${JSON.stringify(persistedProjection)}`)
     }
 
-    await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
+    await page.getByRole('button', { name: /返回画布列表|Back to Canvases/ }).click()
     await settlePage(page, 600)
     await page.locator(`[data-project-id="${projectId}"]:visible`).click()
     const reopenedResult = page.locator(
@@ -699,11 +669,8 @@ function attachUiInspectionCanvasEditing(context) {
     await dialog.waitFor({ state: 'hidden', timeout: 60000 })
     await settlePage(page, 700)
     const firstLegacyMigration = await page.evaluate(async ({ targetProjectId, targetNodeId }) => {
-      const rows = await window.henjiNative.db.select(
-        'SELECT nodes_json FROM storyboard_projects WHERE id = ? LIMIT 1',
-        [targetProjectId]
-      )
-      const nodes = JSON.parse(rows[0]?.nodes_json ?? '[]')
+      const stored = await window.henjiNative.testFixtures.readCanvas(targetProjectId)
+      const nodes = (stored?.nodes ?? [])
       const node = nodes.find((candidate) => candidate.id === targetNodeId)
       return {
         documentRef: node?.data?.imageEditSession?.documentRef,
@@ -722,11 +689,8 @@ function attachUiInspectionCanvasEditing(context) {
     await dialog.waitFor({ state: 'hidden', timeout: 60000 })
     await settlePage(page, 700)
     const secondLegacyMigration = await page.evaluate(async ({ targetProjectId, targetNodeId }) => {
-      const rows = await window.henjiNative.db.select(
-        'SELECT nodes_json FROM storyboard_projects WHERE id = ? LIMIT 1',
-        [targetProjectId]
-      )
-      const nodes = JSON.parse(rows[0]?.nodes_json ?? '[]')
+      const stored = await window.henjiNative.testFixtures.readCanvas(targetProjectId)
+      const nodes = (stored?.nodes ?? [])
       return nodes.find((candidate) => candidate.id === targetNodeId)?.data?.imageEditSession ?? null
     }, { targetProjectId: projectId, targetNodeId: fixture.legacyNodeId })
     if (secondLegacyMigration?.documentRef !== firstLegacyMigration.documentRef) {
@@ -744,14 +708,11 @@ function attachUiInspectionCanvasEditing(context) {
         .map((element) => element.getAttribute('data-layer-stack-node-id'))
         .find((nodeId) => nodeId && !knownIds.includes(nodeId)) ?? null, [fixture.nodeId, fixture.legacyNodeId])
     if (!duplicateNodeId) throw new Error('复制后无法从正式画布节点识别新节点')
-    await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
+    await page.getByRole('button', { name: /返回画布列表|Back to Canvases/ }).click()
     await settlePage(page, 700)
     const duplicateEvidence = await page.evaluate(async ({ targetProjectId, sourceNodeId, duplicateNodeId }) => {
-      const rows = await window.henjiNative.db.select(
-        'SELECT nodes_json FROM storyboard_projects WHERE id = ? LIMIT 1',
-        [targetProjectId]
-      )
-      const nodes = JSON.parse(rows[0]?.nodes_json ?? '[]')
+      const stored = await window.henjiNative.testFixtures.readCanvas(targetProjectId)
+      const nodes = (stored?.nodes ?? [])
       const sourceNode = nodes.find((candidate) => candidate.id === sourceNodeId)
       const duplicate = nodes.find((candidate) => candidate.id === duplicateNodeId)
       return {
@@ -831,11 +792,8 @@ function attachUiInspectionCanvasEditing(context) {
     }
 
     const packageRoundTrip = await page.evaluate(async ({ targetProjectId, targetNodeId }) => {
-      const rows = await window.henjiNative.db.select(
-        'SELECT nodes_json, edges_json, viewport_json FROM storyboard_projects WHERE id = ? LIMIT 1',
-        [targetProjectId]
-      )
-      const nodes = JSON.parse(rows[0]?.nodes_json ?? '[]')
+      const stored = await window.henjiNative.testFixtures.readCanvas(targetProjectId)
+      const nodes = (stored?.nodes ?? [])
       const sourceNode = nodes.find((candidate) => candidate.id === targetNodeId)
       const session = sourceNode?.data?.imageEditSession
       const tempRoot = await window.henjiNative.paths.tempDir()
@@ -848,7 +806,7 @@ function attachUiInspectionCanvasEditing(context) {
         app: 'henji-ai',
         nodes: [sourceNode],
         edges: [],
-        viewport: JSON.parse(rows[0]?.viewport_json ?? '{"x":0,"y":0,"zoom":1}'),
+        viewport: (stored?.viewport ?? {"x":0,"y":0,"zoom":1}),
         imageEditorV3: {
           version: 1,
           bundlePath: 'image-editor-v3/manifest.json',
@@ -940,15 +898,12 @@ function attachUiInspectionCanvasEditing(context) {
     await group.locator('[data-asset-group-preview-count="9"]').waitFor({ state: 'visible', timeout: 12000 })
 
     await page.waitForTimeout(900)
-    await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
+    await page.getByRole('button', { name: /返回画布列表|Back to Canvases/ }).click()
     await settlePage(page, 500)
     const persisted = await page.evaluate(async ({ targetProjectId, targetNodeId }) => {
-      const rows = await window.henjiNative.db.select(
-        'SELECT nodes_json, edges_json FROM storyboard_projects WHERE id = ? LIMIT 1',
-        [targetProjectId]
-      )
-      const nodes = JSON.parse(rows[0]?.nodes_json ?? '[]')
-      const edges = JSON.parse(rows[0]?.edges_json ?? '[]')
+      const stored = await window.henjiNative.testFixtures.readCanvas(targetProjectId)
+      const nodes = (stored?.nodes ?? [])
+      const edges = (stored?.edges ?? [])
       const target = nodes.find((candidate) => candidate.id === targetNodeId)
       const groups = nodes.filter((candidate) => candidate.type === 'assetGroupNode')
       const splitGroup = groups.find((candidate) => candidate.data?.displayName === '宫格切分 · 3×3')

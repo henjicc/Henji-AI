@@ -9,7 +9,6 @@ import { registerAssistantIpc } from './ipc/assistant'
 import { registerCameraStageRenderIpc } from './ipc/camera-stage-render'
 import { registerClipboardIpc } from './ipc/clipboard'
 import { registerCustomModelsIpc } from './ipc/custom-models'
-import { registerDbIpc } from './ipc/db'
 import { registerLocalRecordsIpc } from './ipc/local-records'
 import { registerTestFixturesIpc } from './ipc/test-fixtures'
 import { configureDatabaseMigrations } from './services/db'
@@ -102,7 +101,6 @@ app.whenReady().then(() => {
   registerCameraStageRenderIpc()
   registerClipboardIpc()
   registerCustomModelsIpc()
-  registerDbIpc()
   registerLocalRecordsIpc()
   registerTestFixturesIpc()
   registerDocumentsIpc()

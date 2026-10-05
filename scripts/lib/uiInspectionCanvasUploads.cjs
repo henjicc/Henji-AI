@@ -20,7 +20,7 @@ function createCanvasUploadsScene(context) {
       const { ffmpegPath } = require('./mediaBinaries.cjs')
       execFileSync(ffmpegPath, ['-y', '-f', 'lavfi', '-i', 'testsrc2=size=640x360:rate=12', '-t', '2', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', video], { windowsHide: true, stdio: 'pipe' })
       execFileSync(ffmpegPath, ['-y', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=3', '-af', 'afade=t=in:d=0.5,afade=t=out:st=2:d=1', audio], { windowsHide: true, stdio: 'pipe' })
-      await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
+      await page.getByRole('button', { name: /返回画布列表|Back to Canvases/ }).click()
       await page.locator(`[data-project-id="${projectId}"]:visible`).waitFor()
       await page.evaluate(async projectId => {
         const nodes = [
@@ -30,14 +30,12 @@ function createCanvasUploadsScene(context) {
           { id: 'upload-audio', type: 'universalUploadNode', position: { x: 570, y: 620 }, data: {} },
           { id: 'upload-reference', type: 'imageNode', position: { x: 1060, y: 80 }, data: { prompt: '图片生成节点 · 大小对照' } },
         ]
-        await window.henjiNative.db.execute(
-          'UPDATE storyboard_projects SET node_count = ?, nodes_json = ?, edges_json = ?, viewport_json = ?, history_json = ? WHERE id = ?',
-          [nodes.length, JSON.stringify(nodes), '[]', JSON.stringify({ x: 65, y: 45, zoom: 0.65 }), JSON.stringify({ past: [], future: [], imagePool: [] }), projectId])
+        await window.henjiNative.testFixtures.writeCanvas(projectId, { nodes: nodes, edges: [], viewport: { x: 65, y: 45, zoom: 0.65 }, clearHistory: true })
       }, projectId)
-      // 直接改库后重载渲染层，避免复用刚关闭工程留在内存里的旧会话。
+      // 直接改画布文件后重载渲染层，避免复用刚关闭画布留在内存里的旧会话。
       await page.reload({ waitUntil: 'domcontentloaded' })
       await context.setupCanvas(page)
-      if (await page.locator('.react-flow').count()) await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
+      if (await page.locator('.react-flow').count()) await page.getByRole('button', { name: /返回画布列表|Back to Canvases/ }).click()
       await page.locator(`[data-project-id="${projectId}"]:visible`).click()
       const cases = [
         ['landscape', landscape, 'uploadNode', 427, 240],
@@ -71,7 +69,7 @@ function createCanvasUploadsScene(context) {
       const resized = await audioNode.boundingBox()
       await page.locator('.react-flow__pane').click({ position: { x: 15, y: 350 } })
       await writeFile('.ui-tour/canvas-unified-upload-resized.png', await captureInspectionPage(app, page))
-      await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
+      await page.getByRole('button', { name: /返回画布列表|Back to Canvases/ }).click()
       await page.locator(`[data-project-id="${projectId}"]:visible`).waitFor()
       await page.locator(`[data-project-id="${projectId}"]:visible`).click()
       await audioNode.waitFor()

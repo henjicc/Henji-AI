@@ -13,8 +13,8 @@ async function readDragPersistenceEvidence(page, payload) {
     const loaded = await window.henjiNative.imageEditorV3.loadDocument({
       requestId: `reality-multi-layer-post-drag-${crypto.randomUUID()}`, documentRef,
     })
-    const rows = await window.henjiNative.db.select('SELECT nodes_json FROM storyboard_projects WHERE id = ? LIMIT 1', [projectId])
-    const node = JSON.parse(rows[0]?.nodes_json ?? '[]').find((value) => value.id === nodeId)
+    const stored = await window.henjiNative.testFixtures.readCanvas(projectId)
+    const node = (stored?.nodes ?? []).find((value) => value.id === nodeId)
     return {
       repositorySaveCount: result.events.filter((event) => event.event === 'image_editor_v3.document.save.completed'
         && event.context?.documentId === documentId && event.context?.revision === revision).length,
@@ -85,7 +85,7 @@ async function verifyMultiLayerDragPerformance({
   inspection,
   reopenProject,
 }) {
-  // 调用方刚在库层写入夹具；工程实例常驻内存，必须经 reload 重新读取（reopenCanvasProjectFromStorage）
+  // 调用方刚直接写入画布文件；画布实例常驻内存，必须经 reload 重新读取（reopenCanvasProjectFromStorage）
   await reopenProject(page, projectId)
   const result = page.locator(
     `[data-layer-stack-node-id="${fixture.nodeId}"][data-layer-stack-status="editable-v3"]`
@@ -104,11 +104,8 @@ async function verifyMultiLayerDragPerformance({
   const editor = dialog.locator('[data-image-editor-v3]')
   await editor.waitFor({ state: 'visible', timeout: 15000 })
   const firstOpenEvidence = await page.evaluate(async ({ targetProjectId, targetNodeId, documentRef }) => {
-    const rows = await window.henjiNative.db.select(
-      'SELECT nodes_json FROM storyboard_projects WHERE id = ? LIMIT 1',
-      [targetProjectId]
-    )
-    const nodes = JSON.parse(rows[0]?.nodes_json ?? '[]')
+    const stored = await window.henjiNative.testFixtures.readCanvas(targetProjectId)
+    const nodes = (stored?.nodes ?? [])
     const node = nodes.find((candidate) => candidate.id === targetNodeId)
     const loaded = await window.henjiNative.imageEditorV3.loadDocument({
       requestId: `reality-multi-layer-first-open-${crypto.randomUUID()}`,

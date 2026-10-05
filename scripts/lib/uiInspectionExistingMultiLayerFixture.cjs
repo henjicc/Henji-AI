@@ -94,7 +94,7 @@ function loadExistingMultiLayerSource(source) {
 
 async function seedExistingMultiLayerIsolatedFixture(page, context, source) {
   const { projectId } = await context.seedAndOpenCanvasPanoramaProject(page)
-  await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
+  await page.getByRole('button', { name: /返回画布列表|Back to Canvases/ }).click()
   await context.settlePage(page, 350)
   const payload = loadExistingMultiLayerSource(source)
   const target = await page.evaluate(async ({ targetProjectId, fixture }) => {
@@ -158,20 +158,14 @@ async function seedExistingMultiLayerIsolatedFixture(page, context, source) {
         isGenerating: false,
       },
     }
-    await window.henjiNative.db.execute(
-      `UPDATE storyboard_projects
-       SET node_count = 1, nodes_json = ?, edges_json = '[]', viewport_json = ?, history_json = ?
-       WHERE id = ?`,
-      [JSON.stringify([node]), JSON.stringify({ x: 50, y: 120, zoom: 0.7 }),
-        JSON.stringify({ past: [], future: [], imagePool: [] }), targetProjectId]
-    )
+    await window.henjiNative.testFixtures.writeCanvas(targetProjectId, { nodes: [node], edges: [], viewport: { x: 50, y: 120, zoom: 0.7 }, clearHistory: true })
     return {
       projectId: targetProjectId,
       nodeId,
       expectedLayerCount: layers.length,
     }
   }, { targetProjectId: projectId, fixture: payload })
-  // 工程实例常驻内存，库层改写后必须经 reload 重新读取（见 reopenCanvasProjectFromStorage）
+  // 画布实例常驻内存，直接改文件后必须经 reload 重新读取（见 reopenCanvasProjectFromStorage）
   await context.reopenCanvasProjectFromStorage(page, projectId)
   return target
 }

@@ -6,7 +6,7 @@
     "writesUserData": true,
     "steps": [
       { "enter": "canvas" },
-      { "click": { "role": "button", "name": "/^(返回项目|Back to Projects)/" }, "ifPresent": { "role": "button", "name": "/^(返回项目|Back to Projects)/" } },
+      { "click": { "role": "button", "name": "/^(返回画布列表|Back to Canvases)/" }, "ifPresent": { "role": "button", "name": "/^(返回画布列表|Back to Canvases)/" } },
       { "waitFor": { "selector": "[data-project-library-state]" }, "timeout": 12000 },
       { "waitStable": {} },
       { "capture": "canvas-projects" },

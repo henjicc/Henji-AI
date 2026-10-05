@@ -8,7 +8,7 @@ async function setupCameraStageBackgroundRender(page, context, inspection = {}) 
   const stageDocumentId = await seedCameraStageDocument(page, { name: '真实性巡检-后台渲染生命周期', scene: createPlaybackFixture() })
 
   const { projectId } = await seedAndOpenCanvasPanoramaProject(page)
-  await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
+  await page.getByRole('button', { name: /返回画布列表|Back to Canvases/ }).click()
   await settlePage(page, 500)
   const node = {
     id: CAMERA_STAGE_NODE_ID,
@@ -42,15 +42,11 @@ async function setupCameraStageBackgroundRender(page, context, inspection = {}) 
     },
   }
   await page.evaluate(async ({ canvasProjectId, cameraNode }) => {
-    await window.henjiNative.db.execute(
-      'UPDATE storyboard_projects SET node_count = 1, nodes_json = ?, edges_json = ?, viewport_json = ?, history_json = ? WHERE id = ?',
-      [JSON.stringify([cameraNode]), '[]', JSON.stringify({ x: 180, y: 100, zoom: 0.8 }),
-        JSON.stringify({ past: [], future: [], imagePool: [] }), canvasProjectId]
-    )
+    await window.henjiNative.testFixtures.writeCanvas(canvasProjectId, { nodes: [cameraNode], edges: [], viewport: { x: 180, y: 100, zoom: 0.8 }, clearHistory: true })
   }, { canvasProjectId: projectId, cameraNode: node })
 
   const projectCard = page.locator(`[data-project-id="${projectId}"]:visible`)
-  // 工程实例常驻内存，库层改写后必须经 reload 重新读取（见 reopenCanvasProjectFromStorage）
+  // 画布实例常驻内存，直接改文件后必须经 reload 重新读取（见 reopenCanvasProjectFromStorage）
   await reopenCanvasProjectFromStorage(page, projectId)
   const cameraNode = page.locator(`.react-flow__node[data-id="${CAMERA_STAGE_NODE_ID}"]`)
   await cameraNode.waitFor({ state: 'visible', timeout: 12000 })
@@ -58,37 +54,31 @@ async function setupCameraStageBackgroundRender(page, context, inspection = {}) 
   await page.getByRole('button', { name: /输出图片|Output Image/i }).click()
 
   await page.waitForFunction(async ({ canvasProjectId, nodeId }) => {
-    const rows = await window.henjiNative.db.select(
-      'SELECT nodes_json FROM storyboard_projects WHERE id = ? LIMIT 1', [canvasProjectId]
-    )
-    const nodes = rows.length ? JSON.parse(rows[0].nodes_json) : []
+    const stored = await window.henjiNative.testFixtures.readCanvas(canvasProjectId)
+    const nodes = (stored?.nodes ?? [])
     const source = nodes.find((candidate) => candidate.id === nodeId)
     return Boolean(source?.data?.renderTask?.requestId)
   }, { canvasProjectId: projectId, nodeId: CAMERA_STAGE_NODE_ID }, { timeout: 12000 })
 
   // 返回项目列表会卸载整个 Canvas（包括旧实现所在的 CameraStageNodeDialog），
   // 应用级任务宿主仍保持订阅；终态先留在主进程，等重入工程后再落图。
-  await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
+  await page.getByRole('button', { name: /返回画布列表|Back to Canvases/ }).click()
   await page.waitForFunction(async (canvasProjectId) => {
     const tasks = await window.henjiNative.cameraStageRender.list(canvasProjectId)
     return tasks.some((task) => task.status === 'completed')
   }, projectId, { timeout: 45000 })
 
-  const beforeRows = await page.evaluate(async (canvasProjectId) => (
-    await window.henjiNative.db.select(
-      'SELECT nodes_json FROM storyboard_projects WHERE id = ? LIMIT 1', [canvasProjectId]
-    )
+  const beforeCanvas = await page.evaluate(async (canvasProjectId) => (
+    await window.henjiNative.testFixtures.readCanvas(canvasProjectId)
   ), projectId)
-  if (JSON.parse(beforeRows[0].nodes_json).length !== 1) {
+  if (beforeCanvas.nodes.length !== 1) {
     throw new Error('离开画布期间不应绕过宿主持久化屏障直接新增结果节点')
   }
 
   await projectCard.click()
   await page.waitForFunction(async ({ canvasProjectId, nodeId }) => {
-    const rows = await window.henjiNative.db.select(
-      'SELECT nodes_json FROM storyboard_projects WHERE id = ? LIMIT 1', [canvasProjectId]
-    )
-    const nodes = rows.length ? JSON.parse(rows[0].nodes_json) : []
+    const stored = await window.henjiNative.testFixtures.readCanvas(canvasProjectId)
+    const nodes = (stored?.nodes ?? [])
     const source = nodes.find((candidate) => candidate.id === nodeId)
     return nodes.filter((candidate) => candidate.type === 'exportImageNode').length === 1
       && source?.data?.renderTask == null

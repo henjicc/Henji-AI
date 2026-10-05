@@ -82,8 +82,8 @@ async function checkCanvasBulkPerformance(page, inspection, projectId) {
   await inspection.capture(`bulk-pasted-${fixture.nodes}`)
   // 测量之外读取正式保存结果，防止只凭 DOM 数量把丢失数据或连错线算作成功。
   const readSaved = () => page.evaluate(async ({ projectId, fixture }) => {
-    const record = await window.henjiNative.storyboardProjects.getProjectRecord(projectId)
-    const nodes = JSON.parse(record.nodesJson), edges = JSON.parse(record.edgesJson)
+    const record = await window.henjiNative.testFixtures.readCanvas(projectId)
+    const nodes = record.nodes, edges = record.edges
     if (nodes.length !== fixture.nodes + fixture.selected.length || edges.length !== fixture.edges + fixture.internalEdges) return false
     const byId = new Map(nodes.map(node => [node.id, node]))
     const edgeById = new Map(edges.map(edge => [edge.id, edge]))

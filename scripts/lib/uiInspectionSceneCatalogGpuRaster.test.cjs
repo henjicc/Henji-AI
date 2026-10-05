@@ -24,12 +24,11 @@ function install(t, { closeAfter = 35000, failure = null, projection = {}, loade
         return { levels: [{ mip: 0, width: 8192, height: 8192 }], ...metadata }
       },
     },
-    db: { select: async (sql, values) => {
-      assert.match(sql, /SELECT nodes_json/)
-      assert.deepEqual(values, ['project'])
-      return [{ nodes_json: JSON.stringify([{ id: 'node', data: { imageEditSession: {
+    testFixtures: { readCanvas: async (projectId) => {
+      assert.equal(projectId, 'project')
+      return { nodes: [{ id: 'node', data: { imageEditSession: {
         documentRef: 'doc-ref', revision: 4, previewRef: 'new-preview', ...projection,
-      } } }]) }]
+      } } }], edges: [] }
     } },
     logging: { queryLogEvents: async (query) => {
       queries.push(query)

@@ -2,6 +2,7 @@
 
 const { dispatch, findPanePoint, releasePointer } = require('./canvasPanInput.cjs')
 const { planSweepViewport } = require('./canvasPanViewport.cjs')
+const { createCanvasDocument, findCanvasDocumentByName, readCanvasDocument, removeCanvasDocuments, writeCanvasDocument } = require('./canvasDocumentFixture.cjs')
 
 /**
  * 画布平移性能基准的公共能力：真实内容 fixture 生成、抓取点查找、连续扫掠驱动、每轮自检。
@@ -80,19 +81,14 @@ function duplicateGraph(nodesJson, edgesJson, multiplier) {
   return { nodes, edges }
 }
 
-async function readProjectRowByName(page, name) {
-  return page.evaluate(async (projectName) => {
-    const rows = await window.henjiNative.db.select(
-      `SELECT id, name, node_count, nodes_json, edges_json, viewport_json, history_json
-       FROM storyboard_projects WHERE name = ? ORDER BY updated_at DESC LIMIT 1`,
-      [projectName]
-    )
-    return rows.length ? rows[0] : null
-  }, name)
+/** 按名称读真实画布（最新的一份）：节点、连线、媒体池与视口；没有返回 null。 */
+async function readProjectByName(page, name) {
+  const found = await findCanvasDocumentByName(page, name)
+  return found ? await readCanvasDocument(page, found.id) : null
 }
 
 /**
- * 用真实项目的节点数据生成临时项目。
+ * 用真实画布的节点数据生成临时画布。
  * 媒体路径原样保留，因此仍然是真实图片/视频负载，而不是占位图 fixture。
  */
 async function createRealContentFixture(page, {
@@ -101,51 +97,31 @@ async function createRealContentFixture(page, {
   tempName,
   viewportPlan,
 } = {}) {
-  const source = await readProjectRowByName(page, sourceProject)
+  const source = await readProjectByName(page, sourceProject)
   if (!source) {
-    throw new Error(`找不到源项目：${sourceProject}（请确认真实数据库中存在该项目）`)
+    throw new Error(`找不到源画布：${sourceProject}（请确认真实作品目录中存在该画布）`)
   }
 
-  const { nodes, edges } = duplicateGraph(source.nodes_json, source.edges_json, multiplier)
+  const { nodes, edges } = duplicateGraph(JSON.stringify(source.nodes), JSON.stringify(source.edges), multiplier)
   const fixtureName = tempName || `${FIXTURE_PREFIX}${Date.now()}`
   const nodeTypes = new Set(nodes.map((node) => node.type))
-  const sourceViewport = JSON.parse(source.viewport_json)
+  const sourceViewport = source.viewport ?? { x: 0, y: 0, zoom: 1 }
   const viewport = viewportPlan
     ? planSweepViewport(nodes, { ...viewportPlan, zoom: viewportPlan.zoom ?? sourceViewport.zoom })
     : sourceViewport
 
-  const projectId = await page.evaluate(async (payload) => {
-    const id = `panbench-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-    const now = Date.now()
-    await window.henjiNative.db.execute(
-      `INSERT INTO storyboard_projects
-       (id, name, created_at, updated_at, node_count, nodes_json, edges_json, viewport_json, history_json)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        id,
-        payload.name,
-        now,
-        now,
-        payload.nodeCount,
-        payload.nodesJson,
-        payload.edgesJson,
-        payload.viewportJson,
-        JSON.stringify({ past: [], future: [], imagePool: payload.imagePool }),
-      ]
-    )
-    return id
-  }, {
+  const created = await createCanvasDocument(page, {
+    id: `panbench-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     name: fixtureName,
-    nodeCount: nodes.length,
-    nodesJson: JSON.stringify(nodes),
-    edgesJson: JSON.stringify(edges),
-    viewportJson: JSON.stringify({ x: viewport.x, y: viewport.y, zoom: viewport.zoom }),
-    // 节点中的 __img_ref__ 依赖原工程媒体池；仅清历史，不丢弃真实媒体负载。
-    imagePool: JSON.parse(source.history_json || '{}').imagePool ?? [],
+    nodes,
+    edges,
+    viewport: { x: viewport.x, y: viewport.y, zoom: viewport.zoom },
   })
+  // 节点中的 __img_ref__（缺失模型的不透明参数）依赖原画布媒体池；只复制媒体池，不带撤销记录。
+  if (source.imagePool.length) await writeCanvasDocument(page, created.id, { imagePool: source.imagePool })
 
   return {
-    projectId,
+    projectId: created.id,
     projectName: fixtureName,
     sourceProjectId: source.id,
     nodeCount: nodes.length,
@@ -157,18 +133,14 @@ async function createRealContentFixture(page, {
   }
 }
 
-/** 按名称前缀删除临时项目，避免污染真实数据 */
+/** 按名称前缀删掉临时画布，避免污染真实数据 */
 async function removeFixtures(page, prefix = FIXTURE_PREFIX) {
-  return page.evaluate(async (namePrefix) => {
-    const rows = await window.henjiNative.db.select(
-      'SELECT id FROM storyboard_projects WHERE name LIKE ?',
-      [`${namePrefix}%`]
-    )
-    for (const row of rows) {
-      await window.henjiNative.db.execute('DELETE FROM storyboard_projects WHERE id = ?', [row.id])
-    }
-    return rows.length
+  const ids = await page.evaluate(async (namePrefix) => {
+    const rows = await window.henjiNative.documents.listDocuments({ kind: 'canvas', includeDrafts: true, includeMissing: false })
+    return rows.filter((row) => row.name.startsWith(namePrefix)).map((row) => row.id)
   }, prefix)
+  await removeCanvasDocuments(page, ids)
+  return ids.length
 }
 
 async function readCanvasState(page) {

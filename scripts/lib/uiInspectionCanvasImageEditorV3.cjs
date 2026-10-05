@@ -18,7 +18,7 @@ async function openCanvasImageEditorV3Fixture({
   openEditor = true,
 }) {
   const { projectId } = await context.seedAndOpenCanvasPanoramaProject(page)
-  await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
+  await page.getByRole('button', { name: /返回画布列表|Back to Canvases/ }).click()
   await context.settlePage(page, 500)
   const fixture = await page.evaluate(async (payload) => {
     const canvas = document.createElement('canvas')
@@ -114,12 +114,9 @@ async function openCanvasImageEditorV3Fixture({
       resourceRefs: [managed.resource.resourceRef, ...(foregroundSource ? [foregroundSource.resource.resourceRef] : [])],
       previewRef: null,
     })
-    const rows = await window.henjiNative.db.select(
-      'SELECT nodes_json, edges_json FROM storyboard_projects WHERE id = ? LIMIT 1',
-      [payload.projectId],
-    )
-    const nodes = JSON.parse(rows[0]?.nodes_json ?? '[]')
-    const edges = JSON.parse(rows[0]?.edges_json ?? '[]')
+    const stored = await window.henjiNative.testFixtures.readCanvas(payload.projectId)
+    const nodes = (stored?.nodes ?? [])
+    const edges = (stored?.edges ?? [])
     const nodeId = '__ui_canvas_gpu_diagnostic_document'
     nodes.push({
       id: nodeId,
@@ -148,17 +145,14 @@ async function openCanvasImageEditorV3Fixture({
       source: '__ui_panorama_source', target: nodeId,
       sourceHandle: 'source', targetHandle: 'target',
     })
-    await window.henjiNative.db.execute(
-      'UPDATE storyboard_projects SET node_count = ?, nodes_json = ?, edges_json = ?, viewport_json = ? WHERE id = ?',
-      [nodes.length, JSON.stringify(nodes), JSON.stringify(edges), JSON.stringify({ x: 50, y: 120, zoom: 0.7 }), payload.projectId],
-    )
+    await window.henjiNative.testFixtures.writeCanvas(payload.projectId, { nodes: nodes, edges: edges, viewport: { x: 50, y: 120, zoom: 0.7 } })
     return { nodeId, documentRef: saved.documentRef, initialRevision: saved.revision,
       sourceResourceRef: managed.resource.resourceRef,
       foregroundResourceRef: foregroundSource?.resource.resourceRef ?? null,
       sourceGeometry: { width: managed.metadata.width, height: managed.metadata.height } }
   }, { projectId, width, height, label, sourceWidth, sourceHeight, transform, solidColor, foreground, annotations })
   if (!openEditor) return { dialog: null, editor: null, fixture, projectId }
-  // 工程实例常驻内存，库层改写后必须经 reload 重新读取（见 reopenCanvasProjectFromStorage）
+  // 画布实例常驻内存，直接改文件后必须经 reload 重新读取（见 reopenCanvasProjectFromStorage）
   await context.reopenCanvasProjectFromStorage(page, projectId)
   const node = page.locator(`[data-layer-stack-node-id="${fixture.nodeId}"][data-layer-stack-status="editable-v3"]`)
   await node.waitFor({ state: 'visible', timeout: 12000 })

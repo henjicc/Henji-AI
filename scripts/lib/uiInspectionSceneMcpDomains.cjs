@@ -6,6 +6,7 @@
  * 并发修改、凭据撤销这几类注入。判据一律落在正式存储和操作账本上，不看返回文本。
  */
 const assert = require('node:assert/strict')
+const { removeCanvasDocuments } = require('./canvasDocumentFixture.cjs')
 const crypto = require('node:crypto')
 const fsp = require('node:fs/promises')
 const path = require('node:path')
@@ -35,14 +36,11 @@ function createMcpDomainScenes({ setupSettings, canvasFixtureProjectId, REFERENC
       const stageId = await seedCameraStageDocument(page, { name: 'MCP三维输出夹具', scene: createPlaybackFixture() })
       const nodeId = 'mcp-camera'
       await page.evaluate(async ({ projectId, stageId, nodeId }) => {
-        const now = Date.now()
         const node = { id: nodeId, type: 'cameraStageNode', position: { x: 0, y: 0 },
           width: 480, height: 320, data: { projectId: stageId, displayName: 'MCP镜头',
             selectedTimeSec: 0.25, aspectRatio: '16:9', mediaInputs: {}, environmentImageUrl: null,
             renderTask: null, imageExporting: false, videoExporting: false, outputKind: 'image' } }
-        await window.henjiNative.storyboardProjects.upsertProjectRecord({ id: projectId, name: 'MCP三维后台画布',
-          createdAt: now, updatedAt: now, nodeCount: 1, nodesJson: JSON.stringify([node]), edgesJson: '[]',
-          viewportJson: '{"x":0,"y":0,"zoom":1}', historyJson: '{"past":[],"future":[],"imagePool":[]}' })
+        await window.henjiNative.testFixtures.createCanvas({ id: projectId, name: 'MCP三维后台画布', nodes: [node], replace: true })
       }, { projectId, stageId, nodeId })
       const identity = await authorizeMcpConnection(page, { name: '三维渲染验收', allowWrites: true, allowDestructive: true })
       const client = await connectMcpClient(identity.config, 'Henji camera render Reality')
@@ -85,8 +83,8 @@ function createMcpDomainScenes({ setupSettings, canvasFixtureProjectId, REFERENC
         assert.ok(media.bytes.length > 4096)
         assert.ok(media.mimeType.startsWith('image/'))
         assert.deepEqual(await callTool(client, 'render_camera_stage_output', args), submitted)
-        const stored = await page.evaluate((id) => window.henjiNative.storyboardProjects.getProjectRecord(id), projectId)
-        const results = JSON.parse(stored.nodesJson).filter((node) => node.type === 'exportImageNode')
+        const stored = await page.evaluate((id) => window.henjiNative.testFixtures.readCanvas(id), projectId)
+        const results = stored.nodes.filter((node) => node.type === 'exportImageNode')
         assert.equal(results.length, 1, '重传不得创建第二个渲染结果')
         assert.equal(observation.resultRefs[0].id, `${projectId}:${results[0].id}`)
 
@@ -109,8 +107,8 @@ function createMcpDomainScenes({ setupSettings, canvasFixtureProjectId, REFERENC
         }
         assert.equal(activeCancelled?.status, 'cancelled', JSON.stringify(activeCancelled))
         await page.waitForTimeout(750)
-        const afterCancel = await page.evaluate((id) => window.henjiNative.storyboardProjects.getProjectRecord(id), projectId)
-        assert.equal(JSON.parse(afterCancel.nodesJson).filter((node) => node.type === 'exportImageNode' || node.type === 'exportVideoNode').length,
+        const afterCancel = await page.evaluate((id) => window.henjiNative.testFixtures.readCanvas(id), projectId)
+        assert.equal(afterCancel.nodes.filter((node) => node.type === 'exportImageNode' || node.type === 'exportVideoNode').length,
           1, '取消后的迟到结果不得新增输出节点')
       } finally {
         await client.close()
@@ -134,10 +132,7 @@ function createMcpDomainScenes({ setupSettings, canvasFixtureProjectId, REFERENC
         await page.evaluate(async ({ historyId, projectId, mediaPath }) => {
           await window.henjiNative.generationHistory.insert({ id: historyId, providerId: 'kie', modelId: 'kie-z-image', type: 'image',
             prompt: 'MCP落图夹具', params: {}, resultPaths: [mediaPath], taskId: null, status: 'success', errorMessage: null, cost: null, duration: null })
-          const now = Date.now()
-          await window.henjiNative.storyboardProjects.upsertProjectRecord({ id: projectId, name: 'MCP结果后台画布',
-            createdAt: now, updatedAt: now, nodeCount: 0, nodesJson: '[]', edgesJson: '[]',
-            viewportJson: '{"x":0,"y":0,"zoom":1}', historyJson: '{"past":[],"future":[],"imagePool":[]}' })
+          await window.henjiNative.testFixtures.createCanvas({ id: projectId, name: 'MCP结果后台画布', replace: true })
         }, { historyId, projectId, mediaPath })
         await page.reload()
         await setupSettings(page)
@@ -148,10 +143,13 @@ function createMcpDomainScenes({ setupSettings, canvasFixtureProjectId, REFERENC
         const baseline = async (ref) => callTool(client, 'read_application_entity', { ref, propertyIds: [] })
         const before = await baseline(projectRef)
         const result = await baseline(resultRef)
-        // 制造真实过期：仅改夹具工程，旧基线必须未执行，不能污染为 unknown。
-        await callTool(client, 'change_application_entities', operationEnvelope([before], {
-          summary: '通过正式实例更新工程，使旧读取基线过期', changes: [{ kind: 'set_properties',
-            entityType: projectRef.kind, target: projectRef, properties: { 'canvas.project.name': '已修改的后台工程' } }],
+        // 制造真实过期：仅给夹具画布改名（3.4 起画布名就是文档名，走 documents.document.name），
+        // 画布版本随之推进，旧基线必须未执行，不能污染为 unknown。
+        const documentRef = { kind: 'documents.document', id: projectId }
+        const documentBefore = await callTool(client, 'read_application_entity', { ref: documentRef, propertyIds: ['documents.document.name'] })
+        await callTool(client, 'change_application_entities', operationEnvelope([documentBefore], {
+          summary: '通过正式实例给画布改名，使旧读取基线过期', changes: [{ kind: 'set_properties',
+            entityType: documentRef.kind, target: documentRef, properties: { 'documents.document.name': '已修改的后台工程' } }],
         }))
         const stale = operationEnvelope([before, result], { projectId, resultRef, placement: { mode: 'absolute', x: 0, y: 0 } })
         const refused = await client.callTool({ name: 'add_generation_result_to_canvas', arguments: stale })
@@ -166,18 +164,16 @@ function createMcpDomainScenes({ setupSettings, canvasFixtureProjectId, REFERENC
         assert.equal(placed.verificationState, 'verified', JSON.stringify(placed))
         assert.ok(placed.result.data.undoRef.startsWith('canvas-batch-undo:'))
         assert.deepEqual(await callTool(client, 'add_generation_result_to_canvas', args), placed)
-        const stored = await page.evaluate((id) => window.henjiNative.storyboardProjects.getProjectRecord(id), projectId)
-        const nodes = JSON.parse(stored.nodesJson)
+        const stored = await page.evaluate((id) => window.henjiNative.testFixtures.readCanvas(id), projectId)
+        const nodes = stored.nodes
         assert.equal(nodes.length, 1)
         assert.equal(placed.result.data.nodeRef.id, `${projectId}:${nodes[0].id}`)
         const media = await readAllMedia(client, placed.result.data.nodeRef)
         assert.equal(crypto.createHash('sha256').update(media.bytes).digest('hex'), crypto.createHash('sha256').update(bytes).digest('hex'))
       } finally {
         if (client) await client.close()
-        await page.evaluate(async ({ historyId, projectId }) => {
-          await window.henjiNative.storyboardProjects.deleteProjectRecord(projectId)
-          await window.henjiNative.generationHistory.delete(historyId)
-        }, { historyId, projectId })
+        await removeCanvasDocuments(page, [projectId])
+        await page.evaluate((id) => window.henjiNative.generationHistory.delete(id), historyId)
         await fsp.rm(mediaPath, { force: true })
         await disableMcp(page)
       }
@@ -294,23 +290,24 @@ function createMcpDomainScenes({ setupSettings, canvasFixtureProjectId, REFERENC
       const second = await authorizeMcpConnection(page, { name: `注入验收乙-${nonce}`, allowWrites: true })
       const clientA = await connectMcpClient(first.config, 'Henji inject A')
       const clientB = await connectMcpClient(second.config, 'Henji inject B')
-      const projectRef = { kind: 'canvas.project', id: canvasFixtureProjectId }
+      // 3.4 起画布名就是文档名：并发改名落在画布文档（documents.document.name）上
+      const projectRef = { kind: 'documents.document', id: canvasFixtureProjectId }
       const countLibraries = async (name) => (await page.evaluate(() => window.henjiNative.assetLibrary.listLibraries()))
         .filter((item) => item.name === name).length
       try {
         // 1. 并发修改：两个连接读到同一基线，后写的一方必须被拒绝，且存储只保留先写的值。
-        const readA = await callTool(clientA, 'read_application_entity', { ref: projectRef, propertyIds: ['canvas.project.name'] })
-        const readB = await callTool(clientB, 'read_application_entity', { ref: projectRef, propertyIds: ['canvas.project.name'] })
+        const readA = await callTool(clientA, 'read_application_entity', { ref: projectRef, propertyIds: ['documents.document.name'] })
+        const readB = await callTool(clientB, 'read_application_entity', { ref: projectRef, propertyIds: ['documents.document.name'] })
         const winner = `MCP并发胜出-${nonce}`
         const applied = await callTool(clientB, 'change_application_entities', operationEnvelope([readB], {
-          summary: '并发写入乙', changes: [{ kind: 'set_properties', entityType: projectRef.kind, target: projectRef, properties: { 'canvas.project.name': winner } }],
+          summary: '并发写入乙', changes: [{ kind: 'set_properties', entityType: projectRef.kind, target: projectRef, properties: { 'documents.document.name': winner } }],
         }))
         assert.equal(applied.executionState, 'completed', JSON.stringify(applied))
         const staleRefusal = await expectToolRefusal(clientA, 'change_application_entities', operationEnvelope([readA], {
-          summary: '并发写入甲', changes: [{ kind: 'set_properties', entityType: projectRef.kind, target: projectRef, properties: { 'canvas.project.name': `MCP并发落败-${nonce}` } }],
+          summary: '并发写入甲', changes: [{ kind: 'set_properties', entityType: projectRef.kind, target: projectRef, properties: { 'documents.document.name': `MCP并发落败-${nonce}` } }],
         }))
         assert.ok(/STALE|BASELINE|REVISION|并发|重新读取/i.test(staleRefusal), `过期基线的拒绝必须说得出该重新读取：${staleRefusal}`)
-        const afterConflict = await page.evaluate((id) => window.henjiNative.storyboardProjects.getProjectRecord(id), canvasFixtureProjectId)
+        const afterConflict = await page.evaluate((id) => window.henjiNative.testFixtures.readCanvas(id), canvasFixtureProjectId)
         assert.equal(afterConflict.name, winner, '并发落败的一方仍然改到了正式存储')
 
         /*
@@ -365,8 +362,8 @@ function createMcpDomainScenes({ setupSettings, canvasFixtureProjectId, REFERENC
         await page.evaluate((id) => window.henjiNative.mcp.revoke({ id }), first.id)
         const denied = await fetch(first.config.url, { method: 'POST', headers: { ...first.config.headers, 'Content-Type': 'application/json' }, body: '{}' })
         assert.equal(denied.status, 401, `撤销后的令牌仍被接受，状态 ${denied.status}`)
-        const survivor = await callTool(clientB, 'read_application_entity', { ref: projectRef, propertyIds: ['canvas.project.name'] })
-        assert.equal(survivor.data.properties['canvas.project.name'], winner, '撤销一条连接影响了另一条连接的读取')
+        const survivor = await callTool(clientB, 'read_application_entity', { ref: projectRef, propertyIds: ['documents.document.name'] })
+        assert.equal(survivor.data.properties['documents.document.name'], winner, '撤销一条连接影响了另一条连接的读取')
         // 操作键按调用者隔离，乙得到与不存在的键相同的结果，不能获知甲的操作事实。
         const isolated = await expectToolRefusal(clientB, 'get_application_operation', { operationId: interrupted.operationId })
         const unknown = await expectToolRefusal(clientB, 'get_application_operation', { operationId: crypto.randomUUID() })

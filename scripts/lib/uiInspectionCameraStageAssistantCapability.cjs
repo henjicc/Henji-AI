@@ -229,11 +229,8 @@ async function waitForTaskStatus(page, client, taskRef, accepted, rejected, time
 
 async function readCanvasNodes(page, projectId) {
   return await page.evaluate(async (canvasProjectId) => {
-    const rows = await window.henjiNative.db.select(
-      'SELECT nodes_json FROM storyboard_projects WHERE id = ? LIMIT 1',
-      [canvasProjectId]
-    )
-    return rows.length ? JSON.parse(rows[0].nodes_json) : []
+    const stored = await window.henjiNative.testFixtures.readCanvas(canvasProjectId)
+    return (stored?.nodes ?? [])
   }, projectId)
 }
 
@@ -298,17 +295,13 @@ async function runCameraStageCapabilityChain(page, client, { canvasProjectId, se
     throw new Error('后台准备视频关键帧不应离开当前画布或打开 3D 编辑器')
   }
 
-  await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
+  await page.getByRole('button', { name: /返回画布列表|Back to Canvases/ }).click()
   await settlePage(page, 400)
   const cameraNode = createCameraStageNode(documentId)
   await page.evaluate(async ({ projectId, node }) => {
-    await window.henjiNative.db.execute(
-      'UPDATE storyboard_projects SET node_count = 1, nodes_json = ?, edges_json = ?, viewport_json = ?, history_json = ? WHERE id = ?',
-      [JSON.stringify([node]), '[]', JSON.stringify({ x: 180, y: 100, zoom: 0.8 }),
-        JSON.stringify({ past: [], future: [], imagePool: [] }), projectId]
-    )
+    await window.henjiNative.testFixtures.writeCanvas(projectId, { nodes: [node], edges: [], viewport: { x: 180, y: 100, zoom: 0.8 }, clearHistory: true })
   }, { projectId: canvasProjectId, node: cameraNode })
-  // 工程实例常驻内存，库层改写后必须经 reload 重新读取（见 reopenCanvasProjectFromStorage）
+  // 画布实例常驻内存，直接改文件后必须经 reload 重新读取（见 reopenCanvasProjectFromStorage）
   await reopenCanvasProjectFromStorage(page, canvasProjectId)
   await page.locator(`.react-flow__node[data-id="${CAMERA_NODE_ID}"]`)
     .waitFor({ state: 'visible', timeout: 12000 })
@@ -347,10 +340,8 @@ async function runCameraStageCapabilityChain(page, client, { canvasProjectId, se
     }, [baseline]))
     await waitForCancelledTaskEvent(page, videoRequestId, 15000)
     await page.waitForFunction(async ({ projectId, nodeId }) => {
-      const rows = await window.henjiNative.db.select(
-        'SELECT nodes_json FROM storyboard_projects WHERE id = ? LIMIT 1', [projectId]
-      )
-      const nodes = rows.length ? JSON.parse(rows[0].nodes_json) : []
+      const stored = await window.henjiNative.testFixtures.readCanvas(projectId)
+      const nodes = (stored?.nodes ?? [])
       const source = nodes.find((node) => node.id === nodeId)
       return source?.data?.renderTask == null && source?.data?.videoExporting === false
         && nodes.every((node) => node.type !== 'exportVideoNode')

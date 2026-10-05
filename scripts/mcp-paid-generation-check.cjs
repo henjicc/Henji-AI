@@ -21,6 +21,7 @@
  *   node scripts/mcp-paid-generation-check.cjs --paid    # 已获授权后，发起 1 次真实付费生成
  */
 const assert = require('node:assert/strict')
+const { removeCanvasDocuments } = require('./lib/canvasDocumentFixture.cjs')
 const crypto = require('node:crypto')
 const fs = require('node:fs')
 const fsp = require('node:fs/promises')
@@ -271,12 +272,7 @@ async function main() {
 
         // ——— 6. 进画布：沿原引用回读，媒体在画布节点上仍是同一份字节 ———
         await page.evaluate(async ({ projectId }) => {
-          const now = Date.now()
-          await window.henjiNative.storyboardProjects.upsertProjectRecord({
-            id: projectId, name: 'MCP付费验收夹具', createdAt: now, updatedAt: now, nodeCount: 0,
-            nodesJson: '[]', edgesJson: '[]', viewportJson: JSON.stringify({ x: 0, y: 0, zoom: 1 }),
-            historyJson: JSON.stringify({ past: [], future: [], imagePool: [] }),
-          })
+          await window.henjiNative.testFixtures.createCanvas({ id: projectId, name: 'MCP付费验收夹具', replace: true })
         }, { projectId: FIXTURE_PROJECT_ID })
         created.project = true
         /*
@@ -295,8 +291,8 @@ async function main() {
           assert.equal(placed.executionState, 'completed', JSON.stringify(placed))
           const nodeRef = placed.result.data.nodeRef
           evidence.canvas = { nodeRef, mediaType: placed.result.data.mediaType, verified: placed.result.data.verification?.verified === true }
-          const persisted = await page.evaluate((projectId) => window.henjiNative.storyboardProjects.getProjectRecord(projectId), FIXTURE_PROJECT_ID)
-          const nodes = JSON.parse(persisted.nodesJson)
+          const persisted = await page.evaluate((projectId) => window.henjiNative.testFixtures.readCanvas(projectId), FIXTURE_PROJECT_ID)
+          const nodes = persisted.nodes
           assert.equal(nodes.length, 1, `画布工程里应恰好一个结果节点，实际 ${nodes.length} 个`)
           assert.equal(`${FIXTURE_PROJECT_ID}:${nodes[0].id}`, nodeRef.id, '回读到的节点与返回的稳定引用不一致')
           const nodeMedia = await readAllMedia(client, nodeRef)
@@ -362,16 +358,14 @@ async function main() {
       /*
        * 删完必须回读确认，不能拿"调用没抛异常"当清理成功。
        *
-       * 这里走的是原生 `deleteProjectRecord`，绕过了渲染层的工程持久化队列——正式删除
-       * （`useProjectStore.deleteProject`）会先取消定时器、等在途写入落定、把工程标记成
-       * deleted 再删，之后的保存一律拒绝；原生删除拿不到这层保护，后台落图排的那次防抖
-       * 保存可以在删除之后把整行写回来。2026-09-18 的付费复跑就这样留下了一个夹具工程，
-       * 而当时清理仍报成功。重试一次再断言，把静默残留变成硬失败。
+       * 这里直接经文档接口把画布文件移到回收站，绕过了渲染层的画布会话：后台落图打开的会话
+       * 还可能在删除之后按防抖把文件写回来（2026-09-18 的付费复跑就这样留下了一个夹具工程，
+       * 而当时清理仍报成功）。重试一次再断言，把静默残留变成硬失败。
        */
       await attempt('project', async () => {
-        const gone = async () => !(await page.evaluate((projectId) => window.henjiNative.storyboardProjects.getProjectRecord(projectId), FIXTURE_PROJECT_ID))
+        const gone = async () => !(await page.evaluate((projectId) => window.henjiNative.testFixtures.readCanvas(projectId), FIXTURE_PROJECT_ID))
         for (let round = 0; round < 3; round += 1) {
-          await page.evaluate((projectId) => window.henjiNative.storyboardProjects.deleteProjectRecord(projectId), FIXTURE_PROJECT_ID)
+          await removeCanvasDocuments(page, [FIXTURE_PROJECT_ID])
           if (await gone()) { cleanup.project = true; return }
           await page.waitForTimeout(600)
         }

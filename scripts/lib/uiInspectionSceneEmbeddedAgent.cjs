@@ -313,14 +313,8 @@ function createEmbeddedAgentScenes(context) {
         }, path.resolve('resources/icons/icon.png'))
         await page.evaluate(() => window.henjiNative.ai.setProviderApiKey('kie', 'isolated-generation-fixture'))
         const projectA = await page.evaluate(async () => {
-          const id = crypto.randomUUID()
-          const now = Date.now()
-          await window.henjiNative.storyboardProjects.upsertProjectRecord({
-            id, name: 'Pi 原消息目标验收 A', createdAt: now, updatedAt: now, nodeCount: 0,
-            nodesJson: '[]', edgesJson: '[]', viewportJson: '{"x":0,"y":0,"zoom":1}',
-            historyJson: '{"past":[],"future":[],"imagePool":[]}',
-          })
-          return id
+          const created = await window.henjiNative.testFixtures.createCanvas({ name: 'Pi 原消息目标验收 A', replace: true })
+          return created.id
         })
         await page.reload()
         const { projectId } = await context.seedAndOpenCanvasPanoramaProject(page)
@@ -334,7 +328,7 @@ function createEmbeddedAgentScenes(context) {
         await page.getByRole('button', { name: '发送', exact: true }).click()
         await waitSnapshot(() => typeof releaseCanvasSubmission === 'function')
         // 消息已绑定 B，模型还没提交生成；先真正打开 A，再放行模型的工具调用。
-        await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
+        await page.getByRole('button', { name: /返回画布列表|Back to Canvases/ }).click()
         await page.locator(`[data-project-id="${projectA}"]:visible`).click()
         await page.locator('.react-flow').waitFor({ state: 'visible', timeout: 15000 })
         assert.equal(await page.locator('.react-flow__node').count(), 0, 'A 必须是独立的空画布')
@@ -360,8 +354,8 @@ function createEmbeddedAgentScenes(context) {
         const resultDeadline = Date.now() + 15000
         do {
           persisted = await page.evaluate(async id => {
-            const record = await window.henjiNative.storyboardProjects.getProjectRecord(id)
-            return { nodes: JSON.parse(record.nodesJson), edges: JSON.parse(record.edgesJson) }
+            const record = await window.henjiNative.testFixtures.readCanvas(id)
+            return { nodes: record.nodes, edges: record.edges }
           }, projectId)
           if (persisted.nodes.some(item => item.data.generationSourceNodeId && item.data.imageUrl && !item.data.isGenerating)) break
           if (Date.now() > resultDeadline) throw new Error('画布生成结果未保存')
@@ -374,12 +368,12 @@ function createEmbeddedAgentScenes(context) {
         assert.ok(result)
         assert.ok(persisted.edges.some(edge => edge.source === generator.id && edge.target === result.id), '结果必须连在生成节点后')
         assert.equal(await page.locator('.react-flow__node').count(), 0, 'B 的完成结果不能出现在 A')
-        const untouchedA = await page.evaluate(id => window.henjiNative.storyboardProjects.getProjectRecord(id), projectA)
-        assert.deepEqual(JSON.parse(untouchedA.nodesJson), [], '后台任务不得污染 A 的存储')
-        assert.deepEqual(JSON.parse(untouchedA.edgesJson), [])
+        const untouchedA = await page.evaluate(id => window.henjiNative.testFixtures.readCanvas(id), projectA)
+        assert.deepEqual(untouchedA.nodes, [], '后台任务不得污染 A 的存储')
+        assert.deepEqual(untouchedA.edges, [])
         await capture('canvas-result-while-editing-a')
         // 再打开原工程，确认结果真的在用户看得到的地方，而不是只躺在存储里。
-        await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
+        await page.getByRole('button', { name: /返回画布列表|Back to Canvases/ }).click()
         await page.locator(`[data-project-id="${projectId}"]:visible`).click()
         await page.locator(`.react-flow__node[data-id="${result.id}"]`).waitFor({ state: 'visible', timeout: 15000 })
         await capture('canvas-completed')
@@ -431,16 +425,14 @@ function createEmbeddedAgentScenes(context) {
           assert.equal(task.status, 'success')
           assert.equal(task.cancellable, false)
           const saved = await page.evaluate(async ({ projectId, taskId }) => {
-            const project = await window.henjiNative.storyboardProjects.getProjectRecord(projectId)
+            const project = await window.henjiNative.testFixtures.readCanvas(projectId)
             const history = await window.henjiNative.generationHistory.get(taskId)
-            return { history, imagePool: JSON.parse(project.historyJson).imagePool,
-              results: JSON.parse(project.nodesJson).filter(node => node.data.generationTaskId === taskId) }
+            return { history, results: project.nodes.filter(node => node.data.generationTaskId === taskId) }
           }, { projectId, taskId: uiTaskId })
           assert.equal(saved.history.status, 'success')
           assert.equal(saved.results.length, 1)
-          const imageRef = saved.results[0].data.imageUrl
-          assert.match(imageRef, /^__img_ref__:\d+$/)
-          assert.deepEqual([saved.imagePool[Number(imageRef.slice('__img_ref__:'.length))]], saved.history.resultPaths)
+          // 3.4 起画布文档直接存结果位置（不再经媒体池引用）
+          assert.deepEqual([saved.results[0].data.imageUrl], saved.history.resultPaths)
           assert.equal(saved.results[0].data.isGenerating, false)
           await capture('ui-task-completed')
         } finally { await client.close() }

@@ -148,15 +148,12 @@ function attachUiInspectionCanvasRelight(context) {
 
 
     await page.waitForTimeout(900)
-    await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
+    await page.getByRole('button', { name: /返回画布列表|Back to Canvases/ }).click()
     await settlePage(page, 500)
     const persisted = await page.evaluate(async ({ targetProjectId, targetNodeId }) => {
-      const rows = await window.henjiNative.db.select(
-        'SELECT nodes_json, edges_json FROM storyboard_projects WHERE id = ? LIMIT 1',
-        [targetProjectId]
-      )
-      const nodes = JSON.parse(rows[0]?.nodes_json ?? '[]')
-      const edges = JSON.parse(rows[0]?.edges_json ?? '[]')
+      const stored = await window.henjiNative.testFixtures.readCanvas(targetProjectId)
+      const nodes = (stored?.nodes ?? [])
+      const edges = (stored?.edges ?? [])
       const node = nodes.find((candidate) => candidate.id === targetNodeId)
       return {
         nodeType: node?.type,
@@ -191,14 +188,14 @@ function attachUiInspectionCanvasRelight(context) {
 
     // 模拟旧版本保存的自动尺寸，确认新默认大小不会被旧测量盒裁切。
     await page.evaluate(async ({ projectId, nodeId }) => {
-      const rows = await window.henjiNative.db.select('SELECT nodes_json FROM storyboard_projects WHERE id = ?', [projectId])
-      const nodes = JSON.parse(rows[0].nodes_json)
+      const stored = await window.henjiNative.testFixtures.readCanvas(projectId)
+      const nodes = (stored?.nodes ?? [])
       const node = nodes.find((item) => item.id === nodeId)
       node.data.isSizeManuallyAdjusted = false
       node.width = 680
       node.height = 360
       node.style = { ...node.style, width: 680, height: 360 }
-      await window.henjiNative.db.execute('UPDATE storyboard_projects SET nodes_json = ? WHERE id = ?', [JSON.stringify(nodes), projectId])
+      await window.henjiNative.testFixtures.writeCanvas(projectId, { nodes: nodes })
     }, { projectId, nodeId: relightNodeId })
     await reopenCanvasProjectFromStorage(page, projectId)
     const reopened = page.locator(`[data-relight-node-id="${relightNodeId}"][data-relight-mode="smart"]`)
@@ -406,15 +403,12 @@ function attachUiInspectionCanvasRelight(context) {
     const cachedBack = await editor.locator('[data-block-texture="back"]').getAttribute('href')
 
     await page.waitForTimeout(900)
-    await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
+    await page.getByRole('button', { name: /返回画布列表|Back to Canvases/ }).click()
     await settlePage(page, 500)
     const persisted = await page.evaluate(async ({ targetProjectId, targetNodeId }) => {
-      const rows = await window.henjiNative.db.select(
-        'SELECT nodes_json, edges_json FROM storyboard_projects WHERE id = ? LIMIT 1',
-        [targetProjectId]
-      )
-      const nodes = JSON.parse(rows[0]?.nodes_json ?? '[]')
-      const edges = JSON.parse(rows[0]?.edges_json ?? '[]')
+      const stored = await window.henjiNative.testFixtures.readCanvas(targetProjectId)
+      const nodes = (stored?.nodes ?? [])
+      const edges = (stored?.edges ?? [])
       const node = nodes.find((candidate) => candidate.id === targetNodeId)
       return {
         nodeType: node?.type,

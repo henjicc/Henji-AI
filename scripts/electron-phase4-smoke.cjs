@@ -35,14 +35,10 @@ async function checkNativeBridge(page) {
       throw new Error('diagnostics ping failed')
     }
 
-    const rows = await native.db.select(
-      "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('history', 'settings', 'canvas_projects') ORDER BY name"
-    )
-    const tableNames = rows.map((row) => row.name)
-    for (const name of ['canvas_projects', 'history', 'settings']) {
-      if (!tableNames.includes(name)) {
-        throw new Error(`missing database table: ${name}`)
-      }
+    // 作品索引与文档底座可用（画布等文档的列表都从这里来）
+    const canvases = await native.documents.listDocuments({ kind: 'canvas', includeDrafts: true, includeMissing: false })
+    if (!Array.isArray(canvases)) {
+      throw new Error('document index is unavailable')
     }
 
     const status = await native.ai.getProviderKeyStatus()
@@ -132,7 +128,7 @@ async function checkMediaWarmup(page, launchedAt) {
 }
 
 async function checkWorkspaceShell(page) {
-  let tempProjectName = null
+  let createdDraft = false
 
   const onboardingDialog = page.getByRole('dialog', {
     name: /首次设置|First-time setup/,
@@ -148,15 +144,11 @@ async function checkWorkspaceShell(page) {
   await page.waitForTimeout(500)
 
   if (await page.locator('.react-flow').count() === 0) {
-    tempProjectName = `Phase 4 Smoke ${Date.now()}`
+    // 新建画布直接打开一份草稿；离开时空草稿自动删除，不留数据
+    createdDraft = true
     await page.locator('[data-ui-page-header]').getByRole('button', {
-      name: /新建项目|New Project/,
+      name: /新建画布|New Canvas/,
     }).click()
-    // 必须限定到项目名输入框：页面上还有智能助手的提示词编辑器，它是
-    // contenteditable 且带 role="textbox"，不限定会命中两个元素直接报 strict 违规。
-    const nameInput = page.getByRole('textbox', { name: /项目名称|Project name/ })
-    await nameInput.fill(tempProjectName)
-    await nameInput.press('Enter')
   }
 
   try {
@@ -205,16 +197,13 @@ async function checkWorkspaceShell(page) {
 
     return canvasMetrics
   } finally {
-    if (tempProjectName) {
+    if (createdDraft) {
       await page.getByRole('button', { name: /画布|Canvas/ }).click().catch(() => undefined)
-      const returnButton = page.getByRole('button', { name: /返回项目|Back to Projects/ })
+      const returnButton = page.getByRole('button', { name: /返回画布列表|Back to Canvases/ })
       if (await returnButton.count()) {
         await returnButton.click().catch(() => undefined)
         await page.waitForTimeout(500)
       }
-      await page.evaluate(async (projectName) => {
-        await window.henjiNative?.db.execute('DELETE FROM storyboard_projects WHERE name = ?', [projectName])
-      }, tempProjectName).catch(() => undefined)
     }
   }
 }

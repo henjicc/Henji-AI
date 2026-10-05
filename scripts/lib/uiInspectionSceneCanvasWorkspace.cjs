@@ -1,3 +1,5 @@
+const { readCanvasDocument, writeCanvasDocument } = require('./canvasDocumentFixture.cjs')
+
 function attachUiInspectionCanvasWorkspace(context) {
   const {
     settlePage,
@@ -26,7 +28,7 @@ function attachUiInspectionCanvasWorkspace(context) {
   async function seedAndOpenCanvasPanoramaProject(page, toolbarBoundary = false, portrait = false) {
     await setupCanvas(page)
     if (await page.locator('.react-flow').count()) {
-      await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
+      await page.getByRole('button', { name: /返回画布列表|Back to Canvases/ }).click()
       await settlePage(page)
     }
     const fixtureCard = page.locator(`[data-project-id="${canvasFixtureProjectId}"]:visible`)
@@ -79,13 +81,8 @@ function attachUiInspectionCanvasWorkspace(context) {
     }]
     const viewportWidth = await page.evaluate(() => window.innerWidth)
     const viewportX = Math.max(80, Math.round(viewportWidth / 2 - 202))
-    await page.evaluate(async (payload) => {
-      await window.henjiNative.db.execute(
-        'UPDATE storyboard_projects SET node_count = ?, nodes_json = ?, edges_json = ?, viewport_json = ?, history_json = ? WHERE id = ?',
-        [payload.nodes.length, JSON.stringify(payload.nodes), '[]', JSON.stringify({ x: payload.viewportX, y: 80, zoom: 0.65 }), JSON.stringify({ past: [], future: [], imagePool: [] }), payload.projectId]
-      )
-    }, { projectId, nodes, viewportX })
-    // 相邻场景可能已打开并修改同一工程；直接换库后必须丢弃旧领域实例。
+    await writeCanvasDocument(page, projectId, { nodes, edges: [], imagePool: [], viewport: { x: viewportX, y: 80, zoom: 0.65 } })
+    // 相邻场景可能已打开并修改同一画布；直接改文件后必须丢弃旧领域实例。
     await page.reload({ waitUntil: 'domcontentloaded' })
     await setupCanvas(page)
     await page.locator(`[data-project-id="${projectId}"]:visible`).click()
@@ -94,8 +91,8 @@ function attachUiInspectionCanvasWorkspace(context) {
   }
 
   /**
-   * 直接改库后重新打开工程。画布工程实例在本次会话中常驻内存（canvasProjectInstances），
-   * 打开过的工程再次打开时读内存实例而不是数据库，所以库层夹具写入后必须 reload 丢弃旧实例。
+   * 直接改画布文件后重新打开。画布实例在本次会话中常驻内存（canvasProjectInstances），
+   * 打开过的画布再次打开时读内存实例而不是文件，所以夹具写入后必须 reload 丢弃旧实例。
    */
   async function reopenCanvasProjectFromStorage(page, projectId) {
     await page.reload({ waitUntil: 'domcontentloaded' })
@@ -107,15 +104,12 @@ function attachUiInspectionCanvasWorkspace(context) {
 
   async function setupCanvasMissingNodes(page) {
     const { projectId } = await seedAndOpenCanvasPanoramaProject(page)
-    await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
+    await page.getByRole('button', { name: /返回画布列表|Back to Canvases/ }).click()
     await settlePage(page)
-    await page.evaluate(async (id) => {
-      const record = await window.henjiNative.storyboardProjects.getProjectRecord(id)
-      const source = JSON.parse(record.nodesJson)[0]
-      const pool = JSON.parse(record.historyJson).imagePool
-      for (const key of ['imageUrl', 'previewImageUrl']) {
-        if (source.data[key]?.startsWith('__img_ref__:')) source.data[key] = pool[Number(source.data[key].slice(12))]
-      }
+    {
+      const id = projectId
+      const record = await readCanvasDocument(page, id)
+      const source = record.nodes[0]
       source.position = { x: 40, y: 120 }
       source.width = 240; source.height = 120
       source.style = { width: 240, height: 120 }; source.measured = { width: 240, height: 120 }
@@ -131,10 +125,9 @@ function attachUiInspectionCanvasWorkspace(context) {
         { id: '__missing_input', source: source.id, target: '__missing_model', sourceHandle: 'source', targetHandle: 'param:__image', type: 'disconnectableEdge' },
         { id: '__missing_output', source: '__missing_model', target: '__missing_type', sourceHandle: 'custom', targetHandle: 'custom', type: 'disconnectableEdge' },
       ]
-      await window.henjiNative.storyboardProjects.upsertProjectRecord({ ...record, nodeCount: nodes.length,
-        nodesJson: JSON.stringify(nodes), edgesJson: JSON.stringify(edges), viewportJson: JSON.stringify({ x: 40, y: 100, zoom: 0.9 }),
-        historyJson: JSON.stringify({ past: [{ nodes, edges }], future: [], imagePool: [source.data.imageUrl] }) })
-    }, projectId)
+      // 缺失模型的不透明参数按媒体池引用保存（`__img_ref__:0` 指向画布内容的 imagePool）
+      await writeCanvasDocument(page, id, { nodes, edges, imagePool: [source.data.imageUrl], viewport: { x: 40, y: 100, zoom: 0.9 } })
+    }
     await page.reload()
     await setupCanvas(page)
     const card = page.locator(`[data-project-id="${projectId}"]:visible`)
@@ -146,15 +139,12 @@ function attachUiInspectionCanvasWorkspace(context) {
     if (await page.locator('.react-flow__edge').count() !== 2) throw new Error('缺失节点的原连线丢失')
     await page.locator('.react-flow__node[data-id="__missing_model"]').click()
     if (await page.locator('[data-node-toolbar-panel]').getByRole('button', { name: /^生成$/ }).filter({ visible: true }).count()) throw new Error('缺失节点仍然允许生成')
-    await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
+    await page.getByRole('button', { name: /返回画布列表|Back to Canvases/ }).click()
     await settlePage(page)
-    const preserved = await page.evaluate(async (id) => {
-      const record = await window.henjiNative.storyboardProjects.getProjectRecord(id)
-      const nodes = JSON.parse(record.nodesJson)
-      return nodes.find((node) => node.id === '__missing_type').type === 'removedExtensionNode'
-        && nodes.find((node) => node.id === '__missing_model').data.params.image === '__img_ref__:0'
-        && JSON.parse(record.historyJson).imagePool.length >= 1
-    }, projectId)
+    const preservedRecord = await readCanvasDocument(page, projectId)
+    const preserved = preservedRecord.nodes.find((node) => node.id === '__missing_type').type === 'removedExtensionNode'
+      && preservedRecord.nodes.find((node) => node.id === '__missing_model').data.params.image === '__img_ref__:0'
+      && preservedRecord.imagePool.length >= 1
     if (!preserved) throw new Error('占位渲染覆盖了原工程数据')
     await page.locator(`[data-project-id="${projectId}"]:visible`).click()
     await page.locator('[data-missing-node="true"]').first().waitFor({ state: 'visible' })
@@ -238,14 +228,10 @@ function attachUiInspectionCanvasWorkspace(context) {
       throw new Error('Escape 关闭菜单后未把焦点还给触发按钮')
     }
 
-    await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
+    await page.getByRole('button', { name: /返回画布列表|Back to Canvases/ }).click()
     await settlePage(page, 500)
-    await page.evaluate(async (targetProjectId) => {
-      const rows = await window.henjiNative.db.select(
-        'SELECT nodes_json FROM storyboard_projects WHERE id = ? LIMIT 1',
-        [targetProjectId]
-      )
-      const nodes = JSON.parse(rows[0]?.nodes_json ?? '[]')
+    {
+      const { nodes } = await readCanvasDocument(page, projectId)
       if (!nodes.some((node) => node.id === '__ui_empty_image_source')) {
         nodes.push({
           id: '__ui_empty_image_source', type: 'uploadNode', position: { x: 100, y: 470 },
@@ -256,11 +242,8 @@ function attachUiInspectionCanvasWorkspace(context) {
           },
         })
       }
-      await window.henjiNative.db.execute(
-        'UPDATE storyboard_projects SET node_count = ?, nodes_json = ?, viewport_json = ? WHERE id = ?',
-        [nodes.length, JSON.stringify(nodes), JSON.stringify({ x: 330, y: 80, zoom: 0.65 }), targetProjectId]
-      )
-    }, projectId)
+      await writeCanvasDocument(page, projectId, { nodes, viewport: { x: 330, y: 80, zoom: 0.65 } })
+    }
     await reopenCanvasProjectFromStorage(page, projectId)
     const emptyNode = page.locator('.react-flow__node[data-id="__ui_empty_image_source"]')
     await emptyNode.waitFor({ state: 'visible', timeout: 12000 })
@@ -482,12 +465,9 @@ function attachUiInspectionCanvasWorkspace(context) {
     if (await shell.getByText('图片', { exact: true }).count()) throw new Error('已有扩图工作面时仍重复显示图片输入行')
     await page.locator('.react-flow__node[data-id="__ui_panorama_source"]').click()
     if (!await stage.isVisible()) throw new Error('取消选中后扩图工作面丢失')
-    await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
+    await page.getByRole('button', { name: /返回画布列表|Back to Canvases/ }).click()
     await settlePage(page)
-    const params = await page.evaluate(async ({ projectId, nodeId }) => {
-      const record = await window.henjiNative.storyboardProjects.getProjectRecord(projectId)
-      return JSON.parse(record.nodesJson).find(node => node.id === nodeId).data.outpaintMargins
-    }, { projectId, nodeId })
+    const params = (await readCanvasDocument(page, projectId)).nodes.find((node) => node.id === nodeId).data.outpaintMargins
     if (params.expandLeft !== 0 || params.expandRight <= 80) {
       throw new Error(`扩图参数保存错误：${JSON.stringify(params)}`)
     }

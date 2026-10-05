@@ -12,7 +12,6 @@ import type {
   HenjiCameraStageRenderTaskSnapshot,
   HenjiClipboardApi,
   HenjiCustomModelsApi,
-  HenjiDbApi,
   HenjiTestFixturesApi,
   HenjiDialogApi,
   HenjiDragApi,
@@ -44,6 +43,7 @@ import { createMcpApi } from './mcp-api'
 import { createVideoFramesApi } from './video-frames-api'
 import { createVideoDecoderApi } from './video-decoder-api'
 import { createDocumentsApi } from './documents-api'
+import { createCanvasTestFixturesApi } from './canvas-test-fixtures'
 import { createWorkRootApi } from './work-root-api'
 import { createGenerationHistoryApi, createPresetsApi, createSettingsApi } from './local-records-api'
 
@@ -133,20 +133,16 @@ const diagnosticsApi: HenjiDiagnosticsApi = {
 }
 
 /**
- * 原始 SQL 通道（测试专用）：主进程只在自动化 / 隔离测试模式下注册对应 IPC（见 electron/main/ipc/db.ts），
- * 这里用同样的判断决定是否暴露，正常启动的渲染层没有 `henjiNative.db`。3.4 删除。
+ * 自动化 / 隔离测试模式：主进程只在此模式下注册测试夹具 IPC（见 electron/main/services/automationMode.ts），
+ * 这里用同样的判断决定是否暴露 `henjiNative.testFixtures`；正常启动的渲染层没有它。
  */
 const automationTestMode = process.env['HENJI_AUTOMATION'] === '1' || Boolean(process.env['HENJI_ISOLATED_APP_DATA']?.trim())
 
-/** 测试夹具（测试专用，与原始 SQL 通道同样只在自动化模式下存在）：经拥有该表的仓库核对或清理记录。 */
+/** 测试夹具（测试专用）：经拥有该表的仓库核对或清理记录；画布读写经正式文档接口（canvas-test-fixtures.ts）。 */
 const testFixturesApi: HenjiTestFixturesApi = {
   inspectGenerationSubmission: (requestId) => nativeInvoke('testFixtures:generationSubmission:inspect', { requestId }),
   deleteGenerationSubmission: (requestId) => nativeInvoke('testFixtures:generationSubmission:delete', { requestId }),
-}
-
-const dbApi: HenjiDbApi = {
-  execute: (sql, params) => nativeInvoke('db:execute', { sql, params }),
-  select: (sql, params) => nativeInvoke('db:select', { sql, params }),
+  ...createCanvasTestFixturesApi(createDocumentsApi(nativeInvoke)),
 }
 
 const customModelsApi: HenjiCustomModelsApi = {
@@ -440,7 +436,7 @@ const api: HenjiNativeApi = {
   assistant: assistantApi,
   ai: aiApi,
   llm: llmApi,
-  ...(automationTestMode ? { db: dbApi, testFixtures: testFixturesApi } : {}),
+  ...(automationTestMode ? { testFixtures: testFixturesApi } : {}),
   generationHistory: createGenerationHistoryApi(nativeInvoke),
   presets: createPresetsApi(nativeInvoke),
   settings: createSettingsApi(nativeInvoke),

@@ -45,7 +45,7 @@ test('两层夹具真实调用两次ingest再一次save，默认单层不变，�
         return { documentRef: `image-edit-v3:${input.document.id}`, revision: input.document.revision, previewRef: null }
       },
     },
-    db: { select: async () => [{ nodes_json: '[]', edges_json: '[]' }], execute: async () => undefined },
+    testFixtures: { readCanvas: async () => ({ nodes: [], edges: [] }), writeCanvas: async () => 1 },
   } }
   const locator = { click: async () => {}, dblclick: async () => {}, waitFor: async () => {}, locator: () => locator }
   const page = { getByRole: () => locator, locator: () => locator, evaluate: (run, input) => run(input) }

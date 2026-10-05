@@ -171,8 +171,8 @@ function createLayerControlsScene(context) {
       await editor.getByRole('button', { name: /^(关闭编辑器|Close editor)$/ }).click()
       await dialog.waitFor({ state: 'hidden' })
       const finalState = await page.evaluate(async ({ projectId, fixture }) => {
-        const rows = await window.henjiNative.db.select('SELECT nodes_json FROM storyboard_projects WHERE id = ?', [projectId])
-        const storedNode = JSON.parse(rows[0].nodes_json).find((item) => item.id === fixture.nodeId)
+        const stored = await window.henjiNative.testFixtures.readCanvas(projectId)
+        const storedNode = (stored?.nodes ?? []).find((item) => item.id === fixture.nodeId)
         const saved = await window.henjiNative.imageEditorV3.loadDocument({ requestId: crypto.randomUUID(), documentRef: fixture.documentRef })
         return { session: storedNode?.data.imageEditSession, transform: saved.document.layers[1].transform,
           undo: saved.history.undo.length, redo: saved.history.redo.length }

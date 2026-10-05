@@ -41,9 +41,9 @@ test('拖动保存证据只统计正式文档写入，节点投影等关闭；�
     return { events, hasMore }
   } }, imageEditorV3: { loadDocument: async () => ({ revision: 1,
     document: { id: 'owned', layers: [{ id: 'ui-foreground-layer', transform: [1, 0, 0, 1, 5, 6] }] } }) },
-  db: { select: async () => [{ nodes_json: JSON.stringify([{ id: 'node', data: {
+  testFixtures: { readCanvas: async () => ({ nodes: [{ id: 'node', data: {
     imageEditSession: { documentRef: payload.documentRef, revision: 0 },
-  } }]) }] } }
+  } }], edges: [] }) } }
   const previous = globalThis.window
   globalThis.window = { henjiNative: native }
   try {

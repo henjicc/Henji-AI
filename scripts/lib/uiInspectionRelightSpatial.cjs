@@ -2,7 +2,7 @@ const { writeFile } = require('node:fs/promises')
 const { captureInspectionPage } = require('./uiInspectionCapture.cjs')
 
 async function prepareRelightPortrait(page, projectId, reopenCanvasProjectFromStorage) {
-  await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
+  await page.getByRole('button', { name: /返回画布列表|Back to Canvases/ }).click()
   await page.locator(`[data-project-id="${projectId}"]:visible`).waitFor()
   await page.evaluate(async (id) => {
     const canvas = document.createElement('canvas')
@@ -24,13 +24,13 @@ async function prepareRelightPortrait(page, projectId, reopenCanvasProjectFromSt
     ctx.fillText('STUDIO', 105, 340)
     const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'))
     const source = await window.henjiNative.image.persistImageBinary(new Uint8Array(await blob.arrayBuffer()), 'png')
-    const rows = await window.henjiNative.db.select('SELECT nodes_json FROM storyboard_projects WHERE id = ?', [id])
-    const nodes = JSON.parse(rows[0].nodes_json)
+    const stored = await window.henjiNative.testFixtures.readCanvas(id)
+    const nodes = (stored?.nodes ?? [])
     const node = nodes.find(item => item.id === '__ui_panorama_source')
     node.data = { ...node.data, imageUrl: source, previewImageUrl: source, aspectRatio: '1:2', displayName: '竖版产品参考图' }
-    await window.henjiNative.db.execute('UPDATE storyboard_projects SET nodes_json = ? WHERE id = ?', [JSON.stringify(nodes), id])
+    await window.henjiNative.testFixtures.writeCanvas(id, { nodes: nodes })
   }, projectId)
-  // 工程实例常驻内存，库层改写后必须经 reload 重新读取（见 reopenCanvasProjectFromStorage）
+  // 画布实例常驻内存，直接改文件后必须经 reload 重新读取（见 reopenCanvasProjectFromStorage）
   await reopenCanvasProjectFromStorage(page, projectId)
   await page.locator('.react-flow__node[data-id="__ui_panorama_source"]').waitFor()
 }

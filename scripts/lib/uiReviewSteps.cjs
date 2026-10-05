@@ -17,6 +17,7 @@
  * }
  */
 const fs = require('node:fs')
+const { writeCanvasDocument } = require('./canvasDocumentFixture.cjs')
 const os = require('node:os')
 const path = require('node:path')
 const { analyzeLayoutMetrics, collectLayoutMeasurements } = require('./uiReviewMetrics.cjs')
@@ -146,6 +147,12 @@ const STEP_ACTIONS = Object.freeze({
   seedCanvas: (value) => {
     if (!Array.isArray(value?.nodes) || value.nodes.length === 0) throw new Error('seedCanvas 需要 nodes')
     return { nodes: value.nodes, edges: value.edges ?? [], viewport: value.viewport ?? { x: 120, y: 80, zoom: 0.9 } }
+  },
+  // 已命名的空画布（3.4 起“新建画布”直接打开草稿、空草稿离开即删）：经测试夹具的正式文档接口建在作品目录“画布/”，
+  // 之后 reload 或重新进入画布页即可在列表看到
+  seedCanvasDocuments: (value) => {
+    if (!Array.isArray(value?.names) || value.names.length === 0) throw new Error('seedCanvasDocuments 需要 names')
+    return { names: value.names.map(String) }
   },
   // 助手夹具：本机流式模型替身 + 隔离模型配置（uiReviewAssistantFixture.cjs）；要在打开助手侧栏之前执行，
   // 侧栏挂载时才读取模型列表。releaseAssistant 放行 hold 暂停中的那一轮回复。
@@ -530,17 +537,12 @@ async function seedCanvasFixture(page, context, { nodes: rawNodes, edges, viewpo
   const nodes = JSON.stringify(rawNodes).includes('{{media:') ? expandMediaPlaceholders(rawNodes, canvasMediaDataUrls()) : rawNodes
   await context.setupCanvas(page)
   if (await page.locator('.react-flow').count()) {
-    await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
+    await page.getByRole('button', { name: /返回画布列表|Back to Canvases/ }).click()
     await context.settlePage(page)
   }
   const projectId = context.canvasFixtureProjectId
   await page.locator(`[data-project-id="${projectId}"]:visible`).waitFor({ state: 'visible', timeout: 12000 })
-  await page.evaluate(async (payload) => {
-    await window.henjiNative.db.execute(
-      'UPDATE storyboard_projects SET node_count = ?, nodes_json = ?, edges_json = ?, viewport_json = ? WHERE id = ?',
-      [payload.nodes.length, JSON.stringify(payload.nodes), JSON.stringify(payload.edges), JSON.stringify(payload.viewport), payload.projectId],
-    )
-  }, { projectId, nodes, edges, viewport })
+  await writeCanvasDocument(page, projectId, { nodes, edges, viewport })
   await context.reopenCanvasProjectFromStorage(page, projectId)
   await page.locator('[data-application-observation-region="canvas.viewport_observer"]:visible')
     .waitFor({ state: 'visible', timeout: 12000 })
@@ -724,6 +726,11 @@ async function runStep(page, step, runtime) {
       await panel.waitFor({ state: 'hidden', timeout })
       return
     }
+    case 'seedCanvasDocuments':
+      for (const name of step.names) {
+        await page.evaluate((documentName) => window.henjiNative.testFixtures.createCanvas({ name: documentName, replace: true }), name)
+      }
+      return
     case 'seedCanvas':
       await seedCanvasFixture(page, context, step)
       return

@@ -85,7 +85,7 @@ function createVideoEditCreativeResultsScene(context) {
         await page.reload({ waitUntil: 'domcontentloaded' }); await button(page, '剪辑').waitFor({ state: 'visible', timeout: 30000 })
 
 
-        // 3D render first. The canvas record is written through the formal project-record API before any
+        // 3D render first. The canvas document is written through the formal document API (test fixtures) before any
         // canvas instance exists; its persisted completion node is consumed after the edit project is open.
         phase('camera-stage-render')
         // 3.2：镜头参考是作品目录里的文档文件，经正式文档接口造数据
@@ -94,14 +94,12 @@ function createVideoEditCreativeResultsScene(context) {
           const now = Date.now()
           const node = { id: nodeId, type: 'cameraStageNode', position: { x: 220, y: 160 }, width: 480, height: 320, measured: { width: 480, height: 320 }, style: { width: 480, height: 320 },
             data: { displayName: '剪辑回填镜头', projectId: stageProjectId, imageUrl: null, previewImageUrl: null, videoUrl: null, aspectRatio: '16:9', durationSec: null, selectedTimeSec: 0.25, mediaInputs: {}, environmentImageUrl: null, imageExporting: false, imageRenderRequestId: null, imageRenderError: null, videoProgress: null, videoExporting: false, videoRenderPhase: null, videoRenderRequestId: null, videoRenderError: null, renderTask: null, outputKind: 'image' } }
-          const id = crypto.randomUUID()
-          await window.henjiNative.storyboardProjects.upsertProjectRecord({ id, name: '剪辑回填三维画布', createdAt: now, updatedAt: now, nodeCount: 1,
-            nodesJson: JSON.stringify([node]), edgesJson: '[]', viewportJson: JSON.stringify({ x: 180, y: 100, zoom: 0.8 }), historyJson: '{"past":[],"future":[],"imagePool":[]}' })
-          return id
+          const created = await window.henjiNative.testFixtures.createCanvas({ name: `剪辑回填三维画布 ${now}`, nodes: [node], viewport: { x: 180, y: 100, zoom: 0.8 } })
+          return created.id
         }, { stageProjectId: stageDocumentId, nodeId: STAGE_NODE_ID })
         await page.reload({ waitUntil: 'domcontentloaded' }); await button(page, '剪辑').waitFor({ state: 'visible', timeout: 30000 })
         await context.setupCanvas(page)
-        if (await page.locator('.react-flow').count()) { await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click(); await context.settlePage(page) }
+        if (await page.locator('.react-flow').count()) { await page.getByRole('button', { name: /返回画布列表|Back to Canvases/ }).click(); await context.settlePage(page) }
         await page.locator(`[data-project-id="${stageCanvasId}"]:visible`).click()
         const stageNode = page.locator(`.react-flow__node[data-id="${STAGE_NODE_ID}"]`); await stageNode.waitFor({ state: 'visible', timeout: 15000 }); await stageNode.click()
         const renderAt = performance.now(); await page.getByRole('button', { name: /输出图片|Output Image/i }).click()
@@ -109,8 +107,8 @@ function createVideoEditCreativeResultsScene(context) {
         let stageResultId = null
         for (let attempt = 0; attempt < 600 && !stageResultId; attempt++) {
           stageResultId = await page.evaluate(async canvasProjectId => {
-            const rows = await window.henjiNative.db.select('SELECT nodes_json FROM storyboard_projects WHERE id = ? LIMIT 1', [canvasProjectId])
-            const nodes = rows.length ? JSON.parse(rows[0].nodes_json) : []
+            const stored = await window.henjiNative.testFixtures.readCanvas(canvasProjectId)
+            const nodes = (stored?.nodes ?? [])
             return nodes.find(candidate => candidate.data?.cameraStageRenderReceipt && candidate.data?.generationOutputCommitId)?.id ?? null
           }, stageCanvasId)
           if (!stageResultId) await page.waitForTimeout(100)
@@ -208,7 +206,7 @@ function createVideoEditCreativeResultsScene(context) {
         const { canvasId, resultNodeId } = stage
         await context.setupCanvas(page)
         if (!await page.locator(`.react-flow__node[data-id="${resultNodeId}"]`).count()) {
-          if (await page.locator('.react-flow').count()) { await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click(); await context.settlePage(page) }
+          if (await page.locator('.react-flow').count()) { await page.getByRole('button', { name: /返回画布列表|Back to Canvases/ }).click(); await context.settlePage(page) }
           await page.locator(`[data-project-id="${canvasId}"]:visible`).click()
         }
         const resultNode = page.locator(`.react-flow__node[data-id="${resultNodeId}"]`); await resultNode.waitFor({ state: 'visible', timeout: 15000 }); await resultNode.click()

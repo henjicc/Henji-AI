@@ -4,13 +4,6 @@ import Database from 'better-sqlite3'
 import { getProgramDataDir } from './appBasePaths'
 import { runSchemaMigrations, type SchemaMigrationOptions } from './db-migrations'
 
-export type SqlBindValue = string | number | boolean | null | Uint8Array
-
-export interface SqlExecuteResult {
-  rowsAffected: number
-  lastInsertId?: number
-}
-
 const DB_FILE_NAME = 'henji.db'
 
 let db: Database.Database | null = null
@@ -33,29 +26,6 @@ export function getHenjiDataDir(): string {
 
 export function getHenjiDbPath(): string {
   return path.join(getHenjiDataDir(), DB_FILE_NAME)
-}
-
-function normalizeParams(params?: SqlBindValue[]): unknown[] {
-  return (params ?? []).map((value) => {
-    if (typeof value === 'boolean') {
-      return value ? 1 : 0
-    }
-    return value
-  })
-}
-
-function ensureWriteStatement(sql: string): void {
-  const head = sql.trimStart().split(/\s+/, 1)[0]?.toUpperCase()
-  if (!head || ['SELECT', 'PRAGMA'].includes(head)) {
-    throw new Error('Use db:select for read statements')
-  }
-}
-
-function ensureReadStatement(sql: string): void {
-  const head = sql.trimStart().split(/\s+/, 1)[0]?.toUpperCase()
-  if (!head || !['SELECT', 'PRAGMA', 'WITH'].includes(head)) {
-    throw new Error('Use db:execute for write statements')
-  }
 }
 
 /**
@@ -85,22 +55,4 @@ export function getDb(): Database.Database {
     throw error
   }
   return connection
-}
-
-/*
- * 原始 SQL 通道：生产代码不再使用，只在自动化 / 隔离测试模式下注册 IPC（ipc/db.ts），
- * 留给尚未改写的画布造数据脚本（写 storyboard_projects）。3.4 画布接入后连同通道一起删除。
- */
-export function executeSql(sql: string, params?: SqlBindValue[]): SqlExecuteResult {
-  ensureWriteStatement(sql)
-  const result = getDb().prepare(sql).run(...normalizeParams(params))
-  return {
-    rowsAffected: result.changes,
-    lastInsertId: typeof result.lastInsertRowid === 'number' ? result.lastInsertRowid : Number(result.lastInsertRowid),
-  }
-}
-
-export function selectSql<T = unknown>(sql: string, params?: SqlBindValue[]): T[] {
-  ensureReadStatement(sql)
-  return getDb().prepare(sql).all(...normalizeParams(params)) as T[]
 }

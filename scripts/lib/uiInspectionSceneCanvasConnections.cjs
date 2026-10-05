@@ -11,7 +11,7 @@ function attachUiInspectionCanvasConnections(context) {
   async function setupCanvasBatchConnection(page) {
     await setupCanvas(page)
     if (await page.locator('.react-flow').count()) {
-      await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
+      await page.getByRole('button', { name: /返回画布列表|Back to Canvases/ }).click()
       await settlePage(page)
     }
     const fixtureCard = page.locator(`[data-project-id="${canvasFixtureProjectId}"]:visible`)
@@ -42,10 +42,7 @@ function attachUiInspectionCanvasConnections(context) {
       },
     ]
     await page.evaluate(async (payload) => {
-      await window.henjiNative.db.execute(
-        'UPDATE storyboard_projects SET node_count = ?, nodes_json = ?, edges_json = ?, viewport_json = ? WHERE id = ?',
-        [payload.nodes.length, JSON.stringify(payload.nodes), '[]', JSON.stringify({ x: 140, y: 70, zoom: 0.82 }), payload.projectId]
-      )
+      await window.henjiNative.testFixtures.writeCanvas(payload.projectId, { nodes: payload.nodes, edges: [], viewport: { x: 140, y: 70, zoom: 0.82 } })
     }, { projectId, nodes })
     // 前一场景可能已缓存同一工程；重新装载数据库中的当前夹具。
     await page.reload({ waitUntil: 'domcontentloaded' })
@@ -82,28 +79,20 @@ function attachUiInspectionCanvasConnections(context) {
   /**
    * 拖放建节点必须自动连上，且长提示词只在节点内换行、不把节点撑宽。
    *
-   * 全程走应用正式路径：自己新建工程、用真实图片文件走正式上传链路、用真实拖拽
-   * 手势连线。不再直接 UPDATE storyboard_projects——那既会覆盖已有工程，塞进去的
-   * 占位像素也不能代表用户真实画布。
+   * 新建一份空画布后全程走应用正式路径：用真实图片文件走正式上传链路、用真实拖拽
+   * 手势连线。不往已有画布里塞节点——那既会覆盖已有画布，塞进去的占位像素也不能代表用户真实画布。
    */
   async function setupCanvasQuickConnectPrompt(page) {
     await setupCanvas(page)
     if (await page.locator('.react-flow').count()) {
-      await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
+      await page.getByRole('button', { name: /返回画布列表|Back to Canvases/ }).click()
       await settlePage(page)
     }
-    await clickNamedButton(page, /^(新建项目|New Project)$/i)
-    const createDialog = page.locator('[data-dialog="true"]:visible').last()
-    await createDialog.waitFor({ state: 'visible', timeout: 8000 })
-    await createDialog.locator('input').first().fill('回归-拖放连接与提示词换行')
-    const confirmButton = createDialog.getByRole('button', { name: /确定|确认|Confirm|OK/i }).last()
-    if (!await confirmButton.count()) {
-      const dump = await createDialog.evaluate((element) => Array.from(
-        element.querySelectorAll('button')
-      ).map((button) => button.textContent?.trim()).join(' | '))
-      throw new Error(`新建项目对话框没有可识别的确认按钮，实际按钮：${dump}`)
-    }
-    await confirmButton.click()
+    // 3.4 起“新建画布”直接打开草稿，离开时会询问保存；巡检要一份已命名的空画布，经测试夹具的正式文档接口建好再从列表打开
+    const created = await page.evaluate((name) => window.henjiNative.testFixtures.createCanvas({ name, replace: true }), '回归-拖放连接与提示词换行')
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await setupCanvas(page)
+    await page.locator(`[data-project-id="${created.id}"]:visible`).click()
     const viewport = page.locator('[data-application-observation-region="canvas.viewport_observer"]:visible')
     await viewport.waitFor({ state: 'visible', timeout: 12000 })
     await settlePage(page, 700)

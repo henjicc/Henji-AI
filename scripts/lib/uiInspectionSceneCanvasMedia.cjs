@@ -9,7 +9,7 @@ function attachUiInspectionCanvasMedia(context) {
   async function setupCanvasMidjourneyNode(page, openSettings) {
     await setupCanvas(page)
     if (await page.locator('.react-flow').count()) {
-      await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
+      await page.getByRole('button', { name: /返回画布列表|Back to Canvases/ }).click()
       await settlePage(page)
     }
     const fixtureCard = page.locator(`[data-project-id="${canvasFixtureProjectId}"]:visible`)
@@ -27,10 +27,7 @@ function attachUiInspectionCanvasMedia(context) {
       },
     }
     await page.evaluate(async (payload) => {
-      await window.henjiNative.db.execute(
-        'UPDATE storyboard_projects SET node_count = ?, nodes_json = ?, edges_json = ?, viewport_json = ? WHERE id = ?',
-        [1, JSON.stringify([payload.node]), '[]', JSON.stringify({ x: 180, y: 90, zoom: 0.9 }), payload.projectId]
-      )
+      await window.henjiNative.testFixtures.writeCanvas(payload.projectId, { nodes: [payload.node], edges: [], viewport: { x: 180, y: 90, zoom: 0.9 } })
     }, { projectId, node: nodeData })
     await reopenCanvasProjectFromStorage(page, projectId)
     const viewport = page.locator('[data-application-observation-region="canvas.viewport_observer"]:visible')
@@ -53,7 +50,7 @@ function attachUiInspectionCanvasMedia(context) {
   async function setupCanvasGptMaskEditor(page) {
     await setupCanvas(page)
     if (await page.locator('.react-flow').count()) {
-      await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
+      await page.getByRole('button', { name: /返回画布列表|Back to Canvases/ }).click()
       await settlePage(page)
     }
     const fixtureCard = page.locator(`[data-project-id="${canvasFixtureProjectId}"]:visible`)
@@ -78,10 +75,7 @@ function attachUiInspectionCanvasMedia(context) {
       },
     }
     await page.evaluate(async (payload) => {
-      await window.henjiNative.db.execute(
-        'UPDATE storyboard_projects SET node_count = ?, nodes_json = ?, edges_json = ?, viewport_json = ? WHERE id = ?',
-        [1, JSON.stringify([payload.node]), '[]', JSON.stringify({ x: 180, y: 80, zoom: 0.9 }), payload.projectId]
-      )
+      await window.henjiNative.testFixtures.writeCanvas(payload.projectId, { nodes: [payload.node], edges: [], viewport: { x: 180, y: 80, zoom: 0.9 } })
     }, { projectId, node: nodeData })
     await reopenCanvasProjectFromStorage(page, projectId)
     const node = page.locator('.react-flow__node:has([data-generation-node-model-id="apimart-gpt-image-2"])').last()
@@ -95,7 +89,7 @@ function attachUiInspectionCanvasMedia(context) {
   async function setupCanvasAssetGroup(page, expanded) {
     await setupCanvas(page)
     if (await page.locator('.react-flow').count()) {
-      await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
+      await page.getByRole('button', { name: /返回画布列表|Back to Canvases/ }).click()
       await settlePage(page)
     }
     const fixtureCard = page.locator(`[data-project-id="${canvasFixtureProjectId}"]:visible`)
@@ -171,10 +165,7 @@ function attachUiInspectionCanvasMedia(context) {
       },
     ]
     await page.evaluate(async (payload) => {
-      await window.henjiNative.db.execute(
-        'UPDATE storyboard_projects SET node_count = ?, nodes_json = ?, edges_json = ?, viewport_json = ? WHERE id = ?',
-        [payload.nodes.length, JSON.stringify(payload.nodes), '[]', JSON.stringify({ x: 120, y: 80, zoom: 0.85 }), payload.projectId]
-      )
+      await window.henjiNative.testFixtures.writeCanvas(payload.projectId, { nodes: payload.nodes, edges: [], viewport: { x: 120, y: 80, zoom: 0.85 } })
     }, { projectId, nodes })
     await reopenCanvasProjectFromStorage(page, projectId)
     const group = page.locator('.react-flow__node[data-id="__asset_group"]')

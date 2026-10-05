@@ -21,8 +21,8 @@ function createMcpBackgroundDocumentScenes(context) {
 
   /** 读 B 工程正式存储里那个节点的编辑会话，判断画布预览是否跟上了文档修订。 */
   const readNodeSession = (page, projectId, nodeId) => page.evaluate(async ({ projectId, nodeId }) => {
-    const record = await window.henjiNative.storyboardProjects.getProjectRecord(projectId)
-    const node = JSON.parse(record.nodesJson).find((item) => item.id === nodeId)
+    const record = await window.henjiNative.testFixtures.readCanvas(projectId)
+    const node = record.nodes.find((item) => item.id === nodeId)
     return { session: node?.data?.imageEditSession ?? null, name: record.name }
   }, { projectId, nodeId })
 
@@ -60,10 +60,10 @@ function createMcpBackgroundDocumentScenes(context) {
       const client = await connectMcpClient(identity.config, 'Henji background document Reality')
       try {
         // A：另建一个工程并真的打开它，之后所有后台写入都不得把界面从这里带走。
-        const created = await callTool(client, 'create_canvas_project', operationEnvelope([], { name: '正在编辑的A工程' }))
-        const projectA = created.result.data.projectId
+        const created = await callTool(client, 'create_document', operationEnvelope([], { kind: 'canvas', name: `正在编辑的A画布-${Date.now()}` }))
+        const projectA = created.result.data.resultRef.id
         assert.notEqual(projectA, projectB, '验收工程必须是两个不同工程')
-        await callTool(client, 'open_canvas_project', operationEnvelope([], { projectId: projectA }))
+        await callTool(client, 'open_document', operationEnvelope([], { documentId: projectA }))
         await page.locator('.react-flow').waitFor({ state: 'visible', timeout: 15000 })
         await settlePage(page, 600)
         /*
@@ -168,10 +168,10 @@ function createMcpBackgroundDocumentScenes(context) {
         }
         assert.ok(bluePixels > 100, '导出必须包含后台修改后的蓝色标注')
         assert.equal(redPixels, 0, '导出不能使用修改前的红色标注')
-        const projectedExport = await page.evaluate(id => window.henjiNative.storyboardProjects.getProjectRecord(id), projectB)
+        const projectedExport = await page.evaluate(id => window.henjiNative.testFixtures.readCanvas(id), projectB)
         const exportId = output.nodeRef.id.slice(projectB.length + 1)
-        assert.ok(JSON.parse(projectedExport.nodesJson).some(node => node.id === exportId))
-        assert.ok(JSON.parse(projectedExport.edgesJson).some(edge => edge.source === nodeId && edge.target === exportId))
+        assert.ok(projectedExport.nodes.some(node => node.id === exportId))
+        assert.ok(projectedExport.edges.some(edge => edge.source === nodeId && edge.target === exportId))
         await onProjectA('落盘核对后')
         step('后台写入与落盘核对完成')
         await capture('editing-a')
@@ -182,7 +182,7 @@ function createMcpBackgroundDocumentScenes(context) {
 
       // 打开 B：内容是后台改完的那份，撤销历史也接得上后台那一步。
       await setupCanvas(page)
-      await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
+      await page.getByRole('button', { name: /返回画布列表|Back to Canvases/ }).click()
       await settlePage(page, 600)
       await page.locator(`[data-project-id="${projectB}"]:visible`).click()
       const node = page.locator(`[data-layer-stack-node-id="${nodeId}"][data-layer-stack-status="editable-v3"]`)
@@ -238,8 +238,9 @@ function createMcpResourceScenes({ setupSettings, canvasFixtureProjectId }) {
       const identity = await authorizeMcpConnection(page, { name: '资源与订阅验收', allowWrites: true })
       const client = await connectMcpClient(identity.config, 'Henji resources Reality')
       try {
-        const projectRef = { kind: 'canvas.project', id: canvasFixtureProjectId }
-        const projectUri = `henji://entity/canvas.project/${encodeURIComponent(canvasFixtureProjectId)}`
+        // 3.4 起画布是通用文档：盯画布文档本身（改名走 documents.document.name）
+        const projectRef = { kind: 'documents.document', id: canvasFixtureProjectId }
+        const projectUri = `henji://entity/documents.document/${encodeURIComponent(canvasFixtureProjectId)}`
         const settingsUri = 'henji://entity/settings.registry/singleton'
 
         // 目录来自真实领域实体，不是给 MCP 单独维护的一份名单。
@@ -264,11 +265,11 @@ function createMcpResourceScenes({ setupSettings, canvasFixtureProjectId }) {
         const subscription = await client.listen({ resourceSubscriptions: [projectUri] })
         assert.deepEqual(subscription.honoredFilter.resourceSubscriptions, [projectUri])
 
-        const before = await callTool(client, 'read_application_entity', { ref: projectRef, propertyIds: ['canvas.project.name'] })
+        const before = await callTool(client, 'read_application_entity', { ref: projectRef, propertyIds: ['documents.document.name'] })
         const renamed = `资源订阅验收-${Date.now()}`
         const applied = await callTool(client, 'change_application_entities', operationEnvelope([before], {
           summary: '真实改名以触发资源变化通知',
-          changes: [{ kind: 'set_properties', entityType: projectRef.kind, target: projectRef, properties: { 'canvas.project.name': renamed } }],
+          changes: [{ kind: 'set_properties', entityType: projectRef.kind, target: projectRef, properties: { 'documents.document.name': renamed } }],
         }))
         assert.equal(applied.executionState, 'completed', JSON.stringify(applied))
         for (const deadline = Date.now() + 15000; !updates.includes(projectUri);) {
@@ -280,11 +281,11 @@ function createMcpResourceScenes({ setupSettings, canvasFixtureProjectId }) {
         await subscription.close()
         assert.equal(await subscription.closed, 'local')
         const settled = updates.length
-        const after = await callTool(client, 'read_application_entity', { ref: projectRef, propertyIds: ['canvas.project.name'] })
-        assert.equal(after.data.properties['canvas.project.name'], renamed)
+        const after = await callTool(client, 'read_application_entity', { ref: projectRef, propertyIds: ['documents.document.name'] })
+        assert.equal(after.data.properties['documents.document.name'], renamed)
         await callTool(client, 'change_application_entities', operationEnvelope([after], {
           summary: '关闭订阅后再改一次',
-          changes: [{ kind: 'set_properties', entityType: projectRef.kind, target: projectRef, properties: { 'canvas.project.name': `${renamed}-2` } }],
+          changes: [{ kind: 'set_properties', entityType: projectRef.kind, target: projectRef, properties: { 'documents.document.name': `${renamed}-2` } }],
         }))
         await page.waitForTimeout(1200)
         assert.equal(updates.length, settled, `关闭订阅后仍在收通知：${JSON.stringify(updates)}`)

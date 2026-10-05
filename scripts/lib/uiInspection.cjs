@@ -1,6 +1,7 @@
 const fs = require('node:fs')
 const path = require('node:path')
 const { launchElectronApp, waitForApp } = require('./electronLaunch.cjs')
+const { createCanvasDocument, removeCanvasDocuments } = require('./canvasDocumentFixture.cjs')
 const { createUiInspectionScenes } = require('./uiInspectionScenes.cjs')
 const { createReviewStepContext } = require('./uiReviewContext.cjs')
 const { loadStepScenes } = require('./uiReviewSteps.cjs')
@@ -309,46 +310,24 @@ const UI_INSPECTION_SCENES = createUiInspectionScenes({
 
 async function seedCanvasInspectionFixture(page) {
   const seededAt = Date.now()
-  await page.evaluate(async ({ projectId, projectName, now }) => {
-    await window.henjiNative.db.execute(
-      `INSERT OR IGNORE INTO storyboard_projects
-       (id, name, created_at, updated_at, node_count, nodes_json, edges_json, viewport_json, history_json)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        projectId,
-        projectName,
-        now,
-        now,
-        0,
-        '[]',
-        '[]',
-        JSON.stringify({ x: 120, y: 80, zoom: 0.85 }),
-        JSON.stringify({ past: [], future: [], imagePool: [] }),
-      ]
-    )
-    const rows = await window.henjiNative.db.select(
-      'SELECT name FROM storyboard_projects WHERE id = ? LIMIT 1',
-      [projectId]
-    )
-    if (rows[0]?.name !== projectName) {
-      throw new Error('UI 巡检专用画布工程 ID 已被其他工程占用')
-    }
-  }, { projectId: UI_INSPECTION_CANVAS_PROJECT_ID, projectName: UI_INSPECTION_CANVAS_PROJECT_NAME, now: seededAt })
+  const seeded = await createCanvasDocument(page, {
+    id: UI_INSPECTION_CANVAS_PROJECT_ID,
+    name: UI_INSPECTION_CANVAS_PROJECT_NAME,
+    viewport: { x: 120, y: 80, zoom: 0.85 },
+  })
+  if (seeded.name !== UI_INSPECTION_CANVAS_PROJECT_NAME) {
+    throw new Error('UI 巡检专用画布 ID 已被其他画布占用')
+  }
   return seededAt
 }
 
+/** 真实配置下清理巡检造的画布：专用画布与本次新建的“拖放连接”画布（删文件并从作品索引移除）。 */
 async function cleanupCanvasInspectionFixtures(page, seededAt) {
-  await page.evaluate(async ({ projectId, projectName, quickProjectName, cleanupAfter }) => {
-    await window.henjiNative.db.execute(
-      'DELETE FROM storyboard_projects WHERE (id = ? AND name = ?) OR (name = ? AND created_at >= ?)',
-      [projectId, projectName, quickProjectName, cleanupAfter]
-    )
-  }, {
-    projectId: UI_INSPECTION_CANVAS_PROJECT_ID,
-    projectName: UI_INSPECTION_CANVAS_PROJECT_NAME,
-    quickProjectName: UI_INSPECTION_QUICK_PROJECT_NAME,
-    cleanupAfter: seededAt,
-  })
+  const quickIds = await page.evaluate(async ({ quickProjectName, cleanupAfter }) => {
+    const rows = await window.henjiNative.documents.listDocuments({ kind: 'canvas', includeDrafts: true, includeMissing: false })
+    return rows.filter((row) => row.name === quickProjectName && row.createdAt >= cleanupAfter).map((row) => row.id)
+  }, { quickProjectName: UI_INSPECTION_QUICK_PROJECT_NAME, cleanupAfter: seededAt })
+  await removeCanvasDocuments(page, [UI_INSPECTION_CANVAS_PROJECT_ID, ...quickIds])
 }
 
 async function launchUiInspectionApp({ root, mainEntry, extraEnv = {}, extraArgs = [], profile = 'temporary', readOnly = true,

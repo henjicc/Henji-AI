@@ -512,7 +512,7 @@ test('口播直接剪辑场景截图后离开编辑器并删除自建工程与�
   const clicks = []
   let tempDirectory = null
   const button = (name) => ({
-    isVisible: async () => name === '返回项目列表',
+    isVisible: async () => name === '返回口播列表',
     click: async () => { clicks.push(name) },
     waitFor: async () => {},
   })
@@ -524,7 +524,7 @@ test('口播直接剪辑场景截图后离开编辑器并删除自建工程与�
     evaluate: async (callback, arg) => {
       if (typeof arg === 'object' && arg?.sourcePath) {
         tempDirectory = path.dirname(arg.sourcePath)
-        return 'audio-project-1'
+        return { id: 'audio-project-1' }
       }
       if (arg === 'audio-project-1') { deleted.push(arg); return undefined }
       if (!tempDirectory) return '1'
@@ -534,7 +534,7 @@ test('口播直接剪辑场景截图后离开编辑器并删除自建工程与�
   await assert.rejects(scene.setup(page), /夹具建好后中止/)
   assert.ok(tempDirectory && fs.existsSync(tempDirectory))
   await scene.cleanup(page)
-  assert.deepEqual(clicks, ['返回项目列表'])
+  assert.deepEqual(clicks, ['返回口播列表'])
   assert.deepEqual(deleted, ['audio-project-1'])
   assert.equal(fs.existsSync(tempDirectory), false)
   await scene.cleanup(page)

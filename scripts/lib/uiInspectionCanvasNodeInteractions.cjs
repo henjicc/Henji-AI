@@ -6,7 +6,7 @@ function createCanvasNodeInteractionsScene(context) {
     id: 'canvas-node-interactions', surface: '画布', name: '画布-模型面板锚定与Alt复制', writesUserData: true,
     async setup(page, app) {
       const { projectId, panoramaSource } = await context.seedAndOpenCanvasPanoramaProject(page)
-      await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
+      await page.getByRole('button', { name: /返回画布列表|Back to Canvases/ }).click()
       await page.locator(`[data-project-id="${projectId}"]:visible`).waitFor()
       await page.evaluate(async ({ projectId, panoramaSource }) => {
         const nodes = [
@@ -15,9 +15,7 @@ function createCanvasNodeInteractionsScene(context) {
           { id: 'interaction-upper', type: 'imageNode', position: { x: 500, y: 60 }, data: { prompt: '上方节点' } },
           { id: 'interaction-lower', type: 'imageNode', position: { x: 500, y: 800 }, data: { prompt: '下方节点' } },
         ]
-        await window.henjiNative.db.execute(
-          'UPDATE storyboard_projects SET node_count = ?, nodes_json = ?, edges_json = ?, viewport_json = ?, history_json = ? WHERE id = ?',
-          [nodes.length, JSON.stringify(nodes), '[]', JSON.stringify({ x: 90, y: 40, zoom: 0.65 }), JSON.stringify({ past: [], future: [], imagePool: [] }), projectId])
+        await window.henjiNative.testFixtures.writeCanvas(projectId, { nodes: nodes, edges: [], viewport: { x: 90, y: 40, zoom: 0.65 }, clearHistory: true })
       }, { projectId, panoramaSource })
       // 数据库夹具已替换；重载清空上一份工程的会话实例后再打开。
       await page.reload({ waitUntil: 'domcontentloaded' })
@@ -97,7 +95,7 @@ function createCanvasFirstResizeScene(context) {
     id: 'canvas-first-resize', surface: '画布', name: '画布-节点首次缩放', writesUserData: true,
     async setup(page, app) {
       const { projectId } = await context.seedAndOpenCanvasPanoramaProject(page)
-      await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
+      await page.getByRole('button', { name: /返回画布列表|Back to Canvases/ }).click()
       await page.locator(`[data-project-id="${projectId}"]:visible`).waitFor()
       const types = ['imageNode', 'videoGenNode', 'audioGenNode', 'upscaleGenNode']
       await page.evaluate(async ({ projectId, types }) => {
@@ -106,9 +104,7 @@ function createCanvasFirstResizeScene(context) {
           position: { x: 80 + (index % 2) * 680, y: 80 + Math.floor(index / 2) * 750 },
           data: { prompt: '第一次缩放应立即生效', isSizeManuallyAdjusted: false },
         }))
-        await window.henjiNative.db.execute(
-          'UPDATE storyboard_projects SET node_count = ?, nodes_json = ?, edges_json = ?, viewport_json = ?, history_json = ? WHERE id = ?',
-          [nodes.length, JSON.stringify(nodes), '[]', JSON.stringify({ x: 90, y: 40, zoom: 0.65 }), JSON.stringify({ past: [], future: [], imagePool: [] }), projectId])
+        await window.henjiNative.testFixtures.writeCanvas(projectId, { nodes: nodes, edges: [], viewport: { x: 90, y: 40, zoom: 0.65 }, clearHistory: true })
       }, { projectId, types })
       // 与 Alt 复制夹具一致，清空旧工程实例后再读取已替换的数据库记录。
       await page.reload({ waitUntil: 'domcontentloaded' })
@@ -125,7 +121,7 @@ function createCanvasFirstResizeScene(context) {
       }
       await page.locator('.react-flow__pane').click({ position: { x: 20, y: 400 } })
       await writeFile('.ui-tour/canvas-first-resize.png', await captureInspectionPage(app, page))
-      await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
+      await page.getByRole('button', { name: /返回画布列表|Back to Canvases/ }).click()
       await page.locator(`[data-project-id="${projectId}"]:visible`).waitFor()
       await page.locator(`[data-project-id="${projectId}"]:visible`).click()
       for (const expected of resizedBoxes) {

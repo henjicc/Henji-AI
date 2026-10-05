@@ -63,7 +63,7 @@ function createCanvasScalePerformanceScenes(context) {
       // 只影响本场景的窗口，结束或失败时恢复；不改变正式应用的启动配置。
       await context.setupCanvas(page)
       for (const count of counts) {
-        if (await page.locator('.react-flow').count()) await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
+        if (await page.locator('.react-flow').count()) await page.getByRole('button', { name: /返回画布列表|Back to Canvases/ }).click()
         const projectId = `canvas-scale-${Date.now()}-${count}`
         const edgeCount = await page.evaluate(async ({ count, projectId, image, viewport }) => {
           const nodes = [], edges = []
@@ -76,11 +76,10 @@ function createCanvasScalePerformanceScenes(context) {
             if (kind > 0) edges.push({ id: `scale-edge-${i}`, source: `scale-${i - 1}`, target: `scale-${i}`,
               sourceHandle: 'source', targetHandle: kind === 1 ? 'param:__image' : 'target', type: 'disconnectableEdge' })
           }
-          await window.henjiNative.db.execute('INSERT INTO storyboard_projects (id,name,created_at,updated_at,node_count,nodes_json,edges_json,viewport_json,history_json) VALUES (?,?,?,?,?,?,?,?,?)',
-            [projectId, `性能基准 ${count}`, Date.now(), Date.now(), count, JSON.stringify(nodes), JSON.stringify(edges), JSON.stringify(viewport), JSON.stringify({ past: [], future: [], imagePool: [] })])
+          await window.henjiNative.testFixtures.createCanvas({ id: projectId, name: `性能基准 ${count} ${projectId.slice(-6)}`, nodes, edges, viewport })
           return edges.length
         }, { count, projectId, image, viewport })
-        // 每档重建渲染层状态，避免上一档已加载工程的会话缓存遮蔽数据库夹具。
+        // 每档重建渲染层状态，避免上一档已加载画布的会话缓存遮蔽刚写的画布文件。
         await page.reload({ waitUntil: 'domcontentloaded' })
         await context.setupCanvas(page)
         // ResizeObserver 必须在节点创建前包装；挂载后才安装会把已有监听器漏记成零。

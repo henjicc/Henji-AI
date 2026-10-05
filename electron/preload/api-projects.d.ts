@@ -45,23 +45,52 @@ export interface HenjiDiagnosticsApi {
   streamEcho(message: string, onEvent: (event: HenjiDiagnosticsStreamEvent) => void): Promise<() => Promise<void>>
 }
 
-export type HenjiSqlBindValue = string | number | boolean | null | Uint8Array
-
-export interface HenjiSqlExecuteResult {
-  rowsAffected: number
-  lastInsertId?: number
-}
-
 /** 测试夹具（只在自动化 / 隔离测试模式下存在）：核对或清理正式界面没有入口的记录。 */
 export interface HenjiTestFixturesApi {
   inspectGenerationSubmission(requestId: string): Promise<{ phase: string; createdAt: number; hasResponse: boolean } | null>
   deleteGenerationSubmission(requestId: string): Promise<boolean>
+  /** 读画布文档（内容 + 视口 / 撤销会话状态）；不存在返回 null。经正式文档接口，见 canvas-test-fixtures.ts。 */
+  readCanvas(id: string): Promise<HenjiCanvasTestFixture | null>
+  /** 改写画布内容（保留未给的字段），给了 viewport 一并写会话状态；返回新版本号。 */
+  writeCanvas(id: string, patch: HenjiCanvasTestFixturePatch): Promise<number>
+  /** 新建已命名画布（可沿用固定 ID）；已有同 ID 时按 replace 改写或原样保留；同名时换带时间的名字。 */
+  createCanvas(request: HenjiCanvasTestFixtureCreateRequest): Promise<{ id: string; name: string; path: string; created: boolean }>
+  findCanvasByName(name: string): Promise<{ id: string; name: string; path: string } | null>
 }
 
-/** 原始 SQL 通道（测试专用，只在自动化 / 隔离测试模式下存在；3.4 删除）。 */
-export interface HenjiDbApi {
-  execute(sql: string, params?: HenjiSqlBindValue[]): Promise<HenjiSqlExecuteResult>
-  select<T = unknown>(sql: string, params?: HenjiSqlBindValue[]): Promise<T[]>
+export interface HenjiCanvasTestFixture {
+  id: string
+  name: string
+  path: string
+  revision: number
+  draft: boolean
+  nodes: Array<Record<string, unknown>>
+  edges: Array<Record<string, unknown>>
+  imagePool: string[]
+  layerPackages: Record<string, string>
+  viewport: unknown
+  /** 会话状态里的撤销记录：{ revision, history: { past, future } }。 */
+  history: unknown
+}
+
+export interface HenjiCanvasTestFixturePatch {
+  nodes?: unknown[]
+  edges?: unknown[]
+  imagePool?: string[]
+  viewport?: { x: number; y: number; zoom: number }
+  /** 清掉撤销记录（改写内容后旧记录对不上版本，本来也不会恢复）。 */
+  clearHistory?: boolean
+}
+
+export interface HenjiCanvasTestFixtureCreateRequest {
+  id?: string
+  name: string
+  nodes?: unknown[]
+  edges?: unknown[]
+  viewport?: { x: number; y: number; zoom: number }
+  container?: { kind: 'user' } | { kind: 'project'; projectId: string }
+  /** 已有同 ID 的画布时改写它的内容（否则原样保留）。 */
+  replace?: boolean
 }
 
 export type HenjiCameraStageRenderResolutionPreset = CameraStageRenderResolutionPreset

@@ -35,14 +35,11 @@ function attachUiInspectionCanvasPanorama(context) {
   async function setupCanvasPanoramaViewer(page, app) {
     const { generatedNodeId, projectId } = await setupCanvasPanoramaToolbar(page)
     await page.waitForTimeout(900)
-    await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
+    await page.getByRole('button', { name: /返回画布列表|Back to Canvases/ }).click()
     await settlePage(page, 500)
     await page.evaluate(async (payload) => {
-      const rows = await window.henjiNative.db.select(
-        'SELECT nodes_json FROM storyboard_projects WHERE id = ? LIMIT 1',
-        [payload.projectId]
-      )
-      const nodes = JSON.parse(rows[0]?.nodes_json ?? '[]').map((node) => {
+      const stored = await window.henjiNative.testFixtures.readCanvas(payload.projectId)
+      const nodes = (stored?.nodes ?? []).map((node) => {
         if (node.id !== '__ui_panorama_result') return node
         const { height: _height, measured: _measured, ...rest } = node
         return {
@@ -72,10 +69,7 @@ function attachUiInspectionCanvasPanorama(context) {
           data: { ...primary.data, displayName: '全景查看·次节点' },
         })
       }
-      await window.henjiNative.db.execute(
-        'UPDATE storyboard_projects SET nodes_json = ?, viewport_json = ? WHERE id = ?',
-        [JSON.stringify(nodes), JSON.stringify({ x: -920, y: -510, zoom: 0.82 }), payload.projectId]
-      )
+      await window.henjiNative.testFixtures.writeCanvas(payload.projectId, { nodes: nodes, viewport: { x: -920, y: -510, zoom: 0.82 } })
     }, { projectId })
     // 夹具直接替换了数据库；重建渲染层实例后读取，避免复用修改前的已打开工程。
     await page.reload({ waitUntil: 'domcontentloaded' })
@@ -278,7 +272,7 @@ function attachUiInspectionCanvasPanorama(context) {
     } finally { await layoutSession.detach() }
 
     // 项目重开后直接显示上次冻结视角，并从同一相机状态继续交互。
-    await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
+    await page.getByRole('button', { name: /返回画布列表|Back to Canvases/ }).click()
     await settlePage(page, 500)
     await page.locator(`[data-project-id="${projectId}"]:visible`).click()
     await resultNode.waitFor({ state: 'visible', timeout: 12000 })
@@ -414,16 +408,13 @@ function attachUiInspectionCanvasPanorama(context) {
     }
 
     await page.waitForTimeout(900)
-    await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
+    await page.getByRole('button', { name: /返回画布列表|Back to Canvases/ }).click()
     await settlePage(page, 600)
     const persisted = await page.evaluate(async (payload) => {
-      const rows = await window.henjiNative.db.select(
-        'SELECT nodes_json, edges_json, history_json FROM storyboard_projects WHERE id = ? LIMIT 1',
-        [payload.projectId]
-      )
-      const nodes = JSON.parse(rows[0]?.nodes_json ?? '[]')
-      const edges = JSON.parse(rows[0]?.edges_json ?? '[]')
-      const history = JSON.parse(rows[0]?.history_json ?? '{}')
+      const stored = await window.henjiNative.testFixtures.readCanvas(payload.projectId)
+      const nodes = (stored?.nodes ?? [])
+      const edges = (stored?.edges ?? [])
+      const history = { imagePool: stored?.imagePool ?? [] }
       const primary = nodes.find((node) => node.id === '__ui_panorama_result')
       const secondary = nodes.find((node) => node.id === '__ui_panorama_result_secondary')
       const snapshot = nodes.find((node) => node.id === payload.snapshotNodeId)

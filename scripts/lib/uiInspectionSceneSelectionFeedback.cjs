@@ -92,7 +92,7 @@ function createSelectionFeedbackScenes(context) {
   async function setupCanvasImageNodeSelection(page, capture) {
     await setupCanvas(page)
     if (await page.locator('.react-flow').count()) {
-      await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
+      await page.getByRole('button', { name: /返回画布列表|Back to Canvases/ }).click()
       await settlePage(page)
     }
     const fixtureCard = page.locator(`[data-project-id="${canvasFixtureProjectId}"]:visible`)
@@ -110,10 +110,7 @@ function createSelectionFeedbackScenes(context) {
       },
     }
     await page.evaluate(async (payload) => {
-      await window.henjiNative.db.execute(
-        'UPDATE storyboard_projects SET node_count = ?, nodes_json = ?, edges_json = ?, viewport_json = ? WHERE id = ?',
-        [1, JSON.stringify([payload.node]), '[]', JSON.stringify({ x: 180, y: 90, zoom: 1 }), payload.projectId]
-      )
+      await window.henjiNative.testFixtures.writeCanvas(payload.projectId, { nodes: [payload.node], edges: [], viewport: { x: 180, y: 90, zoom: 1 } })
     }, { projectId, node })
     await reopenCanvasProjectFromStorage(page, projectId)
     const flowNode = page.locator('.react-flow__node:has([data-generation-node-model-id="kie-gpt-image-2"])').last()

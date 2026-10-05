@@ -64,8 +64,8 @@ async function closeLargeCpuFallbackDocument(page, dialog, editor, fixture, proj
     const loaded = await window.henjiNative.imageEditorV3.loadDocument({
       requestId: `reality-large-closed-${crypto.randomUUID()}`, documentRef,
     })
-    const rows = await window.henjiNative.db.select('SELECT nodes_json FROM storyboard_projects WHERE id = ? LIMIT 1', [projectId])
-    const node = JSON.parse(rows[0]?.nodes_json ?? '[]').find((entry) => entry.id === nodeId)
+    const stored = await window.henjiNative.testFixtures.readCanvas(projectId)
+    const node = (stored?.nodes ?? []).find((entry) => entry.id === nodeId)
     const metadata = loaded.previewRef ? await window.henjiNative.imageEditorV3.describeSourcePyramid({
       requestId: `reality-large-preview-${crypto.randomUUID()}`, resourceRef: loaded.previewRef,
     }) : null

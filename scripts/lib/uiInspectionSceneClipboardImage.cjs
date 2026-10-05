@@ -31,7 +31,7 @@ function createClipboardImageScene(context) {
       }
       await context.setupCanvas(page)
       if (await page.locator('.react-flow').count()) {
-        await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
+        await page.getByRole('button', { name: /返回画布列表|Back to Canvases/ }).click()
       }
       const projectId = context.canvasFixtureProjectId
       const nodeId = '__clipboard_image_regression__'
@@ -39,12 +39,9 @@ function createClipboardImageScene(context) {
         const node = { id: nodeId, type: 'exportImageNode', position: { x: 180, y: 180 },
           width: 360, height: 270, style: { width: 360, height: 270 },
           data: { displayName: '图片复制验证', imageUrl: source, previewImageUrl: source, aspectRatio: '4:3', resultKind: 'image' } }
-        await window.henjiNative.db.execute(
-          'UPDATE storyboard_projects SET nodes_json = ?, edges_json = ?, history_json = ?, viewport_json = ?, node_count = ? WHERE id = ?',
-          [JSON.stringify([node]), '[]', JSON.stringify({ past: [], future: [], imagePool: [] }), JSON.stringify({ x: 0, y: 0, zoom: 1 }), 1, projectId],
-        )
+        await window.henjiNative.testFixtures.writeCanvas(projectId, { nodes: [node], edges: [], clearHistory: true, viewport: { x: 0, y: 0, zoom: 1 } })
       }, { projectId, nodeId, source })
-      // 工程实例常驻内存，库层改写后必须经 reload 重新读取（见 reopenCanvasProjectFromStorage）
+      // 画布实例常驻内存，直接改文件后必须经 reload 重新读取（见 reopenCanvasProjectFromStorage）
       await context.reopenCanvasProjectFromStorage(page, projectId)
       await page.locator(`.react-flow__node[data-id="${nodeId}"]`).click()
       await app.evaluate(({ clipboard }) => clipboard.clear())

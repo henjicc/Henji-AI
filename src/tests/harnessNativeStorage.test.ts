@@ -31,10 +31,10 @@ describe('harness 内存 native 替身', () => {
 
   it('没实现的命名空间抛错，不返回空值', () => {
     const native = (window as unknown as { henjiNative: Record<string, unknown> }).henjiNative
-    expect(() => native.db).toThrowError(/henjiNative\.db 没有实现/)
+    expect(() => native.notInstalled).toThrowError(/henjiNative\.notInstalled 没有实现/)
     // 抛的错要能自纠：说清替身装了什么，以及该去哪里补。
-    expect(() => native.canvasProjects).toThrowError(/assetLibrary、audio/)
-    expect(() => native.canvasProjects).toThrowError(/harnessNativeStorage\.ts/)
+    expect(() => native.notInstalled).toThrowError(/assetLibrary、audio/)
+    expect(() => native.notInstalled).toThrowError(/harnessNativeStorage\.ts/)
   })
 
   it('已实现命名空间里没实现的方法同样抛错，并列出已实现的方法', () => {

@@ -101,7 +101,7 @@ async function openFixtureProject(page, projectName, expectedNodeCount) {
   await page.getByRole('button', { name: /画布|Canvas/ }).click()
   await page.waitForTimeout(600)
   if (await page.locator('.react-flow').count() > 0) {
-    await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
+    await page.getByRole('button', { name: /返回画布列表|Back to Canvases/ }).click()
     await page.waitForTimeout(600)
   }
   await page.getByText(projectName, { exact: true }).click()
@@ -133,10 +133,7 @@ async function closeSyntheticModelPicker(page) {
 async function lowerSyntheticFixtureViewport(page, fixture) {
   const viewport = { ...fixture.viewport, y: fixture.viewport.y + 120 }
   await page.evaluate(async ({ projectId, viewportJson }) => {
-    await window.henjiNative.db.execute(
-      'UPDATE storyboard_projects SET viewport_json = ? WHERE id = ?',
-      [viewportJson, projectId]
-    )
+    await window.henjiNative.testFixtures.writeCanvas(projectId, { viewport: JSON.parse(viewportJson) })
   }, { projectId: fixture.projectId, viewportJson: JSON.stringify(viewport) })
   return { ...fixture, viewport }
 }
@@ -517,7 +514,7 @@ async function main() {
     if (!ok) process.exitCode = 1
   } finally {
     if (fixture) {
-      await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click().catch(() => undefined)
+      await page.getByRole('button', { name: /返回画布列表|Back to Canvases/ }).click().catch(() => undefined)
       await sleep(800)
     }
     if (source || fixture) await removeFixtures(page, FIXTURE_PREFIX).catch(() => undefined)

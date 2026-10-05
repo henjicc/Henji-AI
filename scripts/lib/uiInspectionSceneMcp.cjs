@@ -187,16 +187,17 @@ function createMcpScenes({ setupSettings, canvasFixtureProjectId }) {
         assert.equal(library.data.properties['asset.library.name'], 'MCP新建集合')
         await change([{ kind: 'set_properties', entityType: 'asset.library', target: libraryRef, properties: { 'asset.library.name': 'MCP已改名集合' } }], [library])
         assert.equal((await read(libraryRef, ['asset.library.name'])).data.properties['asset.library.name'], 'MCP已改名集合')
-        const projectRef = { kind: 'canvas.project', id: canvasFixtureProjectId }
-        const project = await read(projectRef, ['canvas.project.name'])
-        await change([{ kind: 'set_properties', entityType: projectRef.kind, target: projectRef, properties: { 'canvas.project.name': 'MCP已保存画布' } }], [project])
-        assert.equal((await read(projectRef, ['canvas.project.name'])).data.properties['canvas.project.name'], 'MCP已保存画布')
+        // 3.4 起画布是通用文档：改名走 documents.document.name（canvas.project.name 只读）
+        const projectRef = { kind: 'documents.document', id: canvasFixtureProjectId }
+        const project = await read(projectRef, ['documents.document.name'])
+        await change([{ kind: 'set_properties', entityType: projectRef.kind, target: projectRef, properties: { 'documents.document.name': 'MCP已保存画布' } }], [project])
+        assert.equal((await read(projectRef, ['documents.document.name'])).data.properties['documents.document.name'], 'MCP已保存画布')
         // 直接检查正式存储，不把协议 ok 当作持久化证据。
         const stored = await page.evaluate(async ({ libraryId, projectId }) => ({
           libraries: await window.henjiNative.assetLibrary.listLibraries(),
           settings: JSON.parse(localStorage.getItem('settings-storage')),
           hiddenModels: localStorage.getItem('hidden_models'),
-          project: await window.henjiNative.storyboardProjects.getProjectRecord(projectId),
+          project: await window.henjiNative.testFixtures.readCanvas(projectId),
         }), { libraryId: libraryRef.id, projectId: canvasFixtureProjectId })
         const storedLibrary = stored.libraries.find((item) => String(item.id) === String(libraryRef.id))
         assert.ok(storedLibrary, `正式素材库缺少结果引用：${JSON.stringify({ libraryRef, libraries: stored.libraries })}`)
@@ -215,7 +216,7 @@ function createMcpScenes({ setupSettings, canvasFixtureProjectId }) {
         assert.equal(remaining.some((item) => String(item.id) === String(libraryRef.id)), false)
         await page.reload(); await waitReady(page)
         for (const operationId of operations) assert.equal((await call('get_application_operation', { operationId })).executionState, 'completed')
-        const stale = await client.callTool({ name: 'change_application_entities', arguments: { operationId: require('node:crypto').randomUUID(), baselineIds: [project.baselineId], summary: '过期基线拒绝', changes: [{ kind: 'set_properties', entityType: projectRef.kind, target: projectRef, properties: { 'canvas.project.name': '不能写入' } }] } })
+        const stale = await client.callTool({ name: 'change_application_entities', arguments: { operationId: require('node:crypto').randomUUID(), baselineIds: [project.baselineId], summary: '过期基线拒绝', changes: [{ kind: 'set_properties', entityType: projectRef.kind, target: projectRef, properties: { 'documents.document.name': '不能写入' } }] } })
         assert.equal(stale.isError, true)
         // 撤回本场景改过的全局设置：层级对比与模型隐藏是应用级状态，不还原会漏到后面的场景
         // （“设置-主题外观”断言默认层级对比为“标准”，曾因此在全量顺序跑时失败，5.8）。
@@ -293,22 +294,19 @@ function createMcpScenes({ setupSettings, canvasFixtureProjectId }) {
 
         // 跨工程目标：克隆夹具工程得到一个当前界面完全没有打开的后台工程。
         const backgroundProjectId = await page.evaluate(async (sourceId) => {
-          const record = await window.henjiNative.storyboardProjects.getProjectRecord(sourceId)
-          const id = crypto.randomUUID()
-          const now = Date.now()
-          await window.henjiNative.storyboardProjects.upsertProjectRecord({
-            id, name: 'MCP后台工程', createdAt: now, updatedAt: now, nodeCount: record.nodeCount,
-            nodesJson: record.nodesJson, edgesJson: record.edgesJson, viewportJson: record.viewportJson, historyJson: record.historyJson,
+          const record = await window.henjiNative.testFixtures.readCanvas(sourceId)
+          const created = await window.henjiNative.testFixtures.createCanvas({
+            name: 'MCP后台工程', nodes: record.nodes, edges: record.edges, ...(record.viewport ? { viewport: record.viewport } : {}), replace: true,
           })
-          return id
+          return created.id
         }, canvasFixtureProjectId)
         await assertStillOnSettings('写入前')
 
-        const projectRef = { kind: 'canvas.project', id: backgroundProjectId }
-        const project = await call('read_application_entity', { ref: projectRef, propertyIds: ['canvas.project.name'] })
-        assert.equal(project.data.properties['canvas.project.name'], 'MCP后台工程')
+        const projectRef = { kind: 'documents.document', id: backgroundProjectId }
+        const project = await call('read_application_entity', { ref: projectRef, propertyIds: ['documents.document.name'] })
+        assert.equal(project.data.properties['documents.document.name'], 'MCP后台工程')
         const args = { operationId: require('node:crypto').randomUUID(), baselineIds: [project.baselineId], summary: '后台跨域改名',
-          changes: [{ kind: 'set_properties', entityType: projectRef.kind, target: projectRef, properties: { 'canvas.project.name': 'MCP后台已保存' } }] }
+          changes: [{ kind: 'set_properties', entityType: projectRef.kind, target: projectRef, properties: { 'documents.document.name': 'MCP后台已保存' } }] }
         const applied = await call('change_application_entities', args)
         assert.equal(applied.executionState, 'completed', JSON.stringify(applied))
         assert.equal(applied.verificationState, 'verified', JSON.stringify(applied))
@@ -316,10 +314,10 @@ function createMcpScenes({ setupSettings, canvasFixtureProjectId }) {
         assert.deepEqual(await call('change_application_entities', args), applied)
         await assertStillOnSettings('写入后')
 
-        const stored = await page.evaluate((id) => window.henjiNative.storyboardProjects.getProjectRecord(id), backgroundProjectId)
+        const stored = await page.evaluate((id) => window.henjiNative.testFixtures.readCanvas(id), backgroundProjectId)
         assert.ok(stored, `正式画布存储缺少后台工程：${backgroundProjectId}`)
         assert.equal(stored.name, 'MCP后台已保存')
-        const untouched = await page.evaluate((id) => window.henjiNative.storyboardProjects.getProjectRecord(id), canvasFixtureProjectId)
+        const untouched = await page.evaluate((id) => window.henjiNative.testFixtures.readCanvas(id), canvasFixtureProjectId)
         assert.notEqual(untouched.name, 'MCP后台已保存', '跨工程写入串到了夹具工程')
 
         // 媒体读取只接受稳定业务引用；失败信息不得回传任何本地路径。
@@ -333,7 +331,7 @@ function createMcpScenes({ setupSettings, canvasFixtureProjectId }) {
         const recovered = await call('get_application_operation', { operationId: args.operationId })
         assert.equal(recovered.executionState, 'completed', JSON.stringify(recovered))
         assert.equal(recovered.verificationState, 'verified', JSON.stringify(recovered))
-        const afterReload = await page.evaluate((id) => window.henjiNative.storyboardProjects.getProjectRecord(id), backgroundProjectId)
+        const afterReload = await page.evaluate((id) => window.henjiNative.testFixtures.readCanvas(id), backgroundProjectId)
         assert.equal(afterReload.name, 'MCP后台已保存')
       } finally {
         await client.close()

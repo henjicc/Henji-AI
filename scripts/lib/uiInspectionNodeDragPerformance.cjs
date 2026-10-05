@@ -16,7 +16,7 @@ function createNodeDragPerformanceScene(context) {
       if (!imagePath) throw new Error('节点拖动性能场景需要 DRAG_BENCH_IMAGE 指向本地真实 JPG 图片')
       const imageBytes = [...await readFile(imagePath)]
       const image = await page.evaluate(bytes => window.henjiNative.image.persistImageBinary(new Uint8Array(bytes), 'jpg'), imageBytes)
-      await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
+      await page.getByRole('button', { name: /返回画布列表|Back to Canvases/ }).click()
       await page.locator(`[data-project-id="${projectId}"]:visible`).waitFor()
       await page.evaluate(async ({ projectId, image }) => {
         const nodes = [{ id: 'drag-source', type: 'uploadNode', position: { x: 60, y: 120 },
@@ -30,11 +30,9 @@ function createNodeDragPerformanceScene(context) {
           style: { width: 180, height: 260 }, data: { imageUrl: image, aspectRatio: '9:13' } })
         const edges = [{ id: 'drag-input', source: 'drag-source', target: 'drag-generator', sourceHandle: 'source', targetHandle: 'param:__image', type: 'disconnectableEdge' },
           { id: 'drag-output', source: 'drag-generator', target: 'drag-result', sourceHandle: 'source', targetHandle: 'target', type: 'disconnectableEdge' }]
-        await window.henjiNative.db.execute(
-          'UPDATE storyboard_projects SET node_count = ?, nodes_json = ?, edges_json = ?, viewport_json = ?, history_json = ? WHERE id = ?',
-          [nodes.length, JSON.stringify(nodes), JSON.stringify(edges), JSON.stringify({ x: 40, y: 30, zoom: 0.7 }), JSON.stringify({ past: [], future: [], imagePool: [] }), projectId])
+        await window.henjiNative.testFixtures.writeCanvas(projectId, { nodes: nodes, edges: edges, viewport: { x: 40, y: 30, zoom: 0.7 }, clearHistory: true })
       }, { projectId, image })
-      // 工程实例常驻内存，库层改写后必须经 reload 重新读取（见 reopenCanvasProjectFromStorage）
+      // 画布实例常驻内存，直接改文件后必须经 reload 重新读取（见 reopenCanvasProjectFromStorage）
       await context.reopenCanvasProjectFromStorage(page, projectId)
       await page.locator('.react-flow__edge[data-id="drag-output"] .react-flow__edge-path').waitFor()
       await page.waitForFunction(() => {

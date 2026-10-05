@@ -56,15 +56,12 @@ function attachUiInspectionCanvasEnhance(context) {
     }))
 
     await page.waitForTimeout(900)
-    await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
+    await page.getByRole('button', { name: /返回画布列表|Back to Canvases/ }).click()
     await settlePage(page, 500)
     const persisted = await page.evaluate(async ({ targetProjectId, targetNodeId }) => {
-      const rows = await window.henjiNative.db.select(
-        'SELECT nodes_json, edges_json FROM storyboard_projects WHERE id = ? LIMIT 1',
-        [targetProjectId]
-      )
-      const nodes = JSON.parse(rows[0]?.nodes_json ?? '[]')
-      const edges = JSON.parse(rows[0]?.edges_json ?? '[]')
+      const stored = await window.henjiNative.testFixtures.readCanvas(targetProjectId)
+      const nodes = (stored?.nodes ?? [])
+      const edges = (stored?.edges ?? [])
       const target = nodes.find((candidate) => candidate.id === targetNodeId)
       return {
         nodeType: target?.type,
@@ -92,12 +89,9 @@ function attachUiInspectionCanvasEnhance(context) {
 
     // 不触发供应商请求：以确定性本地图片模拟一次成功输出，验证普通 image 结果和继续连接可持久化。
     await page.evaluate(async ({ targetProjectId, targetNodeId, resultSource }) => {
-      const rows = await window.henjiNative.db.select(
-        'SELECT nodes_json, edges_json FROM storyboard_projects WHERE id = ? LIMIT 1',
-        [targetProjectId]
-      )
-      const nodes = JSON.parse(rows[0]?.nodes_json ?? '[]')
-      const edges = JSON.parse(rows[0]?.edges_json ?? '[]')
+      const stored = await window.henjiNative.testFixtures.readCanvas(targetProjectId)
+      const nodes = (stored?.nodes ?? [])
+      const edges = (stored?.edges ?? [])
       const generator = nodes.find((candidate) => candidate.id === targetNodeId)
       nodes.push({
         id: '__ui_upscale_result',
@@ -125,10 +119,7 @@ function attachUiInspectionCanvasEnhance(context) {
         sourceHandle: 'source',
         targetHandle: 'target',
       })
-      await window.henjiNative.db.execute(
-        'UPDATE storyboard_projects SET node_count = ?, nodes_json = ?, edges_json = ?, viewport_json = ? WHERE id = ?',
-        [nodes.length, JSON.stringify(nodes), JSON.stringify(edges), JSON.stringify({ x: 80, y: 120, zoom: 0.62 }), targetProjectId]
-      )
+      await window.henjiNative.testFixtures.writeCanvas(targetProjectId, { nodes: nodes, edges: edges, viewport: { x: 80, y: 120, zoom: 0.62 } })
     }, { targetProjectId: projectId, targetNodeId: nodeId, resultSource: panoramaSource })
 
     await reopenCanvasProjectFromStorage(page, projectId)

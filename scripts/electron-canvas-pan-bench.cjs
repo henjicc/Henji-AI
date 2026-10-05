@@ -127,7 +127,7 @@ async function openFixtureProject(page, projectName, expectedNodeCount) {
   await page.getByRole('button', { name: /画布|Canvas/ }).click()
   await page.waitForTimeout(600)
   if (await page.locator('.react-flow').count() > 0) {
-    await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
+    await page.getByRole('button', { name: /返回画布列表|Back to Canvases/ }).click()
     await page.waitForTimeout(600)
   }
   await page.getByText(projectName, { exact: true }).click()
@@ -147,13 +147,10 @@ async function openFixtureProject(page, projectName, expectedNodeCount) {
 }
 
 async function recoverFixtureViewport(page, fixture, viewport) {
-  await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
+  await page.getByRole('button', { name: /返回画布列表|Back to Canvases/ }).click()
   await page.waitForTimeout(700)
   await page.evaluate(async ({ projectId, nextViewport }) => {
-    await window.henjiNative.db.execute(
-      'UPDATE storyboard_projects SET viewport_json = ? WHERE id = ?',
-      [JSON.stringify(nextViewport), projectId]
-    )
+    await window.henjiNative.testFixtures.writeCanvas(projectId, { viewport: nextViewport })
   }, {
     projectId: fixture.projectId,
     nextViewport: viewport,
@@ -496,7 +493,7 @@ async function main() {
   } finally {
     if (fixture) {
       // 回到项目列表再删，避免正在打开的项目被自动保存重新写回
-      await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click().catch(() => undefined)
+      await page.getByRole('button', { name: /返回画布列表|Back to Canvases/ }).click().catch(() => undefined)
       await sleep(800)
       await removeFixtures(page, FIXTURE_PREFIX).catch(() => undefined)
     }

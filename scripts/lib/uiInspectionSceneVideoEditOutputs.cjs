@@ -95,13 +95,12 @@ function createVideoEditOutputsScene({ canvasFixtureProjectId }) {
           const reads = await Promise.all([callTool(client, 'read_application_entity', { ref: canvasRef }), callTool(client, 'read_application_entity', { ref: assetRef })])
           const result = await callTool(client, 'add_asset_to_canvas', operationEnvelope(reads, { projectId: canvasFixtureProjectId, assetId: asset.id, placement: { mode: 'absolute', x: 320, y: asset.mediaType === 'image' ? 100 : 500 } }))
           assert.equal(result.executionState, 'completed', JSON.stringify(result)); assert.equal(result.verificationState, 'verified', JSON.stringify(result))
-          const record = await page.evaluate(id => window.henjiNative.storyboardProjects.getProjectRecord(id), canvasFixtureProjectId)
-          const node = JSON.parse(record.nodesJson).find(node => node.id === result.result.data.nodeId); assert.ok(node)
+          const record = await page.evaluate(id => window.henjiNative.testFixtures.readCanvas(id), canvasFixtureProjectId)
+          const node = record.nodes.find(node => node.id === result.result.data.nodeId); assert.ok(node)
           const stored = asset.mediaType === 'image' ? node.data.imageUrl : node.data.videoUrl
-          // The formal project format pools images; assert the persisted pool
-          // reference rather than assuming every node stores a literal path.
+          // Canvas documents store media locations directly (only opaque params of missing models use the pool).
           const pooled = /^__img_ref__:(\d+)$/.exec(stored)
-          const fixedPath = pooled ? JSON.parse(record.historyJson).imagePool[Number(pooled[1])] : stored
+          const fixedPath = pooled ? record.imagePool[Number(pooled[1])] : stored
           assert.equal(normalized(fixedPath), normalized(asset.filePath))
           evidence.canvas.push({ assetId: asset.id, nodeId: node.id, nodeType: node.type, originalPath: asset.filePath, persisted: true })
         }

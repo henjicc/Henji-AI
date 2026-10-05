@@ -4,7 +4,6 @@ import type { ApplicationHostPlatform, McpPlatform } from '../../src/core/applic
 import type {
   HenjiCameraStageRenderApi,
   HenjiCustomModelsApi,
-  HenjiDbApi,
   HenjiTestFixturesApi,
   HenjiDiagnosticsApi,
   HenjiWindowApi,
@@ -56,7 +55,6 @@ export interface HenjiNativeApi {
   ai: HenjiAiApi
   llm: HenjiLlmApi
   /** 原始 SQL 通道：只在自动化 / 隔离测试模式下存在（测试脚本造画布数据用），生产代码不得使用；3.4 删除。 */
-  db?: HenjiDbApi
   /** 测试夹具：只在自动化 / 隔离测试模式下存在。 */
   testFixtures?: HenjiTestFixturesApi
   generationHistory: HenjiGenerationHistoryApi

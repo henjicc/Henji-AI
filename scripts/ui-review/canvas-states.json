@@ -817,7 +817,7 @@
       {
         "click": {
           "role": "button",
-          "name": "/^(返回项目|Back to Projects)$/"
+          "name": "/^(返回画布列表|Back to Canvases)$/"
         }
       },
       {
@@ -828,7 +828,7 @@
       },
       {
         "stubIpc": {
-          "channel": "storyboardProjects:upsert",
+          "channel": "documents:rename",
           "mode": "reject",
           "message": "核对夹具：磁盘空间不足，无法写入工程文件。"
         }
