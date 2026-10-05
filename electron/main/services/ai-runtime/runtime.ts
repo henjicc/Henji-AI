@@ -66,6 +66,13 @@ export function getProviderKeyStatus(): ProviderKeyStatusDto[] {
 }
 
 const activeGenerationSubmissions = new Set<string>()
+/** 正在轮询（之后会把结果保存进作品目录）的任务数。 */
+let activePolls = 0
+
+/** 还有生成结果正在取回或保存（会往作品目录写文件）；更换作品目录前据此拒绝（任务 4.2）。 */
+export function hasActiveGenerationWork(): boolean {
+  return activeGenerationSubmissions.size > 0 || activePolls > 0
+}
 
 /** 只完成已收到供应商结果的媒体保存，不会再次调用 SDK 生成。 */
 export async function recoverSavedGenerationResult(requestId: string): Promise<AiGenerateResponseDto | null> {
@@ -191,6 +198,7 @@ export async function continuePolling(
   const requestId = request.requestId?.trim() || `continue-${request.modelId}-${Date.now()}`
   const taskId = request.taskId.trim()
   let ownedMediaPaths: string[] = []
+  activePolls += 1
   logger.info('后端开始轮询', {
     event: 'ai_runtime.poll.start',
     requestId,
@@ -278,6 +286,8 @@ export async function continuePolling(
       error: toLogError(error),
     })
     throw error
+  } finally {
+    activePolls -= 1
   }
 }
 

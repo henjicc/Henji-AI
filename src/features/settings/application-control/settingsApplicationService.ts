@@ -1,6 +1,7 @@
 import { createLogger } from '@/core/logging'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { modelDefaultsManager } from '@/features/settings/modelDefaultsManager'
+import { peekAppDirectories } from '@/utils/dataPath'
 
 import { GENERAL_APPLICATION_SETTING_DEFINITIONS } from './generalSettingDefinitions'
 import { INTERFACE_APPLICATION_SETTING_DEFINITIONS } from './interfaceSettingDefinitions'
@@ -133,6 +134,14 @@ export function getApplicationSettings(ids: string[]): {
         ...PROTECTED_APPLICATION_SETTING_DEFINITIONS[id],
         configured: useSettingsStore.getState().downloadPresetPaths.length > 0,
         configuredCount: useSettingsStore.getState().downloadPresetPaths.length,
+      }
+    }
+    if (id === 'storage.data_path') {
+      // 只给“是否默认位置”，不返回本地路径；尚未读取过作品目录时为 null。
+      const directories = peekAppDirectories()
+      return {
+        ...PROTECTED_APPLICATION_SETTING_DEFINITIONS[id],
+        usesDefaultLocation: directories ? !directories.isCustomUserRoot : null,
       }
     }
     const protectedDefinition = PROTECTED_APPLICATION_SETTING_DEFINITIONS[id]

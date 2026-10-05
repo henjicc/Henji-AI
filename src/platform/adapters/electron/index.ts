@@ -14,7 +14,6 @@ import { createElectronClipboard } from './clipboard'
 import { createElectronDragDrop } from './dragDrop'
 import { createElectronProjectPackage } from './projectPackage'
 import { createElectronStoryboardProjects } from './storyboardProjects'
-import { createElectronCameraStageProjects } from './cameraStageProjects'
 import { createElectronProjectCovers } from './projectCovers'
 import { createElectronCameraStageRender } from './cameraStageRender'
 import { createElectronWindow } from './window'
@@ -28,6 +27,7 @@ import { createElectronAudioEdit } from './audioEdit'
 import { createElectronVideoFrames } from './videoFrames'
 import { createElectronVideoDecoder } from './videoDecoder'
 import { createElectronDocuments } from './documents'
+import { createElectronWorkRoot } from './workRoot'
 
 export function createElectronPlatform(): PlatformRuntime {
   return {
@@ -50,7 +50,6 @@ export function createElectronPlatform(): PlatformRuntime {
     dragDrop: createElectronDragDrop(),
     projectPackage: createElectronProjectPackage(),
     storyboardProjects: createElectronStoryboardProjects(),
-    cameraStageProjects: createElectronCameraStageProjects(),
     projectCovers: createElectronProjectCovers(),
     cameraStageRender: createElectronCameraStageRender(),
     window: createElectronWindow(),
@@ -62,5 +61,6 @@ export function createElectronPlatform(): PlatformRuntime {
     videoFrames: createElectronVideoFrames(),
     videoDecoder: createElectronVideoDecoder(),
     documents: createElectronDocuments(),
+    workRoot: createElectronWorkRoot(),
   }
 }

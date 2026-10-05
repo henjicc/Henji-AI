@@ -7,7 +7,6 @@ import type {
   HenjiDiagnosticsApi,
   HenjiDiagnosticsStreamEvent,
   HenjiAiApi,
-  HenjiCameraStageProjectsApi,
   HenjiCameraStageRenderApi,
   HenjiCameraStageRenderWorkerJob,
   HenjiCameraStageRenderTaskSnapshot,
@@ -48,6 +47,7 @@ import { createMcpApi } from './mcp-api'
 import { createVideoFramesApi } from './video-frames-api'
 import { createVideoDecoderApi } from './video-decoder-api'
 import { createDocumentsApi } from './documents-api'
+import { createWorkRootApi } from './work-root-api'
 import { createGenerationHistoryApi, createPresetsApi, createSettingsApi } from './local-records-api'
 
 type IpcResultEnvelope<T> =
@@ -170,15 +170,6 @@ const storyboardProjectsApi: HenjiStoryboardProjectsApi = {
   renameProjectRecord: (projectId, name, updatedAt) =>
     nativeInvoke('storyboardProjects:rename', { projectId, name, updatedAt }),
   deleteProjectRecord: (projectId) => nativeInvoke('storyboardProjects:delete', { projectId }),
-}
-
-const cameraStageProjectsApi: HenjiCameraStageProjectsApi = {
-  listProjectSummaries: () => nativeInvoke('cameraStageProjects:list'),
-  getProjectRecord: (projectId) => nativeInvoke('cameraStageProjects:get', { projectId }),
-  upsertProjectRecord: (record) => nativeInvoke('cameraStageProjects:upsert', record),
-  renameProjectRecord: (projectId, name, updatedAt) =>
-    nativeInvoke('cameraStageProjects:rename', { projectId, name, updatedAt }),
-  deleteProjectRecord: (projectId) => nativeInvoke('cameraStageProjects:delete', { projectId }),
 }
 
 const projectCoversApi: HenjiProjectCoversApi = {
@@ -486,7 +477,6 @@ const api: HenjiNativeApi = {
   settings: createSettingsApi(nativeInvoke),
   canvasProjects: canvasProjectsApi,
   storyboardProjects: storyboardProjectsApi,
-  cameraStageProjects: cameraStageProjectsApi,
   projectCovers: projectCoversApi,
   cameraStageRender: cameraStageRenderApi,
   customModels: customModelsApi,
@@ -512,6 +502,11 @@ const api: HenjiNativeApi = {
   diagnostics: diagnosticsApi,
   assetLibrary: assetLibraryApi,
   documents: createDocumentsApi(nativeInvoke),
+  workRoot: createWorkRootApi(nativeInvoke, (channel, listener) => {
+    const wrapped = (_event: Electron.IpcRendererEvent, payload: unknown): void => listener(payload)
+    ipcRenderer.on(channel, wrapped)
+    return () => { ipcRenderer.removeListener(channel, wrapped) }
+  }),
 }
 
 contextBridge.exposeInMainWorld('henjiNative', api)

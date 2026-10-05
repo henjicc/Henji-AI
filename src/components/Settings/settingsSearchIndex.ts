@@ -81,7 +81,7 @@ export const SETTINGS_SEARCH_INDEX: readonly SettingsSearchEntry[] = [
     'sections.assetLibrary.edgeTrigger',
   ]),
   ...rows('files-storage', [
-    ['sections.dataPath.pathLabel', ['数据目录', '存储', '迁移', 'storage', 'folder']],
+    ['sections.dataPath.pathLabel', ['作品目录', '数据目录', '保存位置', '更换位置', '存储', 'works folder', 'storage', 'folder']],
   ]),
   ...rows('files-upload', [
     ['sections.largeUpload.strategyLabel', ['大文件', '复制', '引用', 'upload']],

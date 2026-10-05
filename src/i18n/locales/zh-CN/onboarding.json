@@ -4,7 +4,7 @@
   "progress": "第 {{current}} 步，共 {{total}} 步",
   "steps": {
     "welcome": "欢迎",
-    "basics": "数据目录",
+    "basics": "作品目录",
     "provider": "默认供应商",
     "api-key": "API 密钥",
     "first-task": "首次创作"
@@ -37,17 +37,17 @@
     }
   },
   "basics": {
-    "headline": "设置数据保存目录",
-    "description": "现在数据最少，正适合决定保存位置。你可以选择其他目录，也可以直接使用默认位置。",
+    "headline": "设置作品目录",
+    "description": "现在作品最少，正适合决定保存位置。你可以选择其他位置，也可以直接使用默认位置。",
     "language": "界面语言",
     "languageOptions": {
       "auto": "跟随系统",
       "zh-CN": "简体中文",
       "en-US": "English"
     },
-    "dataTitle": "数据保存目录",
-    "dataDescription": "生成结果、项目和相关数据都会保存在这里。选择其他位置时，痕迹AI 会在所选目录中创建 Henji-AI 文件夹。",
-    "currentPath": "当前数据保存目录",
+    "dataTitle": "作品目录",
+    "dataDescription": "项目、各类文档、生成结果和上传素材都保存在这里。更换位置会把作品移过去并重新启动；所选文件夹不是空的时，会在其中新建“痕迹AI”文件夹。",
+    "currentPath": "当前作品目录",
     "defaultPath": "不修改将使用默认位置：{{path}}"
   },
   "provider": {

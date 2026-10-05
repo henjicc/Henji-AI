@@ -236,11 +236,12 @@
   "actions": {
     "close": "Close",
     "select": "Select",
-    "resetDefault": "Reset to Default",
+    "resetDefault": "Restore Default Location",
     "cancel": "Cancel",
     "confirm": "Confirm",
-    "merge": "Merge Data",
-    "overwrite": "Overwrite Data",
+    "openInFileManager": "Open in Folder",
+    "changeLocation": "Change Location…",
+    "moveAndRestart": "Move and Restart",
     "checkUpdate": "Check for Updates",
     "checking": "Checking...",
     "clearIgnored": "Clear Ignored Versions",
@@ -249,9 +250,18 @@
     "toggleOff": "Off"
   },
   "alerts": {
-    "migrationSuccess": "Data migration completed",
-    "migrationFailed": "Data migration failed: {{message}}",
-    "unknownError": "Unknown error"
+    "unknownError": "Unknown error",
+    "workRoot": {
+      "nested": "The new location cannot be inside the current works folder or contain it. Choose another folder.",
+      "notEmpty": "The selected location is not empty. The works folder must go into an empty or new folder. Choose another folder.",
+      "notDirectory": "The selected location is a file, not a folder. Choose another folder.",
+      "insufficientSpace": "There is not enough disk space at the new location. The works folder was not changed.",
+      "inUse": "Some files in the works folder are in use by another program. Close it and try again. The works folder was not changed.",
+      "busy": "Something is still in progress (such as saving generated results). Wait for it to finish and try again. The works folder was not changed.",
+      "cancelled": "Cancelled. The works folder was not changed.",
+      "failed": "The works folder was not changed: {{message}}",
+      "openFailed": "Could not open the works folder: {{message}}"
+    }
   },
   "tabs": {
     "general": {
@@ -285,9 +295,9 @@
       }
     },
     "dataPath": {
-      "title": "Data Directory",
-      "pathLabel": "Data location",
-      "pathHint": "Existing data will be migrated to the new directory."
+      "title": "Works Folder",
+      "pathLabel": "Works folder",
+      "pathHint": "Projects, documents, generated results, uploads, exports, and assistant skills live here. Changing the location moves all of them and restarts the app; program data is stored elsewhere and does not move."
     },
     "concurrency": {
       "title": "Concurrency",
@@ -526,24 +536,27 @@
   },
   "dialogs": {
     "alert": {
-      "title": {
-        "success": "Success",
-        "error": "Error",
-        "warning": "Notice"
-      },
       "confirm": "OK"
     },
-    "resetDataPath": {
-      "title": "Reset Data Directory",
-      "message": "Reset to the default data directory? Existing data will be migrated back."
+    "workRootAlert": {
+      "title": "Works folder"
     },
-    "conflict": {
-      "title": "Target directory already has data",
-      "message": "Target: {{path}}. Choose how to proceed: merge keeps existing files, overwrite clears the target directory."
+    "workRootConfirm": {
+      "title": "Change Works Folder",
+      "resetTitle": "Restore Default Location",
+      "message": "Everything open will be saved first, then the whole works folder moves to the location below and Henji AI restarts automatically. This may take a while if you have many works."
     },
-    "migration": {
-      "title": "Migrating data...",
-      "hint": "Please do not close the app"
+    "workRootMove": {
+      "title": "Moving works folder",
+      "hint": "The app restarts when done. If cancelled or failed, your works stay where they are.",
+      "phases": {
+        "saving": "Saving open content…",
+        "preparing": "Counting files…",
+        "moving": "Moving…",
+        "copying": "Copying…",
+        "verifying": "Verifying…",
+        "cleaning": "Cleaning up the old location…"
+      }
     }
   },
   "modelSettings": {

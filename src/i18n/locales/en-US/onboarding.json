@@ -4,7 +4,7 @@
   "progress": "Step {{current}} of {{total}}",
   "steps": {
     "welcome": "Welcome",
-    "basics": "Data folder",
+    "basics": "Works folder",
     "provider": "Default provider",
     "api-key": "API key",
     "first-task": "First creation"
@@ -37,17 +37,17 @@
     }
   },
   "basics": {
-    "headline": "Choose your data storage location",
-    "description": "This is the best time to choose a location, while there is little data to move. Pick another folder or keep the default.",
+    "headline": "Choose your works folder",
+    "description": "This is the best time to choose a location, while there is little to move. Pick another folder or keep the default.",
     "language": "Interface language",
     "languageOptions": {
       "auto": "Follow system",
       "zh-CN": "简体中文",
       "en-US": "English"
     },
-    "dataTitle": "Data storage location",
-    "dataDescription": "Generated results, projects, and related data are stored here. Henji AI creates a Henji-AI folder inside any location you choose.",
-    "currentPath": "Current data storage location",
+    "dataTitle": "Works folder",
+    "dataDescription": "Projects, documents, generated results, and uploads are stored here. Changing the location moves your works and restarts Henji AI; if the folder you pick is not empty, a \"Henji AI\" folder is created inside it.",
+    "currentPath": "Current works folder",
     "defaultPath": "Keep the default location: {{path}}"
   },
   "provider": {

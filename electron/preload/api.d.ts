@@ -2,7 +2,6 @@ import type { EmbeddedAgentPlatform } from '../../src/core/assistant/embeddedAge
 import type { HenjiAssistantApi } from './api-assistant'
 import type { ApplicationHostPlatform, McpPlatform } from '../../src/core/application-control/localHostContracts'
 import type {
-  HenjiCameraStageProjectsApi,
   HenjiCameraStageRenderApi,
   HenjiCanvasProjectsApi,
   HenjiCustomModelsApi,
@@ -33,6 +32,7 @@ import type { HenjiImageEditorV3Api } from './image-editor-v3-api'
 import type { HenjiVideoFramesApi } from './api-video-frames'
 import type { HenjiVideoDecoderApi } from './api-video-decoder'
 import type { HenjiDocumentsApi } from './api-documents'
+import type { WorkRootPlatform } from '../../src/platform/contracts/workRoot'
 import type { HenjiGenerationHistoryApi, HenjiPresetsApi, HenjiSettingsApi } from './api-local-records'
 
 export * from './api-assistant'
@@ -67,7 +67,6 @@ export interface HenjiNativeApi {
   settings: HenjiSettingsApi
   canvasProjects: HenjiCanvasProjectsApi
   storyboardProjects: HenjiStoryboardProjectsApi
-  cameraStageProjects: HenjiCameraStageProjectsApi
   projectCovers: HenjiProjectCoversApi
   cameraStageRender: HenjiCameraStageRenderApi
   customModels: HenjiCustomModelsApi
@@ -93,6 +92,8 @@ export interface HenjiNativeApi {
   diagnostics: HenjiDiagnosticsApi
   assetLibrary: HenjiAssetLibraryApi
   documents: HenjiDocumentsApi
+  /** 作品目录位置与更换，接口与 PAL `WorkRootPlatform` 相同。 */
+  workRoot: WorkRootPlatform
 }
 
 declare global {

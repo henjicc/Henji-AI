@@ -13,7 +13,6 @@ import type { DragDropPlatform } from './dragDrop'
 import type { ProjectCoversPlatform } from './projectCovers'
 import type { ProjectPackagePlatform } from './projectPackage'
 import type { StoryboardProjectsPlatform } from './storyboardProjects'
-import type { CameraStageProjectsPlatform } from './cameraStageProjects'
 import type { CameraStageRenderPlatform } from './cameraStageRender'
 import type { WindowPlatform } from './window'
 import type { LoggingPlatform } from './logging'
@@ -26,6 +25,7 @@ import type { AudioEditPlatform } from './audioEdit'
 import type { VideoFramesPlatform } from './videoFrames'
 import type { VideoDecoderPlatform } from './videoDecoder'
 import type { DocumentsPlatform } from './documents'
+import type { WorkRootPlatform } from './workRoot'
 
 export interface PlatformRuntime {
   embeddedAgent: EmbeddedAgentPlatform
@@ -48,7 +48,6 @@ export interface PlatformRuntime {
   projectCovers: ProjectCoversPlatform
   projectPackage: ProjectPackagePlatform
   storyboardProjects: StoryboardProjectsPlatform
-  cameraStageProjects: CameraStageProjectsPlatform
   cameraStageRender: CameraStageRenderPlatform
   window: WindowPlatform
   logging: LoggingPlatform
@@ -59,6 +58,7 @@ export interface PlatformRuntime {
   videoFrames: VideoFramesPlatform
   videoDecoder: VideoDecoderPlatform
   documents: DocumentsPlatform
+  workRoot: WorkRootPlatform
 }
 
 export type {
@@ -79,7 +79,6 @@ export type {
   ProjectCoversPlatform,
   ProjectPackagePlatform,
   StoryboardProjectsPlatform,
-  CameraStageProjectsPlatform,
   CameraStageRenderPlatform,
   WindowPlatform,
   LoggingPlatform,
@@ -106,7 +105,6 @@ export * from './dragDrop'
 export * from './projectCovers'
 export * from './projectPackage'
 export * from './storyboardProjects'
-export * from './cameraStageProjects'
 export * from './cameraStageRender'
 export * from './window'
 export * from './logging'
@@ -115,3 +113,4 @@ export * from './assetLibrary'
 export * from './assistant'
 export * from './audioEdit'
 export * from './documents'
+export * from './workRoot'

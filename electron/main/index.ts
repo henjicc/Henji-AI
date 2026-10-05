@@ -6,7 +6,6 @@ import { registerAiRuntimeIpc } from './ipc/ai-runtime'
 import { registerAudioIpc } from './ipc/audio'
 import { registerAssetLibraryIpc } from './ipc/asset-library'
 import { registerAssistantIpc } from './ipc/assistant'
-import { registerCameraStageProjectsIpc } from './ipc/camera-stage-projects'
 import { registerCameraStageRenderIpc } from './ipc/camera-stage-render'
 import { registerCanvasProjectsIpc } from './ipc/canvas-projects'
 import { registerClipboardIpc } from './ipc/clipboard'
@@ -17,6 +16,8 @@ import { registerTestFixturesIpc } from './ipc/test-fixtures'
 import { configureDatabaseMigrations } from './services/db'
 import { databaseMigrationOptions } from './services/db-locations'
 import { registerDocumentsIpc } from './ipc/documents'
+import { registerWorkRootIpc } from './ipc/work-root'
+import { disposeWorkRootChange } from './services/work-root/runtime'
 import { registerDragIpc } from './ipc/drag'
 import { registerImageIpc } from './ipc/image'
 import { disposeImageEditorV3Ipc, registerImageEditorV3Ipc } from './ipc/image-editor-v3'
@@ -101,7 +102,6 @@ app.whenReady().then(() => {
   registerAudioIpc()
   registerAssetLibraryIpc()
   registerAssistantIpc()
-  registerCameraStageProjectsIpc()
   registerCameraStageRenderIpc()
   registerCanvasProjectsIpc()
   registerClipboardIpc()
@@ -110,6 +110,7 @@ app.whenReady().then(() => {
   registerLocalRecordsIpc()
   registerTestFixturesIpc()
   registerDocumentsIpc()
+  registerWorkRootIpc()
   registerDragIpc()
   registerImageIpc()
   registerImageEditorV3Ipc()
@@ -192,6 +193,6 @@ app.on('window-all-closed', () => {
   }
 })
 
-bindApplicationShutdown(app, [disposeEmbeddedAgent, disposeMcp, disposeImageEditorV3Ipc], (error) => {
+bindApplicationShutdown(app, [disposeWorkRootChange, disposeEmbeddedAgent, disposeMcp, disposeImageEditorV3Ipc], (error) => {
   createMainLogger('application.shutdown').error('应用服务退出清理失败', { event: 'application.shutdown.failed', error })
 })

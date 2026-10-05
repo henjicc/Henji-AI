@@ -9,8 +9,7 @@ import {
   UiInput,
   UiPanel,
 } from '@/components/ui'
-import SettingsDialog from '@/components/Settings/components/SettingsDialog'
-import SettingsProgressDialog from '@/components/Settings/components/SettingsProgressDialog'
+import DataPathDialogs from '@/components/Settings/components/DataPathDialogs'
 import type { UseDataPathResult } from '@/components/Settings/hooks/useDataPath'
 import { useI18n } from '@/hooks/useI18n'
 
@@ -52,46 +51,7 @@ export function OnboardingBasicsStep({ dataPath }: { dataPath: UseDataPathResult
   )
 }
 
+/** 与设置页共用同一套作品目录弹窗。 */
 export function OnboardingDataPathDialogs({ dataPath }: { dataPath: UseDataPathResult }): JSX.Element {
-  const { t } = useI18n('settings')
-  const alertTitle = t(`dialogs.alert.title.${dataPath.alert.type}`)
-  const normalizedParams = dataPath.alert.message.params?.message === 'UnknownError'
-    ? { ...dataPath.alert.message.params, message: t('alerts.unknownError') }
-    : dataPath.alert.message.params
-  const alertMessage = dataPath.alert.message.key
-    ? t(dataPath.alert.message.key, normalizedParams)
-    : ''
-
-  return (
-    <>
-      <SettingsDialog
-        open={dataPath.alert.open}
-        title={alertTitle}
-        description={alertMessage}
-        actions={[{
-          label: t('dialogs.alert.confirm'),
-          onClick: dataPath.closeAlert,
-          variant: 'primary',
-        }]}
-        onClose={dataPath.closeAlert}
-      />
-      <SettingsDialog
-        open={dataPath.conflict.open}
-        title={t('dialogs.conflict.title')}
-        description={t('dialogs.conflict.message', { path: dataPath.conflict.targetPath })}
-        actions={[
-          { label: t('actions.merge'), onClick: () => void dataPath.resolveConflict('merge'), variant: 'primary' },
-          { label: t('actions.overwrite'), onClick: () => void dataPath.resolveConflict('overwrite'), variant: 'danger' },
-          { label: t('actions.cancel'), onClick: () => void dataPath.resolveConflict('cancel'), variant: 'secondary' },
-        ]}
-        onClose={dataPath.closeConflict}
-      />
-      <SettingsProgressDialog
-        open={dataPath.showProgress}
-        title={t('dialogs.migration.title')}
-        hint={t('dialogs.migration.hint')}
-        progress={dataPath.progress}
-      />
-    </>
-  )
+  return <DataPathDialogs dataPath={dataPath} />
 }

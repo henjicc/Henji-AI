@@ -21,3 +21,7 @@ export function writeRawSetting(key: string, value: string, type: string): void 
     ON CONFLICT(key) DO UPDATE SET value = excluded.value, type = excluded.type, updated_at = CURRENT_TIMESTAMP
   `).run(key, value, type)
 }
+
+export function deleteRawSetting(key: string): void {
+  getDb().prepare('DELETE FROM settings WHERE key = ?').run(key)
+}

@@ -1,38 +1,21 @@
 import React from 'react'
 import { UiButton, UiFormRow, UiInput } from '@/components/ui'
-import SettingsDialog from '../components/SettingsDialog'
-import SettingsProgressDialog from '../components/SettingsProgressDialog'
+import DataPathDialogs from '../components/DataPathDialogs'
 import { useDataPath } from '../hooks/useDataPath'
 import { useI18n } from '@/hooks/useI18n'
 
+/**
+ * 作品目录（默认“文档/痕迹AI”）：项目、各类文档、生成结果、上传素材、导出、助手技能。
+ * 数据库、日志、缓存等程序数据在程序目录，不在这里展示也不随之移动。
+ */
 const DataPathSection: React.FC = () => {
   const { t } = useI18n('settings')
-  const {
-    currentPath,
-    isMigrating,
-    progress,
-    showProgress,
-    alert,
-    conflict,
-    confirmResetOpen,
-    selectDirectory,
-    openResetConfirm,
-    closeResetConfirm,
-    resolveConflict,
-    resetToDefault,
-    closeAlert,
-    closeConflict
-  } = useDataPath()
-
-  const alertTitle = t(`dialogs.alert.title.${alert.type}`)
-  const normalizedParams = alert.message.params?.message === 'UnknownError'
-    ? { ...alert.message.params, message: t('alerts.unknownError') }
-    : alert.message.params
-  const alertMessage = alert.message.key ? t(alert.message.key, normalizedParams) : ''
+  const dataPath = useDataPath()
+  const { currentPath, isCustom, isMigrating } = dataPath
 
   return (
     <>
-      {/* 常驻说明：改了会自动迁移全部数据，属于「不看就可能误操作」那一档 */}
+      {/* 常驻说明：更换会移动全部作品并重新启动，属于「不看就可能误操作」那一档 */}
       <UiFormRow label={t('sections.dataPath.pathLabel')} hint={t('sections.dataPath.pathHint')}>
         {/* 按钮与输入框同为 32 高（同一行控件同一外框高度） */}
         <div className="flex items-center gap-2">
@@ -43,90 +26,39 @@ const DataPathSection: React.FC = () => {
             value={currentPath}
             title={currentPath}
             readOnly
-            className={`flex-1 font-mono`}
+            className="min-w-0 flex-1 font-mono"
           />
           <UiButton
-            onClick={selectDirectory}
-            disabled={isMigrating}
+            onClick={() => void dataPath.openInFileManager()}
+            disabled={isMigrating || !currentPath}
             variant="secondary"
             className="shrink-0"
           >
-            {t('actions.select')}
+            {t('actions.openInFileManager')}
           </UiButton>
           <UiButton
-            onClick={openResetConfirm}
-            disabled={isMigrating}
+            onClick={() => void dataPath.selectDirectory()}
+            disabled={isMigrating || !currentPath}
             variant="secondary"
             className="shrink-0"
           >
-            {t('actions.resetDefault')}
+            {t('actions.changeLocation')}
           </UiButton>
+          {/* 已在默认位置时没有可恢复的内容，不显示 */}
+          {isCustom ? (
+            <UiButton
+              onClick={() => void dataPath.openResetConfirm()}
+              disabled={isMigrating}
+              variant="secondary"
+              className="shrink-0"
+            >
+              {t('actions.resetDefault')}
+            </UiButton>
+          ) : null}
         </div>
       </UiFormRow>
 
-      <SettingsDialog
-        open={alert.open}
-        title={alertTitle}
-        description={alertMessage}
-        actions={[
-          {
-            label: t('dialogs.alert.confirm'),
-            onClick: closeAlert,
-            variant: 'primary'
-          }
-        ]}
-        onClose={closeAlert}
-      />
-
-      <SettingsDialog
-        open={confirmResetOpen}
-        title={t('dialogs.resetDataPath.title')}
-        description={t('dialogs.resetDataPath.message')}
-        actions={[
-          {
-            label: t('actions.cancel'),
-            onClick: closeResetConfirm,
-            variant: 'secondary'
-          },
-          {
-            label: t('actions.confirm'),
-            onClick: resetToDefault,
-            variant: 'primary'
-          }
-        ]}
-        onClose={closeResetConfirm}
-      />
-
-      <SettingsDialog
-        open={conflict.open}
-        title={t('dialogs.conflict.title')}
-        description={t('dialogs.conflict.message', { path: conflict.targetPath })}
-        actions={[
-          {
-            label: t('actions.merge'),
-            onClick: () => resolveConflict('merge'),
-            variant: 'primary'
-          },
-          {
-            label: t('actions.overwrite'),
-            onClick: () => resolveConflict('overwrite'),
-            variant: 'danger'
-          },
-          {
-            label: t('actions.cancel'),
-            onClick: () => resolveConflict('cancel'),
-            variant: 'secondary'
-          }
-        ]}
-        onClose={closeConflict}
-      />
-
-      <SettingsProgressDialog
-        open={showProgress}
-        title={t('dialogs.migration.title')}
-        hint={t('dialogs.migration.hint')}
-        progress={progress}
-      />
+      <DataPathDialogs dataPath={dataPath} />
     </>
   )
 }

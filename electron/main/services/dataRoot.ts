@@ -1,4 +1,4 @@
-import { readRawSettings, writeRawSetting } from './settings/raw'
+import { deleteRawSetting, readRawSettings, writeRawSetting } from './settings/raw'
 
 const CUSTOM_DATA_DIRECTORY_KEY = 'custom_data_directory'
 /** 首次创建时确定的默认用户目录（绝对路径 + 分类文件夹语言），之后不随界面语言变化。 */
@@ -30,4 +30,10 @@ export function readUserDataRootSettings(): UserDataRootSettings {
 
 export function writePersistedDefaultUserDataRoot(value: string): void {
   writeRawSetting(USER_DATA_ROOT_KEY, value, 'json')
+}
+
+/** 更换作品目录（work-root）切换设置用：null 表示回到默认位置。 */
+export function writeCustomDataRoot(value: string | null): void {
+  if (value === null) deleteRawSetting(CUSTOM_DATA_DIRECTORY_KEY)
+  else writeRawSetting(CUSTOM_DATA_DIRECTORY_KEY, value, 'string')
 }

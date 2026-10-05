@@ -32,10 +32,12 @@ export const PROTECTED_APPLICATION_SETTING_DEFINITIONS: Record<string, Record<st
     aliases: ['下载路径', '保存目录', '本地路径', '下载预设路径'], target: { tab: 'files', sectionId: 'files-download' }, sensitive: true, writable: false,
   },
   'storage.data_path': {
-    id: 'storage.data_path', title: '应用数据目录',
-    description: 'OS 文件选择器由系统弹出，不在渲染进程里，迁移数据目录必须由用户在系统确认框里'
-      + '完成；助手可以用 open_application_surface 把用户带到 files-storage 分区定位到这一项。',
-    aliases: ['数据目录', '迁移数据', '存储位置'], target: { tab: 'files', sectionId: 'files-storage' }, sensitive: true, writable: false,
+    id: 'storage.data_path', title: '作品目录',
+    description: '作品目录（默认“文档/痕迹AI”）存放项目、各类文档、生成结果、上传素材、导出与助手技能。'
+      + '助手只能查询是否使用默认位置，不返回本地路径；更换位置要整体移动全部作品、先保存并关闭所有打开的内容，'
+      + '完成后重新启动应用，新位置也必须由用户在系统选择器里选定，因此只能由用户在设置里操作。'
+      + '需要时用 open_application_surface 把用户带到 files-storage 分区。',
+    aliases: ['作品目录', '数据目录', '保存位置', '存储位置', 'works folder'], target: { tab: 'files', sectionId: 'files-storage' }, sensitive: true, writable: false,
   },
   'downloads.quick_path': {
     id: 'downloads.quick_path', title: '快速下载目录',

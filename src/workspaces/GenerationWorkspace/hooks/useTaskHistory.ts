@@ -190,16 +190,9 @@ export function useLoadTaskHistory({
     }
   }, [isInitialLoadRef, setIsTasksLoaded, setTasks])
 
+  // 更换作品目录后应用会重新启动（任务 4.2），不需要在运行中重新载入。
   useEffect(() => {
     void load()
-
-    const handlePathChange = () => {
-      logger.info('[Workspace] 检测到数据路径变更，重新加载历史记录', {})
-      void load()
-    }
-
-    window.addEventListener('dataPathChanged', handlePathChange)
-    return () => window.removeEventListener('dataPathChanged', handlePathChange)
   }, [load])
 }
 

@@ -17,6 +17,11 @@ const WINDOW_CONFIRM_CLOSE = 'window:confirmClose'
 
 const approvedCloseWindows = new WeakSet<BrowserWindow>()
 
+/** 不经渲染层保存屏障直接批准全部窗口关闭；只给已完成保存的流程用（如更换作品目录后重启）。 */
+export function approveAllWindowsClose(): void {
+  for (const win of BrowserWindow.getAllWindows()) approvedCloseWindows.add(win)
+}
+
 interface WindowStatePayload {
   isMaximized: boolean
 }

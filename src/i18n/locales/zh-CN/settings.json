@@ -236,11 +236,12 @@
   "actions": {
     "close": "关闭",
     "select": "选择",
-    "resetDefault": "恢复默认",
+    "resetDefault": "恢复默认位置",
     "cancel": "取消",
     "confirm": "确定",
-    "merge": "合并数据",
-    "overwrite": "覆盖数据",
+    "openInFileManager": "在文件夹中打开",
+    "changeLocation": "更换位置…",
+    "moveAndRestart": "移动并重新启动",
     "checkUpdate": "检查更新",
     "checking": "检查中...",
     "clearIgnored": "清除忽略的版本",
@@ -249,9 +250,18 @@
     "toggleOff": "关闭"
   },
   "alerts": {
-    "migrationSuccess": "数据迁移成功",
-    "migrationFailed": "数据迁移失败：{{message}}",
-    "unknownError": "未知错误"
+    "unknownError": "未知错误",
+    "workRoot": {
+      "nested": "新位置不能在当前作品目录里面，也不能包含当前作品目录。请另选一个文件夹。",
+      "notEmpty": "所选位置已有内容，作品目录必须放在空文件夹或新文件夹里。请另选一个文件夹。",
+      "notDirectory": "所选位置是一个文件，不是文件夹。请另选一个文件夹。",
+      "insufficientSpace": "新位置所在磁盘空间不足，作品目录保持不变。",
+      "inUse": "作品目录里有文件正被其他程序使用。请关闭相关程序后重试，作品目录保持不变。",
+      "busy": "还有操作正在进行（如生成结果正在保存）。请等待完成后再更换，作品目录保持不变。",
+      "cancelled": "已取消，作品目录保持不变。",
+      "failed": "更换没有完成，作品目录保持不变：{{message}}",
+      "openFailed": "无法打开作品目录：{{message}}"
+    }
   },
   "tabs": {
     "general": {
@@ -285,9 +295,9 @@
       }
     },
     "dataPath": {
-      "title": "数据目录",
-      "pathLabel": "数据保存目录",
-      "pathHint": "更改后将自动迁移现有数据到新目录"
+      "title": "作品目录",
+      "pathLabel": "作品目录",
+      "pathHint": "项目、各类文档、生成结果、上传素材、导出和助手技能都在这里。更换位置会把它们整体移过去并重新启动；程序数据不在这里，不会移动。"
     },
     "concurrency": {
       "title": "并发设置",
@@ -526,24 +536,27 @@
   },
   "dialogs": {
     "alert": {
-      "title": {
-        "success": "操作成功",
-        "error": "操作失败",
-        "warning": "提示"
-      },
       "confirm": "确定"
     },
-    "resetDataPath": {
-      "title": "恢复默认数据目录",
-      "message": "确定要恢复到默认数据目录吗？现有数据将被迁移回默认位置。"
+    "workRootAlert": {
+      "title": "作品目录"
     },
-    "conflict": {
-      "title": "检测到目标目录已有数据",
-      "message": "目标目录：{{path}}。请选择处理方式：合并将保留现有文件，覆盖将清空目标目录。"
+    "workRootConfirm": {
+      "title": "更换作品目录",
+      "resetTitle": "恢复默认位置",
+      "message": "将先保存所有打开的内容，再把整个作品目录移到下面的位置，完成后痕迹AI 会自动重新启动。作品较多时可能需要一些时间。"
     },
-    "migration": {
-      "title": "正在迁移数据...",
-      "hint": "请勿关闭应用"
+    "workRootMove": {
+      "title": "正在移动作品目录",
+      "hint": "完成后会自动重新启动。取消或失败时，作品留在原位置。",
+      "phases": {
+        "saving": "正在保存打开的内容…",
+        "preparing": "正在清点文件…",
+        "moving": "正在移动…",
+        "copying": "正在复制…",
+        "verifying": "正在核对…",
+        "cleaning": "正在清理原位置…"
+      }
     }
   },
   "modelSettings": {

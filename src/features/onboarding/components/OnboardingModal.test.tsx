@@ -30,19 +30,20 @@ vi.mock('@/components/Settings/hooks/useDataPath', () => ({
   useDataPath: () => ({
     currentPath: '/mock/default/Henji-AI',
     defaultPath: '/mock/default/Henji-AI',
+    isCustom: false,
     isMigrating: false,
-    progress: { current: 0, total: 0, file: '' },
+    progress: { phase: null, current: 0, total: 0, file: '' },
     showProgress: false,
-    alert: { open: false, type: 'success', message: { key: '' } },
-    conflict: { open: false, targetPath: '' },
-    confirmResetOpen: false,
+    canCancel: false,
+    alert: { open: false, message: { key: '' } },
+    confirm: { open: false, mode: 'change', targetPath: '' },
     selectDirectory: vi.fn(),
     openResetConfirm: vi.fn(),
-    closeResetConfirm: vi.fn(),
-    resolveConflict: vi.fn(),
-    resetToDefault: vi.fn(),
+    closeConfirm: vi.fn(),
+    confirmMove: vi.fn(),
+    cancelMove: vi.fn(),
+    openInFileManager: vi.fn(),
     closeAlert: vi.fn(),
-    closeConflict: vi.fn(),
   }),
 }))
 
@@ -80,7 +81,7 @@ describe('OnboardingModal', () => {
     expect(languageButton.textContent).toContain('简体中文')
 
     fireEvent.click(screen.getByRole('button', { name: '开始设置' }))
-    expect(screen.getByText('设置数据保存目录')).toBeTruthy()
+    expect(screen.getByText('设置作品目录')).toBeTruthy()
     expect(screen.queryByText('界面语言')).toBeNull()
     expect(screen.getByDisplayValue('/mock/default/Henji-AI')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: '继续' }))

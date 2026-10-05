@@ -1,5 +1,5 @@
 import React from 'react'
-import { UI_TEXT_BODY_CLASS, UI_TEXT_TITLE_CLASS, UiButton, UiModal } from '@/components/ui'
+import { UI_TEXT_BODY_CLASS, UI_TEXT_META_CLASS, UI_TEXT_TITLE_CLASS, UiButton, UiModal } from '@/components/ui'
 
 type DialogActionVariant = 'primary' | 'secondary' | 'danger'
 
@@ -13,6 +13,8 @@ export interface SettingsDialogProps {
   open: boolean
   title: string
   description?: string
+  /** 说明下方单独一行的本地路径；截图观察时遮住。 */
+  detailPath?: string
   actions: DialogAction[]
   onClose?: () => void
 }
@@ -35,7 +37,7 @@ const resolveActionVariant = (
  * 外壳统一走 UiModal：遮罩、portal、过渡、data-dialog 都由 primitive 负责，
  * 这里只描述标题/说明/操作按钮。
  */
-const SettingsDialog: React.FC<SettingsDialogProps> = ({ open, title, description, actions, onClose }) => {
+const SettingsDialog: React.FC<SettingsDialogProps> = ({ open, title, description, detailPath, actions, onClose }) => {
   const hasPrimary = actions.some(action => action.variant === 'primary')
   return (
   <UiModal
@@ -58,6 +60,7 @@ const SettingsDialog: React.FC<SettingsDialogProps> = ({ open, title, descriptio
   >
     <div className={UI_TEXT_TITLE_CLASS}>{title}</div>
     {description ? <div className={`mt-2 ${UI_TEXT_BODY_CLASS}`}>{description}</div> : null}
+    {detailPath ? <div data-observation-sensitive className={`mt-2 break-all font-mono ${UI_TEXT_META_CLASS}`}>{detailPath}</div> : null}
   </UiModal>
   )
 }
