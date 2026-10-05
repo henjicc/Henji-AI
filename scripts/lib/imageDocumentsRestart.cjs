@@ -1,4 +1,5 @@
 const assert = require('node:assert/strict')
+const { execFileSync } = require('node:child_process')
 const fs = require('node:fs')
 const path = require('node:path')
 const yauzl = require('yauzl')
@@ -21,6 +22,18 @@ const { createRuntimeEvidenceCollector, queryApplicationLogs } = require('./runt
  */
 
 const WINDOW_SIZE = { width: 1440, height: 900 }
+
+function killTree(pid) {
+  if (process.platform === 'win32') {
+    try { execFileSync('taskkill', ['/PID', String(pid), '/T', '/F'], { stdio: 'ignore' }) } catch { /* 已经退出 */ }
+  } else {
+    try { process.kill(pid, 'SIGKILL') } catch { /* 已经退出 */ }
+  }
+}
+
+function isAlive(pid) {
+  try { process.kill(pid, 0); return true } catch { return false }
+}
 const HEADER_ENTRY = 'henji-document.json'
 const MANIFEST_ENTRY = 'manifest.json'
 
@@ -120,8 +133,21 @@ async function openImageList(page) {
     if (await page.getByRole('alertdialog').count()) throw new Error('打开列表时出现了意外的离开提示')
   }
   await page.getByRole('button', { name: /^图片编辑/ }).filter({ visible: true }).first().click()
-  await button(page, '新建图片文档').waitFor({ state: 'visible', timeout: 15000 })
+  await listReady(page)
+}
+
+/** 列表页就绪：有文档时页头有“新建图片文档”，空列表时新建来源平铺在空态里。 */
+async function listReady(page) {
+  await page.locator('[aria-label="返回工具"]:visible, [title="返回工具"]:visible').first().waitFor({ state: 'visible', timeout: 15000 })
   await page.waitForTimeout(500)
+}
+
+/** 新建来源：空列表时是平铺按钮，有文档时在“新建图片文档”菜单里。 */
+async function chooseCreateSource(page, label) {
+  const flat = button(page, label)
+  if (await flat.count()) { await flat.click(); return }
+  await button(page, '新建图片文档').click()
+  await page.getByText(label, { exact: true }).filter({ visible: true }).first().click()
 }
 
 async function waitEditor(page) {
@@ -195,8 +221,7 @@ async function runImageDocumentsRestart({ launch, userDataDir, outDir }) {
     await shot('graphite-list-empty')
 
     // 新建空白图片：草稿直接写进“图片文档/”
-    await button(page, '新建图片文档').click()
-    await page.getByText('新建空白图片', { exact: true }).filter({ visible: true }).first().click()
+    await chooseCreateSource(page, '新建空白图片')
     await button(page, '创建图片').click()
     await waitEditor(page)
     const draft = (await listImageDocuments(page)).find((document) => document.draft)
@@ -225,7 +250,7 @@ async function runImageDocumentsRestart({ launch, userDataDir, outDir }) {
     const secondOpacity = await nudgeOpacity(page, 5)
     assert.notEqual(secondOpacity, firstOpacity)
     await backToList(page)
-    await button(page, '新建图片文档').waitFor({ state: 'visible', timeout: 15000 })
+    await listReady(page)
     assert.equal(await page.getByRole('alertdialog').count(), 0, '已保存的文档离开时不应询问')
     const afterClose = await readHeader(savedPath)
     assert.ok(afterClose.header.revision > afterSave.header.revision, '关闭时应写回 .henjiimg')
@@ -248,10 +273,12 @@ async function runImageDocumentsRestart({ launch, userDataDir, outDir }) {
     assert.equal(currentRun.runtime.passed, true, '第一次启动含运行时错误，详见证据')
     collector.dispose(); collector = null
     save()
-    const child = current.app.process()
-    child.kill('SIGKILL')
-    await waitUntil(async () => child.exitCode !== null || child.signalCode !== null, '进程已结束', 10000)
-    currentRun.exit = { pid: child.pid, killed: true, exitCode: child.exitCode, signalCode: child.signalCode }
+    // 启动器返回的子进程可能只是外层包装：取 Electron 主进程自己的 PID，连同子进程整棵树强制结束（不走任何退出流程）。
+    const mainPid = await current.app.evaluate(() => process.pid)
+    killTree(mainPid)
+    await waitUntil(async () => !isAlive(mainPid), 'Electron 主进程已结束', 15000)
+    await new Promise((resolve) => setTimeout(resolve, 1500))
+    currentRun.exit = { pid: mainPid, killed: true }
     current = null
     assert.equal((await readHeader(savedPath)).header.revision, afterClose.header.revision, '意外退出后文件仍是上一次写回的版本')
 
@@ -266,12 +293,13 @@ async function runImageDocumentsRestart({ launch, userDataDir, outDir }) {
     await card(second, draft.id).click()
     const recovery = second.getByRole('alertdialog').filter({ hasText: '恢复上次没写回的修改？' })
     await recovery.waitFor({ state: 'visible', timeout: 15000 })
+    await second.waitForTimeout(600) // 等弹窗入场动效结束再截图
     await shot('paper-recovery-prompt')
     await recovery.getByRole('button', { name: '恢复修改', exact: true }).click()
     await waitEditor(second)
     assert.equal(await readOpacity(second), crashOpacity, '恢复后应是意外退出前的修改')
     await backToList(second)
-    await button(second, '新建图片文档').waitFor({ state: 'visible', timeout: 15000 })
+    await listReady(second)
     const afterRecovery = await readHeader(savedPath)
     assert.ok(afterRecovery.header.revision > afterClose.header.revision, '恢复后关闭应写回文件')
     for (const forbidden of [userDataDir, userDataDir.replace(/\\/g, '/'), 'ImageEditorV3', 'henji-media://']) {
