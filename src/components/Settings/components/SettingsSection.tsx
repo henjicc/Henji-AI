@@ -12,6 +12,8 @@ interface SettingsSectionProps {
   id: string
   /** 分节说明，只在整节都需要一句话前提时给（如密钥的存储方式） */
   description?: React.ReactNode
+  /** 铺满父级高度（单独成页、内部自己滚动的分区，如供应商与模型） */
+  fill?: boolean
   children: React.ReactNode
 }
 
@@ -28,7 +30,7 @@ interface SettingsSectionProps {
  *    这样"线的位置"和"目录条目"一一对应，滚动时那条线就是「进入下一个目录条目」的信号。
  *    以前 8 处 `border-t` 散在 5 个分区文件里、切的位置各凭手感，就是割裂感的来源。
  */
-const SettingsSection: React.FC<SettingsSectionProps> = ({ id, description, children }) => {
+const SettingsSection: React.FC<SettingsSectionProps> = ({ id, description, fill = false, children }) => {
   const { t } = useI18n('settings')
 
   return (
@@ -47,11 +49,11 @@ const SettingsSection: React.FC<SettingsSectionProps> = ({ id, description, chil
        * 直接贴着这条线，读起来像给那个控件加了第二条底边，而不是两节之间的分界。
        * 分隔线属于两节之间的空白，两侧留白必须相等，它才落在中间。
        */
-      className={`mt-10 border-t ${UI_GLASS_ADAPTIVE_DIVIDER_CLASS} pt-10 first:mt-0 first:border-t-0 first:pt-0`}
+      className={`mt-10 border-t ${UI_GLASS_ADAPTIVE_DIVIDER_CLASS} pt-10 first:mt-0 first:border-t-0 first:pt-0 ${fill ? 'flex min-h-0 flex-1 flex-col' : ''}`}
     >
       <h3 className={UI_TEXT_TITLE_CLASS}>{t(`navSections.${id}`)}</h3>
       {description ? <p className="mt-1 text-xs text-text2">{description}</p> : null}
-      <div className={`mt-5 ${UI_FORM_ROW_GAP_CLASS}`}>{children}</div>
+      <div className={fill ? 'mt-5 flex min-h-0 flex-1 flex-col' : `mt-5 ${UI_FORM_ROW_GAP_CLASS}`}>{children}</div>
     </section>
   )
 }

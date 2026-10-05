@@ -40,6 +40,15 @@ type SettingsTab = SettingsTabId
  */
 const SECTION_MAP: Record<SettingsTab, readonly string[]> = SETTINGS_TAB_SECTIONS
 
+/**
+ * 只有一个分区的大类（供应商与模型、助手技能）没有“滚到哪个分区”可言：切过去一律从顶部开始。
+ * 以前也会定位到分区，分区自带上内边距，切换瞬间整页往上跳一下。
+ */
+const isSingleSectionTab = (tab: SettingsTab): boolean => SECTION_MAP[tab].length <= 1
+
+/** 铺满内容区、自己管理滚动的大类：外层不滚动，由页面内部的列表各自滚动（供应商与模型只滚模型列表）。 */
+const FILL_TABS: ReadonlySet<SettingsTab> = new Set<SettingsTab>(['providers'])
+
 /** 切换大类后，异步加载的分区（密钥状态、LLM 配置）会改变上方高度，需要补一次定位 */
 const DEEP_LINK_RESCROLL_MS = 320
 /** 搜索结果跳转：等分区补位定位结束后，再把那一行滚到中间并短暂高亮 */
@@ -67,7 +76,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, target }) => {
   // 用状态而不是 ref 持有滚动容器：内容经 UiModal 延后挂载，容器出现时依赖它的定位与测量要重新执行。
   const [contentElement, setContentElement] = useState<HTMLDivElement | null>(null)
   // 切大类时要跳到的分节。跨大类点击目录时目标分节还没挂载，只能等这一帧渲染完再滚。
-  const pendingScrollRef = useRef<string | null>(target?.sectionId ?? null)
+  const pendingScrollRef = useRef<string | null>(target && !isSingleSectionTab(target.tab) ? target.sectionId ?? null : null)
   // 每次目录导航自增。延迟补位的定位只有在"期间没有更新的导航"时才允许生效，
   // 否则用户刚点的目标会被上一次跳转的补位动作拽回去。
   const navTokenRef = useRef(0)
@@ -178,7 +187,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, target }) => {
         scrollToSection(sectionId)
         return
       }
-      pendingScrollRef.current = sectionId
+      pendingScrollRef.current = isSingleSectionTab(tabId) ? null : sectionId
       setActiveTab(tabId)
     },
     [activeTab, scrollToSection]
@@ -307,7 +316,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, target }) => {
             </div>
           </nav>
 
-          <div ref={setContentElement} className="settings-scroll-body min-w-0 flex-1 overflow-y-auto">
+          <div
+            ref={setContentElement}
+            className={`settings-scroll-body min-w-0 flex-1 ${FILL_TABS.has(activeTab) && !query.trim() ? 'flex min-h-0 flex-col overflow-hidden' : 'overflow-y-auto'}`}
+          >
             {query.trim() ? (
               <div className="mx-auto max-w-3xl px-4 pb-4 pt-5">
                 <SettingsSearchResults results={searchResults} onSelect={handleSearchSelect} />
@@ -316,7 +328,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, target }) => {
               <>
                 {ActiveTabComponent && <ActiveTabComponent />}
                 {/* 没有这段占位，最后一个分节永远滚不到顶，点目录最后一项会像「没反应」 */}
-                <div aria-hidden style={{ height: tailSpacerHeight }} />
+                {FILL_TABS.has(activeTab) ? null : <div aria-hidden style={{ height: tailSpacerHeight }} />}
               </>
             )}
           </div>

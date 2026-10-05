@@ -232,12 +232,12 @@ const ProviderCenterSection = ({ llm }: ProviderCenterSectionProps): JSX.Element
 
   return (
     /*
-     * 整页只有设置内容区一条竖向滚动（任务 5.8，B-49）：原来这里固定高度、左右两栏各自滚动，
-     * 960 下和外层设置页并排出现两条竖向滚动条。现在详情栏随内容自然增高、跟着设置页滚动；
-     * 供应商列表吸顶，只有它在供应商很多时自己滚动（左侧的局部列表，不与页面滚动条并排）。
+     * 供应商与模型单独成页、铺满设置内容区（外层不滚动）：上方的供应商信息、密钥、模型筛选固定不动，
+     * 只有模型列表自己滚动；左侧供应商列表在供应商很多时也只滚它自己。
+     * 以前整页跟着设置内容区滚动，模型多时密钥与筛选被一起滚走，切到这页还会因为分区定位往上跳一下。
      */
-    <div className="grid grid-cols-[220px_minmax(0,1fr)] items-start gap-5">
-      <UiPanel variant="inset" className="sticky top-0 flex max-h-[calc(min(88vh,64rem)-8.5rem)] min-h-0 flex-col overflow-hidden p-2">
+    <div className="grid h-full min-h-0 grid-cols-[220px_minmax(0,1fr)] gap-5">
+      <UiPanel variant="inset" className="flex min-h-0 flex-col overflow-hidden p-2">
         <div className="flex min-h-0 flex-1 flex-col gap-2">
           <UiSearchInput value={providerSearch} onChange={event => setProviderSearch(event.target.value)} placeholder={t('providerCenter.searchPlaceholder')} aria-label={t('providerCenter.searchPlaceholder')} />
           <div className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain">
@@ -258,8 +258,8 @@ const ProviderCenterSection = ({ llm }: ProviderCenterSectionProps): JSX.Element
       </UiPanel>
 
       {selected ? (
-        <div className="min-w-0 space-y-5">
-          <div>
+        <div className="flex min-h-0 min-w-0 flex-col gap-5">
+          <div className="shrink-0">
             <div className="flex items-start justify-between gap-4">
               {/* 分节标题“供应商与模型”已是 20 号，供应商名降一档（16），层级才读得出来 */}
               <h3 className={UI_TEXT_SECTION_CLASS}>{selected.displayName}</h3>
@@ -286,7 +286,7 @@ const ProviderCenterSection = ({ llm }: ProviderCenterSectionProps): JSX.Element
             </div>
           </div>
 
-          <div className="border-t border-line pt-5">
+          <div className="shrink-0 border-t border-line pt-5">
             <div className={`mb-3 ${UI_TEXT_LABEL_CLASS}`}>{t('providerCenter.apiKey')}</div>
             {(selected.generationProviders?.length ?? 0) > 1 ? (
               <div className="space-y-4">
@@ -322,8 +322,8 @@ const ProviderCenterSection = ({ llm }: ProviderCenterSectionProps): JSX.Element
             ) : <div className={UI_TEXT_BODY_CLASS}>{t('providerCenter.noCredential')}</div>}
           </div>
 
-          <div className="border-t border-line pt-5">
-            <div className="mb-4 flex items-center justify-between gap-3">
+          <div className="flex min-h-0 flex-1 flex-col border-t border-line pt-5">
+            <div className="mb-4 flex shrink-0 items-center justify-between gap-3">
               <div className={UI_TEXT_LABEL_CLASS}>{t('providerCenter.models')}</div>
               <div className="flex items-center gap-2">
                 {selected.llmProvider ? (
