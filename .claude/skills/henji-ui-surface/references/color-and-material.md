@@ -179,7 +179,7 @@ padding、flex 收缩与助手插入量也会被静默绕开。
 
 1. **令牌层求解**（重要记录 010）：`text2`/`text3` 按目标对比度求解亮度，基准取它实际会压上的最亮表面
    （`selected`/`raised`/`hover`）；对比度档位只拉开表面层级，文字不得因此变暗；强调实底上的字（`on-accent`）与
-   主按钮“静息/悬停渐变中点”都按 ≥ 4.5:1 自动取黑或白；选中淡底的透明度按“与悬停、静息可辨”（`SELECTION_MIN_DELTA`）求解。
+   主按钮静息与悬停实底都按 ≥ 4.5:1 自动取黑或白；选中淡底的透明度按“与悬停、静息可辨”（`SELECTION_MIN_DELTA`）求解。
    `themeEngine.test.ts` 对四个预设 × 三档对比度逐项断言；`themeCombination.test.ts`（任务 5.11）用固定随机种子对
    “预设 × 任意强调色 × 对比度全范围”与预设附近的自定义深浅底色做属性测试，失败时输出收缩后的最小反例。
 2. **渲染后审计**：`npm run check:ui-visual`（正式 Electron 场景）的 `lowContrast` 规则——隐藏全部文字与 lucide 图标截一张

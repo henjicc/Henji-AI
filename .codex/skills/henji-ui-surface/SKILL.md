@@ -53,7 +53,7 @@ description: Henji-AI 新建或改造任何界面/页面骨架/面板/弹窗/侧
 | 按钮 | `UiButton` 五档 `primary`/`secondary`/`quiet`（默认）/`danger`/`dangerSolid` + `link` + `media`；`UiIconButton` 默认静默，`on`/`tone`/`shape`/`size`。外观只由枚举决定，调用点 className 只放布局 | 本文「动作层级」 |
 | 选中 | 一眼可辨：**淡强调底**（`selected-accent`，强调色低透明度）+ 强调文字 / 勾 / 指示条（重要记录 012，修订 003 的中性抬升）；强调色**实底**只给唯一主动作；悬停只用中性抬升，悬停与选中不得同色 | 本文「选中态词汇表」 |
 | 尺寸 | 控件高 28/32/36（`size` sm/md/lg）；字号 20/16/14/13/12/11（正文 13）；圆角 6 控件 / 8 输入与菜单 / 12 浮层；间距 4/8/12/16/24/32；动效 120/180/240（查看器 500） | `references/typography-and-tokens.md`、`references/motion.md` |
-| 材质 | 主按钮材质（细微渐变、顶部高光、内描边、投影、按下下沉）只在 `primary` / `tone="accent"`；**玻璃只压在图片、视频、画布上**（`ui-glass`、`UiPanel variant="glass"`、浮层 `surface="glass"`），纯色界面上的浮层一律实底 | `references/color-and-material.md` |
+| 材质 | **按钮扁平**：纯色实底，不用渐变、顶部高光、内描边、投影或按下位移，层次只靠颜色（静息 → 悬停 → 按下逐档加深）；“质感”来自配色、留白与对齐，不来自写实光影（重要记录 016）；**玻璃只压在图片、视频、画布上**（`ui-glass`、`UiPanel variant="glass"`、浮层 `surface="glass"`），纯色界面上的浮层一律实底 | `references/color-and-material.md` |
 | 骨架 | 一个视图一条命令带：`UiToolbar variant="command"`（左端 / `center` / `trailing` / `subordinate`），一个表面一个主动作 | 本文「页面骨架」 |
 | 字体 | 拉丁与数字 Geist，时间码与数值 Geist Mono（`UI_TEXT_TIMECODE_CLASS`），中文系统字体 | `references/typography-and-tokens.md` |
 
@@ -220,7 +220,7 @@ prominent/bordered/plain、Fluent 的 primary/default/subtle）。本项目（�
 
 | 档 | `UiButton variant` | 图标版 `UiIconButton` | 用途 |
 |---|---|---|---|
-| 主 | `primary`（材质实底：顶部高光、内描边、投影，按下下沉） | `tone="accent"`（圆形，如生成） | **一个表面只允许一个**，这一屏的主动作 |
+| 主 | `primary`（扁平纯色实底，悬停/按下只变色） | `tone="accent"`（圆形，如生成） | **一个表面只允许一个**，这一屏的主动作 |
 | 次 | `secondary`（无边框填充 `bg-control`） | —— | 弹窗与表单里的普通动作 |
 | 辅 | `quiet`（**默认**，静息无底，悬停出底） | 默认（静默） | 工具栏、命令带、行内、菜单 |
 | 危险 | `danger`（静息同 quiet，悬停显红）/ `dangerSolid`（只用于确认弹窗） | `tone="danger"` | 删除、清空、移除 |

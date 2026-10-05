@@ -137,11 +137,13 @@ describe('按钮皮肤只用主题令牌（index.css .ui-btn-*）', () => {
   const css = readFileSync(path.join(process.cwd(), 'src/index.css'), 'utf8');
   const block = css.slice(css.indexOf('.ui-btn {'), css.indexOf('.ui-btn-media:disabled'));
 
-  it('皮肤块不写死颜色，主按钮带材质与按下下沉', () => {
+  it('皮肤块不写死颜色；按钮扁平：不用渐变、高光投影与按下位移（重要记录 016）', () => {
     expect(block).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
     expect(block).not.toMatch(/rgba?\(\s*\d/);
-    expect(block).toMatch(/\.ui-btn-primary \{[^}]*var\(--ui-material-lift\)/);
-    expect(block).toMatch(/\.ui-btn-primary:active:not\(:disabled\) \{[^}]*var\(--ui-material-sink\)[^}]*translateY/);
+    expect(block).not.toMatch(/gradient\(/);
+    expect(block).not.toMatch(/translateY/);
+    expect(block).not.toMatch(/inset 0 1px/);
+    expect(block).toMatch(/\.ui-btn-primary \{[^}]*background-color: rgb\(var\(--accent-rgb\)\)/);
     expect(block).toMatch(/120ms/);
   });
 });
