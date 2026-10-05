@@ -23,6 +23,9 @@ function field(entityType: AudioEditEntityType, suffix: string, title: string, v
   const id = `${entityType}.${suffix}`
   return { propertyId: id, descriptor: { id, entityType, version: 1, title, description: `口播剪辑${title}。`, value, nullable: false, dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], requiredPermissions: { read: ['audio_edit:read'], write: write ? ['audio_edit:write'] : [] }, revisionScopes: ['audio_edit'], schemaRef: audioEditSchemaRef('property', id), ...(!write ? { readOnlyReason: '由源媒体、识别结果或剪辑时间线计算。' } : {}) }, read, ...(write ? { writer: { write: (draft, mutation) => write(draft, mutation.value) } } : {}), storeActions }
 }
+function readOnly(definition: ApplicationFieldDefinition<AudioEditFieldSource, AudioEditFieldSource>, reason: string): ApplicationFieldDefinition<AudioEditFieldSource, AudioEditFieldSource> {
+  return { ...definition, descriptor: { ...definition.descriptor, readOnlyReason: reason } }
+}
 const TEXT = { kind: 'string', maxLength: 20000 } as const
 const BOOL = { kind: 'boolean' } as const
 const INT = { kind: 'integer', hardRange: { min: 0 } } as const
@@ -30,7 +33,8 @@ const objectValue = (id: string): ApplicationPropertyDescriptor['value'] => ({ k
 const E = AUDIO_EDIT_ENTITY_TYPES
 export const AUDIO_EDIT_FIELDS: Record<AudioEditEntityType, ApplicationFieldDefinition<AudioEditFieldSource, AudioEditFieldSource>[]> = {
   [E.project]: [
-    field(E.project, 'name', '工程名', { kind: 'string', minLength: 1, maxLength: 200 }, (s) => s.document.name, (s, v) => { const name = string(v).trim(); if (!name) throw new Error('工程名不能为空'); s.document.name = name }),
+    // 口播名就是文件名（3.3）：只读，改名走通用文档属性 documents.document.name
+    readOnly(field(E.project, 'name', '口播名（文件名）', { kind: 'string', minLength: 1, maxLength: 200 }, (s) => s.document.name), '口播名就是文件名，请改 documents.document.name（同一文档 ID）。'),
     field(E.project, 'reference_script', '参考逐字稿', TEXT, (s) => s.document.referenceScript, (s, v) => { s.document.referenceScript = string(v) }, ['setReferenceScript']),
     field(E.project, 'batch_settings', '批量剪辑设置', objectValue('audio_edit.batch_settings'), (s) => json(s.document.batchSettings ?? {}), (s, v) => { s.document.batchSettings = audioEditSettingsSchema.parse(v) }),
     field(E.project, 'cuts', '声音编辑区间（mode 为 delete 删除或 mute 静音，省略时删除）', objectValue('audio_edit.cuts'), (s) => json(s.document.cuts ?? []), (s, v) => { s.document.cuts = audioEditCutsSchema.parse(v) }),
@@ -43,7 +47,7 @@ export const AUDIO_EDIT_FIELDS: Record<AudioEditEntityType, ApplicationFieldDefi
     field(E.project, 'original_text_available', '是否保留原始识别文本（旧工程为否，不能恢复过去的文字纠正）', BOOL, (s) => s.document.editBaseline?.kind === 'original'),
   ],
   [E.transcriptBlock]: [
-    field(E.transcriptBlock, 'project_id', '所属口播工程（分页读取时可按此筛选）', TEXT, (s) => s.document.id),
+    field(E.transcriptBlock, 'project_id', '所属口播（口播文档 ID，分页读取时可按此筛选）', TEXT, (s) => s.document.id),
     field(E.transcriptBlock, 'original_text', '保留的初始文本（旧工程为升级时的文字）', TEXT, (s) => s.document.editBaseline?.transcript.find((item) => item.id === s.childId)?.text ?? block(s).text),
     field(E.transcriptBlock, 'text', '校正文本', TEXT, (s) => block(s).text, (s, v) => { const item = block(s); if (item.locked) throw new Error('词块已锁定'); item.text = string(v) }),
     field(E.transcriptBlock, 'caption_break_after', '此词之后结束字幕段（不改变声音或时间戳）', BOOL, (s) => block(s).captionBreakAfter ?? false, (s, v) => { const item = block(s); if (item.locked) throw new Error('词块已锁定'); item.captionBreakAfter = boolean(v) }),
@@ -54,7 +58,7 @@ export const AUDIO_EDIT_FIELDS: Record<AudioEditEntityType, ApplicationFieldDefi
     field(E.transcriptBlock, 'granularity', '时间戳粒度', { kind: 'enum', values: [{ value: 'word', label: '逐词' }, { value: 'segment', label: '句段' }] }, (s) => block(s).granularity),
   ],
   [E.suggestion]: [
-    field(E.suggestion, 'project_id', '所属口播工程', TEXT, (s) => s.document.id),
+    field(E.suggestion, 'project_id', '所属口播（口播文档 ID）', TEXT, (s) => s.document.id),
     field(E.suggestion, 'title', '线索标题', TEXT, (s) => suggestion(s).title),
     field(E.suggestion, 'detail', '检测线索（非审批，不限制助手基于全文自行判断）', TEXT, (s) => suggestion(s).kind === 'filler' ? '关键词匹配，不代表必须删除；结合全文判断是否影响语义、语气或节奏。' : suggestion(s).detail),
     field(E.suggestion, 'current_state', '当前实际状态（排除已删除、已静音、失效或锁定的线索）', { kind: 'enum', values: [ ['available', '可参考'], ['removed', '声音已处理'], ['dismissed', '已隐藏'], ['locked', '已锁定'], ['stale', '线索已失效'] ].map(([value, label]) => ({ value, label })) }, (s) => audioEditSuggestionState(s.document, suggestion(s))),

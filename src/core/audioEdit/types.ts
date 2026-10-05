@@ -76,6 +76,10 @@ export interface AudioEditSourceMetadata {
   video?: AudioEditVideoMetadata
 }
 
+/**
+ * 口播在工具内存里的形态（3.3 起存成 `.henji-audio` 文档）：id / name / createdAt / updatedAt / revision 来自文档外壳，
+ * 其余字段是文档内容（见 `documentContent.ts`）。
+ */
 export interface AudioEditProjectDocument {
   id: string
   name: string
@@ -94,21 +98,6 @@ export interface AudioEditProjectDocument {
   xmlFrameRate?: AudioEditFrameRate
   viewSettings?: AudioEditViewSettings
   editBaseline?: AudioEditBaseline
-}
-
-export interface AudioEditProjectSummary {
-  id: string
-  name: string
-  mediaType: AudioEditSourceMetadata['mediaType']
-  durationFrames: number
-  sampleRate: number
-  updatedAt: number
-}
-
-export interface AudioEditProjectCreateRequest {
-  sourcePath: string
-  name?: string
-  referenceScript?: string
 }
 
 export interface AudioEditTranscriptionRequest {

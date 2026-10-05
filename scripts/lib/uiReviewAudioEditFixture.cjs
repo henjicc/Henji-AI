@@ -1,12 +1,13 @@
 /**
  * 界面核对步骤 `seedAudioEdit`：口播剪辑夹具工程（界面重设计 5.5 第二批）。
- * 在系统临时目录生成一段 12 秒的低音量正弦 WAV，经正式 preload 接口建工程；`transcript: true` 时写入
- * 一份固定逐字稿（含已删除的句子与语气词），不走语音识别、不产生费用。场景结束删除工程与临时文件。
- * 与 uiInspectionSceneAudioEdit.cjs 同一种建档方式，只是做成可复用的步骤。
+ * 在系统临时目录生成一段 12 秒的低音量正弦 WAV，经正式 preload 接口建口播文档（3.3：`.henji-audio`，
+ * 见 audioEditDocumentFixture.cjs）；`transcript: true` 时写入一份固定逐字稿（含已删除的句子与语气词），
+ * 不走语音识别、不产生费用。场景结束删除文档文件、从作品索引移除并删掉临时文件。
  */
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
+const { createAudioEditDocument, removeAudioEditDocument } = require('./audioEditDocumentFixture.cjs')
 
 const RATE = 48000
 const SECONDS = 12
@@ -40,33 +41,22 @@ async function seedAudioEditFixture(page, step) {
   writeFixtureWav(file)
   let projectId = null
   try {
-    projectId = await page.evaluate(async ({ sourcePath, name, transcript, rate }) => {
-      const audio = window.henjiNative.audio
-      const project = await audio.createEditProject({ sourcePath, name })
-      if (transcript) {
-        project.transcript = [
-          ['intro', '大家好，今天聊一聊口播剪辑', 0, 1.4, true],
-          ['filler', '嗯', 2, 2.4, true],
-          ['removed', '这一句说错了已经删掉', 2.4, 3.4, false],
-          ['middle', '先把停顿和语气词清理干净', 4, 5.4, true],
-          ['long', '然后逐词检查有没有需要保留的语气，长句子用来看逐字稿换行和波形上方字幕的截断效果', 6, 9.4, true],
-          ['ending', '最后导出给剪辑软件继续编辑', 10, 11.4, true],
-        ].map(([id, text, start, end, included]) => ({
-          id, text, startFrame: Math.round(start * rate), endFrame: Math.round(end * rate), included, locked: false, granularity: 'segment',
-        }))
-      }
-      const saved = await audio.saveEditProject(project)
-      return saved.id
-    }, { sourcePath: file, name: step.name, transcript: step.transcript, rate: RATE })
+    const transcriptRows = step.transcript ? [
+      ['intro', '大家好，今天聊一聊口播剪辑', 0, 1.4, true],
+      ['filler', '嗯', 2, 2.4, true],
+      ['removed', '这一句说错了已经删掉', 2.4, 3.4, false],
+      ['middle', '先把停顿和语气词清理干净', 4, 5.4, true],
+      ['long', '然后逐词检查有没有需要保留的语气，长句子用来看逐字稿换行和波形上方字幕的截断效果', 6, 9.4, true],
+      ['ending', '最后导出给剪辑软件继续编辑', 10, 11.4, true],
+    ] : null
+    projectId = (await createAudioEditDocument(page, { sourcePath: file, name: step.name, transcriptRows })).id
   } catch (error) {
     fs.rmSync(directory, { recursive: true, force: true })
     throw error
   }
   return {
     cleanup: async () => {
-      if (projectId) {
-        await page.evaluate((id) => window.henjiNative.audio.deleteEditProject(id), projectId).catch(() => undefined)
-      }
+      await removeAudioEditDocument(page, projectId)
       fs.rmSync(directory, { recursive: true, force: true })
     },
   }

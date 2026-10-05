@@ -1,28 +1,22 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
-  listAudio: vi.fn(),
-  listCamera: vi.fn(),
+  listDocuments: vi.fn(),
   openCamera: vi.fn(),
-  loadAudio: vi.fn(),
-  setProject: vi.fn(),
+  openAudio: vi.fn(),
   selectTool: vi.fn(),
 }))
 
-vi.mock('@/platform/runtime', () => ({ getPlatform: () => ({ audioEdit: { listProjects: mocks.listAudio } }) }))
 vi.mock('@/stores/navigationStore', () => ({ selectToolboxTool: mocks.selectTool }))
 vi.mock('@/features/documents/documentOperations', () => ({
-  getDocumentOperations: () => ({ listDocuments: mocks.listCamera }),
+  getDocumentOperations: () => ({ listDocuments: mocks.listDocuments }),
 }))
 vi.mock('@/features/cameraStage/projects/cameraStageProjectService', () => ({ openCameraStageDocument: mocks.openCamera }))
-vi.mock('@/features/audioEdit/application/audioEditProjectInstances', () => ({ loadAudioEditProject: mocks.loadAudio }))
-vi.mock('@/features/audioEdit/store/audioEditStore', () => ({
-  useAudioEditStore: { getState: () => ({ setProject: mocks.setProject }) },
-}))
+vi.mock('@/features/audioEdit/application/audioEditDocumentService', () => ({ openAudioEditDocument: mocks.openAudio }))
 
 import { loadToolboxRecentFiles, mergeToolboxRecentFiles, openToolboxRecentFile } from './toolboxRecentFiles'
 
-const audio = (id: string, updatedAt: number) => ({ id, name: `${id}.wav`, mediaType: 'audio' as const, durationFrames: 48000, sampleRate: 48000, updatedAt })
+const audio = (id: string, updatedAt: number) => ({ id, name: id, updatedAt })
 const camera = (id: string, updatedAt: number) => ({ id, name: id, updatedAt })
 
 describe('工具首页最近文件', () => {
@@ -34,11 +28,14 @@ describe('工具首页最近文件', () => {
   })
 
   it('一个来源失败不影响另一个来源', async () => {
-    mocks.listAudio.mockRejectedValue(new Error('磁盘不可用'))
-    mocks.listCamera.mockResolvedValue([camera('c1', 5)])
+    mocks.listDocuments.mockImplementation(async (query: { kind: string }) => {
+      if (query.kind === 'audio_edit') throw new Error('磁盘不可用')
+      return query.kind === 'camera_stage' ? [camera('c1', 5)] : []
+    })
     expect((await loadToolboxRecentFiles()).map((file) => file.key)).toEqual(['cameraStage:c1'])
-    // 镜头参考是通用文档：只列已保存且文件还在的
-    expect(mocks.listCamera).toHaveBeenCalledWith({ kind: 'camera_stage', container: { kind: 'any' }, includeDrafts: false, includeMissing: false })
+    // 口播与镜头参考都是通用文档：只列已保存且文件还在的
+    expect(mocks.listDocuments).toHaveBeenCalledWith({ kind: 'camera_stage', container: { kind: 'any' }, includeDrafts: false, includeMissing: false })
+    expect(mocks.listDocuments).toHaveBeenCalledWith({ kind: 'audio_edit', container: { kind: 'any' }, includeDrafts: false, includeMissing: false })
   })
 
   it('打开镜头参考走它的文档打开入口（进入编辑器），再切到该工具', async () => {
@@ -48,11 +45,11 @@ describe('工具首页最近文件', () => {
     expect(mocks.selectTool).toHaveBeenCalledWith('cameraStage')
   })
 
-  it('打开口播工程失败时仍进入该工具（落在工程列表）并把错误交给调用方', async () => {
-    mocks.loadAudio.mockRejectedValue(new Error('找不到口播工程。'))
+  it('打开口播失败时仍进入该工具（落在口播列表）并把错误交给调用方', async () => {
+    mocks.openAudio.mockRejectedValue(new Error('找不到口播。'))
     await expect(openToolboxRecentFile({ key: 'audioEdit:a1', toolId: 'audioEdit', projectId: 'a1', name: 'a1', updatedAt: 1 }))
-      .rejects.toThrow('找不到口播工程')
-    expect(mocks.setProject).not.toHaveBeenCalled()
+      .rejects.toThrow('找不到口播')
+    expect(mocks.openAudio).toHaveBeenCalledWith({ id: 'a1' })
     expect(mocks.selectTool).toHaveBeenCalledWith('audioEdit')
   })
 })

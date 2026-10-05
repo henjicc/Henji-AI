@@ -2,14 +2,12 @@ import crypto from 'node:crypto'
 import { createReadStream } from 'node:fs'
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import type { AudioEditProjectCreateRequest, AudioEditProjectDocument, AudioEditSourceIdentity, AudioEditSourceMetadata } from '../../../../src/core/audioEdit/types'
-import { DEFAULT_AUDIO_EDIT_SETTINGS } from '../../../../src/core/audioEdit/edits'
+import type { AudioEditProjectDocument, AudioEditSourceIdentity, AudioEditSourceMetadata } from '../../../../src/core/audioEdit/types'
 import { resolveLocalMediaPath } from '../media/shared'
 import { getProgramStoreDir } from '../appPaths'
-import { getDb } from '../db'
 import { loadFfmpegPath, loadFfprobePath } from '../video/ffmpeg-loader'
 import { createMainLogger } from '../logging'
-import { requireAudioEditProject, saveAudioEditProject } from './project-store'
+import { requireAudioEditProject } from './project-store'
 import { runAudioEditProcess } from './process'
 import { assertAudioEditProjectIdle } from './task-store'
 
@@ -100,20 +98,19 @@ export async function probeAudioEditSource(sourcePath: string): Promise<AudioEdi
   }
 }
 
-export async function createAudioEditProject(request: AudioEditProjectCreateRequest): Promise<AudioEditProjectDocument> {
+/**
+ * 导入音频或视频（3.3：导入即建草稿）：只探测素材、计算内容指纹，返回素材信息；
+ * 草稿文档由渲染层经文档会话新建（默认引用原文件，重要记录 006），主进程不写口播内容。
+ */
+export async function probeAudioEditImport(sourcePath: string): Promise<AudioEditSourceMetadata> {
   const requestId = crypto.randomUUID()
-  logger.info('开始创建口播剪辑工程', { event: 'audio_edit.project.create.start', requestId })
+  logger.info('开始读取口播素材', { event: 'audio_edit.source.probe.start', requestId })
   try {
-    const sourcePath = path.resolve(await resolveLocalMediaPath(request.sourcePath))
-    const source = await probeAudioEditSource(sourcePath)
-    const now = Date.now()
-    const project = saveAudioEditProject({ id: crypto.randomUUID(), name: request.name?.trim() || path.basename(sourcePath), source,
-      referenceScript: request.referenceScript?.trim() ?? '', transcript: [], suggestions: [], cuts: [],
-      batchSettings: { ...DEFAULT_AUDIO_EDIT_SETTINGS }, processorChain: [], vstEnabled: false, createdAt: now, updatedAt: now, revision: 1 })
-    logger.info('口播剪辑工程创建完成', { event: 'audio_edit.project.create.completed', requestId, context: { projectId: project.id } })
-    return project
+    const source = await probeAudioEditSource(path.resolve(await resolveLocalMediaPath(sourcePath)))
+    logger.info('口播素材读取完成', { event: 'audio_edit.source.probe.completed', requestId, context: { mediaType: source.mediaType } })
+    return source
   } catch (error) {
-    logger.error('口播剪辑工程创建失败', { event: 'audio_edit.project.create.failed', requestId, error })
+    logger.error('口播素材读取失败', { event: 'audio_edit.source.probe.failed', requestId, error })
     throw error
   }
 }
@@ -135,24 +132,16 @@ export async function prepareAudioEditAudio(project: AudioEditProjectDocument, s
   } finally { await fs.rm(temporary, { force: true }) }
 }
 
-export async function relinkAudioEditSource(projectId: string, sourcePath: string): Promise<AudioEditProjectDocument> {
+/**
+ * 重新定位原素材：确认所选文件与原素材内容相同，返回新的素材信息；渲染层实例接收后经会话保存。
+ */
+export async function relinkAudioEditSource(projectId: string, sourcePath: string): Promise<AudioEditSourceMetadata> {
   assertAudioEditProjectIdle(projectId)
-  const current = requireAudioEditProject(projectId)
+  const current = await requireAudioEditProject(projectId)
   const next = await probeAudioEditSource(path.resolve(await resolveLocalMediaPath(sourcePath)))
   const oldDigest = current.source.identity?.digest ?? (await identifyAudioEditSource(current.source.sourcePath)).digest
-  if (next.identity?.digest !== oldDigest) throw new Error('所选文件不是原素材。请将不同内容作为新工程导入。')
-  return saveAudioEditProject({ ...requireAudioEditProject(projectId), source: next })
-}
-
-export async function deleteAudioEditProject(projectId: string): Promise<void> {
-  assertAudioEditProjectIdle(projectId)
-  requireAudioEditProject(projectId)
-  // Only the explicit cache child is owned here; legacy source copies remain untouched.
-  await fs.rm(audioEditCacheDirectory(projectId), { recursive: true, force: true })
-  getDb().transaction(() => {
-    getDb().prepare('DELETE FROM audio_edit_tasks WHERE project_id = ?').run(projectId)
-    getDb().prepare('DELETE FROM audio_edit_projects WHERE id = ?').run(projectId)
-  })()
+  if (next.identity?.digest !== oldDigest) throw new Error('所选文件不是原素材。请将不同内容作为新口播导入。')
+  return next
 }
 
 /** Verify a rendered derivative before caching or publishing it. */

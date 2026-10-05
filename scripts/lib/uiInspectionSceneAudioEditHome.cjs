@@ -2,17 +2,20 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
+const { createAudioEditDocument, removeAudioEditDocument } = require('./audioEditDocumentFixture.cjs')
+
+// 3.3：口播页是通用文档页（DocumentLibraryPage kind="audio_edit"），新建 = 导入音频或视频（导入即建草稿）
 
 function createAudioEditHomeScene({ setupToolbox, clickNamedButton }) {
   return {
-    id: 'toolbox-audio-edit-home', surface: '工具箱', name: '口播剪辑-项目页', writesUserData: true,
+    id: 'toolbox-audio-edit-home', surface: '工具箱', name: '口播剪辑-口播列表', writesUserData: true,
     setup: async (page) => {
       await setupToolbox(page)
       await clickNamedButton(page, /^(口播剪辑)/)
-      await page.getByText('从一段口播开始', { exact: true }).waitFor()
-      assert.equal(await page.getByRole('textbox', { name: '搜索项目' }).count(), 0)
+      await page.getByText('还没有口播', { exact: true }).waitFor()
+      assert.equal(await page.getByRole('textbox', { name: '搜索口播' }).count(), 0)
       const assertImportLayout = async () => {
-        const button = page.getByRole('button', { name: '导入音频或视频', exact: true })
+        const button = page.getByRole('button', { name: '新建口播', exact: true })
         const bounds = await button.boundingBox()
         const textBounds = await button.evaluate((element) => {
           const range = document.createRange()
@@ -36,30 +39,32 @@ function createAudioEditHomeScene({ setupToolbox, clickNamedButton }) {
       fs.writeFileSync(sourcePath, wav)
       const ids = []
       try {
-        for (const name of ['产品介绍 · 第一版', '周末随想', '这是一段名称比较长的口播项目，用来检查项目标题是否会挤压其他内容']) {
-          ids.push(await page.evaluate(async ({ sourcePath, name }) => (await window.henjiNative.audio.createEditProject({ sourcePath, name })).id, { sourcePath, name }))
+        for (const name of ['产品介绍 · 第一版', '周末随想', '这是一段名称比较长的口播，用来检查标题是否会挤压其他内容']) {
+          ids.push((await createAudioEditDocument(page, { sourcePath, name })).id)
         }
         await page.getByRole('button', { name: '返回工具', exact: true }).click()
         await clickNamedButton(page, /^(口播剪辑)/)
         await page.locator('[data-project-library-state="items"]').waitFor()
         await page.getByText('产品介绍 · 第一版', { exact: true }).waitFor()
         await assertImportLayout()
-        const search = page.getByRole('textbox', { name: '搜索项目' })
+        // 卡片元信息：素材类型与时长（来自作品索引里的摘要）
+        await page.getByText(/音频 · 0:01/).first().waitFor()
+        const search = page.getByRole('textbox', { name: '搜索口播' })
         assert.ok((await search.boundingBox()).width <= 300, '搜索框应保持合理宽度')
         await page.screenshot({ path: path.resolve('.ui-tour', 'audio-edit-home-projects.png') })
-        await search.fill('没有这个项目')
-        await page.getByText('没有符合条件的项目', { exact: true }).waitFor()
+        await search.fill('没有这个口播')
+        await page.getByText('没有符合条件的口播', { exact: true }).waitFor()
         await page.screenshot({ path: path.resolve('.ui-tour', 'audio-edit-home-search.png') })
         await search.press('Escape')
         assert.equal(await page.locator('[data-project-id]').count(), 3)
       } finally {
-        for (const id of ids) await page.evaluate((id) => window.henjiNative.audio.deleteEditProject(id), id)
+        for (const id of ids) await removeAudioEditDocument(page, id)
         fs.unlinkSync(sourcePath)
         fs.rmdirSync(directory)
       }
       await page.getByRole('button', { name: '返回工具', exact: true }).click()
       await clickNamedButton(page, /^(口播剪辑)/)
-      await page.getByText('从一段口播开始', { exact: true }).waitFor()
+      await page.getByText('还没有口播', { exact: true }).waitFor()
     },
   }
 }

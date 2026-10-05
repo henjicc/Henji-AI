@@ -333,10 +333,8 @@ export interface HenjiAudioApi {
   extractRangeSamples(payload: AudioWaveformRangeRequest & { requestId: string }): Promise<AudioWaveformRangeResult>
   extractWaveformPyramid(payload: AudioWaveformPyramidRequest & { requestId: string }): Promise<AudioWaveformPyramidResult>
   cancelExtractSamples(requestId: string): Promise<void>
-  listEditProjects(): Promise<AudioEditProjectSummary[]>
-  createEditProject(payload: AudioEditProjectCreateRequest): Promise<AudioEditProjectDocument>
-  getEditProject(projectId: string): Promise<AudioEditProjectDocument | null>
-  saveEditProject(project: AudioEditProjectDocument): Promise<AudioEditProjectDocument>
+  /** 导入音频或视频时探测素材（口播文档本身经通用文档接口新建，3.3）。 */
+  probeEditSource(sourcePath: string): Promise<AudioEditSourceMetadata>
   listAsrModels(): Promise<Array<{
     id: string
     providerId: string
@@ -346,8 +344,7 @@ export interface HenjiAudioApi {
   }>>
   transcribeEditProject(payload: AudioEditTranscriptionRequest): Promise<AudioEditTranscriptionResult>
   verifyEditSource(projectId: string): Promise<void>
-  relinkEditSource(projectId: string, sourcePath: string): Promise<AudioEditProjectDocument>
-  deleteEditProject(projectId: string): Promise<void>
+  relinkEditSource(projectId: string, sourcePath: string): Promise<AudioEditSourceMetadata>
   detectEditSilence(payload: AudioEditSilenceRequest): Promise<{ revision: number; suggestions: AudioEditSuggestion[] }>
   listEditTasks(projectId: string): Promise<AudioEditTask[]>
   cancelEditTask(requestId: string): Promise<void>
@@ -365,9 +362,7 @@ import type {
   AudioEditProcessorDescriptor,
   AudioEditPreviewChunk,
   AudioEditPreviewChunkRequest,
-  AudioEditProjectCreateRequest,
-  AudioEditProjectDocument,
-  AudioEditProjectSummary,
+  AudioEditSourceMetadata,
   AudioEditTranscriptionRequest,
   AudioEditTranscriptionResult,
 } from '../../src/core/audioEdit/types'

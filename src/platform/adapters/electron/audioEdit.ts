@@ -33,13 +33,9 @@ function cancellable<TRequest extends object, TResult>(call: (payload: TRequest 
 
 export function createElectronAudioEdit(): AudioEditPlatform {
   return {
-    listProjects: () => api().listEditProjects(),
-    createProject: (request) => api().createEditProject(request),
-    getProject: (projectId) => api().getEditProject(projectId),
-    saveProject: (project) => api().saveEditProject(project),
+    probeSource: (sourcePath) => api().probeEditSource(sourcePath),
     verifySource: (projectId) => api().verifyEditSource(projectId),
     relinkSource: (projectId, sourcePath) => api().relinkEditSource(projectId, sourcePath),
-    deleteProject: (projectId) => api().deleteEditProject(projectId),
     detectSilence: (request) => api().detectEditSilence(request),
     listTasks: (projectId) => api().listEditTasks(projectId),
     cancelTask: (requestId) => api().cancelEditTask(requestId),

@@ -6,7 +6,7 @@ import { prepareAudioEditProcessedAudio } from './processors'
 import { prepareAudioEditAudio } from './media'
 
 export async function prepareAudioEditPreviewChunk(request: AudioEditPreviewChunkRequest): Promise<AudioEditPreviewChunk> {
-  const project = requireAudioEditProject(request.projectId)
+  const project = await requireAudioEditProject(request.projectId)
   const sourceStartFrame = Math.max(0, Math.min(project.source.durationFrames, Math.round(request.sourceStartFrame)))
   const frameCount = Math.min(Math.max(1, Math.round(request.frameCount)), project.source.sampleRate * 4, project.source.durationFrames - sourceStartFrame)
   if (frameCount <= 0) return { sourceStartFrame, sourceEndFrame: sourceStartFrame, sampleRate: project.source.sampleRate, channels: project.source.channels, pcm: new ArrayBuffer(0) }

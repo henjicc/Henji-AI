@@ -1,7 +1,6 @@
 import path from 'node:path'
 import fs from 'node:fs'
 import Database from 'better-sqlite3'
-import { initializeAudioEditSchema } from './audio-edit/schema'
 import { getProgramDataDir } from './appBasePaths'
 import { runSchemaMigrations, type SchemaMigrationOptions } from './db-migrations'
 
@@ -60,12 +59,12 @@ function ensureReadStatement(sql: string): void {
 }
 
 /**
- * 即将被文档文件取代的工程表（画布两张、口播及其任务表）。
+ * 即将被文档文件取代的工程表（画布两张）。
  *
  * 它们不进迁移账本，结构保持 2.3 之前的样子（`IF NOT EXISTS` + 补列）；
  * 3.x 各工具接入文档文件时连同这里的定义一起删除，并在迁移账本追加一项退役迁移删表
  * （legacy-project-tables.ts，有数据时账本先备份 henji.db），不迁移内容（重要记录 008）。
- * 镜头参考已在 3.2 退役（账本第 15 项）。
+ * 镜头参考已在 3.2 退役（账本第 15 项），口播在 3.3 退役（第 16 项）。
  */
 export function initializeLegacyProjectTables(conn: Database.Database): void {
   conn.exec(`
@@ -100,7 +99,6 @@ export function initializeLegacyProjectTables(conn: Database.Database): void {
       ON canvas_projects(updated_at DESC);
   `)
   ensureLegacyProjectColumn(conn, 'storyboard_projects', 'cover_path', 'TEXT')
-  initializeAudioEditSchema(conn)
 }
 
 /** 只给上面的工程表补列（3.x 随表删除）；其他表的结构变化一律写成迁移账本里的编号迁移。 */

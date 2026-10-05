@@ -66,7 +66,8 @@ it('所有已登记写域均经公共授权入口修改、正式读回并核对�
       { domain: 'image_mark', ref: await first('image_mark.document'), property: 'image_mark.document.orientation_rotate', value: '90' },
       { domain: 'image_edit', ref: { kind: 'image_edit.layer', id: `v3:${document.id}:effect` }, property: 'image_edit.layer.opacity', value: 0.42 },
       { domain: 'assets', ref: (library.resultRefs as ApplicationRef[])[0], property: 'asset.library.name', value: '公共素材已改名' },
-      { domain: 'audio_edit', ref: { kind: 'audio_edit.project', id: 'audio-loop' }, property: 'audio_edit.project.name', value: '公共口播已改名' },
+      // 口播名就是文件名（3.3，改名走 documents.document.name）；口播写域以参考稿验证内容写入与持久化
+      { domain: 'audio_edit', ref: { kind: 'audio_edit.project', id: 'audio-loop' }, property: 'audio_edit.project.reference_script', value: '公共口播参考稿' },
       // 剪辑名就是文件名（3.1，改名走 documents.document.name）；剪辑写域以序列名验证内容写入与持久化
       { domain: 'video_edit', ref: { kind: 'video_edit.sequence', id: `${video.document.id}:${video.activeSequenceId}` }, property: 'video_edit.sequence.name', value: '公共剪辑已改名' },
       { domain: 'documents', ref: { kind: 'documents.document', id: documentMeta.id }, property: 'documents.document.name', value: '公共文档已改名' },
@@ -98,6 +99,7 @@ it('所有已登记写域均经公共授权入口修改、正式读回并核对�
     // 后台写入不切换界面上的三维场景
     expect(useCameraStageStore.getState().currentProjectId).not.toBe(cameraDocumentId)
     expect(savedVideoEdit(video).sequences[0].name).toBe('公共剪辑已改名')
+    expect((harnessDocumentStore().stored('audio-loop')?.content as { referenceScript: string }).referenceScript).toBe('公共口播参考稿')
     expect(harnessDocumentStore().stored(documentMeta.id)?.meta.name).toBe('公共文档已改名')
     await closeVideoEditProject(video.document.id)
   } finally { vi.restoreAllMocks(); dispose(); app.dispose(); useSettingsStore.getState().setThemeContrast(originalContrast) }

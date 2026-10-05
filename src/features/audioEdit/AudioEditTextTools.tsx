@@ -1,32 +1,30 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, FolderSearch, PencilLine, Regex, Trash2, X } from 'lucide-react'
-import { AlertDialog, PanelTrigger, UiButton, UiIconButton, UiInput, UiModal, UiOptionButton, UiTextArea } from '@/components/ui'
+import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, FolderSearch, PencilLine, Regex, X } from 'lucide-react'
+import { PanelTrigger, UiButton, UiIconButton, UiInput, UiModal, UiOptionButton, UiTextArea } from '@/components/ui'
 import type { AudioEditTranscriptBlock } from '@/core/audioEdit/types'
 import type { AudioEditTextSearch } from './useAudioEditTextSearch'
 
 /**
- * 命令带左端的文件上下文（设计稿 ToolAudioEdit：项目名 ▾）：单击打开文件菜单
- * （重命名、重新定位原素材、删除项目），双击直接重命名。删除走确认弹窗。
+ * 命令带左端的文件上下文（设计稿 ToolAudioEdit：口播名 ▾）：单击打开文件菜单
+ * （重命名、重新定位原素材），双击直接重命名。名称就是文件名；删除在口播列表的右键菜单里（移到回收站）。
  */
-export function AudioEditFileMenu({ name, disabled, onRename, onRelink, onDelete }: {
+export function AudioEditFileMenu({ name, disabled, onRename, onRelink }: {
   name: string
   disabled: boolean
   onRename: (value: string) => void
   onRelink: () => void
-  onDelete: () => void
 }) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(name)
-  const [confirmDelete, setConfirmDelete] = useState(false)
   const startRename = () => { setDraft(name); setEditing(true) }
   const cancel = () => setEditing(false)
-  const save = () => { if (draft.trim()) onRename(draft.trim()); cancel() }
+  const save = () => { if (draft.trim() && draft.trim() !== name) onRename(draft.trim()); cancel() }
   if (editing) {
-    return <UiInput autoFocus size="sm" aria-label="项目名" className="w-56 min-w-0" value={draft} maxLength={200} disabled={disabled}
+    return <UiInput autoFocus size="sm" aria-label="口播名" className="w-56 min-w-0" value={draft} maxLength={200} disabled={disabled}
       onChange={(event) => setDraft(event.target.value)} onBlur={save}
       onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); save() } else if (event.key === 'Escape') { event.preventDefault(); cancel() } }} />
   }
-  return <>
+  return (
     <PanelTrigger
       className="min-w-0 max-w-64"
       disabled={disabled}
@@ -34,34 +32,25 @@ export function AudioEditFileMenu({ name, disabled, onRename, onRelink, onDelete
       panelPadding="menu"
       closeOnPanelClick
       renderPanel={() => (
-        <div role="menu" aria-label="项目" className="flex flex-col gap-0.5">
+        <div role="menu" aria-label="口播" className="flex flex-col gap-0.5">
           <UiOptionButton role="menuitem" variant="menu" size="md" className="w-full gap-2" onClick={startRename}>
             <PencilLine size={14} />重命名
           </UiOptionButton>
           <UiOptionButton role="menuitem" variant="menu" size="md" className="w-full gap-2" onClick={onRelink}>
             <FolderSearch size={14} />重新定位原素材
           </UiOptionButton>
-          {/* 删除与其他菜单项同一组件；破坏性由二次确认弹窗承担，菜单项本身保持静默 */}
-          <div role="separator" className="my-1 border-t border-line" />
-          <UiOptionButton role="menuitem" variant="menu" size="md" className="w-full gap-2" onClick={() => setConfirmDelete(true)}>
-            <Trash2 size={14} />删除项目
-          </UiOptionButton>
         </div>
       )}
     >
       {({ open, togglePanel }) => (
         <UiButton size="sm" className="min-w-0 max-w-full gap-1" disabled={disabled} aria-haspopup="menu" aria-expanded={open}
-          title="项目菜单 · 双击重命名" onClick={togglePanel} onDoubleClick={startRename}>
+          title="口播菜单 · 双击重命名" onClick={togglePanel} onDoubleClick={startRename}>
           <span className="truncate">{name}</span>
           <ChevronDown size={14} aria-hidden="true" className="shrink-0 text-text3" />
         </UiButton>
       )}
     </PanelTrigger>
-    <AlertDialog isOpen={confirmDelete} title="删除项目？" type="warning" closeLabel="取消"
-      message="仅删除项目和缓存，原素材保持不变。"
-      onClose={() => setConfirmDelete(false)}
-      actions={[{ label: '删除项目', variant: 'primary', tone: 'danger', onClick: () => { setConfirmDelete(false); onDelete() } }]} />
-  </>
+  )
 }
 
 export function AudioEditTextEditor({ block, disabled, onSave, onClose }: { block: AudioEditTranscriptBlock; disabled: boolean; onSave: (text: string) => void; onClose: () => void }) {

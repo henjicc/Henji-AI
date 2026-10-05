@@ -11,7 +11,7 @@ import { createCameraStageRenderTaskTableV1 } from './camera-stage-render-task-s
 import { createCustomModelsTableV1 } from './custom-models-schema'
 import { createDocumentIndexSchemaV1 } from './documents/index-schema'
 import { createGenerationHistoryTablesV1, generationHistoryNeedsBackup } from './generation-history/schema'
-import { cameraStageProjectsNeedBackup, retireCameraStageProjectsV1 } from './legacy-project-tables'
+import { audioEditProjectsNeedBackup, cameraStageProjectsNeedBackup, retireAudioEditProjectsV1, retireCameraStageProjectsV1 } from './legacy-project-tables'
 import { createMainLogger, type MainLogger } from './logging/main-logger'
 import { createModelTraceTablesV1 } from './logging/traceSchema'
 import { createPresetsTableV1 } from './presets/schema'
@@ -75,6 +75,8 @@ export const SCHEMA_MIGRATIONS: readonly SchemaMigration[] = [
   { version: 14, name: 'stored_locations', up: upgradeStoredLocationsV1, backupWhen: storedLocationsNeedBackup },
   // 3.2 镜头参考接入文档文件：删旧工程表，渲染回执改引用文档 ID（旧回执清空，不迁移内容）
   { version: 15, name: 'retire_camera_stage_projects', up: retireCameraStageProjectsV1, backupWhen: cameraStageProjectsNeedBackup },
+  // 3.3 口播接入文档文件：删旧工程表，处理任务表重建为按文档 ID 归属（旧回执清空，不迁移内容）
+  { version: 16, name: 'retire_audio_edit_projects', up: retireAudioEditProjectsV1, backupWhen: audioEditProjectsNeedBackup },
 ]
 
 export const SCHEMA_MIGRATIONS_TABLE = 'schema_migrations'

@@ -24,10 +24,11 @@ import type {
   AudioEditTranscriptionResult,
 } from '../../../../src/core/audioEdit/types'
 import { analyzeAudioEditTranscript } from '../../../../src/core/audioEdit/analysis'
+import { createAudioEditBaseline } from '../../../../src/core/audioEdit/baseline'
 import { getAiProviderApiKey } from '../keystore'
 import { createMainLogger } from '../logging'
 import { sdkRuntimeContext } from '../ai-runtime/sdk-runtime'
-import { requireAudioEditProject, saveAudioEditProject } from './project-store'
+import { requireAudioEditProject } from './project-store'
 import { assertAudioEditProjectIdle, createAudioEditTask, findAudioEditTranscription, isAudioEditTaskActive, updateAudioEditTask, registerAudioEditTaskController } from './task-store'
 import { prepareAudioEditAudio, verifyAudioEditSource } from './media'
 
@@ -125,8 +126,8 @@ function toBlocks(output: SpeechRecognitionOutput, sampleRate: number): AudioEdi
 export async function transcribeAudioEditProject(
   request: AudioEditTranscriptionRequest,
 ): Promise<AudioEditTranscriptionResult> {
-  const project = requireAudioEditProject(request.projectId)
-  if (project.transcript.length) throw new Error('工程已有转写，请保留当前编辑；需要重新识别时另建工程。')
+  const project = await requireAudioEditProject(request.projectId)
+  if (project.transcript.length) throw new Error('口播已有转写，请保留当前编辑；需要重新识别时另建口播。')
   await verifyAudioEditSource(project)
   const previous = findAudioEditTranscription(project.id)
   if (previous && isAudioEditTaskActive(previous.request_id)) throw new Error('该工程正在转写，请等待或取消。')
@@ -180,12 +181,14 @@ export async function transcribeAudioEditProject(
       : transcript.length > 0
         ? 'segment'
         : 'none'
-    const next = saveAudioEditProject({
+    // 结果交给渲染层实例接收并经文档会话保存（主进程不写口播内容）；第一次识别同时确立原文基线。
+    const recognized = {
       ...project,
       transcript,
       suggestions: analyzeAudioEditTranscript(transcript, { sampleRate: project.source.sampleRate }),
       selectedAsrModelId: modelId,
-    })
+    }
+    const next = { ...recognized, editBaseline: createAudioEditBaseline(recognized, 'original') }
     logger.info('口播转写完成', {
       event: 'audio_edit.transcription.completed', requestId, modelId,
       context: { projectId: project.id, blockCount: transcript.length, granularity },

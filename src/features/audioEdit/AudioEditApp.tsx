@@ -32,16 +32,18 @@ import {
 } from '@/components/ui'
 import NumberInput from '@/components/ui/NumberInput'
 import type { AudioEditAsrModel } from '@/platform/contracts/audioEdit'
-import type { AudioEditProcessorDescriptor, AudioEditProjectDocument, AudioEditProjectSummary, AudioEditTask, AudioEditRange } from '@/core/audioEdit/types'
+import type { AudioEditProcessorDescriptor, AudioEditProjectDocument, AudioEditTask, AudioEditRange } from '@/core/audioEdit/types'
+import type { DocumentSummary } from '@/core/documents/types'
+import { ICON_TOOL_AUDIO_EDIT } from '@/core/theme/icons'
+import { DocumentLibraryPage } from '@/features/documents/DocumentLibraryPage'
 import { useNotification } from '@/contexts/NotificationContext'
 import { openAssistant } from '@/features/assistant/store/assistantUiStore'
 import { getPlatform } from '@/platform/runtime'
-import { basename, openDialog, readTextFile, saveDialog } from '@/platform/desktopApi'
+import { openDialog, readTextFile, saveDialog } from '@/platform/desktopApi'
 import { useAudioEditPreview } from './preview/useAudioEditPreview'
 import { calculatePreviewGain } from './preview/previewGain'
 import { AudioEditPlaybackModeSwitch, AudioEditTimeline, type AudioEditDelivery } from './AudioEditTimeline'
 import { AudioEditDisclosure } from './AudioEditDisclosure'
-import { AudioEditHome } from './AudioEditHome'
 import { AudioEditViewSettings } from './AudioEditViewSettings'
 import { AudioEditSuggestions } from './AudioEditSuggestions'
 import { AudioEditUndoButton } from './AudioEditUndoButton'
@@ -57,11 +59,10 @@ import { useAudioEditPlaybackStore } from './store/audioEditPlaybackStore'
 import { useAudioEditStore } from './store/audioEditStore'
 
 import { applyAudioEditSuggestion, audioEditSuggestionStates, dismissAudioEditSuggestion, DEFAULT_AUDIO_EDIT_SETTINGS, DEFAULT_AUDIO_EDIT_VIEW_SETTINGS, editAudioEditRange, setAudioEditBlocks } from '@/core/audioEdit/edits'
-import { editAudioEditProject, flushAudioEditProject, loadAudioEditProject } from './application/audioEditProjectInstances'
+import { editAudioEditProject, flushAudioEditProject } from './application/audioEditProjectInstances'
+import { AudioEditLeaveCancelledError, importAudioEditMedia, leaveAudioEditEditor, openAudioEditDocument, pickAudioEditMedia, renameAudioEditDocument } from './application/audioEditDocumentService'
 import { VideoEditSendMenu } from '@/features/videoEdit/panels/VideoEditSendMenu'
-import { compressAudioEditSilence, cleanProjectAudioEditFillers, transcribeAudioEdit, exportAudioEdit, relinkAudioEdit, deleteAudioEdit, renameAudioEdit, prepareAudioEditProcessing, quickProcessAudioEdit } from './application/audioEditApplicationService'
-
-const MEDIA_EXTENSIONS = ['wav', 'mp3', 'm4a', 'aac', 'flac', 'ogg', 'mp4', 'mov', 'mkv', 'webm']
+import { compressAudioEditSilence, cleanProjectAudioEditFillers, transcribeAudioEdit, exportAudioEdit, relinkAudioEdit, prepareAudioEditProcessing, quickProcessAudioEdit } from './application/audioEditApplicationService'
 
 function formatTime(frames: number, sampleRate: number): string {
   const seconds = Math.max(0, frames / Math.max(1, sampleRate))
@@ -213,19 +214,26 @@ function TranscriptEdge(): JSX.Element {
   return <div className="h-8" />
 }
 
+/** 列表卡片元信息：素材类型与时长（来自作品索引里的摘要）。 */
+function describeAudioEditDocument(document: DocumentSummary): string | undefined {
+  const seconds = Number(document.summary.durationSeconds)
+  const type = document.summary.mediaType === 'video' ? '视频' : document.summary.mediaType === 'audio' ? '音频' : null
+  if (!type) return '尚未导入素材'
+  if (!Number.isFinite(seconds)) return type
+  const whole = Math.max(0, Math.floor(seconds))
+  return `${type} · ${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, '0')}`
+}
+
 export interface AudioEditAppProps { onBack?: () => void }
 
 export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element {
   const { showNotification } = useNotification()
   const state = useAudioEditStore()
-  const { project, setProject, selectedBlockIds } = state
+  const { project, selectedBlockIds } = state
   useEffect(() => { if (project?.id) openAssistant() }, [project?.id])
-  const [projects, setProjects] = useState<AudioEditProjectSummary[]>([])
   const [asrModels, setAsrModels] = useState<AudioEditAsrModel[]>([])
   const [processors, setProcessors] = useState<AudioEditProcessorDescriptor[]>([])
   const [busy, setBusy] = useState(false)
-  const [homeLoading, setHomeLoading] = useState(true)
-  const [homeLoadFailed, setHomeLoadFailed] = useState(false)
   const textSearch = useAudioEditTextSearch(project)
   const delivery = useMemo<AudioEditDelivery>(() => {
     if (!project) return { timeline: null, error: '' }
@@ -256,22 +264,11 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
     setBusy(true)
     try { await operation() } catch (error) { notifyError(error) } finally { setBusy(false) }
   }, [notifyError])
-  // 只有首次读取显示加载态；改名、删除、返回列表后的刷新保持原列表，不闪成加载页
-  const homeLoadedRef = useRef(false)
-  const refreshHome = useCallback(async () => {
+  // 口播列表由通用文档页取数（DocumentLibraryPage）；这里只读编辑器要用的识别模型与声音处理器
+  useEffect(() => {
     const api = getPlatform().audioEdit
-    if (!homeLoadedRef.current) setHomeLoading(true)
-    setHomeLoadFailed(false)
-    await Promise.all([
-      api.listProjects().then((items) => { homeLoadedRef.current = true; setProjects(items) }).catch((error: unknown) => {
-        setHomeLoadFailed(true)
-        throw error
-      }).finally(() => setHomeLoading(false)),
-      api.listAsrModels().then(setAsrModels),
-      api.listProcessors().then(setProcessors),
-    ])
-  }, [])
-  useEffect(() => { void refreshHome().catch(notifyError) }, [refreshHome, notifyError])
+    void Promise.all([api.listAsrModels().then(setAsrModels), api.listProcessors().then(setProcessors)]).catch(notifyError)
+  }, [notifyError])
   const projectId = project?.id
   const setSelectedBlockIds = state.setSelectedBlockIds
   useEffect(() => { setWaveSelection(null); setSelectionOnly(false); setEditingBlockId(null); setNavigationTarget(null) }, [projectId])
@@ -320,14 +317,15 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
     const timer = window.setInterval(update, 1500)
     return () => { disposed = true; window.clearInterval(timer) }
   }, [projectId, notifyError])
-  const leave = () => run(async () => {
-    if (project) await flushAudioEditProject(project.id)
-    setProject(null); await refreshHome()
-  })
+  // 返回列表：草稿走“保存 / 不保存 / 取消”，取消留在编辑器
+  const leave = () => run(async () => { await leaveAudioEditEditor() })
+  // 新建口播 = 导入音频或视频，导入即建草稿（离开时起名）
   const importMedia = () => run(async () => {
-    const selected = await openDialog({ multiple: false, filters: [{ name: '音频或视频', extensions: MEDIA_EXTENSIONS }] })
-    const sourcePath = Array.isArray(selected) ? selected[0] : selected
-    if (sourcePath) setProject(await getPlatform().audioEdit.createProject({ sourcePath, name: basename(sourcePath) }))
+    const sourcePath = await pickAudioEditMedia()
+    if (sourcePath) await importAudioEditMedia(sourcePath)
+  })
+  const openDocument = (document: { id: string; path?: string }) => run(async () => {
+    try { await openAudioEditDocument(document) } catch (error) { if (!(error instanceof AudioEditLeaveCancelledError)) throw error }
   })
   const exportProject = () => run(async () => {
     if (!project) return
@@ -337,9 +335,22 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
     showNotification(`已导出${format === 'xml' ? ' XML' : ' WAV'}，交付时长 ${formatTime(result.durationFrames, project.source.sampleRate)}`)
   })
   if (!project) {
-    return <AudioEditHome projects={projects} loading={homeLoading} loadFailed={homeLoadFailed} disabled={disabled} onBack={onBack} onImport={() => void importMedia()} onRetry={() => void run(refreshHome)} onOpen={(id) => void run(async () => setProject((await loadAudioEditProject(id)).document))}
-      onRename={(id, name) => void run(async () => { await renameAudioEdit(id, name); await refreshHome() })}
-      onDelete={(ids) => run(async () => { for (const id of ids) await deleteAudioEdit(id); await refreshHome() })} />
+    // 列表整页是通用文档页（3.3）：取数、筛选、草稿区与右键操作（重命名、移到项目、创建副本、删除等）都由通用组件负责
+    return (
+      <DocumentLibraryPage
+        kind="audio_edit"
+        title="口播剪辑"
+        description="用文字和波形剪辑，再交给专业剪辑软件"
+        onBack={onBack}
+        backLabel="返回工具"
+        icon={ICON_TOOL_AUDIO_EDIT}
+        describe={describeAudioEditDocument}
+        busy={disabled}
+        labels={{ emptyDescription: '导入音频或视频，压缩停顿、清理语气词，再导出到 Premiere 或达芬奇继续编辑。口播直接引用原素材。' }}
+        create={{ kind: 'direct', onCreate: () => void importMedia() }}
+        onOpen={(document) => openDocument({ id: document.id, path: document.path })}
+      />
+    )
   }
   const settings = project.batchSettings ?? DEFAULT_AUDIO_EDIT_SETTINGS
   const update = (patch: Partial<AudioEditProjectDocument>) => {
@@ -373,11 +384,9 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
     try { editAudioEditProject(project.id, (current) => editAudioEditRange(current, waveSelection, mode)) } catch (error) { notifyError(error) }
   }
   const relinkSource = () => run(async () => {
-    const value = await openDialog({ multiple: false, filters: [{ name: '原始素材', extensions: MEDIA_EXTENSIONS }] })
-    const path = Array.isArray(value) ? value[0] : value
+    const path = await pickAudioEditMedia('原始素材')
     if (path) { await relinkAudioEdit(project.id, path); setSourceError(''); showNotification('原素材已重新定位') }
   })
-  const removeProject = () => run(async () => { await deleteAudioEdit(project.id); setProject(null); await refreshHome() })
   const runningTasks = tasks.filter((task) => task.state === 'running' && (task.kind !== 'silence' || state.busy))
   const transcriptionInterrupted = tasks.some((task) => task.kind === 'transcription' && ['failed', 'cancelled'].includes(task.state)) && !project.transcript.length
   const selectedSeconds = selectedBlocks.reduce((total, block) => total + Math.max(0, block.endFrame - block.startFrame), 0) / project.source.sampleRate
@@ -415,8 +424,8 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
         <UiButton variant="primary" disabled={disabled || Boolean(sourceError)} onClick={() => void exportProject()}><Download size={15} className="mr-1.5" />导出</UiButton>
       </>}
     >
-      <UiIconButton size="lg" onClick={() => void leave()} aria-label="返回项目列表" title="返回项目列表"><ArrowLeft size={16} /></UiIconButton>
-      <AudioEditFileMenu key={project.id} name={project.name} disabled={disabled} onRename={(name) => update({ name })} onRelink={() => void relinkSource()} onDelete={() => void removeProject()} />
+      <UiIconButton size="lg" onClick={() => void leave()} aria-label="返回口播列表" title="返回口播列表"><ArrowLeft size={16} /></UiIconButton>
+      <AudioEditFileMenu key={project.id} name={project.name} disabled={disabled} onRename={(name) => void run(() => renameAudioEditDocument(project.id, name))} onRelink={() => void relinkSource()} />
     </UiToolbar>
     <div className="flex min-h-0 flex-1">
       <main className="min-h-0 min-w-0 flex-1"><Transcript project={project} onSeek={navigateToFrame} onEdit={setEditingBlockId} onDelete={deleteBlock} disabled={disabled} search={textSearch} /></main>

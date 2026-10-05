@@ -4,7 +4,11 @@ import { capabilityControl, defineApplicationCapability } from '../shared/define
 import { audioEditRangeSchema } from '../../../audioEdit/schema'
 import { canvasDownloadDestinationSchema } from '../canvas/canvasExportApplicationCapabilities'
 
-const projectRef = applicationRefSchema.extend({ kind: z.literal('audio_edit.project') }).strict()
+// 口播是通用文档（3.3）：列出、新建、打开、改名、移动、删除走通用文档能力；这里的 id 就是口播文档 ID
+const projectRef = applicationRefSchema.extend({
+  kind: z.literal('audio_edit.project'),
+  id: z.string().min(1).max(500).describe('口播文档 ID：取自 list_documents（kind=audio_edit）返回的 id，不是文档所在项目的 ID'),
+}).strict()
 export const audioEditOperationInput = z.object({ projectRef, range: audioEditRangeSchema.optional(), modelId: z.string().optional(), taskId: z.string().optional(), format: z.enum(['xml', 'wav']).optional(), includeProcessing: z.boolean().optional(), includeSrt: z.boolean().optional(), destination: canvasDownloadDestinationSchema.optional() }).strict()
 const output = z.object({ resultRef: projectRef, message: z.string(), verified: z.boolean().optional(), count: z.number().nonnegative().optional(), shortenedMs: z.number().nonnegative().optional(), durationFrames: z.number().nonnegative().optional(), tasks: z.array(z.object({ requestId: z.string(), projectId: z.string(), kind: z.string(), state: z.enum(['queued', 'running', 'completed', 'failed', 'cancelled']), progress: z.number().optional(), errorMessage: z.string().optional() })).optional() }).strict()
 export const AUDIO_EDIT_VERIFIED_EDIT_OPERATIONS = new Set(['reset_audio_edit', 'format_audio_edit_subtitles', 'quick_process_audio_edit', 'compress_audio_edit_silence', 'clean_audio_edit_fillers'])

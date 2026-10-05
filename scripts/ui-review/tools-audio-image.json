@@ -25,11 +25,11 @@
       {
         "click": {
           "role": "button",
-          "name": "/^返回项目列表$/"
+          "name": "/^返回口播列表$/"
         },
         "ifPresent": {
           "role": "button",
-          "name": "/^返回项目列表$/"
+          "name": "/^返回口播列表$/"
         }
       },
       {
@@ -51,7 +51,7 @@
       {
         "waitFor": {
           "role": "button",
-          "name": "/^导入音频或视频$/"
+          "name": "/^新建口播$/"
         },
         "timeout": 12000
       },
@@ -137,7 +137,7 @@
       {
         "click": {
           "role": "button",
-          "name": "/^返回项目列表$/"
+          "name": "/^返回口播列表$/"
         }
       },
       {
@@ -448,11 +448,11 @@
       {
         "click": {
           "role": "button",
-          "name": "/^返回项目列表$/"
+          "name": "/^返回口播列表$/"
         },
         "ifPresent": {
           "role": "button",
-          "name": "/^返回项目列表$/"
+          "name": "/^返回口播列表$/"
         }
       },
       {

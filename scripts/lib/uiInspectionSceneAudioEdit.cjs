@@ -2,6 +2,7 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
+const { createAudioEditDocument, removeAudioEditDocument, updateAudioEditDocument } = require('./audioEditDocumentFixture.cjs')
 
 function createAudioEditScene({ setupToolbox, clickNamedButton }) {
   return {
@@ -20,15 +21,11 @@ function createAudioEditScene({ setupToolbox, clickNamedButton }) {
       fs.writeFileSync(file, wav)
       let project
       try {
-        project = await page.evaluate(async ({ sourcePath, rate }) => {
-          const audio = window.henjiNative.audio
-          const project = await audio.createEditProject({ sourcePath, name: '波形交互验收' })
-          project.transcript = [
-            ['intro', '开场保留', 0, 2, true], ['removed', '这句已经删除', 2, 4, false],
-            ['middle', '跳过后继续播放', 4, 8, true], ['ending', '结尾也应完整播放', 8, 12, true],
-          ].map(([id, text, start, end, included]) => ({ id, text, startFrame: start * rate, endFrame: end * rate, included, locked: false, granularity: 'segment' }))
-          return audio.saveEditProject(project)
-        }, { sourcePath: file, rate })
+        // 3.3：口播是 .henji-audio 文档，经正式接口造数据（audioEditDocumentFixture.cjs）
+        project = await createAudioEditDocument(page, { sourcePath: file, name: '波形交互验收', transcriptRows: [
+          ['intro', '开场保留', 0, 2, true], ['removed', '这句已经删除', 2, 4, false],
+          ['middle', '跳过后继续播放', 4, 8, true], ['ending', '结尾也应完整播放', 8, 12, true],
+        ] })
       } catch (error) {
         fs.unlinkSync(file)
         fs.rmdirSync(directory)
@@ -167,22 +164,23 @@ async function verifyDelivery(page) {
       })
     })()
     const targetPath = path.join(directory, `${item.name}.xml`)
-    const result = await page.evaluate(async ({ sourcePath, targetPath }) => {
-      const api = window.henjiNative.audio
-      const document = await api.createEditProject({ sourcePath })
-      const detected = await api.detectEditSilence({ projectId: document.id, settings: { silenceThresholdMs: 800, retainedSilenceMs: 350, noiseDb: -40, trimEdges: false, fillers: ['嗯'] } })
+    const document = await createAudioEditDocument(page, { sourcePath, name: `交付样例 ${item.name}` })
+    let result
+    try {
+      const detected = await page.evaluate((id) => window.henjiNative.audio.detectEditSilence({ projectId: id, settings: { silenceThresholdMs: 800, retainedSilenceMs: 350, noiseDb: -40, trimEdges: false, fillers: ['嗯'] } }), document.id)
       if (!detected.suggestions.length) throw new Error('真实音频未检测到停顿')
-      document.cuts = detected.suggestions.map((range) => ({ id: range.id, reason: 'silence', enabled: true, startFrame: range.startFrame + Math.floor(document.source.sampleRate * 0.175), endFrame: range.endFrame - Math.ceil(document.source.sampleRate * 0.175) }))
-      const saved = await api.saveEditProject(document)
-      const exported = await api.exportEditProject({ projectId: saved.id, targetPath, format: 'xml', includeProcessing: false })
-      await api.deleteEditProject(saved.id)
-      return { source: document.source, exported, count: detected.suggestions.length }
-    }, { sourcePath, targetPath })
+      const rate = document.source.sampleRate
+      await updateAudioEditDocument(page, document.id, { cuts: detected.suggestions.map((range) => ({ id: range.id, reason: 'silence', enabled: true, startFrame: range.startFrame + Math.floor(rate * 0.175), endFrame: range.endFrame - Math.ceil(rate * 0.175) })) })
+      const exported = await page.evaluate(({ id, targetPath }) => window.henjiNative.audio.exportEditProject({ projectId: id, targetPath, format: 'xml', includeProcessing: false }), { id: document.id, targetPath })
+      result = { source: document.source, exported, count: detected.suggestions.length }
+    } finally {
+      await removeAudioEditDocument(page, document.id)
+    }
     assert.equal(result.source.sourcePath, sourcePath)
     assert.equal(result.source.audioPath, sourcePath)
     assert.equal(result.source.durationFrames, item.rate * item.seconds)
     assert.ok(result.exported.durationFrames < result.source.durationFrames)
-    assert.ok(fs.existsSync(sourcePath), '删除工程后原素材仍在')
+    assert.ok(fs.existsSync(sourcePath), '删除口播后原素材仍在')
     const xml = fs.readFileSync(targetPath, 'utf8')
     const parsed = await page.evaluate((xml) => {
       const doc = new DOMParser().parseFromString(xml, 'application/xml')

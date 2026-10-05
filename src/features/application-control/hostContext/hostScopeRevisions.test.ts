@@ -15,6 +15,11 @@ import {
 import { useImageEditSessionStore } from '@/features/imageEdit/store/imageEditSessionStore'
 import { useAudioEditStore } from '@/features/audioEdit/store/audioEditStore'
 import type { AudioEditProjectDocument } from '@/core/audioEdit/types'
+import { audioEditProjectToDocumentContent } from '@/core/audioEdit/documentContent'
+import { documentKindRegistry } from '@/core/documents/kinds'
+import { getAudioEditRevision, loadAudioEditProject, resetAudioEditProjectInstancesForTests, setAudioEditDocumentRegistryForTests } from '@/features/audioEdit/application/audioEditProjectInstances'
+import { DocumentSessionRegistry } from '@/features/documents/documentSessionRegistry'
+import { createScriptedPrompter, FakeDocumentCommands } from '@/features/documents/documentSessionTestKit'
 import { ImageEditCommandBusV3 } from '@/features/imageEdit/v3/application/imageEditCommandBus'
 import { adoptImageEditDocumentInstanceForTestsV3 } from '@/features/imageEdit/v3/application/imageEditDocumentInstances'
 
@@ -35,11 +40,13 @@ describe('宿主作用域 revision', () => {
     release = retainHostContextTracking()
   })
 
-  afterEach(() => {
+  afterEach(async () => {
     release?.()
     release = undefined
     useNavigationStore.setState({ activeToolId: null })
     useAudioEditStore.getState().setProject(null)
+    await resetAudioEditProjectInstancesForTests()
+    setAudioEditDocumentRegistryForTests(null)
     useImageEditSessionStore.setState({ sessions: {}, revision: 0 })
   })
 
@@ -60,15 +67,20 @@ describe('宿主作用域 revision', () => {
     expect(getHostScopeRevisions().toolbox).toBe(before.toolbox)
   })
 
-  it('口播剪辑页面向助手暴露当前工程和选中的词块', () => {
+  it('口播剪辑页面向助手暴露当前口播和选中的词块', async () => {
     const project: AudioEditProjectDocument = {
       id: 'audio-project', name: '测试口播', referenceScript: '', vstEnabled: false,
       source: { mediaType: 'audio', sourcePath: 'C:/source.wav', audioPath: 'C:/source.wav', durationFrames: 48_000, sampleRate: 48_000, channels: 1 },
       transcript: [{ id: 'word-1', text: '测试', startFrame: 0, endFrame: 12_000, included: true, locked: false, granularity: 'word' }],
       suggestions: [], createdAt: 1, updatedAt: 1, revision: 7,
     }
+    // 口播是通用文档（3.3）：界面只能显示已经打开的口播
+    const commands = new FakeDocumentCommands()
+    setAudioEditDocumentRegistryForTests(new DocumentSessionRegistry({ commands, prompter: createScriptedPrompter(), kinds: documentKindRegistry }))
+    commands.seed({ kind: 'audio_edit', id: project.id, name: project.name, content: audioEditProjectToDocumentContent(project) })
+    await loadAudioEditProject(project.id)
     useNavigationStore.setState({ activeWorkspace: 'tools', activeToolId: 'audioEdit' })
-    useAudioEditStore.getState().setProject(project)
+    useAudioEditStore.getState().setProject({ id: project.id })
     useAudioEditStore.getState().setSelectedBlockIds(['word-1'])
 
     const snapshot = createHostContextSnapshot()
@@ -77,7 +89,8 @@ describe('宿主作用域 revision', () => {
       focusedRef: 'audio_edit.project:audio-project',
       selectedRefs: ['audio_edit.transcript_block:audio-project:word-1'],
     })
-    expect(snapshot.scopeRevisions.audio_edit).toBe(7)
+    expect(snapshot.scopeRevisions.audio_edit).toBe(getAudioEditRevision())
+    expect(snapshot.scopeRevisions.audio_edit).toBeGreaterThan(0)
   })
 
   it('画布选中与素材库开合不推进各自的数据作用域', () => {

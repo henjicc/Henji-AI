@@ -30,3 +30,34 @@ export function retireCameraStageProjectsV1(db: Database.Database): void {
 }
 
 export const cameraStageProjectsNeedBackup = legacyTablesHaveRows('camera_stage_projects', 'camera_stage_render_tasks')
+
+/**
+ * 口播（3.3）：删 `audio_edit_projects`；处理任务表 `audio_edit_tasks` 原来按旧工程 ID 归属并级联删除，
+ * 旧回执已无处可指，整表重建为按口播文档 ID（`document_id`）归属、不再引用工程表。
+ * 原来这两张表由 `initializeLegacyProjectTables` 每次启动建表，从本项起只由账本管理。
+ */
+export function retireAudioEditProjectsV1(db: Database.Database): void {
+  db.exec(`
+    DROP INDEX IF EXISTS idx_audio_edit_tasks_project;
+    DROP TABLE IF EXISTS audio_edit_tasks;
+    DROP INDEX IF EXISTS idx_audio_edit_projects_updated_at;
+    DROP TABLE IF EXISTS audio_edit_projects;
+
+    CREATE TABLE audio_edit_tasks (
+      request_id TEXT PRIMARY KEY,
+      document_id TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      state TEXT NOT NULL,
+      provider_task_id TEXT,
+      input_digest TEXT NOT NULL,
+      result_json TEXT,
+      error_message TEXT,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+    CREATE INDEX idx_audio_edit_tasks_document
+      ON audio_edit_tasks(document_id, updated_at DESC);
+  `)
+}
+
+export const audioEditProjectsNeedBackup = legacyTablesHaveRows('audio_edit_projects', 'audio_edit_tasks')

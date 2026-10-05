@@ -1,61 +1,34 @@
-import { isDeepStrictEqual } from 'node:util'
-import { assertAudioEditLocks } from '../../../src/core/audioEdit/edits'
 import { registerAudioSampleHandlers } from './audio-samples'
 import { parseRecord, parseStringField, parseVoid, registerIpcHandler } from './registry'
-import { createAudioEditProject, deleteAudioEditProject, relinkAudioEditSource, verifyAudioEditSource } from '../services/audio-edit/media'
+import { probeAudioEditImport, relinkAudioEditSource, verifyAudioEditSource } from '../services/audio-edit/media'
 import { detectAudioEditSilence } from '../services/audio-edit/silence'
 import { cancelAudioEditTask, listAudioEditTasks, runAudioEditTask } from '../services/audio-edit/task-store'
-import { audioEditProjectSchema, audioEditSettingsSchema, audioEditRangeSchema, audioEditFrameRateSchema } from '../../../src/core/audioEdit/schema'
-import { hasAudioEditModifications } from '../../../src/core/audioEdit/baseline'
-import {
-  getAudioEditProject,
-  listAudioEditProjects,
-  requireAudioEditProject,
-  saveAudioEditProject,
-} from '../services/audio-edit/project-store'
+import { audioEditSettingsSchema, audioEditRangeSchema, audioEditFrameRateSchema } from '../../../src/core/audioEdit/schema'
+import { requireAudioEditProject } from '../services/audio-edit/project-store'
 import { listAudioEditAsrModels, transcribeAudioEditProject } from '../services/audio-edit/asr'
 import { exportAudioEditProject } from '../services/audio-edit/export'
 import { listAudioEditProcessors, prepareAudioEditProcessedAudio } from '../services/audio-edit/processors'
 import { prepareAudioEditPreviewChunk } from '../services/audio-edit/preview'
 import type {
   AudioEditExportRequest,
-  AudioEditProjectCreateRequest,
-  AudioEditProjectDocument,
   AudioEditPreviewChunkRequest,
   AudioEditTranscriptionRequest,
 } from '../../../src/core/audioEdit/types'
 
+/*
+ * 口播 IPC（3.3 口播接入）：口播是 `.henji-audio` 文档，新建、打开、保存、改名、删除都走通用文档接口；
+ * 这里只剩导入时探测素材，以及按文档 ID（参数名沿用 projectId）执行的转写、分析、处理、试听与导出。
+ */
 export function registerAudioIpc(): void {
   registerAudioSampleHandlers()
 
-  registerIpcHandler('audioEdit:projects:list', parseVoid, () => listAudioEditProjects())
-  registerIpcHandler<AudioEditProjectCreateRequest, AudioEditProjectDocument>(
-    'audioEdit:projects:create',
-    parseCreateProject,
-    createAudioEditProject,
-  )
-  registerIpcHandler('audioEdit:projects:get', (input) => parseStringField(input, 'projectId'), getAudioEditProject)
-  registerIpcHandler<AudioEditProjectDocument, AudioEditProjectDocument>(
-    'audioEdit:projects:save',
-    parseProjectSave,
-    (project) => {
-      const current = requireAudioEditProject(project.id)
-      if (!isDeepStrictEqual(project.source, current.source)) {
-        throw new Error('IMMUTABLE_SOURCE：工程源媒体不能通过编辑接口修改。')
-      }
-      // Explicit full restoration can restore lock state; arbitrary edits remain protected.
-      // Always use the host's immutable baseline, never one supplied by the caller.
-      if (hasAudioEditModifications({ ...project, editBaseline: current.editBaseline })) assertAudioEditLocks(current, project)
-      return saveAudioEditProject(project)
-    },
-  )
+  registerIpcHandler('audioEdit:source:probe', (input) => parseStringField(input, 'sourcePath'), probeAudioEditImport)
   registerIpcHandler('audioEdit:asr:list', parseVoid, () => listAudioEditAsrModels())
-  registerIpcHandler('audioEdit:source:verify', (input) => parseStringField(input, 'projectId'), (id) => verifyAudioEditSource(requireAudioEditProject(id)))
+  registerIpcHandler('audioEdit:source:verify', (input) => parseStringField(input, 'projectId'), async (id) => verifyAudioEditSource(await requireAudioEditProject(id)))
   registerIpcHandler('audioEdit:source:relink', (input) => {
     const record = parseRecord(input)
     return { projectId: readString(record, 'projectId'), sourcePath: readString(record, 'sourcePath') }
   }, ({ projectId, sourcePath }) => relinkAudioEditSource(projectId, sourcePath))
-  registerIpcHandler('audioEdit:projects:delete', (input) => parseStringField(input, 'projectId'), deleteAudioEditProject)
   registerIpcHandler('audioEdit:silence', (input) => {
     const record = parseRecord(input)
     return { projectId: readString(record, 'projectId'), settings: audioEditSettingsSchema.parse(record.settings), range: record.range === undefined ? undefined : audioEditRangeSchema.parse(record.range), requestId: readOptionalString(record, 'requestId') }
@@ -65,8 +38,8 @@ export function registerAudioIpc(): void {
   registerIpcHandler('audioEdit:processing', (input) => {
     const record = parseRecord(input)
     return { projectId: readString(record, 'projectId'), requestId: readString(record, 'requestId') }
-  }, ({ projectId, requestId }) => {
-    const project = requireAudioEditProject(projectId)
+  }, async ({ projectId, requestId }) => {
+    const project = await requireAudioEditProject(projectId)
     return runAudioEditTask(projectId, 'processing', async (signal, progress) => {
       await verifyAudioEditSource(project)
       await prepareAudioEditProcessedAudio(project, signal, progress)
@@ -88,20 +61,6 @@ function parsePreviewChunk(input: unknown): AudioEditPreviewChunkRequest {
     frameCount: readNumber(record, 'frameCount'),
     processing: record.processing === undefined ? undefined : readBoolean(record, 'processing'),
   }
-}
-
-function parseCreateProject(input: unknown): AudioEditProjectCreateRequest {
-  const record = parseRecord(input)
-  return {
-    sourcePath: readString(record, 'sourcePath'),
-    name: readOptionalString(record, 'name'),
-    referenceScript: readOptionalString(record, 'referenceScript'),
-  }
-}
-
-function parseProjectSave(input: unknown): AudioEditProjectDocument {
-  const record = parseRecord(input)
-  return audioEditProjectSchema.parse(record.project)
 }
 
 function parseTranscription(input: unknown): AudioEditTranscriptionRequest {

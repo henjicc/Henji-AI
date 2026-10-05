@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import type { AudioEditProjectDocument } from '@/core/audioEdit/types'
 import { applyAudioEditSuggestion, dismissAudioEditSuggestion, setAudioEditBlocks } from '@/core/audioEdit/edits'
-import { attachAudioEditProject, editAudioEditProject, subscribeAudioEditInstances, undoAudioEditProject } from '../application/audioEditProjectInstances'
+import { editAudioEditProject, getAudioEditProjectInstance, markAudioEditDocumentShown, subscribeAudioEditInstances, undoAudioEditProject } from '../application/audioEditProjectInstances'
 
 interface AudioEditState {
   project: AudioEditProjectDocument | null
@@ -10,7 +10,8 @@ interface AudioEditState {
   selectedBlockIds: string[]
   saveError: string | null
   busy: boolean
-  setProject: (project: AudioEditProjectDocument | null) => void
+  /** 显示一份已载入的口播（按文档 ID）；null 回到列表。 */
+  setProject: (project: { id: string } | null) => void
   toggleBlock: (blockId: string) => void
   setBlocksIncluded: (blockIds: string[], included: boolean) => void
   setReferenceScript: (referenceScript: string) => void
@@ -29,8 +30,11 @@ export const useAudioEditStore = create<AudioEditState>((set, get) => {
   }
   return {
     project: null, past: [], future: [], selectedBlockIds: [], saveError: null, busy: false,
+    // 显示一份已载入的口播（实例由 loadAudioEditProject / createAudioEditDraft 打开）；null 回到列表
     setProject: (project) => {
-      const instance = project ? attachAudioEditProject(project) : null
+      const instance = project ? getAudioEditProjectInstance(project.id) ?? null : null
+      if (project && !instance) throw new Error('口播尚未载入。')
+      markAudioEditDocumentShown(instance?.document.id ?? null)
       set({ project: instance?.document ?? null, past: instance?.past ?? [], future: instance?.future ?? [], selectedBlockIds: [], saveError: instance?.error ?? null, busy: Boolean(instance?.busy) })
     },
     toggleBlock: (id) => mutate((project) => setAudioEditBlocks(project, [id], !project.transcript.find((block) => block.id === id)?.included)),
@@ -47,5 +51,7 @@ export const useAudioEditStore = create<AudioEditState>((set, get) => {
 
 subscribeAudioEditInstances((instance) => {
   if (useAudioEditStore.getState().project?.id !== instance.document.id) return
+  // 会话结束（移到回收站、被别处关闭）：界面回到列表
+  if (instance.session.isEnded) { markAudioEditDocumentShown(null); useAudioEditStore.setState({ project: null, past: [], future: [], selectedBlockIds: [], saveError: null, busy: false }); return }
   useAudioEditStore.setState({ project: instance.document, past: instance.past, future: instance.future, saveError: instance.error, busy: Boolean(instance.busy) })
 })

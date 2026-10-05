@@ -36,7 +36,7 @@ async function publishOutputs(outputs: StagedOutput[]): Promise<void> {
 }
 
 export async function exportAudioEditProject(request: AudioEditExportRequest): Promise<AudioEditExportResult> {
-  const project = requireAudioEditProject(request.projectId)
+  const project = await requireAudioEditProject(request.projectId)
   await verifyAudioEditSource(project)
   const format = request.format ?? 'wav'
   const target = path.resolve(request.targetPath ?? request.audioTargetPath ?? '')

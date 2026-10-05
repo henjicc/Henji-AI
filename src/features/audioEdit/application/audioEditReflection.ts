@@ -9,6 +9,7 @@ import {
 import type { AudioEditProjectDocument } from '@/core/audioEdit/types'
 import { audioEditSuggestionState } from '@/core/audioEdit/edits'
 import { getPlatform } from '@/platform/runtime'
+import { getDocumentOperations } from '@/features/documents/documentOperations'
 
 import { AUDIO_EDIT_ENTITY_TYPES, AUDIO_EDIT_FIELDS, audioEditSchemaRef as schemaRef, type AudioEditEntityType as EntityType } from './audioEditFields'
 import { fieldDescriptors, fieldReadValues } from '@/core/application-control'
@@ -30,15 +31,26 @@ async function project(projectId: string): Promise<AudioEditProjectDocument> {
   return (await loadAudioEditProject(projectId)).document
 }
 
+/**
+ * 口播文档（3.3）：作品索引里已保存、文件还在、已导入素材的口播，加上已打开的草稿。
+ * 没打开的草稿不列：读它会打开会话，草稿区就看不到这份遗留草稿了。没有素材的空文档读不出内容，也不列。
+ */
+async function listAudioEditDocuments(): Promise<Array<{ id: string; name: string }>> {
+  const documents = await getDocumentOperations().listDocuments({ kind: 'audio_edit', container: { kind: 'any' }, includeDrafts: true, includeMissing: false })
+  return documents
+    .filter((document) => document.summary.mediaType !== null && (!document.draft || getAudioEditProjectInstance(document.id)))
+    .map((document) => ({ id: document.id, name: document.name }))
+}
+
 class AudioEditReflectionProvider implements ApplicationEntityProvider {
   constructor(readonly entityType: EntityType) {}
 
   async listEntities(request: { cursor?: string; limit: number }) {
-    const summaries = await getPlatform().audioEdit.listProjects()
-    const projects = await Promise.all(summaries.map((summary) => project(summary.id)))
-    const refs = projects.flatMap((document) => {
-      if (this.entityType === AUDIO_EDIT_ENTITY_TYPES.project) return [{ kind: this.entityType, id: document.id, label: document.name }]
-      if (this.entityType === AUDIO_EDIT_ENTITY_TYPES.processorChain || this.entityType === AUDIO_EDIT_ENTITY_TYPES.render) return [{ kind: this.entityType, id: document.id, label: document.name }]
+    const summaries = await listAudioEditDocuments()
+    const projectScoped = this.entityType === AUDIO_EDIT_ENTITY_TYPES.project || this.entityType === AUDIO_EDIT_ENTITY_TYPES.processorChain || this.entityType === AUDIO_EDIT_ENTITY_TYPES.render
+    // 工程级实体只要名称，不为列出而打开每一份口播；词块与线索才需要读内容
+    const loaded = projectScoped ? [] : (await Promise.allSettled(summaries.map((summary) => project(summary.id)))).flatMap((result) => result.status === 'fulfilled' ? [result.value] : [])
+    const refs = projectScoped ? summaries.map((summary) => ({ kind: this.entityType, id: summary.id, label: summary.name })) : loaded.flatMap((document) => {
       if (this.entityType === AUDIO_EDIT_ENTITY_TYPES.transcriptBlock) return document.transcript.map((block) => childRef(this.entityType, document.id, block.id, block.text))
       return document.suggestions.map((suggestion) => childRef(this.entityType, document.id, suggestion.id, suggestion.title))
     })
@@ -88,7 +100,7 @@ class AudioEditReflectionProvider implements ApplicationEntityProvider {
 }
 
 const entityMeta: Record<EntityType, { title: string; parents: EntityType[] }> = {
-  [AUDIO_EDIT_ENTITY_TYPES.project]: { title: '口播剪辑工程', parents: [] },
+  [AUDIO_EDIT_ENTITY_TYPES.project]: { title: '口播（文档内容根，id 即口播文档 ID）', parents: [] },
   [AUDIO_EDIT_ENTITY_TYPES.transcriptBlock]: { title: '转写词块', parents: [AUDIO_EDIT_ENTITY_TYPES.project] },
   [AUDIO_EDIT_ENTITY_TYPES.suggestion]: { title: '剪辑线索（辅助定位，非审批队列）', parents: [AUDIO_EDIT_ENTITY_TYPES.project] },
   [AUDIO_EDIT_ENTITY_TYPES.processorChain]: { title: '声音处理链', parents: [AUDIO_EDIT_ENTITY_TYPES.project] },

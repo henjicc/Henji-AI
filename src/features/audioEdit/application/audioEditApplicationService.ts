@@ -5,7 +5,7 @@ import { getPlatform } from '@/platform/runtime'
 import { createLogger } from '@/core/logging'
 import { formatAudioEditCaptions, buildAudioEditCaptionGroups } from '@/core/audioEdit/captions'
 import { hasAudioEditModifications } from '@/core/audioEdit/baseline'
-import { acceptAudioEditNativeResult, editAudioEditProject, flushAudioEditProject, getAudioEditProjectInstance, loadAudioEditProject, releaseAudioEditProject, resetAudioEditProject, withAudioEditProjectOperation } from './audioEditProjectInstances'
+import { acceptAudioEditNativeResult, editAudioEditProject, flushAudioEditProject, loadAudioEditProject, resetAudioEditProject, withAudioEditProjectOperation } from './audioEditProjectInstances'
 
 const logger = createLogger('features.audioEdit.operations')
 
@@ -15,7 +15,7 @@ export async function undoAllAudioEditChanges(projectId: string, expectedVersion
   try {
     resetAudioEditProject(projectId, expectedVersion ?? instance.version)
     await flushAudioEditProject(projectId)
-    if (hasAudioEditModifications(instance.document)) throw new Error('工程在保存期间发生了新修改，未将其覆盖，请重新查看。')
+    if (hasAudioEditModifications(instance.document)) throw new Error('口播在保存期间发生了新修改，未将其覆盖，请重新查看。')
     logger.info('audio_edit.reset.completed', { context: { projectId } })
   } catch (error) {
     logger.error('audio_edit.reset.failed', { context: { projectId }, error })
@@ -43,7 +43,7 @@ export async function compressAudioEditSilence(projectId: string, range?: AudioE
     const settings = instance.document.batchSettings ?? DEFAULT_AUDIO_EDIT_SETTINGS
     const before = editedDurationFrames(buildProjectAudioEditTimeline(instance.document))
     const detected = await getPlatform().audioEdit.detectSilence({ projectId, settings, range, requestId })
-    if (detected.revision !== instance.persistedRevision) throw new Error('工程已更新，请重新分析停顿。')
+    if (detected.revision !== instance.persistedRevision) throw new Error('口播已更新，请重新分析停顿。')
     const appliedIds = new Set(instance.document.suggestions.filter((item) => item.status === 'applied').map((item) => item.id))
     const next = commit((document) => {
       const existing = new Set(document.suggestions.filter((item) => item.status !== 'pending').map((item) => item.id))
@@ -76,6 +76,8 @@ export async function transcribeAudioEdit(request: AudioEditTranscriptionRequest
     const version = instance.version
     const result = await getPlatform().audioEdit.transcribe(request)
     acceptAudioEditNativeResult(request.projectId, result.project, version)
+    // 付费识别结果立即写进文档文件，不等防抖
+    await flushAudioEditProject(request.projectId)
   })
 }
 export async function exportAudioEdit(request: AudioEditExportRequest): Promise<AudioEditExportResult> {
@@ -84,29 +86,13 @@ export async function exportAudioEdit(request: AudioEditExportRequest): Promise<
 export async function prepareAudioEditProcessing(projectId: string, requestId: string): Promise<void> {
   return withAudioEditProjectOperation(projectId, () => getPlatform().audioEdit.prepareProcessing(projectId, requestId))
 }
+/** 重新定位原素材：主进程确认是同一份内容后返回新的素材信息，实例接收并经文档会话保存。 */
 export async function relinkAudioEdit(projectId: string, sourcePath: string): Promise<AudioEditProjectDocument> {
   return withAudioEditProjectOperation(projectId, async (instance) => {
-    const result = await getPlatform().audioEdit.relinkSource(projectId, sourcePath)
-    acceptAudioEditNativeResult(projectId, result, instance.version)
-    return result
+    const version = instance.version
+    const source = await getPlatform().audioEdit.relinkSource(projectId, sourcePath)
+    acceptAudioEditNativeResult(projectId, { ...instance.document, source }, version)
+    await flushAudioEditProject(projectId)
+    return instance.document
   })
-}
-export async function deleteAudioEdit(projectId: string): Promise<void> {
-  await withAudioEditProjectOperation(projectId, () => getPlatform().audioEdit.deleteProject(projectId))
-  releaseAudioEditProject(projectId)
-}
-
-/**
- * 项目页重命名：与编辑器文件菜单、助手属性写入走同一条实例编辑与保存链路，不另开 IPC。
- * 项目原本没在内存里时，保存完成后释放，避免列表页的改名把项目常驻在内存。
- */
-export async function renameAudioEdit(projectId: string, name: string): Promise<void> {
-  const trimmed = name.trim()
-  if (!trimmed) return
-  const wasLoaded = Boolean(getAudioEditProjectInstance(projectId))
-  await loadAudioEditProject(projectId)
-  editAudioEditProject(projectId, (current) => ({ ...current, name: trimmed }))
-  await flushAudioEditProject(projectId)
-  if (!wasLoaded) releaseAudioEditProject(projectId)
-  logger.info('audio_edit.project.renamed', { context: { projectId } })
 }

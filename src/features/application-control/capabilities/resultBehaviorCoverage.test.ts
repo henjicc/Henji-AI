@@ -58,7 +58,7 @@ const RESULT_SCENARIOS: Record<string, Scenario[]> = {
     { file: 'src/features/documents/application/documentsReflectionResult.test.ts', title: '移动遇到重名时给出改道办法，按 keepBoth 重试后两个都保留' },
   ],
   audio_edit: [
-    { file: 'src/features/audioEdit/application/audioEditReflectionResult.test.ts', title: '通过通用 change 修改工程名并从正式口播工程状态读回' },
+    { file: 'src/features/audioEdit/application/audioEditReflectionResult.test.ts', title: '通用属性静音与界面设置保存可回读，静音不缩短成片且可以撤销' },
     { file: 'src/features/audioEdit/application/audioEditReflectionResult.test.ts', title: '通过通用 change 删除词块并让成片映射同步缩短' },
   ],
 }

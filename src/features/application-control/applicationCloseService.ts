@@ -1,4 +1,4 @@
-import { flushAllAudioEditProjects } from '@/features/audioEdit/application/audioEditProjectInstances'
+import { hasActiveAudioEditProjectWork } from '@/features/audioEdit/application/audioEditProjectInstances'
 import { runApplicationCloseGuards } from '@/core/applicationLifecycle/applicationCloseGuards'
 import { freezeApplicationWrites } from '@/core/applicationLifecycle/applicationWriteBarrier'
 import { hasActiveCanvasProjectWork, listCanvasProjectInstances } from '@/features/canvas/application/canvasProjectInstances'
@@ -15,7 +15,7 @@ export class ApplicationCloseBusyError extends Error {
 
 function assertIdle(): void {
   if (hasActiveApplicationInvocations() || hasActiveCanvasProjectWork() || hasActiveCameraStageProjectWork()
-    || hasActiveImageEditDocumentWorkV3() || hasLoadingImageEditDocumentsV3()) throw new ApplicationCloseBusyError()
+    || hasActiveImageEditDocumentWorkV3() || hasLoadingImageEditDocumentsV3() || hasActiveAudioEditProjectWork()) throw new ApplicationCloseBusyError()
 }
 
 let pending: Promise<void> | undefined
@@ -49,9 +49,8 @@ export function closeApplication(confirmClose: () => Promise<void>): Promise<voi
         else if (instance.dirty) throw new Error('图片文档尚未保存，请先为文档选择保存位置。')
       }
       for (const instance of listCanvasProjectInstances()) await flushCanvasProjectSnapshot(instance.id)
-      // 通用文档会话的第二轮保存（3.2）：关闭屏障守卫跑完到冻结之间的修改也写完；各工具不再逐个保存
+      // 通用文档会话的第二轮保存（3.2；口播 3.3 起也在其中）：关闭屏障守卫跑完到冻结之间的修改也写完；各工具不再逐个保存
       await getDocumentSessionRegistry().flushAll()
-      await flushAllAudioEditProjects()
       await confirmClose()
     } finally { unfreeze() }
   })()

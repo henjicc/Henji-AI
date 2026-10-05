@@ -159,7 +159,7 @@ describe.skipIf(!process.versions.electron)('统一迁移账本：旧库就地�
       expect(fs.existsSync(userFile)).toBe(false)
       const backupDirectory = path.join(base, 'backups')
       const result = runSchemaMigrations(db, undefined, { locationContext: () => context, backupDirectory })
-      expect(result.applied).toEqual([15])
+      expect(result.applied).toEqual([15, 16])
       expect(fs.readdirSync(backupDirectory)).toEqual([expect.stringMatching(/-before-v15\.db$/)])
       expect(db.prepare("SELECT name FROM sqlite_master WHERE name LIKE '%camera_stage_projects%'").all()).toEqual([])
       expect(db.prepare('SELECT * FROM camera_stage_render_tasks').all()).toEqual([])
@@ -167,6 +167,49 @@ describe.skipIf(!process.versions.electron)('统一迁移账本：旧库就地�
       try {
         expect(copy.prepare('SELECT name FROM camera_stage_projects').all()).toEqual([{ name: '旧镜头' }])
       } finally { copy.close() }
+    } finally { db.close() }
+  })
+
+  it('口播退役（第 16 项）：已在第 15 项的库先备份再删旧工程表，任务表重建为按文档 ID 归属', () => {
+    const file = path.join(base, 'henji-v15.db')
+    const db = new Database(file)
+    try {
+      seedLegacy(db)
+      runSchemaMigrations(db, SCHEMA_MIGRATIONS.slice(0, 15), { locationContext: () => context, backupDirectory: path.join(base, 'backups-15') })
+      // 2.3 之前每次启动由 initializeLegacyProjectTables 建的两张旧表（带级联外键）。
+      db.exec(`
+        CREATE TABLE audio_edit_projects (id TEXT PRIMARY KEY, name TEXT NOT NULL, document_json TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
+        CREATE INDEX idx_audio_edit_projects_updated_at ON audio_edit_projects(updated_at DESC);
+        CREATE TABLE audio_edit_tasks (request_id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES audio_edit_projects(id) ON DELETE CASCADE,
+          kind TEXT NOT NULL, state TEXT NOT NULL, provider_task_id TEXT, input_digest TEXT NOT NULL, result_json TEXT, error_message TEXT,
+          created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
+        CREATE INDEX idx_audio_edit_tasks_project ON audio_edit_tasks(project_id, updated_at DESC);
+      `)
+      db.prepare('INSERT INTO audio_edit_projects VALUES (?,?,?,?,?)').run('voice', '旧口播', '{}', 1, 1)
+      db.prepare("INSERT INTO audio_edit_tasks VALUES ('t1','voice','transcription','completed',NULL,'digest',NULL,NULL,1,1)").run()
+      const backupDirectory = path.join(base, 'backups')
+      const result = runSchemaMigrations(db, undefined, { locationContext: () => context, backupDirectory })
+      expect(result.applied).toEqual([16])
+      expect(fs.readdirSync(backupDirectory)).toEqual([expect.stringMatching(/-before-v16\.db$/)])
+      expect(db.prepare("SELECT name FROM sqlite_master WHERE name LIKE '%audio_edit_projects%'").all()).toEqual([])
+      expect(columns(db, 'audio_edit_tasks')).toContain('document_id')
+      expect(columns(db, 'audio_edit_tasks')).not.toContain('project_id')
+      expect(db.prepare('SELECT * FROM audio_edit_tasks').all()).toEqual([])
+      // 新表不再引用工程表：按文档 ID 直接写入
+      db.prepare("INSERT INTO audio_edit_tasks (request_id,document_id,kind,state,input_digest,created_at,updated_at) VALUES ('t2','doc-1','silence','queued','d',1,1)").run()
+      const copy = new Database(path.join(backupDirectory, fs.readdirSync(backupDirectory)[0]!), { readonly: true })
+      try {
+        expect(copy.prepare('SELECT name FROM audio_edit_projects').all()).toEqual([{ name: '旧口播' }])
+      } finally { copy.close() }
+    } finally { db.close() }
+  })
+
+  it('全新库：口播任务表由账本建出，按文档 ID 归属', () => {
+    const db = new Database(':memory:')
+    try {
+      initializeSchema(db)
+      expect(columns(db, 'audio_edit_tasks')).toContain('document_id')
+      expect(db.prepare("SELECT name FROM sqlite_master WHERE name = 'audio_edit_projects'").get()).toBeUndefined()
     } finally { db.close() }
   })
 

@@ -7,7 +7,7 @@ vi.mock('../logging', () => ({ createMainLogger: () => ({ info: vi.fn(), error: 
 vi.mock('../db', () => ({ getDb: vi.fn() }))
 vi.mock('../appPaths', () => ({ getProgramStoreDir: () => `${os.tmpdir()}/AudioEdit` }))
 vi.mock('../media/shared', () => ({ resolveLocalMediaPath: async (value: string) => value }))
-vi.mock('./project-store', () => ({ requireAudioEditProject: vi.fn(), saveAudioEditProject: vi.fn() }))
+vi.mock('./project-store', () => ({ requireAudioEditProject: vi.fn() }))
 import { identifyAudioEditSource, verifyAudioEditSource, audioEditCacheDirectory } from './media'
 
 let directory: string | undefined

@@ -7,7 +7,7 @@ import { runAudioEditProcess } from './process'
 import { runAudioEditTask } from './task-store'
 
 export async function detectAudioEditSilence(request: AudioEditSilenceRequest): Promise<{ revision: number; suggestions: AudioEditSuggestion[] }> {
-  const project = requireAudioEditProject(request.projectId)
+  const project = await requireAudioEditProject(request.projectId)
   await verifyAudioEditSource(project)
   const settings = request.settings
   if (!(settings.noiseDb >= -80 && settings.noiseDb <= -10 && settings.silenceThresholdMs >= 100 && settings.silenceThresholdMs <= 10000

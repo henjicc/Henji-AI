@@ -6,6 +6,7 @@ const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operatio
 const { observeWorkers, workerSnapshot, waitReleased } = require('./uiInspectionSceneVideoEditLayout.cjs')
 const { dialogs, presented, png, pixelDifference, mediaProbe, trackBanks } = require('./uiInspectionSceneVideoEditMonitor.cjs')
 const { createPlaybackFixture, seedCameraStageDocument } = require('./uiInspectionCameraStagePlayback.cjs')
+const { createAudioEditDocument, removeAudioEditDocument } = require('./audioEditDocumentFixture.cjs')
 const { leaveVideoEditProject, openVideoEditProjectCard, readVideoEditFile, seedVideoEditProject } = require('./uiInspectionVideoEditDocuments.cjs')
 const button = (page, name) => page.getByRole('button', { name, exact: true })
 const normalized = value => value.replaceAll('/', '\\').toLowerCase()
@@ -181,17 +182,11 @@ function createVideoEditCreativeResultsScene(context) {
         }, sceneStart)
 
         phase('voice-over')
-        const created = await page.evaluate(async source => window.henjiNative.audio.createEditProject({ sourcePath: source, name: '回填口播' }), voice)
+        // 3.3：口播是 .henji-audio 文档，经正式接口造数据（audioEditDocumentFixture.cjs）
+        const created = await createAudioEditDocument(page, { sourcePath: voice, name: '回填口播', granularity: 'word', transcriptRows: [
+          ['cut', '删去', 0, 1, false], ['keep', '保留字幕', 1.5, 2.5, true],
+        ] })
         audioProjectId = created.id
-        const seeded = await page.evaluate(async id => {
-          const project = await window.henjiNative.audio.getEditProject(id)
-          project.transcript = [
-            { id: 'cut', text: '删去', startFrame: 0, endFrame: 48000, included: false, locked: false, granularity: 'word' },
-            { id: 'keep', text: '保留字幕', startFrame: 72000, endFrame: 120000, included: true, locked: false, granularity: 'word' },
-          ]
-          return window.henjiNative.audio.saveEditProject(project)
-        }, audioProjectId)
-        assert.equal(seeded.transcript.length, 2)
         await playhead(60)
         await context.setupToolbox(page); await context.clickNamedButton(page, /^(口播剪辑)/)
         await page.getByRole('button', { name: /回填口播/ }).first().click()
@@ -258,7 +253,7 @@ function createVideoEditCreativeResultsScene(context) {
       } catch (error) { evidence.failed = { phase: evidence.currentPhase, message: String(error.message ?? error), stack: error.stack }; store(); await shot('creative-results-failed').catch(() => {}); throw error }
       finally {
         await client?.close().catch(() => {}); await disableMcp(page).catch(() => {})
-        if (audioProjectId) await page.evaluate(id => window.henjiNative.audio.deleteEditProject(id), audioProjectId).catch(() => {})
+        await removeAudioEditDocument(page, audioProjectId)
         if (await button(page, '关闭项目').isVisible().catch(() => false)) await button(page, '关闭项目').click().catch(() => {})
         if (observed) { await waitReleased(page).catch(error => { evidence.completed = false; evidence.releaseFailure = String(error) }); evidence.resources = await workerSnapshot(page).catch(() => evidence.resources) }
         await page.evaluate(() => { window.__videoLayoutObservers?.forEach(observer => observer.disconnect()); if (window.__videoLayoutNativeWorker) window.Worker = window.__videoLayoutNativeWorker }).catch(() => {}); store()

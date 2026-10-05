@@ -1,13 +1,23 @@
 import { AUDIO_EDIT_APPLICATION_CAPABILITIES, AUDIO_EDIT_VERIFIED_EDIT_OPERATIONS, audioEditOperationInput } from '@/core/application-control/domains/audioEdit/audioEditApplicationCapabilities'
 import { audioEditContentKey } from '@/core/audioEdit/baseline'
+import { audioEditProjectFromDocument } from '@/core/audioEdit/documentContent'
 import type { ApplicationCapabilityHandlerRegistrar } from '@/features/application-control/capabilities/handlerTypes'
 import { resolveConfiguredDestination } from '@/features/canvas/application/canvasDownloadService'
 import { getPlatform } from '@/platform/runtime'
 import { join } from '@/platform/desktopApi'
-import { loadAudioEditProject, flushAudioEditProject } from './audioEditProjectInstances'
+import { getDocumentOperations, registerDocumentOpener, registerDocumentReleaser } from '@/features/documents/documentOperations'
+import { openApplicationSurface } from '@/features/navigation/application/surfaceCapabilityService'
+import { loadAudioEditProject, flushAudioEditProject, releaseAudioEditProject } from './audioEditProjectInstances'
+import { openAudioEditDocument } from './audioEditDocumentService'
 import { compressAudioEditSilence, cleanProjectAudioEditFillers, transcribeAudioEdit, exportAudioEdit, prepareAudioEditProcessing, quickProcessAudioEdit, undoAllAudioEditChanges, formatProjectAudioEditCaptions } from './audioEditApplicationService'
 
 export function registerAudioEditCapabilityHandlers(registrar: ApplicationCapabilityHandlerRegistrar): void {
+  // 口播文档的通用打开与后台释放（3.3）：列表、新建、改名、移动、副本、回收站走通用文档能力
+  // （list_documents / open_document 等），这里只登记“打开到哪里”和“后台持有的实例怎么释放”。
+  registerDocumentOpener('audio_edit', async (document) => {
+    if (await openAudioEditDocument({ id: document.id, path: document.path })) openApplicationSurface('tool.audio_edit')
+  })
+  registerDocumentReleaser('audio_edit', releaseAudioEditProject)
   for (const definition of AUDIO_EDIT_APPLICATION_CAPABILITIES) registrar.registerHandler(definition.id, async (raw, context) => {
     const input = audioEditOperationInput.parse(raw)
     context.signal.throwIfAborted()
@@ -46,8 +56,10 @@ export function registerAudioEditCapabilityHandlers(registrar: ApplicationCapabi
         }
       }
       if (AUDIO_EDIT_VERIFIED_EDIT_OPERATIONS.has(definition.id)) {
-        const persisted = await api.getProject(id)
-        if (!persisted || instance.dirty || audioEditContentKey(persisted) !== audioEditContentKey(instance.document)) throw new Error('修改已提交，但回读时发现工程有新变化。请重新读取工程，不要重复提交原修改。')
+        // 从文档文件回读核对（3.3：口播是 .henji-audio 文档）
+        const read = await getDocumentOperations().readDocument({ id })
+        const persisted = audioEditProjectFromDocument(read.meta, read.content).project
+        if (instance.dirty || audioEditContentKey(persisted) !== audioEditContentKey(instance.document)) throw new Error('修改已提交，但回读时发现口播有新变化。请重新读取口播，不要重复提交原修改。')
         result.verified = true
       }
       return result

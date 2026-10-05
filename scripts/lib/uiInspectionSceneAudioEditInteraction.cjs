@@ -2,9 +2,10 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
+const { createAudioEditDocument, readAudioEditDocument, removeAudioEditDocument, waitForAudioEditContent } = require('./audioEditDocumentFixture.cjs')
 
 function createAudioEditInteractionScene({ setupToolbox, clickNamedButton }) {
-  /** 本场景建的工程与临时音频；截图后由 cleanup 撤掉，后续场景（如工程列表空态）不受影响。 */
+  /** 本场景建的口播与临时音频；截图后由 cleanup 撤掉，后续场景（如口播列表空态）不受影响。 */
   let fixture = null
   return {
     id: 'toolbox-audio-edit-interaction', surface: '工具箱', name: '口播剪辑-直接剪辑', writesUserData: true,
@@ -13,13 +14,13 @@ function createAudioEditInteractionScene({ setupToolbox, clickNamedButton }) {
       fixture = null
       if (!current) return
       try {
-        // 先经正式入口离开编辑器（会保存），再删工程，避免删掉仍在编辑的工程。
-        const leave = page.getByRole('button', { name: '返回项目列表', exact: true })
+        // 先经正式入口离开编辑器（会保存），再删口播文件，避免删掉仍在编辑的口播。
+        const leave = page.getByRole('button', { name: '返回口播列表', exact: true })
         if (await leave.isVisible().catch(() => false)) {
           await leave.click()
           await page.getByRole('button', { name: '返回工具', exact: true }).waitFor({ timeout: 10000 })
         }
-        if (current.id) await page.evaluate((id) => window.henjiNative.audio.deleteEditProject(id), current.id)
+        await removeAudioEditDocument(page, current.id)
       } finally {
         fs.rmSync(current.directory, { recursive: true, force: true })
       }
@@ -41,12 +42,9 @@ function createAudioEditInteractionScene({ setupToolbox, clickNamedButton }) {
         wav.writeInt16LE(Math.round(Math.sin(t * 440 * Math.PI * 2) * 32767 * gain), 44 + frame * 2)
       }
       fs.writeFileSync(sourcePath, wav)
-      const id = await page.evaluate(async ({ sourcePath, rate }) => {
-        const project = await window.henjiNative.audio.createEditProject({ sourcePath, name: '口播直接剪辑验收' })
-        project.transcript = [[0, 1, '锁定的开场。', true], [1, 4, '在波形上拖动，直接选择需要调整的声音。', false], [6, 8, '嗯', false], [10, 16, '参数可以按需展开，处理结果可以随时撤销。', false]].map(([start, end, text, locked], index) => ({ id: String(index), text, startFrame: start * rate, endFrame: end * rate, included: true, locked, granularity: index === 2 ? 'word' : 'segment' }))
-        await window.henjiNative.audio.saveEditProject(project)
-        return project.id
-      }, { sourcePath, rate })
+      // 3.3：口播是 .henji-audio 文档，经正式接口造数据（audioEditDocumentFixture.cjs）
+      const transcript = [[0, 1, '锁定的开场。', true], [1, 4, '在波形上拖动，直接选择需要调整的声音。', false], [6, 8, '嗯', false], [10, 16, '参数可以按需展开，处理结果可以随时撤销。', false]].map(([start, end, text, locked], index) => ({ id: String(index), text, startFrame: start * rate, endFrame: end * rate, included: true, locked, granularity: index === 2 ? 'word' : 'segment' }))
+      const { id } = await createAudioEditDocument(page, { sourcePath, name: '口播直接剪辑验收', patch: { transcript } })
       fixture.id = id
       await setupToolbox(page)
       await clickNamedButton(page, /^(口播剪辑)/)
@@ -82,7 +80,7 @@ function createAudioEditInteractionScene({ setupToolbox, clickNamedButton }) {
         const bounds = await waveform.boundingBox()
         await page.mouse.click(bounds.x + bounds.width * seconds / 16, bounds.y + bounds.height * 0.65)
       }
-      const waitCuts = async (count) => page.waitForFunction(async ({ id, count }) => ((await window.henjiNative.audio.getEditProject(id)).cuts ?? []).filter((cut) => cut.enabled).length === count, { id, count })
+      const waitCuts = async (count) => waitForAudioEditContent(page, id, (content) => (content.cuts ?? []).filter((cut) => cut.enabled).length === count, { message: `已启用的区间应为 ${count} 个` })
       await select(2, 3)
       await page.keyboard.press('m')
       await waitCuts(1)
@@ -125,23 +123,22 @@ function createAudioEditInteractionScene({ setupToolbox, clickNamedButton }) {
       const threshold = page.getByRole('slider', { name: '静音阈值', exact: true })
       await threshold.focus()
       for (let step = 0; step < 15; step++) await page.keyboard.press('ArrowRight')
-      await page.waitForFunction(async (id) => (await window.henjiNative.audio.getEditProject(id)).batchSettings?.noiseDb === -25, id)
+      await waitForAudioEditContent(page, id, (content) => content.batchSettings?.noiseDb === -25)
       await waitPreview()
       assert.ok(await page.locator('[data-audio-overlay="preview"]').count() >= 2, '提高阈值应增加低声区间预览')
-      assert.equal((await page.evaluate((id) => window.henjiNative.audio.getEditProject(id), id)).cuts.length, 0, '预览不能提交删除')
+      assert.equal((await readAudioEditDocument(page, id)).content.cuts.length, 0, '预览不能提交删除')
       await page.getByRole('button', { name: '快速处理', exact: true }).click()
       await page.getByText(/已处理停顿和所选语气词，缩短/).waitFor()
-      await page.waitForFunction(async (id) => !(await window.henjiNative.audio.getEditProject(id)).transcript[2].included, id)
-      const processed = await page.evaluate((id) => window.henjiNative.audio.getEditProject(id), id)
+      const processed = await waitForAudioEditContent(page, id, (content) => !content.transcript[2].included)
       assert.ok(processed.cuts.length > 0, '快速处理应同时提交停顿裁切')
       await page.getByRole('button', { name: '撤销；长按撤销所有修改', exact: true }).click(); await waitCuts(0)
-      await page.waitForFunction(async (id) => (await window.henjiNative.audio.getEditProject(id)).transcript[2].included, id)
+      await waitForAudioEditContent(page, id, (content) => content.transcript[2].included)
       await page.getByText('自定义处理参数', { exact: true }).click()
       await page.getByTitle('界面设置', { exact: true }).click()
       const padding = page.getByRole('slider', { name: '文字左右留白', exact: true })
       await padding.focus(); await page.keyboard.press('Home')
       for (let step = 0; step < 8; step++) await page.keyboard.press('ArrowRight')
-      await page.waitForFunction(async (id) => (await window.henjiNative.audio.getEditProject(id)).viewSettings?.sidePadding === 80, id)
+      await waitForAudioEditContent(page, id, (content) => content.viewSettings?.sidePadding === 80)
       const textSize = page.getByRole('slider', { name: '文字大小', exact: true })
       await textSize.focus(); await page.keyboard.press('End')
       for (let step = 0; step < 8; step++) await page.keyboard.press('ArrowLeft')
@@ -180,7 +177,7 @@ function createAudioEditInteractionScene({ setupToolbox, clickNamedButton }) {
       assert.ok(Number(await waveform.getAttribute('data-view-start')) > viewStart, '中键平移必须保留')
       await page.getByRole('button', { name: '显示全部', exact: true }).click()
       await waitPreview()
-      // 标准截图需要工程保持打开；工程与临时音频在截图后由 cleanup 删除。
+      // 标准截图需要口播保持打开；口播与临时音频在截图后由 cleanup 删除。
     },
   }
 }

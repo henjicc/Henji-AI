@@ -1,11 +1,12 @@
-import { editAudioEditProject, loadAudioEditProject, undoAudioEditProject, flushAudioEditProject, releaseAudioEditProject } from './audioEditProjectInstances'
 // @vitest-environment jsdom
+import { editAudioEditProject, loadAudioEditProject, undoAudioEditProject, flushAudioEditProject, resetAudioEditProjectInstancesForTests } from './audioEditProjectInstances'
 import { afterEach, beforeEach, expect, it } from 'vitest'
 
 import { editedDurationFrames, buildAudioEditTimeline, buildProjectAudioEditTimeline } from '@/core/audioEdit/timeline'
 import type { AudioEditProjectDocument } from '@/core/audioEdit/types'
 import { createApplicationHarness } from '@/tests/applicationHarness'
 import {
+  harnessDocumentStore,
   installHarnessNativeStorage,
   registerHarnessAudioEditProject,
   uninstallHarnessNativeStorage,
@@ -28,14 +29,17 @@ beforeEach(() => {
   registerHarnessAudioEditProject(fixture())
 })
 
-afterEach(() => { releaseAudioEditProject('audio-result'); uninstallHarnessNativeStorage() })
+afterEach(async () => { await resetAudioEditProjectInstancesForTests(); uninstallHarnessNativeStorage() })
 
-it('通过通用 change 修改工程名并从正式口播工程状态读回', async () => {
+it('口播名就是文件名：内容实体的名称只读，读到的是文档名（改名走 documents.document.name）', async () => {
   const app = createApplicationHarness()
   try {
     const ref = { kind: 'audio_edit.project', id: 'audio-result' }
-    expect((await app.change(ref, { 'audio_edit.project.name': '新工程名' })).ok).toBe(true)
-    expect((await app.read(ref, ['audio_edit.project.name'])).properties).toMatchObject({ 'audio_edit.project.name': '新工程名' })
+    expect((await app.read(ref, ['audio_edit.project.name'])).properties).toMatchObject({ 'audio_edit.project.name': '原工程' })
+    const result = await app.change(ref, { 'audio_edit.project.name': '新工程名' })
+    expect(result.ok).toBe(false)
+    expect(JSON.stringify(result)).toContain('documents.document.name')
+    expect(harnessDocumentStore().stored('audio-result')?.meta.name).toBe('原工程')
   } finally {
     app.dispose()
   }
@@ -69,9 +73,10 @@ it('通过通用 change 删除词块并让成片映射同步缩短', async () =>
   try {
     const blockRef = { kind: 'audio_edit.transcript_block', id: 'audio-result:first' }
     expect((await app.change(blockRef, { 'audio_edit.transcript_block.included': false })).ok).toBe(true)
-    const project = await window.henjiNative.audio.getEditProject('audio-result')
-    expect(project?.transcript[0].included).toBe(false)
-    expect(editedDurationFrames(buildAudioEditTimeline(project!.source.durationFrames, project!.transcript))).toBe(48_000)
+    // 从文档文件回读（3.3：口播是 .henji-audio 文档）
+    const project = harnessDocumentStore().stored('audio-result')?.content as AudioEditProjectDocument
+    expect(project.transcript[0].included).toBe(false)
+    expect(editedDurationFrames(buildAudioEditTimeline(project.source.durationFrames, project.transcript))).toBe(48_000)
   } finally {
     app.dispose()
   }
@@ -83,10 +88,9 @@ it('助手修改与手工历史共存，撤销助手操作不会抹去之前的�
     const instance = await loadAudioEditProject('audio-result')
     editAudioEditProject('audio-result', (document) => ({ ...document, referenceScript: '手工参考稿' }))
     await flushAudioEditProject('audio-result')
-    expect((await app.change({ kind: 'audio_edit.project', id: 'audio-result' }, { 'audio_edit.project.name': '助手改名', 'audio_edit.project.cuts': [{ id: 'manual', startFrame: 1000, endFrame: 3000, reason: 'manual', enabled: true }] })).ok).toBe(true)
+    expect((await app.change({ kind: 'audio_edit.project', id: 'audio-result' }, { 'audio_edit.project.reference_script': '助手参考稿', 'audio_edit.project.cuts': [{ id: 'manual', startFrame: 1000, endFrame: 3000, reason: 'manual', enabled: true }] })).ok).toBe(true)
     expect(instance.past).toHaveLength(2)
     undoAudioEditProject('audio-result')
-    expect(instance.document.name).toBe('原工程')
     expect(instance.document.cuts).toBeUndefined()
     expect(instance.document.referenceScript).toBe('手工参考稿')
     await flushAudioEditProject('audio-result')
