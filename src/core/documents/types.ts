@@ -272,6 +272,20 @@ export interface DocumentCoverResult {
   coverPath: string | null
 }
 
+/**
+ * 文档会话状态（3.4）：撤销记录、视口这类不写进文档的会话状态，按文档 ID 存在程序目录，随时可丢。
+ * key 由工具自己约定（如 `canvas.history`），文档移到回收站、删除或从列表移除时一并清掉。
+ */
+export interface DocumentSessionStateKey {
+  docId: string
+  key: string
+}
+
+export interface WriteDocumentSessionStateRequest extends DocumentSessionStateKey {
+  /** 任意可 JSON 序列化的值；null 表示清除。 */
+  value: unknown
+}
+
 export interface DocumentIndexScanReport {
   startedAt: number
   durationMs: number

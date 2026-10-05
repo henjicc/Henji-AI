@@ -49,12 +49,9 @@ describe('assetGroupApplicationService media import', () => {
     useSettingsStore.setState({ useUploadFilenameAsNodeTitle: true });
     const project = { ...emptyProject(), nodes: [group], nodeCount: 1 };
     setCanvasTestProjectState({
-      projects: [project],
       currentProjectId: projectId,
       currentProject: project,
-      isHydrated: true,
       isOpeningProject: false,
-      saveCurrentProject: vi.fn(),
     });
   });
 
@@ -135,7 +132,3 @@ describe('assetGroupApplicationService media import', () => {
 });
 
 // 本文件验证领域变换；仅替换最终存储边界，保存完成/拒绝由专门结果测试覆盖。
-vi.mock('@/commands/projectState', async (importOriginal) => ({
-  ...await importOriginal<typeof import('@/commands/projectState')>(),
-  upsertProjectRecord: vi.fn(async () => undefined),
-}))

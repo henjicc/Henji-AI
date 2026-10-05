@@ -9,6 +9,7 @@ import {
   type DocumentContainerRef,
   type DocumentLink,
   type DocumentListQuery,
+  type DocumentSessionStateKey,
   type DocumentTarget,
   type DuplicateDocumentRequest,
   type FinalizeDocumentRequest,
@@ -22,6 +23,7 @@ import {
   type SaveDocumentCoverRequest,
   type SaveDocumentRequest,
   type SetProjectMainDocumentRequest,
+  type WriteDocumentSessionStateRequest,
 } from './types'
 
 /*
@@ -156,4 +158,18 @@ export const importFileRequestSchema: z.ZodType<ImportFileRequest> = z.object({
   container: containerRefSchema,
   sourcePath: pathSchema,
   folder: z.enum(['generated', 'materials']),
+}).strict()
+
+/** 会话状态的键：小写字母、数字与 . _ - ，由工具自己约定（如 `canvas.history`）。 */
+const sessionStateKeySchema = z.string().regex(/^[a-z0-9][a-z0-9._-]{0,63}$/, '会话状态键无效。')
+
+export const documentSessionStateKeySchema: z.ZodType<DocumentSessionStateKey> = z.object({
+  docId: documentIdSchema,
+  key: sessionStateKeySchema,
+}).strict()
+
+export const writeDocumentSessionStateRequestSchema: z.ZodType<WriteDocumentSessionStateRequest> = z.object({
+  docId: documentIdSchema,
+  key: sessionStateKeySchema,
+  value: z.unknown(),
 }).strict()

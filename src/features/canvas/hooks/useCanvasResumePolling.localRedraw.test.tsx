@@ -5,13 +5,12 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { loadRealModelsIntoRegistry } from '@/tests/loadRealModels';
 
 import { useCanvasGenerationProgressStore } from '@/stores/canvasGenerationProgressStore';
-import { setCanvasTestProjectState } from '@/tests/canvasProjectFixture';
+import { setCanvasTestProjectState, createCanvasTestProject, readCanvasTestProject } from '@/tests/canvasProjectFixture';
 import { useCanvasStore } from '@/stores/canvasStore';
-import { flushCanvasProjectSnapshot, useProjectStore, type Project } from '@/stores/projectStore';
+import { confirmCanvasPersistence } from '@/features/canvas/application/canvasPersistenceService';
+import { useProjectStore, type Project } from '@/stores/projectStore';
 
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage';
-import { getProjectRecord, upsertProjectRecord } from '@/commands/projectState';
-import { fromProjectRecord, toProjectRecord } from '@/stores/projectStoreSerialization';
 
 import { CANVAS_NODE_TYPES, type CanvasNode } from '../domain/canvasNodes';
 import { clearActiveCanvasGenerationTasksForTest } from '../generation/activeGenerationTasks';
@@ -107,10 +106,8 @@ function setResumeProject(context: DynamicValue): { source: CanvasNode; result: 
   };
   useCanvasStore.getState().setCanvasData(nodes, edges, project.history);
   setCanvasTestProjectState({
-    projects: [project],
     currentProjectId: project.id,
     currentProject: project,
-    isHydrated: true,
     isOpeningProject: false,
   });
   return { source, result };
@@ -121,7 +118,7 @@ describe('useCanvasResumePolling 局部重绘恢复', () => {
   afterEach(async () => {
     cleanup();
     const projectId = useProjectStore.getState().currentProjectId;
-    if (projectId) await flushCanvasProjectSnapshot(projectId);
+    if (projectId) await confirmCanvasPersistence(projectId);
     uninstallHarnessNativeStorage();
   });
 
@@ -176,9 +173,9 @@ describe('useCanvasResumePolling 局部重绘恢复', () => {
     });
 
     let otherProject: string | null = null;
-    await upsertProjectRecord(toProjectRecord(useProjectStore.getState().currentProject!));
+    await confirmCanvasPersistence(useProjectStore.getState().currentProjectId!);
     if (mode === 'start-background') {
-      otherProject = await useProjectStore.getState().createProject('后台开始局部重绘续查');
+      otherProject = await createCanvasTestProject('后台开始局部重绘续查');
       expect(await resumeCanvasGenerationInProject('local-redraw-resume-project', new Set([result.id]))).toBe(1);
     }
     const direct = mode === 'direct-background' ? commitLocalRedrawGeneration({
@@ -191,7 +188,7 @@ describe('useCanvasResumePolling 局部重绘恢复', () => {
       await waitFor(() => expect(generationMocks.composeLocalRedraw).toHaveBeenCalledOnce());
       if (mode === 'background' || mode === 'cancel' || mode === 'direct-background') {
         hook?.unmount();
-        otherProject = await useProjectStore.getState().createProject('合成中切换项目');
+        otherProject = await createCanvasTestProject('合成中切换项目');
       }
       if (mode === 'cancel') getCanvasResumeControllers('local-redraw-record').forEach(controller => controller.abort(new Error('停止合成')));
     } finally { release(); }
@@ -199,8 +196,8 @@ describe('useCanvasResumePolling 局部重绘恢复', () => {
 
     if (mode !== 'foreground') {
       await waitFor(async () => {
-        const saved = await getProjectRecord('local-redraw-resume-project');
-        const data = fromProjectRecord(saved!).nodes.find(node => node.id === result.id)?.data;
+        const saved = readCanvasTestProject('local-redraw-resume-project');
+        const data = saved!.nodes.find(node => node.id === result.id)?.data;
         expect(data).toMatchObject(mode === 'cancel' ? { generationCancelled: true, isGenerating: false, serverTaskId: 'local-redraw-task' }
           : { imageUrl: '/managed/local-redraw-composite.png', isGenerating: false, generationOutputCommitId: `generation-output:${result.id}` });
       });
@@ -236,9 +233,9 @@ describe('useCanvasResumePolling 局部重绘恢复', () => {
     await waitFor(() => expect(platformMocks.releaseManagedGenerationMedia).toHaveBeenCalledWith([
       '/data/Media/generated-crop.png',
     ]));
-    const saved = await getProjectRecord('local-redraw-resume-project');
+    const saved = readCanvasTestProject('local-redraw-resume-project');
     expect(saved).not.toBeNull();
-    expect(fromProjectRecord(saved!).nodes.find((node) => node.id === result.id)?.data)
+    expect(saved!.nodes.find((node) => node.id === result.id)?.data)
       .toMatchObject({ imageUrl: '/managed/local-redraw-composite.png',
         generationSourceNodeId: source.id, generationOutputCommitId: `generation-output:${result.id}` });
     expect(useProjectStore.getState().persistenceError).toBeNull();

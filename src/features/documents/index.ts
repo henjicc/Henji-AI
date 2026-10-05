@@ -9,6 +9,7 @@ export {
   getDocumentSessionRegistry,
   parentFolderOf,
   type DocumentSessionRegistryOptions,
+  type LeaveDocumentOptions,
   type LeaveProjectRequest,
   type LeftoverDraftQuery,
   type OpenDocumentOptions,

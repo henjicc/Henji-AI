@@ -1,4 +1,3 @@
-import { pauseCanvasProjectPersistence, persistBackgroundCanvasProject } from '@/stores/projectStore'
 import { findCanvasProjectInstance, getCanvasProjectInstance, leaseCanvasProject } from './canvasProjectInstances'
 import { CanvasPersistenceError, type CanvasTransactionRuntime } from './canvasPersistenceService'
 
@@ -16,9 +15,10 @@ export async function acquireCanvasProjectRuntime(projectId: string): Promise<{ 
     runtime: {
       store: instance.store,
       isCurrent: () => findCanvasProjectInstance(projectId) === instance,
-      pause: () => pauseCanvasProjectPersistence(projectId),
+      pause: () => instance.pausePersistence(),
+      // 后台操作与界面编辑共用同一个文档会话：保存确认 = 会话写完当前全部修改
       persist: async () => {
-        try { await persistBackgroundCanvasProject(instance.snapshot()) }
+        try { await instance.session.flush() }
         catch (error) { throw new CanvasPersistenceError(projectId, error) }
       },
     },

@@ -24,24 +24,53 @@ import {
   type ProviderConnectionTestResultDto,
 } from '@henjicc/ai-sdk'
 import { sdkRuntimeContext } from '../services/ai-runtime/sdk-runtime'
+import { containerRefSchema } from '../../../src/core/documents/requests'
+import type { DocumentContainerRef } from '../../../src/core/documents/types'
+import { resolveContainerGeneratedFolder } from '../services/documents/runtime'
+import { createMainLogger } from '../services/logging'
 import { parseRecord, parseStringField, parseVoid, registerIpcHandler } from './registry'
 
-function parseGenerateRequest(input: unknown): AiGenerateRequestDto {
+const logger = createMainLogger('main.ipc.ai_runtime')
+
+/** 宿主自己的请求字段：结果放进哪个容器的“生成结果”（不进 SDK 请求）。 */
+interface HostOutput { outputContainer?: DocumentContainerRef }
+
+function parseOutputContainer(record: Record<string, unknown>): HostOutput {
+  return record.outputContainer === undefined ? {} : { outputContainer: containerRefSchema.parse(record.outputContainer) }
+}
+
+function parseGenerateRequest(input: unknown): AiGenerateRequestDto & HostOutput {
   const record = parseRecord(input)
   return {
     modelId: readString(record, 'modelId'),
     params: parseJsonObject(record.params ?? {}, 'params'),
     requestId: readOptionalString(record, 'requestId'),
+    ...parseOutputContainer(record),
   }
 }
 
-function parseContinuePollingRequest(input: unknown): AiContinuePollingRequestDto {
+function parseContinuePollingRequest(input: unknown): AiContinuePollingRequestDto & HostOutput {
   const record = parseRecord(input)
   return {
     modelId: readString(record, 'modelId'),
     taskId: readString(record, 'taskId'),
     params: record.params === undefined ? undefined : parseJsonObject(record.params, 'params'),
     requestId: readOptionalString(record, 'requestId'),
+    ...parseOutputContainer(record),
+  }
+}
+
+/**
+ * 画布里生成的结果放进画布所在容器的“生成结果”（3.4，独立画布 = 作品目录，项目里 = 项目）。
+ * 找不到项目时退回作品目录“生成结果”，记 warn，不让一次生成因为位置失败。
+ */
+async function resolveOutput(container: DocumentContainerRef | undefined, requestId: string | undefined): Promise<{ outputDirectory?: string }> {
+  if (!container || container.kind === 'user') return {}
+  try {
+    return { outputDirectory: await resolveContainerGeneratedFolder(container) }
+  } catch (error) {
+    logger.warn('生成结果的目标项目找不到，改放作品目录“生成结果”', { event: 'ai_runtime.output.resolve_failed', requestId, error })
+    return {}
   }
 }
 
@@ -81,12 +110,12 @@ export function registerAiRuntimeIpc(): void {
     (modelId) => listTtsVoices(modelId, sdkRuntimeContext)
   )
 
-  registerIpcHandler<AiGenerateRequestDto, AiGenerateResponseDto>('ai:generate', parseGenerateRequest, async (request) => {
-    return await generate(request)
+  registerIpcHandler<AiGenerateRequestDto & HostOutput, AiGenerateResponseDto>('ai:generate', parseGenerateRequest, async ({ outputContainer, ...request }) => {
+    return await generate(request, await resolveOutput(outputContainer, request.requestId))
   })
 
-  registerIpcHandler<AiContinuePollingRequestDto, AiGenerateResponseDto>('ai:continuePolling', parseContinuePollingRequest, async (request) => {
-    return await continuePolling(request)
+  registerIpcHandler<AiContinuePollingRequestDto & HostOutput, AiGenerateResponseDto>('ai:continuePolling', parseContinuePollingRequest, async ({ outputContainer, ...request }) => {
+    return await continuePolling(request, await resolveOutput(outputContainer, request.requestId))
   })
 
   registerIpcHandler<string, void>('ai:cancelTask', (input) => parseStringField(input, 'taskId'), (taskId) => {

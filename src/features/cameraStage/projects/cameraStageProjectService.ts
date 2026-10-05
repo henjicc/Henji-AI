@@ -1,4 +1,5 @@
 import { createLogger } from '@/core/logging'
+import type { DocumentContainerRef } from '@/core/documents/types'
 import { isDocumentServiceError } from '@/features/documents/documentErrors'
 import { getDocumentOperations } from '@/features/documents/documentOperations'
 import type { DocumentLeaveOutcome } from '@/features/documents/documentSessionTypes'
@@ -98,16 +99,17 @@ export async function loadProjectIntoScene(projectId: string, options: { updateS
 /**
  * 画布节点内嵌的镜头参考：直接新建已命名（非草稿）的文档并打开实例，不切换当前界面。
  * 名称沿用节点名；同一文件夹已有同名时改用自动名（未命名镜头参考 N）。
+ * 建在画布所在的容器里（3.4：项目里的画布 → 同一个项目；独立画布 → 作品目录“镜头参考”）。
  */
-export async function createNamedCameraStageDocument(name: string): Promise<SavedProjectInfo> {
+export async function createNamedCameraStageDocument(name: string, container: DocumentContainerRef = { kind: 'user' }): Promise<SavedProjectInfo> {
   const registry = cameraStageDocumentRegistry()
   const trimmed = name.trim()
   let session
   try {
-    session = await registry.create({ kind: 'camera_stage', container: { kind: 'user' }, ...(trimmed ? { name: trimmed } : {}), draft: false })
+    session = await registry.create({ kind: 'camera_stage', container, ...(trimmed ? { name: trimmed } : {}), draft: false })
   } catch (error) {
     if (!isDocumentServiceError(error, 'DocumentNameConflictError') && !isDocumentServiceError(error, 'DocumentNameInvalidError')) throw error
-    session = await registry.create({ kind: 'camera_stage', container: { kind: 'user' }, draft: false })
+    session = await registry.create({ kind: 'camera_stage', container, draft: false })
   }
   const instance = bindCameraStageSession(session)
   logger.info('新建镜头参考文档', { event: 'camera_stage.document.create_named.completed', context: { docId: instance.id } })
@@ -115,8 +117,8 @@ export async function createNamedCameraStageDocument(name: string): Promise<Save
 }
 
 /** 画布节点内嵌并进入编辑器（节点对话框）：新建后附着到界面。 */
-export async function createNamedCameraStageDocumentInEditor(name: string): Promise<SavedProjectInfo> {
-  const created = await createNamedCameraStageDocument(name)
+export async function createNamedCameraStageDocumentInEditor(name: string, container: DocumentContainerRef = { kind: 'user' }): Promise<SavedProjectInfo> {
+  const created = await createNamedCameraStageDocument(name, container)
   await attachCameraStageProject(created.id)
   cameraStageProjectStore(created.id).getState().setViewMode('camera')
   useCameraStageSessionStore.getState().setLastDocumentId(created.id)

@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+import { canvasDocumentIdSchema } from './canvasDocumentId'
+
 import { ASSISTANT_CANVAS_IMAGE_CAPABILITY_IDS } from '../../../canvas/imageCapabilityIds'
 import {
   applicationRefSchema,
@@ -54,7 +56,7 @@ const addCanvasNode = defineApplicationCapability({
   producesRefs: ['canvas.node'],
   executionPrerequisites: ['get_canvas_node_schema'],
   inputSchema: z.object({
-    projectId: z.string().min(1),
+    projectId: canvasDocumentIdSchema,
     nodeType: z.string().min(1),
     placement: canvasNodePlacementSchema,
     data: z.record(z.string(), z.unknown()).optional(),
@@ -108,7 +110,7 @@ const applyCanvasImageCapability = defineApplicationCapability({
   acceptsRefs: ['canvas.project', 'canvas.node'],
   producesRefs: ['canvas.node', 'canvas.edge'],
   inputSchema: z.object({
-    projectId: z.string().min(1),
+    projectId: canvasDocumentIdSchema,
     sourceNodeId: z.string().min(1),
     capabilityId: z.enum(ASSISTANT_CANVAS_IMAGE_CAPABILITY_IDS),
   }).strict(),
@@ -190,7 +192,7 @@ const addAssetToCanvas = defineApplicationCapability({
   acceptsRefs: ['canvas.project', 'canvas.node', 'asset'],
   producesRefs: ['canvas.node', 'asset'],
   inputSchema: z.object({
-    projectId: z.string().min(1),
+    projectId: canvasDocumentIdSchema,
     assetId: z.string().min(1),
     placement: canvasNodePlacementSchema,
   }).strict(),
@@ -238,7 +240,7 @@ const addGenerationResultToCanvas = defineApplicationCapability({
   acceptsRefs: ['canvas.project', 'generation.result', 'image_edit.preview'],
   producesRefs: ['canvas.node', 'generation.result', 'image_edit.preview'],
   inputSchema: z.object({
-    projectId: z.string().min(1),
+    projectId: canvasDocumentIdSchema,
     resultRef: z.object({
       kind: z.enum(['generation.result', 'image_edit.preview']),
       id: z.string().min(1),
@@ -291,7 +293,7 @@ const connectCanvasNodes = defineApplicationCapability({
   producesRefs: ['canvas.edge', 'canvas.node'],
   executionPrerequisites: ['add_canvas_node'],
   inputSchema: z.object({
-    projectId: z.string().min(1),
+    projectId: canvasDocumentIdSchema,
     sourceNodeId: z.string().min(1),
     targetNodeId: z.string().min(1),
     sourceHandle: z.string().min(1).max(160).optional(),
@@ -363,7 +365,7 @@ const focusCanvasNode = defineApplicationCapability({
   successEvidence: ['目标项目已载入，返回并验证 Surface ID workspace.canvas，且节点已在画布可视区域中获得焦点。'],
   failureRecovery: ['项目或节点不存在时重新读取明确引用；画布无法定位时停止并说明，不猜测其它节点。'],
   inputSchema: z.object({
-    projectId: z.string().min(1),
+    projectId: canvasDocumentIdSchema,
     nodeId: z.string().min(1),
   }).strict(),
   outputSchema: capabilityOutputSchema({
@@ -399,7 +401,7 @@ const undoCanvasChange = defineApplicationCapability({
   acceptsRefs: ['canvas.undo'],
   producesRefs: ['canvas.project'],
   inputSchema: z.object({
-    projectId: z.string().min(1),
+    projectId: canvasDocumentIdSchema,
     undoRef: z.string().min(1),
   }).strict(),
   outputSchema: capabilityOutputSchema({
@@ -436,7 +438,7 @@ const redoCanvasChange = defineApplicationCapability({
   acceptsRefs: ['canvas.project'],
   producesRefs: ['canvas.project'],
   inputSchema: z.object({
-    projectId: z.string().min(1),
+    projectId: canvasDocumentIdSchema,
   }).strict(),
   outputSchema: capabilityOutputSchema({
     projectId: z.string(),
@@ -471,7 +473,7 @@ const duplicateCanvasNode = defineApplicationCapability({
   acceptsRefs: ['canvas.project', 'canvas.node'],
   producesRefs: ['canvas.node'],
   inputSchema: z.object({
-    projectId: z.string().min(1),
+    projectId: canvasDocumentIdSchema,
     nodeId: z.string().min(1),
     placement: canvasNodePlacementSchema,
   }).strict(),
@@ -512,7 +514,7 @@ const updateCanvasNode = defineApplicationCapability({
   acceptsRefs: ['canvas.project', 'canvas.node'],
   producesRefs: ['canvas.node'],
   inputSchema: z.object({
-    projectId: z.string().min(1),
+    projectId: canvasDocumentIdSchema,
     nodeId: z.string().min(1),
     data: z.record(z.string(), z.unknown()),
   }).strict(),
@@ -559,7 +561,7 @@ const deleteCanvasNodes = defineApplicationCapability({
   acceptsRefs: ['canvas.project', 'canvas.node'],
   producesRefs: ['canvas.undo'],
   inputSchema: z.object({
-    projectId: z.string().min(1),
+    projectId: canvasDocumentIdSchema,
     nodeIds: z.array(z.string().min(1)).min(1).max(50),
   }).strict(),
   outputSchema: capabilityOutputSchema({
@@ -609,7 +611,7 @@ const selectCanvasNode = defineApplicationCapability({
   acceptsRefs: ['canvas.project', 'canvas.node'],
   producesRefs: ['canvas.node'],
   inputSchema: z.object({
-    projectId: z.string().min(1),
+    projectId: canvasDocumentIdSchema,
     nodeId: z.string().min(1).nullable(),
   }).strict(),
   outputSchema: capabilityOutputSchema({
@@ -647,7 +649,7 @@ const groupCanvasNodes = defineApplicationCapability({
   acceptsRefs: ['canvas.project', 'canvas.node'],
   producesRefs: ['canvas.node'],
   inputSchema: z.object({
-    projectId: z.string().min(1),
+    projectId: canvasDocumentIdSchema,
     nodeIds: z.array(z.string().min(1)).min(2).max(50),
     groupKind: z.enum(['spatial', 'asset']).optional().default('spatial'),
   }).strict(),
@@ -689,7 +691,7 @@ const connectAssetGroupToTarget = defineApplicationCapability({
   acceptsRefs: ['canvas.project', 'canvas.node'],
   producesRefs: ['canvas.edge', 'canvas.undo'],
   inputSchema: z.object({
-    projectId: z.string().min(1),
+    projectId: canvasDocumentIdSchema,
     groupNodeId: z.string().min(1),
     targetNodeId: z.string().min(1),
   }).strict(),
@@ -737,7 +739,7 @@ const disconnectAssetGroupFromTarget = defineApplicationCapability({
   acceptsRefs: ['canvas.project', 'canvas.node'],
   producesRefs: ['canvas.undo'],
   inputSchema: z.object({
-    projectId: z.string().min(1),
+    projectId: canvasDocumentIdSchema,
     groupNodeId: z.string().min(1),
     targetNodeId: z.string().min(1),
   }).strict(),
@@ -781,7 +783,7 @@ const ungroupCanvasNode = defineApplicationCapability({
   acceptsRefs: ['canvas.project', 'canvas.node'],
   producesRefs: ['canvas.undo'],
   inputSchema: z.object({
-    projectId: z.string().min(1),
+    projectId: canvasDocumentIdSchema,
     groupNodeId: z.string().min(1),
   }).strict(),
   outputSchema: capabilityOutputSchema({
@@ -820,7 +822,7 @@ const clearCanvas = defineApplicationCapability({
   acceptsRefs: ['canvas.project'],
   producesRefs: ['canvas.undo'],
   inputSchema: z.object({
-    projectId: z.string().min(1),
+    projectId: canvasDocumentIdSchema,
   }).strict(),
   outputSchema: capabilityOutputSchema({
     projectId: z.string(),
@@ -866,7 +868,7 @@ const disconnectCanvasEdge = defineApplicationCapability({
   acceptsRefs: ['canvas.project', 'canvas.edge'],
   producesRefs: ['canvas.undo'],
   inputSchema: z.object({
-    projectId: z.string().min(1),
+    projectId: canvasDocumentIdSchema,
     edgeId: z.string().min(1),
   }).strict(),
   outputSchema: capabilityOutputSchema({

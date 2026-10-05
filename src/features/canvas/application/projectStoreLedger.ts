@@ -3,11 +3,10 @@ import type { ApplicationStoreActionBinding, ApplicationStoreActionLedger } from
 import type { useProjectStore } from '@/stores/projectStore'
 
 /*
- * projectStore 的界面动作账本。
+ * projectStore（画布页界面状态）的界面动作账本。
  *
- * 放在 canvas/application/ 而不是新开 features/project/application/：projectStore 是
- * canvas.project 实体的唯一数据源，canvasProjectService.ts / canvasProjectMutationExecutor.ts
- * 早就放在这里操作它，src/features/project/ 目录本身只有两个 UI 组件，没有应用层。
+ * 3.4 起画布是 `.henji-canvas` 文档：列出、新建、改名、移动、副本、回收站都归通用文档能力，
+ * 这里只剩“显示哪份画布”的界面状态与离开流程。
  */
 
 type State = ReturnType<typeof useProjectStore.getState>
@@ -15,52 +14,30 @@ type ActionName = {
   [K in keyof State]-?: State[K] extends (...args: never[]) => unknown ? K : never
 }[keyof State]
 
-const HYDRATE_REASON = '项目列表补水是每次工程操作前的自动前置步骤（ensureProjectsHydrated /'
-  + ' openCanvasProject 内部调用），不是用户能独立触发的动作。'
-
-const VIEWPORT_REASON = '画布视口的平移缩放位置是导航态：只为跨会话恢复用户上次看到的位置，'
-  + '不进入节点/连线内容，也不影响生成或导出产物；助手不需要控制用户正在看哪里。'
-
 const CAPABILITY = (capabilityId: string): ApplicationStoreActionBinding => ({ kind: 'capability', capabilityId })
 
 export const PROJECT_STORE_LEDGER: ApplicationStoreActionLedger<ActionName> = {
   storeId: 'projectStore',
-  title: '工程管理',
+  title: '画布页',
   entries: {
-    hydrate: { kind: 'excluded', category: 'internal', reason: HYDRATE_REASON },
-    createProject: CAPABILITY('create_canvas_project'),
-    deleteProject: CAPABILITY('delete_canvas_project'),
-    renameProject: CAPABILITY('rename_canvas_project'),
-    openProject: CAPABILITY('open_canvas_project'),
-    closeProject: CAPABILITY('close_canvas_project'),
+    openProject: CAPABILITY('open_document'),
+    openCanvasDocument: CAPABILITY('open_document'),
+    createCanvasDraft: CAPABILITY('create_document'),
+    closeProject: {
+      kind: 'excluded',
+      category: 'user_only',
+      reason: '返回画布列表是界面导航：已保存的画布写完关闭，草稿要由用户在离开提示里选择“保存 / 不保存 / 取消”，'
+        + '助手不替用户做这个选择；画布内容随时自动保存，不需要先关闭才能被读到。',
+    },
     clearPersistenceError: {
       kind: 'excluded',
       category: 'internal',
-      reason: '仅清除画布项目写盘失败提示；成功写入时会自动清除，不是业务数据操作。',
+      reason: '仅清除画布写盘失败提示；保存成功时会自动清除，不是业务数据操作。',
     },
     getCurrentProject: {
       kind: 'excluded',
       category: 'internal',
-      reason: '纯读取访问器，被 Canvas.tsx 在写入视口/保存快照前内部调用；助手读工程内容用 get_canvas_project。',
-    },
-    saveCurrentProject: {
-      kind: 'excluded',
-      category: 'internal',
-      reason: '自动编辑使用共享防抖队列；正式画布操作通过 confirmCanvasPersistence 等待同一存储确认。'
-        + '保存拒绝后的恢复动作 retry_canvas_project_save 复用该屏障，不重放节点/连线修改。',
-    },
-    setProjectCover: {
-      kind: 'excluded',
-      category: 'internal',
-      reason: '项目卡封面缩略图的本地路径回写，由退出项目时的封面生成流程（canvasProjectCover.ts）'
-        + '自动调用；封面只是列表里的展示图，不属于工程内容，助手没有单独设置它的需求。',
-    },
-    saveCurrentProjectViewport: { kind: 'excluded', category: 'view_state', reason: VIEWPORT_REASON },
-    cancelPendingViewportPersist: {
-      kind: 'excluded',
-      category: 'internal',
-      reason: 'saveCurrentProjectViewport 防抖持久化的清理步骤（手势开始时取消挂起的写盘），'
-        + '不是独立动作，随视口本身一并排除。',
+      reason: '纯读取访问器；助手读画布内容用 get_canvas_project。',
     },
   },
 }

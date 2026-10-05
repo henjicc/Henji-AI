@@ -6,7 +6,7 @@ import { createAssistantMemoryTablesV1 } from './assistant/storageSchema'
  * 2.3 数据库收口之前的 henji.db 结构快照（只给迁移测试用）：当时 db.ts 用 IF NOT EXISTS 建的老表，
  * 加上当时第一次使用才建的生成提交账本（还没有补列）与镜头渲染任务表。
  * 用它造“旧库”，验证就地进入迁移账本、数据保留、结果数组与位置换写法。不要随正式结构修改这份快照。
- * 工程表（画布两张、镜头参考、口播）结构没变，由 initializeLegacyProjectTables 建。
+ * 旧工程表（镜头参考、口播、画布）结构没变；画布两张按当时 initializeLegacyProjectTables 的样子一并建出。
  */
 export const LEGACY_SCHEMA_SQL = `
   CREATE TABLE IF NOT EXISTS history (
@@ -71,6 +71,18 @@ export const LEGACY_SCHEMA_SQL = `
     object_count INTEGER NOT NULL DEFAULT 0, scene_json TEXT NOT NULL, cover_path TEXT
   );
   CREATE INDEX IF NOT EXISTS idx_camera_stage_projects_updated_at ON camera_stage_projects(updated_at DESC);
+  -- 3.4 退役的画布工程表（2.3 之前每次启动由 initializeLegacyProjectTables 建）
+  CREATE TABLE IF NOT EXISTS storyboard_projects (
+    id TEXT PRIMARY KEY, name TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL,
+    node_count INTEGER NOT NULL DEFAULT 0, nodes_json TEXT NOT NULL, edges_json TEXT NOT NULL,
+    viewport_json TEXT NOT NULL, history_json TEXT NOT NULL, cover_path TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_storyboard_projects_updated_at ON storyboard_projects(updated_at DESC);
+  CREATE TABLE IF NOT EXISTS canvas_projects (
+    id TEXT PRIMARY KEY, name TEXT NOT NULL, nodes_json TEXT NOT NULL, edges_json TEXT NOT NULL, viewport_json TEXT NOT NULL,
+    node_count INTEGER NOT NULL DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE INDEX IF NOT EXISTS idx_canvas_projects_updated_at ON canvas_projects(updated_at DESC);
 `
 
 export function createLegacyDatabase(db: Database.Database): void {

@@ -32,6 +32,8 @@ export function createElectronDocuments(): DocumentsPlatform {
     getDocumentCover: (docId) => getNativeDocuments().getDocumentCover(docId),
     saveDocumentCover: (request) => getNativeDocuments().saveDocumentCover(request),
     refreshIndex: () => getNativeDocuments().refreshIndex(),
+    readSessionState: (request) => getNativeDocuments().readSessionState(request),
+    writeSessionState: (request) => getNativeDocuments().writeSessionState(request),
     listProjects: (query) => getNativeDocuments().listProjects(query),
     createProject: (request) => getNativeDocuments().createProject(request),
     renameProject: (request) => getNativeDocuments().renameProject(request),

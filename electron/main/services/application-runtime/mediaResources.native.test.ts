@@ -8,15 +8,19 @@ import { Client } from '@modelcontextprotocol/client'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/client'
 
 if (!process.versions.electron) throw new Error('本测试必须由正式 Electron SQLite 原生运行器执行，不能跳过原生边界。')
-const fixture = vi.hoisted(() => ({ root: '', db: undefined as Database.Database | undefined }))
+const fixture = vi.hoisted(() => ({ root: '', db: undefined as Database.Database | undefined, canvas: null as unknown }))
 vi.mock('electron', () => ({ app: { getPath: (name: string) => path.join(fixture.root, name), isPackaged: false }, protocol: {} }))
 vi.mock('../db', async (importOriginal) => ({ ...await importOriginal<typeof import('../db')>(), getDb: () => {
   if (!fixture.db) throw new Error('原生夹具连接尚未初始化')
   return fixture.db
 } }))
 vi.mock('../logging', () => ({ createMainLogger: () => ({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }) }))
+// 画布 3.4 起存成文档文件（不在 SQLite 里）：这里只替换文档仓库读出的内容，SQLite 部分仍是正式实现。
+vi.mock('../documents/runtime', () => ({ getDocumentService: () => ({ readDocument: async ({ id }: { id: string }) => {
+  if (id !== 'media-project') throw Object.assign(new Error('missing'), { name: 'DocumentNotFoundError' })
+  return { content: fixture.canvas }
+} }) }))
 import { initializeSchema } from '../db'
-import { upsertStoryboardProject } from '../storyboard-projects'
 import { isPathWithinAllowedMediaRoots } from '../../protocol'
 import { readApplicationMediaResource } from './mediaResources'
 import { McpConnections } from '../mcp/connections'
@@ -38,9 +42,7 @@ beforeAll(async () => {
   await fs.writeFile(file, bytes)
   fixture.db.prepare('INSERT INTO history (id,provider_id,model_id,type,params,result_paths,status) VALUES (?,?,?,?,?,?,?)').run('generation-result', 'fixture', 'fixture', 'image', '{}', JSON.stringify([file]), 'success')
   fixture.db.prepare('INSERT INTO assets (id,media_type,display_name,file_path,source,created_at,updated_at) VALUES (?,?,?,?,?,?,?)').run('asset-result', 'image', '实际媒体', file, 'imported', 1, 1)
-  upsertStoryboardProject({ id: 'media-project', name: '媒体项目', createdAt: 1, updatedAt: 1, nodeCount: 1,
-    nodesJson: JSON.stringify([{ id: 'media-node', type: 'image', position: { x: 0, y: 0 }, data: { imageUrl: '__img_ref__:0' } }]),
-    edgesJson: '[]', viewportJson: '{"x":0,"y":0,"zoom":1}', historyJson: JSON.stringify({ past: [], future: [], imagePool: [file] }) })
+  fixture.canvas = { nodes: [{ id: 'media-node', type: 'image', position: { x: 0, y: 0 }, data: { imageUrl: file } }], edges: [] }
   fixture.db.close()
   fixture.db = new Database(path.join(parent, 'media.sqlite'))
 })

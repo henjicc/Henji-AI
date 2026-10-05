@@ -59,63 +59,10 @@ function ensureReadStatement(sql: string): void {
 }
 
 /**
- * 即将被文档文件取代的工程表（画布两张）。
- *
- * 它们不进迁移账本，结构保持 2.3 之前的样子（`IF NOT EXISTS` + 补列）；
- * 3.x 各工具接入文档文件时连同这里的定义一起删除，并在迁移账本追加一项退役迁移删表
- * （legacy-project-tables.ts，有数据时账本先备份 henji.db），不迁移内容（重要记录 008）。
- * 镜头参考已在 3.2 退役（账本第 15 项），口播在 3.3 退役（第 16 项）。
- */
-export function initializeLegacyProjectTables(conn: Database.Database): void {
-  conn.exec(`
-    CREATE TABLE IF NOT EXISTS storyboard_projects (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      created_at INTEGER NOT NULL,
-      updated_at INTEGER NOT NULL,
-      node_count INTEGER NOT NULL DEFAULT 0,
-      nodes_json TEXT NOT NULL,
-      edges_json TEXT NOT NULL,
-      viewport_json TEXT NOT NULL,
-      history_json TEXT NOT NULL,
-      cover_path TEXT
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_storyboard_projects_updated_at
-      ON storyboard_projects(updated_at DESC);
-
-    CREATE TABLE IF NOT EXISTS canvas_projects (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      nodes_json TEXT NOT NULL,
-      edges_json TEXT NOT NULL,
-      viewport_json TEXT NOT NULL,
-      node_count INTEGER NOT NULL DEFAULT 0,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_canvas_projects_updated_at
-      ON canvas_projects(updated_at DESC);
-  `)
-  ensureLegacyProjectColumn(conn, 'storyboard_projects', 'cover_path', 'TEXT')
-}
-
-/** 只给上面的工程表补列（3.x 随表删除）；其他表的结构变化一律写成迁移账本里的编号迁移。 */
-function ensureLegacyProjectColumn(conn: Database.Database, table: string, column: string, definition: string): void {
-  const columns = conn.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>
-  if (columns.some((item) => item.name === column)) {
-    return
-  }
-  conn.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`)
-}
-
-/**
- * 打开 henji.db 后的结构初始化：先维持工程表原样，再执行统一版本化迁移账本（db-migrations.ts）。
+ * 打开 henji.db 后的结构初始化：执行统一版本化迁移账本（db-migrations.ts），全部表都由账本管理。
  * 测试传入自己的位置换算上下文；正式运行环境由 getDb 提供作品目录与备份目录。
  */
 export function initializeSchema(conn: Database.Database, options: SchemaMigrationOptions = {}): void {
-  initializeLegacyProjectTables(conn)
   runSchemaMigrations(conn, undefined, options)
 }
 

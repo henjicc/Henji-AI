@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { useProjectStore } from '@/stores/projectStore'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 
 import { useCanvasStore } from '@/stores/canvasStore'
@@ -18,6 +17,7 @@ import {
   runCanvasNode,
   type CanvasNodeExecutionResult,
 } from './canvasExecutionService'
+import { createCanvasTestProject } from '@/tests/canvasProjectFixture'
 
 function node(id: string, type: CanvasNode['type'], data: Record<string, unknown> = {}): CanvasNode {
   return { id, type, position: { x: 0, y: 0 }, data } as CanvasNode
@@ -55,8 +55,7 @@ function registerText(nodeId: string, run: () => Promise<CanvasNodeExecutionResu
 describe('canvasExecutionService 并发与一致性', () => {
   beforeEach(async () => {
     installHarnessNativeStorage()
-    await useProjectStore.getState().hydrate()
-    await useProjectStore.getState().createProject('并发调度测试')
+    await createCanvasTestProject('并发调度测试')
     resetCanvasExecutionServiceForTests()
     useCanvasStore.getState().setCanvasData([], [], { past: [], future: [] })
   })

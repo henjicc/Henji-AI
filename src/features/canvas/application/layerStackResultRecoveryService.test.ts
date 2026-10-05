@@ -44,7 +44,7 @@ describe('多图层下载失败原任务恢复', () => {
     const project: Project = { id: 'project', name: '恢复测试', createdAt: 1, updatedAt: 1,
       nodeCount: 2, coverPath: null, nodes: [node, other], edges: [], viewport: { x: 0, y: 0, zoom: 1 },
       history: { ...history([pending()]), future: [] } }
-    setCanvasTestProjectState({ currentProjectId: project.id, currentProject: project, projects: [project] })
+    setCanvasTestProjectState({ currentProjectId: project.id, currentProject: project })
   })
 
   it('从最近历史恢复原任务，只写结果节点且重复点击不重复提交', () => {

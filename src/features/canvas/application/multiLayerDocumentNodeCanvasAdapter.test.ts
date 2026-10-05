@@ -1,4 +1,4 @@
-import { setCanvasTestProjectState } from '@/tests/canvasProjectFixture';
+import { setCanvasTestProjectState, canvasSaveSpy } from '@/tests/canvasProjectFixture';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { CANVAS_NODE_TYPES, type CanvasNode } from '../domain/canvasNodes';
@@ -9,7 +9,6 @@ import { MULTI_LAYER_NODE_PROJECTION_HISTORY_POLICY } from './multiLayerDocument
 import { imageEditV3LayerRef } from '@/features/imageEdit/v3/application/imageEditDocumentRefs';
 import { createMultiLayerDocumentExportCanvasPort, createMultiLayerDocumentProjectionCanvasPort } from './multiLayerDocumentNodeCanvasAdapter';
 
-import { upsertProjectRecord } from '@/commands/projectState';
 import { requireCanvasProjectInstance } from './canvasProjectInstances';
 
 const oldSession = {
@@ -94,7 +93,7 @@ function commitInput() {
 
 describe('多图层文档节点投影 CAS', () => {
   beforeEach(() => {
-    vi.mocked(upsertProjectRecord).mockReset()
+    canvasSaveSpy().mockClear()
     const source = node()
     const downstream = downstreamNode()
     useCanvasStore.setState({
@@ -145,7 +144,7 @@ describe('多图层文档节点投影 CAS', () => {
       '/managed/old-composite.png',
       '/managed/old-preview.webp',
     ])
-    expect(vi.mocked(upsertProjectRecord)).toHaveBeenCalledOnce()
+    expect(canvasSaveSpy()).toHaveBeenCalledOnce()
   })
 
   it('旧平面资源释放失败不回滚已经提交的节点状态', async () => {
@@ -180,13 +179,13 @@ describe('多图层文档节点投影 CAS', () => {
       recoverable: true,
     })
     expect(useCanvasStore.getState().nodes).toBe(before)
-    expect(vi.mocked(upsertProjectRecord)).not.toHaveBeenCalled()
+    expect(canvasSaveSpy()).not.toHaveBeenCalled()
   })
 })
 
 describe('多图层文档目标导出画布事务', () => {
   beforeEach(() => {
-    vi.mocked(upsertProjectRecord).mockReset()
+    canvasSaveSpy().mockClear()
     const source = node()
     useCanvasStore.setState({
       nodes: [source],
@@ -289,7 +288,3 @@ describe('多图层文档目标导出画布事务', () => {
   })
 })
 // 本文件验证图投影，真实存储拒绝与恢复由 canvasPersistenceService.test.ts 覆盖。
-vi.mock('@/commands/projectState', async (importOriginal) => ({
-  ...await importOriginal<typeof import('@/commands/projectState')>(),
-  upsertProjectRecord: vi.fn(async () => undefined),
-}))

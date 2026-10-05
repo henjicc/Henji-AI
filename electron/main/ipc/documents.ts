@@ -6,6 +6,7 @@ import {
   documentIdRequestSchema,
   documentLinkSchema,
   documentListQuerySchema,
+  documentSessionStateKeySchema,
   documentTargetSchema,
   duplicateDocumentRequestSchema,
   finalizeDocumentRequestSchema,
@@ -21,6 +22,7 @@ import {
   saveDocumentCoverRequestSchema,
   saveDocumentRequestSchema,
   setProjectMainDocumentRequestSchema,
+  writeDocumentSessionStateRequestSchema,
 } from '../../../src/core/documents/requests'
 import { DOCUMENT_IPC_CHANNELS, type DocumentsPlatform } from '../../../src/platform/contracts/documents'
 import { getDocumentService } from '../services/documents/runtime'
@@ -57,6 +59,8 @@ export function registerDocumentsIpc(): void {
   registerIpcHandler(c.getDocumentCover, parseWith(documentIdRequestSchema), ({ docId }) => service().getDocumentCover(docId))
   registerIpcHandler(c.saveDocumentCover, parseWith(saveDocumentCoverRequestSchema), (request) => service().saveDocumentCover(request))
   registerIpcHandler(c.refreshIndex, parseVoid, () => service().refreshIndex())
+  registerIpcHandler(c.readSessionState, parseWith(documentSessionStateKeySchema), (request) => service().readSessionState(request))
+  registerIpcHandler(c.writeSessionState, parseWith(writeDocumentSessionStateRequestSchema), (request) => service().writeSessionState(request))
   registerIpcHandler(c.listProjects, parseWith(projectListQuerySchema, true), (query) => service().listProjects(query))
   registerIpcHandler(c.createProject, parseWith(createProjectRequestSchema, true), (request) => service().createProject(request))
   registerIpcHandler(c.renameProject, parseWith(renameProjectRequestSchema), (request) => service().renameProject(request))

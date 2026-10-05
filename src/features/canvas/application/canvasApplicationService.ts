@@ -89,53 +89,35 @@ function throwIfAborted(signal: AbortSignal): void {
   if (signal.aborted) throw new CanvasApplicationError('ABORTED', '画布操作已取消')
 }
 
+/** 打开并显示一份画布（通用文档打开方式与助手共用）；界面正显示另一份草稿时会先询问。 */
 export async function openCanvasProject(
   projectId: string,
-  signal: AbortSignal
+  signal: AbortSignal,
+  path?: string,
 ): Promise<Record<string, unknown>> {
-  logger.info('画布项目打开开始', { event: 'canvas.project.open.start', projectId })
-  const projectStore = useProjectStore.getState()
-  if (!projectStore.isHydrated) await projectStore.hydrate()
+  logger.info('画布打开开始', { event: 'canvas.project.open.start', projectId })
   throwIfAborted(signal)
-  if (!useProjectStore.getState().projects.some((project) => project.id === projectId)) {
-    throw new CanvasApplicationError('PROJECT_NOT_FOUND', '画布项目不存在', true, { projectId })
+  let opened: boolean
+  try {
+    opened = await useProjectStore.getState().openCanvasDocument(path ? { id: projectId, path } : { id: projectId })
+  } catch (error) {
+    if (error instanceof Error && error.message === 'PROJECT_NOT_FOUND') {
+      throw new CanvasApplicationError('PROJECT_NOT_FOUND', '画布不存在', true, { projectId })
+    }
+    throw new CanvasApplicationError('PROJECT_NOT_FOUND', '画布无法打开', true, { projectId })
   }
-  if (useProjectStore.getState().currentProjectId !== projectId) {
-    await new Promise<void>((resolve, reject) => {
-      let settled = false
-      const settle = (callback: () => void): void => {
-        if (settled) return
-        settled = true
-        unsubscribe()
-        signal.removeEventListener('abort', onAbort)
-        clearTimeout(timer)
-        callback()
-      }
-      const onAbort = (): void => settle(() => reject(
-        new CanvasApplicationError('ABORTED', '打开画布项目已取消')
-      ))
-      const unsubscribe = useProjectStore.subscribe((state) => {
-        if (state.currentProjectId === projectId) settle(resolve)
-        else if (!state.isOpeningProject) settle(() => reject(
-          new CanvasApplicationError('PROJECT_NOT_FOUND', '画布项目无法打开', true, { projectId })
-        ))
-      })
-      const timer = setTimeout(() => settle(() => reject(
-        new CanvasApplicationError('DEADLINE_EXCEEDED', '打开画布项目超时', true, { projectId })
-      )), 10_000)
-      signal.addEventListener('abort', onAbort, { once: true })
-      useProjectStore.getState().openProject(projectId)
-    })
+  if (!opened) {
+    throw new CanvasApplicationError('STALE_CONTEXT', '当前画布的离开被取消，没有切换画布', true, { projectId })
   }
+  throwIfAborted(signal)
   const project = useProjectStore.getState().currentProject
   if (!project || project.id !== projectId) {
-    throw new CanvasApplicationError('PROJECT_NOT_FOUND', '画布项目无法打开', true, { projectId })
+    throw new CanvasApplicationError('PROJECT_NOT_FOUND', '画布无法打开', true, { projectId })
   }
-  logger.info('画布项目打开完成', { event: 'canvas.project.open.completed', projectId })
+  logger.info('画布打开完成', { event: 'canvas.project.open.completed', projectId })
   return { projectId }
 }
 
-export { persistCanvasState } from './canvasPersistenceService'
 
 export function rememberCanvasUndo(projectId: string, operation: string): string {
   const token = `canvas-undo:${uuidv4()}`

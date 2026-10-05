@@ -5,45 +5,35 @@ import { isUiInspectionReadOnly } from '@/platform/runtime';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { useProjectStore } from '@/stores/projectStore';
 import type { CanvasEdge, CanvasNode } from '@/features/canvas/domain/canvasNodes';
+import { findCanvasProjectInstance } from '@/features/canvas/application/canvasProjectInstances';
 
+/**
+ * 画布页与文档会话的衔接（3.4）：
+ * - 节点、连线的自动保存由画布实例接到文档会话完成（防抖、只在有变化时写，拖动松手后才标脏）；
+ *   这里的 schedulePersist(0) 只是“尽快写完”，其他延迟交给会话的防抖。
+ * - 打开画布时把实例里恢复的视口应用到 ReactFlow；离开画布页时把手势最后的位置同步回 store，
+ *   由实例写进程序目录的会话状态。
+ */
 export function useCanvasPersistence(
   wrapperRef: React.RefObject<HTMLDivElement>,
   reactFlow: ReactFlowInstance<CanvasNode, CanvasEdge>,
 ) {
   const flowStore = useStoreApi<CanvasNode, CanvasEdge>();
-  const nodes = useCanvasStore((state) => state.nodes);
-  const edges = useCanvasStore((state) => state.edges);
-  const history = useCanvasStore((state) => state.history);
-  const dragHistorySnapshot = useCanvasStore((state) => state.dragHistorySnapshot);
   const setCanvasViewportSize = useCanvasStore((state) => state.setCanvasViewportSize);
-  const getCurrentProject = useProjectStore((state) => state.getCurrentProject);
   const currentProjectId = useProjectStore((state) => state.currentProjectId);
-  const saveCurrentProject = useProjectStore((state) => state.saveCurrentProject);
   const inspectionReadOnly = isUiInspectionReadOnly();
   const isRestoringRef = useRef(true);
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const persistSnapshot = useCallback(() => {
-    if (inspectionReadOnly || isRestoringRef.current || !currentProjectId
-      || getCurrentProject()?.id !== currentProjectId) return;
-    const canvas = useCanvasStore.getState();
-    // 视口呈现按帧合并；切页/卸载可能发生在下一帧之前，落盘读取手势的最新位置。
-    const viewport = flowStore.getState().panZoom?.getViewport() ?? reactFlow.getViewport();
-    saveCurrentProject(canvas.nodes, canvas.edges, viewport, canvas.history);
-  }, [currentProjectId, flowStore, getCurrentProject, inspectionReadOnly, reactFlow, saveCurrentProject]);
-
-  const schedulePersist = useCallback((delayMs = 140) => {
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(() => {
-      saveTimerRef.current = null;
-      persistSnapshot();
-    }, delayMs);
-  }, [persistSnapshot]);
+  const schedulePersist = useCallback((delayMs?: number) => {
+    if (inspectionReadOnly || delayMs !== 0 || !currentProjectId) return;
+    const instance = findCanvasProjectInstance(currentProjectId);
+    if (instance) void instance.session.flush().catch(() => undefined);
+  }, [currentProjectId, inspectionReadOnly]);
 
   useEffect(() => {
     isRestoringRef.current = true;
     const frame = requestAnimationFrame(() => {
-      if (currentProjectId && getCurrentProject()?.id === currentProjectId) {
+      if (currentProjectId && useProjectStore.getState().currentProjectId === currentProjectId) {
         void reactFlow.setViewport(useCanvasStore.getState().currentViewport, { duration: 0 });
       }
     });
@@ -51,15 +41,13 @@ export function useCanvasPersistence(
     return () => {
       clearTimeout(restoreTimer);
       cancelAnimationFrame(frame);
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-      saveTimerRef.current = null;
-      persistSnapshot();
+      // 视口呈现按帧合并；切页 / 卸载可能发生在下一帧之前，把手势的最新位置同步回 store。
+      const viewport = flowStore.getState().panZoom?.getViewport();
+      if (viewport && currentProjectId && useProjectStore.getState().currentProjectId === currentProjectId) {
+        useCanvasStore.getState().setViewportState(viewport);
+      }
     };
-  }, [currentProjectId, getCurrentProject, persistSnapshot, reactFlow]);
-
-  useEffect(() => {
-    if (!isRestoringRef.current && !dragHistorySnapshot) schedulePersist();
-  }, [dragHistorySnapshot, edges, history, nodes, schedulePersist]);
+  }, [currentProjectId, flowStore, reactFlow]);
 
   useEffect(() => {
     const element = wrapperRef.current;

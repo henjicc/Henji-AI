@@ -1,7 +1,6 @@
-import { getProjectRecord, listProjectSummaries } from '@/commands/projectState'
-import { fromProjectRecord } from '@/stores/projectStoreSerialization'
 import type { ImageEditDocumentProjectionBindingV3 } from '@/features/imageEdit/v3/application/imageEditDocumentBindings'
-import { getCanvasProjectInstance, listCanvasProjectInstances } from './canvasProjectInstances'
+import { getCanvasProjectInstance } from './canvasProjectInstances'
+import { readAllCanvasProjects } from './canvasQueryService'
 import { createMultiLayerDocumentPersistenceConfirmation } from './multiLayerDocumentPersistenceConfirmation'
 import { isEditableLayerStackResultNode } from '../domain/canvasNodeGuards'
 import { createCanvasEditV3SessionReference } from '../imageEditV3/canvasEditV3Session'
@@ -9,13 +8,8 @@ import { createCanvasEditV3SessionReference } from '../imageEditV3/canvasEditV3S
 /** 当前节点关系优先于磁盘；历史引用只保活，不是当前预览的写入目标。 */
 export async function resolveCanvasImageEditDocumentProjection(documentId: string): Promise<ImageEditDocumentProjectionBindingV3 | undefined> {
   const documentRef = `image-edit-v3:${documentId}` as const
-  const projects = new Map(listCanvasProjectInstances().map((instance) => [instance.id, instance.snapshot()]))
-  for (const summary of await listProjectSummaries()) {
-    if (projects.has(summary.id)) continue
-    const record = await getProjectRecord(summary.id)
-    if (record) projects.set(summary.id, fromProjectRecord(record))
-  }
-  const targets = [...projects.values()].flatMap((project) => project.nodes
+  const projects = await readAllCanvasProjects()
+  const targets = projects.flatMap((project) => project.nodes
     .filter(isEditableLayerStackResultNode)
     .filter((node) => node.data.imageEditSession?.documentRef === documentRef)
     .map((node) => ({ projectId: project.id, nodeId: node.id, session: node.data.imageEditSession! })))

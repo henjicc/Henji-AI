@@ -7,10 +7,10 @@ import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/te
 import { createApplicationHarness } from '@/tests/applicationHarness'
 import { createApplicationCallerGrant } from '@/core/application-control/callerContext'
 import { createApplicationCapabilitySession } from '@/features/application-control/applicationCapabilityService'
-import { createCanvasProject } from '@/features/canvas/application/canvasProjectService'
+import { createCanvasTestProject } from '@/tests/canvasProjectFixture'
 import { readPersistedCanvasProjectSnapshot } from '@/features/canvas/application/canvasQueryService'
 import { resetCanvasApplicationStateForTests } from '@/features/canvas/application/canvasApplicationService'
-import { closeVideoEditProject, createVideoEditProject, editVideoSequence, listVideoEditInstances, openVideoEditProject, setVideoEditTimelineView, setVideoEditView } from './videoEditService'
+import { closeVideoEditProject, createVideoEditProject, editVideoSequence, listVideoEditInstances, setVideoEditTimelineView, setVideoEditView } from './videoEditService'
 import { appendVideoEditCaptionText, exportVideoEditSubtitles } from './videoEditTimedContent'
 import { captureVideoEditProgramFrame, registerVideoEditProgramCapture } from './videoEditProgramCapture'
 import { collectVideoEditOutput, publishVideoEditOutput } from './videoEditOutputs'
@@ -90,7 +90,7 @@ it('真实公共能力回读素材引用；拒绝旧导出任务而不写文件�
 it.each(['image', 'video', 'audio'] as const)('%s资产加入未打开画布后保留媒体路径并核实公共回执', async kind => {
   const asset: AssetRecord = { ...record(`D:/published.${kind === 'image' ? 'png' : kind === 'video' ? 'mp4' : 'wav'}`, kind === 'audio' ? 'image' : kind), mediaType: kind }
   assets.set(asset.id, asset)
-  const project = await createCanvasProject(`正式${kind}资产画布`); const projectId = String(project.projectId)
+  const projectId = await createCanvasTestProject(`正式${kind}资产画布`, { attach: false })
   const app = createApplicationHarness()
   try {
     const result = await app.requireResult('add_asset_to_canvas', { projectId, assetId: asset.id, placement: { mode: 'absolute', x: 80, y: 100 } })

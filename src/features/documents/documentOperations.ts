@@ -112,6 +112,10 @@ export interface CreateNamedDocumentRequest {
   kind: DocumentKindId
   container: DocumentContainerRef
   name: string
+  /** 初始内容（导入时用）；省略为该类型的空内容。 */
+  content?: unknown
+  /** 同名时：fail 报错（默认，用户输入的名字），keepBoth 自动加序号（导入时用）。 */
+  onConflict?: NameConflictPolicy
 }
 
 export const defaultDocumentOperationCommands: DocumentOperationCommands = {
@@ -318,11 +322,20 @@ export class DocumentOperations {
     await this.commands.revealDocument(target)
   }
 
-  /** 新建一份已命名（非草稿）的文档，不打开。重名报错。 */
+  /** 新建一份已命名（非草稿）的文档，不打开。重名默认报错，导入时可选“两个都保留”。 */
   async createDocument(request: CreateNamedDocumentRequest): Promise<DocumentMeta> {
     return await this.write('create', request.kind, async () => {
-      const read = await this.commands.createDocument({ kind: request.kind, container: request.container, name: request.name, draft: false })
-      return read.meta
+      const base = { kind: request.kind, container: request.container, draft: false, ...(request.content !== undefined ? { content: request.content } : {}) }
+      if (request.onConflict !== 'keepBoth') return (await this.commands.createDocument({ ...base, name: request.name })).meta
+      for (let index = 1; index <= 100; index += 1) {
+        const name = index === 1 ? request.name : `${request.name} (${index})`
+        try {
+          return (await this.commands.createDocument({ ...base, name })).meta
+        } catch (error) {
+          if (!isDocumentNameConflict(error)) throw error
+        }
+      }
+      throw new Error('同名文件过多，请先整理文件夹。')
     })
   }
 

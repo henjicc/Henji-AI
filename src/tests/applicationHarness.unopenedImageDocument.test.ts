@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import '@/tests/canvasProjectFixture'
+import { createCanvasTestProject, readCanvasTestProject } from '@/tests/canvasProjectFixture'
 import '@/tests/imageEditDocumentFixture'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { createAttachedImageEditPersistenceFixture } from './imageEditAttachedPersistenceFixture'
@@ -8,7 +8,6 @@ import { createApplicationHarness } from './applicationHarness'
 import { findCanvasProjectInstance, releaseCanvasProjectInstance, requireCanvasProjectInstance } from '@/features/canvas/application/canvasProjectInstances'
 import { requireImageEditDocumentInstanceV3 } from '@/features/imageEdit/v3/application/imageEditDocumentInstances'
 import { imageEditV3LayerRef } from '@/features/imageEdit/v3/application/imageEditDocumentRefs'
-import { getProjectRecord } from '@/commands/projectState'
 import { useProjectStore } from '@/stores/projectStore'
 import { createApplicationCapabilitySession, listApplicationCapabilities } from '@/features/application-control/applicationCapabilityService'
 import { createApplicationCallerGrant } from '@/core/application-control/callerContext'
@@ -35,9 +34,9 @@ async function setup() {
   boundary.load.mockResolvedValue({ ...snapshot, documentRef: `image-edit-v3:${fixture.document.id}`, revision: 0,
     resources: [], resourceRefs: [], previewRef: null, sourceFingerprint: `sha256:${'a'.repeat(64)}` })
   boundary.saveProjection.mockImplementation(fixture.saveProjection)
-  const visibleId = await useProjectStore.getState().createProject('正在编辑 A')
+  const visibleId = await createCanvasTestProject('正在编辑 A')
   fixture.dispose()
-  expect(releaseCanvasProjectInstance(fixture.projectId)).toBe(true)
+  expect(await releaseCanvasProjectInstance(fixture.projectId)).toBe(true)
   expect(findCanvasProjectInstance(fixture.projectId)).toBeUndefined()
   return { fixture, visibleId }
 }
@@ -56,7 +55,7 @@ it('从目录发现未打开文档，通过正式公共入口修改后恢复原�
     expect(readHarnessImageEditDocument(fixture.document.id)?.document.revision).toBe(1)
     const background = requireCanvasProjectInstance(fixture.projectId).store.getState()
     expect(background.nodes[0].data.imageEditSession?.revision).toBe(1)
-    expect(JSON.parse((await getProjectRecord(fixture.projectId))!.nodesJson)[0].data.imageEditSession.revision).toBe(1)
+    expect(readCanvasTestProject(fixture.projectId)!.nodes[0].data.imageEditSession.revision).toBe(1)
     expect(useProjectStore.getState().currentProjectId).toBe(visibleId)
     expect(requireCanvasProjectInstance(visibleId).store.getState().nodes).toEqual([])
     expect(boundary.saveProjection).toHaveBeenCalledOnce()

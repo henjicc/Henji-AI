@@ -1,4 +1,5 @@
 import { createLogger } from '@/core/logging';
+import { canvasDocumentContainer } from '../application/canvasProjectInstances';
 import { registry } from '@/core/ModelRegistry';
 import { getControlledExecutionModel } from '@/core/modelCatalog/controlledExecutionModels';
 import { GenerationService } from '@/core/services/GenerationService';
@@ -22,6 +23,8 @@ export interface CanvasGenerationUpstream {
 
 export interface CanvasGenerationRequest {
   modelId: string;
+  /** 发起生成的画布文档 ID：结果文件放进它所在容器的“生成结果”（独立画布 = 作品目录，项目里 = 项目）。 */
+  projectId?: string | null;
   signal?: AbortSignal;
   /** 贯穿裁剪、模型调用与后处理的稳定链路 ID。 */
   requestId?: string;
@@ -44,6 +47,8 @@ export interface CanvasGenerationRequest {
 
 export interface CanvasResumeRequest {
   modelId: string;
+  /** 同 CanvasGenerationRequest.projectId：续查取回的结果也放进画布所在容器的“生成结果”。 */
+  projectId?: string | null;
   signal?: AbortSignal;
   requestId?: string;
   mediaType?: CanvasMediaType;
@@ -181,10 +186,12 @@ export async function runCanvasGeneration(request: CanvasGenerationRequest): Pro
 
   await request.assertCurrent?.();
   request.signal?.throwIfAborted();
+  const outputContainer = request.projectId ? canvasDocumentContainer(request.projectId) : undefined;
   let result = await generationService.generate(modelId, params, handleProgress, {
     progressSource: 'canvas',
     requestId: request.requestId,
     signal: request.signal,
+    ...(outputContainer ? { outputContainer } : {}),
   });
 
   if (result.status === 'pending') {
@@ -198,6 +205,7 @@ export async function runCanvasGeneration(request: CanvasGenerationRequest): Pro
       progressSource: 'canvas',
       requestId: request.requestId,
       signal: request.signal,
+      ...(outputContainer ? { outputContainer } : {}),
     });
   }
 
@@ -213,12 +221,13 @@ export async function resumeCanvasGeneration(
 ): Promise<CanvasGenerationOutput> {
   const mediaType = request.mediaType ?? 'image';
   const modelId = resolveCanvasModelId(request.modelId, mediaType);
+  const outputContainer = request.projectId ? canvasDocumentContainer(request.projectId) : undefined;
   const result = await GenerationService.getInstance().continuePolling(
     modelId,
     request.taskId,
     {},
     createThrottledProgressHandler(request.onProgress),
-    { progressSource: 'canvas', requestId: request.requestId, signal: request.signal }
+    { progressSource: 'canvas', requestId: request.requestId, signal: request.signal, ...(outputContainer ? { outputContainer } : {}) }
   );
   return toGenerationOutput(result);
 }

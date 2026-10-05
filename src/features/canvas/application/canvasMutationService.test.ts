@@ -1,10 +1,9 @@
-import { setCanvasTestProjectState } from '@/tests/canvasProjectFixture';
+import { setCanvasTestProjectState, canvasSaveSpy, canvasTestRegistry } from '@/tests/canvasProjectFixture';
 // @vitest-environment jsdom
 
 // @vitest-environment jsdom
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { upsertProjectRecord } from '@/commands/projectState';
 import { CANVAS_NODE_TYPES } from '@/features/canvas/domain/canvasNodes';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { type Project } from '@/stores/projectStore';
@@ -24,10 +23,6 @@ beforeAll(async () => {
 })
 
 // 本文件验证领域变换；仅替换最终存储边界，保存完成/拒绝由专门结果测试覆盖。
-vi.mock('@/commands/projectState', async (importOriginal) => ({
-  ...await importOriginal<typeof import('@/commands/projectState')>(),
-  upsertProjectRecord: vi.fn(async () => undefined),
-}))
 
 function emptyProject(): Project {
   return {
@@ -62,12 +57,9 @@ describe('画布清空与解散分组', () => {
     })
     const project = emptyProject()
     setCanvasTestProjectState({
-      projects: [project],
       currentProjectId: projectId,
       currentProject: project,
-      isHydrated: true,
       isOpeningProject: false,
-      saveCurrentProject: vi.fn(),
     })
   })
 
@@ -127,9 +119,9 @@ describe('画布清空与解散分组', () => {
       useCanvasStore.getState().updateNodeData(nodeId, { renderTask })
 
       let releasePersistence!: () => void
-      vi.mocked(upsertProjectRecord).mockImplementationOnce(async () => await new Promise<void>((resolve) => {
+      canvasTestRegistry().commands.saveGate = new Promise<void>((resolve) => {
         releasePersistence = resolve
-      }))
+      })
 
       const transaction = runCanvasTransaction(projectId, 1, async (options) => {
         const result = await deleteCanvasNodes(projectId, [nodeId], options)
@@ -175,7 +167,7 @@ describe('画布清空与解散分组', () => {
         version: 1, requestId: 'request-save-failed', canvasProjectId: projectId, nodeId,
         cameraStageDocumentId: 'stage-1', resolutionPreset: '720p', outputKind: 'image',
       } })
-      vi.mocked(upsertProjectRecord).mockRejectedValueOnce(new Error('disk full'))
+      canvasSaveSpy().mockRejectedValueOnce(new Error('disk full'))
 
       await expect(runCanvasTransaction(projectId, 1, async (options) => [
         await deleteCanvasNodes(projectId, [nodeId], options),

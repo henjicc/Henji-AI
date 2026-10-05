@@ -1,4 +1,6 @@
 import { Suspense, lazy, useCallback, useEffect, useState } from 'react';
+import { canvasDocumentContainer } from '@/features/canvas/application/canvasProjectInstances';
+import { useProjectStore } from '@/stores/projectStore';
 import { useTranslation } from 'react-i18next';
 
 import { UiLoading, UiModal } from '@/components/ui';
@@ -47,8 +49,10 @@ export function CameraStageNodeDialog(): JSX.Element | null {
           ? await loadProjectIntoScene(nodeProjectId)
           : false;
         if (!loaded) {
-          // 节点内嵌的镜头参考：已命名的独立文档（不是草稿），存进作品目录“镜头参考”文件夹
-          const created = await createNamedCameraStageDocumentInEditor(nodeDisplayName || '3D 镜头参考');
+          // 节点内嵌的镜头参考：已命名的文档（不是草稿），建在画布所在的容器里（项目或作品目录“镜头参考”）
+          const canvasId = useProjectStore.getState().currentProjectId;
+          const created = await createNamedCameraStageDocumentInEditor(nodeDisplayName || '3D 镜头参考',
+            canvasId ? canvasDocumentContainer(canvasId) : undefined);
           if (!cancelled) updateNodeData(nodeId, { projectId: created.id });
         }
         logger.info('画布 3D 镜头参考已打开', {

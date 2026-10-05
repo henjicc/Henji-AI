@@ -1,5 +1,5 @@
 /** @vitest-environment jsdom */
-import '@/tests/canvasProjectFixture'
+import { registerCanvasTestProject } from '@/tests/canvasProjectFixture'
 
 import { act, cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -8,7 +8,7 @@ import { CANVAS_NODE_TYPES, type CanvasNode } from '@/features/canvas/domain/can
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useProjectStore } from '@/stores/projectStore'
 import { NodeToolDialogRouter } from './NodeToolDialogRouter'
-import { attachCanvasProject, registerCanvasProjectInstance, requireCanvasProjectInstance } from '@/features/canvas/application/canvasProjectInstances'
+import { attachCanvasProject, requireCanvasProjectInstance } from '@/features/canvas/application/canvasProjectInstances'
 
 const routerMocks = vi.hoisted(() => ({
   saveAfterEditing: vi.fn(),
@@ -53,7 +53,7 @@ function editableNode(): CanvasNode {
 }
 
 function attachProject(id: string) {
-  const instance = registerCanvasProjectInstance({ id, name: id, createdAt: 1, updatedAt: 1,
+  const instance = registerCanvasTestProject({ id, name: id, createdAt: 1, updatedAt: 1,
     nodeCount: 0, coverPath: null, nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 },
     history: { past: [], future: [] } })
   attachCanvasProject(instance)

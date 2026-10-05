@@ -4,7 +4,6 @@ import React, { Suspense, lazy, useState, useEffect } from 'react'
 import WindowControls from './components/WindowControls'
 import TabContainer from './components/TabContainer'
 import { databaseService } from './services/database/DatabaseService'
-import { canvasProjectService } from './services/canvasProjects'
 import { getCustomModelService } from './services/customModels/CustomModelService'
 import { modelscopeCustomModelService } from './services/modelscopeCustomModels/ModelscopeCustomModelService'
 import { loadAllModels } from './core/loaders'
@@ -213,8 +212,7 @@ const App: React.FC = () => {
   }, [])
   // 应用初始化
   useEffect(() => {
-    // 启动链路每一段都可能把第一次切 Tab 堵在后面（画布的 hydrate 就排在 canvasProjectService
-    // 之后），所以每段都要能单独看到耗时，否则只能靠猜。
+    // 启动链路每一段都可能把第一次切 Tab 堵在后面，所以每段都要能单独看到耗时，否则只能靠猜。
     const step = async (event: string, run: () => Promise<unknown>): Promise<void> => {
       const startedAt = performance.now()
       try {
@@ -229,14 +227,8 @@ const App: React.FC = () => {
       // 0. 注册默认面板（必须在使用前注册）
       registerDefaultPanels()
 
-      // 模型注册表与数据库互不依赖，串行等待只会推迟后面所有人。
-      // 画布 hydrate 要等 canvasProjectService，所以这条链越早跑完越好。
-      await Promise.all([
-        step('app.startup.models.completed', loadAllModels),
-        step('app.startup.database.completed', async () => {
-          await canvasProjectService.init()
-        }),
-      ])
+      // 模型注册表最先载入：画布与生成页打开时都要用到它。
+      await step('app.startup.models.completed', loadAllModels)
 
       // 供应商密钥状态与自定义模型都不参与首屏渲染，放到后面并行跑，不再挡住启动链。
       // 密钥状态不能省：画布/生成前置校验读的就是它，冷启动不同步会误判"未配置 API Key"。

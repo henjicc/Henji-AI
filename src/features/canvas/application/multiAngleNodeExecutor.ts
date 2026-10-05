@@ -121,12 +121,14 @@ export function createMultiAngleNodeExecutor(id: string, store: typeof useCanvas
           const generated = context.resumeProviderRequestId
             ? await resumeCanvasGeneration({
                 modelId: plan.modelId,
+                projectId: generationProjectId,
                 mediaType: 'image',
                 signal: context.signal,
                 taskId: context.resumeProviderRequestId,
               })
             : await runCanvasGeneration({
                 modelId: plan.modelId,
+                projectId: generationProjectId,
                 mediaType: 'image',
                 signal: context.signal,
                 params: plan.params,

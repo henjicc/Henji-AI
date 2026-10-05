@@ -1,25 +1,26 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createPlainTextPromptDocument } from '@/core/inputs/promptDocument'
 import { createCanvasStore, canvasStoreAttachment } from '@/stores/canvasStore'
-import { fromProjectRecord, toProjectRecord } from '@/stores/projectStoreSerialization'
 import { CANVAS_NODE_TYPES, type CanvasNode, type ImageEditNodeData } from '../domain/canvasNodes'
 import { migrateCanvasGenerationPrompts } from './canvasGenerationPromptMigration'
-import { attachCanvasProject, configureCanvasInstancePersistence, registerCanvasProjectInstance,
-  resetCanvasProjectInstancesForTests } from './canvasProjectInstances'
+import { attachCanvasProject, onCanvasProjectInstanceChanged, resetCanvasProjectInstancesForTests } from './canvasProjectInstances'
+import { canvasFromDocumentContent, canvasToDocumentContent } from './canvasDocumentContent'
+import { registerCanvasTestProject } from '@/tests/canvasProjectFixture'
 
 function generator(id: string, data: Partial<ImageEditNodeData> = {}): CanvasNode {
   return { id, type: CANVAS_NODE_TYPES.imageEdit, position: { x: 0, y: 0 },
     data: { prompt: '参考图片1修改', modelId: '', ...data } as ImageEditNodeData }
 }
 
+let stopListening: () => void = () => undefined
 afterEach(() => {
-  configureCanvasInstancePersistence(() => undefined)
+  stopListening()
   resetCanvasProjectInstancesForTests()
 })
 
 describe('画布附着前提示词迁移', () => {
   it('千节点只提交一次，保留历史、工程归属和保存通知，重复附着不重复写入', () => {
-    const project = registerCanvasProjectInstance({ id: 'bulk', name: 'bulk', createdAt: 1, updatedAt: 1,
+    const project = registerCanvasTestProject({ id: 'bulk', name: 'bulk', createdAt: 1, updatedAt: 1,
       coverPath: null, nodeCount: 1000, viewport: { x: 2, y: 3, zoom: 0.5 },
       nodes: Array.from({ length: 1000 }, (_, i) => generator(String(i))), edges: [],
       history: { past: [], future: [] } })
@@ -29,12 +30,12 @@ describe('画布附着前提示词迁移', () => {
     const subscriber = vi.fn()
     const save = vi.fn()
     project.store.subscribe(subscriber)
-    configureCanvasInstancePersistence(save)
+    stopListening = onCanvasProjectInstanceChanged((instance) => save(instance.snapshot()))
 
     attachCanvasProject(project)
     expect(subscriber).toHaveBeenCalledTimes(1)
     expect(save).toHaveBeenCalledTimes(1)
-    expect(project.dirty).toBe(true)
+    expect(project.session.dirty).toBe(true)
     expect(save.mock.calls[0][0]).toMatchObject({ id: 'bulk', nodeCount: 1000 })
     expect(project.store.getState().history).toBe(initial.history)
     expect(project.store.getState().edges).toBe(initial.edges)
@@ -44,11 +45,11 @@ describe('画布附着前提示词迁移', () => {
     expect(subscriber).toHaveBeenCalledTimes(1)
     expect(save).toHaveBeenCalledTimes(1)
 
-    const restored = registerCanvasProjectInstance({
-      ...fromProjectRecord(toProjectRecord(project.snapshot())), id: 'restored',
+    const restored = registerCanvasTestProject({
+      ...project.snapshot(), ...canvasFromDocumentContent(JSON.parse(JSON.stringify(canvasToDocumentContent(project.snapshot())))), id: 'restored',
     })
     attachCanvasProject(restored)
-    expect(restored.dirty).toBe(false)
+    expect(restored.session.dirty).toBe(false)
     expect(save).toHaveBeenCalledTimes(1)
     expect(restored.store.getState().nodes.map(node => node.data)).toEqual(project.store.getState().nodes.map(node => node.data))
 

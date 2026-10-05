@@ -18,7 +18,7 @@ import { persistGenerationResult } from '../generation/mediaResultPersist';
 import { createAssetGroupGraph, updateAssetGroupDataGraph } from './assetGroupGraph';
 import { runCanvasTransaction } from './canvasBatchService';
 import { runCanvasMutationStage, retainsCanvasMutation, confirmCanvasPersistence, type CanvasTransactionRuntime } from './canvasPersistenceService';
-import { hasUnconfirmedCanvasProjectSnapshot } from '@/stores/projectStore';
+import { hasUnconfirmedCanvasProjectSnapshot } from './canvasPersistenceService';
 import { requireCurrentCanvasProject } from './canvasApplicationService';
 import { canvasNodeFactory } from './canvasServices';
 import {

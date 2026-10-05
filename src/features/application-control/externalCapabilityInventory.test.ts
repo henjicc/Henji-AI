@@ -61,11 +61,11 @@ describe('外部能力面派生自真实注册表', () => {
   it('公开写入范围与 writeExclusion 声明一致，排除项一个都不放行', () => {
     const writable = new Set(externalWritableEntityTypes(domains))
     // 真实写过的目标（2.1／2.2 的四域与后台链路）必须在范围内。
-    for (const type of ['settings.registry', 'generation.model', 'asset', 'asset.library', 'canvas.node', 'canvas.project', 'camera_stage.object', 'camera_stage.state_keyframe', 'image_edit.layer', 'image_mark.annotation']) {
+    for (const type of ['settings.registry', 'generation.model', 'asset', 'asset.library', 'canvas.node', 'camera_stage.object', 'camera_stage.state_keyframe', 'image_edit.layer', 'image_mark.annotation']) {
       expect(writable.has(type), `${type} 应属于公开业务写入范围`).toBe(true)
     }
     // 声明了 writeExclusion 的实体一律在范围外，通用读改增删不能落到它们身上。
-    for (const type of ['generation.task', 'generation.result', 'generation.record', 'image_edit.document', 'image_edit.preview', 'image_edit.resource', 'asset.catalog', 'storyboard.card', 'storyboard.project', 'toolbox.tool']) {
+    for (const type of ['generation.task', 'generation.result', 'generation.record', 'image_edit.document', 'image_edit.preview', 'image_edit.resource', 'asset.catalog', 'storyboard.card', 'storyboard.project', 'toolbox.tool', 'canvas.project', 'camera_stage.project']) {
       expect(writable.has(type), `${type} 已声明有意只读，不能出现在公开写入范围`).toBe(false)
     }
   })

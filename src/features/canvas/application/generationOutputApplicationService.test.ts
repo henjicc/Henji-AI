@@ -1,11 +1,10 @@
-import { setCanvasTestProjectState } from '@/tests/canvasProjectFixture';
+import { setCanvasTestProjectState, canvasSaveSpy } from '@/tests/canvasProjectFixture';
 // @vitest-environment jsdom
 
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { registry } from '@/core/ModelRegistry';
-import { upsertProjectRecord } from '@/commands/projectState';
 import type { ModelDefinition } from '@/core/types';
 import { collectAndRewriteMedia, rewritePackagePathsToLocal } from '@/services/projectPackage/collectMediaRefs';
 import { useCanvasStore } from '@/stores/canvasStore';
@@ -86,12 +85,9 @@ function setupCanvas(
   }], { past: [], future: [] });
   useCanvasStore.getState().setSelectedNode(source.id);
   setCanvasTestProjectState({
-    projects: [project],
     currentProjectId: projectId,
     currentProject: project,
-    isHydrated: true,
     isOpeningProject: false,
-    saveCurrentProject: vi.fn(),
   });
   return { source, placeholder };
 }
@@ -182,7 +178,7 @@ describe('generationOutputApplicationService', () => {
   });
 
   it('图已提交但存储拒绝时保留节点引用的媒体；相同完成键只重试写盘', async () => {
-    vi.mocked(upsertProjectRecord).mockRejectedValueOnce(new Error('readonly'));
+    canvasSaveSpy().mockRejectedValueOnce(new Error('readonly'));
     const persistOutput = vi.fn(async (_mediaType: unknown, source: string) => ({
       patch: imagePatch(source), createdFilePaths: ['/managed/owned.png'],
     }));
@@ -509,7 +505,3 @@ describe('generationOutputApplicationService', () => {
 });
 
 // 本文件验证领域变换；仅替换最终存储边界，保存完成/拒绝由专门结果测试覆盖。
-vi.mock('@/commands/projectState', async (importOriginal) => ({
-  ...await importOriginal<typeof import('@/commands/projectState')>(),
-  upsertProjectRecord: vi.fn(async () => undefined),
-}))

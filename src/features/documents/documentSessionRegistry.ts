@@ -42,6 +42,14 @@ export interface OpenDocumentOptions {
   persistence?: DocumentPersistence
 }
 
+export interface LeaveDocumentOptions {
+  /**
+   * 还有后台任务在写这份文档（如画布上正在生成）：照常处理草稿（保存 / 不保存 / 取消），
+   * 写完当前修改但不结束会话，由工具在任务结束后自己关闭。“不保存”仍会移到回收站并结束会话。
+   */
+  keepOpen?: boolean
+}
+
 /** 离开草稿项目时由调用方提供：项目里有没有内容（文档都是空草稿或没有文档即为空）。 */
 export interface LeaveProjectRequest {
   project: ProjectSummary
@@ -155,11 +163,16 @@ export class DocumentSessionRegistry {
    * - 有内容的草稿：询问“保存 / 不保存 / 取消”。保存进入起名对话框；不保存移到回收站；取消留在原处。
    * 失败时抛错，会话保持打开、修改保留。
    */
-  async leave(id: string): Promise<DocumentLeaveOutcome> {
+  async leave(id: string, options: LeaveDocumentOptions = {}): Promise<DocumentLeaveOutcome> {
     const session = this.sessions.get(id)
     if (!session) return 'closed'
+    const finish = async (): Promise<void> => {
+      // keepOpen：还有后台任务在用这份文档，只做草稿决定与写完，不结束会话（由工具在空闲后关闭）
+      if (options.keepOpen) await session.flush()
+      else await session.close()
+    }
     if (!session.documentMeta.draft) {
-      await session.close()
+      await finish()
       return 'closed'
     }
     if (session.isEmpty() && await this.deleteEmptyDraft(session)) return 'discarded'
@@ -172,7 +185,7 @@ export class DocumentSessionRegistry {
       return 'discarded'
     }
     if (!await this.promptFinalize(session)) return 'cancelled'
-    await session.close()
+    await finish()
     return 'saved'
   }
 
@@ -310,7 +323,11 @@ export class DocumentSessionRegistry {
     }
   }
 
-  private adopt(read: DocumentReadResult, options: OpenDocumentOptions): DocumentSession {
+  /**
+   * 把已经读到的文档登记为会话（同步）：打开与新建内部用它；工具的测试夹具也用它直接造会话。
+   * 已有同 ID 的会话时返回原会话。
+   */
+  adopt(read: DocumentReadResult, options: OpenDocumentOptions = {}): DocumentSession {
     const existing = this.sessions.get(read.meta.id)
     if (existing) return existing
     const kind = this.kinds.require(read.meta.kind)

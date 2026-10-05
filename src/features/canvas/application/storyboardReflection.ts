@@ -61,14 +61,14 @@ function property(
 /**
  * 分镜全部属性只读，理由逐条给出。
  *
- * 分镜不是独立数据，而是**画布工程的只读摘要投影**：`storyboardProjectService.getStoryboardProject`
- * 读的是同一份画布工程记录（`nodesJson` / `edgesJson`），做截断摘要后返回，整个服务只有读取
+ * 分镜不是独立数据，而是**画布的只读摘要投影**：`storyboardProjectService.getStoryboardProject`
+ * 读的是同一份画布文档（节点 / 连线），做截断摘要后返回，整个服务只有读取
  * 函数。卡片引用用的也是 `nodeId`。要改分镜内容，走 `canvas.*` 的通用动词。
  */
 const properties: Record<StoryboardEntityType, ApplicationPropertyDescriptor[]> = {
   [STORYBOARD_ENTITY_TYPES.project]: [
     property(STORYBOARD_ENTITY_TYPES.project, 'name', '项目名称', { kind: 'string', maxLength: 200 },
-      '分镜工程名即画布工程名，改名请写 canvas.project.name。'),
+      '分镜工程名即画布文档名，改名请写 documents.document.name（同一个 ID）。'),
     property(STORYBOARD_ENTITY_TYPES.project, 'card_refs', '分镜卡引用', { kind: 'ref_list', refKinds: [STORYBOARD_ENTITY_TYPES.card], maxItems: 1000 },
       '卡片集合由画布节点派生，增删请用 canvas.node 的集合写入。'),
     property(STORYBOARD_ENTITY_TYPES.project, 'edge_count', '关系数量', { kind: 'integer', hardRange: { min: 0 } },
@@ -187,11 +187,12 @@ export function createStoryboardReflectionRegistrations(): ApplicationEntityRegi
       exposures: ['ui', 'assistant', 'local_adapter'],
       parentTypes: entityType === STORYBOARD_ENTITY_TYPES.card ? [STORYBOARD_ENTITY_TYPES.project] : [],
       revisionScopes: ['storyboard'],
-      queryCapabilityIds: [entityType === STORYBOARD_ENTITY_TYPES.project ? 'get_storyboard_project' : 'get_storyboard_project'],
+      // 分镜工程就是画布文档（同一个 ID），详情读 get_canvas_project
+      queryCapabilityIds: ['get_canvas_project'],
       schemaRef: schemaRef('entity', entityType),
       writeExclusion: {
-        reason: '分镜是画布工程的只读摘要投影。改格子内容与顺序请写 canvas.node.storyboard_frames'
-          + '（3.2）；增删卡片请用 canvas.node 的集合写入；改工程名请写 canvas.project.name。',
+        reason: '分镜是画布的只读摘要投影。改格子内容与顺序请写 canvas.node.storyboard_frames'
+          + '（3.2）；增删卡片请用 canvas.node 的集合写入；改名请写 documents.document.name（画布文档 ID）。',
       },
     },
     properties: properties[entityType],

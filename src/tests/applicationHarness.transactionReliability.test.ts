@@ -7,8 +7,8 @@ import { createApplicationHarness } from './applicationHarness'
 import { installHarnessNativeStorage, readHarnessImageEditDocument, uninstallHarnessNativeStorage } from './harnessNativeStorage'
 import { registerPersistedImageEditTestSession } from './imageEditPersistenceTestSession'
 import { createAttachedImageEditPersistenceFixture } from './imageEditAttachedPersistenceFixture'
-import { getProjectRecord } from '@/commands/projectState'
 import { applicationTransactionFailureFactsSchema } from '@/core/application-control/applicationTransactionFailureFacts'
+import { readCanvasTestProject } from '@/tests/canvasProjectFixture'
 
 const cleanup: Array<() => void> = []
 beforeEach(() => { installHarnessNativeStorage() })
@@ -67,7 +67,7 @@ it('附着图片 name trim 后公共调用保留双域事实和撤销，仍为 p
   expect(saved.document.layers[0].name).toBe('已修改')
   expect(saved.document.revision).toBe(1)
   expect(saved.history?.undo).toHaveLength(1)
-  const nodes = JSON.parse((await getProjectRecord(fixture.projectId))!.nodesJson)
+  const nodes = readCanvasTestProject(fixture.projectId)!.nodes
   expect(nodes[0].data.imageEditSession.revision).toBe(saved.document.revision)
   expect(nodes[0].data.imageEditSession.previewRef).toBe(saved.previewRef)
   expect(fixture.materialize).toHaveBeenCalledTimes(1)

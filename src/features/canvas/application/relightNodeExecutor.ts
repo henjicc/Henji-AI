@@ -99,6 +99,7 @@ export function createRelightNodeExecutor(id: string, store: typeof useCanvasSto
     try {
       const result = await runCanvasGeneration({
         modelId: prepared.route.model.meta.id,
+        projectId: generationProjectId,
         mediaType: 'image',
         signal: execution.signal,
         params: prepared.params,

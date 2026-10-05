@@ -1,6 +1,5 @@
 import { setCanvasTestProjectState } from '@/tests/canvasProjectFixture';
 // @vitest-environment jsdom
-// @vitest-environment jsdom
 import { afterAll, beforeAll, expect, it } from 'vitest';
 import type { ApplicationRef } from '@/core/application-control';
 import { readPersistedCanvasProjectSnapshot } from '@/features/canvas/application/canvasQueryService';
@@ -12,27 +11,30 @@ import { loadRealModelsIntoRegistry } from './loadRealModels';
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from './harnessNativeStorage';
 
 beforeAll(async () => { installHarnessNativeStorage(); await loadRealModelsIntoRegistry() })
+
+/** 画布是通用文档（3.4）：create_document 返回的文档引用 id 就是画布 ID。 */
+const documentId = (result: Record<string, unknown>): string => (result.resultRef as ApplicationRef).id
 afterAll(() => uninstallHarnessNativeStorage())
 
 it('公共实体调用在 A 页面创建、修改并保存 B，打开 B 复用状态和撤销历史', async () => {
-  setCanvasTestProjectState({ currentProjectId: null, currentProject: null, projects: [], isHydrated: true })
+  setCanvasTestProjectState({ currentProjectId: null, currentProject: null })
   const app = createApplicationHarness()
   try {
-    const a = await app.requireResult('create_canvas_project', { name: '正在编辑 A' })
-    await app.requireResult('open_canvas_project', { projectId: a.projectId })
+    const a = await app.requireResult('create_document', { kind: 'canvas', name: '正在编辑 A' })
+    await app.requireResult('open_document', { documentId: documentId(a) })
     const visible = useCanvasStore.getState()
-    const b = await app.requireResult('create_canvas_project', { name: '后台 B' })
-    const parent = { kind: 'canvas.project', id: String(b.projectId) }
+    const b = await app.requireResult('create_document', { kind: 'canvas', name: '后台 B' })
+    const parent = { kind: 'canvas.project', id: documentId(b) }
     const result = await app.requireResult('change_application_entities', { summary: '在后台工程创建文本', changes: [{
       kind: 'create_items', parent, entityType: 'canvas.node', items: [{ properties: { 'canvas.node.node_type': 'textAnnotationNode' } }],
     }] })
     const target = (result.resultRefs as ApplicationRef[])[0]
     const changed = await app.change(target, { 'canvas.node.text_content': '后台修改的正文' })
     expect(changed.ok, JSON.stringify(changed)).toBe(true)
-    expect(useProjectStore.getState().currentProjectId).toBe(a.projectId)
+    expect(useProjectStore.getState().currentProjectId).toBe(documentId(a))
     expect(useCanvasStore.getState()).toBe(visible)
     expect((await readPersistedCanvasProjectSnapshot(parent.id)).nodes[0].data.content).toBe('后台修改的正文')
-    await app.requireResult('open_canvas_project', { projectId: parent.id })
+    await app.requireResult('open_document', { documentId: parent.id })
     expect(useCanvasStore.getState().nodes[0].data.content).toBe('后台修改的正文')
     expect(useCanvasStore.getState().undo()).toBe(true)
     expect(useCanvasStore.getState().nodes[0].data.content).not.toBe('后台修改的正文')
@@ -43,10 +45,10 @@ it('公共入口连续创建节点和连线，位置与持久化结果一致，�
   const app = createApplicationHarness()
   try {
     useCanvasStore.getState().setCanvasData([], [], { past: [], future: [] })
-    setCanvasTestProjectState({ currentProjectId: null, currentProject: null, projects: [], isHydrated: true })
-    const project = await app.requireResult('create_canvas_project', { name: '公共画布创建' })
-    const parent = { kind: 'canvas.project', id: String(project.projectId) }
-    await app.requireResult('open_canvas_project', { projectId: parent.id })
+    setCanvasTestProjectState({ currentProjectId: null, currentProject: null })
+    const project = await app.requireResult('create_document', { kind: 'canvas', name: '公共画布创建' })
+    const parent = { kind: 'canvas.project', id: documentId(project) }
+    await app.requireResult('open_document', { documentId: parent.id })
     const created = await app.requireResult('change_application_entities', { summary: '创建两个节点', changes: [{
       kind: 'create_items', parent, entityType: 'canvas.node', items: [
         { properties: { 'canvas.node.node_type': 'stringSourceNode' } },
@@ -73,32 +75,4 @@ it('公共入口连续创建节点和连线，位置与持久化结果一致，�
     expect(persisted.nodes.find(node => node.type === 'stringSourceNode')?.position).toEqual({ x: 420, y: 280 })
     expect(persisted.edges).toMatchObject([{ source: refs[0].id.split(':')[1], target: refs[1].id.split(':')[1] }])
   } finally { app.dispose() }
-})
-
-/*
- * 删除是 R3 破坏性操作，回执必须自带核实结果。
- *
- * 外部操作账本的 `ok` 只认 `data.verification.verified`：少了它，一次**真的删掉了**的删除
- * 会以 `ok:false` / `isError:true` 交给调用方，而客户端按常理会重试——重试一个已经完成的
- * 删除正是最不该发生的事。这条盯的就是回执本身，不是删除逻辑。
- */
-it('删除画布工程的回执带着按存储读回的核实结果', async () => {
-  setCanvasTestProjectState({ currentProjectId: null, currentProject: null, projects: [], isHydrated: true })
-  const app = createApplicationHarness()
-  try {
-    const created = await app.requireResult('create_canvas_project', { name: '待删工程' })
-    const projectId = String(created.projectId)
-    // 破坏性操作不自动取基线：先读原目标，拿它的 revision 当基线，与外部客户端同一口径。
-    const baseline = await app.read({ kind: 'canvas.project', id: projectId })
-    const deleted = await app.requireResult('delete_canvas_project', { projectId },
-      baseline.revisions as Record<string, number>)
-    expect(deleted).toMatchObject({ projectId, status: 'deleted' })
-    expect(deleted.verification).toMatchObject({
-      verified: true,
-      target: { kind: 'canvas.project', id: projectId },
-    })
-    expect(await readPersistedCanvasProjectSnapshot(projectId).catch(() => null)).toBeNull()
-  } finally {
-    useProjectStore.setState({ currentProjectId: null })
-  }
 })

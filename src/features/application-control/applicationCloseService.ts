@@ -1,12 +1,11 @@
 import { hasActiveAudioEditProjectWork } from '@/features/audioEdit/application/audioEditProjectInstances'
 import { runApplicationCloseGuards } from '@/core/applicationLifecycle/applicationCloseGuards'
 import { freezeApplicationWrites } from '@/core/applicationLifecycle/applicationWriteBarrier'
-import { hasActiveCanvasProjectWork, listCanvasProjectInstances } from '@/features/canvas/application/canvasProjectInstances'
+import { hasActiveCanvasProjectWork } from '@/features/canvas/application/canvasProjectInstances'
 import { hasActiveCameraStageProjectWork, listCameraStageProjectInstances } from '@/features/cameraStage/application/cameraStageProjectRuntime'
 import { getDocumentSessionRegistry } from '@/features/documents/documentSessionRegistry'
 import { hasActiveImageEditDocumentWorkV3, listImageEditDocumentInstancesV3, saveImageEditDocumentInstanceV3 } from '@/features/imageEdit/v3/application/imageEditDocumentInstances'
 import { hasLoadingImageEditDocumentsV3 } from '@/features/imageEdit/v3/application/imageEditDocumentLoading'
-import { flushCanvasProjectSnapshot } from '@/stores/projectStore'
 import { hasActiveApplicationInvocations } from './applicationCapabilityService'
 
 export class ApplicationCloseBusyError extends Error {
@@ -48,8 +47,7 @@ export function closeApplication(confirmClose: () => Promise<void>): Promise<voi
         if (instance.persistenceOwner) await saveImageEditDocumentInstanceV3(instance.documentId)
         else if (instance.dirty) throw new Error('图片文档尚未保存，请先为文档选择保存位置。')
       }
-      for (const instance of listCanvasProjectInstances()) await flushCanvasProjectSnapshot(instance.id)
-      // 通用文档会话的第二轮保存（3.2；口播 3.3 起也在其中）：关闭屏障守卫跑完到冻结之间的修改也写完；各工具不再逐个保存
+      // 通用文档会话的第二轮保存（3.2；口播 3.3、画布 3.4 起也在其中）：关闭屏障守卫跑完到冻结之间的修改也写完；各工具不再逐个保存
       await getDocumentSessionRegistry().flushAll()
       await confirmClose()
     } finally { unfreeze() }

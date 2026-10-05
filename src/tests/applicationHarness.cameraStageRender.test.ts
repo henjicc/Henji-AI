@@ -1,11 +1,11 @@
-import { setCanvasTestProjectState } from '@/tests/canvasProjectFixture'
+import { setCanvasTestProjectState, createCanvasTestProject } from '@/tests/canvasProjectFixture'
 import '@/tests/cameraStageProjectFixture'
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 
 import { createNamedCameraStageDocument, loadProjectIntoScene } from '@/features/cameraStage/projects/cameraStageProjectService'
 import { findCameraStageProjectInstance, leaveCameraStageProject } from '@/features/cameraStage/application/cameraStageProjectRuntime'
-import { findCanvasProjectInstance } from '@/features/canvas/application/canvasProjectInstances'
+import { findCanvasProjectInstance, leaveCanvasProject } from '@/features/canvas/application/canvasProjectInstances'
 import { applyCameraStageRenderTask, resetCameraStageRenderTasksForTests, startCameraStageNodeRender } from '@/features/canvas/application/cameraStageRenderApplicationService'
 import { createCameraStageRenderTaskRef } from '@/features/cameraStage/application/cameraStageRenderCapabilityAdapter'
 import { confirmCanvasPersistence } from '@/features/canvas/application/canvasPersistenceService'
@@ -14,11 +14,10 @@ import { cameraStageNodeDefinition } from '@/features/canvas/domain/nodeRegistry
 import type { CameraStageRenderEvent, CameraStageRenderPlatform, CameraStageRenderTaskSnapshot } from '@/platform/contracts/cameraStageRender'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useProjectStore } from '@/stores/projectStore'
-import { getPlatform } from '@/platform/runtime'
 
 import { CameraStageRenderTaskRegistry } from '../../electron/main/services/camera-stage-render-task-registry'
 import { createApplicationHarness } from './applicationHarness'
-import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from './harnessNativeStorage'
+import { harnessDocumentStore, installHarnessNativeStorage, uninstallHarnessNativeStorage } from './harnessNativeStorage'
 
 vi.mock('@/features/canvas/generation/mediaResultPersist', () => ({
   // 真实像素属于 harness 允许替代的外部边界；结果节点、事务、回执和持久化仍走生产服务。
@@ -77,8 +76,7 @@ beforeEach(() => {
   installHarnessNativeStorage()
   useCanvasStore.getState().setCanvasData([], [], { past: [], future: [] })
   setCanvasTestProjectState({
-    projects: [], currentProjectId: null, currentProject: null,
-    isHydrated: true, isOpeningProject: false, openError: null,
+    currentProjectId: null, currentProject: null, isOpeningProject: false, openError: null,
     persistenceError: null, persistenceErrors: {},
   })
 })
@@ -94,7 +92,7 @@ it('公共应用入口 共用后台任务完成判据并只取消活动任务', 
   const registry = new CameraStageRenderTaskRegistry()
   installTaskRegistryBridge(registry)
   const stage = await createNamedCameraStageDocument('助手后台镜头')
-  const canvasProjectId = await useProjectStore.getState().createProject('助手后台输出')
+  const canvasProjectId = await createCanvasTestProject('助手后台输出')
   const source: CanvasNode = {
     id: 'camera-node',
     type: CANVAS_NODE_TYPES.cameraStage,
@@ -155,11 +153,11 @@ it('公共应用入口 共用后台任务完成判据并只取消活动任务', 
   expect(registry.require(secondTask, OWNER_ID)?.status).toBe('cancelled')
 })
 
-it.each(['canvas', 'cameraStage'] as const)('A 页面后台渲染 B，打开 B 不接管任务，删除画布 / 离开镜头参考（%s）等待原结果保存', async deleteTarget => {
+it.each(['canvas', 'cameraStage'] as const)('A 页面后台渲染 B，打开 B 不接管任务；离开画布不等任务、离开镜头参考（%s）等待原结果保存', async deleteTarget => {
   const registry = new CameraStageRenderTaskRegistry()
   installTaskRegistryBridge(registry)
   const stage = await createNamedCameraStageDocument('后台 B 场景')
-  const projectId = await useProjectStore.getState().createProject('后台 B 画布')
+  const projectId = await createCanvasTestProject('后台 B 画布')
   useCanvasStore.getState().setCanvasData([{
     id: 'camera-node', type: CANVAS_NODE_TYPES.cameraStage, position: { x: 0, y: 0 },
     data: { ...cameraStageNodeDefinition.createDefaultData(), projectId: stage.id },
@@ -167,7 +165,7 @@ it.each(['canvas', 'cameraStage'] as const)('A 页面后台渲染 B，打开 B �
   await confirmCanvasPersistence(projectId)
   const canvasInstance = findCanvasProjectInstance(projectId)!
   const stageInstance = findCameraStageProjectInstance(stage.id)!
-  const visibleId = await useProjectStore.getState().createProject('用户编辑 A')
+  const visibleId = await createCanvasTestProject('用户编辑 A')
   const descriptor = await startCameraStageNodeRender('camera-node', 'image', {
     expectedOwner: { canvasProjectId: projectId, cameraStageDocumentId: stage.id },
   })
@@ -177,15 +175,21 @@ it.each(['canvas', 'cameraStage'] as const)('A 页面后台渲染 B，打开 B �
   expect(stageInstance.leases).toBe(1)
   const harness = createApplicationHarness(); runtimes.push(harness)
   await loadProjectIntoScene(stage.id)
-  await harness.requireResult('open_canvas_project', { projectId })
+  await harness.requireResult('open_document', { documentId: projectId })
   expect(findCanvasProjectInstance(projectId)).toBe(canvasInstance)
   expect(findCameraStageProjectInstance(stage.id)).toBe(stageInstance)
-  await harness.requireResult('open_canvas_project', { projectId: visibleId })
+  await harness.requireResult('open_document', { documentId: visibleId })
   let deleted = false
-  const deleting = (deleteTarget === 'canvas' ? useProjectStore.getState().deleteProject(projectId) : leaveCameraStageProject(stage.id))
+  // 画布离开不等后台任务（会话留到任务结束再关）；镜头参考离开仍等租约归零
+  const deleting = (deleteTarget === 'canvas' ? leaveCanvasProject(projectId) : leaveCameraStageProject(stage.id))
     .then(() => { deleted = true })
-  await Promise.resolve()
-  expect(deleted).toBe(false)
+  if (deleteTarget === 'canvas') {
+    await deleting
+    expect(findCanvasProjectInstance(projectId)).toBe(canvasInstance)
+  } else {
+    await Promise.resolve()
+    expect(deleted).toBe(false)
+  }
   const completed = registry.applyEvent({
     type: 'completed', requestId: descriptor!.requestId, nodeId: 'camera-node',
     result: { kind: 'image', mediaUrl: 'henji-media://camera-stage/b.png', mediaPath: '/pixel-boundary/b.png',
@@ -205,14 +209,14 @@ it('后台三维等待和恢复共用原任务，保存失败后重试只落一�
   const register = vi.spyOn(registry, 'register')
   installTaskRegistryBridge(registry)
   const stage = await createNamedCameraStageDocument('恢复原三维')
-  const projectId = await useProjectStore.getState().createProject('后台 B')
+  const projectId = await createCanvasTestProject('后台 B')
   useCanvasStore.getState().setCanvasData([{
     id: 'camera-node', type: CANVAS_NODE_TYPES.cameraStage, position: { x: 0, y: 0 },
     data: { ...cameraStageNodeDefinition.createDefaultData(), projectId: stage.id },
   }], [], { past: [], future: [] })
   await confirmCanvasPersistence(projectId)
   const instance = findCanvasProjectInstance(projectId)!
-  const visibleId = await useProjectStore.getState().createProject('编辑 A')
+  const visibleId = await createCanvasTestProject('编辑 A')
   const harness = createApplicationHarness(); runtimes.push(harness)
   const submitted = await harness.requireResult('render_camera_stage_output', {
     projectRef: { kind: 'canvas.project', id: projectId }, nodeRef: { kind: 'canvas.node', id: `${projectId}:camera-node` },
@@ -225,12 +229,12 @@ it('后台三维等待和恢复共用原任务，保存失败后重试只落一�
   })
   const input = { taskRef: submitted.taskRef }
   expect(await harness.requireResult('wait_camera_stage_render_task', input)).toMatchObject({ status: 'awaiting_persistence', waitReason: 'recovery_required' })
-  const io = getPlatform().storyboardProjects
-  const save = vi.spyOn(io, 'upsertProjectRecord').mockRejectedValue(new Error('disk full'))
+  // 画布文档的写入一直失败（文档仓库替身）
+  harnessDocumentStore().failSaves = Number.MAX_SAFE_INTEGER
   expect(await harness.requireResult('recover_camera_stage_render_task', input)).toMatchObject({ status: 'awaiting_persistence', recoveryAttempted: true })
   expect(registry.require(descriptor, OWNER_ID)?.status).toBe('completed')
   expect(instance.leases).toBeGreaterThan(0)
-  save.mockRestore()
+  harnessDocumentStore().failSaves = 0
   expect(await harness.requireResult('recover_camera_stage_render_task', input)).toMatchObject({ status: 'completed', recoveryAttempted: true })
   expect(await harness.requireResult('wait_camera_stage_render_task', input)).toMatchObject({ status: 'completed', waitReason: 'terminal' })
   expect(await harness.requireResult('recover_camera_stage_render_task', input)).toMatchObject({ status: 'completed', recoveryAttempted: false })

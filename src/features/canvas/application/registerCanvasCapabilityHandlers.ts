@@ -6,11 +6,12 @@ import { retryLayerStackResult } from '@/features/canvas/application/layerStackR
 import type { AssistantCanvasImageCapabilityId } from '@/core/canvas/imageCapabilityIds'
 import type { CanvasDownloadDestination } from '@/core/application-control/domains/canvas/canvasExportApplicationCapabilities'
 import { CANVAS_NODE_CONTROL_CATALOG_VERSION, getCanvasNodeSchema, searchCanvasNodeTypes } from '@/features/canvas/domain/nodeControlRegistry'
-import { addCanvasNode, connectCanvasNodes, focusCanvasNode, redoCanvasChange, undoCanvasChange } from '@/features/canvas/application/canvasApplicationService'
+import { addCanvasNode, connectCanvasNodes, focusCanvasNode, openCanvasProject, redoCanvasChange, undoCanvasChange } from '@/features/canvas/application/canvasApplicationService'
 import { commitCanvasBatch, planCanvasBatch, previewCanvasBatch } from '@/features/canvas/application/canvasBatchService'
-import { closeCanvasProject, createCanvasProject, deleteCanvasProject, openCanvasProjectWithSummary, renameCanvasProject } from '@/features/canvas/application/canvasProjectService'
+import { openCanvasDocument, releaseCanvasDocument } from '@/features/canvas/application/canvasProjectService'
+import { registerDocumentOpener, registerDocumentReleaser } from '@/features/documents/documentOperations'
 import { clearCanvasProject, connectAssetGroupToTarget, deleteCanvasNodes, disconnectAssetGroupFromTarget, disconnectCanvasEdge, duplicateCanvasNode, groupCanvasNodes, selectCanvasNode, ungroupCanvasNode, updateCanvasNode } from '@/features/canvas/application/canvasMutationService'
-import { getCanvasNode, getCanvasProject, listCanvasProjectSummaries } from '@/features/canvas/application/canvasQueryService'
+import { getCanvasNode, getCanvasProject } from '@/features/canvas/application/canvasQueryService'
 import { addAssetToCanvas } from '@/features/assets/application/assetCanvasApplicationService'
 import { addGenerationResultToCanvas } from '@/features/canvas/application/generationResultCanvasApplicationService'
 import { downloadCanvasMedia } from '@/features/canvas/application/canvasDownloadService'
@@ -58,15 +59,12 @@ export function registerCanvasCapabilityHandlers(
     await confirmCanvasPersistence(projectRef.id)
     return { ref: projectRef, status: 'persisted' }
   })
-  registrar.registerHandler('list_canvas_projects', async () => ({
-    projects: await listCanvasProjectSummaries(),
-  }))
-
-  registrar.registerHandler('open_canvas_project', async (input, context) => {
-    const parsed = parseCapabilityInput<ProjectInput>('open_canvas_project', input)
-    const result = await openCanvasProjectWithSummary(parsed.projectId, context.signal)
-    return { ...result, ...openApplicationSurface('workspace.canvas', context) }
+  // 画布文档的通用打开与后台释放（3.4）：列出、新建、改名、移动、副本、回收站走通用文档能力，
+  // 这里只登记“打开到哪里”（画布工作区）和“后台持有的实例怎么释放”。
+  registerDocumentOpener('canvas', async (document) => {
+    if (await openCanvasDocument(document)) openApplicationSurface('workspace.canvas')
   })
+  registerDocumentReleaser('canvas', releaseCanvasDocument)
 
   registrar.registerHandler('search_canvas_node_types', (input) => {
     const parsed = parseCapabilityInput<{
@@ -90,33 +88,6 @@ export function registerCanvasCapabilityHandlers(
     const schema = getCanvasNodeSchema(parsed.nodeType)
     if (!schema) throw new Error('CANVAS_NODE_TYPE_NOT_FOUND')
     return { schema }
-  })
-
-  registrar.registerHandler('create_canvas_project', async (input, context) => {
-    throwIfCapabilityAborted(context.signal)
-    const parsed = parseCapabilityInput<{ name: string }>('create_canvas_project', input)
-    return await createCanvasProject(parsed.name)
-  })
-
-  registrar.registerHandler('close_canvas_project', async (input, context) => {
-    throwIfCapabilityAborted(context.signal)
-    const parsed = parseCapabilityInput<ProjectInput>('close_canvas_project', input)
-    return await closeCanvasProject(parsed.projectId)
-  })
-
-  registrar.registerHandler('rename_canvas_project', async (input, context) => {
-    throwIfCapabilityAborted(context.signal)
-    const parsed = parseCapabilityInput<ProjectInput & { name: string }>(
-      'rename_canvas_project',
-      input
-    )
-    return await renameCanvasProject(parsed.projectId, parsed.name)
-  })
-
-  registrar.registerHandler('delete_canvas_project', async (input, context) => {
-    throwIfCapabilityAborted(context.signal)
-    const parsed = parseCapabilityInput<ProjectInput>('delete_canvas_project', input)
-    return await deleteCanvasProject(parsed.projectId)
   })
 
   registrar.registerHandler('get_canvas_project', (input) => {
@@ -182,7 +153,7 @@ export function registerCanvasCapabilityHandlers(
   registrar.registerHandler('focus_canvas_node', async (input, context) => {
     throwIfCapabilityAborted(context.signal)
     const parsed = parseCapabilityInput<NodeInput>('focus_canvas_node', input)
-    await openCanvasProjectWithSummary(parsed.projectId, context.signal)
+    await openCanvasProject(parsed.projectId, context.signal)
     const surface = openApplicationSurface('workspace.canvas', context)
     const focused = await focusCanvasNode(parsed.projectId, parsed.nodeId, context.signal)
     return { ...focused, ...surface }

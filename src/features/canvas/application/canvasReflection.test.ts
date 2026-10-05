@@ -6,12 +6,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ApplicationExecutionContext, ApplicationPlannedStep } from '@/core/application-control'
 import { CANVAS_NODE_TYPES, type StoryboardFrameItem } from '@/features/canvas/domain/canvasNodes'
 import { useCanvasStore, type CanvasNode } from '@/stores/canvasStore'
-import { useProjectStore, flushCanvasProjectSnapshot, hasUnconfirmedCanvasProjectSnapshot, type Project } from '@/stores/projectStore'
-import { upsertProjectRecord } from '@/commands/projectState'
-import { ApplicationPersistenceBoundaryFailure } from '@/core/application-control/execution/persistence'
+import { type Project } from '@/stores/projectStore'
 
 import { CanvasNodeMutationExecutor } from './canvasMutationExecutor'
-import { CanvasProjectMutationExecutor } from './canvasProjectMutationExecutor'
 import { CANVAS_ENTITY_TYPES, createCanvasReflectionRegistrations } from './canvasReflection'
 import * as canvasMutationService from './canvasMutationService'
 
@@ -19,7 +16,6 @@ import * as canvasMutationService from './canvasMutationService'
 
 const projectId = 'canvas-reflection-project'
 const nodeId = 'node-1'
-const originalRenameProject = useProjectStore.getState().renameProject
 const context: ApplicationExecutionContext = {
   requestId: 'canvas-reflection-test',
   exposure: 'assistant',
@@ -101,14 +97,10 @@ describe('canvas reflection and mutation', () => {
     const currentProject = project(canvasNode)
     useCanvasStore.getState().setCanvasData([canvasNode], [], { past: [], future: [] })
     setCanvasTestProjectState({
-      projects: [currentProject],
       currentProjectId: projectId,
       currentProject,
-      isHydrated: true,
       isOpeningProject: false,
-      renameProject: originalRenameProject,
       persistenceErrors: {},
-      saveCurrentProject: vi.fn(),
     })
   })
 
@@ -174,58 +166,13 @@ describe('canvas reflection and mutation', () => {
       'canvas.node.asset_group_cover_member_id',
     ])
     const projectRegistration = registrations.find((item) => item.entity.id === CANVAS_ENTITY_TYPES.project)
+    // 3.4：画布名就是文档文件名，只读，改名走通用文档属性；画布实体本身只读
     expect(projectRegistration?.properties.find((item) => item.id === 'canvas.project.name')).toMatchObject({
-      requiredPermissions: { write: ['canvas:write'] },
+      requiredPermissions: { write: [] },
     })
     expect(projectRegistration?.properties.find((item) => item.id === 'canvas.project.name')?.readOnlyReason)
-      .toBeUndefined()
-  })
-
-  it('通过通用工程属性执行器改名并撤销包含冒号的旧名称', async () => {
-    const oldProject = project(node())
-    oldProject.name = '旧:项目名'
-    setCanvasTestProjectState({
-      projects: [oldProject],
-      currentProject: oldProject,
-      renameProject: async (id, name) => {
-        setCanvasTestProjectState((state) => ({
-          projects: state.projects.map((item) => item.id === id ? { ...item, name } : item),
-          currentProject: state.currentProject?.id === id ? { ...state.currentProject, name } : state.currentProject,
-        }))
-      },
-    })
-    const executor = new CanvasProjectMutationExecutor()
-    const result = await executor.apply({
-      kind: 'mutation',
-      target: { kind: CANVAS_ENTITY_TYPES.project, id: projectId },
-      entityType: CANVAS_ENTITY_TYPES.project,
-      expectedRevisions: { canvas: 2 },
-      mutations: [{ propertyId: 'canvas.project.name', operation: 'set', value: '新项目名' }],
-    })
-    expect(useProjectStore.getState().projects.find((item) => item.id === projectId)?.name).toBe('新项目名')
-
-    await executor.undo(String(result.undoToken))
-    expect(useProjectStore.getState().projects.find((item) => item.id === projectId)?.name).toBe('旧:项目名')
-  })
-
-  it('工程改名保存失败保留真实修改，重试原保存不再次执行改名', async () => {
-    vi.mocked(upsertProjectRecord).mockRejectedValueOnce(new Error('disk failed'))
-    const executor = new CanvasProjectMutationExecutor()
-    const step: Extract<ApplicationPlannedStep, { kind: 'mutation' }> = {
-      kind: 'mutation', target: { kind: CANVAS_ENTITY_TYPES.project, id: projectId },
-      entityType: CANVAS_ENTITY_TYPES.project, expectedRevisions: { canvas: 2 },
-      mutations: [{ propertyId: 'canvas.project.name', operation: 'set', value: '保留名称' }],
-    }
-    const failure = await executor.apply(step).catch((error: unknown) => error)
-    expect(failure).toBeInstanceOf(ApplicationPersistenceBoundaryFailure)
-    expect(failure).toMatchObject({ failure: { facts: { memoryState: 'modified', recovery: { capabilityId: 'retry_canvas_project_save', replayMutation: false } } }, completed: [{ directRefs: [{ id: projectId }] }] })
-    expect(useProjectStore.getState().currentProject?.name).toBe('保留名称')
-    expect(hasUnconfirmedCanvasProjectSnapshot(projectId)).toBe(true)
-    const rename = vi.spyOn(useProjectStore.getState(), 'renameProject')
-    await flushCanvasProjectSnapshot(projectId)
-    expect(rename).not.toHaveBeenCalled()
-    expect(hasUnconfirmedCanvasProjectSnapshot(projectId)).toBe(false)
-    expect(vi.mocked(upsertProjectRecord).mock.lastCall?.[0]).toMatchObject({ id: projectId, name: '保留名称' })
+      .toContain('documents.document.name')
+    expect(projectRegistration?.entity.writeExclusion?.reason).toContain('documents.document.name')
   })
 
   it('非生成节点不会被发现为可写生成配置', async () => {
@@ -375,7 +322,3 @@ describe('canvas reflection and mutation', () => {
 })
 
 // 本文件验证领域变换；仅替换最终存储边界，保存完成/拒绝由专门结果测试覆盖。
-vi.mock('@/commands/projectState', async (importOriginal) => ({
-  ...await importOriginal<typeof import('@/commands/projectState')>(),
-  upsertProjectRecord: vi.fn(async () => undefined),
-}))

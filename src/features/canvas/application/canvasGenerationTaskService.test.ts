@@ -6,8 +6,8 @@ import { GenerationSubmissionCancelledError } from '@/core/services/generationSu
 import { useSettingsStore } from '@/stores/settingsStore'
 import { databaseService } from '@/services/database/DatabaseService'
 import type { HistoryRecord } from '@/services/database'
-import { pauseCanvasProjectPersistence, useProjectStore } from '@/stores/projectStore'
-import * as projectStorage from '@/stores/projectStore'
+import { useProjectStore } from '@/stores/projectStore'
+import { pauseCanvasProjectPersistence } from './canvasPersistenceService'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { readGenerationTaskStatusSnapshot, replaceGenerationTaskStatusSnapshots } from '@/features/generation/application/generationTaskStatusRegistry'
@@ -30,6 +30,7 @@ import * as imageCommands from '@/commands/image'
 import { CANVAS_IMAGE_CAPABILITY_IDS } from '../capabilities'
 import { prepareNodeImage } from './imageData'
 import { openCanvasProject } from './canvasApplicationService'
+import { createCanvasTestProject, canvasTestRegistry } from '@/tests/canvasProjectFixture'
 vi.mock('./imageData', async (original) => ({
   ...await original<typeof import('./imageData')>(),
   persistImageLocally: vi.fn(async (url: string) => url),
@@ -41,7 +42,6 @@ const records = new Map<string, HistoryRecord>()
 beforeEach(async () => {
   replaceGenerationTaskStatusSnapshots([])
   installHarnessNativeStorage()
-  await useProjectStore.getState().hydrate()
   resetCanvasExecutionServiceForTests()
   records.clear()
   useSettingsStore.setState({ providerKeyStatus: { ...useSettingsStore.getState().providerKeyStatus, fixture: true } })
@@ -52,7 +52,7 @@ beforeEach(async () => {
   vi.spyOn(databaseService, 'updateHistory').mockImplementation(async (id, patch) => { Object.assign(records.get(id)!, patch) })
   registry.register({ meta: { id: 'canvas-task-fixture', canonicalModelId: 'nano-banana', provider: 'fixture', type: 'image', name: { zh: '测试', en: 'Test' } }, params: [], endpoints: '/fixture',
     inputLimits: { images: { max: 1 }, videos: { max: 0 }, audios: { max: 0 } }, pricing: { currency: '$', fixed: 0.03 }, request: { builder: params => params } })
-  projectId = await useProjectStore.getState().createProject('画布生成测试')
+  projectId = await createCanvasTestProject('画布生成测试')
   useCanvasStore.getState().setCanvasData([{ id: 'reference', type: CANVAS_NODE_TYPES.upload, position: { x: 10, y: 10 }, data: { imageUrl: 'C:/reference.png' } }], [])
 })
 afterEach(() => { replaceGenerationTaskStatusSnapshots([]); resetCanvasExecutionServiceForTests(); registry.unregister('canvas-task-fixture'); vi.restoreAllMocks(); uninstallHarnessNativeStorage() })
@@ -69,7 +69,7 @@ it('用户拒绝提交确认后，画布节点和任务都进入取消状态', a
 
 it('A 页面准备和提交 B 的生成，打开 B 不重复提交，结果保存到同一实例', async () => {
   const targetId = projectId
-  const visibleId = await useProjectStore.getState().createProject('正在编辑 A')
+  const visibleId = await createCanvasTestProject('正在编辑 A')
   const visible = useCanvasStore.getState()
   let finish!: () => void
   const generate = vi.mocked(GenerationService.getInstance().generate).mockImplementation(async () => {
@@ -133,7 +133,7 @@ it('已有 B 节点的估价与提交读取 B 的配置，不需要切换 A 页�
     modelId: 'canvas-task-fixture', prompt: '原 B 配置', params: {},
   })
   useCanvasStore.getState().addEdge('reference', nodeId)
-  const visibleId = await useProjectStore.getState().createProject('A')
+  const visibleId = await createCanvasTestProject('A')
   const prepared = await prepareCanvasNodeGeneration({ projectId, nodeId })
   expect(prepared.preparation.modelId).toBe('canvas-task-fixture')
   expect(GenerationService.getInstance().generate).not.toHaveBeenCalled()
@@ -333,7 +333,7 @@ it.each([false, true])('界面直接执行登记同一份任务，MCP 可查询�
   const execute = taskControlSession()
   expect(await execute('get_generation_task', { taskId })).toMatchObject({ ok: true, data: { task: { waitingExternal: true, cancellable: true } } })
   await expect(submitCanvasNodeGeneration({ projectId, nodeId, inputSignature: (await prepareCanvasNodeGeneration({ projectId, nodeId })).submitInput.inputSignature }, crypto.randomUUID())).rejects.toThrow('此节点已有')
-  const otherProject = await useProjectStore.getState().createProject('界面生成后的其他项目')
+  const otherProject = await createCanvasTestProject('界面生成后的其他项目')
   if (cancel) expect(await execute('cancel_generation_task', { taskId, reason: '停止界面任务' })).toMatchObject({ ok: true })
   release()
   expect(await outcome).toBe(cancel ? 'cancelled' : 'success')
@@ -369,7 +369,7 @@ it.each([false, true])('界面五个请求入队即登记，卸载页面后继�
     expect(await execute('get_generation_task', { taskId: tail.id })).toMatchObject({ ok: true,
       data: { task: { status: 'queued', waitingExternal: true, cancellable: true } } })
     unregister.forEach(dispose => dispose())
-    const otherProject = await useProjectStore.getState().createProject('排队时切到其他项目')
+    const otherProject = await createCanvasTestProject('排队时切到其他项目')
     if (cancel) {
       expect(await execute('cancel_generation_task', { taskId: tail.id, reason: '停止排队任务' })).toMatchObject({ ok: true })
       await vi.waitFor(() => expect(records.get(tail.id)?.status).toBe('cancelled'))
@@ -450,10 +450,10 @@ it.each([false, true])('离开原项目后 MCP 仍可取消续查（后台启动
   })
   const execute = taskControlSession()
   const input = (await getCanvasGenerationTask(taskId))!.resumeInput as Record<string, unknown>
-  let otherProject = startInBackground ? await useProjectStore.getState().createProject('后台启动续查') : null
+  let otherProject = startInBackground ? await createCanvasTestProject('后台启动续查') : null
   expect(await execute('resume_canvas_generation_task', input)).toMatchObject({ ok: true })
   await vi.waitFor(() => expect(polling).toHaveBeenCalledTimes(1))
-  otherProject ??= await useProjectStore.getState().createProject('后台续查时的当前项目')
+  otherProject ??= await createCanvasTestProject('后台续查时的当前项目')
   expect(await getCanvasGenerationTask(taskId)).toMatchObject({ cancellable: true })
   expect(await execute('cancel_generation_task', { taskId, reason: '停止后台任务' })).toMatchObject({ ok: true })
   await vi.waitFor(async () => {
@@ -472,7 +472,7 @@ it.each([false, true])('离开原项目后 MCP 仍可取消续查（后台启动
 it('在其他项目中恢复标准任务，只续查原任务并保存原项目结果', async () => {
   const { taskId, resultId } = await restoredTask({ serverTaskId: 'offscreen-original', serverTaskModelId: 'canvas-task-fixture' })
   const input = (await getCanvasGenerationTask(taskId))!.resumeInput as Record<string, unknown>
-  const otherProject = await useProjectStore.getState().createProject('恢复时保留的页面')
+  const otherProject = await createCanvasTestProject('恢复时保留的页面')
   const polling = vi.spyOn(GenerationService.getInstance(), 'continuePolling').mockResolvedValue({
     status: 'completed', url: 'C:/offscreen-resumed.png', filePath: 'C:/offscreen-resumed.png',
   })
@@ -500,7 +500,7 @@ it.each([false, true])('续查失败对账并保留原任务，明确恢复后�
   const input = (await getCanvasGenerationTask(taskId))!.resumeInput as Record<string, unknown>
   expect(await execute('resume_canvas_generation_task', input)).toMatchObject({ ok: true })
   await vi.waitFor(() => expect(polling).toHaveBeenCalledTimes(1))
-  if (background) await useProjectStore.getState().createProject('续查失败时的其他项目')
+  if (background) await createCanvasTestProject('续查失败时的其他项目')
   fail()
   await vi.waitFor(async () => expect(await getCanvasGenerationTask(taskId)).toMatchObject({ status: 'error',
     errorMessage: expect.stringContaining('原任务结果下载暂时中断'), resumeInput: input, waitingExternal: false, resultAvailable: false }))
@@ -677,7 +677,7 @@ it.each(['foreground', 'background', 'cancel-queued'] as const)('五个请求保
     expect(generate.mock.calls.length).toBeLessThanOrEqual(2)
     await vi.waitFor(() => expect(nodeIds.every(id => isCanvasNodeRunActive(projectId, id))).toBe(true))
     expect(await getCanvasGenerationTask(taskIds[4])).toMatchObject({ status: 'queued', waitingExternal: true, cancellable: true })
-    const otherProject = background ? await useProjectStore.getState().createProject('队列期间的另一个项目') : null
+    const otherProject = background ? await createCanvasTestProject('队列期间的另一个项目') : null
     if (mode === 'cancel-queued') {
       expect(await taskControlSession()('cancel_generation_task', { taskId: taskIds[4], reason: '取消队尾任务' })).toMatchObject({ ok: true })
       await vi.waitFor(() => expect(records.get(taskIds[4])?.status).toBe('cancelled'))
@@ -702,7 +702,7 @@ it.each([false, true])('任务刚登记就切换项目，执行与取消保持�
   const update = databaseService.updateHistory
   vi.mocked(databaseService.updateHistory).mockImplementationOnce(async (...args) => { await waiting; return update(...args) })
   await submitCanvasGenerationTask({ modelId: 'canvas-task-fixture', mediaType: 'image', prompt: '图', options: {} }, { mode: 'canvas', projectId, sourceNodeIds: [] }, taskId)
-  const otherProject = await useProjectStore.getState().createProject('登记后立即切换')
+  const otherProject = await createCanvasTestProject('登记后立即切换')
   if (cancel) expect(await taskControlSession()('cancel_generation_task', { taskId, reason: '取消刚登记的任务' })).toMatchObject({ ok: true })
   release()
   await vi.waitFor(() => expect(records.get(taskId)?.status).toBe(cancel ? 'cancelled' : 'success'))
@@ -721,7 +721,7 @@ it.each([false, true])('生成前等待估算时切换项目，执行与取消�
   await submitCanvasGenerationTask({ modelId: 'canvas-task-fixture', mediaType: 'image', prompt: '原项目准备中', options: {} },
     { mode: 'canvas', projectId, sourceNodeIds: [] }, taskId)
   await vi.waitFor(() => expect(GenerationService.getInstance().getProgressEstimate).toHaveBeenCalledTimes(1))
-  const otherProject = await useProjectStore.getState().createProject('准备期间切换')
+  const otherProject = await createCanvasTestProject('准备期间切换')
   if (cancel) expect(await taskControlSession()('cancel_generation_task', { taskId, reason: '取消准备中的任务' })).toMatchObject({ ok: true })
   release()
   await vi.waitFor(() => expect(records.get(taskId)?.status).toBe(cancel ? 'cancelled' : 'success'))
@@ -739,8 +739,9 @@ it('后台占位保存失败时不提交供应商，并保存原节点失败状�
   await submitCanvasGenerationTask({ modelId: 'canvas-task-fixture', mediaType: 'image', prompt: '保存失败', options: {} },
     { mode: 'canvas', projectId, sourceNodeIds: [] }, taskId)
   await vi.waitFor(() => expect(GenerationService.getInstance().getProgressEstimate).toHaveBeenCalledTimes(1))
-  await useProjectStore.getState().createProject('保存失败时的当前项目')
-  vi.spyOn(projectStorage, 'persistBackgroundCanvasProject').mockRejectedValueOnce(new Error('后台占位写入失败'))
+  await createCanvasTestProject('保存失败时的当前项目')
+  // 后台画布的下一次写入失败（文档仓库替身）
+  canvasTestRegistry().commands.failSaves = 1
   release()
   await vi.waitFor(() => expect(records.get(taskId)?.status).toBe('error'))
   expect(GenerationService.getInstance().generate).not.toHaveBeenCalled()
@@ -758,7 +759,7 @@ it('供应商任务已保存后切换项目，持续轮询并保存原项目，�
     { mode: 'canvas', projectId, sourceNodeIds: [] }, taskId)
   await vi.waitFor(() => expect(polling).toHaveBeenCalledTimes(1))
   await confirmCanvasPersistence(projectId)
-  const otherProject = await useProjectStore.getState().createProject('另一个工作区')
+  const otherProject = await createCanvasTestProject('另一个工作区')
   await openCanvasProject(otherProject, new AbortController().signal)
   const currentCanvas = useCanvasStore.getState()
   finishOriginal({ status: 'completed', url: 'C:/original.png', filePath: 'C:/original.png' })
@@ -785,7 +786,7 @@ it('切走后才收到供应商任务号，仍保存原任务并继续获取结�
   await submitCanvasGenerationTask({ modelId: 'canvas-task-fixture', mediaType: 'image', prompt: '迟到任务号', options: {} },
     { mode: 'canvas', projectId, sourceNodeIds: [] }, taskId)
   await vi.waitFor(() => expect(submitted).toBeTypeOf('function'))
-  const otherProject = await useProjectStore.getState().createProject('切走等待')
+  const otherProject = await createCanvasTestProject('切走等待')
   await openCanvasProject(otherProject, new AbortController().signal)
   submitted()
   await vi.waitFor(() => expect(records.get(taskId)?.status, records.get(taskId)?.errorMessage ?? '').toBe('success'))
@@ -806,7 +807,7 @@ it('在其他项目中取消原画布任务，停止状态仍保存到原节点'
   await submitCanvasGenerationTask({ modelId: 'canvas-task-fixture', mediaType: 'image', prompt: '后台取消', options: {} },
     { mode: 'canvas', projectId, sourceNodeIds: [] }, taskId)
   await vi.waitFor(() => expect(polling).toHaveBeenCalledTimes(1))
-  const otherProject = await useProjectStore.getState().createProject('其他项目')
+  const otherProject = await createCanvasTestProject('其他项目')
   await openCanvasProject(otherProject, new AbortController().signal)
   const active = useCanvasStore.getState()
   const execute = taskControlSession()

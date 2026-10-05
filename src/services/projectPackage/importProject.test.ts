@@ -3,20 +3,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
   openDialog: vi.fn(),
   importProjectPackage: vi.fn(),
-  upsertProjectRecord: vi.fn(),
+  createDocument: vi.fn(),
   deleteDocumentIfRevision: vi.fn(),
   collectGarbage: vi.fn(),
 }))
 
 vi.mock('@/platform/desktopApi', () => ({ openDialog: mocks.openDialog }))
 vi.mock('@/commands/projectPackage', () => ({ importProjectPackage: mocks.importProjectPackage }))
-vi.mock('@/commands/projectState', () => ({
-  deleteProjectRecord: vi.fn(),
-  getProjectRecord: vi.fn(),
-  listProjectSummaries: vi.fn(),
-  renameProjectRecord: vi.fn(),
-  updateProjectViewportRecord: vi.fn(),
-  upsertProjectRecord: mocks.upsertProjectRecord,
+// 3.4：导入新建一份画布文档（通用文档操作）
+vi.mock('@/features/documents/documentOperations', () => ({
+  getDocumentOperations: () => ({ createDocument: mocks.createDocument }),
 }))
 vi.mock('@/commands/imageEditorV3', async (importOriginal) => ({
   ...await importOriginal<typeof import('@/commands/imageEditorV3')>(),
@@ -38,7 +34,7 @@ beforeEach(() => {
 })
 
 describe('项目包渲染层导入事务', () => {
-  it('项目记录写入失败时精确补偿已导入 V3 文档并保留原项目', async () => {
+  it('画布文档写入失败时精确补偿已导入 V3 文档', async () => {
     mocks.importProjectPackage.mockResolvedValue({
       manifestJson: JSON.stringify({
         formatVersion: 2,
@@ -70,7 +66,7 @@ describe('项目包渲染层导入事务', () => {
         imported: { documentRef: 'image-edit-v3:imported', revision: 4, previewRef: PREVIEW_REF },
       }],
     })
-    mocks.upsertProjectRecord.mockRejectedValue(new Error('database unavailable'))
+    mocks.createDocument.mockRejectedValue(new Error('database unavailable'))
 
     await expect(importProjectFromPackage()).rejects.toThrow('database unavailable')
     expect(mocks.deleteDocumentIfRevision).toHaveBeenCalledWith(expect.objectContaining({

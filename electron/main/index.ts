@@ -7,7 +7,6 @@ import { registerAudioIpc } from './ipc/audio'
 import { registerAssetLibraryIpc } from './ipc/asset-library'
 import { registerAssistantIpc } from './ipc/assistant'
 import { registerCameraStageRenderIpc } from './ipc/camera-stage-render'
-import { registerCanvasProjectsIpc } from './ipc/canvas-projects'
 import { registerClipboardIpc } from './ipc/clipboard'
 import { registerCustomModelsIpc } from './ipc/custom-models'
 import { registerDbIpc } from './ipc/db'
@@ -27,10 +26,8 @@ import { registerLlmProviderSettingsIpc } from './ipc/llm-provider-settings'
 import { registerLoggingIpc } from './ipc/logging'
 import { registerMediaIpc } from './ipc/media'
 import { registerPingIpc } from './ipc/registry'
-import { registerProjectCoversIpc } from './ipc/project-covers'
 import { registerProjectPackageIpc } from './ipc/project-package'
 import { registerStreamIpc } from './ipc/stream'
-import { registerStoryboardProjectsIpc } from './ipc/storyboard-projects'
 import { registerSystemIpc } from './ipc/system'
 import { registerUpdaterIpc } from './ipc/updater'
 import { registerVideoIpc } from './ipc/video'
@@ -103,7 +100,6 @@ app.whenReady().then(() => {
   registerAssetLibraryIpc()
   registerAssistantIpc()
   registerCameraStageRenderIpc()
-  registerCanvasProjectsIpc()
   registerClipboardIpc()
   registerCustomModelsIpc()
   registerDbIpc()
@@ -120,10 +116,8 @@ app.whenReady().then(() => {
   registerLoggingIpc()
   registerMediaIpc()
   registerPingIpc()
-  registerProjectCoversIpc()
   registerProjectPackageIpc()
   registerStreamIpc()
-  registerStoryboardProjectsIpc()
   registerSystemIpc()
   registerUpdaterIpc()
   registerVideoIpc()

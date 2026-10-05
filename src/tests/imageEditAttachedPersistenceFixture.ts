@@ -16,12 +16,13 @@ import { createCanvasEditV3SessionReference } from '@/features/canvas/imageEditV
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useProjectStore } from '@/stores/projectStore'
 import { readHarnessImageEditDocument } from './harnessNativeStorage'
+import { createCanvasTestProject } from './canvasProjectFixture'
 
 /** GPU/编码/资源主进程端口是已知图像夹具；确认器、物化编排、节点 CAS 与存储链均为生产实现。 */
 export async function createAttachedImageEditPersistenceFixture() {
   useCanvasStore.getState().setCanvasData([], [], { past: [], future: [] })
-  useProjectStore.setState({ projects: [], currentProject: null, currentProjectId: null, isHydrated: true })
-  const projectId = await useProjectStore.getState().createProject('附着图片保存夹具')
+  useProjectStore.setState({ currentProject: null, currentProjectId: null })
+  const projectId = await createCanvasTestProject('附着图片保存夹具')
   const document = createImageEditDocumentV3({ width: 8, height: 8, documentId: 'attached-durable' })
   document.layers = [createImageEditEffectLayerV3('effect', '模糊', 'image.gaussian-blur-v2', { radius: 8 })]
   const bus = new ImageEditCommandBusV3(document)

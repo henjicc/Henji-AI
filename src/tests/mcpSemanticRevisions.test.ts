@@ -1,12 +1,11 @@
 import { releaseCanvasProjectInstance } from '@/features/canvas/application/canvasProjectInstances'
-import { setCanvasTestProjectState } from '@/tests/canvasProjectFixture'
+import { setCanvasTestProjectState, seedCanvasTestProject } from '@/tests/canvasProjectFixture'
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { createApplicationCallerGrant } from '@/core/application-control/callerContext'
 import { createApplicationCapabilitySession, listApplicationCapabilities } from '@/features/application-control/applicationCapabilityService'
 import { replaceGenerationTaskStatusSnapshots, type GenerationTaskStatusSnapshot } from '@/features/generation/application/generationTaskStatusRegistry'
 import { registerVisibleGenerationTaskHandler } from '@/workspaces/GenerationWorkspace/application/visibleGenerationTaskCommand'
-import { upsertProjectRecord } from '@/commands/projectState'
 import { getCanvasNode, getCanvasProject, readPersistedCanvasProjectSnapshot } from '@/features/canvas/application/canvasQueryService'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from './harnessNativeStorage'
 import { registry } from '@/core/ModelRegistry'
@@ -52,19 +51,20 @@ it('没有项目时可创建并验证持久化，再打开同一画布项目', a
   const { useNavigationStore } = await import('@/stores/navigationStore')
   const previousNavigation = useNavigationStore.getState()
   try {
-    setCanvasTestProjectState({ currentProjectId: null, currentProject: null, projects: [], isHydrated: true })
+    setCanvasTestProjectState({ currentProjectId: null, currentProject: null })
     const session = createApplicationCapabilitySession(createApplicationCallerGrant({
       callerId: 'mcp-creative-create', capabilityIds: [...APPLICATION_CAPABILITY_IDS], allowWrites: true, allowDestructive: false,
       permissions: [...APPLICATION_READ_PERMISSIONS, ...APPLICATION_WRITE_PERMISSIONS],
     }))
-    const created = await session.execute({ id: 'create_canvas_project', version: 2, input: { name: '短剧画布' } }, request())
+    // 画布是通用文档（3.4）：create_document 新建、open_document 打开到画布页
+    const created = await session.execute({ id: 'create_document', version: 1, input: { kind: 'canvas', name: '短剧画布' } }, request())
     expect(created).toMatchObject({ ok: true, data: { verification: { verified: true } } })
     if (!created.ok) throw new Error('创建失败')
-    const projectId = String(created.data.projectId)
+    const projectId = (created.data.resultRef as { id: string }).id
     expect((await readPersistedCanvasProjectSnapshot(projectId)).name).toBe('短剧画布')
-    const opened = await session.execute({ id: 'open_canvas_project', version: 2, input: { projectId } }, request())
-    expect(opened).toMatchObject({ ok: true, data: { projectId, surfaceId: 'workspace.canvas', verification: { verified: true } } })
-    expect(useProjectStore.getState().projects).toHaveLength(1)
+    const opened = await session.execute({ id: 'open_document', version: 1, input: { documentId: projectId } }, request())
+    expect(opened, JSON.stringify(opened)).toMatchObject({ ok: true, data: { resultRef: { id: projectId }, verification: { verified: true } } })
+    expect(useProjectStore.getState().currentProjectId).toBe(projectId)
     expect(useNavigationStore.getState().activeWorkspace).toBe('nodes')
   } finally {
     useCanvasStore.setState(previousCanvas, true)
@@ -91,7 +91,7 @@ it('创作文本经 MCP 保存后新会话按需读回，局部返修保留其�
     const project = { id: projectId, name: '创作续做', createdAt: 1, updatedAt: 1, nodeCount: nodes.length,
       coverPath: null, nodes, edges, viewport: { x: 0, y: 0, zoom: 1 }, history: { past: [], future: [] } }
     useCanvasStore.getState().setCanvasData(nodes, edges, project.history)
-    setCanvasTestProjectState({ currentProjectId: projectId, currentProject: project, projects: [project], isHydrated: true })
+    setCanvasTestProjectState({ currentProjectId: projectId, currentProject: project })
     const overview = await getCanvasProject(projectId)
     expect(JSON.stringify(overview)).not.toContain('原始说明')
     expect(JSON.stringify(overview)).not.toContain('小林穿灰色外套')
@@ -109,7 +109,7 @@ it('创作文本经 MCP 保存后新会话按需读回，局部返修保留其�
 
     // 清除活动画布和当前工程，强制新调用方经过持久化读取，而不是使用原会话内存。
     await useProjectStore.getState().closeProject()
-    expect(releaseCanvasProjectInstance(projectId)).toBe(true)
+    expect(await releaseCanvasProjectInstance(projectId)).toBe(true)
     const resumed = creativeClient()
     const read = await resumed.execute({ id: 'read_application_entity', version: 1,
       input: { ref: ref('shot-one'), propertyIds: ['canvas.node.text_content'] } }, request())
@@ -140,7 +140,7 @@ it('MCP 实际授权可发现、创建和配置图片节点，并从原工程存
     const project = { id: projectId, name: '图片工具验收', createdAt: 1, updatedAt: 1, nodeCount: 1,
       coverPath: null, nodes: [source], edges: [], viewport: { x: 0, y: 0, zoom: 1 }, history: { past: [], future: [] } }
     useCanvasStore.getState().setCanvasData([source], [], project.history)
-    setCanvasTestProjectState({ currentProjectId: projectId, currentProject: project, projects: [project], isHydrated: true })
+    setCanvasTestProjectState({ currentProjectId: projectId, currentProject: project })
     const session = createApplicationCapabilitySession(createApplicationCallerGrant({ callerId: 'mcp-image-tools',
       capabilityIds: [...APPLICATION_CAPABILITY_IDS], allowWrites: true, allowDestructive: false,
       permissions: [...APPLICATION_READ_PERMISSIONS, ...APPLICATION_WRITE_PERMISSIONS] }))
@@ -264,9 +264,7 @@ it('任务状态变更使旧基线失效，明确标为未执行；重新读取�
 it('生成结果与后台画布各用原读取版本，创建节点后从正式存储回读', async () => {
   const session = client()
   const projectId = 'mcp-result-background'
-  await upsertProjectRecord({ id: projectId, name: '结果验收', createdAt: 12345, updatedAt: 12345,
-    nodeCount: 0, nodesJson: '[]', edgesJson: '[]', viewportJson: '{"x":0,"y":0,"zoom":1}',
-    historyJson: '{"past":[],"future":[],"imagePool":[]}' })
+  seedCanvasTestProject({ id: projectId, name: '结果验收', nodes: [], edges: [] })
   replaceGenerationTaskStatusSnapshots([{ ...task, status: 'success', progress: 100, resultAvailable: true }])
   const resultRef = { kind: 'generation.result', id: task.taskId }
   const expectedRevisions: Record<string, number> = {}

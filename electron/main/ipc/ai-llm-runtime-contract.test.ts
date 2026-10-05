@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   recoverSavedGenerationResult: vi.fn(),
   llmChatStream: vi.fn(),
   llmModelStep: vi.fn(),
+  resolveContainerGeneratedFolder: vi.fn(),
 }))
 
 vi.mock('electron', () => ({
@@ -33,6 +34,11 @@ vi.mock('../services/ai-runtime/runtime', () => ({
   recordSample: vi.fn(),
   recoverSavedGenerationResult: mocks.recoverSavedGenerationResult,
 }))
+
+vi.mock('../services/documents/runtime', () => ({
+  resolveContainerGeneratedFolder: mocks.resolveContainerGeneratedFolder,
+}))
+vi.mock('../services/logging', () => ({ createMainLogger: () => ({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }) }))
 
 vi.mock('../services/ai-runtime/pending-results', () => ({
   consumePendingResult: mocks.consumePendingResult,
@@ -109,7 +115,7 @@ describe('AI/LLM IPC 契约', () => {
       modelId: 'model-a',
       params: { prompt: 'hello' },
       requestId: 'request-a',
-    })
+    }, {})
 
     const pollingResponse = {
       ...generateResponse,
@@ -127,7 +133,25 @@ describe('AI/LLM IPC 契约', () => {
       taskId: 'server-task',
       params: { prompt: 'hello' },
       requestId: 'request-a',
-    })
+    }, {})
+  })
+
+  it('画布所在项目的“生成结果”由宿主解析后交给运行时，不进 SDK 请求；项目找不到时回落作品目录', async () => {
+    const event = { sender: { send: vi.fn() } }
+    mocks.generate.mockResolvedValue({ status: 'completed', url: 'u' })
+    mocks.continuePolling.mockResolvedValue({ status: 'completed', url: 'u' })
+    mocks.resolveContainerGeneratedFolder.mockResolvedValueOnce('/work/项目/海报/生成结果')
+    await handler('ai:generate')(event, { modelId: 'model-a', params: {}, requestId: 'r1', outputContainer: { kind: 'project', projectId: 'proj_1' } })
+    expect(mocks.resolveContainerGeneratedFolder).toHaveBeenCalledWith({ kind: 'project', projectId: 'proj_1' })
+    expect(mocks.generate).toHaveBeenLastCalledWith({ modelId: 'model-a', params: {}, requestId: 'r1' }, { outputDirectory: '/work/项目/海报/生成结果' })
+    mocks.resolveContainerGeneratedFolder.mockRejectedValueOnce(Object.assign(new Error('missing'), { name: 'ProjectNotFoundError' }))
+    await handler('ai:continuePolling')(event, { modelId: 'model-a', taskId: 't', requestId: 'r2', outputContainer: { kind: 'project', projectId: 'gone' } })
+    expect(mocks.continuePolling).toHaveBeenLastCalledWith({ modelId: 'model-a', taskId: 't', params: undefined, requestId: 'r2' }, {})
+    // 作品目录本身不用解析
+    mocks.resolveContainerGeneratedFolder.mockClear()
+    await handler('ai:generate')(event, { modelId: 'model-a', params: {}, requestId: 'r3', outputContainer: { kind: 'user' } })
+    expect(mocks.resolveContainerGeneratedFolder).not.toHaveBeenCalled()
+    await expect(handler('ai:generate')(event, { modelId: 'model-a', params: {}, outputContainer: { kind: 'project' } })).resolves.toMatchObject({ ok: false })
   })
 
   it('ai:consumePendingResult 保留缓存结果的新建文件所有权', async () => {

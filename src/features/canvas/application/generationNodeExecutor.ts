@@ -300,6 +300,7 @@ export function createGenerationNodeExecutor(readOptions: (store?: typeof useCan
 
           const result = await runCanvasGeneration({
             modelId: runtime.modelId,
+            projectId: generationProjectId,
             requestId: current.requestId ?? requestPreparation?.requestId,
             signal: current.signal,
             mediaType: current.modelType,

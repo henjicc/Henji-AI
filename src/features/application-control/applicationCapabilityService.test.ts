@@ -12,7 +12,7 @@ import { createApplicationCapabilitySession, listApplicationCapabilities } from 
 import { APPLICATION_READ_PERMISSIONS, APPLICATION_WRITE_PERMISSIONS } from '@/core/application-control/localHostContracts'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { useProjectStore } from '@/stores/projectStore'
-import { requireCanvasProjectInstance } from '@/features/canvas/application/canvasProjectInstances'
+import { getCanvasProjectInstance } from '@/features/canvas/application/canvasProjectInstances'
 import { freezeApplicationWrites } from '@/core/applicationLifecycle/applicationWriteBarrier'
 import { readPersistedCanvasProjectSnapshot } from '@/features/canvas/application/canvasQueryService'
 import { useNavigationStore } from '@/stores/navigationStore'
@@ -42,7 +42,6 @@ describe('独立应用调用入口', () => {
     installHarnessNativeStorage()
     const beforeWorkspace = useNavigationStore.getState().activeWorkspace
     try {
-      await useProjectStore.getState().hydrate()
       const session = createApplicationCapabilitySession(grant([...APPLICATION_READ_PERMISSIONS, ...APPLICATION_WRITE_PERMISSIONS], true))
       const call = async (id: string, input: Record<string, unknown>) => {
         const definition = session.list().find(item => item.id === id)!
@@ -55,15 +54,15 @@ describe('独立应用调用入口', () => {
       await call('open_application_surface', { surfaceId: 'workspace.canvas' })
       expect(useNavigationStore.getState().activeWorkspace).toBe('nodes')
       await call('get_current_application_context', {})
-      const project = await call('create_canvas_project', { name: 'MCP 自动对齐测试' })
-      const projectId = String(project.projectId)
+      const project = await call('create_document', { kind: 'canvas', name: 'MCP 自动对齐测试' })
+      const projectId = (project.resultRef as { id: string }).id
       expect(useProjectStore.getState().currentProjectId).toBeNull()
-      const nodeId = requireCanvasProjectInstance(projectId).store.getState().addNode('textAnnotationNode', { x: 0, y: 0 }, { text: '复制源', displayName: '原节点' })
+      const nodeId = (await getCanvasProjectInstance(projectId)).store.getState().addNode('textAnnotationNode', { x: 0, y: 0 }, { text: '复制源', displayName: '原节点' })
       const duplicated = await call('duplicate_canvas_node', { projectId, nodeId, placement: { mode: 'absolute', x: 400, y: 0 } })
       const saved = await readPersistedCanvasProjectSnapshot(projectId)
       expect(saved.nodes.find(node => node.id === duplicated.nodeId)?.data.displayName).toContain('原节点')
       expect(saved.nodes).toHaveLength(2)
-      await call('open_canvas_project', { projectId })
+      await call('open_document', { documentId: projectId })
       await call('select_canvas_node', { projectId, nodeId: null })
       await call('get_canvas_node_schema', { nodeType: 'textAnnotationNode' })
     } finally {

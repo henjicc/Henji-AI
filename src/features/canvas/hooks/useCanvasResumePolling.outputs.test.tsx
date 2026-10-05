@@ -3,14 +3,13 @@
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { setCanvasTestProjectState } from '@/tests/canvasProjectFixture';
+import { setCanvasTestProjectState, readCanvasTestProject } from '@/tests/canvasProjectFixture';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { useCanvasGenerationProgressStore } from '@/stores/canvasGenerationProgressStore';
-import { flushCanvasProjectSnapshot, useProjectStore, type Project } from '@/stores/projectStore';
+import { confirmCanvasPersistence } from '@/features/canvas/application/canvasPersistenceService';
+import { useProjectStore, type Project } from '@/stores/projectStore';
 
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage';
-import { getProjectRecord } from '@/commands/projectState';
-import { fromProjectRecord } from '@/stores/projectStoreSerialization';
 
 import { CANVAS_NODE_TYPES, type CanvasNode } from '../domain/canvasNodes';
 import { createLayerStackCompositeOutputDescriptor } from '../domain/generationOutputs';
@@ -170,7 +169,6 @@ function setResumeProject(nodes: CanvasNode[], edges: Project['edges']): void {
     history: { past: [], future: [] },
   };
   setCanvasTestProjectState({
-    projects: [project],
     currentProjectId: project.id,
     currentProject: project,
   });
@@ -180,7 +178,7 @@ describe('useCanvasResumePolling 结构化结果恢复', () => {
   afterEach(async () => {
     cleanup();
     const projectId = useProjectStore.getState().currentProjectId;
-    if (projectId) await flushCanvasProjectSnapshot(projectId);
+    if (projectId) await confirmCanvasPersistence(projectId);
     uninstallHarnessNativeStorage();
   });
 
@@ -216,10 +214,8 @@ describe('useCanvasResumePolling 结构化结果恢复', () => {
       history: { past: [], future: [] },
     };
     setCanvasTestProjectState({
-      projects: [project],
       currentProjectId: project.id,
       currentProject: project,
-      isHydrated: true,
       isOpeningProject: false,
     });
     generationMocks.resumeCanvasGeneration.mockResolvedValue({ primary: 'remote-result', outputs: ['remote-result'] });
@@ -274,9 +270,9 @@ describe('useCanvasResumePolling 结构化结果恢复', () => {
         inputSignature: 'storyboard-input-v1',
         outputRefs: [{ resultNodeId: 'storyboard-result' }],
       }));
-    const saved = await getProjectRecord('resume-project');
+    const saved = readCanvasTestProject('resume-project');
     expect(saved).not.toBeNull();
-    expect(fromProjectRecord(saved!).nodes.find((node) => node.id === 'storyboard-result')?.data)
+    expect(saved!.nodes.find((node) => node.id === 'storyboard-result')?.data)
       .toMatchObject({ generationSourceNodeId: 'storyboard-generator',
         generationOutputCommitId: 'storyboard-grid:storyboard-result',
         imageUrl: '/managed/storyboard-metadata.png',

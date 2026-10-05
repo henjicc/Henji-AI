@@ -1,485 +1,238 @@
-import { attachCanvasProject, closeCanvasProjectInstance, configureCanvasInstancePersistence, detachCanvasProject, findCanvasProjectInstance, getCanvasProjectInstance, registerCanvasProjectInstance } from '@/features/canvas/application/canvasProjectInstances';
-import { createLogger } from '@/core/logging';
-import { isUiInspectionReadOnly } from '@/platform/runtime';
-import { create } from 'zustand';
-import { v4 as uuidv4 } from 'uuid';
-import type { Viewport } from '@xyflow/react';
-import { type CanvasEdge, type CanvasHistoryState, type CanvasNode } from './canvasStore';
-import { deleteProjectRecord, listProjectSummaries, updateProjectViewportRecord, upsertProjectRecord } from '@/commands/projectState';
-import { createProjectPersistenceQueue } from './projectPersistenceQueue';
+import { create } from 'zustand'
 
-import { toProjectRecord, toProjectSummary, type Project, type ProjectSummary } from './projectStoreSerialization';
-export { decodeProjectRecord, encodeProjectAsRecord } from './projectStoreSerialization';
-export type { Project, ProjectSummary } from './projectStoreSerialization';
+import { createLogger } from '@/core/logging'
+import type { DocumentContainerRef, DocumentTarget } from '@/core/documents/types'
+import type { DocumentLeaveOutcome } from '@/features/documents/documentSessionTypes'
+import {
+  attachCanvasProject,
+  createCanvasDraftInstance,
+  findCanvasProjectInstance,
+  getCanvasProjectInstance,
+  leaveCanvasProject,
+  onCanvasProjectInstanceChanged,
+  releaseCanvasProjectInstance,
+  type CanvasProjectInstance,
+} from '@/features/canvas/application/canvasProjectInstances'
+import type { Project } from '@/features/canvas/application/canvasDocumentContent'
+
+export type { Project, ProjectSummary } from '@/features/canvas/application/canvasDocumentContent'
+
+/*
+ * 画布页的界面状态（3.4 起画布是 `.henji-canvas` 文档）：当前显示哪份画布、正在打开、打开失败与保存失败提示。
+ *
+ * 画布列表、新建、改名、移动、副本、删除都由通用文档页（DocumentLibraryPage kind="canvas"）与通用文档操作负责；
+ * 内容、撤销与保存由画布实例（canvasProjectInstances，接在文档会话上）负责。这里只是界面投影。
+ * 历史命名：“Project”指一份画布文档，currentProjectId 即文档 ID。
+ */
 
 const logger = createLogger('stores.projectStore')
+const PERSISTENCE_FAILED = 'project.persistenceFailed'
+const OPEN_FAILED = 'project.openFailed'
 
-const DEFAULT_VIEWPORT: Viewport = {
-  x: 0,
-  y: 0,
-  zoom: 1,
-};
+interface ProjectState {
+  /** 画布页当前显示的画布文档 ID。 */
+  currentProjectId: string | null
+  /** 当前画布的内存快照（内容变化时刷新）。 */
+  currentProject: Project | null
+  isOpeningProject: boolean
+  openError: string | null
+  /** 当前画布的保存失败提示（自动重试中或等待处理冲突）。 */
+  persistenceError: string | null
+  persistenceErrors: Record<string, string>
 
-function createEmptyHistory(): CanvasHistoryState {
-  return {
-    past: [],
-    future: [],
-  };
+  /** 打开并显示一份画布（不等待结果；界面正显示另一份时先走离开流程，取消则留在原画布）。 */
+  openProject: (id: string, path?: string) => void
+  /** 打开并显示一份画布；离开当前画布被取消时返回 false。 */
+  openCanvasDocument: (target: DocumentTarget) => Promise<boolean>
+  /** 新建画布草稿并显示；离开当前画布被取消时返回 null。 */
+  createCanvasDraft: (container?: DocumentContainerRef) => Promise<string | null>
+  /** 离开当前画布（返回列表）：已保存的写完关闭，草稿按“保存 / 不保存 / 取消”处理。 */
+  closeProject: () => Promise<DocumentLeaveOutcome>
+  clearPersistenceError: () => void
+  getCurrentProject: () => Project | null
 }
 
-let openProjectRequestSeq = 0;
+let openRequestSeq = 0
+
 /** 让打开状态先完成一帧呈现，再开始解码和挂载；后台窗口不依赖可能暂停的 RAF。 */
 function yieldForProjectLoadingPaint(): Promise<void> {
   if (typeof document === 'undefined' || document.visibilityState !== 'visible'
-    || typeof requestAnimationFrame === 'undefined') return Promise.resolve();
+    || typeof requestAnimationFrame === 'undefined') return Promise.resolve()
   return new Promise((resolve) => {
-    let afterFrame: ReturnType<typeof setTimeout> | undefined;
+    let afterFrame: ReturnType<typeof setTimeout> | undefined
     const finish = () => {
-      clearTimeout(fallback);
-      clearTimeout(afterFrame);
-      cancelAnimationFrame(frame);
-      resolve();
-    };
-    const fallback = setTimeout(finish, 100);
-    const frame = requestAnimationFrame(() => { afterFrame = setTimeout(finish, 0); });
-  });
+      clearTimeout(fallback)
+      clearTimeout(afterFrame)
+      cancelAnimationFrame(frame)
+      resolve()
+    }
+    const fallback = setTimeout(finish, 100)
+    const frame = requestAnimationFrame(() => { afterFrame = setTimeout(finish, 0) })
+  })
 }
 
-const VIEWPORT_EPSILON = 0.001;
-/** Opening attaches the existing domain instance, including in-flight work and undo history. */
-function restoreProjectCanvas(project: Project): void {
-  attachCanvasProject(registerCanvasProjectInstance(project));
+function persistenceErrorOf(instance: CanvasProjectInstance): string | null {
+  if (instance.session.isEnded) return null
+  const status = instance.session.getState().status
+  return status === 'failed' || status === 'conflict' ? PERSISTENCE_FAILED : null
 }
 
-function hasViewportMeaningfulDelta(current: Viewport, next: Viewport): boolean {
-  return (
-    Math.abs(current.x - next.x) > VIEWPORT_EPSILON ||
-    Math.abs(current.y - next.y) > VIEWPORT_EPSILON ||
-    Math.abs(current.zoom - next.zoom) > VIEWPORT_EPSILON
-  );
+function show(instance: CanvasProjectInstance): void {
+  attachCanvasProject(instance)
+  const error = persistenceErrorOf(instance)
+  useProjectStore.setState((state) => ({
+    currentProjectId: instance.id,
+    currentProject: instance.snapshot(),
+    isOpeningProject: false,
+    openError: null,
+    persistenceError: error,
+    persistenceErrors: withError(state.persistenceErrors, instance.id, error),
+  }))
 }
 
-function normalizeViewport(viewport: Viewport): Viewport {
-  return {
-    x: Number(viewport.x.toFixed(2)),
-    y: Number(viewport.y.toFixed(2)),
-    zoom: Number(viewport.zoom.toFixed(4)),
-  };
+function withError(errors: Record<string, string>, id: string, error: string | null): Record<string, string> {
+  if ((errors[id] ?? null) === error) return errors
+  const next = { ...errors }
+  if (error) next[id] = error
+  else delete next[id]
+  return next
 }
 
-let reportBackgroundPersistenceError: (operation: 'save' | 'viewport', error: unknown, projectId: string) => void = (
-  operation,
-  error
-) => {
-  logger.error(`Failed to persist project ${operation}`, error)
+/** 离开当前画布（不动打开请求序号）；没有当前画布时视为已关闭。 */
+async function leaveCurrent(keepOpening: boolean): Promise<DocumentLeaveOutcome> {
+  const id = useProjectStore.getState().currentProjectId
+  if (!id) return 'closed'
+  let outcome: DocumentLeaveOutcome
+  try {
+    outcome = await leaveCanvasProject(id)
+  } catch (error) {
+    logger.error('离开画布前保存失败，留在画布上', error, { event: 'project.close.failed', context: { projectId: id } })
+    useProjectStore.setState((state) => ({ isOpeningProject: false, persistenceError: PERSISTENCE_FAILED,
+      persistenceErrors: withError(state.persistenceErrors, id, PERSISTENCE_FAILED) }))
+    throw error
+  }
+  if (outcome === 'cancelled') return outcome
+  if (useProjectStore.getState().currentProjectId === id) {
+    useProjectStore.setState((state) => ({
+      currentProjectId: null,
+      currentProject: null,
+      ...(keepOpening ? {} : { isOpeningProject: false }),
+      openError: null,
+      persistenceError: null,
+      persistenceErrors: withError(state.persistenceErrors, id, null),
+    }))
+  }
+  return outcome
 }
 
-const persistenceQueue = createProjectPersistenceQueue<Project>({
-  getProjectId: (project) => project.id,
-  upsertProject: async (project) => {
-    await upsertProjectRecord(toProjectRecord(project))
-    findCanvasProjectInstance(project.id)?.markSaved(project)
-    setProjectPersistenceError(project.id, null)
-  },
-  updateViewport: updateProjectViewportRecord,
-  deleteProject: deleteProjectRecord,
-  onBackgroundError: (operation, error, projectId) => reportBackgroundPersistenceError(operation, error, projectId),
-})
-
-function updateProjectSummary(
-  summaries: ProjectSummary[],
-  updated: ProjectSummary
-): ProjectSummary[] {
-  const next = summaries.map((summary) => (summary.id === updated.id ? updated : summary));
-  next.sort((a, b) => b.updatedAt - a.updatedAt);
-  return next;
-}
-
-interface ProjectState {
-  projects: ProjectSummary[];
-  currentProjectId: string | null;
-  currentProject: Project | null;
-  isHydrated: boolean;
-  isOpeningProject: boolean;
-  openError: string | null;
-  persistenceError: string | null;
-  persistenceErrors: Record<string, string>;
-
-  hydrate: () => Promise<void>;
-  createProject: (name: string, options?: { attach?: boolean }) => Promise<string>;
-  deleteProject: (id: string) => Promise<void>;
-  renameProject: (id: string, name: string) => Promise<void>;
-  setProjectCover: (id: string, coverPath: string | null) => void;
-  openProject: (id: string) => void;
-  closeProject: () => Promise<void>;
-  clearPersistenceError: () => void;
-  getCurrentProject: () => Project | null;
-  saveCurrentProject: (
-    nodes: CanvasNode[],
-    edges: CanvasEdge[],
-    viewport?: Viewport,
-    history?: CanvasHistoryState
-  ) => void;
-  saveCurrentProjectViewport: (viewport: Viewport) => void;
-  cancelPendingViewportPersist: () => void;
+/** 界面正显示另一份画布时先离开它；取消返回 false。 */
+async function leaveCurrentFor(nextId: string | null): Promise<boolean> {
+  const current = useProjectStore.getState().currentProjectId
+  if (!current || current === nextId) return true
+  return await leaveCurrent(true) !== 'cancelled'
 }
 
 export const useProjectStore = create<ProjectState>((set, get) => ({
-  projects: [],
   currentProjectId: null,
   currentProject: null,
-  isHydrated: false,
   isOpeningProject: false,
   openError: null,
   persistenceError: null,
   persistenceErrors: {},
 
-  hydrate: async () => {
-    if (get().isHydrated) {
-      return;
-    }
+  openProject: (id, path) => {
+    void get().openCanvasDocument(path ? { id, path } : { id }).catch(() => undefined)
+  },
 
+  openCanvasDocument: async (target) => {
+    const seq = ++openRequestSeq
+    if (get().currentProjectId === target.id && findCanvasProjectInstance(target.id)) return true
+    set({ isOpeningProject: true, openError: null })
+    logger.debug('开始打开画布', { event: 'project.open.start', context: { projectId: target.id } })
+    let instance: CanvasProjectInstance
     try {
-      const records = await listProjectSummaries();
-      const projects = records.map(toProjectSummary).sort((a, b) => b.updatedAt - a.updatedAt);
-      set({
-        projects,
-        currentProjectId: null,
-        currentProject: null,
-        isHydrated: true,
-      });
+      await yieldForProjectLoadingPaint()
+      // 等呈现期间又有新的打开或返回：不再读取
+      if (seq !== openRequestSeq) return false
+      // 先载入目标：读不懂的画布不会把用户从当前画布里赶出来
+      instance = await getCanvasProjectInstance(target.id, target.path)
     } catch (error) {
-      logger.error('Failed to hydrate project summaries from SQLite', error);
-      set({
-        projects: [],
-        currentProjectId: null,
-        currentProject: null,
-        isHydrated: true,
-      });
-    }
-  },
-
-  createProject: async (name, options) => {
-    const id = uuidv4();
-    const now = Date.now();
-    const project: Project = {
-      id,
-      name,
-      createdAt: now,
-      updatedAt: now,
-      nodeCount: 0,
-      coverPath: null,
-      nodes: [],
-      edges: [],
-      viewport: DEFAULT_VIEWPORT,
-      history: createEmptyHistory(),
-    };
-
-    try {
-      await persistenceQueue.flushProject(project)
-    } catch (error) {
-      logger.error('Failed to create project record', error)
-      setProjectPersistenceError(id, 'project.persistenceFailed')
-      throw error
-    }
-    registerCanvasProjectInstance(project);
-    if (options?.attach !== false) restoreProjectCanvas(project);
-    set((state) => ({
-      projects: [{ ...project }, ...state.projects],
-      currentProjectId: options?.attach === false ? state.currentProjectId : id,
-      currentProject: options?.attach === false ? state.currentProject : project,
-      isOpeningProject: false,
-      persistenceError: null,
-      openError: null,
-    }));
-    return id;
-  },
-
-  deleteProject: async (id) => {
-    try {
-      await closeCanvasProjectInstance(id, () => persistenceQueue.deleteProject(id))
-    } catch (error) {
-      logger.error('Failed to delete project record', error)
-      setProjectPersistenceError(id, 'project.persistenceFailed')
-      throw error
-    }
-    setProjectPersistenceError(id, null)
-    if (get().currentProjectId === id) detachCanvasProject()
-    set((state) => ({
-      projects: state.projects.filter((project) => project.id !== id),
-      currentProjectId: state.currentProjectId === id ? null : state.currentProjectId,
-      currentProject: state.currentProject?.id === id ? null : state.currentProject,
-      isOpeningProject: false,
-      persistenceError: state.currentProjectId === id ? null : state.persistenceError,
-    }));
-  },
-
-  renameProject: async (id, name) => {
-    const instance = await getCanvasProjectInstance(id)
-    instance.updateMetadata({ name })
-    try {
-      await persistenceQueue.flushProject(instance.snapshot())
-    } catch (error) {
-      logger.error('Failed to rename project record', error)
-      setProjectPersistenceError(id, 'project.persistenceFailed')
-      throw error
-    }
-    setProjectPersistenceError(id, null)
-  },
-
-  setProjectCover: (id, coverPath) => {
-    findCanvasProjectInstance(id)?.updateMetadata({ coverPath });
-    set((state) => ({
-      projects: state.projects.map((summary) => (
-        summary.id === id ? { ...summary, coverPath } : summary
-      )),
-      currentProject: state.currentProject?.id === id
-        ? { ...state.currentProject, coverPath }
-        : state.currentProject,
-    }));
-  },
-
-  openProject: (id) => {
-    const reqSeq = ++openProjectRequestSeq;
-    set({ isOpeningProject: true, openError: null });
-    logger.debug('开始打开工程', { event: 'project.open.start', context: { projectId: id } });
-
-    void (async () => {
-      try {
-        await yieldForProjectLoadingPaint();
-        if (reqSeq !== openProjectRequestSeq) return;
-        const instance = await getCanvasProjectInstance(id);
-        const project = instance.snapshot();
-        if (reqSeq !== openProjectRequestSeq) {
-          return;
-        }
-        if (!project) {
-          logger.warn('工程记录不存在', { event: 'project.open.failed', context: { projectId: id } });
-          set({ isOpeningProject: false, openError: 'project.openFailed' });
-          return;
-        }
-
-        restoreProjectCanvas(project);
-        set((state) => ({
-          currentProjectId: id,
-          currentProject: project,
-          isOpeningProject: false,
-          persistenceError: state.persistenceErrors[id] ?? null,
-          projects: updateProjectSummary(state.projects, {
-            id: project.id,
-            name: project.name,
-            createdAt: project.createdAt,
-            updatedAt: project.updatedAt,
-            nodeCount: project.nodeCount,
-            coverPath: project.coverPath,
-          }),
-        }));
-        logger.debug('完成打开工程', { event: 'project.open.completed', context: { projectId: id } });
-      } catch (error) {
-        if (reqSeq !== openProjectRequestSeq) {
-          return;
-        }
-        logger.error('工程无法打开，保留当前工程与原始记录', error, {
-          event: 'project.open.failed', context: { projectId: id },
-        });
-        set({ isOpeningProject: false, openError: 'project.openFailed' });
+      if (seq === openRequestSeq) {
+        logger.error('画布无法打开，保留当前画布与原文件', error, { event: 'project.open.failed', context: { projectId: target.id } })
+        set({ isOpeningProject: false, openError: OPEN_FAILED })
       }
-    })();
+      throw error
+    }
+    // 载入期间又有新的打开或返回：这次打开作废，不去动当前画布；刚载入的没人用就放掉
+    if (seq !== openRequestSeq) {
+      if (get().currentProjectId !== target.id) void releaseCanvasProjectInstance(target.id).catch(() => undefined)
+      return false
+    }
+    if (!await leaveCurrentFor(target.id)) {
+      // 用户取消离开当前画布：留在原处，刚载入的目标没人用就放掉
+      void releaseCanvasProjectInstance(target.id).catch(() => undefined)
+      if (seq === openRequestSeq) set({ isOpeningProject: false })
+      return false
+    }
+    if (seq !== openRequestSeq) return true
+    show(instance)
+    logger.debug('完成打开画布', { event: 'project.open.completed', context: { projectId: target.id } })
+    return true
+  },
+
+  createCanvasDraft: async (container) => {
+    const seq = ++openRequestSeq
+    set({ isOpeningProject: true, openError: null })
+    try {
+      if (!await leaveCurrentFor(null)) {
+        if (seq === openRequestSeq) set({ isOpeningProject: false })
+        return null
+      }
+      const instance = await createCanvasDraftInstance(container)
+      if (seq === openRequestSeq) show(instance)
+      return instance.id
+    } catch (error) {
+      if (seq === openRequestSeq) {
+        logger.error('新建画布失败', error, { event: 'project.create.failed' })
+        set({ isOpeningProject: false, openError: PERSISTENCE_FAILED })
+      }
+      throw error
+    }
   },
 
   closeProject: async () => {
-    openProjectRequestSeq += 1;
-    const { currentProjectId, currentProject } = get();
-    let persistedSummary: ProjectSummary | null = null;
-
-    if (currentProjectId && currentProject && currentProject.id === currentProjectId) {
-      const nextProject = (await getCanvasProjectInstance(currentProjectId)).snapshot();
-
-      persistedSummary = {
-        id: nextProject.id,
-        name: nextProject.name,
-        createdAt: nextProject.createdAt,
-        updatedAt: nextProject.updatedAt,
-        nodeCount: nextProject.nodeCount,
-        coverPath: nextProject.coverPath,
-      };
-      try {
-        await persistenceQueue.flushProject(nextProject)
-      } catch (error) {
-        logger.error('Failed to persist project before closing', error)
-        setProjectPersistenceError(currentProjectId, 'project.persistenceFailed')
-        throw error
-      }
-      setProjectPersistenceError(currentProjectId, null)
+    // 取消还没完成的打开请求（打开中点“返回”）
+    openRequestSeq += 1
+    if (!get().currentProjectId) {
+      set({ isOpeningProject: false, openError: null })
+      return 'closed'
     }
-
-    if (get().currentProjectId !== currentProjectId) return;
-    detachCanvasProject();
-    set((state) => ({
-      projects: persistedSummary
-        ? updateProjectSummary(state.projects, persistedSummary)
-        : state.projects,
-      currentProjectId: null,
-      currentProject: null,
-      isOpeningProject: false,
-      persistenceError: null,
-      openError: null,
-    }));
+    return await leaveCurrent(false)
   },
 
   clearPersistenceError: () => set({ persistenceError: null }),
 
   getCurrentProject: () => {
-    const { currentProjectId, currentProject } = get();
-    if (!currentProjectId || !currentProject) {
-      return null;
-    }
-    if (currentProject.id !== currentProjectId) {
-      return null;
-    }
-    return currentProject;
+    const { currentProjectId, currentProject } = get()
+    if (!currentProjectId || !currentProject || currentProject.id !== currentProjectId) return null
+    return currentProject
   },
+}))
 
-  saveCurrentProject: (nodes, edges, viewport, history) => {
-    const { currentProjectId, currentProject } = get();
-    if (!currentProjectId || !currentProject || currentProject.id !== currentProjectId) {
-      return;
-    }
-
-    const nextViewport = viewport ?? currentProject.viewport ?? DEFAULT_VIEWPORT;
-    const nextHistory = history ?? currentProject.history ?? createEmptyHistory();
-    const nextNodeCount = nodes.length;
-
-    const hasViewportChanged =
-      currentProject.viewport.x !== nextViewport.x ||
-      currentProject.viewport.y !== nextViewport.y ||
-      currentProject.viewport.zoom !== nextViewport.zoom;
-    const hasChanged =
-      currentProject.nodes !== nodes ||
-      currentProject.edges !== edges ||
-      currentProject.history !== nextHistory ||
-      currentProject.nodeCount !== nextNodeCount ||
-      hasViewportChanged;
-    if (!hasChanged) {
-      return;
-    }
-
-    const nextProject: Project = {
-      ...currentProject,
-      nodes,
-      edges,
-      viewport: nextViewport,
-      history: nextHistory,
-      nodeCount: nextNodeCount,
-      updatedAt: Date.now(),
-    };
-
-    set((state) => ({
-      currentProject: nextProject,
-      projects: updateProjectSummary(state.projects, {
-        id: nextProject.id,
-        name: nextProject.name,
-        createdAt: nextProject.createdAt,
-        updatedAt: nextProject.updatedAt,
-        nodeCount: nextProject.nodeCount,
-        coverPath: nextProject.coverPath,
-      }),
-    }));
-    persistenceQueue.clearViewport(nextProject.id)
-    persistenceQueue.queueProject(nextProject);
-  },
-
-  saveCurrentProjectViewport: (viewport) => {
-    const { currentProjectId, currentProject } = get();
-    if (!currentProjectId || !currentProject || currentProject.id !== currentProjectId) {
-      return;
-    }
-
-    const nextViewport = normalizeViewport(viewport);
-    const hasChanged = hasViewportMeaningfulDelta(currentProject.viewport, nextViewport);
-    if (!hasChanged) {
-      return;
-    }
-
-    const nextProject: Project = {
-      ...currentProject,
-      viewport: nextViewport,
-    };
-
-    set({ currentProject: nextProject });
-    persistenceQueue.queueViewport(currentProjectId, JSON.stringify(nextViewport));
-  },
-
-  cancelPendingViewportPersist: () => {
-    const currentProjectId = get().currentProjectId;
-    if (!currentProjectId) {
-      return;
-    }
-    persistenceQueue.clearViewport(currentProjectId);
-  },
-}));
-
-reportBackgroundPersistenceError = (operation, error, projectId) => {
-  logger.error(`Failed to persist project ${operation}`, error, { projectId })
-  setProjectPersistenceError(projectId, 'project.persistenceFailed')
-}
-
-function setProjectPersistenceError(projectId: string, error: string | null): void {
+// 实例内容、名称、保存状态变化：刷新当前画布投影与保存错误（后台画布只记错误）
+onCanvasProjectInstanceChanged((instance) => {
+  const ended = instance.session.isEnded
+  const error = ended ? null : persistenceErrorOf(instance)
   useProjectStore.setState((state) => {
-    const persistenceErrors = { ...state.persistenceErrors }
-    if (error) persistenceErrors[projectId] = error
-    else delete persistenceErrors[projectId]
-    return { persistenceErrors, persistenceError: state.currentProjectId === projectId
-      ? error : state.persistenceError }
+    const isCurrent = state.currentProjectId === instance.id
+    // 正在显示的画布的会话结束了（离开、被释放）：界面回到列表
+    if (isCurrent && ended) {
+      return { currentProjectId: null, currentProject: null, persistenceError: null,
+        persistenceErrors: withError(state.persistenceErrors, instance.id, null) }
+    }
+    return {
+      persistenceErrors: withError(state.persistenceErrors, instance.id, error),
+      ...(isCurrent ? { persistenceError: error, currentProject: instance.snapshot() } : {}),
+    }
   })
-}
-
-/** 捕获当前项目快照后等待真实存储；重试不依赖 hasChanged，也不重放业务动作。 */
-export function hasUnconfirmedCanvasProjectSnapshot(projectId: string): boolean {
-  return persistenceQueue.getUnsavedProject(projectId) !== undefined
-}
-
-/** 后台领域操作也写入同一保存队列，打开工程时可恢复尚未落盘的原快照。 */
-export async function persistBackgroundCanvasProject(project: Project): Promise<void> {
-  persistenceQueue.queueProject(project)
-  try {
-    await persistenceQueue.flushProject(project)
-    setProjectPersistenceError(project.id, null)
-    useProjectStore.setState((state) => ({ projects: updateProjectSummary(state.projects, project) }))
-  } catch (error) {
-    setProjectPersistenceError(project.id, 'project.persistenceFailed')
-    throw error
-  }
-}
-
-export function readUnconfirmedCanvasProject(projectId: string): Project | undefined {
-  return persistenceQueue.getUnsavedProject(projectId)
-}
-
-export async function flushCanvasProjectSnapshot(projectId: string): Promise<void> {
-  const project = findCanvasProjectInstance(projectId)?.snapshot() ?? persistenceQueue.getUnsavedProject(projectId)
-  if (!project || project.id !== projectId) throw new Error('画布工程实例不存在')
-  try {
-    await persistenceQueue.flushProject(project)
-    setProjectPersistenceError(projectId, null)
-  } catch (error) {
-    setProjectPersistenceError(projectId, 'project.persistenceFailed')
-    throw error
-  }
-}
-
-/** 仅阻挡存储 writer，不阻塞 UI；调用方释放前必须入队最终提交或恢复快照。 */
-export function pauseCanvasProjectPersistence(projectId: string): () => void {
-  return persistenceQueue.pauseProject(projectId)
-}
-
-configureCanvasInstancePersistence(project => {
-  if (!isUiInspectionReadOnly()) {
-    persistenceQueue.clearViewport(project.id)
-    persistenceQueue.queueProject(project)
-  }
-  useProjectStore.setState(state => ({
-    currentProject: state.currentProjectId === project.id ? project : state.currentProject,
-    projects: updateProjectSummary(state.projects, project),
-  }))
 })

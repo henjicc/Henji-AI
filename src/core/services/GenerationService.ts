@@ -1,4 +1,5 @@
 import { createLogger } from '@/core/logging'
+import type { DocumentContainerRef } from '@/core/documents/types'
 import { emitApplicationEvent } from '@/core/events/applicationEvents'
 
 const logger = createLogger('core.services.GenerationService')
@@ -54,6 +55,8 @@ export type ProviderFactory = never
 export interface GenerationExecutionOptions {
   progressSource?: 'generation' | 'canvas'
   requestId?: string
+  /** 结果文件放进哪个容器的“生成结果”（画布所在项目或作品目录）；省略为作品目录“生成结果”。 */
+  outputContainer?: DocumentContainerRef
   /** 宿主持有的业务任务信号；不传入模型参数或 IPC DTO。 */
   signal?: AbortSignal
 }
@@ -182,6 +185,7 @@ export class GenerationService {
         modelId,
         params: runtimeParams,
         requestId,
+        ...(options.outputContainer ? { outputContainer: options.outputContainer } : {}),
       }))
       recordRuntimeTrace(modelId, runtimeParams, response.trace)
       await captureClonedVoice(modelId, model.meta.provider, response)
@@ -346,6 +350,7 @@ export class GenerationService {
         taskId,
         params: runtimeParams,
         requestId,
+        ...(options.outputContainer ? { outputContainer: options.outputContainer } : {}),
       }))
       recordRuntimeTrace(modelId, runtimeParams, response.trace)
       if (model) await captureClonedVoice(modelId, model.meta.provider, response)

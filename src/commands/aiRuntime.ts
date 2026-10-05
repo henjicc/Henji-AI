@@ -1,6 +1,7 @@
 import type { AiRuntimeTrace } from '@/core/types'
 import type { StructuredGenerationOutput, TtsVoice } from '@henjicc/ai-sdk'
 import { getPlatform, isDesktopRuntime } from '@/platform/runtime'
+import type { DocumentContainerRef } from '@/core/documents/types'
 
 export interface ProviderKeyStatusDto {
   providerId: string
@@ -13,6 +14,8 @@ export interface AiGenerateRequestDto {
   modelId: string
   params: DynamicValueMap
   requestId?: string
+  /** 结果文件放进哪个容器的“生成结果”（项目或作品目录）；省略时放作品目录“生成结果”。由宿主解析位置，不进模型参数。 */
+  outputContainer?: DocumentContainerRef
 }
 
 export interface AiContinuePollingRequestDto {
@@ -20,6 +23,8 @@ export interface AiContinuePollingRequestDto {
   taskId: string
   params?: DynamicValueMap
   requestId?: string
+  /** 结果文件放进哪个容器的“生成结果”（项目或作品目录）；省略时放作品目录“生成结果”。由宿主解析位置，不进模型参数。 */
+  outputContainer?: DocumentContainerRef
 }
 
 export interface AiGetProgressEstimateRequestDto {

@@ -6,71 +6,18 @@ import {
   capabilityOutputSchema,
   defineApplicationCapability,
 } from '../shared/defineApplicationCapability'
+import { canvasDocumentIdSchema } from './canvasDocumentId'
+
+/*
+ * 画布内容能力（3.4 起画布是 `.henji-canvas` 文档）：画布的列出、新建、打开、改名、移动、副本、回收站
+ * 都由通用文档能力承担（list_documents / create_document / open_document / documents.document.name …），
+ * 这里只留读取画布内容与保存恢复。projectId 一律是画布文档 ID（取自 list_documents，kind=canvas），不是所在项目 ID。
+ */
+
 
 function projectTarget(projectId: string): Record<string, string> {
   return { projectId }
 }
-
-const listCanvasProjects = defineApplicationCapability({
-  id: 'list_canvas_projects',
-  version: 1,
-  title: '列出画布项目',
-  description: '列出可供明确选择的画布项目摘要，不读取完整节点数据。',
-  domain: 'canvas',
-  aliases: ['画布项目', '已有画布', 'list canvas projects'],
-  readOnly: true,
-  control: capabilityControl('observe', ['canvas.project']),
-  risk: 'R0',
-  dataClasses: ['C1'],
-  permission: 'canvas:read',
-  idempotent: true,
-  destructive: false,
-  timeoutMs: 5_000,
-  supportsPreview: false,
-  supportsUndo: false,
-  requiredScopes: [],
-  producesRefs: ['canvas.project'],
-  inputSchema: z.object({}).strict(),
-  outputSchema: capabilityOutputSchema({
-    projects: z.array(z.record(z.string(), z.unknown())),
-  }),
-  concurrencyKey: 'canvas_catalog',
-  summarize: (output) => `画布项目目录返回 ${output.projects.length} 项。`,
-})
-
-const openCanvasProject = defineApplicationCapability({
-  id: 'open_canvas_project',
-  version: 2,
-  title: '打开画布项目',
-  description: '按明确项目引用打开画布项目并进入画布工作区。',
-  domain: 'canvas',
-  aliases: ['进入画布项目', 'open canvas project'],
-  readOnly: false,
-  control: capabilityControl('navigate', ['canvas.project', 'application.surface']),
-  risk: 'R1',
-  dataClasses: ['C1'],
-  permission: 'canvas:open',
-  idempotent: true,
-  destructive: false,
-  timeoutMs: 15_000,
-  supportsPreview: false,
-  supportsUndo: false,
-  requiredScopes: ['navigation', 'canvas'],
-  acceptsRefs: ['canvas.project'],
-  producesRefs: ['canvas.project', 'application.surface'],
-  successEvidence: ['工程已载入，返回 surfaceId=workspace.canvas，且宿主当前 Surface 已验证为画布工作区。'],
-  failureRecovery: ['工程不存在时重新读取工程目录；Surface 无法打开时停止并说明，不得声称已进入画布。'],
-  inputSchema: z.object({ projectId: z.string().min(1) }).strict(),
-  outputSchema: capabilityOutputSchema({
-    projectId: z.string().min(1),
-    name: z.string().nullable(),
-    nodeCount: z.number().int().nonnegative(),
-    surfaceId: z.literal('workspace.canvas'),
-  }),
-  concurrencyKey: 'canvas_project',
-  resolveTargetIds: (input) => projectTarget(input.projectId),
-  summarize: (output) => `已打开画布项目 ${output.projectId}。`,
-})
 
 const searchCanvasNodeTypes = defineApplicationCapability({
   id: 'search_canvas_node_types',
@@ -152,140 +99,11 @@ const getCanvasNodeSchema = defineApplicationCapability({
   summarize: (output) => `已读取节点 ${String(output.schema.nodeType ?? '')} 的结构。`,
 })
 
-const createCanvasProject = defineApplicationCapability({
-  id: 'create_canvas_project',
-  resolveOperationTargets: () => [],
-  resolveOperationWriteTargets: (_input, operationId) => [{ kind: 'canvas.project', id: `pending:${operationId}` }],
-  version: 2,
-  title: '新建画布项目',
-  description: '创建并载入空画布项目数据，但不切换当前界面；用户要求进入或查看时，再调用打开画布项目能力。',
-  domain: 'canvas',
-  aliases: ['创建画布', 'new canvas project'],
-  readOnly: false,
-  control: capabilityControl('create', ['canvas.project'], { revisionScopes: ['canvas'] }),
-  risk: 'R1',
-  dataClasses: ['C1'],
-  permission: 'canvas:project_write',
-  idempotent: false,
-  destructive: false,
-  timeoutMs: 8_000,
-  supportsPreview: false,
-  supportsUndo: false,
-  requiredScopes: ['canvas'],
-  producesRefs: ['canvas.project'],
-  successEvidence: ['项目已创建并返回稳定 projectId；本能力不以切换界面作为成功条件。'],
-  failureRecovery: ['创建失败时修正项目名称后最多重试一次；仍失败则停止并说明。'],
-  inputSchema: z.object({ name: z.string().trim().min(1).max(120) }).strict(),
-  outputSchema: capabilityOutputSchema({
-    projectId: z.string().min(1),
-    name: z.string().min(1),
-  }),
-  concurrencyKey: 'canvas_project',
-  resolveTargetIds: (input) => ({ name: input.name }),
-  resolveObservedEffects: (_input, output) => [{
-    effect: 'create', entityTypes: ['canvas.project'], propertyIds: [],
-    targetRefs: [{ kind: 'canvas.project', id: output.projectId }],
-    count: 1, verified: false, evidence: [`project:${output.projectId}`],
-  }],
-  summarize: (output) => `已创建画布项目 ${output.projectId}。`,
-})
-
-function defineProjectWrite(
-  id: 'close_canvas_project' | 'rename_canvas_project',
-  title: string,
-  description: string,
-  withName: boolean
-): ApplicationCapabilityDefinition {
-  const inputSchema = withName
-    ? z.object({
-        projectId: z.string().min(1),
-        name: z.string().trim().min(1).max(120),
-      }).strict()
-    : z.object({ projectId: z.string().min(1) }).strict()
-  return defineApplicationCapability({
-    id,
-    ...(withName ? { external: { kind: 'delegate' as const, entityType: 'canvas.project', operations: ['write' as const],
-      propertyIds: ['canvas.project.name'], reason: '工程重命名由 canvas.project.name 与通用实体事务维护。' } } : {}),
-    resolveOperationTargets: input => [{ kind: 'canvas.project', id: input.projectId }],
-    version: 1,
-    title,
-    description,
-    domain: 'canvas',
-    aliases: [title, id.replaceAll('_', ' ')],
-    readOnly: false,
-    control: capabilityControl(withName ? 'update' : 'navigate', ['canvas.project'], {
-      revisionScopes: ['canvas'], verificationRequired: withName,
-    }),
-    risk: 'R1',
-    dataClasses: ['C1'],
-    permission: 'canvas:project_write',
-    idempotent: true,
-    destructive: false,
-    timeoutMs: 8_000,
-    supportsPreview: false,
-    supportsUndo: false,
-    requiredScopes: ['canvas'],
-    acceptsRefs: ['canvas.project'],
-    producesRefs: ['canvas.project'],
-    inputSchema,
-    outputSchema: capabilityOutputSchema({
-      projectId: z.string().min(1),
-      ...(withName
-        ? { name: z.string().min(1) }
-        : { status: z.literal('closed') }),
-    }),
-    concurrencyKey: 'canvas_project',
-    resolveConcurrencyKey: (input) => `canvas:${input.projectId}`,
-    resolveTargetIds: (input) => projectTarget(input.projectId),
-    summarize: (output) => withName && 'name' in output
-      ? `已将画布项目重命名为 ${String(output.name)}。`
-      : `已关闭画布项目 ${String(output.projectId)}。`,
-  })
-}
-
-const deleteCanvasProject = defineApplicationCapability({
-  id: 'delete_canvas_project',
-  resolveOperationTargets: input => [{ kind: 'canvas.project', id: input.projectId }],
-  version: 1,
-  title: '删除画布项目',
-  description: '删除明确画布项目及其持久化画布数据。',
-  domain: 'canvas',
-  aliases: ['永久删除画布', 'delete canvas project'],
-  readOnly: false,
-  control: capabilityControl('delete', ['canvas.project'], { revisionScopes: ['canvas'] }),
-  risk: 'R3',
-  dataClasses: ['C1'],
-  permission: 'canvas:project_delete',
-  idempotent: true,
-  destructive: true,
-  timeoutMs: 10_000,
-  supportsPreview: true,
-  supportsUndo: false,
-  requiredScopes: ['canvas'],
-  acceptsRefs: ['canvas.project'],
-  inputSchema: z.object({ projectId: z.string().min(1) }).strict(),
-  outputSchema: capabilityOutputSchema({
-    projectId: z.string().min(1),
-    status: z.literal('deleted'),
-  }),
-  concurrencyKey: 'canvas_project',
-  resolveConcurrencyKey: (input) => `canvas:${input.projectId}`,
-  resolveTargetIds: (input) => projectTarget(input.projectId),
-  preview: (input) => ({
-    title: '删除画布项目',
-    summary: `永久删除项目 ${input.projectId} 及其画布数据。`,
-    targetIds: projectTarget(input.projectId),
-    reversible: false,
-    dataClasses: ['C1'],
-  }),
-  summarize: (output) => `已删除画布项目 ${output.projectId}。`,
-})
-
 const getCanvasProject = defineApplicationCapability({
   id: 'get_canvas_project',
   version: 1,
-  title: '读取画布项目详情',
-  description: '读取明确画布项目的节点和连接摘要，不返回大媒体或完整画布数据。',
+  title: '读取画布详情',
+  description: '读取明确画布文档的节点和连接摘要，不返回大媒体或完整画布数据。',
   domain: 'canvas',
   aliases: ['画布项目详情', 'get canvas project'],
   readOnly: true,
@@ -301,7 +119,7 @@ const getCanvasProject = defineApplicationCapability({
   requiredScopes: ['canvas'],
   acceptsRefs: ['canvas.project'],
   producesRefs: ['canvas.project', 'canvas.node', 'canvas.edge'],
-  inputSchema: z.object({ projectId: z.string().min(1) }).strict(),
+  inputSchema: z.object({ projectId: canvasDocumentIdSchema }).strict(),
   outputSchema: capabilityOutputSchema({
     project: z.record(z.string(), z.unknown()),
     nodes: z.array(z.record(z.string(), z.unknown())),
@@ -356,7 +174,7 @@ const getCanvasNode = defineApplicationCapability({
   acceptsRefs: ['canvas.project', 'canvas.node'],
   producesRefs: ['canvas.node', 'canvas.edge'],
   inputSchema: z.object({
-    projectId: z.string().min(1),
+    projectId: canvasDocumentIdSchema,
     nodeId: z.string().min(1),
   }).strict(),
   outputSchema: capabilityOutputSchema({
@@ -381,7 +199,7 @@ const retryCanvasProjectSave = defineApplicationCapability({
   domain: 'canvas', aliases: ['重试保存', '画布保存失败', 'retry canvas save'],
   readOnly: false,
   control: capabilityControl('execute', ['canvas.project'], { revisionScopes: ['canvas'] }),
-  risk: 'R1', dataClasses: ['C1'], permission: 'canvas:project_write',
+  risk: 'R1', dataClasses: ['C1'], permission: 'canvas:write',
   idempotent: true, destructive: false, timeoutMs: 15_000,
   supportsPreview: false, supportsUndo: false, requiredScopes: ['canvas'],
   acceptsRefs: ['canvas.project'], producesRefs: ['canvas.project'],
@@ -400,14 +218,8 @@ const retryCanvasProjectSave = defineApplicationCapability({
 
 export const CANVAS_PROJECT_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinition[] = [
   retryCanvasProjectSave,
-  listCanvasProjects,
-  openCanvasProject,
   searchCanvasNodeTypes,
   getCanvasNodeSchema,
-  createCanvasProject,
-  defineProjectWrite('close_canvas_project', '关闭画布项目', '保存并关闭明确的当前画布项目。', false),
-  defineProjectWrite('rename_canvas_project', '重命名画布项目', '重命名明确的画布项目。', true),
-  deleteCanvasProject,
   getCanvasProject,
   getCanvasNode,
 ]

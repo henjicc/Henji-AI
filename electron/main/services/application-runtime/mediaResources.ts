@@ -7,9 +7,9 @@ import { getGenerationHistoryStore } from '../generation-history/store'
 import { getDataRootDir } from '../image/path-utils'
 import { normalizeLocalSource } from '../image/source'
 import { createMainLogger } from '../logging'
-import { getStoryboardProject } from '../storyboard-projects'
-import { resolveStoryboardProjectMediaSchema } from '../storyboard-project-validation'
-import { decodeCanvasProjectImageReference, parseCanvasProjectRecord } from '../../../../src/core/canvas/projectRecordCodec'
+import { getDocumentService } from '../documents/runtime'
+import { resolveCanvasMediaSchema } from '../canvas-media-schema'
+import { decodeCanvasImageReference, parseCanvasDocumentGraph } from '../../../../src/core/canvas/canvasDocumentGraph'
 import { mapCanvasNodeMediaReferences } from '../../../../src/core/canvas/nodeMediaReferences'
 import { APPLICATION_READABLE_MEDIA_KINDS } from '../../../../src/core/application-control/mediaReferenceKinds'
 
@@ -25,7 +25,7 @@ const inputSchema = z.object({
   length: z.number().int().min(1).max(256 * 1024).default(256 * 1024),
 }).strict()
 
-function sources(ref: z.infer<typeof inputSchema>['ref']): string[] {
+async function sources(ref: z.infer<typeof inputSchema>['ref']): Promise<string[]> {
   // 参数只作为完整业务主键交给各自的仓库，绝不作为文件路径或 SQL 片段；仓库返回已换回的绝对路径。
   if (ref.kind === 'asset') {
     const filePath = getAssetFilePath(ref.id)
@@ -39,13 +39,19 @@ function sources(ref: z.infer<typeof inputSchema>['ref']): string[] {
   }
   const separator = ref.id.indexOf(':')
   if (separator < 1 || separator === ref.id.length - 1) failure('INVALID_REFERENCE', '请使用包含原工程的完整画布节点引用。')
-  const record = getStoryboardProject(ref.id.slice(0, separator))
-  if (!record) failure('NOT_FOUND', '原画布工程不存在。')
-  const project = parseCanvasProjectRecord(record, resolveStoryboardProjectMediaSchema)
-  const node = project.nodes.find((item) => item.id === ref.id.slice(separator + 1))
+  // 画布节点引用是“画布文档 ID:节点 ID”；从画布文件读（内容里的位置已换回绝对路径）
+  let content: unknown
+  try {
+    content = (await getDocumentService().readDocument({ id: ref.id.slice(0, separator) })).content
+  } catch (error) {
+    if (error instanceof Error && error.name === 'DocumentNotFoundError') failure('NOT_FOUND', '原画布不存在。')
+    throw error
+  }
+  const graph = parseCanvasDocumentGraph(content, resolveCanvasMediaSchema)
+  const node = graph.nodes.find((item) => item.id === ref.id.slice(separator + 1))
   if (!node) failure('NOT_FOUND', '原画布节点不存在。')
   const found = new Set<string>()
-  mapCanvasNodeMediaReferences(node.data, (value) => { found.add(decodeCanvasProjectImageReference(value, project.imagePool, 'nodesJson')); return value }, resolveStoryboardProjectMediaSchema)
+  mapCanvasNodeMediaReferences(node.data, (value) => { found.add(decodeCanvasImageReference(value, graph.imagePool, 'nodes')); return value }, resolveCanvasMediaSchema)
   return [...found]
 }
 
@@ -56,7 +62,7 @@ export async function readApplicationMediaResource(input: {
   const parsed = inputSchema.parse(input)
   logger.debug('开始读取关联媒体', { event: 'mcp.media.read.start', context: { kind: parsed.ref.kind } })
   try {
-    const source = sources(parsed.ref)[parsed.outputIndex]
+    const source = (await sources(parsed.ref))[parsed.outputIndex]
     if (!source) failure('MEDIA_INDEX_OUT_OF_RANGE', '此媒体序号不存在，请查询原业务结果。')
     if (/^(?:https?:|data:|blob:)/i.test(source)) failure('MEDIA_NOT_LOCAL', '媒体尚未由应用保存到本地，请先完成原任务保存。')
     const normalized = normalizeLocalSource(source)

@@ -3,13 +3,10 @@ import type { HenjiAssistantApi } from './api-assistant'
 import type { ApplicationHostPlatform, McpPlatform } from '../../src/core/application-control/localHostContracts'
 import type {
   HenjiCameraStageRenderApi,
-  HenjiCanvasProjectsApi,
   HenjiCustomModelsApi,
   HenjiDbApi,
   HenjiTestFixturesApi,
   HenjiDiagnosticsApi,
-  HenjiProjectCoversApi,
-  HenjiStoryboardProjectsApi,
   HenjiWindowApi,
 } from './api-projects'
 import type { HenjiAiApi, HenjiLlmApi } from './api-ai'
@@ -65,9 +62,6 @@ export interface HenjiNativeApi {
   generationHistory: HenjiGenerationHistoryApi
   presets: HenjiPresetsApi
   settings: HenjiSettingsApi
-  canvasProjects: HenjiCanvasProjectsApi
-  storyboardProjects: HenjiStoryboardProjectsApi
-  projectCovers: HenjiProjectCoversApi
   cameraStageRender: HenjiCameraStageRenderApi
   customModels: HenjiCustomModelsApi
   fs: HenjiFsApi

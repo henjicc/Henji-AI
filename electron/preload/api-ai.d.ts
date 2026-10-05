@@ -18,10 +18,14 @@ export interface HenjiProviderKeyStatus {
   configured: boolean
 }
 
+/** 结果文件放进哪个容器的“生成结果”；省略时为作品目录“生成结果”。 */
+export type HenjiAiOutputContainer = { kind: 'user' } | { kind: 'project'; projectId: string }
+
 export interface HenjiAiGenerateRequest {
   modelId: string
   params: Record<string, unknown>
   requestId?: string
+  outputContainer?: HenjiAiOutputContainer
 }
 
 export interface HenjiAiContinuePollingRequest {
@@ -29,6 +33,7 @@ export interface HenjiAiContinuePollingRequest {
   taskId: string
   params?: Record<string, unknown>
   requestId?: string
+  outputContainer?: HenjiAiOutputContainer
 }
 
 export interface HenjiAiGetProgressEstimateRequest {

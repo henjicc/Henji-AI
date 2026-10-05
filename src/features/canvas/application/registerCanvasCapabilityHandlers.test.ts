@@ -1,8 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
-  openCanvasProjectWithSummaryFromAgent: vi.fn(),
-  createCanvasProjectFromAgent: vi.fn(),
+  openCanvasDocument: vi.fn(),
+  releaseCanvasDocument: vi.fn(),
+  openCanvasProject: vi.fn(),
+  registerDocumentOpener: vi.fn(),
+  registerDocumentReleaser: vi.fn(),
   focusCanvasNodeFromAgent: vi.fn(),
   downloadCanvasMediaFromAgent: vi.fn(),
   openApplicationSurface: vi.fn(),
@@ -26,6 +29,7 @@ vi.mock('@/features/canvas/application/canvasApplicationService', () => ({
   addCanvasNode: vi.fn(),
   connectCanvasNodes: vi.fn(),
   focusCanvasNode: mocks.focusCanvasNodeFromAgent,
+  openCanvasProject: mocks.openCanvasProject,
   undoCanvasChange: vi.fn(),
   redoCanvasChange: mocks.redoCanvasChangeFromAgent,
 }))
@@ -35,11 +39,12 @@ vi.mock('@/features/canvas/application/canvasBatchService', () => ({
   previewCanvasBatch: vi.fn(),
 }))
 vi.mock('@/features/canvas/application/canvasProjectService', () => ({
-  closeCanvasProject: vi.fn(),
-  createCanvasProject: mocks.createCanvasProjectFromAgent,
-  deleteCanvasProject: vi.fn(),
-  openCanvasProjectWithSummary: mocks.openCanvasProjectWithSummaryFromAgent,
-  renameCanvasProject: vi.fn(),
+  openCanvasDocument: mocks.openCanvasDocument,
+  releaseCanvasDocument: mocks.releaseCanvasDocument,
+}))
+vi.mock('@/features/documents/documentOperations', () => ({
+  registerDocumentOpener: mocks.registerDocumentOpener,
+  registerDocumentReleaser: mocks.registerDocumentReleaser,
 }))
 vi.mock('@/features/canvas/application/canvasMutationService', () => ({
   deleteCanvasNodes: vi.fn(),
@@ -56,7 +61,6 @@ vi.mock('@/features/canvas/application/canvasMutationService', () => ({
 vi.mock('@/features/canvas/application/canvasQueryService', () => ({
   getCanvasNode: vi.fn(),
   getCanvasProject: vi.fn(),
-  listCanvasProjectSummaries: vi.fn(),
 }))
 vi.mock('@/features/assets/application/assetCanvasApplicationService', () => ({
   addAssetToCanvas: vi.fn(),
@@ -100,34 +104,19 @@ describe('canvas capability handlers', () => {
     mocks.openApplicationSurface.mockImplementation((surfaceId: string) => ({ surfaceId }))
   })
 
-  it('打开画布项目成功后才进入画布 Surface', async () => {
-    mocks.openCanvasProjectWithSummaryFromAgent.mockResolvedValue({
-      projectId: 'project-1',
-      name: '项目一',
-      nodeCount: 2,
-    })
-    const handler = registeredHandlers().get('open_canvas_project')
-
-    const result = await handler?.({ projectId: 'project-1' }, context)
-
-    expect(result).toMatchObject({ projectId: 'project-1', surfaceId: 'workspace.canvas' })
-    expect(mocks.openApplicationSurface).toHaveBeenCalledWith('workspace.canvas', context)
-    expect(
-      mocks.openCanvasProjectWithSummaryFromAgent.mock.invocationCallOrder[0]
-    ).toBeLessThan(mocks.openApplicationSurface.mock.invocationCallOrder[0])
-  })
-
-  it('创建画布项目不切换当前界面', async () => {
-    mocks.createCanvasProjectFromAgent.mockResolvedValue({
-      projectId: 'project-created',
-      name: '后台画布',
-    })
-    const handler = registeredHandlers().get('create_canvas_project')
-
-    const result = await handler?.({ name: '后台画布' }, context)
-
-    expect(result).toMatchObject({ projectId: 'project-created' })
+  it('画布项目管理交给通用文档能力：只登记打开方式（打开成功才进画布 Surface）与后台释放', async () => {
+    const handlers = registeredHandlers()
+    for (const id of ['list_canvas_projects', 'open_canvas_project', 'create_canvas_project', 'close_canvas_project', 'rename_canvas_project', 'delete_canvas_project']) {
+      expect(handlers.has(id), id).toBe(false)
+    }
+    expect(mocks.registerDocumentReleaser).toHaveBeenCalledWith('canvas', mocks.releaseCanvasDocument)
+    const opener = mocks.registerDocumentOpener.mock.calls.find(([kind]) => kind === 'canvas')?.[1] as (document: { id: string; path: string }) => Promise<void>
+    mocks.openCanvasDocument.mockResolvedValueOnce(false)
+    await opener({ id: 'canvas-1', path: '/work/a.henji-canvas' })
     expect(mocks.openApplicationSurface).not.toHaveBeenCalled()
+    mocks.openCanvasDocument.mockResolvedValueOnce(true)
+    await opener({ id: 'canvas-1', path: '/work/a.henji-canvas' })
+    expect(mocks.openApplicationSurface).toHaveBeenCalledWith('workspace.canvas')
   })
 
   it('生成结果桥梁把稳定引用和绝对坐标原样交给组合服务', async () => {
@@ -167,7 +156,7 @@ describe('canvas capability handlers', () => {
   })
 
   it('定位节点时自动载入目标项目、打开画布后再聚焦', async () => {
-    mocks.openCanvasProjectWithSummaryFromAgent.mockResolvedValue({
+    mocks.openCanvasProject.mockResolvedValue({
       projectId: 'project-2',
       name: '项目二',
       nodeCount: 1,
@@ -189,7 +178,7 @@ describe('canvas capability handlers', () => {
     })
     expect(mocks.openApplicationSurface).toHaveBeenCalledWith('workspace.canvas', context)
     expect(
-      mocks.openCanvasProjectWithSummaryFromAgent.mock.invocationCallOrder[0]
+      mocks.openCanvasProject.mock.invocationCallOrder[0]
     ).toBeLessThan(mocks.focusCanvasNodeFromAgent.mock.invocationCallOrder[0])
     expect(
       mocks.openApplicationSurface.mock.invocationCallOrder[0]
@@ -226,7 +215,7 @@ describe('canvas capability handlers', () => {
       editorKind: 'multi_layer_document',
       nodeRef,
     })
-    expect(mocks.openCanvasProjectWithSummaryFromAgent).not.toHaveBeenCalled()
+    expect(mocks.openCanvasProject).not.toHaveBeenCalled()
     expect(mocks.openApplicationSurface).not.toHaveBeenCalled()
     expect(mocks.focusCanvasNodeFromAgent).not.toHaveBeenCalled()
   })

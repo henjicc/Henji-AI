@@ -74,8 +74,13 @@ export function hasActiveGenerationWork(): boolean {
   return activeGenerationSubmissions.size > 0 || activePolls > 0
 }
 
+/** 结果文件的落点（宿主决定，不进 SDK 请求与提交摘要）：省略时为作品目录“生成结果”。 */
+export interface GenerationOutputOptions {
+  outputDirectory?: string
+}
+
 /** 只完成已收到供应商结果的媒体保存，不会再次调用 SDK 生成。 */
-export async function recoverSavedGenerationResult(requestId: string): Promise<AiGenerateResponseDto | null> {
+export async function recoverSavedGenerationResult(requestId: string, output: GenerationOutputOptions = {}): Promise<AiGenerateResponseDto | null> {
   const response = readGenerationSubmission(requestId)
   if (!response) return null
   const stage = readGenerationSubmissionStage(requestId)
@@ -85,7 +90,7 @@ export async function recoverSavedGenerationResult(requestId: string): Promise<A
   activeGenerationSubmissions.add(requestId)
   try {
     const media = response.filePath ? { filePath: response.filePath, createdFilePaths: response.createdFilePaths ?? [] }
-      : response.status === 'completed' ? await saveMediaPaths(response.url, { requestId, modelId: stage.modelId, taskId: response.taskId })
+      : response.status === 'completed' ? await saveMediaPaths(response.url, { requestId, modelId: stage.modelId, taskId: response.taskId }, output.outputDirectory)
       : { filePath: undefined, createdFilePaths: [] }
     const saved = { ...response, ...media }
     completeGenerationSubmission(requestId, saved, 'media')
@@ -96,11 +101,12 @@ export async function recoverSavedGenerationResult(requestId: string): Promise<A
 }
 
 export async function generate(
-  request: AiGenerateRequestDto
+  request: AiGenerateRequestDto,
+  output: GenerationOutputOptions = {},
 ): Promise<AiGenerateResponseDto> {
   const requestId = resolveRequestId(request)
   const previous = claimGenerationSubmission(requestId, request)
-  if (previous) return await recoverSavedGenerationResult(requestId) ?? previous
+  if (previous) return await recoverSavedGenerationResult(requestId, output) ?? previous
   activeGenerationSubmissions.add(requestId)
   let ownedMediaPaths: string[] = []
   logger.info('后端开始生成', {
@@ -140,7 +146,7 @@ export async function generate(
       providerResult.metadata
     )
     const persistedMedia = providerResult.status === 'completed'
-      ? await saveMediaPaths(providerResult.url, { requestId, modelId: request.modelId, taskId: providerResult.taskId })
+      ? await saveMediaPaths(providerResult.url, { requestId, modelId: request.modelId, taskId: providerResult.taskId }, output.outputDirectory)
       : { filePath: undefined, createdFilePaths: [] }
     const { filePath, createdFilePaths } = persistedMedia
     ownedMediaPaths = createdFilePaths
@@ -193,7 +199,8 @@ export async function generate(
 }
 
 export async function continuePolling(
-  request: AiContinuePollingRequestDto
+  request: AiContinuePollingRequestDto,
+  output: GenerationOutputOptions = {},
 ): Promise<AiGenerateResponseDto> {
   const requestId = request.requestId?.trim() || `continue-${request.modelId}-${Date.now()}`
   const taskId = request.taskId.trim()
@@ -247,7 +254,7 @@ export async function continuePolling(
         responseBody: trace.responseBody,
       },
     })
-    const { filePath, createdFilePaths } = await saveMediaPaths(providerResult.url, { requestId, modelId: request.modelId, taskId })
+    const { filePath, createdFilePaths } = await saveMediaPaths(providerResult.url, { requestId, modelId: request.modelId, taskId }, output.outputDirectory)
     ownedMediaPaths = createdFilePaths
     const structuredOutput = materializeStructuredOutput(providerResult.structuredOutput, filePath)
     const responseResult = {
@@ -327,7 +334,7 @@ function requireRequestInfo(
   return info
 }
 
-async function saveMediaPaths(joinedUrls: string, context: MediaDownloadContext): Promise<{
+async function saveMediaPaths(joinedUrls: string, context: MediaDownloadContext, directory?: string): Promise<{
   filePath?: string
   createdFilePaths: string[]
 }> {
@@ -337,7 +344,7 @@ async function saveMediaPaths(joinedUrls: string, context: MediaDownloadContext)
   try {
     const urls = joinedUrls.split('|||').map((item) => item.trim()).filter(Boolean)
     for (const [outputIndex, url] of urls.entries()) {
-      const saved = await saveMediaFromUrlTracked(url, { ...context, outputIndex })
+      const saved = await saveMediaFromUrlTracked(url, { ...context, outputIndex }, directory)
       if (saved) {
         savedPaths.push(saved.filePath)
         if (saved.created && createdPathSet.has(saved.filePath)) {

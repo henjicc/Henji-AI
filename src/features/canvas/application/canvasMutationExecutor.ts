@@ -10,7 +10,7 @@ import { CanvasApplicationError } from './canvasApplicationService';
 import { CANVAS_NODE_WRITERS as WRITERS } from './canvasFields';
 import { applyCanvasNodePropertyPatches, applyStoryboardFramePatches, type CanvasNodePropertyPatch } from './canvasMutationService';
 import { CANVAS_ENTITY_TYPES } from './canvasReflection';
-import { pauseCanvasProjectPersistence } from '@/stores/projectStore';
+import { pauseCanvasProjectPersistence } from './canvasPersistenceService';
 import { confirmCanvasPersistence, CanvasPersistenceError, runPersistedCanvasUndo, createCanvasMutationCheckpoint, isCanvasMutationCheckpointCurrent, CanvasTransactionConflictError, type CanvasUndoPersistenceState } from './canvasPersistenceService';
 
 type MutationStep = Extract<ApplicationPlannedStep, { kind: 'mutation' }>

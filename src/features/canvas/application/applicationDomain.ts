@@ -6,22 +6,18 @@ import type { ApplicationDomainModule } from '@/features/application-control/dom
 import { createCanvasReflectionRegistrations, CANVAS_ENTITY_TYPES } from './canvasReflection'
 import { createStoryboardReflectionRegistrations } from './storyboardReflection'
 import { CanvasNodeMutationExecutor } from './canvasMutationExecutor'
-import { CanvasProjectMutationExecutor } from './canvasProjectMutationExecutor'
 import { CanvasCollectionExecutor } from './canvasCollectionExecutor'
 import { registerCanvasCapabilityHandlers } from './registerCanvasCapabilityHandlers'
-import { registerStoryboardCapabilityHandlers } from './registerStoryboardCapabilityHandlers'
 
 export const canvasApplicationDomain: ApplicationDomainModule = {
   id: 'canvas',
   entities: () => [...createCanvasReflectionRegistrations(), ...createStoryboardReflectionRegistrations()],
   registerExecutors(engine) {
     engine.registerMutationExecutor(new CanvasNodeMutationExecutor())
-    engine.registerMutationExecutor(new CanvasProjectMutationExecutor())
     for (const entityType of [CANVAS_ENTITY_TYPES.node, CANVAS_ENTITY_TYPES.edge]) engine.registerCollectionExecutor(new CanvasCollectionExecutor(entityType))
   },
   registerCapabilities(registrar) {
     registerCanvasCapabilityHandlers(registrar)
-    registerStoryboardCapabilityHandlers(registrar)
   },
   failure(error, normalize) {
   if (error instanceof CanvasTransactionRolledBackError) {

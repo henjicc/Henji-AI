@@ -126,6 +126,8 @@ describe.skipIf(!process.versions.electron)('统一迁移账本：旧库就地�
       expect(JSON.parse((db.prepare('SELECT response_json FROM generation_submissions').get() as { response_json: string }).response_json)).toMatchObject({ filePath: 'henji://user/生成结果/a.png' })
       // 3.2 第 15 项：镜头参考旧工程表删除，引用旧工程 ID 的渲染回执清空（不迁移内容，重要记录 008）。
       expect(db.prepare("SELECT name FROM sqlite_master WHERE name = 'camera_stage_projects'").get()).toBeUndefined()
+      // 3.4 第 17 项：两张旧画布工程表删除。
+      expect(db.prepare("SELECT name FROM sqlite_master WHERE name IN ('storyboard_projects', 'canvas_projects')").all()).toEqual([])
       expect(db.prepare('SELECT * FROM camera_stage_render_tasks').all()).toEqual([])
       expect(fs.existsSync(userFile)).toBe(false) // 只改记录，不碰文件
 
@@ -159,7 +161,7 @@ describe.skipIf(!process.versions.electron)('统一迁移账本：旧库就地�
       expect(fs.existsSync(userFile)).toBe(false)
       const backupDirectory = path.join(base, 'backups')
       const result = runSchemaMigrations(db, undefined, { locationContext: () => context, backupDirectory })
-      expect(result.applied).toEqual([15, 16])
+      expect(result.applied).toEqual([15, 16, 17])
       expect(fs.readdirSync(backupDirectory)).toEqual([expect.stringMatching(/-before-v15\.db$/)])
       expect(db.prepare("SELECT name FROM sqlite_master WHERE name LIKE '%camera_stage_projects%'").all()).toEqual([])
       expect(db.prepare('SELECT * FROM camera_stage_render_tasks').all()).toEqual([])
@@ -189,7 +191,7 @@ describe.skipIf(!process.versions.electron)('统一迁移账本：旧库就地�
       db.prepare("INSERT INTO audio_edit_tasks VALUES ('t1','voice','transcription','completed',NULL,'digest',NULL,NULL,1,1)").run()
       const backupDirectory = path.join(base, 'backups')
       const result = runSchemaMigrations(db, undefined, { locationContext: () => context, backupDirectory })
-      expect(result.applied).toEqual([16])
+      expect(result.applied).toEqual([16, 17])
       expect(fs.readdirSync(backupDirectory)).toEqual([expect.stringMatching(/-before-v16\.db$/)])
       expect(db.prepare("SELECT name FROM sqlite_master WHERE name LIKE '%audio_edit_projects%'").all()).toEqual([])
       expect(columns(db, 'audio_edit_tasks')).toContain('document_id')
@@ -201,6 +203,34 @@ describe.skipIf(!process.versions.electron)('统一迁移账本：旧库就地�
       try {
         expect(copy.prepare('SELECT name FROM audio_edit_projects').all()).toEqual([{ name: '旧口播' }])
       } finally { copy.close() }
+    } finally { db.close() }
+  })
+
+  it('画布退役（第 17 项）：有旧画布工程的库先备份再删两张旧表，内容不迁移', () => {
+    const file = path.join(base, 'henji-v16.db')
+    const db = new Database(file)
+    try {
+      seedLegacy(db)
+      runSchemaMigrations(db, SCHEMA_MIGRATIONS.slice(0, 16), { locationContext: () => context, backupDirectory: path.join(base, 'backups-16') })
+      db.prepare('INSERT INTO storyboard_projects (id,name,created_at,updated_at,node_count,nodes_json,edges_json,viewport_json,history_json) VALUES (?,?,?,?,?,?,?,?,?)')
+        .run('canvas-1', '旧画布', 1, 1, 0, '[]', '[]', '{}', '{}')
+      const backupDirectory = path.join(base, 'backups')
+      const result = runSchemaMigrations(db, undefined, { locationContext: () => context, backupDirectory })
+      expect(result.applied).toEqual([17])
+      expect(fs.readdirSync(backupDirectory)).toEqual([expect.stringMatching(/-before-v17\.db$/)])
+      expect(db.prepare("SELECT name FROM sqlite_master WHERE name LIKE '%storyboard_projects%' OR name LIKE '%canvas_projects%'").all()).toEqual([])
+      const copy = new Database(path.join(backupDirectory, fs.readdirSync(backupDirectory)[0]!), { readonly: true })
+      try {
+        expect(copy.prepare('SELECT name FROM storyboard_projects').all()).toEqual([{ name: '旧画布' }])
+      } finally { copy.close() }
+    } finally { db.close() }
+  })
+
+  it('全新库：不再有账本之外的旧工程表', () => {
+    const db = new Database(':memory:')
+    try {
+      initializeSchema(db)
+      expect(db.prepare("SELECT name FROM sqlite_master WHERE name IN ('storyboard_projects', 'canvas_projects', 'camera_stage_projects', 'audio_edit_projects')").all()).toEqual([])
     } finally { db.close() }
   })
 

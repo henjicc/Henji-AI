@@ -3,9 +3,9 @@ import { afterEach, beforeEach, expect, it } from 'vitest'
 import { getApplicationControlExecutionEngine, getApplicationReflectionRegistry } from '@/features/application-control/capabilities/applicationControlRegistry'
 import { createAttachedImageEditPersistenceFixture } from '@/tests/imageEditAttachedPersistenceFixture'
 import { installHarnessNativeStorage, readHarnessImageEditDocument, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
-import { getProjectRecord } from '@/commands/projectState'
 import { imageEditV3DocumentRef, imageEditV3LayerRef } from './imageEditDocumentRefs'
 import type { ApplicationPlannedStep } from '@/core/application-control/transactions'
+import { readCanvasTestProject } from '@/tests/canvasProjectFixture'
 
 const disposals: Array<() => void> = []
 beforeEach(() => { installHarnessNativeStorage() })
@@ -38,7 +38,7 @@ it.each(['compensatable', 'non_reversible'] as const)('%s 部分业务修改在�
   expect(saved.document.layers[0].opacity).toBe(0.5)
   expect(saved.document.layers[0].name).toBe('模糊')
   expect(saved.document.revision).toBe(1)
-  expect(JSON.parse((await getProjectRecord(f.projectId))!.nodesJson)[0].data.imageEditSession.revision).toBe(1)
+  expect(readCanvasTestProject(f.projectId)!.nodes[0].data.imageEditSession.revision).toBe(1)
   expect(await engine.commit(input, context)).toEqual(result)
   expect(await engine.commit({ ...input, idempotencyKey: `again-${input.idempotencyKey}` }, context)).toMatchObject({ status: 'failed', code: 'INVALID_PLAN' })
   expect(f.materialize).toHaveBeenCalledTimes(1)

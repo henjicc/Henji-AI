@@ -39,7 +39,7 @@ interface CanvasBatchUndo extends CanvasUndoPersistenceState {
 
 const plans = new Map<string, CanvasBatchPlan>()
 const undos = new Map<string, CanvasBatchUndo>()
-import { pauseCanvasProjectPersistence } from '@/stores/projectStore';
+import { pauseCanvasProjectPersistence } from './canvasPersistenceService';
 import { confirmCanvasPersistence, runPersistedCanvasUndo, createCanvasMutationCheckpoint, isCanvasMutationCheckpointCurrent, assertCanvasCommitContext, CanvasTransactionConflictError, CanvasTransactionRolledBackError, CanvasPersistenceError, type CanvasCommitOptions, type CanvasUndoPersistenceState, type CanvasTransactionRuntime } from './canvasPersistenceService';
 const PLAN_TTL_MS = 15 * 60_000
 const logger = createLogger('features.canvas.batch')

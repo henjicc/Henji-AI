@@ -121,12 +121,19 @@ describe('文档类型登记', () => {
   })
 
   it('骨架类型：空对象为空内容，摘要为空', () => {
-    const kind = documentKindRegistry.require('canvas')
+    const kind = defineSkeletonDocumentKind({ id: 'canvas', extension: '.henji-test', standaloneFolderNames: null, untitledNames: { zh: '测试', en: 'Test' }, storage: 'json' })
     const empty = kind.createEmptyContent()
     expect(kind.isEmptyContent(empty)).toBe(true)
     expect(kind.isEmptyContent({ nodes: [] })).toBe(false)
     expect(kind.summarize(empty)).toEqual({})
     expect(kind.contentSchema.safeParse([]).success).toBe(false)
+  })
+
+  it('画布（3.4）：节点 / 连线为内容，没有节点就是空画布，摘要是节点数', () => {
+    const kind = documentKindRegistry.require('canvas')
+    expect(kind.createEmptyContent()).toEqual({ nodes: [], edges: [] })
+    expect(kind.isEmptyContent(kind.createEmptyContent())).toBe(true)
+    expect(kind.contentSchema.safeParse({ nodes: [{ id: 'n' }], edges: [] }).success).toBe(false)
   })
 
   it('重复的 ID、扩展名、独立文件夹与非法名称在登记时拒绝', () => {

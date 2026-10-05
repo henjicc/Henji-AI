@@ -11,6 +11,7 @@ import { createPackageAdapterRegistry, type PackageAdapterRegistry } from './pac
 import { ProjectService } from './projects'
 import { DocumentRepository } from './repository'
 import { DocumentService } from './service'
+import { DocumentSessionStateStore } from './session-state'
 import { DocumentWorkspace, type WorkspaceLayout } from './workspace'
 
 /** 文档底座的运行环境：正式运行由 runtime.ts 注入 appPaths、henji.db 与 Electron 能力，测试注入临时目录。 */
@@ -40,6 +41,7 @@ export interface DocumentServices {
   projects: ProjectService
   scanner: DocumentIndexScanner
   covers: DocumentCoverStore
+  sessionState: DocumentSessionStateStore
 }
 
 export function createDocumentServices(environment: DocumentEnvironment): DocumentServices {
@@ -62,6 +64,14 @@ export function createDocumentServices(environment: DocumentEnvironment): Docume
     render: environment.renderCover,
     logger: environment.logger('main.documents.covers'),
   })
+  const sessionState = new DocumentSessionStateStore({
+    directory: path.join(environment.storeDirectory, 'session-state'),
+    logger: environment.logger('main.documents.session_state'),
+  })
+  // 文档离开作品（回收站、删除空草稿、从列表移除）时，程序目录里按文档 ID 存的封面与会话状态一起清掉。
+  const removeProgramState = async (docId: string): Promise<void> => {
+    await Promise.all([covers.remove(docId), sessionState.remove(docId)])
+  }
   const refreshProjects = async (): Promise<void> => { await scanner.refresh() }
   const repository = new DocumentRepository({
     workspace,
@@ -72,7 +82,7 @@ export function createDocumentServices(environment: DocumentEnvironment): Docume
     trashItem: environment.trashItem,
     showItemInFolder: environment.showItemInFolder,
     grantMediaRoots: environment.grantMediaRoots,
-    removeCover: (docId) => covers.remove(docId),
+    removeCover: removeProgramState,
     refreshProjects,
   })
   const projects = new ProjectService({
@@ -81,10 +91,10 @@ export function createDocumentServices(environment: DocumentEnvironment): Docume
     trashItem: environment.trashItem,
     showItemInFolder: environment.showItemInFolder,
     grantMediaRoots: environment.grantMediaRoots,
-    removeCovers: async (docIds) => { await Promise.all(docIds.map((docId) => covers.remove(docId))) },
+    removeCovers: async (docIds) => { await Promise.all(docIds.map((docId) => removeProgramState(docId))) },
     refreshProjects,
     scheduleIndexRefresh: () => { void scanner.refresh().catch(() => undefined) },
   })
-  const service = new DocumentService({ workspace, repository, projects, scanner, covers })
-  return { service, workspace, repository, projects, scanner, covers }
+  const service = new DocumentService({ workspace, repository, projects, scanner, covers, sessionState })
+  return { service, workspace, repository, projects, scanner, covers, sessionState }
 }

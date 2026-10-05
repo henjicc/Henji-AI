@@ -1,7 +1,6 @@
 import type { AiRuntimePlatform } from './aiRuntime'
 import type { LlmRuntimePlatform } from './llmRuntime'
 import type { GenerationHistoryPlatform, PresetsPlatform, SettingsPlatform } from './localRecords'
-import type { CanvasProjectsPlatform } from './canvasProjects'
 import type { CustomModelsPlatform } from './customModels'
 import type { SystemPlatform } from './system'
 import type { MediaPlatform } from './media'
@@ -10,9 +9,7 @@ import type { ImageEditorV3Platform } from './imageEditorV3'
 import type { VideoPlatform } from './video'
 import type { ClipboardPlatform } from './clipboard'
 import type { DragDropPlatform } from './dragDrop'
-import type { ProjectCoversPlatform } from './projectCovers'
 import type { ProjectPackagePlatform } from './projectPackage'
-import type { StoryboardProjectsPlatform } from './storyboardProjects'
 import type { CameraStageRenderPlatform } from './cameraStageRender'
 import type { WindowPlatform } from './window'
 import type { LoggingPlatform } from './logging'
@@ -36,7 +33,6 @@ export interface PlatformRuntime {
   generationHistory: GenerationHistoryPlatform
   presets: PresetsPlatform
   settings: SettingsPlatform
-  canvasProjects: CanvasProjectsPlatform
   customModels: CustomModelsPlatform
   system: SystemPlatform
   media: MediaPlatform
@@ -45,9 +41,7 @@ export interface PlatformRuntime {
   video: VideoPlatform
   clipboard: ClipboardPlatform
   dragDrop: DragDropPlatform
-  projectCovers: ProjectCoversPlatform
   projectPackage: ProjectPackagePlatform
-  storyboardProjects: StoryboardProjectsPlatform
   cameraStageRender: CameraStageRenderPlatform
   window: WindowPlatform
   logging: LoggingPlatform
@@ -67,7 +61,6 @@ export type {
   GenerationHistoryPlatform,
   PresetsPlatform,
   SettingsPlatform,
-  CanvasProjectsPlatform,
   CustomModelsPlatform,
   SystemPlatform,
   MediaPlatform,
@@ -76,9 +69,7 @@ export type {
   VideoPlatform,
   ClipboardPlatform,
   DragDropPlatform,
-  ProjectCoversPlatform,
   ProjectPackagePlatform,
-  StoryboardProjectsPlatform,
   CameraStageRenderPlatform,
   WindowPlatform,
   LoggingPlatform,
@@ -93,7 +84,6 @@ export type {
 export * from './aiRuntime'
 export * from './llmRuntime'
 export * from './localRecords'
-export * from './canvasProjects'
 export * from './customModels'
 export * from './system'
 export * from './media'
@@ -102,9 +92,7 @@ export * from './imageEditorV3'
 export * from './video'
 export * from './clipboard'
 export * from './dragDrop'
-export * from './projectCovers'
 export * from './projectPackage'
-export * from './storyboardProjects'
 export * from './cameraStageRender'
 export * from './window'
 export * from './logging'

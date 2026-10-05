@@ -12,6 +12,7 @@ import { runCanvasNode, resetCanvasExecutionServiceForTests } from './canvasExec
 import { readPersistedCanvasProjectSnapshot } from './canvasQueryService'
 import { attachCanvasGenerationFeedback } from './canvasDomainExecutors'
 import { findCanvasProjectInstance } from './canvasProjectInstances'
+import { createCanvasTestProject } from '@/tests/canvasProjectFixture'
 
 vi.mock('@/commands/llmRuntime', async original => ({
   ...await original<typeof import('@/commands/llmRuntime')>(),
@@ -32,8 +33,7 @@ beforeEach(async () => {
   installHarnessNativeStorage()
   resetCanvasExecutionServiceForTests()
   vi.spyOn(llmConfigService, 'getConfig').mockResolvedValue(config)
-  await useProjectStore.getState().hydrate()
-  projectId = await useProjectStore.getState().createProject('文本工程 B')
+  projectId = await createCanvasTestProject('文本工程 B')
   nodeId = useCanvasStore.getState().addNode(CANVAS_NODE_TYPES.textProcessing, { x: 0, y: 0 }, {
     prompt: '写一句话', providerId: 'fixture', modelId: 'text',
   })
@@ -52,7 +52,7 @@ it('未挂载文本节点可从 A 页面运行 B，打开再关闭 B 不取消�
     emit({ type: 'Token', data: '后半句' })
     emit({ type: 'Done', data: { providerId: 'fixture', modelId: 'text', startedAtMs: 0, elapsedMs: 1, inputChars: 4, outputChars: 6 } })
   })
-  const visibleId = await useProjectStore.getState().createProject('可见 A')
+  const visibleId = await createCanvasTestProject('可见 A')
   const running = runCanvasNode(nodeId, undefined, projectId)
   await vi.waitFor(() => expect(finish).toBeTypeOf('function'))
   expect(useProjectStore.getState().currentProjectId).toBe(visibleId)
@@ -77,7 +77,7 @@ it('取消一条文本任务不会取消另一工程的流，已收到文本与�
   vi.mocked(llmCancelTask).mockImplementation(async requestId => { finishers.get(requestId)?.() })
   const firstProject = projectId
   const firstNode = nodeId
-  const secondProject = await useProjectStore.getState().createProject('并行工程')
+  const secondProject = await createCanvasTestProject('并行工程')
   const secondNode = useCanvasStore.getState().addNode(CANVAS_NODE_TYPES.textProcessing, { x: 0, y: 0 }, { prompt: '另一句', providerId: 'fixture', modelId: 'text' })
   const controller = new AbortController()
   const first = runCanvasNode(firstNode, undefined, firstProject, controller.signal)

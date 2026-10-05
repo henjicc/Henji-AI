@@ -7,7 +7,7 @@ import { createApplicationHarness } from './applicationHarness'
 import { installHarnessNativeStorage, readHarnessImageEditDocument, uninstallHarnessNativeStorage } from './harnessNativeStorage'
 import { registerPersistedImageEditTestSession } from './imageEditPersistenceTestSession'
 import { createAttachedImageEditPersistenceFixture } from './imageEditAttachedPersistenceFixture'
-import { getProjectRecord } from '@/commands/projectState'
+import { readCanvasTestProject } from '@/tests/canvasProjectFixture'
 
 let dispose: (() => void) | undefined
 beforeEach(() => { installHarnessNativeStorage() })
@@ -43,7 +43,7 @@ it('附着图片通过公共调用 修改后，文档与画布节点持久化事
   expect(result.ok, JSON.stringify(result)).toBe(true)
   if (!result.ok) throw new Error('图片修改失败')
   const saved = readHarnessImageEditDocument(fixture.document.id)!
-  const nodes = JSON.parse((await getProjectRecord(fixture.projectId))!.nodesJson)
+  const nodes = readCanvasTestProject(fixture.projectId)!.nodes
   expect(saved.document.layers[0].opacity).toBe(0.42)
   expect(nodes[0].data.imageEditSession.revision).toBe(saved.document.revision)
   expect(nodes[0].data.imageEditSession.previewRef).toBe(saved.previewRef)

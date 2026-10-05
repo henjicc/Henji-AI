@@ -5,10 +5,9 @@ import { createLogger } from '@/core/logging'
 import { parseImageEditSessionReferenceV3 } from '@/core/imageEdit/v3/sessionReference'
 import { getPlatform } from '@/platform/runtime'
 import type { CanvasHistorySnapshot, CanvasState } from '@/stores/canvasStore'
-import { getProjectRecord, listProjectSummaries } from '@/commands/projectState'
-import { fromProjectRecord } from '@/stores/projectStoreSerialization'
 import { deleteIdleImageEditDocumentV3 } from '@/features/imageEdit/v3/application/imageEditDocumentInstances'
 import { listCanvasProjectInstances } from './canvasProjectInstances'
+import { readAllCanvasProjects } from './canvasQueryService'
 
 import type { CanvasNode } from '../domain/canvasNodes'
 import type { MultiLayerDocumentNodePort } from './multiLayerDocumentNodeApplicationContracts'
@@ -85,10 +84,7 @@ export async function maintainMultiLayerDocumentReleaseCandidates(projectId: str
   if (![...candidates.values()].some((candidate) => candidate.projectId === projectId)) return
   const persistedRefs = new Set<string>()
   try {
-    for (const summary of await listProjectSummaries()) {
-      const record = await getProjectRecord(summary.id)
-      if (!record) continue
-      const project = fromProjectRecord(record)
+    for (const project of await readAllCanvasProjects()) {
       const refs = collectMultiLayerDocumentLiveReferences({ ...project, dragHistorySnapshot: null, activeToolDialog: null })
       for (const ref of refs) persistedRefs.add(ref)
     }

@@ -249,6 +249,7 @@ async function resumeNodeTask(input: ResumeNodeTaskInput): Promise<void> {
       : null;
     const result = await resumeCanvasGeneration({
       modelId,
+      projectId,
       signal,
       requestId: typeof resultNodeData.generationTaskId === 'string' ? resultNodeData.generationTaskId : localRedrawContext?.requestId,
       mediaType,

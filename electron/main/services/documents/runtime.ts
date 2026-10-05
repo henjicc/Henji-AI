@@ -11,6 +11,7 @@ import { createDocumentServices, type DocumentServices } from './create-services
 import { DocumentIndexStore } from './index-store'
 import { createPackageAdapterRegistry } from './package-adapters'
 import { createImageDocumentPackageAdapter } from '../image-editor-v3/image-document/package-adapter'
+import type { DocumentContainerRef } from '../../../../src/core/documents/types'
 import type { DocumentService } from './service'
 import type { WorkspaceLayout } from './workspace'
 
@@ -73,6 +74,22 @@ function getServices(): DocumentServices {
 
 export function getDocumentService(): DocumentService {
   return getServices().service
+}
+
+/**
+ * 容器（项目或作品目录）的“生成结果”文件夹：画布里生成的结果放进画布所在的容器（3.4）。
+ * 项目找不到时报 ProjectNotFoundError，调用方回落到作品目录。
+ */
+export async function resolveContainerGeneratedFolder(container: DocumentContainerRef): Promise<string> {
+  const services = getServices()
+  try {
+    return (await services.workspace.resolveContainer(container)).generatedDir
+  } catch (error) {
+    if (container.kind !== 'project') throw error
+    // 索引可能落后于磁盘（项目刚改名或拷进来）：刷新一次再找
+    await services.scanner.refresh()
+    return (await services.workspace.resolveContainer(container)).generatedDir
+  }
 }
 
 /**

@@ -3,7 +3,6 @@ import type { PlatformRuntime } from '@/platform/contracts'
 import { createElectronAiRuntime } from './aiRuntime'
 import { createElectronLlmRuntime } from './llmRuntime'
 import { createElectronGenerationHistory, createElectronPresets, createElectronSettings } from './localRecords'
-import { createElectronCanvasProjects } from './canvasProjects'
 import { createElectronCustomModels } from './customModels'
 import { createElectronSystem } from './system'
 import { createElectronMedia } from './media'
@@ -13,8 +12,6 @@ import { createElectronVideo } from './video'
 import { createElectronClipboard } from './clipboard'
 import { createElectronDragDrop } from './dragDrop'
 import { createElectronProjectPackage } from './projectPackage'
-import { createElectronStoryboardProjects } from './storyboardProjects'
-import { createElectronProjectCovers } from './projectCovers'
 import { createElectronCameraStageRender } from './cameraStageRender'
 import { createElectronWindow } from './window'
 import { createElectronLogging } from './logging'
@@ -39,7 +36,6 @@ export function createElectronPlatform(): PlatformRuntime {
     generationHistory: createElectronGenerationHistory(),
     presets: createElectronPresets(),
     settings: createElectronSettings(),
-    canvasProjects: createElectronCanvasProjects(),
     customModels: createElectronCustomModels(),
     system: createElectronSystem(),
     media: createElectronMedia(),
@@ -49,8 +45,6 @@ export function createElectronPlatform(): PlatformRuntime {
     clipboard: createElectronClipboard(),
     dragDrop: createElectronDragDrop(),
     projectPackage: createElectronProjectPackage(),
-    storyboardProjects: createElectronStoryboardProjects(),
-    projectCovers: createElectronProjectCovers(),
     cameraStageRender: createElectronCameraStageRender(),
     window: createElectronWindow(),
     logging: createElectronLogging(),

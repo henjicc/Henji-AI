@@ -1,7 +1,8 @@
 import type { CanvasDownloadDestination } from '@/core/application-control/domains/canvas/canvasExportApplicationCapabilities'
-import { getProjectRecord } from '@/commands/projectState'
 import { useCanvasStore } from '@/stores/canvasStore'
-import { decodeProjectRecord, useProjectStore } from '@/stores/projectStore'
+import { useProjectStore } from '@/stores/projectStore'
+import { findCanvasProjectInstance } from './canvasProjectInstances'
+import { readPersistedCanvasProjectSnapshot } from './canvasQueryService'
 import { useSettingsStore } from '@/stores/settingsStore'
 import {
   QUICK_DOWNLOAD_SETTING_SPECS,
@@ -13,14 +14,12 @@ import {
 } from './canvasMediaDownload'
 
 async function loadProjectNodes(projectId: string) {
-  const projectStore = useProjectStore.getState()
-  if (!projectStore.isHydrated) await projectStore.hydrate()
-  if (projectStore.currentProject?.id === projectId) {
+  if (useProjectStore.getState().currentProject?.id === projectId) {
     return useCanvasStore.getState().nodes
   }
-  const record = await getProjectRecord(projectId)
-  if (!record) throw new Error('PROJECT_NOT_FOUND')
-  return decodeProjectRecord(record).nodes
+  const instance = findCanvasProjectInstance(projectId)
+  if (instance) return instance.store.getState().nodes
+  return (await readPersistedCanvasProjectSnapshot(projectId)).nodes
 }
 
 export function resolveConfiguredDestination(destination: CanvasDownloadDestination): string {

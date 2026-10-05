@@ -12,8 +12,12 @@ vi.mock('../generation-history/store', () => ({ getGenerationHistoryStore: () =>
 } }) }))
 vi.mock('../image/path-utils', () => ({ getDataRootDir: () => state.root }))
 vi.mock('../logging', () => ({ createMainLogger: () => ({ debug: vi.fn(), warn: vi.fn() }) }))
-vi.mock('../storyboard-projects', () => ({ getStoryboardProject: (id: string) => id === 'project' ? state.project : null }))
-vi.mock('../storyboard-project-validation', () => ({ resolveStoryboardProjectMediaSchema: () => [] }))
+// 画布节点引用从画布文档读（文档仓库返回的内容里位置已换回绝对路径）
+vi.mock('../documents/runtime', () => ({ getDocumentService: () => ({ readDocument: async ({ id }: { id: string }) => {
+  if (id !== 'project' || !state.project) throw Object.assign(new Error('missing'), { name: 'DocumentNotFoundError' })
+  return { content: state.project }
+} }) }))
+vi.mock('../canvas-media-schema', () => ({ resolveCanvasMediaSchema: () => [] }))
 vi.mock('../../protocol', () => ({
   isPathWithinAllowedMediaRoots: (value: string) => { const relative = path.relative(state.root, value); return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative)) },
   inferMimeFromPath: (value: string) => ({ '.png': 'image/png', '.mp4': 'video/mp4', '.mp3': 'audio/mpeg' })[path.extname(value)] ?? 'application/octet-stream',
@@ -44,7 +48,7 @@ describe('稳定业务引用的媒体读取', () => {
     await fs.writeFile(filename, Buffer.from([1, 2, 3, 4, 5]))
     const id = kind === 'canvas.node' ? 'project:node' : 'result'
     state.rows.set(`${kind}:${id}`, { file_path: filename })
-    state.project = { nodesJson: JSON.stringify([{ id: 'node', type: 'video', position: { x: 0, y: 0 }, data: { videoUrl: '__img_ref__:0' } }]), edgesJson: '[]', viewportJson: '{"x":0,"y":0,"zoom":1}', historyJson: JSON.stringify({ past: [], future: [], imagePool: [filename] }) }
+    state.project = { nodes: [{ id: 'node', type: 'video', position: { x: 0, y: 0 }, data: { videoUrl: '__img_ref__:0' } }], edges: [], imagePool: [filename] }
     const first = await readApplicationMediaResource({ ref: { kind, id }, length: 3 })
     expect(first).toEqual({ mimeType: 'video/mp4', base64: 'AQID', offset: 0, byteLength: 3, totalBytes: 5, eof: false })
     expect(await readApplicationMediaResource({ ref: { kind, id }, offset: 3, length: 3 })).toMatchObject({ base64: 'BAU=', byteLength: 2, eof: true })
@@ -69,7 +73,7 @@ describe('稳定业务引用的媒体读取', () => {
   it('画布关联媒体按正式遍历去重，包括预览与输入，不冒充只返回生成输出', async () => {
     const a = path.join(state.root, 'a.png'); const b = path.join(state.root, 'b.png')
     await fs.writeFile(a, 'a'); await fs.writeFile(b, 'b')
-    state.project = { nodesJson: JSON.stringify([{ id: 'node', type: 'image', position: { x: 0, y: 0 }, data: { imageUrl: a, previewImageUrl: a, mediaInputs: { image: [b] } } }]), edgesJson: '[]', viewportJson: '{"x":0,"y":0,"zoom":1}', historyJson: '{"past":[],"future":[],"imagePool":[]}' }
+    state.project = { nodes: [{ id: 'node', type: 'image', position: { x: 0, y: 0 }, data: { imageUrl: a, previewImageUrl: a, mediaInputs: { image: [b] } } }], edges: [] }
     expect(await readApplicationMediaResource({ ref: { kind: 'canvas.node', id: 'project:node' }, outputIndex: 1 })).toMatchObject({ base64: 'Yg==' })
   })
   it.each([{ outputIndex: -1 }, { outputIndex: 0.5 }, { offset: -1 }, { offset: 1.5 }, { offset: Infinity }, { length: 0 }, { length: 262145 }, { length: 1.5 }])('拒绝非法范围 %j', async (range) => {

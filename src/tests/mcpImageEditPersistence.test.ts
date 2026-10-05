@@ -3,7 +3,6 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { createApplicationCallerGrant } from '@/core/application-control/callerContext'
 import { createApplicationCapabilitySession, listApplicationCapabilities } from '@/features/application-control/applicationCapabilityService'
 import { getHostScopeRevisions, retainHostContextTracking } from '@/features/application-control/hostContext/hostContext'
-import { getProjectRecord } from '@/commands/projectState'
 import { ImageEditorV3CommandRepository } from '@/commands/imageEditorV3'
 import { ImageEditCommandBusV3 } from '@/features/imageEdit/v3/application/imageEditCommandBus'
 import { createImageEditDocumentV3, createImageEditEffectLayerV3 } from '@/core/imageEdit/v3/documentFactory'
@@ -11,6 +10,7 @@ import { installHarnessNativeStorage, readHarnessImageEditDocument, uninstallHar
 import { createAttachedImageEditPersistenceFixture } from './imageEditAttachedPersistenceFixture'
 import { registerPersistedImageEditTestSession } from './imageEditPersistenceTestSession'
 import { applicationTransactionFailureFactsSchema } from '@/core/application-control/applicationTransactionFailureFacts'
+import { readCanvasTestProject, canvasSaveSpy } from '@/tests/canvasProjectFixture'
 
 const disposers: Array<() => void> = []
 beforeEach(() => { installHarnessNativeStorage(); disposers.push(retainHostContextTracking()) })
@@ -45,7 +45,7 @@ function retry(target: ReturnType<typeof session>, documentId: string, expectedO
 
 it('独立应用入口附着图片双域保存失败保留真实修改与原恢复目标', async () => {
   const fixture = await createAttachedImageEditPersistenceFixture(); disposers.push(fixture.dispose)
-  vi.spyOn(window.henjiNative!.storyboardProjects, 'upsertProjectRecord').mockRejectedValueOnce(new Error('storage denied'))
+  canvasSaveSpy().mockRejectedValueOnce(new Error('storage denied'))
   const result = await edit(session(), fixture.document.id)
   expect(result.ok, JSON.stringify(result)).toBe(false)
   expect(result).toMatchObject({ error: { details: { transaction: {
@@ -57,7 +57,7 @@ it('独立应用入口附着图片双域保存失败保留真实修改与原恢�
   expect(JSON.stringify(result)).toContain(`v3:${fixture.document.id}`)
   expect(readHarnessImageEditDocument(fixture.document.id)!.document.layers[0].opacity).toBe(0.42)
   expect(fixture.bus.getPersistenceSnapshot().history.undo).toHaveLength(1)
-  const persisted = JSON.parse((await getProjectRecord(fixture.projectId))!.nodesJson)
+  const persisted = readCanvasTestProject(fixture.projectId)!.nodes
   expect(persisted[0].data.imageEditSession.revision).toBe(0)
 })
 
@@ -69,7 +69,7 @@ it('仅重试原保存，文档和画布正式回读一致且编辑命令不重�
   const result = await retry(target, fixture.document.id, originalOwnerId(failed))
   expect(result.ok, JSON.stringify(result)).toBe(true)
   const saved = readHarnessImageEditDocument(fixture.document.id)!
-  const nodes = JSON.parse((await getProjectRecord(fixture.projectId))!.nodesJson)
+  const nodes = readCanvasTestProject(fixture.projectId)!.nodes
   expect(saved.document.layers[0].opacity).toBe(0.42)
   expect(saved.document.revision).toBe(1)
   expect(saved.history?.undo).toHaveLength(1)
@@ -83,12 +83,12 @@ it('仅重试原保存，文档和画布正式回读一致且编辑命令不重�
 it('同一文档换成工具箱保存宿主后，原 owner 身份禁止旧恢复且不改变实际结果', async () => {
   const fixture = await createAttachedImageEditPersistenceFixture()
   const target = session()
-  vi.spyOn(window.henjiNative!.storyboardProjects, 'upsertProjectRecord').mockRejectedValueOnce(new Error('storage denied'))
+  canvasSaveSpy().mockRejectedValueOnce(new Error('storage denied'))
   const failed = await edit(target, fixture.document.id)
   const ownerId = originalOwnerId(failed)
   const originalFacts = structuredClone(failed)
   const originalSaved = structuredClone(readHarnessImageEditDocument(fixture.document.id))
-  const originalProject = await getProjectRecord(fixture.projectId)
+  const originalProject = readCanvasTestProject(fixture.projectId)
   fixture.dispose()
   const replacement = new ImageEditCommandBusV3(structuredClone(fixture.bus.getPersistenceSnapshot().document))
   disposers.push(registerPersistedImageEditTestSession('same-document-toolbox', replacement, new ImageEditorV3CommandRepository()))
@@ -101,7 +101,7 @@ it('同一文档换成工具箱保存宿主后，原 owner 身份禁止旧恢复
   expect(saves.mock.calls.length).toBe(previousSaves)
   expect(replacement.getPersistenceSnapshot()).toEqual(previousSnapshot)
   expect(readHarnessImageEditDocument(fixture.document.id)).toEqual(originalSaved)
-  expect(await getProjectRecord(fixture.projectId)).toEqual(originalProject)
+  expect(readCanvasTestProject(fixture.projectId)).toEqual(originalProject)
   expect(failed).toEqual(originalFacts)
 })
 

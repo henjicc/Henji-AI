@@ -111,15 +111,8 @@ export function Canvas() {
   const imageViewer = useCanvasStore((state) => state.imageViewer);
   const closeImageViewer = useCanvasStore((state) => state.closeImageViewer);
   const navigateImageViewer = useCanvasStore((state) => state.navigateImageViewer);
-  const getCurrentProject = useProjectStore((state) => state.getCurrentProject);
   const currentProjectId = useProjectStore((state) => state.currentProjectId);
-  const saveCurrentProjectViewport = useProjectStore((state) => state.saveCurrentProjectViewport);
-  const cancelPendingViewportPersist = useProjectStore((state) => state.cancelPendingViewportPersist);
-  const {
-    schedulePersist: scheduleCanvasPersist,
-    isRestoringRef: isRestoringCanvasRef,
-    inspectionReadOnly,
-  } = useCanvasPersistence(wrapperRef, reactFlowInstance);
+  const { schedulePersist: scheduleCanvasPersist } = useCanvasPersistence(wrapperRef, reactFlowInstance);
 
   const clearToastTimers = useCallback(() => {
     if (toastHideTimerRef.current) clearTimeout(toastHideTimerRef.current);
@@ -211,17 +204,13 @@ export function Canvas() {
   // 视口状态只在 moveEnd 时同步进 store：平移/缩放过程中每帧 set() 会把
   // 全画布节点的 zustand 选择器（含 O(节点+边) 的图遍历）都跑一遍，是大画布掉帧主因之一。
   // 需要实时视口的调用方一律走 reactFlowInstance.getViewport()。
+  // 视口不进画布文档：画布实例按文档 ID 把它低频写进程序目录的会话状态（canvasSessionState.ts）。
   const handleMoveEnd = useCallback(
     (_event: DynamicValue, viewport: Viewport) => {
       clearViewportGestureClasses();
       setViewportState(viewport);
-      const project = getCurrentProject();
-      if (!project || inspectionReadOnly || isRestoringCanvasRef.current) {
-        return;
-      }
-      saveCurrentProjectViewport(viewport);
     },
-    [clearViewportGestureClasses, getCurrentProject, inspectionReadOnly, isRestoringCanvasRef, saveCurrentProjectViewport, setViewportState]
+    [clearViewportGestureClasses, setViewportState]
   );
 
   const handleMoveStart = useCallback(
@@ -230,9 +219,8 @@ export function Canvas() {
       // 可见毛玻璃密度过高时临时取消滤镜。用 classList 避免多一次 React 渲染。
       prepareGlassGesture();
       wrapperRef.current?.classList.add('canvas-viewport-moving');
-      cancelPendingViewportPersist();
     },
-    [cancelPendingViewportPersist, prepareGlassGesture]
+    [prepareGlassGesture]
   );
 
   const rawSelectedNodeIds = useMemo(

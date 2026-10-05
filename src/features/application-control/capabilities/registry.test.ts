@@ -58,8 +58,11 @@ describe('application capability handler coverage', () => {
     expect(BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get('open_camera_stage_project')).toBeUndefined()
     expect(BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get('bake_camera_stage_to_pro')).toBeUndefined()
 
+    // 3.4：画布的打开是通用 open_document（打开方式由画布登记）
+    for (const id of ['list_canvas_projects', 'open_canvas_project', 'create_canvas_project', 'delete_canvas_project', 'list_storyboard_projects', 'get_storyboard_project']) {
+      expect(BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(id), id).toBeUndefined()
+    }
     for (const id of [
-      'open_canvas_project',
       'focus_canvas_node',
       'open_multi_layer_document_node_editor',
     ]) {

@@ -2,13 +2,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { registerCameraStageCapabilityHandlers } from '@/features/cameraStage/application/registerCameraStageCapabilityHandlers'
 import { registerImageEditCapabilityHandlers } from '@/features/imageEdit/application/registerImageEditCapabilityHandlers'
-import { registerStoryboardCapabilityHandlers } from '@/features/canvas/application/registerStoryboardCapabilityHandlers'
 
 const mocks = vi.hoisted(() => ({
   commitImageEdit: vi.fn(),
-  getStoryboardProject: vi.fn(),
   getToolboxState: vi.fn(),
-  listStoryboardProjects: vi.fn(),
   listToolboxTools: vi.fn(),
   cameraAdapter: {
     applyCameraStageCameraMove: vi.fn(),
@@ -36,10 +33,6 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/features/imageEdit/application/imageEditApplicationService', () => ({
   commitImageEdit: mocks.commitImageEdit,
 }))
-vi.mock('@/features/canvas/application/storyboardProjectService', () => ({
-  getStoryboardProject: mocks.getStoryboardProject,
-  listStoryboardProjects: mocks.listStoryboardProjects,
-}))
 vi.mock('@/features/toolbox/application/toolboxApplicationService', () => ({
   getToolboxState: mocks.getToolboxState,
   listToolboxTools: mocks.listToolboxTools,
@@ -62,7 +55,7 @@ const context = { signal: new AbortController().signal }
 
 function registeredHandlers(): Map<string, CapabilityHandler> {
   const handlers = new Map<string, CapabilityHandler>()
-  for (const register of [registerToolboxCapabilityHandlers, registerCameraStageCapabilityHandlers, registerImageEditCapabilityHandlers, registerStoryboardCapabilityHandlers]) {
+  for (const register of [registerToolboxCapabilityHandlers, registerCameraStageCapabilityHandlers, registerImageEditCapabilityHandlers]) {
     register({ registerHandler: (id, handler) => handlers.set(id, handler) })
   }
   return handlers

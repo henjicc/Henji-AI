@@ -1,12 +1,11 @@
-import { setCanvasTestProjectState } from '@/tests/canvasProjectFixture'
+import { confirmCanvasPersistence } from './canvasPersistenceService';
+import { setCanvasTestProjectState, createCanvasTestProject } from '@/tests/canvasProjectFixture'
 // @vitest-environment jsdom
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useCanvasStore } from '@/stores/canvasStore';
 import { useProjectStore, type Project } from '@/stores/projectStore';
-import { toProjectRecord } from '@/stores/projectStoreSerialization';
-import { upsertProjectRecord } from '@/commands/projectState';
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage';
 import { readPersistedCanvasProjectSnapshot } from './canvasQueryService';
 
@@ -84,12 +83,9 @@ function setupCanvas(
   }], { past: [], future: [] });
   useCanvasStore.getState().setSelectedNode(source.id);
   setCanvasTestProjectState({
-    projects: [project],
     currentProjectId: projectId,
     currentProject: project,
-    isHydrated: true,
     isOpeningProject: false,
-    saveCurrentProject: vi.fn(),
   });
   return { source, placeholder };
 }
@@ -181,8 +177,7 @@ describe('generationOutputApplicationService 图层栈', () => {
     let running: Promise<unknown> | undefined;
     try {
       setupCanvas('image', CANVAS_NODE_TYPES.layerStackResult);
-      await upsertProjectRecord(toProjectRecord({ ...useProjectStore.getState().currentProject!,
-        nodes: useCanvasStore.getState().nodes, edges: useCanvasStore.getState().edges }));
+      await confirmCanvasPersistence(useProjectStore.getState().currentProjectId!);
       const layerContract = contract(2, 'layer-stack');
       layerContract.resultKind = 'layer-stack';
       layerContract.outputs.forEach((item, index) => {
@@ -196,7 +191,7 @@ describe('generationOutputApplicationService 图层栈', () => {
         if (mode === 'rollback-error') throw new Error('文档删除失败');
         return !uncertain;
       });
-      let otherProject = mode === 'switch' || uncertain ? null : await useProjectStore.getState().createProject('后台文档测试');
+      let otherProject = mode === 'switch' || uncertain ? null : await createCanvasTestProject('后台文档测试');
       const operation = commitCanvasGenerationOutputsInProject(projectId, {
         sourceNodeId: 'source-node', placeholderNodeId: 'placeholder-node', resultNodeType: CANVAS_NODE_TYPES.layerStackResult,
         completionId: 'background-layer', contract: layerContract, preparedLayerStack: layerStackDocument('background-layer'),
@@ -204,7 +199,7 @@ describe('generationOutputApplicationService 图层栈', () => {
       });
       running = operation.then(result => result, error => error);
       await vi.waitFor(() => expect(createLayerStackDocument).toHaveBeenCalledOnce());
-      if (mode === 'switch' || uncertain) otherProject = await useProjectStore.getState().createProject('文档保存时切换');
+      if (mode === 'switch' || uncertain) otherProject = await createCanvasTestProject('文档保存时切换');
       if (mode === 'cancel' || uncertain) controller.abort(new Error('停止合成'));
       release();
       if (uncertain) await expect(operation).rejects.toThrow('回收未确认');

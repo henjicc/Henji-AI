@@ -55,7 +55,8 @@ it('真实 MCP 与 Pi 写入经过授权、SQLite账本、正式Session及设置
     await client.connect(new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${server.listeningPort}/mcp`), { requestInit: { headers: { Authorization: `Bearer ${connections.token(identity.id)}` } } }))
     const published = (await client.listTools()).tools.map(tool => tool.name)
     expect(published.length).toBeGreaterThan(32)
-    expect(published).toEqual(expect.arrayContaining(['create_canvas_project', 'duplicate_canvas_node', 'open_application_surface']))
+    expect(published).toEqual(expect.arrayContaining(['create_document', 'duplicate_canvas_node', 'open_application_surface']))
+    expect(published).not.toContain('create_canvas_project')
     const navigation = await client.callTool({ name: 'open_application_surface', arguments: { operationId: randomUUID(), surfaceId: 'workspace.canvas' } })
     expect(navigation.structuredContent, JSON.stringify(navigation)).toMatchObject({ executionState: 'completed' })
     const { useNavigationStore } = await import('@/stores/navigationStore')
@@ -64,17 +65,17 @@ it('真实 MCP 与 Pi 写入经过授权、SQLite账本、正式Session及设置
     installHarnessNativeStorage()
     try {
       const { useProjectStore } = await import('@/stores/projectStore')
-      await useProjectStore.getState().hydrate()
       const currentProjectId = useProjectStore.getState().currentProjectId
       const createId = randomUUID()
-      const create = { operationId: createId, name: 'MCP 生命周期测试' }
-      const created = await client.callTool({ name: 'create_canvas_project', arguments: create })
+      // 画布是通用文档（3.4）：经 create_document 新建，幂等重放返回同一回执
+      const create = { operationId: createId, kind: 'canvas', name: 'MCP 生命周期测试' }
+      const created = await client.callTool({ name: 'create_document', arguments: create })
       expect(created.structuredContent, JSON.stringify(created)).toMatchObject({ executionState: 'completed' })
-      const projectId = (created.structuredContent as { result: { data: { projectId: string } } }).result.data.projectId
+      const projectId = (created.structuredContent as { result: { data: { resultRef: { id: string } } } }).result.data.resultRef.id
       expect(projectId).toBeTruthy()
-      const { getProjectRecord } = await import('@/commands/projectState')
-      expect(await getProjectRecord(projectId)).toMatchObject({ id: projectId, name: create.name })
-      expect((await client.callTool({ name: 'create_canvas_project', arguments: create })).structuredContent).toEqual(created.structuredContent)
+      const { harnessDocumentStore } = await import('@/tests/harnessNativeStorage')
+      expect(harnessDocumentStore().stored(projectId)?.meta).toMatchObject({ id: projectId, kind: 'canvas', name: create.name })
+      expect((await client.callTool({ name: 'create_document', arguments: create })).structuredContent).toEqual(created.structuredContent)
       expect(useProjectStore.getState().currentProjectId).toBe(currentProjectId)
       expect(operations.store.get(createId, identity.id)?.state).toBe('completed')
     } finally { uninstallHarnessNativeStorage() }

@@ -3,7 +3,7 @@
  *
  * ── 为什么需要它 ──
  * jsdom 下 `detectShell()` 找不到 `window.henjiNative`，`getPlatform()` 直接抛
- * `Platform runtime is only available inside the Electron desktop shell`。素材集合、画布与 3D 工程
+ * `Platform runtime is only available inside the Electron desktop shell`。素材集合、画布与 3D 文档
  * 的创建都要经持久化落地，于是事务整体补偿回滚，相关域的读改验回环够不到实例——不是链路
  * 缺陷，是环境限制（真机场景每次都通过）。
  *
@@ -30,11 +30,6 @@ import { v4 as uuidv4 } from 'uuid'
 import { FakeDocumentCommands } from '@/features/documents/documentSessionTestKit'
 
 import type { AssetLibraryRecord, AssetLibrarySnapshot } from '@/platform/contracts/assetLibrary'
-import type {
-  StoryboardProjectPlatformRecord,
-  StoryboardProjectPlatformSummary,
-  StoryboardProjectPlatformWrite,
-} from '@/platform/contracts/storyboardProjects'
 import type { ImageEditorV3Platform } from '@/platform/contracts/imageEditorV3'
 import type { AudioEditProjectDocument } from '@/core/audioEdit/types'
 import { audioEditProjectToDocumentContent } from '@/core/audioEdit/documentContent'
@@ -122,49 +117,6 @@ const assetLibraryStorage = {
   },
 }
 
-/* ── 画布工程存储 ───────────────────────────────────────────────────────── */
-
-const storyboardProjects = new Map<string, StoryboardProjectPlatformRecord>()
-
-const storyboardProjectsStorage = {
-  async listProjectSummaries(): Promise<StoryboardProjectPlatformSummary[]> {
-    return [...storyboardProjects.values()]
-      .sort((left, right) => right.updatedAt - left.updatedAt)
-      .map(({ nodesJson: _nodesJson, edgesJson: _edgesJson, viewportJson: _viewportJson,
-        historyJson: _historyJson, ...summary }) => wire(summary))
-  },
-
-  async getProjectRecord(projectId: string): Promise<StoryboardProjectPlatformRecord | null> {
-    const record = storyboardProjects.get(projectId)
-    return record ? wire(record) : null
-  },
-
-  async upsertProjectRecord(record: StoryboardProjectPlatformWrite): Promise<void> {
-    const existing = storyboardProjects.get(record.id)
-    storyboardProjects.set(record.id, wire({
-      ...record,
-      createdAt: existing?.createdAt ?? record.createdAt,
-      coverPath: existing?.coverPath ?? null,
-    }))
-  },
-
-  async updateProjectViewportRecord(projectId: string, viewportJson: string): Promise<void> {
-    const record = storyboardProjects.get(projectId)
-    if (!record) return
-    storyboardProjects.set(projectId, { ...record, viewportJson })
-  },
-
-  async renameProjectRecord(projectId: string, name: string, updatedAt: number): Promise<void> {
-    const record = storyboardProjects.get(projectId)
-    if (!record) return
-    storyboardProjects.set(projectId, { ...record, name, updatedAt })
-  },
-
-  async deleteProjectRecord(projectId: string): Promise<void> {
-    storyboardProjects.delete(projectId)
-  },
-}
-
 /* ── 口播（3.3 起是通用文档 `.henji-audio`，存在下面的作品文档仓库里） ─────────── */
 
 /** 口播的主进程处理（转写、分析、导出等）不在替身里；用例按需 spy 平台方法。 */
@@ -176,17 +128,22 @@ const audioEditStorage = {}
  * 复用文档会话测试的内存仓库（FakeDocumentCommands）：它只模拟文件夹里的“唯一文件名”与版本号这类
  * 存储语义（重名报错、keepBoth 加序号、写前核对版本），不模拟素材复制、引用换算与扫描。
  */
-let documentStore = new FakeDocumentCommands()
+let documentStore = new FakeDocumentCommands({ realKinds: true })
 
 /** 当前用例的作品文档仓库（造数据与断言“磁盘”状态用）。 */
 export function harnessDocumentStore(): FakeDocumentCommands {
   return documentStore
 }
 
+/** 只换一个空的作品文档仓库（画布夹具每个用例前调用，不动其他存储）。 */
+export function resetHarnessDocumentStore(): void {
+  documentStore = new FakeDocumentCommands({ realKinds: true })
+}
+
 const DOCUMENT_METHODS = [
   'listDocuments', 'readDocument', 'createDocument', 'saveDocument', 'renameDocument', 'finalizeDocument',
   'moveDocument', 'duplicateDocument', 'trashDocument', 'deleteEmptyDraft', 'forgetDocument', 'revealDocument', 'checkName',
-  'refreshIndex', 'listProjects', 'createProject', 'renameProject', 'finalizeProject', 'trashProject', 'revealProject',
+  'refreshIndex', 'readSessionState', 'writeSessionState', 'listProjects', 'createProject', 'renameProject', 'finalizeProject', 'trashProject', 'revealProject',
   'collectDocumentMedia', 'importFile', 'setProjectMainDocument', 'registerExternalProject', 'forgetExternalLocation',
 ] as const
 
@@ -204,7 +161,6 @@ const documentsStorage = Object.fromEntries(DOCUMENT_METHODS.map((method) => [
 const NAMESPACES: Record<string, object> = {
   runtimeInfo: { uiInspectionReadOnly: false },
   assetLibrary: assetLibraryStorage,
-  storyboardProjects: storyboardProjectsStorage,
   audio: audioEditStorage,
   documents: documentsStorage,
   imageEditorV3: {
@@ -298,8 +254,7 @@ export function installHarnessNativeStorage(): void {
 export function resetHarnessNativeStorage(): void {
   imageDocuments.clear()
   libraries.clear()
-  storyboardProjects.clear()
-  documentStore = new FakeDocumentCommands()
+  documentStore = new FakeDocumentCommands({ realKinds: true })
 }
 
 export function uninstallHarnessNativeStorage(): void {

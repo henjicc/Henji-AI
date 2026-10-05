@@ -189,7 +189,7 @@ const ASSISTANT_BLIND_FEATURES = {
     + '诊断读取由统一日志服务承接。',
   navigation: 'Surface 目录本身就是助手的导航契约，通过 open/close_application_surface 与 '
     + 'get_current_application_context 覆盖，不再另建实体。',
-  project: '项目页操作的数据由 canvas.project 与通用文档 documents（镜头参考等已接入的类型）各自注册，'
+  project: '项目页操作的数据由通用文档 documents（剪辑、画布、口播、镜头参考、图片文档）注册，'
     + '这一层只是它们的共用 UI 外壳。',
   assistant: 'Pi 负责模型对话与消息队列；技能、共享记忆和用户指令有独立服务，模型不能写入自己的授权与执行状态。',
   settings: '设置项的实体与属性注册在 application-control 子目录下，由 settingsReflection 覆盖；'

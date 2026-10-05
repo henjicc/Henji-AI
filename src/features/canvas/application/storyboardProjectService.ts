@@ -1,14 +1,13 @@
-import { getStoryboardProjectRecord, listStoryboardProjectSummaries } from '@/commands/storyboardProjects'
+import { findCanvasProjectInstance } from './canvasProjectInstances'
+import { listCanvasDocumentSummaries } from './canvasProjectService'
+import { readPersistedCanvasProjectSnapshot } from './canvasQueryService'
+
+/*
+ * 分镜摘要（画布的只读投影）：3.4 起直接读画布文档（打开着的取实例，其余读文件），不再查工程表。
+ * 列出与读取由分镜反射使用；分镜没有自己的能力入口，读详情用 get_canvas_project。
+ */
 
 const MAX_DETAIL_ITEMS = 32
-
-function parseJsonValue(value: string): unknown {
-  try {
-    return JSON.parse(value) as unknown
-  } catch {
-    return null
-  }
-}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
@@ -36,20 +35,25 @@ function summarizeCollection(value: unknown, fields: string[]) {
 }
 
 export async function listStoryboardProjects(): Promise<Record<string, unknown>[]> {
-  return (await listStoryboardProjectSummaries()).map((project) => ({ ...project }))
+  return (await listCanvasDocumentSummaries()).map((project) => ({ ...project }))
 }
 
 export async function getStoryboardProject(projectId: string): Promise<Record<string, unknown>> {
-  const project = await getStoryboardProjectRecord(projectId)
-  if (!project) throw new Error('NOT_FOUND')
+  const instance = findCanvasProjectInstance(projectId)
+  let project
+  try {
+    project = instance ? instance.snapshot() : await readPersistedCanvasProjectSnapshot(projectId)
+  } catch (error) {
+    if (error instanceof Error && error.message === 'PROJECT_NOT_FOUND') throw new Error('NOT_FOUND')
+    throw error
+  }
   return {
     id: project.id,
     name: project.name,
     createdAt: project.createdAt,
     updatedAt: project.updatedAt,
-    nodeCount: project.nodeCount,
-    nodeSummary: summarizeCollection(parseJsonValue(project.nodesJson), ['id', 'type', 'position', 'selected']),
-    edgeSummary: summarizeCollection(parseJsonValue(project.edgesJson), ['id', 'source', 'target', 'sourceHandle', 'targetHandle']),
-    viewportBytes: new TextEncoder().encode(project.viewportJson).byteLength,
+    nodeCount: project.nodes.length,
+    nodeSummary: summarizeCollection(project.nodes, ['id', 'type', 'selected']),
+    edgeSummary: summarizeCollection(project.edges, ['id', 'source', 'target', 'sourceHandle', 'targetHandle']),
   }
 }

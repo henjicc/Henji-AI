@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { getProjectRecord } from '@/commands/projectState'
 import { getApplicationControlExecutionEngine, getApplicationReflectionRegistry } from '@/features/application-control/capabilities/applicationControlRegistry'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { createAttachedImageEditPersistenceFixture } from '@/tests/imageEditAttachedPersistenceFixture'
 import { installHarnessNativeStorage, readHarnessImageEditDocument, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { imageEditV3LayerRef } from './imageEditDocumentRefs'
 import { retryImageEditDocumentSaveV3 } from './imageEditPersistenceOperations'
+import { readCanvasTestProject, canvasSaveSpy } from '@/tests/canvasProjectFixture'
 
 let dispose: (() => void) | undefined
 beforeEach(() => { installHarnessNativeStorage() })
@@ -18,7 +18,7 @@ const context = { exposure: 'assistant' as const, requestId: 'attached-failure',
 it('文档已保存但节点存储拒绝，失败回执保留双域事实且恢复不重新物化或编辑', async () => {
   const fixture = await createAttachedImageEditPersistenceFixture()
   dispose = fixture.dispose
-  const saves = vi.spyOn(window.henjiNative!.storyboardProjects, 'upsertProjectRecord').mockRejectedValueOnce(new Error('readonly canvas'))
+  const saves = canvasSaveSpy().mockRejectedValueOnce(new Error('readonly canvas'))
   const target = imageEditV3LayerRef(fixture.document.id, 'effect')
   const snapshot = await getApplicationReflectionRegistry().readEntity(target, [], context)
   const engine = getApplicationControlExecutionEngine()
@@ -32,10 +32,10 @@ it('文档已保存但节点存储拒绝，失败回执保留双域事实且恢�
   if (result.status === 'failed') expect(result.effects?.map((effect) => effect.entityType)).toEqual(['image_edit.layer', 'canvas.node'])
   const storedDocument = readHarnessImageEditDocument(fixture.document.id)!
   expect(storedDocument.document.revision).toBe(1)
-  expect(JSON.parse((await getProjectRecord(fixture.projectId))!.nodesJson)[0].data.imageEditSession.revision).toBe(0)
+  expect(readCanvasTestProject(fixture.projectId)!.nodes[0].data.imageEditSession.revision).toBe(0)
   expect(useCanvasStore.getState().nodes[0].data.imageEditSession).toMatchObject({ revision: 1 })
   await retryImageEditDocumentSaveV3(fixture.document.id)
-  expect(JSON.parse((await getProjectRecord(fixture.projectId))!.nodesJson)[0].data.imageEditSession).toMatchObject({
+  expect(readCanvasTestProject(fixture.projectId)!.nodes[0].data.imageEditSession).toMatchObject({
     revision: 1, previewRef: storedDocument.previewRef,
   })
   expect(fixture.materialize).toHaveBeenCalledTimes(1)
@@ -72,7 +72,7 @@ it('附着双字段撤销遇画布拒写，失败回执记录原步骤逆序和�
   const committed = await engine.commit({ planRef: plan.planRef, expectedRevisions: snapshot.revisions,
     idempotencyKey: 'attached-two-fields-for-undo' }, context)
   if (committed.status !== 'completed' || !committed.undoRef) throw new Error(JSON.stringify(committed))
-  vi.spyOn(window.henjiNative!.storyboardProjects, 'upsertProjectRecord').mockRejectedValueOnce(new Error('undo canvas readonly'))
+  canvasSaveSpy().mockRejectedValueOnce(new Error('undo canvas readonly'))
   const undone = await engine.undo({ undoRef: committed.undoRef, expectedRevisions: committed.resultingRevisions,
     idempotencyKey: 'attached-two-fields-undo-refused' }, context)
   expect(undone).toMatchObject({ status: 'failed', persistence: { stage: 'projection' },
@@ -88,7 +88,7 @@ it('附着双字段撤销遇画布拒写，失败回执记录原步骤逆序和�
   expect(history.redo).toHaveLength(2)
   const retried = await retryImageEditDocumentSaveV3(fixture.document.id)
   expect(retried.receipt?.effects.map((effect) => effect.effect)).toEqual(['execute'])
-  expect(JSON.parse((await getProjectRecord(fixture.projectId))!.nodesJson)[0].data.imageEditSession.revision).toBe(4)
+  expect(readCanvasTestProject(fixture.projectId)!.nodes[0].data.imageEditSession.revision).toBe(4)
   expect(fixture.materialize).toHaveBeenCalledTimes(2)
   expect(fixture.bus.getPersistenceSnapshot().history).toEqual(history)
   expect(await engine.undo({ undoRef: committed.undoRef, expectedRevisions: undone.currentRevisions ?? {},

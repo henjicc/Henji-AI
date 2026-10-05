@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import '@/tests/canvasProjectFixture'
+import { createCanvasTestProject } from '@/tests/canvasProjectFixture'
 import '@/tests/imageEditDocumentFixture'
 import '@/tests/cameraStageProjectFixture'
 import { afterEach, beforeEach, expect, it } from 'vitest'
@@ -19,9 +19,8 @@ afterEach(uninstallHarnessNativeStorage)
 
 it('工程、文档与设置资源目录通过正式注册表读取，后台修改发布变化且不切换页面', async () => {
   const harness = createApplicationHarness()
-  await useProjectStore.getState().hydrate()
-  const visibleId = await useProjectStore.getState().createProject('编辑 A')
-  const backgroundId = await useProjectStore.getState().createProject('后台 B', { attach: false })
+  const visibleId = await createCanvasTestProject('编辑 A')
+  const backgroundId = await createCanvasTestProject('后台 B', { attach: false })
   const stage = await createNamedCameraStageDocument('后台三维')
   let notifications = 0
   const detach = subscribeHostContext(() => { notifications++ })

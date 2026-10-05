@@ -16,9 +16,14 @@ import { isTextAnnotationNode } from '../domain/canvasNodes'
 import { CANVAS_NODE_SCHEMA_DOCUMENTS, NODE_FIELDS, PROJECT_FIELDS } from './canvasFields'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useProjectStore } from '@/stores/projectStore'
-import { listCanvasProjects } from './canvasProjectService'
+import { listCanvasDocumentSummaries } from './canvasProjectService'
 import { readCanvasProjectSnapshot } from './canvasQueryService'
 import { supportsCanvasNodeGenerationConfig } from './canvasNodeGenerationConfig'
+
+/** 3.4：canvas.project 就是一份画布文档，文档本身的管理全部归通用文档能力。 */
+const PROJECT_WRITE_EXCLUSION = 'canvas.project 就是一份画布文档（id 即文档 ID），本身只读：改名写 documents.document.name；'
+  + '打开、移动、创建副本、移到回收站用 open_document / move_document / duplicate_document / trash_document；'
+  + '新建用 create_document（kind=canvas）。画布内容经 canvas.node / canvas.edge 写入。'
 
 const DOMAIN = 'canvas'
 const REVISION_SCOPE = 'canvas'
@@ -157,7 +162,7 @@ class CanvasReflectionProvider implements ApplicationEntityProvider {
   constructor(readonly entityType: CanvasEntityType) {}
 
   async listEntities(request: { cursor?: string; limit: number }) {
-    const projects = await listCanvasProjects()
+    const projects = await listCanvasDocumentSummaries()
     const refs: ApplicationRef[] = []
     for (const project of projects) {
       if (this.entityType === CANVAS_ENTITY_TYPES.project) {
@@ -277,7 +282,7 @@ class CanvasReflectionProvider implements ApplicationEntityProvider {
 }
 
 const META: Record<CanvasEntityType, { title: string; description: string; parents: CanvasEntityType[]; queryIds: string[] }> = {
-  [CANVAS_ENTITY_TYPES.project]: { title: '画布项目', description: '持久化的节点画布项目。', parents: [], queryIds: ['get_canvas_project'] },
+  [CANVAS_ENTITY_TYPES.project]: { title: '画布', description: '一份画布文档（.henji-canvas，id 即文档 ID）的节点画布内容。', parents: [], queryIds: ['get_canvas_project'] },
   [CANVAS_ENTITY_TYPES.node]: { title: '画布节点', description: '由节点目录约束的数据与位置实体。', parents: [CANVAS_ENTITY_TYPES.project], queryIds: ['get_canvas_node'] },
   [CANVAS_ENTITY_TYPES.edge]: { title: '画布连线', description: '通过节点端口校验建立的有向连接。', parents: [CANVAS_ENTITY_TYPES.project], queryIds: ['get_canvas_project'] },
 }
@@ -297,6 +302,7 @@ export function createCanvasReflectionRegistrations(): ApplicationEntityRegistra
       revisionScopes: [REVISION_SCOPE],
       queryCapabilityIds: META[entityType].queryIds,
       schemaRef: schemaRef('entity', entityType),
+      ...(entityType === CANVAS_ENTITY_TYPES.project ? { writeExclusion: { reason: PROJECT_WRITE_EXCLUSION } } : {}),
       /**
        * 节点与连线可增删。声明之后助手用通用动词就能建画布，不必为每种「加一个 X」写专用能力。
        *

@@ -1,9 +1,8 @@
-import { upsertProjectRecord } from '@/commands/projectState';
-import { setCanvasTestProjectState } from '@/tests/canvasProjectFixture';
+import { setCanvasTestProjectState, canvasSaveSpy } from '@/tests/canvasProjectFixture';
 // @vitest-environment jsdom
 
 // @vitest-environment jsdom
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { CANVAS_IMAGE_CAPABILITY_IDS, getCanvasImageCapability, type CanvasImageCapabilityDefinition } from '@/features/canvas/capabilities';
 import { CANVAS_NODE_TYPES, type CanvasNode, type CanvasNodeType } from '@/features/canvas/domain/canvasNodes';
@@ -26,10 +25,6 @@ beforeAll(async () => {
 })
 
 // 本文件验证领域变换；仅替换最终存储边界，保存完成/拒绝由专门结果测试覆盖。
-vi.mock('@/commands/projectState', async (importOriginal) => ({
-  ...await importOriginal<typeof import('@/commands/projectState')>(),
-  upsertProjectRecord: vi.fn(async () => undefined),
-}))
 
 function createSourceNode(): CanvasNode {
   return {
@@ -72,7 +67,7 @@ function capabilityForNode(nodeType: CanvasNodeType): CanvasImageCapabilityDefin
 
 describe('画布图片能力应用服务', () => {
   beforeEach(async () => {
-    vi.mocked(upsertProjectRecord).mockClear()
+    canvasSaveSpy().mockClear()
     await i18n.changeLanguage('zh-CN')
     resetCanvasApplicationStateForTests()
     resetCanvasBatchStateForTests()
@@ -87,12 +82,9 @@ describe('画布图片能力应用服务', () => {
       selectedNodeId: sourceNodeId,
     })
     setCanvasTestProjectState({
-      projects: [project],
       currentProjectId: projectId,
       currentProject: project,
-      isHydrated: true,
       isOpeningProject: false,
-      saveCurrentProject: vi.fn(),
     })
   })
 
@@ -181,7 +173,7 @@ describe('画布图片能力应用服务', () => {
     expect(canvas.selectedNodeId).toBe(result.nodeId)
     expect(canvas.nodes.find((node) => node.id === result.nodeId)?.selected).toBe(true)
     expect(canvas.history.past).toHaveLength(1)
-    expect(vi.mocked(upsertProjectRecord)).toHaveBeenCalledTimes(1)
+    expect(canvasSaveSpy()).toHaveBeenCalledTimes(1)
 
     expect(await undoCanvasBatch(projectId, result.undoRef)).toMatchObject({ status: 'undone' })
     expect(useCanvasStore.getState().nodes).toHaveLength(1)

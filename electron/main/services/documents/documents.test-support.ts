@@ -3,7 +3,7 @@ import fsp from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 
-import type { DocumentKindRegistry } from '../../../../src/core/documents/kinds'
+import { createDocumentKindRegistry, defineSkeletonDocumentKind, DOCUMENT_KINDS, type DocumentKindRegistry } from '../../../../src/core/documents/kinds'
 import type { FolderLocale } from '../../../../src/core/documents/types'
 import { pathKey, type PathStyle } from '../../../../src/core/storage/pathSyntax'
 import type { MainLogger } from '../logging/main-logger'
@@ -144,6 +144,16 @@ export interface TestEnvironmentOptions {
   adapters?: PackageAdapterRegistry
 }
 
+/**
+ * 通用仓库测试用的类型登记：画布（3.4 起有真实内容规则）在这里换成内容任意的骨架类型，
+ * 仓库、索引与项目测试照旧拿它当“任意 JSON 文档”；其余类型用正式登记。
+ */
+export const GENERIC_TEST_DOCUMENT_KINDS: DocumentKindRegistry = createDocumentKindRegistry(DOCUMENT_KINDS.map((kind) => (
+  kind.id === 'canvas'
+    ? defineSkeletonDocumentKind({ id: kind.id, extension: kind.extension, standaloneFolderNames: kind.standaloneFolderNames, untitledNames: kind.untitledNames, storage: kind.storage })
+    : kind
+)))
+
 /** 在系统临时目录里建一套作品目录、程序目录与“外部”位置，不碰用户真实目录。 */
 export function createTestEnvironment(options: TestEnvironmentOptions = {}): TestEnvironment {
   const base = fs.mkdtempSync(path.join(os.tmpdir(), 'henji-documents-'))
@@ -185,7 +195,7 @@ export function createTestEnvironment(options: TestEnvironmentOptions = {}): Tes
     grantMediaRoots: (directories) => { granted.push(...directories) },
     renderCover: async (sources) => ({ bytes: Buffer.from(`cover:${sources.length}`), selected: [...sources] }),
     hideDirectory: async (directory) => { hidden.push(directory) },
-    kinds: options.kinds,
+    kinds: options.kinds ?? GENERIC_TEST_DOCUMENT_KINDS,
     adapters: options.adapters,
     randomId: () => {
       counter += 1

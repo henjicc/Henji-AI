@@ -73,20 +73,13 @@ beforeEach(() => {
   useCanvasStore.getState().setCanvasData([source], [], project.history)
   useCanvasStore.setState({ currentViewport: project.viewport, canvasViewportSize: { width: 1200, height: 800 } })
   setCanvasTestProjectState({
-    projects: [project],
     currentProjectId: projectId,
     currentProject: project,
-    isHydrated: true,
     isOpeningProject: false,
-    saveCurrentProject: vi.fn(),
   })
 })
 
 // 本文件验证领域变换；仅替换最终存储边界，保存完成/拒绝由专门结果测试覆盖。
-vi.mock('@/commands/projectState', async (importOriginal) => ({
-  ...await importOriginal<typeof import('@/commands/projectState')>(),
-  upsertProjectRecord: vi.fn(async () => undefined),
-}))
 
 describe('多图层文档节点复制事务', () => {
   it('已载入的普通节点同步创建，仍使用同一复制入口且不复制文档', () => {

@@ -1,19 +1,18 @@
 import { createLogger } from '@/core/logging'
-import { saveProjectCover } from '@/commands/projectCovers'
-import type { ProjectCoverSource } from '@/platform/contracts/projectCovers'
+import type { DocumentCoverSource } from '@/core/documents/types'
 import { getPlatform } from '@/platform'
 import { SURFACE_OBSERVATION_SCHEMA_VERSION, type SurfaceCaptureRect } from '@/core/application-control/surfaceObservation'
 import { useCanvasStore, type CanvasNode } from '@/stores/canvasStore'
-import { useProjectStore } from '@/stores/projectStore'
+import { canvasDocumentCommands } from './canvasDocumentEnvironment'
 import { getCanvasNodeDefinition } from '../domain/nodeRegistry'
 
 const logger = createLogger('features.canvas.application.canvasProjectCover')
 
 /**
- * 画布项目封面：优先取项目里最早的生成图片，没有生成结果时退回节点区域截图。
+ * 画布封面：优先取画布里最早的生成图片，没有生成结果时退回节点区域截图。
  *
- * 自动更新层会在封面来源变化后低频调用；退出项目时再补一次立即刷新。
- * 转码、拼图与落盘统一交给主进程 project-covers 服务。
+ * 自动更新层会在封面来源变化后低频调用；返回列表前再补一次立即刷新。
+ * 转码、拼图与落盘交给通用文档封面（按文档 ID 存程序目录，3.4 起不再写工程表）。
  */
 
 /** 节点区域截图四周留出的呼吸空间（CSS px） */
@@ -27,7 +26,7 @@ function isGeneratedResultNode(node: CanvasNode): boolean {
   return media?.role === 'result' && media.kind === 'image'
 }
 
-function readNodeImages(node: CanvasNode): ProjectCoverSource[] {
+function readNodeImages(node: CanvasNode): DocumentCoverSource[] {
   const definition = getCanvasNodeDefinition(node.type ?? '')
   const outputs = definition?.getOutputs?.(node.data) ?? []
   return outputs
@@ -36,8 +35,8 @@ function readNodeImages(node: CanvasNode): ProjectCoverSource[] {
 }
 
 /** 画布里最早的四张生成图片；节点数组按创建顺序持久化，因此顺序跨重启保持稳定。 */
-export function findGeneratedCoverSources(nodes: CanvasNode[]): ProjectCoverSource[] {
-  const sources: ProjectCoverSource[] = []
+export function findGeneratedCoverSources(nodes: CanvasNode[]): DocumentCoverSource[] {
+  const sources: DocumentCoverSource[] = []
   for (const node of nodes) {
     if (!isGeneratedResultNode(node)) continue
     sources.push(...readNodeImages(node))
@@ -113,19 +112,14 @@ async function captureNodeAreaDataUrl(): Promise<string | null> {
 export async function updateCanvasProjectCover(projectId: string): Promise<void> {
   try {
     const generated = findGeneratedCoverSources(useCanvasStore.getState().nodes)
-    const sources = generated.length > 0 ? generated : await (async (): Promise<ProjectCoverSource[]> => {
+    const sources = generated.length > 0 ? generated : await (async (): Promise<DocumentCoverSource[]> => {
       const dataUrl = await captureNodeAreaDataUrl()
       return dataUrl ? [{ source: dataUrl, sourceKind: 'image' }] : []
     })()
     if (sources.length === 0) return
 
-    const result = await saveProjectCover({
-      scope: 'canvas',
-      projectId,
-      sources,
-    })
-    useProjectStore.getState().setProjectCover(projectId, result.coverPath)
+    await canvasDocumentCommands().saveDocumentCover({ docId: projectId, sources })
   } catch (error) {
-    logger.warn('画布项目封面更新失败', { projectId, error: String(error) })
+    logger.warn('画布封面更新失败', { projectId, error: String(error) })
   }
 }

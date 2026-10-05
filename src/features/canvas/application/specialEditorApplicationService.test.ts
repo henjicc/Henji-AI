@@ -1,9 +1,8 @@
-import { upsertProjectRecord } from '@/commands/projectState';
-import { setCanvasTestProjectState } from '@/tests/canvasProjectFixture';
+import { setCanvasTestProjectState, canvasSaveSpy } from '@/tests/canvasProjectFixture';
 // @vitest-environment jsdom
 
 // @vitest-environment jsdom
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 
 import { CANVAS_NODE_TYPES } from '@/features/canvas/domain/canvasNodes';
 import { DEFAULT_RELIGHT_SETTINGS } from '@/features/canvas/capabilities/relightPolicy';
@@ -35,12 +34,9 @@ describe('specialEditorApplicationService', () => {
     useCanvasSpecialEditorController.setState({ session: null });
     const project = emptyProject();
     setCanvasTestProjectState({
-      projects: [project],
       currentProjectId: projectId,
       currentProject: project,
-      isHydrated: true,
       isOpeningProject: false,
-      saveCurrentProject: vi.fn(),
     });
   });
 
@@ -63,7 +59,7 @@ describe('specialEditorApplicationService', () => {
     expect(useCanvasStore.getState().nodes.find((node) => node.id === nodeId)?.data.prompt)
       .toBe('已确认的提示词');
     expect(useCanvasSpecialEditorController.getState().session).toBeNull();
-    expect(vi.mocked(upsertProjectRecord)).toHaveBeenCalled();
+    expect(canvasSaveSpy()).toHaveBeenCalled();
   });
 
   it('打光编辑器仅通过内部白名单原子写回契约数据', async () => {
@@ -108,7 +104,3 @@ describe('specialEditorApplicationService', () => {
 });
 
 // 本文件验证领域变换；仅替换最终存储边界，保存完成/拒绝由专门结果测试覆盖。
-vi.mock('@/commands/projectState', async (importOriginal) => ({
-  ...await importOriginal<typeof import('@/commands/projectState')>(),
-  upsertProjectRecord: vi.fn(async () => undefined),
-}))

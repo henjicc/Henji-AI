@@ -9,6 +9,7 @@ import type {
   DocumentMeta,
   DocumentReadResult,
   DocumentSaveResult,
+  DocumentSessionStateKey,
   DocumentSummary,
   DocumentTarget,
   DocumentTransferResult,
@@ -27,6 +28,7 @@ import type {
   SaveDocumentCoverRequest,
   SaveDocumentRequest,
   SetProjectMainDocumentRequest,
+  WriteDocumentSessionStateRequest,
 } from '../../../../src/core/documents/types'
 import type { DocumentsPlatform } from '../../../../src/platform/contracts/documents'
 import { isPathInside } from '../../../../src/core/storage/pathSyntax'
@@ -34,6 +36,7 @@ import type { DocumentCoverStore } from './covers'
 import type { DocumentIndexScanner } from './index-scanner'
 import type { ProjectService } from './projects'
 import type { DocumentRepository } from './repository'
+import type { DocumentSessionStateStore } from './session-state'
 import type { DocumentWorkspace } from './workspace'
 
 /**
@@ -47,6 +50,7 @@ export class DocumentService implements DocumentsPlatform {
     projects: ProjectService
     scanner: DocumentIndexScanner
     covers: DocumentCoverStore
+    sessionState: DocumentSessionStateStore
   }) {}
 
   async listDocuments(query: DocumentListQuery = {}): Promise<DocumentSummary[]> {
@@ -153,6 +157,14 @@ export class DocumentService implements DocumentsPlatform {
 
   refreshIndex(): Promise<DocumentIndexScanReport> {
     return this.parts.scanner.refresh()
+  }
+
+  readSessionState(request: DocumentSessionStateKey): Promise<unknown> {
+    return this.parts.sessionState.read(request)
+  }
+
+  writeSessionState(request: WriteDocumentSessionStateRequest): Promise<void> {
+    return this.parts.sessionState.write(request)
   }
 
   async listProjects(query: ProjectListQuery = {}): Promise<ProjectSummary[]> {

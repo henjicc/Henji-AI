@@ -57,6 +57,10 @@ export interface DocumentLibraryPageProps {
   busy?: boolean
   /** 覆盖个别文案（如空态说明）。 */
   labels?: Partial<Omit<ProjectLibraryLabels, 'card' | 'selection'>>
+  /** 类型专属的卡片右键动作（排在通用动作之后，如画布的“导出工程包”）；找不到文件的文档不显示。 */
+  documentActions?: (document: DocumentSummary) => ProjectCardGridExtraAction[]
+  /** 页头下方的类型专属提示（如导出进度、导入失败），排在草稿区之后。 */
+  banner?: ReactNode
   /** 测试替换；正式运行用应用唯一的服务与会话登记表。 */
   operations?: DocumentOperations
   registry?: DocumentSessionRegistry
@@ -82,6 +86,8 @@ export function DocumentLibraryPage({
   describe,
   busy = false,
   labels: labelOverrides,
+  documentActions,
+  banner,
   operations: providedOperations,
   registry,
 }: DocumentLibraryPageProps): JSX.Element {
@@ -187,8 +193,9 @@ export function DocumentLibraryPage({
         icon: <FolderOpen className="h-4 w-4" />,
         onClick: () => { void run('reveal', () => operations.revealDocument({ id: document.id, path: document.path })) },
       },
+      ...(documentActions?.(document) ?? []),
     ]
-  }, [t, canStandalone, run, moveWithConflictPrompt, operations])
+  }, [t, canStandalone, run, moveWithConflictPrompt, operations, documentActions])
 
   const pageLabels = useMemo((): ProjectLibraryLabels => ({
     createAction: t('documentLibrary.create', { kind: kindName }),
@@ -265,6 +272,7 @@ export function DocumentLibraryPage({
               <DocumentDraftRecoveryNotice kind={kind} onRecover={open} {...(registry ? { registry } : {})} />
             </div>
             {actionError ? <p role="alert" className="mb-4 text-xs text-danger-text">{actionError}</p> : null}
+            {banner}
           </>
         )}
         // 只有存在项目时才有筛选可选（否则全部就是不在项目里）

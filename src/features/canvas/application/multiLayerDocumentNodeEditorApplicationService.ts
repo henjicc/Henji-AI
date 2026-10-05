@@ -7,9 +7,8 @@ import { isEditableLayerStackResultNode } from '../domain/canvasNodeGuards'
 import type { LayerStackResultNodeData } from '../domain/canvasNodeData'
 import { CANVAS_NODE_TYPES, NODE_TOOL_TYPES } from '../domain/canvasNodes'
 import { parseMultiLayerDocumentNodeState } from '../domain/multiLayerDocumentNode'
-import { CanvasApplicationError, focusCanvasNode } from './canvasApplicationService'
+import { CanvasApplicationError, focusCanvasNode, openCanvasProject } from './canvasApplicationService'
 import { openMultiLayerDocumentForEditing } from './multiLayerDocumentNodeGenerationAdapter'
-import { openCanvasProjectWithSummary } from './canvasProjectService'
 
 const logger = createLogger('features.canvas.multi_layer_document_editor_application')
 
@@ -34,7 +33,7 @@ export interface OpenMultiLayerDocumentNodeEditorResult {
 }
 
 interface OpenMultiLayerDocumentNodeEditorDependencies {
-  openProject?: typeof openCanvasProjectWithSummary
+  openProject?: typeof openCanvasProject
   openSurface?: typeof openApplicationSurface
   focusNode?: typeof focusCanvasNode
   validateDocument?: typeof openMultiLayerDocumentForEditing
@@ -110,7 +109,7 @@ export async function openMultiLayerDocumentNodeEditor(
   input: OpenMultiLayerDocumentNodeEditorInput,
   dependencies: OpenMultiLayerDocumentNodeEditorDependencies = {},
 ): Promise<OpenMultiLayerDocumentNodeEditorResult> {
-  const openProject = dependencies.openProject ?? openCanvasProjectWithSummary
+  const openProject = dependencies.openProject ?? openCanvasProject
   const openSurface = dependencies.openSurface ?? openApplicationSurface
   const focusNode = dependencies.focusNode ?? focusCanvasNode
   const validateDocument = dependencies.validateDocument ?? openMultiLayerDocumentForEditing

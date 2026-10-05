@@ -92,6 +92,8 @@ export interface SavedMediaFile {
 export async function saveMediaFromUrlTracked(
   url: string,
   context: MediaDownloadContext = { requestId: `media-download-${randomUUID()}` },
+  /** 放进哪个“生成结果”文件夹（画布所在项目等）；省略为作品目录“生成结果”。 */
+  directory?: string,
 ): Promise<SavedMediaFile | undefined> {
   if (!url.trim()) {
     return undefined
@@ -99,7 +101,8 @@ export async function saveMediaFromUrlTracked(
 
   const { bytes, contentType } = await downloadMedia(url, context)
   const fileName = buildFileName(url, bytes, contentType)
-  const mediaDir = getGeneratedMediaDir()
+  // 下载完成后才确定并建好目标文件夹：下载失败不留空文件夹
+  const mediaDir = directory ?? getGeneratedMediaDir()
   await fs.mkdir(mediaDir, { recursive: true })
   const filePath = path.join(mediaDir, fileName)
   const leased = await acquireManagedMediaFileLease(filePath, async () => {

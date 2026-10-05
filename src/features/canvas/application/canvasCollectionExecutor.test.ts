@@ -2,7 +2,7 @@ import { setCanvasTestProjectState } from '@/tests/canvasProjectFixture';
 // @vitest-environment jsdom
 
 // @vitest-environment jsdom
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 
 import type { ApplicationPlannedStep } from '@/core/application-control';
 import { CANVAS_NODE_TYPES } from '@/features/canvas/domain/canvasNodes';
@@ -38,12 +38,9 @@ describe('画布集合写入执行器', () => {
     useCanvasStore.getState().setCanvasData([], [], { past: [], future: [] })
     const currentProject = project()
     setCanvasTestProjectState({
-      projects: [currentProject],
       currentProjectId: projectId,
       currentProject,
-      isHydrated: true,
       isOpeningProject: false,
-      saveCurrentProject: vi.fn(),
     })
   })
 
@@ -104,7 +101,3 @@ describe('画布集合写入执行器', () => {
 })
 
 // 本文件验证领域变换；仅替换最终存储边界，保存完成/拒绝由专门结果测试覆盖。
-vi.mock('@/commands/projectState', async (importOriginal) => ({
-  ...await importOriginal<typeof import('@/commands/projectState')>(),
-  upsertProjectRecord: vi.fn(async () => undefined),
-}))

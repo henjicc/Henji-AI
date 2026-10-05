@@ -1,7 +1,6 @@
 import { findCanvasProjectInstance, getCanvasProjectInstance, requireCanvasProjectInstance } from './canvasProjectInstances'
 import { createLogger } from '@/core/logging'
-import { useCanvasStore } from '@/stores/canvasStore'
-import { flushCanvasProjectSnapshot, useProjectStore } from '@/stores/projectStore'
+import type { useCanvasStore } from '@/stores/canvasStore'
 import type { ApplicationTransactionResult } from '@/core/application-control/transactions'
 
 const logger = createLogger('features.canvas.persistence')
@@ -105,12 +104,14 @@ export class CanvasPersistenceError extends Error {
   }
 }
 
-/** 自动保存只排队；正式业务操作用 confirmCanvasPersistence 等待同一存储链。 */
-export function persistCanvasState(): void {
-  const canvas = useCanvasStore.getState()
-  useProjectStore.getState().saveCurrentProject(
-    canvas.nodes, canvas.edges, canvas.currentViewport, canvas.history,
-  )
+/** 画布实例里还有没写进文件的修改（自动保存还没完成或失败了）。 */
+export function hasUnconfirmedCanvasProjectSnapshot(projectId: string): boolean {
+  return findCanvasProjectInstance(projectId)?.session.dirty ?? false
+}
+
+/** 批量事务期间暂停自动保存（不写中间结果）；返回恢复函数。实例不在时无事可停。 */
+export function pauseCanvasProjectPersistence(projectId: string): () => void {
+  return findCanvasProjectInstance(projectId)?.pausePersistence() ?? (() => undefined)
 }
 
 export async function confirmCanvasPersistence(
@@ -127,7 +128,7 @@ export async function confirmCanvasPersistence(
   if (!findCanvasProjectInstance(projectId)) await getCanvasProjectInstance(projectId)
   logger.debug('画布保存确认开始', { event: 'canvas.persistence.confirm.start', projectId })
   try {
-    await flushCanvasProjectSnapshot(projectId)
+    await requireCanvasProjectInstance(projectId).session.flush()
     logger.info('画布保存确认完成', { event: 'canvas.persistence.confirm.completed', projectId })
   } catch (error) {
     logger.error('画布保存尚未确认', error, { event: 'canvas.persistence.confirm.failed', projectId })

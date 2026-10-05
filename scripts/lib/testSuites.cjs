@@ -23,8 +23,6 @@ const NATIVE_TEST_FILES = [
   'src/features/application-control/mcpWriteIntegration.test.ts',
   'electron/main/services/assistant/memory-store.test.ts',
   'electron/main/services/logging/agent-trace-store.test.ts',
-  'electron/main/services/storyboard-projects.storage.test.ts',
-  'src/stores/projectPersistenceQueue.storage.test.ts',
   'electron/main/services/documents/index.native.test.ts',
   'electron/main/services/db-migrations.native.test.ts',
 ]

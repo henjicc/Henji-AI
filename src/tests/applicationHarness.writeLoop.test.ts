@@ -12,7 +12,6 @@ import { useImageEditSessionStore } from '@/features/imageEdit/store/imageEditSe
 import { useSettingsStore } from '@/stores/settingsStore';
 
 import { useCameraStageStore } from '@/features/cameraStage/store/cameraStageStore';
-import { getPlatform } from '@/platform/runtime';
 import { BLACK_HEX } from '@/core/theme/colorTokens';
 import { registerPersistedImageEditTestSession } from './imageEditPersistenceTestSession';
 import { loadRealModelsIntoRegistry } from './loadRealModels';
@@ -33,8 +32,15 @@ it('所有已登记写域均经公共授权入口修改、正式读回并核对�
   const dispose = registerPersistedImageEditTestSession('application-write-loop', bus, new ImageEditorV3CommandRepository())
   useImageEditSessionStore.getState().ensureSession('application-mark-loop', createEmptyImageEditDocument())
   try {
-    setCanvasTestProjectState({ projects: [], currentProject: null, currentProjectId: null, isHydrated: true })
-    const canvas = await app.requireResult('create_canvas_project', { name: '公共画布回环' })
+    setCanvasTestProjectState({ currentProject: null, currentProjectId: null })
+    // 画布是通用文档（3.4）：用 create_document 新建，canvas.project 的 id 就是文档 ID；写域以节点标题验证
+    const canvas = await app.requireResult('create_document', { kind: 'canvas', name: '公共画布回环' })
+    const canvasDocumentId = (canvas.resultRef as ApplicationRef).id
+    const canvasNode = await app.requireResult('change_application_entities', { summary: '公共画布节点', changes: [{
+      kind: 'create_items', parent: { kind: 'canvas.project', id: canvasDocumentId }, entityType: 'canvas.node',
+      items: [{ properties: { 'canvas.node.node_type': 'textAnnotationNode' } }],
+    }] })
+    const canvasNodeRef = (canvasNode.resultRefs as ApplicationRef[])[0]
     // 镜头参考是通用文档（3.2）：用通用 create_document 新建，内容实体的 id 就是文档 ID
     const camera = await app.requireResult('create_document', { kind: 'camera_stage', name: '公共三维回环' })
     const cameraDocumentId = (camera.resultRef as ApplicationRef).id
@@ -50,7 +56,7 @@ it('所有已登记写域均经公共授权入口修改、正式读回并核对�
     // 剪辑工程保存在用户选择的本地文件；这里只替换文件 I/O 边界。
     const video = await createVideoEditProject()
     // 作品文档（存储底座 2.5）：只替换 henjiNative.documents 背后的文件夹
-    const documentMeta = harnessDocumentStore().seed({ name: '公共文档回环', content: { items: [] } })
+    const documentMeta = harnessDocumentStore().seed({ kind: 'canvas', name: '公共文档回环', content: { nodes: [], edges: [] } })
     const first = async (entityType: string): Promise<ApplicationRef> => {
       const result = await app.requireResult('list_application_entities', { entityType })
       const refs = result.refs as ApplicationRef[]
@@ -60,7 +66,7 @@ it('所有已登记写域均经公共授权入口修改、正式读回并核对�
     const loops = [
       { domain: 'settings', ref: { kind: 'settings.registry', id: 'singleton' }, property: 'interface.theme_contrast', value: 'strong' },
       { domain: 'generation', ref: { kind: 'generation.draft', id: 'singleton' }, property: 'generation.draft.prompt_text', value: '公共草稿回环' },
-      { domain: 'canvas', ref: { kind: 'canvas.project', id: String(canvas.projectId) }, property: 'canvas.project.name', value: '公共画布已改名' },
+      { domain: 'canvas', ref: canvasNodeRef, property: 'canvas.node.display_name', value: '公共画布节点已改名' },
       { domain: 'camera_stage', ref: { kind: 'camera_stage.scene', id: cameraDocumentId }, property: 'camera_stage.scene.sky_color', value: BLACK_HEX },
       { domain: 'models', ref: await first('generation.model'), property: 'generation.model.hidden', value: true },
       { domain: 'image_mark', ref: await first('image_mark.document'), property: 'image_mark.document.orientation_rotate', value: '90' },
@@ -93,7 +99,8 @@ it('所有已登记写域均经公共授权入口修改、正式读回并核对�
     expect(useSettingsStore.getState().themeSelection.contrast).toBe('strong')
     expect(bus.getSnapshot().document.layers[0].opacity).toBe(0.42)
     expect(imageEditDocumentToMarkDoc(useImageEditSessionStore.getState().sessions['application-mark-loop'].document).orientation.rotate).toBe(90)
-    expect((await getPlatform().storyboardProjects.listProjectSummaries()).map(project => project.name)).toContain('公共画布已改名')
+    const canvasContent = harnessDocumentStore().stored(canvasDocumentId)?.content as { nodes: Array<{ data: { displayName?: string } }> }
+    expect(canvasContent.nodes[0].data.displayName).toBe('公共画布节点已改名')
     const cameraContent = harnessDocumentStore().stored(cameraDocumentId)?.content as { sceneSettings: { sky: { color: string } } }
     expect(cameraContent.sceneSettings.sky.color).toBe(BLACK_HEX)
     // 后台写入不切换界面上的三维场景

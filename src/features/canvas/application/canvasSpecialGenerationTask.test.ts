@@ -18,6 +18,7 @@ import { createGenerationNodeExecutor } from './generationNodeExecutor'
 import { registerCanvasNodeExecutor, resetCanvasExecutionServiceForTests, runCanvasNode } from './canvasExecutionService'
 import { prepareCanvasNodeGeneration, submitCanvasNodeGeneration, getCanvasGenerationTask, cancelCanvasGenerationTask } from './canvasGenerationTaskService'
 import { readPersistedCanvasProjectSnapshot } from './canvasQueryService'
+import { createCanvasTestProject } from '@/tests/canvasProjectFixture'
 
 // 仅供应商、像素与 V3 文档 I/O 使用替身，任务、执行器和原项目保存走正式服务。
 vi.mock('./imageData', async original => ({
@@ -32,8 +33,7 @@ beforeEach(async () => {
   records.clear()
   installHarnessNativeStorage()
   resetCanvasExecutionServiceForTests()
-  await useProjectStore.getState().hydrate()
-  projectId = await useProjectStore.getState().createProject('特殊生成原项目')
+  projectId = await createCanvasTestProject('特殊生成原项目')
   useSettingsStore.setState({ providerKeyStatus: { ...useSettingsStore.getState().providerKeyStatus, apimart: true, volcengine: true } })
   vi.spyOn(GenerationService.getInstance(), 'getProgressEstimate').mockResolvedValue(null)
   vi.spyOn(databaseService, 'getHistoryById').mockImplementation(async id => records.get(id) ?? null)
@@ -127,7 +127,7 @@ it.each([
     expect(before.nodes.filter(node => node.data.generationTaskId === taskId)).toHaveLength(1)
     expect(before.edges).toEqual(expect.arrayContaining([expect.objectContaining({ source: sourceId, target: nodeId })]))
     expect(await getCanvasGenerationTask(taskId)).toMatchObject({ cancellable: true, resultAvailable: false })
-    const other = await useProjectStore.getState().createProject('保持当前页面')
+    const other = await createCanvasTestProject('保持当前页面')
     unmount()
     if (cancel) await cancelCanvasGenerationTask(taskId)
     release()

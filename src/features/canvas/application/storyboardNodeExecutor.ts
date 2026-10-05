@@ -93,6 +93,7 @@ export function createStoryboardNodeExecutor(id: string, store: typeof useCanvas
     try {
       const generated = await generateStoryboardImage({
         signal: execution.signal,
+        projectId: generationProjectId,
         modelId: runtime.modelId,
         params: generationParams,
         incomingImages: runtime.images,

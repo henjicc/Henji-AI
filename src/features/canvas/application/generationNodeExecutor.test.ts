@@ -14,7 +14,8 @@ import { createGenerationNodeExecutor, type GenerationNodeExecutionOptions } fro
 import { registerCanvasNodeExecutor, resetCanvasExecutionServiceForTests, runCanvasNode } from './canvasExecutionService'
 import { readPersistedCanvasProjectSnapshot } from './canvasQueryService'
 import { attachCanvasGenerationFeedback, getCanvasDomainExecutor } from './canvasDomainExecutors'
-import { findCanvasProjectInstance } from './canvasProjectInstances'
+import { findCanvasProjectInstance, leaveCanvasProject } from './canvasProjectInstances'
+import { createCanvasTestProject, readCanvasTestProject } from '@/tests/canvasProjectFixture'
 
 // 媒体 I/O 与历史存储使用替身；任务登记、图执行、结果编排及工程保存走正式服务。
 vi.mock('./imageData', async (original) => ({
@@ -37,8 +38,7 @@ beforeEach(async () => {
     inputLimits: { images: { max: 1 }, videos: { max: 0 }, audios: { max: 0 } }, pricing: { currency: '$', fixed: 0.01 } })
   useSettingsStore.setState({ providerKeyStatus: { ...useSettingsStore.getState().providerKeyStatus, fixture: true } })
   vi.spyOn(GenerationService.getInstance(), 'getProgressEstimate').mockResolvedValue(null)
-  await useProjectStore.getState().hydrate()
-  projectId = await useProjectStore.getState().createProject('无页面执行器测试')
+  projectId = await createCanvasTestProject('无页面执行器测试')
   const canvas = useCanvasStore.getState()
   const reference = canvas.addNode(CANVAS_NODE_TYPES.upload, { x: 0, y: 0 }, { imageUrl: 'C:/reference.png' })
   nodeId = canvas.addNode(CANVAS_NODE_TYPES.imageEdit, { x: 400, y: 0 }, { modelId: 'executor-fixture', prompt: '生成三视图', params: {} })
@@ -103,7 +103,7 @@ it('标准执行器由领域实例提供，页面关闭与反馈解除不会取�
   expect(findCanvasProjectInstance(projectId)?.leases).toBe(0)
 })
 
-it('删除工程等待已提交生成回填和保存，关闭屏障不拒绝原任务的后续提交', async () => {
+it('离开画布不等已提交的生成：结果照常回填原画布并保存，任务结束后才关闭', async () => {
   let finish!: () => void
   vi.spyOn(GenerationService.getInstance(), 'generate').mockImplementation(async () => {
     await new Promise<void>(resolve => { finish = resolve })
@@ -111,14 +111,12 @@ it('删除工程等待已提交生成回填和保存，关闭屏障不拒绝原�
   })
   const running = runCanvasNode(nodeId)
   await vi.waitFor(() => expect(finish).toBeTypeOf('function'))
-  let deleted = false
-  const deleting = useProjectStore.getState().deleteProject(projectId).then(() => { deleted = true })
-  await vi.waitFor(() => expect(findCanvasProjectInstance(projectId)?.closing).toBe(true))
-  expect(deleted).toBe(false)
-  await expect(runCanvasNode(nodeId, undefined, projectId)).rejects.toThrow('PROJECT_CLOSING')
+  expect(await leaveCanvasProject(projectId)).toBe('closed')
+  const instance = findCanvasProjectInstance(projectId)
+  expect(instance?.leases).toBeGreaterThan(0)
   finish()
   const result = await running
   expect(result.resultNodeIds).toHaveLength(1)
-  await deleting
-  expect(findCanvasProjectInstance(projectId)).toBeUndefined()
+  await vi.waitFor(() => expect(findCanvasProjectInstance(projectId)).toBeUndefined())
+  expect(readCanvasTestProject(projectId)!.nodes.some(node => node.id === result.resultNodeIds[0])).toBe(true)
 })

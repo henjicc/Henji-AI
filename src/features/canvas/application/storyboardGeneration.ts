@@ -18,6 +18,8 @@ interface BuildStoryboardPromptParams {
 }
 
 interface GenerateStoryboardImageParams {
+  /** 发起生成的画布文档 ID（结果放进它所在容器的“生成结果”）。 */
+  projectId?: string | null
   signal?: AbortSignal
   modelId: string
   /** schema 参数 + prompt/text 协议键（智能宽高比由 GenerationService 解析） */
@@ -76,6 +78,7 @@ export function buildStoryboardPrompt({
 
 export async function generateStoryboardImage({
   signal,
+  projectId,
   modelId,
   params,
   incomingImages,
@@ -97,6 +100,7 @@ export async function generateStoryboardImage({
 
   const generated = await runCanvasGeneration({
     signal,
+    projectId,
     modelId,
     params,
     referenceImages: allReferenceImages,

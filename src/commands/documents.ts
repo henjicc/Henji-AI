@@ -10,6 +10,7 @@ import type {
   DocumentMeta,
   DocumentReadResult,
   DocumentSaveResult,
+  DocumentSessionStateKey,
   DocumentSummary,
   DocumentTarget,
   DocumentTransferResult,
@@ -28,6 +29,7 @@ import type {
   SaveDocumentCoverRequest,
   SaveDocumentRequest,
   SetProjectMainDocumentRequest,
+  WriteDocumentSessionStateRequest,
 } from '@/platform/contracts/documents'
 
 /*
@@ -115,6 +117,15 @@ export async function saveDocumentCover(request: SaveDocumentCoverRequest): Prom
 
 export async function refreshDocumentIndex(): Promise<DocumentIndexScanReport> {
   return await documents().refreshIndex()
+}
+
+/** 文档会话状态（撤销记录、视口等，存在程序目录，随时可丢）；没有时返回 null。 */
+export async function readDocumentSessionState(request: DocumentSessionStateKey): Promise<unknown> {
+  return await documents().readSessionState(request)
+}
+
+export async function writeDocumentSessionState(request: WriteDocumentSessionStateRequest): Promise<void> {
+  await documents().writeSessionState(request)
 }
 
 export async function listProjects(query?: ProjectListQuery): Promise<ProjectSummary[]> {

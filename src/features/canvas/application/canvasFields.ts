@@ -12,7 +12,6 @@ import type { CanvasNode } from '@/stores/canvasStore'
 
 import { isAssetGroupNode, isStoryboardSplitNode, isTextAnnotationNode } from '../domain/canvasNodes'
 import type { CanvasNodePropertyPatch, CanvasStoryboardFramePatch } from './canvasMutationService'
-import { renameCanvasProject } from './canvasProjectService'
 import {
   canvasNodeGenerationConfigSchema, readCanvasNodeGenerationConfig, readCanvasNodeGenerationSchema,
 } from './canvasNodeGenerationConfig'
@@ -64,19 +63,18 @@ function canvasDescriptor(
 }
 
 /** 写入目标只有工程 id——改名直接落到领域服务，没有需要累积的中间态。 */
+/**
+ * 画布名就是 `.henji-canvas` 的文件名（3.4）：只读，改名走通用文档属性 documents.document.name（同一个 ID）。
+ */
 export const PROJECT_FIELDS: ApplicationFieldDefinition<{ name: string }, string>[] = [
   {
     propertyId: `${PROJECT_ENTITY_TYPE}.name`,
-    descriptor: canvasDescriptor(PROJECT_ENTITY_TYPE, 'name', '项目名称', { kind: 'string', minLength: 1, maxLength: 120 }),
-    read: (project) => project.name,
-    writer: {
-      async write(projectId, mutation) {
-        if (typeof mutation.value !== 'string' || mutation.value.trim() === '') {
-          throw new Error('CANVAS_PROJECT_NAME_INVALID：工程名必须是非空字符串。')
-        }
-        await renameCanvasProject(projectId, mutation.value)
-      },
+    descriptor: {
+      ...canvasDescriptor(PROJECT_ENTITY_TYPE, 'name', '画布名称', { kind: 'string', minLength: 1, maxLength: 200 }),
+      requiredPermissions: { read: ['canvas:read'], write: [] },
+      readOnlyReason: '画布名就是画布文档的文件名：改名用 change_application_entities 写 documents.document.name（同一个 id）。',
     },
+    read: (project) => project.name,
     storeActions: [],
   },
 ]
@@ -264,5 +262,4 @@ export const NODE_FIELDS: ApplicationFieldDefinition<
   },
 ]
 
-export const CANVAS_PROJECT_WRITERS = fieldWriterTable(PROJECT_FIELDS)
 export const CANVAS_NODE_WRITERS = fieldWriterTable(NODE_FIELDS)

@@ -9,6 +9,7 @@ import type {
   DocumentMeta,
   DocumentReadResult,
   DocumentSaveResult,
+  DocumentSessionStateKey,
   DocumentSummary,
   DocumentTarget,
   DocumentTransferResult,
@@ -27,6 +28,7 @@ import type {
   SaveDocumentCoverRequest,
   SaveDocumentRequest,
   SetProjectMainDocumentRequest,
+  WriteDocumentSessionStateRequest,
 } from '../../core/documents/types'
 
 /*
@@ -74,6 +76,10 @@ export interface DocumentsPlatform {
   saveDocumentCover(request: SaveDocumentCoverRequest): Promise<DocumentCoverResult>
   /** 扫描作品目录与外部位置，更新作品索引；返回本轮统计。 */
   refreshIndex(): Promise<DocumentIndexScanReport>
+  /** 读取文档会话状态（撤销记录、视口等，存在程序目录）；没有时返回 null。 */
+  readSessionState(request: DocumentSessionStateKey): Promise<unknown>
+  /** 写入文档会话状态；value 为 null 时清除。 */
+  writeSessionState(request: WriteDocumentSessionStateRequest): Promise<void>
 
   listProjects(query?: ProjectListQuery): Promise<ProjectSummary[]>
   /** 新建项目：不给名字时以草稿建在“项目”文件夹里并自动起名。 */
@@ -112,6 +118,8 @@ export const DOCUMENT_IPC_CHANNELS = {
   getDocumentCover: 'documents:cover:get',
   saveDocumentCover: 'documents:cover:save',
   refreshIndex: 'documents:index:refresh',
+  readSessionState: 'documents:sessionState:read',
+  writeSessionState: 'documents:sessionState:write',
   listProjects: 'documents:projects:list',
   createProject: 'documents:projects:create',
   renameProject: 'documents:projects:rename',

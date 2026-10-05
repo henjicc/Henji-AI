@@ -1,3 +1,4 @@
+import { canvasDocumentContainer } from './canvasProjectInstances';
 import {
   acknowledgeCameraStageRender,
   cancelCameraStageRender as cancelCameraStageRenderCommand,
@@ -333,7 +334,7 @@ async function startRenderInRuntime(nodeId: string, outputKind: 'image' | 'video
     if (node.data.renderTask) return node.data.renderTask;
     let cameraStageDocumentId = node.data.projectId;
     if (!cameraStageDocumentId) {
-      cameraStageDocumentId = (await createNamedCameraStageDocument(node.data.displayName || '3D 镜头参考')).id;
+      cameraStageDocumentId = (await createNamedCameraStageDocument(node.data.displayName || '3D 镜头参考', canvasDocumentContainer(canvasProjectId))).id;
     }
     const latestNode = requireUnchangedOwner(ownedCameraStageProjectId);
     requireCurrentNode(canvasProjectId, nodeId, null, runtime);

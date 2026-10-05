@@ -10,8 +10,6 @@ import type {
   HenjiCameraStageRenderApi,
   HenjiCameraStageRenderWorkerJob,
   HenjiCameraStageRenderTaskSnapshot,
-  HenjiCanvasProjectsApi,
-  HenjiProjectCoversApi,
   HenjiClipboardApi,
   HenjiCustomModelsApi,
   HenjiDbApi,
@@ -32,7 +30,6 @@ import type {
   HenjiPathsApi,
   HenjiProjectPackageApi,
   HenjiShellApi,
-  HenjiStoryboardProjectsApi,
   HenjiUpdaterApi,
   HenjiUpdaterEvent,
   HenjiWindowApi,
@@ -150,30 +147,6 @@ const testFixturesApi: HenjiTestFixturesApi = {
 const dbApi: HenjiDbApi = {
   execute: (sql, params) => nativeInvoke('db:execute', { sql, params }),
   select: (sql, params) => nativeInvoke('db:select', { sql, params }),
-}
-
-const canvasProjectsApi: HenjiCanvasProjectsApi = {
-  listProjects: () => nativeInvoke('canvasProjects:list'),
-  createProject: (id, name, snapshot) => nativeInvoke('canvasProjects:create', { id, name, snapshot }),
-  getProject: (projectId) => nativeInvoke('canvasProjects:get', { projectId }),
-  renameProject: (projectId, name) => nativeInvoke('canvasProjects:rename', { projectId, name }),
-  saveProjectSnapshot: (projectId, snapshot) => nativeInvoke('canvasProjects:saveSnapshot', { projectId, snapshot }),
-  deleteProject: (projectId) => nativeInvoke('canvasProjects:delete', { projectId }),
-}
-
-const storyboardProjectsApi: HenjiStoryboardProjectsApi = {
-  listProjectSummaries: () => nativeInvoke('storyboardProjects:list'),
-  getProjectRecord: (projectId) => nativeInvoke('storyboardProjects:get', { projectId }),
-  upsertProjectRecord: (record) => nativeInvoke('storyboardProjects:upsert', record),
-  updateProjectViewportRecord: (projectId, viewportJson) =>
-    nativeInvoke('storyboardProjects:updateViewport', { projectId, viewportJson }),
-  renameProjectRecord: (projectId, name, updatedAt) =>
-    nativeInvoke('storyboardProjects:rename', { projectId, name, updatedAt }),
-  deleteProjectRecord: (projectId) => nativeInvoke('storyboardProjects:delete', { projectId }),
-}
-
-const projectCoversApi: HenjiProjectCoversApi = {
-  saveCover: (request) => nativeInvoke('projectCovers:save', request),
 }
 
 const customModelsApi: HenjiCustomModelsApi = {
@@ -471,9 +444,6 @@ const api: HenjiNativeApi = {
   generationHistory: createGenerationHistoryApi(nativeInvoke),
   presets: createPresetsApi(nativeInvoke),
   settings: createSettingsApi(nativeInvoke),
-  canvasProjects: canvasProjectsApi,
-  storyboardProjects: storyboardProjectsApi,
-  projectCovers: projectCoversApi,
   cameraStageRender: cameraStageRenderApi,
   customModels: customModelsApi,
   fs: fsApi,

@@ -2,7 +2,7 @@ import { setCanvasTestProjectState } from '@/tests/canvasProjectFixture';
 // @vitest-environment jsdom
 
 // @vitest-environment jsdom
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 
 import { CANVAS_NODE_TYPES } from '@/features/canvas/domain/canvasNodes';
 import { useCanvasStore } from '@/stores/canvasStore';
@@ -39,12 +39,9 @@ describe('canvas application service', () => {
     useSettingsStore.getState().setAutoInsertTextDisplayNode(false)
     const project = emptyProject()
     setCanvasTestProjectState({
-      projects: [project],
       currentProjectId: projectId,
       currentProject: project,
-      isHydrated: true,
       isOpeningProject: false,
-      saveCurrentProject: vi.fn(),
     })
   })
 
@@ -405,7 +402,3 @@ describe('canvas application service', () => {
 })
 
 // 本文件验证领域变换；仅替换最终存储边界，保存完成/拒绝由专门结果测试覆盖。
-vi.mock('@/commands/projectState', async (importOriginal) => ({
-  ...await importOriginal<typeof import('@/commands/projectState')>(),
-  upsertProjectRecord: vi.fn(async () => undefined),
-}))

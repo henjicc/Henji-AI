@@ -1,4 +1,6 @@
 import { z } from 'zod'
+
+import { canvasDocumentIdSchema } from './canvasDocumentId'
 import type { ApplicationCapabilityDefinition } from '../../applicationCapabilities'
 import {
   capabilityControl,
@@ -37,12 +39,12 @@ const downloadCanvasMedia = defineApplicationCapability({
   successEvidence: ['返回实际保存成功与失败的节点 ID；目标目录只从用户已配置项解析，不向模型暴露本地路径。'],
   failureRecovery: ['未配置目标目录时提示用户先配置；部分文件失败时返回失败节点，不猜测或改写其它目录。'],
   inputSchema: z.object({
-    projectId: z.string().min(1),
+    projectId: canvasDocumentIdSchema,
     nodeIds: z.array(z.string().min(1)).min(1).max(50),
     destination: canvasDownloadDestinationSchema,
   }).strict(),
   outputSchema: capabilityOutputSchema({
-    projectId: z.string().min(1),
+    projectId: canvasDocumentIdSchema,
     requestedCount: z.number().int().nonnegative(),
     savedNodeIds: z.array(z.string()),
     failedNodeIds: z.array(z.string()),

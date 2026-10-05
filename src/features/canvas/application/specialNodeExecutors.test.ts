@@ -11,6 +11,7 @@ import { CANVAS_NODE_TYPES, type CanvasNodeType } from '../domain/canvasNodes'
 import { createDefaultMultiAngleConfig } from '../capabilities/multiAnglePolicy'
 import { runCanvasNode, resetCanvasExecutionServiceForTests } from './canvasExecutionService'
 import { readPersistedCanvasProjectSnapshot } from './canvasQueryService'
+import { createCanvasTestProject } from '@/tests/canvasProjectFixture'
 
 vi.mock('./imageData', async original => ({
   ...await original<typeof import('./imageData')>(),
@@ -31,8 +32,7 @@ beforeAll(async () => { await loadRealModelsIntoRegistry() })
 beforeEach(async () => {
   installHarnessNativeStorage()
   resetCanvasExecutionServiceForTests()
-  await useProjectStore.getState().hydrate()
-  projectId = await useProjectStore.getState().createProject('专用节点 B')
+  projectId = await createCanvasTestProject('专用节点 B')
   useSettingsStore.setState({ providerKeyStatus: Object.fromEntries(registry.getModelsByType('image').map(model => [model.meta.provider, true])) })
   vi.spyOn(GenerationService.getInstance(), 'getProgressEstimate').mockResolvedValue(null)
   vi.spyOn(GenerationService.getInstance(), 'generate').mockResolvedValue({ status: 'pending', url: '', taskId: 'provider-original' })
@@ -60,7 +60,7 @@ it.each([CANVAS_NODE_TYPES.multiAngleGen, CANVAS_NODE_TYPES.relightGen, CANVAS_N
       await new Promise<void>(resolve => { finish = resolve })
       return { status: 'completed', url: 'C:/result.png', filePath: 'C:/result.png' }
     })
-    const visibleId = await useProjectStore.getState().createProject('用户 A')
+    const visibleId = await createCanvasTestProject('用户 A')
     const running = runCanvasNode(nodeId, undefined, projectId)
     await vi.waitFor(() => expect(finish).toBeTypeOf('function'))
     expect(useProjectStore.getState().currentProjectId).toBe(visibleId)

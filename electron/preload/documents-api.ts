@@ -25,6 +25,8 @@ export function createDocumentsApi(invoke: NativeInvoke): DocumentsPlatform {
     getDocumentCover: (docId) => invoke(c.getDocumentCover, { docId }),
     saveDocumentCover: (request) => invoke(c.saveDocumentCover, request),
     refreshIndex: () => invoke(c.refreshIndex),
+    readSessionState: (request) => invoke(c.readSessionState, request),
+    writeSessionState: (request) => invoke(c.writeSessionState, request),
     listProjects: (query) => invoke(c.listProjects, query),
     createProject: (request) => invoke(c.createProject, request),
     renameProject: (request) => invoke(c.renameProject, request),

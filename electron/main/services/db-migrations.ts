@@ -11,7 +11,14 @@ import { createCameraStageRenderTaskTableV1 } from './camera-stage-render-task-s
 import { createCustomModelsTableV1 } from './custom-models-schema'
 import { createDocumentIndexSchemaV1 } from './documents/index-schema'
 import { createGenerationHistoryTablesV1, generationHistoryNeedsBackup } from './generation-history/schema'
-import { audioEditProjectsNeedBackup, cameraStageProjectsNeedBackup, retireAudioEditProjectsV1, retireCameraStageProjectsV1 } from './legacy-project-tables'
+import {
+  audioEditProjectsNeedBackup,
+  cameraStageProjectsNeedBackup,
+  canvasProjectsNeedBackup,
+  retireAudioEditProjectsV1,
+  retireCameraStageProjectsV1,
+  retireCanvasProjectsV1,
+} from './legacy-project-tables'
 import { createMainLogger, type MainLogger } from './logging/main-logger'
 import { createModelTraceTablesV1 } from './logging/traceSchema'
 import { createPresetsTableV1 } from './presets/schema'
@@ -36,9 +43,8 @@ import { storedLocationsNeedBackup, upgradeStoredLocationsV1 } from './stored-lo
  * 2.3 之前的库没有账本里的第 2 项起：这些迁移用 `IF NOT EXISTS` 建表并补齐当时散写的补列，
  * 已有的表与数据原样保留，就地进入账本。
  *
- * 不在账本里的只有即将被文档文件取代的工程表（画布两张、口播及其任务表），
- * 由 db.ts 的 initializeLegacyProjectTables 维持原样，在 3.x 各工具接入时连同表一起删除
- * （删除写成账本里的退役迁移，见 legacy-project-tables.ts；镜头参考已在 3.2 退役，第 15 项）。
+ * 被文档文件取代的旧工程表（镜头参考、口播、画布）已在 3.x 各工具接入时用退役迁移删除
+ * （legacy-project-tables.ts，第 15–17 项）；此后 henji.db 的全部表都由本账本管理。
  */
 
 export interface SchemaMigrationContext {
@@ -77,6 +83,8 @@ export const SCHEMA_MIGRATIONS: readonly SchemaMigration[] = [
   { version: 15, name: 'retire_camera_stage_projects', up: retireCameraStageProjectsV1, backupWhen: cameraStageProjectsNeedBackup },
   // 3.3 口播接入文档文件：删旧工程表，处理任务表重建为按文档 ID 归属（旧回执清空，不迁移内容）
   { version: 16, name: 'retire_audio_edit_projects', up: retireAudioEditProjectsV1, backupWhen: audioEditProjectsNeedBackup },
+  // 3.4 画布接入文档文件：删两张旧画布工程表（不迁移内容）；此后 henji.db 的全部表都由账本管理
+  { version: 17, name: 'retire_canvas_projects', up: retireCanvasProjectsV1, backupWhen: canvasProjectsNeedBackup },
 ]
 
 export const SCHEMA_MIGRATIONS_TABLE = 'schema_migrations'

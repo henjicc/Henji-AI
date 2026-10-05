@@ -1,18 +1,12 @@
 import '@/tests/imageEditDocumentFixture';
-import { setCanvasTestProjectState } from '@/tests/canvasProjectFixture';
+import { canvasTestRegistry, registerCanvasTestProject, seedCanvasTestProject, setCanvasTestProjectState } from '@/tests/canvasProjectFixture';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   deleteIfRevision: vi.fn(),
-  listProjects: vi.fn(),
-  getProject: vi.fn(),
   collectGarbage: vi.fn(),
 }))
 
-vi.mock('@/commands/projectState', async (importOriginal) => ({
-  ...await importOriginal<typeof import('@/commands/projectState')>(),
-  listProjectSummaries: mocks.listProjects, getProjectRecord: mocks.getProject,
-}))
 
 vi.mock('@/commands/imageEditorV3', async (importOriginal) => ({
   ...await importOriginal<typeof import('@/commands/imageEditorV3')>(),
@@ -24,8 +18,7 @@ vi.mock('@/platform/runtime', () => ({
 }))
 
 import { useCanvasStore } from '@/stores/canvasStore';
-import { registerCanvasProjectInstance, requireCanvasProjectInstance } from './canvasProjectInstances'
-import { toProjectRecord } from '@/stores/projectStoreSerialization'
+import { requireCanvasProjectInstance } from './canvasProjectInstances'
 import { CANVAS_NODE_TYPES, type CanvasNode } from '../domain/canvasNodes'
 
 import { createMultiLayerDocumentLifecyclePort, maintainMultiLayerDocumentReleaseCandidates, resetMultiLayerDocumentLifecycleForTests } from './multiLayerDocumentLifecycleService';
@@ -41,8 +34,6 @@ const session = {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  mocks.listProjects.mockReset().mockResolvedValue([])
-  mocks.getProject.mockReset()
   resetMultiLayerDocumentLifecycleForTests()
   useCanvasStore.getState().setCanvasData([], [], { past: [], future: [] })
   setCanvasTestProjectState({
@@ -67,7 +58,7 @@ describe('多图层文档候选清理', () => {
   it('后台工程仍被另一工程的撤销历史引用时保留，历史释放后才清理', async () => {
     const node = { id: 'retained', type: CANVAS_NODE_TYPES.layerStackResult, position: { x: 0, y: 0 },
       data: { resultKind: 'layer-stack', imageUrl: session.sourceUrl, imageEditSession: session } } as CanvasNode
-    const other = registerCanvasProjectInstance({ ...requireCanvasProjectInstance(projectId).snapshot(), id: 'other',
+    const other = registerCanvasTestProject({ ...requireCanvasProjectInstance(projectId).snapshot(), id: 'other',
       history: { past: [{ nodes: [node], edges: [] }], future: [] } })
     mocks.deleteIfRevision.mockResolvedValue({ deleted: true })
     await createMultiLayerDocumentLifecyclePort().markReleaseCandidate({ projectId, nodeId: 'deleted-node', session })
@@ -77,16 +68,17 @@ describe('多图层文档候选清理', () => {
     expect(mocks.deleteIfRevision).toHaveBeenCalledOnce()
   })
 
-  it('未加载工程的保存记录及其撤销历史也保留文档；读取失败不删除', async () => {
+  it('没打开的画布的文件及其撤销记录也保留文档；读取失败不删除', async () => {
     const node = { id: 'retained', type: CANVAS_NODE_TYPES.layerStackResult, position: { x: 0, y: 0 },
       data: { resultKind: 'layer-stack', imageUrl: session.sourceUrl, imageEditSession: session } } as CanvasNode
-    const record = toProjectRecord({ ...requireCanvasProjectInstance(projectId).snapshot(), id: 'unopened',
-      history: { past: [], future: [{ nodes: [node], edges: [] }] } })
-    mocks.listProjects.mockResolvedValue([{ id: 'unopened' }])
-    mocks.getProject.mockResolvedValue(record)
+    // 没打开的画布：文件里没有这个节点，但它的撤销记录（程序目录会话状态）里还引用着这份文档
+    seedCanvasTestProject({ id: 'unopened', name: '未打开', nodes: [], edges: [] })
+    const { commands } = canvasTestRegistry()
+    await commands.writeSessionState({ docId: 'unopened', key: 'canvas.history', value: {
+      revision: commands.stored('unopened')!.meta.revision, history: { past: [], future: [{ nodes: [node], edges: [] }] } } })
     await createMultiLayerDocumentLifecyclePort().markReleaseCandidate({ projectId, nodeId: 'deleted-node', session })
     expect(mocks.deleteIfRevision).not.toHaveBeenCalled()
-    mocks.getProject.mockRejectedValueOnce(new Error('read unavailable'))
+    vi.spyOn(commands, 'readDocument').mockRejectedValueOnce(new Error('read unavailable'))
     await maintainMultiLayerDocumentReleaseCandidates(projectId)
     expect(mocks.deleteIfRevision).not.toHaveBeenCalled()
   })

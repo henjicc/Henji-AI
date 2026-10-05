@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+import { canvasDocumentIdSchema } from './canvasDocumentId'
+
 import type { ApplicationCapabilityDefinition } from '../../applicationCapabilities'
 import type { ApplicationObservedEffect } from '../../observedEffect'
 import {
@@ -155,7 +157,7 @@ const planCanvasBatch = defineApplicationCapability({
   acceptsRefs: ['canvas.project', 'canvas.node', 'canvas.edge'],
   producesRefs: ['canvas.batch_plan'],
   inputSchema: z.object({
-    projectId: z.string().min(1),
+    projectId: canvasDocumentIdSchema,
     operations: z.array(canvasBatchOperationSchema).min(1).max(20),
   }).strict(),
   outputSchema: capabilityOutputSchema({

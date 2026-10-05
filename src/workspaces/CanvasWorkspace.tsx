@@ -1,20 +1,22 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { ReactFlowProvider } from '@xyflow/react';
 import { useTranslation } from 'react-i18next';
 import { UiButton, UiError, UiLoading, UiPanel } from '@/components/ui';
 import { Canvas } from '@/features/canvas/Canvas';
 import { updateCanvasProjectCover } from '@/features/canvas/application/canvasProjectCover';
 import { useCanvasProjectCoverAutosave } from '@/features/canvas/application/useCanvasProjectCoverAutosave';
-import { ProjectManager } from '@/features/project/ProjectManager';
+import { CanvasLibrary } from '@/features/canvas/projects/CanvasLibrary';
 import { useProjectStore } from '@/stores/projectStore';
 import '@/features/canvas/storyboard.css';
 import { isUiInspectionReadOnly } from '@/platform/runtime';
 import { confirmCanvasPersistence } from '@/features/canvas/application/canvasPersistenceService';
 
+/**
+ * 画布工作区：“画布列表 ↔ 画布”两级视图（3.4 起画布是 `.henji-canvas` 文档）。
+ * 返回列表走通用离开流程：已保存的写完关闭，草稿询问“保存 / 不保存 / 取消”，取消留在画布上。
+ */
 const CanvasWorkspace = (): JSX.Element => {
   const { t } = useTranslation();
-  const isHydrated = useProjectStore((state) => state.isHydrated);
-  const hydrate = useProjectStore((state) => state.hydrate);
   const currentProjectId = useProjectStore((state) => state.currentProjectId);
   const isOpeningProject = useProjectStore((state) => state.isOpeningProject);
   const openError = useProjectStore((state) => state.openError);
@@ -25,24 +27,17 @@ const CanvasWorkspace = (): JSX.Element => {
 
   useCanvasProjectCoverAutosave(currentProjectId);
 
-  useEffect(() => {
-    void hydrate();
-  }, [hydrate]);
-
   /**
-   * 退出项目前先更新封面。必须等封面拿到再 closeProject——
-   * 没有生成结果时封面走节点区域截图，画布一旦卸载就只能截到项目列表本身。
+   * 返回列表前先更新封面。必须在离开前截——
+   * 没有生成结果时封面走节点区域截图，画布一旦卸载就只能截到列表本身。
    */
   const handleBackToProjects = useCallback(async (): Promise<void> => {
     if (isLeavingProject) return;
     const projectId = useProjectStore.getState().currentProjectId;
     setIsLeavingProject(true);
     try {
-      try {
-        if (projectId && !inspectionReadOnly) await updateCanvasProjectCover(projectId);
-      } finally {
-        await closeProject();
-      }
+      if (projectId && !inspectionReadOnly) await updateCanvasProjectCover(projectId);
+      await closeProject();
     } catch {
       // store 已记录并公开保存错误；留在画布上，避免误导用户以为已经安全退出。
     } finally {
@@ -53,11 +48,9 @@ const CanvasWorkspace = (): JSX.Element => {
   return (
     <ReactFlowProvider>
       <div className="h-full min-h-0 w-full bg-window text-text1">
-        {!isHydrated && <UiLoading className="h-full" message={t('common.loading')} />}
+        {!currentProjectId && !isOpeningProject && <CanvasLibrary />}
 
-        {isHydrated && !currentProjectId && !isOpeningProject && <ProjectManager />}
-
-        {isHydrated && (currentProjectId || isOpeningProject) && (
+        {(currentProjectId || isOpeningProject) && (
           <div className="relative h-full w-full bg-canvas" aria-busy={isOpeningProject}>
             {/* 截封面期间隐藏自己：它悬在画布上，留着会被一起截进节点区域封面里 */}
             {!isLeavingProject && (

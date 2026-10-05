@@ -170,7 +170,7 @@ describe('cameraStageRenderApplicationService', () => {
 
     await startCameraStageNodeRender('node-1', 'image');
 
-    expect(mocks.createProject).toHaveBeenCalledWith('镜头');
+    expect(mocks.createProject).toHaveBeenCalledWith('镜头', undefined);
     expect(mocks.start).toHaveBeenCalledWith(expect.objectContaining({
       cameraStageDocumentId: 'stage-created',
     }));

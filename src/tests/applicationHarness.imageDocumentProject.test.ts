@@ -1,16 +1,15 @@
 // @vitest-environment jsdom
-import '@/tests/canvasProjectFixture'
+import { createCanvasTestProject, readCanvasTestProject } from '@/tests/canvasProjectFixture'
 import '@/tests/imageEditDocumentFixture'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { createAttachedImageEditPersistenceFixture } from './imageEditAttachedPersistenceFixture'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from './harnessNativeStorage'
 import { createApplicationHarness } from './applicationHarness'
-import { requireCanvasProjectInstance } from '@/features/canvas/application/canvasProjectInstances'
+import { findCanvasProjectInstance, leaveCanvasProject, requireCanvasProjectInstance } from '@/features/canvas/application/canvasProjectInstances'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useProjectStore } from '@/stores/projectStore'
 import { imageEditV3LayerRef } from '@/features/imageEdit/v3/application/imageEditDocumentRefs'
 import { deleteIdleImageEditDocumentV3, requireImageEditDocumentInstanceV3 } from '@/features/imageEdit/v3/application/imageEditDocumentInstances'
-import { getProjectRecord } from '@/commands/projectState'
 import * as canvasQueries from '@/features/canvas/application/canvasQueryService'
 import { CANVAS_NODE_TYPES } from '@/features/canvas/domain/canvasNodes'
 import { createImageEditRasterLayerV3 } from '@/core/imageEdit/v3/documentFactory'
@@ -38,7 +37,7 @@ async function setup() {
     await gate
     return original(input)
   })
-  const visibleProject = await useProjectStore.getState().createProject('正在编辑 A')
+  const visibleProject = await createCanvasTestProject('正在编辑 A')
   const visibleStore = requireCanvasProjectInstance(visibleProject).store
   return { ...fixture, finish, started: () => started, visibleProject, visibleStore }
 }
@@ -57,26 +56,23 @@ it('正式公共修改在编辑 A 时保存 B 的图片文档和节点投影，�
   expect(useCanvasStore.getState().nodes).toBe(visibleNodes)
   const background = requireCanvasProjectInstance(state.projectId).store.getState()
   expect(background.nodes[0].data.imageEditSession).toMatchObject({ revision: 1 })
-  expect(JSON.parse((await getProjectRecord(state.projectId))!.nodesJson)[0].data.imageEditSession.revision).toBe(1)
+  expect(readCanvasTestProject(state.projectId)!.nodes[0].data.imageEditSession.revision).toBe(1)
   expect(state.materialize).toHaveBeenCalledTimes(1)
   expect(state.bus.getSnapshot().history.undoCount).toBe(1)
 })
 
-it('工程删除等待图片物化和原工程投影保存，关闭页面不撤销文档修改', async () => {
+it('离开画布不等图片物化：原画布投影照常保存，任务结束后才关闭，不撤销文档修改', async () => {
   const state = await setup()
-  state.bus.dispatch({ type: 'layer.update-common', commandId: 'before-delete', expectedRevision: 0,
+  state.bus.dispatch({ type: 'layer.update-common', commandId: 'before-leave', expectedRevision: 0,
     layerId: 'effect', patch: { opacity: 0.3 } })
   const owner = requireImageEditDocumentInstanceV3(state.document.id).persistenceOwner!
   const pending = owner.confirm(true)
   await vi.waitFor(() => expect(state.started()).toBe(true))
-  let deleted = false
-  const deleting = useProjectStore.getState().deleteProject(state.projectId).then(() => { deleted = true })
-  await Promise.resolve()
-  expect(deleted).toBe(false)
+  expect(await leaveCanvasProject(state.projectId)).toBe('closed')
   state.finish()
   await expect(pending).resolves.toMatchObject({ documentId: state.document.id, revision: 1 })
-  await deleting
-  expect(await getProjectRecord(state.projectId)).toBeNull()
+  await vi.waitFor(() => expect(findCanvasProjectInstance(state.projectId)).toBeUndefined())
+  expect(readCanvasTestProject(state.projectId)!.nodes[0].data.imageEditSession.revision).toBe(1)
   expect(state.bus.getSnapshot().document.layers[0].opacity).toBe(0.3)
   expect(useProjectStore.getState().currentProjectId).toBe(state.visibleProject)
 })

@@ -19,7 +19,7 @@ import { registerDocumentsIpc } from './documents'
 const METHODS: Array<keyof DocumentsPlatform> = [
   'listDocuments', 'readDocument', 'createDocument', 'saveDocument', 'renameDocument', 'finalizeDocument', 'moveDocument',
   'duplicateDocument', 'trashDocument', 'deleteEmptyDraft', 'forgetDocument', 'revealDocument', 'resolveDocumentLink', 'checkName',
-  'getDocumentCover', 'saveDocumentCover', 'refreshIndex', 'listProjects', 'createProject', 'renameProject', 'finalizeProject',
+  'getDocumentCover', 'saveDocumentCover', 'refreshIndex', 'readSessionState', 'writeSessionState', 'listProjects', 'createProject', 'renameProject', 'finalizeProject',
   'trashProject', 'registerExternalProject', 'forgetExternalLocation', 'revealProject',
 ]
 
@@ -60,6 +60,8 @@ describe('文档底座 IPC 契约（preload 桥 → 主进程校验 → Document
       ['getDocumentCover', ['doc-1'], ['doc-1']],
       ['saveDocumentCover', [{ docId: 'doc-1', sources: [{ source: 'a.png', sourceKind: 'image' }] }], [{ docId: 'doc-1', sources: [{ source: 'a.png', sourceKind: 'image' }] }]],
       ['refreshIndex', [], []],
+      ['readSessionState', [{ docId: 'doc-1', key: 'canvas.viewport' }], [{ docId: 'doc-1', key: 'canvas.viewport' }]],
+      ['writeSessionState', [{ docId: 'doc-1', key: 'canvas.viewport', value: { x: 1 } }], [{ docId: 'doc-1', key: 'canvas.viewport', value: { x: 1 } }]],
       ['listProjects', [undefined], [{}]],
       ['createProject', [undefined], [{}]],
       ['renameProject', [{ projectId: 'p1', name: '新' }], [{ projectId: 'p1', name: '新' }]],
@@ -85,7 +87,8 @@ describe('文档底座 IPC 契约（preload 桥 → 主进程校验 → Document
     await expect(bridge.trashProject('')).rejects.toThrow()
     await expect(bridge.moveDocument({ target: { id: 'a' }, container: { kind: 'project' } } as never)).rejects.toThrow()
     await expect(bridge.saveDocumentCover({ docId: 'a', sources: [] })).rejects.toThrow()
-    for (const method of ['saveDocument', 'createDocument', 'readDocument', 'trashProject', 'moveDocument', 'saveDocumentCover'] as const) {
+    await expect(bridge.readSessionState({ docId: 'a', key: '../escape' })).rejects.toThrow()
+    for (const method of ['saveDocument', 'createDocument', 'readDocument', 'trashProject', 'moveDocument', 'saveDocumentCover', 'readSessionState'] as const) {
       expect(mock.service[method]).not.toHaveBeenCalled()
     }
   })
