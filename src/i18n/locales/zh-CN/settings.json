@@ -3,6 +3,13 @@
   "title": "设置",
   "language": "语言",
   "theme": "主题",
+  "search": {
+    "placeholder": "搜索设置",
+    "clear": "清除搜索",
+    "empty": "没有匹配的设置",
+    "emptyHint": "换个说法试试，例如：密钥、汇率、快捷键。",
+    "resultsLabel": "搜索结果"
+  },
   "navSections": {
     "general-basic": "语言与启动",
     "general-view": "查看与快捷键",

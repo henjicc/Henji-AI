@@ -3,6 +3,13 @@
   "title": "Settings",
   "language": "Language",
   "theme": "Theme",
+  "search": {
+    "placeholder": "Search settings",
+    "clear": "Clear search",
+    "empty": "No matching settings",
+    "emptyHint": "Try other words, such as: API key, exchange rate, shortcuts.",
+    "resultsLabel": "Search results"
+  },
   "navSections": {
     "general-basic": "Language & Startup",
     "general-view": "Viewing & Shortcuts",

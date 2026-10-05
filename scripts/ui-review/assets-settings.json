@@ -1038,6 +1038,33 @@
         "capture": "general-top"
       },
       {
+        "fill": {
+          "target": {
+            "role": "textbox",
+            "name": "搜索设置"
+          },
+          "text": "下载"
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "search"
+      },
+      {
+        "fill": {
+          "target": {
+            "role": "textbox",
+            "name": "搜索设置"
+          },
+          "text": ""
+        }
+      },
+      {
+        "wait": 300
+      },
+      {
         "hover": {
           "role": "button",
           "name": "供应商与模型",

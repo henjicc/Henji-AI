@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
   UI_GLASS_ADAPTIVE_DIVIDER_CLASS,
   UI_GLASS_ADAPTIVE_REGION_CLASS,
@@ -7,6 +7,7 @@ import {
   UiIconButton,
   UiModal,
   UiNavButton,
+  UiSearchInput,
 } from '@/components/ui'
 import { UI_DIALOG_TRANSITION_MS } from '@/components/ui/motion'
 import { Bot, FolderOpen, KeyRound, LayoutGrid, Package, Settings2, X } from 'lucide-react'
@@ -17,6 +18,8 @@ import FilesTab from './tabs/FilesTab'
 import AssistantTab from './tabs/AssistantTab'
 import SkillsTab from './tabs/SkillsTab'
 import { useSettingsScrollSpy } from './hooks/useSettingsScrollSpy'
+import SettingsSearchResults from './components/SettingsSearchResults'
+import { searchSettings, type SettingsSearchResult } from './settingsSearchIndex'
 import { useI18n } from '@/hooks/useI18n'
 import { useUiStore } from '@/stores/uiStore'
 import { resolveSettingsSurfaceId } from '@/features/navigation/application/surfaceCatalog'
@@ -39,6 +42,19 @@ const SECTION_MAP: Record<SettingsTab, readonly string[]> = SETTINGS_TAB_SECTION
 
 /** 切换大类后，异步加载的分区（密钥状态、LLM 配置）会改变上方高度，需要补一次定位 */
 const DEEP_LINK_RESCROLL_MS = 320
+/** 搜索结果跳转：等分区补位定位结束后，再把那一行滚到中间并短暂高亮 */
+const SEARCH_ROW_FOCUS_MS = DEEP_LINK_RESCROLL_MS + 80
+const SEARCH_ROW_HIGHLIGHT_MS = 1600
+const SEARCH_ROW_HIGHLIGHT_CLASS = 'text-accent-text'
+
+/** 在内容区里找到文字等于标签的那个最内层元素（设置行的标签） */
+function findSettingsRowLabel(container: HTMLElement, label: string): HTMLElement | null {
+  const candidates = container.querySelectorAll<HTMLElement>('label, span, div, p, button, h3, h4')
+  for (const element of candidates) {
+    if (element.childElementCount === 0 && element.textContent?.trim() === label) return element
+  }
+  return null
+}
 
 const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, target }) => {
   const { t } = useI18n('settings')
@@ -98,6 +114,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, target }) => {
   ]
 
   const ActiveTabComponent = tabs.find(tab => tab.id === activeTab)?.component
+
+  // 设置搜索：有关键词时内容区换成结果列表，点一条跳到对应分区并把那一行滚到中间
+  const [query, setQuery] = useState('')
+  const searchResults = useMemo(() => searchSettings(query, (key) => t(key)), [query, t])
   // 分区与 Surface 的对应关系只在 surfaceCatalog 维护，这里不再复制一份映射表，
   // 否则新增设置分区会通过能力门禁却观察到错误的 Surface。
   const activeSurfaceId = resolveSettingsSurfaceId(activeTab, activeSectionId) ?? undefined
@@ -164,6 +184,25 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, target }) => {
     [activeTab, scrollToSection]
   )
 
+  const rowFocusTimerRef = useRef<number | null>(null)
+  useEffect(() => () => {
+    if (rowFocusTimerRef.current) window.clearTimeout(rowFocusTimerRef.current)
+  }, [])
+  const handleSearchSelect = useCallback((result: SettingsSearchResult): void => {
+    setQuery('')
+    // 先让结果列表换回分区内容（同一帧里分区还没挂载，定位不到），下一帧再跳
+    window.requestAnimationFrame(() => handleSectionSelect(result.tab, result.entry.sectionId))
+    if (rowFocusTimerRef.current) window.clearTimeout(rowFocusTimerRef.current)
+    rowFocusTimerRef.current = window.setTimeout(() => {
+      rowFocusTimerRef.current = null
+      const row = contentElement ? findSettingsRowLabel(contentElement, result.label) : null
+      if (!row) return
+      row.scrollIntoView({ block: 'center', behavior: 'smooth' })
+      row.classList.add(SEARCH_ROW_HIGHLIGHT_CLASS)
+      window.setTimeout(() => row.classList.remove(SEARCH_ROW_HIGHLIGHT_CLASS), SEARCH_ROW_HIGHLIGHT_MS)
+    }, SEARCH_ROW_FOCUS_MS)
+  }, [contentElement, handleSectionSelect])
+
   useEffect(() => {
     if (!target) return
     const key = `${target.tab}:${target.sectionId ?? ''}`
@@ -213,6 +252,23 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, target }) => {
             aria-label={t('title')}
             className={`w-52 shrink-0 overflow-y-auto border-r p-2 ${UI_GLASS_ADAPTIVE_DIVIDER_CLASS} ${UI_GLASS_ADAPTIVE_SURFACE_CLASS}`}
           >
+            <UiSearchInput
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              onClear={() => setQuery('')}
+              clearLabel={t('search.clear')}
+              placeholder={t('search.placeholder')}
+              aria-label={t('search.placeholder')}
+              className="mb-2"
+              onKeyDown={(event) => {
+                // 有关键词时 Esc 先清空搜索，不关闭设置
+                if (event.key === 'Escape' && query) {
+                  event.stopPropagation()
+                  setQuery('')
+                }
+                if (event.key === 'Enter' && searchResults[0]) handleSearchSelect(searchResults[0])
+              }}
+            />
             <div className="space-y-1">
               {tabs.map(tab => {
                 const sections = SECTION_MAP[tab.id]
@@ -252,9 +308,17 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, target }) => {
           </nav>
 
           <div ref={setContentElement} className="settings-scroll-body min-w-0 flex-1 overflow-y-auto">
-            {ActiveTabComponent && <ActiveTabComponent />}
-            {/* 没有这段占位，最后一个分节永远滚不到顶，点目录最后一项会像「没反应」 */}
-            <div aria-hidden style={{ height: tailSpacerHeight }} />
+            {query.trim() ? (
+              <div className="mx-auto max-w-3xl px-4 pb-4 pt-5">
+                <SettingsSearchResults results={searchResults} onSelect={handleSearchSelect} />
+              </div>
+            ) : (
+              <>
+                {ActiveTabComponent && <ActiveTabComponent />}
+                {/* 没有这段占位，最后一个分节永远滚不到顶，点目录最后一项会像「没反应」 */}
+                <div aria-hidden style={{ height: tailSpacerHeight }} />
+              </>
+            )}
           </div>
         </div>
       </div>

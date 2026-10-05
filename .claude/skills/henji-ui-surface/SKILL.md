@@ -401,7 +401,7 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 
 新增设置先问"用户会在哪个页面遇到这件事"，放进对应分区；同一件事不得拆在两个大类。
 新增分区要同时登记 `SETTINGS_TAB_SECTIONS`、`surfaceCatalog.ts` 的 Surface、文案 `navSections`，
-助手可写属性的 `target` 指向新分区。
+助手可写属性的 `target` 指向新分区。新增一行设置还要在 `src/components/Settings/settingsSearchIndex.ts` 登记一条，设置搜索才搜得到。
 
 页内写法统一：
 
