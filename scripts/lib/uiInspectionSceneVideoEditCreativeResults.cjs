@@ -59,7 +59,7 @@ function createVideoEditCreativeResultsScene(context) {
         const read = await callTool(client, 'read_application_entity', { ref: projectRef, propertyIds: ['video_edit.project.program_playback'] })
         await callTool(client, 'change_application_entities', operationEnvelope([read], { summary: '定位回填播放头', changes: [{ kind: 'set_properties', entityType: 'video_edit.project', target: projectRef, properties: { 'video_edit.project.program_playback': { frame, playing: false, playbackDirection: 1 } } }] }))
       }
-      const openEdit = async () => { await button(page, '剪辑').first().click(); await button(page, '关闭工程').or(button(page, '打开工程')).first().waitFor({ state: 'visible', timeout: 30000 }) }
+      const openEdit = async () => { await button(page, '剪辑').first().click(); await button(page, '关闭项目').or(button(page, '打开项目文件')).first().waitFor({ state: 'visible', timeout: 30000 }) }
       try {
         evidence.display = await app.evaluate(({ BrowserWindow, screen }, { point, hostContentsId }) => {
           const host = (BrowserWindow.getAllWindows().find(window => window.webContents.id === hostContentsId) ?? BrowserWindow.getAllWindows()[0])
@@ -109,9 +109,9 @@ function createVideoEditCreativeResultsScene(context) {
         const stage = { canvasId: stageCanvasId, resultNodeId: stageResultId }
         evidence.timings.cameraStageRenderMs = performance.now() - renderAt
         phase('open-project')
-        await openEdit(); if (await button(page, '关闭工程').isVisible()) await button(page, '关闭工程').click()
+        await openEdit(); if (await button(page, '关闭项目').isVisible()) await button(page, '关闭项目').click()
         await observeWorkers(page); observed = true
-        await dialogs(app, [file], file); await button(page, '打开工程').click(); await presented(page, 0)
+        await dialogs(app, [file], file); await button(page, '打开项目文件').click(); await presented(page, 0)
         const identity = await authorizeMcpConnection(page, { name: '创作结果回填验收', allowWrites: true }); client = await connectMcpClient(identity.config, 'Henji creative results Reality')
         evidence.trackBanks = await trackBanks(page)
 
@@ -221,8 +221,8 @@ function createVideoEditCreativeResultsScene(context) {
 
         phase('reopen-export')
         await openEdit(); const persisted = readProject(file)
-        await button(page, '关闭工程').click(); await waitReleased(page)
-        await dialogs(app, [file], file); await button(page, '打开工程').click(); await presented(page, 0)
+        await button(page, '关闭项目').click(); await waitReleased(page)
+        await dialogs(app, [file], file); await button(page, '打开项目文件').click(); await presented(page, 0)
         const reopened = readProject(file); assert.deepEqual(reopened.sequences[0].clips, persisted.sequences[0].clips)
         await playhead(300); await presented(page, 300)
         const reopenedFrame = await png(page, path.join(root, 'program-300-reopened.png'))
@@ -239,7 +239,7 @@ function createVideoEditCreativeResultsScene(context) {
         assert.ok(evidence.export.frame300.psnr === null || evidence.export.frame300.psnr >= 30, JSON.stringify(evidence.export.frame300))
         evidence.phases.push('保存重开片段与画面一致；4K60整条时间线/48k双声道成片含全部回填结果'); await shot('creative-results-reopened-4k60')
 
-        await button(page, '关闭工程').click(); await waitReleased(page)
+        await button(page, '关闭项目').click(); await waitReleased(page)
         const now = fs.statSync(ORIGINAL); assert.equal(now.size, original.size); assert.equal(now.mtimeMs, original.mtimeMs)
         evidence.resources = await workerSnapshot(page); assert.equal(evidence.resources.live, 0)
         evidence.originalUnchanged = true; evidence.completed = true; store()
@@ -247,7 +247,7 @@ function createVideoEditCreativeResultsScene(context) {
       finally {
         await client?.close().catch(() => {}); await disableMcp(page).catch(() => {})
         if (audioProjectId) await page.evaluate(id => window.henjiNative.audio.deleteEditProject(id), audioProjectId).catch(() => {})
-        if (await button(page, '关闭工程').isVisible().catch(() => false)) await button(page, '关闭工程').click().catch(() => {})
+        if (await button(page, '关闭项目').isVisible().catch(() => false)) await button(page, '关闭项目').click().catch(() => {})
         if (observed) { await waitReleased(page).catch(error => { evidence.completed = false; evidence.releaseFailure = String(error) }); evidence.resources = await workerSnapshot(page).catch(() => evidence.resources) }
         await page.evaluate(() => { window.__videoLayoutObservers?.forEach(observer => observer.disconnect()); if (window.__videoLayoutNativeWorker) window.Worker = window.__videoLayoutNativeWorker }).catch(() => {}); store()
       }

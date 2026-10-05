@@ -161,7 +161,7 @@ function createVideoEditFormatMatrixScene() {
         assert.equal(status.forcedBackend ?? null, forced, '诊断变量未经平台层传到渲染层')
         if (forced !== 'browser') assert.equal(status.available, true, '本机原生解码服务应可用')
         await button(page, '剪辑').first().click()
-        if (await button(page, '关闭工程').isVisible()) await button(page, '关闭工程').click()
+        if (await button(page, '关闭项目').isVisible()) await button(page, '关闭项目').click()
         previousLayout = await page.evaluate(() => localStorage.getItem('henji.videoEdit.dockLayout.v1'))
         await page.evaluate(() => localStorage.removeItem('henji.videoEdit.dockLayout.v1'))
         const identity = await authorizeMcpConnection(page, { name: '格式矩阵验收', allowWrites: true })
@@ -181,7 +181,7 @@ function createVideoEditFormatMatrixScene() {
           const described = matrix.ensureSamples({ only: definitions.map(sample => sample.id) })
           await page.evaluate(dir => window.henjiNative.media.allowRoot(dir), matrix.ROOT)
           const importFile = path.join(ROOT, `import-${forced ?? 'auto'}-${Date.now()}.henji-video`)
-          await dialogs(app, [], importFile); await button(page, '新建工程').click()
+          await dialogs(app, [], importFile); await button(page, '新建项目').click()
           await saved(page, importFile, () => true, '新建工程未保存')
 
           for (const sample of described) {
@@ -191,8 +191,8 @@ function createVideoEditFormatMatrixScene() {
             const reference = sample.audio.length ? matrix.referenceStreams(sample.path, sample.audio, RATE) : []
             const fps = sample.video.fps
             // ---- 导入（每格回到同一个导入工程）
-            if (await button(page, '关闭工程').isVisible()) await button(page, '关闭工程').click()
-            await dialogs(app, [importFile], importFile); await button(page, '打开工程').click()
+            if (await button(page, '关闭项目').isVisible()) await button(page, '关闭项目').click()
+            await dialogs(app, [importFile], importFile); await button(page, '打开项目文件').click()
             await button(page, '导入').waitFor({ state: 'visible', timeout: 30000 })
             await page.waitForTimeout(300)
             const before = fs.readFileSync(importFile, 'utf8')
@@ -270,8 +270,8 @@ function createVideoEditFormatMatrixScene() {
             }
 
             evidence.currentPhase = `${sample.id}：节目监视器`; store()
-            if (await button(page, '关闭工程').isVisible()) await button(page, '关闭工程').click()
-            await dialogs(app, [projectFile], output); await button(page, '打开工程').click()
+            if (await button(page, '关闭项目').isVisible()) await button(page, '关闭项目').click()
+            await dialogs(app, [projectFile], output); await button(page, '打开项目文件').click()
             try { await presented(page, 0) } catch (error) { record.failedPrompt = await programPrompt(); await capture(`matrix-${sample.id}-open-failed`); throw error }
             const canvasData = () => page.locator('canvas[aria-label="剪辑画面"]').evaluate(canvas => ({ ...canvas.dataset, width: canvas.width, height: canvas.height }))
             exactAt(0, (await canvasData()).sourceTimestamps, '首帧')
@@ -471,7 +471,7 @@ function createVideoEditFormatMatrixScene() {
             }
             record.checks.export = true
             record.result = '通过'
-            if (await button(page, '关闭工程').isVisible()) await button(page, '关闭工程').click()
+            if (await button(page, '关闭项目').isVisible()) await button(page, '关闭项目').click()
             store()
             console.log(`[video-edit-format-matrix] ${sample.id} ${JSON.stringify({ backend: record.import.backend, psnr: record.pixels.map(value => value.psnrVsFfmpeg), forward: record.forward.updatesPerSecond, cores: record.forward.nativeCores, reverse: record.reverse.updatesPerSecond, source: record.source.forward.updatesPerSecond, exportMs: record.export.ms, audio: record.export.audio?.map(value => value.correlation) })}`)
             } catch (error) {
@@ -479,7 +479,7 @@ function createVideoEditFormatMatrixScene() {
               if (!(forced === 'browser' && sample.browser === null)) throw error
               record.result = `浏览器后备未通过：${String(error?.message ?? error).split(/\r?\n/)[0].slice(0, 200)}`; store()
               await button(page, '关闭源素材').click({ timeout: 5000 }).catch(() => {})
-              if (await button(page, '关闭工程').isVisible().catch(() => false)) await button(page, '关闭工程').click().catch(() => {})
+              if (await button(page, '关闭项目').isVisible().catch(() => false)) await button(page, '关闭项目').click().catch(() => {})
             }
           }
           // Back to the import project to leave a clean state.
@@ -491,9 +491,9 @@ function createVideoEditFormatMatrixScene() {
           const files = fs.readdirSync(TRIPO).filter(name => /\.(mp4|mov|mkv|mxf|webm)$/i.test(name)).map(name => path.join(TRIPO, name)).filter(file => fs.statSync(file).isFile()).sort()
           const stamp = Object.fromEntries(files.map(file => { const stat = fs.statSync(file); return [file, { size: stat.size, mtimeMs: stat.mtimeMs }] }))
           const tripoFile = path.join(ROOT, `tripo-${forced ?? 'auto'}-${Date.now()}.henji-video`)
-          if (await button(page, '关闭工程').isVisible()) await button(page, '关闭工程').click()
+          if (await button(page, '关闭项目').isVisible()) await button(page, '关闭项目').click()
           await page.evaluate(dir => window.henjiNative.media.allowRoot(dir), TRIPO)
-          await dialogs(app, [], tripoFile); await button(page, '新建工程').click(); await saved(page, tripoFile, () => true, 'Tripo 工程未保存')
+          await dialogs(app, [], tripoFile); await button(page, '新建项目').click(); await saved(page, tripoFile, () => true, 'Tripo 工程未保存')
           const importedAt = Date.now()
           await dialogs(app, files, tripoFile); await button(page, '导入').click()
           const project = await saved(page, tripoFile, value => value.media.length === files.length, `Tripo 素材未全部导入（${files.length} 个）`, 2400)
@@ -543,7 +543,7 @@ function createVideoEditFormatMatrixScene() {
           for (const file of files) { const stat = fs.statSync(file); assert.deepEqual({ size: stat.size, mtimeMs: stat.mtimeMs }, stamp[file], `${path.basename(file)} 不能被改动`) }
           evidence.tripo.unchanged = true
           await capture('matrix-tripo-project')
-          if (await button(page, '关闭工程').isVisible()) await button(page, '关闭工程').click()
+          if (await button(page, '关闭项目').isVisible()) await button(page, '关闭项目').click()
           store()
         }
         evidence.completed = true; delete evidence.currentPhase; store()
@@ -561,7 +561,7 @@ function createVideoEditFormatMatrixScene() {
         throw error
       } finally {
         if (client) await client.close().catch(() => {}); await disableMcp(page).catch(() => {})
-        if (await button(page, '关闭工程').isVisible().catch(() => false)) await button(page, '关闭工程').click().catch(() => {})
+        if (await button(page, '关闭项目').isVisible().catch(() => false)) await button(page, '关闭项目').click().catch(() => {})
         await page.evaluate(previous => { if (previous === null) localStorage.removeItem('henji.videoEdit.dockLayout.v1'); else if (typeof previous === 'string') localStorage.setItem('henji.videoEdit.dockLayout.v1', previous) }, previousLayout).catch(() => {})
         store()
       }

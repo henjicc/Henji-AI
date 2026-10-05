@@ -691,7 +691,7 @@
           "message": "This image could not be imported. Please try again."
         },
         "sourceMenu": {
-          "openFile": "Open from file",
+          "openFile": "Open image",
           "openPackage": "Open editable file",
           "paste": "Paste image from clipboard",
           "createBlank": "Create blank image",

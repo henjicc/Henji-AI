@@ -32,10 +32,10 @@ function createVideoEditOutputsScene({ canvasFixtureProjectId }) {
         }, { point: process.env.HENJI_DEV_DISPLAY_POINT, hostContentsId: await (await app.browserWindow(page)).evaluate((window) => window.webContents.id) })
         if (process.env.HENJI_DEV_DISPLAY_POINT) { assert.equal(evidence.display.id, evidence.display.preferredId); assert.equal(evidence.display.primary, false) }
         await button(page, '剪辑').click()
-        if (await button(page, '关闭工程').isVisible()) await button(page, '关闭工程').click()
+        if (await button(page, '关闭项目').isVisible()) await button(page, '关闭项目').click()
         await button(page, '生成').click(); previousLayout = await page.evaluate(() => localStorage.getItem('henji.videoEdit.dockLayout.v1'))
         await page.evaluate(() => localStorage.removeItem('henji.videoEdit.dockLayout.v1')); await observeWorkers(page); observed = true; await button(page, '剪辑').click()
-        await dialogs(app, [file], file); await button(page, '打开工程').click(); await presented(page, 0)
+        await dialogs(app, [file], file); await button(page, '打开项目文件').click(); await presented(page, 0)
         const identity = await authorizeMcpConnection(page, { name: '剪辑输出收录验收', allowWrites: true }); client = await connectMcpClient(identity.config, 'Henji output collection Reality')
         const projectRef = { kind: 'video_edit.project', id: fixture.id }
         const baseline = await callTool(client, 'read_application_entity', { ref: projectRef, propertyIds: ['video_edit.project.program_playback'] })
@@ -104,13 +104,13 @@ function createVideoEditOutputsScene({ canvasFixtureProjectId }) {
           assert.equal(normalized(fixedPath), normalized(asset.filePath))
           evidence.canvas.push({ assetId: asset.id, nodeId: node.id, nodeType: node.type, originalPath: asset.filePath, persisted: true })
         }
-        await shot('outputs-movie-collected-original-4k60'); await button(page, '关闭工程').click(); await waitReleased(page)
+        await shot('outputs-movie-collected-original-4k60'); await button(page, '关闭项目').click(); await waitReleased(page)
         for (const original of originals) { const now = fs.statSync(original.file); assert.equal(now.size, original.size); assert.equal(now.mtimeMs, original.mtimeMs) }
         evidence.originalsUnchanged = true; evidence.resources = await workerSnapshot(page); assert.equal(evidence.resources.live, 0); evidence.completed = true; store()
       } catch (error) { evidence.failed = { message: String(error.message ?? error), stack: error.stack }; store(); await shot('outputs-failed').catch(() => {}); throw error }
       finally {
         await client?.close().catch(() => {}); await disableMcp(page).catch(() => {})
-        if (await button(page, '关闭工程').isVisible().catch(() => false)) await button(page, '关闭工程').click().catch(() => {})
+        if (await button(page, '关闭项目').isVisible().catch(() => false)) await button(page, '关闭项目').click().catch(() => {})
         if (observed) { await waitReleased(page).catch(error => { evidence.completed = false; evidence.releaseFailure = String(error) }); evidence.resources = await workerSnapshot(page).catch(() => evidence.resources) }
         await page.evaluate(previous => { window.__videoLayoutObservers?.forEach(observer => observer.disconnect()); if (window.__videoLayoutNativeWorker) window.Worker = window.__videoLayoutNativeWorker; if (previous === null) localStorage.removeItem('henji.videoEdit.dockLayout.v1'); else if (typeof previous === 'string') localStorage.setItem('henji.videoEdit.dockLayout.v1', previous) }, previousLayout).catch(() => {}); store()
       }

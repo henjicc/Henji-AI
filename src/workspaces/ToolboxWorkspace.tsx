@@ -106,7 +106,7 @@ const ToolboxHome: React.FC = () => {
   const locale = i18n.language || 'zh-CN'
 
   const openRecent = (file: ToolboxRecentFile): void => {
-    void openToolboxRecentFile(file).catch(() => showNotification(`无法打开「${file.name}」，已进入工程列表`, 'error'))
+    void openToolboxRecentFile(file).catch(() => showNotification(`无法打开「${file.name}」，已进入项目列表`, 'error'))
   }
 
   return (

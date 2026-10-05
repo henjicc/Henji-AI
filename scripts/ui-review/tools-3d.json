@@ -16,11 +16,11 @@
       {
         "click": {
           "role": "button",
-          "name": "/^(返回工程列表|返回列表)$/"
+          "name": "/^(返回项目列表|返回列表)$/"
         },
         "ifPresent": {
           "role": "button",
-          "name": "/^(返回工程列表|返回列表)$/"
+          "name": "/^(返回项目列表|返回列表)$/"
         }
       },
       {
@@ -91,11 +91,11 @@
       {
         "click": {
           "role": "button",
-          "name": "/^(返回工程列表|返回列表)$/"
+          "name": "/^(返回项目列表|返回列表)$/"
         },
         "ifPresent": {
           "role": "button",
-          "name": "/^(返回工程列表|返回列表)$/"
+          "name": "/^(返回项目列表|返回列表)$/"
         }
       },
       {
@@ -117,7 +117,7 @@
       {
         "waitFor": {
           "role": "button",
-          "name": "/^新建工程$/"
+          "name": "/^新建项目$/"
         },
         "timeout": 12000
       },
@@ -130,7 +130,7 @@
       {
         "click": {
           "role": "button",
-          "name": "/^新建工程$/"
+          "name": "/^新建项目$/"
         }
       },
       {
@@ -692,20 +692,20 @@
       {
         "click": {
           "role": "button",
-          "name": "/^返回工程列表$/"
+          "name": "/^返回项目列表$/"
         }
       },
       {
         "waitFor": {
           "role": "button",
-          "name": "/^新建工程$/"
+          "name": "/^新建项目$/"
         },
         "timeout": 12000
       },
       {
         "click": {
           "role": "button",
-          "name": "/^新建工程$/"
+          "name": "/^新建项目$/"
         }
       },
       {
@@ -745,13 +745,13 @@
       {
         "click": {
           "role": "button",
-          "name": "/^返回工程列表$/"
+          "name": "/^返回项目列表$/"
         }
       },
       {
         "waitFor": {
           "role": "button",
-          "name": "/^新建工程$/"
+          "name": "/^新建项目$/"
         },
         "timeout": 12000
       },

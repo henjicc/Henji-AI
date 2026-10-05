@@ -80,7 +80,7 @@ function createVideoEditCodeProjectScene({ controls = false } = {}) {
       let client
       await observeWorkers(page)
       try {
-        await button(page, '剪辑').click(); await dialogs(app, [video, picture, audio], file); await button(page, '新建工程').click()
+        await button(page, '剪辑').click(); await dialogs(app, [video, picture, audio], file); await button(page, '新建项目').click()
         await button(page, '导入').click()
         let document = await saved(page, file, document => document.media.length === 3)
         const projectRef = { kind: 'video_edit.project', id: document.id }
@@ -234,7 +234,7 @@ function createVideoEditCodeProjectScene({ controls = false } = {}) {
         evidence.export.audioRms = Math.sqrt(samples.reduce((sum, sample) => sum + sample * sample, 0) / samples.length); assert.ok(evidence.export.audioRms > .01)
         const savedContent = JSON.parse(fs.readFileSync(file, 'utf8'))
         assert.ok(!/"(program|shader|instructions)"/.test(JSON.stringify(savedContent))); assert.deepEqual(savedContent.codeMaterials.map(definition => definition.versions[0].source), [dynamicSource, staticSource])
-        await button(page, '关闭工程').click(); await waitReleased(page)
+        await button(page, '关闭项目').click(); await waitReleased(page)
         evidence.released = await workerSnapshot(page)
         const releases = evidence.released.events.filter(event => event.kind === 'dispose.completed' && event.codeResources?.gpu)
         assert.ok(releases.length >= 3, '试渲染、预览、导出都需释放代码GPU')
@@ -252,14 +252,14 @@ function createVideoEditCodeProjectScene({ controls = false } = {}) {
         assert.equal(first.gpu.externalCopies, last.gpu.externalCopies, '热帧不能重复上传字形'); assert.equal(first.gpu.textureAllocations, last.gpu.textureAllocations)
         if (control) { assert.equal(first.images.uploads, last.images.uploads, '同图代码/普通片段热帧不能重复上传'); assert.equal(first.decodedImages, 1); assert.equal(last.decodedImages, 1) }
         evidence.codeHotResources = { first, last }
-        await dialogs(app, [file], output); await button(page, '打开工程').click(); await presented(page, 0); await seek(page, 120)
+        await dialogs(app, [file], output); await button(page, '打开项目文件').click(); await presented(page, 0); await seek(page, 120)
         const reopened = JSON.parse(fs.readFileSync(file, 'utf8')); assert.deepEqual(reopened, savedContent)
         assert.equal(await page.getByLabel('剪辑画面', { exact: true }).evaluate(canvas => canvas.toDataURL('image/png')), snapshots[120], '保存重开后固定代码画面保持一致')
         await capture('code-mixed-reopened')
         for (const original of originals) { assert.equal(fs.statSync(original.file).size, original.size); assert.equal(fs.statSync(original.file).mtimeMs, original.mtime) }
         evidence.savedReopened = true; evidence.originalFilesUnchanged = true; evidence.completed = true; saveEvidence()
       } catch (error) { evidence.failed = String(error); saveEvidence(); await capture('code-project-failed').catch(() => {}); throw error }
-      finally { await client?.close(); await disableMcp(page).catch(() => {}); await button(page, '关闭工程').click().catch(() => {}); await waitReleased(page).catch(() => {}) }
+      finally { await client?.close(); await disableMcp(page).catch(() => {}); await button(page, '关闭项目').click().catch(() => {}); await waitReleased(page).catch(() => {}) }
     },
   }
 }

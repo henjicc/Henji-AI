@@ -65,7 +65,7 @@ interface CameraStageEditorProps {
 
 const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
   onBackToList,
-  backLabel = '返回工程列表',
+  backLabel = '返回项目列表',
   autoExportVideoRequest,
   embeddedOutput,
 }) => {

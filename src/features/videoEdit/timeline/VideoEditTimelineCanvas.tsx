@@ -247,7 +247,7 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
     {audioChannels && <VideoEditAudioChannelsDialog projectId={projectId} target={audioChannels} onClose={() => setAudioChannels(null)} />}
     {pendingSequence && <VideoEditSequenceDialog title="按素材新建序列" requireFrameRate initial={pendingSequence.settings} bins={pendingSequence.owner.document.bins} onClose={() => setPendingSequence(null)} onSubmit={async settings => {
       const { owner, input, placement: at, sequenceId } = pendingSequence
-      if (requireVideoEditInstance(owner.document.id) !== owner) throw new Error('原工程已关闭，请重新拖入。')
+      if (requireVideoEditInstance(owner.document.id) !== owner) throw new Error('原项目已关闭，请重新拖入。')
       await dropVideoEditInput(owner.document.id, input, at, undefined, { sequenceId, createSequenceWhenEmpty: true, sequenceSettings: settings })
     }} />}
   </>

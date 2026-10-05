@@ -24,11 +24,11 @@ function createGpuBudgetScenes(context) {
       }, fixturePath)
       try {
         const openSource = surface.getByRole('button', {
-          name: previousEditor ? /^(打开|Open)$/i : /^(从文件打开|Open from file)$/i,
+          name: previousEditor ? /^(打开|Open)$/i : /^(打开图片|Open image)$/i,
         }).first()
         await openSource.click()
         if (previousEditor) {
-          await page.getByRole('button', { name: /^(从文件打开|Open from file)$/i })
+          await page.getByRole('button', { name: /^(打开图片|Open image)$/i })
             .last().click()
         }
       } finally {

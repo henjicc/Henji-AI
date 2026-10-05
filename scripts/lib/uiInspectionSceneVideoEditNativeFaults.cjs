@@ -106,9 +106,9 @@ async function waitNoPrompt(page, timeoutMs = 30000) {
   await page.waitForFunction(() => !document.body.innerText.includes('节目画面无法显示'), null, { timeout: timeoutMs })
 }
 async function openProject(page, app, file) {
-  if (await button(page, '关闭工程').isVisible().catch(() => false)) await button(page, '关闭工程').click()
+  if (await button(page, '关闭项目').isVisible().catch(() => false)) await button(page, '关闭项目').click()
   await dialogs(app, [file], file)
-  await button(page, '打开工程').click()
+  await button(page, '打开项目文件').click()
 }
 /** Steps the paused program monitor `count` frames forward (each step is a single-frame read) and returns the frame. */
 async function stepFrames(page, count) {
@@ -268,7 +268,7 @@ function createVideoEditNativeFaultsScene() {
         evidence.phases.budget = { prompt: await promptText(page), samePid: (await servicePid(page)) === budgetPid, rendererResponsive: await page.evaluate(() => document.readyState) }
         await capture('native-faults-budget')
         assert.ok(evidence.phases.budget.samePid, '超出预算不能让服务崩溃')
-        await button(page, '关闭工程').click()
+        await button(page, '关闭项目').click()
         await page.waitForFunction(() => !document.querySelector('canvas[aria-label="剪辑画面"]'), null, { timeout: 30000 })
         await sleep(2000)
         evidence.phases.budget.afterClose = await nativeStats(page)
@@ -301,7 +301,7 @@ function createVideoEditNativeFaultsScene() {
         await presented(page, 0); await waitNoPrompt(page)
         evidence.phases.missing.recovered = { timestamps: await page.evaluate(() => document.querySelector('canvas[aria-label="剪辑画面"]').dataset.sourceTimestamps), pid: await servicePid(page) }
         assert.deepEqual(evidence.phases.missing.recovered.timestamps.split(',').map(Number), [0, 0])
-        await button(page, '关闭工程').click()
+        await button(page, '关闭项目').click()
         await page.waitForFunction(() => !document.querySelector('canvas[aria-label="剪辑画面"]'), null, { timeout: 30000 })
         await sleep(2000)
         evidence.afterClose = await nativeStats(page)
@@ -318,7 +318,7 @@ function createVideoEditNativeFaultsScene() {
           if (globalThis.__henjiFaultImport) { sharedTexture.importSharedTexture = globalThis.__henjiFaultImport; delete globalThis.__henjiFaultImport }
         }).catch(() => {})
         await page.evaluate(() => { window.__faultObserver?.disconnect(); clearInterval(window.__faultPromptTimer) }).catch(() => {})
-        if (await button(page, '关闭工程').isVisible().catch(() => false)) await button(page, '关闭工程').click().catch(() => {})
+        if (await button(page, '关闭项目').isVisible().catch(() => false)) await button(page, '关闭项目').click().catch(() => {})
       }
     },
   }

@@ -1,0 +1,53 @@
+[
+  {
+    "id": "review-project-pages",
+    "surface": "项目页",
+    "name": "核对-五个模块的项目页（项目体系 2.1：空态只有新建、有项目时一条页头）",
+    "writesUserData": true,
+    "steps": [
+      { "enter": "canvas" },
+      { "click": { "role": "button", "name": "/^(返回项目|Back to Projects)/" }, "ifPresent": { "role": "button", "name": "/^(返回项目|Back to Projects)/" } },
+      { "waitFor": { "selector": "[data-project-library-state]" }, "timeout": 12000 },
+      { "waitStable": {} },
+      { "capture": "canvas-projects" },
+
+      { "enter": "toolbox" },
+      { "click": { "role": "button", "name": "/^返回项目列表$/" }, "ifPresent": { "role": "button", "name": "/^返回项目列表$/" } },
+      { "click": { "role": "button", "name": "/^返回工具$/" }, "ifPresent": { "role": "button", "name": "/^返回工具$/" } },
+      { "click": { "role": "button", "name": "/^口播剪辑/" } },
+      { "waitFor": { "selector": "[data-project-library-state=\"empty\"]" }, "timeout": 12000 },
+      { "waitStable": {} },
+      { "capture": "audio-empty" },
+      { "seedAudioEdit": { "name": "核对-口播 产品介绍", "transcript": false } },
+      { "seedAudioEdit": { "name": "核对-口播 名称很长的第二个项目用来检查卡片标题截断效果", "transcript": false } },
+      { "click": { "role": "button", "name": "/^返回工具$/" } },
+      { "click": { "role": "button", "name": "/^口播剪辑/" } },
+      { "waitFor": { "selector": "[data-project-library-state=\"items\"]" }, "timeout": 12000 },
+      { "waitStable": {} },
+      { "capture": "audio-items" },
+      { "rightClick": { "selector": "[data-project-id]", "nth": 0 } },
+      { "waitFor": { "role": "menu" } },
+      { "waitStable": {} },
+      { "capture": "audio-items-menu" },
+      { "escape": {} },
+
+      { "click": { "role": "button", "name": "/^返回工具$/" } },
+      { "click": { "role": "button", "name": "/^3D 镜头参考/" } },
+      { "waitFor": { "selector": "[data-project-library-state]" }, "timeout": 12000 },
+      { "waitStable": {} },
+      { "capture": "camera-stage-projects" },
+
+      { "click": { "role": "button", "name": "/^返回工具$/" } },
+      { "click": { "role": "button", "name": "/^图片编辑/" } },
+      { "waitFor": { "role": "button", "name": "/^打开图片$/" }, "timeout": 12000 },
+      { "waitStable": {} },
+      { "capture": "image-edit-empty" },
+
+      { "enter": { "surface": "workspace.video_edit" } },
+      { "click": { "role": "button", "name": "关闭项目" }, "ifPresent": { "role": "button", "name": "关闭项目" } },
+      { "waitFor": { "role": "button", "name": "/^打开项目文件$/" }, "timeout": 12000 },
+      { "waitStable": {} },
+      { "capture": "video-edit-empty" }
+    ]
+  }
+]

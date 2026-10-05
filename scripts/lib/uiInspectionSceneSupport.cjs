@@ -9,7 +9,7 @@ function attachUiInspectionSupport(context) {
 
   async function setupToolbox(page) {
     await openWorkspace(page, 'toolbox')
-    for (const title of ['返回工程列表', '返回工具']) {
+    for (const title of ['返回项目列表', '返回工具']) {
       const back = page.locator(`[title="${title}"]:visible, [aria-label="${title}"]:visible`).first()
       if (await back.count()) {
         await back.click()
@@ -22,13 +22,13 @@ function attachUiInspectionSupport(context) {
   async function setupCameraStageProjectList(page) {
     await setupToolbox(page)
     await clickNamedButton(page, /^(3D 镜头参考|3D Camera Reference)/i)
-    await page.getByRole('button', { name: /^(新建工程|New Project)$/i }).first()
+    await page.getByRole('button', { name: /^(新建项目|New Project)$/i }).first()
       .waitFor({ state: 'visible', timeout: 12000 })
   }
 
   async function setupCameraStageStyledEditor(page) {
     await setupCameraStageProjectList(page)
-    await page.getByRole('button', { name: /^(新建工程|New Project)$/i }).first().click()
+    await page.getByRole('button', { name: /^(新建项目|New Project)$/i }).first().click()
     const dialog = page.getByRole('dialog').last()
     await dialog.waitFor({ state: 'visible', timeout: 8000 })
     const input = dialog.getByRole('textbox')

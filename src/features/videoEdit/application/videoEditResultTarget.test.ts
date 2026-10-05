@@ -84,7 +84,7 @@ it('资产重新定位或内容身份变化不能替换原结果；取消不创�
 it('保存失败后重试只保存，不重复导入、字幕或历史', async () => {
   const { owner, target, result } = await setup()
   vi.mocked(getPlatform().system.fs.writeTextFile).mockRejectedValueOnce(new Error('磁盘不可写'))
-  await expect(commitVideoEditCreativeResult(target, result)).rejects.toThrow('工程未能保存到磁盘')
+  await expect(commitVideoEditCreativeResult(target, result)).rejects.toThrow('项目未能保存到磁盘')
   expect(owner.document.sequences[0].clips).toHaveLength(1); expect(owner.past).toHaveLength(1)
   const calls = vi.mocked(getPlatform().assetLibrary.inspectAsset).mock.calls.length
   expect((await commitVideoEditCreativeResult(target, result)).verified).toBe(true)
@@ -157,7 +157,7 @@ it('公共创建与属性修改都不能伪造创作来源', async () => {
 
 it('损坏或字段缺失的工程文件给出可理解的拒绝，不向界面泄露 schema 路径', async () => {
   files.set('D:/broken.henji-video', '{not json'); files.set('D:/partial.henji-video', JSON.stringify({ format: 'henji-video-project', version: 2, id: 'p', name: '缺字段', revision: 0, media: [], bins: [], items: [], sequences: [{ id: 's' }] }))
-  await expect(openVideoEditProject('D:/broken.henji-video')).rejects.toThrow('工程文件已损坏，无法打开')
+  await expect(openVideoEditProject('D:/broken.henji-video')).rejects.toThrow('项目文件已损坏，无法打开')
   const partial = openVideoEditProject('D:/partial.henji-video')
   await expect(partial).rejects.toThrow('内容不完整或已损坏'); await expect(partial).rejects.not.toThrow('sequences')
 })

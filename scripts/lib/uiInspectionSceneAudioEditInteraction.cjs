@@ -14,7 +14,7 @@ function createAudioEditInteractionScene({ setupToolbox, clickNamedButton }) {
       if (!current) return
       try {
         // 先经正式入口离开编辑器（会保存），再删工程，避免删掉仍在编辑的工程。
-        const leave = page.getByRole('button', { name: '返回工程列表', exact: true })
+        const leave = page.getByRole('button', { name: '返回项目列表', exact: true })
         if (await leave.isVisible().catch(() => false)) {
           await leave.click()
           await page.getByRole('button', { name: '返回工具', exact: true }).waitFor({ timeout: 10000 })

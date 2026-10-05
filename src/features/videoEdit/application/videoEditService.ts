@@ -72,7 +72,7 @@ export function restoreVideoEditProgramCommandIdentity(id: string, expected: obj
   if (videoEditProgramCommandIdentity(id) !== expected) throw new Error('节目播放已有后续操作。')
   programCommands.set(requireVideoEditInstance(id), previous)
 }
-function assertVideoEditWritable(owner: VideoEditInstance): void { if (closing.has(owner)) throw new Error('工程正在关闭，请等待保存完成。') }
+function assertVideoEditWritable(owner: VideoEditInstance): void { if (closing.has(owner)) throw new Error('项目正在关闭，请等待保存完成。') }
 export function videoEditGestureActive(projectId: string): boolean { return gestures.has(requireVideoEditInstance(projectId)) }
 export function beginVideoEditGesture(projectId: string): VideoEditGesture {
   assertApplicationWritesAllowed()
@@ -147,7 +147,7 @@ export function videoEditDomainRevision(): number { return domainRevision }
 export function subscribeVideoEditDomain(listener: () => void): () => void { domainListeners.add(listener); return () => { domainListeners.delete(listener) } }
 export function listVideoEditInstances(): VideoEditInstance[] { return [...instances.values()] }
 export function activeVideoEditInstance(): VideoEditInstance | undefined { return activeId ? instances.get(activeId) : undefined }
-export function requireVideoEditInstance(id: string): VideoEditInstance { const instance = instances.get(id); if (!instance) throw new Error('请先从本地打开目标剪辑工程。'); return instance }
+export function requireVideoEditInstance(id: string): VideoEditInstance { const instance = instances.get(id); if (!instance) throw new Error('请先从本地打开目标剪辑项目。'); return instance }
 export function publishVideoEdit(changed = false): void { revision++; if (changed) { domainRevision++; for (const listener of domainListeners) listener() } for (const listener of listeners) listener(); publishView() }
 export function focusVideoEdit(id: string): void { requireVideoEditInstance(id); if (activeId && activeId !== id) { const previous = instances.get(activeId); if (previous) cancelVideoEditGesture(previous) } activeId = id; publishVideoEdit() }
 const compositions = new WeakMap<VideoEditDocument, Map<string, VideoEditComposition>>()
@@ -224,7 +224,7 @@ export function duplicateVideoEditSequence(projectId: string, sequenceId: string
   editVideoProject(projectId, document => ({ ...document, sequences: [...document.sequences, sequence] })); return sequence.id
 }
 export function deleteVideoEditSequence(projectId: string, sequenceId: string): void {
-  editVideoProject(projectId, document => { if (document.sequences.length === 1) throw new Error('工程至少保留一个序列。'); const sequence = document.sequences.find(sequence => sequence.id === sequenceId); if (!sequence) throw new Error('目标序列不存在。'); if (sequence.clips.length || sequence.annotations.length || sequence.markers?.length || sequence.captions?.length || sequence.transitions?.length) throw new Error('请先移除序列内的片段和标注，再移除序列。'); return { ...document, sequences: document.sequences.filter(sequence => sequence.id !== sequenceId) } })
+  editVideoProject(projectId, document => { if (document.sequences.length === 1) throw new Error('项目至少保留一个序列。'); const sequence = document.sequences.find(sequence => sequence.id === sequenceId); if (!sequence) throw new Error('目标序列不存在。'); if (sequence.clips.length || sequence.annotations.length || sequence.markers?.length || sequence.captions?.length || sequence.transitions?.length) throw new Error('请先移除序列内的片段和标注，再移除序列。'); return { ...document, sequences: document.sequences.filter(sequence => sequence.id !== sequenceId) } })
 }
 export function updateVideoEditSequenceSettings(projectId: string, sequenceId: string, settings: Parameters<typeof changeVideoEditSequenceSettings>[1] & { name?: string; binId?: string | null }): void {
   const { name, binId, ...timing } = settings
@@ -365,7 +365,7 @@ export function setVideoEditProjectView(id: string, values: Partial<VideoEditPro
   if (!next.openSequenceIds.includes(instance.activeSequenceId)) switchVideoEditSequence(id, next.openSequenceIds.at(-1)!)
   publishVideoEdit(true)
 }
-const VIDEO_EDIT_SAVE_FAILED = '工程未能保存到磁盘：修改仍保留在当前工程，并会自动重试。请检查工程文件是否只读、被其他程序占用或磁盘空间不足。'
+const VIDEO_EDIT_SAVE_FAILED = '项目未能保存到磁盘：修改仍保留在当前项目，并会自动重试。请检查项目文件是否只读、被其他程序占用或磁盘空间不足。'
 export async function saveVideoEdit(id: string): Promise<void> {
   const instance = requireVideoEditInstance(id)
   if (instance.saving) return instance.saving
@@ -390,20 +390,20 @@ export async function saveVideoEdit(id: string): Promise<void> {
 }
 function attach(document: VideoEditDocument, path: string, dirty: boolean, codeMetadata: VideoEditCodeMetadata = new Map()): VideoEditInstance {
   const existing = instances.get(document.id)
-  if (existing) { if (existing.path !== path) throw new Error('此工程已从另一位置打开，请先关闭后再打开副本。'); focusVideoEdit(document.id); return existing }
+  if (existing) { if (existing.path !== path) throw new Error('此项目已从另一位置打开，请先关闭后再打开副本。'); focusVideoEdit(document.id); return existing }
   const instance: VideoEditInstance = { document, activeSequenceId: document.sequences[0].id, sequenceViews: new Map(), selectedItemIds: [], selectedBinId: '', openSequenceIds: [document.sequences[0].id], path, dirty, error: null, past: [], future: [], ...defaultSequenceView(document.sequences[0]), playing: false, playbackDirection: 1, activePanel: 'timeline', busy: false, version: 0 }
   installVideoEditCodeMetadata(instance, codeMetadata)
   instances.set(document.id, instance); activeId = document.id; publishVideoEdit(true); return instance
 }
 export async function createVideoEditProject(): Promise<VideoEditInstance | null> {
-  const path = await getPlatform().system.dialog.save({ defaultPath: '未命名剪辑.henji-video', filters: [{ name: '痕迹剪辑工程', extensions: ['henji-video'] }] })
+  const path = await getPlatform().system.dialog.save({ defaultPath: '未命名剪辑.henji-video', filters: [{ name: '痕迹剪辑项目', extensions: ['henji-video'] }] })
   if (!path) return null
   const name = path.split(/[\\/]/).at(-1)?.replace(/\.henji-video$/i, '') || '未命名剪辑'
   const instance = attach(createVideoEditDocument(name), path, true)
   await saveVideoEdit(instance.document.id); return instance
 }
 export async function openVideoEditProject(path?: string): Promise<VideoEditInstance | null> {
-  const chosen = path ?? await getPlatform().system.dialog.open({ filters: [{ name: '痕迹剪辑工程', extensions: ['henji-video'] }] })
+  const chosen = path ?? await getPlatform().system.dialog.open({ filters: [{ name: '痕迹剪辑项目', extensions: ['henji-video'] }] })
   if (!chosen || Array.isArray(chosen)) return null
   const existing = listVideoEditInstances().find(instance => instance.path === chosen)
   if (existing) { focusVideoEdit(existing.document.id); return existing }
@@ -411,14 +411,14 @@ export async function openVideoEditProject(path?: string): Promise<VideoEditInst
   let raw: unknown
   try { raw = JSON.parse(text) } catch (error) {
     logger.warn('剪辑工程文件不是有效 JSON', { event: 'video_edit.project.open.invalid_json', error })
-    throw new Error('工程文件已损坏，无法打开；原文件未被修改。')
+    throw new Error('项目文件已损坏，无法打开；原文件未被修改。')
   }
-  if (typeof raw === 'object' && raw !== null && 'version' in raw && raw.version !== 2) throw new Error('此工程使用不支持的旧格式。请保留原文件并新建工程。')
+  if (typeof raw === 'object' && raw !== null && 'version' in raw && raw.version !== 2) throw new Error('此项目使用不支持的旧格式。请保留原文件并新建项目。')
   const parsed = videoEditDocumentSchema.safeParse(raw)
   // Schema paths are diagnostics, not user language; they go to the log only.
   if (!parsed.success) {
     logger.warn('剪辑工程文件内容不完整', { event: 'video_edit.project.open.invalid_document', context: { issues: parsed.error.issues.slice(0, 10).map(issue => ({ path: issue.path.join('.'), message: issue.message })) } })
-    throw new Error('工程文件内容不完整或已损坏，无法打开；原文件未被修改。')
+    throw new Error('项目文件内容不完整或已损坏，无法打开；原文件未被修改。')
   }
   const document = parsed.data
   try {
@@ -463,5 +463,5 @@ export function appendVideoEditClip(id: string, mediaId?: string, placement?: { 
   if (instance.activeSequenceId === targetSequenceId) setVideoEditView(id, { selection: clip.id })
 }
 registerApplicationCloseGuard(async () => {
-  for (const instance of instances.values()) { if (instance.busy) throw new Error('剪辑工程正在导出，请等待或取消。'); cancelVideoEditGesture(instance); instance.playing = false; await saveVideoEdit(instance.document.id) }
+  for (const instance of instances.values()) { if (instance.busy) throw new Error('剪辑项目正在导出，请等待或取消。'); cancelVideoEditGesture(instance); instance.playing = false; await saveVideoEdit(instance.document.id) }
 })

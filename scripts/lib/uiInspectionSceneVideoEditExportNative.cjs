@@ -258,13 +258,13 @@ function createVideoEditExportNativeScene() {
 
         phase('导入并经“添加到当前序列”得到正式放置')
         await button(page, '剪辑').click()
-        if (await button(page, '关闭工程').isVisible()) await button(page, '关闭工程').click()
+        if (await button(page, '关闭项目').isVisible()) await button(page, '关闭项目').click()
         // The default dock layout (project panel visible), as the multitrack scene does; restored afterwards.
         previousLayout = await page.evaluate(() => localStorage.getItem('henji.videoEdit.dockLayout.v1'))
         await page.evaluate(() => localStorage.removeItem('henji.videoEdit.dockLayout.v1'))
         const importFile = path.join(ROOT, `import-${Date.now()}.henji-video`)
         await dialogs(app, Object.values(samples).map(sample => sample.path), importFile)
-        await button(page, '新建工程').click(); await button(page, '导入').click()
+        await button(page, '新建项目').click(); await button(page, '导入').click()
         const imported = await saved(page, importFile, value => value.media.length === Object.keys(samples).length, '样本未全部导入')
         const identity = await authorizeMcpConnection(page, { name: '导出验收', allowWrites: true })
         client = await connectMcpClient(identity.config, 'Henji export Reality')
@@ -293,9 +293,9 @@ function createVideoEditExportNativeScene() {
         }
         const alerts = async () => (await page.getByRole('alert').allTextContents()).map(text => text.trim()).filter(Boolean)
         const open = async (document, output) => {
-          if (await button(page, '关闭工程').isVisible()) await button(page, '关闭工程').click()
+          if (await button(page, '关闭项目').isVisible()) await button(page, '关闭项目').click()
           const file = path.join(ROOT, `${document.id}.henji-video`); fs.writeFileSync(file, JSON.stringify(document))
-          await dialogs(app, [file], output); await button(page, '打开工程').click(); await presented(page, 0)
+          await dialogs(app, [file], output); await button(page, '打开项目文件').click(); await presented(page, 0)
           return file
         }
         const previewFrames = async (document, frames) => {
@@ -487,7 +487,7 @@ function createVideoEditExportNativeScene() {
         throw error
       } finally {
         if (client) await client.close().catch(() => {}); await disableMcp(page).catch(() => {})
-        if (await button(page, '关闭工程').isVisible().catch(() => false)) await button(page, '关闭工程').click().catch(() => {})
+        if (await button(page, '关闭项目').isVisible().catch(() => false)) await button(page, '关闭项目').click().catch(() => {})
         await page.evaluate(previous => { if (previous === null) localStorage.removeItem('henji.videoEdit.dockLayout.v1'); else if (typeof previous === 'string') localStorage.setItem('henji.videoEdit.dockLayout.v1', previous) }, previousLayout).catch(() => {})
         store()
       }

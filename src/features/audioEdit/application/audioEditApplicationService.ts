@@ -5,7 +5,7 @@ import { getPlatform } from '@/platform/runtime'
 import { createLogger } from '@/core/logging'
 import { formatAudioEditCaptions, buildAudioEditCaptionGroups } from '@/core/audioEdit/captions'
 import { hasAudioEditModifications } from '@/core/audioEdit/baseline'
-import { acceptAudioEditNativeResult, editAudioEditProject, flushAudioEditProject, loadAudioEditProject, releaseAudioEditProject, resetAudioEditProject, withAudioEditProjectOperation } from './audioEditProjectInstances'
+import { acceptAudioEditNativeResult, editAudioEditProject, flushAudioEditProject, getAudioEditProjectInstance, loadAudioEditProject, releaseAudioEditProject, resetAudioEditProject, withAudioEditProjectOperation } from './audioEditProjectInstances'
 
 const logger = createLogger('features.audioEdit.operations')
 
@@ -94,4 +94,19 @@ export async function relinkAudioEdit(projectId: string, sourcePath: string): Pr
 export async function deleteAudioEdit(projectId: string): Promise<void> {
   await withAudioEditProjectOperation(projectId, () => getPlatform().audioEdit.deleteProject(projectId))
   releaseAudioEditProject(projectId)
+}
+
+/**
+ * 项目页重命名：与编辑器文件菜单、助手属性写入走同一条实例编辑与保存链路，不另开 IPC。
+ * 项目原本没在内存里时，保存完成后释放，避免列表页的改名把项目常驻在内存。
+ */
+export async function renameAudioEdit(projectId: string, name: string): Promise<void> {
+  const trimmed = name.trim()
+  if (!trimmed) return
+  const wasLoaded = Boolean(getAudioEditProjectInstance(projectId))
+  await loadAudioEditProject(projectId)
+  editAudioEditProject(projectId, (current) => ({ ...current, name: trimmed }))
+  await flushAudioEditProject(projectId)
+  if (!wasLoaded) releaseAudioEditProject(projectId)
+  logger.info('audio_edit.project.renamed', { context: { projectId } })
 }

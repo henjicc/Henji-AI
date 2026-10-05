@@ -55,7 +55,7 @@ export function VideoEditCodeCreateDialog({ projectId, binId, mode = 'generator'
   }
   return <UiModal isOpen size="editor" title={mode === 'filter' ? '编写新滤镜源码' : '新建代码素材'} onClose={close} footer={<><UiButton onClick={close}>取消</UiButton><UiButton variant="primary" disabled={checking || !source.trim()} onClick={() => { void create() }}>{checking ? mode === 'filter' ? '正在检查源码…' : '正在检查画面…' : mode === 'filter' ? '检查并创建滤镜源码' : '检查并创建'}</UiButton></>}>
     <div className="space-y-3">
-      <p className="text-xs text-text3">{mode === 'filter' ? '编写处理输入画面的滤镜源码。检查通过后保存在工程中，再选择“添加到片段”试渲染并应用；添加失败仍可复用这份源码。' : '编写图形或动态标题的源码。检查通过后成为工程素材，可拖入时间线与视频混合剪辑。'}</p>
+      <p className="text-xs text-text3">{mode === 'filter' ? '编写处理输入画面的滤镜源码。检查通过后保存在项目中，再选择“添加到片段”试渲染并应用；添加失败仍可复用这份源码。' : '编写图形或动态标题的源码。检查通过后成为项目素材，可拖入时间线与视频混合剪辑。'}</p>
       <UiFormRow label={mode === 'filter' ? '滤镜名称' : '素材名称'}><UiInput aria-label={mode === 'filter' ? '滤镜源码名称' : '代码素材名称'} placeholder="使用源码中的名称" maxLength={200} value={name} disabled={checking} onChange={event => setName(event.target.value)} /></UiFormRow>
       <UiFormRow label="作者源码"><UiTextArea aria-label="作者源码" className="h-80 font-mono" spellCheck={false} value={source} maxLength={65536} disabled={checking} onChange={event => setSource(event.target.value)} /></UiFormRow>
       {error && <UiError size="xs" align="start" title={error} message="" />}

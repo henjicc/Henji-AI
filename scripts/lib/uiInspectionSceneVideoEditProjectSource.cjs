@@ -86,7 +86,7 @@ function createVideoEditProjectSourceScene() {
         if (native) assert.equal(status.available, true, '本机原生解码服务应可用')
         evidence.sourceBackend = native ? 'native' : 'browser'
         const FRAME = 1 / 60
-        await button(page, '剪辑').click(); await dialogs(app, [video, audio], file); await button(page, '新建工程').click()
+        await button(page, '剪辑').click(); await dialogs(app, [video, audio], file); await button(page, '新建项目').click()
         const list = page.getByLabel('项目项列表', { exact: true }); const listRect = await list.boundingBox()
         await list.dblclick({ position: { x: 24, y: listRect.height - 20 } })
         let document = await saved(page, file, value => value.media.length === 2)
@@ -107,7 +107,7 @@ function createVideoEditProjectSourceScene() {
         await button(page, '新建项目项').click(); await button(page, '新建素材箱').click(); await page.getByLabel('项目项名称', { exact: true }).fill('镜头素材'); await button(page, '保存').click()
         document = await saved(page, file, value => value.bins.length === 1)
         const binId = document.bins[0].id
-        await button(page, '工程根目录').click(); await renameItem(page, videoId, '4K60 原镜头', '片头,压力样本', binId)
+        await button(page, '项目根目录').click(); await renameItem(page, videoId, '4K60 原镜头', '片头,压力样本', binId)
         await page.locator(`[data-video-edit-bin="${binId}"]`).click()
         await page.getByLabel('搜索项目素材', { exact: true }).fill('压力样本'); await entry(page, videoId).waitFor({ state: 'visible' })
         await page.getByLabel('搜索项目素材', { exact: true }).fill('')
@@ -176,7 +176,7 @@ function createVideoEditProjectSourceScene() {
         assert.ok(Math.abs(mediaElapsed - elapsed) < 0.15, '源播放必须保持真实时长')
         await button(page, '关闭源素材').click(); await page.waitForFunction(() => !document.querySelector('[data-video-edit-source-media]'))
         const beforeReopen = performance.now(); await entry(page, videoId).dblclick(); await ready(page, 'video'); evidence.sourceReopenMs = performance.now() - beforeReopen
-        await button(page, '关闭源素材').click(); await button(page, '工程根目录').click()
+        await button(page, '关闭源素材').click(); await button(page, '项目根目录').click()
         await entry(page, audioId).dblclick(); await ready(page, 'audio'); await sourceSeek(page, 0.75, native)
         // One sound reader either way: the native sound view (no media element) or one controlled audio element.
         assert.deepEqual(await sourceElements(page), native ? { video: 0, audio: 0, canvas: 0, sound: 1 } : { video: 0, audio: 1, canvas: 0, sound: 0 }, '源监视器声音元素与后端不符')
@@ -206,8 +206,8 @@ function createVideoEditProjectSourceScene() {
         const dropped = document.sequences.at(-1)
         assert.equal(dropped.width, 3840); assert.deepEqual(dropped.frameRate, { numerator: 60, denominator: 1 }); assert.equal(dropped.clips[0].start, 0)
         evidence.emptyTimelineDrop = { newSequenceId: dropped.id, originalEmpty: document.sequences[0].clips.length === 0 }
-        await button(page, '关闭工程').click(); await waitReleased(page)
-        await dialogs(app, [file], file); await button(page, '打开工程').click()
+        await button(page, '关闭项目').click(); await waitReleased(page)
+        await dialogs(app, [file], file); await button(page, '打开项目文件').click()
         await page.locator(`[data-video-edit-bin="${binId}"]`).click()
         await entry(page, sequence.id).dblclick(); await button(page, '序列设置').click()
         assert.equal(await page.getByLabel('音频采样率', { exact: true }).inputValue(), '44100'); assert.equal(await page.getByLabel('声道', { exact: true }).inputValue(), '1')
@@ -215,10 +215,10 @@ function createVideoEditProjectSourceScene() {
         await page.locator(`[data-video-edit-bin="${binId}"]`).click({ button: 'right' }); await menuItem(page, '重命名与移动素材箱').click()
         await page.getByLabel('项目项名称', { exact: true }).fill('已重命名镜头箱'); await button(page, '保存').click()
         await saved(page, file, value => value.bins[0].name === '已重命名镜头箱')
-        await button(page, '工程根目录').click(); await entry(page, imageId).click({ button: 'right' }); await menuItem(page, '从工程移除').click()
+        await button(page, '项目根目录').click(); await entry(page, imageId).click({ button: 'right' }); await menuItem(page, '从项目移除').click()
         await saved(page, file, value => value.media.length === 2); assert.ok(fs.existsSync(picture), '移除项目引用不能删除源文件')
         await button(page, '撤销').click(); await saved(page, file, value => value.media.length === 3)
-        await button(page, '关闭工程').click(); await waitReleased(page)
+        await button(page, '关闭项目').click(); await waitReleased(page)
 
         // Maximum project-item and bin scale; all sources are existing original references.
         const scale = JSON.parse(fs.readFileSync(file, 'utf8')); scale.id = 'project-source-scale'; scale.name = '500项目项压力工程'
@@ -227,7 +227,7 @@ function createVideoEditProjectSourceScene() {
         scale.items = Array.from({ length: 500 }, (_, index) => ({ ...sourceItem, id: `scale-item-${index}`, name: `4K60 ${String(index).padStart(3, '0')}`, binId: undefined }))
         scale.sequences = [scale.sequences[0]]; scale.sequences[0].clips = []; scale.sequences[0].annotations = []
         const scaleFile = path.join(root, 'scale.henji-video'); fs.writeFileSync(scaleFile, JSON.stringify(scale))
-        const scaleStarted = performance.now(); await dialogs(app, [scaleFile], scaleFile); await button(page, '打开工程').click(); await entry(page, 'scale-item-0').waitFor({ state: 'visible' })
+        const scaleStarted = performance.now(); await dialogs(app, [scaleFile], scaleFile); await button(page, '打开项目文件').click(); await entry(page, 'scale-item-0').waitFor({ state: 'visible' })
         evidence.scale = { items: 500, bins: 200, firstVisibleMs: performance.now() - scaleStarted, mountedItems: await page.locator('[data-video-edit-project-entry]').count(), mountedBins: await page.locator('[data-video-edit-bin]').count() }
         assert.ok(evidence.scale.mountedItems < 80); assert.ok(evidence.scale.mountedBins < 80)
         await button(page, '视图与排序').click(); await button(page, '缩略图视图').click(); await page.waitForTimeout(500)
@@ -237,7 +237,7 @@ function createVideoEditProjectSourceScene() {
         await entry(page, 'scale-item-0').waitFor({ state: 'visible' })
         await page.getByLabel('项目项列表', { exact: true }).hover(); await page.mouse.wheel(0, 50000)
         await entry(page, 'scale-item-499').waitFor({ state: 'visible' }); await capture('video-project-scale-end')
-        await button(page, '关闭工程').click(); await waitReleased(page)
+        await button(page, '关闭项目').click(); await waitReleased(page)
         // Render workers at once: the program's, plus on the native path the source view's picture session and, for an
         // item with sound, its sound session (tasks 2.2, 2.3); the browser path's source monitor uses media elements.
         const expectedPeak = 1 + (native ? 1 + (videoHasAudio ? 1 : 0) : 0)

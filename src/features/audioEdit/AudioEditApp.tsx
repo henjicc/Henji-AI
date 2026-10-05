@@ -59,7 +59,7 @@ import { useAudioEditStore } from './store/audioEditStore'
 import { applyAudioEditSuggestion, audioEditSuggestionStates, dismissAudioEditSuggestion, DEFAULT_AUDIO_EDIT_SETTINGS, DEFAULT_AUDIO_EDIT_VIEW_SETTINGS, editAudioEditRange, setAudioEditBlocks } from '@/core/audioEdit/edits'
 import { editAudioEditProject, flushAudioEditProject, loadAudioEditProject } from './application/audioEditProjectInstances'
 import { VideoEditSendMenu } from '@/features/videoEdit/panels/VideoEditSendMenu'
-import { compressAudioEditSilence, cleanProjectAudioEditFillers, transcribeAudioEdit, exportAudioEdit, relinkAudioEdit, deleteAudioEdit, prepareAudioEditProcessing, quickProcessAudioEdit } from './application/audioEditApplicationService'
+import { compressAudioEditSilence, cleanProjectAudioEditFillers, transcribeAudioEdit, exportAudioEdit, relinkAudioEdit, deleteAudioEdit, renameAudioEdit, prepareAudioEditProcessing, quickProcessAudioEdit } from './application/audioEditApplicationService'
 
 const MEDIA_EXTENSIONS = ['wav', 'mp3', 'm4a', 'aac', 'flac', 'ogg', 'mp4', 'mov', 'mkv', 'webm']
 
@@ -256,11 +256,14 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
     setBusy(true)
     try { await operation() } catch (error) { notifyError(error) } finally { setBusy(false) }
   }, [notifyError])
+  // 只有首次读取显示加载态；改名、删除、返回列表后的刷新保持原列表，不闪成加载页
+  const homeLoadedRef = useRef(false)
   const refreshHome = useCallback(async () => {
     const api = getPlatform().audioEdit
-    setHomeLoading(true); setHomeLoadFailed(false)
+    if (!homeLoadedRef.current) setHomeLoading(true)
+    setHomeLoadFailed(false)
     await Promise.all([
-      api.listProjects().then(setProjects).catch((error: unknown) => {
+      api.listProjects().then((items) => { homeLoadedRef.current = true; setProjects(items) }).catch((error: unknown) => {
         setHomeLoadFailed(true)
         throw error
       }).finally(() => setHomeLoading(false)),
@@ -334,7 +337,9 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
     showNotification(`已导出${format === 'xml' ? ' XML' : ' WAV'}，交付时长 ${formatTime(result.durationFrames, project.source.sampleRate)}`)
   })
   if (!project) {
-    return <AudioEditHome projects={projects} loading={homeLoading} loadFailed={homeLoadFailed} disabled={disabled} onBack={onBack} onImport={() => void importMedia()} onRetry={() => void run(refreshHome)} onOpen={(id) => void run(async () => setProject((await loadAudioEditProject(id)).document))} />
+    return <AudioEditHome projects={projects} loading={homeLoading} loadFailed={homeLoadFailed} disabled={disabled} onBack={onBack} onImport={() => void importMedia()} onRetry={() => void run(refreshHome)} onOpen={(id) => void run(async () => setProject((await loadAudioEditProject(id)).document))}
+      onRename={(id, name) => void run(async () => { await renameAudioEdit(id, name); await refreshHome() })}
+      onDelete={(ids) => run(async () => { for (const id of ids) await deleteAudioEdit(id); await refreshHome() })} />
   }
   const settings = project.batchSettings ?? DEFAULT_AUDIO_EDIT_SETTINGS
   const update = (patch: Partial<AudioEditProjectDocument>) => {
@@ -410,7 +415,7 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
         <UiButton variant="primary" disabled={disabled || Boolean(sourceError)} onClick={() => void exportProject()}><Download size={15} className="mr-1.5" />导出</UiButton>
       </>}
     >
-      <UiIconButton size="lg" onClick={() => void leave()} aria-label="返回工程列表" title="返回工程列表"><ArrowLeft size={16} /></UiIconButton>
+      <UiIconButton size="lg" onClick={() => void leave()} aria-label="返回项目列表" title="返回项目列表"><ArrowLeft size={16} /></UiIconButton>
       <AudioEditFileMenu key={project.id} name={project.name} disabled={disabled} onRename={(name) => update({ name })} onRelink={() => void relinkSource()} onDelete={() => void removeProject()} />
     </UiToolbar>
     <div className="flex min-h-0 flex-1">
@@ -456,7 +461,7 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
               <UiFormRow label="剪后试听启用" density="compact" inline><UiSwitch aria-label="剪后试听启用" checked={project.vstEnabled} disabled={!plugins.length} onCheckedChange={(value) => void run(async () => { if (value) await prepareAudioEditProcessing(project.id, crypto.randomUUID()); state.setVstEnabled(value) })} /></UiFormRow>
               {!plugins.length && <p className={UI_TEXT_META_CLASS}>未发现兼容插件，可继续基础剪辑。</p>}
               {plugins.map((plugin) => { const entry = project.processorChain?.find((item) => item.id === plugin.id); return <div key={plugin.id} className="flex flex-col gap-2"><UiFormRow label={plugin.name} density="compact" inline><UiSwitch aria-label={plugin.name} checked={Boolean(entry?.enabled)} onCheckedChange={(enabled) => update({ vstEnabled: false, processorChain: [...(project.processorChain ?? []).filter((item) => item.id !== plugin.id).map((item) => processors.find((p) => p.id === item.id)?.semanticRole === plugin.semanticRole ? { ...item, enabled: false } : item), { id: plugin.id, enabled, parameters: entry?.parameters ?? {} }] })} /></UiFormRow>{entry?.enabled && plugin.parameters?.map((parameter) => <UiFormRow key={parameter.id} label={parameter.name} density="compact" inline><NumberInput ariaLabel={parameter.name} size="sm" min={0} max={1} step={0.01} precision={2} widthClassName="w-20" align="right" commitOnChange value={entry.parameters[parameter.name] ?? parameter.normalizedValue} onChange={(next) => update({ vstEnabled: false, processorChain: project.processorChain?.map((item) => item.id === plugin.id ? { ...item, parameters: { ...item.parameters, [parameter.name]: next } } : item) })} /></UiFormRow>)}</div> })}
-              <p className={UI_TEXT_META_CLASS}>配方随工程保存。更改后重新启用试听；切换到原始试听可旁路对比。</p>
+              <p className={UI_TEXT_META_CLASS}>配方随项目保存。更改后重新启用试听；切换到原始试听可旁路对比。</p>
             </AudioEditDisclosure>
             <AudioEditDisclosure title="交付设置" value={format === 'xml' ? 'XML' : 'WAV'}>
               <UiFormRow label="导出格式" density="compact">

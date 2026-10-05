@@ -31,7 +31,7 @@ const gridComponents = { List: GridList, Item: GridItem }
 const SORT_OPTIONS = [{ value: 'name', label: '名称' }, { value: 'kind', label: '类型' }, { value: 'duration', label: '时长' }] as const
 type SequenceDialog = { kind: 'create' | 'edit' | 'fromItem'; settings: VideoEditSequenceSettings; id?: string; requireFrameRate?: boolean }
 
-/** 素材箱树放得下根目录名称所需的宽度（“工程根目录”五个字 + 图标 + 内边距约 96px）；树最多占面板宽的 40% */
+/** 素材箱树放得下根目录名称所需的宽度（“项目根目录”五个字 + 图标 + 内边距约 96px）；树最多占面板宽的 40% */
 const BIN_TREE_LABEL_MIN_WIDTH = 96
 const BIN_TREE_MAX_RATIO = 0.4
 
@@ -40,8 +40,8 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
   const [sort, setSort] = useState<'name' | 'kind' | 'duration'>('name')
   const [view, setView] = useState<'list' | 'grid'>('list')
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
-  // 面板窄到素材箱树放不下“工程根目录”时（窄停靠面板，如 960 宽窗口），树收成一列图标、名称进悬停说明，
-  // 让出宽度给项目项列表；不把根目录截成“工程…”（5.8 shortTextTruncated）。按面板宽度判断，避免收起后自己变窄回不来。
+  // 面板窄到素材箱树放不下“项目根目录”时（窄停靠面板，如 960 宽窗口），树收成一列图标、名称进悬停说明，
+  // 让出宽度给项目项列表；不把根目录截成“项目…”（5.8 shortTextTruncated）。按面板宽度判断，避免收起后自己变窄回不来。
   const binTreeRef = useRef<HTMLDivElement>(null)
   const [compactBinTree, setCompactBinTree] = useState(false)
   useLayoutEffect(() => {
@@ -123,7 +123,7 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
       { id: 'edit', label: '重命名、标签与移动', icon: <Pencil size={16} />, onClick: () => setEdit({ kind: 'items', items }) },
       { id: 'audio_channels', label: '音频声道…', icon: <AudioLines size={16} />, disabled: !audioTarget, onClick: () => { if (audioTarget) setAudioChannels(audioTarget) } },
       { id: 'relink', label: '重新定位源文件', icon: <RefreshCw size={16} />, disabled: !item.mediaId || ids.length !== 1, onClick: () => run(() => relinkVideoEditMedia(projectId, item.mediaId!)) },
-      { id: 'remove', label: `从工程移除${ids.length > 1 ? ` ${ids.length} 项` : ''}`, icon: <Trash2 size={16} />, onClick: () => run(() => deleteVideoEditItems(projectId, ids)) },
+      { id: 'remove', label: `从项目移除${ids.length > 1 ? ` ${ids.length} 项` : ''}`, icon: <Trash2 size={16} />, onClick: () => run(() => deleteVideoEditItems(projectId, ids)) },
     ]
   }
   const selectBin = (id: string): void => { anchor.current = null; setSelectedSequence(null); run(() => setVideoEditProjectView(projectId, { selectedBinId: id, selectedItemIds: [] })) }
@@ -167,7 +167,7 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
     { id: 'edit', label: '重命名与移动素材箱', icon: <Pencil size={16} />, onClick: () => setEdit({ kind: 'bin', bin }) },
     { id: 'delete', label: '移除空素材箱', icon: <Trash2 size={16} />, onClick: () => run(() => deleteVideoEditBins(projectId, [bin.id])) },
   ]
-  return <div className="flex h-full min-h-0 flex-col" aria-label="工程素材" tabIndex={0}
+  return <div className="flex h-full min-h-0 flex-col" aria-label="项目素材" tabIndex={0}
     onDragOver={event => { if (acceptsVideoEditDrop(event.dataTransfer)) { event.preventDefault(); event.dataTransfer.dropEffect = 'copy' } }} onDrop={event => drop(event)}
     onKeyDown={event => {
       if ((event.target as HTMLElement).closest('input,textarea,select,[contenteditable=true]')) return
@@ -203,7 +203,7 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
     </div>
     <div className="flex min-h-0 flex-1">
       <div ref={binTreeRef} className={`flex shrink-0 flex-col border-r border-line pl-1 ${compactBinTree ? 'w-10' : 'w-28 min-w-14 max-w-[40%]'}`} aria-label="素材箱树" role="tree">
-        <UiChipButton selectionRole="navigation" active={!binId} size="sm" className="w-full gap-1 !px-2" aria-label={compactBinTree ? '工程根目录' : undefined} title={compactBinTree ? '工程根目录' : undefined} onClick={() => selectBin('')} onDrop={event => drop(event, '')}><Folder size={14} />{compactBinTree ? null : <span className="truncate">工程根目录</span>}</UiChipButton>
+        <UiChipButton selectionRole="navigation" active={!binId} size="sm" className="w-full gap-1 !px-2" aria-label={compactBinTree ? '项目根目录' : undefined} title={compactBinTree ? '项目根目录' : undefined} onClick={() => selectBin('')} onDrop={event => drop(event, '')}><Folder size={14} />{compactBinTree ? null : <span className="truncate">项目根目录</span>}</UiChipButton>
         <Virtuoso className="min-h-0 flex-1" data={bins} computeItemKey={(_index, row) => row.bin.id} itemContent={(_index, row) => <div className="flex items-center" style={{ paddingLeft: compactBinTree ? 0 : Math.min(row.depth, 8) * 10 }} role="treeitem" aria-level={row.depth + 1} aria-expanded={row.hasChildren ? !collapsed.has(row.bin.id) : undefined}>
           {compactBinTree ? null : <UiIconButton size="sm" className="shrink-0" disabled={!row.hasChildren} title={collapsed.has(row.bin.id) ? '展开素材箱' : '折叠素材箱'} onClick={() => setCollapsed(previous => { const next = new Set(previous); if (next.has(row.bin.id)) next.delete(row.bin.id); else next.add(row.bin.id); return next })}>{row.hasChildren ? collapsed.has(row.bin.id) ? <ChevronRight size={12} /> : <ChevronDown size={12} /> : null}</UiIconButton>}
           <UiChipButton selectionRole="navigation" active={binId === row.bin.id} data-video-edit-bin={row.bin.id} size="sm" className="min-w-0 flex-1 gap-1 !px-1" aria-label={compactBinTree ? row.bin.name : undefined} title={compactBinTree ? row.bin.name : undefined} onClick={() => selectBin(row.bin.id)} onContextMenu={event => menu.showMenu(event, binMenu(row.bin))} onDrop={event => drop(event, row.bin.id)}><Folder size={13} className="shrink-0" />{compactBinTree ? null : <span className="truncate" data-user-content>{row.bin.name}</span>}</UiChipButton>

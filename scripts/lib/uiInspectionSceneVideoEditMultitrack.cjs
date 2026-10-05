@@ -213,11 +213,11 @@ function createVideoEditMultitrackScene() {
 
         phase('导入：素材记录全部声音流')
         await button(page, '剪辑').click()
-        if (await button(page, '关闭工程').isVisible()) await button(page, '关闭工程').click()
+        if (await button(page, '关闭项目').isVisible()) await button(page, '关闭项目').click()
         previousLayout = await page.evaluate(() => localStorage.getItem('henji.videoEdit.dockLayout.v1'))
         await page.evaluate(() => localStorage.removeItem('henji.videoEdit.dockLayout.v1'))
         await dialogs(app, Object.values(samples).map(sample => sample.path), file)
-        await button(page, '新建工程').click(); await button(page, '导入').click()
+        await button(page, '新建项目').click(); await button(page, '导入').click()
         let project = await saved(page, file, value => value.media.length === 4, '四个多音轨样本未全部导入')
         const itemOf = key => { const media = project.media.find(media => path.resolve(media.path).toLowerCase() === path.resolve(samples[key].path).toLowerCase()); return project.items.find(item => item.mediaId === media.id) }
         const items = Object.fromEntries(SAMPLES.map(sample => [sample.key, itemOf(sample.key)]))
@@ -420,7 +420,7 @@ function createVideoEditMultitrackScene() {
         evidence.phases.push('源监视器读取全部四条声音流并出声'); store()
 
         phase('旧工程：无声音流清单、画面声音合一片段')
-        await button(page, '关闭工程').click()
+        await button(page, '关闭项目').click()
         const legacyFile = path.join(ROOT, 'legacy.henji-video')
         const legacy = {
           format: 'henji-video-project', version: 2, id: 'multitrack-legacy', name: '2.6 之前的旧工程', revision: 0,
@@ -431,7 +431,7 @@ function createVideoEditMultitrackScene() {
             clips: [{ id: 'legacy-clip', itemId: 'legacy-item', name: samples.mxf.file, kind: 'video', track: 1, start: 0, duration: 120, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 1, brightness: 1, text: '' }], annotations: [] }],
         }
         fs.writeFileSync(legacyFile, JSON.stringify(legacy)); const legacyHash = hash(legacyFile)
-        await dialogs(app, [legacyFile], legacyFile); await button(page, '打开工程').click(); await presented(page, 0)
+        await dialogs(app, [legacyFile], legacyFile); await button(page, '打开项目文件').click(); await presented(page, 0)
         await page.waitForTimeout(1500)
         assert.equal(hash(legacyFile), legacyHash, '打开旧工程不应改写文件')
         const legacyComposition = composition(legacy, legacy.sequences[0], ++revision)
@@ -445,7 +445,7 @@ function createVideoEditMultitrackScene() {
         assertMatches(legacyResults, '旧工程合一片段（只播放第一条声音流）', true)
         assert.equal(legacyMix.maxSessions - baselineSessions, 1, '旧工程合一片段只打开第一条声音流')
         await shot('multitrack-legacy-project')
-        await button(page, '关闭工程').click()
+        await button(page, '关闭项目').click()
         assert.equal(hash(legacyFile), legacyHash, '关闭旧工程后文件不应改变')
         for (const original of originals) assert.equal(hash(original.file), original.hash, `${original.file} 原素材不应改变`)
         let remaining = -1
@@ -461,7 +461,7 @@ function createVideoEditMultitrackScene() {
         await page.keyboard.up('Alt').catch(() => {})
         await closeHarness().catch(() => {})
         if (client) await client.close().catch(() => {}); await disableMcp(page).catch(() => {})
-        if (await button(page, '关闭工程').isVisible().catch(() => false)) await button(page, '关闭工程').click().catch(() => {})
+        if (await button(page, '关闭项目').isVisible().catch(() => false)) await button(page, '关闭项目').click().catch(() => {})
         await page.evaluate(previous => { if (previous === null) localStorage.removeItem('henji.videoEdit.dockLayout.v1'); else if (typeof previous === 'string') localStorage.setItem('henji.videoEdit.dockLayout.v1', previous) }, previousLayout).catch(() => {})
         store()
       }

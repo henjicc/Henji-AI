@@ -54,7 +54,7 @@ function createToolboxScenes(context) {
         await setupToolbox(page)
         await clickNamedButton(page, /^(图片编辑|Image Edit)/i)
         await page.locator('[data-application-surface-id="tool.image_edit"]:visible').waitFor({ state: 'visible', timeout: 12000 })
-        await page.getByRole('button', { name: /^(从文件打开|Open from file)$/i }).waitFor({ state: 'visible', timeout: 12000 })
+        await page.getByRole('button', { name: /^(打开图片|Open image)$/i }).waitFor({ state: 'visible', timeout: 12000 })
         await settlePage(page, 700)
       },
     },
@@ -89,7 +89,7 @@ function createToolboxScenes(context) {
               }, fixturePath)
               try {
                 await surface.getByRole('button', {
-                  name: /^(从文件打开|Open from file)$/i,
+                  name: /^(打开图片|Open image)$/i,
                 }).click()
               } finally {
                 await electronApp.evaluate(({ dialog }) => {

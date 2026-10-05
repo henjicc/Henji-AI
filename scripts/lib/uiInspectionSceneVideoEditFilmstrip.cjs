@@ -43,7 +43,7 @@ function createVideoEditFilmstripScene() {
       }
       const open = async () => {
         await app.evaluate(({ dialog }, file) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] }) }, file)
-        await button(page, '打开工程').click(); await presented(0, 'filmstrip-open-failed')
+        await button(page, '打开项目文件').click(); await presented(0, 'filmstrip-open-failed')
       }
       const rewind = async label => {
         const ruler = page.getByRole('slider', { name: '剪辑时间定位' })
@@ -114,7 +114,7 @@ function createVideoEditFilmstripScene() {
       const summary = result => ({ frames: result.frames, p50Ms: quantile(result.intervals, .5), p95Ms: quantile(result.intervals, .95), maxMs: Math.max(...result.intervals), longTasks: result.longTasks.length, longTaskMs: result.longTasks.reduce((sum, value) => sum + value, 0), longestTaskMs: Math.max(0, ...result.longTasks) })
       try {
         await button(page, '剪辑').click()
-        if (await button(page, '关闭工程').isVisible()) await button(page, '关闭工程').click()
+        if (await button(page, '关闭项目').isVisible()) await button(page, '关闭项目').click()
         const openedAt = Date.now(); await open()
         await setZoom(1.5)
         // (a) play while the visible filmstrips are still being generated in the background.
@@ -133,7 +133,7 @@ function createVideoEditFilmstripScene() {
         evidence.afterInteraction = await strips()
         await capture('filmstrip-after-zoom')
         // Reopen: every visible frame comes from the disk cache.
-        await button(page, '关闭工程').click()
+        await button(page, '关闭项目').click()
         const reopenedAt = Date.now(); await open()
         await setZoom(1.5)
         evidence.warmFillMs = (Date.now() - reopenedAt) + await waitFilled('warm')
@@ -148,7 +148,7 @@ function createVideoEditFilmstripScene() {
         assert.ok(evidence.cache.files > 0 && evidence.cache.leftoverTemporary === 0)
         assert.ok(evidence.warmFillMs < Math.max(3000, evidence.coldFillMs / 3), `重开命中缓存应明显快于首次：首次 ${evidence.coldFillMs}ms，重开 ${evidence.warmFillMs}ms`)
         for (const name of ['scroll', 'zoom']) assert.ok(evidence[name].longestTaskMs < 100, `${name} 期间出现 ${evidence[name].longestTaskMs.toFixed(0)}ms 长任务`)
-        await button(page, '关闭工程').click()
+        await button(page, '关闭项目').click()
         evidence.completed = true
       } finally {
         fs.writeFileSync(path.join(root, 'evidence.json'), JSON.stringify(evidence, null, 2))

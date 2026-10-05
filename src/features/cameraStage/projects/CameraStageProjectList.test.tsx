@@ -17,15 +17,15 @@ vi.mock('../application/cameraStageApplicationService', () => ({
   },
 }))
 vi.mock('@/components/ProjectLibraryPage', () => ({
-  ProjectLibraryPage: ({ onCreate }: { onCreate: (name: string) => void }) => {
-    mocks.onCreate = onCreate
+  ProjectLibraryPage: ({ create }: { create: { kind: string; onCreate: (name: string) => void } }) => {
+    if (create.kind === 'named') mocks.onCreate = create.onCreate
     return null
   },
 }))
 
 import CameraStageProjectList from './CameraStageProjectList'
 
-describe('CameraStageProjectList 新建工程', () => {
+describe('CameraStageProjectList 新建项目', () => {
   afterEach(() => {
     cleanup()
     vi.clearAllMocks()
@@ -37,7 +37,7 @@ describe('CameraStageProjectList 新建工程', () => {
     const order: string[] = []
     mocks.createNewProject.mockImplementation(async () => {
       order.push('create')
-      return { id: 'project-new', name: '新工程' }
+      return { id: 'project-new', name: '新项目' }
     })
     const onEnterEditor = vi.fn(() => order.push('enter'))
     render(<CameraStageProjectList onEnterEditor={onEnterEditor} />)

@@ -62,7 +62,7 @@ async function openProject(instance, file) {
     dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] })
   }, file)
   await button(page, '剪辑').click()
-  await button(page, '打开工程').click()
+  await button(page, '打开项目文件').click()
   await page.waitForFunction(() => {
     const canvas = document.querySelector('canvas[aria-label="剪辑画面"]')
     return canvas?.dataset.presentedFrame === '0' && canvas.dataset.scrubbing === 'false'

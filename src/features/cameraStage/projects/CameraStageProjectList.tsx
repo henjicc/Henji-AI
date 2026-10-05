@@ -9,7 +9,7 @@ import { CAMERA_STAGE_DEFAULT_PROJECT_NAME } from '../store/cameraStageStore'
 import { createNewProject } from './cameraStageProjectService'
 
 /**
- * 3D 镜头参考工程列表页：新建 / 打开 / 重命名 / 删除 / 多选批量删除工程。
+ * 3D 镜头参考项目页：新建 / 打开 / 重命名 / 删除 / 多选批量删除项目。
  * 打开或新建成功后调用 onEnterEditor 进入场景编辑器（场景已加载进 store）。
  *
  * 页面外壳整体复用 `ProjectLibraryPage`（画布项目管理页用的是同一个组件），
@@ -22,32 +22,32 @@ interface CameraStageProjectListProps {
 }
 
 const LABELS: ProjectLibraryLabels = {
-  createAction: '新建工程',
-  count: (count) => `${count} 个工程`,
-  searchPlaceholder: '搜索工程',
-  noResults: '没有符合条件的工程',
+  createAction: '新建项目',
+  count: (count) => `${count} 个项目`,
+  searchPlaceholder: '搜索项目',
+  noResults: '没有符合条件的项目',
   sortLabel: '排序',
   sortOptions: { updated: '最近编辑', created: '最近创建', name: '名称' },
-  createDialogTitle: '新建工程',
-  renameDialogTitle: '重命名工程',
-  namePlaceholder: '工程名称',
+  createDialogTitle: '新建项目',
+  renameDialogTitle: '重命名项目',
+  namePlaceholder: '项目名称',
   defaultNewName: CAMERA_STAGE_DEFAULT_PROJECT_NAME,
   loadingMessage: '加载中…',
-  emptyTitle: '还没有工程',
-  emptyDescription: '新建第一个工程，开始搭建镜头参考。',
-  deleteTitle: '删除工程',
+  emptyTitle: '还没有项目',
+  emptyDescription: '新建第一个项目，开始搭建镜头参考。',
+  deleteTitle: '删除项目',
   deleteConfirmSingle: (name) => `确定删除「${name}」？此操作不可恢复。`,
-  deleteConfirmMultiple: (count) => `确定删除选中的 ${count} 个工程？此操作不可恢复。`,
+  deleteConfirmMultiple: (count) => `确定删除选中的 ${count} 个项目？此操作不可恢复。`,
   confirmDelete: '删除',
   cancel: '取消',
   card: {
-    open: '打开工程',
+    open: '打开项目',
     rename: '重命名',
     delete: '删除',
     selectMultiple: '多选',
     selectItem: '选中',
     deselectItem: '取消选中',
-    more: '工程操作',
+    more: '项目操作',
   },
   selection: {
     selectedCount: (count) => `已选择 ${count} 项`,
@@ -144,11 +144,12 @@ const CameraStageProjectList: React.FC<CameraStageProjectListProps> = ({ onEnter
       backLabel="返回工具"
       items={projects.map(toCardItem)}
       icon={ICON_TOOL_CAMERA_STAGE}
+      emptyIcon={<ICON_TOOL_CAMERA_STAGE size={40} strokeWidth={1.5} aria-hidden="true" />}
       loading={loading}
       busy={busy}
       labels={LABELS}
       onOpen={(item) => void handleOpen(item.id)}
-      onCreate={(name) => void handleCreate(name)}
+      create={{ kind: 'named', onCreate: (name) => void handleCreate(name) }}
       onRename={(item, name) => void handleRename(item.id, name)}
       onDelete={handleDelete}
     />

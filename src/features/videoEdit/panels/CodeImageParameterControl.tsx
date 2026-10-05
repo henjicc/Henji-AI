@@ -39,7 +39,7 @@ export function CodeImageParameterControl({ target, parameterKey, title, value }
     try {
       const input = readVideoEditDrop(event.dataTransfer)
       if (input.kind === 'items') {
-        if (input.projectId !== target.projectId) throw new Error('请拖入当前工程的图片，或从资产库选择。')
+        if (input.projectId !== target.projectId) throw new Error('请拖入当前项目的图片，或从资产库选择。')
         if (input.itemIds.length !== 1) throw new Error('请一次拖入一张图片。')
         const document = requireVideoEditInstance(target.projectId).document
         const item = document.items.find(item => item.id === input.itemIds[0])
@@ -56,7 +56,7 @@ export function CodeImageParameterControl({ target, parameterKey, title, value }
     } catch (reason) { setError(reason instanceof Error ? reason.message : '无法识别拖入的图片。') }
   }
   return <div className="flex flex-col gap-2" aria-label={`${title}图片拖放区`} data-video-edit-code-image={parameterKey} onDrop={drop} onDragOver={event => { if (acceptsVideoEditDrop(event.dataTransfer)) { event.preventDefault(); event.stopPropagation(); event.dataTransfer.dropEffect = 'copy' } }}>
-    <Dropdown ariaLabel={`${title}工程图片`} value={value?.mediaId ?? ''} options={[{ value: '', label: '未绑定图片' }, ...images.map(media => ({ value: media.id, label: media.name }))]} disabled={busy} onSelect={mediaId => bind(mediaId ? { kind: 'media', mediaId } : null)} />
+    <Dropdown ariaLabel={`${title}项目图片`} value={value?.mediaId ?? ''} options={[{ value: '', label: '未绑定图片' }, ...images.map(media => ({ value: media.id, label: media.name }))]} disabled={busy} onSelect={mediaId => bind(mediaId ? { kind: 'media', mediaId } : null)} />
     <div className="flex flex-wrap items-center gap-2">
       <UiButton variant="secondary" disabled={busy} onClick={() => { void run(signal => chooseVideoEditCodeImage(target, parameterKey, signal)) }}>选择文件</UiButton>
       <UiButton variant="secondary" onClick={() => openAssetLibrary('floating')}>从资产库拖入</UiButton>

@@ -34,17 +34,17 @@
       {
         "click": {
           "role": "button",
-          "name": "关闭工程"
+          "name": "关闭项目"
         },
         "ifPresent": {
           "role": "button",
-          "name": "关闭工程"
+          "name": "关闭项目"
         }
       },
       {
         "waitFor": {
           "role": "button",
-          "name": "/^打开工程$/"
+          "name": "/^打开项目文件$/"
         },
         "timeout": 12000
       },
@@ -63,7 +63,7 @@
       {
         "click": {
           "role": "button",
-          "name": "/^打开工程$/"
+          "name": "/^打开项目文件$/"
         }
       },
       {
@@ -129,7 +129,7 @@
         "open": {
           "trigger": {
             "role": "button",
-            "name": "/^工程 /"
+            "name": "/^项目 /"
           },
           "expect": {
             "selector": "[data-panel-scroll-region]"
@@ -275,7 +275,7 @@
         "press": {
           "key": "F2",
           "target": {
-            "selector": "[aria-label=\"工程素材\"]"
+            "selector": "[aria-label=\"项目素材\"]"
           }
         }
       },
@@ -542,7 +542,7 @@
         "open": {
           "trigger": {
             "role": "button",
-            "name": "/^工程 /"
+            "name": "/^项目 /"
           },
           "expect": {
             "selector": "[data-panel-scroll-region]"

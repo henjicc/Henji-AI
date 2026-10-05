@@ -103,9 +103,9 @@ function createVideoEditNativeSoakScene() {
       }
       try {
         evidence.runtime = await app.evaluate(async ({ app }) => ({ electron: process.versions.electron, chrome: process.versions.chrome, gpu: (await app.getGPUInfo('basic')).gpuDevice }))
-        await button(page, '剪辑').first().click(); if (await button(page, '关闭工程').isVisible()) await button(page, '关闭工程').click()
+        await button(page, '剪辑').first().click(); if (await button(page, '关闭项目').isVisible()) await button(page, '关闭项目').click()
         await observeWorkerCount(page)
-        await dialogs(app, [file], file); await button(page, '打开工程').click(); await presented(page, 0)
+        await dialogs(app, [file], file); await button(page, '打开项目文件').click(); await presented(page, 0)
         const identity = await authorizeMcpConnection(page, { name: '长时资源曲线', allowWrites: true }); client = await connectMcpClient(identity.config, 'Henji soak Reality')
         const startedAt = Date.now()
         for (let segment = 0; segment < SEGMENTS; segment++) {
@@ -133,7 +133,7 @@ function createVideoEditNativeSoakScene() {
           store()
         }
         await capture('native-soak-end')
-        await button(page, '关闭工程').click(); await waitReleased(page)
+        await button(page, '关闭项目').click(); await waitReleased(page)
         await sleep(2000)
         evidence.afterClose = await sample(page, app, startedAt, SEGMENTS, false)
 
@@ -167,7 +167,7 @@ function createVideoEditNativeSoakScene() {
       } finally {
         await client?.close().catch(() => {}); await disableMcp(page).catch(() => {})
         await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().filter(window => window.getTitle().startsWith('痕迹AI · ')).forEach(window => window.close())).catch(() => {})
-        if (await button(page, '关闭工程').isVisible().catch(() => false)) await button(page, '关闭工程').click().catch(() => {})
+        if (await button(page, '关闭项目').isVisible().catch(() => false)) await button(page, '关闭项目').click().catch(() => {})
         await page.evaluate(() => { window.__soakObserver?.disconnect(); if (window.__videoLayoutNativeWorker) window.Worker = window.__videoLayoutNativeWorker; try { localStorage.removeItem('henji.videoEdit.popoutLayout.v1') } catch { /* view convenience only */ } }).catch(() => {})
         store()
       }

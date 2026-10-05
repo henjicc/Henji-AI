@@ -79,7 +79,7 @@ async function setupCameraStageBackgroundRender(page, context, inspection = {}) 
     return Boolean(source?.data?.renderTask?.requestId)
   }, { canvasProjectId: projectId, nodeId: CAMERA_STAGE_NODE_ID }, { timeout: 12000 })
 
-  // 返回工程列表会卸载整个 Canvas（包括旧实现所在的 CameraStageNodeDialog），
+  // 返回项目列表会卸载整个 Canvas（包括旧实现所在的 CameraStageNodeDialog），
   // 应用级任务宿主仍保持订阅；终态先留在主进程，等重入工程后再落图。
   await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
   await page.waitForFunction(async (canvasProjectId) => {

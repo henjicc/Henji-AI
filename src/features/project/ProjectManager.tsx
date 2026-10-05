@@ -6,7 +6,7 @@ import { type ProjectCardGridItem } from '@/components/ProjectCardGrid';
 import { ProjectLibraryPage, type ProjectLibraryLabels } from '@/components/ProjectLibraryPage';
 import { ICON_WORKSPACE_CANVAS } from '@/core/theme/icons';
 import { createLogger } from '@/core/logging';
-import { UI_TEXT_META_CLASS, UiButton, UiError } from '@/components/ui';
+import { UI_TEXT_META_CLASS, UiError } from '@/components/ui';
 import { useProjectStore, type ProjectSummary } from '@/stores/projectStore';
 import { exportProjectToPackage } from '@/services/projectPackage/exportProject';
 import { importProjectFromPackage } from '@/services/projectPackage/importProject';
@@ -125,15 +125,12 @@ export function ProjectManager(): JSX.Element {
         emptyIcon={<FolderOpen className="h-12 w-12" />}
         busy={isOpeningProject}
         labels={buildLabels(t)}
-        headerActions={(
-          <UiButton
-            onClick={() => void handleImportClick()}
-            disabled={isImporting}
-          >
-            <PackageOpen className="h-4 w-4" />
-            {isImporting ? t('project.importing') : t('project.importPackage')}
-          </UiButton>
-        )}
+        secondaryAction={{
+          label: isImporting ? t('project.importing') : t('project.importPackage'),
+          icon: PackageOpen,
+          onClick: () => void handleImportClick(),
+          disabled: isImporting,
+        }}
         banner={packagingProjectId ? (
           // 导出期间菜单已收起，在页头下方常驻进行中提示；完成与失败沿用原有提示
           <p role="status" className={`mb-4 flex items-center gap-2 ${UI_TEXT_META_CLASS}`}>
@@ -157,7 +154,7 @@ export function ProjectManager(): JSX.Element {
           },
         ]}
         onOpen={(item) => openProject(item.id)}
-        onCreate={(name) => { void createProject(name).catch(reportPersistenceFailure) }}
+        create={{ kind: 'named', onCreate: (name) => { void createProject(name).catch(reportPersistenceFailure) } }}
         onRename={(item, name) => { void renameProject(item.id, name).catch(reportPersistenceFailure) }}
         onDelete={async (items) => {
           await Promise.all(items.map((item) => deleteProject(item.id))).catch(reportPersistenceFailure)

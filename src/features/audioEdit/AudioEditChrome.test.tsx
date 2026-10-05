@@ -7,7 +7,7 @@ import { AudioEditViewSettings } from './AudioEditViewSettings'
 
 /**
  * 口播剪辑外壳（界面重设计 5.5 第二批）：界面设置不再用系统原生下拉（不随主题、不能键盘高亮），
- * 文件菜单里“删除工程”与其他菜单项同一组件，删除仍要二次确认。
+ * 文件菜单里“删除项目”与其他菜单项同一组件，删除仍要二次确认。
  */
 
 afterEach(cleanup)
@@ -25,9 +25,9 @@ describe('口播剪辑外壳', () => {
     render(<AudioEditFileMenu name="口播 1" disabled={false} onRename={vi.fn()} onRelink={vi.fn()} onDelete={onDelete} />)
     fireEvent.click(screen.getByRole('button', { name: /口播 1/ }))
     const items = await screen.findAllByRole('menuitem')
-    expect(items.map((item) => item.textContent)).toEqual(['重命名', '重新定位原素材', '删除工程'])
+    expect(items.map((item) => item.textContent)).toEqual(['重命名', '重新定位原素材', '删除项目'])
     fireEvent.click(items[2])
-    await waitFor(() => expect(screen.getByRole('button', { name: '删除工程' })).toBeTruthy())
+    await waitFor(() => expect(screen.getByRole('button', { name: '删除项目' })).toBeTruthy())
     expect(onDelete).not.toHaveBeenCalled()
   })
 })

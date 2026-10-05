@@ -155,9 +155,9 @@ function createVideoEditMonitorScene() {
         pressureSequence.clips.push(...Array.from({ length: 497 }, (_, index) => ({ ...pressureSequence.clips[0], id: `monitor-offscreen-${index}`, start: 3600 + index * 4, duration: 2, track: 31 })))
         pressureSequence.captions = Array.from({ length: 500 }, (_, index) => ({ id: `monitor-caption-${index}`, start: 7200 + index * 2, duration: 1, text: `范围字幕 ${index}` }))
         fs.writeFileSync(pressureFile, JSON.stringify(pressure))
-        const open = async target => { await dialogs(app, [target], target); await button(page, '打开工程').click(); await presented(page, 0) }
+        const open = async target => { await dialogs(app, [target], target); await button(page, '打开项目文件').click(); await presented(page, 0) }
         await button(page, '剪辑').click()
-        if (await button(page, '关闭工程').isVisible()) await button(page, '关闭工程').click()
+        if (await button(page, '关闭项目').isVisible()) await button(page, '关闭项目').click()
         await button(page, '生成').click()
         previousLayout = await page.evaluate(() => localStorage.getItem('henji.videoEdit.dockLayout.v1'))
         await page.evaluate(() => localStorage.removeItem('henji.videoEdit.dockLayout.v1'))
@@ -388,7 +388,7 @@ function createVideoEditMonitorScene() {
         assert.deepEqual(document.codeMaterials.map(material => material.versions), codeSources, '字幕编辑不得修改固定作者源码')
         assert.ok(!document.sequences[0].clips.some(clip => clip.id.startsWith('caption:')), '烧录用合成文字片段不能进入持久工程')
         const snapshot = structuredClone(document); await shot('monitor-caption-and-marker-agent-loop')
-        await button(page, '关闭工程').click(); await waitReleased(page); await waitNativeWaveformsReleased(app, page); await open(file)
+        await button(page, '关闭项目').click(); await waitReleased(page); await waitNativeWaveformsReleased(app, page); await open(file)
         assert.deepEqual(readProject(file), snapshot); await frame(60)
         const reopen = await png(page, path.join(root, 'caption-reopened-60.png')); assert.ok((await pixelDifference(reopen.file, path.join(root, 'caption-boundary-60.png'))).equal)
         evidence.savedReopened = true; await shot('monitor-caption-saved-reopened')
@@ -425,12 +425,12 @@ function createVideoEditMonitorScene() {
           result.audio = { sampleValues: pcm.length / 4, seconds: pcm.length / 4 / settings.channels / settings.rate, peak, rms: Math.sqrt(square / (pcm.length / 4)) }
           assert.ok(result.audio.rms > .01); assert.ok(Math.abs(result.audio.seconds - 3) < .1); store()
         }
-        await button(page, '关闭工程').click(); await waitReleased(page); await waitNativeWaveformsReleased(app, page)
+        await button(page, '关闭项目').click(); await waitReleased(page); await waitNativeWaveformsReleased(app, page)
         await open(file)
         const reopenedSettings = (await read(sequenceRef, ['video_edit.sequence.sample_rate', 'video_edit.sequence.channels'])).data.properties
         assert.equal(reopenedSettings['video_edit.sequence.sample_rate'], 44100); assert.equal(reopenedSettings['video_edit.sequence.channels'], 1)
         evidence.reopenedAudioSettings = reopenedSettings
-        await button(page, '关闭工程').click(); await waitReleased(page); await waitNativeWaveformsReleased(app, page)
+        await button(page, '关闭项目').click(); await waitReleased(page); await waitNativeWaveformsReleased(app, page)
         evidence.phases.push('SRT/VTT导入编辑、锚定删除撤销、MCP定位修改、隐藏草稿、保存重开、4K60字幕边界和两种音频格式'); store()
         evidence.currentPhase = '原4K60完整压力样本与500字幕有界列表'; store()
         const firstAt = performance.now(); await open(pressureFile); evidence.firstDecodeMs = performance.now() - firstAt
@@ -480,7 +480,7 @@ function createVideoEditMonitorScene() {
         assert.ok(latencies.length > 0); const final = drag.frames.findLast(sample => sample.frame === 180); assert.ok(final)
         evidence.drag = { ...drag, actualUpdatesPerSecond: during.length * 1000 / (endedAt - (drag.inputs[0]?.at ?? endedAt)), latencyP95Ms: quantile(latencies, .95), finalFrame: final.frame, finalSettleMs: Math.max(0, final.at - endedAt) }; store()
         assert.ok(evidence.drag.actualUpdatesPerSecond >= 58); assert.ok(evidence.drag.latencyP95Ms < 100); assert.ok(evidence.drag.finalSettleMs < 100)
-        await shot('monitor-32-track-500-clip-original-4k60'); await button(page, '关闭工程').click(); await waitReleased(page)
+        await shot('monitor-32-track-500-clip-original-4k60'); await button(page, '关闭项目').click(); await waitReleased(page)
         evidence.nativeWaveforms = await waitNativeWaveformsReleased(app, page); evidence.resources = await workerSnapshot(page)
         assert.equal(evidence.resources.live, 0); assert.equal(evidence.nativeWaveforms.liveWorkers, 0); assert.equal(evidence.nativeWaveforms.liveProcesses, 0)
         assert.ok(evidence.nativeWaveforms.workers.length > 0); assert.ok(evidence.nativeWaveforms.processes.length > 0); assert.ok(evidence.nativeWaveforms.peakWorkers <= 2); assert.ok(evidence.nativeWaveforms.peakProcesses <= 2)
@@ -495,7 +495,7 @@ function createVideoEditMonitorScene() {
       } finally {
         await page.mouse.up().catch(() => {})
         await client?.close().catch(() => {}); await disableMcp(page).catch(() => {})
-        await button(page, '关闭工程').click().catch(() => {})
+        await button(page, '关闭项目').click().catch(() => {})
         if (renderObserved) { await waitReleased(page).catch(error => { evidence.releaseFailure = String(error); evidence.completed = false }); evidence.resources = await workerSnapshot(page).catch(() => evidence.resources) }
         if (nativeObserved) {
           await waitNativeWaveformsReleased(app, page).catch(error => { evidence.nativeReleaseFailure = String(error); evidence.completed = false })

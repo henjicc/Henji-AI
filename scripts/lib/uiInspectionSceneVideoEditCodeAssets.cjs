@@ -39,10 +39,10 @@ function createVideoEditCodeAssetsScene() {
           return { bounds, id: current.id, primary: current.id === screen.getPrimaryDisplay().id, preferred: preferred?.id }
         }, { point: process.env.HENJI_DEV_DISPLAY_POINT, hostContentsId: await (await app.browserWindow(page)).evaluate((window) => window.webContents.id) })
         if (process.env.HENJI_DEV_DISPLAY_POINT) { assert.equal(evidence.display.id, evidence.display.preferred); assert.equal(evidence.display.primary, false) }
-        await button(page, '剪辑').click(); if (await button(page, '关闭工程').isVisible()) await button(page, '关闭工程').click()
+        await button(page, '剪辑').click(); if (await button(page, '关闭项目').isVisible()) await button(page, '关闭项目').click()
         await button(page, '生成').click(); previousLayout = await page.evaluate(() => localStorage.getItem('henji.videoEdit.dockLayout.v1'))
         await page.evaluate(() => localStorage.removeItem('henji.videoEdit.dockLayout.v1')); await observeWorkers(page); observed = true; await button(page, '剪辑').click()
-        const open = async file => { await dialogs(app, [file], file); await button(page, '打开工程').click(); await presented(page, 0) }
+        const open = async file => { await dialogs(app, [file], file); await button(page, '打开项目文件').click(); await presented(page, 0) }
         await open(originFile)
         const identity = await authorizeMcpConnection(page, { name: '代码资产真实工程验收', allowWrites: true }); client = await connectMcpClient(identity.config, 'Henji editable code assets Reality')
         const change = async changes => {
@@ -77,7 +77,7 @@ function createVideoEditCodeAssetsScene() {
         const sourceRef = { kind: 'video_edit.clip', id: `${fixture.id}:${sourceClip.id}` }; const sourceRead = await callTool(client, 'read_application_entity', { ref: sourceRef })
         const repeated = checked(await callTool(client, 'collect_video_edit_code_asset', operationEnvelope([baseline, sourceRead], { projectRef: project(fixture.id), targetRef: sourceRef })))
         assert.equal(repeated.result.data.resultRef.id, asset.id); evidence.publicCollect = repeated
-        await shot('code-asset-collected-original-source'); await clickOutsideFloatingAssets(page); await button(page, '关闭工程').click(); await waitReleased(page)
+        await shot('code-asset-collected-original-source'); await clickOutsideFloatingAssets(page); await button(page, '关闭项目').click(); await waitReleased(page)
         await open(targetFile); await button(page, '资产库').click(); const card = page.locator(`[data-asset-id="${asset.id}"]`); await card.waitFor({ state: 'visible' })
         const beforePreview = await workerSnapshot(page); await card.locator('.aspect-square').dblclick(); await page.locator('[data-asset-code-preview]').waitFor({ state: 'visible' }); await page.locator('[data-asset-code-import]').waitFor({ state: 'visible' })
         assert.equal((await workerSnapshot(page)).workers.length, beforePreview.workers.length, '资产清单预览不能启动GPU或编译Worker')
@@ -104,7 +104,7 @@ function createVideoEditCodeAssetsScene() {
         await change([{ kind: 'set_properties', entityType: clipRef.kind, target: clipRef, properties: { 'video_edit.clip.code_parameters': { ...importedClip.code.parameters, label: 'Agent 回环标题' } } }])
         document = await saved(page, targetFile, value => value.sequences[0].clips.find(clip => clip.id === importedClip.id).code.parameters.label === 'Agent 回环标题'); assert.equal(await page.getByLabel('标题内容', { exact: true }).inputValue(), 'Agent 回环标题')
         await page.waitForFunction(revision => document.querySelector('canvas[aria-label="剪辑画面"]')?.dataset.presentedRevision === String(revision), document.revision)
-        const beforeReopen = await png(page, path.join(root, 'before-reopen.png')); await shot('code-asset-target-editable-mixed'); await button(page, '关闭工程').click(); await waitReleased(page); await open(targetFile); await seek(target.id, 179)
+        const beforeReopen = await png(page, path.join(root, 'before-reopen.png')); await shot('code-asset-target-editable-mixed'); await button(page, '关闭项目').click(); await waitReleased(page); await open(targetFile); await seek(target.id, 179)
         const reopened = await png(page, path.join(root, 'after-reopen.png')); evidence.reopen = await pixelDifference(beforeReopen.file, reopened.file); assert.ok(evidence.reopen.equal)
         // A filter asset uses the public original clipRef even when another clip is selected.
         await change([{ kind: 'create_items', entityType: 'video_edit.code_material', parent: project(target.id), items: [{ properties: { 'video_edit.code_material.source': filterSource } }] }])
@@ -126,13 +126,13 @@ function createVideoEditCodeAssetsScene() {
         assert.equal(video.width, 3840); assert.equal(video.height, 2160); assert.equal(video.avg_frame_rate, '60/1'); assert.equal(Number(video.nb_frames), 180); assert.ok(metadata.streams.some(stream => stream.codec_type === 'audio'))
         const decoded = path.join(root, 'export-179.png'); execFileSync(ffmpegPath, ['-v', 'error', '-y', '-i', output, '-vf', 'select=eq(n\\,179)', '-frames:v', '1', decoded], { windowsHide: true, timeout: 60000 })
         const comparison = await pixelDifference(decoded, finalPreview.file); assert.ok(comparison.psnr === null || comparison.psnr >= 30, JSON.stringify(comparison)); evidence.export = { path: output, milliseconds: performance.now() - exportAt, metadata, comparison }
-        evidence.trackBanks = await trackBanks(page); await shot('code-asset-original-image-curves-filter-export'); await button(page, '关闭工程').click(); await waitReleased(page)
+        evidence.trackBanks = await trackBanks(page); await shot('code-asset-original-image-curves-filter-export'); await button(page, '关闭项目').click(); await waitReleased(page)
         for (const original of originals) { const stat = fs.statSync(original.file); assert.equal(stat.size, original.size); assert.equal(stat.mtimeMs, original.mtimeMs) }
         evidence.originalsUnchanged = true; evidence.resources = await workerSnapshot(page); assert.equal(evidence.resources.live, 0); evidence.completed = true; store()
       } catch (error) { evidence.failed = { message: String(error.message ?? error), stack: error.stack }; store(); await shot('code-assets-failed').catch(() => {}); throw error }
       finally {
         await client?.close().catch(() => {}); await disableMcp(page).catch(() => {})
-        if (await button(page, '关闭工程').isVisible().catch(() => false)) await button(page, '关闭工程').click().catch(() => {})
+        if (await button(page, '关闭项目').isVisible().catch(() => false)) await button(page, '关闭项目').click().catch(() => {})
         if (observed) { await waitReleased(page).catch(error => { evidence.completed = false; evidence.releaseFailure = String(error) }); evidence.resources = await workerSnapshot(page).catch(() => evidence.resources) }
         await page.evaluate(previous => { window.__videoLayoutObservers?.forEach(observer => observer.disconnect()); if (window.__videoLayoutNativeWorker) window.Worker = window.__videoLayoutNativeWorker; if (previous === null) localStorage.removeItem('henji.videoEdit.dockLayout.v1'); else if (typeof previous === 'string') localStorage.setItem('henji.videoEdit.dockLayout.v1', previous) }, previousLayout).catch(() => {}); store()
       }

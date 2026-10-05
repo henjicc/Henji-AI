@@ -110,7 +110,7 @@ export default function CameraStageRenderWorker(): JSX.Element {
         const loadedState = useCameraStageStore.getState()
         const cameras = getCameraObjects(loadedState.objects)
         const exportCamera = cameras[0]
-        if (!exportCamera) throw new Error('3D 镜头参考工程中没有可用摄像机')
+        if (!exportCamera) throw new Error('3D 镜头参考项目中没有可用摄像机')
         loadedState.pause()
         const activeCameraId = cameras.some((camera) => camera.id === loadedState.activeCameraId)
           ? loadedState.activeCameraId

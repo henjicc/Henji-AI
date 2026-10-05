@@ -136,7 +136,7 @@ function createVideoEditPictureGestureScene() {
         await observeSaves(app, file); savesObserved = true
         await button(page, '剪辑').click()
         await app.evaluate(({ dialog }, file) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] }) }, file)
-        const openedAt = performance.now(); await button(page, '打开工程').click(); await presented(page, 0)
+        const openedAt = performance.now(); await button(page, '打开项目文件').click(); await presented(page, 0)
         const canvas = page.getByLabel('剪辑画面', { exact: true })
         evidence.firstDecode = { openToPresentedMs: performance.now() - openedAt, ...(await canvas.evaluate(canvas => ({ width: canvas.width, height: canvas.height, ...canvas.dataset }))) }
         assert.equal(evidence.firstDecode.width, 3840); assert.equal(evidence.firstDecode.height, 2160)
@@ -263,7 +263,7 @@ function createVideoEditPictureGestureScene() {
         evidence.pixels = { moved: await comparePng(evidence.before.file, evidence.moved.file), undo: await comparePng(evidence.before.file, evidence.undo.file) }
         assert.ok(evidence.pixels.moved.changedChannels > 1000 && evidence.pixels.moved.rms > .2, '全分辨率像素须实际随画面移动变化')
         assert.equal(evidence.pixels.undo.equal, true, '一次Undo应精确恢复原4K像素')
-        await button(page, '关闭工程').click(); await waitReleased(page)
+        await button(page, '关闭项目').click(); await waitReleased(page)
         evidence.resources = await workerSnapshot(page); assert.equal(evidence.resources.live, 0)
         for (const original of originals) { const stat = fs.statSync(original.file); assert.equal(stat.size, original.size); assert.equal(stat.mtimeMs, original.mtimeMs) }
         evidence.originalFilesUnchanged = true; evidence.completed = true; delete evidence.currentPhase; store()
@@ -276,7 +276,7 @@ function createVideoEditPictureGestureScene() {
         await inputSession?.detach().catch(() => {})
         await page.mouse.up().catch(() => {})
         await client?.close().catch(() => {}); await disableMcp(page).catch(() => {})
-        await button(page, '关闭工程').click().catch(() => {})
+        await button(page, '关闭项目').click().catch(() => {})
         if (resourcesObserved) { await waitReleased(page).catch(error => { evidence.releaseFailure = String(error); evidence.completed = false }); evidence.resources = await workerSnapshot(page).catch(() => evidence.resources) }
         if (savesObserved) {
           evidence.saves = await saveSnapshot(app).catch(() => evidence.saves)

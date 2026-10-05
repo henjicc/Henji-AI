@@ -78,10 +78,10 @@ function createVideoEditPopoutScene() {
         if (process.env.HENJI_DEV_DISPLAY_POINT) assert.equal(main.primary, false, '主窗口应在指定副屏1')
 
         phase('open-project')
-        await button(page, '剪辑').first().click(); if (await button(page, '关闭工程').isVisible()) await button(page, '关闭工程').click()
+        await button(page, '剪辑').first().click(); if (await button(page, '关闭项目').isVisible()) await button(page, '关闭项目').click()
         await page.evaluate(() => localStorage.removeItem('henji.videoEdit.dockLayout.v1'))
         await observeWorkers(page); observed = true
-        await dialogs(app, [file], file); await button(page, '打开工程').click(); await presented(page, 0)
+        await dialogs(app, [file], file); await button(page, '打开项目文件').click(); await presented(page, 0)
         const identity = await authorizeMcpConnection(page, { name: '独立浮窗验收', allowWrites: true }); client = await connectMcpClient(identity.config, 'Henji popout Reality')
         await playback(0, false); await presented(page, 0)
 
@@ -157,7 +157,7 @@ function createVideoEditPopoutScene() {
         await observeWorkers(page)
         await button(page, '剪辑').first().click(); await dialogs(app, [file], file)
         const restoredWindows = []; const onWindow = child => restoredWindows.push(child); app.on('window', onWindow)
-        await button(page, '打开工程').click()
+        await button(page, '打开项目文件').click()
         const expectedTitles = ['痕迹AI', '痕迹AI · 效果控件', '痕迹AI · 时间线', '痕迹AI · 节目画面'].sort()
         for (let attempt = 0; attempt < 200 && JSON.stringify((await windows()).map(window => window.title).sort()) !== JSON.stringify(expectedTitles); attempt++) await page.waitForTimeout(100)
         app.off('window', onWindow)
@@ -184,14 +184,14 @@ function createVideoEditPopoutScene() {
         await shot('popout-docked-back')
         evidence.phases.push('关闭浮窗即贴回，节目画面回主窗口，无残留窗口')
 
-        await button(page, '关闭工程').click(); await waitReleased(page)
+        await button(page, '关闭项目').click(); await waitReleased(page)
         evidence.resources = await workerSnapshot(page); assert.equal(evidence.resources.live, 0)
         evidence.completed = true; store()
       } catch (error) { evidence.failed = { phase: evidence.currentPhase, message: String(error.message ?? error), stack: error.stack }; store(); await shot('popout-failed').catch(() => {}); throw error }
       finally {
         await client?.close().catch(() => {}); await disableMcp(page).catch(() => {})
         await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().filter(window => window.getTitle().startsWith('痕迹AI · ')).forEach(window => window.close())).catch(() => {})
-        if (await button(page, '关闭工程').isVisible().catch(() => false)) await button(page, '关闭工程').click().catch(() => {})
+        if (await button(page, '关闭项目').isVisible().catch(() => false)) await button(page, '关闭项目').click().catch(() => {})
         if (observed) { await waitReleased(page).catch(error => { evidence.completed = false; evidence.releaseFailure = String(error) }); evidence.resources = await workerSnapshot(page).catch(() => evidence.resources) }
         await page.evaluate(() => { window.__videoLayoutObservers?.forEach(observer => observer.disconnect()); if (window.__videoLayoutNativeWorker) window.Worker = window.__videoLayoutNativeWorker; localStorage.removeItem('henji.videoEdit.dockLayout.v1') }).catch(() => {}); store()
       }

@@ -132,8 +132,8 @@ async function videoEditResourceCycle(page, app, file, frame) {
   const child = await opened; await child.waitForFunction(value => document.querySelector('canvas[aria-label="剪辑画面"]')?.dataset.presentedFrame === String(value), frame, { timeout: 60000 })
   await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find(window => window.getTitle() === '痕迹AI · 节目画面')?.close())
   await page.locator('canvas[aria-label="剪辑画面"]').waitFor({ state: 'visible', timeout: 60000 }); await presented(page, frame)
-  await button(page, '关闭工程').click(); await waitReleased(page)
-  await dialogs(app, [file], file); await button(page, '打开工程').click(); await presented(page, 0)
+  await button(page, '关闭项目').click(); await waitReleased(page)
+  await dialogs(app, [file], file); await button(page, '打开项目文件').click(); await presented(page, 0)
   await page.waitForTimeout(1500)
 }
 
@@ -159,9 +159,9 @@ function createVideoEditPerformanceScene() {
       try {
         evidence.runtime = await app.evaluate(async ({ app, screen, BrowserWindow }) => ({ versions: { electron: process.versions.electron, chrome: process.versions.chrome }, gpu: await app.getGPUInfo('basic'), window: BrowserWindow.getAllWindows()[0].getBounds(), display: screen.getDisplayMatching(BrowserWindow.getAllWindows()[0].getBounds()).id, primary: screen.getPrimaryDisplay().id }))
         phase('build-load')
-        await button(page, '剪辑').first().click(); if (await button(page, '关闭工程').isVisible()) await button(page, '关闭工程').click()
+        await button(page, '剪辑').first().click(); if (await button(page, '关闭项目').isVisible()) await button(page, '关闭项目').click()
         await observeWorkers(page); observed = true
-        await dialogs(app, [file], file); await button(page, '打开工程').click(); await presented(page, 0)
+        await dialogs(app, [file], file); await button(page, '打开项目文件').click(); await presented(page, 0)
         const identity = await authorizeMcpConnection(page, { name: '性能负载', allowWrites: true }); client = await connectMcpClient(identity.config, 'Henji performance Reality')
         await create('video_edit.code_material', projectRef, [{ 'video_edit.code_material.source': GENERATOR }, { 'video_edit.code_material.source': FILTER }])
         let document = readProject(); const generatorItem = document.items.find(item => item.code && document.codeMaterials.find(definition => definition.id === item.code.definitionId)?.versions[0].source === GENERATOR)
@@ -267,7 +267,7 @@ function createVideoEditPerformanceScene() {
         check(evidence.cycles.every(cycle => cycle.workers <= 1), `循环后节目渲染Worker多于一个：${JSON.stringify(evidence.cycles.map(cycle => cycle.workers))}`)
         evidence.phases.push('切页/节目浮窗/关闭重开4轮后渲染与GPU进程内存不持续增长，单一渲染会话')
 
-        await button(page, '关闭工程').click(); await waitReleased(page)
+        await button(page, '关闭项目').click(); await waitReleased(page)
         evidence.resources = await workerSnapshot(page); assert.equal(evidence.resources.live, 0)
         evidence.completed = evidence.violations.length === 0; store()
         assert.deepEqual(evidence.violations, [], '标准4K60负载未达到预先固定的容差')
@@ -275,7 +275,7 @@ function createVideoEditPerformanceScene() {
       finally {
         await client?.close().catch(() => {}); await disableMcp(page).catch(() => {})
         await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().filter(window => window.getTitle().startsWith('痕迹AI · ')).forEach(window => window.close())).catch(() => {})
-        if (await button(page, '关闭工程').isVisible().catch(() => false)) await button(page, '关闭工程').click().catch(() => {})
+        if (await button(page, '关闭项目').isVisible().catch(() => false)) await button(page, '关闭项目').click().catch(() => {})
         if (observed) { await waitReleased(page).catch(error => { evidence.completed = false; evidence.releaseFailure = String(error) }); evidence.resources = await workerSnapshot(page).catch(() => evidence.resources) }
         await page.evaluate(() => { window.__videoLayoutObservers?.forEach(observer => observer.disconnect()); if (window.__videoLayoutNativeWorker) window.Worker = window.__videoLayoutNativeWorker; try { localStorage.removeItem('henji.videoEdit.popoutLayout.v1') } catch { /* view convenience only */ } }).catch(() => {}); store()
       }

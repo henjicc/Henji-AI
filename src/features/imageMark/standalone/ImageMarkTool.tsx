@@ -2,14 +2,9 @@ import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { ClipboardPaste, FilePlus2, FolderOpen, ImagePlus } from 'lucide-react';
 import { createLogger } from '@/core/logging';
 import { createEmptyImageEditDocument, type ImageEditDocument } from '@/core/imageEdit';
-import {
-  UI_TEXT_BODY_CLASS,
-  UI_TEXT_META_CLASS,
-  UiButton,
-  UiLoading,
-  UiPageHeader,
-  UiRegion,
-} from '@/components/ui';
+import { UiLoading } from '@/components/ui';
+import { ProjectLibraryPage, type ProjectLibraryLabels } from '@/components/ProjectLibraryPage';
+import { ICON_TOOL_IMAGE_EDIT } from '@/core/theme/icons';
 import { readClipboardImage } from '@/commands/clipboard';
 import { useNotification } from '@/contexts/NotificationContext';
 import { allowMediaRoot, basename, dirname, getPathForFile, openDialog } from '@/platform/desktopApi';
@@ -36,6 +31,23 @@ const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'avif'];
 
 type ImageMarkSource = ImageMarkToolWorkspaceSourceV3;
 
+/**
+ * 图片编辑暂时没有项目列表（图片文档列表在 3.3 接入 .henjiimg 后提供），项目页只用到空态的新建提示。
+ * 受管文档目录里混有画布节点、剪辑画面的文档，没有名称与归属，不能直接列给用户再独立编辑。
+ */
+const EMPTY_PAGE_LABELS: ProjectLibraryLabels = {
+  createAction: '新建',
+  count: (count) => `${count} 张图片`,
+  searchPlaceholder: '搜索图片',
+  noResults: '没有符合条件的图片',
+  sortLabel: '排序',
+  sortOptions: { updated: '最近编辑', created: '最近创建', name: '名称' },
+  emptyTitle: '打开已有图片，或创建一张空白画布',
+  emptyDescription: '也可以把图片拖到这里；支持序号、框选、弯曲箭头、文字、画笔、打码与裁剪。',
+  cancel: '取消',
+  card: { open: '打开', more: '更多' },
+};
+
 export interface ImageMarkToolProps {
   /** 返回“工具”首页。本工具自带命令带,返回按钮由它自己渲染,外层不再画标题带。 */
   onBack?: () => void;
@@ -51,7 +63,6 @@ export function ImageMarkTool({ onBack }: ImageMarkToolProps = {}): JSX.Element 
   const developmentLaunch = readDevelopmentLaunchOptions();
   const { showNotification } = useNotification();
   const [source, setSource] = useState<ImageMarkSource | null>(() => readImageMarkToolWorkspaceSourceV3());
-  const [isDragOver, setIsDragOver] = useState(false);
   const [isBlankDialogOpen, setIsBlankDialogOpen] = useState(false);
   const pendingHandoff = useImageEditorHandoffStore((state) => state.pending);
   const consumeHandoff = useImageEditorHandoffStore((state) => state.consume);
@@ -231,10 +242,8 @@ export function ImageMarkTool({ onBack }: ImageMarkToolProps = {}): JSX.Element 
     return () => window.removeEventListener('paste', handlePaste);
   }, [acceptFile, showNotification]);
 
-  const handleDrop = useCallback((event: React.DragEvent) => {
-    event.preventDefault();
-    setIsDragOver(false);
-    const file = Array.from(event.dataTransfer.files).find((entry) =>
+  const handleDropFiles = useCallback((files: File[]) => {
+    const file = files.find((entry) =>
       entry.type.startsWith('image/') ||
       IMAGE_EXTENSIONS.some((extension) => entry.name.toLowerCase().endsWith(`.${extension}`))
     );
@@ -249,48 +258,34 @@ export function ImageMarkTool({ onBack }: ImageMarkToolProps = {}): JSX.Element 
     });
   }, [acceptFile, showNotification]);
 
+  const handleDrop = useCallback((event: React.DragEvent) => {
+    event.preventDefault();
+    handleDropFiles(Array.from(event.dataTransfer.files));
+  }, [handleDropFiles]);
+
   if (!source) {
     return (
       <>
-        {/* 空态没有工作面，是一张普通页面：返回进标题左侧，不为它单画一条命令带 */}
-        <div className="flex h-full flex-col overflow-y-auto bg-window p-6">
-          <UiRegion maxWidthClassName="max-w-6xl" className="mx-auto w-full">
-            <UiPageHeader title="图片编辑" onBack={onBack} backLabel="返回工具" />
-          </UiRegion>
-          <div className="flex min-h-0 flex-1 items-center justify-center p-8">
-            <div
-              className={`flex w-full max-w-xl flex-col items-center gap-4 rounded-overlay border-2 border-dashed p-12 transition-colors ${
-                isDragOver ? 'border-accent bg-accent-tint' : 'border-line bg-raised/40'
-              }`}
-              onDragOver={(event) => {
-                event.preventDefault();
-                setIsDragOver(true);
-              }}
-              onDragLeave={() => setIsDragOver(false)}
-              onDrop={handleDrop}
-            >
-              <ImagePlus size={40} className="text-text2" />
-              <div className={UI_TEXT_BODY_CLASS}>打开已有图片，或创建一张空白画布</div>
-              <div className="flex flex-wrap items-center justify-center gap-2">
-                <UiButton variant="primary" onClick={() => void handleOpenFile()}>
-                  <FolderOpen size={15} className="mr-1.5" />
-                  从文件打开
-                </UiButton>
-                <UiButton variant="secondary" onClick={() => setIsBlankDialogOpen(true)}>
-                  <FilePlus2 size={15} className="mr-1.5" />
-                  新建空白图片
-                </UiButton>
-                <UiButton variant="secondary" onClick={() => void handlePasteFromClipboard()}>
-                  <ClipboardPaste size={15} className="mr-1.5" />
-                  粘贴剪贴板图片
-                </UiButton>
-              </div>
-              <div className={`leading-relaxed ${UI_TEXT_META_CLASS}`}>
-                也可以把图片拖到这里；支持序号、框选、弯曲箭头、文字、画笔、打码与裁剪
-              </div>
-            </div>
-          </div>
-        </div>
+        {/* 空态是五个模块共用的项目页：返回进标题左侧，新建来源平铺成按钮，可把图片拖进来 */}
+        <ProjectLibraryPage
+          title="图片编辑"
+          onBack={onBack}
+          backLabel="返回工具"
+          items={[]}
+          icon={ICON_TOOL_IMAGE_EDIT}
+          emptyIcon={<ImagePlus size={40} strokeWidth={1.5} aria-hidden="true" />}
+          labels={EMPTY_PAGE_LABELS}
+          create={{
+            kind: 'menu',
+            options: [
+              { id: 'open', label: '打开图片', icon: FolderOpen, onSelect: () => void handleOpenFile() },
+              { id: 'blank', label: '新建空白图片', icon: FilePlus2, onSelect: () => setIsBlankDialogOpen(true) },
+              { id: 'paste', label: '粘贴剪贴板图片', icon: ClipboardPaste, onSelect: () => void handlePasteFromClipboard() },
+            ],
+          }}
+          onDropFiles={handleDropFiles}
+          onOpen={() => undefined}
+        />
         <BlankImageDialog
           isOpen={isBlankDialogOpen}
           onClose={() => setIsBlankDialogOpen(false)}

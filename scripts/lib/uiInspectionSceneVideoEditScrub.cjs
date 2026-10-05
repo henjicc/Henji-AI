@@ -26,7 +26,7 @@ function createVideoEditScrubScene() {
       const file = path.join(root, 'scrub.henji-video'); fs.writeFileSync(file, JSON.stringify(project))
       await app.evaluate(({ dialog }, file) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] }) }, file)
       await observeWorkers(page)
-      await button(page, '剪辑').click(); const openedAt = performance.now(); await button(page, '打开工程').click()
+      await button(page, '剪辑').click(); const openedAt = performance.now(); await button(page, '打开项目文件').click()
       const canvas = page.getByLabel('剪辑画面', { exact: true })
       try {
         await page.waitForFunction(() => document.querySelector('canvas[aria-label="剪辑画面"]')?.dataset.presentedFrame === '0', null, { timeout: 90000 })
@@ -58,9 +58,9 @@ function createVideoEditScrubScene() {
           if (!fs.existsSync(longSource)) execFileSync(ffmpegPath, ['-v', 'error', '-y', '-stream_loop', '-1', '-i', source, '-t', '40', '-c', 'copy', longSource], { windowsHide: true })
           const longProject = structuredClone(project); longProject.id = 'scrub-boundary'; longProject.media[0].path = longSource; longProject.media[0].durationSeconds = 40; longProject.sequences[0].clips.forEach(clip => { clip.duration = 36 * 60 })
           const longFile = path.join(root, 'boundary.henji-video'); fs.writeFileSync(longFile, JSON.stringify(longProject))
-          await button(page, '关闭工程').click()
+          await button(page, '关闭项目').click()
           await app.evaluate(({ dialog }, file) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] }) }, longFile)
-          await button(page, '打开工程').click(); await waitPresented(0, 'segment-start-failed')
+          await button(page, '打开项目文件').click(); await waitPresented(0, 'segment-start-failed')
           await page.getByLabel('时间线缩放', { exact: true }).focus(); await page.getByLabel('时间线缩放', { exact: true }).press('Home')
           // The timeline draws 60 x zoom / fps pixels per frame; read the zoom the control actually reached.
           pixels = 60 * Number(await page.getByLabel('时间线缩放', { exact: true }).inputValue()) / 60
@@ -119,9 +119,9 @@ function createVideoEditScrubScene() {
       assert.deepEqual(evidence.diskPreviewFiles, [], '普通原素材预览不得生成磁盘转码缓存')
       assert.ok(evidence.canvas.cacheBytes <= 8 * 1024 ** 3, '临时帧工作集不能超过总预算')
       // Playback measures completed video frames, never animation callback counts.
-      await button(page, '关闭工程').click()
+      await button(page, '关闭项目').click()
       await app.evaluate(({ dialog }, file) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] }) }, file)
-      await button(page, '打开工程').click()
+      await button(page, '打开项目文件').click()
       await page.waitForFunction(() => document.querySelector('canvas[aria-label="剪辑画面"]')?.dataset.presentedFrame === '0', null, { timeout: 90000 })
       await canvas.evaluate(canvas => {
         window.__playFrames = []
@@ -157,7 +157,7 @@ function createVideoEditScrubScene() {
         assert.ok(result.gapMaxMs < 500, `${result.name} 拖动期间停顿 ${result.gapMaxMs.toFixed(0)}ms`)
         assert.ok(result.settleMs < 100, `${result.name} 松手后定位耗时 ${result.settleMs.toFixed(0)}ms`)
       }
-      await button(page, '关闭工程').click(); await waitReleased(page)
+      await button(page, '关闭项目').click(); await waitReleased(page)
       evidence.resources = await workerSnapshot(page)
       assert.equal(evidence.resources.live, 0); assert.equal(evidence.resources.peakLive, 1)
       assert.ok(evidence.resources.workers.every(worker => worker.disposedAt && worker.terminatedAt), '原视频预览资源必须完成释放并终止')

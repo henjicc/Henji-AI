@@ -52,7 +52,7 @@ export function AudioEditUndoButton({ project, canUndo, disabled, onUndo, onRest
     </UiIconButton>
     <ContextMenu visible={menu.menuVisible} position={menu.menuPosition} items={menu.menuItems} onClose={menu.hideMenu} />
     <AlertDialog isOpen={Boolean(confirmation)} title="撤销所有修改？" type="warning" closeLabel="取消"
-      message={`将恢复全部声音和初始字幕，撤销删除、静音、分段、锁定及声音处理设置。工程名、参考稿和显示偏好保留；本次恢复仍可撤销。${project.editBaseline?.kind !== 'original' ? '\n此旧工程未保存最初识别原文，只能恢复至本版本保留的文字，早期改写无法追回。' : ''}`}
+      message={`将恢复全部声音和初始字幕，撤销删除、静音、分段、锁定及声音处理设置。项目名、参考稿和显示偏好保留；本次恢复仍可撤销。${project.editBaseline?.kind !== 'original' ? '\n此旧项目未保存最初识别原文，只能恢复至本版本保留的文字，早期改写无法追回。' : ''}`}
       onClose={() => setConfirmation(null)} actions={[{ label: '确认撤销所有修改', variant: 'primary', onClick: () => void restore() }]} />
   </>
 }

@@ -48,7 +48,7 @@ function CodeAssetPreview({ asset, onClose }: { asset: AssetRecord; onClose: () 
   }, [asset.id, attempt, t])
 
   useEffect(() => {
-    importController.current?.abort(new Error('原剪辑工程已切换。'))
+    importController.current?.abort(new Error('原剪辑项目已切换。'))
     importController.current = null
     setBusy(false)
     setImportError(null)

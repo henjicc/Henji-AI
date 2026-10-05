@@ -45,12 +45,12 @@ function createVideoEditAssetReferencesScene() {
         }, { point: process.env.HENJI_DEV_DISPLAY_POINT, hostContentsId: await (await app.browserWindow(page)).evaluate((window) => window.webContents.id) })
         if (process.env.HENJI_DEV_DISPLAY_POINT) { assert.ok(evidence.display.preferredId !== undefined); assert.equal(evidence.display.id, evidence.display.preferredId); assert.equal(evidence.display.primary, false) }
         await button(page, '剪辑').click()
-        if (await button(page, '关闭工程').isVisible()) await button(page, '关闭工程').click()
+        if (await button(page, '关闭项目').isVisible()) await button(page, '关闭项目').click()
         await button(page, '生成').click()
         previousLayout = await page.evaluate(() => localStorage.getItem('henji.videoEdit.dockLayout.v1'))
         await page.evaluate(() => localStorage.removeItem('henji.videoEdit.dockLayout.v1'))
         await observeWorkers(page); observed = true; await button(page, '剪辑').click()
-        const open = async () => { await dialogs(app, [file], file); await button(page, '打开工程').click(); await button(page, '关闭工程').waitFor({ state: 'visible' }) }
+        const open = async () => { await dialogs(app, [file], file); await button(page, '打开项目文件').click(); await button(page, '关闭项目').waitFor({ state: 'visible' }) }
         await open()
         phase('原生资产核验与陈旧卡片路径的真实拖入')
         const asset = await page.evaluate(async filePath => {
@@ -95,7 +95,7 @@ function createVideoEditAssetReferencesScene() {
         evidence.phases.push('现代MCP复用相同领域导入且不重复注册')
         phase('删除资产库记录后的固定原路径保存重开与显式重新定位')
         await page.evaluate(id => window.henjiNative.assetLibrary.deleteAsset(id), asset.id)
-        await button(page, '关闭工程').click(); await waitReleased(page)
+        await button(page, '关闭项目').click(); await waitReleased(page)
         await open(); await presented(page, 0)
         evidence.reopened = await png(page, path.join(root, 'program-reopened.png')); evidence.reopenDifference = await pixelDifference(evidence.program.file, evidence.reopened.file)
         assert.ok(evidence.reopenDifference.equal)
@@ -110,7 +110,7 @@ function createVideoEditAssetReferencesScene() {
         evidence.fixedReference = { deletedLibraryRecord: true, mediaId: media.id, assetId: asset.id, path: document.media[0].path, sourceRevision: document.media[0].sourceRevision, contentIdentity: document.media[0].assetContent.contentIdentity }
         await shot('asset-deleted-library-fixed-path-reopen-and-relink')
         evidence.phases.push('记录删除后原路径仍可出画、重开、显式重新定位')
-        await button(page, '关闭工程').click(); await waitReleased(page)
+        await button(page, '关闭项目').click(); await waitReleased(page)
         evidence.resources = await workerSnapshot(page); assert.equal(evidence.resources.live, 0); assert.equal(await page.locator('[data-video-edit-source-media]').count(), 0)
         for (const original of originals) { const now = fs.statSync(original.file); assert.equal(now.size, original.size); assert.equal(now.mtimeMs, original.mtimeMs) }
         evidence.originalsUnchanged = true; evidence.completed = true; delete evidence.currentPhase; store()
@@ -118,7 +118,7 @@ function createVideoEditAssetReferencesScene() {
         evidence.failed = { message: String(error.message ?? error), stack: error.stack }; store(); await shot('asset-references-failed').catch(() => {}); throw error
       } finally {
         await page.mouse.up().catch(() => {}); await client?.close().catch(() => {}); await disableMcp(page).catch(() => {})
-        if (await button(page, '关闭工程').isVisible().catch(() => false)) await button(page, '关闭工程').click().catch(() => {})
+        if (await button(page, '关闭项目').isVisible().catch(() => false)) await button(page, '关闭项目').click().catch(() => {})
         if (observed) { await waitReleased(page).catch(error => { evidence.releaseFailure = String(error); evidence.completed = false }); evidence.resources = await workerSnapshot(page).catch(() => evidence.resources) }
         await page.evaluate(previous => {
           window.__videoLayoutObservers?.forEach(observer => observer.disconnect()); if (window.__videoLayoutNativeWorker) window.Worker = window.__videoLayoutNativeWorker

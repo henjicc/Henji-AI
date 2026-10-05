@@ -65,10 +65,10 @@ beforeEach(async () => {
 })
 afterEach(async () => { cleanup(); for (const instance of listVideoEditInstances()) await closeVideoEditProject(instance.document.id); vi.restoreAllMocks(); uninstallHarnessNativeStorage() })
 
-it('图片参数复用工程图片、正式文件选择、资产库和清除，所有动作绑定原实例', async () => {
+it('图片参数复用项目图片、正式文件选择、资产库和清除，所有动作绑定原实例', async () => {
   setVideoEditCodeParameter(editor().target, 'logo', { kind: 'image', mediaId: 'imageA' })
   const target = editor().target; const view = render(<View />)
-  fireEvent.click(view.getByRole('button', { name: '图片工程图片' })); await act(async () => { fireEvent.click(view.getByText('图片素材B')) })
+  fireEvent.click(view.getByRole('button', { name: '图片项目图片' })); await act(async () => { fireEvent.click(view.getByText('图片素材B')) })
   expect(bindVideoEditCodeImage).toHaveBeenLastCalledWith(target, 'logo', { kind: 'media', mediaId: 'imageB' }, expect.any(AbortSignal))
   await act(async () => { fireEvent.click(view.getByRole('button', { name: '选择文件' })) })
   expect(chooseVideoEditCodeImage).toHaveBeenCalledWith(target, 'logo', expect.any(AbortSignal))

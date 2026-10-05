@@ -171,9 +171,9 @@ function createVideoEditMediaProbeScene() {
 
         // 2. 真实导入入口。
         await button(page, '剪辑').first().click()
-        if (await button(page, '关闭工程').isVisible()) await button(page, '关闭工程').click()
+        if (await button(page, '关闭项目').isVisible()) await button(page, '关闭项目').click()
         const projectPath = path.join(ROOT, `import-${forced ?? 'auto'}.henji-video`); fs.rmSync(projectPath, { force: true })
-        await dialogs(app, [CONTROL], projectPath); await button(page, '新建工程').click()
+        await dialogs(app, [CONTROL], projectPath); await button(page, '新建项目').click()
         const snapshot = () => fs.existsSync(projectPath) ? fs.readFileSync(projectPath, 'utf8') : null
         const project = () => JSON.parse(snapshot() ?? '{"media":[]}')
         for (let index = 0; index < 100 && !fs.existsSync(projectPath); index++) await page.waitForTimeout(50)
@@ -251,8 +251,8 @@ function createVideoEditMediaProbeScene() {
           }
           const target = path.join(ROOT, `legacy-open-${forced ?? 'auto'}-${legacy.name}.henji-video`); fs.writeFileSync(target, JSON.stringify(document))
           const hash = sha256(target)
-          if (await button(page, '关闭工程').isVisible()) await button(page, '关闭工程').click()
-          await dialogs(app, [target], target); await button(page, '打开工程').click()
+          if (await button(page, '关闭项目').isVisible()) await button(page, '关闭项目').click()
+          await dialogs(app, [target], target); await button(page, '打开项目文件').click()
           let outcome = 'presented'
           if (legacy.fixedReference) {
             const refused = page.locator('body').getByText(/源文件已改变或丢失/).first()

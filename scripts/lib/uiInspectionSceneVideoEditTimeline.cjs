@@ -45,7 +45,7 @@ function createVideoEditTimelineScene() {
       const originals = [...new Set([...project.media, ...pressure.media].map(media => media.path))].map(file => ({ file, size: fs.statSync(file).size, mtime: fs.statSync(file).mtimeMs }))
       const evidence = { originalPaths: originals, phases: [] }; let client
       const store = () => fs.writeFileSync(path.join(root, 'evidence.json'), JSON.stringify(evidence, null, 2))
-      const open = async file => { await app.evaluate(({ dialog }, file) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] }) }, file); await button(page, '打开工程').click(); await presented(page, 0) }
+      const open = async file => { await app.evaluate(({ dialog }, file) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] }) }, file); await button(page, '打开项目文件').click(); await presented(page, 0) }
       await observeWorkers(page)
       try {
         await button(page, '剪辑').click(); await open(file)
@@ -137,10 +137,10 @@ function createVideoEditTimelineScene() {
         await button(page, '视频 1锁定').click(); await saved(page, file, document => !document.sequences[0].tracks[1].locked)
         await capture('timeline-mixed-command-result')
         evidence.phases.push('关联多选移动一次历史、代码视频共同拆分、复制粘贴删除撤销、输入和IME保护、源I/O与J/K、锁定跨命令')
-        const savedBeforeReopen = JSON.parse(fs.readFileSync(file, 'utf8')); await button(page, '关闭工程').click(); await waitReleased(page); await open(file)
+        const savedBeforeReopen = JSON.parse(fs.readFileSync(file, 'utf8')); await button(page, '关闭项目').click(); await waitReleased(page); await open(file)
         assert.deepEqual(JSON.parse(fs.readFileSync(file, 'utf8')), savedBeforeReopen)
         assert.equal(await page.locator('[data-video-edit-track]').count(), 32)
-        await button(page, '关闭工程').click(); await waitReleased(page)
+        await button(page, '关闭项目').click(); await waitReleased(page)
         const openedAt = performance.now(); await open(pressureFile); evidence.firstFrameMs = performance.now() - openedAt
         const canvas = page.getByLabel('剪辑画面', { exact: true })
         evidence.firstFrame = await canvas.evaluate(canvas => ({ width: canvas.width, height: canvas.height, ...canvas.dataset }))
@@ -191,7 +191,7 @@ function createVideoEditTimelineScene() {
         store(); assert.ok(evidence.drag.actualUpdatesPerSecond >= 58); assert.ok(evidence.drag.settleMs < 100); assert.ok(evidence.drag.latencyP95Ms < 100)
         await capture('timeline-32-tracks-500-clips-4k60')
         evidence.finalCanvas = await canvas.evaluate(canvas => ({ width: canvas.width, height: canvas.height, ...canvas.dataset }))
-        await button(page, '关闭工程').click(); await waitReleased(page); evidence.resources = await workerSnapshot(page); assert.equal(evidence.resources.live, 0)
+        await button(page, '关闭项目').click(); await waitReleased(page); evidence.resources = await workerSnapshot(page); assert.equal(evidence.resources.live, 0)
         for (const original of originals) { assert.equal(fs.statSync(original.file).size, original.size); assert.equal(fs.statSync(original.file).mtimeMs, original.mtime) }
         evidence.completed = true; store()
       } finally {

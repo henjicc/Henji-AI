@@ -454,7 +454,7 @@ describe('ImageMarkToolV3Host', () => {
     expect(handButton.disabled).toBe(false)
 
     fireEvent.click(screen.getByRole('button', { name: 'Open' }))
-    expect(await screen.findByRole('button', { name: 'Open from file' })).toBeTruthy()
+    expect(await screen.findByRole('button', { name: 'Open image' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Open editable file' })).toBeNull()
     expect(screen.getByRole('button', { name: 'Paste image from clipboard' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Create blank image' })).toBeTruthy()

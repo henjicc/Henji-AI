@@ -144,14 +144,14 @@ function createVideoEditLayoutScene() {
       const previousLayout = await page.evaluate(key => localStorage.getItem(key), STORAGE_KEY)
       // Release any prior scenario's project before beginning this scene's Worker accounting.
       await button(page, '剪辑').click()
-      if (await button(page, '关闭工程').isVisible()) await button(page, '关闭工程').click()
+      if (await button(page, '关闭项目').isVisible()) await button(page, '关闭项目').click()
       await button(page, '生成').click()
       await page.evaluate(key => localStorage.removeItem(key), STORAGE_KEY)
       await observeWorkers(page)
       try {
         await app.evaluate(({ dialog }, file) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] }) }, file)
         await button(page, '剪辑').click()
-        const openedAt = performance.now(); await button(page, '打开工程').click(); await presented(page, 0)
+        const openedAt = performance.now(); await button(page, '打开项目文件').click(); await presented(page, 0)
         evidence.firstPresentedMs = performance.now() - openedAt
         await page.evaluate(() => window.__videoLayoutWatchCanvas(document.querySelector('canvas[aria-label="剪辑画面"]')))
         await page.getByTitle('布局验收文字', { exact: true }).click()
@@ -269,7 +269,7 @@ function createVideoEditLayoutScene() {
         await layoutAction(page, '效果控件'); await stable('页面往返恢复', false)
         evidence.restoration.pageRoundTrip = true; await capture('video-layout-page-restored')
         await layoutAction(page, '重置布局'); await stable('最终重置', false)
-        await button(page, '关闭工程').click(); await waitReleased(page)
+        await button(page, '关闭项目').click(); await waitReleased(page)
         evidence.resources = await workerSnapshot(page)
         assert.equal(evidence.resources.live, 0); assert.equal(evidence.resources.peakLive, 1)
         assert.ok(evidence.resources.workers.every(worker => worker.disposedAt && worker.terminatedAt), '所有节目 Worker 均完成资源释放与终止')
@@ -280,7 +280,7 @@ function createVideoEditLayoutScene() {
         fs.writeFileSync(path.join(root, 'evidence.json'), JSON.stringify(evidence, null, 2))
         await capture('video-layout-failed').catch(() => {}); throw error
       } finally {
-        if (await button(page, '关闭工程').isVisible().catch(() => false)) { await button(page, '关闭工程').click({ timeout: 10000 }).catch(() => {}); await waitReleased(page).catch(() => {}) }
+        if (await button(page, '关闭项目').isVisible().catch(() => false)) { await button(page, '关闭项目').click({ timeout: 10000 }).catch(() => {}); await waitReleased(page).catch(() => {}) }
         evidence.resources = await workerSnapshot(page).catch(() => evidence.resources)
         fs.writeFileSync(path.join(root, 'evidence.json'), JSON.stringify(evidence, null, 2))
         await page.evaluate(({ key, previousLayout }) => {

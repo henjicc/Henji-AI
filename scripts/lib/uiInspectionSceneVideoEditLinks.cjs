@@ -82,8 +82,8 @@ function createVideoEditLinksScene() {
       const ids = project.sequences[0].clips.map(clip => clip.id); const [picture, sound, sound2] = ids
       try {
         await button(page, '剪辑').click()
-        if (await button(page, '关闭工程').isVisible()) await button(page, '关闭工程').click()
-        await dialogs(app, [file], file); await button(page, '打开工程').click(); await presented(page, 0)
+        if (await button(page, '关闭项目').isVisible()) await button(page, '关闭项目').click()
+        await dialogs(app, [file], file); await button(page, '打开项目文件').click(); await presented(page, 0)
         const identity = await authorizeMcpConnection(page, { name: '剪辑链接验收', allowWrites: false, allowDestructive: false })
         client = await connectMcpClient(identity.config, 'Henji links Reality')
         const view = async () => (await callTool(client, 'read_application_entity', { ref: { kind: 'video_edit.project', id: project.id }, propertyIds: ['video_edit.project.timeline_view'] })).data.properties['video_edit.project.timeline_view']
@@ -165,7 +165,7 @@ function createVideoEditLinksScene() {
         await label(page, picture, '画面').click(); assert.deepEqual((await view()).selectedClipIds, [picture])
         evidence.steps.push('解除链接后点击画面只选画面')
         assert.deepEqual(clips().map(clip => clip.itemId), Array(7).fill('links-item'))
-        await button(page, '关闭工程').click()
+        await button(page, '关闭项目').click()
         assert.equal(fs.statSync(source).size, original.size); assert.equal(fs.statSync(source).mtimeMs, original.mtime)
         evidence.completed = true
       } finally {

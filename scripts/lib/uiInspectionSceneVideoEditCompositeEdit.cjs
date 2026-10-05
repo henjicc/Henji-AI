@@ -43,12 +43,12 @@ function createVideoEditCompositeEditScene({ pressureOnly = false } = {}) {
         }, { point: process.env.HENJI_DEV_DISPLAY_POINT, hostContentsId: await (await app.browserWindow(page)).evaluate((window) => window.webContents.id) })
         if (process.env.HENJI_DEV_DISPLAY_POINT) { assert.ok(evidence.display.preferredId !== undefined); assert.equal(evidence.display.id, evidence.display.preferredId); assert.equal(evidence.display.primary, false) }
         await button(page, '剪辑').click()
-        if (await button(page, '关闭工程').isVisible()) await button(page, '关闭工程').click()
+        if (await button(page, '关闭项目').isVisible()) await button(page, '关闭项目').click()
         await button(page, '生成').click()
         previousLayout = await page.evaluate(() => localStorage.getItem('henji.videoEdit.dockLayout.v1'))
         await page.evaluate(() => localStorage.removeItem('henji.videoEdit.dockLayout.v1'))
         await observeWorkers(page); observed = true; await button(page, '剪辑').click()
-        const open = async target => { await dialogs(app, [target], target); await button(page, '打开工程').click(); await presented(page, 0) }
+        const open = async target => { await dialogs(app, [target], target); await button(page, '打开项目文件').click(); await presented(page, 0) }
         if (!pressureOnly) await open(file)
         const identity = await authorizeMcpConnection(page, { name: '原生图形滤镜转场验收', allowWrites: true, allowDestructive: true })
         client = await connectMcpClient(identity.config, 'Henji composite Reality')
@@ -213,7 +213,7 @@ function createVideoEditCompositeEditScene({ pressureOnly = false } = {}) {
         const preview = new Map()
         for (const frame of [60, 81, 82, 89, 90, 97, 98, 120]) { await seek(projectRef, frame); preview.set(frame, await pixels(`preview-${frame}.png`)) }
         const snapshot = readFile(file); evidence.trackBanks = { mixed: await trackBanks(page) }
-        await shot('composite-mixed-transition-4k'); await button(page, '关闭工程').click(); await waitReleased(page); await open(file)
+        await shot('composite-mixed-transition-4k'); await button(page, '关闭项目').click(); await waitReleased(page); await open(file)
         assert.deepEqual(readFile(file), snapshot); await seek(projectRef, 90)
         const reopened = await pixels('reopened-90.png'); assert.ok((await pixelDifference(reopened.file, preview.get(90).file)).equal)
         evidence.savedReopened = true; evidence.public = { effectRef, fixedVersion: fixed.versionId, transitionRef, graphicRef, adjustmentRef }
@@ -234,7 +234,7 @@ function createVideoEditCompositeEditScene({ pressureOnly = false } = {}) {
           const difference = await pixelDifference(decoded, image.file); evidence.export.comparisons.push({ frame, difference }); store()
           assert.ok(difference.psnr === null || difference.psnr >= 30, `实际成片须与同帧全分辨率预览匹配：${JSON.stringify({ frame, difference })}`)
         }
-        await button(page, '关闭工程').click(); await waitReleased(page)
+        await button(page, '关闭项目').click(); await waitReleased(page)
         evidence.mixedCompleted = true; evidence.phases.push('手动原生对象/源码效果/Modern MCP/保存重开/实际成片全部通过'); store()
         }
         phase('完整500片段500字幕原4K60新增受控代码滤镜压力')
@@ -317,7 +317,7 @@ function createVideoEditCompositeEditScene({ pressureOnly = false } = {}) {
         const longGaps = during.slice(1).map((sample, index) => ({ fromFrame: during[index].frame, toFrame: sample.frame, gapMs: Math.round(sample.at - during[index].at), decodeMs: Math.round(sample.decodeMs), gpuMs: Math.round(sample.gpuMs) })).filter(gap => gap.gapMs > 50).map(gap => ({ ...gap, cause: gap.decodeMs >= gap.gapMs / 2 ? 'decode' : gap.gpuMs >= gap.gapMs / 2 ? 'gpu' : 'presentation' }))
         evidence.drag = { ...drag, actualUpdatesPerSecond: during.length * 1000 / (endedAt - drag.inputs[0].at), latencyP95Ms: quantile(latencies, .95), finalSettleMs: Math.max(0, final.at - endedAt), longGaps }; store()
         assert.ok(evidence.drag.actualUpdatesPerSecond >= 58); assert.ok(evidence.drag.latencyP95Ms < 100); assert.ok(evidence.drag.finalSettleMs < 100)
-        await shot('composite-32-track-500-clip-code-filter-original-4k60'); await button(page, '关闭工程').click(); await waitReleased(page)
+        await shot('composite-32-track-500-clip-code-filter-original-4k60'); await button(page, '关闭项目').click(); await waitReleased(page)
         evidence.resources = await workerSnapshot(page); assert.equal(evidence.resources.live, 0)
         for (const original of originals) { const now = fs.statSync(original.file); assert.equal(now.size, original.size); assert.equal(now.mtimeMs, original.mtimeMs) }
         evidence.originalsUnchanged = true; evidence.phases.push('完整原4K60压力帧、拖动与释放'); evidence.completed = true; evidence.pressureOnly = pressureOnly; delete evidence.currentPhase; store()
@@ -326,7 +326,7 @@ function createVideoEditCompositeEditScene({ pressureOnly = false } = {}) {
         await shot('composite-edit-failed').catch(() => {}); throw error
       } finally {
         await page.mouse.up().catch(() => {}); await client?.close().catch(() => {}); await disableMcp(page).catch(() => {})
-        await button(page, '关闭工程').click().catch(() => {})
+        await button(page, '关闭项目').click().catch(() => {})
         if (observed) { await waitReleased(page).catch(error => { evidence.releaseFailure = String(error); evidence.completed = false }); evidence.resources = await workerSnapshot(page).catch(() => evidence.resources) }
         await page.evaluate(previous => {
           for (const key of ['__compositeParameterObserver', '__compositeFrameObserver', '__compositeInputObserver', '__compositeDragObserver']) window[key]?.disconnect()

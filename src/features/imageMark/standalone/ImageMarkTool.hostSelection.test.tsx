@@ -64,7 +64,7 @@ function renderTool() {
 }
 
 async function openSource(): Promise<void> {
-  fireEvent.click(screen.getByRole('button', { name: '从文件打开' }))
+  fireEvent.click(screen.getByRole('button', { name: '打开图片' }))
   await waitFor(() => expect(mocks.openDialog).toHaveBeenCalledTimes(1))
 }
 

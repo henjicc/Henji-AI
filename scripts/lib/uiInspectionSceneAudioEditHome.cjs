@@ -5,13 +5,12 @@ const path = require('node:path')
 
 function createAudioEditHomeScene({ setupToolbox, clickNamedButton }) {
   return {
-    id: 'toolbox-audio-edit-home', surface: '工具箱', name: '口播剪辑-工程列表', writesUserData: true,
+    id: 'toolbox-audio-edit-home', surface: '工具箱', name: '口播剪辑-项目页', writesUserData: true,
     setup: async (page) => {
       await setupToolbox(page)
       await clickNamedButton(page, /^(口播剪辑)/)
       await page.getByText('从一段口播开始', { exact: true }).waitFor()
-      assert.equal(await page.getByRole('textbox', { name: '搜索工程' }).count(), 0)
-      assert.equal(await page.getByRole('navigation', { name: '工程分页' }).count(), 0)
+      assert.equal(await page.getByRole('textbox', { name: '搜索项目' }).count(), 0)
       const assertImportLayout = async () => {
         const button = page.getByRole('button', { name: '导入音频或视频', exact: true })
         const bounds = await button.boundingBox()
@@ -37,22 +36,22 @@ function createAudioEditHomeScene({ setupToolbox, clickNamedButton }) {
       fs.writeFileSync(sourcePath, wav)
       const ids = []
       try {
-        for (const name of ['产品介绍 · 第一版', '周末随想', '这是一段名称比较长的口播工程，用来检查工程标题是否会挤压其他内容']) {
+        for (const name of ['产品介绍 · 第一版', '周末随想', '这是一段名称比较长的口播项目，用来检查项目标题是否会挤压其他内容']) {
           ids.push(await page.evaluate(async ({ sourcePath, name }) => (await window.henjiNative.audio.createEditProject({ sourcePath, name })).id, { sourcePath, name }))
         }
         await page.getByRole('button', { name: '返回工具', exact: true }).click()
         await clickNamedButton(page, /^(口播剪辑)/)
-        await page.getByRole('button', { name: /产品介绍 · 第一版/ }).waitFor()
+        await page.locator('[data-project-library-state="items"]').waitFor()
+        await page.getByText('产品介绍 · 第一版', { exact: true }).waitFor()
         await assertImportLayout()
-        const search = page.getByRole('textbox', { name: '搜索工程' })
+        const search = page.getByRole('textbox', { name: '搜索项目' })
         assert.ok((await search.boundingBox()).width <= 300, '搜索框应保持合理宽度')
-        assert.equal(await page.getByRole('navigation', { name: '工程分页' }).count(), 0)
         await page.screenshot({ path: path.resolve('.ui-tour', 'audio-edit-home-projects.png') })
-        await search.fill('没有这个工程')
-        await page.getByText('没有找到匹配的工程', { exact: true }).waitFor()
+        await search.fill('没有这个项目')
+        await page.getByText('没有符合条件的项目', { exact: true }).waitFor()
         await page.screenshot({ path: path.resolve('.ui-tour', 'audio-edit-home-search.png') })
-        await page.getByRole('button', { name: '清除搜索', exact: true }).click()
-        assert.equal(await page.getByRole('button', { name: /继续编辑/ }).count(), 3)
+        await search.press('Escape')
+        assert.equal(await page.locator('[data-project-id]').count(), 3)
       } finally {
         for (const id of ids) await page.evaluate((id) => window.henjiNative.audio.deleteEditProject(id), id)
         fs.unlinkSync(sourcePath)

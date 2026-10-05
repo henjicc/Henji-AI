@@ -80,7 +80,7 @@ function createVideoEditProbeScene() {
     expectedLogEvents: ['video_edit.save.failed'],
     // 故障阶段最后停在已重新定位的工程上；关掉它，后序场景（与 --only 单跑时一样）从“打开工程”开始。
     cleanup: async (page) => {
-      const close = button(page, '关闭工程')
+      const close = button(page, '关闭项目')
       if (!(await close.isVisible().catch(() => false))) {
         const tab = button(page, '剪辑').first()
         if (await tab.isVisible().catch(() => false)) await tab.click()
@@ -93,7 +93,7 @@ function createVideoEditProbeScene() {
         await button(page, '导出视频').waitFor({ state: 'visible', timeout: 20000 })
       }
       await close.click()
-      await button(page, '打开工程').waitFor({ state: 'visible', timeout: 15000 })
+      await button(page, '打开项目文件').waitFor({ state: 'visible', timeout: 15000 })
     },
     setup: async (page, app, { capture }) => {
       const root = path.resolve('node_modules/.cache/video-edit-probe'); fs.mkdirSync(root, { recursive: true })
@@ -114,7 +114,7 @@ function createVideoEditProbeScene() {
       const projectPath = path.join(root, 'closure.henji-video')
       await dialogs(app, [specs[0].source, sound], projectPath)
       // Import only creates project items (original paths); the asset-library image joins by drag.
-      await button(page, '新建工程').click(); await button(page, '导入').click()
+      await button(page, '新建项目').click(); await button(page, '导入').click()
       let imported = await savedProject(page, projectPath, document => document.media.length === 2, '导入项目项保存')
       assert.equal(imported.sequences[0].clips.length, 0, '导入只创建项目项')
       await page.evaluate(async picture => { await window.henjiNative.assetLibrary.createAsset({ filePath: picture, mediaType: 'image', source: 'external', displayName: '素材库图片' }) }, picture)
@@ -215,13 +215,13 @@ function createVideoEditProbeScene() {
         evidence.toolRoundTrip = { change: changed.executionState, verification: changed.verificationState, annotation: marks.data.items, split: split.executionState }
         await button(page, '选择').click()
         for (const spec of specs) {
-          await button(page, '关闭工程').click()
+          await button(page, '关闭项目').click()
           const document = structuredClone(saved)
           document.id = `reality-${spec.width}-${spec.fps}`; document.sequences[0].width = spec.width; document.sequences[0].height = spec.height; document.sequences[0].frameRate = { numerator: spec.fps, denominator: 1 }; document.name = `剪辑验收 ${spec.width} ${spec.fps}`
           Object.assign(document.media.find(item => item.kind === 'video'), { path: spec.source, width: spec.width, height: spec.height })
           document.sequences[0].clips.forEach(clip => { clip.start *= spec.fps / 30; clip.duration *= spec.fps / 30 }); document.sequences[0].annotations.forEach(mark => { mark.frame *= spec.fps / 30 })
           const file = path.join(root, `${spec.width}-${spec.fps}.henji-video`); fs.writeFileSync(file, JSON.stringify(document))
-          await dialogs(app, [file], ''); await button(page, '打开工程').click(); await presented(page, 0)
+          await dialogs(app, [file], ''); await button(page, '打开项目文件').click(); await presented(page, 0)
           const seeks = []; const previewFrames = {}
           const canvas = page.getByLabel('剪辑画面', { exact: true })
           const pixel = () => canvas.evaluate(canvas => canvas.toDataURL('image/png'))
@@ -332,7 +332,7 @@ function createVideoEditProbeScene() {
         assert.equal(cancelled.data.task.state, 'cancelled'); assert.equal(fs.existsSync(cancellationPath), false)
         evidence.cancellation = { state: cancelled.data.task.state, partialFileRemoved: true }
         // Exercise sequence-specific output settings and disk reopening in the real host.
-        await button(page, '关闭工程').click()
+        await button(page, '关闭项目').click()
         const multi = structuredClone(saved); multi.id = 'reality-multi-sequence'; multi.name = '多序列保存导出验收'
         const portrait = structuredClone(multi.sequences[0]); portrait.id = 'portrait-2997'; portrait.name = '竖屏 29.97 单声道'
         portrait.width = 1080; portrait.height = 1920; portrait.frameRate = { numerator: 30000, denominator: 1001 }; portrait.sampleRate = 44100; portrait.channels = 1
@@ -344,14 +344,14 @@ function createVideoEditProbeScene() {
         // Its own folder: the save-failure ACL must not touch media files (asset identity includes ctime).
         const multiPath = path.join(root, 'projects', 'multi-sequence.henji-video'); fs.mkdirSync(path.dirname(multiPath), { recursive: true }); fs.writeFileSync(multiPath, JSON.stringify(multi))
         const fractionalOutput = path.join(root, `portrait-2997-mono-${Date.now()}.mp4`)
-        await dialogs(app, [multiPath], fractionalOutput); await button(page, '打开工程').click(); await presented(page, 0)
+        await dialogs(app, [multiPath], fractionalOutput); await button(page, '打开项目文件').click(); await presented(page, 0)
         const portraitRef = { kind: 'video_edit.sequence', id: `${multi.id}:${portrait.id}` }
         const portraitRead = await callTool(client, 'read_application_entity', { ref: portraitRef, propertyIds: ['video_edit.sequence.name', 'video_edit.sequence.frame_rate', 'video_edit.sequence.sample_rate', 'video_edit.sequence.channels'] })
         const named = await callTool(client, 'change_application_entities', operationEnvelope([portraitRead], { summary: '修改后台竖屏序列名称', changes: [{ kind: 'set_properties', entityType: portraitRef.kind, target: portraitRef, properties: { 'video_edit.sequence.name': '已保存的竖屏序列' } }] }))
         assert.equal(named.verificationState, 'verified', JSON.stringify(named))
         const multiSaved = JSON.parse(fs.readFileSync(multiPath, 'utf8'))
         assert.equal(multiSaved.sequences[1].name, '已保存的竖屏序列'); assert.deepEqual(multiSaved.media, multi.media)
-        await button(page, '关闭工程').click(); await button(page, '打开工程').click(); await presented(page, 0)
+        await button(page, '关闭项目').click(); await button(page, '打开项目文件').click(); await presented(page, 0)
         const restored = await callTool(client, 'read_application_entity', { ref: portraitRef, propertyIds: ['video_edit.sequence.name', 'video_edit.sequence.frame_rate', 'video_edit.sequence.sample_rate', 'video_edit.sequence.channels'] })
         assert.deepEqual(restored.data.properties, { 'video_edit.sequence.name': '已保存的竖屏序列', 'video_edit.sequence.frame_rate': { numerator: 30000, denominator: 1001 }, 'video_edit.sequence.sample_rate': 44100, 'video_edit.sequence.channels': 1 })
         const focused = await callTool(client, 'focus_application_entity', operationEnvelope([], { ref: portraitRef }))
@@ -378,8 +378,8 @@ function createVideoEditProbeScene() {
           await button(page.locator('[data-video-edit-panel="timeline"]').first(), '文字').click()
           await savedProject(page, multiPath, document => document.sequences[1].clips.length === before + 1, '导出期间编辑保存')
           // Leaving the project is refused while its export runs; the export keeps going.
-          await button(page, '关闭工程').click(); await page.waitForTimeout(300)
-          const closeRefused = { stillOpen: await button(page, '关闭工程').count(), alerts: await alerts() }
+          await button(page, '关闭项目').click(); await page.waitForTimeout(300)
+          const closeRefused = { stillOpen: await button(page, '关闭项目').count(), alerts: await alerts() }
           const multiRef = { kind: 'video_edit.project', id: multi.id }
           for (let state = 'running'; state === 'running';) { await page.waitForTimeout(250); state = (await callTool(client, 'query_video_edit_export', { projectRef: multiRef })).data.task.state }
           const metadata = probe(output); const video = metadata.streams.find(track => track.codec_type === 'video')
@@ -397,29 +397,29 @@ function createVideoEditProbeScene() {
           acl(['/deny', `${account}:(W)`])
           try {
             await button(page, '撤销').click()
-            await page.getByText(/工程未能保存到磁盘/).first().waitFor({ state: 'visible', timeout: 10000 })
+            await page.getByText(/项目未能保存到磁盘/).first().waitFor({ state: 'visible', timeout: 10000 })
             evidence.faults.saveFailure = { alerts: await alerts() }
             assert.ok(!evidence.faults.saveFailure.alerts.some(text => /EISDIR|EPERM|ENOENT|illegal operation/i.test(text)), `保存失败提示不得暴露原始系统错误：${evidence.faults.saveFailure.alerts}`)
             await capture('video-edit-fault-save-failed')
-            await button(page, '关闭工程').click(); await page.waitForTimeout(800)
-            assert.equal(await button(page, '关闭工程').count(), 1, '未保存成功前关闭须保留工程与修改')
+            await button(page, '关闭项目').click(); await page.waitForTimeout(800)
+            assert.equal(await button(page, '关闭项目').count(), 1, '未保存成功前关闭须保留工程与修改')
             evidence.faults.saveFailure.alertsAfterClose = await alerts()
           } finally { acl(['/remove:d', account]) }
           const deadline = performance.now() + 45000; let recovered
           do { await page.waitForTimeout(250); recovered = JSON.parse(projectText()) } while (recovered.sequences[1].clips.length !== before - 1 && performance.now() < deadline)
           assert.equal(recovered.sequences[1].clips.length, before - 1, '恢复写入后自动重试须保存失败期间的修改')
-          await page.waitForFunction(() => ![...document.querySelectorAll('[role=alert]')].some(alert => /工程未能保存到磁盘/.test(alert.textContent ?? '')), null, { timeout: 5000 })
+          await page.waitForFunction(() => ![...document.querySelectorAll('[role=alert]')].some(alert => /项目未能保存到磁盘/.test(alert.textContent ?? '')), null, { timeout: 5000 })
           evidence.faults.saveFailure.recovered = true; evidence.faults.saveFailure.alertsAfterRecovery = await alerts()
           fs.writeFileSync(path.join(root, 'evidence-final.json'), JSON.stringify(evidence, null, 2))
         }
         // 3) Missing source file on open, then explicit relink to the original path.
         {
-          if (await button(page, '关闭工程').count()) await button(page, '关闭工程').click()
+          if (await button(page, '关闭项目').count()) await button(page, '关闭项目').click()
           const missing = structuredClone(saved); missing.id = 'reality-missing-source'; missing.name = '缺失源文件验收'
           const missingPath = path.join(root, 'missing-source-does-not-exist.mp4'); fs.rmSync(missingPath, { force: true })
           missing.media.find(item => item.kind === 'video').path = missingPath
           const missingProject = path.join(root, 'missing-source.henji-video'); fs.writeFileSync(missingProject, JSON.stringify(missing))
-          await dialogs(app, [missingProject], ''); await button(page, '打开工程').click(); await page.waitForTimeout(3000)
+          await dialogs(app, [missingProject], ''); await button(page, '打开项目文件').click(); await page.waitForTimeout(3000)
           evidence.faults.missingSource = { alerts: await alerts(), canvas: await page.getByLabel('剪辑画面', { exact: true }).evaluate(canvas => ({ ...canvas.dataset })).catch(error => String(error)), body: (await page.locator('body').innerText()).slice(-800) }
           assert.ok(evidence.faults.missingSource.alerts.some(text => text.includes('找不到素材「1920-30.mp4」的源文件') && text.includes('重新定位源文件')), JSON.stringify(evidence.faults.missingSource.alerts))
           assert.ok(!evidence.faults.missingSource.alerts.some(text => text.includes('henji-media')), '缺失提示不得暴露内部地址')

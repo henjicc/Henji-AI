@@ -68,7 +68,7 @@ async function inspectCodeControls({ page, app, capture, evidence, change, file,
   await select(staticClip)
   assert.equal(await page.locator('[data-video-edit-code-parameter="speed"]').count(), 0)
   await seek(page, 120); const withoutLogo = await png()
-  await page.getByLabel('透明徽标工程图片', { exact: true }).click()
+  await page.getByLabel('透明徽标项目图片', { exact: true }).click()
   await page.getByRole('option', { name: 'transparent-4k.png', exact: true }).click()
   document = await saved(page, file, value => Boolean(codeOf(value, staticClip).parameters.logo))
   await page.waitForFunction(previous => document.querySelector('canvas[aria-label="剪辑画面"]').toDataURL('image/png') !== previous, withoutLogo)

@@ -2,6 +2,7 @@
 import React from 'react';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { ClipboardPaste, FilePlus2, FolderOpen, PackageOpen } from 'lucide-react';
 import { ProjectLibraryPage, type ProjectLibraryLabels } from './ProjectLibraryPage';
 import type { ProjectCardGridItem } from './ProjectCardGrid';
 
@@ -35,9 +36,9 @@ const renderPage = (pageItems: ProjectCardGridItem[] = items, onOpen = vi.fn()) 
     title="项目管理"
     items={pageItems}
     labels={labels}
-    headerActions={<span>导入</span>}
+    secondaryAction={{ label: '导入', icon: PackageOpen, onClick: vi.fn() }}
     onOpen={onOpen}
-    onCreate={vi.fn()}
+    create={{ kind: 'named', onCreate: vi.fn() }}
     onRename={vi.fn()}
     onDelete={vi.fn()}
   />,
@@ -64,11 +65,15 @@ describe('ProjectLibraryPage', () => {
     expect(screen.getByText(longName).getAttribute('title')).toBe(longName);
   });
 
-  it('空状态不再放第二个新建按钮，也不显示搜索与排序', () => {
+  it('没有项目时只显示新建提示：一个新建主按钮与次要动作，没有数量、搜索、排序', () => {
     renderPage([]);
     expect(screen.getByText('暂无项目')).toBeTruthy();
     expect(screen.getAllByRole('button', { name: '新建项目' })).toHaveLength(1);
+    expect(document.querySelectorAll('[data-variant="primary"]')).toHaveLength(1);
+    expect(screen.getByRole('button', { name: '导入' })).toBeTruthy();
     expect(screen.queryByRole('textbox', { name: '搜索项目' })).toBeNull();
+    expect(screen.queryByText('0 个项目')).toBeNull();
+    expect(screen.queryByRole('button', { name: '排序' })).toBeNull();
   });
 
   it('搜索只筛选本页显示，没有命中时显示无结果', () => {
@@ -96,7 +101,7 @@ describe('ProjectLibraryPage', () => {
   it('多选删除确认后退出多选，页头回到常规动作', async () => {
     const onDelete = vi.fn();
     render(
-      <ProjectLibraryPage title="项目管理" items={items} labels={labels} onOpen={vi.fn()} onCreate={vi.fn()} onRename={vi.fn()} onDelete={onDelete} />,
+      <ProjectLibraryPage title="项目管理" items={items} labels={labels} onOpen={vi.fn()} create={{ kind: 'named', onCreate: vi.fn() }} onRename={vi.fn()} onDelete={onDelete} />,
     );
     fireEvent.contextMenu(document.querySelector('[data-project-id="p1"]')!);
     fireEvent.click(within(document.querySelector('[data-context-menu]') as HTMLElement).getByText('多选'));
@@ -116,5 +121,79 @@ describe('ProjectLibraryPage', () => {
     expect(document.querySelector('[data-project-id="p2"]')?.getAttribute('data-selected')).toBe('true');
     expect(screen.getByRole('button', { name: '删除所选' }).getAttribute('data-variant')).toBe('danger');
     expect(document.querySelectorAll('[data-variant="primary"]')).toHaveLength(0);
+  });
+
+  it('多来源新建：空态平铺成按钮（第一项为主按钮），有项目时页头主按钮打开来源菜单', async () => {
+    const openImage = vi.fn();
+    const blank = vi.fn();
+    const options = [
+      { id: 'open', label: '打开图片', icon: FolderOpen, onSelect: openImage },
+      { id: 'blank', label: '新建空白图片', icon: FilePlus2, onSelect: blank },
+      { id: 'paste', label: '粘贴剪贴板图片', icon: ClipboardPaste, onSelect: vi.fn() },
+    ];
+    const view = render(
+      <ProjectLibraryPage title="图片编辑" items={[]} labels={labels} onOpen={vi.fn()} create={{ kind: 'menu', options }} />,
+    );
+    expect(screen.getByRole('button', { name: '打开图片' }).getAttribute('data-variant')).toBe('primary');
+    expect(screen.getByRole('button', { name: '新建空白图片' }).getAttribute('data-variant')).toBe('secondary');
+    fireEvent.click(screen.getByRole('button', { name: '打开图片' }));
+    expect(openImage).toHaveBeenCalledOnce();
+
+    view.rerender(
+      <ProjectLibraryPage title="图片编辑" items={items} labels={labels} onOpen={vi.fn()} create={{ kind: 'menu', options }} />,
+    );
+    expect(screen.queryByRole('button', { name: '新建空白图片' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: '新建项目' }));
+    fireEvent.click(within(document.querySelector('[data-context-menu]') as HTMLElement).getByText('新建空白图片'));
+    await waitFor(() => expect(blank).toHaveBeenCalledOnce());
+  });
+
+  it('不起名直接新建：点击即交给调用方，不弹起名对话框', () => {
+    const onCreate = vi.fn();
+    render(<ProjectLibraryPage title="剪辑" items={[]} labels={labels} onOpen={vi.fn()} create={{ kind: 'direct', onCreate }} />);
+    fireEvent.click(screen.getByRole('button', { name: '新建项目' }));
+    expect(onCreate).toHaveBeenCalledOnce();
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('空态接受拖入文件', () => {
+    const onDropFiles = vi.fn();
+    render(<ProjectLibraryPage title="图片编辑" items={[]} labels={labels} onOpen={vi.fn()} create={{ kind: 'direct', onCreate: vi.fn() }} onDropFiles={onDropFiles} />);
+    const page = document.querySelector('[data-project-library-state="empty"]') as HTMLElement;
+    const file = new File(['x'], 'a.png', { type: 'image/png' });
+    fireEvent.dragEnter(page, { dataTransfer: { types: ['Files'], files: [file] } });
+    expect(document.querySelector('[data-project-library-drop]')?.getAttribute('data-project-library-drop')).toBe('active');
+    fireEvent.drop(page, { dataTransfer: { types: ['Files'], files: [file] } });
+    expect(onDropFiles).toHaveBeenCalledWith([file]);
+    expect(document.querySelector('[data-project-library-drop]')?.getAttribute('data-project-library-drop')).toBe('idle');
+  });
+
+  it('不支持重命名与删除的项目没有“更多”与右键菜单；缺失文件显示状态行而不是元信息', () => {
+    const onOpen = vi.fn();
+    render(
+      <ProjectLibraryPage
+        title="剪辑"
+        items={[{ id: 'v1', name: '旅行', metaLine: 'D:/a/旅行.henji-video', status: '文件不存在' }]}
+        labels={labels}
+        onOpen={onOpen}
+        create={{ kind: 'direct', onCreate: vi.fn() }}
+      />,
+    );
+    expect(screen.queryByRole('button', { name: '项目操作' })).toBeNull();
+    fireEvent.contextMenu(document.querySelector('[data-project-id="v1"]')!);
+    expect(document.querySelector('[data-context-menu]')).toBeNull();
+    expect(screen.getByText('文件不存在')).toBeTruthy();
+    expect(screen.queryByText('D:/a/旅行.henji-video')).toBeNull();
+    fireEvent.click(document.querySelector('[data-project-id="v1"]')!);
+    expect(onOpen).toHaveBeenCalledOnce();
+  });
+
+  it('读取失败只显示错误与重试，不显示新建提示', () => {
+    const onRetry = vi.fn();
+    render(
+      <ProjectLibraryPage title="口播" items={[]} labels={labels} onOpen={vi.fn()} create={{ kind: 'direct', onCreate: vi.fn() }} loadError={{ title: '暂时无法读取', message: '请重试', onRetry }} />,
+    );
+    expect(screen.getByText('暂时无法读取')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '新建项目' })).toBeNull();
   });
 });

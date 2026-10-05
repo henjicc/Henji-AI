@@ -25,11 +25,11 @@
       {
         "click": {
           "role": "button",
-          "name": "/^返回工程列表$/"
+          "name": "/^返回项目列表$/"
         },
         "ifPresent": {
           "role": "button",
-          "name": "/^返回工程列表$/"
+          "name": "/^返回项目列表$/"
         }
       },
       {
@@ -137,7 +137,7 @@
       {
         "click": {
           "role": "button",
-          "name": "/^返回工程列表$/"
+          "name": "/^返回项目列表$/"
         }
       },
       {
@@ -390,7 +390,7 @@
           },
           "expect": {
             "role": "menu",
-            "name": "工程"
+            "name": "项目"
           }
         }
       },
@@ -448,11 +448,11 @@
       {
         "click": {
           "role": "button",
-          "name": "/^返回工程列表$/"
+          "name": "/^返回项目列表$/"
         },
         "ifPresent": {
           "role": "button",
-          "name": "/^返回工程列表$/"
+          "name": "/^返回项目列表$/"
         }
       },
       {
@@ -474,7 +474,7 @@
       {
         "waitFor": {
           "role": "button",
-          "name": "/^从文件打开$/"
+          "name": "/^打开图片$/"
         },
         "timeout": 12000,
         "optional": true
@@ -486,7 +486,7 @@
         "capture": "image-empty",
         "ifPresent": {
           "role": "button",
-          "name": "/^从文件打开$/"
+          "name": "/^打开图片$/"
         }
       },
       {
@@ -496,7 +496,7 @@
         },
         "ifPresent": {
           "role": "button",
-          "name": "/^从文件打开$/"
+          "name": "/^打开图片$/"
         }
       },
       {

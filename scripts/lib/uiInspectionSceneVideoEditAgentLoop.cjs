@@ -53,9 +53,9 @@ function createVideoEditAgentLoopScene() {
       }
       try {
         phase('open-project')
-        await button(page, '剪辑').first().click(); if (await button(page, '关闭工程').isVisible()) await button(page, '关闭工程').click()
+        await button(page, '剪辑').first().click(); if (await button(page, '关闭项目').isVisible()) await button(page, '关闭项目').click()
         await observeWorkers(page); observed = true
-        await dialogs(app, [file], file); await button(page, '打开工程').click(); await presented(page, 0)
+        await dialogs(app, [file], file); await button(page, '打开项目文件').click(); await presented(page, 0)
         const identity = await authorizeMcpConnection(page, { name: '智能体剪辑回环', allowWrites: true }); client = await connectMcpClient(identity.config, 'Henji agent loop Reality')
 
         phase('mcp-discover')
@@ -193,11 +193,11 @@ function createVideoEditAgentLoopScene() {
         evidence.phases.push('真实Pi(本地受控视觉模型)以剪辑首轮工具读取→调参→观察→读取图像→结论；手动撤销撤回Pi修改')
 
         phase('reopen')
-        await button(page, '关闭工程').click(); await waitReleased(page)
-        await dialogs(app, [file], file); await button(page, '打开工程').click(); await presented(page, 0)
+        await button(page, '关闭项目').click(); await waitReleased(page)
+        await dialogs(app, [file], file); await button(page, '打开项目文件').click(); await presented(page, 0)
         const reopened = readProject(file); assert.equal(reopened.codeMaterials[0].versions[0].source, SOURCE)
         const after = await observe({ kind: 'program', sequenceRef, frame: 60 }); assert.ok(near(after.pixel.rgb, [51, 77, 204]))
-        await button(page, '关闭工程').click(); await waitReleased(page)
+        await button(page, '关闭项目').click(); await waitReleased(page)
         evidence.resources = await workerSnapshot(page); assert.equal(evidence.resources.live, 0)
         evidence.phases.push('保存重开后源码与观察画面一致，Worker归零')
         evidence.completed = true; store()
@@ -205,7 +205,7 @@ function createVideoEditAgentLoopScene() {
       finally {
         server?.close()
         await client?.close().catch(() => {}); await disableMcp(page).catch(() => {})
-        if (await button(page, '关闭工程').isVisible().catch(() => false)) await button(page, '关闭工程').click().catch(() => {})
+        if (await button(page, '关闭项目').isVisible().catch(() => false)) await button(page, '关闭项目').click().catch(() => {})
         if (observed) { await waitReleased(page).catch(error => { evidence.completed = false; evidence.releaseFailure = String(error) }); evidence.resources = await workerSnapshot(page).catch(() => evidence.resources) }
         await page.evaluate(() => { window.__videoLayoutObservers?.forEach(observer => observer.disconnect()); if (window.__videoLayoutNativeWorker) window.Worker = window.__videoLayoutNativeWorker }).catch(() => {}); store()
       }
