@@ -46,12 +46,13 @@ import { registerImageEditorV3ImageDocumentIpc } from './image-editor-v3-package
 import path from 'node:path'
 import { getProgramStoreDir } from '../services/appBasePaths'
 import { getUserDataLayout } from '../services/appPaths'
-import { getDocumentService } from '../services/documents/runtime'
+import { getDocumentService, resolveContainerInternalFolder } from '../services/documents/runtime'
 import {
   createImageEditorV3ResourceMediaUrl,
   imageEditorV3ResourceObjectPath,
 } from '../services/image-editor-v3/resource-media-url'
 import { ImageDocumentService, ImageDocumentWorkingCopyLinks } from '../services/image-editor-v3/image-document'
+import { CanvasLayerPackageService } from '../services/image-editor-v3/canvas-layers/canvas-layer-packages'
 
 export {
   parseImageEditorV3FastProxyPayload,
@@ -80,6 +81,7 @@ interface ImageEditorV3Runtime {
   rasterExports: RasterExportSessionManager
   managedRaster: ManagedRasterMaterializer
   imageDocuments: ImageDocumentService
+  canvasLayers: CanvasLayerPackageService
 }
 let runtime: ImageEditorV3Runtime | undefined
 const requestAdmission = new ImageEditorV3RequestAdmission()
@@ -130,6 +132,15 @@ function getRuntime(): ImageEditorV3Runtime {
         const descriptor = await resources.describe(resourceId)
         return descriptor.mediaType ? createImageEditorV3ResourceMediaUrl(resourceId, descriptor.mediaType) : null
       },
+    }),
+    // 画布多图层节点的内嵌图片文档（3.4）：工作副本照旧在本仓库，写回时打包进画布所在容器的 .henji/
+    canvasLayers: new CanvasLayerPackageService({
+      documents,
+      packages,
+      linksDirectory: path.join(paths.rootDir, 'canvas-layer-links'),
+      logger: createMainLogger('main.image_editor_v3.canvas_layers'),
+      validateDocument: (document) => { validateSnapshotDocument(document) },
+      resolveInternalFolder: resolveContainerInternalFolder,
     }),
   }
   return runtime
@@ -404,6 +415,7 @@ export function registerImageEditorV3Ipc(): void {
   })
   registerImageEditorV3ImageDocumentIpc({
     imageDocuments: () => getRuntime().imageDocuments,
+    canvasLayers: () => getRuntime().canvasLayers,
     guard,
     runRequest,
   })

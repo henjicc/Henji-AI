@@ -37,12 +37,16 @@ const sessionCommands: DocumentSessionCommands = new Proxy({} as DocumentSession
 
 const canvasCommands: CanvasDocumentCommands = {
   readDocument: (target) => store().readDocument(target),
+  saveDocument: (request) => store().saveDocument(request),
   listDocuments: (query) => store().listDocuments(query),
   listProjects: (query) => store().listProjects(query),
   readSessionState: (request) => store().readSessionState(request),
   writeSessionState: (request) => store().writeSessionState(request),
   saveDocumentCover: async (request) => ({ docId: request.docId, coverPath: null }),
   importFile: async (request) => ({ path: request.sourcePath, copied: false }),
+  // 多图层内嵌图片文档的包由主进程写，这里不碰：准备不改指向，写出不产生包
+  prepareLayers: async () => ({ rewrites: {}, missing: [] }),
+  commitLayers: async () => ({ packages: {}, written: 0 }),
 }
 
 let registry = createRegistry()

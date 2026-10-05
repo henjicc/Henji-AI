@@ -492,3 +492,15 @@ export class ImageEditorV3CommandRepository implements ImageEditDocumentReposito
     }
   }
 }
+
+export function prepareImageEditorV3CanvasLayers(
+  request: Parameters<ImageEditorV3Platform['prepareCanvasLayers']>[0],
+): ReturnType<ImageEditorV3Platform['prepareCanvasLayers']> {
+  return getPlatform().imageEditorV3.prepareCanvasLayers(request)
+}
+
+export function commitImageEditorV3CanvasLayers(
+  request: Parameters<ImageEditorV3Platform['commitCanvasLayers']>[0],
+): ReturnType<ImageEditorV3Platform['commitCanvasLayers']> {
+  return getPlatform().imageEditorV3.commitCanvasLayers(request)
+}

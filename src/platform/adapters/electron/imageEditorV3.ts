@@ -37,6 +37,8 @@ export function createElectronImageEditorV3(): ImageEditorV3Platform {
     describeImageDocument: (request) => getNativeImageEditorV3().describeImageDocument(request),
     createImageDocument: (request) => getNativeImageEditorV3().createImageDocument(request),
     commitImageDocument: (request) => getNativeImageEditorV3().commitImageDocument(request),
+    prepareCanvasLayers: (request) => getNativeImageEditorV3().prepareCanvasLayers(request),
+    commitCanvasLayers: (request) => getNativeImageEditorV3().commitCanvasLayers(request),
     startRasterExport: (request) => getNativeImageEditorV3().startRasterExport(request),
     startManagedRasterExport: (request) => getNativeImageEditorV3().startManagedRasterExport(request),
     writeRasterExportTile: (request) => getNativeImageEditorV3().writeRasterExportTile(request),

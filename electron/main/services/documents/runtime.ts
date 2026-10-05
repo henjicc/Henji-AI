@@ -93,6 +93,23 @@ export async function resolveContainerGeneratedFolder(container: DocumentContain
 }
 
 /**
+ * 容器的内部文件夹 `.henji`（用到时才建，Windows 上设为隐藏）：画布内嵌图片文档的包放在这里（3.4）。
+ * 项目找不到时刷新索引再找一次。
+ */
+export async function resolveContainerInternalFolder(container: DocumentContainerRef): Promise<string> {
+  const services = getServices()
+  let resolved
+  try {
+    resolved = await services.workspace.resolveContainer(container)
+  } catch (error) {
+    if (container.kind !== 'project') throw error
+    await services.scanner.refresh()
+    resolved = await services.workspace.resolveContainer(container)
+  }
+  return await services.workspace.ensureInternalFolder(resolved.root)
+}
+
+/**
  * 启动后在后台扫描作品索引，不阻塞启动。作品目录尚未确定（全新安装、渲染层还没报告界面语言）时跳过，
  * 避免抢在渲染层之前按系统语言定下目录名称；之后的页面打开或刷新会触发扫描。
  */

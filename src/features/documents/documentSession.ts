@@ -214,6 +214,21 @@ export class DocumentSession {
     await this.enqueue(() => this.writeBack(reason))
   }
 
+  /**
+   * 换位置（移动、转正、创建副本）前的屏障：写完最后一次，再让保存策略把文档引用的内部资源写到位。
+   * 没有这一步的类型等同 flush。失败时抛错，修改保留。
+   */
+  async prepareTransfer(): Promise<void> {
+    await this.flush()
+    const hook = this.persistence.beforeTransfer
+    if (!hook || this.ended) return
+    await this.enqueue(async () => {
+      const meta = await hook(this.meta)
+      if (meta) this.meta = meta
+      this.emit()
+    })
+  }
+
   /** 失败后手动重试。 */
   retry(): Promise<void> {
     return this.flush()

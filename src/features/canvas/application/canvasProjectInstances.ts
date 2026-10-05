@@ -4,11 +4,11 @@ import { canvasStoreAttachment, createCanvasStore } from '@/stores/canvasStore'
 import { registerApplicationCloseGuard } from '@/core/applicationLifecycle/applicationCloseGuards'
 import { assertApplicationWritesAllowed } from '@/core/applicationLifecycle/applicationWriteBarrier'
 import { notifyApplicationDomainChanged } from '@/core/application-control/domainChangeSignal'
-import type { DocumentContainerRef, DocumentTarget } from '@/core/documents/types'
+import type { DocumentContainerRef, DocumentMeta, DocumentTarget } from '@/core/documents/types'
 import { createLogger } from '@/core/logging'
 import { isDocumentServiceError, toError } from '@/features/documents/documentErrors'
 import type { DocumentSession } from '@/features/documents/documentSession'
-import type { DocumentContentAdapter, DocumentLeaveOutcome } from '@/features/documents/documentSessionTypes'
+import type { DocumentContentAdapter, DocumentLeaveOutcome, DocumentPersistence } from '@/features/documents/documentSessionTypes'
 
 import { migrateCanvasGenerationPrompts } from './canvasGenerationPromptMigration'
 import {
@@ -18,7 +18,8 @@ import {
   type CanvasGraphContent,
   type Project,
 } from './canvasDocumentContent'
-import { canvasDocumentRegistry } from './canvasDocumentEnvironment'
+import { canvasDocumentCommands, canvasDocumentRegistry } from './canvasDocumentEnvironment'
+import { commitCanvasLayers, prepareCanvasLayers, rewriteCanvasLayerReferences } from './canvasLayerPackages'
 import { createCanvasSessionStatePersister, readCanvasSessionState, type CanvasSessionStatePersister } from './canvasSessionState'
 
 /*
@@ -29,6 +30,7 @@ import { createCanvasSessionStatePersister, readCanvasSessionState, type CanvasS
  * - 自动保存（防抖、只在有变化时写）、草稿、离开提示、冲突、退出屏障全部由会话负责；
  *   拖动节点期间不通知会话，松手后才标脏，避免每一帧都排一次保存。
  * - 撤销记录与视口不写进文档，按文档 ID 存程序目录（canvasSessionState.ts）。
+ * - 节点的内嵌图片文档（多图层）：写回与换位置前写成容器 `.henji/` 里的包，打开时按包准备（canvasLayerPackages.ts）。
  * - 同一份画布全局只有一个实例：界面、助手后台读写、生成任务回写都租用同一个实例（lease），
  *   离开或释放前等租约归零。会话结束（离开、移到回收站、被释放）时实例自动拆掉，之后再访问会重新打开。
  *
@@ -46,8 +48,10 @@ export interface CanvasProjectInstance {
   snapshot(): Project
   /** 暂停自动保存（批量事务期间不写中间结果）；返回恢复函数，可嵌套。 */
   pausePersistence(): () => void
-  /** 多图层内嵌包位置（canvasLayers 写回后更新，进下一次保存）。 */
-  setLayerPackages(packages: Record<string, string>): void
+  /** 多图层内嵌包位置（写出包后更新，并标记待保存）；返回是否有变化。 */
+  setLayerPackages(packages: Record<string, string>): boolean
+  /** 当前要写进文档的内容。 */
+  documentContent(): unknown
   readonly sessionState: CanvasSessionStatePersister
   dispose(): void
 }
@@ -187,10 +191,12 @@ export function bindCanvasSession(session: DocumentSession, initial: CanvasSessi
     },
     setLayerPackages: (packages) => {
       const next = Object.keys(packages).length ? { ...packages } : undefined
-      if (JSON.stringify(next ?? null) === JSON.stringify(graph.layerPackages ?? null)) return
+      if (JSON.stringify(next ?? null) === JSON.stringify(graph.layerPackages ?? null)) return false
       graph = { ...graph, layerPackages: next }
       notifySession()
+      return true
     },
+    documentContent: () => adapter.getContent(),
     dispose: () => undefined,
   }
   // 名称变化、进入或离开保存失败 / 冲突时通知（项目 store 据此刷新标题与保存错误）；普通的“待保存 / 保存中”不通知
@@ -230,10 +236,38 @@ export function bindCanvasSession(session: DocumentSession, initial: CanvasSessi
   return instance
 }
 
+/**
+ * 画布的保存策略：内容照常直接写文档文件；写回（空闲、关闭、保存）与换位置前，把节点的内嵌图片文档写成
+ * 容器 `.henji/` 里的包，包位置有变化时连同内容立即写一次文档（随后的自动保存内容相同，不再写盘）。
+ */
+function createCanvasPersistence(): { persistence: DocumentPersistence; bind(instance: CanvasProjectInstance): void } {
+  let bound: CanvasProjectInstance | null = null
+  const writeLayers = async (meta: DocumentMeta): Promise<DocumentMeta | void> => {
+    const instance = bound
+    if (!instance) return
+    const packages = await commitCanvasLayers(instance.id, meta, instance.store.getState().nodes)
+    if (!instance.setLayerPackages(packages)) return
+    const result = await canvasDocumentCommands().saveDocument({
+      target: { id: meta.id, path: meta.path }, expectedRevision: meta.revision, content: instance.documentContent(),
+    })
+    return result.meta
+  }
+  return {
+    persistence: {
+      mode: 'json',
+      save: (request) => canvasDocumentCommands().saveDocument(request),
+      commit: (_reason, meta) => writeLayers(meta),
+      beforeTransfer: writeLayers,
+    },
+    bind: (instance) => { bound = instance },
+  }
+}
+
 async function openBound(target: DocumentTarget): Promise<CanvasProjectInstance> {
   let session: DocumentSession
+  const persistence = createCanvasPersistence()
   try {
-    session = await canvasDocumentRegistry().open(target)
+    session = await canvasDocumentRegistry().open(target, { persistence: persistence.persistence })
   } catch (error) {
     if (isDocumentServiceError(error, 'DocumentNotFoundError')) throw new Error('PROJECT_NOT_FOUND')
     throw error
@@ -243,7 +277,16 @@ async function openBound(target: DocumentTarget): Promise<CanvasProjectInstance>
   try {
     const graph = canvasFromDocumentContent(session.getContent())
     const initial = await readCanvasSessionState(session, graph.imagePool)
-    return bindCanvasSession(session, initial)
+    // 内嵌图片文档：本机没有时按包解出；副本画布分出自己的文档，节点（含撤销记录）改指向新文档
+    const prepared = await prepareCanvasLayers(session.id, graph.nodes, graph.layerPackages)
+    const instance = bindCanvasSession(session, initial)
+    persistence.bind(instance)
+    if (prepared) {
+      const state = instance.store.getState()
+      const remap = (snapshots: typeof state.history.past) => snapshots.map((snapshot) => ({ ...snapshot, nodes: rewriteCanvasLayerReferences(snapshot.nodes, prepared.rewrites) }))
+      instance.store.setState({ nodes: prepared.nodes, history: { past: remap(state.history.past), future: remap(state.history.future) } })
+    }
+    return instance
   } catch (error) {
     // 内容读不懂（文件被手工改坏）：不留一个没有实例附着的会话
     logger.warn('画布内容无法载入', { event: 'canvas.document.bind.failed', error: toError(error), context: { docId: target.id } })
@@ -269,8 +312,11 @@ export async function getCanvasProjectInstance(id: string, path?: string): Promi
 /** 新建画布草稿（以草稿标记立即写进最终所在的文件夹：独立 = 作品目录“画布/”，项目 = 项目文件夹）并接成实例。 */
 export async function createCanvasDraftInstance(container: DocumentContainerRef = { kind: 'user' }): Promise<CanvasProjectInstance> {
   assertApplicationWritesAllowed()
-  const session = await canvasDocumentRegistry().create({ kind: 'canvas', container })
-  return bindCanvasSession(session)
+  const persistence = createCanvasPersistence()
+  const session = await canvasDocumentRegistry().create({ kind: 'canvas', container }, { persistence: persistence.persistence })
+  const instance = bindCanvasSession(session)
+  persistence.bind(instance)
+  return instance
 }
 
 export function attachCanvasProject(instance: CanvasProjectInstance): void {

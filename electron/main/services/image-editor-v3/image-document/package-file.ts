@@ -77,6 +77,11 @@ function parseManifest(bytes: Buffer): HenjiImagePackageManifest {
   }
 }
 
+/** 只读包里的文档头条目（`henji-document.json`）原始字节；没有时返回 null。画布内嵌图层包也用这个条目放自己的头。 */
+export async function readPackageDocumentHeaderBytes(filePath: string): Promise<Buffer | null> {
+  return (await readSmallEntries(filePath, [HENJI_IMAGE_DOCUMENT_HEADER_ENTRY])).get(HENJI_IMAGE_DOCUMENT_HEADER_ENTRY) ?? null
+}
+
 export async function readImageDocumentPackageHeader(filePath: string): Promise<ImageDocumentPackageHeaderRead> {
   const header = (await readSmallEntries(filePath, [HENJI_IMAGE_DOCUMENT_HEADER_ENTRY])).get(HENJI_IMAGE_DOCUMENT_HEADER_ENTRY)
   if (header) return { header: parseImageDocumentHeaderBytes(header), legacy: false }

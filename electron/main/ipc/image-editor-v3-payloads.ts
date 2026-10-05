@@ -433,20 +433,23 @@ export function parseImageEditorV3DescribeImageDocumentPayload(input: unknown): 
   return { requestId: readRequestId(record), target: parseImageDocumentTarget(record.target) }
 }
 
+function parseDocumentContainer(input: unknown): CreateImageDocumentPayload['container'] {
+  const container = parseRecord(input)
+  if (container.kind === 'user') {
+    assertExactKeys(container, ['kind'], 'image document container')
+    return { kind: 'user' }
+  }
+  if (container.kind === 'project') {
+    assertExactKeys(container, ['kind', 'projectId'], 'image document container')
+    return { kind: 'project', projectId: readDocumentId(container.projectId, 'project id') }
+  }
+  throw new Error('Invalid image document container')
+}
+
 export function parseImageEditorV3CreateImageDocumentPayload(input: unknown): CreateImageDocumentPayload {
   const record = parseRecord(input)
   assertExactKeys(record, ['requestId', 'documentId', 'container', 'emptyUntilRevision'], 'create image document payload')
-  const container = parseRecord(record.container)
-  let parsedContainer: CreateImageDocumentPayload['container']
-  if (container.kind === 'user') {
-    assertExactKeys(container, ['kind'], 'image document container')
-    parsedContainer = { kind: 'user' }
-  } else if (container.kind === 'project') {
-    assertExactKeys(container, ['kind', 'projectId'], 'image document container')
-    parsedContainer = { kind: 'project', projectId: readDocumentId(container.projectId, 'project id') }
-  } else {
-    throw new Error('Invalid image document container')
-  }
+  const parsedContainer = parseDocumentContainer(record.container)
   const emptyUntil = record.emptyUntilRevision
   if (emptyUntil !== null && (!Number.isSafeInteger(emptyUntil) || (emptyUntil as number) < 0)) {
     throw new Error('Invalid emptyUntilRevision')
@@ -470,6 +473,60 @@ export function parseImageEditorV3CommitImageDocumentPayload(input: unknown): Co
     expectedRevision: readSafeInteger(record, 'expectedRevision', 0, Number.MAX_SAFE_INTEGER),
     ...(record.force === true ? { force: true } : {}),
     ...(thumbnail ? { thumbnail } : {}),
+  }
+}
+
+const MAX_CANVAS_LAYERS = 10_000
+
+export interface CanvasLayersPreparePayload {
+  requestId: string
+  canvasId: string
+  layers: Array<{ documentId: string; packagePath?: string }>
+}
+
+export interface CanvasLayersCommitPayload {
+  requestId: string
+  canvasId: string
+  container: CreateImageDocumentPayload['container']
+  documentIds: string[]
+}
+
+function readLayerList<T>(value: unknown, read: (item: unknown) => T): T[] {
+  if (!Array.isArray(value) || value.length > MAX_CANVAS_LAYERS) throw new Error('Invalid canvas layer list')
+  return value.map(read)
+}
+
+export function parseImageEditorV3CanvasLayersPreparePayload(input: unknown): CanvasLayersPreparePayload {
+  const record = parseRecord(input)
+  assertExactKeys(record, ['requestId', 'canvasId', 'layers'], 'canvas layers prepare payload')
+  return {
+    requestId: readRequestId(record),
+    canvasId: readDocumentId(record.canvasId, 'canvas id'),
+    layers: readLayerList(record.layers, (item) => {
+      const layer = parseRecord(item)
+      assertExactKeys(layer, ['documentId', 'packagePath'], 'canvas layer')
+      const documentId = readDocumentId(layer.documentId, 'canvas layer document id')
+      if (layer.packagePath === undefined) return { documentId }
+      if (typeof layer.packagePath !== 'string'
+        || layer.packagePath.length > MAX_LOCAL_PATH_CHARACTERS
+        || layer.packagePath.includes('\0')
+        || !path.isAbsolute(layer.packagePath)
+        || !layer.packagePath.toLowerCase().endsWith('.henjilayer')) {
+        throw new Error('Invalid canvas layer package path')
+      }
+      return { documentId, packagePath: layer.packagePath }
+    }),
+  }
+}
+
+export function parseImageEditorV3CanvasLayersCommitPayload(input: unknown): CanvasLayersCommitPayload {
+  const record = parseRecord(input)
+  assertExactKeys(record, ['requestId', 'canvasId', 'container', 'documentIds'], 'canvas layers commit payload')
+  return {
+    requestId: readRequestId(record),
+    canvasId: readDocumentId(record.canvasId, 'canvas id'),
+    container: parseDocumentContainer(record.container),
+    documentIds: readLayerList(record.documentIds, (item) => readDocumentId(item, 'canvas layer document id')),
   }
 }
 

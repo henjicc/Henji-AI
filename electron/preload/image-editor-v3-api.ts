@@ -126,6 +126,8 @@ export function createImageEditorV3Api(
     describeImageDocument: (request) => nativeInvoke('imageEditorV3:imageDocument:describe', request),
     createImageDocument: (request) => nativeInvoke('imageEditorV3:imageDocument:create', request),
     commitImageDocument: (request) => nativeInvoke('imageEditorV3:imageDocument:commit', request),
+    prepareCanvasLayers: (request) => nativeInvoke('imageEditorV3:canvasLayers:prepare', request),
+    commitCanvasLayers: (request) => nativeInvoke('imageEditorV3:canvasLayers:commit', request),
     startRasterExport: (request) => nativeInvoke('imageEditorV3:rasterExport:start', request),
     startManagedRasterExport: (request) => nativeInvoke('imageEditorV3:rasterExport:startManaged', request),
     writeRasterExportTile: (request) => nativeInvoke('imageEditorV3:rasterExport:writeTile', request),

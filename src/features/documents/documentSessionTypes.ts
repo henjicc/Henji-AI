@@ -80,6 +80,11 @@ export interface DocumentPersistence {
   save(request: SaveDocumentRequest): Promise<DocumentSaveResult>
   /** 写回文档文件；返回新的元信息（没有变化时可不返回）。 */
   commit?(reason: DocumentCommitReason, meta: DocumentMeta): Promise<DocumentMeta | void>
+  /**
+   * 换位置（移动、转正、创建副本）前把文档引用的内部资源写到位，好让它们随文档一起复制
+   * （画布：多图层内嵌图片文档写成容器 `.henji/` 里的包）。返回新的元信息（没有写文档时可不返回）。
+   */
+  beforeTransfer?(meta: DocumentMeta): Promise<DocumentMeta | void>
   /** 会话结束（关闭或丢弃）后释放工作副本等资源。 */
   dispose?(): Promise<void>
 }

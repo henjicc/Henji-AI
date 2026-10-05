@@ -210,7 +210,7 @@ export class DocumentSessionRegistry {
       defaultFolder: parentFolderOf(session.documentMeta.path),
       check: (name, folder) => this.checkDocumentSaveName(session, name, folder),
       submit: async (name, folder) => {
-        await session.flush()
+        await session.prepareTransfer()
         const result = await this.commands.finalizeDocument({
           target: session.target,
           name,
@@ -257,7 +257,7 @@ export class DocumentSessionRegistry {
         location: folder ? { folder } : { renaming: project.path },
       }),
       submit: async (name, folder) => {
-        for (const session of sessions) await session.flush()
+        for (const session of sessions) await session.prepareTransfer()
         await this.commands.finalizeProject({ projectId: project.id, name, ...(folder ? { parentFolder: folder } : {}) })
         for (const session of sessions) await session.relocate()
         this.logger.info('草稿项目已保存', { event: 'documents.session.finalize_project.completed', context: { projectId: project.id, movedFolder: Boolean(folder) } })

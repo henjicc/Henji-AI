@@ -239,6 +239,21 @@ export interface ImageEditorV3ImageDocumentCommitResult {
   unchanged: boolean
 }
 
+/** 画布多图层节点的内嵌图片文档（3.4）：打开画布时的准备结果。 */
+export interface ImageEditorV3CanvasLayersPrepareResult {
+  /** 画布副本分出的新文档：旧文档 ID → 新文档 ID（节点要改指向新的）。 */
+  rewrites: Record<string, string>
+  /** 既没有工作副本也找不到包的文档 ID。 */
+  missing: string[]
+}
+
+/** 画布写回时写出内嵌图片文档包的结果。 */
+export interface ImageEditorV3CanvasLayersCommitResult {
+  /** 文档 ID → 包所在位置（画布所在容器的 `.henji/canvas-layers/`）。 */
+  packages: Record<string, string>
+  written: number
+}
+
 export type ImageEditorV3RasterExportFormat =
   | 'bigtiff'
   | 'jpeg'
@@ -419,6 +434,22 @@ export interface ImageEditorV3Platform {
     /** 当前已合成预览的有界副本，作为包内缩略图与列表封面；不接收 Data URL 或完整文档像素。 */
     thumbnail?: ImageEditorV3PackageThumbnail & { extension: 'png' | 'webp' }
   }): Promise<ImageEditorV3ImageDocumentCommitResult>
+  /**
+   * 打开画布时准备多图层节点的内嵌图片文档：本机没有工作副本时按包解出；工作副本属于别的画布
+   * （创建副本、拷贝文件夹）时分出新文档并返回改指向关系。
+   */
+  prepareCanvasLayers(request: {
+    requestId: string
+    canvasId: string
+    layers: Array<{ documentId: string; packagePath?: string }>
+  }): Promise<ImageEditorV3CanvasLayersPrepareResult>
+  /** 画布写回时把内嵌图片文档写成画布所在容器 `.henji/canvas-layers/` 里的包；已是最新的不写。 */
+  commitCanvasLayers(request: {
+    requestId: string
+    canvasId: string
+    container: DocumentContainerRef
+    documentIds: string[]
+  }): Promise<ImageEditorV3CanvasLayersCommitResult>
   /** 保存位置只由主进程原生对话框产生，渲染层不能注入输出路径。 */
   startRasterExport(request: {
     requestId: string

@@ -284,7 +284,7 @@ export class DocumentOperations {
         const kind = session?.documentMeta.kind ?? (await this.findDocument(target.id)).kind
         if (!this.canStandalone(kind)) throw new DocumentStandaloneNotAllowedError(kind)
       }
-      if (session) await session.flush()
+      if (session) await session.prepareTransfer()
       const result = await this.commands.moveDocument({ target: session?.target ?? target, container, onConflict })
       if (session && !session.isEnded) await session.applyTransfer(result)
       return result
@@ -295,7 +295,7 @@ export class DocumentOperations {
   async duplicateDocument(target: DocumentTarget, onConflict: NameConflictPolicy = 'keepBoth'): Promise<DocumentTransferResult> {
     return await this.write('duplicate', target.id, async () => {
       const session = this.registry().get(target.id)
-      if (session) await session.flush()
+      if (session) await session.prepareTransfer()
       return await this.commands.duplicateDocument({ target: session?.target ?? target, onConflict })
     })
   }

@@ -58,6 +58,8 @@ function createPlatform(): ImageEditorV3Platform {
     describeImageDocument: vi.fn(),
     createImageDocument: vi.fn(),
     commitImageDocument: vi.fn(),
+    prepareCanvasLayers: vi.fn(),
+    commitCanvasLayers: vi.fn(),
     startRasterExport: vi.fn(async () => ({ status: 'cancelled' as const })),
     startManagedRasterExport: vi.fn(),
     writeRasterExportTile: vi.fn(async () => ({ written: true as const })),
