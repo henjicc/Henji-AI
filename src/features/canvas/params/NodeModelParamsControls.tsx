@@ -27,6 +27,24 @@ const MODEL_PANEL_FALLBACK_CONTENT_WIDTH = 302;
 // 浮层 panelPadding="content"（左右各 12）+ 边框 2
 const MODEL_PANEL_HORIZONTAL_CHROME = 26;
 const MODEL_PANEL_GAP = 8;
+// 芯片 sm 档左右内边距 8 + 8、边框 1 + 1，名称与渠道之间 gap 6（测量层用的是 gap 8，多出的 2 留作余量）
+const MODEL_CHIP_HORIZONTAL_CHROME = 18;
+
+/**
+ * 芯片所在行还能给它多宽：行内容宽减去同排其它占位（标签等）与间距。用 offsetWidth（布局尺寸），
+ * 画布缩放的变换不影响结果；芯片自身宽度随内容变化，不能拿它判断“放不放得下”。
+ */
+function availableChipWidth(root: HTMLElement): number {
+  const slot = root.parentElement;
+  const row = slot?.parentElement;
+  if (!slot || !row) return root.offsetWidth;
+  const style = window.getComputedStyle(row);
+  const gap = Number.parseFloat(style.columnGap) || 0;
+  const inner = row.clientWidth - (Number.parseFloat(style.paddingLeft) || 0) - (Number.parseFloat(style.paddingRight) || 0);
+  const siblings = Array.from(row.children).filter((child): child is HTMLElement => child !== slot
+    && child instanceof HTMLElement && window.getComputedStyle(child).position !== 'absolute');
+  return inner - siblings.reduce((sum, child) => sum + child.offsetWidth + gap, 0);
+}
 
 export const NodeModelParamsControls = memo(({
   mediaType,
@@ -40,6 +58,9 @@ export const NodeModelParamsControls = memo(({
 }: NodeModelParamsControlsProps) => {
   const { t, i18n } = useTranslation();
   const modelChipMeasureRef = useRef<HTMLDivElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+  // 放不下“模型名 + 渠道”时只显示模型名，渠道进悬停说明：模型名是主要信息，不能被截成“GPT Im…”（5.8 shortTextTruncated）
+  const [compactChip, setCompactChip] = useState(false);
   const modelSearchInputRef = useRef<HTMLInputElement>(null);
   // 模型面板走共享浮层 PanelTrigger（任务 5.9）：定位、玻璃表面、点外与 Escape 关闭、子浮层归属都由它处理
   const [panelOpen, setPanelOpen] = useState(false);
@@ -72,6 +93,19 @@ export const NodeModelParamsControls = memo(({
     return () => observer.disconnect();
   }, [onModelChipContentWidthChange, selectedModelName, selectedModel]);
 
+  useLayoutEffect(() => {
+    const root = rootRef.current;
+    const measureEl = modelChipMeasureRef.current;
+    const row = root?.parentElement?.parentElement;
+    if (!root || !measureEl) return;
+    const update = () => setCompactChip(availableChipWidth(root) < measureEl.scrollWidth + MODEL_CHIP_HORIZONTAL_CHROME);
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(measureEl);
+    if (row) observer.observe(row);
+    return () => observer.disconnect();
+  }, [selectedModelName, selectedModel]);
+
   useEffect(() => {
     if (!panelOpen) {
       return;
@@ -85,7 +119,7 @@ export const NodeModelParamsControls = memo(({
   }, [panelOpen]);
 
   return (
-    <div className="relative flex w-full min-w-0 items-center gap-1">
+    <div ref={rootRef} className="relative flex w-full min-w-0 items-center gap-1">
       <PanelTrigger
         className="flex min-w-0 flex-1"
         open={panelOpen}
@@ -130,6 +164,9 @@ export const NodeModelParamsControls = memo(({
             aria-expanded={panelOpen}
             data-panel-trigger-button
             data-node-model-trigger
+            title={compactChip && selectedModel
+              ? `${selectedModelName} · ${getProviderDisplayName(selectedModel.meta.provider, i18n.language)}`
+              : undefined}
             className={`min-w-0 overflow-hidden ${chipClassName} ${modelChipClassName}`}
             onClick={(event) => {
               event.stopPropagation();
@@ -143,7 +180,7 @@ export const NodeModelParamsControls = memo(({
             }}
           >
             <span className="min-w-0 flex-1 truncate text-xs font-normal leading-none">{selectedModelName}</span>
-            {selectedModel && (
+            {selectedModel && !compactChip && (
               <span className={`shrink-0 text-xs leading-none text-text2`}>
                 {getProviderDisplayName(selectedModel.meta.provider, i18n.language)}
               </span>
@@ -151,20 +188,19 @@ export const NodeModelParamsControls = memo(({
           </UiChipButton>
         )}
       </PanelTrigger>
-      {onModelChipContentWidthChange && (
-        <div
-          ref={modelChipMeasureRef}
-          aria-hidden
-          className="pointer-events-none invisible absolute left-0 top-0 inline-flex items-center gap-2 whitespace-nowrap text-xs"
-        >
-          <span className="text-xs font-normal leading-none">{selectedModelName}</span>
-          {selectedModel && (
-            <span className="text-xs leading-none text-text2">
-              {getProviderDisplayName(selectedModel.meta.provider, i18n.language)}
-            </span>
-          )}
-        </div>
-      )}
+      {/* 测量层：常驻，算“模型名 + 渠道”的自然宽度（节点自适应宽度与紧凑判定共用） */}
+      <div
+        ref={modelChipMeasureRef}
+        aria-hidden
+        className="pointer-events-none invisible absolute left-0 top-0 inline-flex items-center gap-2 whitespace-nowrap text-xs"
+      >
+        <span className="text-xs font-normal leading-none">{selectedModelName}</span>
+        {selectedModel && (
+          <span className="text-xs leading-none text-text2">
+            {getProviderDisplayName(selectedModel.meta.provider, i18n.language)}
+          </span>
+        )}
+      </div>
     </div>
   );
 });

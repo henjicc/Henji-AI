@@ -91,8 +91,11 @@ function createRuntimeEvidenceCollector(page) {
       if (active) throw new Error(`运行时证据场景尚未结束：${active.key}`)
       active = { key, startedAt: new Date().toISOString(), browserErrorOffset: browserErrors.length }
     },
-    /** `expectedLogEvents`: event names a scene injects on purpose (fault injection); recorded, not failed. */
-    async finish({ expectedLogEvents = [] } = {}) {
+    /**
+     * `expectedLogEvents`: event names a scene injects on purpose (fault injection); recorded, not failed.
+     * `expectedBrowserErrors`: 同理的浏览器控制台错误（正则文本），如“源文件丢失”场景必然出现的 404（5.8）。
+     */
+    async finish({ expectedLogEvents = [], expectedBrowserErrors = [] } = {}) {
       if (!active) throw new Error('运行时证据场景尚未开始')
       const current = active
       active = null
@@ -101,13 +104,17 @@ function createRuntimeEvidenceCollector(page) {
         queryApplicationLogs(page, { afterTimestamp: current.startedAt, endTimestamp: finishedAt, level: 'error' }),
         queryApplicationLogs(page, { afterTimestamp: current.startedAt, endTimestamp: finishedAt, level: 'warn' }),
       ])
-      const browser = browserErrors.slice(current.browserErrorOffset)
+      const browserPatterns = expectedBrowserErrors.map((pattern) => new RegExp(pattern))
+      const isExpectedBrowserError = (item) => browserPatterns.some((pattern) => pattern.test(item.message))
+      const browser = browserErrors.slice(current.browserErrorOffset).filter((item) => !isExpectedBrowserError(item))
+      const expectedBrowser = browserErrors.slice(current.browserErrorOffset).filter(isExpectedBrowserError)
       const expected = new Set(expectedLogEvents)
       const unexpected = errors.events.filter(event => !expected.has(event.event))
       return {
         startedAt: current.startedAt,
         finishedAt,
         browserErrors: browser,
+        expectedBrowserErrors: expectedBrowser,
         logErrors: unexpected,
         expectedLogErrors: errors.events.filter(event => expected.has(event.event)),
         logWarnings: warnings.events,

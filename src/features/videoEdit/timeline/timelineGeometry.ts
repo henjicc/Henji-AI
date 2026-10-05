@@ -1,7 +1,8 @@
 import type { VideoEditClip, VideoEditSequence } from '@/core/videoEdit/document'
 import { videoEditFrameTimecode } from '@/core/videoEdit/timecode'
 
-export const TIMELINE_HEADER_WIDTH = 208
+/** 轨道头宽：名称按钮 + 6 个 24 命中区的图标开关（5.8：原 20 的开关低于命中区下限 24，宽度随之 208 → 232） */
+export const TIMELINE_HEADER_WIDTH = 232
 export const TIMELINE_RULER_HEIGHT = 28
 export const TIMELINE_TRACK_SECTION_GAP = 8
 export interface TimelineTrackRow { track: VideoEditSequence['tracks'][number]; top: number; height: number }

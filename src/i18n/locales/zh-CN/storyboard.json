@@ -174,7 +174,8 @@
       "cellCount": "输出小格数量",
       "cellWidth": "单格宽度（px）",
       "cellHeight": "单格高度（px）",
-      "layoutError": "分割线过粗，可切割区域不够。请减小线宽或减少行列数。"
+      "layoutError": "分割线过粗，可切割区域不够。请减小线宽或减少行列数。",
+      "layoutTooSmall": "图片太小，切不出这么多格。请减少行列数。"
     },
     "imageEditorV3": {
       "loading": "正在准备图片编辑器...",

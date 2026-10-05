@@ -140,9 +140,9 @@ export default function AlertDialog({
   return (
     <div
       ref={dialogRef}
-      data-dialog="true"
+      data-dialog={closing ? undefined : 'true'}
       role="alertdialog"
-      aria-modal="true"
+      aria-modal={closing ? undefined : 'true'}
       aria-labelledby={titleId}
       aria-describedby={messageId}
       tabIndex={-1}

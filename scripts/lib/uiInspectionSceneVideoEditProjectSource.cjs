@@ -1,4 +1,5 @@
 const assert = require('node:assert/strict')
+const { VIDEO_EDIT_TRACK_HEADER_WIDTH } = require('./uiInspectionVideoEditGeometry.cjs')
 const fs = require('node:fs')
 const path = require('node:path')
 const { execFileSync } = require('node:child_process')
@@ -200,7 +201,7 @@ function createVideoEditProjectSourceScene() {
         await page.getByRole('tab', { name: '序列 1', exact: true }).click()
         // Timeline content: ruler row (28px) above track rows; lanes start after the 208px track header.
         const timeline = page.locator('[data-video-edit-timeline-content]')
-        await entry(page, videoId).dragTo(timeline, { targetPosition: { x: 208 + 6, y: 28 + 32 + 16 } })
+        await entry(page, videoId).dragTo(timeline, { targetPosition: { x: VIDEO_EDIT_TRACK_HEADER_WIDTH + 6, y: 28 + 32 + 16 } })
         document = await saved(page, file, value => value.sequences.length === 3)
         const dropped = document.sequences.at(-1)
         assert.equal(dropped.width, 3840); assert.deepEqual(dropped.frameRate, { numerator: 60, denominator: 1 }); assert.equal(dropped.clips[0].start, 0)

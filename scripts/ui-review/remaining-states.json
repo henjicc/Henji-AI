@@ -1,0 +1,659 @@
+[
+  {
+    "id": "review-remaining-storyboard",
+    "surface": "画布",
+    "name": "核对-分镜生成完成、切割结果帧卡悬停与排序拖动（5.8 补截）",
+    "checklist": [
+      "N10.4",
+      "N11.2",
+      "N11.5"
+    ],
+    "writesUserData": true,
+    "steps": [
+      {
+        "seedCanvas": {
+          "viewport": {
+            "x": 40,
+            "y": 40,
+            "zoom": 0.8
+          },
+          "nodes": [
+            {
+              "id": "__m_storyboard_gen",
+              "type": "storyboardGenNode",
+              "position": {
+                "x": 0,
+                "y": 0
+              },
+              "data": {
+                "displayName": "分镜生成",
+                "gridRows": 2,
+                "gridCols": 2,
+                "frames": [
+                  {
+                    "id": "f1",
+                    "description": "远景：城市清晨",
+                    "referenceIndex": null
+                  },
+                  {
+                    "id": "f2",
+                    "description": "中景：人物走出地铁",
+                    "referenceIndex": null
+                  },
+                  {
+                    "id": "f3",
+                    "description": "近景：咖啡杯冒热气",
+                    "referenceIndex": null
+                  },
+                  {
+                    "id": "f4",
+                    "description": "特写：手表指针",
+                    "referenceIndex": null
+                  }
+                ],
+                "modelId": "kie-nano-banana-2",
+                "params": {},
+                "mediaInputs": {},
+                "imageUrl": "{{media:image}}",
+                "previewImageUrl": "{{media:image}}",
+                "aspectRatio": "1:1",
+                "isGenerating": false,
+                "generationStartedAt": null
+              }
+            },
+            {
+              "id": "__m_storyboard",
+              "type": "storyboardNode",
+              "position": {
+                "x": 760,
+                "y": 0
+              },
+              "data": {
+                "displayName": "切割结果",
+                "aspectRatio": "1:1",
+                "gridRows": 2,
+                "gridCols": 2,
+                "frames": [
+                  {
+                    "id": "cut1",
+                    "imageUrl": "{{media:image}}",
+                    "previewImageUrl": "{{media:image}}",
+                    "note": "第 1 格",
+                    "order": 0
+                  },
+                  {
+                    "id": "cut2",
+                    "imageUrl": "{{media:image}}",
+                    "previewImageUrl": "{{media:image}}",
+                    "note": "第 2 格",
+                    "order": 1
+                  },
+                  {
+                    "id": "cut3",
+                    "imageUrl": "{{media:image}}",
+                    "previewImageUrl": "{{media:image}}",
+                    "note": "第 3 格",
+                    "order": 2
+                  },
+                  {
+                    "id": "cut4",
+                    "imageUrl": "{{media:image}}",
+                    "previewImageUrl": "{{media:image}}",
+                    "note": "第 4 格",
+                    "order": 3
+                  }
+                ]
+              }
+            }
+          ],
+          "edges": []
+        }
+      },
+      {
+        "waitStable": {}
+      },
+      {
+        "capture": "storyboard-gen-completed"
+      },
+      {
+        "hover": {
+          "selector": ".storyboard-frame-card"
+        }
+      },
+      {
+        "capture": "frame-card-hover"
+      },
+      {
+        "drag": {
+          "from": {
+            "selector": ".storyboard-frame-card"
+          },
+          "to": {
+            "selector": ".storyboard-frame-card",
+            "nth": 1
+          },
+          "steps": 10,
+          "release": false
+        }
+      },
+      {
+        "capture": "frame-card-dragging"
+      },
+      {
+        "release": {}
+      }
+    ]
+  },
+  {
+    "id": "review-remaining-split-error",
+    "surface": "画布",
+    "name": "核对-宫格切分弹窗版式切不出报错与应用禁用（5.8 补截）",
+    "checklist": [
+      "C11.3"
+    ],
+    "writesUserData": true,
+    "steps": [
+      {
+        "seedCanvas": {
+          "viewport": {
+            "x": 200,
+            "y": 160,
+            "zoom": 1
+          },
+          "nodes": [
+            {
+              "id": "__m_tiny",
+              "type": "uploadNode",
+              "position": {
+                "x": 0,
+                "y": 0
+              },
+              "width": 240,
+              "height": 200,
+              "data": {
+                "displayName": "6×6 小图",
+                "imageUrl": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAYAAAAGCAIAAABvrngfAAAAEUlEQVR4nGM4EWCDhhhoKwQAuggv0bzWQnUAAAAASUVORK5CYII=",
+                "previewImageUrl": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAYAAAAGCAIAAABvrngfAAAAEUlEQVR4nGM4EWCDhhhoKwQAuggv0bzWQnUAAAAASUVORK5CYII=",
+                "aspectRatio": "1:1"
+              }
+            }
+          ],
+          "edges": []
+        }
+      },
+      {
+        "click": {
+          "selector": "[data-node-header-drag-surface=\"__m_tiny\"]"
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "/^(宫格切分|Grid Split)$/i"
+        },
+        "optional": true
+      },
+      {
+        "open": {
+          "trigger": {
+            "role": "button",
+            "name": "/^更多/"
+          },
+          "expect": {
+            "role": "menu"
+          }
+        },
+        "ifPresent": {
+          "role": "button",
+          "name": "/^更多/"
+        },
+        "optional": true
+      },
+      {
+        "click": {
+          "role": "menuitem",
+          "name": "/^(宫格切分|Grid Split)/i"
+        },
+        "optional": true
+      },
+      {
+        "waitFor": {
+          "role": "dialog",
+          "name": "/切割工具|Split.*tool/i"
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "增加数值",
+          "exact": true,
+          "nth": 1,
+          "within": {
+            "role": "dialog"
+          }
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "增加数值",
+          "exact": true,
+          "nth": 1,
+          "within": {
+            "role": "dialog"
+          }
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "增加数值",
+          "exact": true,
+          "nth": 1,
+          "within": {
+            "role": "dialog"
+          }
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "增加数值",
+          "exact": true,
+          "nth": 1,
+          "within": {
+            "role": "dialog"
+          }
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "增加数值",
+          "exact": true,
+          "nth": 1,
+          "within": {
+            "role": "dialog"
+          }
+        }
+      },
+      {
+        "waitFor": {
+          "text": "图片太小，切不出这么多格。请减少行列数。"
+        }
+      },
+      {
+        "waitFor": {
+          "selector": "[role=dialog] button:disabled",
+          "hasText": "应用"
+        }
+      },
+      {
+        "capture": "split-layout-error"
+      },
+      {
+        "escape": {}
+      }
+    ]
+  },
+  {
+    "id": "review-remaining-modelscope-custom",
+    "surface": "生成",
+    "name": "核对-魔搭自定义模型多条与删除确认（5.8 补截，校验接口走本机替身）",
+    "checklist": [
+      "G17.3",
+      "A15.3"
+    ],
+    "writesUserData": true,
+    "steps": [
+      {
+        "enter": "generation"
+      },
+      {
+        "selectModel": {
+          "modelId": "modelscope-custom",
+          "providerId": "modelscope"
+        }
+      },
+      {
+        "stubIpc": {
+          "channel": "http:fetch",
+          "mode": "resolve",
+          "data": {
+            "status": 200,
+            "statusText": "OK",
+            "headers": [
+              [
+                "content-type",
+                "application/json"
+              ]
+            ],
+            "body": "{\"Data\": {\"Providers\": [{\"CostTier\": \"Free\", \"EstimatedMagicGrainCost\": 0}], \"TotalCount\": 1}, \"Success\": true}"
+          }
+        }
+      },
+      {
+        "click": {
+          "selector": "[data-param-id=\"modelscopeCustomModel\"] [data-panel-trigger-button]"
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "添加新模型"
+        }
+      },
+      {
+        "fill": {
+          "target": {
+            "placeholder": "例如：Tongyi-MAI/Z-Image-Turbo"
+          },
+          "text": "Review/Custom-Image-A"
+        }
+      },
+      {
+        "fill": {
+          "target": {
+            "placeholder": "例如：Z-Image Turbo"
+          },
+          "text": "核对模型 A"
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "确认添加"
+        }
+      },
+      {
+        "waitFor": {
+          "text": "核对模型 A"
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "添加新模型"
+        }
+      },
+      {
+        "fill": {
+          "target": {
+            "placeholder": "例如：Tongyi-MAI/Z-Image-Turbo"
+          },
+          "text": "Review/Custom-Image-B"
+        }
+      },
+      {
+        "fill": {
+          "target": {
+            "placeholder": "例如：Z-Image Turbo"
+          },
+          "text": "核对模型 B"
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "确认添加"
+        }
+      },
+      {
+        "waitFor": {
+          "text": "核对模型 B"
+        }
+      },
+      {
+        "capture": "custom-models-list"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "删除",
+          "exact": true
+        }
+      },
+      {
+        "waitFor": {
+          "role": "alertdialog"
+        }
+      },
+      {
+        "wait": 400
+      },
+      {
+        "capture": "custom-model-delete-confirm"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "删除",
+          "exact": true,
+          "within": {
+            "role": "alertdialog"
+          }
+        }
+      },
+      {
+        "waitFor": {
+          "target": {
+            "role": "alertdialog"
+          },
+          "state": "hidden"
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "删除",
+          "exact": true
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "删除",
+          "exact": true,
+          "within": {
+            "role": "alertdialog"
+          }
+        }
+      },
+      {
+        "waitFor": {
+          "text": "暂无自定义模型"
+        }
+      },
+      {
+        "escape": {}
+      }
+    ]
+  },
+  {
+    "id": "review-remaining-asset-missing",
+    "surface": "资产库",
+    "name": "核对-资产预览源文件丢失（5.8 补截）",
+    "checklist": [
+      "A06.4"
+    ],
+    "writesUserData": true,
+    "expectedLogEvents": [
+      "asset.inspect.failed"
+    ],
+    "expectedBrowserErrors": [
+      "status of 404"
+    ],
+    "steps": [
+      {
+        "seedAsset": {
+          "name": "预览失败验收",
+          "missing": true
+        }
+      },
+      {
+        "reload": {}
+      },
+      {
+        "enter": "assets"
+      },
+      {
+        "doubleClick": {
+          "selector": "[data-asset-id]",
+          "at": {
+            "x": 120,
+            "y": 60
+          }
+        }
+      },
+      {
+        "wait": 800
+      },
+      {
+        "capture": "asset-preview-missing"
+      },
+      {
+        "escape": {}
+      }
+    ]
+  },
+  {
+    "id": "review-remaining-data-path",
+    "surface": "设置",
+    "name": "核对-数据目录迁移进度与失败（5.8 补截，复制文件通道挂起后拒绝）",
+    "checklist": [
+      "A09.2",
+      "A09.3",
+      "A07.5"
+    ],
+    "writesUserData": true,
+    "expectedLogEvents": [
+      "data_path.migration.copy_failed",
+      "data_path.migration.aborted",
+      "data_path.migration.failed"
+    ],
+    "steps": [
+      {
+        "enter": {
+          "surface": "settings.storage"
+        }
+      },
+      {
+        "stubDialogs": {
+          "save": false,
+          "open": [
+            "@tmp:data-path-target"
+          ]
+        }
+      },
+      {
+        "stubIpc": {
+          "channel": "fs:copyFile",
+          "mode": "hold"
+        }
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "选择",
+          "exact": true
+        }
+      },
+      {
+        "waitFor": {
+          "text": "正在迁移数据..."
+        }
+      },
+      {
+        "wait": 400
+      },
+      {
+        "capture": "migration-progress"
+      },
+      {
+        "stubIpc": {
+          "channel": "fs:copyFile",
+          "mode": "reject",
+          "message": "目标磁盘空间不足"
+        }
+      },
+      {
+        "releaseIpc": {
+          "channel": "fs:copyFile",
+          "release": "reject",
+          "message": "目标磁盘空间不足"
+        }
+      },
+      {
+        "waitFor": {
+          "text": "/数据迁移失败/"
+        }
+      },
+      {
+        "waitFor": {
+          "target": {
+            "text": "正在迁移数据..."
+          },
+          "state": "hidden"
+        }
+      },
+      {
+        "capture": "migration-failed"
+      },
+      {
+        "click": {
+          "role": "button",
+          "name": "确定",
+          "exact": true
+        }
+      }
+    ]
+  },
+  {
+    "id": "review-remaining-image-editor-panel-drag",
+    "surface": "工具箱",
+    "name": "核对-图片编辑浮动面板拖动中（5.8 补截）",
+    "checklist": [
+      "T07.5"
+    ],
+    "writesUserData": false,
+    "steps": [
+      {
+        "enter": {
+          "surface": "tool.image_edit",
+          "media": "resources/icons/128x128@2x.png"
+        }
+      },
+      {
+        "waitFor": {
+          "selector": "[data-editor-panel-handle]"
+        }
+      },
+      {
+        "drag": {
+          "from": {
+            "selector": "[data-editor-panel-handle]",
+            "at": {
+              "x": 60,
+              "y": 12
+            }
+          },
+          "to": {
+            "dx": -320,
+            "dy": 160
+          },
+          "steps": 12,
+          "release": false
+        }
+      },
+      {
+        "capture": "floating-panel-dragging"
+      },
+      {
+        "release": {}
+      },
+      {
+        "capture": "floating-panel-dropped"
+      }
+    ]
+  }
+]

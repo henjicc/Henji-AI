@@ -3,7 +3,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const { execFileSync } = require('node:child_process')
 const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
-const { observeWorkers, workerSnapshot, waitReleased } = require('./uiInspectionSceneVideoEditLayout.cjs')
+const { clickOutsideFloatingAssets, observeWorkers, workerSnapshot, waitReleased } = require('./uiInspectionSceneVideoEditLayout.cjs')
 const { dialogs, saved, presented, png, pixelDifference, mediaProbe, trackBanks } = require('./uiInspectionSceneVideoEditMonitor.cjs')
 
 const source = `export default {apiVersion:1,name:"跨工程代码资产",kind:"generator",mode:"dynamic",width:3840,height:2160,durationSeconds:3,seed:77,parameters:{amount:{type:"number",title:"图形透明度",default:.5,min:0,max:1,step:.01,animatable:true},logo:{type:"image",title:"原图片",default:null,animatable:false},label:{type:"text",title:"标题内容",default:"跨工程代码资产",maxLength:64}},render(ctx){return [rect({x:130+ctx.time*100,y:500,width:1000,height:500,fill:[0,.6,1,ctx.params.amount]}),image({source:ctx.params.logo,x:1800,y:300,width:1000,height:600}),text({x:200,y:1500,text:ctx.params.label,fontSize:130,color:[1,1,1,1]})];}}`
@@ -32,12 +32,12 @@ function createVideoEditCodeAssetsScene() {
       const shot = async name => { evidence.captures.push({ name, result: await capture(name) }); store() }
       let client; let previousLayout; let observed = false
       try {
-        evidence.display = await app.evaluate(({ BrowserWindow, screen }, point) => {
-          const host = BrowserWindow.getAllWindows().find(window => window.getTitle() === '痕迹AI') ?? BrowserWindow.getAllWindows()[0]
+        evidence.display = await app.evaluate(({ BrowserWindow, screen }, { point, hostContentsId }) => {
+          const host = (BrowserWindow.getAllWindows().find(window => window.webContents.id === hostContentsId) ?? BrowserWindow.getAllWindows()[0])
           const bounds = host.getBounds(); const current = screen.getDisplayMatching(bounds); const coordinates = point?.split(',').map(Number)
           const preferred = coordinates && screen.getAllDisplays().find(display => coordinates[0] >= display.bounds.x && coordinates[0] < display.bounds.x + display.bounds.width && coordinates[1] >= display.bounds.y && coordinates[1] < display.bounds.y + display.bounds.height)
           return { bounds, id: current.id, primary: current.id === screen.getPrimaryDisplay().id, preferred: preferred?.id }
-        }, process.env.HENJI_DEV_DISPLAY_POINT)
+        }, { point: process.env.HENJI_DEV_DISPLAY_POINT, hostContentsId: await (await app.browserWindow(page)).evaluate((window) => window.webContents.id) })
         if (process.env.HENJI_DEV_DISPLAY_POINT) { assert.equal(evidence.display.id, evidence.display.preferred); assert.equal(evidence.display.primary, false) }
         await button(page, '剪辑').click(); if (await button(page, '关闭工程').isVisible()) await button(page, '关闭工程').click()
         await button(page, '生成').click(); previousLayout = await page.evaluate(() => localStorage.getItem('henji.videoEdit.dockLayout.v1'))
@@ -77,14 +77,14 @@ function createVideoEditCodeAssetsScene() {
         const sourceRef = { kind: 'video_edit.clip', id: `${fixture.id}:${sourceClip.id}` }; const sourceRead = await callTool(client, 'read_application_entity', { ref: sourceRef })
         const repeated = checked(await callTool(client, 'collect_video_edit_code_asset', operationEnvelope([baseline, sourceRead], { projectRef: project(fixture.id), targetRef: sourceRef })))
         assert.equal(repeated.result.data.resultRef.id, asset.id); evidence.publicCollect = repeated
-        await shot('code-asset-collected-original-source'); await page.getByLabel('项目项列表', { exact: true }).click({ position: { x: 12, y: 25 } }); await button(page, '关闭工程').click(); await waitReleased(page)
+        await shot('code-asset-collected-original-source'); await clickOutsideFloatingAssets(page); await button(page, '关闭工程').click(); await waitReleased(page)
         await open(targetFile); await button(page, '资产库').click(); const card = page.locator(`[data-asset-id="${asset.id}"]`); await card.waitFor({ state: 'visible' })
         const beforePreview = await workerSnapshot(page); await card.locator('.aspect-square').dblclick(); await page.locator('[data-asset-code-preview]').waitFor({ state: 'visible' }); await page.locator('[data-asset-code-import]').waitFor({ state: 'visible' })
         assert.equal((await workerSnapshot(page)).workers.length, beforePreview.workers.length, '资产清单预览不能启动GPU或编译Worker')
         const importAt = performance.now(); await page.locator('[data-asset-code-import]').click()
         document = await saved(page, targetFile, value => value.items.some(item => item.kind === 'code')); await page.getByText('已加入项目素材，可继续剪辑和调参', { exact: true }).waitFor({ state: 'visible' }); evidence.importMs = performance.now() - importAt
         await page.getByRole('dialog', { name: '可编辑代码', exact: true }).getByRole('button', { name: '可编辑代码 - 关闭', exact: true }).click()
-        await page.getByLabel('项目项列表', { exact: true }).click({ position: { x: 12, y: 25 } })
+        await clickOutsideFloatingAssets(page)
         const imported = document.items.find(item => item.kind === 'code'); const originalCount = target.media.length
         assert.equal(document.media.length, originalCount + 1); assert.notEqual(imported.code.parameters.logo.mediaId, image.id); assert.deepEqual(imported.code.curves, curves); assert.equal(imported.code.parameters.amount, .35)
         assert.equal(document.codeMaterials[0].versions[0].assetOrigin.contentIdentity, asset.contentIdentity)

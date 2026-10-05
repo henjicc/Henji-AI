@@ -24,6 +24,11 @@ interface AssetCardProps {
   onPreview: (asset: AssetRecord) => void
   onRename: (asset: AssetRecord, name: string) => Promise<void>
   thumbnailFit: 'cover' | 'contain'
+  /**
+   * 卡片压在玻璃浮层上（浮动资产库）：类型与尺寸这行改用次要文字色。玻璃会把下面的饱和内容（剪辑时间线的彩色片段）
+   * 透上来，辅助文字色只剩 4.16–4.33:1（任务 5.8 全量机器检查）；次要文字色在同样的底上仍 ≥ 4.5。
+   */
+  onGlass?: boolean
 }
 
 export interface AssetMenuAnchor {
@@ -41,7 +46,7 @@ const mediaIcons = { image: ImageIcon, video: Film, audio: FileAudio, code: ICON
  * 悬停、单选与批量选中都只画在封面框上（`UI_COVER_FRAME_CLASS`）；下方名称一行 + 辅助信息一行
  * （类型 · 首个标签 +N · 尺寸）。根元素是可拖拽的 div（内部还有菜单、播放与复选框按钮，不能整体做成 button）。
  */
-export const AssetCard: React.FC<AssetCardProps> = ({ asset, selected, eager = false, menuOpen = false, batchMode = false, batchSelected = false, batchDisabled = false, onSelect, onMenu, onToggleBatch, onPreview, onRename, thumbnailFit }) => {
+export const AssetCard: React.FC<AssetCardProps> = ({ asset, selected, eager = false, menuOpen = false, batchMode = false, batchSelected = false, batchDisabled = false, onSelect, onMenu, onToggleBatch, onPreview, onRename, thumbnailFit, onGlass = false }) => {
   const { t } = useI18n('ui')
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(asset.displayName)
@@ -100,7 +105,6 @@ export const AssetCard: React.FC<AssetCardProps> = ({ asset, selected, eager = f
           />
         )}
         <UiIconButton tone="media"
-          data-ui-shared-glass="exclude"
           title={t('workspaceFilters.moreActions')}
           aria-label={t('workspaceFilters.moreActions')}
           className={`absolute right-2 top-2 transition-opacity duration-120 group-hover:opacity-100 focus-visible:opacity-100 ${menuOpen ? 'opacity-100' : 'opacity-0'}`}
@@ -110,7 +114,7 @@ export const AssetCard: React.FC<AssetCardProps> = ({ asset, selected, eager = f
       </div>
       <div className="flex min-w-0 flex-col gap-0.5 px-0.5">
         {editing ? <UiInput autoFocus size="sm" value={draft} aria-label={t('assetLibrary.renameAsset')} onChange={(event) => setDraft(event.target.value)} onBlur={() => void submitRename()} onKeyDown={(event) => { if (event.key === 'Enter') void submitRename(); if (event.key === 'Escape') { setDraft(asset.displayName); setEditing(false) } }} onClick={(event) => event.stopPropagation()} /> : <div className="truncate text-13 font-medium text-text1" title={asset.displayName} onDoubleClick={(event) => { if (batchMode) return; event.stopPropagation(); setDraft(asset.displayName); setEditing(true) }}>{asset.displayName}</div>}
-        <div className="flex min-w-0 items-center gap-1 text-xs text-text3">
+        <div className={`flex min-w-0 items-center gap-1 text-xs ${onGlass ? 'text-text2' : 'text-text3'}`}>
           <span className="shrink-0">{t(`assetLibrary.${asset.mediaType}`)}</span>
           {asset.tags[0] && <><span aria-hidden="true">·</span><span className="min-w-0 truncate">{asset.tags[0]}</span></>}
           {asset.tags.length > 1 && <span className="shrink-0">+{asset.tags.length - 1}</span>}

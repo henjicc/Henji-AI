@@ -520,8 +520,8 @@ export const UiSearchInput = forwardRef<HTMLInputElement, UiSearchInputProps>(
         />
         {onClear && hasValue ? (
           <UiIconButton
-            size="xs"
-            className="absolute right-1 top-1/2 -translate-y-1/2"
+            size="sm"
+            className="absolute right-0.5 top-1/2 -translate-y-1/2"
             aria-label={clearLabel}
             title={clearLabel}
             onClick={(event) => {
@@ -669,17 +669,22 @@ export const UiSwitch = forwardRef<HTMLButtonElement, UiSwitchProps>(
         role="switch"
         aria-checked={checked}
         {...rowLabelling}
-        className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border-0 transition-colors duration-120 ${
-          checked
-            ? UI_BOOLEAN_CONTROL_ACTIVE_CLASS
-            : 'bg-control-pressed hover:bg-line-strong'
-        } ${UI_BUTTON_RESET_CLASS} ${UI_FIELD_DISABLED_CLASS} focus-visible:!ring-2 focus-visible:!ring-accent-ring ${className}`}
+        // 命中区 24 高（命中区下限），看得见的轨道仍是 20 高的胶囊：轨道画在内层，按钮本身透明（任务 5.8，smallTargets）
+        className={`group/switch relative inline-flex h-6 w-9 shrink-0 items-center rounded-full border-0 bg-transparent ${UI_BUTTON_RESET_CLASS} ${UI_FIELD_DISABLED_CLASS} focus-visible:!ring-2 focus-visible:!ring-accent-ring ${className}`}
         onClick={handleClick}
         {...props}
       >
+        <span
+          aria-hidden="true"
+          className={`pointer-events-none absolute inset-x-0 top-0.5 h-5 rounded-full border-0 transition-colors duration-120 ${
+            checked
+              ? UI_BOOLEAN_CONTROL_ACTIVE_CLASS
+              : 'bg-control-pressed group-hover/switch:bg-line-strong'
+          }`}
+        />
         {/* 开态滑块取 on-accent（与强调色对比 ≥ 4.5 的黑或白），关态取主要文字色：深浅主题都清楚 */}
         <span
-          className={`pointer-events-none ml-0.5 h-4 w-4 rounded-full shadow-thumb-sm transition-transform duration-120 ${
+          className={`pointer-events-none relative ml-0.5 h-4 w-4 rounded-full shadow-thumb-sm transition-transform duration-120 ${
             checked ? 'translate-x-4 bg-on-accent' : 'translate-x-0 bg-text1'
           }`}
         />

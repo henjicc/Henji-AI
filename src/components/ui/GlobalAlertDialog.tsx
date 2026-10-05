@@ -50,7 +50,7 @@ export const GlobalAlertDialog: React.FC<GlobalAlertDialogProps> = ({ onAskAssis
     const result: AlertDialogAction[] = []
 
     if (current.confirmation) {
-      return [{ label: current.confirmation.label, variant: 'primary', onClick: () => {
+      return [{ label: current.confirmation.label, variant: 'primary', tone: current.confirmation.tone, onClick: () => {
         if (useAlertDialogStore.getState().queue[0] === current) confirmCurrent()
       } }]
     }

@@ -61,12 +61,12 @@ function createVideoEditCreativeResultsScene(context) {
       }
       const openEdit = async () => { await button(page, '剪辑').first().click(); await button(page, '关闭工程').or(button(page, '打开工程')).first().waitFor({ state: 'visible', timeout: 30000 }) }
       try {
-        evidence.display = await app.evaluate(({ BrowserWindow, screen }, point) => {
-          const host = BrowserWindow.getAllWindows().find(window => window.getTitle() === '痕迹AI') ?? BrowserWindow.getAllWindows()[0]
+        evidence.display = await app.evaluate(({ BrowserWindow, screen }, { point, hostContentsId }) => {
+          const host = (BrowserWindow.getAllWindows().find(window => window.webContents.id === hostContentsId) ?? BrowserWindow.getAllWindows()[0])
           const bounds = host.getBounds(); const current = screen.getDisplayMatching(bounds); const coordinates = point?.split(',').map(Number)
           const selected = coordinates ? screen.getAllDisplays().find(display => coordinates[0] >= display.bounds.x && coordinates[0] < display.bounds.x + display.bounds.width && coordinates[1] >= display.bounds.y && coordinates[1] < display.bounds.y + display.bounds.height) : undefined
           return { windowBounds: bounds, id: current.id, primary: current.id === screen.getPrimaryDisplay().id, preferredId: selected?.id }
-        }, process.env.HENJI_DEV_DISPLAY_POINT)
+        }, { point: process.env.HENJI_DEV_DISPLAY_POINT, hostContentsId: await (await app.browserWindow(page)).evaluate((window) => window.webContents.id) })
         if (process.env.HENJI_DEV_DISPLAY_POINT) { assert.equal(evidence.display.id, evidence.display.preferredId); assert.equal(evidence.display.primary, false) }
         // Controlled producer records: completed local files, no paid request.
         await page.evaluate(async rows => {

@@ -1,4 +1,5 @@
 const assert = require('node:assert/strict')
+const { VIDEO_EDIT_TRACK_HEADER_WIDTH } = require('./uiInspectionVideoEditGeometry.cjs')
 const fs = require('node:fs')
 const path = require('node:path')
 const { execFileSync } = require('node:child_process')
@@ -121,7 +122,7 @@ function createVideoEditCodeProjectScene({ controls = false } = {}) {
         // Drag onto the populated 4K60 sequence to verify insertion into this target.
         // Free video track 3 (code clips occupy 4; the monitor scene reuses this project and keeps 6/7 free).
         const freeTrack = page.locator('[data-track-kind="video"][data-track-index="3"]')
-        await page.locator(`[data-video-edit-project-entry="${staticItem.id}"]`).dragTo(freeTrack, { targetPosition: { x: 208 + 6, y: 16 } })
+        await page.locator(`[data-video-edit-project-entry="${staticItem.id}"]`).dragTo(freeTrack, { targetPosition: { x: VIDEO_EDIT_TRACK_HEADER_WIDTH + 6, y: 16 } })
         document = await saved(page, file, value => value.sequences[0].clips.length === 5)
         const staticClip = document.sequences[0].clips.find(clip => clip.itemId === staticItem.id)
         await change([{ kind: 'set_properties', entityType: 'video_edit.clip', target: { kind: 'video_edit.clip', id: `${document.id}:${staticClip.id}` }, properties: { 'video_edit.clip.start': 0, 'video_edit.clip.duration': 180 } }])

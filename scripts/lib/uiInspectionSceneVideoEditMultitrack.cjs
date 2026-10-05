@@ -1,4 +1,5 @@
 const assert = require('node:assert/strict')
+const { VIDEO_EDIT_TRACK_HEADER_WIDTH } = require('./uiInspectionVideoEditGeometry.cjs')
 const fs = require('node:fs')
 const path = require('node:path')
 const crypto = require('node:crypto')
@@ -264,7 +265,7 @@ function createVideoEditMultitrackScene() {
         await trackRow(page, 1).scrollIntoViewIfNeeded()
         await page.locator('[data-video-edit-timeline-viewport]').evaluate(host => { host.scrollLeft = 0 })
         const beforeDrag = readProject(file).sequences[0].clips.length
-        await entry(page, items.obs.id).dragTo(trackRow(page, 1), { targetPosition: { x: 208 + 270, y: 16 }, timeout: 10000 })
+        await entry(page, items.obs.id).dragTo(trackRow(page, 1), { targetPosition: { x: VIDEO_EDIT_TRACK_HEADER_WIDTH + 270, y: 16 }, timeout: 10000 })
         project = await saved(page, file, value => value.sequences[0].clips.length === beforeDrag + 3, 'OBS 拖入后应新增画面加两个立体声片段')
         assertGroup(project.sequences[0].clips.filter(clip => clip.itemId === items.obs.id), [['audio', 0, null], ['audio', 8, stereo([1, 0], [1, 1])]], 'OBS 双轨立体声（拖放）')
         assert.equal(project.sequences[0].clips.find(clip => clip.itemId === items.obs.id).start, 135)

@@ -110,6 +110,12 @@ export function showVideoEditPanel(api: DockviewApi, id: VideoEditPanelId): IDoc
   if (inspector && inspector.api.location.type === 'grid') {
     return api.addPanel({ id, component: id, title: definition.title, renderer: 'always', position: { referencePanel: inspector, direction: 'within' } })
   }
+  // 节目画面（关闭或从独立浮窗贴回）回到时间线上方：原来按“程序面板不存在 → 第一个面板右侧”新开一列，
+  // 时间线被挤成整高的窄竖列，标尺只剩不到 300px（5.8 全量回归：性能场景弹出节目浮窗再关闭后，后续剪辑场景全部点不到标尺）。
+  const timeline = id === 'program' ? api.getPanel('timeline') : undefined
+  if (timeline && timeline.api.location.type === 'grid') {
+    return api.addPanel({ id, component: id, title: definition.title, renderer: 'always', position: { referencePanel: timeline, direction: 'above' } })
+  }
   const reference = api.getPanel('program') ?? api.panels.find(panel => panel.api.location.type === 'grid')
   return api.addPanel({ id, component: id, title: definition.title, renderer: 'always',
     ...(reference ? { position: { referencePanel: reference, direction: id === 'timeline' ? 'below' : id === 'project' || id === 'source' ? 'left' : 'right' } } : {}),
@@ -117,13 +123,32 @@ export function showVideoEditPanel(api: DockviewApi, id: VideoEditPanelId): IDoc
   })
 }
 
+/**
+ * 浮动面板贴回主区域时落到它的默认方位（与 showVideoEditPanel 一致）：时间线在节目画面下方，项目与源监视器在左，
+ * 其余在右，字幕与标记并入效果控件那一组。此前一律贴到右边，时间线贴回后成了一条窄竖列（960 窗口下只剩约 360px，
+ * 标尺可见部分不到 130px），后续工程沿用这份布局（5.8 全量回归发现）。
+ */
+function defaultDockTarget(api: DockviewApi, id: string, own: DockviewGroupPanel): { group: DockviewGroupPanel; position: 'left' | 'right' | 'bottom' | 'center' } | null {
+  const isGridGroup = (group: DockviewGroupPanel | undefined): group is DockviewGroupPanel => Boolean(group && group !== own && group.api.location.type === 'grid')
+  const inspector = id === 'content' ? api.getPanel('effects')?.group : undefined
+  if (isGridGroup(inspector)) return { group: inspector, position: 'center' }
+  const program = api.getPanel('program')?.group
+  const reference = isGridGroup(program) ? program : api.groups.find(isGridGroup)
+  if (!reference) return null
+  return { group: reference, position: id === 'timeline' ? 'bottom' : id === 'project' || id === 'source' ? 'left' : 'right' }
+}
+
 export function dockVideoEditPanel(api: DockviewApi, panel: IDockviewPanel): void {
-  const target = api.groups.find(group => group !== panel.group && group.api.location.type === 'grid')
-    ?? api.addGroup({ direction: 'right' })
-  panel.api.moveTo({ group: target, position: target.panels.length ? 'right' : 'center' })
+  const target = defaultDockTarget(api, panel.id, panel.group)
+  if (target) {
+    panel.api.moveTo(target)
+    return
+  }
+  const group = api.addGroup({ direction: 'right' })
+  panel.api.moveTo({ group, position: 'center' })
 }
 
 export function dockVideoEditGroup(api: DockviewApi, group: DockviewGroupPanel): void {
-  const target = api.groups.find(other => other !== group && other.api.location.type === 'grid')
-  group.api.moveTo(target ? { group: target, position: 'right' } : { position: 'right' })
+  const target = defaultDockTarget(api, group.activePanel?.id ?? '', group)
+  group.api.moveTo(target ?? { position: 'right' })
 }

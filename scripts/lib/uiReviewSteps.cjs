@@ -23,6 +23,7 @@ const { analyzeLayoutMetrics, collectLayoutMeasurements } = require('./uiReviewM
 const { normalizeSeedAssistant, seedAssistantFixture } = require('./uiReviewAssistantFixture.cjs')
 const { blockPaidGeneration } = require('./uiReviewPaidGuard.cjs')
 const { createWaveFixture, normalizeSeedHistory, seedHistoryFixture } = require('./uiReviewHistoryFixture.cjs')
+const { normalizeSeedAsset, seedAssetFixture } = require('./uiReviewAssetFixture.cjs')
 const { normalizeReleaseIpc, normalizeStubIpc, releaseIpc, restoreIpcStubs, stubIpc } = require('./uiReviewIpcStub.cjs')
 const { normalizeSeedSettings, seedSettingsFixture } = require('./uiReviewSettingsFixture.cjs')
 const { normalizeSeedAudioEdit, seedAudioEditFixture } = require('./uiReviewAudioEditFixture.cjs')
@@ -113,6 +114,8 @@ const STEP_ACTIONS = Object.freeze({
   stubIpc: (value) => normalizeStubIpc(value),
   // 设置表夹具（音色库等只存在设置表里的数据；需 writesUserData: true），见 uiReviewSettingsFixture.cjs
   seedSettings: (value) => normalizeSeedSettings(value),
+  // 资产库夹具（任务 5.8）：登记一张图片资产，`missing: true` 时删掉源文件（截预览加载失败；需 writesUserData: true）
+  seedAsset: (value) => normalizeSeedAsset(value),
   releaseIpc: (value) => normalizeReleaseIpc(value),
   // 重载渲染层（任务 5.8）：启动时才读取的状态（如供应商密钥是否已配置）在 IPC 替身装好后重新读一次
   reload: () => ({}),
@@ -249,6 +252,7 @@ function normalizeStepSpec(raw, sourceFile = '<内联>') {
     writesUserData: raw.writesUserData === true,
     // 场景有意制造的失败日志事件（如助手替身返回 HTTP 500）：记入证据，不判失败（与正式场景同名字段）
     expectedLogEvents: normalizeExpectedLogEvents(raw.expectedLogEvents, sourceFile),
+    expectedBrowserErrors: normalizeExpectedBrowserErrors(raw.expectedBrowserErrors, sourceFile),
     launchArgs: raw.launchArgs ?? [],
     launchEnv: raw.launchEnv ?? {},
     prepare: (raw.prepare ?? []).map((step, index) => normalizeStep(step, `${sourceFile} prepare[${index}]`)),
@@ -264,6 +268,16 @@ function normalizeExpectedLogEvents(value, sourceFile) {
   if (!Array.isArray(value) || value.some((item) => typeof item !== 'string' || !/^[a-zA-Z0-9_.]+$/.test(item))) {
     throw new Error(`${sourceFile}：expectedLogEvents 必须是日志事件名数组`)
   }
+  return value
+}
+
+/** 场景有意制造的浏览器控制台错误（正则文本，如源文件丢失时的 404）：记入证据，不判失败 */
+function normalizeExpectedBrowserErrors(value, sourceFile) {
+  if (value === undefined) return undefined
+  if (!Array.isArray(value) || value.some((item) => typeof item !== 'string' || !item)) {
+    throw new Error(`${sourceFile}：expectedBrowserErrors 必须是正则文本数组`)
+  }
+  for (const item of value) new RegExp(item)
   return value
 }
 
@@ -455,8 +469,23 @@ function expandMediaPlaceholders(value, media) {
 /**
  * 现生成的夹具文件（任务 5.8）：`@generated:video:<秒>` / `@generated:audio:<秒>` 用本机 FFmpeg 生成测试视频（测试图案 + 正弦音）或 WAV，
  * 放在系统临时目录并按时长缓存。仓库里只有 2 秒的视频夹具，“长视频”这类状态靠它截。
+ * `@generated:image:<宽>x<高>` 生成大尺寸细节图（测试图案 + 噪点，JPEG），代替不进仓库的私有参考图（GPU 预算类验收）。
  */
 function resolveFixtureFile(file) {
+  const image = /^@generated:image:(\d+)x(\d+)$/.exec(file)
+  if (image) {
+    const [width, height] = [Number(image[1]), Number(image[2])]
+    if (!(width >= 16 && height >= 16 && width <= 16384 && height <= 16384)) throw new Error('@generated:image 尺寸需在 16–16384')
+    const output = path.join(os.tmpdir(), 'henji-ui-review', `generated-image-${width}x${height}.jpg`)
+    if (!fs.existsSync(output)) {
+      fs.mkdirSync(path.dirname(output), { recursive: true })
+      const { ffmpegPath } = require('./mediaBinaries.cjs')
+      require('node:child_process').execFileSync(ffmpegPath, ['-v', 'error', '-y', '-f', 'lavfi', '-i',
+        `testsrc2=size=${width}x${height}:rate=1`, '-vf', 'noise=alls=24:allf=t', '-frames:v', '1', '-q:v', '3', output],
+      { windowsHide: true, timeout: 120000 })
+    }
+    return output
+  }
   const generated = /^@generated:(video|audio):(\d+)$/.exec(file)
   if (!generated) return path.isAbsolute(file) ? file : path.resolve(ROOT, file)
   const [, kind, rawSeconds] = generated
@@ -593,6 +622,9 @@ async function runStep(page, step, runtime) {
     case 'seedSettings':
       runtime.audioEditFixtures.push(await seedSettingsFixture(page, context, step))
       return
+    case 'seedAsset':
+      runtime.audioEditFixtures.push(await seedAssetFixture(page, step))
+      return
     case 'dropFiles':
       await dispatchFileDrag(page, step)
       return
@@ -617,7 +649,18 @@ async function runStep(page, step, runtime) {
     case 'stubDialogs': {
       const outputDir = path.join(os.tmpdir(), 'henji-ui-review', runtime.sceneId || 'scene')
       fs.mkdirSync(outputDir, { recursive: true })
-      const openPaths = step.open ? step.open.map((file) => (path.isAbsolute(file) ? file : path.resolve(ROOT, file))) : null
+      // `@tmp:<名字>`：系统临时目录 henji-ui-review/<场景 id>/<名字>（选目录类对话框，如数据目录迁移的目标文件夹）
+      const openPaths = step.open ? step.open.map((file) => {
+        const temp = /^@tmp:([\w.-]+)$/.exec(file)
+        if (temp) {
+          // 每次都是空目录：上一次运行留下的内容会让“选目录”走到别的分支（如数据目录迁移的“已有数据”冲突）
+          const directory = path.join(outputDir, temp[1])
+          fs.rmSync(directory, { recursive: true, force: true })
+          fs.mkdirSync(directory, { recursive: true })
+          return directory
+        }
+        return path.isAbsolute(file) ? file : path.resolve(ROOT, file)
+      }) : null
       await runtime.app.evaluate(({ dialog }, values) => {
         const store = globalThis.__henjiUiReviewDialogs ?? (globalThis.__henjiUiReviewDialogs = {
           save: dialog.showSaveDialog, open: dialog.showOpenDialog,
@@ -768,6 +811,7 @@ function compileStepScene(spec, context) {
     sourceFile: spec.sourceFile,
     writesUserData: spec.writesUserData,
     ...(spec.expectedLogEvents ? { expectedLogEvents: spec.expectedLogEvents } : {}),
+    ...(spec.expectedBrowserErrors ? { expectedBrowserErrors: spec.expectedBrowserErrors } : {}),
     launchArgs: spec.launchArgs,
     launchEnv: spec.launchEnv,
     setup: async (page, electronApp, ctx) => {
@@ -863,6 +907,7 @@ module.exports = {
   normalizeTarget,
   parsePattern,
   pointInBox,
+  resolveFixtureFile,
   resolveTarget,
   sanitizeSuffix,
   variantId,

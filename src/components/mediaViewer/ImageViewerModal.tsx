@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ChevronLeft, ChevronRight, RotateCcw, X, GripVertical } from 'lucide-react';
 
-import { isTopmostUiOverlay, UiButton, UiIconButton, UiOptionButton, UiError, UiOverlayLayerProvider, UiSharedGlassHost, useUiOverlayLayer } from '@/components/ui';
+import { isTopmostUiOverlay, UiButton, UiIconButton, UiOptionButton, UiError, UiOverlayLayerProvider, useUiOverlayLayer } from '@/components/ui';
 import { UI_CONTENT_OVERLAY_INSET_CLASS, UI_DURATION, uiTransition } from '@/components/ui/motion';
 import type {
   ImageEditSessionData,
@@ -98,6 +98,9 @@ export function ImageViewerModal({
   const [requestedMode, setRequestedMode] = useState<ImageComparisonMode>('single');
   const [swappedModes, setSwappedModes] = useState({ 'side-by-side': true, overlay: true });
   const [failedOriginal, setFailedOriginal] = useState<string | null>(null);
+  // 主图加载失败（文件被移动或删除）时不留浏览器的破图标与替代文字，改显示可理解的失败提示（任务 5.8，A06.4）
+  const [failedImage, setFailedImage] = useState<string | null>(null);
+  const imageFailed = Boolean(imageUrl) && failedImage === imageUrl;
   const comparisonAvailable = Boolean(comparisonImageUrl) && failedOriginal !== comparisonImageUrl;
   const [decodedOriginal, setDecodedOriginal] = useState<string | null>(null);
   const originalDisplayUrl = comparisonImageUrl ? resolveImageDisplayUrl(comparisonImageUrl) : null;
@@ -231,7 +234,7 @@ export function ImageViewerModal({
       data-comparison-mode={mode}
       role="dialog"
       aria-label={t('viewer.imageAlt', '图片')}
-      aria-modal="true"
+      aria-modal={open ? 'true' : undefined}
       className={/* ui-surface-allow: 全屏沉浸式媒体查看器，铺满视口，不是 UiModal 的居中卡片语义（见重要记录 003） */ `fixed ${UI_CONTENT_OVERLAY_INSET_CLASS} z-viewer overflow-hidden bg-media`}
       style={{
         opacity: overlayOpacity,
@@ -278,11 +281,9 @@ export function ImageViewerModal({
           </React.Suspense>
         </div>
       ) : (
-        <UiSharedGlassHost
+        <div
           ref={containerRef}
-          minTargets={3}
-          // 宿主默认 relative；沉浸查看必须覆盖它，否则绝对定位的对比画面会让宿主高度塌缩。
-          className="!absolute inset-0 flex items-center justify-center overflow-hidden p-4"
+          className="absolute inset-0 isolate flex items-center justify-center overflow-hidden p-4"
           style={{ overscrollBehavior: 'contain' }}
           onMouseMove={handleContainerMouseMove}
           onMouseUp={handleContainerMouseUp}
@@ -308,8 +309,12 @@ export function ImageViewerModal({
                 src={resolveImageDisplayUrl(imageUrl)}
                 alt={comparing ? t('viewer.upscaled', '放大后') : t('viewer.imageAlt', '图片')}
                 className="h-full w-full select-none object-contain"
-                style={{ opacity: viewerOpacity * overlayOpacity }}
+                style={{ opacity: viewerOpacity * overlayOpacity, visibility: imageFailed ? 'hidden' : undefined }}
                 draggable={false}
+                onError={() => {
+                  logger.warn('image_viewer.load_failed', { reason: 'image_load_failed' });
+                  setFailedImage(imageUrl ?? null);
+                }}
                 onClick={(event) => {
                   if (!comparing && !isPointOnImageContent(event.clientX, event.clientY)) onClose();
                 }}
@@ -433,6 +438,14 @@ export function ImageViewerModal({
 
           <ImageInfoPanel open={open} imageSource={resolvedInfoSource} />
 
+          {imageFailed && (
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+              {/* 查看器是固定深色媒体底，提示放进随主题的实底面板：文字色与底同源；玻璃在纸白下透出深底，危险色标题只有 4.29:1 */}
+              <div className="rounded-lg bg-panel px-6 shadow-panel">
+                <UiError size="sm" title={t('viewer.imageUnavailableTitle', '图片无法加载')} message={t('viewer.imageUnavailableMessage', '文件可能已被移动或删除。')} />
+              </div>
+            </div>
+          )}
           {failedOriginal && (
             <div className="absolute bottom-24 left-1/2 z-sticky -translate-x-1/2">
               <UiError size="xs" title={t('viewer.originalUnavailable', '原图无法加载，仍可查看放大结果')} message="" />
@@ -506,7 +519,7 @@ export function ImageViewerModal({
               </UiIconButton>
             </div>
           </div>
-        </UiSharedGlassHost>
+        </div>
       )}
       </UiOverlayLayerProvider>
     </div>

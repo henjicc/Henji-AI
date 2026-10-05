@@ -93,11 +93,13 @@ export function UiModal({
     // data-dialog：资产库边缘触发器靠它判断"当前有弹窗打开，别弹出侧栏"。
     // 放在 UiModal 上，所有走 UiModal 的弹窗自动获得该行为，
     // 不必再指望每个业务弹窗自己记得加这个属性。
+    // 收起中不再声明模态（aria-modal / data-dialog）：画布快捷键、资产库边缘触发器等按“当前有没有模态”判断，
+    // 关闭动画的 180ms 里仍挂着这两个标记会把紧接着的 Delete / 撤销吞掉（5.8，多图层编辑器关闭后删除节点失效）
     <div
       ref={dialogRef}
-      data-dialog="true"
+      data-dialog={closing ? undefined : 'true'}
       role="dialog"
-      aria-modal="true"
+      aria-modal={closing ? undefined : 'true'}
       aria-label={resolvedAriaLabel}
       aria-labelledby={resolvedAriaLabel ? undefined : titleId}
       tabIndex={-1}

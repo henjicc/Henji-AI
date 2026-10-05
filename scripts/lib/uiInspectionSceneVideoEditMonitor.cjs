@@ -1,4 +1,5 @@
 const assert = require('node:assert/strict')
+const { VIDEO_EDIT_TRACK_HEADER_WIDTH } = require('./uiInspectionVideoEditGeometry.cjs')
 const fs = require('node:fs')
 const path = require('node:path')
 const { execFileSync } = require('node:child_process')
@@ -304,7 +305,7 @@ function createVideoEditMonitorScene() {
           const track = component === 'audio' ? 7 : 6; const name = component === 'video' ? '拖入画面' : component === 'audio' ? '拖入声音' : '拖入链接音画'
           await page.locator(`[data-video-edit-track="monitor-track-${track}"]`).scrollIntoViewIfNeeded()
           await viewport.evaluate(host => { host.scrollLeft = 0 })
-          const offset = await viewport.evaluate((host, track) => { const row = host.querySelector(`[data-track-index="${track}"]`); return { x: 208.1 - host.scrollLeft, y: row.getBoundingClientRect().top - host.getBoundingClientRect().top + 16 } }, track)
+          const offset = await viewport.evaluate((host, { track, headerWidth }) => { const row = host.querySelector(`[data-track-index="${track}"]`); return { x: headerWidth + 0.1 - host.scrollLeft, y: row.getBoundingClientRect().top - host.getBoundingClientRect().top + 16 } }, { track, headerWidth: VIDEO_EDIT_TRACK_HEADER_WIDTH })
           await button(panel(page, 'source'), name).dragTo(viewport, { targetPosition: offset })
           const count = component === 'linked' ? 2 : 1
           document = await saved(page, file, value => value.sequences[0].clips.length === beforeRange.length + count)

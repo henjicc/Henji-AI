@@ -233,7 +233,9 @@ async function collectFiles(dirPath: string, baseDir: string): Promise<string[]>
       }
     }
   } catch (error) {
-    logger.error('收集文件失败:', error)
+    // 读不全文件清单就不能继续：迁移结束会删除旧目录，漏掉的文件就丢了（5.8）
+    logger.error('数据迁移读取文件清单失败', error, { event: 'data_path.migration.list_failed' })
+    throw error
   }
 
   return files
@@ -316,7 +318,9 @@ export async function migrateData(
       return
     }
 
-    // 6. 逐个复制文件
+    // 6. 逐个复制文件。单个文件失败继续复制其余文件以便一次报全，但只要有失败，迁移整体失败：
+    // 后面第 9 步会删除旧目录，带着复制不全的新目录继续（例如数据库 henji.db 没拷过去）就是丢数据（5.8）。
+    const failedFiles: string[] = []
     for (let i = 0; i < files.length; i++) {
 
       const relativeFilePath = files[i]
@@ -350,9 +354,13 @@ export async function migrateData(
           onProgress(i + 1, totalFiles, relativeFilePath)
         }
       } catch (error) {
-        logger.error(`复制文件失败: ${relativeFilePath}`, error)
-        // 继续复制其他文件
+        logger.error('数据迁移复制文件失败', error, { event: 'data_path.migration.copy_failed', context: { file: relativeFilePath } })
+        failedFiles.push(relativeFilePath)
       }
+    }
+    if (failedFiles.length > 0) {
+      const sample = failedFiles.slice(0, 3).join('、')
+      throw new Error(`${failedFiles.length} 个文件没能复制到新目录（${sample}${failedFiles.length > 3 ? ' 等' : ''}），原目录的数据保持不变`)
     }
 
     // 7. 验证迁移完整性（检查关键文件）
@@ -381,7 +389,7 @@ export async function migrateData(
       await cleanupOldData(oldPath)
     }
   } catch (error) {
-    logger.error('数据迁移失败:', error)
+    logger.error('数据迁移中止', error, { event: 'data_path.migration.aborted' })
     // 尝试删除迁移标记
     try {
       await removeMigrationMarker(newPath)

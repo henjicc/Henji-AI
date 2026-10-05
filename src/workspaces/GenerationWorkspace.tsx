@@ -6,7 +6,7 @@ import ContextMenu from '@/components/ContextMenu'
 import UpdateDialog from '@/components/UpdateDialog'
 import TestModeIndicator from '@/components/TestModeIndicator'
 import TestModePanel from '@/components/TestModePanel'
-import { UiSharedGlassHost, UiTaskHistoryFilterBar } from '@/components/ui'
+import { UiTaskHistoryFilterBar } from '@/components/ui'
 import { useContextMenu } from '@/hooks/useContextMenu'
 import { useI18n } from '@/hooks/useI18n'
 import { useOnboardingState } from '@/features/onboarding/application/useOnboardingState'
@@ -278,12 +278,11 @@ const GenerationWorkspace: React.FC = () => {
             </div>
           )}
         </div>
-        <UiSharedGlassHost
+        <div
           ref={listContainerRef}
-          minTargets={4}
           // 滚动条与其他主滚动区同一套（全局细滚动条，任务 5.8）；关闭滚动锚定，虚拟列表测高后不跳动
           data-generation-history-scroll
-          className="min-h-0 flex-1 overflow-y-auto overscroll-contain scroll-auto [overflow-anchor:none] [scrollbar-gutter:stable] pt-4"
+          className="relative isolate min-h-0 flex-1 overflow-y-auto overscroll-contain scroll-auto [overflow-anchor:none] [scrollbar-gutter:stable] pt-4"
           style={{ paddingBottom: inputPadding }}
         >
           <div ref={contentRef}>
@@ -306,7 +305,7 @@ const GenerationWorkspace: React.FC = () => {
               notify={notify}
             />
           </div>
-        </UiSharedGlassHost>
+        </div>
         <FloatingInputPanel
           containerRef={inputContainerRef}
           compact={isCompactLayout}

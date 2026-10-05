@@ -31,7 +31,7 @@ import {
   type SplitOptionsPatch,
 } from './splitStoryboard/shared';
 
-export function SplitStoryboardToolEditor({ sourceImageUrl, options, onOptionsChange }: VisualToolEditorProps): JSX.Element {
+export function SplitStoryboardToolEditor({ sourceImageUrl, options, onOptionsChange, onExecutionReadyChange }: VisualToolEditorProps): JSX.Element {
   const { t } = useTranslation();
   const [naturalSize, setNaturalSize] = useState<{ width: number; height: number } | null>(null);
   const displaySourceImageUrl = useMemo(() => resolveImageDisplayUrl(sourceImageUrl), [sourceImageUrl]);
@@ -152,6 +152,11 @@ export function SplitStoryboardToolEditor({ sourceImageUrl, options, onOptionsCh
   );
 
   const hasLayoutError = Boolean(naturalSize && !layout);
+
+  // 版式切不出来时“应用”不可点：原来照样能点，点了才在执行时报同一句错（任务 5.8，C11.3）
+  useEffect(() => {
+    onExecutionReadyChange?.(!hasLayoutError);
+  }, [hasLayoutError, onExecutionReadyChange]);
 
   // 弹窗内两列：左侧是会随窗口长大的预览工作面（沉一级、不描边），右侧是参数分组。
   // 原来右列整块是带描边的卡片、里面的统计又是一层卡片，加上弹窗本身共三层边框（任务 5.4）。
@@ -295,7 +300,8 @@ export function SplitStoryboardToolEditor({ sourceImageUrl, options, onOptionsCh
         </UiPanel>
 
         {hasLayoutError && (
-          <UiError size="xs" align="start" title={t('toolDialog.split.layoutError')} message="" />
+          // 没有分割线也切不出来时，原因是图片太小、格数太多，不能再说“分割线过粗”
+          <UiError size="xs" align="start" title={t(lineThicknessPercent > 0 ? 'toolDialog.split.layoutError' : 'toolDialog.split.layoutTooSmall')} message="" />
         )}
       </UiGroup>
     </div>

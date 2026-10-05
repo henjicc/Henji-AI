@@ -85,7 +85,11 @@ export class CanvasToolProcessor implements ToolProcessor {
       documentRef: session.documentRef,
     }, signal);
     const documentId = session.documentRef.slice('image-edit-v3:'.length);
-    if (!snapshot) throw new Error('画布图片编辑 V3 权威文档不存在');
+    // 节点失败会把 message 直接显示给用户：只写用户能据此行动的说明，版本比对细节进日志（5.8）
+    if (!snapshot) {
+      logger.warn('canvas.tool.image_edit_v3.snapshot_missing', { documentRef: session.documentRef });
+      throw new Error('找不到这次图片编辑的内容，请重新打开图片编辑后再运行');
+    }
     if (
       snapshot.documentRef !== session.documentRef
       || snapshot.document.id !== documentId
@@ -93,7 +97,14 @@ export class CanvasToolProcessor implements ToolProcessor {
       || snapshot.document.revision !== session.revision
       || snapshot.previewRef !== session.previewRef
     ) {
-      throw new Error('画布图片编辑 V3 会话版本与权威快照不一致');
+      logger.warn('canvas.tool.image_edit_v3.snapshot_mismatch', {
+        documentRef: session.documentRef,
+        expectedRevision: session.revision,
+        snapshotRevision: snapshot.revision,
+        documentRevision: snapshot.document.revision,
+        previewMatches: snapshot.previewRef === session.previewRef,
+      });
+      throw new Error('图片编辑的内容在别处改过，请重新打开图片编辑确认后再运行');
     }
     const materialized = await materializeCanvasEditV3Snapshot(
       snapshot,

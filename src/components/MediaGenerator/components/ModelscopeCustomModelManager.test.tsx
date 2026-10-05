@@ -51,6 +51,7 @@ describe('魔搭自定义模型管理：删除确认（5.6 第二批）', () => 
       title: 'modelscopeCustomModel.actions.deleteTitle',
       message: 'modelscopeCustomModel.confirmDelete',
       confirmLabel: 'common:delete',
+      confirmTone: 'danger',
     }))
     expect(mocks.remove).not.toHaveBeenCalled()
 

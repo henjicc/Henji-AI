@@ -336,6 +336,9 @@ export function NodeToolDialog() {
           sourceImageUrl={sourceImageUrl}
           options={options}
           onOptionsChange={setOptions}
+          onExecutionReadyChange={(ready) => {
+            setReadyEditorKey(ready ? editorKey : null);
+          }}
         />
       );
     }
@@ -368,7 +371,7 @@ export function NodeToolDialog() {
             variant="primary"
             onClick={handleApply}
             disabled={isProcessing || !sourceImageUrl || (
-              activePlugin?.editor === 'edit'
+              (activePlugin?.editor === 'edit' || activePlugin?.editor === 'split')
               && readyEditorKey !== editorKey
             )}
           >

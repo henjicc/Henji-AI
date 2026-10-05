@@ -373,6 +373,9 @@
     "overlay": "叠加对比",
     "comparisonDivider": "对比分界线",
     "originalUnavailable": "原图无法加载，仍可查看放大结果",
+    "imageUnavailableTitle": "图片无法加载",
+    "videoUnavailableTitle": "视频无法播放",
+    "imageUnavailableMessage": "文件可能已被移动或删除。",
     "imageAlt": "图片",
     "speed": "播放速度",
     "loop": "循环播放",
@@ -1014,6 +1017,10 @@
     "empty": "暂无自定义模型",
     "confirmDelete": "确定要删除这个模型吗？",
     "alerts": {
+      "deleteFailed": {
+        "title": "没能删除模型",
+        "message": "模型仍保留在列表里，请稍后再试。"
+      },
       "incomplete": {
         "title": "输入不完整",
         "message": "请输入模型ID和名称"

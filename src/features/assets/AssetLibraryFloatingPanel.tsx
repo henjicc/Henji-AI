@@ -3,7 +3,7 @@ import { UiPanel } from '@/components/ui'
 import { useDialogTransition } from '@/components/ui/useDialogTransition'
 import { UI_DIALOG_TRANSITION_MS } from '@/components/ui/motion'
 import { AssetLibrarySurface } from './AssetLibrarySurface'
-import { hasOpenModalUiOverlayDescendant, resolveUiOverlayTarget, UiOverlayLayerProvider, useUiOverlayLayer } from '@/components/ui/overlayOwnership'
+import { hasOpenModalUiOverlayAbove, resolveUiOverlayTarget, UiOverlayLayerProvider, useUiOverlayLayer } from '@/components/ui/overlayOwnership'
 
 interface Props { open: boolean; position: 'top' | 'left' | 'right'; onClose: () => void; onOpenWorkspace: () => void }
 
@@ -18,7 +18,7 @@ export const AssetLibraryFloatingPanel: React.FC<Props> = ({ open, position, onC
       // 子浮层（卡片菜单、右键菜单、下拉、视图设置、预览）里的点击归属面板（任务 4.3 浮层归属）；
       // 预览是模态层，查看器不在面板 DOM 内，打开期间面板不响应点外关闭
       if (resolveUiOverlayTarget(event.target, overlay.id) !== 'outside') return
-      if (hasOpenModalUiOverlayDescendant(overlay.id)) return
+      if (hasOpenModalUiOverlayAbove(overlay.id)) return
       if (!panelRef.current?.contains(event.target as Node)) onClose()
     }
     document.addEventListener('pointerdown', handlePointerDown)

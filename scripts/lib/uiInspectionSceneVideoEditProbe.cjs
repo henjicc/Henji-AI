@@ -1,4 +1,5 @@
 const assert = require('node:assert/strict')
+const { VIDEO_EDIT_TRACK_HEADER_WIDTH } = require('./uiInspectionVideoEditGeometry.cjs')
 const fs = require('node:fs')
 const path = require('node:path')
 const os = require('node:os')
@@ -9,7 +10,7 @@ const menuItem = (page, name) => page.getByRole('menuitem', { name, exact: true 
 const entry = (page, id) => page.locator(`[data-video-edit-project-entry="${id}"]`)
 // Track rows span the 208px track header and the lanes; one frame is 2px at 30fps and zoom 1.
 const trackRow = (page, index) => page.locator(`[data-video-edit-track][data-track-index="${index}"]`)
-const TRACK_HEADER = 208
+const TRACK_HEADER = VIDEO_EDIT_TRACK_HEADER_WIDTH
 async function savedProject(page, file, matches, label) {
   const deadline = performance.now() + 5000
   let document

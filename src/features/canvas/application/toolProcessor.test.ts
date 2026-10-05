@@ -9,7 +9,7 @@ const v3Mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('@/core/logging', () => ({
-  createLogger: () => ({ debug: vi.fn(), info: vi.fn(), error: vi.fn() }),
+  createLogger: () => ({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }),
 }));
 
 vi.mock('./imageData', () => ({
@@ -157,7 +157,7 @@ describe('CanvasToolProcessor 图片编辑分发', () => {
     const controller = new AbortController();
     await expect(processor.process(NODE_TOOL_TYPES.edit, 'source-image', {
       imageEditSession: JSON.stringify(session),
-    }, controller.signal)).rejects.toThrow('版本与权威快照不一致');
+    }, controller.signal)).rejects.toThrow('图片编辑的内容在别处改过');
     expect(v3Mocks.loadDocument.mock.calls.at(-1)?.[1]).toBe(controller.signal);
     expect(v3Mocks.materialize).not.toHaveBeenCalled();
   });

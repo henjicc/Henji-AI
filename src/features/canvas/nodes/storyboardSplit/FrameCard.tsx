@@ -185,8 +185,12 @@ export const FrameCard = memo(({
           </UiIconButton>
         </div>
 
+        {/*
+          * 描述底用实底媒体遮罩，不用向上渐隐：文字从描述框顶部开始排，渐变顶部已透明，
+          * 浅色画面上白字只有 1.5:1（任务 5.8 补截分镜帧卡时像素审计抓到）。
+          */}
         <div
-          className="nodrag absolute inset-x-0 bottom-0 z-raised overflow-hidden bg-gradient-to-t from-media-scrim via-media-scrim to-transparent"
+          className="nodrag absolute inset-x-0 bottom-0 z-raised overflow-hidden bg-media-scrim"
           style={noteWrapperStyle}
           onPointerDown={(event) => event.stopPropagation()}
         >

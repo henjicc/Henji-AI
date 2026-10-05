@@ -221,7 +221,10 @@ describe('Ui primitives 选中态词汇表', () => {
       </>,
     );
 
-    expectClasses(view.getByRole('switch', { name: '已开启' }), UI_BOOLEAN_CONTROL_ACTIVE_CLASS);
+    // 开关按钮本身是 24 高的透明命中区，强调色画在内层 20 高的轨道上
+    const switchButton = view.getByRole('switch', { name: '已开启' });
+    expectClasses(switchButton, 'h-6');
+    expectClasses(switchButton.firstElementChild as HTMLElement, `${UI_BOOLEAN_CONTROL_ACTIVE_CLASS} h-5`);
     expectClasses(view.getByRole('checkbox', { name: '已勾选' }), UI_BOOLEAN_CONTROL_ACTIVE_CLASS);
   });
 
@@ -254,7 +257,7 @@ describe('Ui primitives 选中态词汇表', () => {
     const segmentedOn = view.getByRole('switch', { name: '开启的双段开关' });
 
     expect(pill.classList.contains('rounded-full')).toBe(true);
-    expect(pill.classList.contains('bg-control-pressed')).toBe(true);
+    expect((pill.firstElementChild as HTMLElement).classList.contains('bg-control-pressed')).toBe(true);
     // 双段外观与分段选择同一套选中：轨道更暗、滑块是淡强调底、当前侧文字为强调文字，不用强调色实底（重要记录 012）
     expect(segmentedOff.classList.contains('rounded-lg')).toBe(true);
     expect(segmentedOff.classList.contains('bg-gap/60')).toBe(true);

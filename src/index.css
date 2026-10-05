@@ -333,52 +333,6 @@
   }
 
   /*
-   * 同一区域存在多块玻璃时，UiSharedGlassHost 用一张 alpha mask 合并为单次
-   * backdrop-filter。目标元素只保留受光边与交互叠色；底色、模糊和噪点由
-   * 固定在宿主可见区域内的共享层一次性提供。
-   */
-  .ui-shared-glass-layer {
-    display: none;
-    /*
-     * ui-surface-allow：共享层必须夹在媒体内容与目标控件之间。目标是运行时发现的
-     * 现有 `.ui-glass`，无法在每个 JSX 调用点补一套层级类，因此使用组件内部
-     * 1 / 2 两级局部堆叠；它们不参与应用的全局 Z_LAYERS。
-     */
-    z-index: 1;
-    border: 0;
-    border-radius: 0;
-    box-shadow: none;
-    -webkit-mask-repeat: no-repeat;
-    mask-repeat: no-repeat;
-  }
-
-  .ui-shared-glass-layer::after {
-    border-radius: 0;
-  }
-
-  .ui-shared-glass-host[data-ui-shared-glass-active='true'] > .ui-shared-glass-layer {
-    display: block;
-  }
-
-  .ui-shared-glass-host[data-ui-shared-glass-active='true']
-    .ui-glass:not(.ui-shared-glass-layer):not([data-ui-shared-glass='exclude']) {
-    z-index: 2;
-    background-color: transparent;
-    -webkit-backdrop-filter: none;
-    backdrop-filter: none;
-  }
-
-  .ui-shared-glass-host[data-ui-shared-glass-active='true']
-    .ui-glass:not(.ui-shared-glass-layer):not([data-ui-shared-glass='exclude'])::after {
-    display: none;
-  }
-
-  .ui-shared-glass-host[data-ui-shared-glass-active='true']
-    .ui-glass[data-ui-shared-glass='exclude'] {
-    z-index: 2;
-  }
-
-  /*
    * 玻璃容器里的中性实底按钮随材质开关联动：开启时融入玻璃，关闭时由
    * data-ui-blur='off' 上面的变量恢复为原来的 surface / border / layer 实底。
    * 品牌选中态和主按钮不会带这个标记，因此不会被冲淡。

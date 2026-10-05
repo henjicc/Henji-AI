@@ -123,7 +123,11 @@ const UpdateSection: React.FC = () => {
 
       <SettingsDialog
         open={showResult}
-        title={t('navSections.general-maintenance')}
+        title={t(lastError
+          ? 'sections.updates.resultTitle.failed'
+          : lastResult?.hasUpdate
+            ? 'sections.updates.resultTitle.hasUpdate'
+            : 'sections.updates.resultTitle.upToDate')}
         description={resultMessage}
         actions={resultActions()}
         onClose={closeResult}

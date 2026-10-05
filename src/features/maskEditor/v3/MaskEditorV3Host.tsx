@@ -44,6 +44,22 @@ interface ReadyState {
   descriptors: readonly ImageEditorV3ResourceDescriptor[]
 }
 
+/**
+ * 打开失败的原因（5.8）：界面只给用户能据此行动的说明，source / ref / revision 这类内部比对细节只进日志。
+ */
+class MaskSessionOpenError extends Error {
+  constructor(readonly reason: 'stale' | 'missing-layer', detail: string) {
+    super(detail)
+    this.name = 'MaskSessionOpenError'
+  }
+}
+
+const MASK_OPEN_FAILURE_MESSAGE = {
+  stale: '这张图片在别处改过，蒙版对应的编辑内容已经过期。请关闭后重新打开蒙版编辑。',
+  'missing-layer': '要编辑的蒙版图层已经不在了。请关闭后重新打开蒙版编辑。',
+  load: '蒙版内容读取失败，可以重试；仍然失败时请关闭后重新打开。',
+} as const
+
 type HostState = { kind: 'loading' } | { kind: 'failed'; message: string } | {
   kind: 'ready'
   value: ReadyState
@@ -186,10 +202,10 @@ export const MaskEditorV3Host = forwardRef<MaskEditorV3HostHandle, MaskEditorV3H
           || (!current && (snapshot.revision !== referenceRevision
             || snapshot.document.revision !== referenceRevision
             || snapshot.previewRef !== referencePreviewRef))) {
-          throw new Error('蒙版会话 source/ref/revision 与权威快照不一致')
+          throw new MaskSessionOpenError('stale', '蒙版会话 source/ref/revision 与权威快照不一致')
         }
         if (!collectImageEditLayerIdsV3(snapshot.document.layers).includes(targetLayerId)) {
-          throw new Error('蒙版会话目标图层不存在')
+          throw new MaskSessionOpenError('missing-layer', '蒙版会话目标图层不存在')
         }
         const persistence = restorePersistence(snapshot.document, snapshot.history)
         snapshotRef.current = persistence
@@ -213,11 +229,11 @@ export const MaskEditorV3Host = forwardRef<MaskEditorV3HostHandle, MaskEditorV3H
         })
       }).catch((error: unknown) => {
         if (controller.signal.aborted) return
-        const message = error instanceof Error ? error.message : String(error)
-        setState({ kind: 'failed', message })
+        const reason = error instanceof MaskSessionOpenError ? error.reason : 'load'
+        setState({ kind: 'failed', message: MASK_OPEN_FAILURE_MESSAGE[reason] })
         logger.error('V3 蒙版宿主权威会话加载失败', error, {
           event: 'mask_editor.v3.bootstrap.failed',
-          context: { documentRef: referenceDocumentRef, targetLayerId },
+          context: { documentRef: referenceDocumentRef, targetLayerId, reason },
         })
       })
       return () => controller.abort()

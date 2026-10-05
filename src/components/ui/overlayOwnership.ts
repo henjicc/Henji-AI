@@ -144,12 +144,22 @@ export function hasOpenModalUiOverlayDescendant(overlayId: string): boolean {
 }
 
 /**
- * 订阅版：本层的模态后代（从浮层里打开的弹窗、查看器）是否打开中（任务 5.8）。
- * 浮层层级（popover 75）高于弹窗（modal 50），父浮层若照常显示会压在它打开的弹窗上；
- * 打开期间父浮层隐藏但保持挂载，弹窗关闭后原样回来。
+ * 本层打开之后又打开了模态层（不论是不是本层的后代）：例如浮层里点“删除”弹出的全局确认框——
+ * 它挂在应用根上、不是浮层后代，却应盖在浮层之上（5.8：魔搭自定义模型删除确认被浮层压住，看不见）。
+ */
+export function hasOpenModalUiOverlayAbove(overlayId: string): boolean {
+  const index = openOverlayStack.indexOf(overlayId)
+  if (index >= 0 && openOverlayStack.slice(index + 1).some((id) => openModalOverlays.has(id))) return true
+  return hasOpenModalUiOverlayDescendant(overlayId)
+}
+
+/**
+ * 订阅版：本层之上是否有打开中的模态层（从浮层里打开的弹窗、查看器，或之后弹出的全局确认框，任务 5.8）。
+ * 浮层层级（popover 75）高于弹窗（modal 50），浮层若照常显示会压在弹窗上；
+ * 打开期间浮层隐藏但保持挂载，弹窗关闭后原样回来。
  */
 export function useHasOpenModalUiOverlayDescendant(overlayId: string): boolean {
-  return useSyncExternalStore(subscribeModalOverlays, () => hasOpenModalUiOverlayDescendant(overlayId))
+  return useSyncExternalStore(subscribeModalOverlays, () => hasOpenModalUiOverlayAbove(overlayId))
 }
 
 /** 是否有任何打开中的浮层。 */

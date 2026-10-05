@@ -201,7 +201,7 @@ export function PanoramaViewerModal({
         pointerEvents: open ? 'auto' : 'none',
       }}
       role="dialog"
-      aria-modal="true"
+      aria-modal={open ? 'true' : undefined}
       aria-label={t('viewer.panorama.title')}
     >
       <div className="absolute inset-0 pt-12">

@@ -26,6 +26,20 @@ describe('GlobalAlertDialog', () => {
     await expect(pending).resolves.toBe(false)
   })
 
+  it('破坏性确认用危险实底按钮，普通确认仍是主按钮', async () => {
+    const pending = requestAlertConfirmation({ title: '删除模型', message: '确定要删除这个模型吗？', confirmLabel: '删除', confirmTone: 'danger' })
+    const view = render(<GlobalAlertDialog />)
+    expect(screen.getByRole('button', { name: '删除' }).className).toContain('ui-btn-danger-solid')
+    fireEvent.click(screen.getByRole('button', { name: '取消' }))
+    await expect(pending).resolves.toBe(false)
+    view.unmount()
+    const plain = requestAlertConfirmation({ title: '克隆费用', message: '费用说明', confirmLabel: '开始克隆' })
+    render(<GlobalAlertDialog />)
+    expect(screen.getByRole('button', { name: '开始克隆' }).className).not.toContain('ui-btn-danger-solid')
+    fireEvent.click(screen.getByRole('button', { name: '开始克隆' }))
+    await expect(plain).resolves.toBe(true)
+  })
+
   it('明确确认才接受本次提交', async () => {
     const pending = requestAlertConfirmation({ title: '克隆费用', message: '费用说明', confirmLabel: '开始克隆' })
     render(<GlobalAlertDialog />)

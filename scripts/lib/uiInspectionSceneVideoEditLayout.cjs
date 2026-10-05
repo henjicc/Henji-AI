@@ -293,4 +293,20 @@ function createVideoEditLayoutScene() {
   }
 }
 
-module.exports = { createVideoEditLayoutScene, observeWorkers, workerSnapshot, waitReleased }
+/**
+ * 点浮动资产库外面的项目项列表把它关掉。960 宽窗口下浮层几乎盖满主窗口，写死的坐标会点在浮层上；
+ * 在列表里找一个不被浮层盖住的点（5.8）。
+ */
+async function clickOutsideFloatingAssets(page) {
+  const list = page.getByLabel('项目项列表', { exact: true })
+  const [listBox, panelBox] = await Promise.all([list.boundingBox(), page.locator('[data-asset-floating-panel]').boundingBox()])
+  if (!listBox) throw new Error('项目项列表不可见')
+  const inside = (x, y) => panelBox && x >= panelBox.x && x <= panelBox.x + panelBox.width && y >= panelBox.y && y <= panelBox.y + panelBox.height
+  const candidates = [[12, 25], [12, listBox.height - 12], [listBox.width - 12, listBox.height - 12], [listBox.width - 12, 25]]
+  const point = candidates.find(([x, y]) => !inside(listBox.x + x, listBox.y + y))
+  if (!point) throw new Error(`项目项列表完全被浮动资产库盖住：${JSON.stringify({ listBox, panelBox })}`)
+  await list.click({ position: { x: point[0], y: point[1] } })
+}
+
+module.exports = {
+  clickOutsideFloatingAssets, createVideoEditLayoutScene, observeWorkers, workerSnapshot, waitReleased }

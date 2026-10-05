@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useId, useLayoutEffect, useRef, useState
 import { createPortal } from 'react-dom'
 import { shouldClosePanelAfterInternalClick } from './panelTriggerClosePolicy'
 import {
-  hasOpenModalUiOverlayDescendant,
+  hasOpenModalUiOverlayAbove,
   isTopmostUiOverlay,
   resolveUiOverlayTarget,
   UiOverlayLayerProvider,
@@ -358,7 +358,7 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
       // 子浮层（嵌套的 PanelTrigger / Dropdown / 弹窗 / 提示词候选）里的点击归属本面板，不关闭
       if (relation === 'descendant') return
       // 从面板里打开的模态层（弹窗、查看器）期间，面板不响应点外关闭
-      if (hasOpenModalUiOverlayDescendant(overlay.id)) return
+      if (hasOpenModalUiOverlayAbove(overlay.id)) return
       // 面板内的点击在 click 冒泡阶段才收起（见下）：按下时就收起会让面板先进入不可交互的收起态，选项收不到 click
       if (relation === 'self') return
       if (open) {

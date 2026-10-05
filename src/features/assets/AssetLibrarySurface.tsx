@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { FolderPlus, GripVertical, LoaderCircle, Settings2, X } from 'lucide-react'
-import { Dropdown, PanelTrigger, UI_FIELD_LABEL_CLASS, UI_GLASS_ADAPTIVE_REGION_CLASS, UI_SEGMENTED_TRACK_CLASS, UI_TEXT_META_CLASS, UiButton, UiEmpty, UiError, UiIconButton, UiSearchInput, UiOptionButton, UiPageHeader, UiRangeInput, UiSharedGlassHost } from '@/components/ui'
+import { Dropdown, PanelTrigger, UI_FIELD_LABEL_CLASS, UI_GLASS_ADAPTIVE_REGION_CLASS, UI_SEGMENTED_TRACK_CLASS, UI_TEXT_META_CLASS, UiButton, UiEmpty, UiError, UiIconButton, UiSearchInput, UiOptionButton, UiPageHeader, UiRangeInput } from '@/components/ui'
 import type { AssetLibraryRecord, AssetMediaType, AssetPage, AssetRecord } from '@/platform/contracts/assetLibrary'
 import { addAssetToLibrary, createAssetLibrary, deleteAsset, deleteAssetLibrary, inspectAssets, listAssetLibraries, listAssetTags, queryAssets, removeAssetFromLibrary, renameAssetLibrary, setAssetTags, updateAsset } from '@/commands/assetLibrary'
 import { ICON_MULTI_SELECT } from '@/core/theme/icons'
@@ -353,7 +353,7 @@ export const AssetLibrarySurface: React.FC<Props> = ({ mode, active = true, onCl
               {onClose && <UiIconButton className="shrink-0" title={t('assetLibrary.close')} aria-label={t('assetLibrary.close')} onClick={onClose}><X className="h-4 w-4" /></UiIconButton>}
             </header>
           )}
-          <UiSharedGlassHost ref={scrollRef} minTargets={4} onContextMenu={handleBlankContextMenu} className={`min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable] ${mode === 'workspace' ? 'p-4' : 'px-3 pb-3 pt-1'}`}>
+          <div ref={scrollRef} onContextMenu={handleBlankContextMenu} className={`relative isolate min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable] ${mode === 'workspace' ? 'p-4' : 'px-3 pb-3 pt-1'}`}>
             {loading && page.items.length === 0 ? (
               <div className={`absolute overflow-hidden ${mode === 'workspace' ? 'inset-4' : 'inset-3'}`} aria-busy="true">
                 <div className="grid gap-x-3 gap-y-4" style={{ gridTemplateColumns: `repeat(auto-fill,minmax(${cardSize}px,1fr))` }}>{Array.from({ length: 12 }).map((_, index) => <div key={index} className="aspect-square rounded-lg bg-panel motion-safe:animate-pulse" />)}</div>
@@ -382,6 +382,7 @@ export const AssetLibrarySurface: React.FC<Props> = ({ mode, active = true, onCl
                       asset={asset}
                       selected={selected?.id === asset.id}
                       eager={mode === 'floating'}
+                      onGlass={mode === 'floating'}
                       thumbnailFit={thumbnailFit}
                       menuOpen={menuState?.asset.id === asset.id}
                       batchMode={workspaceBatchMode}
@@ -398,7 +399,7 @@ export const AssetLibrarySurface: React.FC<Props> = ({ mode, active = true, onCl
                 <div ref={loadMoreRef} className={`flex h-14 items-center justify-center ${UI_TEXT_META_CLASS}`}>{loadingMore ? <><LoaderCircle className="mr-2 h-4 w-4 motion-safe:animate-spin" />{t('assetLibrary.loadingMore')}</> : page.items.length < page.total ? t('assetLibrary.scrollForMore') : t('assetLibrary.allLoaded')}</div>
               </>
             )}
-          </UiSharedGlassHost>
+          </div>
         </main>
         {workspaceBatchMode && (
           <AssetBatchManager

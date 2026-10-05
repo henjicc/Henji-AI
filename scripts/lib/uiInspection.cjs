@@ -271,6 +271,21 @@ function formatWindowSize(size) {
   return `${size.width}x${size.height}`
 }
 
+/**
+ * 一次应用启动能跑哪些场景（5.8）：启动参数、环境变量、GPU 初始化失败注入与启动位置检查只对整个进程生效，
+ * 声明了它们的场景各自单独启动；其余场景共用一次启动，保持原顺序。
+ */
+function needsOwnLaunch(scene) {
+  return Boolean(scene.launchArgs?.length || Object.keys(scene.launchEnv ?? {}).length
+    || scene.forceGpuInitializationFailure === true || scene.inspectLaunch)
+}
+
+function partitionLaunchBatches(scenes) {
+  if (scenes.length <= 1) return scenes.length ? [scenes] : []
+  const shared = scenes.filter((scene) => !needsOwnLaunch(scene))
+  return [...(shared.length ? [shared] : []), ...scenes.filter(needsOwnLaunch).map((scene) => [scene])]
+}
+
 function filterScenes(scenes, only) {
   if (only.length === 0) return scenes
   const needles = only.map((value) => value.toLocaleLowerCase())
@@ -451,6 +466,7 @@ module.exports = {
   UI_INSPECTION_THEME_PRESETS,
   UI_INSPECTION_SCENES,
   filterScenes,
+  partitionLaunchBatches,
   formatWindowSize,
   launchUiInspectionApp,
   parseUiInspectionArgs,

@@ -15,6 +15,11 @@ interface UiState {
   isSettingsOpen: boolean
   /** 本次打开设置要定位到的位置；null 表示用设置面板自己的默认分节 */
   settingsTarget: SettingsNavigationTarget | null
+  /**
+   * 每次“打开设置”都自增（即使已经打开）。设置弹窗正在淡出（关闭动画的 180ms）时再点设置，
+   * 弹窗靠它取消收起、重新显示；否则这次点击会被吞掉，淡出结束后设置直接消失（5.8）。
+   */
+  settingsOpenRequest: number
   openSettings: (target?: SettingsNavigationTarget) => void
   closeSettings: () => void
 }
@@ -22,7 +27,12 @@ interface UiState {
 export const useUiStore = create<UiState>((set) => ({
   isSettingsOpen: false,
   settingsTarget: null,
-  openSettings: (target) => set({ isSettingsOpen: true, settingsTarget: target ?? null }),
+  settingsOpenRequest: 0,
+  openSettings: (target) => set((state) => ({
+    isSettingsOpen: true,
+    settingsTarget: target ?? null,
+    settingsOpenRequest: state.settingsOpenRequest + 1,
+  })),
   closeSettings: () => set({ isSettingsOpen: false, settingsTarget: null }),
 }))
 

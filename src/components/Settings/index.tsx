@@ -16,6 +16,7 @@ import InterfaceTab from './tabs/InterfaceTab'
 import ModelsTab from './tabs/ModelsTab'
 import { useSettingsScrollSpy } from './hooks/useSettingsScrollSpy'
 import { useI18n } from '@/hooks/useI18n'
+import { useUiStore } from '@/stores/uiStore'
 import { resolveSettingsSurfaceId } from '@/features/navigation/application/surfaceCatalog'
 import type { SettingsNavigationTarget, SettingsTabId } from '@/core/types/settingsNavigation'
 
@@ -65,10 +66,30 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, target }) => {
   // 关闭分两步：先让 UiModal 播完淡出，再由 App 卸载本组件。
   // 等待时长必须跟着 UiModal 的过渡走，此前写死 300ms 比实际过渡长 120ms，
   // 那段时间里弹窗已经全透明却还占着 DOM。
+  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const handleClose = () => {
     setClosing(true)
-    setTimeout(onClose, UI_DIALOG_TRANSITION_MS)
+    if (closeTimerRef.current) clearTimeout(closeTimerRef.current)
+    closeTimerRef.current = setTimeout(() => {
+      closeTimerRef.current = null
+      onClose()
+    }, UI_DIALOG_TRANSITION_MS)
   }
+  // 淡出期间再次打开设置：取消收起与卸载计时，弹窗重新显示（否则这次点击被吞掉）
+  const openRequest = useUiStore((state) => state.settingsOpenRequest)
+  const mountedOpenRequestRef = useRef(openRequest)
+  useEffect(() => {
+    if (openRequest === mountedOpenRequestRef.current) return
+    mountedOpenRequestRef.current = openRequest
+    if (closeTimerRef.current) {
+      clearTimeout(closeTimerRef.current)
+      closeTimerRef.current = null
+    }
+    setClosing(false)
+  }, [openRequest])
+  useEffect(() => () => {
+    if (closeTimerRef.current) clearTimeout(closeTimerRef.current)
+  }, [])
 
   const tabs = [
     { id: 'general' as const, label: t('tabs.general.label'), icon: Settings2, component: GeneralTab },

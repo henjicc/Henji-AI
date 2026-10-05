@@ -149,6 +149,7 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
       message: t('modelscopeCustomModel.confirmDelete'),
       type: 'warning',
       confirmLabel: t('common:delete'),
+      confirmTone: 'danger',
     })
     if (confirmed) {
       try {
@@ -157,6 +158,8 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
         await notifyModelsChange()
       } catch (e) {
         logger.error('Failed to delete custom model:', e)
+        // 删除失败原来只记日志，列表看起来没变化、用户不知道发生了什么（任务 5.8）
+        showAlert(t('modelscopeCustomModel.alerts.deleteFailed.title'), t('modelscopeCustomModel.alerts.deleteFailed.message'), 'error')
       }
     }
   }

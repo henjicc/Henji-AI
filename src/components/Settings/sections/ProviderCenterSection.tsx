@@ -237,6 +237,7 @@ const ProviderCenterSection = ({ llm }: ProviderCenterSectionProps): JSX.Element
         <div className="flex min-h-0 flex-1 flex-col gap-2">
           <UiSearchInput value={providerSearch} onChange={event => setProviderSearch(event.target.value)} placeholder={t('providerCenter.searchPlaceholder')} aria-label={t('providerCenter.searchPlaceholder')} />
           <div className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain">
+            {filteredGroups.length === 0 ? <UiEmpty size="xs" title={t('providerCenter.searchNoResults')} /> : null}
             {filteredGroups.map(group => (
               <UiOptionButton key={group.id} type="button" variant="menu" size="lg" active={group.id === selected?.id} className="w-full text-left" onClick={() => { setSelectedId(group.id); setCategory('all'); setFetchError(null) }}>
                 <span className="block truncate text-sm font-medium">{group.displayName}</span>

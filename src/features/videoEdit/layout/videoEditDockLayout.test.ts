@@ -68,6 +68,35 @@ describe('剪辑面板布局', () => {
     expect(api.totalPanels).toBe(1)
   })
 
+  it('浮动的时间线贴回时回到节目画面下方，不变成右侧窄竖列（5.8）', () => {
+    resetVideoEditLayout(api)
+    const program = api.getPanel('program')!
+    const timeline = api.getPanel('timeline')!
+    api.addFloatingGroup(timeline)
+    dockVideoEditPanel(api, timeline)
+    expect(timeline.api.location.type).toBe('grid')
+    // 在下方：与节目画面同宽方向排布、比节目矮；贴到右边时会与节目画面并排、几乎等高
+    expect(timeline.api.width).toBeGreaterThanOrEqual(program.api.width)
+    expect(timeline.api.height).toBeLessThan(program.api.height + timeline.api.height)
+    expect(timeline.group).not.toBe(program.group)
+    api.addFloatingGroup(timeline.group)
+    dockVideoEditGroup(api, timeline.group)
+    expect(timeline.api.width).toBeGreaterThanOrEqual(program.api.width)
+  })
+
+  it('节目画面关闭或从浮窗贴回后回到时间线上方，时间线不变成整高窄列（5.8）', () => {
+    resetVideoEditLayout(api)
+    const timelineWidth = api.getPanel('timeline')!.api.width
+    api.getPanel('program')!.api.close()
+    const program = showVideoEditPanel(api, 'program')
+    const timeline = api.getPanel('timeline')!
+    expect(program.api.location.type).toBe('grid')
+    expect(program.group).not.toBe(timeline.group)
+    // 上下排布：两者同宽，时间线宽度不因节目画面回来而被挤窄
+    expect(program.api.width).toBe(timeline.api.width)
+    expect(timeline.api.width).toBe(timelineWidth)
+  })
+
   it('只有浮动分组时仍可将面板和整组贴回主区域', () => {
     const program = showVideoEditPanel(api, 'program')
     api.addFloatingGroup(program)

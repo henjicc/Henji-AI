@@ -14,7 +14,7 @@ import { useUiFormRowLabelling } from './formRowLabel'
 import { UiFieldTrigger, UiOptionButton } from './primitives'
 import { UI_DURATION } from './motion'
 import { resolveDropdownDisplay, resolveDropdownMenuWidth } from './dropdownUtils'
-import { resolveUiOverlayTarget, UiOverlayLayerProvider, useHasOpenModalUiOverlayDescendant, useUiOverlayLayer } from './overlayOwnership'
+import { hasOpenModalUiOverlayAbove, resolveUiOverlayTarget, UiOverlayLayerProvider, useHasOpenModalUiOverlayDescendant, useUiOverlayLayer } from './overlayOwnership'
 import { measureElementTextWidth } from './textMeasurement'
 import { Check } from 'lucide-react'
 import { Z_LAYERS } from '@/core/theme/zLayers'
@@ -259,7 +259,8 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
       // 自身面板与在面板里打开的子浮层都算内部（浮层归属，任务 4.3）
       const inPanel = (panelRef.current?.contains(target) ?? false)
         || resolveUiOverlayTarget(target, overlay.id) !== 'outside'
-      if (!inTrigger && !inPanel) {
+      // 下拉打开后又弹出的模态层（如全局确认框）期间，下拉不响应点外关闭（5.8）
+      if (!inTrigger && !inPanel && !hasOpenModalUiOverlayAbove(overlay.id)) {
         if (open) scheduleClose()
       }
     }

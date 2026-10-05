@@ -10,6 +10,7 @@ const { auditPageContrast, loadContrastExceptions } = require('./lib/uiContrastA
 const { captureInspectionPage } = require('./lib/uiInspectionCapture.cjs')
 const {
   filterScenes,
+  partitionLaunchBatches,
   formatWindowSize,
   launchUiInspectionApp,
   parseUiInspectionArgs,
@@ -181,89 +182,93 @@ async function auditPresetRun({ run, scenes, options, selection, exceptions }) {
   const results = {}
   const failures = []
   const runtimeEvidence = {}
-  const app = await launchUiInspectionApp({
-    root: ROOT,
-    mainEntry: MAIN_ENTRY,
-    profile: options.profile,
-    readOnly: !options.allowWrites,
-    displayPoint: options.displayPoint,
-    extraArgs: [
-      ...(scenes.length === 1 ? scenes[0].launchArgs ?? [] : []),
-      ...themePresetLaunchArgs(run.themePreset),
-    ],
-    extraEnv: {
-      ...(scenes.length === 1 ? scenes[0].launchEnv ?? {} : {}),
-      ...(scenes.length === 1 && scenes[0]?.forceGpuInitializationFailure === true
-        ? { HENJI_UI_INSPECTION_GPU_INIT_FAILURE: '1' } : {}),
-    },
-  })
-  const collector = createRuntimeEvidenceCollector(app.page)
+  // 带启动参数 / 环境变量 / GPU 初始化失败注入 / 启动位置检查的场景各自单独启动一次应用（5.8）：
+  // 这些设置只对整个进程生效，与其他场景同进程跑时不会注入，场景必然失败。
+  for (const batch of partitionLaunchBatches(scenes)) {
+    const app = await launchUiInspectionApp({
+      root: ROOT,
+      mainEntry: MAIN_ENTRY,
+      profile: options.profile,
+      readOnly: !options.allowWrites,
+      displayPoint: options.displayPoint,
+      extraArgs: [
+        ...(batch.length === 1 ? batch[0].launchArgs ?? [] : []),
+        ...themePresetLaunchArgs(run.themePreset),
+      ],
+      extraEnv: {
+        ...(batch.length === 1 ? batch[0].launchEnv ?? {} : {}),
+        ...(batch.length === 1 && batch[0]?.forceGpuInitializationFailure === true
+          ? { HENJI_UI_INSPECTION_GPU_INIT_FAILURE: '1' } : {}),
+      },
+    })
+    const collector = createRuntimeEvidenceCollector(app.page)
 
-  try {
-    for (const size of run.sizes) {
-      const sizeLabel = formatWindowSize(size)
-      for (const scene of scenes) {
-        const resultKey = `${sizeLabel} / ${scene.name}`
-        const contrastContext = { scene: scene.name, themePreset: run.themePreset, exceptions }
-        collector.begin(resultKey)
-        let sceneFailed = false
-        let sceneError = null
-        const windowEvidence = { requestedOuter: size, baseline: null, completed: null }
-        try {
-          windowEvidence.baseline = await setInspectionWindowSize(app, size)
-          // 与 ui:tour 同一个 capture 出口：场景中途截图的状态（菜单、悬停、浮窗）在这里做对比度审计。
-          const capture = async (suffix, { page: targetPage = app.page } = {}) => {
-            if (!/^[a-z0-9-]+$/.test(suffix)) throw new Error(`截图后缀无效：${suffix}`)
-            const key = `${resultKey} / ${suffix}`
-            const result = await auditContrastInto(emptyRuleResult([`中途状态 ${suffix}，只审对比度`]), app, targetPage, contrastContext)
-            results[key] = result
-            printSceneResult(key, result)
-          }
-          // 步骤描述的自动指标只在 ui:tour 里汇总；这里只审规则与对比度
-          await scene.setup(app.page, app.app, { capture, recordMetrics: () => undefined, electronApp: app.app,
-            requestedWindowSize: size, windowEvidence: windowEvidence.baseline })
-          windowEvidence.completed = await assertInspectionWindowSize(app, size, windowEvidence.baseline)
-          const result = await app.page.evaluate(auditUiDom, {
-            scene: scene.name,
-            surface: scene.surface,
-          })
-          await auditContrastInto(result, app, app.page, contrastContext)
-          results[resultKey] = result
-          printSceneResult(resultKey, result)
-        } catch (error) {
-          sceneFailed = true
-          sceneError = error
-          const message = error instanceof Error ? error.message : String(error)
-          failures.push({ name: scene.name, size: sizeLabel, message })
-          console.error(`\n✗ ${resultKey}：${message}`)
-        }
-        // 与 ui:tour 一致：场景撤掉自己留下的夹具，保证 --only 单跑与全量顺序跑看到同一份前置状态。
-        if (typeof scene.cleanup === 'function') {
+    try {
+      for (const size of run.sizes) {
+        const sizeLabel = formatWindowSize(size)
+        for (const scene of batch) {
+          const resultKey = `${sizeLabel} / ${scene.name}`
+          const contrastContext = { scene: scene.name, themePreset: run.themePreset, exceptions }
+          collector.begin(resultKey)
+          let sceneFailed = false
+          let sceneError = null
+          const windowEvidence = { requestedOuter: size, baseline: null, completed: null }
           try {
-            await scene.cleanup(app.page)
+            windowEvidence.baseline = await setInspectionWindowSize(app, size)
+            // 与 ui:tour 同一个 capture 出口：场景中途截图的状态（菜单、悬停、浮窗）在这里做对比度审计。
+            const capture = async (suffix, { page: targetPage = app.page } = {}) => {
+              if (!/^[a-z0-9-]+$/.test(suffix)) throw new Error(`截图后缀无效：${suffix}`)
+              const key = `${resultKey} / ${suffix}`
+              const result = await auditContrastInto(emptyRuleResult([`中途状态 ${suffix}，只审对比度`]), app, targetPage, contrastContext)
+              results[key] = result
+              printSceneResult(key, result)
+            }
+            // 步骤描述的自动指标只在 ui:tour 里汇总；这里只审规则与对比度
+            await scene.setup(app.page, app.app, { capture, recordMetrics: () => undefined, electronApp: app.app,
+              requestedWindowSize: size, windowEvidence: windowEvidence.baseline })
+            windowEvidence.completed = await assertInspectionWindowSize(app, size, windowEvidence.baseline)
+            const result = await app.page.evaluate(auditUiDom, {
+              scene: scene.name,
+              surface: scene.surface,
+            })
+            await auditContrastInto(result, app, app.page, contrastContext)
+            results[resultKey] = result
+            printSceneResult(resultKey, result)
           } catch (error) {
+            sceneFailed = true
+            sceneError = error
             const message = error instanceof Error ? error.message : String(error)
-            failures.push({ name: scene.name, size: sizeLabel, message: `场景清理失败：${message}` })
+            failures.push({ name: scene.name, size: sizeLabel, message })
+            console.error(`\n✗ ${resultKey}：${message}`)
           }
-        }
-        try {
-          runtimeEvidence[resultKey] = finalizeSceneEvidence(await collector.finish({ expectedLogEvents: scene.expectedLogEvents }), sceneError)
-          runtimeEvidence[resultKey].window = windowEvidence
-          if (!sceneFailed && !runtimeEvidence[resultKey].passed) {
-            const runtimeErrorCount = runtimeEvidence[resultKey].browserErrors.length
-              + runtimeEvidence[resultKey].logErrors.length
-            failures.push({ name: scene.name, size: sizeLabel, message: `捕获到 ${runtimeErrorCount} 个运行时错误` })
+          // 与 ui:tour 一致：场景撤掉自己留下的夹具，保证 --only 单跑与全量顺序跑看到同一份前置状态。
+          if (typeof scene.cleanup === 'function') {
+            try {
+              await scene.cleanup(app.page)
+            } catch (error) {
+              const message = error instanceof Error ? error.message : String(error)
+              failures.push({ name: scene.name, size: sizeLabel, message: `场景清理失败：${message}` })
+            }
           }
-        } catch (error) {
-          collector.cancel()
-          const message = error instanceof Error ? error.message : String(error)
-          failures.push({ name: scene.name, size: sizeLabel, message: `运行时证据查询失败：${message}` })
+          try {
+            runtimeEvidence[resultKey] = finalizeSceneEvidence(await collector.finish({ expectedLogEvents: scene.expectedLogEvents, expectedBrowserErrors: scene.expectedBrowserErrors }), sceneError)
+            runtimeEvidence[resultKey].window = windowEvidence
+            if (!sceneFailed && !runtimeEvidence[resultKey].passed) {
+              const runtimeErrorCount = runtimeEvidence[resultKey].browserErrors.length
+                + runtimeEvidence[resultKey].logErrors.length
+              failures.push({ name: scene.name, size: sizeLabel, message: `捕获到 ${runtimeErrorCount} 个运行时错误` })
+            }
+          } catch (error) {
+            collector.cancel()
+            const message = error instanceof Error ? error.message : String(error)
+            failures.push({ name: scene.name, size: sizeLabel, message: `运行时证据查询失败：${message}` })
+          }
         }
       }
+    } finally {
+      collector.dispose()
+      await app.close()
     }
-  } finally {
-    collector.dispose()
-    await app.close()
   }
 
   const crossScene = {

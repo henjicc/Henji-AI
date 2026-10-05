@@ -174,7 +174,8 @@
       "cellCount": "Output cells",
       "cellWidth": "Cell width (px)",
       "cellHeight": "Cell height (px)",
-      "layoutError": "Dividers are too thick to leave room for cells. Reduce the thickness or the number of rows and columns."
+      "layoutError": "Dividers are too thick to leave room for cells. Reduce the thickness or the number of rows and columns.",
+      "layoutTooSmall": "The image is too small for this many cells. Reduce the number of rows and columns."
     },
     "imageEditorV3": {
       "loading": "Preparing the image editor...",

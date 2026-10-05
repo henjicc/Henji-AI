@@ -134,6 +134,7 @@
     "models": "Models & Capabilities",
     "emptyProviders": "No providers yet",
     "emptyProvidersHint": "Add a provider to manage its key and models together.",
+    "searchNoResults": "No matching providers",
     "emptyModels": "No models in this category",
     "emptyModelsHint": "Add a model or choose another capability category.",
     "syncFailed": "Model sync failed",
@@ -382,7 +383,12 @@
       "clearIgnoredHint": "Clearing will prompt all ignored versions again",
       "upToDate": "You are up to date ({{version}})",
       "hasUpdate": "New version {{version}} is available",
-      "checkFailed": "Update check failed: {{message}}"
+      "checkFailed": "Update check failed: {{message}}",
+      "resultTitle": {
+        "upToDate": "You're up to date",
+        "hasUpdate": "Update available",
+        "failed": "Couldn't check for updates"
+      }
     },
     "about": {
       "productName": "Henji AI",

@@ -132,7 +132,9 @@ describe('MaskEditorV3Host', () => {
       />,
     )
 
-    expect(await screen.findByText(/source\/ref\/revision 与权威快照不一致/)).toBeTruthy()
+    // 界面只给用户能据此行动的说明，内部比对细节（source/ref/revision）只进日志
+    expect(await screen.findByText(/蒙版对应的编辑内容已经过期/)).toBeTruthy()
+    expect(screen.queryByText(/source\/ref\/revision|权威快照/)).toBeNull()
     expect(screen.queryByTestId('v3-mask-editor')).toBeNull()
   })
 

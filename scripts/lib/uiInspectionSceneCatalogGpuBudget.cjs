@@ -6,8 +6,10 @@ function createGpuBudgetScenes(context) {
     surface: '工具箱',
     name: '图片编辑器-GPU预算后备',
     setup: async (page, electronApp, helpers = {}) => {
+      // 私有参考图（test01）不进仓库：没有显式指定时现生成一张 6000×4000 细节图，放大后同样会超出 GPU 预算
       const fixturePath = process.env.HENJI_VGPU_GLOW_FIXTURE_IMAGE
-      if (!fixturePath || !electronApp) throw new Error('GPU预算后备验收缺少test01夹具')
+        || require('./uiReviewSteps.cjs').resolveFixtureFile('@generated:image:6000x4000')
+      if (!electronApp) throw new Error('GPU预算后备验收缺少 Electron 主进程句柄')
       await setupToolbox(page)
       await clickNamedButton(page, /^(图片编辑|Image Edit)/i)
       const surface = page.locator('[data-application-surface-id="tool.image_edit"]:visible')

@@ -1,4 +1,4 @@
-import { forwardRef, useMemo, useRef, useState } from 'react'
+import { forwardRef, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Virtuoso, VirtuosoGrid } from 'react-virtuoso'
 import { ChevronDown, ChevronRight, Folder, FolderPlus, Import, List, Grid2X2, Plus, Pencil, Trash2, RefreshCw, Play, Settings2, Code2, AudioLines } from 'lucide-react'
 import { ICON_WORKSPACE_VIDEO_EDIT as SequenceIcon, ICON_ASSET_LIBRARY as AssetLibraryIcon, ICON_VIDEO_EDIT_GRAPHIC as GraphicIcon } from '@/core/theme/icons'
@@ -31,11 +31,28 @@ const gridComponents = { List: GridList, Item: GridItem }
 const SORT_OPTIONS = [{ value: 'name', label: '名称' }, { value: 'kind', label: '类型' }, { value: 'duration', label: '时长' }] as const
 type SequenceDialog = { kind: 'create' | 'edit' | 'fromItem'; settings: VideoEditSequenceSettings; id?: string; requireFrameRate?: boolean }
 
+/** 素材箱树放得下根目录名称所需的宽度（“工程根目录”五个字 + 图标 + 内边距约 96px）；树最多占面板宽的 40% */
+const BIN_TREE_LABEL_MIN_WIDTH = 96
+const BIN_TREE_MAX_RATIO = 0.4
+
 export function VideoEditProjectPanel({ instance, onError, visible = true }: { instance: VideoEditInstance; onError: (reason: unknown) => void; visible?: boolean }): React.ReactElement {
   const [keyword, setKeyword] = useState('')
   const [sort, setSort] = useState<'name' | 'kind' | 'duration'>('name')
   const [view, setView] = useState<'list' | 'grid'>('list')
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
+  // 面板窄到素材箱树放不下“工程根目录”时（窄停靠面板，如 960 宽窗口），树收成一列图标、名称进悬停说明，
+  // 让出宽度给项目项列表；不把根目录截成“工程…”（5.8 shortTextTruncated）。按面板宽度判断，避免收起后自己变窄回不来。
+  const binTreeRef = useRef<HTMLDivElement>(null)
+  const [compactBinTree, setCompactBinTree] = useState(false)
+  useLayoutEffect(() => {
+    const host = binTreeRef.current?.parentElement
+    if (!host || typeof ResizeObserver === 'undefined') return
+    const update = (): void => setCompactBinTree(host.clientWidth * BIN_TREE_MAX_RATIO < BIN_TREE_LABEL_MIN_WIDTH)
+    update()
+    const observer = new ResizeObserver(update)
+    observer.observe(host)
+    return () => observer.disconnect()
+  }, [])
   const [edit, setEdit] = useState<ProjectEditDialog | null>(null)
   const [sequenceDialog, setSequenceDialog] = useState<SequenceDialog | null>(null)
   const [selectedSequence, setSelectedSequence] = useState<string | null>(null)
@@ -185,11 +202,11 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
       </div>
     </div>
     <div className="flex min-h-0 flex-1">
-      <div className="flex w-28 min-w-14 max-w-[40%] shrink-0 flex-col border-r border-line pl-1" aria-label="素材箱树" role="tree">
-        <UiChipButton selectionRole="navigation" active={!binId} size="sm" className="w-full gap-1 !px-2" onClick={() => selectBin('')} onDrop={event => drop(event, '')}><Folder size={14} /><span className="truncate">工程根目录</span></UiChipButton>
-        <Virtuoso className="min-h-0 flex-1" data={bins} computeItemKey={(_index, row) => row.bin.id} itemContent={(_index, row) => <div className="flex items-center" style={{ paddingLeft: Math.min(row.depth, 8) * 10 }} role="treeitem" aria-level={row.depth + 1} aria-expanded={row.hasChildren ? !collapsed.has(row.bin.id) : undefined}>
-          <UiIconButton size="sm" className="shrink-0" disabled={!row.hasChildren} title={collapsed.has(row.bin.id) ? '展开素材箱' : '折叠素材箱'} onClick={() => setCollapsed(previous => { const next = new Set(previous); if (next.has(row.bin.id)) next.delete(row.bin.id); else next.add(row.bin.id); return next })}>{row.hasChildren ? collapsed.has(row.bin.id) ? <ChevronRight size={12} /> : <ChevronDown size={12} /> : null}</UiIconButton>
-          <UiChipButton selectionRole="navigation" active={binId === row.bin.id} data-video-edit-bin={row.bin.id} size="sm" className="min-w-0 flex-1 gap-1 !px-1" onClick={() => selectBin(row.bin.id)} onContextMenu={event => menu.showMenu(event, binMenu(row.bin))} onDrop={event => drop(event, row.bin.id)}><Folder size={13} className="shrink-0" /><span className="truncate">{row.bin.name}</span></UiChipButton>
+      <div ref={binTreeRef} className={`flex shrink-0 flex-col border-r border-line pl-1 ${compactBinTree ? 'w-10' : 'w-28 min-w-14 max-w-[40%]'}`} aria-label="素材箱树" role="tree">
+        <UiChipButton selectionRole="navigation" active={!binId} size="sm" className="w-full gap-1 !px-2" aria-label={compactBinTree ? '工程根目录' : undefined} title={compactBinTree ? '工程根目录' : undefined} onClick={() => selectBin('')} onDrop={event => drop(event, '')}><Folder size={14} />{compactBinTree ? null : <span className="truncate">工程根目录</span>}</UiChipButton>
+        <Virtuoso className="min-h-0 flex-1" data={bins} computeItemKey={(_index, row) => row.bin.id} itemContent={(_index, row) => <div className="flex items-center" style={{ paddingLeft: compactBinTree ? 0 : Math.min(row.depth, 8) * 10 }} role="treeitem" aria-level={row.depth + 1} aria-expanded={row.hasChildren ? !collapsed.has(row.bin.id) : undefined}>
+          {compactBinTree ? null : <UiIconButton size="sm" className="shrink-0" disabled={!row.hasChildren} title={collapsed.has(row.bin.id) ? '展开素材箱' : '折叠素材箱'} onClick={() => setCollapsed(previous => { const next = new Set(previous); if (next.has(row.bin.id)) next.delete(row.bin.id); else next.add(row.bin.id); return next })}>{row.hasChildren ? collapsed.has(row.bin.id) ? <ChevronRight size={12} /> : <ChevronDown size={12} /> : null}</UiIconButton>}
+          <UiChipButton selectionRole="navigation" active={binId === row.bin.id} data-video-edit-bin={row.bin.id} size="sm" className="min-w-0 flex-1 gap-1 !px-1" aria-label={compactBinTree ? row.bin.name : undefined} title={compactBinTree ? row.bin.name : undefined} onClick={() => selectBin(row.bin.id)} onContextMenu={event => menu.showMenu(event, binMenu(row.bin))} onDrop={event => drop(event, row.bin.id)}><Folder size={13} className="shrink-0" />{compactBinTree ? null : <span className="truncate" data-user-content>{row.bin.name}</span>}</UiChipButton>
         </div>} />
       </div>
       <div className="min-h-0 min-w-0 flex-1" aria-label="项目项列表" onDoubleClick={event => { if (!(event.target as HTMLElement).closest('[data-video-edit-project-entry]')) choose() }} onContextMenu={event => menu.showMenu(event, blankMenu())}>

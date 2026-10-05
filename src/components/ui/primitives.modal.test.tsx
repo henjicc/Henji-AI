@@ -153,12 +153,15 @@ describe('UiModal 收起（任务 5.8，同 VE-06）', () => {
           <UiButton>确定</UiButton>
         </UiModal>,
       );
-      const root = document.body.querySelector('[data-dialog="true"]') as HTMLElement;
+      const root = document.body.querySelector('[role="dialog"]') as HTMLElement;
       expect(root.getAttribute('aria-hidden')).toBe('true');
       expect(root.hasAttribute('inert')).toBe(true);
+      // 收起中不再声明模态：画布快捷键等按 [aria-modal="true"] 判断“有没有弹窗”，关闭动画期间不能吞掉按键
+      expect(document.body.querySelector('[aria-modal="true"]')).toBeNull();
+      expect(document.body.querySelector('[data-dialog="true"]')).toBeNull();
       const panel = root.querySelector('.transition-opacity.duration-180:not(.ui-glass-scrim)') as HTMLElement;
       fireEvent.transitionEnd(panel);
-      expect(document.body.querySelector('[data-dialog="true"]')).toBeNull();
+      expect(document.body.querySelector('[role="dialog"]')).toBeNull();
     } finally {
       vi.useRealTimers();
     }

@@ -36,3 +36,35 @@ describe('浮层栈顺序', () => {
     expect(isTopmostUiOverlay(seen.b)).toBe(true)
   })
 })
+
+function ModalLayer({ name, open }: { name: string; open: boolean }): React.ReactElement {
+  const layer = useUiOverlayLayer(open, { modal: true })
+  seen[name] = layer.id
+  return React.createElement('div', layer.layerProps)
+}
+
+describe('模态层盖在之前打开的浮层上（5.8）', () => {
+  it('浮层打开后才弹出的全局确认框（不是浮层后代）也让浮层让开；先开的弹窗不影响之后打开的浮层', async () => {
+    const { hasOpenModalUiOverlayAbove } = await import('./overlayOwnership')
+    const view = render(React.createElement(React.Fragment, null,
+      React.createElement(Layer, { name: 'panel', open: true }),
+      React.createElement(ModalLayer, { name: 'confirm', open: false })))
+    expect(hasOpenModalUiOverlayAbove(seen.panel)).toBe(false)
+    view.rerender(React.createElement(React.Fragment, null,
+      React.createElement(Layer, { name: 'panel', open: true }),
+      React.createElement(ModalLayer, { name: 'confirm', open: true })))
+    expect(hasOpenModalUiOverlayAbove(seen.panel)).toBe(true)
+    view.rerender(React.createElement(React.Fragment, null,
+      React.createElement(Layer, { name: 'panel', open: true }),
+      React.createElement(ModalLayer, { name: 'confirm', open: false })))
+    expect(hasOpenModalUiOverlayAbove(seen.panel)).toBe(false)
+    cleanup()
+    const later = render(React.createElement(React.Fragment, null,
+      React.createElement(ModalLayer, { name: 'dialog', open: true }),
+      React.createElement(Layer, { name: 'popover', open: false })))
+    later.rerender(React.createElement(React.Fragment, null,
+      React.createElement(ModalLayer, { name: 'dialog', open: true }),
+      React.createElement(Layer, { name: 'popover', open: true })))
+    expect(hasOpenModalUiOverlayAbove(seen.popover)).toBe(false)
+  })
+})

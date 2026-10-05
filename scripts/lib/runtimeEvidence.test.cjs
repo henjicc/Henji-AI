@@ -82,3 +82,18 @@ test('场景声明的故障注入日志单独记录，不掩盖其他错误', as
   const other = await collector.finish({ expectedLogEvents: ['video_edit.save.failed'] })
   assert.equal(other.passed, false); assert.equal(other.logErrors[0].event, 'render.failed')
 })
+
+test('场景声明的浏览器控制台错误（如源文件丢失的 404）单独记录，其他控制台错误照常判失败（5.8）', async () => {
+  const page = new FakePage()
+  const collector = createRuntimeEvidenceCollector(page)
+  collector.begin('资产源文件丢失')
+  page.emit('console', { type: () => 'error', text: () => 'Failed to load resource: the server responded with a status of 404 (Not Found)' })
+  const evidence = await collector.finish({ expectedBrowserErrors: ['status of 404'] })
+  assert.deepEqual(evidence.browserErrors, [])
+  assert.equal(evidence.expectedBrowserErrors.length, 1)
+  collector.begin('其他控制台错误')
+  page.emit('console', { type: () => 'error', text: () => 'TypeError: x is undefined' })
+  const other = await collector.finish({ expectedBrowserErrors: ['status of 404'] })
+  collector.dispose()
+  assert.equal(other.browserErrors.length, 1)
+})

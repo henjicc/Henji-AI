@@ -15,8 +15,8 @@ export interface AlertDialogRequest {
   title: string
   message: string
   type?: AlertDialogType
-  /** 只有用户点击明确的确认按钮才接受；关闭、Escape、取消均拒绝。 */
-  confirmation?: { label: string; resolve: (confirmed: boolean) => void }
+  /** 只有用户点击明确的确认按钮才接受；关闭、Escape、取消均拒绝。tone=danger 用于删除等破坏性确认（危险实底按钮）。 */
+  confirmation?: { label: string; tone?: 'default' | 'danger'; resolve: (confirmed: boolean) => void }
   /** 有值时渲染设置动作并定位到该分节；API 密钥分节会显示「去配置」 */
   settingsTarget?: SettingsNavigationTarget
   /** 有值时渲染「复制错误详情」按钮；放完整技术信息（堆栈、响应体等） */
@@ -57,7 +57,7 @@ export function showAlertDialog(request: AlertDialogRequest): void {
 
 /** 一次性的人机确认；任务中止时精确移除自己的弹窗，不影响其他排队提示。 */
 export function requestAlertConfirmation(
-  request: Omit<AlertDialogRequest, 'confirmation'> & { confirmLabel: string },
+  request: Omit<AlertDialogRequest, 'confirmation'> & { confirmLabel: string; confirmTone?: 'default' | 'danger' },
   signal?: AbortSignal,
 ): Promise<boolean> {
   if (signal?.aborted) return Promise.resolve(false)
@@ -71,7 +71,8 @@ export function requestAlertConfirmation(
       resolve(confirmed && !signal?.aborted)
     }
     const abort = (): void => finish(false)
-    const entry: AlertDialogRequest = { ...request, confirmation: { label: request.confirmLabel, resolve: finish } }
+    const { confirmLabel, confirmTone, ...rest } = request
+    const entry: AlertDialogRequest = { ...rest, confirmation: { label: confirmLabel, tone: confirmTone, resolve: finish } }
     signal?.addEventListener('abort', abort, { once: true })
     showAlertDialog(entry)
     if (signal?.aborted) abort()

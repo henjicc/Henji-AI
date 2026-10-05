@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import { Dropdown, PanelTrigger, UiButton, UiEmpty, UiError, UiIconButton, UiInput, UiOptionButton, UiPanel } from '@/components/ui'
+import { Dropdown, PanelTrigger, UiButton, UiEmpty, UiError, UiIconButton, UiInput, UiOptionButton, UiOverflowRow, UiPanel } from '@/components/ui'
 import { ImagePlus, MapPin, MoreHorizontal, MousePointer2, Move, PenLine, RotateCcw, SquareDashed } from 'lucide-react'
 import { Z_LAYERS } from '@/core/theme/zLayers'
 import { audibleVideoEditClips, videoEditDuration } from '@/core/videoEdit/document'
@@ -22,6 +22,9 @@ import type { VideoEditComposition } from '@/core/videoEdit/document'
 
 const logger = createLogger('features.videoEdit.preview')
 /** 节目监视器的工具模式：选中态开关（不是动作按钮），名称与标注逻辑不变。 */
+/** 节目控制条低于这个宽度时不显示时间码：时间码 112 + 走带 ~170 + 显示比例 ~70 + 节目工具 ~120 + 更多 28 + 间距 */
+const PROGRAM_TOOLBAR_TIMECODE_MIN_WIDTH = 520
+const PROGRAM_DISPLAY_OPTIONS = [{ value: 'fit' as const, label: '适应' }, { value: 'actual' as const, label: '100%' }]
 const PROGRAM_MODES = [{ id: 'select', title: '选择', Icon: MousePointer2 }, { id: 'move', title: '移动画面', Icon: Move }, { id: 'point', title: '点标注', Icon: MapPin }, { id: 'region', title: '区域标注', Icon: SquareDashed }] as const
 
 /** The Program GPU surface belongs to the project: a remount (dock ↔ popout window) waits until the previous session actually retired. */
@@ -31,6 +34,17 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
   const host = useRef<HTMLDivElement>(null)
   const canvas = useRef<HTMLCanvasElement | null>(null)
   const [mode, setMode] = useState<'select' | 'move' | 'point' | 'region'>('select')
+  const programToolbarRef = useRef<HTMLDivElement>(null)
+  const [compactProgramToolbar, setCompactProgramToolbar] = useState(false)
+  useEffect(() => {
+    const toolbar = programToolbarRef.current
+    if (!toolbar || typeof ResizeObserver === 'undefined') return
+    const update = (): void => setCompactProgramToolbar(toolbar.clientWidth < PROGRAM_TOOLBAR_TIMECODE_MIN_WIDTH)
+    update()
+    const observer = new ResizeObserver(update)
+    observer.observe(toolbar)
+    return () => observer.disconnect()
+  }, [])
   const [display, setDisplay] = useState<'fit' | 'actual'>('fit')
   const [levels, setLevels] = useState<VideoEditAudioLevel[]>([])
   const picture = useVideoEditPictureGesture(instance, visible && mode === 'move', onError)
@@ -290,22 +304,34 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
         </UiPanel>
       </div>}
     </div>
-    <div className="flex min-h-10 shrink-0 flex-wrap items-center gap-x-1 gap-y-0.5 whitespace-nowrap border-t border-line px-2 py-1" role="toolbar" aria-label="节目监视器控制">
-      <VideoEditTimecode instance={instance} label="节目时间码" className="w-28 px-1.5 text-13 text-text1" />
+    {/* 节目监视器控制条单行（5.8 toolbarWrap）：窄面板下先让出时间码（时间线工具栏有同一读数），
+        再把显示比例与节目工具按优先级收进“更多”，不再折成多行 */}
+    <div ref={programToolbarRef} className="flex min-h-10 shrink-0 items-center gap-x-1 whitespace-nowrap border-t border-line px-2 py-1" role="toolbar" aria-label="节目监视器控制">
+      {compactProgramToolbar ? null : <VideoEditTimecode instance={instance} label="节目时间码" className="w-28 shrink-0 px-1.5 text-13 text-text1" />}
       <div className="flex min-w-fit flex-1 justify-center"><VideoEditTransportControls instance={instance} onError={onError} /></div>
-      <div className="ml-auto flex shrink-0 items-center gap-1">
-      <Dropdown<'fit' | 'actual'> ariaLabel="节目显示比例" appearance="text" size="sm" value={display} options={[{ value: 'fit', label: '适应' }, { value: 'actual', label: '100%' }]} onSelect={setDisplay} />
-      <div className="flex items-center gap-0.5" role="group" aria-label="节目工具">
-        {PROGRAM_MODES.map(({ id, title, Icon }) => <UiIconButton key={id} on={mode === id} aria-label={title} title={title} onClick={() => setMode(id)}><Icon size={15} /></UiIconButton>)}
-      </div>
-      <PanelTrigger panelWidth={188} zIndex={Z_LAYERS.dropdown} closeOnPanelClick panelPadding="menu" renderPanel={() => <div className="flex flex-col gap-1">
+      <UiOverflowRow
+        className="flex-1 justify-end gap-1"
+        alwaysShowOverflow
+        items={[
+          { id: 'display', priority: 0, node: <Dropdown<'fit' | 'actual'> ariaLabel="节目显示比例" appearance="text" size="sm" value={display} options={PROGRAM_DISPLAY_OPTIONS} onSelect={setDisplay} /> },
+          { id: 'modes', priority: 1, node: <div className="flex items-center gap-0.5" role="group" aria-label="节目工具">
+            {PROGRAM_MODES.map(({ id, title, Icon }) => <UiIconButton key={id} on={mode === id} aria-label={title} title={title} onClick={() => setMode(id)}><Icon size={15} /></UiIconButton>)}
+          </div> },
+        ]}
+        renderOverflow={hiddenIds => <PanelTrigger panelWidth={188} zIndex={Z_LAYERS.dropdown} closeOnPanelClick panelPadding="menu" renderPanel={() => <div className="flex flex-col gap-1">
+        {hiddenIds.includes('modes') && <div className="flex flex-col gap-1" role="group" aria-label="节目工具">
+          {PROGRAM_MODES.map(({ id, title, Icon }) => <UiOptionButton key={id} variant="menu" size="sm" className="gap-2" active={mode === id} onClick={() => setMode(id)}><Icon size={14} />{title}</UiOptionButton>)}
+        </div>}
+        {hiddenIds.includes('display') && <div className="flex flex-col gap-1" role="group" aria-label="节目显示比例">
+          {PROGRAM_DISPLAY_OPTIONS.map(option => <UiOptionButton key={option.value} variant="menu" size="sm" active={display === option.value} onClick={() => setDisplay(option.value)}>显示 {option.label}</UiOptionButton>)}
+        </div>}
         <UiOptionButton variant="menu" size="sm" className="gap-2" disabled={preparing} onClick={() => setRetry(value => value + 1)}><RotateCcw size={14} />重新加载预览</UiOptionButton>
         <UiOptionButton variant="menu" size="sm" className="gap-2" disabled={busy} onClick={captureFrame}><ImagePlus size={14} />选帧加入资产库</UiOptionButton>
         <UiOptionButton variant="menu" size="sm" className="gap-2" disabled={busy} title="在图片编辑中修改当前帧，完成后可回填到此帧上方的空画面轨道" onClick={editFrame}><PenLine size={14} />编辑当前帧</UiOptionButton>
       </div>}>
         {({ open, togglePanel }) => <UiIconButton aria-label="更多节目操作" title="更多：重新加载预览、选帧加入资产库、编辑当前帧" aria-expanded={open} data-panel-trigger-button onClick={togglePanel}><MoreHorizontal size={16} /></UiIconButton>}
-      </PanelTrigger>
-      </div>
+      </PanelTrigger>}
+      />
     </div>
   </div>
 }

@@ -16,6 +16,7 @@ const { createRuntimeEvidenceCollector, finalizeSceneEvidence } = require('./lib
 const { renderVariantSummary, summarizeVariantMetrics } = require('./lib/uiReviewSummary.cjs')
 const {
   filterScenes,
+  partitionLaunchBatches,
   formatWindowSize,
   launchUiInspectionApp,
   parseUiInspectionArgs,
@@ -162,119 +163,123 @@ async function tourPresetRun({ run, scenes, options, selection, exceptions }) {
   const evidence = {}
   const metrics = []
   const contrastResults = {}
-  const app = await launchUiInspectionApp({
-    root: ROOT,
-    mainEntry: MAIN_ENTRY,
-    profile: options.profile,
-    readOnly: !options.allowWrites,
-    displayPoint: options.displayPoint,
-    extraArgs: [
-      ...(scenes.length === 1 ? scenes[0].launchArgs ?? [] : []),
-      ...themePresetLaunchArgs(run.themePreset),
-    ],
-    extraEnv: {
-      ...(scenes.length === 1 ? scenes[0].launchEnv ?? {} : {}),
-      ...(scenes.length === 1 && scenes[0]?.forceGpuInitializationFailure === true
-        ? { HENJI_UI_INSPECTION_GPU_INIT_FAILURE: '1' } : {}),
-    },
-  })
-  const collector = createRuntimeEvidenceCollector(app.page)
-  let launchInspected = false
-
-  // 截图已落盘后再审：审计会临时隐藏文字取背景，不能影响截图本身
-  const auditContrast = async (key, targetPage, scene) => {
-    if (!options.contrast) return
-    const result = await auditPageContrast(targetPage, (page) => captureInspectionPage(app.app, page), {
-      scene: scene.name, themePreset: run.themePreset, exceptions,
+  // 带启动参数 / 环境变量 / GPU 初始化失败注入 / 启动位置检查的场景各自单独启动一次应用（5.8）：
+  // 这些设置只对整个进程生效，与其他场景同进程跑时不会注入，场景必然失败。
+  for (const batch of partitionLaunchBatches(scenes)) {
+    const app = await launchUiInspectionApp({
+      root: ROOT,
+      mainEntry: MAIN_ENTRY,
+      profile: options.profile,
+      readOnly: !options.allowWrites,
+      displayPoint: options.displayPoint,
+      extraArgs: [
+        ...(batch.length === 1 ? batch[0].launchArgs ?? [] : []),
+        ...themePresetLaunchArgs(run.themePreset),
+      ],
+      extraEnv: {
+        ...(batch.length === 1 ? batch[0].launchEnv ?? {} : {}),
+        ...(batch.length === 1 && batch[0]?.forceGpuInitializationFailure === true
+          ? { HENJI_UI_INSPECTION_GPU_INIT_FAILURE: '1' } : {}),
+      },
     })
-    contrastResults[key] = { issues: result.issues, exempted: result.exempted, stats: result.stats }
-    if (result.issues.length) console.error(`  对比度不达标 ${result.issues.length} 处：${key}`)
-  }
+    const collector = createRuntimeEvidenceCollector(app.page)
+    let launchInspected = false
 
-  try {
-    for (const size of run.sizes) {
-      const sizeLabel = formatWindowSize(size)
-      for (const scene of scenes) {
-        const evidenceKey = `${sizeLabel} / ${scene.name}`
-        collector.begin(evidenceKey)
-        let sceneFailed = false
-        let sceneError = null
-        const windowEvidence = { requestedOuter: size, baseline: null, completed: null, captures: [] }
-        try {
-          // 启动位置必须在巡检主动居中/调整尺寸之前检查，而且每次进程只检查一次。
-          if (!launchInspected && scenes.length === 1 && scene.inspectLaunch) {
-            launchInspected = true
-            windowEvidence.launch = await scene.inspectLaunch(app.app, app.page)
-          }
-          windowEvidence.baseline = await setInspectionWindowSize(app, size)
-          // 默认截主窗口；`{ page }` 截场景打开的其他窗口（日志窗口、剪辑浮窗），同样进本次输出目录与索引。
-          const capture = async (suffix, { page: targetPage = app.page } = {}) => {
-            if (!/^[a-z0-9-]+$/.test(suffix)) throw new Error(`截图后缀无效：${suffix}`)
-            const fileName = `${sizeLabel}-${scene.id}-${suffix}.png`
-            const actual = await assertInspectionWindowSize(app, size, windowEvidence.baseline)
+    // 截图已落盘后再审：审计会临时隐藏文字取背景，不能影响截图本身
+    const auditContrast = async (key, targetPage, scene) => {
+      if (!options.contrast) return
+      const result = await auditPageContrast(targetPage, (page) => captureInspectionPage(app.app, page), {
+        scene: scene.name, themePreset: run.themePreset, exceptions,
+      })
+      contrastResults[key] = { issues: result.issues, exempted: result.exempted, stats: result.stats }
+      if (result.issues.length) console.error(`  对比度不达标 ${result.issues.length} 处：${key}`)
+    }
+
+    try {
+      for (const size of run.sizes) {
+        const sizeLabel = formatWindowSize(size)
+        for (const scene of batch) {
+          const evidenceKey = `${sizeLabel} / ${scene.name}`
+          collector.begin(evidenceKey)
+          let sceneFailed = false
+          let sceneError = null
+          const windowEvidence = { requestedOuter: size, baseline: null, completed: null, captures: [] }
+          try {
+            // 启动位置必须在巡检主动居中/调整尺寸之前检查，而且每次进程只检查一次。
+            if (!launchInspected && batch.length === 1 && scene.inspectLaunch) {
+              launchInspected = true
+              windowEvidence.launch = await scene.inspectLaunch(app.app, app.page)
+            }
+            windowEvidence.baseline = await setInspectionWindowSize(app, size)
+            // 默认截主窗口；`{ page }` 截场景打开的其他窗口（日志窗口、剪辑浮窗），同样进本次输出目录与索引。
+            const capture = async (suffix, { page: targetPage = app.page } = {}) => {
+              if (!/^[a-z0-9-]+$/.test(suffix)) throw new Error(`截图后缀无效：${suffix}`)
+              const fileName = `${sizeLabel}-${scene.id}-${suffix}.png`
+              const actual = await assertInspectionWindowSize(app, size, windowEvidence.baseline)
+              let pixels
+              const bytes = await captureInspectionPage(app.app, targetPage, { onEvidence: (value) => { pixels = value } })
+              fs.writeFileSync(path.join(outDir, fileName), bytes)
+              await assertInspectionWindowSize(app, size, windowEvidence.baseline)
+              windowEvidence.captures.push({ suffix, ...actual, pixels, window: targetPage === app.page ? 'main' : 'secondary' })
+              rows.push({ ...scene, name: `${scene.name}-${suffix}`, size: sizeLabel, file: fileName })
+              await auditContrast(`${evidenceKey} / ${suffix}`, targetPage, scene)
+            }
+            // 步骤描述的自动指标（行数、溢出、截断）；普通场景不调用
+            const recordMetrics = ({ suffix, variant, metrics: value }) => {
+              metrics.push({ size: sizeLabel, scene: scene.name, sceneId: scene.id, suffix, variant,
+                file: `${sizeLabel}-${scene.id}-${suffix}.png`, metrics: value })
+              if (value.suspicious) console.log(`  ! ${suffix}：${value.reasons.join('；')}`)
+            }
+            await scene.setup(app.page, app.app, { capture, recordMetrics, electronApp: app.app,
+              requestedWindowSize: size, windowEvidence: windowEvidence.baseline })
+            const fileName = `${sizeLabel}-${scene.id}.png`
+            windowEvidence.completed = await assertInspectionWindowSize(app, size, windowEvidence.baseline)
             let pixels
-            const bytes = await captureInspectionPage(app.app, targetPage, { onEvidence: (value) => { pixels = value } })
+            const bytes = await captureInspectionPage(app.app, app.page, { onEvidence: (value) => { pixels = value } })
             fs.writeFileSync(path.join(outDir, fileName), bytes)
             await assertInspectionWindowSize(app, size, windowEvidence.baseline)
-            windowEvidence.captures.push({ suffix, ...actual, pixels, window: targetPage === app.page ? 'main' : 'secondary' })
-            rows.push({ ...scene, name: `${scene.name}-${suffix}`, size: sizeLabel, file: fileName })
-            await auditContrast(`${evidenceKey} / ${suffix}`, targetPage, scene)
-          }
-          // 步骤描述的自动指标（行数、溢出、截断）；普通场景不调用
-          const recordMetrics = ({ suffix, variant, metrics: value }) => {
-            metrics.push({ size: sizeLabel, scene: scene.name, sceneId: scene.id, suffix, variant,
-              file: `${sizeLabel}-${scene.id}-${suffix}.png`, metrics: value })
-            if (value.suspicious) console.log(`  ! ${suffix}：${value.reasons.join('；')}`)
-          }
-          await scene.setup(app.page, app.app, { capture, recordMetrics, electronApp: app.app,
-            requestedWindowSize: size, windowEvidence: windowEvidence.baseline })
-          const fileName = `${sizeLabel}-${scene.id}.png`
-          windowEvidence.completed = await assertInspectionWindowSize(app, size, windowEvidence.baseline)
-          let pixels
-          const bytes = await captureInspectionPage(app.app, app.page, { onEvidence: (value) => { pixels = value } })
-          fs.writeFileSync(path.join(outDir, fileName), bytes)
-          await assertInspectionWindowSize(app, size, windowEvidence.baseline)
-          windowEvidence.captures.push({ suffix: 'final', ...windowEvidence.completed,
-            pixels })
-          rows.push({ ...scene, size: sizeLabel, file: fileName })
-          await auditContrast(evidenceKey, app.page, scene)
-          console.log(`✓ ${sizeLabel} / ${scene.name}`)
-        } catch (error) {
-          sceneFailed = true
-          sceneError = error
-          const message = error instanceof Error ? error.message : String(error)
-          failures.push({ name: scene.name, size: sizeLabel, message })
-          console.error(`✗ ${sizeLabel} / ${scene.name}：${message}`)
-        }
-        // 场景在同一份隔离资料里顺序运行；截图后由场景撤掉自己留下的夹具，
-        // 保证 --only 单跑与全量顺序跑看到的是同一份前置状态。
-        if (typeof scene.cleanup === 'function') {
-          try {
-            await scene.cleanup(app.page)
+            windowEvidence.captures.push({ suffix: 'final', ...windowEvidence.completed,
+              pixels })
+            rows.push({ ...scene, size: sizeLabel, file: fileName })
+            await auditContrast(evidenceKey, app.page, scene)
+            console.log(`✓ ${sizeLabel} / ${scene.name}`)
           } catch (error) {
+            sceneFailed = true
+            sceneError = error
             const message = error instanceof Error ? error.message : String(error)
-            failures.push({ name: scene.name, size: sizeLabel, message: `场景清理失败：${message}` })
-            console.error(`✗ ${sizeLabel} / ${scene.name}：场景清理失败：${message}`)
+            failures.push({ name: scene.name, size: sizeLabel, message })
+            console.error(`✗ ${sizeLabel} / ${scene.name}：${message}`)
           }
-        }
-        try {
-          evidence[evidenceKey] = finalizeSceneEvidence(await collector.finish({ expectedLogEvents: scene.expectedLogEvents }), sceneError)
-          evidence[evidenceKey].window = windowEvidence
-          if (!sceneFailed && !evidence[evidenceKey].passed) {
-            const runtimeErrorCount = evidence[evidenceKey].browserErrors.length + evidence[evidenceKey].logErrors.length
-            failures.push({ name: scene.name, size: sizeLabel, message: `捕获到 ${runtimeErrorCount} 个运行时错误，详见 evidence.json` })
-            console.error(`✗ ${sizeLabel} / ${scene.name}：捕获到 ${runtimeErrorCount} 个运行时错误`)
+          // 场景在同一份隔离资料里顺序运行；截图后由场景撤掉自己留下的夹具，
+          // 保证 --only 单跑与全量顺序跑看到的是同一份前置状态。
+          if (typeof scene.cleanup === 'function') {
+            try {
+              await scene.cleanup(app.page)
+            } catch (error) {
+              const message = error instanceof Error ? error.message : String(error)
+              failures.push({ name: scene.name, size: sizeLabel, message: `场景清理失败：${message}` })
+              console.error(`✗ ${sizeLabel} / ${scene.name}：场景清理失败：${message}`)
+            }
           }
-        } catch (error) {
-          collector.cancel()
-          const message = error instanceof Error ? error.message : String(error)
-          failures.push({ name: scene.name, size: sizeLabel, message: `运行时证据查询失败：${message}` })
+          try {
+            evidence[evidenceKey] = finalizeSceneEvidence(await collector.finish({ expectedLogEvents: scene.expectedLogEvents, expectedBrowserErrors: scene.expectedBrowserErrors }), sceneError)
+            evidence[evidenceKey].window = windowEvidence
+            if (!sceneFailed && !evidence[evidenceKey].passed) {
+              const runtimeErrorCount = evidence[evidenceKey].browserErrors.length + evidence[evidenceKey].logErrors.length
+              failures.push({ name: scene.name, size: sizeLabel, message: `捕获到 ${runtimeErrorCount} 个运行时错误，详见 evidence.json` })
+              console.error(`✗ ${sizeLabel} / ${scene.name}：捕获到 ${runtimeErrorCount} 个运行时错误`)
+            }
+          } catch (error) {
+            collector.cancel()
+            const message = error instanceof Error ? error.message : String(error)
+            failures.push({ name: scene.name, size: sizeLabel, message: `运行时证据查询失败：${message}` })
+          }
         }
       }
+    } finally {
+      collector.dispose()
+      await app.close()
     }
-  } finally {
-    collector.dispose()
-    await app.close()
   }
 
   const contrast = options.contrast ? {

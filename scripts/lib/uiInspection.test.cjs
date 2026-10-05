@@ -540,3 +540,19 @@ test('口播直接剪辑场景截图后离开编辑器并删除自建工程与�
   await scene.cleanup(page)
   assert.deepEqual(deleted, ['audio-project-1'], '重复清理不得再删')
 })
+
+test('启动分批：声明了启动参数、环境变量、GPU 初始化失败注入或启动检查的场景各自单独启动（5.8）', () => {
+  const { partitionLaunchBatches } = require('./uiInspection.cjs')
+  const plain = (id) => ({ id })
+  const batches = partitionLaunchBatches([plain('a'), { id: 'gpu', forceGpuInitializationFailure: true }, plain('b'),
+    { id: 'env', launchEnv: { X: '1' } }, { id: 'args', launchArgs: ['--x'] }, { id: 'launch', inspectLaunch: () => undefined }])
+  assert.deepEqual(batches.map((batch) => batch.map((scene) => scene.id)), [['a', 'b'], ['gpu'], ['env'], ['args'], ['launch']])
+  assert.deepEqual(partitionLaunchBatches([{ id: 'gpu', forceGpuInitializationFailure: true }]).map((batch) => batch.length), [1])
+  assert.deepEqual(partitionLaunchBatches([]), [])
+})
+
+test('剪辑场景的轨道头宽与源码同值（场景按它算拖放落点，5.8 起 232）', () => {
+  const { VIDEO_EDIT_TRACK_HEADER_WIDTH } = require('./uiInspectionVideoEditGeometry.cjs')
+  const source = require('node:fs').readFileSync(require('node:path').resolve(__dirname, '../../src/features/videoEdit/timeline/timelineGeometry.ts'), 'utf8')
+  assert.equal(Number(/export const TIMELINE_HEADER_WIDTH = (\d+)/.exec(source)?.[1]), VIDEO_EDIT_TRACK_HEADER_WIDTH)
+})

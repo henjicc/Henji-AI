@@ -9,8 +9,6 @@ vi.mock('@/core/logging', () => ({ createLogger: () => ({ warn: vi.fn() }) }));
 vi.mock('@/components/ui', async () => {
   const React = await import('react');
   return {
-    UiSharedGlassHost: React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement> & { minTargets?: number }>(
-      ({ minTargets: _minTargets, ...props }, ref) => <div {...props} ref={ref} />),
     UiButton: React.forwardRef<HTMLButtonElement, React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: string; size?: string }>(
       ({ variant: _variant, size: _size, ...props }, ref) => <button {...props} ref={ref} />),
     UiIconButton: ({ size: _size, tone: _tone, on: _on, shape: _shape, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & { size?: string; tone?: string; on?: boolean; shape?: string }) => <button {...props} />,
@@ -78,6 +76,16 @@ describe('图片查看与同步对比', () => {
     expect(result.style.transform).toBe('scale(1) translate(0px, 0px)');
     expect(original.style.transform).toBe(result.style.transform);
     expect(vi.getTimerCount()).toBe(0);
+  });
+  it('主图加载失败显示可理解的提示、不留破图，换图后恢复', () => {
+    const view = render(<ImageViewerModal {...props} />);
+    const image = screen.getByAltText('图片') as HTMLImageElement;
+    fireEvent.error(image);
+    expect(screen.getByRole('alert').textContent).toBe('文件可能已被移动或删除。');
+    expect(image.style.visibility).toBe('hidden');
+    view.rerender(<ImageViewerModal {...props} imageUrl="other.png" />);
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect((screen.getByAltText('图片') as HTMLImageElement).style.visibility).toBe('');
   });
   it('分界线键盘调整不翻页，原图失效回退普通结果且换图后不残留错误', async () => {
     const view = render(<ImageViewerModal {...props} comparisonImageUrl="original.png" />);

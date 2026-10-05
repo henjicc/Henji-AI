@@ -4,7 +4,7 @@ const path = require('node:path')
 const sharp = require('sharp')
 const { execFileSync } = require('node:child_process')
 const { authorizeMcpConnection, callTool, connectMcpClient, disableMcp, operationEnvelope } = require('./uiInspectionMcpClient.cjs')
-const { observeWorkers, workerSnapshot, waitReleased } = require('./uiInspectionSceneVideoEditLayout.cjs')
+const { clickOutsideFloatingAssets, observeWorkers, workerSnapshot, waitReleased } = require('./uiInspectionSceneVideoEditLayout.cjs')
 const { dialogs, presented, png, pixelDifference, mediaProbe, trackBanks } = require('./uiInspectionSceneVideoEditMonitor.cjs')
 const button = (page, name) => page.getByRole('button', { name, exact: true })
 const normalized = value => value.replaceAll('/', '\\').toLowerCase()
@@ -24,12 +24,12 @@ function createVideoEditOutputsScene({ canvasFixtureProjectId }) {
       const shot = async name => { evidence.captures.push({ name, result: await capture(name) }); store() }
       let client; let previousLayout; let observed = false
       try {
-        evidence.display = await app.evaluate(({ BrowserWindow, screen }, point) => {
-          const host = BrowserWindow.getAllWindows().find(window => window.getTitle() === '痕迹AI') ?? BrowserWindow.getAllWindows()[0]
+        evidence.display = await app.evaluate(({ BrowserWindow, screen }, { point, hostContentsId }) => {
+          const host = (BrowserWindow.getAllWindows().find(window => window.webContents.id === hostContentsId) ?? BrowserWindow.getAllWindows()[0])
           const bounds = host.getBounds(); const current = screen.getDisplayMatching(bounds); const coordinates = point?.split(',').map(Number)
           const selected = coordinates ? screen.getAllDisplays().find(display => coordinates[0] >= display.bounds.x && coordinates[0] < display.bounds.x + display.bounds.width && coordinates[1] >= display.bounds.y && coordinates[1] < display.bounds.y + display.bounds.height) : undefined
           return { windowBounds: bounds, id: current.id, primary: current.id === screen.getPrimaryDisplay().id, preferredId: selected?.id }
-        }, process.env.HENJI_DEV_DISPLAY_POINT)
+        }, { point: process.env.HENJI_DEV_DISPLAY_POINT, hostContentsId: await (await app.browserWindow(page)).evaluate((window) => window.webContents.id) })
         if (process.env.HENJI_DEV_DISPLAY_POINT) { assert.equal(evidence.display.id, evidence.display.preferredId); assert.equal(evidence.display.primary, false) }
         await button(page, '剪辑').click()
         if (await button(page, '关闭工程').isVisible()) await button(page, '关闭工程').click()
@@ -61,7 +61,7 @@ function createVideoEditOutputsScene({ canvasFixtureProjectId }) {
         const readFrame = await callTool(client, 'read_application_entity', { ref: projectRef })
         const frameResult = await callTool(client, 'collect_video_edit_output', operationEnvelope([readFrame], { projectRef, kind: 'frame', frame: 90 }))
         assert.equal(frameResult.executionState, 'completed', JSON.stringify(frameResult)); assert.equal(frameResult.verificationState, 'verified', JSON.stringify(frameResult)); assert.equal(frameResult.result.data.resultRef.id, selected.id)
-        evidence.publicFrame = frameResult; await page.getByLabel('项目项列表', { exact: true }).click({ position: { x: 12, y: 25 } }); await page.locator('[data-asset-floating-panel]').waitFor({ state: 'hidden' })
+        evidence.publicFrame = frameResult; await clickOutsideFloatingAssets(page); await page.locator('[data-asset-floating-panel]').waitFor({ state: 'hidden' })
         await dialogs(app, [file], exportPath); const exportAt = performance.now(); await button(page, '导出视频').click()
         let task
         for (let attempt = 0; attempt < 2400; attempt++) { task = await callTool(client, 'query_video_edit_export', { projectRef }); if (['completed', 'failed', 'cancelled'].includes(task.data.task?.state)) break; await page.waitForTimeout(50) }

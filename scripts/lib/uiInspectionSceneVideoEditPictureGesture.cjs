@@ -122,13 +122,13 @@ function createVideoEditPictureGestureScene() {
       let client; let inputSession; let nativePointer = { x: 0, y: 0 }; let resourcesObserved = false; let savesObserved = false
       try {
         const preferredPoint = process.env.HENJI_DEV_DISPLAY_POINT
-        evidence.display = await app.evaluate(({ BrowserWindow, screen }, point) => {
-          const window = BrowserWindow.getAllWindows().find(window => window.getTitle() === '痕迹AI') ?? BrowserWindow.getAllWindows()[0]
+        evidence.display = await app.evaluate(({ BrowserWindow, screen }, { point, hostContentsId }) => {
+          const window = (BrowserWindow.getAllWindows().find(window => window.webContents.id === hostContentsId) ?? BrowserWindow.getAllWindows()[0])
           const bounds = window.getBounds(); const current = screen.getDisplayMatching(bounds)
           const coordinates = point?.split(',').map(Number)
           const selected = coordinates ? screen.getAllDisplays().find(display => coordinates[0] >= display.bounds.x && coordinates[0] < display.bounds.x + display.bounds.width && coordinates[1] >= display.bounds.y && coordinates[1] < display.bounds.y + display.bounds.height) : undefined
           return { windowBounds: bounds, id: current.id, primary: current.id === screen.getPrimaryDisplay().id, bounds: current.bounds, scaleFactor: current.scaleFactor, preferredId: selected?.id }
-        }, preferredPoint)
+        }, { point: preferredPoint, hostContentsId: await (await app.browserWindow(page)).evaluate((window) => window.webContents.id) })
         if (preferredPoint) { assert.ok(evidence.display.preferredId !== undefined); assert.equal(evidence.display.id, evidence.display.preferredId) }
         evidence.currentPhase = '原4K首次呈现与正式MCP原目标'; store()
         await observeWorkers(page); resourcesObserved = true

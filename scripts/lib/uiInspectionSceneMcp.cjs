@@ -217,6 +217,12 @@ function createMcpScenes({ setupSettings, canvasFixtureProjectId }) {
         for (const operationId of operations) assert.equal((await call('get_application_operation', { operationId })).executionState, 'completed')
         const stale = await client.callTool({ name: 'change_application_entities', arguments: { operationId: require('node:crypto').randomUUID(), baselineIds: [project.baselineId], summary: '过期基线拒绝', changes: [{ kind: 'set_properties', entityType: projectRef.kind, target: projectRef, properties: { 'canvas.project.name': '不能写入' } }] } })
         assert.equal(stale.isError, true)
+        // 撤回本场景改过的全局设置：层级对比与模型隐藏是应用级状态，不还原会漏到后面的场景
+        // （“设置-主题外观”断言默认层级对比为“标准”，曾因此在全量顺序跑时失败，5.8）。
+        await change([{ kind: 'set_properties', entityType: settingsRef.kind, target: settingsRef,
+          properties: { 'interface.theme_contrast': settings.data.properties['interface.theme_contrast'] } }], [await read(settingsRef, ['interface.theme_contrast'])])
+        await change([{ kind: 'set_properties', entityType: modelRef.kind, target: modelRef,
+          properties: { 'generation.model.hidden': !hidden } }], [await read(modelRef, ['generation.model.hidden', 'generation.model.provider_id'])])
       } finally {
         await client.close()
         await closeMcpRestoringAccess(page, enteringAccess)

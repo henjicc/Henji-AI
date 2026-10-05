@@ -28,10 +28,6 @@ vi.mock('@/commands/assetLibrary', () => ({
   removeAssetFromLibrary: vi.fn(), renameAssetLibrary: vi.fn(), setAssetTags: vi.fn(), updateAsset: vi.fn(),
   inspectAsset: vi.fn(), inspectAssets: mocks.inspect, inspectAssetLibrary: vi.fn(), restoreAssetLibrary: vi.fn(),
 }))
-vi.mock('@/components/ui', async importOriginal => ({
-  ...await importOriginal<typeof import('@/components/ui')>(),
-  UiSharedGlassHost: React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement> & { minTargets?: number }>(function TestGlassHost({ minTargets: _minTargets, ...props }, ref) { return <div ref={ref} {...props} /> }),
-}))
 
 const asset: AssetRecord = {
   id: 'library-code', mediaType: 'code', displayName: '库中代码', filePath: 'C:/library/code.henji-code', displayUrl: 'henji-media://local/code.henji-code', source: 'video-edit',

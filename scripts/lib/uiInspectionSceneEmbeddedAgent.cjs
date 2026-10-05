@@ -66,8 +66,11 @@ function createEmbeddedAgentScenes(context) {
         response.end('data: [DONE]\n\n')
       })
       await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
+      // 场景结束把模型配置恢复成进场时的样子：否则替身供应商（端口已关）留在配置里，
+      // 后面的提示词优化等场景会选中它、请求被拒（5.8 全量顺序跑时“核对-提示词优化”因此失败）
+      let llmBaseline = null
       try {
-        await page.evaluate(async (baseUrl) => {
+        llmBaseline = await page.evaluate(async (baseUrl) => {
           const baselineConfig = await window.henjiNative.llm.readConfig() ?? { providers: [], models: [], promptProfiles: [], agentProfiles: [] }
           const provider = { providerId: 'pi-reality', displayName: '隔离验收', adapter: 'openai-compatible', baseUrl, enabled: true, setup: { kind: 'custom' } }
           const model = { providerId: provider.providerId, modelId: 'fixture', displayName: '隔离验收模型', adapter: provider.adapter, baseUrl, enabled: true,
@@ -82,8 +85,10 @@ function createEmbeddedAgentScenes(context) {
             verifications: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }]
           config.selectedAgentProfileId = 'pi-fixture-profile'
           await window.henjiNative.llm.writeConfig(config)
+          return baselineConfig
         }, `http://127.0.0.1:${server.address().port}/v1`)
-        await page.keyboard.press('Control+Shift+A')
+        // 只在侧栏未打开时切换：前一个场景失败时可能把侧栏留在打开状态，盲按会把它关掉
+        if (!await page.getByRole('complementary', { name: '智能助手' }).isVisible()) await page.keyboard.press('Control+Shift+A')
         const panel = page.getByRole('complementary', { name: '智能助手' })
         await panel.waitFor()
         /*
@@ -208,6 +213,8 @@ function createEmbeddedAgentScenes(context) {
           await page.getByRole('button', { name: /^(设置|Settings)$/i }).click()
           await page.getByRole('dialog', { name: /设置|Settings/i }).waitFor()
           await page.keyboard.press('Escape')
+          // 等设置真正卸载：助手在“设置关闭”时才重读模型配置（输入能力），淡出的 180ms 里拖入附件会按旧模型判定
+          await page.locator('[role="dialog"][aria-label="设置"], [role="dialog"][aria-label="Settings"]').waitFor({ state: 'detached' })
           await panel.waitFor()
         }
         await selectModel('图片验收模型')
@@ -216,7 +223,7 @@ function createEmbeddedAgentScenes(context) {
         await page.getByLabel('聊天附件', { exact: true }).setInputFiles(path.resolve('resources/icons/icon.png'))
         await page.getByRole('button', { name: '移除 icon.png', exact: true }).waitFor()
         await selectModel('隔离验收模型')
-        await page.getByText('当前模型无法读取部分附件，请移除这些附件或切换模型。', { exact: true }).waitFor()
+        await page.getByText('当前模型无法读取部分附件', { exact: true }).waitFor()
         assert.equal(await page.getByRole('button', { name: '发送', exact: true }).isDisabled(), true)
         await selectModel('图片验收模型')
         await page.getByRole('button', { name: '移除 icon.png', exact: true }).click()
@@ -441,6 +448,10 @@ function createEmbeddedAgentScenes(context) {
       } finally {
         server.closeAllConnections()
         await new Promise((resolve) => server.close(resolve))
+        if (llmBaseline) {
+          await page.evaluate((config) => window.henjiNative.llm.writeConfig(config), llmBaseline)
+            .catch((error) => console.warn(`[embedded-agent] 恢复模型配置失败：${error instanceof Error ? error.message : String(error)}`))
+        }
         // 每个场景只撤销自己新建的授权，并恢复进场时的服务开关；不得污染同一 profile 的后续场景。
         await page.evaluate(async (entering) => {
           let state = await window.henjiNative.mcp.status()

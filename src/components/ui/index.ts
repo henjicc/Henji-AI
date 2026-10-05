@@ -1,6 +1,5 @@
 export * from './primitives';
 export * from './UiModal';
-export * from './UiSharedGlassHost';
 export * from './layout';
 export * from './states';
 export { default as Dropdown } from './Dropdown';

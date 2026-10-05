@@ -373,6 +373,9 @@
     "overlay": "Overlay",
     "comparisonDivider": "Comparison divider",
     "originalUnavailable": "Original unavailable. You can still view the upscaled result.",
+    "imageUnavailableTitle": "Image can't be loaded",
+    "videoUnavailableTitle": "Video can't be played",
+    "imageUnavailableMessage": "The file may have been moved or deleted.",
     "imageAlt": "Image",
     "speed": "Playback speed",
     "loop": "Loop",
@@ -1014,6 +1017,10 @@
     "empty": "No custom models yet",
     "confirmDelete": "Are you sure you want to delete this model?",
     "alerts": {
+      "deleteFailed": {
+        "title": "Couldn't delete the model",
+        "message": "The model is still in the list. Please try again later."
+      },
       "incomplete": {
         "title": "Incomplete input",
         "message": "Please enter model ID and name"

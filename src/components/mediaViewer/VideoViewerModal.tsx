@@ -1,11 +1,14 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useI18n } from '@/hooks/useI18n'
-import { isTopmostUiOverlay, UiIconButton, UiOverlayLayerProvider, UiSharedGlassHost, useUiOverlayLayer } from '@/components/ui'
+import { isTopmostUiOverlay, UiError, UiIconButton, UiOverlayLayerProvider, useUiOverlayLayer } from '@/components/ui'
+import { createLogger } from '@/core/logging'
 import { readVideoInfo } from '@/commands/video'
 import { Volume2, VolumeX, X } from 'lucide-react'
 import { VideoViewerControls } from './VideoViewerControls'
 import { UI_DURATION, uiTransition } from '@/components/ui/motion'
+
+const logger = createLogger('components.mediaViewer.VideoViewerModal')
 
 type VideoFrameRequestCallback = (now: number, metadata: { mediaTime: number }) => void
 interface RenderedVideoRect {
@@ -52,6 +55,9 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
   const [playbackRate, setPlaybackRate] = useState(1)
   const [loop, setLoop] = useState(false)
   const [isBuffering, setIsBuffering] = useState(false)
+  // 视频文件被移动或删除时不留空黑画面与一直转圈的缓冲，显示可理解的失败提示（任务 5.8，与图片查看器同源）
+  const [failedVideo, setFailedVideo] = useState<string | null>(null)
+  const videoFailed = Boolean(videoUrl) && failedVideo === videoUrl
   const [isControlsVisible, setIsControlsVisible] = useState(true)
   const [isSpeedMenuOpen, setIsSpeedMenuOpen] = useState(false)
   const [showVolumeIndicator, setShowVolumeIndicator] = useState(false)
@@ -415,9 +421,8 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
       }}
     >
       <UiOverlayLayerProvider id={overlay.id}>
-      <UiSharedGlassHost
-        minTargets={2}
-        className="relative w-[92vw] h-[90vh] flex items-center justify-center"
+      <div
+        className="relative isolate w-[92vw] h-[90vh] flex items-center justify-center"
         onMouseEnter={() => {
           setIsControlsVisible(true)
           scheduleHideControls()
@@ -494,6 +499,11 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
             onPause={() => setIsVideoPlaying(false)}
             onWaiting={() => setIsBuffering(true)}
             onStalled={() => setIsBuffering(true)}
+            onError={() => {
+              logger.warn('video_viewer.load_failed', { reason: 'video_load_failed' })
+              setIsBuffering(false)
+              setFailedVideo(videoUrl)
+            }}
             onClick={togglePlay}
             onWheel={(e) => {
               if (hasAudio === false) return
@@ -503,6 +513,14 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
             }}
             controls={false}
           />
+          {videoFailed && (
+            <div className="pointer-events-none absolute inset-0 z-raised flex items-center justify-center">
+              {/* 查看器是固定深色媒体底，提示放进随主题的实底面板：文字色与底同源；玻璃在纸白下透出深底，危险色标题只有 4.29:1 */}
+              <div className="rounded-lg bg-panel px-6 shadow-panel">
+                <UiError size="sm" title={t('ui:viewer.videoUnavailableTitle')} message={t('ui:viewer.imageUnavailableMessage')} />
+              </div>
+            </div>
+          )}
           <div
             className="absolute z-raised pointer-events-none"
             style={{
@@ -552,7 +570,7 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
           isBuffering={isBuffering}
           trimRange={trimRange}
         />
-      </UiSharedGlassHost>
+      </div>
       </UiOverlayLayerProvider>
     </div>,
     document.body,
