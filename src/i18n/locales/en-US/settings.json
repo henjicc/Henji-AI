@@ -142,6 +142,9 @@
     "searchNoResults": "No matching providers",
     "emptyModels": "No models in this category",
     "emptyModelsHint": "Add a model or choose another capability category.",
+    "deleteTitle": "Delete provider \"{{name}}\"",
+    "deleteMessage": "This removes the provider's connection, key and its models. This cannot be undone.",
+    "menuHint": "Right-click to edit or delete",
     "renameHint": "Renames this model for every provider. Leave empty to restore the original name.",
     "originalName": "Original: {{name}}",
     "syncFailed": "Model sync failed",
@@ -160,7 +163,7 @@
       "beforeWebsite": "First visit", "afterWebsite": "to register or sign in, then open", "onlyApiKey": "Open", "afterApiKey": "to get your key."
     },
     "actions": {
-      "addProvider": "Add provider", "connectionSettings": "Connection settings", "syncModels": "Sync models", "syncingModels": "Syncing…", "addModel": "Add model",
+      "addProvider": "Add provider", "editConnection": "Edit connection", "deleteProvider": "Delete provider", "syncModels": "Sync models", "syncingModels": "Syncing…", "addModel": "Add model",
       "renameModel": "Rename", "editModel": "Edit model", "deleteModel": "Delete model"
     }
   },

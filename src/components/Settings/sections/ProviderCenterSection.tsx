@@ -1,5 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Plus, RefreshCw, Settings2 } from 'lucide-react'
+import { useEffect, useMemo, useState, type MouseEvent } from 'react'
+import { Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react'
+import ContextMenu from '@/components/ContextMenu'
+import { DeleteConfirmDialog } from '@/components/DeleteConfirmDialog'
+import { useContextMenu } from '@/hooks/useContextMenu'
 import {
   UI_TEXT_BODY_CLASS,
   UI_TEXT_LABEL_CLASS,
@@ -75,6 +78,9 @@ const ProviderCenterSection = ({ llm }: ProviderCenterSectionProps): JSX.Element
   const [fetchError, setFetchError] = useState<string | null>(null)
   const [syncProvider, setSyncProvider] = useState<LlmProviderConfig | null>(null)
   const [syncDiscovered, setSyncDiscovered] = useState<DiscoveredModelDraft[]>([])
+  const providerMenu = useContextMenu()
+  const [deleting, setDeleting] = useState<{ providerId: string; name: string } | null>(null)
+  const [deleteBusy, setDeleteBusy] = useState(false)
 
   const groups = useMemo(() => buildProviderCenterGroups({
     generationProviders,
@@ -228,6 +234,44 @@ const ProviderCenterSection = ({ llm }: ProviderCenterSectionProps): JSX.Element
     })
   }
 
+  /**
+   * 供应商列表右键菜单：编辑连接（只有自定义供应商）与删除（用户添加的供应商，含从预设添加的）。
+   * 内置供应商（派欧云等随软件提供的）连接由软件维护、也不能删，右键不弹菜单。
+   */
+  const openProviderMenu = (event: MouseEvent, group: (typeof groups)[number]): void => {
+    const provider = group.llmProvider
+    if (!provider) return
+    const editable = provider.setup?.kind === 'custom'
+    const deletable = !(provider.setup?.kind === 'preset' && provider.setup.lifecycle === 'builtin')
+    if (!editable && !deletable) return
+    setSelectedId(group.id)
+    providerMenu.showMenu(event, [
+      ...(editable ? [{
+        id: 'edit', label: t('providerCenter.actions.editConnection'), icon: <Pencil className="h-4 w-4" />,
+        onClick: () => { setProviderDialogCreate(false); setProviderDialogOpen(true) },
+      }] : []),
+      ...(deletable ? [{
+        id: 'delete', label: t('providerCenter.actions.deleteProvider'), icon: <Trash2 className="h-4 w-4" />,
+        onClick: () => setDeleting({ providerId: provider.providerId, name: group.displayName }),
+      }] : []),
+    ])
+  }
+
+  const confirmDelete = async (): Promise<void> => {
+    if (!deleting) return
+    setDeleteBusy(true)
+    try {
+      await llm.deleteProviderSettings(deleting.providerId)
+      setDeleting(null)
+    } catch (error) {
+      logger.warn('删除供应商失败', { event: 'provider_center.delete_provider.failed', error, context: { providerId: deleting.providerId } })
+      setDeleting(null)
+      setFetchError(error instanceof Error && error.message ? error.message : t('llmProvider.errors.deleteFailed'))
+    } finally {
+      setDeleteBusy(false)
+    }
+  }
+
   if (llm.loading) return <UiLoading message={t('providerCenter.loading')} />
 
   return (
@@ -243,7 +287,7 @@ const ProviderCenterSection = ({ llm }: ProviderCenterSectionProps): JSX.Element
           <div className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain">
             {filteredGroups.length === 0 ? <UiEmpty size="xs" title={t('providerCenter.searchNoResults')} /> : null}
             {filteredGroups.map(group => (
-              <UiOptionButton key={group.id} type="button" variant="menu" size="lg" active={group.id === selected?.id} className="w-full text-left" onClick={() => { setSelectedId(group.id); setCategory('all'); setFetchError(null) }}>
+              <UiOptionButton key={group.id} type="button" variant="menu" size="lg" active={group.id === selected?.id} className="w-full text-left" onClick={() => { setSelectedId(group.id); setCategory('all'); setFetchError(null) }} onContextMenu={(event) => openProviderMenu(event, group)} title={group.llmProvider && !(group.llmProvider.setup?.kind === 'preset' && group.llmProvider.setup.lifecycle === 'builtin') ? t('providerCenter.menuHint') : undefined}>
                 <span className="block truncate text-sm font-medium">{group.displayName}</span>
               </UiOptionButton>
             ))}
@@ -264,13 +308,7 @@ const ProviderCenterSection = ({ llm }: ProviderCenterSectionProps): JSX.Element
               {/* 分节标题“供应商与模型”已是 20 号，供应商名降一档（16），层级才读得出来 */}
               <h3 className={UI_TEXT_SECTION_CLASS}>{selected.displayName}</h3>
               <div className="flex shrink-0 items-center gap-2">
-                {/* 只有用户自定义的供应商可改连接（名称、协议、地址）或删除；内置与预设的连接由软件维护 */}
-                {selected.llmProvider?.setup?.kind === 'custom' ? (
-                  <UiButton type="button" variant="secondary" onClick={() => { setProviderDialogCreate(false); setProviderDialogOpen(true) }}>
-                    <Settings2 className="h-4 w-4" />
-                    {t('providerCenter.actions.connectionSettings')}
-                  </UiButton>
-                ) : null}
+                {/* 编辑连接与删除在左侧列表的右键菜单里（openProviderMenu），不占页面 */}
                 <span className={UI_TEXT_LABEL_CLASS}>{t('providerCenter.enabled')}</span>
                 <UiSwitch checked={selected.enabled} onCheckedChange={enabled => void setProviderEnabled(enabled)} />
               </div>
@@ -371,6 +409,17 @@ const ProviderCenterSection = ({ llm }: ProviderCenterSectionProps): JSX.Element
         onClose={() => setProviderDialogOpen(false)}
         onSave={saveProvider}
         onDelete={async providerId => { await llm.deleteProviderSettings(providerId) }}
+      />
+      <ContextMenu items={providerMenu.menuItems} position={providerMenu.menuPosition} onClose={providerMenu.hideMenu} visible={providerMenu.menuVisible} />
+      <DeleteConfirmDialog
+        isOpen={deleting !== null}
+        title={t('providerCenter.deleteTitle', { name: deleting?.name ?? '' })}
+        message={t('providerCenter.deleteMessage')}
+        cancelLabel={t('llmProvider.actions.cancel')}
+        confirmLabel={t('providerCenter.actions.deleteProvider')}
+        busy={deleteBusy}
+        onCancel={() => setDeleting(null)}
+        onConfirm={() => void confirmDelete()}
       />
       <LlmModelDialog isOpen={modelDialogOpen} model={modelDraft} onChange={setModelDraft} onClose={() => setModelDialogOpen(false)} onSave={saveModel} />
       <ModelSyncDialog

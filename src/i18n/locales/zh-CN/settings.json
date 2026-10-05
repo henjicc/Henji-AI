@@ -142,6 +142,9 @@
     "searchNoResults": "没有匹配的供应商",
     "emptyModels": "这个分类还没有模型",
     "emptyModelsHint": "可添加模型或切换其他能力分类。",
+    "deleteTitle": "删除供应商「{{name}}」",
+    "deleteMessage": "会删除这个供应商的连接、密钥和它下面的模型。此操作不可撤销。",
+    "menuHint": "右键可编辑或删除",
     "renameHint": "同一模型在所有供应商下同步改名，留空恢复原名",
     "originalName": "原名 {{name}}",
     "syncFailed": "同步模型失败",
@@ -160,7 +163,7 @@
       "beforeWebsite": "先去", "afterWebsite": "注册或登录，再去", "onlyApiKey": "前往", "afterApiKey": "获取密钥。"
     },
     "actions": {
-      "addProvider": "添加供应商", "connectionSettings": "连接设置", "syncModels": "同步模型", "syncingModels": "正在同步…", "addModel": "添加模型",
+      "addProvider": "添加供应商", "editConnection": "编辑连接", "deleteProvider": "删除供应商", "syncModels": "同步模型", "syncingModels": "正在同步…", "addModel": "添加模型",
       "renameModel": "改名", "editModel": "编辑模型", "deleteModel": "删除模型"
     }
   },
