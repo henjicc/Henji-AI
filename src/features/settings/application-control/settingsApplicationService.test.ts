@@ -31,7 +31,7 @@ describe('assistant settings registry', () => {
     useSettingsStore.getState().setThemeContrast('standard')
   })
   it('剪辑键位封闭对象由正式设置提交，冲突不写入，空配置恢复默认', () => {
-    const config = { select_tool: { code: 'KeyQ', ctrl: false, alt: false, shift: false, meta: false } }
+    const config = { select_tool: { code: 'F9', ctrl: false, alt: false, shift: false, meta: false } }
     const plan = planApplicationSettingsChange([{ id: 'video_edit.shortcuts', value: config }])
     applyApplicationSettingsChange(plan.planRef)
     expect(useSettingsStore.getState().videoEditShortcuts).toEqual(config)

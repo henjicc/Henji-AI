@@ -279,8 +279,8 @@ it('正式运输/工具按钮共用命令与自定义键位；实时读数使用
   const view = render(<><View /><VideoEditTransportControls instance={owner} onError={onError} /></>)
   const previous = useSettingsStore.getState().videoEditShortcuts
   try {
-    act(() => useSettingsStore.getState().setVideoEditShortcuts({ ...previous, select_tool: { code: 'KeyQ', ctrl: false, alt: false, shift: false, meta: false } }))
-    expect(view.getByRole('button', { name: '选择工具' }).getAttribute('title')).toBe('选择工具（Q）')
+    act(() => useSettingsStore.getState().setVideoEditShortcuts({ ...previous, select_tool: { code: 'F9', ctrl: false, alt: false, shift: false, meta: false } }))
+    expect(view.getByRole('button', { name: '选择工具' }).getAttribute('title')).toBe('选择工具（F9）')
     fireEvent.click(view.getByRole('button', { name: '下一帧' })); expect(owner.frame).toBe(1)
     fireEvent.click(view.getByRole('button', { name: '下一帧' })); expect(owner.frame).toBe(2)
     fireEvent.click(view.getByRole('button', { name: '上一帧' })); expect(owner.frame).toBe(1)

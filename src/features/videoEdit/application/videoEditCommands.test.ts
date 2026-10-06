@@ -3,7 +3,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { getPlatform } from '@/platform/runtime'
 import { captureVideoEditCommandContext, executeVideoEditCommand, videoEditCommandState } from './videoEditCommands'
-import { appendVideoEditClip, appendVideoEditMedia, appendVideoEditSequence, closeVideoEditProject, createVideoEditProject, editVideoProject, getActiveVideoEditSequence, listVideoEditInstances, setVideoEditTimelineView, setVideoEditView, switchVideoEditSequence } from './videoEditService'
+import { appendVideoEditClip, appendVideoEditMedia, appendVideoEditSequence, closeVideoEditProject, createVideoEditProject, editVideoProject, getActiveVideoEditSequence, listVideoEditInstances, setVideoEditTimelineView, setVideoEditView, switchVideoEditSequence, undoVideoEdit } from './videoEditService'
 import { copyVideoEditTimeline, updateVideoEditTrack } from './videoEditTimeline'
 import { registerVideoEditTimelineViewport } from './videoEditTimelineViewport'
 import { registerVideoEditSourcePresenter, readVideoEditSource, updateVideoEditSource, observeVideoEditSource } from './videoEditSource'
@@ -151,4 +151,58 @@ it('Premiere 时间线视图键：五帧步进、轨道高度一步编辑、缩�
     for (const command of ['zoom_to_sequence', 'next_screen', 'previous_screen'] as const) await executeVideoEditCommand(captureVideoEditCommandContext(id, 'timeline'), command)
     expect(calls).toEqual(['fit', 'screen:1', 'screen:-1'])
   } finally { off() }
+})
+it('Premiere 导航、标记片段、入出点与序列标记键按目标轨道定位，没有落点时说明原因', async () => {
+  const { owner, id, sequence } = await fixture()
+  const video = sequence.tracks.find(track => track.index === 1)!
+  setVideoEditTimelineView(id, { targetTrackIds: [video.id] }); setVideoEditView(id, { frame: 120 })
+  const run = (command: Parameters<typeof executeVideoEditCommand>[1], scope: 'timeline' | 'source' = 'timeline') => executeVideoEditCommand(captureVideoEditCommandContext(id, scope), command)
+  await run('go_prev_edit'); expect(owner.frame).toBe(90)
+  await run('go_next_edit'); expect(owner.frame).toBe(200)
+  await run('go_next_edit'); expect(owner.frame).toBe(290)
+  expect(videoEditCommandState(captureVideoEditCommandContext(id, 'timeline'), 'go_next_edit')).toMatchObject({ enabled: false, reason: '这个方向没有编辑点。' })
+  await run('go_start'); expect(owner.frame).toBe(0)
+  await run('go_end'); expect(owner.frame).toBe(290)
+  setVideoEditView(id, { frame: 210 }); await run('mark_clip')
+  expect(owner).toMatchObject({ inFrame: 200, outFrame: 290 })
+  setVideoEditView(id, { frame: 0 }); await run('go_out'); expect(owner.frame).toBe(289)
+  await run('go_in'); expect(owner.frame).toBe(200)
+  await run('clear_out'); expect(owner).toMatchObject({ inFrame: 200, outFrame: null })
+  await run('clear_in_out'); expect(owner).toMatchObject({ inFrame: null, outFrame: null })
+  expect(videoEditCommandState(captureVideoEditCommandContext(id, 'timeline'), 'go_in').enabled).toBe(false)
+  setVideoEditView(id, { frame: 30 }); await run('add_marker'); setVideoEditView(id, { frame: 250 }); await run('add_marker')
+  expect(getActiveVideoEditSequence(owner).markers?.map(mark => [mark.frame, mark.name])).toEqual([[30, '标记 1'], [250, '标记 2']])
+  await run('prev_marker'); expect(owner.frame).toBe(30)
+  await run('next_marker'); expect(owner.frame).toBe(250)
+  setVideoEditView(id, { frame: 10 }); setVideoEditTimelineView(id, { selectedClipIds: [] }); await run('select_clip_at_playhead')
+  expect(owner.selectedClipIds).toHaveLength(1)
+  await run('deselect_all'); expect(owner.selectedClipIds).toEqual([])
+})
+it('提升、提取与 Q/W 波纹修剪各是一步编辑；Alt 方向键微移所选片段；Ctrl+L 链接开关与剪切', async () => {
+  const { owner, id, first, second, sequence } = await fixture()
+  const video = sequence.tracks.find(track => track.index === 1)!
+  setVideoEditTimelineView(id, { targetTrackIds: [video.id], inFrame: 40, outFrame: 60 })
+  const run = (command: Parameters<typeof executeVideoEditCommand>[1]) => executeVideoEditCommand(captureVideoEditCommandContext(id, 'timeline'), command)
+  const spans = () => getActiveVideoEditSequence(owner).clips.filter(clip => clip.track === 1).map(clip => [clip.start, clip.start + clip.duration]).sort((a, b) => a[0] - b[0])
+  let history = owner.past.length
+  await run('lift'); expect(spans()).toEqual([[0, 40], [60, 90], [200, 290]]); expect(owner.past.length).toBe(history + 1)
+  undoVideoEdit(id)
+  await run('extract'); expect(spans()).toEqual([[0, 40], [40, 70], [180, 270]])
+  setVideoEditTimelineView(id, { inFrame: null, outFrame: null })
+  expect(videoEditCommandState(captureVideoEditCommandContext(id, 'timeline'), 'lift')).toMatchObject({ enabled: false, reason: '请先设置序列入点或出点。' })
+  setVideoEditView(id, { frame: 200 }); history = owner.past.length
+  await run('ripple_trim_prev'); expect(spans()).toEqual([[0, 40], [40, 70], [180, 250]]); expect(owner.past.length).toBe(history + 1)
+  setVideoEditView(id, { frame: 200 }); await run('ripple_trim_next'); expect(spans()).toEqual([[0, 40], [40, 70], [180, 200]])
+  const last = getActiveVideoEditSequence(owner).clips.find(clip => clip.start === 180)!
+  setVideoEditTimelineView(id, { selectedClipIds: [last.id] }, last.id)
+  await run('nudge_right_five'); expect(getActiveVideoEditSequence(owner).clips.find(clip => clip.id === last.id)!.start).toBe(185)
+  await run('nudge_up'); expect(getActiveVideoEditSequence(owner).clips.find(clip => clip.id === last.id)!.track).toBe(2)
+  const left = getActiveVideoEditSequence(owner).clips.find(clip => clip.start === 0)!
+  setVideoEditTimelineView(id, { selectedClipIds: [left.id, last.id] }, left.id)
+  await run('toggle_link'); expect(new Set(getActiveVideoEditSequence(owner).clips.filter(clip => [left.id, last.id].includes(clip.id)).map(clip => clip.linkId)).size).toBe(1)
+  await run('toggle_link'); expect(getActiveVideoEditSequence(owner).clips.find(clip => clip.id === left.id)!.linkId).toBeUndefined()
+  setVideoEditTimelineView(id, { selectedClipIds: [left.id] }, left.id)
+  await run('cut'); expect(getActiveVideoEditSequence(owner).clips.some(clip => clip.id === left.id)).toBe(false)
+  setVideoEditView(id, { frame: 0 }); await run('paste'); expect(spans()[0]).toEqual([0, 40])
+  expect([first, second]).toHaveLength(2)
 })

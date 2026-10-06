@@ -29,6 +29,12 @@ export type VideoEditTimelineEdit =
   | { kind: 'delete'; clipIds: string[]; linked?: VideoEditRelations; ripple?: boolean; targetTracks?: number[] }
   | { kind: 'link' | 'unlink' | 'group' | 'ungroup'; clipIds: string[]; linked?: VideoEditRelations }
   | { kind: 'separate_audio'; clipIds: string[]; linked?: VideoEditRelations; audioTrack: number }
+  /**
+   * Premiere Lift (`ripple: false`) / Extract (`ripple: true`) of `[from, to)` on the given (target) tracks: clips crossing
+   * either boundary are cut there, the pieces inside are removed, and Extract closes the gap on sync-locked tracks.
+   * Ripple Trim Previous/Next Edit to Playhead (Q/W) is the same edit over the clip's part before/after the playhead.
+   */
+  | { kind: 'range'; from: number; to: number; tracks: number[]; ripple: boolean }
   /** Premiere "Move into sync" / "Slip into sync" for the selected out-of-sync portions only. */
   | { kind: 'sync'; clipIds: string[]; mode: 'move' | 'slip' }
   /** `newTracks`: audio tracks appended before placing (a multi-track item needs more audio tracks than the sequence has). */
@@ -151,14 +157,39 @@ export function applyVideoEditTimelineEdit(document: VideoEditDocument, sequence
   return applyVideoEditTimelineEditResult(document, sequenceId, edit, metadata).sequence
 }
 export function applyVideoEditTimelineEditResult(document: VideoEditDocument, sequenceId: string, edit: VideoEditTimelineEdit, metadata?: CodeMaterialMetadataReader): { sequence: VideoEditSequence; selectedClipIds?: string[] } {
-  const result = edit.kind === 'place' ? placeClips(document, sequenceOf(document, sequenceId), edit) : { sequence: applyClipEdit(document, sequenceId, edit, metadata) }
+  const result = edit.kind === 'place' ? placeClips(document, sequenceOf(document, sequenceId), edit) : edit.kind === 'range' ? { sequence: removeRange(sequenceOf(document, sequenceId), edit) } : { sequence: applyClipEdit(document, sequenceId, edit, metadata) }
   if (result.sequence.clips.length > 500 || result.sequence.annotations.length > 500 || (result.sequence.markers?.length ?? 0) > 500 || (result.sequence.captions?.length ?? 0) > 500 || result.sequence.clips.some(clip => clip.start < 0 || clip.duration < 1 || clip.start + clip.duration > Math.floor(result.sequence.frameRate.numerator / result.sequence.frameRate.denominator * 1800))) throw new Error('编辑结果超出序列片段、标记数量或时间边界。')
   if ((result.sequence.transitions?.length ?? 0) > 500) throw new Error('序列最多500项转场。')
   validateVideoEditAdjustmentRanges(result.sequence)
   validateVideoEditTransitions({ ...document, sequences: document.sequences.map(sequence => sequence.id === sequenceId ? result.sequence : sequence) }, metadata)
   return result
 }
-function applyClipEdit(document: VideoEditDocument, sequenceId: string, edit: Exclude<VideoEditTimelineEdit, { kind: 'place' }>, metadata?: CodeMaterialMetadataReader): VideoEditSequence {
+function removeRange(sequence: VideoEditSequence, edit: Extract<VideoEditTimelineEdit, { kind: 'range' }>): VideoEditSequence {
+  integer(edit.from); integer(edit.to)
+  if (edit.to <= edit.from) throw new Error('请先设置有效的入点和出点。')
+  const tracks = new Set(edit.tracks.filter(index => sequence.tracks.some(track => track.index === index && !track.locked)))
+  if (!tracks.size) throw new Error('请先选择未锁定的目标轨道。')
+  let next = sequence
+  for (const frame of [edit.from, edit.to]) {
+    const crossing = next.clips.filter(clip => tracks.has(clip.track) && clip.start < frame && frame < clip.start + clip.duration).map(clip => clip.id)
+    if (crossing.length) next = splitClips(next, crossing, frame)
+  }
+  const removed = new Set(next.clips.filter(clip => tracks.has(clip.track) && clip.start >= edit.from && clip.start + clip.duration <= edit.to).map(clip => clip.id))
+  if (!removed.size) throw new Error('入出点之间的目标轨道上没有片段。')
+  let kept = next.clips.filter(clip => !removed.has(clip.id))
+  if (edit.ripple) {
+    const length = edit.to - edit.from; const affected = synchronizedTracks(next, [...tracks])
+    kept = kept.map(clip => {
+      if (!affected.has(clip.track) || clip.start + clip.duration <= edit.from) return clip
+      if (clip.start < edit.to) throw new Error('波纹范围内的同步锁定轨道还有片段，请先调整目标轨道或关闭该轨道的同步锁定。')
+      assertVideoEditClipsEditable(next, [clip.id])
+      return { ...clip, start: clip.start - length }
+    })
+  }
+  const origins = new Map(kept.map(clip => [clip.id, { originalId: clip.id, shift: clip.start - next.clips.find(value => value.id === clip.id)!.start }]))
+  return retimeVideoEditContent(next, { ...next, clips: kept, annotations: shiftAnnotations(next, kept) }, origins)
+}
+function applyClipEdit(document: VideoEditDocument, sequenceId: string, edit: Exclude<VideoEditTimelineEdit, { kind: 'place' | 'range' }>, metadata?: CodeMaterialMetadataReader): VideoEditSequence {
   const sequence = sequenceOf(document, sequenceId)
   const ids = expandVideoEditSelection(sequence, edit.clipIds, edit.kind === 'sync' ? false : edit.linked ?? true); const selected = new Set(ids)
   if (!ids.length) throw new Error('请先选择片段。')

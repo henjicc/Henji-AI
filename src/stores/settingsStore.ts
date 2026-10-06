@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { parseVideoEditShortcutOverrides, type VideoEditShortcutOverrides } from '@/core/videoEdit/commands';
+import { parseVideoEditShortcutOverrides, sanitizeVideoEditShortcutOverrides, type VideoEditShortcutOverrides } from '@/core/videoEdit/commands';
 
 /** 下载预设路径的条数上限：菜单里超过这个数就要滚动，反而比「另存为」更慢 */
 export const DOWNLOAD_PRESET_PATH_LIMIT = 8;
@@ -316,6 +316,11 @@ export const useSettingsStore = create<SettingsState>()(
       version: 13,
       // `logCaptureMode` 有意不持久化：应用重启应回落 standard，避免用户忘记关闭
       // "完整捕获" 导致日志长期膨胀。
+      // 剪辑快捷键：默认键位随版本对齐 PR 时，旧改键里不认识或与新默认冲突的部分在恢复时让出，避免读设置失败。
+      merge: (persistedState, currentState) => {
+        const persisted = (persistedState ?? {}) as Partial<SettingsState>;
+        return { ...currentState, ...persisted, videoEditShortcuts: sanitizeVideoEditShortcutOverrides(persisted.videoEditShortcuts) };
+      },
       partialize: (state) => {
         const { logCaptureMode: _logCaptureMode, ...persisted } = state;
         return persisted;

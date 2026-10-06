@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { PanelTrigger, UiButton, UiError, UiIconButton, UiOptionButton, UiToolbar } from '@/components/ui'
 import { VideoEditProjectsPage } from './VideoEditProjectsPage'
 import { ChevronDown, ChevronLeft, Download, FolderInput, FolderOpen, Keyboard, Redo2, Undo2 } from 'lucide-react'
@@ -22,6 +22,26 @@ import { useAssetLibraryStore } from '@/features/assets/store/assetLibraryStore'
 import { openAssetLibrary } from '@/stores/navigationStore'
 import { openDialog } from '@/platform/desktopApi'
 import { getDocumentOperations } from '@/features/documents/documentOperations'
+import { elementOfEventTarget } from '@/utils/crossRealmDom'
+
+/** Shift+1…5（Premiere 默认）切到的面板；切换后键盘焦点也进入该面板，后续快捷键按它的作用域生效。 */
+const FOCUS_COMMANDS: Partial<Record<VideoEditCommandId, 'project' | 'source' | 'timeline' | 'program' | 'effects'>> = { focus_project: 'project', focus_source: 'source', focus_timeline: 'timeline', focus_program: 'program', focus_effects: 'effects' }
+function focusPanelElement(panel: string): void {
+  requestAnimationFrame(() => {
+    const element = document.querySelector<HTMLElement>(`[data-video-edit-panel="${panel}"]`)
+    if (!element) return
+    const target = element.querySelector<HTMLElement>('[data-video-edit-timeline-viewport],[tabindex="0"]') ?? element
+    if (target === element && !element.hasAttribute('tabindex')) element.tabIndex = -1
+    target.focus({ preventScroll: true })
+  })
+}
+/** `（Premiere 默认）：最大化光标下的面板组，已有最大化时还原。 */
+function toggleMaximizedGroup(api: DockviewApi | null, hovered: Element | null): void {
+  if (!api) return
+  if (api.hasMaximizedGroup()) { api.exitMaximizedGroup(); return }
+  const group = (hovered && api.groups.find(value => value.element.contains(hovered))) || api.activeGroup
+  group?.api.maximize()
+}
 
 /**
  * 剪辑命令带（界面重设计 3.5，设计稿 VideoEdit）：一条带。左端关闭项目、项目名菜单与序列规格；右端撤销/重做、
@@ -99,12 +119,16 @@ export default function VideoEditApp(): React.ReactElement {
     if (projectId && panel && ['timeline', 'program', 'source', 'project', 'effects', 'content'].includes(panel) && panel !== instance?.activePanel) focusVideoEditPanel(projectId, panel as NonNullable<typeof instance>['activePanel'])
   }
   const shortcuts = useSettingsStore(state => state.videoEditShortcuts)
-  return <div className="flex h-full min-h-0 flex-col bg-window text-text1" onFocusCapture={event => focusPanel(event.target)} onPointerDownCapture={event => focusPanel(event.target)} onKeyDown={event => {
+  const hovered = useRef<Element | null>(null)
+  return <div className="flex h-full min-h-0 flex-col bg-window text-text1" onFocusCapture={event => focusPanel(event.target)} onPointerDownCapture={event => focusPanel(event.target)} onPointerMoveCapture={event => { hovered.current = elementOfEventTarget(event.target) }} onKeyDown={event => {
     const binding = videoEditKeyboardCommand({ ...event.nativeEvent, code: event.code, key: event.key, ctrlKey: event.ctrlKey, metaKey: event.metaKey, altKey: event.altKey, shiftKey: event.shiftKey, repeat: event.repeat, isComposing: event.nativeEvent.isComposing, defaultPrevented: event.defaultPrevented, target: event.target }, instance?.activePanel ?? 'global', shortcuts)
     if (!binding) return
+    if (binding.id === 'maximize_panel') { event.preventDefault(); event.stopPropagation(); toggleMaximizedGroup(dockApi, hovered.current); return }
     const context = captureVideoEditCommandContext(projectId, binding.scope)
     if (!videoEditCommandState(context, binding.id).enabled) return
-    event.preventDefault(); event.stopPropagation(); run(() => executeVideoEditCommand(context, binding.id))
+    event.preventDefault(); event.stopPropagation()
+    const panel = FOCUS_COMMANDS[binding.id]
+    run(async () => { await executeVideoEditCommand(context, binding.id); if (panel) focusPanelElement(panel) })
   }}>
     {instance && sequence ? <>
       <VideoEditToolbar instance={instance} api={dockApi} run={run} onNotice={setNotice} />

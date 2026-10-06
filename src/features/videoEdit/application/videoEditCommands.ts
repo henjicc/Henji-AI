@@ -12,7 +12,10 @@ import { readVideoEditSource, updateVideoEditSource, pauseVideoEditSourceForProg
 import { readVideoEditCodeMetadata } from './videoEditCodeState'
 import { copyVideoEditTimeline, executeVideoEditTimelineEdit, readVideoEditClipboard, resizeVideoEditTracks, separateVideoEditAudio } from './videoEditTimeline'
 import { videoEditTimelineViewport } from './videoEditTimelineViewport'
-import { VIDEO_EDIT_TRACK_HEIGHT_DEFAULT, VIDEO_EDIT_TRACK_HEIGHT_MAX, VIDEO_EDIT_TRACK_HEIGHT_MIN } from '@/core/videoEdit/timelineNavigation'
+import { VIDEO_EDIT_TRACK_HEIGHT_DEFAULT, VIDEO_EDIT_TRACK_HEIGHT_MAX, VIDEO_EDIT_TRACK_HEIGHT_MIN, videoEditAdjacentPoint, videoEditClipsAtFrame, videoEditEditPoints } from '@/core/videoEdit/timelineNavigation'
+import { videoEditMoveTrackMap } from '@/core/videoEdit/timelineEdits'
+import { createVideoEditMarker } from './videoEditTimedContent'
+import { createVideoEditBin } from './videoEditProjectItems'
 
 /** Premiere 轨道高度键：每次 8px；展开所有轨道到 96px，最小化到最小高度。 */
 const TRACK_HEIGHT_STEP = 8
@@ -22,6 +25,11 @@ const trackResizes = {
   expand_all_tracks: ['all', () => 96], minimize_all_tracks: ['all', () => VIDEO_EDIT_TRACK_HEIGHT_MIN],
 } as const satisfies Partial<Record<VideoEditCommandId, readonly ['video' | 'audio' | 'all', (height: number) => number]>>
 const STEP_DISTANCE = { step_back: -1, step_forward: 1, step_back_five: -5, step_forward_five: 5 } as const
+const NUDGES = { nudge_left: [-1, 0], nudge_right: [1, 0], nudge_left_five: [-5, 0], nudge_right_five: [5, 0], nudge_up: [0, 1], nudge_down: [0, -1] } as const
+const FOCUS_PANELS = { focus_project: 'project', focus_source: 'source', focus_timeline: 'timeline', focus_program: 'program', focus_effects: 'effects' } as const
+const NAVIGATIONS = new Set<VideoEditCommandId>(['go_prev_edit', 'go_next_edit', 'go_prev_edit_any', 'go_next_edit_any', 'go_start', 'go_end', 'go_in', 'go_out', 'next_marker', 'prev_marker'])
+/** 素材面板自己的视图状态，只在素材面板里响应。 */
+const PROJECT_PANEL_COMMANDS = new Set<VideoEditCommandId>(['project_list_view', 'project_icon_view', 'project_toggle_view'])
 export interface VideoEditCommandContext { readonly projectId?: string; readonly sequenceId?: string; readonly scope: VideoEditCommandScope; readonly clipIds: readonly string[]; readonly itemIds: readonly string[]; readonly frame: number }
 interface ContextState { owner?: VideoEditInstance; document?: VideoEditInstance['document']; source?: VideoEditSourceState; sourceCommand?: VideoEditSourceCommandIdentity; targetTrackIds: string[]; clipboard?: VideoEditClipboard }
 const contexts = new WeakMap<VideoEditCommandContext, ContextState>()
@@ -85,12 +93,58 @@ function clipboardTrackMap(context: VideoEditCommandContext, clipboard: VideoEdi
   return mapping
 }
 function contextTargetTracks(context: VideoEditCommandContext): number[] { const state = stateOf(context); return getActiveVideoEditSequence(state.owner!).tracks.filter(track => state.targetTrackIds.includes(track.id)).map(track => track.index) }
+/** 目标轨道；没有目标轨道时按全部轨道（导航与标记片段）。 */
+function navigationTracks(context: VideoEditCommandContext): number[] | undefined { const targets = contextTargetTracks(context); return targets.length ? targets : undefined }
+function targetClipsAtFrame(context: VideoEditCommandContext) {
+  const sequence = getActiveVideoEditSequence(stateOf(context).owner!)
+  return videoEditClipsAtFrame(sequence.clips, context.frame, navigationTracks(context) ?? sequence.tracks.map(track => track.index))
+}
+/** Premiere 导航键的落点；没有可去的位置时给出原因。 */
+function navigationTarget(context: VideoEditCommandContext, id: VideoEditCommandId): { frame?: number; reason: string } {
+  const owner = stateOf(context).owner!; const sequence = getActiveVideoEditSequence(owner)
+  const limit = Math.floor(sequence.fps * 1800)
+  if (id === 'go_start') return { frame: 0, reason: '' }
+  if (id === 'go_end') return { frame: Math.min(limit, videoEditDuration(sequence)), reason: '' }
+  if (id === 'go_in') return { frame: owner.inFrame ?? undefined, reason: '序列没有入点。' }
+  if (id === 'go_out') return { frame: owner.outFrame === null ? undefined : owner.outFrame - 1, reason: '序列没有出点。' }
+  if (id === 'next_marker' || id === 'prev_marker') return { frame: videoEditAdjacentPoint([...new Set((sequence.markers ?? []).map(mark => mark.frame))].sort((a, b) => a - b), context.frame, id === 'prev_marker' ? -1 : 1), reason: '这个方向没有标记。' }
+  const any = id === 'go_prev_edit_any' || id === 'go_next_edit_any'
+  return { frame: videoEditAdjacentPoint(videoEditEditPoints(sequence, any ? undefined : navigationTracks(context)), context.frame, id === 'go_prev_edit' || id === 'go_prev_edit_any' ? -1 : 1), reason: '这个方向没有编辑点。' }
+}
+/** Ctrl+L：所选片段已有链接就解除，否则链接（Premiere 的“链接”是开关）。 */
+function linkToggle(context: VideoEditCommandContext): 'link' | 'unlink' { return selection(context).some(clip => clip.linkId) ? 'unlink' : 'link' }
 function timelineIntent(context: VideoEditCommandContext, id: VideoEditCommandId): VideoEditTimelineEdit | undefined {
   const clips = [...context.clipIds]
-  if (id === 'paste' || id === 'insert' || id === 'overwrite') {
+  if (id === 'lift' || id === 'extract') {
+    const owner = stateOf(context).owner!; const sequence = getActiveVideoEditSequence(owner)
+    if (owner.inFrame === null && owner.outFrame === null) throw new Error('请先设置序列入点或出点。')
+    return { kind: 'range', from: owner.inFrame ?? 0, to: owner.outFrame ?? videoEditDuration(sequence), tracks: contextTargetTracks(context), ripple: id === 'extract' }
+  }
+  if (id === 'ripple_trim_prev' || id === 'ripple_trim_next') {
+    const crossing = targetClipsAtFrame(context).filter(clip => clip.start < context.frame)
+    if (!crossing.length) throw new Error('播放头处的目标轨道没有可修剪的片段。')
+    // 各轨片段的起点／终点不同时取最靠近播放头的编辑点，不删掉另一条轨道上播放头之外的内容。
+    const from = id === 'ripple_trim_prev' ? Math.max(...crossing.map(clip => clip.start)) : context.frame
+    const to = id === 'ripple_trim_prev' ? context.frame : Math.min(...crossing.map(clip => clip.start + clip.duration))
+    return { kind: 'range', from, to, tracks: [...new Set(crossing.map(clip => clip.track))], ripple: true }
+  }
+  if (id in NUDGES) {
+    const [delta, lanes] = NUDGES[id as keyof typeof NUDGES]
+    if (!clips.length) throw new Error('请先选择片段。')
+    if (!lanes) return { kind: 'adjust', clipIds: clips, linked: false, mode: 'move', delta }
+    const owner = stateOf(context).owner!; const sequence = getActiveVideoEditSequence(owner)
+    const primary = sequence.clips.find(clip => clip.id === (owner.selection && clips.includes(owner.selection) ? owner.selection : clips[0]))!
+    const kind = primary.kind === 'audio' ? 'audio' : 'video'
+    const ordered = sequence.tracks.filter(track => track.kind === kind).sort((a, b) => a.index - b.index)
+    // 画面轨编号越大越靠上，声音轨编号越大越靠下。
+    const target = ordered[ordered.findIndex(track => track.index === primary.track) + (kind === 'video' ? lanes : -lanes)]
+    if (!target) throw new Error('没有可移动到的同类轨道。')
+    return { kind: 'adjust', clipIds: clips, linked: false, mode: 'move', delta: 0, trackMap: videoEditMoveTrackMap(sequence, clips, primary.id, target.index) }
+  }
+  if (id === 'paste' || id === 'insert' || id === 'overwrite' || id === 'paste_insert') {
     const { clipboard, newTracks } = placeClipboard(context)
     // Source and project placements already sit on the target tracks (and on tracks they add).
-    return { kind: 'place', clipboard, mode: id, frame: context.frame, ...(context.scope === 'source' || context.scope === 'project' ? newTracks ? { newTracks } : {} : { trackMap: clipboardTrackMap(context, clipboard) }), targetTracks: contextTargetTracks(context) }
+    return { kind: 'place', clipboard, mode: id === 'paste_insert' ? 'insert' : id, frame: context.frame, ...(context.scope === 'source' || context.scope === 'project' ? newTracks ? { newTracks } : {} : { trackMap: clipboardTrackMap(context, clipboard) }), targetTracks: contextTargetTracks(context) }
   }
   if (id === 'split') return { kind: 'split', clipIds: clips, linked: false, frame: context.frame }
   if (id === 'split_tracks') return { kind: 'split', clipIds: getActiveVideoEditSequence(stateOf(context).owner!).clips.filter(clip => contextTargetTracks(context).includes(clip.track) && context.frame > clip.start && context.frame < clip.start + clip.duration).map(clip => clip.id), linked: videoEditPickRelations(stateOf(context).owner!.linkedSelection !== false), frame: context.frame }
@@ -112,6 +166,19 @@ export function videoEditCommandState(context: VideoEditCommandContext, id: Vide
     if (id === 'toggle_snapping') return { enabled: true, checked: owner.snapping }
     if (id === 'toggle_linked_selection') return { enabled: true, checked: owner.linkedSelection !== false }
     if (id === 'export') return { enabled: sequence.clips.length > 0 && !owner.busy, reason: '序列没有可导出的片段或正在导出。' }
+    if (id in FOCUS_PANELS || id === 'maximize_panel' || id === 'deselect_all') return { enabled: true }
+    if (PROJECT_PANEL_COMMANDS.has(id)) return { enabled: false, reason: '请在素材面板中使用。' }
+    if (id === 'new_bin') return { enabled: owner.document.bins.length < 200, reason: '素材箱数量已达上限。' }
+    if (id === 'open_in_source') return { enabled: owner.document.items.some(item => context.itemIds.includes(item.id) && item.mediaId), reason: '请先选择有源文件的素材项。' }
+    if (NAVIGATIONS.has(id)) { const target = navigationTarget(context, id); return { enabled: target.frame !== undefined, reason: target.reason } }
+    if (id === 'mark_clip' || id === 'select_clip_at_playhead') return { enabled: targetClipsAtFrame(context).length > 0, reason: '播放头处的目标轨道没有片段。' }
+    if (id === 'add_marker') return { enabled: (sequence.markers?.length ?? 0) < 500, reason: '序列最多500个标记。' }
+    if (id === 'clear_in' || id === 'clear_out' || id === 'clear_in_out') {
+      const [inPoint, outPoint] = context.scope === 'source' ? [source?.inUs ?? null, source?.outUs ?? null] : [owner.inFrame, owner.outFrame]
+      return { enabled: id === 'clear_in' ? inPoint !== null : id === 'clear_out' ? outPoint !== null : inPoint !== null || outPoint !== null, reason: '没有可清除的入出点。' }
+    }
+    if (id === 'toggle_link') return selection(context).length ? videoEditCommandState(context, linkToggle(context)) : { enabled: false, reason: '请先选择片段。' }
+    if (id === 'cut') return videoEditCommandState(context, 'delete')
     if (id in trackResizes) {
       const [kind, resize] = trackResizes[id as keyof typeof trackResizes]
       return { enabled: sequence.tracks.some(track => (kind === 'all' || track.kind === kind) && Math.max(VIDEO_EDIT_TRACK_HEIGHT_MIN, Math.min(VIDEO_EDIT_TRACK_HEIGHT_MAX, Math.round(resize(track.height ?? VIDEO_EDIT_TRACK_HEIGHT_DEFAULT)))) !== (track.height ?? VIDEO_EDIT_TRACK_HEIGHT_DEFAULT)), reason: '轨道高度已到上限或下限。' }
@@ -167,6 +234,25 @@ export async function executeVideoEditCommand(context: VideoEditCommandContext, 
     case 'select_tool': case 'razor_tool': case 'hand_tool': case 'track_tool': setVideoEditTimelineView(projectId, { tool: ({ select_tool: 'select', razor_tool: 'razor', hand_tool: 'hand', track_tool: 'track' } as const)[id] }); return
     case 'toggle_snapping': setVideoEditTimelineView(projectId, { snapping: !owner!.snapping }); return
     case 'toggle_linked_selection': setVideoEditTimelineView(projectId, { linkedSelection: owner!.linkedSelection === false }); return
+    case 'focus_project': case 'focus_source': case 'focus_timeline': case 'focus_program': case 'focus_effects': focusVideoEditPanel(projectId, FOCUS_PANELS[id]); return
+    // 面板组最大化属于布局，由剪辑页拿着停靠区执行；素材视图属于素材面板。命令层无事可做。
+    case 'maximize_panel': case 'project_list_view': case 'project_icon_view': case 'project_toggle_view': return
+    case 'new_bin': { const binId = createVideoEditBin(projectId, `素材箱 ${owner!.document.bins.length + 1}`, owner!.selectedBinId || undefined); setVideoEditProjectView(projectId, { selectedBinId: binId, selectedItemIds: [] }); return }
+    case 'open_in_source': await updateVideoEditSource(projectId, { itemId: owner!.document.items.find(item => context.itemIds.includes(item.id) && item.mediaId)!.id }); focusVideoEditPanel(projectId, 'source'); return
+    case 'go_prev_edit': case 'go_next_edit': case 'go_prev_edit_any': case 'go_next_edit_any': case 'go_start': case 'go_end': case 'go_in': case 'go_out': case 'next_marker': case 'prev_marker':
+      setVideoEditView(projectId, { frame: navigationTarget(context, id).frame!, playing: false }); return
+    case 'mark_clip': { const clips = targetClipsAtFrame(context); setVideoEditTimelineView(projectId, { inFrame: Math.min(...clips.map(clip => clip.start)), outFrame: Math.max(...clips.map(clip => clip.start + clip.duration)) }); return }
+    case 'select_clip_at_playhead': setVideoEditTimelineView(projectId, { selectedClipIds: expandVideoEditSelection(sequence, targetClipsAtFrame(context).map(clip => clip.id), videoEditPickRelations(owner!.linkedSelection !== false)) }); return
+    case 'add_marker': createVideoEditMarker(projectId, sequenceId, { frame: context.frame, name: `标记 ${(sequence.markers?.length ?? 0) + 1}` }); return
+    case 'clear_in': case 'clear_out': case 'clear_in_out': {
+      const clearIn = id !== 'clear_out'; const clearOut = id !== 'clear_in'
+      if (context.scope === 'source') await updateVideoEditSource(projectId, { ...(clearIn ? { inUs: null } : {}), ...(clearOut ? { outUs: null } : {}) })
+      else setVideoEditTimelineView(projectId, { ...(clearIn ? { inFrame: null } : {}), ...(clearOut ? { outFrame: null } : {}) })
+      return
+    }
+    case 'deselect_all': if (context.scope === 'project') setVideoEditProjectView(projectId, { selectedItemIds: [] }); else setVideoEditTimelineView(projectId, { selectedClipIds: [] }); return
+    case 'toggle_link': await executeVideoEditCommand(context, linkToggle(context)); return
+    case 'cut': copyVideoEditTimeline(projectId, sequenceId, [...context.clipIds], false); executeVideoEditTimelineEdit(projectId, sequenceId, { kind: 'delete', clipIds: [...context.clipIds], linked: false, ripple: false }); return
     case 'zoom_to_sequence': videoEditTimelineViewport(projectId, sequenceId)!.zoomToSequence(); return
     case 'previous_screen': case 'next_screen': videoEditTimelineViewport(projectId, sequenceId)!.showScreen(id === 'next_screen' ? 1 : -1); return
     case 'increase_video_tracks': case 'decrease_video_tracks': case 'increase_audio_tracks': case 'decrease_audio_tracks': case 'expand_all_tracks': case 'minimize_all_tracks': { const [kind, resize] = trackResizes[id]; resizeVideoEditTracks(projectId, sequenceId, kind, resize); return }

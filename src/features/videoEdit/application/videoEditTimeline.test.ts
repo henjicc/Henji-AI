@@ -45,7 +45,7 @@ it('节目拖入依真实32轨目标和素材类型落点，显式锁定落轨�
 })
 it('正式设置反射读写封闭键位对象，冲突写入保留原配置', async () => {
   await fixture(); const app = createApplicationHarness(); useSettingsStore.getState().setVideoEditShortcuts({})
-  const ref = { kind: 'settings.registry', id: 'singleton' }; const config = { select_tool: { code: 'KeyQ', ctrl: false, meta: false, alt: false, shift: false } }
+  const ref = { kind: 'settings.registry', id: 'singleton' }; const config = { select_tool: { code: 'F9', ctrl: false, meta: false, alt: false, shift: false } }
   try {
     expect((await app.change(ref, { 'video_edit.shortcuts': config })).ok).toBe(true)
     expect((await app.read(ref, ['video_edit.shortcuts'])).properties).toEqual({ 'video_edit.shortcuts': config })

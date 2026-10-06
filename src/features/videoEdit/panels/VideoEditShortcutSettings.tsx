@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { UiButton, UiError, UiFormRow, UiModal } from '@/components/ui'
 import { useI18n } from '@/hooks/useI18n'
 import { useSettingsStore } from '@/stores/settingsStore'
-import { parseVideoEditShortcutOverrides, VIDEO_EDIT_COMMANDS, videoEditCommandShortcut, videoEditShortcutLabel, type VideoEditCommandId, type VideoEditShortcutOverrides } from '@/core/videoEdit/commands'
+import { parseVideoEditShortcutOverrides, VIDEO_EDIT_COMMANDS, videoEditCommandShortcuts, videoEditShortcutLabel, type VideoEditCommandId, type VideoEditShortcutOverrides } from '@/core/videoEdit/commands'
 
 /**
  * 设置行 + 弹窗（设置 → 通用 → 查看与快捷键）。和同一分节的其他设置一样是“标签左、控件右”的一行，
@@ -50,7 +50,7 @@ export function VideoEditShortcutDialog({ open, onClose }: { open: boolean; onCl
         <div className="min-h-0 flex-1 space-y-1 overflow-y-auto">
           {VIDEO_EDIT_COMMANDS.map(command => <div className="flex items-center gap-2 border-b border-line py-1" key={command.id}>
             <span className="min-w-0 flex-1 text-xs">{command.title}</span>
-            <UiButton aria-label={t('videoEditShortcuts.keyLabel', { command: command.title })} aria-pressed={capture === command.id} onClick={() => setCapture(command.id)}>{capture === command.id ? t('videoEditShortcuts.capturing') : videoEditShortcutLabel(videoEditCommandShortcut(command.id, draft))}</UiButton>
+            <UiButton aria-label={t('videoEditShortcuts.keyLabel', { command: command.title })} aria-pressed={capture === command.id} onClick={() => setCapture(command.id)}>{capture === command.id ? t('videoEditShortcuts.capturing') : videoEditCommandShortcuts(command.id, draft).map(videoEditShortcutLabel).join(' / ') || videoEditShortcutLabel(undefined)}</UiButton>
             <UiButton aria-label={t('videoEditShortcuts.clearLabel', { command: command.title })} onClick={() => { setCapture(null); change({ ...draft, [command.id]: null }) }}>{t('videoEditShortcuts.clear')}</UiButton>
           </div>)}
         </div>
