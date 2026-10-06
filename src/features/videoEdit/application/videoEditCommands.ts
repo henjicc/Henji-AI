@@ -20,6 +20,8 @@ import { createVideoEditBin } from './videoEditProjectItems'
 import { applyVideoEditDefaultTransitions, selectVideoEditTransition, selectedVideoEditTransitionId, videoEditDefaultTransitionTargets, type VideoEditDefaultTransitionRequest } from './videoEditTransitions'
 import { deleteVideoEditTransition } from './videoEditCompositing'
 import { matchVideoEditFrame, reverseMatchVideoEditFrame, videoEditMatchFrameUnavailable } from './videoEditMatchFrame'
+import { videoEditClipSpeedSupported } from '@/core/videoEdit/clipSpeed'
+import { openVideoEditSpeedDialog } from './videoEditSpeedDialog'
 
 /** Premiere 轨道高度键：每次 8px；展开所有轨道到 96px，最小化到最小高度。 */
 const TRACK_HEIGHT_STEP = 8
@@ -224,6 +226,13 @@ export function videoEditCommandState(context: VideoEditCommandContext, id: Vide
       if (!context.clipIds.length) return { enabled: false, reason: '请先选择片段。' }
       if (!videoEditSyncCorrections(sequence, context.clipIds).size) return { enabled: false, reason: '所选片段与链接片段没有失步。' }
     }
+    if (id === 'clip_speed') {
+      // 速度/持续时间（4.13）：所选片段里有源时间的那些（视频、音频、代码素材）。
+      const clips = selection(context).filter(clip => videoEditClipSpeedSupported(clip.kind))
+      if (!clips.length) return { enabled: false, reason: selection(context).length ? '所选片段没有可变速的源时间（图片、文字、图形不能改速度）。' : '请先选择片段。' }
+      assertVideoEditClipsEditable(sequence, clips.map(clip => clip.id))
+      return { enabled: true }
+    }
     if (id === 'copy' || id === 'locate_project' || id === 'locate_effects') return { enabled: context.clipIds.length > 0, reason: '请先选择片段。' }
     if (id === 'locate_source') return { enabled: Boolean(owner.document.items.find(item => item.id === sourceItem(context))?.mediaId), reason: '此片段没有源媒体文件。' }
     const intent = timelineIntent(context, id)
@@ -249,7 +258,7 @@ export async function executeVideoEditCommand(context: VideoEditCommandContext, 
     case 'save': await saveVideoEdit(projectId); return
     case 'undo': case 'redo': undoVideoEdit(projectId, id === 'redo'); return
     case 'export': await exportVideoEdit(projectId); return
-    case 'select_tool': case 'track_tool': case 'track_backward_tool': case 'ripple_tool': case 'roll_tool': case 'razor_tool': case 'slip_tool': case 'slide_tool': case 'hand_tool': case 'zoom_tool': case 'type_tool': setVideoEditTimelineView(projectId, { tool: VIDEO_EDIT_TOOL_COMMANDS[id] }); return
+    case 'select_tool': case 'track_tool': case 'track_backward_tool': case 'ripple_tool': case 'roll_tool': case 'rate_stretch_tool': case 'razor_tool': case 'slip_tool': case 'slide_tool': case 'hand_tool': case 'zoom_tool': case 'type_tool': setVideoEditTimelineView(projectId, { tool: VIDEO_EDIT_TOOL_COMMANDS[id] }); return
     case 'match_frame': await matchVideoEditFrame(projectId, [...context.clipIds], context.frame); return
     case 'reverse_match_frame': reverseMatchVideoEditFrame(projectId); return
     case 'toggle_snapping': setVideoEditTimelineView(projectId, { snapping: !owner!.snapping }); return
@@ -282,6 +291,7 @@ export async function executeVideoEditCommand(context: VideoEditCommandContext, 
     case 'separate_audio': await separateVideoEditAudio(projectId, sequenceId, [...context.clipIds], sequence.tracks.find(track => track.kind === 'audio' && !track.locked && stateOf(context).targetTrackIds.includes(track.id))?.index ?? sequence.tracks.find(track => track.kind === 'audio' && !track.locked)!.index, undefined, false); return
     case 'locate_project': { const item = owner!.document.items.find(item => item.id === sourceItem(context))!; setVideoEditProjectView(projectId, { selectedItemIds: [item.id], selectedBinId: item.binId ?? '' }); focusVideoEditPanel(projectId, 'project'); return }
     case 'locate_source': await updateVideoEditSource(projectId, { itemId: sourceItem(context), playing: false }); focusVideoEditPanel(projectId, 'source'); return
+    case 'clip_speed': openVideoEditSpeedDialog({ projectId, sequenceId, clipIds: selection(context).filter(clip => videoEditClipSpeedSupported(clip.kind)).map(clip => clip.id) }); return
     case 'locate_effects': setVideoEditTimelineView(projectId, { selectedClipIds: [...context.clipIds] }, context.clipIds[0]); focusVideoEditPanel(projectId, 'effects'); return
     case 'mark_in': case 'mark_out': {
       if (context.scope === 'source') {

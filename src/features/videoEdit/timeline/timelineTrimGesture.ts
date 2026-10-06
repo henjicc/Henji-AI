@@ -4,8 +4,12 @@ import type { VideoEditTimelineTool } from '@/core/videoEdit/timelineSelection'
 
 /** 修剪工具在片段一端多近（像素）算抓住这一端（PR 光标在编辑点附近才变成修剪光标）。 */
 export const TIMELINE_TRIM_EDGE_PIXELS = 10
-export const TIMELINE_TRIM_TOOLS = new Set<VideoEditTimelineTool>(['ripple', 'roll', 'slip', 'slide'])
-export function isTimelineTrimTool(tool: VideoEditTimelineTool): tool is VideoEditTrimMode { return TIMELINE_TRIM_TOOLS.has(tool) }
+/** 修剪类工具：四种修剪加比率拉伸（4.13，拖一端改速度，与波纹、滚动一样要抓住一端）。 */
+export type TimelineTrimTool = VideoEditTrimMode | 'rate_stretch'
+export const TIMELINE_TRIM_TOOLS = new Set<VideoEditTimelineTool>(['ripple', 'roll', 'rate_stretch', 'slip', 'slide'])
+export function isTimelineTrimTool(tool: VideoEditTimelineTool): tool is TimelineTrimTool { return TIMELINE_TRIM_TOOLS.has(tool) }
+/** 要抓住片段一端才生效的工具（点在中间只选中）。 */
+export function timelineTrimNeedsEdge(tool: TimelineTrimTool): boolean { return tool === 'ripple' || tool === 'roll' || tool === 'rate_stretch' }
 
 /**
  * 波纹／滚动编辑抓的是哪一端：命中裁剪柄就是那一端，否则看指针离起点还是终点更近（`frame` 可带小数）；
@@ -22,7 +26,7 @@ export function timelineTrimEdge(clip: Pick<VideoEditClip, 'start' | 'duration'>
  * 拖动 `dx` 帧时请求的修剪量与参与吸附的边缘位置（拖动前的坐标）。外滑不移动任何边缘、不吸附；
  * 往右拖外滑露出更早的内容（与 PR 一致），所以源内容前进 `-dx` 帧。
  */
-export function timelineTrimRequest(mode: VideoEditTrimMode, edge: 'in' | 'out' | undefined, clip: Pick<VideoEditClip, 'start' | 'duration'>, dx: number): { delta: number; edges: number[] } {
+export function timelineTrimRequest(mode: TimelineTrimTool, edge: 'in' | 'out' | undefined, clip: Pick<VideoEditClip, 'start' | 'duration'>, dx: number): { delta: number; edges: number[] } {
   if (mode === 'slip') return { delta: -dx, edges: [] }
   if (mode === 'slide') return { delta: dx, edges: [clip.start + dx, clip.start + clip.duration + dx] }
   return { delta: dx, edges: [(edge === 'in' ? clip.start : clip.start + clip.duration) + dx] }

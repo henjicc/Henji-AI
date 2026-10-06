@@ -7,8 +7,7 @@ import { addVideoEditTextClipAt, beginVideoEditTimelineDrag, finishVideoEditTime
 import { captureVideoEditCommandContext, executeVideoEditCommand } from '../application/videoEditCommands'
 import { focusVideoEditPanel, requireVideoEditInstance, setVideoEditTimelineView, setVideoEditView, type VideoEditInstance } from '../application/videoEditService'
 import { videoEditTimelineViewport } from '../application/videoEditTimelineViewport'
-import type { VideoEditTrimMode } from '@/core/videoEdit/timelineTrims'
-import { isTimelineTrimTool, timelineTrimEdge, timelineTrimRequest, timelineTrimSnapExclusions } from './timelineTrimGesture'
+import { isTimelineTrimTool, timelineTrimEdge, timelineTrimNeedsEdge, timelineTrimRequest, timelineTrimSnapExclusions, type TimelineTrimTool } from './timelineTrimGesture'
 import { elementOfEventTarget, ownerDocumentOf, ownerWindowOf } from '@/utils/crossRealmDom'
 import { videoEditEdgeTracks } from '@/core/videoEdit/tracks'
 import { videoEditTransitionWindow } from '@/core/videoEdit/transitions'
@@ -33,7 +32,7 @@ type PointerGesture = BaseGesture & (
   | { kind: 'transition'; drag: VideoEditTimelineHandleDrag; transitionId: string; mode: 'in' | 'out' | 'move'; moved: boolean }
   | { kind: 'fade'; drag: VideoEditTimelineHandleDrag; clipId: string; fade: 'in' | 'out'; frames: number; moved: boolean }
   /** PR 修剪工具（波纹 B、滚动 N、外滑 Y、内滑 U）：拖动实时预览，松手一步撤销；`trim` 为最近一次能做到的请求。 */
-  | { kind: 'trim'; handle: VideoEditTimelineDrag; mode: VideoEditTrimMode; trimEdge?: 'in' | 'out'; clipId: string; ids: string[]; moved: boolean; trim?: VideoEditTimelineTrimDrag }
+  | { kind: 'trim'; handle: VideoEditTimelineDrag; mode: TimelineTrimTool; trimEdge?: 'in' | 'out'; clipId: string; ids: string[]; moved: boolean; trim?: VideoEditTimelineTrimDrag }
   /** 缩放工具（Z）：单击放大（Alt 缩小），横向拖出范围则缩放到这一段。 */
   | { kind: 'zoom'; zoomOut: boolean }
 )
@@ -264,9 +263,9 @@ export function useTimelinePointer(options: Options) {
       if (isTimelineTrimTool(instance.tool)) {
         if (!clip) return
         const mode = instance.tool
-        const edge = mode === 'ripple' || mode === 'roll' ? timelineTrimEdge(clip, at.x / pixels, pixels, target.closest('[data-video-edit-trim]')?.getAttribute('data-video-edit-trim')) : undefined
+        const edge = timelineTrimNeedsEdge(mode) ? timelineTrimEdge(clip, at.x / pixels, pixels, target.closest('[data-video-edit-trim]')?.getAttribute('data-video-edit-trim')) : undefined
         // 波纹与滚动要抓住片段的一端；点在片段中间只选中它。
-        if ((mode === 'ripple' || mode === 'roll') && !edge) { select([clip.id], false, false, linked); return }
+        if (timelineTrimNeedsEdge(mode) && !edge) { select([clip.id], false, false, linked); return }
         const ids = expandVideoEditSelection(sequence, [clip.id], linked)
         setVideoEditTimelineView(instance.document.id, { selectedClipIds: ids }, clip.id)
         capture({ ...base(event), kind: 'trim', handle: beginVideoEditTimelineDrag(instance.document.id, sequence.id, ids), mode, ...(edge ? { trimEdge: edge } : {}), clipId: clip.id, ids, moved: false })

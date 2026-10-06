@@ -23,12 +23,13 @@ export const VIDEO_EDIT_COMMANDS = [
   command('focus_program', '节目监视器', ['global'], key('Digit4', false, true)),
   command('focus_effects', '效果控件', ['global'], key('Digit5', false, true)),
   command('maximize_panel', '最大化／还原光标下的面板组', ['global'], key('Backquote')),
-  // 工具（PR 工具面板，4.6）：按 PR 默认键位。比率拉伸 R 与钢笔 P 需要片段速度与关键帧数据，尚未提供。
+  // 工具（PR 工具面板，4.6）：按 PR 默认键位。比率拉伸 R 在 4.13 随片段速度提供；钢笔 P 需要属性关键帧，尚未提供。
   command('select_tool', '选择工具', ['timeline'], key('KeyV')),
   command('track_tool', '向前选择轨道工具', ['timeline'], key('KeyA')),
   command('track_backward_tool', '向后选择轨道工具', ['timeline'], key('KeyA', false, true)),
   command('ripple_tool', '波纹编辑工具', ['timeline'], key('KeyB')),
   command('roll_tool', '滚动编辑工具', ['timeline'], key('KeyN')),
+  command('rate_stretch_tool', '比率拉伸工具', ['timeline'], key('KeyR')),
   command('razor_tool', '剃刀工具', ['timeline'], key('KeyC')),
   command('slip_tool', '外滑工具', ['timeline'], key('KeyY')),
   command('slide_tool', '内滑工具', ['timeline'], key('KeyU')),
@@ -111,6 +112,8 @@ export const VIDEO_EDIT_COMMANDS = [
   command('move_into_sync', '移入同步', editScopes), command('slip_into_sync', '滑入同步', editScopes),
   command('locate_source', '打开源素材', editScopes), command('locate_project', '在素材中定位', editScopes),
   command('locate_effects', '编辑片段属性', editScopes),
+  // PR 剪辑 > 速度/持续时间（cmd.clip.speed，Ctrl+R，4.13）。
+  command('clip_speed', '速度/持续时间…', editScopes, key('KeyR', true)),
   command('new_bin', '新建素材箱', ['project'], key('KeyB', true)),
   command('open_in_source', '在源监视器中打开', ['project'], key('KeyO', false, true)),
   command('project_list_view', '素材列表视图', ['project'], key('PageUp', true)),
@@ -119,7 +122,7 @@ export const VIDEO_EDIT_COMMANDS = [
 ] as const
 export type VideoEditCommandId = typeof VIDEO_EDIT_COMMANDS[number]['id']
 /** 工具命令 → 时间线工具（模式）。 */
-export const VIDEO_EDIT_TOOL_COMMANDS = { select_tool: 'select', track_tool: 'track', track_backward_tool: 'track_backward', ripple_tool: 'ripple', roll_tool: 'roll', razor_tool: 'razor', slip_tool: 'slip', slide_tool: 'slide', hand_tool: 'hand', zoom_tool: 'zoom', type_tool: 'type' } as const satisfies Partial<Record<VideoEditCommandId, string>>
+export const VIDEO_EDIT_TOOL_COMMANDS = { select_tool: 'select', track_tool: 'track', track_backward_tool: 'track_backward', ripple_tool: 'ripple', roll_tool: 'roll', rate_stretch_tool: 'rate_stretch', razor_tool: 'razor', slip_tool: 'slip', slide_tool: 'slide', hand_tool: 'hand', zoom_tool: 'zoom', type_tool: 'type' } as const satisfies Partial<Record<VideoEditCommandId, string>>
 export type VideoEditToolCommandId = keyof typeof VIDEO_EDIT_TOOL_COMMANDS
 export function isVideoEditToolCommand(id: VideoEditCommandId): id is VideoEditToolCommandId { return Object.hasOwn(VIDEO_EDIT_TOOL_COMMANDS, id) }
 export type VideoEditShortcutOverrides = Partial<Record<VideoEditCommandId, VideoEditShortcut | null>>

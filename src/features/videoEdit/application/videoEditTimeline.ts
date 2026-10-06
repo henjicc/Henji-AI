@@ -101,19 +101,26 @@ export function finishVideoEditTimelineRearrange(handle: VideoEditTimelineDrag, 
   drags.delete(handle)
   executeVideoEditTimelineEdit(handle.projectId, handle.sequenceId, { ...rearrange, kind: 'rearrange', clipIds: state.clipIds })
 }
-/** PR 修剪工具（波纹、滚动、外滑、内滑）的拖动：与片段拖动同一把手，预览与松手共用同一份编辑，松手只记一步撤销。 */
-export type VideoEditTimelineTrimDrag = Omit<Extract<VideoEditTimelineEdit, { kind: 'trim' }>, 'kind' | 'clipIds' | 'linked'>
+/**
+ * PR 修剪工具（波纹、滚动、外滑、内滑）与比率拉伸（R，4.13）的拖动：与片段拖动同一把手，预览与松手共用同一份编辑，
+ * 松手只记一步撤销。比率拉伸改的是速度（源内容不变），走时间线编辑的 `stretch`。
+ */
+export type VideoEditTimelineTrimDrag = Omit<Extract<VideoEditTimelineEdit, { kind: 'trim' }>, 'kind' | 'clipIds' | 'linked' | 'mode'> & { mode: Extract<VideoEditTimelineEdit, { kind: 'trim' }>['mode'] | 'rate_stretch' }
+function trimEdit(trim: VideoEditTimelineTrimDrag, clipIds: string[]): VideoEditTimelineEdit {
+  if (trim.mode === 'rate_stretch') { if (!trim.edge) throw new Error('比率拉伸需要抓住片段的一端。'); return { kind: 'stretch', clipIds, linked: false, edge: trim.edge, delta: trim.delta } }
+  return { ...trim, mode: trim.mode, kind: 'trim', clipIds, linked: false }
+}
 export function previewVideoEditTimelineTrim(handle: VideoEditTimelineDrag, trim: VideoEditTimelineTrimDrag): VideoEditSequence {
   const state = requireDrag(handle)
   // 选区已经按链接选择与 Alt 展开好，修剪恰好作用于它。
-  return applyVideoEditTimelineEdit(state.baseline, handle.sequenceId, { ...trim, kind: 'trim', clipIds: state.clipIds, linked: false }, readVideoEditCodeMetadata(state.owner, state.baseline))
+  return applyVideoEditTimelineEdit(state.baseline, handle.sequenceId, trimEdit(trim, state.clipIds), readVideoEditCodeMetadata(state.owner, state.baseline))
 }
 export function finishVideoEditTimelineTrim(handle: VideoEditTimelineDrag, trim: VideoEditTimelineTrimDrag): void {
   const state = requireDrag(handle)
   const sequence = previewVideoEditTimelineTrim(handle, trim)
   videoEditDocumentSchema.parse({ ...state.baseline, sequences: state.baseline.sequences.map(value => value.id === handle.sequenceId ? sequence : value) })
   drags.delete(handle)
-  executeVideoEditTimelineEdit(handle.projectId, handle.sequenceId, { ...trim, kind: 'trim', clipIds: state.clipIds, linked: false })
+  executeVideoEditTimelineEdit(handle.projectId, handle.sequenceId, trimEdit(trim, state.clipIds))
 }
 /**
  * PR 文字工具（T）：在视频轨道空白处单击，就地放一段文字片段（默认 3 秒，碰到后面的片段就缩短到空白为止），

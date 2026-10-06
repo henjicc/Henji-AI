@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { ArrowLeft, ArrowRight, BetweenVerticalStart, ChevronsLeftRight, Columns2, Hand, MousePointer2, MoveHorizontal, Scissors, Type, ZoomIn, type LucideIcon } from 'lucide-react'
+import { ArrowLeft, ArrowRight, BetweenVerticalStart, ChevronsLeftRight, Columns2, Gauge, Hand, MousePointer2, MoveHorizontal, Scissors, Type, ZoomIn, type LucideIcon } from 'lucide-react'
 import ContextMenu from '@/components/ContextMenu'
 import { UiIconButton } from '@/components/ui'
 import { useContextMenu } from '@/hooks/useContextMenu'
@@ -8,12 +8,12 @@ import type { timelineCommandPresentation } from './timelineCommandPresentation'
 
 type Presentation = ReturnType<typeof timelineCommandPresentation>
 const TOOL_ICONS: Record<VideoEditToolCommandId, LucideIcon> = {
-  select_tool: MousePointer2, track_tool: ArrowRight, track_backward_tool: ArrowLeft, ripple_tool: BetweenVerticalStart, roll_tool: Columns2,
+  select_tool: MousePointer2, track_tool: ArrowRight, track_backward_tool: ArrowLeft, ripple_tool: BetweenVerticalStart, roll_tool: Columns2, rate_stretch_tool: Gauge,
   razor_tool: Scissors, slip_tool: ChevronsLeftRight, slide_tool: MoveHorizontal, hand_tool: Hand, zoom_tool: ZoomIn, type_tool: Type,
 }
 /** 与 PR 工具面板相同的分组：同组工具共用一个按钮，按住或右键选组内其他工具，快捷键直接切换。 */
 const TOOL_GROUPS: readonly (readonly VideoEditToolCommandId[])[] = [
-  ['select_tool'], ['track_tool', 'track_backward_tool'], ['ripple_tool', 'roll_tool'], ['razor_tool'], ['slip_tool', 'slide_tool'], ['hand_tool', 'zoom_tool'], ['type_tool'],
+  ['select_tool'], ['track_tool', 'track_backward_tool'], ['ripple_tool', 'roll_tool', 'rate_stretch_tool'], ['razor_tool'], ['slip_tool', 'slide_tool'], ['hand_tool', 'zoom_tool'], ['type_tool'],
 ]
 /** 按住多久弹出同组工具（PR 按住工具按钮弹出）。 */
 const HOLD_MS = 350

@@ -30,6 +30,8 @@ import { useTimelinePointer } from './useTimelinePointer'
 import { clearTimelineSnap, snapTimelineFrame, timelineSnapPoints, TIMELINE_SNAP_PIXELS, useTimelineSnapIndicator } from './timelineSnap'
 import { VideoEditTimelineInOut } from './VideoEditTimelineInOut'
 import { useTimelineMenu } from './useTimelineMenu'
+import { VideoEditSpeedDialog } from '../panels/VideoEditSpeedDialog'
+import { closeVideoEditSpeedDialog, useVideoEditSpeedDialogRequest } from '../application/videoEditSpeedDialog'
 import { useVideoEditClipSource } from '../panels/useVideoEditClipSource'
 import { elementOfEventTarget } from '@/utils/crossRealmDom'
 import { TIMELINE_DEFAULT_SPLIT, TIMELINE_HEADER_WIDTH, TIMELINE_RULER_HEIGHT, TIMELINE_TRACK_SECTION_GAP, timelineLayout, timelineNewTrackZone, timelineRegionAt, timelineRulerScale, timelineTimecode, timelineTrackAt, timelineVisibleClips, timelineWheelAction, type TimelineRegion, type TimelineRegionKind, type TimelineViewport } from './timelineGeometry'
@@ -100,6 +102,7 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
   // 吸附提示线（PR）：拖动吸上的那一帧在轨道上画一条竖线，各种拖动共用 timelineSnap 的同一份状态
   const snapFrame = useTimelineSnapIndicator(sequence.id)
   const [audioChannels, setAudioChannels] = useState<VideoEditAudioChannelsTarget | null>(null)
+  const speedDialog = useVideoEditSpeedDialogRequest(instance.document.id)
   const clipSource = useVideoEditClipSource(onError)
   // 原地生成（4.12）：右键菜单项、生成面板与占位片段都在独立模块，这里只接线
   const inPlace = useVideoEditInPlaceMenu(instance, sequence, onError)
@@ -494,6 +497,7 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
     {trackMenu.elements}
     {clipSource.dialog}
     {inPlace.dialog}
+    {speedDialog && <VideoEditSpeedDialog request={speedDialog} onClose={closeVideoEditSpeedDialog} />}
     {audioChannels && <VideoEditAudioChannelsDialog projectId={projectId} target={audioChannels} onClose={() => setAudioChannels(null)} />}
     {pendingSequence && <VideoEditSequenceDialog title="按素材新建序列" requireFrameRate initial={pendingSequence.settings} bins={pendingSequence.owner.document.bins} onClose={() => setPendingSequence(null)} onSubmit={async settings => {
       const { owner, input, placement: at, sequenceId } = pendingSequence
