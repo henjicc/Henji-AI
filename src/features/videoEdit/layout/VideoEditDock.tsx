@@ -10,6 +10,7 @@ import { VideoEditProjectPanel } from '../panels/VideoEditProjectPanel'
 import { VideoEditEffectsPanel } from '../panels/VideoEditEffectsPanel'
 import { VideoEditSourcePanel } from '../panels/VideoEditSourcePanel'
 import { VideoEditTimedContentPanel } from '../panels/VideoEditTimedContentPanel'
+import { VideoEditEffectsLibraryPanel } from '../panels/VideoEditEffectsLibraryPanel'
 import { readVideoEditSource, subscribeVideoEditSource } from '../application/videoEditSource'
 import { DockviewHost } from '@/components/DockviewHost'
 import { dockviewHostTheme } from '@/components/dockviewHostTheme'
@@ -30,9 +31,10 @@ function EffectsBody({ visible }: { visible: boolean }): React.ReactElement { re
 function ProgramBody({ visible }: { visible: boolean }): React.ReactElement { return <div className="flex h-full min-h-0 flex-col" data-video-edit-panel="program"><VideoEditPreview {...useDock()} visible={visible} /></div> }
 function TimelineBody({ visible }: { visible: boolean }): React.ReactElement { return <div className="flex h-full min-h-0 flex-col" data-video-edit-panel="timeline"><VideoEditTimeline {...useDock()} visible={visible} /></div> }
 function ContentBody({ visible }: { visible: boolean }): React.ReactElement { return <div className="h-full min-h-0" data-video-edit-panel="content"><VideoEditTimedContentPanel {...useDock()} visible={visible} /></div> }
+function EffectsLibraryBody({ visible }: { visible: boolean }): React.ReactElement { return <div className="h-full min-h-0" data-video-edit-panel="effects_library"><VideoEditEffectsLibraryPanel {...useDock()} visible={visible} /></div> }
 function SourceBody({ visible }: { visible: boolean }): React.ReactElement { return <div className="h-full min-h-0" data-video-edit-panel="source"><VideoEditSourcePanel {...useDock()} visible={visible} /></div> }
 const VIDEO_EDIT_DOCK_THEME = dockviewHostTheme('henji-cameraStage-dock henji-videoEdit-dock')
-const BODIES: Record<VideoEditPanelId, PanelBody> = { project: ProjectBody, effects: EffectsBody, program: ProgramBody, timeline: TimelineBody, content: ContentBody, source: SourceBody }
+const BODIES: Record<VideoEditPanelId, PanelBody> = { project: ProjectBody, effects: EffectsBody, program: ProgramBody, timeline: TimelineBody, content: ContentBody, source: SourceBody, effects_library: EffectsLibraryBody }
 function dockPanel(id: VideoEditPanelId, Body: PanelBody): (props: IDockviewPanelProps) => React.ReactElement {
   return function DockPanel({ api }: IDockviewPanelProps): React.ReactElement {
     const [visible, setVisible] = useState(api.isVisible)

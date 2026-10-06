@@ -1,6 +1,7 @@
 import {
   AudioLines,
   AudioWaveform,
+  Blend,
   CheckSquare,
   Clapperboard,
   Code2,
@@ -89,6 +90,8 @@ export const ICON_MEDIA_AUDIO: LucideIcon = Music
 export const ICON_VIDEO_EDIT_GRAPHIC: LucideIcon = Shapes
 /** 处理下方画面范围的调整图层。 */
 export const ICON_VIDEO_EDIT_ADJUSTMENT: LucideIcon = SlidersHorizontal
+/** 剪辑过渡（时间线上的过渡块、效果面板的过渡预设）。 */
+export const ICON_VIDEO_EDIT_TRANSITION: LucideIcon = Blend
 
 /* 其他跨界面概念 ----------------------------------------------------------- */
 

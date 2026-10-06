@@ -11,6 +11,8 @@ export const VIDEO_EDIT_PANELS = [
   { id: 'timeline', title: '时间线' },
   { id: 'source', title: '源监视器' },
   { id: 'content', title: '字幕与标记' },
+  // PR“效果”面板：视频／音频过渡与效果的预设库，拖到时间线编辑点或片段上（4.3）。
+  { id: 'effects_library', title: '效果' },
 ] as const
 export type VideoEditPanelId = typeof VIDEO_EDIT_PANELS[number]['id']
 
@@ -26,7 +28,7 @@ export function defaultVideoEditLayout(): SerializedDockview {
           { type: 'leaf', size: 540, data: { id: 'program-group', views: ['program'], activeView: 'program' } },
           { type: 'leaf', size: 320, data: { id: 'timeline-group', views: ['timeline'], activeView: 'timeline' } },
         ] },
-        { type: 'leaf', size: 280, data: { id: 'effects-group', views: ['effects'], activeView: 'effects' } },
+        { type: 'leaf', size: 280, data: { id: 'effects-group', views: ['effects', 'effects_library'], activeView: 'effects' } },
       ] },
     }, panels, activeGroup: 'program-group',
   }

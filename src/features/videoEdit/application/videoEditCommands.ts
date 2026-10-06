@@ -16,6 +16,8 @@ import { VIDEO_EDIT_TRACK_HEIGHT_DEFAULT, VIDEO_EDIT_TRACK_HEIGHT_MAX, VIDEO_EDI
 import { videoEditMoveTrackMap } from '@/core/videoEdit/timelineEdits'
 import { createVideoEditMarker } from './videoEditTimedContent'
 import { createVideoEditBin } from './videoEditProjectItems'
+import { applyVideoEditDefaultTransitions, selectVideoEditTransition, selectedVideoEditTransitionId, videoEditDefaultTransitionTargets, type VideoEditDefaultTransitionRequest } from './videoEditTransitions'
+import { deleteVideoEditTransition } from './videoEditCompositing'
 
 /** Premiere 轨道高度键：每次 8px；展开所有轨道到 96px，最小化到最小高度。 */
 const TRACK_HEIGHT_STEP = 8
@@ -27,6 +29,7 @@ const trackResizes = {
 const STEP_DISTANCE = { step_back: -1, step_forward: 1, step_back_five: -5, step_forward_five: 5 } as const
 const NUDGES = { nudge_left: [-1, 0], nudge_right: [1, 0], nudge_left_five: [-5, 0], nudge_right_five: [5, 0], nudge_up: [0, 1], nudge_down: [0, -1] } as const
 const FOCUS_PANELS = { focus_project: 'project', focus_source: 'source', focus_timeline: 'timeline', focus_program: 'program', focus_effects: 'effects' } as const
+const TRANSITION_COMMANDS: Partial<Record<VideoEditCommandId, VideoEditDefaultTransitionRequest>> = { apply_video_transition: { mode: 'playhead', medium: 'video' }, apply_audio_transition: { mode: 'playhead', medium: 'audio' }, apply_default_transitions: { mode: 'selection' } }
 const NAVIGATIONS = new Set<VideoEditCommandId>(['go_prev_edit', 'go_next_edit', 'go_prev_edit_any', 'go_next_edit_any', 'go_start', 'go_end', 'go_in', 'go_out', 'next_marker', 'prev_marker'])
 /** 素材面板自己的视图状态，只在素材面板里响应。 */
 const PROJECT_PANEL_COMMANDS = new Set<VideoEditCommandId>(['project_list_view', 'project_icon_view', 'project_toggle_view'])
@@ -188,6 +191,15 @@ export function videoEditCommandState(context: VideoEditCommandContext, id: Vide
       const item = owner.document.items.find(item => item.id === source?.itemId); const media = owner.document.media.find(media => media.id === item?.mediaId)
       return { enabled: Boolean(media && media.kind !== 'image' && (source?.status === 'ready' || id === 'play_stop' && source?.status === 'loading')), reason: '请先打开可以播放的源素材。' }
     }
+    const transitionRequest = TRANSITION_COMMANDS[id]
+    if (transitionRequest) {
+      const pairs = videoEditDefaultTransitionTargets(owner, transitionRequest, context.clipIds, context.frame)
+      if (!pairs.length) return { enabled: false, reason: transitionRequest.mode === 'selection' ? '所选片段两端没有相接的片段。' : '目标轨道上没有首尾相接的片段。' }
+      assertVideoEditClipsEditable(sequence, pairs.flatMap(pair => [pair.leftClipId, pair.rightClipId]))
+      return { enabled: true }
+    }
+    // 选中时间线上的过渡块（没有选中片段）时，Delete／Backspace 删除这个过渡（PR）。
+    if ((id === 'delete' || id === 'ripple_delete') && !context.clipIds.length && selectedVideoEditTransitionId(owner)) return { enabled: true }
     if (['split', 'delete', 'ripple_delete', 'link', 'unlink', 'group', 'ungroup', 'separate_audio'].includes(id)) {
       const clips = selection(context)
       if (!clips.length) return { enabled: false, reason: '请先选择片段。' }
@@ -223,6 +235,10 @@ export async function executeVideoEditCommand(context: VideoEditCommandContext, 
   const { owner, source } = stateOf(context)
   if (id === 'new_project') { await createVideoEditProject(); return }
   const projectId = owner!.document.id; const sequenceId = context.sequenceId!; const sequence = getActiveVideoEditSequence(owner!)
+  const transitionRequest = TRANSITION_COMMANDS[id]
+  if (transitionRequest) { await applyVideoEditDefaultTransitions(projectId, sequenceId, videoEditDefaultTransitionTargets(owner!, transitionRequest, context.clipIds, context.frame)); return }
+  const transitionId = (id === 'delete' || id === 'ripple_delete') && !context.clipIds.length ? selectedVideoEditTransitionId(owner!) : undefined
+  if (transitionId) { await deleteVideoEditTransition(projectId, sequenceId, transitionId); selectVideoEditTransition(projectId, null); return }
   const intent = timelineIntent(context, id)
   if (intent) { executeVideoEditTimelineEdit(projectId, sequenceId, intent); if (intent.kind === 'place') focusVideoEditPanel(projectId, 'timeline'); return }
   switch (id) {

@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { parseVideoEditShortcutOverrides, sanitizeVideoEditShortcutOverrides, type VideoEditShortcutOverrides } from '@/core/videoEdit/commands';
 import { sanitizeVideoEditMonitorButtons, withVideoEditMonitorButtons, type VideoEditMonitorButtonLayouts, type VideoEditMonitorKind } from '@/core/videoEdit/monitorButtons';
+import { sanitizeVideoEditDefaultTransitions, type VideoEditDefaultTransitionPreferences, type VideoEditTransitionKind, type VideoEditTransitionMedium } from '@/core/videoEdit/transitions';
 import { sanitizeVideoEditTrackHeaderButtons, withVideoEditTrackHeaderButtons, type VideoEditTrackHeaderButtonLayouts, type VideoEditTrackHeaderKind } from '@/core/videoEdit/trackHeaderButtons';
 
 /** 下载预设路径的条数上限：菜单里超过这个数就要滚动，反而比「另存为」更慢 */
@@ -101,6 +102,8 @@ interface SettingsState {
   videoEditMonitorButtons: VideoEditMonitorButtonLayouts;
   /** 剪辑视频轨／音频轨轨道头按钮（按钮编辑器）；只存改过的那一类。 */
   videoEditTrackHeaderButtons: VideoEditTrackHeaderButtonLayouts;
+  /** 剪辑默认过渡（效果面板“设为默认过渡”，Ctrl+D／Ctrl+Shift+D／Shift+D 应用它）；省略为交叉溶解与恒定功率。 */
+  videoEditDefaultTransitions: VideoEditDefaultTransitionPreferences;
   /** 剪辑：播放头移动时自动选中该帧最上面的可见片段（PR“选择跟随播放指示器”，默认关）。 */
   videoEditSelectionFollowsPlayhead: boolean;
   setProviderApiKey: (providerId: string, key: string) => void;
@@ -144,6 +147,8 @@ interface SettingsState {
   setVideoEditMonitorButtons: (kind: VideoEditMonitorKind, ids: readonly string[] | null) => void;
   /** `null` = 重置为默认按钮。 */
   setVideoEditTrackHeaderButtons: (kind: VideoEditTrackHeaderKind, ids: readonly string[] | null) => void;
+  /** `null` = 恢复 PR 默认。 */
+  setVideoEditDefaultTransition: (medium: VideoEditTransitionMedium, kind: VideoEditTransitionKind | null) => void;
   setVideoEditSelectionFollowsPlayhead: (enabled: boolean) => void;
 }
 
@@ -239,6 +244,7 @@ export const useSettingsStore = create<SettingsState>()(
       videoEditShortcuts: {},
       videoEditMonitorButtons: {},
       videoEditTrackHeaderButtons: {},
+      videoEditDefaultTransitions: {},
       videoEditSelectionFollowsPlayhead: false,
       setProviderApiKey: (providerId, key) => {
         const normalizedKey = normalizeApiKey(key);
@@ -325,6 +331,7 @@ export const useSettingsStore = create<SettingsState>()(
       setVideoEditShortcuts: (shortcuts) => set({ videoEditShortcuts: parseVideoEditShortcutOverrides(shortcuts) }),
       setVideoEditMonitorButtons: (kind, ids) => set((state) => ({ videoEditMonitorButtons: withVideoEditMonitorButtons(state.videoEditMonitorButtons, kind, ids) })),
       setVideoEditTrackHeaderButtons: (kind, ids) => set((state) => ({ videoEditTrackHeaderButtons: withVideoEditTrackHeaderButtons(state.videoEditTrackHeaderButtons, kind, ids) })),
+      setVideoEditDefaultTransition: (medium, kind) => set((state) => { const next = { ...state.videoEditDefaultTransitions }; if (kind) next[medium] = kind; else delete next[medium]; return { videoEditDefaultTransitions: sanitizeVideoEditDefaultTransitions(next) }; }),
       setVideoEditSelectionFollowsPlayhead: (videoEditSelectionFollowsPlayhead) => set({ videoEditSelectionFollowsPlayhead }),
     }),
     {
@@ -338,7 +345,7 @@ export const useSettingsStore = create<SettingsState>()(
       // 剪辑快捷键：默认键位随版本对齐 PR 时，旧改键里不认识或与新默认冲突的部分在恢复时让出，避免读设置失败。
       merge: (persistedState, currentState) => {
         const persisted = (persistedState ?? {}) as Partial<SettingsState>;
-        return { ...currentState, ...persisted, videoEditShortcuts: sanitizeVideoEditShortcutOverrides(persisted.videoEditShortcuts), videoEditMonitorButtons: sanitizeVideoEditMonitorButtons(persisted.videoEditMonitorButtons), videoEditTrackHeaderButtons: sanitizeVideoEditTrackHeaderButtons(persisted.videoEditTrackHeaderButtons) };
+        return { ...currentState, ...persisted, videoEditShortcuts: sanitizeVideoEditShortcutOverrides(persisted.videoEditShortcuts), videoEditMonitorButtons: sanitizeVideoEditMonitorButtons(persisted.videoEditMonitorButtons), videoEditTrackHeaderButtons: sanitizeVideoEditTrackHeaderButtons(persisted.videoEditTrackHeaderButtons), videoEditDefaultTransitions: sanitizeVideoEditDefaultTransitions(persisted.videoEditDefaultTransitions) };
       },
       partialize: (state) => {
         const { logCaptureMode: _logCaptureMode, ...persisted } = state;

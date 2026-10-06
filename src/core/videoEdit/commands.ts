@@ -59,6 +59,10 @@ export const VIDEO_EDIT_COMMANDS = [
   command('ripple_delete', '波纹删除', editScopes, key('Delete', false, true), false, [key('Backspace', false, false, true)]),
   command('lift', '提升', editScopes, key('Semicolon')),
   command('extract', '提取', editScopes, key('Quote')),
+  // 过渡（PR 序列菜单）：Ctrl+D 在目标轨道离播放头最近的编辑点应用默认视频过渡，Ctrl+Shift+D 应用默认音频过渡，Shift+D 应用到所选片段两端。
+  command('apply_video_transition', '应用视频过渡', editScopes, key('KeyD', true)),
+  command('apply_audio_transition', '应用音频过渡', editScopes, key('KeyD', true, true)),
+  command('apply_default_transitions', '将默认过渡应用到选择项', editScopes, key('KeyD', false, true)),
   command('ripple_trim_prev', '波纹修剪上一个编辑点到播放头', editScopes, key('KeyQ')),
   command('ripple_trim_next', '波纹修剪下一个编辑点到播放头', editScopes, key('KeyW')),
   command('nudge_left', '片段左移一帧', ['timeline'], key('ArrowLeft', false, false, true), true),

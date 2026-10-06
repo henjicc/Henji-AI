@@ -8,6 +8,10 @@ import { copyVideoEditTimeline, updateVideoEditTrack } from './videoEditTimeline
 import { registerVideoEditTimelineViewport } from './videoEditTimelineViewport'
 import { registerVideoEditSourcePresenter, readVideoEditSource, updateVideoEditSource, observeVideoEditSource } from './videoEditSource'
 import { createLegacyTrackVideoEditProject } from './videoEditDocumentTestKit'
+import { selectVideoEditTransition } from './videoEditTransitions'
+
+// 过渡命令的画面试渲染需要 GPU Worker；命令层只验证编辑与撤销，试渲染由 videoEditCodeService.test 覆盖。
+vi.mock('./videoEditCodeTrial', async () => ({ ...await vi.importActual<typeof import('./videoEditCodeTrial')>('./videoEditCodeTrial'), trialVideoEditCodeDocument: async () => undefined }))
 
 beforeEach(() => {
   installHarnessNativeStorage()
@@ -206,4 +210,28 @@ it('提升、提取与 Q/W 波纹修剪各是一步编辑；Alt 方向键微移�
   await run('cut'); expect(getActiveVideoEditSequence(owner).clips.some(clip => clip.id === left.id)).toBe(false)
   setVideoEditView(id, { frame: 0 }); await run('paste'); expect(spans()[0]).toEqual([0, 40])
   expect([first, second]).toHaveLength(2)
+})
+it('Ctrl+D 在离播放头最近的编辑点应用默认视频过渡，Shift+D 应用到所选片段两端，选中过渡后 Delete 删除，各是一步撤销（4.3）', async () => {
+  const { owner, id, first, second } = await fixture()
+  editVideoProject(id, document => { document.sequences[0].clips[1].start = 90; return document })
+  setVideoEditView(id, { frame: 10 })
+  const history = owner.past.length
+  const context = captureVideoEditCommandContext(id, 'timeline')
+  expect(videoEditCommandState(context, 'apply_audio_transition')).toMatchObject({ enabled: false, reason: expect.stringContaining('首尾相接') })
+  await executeVideoEditCommand(context, 'apply_video_transition')
+  const [applied] = getActiveVideoEditSequence(owner).transitions!
+  expect(applied).toMatchObject({ kind: 'cross_dissolve', leftClipId: first, rightClipId: second, durationFrames: 30 })
+  expect(applied).not.toHaveProperty('alignment')
+  expect(owner.past.length).toBe(history + 1)
+  selectVideoEditTransition(id, applied.id)
+  expect(owner.selectedClipIds).toEqual([])
+  await executeVideoEditCommand(captureVideoEditCommandContext(id, 'timeline'), 'delete')
+  expect(getActiveVideoEditSequence(owner).transitions).toEqual([])
+  expect(getActiveVideoEditSequence(owner).clips).toHaveLength(2)
+  expect(owner.past.length).toBe(history + 2)
+  setVideoEditTimelineView(id, { selectedClipIds: [second] }, second)
+  await executeVideoEditCommand(captureVideoEditCommandContext(id, 'timeline'), 'apply_default_transitions')
+  expect(getActiveVideoEditSequence(owner).transitions).toEqual([expect.objectContaining({ leftClipId: first, rightClipId: second, durationFrames: 30 })])
+  undoVideoEdit(id)
+  expect(getActiveVideoEditSequence(owner).transitions).toEqual([])
 })

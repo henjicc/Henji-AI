@@ -13,6 +13,7 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { videoEditShortcutOverridesSchema, type VideoEditShortcutOverrides } from '@/core/videoEdit/commands'
 import { videoEditMonitorButtonLayoutsSchema } from '@/core/videoEdit/monitorButtons'
 import { videoEditTrackHeaderButtonLayoutsSchema } from '@/core/videoEdit/trackHeaderButtons'
+import { videoEditDefaultTransitionPreferencesSchema } from '@/core/videoEdit/transitions'
 import { z } from 'zod'
 
 import { hexSettingSchema, storageSetting, storeSetting } from './definitionFactories'
@@ -60,6 +61,17 @@ export const INTERFACE_APPLICATION_SETTING_DEFINITIONS: ApplicationSettingDefini
     const store = useSettingsStore.getState()
     store.setVideoEditTrackHeaderButtons('video', layouts.video ?? null)
     store.setVideoEditTrackHeaderButtons('audio', layouts.audio ?? null)
+  }),
+  storeSetting({
+    id: 'video_edit.default_transitions', title: '剪辑默认过渡', description: '应用默认过渡（Ctrl+D 视频、Ctrl+Shift+D 音频、Shift+D 所选片段）时用的过渡种类：video 可选 cross_dissolve（交叉溶解）、dip_to_black（黑场过渡）、dip_to_white（白场过渡），audio 可选 constant_power（恒定功率）、constant_gain（恒定增益）；省略某一侧即恢复 PR 默认（交叉溶解、恒定功率）。',
+    aliases: ['默认过渡', '默认转场', '设为默认过渡', 'default transition'], schema: videoEditDefaultTransitionPreferencesSchema, defaultValue: {},
+    target: { tab: 'workspace', sectionId: 'workspace-video-edit' }, requiresReload: false, requiresRestart: false, sensitive: false,
+  }, () => videoEditDefaultTransitionPreferencesSchema.parse(useSettingsStore.getState().videoEditDefaultTransitions),
+  (value) => {
+    const preferences = videoEditDefaultTransitionPreferencesSchema.parse(value)
+    const store = useSettingsStore.getState()
+    store.setVideoEditDefaultTransition('video', preferences.video ?? null)
+    store.setVideoEditDefaultTransition('audio', preferences.audio ?? null)
   }),
   storeSetting({
     id: 'video_edit.selection_follows_playhead', title: '剪辑播放头自动选中片段', description: '对应 PR 的“选择跟随播放指示器”：开启后播放或移动播放头时，自动选中当前帧最上面的可见片段（不进撤销历史），效果控件随之显示该片段。默认关闭。',
