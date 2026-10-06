@@ -312,6 +312,14 @@ Pi 在三维界面的基础工具由 `get_camera_stage_project` 换成 `observe_
 助手读写某份图片文档时先打开它的文档会话（必要时解包到工作副本），修改照常空闲写回文件。`create_document` 对图片文档仍如实拒绝
 （单文件包要从图片新建，经界面）。未做真实模型验收。
 
+2026-10-06 增量（3.4 画布接入文档底座）：画布存成 `.henji-canvas` 文档（独立在“画布/”或在项目里），`open_document` 对 `canvas`
+已可用（打开到画布工作区，登记了后台释放方式）；列出、新建、改名、移动、副本、移到回收站由通用文档能力承担。
+画布的 6 个项目管理能力 `list/open/create/close/rename/delete_canvas_project` 与工具箱的 `list_storyboard_projects`、
+`get_storyboard_project` 删除。`canvas.project` 的 id 即画布文档 ID，实体改为只读（`name` 只读，改名写 `documents.document.name`，
+改名会推进画布版本、读到旧名的基线随之过期），节点、连线、批事务、生成落图等内容能力与属性不变，`projectId` 字段收文档 ID；
+`retry_canvas_project_save` 权限改为 `canvas:write`。正式 Electron 验收 `canvas-documents` 与外部连接相关脚本已改走通用文档能力，
+未做真实模型验收。
+
 ## 二、已经通了的
 
 对照 [assistant-goal.md](assistant-goal.md) 的四条判据：
@@ -479,6 +487,7 @@ HTTP 与插件两类适配器仍然不做，理由不变。
 格式：`日期 · 提交 · 推翻了什么 → 换成了什么 · 为什么旧的不能留`
 
 - **2026-10-06 · 3.3 口播接入** · 推翻经 `audio_edit.project.name` 通用属性改口播工程名、口播工程存在 `audio_edit_projects` 表、主进程保存接口校验素材不可改与锁定 → 换成作品目录或项目里的口播文档（文档会话自动保存、导入即建草稿、离开询问），改名走 `documents.document.name`；素材不可改与锁定保护由口播实例的编辑入口保证，转写与重新定位的结果由实例接收后经会话保存（主进程不再写口播内容）。旧表已退役（迁移账本第 16 项），保留就是第二套文档存储。
+- **2026-10-06 · 3.4 画布接入** · 推翻画布工程存在 `storyboard_projects` / `canvas_projects` 表、经 `list/open/create/close/rename/delete_canvas_project` 与工具箱 `list/get_storyboard_project` 管理、经 `canvas.project.name` 改名 → 换成作品目录或项目里的画布文档（文档会话自动保存、草稿、离开询问），管理走通用文档能力，改名走 `documents.document.name`；撤销记录与视口改存程序目录会话状态，不进文档；多图层节点的内嵌图片文档写成画布所在容器 `.henji/` 里的包。旧表已退役（迁移账本第 17 项），测试专用原始 SQL 通道一并删除；保留就是第二套文档存储与绕过正式接口的写入口。
 - **2026-10-06 · 3.1 剪辑接入** · 推翻 2026-09-30 起剪辑工程的“用户另存为选位置的单个 `.henji-video` 文件、渲染层直接写文件”与经 `video_edit.project.name` 通用属性改工程名 → 换成项目文件夹里的剪辑文档（文档会话自动保存、草稿项目离开询问），改名走 `documents.document.name`。旧做法每个工具各写一套存储与离开流程、素材写死绝对路径，项目拷走就断（项目体系第二版）。
 - **2026-10-06 · 3.5 图片文档** · 推翻 `image_edit.document` 实体目录“列出程序目录 V3 文档仓库里的全部文档”→ 换成作品索引里的图片文档（.henjiimg）加已载入的实例。旧目录混着画布节点、剪辑画面的受管文档，没有名称与归属，直接列给助手编辑会改动别处引用的内容；图片文档的工作副本 ID 就是文档 ID，按文档找即可。工具箱图片编辑旧的“只在内存里记住上一张”与“打开 / 保存可编辑文件”对话框入口一并删除。
 - **2026-10-06 · 3.2 镜头参考接入** · 推翻 2026-10-03 起 `create_camera_stage_project` 等镜头参考项目管理能力（含新建后从持久存储回读默认摄像机的核实回执）→ 换成通用 `create_document` / `list_documents` / `open_document` / `trash_document` 与 `documents.document.name`；默认摄像机与首关键帧改为第一次打开空文档时补上并落盘。旧能力读写的是已删除的 `camera_stage_projects` 表（项目体系第二版：作品文件是唯一真相），保留就是第二套文档管理入口。
