@@ -311,7 +311,7 @@ function applyClipEdit(document: VideoEditDocument, sequenceId: string, edit: Ex
     const audio = clips.map(clip => { const next = { ...clip, id: pairs.get(clip.id)!.audioId, kind: 'audio' as const, sourceComponent: 'audio' as const, track: edit.audioTrack, linkId: pairs.get(clip.id)!.linkId }; delete next.effects; return next })
     assertNoOverlap(sequence.clips, audio)
     // The sound keeps the clip's channel mapping; the picture no longer plays sound.
-    const picture = (clip: VideoEditClip): VideoEditClip => { const next = { ...clip, sourceComponent: 'video' as const, linkId: pairs.get(clip.id)!.linkId }; delete next.audioMapping; return next }
+    const picture = (clip: VideoEditClip): VideoEditClip => { const next = { ...clip, sourceComponent: 'video' as const, linkId: pairs.get(clip.id)!.linkId }; delete next.audioMapping; delete next.audioRole; return next }
     return { ...sequence, clips: sequence.clips.flatMap(clip => selected.has(clip.id) ? [picture(clip), audio.find(value => value.id === pairs.get(clip.id)!.audioId)!] : [clip]) }
   }
   const key = edit.kind === 'link' || edit.kind === 'unlink' ? 'linkId' : 'groupId'

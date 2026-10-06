@@ -48,3 +48,12 @@ it('Ctrl 切换与 Shift 范围依据当前过滤排序，不混入隐藏素材�
   expect(selectVideoEditProjectItems(ids, ['hidden'], 'b', 'a', { toggle: true, range: true })).toEqual(['hidden', 'a', 'b'])
   expect(selectVideoEditProjectItems(ids, ['a', 'b'], 'a', null, { toggle: true, range: false })).toEqual(['b'])
 })
+
+it('子剪辑展示并排序源范围，持续时间不沿用整段素材', () => {
+  const document = project()
+  document.items.push({ id: 'shot', name: '镜头子剪辑', kind: 'video', mediaId: 'clip', sourceRange: { inUs: 1000000, outUs: 1600000 } })
+  expect(videoEditProjectColumns(document, { kind: 'item', value: document.items.at(-1)! }, 30)).toMatchObject({ mediaStart: '00:00:01:00', mediaEnd: '00:00:01:14', durationText: '00:00:00:15', duration: .6 })
+  const ids = (key: 'mediaStart' | 'mediaEnd') => videoEditProjectRows(document, '', '', { key, direction: 'desc' }, new Set()).map(row => row.entry.value.id)
+  expect(ids('mediaStart')[0]).toBe('shot')
+  expect(ids('mediaEnd').slice(0, 2)).toEqual(['first', 'shot'])
+})

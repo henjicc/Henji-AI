@@ -198,3 +198,12 @@ it('无效分量、无声音视频与不匹配公共工厂轨道不创建占位'
   document.media[0].hasAudio = true
   expect(makeVideoEditItemClip(document, 'item', sequence.id, { frame: 0, track: 0, sourceComponent: 'audio' })).toMatchObject({ kind: 'audio', track: 0, itemId: 'item' })
 })
+it('有声音角色的视频分离音频：角色及回避点留在声音，画面去掉声音角色且文档仍有效', () => {
+  const { document, sequence } = fixture()
+  sequence.clips[0].audioRole = 'music'
+  sequence.clips[0].curves = { volume: [{ time: 0, value: .5, interpolation: 'linear', source: 'ducking', duckingOrigin: { time: 0, value: .5 } }] }
+  const next = apply(document, { kind: 'separate_audio', clipIds: ['a'], audioTrack: 0 }).sequences[0]
+  expect(next.clips.find(clip => clip.id === 'a')?.audioRole).toBeUndefined()
+  const sound = next.clips.find(clip => clip.sourceComponent === 'audio')!
+  expect(sound.audioRole).toBe('music'); expect(sound.curves?.volume).toEqual(sequence.clips[0].curves.volume)
+})

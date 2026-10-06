@@ -66,6 +66,7 @@ schemas['video_edit.clip'].textStyle = videoEditTextStyleSchema.nullable()
 schemas['video_edit.clip'].graphic = videoEditClipSchema.shape.graphic.nullable()
 schemas['video_edit.clip'].adjustment = videoEditClipSchema.shape.adjustment.nullable()
 schemas['video_edit.item'].graphic = videoEditItemSchema.shape.graphic.nullable()
+schemas['video_edit.item'].sourceRange = videoEditItemSchema.shape.sourceRange.unwrap().nullable()
 // 颜色标签：读出 null 表示按类型默认，写 null 恢复默认（3.2）。
 for (const type of ['video_edit.item', 'video_edit.bin', 'video_edit.sequence'] as const) schemas[type].label = videoEditLabelSchema.nullable()
 schemas['video_edit.clip'].graphicObjectIds = z.array(z.string().min(1).max(100)).max(32)
@@ -98,6 +99,7 @@ schemas['video_edit.media'].frameRateMode = z.enum(['sampled-constant', 'variabl
 schemas['video_edit.media'].audioStreams = videoEditAudioStreamsSchema.nullable()
 schemas['video_edit.item'].audioChannels = videoEditAudioLayoutSchema.nullable()
 schemas['video_edit.clip'].audioMapping = videoEditAudioMappingSchema.nullable()
+schemas['video_edit.clip'].audioRole = videoEditClipSchema.shape.audioRole.unwrap().nullable()
 // 淡化手柄（4.3）：没有淡化时读出 0，写 0 去掉。
 schemas['video_edit.clip'].fadeInFrames = z.number().int().min(0).max(108_000)
 schemas['video_edit.clip'].fadeOutFrames = z.number().int().min(0).max(108_000)
@@ -118,11 +120,14 @@ Object.assign(labels, { lumetriLuts: '项目 LUT', graphicObjectIds: '图形对�
 Object.assign(labels, { alignment: '过渡对齐（center 中心切点、start 起点切点即整段在切点后、end 终点切点即整段在切点前、custom 自定义起点）', framesBeforeCut: '过渡在切点之前的帧数（对齐为 custom 时生效）', fadeInFrames: '淡入帧数（0 为不淡入；画面从透明渐显，声音按恒定功率渐强）', fadeOutFrames: '淡出帧数（0 为不淡出）' })
 Object.assign(labels, { group: '分组', description: '作用与适用场景', params: '参数（键、类型、范围、单位、默认值与取值含义）', mask: '作用区域', regionStatus: '作用区域分析状态' })
 Object.assign(labels, { speedPercent: '速度百分比', reverse: '倒放', preservePitch: '变速时保持音调' })
+labels.audioRole = '声音类型'
 Object.assign(labels, { takes: '可切回的镜头版本（替换镜头后记下的原素材，新的在前；用 restore_video_edit_clip_take 切回）' })
 /** 个别属性的说明比通用模板更具体（助手据此取值）。 */
 labels.textStyle = '文字样式'
 Object.assign(labels, { translation: '第二语言字幕', style: '字幕样式' })
 const descriptions: Record<string, string> = {
+  'video_edit.item.source_range': '子剪辑的原素材范围，inUs/outUs 是整数微秒、右端不含；null 恢复完整素材。新放入时间线及首次打开源预览使用此范围，不改变已经放置的片段。',
+  'video_edit.clip.audio_role': '声音片段用途：dialogue 对话、music 音乐、sound_effect 音效、ambience 环境；null 清除标注。可在同一通用事务批量设置，一步撤销。自动回避会压低指定音乐片段，在同时间的对话或音效有声时生效；不会自动识别声音类型。',
   'video_edit.caption.translation': '第二语言字幕；原文保持在 text，译文显示在原文下方，并进入字幕文件导出与烧录。空字符串清除；自动生成用 translate_video_edit_subtitles（可能计费，须审批）。',
   'video_edit.caption.style': '字幕整体样式：fontFamily（sans-serif/serif/monospace）、fontSize（1080p参考字号12–200）、outline 描边、background 底框、bottomMargin 底部安全区比例0.05–0.4。空字符串恢复默认样式。可从 video_edit.subtitle_preset.style 读取模板，在同一通用事务中批量应用，一步撤销。原文与译文合计最多三行。',
   'video_edit.clip.text_style': '文字片段样式；null 保留旧片段默认外观。对象含 fontFamily（系统字体名）、fontSize（序列像素，1–512）、color/strokeColor/shadowColor/backgroundColor（六位十六进制颜色）、align（left/center/right）、anchor（top 顶边，middle 首行中心）、strokeWidth（0–20 像素，0 无描边）、shadow、shadowBlur（0–50 像素）、background、boxWidth（序列宽度比例，0 为点文字，0–1 为固定宽度换行）。整体替换，先读后改。样式在运动缩放前生效，位置使用片段 x/y：序列画面归一化，0 表示序列中心，左上为 -.5/-.5；运动锚点 anchor_x/anchor_y 默认 .5/.5 时，anchor 为 top 时文字第一行顶边在此锚点，为 middle 时首行中心在此锚点，对齐决定文字向左/右展开；scale 与 rotation 复用运动属性。',
@@ -163,7 +168,7 @@ export const VIDEO_EDIT_FIELDS = Object.fromEntries(VIDEO_EDIT_TYPES.map(entityT
   const child = VIDEO_EDIT_COMPOSITE_TYPES.some(type => type === entityType)
   const curveKey = key.endsWith('.keyframes') ? key.split('.').at(-2)! : undefined
   const curveDataKey = entityType === 'video_edit.clip' ? 'curves' : 'frameCurves'
-  const curveDescription = '整体替换关键帧序列；[] 关闭动画。time 为片段内整数帧（0 为片段第一帧，最大 duration−1），不是秒或素材时间。value 与原参数单位、范围一致。interpolation 控制到下一点：linear 线性，hold 定格至下一点，ease 三次贝塞尔缓入缓出（固定对称缓动）。开关与选项只能 hold。同一参数按 time 升序且不重复。片段跟随时 x/y 是跟踪位置上的偏移，scale 是跟踪缩放的乘数。'
+  const curveDescription = '整体替换关键帧序列；[] 关闭动画。time 为片段内整数帧（0 为片段第一帧，最大 duration−1），不是秒或素材时间。value 与原参数单位、范围一致。interpolation 控制到下一点：linear 线性，hold 定格至下一点，ease 三次贝塞尔缓入缓出（固定对称缓动）。开关与选项只能 hold。同一参数按 time 升序且不重复。音量回避生成的点带 source 与 duckingOrigin 来源信息；回写未改的点保留原信息，手动新增点省略来源信息。修改生成点的时刻、值或插值后归用户所有，重新生成不会删除它。片段跟随时 x/y 是跟踪位置上的偏移，scale 是跟踪缩放的乘数。'
   const writable = !controlled && !(entityType === 'video_edit.track' && ['index', 'kind'].includes(key)) && !(child && ['kind', 'definitionId', 'clipId', 'sequenceId', 'leftClipId', 'rightClipId', 'regionStatus', 'status'].includes(key) && !(entityType === 'video_edit.transition' && key === 'kind')) && entityType !== 'video_edit.media' && entityType !== 'video_edit.code_version' && entityType !== 'video_edit.builtin_effect' && (entityType !== 'video_edit.code_material' || key === 'name') && (entityType !== 'video_edit.document' || ['selectedItemIds', 'selectedBinId', 'openSequenceIds', 'timelineView', 'programPlayback', 'playbackResolution'].includes(key)) && !(entityType === 'video_edit.item' && ['kind', 'mediaId', 'graphicKind', 'graphicWidth', 'graphicHeight'].includes(key)) && (entityType !== 'video_edit.source' || ['itemId', 'timeUs', 'playing', 'volume', 'inUs', 'outUs', 'playbackDirection'].includes(key))
   return {
     propertyId: id, descriptor: { id, entityType, version: 1, title: curveKey ? `${labels[curveKey] ?? curveKey}关键帧` : key === 'codeParameters' ? '代码实例参数' : labels[key] ?? key, description: curveKey ? curveDescription : descriptions[id] ?? (key === 'source' ? '受限作者源码；只经AST白名单检查、指定帧试渲染后进入剪辑，不执行JavaScript或宿主脚本。源码版本不可原位改写。' : key === 'codeParameters' ? '按固定源码版本的声明校验参数字典；修改只作用于此片段，不重编译源码，复用剪辑历史和自动保存。' : key === 'programPlayback' ? '节目播放控制命令；回读为当前实际位置，播放观察可随帧推进。执行确认表示会话接受命令，实际画面由节目监视器呈现。' : `${labels[key] ?? key}；时间线使用整数帧，源入点使用微秒，画面位置使用归一化坐标。`), value: { kind: 'json', schemaRef: videoEditSchemaRef('property', id + '.value') }, nullable: key === 'code' || schema.isNullable(), ...((entityType === 'video_edit.source' && ['timeUs', 'playing'].includes(key) || entityType === 'video_edit.document' && key === 'programPlayback') ? { verificationStrategy: 'execution' as const } : {}), dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], requiredPermissions: { read: ['video_edit:read'], write: writable ? ['video_edit:write'] : [] }, revisionScopes: ['video_edit'], schemaRef: videoEditSchemaRef('property', id), ...(!writable ? { readOnlyReason: entityType === 'video_edit.document' && key === 'name' ? VIDEO_EDIT_PROJECT_NAME_READ_ONLY : entityType === 'video_edit.builtin_effect' ? VIDEO_EDIT_BUILTIN_CATALOG_READ_ONLY : entityType === 'video_edit.tracker' && key === 'status' ? '由后台跟踪维护；新建或修改 prompts 自动开始，读 status 看进度。' : key === 'regionStatus' ? '由后台分析维护：写 mask 设置作用区域后自动开始分析，读这里看进度。' : '由剪辑会话、不可变源码或原素材维护。' } : {}) },
@@ -173,7 +178,7 @@ export const VIDEO_EDIT_FIELDS = Object.fromEntries(VIDEO_EDIT_TYPES.map(entityT
     ...((entityType === 'video_edit.clip' || entityType === 'video_edit.sequence' || child) && writable ? { cascadeEffects: [...(entityType === 'video_edit.clip' && ['duration', 'speedPercent'].includes(key) ? [VIDEO_EDIT_CLIP_KEYFRAME_TIME_CASCADE] : []), ...(entityType === 'video_edit.clip' && ['start', 'duration', 'sourceInUs', 'speedPercent', 'reverse'].includes(key) ? VIDEO_EDIT_CLIP_CONTENT_CASCADES : []), ...(entityType === 'video_edit.sequence' && key === 'frameRate' ? VIDEO_EDIT_TIME_CASCADES : []), ...VIDEO_EDIT_COMPOSITE_CASCADES] } : {}),
     ...(entityType === 'video_edit.source' && writable ? { cascadeEffects: [VIDEO_EDIT_SOURCE_PROGRAM_CASCADE] } : {}),
     ...(entityType === 'video_edit.document' && key === 'programPlayback' ? { cascadeEffects: [VIDEO_EDIT_PROGRAM_SOURCE_CASCADE] } : {}),
-    ...(writable ? { writer: { write: (draft: VideoEditFieldData, mutation: { value?: JsonValue }) => { const value = schema.parse(mutation.value) as JsonValue; if (curveKey) { const curves = draft[curveDataKey]; const next = { ...(curves && typeof curves === 'object' && !Array.isArray(curves) ? curves : {}), [curveKey]: value }; if (Array.isArray(value) && !value.length) delete next[curveKey]; draft[curveDataKey] = next } else if (codeKeys[key]) { if (!draft.code || typeof draft.code !== 'object' || Array.isArray(draft.code)) throw new Error('此片段没有代码实例。'); draft.code = { ...draft.code, [codeKeys[key]]: value } } else if ((['binId', 'parentId', 'linkId', 'groupId'].includes(key) || ['video_edit.marker', 'video_edit.caption'].includes(entityType) && key === 'clipId') && value === '' || key === 'sourceComponent' && value === 'all' || ['audioChannels', 'audioMapping', 'follow', 'textStyle'].includes(key) && value === null || ['fadeInFrames', 'fadeOutFrames'].includes(key) && value === 0) delete draft[key]; else draft[key] = value } } } : {}),
+    ...(writable ? { writer: { write: (draft: VideoEditFieldData, mutation: { value?: JsonValue }) => { const value = schema.parse(mutation.value) as JsonValue; if (curveKey) { const curves = draft[curveDataKey]; const next = { ...(curves && typeof curves === 'object' && !Array.isArray(curves) ? curves : {}), [curveKey]: value }; if (Array.isArray(value) && !value.length) delete next[curveKey]; draft[curveDataKey] = next } else if (codeKeys[key]) { if (!draft.code || typeof draft.code !== 'object' || Array.isArray(draft.code)) throw new Error('此片段没有代码实例。'); draft.code = { ...draft.code, [codeKeys[key]]: value } } else if ((['binId', 'parentId', 'linkId', 'groupId'].includes(key) || ['video_edit.marker', 'video_edit.caption'].includes(entityType) && key === 'clipId') && value === '' || key === 'sourceComponent' && value === 'all' || ['audioChannels', 'audioMapping', 'follow', 'textStyle', 'audioRole', 'sourceRange'].includes(key) && value === null || ['fadeInFrames', 'fadeOutFrames'].includes(key) && value === 0) delete draft[key]; else draft[key] = value } } } : {}),
   }
 })])) as Record<VideoEditEntityType, ApplicationFieldDefinition<VideoEditFieldData, VideoEditFieldData>[]>
 export function videoEditSchemaDocuments(entityType: VideoEditEntityType): Array<{ ref: ApplicationSchemaRef; value: JsonValue }> {
@@ -192,7 +197,7 @@ export function videoEditCollectionValues(entityType: VideoEditEntityType, prope
       const curveKey = key.split('.').at(-2)!
       const curves = data[store]
       data[store] = { ...(curves && typeof curves === 'object' && !Array.isArray(curves) ? curves : {}), [curveKey]: parsed }
-    } else if (!(entityType === 'video_edit.clip' && key === 'textStyle' && parsed === null)) data[key] = parsed
+    } else if (!((entityType === 'video_edit.clip' && ['textStyle', 'audioRole'].includes(key) || entityType === 'video_edit.item' && key === 'sourceRange') && parsed === null)) data[key] = parsed
   }
   return data
 }

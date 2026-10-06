@@ -173,7 +173,7 @@ export function videoEditCommandState(context: VideoEditCommandContext, id: Vide
     if (id === 'match_frame' || id === 'reverse_match_frame') { const reason = videoEditMatchFrameUnavailable(owner, id, context.clipIds, context.frame, context.scope); return { enabled: !reason, ...(reason ? { reason } : {}) } }
     if (id === 'toggle_snapping') return { enabled: true, checked: owner.snapping }
     if (id === 'toggle_linked_selection') return { enabled: true, checked: owner.linkedSelection !== false }
-    if (id === 'export') return { enabled: sequence.clips.length > 0 && !owner.busy, reason: '序列没有可导出的片段或正在导出。' }
+    if (id === 'export') return { enabled: sequence.clips.length > 0, reason: '序列没有可导出的片段。' }
     if (id in FOCUS_PANELS || id === 'maximize_panel' || id === 'deselect_all') return { enabled: true }
     if (PROJECT_PANEL_COMMANDS.has(id)) return { enabled: false, reason: '请在素材面板中使用。' }
     if (id === 'new_bin') return { enabled: owner.document.bins.length < 200, reason: '素材箱数量已达上限。' }

@@ -216,9 +216,10 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
   const detailOf = (entry: VideoEditProjectEntry): string => {
     if (entry.kind === 'bin') { const count = instance.document.items.filter(item => item.binId === entry.value.id).length + instance.document.bins.filter(bin => bin.parentId === entry.value.id).length; return count ? `${count} 项` : '空素材箱' }
     const itemMedia = entry.kind === 'item' ? media.get(entry.value.mediaId ?? '') : undefined
+    const itemDuration = entry.kind === 'item' && entry.value.sourceRange ? (entry.value.sourceRange.outUs - entry.value.sourceRange.inUs) / 1e6 : itemMedia?.durationSeconds
     const kind = entry.kind === 'sequence' ? 'sequence' : entry.value.kind
     const graphic = entry.kind === 'item' && kind === 'graphic' ? entry.value.graphic : undefined
-    return entry.kind === 'sequence' ? `${entry.value.width} × ${entry.value.height} · ${Number((entry.value.frameRate.numerator / entry.value.frameRate.denominator).toFixed(3))} fps` : itemMedia ? `${itemMedia.kind === 'audio' ? '音频' : `${itemMedia.width} × ${itemMedia.height}`}${itemMedia.durationSeconds ? ` · ${itemMedia.durationSeconds.toFixed(1)} 秒` : ''}${itemMedia.assetId ? ' · 来自资产库' : ''}` : graphic ? `可编辑图形 · ${graphic.width} × ${graphic.height}` : kind === 'adjustment' ? '调整图层 · 添加到现有序列上方画面轨道' : kind === 'code' ? '原生代码素材' : '文字'
+    return entry.kind === 'sequence' ? `${entry.value.width} × ${entry.value.height} · ${Number((entry.value.frameRate.numerator / entry.value.frameRate.denominator).toFixed(3))} fps` : itemMedia ? `${itemMedia.kind === 'audio' ? '音频' : `${itemMedia.width} × ${itemMedia.height}`}${itemDuration ? ` · ${itemDuration.toFixed(1)} 秒` : ''}${itemMedia.assetId ? ' · 来自资产库' : ''}` : graphic ? `可编辑图形 · ${graphic.width} × ${graphic.height}` : kind === 'adjustment' ? '调整图层 · 添加到现有序列上方画面轨道' : kind === 'code' ? '原生代码素材' : '文字'
   }
   /** 一项的选择、双击、右键与拖动（列表行与图标格共用）。素材箱双击进入，素材拖到素材箱上即移入。 */
   const entryHandlers = (entry: VideoEditProjectEntry, selected: boolean) => ({

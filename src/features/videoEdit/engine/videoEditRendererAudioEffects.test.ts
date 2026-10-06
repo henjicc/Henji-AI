@@ -5,6 +5,7 @@ import type { VideoEditEffect } from '@/core/videoEdit/compositing'
 import { videoEditAudioTransitionGains } from '@/core/videoEdit/transitions'
 import { VideoEditRenderer } from './videoEditRenderer'
 import { evaluateVideoEditKeyframes } from '@/core/videoEdit/keyframes'
+import { replaceVideoEditDuckingKeyframes, videoEditDuckingSettingsSchema } from '@/core/videoEdit/audioDucking'
 import type { VideoEditFrameBackend } from './videoEditFrameSource'
 import { createVideoEditNativeClipAudio, type VideoEditPcmSession } from './videoEditNativeAudio'
 
@@ -12,6 +13,17 @@ vi.mock('@/core/logging', () => ({ createLogger: () => ({ debug: vi.fn(), info: 
 beforeAll(() => { (globalThis as { WorkerGlobalScope?: unknown }).WorkerGlobalScope ??= class {} })
 
 const RATE = 48000
+it('生成回避进入真实混音函数，淡化逐样本平滑且预览块与导出帧块完全一致', async () => {
+  const composition = sound(); const clip = composition.clips[0]
+  clip.curves = { volume: replaceVideoEditDuckingKeyframes(clip, [{ startSeconds: 1.5, endSeconds: 2 }], composition.fps, videoEditDuckingSettingsSchema.parse({ reductionDb: 20, fadeSeconds: .5 })) }
+  const preview = await mix(composition, [.5, .5, .5, .5, .5, .5])
+  const exported = await mix(composition, Array.from({ length: 90 }, () => 1 / 30))
+  expect(exported).toEqual(preview)
+  for (const sample of [RATE * 1.25, RATE * 1.25 + 1, RATE * 1.75, RATE * 2.25 + 13]) {
+    const gain = evaluateVideoEditKeyframes(clip.curves.volume, sample / RATE * composition.fps - clip.start, clip.volume)
+    expect(preview[0][sample]).toBeCloseTo(original(0, sample) * gain, 7)
+  }
+})
 it('音量与内置增益关键帧按输出样本求值；预览块与导出帧块一致，静音基础值不会吞掉动画', async () => {
   const volume = [{ time: 0, value: 0, interpolation: 'linear' as const }, { time: 30, value: 1, interpolation: 'ease' as const }, { time: 60, value: .25, interpolation: 'hold' as const }]
   const composition = sound({ volume: 0, curves: { volume } })

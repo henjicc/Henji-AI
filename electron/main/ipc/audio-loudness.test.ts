@@ -2,11 +2,11 @@ import { EventEmitter } from 'node:events'
 import type { IpcMainInvokeEvent } from 'electron'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 type Handler = (raw: unknown, event: IpcMainInvokeEvent) => Promise<unknown>
-const mock = vi.hoisted(() => ({ handler: undefined as Handler | undefined, trusted: vi.fn(), init: vi.fn(), close: vi.fn(), append: vi.fn(), measure: vi.fn() }))
+const mock = vi.hoisted(() => ({ handler: undefined as Handler | undefined, trusted: vi.fn(), init: vi.fn(), close: vi.fn(), append: vi.fn(), measure: vi.fn(), activity: vi.fn() }))
 vi.mock('electron', () => ({ app: { once() {} } }))
 vi.mock('./application-control', () => ({ assertTrustedApplicationSender: mock.trusted }))
 vi.mock('./registry', () => ({ registerIpcHandler: (_channel: string, parse: (raw: unknown) => unknown, handler: Handler, guard: (event: IpcMainInvokeEvent) => void) => { mock.handler = async (raw, event) => { guard(event); return handler(parse(raw), event) } } }))
-vi.mock('../services/audio/loudness', () => ({ AudioLoudnessSession: class { initialize = mock.init; close = mock.close; append = mock.append; measure = mock.measure } }))
+vi.mock('../services/audio/loudness', () => ({ AudioLoudnessSession: class { initialize = mock.init; close = mock.close; append = mock.append; measure = mock.measure; detectActivity = mock.activity } }))
 vi.mock('../services/logging', () => ({ createMainLogger: () => ({ info() {}, warn() {}, error() {} }) }))
 import { registerAudioLoudnessHandlers } from './audio-loudness'
 const senders: EventEmitter[] = []
@@ -37,4 +37,13 @@ it('开始失败释放 ID，可以重新开始', async () => {
   const request = { action: 'start', sessionId: 'retry', sampleRate: 48000, channels: 2 }
   await expect(invoke(request, event)).rejects.toThrow('disk full'); expect(mock.close).toHaveBeenCalledOnce()
   await invoke(request, event)
+})
+it('活动检测仍归原窗口，敏感度严格验证并传到同一会话', async () => {
+  const event = sender(605); const invoke = mock.handler!
+  await invoke({ action: 'start', sessionId: 'vad', sampleRate: 48000, channels: 1 }, event)
+  mock.activity.mockResolvedValue([{ startSeconds: 1, endSeconds: 2 }])
+  await expect(invoke({ action: 'activity', sessionId: 'vad', sensitivity: 75 }, event)).resolves.toEqual([{ startSeconds: 1, endSeconds: 2 }])
+  expect(mock.activity).toHaveBeenCalledWith(75)
+  await expect(invoke({ action: 'activity', sessionId: 'vad', sensitivity: -1 }, event)).rejects.toThrow()
+  await expect(invoke({ action: 'activity', sessionId: 'vad', sensitivity: 50 }, sender(606))).rejects.toThrow('关闭')
 })

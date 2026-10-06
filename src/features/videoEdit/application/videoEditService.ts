@@ -717,6 +717,7 @@ export function videoEditBusyReason(id: string): string | null {
   const instance = instances.get(id)
   if (!instance) return null
   if (instance.busy) return '请等待导出完成或取消导出。'
+  if ([...activities.get(instance) ?? []].some(value => value.startsWith('export:'))) return '仍有待导出的项目，请等待完成或在导出列表取消。'
   if (activities.get(instance)?.size) return '请等待字幕处理完成或在字幕面板取消。'
   if (gestures.has(instance)) return '请先完成当前参数调整。'
   return null

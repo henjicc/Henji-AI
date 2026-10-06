@@ -4,6 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { loadFfmpegPath } from '../video/ffmpeg-loader'
 import { videoEditLoudnessSettingsSchema, type VideoEditLoudnessMeasurement, type VideoEditLoudnessSettings } from '../../../../src/core/videoEdit/loudness'
+import { invertVideoEditSilence, videoEditActivityThreshold, type VideoEditAudioActivity } from '../../../../src/core/videoEdit/audioDucking'
 
 const number = (text: string | undefined): number | null => text !== undefined && Number.isFinite(Number(text)) ? Number(text) : null
 /** FFmpeg's final summary is authoritative; silence/ungated audio has no integrated LUFS. */
@@ -18,14 +19,21 @@ export function parseLoudnessLog(text: string, durationSeconds: number, samplePe
 }
 
 /** All DSP is performed in a background FFmpeg process; memory and stderr are bounded. */
-export async function runLoudnessFfmpeg(args: string[], signal: AbortSignal, binary?: string): Promise<string> {
+export async function runLoudnessFfmpeg(args: string[], signal: AbortSignal, binary?: string, onLine?: (line: string) => void): Promise<string> {
   signal.throwIfAborted()
   const executable = binary ?? await loadFfmpegPath()
   signal.throwIfAborted()
   return new Promise((resolve, reject) => {
     const child = spawn(executable, ['-hide_banner', '-nostdin', '-nostats', ...args], { windowsHide: true, stdio: ['ignore', 'ignore', 'pipe'] })
     let tail = ''
-    child.stderr.on('data', chunk => { tail = (tail + String(chunk)).slice(-65536) })
+    let pending = ''; let lineFailure: unknown
+    child.stderr.on('data', chunk => {
+      tail = (tail + String(chunk)).slice(-65536)
+      if (!onLine || lineFailure) return
+      pending += String(chunk)
+      const lines = pending.split(/\r?\n/); pending = lines.pop()!.slice(-65536)
+      try { for (const line of lines) onLine(line) } catch (error) { lineFailure = error; child.kill() }
+    })
     const abort = (): void => { child.kill() }
     signal.addEventListener('abort', abort, { once: true })
     if (signal.aborted) abort()
@@ -33,8 +41,9 @@ export async function runLoudnessFfmpeg(args: string[], signal: AbortSignal, bin
     child.once('close', code => {
       signal.removeEventListener('abort', abort)
       if (signal.aborted) reject(signal.reason ?? new Error('响度处理已取消。'))
+      else if (lineFailure) reject(lineFailure)
       else if (code !== 0) reject(new Error('声音测量或标准化失败，请确认声音完整且磁盘空间充足。'))
-      else resolve(tail)
+      else { try { if (pending && onLine) onLine(pending); resolve(tail) } catch (error) { reject(error) } }
     })
   })
 }
@@ -88,6 +97,22 @@ export class AudioLoudnessSession {
   }
   async measure(): Promise<VideoEditLoudnessMeasurement> {
     return this.exclusive(async () => { this.sealed = true; return this.analyze(this.file('input'), true) })
+  }
+  async detectActivity(sensitivity: number): Promise<VideoEditAudioActivity[]> {
+    return this.exclusive(async () => {
+      const threshold = videoEditActivityThreshold(sensitivity); this.sealed = true
+      if (!this.frames) throw new Error('没有可分析的声音。')
+      const silence: VideoEditAudioActivity[] = []; let start: number | undefined
+      await runLoudnessFfmpeg([...this.input(this.file('input')), '-af', `asetpts=PTS-STARTPTS,silencedetect=noise=${threshold}dB:d=0.15`, '-f', 'null', '-'], this.controller.signal, this.binary, line => {
+        const began = /silence_start: ([\d.e+-]+)/.exec(line); const ended = /silence_end: ([\d.e+-]+)/.exec(line)
+        if (began) start = Math.max(0, Number(began[1]))
+        if (ended && start !== undefined) { silence.push({ startSeconds: start, endSeconds: Number(ended[1]) }); start = undefined }
+        if (silence.length > 12000) throw new Error('声音活动过于密集，请分段分析。')
+      })
+      const duration = this.frames / this.sampleRate
+      if (start !== undefined) silence.push({ startSeconds: start, endSeconds: duration })
+      return invertVideoEditSilence(silence, duration)
+    })
   }
   async normalize(settings: VideoEditLoudnessSettings): Promise<VideoEditLoudnessMeasurement> {
     return this.exclusive(async () => {

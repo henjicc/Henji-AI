@@ -65,7 +65,10 @@ export async function updateVideoEditSource(projectId: string, values: Partial<V
   externalSignal?.throwIfAborted()
   const current = session(projectId)
   const request = { itemId: current.state.itemId, timeUs: current.state.timeUs, playing: current.state.playing, volume: current.state.volume, inUs: current.state.inUs, outUs: current.state.outUs, playbackDirection: current.state.playbackDirection, ...values }
-  if (values.itemId !== undefined && values.itemId !== current.state.itemId) { request.timeUs = values.timeUs ?? 0; request.playing = values.playing ?? false; request.inUs = values.inUs ?? null; request.outUs = values.outUs ?? null; request.playbackDirection = values.playbackDirection ?? 1 }
+  if (values.itemId !== undefined && values.itemId !== current.state.itemId) {
+    const range = requireVideoEditInstance(projectId).document.items.find(item => item.id === values.itemId)?.sourceRange
+    request.timeUs = values.timeUs ?? range?.inUs ?? 0; request.playing = values.playing ?? false; request.inUs = values.inUs ?? range?.inUs ?? null; request.outUs = values.outUs ?? range?.outUs ?? null; request.playbackDirection = values.playbackDirection ?? 1
+  }
   validateRequest(projectId, request)
   const owner = requireVideoEditInstance(projectId)
   const inheritedPause = current.pendingProgramPause

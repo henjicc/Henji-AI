@@ -1,5 +1,6 @@
 import { fieldDescriptors, fieldReadValues, unrestrictedCollectionAvailability, type ApplicationEntityProvider, type ApplicationEntityRegistration, type ApplicationRef } from '@/core/application-control'
-import type { VideoEditDocument } from '@/core/videoEdit/document'
+import { videoEditClipMedia, type VideoEditDocument } from '@/core/videoEdit/document'
+import { videoEditClipSpeedData } from './videoEditClipSpeed'
 import { VIDEO_EDIT_MAX_EFFECTS } from '@/core/videoEdit/compositing'
 import { VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS, describeVideoEditBuiltinEffect, parseVideoEditBuiltinRefId, requireVideoEditBuiltinEffect, videoEditBuiltinRefId } from '@/core/videoEdit/builtinEffects'
 import { describeVideoEditTransitionKind, parseVideoEditTransitionRefId, videoEditTransitionClipIds, VIDEO_EDIT_TRANSITION_PRESETS, VIDEO_EDIT_TRANSITION_REF_PREFIX } from '@/core/videoEdit/transitions'
@@ -8,9 +9,9 @@ import { VIDEO_EDIT_BUILTIN_CATALOG_READ_ONLY, VIDEO_EDIT_FIELDS, VIDEO_EDIT_TYP
 import { readVideoEditSource } from './videoEditSource'
 import { getVideoEditPlaybackResolution } from './videoEditPlaybackResolution'
 import { VIDEO_EDIT_COMPOSITE_TYPES, videoEditCompositeItems, videoEditCompositeData, videoEditCompositeOwner, type VideoEditCompositeEntityType } from './videoEditCompositeEntities'
-import { videoEditClipSpeedData } from './videoEditClipSpeed'
 import { createVideoEditEffectPresetRegistration } from './videoEditEffectPresetReflection'
 import { createVideoEditSubtitlePresetRegistration } from './videoEditSubtitlePresetReflection'
+import { createVideoEditExportPresetRegistration } from './videoEditExportPresetReflection'
 
 export function splitVideoEditRef(ref: ApplicationRef): { projectId: string; childId: string } {
   if (ref.kind === 'video_edit.document') return { projectId: ref.id, childId: '' }
@@ -95,14 +96,16 @@ class VideoEditProvider implements ApplicationEntityProvider {
       const absent = ['video_edit.clip.code_parameters', 'video_edit.clip.code_curves', 'video_edit.clip.code_version_id'].includes(propertyId) && !data.code
       const wrongKind = propertyId === 'video_edit.clip.graphic_object_ids' && data.kind !== 'graphic' || propertyId === 'video_edit.clip.adjustment_from_track' && data.kind !== 'adjustment'
       const { projectId, childId } = splitVideoEditRef(ref); const document = requireVideoEditInstance(projectId).document
+      const roleOwner = propertyId === 'video_edit.clip.audio_role' ? document.sequences.flatMap(sequence => sequence.clips.map(clip => ({ clip, sequence }))).find(value => value.clip.id === childId) : undefined
+      const roleUnsupported = roleOwner && (!(roleOwner.clip.kind === 'audio' || roleOwner.clip.kind === 'video' && roleOwner.clip.sourceComponent !== 'video') || !videoEditClipMedia({ ...document, ...roleOwner.sequence }, roleOwner.clip) || videoEditClipMedia({ ...document, ...roleOwner.sequence }, roleOwner.clip)?.hasAudio === false)
       const childOwner = VIDEO_EDIT_COMPOSITE_TYPES.some(type => type === this.entityType) ? videoEditCompositeOwner(document, this.entityType as VideoEditCompositeEntityType, childId) : undefined
       const parameterKey = propertyId.split('.').at(-2)!
       const curveKey = propertyId.endsWith('.keyframes') ? this.entityType === 'video_edit.clip' ? videoEditDataKey(parameterKey) : parameterKey : undefined
       const builtin = childOwner?.kind === 'effect' ? childOwner.effect.builtin : undefined
       const curveReason = curveKey && this.entityType === 'video_edit.effect' && (!builtin || !requireVideoEditBuiltinEffect(builtin.id).params.some(param => param.key === curveKey)) ? '此内置效果没有该参数；代码滤镜请用 curves 源时间曲线。' : curveKey && this.entityType === 'video_edit.clip' && (data.kind === 'adjustment' && curveKey !== 'opacity' || data.kind === 'audio' && curveKey !== 'volume') ? '此片段类型不支持该动画参数。' : undefined
       const locked = childOwner ? childOwner.clipIds.some(id => childOwner.sequence.tracks.find(track => track.index === childOwner.sequence.clips.find(clip => clip.id === id)?.track)?.locked) : false
-      const reasons = curveReason ? [curveReason] : absent ? ['此片段没有代码实例参数。'] : wrongKind ? ['此片段类型不支持该操作。'] : locked ? ['所属轨道已锁定。'] : field.writer ? [] : [field.descriptor.readOnlyReason!]
-      return { propertyId, readable: true, writable: Boolean(field.writer) && !absent && !wrongKind && !locked && !curveReason, reasons, requiredPermissions: ['video_edit:read'], revisions: { video_edit: videoEditRevision() } }
+      const reasons = roleUnsupported ? ['只有带声音的音视频片段可以标注声音类型。'] : curveReason ? [curveReason] : absent ? ['此片段没有代码实例参数。'] : wrongKind ? ['此片段类型不支持该操作。'] : locked ? ['所属轨道已锁定。'] : field.writer ? [] : [field.descriptor.readOnlyReason!]
+      return { propertyId, readable: true, writable: Boolean(field.writer) && !absent && !wrongKind && !locked && !curveReason && !roleUnsupported, reasons, requiredPermissions: ['video_edit:read'], revisions: { video_edit: videoEditRevision() } }
     })
   }
   async getCollectionAvailability(parent: ApplicationRef) {
@@ -158,5 +161,5 @@ export function createVideoEditRegistrations(): ApplicationEntityRegistration[] 
       ...(entityType === 'video_edit.builtin_effect' ? { writeExclusion: { reason: VIDEO_EDIT_BUILTIN_CATALOG_READ_ONLY } } : {}),
       ...(required[entityType] ? { collectionWrite: { creatable: true, removable: entityType !== 'video_edit.code_version', requiredPropertyIds: required[entityType]!, maxItemsPerChange: 32 } } : {}),
     }, properties: fieldDescriptors(VIDEO_EDIT_FIELDS[entityType]), provider: new VideoEditProvider(entityType), schemaDocuments: videoEditSchemaDocuments(entityType),
-  })), createVideoEditEffectPresetRegistration(), createVideoEditSubtitlePresetRegistration()]
+  })), createVideoEditEffectPresetRegistration(), createVideoEditSubtitlePresetRegistration(), createVideoEditExportPresetRegistration()]
 }

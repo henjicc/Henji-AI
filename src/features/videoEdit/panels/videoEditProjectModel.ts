@@ -10,17 +10,17 @@ export interface VideoEditProjectSort { key: VideoEditProjectSortKey; direction:
 /** 列表的一行：素材箱可展开（PR 三角），子项缩进一级。 */
 export interface VideoEditProjectRow { entry: VideoEditProjectEntry; depth: number; expandable: boolean; expanded: boolean }
 /** 一行的列内容：`frameRate`／`duration` 是排序用的数值（没有则 undefined，排在最后）。 */
-export interface VideoEditProjectColumns { label: VideoEditLabel; frameRateText: string; frameRate?: number; mediaStart: string; mediaEnd: string; durationText: string; duration?: number }
+export interface VideoEditProjectColumns { label: VideoEditLabel; frameRateText: string; frameRate?: number; mediaStart: string; mediaEnd: string; mediaStartSeconds?: number; mediaEndSeconds?: number; durationText: string; duration?: number }
 
 const kindOf = (entry: VideoEditProjectEntry): string => entry.kind === 'item' ? entry.value.kind : entry.kind
 /**
  * 一行的列内容。视频按素材帧率算时间码；序列按序列帧率；音频没有帧率，按 `fallbackFps`（当前序列）显示时间码、帧速率列显示采样率。
- * 图片、文字、图形等没有媒体时长的项留空。媒体开始总是 00:00:00:00（素材没有内嵌时间码时 PR 也从零起）。
+ * 图片、文字、图形等没有媒体时长的项留空。子剪辑按源范围显示开始、结束与持续时间。
  */
 export function videoEditProjectColumns(document: VideoEditDocument, entry: VideoEditProjectEntry, fallbackFps: number): VideoEditProjectColumns {
   if (entry.kind === 'bin') return { label: videoEditLabelOf('bin', entry.value.label), frameRateText: '', mediaStart: '', mediaEnd: '', durationText: '' }
-  const timed = (fps: number, frames: number, frameRateText: string, frameRate: number | undefined, label: VideoEditLabel): VideoEditProjectColumns => ({
-    label, frameRateText, frameRate, mediaStart: videoEditFrameTimecode(0, fps), mediaEnd: videoEditFrameTimecode(Math.max(0, frames - 1), fps), durationText: videoEditFrameTimecode(frames, fps), duration: frames / fps,
+  const timed = (fps: number, frames: number, frameRateText: string, frameRate: number | undefined, label: VideoEditLabel, start = 0): VideoEditProjectColumns => ({
+    label, frameRateText, frameRate, mediaStart: videoEditFrameTimecode(start, fps), mediaEnd: videoEditFrameTimecode(start + Math.max(0, frames - 1), fps), mediaStartSeconds: start / fps, mediaEndSeconds: (start + Math.max(0, frames - 1)) / fps, durationText: videoEditFrameTimecode(frames, fps), duration: frames / fps,
   })
   const rateText = (fps: number): string => `${Number(fps.toFixed(3))} fps`
   if (entry.kind === 'sequence') {
@@ -31,19 +31,21 @@ export function videoEditProjectColumns(document: VideoEditDocument, entry: Vide
   const label = videoEditLabelOf(item.kind, item.label)
   const media = document.media.find(value => value.id === item.mediaId)
   if (!media || media.kind === 'image' || !media.durationSeconds) return { label, frameRateText: '', mediaStart: '', mediaEnd: '', durationText: '' }
+  const startSeconds = (item.sourceRange?.inUs ?? 0) / 1e6
+  const durationSeconds = item.sourceRange ? (item.sourceRange.outUs - item.sourceRange.inUs) / 1e6 : media.durationSeconds
   if (media.kind === 'audio' || !media.frameRate) {
     const sampleRate = media.audioStreams?.[0]?.sampleRate
-    return timed(fallbackFps, Math.round(media.durationSeconds * fallbackFps), sampleRate ? `${sampleRate} Hz` : '', sampleRate, label)
+    return timed(fallbackFps, Math.round(durationSeconds * fallbackFps), sampleRate ? `${sampleRate} Hz` : '', sampleRate, label, Math.round(startSeconds * fallbackFps))
   }
   const fps = videoEditFps(media.frameRate)
-  return timed(fps, Math.round(media.durationSeconds * fps), rateText(fps), fps, label)
+  return timed(fps, Math.round(durationSeconds * fps), rateText(fps), fps, label, Math.round(startSeconds * fps))
 }
 
 function compare(document: VideoEditDocument, sort: VideoEditProjectSort, fallbackFps: number): (left: VideoEditProjectEntry, right: VideoEditProjectEntry) => number {
   const columns = new Map<VideoEditProjectEntry, VideoEditProjectColumns>()
   const of = (entry: VideoEditProjectEntry): VideoEditProjectColumns => { let value = columns.get(entry); if (!value) { value = videoEditProjectColumns(document, entry, fallbackFps); columns.set(entry, value) } return value }
   const byName = (left: VideoEditProjectEntry, right: VideoEditProjectEntry): number => left.value.name.localeCompare(right.value.name, 'zh-CN', { numeric: true })
-  const numeric = (key: 'frameRate' | 'duration') => (left: VideoEditProjectEntry, right: VideoEditProjectEntry): number => {
+  const numeric = (key: 'frameRate' | 'duration' | 'mediaStartSeconds' | 'mediaEndSeconds') => (left: VideoEditProjectEntry, right: VideoEditProjectEntry): number => {
     const a = of(left)[key]; const b = of(right)[key]
     // 没有这一列数值的（素材箱、图片等）不论升降序都排在最后。
     if (a === undefined || b === undefined) return a === b ? 0 : a === undefined ? 1 : -1
@@ -51,9 +53,8 @@ function compare(document: VideoEditDocument, sort: VideoEditProjectSort, fallba
   }
   const direction = sort.direction === 'asc' ? 1 : -1
   return (left, right) => {
-    if (sort.key === 'frameRate' || sort.key === 'duration' || sort.key === 'mediaEnd') return numeric(sort.key === 'frameRate' ? 'frameRate' : 'duration')(left, right) || byName(left, right)
+    if (sort.key === 'frameRate' || sort.key === 'duration' || sort.key === 'mediaStart' || sort.key === 'mediaEnd') return numeric(sort.key === 'mediaStart' ? 'mediaStartSeconds' : sort.key === 'mediaEnd' ? 'mediaEndSeconds' : sort.key)(left, right) || byName(left, right)
     if (sort.key === 'kind') return kindOf(left).localeCompare(kindOf(right)) * direction || byName(left, right)
-    // 名称与媒体开始（都从零起）按名称排。
     return byName(left, right) * direction
   }
 }

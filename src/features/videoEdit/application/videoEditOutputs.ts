@@ -14,7 +14,7 @@ export interface VideoEditOutputReceipt {
   readonly revision: number
   readonly path: string
   readonly name: string
-  readonly kind: 'image' | 'video' | 'code'
+  readonly kind: 'image' | 'video' | 'audio' | 'code'
   readonly frame?: number
   readonly content: Readonly<AssetFileContent>
 }

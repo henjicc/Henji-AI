@@ -37,6 +37,7 @@ export function createElectronAudioEdit(): AudioEditPlatform {
       start: (...args) => api().loudness.start(...args),
       append: (...args) => api().loudness.append(...args),
       measure: (...args) => api().loudness.measure(...args),
+      detectActivity: (...args) => api().loudness.detectActivity(...args),
       normalize: (...args) => api().loudness.normalize(...args),
       read: (...args) => api().loudness.read(...args),
       close: (...args) => api().loudness.close(...args),

@@ -15,6 +15,7 @@ import { videoEditInPlaceRecordsSchema } from './inPlacePersistence'
 import { videoEditClipCurvesSchema, assertVideoEditKeyframeTimes, sliceVideoEditClipKeyframes, rescaleVideoEditClipKeyframes, VIDEO_EDIT_ANIMATABLE_KEYS } from './keyframes'
 import { videoEditTextStyleSchema } from './text'
 import { lumetriLutAssetSchema } from './lumetriLutAsset'
+import { videoEditAudioRoleSchema } from './audioDucking'
 
 const frame = z.number().int().min(0).max(108_000)
 const identifier = z.string().min(1).max(100)
@@ -29,7 +30,8 @@ export const videoEditMediaSchema = z.object({
   audioStreams: videoEditAudioStreamsSchema.optional(),
 }).strict()
 export const videoEditBinSchema = z.object({ id: identifier, name, parentId: identifier.optional(), label: videoEditLabelSchema.optional() }).strict()
-export const videoEditItemSchema = z.object({ id: identifier, name, binId: identifier.optional(), label: videoEditLabelSchema.optional(), tags: z.array(z.string().trim().min(1).max(80)).max(32).optional(), kind: z.enum(['video', 'audio', 'image', 'text', 'code', 'graphic', 'adjustment']), mediaId: identifier.optional(), code: codeMaterialInstanceSchema.optional(), graphic: videoEditGraphicSchema.optional(), audioChannels: videoEditAudioLayoutSchema.optional() }).strict()
+export const videoEditItemSourceRangeSchema = z.object({ inUs: z.number().int().nonnegative(), outUs: z.number().int().positive() }).strict().refine(value => value.outUs > value.inUs, '子剪辑出点须晚于入点。')
+export const videoEditItemSchema = z.object({ id: identifier, name, binId: identifier.optional(), label: videoEditLabelSchema.optional(), tags: z.array(z.string().trim().min(1).max(80)).max(32).optional(), kind: z.enum(['video', 'audio', 'image', 'text', 'code', 'graphic', 'adjustment']), mediaId: identifier.optional(), code: codeMaterialInstanceSchema.optional(), graphic: videoEditGraphicSchema.optional(), audioChannels: videoEditAudioLayoutSchema.optional(), sourceRange: videoEditItemSourceRangeSchema.optional() }).strict()
 export const videoEditTrackSchema = z.object({ id: identifier, name, index: z.number().int().min(0).max(31), kind: z.enum(['video', 'audio']), locked: z.boolean(), enabled: z.boolean(), muted: z.boolean(), solo: z.boolean(), height: z.number().int().min(24).max(160).optional(), syncLocked: z.boolean().optional() }).strict()
 export { videoEditCreativeSourceSchema, type VideoEditCreativeSource } from './creativeResult'
 /**
@@ -47,7 +49,7 @@ const videoEditClipStateSchema = z.object({
   x: z.number().finite().min(-2).max(2), y: z.number().finite().min(-2).max(2),
   scale: z.number().min(0.01).max(4), rotation: z.number().min(-360).max(360),
   anchorX: z.number().min(0).max(1).optional(), anchorY: z.number().min(0).max(1).optional(), curves: videoEditClipCurvesSchema.optional(),
-  opacity: z.number().min(0).max(1), volume: z.number().min(0).max(2), brightness: z.number().min(0).max(2), text: z.string().max(2000),
+  opacity: z.number().min(0).max(1), volume: z.number().min(0).max(2), audioRole: videoEditAudioRoleSchema.optional(), brightness: z.number().min(0).max(2), text: z.string().max(2000),
   textStyle: videoEditTextStyleSchema.optional(),
   /** PR 淡化手柄：片段开头淡入、结尾淡出的帧数（画面从透明渐显，声音按恒定功率渐强）；没有就是不淡化。 */
   fadeInFrames: z.number().int().min(1).max(108_000).optional(), fadeOutFrames: z.number().int().min(1).max(108_000).optional(),
@@ -108,6 +110,7 @@ export const videoEditDocumentSchema = z.object({
   for (const item of document.items) {
     if (item.binId && !document.bins.some(bin => bin.id === item.binId)) issue('素材项的素材箱不存在。')
     const media = document.media.find(media => media.id === item.mediaId)
+    if (item.sourceRange && (!media || !['video', 'audio'].includes(item.kind) || item.sourceRange.outUs > Math.round(media.durationSeconds * 1e6))) issue('子剪辑源范围超出原音视频素材。')
     if (!['text', 'code', 'graphic', 'adjustment'].includes(item.kind) && (!media || item.kind !== media.kind)) issue(`素材项 ${item.name} 的素材引用无效。`)
     if (['text', 'graphic', 'adjustment'].includes(item.kind) && item.mediaId) issue('文字、图形及调整图层不能引用媒体文件。')
     if (item.kind === 'graphic' ? !item.graphic : Boolean(item.graphic)) issue('只有图形素材项可以且必须保存结构化图形。')
@@ -140,6 +143,7 @@ export const videoEditDocumentSchema = z.object({
       const media = document.media.find(media => media.id === item?.mediaId)
       const track = sequence.tracks.find(track => track.index === clip.track)
       const extractedAudio = item?.kind === 'video' && clip.kind === 'audio' && clip.sourceComponent === 'audio'
+      if (clip.audioRole && (!media || media.hasAudio === false || !(clip.kind === 'audio' || clip.kind === 'video' && clip.sourceComponent !== 'video'))) issue('只有带声音的音视频片段可以标注声音类型。')
       if (!item || (item.kind !== clip.kind && !extractedAudio)) issue(`片段 ${clip.name} 的素材项引用无效。`)
       if (clip.sourceComponent && !(item?.kind === 'video' && ((clip.kind === 'video' && clip.sourceComponent === 'video') || extractedAudio))) issue('只有视频素材可以拆开引用画面或声音。')
       if (extractedAudio && media?.hasAudio !== true) issue('拆出的声音必须引用已确认具有音轨的视频素材。')

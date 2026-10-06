@@ -10,13 +10,14 @@ import { videoEditClipMedia } from '@/core/videoEdit/document'
 import type { VideoEditAudioChannelsTarget } from '../panels/VideoEditAudioChannelsDialog'
 import { elementOfEventTarget } from '@/utils/crossRealmDom'
 import type { VideoEditInPlaceMenuTarget } from './useVideoEditInPlaceMenu'
+import type { VideoEditSceneTarget } from '../application/videoEditSceneDetection'
 
 const actionIcons = { audio_gain: AudioLines, clip_speed: Gauge, copy: Copy, paste: Clipboard, insert: ArrowRightToLine, overwrite: Clipboard, split: Scissors, split_tracks: Scissors, delete: Trash2, ripple_delete: Trash2, link: Link2, unlink: Unlink, group: Group, ungroup: Ungroup, separate_audio: AudioLines, locate_source: Play, locate_project: Locate, locate_effects: SlidersHorizontal, select_all: ListChecks, move_into_sync: MoveHorizontal, slip_into_sync: ChevronsLeftRight } as const
 type MenuCommand = keyof typeof actionIcons
 
 /** 原地生成（4.12）：按右键落点（轨道、帧、片段）给出菜单最前面的生成项。 */
 export interface TimelineInPlaceMenu { items(target: VideoEditInPlaceMenuTarget): MenuItem[]; frameAt(clientX: number): number | null }
-export function useTimelineMenu(instance: VideoEditInstance, onError: (error: unknown) => void, cancelPointer: () => void, onAudioChannels?: (target: VideoEditAudioChannelsTarget) => void, onOpenSource?: (clipId: string) => void, inPlace?: TimelineInPlaceMenu) {
+export function useTimelineMenu(instance: VideoEditInstance, onError: (error: unknown) => void, cancelPointer: () => void, onAudioChannels?: (target: VideoEditAudioChannelsTarget) => void, onOpenSource?: (clipId: string) => void, inPlace?: TimelineInPlaceMenu, onScenes?: (target: VideoEditSceneTarget) => void) {
   const menu = useContextMenu()
   const shortcuts = useSettingsStore(state => state.videoEditShortcuts)
   const show = (event: React.MouseEvent): void => {
@@ -43,6 +44,7 @@ export function useTimelineMenu(instance: VideoEditInstance, onError: (error: un
       // Premiere's "Audio Channels" on a sequence clip: reassign the source channels of the clicked clip (task 2.6).
       const clip = clipId ? sequence.clips.find(value => value.id === clipId) : undefined
       const media = clip && videoEditClipMedia(instance.document, clip)
+      if (clip?.kind === 'video' && media?.kind === 'video' && onScenes) items.push({ id: 'scene_detection', label: '场景编辑检测…', icon: <Scissors size={16} />, disabled: sequence.tracks.find(track => track.index === clip.track)?.locked, onClick: () => onScenes({ projectId: instance.document.id, sequenceId: sequence.id, clipId: clip.id }) })
       if (clip && media && onAudioChannels && (clip.kind === 'audio' || clip.kind === 'video' && clip.sourceComponent !== 'video' && media.hasAudio === true)) {
         const locked = sequence.tracks.find(track => track.index === clip.track)?.locked === true
         items.push({ id: 'audio_channels', label: '音频声道…', icon: <AudioLines size={16} />, disabled: locked, onClick: () => onAudioChannels({ kind: 'clip', sequenceId: sequence.id, clipIds: [clip.id], mediaId: media.id, ...(clip.audioMapping ? { mapping: clip.audioMapping } : {}) }) })

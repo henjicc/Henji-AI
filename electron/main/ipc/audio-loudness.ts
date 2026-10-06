@@ -11,6 +11,7 @@ const input = z.discriminatedUnion('action', [
   z.object({ action: z.literal('start'), sessionId: id, sampleRate: z.union([z.literal(44100), z.literal(48000)]), channels: z.union([z.literal(1), z.literal(2)]) }).strict(),
   z.object({ action: z.literal('append'), sessionId: id, channels: z.array(z.custom<Float32Array>(value => value instanceof Float32Array && value.length <= 96000)).min(1).max(2) }).strict(),
   z.object({ action: z.literal('measure'), sessionId: id }).strict(),
+  z.object({ action: z.literal('activity'), sessionId: id, sensitivity: z.number().finite().min(0).max(100) }).strict(),
   z.object({ action: z.literal('normalize'), sessionId: id, settings: videoEditLoudnessSettingsSchema }).strict(),
   z.object({ action: z.literal('read'), sessionId: id, startFrame: z.number().int().nonnegative(), frames: z.number().int().min(1).max(96000) }).strict(),
   z.object({ action: z.literal('close'), sessionId: id }).strict(),
@@ -45,8 +46,8 @@ export function registerAudioLoudnessHandlers(): void {
     if (request.action === 'read') return session.read(request.startFrame, request.frames)
     logger.info('开始处理声音响度', { event: `audio.loudness.${request.action}.start`, context: { sessionId: request.sessionId } })
     try {
-      const result = await (request.action === 'measure' ? session.measure() : session.normalize(request.settings))
-      logger.info('声音响度处理完成', { event: `audio.loudness.${request.action}.completed`, context: { sessionId: request.sessionId, ...result } }); return result
+      const result = await (request.action === 'measure' ? session.measure() : request.action === 'activity' ? session.detectActivity(request.sensitivity) : session.normalize(request.settings))
+      logger.info('声音响度处理完成', { event: `audio.loudness.${request.action}.completed`, context: { sessionId: request.sessionId, ...(Array.isArray(result) ? { intervals: result.length } : result) } }); return result
     } catch (error) { logger.error('声音响度处理失败', { event: `audio.loudness.${request.action}.failed`, error, context: { sessionId: request.sessionId } }); throw error }
   }, assertTrustedApplicationSender)
   app.once('before-quit', () => { for (const sender of sessions.keys()) release(sender) })

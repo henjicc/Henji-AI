@@ -5,6 +5,7 @@ export function createAudioLoudnessApi(nativeInvoke: <T>(channel: string, payloa
     start: (sampleRate, channels, sessionId) => nativeInvoke('audio:loudness', { action: 'start', sampleRate, channels, sessionId }),
     append: (sessionId, channels) => nativeInvoke('audio:loudness', { action: 'append', sessionId, channels }),
     measure: sessionId => nativeInvoke('audio:loudness', { action: 'measure', sessionId }),
+    detectActivity: (sessionId, sensitivity) => nativeInvoke('audio:loudness', { action: 'activity', sessionId, sensitivity }),
     normalize: (sessionId, settings) => nativeInvoke('audio:loudness', { action: 'normalize', sessionId, settings }),
     read: (sessionId, startFrame, frames) => nativeInvoke('audio:loudness', { action: 'read', sessionId, startFrame, frames }),
     close: sessionId => nativeInvoke('audio:loudness', { action: 'close', sessionId }),

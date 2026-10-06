@@ -80,7 +80,8 @@ function VideoEditToolbar({ instance, api, run, onNotice }: { instance: VideoEdi
         if (activeVideoEditInstance() === instance) { useAssetLibraryStore.getState().setSelectedAsset(asset); openAssetLibrary('floating') }
       } finally { setCollecting(false) }
     })}>{collecting ? '正在收录成片…' : '成片加入资产库'}</UiButton>}
-    {task?.state === 'running' ? <UiButton onClick={() => cancelVideoEditExport(projectId)}>取消导出 {Math.round(task.progress * 100)}%</UiButton> : <UiButton variant="primary" aria-label="导出视频" title={exporting.tooltip} disabled={!exporting.enabled} onClick={() => command('export')}><Download size={15} />导出</UiButton>}
+    {task?.state === 'running' && <UiButton onClick={() => cancelVideoEditExport(projectId)}>取消导出 {Math.round(task.progress * 100)}%</UiButton>}
+    <UiButton variant="primary" aria-label="导出视频" title={exporting.tooltip} disabled={!exporting.enabled} onClick={() => command('export')}><Download size={15} />导出</UiButton>
   </>}>
     <UiIconButton size="lg" aria-label={t('videoEditProject.back')} title={t('videoEditProject.back')} onClick={() => run(() => leaveVideoEditProject(projectId))}><ChevronLeft size={18} /></UiIconButton>
     <PanelTrigger panelWidth={220} zIndex={Z_LAYERS.dropdown} closeOnPanelClick panelPadding="menu" renderPanel={() => <div className="flex flex-col gap-1">

@@ -1,4 +1,7 @@
-import { AudioBufferSource, CanvasSource, Mp4OutputFormat, Output, StreamTarget } from 'mediabunny'
+import { AdtsOutputFormat, AudioBufferSource, CanvasSource, Mp4OutputFormat, WavOutputFormat, Output, StreamTarget } from 'mediabunny'
+import { BLACK_HEX } from '@/core/theme/colorTokens'
+import { videoEditExportEncoding, videoEditExportGeometry, videoEditExportSettingsSchema, type VideoEditExportSettings } from '@/core/videoEdit/exportPresets'
+import type { VideoEditComposition } from '@/core/videoEdit/document'
 import { getPlatform } from '@/platform/runtime'
 import { createLogger } from '@/core/logging'
 import { videoEditFrameTimecode } from '@/core/videoEdit/timecode'
@@ -22,15 +25,24 @@ export interface VideoEditExportTask { id: string; projectId: string; sequenceId
 const tasks = new WeakMap<VideoEditInstance, VideoEditExportTask>()
 export function videoEditExportTask(projectId: string): VideoEditExportTask | undefined { return tasks.get(requireVideoEditInstance(projectId)) }
 export function cancelVideoEditExport(projectId: string): void { videoEditExportTask(projectId)?.controller.abort() }
-export async function exportVideoEdit(projectId: string, requestedPath?: string, background = false, submissionSignal?: AbortSignal, loudnessSettings?: VideoEditLoudnessSettings): Promise<string | null> {
+export interface VideoEditExportOptions {
+  snapshot: VideoEditComposition
+  range: { startFrame: number; endFrame: number }
+  settings: VideoEditExportSettings
+  signal?: AbortSignal
+  onTask?: (task: VideoEditExportTask) => void
+}
+export async function exportVideoEdit(projectId: string, requestedPath?: string, background = false, submissionSignal?: AbortSignal, loudnessSettings?: VideoEditLoudnessSettings, options?: VideoEditExportOptions): Promise<string | null> {
   submissionSignal?.throwIfAborted()
   const loudness = loudnessSettings === undefined ? undefined : videoEditLoudnessSettingsSchema.parse(loudnessSettings)
   const instance = requireVideoEditInstance(projectId)
-  const snapshot = structuredClone(getActiveVideoEditSequence(instance))
-  const range = videoEditExportRange(instance)
+  const snapshot = structuredClone(options?.snapshot ?? getActiveVideoEditSequence(instance))
+  const range = options?.range ?? videoEditExportRange(instance)
+  const settings = options ? videoEditExportSettingsSchema.parse(options.settings) : undefined
+  const format = settings?.format ?? 'mp4'
   if (instance.busy) throw new Error('该剪辑已有导出任务。')
   const platform = getPlatform()
-  const path = requestedPath ?? await platform.system.dialog.save({ defaultPath: `${instance.document.name}.mp4`, filters: [{ name: 'MP4 视频', extensions: ['mp4'] }] })
+  const path = requestedPath ?? await platform.system.dialog.save({ defaultPath: `${instance.document.name}.${format}`, filters: [{ name: format.toUpperCase(), extensions: [format] }] })
   submissionSignal?.throwIfAborted()
   if (!path) return null
   if (!listVideoEditInstances().includes(instance)) throw new Error('原剪辑已关闭，请重新选择导出剪辑。')
@@ -45,6 +57,10 @@ export async function exportVideoEdit(projectId: string, requestedPath?: string,
   const task: VideoEditExportTask = { id: crypto.randomUUID(), projectId, sequenceId: document.id, revision: document.revision, ...range, state: 'running', progress: 0, controller: new AbortController() }
   task.loudness = loudness
   tasks.set(instance, task); instance.busy = true; publishVideoEdit()
+  const abort = (): void => task.controller.abort()
+  options?.signal?.addEventListener('abort', abort, { once: true })
+  if (options?.signal?.aborted) abort()
+  options?.onTask?.(task)
   const render = async (): Promise<string | null> => {
   let renderer: VideoEditRenderSession | undefined
   let soundSession: string | undefined
@@ -72,21 +88,29 @@ export async function exportVideoEdit(projectId: string, requestedPath?: string,
       task.loudnessMeasurement = await loudnessApi.normalize(soundSession, loudness)
       task.controller.signal.throwIfAborted()
     }
-    output = new Output({ format: new Mp4OutputFormat(), target: new StreamTarget(new WritableStream({ write: async chunk => { task.controller.signal.throwIfAborted(); await platform.system.fs.writeFile(path, chunk.data, { position: chunk.position }) } }), { chunked: true, chunkSize: 1024 * 1024 }) })
+    output = new Output({ format: format === 'wav' ? new WavOutputFormat() : format === 'aac' ? new AdtsOutputFormat() : new Mp4OutputFormat(), target: new StreamTarget(new WritableStream({ write: async chunk => { task.controller.signal.throwIfAborted(); await platform.system.fs.writeFile(path, chunk.data, { position: chunk.position }) } }), { chunked: true, chunkSize: 1024 * 1024 }) })
     await platform.system.fs.writeFile(path, new Uint8Array(), { exclusive: true }); created = true
-    const video = new CanvasSource(renderer.canvas, { codec: 'avc', bitrate: 8_000_000 })
-    const audio = new AudioBufferSource({ codec: 'aac', bitrate: 192_000 })
-    output.addVideoTrack(video, { frameRate: document.fps }); output.addAudioTrack(audio)
+    const encoding = settings ? videoEditExportEncoding(settings, document.fps) : { fps: document.fps, videoBitrate: 8_000_000, audioBitrate: 192_000, audioCodec: 'aac' as const }
+    const adapted = settings && format === 'mp4' ? new OffscreenCanvas(settings.width, settings.height) : undefined
+    const geometry = settings ? videoEditExportGeometry(document.width, document.height, settings) : undefined
+    const video = format === 'mp4' ? new CanvasSource(adapted ?? renderer.canvas, { codec: 'avc', bitrate: encoding.videoBitrate }) : undefined
+    const audio = new AudioBufferSource({ codec: encoding.audioCodec, ...(format === 'wav' ? {} : { bitrate: encoding.audioBitrate }) })
+    if (video) output.addVideoTrack(video, { frameRate: encoding.fps })
+    output.addAudioTrack(audio)
     await output.start()
     const { startFrame, endFrame } = range; const frames = endFrame - startFrame
-    let nextAudioFrame = startFrame
+    const videoFrames = Math.ceil(frames / document.fps * encoding.fps - 1e-7)
     /** This frame's pictures or sound, exact, or the export stops here with the position in the message. */
     const exact = async <T>(frame: number, work: Promise<T>): Promise<T> => {
       try { return await work } catch (error) { failedFrame = frame; throw task.controller.signal.aborted ? error : videoEditExportFrameError(frame, document.fps, error) }
     }
-    for (let frame = startFrame; frame < endFrame; frame++) {
+    // Audio advances by sequence time independently from output FPS. This prevents
+    // duplicated or missing sound when converting fractional/high frame rates.
+    let audioFrame = startFrame
+    const addSoundUntil = async (limit: number): Promise<void> => {
+      while (audioFrame < limit) {
+      const frame = audioFrame
       task.controller.signal.throwIfAborted()
-      if (frame === nextAudioFrame) {
         const end = Math.min(endFrame, frame + Math.max(1, Math.round(document.fps)))
         const mix = async (): Promise<AudioBuffer> => {
           if (!soundSession) return renderer!.mixAudio(frame / document.fps, (end - frame) / document.fps)
@@ -97,16 +121,31 @@ export async function exportVideoEdit(projectId: string, requestedPath?: string,
           const buffer = new AudioBuffer({ numberOfChannels: document.channels, sampleRate: document.sampleRate, length: last - first })
           channels.forEach((channel, index) => buffer.getChannelData(index).set(channel)); return buffer
         }
-        await audio.add(await exact(frame, mix())); nextAudioFrame = end
+        await audio.add(await exact(frame, mix())); audioFrame = end
       }
-      singleFrameReads += (await exact(frame, renderer.render(frame, true))).singleFrameReads
-      await video.add((frame - startFrame) / document.fps, 1 / document.fps)
-      task.progress = (frame - startFrame + 1) / frames
-      if (frame % 5 === 0) { publishVideoEdit(); await new Promise(resolve => setTimeout(resolve, 0)) }
     }
+    const steps = video ? videoFrames : Math.ceil(frames / Math.max(1, Math.round(document.fps)))
+    for (let index = 0; index < steps; index++) {
+      const frame = video ? Math.min(endFrame - 1, startFrame + Math.floor(index * document.fps / encoding.fps + 1e-7)) : audioFrame
+      task.controller.signal.throwIfAborted()
+      await addSoundUntil(Math.min(endFrame, frame + 1))
+      if (video) {
+        singleFrameReads += (await exact(frame, renderer.render(frame, true))).singleFrameReads
+        if (adapted && geometry) {
+          const ctx = adapted.getContext('2d')!
+          ctx.fillStyle = BLACK_HEX; ctx.fillRect(0, 0, adapted.width, adapted.height)
+          const s = geometry.source; const d = geometry.destination
+          ctx.drawImage(renderer.canvas, s.x, s.y, s.width, s.height, d.x, d.y, d.width, d.height)
+        }
+        await video.add(index / encoding.fps, Math.min(1 / encoding.fps, frames / document.fps - index / encoding.fps))
+      }
+      task.progress = (index + 1) / steps
+      if (index % 5 === 0) { publishVideoEdit(); await new Promise(resolve => setTimeout(resolve, 0)) }
+    }
+    await addSoundUntil(endFrame)
     task.controller.signal.throwIfAborted()
     await output.finalize(); published = true; task.state = 'completed'
-    task.output = await publishVideoEditOutput({ owner: instance, sequenceId: document.id, revision: document.revision, path, name: `${snapshot.name} · 成片`, kind: 'video' })
+    task.output = await publishVideoEditOutput({ owner: instance, sequenceId: document.id, revision: document.revision, path, name: `${snapshot.name} · ${format === 'mp4' ? '成片' : '声音'}`, kind: format === 'mp4' ? 'video' : 'audio' })
     logger.info('剪辑导出完成', { event: 'video_edit.export.completed', context: { projectId, taskId: task.id, frames, singleFrameReads, elapsedMs: Math.round(performance.now() - started) } })
     return path
   } catch (error) {
@@ -124,6 +163,7 @@ export async function exportVideoEdit(projectId: string, requestedPath?: string,
     return null
   } finally {
     task.controller.signal.removeEventListener('abort', cancelSound)
+    options?.signal?.removeEventListener('abort', abort)
     try { if (soundSession) await loudnessApi.close(soundSession) } finally { try { await renderer?.dispose() } finally { instance.busy = false; publishVideoEdit() } }
   }
   }

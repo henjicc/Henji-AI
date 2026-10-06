@@ -48,6 +48,7 @@ import { createWorkRootApi } from './work-root-api'
 import { createLocalModelsApi } from './local-models-api'
 import { createSmartRegionsApi } from './smart-regions-api'
 import { createTrackingApi } from './tracking-api'
+import { createSceneDetectionApi } from './scene-detection-api'
 import { createGenerationHistoryApi, createPresetsApi, createSettingsApi } from './local-records-api'
 
 type IpcResultEnvelope<T> =
@@ -472,6 +473,7 @@ const api: HenjiNativeApi = {
   localModels: createLocalModelsApi(nativeInvoke, subscribeChannel),
   smartRegions: createSmartRegionsApi(nativeInvoke, subscribeChannel),
   tracking: createTrackingApi(nativeInvoke, subscribeChannel),
+  sceneDetection: createSceneDetectionApi(nativeInvoke, subscribeChannel),
 }
 
 contextBridge.exposeInMainWorld('henjiNative', api)

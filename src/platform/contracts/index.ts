@@ -25,6 +25,7 @@ import type { WorkRootPlatform } from './workRoot'
 import type { LocalModelsPlatform } from './localModels'
 import type { SmartRegionsPlatform } from './smartRegions'
 import type { TrackingPlatform } from './tracking'
+import type { SceneDetectionPlatform } from './sceneDetection'
 
 export interface PlatformRuntime {
   embeddedAgent: EmbeddedAgentPlatform
@@ -57,6 +58,7 @@ export interface PlatformRuntime {
   localModels: LocalModelsPlatform
   smartRegions: SmartRegionsPlatform
   tracking: TrackingPlatform
+  sceneDetection: SceneDetectionPlatform
 }
 
 export type {

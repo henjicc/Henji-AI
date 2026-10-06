@@ -27,6 +27,7 @@ import { createElectronWorkRoot } from './workRoot'
 import { createElectronLocalModels } from './localModels'
 import { createElectronSmartRegions } from './smartRegions'
 import { createElectronTracking } from './tracking'
+import { createElectronSceneDetection } from './sceneDetection'
 
 export function createElectronPlatform(): PlatformRuntime {
   return {
@@ -60,5 +61,6 @@ export function createElectronPlatform(): PlatformRuntime {
     localModels: createElectronLocalModels(),
     smartRegions: createElectronSmartRegions(),
     tracking: createElectronTracking(),
+    sceneDetection: createElectronSceneDetection(),
   }
 }

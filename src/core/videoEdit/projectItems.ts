@@ -46,9 +46,9 @@ export function makeVideoEditItemClip(document: VideoEditDocument, itemId: strin
   if (target.locked) throw new Error('目标轨道已锁定。')
   const program = item.code ? codeMetadata?.(item.code) : undefined
   if (item.kind === 'code' && (!program || !item.code)) throw new Error('代码素材尚未完成源码检查，不能添加占位片段。')
-  const sourceInUs = placement.sourceInUs ?? 0
-  const sourceOutUs = placement.sourceOutUs ?? (media && media.kind !== 'image' ? Math.round(media.durationSeconds * 1e6) : undefined)
-  const ranged = placement.sourceInUs !== undefined || placement.sourceOutUs !== undefined
+  const sourceInUs = placement.sourceInUs ?? item.sourceRange?.inUs ?? 0
+  const sourceOutUs = placement.sourceOutUs ?? item.sourceRange?.outUs ?? (media && media.kind !== 'image' ? Math.round(media.durationSeconds * 1e6) : undefined)
+  const ranged = placement.sourceInUs !== undefined || placement.sourceOutUs !== undefined || item.sourceRange !== undefined
   if (ranged && (!media || media.kind === 'image' || !Number.isSafeInteger(sourceInUs) || sourceInUs < 0 || !Number.isSafeInteger(sourceOutUs) || sourceOutUs! <= sourceInUs || sourceOutUs! > Math.round(media.durationSeconds * 1e6))) throw new Error('源范围须为原音视频素材内的正向整数微秒区间。')
   const availableDuration = ranged ? Math.floor((sourceOutUs! - sourceInUs) / 1e6 * sequence.fps + 1e-6) : program?.mode === 'dynamic' ? Math.max(1, Math.floor(program.durationSeconds * sequence.fps + 1e-6)) : media && media.kind !== 'image' ? Math.max(1, Math.floor(media.durationSeconds * sequence.fps + 1e-6)) : Math.round(sequence.fps * 3)
   const duration = placement.duration ?? availableDuration

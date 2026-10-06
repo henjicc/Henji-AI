@@ -14,6 +14,7 @@ import { selectedVideoEditTransitionId } from '../application/videoEditTransitio
 import { VideoEditClipPropertySections } from './VideoEditClipPropertySections'
 import { useVideoEditClipPropertyGesture } from './useVideoEditClipPropertyGesture'
 import { VideoEditTextStylePanel } from './VideoEditTextStylePanel'
+import { VideoEditBasicSoundPanel } from './VideoEditBasicSoundPanel'
 
 /** 片段名称一行（PR 效果控件顶部的“主要 * 片段名”）：确认是哪个片段，铅笔改名，回车或失焦提交一次。 */
 function ClipNameHeader({ clip, onRename }: { clip: VideoEditClip; onRename: (name: string) => void }): React.ReactElement {
@@ -50,6 +51,7 @@ export function VideoEditEffectsPanel({ instance, onError, visible = true }: { i
       <VideoEditClipPropertySections clip={selected} frame={{ ...sequence, playhead: instance.frame }} gesture={gesture} />
       {visible && selected.kind === 'text' && <VideoEditTextStylePanel key={selected.id} projectId={projectId} sequenceId={sequence.id} clip={selected} height={sequence.height} onError={reportError} />}
     </div> : selectedVideoEditTransitionId(instance) ? null : <UiEmpty size="sm" title="选择片段以编辑" />}
+    {visible && <VideoEditBasicSoundPanel instance={instance} onError={reportError} />}
     {visible && selected?.kind === 'code' && selected.code && <CodeParameterPanel key={JSON.stringify(['source-code', projectId, sequence.id, selected.id])} projectId={projectId} sequenceId={sequence.id} clipId={selected.id} onError={onError} />}
     {visible && selected?.kind === 'graphic' && selected.graphic && <VideoEditGraphicPanel key={JSON.stringify(['graphic', projectId, sequence.id, selected.id])} projectId={projectId} sequenceId={sequence.id} clipId={selected.id} onError={onError} />}
     {visible && selected && <VideoEditEffectChainPanel key={JSON.stringify(['effects', projectId, sequence.id, selected.id])} instance={instance} sequence={sequence} clip={selected} onError={reportError} />}
