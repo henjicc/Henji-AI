@@ -320,6 +320,13 @@ Pi 在三维界面的基础工具由 `get_camera_stage_project` 换成 `observe_
 `retry_canvas_project_save` 权限改为 `canvas:write`。正式 Electron 验收 `canvas-documents` 与外部连接相关脚本已改走通用文档能力，
 未做真实模型验收。
 
+2026-10-06 增量（4.1 自由组合）：`place_video_edit_creative_result` 的来源统一为两种——`{ type: 'document', documentRef, nodeRef?, includeProcessing? }`
+（画布节点、口播、镜头参考、图片文档都按“文档 + 部位”给）与 `{ type: 'generation', resultRef, outputIndex }`，旧的五种来源写法删除；
+新增 `open_video_edit_clip_source`（片段回到来源继续编辑：打开来源文档并定位部位，或打开生成记录；来源找不到如实返回）、
+`export_document_package`（把一份文档或整个项目导出为单个 `.henjipack` 文件，只回文件名不回路径）；`open_document` 新增 `fromDocumentId`
+（从剪辑里打开时带返回剪辑的嵌入模式），`duplicate_document` 新增 `projectId`（复制进指定项目）。导入单个文件有意不开放给助手
+（要用户选文件，且会新建项目与文档，经界面）。收集素材会一并复制剪辑引用的别处文档并改写引用。未做真实模型验收。
+
 ## 二、已经通了的
 
 对照 [assistant-goal.md](assistant-goal.md) 的四条判据：
@@ -489,6 +496,7 @@ HTTP 与插件两类适配器仍然不做，理由不变。
 - **2026-10-06 · 3.3 口播接入** · 推翻经 `audio_edit.project.name` 通用属性改口播工程名、口播工程存在 `audio_edit_projects` 表、主进程保存接口校验素材不可改与锁定 → 换成作品目录或项目里的口播文档（文档会话自动保存、导入即建草稿、离开询问），改名走 `documents.document.name`；素材不可改与锁定保护由口播实例的编辑入口保证，转写与重新定位的结果由实例接收后经会话保存（主进程不再写口播内容）。旧表已退役（迁移账本第 16 项），保留就是第二套文档存储。
 - **2026-10-06 · 3.4 画布接入** · 推翻画布工程存在 `storyboard_projects` / `canvas_projects` 表、经 `list/open/create/close/rename/delete_canvas_project` 与工具箱 `list/get_storyboard_project` 管理、经 `canvas.project.name` 改名 → 换成作品目录或项目里的画布文档（文档会话自动保存、草稿、离开询问），管理走通用文档能力，改名走 `documents.document.name`；撤销记录与视口改存程序目录会话状态，不进文档；多图层节点的内嵌图片文档写成画布所在容器 `.henji/` 里的包。旧表已退役（迁移账本第 17 项），测试专用原始 SQL 通道一并删除；保留就是第二套文档存储与绕过正式接口的写入口。
 - **2026-10-06 · 3.1 剪辑接入** · 推翻 2026-09-30 起剪辑工程的“用户另存为选位置的单个 `.henji-video` 文件、渲染层直接写文件”与经 `video_edit.project.name` 通用属性改工程名 → 换成项目文件夹里的剪辑文档（文档会话自动保存、草稿项目离开询问），改名走 `documents.document.name`。旧做法每个工具各写一套存储与离开流程、素材写死绝对路径，项目拷走就断（项目体系第二版）。
+- **2026-10-06 · 4.1 自由组合** · 推翻剪辑片段来源的五种写法（生成结果、画布节点、图片编辑文档、口播工程、三维渲染任务各一种）→ 换成“文档引用 + 部位”与“生成记录 + 第几个结果”两种，`place_video_edit_creative_result` 输入随之改变；推翻 3.4 画布的“画布工程包”导出导入 → 换成通用单文件包（任意文档或整个项目，`.henjipack`）；推翻口播放回剪辑时弹保存对话框选位置 → 剪后声音直接写进剪辑所在项目的“生成结果”。旧写法各自一套“回到来源”逻辑、不跨工具通用，画布包只认画布；按重要记录 008 不保留兼容。
 - **2026-10-06 · 3.5 图片文档** · 推翻 `image_edit.document` 实体目录“列出程序目录 V3 文档仓库里的全部文档”→ 换成作品索引里的图片文档（.henjiimg）加已载入的实例。旧目录混着画布节点、剪辑画面的受管文档，没有名称与归属，直接列给助手编辑会改动别处引用的内容；图片文档的工作副本 ID 就是文档 ID，按文档找即可。工具箱图片编辑旧的“只在内存里记住上一张”与“打开 / 保存可编辑文件”对话框入口一并删除。
 - **2026-10-06 · 3.2 镜头参考接入** · 推翻 2026-10-03 起 `create_camera_stage_project` 等镜头参考项目管理能力（含新建后从持久存储回读默认摄像机的核实回执）→ 换成通用 `create_document` / `list_documents` / `open_document` / `trash_document` 与 `documents.document.name`；默认摄像机与首关键帧改为第一次打开空文档时补上并落盘。旧能力读写的是已删除的 `camera_stage_projects` 表（项目体系第二版：作品文件是唯一真相），保留就是第二套文档管理入口。
 
