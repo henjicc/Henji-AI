@@ -1049,7 +1049,7 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
 }
 
 /* 剪辑工作区（界面重设计 3.5，设计稿 VideoEdit）：面板之间只露 1px 间隙色（不再画发丝线），
- * 面板头右侧的“放大/面板菜单”平时隐藏，悬停该面板组、键盘聚焦或菜单展开时出现。
+ * 面板头右侧的“最大化／恢复”平时隐藏，悬停该面板组或键盘聚焦时出现（面板菜单在当前标签标题旁，始终显示）。
  * 只用 opacity：按钮始终占位、可被键盘与自动化命中，标签条不因显隐抖动。 */
 .henji-videoEdit-dock.dockview-theme-abyss {
   --dv-separator-border: rgb(var(--gap-rgb));
@@ -1061,8 +1061,7 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
 }
 
 .henji-videoEdit-dock .dv-groupview:hover [data-video-edit-dock-actions],
-.henji-videoEdit-dock [data-video-edit-dock-actions]:focus-within,
-.henji-videoEdit-dock [data-video-edit-dock-actions][data-open='true'] {
+.henji-videoEdit-dock [data-video-edit-dock-actions]:focus-within {
   opacity: 1;
 }
 

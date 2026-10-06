@@ -237,3 +237,19 @@ it('旧布局里的应用内浮动组恢复后贴回主区域（浮动统一为�
   expect(dock.getPanel('effects')).toBeDefined()
   second.unmount()
 })
+
+it('面板菜单紧跟在组内当前标签的标题旁（PR），切换当前标签随之移动', () => {
+  const document = createVideoEditDocument('面板菜单')
+  const instance: VideoEditInstance = { document, activeSequenceId: document.sequences[0].id, sequenceViews: new Map(), selectedItemIds: [], selectedBinId: '', openSequenceIds: [document.sequences[0].id], selectedClipIds: [], targetTrackIds: [], tool: 'select', snapping: true, zoom: 1, inFrame: null, outFrame: null, session: {} as VideoEditInstance['session'], dirty: false, error: null, past: [], future: [], selection: null, frame: 0, playing: false, playbackDirection: 1, activePanel: 'timeline', busy: false, version: 0 }
+  let api: DockviewApi | null = null
+  const view = render(<VideoEditDock instance={instance} onError={vi.fn()} onApiChange={value => { api = value }} />)
+  const dock = api as unknown as DockviewApi
+  act(() => { dock.layout(1440, 860); dock.getPanel('timeline')!.api.moveTo({ group: dock.getPanel('program')!.group, position: 'center' }) })
+  const menuTabs = (): string[] => view.getAllByRole('button', { name: '面板菜单' }).map(button => button.closest('.dv-tab')?.textContent ?? '')
+  expect(menuTabs()).toHaveLength(dock.groups.length)
+  expect(menuTabs().filter(text => text.includes('时间线'))).toHaveLength(1)
+  expect(menuTabs().some(text => text.includes('节目画面'))).toBe(false)
+  act(() => dock.getPanel('program')!.api.setActive())
+  expect(menuTabs().some(text => text.includes('节目画面'))).toBe(true)
+  expect(menuTabs().some(text => text.includes('时间线'))).toBe(false)
+})
