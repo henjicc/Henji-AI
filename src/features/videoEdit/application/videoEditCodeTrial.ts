@@ -3,7 +3,7 @@ import { videoEditComposition, videoEditVisibleTracks, type VideoEditDocument } 
 import { VideoEditRenderSession } from '../engine/videoEditRenderSession'
 import { ensureVideoEditCodeDocumentMetadata } from './videoEditCodeState'
 import { listVideoEditInstances, subscribeVideoEditDomain, type VideoEditInstance } from './videoEditService'
-import { videoEditTransitionWindow } from '@/core/videoEdit/transitions'
+import { videoEditTransitionClipIds, videoEditTransitionWindow } from '@/core/videoEdit/transitions'
 
 export interface VideoEditTrialTarget { sequenceId: string; clipId: string; effectIds?: string[] }
 /** Exact original-clock endpoints, plus every affected transition boundary. */
@@ -21,7 +21,7 @@ export function videoEditCodeTrialFrames(document: VideoEditDocument, targets: V
     const clip = sequence?.clips.find(clip => clip.id === target.clipId)
     if (!sequence || !clip) throw new Error('原试渲染片段已移除。')
     add(sequence.id, clip.start); add(sequence.id, clip.start + clip.duration - 1)
-    for (const transition of sequence.transitions ?? []) if ([transition.leftClipId, transition.rightClipId].includes(clip.id)) {
+    for (const transition of sequence.transitions ?? []) if (videoEditTransitionClipIds(transition).includes(clip.id)) {
       const window = videoEditTransitionWindow(sequence, transition)
       for (const frame of [window.start, window.cut, window.end - 1]) add(sequence.id, frame)
     }
@@ -39,12 +39,12 @@ export function videoEditCodeValidationFrames(document: VideoEditDocument, targe
   for (const target of targets) {
     const actual = videoEditComposition(document, target.sequenceId)
     const visible = videoEditVisibleTracks(actual); const ids = new Set([target.clipId])
-    for (const transition of actual.transitions ?? []) if ([transition.leftClipId, transition.rightClipId].includes(target.clipId)) { ids.add(transition.leftClipId); ids.add(transition.rightClipId) }
+    for (const transition of actual.transitions ?? []) if (videoEditTransitionClipIds(transition).includes(target.clipId)) videoEditTransitionClipIds(transition).forEach(id => ids.add(id))
     const targetTracks = new Set(actual.clips.filter(clip => ids.has(clip.id)).map(clip => clip.track))
     const forced: VideoEditComposition = { ...actual,
       tracks: actual.tracks.map(track => ({ ...track, enabled: visible.has(track.index) || targetTracks.has(track.index), solo: false })),
       clips: actual.clips.filter(clip => visible.has(clip.track) || ids.has(clip.id)).map(clip => clip.id === target.clipId ? { ...clip, opacity: 1, effects: clip.effects?.map(effect => !target.effectIds || target.effectIds.includes(effect.id) ? { ...effect, enabled: true, amount: 1 } : effect) } : clip),
-      transitions: actual.transitions?.filter(transition => actual.clips.some(clip => clip.id === transition.leftClipId && (visible.has(clip.track) || ids.has(clip.id))) && actual.clips.some(clip => clip.id === transition.rightClipId && (visible.has(clip.track) || ids.has(clip.id)))),
+      transitions: actual.transitions?.filter(transition => videoEditTransitionClipIds(transition).every(id => actual.clips.some(clip => clip.id === id && (visible.has(clip.track) || ids.has(clip.id))))),
     }
     for (const input of videoEditCodeTrialFrames(document, [target])) frames.push({ document: forced, frame: input.frame })
   }

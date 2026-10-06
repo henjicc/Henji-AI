@@ -235,7 +235,7 @@ export function duplicateVideoEditSequence(projectId: string, sequenceId: string
   sequence.annotations = sequence.annotations.map(mark => ({ ...mark, id: crypto.randomUUID(), clipId: clips.get(mark.clipId)! }))
   if (sequence.markers) sequence.markers = sequence.markers.map(mark => ({ ...mark, id: crypto.randomUUID(), ...(mark.clipId ? { clipId: clips.get(mark.clipId)! } : {}) }))
   if (sequence.captions) sequence.captions = sequence.captions.map(caption => ({ ...caption, id: crypto.randomUUID(), ...(caption.clipId ? { clipId: clips.get(caption.clipId)! } : {}) }))
-  if (sequence.transitions) sequence.transitions = sequence.transitions.map(transition => ({ ...transition, id: crypto.randomUUID(), leftClipId: clips.get(transition.leftClipId)!, rightClipId: clips.get(transition.rightClipId)! }))
+  if (sequence.transitions) sequence.transitions = sequence.transitions.map(transition => ({ ...transition, id: crypto.randomUUID(), ...(transition.leftClipId ? { leftClipId: clips.get(transition.leftClipId)! } : {}), ...(transition.rightClipId ? { rightClipId: clips.get(transition.rightClipId)! } : {}) }))
   editVideoProject(projectId, document => ({ ...document, sequences: [...document.sequences, sequence] })); return sequence.id
 }
 export function deleteVideoEditSequence(projectId: string, sequenceId: string): void {

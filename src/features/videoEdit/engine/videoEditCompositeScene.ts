@@ -1,7 +1,7 @@
 import type { VideoEditClip, VideoEditComposition } from '@/core/videoEdit/document'
 import type { VideoEditCompositeNode } from '@/core/videoEdit/compositing'
 import { activeVideoEditEffects } from '@/core/videoEdit/compositing'
-import { videoEditTransitionAmount, videoEditTransitionDipColor } from '@/core/videoEdit/transitions'
+import { videoEditTransitionMix } from '@/core/videoEdit/transitions'
 import type { PreparedVideoEditEffect } from './videoEditCodeSources'
 import type { VideoEditCodePicture, VideoEditCodeGpu } from './videoEditCodeGpu'
 import type { VideoEditGpuCompositor, VideoEditPicture } from './videoEditGpuCompositor'
@@ -75,8 +75,10 @@ export async function renderVideoEditCompositeScene(document: VideoEditCompositi
       current()
       if (node.kind === 'clip') layers.push(await resolveClip(node.clip))
       else if (node.kind === 'transition') {
-        const left = await resolveClip(node.window.left, true); const right = await resolveClip(node.window.right, true)
-        const picture = await (await gpu()).mix(`composite:transition:${node.window.transition.id}`, left.picture as VideoEditCodePicture, right.picture as VideoEditCodePicture, videoEditTransitionAmount(node.window, frame), videoEditTransitionDipColor(node.window.transition.kind)); current()
+        // 单侧过渡（4.4）两边是同一个片段，只准备一次画面；混合参数由 videoEditTransitionMix 统一给出。
+        const left = await resolveClip(node.window.left, true); const right = node.window.side ? left : await resolveClip(node.window.right, true)
+        const mix = videoEditTransitionMix(node.window, frame)
+        const picture = await (await gpu()).mix(`composite:transition:${node.window.transition.id}`, left.picture as VideoEditCodePicture, right.picture as VideoEditCodePicture, mix.amount, mix.through); current()
         layers.push({ clip: identity(node.window.left), picture })
       } else {
         const children = await resolve(node.children)

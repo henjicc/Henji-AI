@@ -1,7 +1,7 @@
 import { videoEditDocumentSchema, type VideoEditClip, type VideoEditSequence, type VideoEditDocument } from '@/core/videoEdit/document'
 import { videoEditEffectSchema, orderVideoEditEffects, type VideoEditEffect } from '@/core/videoEdit/compositing'
 import type { CodeMaterialMetadataReader } from '@/core/videoEdit/codeMaterialDocument'
-import { videoEditTransitionSchema, videoEditTransitionsAt, type VideoEditTransition } from '@/core/videoEdit/transitions'
+import { videoEditTransitionClipIds, videoEditTransitionSchema, videoEditTransitionsAt, type VideoEditTransition } from '@/core/videoEdit/transitions'
 import { assertVideoEditLockedTracks } from '@/core/videoEdit/lockedTracks'
 import { validateCodeMaterialParameters } from '@/core/videoEdit/codeMaterial/parameters'
 import type { CodeMaterialInstance } from '@/core/videoEdit/codeMaterialPersistence'
@@ -102,9 +102,9 @@ export async function updateVideoEditAdjustmentRange(target: VideoEditCompositeT
     clip.adjustment = { fromTrack }
   }, signal)
 }
-export async function createVideoEditTransition(projectId: string, sequenceId: string, input: { leftClipId: string; rightClipId: string; durationFrames: number } & Partial<Pick<VideoEditTransition, 'kind' | 'alignment' | 'framesBeforeCut'>>, signal?: AbortSignal): Promise<string> {
+export async function createVideoEditTransition(projectId: string, sequenceId: string, input: { leftClipId?: string; rightClipId?: string; durationFrames: number } & Partial<Pick<VideoEditTransition, 'kind' | 'alignment' | 'framesBeforeCut'>>, signal?: AbortSignal): Promise<string> {
   const transition = videoEditTransitionSchema.parse({ id: crypto.randomUUID(), kind: 'cross_dissolve', ...input })
-  await editComposite(projectId, sequenceId, [transition.leftClipId, transition.rightClipId], sequence => { (sequence.transitions ??= []).push(transition) }, signal)
+  await editComposite(projectId, sequenceId, videoEditTransitionClipIds(transition), sequence => { (sequence.transitions ??= []).push(transition) }, signal)
   return transition.id
 }
 /** `changes` 为数字时只改时长（旧调用）；对象可同时改种类、时长与对齐（对齐不是自定义起点时去掉切点前帧数）。 */
@@ -112,7 +112,7 @@ export async function updateVideoEditTransition(projectId: string, sequenceId: s
   const transition = requireVideoEditInstance(projectId).document.sequences.find(sequence => sequence.id === sequenceId)?.transitions?.find(transition => transition.id === transitionId)
   if (!transition) throw new Error('原转场已移除。')
   const patch = typeof changes === 'number' ? { durationFrames: changes } : changes
-  await editComposite(projectId, sequenceId, [transition.leftClipId, transition.rightClipId], sequence => {
+  await editComposite(projectId, sequenceId, videoEditTransitionClipIds(transition), sequence => {
     const list = sequence.transitions!; const index = list.findIndex(value => value.id === transitionId)
     const next = videoEditTransitionSchema.parse({ ...list[index], ...patch })
     if (next.alignment === 'center') delete next.alignment
@@ -123,5 +123,5 @@ export async function updateVideoEditTransition(projectId: string, sequenceId: s
 export async function deleteVideoEditTransition(projectId: string, sequenceId: string, transitionId: string, signal?: AbortSignal): Promise<void> {
   const transition = requireVideoEditInstance(projectId).document.sequences.find(sequence => sequence.id === sequenceId)?.transitions?.find(transition => transition.id === transitionId)
   if (!transition) throw new Error('原转场已移除。')
-  await editComposite(projectId, sequenceId, [transition.leftClipId, transition.rightClipId], sequence => { sequence.transitions = sequence.transitions!.filter(value => value.id !== transitionId) }, signal)
+  await editComposite(projectId, sequenceId, videoEditTransitionClipIds(transition), sequence => { sequence.transitions = sequence.transitions!.filter(value => value.id !== transitionId) }, signal)
 }

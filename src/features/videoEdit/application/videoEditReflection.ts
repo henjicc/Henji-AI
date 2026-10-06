@@ -1,5 +1,6 @@
 import { fieldDescriptors, fieldReadValues, unrestrictedCollectionAvailability, type ApplicationEntityProvider, type ApplicationEntityRegistration, type ApplicationRef } from '@/core/application-control'
 import type { VideoEditDocument } from '@/core/videoEdit/document'
+import { videoEditTransitionClipIds } from '@/core/videoEdit/transitions'
 import { listVideoEditInstances, requireVideoEditInstance, getVideoEditTimelineView, videoEditDomainRevision as videoEditRevision } from './videoEditService'
 import { VIDEO_EDIT_FIELDS, VIDEO_EDIT_TYPES, videoEditSchemaDocuments, videoEditSchemaRef, type VideoEditEntityType, type VideoEditFieldData } from './videoEditFields'
 import { readVideoEditSource } from './videoEditSource'
@@ -95,8 +96,8 @@ class VideoEditProvider implements ApplicationEntityProvider {
       if (parent.kind !== 'video_edit.sequence' || !sequence) createReason = removeReason = '请选择所属序列。'
       else {
         const clips = sequence.clips.filter(clip => !['audio', 'adjustment'].includes(clip.kind) && !sequence.tracks.find(track => track.index === clip.track)?.locked)
-        if (!clips.some(left => clips.some(right => left.id !== right.id && left.track === right.track && left.start + left.duration === right.start))) createReason = '需要同一未锁定画面轨道上紧邻的两个片段。'
-        if (!(sequence.transitions ?? []).some(transition => [transition.leftClipId, transition.rightClipId].every(id => clips.some(clip => clip.id === id)))) removeReason = '没有可移除的未锁定转场。'
+        if (!clips.length) createReason = '需要未锁定画面轨道上的片段（过渡放在片段一端，或两个紧邻片段之间）。'
+        if (!(sequence.transitions ?? []).some(transition => videoEditTransitionClipIds(transition).every(id => clips.some(clip => clip.id === id)))) removeReason = '没有可移除的未锁定转场。'
       }
     } else {
       const sequence = document.sequences.find(sequence => sequence.clips.some(clip => clip.id === childId)); const clip = sequence?.clips.find(clip => clip.id === childId)

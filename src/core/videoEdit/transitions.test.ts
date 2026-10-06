@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { createVideoEditDocument, changeVideoEditSequenceSettings, videoEditDocumentSchema, type VideoEditDocument } from './document'
 import { makeVideoEditItemClip } from './projectItems'
 import { applyVideoEditTimelineEdit, copyVideoEditClips } from './timelineEdits'
-import { applyVideoEditTransitionPairs, dragVideoEditTransition, validateVideoEditTransitions, videoEditAudioTransitionGains, videoEditDefaultTransitionPairs, videoEditHandleFrame, videoEditTransitionAlignmentFields, videoEditTransitionDipColor, videoEditTransitionWindow, videoEditTransitionsAt, videoEditTransitionAmount } from './transitions'
+import { applyVideoEditTransitionPairs, dragVideoEditTransition, validateVideoEditTransitions, videoEditAudioTransitionClipGain, videoEditAudioTransitionGains, videoEditTransitionFit, videoEditTransitionMix, videoEditDefaultTransitionPairs, videoEditHandleFrame, videoEditTransitionAlignmentFields, videoEditTransitionDipColor, videoEditTransitionWindow, videoEditTransitionsAt, videoEditTransitionAmount } from './transitions'
 import { reconcileVideoEditTimedContent } from './timedContent'
 import { assertVideoEditLockedTracks } from './lockedTracks'
 import { compileCodeMaterial } from './codeMaterial/compiler'
@@ -147,7 +147,7 @@ describe('真实转场窗口、源余量和编辑持久契约', () => {
       expect(evaluateCodeMaterialParameters(prepared, offsetVideoEditSource(right, frame - 90, sequence.frameRate, true)).amount).toBe(.2)
     }
   })
-  it('拆分保留切点引用，双端移动保留，单端破坏邻接整体拒绝', () => {
+  it('拆分保留切点引用，双端移动保留，单端移开后过渡留在被移动片段一端（4.4）', () => {
     const { document, sequence } = fixture(); addEffect(document)
     const split = applyVideoEditTimelineEdit(document, sequence.id, { kind: 'split', clipIds: ['left'], frame: 60 })
     const outgoing = split.clips.find(clip => clip.start === 60)!
@@ -156,8 +156,81 @@ describe('真实转场窗口、源余量和编辑持久契约', () => {
     const moved = applyVideoEditTimelineEdit(document, sequence.id, { kind: 'adjust', clipIds: ['left', 'right'], mode: 'move', delta: 10 })
     expect(videoEditTransitionWindow(moved, moved.transitions![0]).cut).toBe(100)
     const before = JSON.stringify(document)
-    expect(() => applyVideoEditTimelineEdit(document, sequence.id, { kind: 'adjust', clipIds: ['right'], mode: 'move', delta: 1 })).toThrow('紧邻')
+    // 右片段移开：过渡成为右片段入点的单侧过渡，保持时长、去掉对齐
+    const right = applyVideoEditTimelineEdit(document, sequence.id, { kind: 'adjust', clipIds: ['right'], mode: 'move', delta: 20 })
+    expect(right.transitions).toEqual([{ id: 'dissolve', kind: 'cross_dissolve', rightClipId: 'right', durationFrames: 30 }])
+    expect(videoEditTransitionWindow(right, right.transitions![0])).toMatchObject({ side: 'in', start: 110, end: 140, cut: 110 })
+    // 左片段移开：留在左片段出点
+    const left = applyVideoEditTimelineEdit(document, sequence.id, { kind: 'adjust', clipIds: ['left'], mode: 'move', delta: -5 })
+    expect(left.transitions).toEqual([{ id: 'dissolve', kind: 'cross_dissolve', leftClipId: 'left', durationFrames: 30 }])
+    expect(videoEditTransitionWindow(left, left.transitions![0])).toMatchObject({ side: 'out', start: 55, end: 85 })
+    // 裁剪入点让两端分开：同样留在被裁剪的片段一端
+    const trimmed = applyVideoEditTimelineEdit(document, sequence.id, { kind: 'adjust', clipIds: ['right'], mode: 'in', delta: 10 })
+    expect(trimmed.transitions![0]).toMatchObject({ rightClipId: 'right', durationFrames: 30 })
+    expect(trimmed.transitions![0]).not.toHaveProperty('leftClipId')
     expect(JSON.stringify(document)).toBe(before)
+  })
+  it('单侧过渡：窗口整段在片段内，片段变短时缩短，放不下两帧时删除（4.4）', () => {
+    const { document, sequence } = fixture(); addEffect(document)
+    sequence.transitions = [{ id: 'head', kind: 'dip_to_black', rightClipId: 'right', durationFrames: 30, alignment: 'end' }, { id: 'tail', kind: 'cross_dissolve', leftClipId: 'left', durationFrames: 20 }]
+    // 单侧过渡忽略对齐：入点那一侧从切点起
+    expect(videoEditTransitionWindow(sequence, sequence.transitions[0])).toMatchObject({ side: 'in', start: 90, end: 120, cut: 90 })
+    expect(videoEditTransitionWindow(sequence, sequence.transitions[1])).toMatchObject({ side: 'out', start: 70, end: 90, cut: 90 })
+    expect(() => validateVideoEditTransitions(document)).not.toThrow()
+    expect(() => videoEditTransitionWindow(sequence, { ...sequence.transitions[0], durationFrames: 61 })).toThrow('超出片段')
+    expect(() => videoEditTransitionWindow(sequence, { id: 'none', kind: 'cross_dissolve', durationFrames: 10 })).toThrow('至少')
+    const shorter = applyVideoEditTimelineEdit(document, sequence.id, { kind: 'adjust', clipIds: ['right'], mode: 'out', delta: -45 })
+    expect(shorter.transitions!.find(value => value.id === 'head')).toMatchObject({ durationFrames: 15 })
+    const tiny = applyVideoEditTimelineEdit(document, sequence.id, { kind: 'adjust', clipIds: ['right'], mode: 'out', delta: -59 })
+    expect(tiny.transitions!.map(value => value.id)).toEqual(['tail'])
+    // 拖单侧过渡：只有离开那一端的边缘改时长，另一缘与平移不动
+    expect(dragVideoEditTransition(sequence, 'head', 'out', 10)).toMatchObject({ durationFrames: 40 })
+    expect(dragVideoEditTransition(sequence, 'head', 'out', 1000)).toMatchObject({ durationFrames: 60 })
+    expect(dragVideoEditTransition(sequence, 'head', 'in', -10)).toMatchObject({ durationFrames: 30 })
+    expect(dragVideoEditTransition(sequence, 'tail', 'in', -100)).toMatchObject({ durationFrames: 60 })
+    expect(dragVideoEditTransition(sequence, 'tail', 'move', 5)).toMatchObject({ durationFrames: 20 })
+    // 只复制它挂着的那个片段时也带上单侧过渡
+    const clipboard = copyVideoEditClips(document, sequence.id, ['right'])
+    expect(clipboard.transitions!.map(value => value.id)).toEqual(['head'])
+    const pasted = applyVideoEditTimelineEdit(document, sequence.id, { kind: 'place', clipboard, frame: 300, mode: 'overwrite' })
+    const copy = pasted.transitions!.find(value => !['head', 'tail'].includes(value.id))!
+    expect(videoEditTransitionWindow(pasted, copy)).toMatchObject({ side: 'in', start: 300 })
+  })
+  it('单侧过渡的画面混合与声音增益：从透明或纯色淡入、淡出到透明或纯色（4.4）', () => {
+    const { sequence } = fixture()
+    const head = videoEditTransitionWindow(sequence, { id: 'head', kind: 'cross_dissolve', rightClipId: 'right', durationFrames: 11 })
+    // 交叉溶解借“经过纯色”的后半段，纯色为预乘透明：开头全透明、结尾全是片段
+    expect(videoEditTransitionMix(head, head.start)).toEqual({ amount: .5, through: [0, 0, 0, 0] })
+    expect(videoEditTransitionMix(head, head.end - 1)).toEqual({ amount: 1, through: [0, 0, 0, 0] })
+    const tail = videoEditTransitionWindow(sequence, { id: 'tail', kind: 'dip_to_white', leftClipId: 'left', durationFrames: 11 })
+    expect(videoEditTransitionMix(tail, tail.start)).toEqual({ amount: 0, through: [1, 1, 1, 1] })
+    expect(videoEditTransitionMix(tail, tail.end - 1)).toEqual({ amount: .5, through: [1, 1, 1, 1] })
+    // 普通过渡保持原参数
+    const both = videoEditTransitionWindow(sequence, sequence.transitions![0])
+    expect(videoEditTransitionMix(both, both.start)).toEqual({ amount: 0, through: undefined })
+    // 声音：入点淡入、出点淡出，普通过渡左出右入
+    const power = { ...head, transition: { ...head.transition, kind: 'constant_power' as const } }
+    expect(videoEditAudioTransitionClipGain(power, 'right', 0)).toBeCloseTo(0)
+    expect(videoEditAudioTransitionClipGain(power, 'right', 1)).toBeCloseTo(1)
+    expect(videoEditAudioTransitionClipGain({ ...tail, transition: { ...tail.transition, kind: 'constant_gain' as const } }, 'left', .25)).toBeCloseTo(.75)
+    expect(videoEditAudioTransitionClipGain({ ...both, transition: { ...both.transition, kind: 'constant_gain' as const } }, 'right', .25)).toBeCloseTo(.25)
+  })
+  it('编辑点含片段空白一端：Ctrl+D、Shift+D 放单侧过渡，再放普通过渡时替换同一切点的单侧过渡（4.4）', () => {
+    const { sequence } = fixture(); sequence.transitions = []
+    expect(videoEditDefaultTransitionPairs(sequence, { mode: 'playhead', medium: 'video', frame: 25, tracks: [1] })).toEqual([{ rightClipId: 'left', medium: 'video' }])
+    expect(videoEditDefaultTransitionPairs(sequence, { mode: 'playhead', medium: 'video', frame: 160, tracks: [1] })).toEqual([{ leftClipId: 'right', medium: 'video' }])
+    const selection = videoEditDefaultTransitionPairs(sequence, { mode: 'selection', clipIds: ['right'] })
+    expect(selection).toEqual([{ leftClipId: 'left', rightClipId: 'right', medium: 'video' }, { leftClipId: 'right', medium: 'video' }])
+    const { sequence: applied } = applyVideoEditTransitionPairs(sequence, [{ leftClipId: 'right', medium: 'video' }, { rightClipId: 'left', medium: 'video' }], { durationFrames: 100 })
+    expect(applied.transitions!.map(value => videoEditTransitionWindow(applied, value)).map(window => [window.side, window.start, window.end])).toEqual([['out', 90, 150], ['in', 30, 90]])
+    expect(applied.transitions![0]).not.toHaveProperty('alignment')
+    // 右片段入点上的单侧过渡与左右之间的普通过渡在同一切点：放普通过渡即替换
+    const single = applyVideoEditTransitionPairs(sequence, [{ rightClipId: 'right', medium: 'video' }], { durationFrames: 10 }).sequence
+    expect(videoEditTransitionFit(single, { leftClipId: 'left', rightClipId: 'right' }, 30)).toEqual({ durationFrames: 30, framesBeforeCut: 15 })
+    const replaced = applyVideoEditTransitionPairs(single, [{ leftClipId: 'left', rightClipId: 'right', medium: 'video' }], { durationFrames: 30 })
+    expect(replaced.sequence.transitions).toHaveLength(1)
+    expect(replaced.transitionIds[0]).toBe(single.transitions![0].id)
+    expect(replaced.sequence.transitions![0]).toMatchObject({ leftClipId: 'left', rightClipId: 'right', durationFrames: 30 })
   })
   it('双端复制重映射转场及效果，覆盖保留原切点并在覆盖切点时移除，删除级联', () => {
     const { document, sequence } = fixture(); addEffect(document)

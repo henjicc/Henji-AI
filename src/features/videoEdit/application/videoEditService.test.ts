@@ -44,7 +44,7 @@ it('原生图形和调整范围独立持久，复制序列重映射转场，错�
   expect(owner.document.items[0].graphic!.objects[0].parameters.x).not.toBe(123)
   expect(owner.document.sequences[0].clips[0].graphic!.objects[0].parameters.x).not.toBe(123)
   const beforeReject = owner.document; const history = owner.past.length
-  expect(() => editVideoSequence(id, duplicateId, sequence => { sequence.clips[0].duration--; return sequence })).toThrow('紧邻')
+  expect(() => editVideoSequence(id, duplicateId, sequence => { sequence.transitions![0].durationFrames = 1000; return sequence })).toThrow('超出')
   expect(owner.document).toBe(beforeReject); expect(owner.past).toHaveLength(history)
   await saveVideoEdit(id); const saved = structuredClone(owner.document)
   const reopened = await reopenVideoEdit(id)

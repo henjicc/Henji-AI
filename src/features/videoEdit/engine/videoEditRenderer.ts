@@ -9,7 +9,7 @@ import { codeMaterialImageIds } from '@/core/videoEdit/codeMaterialResources'
 import type { VideoEditClipAudio, VideoEditClipFrames, VideoEditDecodedPicture, VideoEditFrameBackend, VideoEditFrameSeeker, VideoEditFrameSource } from './videoEditFrameSource'
 import { VideoEditBrowserFrames } from './videoEditBrowserFrames'
 import { videoEditSourceReadError } from './videoEditSourceErrors'
-import { videoEditAudioTransitionGains, videoEditHandleFrame, videoEditTransitionMedium, videoEditTransitionWindow, videoEditTransitionsAt, type VideoEditTransitionWindow } from '@/core/videoEdit/transitions'
+import { videoEditAudioTransitionClipGain, videoEditHandleFrame, videoEditTransitionMedium, videoEditTransitionWindow, videoEditTransitionsAt, type VideoEditTransitionWindow } from '@/core/videoEdit/transitions'
 import { videoEditClipFades, videoEditFadeGain, videoEditFadeOpacity } from '@/core/videoEdit/fades'
 import { activeVideoEditEffects, buildVideoEditCompositePlan } from '@/core/videoEdit/compositing'
 import { renderVideoEditCompositeScene, videoEditCompositeSurfaceKeys } from './videoEditCompositeScene'
@@ -424,7 +424,7 @@ export class VideoEditRenderer {
     // 音频过渡（PR 恒定功率／恒定增益）：左片段越过出点、右片段提前入点，在窗口里按曲线交叉淡化。
     const audioWindows = (this.document.transitions ?? []).filter(transition => videoEditTransitionMedium(transition.kind) === 'audio').flatMap((transition): VideoEditTransitionWindow[] => { try { return [videoEditTransitionWindow(this.document, transition)] } catch { return [] } })
     for (const clip of audibleVideoEditClips(this.document)) {
-      const outgoing = audioWindows.filter(window => window.left.id === clip.id); const incoming = audioWindows.filter(window => window.right.id === clip.id)
+      const outgoing = audioWindows.filter(window => window.left.id === clip.id && window.side !== 'in'); const incoming = audioWindows.filter(window => window.right.id === clip.id && window.side !== 'out')
       const clipStart = clip.start / fps
       const playStart = Math.min(clip.start, ...incoming.map(window => window.start)) / fps
       const playEnd = Math.max(clip.start + clip.duration, ...outgoing.map(window => window.end)) / fps
@@ -444,7 +444,7 @@ export class VideoEditRenderer {
         let gain = clip.volume * (seconds >= clipStart && seconds < (clip.start + clip.duration) / fps ? videoEditFadeGain(clip, seconds, fps) : 1)
         for (const window of [...outgoing, ...incoming]) {
           const begin = window.start / fps; const end = window.end / fps
-          if (seconds >= begin && seconds < end) gain *= videoEditAudioTransitionGains(window.transition.kind, (seconds - begin) / (end - begin))[window.left.id === clip.id ? 0 : 1]
+          if (seconds >= begin && seconds < end) gain *= videoEditAudioTransitionClipGain(window, clip.id, (seconds - begin) / (end - begin))
         }
         return gain
       }) : undefined

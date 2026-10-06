@@ -39,13 +39,14 @@ export const VideoEditTransitionPanel = memo(function VideoEditTransitionPanel({
     <div className="flex min-w-0 items-center gap-2 px-1">
       <Icon size={14} aria-hidden="true" className="shrink-0 text-text3" />
       <span className="min-w-0 flex-1 truncate text-xs text-text1">{preset.name}</span>
-      {window && <span className="shrink-0 truncate text-2xs text-text3" data-user-content>{window.left.name} → {window.right.name}</span>}
+      {window && <span className="shrink-0 truncate text-2xs text-text3" data-user-content>{window.side ? `${window.left.name} ${window.side === 'in' ? '开头' : '结尾'}` : `${window.left.name} → ${window.right.name}`}</span>}
     </div>
     <UiFormRow density="compact" label="持续时间（帧）" hint={`${timelineTimecode(transition.durationFrames, fps)}`}>
       <NumberInput ariaLabel="过渡持续时间帧" size="sm" min={2} max={108_000} step={1} precision={0} value={transition.durationFrames} disabled={action.busy}
         onChange={durationFrames => { if (durationFrames !== transition.durationFrames) update(transition.alignment === 'custom' ? { durationFrames, framesBeforeCut: Math.min(durationFrames, before) } : { durationFrames }) }} />
     </UiFormRow>
-    <UiFormRow density="compact" label="对齐">
+    {/* 单侧过渡整段在片段内，没有对齐可选（PR 只列出它所在的一端） */}
+    {!window?.side && <UiFormRow density="compact" label="对齐">
       <Dropdown ariaLabel="过渡对齐" value={videoEditTransitionAlignmentOf(transition)} disabled={action.busy}
         options={ALIGNMENTS.filter(option => option.value !== 'custom' || transition.alignment === 'custom').map(option => ({ value: option.value, label: option.label }))}
         onSelect={alignment => {
@@ -53,7 +54,7 @@ export const VideoEditTransitionPanel = memo(function VideoEditTransitionPanel({
           const framesBeforeCut = alignment === 'start' ? 0 : alignment === 'end' ? transition.durationFrames : Math.floor(transition.durationFrames / 2)
           update({ alignment: videoEditTransitionAlignmentFields(transition.durationFrames, framesBeforeCut).alignment ?? 'center' })
         }} />
-    </UiFormRow>
+    </UiFormRow>}
     <div className="flex items-center gap-2">
       <UiButton variant="danger" size="sm" disabled={action.busy} onClick={() => { void action.run(signal => deleteVideoEditTransition(projectId, sequence.id, transition.id, signal), () => selectVideoEditTransition(projectId, null)) }}><Trash2 size={14} aria-hidden="true" />删除过渡</UiButton>
       {action.busy && <><UiLoading size="xs" message="正在检查过渡画面" /><UiButton size="sm" onClick={action.cancel}>取消</UiButton></>}

@@ -214,10 +214,10 @@ it('提升、提取与 Q/W 波纹修剪各是一步编辑；Alt 方向键微移�
 it('Ctrl+D 在离播放头最近的编辑点应用默认视频过渡，Shift+D 应用到所选片段两端，选中过渡后 Delete 删除，各是一步撤销（4.3）', async () => {
   const { owner, id, first, second } = await fixture()
   editVideoProject(id, document => { document.sequences[0].clips[1].start = 90; return document })
-  setVideoEditView(id, { frame: 10 })
+  setVideoEditView(id, { frame: 80 })
   const history = owner.past.length
   const context = captureVideoEditCommandContext(id, 'timeline')
-  expect(videoEditCommandState(context, 'apply_audio_transition')).toMatchObject({ enabled: false, reason: expect.stringContaining('首尾相接') })
+  expect(videoEditCommandState(context, 'apply_audio_transition')).toMatchObject({ enabled: false, reason: expect.stringContaining('没有可放过渡') })
   await executeVideoEditCommand(context, 'apply_video_transition')
   const [applied] = getActiveVideoEditSequence(owner).transitions!
   expect(applied).toMatchObject({ kind: 'cross_dissolve', leftClipId: first, rightClipId: second, durationFrames: 30 })
@@ -231,7 +231,14 @@ it('Ctrl+D 在离播放头最近的编辑点应用默认视频过渡，Shift+D �
   expect(owner.past.length).toBe(history + 2)
   setVideoEditTimelineView(id, { selectedClipIds: [second] }, second)
   await executeVideoEditCommand(captureVideoEditCommandContext(id, 'timeline'), 'apply_default_transitions')
-  expect(getActiveVideoEditSequence(owner).transitions).toEqual([expect.objectContaining({ leftClipId: first, rightClipId: second, durationFrames: 30 })])
+  // 所选片段后面是空白：那一端放单侧过渡（4.4）
+  expect(getActiveVideoEditSequence(owner).transitions).toEqual([expect.objectContaining({ leftClipId: first, rightClipId: second, durationFrames: 30 }), { id: expect.any(String), kind: 'cross_dissolve', leftClipId: second, durationFrames: 30 }])
+  undoVideoEdit(id)
+  expect(getActiveVideoEditSequence(owner).transitions).toEqual([])
+  // Ctrl+D 离播放头最近的是片段空白的一端：放单侧过渡，一步撤销
+  setVideoEditView(id, { frame: 178 })
+  await executeVideoEditCommand(captureVideoEditCommandContext(id, 'timeline'), 'apply_video_transition')
+  expect(getActiveVideoEditSequence(owner).transitions).toEqual([{ id: expect.any(String), kind: 'cross_dissolve', leftClipId: second, durationFrames: 30 }])
   undoVideoEdit(id)
   expect(getActiveVideoEditSequence(owner).transitions).toEqual([])
 })

@@ -1,4 +1,5 @@
 import type { VideoEditDocument, VideoEditSequence } from './document'
+import { videoEditTransitionClipIds } from './transitions'
 
 /** Lock is an editing constraint, not an output switch. Undo restores the whole transaction. */
 export function assertVideoEditLockedTracks(before: VideoEditDocument, after: VideoEditDocument): void {
@@ -13,7 +14,7 @@ export function assertVideoEditLockedTracks(before: VideoEditDocument, after: Vi
         const annotations = value.annotations.filter(mark => ids.has(mark.clipId)).sort((a, b) => a.id.localeCompare(b.id))
         const markers = (value.markers ?? []).filter(mark => mark.clipId && ids.has(mark.clipId)).sort((a, b) => a.id.localeCompare(b.id))
         const captions = (value.captions ?? []).filter(caption => caption.clipId && ids.has(caption.clipId)).sort((a, b) => a.id.localeCompare(b.id))
-        const transitions = (value.transitions ?? []).filter(transition => ids.has(transition.leftClipId) || ids.has(transition.rightClipId)).sort((a, b) => a.id.localeCompare(b.id))
+        const transitions = (value.transitions ?? []).filter(transition => videoEditTransitionClipIds(transition).some(id => ids.has(id))).sort((a, b) => a.id.localeCompare(b.id))
         return JSON.stringify({ clips, annotations, markers, captions, transitions })
       }
       if (content(sequence) !== content(target)) throw new Error(`轨道“${track.name}”已锁定，请先解锁再编辑。`)

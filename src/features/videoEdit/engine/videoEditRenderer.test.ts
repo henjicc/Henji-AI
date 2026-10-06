@@ -164,6 +164,27 @@ it('音频过渡：左片段越过出点、右片段提前入点，恒定功率�
     expect((await renderer.mixAudio(2.6, .01))[0][0]).toBe(.75)
   } finally { await renderer.dispose() }
 })
+it('单侧过渡：画面从黑场淡入、淡出到透明，声音在片段一端淡入淡出（4.4）', async () => {
+  const document = fixture()
+  document.clips = [{ ...document.clips[0], start: 30, duration: 60 }]
+  document.transitions = [{ id: 'head', kind: 'dip_to_black', rightClipId: 'clip', durationFrames: 10 }, { id: 'tail', kind: 'cross_dissolve', leftClipId: 'clip', durationFrames: 10 }]
+  const renderer = new VideoEditRenderer(document)
+  try {
+    // 入点：同一片段两次传入，借纯色混合的后半段（0.5 → 1）；出点借前半段（0 → 0.5），透明为全零预乘色
+    await renderer.render(33); expect(boundary.mixes).toEqual([[.5 + 3 / 18, 0, 0, 0, 1]])
+    await renderer.render(89); expect(boundary.mixes).toEqual([[.5 + 3 / 18, 0, 0, 0, 1], [.5, 0, 0, 0, 0]])
+  } finally { await renderer.dispose() }
+  const sound = fixture()
+  sound.media = sound.media.map(media => ({ ...media, durationSeconds: 4, hasAudio: true }))
+  sound.clips = [{ ...sound.clips[0], kind: 'audio', track: 0, sourceComponent: 'audio', start: 30, duration: 60 }]
+  sound.transitions = [{ id: 'in', kind: 'constant_gain', rightClipId: 'clip', durationFrames: 30 }]
+  const mixer = new VideoEditRenderer(sound)
+  try {
+    // 入点窗口 30..60 帧（1–2 秒），1.25 秒处进度 1/4：恒定增益只乘 0.25，窗口之后整段原音量
+    expect((await mixer.mixAudio(1.25, .01))[0][0]).toBeCloseTo(.25 * .25)
+    expect((await mixer.mixAudio(2.2, .01))[0][0]).toBe(.25)
+  } finally { await mixer.dispose() }
+})
 it('顺序播放和导出使用定位同一GPU格式，每个实际解码帧只复制一次', async () => {
   const document = { ...fixture(), fps: 60, frameRate: { numerator: 60, denominator: 1 } }; const renderer = new VideoEditRenderer(document)
   try {

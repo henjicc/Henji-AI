@@ -1,6 +1,7 @@
 import { VIDEO_EDIT_COMMANDS, type VideoEditCommandId, type VideoEditCommandScope } from '@/core/videoEdit/commands'
 import { placeVideoEditItems } from '@/core/videoEdit/projectItems'
 import { videoEditDuration, type VideoEditSequence } from '@/core/videoEdit/document'
+import { videoEditTransitionClipIds } from '@/core/videoEdit/transitions'
 import { assertVideoEditClipsEditable } from '@/core/videoEdit/lockedTracks'
 import { expandVideoEditSelection, videoEditPickRelations, type VideoEditRelations } from '@/core/videoEdit/timelineSelection'
 import { applyVideoEditTimelineEdit, type VideoEditClipboard, type VideoEditTimelineEdit } from '@/core/videoEdit/timelineEdits'
@@ -194,8 +195,8 @@ export function videoEditCommandState(context: VideoEditCommandContext, id: Vide
     const transitionRequest = TRANSITION_COMMANDS[id]
     if (transitionRequest) {
       const pairs = videoEditDefaultTransitionTargets(owner, transitionRequest, context.clipIds, context.frame)
-      if (!pairs.length) return { enabled: false, reason: transitionRequest.mode === 'selection' ? '所选片段两端没有相接的片段。' : '目标轨道上没有首尾相接的片段。' }
-      assertVideoEditClipsEditable(sequence, pairs.flatMap(pair => [pair.leftClipId, pair.rightClipId]))
+      if (!pairs.length) return { enabled: false, reason: transitionRequest.mode === 'selection' ? '所选片段不能放这种过渡。' : '目标轨道上没有可放过渡的片段。' }
+      assertVideoEditClipsEditable(sequence, pairs.flatMap(videoEditTransitionClipIds))
       return { enabled: true }
     }
     // 选中时间线上的过渡块（没有选中片段）时，Delete／Backspace 删除这个过渡（PR）。

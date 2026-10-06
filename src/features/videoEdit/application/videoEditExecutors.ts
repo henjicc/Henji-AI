@@ -1,6 +1,7 @@
 import { fieldEffectContract, fieldWriterTable, type ApplicationEffectContract, type ApplicationCollectionExecutor, type ApplicationCompletedStepResult, type ApplicationEffectReceipt, type ApplicationEvidence, type ApplicationExecutionContext, type ApplicationMutationExecutor, type ApplicationPlannedStep, type ApplicationRef } from '@/core/application-control'
 import { applyWriterTable, propertyOperations, writableProperties } from '@/core/application-control/execution/writerTable'
 import { videoEditAnnotationSchema, videoEditClipSchema, videoEditDocumentSchema, videoEditBinSchema, videoEditItemSchema, videoEditTrackSchema, createVideoEditSequence, changeVideoEditSequenceSettings, type VideoEditDocument } from '@/core/videoEdit/document'
+import { videoEditTransitionClipIds } from '@/core/videoEdit/transitions'
 import { editVideoProject, restoreVideoEditSnapshot, requireVideoEditInstance, listVideoEditInstances, getVideoEditProjectView, setVideoEditProjectView, switchVideoEditSequence, getVideoEditTimelineView, setVideoEditTimelineView, validateVideoEditTimelineView, validateVideoEditProgramControl, setVideoEditView, videoEditProgramCommandIdentity, restoreVideoEditProgramCommandIdentity, subscribeVideoEditView, subscribeVideoEditDomain, videoEditDomainRevision as videoEditRevision, type VideoEditProjectView, type VideoEditTimelineView } from './videoEditService'
 import { VIDEO_EDIT_FIELDS, VIDEO_EDIT_CONTROLLED_AGGREGATES, VIDEO_EDIT_CLIP_CONTENT_CASCADES, VIDEO_EDIT_COMPOSITE_CASCADES, VIDEO_EDIT_PROGRAM_SOURCE_CASCADE, videoEditCollectionValues, videoEditDataKey, type VideoEditEntityType } from './videoEditFields'
 import { pauseVideoEditSourceForProgram, restoreVideoEditSourcePause, revertVideoEditSourcePause, matchesVideoEditSourceCommand, videoEditSourceCommandIdentity, type VideoEditSourcePause } from './videoEditSource'
@@ -363,7 +364,7 @@ export class VideoEditCollectionExecutor implements ApplicationCollectionExecuto
     const next = videoEditDocumentSchema.parse(reconcileVideoEditTimedContent(before, update(structuredClone(before))))
     assertVideoEditLockedTracks(before, next)
     if (['video_edit.effect', 'video_edit.transition'].includes(this.entityType)) {
-      const clipIds = this.entityType === 'video_edit.effect' ? [parsed.childId] : [...new Set([...before.sequences, ...next.sequences].filter(sequence => sequence.id === parsed.childId).flatMap(sequence => (sequence.transitions ?? []).filter(transition => refs.some(ref => splitVideoEditRef(ref).childId === transition.id)).flatMap(transition => [transition.leftClipId, transition.rightClipId])))]
+      const clipIds = this.entityType === 'video_edit.effect' ? [parsed.childId] : [...new Set([...before.sequences, ...next.sequences].filter(sequence => sequence.id === parsed.childId).flatMap(sequence => (sequence.transitions ?? []).filter(transition => refs.some(ref => splitVideoEditRef(ref).childId === transition.id)).flatMap(videoEditTransitionClipIds)))]
       const sequence = next.sequences.find(sequence => this.entityType === 'video_edit.transition' ? sequence.id === parsed.childId : sequence.clips.some(clip => clip.id === parsed.childId))!
       // 音频过渡两端是声音片段，不做画面试渲染。
       const pictured = clipIds.filter(clipId => sequence.clips.find(clip => clip.id === clipId)?.kind !== 'audio')

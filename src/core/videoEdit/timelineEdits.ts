@@ -5,7 +5,7 @@ import { expandVideoEditSelection, type VideoEditRelations } from './timelineSel
 import { offsetVideoEditSource, rescaleVideoEditFrame, videoEditSourceSeconds, type VideoEditRatio } from './time'
 import { videoEditSyncCorrections } from './linkSync'
 import { retimeVideoEditContent, type VideoEditMarker, type VideoEditCaption, type VideoEditContentOrigin } from './timedContent'
-import { validateVideoEditTransitions, type VideoEditTransition } from './transitions'
+import { validateVideoEditTransitions, videoEditTransitionClipIds, type VideoEditTransition } from './transitions'
 import { validateVideoEditAdjustmentRanges } from './compositing'
 
 export interface VideoEditClipboard {
@@ -154,7 +154,7 @@ function intervals(clips: readonly VideoEditClip[]): Array<{ from: number; to: n
 export function copyVideoEditClips(document: VideoEditDocument, sequenceId: string, clipIds: string[], linked: VideoEditRelations = true): VideoEditClipboard {
   const sequence = sequenceOf(document, sequenceId); const ids = new Set(expandVideoEditSelection(sequence, clipIds, linked))
   if (!ids.size) throw new Error('请先选择要复制的片段。')
-  return structuredClone({ projectId: document.id, frameRate: sequence.frameRate, clips: sequence.clips.filter(clip => ids.has(clip.id)), annotations: sequence.annotations.filter(mark => ids.has(mark.clipId)), markers: (sequence.markers ?? []).filter(mark => mark.clipId && ids.has(mark.clipId)), captions: (sequence.captions ?? []).filter(caption => caption.clipId && ids.has(caption.clipId)), transitions: (sequence.transitions ?? []).filter(transition => ids.has(transition.leftClipId) && ids.has(transition.rightClipId)), tracks: sequence.tracks.map(track => ({ index: track.index, kind: track.kind })) })
+  return structuredClone({ projectId: document.id, frameRate: sequence.frameRate, clips: sequence.clips.filter(clip => ids.has(clip.id)), annotations: sequence.annotations.filter(mark => ids.has(mark.clipId)), markers: (sequence.markers ?? []).filter(mark => mark.clipId && ids.has(mark.clipId)), captions: (sequence.captions ?? []).filter(caption => caption.clipId && ids.has(caption.clipId)), transitions: (sequence.transitions ?? []).filter(transition => videoEditTransitionClipIds(transition).every(id => ids.has(id))), tracks: sequence.tracks.map(track => ({ index: track.index, kind: track.kind })) })
 }
 
 /** Vertical dragging moves the selected lanes of the primary kind; linked audio keeps its lane. */
@@ -391,9 +391,9 @@ function placeClips(document: VideoEditDocument, original: VideoEditSequence, ed
   const markers = (edit.clipboard.markers ?? []).map(mark => ({ ...mark, id: crypto.randomUUID(), clipId: ids.get(mark.clipId!)!, frame: edit.frame + convert(mark.frame) }))
   const captions = (edit.clipboard.captions ?? []).map(caption => ({ ...caption, id: crypto.randomUUID(), clipId: ids.get(caption.clipId!)!, start: edit.frame + convert(caption.start), duration: convert(caption.start + caption.duration) - convert(caption.start) }))
   const transitions = (edit.clipboard.transitions ?? []).map(transition => {
-    const leftClipId = ids.get(transition.leftClipId); const rightClipId = ids.get(transition.rightClipId)
-    if (!leftClipId || !rightClipId) throw new Error('复制转场必须同时包含两端片段。')
-    return { ...transition, id: crypto.randomUUID(), leftClipId, rightClipId, durationFrames: rescaleVideoEditFrame(transition.durationFrames, edit.clipboard.frameRate, sequence.frameRate) }
+    const leftClipId = transition.leftClipId && ids.get(transition.leftClipId); const rightClipId = transition.rightClipId && ids.get(transition.rightClipId)
+    if (transition.leftClipId && !leftClipId || transition.rightClipId && !rightClipId) throw new Error('复制转场必须同时包含两端片段。')
+    return { ...transition, id: crypto.randomUUID(), ...(leftClipId ? { leftClipId } : {}), ...(rightClipId ? { rightClipId } : {}), durationFrames: rescaleVideoEditFrame(transition.durationFrames, edit.clipboard.frameRate, sequence.frameRate) }
   })
   return { sequence: { ...kept, clips: [...kept.clips, ...incoming], annotations: [...kept.annotations, ...annotations], ...(kept.markers || markers.length ? { markers: [...(kept.markers ?? []), ...markers] } : {}), ...(kept.captions || captions.length ? { captions: [...(kept.captions ?? []), ...captions] } : {}), ...(kept.transitions || transitions.length ? { transitions: [...(kept.transitions ?? []), ...transitions] } : {}) }, selectedClipIds: incoming.map(clip => clip.id) }
 }

@@ -3,7 +3,7 @@ import type { VideoEditClip, VideoEditSequence } from '@/core/videoEdit/document
 import { setVideoEditClipFade } from '@/core/videoEdit/fades'
 import { assertVideoEditClipsEditable } from '@/core/videoEdit/lockedTracks'
 import { useSettingsStore } from '@/stores/settingsStore'
-import { applyVideoEditTransitionPairs, dragVideoEditTransition, videoEditDefaultTransitionKind, videoEditDefaultTransitionPairs, type VideoEditTransitionAlignment, type VideoEditTransitionKind, type VideoEditTransitionMedium, type VideoEditTransitionPair } from '@/core/videoEdit/transitions'
+import { applyVideoEditTransitionPairs, dragVideoEditTransition, videoEditTransitionClipIds, videoEditDefaultTransitionKind, videoEditDefaultTransitionPairs, type VideoEditTransitionAlignment, type VideoEditTransitionKind, type VideoEditTransitionMedium, type VideoEditTransitionPair } from '@/core/videoEdit/transitions'
 import { editComposite } from './videoEditCompositing'
 import { beginVideoEditGesture, finishVideoEditGesture, getActiveVideoEditSequence, requireVideoEditInstance, setVideoEditTimelineView, updateVideoEditGesture, type VideoEditGesture, type VideoEditInstance } from './videoEditService'
 
@@ -43,11 +43,11 @@ function sequenceOf(projectId: string, sequenceId: string): VideoEditSequence {
 }
 async function commitPairs(projectId: string, sequenceId: string, pairs: readonly VideoEditTransitionPair[], options: { kind?: (medium: VideoEditTransitionMedium) => VideoEditTransitionKind; durationFrames?: number; alignment?: VideoEditTransitionAlignment }, operation: string, signal?: AbortSignal): Promise<string[]> {
   const sequence = sequenceOf(projectId, sequenceId)
-  assertVideoEditClipsEditable(sequence, pairs.flatMap(pair => [pair.leftClipId, pair.rightClipId]))
+  assertVideoEditClipsEditable(sequence, pairs.flatMap(videoEditTransitionClipIds))
   const result = applyVideoEditTransitionPairs(sequence, pairs, { ...options, durationFrames: options.durationFrames ?? videoEditDefaultTransitionFrames(sequence) })
   logger.debug('应用过渡', { event: 'video_edit.transition.apply.start', context: { projectId, sequenceId, operation, count: result.transitionIds.length } })
   try {
-    await editComposite(projectId, sequenceId, [...new Set(pairs.flatMap(pair => [pair.leftClipId, pair.rightClipId]))], draft => { draft.transitions = result.sequence.transitions }, signal)
+    await editComposite(projectId, sequenceId, [...new Set(pairs.flatMap(videoEditTransitionClipIds))], draft => { draft.transitions = result.sequence.transitions }, signal)
   } catch (error) { logger.debug('过渡未应用', { event: 'video_edit.transition.apply.failed', error, context: { projectId, sequenceId, operation } }); throw error }
   logger.debug('过渡已应用', { event: 'video_edit.transition.apply.completed', context: { projectId, sequenceId, operation, count: result.transitionIds.length } })
   return result.transitionIds
@@ -86,7 +86,7 @@ function previewSequence(drag: VideoEditTimelineHandleDrag, change: (sequence: V
 export function beginVideoEditTransitionDrag(projectId: string, sequenceId: string, transitionId: string): VideoEditTimelineHandleDrag {
   const transition = sequenceOf(projectId, sequenceId).transitions?.find(value => value.id === transitionId)
   if (!transition) throw new Error('原过渡已移除。')
-  return beginDrag(projectId, sequenceId, [transition.leftClipId, transition.rightClipId])
+  return beginDrag(projectId, sequenceId, videoEditTransitionClipIds(transition))
 }
 /** 拖过渡块：`mode` in／out 改时长（另一缘不动），move 沿切点平移；`delta` 相对按下时的整数帧。 */
 export function previewVideoEditTransitionDrag(drag: VideoEditTimelineHandleDrag, transitionId: string, mode: 'in' | 'out' | 'move', delta: number): void {

@@ -34,7 +34,7 @@ import { TIMELINE_DEFAULT_SPLIT, TIMELINE_HEADER_WIDTH, TIMELINE_RULER_HEIGHT, T
 import { videoEditTrackCodes } from '@/core/videoEdit/tracks'
 import { useTrackHeaderMenu } from './useTrackHeaderMenu'
 import { ICON_VIDEO_EDIT_TRANSITION } from '@/core/theme/icons'
-import { videoEditTransitionEditPoints, videoEditTransitionFit, videoEditTransitionMedium, videoEditTransitionPreset, videoEditTransitionWindow, type VideoEditTransitionAlignment, type VideoEditTransitionKind, type VideoEditTransitionPair, type VideoEditTransitionWindow } from '@/core/videoEdit/transitions'
+import { videoEditTransitionEditPoints, videoEditTransitionFit, videoEditTransitionPairCut, videoEditTransitionMedium, videoEditTransitionPreset, videoEditTransitionWindow, type VideoEditTransitionAlignment, type VideoEditTransitionKind, type VideoEditTransitionPair, type VideoEditTransitionWindow } from '@/core/videoEdit/transitions'
 import { placeVideoEditTransition, selectVideoEditTransition, selectedVideoEditTransitionId, subscribeVideoEditTransitionSelection, videoEditDefaultTransitionFrames, videoEditTransitionSelectionVersion } from '../application/videoEditTransitions'
 import { readVideoEditTransitionDrag } from '../panels/videoEditTransitionDrag'
 
@@ -233,7 +233,10 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
     return zone && { frame, newTrack: zone, mode }
   }
   const run = (operation: () => void): void => { try { operation() } catch (error) { onError(error) } }
-  /** 过渡预设的落点（PR）：同类轨道上离光标最近的编辑点；落在切点上居中，左侧终点对齐切点，右侧起点对齐切点。 */
+  /**
+   * 过渡预设的落点（PR）：同类轨道上离光标最近的编辑点；落在切点上居中，左侧终点对齐切点，右侧起点对齐切点。
+   * 片段一端旁边是空白时放单侧过渡，整段在片段内（4.4）。
+   */
   const transitionDrop = (event: React.DragEvent<HTMLDivElement>, kind: VideoEditTransitionKind): TransitionDropHint | null => {
     const host = pointer.viewport.current!; const rect = host.getBoundingClientRect()
     if (event.clientX < rect.left + TIMELINE_HEADER_WIDTH) return null
@@ -241,13 +244,13 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
     const medium = videoEditTransitionMedium(kind)
     if (!row || row.track.kind !== medium || row.track.locked) return null
     const x = (event.clientX - rect.left + host.scrollLeft - TIMELINE_HEADER_WIDTH) / pixels
-    const cutOf = (pair: VideoEditTransitionPair): number => sequence.clips.find(clip => clip.id === pair.rightClipId)!.start
+    const cutOf = (pair: VideoEditTransitionPair): number => videoEditTransitionPairCut(sequence, pair)!
     const pair = videoEditTransitionEditPoints(sequence, medium, new Set([row.track.index])).sort((a, b) => Math.abs(cutOf(a) - x) - Math.abs(cutOf(b) - x))[0]
     if (!pair) return null
     const offset = (x - cutOf(pair)) * pixels
     if (Math.abs(offset) > TRANSITION_DROP_REACH) return null
-    const alignment: VideoEditTransitionAlignment = Math.abs(offset) <= TRANSITION_DROP_CENTER ? 'center' : offset < 0 ? 'end' : 'start'
-    const fit = videoEditTransitionFit(sequence, pair.leftClipId, pair.rightClipId, videoEditDefaultTransitionFrames(sequence), alignment)
+    const alignment: VideoEditTransitionAlignment = !pair.leftClipId ? 'start' : !pair.rightClipId ? 'end' : Math.abs(offset) <= TRANSITION_DROP_CENTER ? 'center' : offset < 0 ? 'end' : 'start'
+    const fit = videoEditTransitionFit(sequence, pair, videoEditDefaultTransitionFrames(sequence), alignment)
     return fit ? { kind, pair, alignment, track: row.track.index, start: cutOf(pair) - fit.framesBeforeCut, duration: fit.durationFrames } : null
   }
   // 时间线上的过渡块（PR）：盖在切点上，显示名称；拖左右缘改时长，拖中间平移。
@@ -260,15 +263,17 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
     const selected = window.transition.id === selectedTransitionId
     const width = Math.max(6, (window.end - window.start) * pixels)
     const Icon = ICON_VIDEO_EDIT_TRANSITION
-    return <div key={window.transition.id} data-video-edit-transition={window.transition.id} data-selected={selected || undefined} title={`${preset.name}：拖两端改时长，拖中间沿切点移动`}
+    // 单侧过渡（4.4）贴着片段一端：只有离开那一端的边缘能拖。
+    const fixed = window.side === 'in' ? 'in' : window.side === 'out' ? 'out' : undefined
+    return <div key={window.transition.id} data-video-edit-transition={window.transition.id} data-video-edit-transition-side={window.side} data-selected={selected || undefined} title={window.side ? `${preset.name}：拖${window.side === 'in' ? '右' : '左'}缘改时长` : `${preset.name}：拖两端改时长，拖中间沿切点移动`}
       className={`absolute z-raised flex overflow-hidden rounded-md border bg-raised text-text1 ${selected ? CLIP_SELECTED_LINE : 'border-line-strong'}`}
       style={{ top: row.top - region.top + 2, height: Math.max(12, Math.min(row.height - 4, 28)), left: TIMELINE_HEADER_WIDTH + window.start * pixels, width }}>
-      <div data-video-edit-transition-edge="in" aria-hidden="true" className="h-full w-1.5 shrink-0 cursor-ew-resize" />
-      <div className="flex min-w-0 flex-1 cursor-grab items-center gap-1 overflow-hidden">
+      <div data-video-edit-transition-edge={fixed === 'in' ? undefined : 'in'} aria-hidden="true" className={`h-full w-1.5 shrink-0 ${fixed === 'in' ? '' : 'cursor-ew-resize'}`} />
+      <div className={`flex min-w-0 flex-1 items-center gap-1 overflow-hidden ${fixed ? '' : 'cursor-grab'}`}>
         {width > 28 && <Icon size={12} aria-hidden="true" className="shrink-0 text-text3" />}
         {width > 56 && <span className="truncate text-2xs leading-4">{preset.name}</span>}
       </div>
-      <div data-video-edit-transition-edge="out" aria-hidden="true" className="h-full w-1.5 shrink-0 cursor-ew-resize" />
+      <div data-video-edit-transition-edge={fixed === 'out' ? undefined : 'out'} aria-hidden="true" className={`h-full w-1.5 shrink-0 ${fixed === 'out' ? '' : 'cursor-ew-resize'}`} />
     </div>
   }
   const renderClip = (clip: VideoEditSequence['clips'][number], region: TimelineRegion): React.ReactElement => {
@@ -362,7 +367,7 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
         if (transitionKind) {
           event.preventDefault()
           const at = transitionDrop(event, transitionKind); event.dataTransfer.dropEffect = at ? 'copy' : 'none'
-          setTransitionHint(current => current && at && current.pair.rightClipId === at.pair.rightClipId && current.alignment === at.alignment && current.kind === at.kind ? current : at)
+          setTransitionHint(current => current && at && current.pair.leftClipId === at.pair.leftClipId && current.pair.rightClipId === at.pair.rightClipId && current.alignment === at.alignment && current.kind === at.kind ? current : at)
           return
         }
         if (!acceptsVideoEditDrop(event.dataTransfer)) return

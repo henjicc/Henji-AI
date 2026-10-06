@@ -2,7 +2,7 @@ import type { JsonValue } from '@/core/application-control'
 import { videoEditClipSchema, type VideoEditDocument, type VideoEditClip } from '@/core/videoEdit/document'
 import { createVideoEditGraphic, orderVideoEditGraphicObjects } from '@/core/videoEdit/graphics'
 import { orderVideoEditEffects, videoEditEffectSchema, videoEditAdjustmentSchema } from '@/core/videoEdit/compositing'
-import { videoEditTransitionPreset, videoEditTransitionSchema } from '@/core/videoEdit/transitions'
+import { videoEditTransitionClipIds, videoEditTransitionPreset, videoEditTransitionSchema } from '@/core/videoEdit/transitions'
 import { codeMaterialInstanceSchema } from '@/core/videoEdit/codeMaterialPersistence'
 import type { CodeMaterialMetadataReader } from '@/core/videoEdit/codeMaterialDocument'
 import { makeVideoEditEffect } from './videoEditCompositing'
@@ -46,7 +46,7 @@ export function videoEditCompositeOwner(document: VideoEditDocument, type: Video
   const sequence = document.sequences.find(sequence => sequence.transitions?.some(transition => transition.id === childId))
   const transition = sequence?.transitions?.find(transition => transition.id === childId)
   if (!sequence || !transition) throw new Error('NOT_FOUND：转场已移除。')
-  return { kind: 'transition' as const, sequence, transition, clipIds: [transition.leftClipId, transition.rightClipId] }
+  return { kind: 'transition' as const, sequence, transition, clipIds: videoEditTransitionClipIds(transition) }
 }
 export function videoEditCompositeItems(document: VideoEditDocument, type: VideoEditCompositeEntityType): Array<{ id: string; name: string }> {
   if (type === 'video_edit.graphic_object') return document.sequences.flatMap(sequence => sequence.clips.flatMap(clip => (clip.graphic?.objects ?? []).map(object => ({ id: videoEditGraphicObjectId(clip.id, object.id), name: object.name }))))
