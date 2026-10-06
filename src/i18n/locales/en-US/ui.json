@@ -1179,7 +1179,8 @@
       "removeFromProject": "Remove from Project",
       "duplicate": "Duplicate",
       "reveal": "Show in Folder",
-      "forget": "Remove from List"
+      "forget": "Remove from List",
+      "exportPackage": "Export as single file…"
     },
     "rename": {
       "title": "Rename",
@@ -1216,7 +1217,18 @@
       "delete": "Couldn't move to the Recycle Bin: {{message}}",
       "open": "Couldn't open: {{message}}",
       "forget": "Couldn't remove from the list: {{message}}",
-      "createProject": "Couldn't create the project: {{message}}"
+      "createProject": "Couldn't create the project: {{message}}",
+      "exportPackage": "Couldn't export: {{message}}",
+      "importPackage": "Couldn't import: {{message}}"
+    },
+    "importPackage": "Import file…",
+    "package": {
+      "exporting": "Exporting…",
+      "importing": "Importing…",
+      "exported": "Exported “{{name}}”.",
+      "exportedMissing": "Exported “{{name}}”. {{count}} referenced files could not be found and were left out.",
+      "importedDocument": "Imported “{{name}}”.",
+      "importedProject": "Imported project “{{name}}”. Open it from the Edit project list."
     }
   },
   "projectLibrary": {
@@ -1241,7 +1253,9 @@
       "rename": "Couldn't rename: {{message}}",
       "delete": "Couldn't move to the Recycle Bin: {{message}}",
       "reveal": "Couldn't show in folder: {{message}}",
-      "forget": "Couldn't remove from the list: {{message}}"
+      "forget": "Couldn't remove from the list: {{message}}",
+      "exportPackage": "Couldn't export: {{message}}",
+      "importPackage": "Couldn't import: {{message}}"
     }
   },
   "videoEditProject": {

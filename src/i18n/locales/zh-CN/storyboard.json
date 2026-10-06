@@ -814,14 +814,8 @@
   },
   "project": {
     "title": "画布",
-    "exportPackage": "导出画布包",
-    "importPackage": "导入画布包",
-    "importing": "导入中…",
-    "exporting": "正在导出…",
-    "exportFailed": "画布包导出失败",
-    "importFailed": "画布包导入失败",
     "persistenceFailed": "画布保存失败，修改已保留并会自动重试；请检查磁盘空间",
-    "openFailed": "画布无法安全打开，原文件未被修改。请重新打开，或从有效画布包导入为新画布。",
+    "openFailed": "画布无法安全打开，原文件未被修改。请重新打开，或从有效的单文件包导入为新画布。",
     "namePlaceholder": "请输入名称",
     "emptyHint": "新建第一个画布，开始整理你的节点内容",
     "nodesCount": "{{count}} 个节点"

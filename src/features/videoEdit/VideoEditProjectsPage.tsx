@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { FolderOpen, ListX } from 'lucide-react'
+import { FolderOpen, ListX, PackageCheck, PackageOpen } from 'lucide-react'
 import type { ProjectCardGridExtraAction, ProjectCardGridItem } from '@/components/ProjectCardGrid'
 import { ProjectLibraryPage, type ProjectLibraryLabels } from '@/components/ProjectLibraryPage'
+import { UI_TEXT_META_CLASS } from '@/components/ui'
 import { ICON_WORKSPACE_VIDEO_EDIT } from '@/core/theme/icons'
 import { MAX_ENTRY_NAME_LENGTH, normalizeEntryName } from '@/core/documents/naming'
 import type { NameCheckResult, ProjectSummary } from '@/core/documents/types'
 import { toError } from '@/features/documents/documentErrors'
 import { getDocumentOperations, type DocumentOperations } from '@/features/documents/documentOperations'
+import { exportProjectPackageInteractive, importPackageInteractive, packageFileName } from '@/features/documents/documentPackageActions'
 import type { DocumentSessionRegistry } from '@/features/documents/documentSessionRegistry'
 import { ProjectDraftRecoveryNotice } from '@/features/documents/ProjectDraftRecoveryNotice'
 import { useProjectLibrary, type ProjectCardItem } from '@/features/documents/useDocumentLibrary'
@@ -17,7 +19,8 @@ import { useNavigationStore } from '@/stores/navigationStore'
 /*
  * 剪辑页 = 项目列表（实施方案 2.10，3.1 剪辑接入）：每个项目是一个文件夹，剪辑是它的主文档。
  * 新建项目（草稿，离开时询问保存）、打开项目（打开主剪辑）、打开别处的项目文件夹（登记为外部位置）。
- * 数据来自通用项目列表（作品索引）；右键：打开、重命名、在文件夹中显示、删除（整个文件夹移到回收站），
+ * 数据来自通用项目列表（作品索引）；右键：打开、重命名、在文件夹中显示、导出为单个文件…（4.1）、删除（整个文件夹移到回收站），
+ * 页头次要动作：打开项目文件夹…、导入单个文件…（项目包放进“项目”文件夹，单个文档的包放进作品目录），
  * 找不到文件夹的外部项目只能“从列表移除”。页头下方是意外退出留下的草稿项目。
  */
 
@@ -53,9 +56,11 @@ export function VideoEditProjectsPage({ busy = false, onCreate, onOpenFolder, on
   }, [active, operations, reload])
   const [actionError, setActionError] = useState<string | null>(null)
   const [working, setWorking] = useState(false)
+  const [packageStatus, setPackageStatus] = useState<string | null>(null)
 
   const run = useCallback(async (failureKey: string, action: () => Promise<void>): Promise<void> => {
     setActionError(null)
+    setPackageStatus(null)
     setWorking(true)
     try { await action() } catch (raw) {
       setActionError(t(`projectLibrary.failed.${failureKey}`, { message: toError(raw).message }))
@@ -95,8 +100,32 @@ export function VideoEditProjectsPage({ busy = false, onCreate, onOpenFolder, on
       label: t('documentLibrary.actions.reveal'),
       icon: <FolderOpen className="h-4 w-4" />,
       onClick: () => { void run('reveal', () => operations.revealProject(project.id)) },
+    }, {
+      id: 'export-package',
+      label: t('documentLibrary.actions.exportPackage'),
+      icon: <PackageCheck className="h-4 w-4" />,
+      onClick: () => {
+        void run('exportPackage', async () => {
+          setPackageStatus(t('documentLibrary.package.exporting'))
+          const result = await exportProjectPackageInteractive(project, operations)
+          setPackageStatus(result ? (result.missingPaths.length
+            ? t('documentLibrary.package.exportedMissing', { name: packageFileName(result), count: result.missingPaths.length })
+            : t('documentLibrary.package.exported', { name: packageFileName(result) })) : null)
+        })
+      },
     }]
   }, [t, run, operations])
+
+  const importPackage = useCallback((): void => {
+    void run('importPackage', async () => {
+      setPackageStatus(t('documentLibrary.package.importing'))
+      const result = await importPackageInteractive(undefined, operations)
+      if (!result) { setPackageStatus(null); return }
+      setPackageStatus(result.type === 'project'
+        ? t('documentLibrary.package.importedProject', { name: result.project.name })
+        : t('documentLibrary.package.importedDocument', { name: result.meta.name }))
+    })
+  }, [run, operations, t])
 
   const labels = useMemo((): ProjectLibraryLabels => ({
     createAction: t('projectLibrary.create'),
@@ -152,13 +181,17 @@ export function VideoEditProjectsPage({ busy = false, onCreate, onOpenFolder, on
       busy={busy || working}
       labels={labels}
       create={{ kind: 'direct', onCreate }}
-      secondaryAction={{ label: t('projectLibrary.openFolder'), icon: FolderOpen, onClick: onOpenFolder }}
+      secondaryAction={[
+        { label: t('projectLibrary.openFolder'), icon: FolderOpen, onClick: onOpenFolder },
+        { label: t('documentLibrary.importPackage'), icon: PackageOpen, onClick: importPackage },
+      ]}
       banner={(
         <>
           <div className="mb-6 empty:hidden">
             <ProjectDraftRecoveryNotice onRecover={onOpen} {...(registry ? { registry } : {})} />
           </div>
           {actionError ? <p role="alert" className="mb-4 text-xs text-danger-text">{actionError}</p> : null}
+          {packageStatus && !actionError ? <p role="status" className={`mb-4 ${UI_TEXT_META_CLASS}`} data-observation-sensitive>{packageStatus}</p> : null}
         </>
       )}
       canManage={(item) => !asProjectItem(item).project.missing}

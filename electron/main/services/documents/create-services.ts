@@ -7,6 +7,7 @@ import type { MainLogger } from '../logging/main-logger'
 import type { DocumentCatalog } from './catalog'
 import { DocumentCoverStore } from './covers'
 import { DocumentIndexScanner } from './index-scanner'
+import { DocumentPackageService } from './package-service'
 import { createPackageAdapterRegistry, type PackageAdapterRegistry } from './package-adapters'
 import { ProjectService } from './projects'
 import { DocumentRepository } from './repository'
@@ -42,6 +43,7 @@ export interface DocumentServices {
   scanner: DocumentIndexScanner
   covers: DocumentCoverStore
   sessionState: DocumentSessionStateStore
+  packages: DocumentPackageService
 }
 
 export function createDocumentServices(environment: DocumentEnvironment): DocumentServices {
@@ -95,6 +97,17 @@ export function createDocumentServices(environment: DocumentEnvironment): Docume
     refreshProjects,
     scheduleIndexRefresh: () => { void scanner.refresh().catch(() => undefined) },
   })
-  const service = new DocumentService({ workspace, repository, projects, scanner, covers, sessionState })
-  return { service, workspace, repository, projects, scanner, covers, sessionState }
+  const packages = new DocumentPackageService({
+    workspace,
+    repository,
+    projects,
+    scanner,
+    kinds,
+    adapters,
+    logger: environment.logger('main.documents.package'),
+    stagingDirectory: path.join(environment.storeDirectory, 'package-staging'),
+    hideDirectory: environment.hideDirectory,
+  })
+  const service = new DocumentService({ workspace, repository, projects, scanner, covers, sessionState, packages })
+  return { service, workspace, repository, projects, scanner, covers, sessionState, packages }
 }

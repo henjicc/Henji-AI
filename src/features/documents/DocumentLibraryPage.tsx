@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Copy, FolderInput, FolderOpen, FolderOutput, ListX } from 'lucide-react'
+import { Copy, FolderInput, FolderOpen, FolderOutput, ListX, PackageCheck, PackageOpen } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
 import type { ProjectCardGridExtraAction, ProjectCardGridItem } from '@/components/ProjectCardGrid'
@@ -11,13 +11,14 @@ import {
   type ProjectLibraryLabels,
   type ProjectLibrarySecondaryAction,
 } from '@/components/ProjectLibraryPage'
-import { AlertDialog } from '@/components/ui'
+import { AlertDialog, UI_TEXT_META_CLASS } from '@/components/ui'
 import { MAX_ENTRY_NAME_LENGTH, normalizeEntryName } from '@/core/documents/naming'
 import type { DocumentContainerRef, DocumentKindId, DocumentSummary, NameCheckResult } from '@/core/documents/types'
 
 import { DocumentDraftRecoveryNotice } from './DocumentDraftRecoveryNotice'
 import { toError } from './documentErrors'
 import { documentKindPresentation } from './documentKindPresentation'
+import { exportDocumentPackageInteractive, importPackageInteractive, packageFileName } from './documentPackageActions'
 import { getDocumentOperations, isDocumentNameConflict, type DocumentOperations } from './documentOperations'
 import type { DocumentSessionRegistry } from './documentSessionRegistry'
 import { MoveToProjectDialog, type MoveToProjectChoice } from './MoveToProjectDialog'
@@ -33,7 +34,8 @@ import {
  * 文档类型的项目页（存储底座 2.5，实施方案 2.10）：共用 ProjectLibraryPage 外壳，接上通用数据源与右键操作。
  * 3.x 各工具切换时只换成 <DocumentLibraryPage kind="…" …/>，不再自己取数、自己写重命名 / 删除。
  *
- * 右键：打开、重命名（实时查重，重名不加后缀）、移到项目…、移出项目、创建副本、在文件夹中显示、删除（移到回收站）。
+ * 右键：打开、重命名（实时查重，重名不加后缀）、移到项目…、移出项目、创建副本、在文件夹中显示、
+ * 导出为单个文件…（4.1 通用单文件包）、删除（移到回收站）。页头次要动作“导入单个文件…”（导入到作品目录）。
  * 找不到文件的文档只有“从列表移除”（只改作品索引，不动磁盘）。
  * 移动遇到重名时询问“两个都保留 / 取消”；创建副本与原件在同一文件夹，按“两个都保留”自动加序号，不再询问。
  * 草稿不进网格，放在页头下方的草稿区（DocumentDraftRecoveryNotice）。
@@ -101,9 +103,11 @@ export function DocumentLibraryPage({
   const [conflict, setConflict] = useState<PendingConflict | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [working, setWorking] = useState(false)
+  const [packageStatus, setPackageStatus] = useState<string | null>(null)
 
   const run = useCallback(async (failureKey: string, action: () => Promise<void>): Promise<void> => {
     setActionError(null)
+    setPackageStatus(null)
     setWorking(true)
     try {
       await action()
@@ -193,9 +197,34 @@ export function DocumentLibraryPage({
         icon: <FolderOpen className="h-4 w-4" />,
         onClick: () => { void run('reveal', () => operations.revealDocument({ id: document.id, path: document.path })) },
       },
+      {
+        id: 'export-package',
+        label: t('documentLibrary.actions.exportPackage'),
+        icon: <PackageCheck className="h-4 w-4" />,
+        onClick: () => {
+          void run('exportPackage', async () => {
+            setPackageStatus(t('documentLibrary.package.exporting'))
+            const result = await exportDocumentPackageInteractive(document, operations)
+            setPackageStatus(result ? (result.missingPaths.length
+              ? t('documentLibrary.package.exportedMissing', { name: packageFileName(result), count: result.missingPaths.length })
+              : t('documentLibrary.package.exported', { name: packageFileName(result) })) : null)
+          })
+        },
+      },
       ...(documentActions?.(document) ?? []),
     ]
   }, [t, canStandalone, run, moveWithConflictPrompt, operations, documentActions])
+
+  const importPackage = useCallback((): void => {
+    void run('importPackage', async () => {
+      setPackageStatus(t('documentLibrary.package.importing'))
+      const result = await importPackageInteractive(undefined, operations)
+      if (!result) { setPackageStatus(null); return }
+      setPackageStatus(result.type === 'project'
+        ? t('documentLibrary.package.importedProject', { name: result.project.name })
+        : t('documentLibrary.package.importedDocument', { name: result.meta.name }))
+    })
+  }, [run, operations, t])
 
   const pageLabels = useMemo((): ProjectLibraryLabels => ({
     createAction: t('documentLibrary.create', { kind: kindName }),
@@ -262,7 +291,10 @@ export function DocumentLibraryPage({
         busy={busy || working}
         labels={pageLabels}
         create={create}
-        secondaryAction={secondaryAction}
+        secondaryAction={[
+          ...(secondaryAction ? [secondaryAction] : []),
+          { label: t('documentLibrary.importPackage'), icon: PackageOpen, onClick: importPackage },
+        ]}
         onDropFiles={onDropFiles}
         onBack={onBack}
         backLabel={backLabel}
@@ -272,6 +304,7 @@ export function DocumentLibraryPage({
               <DocumentDraftRecoveryNotice kind={kind} onRecover={open} {...(registry ? { registry } : {})} />
             </div>
             {actionError ? <p role="alert" className="mb-4 text-xs text-danger-text">{actionError}</p> : null}
+            {packageStatus && !actionError ? <p role="status" className={`mb-4 ${UI_TEXT_META_CLASS}`} data-observation-sensitive>{packageStatus}</p> : null}
             {banner}
           </>
         )}

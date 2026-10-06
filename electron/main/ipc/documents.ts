@@ -9,6 +9,9 @@ import {
   documentSessionStateKeySchema,
   documentTargetSchema,
   duplicateDocumentRequestSchema,
+  exportDocumentPackageRequestSchema,
+  exportProjectPackageRequestSchema,
+  importPackageRequestSchema,
   finalizeDocumentRequestSchema,
   finalizeProjectRequestSchema,
   importFileRequestSchema,
@@ -70,4 +73,7 @@ export function registerDocumentsIpc(): void {
   registerIpcHandler(c.registerExternalProject, parseWith(pathRequestSchema), ({ path }) => service().registerExternalProject(path))
   registerIpcHandler(c.forgetExternalLocation, parseWith(pathRequestSchema), ({ path }) => service().forgetExternalLocation(path))
   registerIpcHandler(c.revealProject, parseWith(projectIdRequestSchema), ({ projectId }) => service().revealProject(projectId))
+  registerIpcHandler(c.exportDocumentPackage, parseWith(exportDocumentPackageRequestSchema), (request) => service().exportDocumentPackage(request))
+  registerIpcHandler(c.exportProjectPackage, parseWith(exportProjectPackageRequestSchema), (request) => service().exportProjectPackage(request))
+  registerIpcHandler(c.importPackage, parseWith(importPackageRequestSchema), (request) => service().importPackage(request))
 }

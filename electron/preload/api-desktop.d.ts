@@ -136,25 +136,6 @@ export interface HenjiDragApi {
   startNativeFileDragImmediate(filePath: string, iconPath?: string): void
 }
 
-export interface HenjiPackageMediaFile {
-  srcPath: string
-  packagePath: string
-}
-
-export interface HenjiImportedProjectPackage {
-  manifestJson: string
-  pathMap: Record<string, string>
-  imageEditReferences: Array<{
-    source: { documentRef: string; revision: number; previewRef: string | null }
-    imported: { documentRef: string; revision: number; previewRef: string | null }
-  }>
-}
-
-export interface HenjiProjectPackageApi {
-  exportProjectPackage(manifestJson: string, mediaFiles: HenjiPackageMediaFile[], targetPath: string): Promise<void>
-  importProjectPackage(zipPath: string): Promise<HenjiImportedProjectPackage>
-}
-
 export interface HenjiLogEventBridgeDto {
   timestamp: string
   level: 'trace' | 'debug' | 'info' | 'warn' | 'error'

@@ -66,24 +66,22 @@ async function checkNativeBridge(page) {
       throw new Error('media range fetch content mismatch')
     }
 
-    const packagePath = await native.paths.join(workDir, 'package.zip')
-    const manifestJson = JSON.stringify({
-      formatVersion: 1,
-      exportedAt: new Date().toISOString(),
-      project: { id: 'phase4-smoke', name: 'Phase 4 Smoke' },
+    // 通用单文件包（4.1）：独立文档引用一个外部文件，导出后导入为新文档，素材收进作品目录
+    const created = await native.documents.createDocument({
+      kind: 'canvas',
+      container: { kind: 'user' },
+      name: `smoke-${Date.now()}`,
+      content: { nodes: [{ id: 'n1', type: 'exportImageNode', position: { x: 0, y: 0 }, data: { imageUrl: mediaPath } }], edges: [] },
     })
-    await native.projectPackage.exportProjectPackage(
-      manifestJson,
-      [{ srcPath: mediaPath, packagePath: 'media/media.txt' }],
-      packagePath
-    )
-    const imported = await native.projectPackage.importProjectPackage(packagePath)
-    const importedManifest = JSON.parse(imported.manifestJson)
-    if (importedManifest.project.id !== 'phase4-smoke') {
-      throw new Error('project package manifest mismatch')
+    const exported = await native.documents.exportDocumentPackage({ target: { id: created.meta.id }, destination: await native.paths.join(workDir, 'package.henjipack') })
+    const imported = await native.documents.importPackage({ source: exported.path })
+    if (imported.type !== 'document' || imported.meta.id === created.meta.id) {
+      throw new Error('single-file package import did not create a new document')
     }
-    if (!imported.pathMap['media/media.txt']) {
-      throw new Error('project package pathMap missing media file')
+    const importedContent = (await native.documents.readDocument({ id: imported.meta.id })).content
+    const importedMedia = importedContent?.nodes?.[0]?.data?.imageUrl
+    if (!importedMedia || importedMedia === mediaPath) {
+      throw new Error('single-file package import did not collect the referenced media')
     }
 
     let dragRejected = false

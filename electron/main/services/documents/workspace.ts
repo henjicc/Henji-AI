@@ -44,6 +44,8 @@ export interface WorkspaceLayout {
   generatedDir: string
   /** 作品目录的“上传素材”，独立文档复制进来的素材放这里。 */
   uploadsDir: string
+  /** 作品目录的“导出”：没有另选位置的单文件包放这里（4.1）。 */
+  exportsDir: string
 }
 
 export interface ResolvedContainer {

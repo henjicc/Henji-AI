@@ -11,8 +11,13 @@ import type {
   DocumentTarget,
   DocumentTransferResult,
   DuplicateDocumentRequest,
+  ExportDocumentPackageRequest,
+  ExportProjectPackageRequest,
   ImportFileRequest,
   ImportFileResult,
+  ImportPackageRequest,
+  PackageExportResult,
+  PackageImportResult,
   MoveDocumentRequest,
   NameCheckResult,
   NameConflictPolicy,
@@ -57,6 +62,9 @@ export interface DocumentOperationCommands extends DocumentSessionCommands {
   setProjectMainDocument(request: SetProjectMainDocumentRequest): Promise<ProjectSummary>
   registerExternalProject(folderPath: string): Promise<ProjectSummary>
   forgetExternalLocation(folderPath: string): Promise<void>
+  exportDocumentPackage(request: ExportDocumentPackageRequest): Promise<PackageExportResult>
+  exportProjectPackage(request: ExportProjectPackageRequest): Promise<PackageExportResult>
+  importPackage(request: ImportPackageRequest): Promise<PackageImportResult>
 }
 
 /** 打开一份文档（进入对应工具的编辑界面）。由各工具在接入通用文档时登记。 */
@@ -144,6 +152,9 @@ export const defaultDocumentOperationCommands: DocumentOperationCommands = {
   setProjectMainDocument: documentCommands.setProjectMainDocument,
   registerExternalProject: documentCommands.registerExternalProject,
   forgetExternalLocation: documentCommands.forgetExternalLocation,
+  exportDocumentPackage: documentCommands.exportDocumentPackage,
+  exportProjectPackage: documentCommands.exportProjectPackage,
+  importPackage: documentCommands.importDocumentPackage,
 }
 
 /** 名称重名错误（主进程报 DocumentNameConflictError）：移动、复制时据此询问“两个都保留”。 */
@@ -291,13 +302,44 @@ export class DocumentOperations {
     })
   }
 
-  /** 创建副本：与原件在同一文件夹，沿用原名，重名时按 onConflict（默认两个都保留，自动加序号）。 */
-  async duplicateDocument(target: DocumentTarget, onConflict: NameConflictPolicy = 'keepBoth'): Promise<DocumentTransferResult> {
+  /**
+   * 创建副本：默认与原件在同一文件夹，沿用原名，重名时按 onConflict（默认两个都保留，自动加序号）。
+   * 给了 container 时复制进那个容器（4.1“复制进本项目”：新 ID，原容器里用到的素材一并复制）。
+   */
+  async duplicateDocument(target: DocumentTarget, onConflict: NameConflictPolicy = 'keepBoth', container?: DocumentContainerRef): Promise<DocumentTransferResult> {
     return await this.write('duplicate', target.id, async () => {
       const session = this.registry().get(target.id)
       if (session) await session.prepareTransfer()
-      return await this.commands.duplicateDocument({ target: session?.target ?? target, onConflict })
+      return await this.commands.duplicateDocument({ target: session?.target ?? target, onConflict, ...(container ? { container } : {}) })
     })
+  }
+
+  /**
+   * 导出单个文档为单文件包（4.1）：正在编辑的先写完（含内嵌图层包），再由主进程打包。
+   * 不给位置时放进作品目录“导出”。
+   */
+  async exportDocumentPackage(target: DocumentTarget, destination?: string): Promise<PackageExportResult> {
+    return await this.logged('export_package', target.id, async () => {
+      const session = this.registry().get(target.id)
+      if (session) await session.prepareTransfer()
+      return await this.commands.exportDocumentPackage({ target: session?.target ?? target, ...(destination ? { destination } : {}) })
+    })
+  }
+
+  /** 导出整个项目为单文件包（4.1）：项目里正在编辑的文档先写完。 */
+  async exportProjectPackage(projectId: string, destination?: string): Promise<PackageExportResult> {
+    return await this.logged('export_project_package', projectId, async () => {
+      for (const session of this.registry().list()) {
+        const container = session.documentMeta.container
+        if (container.kind === 'project' && container.projectId === projectId && !session.isEnded) await session.prepareTransfer()
+      }
+      return await this.commands.exportProjectPackage({ projectId, ...(destination ? { destination } : {}) })
+    })
+  }
+
+  /** 导入单文件包（4.1）：文档包放进给定容器（默认作品目录），项目包放进“项目”文件夹；ID 冲突换新。 */
+  async importPackage(source: string, container?: DocumentContainerRef): Promise<PackageImportResult> {
+    return await this.write('import_package', source, async () => await this.commands.importPackage({ source, ...(container ? { container } : {}) }))
   }
 
   /**
@@ -447,6 +489,21 @@ export class DocumentOperations {
       // 重名、正在编辑这类用户可处理的失败记 warn
       const expected = ['DocumentNameConflictError', 'DocumentNameInvalidError', 'DocumentInUseError', 'ProjectInUseError', 'DocumentStandaloneNotAllowedError'].includes(error.name)
       this.logger[expected ? 'warn' : 'error']('文档操作失败', { event: `${event}.failed`, error, context: { subjectId } })
+      throw error
+    }
+  }
+
+  /** 只读或不改变作品索引的操作（导出）：同样记开始 / 完成 / 失败，但不推进版本。 */
+  private async logged<T>(action: string, subjectId: string, run: () => Promise<T>): Promise<T> {
+    const event = `documents.operations.${action}`
+    this.logger.info('文档操作开始', { event: `${event}.start`, context: { subjectId } })
+    try {
+      const result = await run()
+      this.logger.info('文档操作完成', { event: `${event}.completed`, context: { subjectId } })
+      return result
+    } catch (raw) {
+      const error = toError(raw)
+      this.logger.warn('文档操作失败', { event: `${event}.failed`, error, context: { subjectId } })
       throw error
     }
   }

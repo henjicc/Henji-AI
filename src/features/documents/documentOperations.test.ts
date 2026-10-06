@@ -155,3 +155,41 @@ describe('打开、通知与版本', () => {
     expect(listener).toHaveBeenCalledTimes(2)
   })
 })
+
+describe('单文件包与复制进项目（4.1）', () => {
+  it('导出前写完最后一次（含正在编辑的修改），导入推进版本并按容器放置', async () => {
+    const kit = setup()
+    const { meta } = await openEdited(kit)
+    const exported = await kit.operations.exportDocumentPackage({ id: meta.id, path: meta.path }, 'D:/外部/海报.henjipack')
+    expect(exported.path).toBe('D:/外部/海报.henjipack')
+    expect(kit.commands.packages.get(exported.path)).toMatchObject({ type: 'document', content: { items: ['a', '未保存的修改'] } })
+    const project = kit.commands.seedProject({ name: '宣传片' })
+    const before = kit.operations.revision()
+    const imported = await kit.operations.importPackage(exported.path, { kind: 'project', projectId: project.id })
+    expect(imported.type === 'document' && imported.meta.container).toEqual({ kind: 'project', projectId: project.id })
+    expect(kit.operations.revision()).toBe(before + 1)
+  })
+
+  it('导出项目前写完项目里所有打开的文档', async () => {
+    const kit = setup()
+    const project = kit.commands.seedProject({ name: '宣传片' })
+    const meta = kit.commands.seed({ name: '镜头', content: { items: ['a'] }, projectId: project.id, folder: project.path })
+    const session = await kit.registry.open({ id: meta.id, path: meta.path })
+    const tool = new TestToolInstance(session.getContent() as TestContent)
+    session.attach(tool)
+    tool.edit('项目里未保存的修改')
+    await kit.operations.exportProjectPackage(project.id)
+    expect(kit.commands.stored(meta.id)?.content).toEqual({ items: ['a', '项目里未保存的修改'] })
+    expect(kit.commands.exportedPackages.at(-1)).toMatchObject({ projectId: project.id })
+  })
+
+  it('复制进本项目：副本在目标项目里，原件不动', async () => {
+    const kit = setup()
+    const project = kit.commands.seedProject({ name: '宣传片' })
+    const meta = kit.commands.seed({ name: '海报', content: { items: ['a'] } })
+    const copy = await kit.operations.duplicateDocument({ id: meta.id, path: meta.path }, 'keepBoth', { kind: 'project', projectId: project.id })
+    expect(copy.meta.id).not.toBe(meta.id)
+    expect(copy.meta.container).toEqual({ kind: 'project', projectId: project.id })
+    expect(kit.commands.stored(meta.id)?.meta.container).toEqual({ kind: 'user' })
+  })
+})

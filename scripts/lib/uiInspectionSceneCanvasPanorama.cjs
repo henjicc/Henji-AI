@@ -369,42 +369,36 @@ function attachUiInspectionCanvasPanorama(context) {
       throw new Error(`全景下载文件 GPano 往返失败：${JSON.stringify(downloadedMetadata)}`)
     }
 
+    // 通用单文件包往返（4.1）：独立画布引用一张作品目录外的全景图，导出时收进包里的“素材”，导入后元数据仍在
     const packageRoundTrip = await page.evaluate(async ({ targetDir, mediaPath }) => {
-      const packagePath = await window.henjiNative.paths.join(targetDir, 'panorama-roundtrip.henjiproj')
-      const packageMediaPath = 'media/1-panorama.png'
-      const manifest = {
-        formatVersion: 1,
-        app: 'henji-ai',
-        nodes: [{
-          id: '__ui_panorama_package_result',
-          type: 'exportImageNode',
-          position: { x: 0, y: 0 },
-          data: { imageUrl: packageMediaPath, resultKind: 'panorama', aspectRatio: '2:1' },
-        }],
-        edges: [],
-        viewport: { x: 0, y: 0, zoom: 1 },
-      }
-      await window.henjiNative.projectPackage.exportProjectPackage(
-        JSON.stringify(manifest),
-        [{ srcPath: mediaPath, packagePath: packageMediaPath }],
-        packagePath
-      )
-      const imported = await window.henjiNative.projectPackage.importProjectPackage(packagePath)
-      const importedManifest = JSON.parse(imported.manifestJson)
-      const importedMediaPath = imported.pathMap[packageMediaPath]
-      const importedMetadata = importedMediaPath
-        ? await window.henjiNative.image.readPanoramaImageMetadata(importedMediaPath)
-        : null
+      const documents = window.henjiNative.documents
+      const created = await documents.createDocument({
+        kind: 'canvas',
+        container: { kind: 'user' },
+        name: `全景包往返 ${crypto.randomUUID().slice(0, 8)}`,
+        content: {
+          nodes: [{ id: '__ui_panorama_package_result', type: 'exportImageNode', position: { x: 0, y: 0 }, data: { imageUrl: mediaPath, resultKind: 'panorama', aspectRatio: '2:1' } }],
+          edges: [],
+        },
+      })
+      const exported = await documents.exportDocumentPackage({ target: { id: created.meta.id }, destination: await window.henjiNative.paths.join(targetDir, 'panorama-roundtrip.henjipack') })
+      const imported = await documents.importPackage({ source: exported.path })
+      const read = imported.type === 'document' ? await documents.readDocument({ id: imported.meta.id }) : null
+      const node = read?.content?.nodes?.[0]
+      const importedMediaPath = node?.data?.imageUrl
+      const importedMetadata = importedMediaPath ? await window.henjiNative.image.readPanoramaImageMetadata(importedMediaPath) : null
       return {
-        resultKind: importedManifest.nodes?.[0]?.data?.resultKind,
+        newId: imported.type === 'document' && imported.meta.id !== created.meta.id,
+        resultKind: node?.data?.resultKind,
         importedMediaPath,
+        copied: importedMediaPath !== mediaPath,
         metadataStatus: importedMetadata?.status,
       }
     }, { targetDir: downloadDir, mediaPath: downloadedPath })
-    if (packageRoundTrip.resultKind !== 'panorama'
-      || !packageRoundTrip.importedMediaPath
+    if (!packageRoundTrip.newId || packageRoundTrip.resultKind !== 'panorama'
+      || !packageRoundTrip.importedMediaPath || !packageRoundTrip.copied
       || packageRoundTrip.metadataStatus !== 'valid') {
-      throw new Error(`全景项目包导出导入往返失败：${JSON.stringify(packageRoundTrip)}`)
+      throw new Error(`全景单文件包导出导入往返失败：${JSON.stringify(packageRoundTrip)}`)
     }
 
     await page.waitForTimeout(900)

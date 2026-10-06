@@ -791,60 +791,35 @@ function attachUiInspectionCanvasEditing(context) {
       throw new Error('删除→撤销→重做错误清理了仍受历史保护的文档')
     }
 
+    // 通用单文件包往返（4.1）：画布文档连同内嵌图层包导出、导入为新画布（新 ID），节点与图层包位置都在
     const packageRoundTrip = await page.evaluate(async ({ targetProjectId, targetNodeId }) => {
-      const stored = await window.henjiNative.testFixtures.readCanvas(targetProjectId)
-      const nodes = (stored?.nodes ?? [])
-      const sourceNode = nodes.find((candidate) => candidate.id === targetNodeId)
-      const session = sourceNode?.data?.imageEditSession
+      const documents = window.henjiNative.documents
       const tempRoot = await window.henjiNative.paths.tempDir()
-      const packagePath = await window.henjiNative.paths.join(
-        tempRoot,
-        `multi-layer-document-${crypto.randomUUID()}.henjiproj`
-      )
-      const manifest = {
-        formatVersion: 2,
-        app: 'henji-ai',
-        nodes: [sourceNode],
-        edges: [],
-        viewport: (stored?.viewport ?? {"x":0,"y":0,"zoom":1}),
-        imageEditorV3: {
-          version: 1,
-          bundlePath: 'image-editor-v3/manifest.json',
-          documents: [{
-            documentRef: session.documentRef,
-            revision: session.revision,
-            previewRef: session.previewRef,
-          }],
-        },
-      }
-      await window.henjiNative.projectPackage.exportProjectPackage(
-        JSON.stringify(manifest),
-        [],
-        packagePath
-      )
-      const imported = await window.henjiNative.projectPackage.importProjectPackage(packagePath)
-      const mapping = imported.imageEditReferences?.[0]
-      const importedDocument = mapping
-        ? await window.henjiNative.imageEditorV3.loadDocument({
-            requestId: `reality-package-import-${crypto.randomUUID()}`,
-            documentRef: mapping.imported.documentRef,
-          })
-        : null
-      await window.henjiNative.fs.remove(packagePath)
+      const exported = await documents.exportDocumentPackage({
+        target: { id: targetProjectId },
+        destination: await window.henjiNative.paths.join(tempRoot, `multi-layer-document-${crypto.randomUUID()}.henjipack`),
+      })
+      const imported = await documents.importPackage({ source: exported.path })
+      const importedCanvas = imported.type === 'document' ? await window.henjiNative.testFixtures.readCanvas(imported.meta.id) : null
+      const node = importedCanvas?.nodes?.find((candidate) => candidate.id === targetNodeId)
+      const layerPaths = Object.values(importedCanvas?.layerPackages ?? {})
+      const layerFilesPresent = (await Promise.all(layerPaths.map((filePath) => window.henjiNative.fs.exists(filePath)))).every(Boolean)
+      await window.henjiNative.fs.remove(exported.path)
       return {
-        sourceDocumentRef: session.documentRef,
-        importedDocumentRef: mapping?.imported?.documentRef,
-        sourceRevision: mapping?.source?.revision,
-        importedRevision: mapping?.imported?.revision,
-        importedLayerCount: importedDocument?.document?.layers?.length,
+        importedId: imported.type === 'document' ? imported.meta.id : null,
+        sourceId: targetProjectId,
+        hasNode: Boolean(node?.data?.imageEditSession),
+        layerPackages: layerPaths.length,
+        layerFilesPresent,
+        missing: exported.missingPaths.length,
       }
     }, { targetProjectId: projectId, targetNodeId: fixture.nodeId })
-    if (!packageRoundTrip.importedDocumentRef
-      || packageRoundTrip.importedDocumentRef === packageRoundTrip.sourceDocumentRef
-      || packageRoundTrip.sourceRevision !== fixture.initialRevision + 2
-      || packageRoundTrip.importedRevision !== fixture.initialRevision + 2
-      || packageRoundTrip.importedLayerCount !== 7) {
-      throw new Error(`多图层文档项目包往返失败：${JSON.stringify(packageRoundTrip)}`)
+    if (!packageRoundTrip.importedId
+      || packageRoundTrip.importedId === packageRoundTrip.sourceId
+      || !packageRoundTrip.hasNode
+      || !packageRoundTrip.layerFilesPresent
+      || packageRoundTrip.missing !== 0) {
+      throw new Error(`多图层画布单文件包往返失败：${JSON.stringify(packageRoundTrip)}`)
     }
     await settlePage(page, 900)
   }

@@ -16,10 +16,15 @@ import type {
   DocumentTarget,
   DocumentTransferResult,
   DuplicateDocumentRequest,
+  ExportDocumentPackageRequest,
+  ExportProjectPackageRequest,
   FinalizeDocumentRequest,
   FinalizeProjectRequest,
   ImportFileRequest,
   ImportFileResult,
+  ImportPackageRequest,
+  PackageExportResult,
+  PackageImportResult,
   MoveDocumentRequest,
   NameCheckRequest,
   NameCheckResult,
@@ -400,16 +405,18 @@ export class FakeDocumentCommands implements DocumentOperationCommands {
   async duplicateDocument(request: DuplicateDocumentRequest): Promise<DocumentTransferResult> {
     this.calls.push('duplicateDocument')
     const stored = this.require(request.target.id)
-    const folder = folderOf(stored.meta.path)
+    // 对齐主进程：给了 container 时复制进那个容器（素材一并复制），否则与原件同一文件夹
+    const container = request.container ?? stored.meta.container
+    const folder = request.container ? this.folderFor(request.container) : folderOf(stored.meta.path)
     const name = this.pickName(folder, request.name ?? stored.meta.name, '', request.onConflict ?? 'fail')
     const copy = this.seed({
       kind: stored.meta.kind,
       name,
       content: structuredClone(stored.content),
       folder,
-      projectId: stored.meta.container.kind === 'project' ? stored.meta.container.projectId : undefined,
+      projectId: container.kind === 'project' ? container.projectId : undefined,
     })
-    return { meta: copy, copiedFiles: 0, missingPaths: [] }
+    return { meta: copy, copiedFiles: request.container ? 1 : 0, missingPaths: [] }
   }
 
   async revealDocument(target: DocumentTarget): Promise<void> {
@@ -513,6 +520,43 @@ export class FakeDocumentCommands implements DocumentOperationCommands {
     const next = { ...project, path: folderPath, external: true }
     this.projects.set(project.id, next)
     return next
+  }
+
+  /** 单文件包的替身：导出记录请求、返回包位置；导入按 packages 里登记的内容建文档或项目。 */
+  readonly exportedPackages: Array<{ target?: DocumentTarget; projectId?: string; path: string }> = []
+  readonly packages = new Map<string, { type: 'document'; kind: DocumentKindId; name: string; content: unknown } | { type: 'project'; name: string }>()
+
+  async exportDocumentPackage(request: ExportDocumentPackageRequest): Promise<PackageExportResult> {
+    this.calls.push('exportDocumentPackage')
+    const stored = this.require(request.target.id)
+    const path = request.destination ?? `${TEST_DOCUMENT_ROOT}/导出/${stored.meta.name}.henjipack`
+    this.exportedPackages.push({ target: request.target, path })
+    this.packages.set(path, { type: 'document', kind: stored.meta.kind, name: stored.meta.name, content: structuredClone(stored.content) })
+    return { path, files: 1, missingPaths: [] }
+  }
+
+  async exportProjectPackage(request: ExportProjectPackageRequest): Promise<PackageExportResult> {
+    this.calls.push('exportProjectPackage')
+    const project = this.projects.get(request.projectId)
+    if (!project) throw namedError('ProjectNotFoundError')
+    const path = request.destination ?? `${TEST_DOCUMENT_ROOT}/导出/${project.name}.henjipack`
+    this.exportedPackages.push({ projectId: request.projectId, path })
+    this.packages.set(path, { type: 'project', name: project.name })
+    return { path, files: 1, missingPaths: [] }
+  }
+
+  async importPackage(request: ImportPackageRequest): Promise<PackageImportResult> {
+    this.calls.push('importPackage')
+    const entry = this.packages.get(request.source)
+    if (!entry) throw namedError('DocumentFormatError', '不是痕迹AI的单文件包。')
+    if (entry.type === 'project') {
+      const project = this.seedProject({ name: keepBothEntryName(entry.name, (candidate) => [...this.projects.values()].some((item) => entryNameKey(item.name) === entryNameKey(candidate))) })
+      return { type: 'project', project, documents: 0 }
+    }
+    const container = request.container ?? { kind: 'user' }
+    const folder = this.folderFor(container)
+    const meta = this.seed({ kind: entry.kind, name: this.pickName(folder, entry.name, '', 'keepBoth'), content: structuredClone(entry.content), folder, projectId: container.kind === 'project' ? container.projectId : undefined })
+    return { type: 'document', meta, copiedFiles: 0 }
   }
 
   async forgetExternalLocation(folderPath: string): Promise<void> {

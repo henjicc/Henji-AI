@@ -15,6 +15,11 @@ import type {
   DocumentTarget,
   DocumentTransferResult,
   DuplicateDocumentRequest,
+  ExportDocumentPackageRequest,
+  ExportProjectPackageRequest,
+  ImportPackageRequest,
+  PackageExportResult,
+  PackageImportResult,
   FinalizeDocumentRequest,
   FinalizeProjectRequest,
   ImportFileRequest,
@@ -162,4 +167,19 @@ export async function forgetExternalLocation(folderPath: string): Promise<void> 
 
 export async function revealProject(projectId: string): Promise<void> {
   await documents().revealProject(projectId)
+}
+
+/** 导出单个文档为单文件包（4.1）；不给位置时放进作品目录“导出”。 */
+export async function exportDocumentPackage(request: ExportDocumentPackageRequest): Promise<PackageExportResult> {
+  return await documents().exportDocumentPackage(request)
+}
+
+/** 导出整个项目为单文件包（4.1）；不给位置时放进作品目录“导出”。 */
+export async function exportProjectPackage(request: ExportProjectPackageRequest): Promise<PackageExportResult> {
+  return await documents().exportProjectPackage(request)
+}
+
+/** 导入单文件包（4.1）：文档包放进给定容器，项目包放进“项目”文件夹；ID 冲突换新。 */
+export async function importDocumentPackage(request: ImportPackageRequest): Promise<PackageImportResult> {
+  return await documents().importPackage(request)
 }

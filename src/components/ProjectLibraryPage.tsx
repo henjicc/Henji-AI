@@ -117,7 +117,8 @@ interface ProjectLibraryPageProps {
   busy?: boolean;
   labels: ProjectLibraryLabels;
   create: ProjectLibraryCreate;
-  secondaryAction?: ProjectLibrarySecondaryAction;
+  /** 一个或多个次要动作（如“打开项目文件夹…”“导入单个文件…”），同档并列。 */
+  secondaryAction?: ProjectLibrarySecondaryAction | readonly ProjectLibrarySecondaryAction[];
   /** 传入即接受把文件拖到页面上（如图片编辑拖入图片） */
   onDropFiles?: (files: File[]) => void;
   /** 标题区与网格之间的场景专属内容（如错误条） */
@@ -248,12 +249,13 @@ export function ProjectLibraryPage({
       {create.kind === 'menu' ? <ChevronDown className="h-4 w-4" /> : null}
     </UiButton>
   );
-  const secondaryButton = (variant: 'quiet' | 'secondary'): React.ReactNode => secondaryAction ? (
-    <UiButton variant={variant} onClick={secondaryAction.onClick} disabled={busy || secondaryAction.disabled}>
-      <secondaryAction.icon className="h-4 w-4" />
-      {secondaryAction.label}
+  const secondaryActions: readonly ProjectLibrarySecondaryAction[] = secondaryAction === undefined ? [] : Array.isArray(secondaryAction) ? secondaryAction : [secondaryAction as ProjectLibrarySecondaryAction];
+  const secondaryButton = (variant: 'quiet' | 'secondary'): React.ReactNode => secondaryActions.map((action) => (
+    <UiButton key={action.label} variant={variant} onClick={action.onClick} disabled={busy || action.disabled}>
+      <action.icon className="h-4 w-4" />
+      {action.label}
     </UiButton>
-  ) : null;
+  ));
 
   // 空态：多来源平铺成按钮（第一项主按钮，其余次级），单一新建就是一个主按钮，次要动作跟在后面
   const emptyActions = create.kind === 'menu' ? (

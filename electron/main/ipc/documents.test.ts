@@ -21,6 +21,7 @@ const METHODS: Array<keyof DocumentsPlatform> = [
   'duplicateDocument', 'trashDocument', 'deleteEmptyDraft', 'forgetDocument', 'revealDocument', 'resolveDocumentLink', 'checkName',
   'getDocumentCover', 'saveDocumentCover', 'refreshIndex', 'readSessionState', 'writeSessionState', 'listProjects', 'createProject', 'renameProject', 'finalizeProject',
   'trashProject', 'registerExternalProject', 'forgetExternalLocation', 'revealProject',
+  'exportDocumentPackage', 'exportProjectPackage', 'importPackage',
 ]
 
 function api(): DocumentsPlatform {
@@ -70,6 +71,9 @@ describe('文档底座 IPC 契约（preload 桥 → 主进程校验 → Document
       ['registerExternalProject', ['/elsewhere/p'], ['/elsewhere/p']],
       ['forgetExternalLocation', ['/elsewhere/p'], ['/elsewhere/p']],
       ['revealProject', ['p1'], ['p1']],
+      ['exportDocumentPackage', [{ target }], [{ target }]],
+      ['exportProjectPackage', [{ projectId: 'p1', destination: '/elsewhere/p.henjipack' }], [{ projectId: 'p1', destination: '/elsewhere/p.henjipack' }]],
+      ['importPackage', [{ source: '/elsewhere/p.henjipack', container: { kind: 'project', projectId: 'p1' } }], [{ source: '/elsewhere/p.henjipack', container: { kind: 'project', projectId: 'p1' } }]],
     ]
     for (const [method, args, expected] of calls) {
       const call = bridge[method] as (...values: unknown[]) => Promise<unknown>

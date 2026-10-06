@@ -182,6 +182,7 @@ export function createTestEnvironment(options: TestEnvironmentOptions = {}): Tes
       projectsDir: path.join(workRoot, folders.projects),
       generatedDir: path.join(workRoot, folders.generated),
       uploadsDir: path.join(workRoot, folders.uploads),
+      exportsDir: path.join(workRoot, locale === 'zh' ? '导出' : 'Exports'),
     }),
     programRoots: () => [programRoot],
     catalog,

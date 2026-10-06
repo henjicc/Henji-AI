@@ -814,14 +814,8 @@
   },
   "project": {
     "title": "Canvases",
-    "exportPackage": "Export Canvas Package",
-    "importPackage": "Import Canvas Package",
-    "importing": "Importing…",
-    "exporting": "Exporting…",
-    "exportFailed": "Failed to export the canvas package",
-    "importFailed": "Failed to import the canvas package",
     "persistenceFailed": "Failed to save the canvas. Your changes are kept and saving will retry; check available disk space.",
-    "openFailed": "The canvas could not be opened safely. The original file has not been changed. Try opening it again, or import a valid canvas package as a new canvas.",
+    "openFailed": "The canvas could not be opened safely. The original file has not been changed. Try opening it again, or import a valid single-file package as a new canvas.",
     "namePlaceholder": "Enter a name",
     "emptyHint": "Create your first canvas to start organizing nodes",
     "nodesCount": "{{count}} nodes"

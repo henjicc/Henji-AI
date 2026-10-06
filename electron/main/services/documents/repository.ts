@@ -105,6 +105,19 @@ interface RelocateOptions {
 
 const MAX_NAME_ATTEMPTS = 100
 const REFERENCE_CHECK_CONCURRENCY = 16
+
+export interface AdoptDocumentRequest {
+  /** 要收养的文档文件（不会被改动）。 */
+  sourcePath: string
+  /** 它所在的容器：内容里“相对所在容器”的位置按它解析，被引用的素材从这里复制。 */
+  sourceContainer: ResolvedContainer
+  destination: DocumentContainerRef
+  name?: string
+  /** 默认 keepBoth。 */
+  onConflict?: 'fail' | 'keepBoth'
+  /** 默认 whenTaken：索引里已有同 ID 时换新。 */
+  newId?: 'always' | 'whenTaken'
+}
 /** 用户可以自行处理的失败（重名、找不到、版本冲突等）记 warn，其余记 error。 */
 const EXPECTED_FAILURES = [
   DocumentNameConflictError, DocumentNameInvalidError, DocumentNotFoundError, DocumentLocationError,
@@ -277,10 +290,23 @@ export class DocumentRepository {
     }))
   }
 
-  /** 在原文件夹里创建副本（新 ID、非草稿）；同名时按调用方要求报错或加序号。 */
+  /**
+   * 创建副本（新 ID、非草稿）；同名时按调用方要求报错或加序号。默认与原件同一文件夹；
+   * 给了 container 时复制进那个容器（4.1“复制进本项目”），原容器里用到的素材一并复制过去。
+   */
   async duplicate(request: DuplicateDocumentRequest): Promise<DocumentTransferResult> {
-    return await this.exclusive(request.target.id, async () => await this.logged('duplicate', { documentId: request.target.id }, async () => {
+    return await this.exclusive(request.target.id, async () => await this.logged('duplicate', { documentId: request.target.id, container: request.container }, async () => {
       const file = await this.locate(request.target)
+      if (request.container) {
+        const source = await this.workspace.containerForPath(file.path)
+        if (!sameContainer(source.ref, request.container)) {
+          return await this.adoptFile(file, source, await this.resolveContainer(request.container), {
+            name: request.name === undefined ? undefined : requireEntryName(request.name),
+            onConflict: request.onConflict ?? 'fail',
+            newId: 'always',
+          })
+        }
+      }
       const name = request.name === undefined ? documentNameOf(file.kind, file.path) : requireEntryName(request.name)
       const naming: NamingMode = request.onConflict === 'keepBoth' ? { mode: 'keepBoth', name } : { mode: 'exact', name }
       const folder = path.dirname(file.path)
@@ -300,6 +326,68 @@ export class DocumentRepository {
       this.workspace.catalog.upsertDocument(indexedFromFile(copy, container, summarizeFile(copy, container, this.workspace)))
       return { meta: metaFromFile(copy, container), copiedFiles: 0, missingPaths: [] }
     }))
+  }
+
+  /**
+   * 收养一份文档文件（4.1：导入包里解出的文档、复制进本项目）：放进目标容器的默认位置，
+   * 原容器（sourceContainer，可以是解包用的临时文件夹）里被引用的素材复制过去并改写引用；
+   * ID 已被占用（或要求换新）时换新 ID；去掉草稿标记。sourcePath 本身不动。
+   */
+  async adoptDocument(request: AdoptDocumentRequest): Promise<DocumentTransferResult> {
+    return await this.logged('adopt', { container: request.destination }, async () => {
+      const file = await loadDocumentFile(request.sourcePath, this.fileDependencies())
+      const destination = await this.resolveContainer(request.destination)
+      return await this.adoptFile(file, request.sourceContainer, destination, {
+        name: request.name, onConflict: request.onConflict ?? 'keepBoth', newId: request.newId ?? 'whenTaken',
+      })
+    })
+  }
+
+  private async adoptFile(
+    file: LoadedDocumentFile,
+    source: ResolvedContainer,
+    destination: ResolvedContainer,
+    options: { name?: string; onConflict: 'fail' | 'keepBoth'; newId: 'always' | 'whenTaken' },
+  ): Promise<DocumentTransferResult> {
+    if (destination.ref.kind === 'user' && !file.kind.standaloneFolderNames) throw new DocumentLocationError('这种文档只能放在项目里。')
+    const name = options.name ?? documentNameOf(file.kind, file.path)
+    const naming: NamingMode = options.onConflict === 'keepBoth' ? { mode: 'keepBoth', name } : { mode: 'exact', name }
+    const folder = this.workspace.defaultDocumentFolder(file.kind, destination)
+    const id = options.newId === 'always' || this.workspace.catalog.getDocument(file.header.id) ? this.workspace.randomId() : file.header.id
+    let copiedFiles = 0
+    let missingPaths: string[] = []
+    let adopted: LoadedDocumentFile
+    if (file.envelope) {
+      const original = file.envelope
+      const decoded = await this.decode(file, source)
+      const transfer = await transferContainerMedia({
+        style: this.workspace.style,
+        references: decoded.report.references,
+        from: source,
+        to: destination,
+        isDocumentFile: (candidate) => Boolean(this.options.kinds.forFileName(path.basename(candidate))),
+        prepareInternalFolder: (root) => this.workspace.ensureInternalFolder(root),
+      })
+      copiedFiles = transfer.copied
+      missingPaths = transfer.missingPaths
+      const content = this.validateContent(file.kind, rewriteContentPaths(decoded.content, transfer.mapping, this.workspace.style))
+      const encoded = this.encode(destination, content)
+      const now = this.workspace.now().toISOString()
+      const written = await this.writeNewDocumentFile(folder, file.kind, (fileName) => this.withHeader(original, {
+        id, name: fileName, draft: false, createdAt: now, updatedAt: now, revision: 0, kindVersion: file.kind.version, content: encoded.content,
+      }), naming)
+      adopted = await describeWrittenDocument(file.kind, written.path, written.envelope)
+    } else {
+      await fsp.mkdir(folder, { recursive: true })
+      adopted = await loadDocumentFile(await this.copyPackage(file, folder, naming, { id, draft: false }), this.fileDependencies(), id)
+    }
+    this.workspace.catalog.upsertDocument(indexedFromFile(adopted, destination, summarizeFile(adopted, destination, this.workspace)))
+    if (!isPathInside(this.workspace.style, this.workspace.layout().root, destination.root)) this.options.grantMediaRoots([destination.root])
+    this.logger.info('文档已复制进容器', {
+      event: 'documents.adopt.completed',
+      context: { documentId: id, previousId: file.header.id, to: destination.ref, copiedFiles, missing: missingPaths.length },
+    })
+    return { meta: metaFromFile(adopted, destination), copiedFiles, missingPaths }
   }
 
   /** 移到系统回收站（“不保存”与删除都走这里，误点也能找回）。 */
@@ -418,6 +506,11 @@ export class DocumentRepository {
 
   async checkName(request: NameCheckRequest): Promise<NameCheckResult> {
     return await checkEntryName(request, { workspace: this.workspace, kinds: this.options.kinds })
+  }
+
+  /** 按位置 / ID 找到文档文件并读出头信息（不解码内容）；单文件包导出用。 */
+  async locateFile(target: DocumentTarget): Promise<LoadedDocumentFile> {
+    return await this.locate(target)
   }
 
   // ==================== 定位与换算 ====================

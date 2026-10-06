@@ -1178,7 +1178,8 @@
       "removeFromProject": "移出项目",
       "duplicate": "创建副本",
       "reveal": "在文件夹中显示",
-      "forget": "从列表移除"
+      "forget": "从列表移除",
+      "exportPackage": "导出为单个文件…"
     },
     "rename": {
       "title": "重命名",
@@ -1215,7 +1216,18 @@
       "delete": "没能移到回收站：{{message}}",
       "open": "没能打开：{{message}}",
       "forget": "没能从列表移除：{{message}}",
-      "createProject": "没能新建项目：{{message}}"
+      "createProject": "没能新建项目：{{message}}",
+      "exportPackage": "没能导出：{{message}}",
+      "importPackage": "没能导入：{{message}}"
+    },
+    "importPackage": "导入单个文件…",
+    "package": {
+      "exporting": "正在导出…",
+      "importing": "正在导入…",
+      "exported": "已导出“{{name}}”。",
+      "exportedMissing": "已导出“{{name}}”，有 {{count}} 个引用的文件找不到，没有放进去。",
+      "importedDocument": "已导入“{{name}}”。",
+      "importedProject": "已导入项目“{{name}}”，可在剪辑的项目列表里打开。"
     }
   },
   "projectLibrary": {
@@ -1240,7 +1252,9 @@
       "rename": "没能重命名：{{message}}",
       "delete": "没能移到回收站：{{message}}",
       "reveal": "没能在文件夹中显示：{{message}}",
-      "forget": "没能从列表移除：{{message}}"
+      "forget": "没能从列表移除：{{message}}",
+      "exportPackage": "没能导出：{{message}}",
+      "importPackage": "没能导入：{{message}}"
     }
   },
   "videoEditProject": {

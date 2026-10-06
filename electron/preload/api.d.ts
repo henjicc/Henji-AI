@@ -20,7 +20,6 @@ import type {
   HenjiLoggingApi,
   HenjiMediaApi,
   HenjiPathsApi,
-  HenjiProjectPackageApi,
   HenjiShellApi,
   HenjiUpdaterApi,
 } from './api-desktop'
@@ -76,7 +75,6 @@ export interface HenjiNativeApi {
   audio: HenjiAudioApi
   clipboard: HenjiClipboardApi
   drag: HenjiDragApi
-  projectPackage: HenjiProjectPackageApi
   logging: HenjiLoggingApi
   updater: HenjiUpdaterApi
   modelscope: Record<string, never>

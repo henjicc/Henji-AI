@@ -185,6 +185,11 @@ export interface DuplicateDocumentRequest {
   /** 省略时沿用原名（同一文件夹里必然重名，需配合 keepBoth）。 */
   name?: string
   onConflict?: NameConflictPolicy
+  /**
+   * 复制到另一个容器（4.1“复制进本项目”）：副本放进该容器的默认位置，原容器里用到的素材一并复制过去；
+   * 省略时副本与原件在同一文件夹。
+   */
+  container?: DocumentContainerRef
 }
 
 export type NameCheckSubject = { type: 'project' } | { type: 'document'; kind: DocumentKindId }
@@ -302,3 +307,43 @@ export interface DocumentIndexScanReport {
   /** 无法识别的文件（格式损坏、类型未登记、版本过新）。 */
   invalid: number
 }
+
+/*
+ * 通用单文件包（4.1）：一个文档或整个项目连同引用的素材、内嵌图层包打成一个文件，
+ * 文件在包里保持“相对所在容器”的位置；导入时 ID 冲突换新。取代画布专用的工程包。
+ */
+
+/** 单文件包的扩展名。 */
+export const DOCUMENT_PACKAGE_EXTENSION = '.henjipack'
+
+export interface ExportDocumentPackageRequest {
+  target: DocumentTarget
+  /** 包文件的位置；省略时放进作品目录的“导出”文件夹（重名自动加序号）。 */
+  destination?: string
+}
+
+export interface ExportProjectPackageRequest {
+  projectId: string
+  /** 包文件的位置；省略时放进作品目录的“导出”文件夹（重名自动加序号）。 */
+  destination?: string
+}
+
+export interface PackageExportResult {
+  /** 写出的包文件（绝对路径）。 */
+  path: string
+  /** 包里的文件数（文档与素材）。 */
+  files: number
+  /** 引用到但找不到、因此没能放进包里的文件。 */
+  missingPaths: string[]
+}
+
+export interface ImportPackageRequest {
+  /** 包文件（绝对路径）。 */
+  source: string
+  /** 文档包放进哪个容器；省略时为作品目录（只能放在项目里的类型须给项目）。项目包总是放进“项目”文件夹。 */
+  container?: DocumentContainerRef
+}
+
+export type PackageImportResult =
+  | { type: 'document'; meta: DocumentMeta; copiedFiles: number }
+  | { type: 'project'; project: ProjectSummary; documents: number }

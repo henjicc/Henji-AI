@@ -36,5 +36,8 @@ export function createDocumentsApi(invoke: NativeInvoke): DocumentsPlatform {
     registerExternalProject: (folderPath) => invoke(c.registerExternalProject, { path: folderPath }),
     forgetExternalLocation: (folderPath) => invoke(c.forgetExternalLocation, { path: folderPath }),
     revealProject: (projectId) => invoke(c.revealProject, { projectId }),
+    exportDocumentPackage: (request) => invoke(c.exportDocumentPackage, request),
+    exportProjectPackage: (request) => invoke(c.exportProjectPackage, request),
+    importPackage: (request) => invoke(c.importPackage, request),
   }
 }

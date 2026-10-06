@@ -12,6 +12,9 @@ import {
   type DocumentSessionStateKey,
   type DocumentTarget,
   type DuplicateDocumentRequest,
+  type ExportDocumentPackageRequest,
+  type ExportProjectPackageRequest,
+  type ImportPackageRequest,
   type FinalizeDocumentRequest,
   type FinalizeProjectRequest,
   type ImportFileRequest,
@@ -101,6 +104,22 @@ export const duplicateDocumentRequestSchema: z.ZodType<DuplicateDocumentRequest>
   target: documentTargetSchema,
   name: nameSchema.optional(),
   onConflict: conflictSchema.optional(),
+  container: containerRefSchema.optional(),
+}).strict()
+
+export const exportDocumentPackageRequestSchema: z.ZodType<ExportDocumentPackageRequest> = z.object({
+  target: documentTargetSchema,
+  destination: pathSchema.optional(),
+}).strict()
+
+export const exportProjectPackageRequestSchema: z.ZodType<ExportProjectPackageRequest> = z.object({
+  projectId: documentIdSchema,
+  destination: pathSchema.optional(),
+}).strict()
+
+export const importPackageRequestSchema: z.ZodType<ImportPackageRequest> = z.object({
+  source: pathSchema,
+  container: containerRefSchema.optional(),
 }).strict()
 
 export const nameCheckRequestSchema: z.ZodType<NameCheckRequest> = z.object({

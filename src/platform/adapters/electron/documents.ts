@@ -43,5 +43,8 @@ export function createElectronDocuments(): DocumentsPlatform {
     registerExternalProject: (folderPath) => getNativeDocuments().registerExternalProject(folderPath),
     forgetExternalLocation: (folderPath) => getNativeDocuments().forgetExternalLocation(folderPath),
     revealProject: (projectId) => getNativeDocuments().revealProject(projectId),
+    exportDocumentPackage: (request) => getNativeDocuments().exportDocumentPackage(request),
+    exportProjectPackage: (request) => getNativeDocuments().exportProjectPackage(request),
+    importPackage: (request) => getNativeDocuments().importPackage(request),
   }
 }

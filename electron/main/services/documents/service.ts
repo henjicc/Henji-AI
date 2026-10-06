@@ -14,6 +14,11 @@ import type {
   DocumentTarget,
   DocumentTransferResult,
   DuplicateDocumentRequest,
+  ExportDocumentPackageRequest,
+  ExportProjectPackageRequest,
+  ImportPackageRequest,
+  PackageExportResult,
+  PackageImportResult,
   FinalizeDocumentRequest,
   FinalizeProjectRequest,
   ImportFileRequest,
@@ -34,6 +39,7 @@ import type { DocumentsPlatform } from '../../../../src/platform/contracts/docum
 import { isPathInside } from '../../../../src/core/storage/pathSyntax'
 import type { DocumentCoverStore } from './covers'
 import type { DocumentIndexScanner } from './index-scanner'
+import type { DocumentPackageService } from './package-service'
 import type { ProjectService } from './projects'
 import type { DocumentRepository } from './repository'
 import type { DocumentSessionStateStore } from './session-state'
@@ -51,6 +57,7 @@ export class DocumentService implements DocumentsPlatform {
     scanner: DocumentIndexScanner
     covers: DocumentCoverStore
     sessionState: DocumentSessionStateStore
+    packages: DocumentPackageService
   }) {}
 
   async listDocuments(query: DocumentListQuery = {}): Promise<DocumentSummary[]> {
@@ -201,5 +208,17 @@ export class DocumentService implements DocumentsPlatform {
 
   revealProject(projectId: string): Promise<void> {
     return this.parts.projects.reveal(projectId)
+  }
+
+  exportDocumentPackage(request: ExportDocumentPackageRequest): Promise<PackageExportResult> {
+    return this.parts.packages.exportDocument(request)
+  }
+
+  exportProjectPackage(request: ExportProjectPackageRequest): Promise<PackageExportResult> {
+    return this.parts.packages.exportProject(request)
+  }
+
+  importPackage(request: ImportPackageRequest): Promise<PackageImportResult> {
+    return this.parts.packages.importPackage(request)
   }
 }

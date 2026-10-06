@@ -14,6 +14,11 @@ import type {
   DocumentTarget,
   DocumentTransferResult,
   DuplicateDocumentRequest,
+  ExportDocumentPackageRequest,
+  ExportProjectPackageRequest,
+  ImportPackageRequest,
+  PackageExportResult,
+  PackageImportResult,
   FinalizeDocumentRequest,
   FinalizeProjectRequest,
   ImportFileRequest,
@@ -95,6 +100,13 @@ export interface DocumentsPlatform {
   /** 从列表里移除外部位置（不动磁盘上的文件）。 */
   forgetExternalLocation(folderPath: string): Promise<void>
   revealProject(projectId: string): Promise<void>
+
+  /** 导出单个文档为单文件包（含引用的素材与内嵌图层包）；不给位置时放进作品目录“导出”。 */
+  exportDocumentPackage(request: ExportDocumentPackageRequest): Promise<PackageExportResult>
+  /** 导出整个项目为单文件包；不给位置时放进作品目录“导出”。 */
+  exportProjectPackage(request: ExportProjectPackageRequest): Promise<PackageExportResult>
+  /** 导入单文件包：文档包放进给定容器（默认作品目录），项目包放进“项目”文件夹；ID 冲突换新。 */
+  importPackage(request: ImportPackageRequest): Promise<PackageImportResult>
 }
 
 /** IPC 通道名与 DocumentsPlatform 方法一一对应（主进程注册与 preload 桥共用）。 */
@@ -129,4 +141,7 @@ export const DOCUMENT_IPC_CHANNELS = {
   registerExternalProject: 'documents:projects:registerExternal',
   forgetExternalLocation: 'documents:locations:forget',
   revealProject: 'documents:projects:reveal',
+  exportDocumentPackage: 'documents:package:exportDocument',
+  exportProjectPackage: 'documents:package:exportProject',
+  importPackage: 'documents:package:import',
 } as const satisfies Record<keyof DocumentsPlatform, string>

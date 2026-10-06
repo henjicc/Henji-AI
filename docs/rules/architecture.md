@@ -30,7 +30,7 @@
 electron/
 ├── main/              # 主进程：窗口、IPC、协议、Node/TS 后端能力
 │   ├── ipc/           # ipcMain handler 注册
-│   └── services/      # db / keystore / ai-runtime / llm / image / project-package / updater 等
+│   └── services/      # db / keystore / ai-runtime / llm / image / documents（文档底座与单文件包） / updater 等
 └── preload/           # contextBridge 安全暴露 window.henjiNative
 
 src/

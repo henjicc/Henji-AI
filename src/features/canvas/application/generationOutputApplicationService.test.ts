@@ -6,7 +6,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { registry } from '@/core/ModelRegistry';
 import type { ModelDefinition } from '@/core/types';
-import { collectAndRewriteMedia, rewritePackagePathsToLocal } from '@/services/projectPackage/collectMediaRefs';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { type Project } from '@/stores/projectStore';
 
@@ -451,7 +450,7 @@ describe('generationOutputApplicationService', () => {
     ]));
   });
 
-  it('保存重开及项目导入导出保留成员顺序、描述符和媒体引用', async () => {
+  it('保存重开保留成员顺序与描述符', async () => {
     const result = await commit(contract(2));
     const saved = structuredClone(useCanvasStore.getState().nodes);
     const savedEdges = structuredClone(useCanvasStore.getState().edges);
@@ -460,21 +459,9 @@ describe('generationOutputApplicationService', () => {
     expect(reopenedGroup && isAssetGroupNode(reopenedGroup)
       ? reopenedGroup.data.generationOutputDescriptors?.map((item) => item.order)
       : []).toEqual([0, 1]);
-
-    const collected = collectAndRewriteMedia(useCanvasStore.getState().nodes);
-    expect(collected.mediaFiles).toHaveLength(4);
-    const pathMap = Object.fromEntries(collected.mediaFiles.map((item) => [
-      item.packagePath,
-      `/restored/${item.packagePath.split('/').at(-1)}`,
-    ]));
-    const restored = rewritePackagePathsToLocal(collected.nodes, pathMap);
-    const restoredGroup = restored.find((node) => node.id === result.groupNodeId);
-    expect(restoredGroup && isAssetGroupNode(restoredGroup)
-      ? restoredGroup.data.memberOrder
+    expect(reopenedGroup && isAssetGroupNode(reopenedGroup)
+      ? reopenedGroup.data.memberOrder
       : []).toEqual(result.resultNodeIds);
-    expect(restored.filter((node) => result.resultNodeIds.includes(node.id)).every((node) => (
-      typeof node.data.imageUrl === 'string' && node.data.imageUrl.startsWith('/restored/')
-    ))).toBe(true);
   });
 
   it('independent 策略保留有序独立节点，不创建素材组', async () => {

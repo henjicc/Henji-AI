@@ -32,6 +32,7 @@ function workspaceLayout(): WorkspaceLayout {
     projectsDir: layout.folders.projects,
     generatedDir: layout.folders.generated,
     uploadsDir: layout.folders.uploads,
+    exportsDir: layout.folders.exports,
   }
 }
 

@@ -27,7 +27,6 @@ import type {
   HenjiNativeApi,
   HenjiNativeFetchRequest,
   HenjiPathsApi,
-  HenjiProjectPackageApi,
   HenjiShellApi,
   HenjiUpdaterApi,
   HenjiUpdaterEvent,
@@ -294,12 +293,6 @@ const dragApi: HenjiDragApi = {
   },
 }
 
-const projectPackageApi: HenjiProjectPackageApi = {
-  exportProjectPackage: (manifestJson, mediaFiles, targetPath) =>
-    nativeInvoke('projectPackage:export', { manifestJson, mediaFiles, targetPath }),
-  importProjectPackage: (zipPath) => nativeInvoke('projectPackage:import', { zipPath }),
-}
-
 const { imageApi, videoApi } = createImageVideoApis(nativeInvoke)
 const imageEditorV3Api = createImageEditorV3Api(
   nativeInvoke,
@@ -456,7 +449,6 @@ const api: HenjiNativeApi = {
   audio: audioApi,
   clipboard: clipboardApi,
   drag: dragApi,
-  projectPackage: projectPackageApi,
   logging: loggingApi,
   updater: updaterApi,
   modelscope: {},
