@@ -69,16 +69,44 @@ function createAudioEditInteractionScene({ setupToolbox, clickNamedButton }) {
       await waitPreview()
       assert.equal(await page.getByRole('slider', { name: '静音阈值', exact: true }).isVisible(), false, '默认隐藏参数')
       assert.ok(await page.locator('[data-audio-overlay="preview"]').count() >= 1)
+      // 时间 → 波形上的点：按波形当前实际显示的区间（data-view-start/end）和实际位置换算，不假设整段 16 秒铺满；
+      // 纵向落在字幕带以下、且在窗口可见范围内，并核对该点命中的确实是波形（窄窗口下不被别的层盖住）。
+      const pointAt = async (seconds) => {
+        await waveform.scrollIntoViewIfNeeded()
+        const { x, y, hit } = await waveform.evaluate((element, { seconds, rate }) => {
+          const rect = element.getBoundingClientRect()
+          const start = Number(element.dataset.viewStart)
+          const end = Number(element.dataset.viewEnd)
+          const ratio = (seconds * rate - start) / Math.max(1, end - start)
+          const px = rect.left + rect.width * Math.min(1, Math.max(0, ratio))
+          const py = Math.min(rect.top + rect.height * 0.65, window.innerHeight - 4)
+          const target = document.elementFromPoint(px, py)
+          return { x: px, y: py, hit: ratio >= 0 && ratio <= 1 && Boolean(target) && element.contains(target) }
+        }, { seconds, rate })
+        assert.ok(hit, `波形上 ${seconds} 秒处的点不可点击（不在可见区间或被其他层覆盖）`)
+        return { x, y }
+      }
       const select = async (start, end) => {
-        const bounds = await waveform.boundingBox()
-        await page.mouse.move(bounds.x + bounds.width * start / 16, bounds.y + bounds.height * 0.65)
+        const from = await pointAt(start)
+        const to = await pointAt(end)
+        await page.mouse.move(from.x, from.y)
         await page.mouse.down()
-        await page.mouse.move(bounds.x + bounds.width * end / 16, bounds.y + bounds.height * 0.65, { steps: 12 })
+        await page.mouse.move(to.x, to.y, { steps: 12 })
         await page.mouse.up()
       }
+      const playhead = () => waveform.evaluate((element) => Number(element.getAttribute('aria-valuenow')))
       const seek = async (seconds) => {
-        const bounds = await waveform.boundingBox()
-        await page.mouse.click(bounds.x + bounds.width * seconds / 16, bounds.y + bounds.height * 0.65)
+        const point = await pointAt(seconds)
+        await page.mouse.click(point.x, point.y)
+        await page.waitForFunction(({ frame, tolerance }) => Math.abs(Number(document.querySelector('[aria-label="口播波形定位"]').getAttribute('aria-valuenow')) - frame) <= tolerance,
+          { frame: seconds * rate, tolerance: rate * 0.05 })
+      }
+      // 点播放后等播放头真的走起来再采样，避免“还没出声”被误判为静音或把起播延迟算进结果
+      const playFrom = async (frame) => {
+        await page.getByTitle('播放', { exact: true }).click()
+        await page.waitForFunction((from) => Number(document.querySelector('[aria-label="口播波形定位"]').getAttribute('aria-valuenow')) > from,
+          frame + rate * 0.1, { timeout: 5000 })
+        await page.waitForTimeout(80)
       }
       const waitCuts = async (count) => waitForAudioEditContent(page, id, (content) => (content.cuts ?? []).filter((cut) => cut.enabled).length === count, { message: `已启用的区间应为 ${count} 个` })
       await select(2, 3)
@@ -94,12 +122,19 @@ function createAudioEditInteractionScene({ setupToolbox, clickNamedButton }) {
         window.__audioInteractionTap.getFloatTimeDomainData(samples)
         return Math.sqrt(samples.reduce((sum, sample) => sum + sample * sample, 0) / samples.length)
       })
-      await seek(2.1)
-      await page.getByTitle('播放', { exact: true }).click(); await page.waitForTimeout(250)
-      assert.ok(await rms() < 0.001, '剪后试听应输出真实静音')
+      // 试听点取实际静音区间开头后 0.1 秒（以文档里的区间为准，不按点击位置推算）
+      const muted = (await readAudioEditDocument(page, id)).content.cuts.find((cut) => cut.enabled && cut.mode === 'mute')
+      assert.ok(muted, '撤销删除后应保留一个静音区间')
+      const listenAt = muted.startFrame / rate + 0.1
+      await seek(listenAt)
+      await playFrom(listenAt * rate)
+      const mutedLevel = await rms()
+      const mutedPlayhead = await playhead()
+      assert.ok(mutedPlayhead >= muted.startFrame && mutedPlayhead < muted.endFrame, `采样时播放头应在静音区间内（${mutedPlayhead} 不在 ${muted.startFrame}–${muted.endFrame}）`)
+      assert.ok(mutedLevel < 0.001, `剪后试听应输出真实静音（RMS ${mutedLevel.toFixed(4)}）`)
       await page.getByTitle('暂停', { exact: true }).click()
-      await page.getByRole('button', { name: '原始', exact: true }).click(); await seek(2.1)
-      await page.getByTitle('播放', { exact: true }).click(); await page.waitForTimeout(250)
+      await page.getByRole('button', { name: '原始', exact: true }).click(); await seek(listenAt)
+      await playFrom(listenAt * rate)
       assert.ok(await rms() > 0.02, '原始对比保留原声音')
       await page.getByTitle('暂停', { exact: true }).click()
       await page.getByRole('button', { name: '剪后', exact: true }).click()
@@ -116,8 +151,8 @@ function createAudioEditInteractionScene({ setupToolbox, clickNamedButton }) {
       assert.ok(pcm.length > 0 && pcm.every((byte) => byte === 0), '导出的静音段必须是零采样')
       await select(2, 3)
       // 在选区里右键（波形中心在 8 秒处，窄窗口下离选区更远）
-      const restoreBounds = await waveform.boundingBox()
-      await page.mouse.click(restoreBounds.x + restoreBounds.width * 2.5 / 16, restoreBounds.y + restoreBounds.height * 0.65, { button: 'right' })
+      const restorePoint = await pointAt(2.5)
+      await page.mouse.click(restorePoint.x, restorePoint.y, { button: 'right' })
       await page.getByText('恢复选区', { exact: true }).last().click()
       await waitCuts(0)
       await page.getByRole('button', { name: '取消选区', exact: true }).click()
