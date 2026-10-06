@@ -26,6 +26,8 @@ function loadTypeScript() {
 
 /** 受检组件 → 受检属性。 */
 const CHECKED_ATTRIBUTES = {
+  UiToneCurve: 'className',
+  UiColorWheel: 'className',
   UiButton: 'className',
   UiIconButton: 'className',
   UiOptionButton: 'className',

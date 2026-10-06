@@ -42,6 +42,7 @@ const GLYPH_FILE_EXEMPTIONS = new Map([
  * 换成图标库反而是错的。新增豁免必须在这里写明理由。
  */
 const GRAPHIC_EXEMPTIONS = new Map([
+  ['src/components/ui/UiColorGrading.tsx', '调色曲线数据图形与控制点，坐标来自用户曲线参数，不是图标'],
   ['src/features/cameraStage/timeline/EasingCurveEditor.tsx', '缓动曲线编辑器，路径由控制点算出'],
   ['src/features/cameraStage/timeline/GraphEditor.tsx', '关键帧曲线图，路径由数据算出'],
   ['src/features/canvas/ui/CanvasOverlays.tsx', '画布连线预览，路径随指针位置实时计算'],

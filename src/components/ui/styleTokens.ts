@@ -384,3 +384,5 @@ export const UI_LIGHTING_RANGE_CLASS = `rounded-full focus-visible:ring-2 focus-
   [&::-webkit-slider-thumb]:!border-2 [&::-webkit-slider-thumb]:!border-solid [&::-webkit-slider-thumb]:!border-on-media
   [&::-moz-range-thumb]:!border-2 [&::-moz-range-thumb]:!border-solid [&::-moz-range-thumb]:!border-on-media
   [&::-webkit-slider-thumb]:shadow-thumb-ring [&::-moz-range-thumb]:shadow-thumb-ring`
+/** Media color content: hue angle increases clockwise from red on the right. */
+export const UI_COLOR_WHEEL_BACKGROUND = 'radial-gradient(circle, rgb(var(--media-rgb) / 0.8), transparent), conic-gradient(from 90deg, hsl(0 100% 50%), hsl(60 100% 50%), hsl(120 100% 50%), hsl(180 100% 50%), hsl(240 100% 50%), hsl(300 100% 50%), hsl(360 100% 50%))'

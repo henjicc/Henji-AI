@@ -2,6 +2,7 @@ import { resolveVideoEditBuiltinParams, type VideoEditBuiltinParams } from '@/co
 import type { VideoEditBuiltinEffectInstance } from '@/core/videoEdit/compositing'
 import type { VideoEditBuiltinTransitionInput } from '@/core/videoEdit/transitions'
 import type { VideoEditBuiltinEffectEntry } from './videoEditBuiltinEffectShaders'
+import { LUMETRI_CURVE_CHANNELS, LUMETRI_WHEEL_REGIONS, lumetriWhiteBalance } from '@/core/videoEdit/lumetri'
 
 /**
  * 把一个内置效果实例翻译成 GPU 工序（纯函数，可单测）：每道工序是一个着色器入口、输入、输出和 16 个 float 的参数。
@@ -93,6 +94,34 @@ export function planVideoEditBuiltinEffect(instance: VideoEditBuiltinEffectInsta
   const plan = new Planner(width, height)
   const H = height
   switch (instance.id) {
+    case 'lumetri_color': {
+      const n = (key: string): number => number(params, key)
+      const stages: Array<{ entry: VideoEditBuiltinEffectEntry; a: Vec4; b?: Vec4; c?: Vec4 }> = []
+      if (['temperature', 'tint', 'exposure', 'contrast', 'highlights', 'shadows', 'whites', 'blacks', 'saturation', 'vibrance'].some(key => n(key) !== 0)) {
+        const gain = 2 ** n('exposure'); const wb = lumetriWhiteBalance(n('temperature'), n('tint')); const contrast = n('contrast') / 100
+        stages.push({ entry: 'lumetri_basic', a: [wb[0] * gain, wb[1] * gain, wb[2] * gain, contrast >= 0 ? 1 + contrast * 2 : 1 + contrast], b: [n('highlights') / 100, n('shadows') / 100, n('whites') / 100, n('blacks') / 100], c: [n('saturation') / 100, n('vibrance') / 100, 0, 0] })
+      }
+      if (n('faded_film') || n('creative_shadow_strength') || n('creative_highlight_strength')) stages.push({ entry: 'lumetri_creative', a: [n('faded_film') / 100, n('creative_shadow_hue'), n('creative_shadow_strength') / 100, n('creative_highlight_hue')], b: [n('creative_highlight_strength') / 100, 0, 0, 0] })
+      // Two full-resolution ping-pong surfaces regardless of the number of color sections.
+      let current: VideoEditBuiltinTexture = 'input'; const ping = plan.alloc(); const pong = plan.alloc()
+      const target = (): number => current === ping ? pong : ping
+      const draw = (stage: typeof stages[number]): void => { const next = target(); plan.pass(stage.entry, current, next, stage.a, stage.b ?? ZERO, undefined, stage.c ?? ZERO); current = next }
+      stages.forEach(draw)
+      if (n('sharpen')) {
+        const blurred = plan.alloc(); const sigma = Math.max(.6, .0015 * H)
+        plan.gaussian(current, blurred, sigma, sigma, true)
+        const next = target(); plan.pass('unsharp', blurred, next, [n('sharpen') / 100 * 3, 0, 0, 0], ZERO, current); current = next
+      }
+      LUMETRI_CURVE_CHANNELS.forEach((channel, index) => {
+        const y = Array.from({ length: 5 }, (_, i) => n(`curve_${channel}_${i}`) / 100)
+        if (y.some((value, i) => value !== i / 4)) draw({ entry: 'lumetri_curve', a: [y[0], y[1], y[2], y[3]], b: [y[4], index, 0, 0] })
+      })
+      LUMETRI_WHEEL_REGIONS.forEach((region, index) => { if (n(`${region}_strength`) || n(`${region}_luminance`)) draw({ entry: 'lumetri_wheel', a: [n(`${region}_hue`), n(`${region}_strength`) / 100, n(`${region}_luminance`) / 100, index] }) })
+      if (n('vignette_amount')) draw({ entry: 'lumetri_vignette', a: [n('vignette_amount') / 100, n('vignette_midpoint') / 100, n('vignette_roundness') / 100, n('vignette_feather') / 100], b: [width / height, 0, 0, 0] })
+      plan.pass('copy', current, 'output')
+      if (current === 'input') plan.scratch.length = 0
+      break
+    }
     case 'gaussian_blur': {
       const sigma = number(params, 'strength') / 100 * 0.06 * H / 2
       const dimensions = params.dimensions

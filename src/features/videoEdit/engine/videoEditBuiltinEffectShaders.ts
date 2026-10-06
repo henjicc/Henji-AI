@@ -7,10 +7,12 @@
  * 视频过渡（`tr_*`）：`source` 是前一段、`original` 是后一段，`c` = (进度 0..1, 前一段为空, 后一段为空, 备用)；
  * 单侧过渡空着的一侧按透明处理（与交叉溶解的单侧语义一致）。
  */
-export const VIDEO_EDIT_BUILTIN_EFFECT_ENTRIES = ['copy', 'blur', 'line', 'zoom', 'unsharp', 'brightness_contrast', 'gain_linear', 'hue_saturation', 'invert', 'mosaic', 'vignette', 'grain', 'chromatic', 'glow_extract', 'glow_add', 'crop', 'flip', 'chroma_key', 'tr_wipe', 'tr_iris', 'tr_move', 'tr_zoom', 'tr_mix', 'tr_flash'] as const
+import { VIDEO_EDIT_LUMETRI_SHADER } from './videoEditLumetriShader'
+export const VIDEO_EDIT_BUILTIN_EFFECT_ENTRIES = ['copy', 'blur', 'line', 'zoom', 'unsharp', 'brightness_contrast', 'gain_linear', 'hue_saturation', 'invert', 'mosaic', 'vignette', 'grain', 'chromatic', 'glow_extract', 'glow_add', 'crop', 'flip', 'chroma_key', 'tr_wipe', 'tr_iris', 'tr_move', 'tr_zoom', 'tr_mix', 'tr_flash', 'lumetri_basic', 'lumetri_creative', 'lumetri_curve', 'lumetri_wheel', 'lumetri_vignette'] as const
 export type VideoEditBuiltinEffectEntry = typeof VIDEO_EDIT_BUILTIN_EFFECT_ENTRIES[number]
 
 export const VIDEO_EDIT_BUILTIN_EFFECT_SHADER = `
+${VIDEO_EDIT_LUMETRI_SHADER}
 struct Params { size: vec4f, a: vec4f, b: vec4f, c: vec4f }
 @group(0) @binding(0) var source: texture_2d<f32>;
 @group(0) @binding(1) var s: sampler;

@@ -8,6 +8,7 @@
  */
 import { VIDEO_EDIT_CHROMA_KEY_DEFAULT_HEX } from '../theme/colorTokens'
 import { VIDEO_EDIT_AUDIO_EFFECT_DEFINITIONS } from './audioEffectDefinitions'
+import { VIDEO_EDIT_LUMETRI } from './lumetri'
 
 export type VideoEditBuiltinParamValue = number | boolean | string
 export type VideoEditBuiltinParams = Record<string, VideoEditBuiltinParamValue>
@@ -127,6 +128,7 @@ const VIDEO_EDIT_VIDEO_EFFECT_DEFINITIONS: readonly VideoEditBuiltinEffectDefini
       strength('softness', '边缘柔化', 10, '透明边缘的过渡宽度', '0 硬边；10 默认；50 很柔的半透明边缘（适合头发）。'),
       strength('spill', '溢色抑制', 50, '去掉主体边缘反射的背景色', '0 不处理；50 默认；100 强力去除主体上的绿色/蓝色反光。'),
     ] },
+  VIDEO_EDIT_LUMETRI,
 ]
 /** 全部内置效果：画面效果在前，音频效果（4.7c）在后。 */
 export const VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS: readonly VideoEditBuiltinEffectDefinition[] = [...VIDEO_EDIT_VIDEO_EFFECT_DEFINITIONS, ...VIDEO_EDIT_AUDIO_EFFECT_DEFINITIONS]

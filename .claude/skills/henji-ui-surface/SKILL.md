@@ -507,6 +507,7 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 | 提示词编辑 | `PromptEditor` | 自己拼 textarea |
 | 文件上传/排序 | `FileUploader` / `useReorderDrag` | 重写拖拽 |
 | 音频播放 | `@/components/AudioPlayer` | 再写一个播放器 |
+| 调色曲线 / 色轮（Lumetri 曲线、三色轮等二维调色控件） | `UiToneCurve` / `UiColorWheel`（`@/components/ui`，受控值 + 拖动开始 / 结束回调，撤销交给业务手势） | 用 NumberInput 拼曲线点、自写 Canvas 色轮 |
 | 长列表 | `react-virtuoso`（已是依赖） | 全量 map 渲染上百项 |
 
 **新增组件的门槛**（Agent 自行判断，不需要等用户确认；四条都要做到）：

@@ -16,6 +16,7 @@ export type { AlertDialogAction } from './AlertDialog';
 export * from './GlobalAlertDialog';
 export * from './UiErrorBoundary';
 export * from './UiOverflowRow';
+export * from './UiColorGrading';
 export * from './UiToast';
 export { resolveOverflowHiddenIds, type OverflowLayoutItem } from './overflowLayout';
 export {
