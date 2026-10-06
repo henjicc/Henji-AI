@@ -1145,11 +1145,6 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
   box-shadow: inset 0 0 0 2px rgb(var(--accent-ring-rgb));
 }
 
-/* 未保存的草稿（项目页）：封面框画一圈警示色虚线，与已保存的项目一眼区分；悬停、焦点照常叠加 */
-.ui-cover-frame[data-draft='true']::after {
-  border: 2px dashed rgb(var(--warning-rgb));
-}
-
 /*
  * 项目卡封面占位图：项目还没有封面截图时，用设计稿的画布点阵（面板底 + 发丝线色圆点）代替。
  * 只用表面与发丝线令牌，不用强调色（重要记录 001：强调色只给主动作、焦点与选中）。

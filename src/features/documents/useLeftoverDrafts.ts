@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { DocumentKindId, DocumentSummary, ProjectSummary } from '@/core/documents/types'
 import { createLogger } from '@/core/logging/logger'
 
+import { subscribeDocumentCoverChanged } from './documentCovers'
 import { toError } from './documentErrors'
 import { getDocumentSessionRegistry, type DocumentSessionRegistry } from './documentSessionRegistry'
 
@@ -38,7 +39,9 @@ function useLeftover<T extends { id: string }>(
 
   useEffect(() => {
     void load()
-    return registry.subscribe(() => { void load() })
+    // 补生成的封面写好后也重读，草稿卡片换上封面
+    const stops = [registry.subscribe(() => { void load() }), subscribeDocumentCoverChanged(() => { void load() })]
+    return () => stops.forEach((stop) => stop())
   }, [registry, load])
 
   const discard = useCallback(async (draft: T): Promise<void> => {

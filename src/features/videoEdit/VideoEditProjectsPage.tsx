@@ -16,8 +16,7 @@ import { useLeftoverDraftProjects } from '@/features/documents/useLeftoverDrafts
 import { createLogger } from '@/core/logging/logger'
 import { useNavigationStore } from '@/stores/navigationStore'
 import { getDocumentCover } from '@/commands/documents'
-import { subscribeVideoEditCoverChanged } from './application/videoEditProjectCover'
-import { ensureVideoEditProjectCover } from './application/videoEditService'
+import { ensureDocumentCover, subscribeDocumentCoverChanged } from '@/features/documents/documentCovers'
 
 /*
  * 剪辑页 = 项目列表（实施方案 2.10，3.1 剪辑接入）：每个项目是一个文件夹，剪辑是它的主文档。
@@ -43,6 +42,11 @@ interface VideoEditProjectsPageProps {
 
 const logger = createLogger('features.videoEdit.projects')
 
+/** 主剪辑没有封面时按剪辑登记的取法从内容补生成。 */
+function ensureMainVideoEditCover(docId: string): Promise<void> {
+  return ensureDocumentCover(docId, 'video_edit')
+}
+
 function asProjectItem(item: ProjectCardGridItem): ProjectCardItem {
   return item as ProjectCardItem
 }
@@ -51,7 +55,7 @@ function asProjectItem(item: ProjectCardGridItem): ProjectCardItem {
 function useProjectCovers(items: readonly ProjectCardItem[], readCover: (docId: string) => Promise<string | null>, ensureCover: (docId: string) => Promise<void>): ProjectCardItem[] {
   const [covers, setCovers] = useState<ReadonlyMap<string, string>>(new Map())
   const [version, setVersion] = useState(0)
-  useEffect(() => subscribeVideoEditCoverChanged(() => setVersion(value => value + 1)), [])
+  useEffect(() => subscribeDocumentCoverChanged(() => setVersion(value => value + 1)), [])
   const mainIds = useMemo(() => items.map(item => item.project.mainVideoEditId).filter((id): id is string => Boolean(id)), [items])
   useEffect(() => {
     let disposed = false
@@ -69,7 +73,7 @@ function useProjectCovers(items: readonly ProjectCardItem[], readCover: (docId: 
   }), [items, covers])
 }
 
-export function VideoEditProjectsPage({ busy = false, onCreate, onOpenFolder, onOpen, operations: providedOperations, registry, readCover = getDocumentCover, ensureCover = ensureVideoEditProjectCover }: VideoEditProjectsPageProps): JSX.Element {
+export function VideoEditProjectsPage({ busy = false, onCreate, onOpenFolder, onOpen, operations: providedOperations, registry, readCover = getDocumentCover, ensureCover = ensureMainVideoEditCover }: VideoEditProjectsPageProps): JSX.Element {
   const { t } = useTranslation('ui')
   const operations = providedOperations ?? getDocumentOperations()
   const library = useProjectLibrary({ operations })

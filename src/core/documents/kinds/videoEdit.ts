@@ -38,6 +38,7 @@ export const videoEditContentSchema = z.object({
   items: z.array(identified),
   sequences: z.array(sequenceSchema).min(1),
   codeMaterials: z.array(identified).optional(),
+  posterFrame: z.looseObject({ sequenceId: z.string().min(1), frame: z.number() }).optional(),
 })
 
 export type VideoEditDocumentContent = z.infer<typeof videoEditContentSchema>

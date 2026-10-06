@@ -3,7 +3,9 @@ import { ApplicationPersistenceFailure, type ApplicationPersistenceParticipant }
 import { createVideoEditRegistrations } from './videoEditReflection'
 import { VideoEditCollectionExecutor, VideoEditMutationExecutor } from './videoEditExecutors'
 import { VIDEO_EDIT_COMPOSITE_TYPES } from './videoEditCompositeEntities'
-import { openVideoEditDocument, releaseVideoEditDocument, requireVideoEditInstance, saveVideoEdit, verifyVideoEditSaved, type VideoEditInstance } from './videoEditService'
+import { openVideoEditDocument, releaseVideoEditDocument, requireVideoEditInstance, saveVideoEdit, verifyVideoEditSaved, videoEditDocumentFromContent, type VideoEditInstance } from './videoEditService'
+import { videoEditCoverSource } from './videoEditProjectCover'
+import { registerDocumentCoverProvider } from '@/features/documents/documentCovers'
 import { getDocumentOperations, registerDocumentBusyCheck, registerDocumentOpener, registerDocumentReleaser } from '@/features/documents/documentOperations'
 import { openApplicationSurface } from '@/features/navigation/application/surfaceCapabilityService'
 import { startVideoEditImageDocumentLinks } from './videoEditImageLinks'
@@ -42,6 +44,8 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
       openApplicationSurface('workspace.video_edit')
     })
     registerDocumentReleaser('video_edit', releaseVideoEditDocument)
+    // 列表里没有封面的剪辑（含草稿）从内容补生成：与编辑时同一取法
+    registerDocumentCoverProvider('video_edit', (read) => { const source = videoEditCoverSource(videoEditDocumentFromContent(read.content, { id: read.meta.id, name: read.meta.name })); return source ? [source] : null })
     // 通用“收集素材到项目”（4.4）：导出进行中或参数调整未完成时不允许整份改写
     registerDocumentBusyCheck('video_edit', videoEditBusyReason)
     // 图片文档放进剪辑保持链接（4.1）：图片文档写回后，打开着的剪辑里链接它的片段自动重新渲染

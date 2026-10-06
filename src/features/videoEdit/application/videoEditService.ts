@@ -399,21 +399,6 @@ export function videoEditDocumentContent(document: VideoEditDocument): VideoEdit
   const { format: _format, version: _version, id: _id, name: _name, revision: _revision, ...content } = document
   return content as VideoEditDocumentContent
 }
-/**
- * 列表里的剪辑还没有封面时（草稿意外退出前没写过封面、换了作品目录等），从剪辑文件读出内容补生成一次。
- * 每份剪辑每次运行只尝试一次；没有画面片段或读不出时保持占位图，只记日志。
- */
-const ensuredCovers = new Set<string>()
-export async function ensureVideoEditProjectCover(docId: string): Promise<void> {
-  if (ensuredCovers.has(docId)) return
-  ensuredCovers.add(docId)
-  try {
-    const read = await documentOperations().readDocument({ id: docId })
-    await updateVideoEditProjectCover(videoEditDocumentFromContent(read.content, { id: docId, name: read.meta.name }))
-  } catch (error) {
-    logger.warn('补生成剪辑封面失败', { event: 'video_edit.document.cover.ensure_failed', context: { docId }, error: String(error) })
-  }
-}
 /** 文档内容 → 剪辑（完整 schema 校验）；内容读不懂时报错，原文件不动。 */
 export function videoEditDocumentFromContent(content: unknown, meta: { id: string; name: string }, revision = 0): VideoEditDocument {
   const raw = { format: 'henji-video-project', version: 2, id: meta.id, name: meta.name, revision, ...(typeof content === 'object' && content !== null ? content : {}) }

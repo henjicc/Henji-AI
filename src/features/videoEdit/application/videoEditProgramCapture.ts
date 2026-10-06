@@ -1,7 +1,8 @@
 import { createLogger } from '@/core/logging'
 import type { VideoEditComposition } from '@/core/videoEdit/document'
 import { getPlatform } from '@/platform/runtime'
-import { getActiveVideoEditSequence, listVideoEditInstances, requireVideoEditInstance, videoEditProgramCommandIdentity, type VideoEditInstance } from './videoEditService'
+import { editVideoProject, getActiveVideoEditSequence, listVideoEditInstances, requireVideoEditInstance, videoEditProgramCommandIdentity, type VideoEditInstance } from './videoEditService'
+import { saveVideoEditPosterCover } from './videoEditProjectCover'
 import { publishVideoEditOutput, verifyVideoEditOutput, type VideoEditOutputReceipt } from './videoEditOutputs'
 
 const logger = createLogger('features.videoEdit.programCapture')
@@ -59,4 +60,37 @@ export async function captureVideoEditProgramFrame(projectId: string, frame?: nu
   } catch (error) {
     logger.warn('节目选帧未完成', { event: 'video_edit.program_frame.failed', error, context: { projectId } }); throw error
   } finally { pending.delete(owner) }
+}
+
+/**
+ * “设为项目封面”（PR 的海报帧）：把节目当前实际画面存成这份剪辑的列表封面，并在剪辑里记下封面帧（可撤销），
+ * 之后保存时不再自动换封面。
+ */
+export async function setVideoEditPosterFrame(projectId: string, signal?: AbortSignal): Promise<void> {
+  const owner = requireVideoEditInstance(projectId)
+  if (owner.playing) throw new Error('请先暂停节目播放，再设为封面。')
+  const target = owner.frame
+  const baseline = owner.document; const document = getActiveVideoEditSequence(owner)
+  const provider = providers.get(owner)
+  if (!provider || provider.sequenceId !== document.id) throw new Error('请打开当前序列的节目面板后再设为封面。')
+  const assertCurrent = (): void => {
+    signal?.throwIfAborted()
+    if (!listVideoEditInstances().includes(owner) || owner.document !== baseline || owner.activeSequenceId !== document.id || owner.frame !== target || owner.playing) throw new Error('节目画面已变化，请重新设为封面。')
+  }
+  const blob = await provider.capture({ document, frame: target, assertCurrent }, signal)
+  assertCurrent()
+  if (!blob.size || blob.size > 128 * 1024 * 1024) throw new Error('节目画面没有返回有效的图片。')
+  const dataUrl = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result)); reader.onerror = () => reject(reader.error ?? new Error('读取节目画面失败。'))
+    reader.readAsDataURL(blob)
+  })
+  await saveVideoEditPosterCover(projectId, dataUrl)
+  editVideoProject(projectId, value => ({ ...value, posterFrame: { sequenceId: document.id, frame: target } }))
+  logger.info('已设为项目封面', { event: 'video_edit.poster_frame.set', context: { projectId, frame: target } })
+}
+
+/** 取消固定封面：去掉封面帧，下次保存按内容自动更新封面。 */
+export function clearVideoEditPosterFrame(projectId: string): void {
+  editVideoProject(projectId, ({ posterFrame: _posterFrame, ...value }) => value)
 }

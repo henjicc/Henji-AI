@@ -270,6 +270,8 @@ export interface DocumentCoverSource {
   /** 任意媒体形态：本地路径 / file:// / henji-media:// / http(s) / data:。 */
   source: string
   sourceKind: 'image' | 'video'
+  /** 视频取帧的时间点（秒）；不给时取开头。 */
+  atSeconds?: number
 }
 
 export interface SaveDocumentCoverRequest {

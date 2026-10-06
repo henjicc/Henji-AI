@@ -230,14 +230,15 @@ export async function generateVideoThumbnail(
  * 200px 约束的 webp 缩略图，供缩略图缓存场景使用（区别于 generateVideoThumbnail 的
  * 480px PNG poster 场景，两者用途/格式不同，不合并成一个通用函数）。
  */
-export async function generateVideoThumbnailBytes(source: string, maxSize = 200, signal?: AbortSignal): Promise<Buffer> {
+export async function generateVideoThumbnailBytes(source: string, maxSize = 200, signal?: AbortSignal, atSeconds = 0.1): Promise<Buffer> {
   if (!Number.isSafeInteger(maxSize) || maxSize < 16 || maxSize > 1024) throw new Error('缩略图尺寸超出范围。')
   return withMediaHeavyTask(async () => {
   const ffmpegPath = await loadFfmpegPath()
   const localPath = await resolveLocalMediaPath(source, signal)
   signal?.throwIfAborted()
   const { stdout } = await execFileAsyncBuffer(ffmpegPath, [
-    '-ss', '0.1',
+    // 超出时长时 ffmpeg 取不到帧：调用方给的是估计值，取不到就退回开头
+    '-ss', String(Number.isFinite(atSeconds) && atSeconds > 0 ? Math.round(atSeconds * 1000) / 1000 : 0.1),
     '-i', localPath,
     '-frames:v', '1',
     '-vf', `scale='min(${maxSize},iw)':'min(${maxSize},ih)':force_original_aspect_ratio=decrease`,
@@ -247,5 +248,5 @@ export async function generateVideoThumbnailBytes(source: string, maxSize = 200,
   ], { signal, timeout: 15000 })
 
   return stdout
-  }, signal)
+  }, signal).then(async (bytes) => (bytes.length === 0 && atSeconds > 0.1 ? await generateVideoThumbnailBytes(source, maxSize, signal, 0.1) : bytes))
 }

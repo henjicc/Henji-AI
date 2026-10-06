@@ -7,6 +7,8 @@ import { getPlatform } from '@/platform/runtime'
 import { join } from '@/platform/desktopApi'
 import { getDocumentOperations, registerDocumentCreator, registerDocumentOpener, registerDocumentReleaser } from '@/features/documents/documentOperations'
 import { getDocumentSessionRegistry } from '@/features/documents/documentSessionRegistry'
+import { registerDocumentCoverProvider } from '@/features/documents/documentCovers'
+import { audioEditContentSchema } from '@/core/documents/kinds/audioEdit'
 import { openApplicationSurface } from '@/features/navigation/application/surfaceCapabilityService'
 import { loadAudioEditProject, flushAudioEditProject, releaseAudioEditProject } from './audioEditProjectInstances'
 import { importAudioEditMedia, openAudioEditDocument, pickAudioEditMedia } from './audioEditDocumentService'
@@ -19,6 +21,13 @@ export function registerAudioEditCapabilityHandlers(registrar: ApplicationCapabi
     if (await openAudioEditDocument({ id: document.id, path: document.path })) openApplicationSurface('tool.audio_edit')
   })
   registerDocumentReleaser('audio_edit', releaseAudioEditProject)
+  // 列表封面：从视频导入的口播取原视频约 1/3 处的一帧；纯音频没有画面，保持口播图标
+  registerDocumentCoverProvider('audio_edit', (read) => {
+    const source = audioEditContentSchema.safeParse(read.content).data?.source
+    if (!source || source.mediaType !== 'video') return null
+    const seconds = source.durationFrames / Math.max(1, source.sampleRate)
+    return [{ source: source.sourcePath, sourceKind: 'video', atSeconds: Math.round(seconds / 3 * 1000) / 1000 }]
+  })
   // 在剪辑里新建口播（4.1）：先请用户选音频或视频，导入即建草稿（放在所在项目里）；取消选择时不新建
   registerDocumentCreator('audio_edit', async (container) => {
     const sourcePath = await pickAudioEditMedia()

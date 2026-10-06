@@ -16,7 +16,7 @@ export type CoverSource = ProjectCoverSourceDto
 
 async function renderSourceTile(source: CoverSource, width: number, height: number): Promise<Buffer> {
   const input = source.sourceKind === 'video'
-    ? await generateVideoThumbnailBytes(source.source, Math.max(width, height))
+    ? await generateVideoThumbnailBytes(source.source, Math.max(width, height), undefined, source.atSeconds)
     : (await resolveSourceBytes(source.source)).bytes
   const sharp = await loadSharp()
   return await sharp(input)

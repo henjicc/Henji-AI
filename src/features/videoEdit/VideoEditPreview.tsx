@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { Dropdown, PanelTrigger, UiButton, UiEmpty, UiError, UiIconButton, UiInput, UiOptionButton, UiOverflowRow, UiPanel } from '@/components/ui'
-import { ArrowRightFromLine, ArrowRightToLine, ArrowUpFromLine, BookmarkPlus, Camera, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Eraser, FastForward, FoldHorizontal, ImagePlus, MapPin, MoreHorizontal, MousePointer2, Move, Pause, PenLine, Play, Rewind, RotateCcw, SkipBack, SkipForward, Square, SquareDashed, StepBack, StepForward, type LucideIcon } from 'lucide-react'
+import { ArrowRightFromLine, ArrowRightToLine, ArrowUpFromLine, BookmarkPlus, Camera, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Eraser, FastForward, FoldHorizontal, ImagePlus, ImageUp, MapPin, MoreHorizontal, MousePointer2, Move, Pause, PenLine, Play, Rewind, RotateCcw, SkipBack, SkipForward, Square, SquareDashed, StepBack, StepForward, type LucideIcon } from 'lucide-react'
 import { Z_LAYERS } from '@/core/theme/zLayers'
 import { audibleVideoEditClips, videoEditDuration } from '@/core/videoEdit/document'
 import { VideoEditRenderSession } from './engine/videoEditRenderSession'
@@ -18,7 +18,7 @@ import { VideoEditMonitorButton, VideoEditMonitorButtonEditor, useVideoEditMonit
 import { useSettingsStore } from '@/stores/settingsStore'
 import type { VideoEditCommandId } from '@/core/videoEdit/commands'
 import type { VideoEditProgramButtonId } from '@/core/videoEdit/monitorButtons'
-import { captureVideoEditProgramFrame, registerVideoEditProgramCapture } from './application/videoEditProgramCapture'
+import { captureVideoEditProgramFrame, clearVideoEditPosterFrame, registerVideoEditProgramCapture, setVideoEditPosterFrame } from './application/videoEditProgramCapture'
 import { collectVideoEditOutput } from './application/videoEditOutputs'
 import { editVideoEditProgramFrame } from './application/videoEditFrameEdit'
 import { useAssetLibraryStore } from '@/features/assets/store/assetLibraryStore'
@@ -268,6 +268,10 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
     return stop
   }, [instance, instance.activeSequenceId, onError, retry, visible])
   const busy = collecting || preparing
+  const setPosterFrame = (): void => {
+    setVideoEditView(instance.document.id, { playing: false })
+    void setVideoEditPosterFrame(instance.document.id).catch(onError)
+  }
   const captureFrame = (): void => {
     setCollecting(true)
     setVideoEditView(instance.document.id, { playing: false })
@@ -370,6 +374,8 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
         </div>}
         <UiOptionButton variant="menu" size="sm" className="gap-2" disabled={preparing} onClick={() => setRetry(value => value + 1)}><RotateCcw size={14} />重新加载预览</UiOptionButton>
         <UiOptionButton variant="menu" size="sm" className="gap-2" disabled={busy} onClick={captureFrame}><ImagePlus size={14} />选帧加入资产库</UiOptionButton>
+        <UiOptionButton variant="menu" size="sm" className="gap-2" disabled={busy} title="把当前画面作为项目列表里的封面" onClick={setPosterFrame}><ImageUp size={14} />设为项目封面</UiOptionButton>
+        {instance.document.posterFrame && <UiOptionButton variant="menu" size="sm" className="gap-2" title="不再固定封面，保存时按剪辑内容自动更新" onClick={() => { try { clearVideoEditPosterFrame(instance.document.id) } catch (error) { onError(error) } }}><RotateCcw size={14} />恢复自动封面</UiOptionButton>}
         <UiOptionButton variant="menu" size="sm" className="gap-2" disabled={busy} title="在图片编辑中修改当前帧，完成后可回填到此帧上方的空画面轨道" onClick={editFrame}><PenLine size={14} />编辑当前帧</UiOptionButton>
       </div>}>
         {({ open, togglePanel }) => <UiIconButton aria-label="更多节目操作" title="更多：重新加载预览、选帧加入资产库、编辑当前帧" aria-expanded={open} data-panel-trigger-button onClick={togglePanel}><MoreHorizontal size={16} /></UiIconButton>}

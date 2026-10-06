@@ -3,6 +3,8 @@ export type ProjectCoverSourceKind = 'image' | 'video'
 export interface ProjectCoverSourceDto {
   source: string
   sourceKind: ProjectCoverSourceKind
+  /** 视频取帧时间（秒）；不给时取开头。 */
+  atSeconds?: number
 }
 
 /** 三张图不做不对称排版：只取最早两张；四张才升级为 2×2。 */

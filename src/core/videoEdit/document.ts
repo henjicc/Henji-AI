@@ -52,6 +52,8 @@ export const videoEditDocumentSchema = z.object({
   format: z.literal('henji-video-project'), version: z.literal(2), id: identifier, name, revision: z.number().int().nonnegative(),
   media: z.array(videoEditMediaSchema).max(200), bins: z.array(videoEditBinSchema).max(200), items: z.array(videoEditItemSchema).max(500), sequences: z.array(videoEditSequenceSchema).min(1).max(32),
   codeMaterials: codeMaterialDefinitionsSchema.optional(),
+  /** 用户指定的封面帧（“设为项目封面”）；没有时自动取第一条序列约 1/3 处的画面。 */
+  posterFrame: z.object({ sequenceId: identifier, frame: z.number().int().nonnegative() }).strict().optional(),
 }).strict().superRefine((document, ctx) => {
   const issue = (message: string): void => { ctx.addIssue({ code: 'custom', message }) }
   for (const media of document.media) if (media.assetContent && !media.assetId && !media.assetContent.contentIdentity) issue('原文件内容快照需要固定内容身份。')

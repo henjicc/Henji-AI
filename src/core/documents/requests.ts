@@ -145,6 +145,7 @@ export const saveDocumentCoverRequestSchema: z.ZodType<SaveDocumentCoverRequest>
   sources: z.array(z.object({
     source: z.string().min(1).max(64 * 1024 * 1024),
     sourceKind: z.enum(['image', 'video']),
+    atSeconds: z.number().finite().nonnegative().max(24 * 3600).optional(),
   }).strict()).min(1).max(4),
 }).strict()
 

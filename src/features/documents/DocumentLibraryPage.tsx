@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Copy, File as FileIcon, FileInput, FolderInput, FolderOpen, FolderOutput, ListX, PackageCheck, PackageOpen, PackagePlus } from 'lucide-react'
@@ -17,6 +17,7 @@ import { MAX_ENTRY_NAME_LENGTH, normalizeEntryName } from '@/core/documents/nami
 import type { DocumentContainerRef, DocumentKindId, DocumentSummary, NameCheckResult } from '@/core/documents/types'
 import { openDialog } from '@/platform/desktopApi'
 
+import { ensureDocumentCover, hasDocumentCoverProvider, subscribeDocumentCoverChanged } from './documentCovers'
 import { toError } from './documentErrors'
 import { documentKindPresentation } from './documentKindPresentation'
 import { exportDocumentPackageInteractive, importPackageInteractive, packageFileName } from './documentPackageActions'
@@ -114,6 +115,13 @@ export function DocumentLibraryPage({
     () => toDocumentCardItems(leftover.drafts.filter((draft) => draftMatchesFilter(draft, library.filter)), { t, describe }),
     [leftover.drafts, library.filter, t, describe],
   )
+  // 没有封面的文档（含草稿）按类型登记的取法从内容补生成，写好后重读列表
+  const { reload } = library
+  useEffect(() => subscribeDocumentCoverChanged(() => { void reload() }), [reload])
+  useEffect(() => {
+    if (!hasDocumentCoverProvider(kind)) return
+    for (const item of [...library.items, ...draftItems]) if (!item.coverPath) void ensureDocumentCover(item.id, kind)
+  }, [kind, library.items, draftItems])
   const presentation = documentKindPresentation(kind)
   const kindName = t(presentation.nameKey)
   const PageIcon = icon ?? presentation.icon

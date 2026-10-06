@@ -389,17 +389,14 @@ export const ProjectCardGrid: React.FC<ProjectCardGridProps> = ({
           >
             <span data-draft={item.draft ? 'true' : undefined} className={`${UI_COVER_FRAME_CLASS} aspect-[16/10] w-full`}>
               <ProjectCardCover coverPath={item.coverPath} icon={item.icon ?? Icon} alt={item.name} />
+              {/* 草稿：封面照常显示，左上角一个小标签（PR 式），不再整圈虚线 */}
+              {item.draft && labels.draft ? <span className="absolute left-2 top-2 rounded-full bg-warning-solid px-1.5 py-0.5 text-xs font-medium text-on-warning">{labels.draft.marker}</span> : null}
             </span>
             <span className="flex min-w-0 flex-col gap-0.5 px-0.5">
               {/* 长名称会截断：悬停名称看全名（A01.7） */}
               <span className="truncate text-13 font-medium text-text1" title={item.name}>{item.name}</span>
               {item.status ? (
                 <span className="truncate text-xs text-danger-text" title={item.status}>{item.status}</span>
-              ) : item.draft ? (
-                <span className="flex min-w-0 items-baseline gap-1.5">
-                  {draftMarker}
-                  {item.metaLine ? <span className="truncate text-xs text-text3" title={item.metaLine}>{item.metaLine}</span> : null}
-                </span>
               ) : item.metaLine ? (
                 <span className="truncate text-xs text-text3" title={item.metaLine}>{item.metaLine}</span>
               ) : null}
