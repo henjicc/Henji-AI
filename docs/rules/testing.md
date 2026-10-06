@@ -63,7 +63,7 @@ npx tsc -p tsconfig.electron.json --noEmit
 npx eslint electron/main/path/to/changed.ts --cache --cache-location node_modules/.eslintcache-electron --report-unused-disable-directives --max-warnings 0
 ```
 
-**`src/core/**` 同时属于两套工程**：主进程也会编译它，而主进程不认 `@/` 别名，也没有 DOM 类型（如 `ReadableStreamReadResult`）。所以改了 `src/core/**`，两条 `tsc` 都要跑；`src/core/**` 内部只用相对路径互相引用。只跑渲染层类型检查是拦不住这类错误的，它们会留到 CI 才报。
+**`src/core/**` 可能同时属于两套工程**：主进程引用到的 core 文件（以及它们再引用的文件）也会被主进程编译，而主进程不认 `@/` 别名，也没有 DOM 类型（如 `ReadableStreamReadResult`）。所以改了 `src/core/**`，两条 `tsc` 都要跑；被主进程引用的 core 文件之间只用相对路径互相引用。只跑渲染层类型检查是拦不住这类错误的，它们会留到 CI 才报。
 
 文件级 ESLint 使用仓库现有 `.eslintrc.json`，不必为主进程叶子改动全扫 `lint:electron`。两套 TypeScript 工程有增量缓存，仍只检查改动所属工程（`src/core/**` 按上一条两套都查）；也可用显式文件入口：
 
