@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
-import { Dropdown, PanelTrigger, UiButton, UiEmpty, UiError, UiIconButton, UiInput, UiOptionButton, UiOverflowRow, UiPanel } from '@/components/ui'
+import { PanelTrigger, UiButton, UiEmpty, UiError, UiIconButton, UiInput, UiOptionButton, UiOverflowRow, UiPanel } from '@/components/ui'
 import { ArrowRightFromLine, ArrowRightToLine, ArrowUpFromLine, BookmarkPlus, Camera, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Eraser, FastForward, FoldHorizontal, ImagePlus, ImageUp, MapPin, MoreHorizontal, MousePointer2, Move, Pause, PenLine, Play, Rewind, RotateCcw, SkipBack, SkipForward, Square, SquareDashed, StepBack, StepForward, type LucideIcon } from 'lucide-react'
 import { Z_LAYERS } from '@/core/theme/zLayers'
 import { audibleVideoEditClips, videoEditDuration } from '@/core/videoEdit/document'
@@ -14,6 +14,7 @@ import { VideoEditAudioScheduler } from './engine/videoEditAudioScheduler'
 import { VideoEditLevelMeter } from './panels/VideoEditLevelMeter'
 import { useVideoEditPictureGesture } from './panels/useVideoEditPictureGesture'
 import { VideoEditTimecode } from './timeline/VideoEditTimelineTransport'
+import { useMonitorZoom } from './panels/useMonitorZoom'
 import { timelineCommandPresentation } from './timeline/timelineCommandPresentation'
 import { captureVideoEditCommandContext, executeVideoEditCommand } from './application/videoEditCommands'
 import { VideoEditMonitorButton, VideoEditMonitorButtonEditor, useVideoEditMonitorButtonIds, type VideoEditMonitorButtonSpec } from './panels/VideoEditMonitorButtons'
@@ -31,7 +32,8 @@ import type { VideoEditComposition } from '@/core/videoEdit/document'
 const logger = createLogger('features.videoEdit.preview')
 /** 节目控制条低于这个宽度时不显示时间码：时间码 112 + 默认按钮 ~360 + 显示比例 ~70 + 更多 28 + 间距 */
 const PROGRAM_TOOLBAR_TIMECODE_MIN_WIDTH = 600
-const PROGRAM_DISPLAY_OPTIONS = [{ value: 'fit' as const, label: '适应' }, { value: 'actual' as const, label: '100%' }]
+/** 收进“更多”时的常用显示比例（完整等级在显示比例下拉里）。 */
+const PROGRAM_DISPLAY_OPTIONS = [{ value: 'fit' as const, label: '适合' }, { value: 'actual' as const, label: '100%' }]
 /** 节目监视器的工具模式：选中态开关（不是动作按钮），名称与标注逻辑不变；默认不在按钮栏，不在栏里时从“更多”切换。 */
 const PROGRAM_MODES = [{ id: 'select', title: '选择', Icon: MousePointer2 }, { id: 'move', title: '移动画面', Icon: Move }, { id: 'point', title: '点标注', Icon: MapPin }, { id: 'region', title: '区域标注', Icon: SquareDashed }] as const
 /** 节目按钮栏里走剪辑命令的按钮（名称、快捷键与启用状态来自正式命令）。 */
@@ -81,7 +83,6 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
     observer.observe(toolbar)
     return () => observer.disconnect()
   }, [])
-  const [display, setDisplay] = useState<'fit' | 'actual'>('fit')
   const [levels, setLevels] = useState<VideoEditAudioLevel[]>([])
   const picture = useVideoEditPictureGesture(instance, visible && mode === 'move', onError)
   const [label, setLabel] = useState('')
@@ -96,6 +97,9 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
   const session = useRef<VideoEditRenderSession | null>(null)
   const stopPreview = useRef<() => void>(() => {})
   const document = getActiveVideoEditSequence(instance)
+  // 显示比例与缩放（Premiere：滚轮缩放、中键平移、下拉选等级或“适合”）
+  const zoom = useMonitorZoom({ width: document.width, height: document.height, label: '节目显示比例' })
+  const display = zoom.display
   useEffect(() => {
     if (!visible) { setVideoEditView(instance.document.id, { playing: false }, true); setPreparing(false); setLevels([]); return }
     const previousRelease = programReleases.get(instance) ?? Promise.resolve()
@@ -340,7 +344,7 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
   // 时间码 ｜ 自定义按钮栏（默认同 PR 节目监视器）+“+”按钮编辑器、适应 ｜ 更多（放不下的按钮、不在栏里的工具模式、重新加载、选帧加入资产库、编辑当前帧）。
   // 压在画面上的状态与标注输入用玻璃 / 媒体叠层令牌。
   return <div className="flex min-h-0 flex-1 flex-col bg-panel">
-    <div className={`relative flex min-h-0 flex-1 bg-media py-3 pl-3 pr-6 ${display === 'fit' ? 'items-center justify-center overflow-hidden' : 'items-start justify-start overflow-auto'}`}
+    <div ref={zoom.containerRef} {...zoom.containerProps} className={`relative flex min-h-0 flex-1 bg-media py-3 pl-3 pr-6 ${zoom.containerClass}`}
       onDragOver={event => {
         if (!acceptsVideoEditDrop(event.dataTransfer)) return
         const mode = programDropZoneAt(event)
@@ -361,7 +365,7 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
         const mode = programDropZoneAt(event)
         try { void dropVideoEditInput(instance.document.id, readVideoEditDrop(event.dataTransfer), { frame: instance.frame, mode }).catch(onError) } catch (error) { onError(error) }
       }}>
-      <div className={`relative ${display === 'fit' ? 'max-h-full max-w-full' : 'shrink-0'}`} style={display === 'fit' ? { aspectRatio: `${document.width}/${document.height}`, height: '100%' } : { width: document.width, height: document.height }} data-video-edit-program-display={display}>
+      <div className={`relative ${zoom.boxClass}`} style={zoom.boxStyle} data-monitor-zoom-box data-video-edit-program-display={display === 'fit' ? 'fit' : 'zoom'}>
         <div ref={host} className="h-full w-full"
           onPointerDown={event => { if (mode === 'move') { picture.down(event); return } if (mode === 'select' || !instance.selection) return; const rect = event.currentTarget.getBoundingClientRect(); pointer.current = { x: (event.clientX - rect.left) / rect.width, y: (event.clientY - rect.top) / rect.height, document: instance.document, sequenceId: instance.activeSequenceId, clipId: instance.selection, frame: instance.frame, command: videoEditProgramCommandIdentity(instance.document.id), selection: instance.selectedClipIds }; event.currentTarget.setPointerCapture(event.pointerId) }}
           onPointerMove={picture.move}
@@ -406,7 +410,7 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
         items={[
           ...barButtons.map(spec => ({ id: spec.id, priority: PROGRAM_BUTTON_PRIORITY[spec.id as VideoEditProgramButtonId] ?? 10, node: <VideoEditMonitorButton spec={spec} /> })),
           { id: 'button_editor', priority: 0, pinned: true, node: <VideoEditMonitorButtonEditor kind="program" specs={programButtons} /> },
-          { id: 'display', priority: 0, node: <div className="ml-2"><Dropdown<'fit' | 'actual'> ariaLabel="节目显示比例" appearance="text" size="sm" value={display} options={PROGRAM_DISPLAY_OPTIONS} onSelect={setDisplay} /></div> },
+          { id: 'display', priority: 0, node: <div className="ml-2">{zoom.dropdown}</div> },
         ]}
         renderOverflow={hiddenIds => <PanelTrigger panelWidth={200} zIndex={Z_LAYERS.dropdown} closeOnPanelClick panelPadding="menu" renderPanel={() => <div className="flex flex-col gap-1">
         {menuButtons(hiddenIds).length > 0 && <div className="flex flex-col gap-1" role="group" aria-label="收起的按钮">
@@ -416,7 +420,7 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
           {menuModes(hiddenIds).map(({ id, title, Icon }) => <UiOptionButton key={id} variant="menu" size="sm" className="gap-2" active={mode === id} onClick={() => setMode(id)}><Icon size={14} />{title}</UiOptionButton>)}
         </div>}
         {hiddenIds.includes('display') && <div className="flex flex-col gap-1" role="group" aria-label="节目显示比例">
-          {PROGRAM_DISPLAY_OPTIONS.map(option => <UiOptionButton key={option.value} variant="menu" size="sm" active={display === option.value} onClick={() => setDisplay(option.value)}>显示 {option.label}</UiOptionButton>)}
+          {PROGRAM_DISPLAY_OPTIONS.map(option => <UiOptionButton key={option.value} variant="menu" size="sm" active={option.value === 'fit' ? display === 'fit' : display === 1} onClick={() => zoom.setDisplay(option.value === 'fit' ? 'fit' : 1)}>显示 {option.label}</UiOptionButton>)}
         </div>}
         <UiOptionButton variant="menu" size="sm" className="gap-2" disabled={preparing} onClick={() => setRetry(value => value + 1)}><RotateCcw size={14} />重新加载预览</UiOptionButton>
         <UiOptionButton variant="menu" size="sm" className="gap-2" disabled={busy} onClick={captureFrame}><ImagePlus size={14} />选帧加入资产库</UiOptionButton>
