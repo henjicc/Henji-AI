@@ -34,6 +34,18 @@ describe('剪辑项目页', () => {
     expect(actions.onOpenFolder).toHaveBeenCalledOnce()
   })
 
+  it('项目卡片封面用主剪辑的通用封面；没有封面的保持占位图', async () => {
+    const { kit, operations, actions } = setup()
+    const withCover = kit.commands.seedProject({ name: '旅行 Vlog' })
+    kit.commands.projects.set(withCover.id, { ...withCover, mainVideoEditId: 'main-edit' })
+    const plain = kit.commands.seedProject({ name: '花絮' })
+    const readCover = vi.fn(async (docId: string) => docId === 'main-edit' ? 'C:/covers/main-edit/1.webp' : null)
+    render(<VideoEditProjectsPage operations={operations} registry={kit.registry} readCover={readCover} {...actions} />)
+    await waitFor(() => expect(document.querySelector(`[data-project-id="${withCover.id}"] img`)).not.toBeNull())
+    expect(readCover).toHaveBeenCalledWith('main-edit')
+    expect(document.querySelector(`[data-project-id="${plain.id}"] img`)).toBeNull()
+  })
+
   it('列出已保存的项目（不含草稿项目），点开交回项目；草稿项目在恢复区，可继续编辑或整个移到回收站', async () => {
     const { kit, actions, view } = setup()
     const saved = kit.commands.seedProject({ name: '旅行 Vlog' })

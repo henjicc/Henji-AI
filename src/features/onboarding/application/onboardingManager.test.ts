@@ -95,6 +95,21 @@ describe('OnboardingManager', () => {
     })
   })
 
+  it('重新启动（如引导里更换作品目录）后回到原来那一步继续', () => {
+    const storage = new MemoryStorage()
+    const manager = createManager(storage)
+    manager.open()
+    manager.next()
+    expect(manager.getSnapshot().activeStepId).toBe('basics')
+
+    expect(createManager(storage).getSnapshot()).toMatchObject({
+      status: 'in_progress',
+      activeStepId: 'basics',
+      completedStepIds: ['welcome'],
+      isOpen: true,
+    })
+  })
+
   it('记录主供应商、密钥验证和首次真实任务完成', () => {
     const manager = createManager()
     manager.open()

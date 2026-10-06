@@ -1,4 +1,4 @@
-import { app, shell } from 'electron'
+import { app, session, shell } from 'electron'
 
 import { hasActiveGenerationWork } from '../ai-runtime/runtime'
 import { getUserDataLayout, USER_ROOT_FOLDER_NAMES } from '../appPaths'
@@ -56,6 +56,10 @@ export async function openWorkRoot(): Promise<void> {
 export function relaunchAfterWorkRootChange(approveWindowsClose: () => void): void {
   if (getWorkRootService().isRunning()) throw new Error('作品目录正在移动，请等待完成')
   logger.info('作品目录已更换，重新启动应用', { event: 'work_root.relaunch.requested' })
+  // 先把渲染层本地存储（首次引导的步骤进度等）写到磁盘：重启后引导回到原来那一步，而不是从头开始
+  try { session.defaultSession.flushStorageData() } catch (error) {
+    logger.warn('重启前写入本地存储失败', { event: 'work_root.relaunch.flush_failed', error })
+  }
   approveWindowsClose()
   app.relaunch()
   app.quit()

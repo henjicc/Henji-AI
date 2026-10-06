@@ -3,16 +3,18 @@ import type { VideoEditDocument, VideoEditClip } from '@/core/videoEdit/document
 import type { VideoEditDocumentSource } from '@/core/videoEdit/creativeResult'
 import { createImageEditorV3RequestId, loadImageEditorV3Document } from '@/commands/imageEditorV3'
 import { onImageDocumentCommitted } from '@/features/imageEdit/documents/imageDocumentPersistence'
+import { ensureImageDocumentOpenInBackground } from '@/features/imageEdit/documents/imageDocumentRuntime'
 import type { ImageEditorV3DocumentRef } from '@/platform/contracts/imageEditorV3'
 import { prepareVideoEditCreativeResult } from './videoEditCreativeSources'
 import { importVideoEditSources } from './videoEditMedia'
-import { listVideoEditInstances, requireVideoEditInstance, videoEditDocumentOperations, type VideoEditInstance } from './videoEditService'
+import { listVideoEditInstances, requireVideoEditInstance, subscribeVideoEditDomain, videoEditDocumentOperations, type VideoEditInstance } from './videoEditService'
 
 /*
  * 图片文档放进剪辑保持链接（4.1）：片段的来源是图片文档本身（不是一张导出的图），画面是它的受管渲染
  * （复制进项目“生成结果”）。图片文档每次写回（保存、空闲、关闭），打开着的剪辑里链接它的片段自动重新渲染：
  * 片段换用新渲染、记下新版本，位置、时长、变换与效果不变；不再被引用的旧素材项与旧媒体一并移出剪辑（文件留在磁盘）。
- * 这是一次普通的剪辑修改（会自动保存，也能撤销回上一张渲染）。剪辑没打开时不处理，下次放入或回到来源时再渲染。
+ * 这是一次普通的剪辑修改（会自动保存，也能撤销回上一张渲染）。剪辑没打开时保存的图片文档，在剪辑下次打开时
+ * 逐份核对：文档版本已比片段记录的新，就照样重新渲染。
  */
 
 const logger = createLogger('features.videoEdit.imageLinks')
@@ -101,11 +103,56 @@ function schedule(instance: VideoEditInstance, documentId: string): void {
   }, DEBOUNCE_MS))
 }
 
-/** 应用启动时接上图片文档写回通知（剪辑领域登记时调用一次）；返回取消订阅函数。 */
+/** 剪辑里引用的全部图片文档 ID（去重）。 */
+function linkedDocumentIds(document: VideoEditDocument): string[] {
+  return [...new Set(document.sequences.flatMap((sequence) => sequence.clips)
+    .flatMap((clip) => clip.kind === 'image' && clip.creativeSource?.type === 'document' ? [clip.creativeSource.docRef.docId] : []))]
+}
+
+/**
+ * 剪辑刚打开时核对引用的图片文档：剪辑没打开期间文档被保存过（工作副本版本比片段记录的新）就重新渲染。
+ * 工作副本已回收时先在后台打开文档再核对；版本相同的不动，不让剪辑无故变脏。
+ */
+export async function refreshStaleVideoEditImageDocumentClips(projectId: string): Promise<number> {
+  let changed = 0
+  for (const documentId of linkedDocumentIds(requireVideoEditInstance(projectId).document)) {
+    try {
+      let current = await workingRevision(documentId)
+      if (current === null) {
+        await ensureImageDocumentOpenInBackground(documentId)
+        current = await workingRevision(documentId)
+      }
+      // 文档找不到（被删、移走）：片段保留上一张画面
+      if (current === null) continue
+      const clips = linkedClips(requireVideoEditInstance(projectId).document, documentId)
+      if (clips.every((clip) => clip.creativeSource.revision === current)) continue
+      changed += await refreshVideoEditImageDocumentClips(projectId, documentId)
+    } catch (error) {
+      logger.warn('打开剪辑时图片文档片段没能重新渲染，片段保留上一张画面', { event: 'video_edit.image_link.open_refresh.failed', error, context: { projectId, documentId } })
+    }
+  }
+  return changed
+}
+
+/** 应用启动时接上图片文档写回通知与剪辑打开时的核对（剪辑领域登记时调用一次）；返回取消订阅函数。 */
 export function startVideoEditImageDocumentLinks(): () => void {
-  return onImageDocumentCommitted(({ documentId }) => {
+  const stopCommits = onImageDocumentCommitted(({ documentId }) => {
     for (const instance of listVideoEditInstances()) {
       if (linkedClips(instance.document, documentId).length) schedule(instance, documentId)
     }
   })
+  // 新出现的剪辑实例（刚打开）各核对一次
+  const checked = new WeakSet<VideoEditInstance>()
+  const stopOpens = subscribeVideoEditDomain(() => {
+    for (const instance of listVideoEditInstances()) {
+      if (checked.has(instance)) continue
+      checked.add(instance)
+      if (!linkedDocumentIds(instance.document).length) continue
+      const projectId = instance.document.id
+      void refreshStaleVideoEditImageDocumentClips(projectId).catch((error: unknown) => {
+        logger.warn('打开剪辑时核对图片文档片段失败', { event: 'video_edit.image_link.open_check.failed', error, context: { projectId } })
+      })
+    }
+  })
+  return () => { stopCommits(); stopOpens() }
 }

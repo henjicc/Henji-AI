@@ -5,15 +5,16 @@ import type { AssetRecord } from '@/platform/contracts/assetLibrary'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { closeVideoEditProject, createVideoEditProject, editVideoProject, listVideoEditInstances, undoVideoEdit } from './videoEditService'
 import { captureVideoEditResultTarget, commitVideoEditCreativeResult } from './videoEditResultTarget'
-import { refreshVideoEditImageDocumentClips } from './videoEditImageLinks'
+import { refreshStaleVideoEditImageDocumentClips, refreshVideoEditImageDocumentClips } from './videoEditImageLinks'
 
 /*
  * 4.1 图片文档放进剪辑保持链接：图片文档写回后，剪辑里链接它的片段换用新渲染、记下新版本，
  * 位置与变换不变，旧素材项与旧媒体移出剪辑；版本没变时不重新渲染。受管渲染与工作副本读取在边界替换。
  */
 
-const links = vi.hoisted(() => ({ prepare: vi.fn(), load: vi.fn() }))
+const links = vi.hoisted(() => ({ prepare: vi.fn(), load: vi.fn(), ensure: vi.fn() }))
 vi.mock('./videoEditCreativeSources', async importOriginal => ({ ...await importOriginal<Record<string, unknown>>(), prepareVideoEditCreativeResult: links.prepare }))
+vi.mock('@/features/imageEdit/documents/imageDocumentRuntime', async importOriginal => ({ ...await importOriginal<Record<string, unknown>>(), ensureImageDocumentOpenInBackground: links.ensure }))
 vi.mock('@/commands/imageEditorV3', async importOriginal => ({ ...await importOriginal<Record<string, unknown>>(), loadImageEditorV3Document: links.load }))
 
 const docRef = { docId: 'poster', path: 'D:/作品/项目/短片/海报.henjiimg' }
@@ -22,7 +23,7 @@ function asset(patch: Partial<AssetRecord> = {}): AssetRecord {
 }
 const assets = new Map<string, AssetRecord>()
 beforeEach(() => {
-  installHarnessNativeStorage(); assets.clear(); links.prepare.mockReset(); links.load.mockReset()
+  installHarnessNativeStorage(); assets.clear(); links.prepare.mockReset(); links.load.mockReset(); links.ensure.mockReset(); links.ensure.mockResolvedValue(undefined)
   for (const value of [asset(), asset({ id: 'render-2', filePath: 'D:/作品/项目/短片/生成结果/海报-2.png', contentIdentity: 'b'.repeat(64), width: 1280, height: 720 })]) assets.set(value.id, value)
   vi.spyOn(getPlatform().assetLibrary, 'inspectAsset').mockImplementation(async id => structuredClone(assets.get(id)!))
   vi.spyOn(getPlatform().media, 'allowRoot').mockResolvedValue(undefined)
@@ -54,4 +55,21 @@ it('图片文档写回后片段换用新渲染：位置与变换保留，旧素�
   // 一次撤销回到上一张渲染
   undoVideoEdit(id)
   expect(owner.document.sequences[0].clips[0]).toMatchObject({ itemId: before.itemId, creativeSource: { revision: 1 } })
+})
+
+it('剪辑打开时核对：文档版本没变不动；剪辑没打开期间保存过（版本更新）就重新渲染，工作副本已回收时先在后台打开', async () => {
+  const owner = (await createVideoEditProject())!; const id = owner.document.id; const sequence = owner.document.sequences[0]
+  const target = captureVideoEditResultTarget(id, sequence.id, { mode: 'add', frame: 0, duration: 30, trackId: sequence.tracks.find(track => track.kind === 'video')!.id })
+  await commitVideoEditCreativeResult(target, { asset: asset(), origin: { type: 'document', docRef, revision: 1 } })
+
+  links.load.mockResolvedValue({ revision: 1 })
+  expect(await refreshStaleVideoEditImageDocumentClips(id)).toBe(0)
+  expect(links.prepare).not.toHaveBeenCalled()
+  expect(links.ensure).not.toHaveBeenCalled()
+
+  links.load.mockResolvedValueOnce(null).mockResolvedValue({ revision: 3 })
+  links.prepare.mockResolvedValue({ asset: assets.get('render-2'), origin: { type: 'document', docRef, revision: 3 } })
+  expect(await refreshStaleVideoEditImageDocumentClips(id)).toBe(1)
+  expect(links.ensure).toHaveBeenCalledWith('poster')
+  expect(owner.document.sequences[0].clips[0]).toMatchObject({ creativeSource: { revision: 3 } })
 })

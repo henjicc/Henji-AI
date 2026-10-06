@@ -17,6 +17,7 @@ import type { DocumentContentAdapter, DocumentLeaveOutcome } from '@/features/do
 import { getDocumentOperations, type DocumentOperations } from '@/features/documents/documentOperations'
 import { ensureVideoEditCodeDocumentMetadata, installVideoEditCodeMetadata, prepareVideoEditCodeMetadata, readVideoEditCodeMetadata, releaseVideoEditCodeCompiler } from './videoEditCodeState'
 import { validateVideoEditGraphicTextBudget } from './videoEditGraphicTextBudget'
+import { updateVideoEditProjectCover } from './videoEditProjectCover'
 
 const logger = createLogger('features.videoEdit')
 export interface VideoEditTimelineView {
@@ -389,6 +390,8 @@ export async function saveVideoEdit(id: string): Promise<void> {
     logger.error('剪辑保存失败', error, { event: 'video_edit.save.failed', context: { projectId: id } })
     throw new Error(VIDEO_EDIT_SAVE_FAILED, { cause: error })
   } finally { publishVideoEdit() }
+  // 保存后顺带更新列表封面（后台进行，画面没变时不重复生成）
+  void updateVideoEditProjectCover(instance.document)
 }
 
 /** 文档内容（剪辑的持久部分）：去掉外壳表达的 format / version / id / name / revision。 */
@@ -605,6 +608,8 @@ export async function leaveVideoEditProject(id: string): Promise<DocumentLeaveOu
       outcome = await registry.leaveProject({ project, isEmpty })
       if (outcome === 'saved') await renameMainAfterSave(project, id)
     } else outcome = await registry.leave(id)
+    // 留下来的剪辑（已保存或直接关闭）更新列表封面；不保存的草稿不用
+    if (outcome === 'saved' || outcome === 'closed') void updateVideoEditProjectCover(instance.document)
     if (outcome !== 'cancelled') disposers.get(instance)?.()
     logger.info('离开剪辑', { event: 'video_edit.document.leave.completed', context: { docId: id, outcome, draftProject: Boolean(project?.draft) } })
     return outcome
