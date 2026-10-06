@@ -36,6 +36,7 @@ import type { AudioEditProcessorDescriptor, AudioEditProjectDocument, AudioEditT
 import type { DocumentSummary } from '@/core/documents/types'
 import { ICON_TOOL_AUDIO_EDIT } from '@/core/theme/icons'
 import { DocumentLibraryPage } from '@/features/documents/DocumentLibraryPage'
+import { returnFromEmbedded, useEmbeddedHost } from '@/features/documents/embeddedDocuments'
 import { useNotification } from '@/contexts/NotificationContext'
 import { openAssistant } from '@/features/assistant/store/assistantUiStore'
 import { getPlatform } from '@/platform/runtime'
@@ -62,6 +63,7 @@ import { applyAudioEditSuggestion, audioEditSuggestionStates, dismissAudioEditSu
 import { editAudioEditProject, flushAudioEditProject } from './application/audioEditProjectInstances'
 import { AudioEditLeaveCancelledError, importAudioEditMedia, leaveAudioEditEditor, openAudioEditDocument, pickAudioEditMedia, renameAudioEditDocument } from './application/audioEditDocumentService'
 import { VideoEditSendMenu } from '@/features/videoEdit/panels/VideoEditSendMenu'
+import { videoEditDocumentRef } from '@/features/videoEdit/application/videoEditSourceRefs'
 import { compressAudioEditSilence, cleanProjectAudioEditFillers, transcribeAudioEdit, exportAudioEdit, relinkAudioEdit, prepareAudioEditProcessing, quickProcessAudioEdit } from './application/audioEditApplicationService'
 
 function formatTime(frames: number, sampleRate: number): string {
@@ -318,7 +320,9 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
     return () => { disposed = true; window.clearInterval(timer) }
   }, [projectId, notifyError])
   // 返回列表：草稿走“保存 / 不保存 / 取消”，取消留在编辑器
-  const leave = () => run(async () => { await leaveAudioEditEditor() })
+  // 从剪辑里打开的口播（4.1 嵌入模式）离开后回到剪辑；其余回到列表
+  const embeddedHost = useEmbeddedHost(project?.id)
+  const leave = () => run(async () => { if (project) await returnFromEmbedded(project.id, leaveAudioEditEditor); else await leaveAudioEditEditor() })
   // 新建口播 = 导入音频或视频，导入即建草稿（离开时起名）
   const importMedia = () => run(async () => {
     const sourcePath = await pickAudioEditMedia()
@@ -420,11 +424,13 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
         <UiIconButton size="lg" disabled={disabled || !state.future.length} onClick={state.redo} aria-label="重做" title="重做"><Redo2 size={16} /></UiIconButton>
         {/* 一条带只有这一条分隔线：左侧是编辑工具，右侧是交付动作 */}
         <span aria-hidden="true" className="mx-1 h-4 w-px shrink-0 bg-line" />
-        <VideoEditSendMenu mediaKind="audio" disabled={disabled || Boolean(sourceError)} notify={showNotification} resolveSource={() => ({ kind: 'audio_edit.project', projectId: project.id, includeProcessing: withRx })} />
+        <VideoEditSendMenu mediaKind="audio" disabled={disabled || Boolean(sourceError)} notify={showNotification} resolveSource={async () => ({ type: 'document', docRef: await videoEditDocumentRef(project.id), includeProcessing: withRx })} />
         <UiButton variant="primary" disabled={disabled || Boolean(sourceError)} onClick={() => void exportProject()}><Download size={15} className="mr-1.5" />导出</UiButton>
       </>}
     >
-      <UiIconButton size="lg" onClick={() => void leave()} aria-label="返回口播列表" title="返回口播列表"><ArrowLeft size={16} /></UiIconButton>
+      {embeddedHost
+        ? <UiButton onClick={() => void leave()}><ArrowLeft size={16} />{`返回剪辑 · ${embeddedHost.label}`}</UiButton>
+        : <UiIconButton size="lg" onClick={() => void leave()} aria-label="返回口播列表" title="返回口播列表"><ArrowLeft size={16} /></UiIconButton>}
       <AudioEditFileMenu key={project.id} name={project.name} disabled={disabled} onRename={(name) => void run(() => renameAudioEditDocument(project.id, name))} onRelink={() => void relinkSource()} />
     </UiToolbar>
     <div className="flex min-h-0 flex-1">

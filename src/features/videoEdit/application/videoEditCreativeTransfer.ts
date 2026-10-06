@@ -1,5 +1,5 @@
 import { videoEditCreativeSourceRequestSchema, type VideoEditCreativeSourceRequest } from '@/core/videoEdit/creativeResult'
-import { assertVideoEditResultTarget, commitVideoEditCreativeResult, placeVideoEditResultInProject, type VideoEditCreativeResult, type VideoEditResultReceipt, type VideoEditResultTarget } from './videoEditResultTarget'
+import { assertVideoEditResultTarget, commitVideoEditCreativeResult, placeVideoEditResultInProject, videoEditResultOutputFolder, type VideoEditCreativeResult, type VideoEditResultReceipt, type VideoEditResultTarget } from './videoEditResultTarget'
 import { prepareVideoEditCreativeResult } from './videoEditCreativeSources'
 
 export interface VideoEditCreativeTransfer { readonly target: VideoEditResultTarget; readonly source: VideoEditCreativeSourceRequest }
@@ -20,7 +20,7 @@ export async function runVideoEditCreativeTransfer(transfer: VideoEditCreativeTr
   try {
     const assertTarget = (): void => assertVideoEditResultTarget(transfer.target, signal)
     assertTarget()
-    state.prepared ??= await prepareVideoEditCreativeResult(transfer.source, { signal, assertTarget, place: path => placeVideoEditResultInProject(transfer.target, path) })
+    state.prepared ??= await prepareVideoEditCreativeResult(transfer.source, { signal, assertTarget, place: path => placeVideoEditResultInProject(transfer.target, path), outputFolder: () => videoEditResultOutputFolder(transfer.target) })
     assertTarget()
     return await commitVideoEditCreativeResult(transfer.target, state.prepared, signal)
   } finally { state.busy = false }

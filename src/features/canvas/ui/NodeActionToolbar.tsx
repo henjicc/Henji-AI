@@ -54,9 +54,8 @@ import { useAddToAssetLibrary } from '@/features/assets/hooks/useAddToAssetLibra
 import { resolveLocalAssetPath } from '@/features/assets/services/assetCollectionService';
 import { checkAssetPaths } from '@/commands/assetLibrary';
 import { ICON_WORKSPACE_VIDEO_EDIT } from '@/core/theme/icons';
-import { createCameraStageRenderTaskRef } from '@/features/cameraStage/application/cameraStageRenderCapabilityAdapter';
 import { sendCreativeResultToVideoEdit } from '@/features/videoEdit/application/videoEditResultSend';
-import type { VideoEditCreativeSourceRequest } from '@/core/videoEdit/creativeResult';
+import { videoEditDocumentRef } from '@/features/videoEdit/application/videoEditSourceRefs';
 import { useNodeDownload } from '@/features/canvas/hooks/useNodeDownload';
 import { runCanvasNode } from '@/features/canvas/application/canvasExecutionService';
 import { dissolveAssetGroup } from '@/features/canvas/application/assetGroupApplicationService';
@@ -165,22 +164,19 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
     }
   }, [addMedia, assetMedia, collecting, node.data.displayName, node.id, t]);
 
-  // Only persisted completions enter an edit; 3D results keep their render-task provenance.
-  const videoEditSource = useMemo((): { source: VideoEditCreativeSourceRequest; mediaKind: 'image' | 'video' | 'audio' } | null => {
+  // Only persisted completions enter an edit. 来源 = 这份画布 + 这个节点（4.1，三维渲染结果也是画布节点）。
+  const videoEditSource = useMemo((): { canvasId: string; mediaKind: 'image' | 'video' | 'audio' } | null => {
     const descriptor = node.data.generationOutputDescriptor;
     if (!projectId || !assetMedia || !node.data.generationOutputCommitId || descriptor?.version !== 1 || node.data.isGenerating) return null;
-    const receipt = node.data.cameraStageRenderReceipt;
-    const source: VideoEditCreativeSourceRequest = receipt
-      ? { kind: 'camera_stage.render_task', taskRef: createCameraStageRenderTaskRef(receipt).id }
-      : { kind: 'canvas.node', projectId, nodeId: node.id, completionId: node.data.generationOutputCommitId, outputId: descriptor.outputId };
-    return { source, mediaKind: descriptor.mediaType };
-  }, [assetMedia, node.data.cameraStageRenderReceipt, node.data.generationOutputCommitId, node.data.generationOutputDescriptor, node.data.isGenerating, node.id, projectId]);
+    return { canvasId: projectId, mediaKind: descriptor.mediaType };
+  }, [assetMedia, node.data.generationOutputCommitId, node.data.generationOutputDescriptor, node.data.isGenerating, projectId]);
   const [sendingToVideoEdit, setSendingToVideoEdit] = useState(false);
   const handleSendToVideoEdit = useCallback(async (): Promise<void> => {
     if (!videoEditSource || sendingToVideoEdit) return;
     setSendingToVideoEdit(true);
     try {
-      await sendCreativeResultToVideoEdit(videoEditSource.source, { mediaKind: videoEditSource.mediaKind, mode: 'add' });
+      const docRef = await videoEditDocumentRef(videoEditSource.canvasId);
+      await sendCreativeResultToVideoEdit({ type: 'document', docRef, part: node.id }, { mediaKind: videoEditSource.mediaKind, mode: 'add' });
       canvasEventBus.publish('canvas/toast', { message: t('ui:videoEditSend.added'), type: 'success' });
     } catch (error) {
       canvasEventBus.publish('canvas/toast', { message: error instanceof Error ? error.message : t('ui:videoEditSend.failed') });

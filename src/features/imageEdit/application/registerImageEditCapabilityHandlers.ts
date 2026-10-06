@@ -8,7 +8,10 @@ import type { ApplicationCapabilityHandlerRegistrar } from '@/features/applicati
 import { createImageEditPreviewFromRef } from '@/features/imageEdit/application/imageSourceCapabilityService'
 import { readImageEditPreview } from '@/features/imageEdit/application/imageEditSessionRegistry'
 import { parseCapabilityInput, throwIfCapabilityAborted } from '@/features/application-control/capabilities/handlerUtils'
-import { registerDocumentOpener, registerDocumentReleaser } from '@/features/documents/documentOperations'
+import { registerDocumentCreator, registerDocumentOpener, registerDocumentReleaser } from '@/features/documents/documentOperations'
+import { UI_WHITE_HEX } from '@/components/ui/styleTokens'
+import { createBlankImageDataUrl } from '@/features/imageMark/standalone/blankImage'
+import { createImageDocumentFromSource } from '@/features/imageMark/standalone/imageDocumentFromSource'
 import { openApplicationSurface } from '@/features/navigation/application/surfaceCapabilityService'
 import { releaseImageDocument } from '@/features/imageEdit/documents/imageDocumentRuntime'
 import { requestImageDocumentInEditor } from '@/features/imageEdit/documents/imageDocumentWorkspace'
@@ -21,6 +24,16 @@ export function registerImageEditCapabilityHandlers(registrar: ApplicationCapabi
     openApplicationSurface('tool.image_edit')
   })
   registerDocumentReleaser('image_document', releaseImageDocument)
+  // 在剪辑里新建图片文档（4.1）：按剪辑序列的画面尺寸建一张空白图片，草稿放在所在项目里，再交给图片编辑页打开
+  registerDocumentCreator('image_document', async (container, { size }) => {
+    const edge = (value: number | undefined, fallback: number): number => Math.min(8192, Math.max(16, Math.round(value ?? fallback)))
+    const blank = createBlankImageDataUrl({ width: edge(size?.width, 1920), height: edge(size?.height, 1080), dpi: 72, backgroundColor: UI_WHITE_HEX })
+    const document = await createImageDocumentFromSource({ url: blank, blank: true }, container)
+    const meta = document.session.documentMeta
+    requestImageDocumentInEditor({ id: meta.id, path: meta.path })
+    openApplicationSurface('tool.image_edit')
+    return meta
+  })
 
   registrar.registerHandler('create_image_edit_preview', async (input, context) => {
     throwIfCapabilityAborted(context.signal)

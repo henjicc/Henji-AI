@@ -10,7 +10,7 @@
  *   4. 未知原请求换标识仍不能重放，独立追加可以继续；
  *   5. 重启后可区分待续查、未知和已保存结果；仅注入存储样本，不调用供应商。
  *
- * 用法：node scripts/mcp-restart-check.cjs [--out .mcp-restart] [--only mcp|video-edit-layout|camera-stage-documents|image-documents|video-edit-documents|audio-edit-documents]
+ * 用法：node scripts/mcp-restart-check.cjs [--out .mcp-restart] [--only mcp|video-edit-layout|camera-stage-documents|image-documents|video-edit-documents|audio-edit-documents|canvas-documents|free-composition]
  * 默认仍核对 MCP；剪辑布局与镜头参考文档目标复用下面同一启动器与两次启动的隔离资料。
  */
 const assert = require('node:assert/strict')
@@ -98,6 +98,12 @@ async function main() {
   if (options.target === 'canvas-documents') {
     const { runCanvasDocumentsRestart } = require('./lib/canvasDocumentsRestart.cjs')
     try { await runCanvasDocumentsRestart({ launch, userDataDir, outDir }) }
+    finally { await cleanupIsolatedUserDataDir(userDataDir) }
+    return
+  }
+  if (options.target === 'free-composition') {
+    const { runFreeCompositionRestart } = require('./lib/freeCompositionRestart.cjs')
+    try { await runFreeCompositionRestart({ launch, userDataDir, outDir }) }
     finally { await cleanupIsolatedUserDataDir(userDataDir) }
     return
   }

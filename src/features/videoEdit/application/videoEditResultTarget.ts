@@ -5,6 +5,7 @@ import { importVideoEditCaptions } from '@/core/videoEdit/timedContent'
 import { videoEditFps } from '@/core/videoEdit/time'
 import type { AssetRecord } from '@/platform/contracts/assetLibrary'
 import { getDocumentOperations } from '@/features/documents/documentOperations'
+import { getPlatform } from '@/platform/runtime'
 import { videoEditResultPlacementSchema, type VideoEditResultPlacement } from '@/core/videoEdit/creativeResult'
 import { importVideoEditSources, sameVideoEditMediaPath } from './videoEditMedia'
 import { listVideoEditInstances, requireVideoEditInstance, saveVideoEdit, verifyVideoEditSaved, type VideoEditInstance } from './videoEditService'
@@ -62,6 +63,14 @@ function publishedClip(document: VideoEditDocument, sequenceId: string, clipId: 
  * 结果文件放进目标剪辑所在项目的“生成结果”（重要记录 006：其他工具的结果复制进项目再引用；
  * 同名同内容复用，从不覆盖）；返回剪辑里要引用的位置。已在项目里的原样返回。
  */
+/** 需要新写出文件的来源（口播剪后声音）直接写进目标剪辑所在项目的“生成结果”；找不到项目时返回 null（改由用户选择位置）。 */
+export async function videoEditResultOutputFolder(target: VideoEditResultTarget): Promise<string | null> {
+  const container = stateOf(target).owner.session.documentMeta.container
+  if (container.kind !== 'project') return null
+  const project = await getDocumentOperations().findProject(container.projectId).catch(() => null)
+  return project ? await getPlatform().system.paths.join(project.path, project.folders.generated) : null
+}
+
 export async function placeVideoEditResultInProject(target: VideoEditResultTarget, filePath: string): Promise<string> {
   const container = stateOf(target).owner.session.documentMeta.container
   if (container.kind !== 'project') return filePath

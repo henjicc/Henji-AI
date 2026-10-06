@@ -3,6 +3,7 @@ import { UiLoading } from '@/components/ui'
 import { useNotification } from '@/contexts/NotificationContext'
 import { ICON_TOOL_CAMERA_STAGE } from '@/core/theme/icons'
 import { DocumentLibraryPage } from '@/features/documents/DocumentLibraryPage'
+import { returnFromEmbedded } from '@/features/documents/embeddedDocuments'
 import CameraStageEditor from './CameraStageEditor'
 import CameraStageErrorBoundary from './CameraStageErrorBoundary'
 import {
@@ -122,7 +123,10 @@ const CameraStageAppInner: React.FC<CameraStageAppProps> = ({ onBackToToolbox })
 
   const handleBackToList = useCallback(async (): Promise<void> => {
     try {
-      await leaveCameraStageEditor()
+      // 从剪辑里打开的（4.1 嵌入模式）离开后回到剪辑；其余回到列表
+      const documentId = useCameraStageStore.getState().currentProjectId
+      if (documentId) await returnFromEmbedded(documentId, leaveCameraStageEditor)
+      else await leaveCameraStageEditor()
     } catch (error) {
       notifyError(error)
     }

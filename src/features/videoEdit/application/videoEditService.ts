@@ -77,6 +77,8 @@ export function setVideoEditDocumentServicesForTests(services: { registry: Docum
 }
 function documentRegistry(): DocumentSessionRegistry { return registryOverride ?? getDocumentSessionRegistry() }
 function documentOperations(): DocumentOperations { return operationsOverride ?? getDocumentOperations() }
+/** 剪辑用的通用文档操作（测试时是替身）：在剪辑里组合文档（4.1）也走它。 */
+export function videoEditDocumentOperations(): DocumentOperations { return documentOperations() }
 export interface VideoEditGesture { readonly projectId: string; readonly token: string }
 interface GestureState { handle: VideoEditGesture; before: VideoEditDocument; finished: Promise<void>; release: () => void }
 const gestures = new WeakMap<VideoEditInstance, GestureState>()
@@ -657,14 +659,18 @@ export async function releaseVideoEditDocument(id: string): Promise<boolean> {
   return true
 }
 
-/** 收集素材：把剪辑引用的外部文件复制进所在项目的“素材”并改写引用，返回复制与找不到的数量。 */
-export async function collectVideoEditMedia(id: string): Promise<{ copiedFiles: number; missing: number }> {
+/**
+ * 收集素材：把剪辑引用的外部文件复制进所在项目的“素材”并改写引用；片段来源引用的别处文档
+ * （别的项目、作品目录里的画布、口播、图片文档）复制进项目（新 ID）并改指向副本（4.1）。
+ * 返回复制的文件数、文档数与找不到的数量。
+ */
+export async function collectVideoEditMedia(id: string): Promise<{ copiedFiles: number; copiedDocuments: number; missing: number }> {
   const instance = requireVideoEditInstance(id)
   if (instance.busy) throw new Error('请等待导出完成或取消导出。')
   if (gestures.has(instance)) throw new Error('请先完成当前参数调整。')
   const result = await documentOperations().collectDocumentMedia(instance.session.target)
-  logger.info('剪辑素材已收集', { event: 'video_edit.media.collect.completed', context: { docId: id, copiedFiles: result.copiedFiles, missing: result.missingPaths.length } })
-  return { copiedFiles: result.copiedFiles, missing: result.missingPaths.length }
+  logger.info('剪辑素材已收集', { event: 'video_edit.media.collect.completed', context: { docId: id, copiedFiles: result.copiedFiles, copiedDocuments: result.copiedDocuments ?? 0, missing: result.missingPaths.length } })
+  return { copiedFiles: result.copiedFiles, copiedDocuments: result.copiedDocuments ?? 0, missing: result.missingPaths.length }
 }
 
 /**

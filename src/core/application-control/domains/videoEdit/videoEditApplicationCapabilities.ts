@@ -35,12 +35,15 @@ export const collectVideoEditCodeAssetCapability = defineApplicationCapability({
   resolveObservedEffects: (_input, result) => [{ effect: 'execute', entityTypes: ['asset'], propertyIds: [], targetRefs: [result.resultRef], count: 1, verified: result.verification.verified, evidence: result.verification.verified ? [result.verification.condition] : [] }],
 })
 const ref = <K extends string>(kind: K) => applicationRefSchema.extend({ kind: z.literal(kind) }).strict()
-const creativeResult = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('generation.result'), resultRef: ref('generation.result'), outputIndex: z.number().int().nonnegative().max(199) }).strict(),
-  z.object({ kind: z.literal('canvas.node'), canvasProjectRef: ref('canvas.project'), nodeRef: ref('canvas.node') }).strict(),
-  z.object({ kind: z.literal('image_edit.document'), documentRef: ref('image_edit.document'), revision: z.number().int().nonnegative() }).strict(),
-  z.object({ kind: z.literal('audio_edit.project'), audioProjectRef: ref('audio_edit.project'), includeProcessing: z.boolean().optional() }).strict(),
-  z.object({ kind: z.literal('camera_stage.render_task'), taskRef: ref('camera_stage.render_task') }).strict(),
+// 片段来源只有两种（4.1）：文档（画布结果节点 / 图片文档 / 口播）与生成记录里的第几个结果
+const creativeResult = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal('document'),
+    documentRef: ref('documents.document').describe('来源文档，取自 list_documents。画布、图片文档、口播可以放进剪辑。'),
+    nodeRef: ref('canvas.node').optional().describe('画布来源必填：要放进剪辑的结果节点（三维渲染结果也是画布节点）。'),
+    includeProcessing: z.boolean().optional().describe('口播来源：导出的剪后声音是否带上声音处理。'),
+  }).strict(),
+  z.object({ type: z.literal('generation'), resultRef: ref('generation.result'), outputIndex: z.number().int().nonnegative().max(199) }).strict(),
 ])
 const placementInput = z.discriminatedUnion('mode', [
   z.object({ mode: z.literal('add'), frame: z.number().int().nonnegative(), trackRef: ref('video_edit.track'), durationFrames: z.number().int().positive().optional() }).strict(),
@@ -49,16 +52,28 @@ const placementInput = z.discriminatedUnion('mode', [
 const clipResultRef = ref('video_edit.clip')
 const placeOutput = z.object({ resultRef: clipResultRef, projectRef, assetRef, message: z.string(), verification: z.object({ verified: z.boolean(), condition: z.string(), target: clipResultRef }) }).strict()
 export const placeVideoEditCreativeResultCapability = defineApplicationCapability({
-  id: 'place_video_edit_creative_result', title: '把创作结果放入剪辑', description: '把已正式完成的生成结果、画布节点输出、图片编辑文档版本、口播剪辑工程（导出新WAV与SRT）或三维渲染任务结果，加入指定序列轨道的整数帧，或替换明确片段。目标在开始前固定，期间原工程被修改、关闭或取消则不回填；结果先收录到现有资产库并保留原路径，一次撤销即可移除。不会发起新的付费生成。',
+  id: 'place_video_edit_creative_result', title: '把创作结果放入剪辑', description: '把来源放进指定序列轨道的整数帧，或替换明确片段。来源只有两种：文档（画布里已正式完成的结果节点、图片文档的当前版本、口播导出的剪后声音与字幕）或生成记录里的第几个结果。结果复制进剪辑所在项目的“生成结果”再引用，片段记住来源，之后可用 open_video_edit_clip_source 回到来源继续编辑；图片文档放进剪辑后保持链接，保存修改后自动重新渲染。目标在开始前固定，期间原工程被修改、关闭或取消则不回填；一次撤销即可移除。不会发起新的付费生成。',
   version: 1, domain: 'video_edit', aliases: ['生成结果加入剪辑', '替换剪辑片段', '图片编辑结果回填剪辑', '口播加入剪辑', '三维渲染加入剪辑'], readOnly: false, risk: 'R1', dataClasses: ['C1'], permission: 'video_edit:write', idempotent: false, destructive: false, timeoutMs: 600000, supportsPreview: false, supportsUndo: false,
-  requiredScopes: ['video_edit', 'assets'], acceptsRefs: ['video_edit.project', 'video_edit.sequence', 'video_edit.track', 'video_edit.clip', 'generation.result', 'canvas.project', 'canvas.node', 'image_edit.document', 'audio_edit.project', 'camera_stage.render_task'], producesRefs: ['video_edit.clip', 'asset'],
-  prerequisites: ['来源必须已经完成并保存为本地文件；口播来源会请用户选择新的 WAV 文件名（同名 SRT 一并写出）。'],
+  requiredScopes: ['video_edit', 'assets'], acceptsRefs: ['video_edit.project', 'video_edit.sequence', 'video_edit.track', 'video_edit.clip', 'generation.result', 'documents.document', 'canvas.node'], producesRefs: ['video_edit.clip', 'asset'],
+  prerequisites: ['来源必须已经完成并保存为本地文件；口播来源的剪后声音写进剪辑所在项目的“生成结果”（同名 SRT 一并写出）。'],
   inputSchema: z.object({ projectRef, sequenceRef: ref('video_edit.sequence'), placement: placementInput, result: creativeResult }).strict(), outputSchema: placeOutput,
   concurrencyKey: 'video_edit', resolveConcurrencyKey: parsed => `video_edit:${parsed.projectRef.id}`,
   resolveOperationTargets: parsed => [parsed.projectRef], resolveOperationWriteTargets: parsed => [parsed.projectRef],
   control: capabilityControl('execute', ['video_edit.clip', 'asset'], { cancelable: true, revisionScopes: ['video_edit', 'assets'] }), summarize: result => result.message,
   verificationContract: { kind: 'effect_receipt', requireEffects: true, requireVerifiedEffects: true },
   resolveObservedEffects: (_input, result) => [{ effect: 'execute', entityTypes: ['video_edit.clip'], propertyIds: [], targetRefs: [result.resultRef], count: 1, verified: result.verification.verified, evidence: result.verification.verified ? [result.verification.condition] : [] }],
+})
+const sourceOutput = z.object({ resultRef: clipResultRef, projectRef, status: z.enum(['opened', 'missing']), sourceType: z.enum(['document', 'generation']), message: z.string(), verification: z.object({ verified: z.boolean(), condition: z.string(), target: clipResultRef }) }).strict()
+export const openVideoEditClipSourceCapability = defineApplicationCapability({
+  id: 'open_video_edit_clip_source', title: '回到片段来源继续编辑', description: '打开剪辑片段记录的来源：来源文档（画布定位到结果节点、图片文档、口播）以嵌入模式打开，工具命令带显示“返回剪辑 · 项目名”；生成记录则打开生成页并定位。会切换界面，只在用户要求回去修改来源时使用。来源找不到时返回 status=missing，需请用户在剪辑里“重新定位…”。',
+  version: 1, domain: 'video_edit', aliases: ['回到来源', '继续编辑来源', '打开片段来源', 'open clip source'], readOnly: false, risk: 'R1', dataClasses: ['C1'], permission: 'video_edit:read', idempotent: true, destructive: false, timeoutMs: 30000, supportsPreview: false, supportsUndo: false,
+  requiredScopes: ['video_edit', 'navigation'], acceptsRefs: ['video_edit.project', 'video_edit.clip'], producesRefs: ['application.surface'],
+  successEvidence: ['来源文档已在对应工具里以嵌入模式打开，或生成页已定位到来源记录。'],
+  failureRecovery: ['片段没有记录来源（直接导入的素材）时如实说明；来源找不到时请用户在剪辑里右键片段“回到来源继续编辑”后选择“重新定位…”。'],
+  inputSchema: z.object({ projectRef, clipRef: ref('video_edit.clip') }).strict(), outputSchema: sourceOutput,
+  concurrencyKey: 'video_edit_navigate', resolveConcurrencyKey: parsed => `video_edit_navigate:${parsed.projectRef.id}`,
+  resolveOperationTargets: parsed => [parsed.projectRef], resolveOperationWriteTargets: () => [],
+  control: capabilityControl('navigate', ['video_edit.clip', 'application.surface']), summarize: result => result.message,
 })
 const observeTarget = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('program'), sequenceRef: ref('video_edit.sequence').optional(), frame: z.number().int().nonnegative() }).strict(),
@@ -96,4 +111,4 @@ export const VIDEO_EDIT_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinitio
     entityTypes: ['video_edit.project'], propertyIds: [], targetRefs: [result.resultRef], count: 1,
     verified: result.verification.verified, evidence: result.verification.verified ? [result.verification.condition] : [],
   }],
-})), collectVideoEditOutputCapability, collectVideoEditCodeAssetCapability, placeVideoEditCreativeResultCapability, observeVideoEditFrameCapability]
+})), collectVideoEditOutputCapability, collectVideoEditCodeAssetCapability, placeVideoEditCreativeResultCapability, observeVideoEditFrameCapability, openVideoEditClipSourceCapability]

@@ -131,7 +131,8 @@ function createVideoEditCreativeResultsScene(context) {
         await resultImage.click({ button: 'right' })
         const addItem = page.getByText('剪辑：加入播放头', { exact: true })
         await addItem.waitFor({ state: 'visible', timeout: 10000 }); let at = performance.now(); await addItem.click()
-        const generated = await savedClip(page, file, clip => clip.creativeSource?.kind === 'generation.result', '生成页结果没有回填并保存到原剪辑工程')
+        // 4.1：片段来源统一为“文档 + 部位”与“生成记录 + 第几个结果”两种
+        const generated = await savedClip(page, file, clip => clip.creativeSource?.type === 'generation', '生成页结果没有回填并保存到原剪辑工程')
         evidence.timings.generationAddMs = performance.now() - at
         assert.equal(generated.clip.start, 120); assert.ok(generated.clip.track >= 2, '加入播放头不得覆盖原片段所在轨道')
         const generatedMedia = generated.document.media.find(media => media.id === generated.document.items.find(item => item.id === generated.clip.itemId).mediaId)
@@ -144,11 +145,11 @@ function createVideoEditCreativeResultsScene(context) {
         phase('mcp-replace-generation')
         const read = await callTool(client, 'read_application_entity', { ref: projectRef })
         at = performance.now()
-        const replaced = await callTool(client, 'place_video_edit_creative_result', operationEnvelope([read], { projectRef, sequenceRef: { kind: 'video_edit.sequence', id: `${PROJECT_ID}:main` }, placement: { mode: 'replace', clipRef: { kind: 'video_edit.clip', id: `${PROJECT_ID}:${generated.clip.id}` } }, result: { kind: 'generation.result', resultRef: { kind: 'generation.result', id: generated.clip.creativeSource.id === 'creative-generation-a' ? 'creative-generation-b' : 'creative-generation-a' }, outputIndex: 0 } }))
+        const replaced = await callTool(client, 'place_video_edit_creative_result', operationEnvelope([read], { projectRef, sequenceRef: { kind: 'video_edit.sequence', id: `${PROJECT_ID}:main` }, placement: { mode: 'replace', clipRef: { kind: 'video_edit.clip', id: `${PROJECT_ID}:${generated.clip.id}` } }, result: { type: 'generation', resultRef: { kind: 'generation.result', id: generated.clip.creativeSource.recordId === 'creative-generation-a' ? 'creative-generation-b' : 'creative-generation-a' }, outputIndex: 0 } }))
         evidence.timings.mcpReplaceMs = performance.now() - at
         assert.equal(replaced.executionState, 'completed', JSON.stringify(replaced)); assert.equal(replaced.verificationState, 'verified', JSON.stringify(replaced))
         const afterReplace = readProject(file).sequences[0].clips.find(clip => clip.id === generated.clip.id)
-        assert.equal(afterReplace.start, generated.clip.start); assert.equal(afterReplace.duration, generated.clip.duration); assert.notEqual(afterReplace.creativeSource.id, generated.clip.creativeSource.id)
+        assert.equal(afterReplace.start, generated.clip.start); assert.equal(afterReplace.duration, generated.clip.duration); assert.notEqual(afterReplace.creativeSource.recordId, generated.clip.creativeSource.recordId)
         evidence.replace = { result: replaced, clip: afterReplace }; evidence.phases.push('Modern MCP 替换同一片段：原时间位置保留，来源更新')
 
         phase('program-frame-image-edit')
@@ -163,7 +164,8 @@ function createVideoEditCreativeResultsScene(context) {
         await shot('creative-image-editor-opened')
         await sendMenu.click(); const backfill = page.getByRole('menuitem', { name: /回填到原剪辑位置/ })
         await backfill.waitFor({ state: 'visible' }); evidence.imageReturnLabel = await backfill.innerText(); at = performance.now(); await backfill.click()
-        const edited = await savedClip(page, file, clip => clip.creativeSource?.kind === 'image_edit.document', '图片编辑结果没有回填原帧位置')
+        // 编辑当前帧 = 一份图片文档：片段来源引用图片文档本身（保持链接，写回后自动重新渲染）
+        const edited = await savedClip(page, file, clip => clip.creativeSource?.type === 'document' && /\.henjiimg$/i.test(clip.creativeSource.docRef.path), '图片编辑结果没有回填原帧位置')
         evidence.timings.imageBackfillMs = performance.now() - at
         assert.equal(edited.clip.start, 300); assert.ok(edited.clip.track > 1, '编辑帧必须位于原画面上方')
         const editedMedia = edited.document.media.find(media => media.id === edited.document.items.find(item => item.id === edited.clip.itemId).mediaId)
@@ -188,11 +190,13 @@ function createVideoEditCreativeResultsScene(context) {
         await playhead(60)
         await context.setupToolbox(page); await context.clickNamedButton(page, /^(口播剪辑)/)
         await page.getByRole('button', { name: /回填口播/ }).first().click()
-        const wavPath = path.join(root, `voice-cut-${Date.now()}.wav`); await dialogs(app, [], wavPath)
+        // 4.1：剪后声音直接写进剪辑所在项目的“生成结果”（不再弹保存对话框）
         await page.getByRole('button', { name: /加入剪辑/ }).click(); const voiceAdd = page.getByRole('menuitem', { name: /加入播放头/ })
         await voiceAdd.waitFor({ state: 'visible' }); evidence.voiceLabel = await voiceAdd.innerText(); at = performance.now(); await voiceAdd.click()
-        const voiced = await savedClip(page, file, clip => clip.creativeSource?.kind === 'audio_edit.project', '口播结果没有回填序列')
+        const voiced = await savedClip(page, file, clip => clip.creativeSource?.type === 'document' && clip.creativeSource.docRef.docId === audioProjectId, '口播结果没有回填序列')
         evidence.timings.voiceMs = performance.now() - at
+        const wavPath = voiced.document.media.find(media => media.id === voiced.document.items.find(item => item.id === voiced.clip.itemId).mediaId).path
+        assert.equal(normalized(path.dirname(wavPath)), normalized(path.join(editProject.projectPath, '生成结果')), `剪后声音应写进项目“生成结果”：${wavPath}`)
         const voiceProbe = mediaProbe(ffprobePath, wavPath); const voiceStream = voiceProbe.streams.find(stream => stream.codec_type === 'audio')
         assert.equal(Number(voiceStream.sample_rate), 48000); assert.ok(Math.abs(Number(voiceProbe.format.duration) - 4) < 0.02, `剪后时长应为4秒：${voiceProbe.format.duration}`)
         assert.ok(fs.existsSync(wavPath.replace(/\.wav$/, '.srt')))
@@ -211,7 +215,7 @@ function createVideoEditCreativeResultsScene(context) {
         }
         const resultNode = page.locator(`.react-flow__node[data-id="${resultNodeId}"]`); await resultNode.waitFor({ state: 'visible', timeout: 15000 }); await resultNode.click()
         at = performance.now(); await page.getByRole('button', { name: '加入剪辑', exact: true }).click()
-        const staged = await savedClip(page, file, clip => clip.creativeSource?.kind === 'camera_stage.render_task', '三维正式渲染没有回填序列')
+        const staged = await savedClip(page, file, clip => clip.creativeSource?.type === 'document' && clip.creativeSource.part === resultNodeId, '三维正式渲染没有回填序列')
         evidence.timings.cameraStageMs = performance.now() - at
         assert.equal(staged.clip.start, 360)
         const stagedMedia = staged.document.media.find(media => media.id === staged.document.items.find(item => item.id === staged.clip.itemId).mediaId)
@@ -219,9 +223,9 @@ function createVideoEditCreativeResultsScene(context) {
         await shot('creative-camera-stage-sent')
         // Same canvas completion through the public canvas-node source, replacing the 3D clip in place.
         const nodeRead = await callTool(client, 'read_application_entity', { ref: projectRef })
-        const canvasReplace = await callTool(client, 'place_video_edit_creative_result', operationEnvelope([nodeRead], { projectRef, sequenceRef: { kind: 'video_edit.sequence', id: `${PROJECT_ID}:main` }, placement: { mode: 'replace', clipRef: { kind: 'video_edit.clip', id: `${PROJECT_ID}:${staged.clip.id}` } }, result: { kind: 'canvas.node', canvasProjectRef: { kind: 'canvas.project', id: canvasId }, nodeRef: { kind: 'canvas.node', id: resultNodeId } } }))
+        const canvasReplace = await callTool(client, 'place_video_edit_creative_result', operationEnvelope([nodeRead], { projectRef, sequenceRef: { kind: 'video_edit.sequence', id: `${PROJECT_ID}:main` }, placement: { mode: 'replace', clipRef: { kind: 'video_edit.clip', id: `${PROJECT_ID}:${staged.clip.id}` } }, result: { type: 'document', documentRef: { kind: 'documents.document', id: canvasId }, nodeRef: { kind: 'canvas.node', id: `${canvasId}:${resultNodeId}` } } }))
         assert.equal(canvasReplace.verificationState, 'verified', JSON.stringify(canvasReplace))
-        assert.equal(readProject(file).sequences[0].clips.find(clip => clip.id === staged.clip.id).creativeSource.kind, 'canvas.node')
+        assert.deepEqual(readProject(file).sequences[0].clips.find(clip => clip.id === staged.clip.id).creativeSource.part, resultNodeId)
         evidence.phases.push('三维正式完成结果经画布节点工具条进入播放头；同一完成节点经MCP画布来源替换')
 
         phase('reopen-export')

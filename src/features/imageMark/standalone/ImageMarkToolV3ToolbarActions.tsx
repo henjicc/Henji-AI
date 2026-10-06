@@ -8,6 +8,7 @@ import { ImageMarkSourceMenu } from './ImageMarkSourceMenu'
 import { useNotification } from '@/contexts/NotificationContext'
 import { VideoEditSendMenu } from '@/features/videoEdit/panels/VideoEditSendMenu'
 import { readVideoEditImageReturn } from '@/features/videoEdit/application/videoEditFrameEdit'
+import { videoEditDocumentRef } from '@/features/videoEdit/application/videoEditSourceRefs'
 import type {
   ImageMarkToolV3HostController,
   ImageMarkToolV3HostProps,
@@ -101,8 +102,9 @@ export function ImageMarkToolV3ToolbarActions({
         boundTarget={boundReturn}
         resolveSource={async () => {
           // The edit lands from the saved revision; later strokes need a new send.
+          // 来源 = 这份图片文档（4.1）：放进剪辑后保持链接，保存后剪辑自动重新渲染。
           const reference = await host.flushPending()
-          return { kind: 'image_edit.document', documentRef: `image-edit-v3:${reference.documentId}`, revision: reference.revision }
+          return { type: 'document', docRef: await videoEditDocumentRef(reference.documentId), revision: reference.revision }
         }}
       />
       {host.rasterExport ? (

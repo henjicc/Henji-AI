@@ -4,7 +4,7 @@ import { getPlatform } from '@/platform/runtime'
 import type { AssetRecord } from '@/platform/contracts/assetLibrary'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { createVideoEditSequence } from '@/core/videoEdit/document'
-import { createVideoEditProject, listVideoEditInstances, closeVideoEditProject, editVideoProject, openVideoEditProject, switchVideoEditSequence, undoVideoEdit, saveVideoEdit, subscribeVideoEditDomain } from './videoEditService'
+import { createVideoEditProject, listVideoEditInstances, closeVideoEditProject, editVideoProject, switchVideoEditSequence, undoVideoEdit, saveVideoEdit, subscribeVideoEditDomain } from './videoEditService'
 import { VideoEditCollectionExecutor } from './videoEditExecutors'
 import { captureVideoEditResultTarget, commitVideoEditCreativeResult, type VideoEditCreativeResult } from './videoEditResultTarget'
 import { VIDEO_EDIT_FIELDS } from './videoEditFields'
@@ -20,7 +20,7 @@ vi.mock('mediabunny', () => ({ ALL_FORMATS: [], UrlSource: class {}, Input: clas
   dispose() {}
 } }))
 const files = new Map<string, string>()
-const origin = { kind: 'generation.result' as const, id: 'generation-1', version: 'completed-output-0' }
+const origin = { type: 'generation' as const, recordId: 'generation-1', outputIndex: 0 }
 function asset(patch: Partial<AssetRecord> = {}): AssetRecord {
   return { id: 'finished-image', mediaType: 'image', displayName: '生成原图', filePath: 'D:/results/source.png', displayUrl: 'henji-media://local/result', source: 'generated', mimeType: 'image/png', sizeBytes: 1024, width: 3840, height: 2160, durationSeconds: 0, thumbnailPath: null, thumbnailUrl: null, inspectionStatus: 'ready', inspectionError: null, fileModifiedAt: 1000, contentIdentity: 'a'.repeat(64), lastUsedAt: null, createdAt: 1, updatedAt: 1, tags: [], libraryIds: [], ...patch }
 }
@@ -98,8 +98,8 @@ it('替换保留原时间/画面与节目字幕锚点，原文件和旧项目项
   editVideoProject(owner.document.id, doc => ({ ...doc, sequences: doc.sequences.map(seq => ({ ...seq, clips: seq.clips.map(clip => ({ ...clip, x: .4, sourceInUs: 1_000_000 })), captions: [{ id: 'old-caption', clipId: first.clipId, start: 31, duration: 5, text: '保留节目位置' }] })) }))
   const replacement = captureVideoEditResultTarget(owner.document.id, owner.activeSequenceId, { mode: 'replace', clipId: first.clipId })
   const nextAsset = asset({ id: 'next-image', filePath: 'D:/results/next.png', contentIdentity: 'b'.repeat(64) }); vi.mocked(getPlatform().assetLibrary.inspectAsset).mockResolvedValue(nextAsset)
-  await commitVideoEditCreativeResult(replacement, { asset: nextAsset, origin: { ...origin, version: 'output-1' } })
-  expect(owner.document.sequences[0].clips[0]).toMatchObject({ id: first.clipId, start: 30, duration: 60, x: .4, sourceInUs: 0, creativeSource: { version: 'output-1' } })
+  await commitVideoEditCreativeResult(replacement, { asset: nextAsset, origin: { ...origin, outputIndex: 1 } })
+  expect(owner.document.sequences[0].clips[0]).toMatchObject({ id: first.clipId, start: 30, duration: 60, x: .4, sourceInUs: 0, creativeSource: { outputIndex: 1 } })
   expect(owner.document.sequences[0].captions?.[0]).toMatchObject({ start: 31, duration: 5 })
   expect(owner.document.media.map(media => media.path)).toEqual(['D:/results/source.png', 'D:/results/next.png'])
 })
@@ -108,7 +108,7 @@ it('口播字幕按输出秒换算到序列帧并与音频同事务，错误字�
   const { owner } = await setup(); const sequence = owner.document.sequences[0]; const audioAsset = asset({ id: 'audio', mediaType: 'audio', filePath: 'D:/results/audio.wav', width: 0, height: 0, durationSeconds: 3 })
   vi.mocked(getPlatform().assetLibrary.inspectAsset).mockResolvedValue(audioAsset)
   const target = captureVideoEditResultTarget(owner.document.id, sequence.id, { mode: 'add', frame: 30, trackId: sequence.tracks.find(track => track.kind === 'audio')!.id })
-  const origin = { kind: 'audio_edit.project' as const, id: 'voice', version: 'wav-srt-1' }
+  const origin = { type: 'document' as const, docRef: { docId: 'voice', path: 'D:/作品/口播/voice.henji-audio' }, revision: 1 }
   await expect(commitVideoEditCreativeResult(target, { asset: audioAsset, origin, captions: '1\n00:00:00,000 --> 00:00:08,000\n超长\n' })).rejects.toThrow('字幕范围')
   expect(owner.past).toHaveLength(0)
   const receipt = await commitVideoEditCreativeResult(target, { asset: audioAsset, origin, captions: '1\n00:00:00,500 --> 00:00:01,000\n剪后字幕\n' })
@@ -124,7 +124,7 @@ it('已拆分的纯画面片段替换为有声视频仍只用画面，完成来�
   editVideoProject(owner.document.id, doc => ({ ...doc, sequences: doc.sequences.map(seq => ({ ...seq, clips: seq.clips.map(clip => ({ ...clip, sourceComponent: 'video' as const })) })) }))
   const next = asset({ ...original, id: 'new-video', filePath: 'D:/results/new.mp4', contentIdentity: 'b'.repeat(64) }); vi.mocked(getPlatform().assetLibrary.inspectAsset).mockResolvedValue(next)
   const replacement = captureVideoEditResultTarget(owner.document.id, owner.activeSequenceId, { mode: 'replace', clipId: first.clipId })
-  await commitVideoEditCreativeResult(replacement, { asset: next, origin: { ...origin, version: 'new-video' } })
+  await commitVideoEditCreativeResult(replacement, { asset: next, origin: { ...origin, outputIndex: 2 } })
   expect(owner.document.sequences[0].clips[0].sourceComponent).toBe('video')
   const field = VIDEO_EDIT_FIELDS['video_edit.clip'].find(field => field.propertyId === 'video_edit.clip.creative_source')!
   expect(field.writer).toBeUndefined(); expect(field.read({})).toBeNull()
@@ -142,9 +142,9 @@ it('同一资产替换重置源入点时字幕与标记仍保持节目位置', a
   const { owner, target, result } = await setup(); const first = await commitVideoEditCreativeResult(target, result)
   editVideoProject(owner.document.id, doc => ({ ...doc, sequences: doc.sequences.map(seq => ({ ...seq, clips: seq.clips.map(clip => ({ ...clip, sourceInUs: 500_000 })), markers: [{ id: 'mark', frame: 40, name: '节拍', clipId: first.clipId }], captions: [{ id: 'cap', clipId: first.clipId, start: 35, duration: 10, text: '原位置' }] })) }))
   const replacement = captureVideoEditResultTarget(owner.document.id, owner.activeSequenceId, { mode: 'replace', clipId: first.clipId })
-  await commitVideoEditCreativeResult(replacement, { ...result, origin: { ...origin, version: 'same-asset-again' } })
+  await commitVideoEditCreativeResult(replacement, { ...result, origin: { ...origin, outputIndex: 3 } })
   const sequence = owner.document.sequences[0]
-  expect(owner.document.items).toHaveLength(1); expect(sequence.clips[0]).toMatchObject({ id: first.clipId, sourceInUs: 0, creativeSource: { version: 'same-asset-again' } })
+  expect(owner.document.items).toHaveLength(1); expect(sequence.clips[0]).toMatchObject({ id: first.clipId, sourceInUs: 0, creativeSource: { outputIndex: 3 } })
   expect(sequence.captions?.[0]).toMatchObject({ start: 35, duration: 10 }); expect(sequence.markers?.[0]).toMatchObject({ frame: 40 })
 })
 

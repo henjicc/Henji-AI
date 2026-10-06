@@ -37,10 +37,15 @@ export {
   ProjectInUseError,
   getDocumentOperations,
   isDocumentNameConflict,
+  registerDocumentCreator,
   registerDocumentOpener,
   registerDocumentReleaser,
   type CreateNamedDocumentRequest,
+  type DocumentCreateOptions,
+  type DocumentCreator,
+  type DocumentOpenOptions,
   type DocumentOpener,
+  type OpenDocumentWithOptions,
   type DocumentReleaser,
   type DocumentOperationCommands,
   type DocumentOperationsOptions,
@@ -61,3 +66,4 @@ export {
 } from './useDocumentLibrary'
 export { DocumentLibraryPage, type DocumentLibraryPageProps } from './DocumentLibraryPage'
 export { MoveToProjectDialog, type MoveToProjectChoice } from './MoveToProjectDialog'
+export { getEmbeddedHost, returnFromEmbedded, setEmbeddedHost, useEmbeddedHost, type EmbeddedHost } from './embeddedDocuments'

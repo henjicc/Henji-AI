@@ -42,6 +42,10 @@ vi.mock('@/commands/documents', () => {
     setProjectMainDocument: call('setProjectMainDocument'),
     registerExternalProject: call('registerExternalProject'),
     forgetExternalLocation: call('forgetExternalLocation'),
+    exportDocumentPackage: call('exportDocumentPackage'),
+    exportProjectPackage: call('exportProjectPackage'),
+    importDocumentPackage: call('importPackage'),
+    resolveDocumentLink: call('resolveDocumentLink'),
   }
 })
 
@@ -126,6 +130,29 @@ it('移动遇到重名时给出改道办法，按 keepBoth 重试后两个都保
     const moved = await app.requireResult('move_document', { documentId: outside.id, projectId: project.id, onConflict: 'keepBoth' }) as { name: string }
     expect(moved.name).toBe('镜头 (2)')
     expect(fake.stored(outside.id)?.meta.container).toEqual({ kind: 'project', projectId: project.id })
+  } finally {
+    app.dispose()
+  }
+})
+
+it('复制进另一个项目与导出为单个文件（4.1）：副本落在目标项目，导出只给文件名不给路径', async () => {
+  const meta = fake.seed({ name: '海报', content: { items: ['a'] } })
+  const project = fake.seedProject({ name: '短片' })
+  const app = createApplicationHarness()
+  try {
+    type Verified = { verification: { verified: boolean } }
+    const copy = await app.requireResult('duplicate_document', { documentId: meta.id, projectId: project.id }) as { resultRef: { id: string }; projectId: string | null } & Verified
+    expect(copy.projectId).toBe(project.id)
+    expect(copy.verification.verified).toBe(true)
+    expect(fake.stored(copy.resultRef.id)?.meta.container).toEqual({ kind: 'project', projectId: project.id })
+    expect(fake.stored(meta.id)?.meta.container).toEqual({ kind: 'user' })
+
+    const exported = await app.call('export_document_package', { projectId: project.id }) as { ok?: boolean; data?: { fileName: string } }
+    expect(JSON.stringify(exported)).toContain('短片.henjipack')
+    expect(JSON.stringify(exported)).not.toContain('D:/')
+    expect(fake.exportedPackages.at(-1)).toMatchObject({ projectId: project.id })
+    const both = await app.call('export_document_package', { documentId: meta.id, projectId: project.id })
+    expect(JSON.stringify(both)).toContain('只能给一个')
   } finally {
     app.dispose()
   }

@@ -9,8 +9,9 @@ import { parseCapabilityInput, throwIfCapabilityAborted } from '@/features/appli
 import { openApplicationSurface } from '@/features/navigation/application/surfaceCapabilityService'
 import { applyCameraStageCameraMove, deleteCameraStageObject, duplicateCameraStageObject, observeCameraStageScene, placeCameraStageObject, updateCameraStageObject, verifyCameraStage } from '@/features/cameraStage/application/cameraStageCapabilityAdapter'
 import { releaseCameraStageProjectInstance } from '@/features/cameraStage/application/cameraStageProjectRuntime'
-import { openCameraStageDocument } from '@/features/cameraStage/projects/cameraStageProjectService'
-import { registerDocumentOpener, registerDocumentReleaser } from '@/features/documents/documentOperations'
+import { createDraftCameraStageDocument, openCameraStageDocument } from '@/features/cameraStage/projects/cameraStageProjectService'
+import { getDocumentSessionRegistry } from '@/features/documents/documentSessionRegistry'
+import { getDocumentOperations, registerDocumentCreator, registerDocumentOpener, registerDocumentReleaser } from '@/features/documents/documentOperations'
 import { cancelCameraStageRenderTask, getCameraStageRenderTask, renderCameraStageOutput, waitCameraStageRenderTask, recoverCameraStageRenderTask } from '@/features/cameraStage/application/cameraStageRenderCapabilityAdapter'
 
 interface ProjectInput {
@@ -33,6 +34,11 @@ export function registerCameraStageCapabilityHandlers(registrar: ApplicationCapa
     openApplicationSurface('tool.camera_stage')
   })
   registerDocumentReleaser('camera_stage', releaseCameraStageProjectInstance)
+  registerDocumentCreator('camera_stage', async (container) => {
+    const created = await createDraftCameraStageDocument(container)
+    openApplicationSurface('tool.camera_stage')
+    return getDocumentSessionRegistry().get(created.id)?.documentMeta ?? (await getDocumentOperations().readDocument({ id: created.id })).meta
+  })
 
   registrar.registerHandler('observe_camera_stage_scene', async (input) => {
     const parsed = parseCapabilityInput<ProjectInput>('observe_camera_stage_scene', input)

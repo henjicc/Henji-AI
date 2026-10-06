@@ -1228,6 +1228,9 @@
       "exportedMissing": "已导出“{{name}}”，有 {{count}} 个引用的文件找不到，没有放进去。",
       "importedDocument": "已导入“{{name}}”。",
       "importedProject": "已导入项目“{{name}}”，可在剪辑的项目列表里打开。"
+    },
+    "embedded": {
+      "returnTo": "返回剪辑 · {{name}}"
     }
   },
   "projectLibrary": {
@@ -1269,6 +1272,27 @@
     "collectMissing": "有 {{count}} 个素材找不到，未能收集。",
     "otherDocuments": "本项目里的其他文档",
     "otherDocumentsEmpty": "项目里还没有其他文档。",
-    "otherDocumentsMissing": "文件不存在"
+    "otherDocumentsMissing": "文件不存在",
+    "source": {
+      "missingTitle": "找不到来源",
+      "missingDocument": "这个片段的来源“{{name}}”找不到，可能已被删除或移到了别处。可以重新定位到它现在的位置，剪辑里引用它的片段会一并更新。",
+      "missingGeneration": "这个片段来自的生成记录已被删除，无法回到来源。片段本身不受影响。",
+      "relocate": "重新定位…",
+      "cancel": "取消",
+      "fileFilter": "痕迹AI 文档"
+    },
+    "collectDocuments": "已把 {{count}} 份来自其他位置的文档复制进项目，剪辑改为引用项目里的副本。",
+    "documents": {
+      "title": "项目文档",
+      "elsewhere": "片段引用的其他位置文档",
+      "fromElsewhere": "来自其他位置",
+      "openElsewhere": "打开其他位置的文档…",
+      "openElsewhereTitle": "打开其他位置的文档",
+      "copyIn": "复制进本项目",
+      "moveIn": "移进本项目",
+      "noOthers": "其他位置还没有画布、口播、镜头参考或图片文档。",
+      "moved": "已把“{{name}}”移进本项目。",
+      "copied": "已把“{{name}}”复制进本项目。"
+    }
   }
 }

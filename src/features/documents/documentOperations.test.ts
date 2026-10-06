@@ -135,7 +135,7 @@ describe('打开、通知与版本', () => {
     const opener = vi.fn()
     const unregister = kit.operations.registerOpener('canvas', opener)
     await kit.operations.openDocument(summary)
-    expect(opener).toHaveBeenCalledWith(summary)
+    expect(opener).toHaveBeenCalledWith(summary, {})
     unregister()
     expect(kit.operations.canOpen('canvas')).toBe(false)
   })

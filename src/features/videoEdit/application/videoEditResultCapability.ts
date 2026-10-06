@@ -1,7 +1,7 @@
 import type { z } from 'zod'
 import type { placeVideoEditCreativeResultCapability } from '@/core/application-control/domains/videoEdit/videoEditApplicationCapabilities'
 import type { VideoEditCreativeSourceRequest } from '@/core/videoEdit/creativeResult'
-import { splitImageEditV3DocumentRef } from '@/features/imageEdit/v3/application/imageEditDocumentRefs'
+import { getDocumentOperations } from '@/features/documents/documentOperations'
 import { splitVideoEditRef } from './videoEditReflection'
 import { captureVideoEditResultTarget } from './videoEditResultTarget'
 import { createVideoEditCreativeTransfer, runVideoEditCreativeTransfer } from './videoEditCreativeTransfer'
@@ -14,14 +14,17 @@ function childOf(projectId: string, ref: { kind: string; id: string }): string {
   if (value.projectId !== projectId || !value.childId) throw new Error(`${ref.kind} 必须属于目标剪辑工程，请使用目录返回的完整引用。`)
   return value.childId
 }
-function sourceRequest(source: PlaceInput['result']): VideoEditCreativeSourceRequest {
-  switch (source.kind) {
-    case 'generation.result': return { kind: source.kind, id: source.resultRef.id, outputIndex: source.outputIndex }
-    case 'canvas.node': return { kind: source.kind, projectId: source.canvasProjectRef.id, nodeId: source.nodeRef.id }
-    case 'image_edit.document': return { kind: source.kind, documentRef: `image-edit-v3:${splitImageEditV3DocumentRef(source.documentRef).documentId}`, revision: source.revision }
-    case 'audio_edit.project': return { kind: source.kind, projectId: source.audioProjectRef.id, ...(source.includeProcessing !== undefined ? { includeProcessing: source.includeProcessing } : {}) }
-    case 'camera_stage.render_task': return { kind: source.kind, taskRef: source.taskRef.id }
+/** 公共入口只把引用换成来源（文档引用补上当前位置），之后与界面同一条放入流程。 */
+async function sourceRequest(source: PlaceInput['result']): Promise<VideoEditCreativeSourceRequest> {
+  if (source.type === 'generation') return { type: 'generation', recordId: source.resultRef.id, outputIndex: source.outputIndex }
+  const document = await getDocumentOperations().findDocument(source.documentRef.id)
+  let part: string | undefined
+  if (source.nodeRef) {
+    const prefix = `${document.id}:`
+    if (!source.nodeRef.id.startsWith(prefix) || source.nodeRef.id.length === prefix.length) throw new Error(`nodeRef 必须是这份画布里的节点，格式为 ${prefix}<节点 ID>。`)
+    part = source.nodeRef.id.slice(prefix.length)
   }
+  return { type: 'document', docRef: { docId: document.id, path: document.path }, ...(part ? { part } : {}), ...(source.includeProcessing !== undefined ? { includeProcessing: source.includeProcessing } : {}) }
 }
 
 /** Same frozen-target transfer as the UI send menus; the public layer only maps refs. */
@@ -32,7 +35,7 @@ export async function placeVideoEditCreativeResultFromCapability(input: PlaceInp
     ? { mode: 'add' as const, frame: input.placement.frame, trackId: childOf(projectId, input.placement.trackRef), ...(input.placement.durationFrames !== undefined ? { duration: input.placement.durationFrames } : {}) }
     : { mode: 'replace' as const, clipId: childOf(projectId, input.placement.clipRef) }
   const target = captureVideoEditResultTarget(projectId, sequenceId, placement)
-  const receipt = await runVideoEditCreativeTransfer(createVideoEditCreativeTransfer(target, sourceRequest(input.result)), signal)
+  const receipt = await runVideoEditCreativeTransfer(createVideoEditCreativeTransfer(target, await sourceRequest(input.result)), signal)
   const resultRef = { kind: 'video_edit.clip' as const, id: `${projectId}:${receipt.clipId}` }
   return {
     resultRef, projectRef: input.projectRef, assetRef: { kind: 'asset', id: receipt.assetId },

@@ -61,7 +61,8 @@ function VideoEditToolbar({ instance, api, run, onNotice }: { instance: VideoEdi
     <PanelTrigger panelWidth={220} zIndex={Z_LAYERS.dropdown} closeOnPanelClick panelPadding="menu" renderPanel={() => <div className="flex flex-col gap-1">
       <UiOptionButton variant="menu" size="sm" className="gap-2" onClick={() => run(async () => {
         const result = await collectVideoEditMedia(projectId)
-        onNotice(result.missing ? t('videoEditProject.collectMissing', { count: result.missing }) : result.copiedFiles ? t('videoEditProject.collectDone', { count: result.copiedFiles }) : t('videoEditProject.collectNone'))
+        const files = result.missing ? t('videoEditProject.collectMissing', { count: result.missing }) : result.copiedFiles ? t('videoEditProject.collectDone', { count: result.copiedFiles }) : result.copiedDocuments ? '' : t('videoEditProject.collectNone')
+        onNotice([files, result.copiedDocuments ? t('videoEditProject.collectDocuments', { count: result.copiedDocuments }) : ''].filter(Boolean).join(' '))
       })}><FolderInput size={14} />{t('videoEditProject.collect')}</UiOptionButton>
       <UiOptionButton variant="menu" size="sm" className="gap-2" onClick={() => run(() => getDocumentOperations().revealDocument(instance.session.target))}><FolderOpen size={14} />{t('videoEditProject.revealProject')}</UiOptionButton>
       <UiOptionButton variant="menu" size="sm" className="gap-2" onClick={() => setShortcutsOpen(true)}><Keyboard size={14} />{t('videoEditProject.shortcuts')}</UiOptionButton>

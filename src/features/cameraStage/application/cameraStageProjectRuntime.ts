@@ -1,6 +1,6 @@
 import { assertApplicationWritesAllowed } from '@/core/applicationLifecycle/applicationWriteBarrier'
 import { notifyApplicationDomainChanged } from '@/core/application-control/domainChangeSignal'
-import type { DocumentTarget } from '@/core/documents/types'
+import type { DocumentContainerRef, DocumentTarget } from '@/core/documents/types'
 import { createLogger } from '@/core/logging'
 import { isDocumentServiceError, toError } from '@/features/documents/documentErrors'
 import type { DocumentSession } from '@/features/documents/documentSession'
@@ -203,9 +203,9 @@ export async function ensureCameraStageProjectRuntime(projectId: string, path?: 
 }
 
 /** 新建镜头参考草稿（以草稿标记立即写进“镜头参考”文件夹）并接成实例。 */
-export async function createCameraStageDraftRuntime(): Promise<CameraStageProjectInstance> {
+export async function createCameraStageDraftRuntime(container: DocumentContainerRef = { kind: 'user' }): Promise<CameraStageProjectInstance> {
   assertApplicationWritesAllowed()
-  const session = await documentRegistry().create({ kind: 'camera_stage', container: { kind: 'user' } })
+  const session = await documentRegistry().create({ kind: 'camera_stage', container })
   return bindCameraStageSession(session)
 }
 

@@ -145,7 +145,7 @@ const DOCUMENT_METHODS = [
   'moveDocument', 'duplicateDocument', 'trashDocument', 'deleteEmptyDraft', 'forgetDocument', 'revealDocument', 'checkName',
   'refreshIndex', 'readSessionState', 'writeSessionState', 'listProjects', 'createProject', 'renameProject', 'finalizeProject', 'trashProject', 'revealProject',
   'collectDocumentMedia', 'importFile', 'setProjectMainDocument', 'registerExternalProject', 'forgetExternalLocation',
-  'exportDocumentPackage', 'exportProjectPackage', 'importPackage',
+  'exportDocumentPackage', 'exportProjectPackage', 'importPackage', 'resolveDocumentLink',
 ] as const
 
 const documentsStorage = Object.fromEntries(DOCUMENT_METHODS.map((method) => [

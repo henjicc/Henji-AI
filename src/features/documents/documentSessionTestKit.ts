@@ -8,6 +8,8 @@ import type {
   DocumentContainerRef,
   DocumentKindId,
   DocumentIndexScanReport,
+  DocumentLink,
+  DocumentLinkResolution,
   DocumentListQuery,
   DocumentMeta,
   DocumentReadResult,
@@ -557,6 +559,16 @@ export class FakeDocumentCommands implements DocumentOperationCommands {
     const folder = this.folderFor(container)
     const meta = this.seed({ kind: entry.kind, name: this.pickName(folder, entry.name, '', 'keepBoth'), content: structuredClone(entry.content), folder, projectId: container.kind === 'project' ? container.projectId : undefined })
     return { type: 'document', meta, copiedFiles: 0 }
+  }
+
+  /** 对齐主进程：先按位置找（不核对 ID），再按 ID 找；被标为缺失的按找不到处理。 */
+  async resolveDocumentLink(link: DocumentLink): Promise<DocumentLinkResolution> {
+    this.calls.push('resolveDocumentLink')
+    const byPath = [...this.documents.values()].find(({ meta }) => meta.path === link.path && !this.missingIds.has(meta.id))
+    if (byPath) return { status: 'found', via: 'path', meta: byPath.meta }
+    const byId = this.documents.get(link.docId)
+    if (byId && !this.missingIds.has(link.docId)) return { status: 'found', via: 'id', meta: byId.meta }
+    return { status: 'missing' }
   }
 
   async forgetExternalLocation(folderPath: string): Promise<void> {

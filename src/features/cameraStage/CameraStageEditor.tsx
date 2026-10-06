@@ -32,6 +32,8 @@ import type { StageCaptureFn } from './scene/StageCaptureBridge'
 import { useCameraStageSessionStore } from './store/cameraStageSessionStore'
 import { useCameraStageStore } from './store/cameraStageStore'
 import { useCameraStageHistory } from './store/useCameraStageHistory'
+import { useEmbeddedHost } from '@/features/documents/embeddedDocuments'
+import { useTranslation } from 'react-i18next'
 import QuickAddGroup from './toolbar/QuickAddGroup'
 import StagePathContextBar from './toolbar/StagePathContextBar'
 import StageViewportToolbar from './toolbar/StageViewportToolbar'
@@ -75,6 +77,9 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
   const activeCameraId = useCameraStageStore((state) => state.activeCameraId)
   const setGizmoMode = useCameraStageStore((state) => state.setGizmoMode)
   const currentProjectId = useCameraStageStore((state) => state.currentProjectId)
+  // 从剪辑里打开（4.1 嵌入模式）：命令带左端的返回换成“返回剪辑 · 项目名”
+  const embeddedHost = useEmbeddedHost(currentProjectId)
+  const { t } = useTranslation('ui')
   const removeObject = useCameraStageStore((state) => state.removeObject)
   const duplicateObject = useCameraStageStore((state) => state.duplicateObject)
   const requestFocusSelected = useCameraStageStore((state) => state.requestFocusSelected)
@@ -553,7 +558,13 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
           </>
         )}
       >
-        {onBackToList && (
+        {onBackToList && embeddedHost && (
+          <UiButton onClick={() => void handleBackToList()}>
+            <ArrowLeft size={16} />
+            {t('documentLibrary.embedded.returnTo', { name: embeddedHost.label })}
+          </UiButton>
+        )}
+        {onBackToList && !embeddedHost && (
           <UiIconButton
             size="lg"
             aria-label={backLabel}

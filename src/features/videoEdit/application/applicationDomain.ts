@@ -4,13 +4,15 @@ import { createVideoEditRegistrations } from './videoEditReflection'
 import { VideoEditCollectionExecutor, VideoEditMutationExecutor } from './videoEditExecutors'
 import { VIDEO_EDIT_COMPOSITE_TYPES } from './videoEditCompositeEntities'
 import { openVideoEditDocument, releaseVideoEditDocument, requireVideoEditInstance, saveVideoEdit, verifyVideoEditSaved, type VideoEditInstance } from './videoEditService'
-import { registerDocumentOpener, registerDocumentReleaser } from '@/features/documents/documentOperations'
+import { getDocumentOperations, registerDocumentOpener, registerDocumentReleaser } from '@/features/documents/documentOperations'
 import { openApplicationSurface } from '@/features/navigation/application/surfaceCapabilityService'
+import { startVideoEditImageDocumentLinks } from './videoEditImageLinks'
+import { openVideoEditClipSource, videoEditClipSource, videoEditEmbedHost } from './videoEditComposition'
 import { undoVideoEdit } from './videoEditService'
 import { executeVideoEditTimelineEdit } from './videoEditTimeline'
 import { videoEditPickRelations } from '@/core/videoEdit/timelineSelection'
 import { splitVideoEditRef } from './videoEditReflection'
-import { VIDEO_EDIT_APPLICATION_CAPABILITIES, collectVideoEditOutputCapability, collectVideoEditCodeAssetCapability, placeVideoEditCreativeResultCapability, observeVideoEditFrameCapability } from '@/core/application-control/domains/videoEdit/videoEditApplicationCapabilities'
+import { VIDEO_EDIT_APPLICATION_CAPABILITIES, collectVideoEditOutputCapability, collectVideoEditCodeAssetCapability, placeVideoEditCreativeResultCapability, observeVideoEditFrameCapability, openVideoEditClipSourceCapability } from '@/core/application-control/domains/videoEdit/videoEditApplicationCapabilities'
 import { exportVideoEdit, cancelVideoEditExport, videoEditExportTask } from './videoEditExport'
 import { VideoEditSourceExecutor } from './videoEditSourceExecutor'
 import { importVideoEditSources } from './videoEditMedia'
@@ -23,6 +25,7 @@ import { placeVideoEditCreativeResultFromCapability } from './videoEditResultCap
 import { observeVideoEditFrame } from './videoEditFrameObservation'
 
 const persistenceOwners = new WeakMap<VideoEditInstance, ApplicationPersistenceParticipant>()
+let stopImageDocumentLinks: (() => void) | null = null
 
 export const videoEditApplicationDomain: ApplicationDomainModule = {
   id: 'videoEdit', entities: createVideoEditRegistrations,
@@ -39,6 +42,10 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
       openApplicationSurface('workspace.video_edit')
     })
     registerDocumentReleaser('video_edit', releaseVideoEditDocument)
+    // 图片文档放进剪辑保持链接（4.1）：图片文档写回后，打开着的剪辑里链接它的片段自动重新渲染
+    stopImageDocumentLinks ??= startVideoEditImageDocumentLinks()
+    // 嵌入模式的宿主（4.1）：从剪辑里打开的文档“返回剪辑 · 项目名”，助手 open_document 的 fromDocumentId 也走这里
+    getDocumentOperations().registerEmbedHost('video_edit', videoEditEmbedHost)
     for (const definition of VIDEO_EDIT_APPLICATION_CAPABILITIES) registrar.registerHandler(definition.id, async (raw, context) => {
       if (definition.id === observeVideoEditFrameCapability.id) {
         const input = observeVideoEditFrameCapability.inputSchema.parse(raw); const id = input.projectRef.id
@@ -50,6 +57,19 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
           verification: { verified: true, target: resultRef, condition: '已用正式渲染器生成固定版本画面，并通过资产检查核对尺寸。' } }
       }
       if (definition.id === placeVideoEditCreativeResultCapability.id) return await placeVideoEditCreativeResultFromCapability(placeVideoEditCreativeResultCapability.inputSchema.parse(raw), context.signal)
+      if (definition.id === openVideoEditClipSourceCapability.id) {
+        // 回到来源（4.1）：与时间线右键 / 双击同一入口
+        const input = openVideoEditClipSourceCapability.inputSchema.parse(raw); const id = input.projectRef.id
+        const ref = splitVideoEditRef(input.clipRef)
+        if (ref.projectId !== id || !ref.childId) throw new Error('clipRef 必须属于目标剪辑工程，请使用目录返回的完整引用。')
+        const source = videoEditClipSource(id, ref.childId)
+        if (!source) throw new Error('这个片段没有记录来源（直接导入的素材），没有可回去编辑的文档或生成记录。')
+        const outcome = await openVideoEditClipSource(id, ref.childId)
+        const opened = outcome.status === 'opened'
+        return { resultRef: input.clipRef, projectRef: input.projectRef, status: outcome.status, sourceType: source.type,
+          message: opened ? (source.type === 'generation' ? '已打开生成页并定位到来源记录。' : '已以嵌入模式打开来源文档，用户改完可点“返回剪辑”回到原位置。') : (source.type === 'generation' ? '来源生成记录已被删除，无法回到来源。' : '来源文档找不到：请用户在剪辑里右键这个片段选择“回到来源继续编辑”，再点“重新定位…”选到它现在的位置。'),
+          verification: { verified: opened, target: input.clipRef, condition: opened ? '来源已交给对应界面打开。' : '来源找不到，没有打开。' } }
+      }
       if (definition.id === collectVideoEditCodeAssetCapability.id) {
         const input = collectVideoEditCodeAssetCapability.inputSchema.parse(raw)
         const ref = splitVideoEditRef(input.targetRef)

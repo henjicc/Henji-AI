@@ -1,4 +1,4 @@
-import { Copy, Clipboard, Scissors, Trash2, Link2, Unlink, Group, Ungroup, Locate, Play, SlidersHorizontal, AudioLines, ArrowRightToLine, ListChecks, MoveHorizontal, ChevronsLeftRight } from 'lucide-react'
+import { Copy, Clipboard, Scissors, Trash2, Link2, Unlink, Group, Ungroup, Locate, Play, SlidersHorizontal, AudioLines, ArrowRightToLine, ListChecks, MoveHorizontal, ChevronsLeftRight, Undo2 } from 'lucide-react'
 import { expandVideoEditSelection, videoEditPickRelations } from '@/core/videoEdit/timelineSelection'
 import { useContextMenu, type MenuItem } from '@/hooks/useContextMenu'
 import { useSettingsStore } from '@/stores/settingsStore'
@@ -13,7 +13,7 @@ import { elementOfEventTarget } from '@/utils/crossRealmDom'
 const actionIcons = { copy: Copy, paste: Clipboard, insert: ArrowRightToLine, overwrite: Clipboard, split: Scissors, split_tracks: Scissors, delete: Trash2, ripple_delete: Trash2, link: Link2, unlink: Unlink, group: Group, ungroup: Ungroup, separate_audio: AudioLines, locate_source: Play, locate_project: Locate, locate_effects: SlidersHorizontal, select_all: ListChecks, move_into_sync: MoveHorizontal, slip_into_sync: ChevronsLeftRight } as const
 type MenuCommand = keyof typeof actionIcons
 
-export function useTimelineMenu(instance: VideoEditInstance, onError: (error: unknown) => void, cancelPointer: () => void, onAudioChannels?: (target: VideoEditAudioChannelsTarget) => void) {
+export function useTimelineMenu(instance: VideoEditInstance, onError: (error: unknown) => void, cancelPointer: () => void, onAudioChannels?: (target: VideoEditAudioChannelsTarget) => void, onOpenSource?: (clipId: string) => void) {
   const menu = useContextMenu()
   const shortcuts = useSettingsStore(state => state.videoEditShortcuts)
   const show = (event: React.MouseEvent): void => {
@@ -43,6 +43,8 @@ export function useTimelineMenu(instance: VideoEditInstance, onError: (error: un
         const locked = sequence.tracks.find(track => track.index === clip.track)?.locked === true
         items.push({ id: 'audio_channels', label: '音频声道…', icon: <AudioLines size={16} />, disabled: locked, onClick: () => onAudioChannels({ kind: 'clip', sequenceId: sequence.id, clipIds: [clip.id], mediaId: media.id, ...(clip.audioMapping ? { mapping: clip.audioMapping } : {}) }) })
       }
+      // 回到来源继续编辑（4.1）：片段记着来源时打开来源文档并定位，或打开生成记录
+      if (clip?.creativeSource && onOpenSource) items.unshift({ id: 'open_source', label: '回到来源继续编辑', icon: <Undo2 size={16} />, divider: true, onClick: () => onOpenSource(clip.id) })
       menu.showMenu(event, items)
     } catch (error) { onError(error) }
   }

@@ -9,6 +9,7 @@ import {
 import type { DocumentContainerRef, DocumentSummary, ProjectSummary } from '@/core/documents/types'
 import type { ApplicationCapabilityHandlerRegistrar } from '@/features/application-control/capabilities/handlerTypes'
 import { parseCapabilityInput, throwIfCapabilityAborted } from '@/features/application-control/capabilities/handlerUtils'
+import { getPlatform } from '@/platform/runtime'
 
 import { toError } from '../documentErrors'
 import { getDocumentOperations, isDocumentNameConflict, type DocumentOperations } from '../documentOperations'
@@ -112,12 +113,14 @@ export function registerDocumentsCapabilityHandlers(
 
   registrar.registerHandler('open_document', async (raw, context) => {
     throwIfCapabilityAborted(context.signal)
-    const input = parseCapabilityInput<{ documentId: string }>('open_document', raw)
+    const input = parseCapabilityInput<{ documentId: string; fromDocumentId?: string }>('open_document', raw)
     const document = await operations().findDocument(input.documentId)
-    await operations().openDocument(document)
+    // 嵌入模式（4.1）：宿主（剪辑）登记了嵌入方式时，由它给出返回去处
+    const embedIn = input.fromDocumentId ? await operations().embedHostFor(input.fromDocumentId) : undefined
+    await operations().openDocument(document, embedIn ? { embedIn } : {})
     // 打开方式（各工具登记）只有在编辑器载入并切换界面后才返回
     const verification = { verified: true, condition: '文档已由对应工具载入并切换到它的编辑器', target: documentRef(document.id) }
-    return { resultRef: documentRef(document.id), name: document.name, kind: document.kind, verification }
+    return { resultRef: documentRef(document.id), name: document.name, kind: document.kind, embedded: Boolean(embedIn), verification }
   })
 
   registrar.registerHandler('move_document', async (raw, context) => {
@@ -143,12 +146,14 @@ export function registerDocumentsCapabilityHandlers(
 
   registrar.registerHandler('duplicate_document', async (raw, context) => {
     throwIfCapabilityAborted(context.signal)
-    const input = parseCapabilityInput<{ documentId: string }>('duplicate_document', raw)
+    const input = parseCapabilityInput<{ documentId: string; projectId?: string }>('duplicate_document', raw)
     const document = await operations().findDocument(input.documentId)
-    const result = await operations().duplicateDocument({ id: document.id, path: document.path }, 'keepBoth')
-    const verification = await verifyDocument(operations(), result.meta.id, '副本已从作品索引回读确认（新 ID、同类型）',
-      (copy) => copy.id !== document.id && copy.kind === document.kind)
-    return { resultRef: documentRef(result.meta.id), name: result.meta.name, sourceRef: documentRef(document.id), verification }
+    const container: DocumentContainerRef | undefined = input.projectId ? { kind: 'project', projectId: input.projectId } : undefined
+    const result = await operations().duplicateDocument({ id: document.id, path: document.path }, 'keepBoth', container)
+    const verification = await verifyDocument(operations(), result.meta.id, '副本已从作品索引回读确认（新 ID、同类型、所在项目一致）',
+      (copy) => copy.id !== document.id && copy.kind === document.kind && (!container || JSON.stringify(copy.container) === JSON.stringify(container)))
+    const projectId = result.meta.container.kind === 'project' ? result.meta.container.projectId : null
+    return { resultRef: documentRef(result.meta.id), name: result.meta.name, sourceRef: documentRef(document.id), projectId, verification }
   })
 
   registrar.registerHandler('trash_document', async (raw, context) => {
@@ -159,6 +164,18 @@ export function registerDocumentsCapabilityHandlers(
     const gone = await operations().findDocument(document.id).then(() => false, () => true)
     const verification = { verified: gone, condition: '文档已从作品索引移除（文件在系统回收站）', target: documentRef(document.id) }
     return { resultRef: documentRef(document.id), name: document.name, status: 'trashed' as const, verification }
+  })
+
+  registrar.registerHandler('export_document_package', async (raw, context) => {
+    throwIfCapabilityAborted(context.signal)
+    const input = parseCapabilityInput<{ documentId?: string; projectId?: string }>('export_document_package', raw)
+    const result = input.documentId
+      ? await (async () => { const document = await operations().findDocument(input.documentId!); return await operations().exportDocumentPackage({ id: document.id, path: document.path }) })()
+      : await operations().exportProjectPackage((await operations().findProject(input.projectId!)).id)
+    const fileName = result.path.slice(Math.max(result.path.lastIndexOf('/'), result.path.lastIndexOf('\\')) + 1)
+    const exists = await Promise.resolve().then(() => getPlatform().system.fs.exists(result.path)).catch(() => false)
+    const target = input.documentId ? documentRef(input.documentId) : { kind: DOCUMENT_PROJECT_ENTITY_TYPE, id: input.projectId! }
+    return { fileName, files: result.files, missingFiles: result.missingPaths.length, verification: { verified: exists, condition: '包文件已写进作品目录的“导出”文件夹并回读确认存在', target } }
   })
 
   registrar.registerHandler('create_project', async (raw, context) => {

@@ -190,7 +190,7 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
         {({ open, togglePanel }) => <UiIconButton aria-label="视图与排序" title="视图与排序" aria-expanded={open} data-panel-trigger-button onClick={togglePanel}>{view === 'grid' ? <Grid2X2 size={15} /> : <List size={15} />}</UiIconButton>}
       </PanelTrigger>
       <UiIconButton aria-label="资产库" title="资产库：拖入素材" onClick={() => openAssetLibrary('floating')}><AssetLibraryIcon size={15} /></UiIconButton>
-      <VideoEditProjectDocumentsButton instance={instance} />
+      <VideoEditProjectDocumentsButton instance={instance} onError={onError} />
       <PanelTrigger panelWidth={184} zIndex={Z_LAYERS.dropdown} closeOnPanelClick panelPadding="menu" renderPanel={() => <div className="flex flex-col gap-1">
         <UiOptionButton variant="menu" size="sm" className="gap-2" onClick={() => setEdit({ kind: 'createBin', parentId: binId })}><FolderPlus size={14} />新建素材箱</UiOptionButton>
         <UiOptionButton variant="menu" size="sm" className="gap-2" onClick={newSequence}><SequenceIcon size={14} />新建序列</UiOptionButton>

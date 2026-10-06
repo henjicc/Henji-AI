@@ -1,4 +1,4 @@
-import type { DocumentSummary, DocumentTarget } from '@/core/documents/types'
+import type { DocumentContainerRef, DocumentMeta, DocumentSummary, DocumentTarget } from '@/core/documents/types'
 import { useProjectStore } from '@/stores/projectStore'
 
 import type { ProjectSummary } from './canvasDocumentContent'
@@ -38,6 +38,14 @@ export async function listCanvasDocumentSummaries(): Promise<ProjectSummary[]> {
 /** 打开一份画布到画布页；离开当前画布被取消时返回 false。 */
 export async function openCanvasDocument(target: DocumentTarget | DocumentSummary): Promise<boolean> {
   return await useProjectStore.getState().openCanvasDocument({ id: target.id, ...(target.path ? { path: target.path } : {}) })
+}
+
+/** 在容器里新建一份画布草稿并显示（4.1 在剪辑里新建）；离开当前画布被取消时返回 null。 */
+export async function createCanvasDocumentIn(container: DocumentContainerRef): Promise<DocumentMeta | null> {
+  const id = await useProjectStore.getState().createCanvasDraft(container)
+  if (!id) return null
+  const instance = listCanvasProjectInstances().find((candidate) => candidate.id === id)
+  return instance ? instance.session.documentMeta : null
 }
 
 /** 通用文档操作移到回收站前的后台释放（界面正在显示、有进行中的任务时拒绝）。 */

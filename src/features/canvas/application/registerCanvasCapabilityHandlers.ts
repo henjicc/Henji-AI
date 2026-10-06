@@ -8,8 +8,8 @@ import type { CanvasDownloadDestination } from '@/core/application-control/domai
 import { CANVAS_NODE_CONTROL_CATALOG_VERSION, getCanvasNodeSchema, searchCanvasNodeTypes } from '@/features/canvas/domain/nodeControlRegistry'
 import { addCanvasNode, connectCanvasNodes, focusCanvasNode, openCanvasProject, redoCanvasChange, undoCanvasChange } from '@/features/canvas/application/canvasApplicationService'
 import { commitCanvasBatch, planCanvasBatch, previewCanvasBatch } from '@/features/canvas/application/canvasBatchService'
-import { openCanvasDocument, releaseCanvasDocument } from '@/features/canvas/application/canvasProjectService'
-import { registerDocumentOpener, registerDocumentReleaser } from '@/features/documents/documentOperations'
+import { createCanvasDocumentIn, openCanvasDocument, releaseCanvasDocument } from '@/features/canvas/application/canvasProjectService'
+import { registerDocumentCreator, registerDocumentOpener, registerDocumentReleaser } from '@/features/documents/documentOperations'
 import { clearCanvasProject, connectAssetGroupToTarget, deleteCanvasNodes, disconnectAssetGroupFromTarget, disconnectCanvasEdge, duplicateCanvasNode, groupCanvasNodes, selectCanvasNode, ungroupCanvasNode, updateCanvasNode } from '@/features/canvas/application/canvasMutationService'
 import { getCanvasNode, getCanvasProject } from '@/features/canvas/application/canvasQueryService'
 import { addAssetToCanvas } from '@/features/assets/application/assetCanvasApplicationService'
@@ -61,8 +61,16 @@ export function registerCanvasCapabilityHandlers(
   })
   // 画布文档的通用打开与后台释放（3.4）：列出、新建、改名、移动、副本、回收站走通用文档能力，
   // 这里只登记“打开到哪里”（画布工作区）和“后台持有的实例怎么释放”。
-  registerDocumentOpener('canvas', async (document) => {
-    if (await openCanvasDocument(document)) openApplicationSurface('workspace.canvas')
+  registerDocumentOpener('canvas', async (document, { part } = {}) => {
+    if (!await openCanvasDocument(document)) return
+    openApplicationSurface('workspace.canvas')
+    // 回到来源（4.1）：定位到放进剪辑的那个结果节点；节点已被删掉时只打开画布
+    if (part) await focusCanvasNode(document.id, part, AbortSignal.timeout(10_000)).catch(() => undefined)
+  })
+  registerDocumentCreator('canvas', async (container) => {
+    const created = await createCanvasDocumentIn(container)
+    if (created) openApplicationSurface('workspace.canvas')
+    return created
   })
   registerDocumentReleaser('canvas', releaseCanvasDocument)
 

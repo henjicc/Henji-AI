@@ -118,9 +118,9 @@ describe('收集素材与后台释放', () => {
     appendVideoEditMedia(id, { id: 'outside', name: '外部.mp4', path: 'E:/外部/外部.mp4', kind: 'video', durationSeconds: 3, width: 1920, height: 1080 })
     const copied = `${project(projectId).path}/素材/外部.mp4`
     commands.collectMapping.set('E:/外部/外部.mp4', copied)
-    expect(await collectVideoEditMedia(id)).toEqual({ copiedFiles: 1, missing: 0 })
+    expect(await collectVideoEditMedia(id)).toEqual({ copiedFiles: 1, copiedDocuments: 0, missing: 0 })
     expect(instance.document.media[0].path).toBe(copied); expect(instance.past).toHaveLength(0)
-    expect(await collectVideoEditMedia(id)).toEqual({ copiedFiles: 0, missing: 0 })
+    expect(await collectVideoEditMedia(id)).toEqual({ copiedFiles: 0, copiedDocuments: 0, missing: 0 })
   })
 
   it('项目文件夹里的素材只按位置引用：打开时去掉素材库关联并写回，外部素材的关联保留', async () => {

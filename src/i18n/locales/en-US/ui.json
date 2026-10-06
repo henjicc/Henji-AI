@@ -1229,6 +1229,9 @@
       "exportedMissing": "Exported “{{name}}”. {{count}} referenced files could not be found and were left out.",
       "importedDocument": "Imported “{{name}}”.",
       "importedProject": "Imported project “{{name}}”. Open it from the Edit project list."
+    },
+    "embedded": {
+      "returnTo": "Back to Edit · {{name}}"
     }
   },
   "projectLibrary": {
@@ -1270,6 +1273,27 @@
     "collectMissing": "{{count}} media file(s) could not be found and were not collected.",
     "otherDocuments": "Other documents in this project",
     "otherDocumentsEmpty": "No other documents in this project yet.",
-    "otherDocumentsMissing": "File not found"
+    "otherDocumentsMissing": "File not found",
+    "source": {
+      "missingTitle": "Source not found",
+      "missingDocument": "The source of this clip, “{{name}}”, can't be found. It may have been deleted or moved. Locate it to update every clip in this edit that uses it.",
+      "missingGeneration": "The generation record this clip came from has been deleted, so its source can't be opened. The clip itself is not affected.",
+      "relocate": "Locate…",
+      "cancel": "Cancel",
+      "fileFilter": "Henji AI document"
+    },
+    "collectDocuments": "Copied {{count}} documents from other locations into the project. The edit now uses the copies in the project.",
+    "documents": {
+      "title": "Project documents",
+      "elsewhere": "Used by clips, stored elsewhere",
+      "fromElsewhere": "From elsewhere",
+      "openElsewhere": "Open a document from elsewhere…",
+      "openElsewhereTitle": "Open a document from elsewhere",
+      "copyIn": "Copy into project",
+      "moveIn": "Move into project",
+      "noOthers": "There are no canvases, voice edits, camera stages or image documents elsewhere yet.",
+      "moved": "Moved “{{name}}” into this project.",
+      "copied": "Copied “{{name}}” into this project."
+    }
   }
 }

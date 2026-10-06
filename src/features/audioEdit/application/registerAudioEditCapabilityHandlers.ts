@@ -5,10 +5,11 @@ import type { ApplicationCapabilityHandlerRegistrar } from '@/features/applicati
 import { resolveConfiguredDestination } from '@/features/canvas/application/canvasDownloadService'
 import { getPlatform } from '@/platform/runtime'
 import { join } from '@/platform/desktopApi'
-import { getDocumentOperations, registerDocumentOpener, registerDocumentReleaser } from '@/features/documents/documentOperations'
+import { getDocumentOperations, registerDocumentCreator, registerDocumentOpener, registerDocumentReleaser } from '@/features/documents/documentOperations'
+import { getDocumentSessionRegistry } from '@/features/documents/documentSessionRegistry'
 import { openApplicationSurface } from '@/features/navigation/application/surfaceCapabilityService'
 import { loadAudioEditProject, flushAudioEditProject, releaseAudioEditProject } from './audioEditProjectInstances'
-import { openAudioEditDocument } from './audioEditDocumentService'
+import { importAudioEditMedia, openAudioEditDocument, pickAudioEditMedia } from './audioEditDocumentService'
 import { compressAudioEditSilence, cleanProjectAudioEditFillers, transcribeAudioEdit, exportAudioEdit, prepareAudioEditProcessing, quickProcessAudioEdit, undoAllAudioEditChanges, formatProjectAudioEditCaptions } from './audioEditApplicationService'
 
 export function registerAudioEditCapabilityHandlers(registrar: ApplicationCapabilityHandlerRegistrar): void {
@@ -18,6 +19,14 @@ export function registerAudioEditCapabilityHandlers(registrar: ApplicationCapabi
     if (await openAudioEditDocument({ id: document.id, path: document.path })) openApplicationSurface('tool.audio_edit')
   })
   registerDocumentReleaser('audio_edit', releaseAudioEditProject)
+  // 在剪辑里新建口播（4.1）：先请用户选音频或视频，导入即建草稿（放在所在项目里）；取消选择时不新建
+  registerDocumentCreator('audio_edit', async (container) => {
+    const sourcePath = await pickAudioEditMedia()
+    if (!sourcePath) return null
+    const id = await importAudioEditMedia(sourcePath, container)
+    openApplicationSurface('tool.audio_edit')
+    return getDocumentSessionRegistry().get(id)?.documentMeta ?? (await getDocumentOperations().readDocument({ id })).meta
+  })
   for (const definition of AUDIO_EDIT_APPLICATION_CAPABILITIES) registrar.registerHandler(definition.id, async (raw, context) => {
     const input = audioEditOperationInput.parse(raw)
     context.signal.throwIfAborted()

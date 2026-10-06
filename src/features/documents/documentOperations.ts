@@ -3,6 +3,8 @@ import { documentKindRegistry, type DocumentKindRegistry } from '@/core/document
 import type {
   DocumentContainerRef,
   DocumentIndexScanReport,
+  DocumentLink,
+  DocumentLinkResolution,
   DocumentKindId,
   DocumentListQuery,
   DocumentMeta,
@@ -30,6 +32,7 @@ import type {
 import { createLogger, type Logger } from '@/core/logging/logger'
 
 import { isDocumentServiceError, toError } from './documentErrors'
+import { setEmbeddedHost, type EmbeddedHost } from './embeddedDocuments'
 import { getDocumentSessionRegistry, type DocumentSessionRegistry } from './documentSessionRegistry'
 import type { DocumentSessionCommands } from './documentSessionTypes'
 
@@ -65,10 +68,32 @@ export interface DocumentOperationCommands extends DocumentSessionCommands {
   exportDocumentPackage(request: ExportDocumentPackageRequest): Promise<PackageExportResult>
   exportProjectPackage(request: ExportProjectPackageRequest): Promise<PackageExportResult>
   importPackage(request: ImportPackageRequest): Promise<PackageImportResult>
+  resolveDocumentLink(link: DocumentLink): Promise<DocumentLinkResolution>
+}
+
+/** 打开时的附加要求：定位到文档里的部位（如画布节点 ID，4.1“回到来源”）。 */
+export interface DocumentOpenOptions {
+  part?: string
 }
 
 /** 打开一份文档（进入对应工具的编辑界面）。由各工具在接入通用文档时登记。 */
-export type DocumentOpener = (document: DocumentSummary) => Promise<void> | void
+export type DocumentOpener = (document: DocumentSummary, options: DocumentOpenOptions) => Promise<void> | void
+
+/**
+ * 在指定容器里新建一份草稿并在对应工具里打开（4.1：在剪辑里新建画布、口播、镜头参考、图片文档）。
+ * 需要用户先选素材的类型（口播导入音视频）取消时返回 null。由各工具与打开方式一起登记。
+ */
+export type DocumentCreator = (container: DocumentContainerRef, options: DocumentCreateOptions) => Promise<DocumentMeta | null>
+
+export interface DocumentCreateOptions {
+  /** 画面尺寸提示（如剪辑序列的分辨率）：新建空白图片文档时用。 */
+  size?: { width: number; height: number }
+}
+
+export interface OpenDocumentWithOptions extends DocumentOpenOptions {
+  /** 嵌入模式：从宿主（剪辑）里打开，工具命令带左端显示“返回剪辑 · 项目名”。 */
+  embedIn?: EmbeddedHost
+}
 
 /**
  * 释放工具在后台持有的文档会话（界面没有在编辑、没有进行中的任务时写完并关闭）。
@@ -155,6 +180,7 @@ export const defaultDocumentOperationCommands: DocumentOperationCommands = {
   exportDocumentPackage: documentCommands.exportDocumentPackage,
   exportProjectPackage: documentCommands.exportProjectPackage,
   importPackage: documentCommands.importDocumentPackage,
+  resolveDocumentLink: documentCommands.resolveDocumentLink,
 }
 
 /** 名称重名错误（主进程报 DocumentNameConflictError）：移动、复制时据此询问“两个都保留”。 */
@@ -169,6 +195,8 @@ export class DocumentOperations {
   private readonly logger: Logger
   private readonly openers = new Map<DocumentKindId, DocumentOpener>()
   private readonly releasers = new Map<DocumentKindId, DocumentReleaser>()
+  private readonly creators = new Map<DocumentKindId, DocumentCreator>()
+  private readonly embedHosts = new Map<DocumentKindId, (documentId: string) => Promise<EmbeddedHost>>()
   private readonly listeners = new Set<() => void>()
   private currentRevision = 0
 
@@ -205,8 +233,37 @@ export class DocumentOperations {
     }
   }
 
+  /** 登记某类文档的“新建并打开”方式；返回取消登记函数。 */
+  registerCreator(kind: DocumentKindId, creator: DocumentCreator): () => void {
+    this.creators.set(kind, creator)
+    return () => {
+      if (this.creators.get(kind) === creator) this.creators.delete(kind)
+    }
+  }
+
+  /** 登记某类文档作为嵌入模式宿主的方式（4.1：剪辑登记“返回剪辑 · 项目名”）；返回取消登记函数。 */
+  registerEmbedHost(kind: DocumentKindId, provider: (documentId: string) => Promise<EmbeddedHost>): () => void {
+    this.embedHosts.set(kind, provider)
+    return () => {
+      if (this.embedHosts.get(kind) === provider) this.embedHosts.delete(kind)
+    }
+  }
+
+  /** 以某份文档为宿主的嵌入方式；该类型没有登记时报错说明。 */
+  async embedHostFor(documentId: string): Promise<EmbeddedHost> {
+    const host = await this.findDocument(documentId)
+    const provider = this.embedHosts.get(host.kind)
+    if (!provider) throw new Error(`这种文档（${host.kind}）不能作为嵌入打开的去处，目前只有打开着的剪辑可以。`)
+    return await provider(host.id)
+  }
+
   canOpen(kind: DocumentKindId): boolean {
     return this.openers.has(kind)
+  }
+
+  /** 可以在容器里直接新建并打开的类型（已登记新建方式的）。 */
+  creatableKinds(): DocumentKindId[] {
+    return [...this.creators.keys()]
   }
 
   /** 该类型能否独立存放（不在任何项目里）；不能的类型没有“移出项目”。 */
@@ -233,6 +290,11 @@ export class DocumentOperations {
     this.logger.debug('作品索引已刷新', { event: 'documents.operations.refresh.completed', context: { ...report } })
     if (report.readDocuments > 0 || report.moved > 0 || report.missing > 0 || report.reassignedIds > 0) this.changed()
     return report
+  }
+
+  /** 跨文档引用 { docId, path }：先按位置找（拷贝出来的项目引用自己的副本），找不到再按 ID 查索引。 */
+  async resolveDocumentLink(link: DocumentLink): Promise<DocumentLinkResolution> {
+    return await this.commands.resolveDocumentLink(link)
   }
 
   /** 找到一份文档的列表摘要（含缺失）；找不到时报 DocumentNotFoundError。 */
@@ -381,12 +443,29 @@ export class DocumentOperations {
     })
   }
 
-  /** 打开文档：交给该类型登记的打开方式（与页面打开是同一入口）。 */
-  async openDocument(document: DocumentSummary): Promise<void> {
+  /**
+   * 打开文档：交给该类型登记的打开方式（与页面打开是同一入口）。
+   * embedIn 给出时以嵌入模式打开（4.1），否则清掉以前留下的嵌入标记；part 定位到文档里的部位。
+   */
+  async openDocument(document: DocumentSummary, options: OpenDocumentWithOptions = {}): Promise<void> {
     const opener = this.openers.get(document.kind)
     if (!opener) throw new DocumentNotOpenableError(document.kind)
-    await opener(document)
-    this.logger.info('打开文档', { event: 'documents.operations.open.completed', context: { docId: document.id, kind: document.kind } })
+    setEmbeddedHost(document.id, options.embedIn ?? null)
+    await opener(document, { ...(options.part !== undefined ? { part: options.part } : {}) })
+    this.logger.info('打开文档', { event: 'documents.operations.open.completed', context: { docId: document.id, kind: document.kind, embedded: Boolean(options.embedIn), part: options.part !== undefined } })
+  }
+
+  /**
+   * 在容器里新建一份草稿并在对应工具里打开（4.1 在剪辑里新建）；用户取消（如没选素材）时返回 null。
+   * embedIn 给出时以嵌入模式打开。
+   */
+  async createAndOpenDocument(kind: DocumentKindId, container: DocumentContainerRef, options: DocumentCreateOptions & { embedIn?: EmbeddedHost } = {}): Promise<DocumentMeta | null> {
+    const creator = this.creators.get(kind)
+    if (!creator) throw new DocumentNotOpenableError(kind)
+    const created = await this.write('create_and_open', kind, async () => await creator(container, { ...(options.size ? { size: options.size } : {}) }))
+    if (created && options.embedIn) setEmbeddedHost(created.id, options.embedIn)
+    this.logger.info('新建并打开文档', { event: 'documents.operations.create_and_open.completed', context: { kind, created: Boolean(created), embedded: Boolean(options.embedIn) } })
+    return created
   }
 
   /** 新建一个已命名的项目（不是草稿）。重名报错。 */
@@ -525,6 +604,11 @@ export function getDocumentOperations(): DocumentOperations {
 /** 登记某类文档的打开方式（各工具接入通用文档时调用）。 */
 export function registerDocumentOpener(kind: DocumentKindId, opener: DocumentOpener): () => void {
   return getDocumentOperations().registerOpener(kind, opener)
+}
+
+/** 登记某类文档的“在容器里新建并打开”方式（4.1，各工具与打开方式一起登记）。 */
+export function registerDocumentCreator(kind: DocumentKindId, creator: DocumentCreator): () => void {
+  return getDocumentOperations().registerCreator(kind, creator)
 }
 
 /** 登记某类文档的后台释放方式（工具会为助手后台读写持有会话时调用）。 */

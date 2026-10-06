@@ -10,10 +10,12 @@ import { useProjectStore } from '@/stores/projectStore';
 import '@/features/canvas/storyboard.css';
 import { isUiInspectionReadOnly } from '@/platform/runtime';
 import { confirmCanvasPersistence } from '@/features/canvas/application/canvasPersistenceService';
+import { returnFromEmbedded, useEmbeddedHost } from '@/features/documents/embeddedDocuments';
 
 /**
  * 画布工作区：“画布列表 ↔ 画布”两级视图（3.4 起画布是 `.henji-canvas` 文档）。
  * 返回列表走通用离开流程：已保存的写完关闭，草稿询问“保存 / 不保存 / 取消”，取消留在画布上。
+ * 从剪辑里打开的画布（4.1 嵌入模式）返回按钮是“返回剪辑 · 项目名”：离开后回到剪辑原来的位置。
  */
 const CanvasWorkspace = (): JSX.Element => {
   const { t } = useTranslation();
@@ -23,6 +25,7 @@ const CanvasWorkspace = (): JSX.Element => {
   const closeProject = useProjectStore((state) => state.closeProject);
   const persistenceError = useProjectStore((state) => state.persistenceError);
   const [isLeavingProject, setIsLeavingProject] = useState(false);
+  const embeddedHost = useEmbeddedHost(currentProjectId);
   const inspectionReadOnly = isUiInspectionReadOnly();
 
   useCanvasProjectCoverAutosave(currentProjectId);
@@ -36,8 +39,12 @@ const CanvasWorkspace = (): JSX.Element => {
     const projectId = useProjectStore.getState().currentProjectId;
     setIsLeavingProject(true);
     try {
-      if (projectId && !inspectionReadOnly) await updateCanvasProjectCover(projectId);
-      await closeProject();
+      const leave = async () => {
+        if (projectId && !inspectionReadOnly) await updateCanvasProjectCover(projectId);
+        return await closeProject();
+      };
+      if (projectId) await returnFromEmbedded(projectId, leave);
+      else await leave();
     } catch {
       // store 已记录并公开保存错误；留在画布上，避免误导用户以为已经安全退出。
     } finally {
@@ -62,7 +69,7 @@ const CanvasWorkspace = (): JSX.Element => {
                   disabled={isOpeningProject && Boolean(currentProjectId)}
                   size="sm"
                 >
-                  {t('canvas.backToProjects')}
+                  {embeddedHost ? t('ui:documentLibrary.embedded.returnTo', { name: embeddedHost.label }) : t('canvas.backToProjects')}
                 </UiButton>
               </div>
             )}

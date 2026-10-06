@@ -45,6 +45,7 @@ vi.mock('@/features/canvas/application/canvasProjectService', () => ({
 vi.mock('@/features/documents/documentOperations', () => ({
   registerDocumentOpener: mocks.registerDocumentOpener,
   registerDocumentReleaser: mocks.registerDocumentReleaser,
+  registerDocumentCreator: vi.fn(),
 }))
 vi.mock('@/features/canvas/application/canvasMutationService', () => ({
   deleteCanvasNodes: vi.fn(),

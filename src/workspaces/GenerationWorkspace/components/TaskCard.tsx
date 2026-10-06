@@ -99,7 +99,7 @@ const TaskCard = React.memo(function TaskCard({
   }
   // Only saved local outputs can enter an edit; each output keeps its own index.
   const videoEditItems = (mediaKind: 'image' | 'video' | 'audio', outputIndex: number, filePath: string | undefined): MenuItem[] => filePath
-    ? videoEditSendMenuItems(mediaKind, () => ({ kind: 'generation.result', id: task.id, outputIndex }), notify, <ICON_WORKSPACE_VIDEO_EDIT className="w-4 h-4" />)
+    ? videoEditSendMenuItems(mediaKind, () => ({ type: 'generation', recordId: task.id, outputIndex }), notify, <ICON_WORKSPACE_VIDEO_EDIT className="w-4 h-4" />)
     : []
   const {
     startImageDrag,

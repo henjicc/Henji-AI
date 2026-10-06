@@ -11,7 +11,9 @@ import { capabilityControl, capabilityOutputSchema, defineApplicationCapability 
  * 改名不在这里：文档与项目的名称是 `documents.document.name` / `documents.project.name` 两条可写属性，
  * 走 change_application_entities。这里只放无法用属性写入表达的动作：
  * 新建（落一个新文件 / 文件夹，重名策略）、移动（换容器并复制原项目里引用的素材）、
- * 创建副本、移到系统回收站（不可撤销）、打开（进入对应工具的界面）。
+ * 创建副本、移到系统回收站（不可撤销）、打开（进入对应工具的界面）、导出为单文件包（4.1）。
+ *
+ * 导入单文件包不向助手开放：它要读用户选的一个包文件，而助手能力不收文件路径；界面的“导入单个文件…”由用户自己选文件。
  *
  * 输入只收文档 / 项目 ID，不收路径；位置用项目 ID 表达（不在任何项目里 = 作品目录）。
  * 能力处理器委托渲染层唯一的通用文档操作服务（与项目页右键同一条路）。
@@ -115,7 +117,7 @@ const createDocument = defineApplicationCapability({
 
 const openDocument = defineApplicationCapability({
   id: 'open_document', version: 1, title: '打开文档',
-  description: '在对应工具里打开一份文档供用户查看与编辑（会切换界面）。只在用户要求查看或进入编辑时使用。',
+  description: '在对应工具里打开一份文档供用户查看与编辑（会切换界面）。只在用户要求查看或进入编辑时使用。给了 fromDocumentId（一份打开着的剪辑）时以嵌入模式打开：工具命令带显示“返回剪辑 · 项目名”，返回时回到那份剪辑。',
   domain: DOCUMENTS_DOMAIN,
   aliases: ['打开画布', '打开口播', '进入文档', 'open document'],
   readOnly: false, risk: 'R1', dataClasses: ['C1'], permission: 'documents:open', idempotent: true, destructive: false,
@@ -123,8 +125,11 @@ const openDocument = defineApplicationCapability({
   acceptsRefs: [DOCUMENT_ENTITY_TYPE], producesRefs: [DOCUMENT_ENTITY_TYPE, 'application.surface'],
   successEvidence: ['文档已交给对应工具打开，应用切换到该工具的编辑器页面。'],
   failureRecovery: ['该类型尚未接入通用打开方式时返回原因，改用对应工具自己的打开能力；不要反复重试。'],
-  inputSchema: z.object({ documentId: z.string().min(1) }).strict(),
-  outputSchema: capabilityOutputSchema({ resultRef: documentRefSchema, name: z.string(), kind: documentKindSchema }),
+  inputSchema: z.object({
+    documentId: z.string().min(1),
+    fromDocumentId: z.string().min(1).optional().describe('从哪份打开着的剪辑里打开（剪辑的文档 ID）；给了就是嵌入模式'),
+  }).strict(),
+  outputSchema: capabilityOutputSchema({ resultRef: documentRefSchema, name: z.string(), kind: documentKindSchema, embedded: z.boolean() }),
   concurrencyKey: 'documents_open',
   control: capabilityControl('navigate', [DOCUMENT_ENTITY_TYPE, 'application.surface']),
   summarize: (output) => `已打开文档“${output.name}”。`,
@@ -154,14 +159,17 @@ const moveDocument = defineApplicationCapability({
 
 const duplicateDocument = defineApplicationCapability({
   id: 'duplicate_document', version: 1, title: '创建文档副本',
-  description: '在原文档所在的文件夹里创建一份副本，名称自动加序号；副本是新的文档（新的引用）。',
+  description: '创建一份副本（新的文档、新的引用），名称自动加序号。默认放在原文档所在的文件夹；给了 projectId 时复制进那个项目（原项目里它用到的素材一并复制）。',
   domain: DOCUMENTS_DOMAIN,
   aliases: ['复制文档', '创建副本', 'duplicate document'],
   readOnly: false, risk: 'R1', dataClasses: ['C1'], permission: 'documents:write', idempotent: false, destructive: false,
   timeoutMs: 60_000, supportsPreview: false, supportsUndo: false, requiredScopes: [],
   acceptsRefs: [DOCUMENT_ENTITY_TYPE], producesRefs: [DOCUMENT_ENTITY_TYPE],
-  inputSchema: z.object({ documentId: z.string().min(1) }).strict(),
-  outputSchema: capabilityOutputSchema({ resultRef: documentRefSchema, name: z.string(), sourceRef: documentRefSchema }),
+  inputSchema: z.object({
+    documentId: z.string().min(1),
+    projectId: z.string().min(1).optional().describe('复制进哪个项目（来自 list_projects）；省略则与原文档放在同一文件夹'),
+  }).strict(),
+  outputSchema: capabilityOutputSchema({ resultRef: documentRefSchema, name: z.string(), sourceRef: documentRefSchema, projectId: z.string().nullable() }),
   concurrencyKey: 'documents_write',
   resolveOperationTargets: (input) => [{ kind: DOCUMENT_ENTITY_TYPE, id: input.documentId }],
   resolveOperationWriteTargets: (_input, operationId) => [{ kind: DOCUMENT_ENTITY_TYPE, id: `pending:${operationId}` }],
@@ -206,6 +214,31 @@ const createProject = defineApplicationCapability({
   summarize: (output) => `已新建项目“${output.name}”。`,
 })
 
+const exportPackageInput = z.object({
+  documentId: z.string().min(1).optional().describe('导出单个文档（来自 list_documents）'),
+  projectId: z.string().min(1).optional().describe('导出整个项目（来自 list_projects）'),
+}).strict().superRefine((value, ctx) => {
+  if (Boolean(value.documentId) === Boolean(value.projectId)) ctx.addIssue({ code: 'custom', message: 'documentId 与 projectId 必须且只能给一个。' })
+})
+
+const exportDocumentPackage = defineApplicationCapability({
+  id: 'export_document_package', version: 1, title: '导出为单个文件',
+  description: '把一份文档或整个项目连同引用的素材、内嵌图层包导出为一个 .henjipack 文件（放进作品目录的“导出”文件夹，重名自动加序号），便于发给别人或备份；对方在痕迹AI里“导入单个文件…”即可打开。不改原文档。',
+  domain: DOCUMENTS_DOMAIN,
+  aliases: ['导出项目包', '打包项目', '导出文档包', '单文件包', 'export package'],
+  readOnly: false, risk: 'R1', dataClasses: ['C1'], permission: 'documents:write', idempotent: false, destructive: false,
+  timeoutMs: 600_000, supportsPreview: false, supportsUndo: false, requiredScopes: [],
+  acceptsRefs: [DOCUMENT_ENTITY_TYPE, DOCUMENT_PROJECT_ENTITY_TYPE],
+  successEvidence: ['包文件已写进作品目录的“导出”文件夹，并回读确认存在。'],
+  failureRecovery: ['引用到但找不到的素材不会进包，结果里给出数量；先“收集素材”或重新定位后再导出。'],
+  inputSchema: exportPackageInput,
+  outputSchema: capabilityOutputSchema({ fileName: z.string(), files: z.number().int().nonnegative(), missingFiles: z.number().int().nonnegative() }),
+  concurrencyKey: 'documents_export',
+  resolveOperationTargets: (input) => input.documentId ? [{ kind: DOCUMENT_ENTITY_TYPE, id: input.documentId }] : input.projectId ? [{ kind: DOCUMENT_PROJECT_ENTITY_TYPE, id: input.projectId }] : [],
+  control: capabilityControl('execute', [DOCUMENT_ENTITY_TYPE, DOCUMENT_PROJECT_ENTITY_TYPE]),
+  summarize: (output) => `已导出“${output.fileName}”（${output.files} 个文件）。`,
+})
+
 export const DOCUMENTS_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinition[] = [
-  listDocuments, listProjects, createDocument, openDocument, moveDocument, duplicateDocument, trashDocument, createProject,
+  listDocuments, listProjects, createDocument, openDocument, moveDocument, duplicateDocument, trashDocument, createProject, exportDocumentPackage,
 ]

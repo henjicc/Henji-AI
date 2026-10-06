@@ -41,6 +41,20 @@ const logger = createLogger('features.imageEdit.document_persistence')
 
 export type ImageDocumentRecoveryChoice = 'restore' | 'discard' | 'cancel'
 
+/** 图片文档写回成功（文件内容真的变了）：剪辑里链接这份图片文档的片段据此重新渲染（4.1）。 */
+export interface ImageDocumentCommitEvent {
+  documentId: string
+  meta: DocumentMeta
+  reason: DocumentCommitReason
+}
+const commitListeners = new Set<(event: ImageDocumentCommitEvent) => void>()
+
+/** 订阅图片文档写回；返回取消订阅函数。 */
+export function onImageDocumentCommitted(listener: (event: ImageDocumentCommitEvent) => void): () => void {
+  commitListeners.add(listener)
+  return () => { commitListeners.delete(listener) }
+}
+
 export interface ImageDocumentRecoveryInfo {
   name: string
   workingSavedAt: number
@@ -180,6 +194,13 @@ export class ImageDocumentPersistence implements DocumentPersistence {
       this.forceNextCommit = false
       this.lastMeta = result.meta
       logger.debug('图片文档写回完成', { event: 'image_document.commit.completed', context: { documentId: meta.id, reason, unchanged: result.unchanged } })
+      if (!result.unchanged) {
+        for (const listener of [...commitListeners]) {
+          try { listener({ documentId: meta.id, meta: result.meta, reason }) } catch (error) {
+            logger.warn('图片文档写回通知处理失败', { event: 'image_document.commit.listener_failed', error, context: { documentId: meta.id } })
+          }
+        }
+      }
       return result.meta
     } catch (error) {
       if (error instanceof Error && error.name === 'DocumentRevisionConflictError') {

@@ -322,7 +322,7 @@ async function runVideoEditDocumentsRestart({ launch, userDataDir, outDir }) {
     const sentAt = new Date(Date.now() - 2000).toISOString()
     await waitUntil(() => {
       const document = readVideoEditFile(travelFile)
-      const clip = document.sequences[0].clips.find((value) => value.creativeSource?.kind === 'generation.result')
+      const clip = document.sequences[0].clips.find((value) => value.creativeSource?.type === 'generation')
       if (!clip) return false
       const item = document.items.find((value) => value.id === clip.itemId)
       placed = document.media.find((value) => value.id === item.mediaId)

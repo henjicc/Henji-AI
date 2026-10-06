@@ -55,10 +55,13 @@ function showInEditor(projectId: string): void {
   session.setAppView('editor')
 }
 
-/** 页面“新建镜头参考”：以草稿新建在“镜头参考”文件夹并进入编辑器（离开时再起名）。 */
-export async function createDraftCameraStageDocument(): Promise<SavedProjectInfo> {
+/**
+ * 页面“新建镜头参考”：以草稿新建在“镜头参考”文件夹并进入编辑器（离开时再起名）。
+ * 在剪辑里新建（4.1）时给出所在项目，草稿建在项目里。
+ */
+export async function createDraftCameraStageDocument(container: DocumentContainerRef = { kind: 'user' }): Promise<SavedProjectInfo> {
   await leaveEditorDocumentBefore(null)
-  const instance = await createCameraStageDraftRuntime()
+  const instance = await createCameraStageDraftRuntime(container)
   await attachCameraStageProject(instance.id)
   cameraStageProjectStore(instance.id).getState().setViewMode('camera')
   useCameraStageSessionStore.getState().setStageViewMode('camera')

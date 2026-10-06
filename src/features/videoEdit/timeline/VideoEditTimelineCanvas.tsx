@@ -22,6 +22,8 @@ import { VideoEditTrackHeader } from './VideoEditTrackHeader'
 import { VideoEditTimelinePlayhead, VideoEditTimelinePosition } from './VideoEditTimelineTransport'
 import { useTimelinePointer } from './useTimelinePointer'
 import { useTimelineMenu } from './useTimelineMenu'
+import { useVideoEditClipSource } from '../panels/useVideoEditClipSource'
+import { elementOfEventTarget } from '@/utils/crossRealmDom'
 import { TIMELINE_HEADER_WIDTH, TIMELINE_RULER_HEIGHT, timelineInitialScrollTop, timelineTrackAt, timelineTrackDivider, timelineTrackRows, timelineVisibleClips, type TimelineViewport } from './timelineGeometry'
 
 interface Props { instance: VideoEditInstance; sequence: VideoEditSequence; pixels: number; onError: (error: unknown) => void; visible?: boolean }
@@ -42,7 +44,8 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
   const [pendingSequence, setPendingSequence] = useState<{ owner: VideoEditInstance; input: VideoEditDropInput; placement: { frame: number; track: number }; sequenceId: string; settings: VideoEditSequenceSettings } | null>(null)
   const pointer = useTimelinePointer({ instance, sequence, rows: timelineTrackRows(sequence), pixels, onError })
   const [audioChannels, setAudioChannels] = useState<VideoEditAudioChannelsTarget | null>(null)
-  const menu = useTimelineMenu(instance, onError, pointer.cancel, setAudioChannels)
+  const clipSource = useVideoEditClipSource(onError)
+  const menu = useTimelineMenu(instance, onError, pointer.cancel, setAudioChannels, clipId => clipSource.open(instance.document.id, clipId))
   const rows = timelineTrackRows(sequence, pointer.resized)
   const divider = timelineTrackDivider(rows)
   const initialViewport = useRef({ owner: instance, sequenceId: sequence.id, measured: false, settled: false, stableFrames: 0, frameCount: 0, width: 0, height: 0, visible, rows })
@@ -168,6 +171,11 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
     <div ref={pointer.viewport} tabIndex={0} role="region" aria-label="时间线编辑区域" data-video-edit-timeline-viewport className="relative min-h-0 flex-1 overflow-auto outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-accent"
       onScroll={onScroll} onWheelCapture={stopInitialPosition} onPointerDownCapture={stopInitialPosition} onKeyDownCapture={stopInitialPosition} onContextMenuCapture={stopInitialPosition}
       onPointerDown={pointer.down} onPointerMove={pointer.move} onPointerUp={pointer.up} onPointerCancel={pointer.cancel} onLostPointerCapture={pointer.cancel} onContextMenu={menu.show}
+      onDoubleClick={event => {
+        // 双击记着来源的片段：回到来源继续编辑（图片文档片段打开图片编辑，4.1）
+        const clipId = elementOfEventTarget(event.target)?.closest('[data-video-edit-clip]')?.getAttribute('data-video-edit-clip')
+        if (clipId && sequence.clips.find(clip => clip.id === clipId)?.creativeSource) { event.preventDefault(); clipSource.open(projectId, clipId) }
+      }}
       onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); pointer.cancel() } }}
       onDragOver={event => { stopInitialPosition(); if (!acceptsVideoEditDrop(event.dataTransfer)) return; const at = placement(event); if (!at) { setHint(null); return } event.preventDefault(); event.dataTransfer.dropEffect = 'copy'; setHint(at) }}
       onDragLeave={event => { if (!isDomNode(event.relatedTarget) || !event.currentTarget.contains(event.relatedTarget)) setHint(null) }}
@@ -244,6 +252,7 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
       {pointer.failure && <div className="sticky bottom-0 left-0 z-raised max-w-lg bg-panel px-2 py-1"><UiError title="当前位置不能编辑" message={pointer.failure} /></div>}
     </div>
     <ContextMenu items={menu.menuItems} position={menu.menuPosition} visible={menu.menuVisible} onClose={menu.hideMenu} />
+    {clipSource.dialog}
     {audioChannels && <VideoEditAudioChannelsDialog projectId={projectId} target={audioChannels} onClose={() => setAudioChannels(null)} />}
     {pendingSequence && <VideoEditSequenceDialog title="按素材新建序列" requireFrameRate initial={pendingSequence.settings} bins={pendingSequence.owner.document.bins} onClose={() => setPendingSequence(null)} onSubmit={async settings => {
       const { owner, input, placement: at, sequenceId } = pendingSequence

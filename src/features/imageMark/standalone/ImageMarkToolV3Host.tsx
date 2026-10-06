@@ -2,6 +2,7 @@ import { ArrowLeft } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import {
+  UiButton,
   UiError,
   UiIconButton,
   UiLoading,
@@ -9,6 +10,7 @@ import {
   UiRegion,
 } from '@/components/ui'
 import { ImageEditorV3 } from '@/features/imageEdit/v3/editor'
+import { useEmbeddedHost } from '@/features/documents/embeddedDocuments'
 import { ImageMarkToolV3ToolbarActions } from './ImageMarkToolV3ToolbarActions'
 import {
   useImageMarkToolV3Host,
@@ -20,6 +22,8 @@ export type { ImageMarkToolV3HostProps } from './useImageMarkToolV3Host'
 export function ImageMarkToolV3Host(props: ImageMarkToolV3HostProps): JSX.Element {
   const { t } = useTranslation('ui')
   const host = useImageMarkToolV3Host(props)
+  // 从剪辑里打开（4.1 嵌入模式）：命令带左端的返回换成“返回剪辑 · 项目名”
+  const embeddedHost = useEmbeddedHost(props.document.id)
   const {
     onBack,
     onOpenFile,
@@ -59,7 +63,12 @@ export function ImageMarkToolV3Host(props: ImageMarkToolV3HostProps): JSX.Elemen
     )
   }
 
-  const backButton = onBack ? (
+  const backButton = onBack && embeddedHost ? (
+    <UiButton disabled={host.isHostBusy} onClick={onBack}>
+      <ArrowLeft size={16} />
+      {t('documentLibrary.embedded.returnTo', { name: embeddedHost.label })}
+    </UiButton>
+  ) : onBack ? (
     <UiIconButton
       size="lg"
       title={t('imageEditor.v3.host.backToList')}

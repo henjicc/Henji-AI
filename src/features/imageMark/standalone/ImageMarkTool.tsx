@@ -6,6 +6,7 @@ import type { ImageEditDocument } from '@/core/imageEdit';
 import type { DocumentSummary, DocumentTarget } from '@/core/documents/types';
 import { AlertDialog, UiLoading } from '@/components/ui';
 import { DocumentLibraryPage } from '@/features/documents/DocumentLibraryPage';
+import { returnFromEmbedded } from '@/features/documents/embeddedDocuments';
 import { ICON_TOOL_IMAGE_EDIT } from '@/core/theme/icons';
 import { readClipboardImage } from '@/commands/clipboard';
 import { useNotification } from '@/contexts/NotificationContext';
@@ -323,7 +324,10 @@ export function ImageMarkTool({ onBack }: ImageMarkToolProps = {}): JSX.Element 
             document={shown.document}
             sourceName={shown.document.session.documentMeta.name}
             videoEditReturn={shown.returnTo}
-            onBack={() => void exclusive('leaveFailed', async () => { await leaveShown(); })}
+            onBack={() => void exclusive('leaveFailed', async () => {
+              // 从剪辑里打开的图片文档（4.1 嵌入模式）离开后回到剪辑；其余回到列表
+              await returnFromEmbedded(shown.document.id, async () => (await leaveShown() ? 'closed' : 'cancelled'));
+            })}
             onOpenFile={handleOpenFile}
             onPasteFromClipboard={handlePasteFromClipboard}
             onCreateBlank={() => setIsBlankDialogOpen(true)}
