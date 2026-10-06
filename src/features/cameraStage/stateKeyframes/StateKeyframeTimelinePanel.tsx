@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from
 import { Plus } from 'lucide-react'
 import { UiIconButton } from '@/components/ui'
 import { useThemeTokens } from '@/hooks/useThemeTokens'
+import { useNonPassiveWheel } from '@/hooks/useNonPassiveWheel'
 import { useCameraStageStore } from '../store/cameraStageStore'
 import { PlaybackButtons } from '../timeline/PlaybackControls'
 import TimeRuler from '../timeline/TimeRuler'
@@ -96,7 +97,7 @@ const StateKeyframeTimelinePanel: React.FC = () => {
   const rulerMode: TimeRulerMode = pxPerSecond >= FRAME_TICK_PX_PER_SECOND ? 'frames' : 'seconds'
 
   // Alt+滚轮锚点缩放：指针所在时间点缩放后保持不动。
-  const handleWheel = useCallback((event: React.WheelEvent<HTMLDivElement>): void => {
+  const handleWheel = useCallback((event: WheelEvent): void => {
     if (!event.altKey) return
     event.preventDefault()
     const scroller = scrollRef.current
@@ -114,6 +115,8 @@ const StateKeyframeTimelinePanel: React.FC = () => {
       scroller.scrollLeft = Math.max(0, timeToX(anchorTime, nextPxPerSecond) - viewportContentX)
     })
   }, [pxPerSecond])
+  // Alt+滚轮缩放要拦住横向滚动：React onWheel 是被动的，走非被动原生监听
+  useNonPassiveWheel(scrollRef, handleWheel)
 
   // 播放头吸附到某关键帧时同步选中，但不重复应用快照。
   useEffect(() => {
@@ -182,7 +185,6 @@ const StateKeyframeTimelinePanel: React.FC = () => {
         ref={scrollRef}
         tabIndex={0}
         className="min-h-0 flex-1 select-none overflow-auto outline-none"
-        onWheel={handleWheel}
         onPointerDown={marquee.handlePointerDown}
         onPointerMove={marquee.handlePointerMove}
         onPointerUp={marquee.handlePointerUp}

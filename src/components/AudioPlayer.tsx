@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
+import { useNonPassiveWheel } from '@/hooks/useNonPassiveWheel'
 import { downloadAudioFile, saveAudioFromUrl } from '@/utils/save'
 import { UiIconButton, UiRangeInput, UI_PANEL_SURFACE_CLASS, UI_TEXT_TIMECODE_CLASS } from '@/components/ui'
 import { WaveformView } from './waveform/WaveformView'
@@ -287,14 +288,17 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
     }
   }
 
-  const onVolumeWheel = (event: React.WheelEvent<HTMLElement>) => {
+  const volumeSliderRef = useRef<HTMLDivElement>(null)
+  const onVolumeWheel = (event: WheelEvent) => {
     event.preventDefault()
     event.stopPropagation()
     const direction = event.deltaY < 0 ? 1 : -1
     const nextVolume = volume + direction * 0.05
     applyVolume(nextVolume)
     showVolumeTipTemporarily(700)
-  }
+  }  // 音量浮层上滚轮调音量并拦住波形/页面滚动：React onWheel 是被动的，走非被动原生监听
+  useNonPassiveWheel(volumeSliderRef, onVolumeWheel, showVolumeSlider)
+
 
   const handleDownload = async (): Promise<void> => {
     if (isDownloading || !src) {
@@ -374,7 +378,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
       {showVolumeSlider && (
         <div
           className={`absolute ${layout === 'inline' ? 'right-[calc(100%+0.5rem)]' : 'left-[calc(100%+0.5rem)]'} top-1/2 z-sticky -translate-y-1/2 ${volumeSliderWidthClass}`}
-          onWheelCapture={onVolumeWheel}
+          ref={volumeSliderRef}
         >
           {/* 音量数值 tooltip 是浮层，边框背景是其在波形上可读所必需的 */}
           {showVolumeValueTip && (

@@ -1,4 +1,5 @@
-import React from 'react'
+import React, { useRef } from 'react'
+import { useNonPassiveWheel } from '@/hooks/useNonPassiveWheel'
 import { Dropdown, UI_TEXT_TIMECODE_CLASS, UiIconButton, UiPanel, UiRangeInput } from '@/components/ui'
 import { useI18n } from '@/hooks/useI18n'
 import { UI_DURATION, uiTransition } from '@/components/ui/motion'
@@ -80,6 +81,13 @@ export function VideoViewerControls({
   const { t } = useI18n()
   const visible = isSpeedMenuOpen || isControlsVisible
   const effectiveVolume = muted ? 0 : volume
+  const volumeRef = useRef<HTMLDivElement>(null)
+  // 滚轮调音量并拦住页面滚动：React onWheel 是被动的，走非被动原生监听
+  useNonPassiveWheel(volumeRef, (e) => {
+    e.preventDefault()
+    const delta = e.deltaY > 0 ? -0.05 : 0.05
+    updateVolume(effectiveVolume + delta)
+  }, hasAudio)
 
   return (
     <div
@@ -143,12 +151,8 @@ export function VideoViewerControls({
           <div className="ml-auto flex items-center gap-2">
             {hasAudio !== false && (
               <div
+                ref={volumeRef}
                 className="flex items-center gap-1"
-                onWheel={(e) => {
-                  e.preventDefault()
-                  const delta = e.deltaY > 0 ? -0.05 : 0.05
-                  updateVolume(effectiveVolume + delta)
-                }}
               >
                 <UiIconButton
                   size="lg"

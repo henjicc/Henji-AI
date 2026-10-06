@@ -5,7 +5,6 @@ import {
   useMemo,
   useRef,
   type PointerEvent as ReactPointerEvent,
-  type WheelEvent as ReactWheelEvent,
 } from 'react';
 import {
   Panel,
@@ -16,6 +15,8 @@ import {
   type Node,
 } from '@xyflow/react';
 import { useTranslation } from 'react-i18next';
+
+import { useNonPassiveWheel } from '@/hooks/useNonPassiveWheel';
 
 import type { CanvasEdge, CanvasNode } from '@/features/canvas/domain/canvasNodes';
 import { CANVAS_MINIMAP_Z_INDEX } from '@/features/canvas/canvasUtils';
@@ -146,12 +147,11 @@ export function CanvasMiniMap(): JSX.Element {
   const transform = useStore((state) => state.transform);
   const flowWidth = useStore((state) => state.width);
   const flowHeight = useStore((state) => state.height);
-  const minZoom = useStore((state) => state.minZoom);
-  const maxZoom = useStore((state) => state.maxZoom);
   const { t } = useTranslation();
   const titleId = useId();
   const activePointerIdRef = useRef<number | null>(null);
   const previousPointerRef = useRef({ x: 0, y: 0 });
+  const svgRef = useRef<SVGSVGElement>(null);
 
   const nodeRects = useMemo(() => {
     const nodeLookup = store.getState().nodeLookup;
@@ -203,25 +203,27 @@ export function CanvasMiniMap(): JSX.Element {
     }
   }, []);
 
-  const handleWheel = useCallback((event: ReactWheelEvent<SVGSVGElement>): void => {
+  // 滚轮缩放要拦住页面与画布的默认滚动，走非被动原生监听（React 的 onWheel 是被动的，
+  // 在里面 preventDefault 会被浏览器忽略并报警）。监听只绑一次，取值一律读 store 现值。
+  const handleWheel = useCallback((event: WheelEvent): void => {
     event.preventDefault();
     event.stopPropagation();
-    const current = store.getState();
-    const [x, y, currentZoom] = current.transform;
+    const { transform: [x, y, currentZoom], width, height, minZoom, maxZoom } = store.getState();
     const wheelScale = event.deltaMode === 1 ? 0.05 : event.deltaMode ? 1 : 0.002;
     const nextZoom = Math.min(
       maxZoom,
       Math.max(minZoom, currentZoom * Math.pow(2, -event.deltaY * wheelScale)),
     );
     if (nextZoom === currentZoom) return;
-    const centerX = (flowWidth / 2 - x) / currentZoom;
-    const centerY = (flowHeight / 2 - y) / currentZoom;
+    const centerX = (width / 2 - x) / currentZoom;
+    const centerY = (height / 2 - y) / currentZoom;
     void reactFlow.setViewport({
-      x: flowWidth / 2 - centerX * nextZoom,
-      y: flowHeight / 2 - centerY * nextZoom,
+      x: width / 2 - centerX * nextZoom,
+      y: height / 2 - centerY * nextZoom,
       zoom: nextZoom,
     });
-  }, [flowHeight, flowWidth, maxZoom, minZoom, reactFlow, store]);
+  }, [reactFlow, store]);
+  useNonPassiveWheel(svgRef, handleWheel);
 
   const maskPath = `M${viewBox.x - viewBox.offset},${viewBox.y - viewBox.offset}`
     + `h${viewBox.width + viewBox.offset * 2}v${viewBox.height + viewBox.offset * 2}`
@@ -238,6 +240,7 @@ export function CanvasMiniMap(): JSX.Element {
     >
       {/* icon-token-allow：节点矩形与 viewport mask 是随画布数据生成的小地图，不是图标 */}
       <svg
+        ref={svgRef}
         width={MINI_MAP_WIDTH}
         height={MINI_MAP_HEIGHT}
         viewBox={`${viewBox.x} ${viewBox.y} ${viewBox.width} ${viewBox.height}`}
@@ -248,7 +251,6 @@ export function CanvasMiniMap(): JSX.Element {
         onPointerMove={handlePointerMove}
         onPointerUp={finishPointerGesture}
         onPointerCancel={finishPointerGesture}
-        onWheel={handleWheel}
       >
         <title id={titleId}>{t('canvas.minimap')}</title>
         <MiniMapNodes rects={nodeRects} />

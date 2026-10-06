@@ -1,6 +1,7 @@
 import { useCallback, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import { Check } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { useNonPassiveWheel } from '@/hooks/useNonPassiveWheel';
 
 import {
   UiOptionButton,
@@ -134,6 +135,29 @@ export function ModelPickerList({
     updateProviderScrollMetrics();
   }, [providerFilter, providerOptions, revealSelectedModel, updateProviderScrollMetrics]);
 
+  // 竖向滚轮横向滚动供应商行：要拦住外层滚动，React onWheel 是被动的，走非被动原生监听
+  useNonPassiveWheel(providerListRef, (event) => {
+    const providerList = providerListRef.current;
+    if (!providerList || providerList.scrollWidth <= providerList.clientWidth) {
+      return;
+    }
+    const delta = Math.abs(event.deltaX) > Math.abs(event.deltaY)
+      ? event.deltaX
+      : event.deltaY;
+    if (delta === 0) {
+      return;
+    }
+    const nextScrollLeft = Math.min(
+      providerList.scrollWidth - providerList.clientWidth,
+      Math.max(0, providerList.scrollLeft + delta)
+    );
+    if (nextScrollLeft !== providerList.scrollLeft) {
+      event.preventDefault();
+      providerList.scrollLeft = nextScrollLeft;
+      updateProviderScrollMetrics();
+    }
+  });
+
   useLayoutEffect(() => {
     updateProviderScrollMetrics();
     const providerList = providerListRef.current;
@@ -242,27 +266,6 @@ export function ModelPickerList({
               ? 'model-provider-scroll-viewport flex max-w-full gap-1 overflow-x-auto overscroll-x-contain'
               : 'flex max-w-full gap-1 overflow-x-scroll overscroll-x-contain pb-2'}
             onScroll={updateProviderScrollMetrics}
-            onWheel={(event) => {
-              const providerList = event.currentTarget;
-              if (providerList.scrollWidth <= providerList.clientWidth) {
-                return;
-              }
-              const delta = Math.abs(event.deltaX) > Math.abs(event.deltaY)
-                ? event.deltaX
-                : event.deltaY;
-              if (delta === 0) {
-                return;
-              }
-              const nextScrollLeft = Math.min(
-                providerList.scrollWidth - providerList.clientWidth,
-                Math.max(0, providerList.scrollLeft + delta)
-              );
-              if (nextScrollLeft !== providerList.scrollLeft) {
-                event.preventDefault();
-                providerList.scrollLeft = nextScrollLeft;
-                updateProviderScrollMetrics();
-              }
-            }}
           >
             <UiOptionButton
               ref={providerFilter === 'all' ? activeProviderRef : undefined}

@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
+import { useNonPassiveWheel } from '@/hooks/useNonPassiveWheel'
 import { createPortal } from 'react-dom'
 import { useI18n } from '@/hooks/useI18n'
 import { isTopmostUiOverlay, UiError, UiIconButton, UiOverlayLayerProvider, useUiOverlayLayer } from '@/components/ui'
@@ -399,6 +400,14 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
 
   const isOverlayControlsVisible = isSpeedMenuOpen || isControlsVisible
 
+  // 画面上滚轮调音量并拦住页面滚动：React onWheel 是被动的，走非被动原生监听
+  useNonPassiveWheel(videoRef, (e) => {
+    if (hasAudio === false) return
+    e.preventDefault()
+    const delta = e.deltaY > 0 ? -0.05 : 0.05
+    updateVolume((muted ? 0 : volume) + delta)
+  }, isVisible)
+
   if (!isVisible) return null
 
   return createPortal(
@@ -505,12 +514,6 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
               setFailedVideo(videoUrl)
             }}
             onClick={togglePlay}
-            onWheel={(e) => {
-              if (hasAudio === false) return
-              e.preventDefault()
-              const delta = e.deltaY > 0 ? -0.05 : 0.05
-              updateVolume((muted ? 0 : volume) + delta)
-            }}
             controls={false}
           />
           {videoFailed && (

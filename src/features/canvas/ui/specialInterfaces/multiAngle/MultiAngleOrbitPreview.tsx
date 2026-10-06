@@ -5,9 +5,9 @@ import {
   useState,
   type KeyboardEvent,
   type PointerEvent,
-  type WheelEvent,
 } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useNonPassiveWheel } from '@/hooks/useNonPassiveWheel'
 
 import { UI_FIELD_FOCUS_CLASS } from '@/components/ui/styleTokens'
 import {
@@ -65,6 +65,7 @@ export function MultiAngleOrbitPreview({
   const fluxDragOrigin = useRef<MultiAngleFluxCameraDragOrigin | null>(null)
   const transientViewRef = useRef<MultiAngleViewV1 | null>(null)
   const lastEmitted = useRef('')
+  const orbitRef = useRef<HTMLDivElement>(null)
   const visualSelected = transientView?.viewId === selected?.viewId ? transientView : selected
   const visualViews = useMemo(() => transientView
     ? views.map((view) => view.viewId === transientView.viewId ? transientView : view)
@@ -217,7 +218,7 @@ export function MultiAngleOrbitPreview({
     setDragging(false)
   }
 
-  const handleWheel = (event: WheelEvent<HTMLDivElement>): void => {
+  const handleWheel = (event: WheelEvent): void => {
     if (!selected || selected.kind === 'discrete') return
     event.preventDefault()
     if (selected.kind === 'continuous') {
@@ -252,8 +253,12 @@ export function MultiAngleOrbitPreview({
     emitFlux(patch)
   }
 
+  // 滚轮调远近/缩放并拦住外层滚动：React onWheel 是被动的，走非被动原生监听
+  useNonPassiveWheel(orbitRef, handleWheel)
+
   return (
     <div
+      ref={orbitRef}
       role="application"
       tabIndex={0}
       aria-label={t('node.multiAngleEditor.orbit.ariaLabel')}
@@ -284,7 +289,6 @@ export function MultiAngleOrbitPreview({
       onPointerUp={finishPointer}
       onPointerCancel={cancelPointer}
       onLostPointerCapture={cancelPointer}
-      onWheel={handleWheel}
     >
       <MultiAngleOrbitScene views={visualViews} selectedViewId={selectedViewId} sourceImage={sourceImage} sourceAlt={sourceAlt}
         previewOrientation={displayedPose} onDiscretePresetChange={onDiscretePresetChange} />

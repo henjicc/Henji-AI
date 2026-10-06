@@ -30,7 +30,7 @@ import { useRef } from 'react';
 import type { MarkToolType } from '../domain/types';
 import type { OrientationOp } from '../domain/geometry';
 import { CROP_RATIO_OPTIONS, TOOL_BUTTONS, type MarkEditorStyleState } from './shared';
-import { useNonPassiveWheel } from './useNonPassiveWheel';
+import { useNonPassiveWheel } from '@/hooks/useNonPassiveWheel';
 import type { NumericStyleKey } from './useMarkController';
 
 interface MarkToolbarProps {

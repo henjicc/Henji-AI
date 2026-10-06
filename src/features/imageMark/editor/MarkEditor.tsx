@@ -23,7 +23,7 @@ import { MarkEditorContextProvider } from './MarkEditorContext';
 import type { MarkEditorContextValue } from './markEditorContextValue';
 import { useMarkController } from './useMarkController';
 import { useMarkHistory, type MarkHistoryController } from './useMarkHistory';
-import { useNonPassiveWheel } from './useNonPassiveWheel';
+import { useNonPassiveWheel } from '@/hooks/useNonPassiveWheel';
 import { ImageEditorShell } from '@/features/imageEdit/shell/ImageEditorShell';
 import {
   CROP_RATIO_OPTIONS,
