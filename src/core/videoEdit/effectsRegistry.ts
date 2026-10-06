@@ -21,6 +21,8 @@ export interface VideoEditEffectsRegistryEntry {
   /** 稳定 ID：过渡为 `transition:<种类>`，内置效果为 `effect:<效果 ID>`。 */
   id: string
   name: string
+  /** 搜索别名（英文名称与登记 ID）。 */
+  aliases?: readonly string[]
   category: VideoEditEffectCategory
   kind: 'effect' | 'transition'
   /** 作用于画面还是声音。 */
@@ -46,16 +48,16 @@ export interface VideoEditEffectsRegistryEntry {
  */
 export const VIDEO_EDIT_BUILTIN_EFFECTS: readonly VideoEditEffectsRegistryEntry[] = VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS.map(definition => ({
   id: videoEditBuiltinRefId(definition.id), name: definition.name, category: definition.media === 'audio' ? 'audio_effect' : 'video_effect', kind: 'effect', media: definition.media ?? 'video',
-  description: definition.description, tooltip: definition.tooltip, builtinId: definition.id, templateRef: definition.id, params: definition.params, group: VIDEO_EDIT_BUILTIN_GROUP_NAMES[definition.group],
+  description: definition.description, tooltip: definition.tooltip, builtinId: definition.id, templateRef: definition.id, params: definition.params, group: VIDEO_EDIT_BUILTIN_GROUP_NAMES[definition.group], aliases: [definition.id, definition.id.replaceAll('_', ' ')],
 }))
 /** 智能文件夹（4.7d）：内置效果 + 作用区域的一键预设，加到视频、图片片段上后在效果控件里微调。 */
 export const VIDEO_EDIT_SMART_EFFECTS: readonly VideoEditEffectsRegistryEntry[] = VIDEO_EDIT_SMART_PRESETS.map(preset => ({
-  id: videoEditSmartPresetRef(preset.id), name: preset.name, category: 'smart', kind: 'effect', media: 'video', description: preset.description, tooltip: preset.tooltip, templateRef: videoEditSmartPresetRef(preset.id),
+  id: videoEditSmartPresetRef(preset.id), name: preset.name, category: 'smart', kind: 'effect', media: 'video', description: preset.description, tooltip: preset.tooltip, templateRef: videoEditSmartPresetRef(preset.id), aliases: [preset.id, preset.id.replaceAll('_', ' ')],
 }))
 /** 登记表全部条目：过渡在前（按预设顺序），内置效果在后。 */
 export function videoEditEffectsRegistry(): VideoEditEffectsRegistryEntry[] {
   return [
-    ...VIDEO_EDIT_TRANSITION_PRESETS.map((preset): VideoEditEffectsRegistryEntry => ({ id: `transition:${preset.kind}`, name: preset.name, category: preset.medium === 'audio' ? 'audio_transition' : 'video_transition', kind: 'transition', media: preset.medium, description: preset.description, tooltip: preset.tooltip, transitionKind: preset.kind, ...(videoEditTransitionParamDefinitions(preset.kind).length ? { params: videoEditTransitionParamDefinitions(preset.kind) } : {}) })),
+    ...VIDEO_EDIT_TRANSITION_PRESETS.map((preset): VideoEditEffectsRegistryEntry => ({ id: `transition:${preset.kind}`, name: preset.name, category: preset.medium === 'audio' ? 'audio_transition' : 'video_transition', kind: 'transition', media: preset.medium, description: preset.description, tooltip: preset.tooltip, transitionKind: preset.kind, aliases: [preset.kind, preset.kind.replaceAll('_', ' ')], ...(videoEditTransitionParamDefinitions(preset.kind).length ? { params: videoEditTransitionParamDefinitions(preset.kind) } : {}) })),
     ...VIDEO_EDIT_BUILTIN_EFFECTS,
     ...VIDEO_EDIT_SMART_EFFECTS,
   ]

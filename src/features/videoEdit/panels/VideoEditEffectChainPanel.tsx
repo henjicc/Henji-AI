@@ -1,7 +1,7 @@
 import { memo, useLayoutEffect, useMemo, useState } from 'react'
-import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Copy, Power, RotateCcw, Trash2 } from 'lucide-react'
+import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Copy, Power, RotateCcw, Save, Trash2 } from 'lucide-react'
 import { ICON_ASSET_CODE } from '@/core/theme/icons'
-import { Dropdown, UiButton, UiEmpty, UiError, UiFormRow, UiGroup, UiIconButton, UiLoading, UiOptionButton, UiSwitch } from '@/components/ui'
+import { Dropdown, UiButton, UiCheckbox, UiEmpty, UiError, UiFormRow, UiGroup, UiIconButton, UiLoading, UiOptionButton, UiSwitch } from '@/components/ui'
 import NumberInput from '@/components/ui/NumberInput'
 import type { VideoEditClip, VideoEditSequence } from '@/core/videoEdit/document'
 import { isVideoEditBuiltinEffect, VIDEO_EDIT_MAX_EFFECTS, type VideoEditEffect } from '@/core/videoEdit/compositing'
@@ -12,6 +12,7 @@ import { VideoEditCodeCreateDialog } from './VideoEditCodeCreateDialog'
 import { useVideoEditCompositeAction } from './useVideoEditCompositeAction'
 import { VideoEditEffectSection } from './VideoEditEffectSection'
 import { VideoEditBuiltinEffectControls } from './VideoEditBuiltinEffectControls'
+import { VideoEditEffectPresetDialog } from './VideoEditEffectPresetDialog'
 type CompositeAction = ReturnType<typeof useVideoEditCompositeAction>
 interface Props { instance: VideoEditInstance; sequence: VideoEditSequence; clip: VideoEditClip; onError: (reason: unknown) => void }
 
@@ -42,6 +43,8 @@ export const VideoEditEffectChainPanel = memo(function VideoEditEffectChainPanel
   const [copySource, setCopySource] = useState('')
   const [creatingFilter, setCreatingFilter] = useState(false)
   const [createdFilter, setCreatedFilter] = useState(false)
+  const [presetSelection, setPresetSelection] = useState<ReadonlySet<string>>(new Set())
+  const [savingPreset, setSavingPreset] = useState<VideoEditEffect[] | null>(null)
   const selected = effects.find(effect => effect.id === selectedId)
   const selectedIndex = selected ? effects.findIndex(effect => effect.id === selected.id) : -1
   const definitions = useMemo(() => {
@@ -53,7 +56,7 @@ export const VideoEditEffectChainPanel = memo(function VideoEditEffectChainPanel
   const definition = useMemo(() => definitions.items.find(value => value.id === definitionId) ?? definitions.items[0], [definitions.items, definitionId])
   const sources = useMemo(() => document.sequences.flatMap(sourceSequence => sourceSequence.clips.filter(sourceClip => (sourceClip.kind === 'audio') === sound && !!sourceClip.effects?.length && (sourceSequence.id !== sequenceId || sourceClip.id !== clipId)).map(sourceClip => ({ value: JSON.stringify([sourceSequence.id, sourceClip.id]), label: `${sourceSequence.name} · ${sourceClip.name}`, sequenceId: sourceSequence.id, clipId: sourceClip.id }))), [document, sequenceId, clipId, sound])
   const source = useMemo(() => sources.find(value => value.value === copySource), [sources, copySource])
-  useLayoutEffect(() => { setSelectedId(''); setDefinitionId(''); setCopySource(''); setCreatingFilter(false); setCreatedFilter(false) }, [instance])
+  useLayoutEffect(() => { setSelectedId(''); setDefinitionId(''); setCopySource(''); setCreatingFilter(false); setCreatedFilter(false); setPresetSelection(new Set()); setSavingPreset(null) }, [instance, sequenceId, clipId])
   const move = (offset: -1 | 1): void => {
     const next = selectedIndex + offset
     if (!selected || next < 0 || next >= effects.length) return
@@ -74,15 +77,18 @@ export const VideoEditEffectChainPanel = memo(function VideoEditEffectChainPanel
     <VideoEditEffectSection id="effects" title={sound ? '音频效果' : '附加效果'} info={sound ? `从“效果”面板把音频效果拖到声音片段上，或选中片段后双击效果添加。效果从上到下依次处理声音（在片段音量之后、淡化与过渡之前），一个片段最多 ${VIDEO_EDIT_MAX_EFFECTS} 项。` : `从“效果”面板把内置效果拖到片段上，或选中片段后双击效果添加；也可以添加代码滤镜。效果从上到下依次处理画面，一个片段最多 ${VIDEO_EDIT_MAX_EFFECTS} 项。`}
       actions={sound ? undefined : <UiIconButton size="xs" aria-label="编写新滤镜源码" title="编写新滤镜源码" disabled={action.busy} onClick={() => setCreatingFilter(true)}><CodeIcon size={13} /></UiIconButton>}>
       <div className="flex flex-col gap-1 pl-5" data-video-edit-effect-chain={clipId}>
+        {effects.some(effect => effect.builtin) && <div className="flex items-center justify-end gap-1"><UiButton size="sm" disabled={action.busy || !effects.some(effect => effect.builtin && presetSelection.has(effect.id))} onClick={() => setSavingPreset(structuredClone(effects.filter(effect => effect.builtin && presetSelection.has(effect.id))))}>保存所选效果为预设…</UiButton></div>}
         {effects.length ? effects.map((effect, index) => {
           const open = selected?.id === effect.id
           return <div key={effect.id} className="flex flex-col">
             <div className="flex min-h-8 items-center gap-1">
+              {effect.builtin && <UiCheckbox aria-label={`选入预设：${effect.name}`} title="选择要保存到预设的效果，可多选" checked={presetSelection.has(effect.id)} disabled={action.busy} onCheckedChange={checked => setPresetSelection(previous => { const next = new Set(previous); if (checked) next.add(effect.id); else next.delete(effect.id); return next })} />}
               <UiOptionButton variant="menu" size="sm" className="min-w-0 flex-1 justify-start gap-1" active={open} disabled={action.busy} aria-label={`选择效果${effect.name}`} aria-expanded={open} data-video-edit-effect={effect.id} onClick={() => toggle(effect.id)}>
                 {open ? <ChevronDown size={13} aria-hidden="true" /> : <ChevronRight size={13} aria-hidden="true" />}<span className={`truncate ${effect.enabled ? '' : 'text-text3 line-through'}`}>{effect.name}</span>
               </UiOptionButton>
               <UiIconButton size="xs" on={effect.enabled} aria-pressed={effect.enabled} aria-label={`${effect.enabled ? '停用' : '启用'}效果${effect.name}`} title={effect.enabled ? '停用此效果（保留参数）' : '启用此效果'} disabled={action.busy} onClick={() => setEnabled(effect, !effect.enabled)}><Power size={12} /></UiIconButton>
               <UiIconButton size="xs" aria-label={`重置效果${effect.name}`} title="恢复默认参数、强度和开关，并移除此效果关键帧" disabled={action.busy} onClick={() => reset(effect)}><RotateCcw size={12} /></UiIconButton>
+              {effect.builtin && <UiIconButton size="xs" aria-label={`保存效果${effect.name}为预设`} title="保存为预设…" disabled={action.busy} onClick={() => setSavingPreset(structuredClone([effect]))}><Save size={12} /></UiIconButton>}
             </div>
             {open && <div className="flex flex-col gap-1 pb-2 pl-4" data-video-edit-effect-editor={effect.id}>
               <div className="flex items-center gap-1">
@@ -113,5 +119,6 @@ export const VideoEditEffectChainPanel = memo(function VideoEditEffectChainPanel
       </div>
     </VideoEditEffectSection>
     {creatingFilter && <VideoEditCodeCreateDialog projectId={projectId} mode="filter" onClose={() => setCreatingFilter(false)} onCreated={ids => { if (requireVideoEditInstance(projectId) === instance) { setDefinitionId(ids[0] ?? ''); setCreatedFilter(true) } }} />}
+    {savingPreset && <VideoEditEffectPresetDialog effects={savingPreset} initialName={savingPreset.length === 1 ? savingPreset[0].name : `${clip.name}效果`} onClose={() => setSavingPreset(null)} />}
   </>
 })
