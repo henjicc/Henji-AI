@@ -181,9 +181,52 @@ export const LOCAL_MODEL_MANIFEST: readonly LocalModelSpec[] = [
     folderName: { zh: '任意物体跟踪 EfficientTAM', en: 'Object Tracking EfficientTAM' },
     homepage: 'https://github.com/yformer/EfficientTAM',
     license: { spdx: 'Apache-2.0', url: 'https://github.com/yformer/EfficientTAM/blob/main/LICENSE' },
-    // 官方没有 ONNX，需要自行导出（任务 4.10d）；导出并上传到我们的仓库后在这里补文件与哈希。
-    availability: 'pending',
-    files: [],
+    // 官方没有 ONNX，由我们从官方权重 efficienttam_ti_512x512.pt 导出（opset 17，fp32），
+    // 拆成图像编码、提示与掩码解码、记忆编码、记忆注意力、遮罩缩小五个部件；
+    // 张量名、形状与记忆库约定（最多 7 帧记忆、16 个目标指针）见上传目录的 SOURCE.md。
+    availability: 'available',
+    files: [
+      {
+        name: 'efficienttam_ti_512_image_encoder.onnx',
+        role: 'model',
+        sizeBytes: 25_447_190,
+        sha256: '19db98cdac060653581616354ce899814cd942ffa3a3620f26551ca8bad85673',
+        // 我们从官方权重导出（官方没有 ONNX），只放在自有仓库；国外用户同样从 ModelScope 下载
+        sources: [{ region: 'domestic', label: 'own-modelscope', url: ownUrl('object_segmentation_efficienttam/efficienttam_ti_512_image_encoder.onnx') }],
+      },
+      {
+        name: 'efficienttam_ti_512_mask_decoder.onnx',
+        role: 'model',
+        sizeBytes: 18_789_601,
+        sha256: '9d99ae7805d3501262987a66d901fbe612f9a0b80291c5182eae7ba89bff1b64',
+        // 我们从官方权重导出（官方没有 ONNX），只放在自有仓库；国外用户同样从 ModelScope 下载
+        sources: [{ region: 'domestic', label: 'own-modelscope', url: ownUrl('object_segmentation_efficienttam/efficienttam_ti_512_mask_decoder.onnx') }],
+      },
+      {
+        name: 'efficienttam_ti_512_memory_encoder.onnx',
+        role: 'model',
+        sizeBytes: 5_575_013,
+        sha256: '594b11773d2b281e78bb761b48a6476e46e9571ebdc6fc8ba02216cde60fbbf4',
+        // 我们从官方权重导出（官方没有 ONNX），只放在自有仓库；国外用户同样从 ModelScope 下载
+        sources: [{ region: 'domestic', label: 'own-modelscope', url: ownUrl('object_segmentation_efficienttam/efficienttam_ti_512_memory_encoder.onnx') }],
+      },
+      {
+        name: 'efficienttam_ti_512_memory_attention.onnx',
+        role: 'model',
+        sizeBytes: 26_112_634,
+        sha256: '8afa10463d201d11a83af4e01a3eaac00d29e85d11f473d9b1c676c9876b8bda',
+        // 我们从官方权重导出（官方没有 ONNX），只放在自有仓库；国外用户同样从 ModelScope 下载
+        sources: [{ region: 'domestic', label: 'own-modelscope', url: ownUrl('object_segmentation_efficienttam/efficienttam_ti_512_memory_attention.onnx') }],
+      },
+      {
+        name: 'efficienttam_ti_512_mask_downsample.onnx',
+        role: 'model',
+        sizeBytes: 511,
+        sha256: 'dd420a9790973a249fdc559cd9b192e8c798e96e40d78e5b7d75d8a47a2cb84f',
+        // 我们从官方权重导出（官方没有 ONNX），只放在自有仓库；国外用户同样从 ModelScope 下载
+        sources: [{ region: 'domestic', label: 'own-modelscope', url: ownUrl('object_segmentation_efficienttam/efficienttam_ti_512_mask_downsample.onnx') }],
+      },
+    ],
   },
 ]
 

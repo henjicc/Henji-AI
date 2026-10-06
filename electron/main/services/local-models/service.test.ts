@@ -187,14 +187,16 @@ describe('本地模型服务', () => {
 })
 
 describe('本地模型清单', () => {
-  it('每个可下载文件都有国内与国外源、64 位小写 SHA-256 与正数大小', () => {
+  it('每个可下载文件都有国内与国外源（自导出模型只有自有仓库）、64 位小写 SHA-256 与正数大小', () => {
     for (const spec of LOCAL_MODEL_MANIFEST.filter((item) => item.availability === 'available')) {
       expect(spec.files.length).toBeGreaterThan(0)
       for (const file of spec.files) {
         expect(file.sha256).toMatch(/^[0-9a-f]{64}$/)
         expect(file.sizeBytes).toBeGreaterThan(0)
         expect(file.sources.some((source) => source.region === 'domestic')).toBe(true)
-        expect(file.sources.some((source) => source.region === 'global')).toBe(true)
+        // 我们自己导出的模型（官方没有 ONNX）只放在自有 ModelScope 仓库，国外用户同样从这里下载
+        const selfExported = file.sources.every((source) => source.label === 'own-modelscope')
+        expect(selfExported || file.sources.some((source) => source.region === 'global')).toBe(true)
         expect(file.sources[0]!.label).toBe('own-modelscope')
       }
     }
