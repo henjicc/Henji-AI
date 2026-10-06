@@ -10,6 +10,13 @@ export const videoEditSubtitleStyleSchema = z.object({
 }).strict()
 export type VideoEditSubtitleStyle = z.infer<typeof videoEditSubtitleStyleSchema>
 
+export const VIDEO_EDIT_SUBTITLE_PRESETS: ReadonlyArray<{ id: string; name: string; style: VideoEditSubtitleStyle }> = [
+  { id: 'builtin:plain', name: '简洁白字黑边', style: videoEditSubtitleStyleSchema.parse({}) },
+  { id: 'builtin:box', name: '底框', style: videoEditSubtitleStyleSchema.parse({ background: true, outline: false }) },
+  { id: 'builtin:variety', name: '综艺大字', style: videoEditSubtitleStyleSchema.parse({ fontSize: 80, bottomMargin: .15 }) },
+  { id: 'builtin:bilingual', name: '双语上下行', style: videoEditSubtitleStyleSchema.parse({ fontSize: 40, bottomMargin: .12 }) },
+]
+
 /** Reuse the existing graphic text/rect commands, including content colors and full-size export. */
 export function subtitleGraphic(text: string, width: number, height: number, input: VideoEditSubtitleStyle): VideoEditGraphic {
   const style = videoEditSubtitleStyleSchema.parse(input)

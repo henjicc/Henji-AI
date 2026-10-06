@@ -1,7 +1,7 @@
 import { memo, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { VideoEditSubtitleActions } from './VideoEditSubtitleActions'
 import { splitVideoEditSubtitle, mergeVideoEditSubtitles } from '../application/videoEditAutoSubtitles'
-import { Virtuoso } from 'react-virtuoso'
+import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso'
 import { FileInput, FileOutput, MoreHorizontal, Plus } from 'lucide-react'
 import { Dropdown, PanelTrigger, UiButton, UiChipButton, UiEmpty, UiError, UiFormRow, UiGroup, UiIconButton, UiSearchInput, UiOptionButton, UiTextAreaField } from '@/components/ui'
 import { Z_LAYERS } from '@/core/theme/zLayers'
@@ -11,11 +11,12 @@ import type { VideoEditClip, VideoEditSequence } from '@/core/videoEdit/document
 import type { VideoEditCaption, VideoEditMarker } from '@/core/videoEdit/timedContent'
 import { createVideoEditCaption, createVideoEditMarker, exportVideoEditSubtitles, importVideoEditCaptionFile, removeVideoEditTimedContent, updateVideoEditTimedContent } from '../application/videoEditTimedContent'
 import { listVideoEditInstances, requireVideoEditInstance, setVideoEditView, subscribeVideoEditDomain, switchVideoEditSequence, videoEditDomainRevision, type VideoEditInstance } from '../application/videoEditService'
+import { selectVideoEditSubtitle, selectedVideoEditSubtitleId, subscribeVideoEditSubtitleSelection, videoEditSubtitleSelectionRevision } from '../application/videoEditSubtitleSelection'
 
 interface PanelProps { instance: VideoEditInstance; sequenceId?: string; visible?: boolean; onError: (reason: unknown) => void }
 type Kind = 'caption' | 'marker'
 type Entry = { kind: 'caption'; value: VideoEditCaption } | { kind: 'marker'; value: VideoEditMarker }
-interface Draft { kind: Kind | 'import'; id?: string; baseline?: string; text: string; start: number; duration: number; clipId: string }
+interface Draft { kind: Kind | 'import'; id?: string; baseline?: string; text: string; translation?: string; start: number; duration: number; clipId: string }
 const atFrame = (entry: Entry): number => entry.kind === 'caption' ? entry.value.start : entry.value.frame
 const entryText = (entry: Entry): string => entry.kind === 'caption' ? entry.value.text : entry.value.name
 
@@ -37,6 +38,9 @@ function ContentWorkspace({ instance, sequence, onError }: { instance: VideoEdit
   const [keyword, setKeyword] = useState('')
   const [draft, setDraft] = useState<Draft | null>(null)
   const [selectedId, setSelectedId] = useState('')
+  const subtitleSelectionRevision = useSyncExternalStore(subscribeVideoEditSubtitleSelection, videoEditSubtitleSelectionRevision)
+  const selectedCaptionId = selectedVideoEditSubtitleId(instance, sequence.id)
+  const list = useRef<VirtuosoHandle>(null)
   const [splitCharacter, setSplitCharacter] = useState(1)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -64,13 +68,24 @@ function ContentWorkspace({ instance, sequence, onError }: { instance: VideoEdit
     const start = mode === 'import' ? 0 : Math.max(clip?.start ?? 0, Math.min((clip ? clip.start + clip.duration : maxFrame) - 1, instance.frame))
     return { kind: mode, text: '', start, duration: Math.max(1, Math.min(Math.round(sequence.frameRate.numerator / sequence.frameRate.denominator * 2), (clip ? clip.start + clip.duration : maxFrame) - start)), clipId: clip?.id ?? '' }
   }
-  const openEntry = (entry: Entry): void => { setError(''); setSelectedId(entry.value.id); setSplitCharacter(Math.max(1, Math.floor(Array.from(entryText(entry)).length / 2))); setDraft({ kind: entry.kind, id: entry.value.id, baseline: JSON.stringify(entry.value), text: entryText(entry), start: atFrame(entry), duration: entry.kind === 'caption' ? entry.value.duration : 1, clipId: entry.value.clipId ?? '' }) }
+  const openEntry = (entry: Entry): void => { setError(''); setSelectedId(entry.value.id); setSplitCharacter(Math.max(1, Math.floor(Array.from(entryText(entry)).length / 2))); setDraft({ kind: entry.kind, id: entry.value.id, baseline: JSON.stringify(entry.value), text: entryText(entry), translation: entry.kind === 'caption' ? entry.value.translation ?? '' : undefined, start: atFrame(entry), duration: entry.kind === 'caption' ? entry.value.duration : 1, clipId: entry.value.clipId ?? '' }) }
+  useEffect(() => {
+    if (!selectedCaptionId) return
+    setKind('caption'); setKeyword(''); setSelectedId(selectedCaptionId)
+    // Selection reveals the row; it never overwrites an unsaved editor draft.
+  }, [selectedCaptionId, subtitleSelectionRevision])
+  useEffect(() => {
+    if (kind !== 'caption' || !selectedCaptionId) return
+    const index = entries.findIndex(entry => entry.value.id === selectedCaptionId)
+    if (index >= 0) list.current?.scrollIntoView({ index, align: 'center' })
+  }, [selectedCaptionId, subtitleSelectionRevision, entries, kind])
   const locate = (entry: Entry): void => run(() => {
     const current = currentSequence(); const values = entry.kind === 'caption' ? current.captions : current.markers
     const value = values?.find(value => value.id === entry.value.id)
     if (!value) throw new Error('此字幕或标记已移除，请重新选择。')
     if (instance.activeSequenceId !== current.id) switchVideoEditSequence(projectId, current.id)
-    setVideoEditView(projectId, { frame: 'start' in value ? value.start : value.frame, playing: false })
+    if (entry.kind === 'caption') selectVideoEditSubtitle(projectId, current.id, value.id)
+    else setVideoEditView(projectId, { frame: 'start' in value ? value.start : value.frame, playing: false })
   })
   const changeAnchor = (clipId: string): void => setDraft(previous => {
     if (!previous) return previous
@@ -89,7 +104,7 @@ function ContentWorkspace({ instance, sequence, onError }: { instance: VideoEdit
     const anchor = draft.clipId ? { clipId: draft.clipId } : { clipId: undefined }
     let id = draft.id
     if (draft.kind === 'caption') {
-      const values = { ...anchor, start: draft.start, duration: draft.duration, text: draft.text }
+      const values = { ...anchor, start: draft.start, duration: draft.duration, text: draft.text, ...(draft.translation !== undefined ? { translation: draft.translation } : {}) }
       if (id) updateVideoEditTimedContent(projectId, sequence.id, 'caption', id, values)
       else id = createVideoEditCaption(projectId, sequence.id, values)
     } else {
@@ -103,7 +118,7 @@ function ContentWorkspace({ instance, sequence, onError }: { instance: VideoEdit
   const assertCaptionDraft = (): void => {
     const cue = currentSequence().captions?.find(cue => cue.id === draft?.id)
     if (!cue || JSON.stringify(cue) !== draft?.baseline) throw new Error('字幕已有新修改，请重新选择后拆分或合并。')
-    if (draft.text !== cue.text || draft.start !== cue.start || draft.duration !== cue.duration || draft.clipId !== (cue.clipId ?? '')) throw new Error('请先保存当前修改，再拆分或合并。')
+    if (draft.text !== cue.text || (draft.translation ?? '') !== (cue.translation ?? '') || draft.start !== cue.start || draft.duration !== cue.duration || draft.clipId !== (cue.clipId ?? '')) throw new Error('请先保存当前修改，再拆分或合并。')
   }
   const asyncFile = (operation: (signal: AbortSignal) => Promise<unknown>): void => {
     try { currentSequence() } catch (reason) { report(reason); return }
@@ -121,7 +136,7 @@ function ContentWorkspace({ instance, sequence, onError }: { instance: VideoEdit
           onClick={() => { setKind(value); setDraft(null); setSelectedId(''); setError('') }}>{value === 'caption' ? '字幕' : '标记'}</UiChipButton>)}
       </div>
       <div className="ml-auto flex shrink-0 items-center gap-0.5">
-        {kind === 'caption' && <VideoEditSubtitleActions instance={instance} sequence={sequence} onError={report} />}
+        {kind === 'caption' && <VideoEditSubtitleActions instance={instance} sequence={sequence} selectedCaptionId={selectedCaptionId} onError={report} />}
         <UiIconButton aria-label={kind === 'caption' ? '新增字幕' : '新增标记'} title={kind === 'caption' ? '新增字幕' : '新增标记'} disabled={busy || count >= 500} onClick={() => { setDraft(freshDraft(kind)); setError('') }}><Plus size={16} /></UiIconButton>
         {kind === 'caption' && <PanelTrigger panelWidth={176} zIndex={Z_LAYERS.dropdown} closeOnPanelClick panelPadding="menu" disabled={busy} renderPanel={() => <div role="menu" aria-label="字幕文件" className="flex flex-col gap-0.5">
           <UiOptionButton role="menuitem" variant="menu" size="sm" className="w-full gap-2" disabled={count >= 500} onClick={() => { setDraft(freshDraft('import')); setError('') }}><FileInput size={14} />导入字幕…</UiOptionButton>
@@ -136,7 +151,7 @@ function ContentWorkspace({ instance, sequence, onError }: { instance: VideoEdit
       <UiSearchInput aria-label="搜索字幕或标记" placeholder="搜索文字或片段" size="sm" className="w-full" value={keyword} onChange={event => setKeyword(event.target.value)} />
     </div>
     <div className="min-h-0 flex-1 px-2" aria-label={kind === 'caption' ? '字幕列表' : '标记列表'}>
-      {entries.length ? <Virtuoso className="h-full" data={entries} fixedItemHeight={56} increaseViewportBy={96} computeItemKey={(_index, entry) => entry.value.id} itemContent={(_index, entry) => <UiOptionButton variant="menu" active={selectedId === entry.value.id} disabled={busy} className="w-full min-w-0 flex-col !items-start" aria-label={`${entry.kind === 'caption' ? '字幕' : '标记'}：${entryText(entry)}`} data-video-edit-timed-entry={entry.value.id} data-entry-kind={entry.kind}
+      {entries.length ? <Virtuoso ref={list} className="h-full" data={entries} fixedItemHeight={56} increaseViewportBy={96} initialTopMostItemIndex={Math.max(0, entries.findIndex(entry => entry.value.id === selectedCaptionId))} computeItemKey={(_index, entry) => entry.value.id} itemContent={(_index, entry) => <UiOptionButton variant="menu" active={(kind === 'caption' ? selectedCaptionId ?? selectedId : selectedId) === entry.value.id} aria-pressed={(kind === 'caption' ? selectedCaptionId ?? selectedId : selectedId) === entry.value.id} disabled={busy} className="w-full min-w-0 flex-col !items-start" aria-label={`${entry.kind === 'caption' ? '字幕' : '标记'}：${entryText(entry)}`} data-video-edit-timed-entry={entry.value.id} data-entry-kind={entry.kind}
         onClick={() => { openEntry(entry); locate(entry) }} onDoubleClick={() => locate(entry)}>
         <span className="block w-full truncate text-13" data-observation-sensitive>{entryText(entry)}</span>
         <span className={`${UI_TEXT_META_CLASS} block w-full truncate`}>第 {atFrame(entry)} 帧{entry.kind === 'caption' ? ` · ${entry.value.duration} 帧` : ''} · {clips.get(entry.value.clipId ?? '')?.name ?? '序列时钟'}</span>
@@ -151,6 +166,7 @@ function ContentWorkspace({ instance, sequence, onError }: { instance: VideoEdit
           <p className={UI_TEXT_META_CLASS}>字幕时间按节目时钟加上偏移；锚定片段时，字幕须落在该片段范围内。</p>
         </> : <>
           <UiFormRow label={draft.kind === 'caption' ? '字幕文字' : '标记名称'} density="compact"><UiTextAreaField aria-label={draft.kind === 'caption' ? '字幕文字' : '标记名称'} value={draft.text} rows={draft.kind === 'caption' ? 3 : 1} maxLength={draft.kind === 'caption' ? 2000 : 200} disabled={busy} onChange={event => setDraft({ ...draft, text: event.target.value })} /></UiFormRow>
+          {draft.kind === 'caption' && <UiFormRow label="第二语言" density="compact"><UiTextAreaField aria-label="第二语言字幕" value={draft.translation ?? ''} rows={1} maxLength={2000} disabled={busy} onChange={event => setDraft({ ...draft, translation: event.target.value })} /></UiFormRow>}
           <div className="grid grid-cols-2 gap-2">
             <UiFormRow label={draft.kind === 'caption' ? '开始帧' : '标记帧'} density="compact"><NumberInput ariaLabel={draft.kind === 'caption' ? '开始帧' : '标记帧'} size="sm" value={draft.start} min={0} max={maxFrame - 1} step={1} precision={0} widthClassName="w-full" disabled={busy} commitOnChange onChange={start => setDraft({ ...draft, start: Math.round(start) })} /></UiFormRow>
             {draft.kind === 'caption' && <UiFormRow label="时长（帧）" density="compact"><NumberInput ariaLabel="时长（帧）" size="sm" value={draft.duration} min={1} max={maxFrame} step={1} precision={0} widthClassName="w-full" disabled={busy} commitOnChange onChange={duration => setDraft({ ...draft, duration: Math.round(duration) })} /></UiFormRow>}

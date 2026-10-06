@@ -3,7 +3,7 @@ import { AudioBufferSource, Output, StreamTarget, WavOutputFormat } from 'mediab
 import { createLogger } from '@/core/logging'
 import { buildAutoSubtitles, autoSubtitleOptionsSchema, type AutoSubtitleOptions } from '@/core/videoEdit/autoSubtitles'
 import { videoEditComposition, videoEditDuration, audibleVideoEditClips, type VideoEditComposition } from '@/core/videoEdit/document'
-import { videoEditCaptionSchema, type VideoEditCaption } from '@/core/videoEdit/timedContent'
+import { videoEditCaptionSchema, captionDisplayText, type VideoEditCaption } from '@/core/videoEdit/timedContent'
 import { videoEditSubtitleStyleSchema, type VideoEditSubtitleStyle } from '@/core/videoEdit/subtitleStyle'
 import { getPlatform } from '@/platform/runtime'
 import { VideoEditRenderSession } from '../engine/videoEditRenderSession'
@@ -111,7 +111,7 @@ export function appendAutoSubtitles(projectId: string, sequenceId: string, capti
 
 /** UI and approved capability calls share ASR, cancellation, saved paid results and a single edit commit. */
 export async function generateVideoEditSubtitles(projectId: string, sequenceId: string, audioDocumentId: string, modelId?: string, options: SubtitleTranscriptionOptions = {}, signal?: AbortSignal, requestId: string = crypto.randomUUID()): Promise<string[]> {
-  const settings = autoSubtitleOptionsSchema.parse({ maxCharacters: options.maxCharacters, minDurationSeconds: options.minDurationSeconds })
+  const settings = autoSubtitleOptionsSchema.parse({ maxCharacters: options.maxCharacters, maxLines: options.maxLines, pauseSeconds: options.pauseSeconds, minDurationSeconds: options.minDurationSeconds })
   const language = z.enum(['zh', 'en']).optional().parse(options.language)
   const owner = requireVideoEditInstance(projectId)
   if (active.has(owner)) throw new Error('这份剪辑正在生成字幕。')
@@ -159,7 +159,16 @@ export function splitVideoEditSubtitle(projectId: string, sequenceId: string, id
     if (!cue || frame <= cue.start || frame >= cue.start + cue.duration || !Number.isInteger(character)) throw new Error('请在字幕内部选择拆分时刻与文字位置。')
     const points = Array.from(cue.text); const left = points.slice(0, character).join('').trim(); const right = points.slice(character).join('').trim()
     if (character <= 0 || character >= points.length || !left || !right) throw new Error('拆分后两行都须保留文字。')
-    return { ...sequence, captions: sequence.captions!.flatMap(value => value.id === id ? [{ ...cue, text: left, duration: frame - cue.start }, { ...cue, id: crypto.randomUUID(), text: right, start: frame, duration: cue.start + cue.duration - frame }] : [value]) }
+    let translations: [string, string] | undefined
+    if (cue.translation) {
+      const translated = Array.from(cue.translation)
+      const target = Math.max(1, Math.min(translated.length - 1, Math.round(translated.length * character / points.length)))
+      const spaces = translated.flatMap((point, index) => /\s/u.test(point) && index > 0 && index < translated.length - 1 ? [index] : [])
+      const boundary = spaces.length ? spaces.reduce((closest, index) => Math.abs(index - target) < Math.abs(closest - target) ? index : closest) : target
+      translations = [translated.slice(0, boundary).join('').trim(), translated.slice(boundary).join('').trim()]
+      if (translations.some(text => !text)) throw new Error('译文太短无法拆分，请先清除第二语言，拆分后重新翻译。')
+    }
+    return { ...sequence, captions: sequence.captions!.flatMap(value => value.id === id ? [{ ...cue, text: left, ...(translations ? { translation: translations[0] } : {}), duration: frame - cue.start }, { ...cue, id: crypto.randomUUID(), text: right, ...(translations ? { translation: translations[1] } : {}), start: frame, duration: cue.start + cue.duration - frame }] : [value]) }
   })
 }
 export function mergeVideoEditSubtitles(projectId: string, sequenceId: string, ids: readonly string[]): void {
@@ -168,16 +177,41 @@ export function mergeVideoEditSubtitles(projectId: string, sequenceId: string, i
     const selected = all.filter(cue => ids.includes(cue.id))
     const first = selected[0]; const last = selected.at(-1)
     if (ids.length < 2 || selected.length !== ids.length || !first || !last || all.slice(all.indexOf(first), all.indexOf(last) + 1).length !== selected.length || selected.some(cue => cue.clipId !== first.clipId)) throw new Error('请选择相邻且跟随同一片段的字幕。')
-    const merged = videoEditCaptionSchema.parse({ ...first, text: selected.map(cue => cue.text).join('\n'), duration: Math.max(...selected.map(cue => cue.start + cue.duration)) - first.start })
+    if (selected.some(cue => Boolean(cue.translation)) && !selected.every(cue => Boolean(cue.translation))) throw new Error('请先为这些字幕统一生成或清除第二语言，再合并。')
+    const merged = videoEditCaptionSchema.parse({ ...first, text: selected.map(cue => cue.text).join('\n'), ...(first.translation ? { translation: selected.map(cue => cue.translation).join(' ') } : {}), duration: Math.max(...selected.map(cue => cue.start + cue.duration)) - first.start })
     if (merged.style && merged.text.split('\n').length > 3) throw new Error('带样式字幕最多三行，请减少合并数量。')
     return { ...sequence, captions: sequence.captions!.flatMap(cue => cue.id === first.id ? [merged] : ids.includes(cue.id) ? [] : [cue]) }
   })
 }
-export function styleVideoEditSubtitles(projectId: string, sequenceId: string, style: VideoEditSubtitleStyle): void {
+export function styleVideoEditSubtitles(projectId: string, sequenceId: string, style: VideoEditSubtitleStyle, ids?: readonly string[]): void {
   const parsed = videoEditSubtitleStyleSchema.parse(style)
   editVideoSequence(projectId, sequenceId, sequence => {
-    if (sequence.captions?.some(cue => cue.text.split('\n').length > 3)) throw new Error('请先拆分超过三行的字幕，再统一样式。')
-    return { ...sequence, captions: sequence.captions?.map(cue => ({ ...cue, style: parsed })) }
+    if (ids && ids.some(id => !sequence.captions?.some(cue => cue.id === id))) throw new Error('原字幕已移除，请重新选择。')
+    if (sequence.captions?.some(cue => (!ids || ids.includes(cue.id)) && captionDisplayText(cue).split('\n').length > 3)) throw new Error('请先拆分超过三行的字幕，再统一样式。')
+    return { ...sequence, captions: sequence.captions?.map(cue => !ids || ids.includes(cue.id) ? { ...cue, style: parsed } : cue) }
   })
+}
+/** Existing cues only have cue-level times; reorganizing their text estimates internal boundaries proportionally. */
+export function segmentVideoEditSubtitles(projectId: string, sequenceId: string, options: AutoSubtitleOptions, ids?: readonly string[]): { captionIds: string[]; createdIds: string[]; updatedIds: string[] } {
+  const settings = autoSubtitleOptionsSchema.parse(options)
+  const captionIds: string[] = []; const createdIds: string[] = []; const updatedIds: string[] = []
+  editVideoSequence(projectId, sequenceId, sequence => {
+    if (ids?.some(id => !sequence.captions?.some(caption => caption.id === id))) throw new Error('原字幕已移除，请重新选择。')
+    const captions = sequence.captions?.flatMap(caption => {
+      if (ids && !ids.includes(caption.id)) return [caption]
+      if (caption.translation) throw new Error('请先清除第二语言，再整理长句；整理后可重新生成双语。')
+      const cues = buildAutoSubtitles([{ id: caption.id, text: caption.text, startFrame: 0, endFrame: caption.duration * sequence.frameRate.denominator, granularity: 'segment', included: true, locked: false }], sequence.frameRate.numerator, sequence.frameRate, { startFrame: caption.start, endFrame: caption.start + caption.duration }, { ...settings, minDurationSeconds: 0 })
+      return cues.map((cue, index) => {
+        const id = index === 0 ? caption.id : cue.id
+        captionIds.push(id); if (index > 0) createdIds.push(id)
+        const value = { ...caption, ...cue, id }
+        if (index === 0 && JSON.stringify(value) !== JSON.stringify(caption)) updatedIds.push(id)
+        return value
+      })
+    })
+    if (!captionIds.length) throw new Error('没有可整理的字幕。')
+    return { ...sequence, captions }
+  })
+  return { captionIds, createdIds, updatedIds }
 }
 export async function verifyAutoSubtitles(projectId: string): Promise<boolean> { return verifyVideoEditSaved(projectId) }

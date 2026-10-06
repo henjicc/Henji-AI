@@ -11,18 +11,21 @@ const id = z.string().min(1).max(100)
 const frame = z.number().int().nonnegative().max(108000)
 export const videoEditMarkerSchema = z.object({ id, clipId: id.optional(), frame, name: z.string().trim().min(1).max(200) }).strict()
 export const videoEditCaptionSchema = z.object({ id, clipId: id.optional(), start: frame, duration: frame.min(1), text: z.string().trim().min(1).max(2000),
+  translation: z.string().trim().max(2000).optional().describe('第二语言字幕，显示在原文下方；空字符串清除翻译。'),
   // Reflection's shared unset-value convention is the empty string; make it a valid schema value.
   style: z.union([videoEditSubtitleStyleSchema, z.literal('')]).optional().describe('字幕样式：fontFamily 为 sans-serif/serif/monospace；fontSize 为1080p参考字号（12–200）；outline 描边、background 底框、bottomMargin 底部安全区比例（0.05–0.4）。整体写入，可多行同事务修改；空字符串恢复默认样式。'),
-}).strict().refine(value => !value.style || value.text.split('\n').length <= 3, '带样式字幕最多三行，请先拆分长句。')
+}).strict().refine(value => !value.style || captionDisplayText(value).split('\n').length <= 3, '带样式字幕最多三行，请先拆分长句。')
 export type VideoEditMarker = z.infer<typeof videoEditMarkerSchema>
 export type VideoEditCaption = z.infer<typeof videoEditCaptionSchema>
 const subtitleGraphics = new WeakMap<VideoEditCaption, { key: string; graphic: VideoEditGraphic }>()
+export function captionDisplayText(caption: { text: string; translation?: string }): string { return [caption.text, caption.translation].filter(Boolean).join('\n') }
 function graphicForCaption(caption: VideoEditCaption, sequence: VideoEditSequence): VideoEditGraphic {
   if (!caption.style) throw new Error('此字幕未设置样式。')
-  const key = JSON.stringify([sequence.width, sequence.height, caption.text, caption.style])
+  const text = captionDisplayText(caption)
+  const key = JSON.stringify([sequence.width, sequence.height, text, caption.style])
   const cached = subtitleGraphics.get(caption)
   if (cached?.key === key) return cached.graphic
-  const graphic = subtitleGraphic(caption.text, sequence.width, sequence.height, caption.style)
+  const graphic = subtitleGraphic(text, sequence.width, sequence.height, caption.style)
   subtitleGraphics.set(caption, { key, graphic }); return graphic
 }
 export interface VideoEditContentOrigin { originalId: string; shift: number }
@@ -85,7 +88,7 @@ export function exportVideoEditCaptions(sequence: VideoEditSequence, format: 'sr
   const from = range?.startFrame ?? 0; const to = range?.endFrame ?? Infinity
   const us = (frame: number): number => Math.round((frame - (range?.clock === 'sequence' ? 0 : from)) * sequence.frameRate.denominator * 1e6 / sequence.frameRate.numerator)
   return buildSubtitleText([...(sequence.captions ?? [])].filter(caption => caption.start < to && caption.start + caption.duration > from).sort((a, b) => a.start - b.start || a.id.localeCompare(b.id))
-    .map(caption => ({ startUs: us(Math.max(from, caption.start)), endUs: us(Math.min(to, caption.start + caption.duration)), text: caption.text })), format)
+    .map(caption => ({ startUs: us(Math.max(from, caption.start)), endUs: us(Math.min(to, caption.start + caption.duration)), text: captionDisplayText(caption) })), format)
 }
 
 /** Burned-in captions use the existing full-resolution text compositor, above video tracks. */
@@ -93,7 +96,7 @@ export function videoEditCaptionClips(sequence: VideoEditSequence, frame: number
   return (sequence.captions ?? []).filter(caption => frame >= caption.start && frame < caption.start + caption.duration).map((caption, index) => ({
     id: `caption:${caption.id}`, itemId: '', name: '字幕', kind: 'text', track: 31,
     start: caption.start, duration: caption.duration, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 },
-    x: 0, y: caption.style ? index === 0 ? 0 : -index * 0.1 : 0.35 - index * 0.1, scale: caption.style ? 1 : 0.65, rotation: 0, opacity: 1, volume: 0, brightness: 1, text: caption.text,
+    x: 0, y: caption.style ? index === 0 ? 0 : -index * 0.1 : 0.35 - index * 0.1, scale: caption.style ? 1 : 0.65, rotation: 0, opacity: 1, volume: 0, brightness: 1, text: captionDisplayText(caption),
     ...(caption.style ? { kind: 'graphic' as const, graphic: graphicForCaption(caption, sequence) } : {}),
   }))
 }
