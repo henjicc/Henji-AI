@@ -3,7 +3,7 @@ import { videoEditTrackerSchema, normalizeVideoEditTracker, VIDEO_EDIT_MAX_TRACK
 import { isShapesMask, type VideoEditEffectMask, type VideoEditMaskShape } from '@/core/videoEdit/effectMasks'
 import { videoEditClipPictureSize } from '@/core/videoEdit/clipGeometry'
 import { editVideoSequence, requireVideoEditInstance } from './videoEditService'
-import { applyVideoEditClipFollow, setVideoEditTrackResults, videoEditClipSourceTimeUs, videoEditClipTracker, videoEditTrackerBox } from '../engine/videoEditTrackResults'
+import { applyVideoEditClipFollow, setVideoEditTrackResults, videoEditClipSourceTimeUs, videoEditClipTracker, videoEditTrackerBox, videoEditTrackerGeometry } from '../engine/videoEditTrackResults'
 import { videoEditTrackResults } from './videoEditTracking'
 import type { VideoEditCompositeTarget } from './videoEditCompositing'
 
@@ -28,6 +28,7 @@ export function assertVideoEditClipFollow(sequence: VideoEditSequence, clip: Vid
   if (clip.kind === 'audio' || clip.kind === 'adjustment') throw new Error('片段跟随只用于画面、文字或图形片段。')
   const target = sequence.clips.find(entry => entry.id === clip.follow!.clipId)
   if (!target?.trackers?.some(tracker => tracker.id === clip.follow!.trackerId)) throw new Error('follow 需要同一序列内已有跟踪器的片段，请先创建 video_edit.tracker。')
+  if (clip.follow.mode === 'corner_pin' && ((clip.kind !== 'video' && clip.kind !== 'image') || target.trackers.find(t=>t.id===clip.follow!.trackerId)?.method !== 'planar')) throw new Error('角点贴合需要图片或视频片段，以及平面跟踪器。')
   const seen = new Set([clip.id]); let current: VideoEditClip | undefined = target
   while (current) {
     if (seen.has(current.id)) throw new Error('片段不能跟随自己或形成循环跟随。')
@@ -90,11 +91,19 @@ export async function readVideoEditTrackingPlacement(projectId: string, sequence
   setVideoEditTrackResults(videoEditTrackResults())
   return (await applyVideoEditClipFollow(document, [clip], frame))[0]
 }
+export async function readVideoEditTrackingGeometry(projectId: string, sequenceId: string, clipId: string, trackerId: string, frame: number) {
+  const document=videoEditComposition(requireVideoEditInstance(projectId).document,sequenceId)
+  const clip=document.clips.find(c=>c.id===clipId); const tracker=clip && videoEditClipTracker(document,clip,trackerId)
+  if (!clip || !tracker) return undefined
+  setVideoEditTrackResults(videoEditTrackResults())
+  return videoEditTrackerGeometry(tracker.key,videoEditClipSourceTimeUs(document,clip,frame))
+}
 /** Bind at the current frame without moving the element. Late reads cannot change a newer document or playhead. */
-export async function bindVideoEditTracking(projectId: string, sequenceId: string, sourceId: string, trackerId: string, target: { clipId: string; scale: boolean } | { effectId: string; shapeId: string }): Promise<void> {
+export async function bindVideoEditTracking(projectId: string, sequenceId: string, sourceId: string, trackerId: string, target: { clipId: string; scale: boolean; cornerPin?: boolean } | { effectId: string; shapeId: string }): Promise<void> {
   const instance = requireVideoEditInstance(projectId); const before = instance.document; const frame = instance.frame
   const box = await readVideoEditTrackingBox(projectId, sequenceId, sourceId, trackerId, frame)
   if (!box) throw new Error('这一帧还没有跟踪框，请先完成跟踪。')
+  if ('clipId' in target && target.cornerPin && !(await readVideoEditTrackingGeometry(projectId,sequenceId,sourceId,trackerId,frame))?.quad) throw new Error('这一帧还没有可用的平面四角，请先跟踪或纠错。')
   const placement = await readVideoEditTrackingPlacement(projectId, sequenceId, sourceId, frame)
   const follower = 'clipId' in target ? await readVideoEditTrackingPlacement(projectId, sequenceId, target.clipId, frame) : undefined
   if (instance.document !== before || instance.frame !== frame || instance.activeSequenceId !== sequenceId) throw new Error('画面已变化，请在当前帧重新绑定。')
@@ -105,6 +114,7 @@ export async function bindVideoEditTracking(projectId: string, sequenceId: strin
       if (!clip) throw new Error('要跟随的片段已移除。')
       clip.follow = videoEditFollowBinding(follower ?? clip, { clipId: sourceId, trackerId, placement: placement ?? source, picture: videoEditClipPictureSize({ ...before, ...sequence }, source) }, videoEditComposition(before, sequenceId), box, target.scale)
       if (follower) clip.scale = follower.scale
+      if (target.cornerPin) clip.follow = {clipId:sourceId,trackerId,offsetX:0,offsetY:0,mode:'corner_pin'}
       assertVideoEditClipFollow(sequence, clip)
     } else {
       const effect = source.effects?.find(effect => effect.id === target.effectId)

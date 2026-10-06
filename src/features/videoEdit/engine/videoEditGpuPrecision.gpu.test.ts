@@ -54,8 +54,8 @@ function compose(source: Texture, width: number, format: Format, brightness = 1,
   const module = device.createShaderModule({ code: videoEditLayerShader(false) })
   const blend = { color: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' }, alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' } }
   const pipeline = device.createRenderPipeline({ layout: 'auto', vertex: { module, entryPoint: 'vs' }, fragment: { module, entryPoint: 'fs', targets: [{ format, blend }] }, primitive: { topology: 'triangle-list' } })
-  const uniform = device.createBuffer({ size: 48, usage: BUFFER_UNIFORM | BUFFER_COPY_DST })
-  device.queue.writeBuffer(uniform, 0, new Float32Array([1, 1, 1, 0, 0, 0, brightness, opacity, ROWS / width, width / ROWS, 0, 0]))
+  const uniform = device.createBuffer({ size: 96, usage: BUFFER_UNIFORM | BUFFER_COPY_DST })
+  device.queue.writeBuffer(uniform, 0, new Float32Array([1, 1, 1, 0, 0, 0, brightness, opacity, ROWS / width, width / ROWS, 0, 0, ...new Array<number>(12).fill(0)]))
   const encoder = device.createCommandEncoder()
   const pass = encoder.beginRenderPass({ colorAttachments: [{ view: target.createView(), clearValue: { r: 0, g: 0, b: 0, a: 1 }, loadOp: 'clear', storeOp: 'store' }] })
   pass.setPipeline(pipeline)

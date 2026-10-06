@@ -3,9 +3,9 @@
  * Every pass works in f32 inside the shader; precision is decided only by the texture formats it reads and writes.
  */
 
-/** Layer geometry: `Params` is 12 floats (48 bytes), written by `VideoEditGpuCompositor.draw()`. */
+/** Layer geometry: 24 floats (96 bytes), including optional corner-pin homography. */
 export const VIDEO_EDIT_LAYER_VERTEX = `
-struct Params { size: vec2f, rotation: vec2f, position: vec2f, brightness: f32, opacity: f32, aspect: vec2f, padding: vec2f }
+struct Params { size: vec2f, rotation: vec2f, position: vec2f, brightness: f32, opacity: f32, aspect: vec2f, padding: vec2f, warp0: vec4f, warp1: vec4f, warp2: vec4f }
 @group(0) @binding(2) var<uniform> p: Params;
 struct Vertex { @builtin(position) position: vec4f, @location(0) uv: vec2f }
 @vertex fn vs(@builtin(vertex_index) i: u32) -> Vertex {
@@ -18,6 +18,12 @@ struct Vertex { @builtin(position) position: vec4f, @location(0) uv: vec2f }
   if (p.padding.x == 90) { sampleUv = vec2f(sampleUv.y, 1 - sampleUv.x); }
   if (p.padding.x == 180) { sampleUv = 1 - sampleUv; }
   if (p.padding.x == 270) { sampleUv = vec2f(1 - sampleUv.y, sampleUv.x); }
+  if (p.warp2.z == 1) {
+    let unit = vec3f(uv, 1);
+    let x = dot(p.warp0.xyz, unit); let y = dot(p.warp1.xyz, unit); let w = dot(p.warp2.xyz, unit);
+    // Homogeneous position gives perspective-correct UV interpolation across both triangles.
+    return Vertex(vec4f(2 * x - w, w - 2 * y, 0, w), sampleUv);
+  }
   return Vertex(vec4f(rotated.x + p.position.x, -rotated.y - p.position.y, 0, 1), sampleUv);
 }
 @group(0) @binding(1) var s: sampler;

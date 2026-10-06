@@ -9,7 +9,8 @@ export interface VideoEditTrackingEditing {
   clipId: string
   trackerId?: string
   method: VideoEditTrackMethod
-  mode: 'point' | 'box' | 'show'
+  mode: 'point' | 'box' | 'quad' | 'show'
+  pointCount?: number
   candidates?: { result: TrackingCandidates; prompt: VideoEditTrackPrompt; preview: number; document: object; frame: number }
 }
 let current: VideoEditTrackingEditing | null = null

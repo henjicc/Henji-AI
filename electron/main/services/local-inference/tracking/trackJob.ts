@@ -9,6 +9,8 @@ import type { LocalExecutionProvider, LocalInferenceLog } from '../providers'
 import { EfficientTamSession, etamPromptFromNormalized, etamMemoryPlan, ETAM_CANDIDATES_OUTPUT, ETAM_IMAGE_SIZE, type EtamFeatures, type EtamFrameResult } from './efficientTam'
 import { VitTracker, type VitFrame, type VitRect } from './vitTrack'
 import type { TrackingCandidatesJob, TrackingCandidatesResult, TrackingJob, TrackingJobPrompt, TrackingJobResult } from './trackingProtocol'
+import { decodeVideoEditTrackGeometry, encodeVideoEditTrackGeometry, type VideoEditTrackGeometryRecord } from '../../../../../src/core/videoEdit/tracking'
+import { loadTrackingOpenCv, OpenCvTracker } from './openCvTracking'
 
 /*
  * 一次跟踪（本地推理后台进程里运行，任务 4.10）：读已有结果 → 从覆盖范围的边界接着跟 → 写出合并后的结果。
@@ -46,7 +48,7 @@ export function vitFrameSize(display: { width: number; height: number }): { widt
   return { width: Math.max(16, Math.round(display.width * scale)), height: Math.max(16, Math.round(display.height * scale)) }
 }
 
-interface Stored { box: VideoEditTrackBox | null; record?: { logits: Float32Array; score: number; pointer: Float32Array } }
+interface Stored { box: VideoEditTrackBox | null; record?: { logits: Float32Array; score: number; pointer: Float32Array }; geometry?: VideoEditTrackGeometryRecord }
 
 function modelOf(job: { models: LocalInferenceModelFile[] }, name: LocalInferenceModelName): LocalInferenceModelFile {
   const model = job.models.find(entry => entry.name === name)
@@ -69,6 +71,11 @@ function readExisting(job: TrackingJob, bytes: Uint8Array | undefined, inflate: 
         if (!frame) return new Map()
         const record = decodeVideoEditTrackRecord(inflate(bytes.subarray(layout.dataOffset + frame.offset, layout.dataOffset + frame.offset + frame.length)))
         entry.record = { logits: dequantizeVideoEditTrackLogits(record.logits), score: record.score, pointer: record.pointer }
+      }
+      if (job.method === 'point' || job.method === 'planar') {
+        const frame = layout.frames[index]
+        if (!frame) return new Map()
+        entry.geometry = decodeVideoEditTrackGeometry(inflate(bytes.subarray(layout.dataOffset + frame.offset, layout.dataOffset + frame.offset + frame.length)))
       }
       stored.set(header.firstFrame + index, entry)
     }
@@ -145,7 +152,8 @@ export async function runTracking(job: TrackingJob, deps: TrackingDependencies):
   }
 
   let model: string; let provider: LocalExecutionProvider; let stopped = false
-  if (job.method === 'box') ({ model, provider, stopped } = await trackBoxes(job, deps, stored, decodeOne, walk, targets))
+  if (job.method === 'point' || job.method === 'planar') ({ model, provider, stopped } = await trackGeometry(job, stored, decodeOne, walk, targets))
+  else if (job.method === 'box') ({ model, provider, stopped } = await trackBoxes(job, deps, stored, decodeOne, walk, targets))
   else ({ model, provider, stopped } = await trackShape(job, deps, stored, range, decodeOne, walk, targets))
 
   // 写出：从第一个提示帧连续生长的一段（还没跟到的后面的提示帧不写，下次重算）。
@@ -159,6 +167,7 @@ export async function runTracking(job: TrackingJob, deps: TrackingDependencies):
       const record = entry?.record ?? { logits: new Float32Array(VIDEO_EDIT_TRACK_LOGIT_SIZE ** 2).fill(-32), score: -10, pointer: new Float32Array(256) }
       records.push(deps.deflate(encodeVideoEditTrackRecord(record)))
     }
+    if (job.method === 'point' || job.method === 'planar') records.push(deps.deflate(encodeVideoEditTrackGeometry(entry?.geometry ?? { confidence: 0 })))
   }
   const header = createVideoEditTrackHeader({
     method: job.method, model, fps: job.fps, firstFrame: first, frameCount: last - first + 1, sourceWidth: job.display.width, sourceHeight: job.display.height,
@@ -175,6 +184,35 @@ export async function runTracking(job: TrackingJob, deps: TrackingDependencies):
 
 type Walk = (from: number, to: number, direction: 1 | -1, width: number, height: number, handle: (frame: number, rgb: Uint8Array) => Promise<void>) => Promise<boolean>
 type Targets = () => { forward?: [number, number]; backward?: [number, number] }
+
+async function trackGeometry(job: TrackingJob, stored: Map<number, Stored>, decodeOne: (frame: number, width: number, height: number) => Promise<Uint8Array>, walk: Walk, targets: Targets): Promise<{ model: string; provider: LocalExecutionProvider; stopped: boolean }> {
+  const { cv } = await loadTrackingOpenCv()
+  const size = vitFrameSize(job.display)
+  const tracker = new OpenCvTracker(cv, job.method as 'point' | 'planar', size.width, size.height)
+  const put = (frame: number, geometry: VideoEditTrackGeometryRecord): void => {
+    const points = geometry.quad ?? geometry.points!
+    const xs=points.map(p=>p[0]); const ys=points.map(p=>p[1])
+    const prompt=[...job.prompts].reverse().find(p=>p.frame<=frame) ?? job.prompts[0]
+    const pad=job.method==='point' ? (prompt.window?.feature ?? 0.04)/2 : 0
+    const x=Math.min(...xs)-pad*size.height/size.width; const y=Math.min(...ys)-pad
+    stored.set(frame,{geometry,box:geometry.confidence>0 ? [x,y,Math.max(...xs)-x+pad*size.height/size.width,Math.max(...ys)-y+pad,geometry.confidence] : null})
+  }
+  try {
+    if (!stored.size) put(job.prompts[0].frame,tracker.init(await decodeOne(job.prompts[0].frame,size.width,size.height),job.prompts[0]))
+    const plan=targets(); let stopped=false
+    for (const [segment,direction] of [[plan.forward,1],[plan.backward,-1]] as const) {
+      if (!segment || stopped) continue
+      const [from,to]=segment; const previous=from-direction
+      const prompt=[...job.prompts].reverse().find(p=>p.frame<=previous) ?? job.prompts[0]
+      tracker.init(await decodeOne(previous,size.width,size.height),prompt,stored.get(previous)!.geometry)
+      stopped=await walk(from,to,direction,size.width,size.height,async (frame,rgb)=> {
+        const correction=job.prompts.find(p=>p.frame===frame)
+        put(frame,correction ? tracker.init(rgb,correction) : tracker.update(rgb))
+      })
+    }
+    return {model:'opencv-4.12-lk-ransac',provider:'cpu',stopped}
+  } finally { tracker.dispose() }
+}
 
 // ==================== 物体框（VitTrack） ====================
 

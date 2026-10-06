@@ -17,6 +17,7 @@ export function VideoEditTrackingPanel({ instance, onError }: { instance: VideoE
   const [creation, setCreation] = useState('shape-point')
   const [destination, setDestination] = useState('')
   const [scale, setScale] = useState(false)
+  const [pointCount, setPointCount] = useState('1')
   const sequence = getActiveVideoEditSequence(instance)
   const clip = sequence.clips.find(clip => clip.id === instance.selection)
   if (!clip || (clip.kind !== 'video' && clip.kind !== 'image')) return <UiEmpty title="选择视频或图片片段" description="在节目画面上点选或框住要跟踪的物体。" />
@@ -34,21 +35,23 @@ export function VideoEditTrackingPanel({ instance, onError }: { instance: VideoE
     ...(clip.effects ?? []).filter(effect => effect.builtin && effect.enabled).map(effect => ({ value: `effect:${effect.id}`, label: `作用区域 · ${effect.name}` })),
     ...(clip.effects ?? []).flatMap(effect => isShapesMask(effect.mask) ? effect.mask.shapes.map(shape => ({ value: `mask:${effect.id}:${shape.id}`, label: `${effect.name} · ${videoEditMaskShapeName(effect.mask!.regionId === 'shapes' ? effect.mask!.shapes : [], shape)}` })) : []),
     ...sequence.clips.filter(entry => entry.id !== clip.id && entry.kind !== 'audio' && entry.kind !== 'adjustment').map(entry => ({ value: `clip:${entry.id}`, label: `片段跟随 · ${entry.name}` })),
+    ...(tracker?.method === 'planar' ? sequence.clips.filter(entry => entry.id !== clip.id && (entry.kind === 'image' || entry.kind === 'video')).map(entry => ({value:`pin:${entry.id}`,label:`角点贴合 · ${entry.name}`})) : []),
   ]
   const apply = (): void => {
     if (!tracker) return
     const [kind, id, shapeId] = destination.split(':')
     try {
       if (kind === 'effect') updateVideoEditBuiltinEffect(target, id, { mask: { regionId: 'tracker', trackerId: tracker.id } })
-      else void bindVideoEditTracking(projectId, sequenceId, clip.id, tracker.id, kind === 'clip' ? { clipId: id, scale } : { effectId: id, shapeId }).catch(onError)
+      else void bindVideoEditTracking(projectId, sequenceId, clip.id, tracker.id, kind === 'clip' || kind === 'pin' ? { clipId: id, scale, ...(kind === 'pin' ? {cornerPin:true} : {}) } : { effectId: id, shapeId }).catch(onError)
     } catch (error) { onError(error) }
   }
   return <div className="flex h-full min-h-0 flex-col gap-3 overflow-auto p-3" data-video-edit-tracking-panel>
     <div className="flex items-center gap-1">
-      <Dropdown ariaLabel="新建跟踪方式" size="sm" value={creation} options={[{ value: 'shape-point', label: '形状 · 点选' }, { value: 'shape-box', label: '形状 · 框选' }, { value: 'box', label: '物体框 · 框选' }]} onSelect={setCreation} />
-      <UiButton size="sm" variant="secondary" disabled={locked || (clip.trackers?.length ?? 0) >= VIDEO_EDIT_MAX_TRACKERS} onClick={() => setVideoEditTrackingEditing({ ...target, method: creation === 'box' ? 'box' : 'shape', mode: creation === 'shape-point' ? 'point' : 'box' })}><Plus size={14} />新建</UiButton>
+      <Dropdown ariaLabel="新建跟踪方式" size="sm" value={creation} options={[{ value: 'shape-point', label: '形状 · 点选' }, { value: 'shape-box', label: '形状 · 框选' }, { value: 'box', label: '物体框 · 框选' }, {value:'point',label:'点 · 特征跟踪'}, {value:'planar',label:'平面 · 四角'}]} onSelect={setCreation} />
+      <UiButton size="sm" variant="secondary" disabled={locked || (clip.trackers?.length ?? 0) >= VIDEO_EDIT_MAX_TRACKERS} onClick={() => setVideoEditTrackingEditing({ ...target, method: creation === 'point' ? 'point' : creation === 'planar' ? 'planar' : creation === 'box' ? 'box' : 'shape', mode: creation === 'planar' ? 'quad' : creation === 'point' || creation === 'shape-point' ? 'point' : 'box', pointCount:Number(pointCount) })}><Plus size={14} />新建</UiButton>
     </div>
-    {selectedEditing && selectedEditing.mode !== 'show' && <p className="text-xs text-text2" role="status">{selectedEditing.mode === 'point' ? '在节目画面上点击物体，选择合适的候选。' : '在节目画面上拖框选中物体。'}<UiButton size="sm" onClick={() => setVideoEditTrackingEditing(null)}>取消</UiButton></p>}
+    {creation === 'point' && <Dropdown ariaLabel="跟踪点数量" size="sm" value={pointCount} options={[1,2,3,4].map(n=>({value:String(n),label:`${n} 个点`}))} onSelect={setPointCount} />}
+    {selectedEditing && selectedEditing.mode !== 'show' && <p className="text-xs text-text2" role="status">{selectedEditing.method === 'point' ? '依次点击要跟踪的特征点。' : selectedEditing.mode === 'quad' ? '沿屏幕或平面的边缘依次点击四角。' : selectedEditing.mode === 'point' ? '在节目画面上点击物体，选择合适的候选。' : '在节目画面上拖框选中物体。'}<UiButton size="sm" onClick={() => setVideoEditTrackingEditing(null)}>取消</UiButton></p>}
     <div className="flex flex-col gap-1" role="list" aria-label="片段跟踪器">
       {(clip.trackers ?? []).map(entry => <div key={entry.id} className="flex items-center gap-1" role="listitem">
         <UiOptionButton variant="menu" size="sm" className="min-w-0 flex-1" active={tracker?.id === entry.id} onClick={() => setVideoEditTrackingEditing({ ...target, trackerId: entry.id, method: entry.method, mode: 'show' })}>{entry.name}</UiOptionButton>

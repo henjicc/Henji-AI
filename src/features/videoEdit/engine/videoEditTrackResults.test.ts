@@ -2,11 +2,27 @@ import { afterEach, expect, it, vi } from 'vitest'
 import { deflateRawSync } from 'node:zlib'
 import { createVideoEditSequence, type VideoEditClip, type VideoEditComposition } from '@/core/videoEdit/document'
 import { encodeSmartRegionSegment } from '@/core/videoEdit/smartRegions'
-import { createVideoEditTrackHeader, encodeVideoEditTrackRecord, videoEditTrackerKey, type VideoEditTrackHeader } from '@/core/videoEdit/tracking'
-import { applyVideoEditClipFollow, setVideoEditTrackResults, videoEditClipSourceTimeUs, videoEditTrackerBox, videoEditTrackerMask } from './videoEditTrackResults'
+import { createVideoEditTrackHeader, encodeVideoEditTrackRecord, encodeVideoEditTrackGeometry, videoEditTrackerKey, type VideoEditTrackHeader, type VideoEditTrackQuad } from '@/core/videoEdit/tracking'
+import { applyVideoEditClipFollow, setVideoEditTrackResults, videoEditClipSourceTimeUs, videoEditTrackerBox, videoEditTrackerMask, videoEditTrackerGeometry, videoEditClipTrackingQuad } from './videoEditTrackResults'
 import { videoEditEffectMask } from './videoEditEffectMasks'
 
 afterEach(() => { vi.unstubAllGlobals(); setVideoEditTrackResults({}) })
+
+it('平面 Range 记录插值驱动角点贴合；丢失帧不外推，定义不被渲染改写',async()=> {
+  const quad:VideoEditTrackQuad=[[.1,.2],[.8,.1],[.9,.8],[.2,.9]]
+  const tracker={id:'plane',name:'屏幕',method:'planar' as const,prompts:[{timeUs:0,quad}]}
+  const source:VideoEditClip={id:'source',itemId:'video',kind:'video',name:'原片',text:'',track:1,start:0,duration:30,sourceInUs:0,sourceRemainder:{numerator:0,denominator:1},x:0,y:0,scale:1,rotation:0,opacity:1,brightness:1,volume:0,trackers:[tracker]}
+  const pinned:VideoEditClip={...source,id:'replacement',track:2,trackers:undefined,follow:{clipId:source.id,trackerId:tracker.id,offsetX:0,offsetY:0,mode:'corner_pin'}}
+  const document:VideoEditComposition={...createVideoEditSequence(),width:100,height:100,fps:30,revision:0,media:[{id:'media',name:'视频',path:'video',kind:'video',durationSeconds:3,width:100,height:100}],items:[{id:'video',mediaId:'media',name:'视频',kind:'video'}],clips:[source,pinned]}
+  const next=quad.map(p=>[p[0]+.05,p[1]]) as VideoEditTrackQuad
+  serve({plane:encodeSmartRegionSegment(header({method:'planar',frameCount:3,boxes:[header().boxes[0],header().boxes[1],null]}),[quad,next,next].map((q,i)=>deflateRawSync(encodeVideoEditTrackGeometry({quad:q,homography:[1,0,0,0,1,0,0,0,1],confidence:i===2?0:1}))))})
+  const key=videoEditTrackerKey('media',tracker);setVideoEditTrackResults({[key]:{url:'plane',version:'1'}})
+  expect((await videoEditTrackerGeometry(key,50_000))!.quad![0][0]).toBeCloseTo(.125)
+  const [followed]=await applyVideoEditClipFollow(document,[pinned],0)
+  videoEditClipTrackingQuad(followed)!.forEach((p,i)=>p.forEach((v,k)=>expect(v).toBeCloseTo(quad[i][k],12)));expect(videoEditClipTrackingQuad(pinned)).toBeUndefined()
+  expect(await videoEditTrackerGeometry(key,200_000)).toBeUndefined()
+  expect(videoEditClipTrackingQuad((await applyVideoEditClipFollow(document,[pinned],6))[0])).toBeUndefined()
+})
 const header = (patch: Partial<VideoEditTrackHeader> = {}) => createVideoEditTrackHeader({ method: 'box', model: 'vittrack', fps: 10, firstFrame: 0, frameCount: 2, sourceWidth: 64, sourceHeight: 64, promptFrames: [0], boxes: [[0.1, 0.2, 0.2, 0.2, 1], [0.5, 0.6, 0.4, 0.4, 1]], summary: { tracked: 2, lost: 0 }, ...patch })
 function serve(files: Record<string, Uint8Array>) {
   const fetcher = vi.fn(async (url: string, options?: { headers?: { Range: string } }) => {

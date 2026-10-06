@@ -10,7 +10,7 @@ export default defineConfig({
     build: {
       outDir: 'out/main',
       rollupOptions: {
-        external: ['better-sqlite3', 'ffmpeg-ffprobe-static', '@earendil-works/pi-coding-agent', 'onnxruntime-node'],
+        external: ['better-sqlite3', 'ffmpeg-ffprobe-static', '@earendil-works/pi-coding-agent', 'onnxruntime-node', '@techstark/opencv-js'],
         input: {
           index: resolve(__dirname, 'electron/main/index.ts'),
           'pi-agent-utility': resolve(__dirname, 'electron/main/pi-agent-utility.ts'),

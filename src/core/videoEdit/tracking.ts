@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { videoEditClipPixelScale, videoEditClipToFrame, type VideoEditClipPlacement, type VideoEditSize } from './clipGeometry'
 import { processSmartRegionMatte, rasterizeSmartRegionBoxes, smartRegionMaskSize, SMART_REGION_FORMAT_VERSION, type SmartRegionBox, type SmartRegionMaskParams } from './smartRegions'
+import { rasterizeVideoEditMaskShapes } from './effectMasks'
 
 /*
  * 跟踪器（任务 4.10，实施方案第七节：跟踪 = 区域 + 方式 + 结果 + 绑定）。
@@ -11,10 +12,10 @@ import { processSmartRegionMatte, rasterizeSmartRegionBoxes, smartRegionMaskSize
  * 被主进程引用：只用相对路径导入，不依赖 DOM。
  */
 
-/** 跟踪方式：shape 形状（逐帧遮罩，EfficientTAM）、box 物体框（逐帧框，VitTrack）。点跟踪、平面跟踪见任务文件后续。 */
-export const VIDEO_EDIT_TRACK_METHODS = ['shape', 'box'] as const
+/** shape/box 用本地模型；point/planar 用后台 OpenCV 金字塔 LK 与 RANSAC，无需下载模型。 */
+export const VIDEO_EDIT_TRACK_METHODS = ['shape', 'box', 'point', 'planar'] as const
 export type VideoEditTrackMethod = (typeof VIDEO_EDIT_TRACK_METHODS)[number]
-export const VIDEO_EDIT_TRACK_METHOD_LABELS: Readonly<Record<VideoEditTrackMethod, string>> = { shape: '形状跟踪', box: '物体框跟踪' }
+export const VIDEO_EDIT_TRACK_METHOD_LABELS: Readonly<Record<VideoEditTrackMethod, string>> = { shape: '形状跟踪', box: '物体框跟踪', point: '点跟踪', planar: '平面跟踪' }
 export const VIDEO_EDIT_MAX_TRACKERS = 8
 export const VIDEO_EDIT_MAX_TRACK_PROMPTS = 16
 /** 跟踪分析的帧率上限（形状跟踪每帧约 12 ms，30 帧足够跟住；播放时框按相邻两帧插值）。 */
@@ -26,16 +27,28 @@ const size = z.number().finite().min(0.002).max(1)
 export const videoEditTrackPointSchema = z.tuple([unit, unit, z.union([z.literal(0), z.literal(1)])])
 export const videoEditTrackBoxSchema = z.tuple([unit, unit, size, size])
 export type VideoEditTrackBoxPrompt = z.infer<typeof videoEditTrackBoxSchema>
+export const videoEditTrackQuadSchema = z.tuple([z.tuple([unit, unit]), z.tuple([unit, unit]), z.tuple([unit, unit]), z.tuple([unit, unit])]).refine(isVideoEditTrackQuad, '四角需按顺时针或逆时针排列，不能交叉或退化。')
+export type VideoEditTrackQuad = [[number, number], [number, number], [number, number], [number, number]]
+/** Convex, consistently ordered corners; tracked results may extend beyond the picture. */
+export function isVideoEditTrackQuad(quad: readonly (readonly number[])[]): boolean {
+  if (quad.length !== 4 || quad.some(p => p.length !== 2 || p.some(v => !Number.isFinite(v)))) return false
+  const crosses = quad.map((a, i) => { const b = quad[(i + 1) % 4]; const c = quad[(i + 2) % 4]; return (b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0]) })
+  return crosses.every(v => v > 1e-8) || crosses.every(v => v < -1e-8)
+}
 
 export const videoEditTrackPromptSchema = z.object({
   /** 提示所在的素材时间（微秒，素材绝对时钟；按跟踪帧率取最近的一帧）。 */
   timeUs: z.number().int().nonnegative().max(4 * 3600 * 1e6),
   points: z.array(videoEditTrackPointSchema).min(1).max(16).optional(),
   box: videoEditTrackBoxSchema.optional(),
+  /** Planar corners: top-left, top-right, bottom-right, bottom-left, in picture coordinates. */
+  quad: videoEditTrackQuadSchema.optional(),
+  /** AE feature/search boxes, as fractions of picture height; shared by 1–4 points. */
+  window: z.object({ feature: z.number().min(0.01).max(0.3), search: z.number().min(0.02).max(0.8) }).strict().refine(v => v.search >= v.feature, '搜索框不能小于特征框。').optional(),
   /** 只点了一个点时，从模型给出的 3 个候选里选第几个（1–3，小到大是“局部、物体、整体”的常见顺序）；不写由模型挑最可信的。 */
   candidate: z.number().int().min(1).max(3).optional(),
 }).strict().superRefine((prompt, ctx) => {
-  if (!prompt.points && !prompt.box) ctx.addIssue({ code: 'custom', message: '每个提示至少要有 points（点选）或 box（框选）。' })
+  if (!prompt.points && !prompt.box && !prompt.quad) ctx.addIssue({ code: 'custom', message: '每个提示至少要有 points（点选）、box（框选）或 quad（四角）。' })
   if (prompt.candidate !== undefined && (prompt.box || prompt.points?.length !== 1)) ctx.addIssue({ code: 'custom', message: 'candidate 只用于只点了一个点的提示。' })
 })
 export type VideoEditTrackPrompt = z.infer<typeof videoEditTrackPromptSchema>
@@ -47,6 +60,10 @@ export const videoEditTrackerSchema = z.object({
   prompts: z.array(videoEditTrackPromptSchema).min(1).max(VIDEO_EDIT_MAX_TRACK_PROMPTS),
 }).strict().superRefine((tracker, ctx) => {
   if (tracker.method === 'box' && tracker.prompts.some(prompt => !prompt.box)) ctx.addIssue({ code: 'custom', message: '物体框跟踪的每个提示都要有 box（框住要跟踪的物体）。' })
+  if ((tracker.method === 'box' || tracker.method === 'shape') && tracker.prompts.some(p=>p.quad || p.window)) ctx.addIssue({code:'custom',message:'quad 用于平面跟踪，window 用于点跟踪；形状与物体框提示不使用这两个字段。'})
+  if (tracker.method === 'point' && tracker.prompts.some(p => !p.points || p.points.length > 4 || p.points.some(point => point[2] !== 1) || p.box || p.quad || p.candidate)) ctx.addIssue({ code: 'custom', message: '点跟踪每帧提示需要 1–4 个正向 points，不使用 box、quad 或 candidate。' })
+  if (tracker.method === 'point' && tracker.prompts.some(p => p.points?.length !== tracker.prompts[0].points?.length)) ctx.addIssue({ code: 'custom', message: '点纠错需保留原有点的数量与顺序。' })
+  if (tracker.method === 'planar' && tracker.prompts.some(p => !p.quad || p.points || p.box || p.candidate)) ctx.addIssue({ code: 'custom', message: '平面跟踪每帧提示需要 quad 四角，不使用 points、box 或 candidate。' })
   if (new Set(tracker.prompts.map(prompt => prompt.timeUs)).size !== tracker.prompts.length) ctx.addIssue({ code: 'custom', message: '同一时间只能有一个提示，要改提示请替换那一项。' })
 })
 export type VideoEditTracker = z.infer<typeof videoEditTrackerSchema>
@@ -107,6 +124,39 @@ export function createVideoEditTrackHeader(header: Omit<VideoEditTrackHeader, 'v
 }
 
 export interface VideoEditTrackShapeRecord { score: number; pointer: Float32Array; logits: Int8Array }
+
+export interface VideoEditTrackGeometryRecord {
+  points?: Array<[number, number, number]>
+  quad?: VideoEditTrackQuad
+  /** Row-major mapping from the governing prompt quad to this frame, normalized picture coordinates. */
+  homography?: number[]
+  confidence: number
+}
+export function encodeVideoEditTrackGeometry(record: VideoEditTrackGeometryRecord): Uint8Array { return new TextEncoder().encode(JSON.stringify(record)) }
+export function decodeVideoEditTrackGeometry(bytes: Uint8Array): VideoEditTrackGeometryRecord {
+  return z.object({ points: z.array(z.tuple([z.number().finite(), z.number().finite(), unit])).min(1).max(4).optional(), quad: z.array(z.tuple([z.number().finite(), z.number().finite()])).length(4).refine(isVideoEditTrackQuad).optional(), homography: z.array(z.number().finite()).length(9).optional(), confidence: unit }).strict().parse(JSON.parse(new TextDecoder().decode(bytes))) as VideoEditTrackGeometryRecord
+}
+export function videoEditTrackProject(matrix: readonly number[], x: number, y: number): [number, number] {
+  const w = matrix[6] * x + matrix[7] * y + matrix[8]
+  return [(matrix[0] * x + matrix[1] * y + matrix[2]) / w, (matrix[3] * x + matrix[4] * y + matrix[5]) / w]
+}
+export function invertVideoEditTrackMatrix(m: readonly number[]): number[] {
+  const [a,b,c,d,e,f,g,h,i]=m
+  const adj=[e*i-f*h,c*h-b*i,b*f-c*e,f*g-d*i,a*i-c*g,c*d-a*f,d*h-e*g,b*g-a*h,a*e-b*d]
+  const determinant=a*adj[0]+b*adj[3]+c*adj[6]
+  if (!Number.isFinite(determinant) || Math.abs(determinant)<1e-12) throw new Error('透视四角已退化，请重新选取平面。')
+  return adj.map(v=>v/determinant)
+}
+/** Exact four-corner geometry (no estimation): unit image square → normalized destination quad. */
+export function videoEditCornerPinMatrix(quad: VideoEditTrackQuad): number[] {
+  if (!isVideoEditTrackQuad(quad)) throw new Error('角点贴合需要有效的四边形。')
+  const [[x0,y0],[x1,y1],[x2,y2],[x3,y3]] = quad
+  const dx1=x1-x2; const dx2=x3-x2; const dx3=x0-x1+x2-x3
+  const dy1=y1-y2; const dy2=y3-y2; const dy3=y0-y1+y2-y3
+  const d=dx1*dy2-dx2*dy1
+  const g=(dx3*dy2-dx2*dy3)/d; const h=(dx1*dy3-dx3*dy1)/d
+  return [x1-x0+g*x1, x3-x0+h*x3, x0, y1-y0+g*y1, y3-y0+h*y3, y0, g, h, 1]
+}
 
 export function encodeVideoEditTrackRecord(record: { score: number; pointer: Float32Array; logits: Float32Array | Int8Array }): Uint8Array {
   const output = new Uint8Array(RECORD_HEADER_BYTES + record.logits.length)
@@ -218,6 +268,11 @@ export function rasterizeVideoEditTrackBox(box: VideoEditTrackBox | null, source
   const boxes: SmartRegionBox[] = box ? [[box[0], box[1], box[2], box[3], box[4], 0]] : []
   return { ...size, data: rasterizeSmartRegionBoxes(boxes, 'rect', params, size.width, size.height) }
 }
+export function rasterizeVideoEditTrackPlane(quad: VideoEditTrackQuad | undefined, sourceWidth: number, sourceHeight: number, params: SmartRegionMaskParams): { width: number; height: number; data: Uint8Array } {
+  const size=smartRegionMaskSize(sourceWidth,sourceHeight)
+  const binary=quad ? rasterizeVideoEditMaskShapes([{id:'plane',kind:'path',points:quad.map(([x,y])=>[x,y,0,0,0,0]),feather:0}],size.width,size.height) : new Uint8Array(size.width*size.height)
+  return {...size,data:processSmartRegionMatte(binary,size.width,size.height,params)}
+}
 
 /** 形状跟踪作为作用区域：logit → 填小洞 → 放大到长边 512 的二值掩码 → 扩展、羽化、反转。 */
 export function videoEditTrackShapeMask(logits: Int8Array, header: Pick<VideoEditTrackHeader, 'logits' | 'sourceWidth' | 'sourceHeight'>, params: SmartRegionMaskParams): { width: number; height: number; data: Uint8Array } {
@@ -237,6 +292,8 @@ export function videoEditTrackShapeMask(logits: Int8Array, header: Pick<VideoEdi
  * 跟踪结果驱动，不写成逐帧数值：跟踪重算或纠错后跟随自动更新（与 4.14 关键帧的衔接见任务文件）。
  */
 export const videoEditClipFollowSchema = z.object({
+  /** corner_pin ignores offsets and pins the image/video corners to a planar tracker. */
+  mode: z.enum(['position', 'corner_pin']).optional(),
   clipId: z.string().min(1).max(100),
   trackerId: z.string().min(1).max(100),
   /** 片段中心相对跟踪框中心的偏移（序列宽、高的比例）。 */

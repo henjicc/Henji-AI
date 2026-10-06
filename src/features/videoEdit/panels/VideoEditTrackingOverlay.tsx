@@ -13,9 +13,15 @@ import { videoEditClipMedia } from '@/core/videoEdit/document'
 import type { VideoEditClip } from '@/core/videoEdit/document'
 import { useThemeTokens } from '@/hooks/useThemeTokens'
 import { parseColor } from '@/core/theme/themeColor'
+import { VideoEditGeometryTrackingOverlay } from './VideoEditGeometryTrackingOverlay'
 
 const logger = createLogger('features.videoEdit.tracking')
 export function VideoEditTrackingOverlay({ instance, onError }: { instance: VideoEditInstance; onError: (error: unknown) => void }): React.ReactElement | null {
+  useSyncExternalStore(subscribeVideoEditTrackingEditing, videoEditTrackingEditingRevision)
+  const method=getVideoEditTrackingEditing()?.method
+  return method==='point' || method==='planar' ? <VideoEditGeometryTrackingOverlay instance={instance} onError={onError} /> : <VideoEditSubjectTrackingOverlay instance={instance} onError={onError} />
+}
+function VideoEditSubjectTrackingOverlay({ instance, onError }: { instance: VideoEditInstance; onError: (error: unknown) => void }): React.ReactElement | null {
   const theme = useThemeTokens()
   useSyncExternalStore(subscribeVideoEditDomain, videoEditDomainRevision)
   useSyncExternalStore(subscribeVideoEditView, videoEditViewRevision)

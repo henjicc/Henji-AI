@@ -1,5 +1,6 @@
 import type { LocalInferenceModelFile } from '../protocol'
 import type { LocalExecutionProvider } from '../providers'
+import type { VideoEditTrackMethod, VideoEditTrackQuad, VideoEditTrackPrompt } from '../../../../../src/core/videoEdit/tracking'
 
 /*
  * 跟踪任务（任务 4.10）：主进程准备参数（素材、模型、帧网格、已有结果），本地推理后台进程取帧、推理、写结果文件。
@@ -11,11 +12,13 @@ export interface TrackingJobPrompt {
   points?: Array<[number, number, 0 | 1]>
   box?: [number, number, number, number]
   candidate?: number
+  quad?: VideoEditTrackQuad
+  window?: VideoEditTrackPrompt['window']
 }
 
 export interface TrackingJob {
   id: string
-  method: 'shape' | 'box'
+  method: VideoEditTrackMethod
   models: LocalInferenceModelFile[]
   ffmpegPath: string
   source: string

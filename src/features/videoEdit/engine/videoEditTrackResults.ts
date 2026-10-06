@@ -2,8 +2,9 @@ import { decodeSmartRegionLayout, smartRegionLayoutBytes, type SmartRegionMaskPa
 import {
   decodeVideoEditTrackRecord, rasterizeVideoEditTrackBox, videoEditFollowPlacement, videoEditTrackBoxAt, videoEditTrackerKey, videoEditTrackFrameIndex,
   videoEditTrackShapeMask, type VideoEditTrackBox, type VideoEditTrackHeader, type VideoEditTracker,
+  decodeVideoEditTrackGeometry, isVideoEditTrackQuad, rasterizeVideoEditTrackPlane, videoEditCornerPinMatrix, videoEditTrackProject, type VideoEditTrackGeometryRecord, type VideoEditTrackQuad,
 } from '@/core/videoEdit/tracking'
-import { videoEditClipPictureSize } from '@/core/videoEdit/clipGeometry'
+import { videoEditClipPictureSize, videoEditClipToFrame } from '@/core/videoEdit/clipGeometry'
 import { videoEditClipMedia, type VideoEditClip, type VideoEditComposition } from '@/core/videoEdit/document'
 import { videoEditSourceSeconds } from '@/core/videoEdit/time'
 import { videoEditClipSourceTimeAt } from '@/core/videoEdit/clipSpeed'
@@ -78,13 +79,34 @@ export async function videoEditTrackerBox(trackerKey: string, timeUs: number): P
   return videoEditTrackBoxAt((await layoutOf(result)).header, timeUs)
 }
 
+export async function videoEditTrackerGeometry(trackerKey: string, timeUs: number): Promise<VideoEditTrackGeometryRecord | undefined> {
+  const result=results[trackerKey]; if (!result) return undefined
+  const layout=await layoutOf(result); const h=layout.header
+  if (h.method !== 'point' && h.method !== 'planar') return undefined
+  const position=Math.max(0,Math.min(h.frameCount-1,timeUs*h.fps/1e6-h.firstFrame)); const before=Math.floor(position); const after=Math.min(h.frameCount-1,before+1); const t=position-before
+  const a=decodeVideoEditTrackGeometry(await recordOf(result,layout,before))
+  if (before===after) return a.confidence>0 ? a : undefined
+  const b=decodeVideoEditTrackGeometry(await recordOf(result,layout,after))
+  if (!a.confidence || !b.confidence) return undefined
+  const blend=(x:number,y:number):number=>x+(y-x)*t
+  if (a.quad && b.quad) {
+    const quad=a.quad.map((p,i)=>[blend(p[0],b.quad![i][0]),blend(p[1],b.quad![i][1])]) as VideoEditTrackQuad
+    return isVideoEditTrackQuad(quad) ? {quad,confidence:Math.min(a.confidence,b.confidence)} : undefined
+  }
+  return {points:a.points?.map((p,i)=>[blend(p[0],b.points![i][0]),blend(p[1],b.points![i][1]),Math.min(p[2],b.points![i][2])]),confidence:Math.min(a.confidence,b.confidence)}
+}
+/** Derived geometry exists only on render copies, never in the saved document. */
+export type VideoEditTrackedClip = VideoEditClip & { trackingQuad?: VideoEditTrackQuad }
+export function videoEditClipTrackingQuad(clip: VideoEditClip): VideoEditTrackQuad | undefined { return (clip as VideoEditTrackedClip).trackingQuad }
+
 /** 跟踪器作为效果作用区域的蒙版（片段画面比例，长边 512）；还没有结果时 undefined。 */
 export async function videoEditTrackerMask(trackerKey: string, params: SmartRegionMaskParams, timeUs: number): Promise<VideoEditSmartRegionMask | undefined> {
   const result = results[trackerKey]
   if (!result) return undefined
   const layout = await layoutOf(result)
   const { header } = layout
-  if (header.method === 'box') return rasterizeVideoEditTrackBox(videoEditTrackBoxAt(header, timeUs), header.sourceWidth, header.sourceHeight, params)
+  if (header.method === 'planar') return rasterizeVideoEditTrackPlane((await videoEditTrackerGeometry(trackerKey,timeUs))?.quad,header.sourceWidth,header.sourceHeight,params)
+  if (header.method !== 'shape') return rasterizeVideoEditTrackBox(videoEditTrackBoxAt(header, timeUs), header.sourceWidth, header.sourceHeight, params)
   const index = videoEditTrackFrameIndex(header, timeUs)
   const key = `${cacheKey(result)}\u0001m${index}\u0000${params.feather}\u0000${params.expand}\u0000${params.invert}`
   const cached = masks.get(key)
@@ -124,6 +146,17 @@ export async function applyVideoEditClipFollow(document: VideoEditComposition, c
     if (!target) return undefined
     const tracker = videoEditClipTracker(document, target, clip.follow.trackerId)
     if (!tracker) return clip
+    if (clip.follow.mode === 'corner_pin') {
+      const geometry=await videoEditTrackerGeometry(tracker.key,videoEditClipSourceTimeUs(document,target,frame)).catch((error: unknown) => {
+        const result=results[tracker.key];const key=result && cacheKey(result)
+        if(key && !failures.has(key)){failures.add(key);logger.warn('角点贴合结果读取失败', {event:'video_edit.tracking.corner_failed',error,context:{clipId:clip.id}})}
+        return undefined
+      })
+      if (!geometry?.quad) return clip
+      const parentQuad=videoEditClipTrackingQuad(target); const parent=parentQuad && videoEditCornerPinMatrix(parentQuad)
+      const quad=geometry.quad.map(([u,v]) => { if (parent) return videoEditTrackProject(parent,u,v); const p=videoEditClipToFrame(target,videoEditClipPictureSize(document,target),document,u,v); return [p.x,p.y] }) as VideoEditTrackQuad
+      return { ...clip, trackingQuad:quad } as VideoEditTrackedClip
+    }
     const box = await videoEditTrackerBox(tracker.key, videoEditClipSourceTimeUs(document, target, frame)).catch((error: unknown) => {
       const result = results[tracker.key]; const key = result && cacheKey(result)
       if (key && !failures.has(key)) { failures.add(key); logger.warn('片段跟随结果读取失败', { event: 'video_edit.tracking.follow_failed', error, context: { sequenceId: document.id, clipId: clip.id } }) }

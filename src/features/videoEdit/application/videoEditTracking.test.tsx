@@ -19,6 +19,7 @@ import { getVideoEditMaskEditing, setVideoEditMaskEditing } from './videoEditMas
 import { VideoEditTrackingPanel } from '../panels/VideoEditTrackingPanel'
 import { VideoEditTrackingOverlay } from '../panels/VideoEditTrackingOverlay'
 import { createVideoEditTrackHeader } from '@/core/videoEdit/tracking'
+import type { VideoEditTrackQuad } from '@/core/videoEdit/tracking'
 import { encodeSmartRegionSegment } from '@/core/videoEdit/smartRegions'
 
 vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: class {
@@ -46,6 +47,53 @@ afterEach(async () => {
   vi.restoreAllMocks(); vi.unstubAllGlobals(); uninstallHarnessNativeStorage()
 })
 const tracker = { id: 'track1', name: '杯子', method: 'box' as const, prompts: [{ timeUs: 0, box: [0.2, 0.2, 0.2, 0.3] as [number, number, number, number] }] }
+
+it.each(['point','planar'] as const)('面板建立 %s；中途拖点/拖角、AE 内外框及纠错可撤销',async method=> {
+  const {owner,id,video}=await project();setVideoEditView(id,{frame:0,selection:video.id})
+  vi.stubGlobal('PointerEvent',MouseEvent)
+  vi.spyOn(SVGElement.prototype,'getBoundingClientRect').mockReturnValue({x:0,y:0,left:0,top:0,width:1920,height:1080,right:1920,bottom:1080,toJSON:()=>({})})
+  Object.defineProperty(SVGElement.prototype,'setPointerCapture',{configurable:true,value:()=>{}})
+  vi.spyOn(trackingEdits,'readVideoEditTrackingGeometry').mockResolvedValue(undefined)
+  const onError=vi.fn();const view=render(<><VideoEditTrackingPanel instance={owner} onError={onError}/><VideoEditTrackingOverlay instance={owner} onError={onError}/></>)
+  fireEvent.click(view.getByLabelText('新建跟踪方式'));fireEvent.click(view.getByText(method==='point'?'点 · 特征跟踪':'平面 · 四角'))
+  if(method==='point'){fireEvent.click(view.getByLabelText('跟踪点数量'));fireEvent.click(view.getByText('2 个点'))}
+  fireEvent.click(view.getByText('新建'));const svg=view.getByLabelText('节目跟踪选择')
+  const initial:VideoEditTrackQuad=[[.2,.2],[.8,.2],[.8,.8],[.2,.8]]
+  for(const [x,y] of initial.slice(0,method==='point'?2:4)){fireEvent.pointerDown(svg,{button:0,clientX:x*1920,clientY:y*1080});fireEvent.pointerUp(svg,{clientX:x*1920,clientY:y*1080})}
+  await act(flush)
+  const read=()=>getActiveVideoEditSequence(owner).clips.find(c=>c.id===video.id)!.trackers![0]
+  expect(read().method).toBe(method);expect(method==='point'?read().prompts[0].points?.length:read().prompts[0].quad?.length).toBe(method==='point'?2:4)
+  act(()=>setVideoEditView(id,{frame:10}));await act(flush)
+  const handle=view.getByLabelText(method==='point'?'跟踪点 1':'平面角点 1')
+  fireEvent.pointerDown(handle,{button:0,clientX:384,clientY:216});fireEvent.pointerMove(svg,{clientX:480,clientY:270});fireEvent.pointerUp(svg,{clientX:480,clientY:270});await act(flush)
+  expect(read().prompts.length).toBe(2);expect(read().prompts[1].timeUs).toBe(333333)
+  expect((method==='point'?read().prompts[1].points!:read().prompts[1].quad!)[0][0]).toBeCloseTo(.25)
+  if(method==='point') {
+    const search=view.getByLabelText('跟踪点 1 搜索框');fireEvent.pointerDown(search,{button:0,clientX:588,clientY:270});fireEvent.pointerMove(svg,{clientX:700,clientY:270});fireEvent.pointerUp(svg,{clientX:700,clientY:270});await act(flush)
+    expect(read().prompts[1].window!.search).toBeGreaterThan(.2)
+    act(()=>{undoVideoEdit(id)});expect(read().prompts[1].window!.search).toBe(.2)
+  }
+  act(()=>{undoVideoEdit(id)});expect(read().prompts.length).toBe(1);expect(onError).not.toHaveBeenCalled()
+})
+
+it('助手通用事务创建点/平面与角点贴合；错误目标回滚、可回读与撤销',async()=> {
+  const {owner,id,video,text}=await project();appendVideoEditClip(id,'media1')
+  const replacement=getActiveVideoEditSequence(owner).clips.filter(c=>c.kind==='video' && c.id!==video.id)[0]
+  const app=createApplicationHarness();const source={kind:'video_edit.clip',id:`${id}:${video.id}`};const target={kind:'video_edit.clip',id:`${id}:${replacement.id}`}
+  const quad:VideoEditTrackQuad=[[.2,.2],[.8,.2],[.8,.8],[.2,.8]]
+  try {
+    const baseline=await app.read(source)
+    expect(await app.call('change_application_entities',{summary:'跟踪屏幕与特征点',changes:[{kind:'create_items',entityType:'video_edit.tracker',parent:source,items:[{properties:{'video_edit.tracker.name':'屏幕','video_edit.tracker.method':'planar','video_edit.tracker.prompts':[{timeUs:0,quad}]}},{properties:{'video_edit.tracker.name':'特征点','video_edit.tracker.method':'point','video_edit.tracker.prompts':[{timeUs:0,points:[[.5,.5,1]]}]}}]}]},baseline.revisions as Record<string,number>)).toMatchObject({ok:true})
+    const stored=getActiveVideoEditSequence(owner).clips.find(c=>c.id===video.id)!.trackers!
+    const follow={mode:'corner_pin',clipId:video.id,trackerId:stored[0].id,offsetX:0,offsetY:0}
+    expect(await app.change(target,{'video_edit.clip.follow':follow})).toMatchObject({ok:true})
+    expect((await app.read(target,['video_edit.clip.follow'])).properties).toMatchObject({'video_edit.clip.follow':follow})
+    expect(await app.change(target,{'video_edit.clip.follow':{...follow,trackerId:stored[1].id}})).toMatchObject({ok:false})
+    expect(await app.change({kind:'video_edit.clip',id:`${id}:${text.id}`},{'video_edit.clip.follow':follow})).toMatchObject({ok:false})
+    expect(getActiveVideoEditSequence(owner).clips.find(c=>c.id===replacement.id)!.follow).toEqual(follow)
+    undoVideoEdit(id);expect(getActiveVideoEditSequence(owner).clips.find(c=>c.id===replacement.id)!.follow).toBeUndefined()
+  }finally{app.dispose()}
+})
 async function project() {
   const owner = await createVideoEditProject(); const id = owner.document.id
   appendVideoEditMedia(id, { id: 'media1', name: '视频', path: resolve(tmpdir(), 'tracking.mp4'), kind: 'video', durationSeconds: 10, width: 1920, height: 1080 })

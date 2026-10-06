@@ -5,7 +5,7 @@ import {
   type TrackingProgressEvent, type TrackingRange, type TrackingResultRef, type TrackingRunOptions, type TrackingStatus,
 } from '../../../../src/platform/contracts/tracking'
 import { decodeSmartRegionLayout, smartRegionLayoutBytes } from '../../../../src/core/videoEdit/smartRegions'
-import { normalizeVideoEditTracker, videoEditTrackFps, videoEditTrackFrame, videoEditTrackFrameTime, type VideoEditTrackHeader } from '../../../../src/core/videoEdit/tracking'
+import { normalizeVideoEditTracker, videoEditTrackerSchema, videoEditTrackFps, videoEditTrackFrame, videoEditTrackFrameTime, type VideoEditTrackHeader } from '../../../../src/core/videoEdit/tracking'
 import type { ContentDiskCache } from '../media/content-disk-cache'
 import type { LocalInferenceFailure } from '../local-inference/host'
 import type { LocalInferenceModelFile } from '../local-inference/protocol'
@@ -64,7 +64,7 @@ export class TrackingService {
   constructor(private readonly deps: TrackingServiceDependencies) {}
 
   private normalize(definition: TrackingDefinition): TrackingDefinition {
-    return { source: definition.source, method: definition.method, prompts: normalizeVideoEditTracker({ id: 'x', name: 'x', method: definition.method, prompts: definition.prompts }).prompts }
+    return { source: definition.source, method: definition.method, prompts: normalizeVideoEditTracker(videoEditTrackerSchema.parse({ id: 'x', name: 'x', method: definition.method, prompts: definition.prompts })).prompts }
   }
 
   /** 素材身份、显示尺寸、帧率与结果键（同一定义只算一次）。 */
@@ -169,6 +169,7 @@ export class TrackingService {
   }
 
   private async models(method: TrackingDefinition['method']): Promise<LocalInferenceModelFile[]> {
+    if (method === 'point' || method === 'planar') return []
     try {
       if (method === 'box') {
         const [file] = await this.deps.ensureModel('object_tracking_vittrack')
@@ -199,7 +200,7 @@ export class TrackingService {
     const trackingJob: TrackingJob = {
       id: job.id, method: definition.method, models, ffmpegPath: await this.deps.ffmpegPath(), source: definition.source,
       containerStartUs: Math.round(prepared.probe.startSeconds * 1e6), fps, display: { width: prepared.probe.width, height: prepared.probe.height },
-      prompts: definition.prompts.map(prompt => ({ frame: videoEditTrackFrame(prompt.timeUs, fps), ...(prompt.points ? { points: prompt.points.map(point => [point[0], point[1], point[2]] as [number, number, 0 | 1]) } : {}), ...(prompt.box ? { box: [...prompt.box] as [number, number, number, number] } : {}), ...(prompt.candidate ? { candidate: prompt.candidate } : {}) })),
+      prompts: definition.prompts.map(({timeUs, ...prompt}) => ({...prompt, frame: videoEditTrackFrame(timeUs, fps)})),
       range: { first: videoEditTrackFrame(range.startUs, fps), last: Math.max(videoEditTrackFrame(range.startUs, fps), Math.ceil(range.endUs * fps / 1e6) - 1) },
       direction: options.direction, ...(options.limit ? { limit: options.limit } : {}), ...(found ? { existingPath: found.path } : {}), outputPath: output, providers: this.deps.providers,
     }
