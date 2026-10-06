@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { PanelTrigger, UiButton, UiError, UiIconButton, UiOptionButton, UiToolbar } from '@/components/ui'
+import { useNotification } from '@/contexts/NotificationContext'
+import { videoEditUserErrorMessage } from './application/videoEditUserError'
 import { VideoEditProjectsPage } from './VideoEditProjectsPage'
 import { ChevronDown, ChevronLeft, Download, FolderInput, FolderOpen, Keyboard, Redo2, Undo2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -101,12 +103,13 @@ export default function VideoEditApp(): React.ReactElement {
   useEffect(() => { if (isUiInspectionActive()) void import('./engine/videoEditCodeProbe') }, [])
   useSyncExternalStore(subscribeVideoEdit, videoEditRevision)
   const instance = activeVideoEditInstance()
-  const [error, setError] = useState<string | null>(null)
-  const [notice, setNotice] = useState<string | null>(null)
+  // 操作失败与普通提示：从画面上方浮现、自动淡出，不占面板空间（用户反馈：底部状态带出现后空间不恢复）
+  const { showNotification } = useNotification()
   const [dockApi, setDockApi] = useState<DockviewApi | null>(null)
   // The project's own save status is shown once and clears itself when the retry succeeds.
-  const onError = useCallback((reason: unknown): void => { const message = reason instanceof Error ? reason.message : String(reason); setError(message === activeVideoEditInstance()?.error ? null : message) }, [])
-  const run = (operation: () => unknown | Promise<unknown>): void => { setError(null); setNotice(null); void Promise.resolve().then(operation).catch(onError) }
+  const onError = useCallback((reason: unknown): void => { const message = videoEditUserErrorMessage(reason); if (message !== activeVideoEditInstance()?.error) showNotification(message, 'error') }, [showNotification])
+  const onNotice = useCallback((message: string | null): void => { if (message) showNotification(message, 'success') }, [showNotification])
+  const run = (operation: () => unknown | Promise<unknown>): void => { void Promise.resolve().then(operation).catch(onError) }
   const chooseProjectFolder = async (): Promise<void> => {
     const selected = await openDialog({ directory: true, multiple: false })
     const folder = Array.isArray(selected) ? selected[0] : selected
@@ -120,7 +123,7 @@ export default function VideoEditApp(): React.ReactElement {
   }
   const shortcuts = useSettingsStore(state => state.videoEditShortcuts)
   const hovered = useRef<Element | null>(null)
-  return <div className="flex h-full min-h-0 flex-col bg-window text-text1" onFocusCapture={event => focusPanel(event.target)} onPointerDownCapture={event => focusPanel(event.target)} onPointerMoveCapture={event => { hovered.current = elementOfEventTarget(event.target) }} onKeyDown={event => {
+  return <div className="relative flex h-full min-h-0 flex-col bg-window text-text1" onFocusCapture={event => focusPanel(event.target)} onPointerDownCapture={event => focusPanel(event.target)} onPointerMoveCapture={event => { hovered.current = elementOfEventTarget(event.target) }} onKeyDown={event => {
     const binding = videoEditKeyboardCommand({ ...event.nativeEvent, code: event.code, key: event.key, ctrlKey: event.ctrlKey, metaKey: event.metaKey, altKey: event.altKey, shiftKey: event.shiftKey, repeat: event.repeat, isComposing: event.nativeEvent.isComposing, defaultPrevented: event.defaultPrevented, target: event.target }, instance?.activePanel ?? 'global', shortcuts)
     if (!binding) return
     if (binding.id === 'maximize_panel') { event.preventDefault(); event.stopPropagation(); toggleMaximizedGroup(dockApi, hovered.current); return }
@@ -131,7 +134,7 @@ export default function VideoEditApp(): React.ReactElement {
     run(async () => { await executeVideoEditCommand(context, binding.id); if (panel) focusPanelElement(panel) })
   }}>
     {instance && sequence ? <>
-      <VideoEditToolbar instance={instance} api={dockApi} run={run} onNotice={setNotice} />
+      <VideoEditToolbar instance={instance} api={dockApi} run={run} onNotice={onNotice} />
       <div className="min-h-0 flex-1" aria-label="剪辑面板工作区"><VideoEditDock instance={instance} onError={onError} onApiChange={setDockApi} /></div>
     </> : <div className="min-h-0 flex-1">
       {/* 剪辑页 = 项目列表（作品索引）；打开项目 = 打开它的主剪辑 */}
@@ -141,8 +144,7 @@ export default function VideoEditApp(): React.ReactElement {
         onOpen={project => run(() => openVideoEditProject(project))}
       />
     </div>}
-    {/* 操作失败与保存状态：底部状态带（不挤占面板区的大块居中提示），重试成功或下一次操作后清除。 */}
-    {(error || instance?.error) ? <div className="shrink-0 border-t border-gap bg-panel px-3"><UiError size="xs" align="start" message={error || instance?.error || ''} /></div>
-      : notice && instance ? <div role="status" className="shrink-0 border-t border-gap bg-panel px-3 py-1.5 text-xs text-text2">{notice}</div> : null}
+    {/* 剪辑自身的保存失败要一直提示到重试成功：浮在底部中间，不占面板空间 */}
+    {instance?.error && <div className="pointer-events-none absolute bottom-3 left-1/2 z-sticky -translate-x-1/2"><div className="pointer-events-auto max-w-xl rounded-full bg-panel px-4 py-1.5 shadow-panel"><UiError size="xs" align="start" message={instance.error} /></div></div>}
   </div>
 }
