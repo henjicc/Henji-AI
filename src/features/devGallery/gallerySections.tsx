@@ -38,6 +38,8 @@ import {
   UiPageHeader,
   UiPanel,
   UiRangeInput,
+  UiColorWheel,
+  UiToneCurve,
   UiRegion,
   UiSearchInput,
   UiSelect,
@@ -311,6 +313,9 @@ export function NavigationSection(): JSX.Element {
 
 export function FormSection(): JSX.Element {
   const [open, setOpen] = useState(true)
+  const [curve, setCurve] = useState<number[]>([0, 0.25, 0.5, 0.75, 1])
+  const [wheel, setWheel] = useState({ hue: 30, strength: 0.4 })
+  const idle = (): void => undefined
   return (
     <GallerySection title="表单与分组">
       <UiGroup title="基础设置">
@@ -330,6 +335,12 @@ export function FormSection(): JSX.Element {
           <UiDisclosurePanel open={open}>
             <span className="text-xs text-text2">展开区内容</span>
           </UiDisclosurePanel>
+        </div>
+      </UiGroup>
+      <UiGroup divided titleTone="compact" title="调色控件">
+        <div className="flex items-center gap-4">
+          <div className="w-40"><UiToneCurve label="RGB 曲线" values={curve} onChange={(point, value) => setCurve(current => current.map((item, index) => index === point ? value : item))} onBegin={idle} onFinish={idle} onCancel={idle} /></div>
+          <div className="w-24"><UiColorWheel label="中间调" hue={wheel.hue} strength={wheel.strength} onChange={(hue, strength) => setWheel({ hue, strength })} onBegin={idle} onFinish={idle} onCancel={idle} /></div>
         </div>
       </UiGroup>
     </GallerySection>
