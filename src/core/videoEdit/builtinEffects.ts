@@ -6,7 +6,7 @@
  * - 实现只有一份：剪辑合成器里的 GPU 着色器（`features/videoEdit/engine/videoEditBuiltinEffect*`），预览与导出同一路径，结果确定。
  * 存入片段效果链 `clip.effects` 时只记 `{ id, params }`；缺的参数按默认值，旧文件没有这个字段不受影响。
  */
-import { VIDEO_EDIT_CHROMA_KEY_DEFAULT_HEX } from '@/core/theme/colorTokens'
+import { VIDEO_EDIT_CHROMA_KEY_DEFAULT_HEX } from '../theme/colorTokens'
 
 export type VideoEditBuiltinParamValue = number | boolean | string
 export type VideoEditBuiltinParams = Record<string, VideoEditBuiltinParamValue>
