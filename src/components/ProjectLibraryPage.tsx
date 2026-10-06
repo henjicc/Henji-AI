@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, Clock3, FilePen, Folder, Layers, LayoutGrid, List, Plus } from 'lucide-react';
+import { Clock3, FilePen, Folder, Layers, LayoutGrid, List, Plus } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import ContextMenu from '@/components/ContextMenu';
 import { DeleteConfirmDialog } from '@/components/DeleteConfirmDialog';
@@ -376,8 +376,14 @@ export function ProjectLibraryPage({
     return () => window.removeEventListener('keydown', onKey);
   }, [dialogOpen, busy, startCreate]);
 
-  const CreateIcon = create.kind === 'direct' && create.icon ? create.icon : Plus;
+  // 多来源新建：左栏常驻，第一个来源当主按钮，其余来源平铺在它下面，一次点击直达（不再先弹菜单）；Ctrl+N 仍弹来源菜单。
+  const primarySource = create.kind === 'menu' ? create.options[0] : undefined;
+  const CreateIcon = primarySource ? primarySource.icon : create.kind === 'direct' && create.icon ? create.icon : Plus;
   const secondaryActions: readonly ProjectLibrarySecondaryAction[] = secondaryAction === undefined ? [] : Array.isArray(secondaryAction) ? secondaryAction : [secondaryAction as ProjectLibrarySecondaryAction];
+  const railActions: readonly ProjectLibrarySecondaryAction[] = [
+    ...(create.kind === 'menu' ? create.options.slice(1).map((option) => ({ label: option.label, icon: option.icon, onClick: option.onSelect })) : []),
+    ...secondaryActions,
+  ];
   const groupOptions = filter ? filter.options.filter((option) => option.value !== filter.defaultValue) : [];
 
   const dropHandlers = onDropFiles ? {
@@ -413,17 +419,15 @@ export function ProjectLibraryPage({
         className="w-full"
         variant="primary"
         disabled={busy}
-        aria-haspopup={create.kind === 'menu' ? 'menu' : undefined}
         aria-keyshortcuts="Control+N"
-        onClick={(event) => startCreate(event.currentTarget)}
+        onClick={(event) => (primarySource ? primarySource.onSelect() : startCreate(event.currentTarget))}
       >
         <CreateIcon className="h-4 w-4" />
-        {labels.createAction}
-        {create.kind === 'menu' ? <ChevronDown className="h-4 w-4" /> : null}
+        {primarySource ? primarySource.label : labels.createAction}
       </UiButton>
-      {secondaryActions.length ? (
+      {railActions.length ? (
         <div className="mt-2 flex flex-col gap-0.5">
-          {secondaryActions.map((action) => (
+          {railActions.map((action) => (
             <UiButton key={action.label} className="w-full justify-start" onClick={action.onClick} disabled={busy || action.disabled}>
               <action.icon className="h-4 w-4 shrink-0" />
               <span className="truncate">{action.label}</span>

@@ -138,19 +138,21 @@ describe('ProjectLibraryPage', () => {
     expect(primaries[0].textContent).toBe('新建项目');
   });
 
-  it('多来源新建：左栏主按钮打开来源菜单，空态不再平铺来源按钮', async () => {
+  it('多来源新建：第一个来源是左栏主按钮，其余来源平铺在左栏，一次点击直达', async () => {
+    const open = vi.fn();
     const blank = vi.fn();
     const options = [
-      { id: 'open', label: '打开图片', icon: FolderOpen, onSelect: vi.fn() },
+      { id: 'open', label: '打开图片', icon: FolderOpen, onSelect: open },
       { id: 'blank', label: '新建空白图片', icon: FilePlus2, onSelect: blank },
       { id: 'paste', label: '粘贴剪贴板图片', icon: ClipboardPaste, onSelect: vi.fn() },
     ];
     render(<ProjectLibraryPage persistKey="test" title="图片编辑" items={[]} labels={labels} onOpen={vi.fn()} create={{ kind: 'menu', options }} />);
-    expect(screen.queryByRole('button', { name: '新建空白图片' })).toBeNull();
     expect(document.querySelectorAll('[data-variant="primary"]')).toHaveLength(1);
-    fireEvent.click(screen.getByRole('button', { name: '新建项目' }));
-    fireEvent.click(within(document.querySelector('[data-context-menu]') as HTMLElement).getByText('新建空白图片'));
-    await waitFor(() => expect(blank).toHaveBeenCalledOnce());
+    fireEvent.click(screen.getByRole('button', { name: '打开图片' }));
+    expect(open).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByRole('button', { name: '新建空白图片' }));
+    expect(blank).toHaveBeenCalledOnce();
+    expect(document.querySelector('[data-context-menu]')).toBeNull();
   });
 
   it('不起名直接新建：点击即交给调用方，不弹起名对话框', () => {

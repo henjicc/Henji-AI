@@ -136,13 +136,13 @@ async function openImageList(page) {
   await listReady(page)
 }
 
-/** 列表页就绪：左栏有“新建图片文档”（点开选新建来源）。 */
+/** 列表页就绪：左栏平铺新建来源（打开图片 / 新建空白图片 / 粘贴剪贴板图片）。 */
 async function listReady(page) {
   await page.locator('[aria-label="返回工具"]:visible, [title="返回工具"]:visible').first().waitFor({ state: 'visible', timeout: 15000 })
   await page.waitForTimeout(500)
 }
 
-/** 新建来源在左栏“新建图片文档”的菜单里（兼容旧版空态平铺按钮）。 */
+/** 新建来源平铺在左栏，直接点；兼容旧版的“新建图片文档”菜单。 */
 async function chooseCreateSource(page, label) {
   const flat = button(page, label)
   if (await flat.count()) { await flat.click(); return }
