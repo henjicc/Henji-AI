@@ -9,6 +9,8 @@ import { captureVideoEditCommandContext, executeVideoEditCommand } from '../appl
 import { requireVideoEditInstance, setVideoEditTimelineView, setVideoEditView, type VideoEditInstance } from '../application/videoEditService'
 import { elementOfEventTarget, ownerDocumentOf, ownerWindowOf } from '@/utils/crossRealmDom'
 import { videoEditEdgeTracks } from '@/core/videoEdit/tracks'
+import { videoEditTransitionWindow } from '@/core/videoEdit/transitions'
+import { beginVideoEditFadeDrag, beginVideoEditTransitionDrag, finishVideoEditTimelineHandleDrag, previewVideoEditFadeDrag, previewVideoEditTransitionDrag, selectVideoEditTransition, type VideoEditTimelineHandleDrag } from '../application/videoEditTransitions'
 import { TIMELINE_HEADER_WIDTH, timelineArmedEdgeVelocity, timelineEdgeAxis, timelineNewTrackZone, timelineRegionAt, timelineTrackAt, type TimelineEdgeAxis, type TimelineLayout, type TimelineRegionKind, type TimelineTrackRow } from './timelineGeometry'
 
 interface Point { x: number; y: number }
@@ -24,6 +26,9 @@ type PointerGesture = BaseGesture & (
   | { kind: 'seek'; snap: boolean }
   | { kind: 'height'; trackId: string; height: number; next: number }
   | { kind: 'razor'; clipId: string; linked: VideoEditRelations }
+  /** 过渡块（PR）：拖左右缘改时长、拖中间平移；淡化手柄：拖到的长度就是淡入／淡出。都是一次手势，文档实时预览、松手一步撤销。 */
+  | { kind: 'transition'; drag: VideoEditTimelineHandleDrag; transitionId: string; mode: 'in' | 'out' | 'move'; moved: boolean }
+  | { kind: 'fade'; drag: VideoEditTimelineHandleDrag; clipId: string; fade: 'in' | 'out'; frames: number; moved: boolean }
 )
 type ClipDragVariant = 'move' | VideoEditTimelineRearrange['mode']
 function clipDragVariant(event: { ctrlKey: boolean; metaKey: boolean; altKey: boolean }): ClipDragVariant {
@@ -62,6 +67,7 @@ export function useTimelinePointer(options: Options) {
   }
   const valid = (gesture: PointerGesture): boolean => {
     try {
+      if (gesture.kind === 'transition' || gesture.kind === 'fade') return requireVideoEditInstance(gesture.owner.document.id) === gesture.owner && gesture.owner.activeSequenceId === gesture.sequenceId && current.current.pixels === gesture.pixels
       return requireVideoEditInstance(gesture.owner.document.id) === gesture.owner && gesture.owner.document === gesture.baseline && gesture.owner.activeSequenceId === gesture.sequenceId && gesture.owner.tool === gesture.tool && gesture.owner.zoom === gesture.zoom && current.current.pixels === gesture.pixels && (gesture.kind !== 'clip' || JSON.stringify(gesture.owner.selectedClipIds) === JSON.stringify(gesture.ids))
     } catch { return false }
   }
@@ -76,8 +82,15 @@ export function useTimelinePointer(options: Options) {
   const cancel = (): void => {
     const previous = detach()
     if (previous?.kind === 'clip') finishVideoEditTimelineDrag(previous.handle)
+    if (previous?.kind === 'transition' || previous?.kind === 'fade') finishVideoEditTimelineHandleDrag(previous.drag, false)
     if (previous?.kind === 'seek' && valid(previous)) setVideoEditView(previous.owner.document.id, { scrubbing: false })
     clear()
+  }
+  /** 拖动中的边缘吸附（吸附开着时）：吸到播放头、编辑点与标记，8 像素内。 */
+  const snapEdge = (frame: number): number => {
+    const { instance, sequence, pixels } = current.current
+    if (!instance.snapping) return frame
+    return videoEditSnapFrame([instance.frame, ...videoEditEditPoints(sequence), ...(sequence.markers ?? []).map(mark => mark.frame)], frame, 8 / pixels)
   }
   const applyPointer = (gesture: PointerGesture): void => {
     if (!valid(gesture)) { cancel(); return }
@@ -110,6 +123,29 @@ export function useTimelinePointer(options: Options) {
       } catch (error) {
         gesture.adjustment = undefined; gesture.rearrange = undefined; gesture.error = error instanceof Error ? error : new Error(String(error)); setFailure(gesture.error.message); setPreview(null)
       }
+    } else if (gesture.kind === 'transition' || gesture.kind === 'fade') {
+      if (!gesture.moved && Math.abs(at.x - gesture.origin.x) < 3) return
+      gesture.moved = true
+      const raw = Math.round((at.x - gesture.origin.x) / pixels)
+      try {
+        if (gesture.kind === 'transition') {
+          const transition = gesture.drag.baseline.transitions?.find(value => value.id === gesture.transitionId)
+          if (!transition) throw new Error('原过渡已移除。')
+          const window = videoEditTransitionWindow(gesture.drag.baseline, transition)
+          // 吸附：拖左缘吸起点、拖右缘吸终点，平移时两缘谁先靠近就吸谁。
+          const edge = gesture.mode === 'out' ? window.end : window.start
+          let delta = snapEdge(edge + raw) - edge
+          if (gesture.mode === 'move' && delta === raw) delta = snapEdge(window.end + raw) - window.end
+          previewVideoEditTransitionDrag(gesture.drag, gesture.transitionId, gesture.mode, delta)
+        } else {
+          const clip = gesture.drag.baseline.clips.find(value => value.id === gesture.clipId)
+          if (!clip) throw new Error('原片段已移除。')
+          const end = gesture.fade === 'in' ? clip.start + gesture.frames + raw : clip.start + clip.duration - gesture.frames + raw
+          const snapped = snapEdge(end)
+          previewVideoEditFadeDrag(gesture.drag, gesture.clipId, gesture.fade, gesture.fade === 'in' ? snapped - clip.start : clip.start + clip.duration - snapped)
+        }
+        setFailure(null)
+      } catch (error) { setFailure(error instanceof Error ? error.message : String(error)) }
     } else if (gesture.kind === 'box') setBox({ from: gesture.origin, to: at })
     else if (gesture.kind === 'height') {
       gesture.next = Math.max(24, Math.min(160, Math.round(gesture.height + gesture.client.y - gesture.origin.y)))
@@ -129,10 +165,10 @@ export function useTimelinePointer(options: Options) {
    * gesture started in scrolls at its own edges (PR: picture and sound tracks scroll separately).
    */
   const edgeVelocity = (gesture: PointerGesture, host: HTMLDivElement): Point & { region?: TimelineRegionKind } => {
-    if ((gesture.kind !== 'clip' && gesture.kind !== 'box' && gesture.kind !== 'seek') || (gesture.kind === 'clip' && !gesture.moved)) return { x: 0, y: 0 }
+    if ((gesture.kind !== 'clip' && gesture.kind !== 'box' && gesture.kind !== 'seek' && gesture.kind !== 'transition' && gesture.kind !== 'fade') || ((gesture.kind === 'clip' || gesture.kind === 'transition' || gesture.kind === 'fade') && !gesture.moved)) return { x: 0, y: 0 }
     const rect = host.getBoundingClientRect()
     const x = timelineArmedEdgeVelocity(gesture.edge.x, gesture.client.x, rect.left + TIMELINE_HEADER_WIDTH, rect.right)
-    const region = gesture.kind === 'seek' ? undefined : timelineRegionAt(current.current.layout.current, gesture.origin.y)
+    const region = gesture.kind === 'seek' || gesture.kind === 'transition' || gesture.kind === 'fade' ? undefined : timelineRegionAt(current.current.layout.current, gesture.origin.y)
     if (!region) return { x, y: 0 }
     const bounds = current.current.layout.current.regions[region]
     return { x, y: timelineArmedEdgeVelocity(gesture.edge.y, gesture.client.y, rect.top + bounds.top, rect.top + bounds.top + bounds.height), region }
@@ -195,6 +231,22 @@ export function useTimelinePointer(options: Options) {
         if (clip) capture({ ...base(event), kind: 'razor', clipId: clip.id, linked })
         return
       }
+      // 过渡块与淡化手柄（选择工具）：按下即选中过渡／开始调淡化，拖动时实时预览。
+      const transitionId = instance.tool === 'select' ? target.closest('[data-video-edit-transition]')?.getAttribute('data-video-edit-transition') : undefined
+      if (transitionId) {
+        const edge = target.closest('[data-video-edit-transition-edge]')?.getAttribute('data-video-edit-transition-edge')
+        selectVideoEditTransition(instance.document.id, transitionId)
+        capture({ ...base(event), kind: 'transition', drag: beginVideoEditTransitionDrag(instance.document.id, sequence.id, transitionId), transitionId, mode: edge === 'in' || edge === 'out' ? edge : 'move', moved: false })
+        setVideoEditView(instance.document.id, { playing: false })
+        return
+      }
+      selectVideoEditTransition(instance.document.id, null)
+      const fadeEdge = instance.tool === 'select' && clip ? target.closest('[data-video-edit-fade]')?.getAttribute('data-video-edit-fade') : undefined
+      if (clip && (fadeEdge === 'in' || fadeEdge === 'out')) {
+        capture({ ...base(event), kind: 'fade', drag: beginVideoEditFadeDrag(instance.document.id, sequence.id, clip.id), clipId: clip.id, fade: fadeEdge, frames: (fadeEdge === 'in' ? clip.fadeInFrames : clip.fadeOutFrames) ?? 0, moved: false })
+        setVideoEditView(instance.document.id, { playing: false })
+        return
+      }
       if (!clip) { capture({ ...base(event), kind: 'box', initial: [...instance.selectedClipIds], additive: event.ctrlKey || event.metaKey || event.shiftKey, linked }); setBox({ from: at, to: at }); return }
       // Shift+click adds or removes the clip (Premiere); Ctrl and Alt press on to modifier drags below.
       if (event.shiftKey) { select([clip.id], true, false, linked); return }
@@ -225,7 +277,7 @@ export function useTimelinePointer(options: Options) {
     applyPointer(gesture)
     const previous = detach(); clear()
     if (!previous) return
-    if (!valid(previous)) { if (previous.kind === 'clip') finishVideoEditTimelineDrag(previous.handle); return }
+    if (!valid(previous)) { if (previous.kind === 'clip') finishVideoEditTimelineDrag(previous.handle); if (previous.kind === 'transition' || previous.kind === 'fade') finishVideoEditTimelineHandleDrag(previous.drag, false); return }
     const { instance, sequence, pixels, onError } = current.current; const layout = current.current.layout.current
     const rows = layout.rows
     try {
@@ -236,7 +288,8 @@ export function useTimelinePointer(options: Options) {
         else if (rearrange) finishVideoEditTimelineDrag(previous.handle)
         else if (previous.adjustment && (previous.adjustment.delta || previous.adjustment.newTracks?.length || Object.entries(previous.adjustment.trackMap ?? {}).some(([from, to]) => Number(from) !== to))) finishVideoEditTimelineDrag(previous.handle, previous.adjustment)
         else finishVideoEditTimelineDrag(previous.handle)
-      } else if (previous.kind === 'box') {
+      } else if (previous.kind === 'transition' || previous.kind === 'fade') finishVideoEditTimelineHandleDrag(previous.drag, previous.moved)
+      else if (previous.kind === 'box') {
         const at = point(previous.client); const fromY = Math.min(previous.origin.y, at.y); const toY = Math.max(previous.origin.y, at.y)
         const ids = selectVideoEditRegion(sequence, { from: Math.max(0, previous.origin.x / pixels), to: Math.max(0, at.x / pixels), tracks: rows.filter(row => Math.max(row.top, row.clipTop) < toY && Math.min(row.top + row.height, row.clipBottom) > fromY).map(row => row.track.index) }, previous.linked)
         setVideoEditTimelineView(instance.document.id, { selectedClipIds: previous.additive ? [...new Set([...previous.initial, ...ids])] : ids })
@@ -246,7 +299,7 @@ export function useTimelinePointer(options: Options) {
         const context = captureVideoEditCommandContext(instance.document.id, 'timeline', { clipIds: [previous.clipId], linked: previous.linked, frame: Math.max(0, Math.round(point(previous.client).x / pixels)) })
         void executeVideoEditCommand(context, 'split').catch(onError)
       }
-    } catch (error) { if (previous.kind === 'clip') finishVideoEditTimelineDrag(previous.handle); onError(error) }
+    } catch (error) { if (previous.kind === 'clip') finishVideoEditTimelineDrag(previous.handle); if (previous.kind === 'transition' || previous.kind === 'fade') finishVideoEditTimelineHandleDrag(previous.drag, false); onError(error) }
   }
   const resize = (event: React.PointerEvent<HTMLElement>, row: TimelineTrackRow): void => {
     if (event.button !== 0) return
@@ -262,7 +315,7 @@ export function useTimelinePointer(options: Options) {
     const blur = (): void => cancel()
     const hidden = (): void => { if (ownerDocument.hidden) cancel() }
     ownerWindow.addEventListener('blur', blur); ownerDocument.addEventListener('visibilitychange', hidden)
-    return () => { const previous = detach(); if (previous?.kind === 'clip') finishVideoEditTimelineDrag(previous.handle); if (previous?.kind === 'seek' && valid(previous)) setVideoEditView(previous.owner.document.id, { scrubbing: false }); ownerWindow.removeEventListener('blur', blur); ownerDocument.removeEventListener('visibilitychange', hidden) }
+    return () => { const previous = detach(); if (previous?.kind === 'clip') finishVideoEditTimelineDrag(previous.handle); if (previous?.kind === 'transition' || previous?.kind === 'fade') finishVideoEditTimelineHandleDrag(previous.drag, false); if (previous?.kind === 'seek' && valid(previous)) setVideoEditView(previous.owner.document.id, { scrubbing: false }); ownerWindow.removeEventListener('blur', blur); ownerDocument.removeEventListener('visibilitychange', hidden) }
     // All listeners read the fixed gesture/current refs, never a former selection closure.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])

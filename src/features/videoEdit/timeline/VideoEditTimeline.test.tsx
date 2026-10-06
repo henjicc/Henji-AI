@@ -618,3 +618,43 @@ it('轨道头右键：添加／删除单个轨道各一步撤销，重命名，�
   expect(count('video')).toBe(1); expect(count('audio')).toBe(1); expect(current().clips).toHaveLength(2)
   expect(onError).not.toHaveBeenCalled()
 })
+it('过渡块：点选即选中，拖右缘改时长、拖中间平移，实时预览且松手一步撤销；淡化手柄拖出淡入（4.3）', () => {
+  editVideoProject(owner.document.id, document => {
+    const [video] = document.sequences[0].clips
+    document.sequences[0].clips = [video, { ...video, id: 'next-video', start: 30, sourceInUs: 2_000_000 }]
+    document.sequences[0].transitions = [{ id: 'dissolve', kind: 'cross_dissolve', leftClipId: video.id, rightClipId: 'next-video', durationFrames: 10 }]
+    return document
+  })
+  const view = render(<View />); const host = view.getByRole('region', { name: '时间线编辑区域' })
+  const block = () => view.container.querySelector<HTMLElement>('[data-video-edit-transition="dissolve"]')!
+  // 窗口 25..35 帧，每帧 2 像素
+  expect(block().style.left).toBe(`${header + 50}px`); expect(block().style.width).toBe('20px')
+  const history = owner.past.length
+  fireEvent.pointerDown(block().querySelector('[data-video-edit-transition-edge="out"]')!, event(header + 69))
+  fireEvent.pointerMove(host, event(header + 79))
+  expect(current().transitions![0]).toMatchObject({ durationFrames: 15, alignment: 'custom', framesBeforeCut: 5 })
+  expect(owner.past).toHaveLength(history)
+  fireEvent.pointerUp(host, event(header + 79))
+  expect(owner.past).toHaveLength(history + 1); expect(block().getAttribute('data-selected')).toBe('true')
+  act(() => undoVideoEdit(owner.document.id)); expect(current().transitions![0]).toEqual({ id: 'dissolve', kind: 'cross_dissolve', leftClipId: ids[0], rightClipId: 'next-video', durationFrames: 10 })
+  fireEvent.pointerDown(block().querySelector('[data-video-edit-transition-edge="out"]')!.previousElementSibling!, event(header + 60))
+  fireEvent.pointerMove(host, event(header + 50)); fireEvent.pointerUp(host, event(header + 50))
+  expect(current().transitions![0]).toMatchObject({ durationFrames: 10, alignment: 'end' })
+  expect(owner.past).toHaveLength(history + 1)
+  const fade = view.container.querySelector<HTMLElement>(`[data-video-edit-clip="${ids[0]}"] [data-video-edit-fade="in"]`)!
+  fireEvent.pointerDown(fade, event(header + 2)); fireEvent.pointerMove(host, event(header + 14)); fireEvent.pointerUp(host, event(header + 14))
+  expect(current().clips[0].fadeInFrames).toBe(6); expect(owner.past).toHaveLength(history + 2)
+  expect(view.container.querySelector(`[data-video-edit-clip="${ids[0]}"] [data-video-edit-fade-shape="in"]`)).not.toBeNull()
+  act(() => undoVideoEdit(owner.document.id)); expect(current().clips[0]).not.toHaveProperty('fadeInFrames')
+  expect(onError).not.toHaveBeenCalled()
+})
+it('不能编辑的原因浮在时间线上方不占位，指针显示禁止（4.3）', () => {
+  const view = render(<View />); const host = view.getByRole('region', { name: '时间线编辑区域' })
+  fireEvent.pointerDown(view.getByRole('button', { name: '选择片段 视频' }), event(header + 20))
+  fireEvent.pointerMove(host, event(header + 20, trackClientY(0)))
+  const hint = view.container.querySelector<HTMLElement>('[data-video-edit-timeline-failure]')!
+  expect(hint.textContent).toContain('同类型轨道'); expect(hint.className).toContain('pointer-events-none'); expect(hint.className).toContain('absolute')
+  expect(host.className).toContain('cursor-not-allowed')
+  fireEvent.pointerUp(host, event(header + 20))
+  expect(host.className).not.toContain('cursor-not-allowed')
+})

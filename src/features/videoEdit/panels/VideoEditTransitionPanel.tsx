@@ -1,58 +1,62 @@
-import { memo, useLayoutEffect, useMemo, useState } from 'react'
-import { UiButton, UiEmpty, UiFormRow, UiGroup, UiLoading, UiOptionButton } from '@/components/ui'
+import { memo, useSyncExternalStore } from 'react'
+import { Trash2 } from 'lucide-react'
+import { UiButton, UiFormRow, UiGroup, UiLoading } from '@/components/ui'
+import Dropdown from '@/components/ui/Dropdown'
 import NumberInput from '@/components/ui/NumberInput'
+import { ICON_VIDEO_EDIT_TRANSITION } from '@/core/theme/icons'
 import type { VideoEditClip, VideoEditSequence } from '@/core/videoEdit/document'
-import { videoEditTransitionWindow, type VideoEditTransition } from '@/core/videoEdit/transitions'
-import { createVideoEditTransition, deleteVideoEditTransition, updateVideoEditTransition } from '../application/videoEditCompositing'
+import { videoEditFps } from '@/core/videoEdit/time'
+import { videoEditTransitionAlignmentFields, videoEditTransitionAlignmentOf, videoEditTransitionFramesBeforeCut, videoEditTransitionPreset, videoEditTransitionWindow, type VideoEditTransitionAlignment } from '@/core/videoEdit/transitions'
+import { deleteVideoEditTransition, updateVideoEditTransition } from '../application/videoEditCompositing'
+import { selectVideoEditTransition, selectedVideoEditTransitionId, subscribeVideoEditTransitionSelection, videoEditTransitionSelectionVersion } from '../application/videoEditTransitions'
 import type { VideoEditInstance } from '../application/videoEditService'
+import { timelineTimecode } from '../timeline/timelineGeometry'
 import { useVideoEditCompositeAction } from './useVideoEditCompositeAction'
 
-interface Props { instance: VideoEditInstance; sequence: VideoEditSequence; clip: VideoEditClip; onError: (reason: unknown) => void }
-interface TransitionEntry { key: string; left: VideoEditClip; right: VideoEditClip; transition?: VideoEditTransition }
-type CompositeAction = ReturnType<typeof useVideoEditCompositeAction>
-
-function TransitionControls({ projectId, sequence, entry, action, owner }: { projectId: string; sequence: VideoEditSequence; entry: TransitionEntry; action: CompositeAction; owner: VideoEditInstance }): React.ReactElement {
-  const transition = entry.transition
-  const initial = transition?.durationFrames ?? Math.max(2, Math.min(Math.round(sequence.frameRate.numerator / sequence.frameRate.denominator / 2), entry.left.duration * 2, entry.right.duration * 2))
-  const [draft, setDraft] = useState(String(initial))
-  useLayoutEffect(() => setDraft(String(initial)), [initial, owner])
-  const durationFrames = Number(draft)
-  const valid = draft.trim() !== '' && Number.isInteger(durationFrames) && durationFrames >= 2 && durationFrames <= 108_000
-  const window = useMemo(() => transition ? videoEditTransitionWindow(sequence, transition) : undefined, [sequence, transition])
-  return <UiGroup gap="row" data-video-edit-transition-id={transition?.id}>
-    <UiFormRow density="compact" label="转场时长（帧）"><div onKeyDownCapture={event => { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setDraft(String(initial)) } }}><NumberInput ariaLabel="交叉溶解时长帧" size="sm" min={2} max={108_000} step={1} precision={0} value={Number.isFinite(durationFrames) ? durationFrames : initial} disabled={action.busy} commitOnChange onChange={next => setDraft(String(next))} /></div></UiFormRow>
-    {window && <p className="text-2xs text-text3">作用帧：{window.start} 至 {window.end - 1}；剪切点：{window.cut}。</p>}
-    <p className="text-2xs text-text3">使用两侧真实源画面完成溶解；源余量不足时会保留原剪辑并提示调整。</p>
-    <div className="flex flex-wrap items-center gap-2">
-      {transition ? <><UiButton variant="secondary" disabled={action.busy || !valid || durationFrames === transition.durationFrames} onClick={() => { void action.run(signal => updateVideoEditTransition(projectId, sequence.id, transition.id, durationFrames, signal)) }}>应用转场时长</UiButton><UiButton disabled={action.busy} onClick={() => { void action.run(signal => deleteVideoEditTransition(projectId, sequence.id, transition.id, signal)) }}>移除交叉溶解</UiButton></> : <UiButton variant="secondary" disabled={action.busy || !valid} onClick={() => { void action.run(signal => createVideoEditTransition(projectId, sequence.id, { leftClipId: entry.left.id, rightClipId: entry.right.id, durationFrames }, signal)) }}>添加交叉溶解</UiButton>}
-    </div>
-  </UiGroup>
-}
-
-export const VideoEditTransitionPanel = memo(function VideoEditTransitionPanel({ instance, sequence, clip, onError }: Props): React.ReactElement {
+/**
+ * 效果控件里的过渡属性（PR）：在时间线上点选过渡块后显示——持续时间、对齐（中心切点／起点切点／终点切点／自定义起点）与删除。
+ * 没有选中过渡时不渲染；效果控件始终挂载本组件（`clip` 为当前片段，可空），选中过渡时它自己出现。
+ */
+interface Props { instance: VideoEditInstance; sequence: VideoEditSequence; clip?: VideoEditClip; onError: (reason: unknown) => void }
+const ALIGNMENTS: Array<{ value: VideoEditTransitionAlignment; label: string }> = [
+  { value: 'center', label: '中心切点' }, { value: 'start', label: '起点切点' }, { value: 'end', label: '终点切点' }, { value: 'custom', label: '自定义起点' },
+]
+export const VideoEditTransitionPanel = memo(function VideoEditTransitionPanel({ instance, sequence, onError }: Props): React.ReactElement | null {
+  useSyncExternalStore(subscribeVideoEditTransitionSelection, videoEditTransitionSelectionVersion)
   const projectId = instance.document.id
-  const action = useVideoEditCompositeAction(instance, JSON.stringify([projectId, sequence.id, clip.id]), onError)
-  const entries = useMemo(() => {
-    if (['audio', 'adjustment'].includes(clip.kind)) return []
-    const result: TransitionEntry[] = []
-    for (const other of sequence.clips) {
-      if (other.id === clip.id || other.track !== clip.track || ['audio', 'adjustment'].includes(other.kind)) continue
-      let left: VideoEditClip; let right: VideoEditClip
-      if (other.start + other.duration === clip.start) { left = other; right = clip }
-      else if (clip.start + clip.duration === other.start) { left = clip; right = other }
-      else continue
-      result.push({ key: JSON.stringify([left.id, right.id]), left, right, transition: sequence.transitions?.find(value => value.leftClipId === left.id && value.rightClipId === right.id) })
-    }
-    return result.sort((a, b) => a.right.start - b.right.start)
-  }, [sequence, clip])
-  const [selectedKey, setSelectedKey] = useState(entries[0]?.key ?? '')
-  useLayoutEffect(() => setSelectedKey(''), [instance])
-  const selected = entries.find(value => value.key === selectedKey) ?? entries[0]
-  return <UiGroup title="交叉溶解" titleTone="compact" divided data-video-edit-transition-panel={clip.id}>
-    {entries.length ? <>
-      <div className="flex flex-col gap-1">{entries.map(entry => <UiOptionButton key={entry.key} variant="menu" size="sm" className="w-full min-w-0 justify-between gap-2" active={entry.key === selected?.key} disabled={action.busy} aria-label={`选择转场${entry.left.name}到${entry.right.name}`} aria-pressed={entry.key === selected?.key} data-video-edit-transition-pair={entry.key} onClick={() => setSelectedKey(entry.key)}><span className="truncate">{entry.left.name} → {entry.right.name}</span><span className="shrink-0 text-2xs text-text3">{entry.transition ? '已添加' : entry.right.id === clip.id ? '入点' : '出点'}</span></UiOptionButton>)}</div>
-      {selected && <TransitionControls key={JSON.stringify([selected.key, selected.transition?.id ?? null])} projectId={projectId} sequence={sequence} entry={selected} action={action} owner={instance} />}
-    </> : <UiEmpty size="xs" title="没有紧邻的画面片段" description="交叉溶解用于同一画面轨道上紧邻的两个片段。" />}
-    {action.busy && <div className="flex items-center gap-2"><UiLoading size="xs" message="正在检查转场画面" /><UiButton onClick={action.cancel}>取消检查</UiButton></div>}
+  const transitionId = selectedVideoEditTransitionId(instance)
+  const transition = sequence.transitions?.find(value => value.id === transitionId)
+  const action = useVideoEditCompositeAction(instance, JSON.stringify([projectId, sequence.id, transitionId ?? null]), onError)
+  if (!transition) return null
+  let window: ReturnType<typeof videoEditTransitionWindow> | undefined
+  try { window = videoEditTransitionWindow(sequence, transition) } catch { window = undefined }
+  const preset = videoEditTransitionPreset(transition.kind)
+  const fps = videoEditFps(sequence.frameRate)
+  const before = videoEditTransitionFramesBeforeCut(transition)
+  const update = (changes: Parameters<typeof updateVideoEditTransition>[3]): void => { void action.run(signal => updateVideoEditTransition(projectId, sequence.id, transition.id, changes, signal)) }
+  const Icon = ICON_VIDEO_EDIT_TRANSITION
+  return <UiGroup title="过渡" titleTone="compact" divided data-video-edit-transition-panel={transition.id}>
+    <div className="flex min-w-0 items-center gap-2 px-1">
+      <Icon size={14} aria-hidden="true" className="shrink-0 text-text3" />
+      <span className="min-w-0 flex-1 truncate text-xs text-text1">{preset.name}</span>
+      {window && <span className="shrink-0 truncate text-2xs text-text3" data-user-content>{window.left.name} → {window.right.name}</span>}
+    </div>
+    <UiFormRow density="compact" label="持续时间（帧）" hint={`${timelineTimecode(transition.durationFrames, fps)}`}>
+      <NumberInput ariaLabel="过渡持续时间帧" size="sm" min={2} max={108_000} step={1} precision={0} value={transition.durationFrames} disabled={action.busy}
+        onChange={durationFrames => { if (durationFrames !== transition.durationFrames) update(transition.alignment === 'custom' ? { durationFrames, framesBeforeCut: Math.min(durationFrames, before) } : { durationFrames }) }} />
+    </UiFormRow>
+    <UiFormRow density="compact" label="对齐">
+      <Dropdown ariaLabel="过渡对齐" value={videoEditTransitionAlignmentOf(transition)} disabled={action.busy}
+        options={ALIGNMENTS.filter(option => option.value !== 'custom' || transition.alignment === 'custom').map(option => ({ value: option.value, label: option.label }))}
+        onSelect={alignment => {
+          if (alignment === videoEditTransitionAlignmentOf(transition)) return
+          const framesBeforeCut = alignment === 'start' ? 0 : alignment === 'end' ? transition.durationFrames : Math.floor(transition.durationFrames / 2)
+          update({ alignment: videoEditTransitionAlignmentFields(transition.durationFrames, framesBeforeCut).alignment ?? 'center' })
+        }} />
+    </UiFormRow>
+    <div className="flex items-center gap-2">
+      <UiButton variant="danger" size="sm" disabled={action.busy} onClick={() => { void action.run(signal => deleteVideoEditTransition(projectId, sequence.id, transition.id, signal), () => selectVideoEditTransition(projectId, null)) }}><Trash2 size={14} aria-hidden="true" />删除过渡</UiButton>
+      {action.busy && <><UiLoading size="xs" message="正在检查过渡画面" /><UiButton size="sm" onClick={action.cancel}>取消</UiButton></>}
+    </div>
   </UiGroup>
 })
