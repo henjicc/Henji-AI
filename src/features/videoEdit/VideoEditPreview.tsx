@@ -13,7 +13,7 @@ import { createVideoEditAudioMeter, type VideoEditAudioLevel } from './engine/vi
 import { VideoEditAudioScheduler } from './engine/videoEditAudioScheduler'
 import { VideoEditLevelMeter } from './panels/VideoEditLevelMeter'
 import { useVideoEditPictureGesture } from './panels/useVideoEditPictureGesture'
-import { VideoEditTimecode } from './timeline/VideoEditTimelineTransport'
+import { VideoEditInOutDuration, VideoEditTimecode } from './timeline/VideoEditTimelineTransport'
 import { useMonitorZoom } from './panels/useMonitorZoom'
 import { timelineCommandPresentation } from './timeline/timelineCommandPresentation'
 import { captureVideoEditCommandContext, executeVideoEditCommand } from './application/videoEditCommands'
@@ -404,6 +404,7 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
         再把显示比例与节目工具按优先级收进“更多”，不再折成多行 */}
     <div ref={programToolbarRef} className="flex min-h-10 shrink-0 items-center gap-x-1 whitespace-nowrap border-t border-line px-2 py-1" role="toolbar" aria-label="节目监视器控制">
       {compactProgramToolbar ? null : <VideoEditTimecode instance={instance} label="节目时间码" className="w-28 px-1.5 text-13" />}
+      {compactProgramToolbar ? null : <VideoEditInOutDuration instance={instance} className="px-1.5 text-xs" />}
       <UiOverflowRow
         className="flex-1 justify-center gap-0.5"
         alwaysShowOverflow

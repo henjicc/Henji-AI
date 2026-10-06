@@ -1,6 +1,7 @@
 import { useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { UiInput } from '@/components/ui'
 import { parseVideoEditTimecodeInput, videoEditFrameCount } from '@/core/videoEdit/timecode'
+import { videoEditDuration } from '@/core/videoEdit/document'
 import { getActiveVideoEditSequence, setVideoEditView, subscribeVideoEditView, videoEditViewRevision, type VideoEditInstance } from '../application/videoEditService'
 import { TIMELINE_HEADER_WIDTH, timelineTimecode } from './timelineGeometry'
 
@@ -69,6 +70,17 @@ export function VideoEditTimecode({ instance, label, className = '' }: { instanc
     }}>{text}</span>
 }
 
+/**
+ * 入出点持续时间（PR 节目监视器右侧的读数）：设了序列入点或出点时显示入点到出点的时长，只设一端时算到序列开头或结尾。
+ */
+export function VideoEditInOutDuration({ instance, className = '' }: { instance: VideoEditInstance; className?: string }): React.ReactElement | null {
+  useSyncExternalStore(subscribeVideoEditView, videoEditViewRevision)
+  if (instance.inFrame === null && instance.outFrame === null) return null
+  const sequence = getActiveVideoEditSequence(instance)
+  const frames = Math.max(0, (instance.outFrame ?? videoEditDuration(sequence)) - (instance.inFrame ?? 0))
+  return <span aria-label="入出点持续时间" title="入出点持续时间" data-video-edit-in-out-duration={frames}
+    className={`shrink-0 select-none font-mono tabular-nums text-text2 ${className}`}>{timelineTimecode(frames, sequence.fps)}</span>
+}
 /** 播放头：强调色竖线（设计稿 VideoEdit；强调色只用于主动作、焦点、播放头与选中指示）。 */
 export function VideoEditTimelinePlayhead({ instance, pixels }: { instance: VideoEditInstance; pixels: number }): React.ReactElement {
   useSyncExternalStore(subscribeVideoEditView, videoEditViewRevision)

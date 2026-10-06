@@ -3,7 +3,6 @@ import type { VideoEditSequence } from '@/core/videoEdit/document'
 import { videoEditFps } from '@/core/videoEdit/time'
 import { expandVideoEditSelection, selectVideoEditRegion, selectVideoEditTrackFrom, videoEditPickRelations, type VideoEditRelations } from '@/core/videoEdit/timelineSelection'
 import { videoEditMoveTrackMap } from '@/core/videoEdit/timelineEdits'
-import { videoEditEditPoints, videoEditSnapFrame } from '@/core/videoEdit/timelineNavigation'
 import { beginVideoEditTimelineDrag, finishVideoEditTimelineDrag, finishVideoEditTimelineRearrange, previewVideoEditTimelineDrag, previewVideoEditTimelineRearrange, updateVideoEditTrack, type VideoEditTimelineAdjustment, type VideoEditTimelineDrag, type VideoEditTimelineRearrange } from '../application/videoEditTimeline'
 import { captureVideoEditCommandContext, executeVideoEditCommand } from '../application/videoEditCommands'
 import { requireVideoEditInstance, setVideoEditTimelineView, setVideoEditView, type VideoEditInstance } from '../application/videoEditService'
@@ -11,6 +10,7 @@ import { elementOfEventTarget, ownerDocumentOf, ownerWindowOf } from '@/utils/cr
 import { videoEditEdgeTracks } from '@/core/videoEdit/tracks'
 import { videoEditTransitionWindow } from '@/core/videoEdit/transitions'
 import { beginVideoEditFadeDrag, beginVideoEditTransitionDrag, finishVideoEditTimelineHandleDrag, previewVideoEditFadeDrag, previewVideoEditTransitionDrag, selectVideoEditTransition, type VideoEditTimelineHandleDrag } from '../application/videoEditTransitions'
+import { clearTimelineSnap, reportTimelineSnap, snapTimelineEdges, snapTimelineFrame, timelineSnapPoints, TIMELINE_SNAP_PIXELS } from './timelineSnap'
 import { TIMELINE_HEADER_WIDTH, timelineArmedEdgeVelocity, timelineEdgeAxis, timelineNewTrackZone, timelineRegionAt, timelineTrackAt, type TimelineEdgeAxis, type TimelineLayout, type TimelineRegionKind, type TimelineTrackRow } from './timelineGeometry'
 
 interface Point { x: number; y: number }
@@ -78,7 +78,7 @@ export function useTimelinePointer(options: Options) {
     if (previous && viewport.current?.hasPointerCapture?.(previous.pointerId)) viewport.current.releasePointerCapture(previous.pointerId)
     return previous
   }
-  const clear = (): void => { setPreview(null); setBox(null); setResized(null); setFailure(null) }
+  const clear = (): void => { setPreview(null); setBox(null); setResized(null); setFailure(null); clearTimelineSnap() }
   const cancel = (): void => {
     const previous = detach()
     if (previous?.kind === 'clip') finishVideoEditTimelineDrag(previous.handle)
@@ -86,11 +86,19 @@ export function useTimelinePointer(options: Options) {
     if (previous?.kind === 'seek' && valid(previous)) setVideoEditView(previous.owner.document.id, { scrubbing: false })
     clear()
   }
-  /** 拖动中的边缘吸附（吸附开着时）：吸到播放头、编辑点与标记，8 像素内。 */
-  const snapEdge = (frame: number): number => {
+  /** 拖动中的边缘吸附（吸附开着时）：一起移动的边缘里最近的那个吸到播放头、编辑点与标记（8 像素内），返回要补的帧数并显示提示线。 */
+  const snapEdges = (edges: readonly number[]): number => {
     const { instance, sequence, pixels } = current.current
-    if (!instance.snapping) return frame
-    return videoEditSnapFrame([instance.frame, ...videoEditEditPoints(sequence), ...(sequence.markers ?? []).map(mark => mark.frame)], frame, 8 / pixels)
+    return snapTimelineEdges(sequence.id, instance.snapping ? timelineSnapPoints(sequence, { playhead: instance.frame }) : [], edges, TIMELINE_SNAP_PIXELS / pixels)
+  }
+  /** 片段拖动的吸附由编辑领域完成：预览里移动过的片段边缘正好落在吸附点上时显示提示线。 */
+  const reportClipSnap = (next: VideoEditSequence, mode: VideoEditTimelineAdjustment['mode']): void => {
+    const { instance, sequence } = current.current
+    if (!instance.snapping) { clearTimelineSnap(); return }
+    const before = new Map(sequence.clips.map(clip => [clip.id, clip]))
+    const moved = next.clips.filter(clip => { const prior = before.get(clip.id); return !prior || prior.start !== clip.start || prior.duration !== clip.duration || prior.track !== clip.track })
+    const edges = moved.flatMap(clip => mode === 'in' ? [clip.start] : mode === 'out' ? [clip.start + clip.duration] : [clip.start, clip.start + clip.duration])
+    reportTimelineSnap(sequence.id, timelineSnapPoints(sequence, { playhead: instance.frame, excludeClipIds: new Set(moved.map(clip => clip.id)) }), edges)
   }
   const applyPointer = (gesture: PointerGesture): void => {
     if (!valid(gesture)) { cancel(); return }
@@ -110,18 +118,18 @@ export function useTimelinePointer(options: Options) {
         if (edge) gesture.newTracks = edge.newTracks
         const newTracks = edge ? { newTracks: edge.newTracks } : {}
         const trackMap = gesture.mode === 'move' ? edge?.trackMap ?? videoEditMoveTrackMap(sequence, gesture.ids, gesture.primary, row!.track.index) : undefined
-        const snap = instance.snapping ? { snapThreshold: 8 / pixels, snapFrames: [instance.frame] } : {}
+        const snap = instance.snapping ? { snapThreshold: TIMELINE_SNAP_PIXELS / pixels, snapFrames: [instance.frame] } : {}
         if (gesture.mode === 'move' && gesture.variant !== 'move') {
           const rearrange: VideoEditTimelineRearrange = { mode: gesture.variant, delta, ...(trackMap ? { trackMap } : {}), ...snap, ...newTracks }
           const next = previewVideoEditTimelineRearrange(gesture.handle, rearrange)
-          gesture.rearrange = rearrange; gesture.adjustment = undefined; gesture.error = undefined; setFailure(null); setPreview(next)
+          gesture.rearrange = rearrange; gesture.adjustment = undefined; gesture.error = undefined; setFailure(null); setPreview(next); reportClipSnap(next, 'move')
           return
         }
         const adjustment: VideoEditTimelineAdjustment = { mode: gesture.mode, delta, ...(trackMap ? { trackMap } : {}), ...snap, ...newTracks }
         const next = previewVideoEditTimelineDrag(gesture.handle, adjustment)
-        gesture.adjustment = adjustment; gesture.rearrange = undefined; gesture.error = undefined; setFailure(null); setPreview(next)
+        gesture.adjustment = adjustment; gesture.rearrange = undefined; gesture.error = undefined; setFailure(null); setPreview(next); reportClipSnap(next, gesture.mode)
       } catch (error) {
-        gesture.adjustment = undefined; gesture.rearrange = undefined; gesture.error = error instanceof Error ? error : new Error(String(error)); setFailure(gesture.error.message); setPreview(null)
+        gesture.adjustment = undefined; gesture.rearrange = undefined; gesture.error = error instanceof Error ? error : new Error(String(error)); setFailure(gesture.error.message); setPreview(null); clearTimelineSnap()
       }
     } else if (gesture.kind === 'transition' || gesture.kind === 'fade') {
       if (!gesture.moved && Math.abs(at.x - gesture.origin.x) < 3) return
@@ -132,16 +140,14 @@ export function useTimelinePointer(options: Options) {
           const transition = gesture.drag.baseline.transitions?.find(value => value.id === gesture.transitionId)
           if (!transition) throw new Error('原过渡已移除。')
           const window = videoEditTransitionWindow(gesture.drag.baseline, transition)
-          // 吸附：拖左缘吸起点、拖右缘吸终点，平移时两缘谁先靠近就吸谁。
-          const edge = gesture.mode === 'out' ? window.end : window.start
-          let delta = snapEdge(edge + raw) - edge
-          if (gesture.mode === 'move' && delta === raw) delta = snapEdge(window.end + raw) - window.end
+          // 吸附：拖左缘吸起点、拖右缘吸终点，平移时两缘谁更近就吸谁。
+          const delta = raw + snapEdges(gesture.mode === 'in' ? [window.start + raw] : gesture.mode === 'out' ? [window.end + raw] : [window.start + raw, window.end + raw])
           previewVideoEditTransitionDrag(gesture.drag, gesture.transitionId, gesture.mode, delta)
         } else {
           const clip = gesture.drag.baseline.clips.find(value => value.id === gesture.clipId)
           if (!clip) throw new Error('原片段已移除。')
           const end = gesture.fade === 'in' ? clip.start + gesture.frames + raw : clip.start + clip.duration - gesture.frames + raw
-          const snapped = snapEdge(end)
+          const snapped = end + snapEdges([end])
           previewVideoEditFadeDrag(gesture.drag, gesture.clipId, gesture.fade, gesture.fade === 'in' ? snapped - clip.start : clip.start + clip.duration - snapped)
         }
         setFailure(null)
@@ -152,7 +158,7 @@ export function useTimelinePointer(options: Options) {
       setResized({ trackId: gesture.trackId, height: gesture.next })
     } else if (gesture.kind === 'seek') {
       const raw = Math.max(0, Math.min(Math.floor(videoEditFps(sequence.frameRate) * 1800), Math.round(at.x / pixels)))
-      const frame = gesture.snap ? videoEditSnapFrame([...videoEditEditPoints(sequence), ...(sequence.markers ?? []).map(mark => mark.frame), ...[instance.inFrame, instance.outFrame].filter((value): value is number => value !== null)], raw, 8 / pixels) : raw
+      const frame = snapTimelineFrame(sequence.id, gesture.snap ? timelineSnapPoints(sequence, { extra: [instance.inFrame, instance.outFrame].filter((value): value is number => value !== null) }) : [], raw, TIMELINE_SNAP_PIXELS / pixels)
       setVideoEditView(instance.document.id, { playing: false, frame })
     } else if (gesture.kind === 'hand' && viewport.current) {
       viewport.current.scrollLeft = gesture.left + gesture.origin.x - gesture.client.x

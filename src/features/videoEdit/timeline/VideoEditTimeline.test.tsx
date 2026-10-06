@@ -12,6 +12,7 @@ import { appendVideoEditSequence, closeVideoEditProject, createVideoEditProject,
 import { executeVideoEditTimelineEdit } from '../application/videoEditTimeline'
 import { VIDEO_EDIT_ITEM_DRAG_MIME } from '../application/videoEditDrop'
 import { VideoEditTimeline } from '../VideoEditTimeline'
+import { VideoEditInOutDuration } from './VideoEditTimelineTransport'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { TIMELINE_HEADER_WIDTH as header, TIMELINE_DEFAULT_SPLIT, timelineLayout } from './timelineGeometry'
 import { addLegacyVideoEditTracks } from '@/core/videoEdit/testFixtures'
@@ -657,4 +658,59 @@ it('不能编辑的原因浮在时间线上方不占位，指针显示禁止（4
   expect(host.className).toContain('cursor-not-allowed')
   fireEvent.pointerUp(host, event(header + 20))
   expect(host.className).not.toContain('cursor-not-allowed')
+})
+it('标尺入出点区间：拖两端改入出点、拖中间平移，吸附时显示提示线，松手收起；节目监视器读数显示入出点持续时间（4.4）', () => {
+  act(() => setVideoEditTimelineView(owner.document.id, { inFrame: 10, outFrame: 40 }))
+  const view = render(<><View /><VideoEditInOutDuration instance={owner} /></>)
+  const bar = () => view.container.querySelector<HTMLElement>('[data-video-edit-in-out-range]')!
+  // 每帧 2 像素：入点 10 → 20px，宽 30 帧
+  expect(bar().style.left).toBe('20px'); expect(bar().style.width).toBe('60px')
+  expect(view.getByLabelText('入出点持续时间').textContent).toBe('00:00:01:00')
+  const handle = (edge: 'in' | 'out') => bar().querySelector<HTMLElement>(`[data-video-edit-in-out-handle="${edge}"]`)!
+  const history = owner.past.length
+  fireEvent.pointerDown(handle('in'), event(header + 20, 10)); fireEvent.pointerMove(handle('in'), event(header + 30, 10)); fireEvent.pointerUp(handle('in'), event(header + 30, 10))
+  expect([owner.inFrame, owner.outFrame]).toEqual([15, 40]); expect(owner.frame).toBe(0)
+  // 吸附开着：出点拖到片段末尾（30 帧）附近吸上，拖动中显示提示线
+  act(() => setVideoEditTimelineView(owner.document.id, { snapping: true }))
+  fireEvent.pointerDown(handle('out'), event(header + 80, 10)); fireEvent.pointerMove(handle('out'), event(header + 63, 10))
+  expect(owner.outFrame).toBe(30); expect(view.container.querySelector('[data-video-edit-snap-indicator="30"]')).not.toBeNull()
+  fireEvent.pointerUp(handle('out'), event(header + 63, 10))
+  expect(view.container.querySelector('[data-video-edit-snap-indicator]')).toBeNull()
+  act(() => setVideoEditTimelineView(owner.document.id, { snapping: false }))
+  fireEvent.pointerDown(bar(), event(header + 40, 10)); fireEvent.pointerMove(bar(), event(header + 60, 10)); fireEvent.pointerUp(bar(), event(header + 60, 10))
+  expect([owner.inFrame, owner.outFrame]).toEqual([25, 40])
+  expect(view.getByLabelText('入出点持续时间').textContent).toBe('00:00:00:15')
+  // 入出点是视图状态，同 I／O 键一样不记撤销
+  expect(owner.past).toHaveLength(history)
+  act(() => setVideoEditTimelineView(owner.document.id, { inFrame: null, outFrame: null }))
+  expect(view.container.querySelector('[data-video-edit-in-out-range]')).toBeNull(); expect(view.queryByLabelText('入出点持续时间')).toBeNull()
+  expect(onError).not.toHaveBeenCalled()
+})
+it('拖动吸上时轨道上显示吸附提示线：片段移动、过渡块与 Shift 拖播放头共用同一条，松手收起（4.4）', () => {
+  editVideoProject(owner.document.id, document => {
+    const [video] = document.sequences[0].clips
+    document.sequences[0].transitions = [{ id: 'tail', kind: 'cross_dissolve', leftClipId: video.id, durationFrames: 10 }]
+    return document
+  })
+  act(() => { setVideoEditTimelineView(owner.document.id, { snapping: true }); setVideoEditView(owner.document.id, { frame: 50 }) })
+  const view = render(<View />); const host = view.getByRole('region', { name: '时间线编辑区域' })
+  const line = () => view.container.querySelector<HTMLElement>('[data-video-edit-snap-indicator]')
+  // 片段 0..30 右移约 20.5 帧：末尾吸到播放头 50
+  fireEvent.pointerDown(view.getByRole('button', { name: '选择片段 视频' }), event(header + 20)); fireEvent.pointerMove(host, event(header + 61))
+  expect(line()?.getAttribute('data-video-edit-snap-indicator')).toBe('50'); expect(line()!.style.left).toBe(`${header + 100}px`)
+  fireEvent.pointerUp(host, event(header + 61))
+  expect(current().clips[0].start).toBe(20); expect(line()).toBeNull()
+  // 单侧过渡块（片段出点 40..50）只有左缘能拖：左缘拖到片段起点 20 附近吸上
+  const block = view.container.querySelector<HTMLElement>('[data-video-edit-transition="tail"]')!
+  expect(block.getAttribute('data-video-edit-transition-side')).toBe('out')
+  expect(block.querySelector('[data-video-edit-transition-edge="out"]')).toBeNull()
+  fireEvent.pointerDown(block.querySelector('[data-video-edit-transition-edge="in"]')!, event(header + 80)); fireEvent.pointerMove(host, event(header + 43))
+  expect(current().transitions![0].durationFrames).toBe(30); expect(line()?.getAttribute('data-video-edit-snap-indicator')).toBe('20')
+  fireEvent.pointerUp(host, event(header + 43)); expect(line()).toBeNull()
+  // Shift 拖播放头吸到编辑点
+  const ruler = view.getByRole('slider', { name: '剪辑时间定位' })
+  fireEvent.pointerDown(ruler, event(header + 41, 14, { shiftKey: true }))
+  expect(owner.frame).toBe(20); expect(line()?.getAttribute('data-video-edit-snap-indicator')).toBe('20')
+  fireEvent.pointerUp(host, event(header + 41, 14)); expect(line()).toBeNull()
+  expect(onError).not.toHaveBeenCalled()
 })

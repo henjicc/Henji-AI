@@ -177,7 +177,7 @@ describe('真实转场窗口、源余量和编辑持久契约', () => {
     expect(videoEditTransitionWindow(sequence, sequence.transitions[0])).toMatchObject({ side: 'in', start: 90, end: 120, cut: 90 })
     expect(videoEditTransitionWindow(sequence, sequence.transitions[1])).toMatchObject({ side: 'out', start: 70, end: 90, cut: 90 })
     expect(() => validateVideoEditTransitions(document)).not.toThrow()
-    expect(() => videoEditTransitionWindow(sequence, { ...sequence.transitions[0], durationFrames: 61 })).toThrow('超出片段')
+    expect(() => videoEditTransitionWindow(sequence, { ...sequence.transitions![0], durationFrames: 61 })).toThrow('超出片段')
     expect(() => videoEditTransitionWindow(sequence, { id: 'none', kind: 'cross_dissolve', durationFrames: 10 })).toThrow('至少')
     const shorter = applyVideoEditTimelineEdit(document, sequence.id, { kind: 'adjust', clipIds: ['right'], mode: 'out', delta: -45 })
     expect(shorter.transitions!.find(value => value.id === 'head')).toMatchObject({ durationFrames: 15 })
