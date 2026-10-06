@@ -25,12 +25,12 @@ import { isDomNode, ownerWindowOf } from '@/utils/crossRealmDom'
 import { VideoEditSequenceDialog } from '../panels/VideoEditSequenceDialog'
 import { VideoEditAudioChannelsDialog, type VideoEditAudioChannelsTarget } from '../panels/VideoEditAudioChannelsDialog'
 import { VideoEditTrackHeader } from './VideoEditTrackHeader'
-import { VideoEditTimelinePlayhead, VideoEditTimelinePosition } from './VideoEditTimelineTransport'
+import { VideoEditTimelinePlayhead, VideoEditTimelinePlayheadHead, VideoEditTimelinePosition } from './VideoEditTimelineTransport'
 import { useTimelinePointer } from './useTimelinePointer'
 import { useTimelineMenu } from './useTimelineMenu'
 import { useVideoEditClipSource } from '../panels/useVideoEditClipSource'
 import { elementOfEventTarget } from '@/utils/crossRealmDom'
-import { TIMELINE_DEFAULT_SPLIT, TIMELINE_HEADER_WIDTH, TIMELINE_RULER_HEIGHT, TIMELINE_TRACK_SECTION_GAP, timelineLayout, timelineNewTrackZone, timelineRegionAt, timelineTrackAt, timelineVisibleClips, timelineWheelAction, type TimelineRegion, type TimelineRegionKind, type TimelineViewport } from './timelineGeometry'
+import { TIMELINE_DEFAULT_SPLIT, TIMELINE_HEADER_WIDTH, TIMELINE_RULER_HEIGHT, TIMELINE_TRACK_SECTION_GAP, timelineLayout, timelineNewTrackZone, timelineRegionAt, timelineRulerScale, timelineTimecode, timelineTrackAt, timelineVisibleClips, timelineWheelAction, type TimelineRegion, type TimelineRegionKind, type TimelineViewport } from './timelineGeometry'
 import { videoEditTrackCodes } from '@/core/videoEdit/tracks'
 import { useTrackHeaderMenu } from './useTrackHeaderMenu'
 
@@ -109,10 +109,12 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
   // V1/A1 numbering follows each kind's track order, as Premiere's track labels.
   const trackCodes = videoEditTrackCodes(displayed)
   const devicePixelRatio = ownerWindowOf(pointer.viewport.current).devicePixelRatio || 1
-  const tickSeconds = Math.max(1, Math.ceil(64 / (pixels * fps)))
-  const tickWidth = tickSeconds * fps * pixels
-  const tickStart = Math.max(0, Math.floor(view.left / tickWidth) - 1)
-  const tickEnd = Math.ceil((view.left + view.width) / tickWidth) + 1
+  // 标尺刻度随缩放变细（Premiere）：放得越大，主刻度间隔越小，最小到逐帧；主刻度标时间码，次刻度只画短线
+  const ruler = timelineRulerScale(pixels, fps)
+  const majorWidth = ruler.major * pixels
+  const tickStart = Math.max(0, Math.floor(view.left / majorWidth) - 1)
+  const tickEnd = Math.ceil((view.left + view.width) / majorWidth) + 1
+  const minorPerMajor = ruler.minor ? Math.round(ruler.major / ruler.minor) : 0
   const readViewport = useCallback((): void => {
     const host = pointer.viewport.current
     if (!host) return
@@ -312,7 +314,9 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
         <div className="sticky top-0 z-sticky flex h-7 border-b border-line bg-panel" data-video-edit-ruler>
           <div className="sticky left-0 z-sticky flex shrink-0 items-center border-r border-gap bg-panel px-2.5 text-2xs text-text3" style={{ width: TIMELINE_HEADER_WIDTH }} data-video-edit-track-header>轨道</div>
           <VideoEditTimelinePosition instance={instance}>
-            {Array.from({ length: Math.max(0, tickEnd - tickStart) }, (_, index) => index + tickStart).map(index => <span key={index} className="pointer-events-none absolute bottom-0 top-1 border-l border-line pl-1 font-mono text-2xs tabular-nums text-text3" style={{ left: index * tickWidth }}>{index * tickSeconds}s</span>)}
+            {Array.from({ length: Math.max(0, tickEnd - tickStart) }, (_, index) => index + tickStart).map(index => <span key={index} className="pointer-events-none absolute bottom-0 top-1 border-l border-line-strong pl-1 font-mono text-2xs tabular-nums text-text3" style={{ left: index * majorWidth }}>{timelineTimecode(index * ruler.major, fps)}</span>)}
+            {minorPerMajor > 1 && Array.from({ length: Math.max(0, tickEnd - tickStart) * minorPerMajor }, (_, index) => tickStart * minorPerMajor + index).filter(index => index % minorPerMajor !== 0).map(index => <span key={`m${index}`} aria-hidden="true" className="pointer-events-none absolute bottom-0 h-1.5 border-l border-line" style={{ left: index * ruler.minor * pixels }} />)}
+            <VideoEditTimelinePlayheadHead instance={instance} pixels={pixels} />
             {/* ui-surface-allow 标尺上的标记与字幕区间条是时间轴记号（12px 命中区 + 菱形图形），不是按钮档位（3.5 确认保留） */}
             {(sequence.markers ?? []).filter(mark => mark.frame * pixels >= view.left - 8 && mark.frame * pixels <= view.left + view.width - TIMELINE_HEADER_WIDTH + 8).map(mark => <UiButton key={mark.id} data-video-edit-marker={mark.id} aria-label={`定位标记 ${mark.name}`} className="absolute top-3 z-raised -ml-1.5 !h-3 !w-3 !p-0 text-accent-text" title={mark.name} style={{ left: mark.frame * pixels }} onPointerDown={event => event.stopPropagation()} onClick={() => run(() => { setVideoEditView(projectId, { frame: mark.frame, playing: false, selection: mark.clipId ?? null }); focusVideoEditPanel(projectId, 'content') })}><Diamond size={10} fill="currentColor" strokeWidth={1.5} aria-hidden="true" /></UiButton>)}
             {/* ui-surface-allow 字幕区间条：时间轴记号的命中区（区间色条由片段令牌给出），不是按钮档位 */}

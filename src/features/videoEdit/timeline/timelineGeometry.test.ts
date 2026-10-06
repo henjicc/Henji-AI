@@ -101,3 +101,11 @@ it('滚轮按 Premiere 默认：横向滚动，Alt 横向缩放，Shift 轨道�
   expect(timelineWheelAction(wheel(200, { shiftKey: true }))).toEqual({ kind: 'track-height', delta: -16 })
   expect(timelineWheelAction(wheel(0))).toBeUndefined()
 })
+
+it('标尺随缩放变细：放大到逐帧，缩小到秒和分；次刻度整除主刻度', async () => {
+  const { timelineRulerScale } = await import('./timelineGeometry')
+  expect(timelineRulerScale(100, 60)).toEqual({ major: 1, minor: 0 })
+  expect(timelineRulerScale(10, 60).major).toBe(10)
+  const seconds = timelineRulerScale(2, 60); expect(seconds.major).toBe(60); expect(60 % seconds.minor).toBe(0)
+  expect(timelineRulerScale(0.01, 30).major).toBeGreaterThanOrEqual(300 * 30)
+})

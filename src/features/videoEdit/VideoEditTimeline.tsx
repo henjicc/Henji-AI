@@ -31,6 +31,8 @@ export function VideoEditTimeline({ instance, onError, visible = true }: { insta
   }
   return <div className="flex h-full min-h-0 select-none flex-col bg-panel" aria-label="剪辑时间线" data-video-edit-timeline>
     <div className="flex h-9 shrink-0 items-center gap-1 overflow-x-auto whitespace-nowrap border-b border-gap px-2" role="toolbar" aria-label="时间线工具栏">
+      {/* 时间码放在最左（Premiere 时间线左上角的播放指示器位置），可拖动、单击输入、Ctrl+单击切换帧号 */}
+      <VideoEditTimecode instance={instance} label="当前时间码" className="px-1.5 text-13" />
       <VideoEditSequenceTabs instance={instance} onError={onError} />
       <div className="ml-2 flex items-center gap-0.5" role="group" aria-label="时间线工具">
         {([{ id: 'select_tool', icon: MousePointer2 }, { id: 'razor_tool', icon: Scissors }, { id: 'hand_tool', icon: Hand }, { id: 'track_tool', icon: ArrowRight }] as const).map(({ id, icon: Icon }) => {
@@ -47,7 +49,6 @@ export function VideoEditTimeline({ instance, onError, visible = true }: { insta
         <UiIconButton aria-label="文字" title="在播放头添加文字片段" onClick={() => run(() => appendVideoEditClip(instance.document.id))}><Type size={15} /></UiIconButton>
       </div>
       <div className="ml-auto flex shrink-0 items-center gap-1 pl-3">
-        <VideoEditTimecode instance={instance} label="当前时间码" className="px-2 text-xs text-text2" />
         <UiIconButton size="sm" aria-label="缩小时间线" title={presentation('zoom_out').tooltip} disabled={!presentation('zoom_out').enabled} onClick={() => execute('zoom_out')}><Minus size={13} /></UiIconButton>
         <div className="flex w-24 items-center"><UiRangeInput aria-label="时间线缩放" min={ZOOM_MIN} max={ZOOM_MAX} step={0.1} value={instance.zoom} onChange={event => run(() => setVideoEditTimelineView(instance.document.id, { zoom: Number(event.target.value) }))} /></div>
         <UiIconButton size="sm" aria-label="放大时间线" title={presentation('zoom_in').tooltip} disabled={!presentation('zoom_in').enabled} onClick={() => execute('zoom_in')}><Plus size={13} /></UiIconButton>

@@ -115,3 +115,15 @@ export function timelineWheelAction(input: TimelineWheelInput): TimelineWheelAct
 export function timelineTimecode(frame: number, fps: number): string {
   return videoEditFrameTimecode(frame, fps)
 }
+
+/**
+ * 标尺刻度（Premiere：放得越大越细）：主刻度从“逐帧 → 若干帧 → 半秒 → 秒 → 分”的候选里取第一个间距不小于 90 像素的，
+ * 够放下一个时间码；次刻度取能整除主刻度、间距不小于 8 像素的最大候选（没有就不画）。单位为帧（按名义整数帧率）。
+ */
+export function timelineRulerScale(pixelsPerFrame: number, fps: number): { major: number; minor: number } {
+  const nominal = Math.max(1, Math.round(fps))
+  const candidates = [...new Set([1, 2, 5, 10, ...(nominal % 2 === 0 ? [nominal / 2] : []), ...[1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600].map(seconds => seconds * nominal)])].sort((a, b) => a - b)
+  const major = candidates.find(frames => frames * pixelsPerFrame >= 90) ?? candidates.at(-1)!
+  const minor = candidates.filter(frames => frames < major && major % frames === 0 && frames * pixelsPerFrame >= 8).at(-1) ?? 0
+  return { major, minor }
+}

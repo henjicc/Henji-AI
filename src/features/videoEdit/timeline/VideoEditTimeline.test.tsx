@@ -416,7 +416,7 @@ it('交错32轨道与500片段分成音画两区，各自纵向滚动，DOM仍�
   expect(trackTop(0)).toBe(Number.parseFloat(divider.style.top) + 8 - 64); expect(trackTop(1)).toBe(video)
   host.scrollLeft = 10000; fireEvent.scroll(host)
   expect(view.container.querySelector('[data-video-edit-clip="clip-0"]')).toBeNull(); expect(view.container.querySelector('[data-video-edit-clip="clip-50"]')).not.toBeNull()
-  expect(view.container.querySelectorAll('[data-video-edit-clip]').length).toBeLessThan(10); expect(view.container.querySelector('[data-video-edit-ruler]')!.querySelectorAll('span').length).toBeLessThan(20)
+  expect(view.container.querySelectorAll('[data-video-edit-clip]').length).toBeLessThan(10); expect(view.container.querySelector('[data-video-edit-ruler]')!.querySelectorAll('span:not([aria-hidden])').length).toBeLessThan(20); expect(view.container.querySelector('[data-video-edit-ruler]')!.querySelectorAll('span').length).toBeLessThan(200)
   expect(onError).not.toHaveBeenCalled()
 })
 

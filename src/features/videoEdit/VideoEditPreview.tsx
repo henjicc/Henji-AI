@@ -353,7 +353,7 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
     {/* 节目监视器控制条单行（5.8 toolbarWrap）：窄面板下先让出时间码（时间线工具栏有同一读数），
         再把显示比例与节目工具按优先级收进“更多”，不再折成多行 */}
     <div ref={programToolbarRef} className="flex min-h-10 shrink-0 items-center gap-x-1 whitespace-nowrap border-t border-line px-2 py-1" role="toolbar" aria-label="节目监视器控制">
-      {compactProgramToolbar ? null : <VideoEditTimecode instance={instance} label="节目时间码" className="w-28 shrink-0 px-1.5 text-13 text-text1" />}
+      {compactProgramToolbar ? null : <VideoEditTimecode instance={instance} label="节目时间码" className="w-28 px-1.5 text-13" />}
       <UiOverflowRow
         className="flex-1 justify-center gap-0.5"
         alwaysShowOverflow
