@@ -54,6 +54,7 @@ export function registerDocumentsIpc(): void {
   registerIpcHandler(c.trashDocument, parseWith(documentTargetSchema), (target) => service().trashDocument(target))
   registerIpcHandler(c.deleteEmptyDraft, parseWith(documentTargetSchema), (target) => service().deleteEmptyDraft(target))
   registerIpcHandler(c.forgetDocument, parseWith(documentIdRequestSchema), ({ docId }) => service().forgetDocument(docId))
+  registerIpcHandler(c.markDocumentOpened, parseWith(documentIdRequestSchema), ({ docId }) => service().markDocumentOpened(docId))
   registerIpcHandler(c.revealDocument, parseWith(documentTargetSchema), (target) => service().revealDocument(target))
   registerIpcHandler(c.collectDocumentMedia, parseWith(documentTargetSchema), (target) => service().collectDocumentMedia(target))
   registerIpcHandler(c.importFile, parseWith(importFileRequestSchema), (request) => service().importFile(request))

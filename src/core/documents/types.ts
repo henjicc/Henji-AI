@@ -65,6 +65,8 @@ export interface DocumentSummary extends DocumentMeta {
   /** 通用封面（程序目录，按文档 ID 存）；没有时为 null。 */
   coverPath: string | null
   summary: DocumentListSummary
+  /** 最近一次打开的时间（任何入口经文档会话打开都会记）；从未打开过为 null。只在作品索引里，不写进文档。 */
+  lastOpenedAt: number | null
 }
 
 export interface DocumentUnresolvedLocation {
@@ -120,6 +122,8 @@ export interface ProjectSummary {
   createdAt: number
   mainVideoEditId: string | null
   documentCount: number
+  /** 最近一次打开其中文档的时间；从未打开过为 null。只在作品索引里，不写进项目说明。 */
+  lastOpenedAt: number | null
 }
 
 export type DocumentContainerFilter = { kind: 'any' } | DocumentContainerRef

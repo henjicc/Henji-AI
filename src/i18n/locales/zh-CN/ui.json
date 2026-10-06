@@ -1148,7 +1148,7 @@
       "recent": "最近打开",
       "drafts": "未保存草稿"
     },
-    "recentEmpty": "还没有在这里打开过",
+    "recentEmpty": "还没有打开过",
     "view": {
       "grid": "网格视图",
       "list": "列表视图"

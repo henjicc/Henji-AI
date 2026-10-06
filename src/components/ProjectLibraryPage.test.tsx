@@ -240,18 +240,28 @@ describe('ProjectLibraryPage', () => {
     expect(visibleProjectIds()).toEqual(['d1']);
   });
 
-  it('列表视图记在本机，表头点击排序；最近打开只列从这里打开过的', () => {
+  it('列表视图记在本机，表头点击排序', () => {
     const view = renderPage();
     fireEvent.click(screen.getByRole('button', { name: '列表视图' }));
     expect(document.querySelector('[data-project-list-view]')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: '名称' }));
     expect(visibleProjectIds()).toEqual(['p2', 'p1']);
-    fireEvent.click(document.querySelector('[data-project-id="p2"]')!);
-    fireEvent.click(screen.getByRole('button', { name: '最近打开' }));
-    expect(visibleProjectIds()).toEqual(['p2']);
     view.unmount();
     renderPage();
     expect(document.querySelector('[data-project-list-view]')).toBeTruthy();
+  });
+
+  it('最近打开按作品索引的打开时间倒序，只列打开过的；本页点击不另记', () => {
+    const onOpen = vi.fn();
+    renderPage([
+      { id: 'p1', name: '江南雨夜', updatedAt: 2, openedAt: 10 },
+      { id: 'p2', name: '产品主图', updatedAt: 1 },
+      { id: 'p3', name: '片头', updatedAt: 3, openedAt: 30 },
+    ], onOpen);
+    fireEvent.click(document.querySelector('[data-project-id="p2"]')!);
+    expect(onOpen).toHaveBeenCalledWith(expect.objectContaining({ id: 'p2' }));
+    fireEvent.click(screen.getByRole('button', { name: '最近打开' }));
+    expect(visibleProjectIds()).toEqual(['p3', 'p1']);
   });
 
   it('键盘：F2 重命名焦点项', async () => {

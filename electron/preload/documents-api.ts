@@ -17,6 +17,7 @@ export function createDocumentsApi(invoke: NativeInvoke): DocumentsPlatform {
     trashDocument: (target) => invoke(c.trashDocument, target),
     deleteEmptyDraft: (target) => invoke(c.deleteEmptyDraft, target),
     forgetDocument: (docId) => invoke(c.forgetDocument, { docId }),
+    markDocumentOpened: (docId) => invoke(c.markDocumentOpened, { docId }),
     revealDocument: (target) => invoke(c.revealDocument, target),
     collectDocumentMedia: (target) => invoke(c.collectDocumentMedia, target),
     importFile: (request) => invoke(c.importFile, request),

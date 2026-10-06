@@ -78,6 +78,26 @@ describe.skipIf(!process.versions.electron)('作品索引（SQLite）与扫描',
     expect(store.listExternalLocations().map((location) => location.path)).toEqual([env.outside])
   })
 
+  it('最近打开时间：记到文档与所在项目，扫描与改动写回索引行时保留，列表与项目摘要带出', async () => {
+    const { service, scanner } = env.services
+    const project = await service.createProject({ name: '短片' })
+    const doc = await service.createDocument({ kind: 'canvas', container: { kind: 'project', projectId: project.id }, name: '分镜' })
+    const loose = await service.createDocument({ kind: 'canvas', container: { kind: 'user' }, name: '独立' })
+    expect((await service.listDocuments()).every((item) => item.lastOpenedAt === null)).toBe(true)
+    expect((await service.listProjects())[0].lastOpenedAt).toBeNull()
+
+    await service.markDocumentOpened(doc.meta.id)
+    await service.markDocumentOpened('not-indexed')
+    const opened = env.catalog.getDocument(doc.meta.id)?.lastOpenedAt
+    expect(typeof opened).toBe('number')
+    await service.saveDocument({ target: { id: doc.meta.id }, expectedRevision: 0, content: { ...(doc.content as object) } })
+    await scanner.refresh()
+    const listed = await service.listDocuments()
+    expect(listed.find((item) => item.id === doc.meta.id)?.lastOpenedAt).toBe(opened)
+    expect(listed.find((item) => item.id === loose.meta.id)?.lastOpenedAt).toBeNull()
+    expect((await service.listProjects())[0]).toMatchObject({ id: project.id, lastOpenedAt: opened })
+  })
+
   it('索引删光后扫描能恢复（外部位置保留）；没变的文件不重新读取', async () => {
     const { service, scanner } = env.services
     const project = await service.createProject({ name: '短片' })

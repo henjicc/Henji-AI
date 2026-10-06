@@ -24,6 +24,7 @@ export function createElectronDocuments(): DocumentsPlatform {
     trashDocument: (target) => getNativeDocuments().trashDocument(target),
     deleteEmptyDraft: (target) => getNativeDocuments().deleteEmptyDraft(target),
     forgetDocument: (docId) => getNativeDocuments().forgetDocument(docId),
+    markDocumentOpened: (docId) => getNativeDocuments().markDocumentOpened(docId),
     revealDocument: (target) => getNativeDocuments().revealDocument(target),
     collectDocumentMedia: (target) => getNativeDocuments().collectDocumentMedia(target),
     importFile: (request) => getNativeDocuments().importFile(request),

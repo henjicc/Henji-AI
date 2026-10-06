@@ -40,6 +40,8 @@ export interface DocumentSessionCommands {
   finalizeProject(request: FinalizeProjectRequest): Promise<ProjectSummary>
   trashProject(projectId: string): Promise<void>
   listProjects(query?: ProjectListQuery): Promise<ProjectSummary[]>
+  /** 记一次打开（作品索引的最近打开时间）。 */
+  markDocumentOpened(docId: string): Promise<void>
 }
 
 /**

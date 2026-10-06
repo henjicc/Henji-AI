@@ -90,6 +90,11 @@ export async function forgetDocument(docId: string): Promise<void> {
   await documents().forgetDocument(docId)
 }
 
+/** 记一次打开（作品索引的最近打开时间）；只由文档会话登记表调用。 */
+export async function markDocumentOpened(docId: string): Promise<void> {
+  await documents().markDocumentOpened(docId)
+}
+
 export async function revealDocument(target: DocumentTarget): Promise<void> {
   await documents().revealDocument(target)
 }

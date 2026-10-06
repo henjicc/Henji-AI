@@ -23,6 +23,8 @@ export interface IndexedProject {
   manifestSize: number
   /** 文件夹创建时间，用于判断拷贝出来的副本（较新的那个换 ID）。 */
   folderCreatedAt: number
+  /** 最近一次打开其中文档的时间；只由 markDocumentOpened 写入，upsertProject 不改它。 */
+  lastOpenedAt?: number | null
 }
 
 export interface IndexedDocument {
@@ -44,6 +46,8 @@ export interface IndexedDocument {
   fileCreatedAt: number
   summary: DocumentListSummary
   missing: boolean
+  /** 最近一次打开的时间；只由 markDocumentOpened 写入，upsertDocument 不改它。 */
+  lastOpenedAt?: number | null
 }
 
 export type ExternalLocationKind = 'project' | 'folder'
@@ -71,6 +75,8 @@ export interface DocumentCatalog {
   removeDocument(id: string): void
   /** 项目文件夹改名或移动后，把其中文档的位置整体换到新文件夹。 */
   rebaseDocuments(oldRoot: string, newRoot: string): void
+  /** 记一次打开：文档与它所在的项目都记为 at（不在索引里时什么也不做）。 */
+  markDocumentOpened(id: string, at: number): void
 
   getProject(id: string): IndexedProject | null
   getProjectByPath(path: string): IndexedProject | null

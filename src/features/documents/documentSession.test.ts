@@ -206,3 +206,30 @@ describe('会话唯一', () => {
     expect(() => second.attach(new TestToolInstance({ items: [] }))).toThrow()
   })
 })
+
+describe('最近打开', () => {
+  it('打开与新建都经登记表记一次打开（所在项目一并记上）；已打开的再次打开不重复记', async () => {
+    vi.useRealTimers()
+    const { registry, commands } = createTestRegistry()
+    const project = commands.seedProject({ name: '短片' })
+    const inProject = commands.seed({ name: '分镜', content: { items: [] }, projectId: project.id })
+    const untouched = commands.seed({ name: '没打开', content: { items: [] } })
+    const opened = vi.spyOn(commands, 'markDocumentOpened')
+    await registry.open({ id: inProject.id })
+    await registry.open({ id: inProject.id })
+    const created = await registry.create({ kind: inProject.kind, container: { kind: 'user' }, name: '新建' })
+    await vi.waitFor(() => expect(opened).toHaveBeenCalledTimes(2))
+    expect(opened.mock.calls.map(([id]) => id)).toEqual([inProject.id, created.id])
+    const listed = await commands.listDocuments()
+    expect(listed.find((item) => item.id === inProject.id)?.lastOpenedAt).toEqual(expect.any(Number))
+    expect(listed.find((item) => item.id === untouched.id)?.lastOpenedAt).toBeNull()
+    expect((await commands.listProjects())[0].lastOpenedAt).toEqual(expect.any(Number))
+  })
+
+  it('记录失败只记日志，不影响打开', async () => {
+    const { registry, commands } = createTestRegistry()
+    const meta = commands.seed({ name: '海报', content: { items: [] } })
+    vi.spyOn(commands, 'markDocumentOpened').mockRejectedValue(new Error('db busy'))
+    await expect(registry.open({ id: meta.id })).resolves.toBeTruthy()
+  })
+})

@@ -55,7 +55,7 @@ async function listDocuments(): Promise<DocumentSummary[]> {
       id: header.id, kind: 'image_document', name: path.basename(file, '.henjiimg'), path: file,
       container: { kind: 'user' }, draft: header.draft, revision: header.revision, kindVersion: header.kindVersion,
       createdAt: Date.parse(header.createdAt), updatedAt: Date.parse(header.updatedAt), projectName: null,
-      external: false, missing: false, fileModifiedAt: 0, sizeBytes: 0, coverPath: null, summary: { ...header.summary },
+      external: false, missing: false, fileModifiedAt: 0, sizeBytes: 0, coverPath: null, summary: { ...header.summary }, lastOpenedAt: null,
     })
   }
   return rows

@@ -161,7 +161,7 @@ describe.skipIf(!process.versions.electron)('统一迁移账本：旧库就地�
       expect(fs.existsSync(userFile)).toBe(false)
       const backupDirectory = path.join(base, 'backups')
       const result = runSchemaMigrations(db, undefined, { locationContext: () => context, backupDirectory })
-      expect(result.applied).toEqual([15, 16, 17])
+      expect(result.applied).toEqual([15, 16, 17, 18])
       expect(fs.readdirSync(backupDirectory)).toEqual([expect.stringMatching(/-before-v15\.db$/)])
       expect(db.prepare("SELECT name FROM sqlite_master WHERE name LIKE '%camera_stage_projects%'").all()).toEqual([])
       expect(db.prepare('SELECT * FROM camera_stage_render_tasks').all()).toEqual([])
@@ -191,7 +191,7 @@ describe.skipIf(!process.versions.electron)('统一迁移账本：旧库就地�
       db.prepare("INSERT INTO audio_edit_tasks VALUES ('t1','voice','transcription','completed',NULL,'digest',NULL,NULL,1,1)").run()
       const backupDirectory = path.join(base, 'backups')
       const result = runSchemaMigrations(db, undefined, { locationContext: () => context, backupDirectory })
-      expect(result.applied).toEqual([16, 17])
+      expect(result.applied).toEqual([16, 17, 18])
       expect(fs.readdirSync(backupDirectory)).toEqual([expect.stringMatching(/-before-v16\.db$/)])
       expect(db.prepare("SELECT name FROM sqlite_master WHERE name LIKE '%audio_edit_projects%'").all()).toEqual([])
       expect(columns(db, 'audio_edit_tasks')).toContain('document_id')
@@ -216,13 +216,25 @@ describe.skipIf(!process.versions.electron)('统一迁移账本：旧库就地�
         .run('canvas-1', '旧画布', 1, 1, 0, '[]', '[]', '{}', '{}')
       const backupDirectory = path.join(base, 'backups')
       const result = runSchemaMigrations(db, undefined, { locationContext: () => context, backupDirectory })
-      expect(result.applied).toEqual([17])
+      expect(result.applied).toEqual([17, 18])
       expect(fs.readdirSync(backupDirectory)).toEqual([expect.stringMatching(/-before-v17\.db$/)])
       expect(db.prepare("SELECT name FROM sqlite_master WHERE name LIKE '%storyboard_projects%' OR name LIKE '%canvas_projects%'").all()).toEqual([])
       const copy = new Database(path.join(backupDirectory, fs.readdirSync(backupDirectory)[0]!), { readonly: true })
       try {
         expect(copy.prepare('SELECT name FROM storyboard_projects').all()).toEqual([{ name: '旧画布' }])
       } finally { copy.close() }
+    } finally { db.close() }
+  })
+
+  it('作品索引最近打开时间（第 18 项）：已有索引行原样保留，新增列为空；可重复执行', () => {
+    const db = new Database(':memory:')
+    try {
+      runSchemaMigrations(db, SCHEMA_MIGRATIONS.slice(0, 17), { locationContext: () => context })
+      db.prepare("INSERT INTO document_index_documents (id,kind,path,path_key,name,created_at,updated_at,indexed_at) VALUES ('d1','canvas','/a.henji-canvas','/a.henji-canvas','a',1,1,1)").run()
+      expect(runSchemaMigrations(db, undefined, { locationContext: () => context }).applied).toEqual([18])
+      expect(columns(db, 'document_index_projects')).toContain('last_opened_at')
+      expect(db.prepare('SELECT id, last_opened_at FROM document_index_documents').all()).toEqual([{ id: 'd1', last_opened_at: null }])
+      expect(() => SCHEMA_MIGRATIONS[17].up(db, { locations: () => context })).not.toThrow()
     } finally { db.close() }
   })
 

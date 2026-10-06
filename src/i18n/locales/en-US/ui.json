@@ -1148,7 +1148,7 @@
       "recent": "Recently Opened",
       "drafts": "Unsaved Drafts"
     },
-    "recentEmpty": "Nothing opened here yet",
+    "recentEmpty": "Nothing opened yet",
     "view": {
       "grid": "Grid View",
       "list": "List View"

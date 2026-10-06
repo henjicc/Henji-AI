@@ -58,7 +58,7 @@ export class MemoryDocumentCatalog implements DocumentCatalog {
   upsertDocument(row: IndexedDocument): void {
     const key = keyOf(row.path)
     for (const [id, existing] of this.documents) if (id !== row.id && keyOf(existing.path) === key) this.documents.delete(id)
-    this.documents.set(row.id, { ...row })
+    this.documents.set(row.id, { ...row, lastOpenedAt: this.documents.get(row.id)?.lastOpenedAt ?? null })
   }
 
   removeDocument(id: string): void {
@@ -71,6 +71,14 @@ export class MemoryDocumentCatalog implements DocumentCatalog {
       if (!keyOf(row.path).startsWith(prefix)) continue
       row.path = path.join(newRoot, path.relative(oldRoot, row.path))
     }
+  }
+
+  markDocumentOpened(id: string, at: number): void {
+    const row = this.documents.get(id)
+    if (!row) return
+    row.lastOpenedAt = at
+    const project = row.projectId ? this.projects.get(row.projectId) : undefined
+    if (project) project.lastOpenedAt = at
   }
 
   getProject(id: string): IndexedProject | null {
@@ -89,7 +97,7 @@ export class MemoryDocumentCatalog implements DocumentCatalog {
   upsertProject(row: IndexedProject): void {
     const key = keyOf(row.path)
     for (const [id, existing] of this.projects) if (id !== row.id && keyOf(existing.path) === key) this.projects.delete(id)
-    this.projects.set(row.id, { ...row, folders: { ...row.folders } })
+    this.projects.set(row.id, { ...row, folders: { ...row.folders }, lastOpenedAt: this.projects.get(row.id)?.lastOpenedAt ?? null })
   }
 
   removeProject(id: string): void {

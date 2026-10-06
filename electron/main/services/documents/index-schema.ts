@@ -72,3 +72,18 @@ export function createDocumentIndexSchemaV1(db: Database.Database): void {
     );
   `)
 }
+
+/**
+ * 迁移账本第 18 项：作品索引记“最近打开时间”（项目页“最近打开”与“最近”排序用）。
+ *
+ * 只是索引里的元数据，不写进文档文件或项目说明；由会话打开文档时写入（打开项目里的文档同时记到项目上），
+ * 扫描写索引行时保留原值。重建索引（清空可重建行）会一并清掉，这是可接受的代价。
+ */
+export function addDocumentIndexLastOpenedV1(db: Database.Database): void {
+  for (const table of [DOCUMENT_INDEX_TABLES.projects, DOCUMENT_INDEX_TABLES.documents]) {
+    const columns = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>
+    if (!columns.some((column) => column.name === 'last_opened_at')) {
+      db.exec(`ALTER TABLE ${table} ADD COLUMN last_opened_at INTEGER`)
+    }
+  }
+}

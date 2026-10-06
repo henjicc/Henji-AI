@@ -74,6 +74,7 @@ const defaultCommands: DocumentSessionCommands = {
   finalizeProject: documentCommands.finalizeProject,
   trashProject: documentCommands.trashProject,
   listProjects: documentCommands.listProjects,
+  markDocumentOpened: documentCommands.markDocumentOpened,
 }
 
 /** 路径所在的文件夹（Windows 与 POSIX 分隔符都认）。 */
@@ -348,6 +349,11 @@ export class DocumentSessionRegistry {
     this.logger.info('打开文档', {
       event: 'documents.session.open.completed',
       context: { docId: session.id, kind: kind.id, draft: read.meta.draft, missing: read.missingPaths.length, unresolved: read.unresolved.length },
+    })
+    // 任何入口（项目页、助手、启动恢复、打开文件、文档链接）打开或新建文档都经这里：统一记最近打开时间。
+    // 只是列表排序用的索引元数据，失败不影响打开。
+    void this.commands.markDocumentOpened(session.id).catch((error: unknown) => {
+      this.logger.warn('记录最近打开时间失败', { event: 'documents.session.mark_opened.failed', error: toError(error), context: { docId: session.id } })
     })
     this.emit()
     return session

@@ -171,6 +171,7 @@ export const defaultDocumentOperationCommands: DocumentOperationCommands = {
   finalizeProject: documentCommands.finalizeProject,
   trashProject: documentCommands.trashProject,
   listProjects: documentCommands.listProjects,
+  markDocumentOpened: documentCommands.markDocumentOpened,
   renameDocument: documentCommands.renameDocument,
   moveDocument: documentCommands.moveDocument,
   duplicateDocument: documentCommands.duplicateDocument,

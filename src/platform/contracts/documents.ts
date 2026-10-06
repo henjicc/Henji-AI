@@ -66,6 +66,8 @@ export interface DocumentsPlatform {
   deleteEmptyDraft(target: DocumentTarget): Promise<void>
   /** 从列表移除找不到文件的文档（只改作品索引，不动磁盘）；文件还在时报 DocumentLocationError。 */
   forgetDocument(docId: string): Promise<void>
+  /** 记一次打开（只写作品索引的最近打开时间，所在项目一并记上）；由文档会话登记表统一调用。 */
+  markDocumentOpened(docId: string): Promise<void>
   revealDocument(target: DocumentTarget): Promise<void>
   /**
    * 收集素材：把文档引用到的、不在所在容器里的文件（外部文件、作品目录或别的项目里的文件）
@@ -124,6 +126,7 @@ export const DOCUMENT_IPC_CHANNELS = {
   trashDocument: 'documents:trash',
   deleteEmptyDraft: 'documents:deleteEmptyDraft',
   forgetDocument: 'documents:forget',
+  markDocumentOpened: 'documents:markOpened',
   revealDocument: 'documents:reveal',
   collectDocumentMedia: 'documents:collectMedia',
   importFile: 'documents:importFile',

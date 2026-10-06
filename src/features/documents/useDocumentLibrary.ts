@@ -94,6 +94,7 @@ export function toDocumentCardItems(documents: readonly DocumentSummary[], optio
       coverPath: document.coverPath,
       updatedAt: document.updatedAt,
       createdAt: document.createdAt,
+      ...(document.lastOpenedAt !== null ? { openedAt: document.lastOpenedAt } : {}),
       document,
     }
   })
@@ -193,6 +194,7 @@ export function toProjectCardItems(projects: readonly ProjectSummary[], t: TFunc
       detail,
       ...(project.missing ? { status: t('documentLibrary.status.missingFolder') } : {}),
       createdAt: project.createdAt,
+      ...(project.lastOpenedAt !== null ? { openedAt: project.lastOpenedAt } : {}),
       project,
     }
   })

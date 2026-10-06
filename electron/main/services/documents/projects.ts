@@ -280,6 +280,7 @@ export class ProjectService {
       createdAt: project.createdAt,
       mainVideoEditId: project.mainVideoEditId,
       documentCount,
+      lastOpenedAt: project.lastOpenedAt ?? null,
     }
   }
 

@@ -34,6 +34,8 @@ export interface ProjectCardGridItem {
   /** 排序用的时间戳（毫秒）；不传时该项按原顺序排在后面 */
   updatedAt?: number;
   createdAt?: number;
+  /** 最近一次打开的时间（作品索引记录，任何入口打开都算）；从未打开过不传，“最近打开”分类只列出有它的项 */
+  openedAt?: number;
   /** 意外退出留下、尚未保存的草稿：排在最前，带“草稿”标记，只能继续编辑或移到回收站 */
   draft?: boolean;
   /** 列表视图“大小”列；拿不到就不传 */

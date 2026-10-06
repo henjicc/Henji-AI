@@ -29,6 +29,7 @@ interface ProjectRow {
   manifest_mtime_ms: number
   manifest_size: number
   folder_birthtime_ms: number
+  last_opened_at: number | null
 }
 
 interface DocumentRow {
@@ -47,6 +48,7 @@ interface DocumentRow {
   file_birthtime_ms: number
   summary_json: string
   missing: number
+  last_opened_at: number | null
 }
 
 function parseSummary(json: string): DocumentListSummary {
@@ -78,6 +80,7 @@ function toProject(row: ProjectRow): IndexedProject {
     manifestModifiedAt: row.manifest_mtime_ms,
     manifestSize: row.manifest_size,
     folderCreatedAt: row.folder_birthtime_ms,
+    lastOpenedAt: row.last_opened_at ?? null,
   }
 }
 
@@ -99,6 +102,7 @@ function toDocument(row: DocumentRow): IndexedDocument | null {
     fileCreatedAt: row.file_birthtime_ms,
     summary: parseSummary(row.summary_json),
     missing: row.missing === 1,
+    lastOpenedAt: row.last_opened_at ?? null,
   }
 }
 
@@ -186,6 +190,15 @@ export class DocumentIndexStore implements DocumentCatalog {
         const path = formatAbsolutePath(this.style, { root: newParsed.root, segments: [...newParsed.segments, ...rest] })
         update.run(path, this.key(path), Date.now(), row.id)
       }
+    })()
+  }
+
+  markDocumentOpened(id: string, at: number): void {
+    this.db.transaction(() => {
+      const row = this.db.prepare(`SELECT project_id FROM ${T.documents} WHERE id = ?`).get(id) as { project_id: string | null } | undefined
+      if (!row) return
+      this.db.prepare(`UPDATE ${T.documents} SET last_opened_at = ? WHERE id = ?`).run(at, id)
+      if (row.project_id) this.db.prepare(`UPDATE ${T.projects} SET last_opened_at = ? WHERE id = ?`).run(at, row.project_id)
     })()
   }
 

@@ -35,8 +35,6 @@ import {
 } from '@/components/projectLibraryArrange';
 import {
   readProjectLibraryView,
-  readRecentOpens,
-  recordRecentOpen,
   writeProjectLibraryView,
   type ProjectLibraryView,
 } from '@/components/projectLibraryPrefs';
@@ -131,7 +129,7 @@ interface ProjectLibraryPageProps {
   title: React.ReactNode;
   /** 页面用途的补充说明：只作为标题的悬停提示，不占常驻行 */
   description?: React.ReactNode;
-  /** 本机视图偏好（网格/列表、最近打开）的存储名，每个页面一个 */
+  /** 本机视图偏好（网格/列表）的存储名，每个页面一个 */
   persistKey: string;
   items: ProjectCardGridItem[];
   /** 意外退出留下的未保存草稿：排在最前，左栏多一个「未保存草稿」分类 */
@@ -191,7 +189,8 @@ function isTypingTarget(target: EventTarget | null): boolean {
  *   文档页的位置筛选在其下作为「按所属项目」一组导航。
  * - **主区**铺满剩余宽度：页头一行——标题 + 数量 ｜ 搜索、排序、网格/列表切换；多选时动作整组换成多选工具条。
  *   网格按 auto-fill 排列，宽屏自动多排几列；列表按列显示名称、位置、修改时间、大小，点表头排序。
- *   网格/列表的选择与“最近打开”按页面记在本机（`persistKey`）。
+ *   网格/列表的选择按页面记在本机（`persistKey`）；“最近打开”用作品索引记的打开时间（`openedAt`），
+ *   任何入口打开过的都算，按打开时间倒序。
  *
  * 状态：读取中 / 读取失败时主区只有加载或错误；没有项目时主区只有一句邀请（支持拖入时加拖放提示），
  * 不重复放新建按钮。草稿排在列表最前，带“草稿”标记，单击继续编辑，菜单里可以移到回收站。
@@ -239,7 +238,6 @@ export function ProjectLibraryPage({
   const [sort, setSort] = useState<ProjectLibrarySort>('updated');
   const [category, setCategory] = useState<LibraryCategory>('all');
   const [view, setView] = useState<ProjectLibraryView>(() => readProjectLibraryView(persistKey));
-  const [recentOpens, setRecentOpens] = useState<Record<string, number>>(() => readRecentOpens(persistKey));
 
   const { menuVisible, menuPosition, menuItems, showMenu, showMenuAt, hideMenu } = useContextMenu();
 
@@ -254,11 +252,11 @@ export function ProjectLibraryPage({
   const visibleItems = useMemo(() => {
     if (activeCategory === 'drafts') return draftItems;
     if (activeCategory === 'recent') {
-      return arrangeProjectItems(items.filter((item) => recentOpens[item.id] !== undefined), query, 'name')
-        .sort((a, b) => (recentOpens[b.id] ?? 0) - (recentOpens[a.id] ?? 0));
+      return arrangeProjectItems(items.filter((item) => item.openedAt !== undefined), query, 'name')
+        .sort((a, b) => (b.openedAt ?? 0) - (a.openedAt ?? 0));
     }
     return [...draftItems, ...arrangeProjectItems(items, query, sort)];
-  }, [activeCategory, draftItems, items, query, sort, recentOpens]);
+  }, [activeCategory, draftItems, items, query, sort]);
 
   // 多选的「全选」只覆盖当前看得见的已保存项目，草稿不参与
   const selectableIds = useMemo(() => visibleItems.filter((item) => !item.draft).map((item) => item.id), [visibleItems]);
@@ -272,11 +270,6 @@ export function ProjectLibraryPage({
   const allCountRef = useRef(0);
   if (!filtering) allCountRef.current = items.length + drafts.length;
   const allCount = allCountRef.current;
-
-  const openItem = useCallback((item: ProjectCardGridItem): void => {
-    if (!item.draft) setRecentOpens(recordRecentOpen(persistKey, item.id));
-    onOpen(item);
-  }, [onOpen, persistKey]);
 
   const changeView = (next: ProjectLibraryView): void => {
     setView(next);
@@ -568,7 +561,7 @@ export function ProjectLibraryPage({
             sort={activeCategory === 'recent' ? undefined : sort}
             onSortChange={activeCategory === 'recent' ? undefined : setSort}
             emptyTitle={listEmptyTitle}
-            onOpen={openItem}
+            onOpen={onOpen}
             onRename={onRename ? (item) => setNameDialog({ mode: 'rename', item }) : undefined}
             onDeleteRequest={onDelete ? (targets) => setPendingDelete(targets) : undefined}
             onDiscardDraftRequest={onDiscardDraft ? (item) => setPendingDelete([item]) : undefined}

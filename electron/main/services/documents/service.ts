@@ -96,7 +96,15 @@ export class DocumentService implements DocumentsPlatform {
       sizeBytes: row.fileSize,
       coverPath: coverPaths.get(row.id) ?? null,
       summary: row.summary,
+      lastOpenedAt: row.lastOpenedAt ?? null,
     }))
+  }
+
+  /** 记一次打开（文档会话打开或新建文档时调用）：只写作品索引，文档所在的项目一并记上。 */
+  markDocumentOpened(docId: string): Promise<void> {
+    const { workspace } = this.parts
+    workspace.catalog.markDocumentOpened(docId, workspace.now().getTime())
+    return Promise.resolve()
   }
 
   readDocument(target: DocumentTarget): Promise<DocumentReadResult> {

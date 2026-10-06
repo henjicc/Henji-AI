@@ -124,6 +124,8 @@ export class FakeDocumentCommands implements DocumentOperationCommands {
   saveGate: Promise<void> | null = null
   private nextId = 1
   private clock = 1_000
+  /** 文档或项目 ID → 最近打开时间（主进程记在作品索引里）。 */
+  private readonly openedAt = new Map<string, number>()
   /** 会话状态（撤销记录、视口）：文档 ID → 键 → 值。 */
   readonly sessionState = new Map<string, Map<string, unknown>>()
   private readonly realKinds: boolean
@@ -178,6 +180,7 @@ export class FakeDocumentCommands implements DocumentOperationCommands {
       createdAt: this.clock,
       mainVideoEditId: null,
       documentCount: 0,
+      lastOpenedAt: null,
     }
     this.projects.set(id, project)
     return project
@@ -275,6 +278,16 @@ export class FakeDocumentCommands implements DocumentOperationCommands {
   }
 
   /** 对齐主进程：只有找不到文件（标为缺失）的文档能从列表移除，文件还在时报 DocumentLocationError。 */
+  /** 对齐主进程：记文档与所在项目的最近打开时间（列表里的 lastOpenedAt）。 */
+  async markDocumentOpened(docId: string): Promise<void> {
+    const stored = this.documents.get(docId)
+    if (!stored) return
+    const at = ++this.clock
+    this.openedAt.set(docId, at)
+    const container = stored.meta.container
+    if (container.kind === 'project') this.openedAt.set(container.projectId, at)
+  }
+
   async forgetDocument(docId: string): Promise<void> {
     this.calls.push('forgetDocument')
     if (!this.documents.has(docId)) return
@@ -304,6 +317,7 @@ export class FakeDocumentCommands implements DocumentOperationCommands {
         sizeBytes: 1,
         coverPath: null,
         summary: this.summaryOf(meta.kind, content),
+        lastOpenedAt: this.openedAt.get(meta.id) ?? null,
       }))
       .sort((left, right) => right.updatedAt - left.updatedAt)
   }
@@ -368,7 +382,9 @@ export class FakeDocumentCommands implements DocumentOperationCommands {
 
   async listProjects(query: ProjectListQuery = {}): Promise<ProjectSummary[]> {
     this.calls.push('listProjects')
-    return [...this.projects.values()].filter((project) => query.includeDrafts !== false || !project.draft)
+    return [...this.projects.values()]
+      .filter((project) => query.includeDrafts !== false || !project.draft)
+      .map((project) => ({ ...project, lastOpenedAt: this.openedAt.get(project.id) ?? project.lastOpenedAt }))
   }
 
   // ---- 通用文档操作（2.5）用到的命令：行为对齐主进程仓库（用户输入的名字重名报错，keepBoth 加序号） ----

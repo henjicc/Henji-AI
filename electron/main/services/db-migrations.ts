@@ -9,7 +9,7 @@ import { createAssetLibraryTablesV1 } from './asset-library/schema'
 import { createAssistantMemoryTablesV1 } from './assistant/storageSchema'
 import { createCameraStageRenderTaskTableV1 } from './camera-stage-render-task-schema'
 import { createCustomModelsTableV1 } from './custom-models-schema'
-import { createDocumentIndexSchemaV1 } from './documents/index-schema'
+import { addDocumentIndexLastOpenedV1, createDocumentIndexSchemaV1 } from './documents/index-schema'
 import { createGenerationHistoryTablesV1, generationHistoryNeedsBackup } from './generation-history/schema'
 import {
   audioEditProjectsNeedBackup,
@@ -85,6 +85,8 @@ export const SCHEMA_MIGRATIONS: readonly SchemaMigration[] = [
   { version: 16, name: 'retire_audio_edit_projects', up: retireAudioEditProjectsV1, backupWhen: audioEditProjectsNeedBackup },
   // 3.4 画布接入文档文件：删两张旧画布工程表（不迁移内容）；此后 henji.db 的全部表都由账本管理
   { version: 17, name: 'retire_canvas_projects', up: retireCanvasProjectsV1, backupWhen: canvasProjectsNeedBackup },
+  // 作品索引记最近打开时间（只是索引元数据，可重建）
+  { version: 18, name: 'document_index_last_opened', up: addDocumentIndexLastOpenedV1 },
 ]
 
 export const SCHEMA_MIGRATIONS_TABLE = 'schema_migrations'
