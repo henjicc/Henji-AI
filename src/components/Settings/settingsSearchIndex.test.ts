@@ -35,7 +35,7 @@ describe('设置搜索索引', () => {
     const zh = translate('zh')
     expect(searchSettings('汇率', zh)[0]).toMatchObject({ tab: 'workspace', entry: { sectionId: 'workspace-generation' } })
     expect(searchSettings('API Key', zh)[0]).toMatchObject({ tab: 'providers' })
-    expect(searchSettings('快捷键', zh)[0]).toMatchObject({ label: '剪辑快捷键', entry: { sectionId: 'general-view' } })
+    expect(searchSettings('快捷键', zh)[0]).toMatchObject({ label: '剪辑快捷键', entry: { sectionId: 'workspace-video-edit' } })
     expect(searchSettings('别名', zh)[0]).toMatchObject({ entry: { labelKey: 'providerCenter.actions.renameModel' } })
     expect(searchSettings('  ', zh)).toEqual([])
     // 有直接命中时不混入只靠大类名命中的条目；没有直接命中时按分区名兜底

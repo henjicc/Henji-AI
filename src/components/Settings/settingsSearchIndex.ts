@@ -27,7 +27,6 @@ export const SETTINGS_SEARCH_INDEX: readonly SettingsSearchEntry[] = [
   ]),
   ...rows('general-view', [
     ['sections.canvas.imageViewerInfoLabel', ['查看器', '分辨率', 'viewer']],
-    ['videoEditShortcuts.label', ['快捷键', '键位', 'shortcut', 'hotkey']],
   ]),
   ...rows('general-appearance', [
     ['sections.theme.preset.label', ['主题', '深色', '浅色', 'dark', 'light', 'theme']],
@@ -76,6 +75,7 @@ export const SETTINGS_SEARCH_INDEX: readonly SettingsSearchEntry[] = [
     'sections.canvas.ignoreAtTagLabel',
   ]),
   ...rows('workspace-video-edit', [
+    ['videoEditShortcuts.label', ['快捷键', '键位', 'shortcut', 'hotkey']],
     ['sections.videoEdit.selectionFollowsPlayheadLabel', ['剪辑', '播放头', '自动选中', '效果控件', 'playhead', 'selection']],
   ]),
   ...rows('workspace-assets', [

@@ -12,6 +12,7 @@ import BottomPanelSection from '../sections/BottomPanelSection'
 import CanvasSection from '../sections/CanvasSection'
 import AssetLibrarySection from '../sections/AssetLibrarySection'
 import VideoEditSection from '../sections/VideoEditSection'
+import { VideoEditShortcutSettings } from '@/features/videoEdit/panels/VideoEditShortcutSettings'
 
 /**
  * 工作区：按应用顶部的页面分节（生成 / 画布 / 剪辑 / 资产库）。
@@ -63,6 +64,8 @@ const WorkspaceTab: React.FC = () => {
 
       <SettingsSection id="workspace-video-edit">
         <VideoEditSection />
+        {/* 剪辑快捷键与剪辑行为放在一处（用户要求：放到“剪辑”分类下） */}
+        <VideoEditShortcutSettings />
       </SettingsSection>
 
       <SettingsSection id="workspace-assets">

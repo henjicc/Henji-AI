@@ -2,7 +2,6 @@ import React from 'react'
 import { UiRegion } from '@/components/ui'
 import { createLogger } from '@/core/logging'
 import { createThemePayloadV2, parseThemePayload } from '@/core/theme/themeMigration'
-import { VideoEditShortcutSettings } from '@/features/videoEdit/panels/VideoEditShortcutSettings'
 import { useSettingsStore, type ThemeImportMode } from '@/stores/settingsStore'
 import SettingsSection from '../components/SettingsSection'
 import { SETTINGS_CONTENT_CLASS, SETTINGS_CONTENT_MAX_WIDTH_CLASS } from '../settingsLayout'
@@ -61,7 +60,6 @@ const GeneralTab: React.FC = () => {
 
       <SettingsSection id="general-view">
         <ImageViewerSection />
-        <VideoEditShortcutSettings />
       </SettingsSection>
 
       <SettingsSection id="general-appearance">
