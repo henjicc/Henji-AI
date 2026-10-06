@@ -12,6 +12,7 @@ export const LOCAL_MODEL_IDS = [
   'person_matting_rvm',
   'selfie_segmentation',
   'text_detection_ppocr',
+  'object_tracking_vittrack',
   'object_tracking_efficienttam',
 ] as const
 

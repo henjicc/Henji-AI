@@ -15,7 +15,7 @@ import type { DownloadRegion } from '../download/sourceSelector'
  */
 
 /** 我们自己的 ModelScope 模型仓库（用户上传后生效）。目录结构见任务文件 4.11 的上传清单。 */
-export const OWN_MODELSCOPE_REPO = 'henjicc/henji-local-models'
+export const OWN_MODELSCOPE_REPO = 'henjicc/henji-ai-local-models'
 
 export function modelScopeUrl(repo: string, file: string): string {
   return `https://www.modelscope.cn/models/${repo}/resolve/master/${file}`
@@ -151,6 +151,26 @@ export const LOCAL_MODEL_MANIFEST: readonly LocalModelSpec[] = [
         { region: 'domestic', label: 'own-modelscope', url: ownUrl('text_detection_ppocr/ch_PP-OCRv4_det_mobile.onnx') },
         { region: 'domestic', label: 'modelscope-rapidocr', url: modelScopeUrl('RapidAI/RapidOCR', 'onnx/PP-OCRv4/det/ch_PP-OCRv4_det_mobile.onnx') },
         { region: 'global', label: 'huggingface-rapidocr', url: huggingFaceUrl('SWHL/RapidOCR', 'PP-OCRv4/ch_PP-OCRv4_det_infer.onnx') },
+      ],
+    }],
+  },
+  {
+    id: 'object_tracking_vittrack',
+    title: { zh: '物体框跟踪 VitTrack', en: 'Box Tracking (VitTrack)' },
+    purpose: { zh: '框选一个物体后逐帧跟随它的位置，用于让文字、贴纸或效果跟着物体走', en: 'Follows a boxed object frame by frame so text, stickers or effects can move with it' },
+    folderName: { zh: '物体框跟踪 VitTrack', en: 'Box Tracking VitTrack' },
+    homepage: 'https://github.com/opencv/opencv_zoo/tree/main/models/object_tracking_vittrack',
+    license: { spdx: 'Apache-2.0', url: 'https://github.com/opencv/opencv_zoo/blob/main/models/object_tracking_vittrack/LICENSE' },
+    availability: 'available',
+    files: [{
+      name: 'object_tracking_vittrack_2023sep.onnx',
+      role: 'model',
+      sizeBytes: 714_726,
+      sha256: '2990f0b7cd44d92afa48cd97db6de7be113fc1d9594fddb74e2725c10478e91d',
+      sources: [
+        { region: 'domestic', label: 'own-modelscope', url: ownUrl('object_tracking_vittrack/object_tracking_vittrack_2023sep.onnx') },
+        { region: 'global', label: 'huggingface-opencv', url: huggingFaceUrl('opencv/object_tracking_vittrack', 'object_tracking_vittrack_2023sep.onnx') },
+        { region: 'global', label: 'github-opencv-zoo', url: 'https://github.com/opencv/opencv_zoo/raw/main/models/object_tracking_vittrack/object_tracking_vittrack_2023sep.onnx' },
       ],
     }],
   },
