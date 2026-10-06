@@ -3,13 +3,14 @@ import { filmstripHeightBucket, filmstripTileWidth, planFilmstripTiles, type Fil
 import { useFilmstripFrames, useFilmstripFramesRevision, type FilmstripFrameRef } from '@/hooks/useFilmstripFrames'
 import { filmstripFrameKey, nearestFilmstripFrame, readFilmstripFrame } from '@/services/videoFilmstrip/filmstripFrameService'
 import { resolveImageDisplayUrl } from '@/services/imageSource'
+import { videoEditClipSourceSecondsAt, type VideoEditClipTiming } from '@/core/videoEdit/clipSpeed'
 
 /**
  * 画面片段的缩略图条（任务 2.4，重要记录 006）：第一格固定是入点那一帧，其后按格宽铺开；
  * 只铺可见范围（前后各多一格），滚动缩放稳定后才请求新帧；新帧未到时显示同一素材最接近的已有帧，不留白不闪烁。
- * 静态图片片段每格都是这张图。
+ * 变速／倒放的每格源时间都由 clipSpeed 换算，再沿用源时钟网格与缓存；静态图片片段每格都是这张图。
  */
-export const VideoEditClipFilmstrip = memo(function VideoEditClipFilmstrip({ clipId, source, sourceRevision, still, aspect, mediaEndSeconds, frameSeconds, sourceInSeconds, clipWidth, height, secondsPerPixel, visibleFrom, visibleTo, devicePixelRatio, active }: {
+export const VideoEditClipFilmstrip = memo(function VideoEditClipFilmstrip({ clipId, source, sourceRevision, still, aspect, mediaEndSeconds, frameSeconds, clip, fps, pixels, clipWidth, height, visibleFrom, visibleTo, devicePixelRatio, active }: {
   clipId: string
   source: string
   sourceRevision?: string
@@ -18,11 +19,13 @@ export const VideoEditClipFilmstrip = memo(function VideoEditClipFilmstrip({ cli
   aspect: number
   mediaEndSeconds: number
   frameSeconds: number
-  sourceInSeconds: number
+  clip: VideoEditClipTiming
+  fps: number
+  /** 每时间线帧的 CSS 像素数。 */
+  pixels: number
   clipWidth: number
   /** 片段内部高度（CSS 像素）。 */
   height: number
-  secondsPerPixel: number
   /** 可见范围（相对片段左缘，CSS 像素）。 */
   visibleFrom: number
   visibleTo: number
@@ -33,7 +36,11 @@ export const VideoEditClipFilmstrip = memo(function VideoEditClipFilmstrip({ cli
   const revision = useFilmstripFramesRevision()
   const tileWidth = filmstripTileWidth(height, aspect)
   const bucket = filmstripHeightBucket(height * devicePixelRatio)
-  const tiles = useMemo(() => planFilmstripTiles({ clipWidth, tileWidth, visibleFrom, visibleTo, sourceInSeconds, secondsPerPixel, mediaEndSeconds, frameSeconds }), [clipWidth, tileWidth, visibleFrom, visibleTo, sourceInSeconds, secondsPerPixel, mediaEndSeconds, frameSeconds])
+  const tiles = useMemo(() => planFilmstripTiles({
+    clipWidth, tileWidth, visibleFrom, visibleTo, mediaEndSeconds, frameSeconds,
+    sourceInSeconds: videoEditClipSourceSecondsAt(clip, clip.start, fps), secondsPerPixel: 1 / (pixels * fps),
+    sourceSecondsAtPixel: still ? undefined : pixel => videoEditClipSourceSecondsAt(clip, clip.start + Math.min(clip.duration - 1, Math.floor(pixel / pixels)), fps),
+  }), [clipWidth, tileWidth, visibleFrom, visibleTo, clip, fps, pixels, still, mediaEndSeconds, frameSeconds])
   const refs = useMemo(() => still ? [] : tiles.map((tile): FilmstripFrameRef => ({ source, ...(sourceRevision ? { sourceRevision } : {}), timeUs: tile.timeUs, height: bucket })), [still, tiles, source, sourceRevision, bucket])
   const firstKeys = useMemo(() => new Set(refs.flatMap((ref, index) => tiles[index].index === 0 ? [filmstripFrameKey(ref)] : [])), [refs, tiles])
   useFilmstripFrames(refs, firstKeys, active)

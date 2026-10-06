@@ -57,8 +57,10 @@ export interface FilmstripPlanInput {
   visibleTo: number
   /** 片段入点（素材绝对时钟，秒）。 */
   sourceInSeconds: number
-  /** 每 CSS 像素代表的素材秒数。 */
+  /** 每 CSS 像素代表的素材秒数；提供源时间映射时仅用于验证显示比例为正。 */
   secondsPerPixel: number
+  /** 可选的源时间映射（变速／倒放片段由其唯一换算入口提供），像素相对片段左缘。 */
+  sourceSecondsAtPixel?: (pixel: number) => number
   /** 素材结束时刻（与导入时长同一时钟，秒）。 */
   mediaEndSeconds: number
   /** 素材一帧的时长（秒），用于让最后一格落在最后一帧上。 */
@@ -74,13 +76,20 @@ export function planFilmstripTiles(input: FilmstripPlanInput): FilmstripTile[] {
   if (last < first) return []
   const lastUs = Math.max(0, Math.floor((input.mediaEndSeconds - Math.max(input.frameSeconds, 0.001)) * 1_000_000))
   // Floor: a microsecond past the in-point picture would make FFmpeg return the next picture.
-  const inUs = Math.min(lastUs, Math.max(0, Math.floor(input.sourceInSeconds * 1_000_000)))
-  const step = filmstripGridStepUs(tileWidth * secondsPerPixel * 1_000_000)
+  const sourceAt = input.sourceSecondsAtPixel
+  const head = sourceAt ? sourceAt(0) : input.sourceInSeconds
+  const tail = sourceAt ? sourceAt(clipWidth) : input.mediaEndSeconds
+  const inUs = Math.min(lastUs, Math.max(0, Math.floor(head * 1_000_000)))
+  // 映射可能倒放，量化后仍须位于首尾取帧范围内，尤其是很短的片段与接近源时间 0 的尾格。
+  const minUs = sourceAt ? Math.min(inUs, Math.max(0, Math.floor(tail * 1_000_000))) : inUs
+  const maxUs = sourceAt ? Math.min(lastUs, Math.max(inUs, Math.floor(tail * 1_000_000))) : lastUs
+  const span = sourceAt ? Math.abs(sourceAt(tileWidth) - head) : tileWidth * secondsPerPixel
+  const step = filmstripGridStepUs(span * 1_000_000)
   const tiles: FilmstripTile[] = []
   for (let index = first; index <= last; index++) {
     const left = index * tileWidth
-    const exact = inUs + left * secondsPerPixel * 1_000_000
-    const timeUs = index === 0 ? inUs : Math.min(lastUs, Math.max(inUs, Math.floor(exact / step) * step))
+    const exact = sourceAt ? sourceAt(left) * 1_000_000 : inUs + left * secondsPerPixel * 1_000_000
+    const timeUs = index === 0 ? inUs : Math.min(maxUs, Math.max(minUs, Math.floor(exact / step) * step))
     tiles.push({ index, left, width: Math.min(tileWidth, clipWidth - left), timeUs })
   }
   return tiles

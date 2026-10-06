@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import React, { useSyncExternalStore } from 'react'
-import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, waitFor, within } from '@testing-library/react'
 import { createPortal } from 'react-dom'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { compileCodeMaterial } from '@/core/videoEdit/codeMaterial/compiler'
@@ -10,7 +10,10 @@ import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/te
 import { rememberVideoEditCodeMetadata, readVideoEditCodeMetadata } from '../application/videoEditCodeState'
 import { appendVideoEditSequence, closeVideoEditProject, createVideoEditProject, editVideoProject, getActiveVideoEditSequence, listVideoEditInstances, setVideoEditTimelineView, setVideoEditView, subscribeVideoEdit, switchVideoEditSequence, undoVideoEdit, videoEditRevision, type VideoEditInstance } from '../application/videoEditService'
 import { executeVideoEditTimelineEdit } from '../application/videoEditTimeline'
-import { captureVideoEditCommandContext, executeVideoEditCommand } from '../application/videoEditCommands'
+import { captureVideoEditCommandContext, executeVideoEditCommand, videoEditCommandState } from '../application/videoEditCommands'
+import { videoEditKeyboardCommand } from '../application/videoEditKeyboard'
+import { closeVideoEditSpeedDialog } from '../application/videoEditSpeedDialog'
+import { videoEditClipSourceRange, videoEditClipSpeedPercent } from '@/core/videoEdit/clipSpeed'
 import { VIDEO_EDIT_ITEM_DRAG_MIME } from '../application/videoEditDrop'
 import { VideoEditTimeline } from '../VideoEditTimeline'
 import { VideoEditInOutDuration } from './VideoEditTimelineTransport'
@@ -25,6 +28,113 @@ let owner: VideoEditInstance
 let ids: string[]
 let onError: ReturnType<typeof vi.fn>
 function View({ visible = true }: { visible?: boolean }): React.ReactElement { useSyncExternalStore(subscribeVideoEdit, videoEditRevision); return <VideoEditTimeline instance={owner} onError={onError} visible={visible} /> }
+/** 复用工作区根部的正式键盘路由与命令执行器，叶子时间线不另注册快捷键。 */
+function SpeedKeyboardView(): React.ReactElement {
+  return <div onKeyDown={event => {
+    const binding = videoEditKeyboardCommand({ code: event.code, key: event.key, ctrlKey: event.ctrlKey, metaKey: event.metaKey, altKey: event.altKey, shiftKey: event.shiftKey, repeat: event.repeat, isComposing: event.nativeEvent.isComposing, defaultPrevented: event.defaultPrevented, target: event.target }, 'timeline', {})
+    if (!binding) return
+    const context = captureVideoEditCommandContext(owner.document.id, binding.scope)
+    if (!videoEditCommandState(context, binding.id).enabled) return
+    event.preventDefault(); event.stopPropagation()
+    void executeVideoEditCommand(context, binding.id).catch(onError)
+  }}><View /></div>
+}
+
+it('Ctrl+R 打开速度对话框：50% 与时长互算，倒放／保持音调／波纹编辑一起提交并一步撤销（4.13）', async () => {
+  setVideoEditTimelineView(owner.document.id, { selectedClipIds: [ids[0]] })
+  const baseline = owner.document; const history = owner.past.length
+  const view = render(<SpeedKeyboardView />)
+  fireEvent.keyDown(view.getByRole('region', { name: '时间线编辑区域' }), { key: 'r', code: 'KeyR', ctrlKey: true })
+  const dialog = within(await view.findByRole('dialog', { name: '剪辑速度/持续时间' }))
+  const speed = dialog.getByLabelText('速度百分比') as HTMLInputElement
+  const duration = dialog.getByLabelText('持续时间') as HTMLInputElement
+  expect(speed.value).toBe('100'); expect(duration.value).toBe('00:00:01:00')
+  for (const name of ['倒放速度', '保持音频音调', '波纹编辑，移动尾部剪辑']) expect(dialog.getByRole('checkbox', { name }).getAttribute('aria-checked')).toBe('false')
+  fireEvent.change(speed, { target: { value: '50' } }); fireEvent.blur(speed)
+  expect(duration.value).toBe('00:00:02:00')
+  for (const name of ['倒放速度', '保持音频音调', '波纹编辑，移动尾部剪辑']) fireEvent.click(dialog.getByRole('checkbox', { name }))
+  expect(owner.document).toBe(baseline); expect(owner.past).toHaveLength(history)
+  fireEvent.click(dialog.getByRole('button', { name: '确定' }))
+  expect(current().clips[0]).toMatchObject({ duration: 60, reverse: true, preservePitch: true })
+  expect(videoEditClipSpeedPercent(current().clips[0])).toBe(50)
+  expect(videoEditClipSourceRange(current().clips[0], 30)).toEqual({ from: 0, to: 1 })
+  expect(current().clips[1].start).toBe(90); expect(owner.past).toHaveLength(history + 1)
+  act(() => undoVideoEdit(owner.document.id)); expect(owner.document.sequences).toEqual(baseline.sequences); expect(owner.past).toHaveLength(history)
+  expect(onError).not.toHaveBeenCalled()
+})
+
+it('速度对话框：持续时间反算速度，输入保护与取消不编辑，关闭波纹后保留尾部位置（4.13）', async () => {
+  setVideoEditTimelineView(owner.document.id, { selectedClipIds: [ids[0]] })
+  const view = render(<SpeedKeyboardView />); const host = view.getByRole('region', { name: '时间线编辑区域' })
+  const open = async () => { fireEvent.keyDown(host, { key: 'r', code: 'KeyR', ctrlKey: true }); return within(await view.findByRole('dialog', { name: '剪辑速度/持续时间' })) }
+  let dialog = await open(); const baseline = owner.document; const history = owner.past.length
+  const duration = dialog.getByLabelText('持续时间') as HTMLInputElement
+  fireEvent.change(duration, { target: { value: '00:00:02:00' } }); fireEvent.blur(duration)
+  expect((dialog.getByLabelText('速度百分比') as HTMLInputElement).value).toBe('50')
+  // 弹窗输入里按 R 不切换工具、Ctrl+R 不重开对话框。
+  fireEvent.keyDown(duration, { key: 'r', code: 'KeyR' }); fireEvent.keyDown(duration, { key: 'r', code: 'KeyR', ctrlKey: true })
+  expect(owner.tool).toBe('select'); expect(view.getAllByRole('dialog')).toHaveLength(1)
+  fireEvent.click(dialog.getByRole('button', { name: '取消' }))
+  expect(owner.document).toBe(baseline); expect(owner.past).toHaveLength(history)
+  dialog = await open()
+  const time = dialog.getByLabelText('持续时间') as HTMLInputElement
+  fireEvent.change(time, { target: { value: 'bad-timecode' } }); fireEvent.blur(time)
+  expect(time.value).toBe('00:00:01:00')
+  fireEvent.change(time, { target: { value: '00:00:02:00' } }); fireEvent.keyDown(time, { key: 'Enter', code: 'Enter' })
+  expect((dialog.getByLabelText('速度百分比') as HTMLInputElement).value).toBe('50')
+  // 开关打开再关闭，确保提交读取最终值。
+  const ripple = dialog.getByRole('checkbox', { name: '波纹编辑，移动尾部剪辑' })
+  fireEvent.click(ripple); fireEvent.click(ripple)
+  fireEvent.click(dialog.getByRole('button', { name: '确定' }))
+  expect(current().clips[0].duration).toBe(60); expect(current().clips[1].start).toBe(60)
+  expect(videoEditClipSpeedPercent(current().clips[0])).toBe(50); expect(owner.past).toHaveLength(history + 1)
+  expect(onError).not.toHaveBeenCalled()
+})
+
+it.each(['in', 'out'] as const)('R 比率拉伸拖 %s 边缘：吸附、实时预览、保留源范围，释放一步历史与撤销（4.13）', async edge => {
+  editVideoProject(owner.document.id, document => { document.sequences[0].clips[0].start = 30; document.sequences[0].clips[1].start = 90; return document })
+  setVideoEditTimelineView(owner.document.id, { snapping: true }); setVideoEditView(owner.document.id, { frame: 45 })
+  const view = render(<SpeedKeyboardView />); const host = view.getByRole('region', { name: '时间线编辑区域' })
+  fireEvent.keyDown(host, { key: 'r', code: 'KeyR' }); await waitFor(() => expect(owner.tool).toBe('rate_stretch'))
+  const baseline = owner.document; const history = owner.past.length
+  const origin = edge === 'in' ? 60 : 120; const target = edge === 'in' ? 87 : 177
+  fireEvent.pointerDown(view.getByRole('button', { name: `裁剪视频${edge === 'in' ? '入点' : '出点'}` }), event(header + origin))
+  fireEvent.pointerMove(host, event(header + target - 10)); fireEvent.pointerMove(host, event(header + target))
+  expect(owner.document).toBe(baseline); expect(owner.past).toHaveLength(history)
+  const block = view.container.querySelector(`[data-video-edit-clip="${ids[0]}"]`)!
+  expect(block.getAttribute('data-clip-start')).toBe(edge === 'in' ? '45' : '30')
+  expect(block.getAttribute('data-clip-duration')).toBe(edge === 'in' ? '15' : '60')
+  expect(block.textContent).toContain(edge === 'in' ? '[200%]' : '[50%]')
+  expect(view.container.querySelector('[data-video-edit-snap-indicator]')?.getAttribute('data-video-edit-snap-indicator')).toBe(edge === 'in' ? '45' : '90')
+  fireEvent.pointerUp(host, event(header + target))
+  expect(current().clips[0]).toMatchObject({ start: edge === 'in' ? 45 : 30, duration: edge === 'in' ? 15 : 60 })
+  expect(videoEditClipSpeedPercent(current().clips[0])).toBe(edge === 'in' ? 200 : 50)
+  expect(videoEditClipSourceRange(current().clips[0], 30)).toEqual({ from: 0, to: 1 })
+  expect(current().clips[1].start).toBe(90); expect(owner.past).toHaveLength(history + 1)
+  expect(view.container.querySelector('[data-video-edit-snap-indicator]')).toBeNull()
+  act(() => undoVideoEdit(owner.document.id)); expect(owner.document.sequences).toEqual(baseline.sequences); expect(owner.past).toHaveLength(history); expect(onError).not.toHaveBeenCalled()
+})
+
+it('速度对话框回读既有倒放与保持音调，关闭两项不改变速度或源范围且一步撤销（4.13）', async () => {
+  executeVideoEditTimelineEdit(owner.document.id, current().id, { kind: 'speed', clipIds: [ids[0]], linked: false, change: { speed: { numerator: 2, denominator: 1 }, reverse: true, preservePitch: true } })
+  setVideoEditTimelineView(owner.document.id, { selectedClipIds: [ids[0]] })
+  const baseline = owner.document; const history = owner.past.length
+  const view = render(<SpeedKeyboardView />)
+  fireEvent.keyDown(view.getByRole('region', { name: '时间线编辑区域' }), { key: 'r', code: 'KeyR', ctrlKey: true })
+  const dialog = within(await view.findByRole('dialog', { name: '剪辑速度/持续时间' }))
+  expect((dialog.getByLabelText('速度百分比') as HTMLInputElement).value).toBe('200')
+  expect((dialog.getByLabelText('持续时间') as HTMLInputElement).value).toBe('00:00:00:15')
+  for (const name of ['倒放速度', '保持音频音调']) {
+    const checkbox = dialog.getByRole('checkbox', { name })
+    expect(checkbox.getAttribute('aria-checked')).toBe('true'); fireEvent.click(checkbox)
+  }
+  fireEvent.click(dialog.getByRole('button', { name: '确定' }))
+  expect(current().clips[0].reverse).toBeUndefined(); expect(current().clips[0].preservePitch).toBeUndefined()
+  expect(current().clips[0].duration).toBe(15); expect(videoEditClipSpeedPercent(current().clips[0])).toBe(200)
+  expect(videoEditClipSourceRange(current().clips[0], 30)).toEqual({ from: 0, to: 1 }); expect(owner.past).toHaveLength(history + 1)
+  act(() => undoVideoEdit(owner.document.id)); expect(owner.document.sequences).toEqual(baseline.sequences); expect(owner.past).toHaveLength(history)
+  expect(onError).not.toHaveBeenCalled()
+})
 const current = () => getActiveVideoEditSequence(owner)
 /** 轨道中线的客户区纵坐标：按实际渲染的区位置与区内滚动读取（视口 getBoundingClientRect 固定在 0）。 */
 const trackClientY = (index = 1): number => {
@@ -75,7 +185,7 @@ beforeEach(async () => {
   ids = current().clips.map(clip => clip.id)
   setVideoEditTimelineView(owner.document.id, { selectedClipIds: [], snapping: false })
 })
-afterEach(async () => { cleanup(); for (const instance of listVideoEditInstances()) await closeVideoEditProject(instance.document.id); vi.restoreAllMocks(); vi.unstubAllGlobals(); uninstallHarnessNativeStorage(); resetFilmstripFramesForTests() })
+afterEach(async () => { cleanup(); closeVideoEditSpeedDialog(); for (const instance of listVideoEditInstances()) await closeVideoEditProject(instance.document.id); vi.restoreAllMocks(); vi.unstubAllGlobals(); uninstallHarnessNativeStorage(); resetFilmstripFramesForTests() })
 
 it('普通视频与代码多选，连续拖动仅本地预览，释放一次历史且一次撤销', () => {
   const view = render(<View />); const host = view.getByRole('region', { name: '时间线编辑区域' })

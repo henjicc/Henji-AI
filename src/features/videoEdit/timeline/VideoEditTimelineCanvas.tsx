@@ -8,7 +8,8 @@ import { UiButton } from '@/components/ui'
 import { UI_DIVIDER_CLASS, UI_TEXT_NUMERIC_CLASS } from '@/components/ui/styleTokens'
 import { VideoEditSequenceFrameRateRequired, type VideoEditSequenceSettings } from '@/core/videoEdit/projectItems'
 import { videoEditDuration, videoEditClipMedia, type VideoEditClip, type VideoEditSequence } from '@/core/videoEdit/document'
-import { rescaleVideoEditFrame, videoEditFps, videoEditSourceSeconds } from '@/core/videoEdit/time'
+import { rescaleVideoEditFrame, videoEditFps } from '@/core/videoEdit/time'
+import { videoEditClipSourceSecondsAtTime } from '@/core/videoEdit/clipSpeed'
 import { videoEditSyncOffsets } from '@/core/videoEdit/linkSync'
 import { videoEditClipSpeedLabel } from '@/core/videoEdit/clipSpeedDisplay'
 import { videoEditPickRelations } from '@/core/videoEdit/timelineSelection'
@@ -126,7 +127,8 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
     if (!media || !(clip.kind === 'audio' || clip.kind === 'video' && clip.sourceComponent !== 'video' && media.hasAudio === true)) return []
     const from = Math.max(clip.start, Math.floor(Math.max(0, view.left) / pixels)); const to = Math.min(clip.start + clip.duration, Math.ceil((view.left + view.width - TIMELINE_HEADER_WIDTH) / pixels))
     if (to <= from) return []
-    const startSeconds = Math.max(0, videoEditSourceSeconds(clip) + (from - clip.start) / fps); const endSeconds = Math.min(media.durationSeconds, videoEditSourceSeconds(clip) + (to - clip.start) / fps)
+    const head = videoEditClipSourceSecondsAtTime(clip, from / fps, fps); const tail = videoEditClipSourceSecondsAtTime(clip, to / fps, fps)
+    const startSeconds = Math.max(0, Math.min(head, tail)); const endSeconds = Math.min(media.durationSeconds, Math.max(head, tail))
     if (endSeconds <= startSeconds) return []
     const source = { source: media.path, ...(media.sourceRevision ? { sourceRevision: media.sourceRevision } : {}) }
     // A mapped clip (task 2.6) draws one lane per clip channel from the source channel it reads.
@@ -331,9 +333,9 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
         const fadable = clip.kind !== 'adjustment' && clipWidth >= FADE_HANDLE_MIN_WIDTH
         return <div key={clip.id} data-video-edit-clip={clip.id} data-clip-start={clip.start} data-clip-duration={clip.duration} className={`group absolute overflow-hidden rounded-md border ${surface.fill} ${selected ? CLIP_SELECTED_LINE : surface.line}`} data-clip-dimmed={dimmed || undefined} style={{ top: row.top - region.top + 2, height: row.height - 4, left: clipLeft, width: clipWidth }}>
           {picture && media && <VideoEditClipFilmstrip clipId={clip.id} source={media.path} sourceRevision={media.sourceRevision} still={media.kind === 'image'} aspect={media.width > 0 && media.height > 0 ? media.width / media.height : 16 / 9}
-            mediaEndSeconds={media.durationSeconds} frameSeconds={media.frameRate ? media.frameRate.denominator / media.frameRate.numerator : 1 / 30} sourceInSeconds={videoEditSourceSeconds(clip)} clipWidth={clipWidth} height={row.height - 6}
-            secondsPerPixel={1 / (pixels * fps)} visibleFrom={stripEdge(view.left + TIMELINE_HEADER_WIDTH - clipLeft, clipWidth, Math.floor)} visibleTo={stripEdge(view.left + view.width - clipLeft, clipWidth, Math.ceil)} devicePixelRatio={devicePixelRatio} active={visible} />}
-          {range && <VideoEditClipWaveform clipId={clip.id} sources={range.sources} startSeconds={range.startSeconds} endSeconds={range.endSeconds} left={(range.from - clip.start) * pixels} width={(range.to - range.from) * pixels} visible={visible} lane={picture ? 'lower' : 'full'} />}
+            mediaEndSeconds={media.durationSeconds} frameSeconds={media.frameRate ? media.frameRate.denominator / media.frameRate.numerator : 1 / 30} clip={clip} fps={fps} pixels={pixels} clipWidth={clipWidth} height={row.height - 6}
+            visibleFrom={stripEdge(view.left + TIMELINE_HEADER_WIDTH - clipLeft, clipWidth, Math.floor)} visibleTo={stripEdge(view.left + view.width - clipLeft, clipWidth, Math.ceil)} devicePixelRatio={devicePixelRatio} active={visible} />}
+          {range && <VideoEditClipWaveform clipId={clip.id} sources={range.sources} startSeconds={range.startSeconds} endSeconds={range.endSeconds} reverse={clip.reverse} left={(range.from - clip.start) * pixels} width={(range.to - range.from) * pixels} visible={visible} lane={picture ? 'lower' : 'full'} />}
           {/* 隐藏轨/静音轨只淡化画面与波形（盖一层半透明窗口底），片段名标签不跟着变淡：整片 opacity-50 时
               纸白下标签只剩 1.5:1（4.1 对比度审计） */}
           {dimmed && <div className="pointer-events-none absolute inset-0 bg-window/50" aria-hidden="true" />}

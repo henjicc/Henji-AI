@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import NumberInput from '@/components/ui/NumberInput'
 import { UiButton, UiCheckbox, UiError, UiFormRow, UiGroup, UiInput, UiModal } from '@/components/ui'
-import { videoEditClipSpeedPercent, videoEditClipSpeedValue, videoEditSpeedRatio, VIDEO_EDIT_SPEED_MAX, VIDEO_EDIT_SPEED_MIN } from '@/core/videoEdit/clipSpeed'
+import { changeVideoEditClipSpeed, stretchVideoEditClip, videoEditClipSpeedPercent, videoEditSpeedRatio, VIDEO_EDIT_SPEED_MAX, VIDEO_EDIT_SPEED_MIN } from '@/core/videoEdit/clipSpeed'
 import type { VideoEditSpeedChange } from '@/core/videoEdit/clipSpeedEdits'
 import { parseVideoEditTimecodeInput, videoEditFrameTimecode } from '@/core/videoEdit/timecode'
 import { videoEditFps } from '@/core/videoEdit/time'
@@ -19,7 +19,7 @@ export function VideoEditSpeedDialog({ request, onClose }: { request: VideoEditS
     const sequence = owner.document.sequences.find(value => value.id === request.sequenceId)
     const clips = sequence?.clips.filter(clip => request.clipIds.includes(clip.id)) ?? []
     const first = clips[0]
-    return { fps: sequence ? videoEditFps(sequence.frameRate) : 30, percent: first ? videoEditClipSpeedPercent(first) : 100, speed: first ? videoEditClipSpeedValue(first) : 1, duration: first?.duration ?? 1, reverse: clips.length > 0 && clips.every(clip => clip.reverse), preservePitch: clips.length > 0 && clips.every(clip => clip.preservePitch), count: clips.length }
+    return { fps: sequence ? videoEditFps(sequence.frameRate) : 30, percent: first ? videoEditClipSpeedPercent(first) : 100, clip: first ?? { start: 0, duration: 1, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 } }, duration: first?.duration ?? 1, reverse: clips.length > 0 && clips.every(clip => clip.reverse), preservePitch: clips.length > 0 && clips.every(clip => clip.preservePitch), count: clips.length }
   }, [request])
   const [percent, setPercent] = useState(initial.percent)
   const [duration, setDuration] = useState(initial.duration)
@@ -31,14 +31,14 @@ export function VideoEditSpeedDialog({ request, onClose }: { request: VideoEditS
   const [error, setError] = useState('')
   const changeSpeed = (value: number): void => {
     const next = Math.max(VIDEO_EDIT_SPEED_MIN * 100, Math.min(VIDEO_EDIT_SPEED_MAX * 100, value))
-    const frames = Math.max(1, Math.round(initial.duration * initial.speed / (next / 100)))
+    const frames = changeVideoEditClipSpeed(initial.clip, videoEditSpeedRatio(next / 100), initial.fps).duration
     setPercent(next); setDuration(frames); setDurationText(videoEditFrameTimecode(frames, initial.fps)); setEdited('speed')
   }
   const commitDuration = (): void => {
     const frames = parseVideoEditTimecodeInput(durationText, initial.fps, duration)
     if (frames === null || frames < 1) { setDurationText(videoEditFrameTimecode(duration, initial.fps)); return }
-    const next = Math.max(VIDEO_EDIT_SPEED_MIN * 100, Math.min(VIDEO_EDIT_SPEED_MAX * 100, Math.round(initial.speed * initial.duration / frames * 10_000) / 100))
-    setDuration(frames); setDurationText(videoEditFrameTimecode(frames, initial.fps)); setPercent(next); setEdited('duration')
+    const stretched = stretchVideoEditClip(initial.clip, frames)
+    setDuration(stretched.duration); setDurationText(videoEditFrameTimecode(stretched.duration, initial.fps)); setPercent(videoEditClipSpeedPercent(stretched)); setEdited('duration')
   }
   const submit = (): void => {
     try {
