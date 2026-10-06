@@ -31,8 +31,8 @@ const VIEWS: Record<VideoEditClipPropertyKey, PropertyView> = {
 }
 
 function PropertyRow({ label, tooltip, children, resetLabel, resetDisabled, onReset, animation }: { label: string; tooltip: string; children: ReactNode; resetLabel: string; resetDisabled: boolean; onReset: () => void; animation?: ReactNode }): React.ReactElement {
-  return <div className="flex min-h-8 items-center gap-1.5 pl-5">
-    {animation}<span className="min-w-0 flex-1 truncate text-xs text-text2"><UiTooltipText tooltip={tooltip}>{label}</UiTooltipText></span>
+  return <div className="flex min-h-8 flex-wrap items-center gap-1.5 pl-5">
+    {animation}<span className="min-w-20 flex-1 text-xs text-text2"><UiTooltipText tooltip={tooltip}>{label}</UiTooltipText></span>
     {children}
     <UiIconButton size="xs" aria-label={resetLabel} title={resetLabel} disabled={resetDisabled} onClick={onReset}><RotateCcw size={12} /></UiIconButton>
   </div>

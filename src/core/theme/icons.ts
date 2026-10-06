@@ -9,6 +9,7 @@ import {
   FileText,
   FileVideo,
   Film,
+  Gauge,
   Grid2x2,
   Hash,
   Image as ImageIcon,
@@ -92,6 +93,8 @@ export const ICON_VIDEO_EDIT_GRAPHIC: LucideIcon = Shapes
 export const ICON_VIDEO_EDIT_ADJUSTMENT: LucideIcon = SlidersHorizontal
 /** 剪辑过渡（时间线上的过渡块、效果面板的过渡预设）。 */
 export const ICON_VIDEO_EDIT_TRANSITION: LucideIcon = Blend
+/** 剪辑代理：两个监视器的切换按钮与素材创建入口共用。 */
+export const ICON_VIDEO_EDIT_PROXY: LucideIcon = Gauge
 
 /* 其他跨界面概念 ----------------------------------------------------------- */
 

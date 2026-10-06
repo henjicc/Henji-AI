@@ -79,7 +79,7 @@ it('真实片段字幕创建、整笔编辑、定位和撤销使用同一剪辑�
 it('标记可改为序列锚定、编辑整数帧、定位和删除，一次操作一次历史', async () => {
   const view = render(<View />)
   fireEvent.click(view.getByRole('tab', { name: '标记' })); fireEvent.click(view.getByRole('button', { name: '新增标记' }))
-  fireEvent.click(view.getByRole('button', { name: '内容锚定' })); fireEvent.click(view.getByRole('button', { name: '序列时钟' }))
+  fireEvent.click(view.getByRole('button', { name: '内容锚定' })); fireEvent.click(view.getByRole('button', { name: '序列时间' }))
   fireEvent.change(view.getByLabelText('标记名称'), { target: { value: '段落开始' } })
   fireEvent.change(view.getByLabelText('标记帧'), { target: { value: '60' } })
   const history = owner.past.length; fireEvent.click(view.getByRole('button', { name: '添加' }))

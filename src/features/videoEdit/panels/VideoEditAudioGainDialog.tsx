@@ -34,7 +34,7 @@ export function VideoEditAudioGainDialog({ target, onClose }: { target: VideoEdi
         <UiButton disabled={busy} onClick={() => void run(false)}>测量所选声音</UiButton>
       </UiGroup>
       {busy && <UiLoading message="正在处理声音…" />}
-      {measurements.length > 0 && <UiGroup title="测量结果">{measurements.map((measurement, index) => <p key={index} className="text-xs text-text2">声音 {index + 1}：积分 {format(measurement.integratedLufs, 'LUFS')} · 短期 {format(measurement.shortTermLufs, 'LUFS')} · 真峰值 {format(measurement.truePeakDbtp, 'dBTP')}</p>)}</UiGroup>}
+      {measurements.length > 0 && <UiGroup title="测量结果">{measurements.map((measurement, index) => <p key={index} className="break-words text-xs text-text2">声音 {index + 1}：整体响度 {format(measurement.integratedLufs, 'LUFS')} · 短时响度 {format(measurement.shortTermLufs, 'LUFS')} · 真峰值 {format(measurement.truePeakDbtp, 'dBTP')}</p>)}</UiGroup>}
       {error && <UiError message={error} />}
     </div>
   </UiModal>

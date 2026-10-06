@@ -16,8 +16,8 @@ import { encodeLumetriCurve, lumetriCurvePoints, parseLumetriCurve } from '@/cor
 type Gesture = VideoEditBuiltinParamGesture
 
 function Row({ label, tooltip, children, resetLabel, resetDisabled, onReset, param, animation }: { label: string; tooltip: string; children: ReactNode; resetLabel: string; resetDisabled: boolean; onReset: () => void; param?: string; animation?: ReactNode }): React.ReactElement {
-  return <div className="flex min-h-8 items-center gap-1.5" data-video-edit-builtin-param={param}>
-    {animation}<span className="min-w-0 flex-1 truncate text-xs text-text2"><UiTooltipText tooltip={tooltip}>{label}</UiTooltipText></span>
+  return <div className="flex min-h-8 flex-wrap items-center gap-1.5" data-video-edit-builtin-param={param}>
+    {animation}<span className="min-w-20 flex-1 text-xs text-text2"><UiTooltipText tooltip={tooltip}>{label}</UiTooltipText></span>
     {children}
     <UiIconButton size="xs" aria-label={resetLabel} title={resetLabel} disabled={resetDisabled} onClick={onReset}><RotateCcw size={12} /></UiIconButton>
   </div>
@@ -68,7 +68,7 @@ function ColorControl({ label, value, gesture, onChange }: { label: string; valu
 export function VideoEditBuiltinEffectControls({ target, effect, onError }: { target: VideoEditCompositeTarget; effect: VideoEditBuiltinEffect; onError: (reason: unknown) => void }): React.ReactElement {
   const gesture = useVideoEditBuiltinParamGesture(target.projectId, JSON.stringify([target.sequenceId, target.clipId, effect.id]), (changes, handle) => updateVideoEditBuiltinEffect(target, effect.id, changes, handle), onError)
   let definition
-  try { definition = requireVideoEditBuiltinEffect(effect.builtin.id) } catch { return <span className="text-2xs text-text3">此版本不认识这个效果，保留原样不渲染修改。</span> }
+  try { definition = requireVideoEditBuiltinEffect(effect.builtin.id) } catch { return <span className="text-2xs text-text3">暂不支持此效果，已保留原设置。</span> }
   const owner = requireVideoEditInstance(target.projectId)
   const clip = owner.document.sequences.find(sequence => sequence.id === target.sequenceId)!.clips.find(clip => clip.id === target.clipId)!
   const values = resolveVideoEditBuiltinParams(evaluateVideoEditEffect(effect, owner.frame - clip.start).builtin!)

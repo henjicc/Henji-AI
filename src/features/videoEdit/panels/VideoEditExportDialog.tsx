@@ -1,5 +1,5 @@
 import { useState, useSyncExternalStore } from 'react'
-import { UiButton, UiCheckbox, UiError, UiFormRow, UiGroup, UiInput, UiModal, UiSelect } from '@/components/ui'
+import { UiButton, UiCheckbox, UiError, UiFormRow, UiGroup, UiInput, UiLoading, UiModal, UiSelect } from '@/components/ui'
 import NumberInput from '@/components/ui/NumberInput'
 import type { VideoEditExportSettings } from '@/core/videoEdit/exportPresets'
 import { enqueueVideoEditExports, videoEditExportQueue } from '../application/videoEditExportQueue'
@@ -53,18 +53,19 @@ export function VideoEditExportDialog({ projectId, onClose }: { projectId: strin
         <UiFormRow label="格式" inline><UiSelect aria-label="导出格式" value={settings.format} onChange={event => patch({ format: event.target.value as VideoEditExportSettings['format'] })}><option value="mp4">MP4 视频</option><option value="aac">AAC 音频</option><option value="wav">WAV 音频</option></UiSelect></UiFormRow>
         {settings.format === 'mp4' && <>
           <UiFormRow label="保持序列画幅" inline><UiCheckbox checked={settings.keepSequenceSize ?? false} onCheckedChange={keepSequenceSize => patch({ keepSequenceSize })} /></UiFormRow>
-          {!settings.keepSequenceSize && <UiFormRow label="分辨率" inline><div className="flex items-center gap-2"><NumberInput ariaLabel="导出宽度" value={settings.width} min={16} max={7680} step={2} widthClassName="w-24" onChange={width => patch({ width })} /><span>×</span><NumberInput ariaLabel="导出高度" value={settings.height} min={16} max={7680} step={2} widthClassName="w-24" onChange={height => patch({ height })} /></div></UiFormRow>}
-          <UiFormRow label="帧率" inline><div className="flex items-center gap-2"><UiCheckbox checked={settings.fps === null} onCheckedChange={checked => patch({ fps: checked ? null : 30 })} aria-label="保持序列帧率" /><span>保持序列</span>{settings.fps !== null && <NumberInput ariaLabel="导出帧率" value={settings.fps} min={1} max={120} step={1} widthClassName="w-24" onChange={fps => patch({ fps })} />}</div></UiFormRow>
+          {!settings.keepSequenceSize && <UiFormRow label="分辨率"><div className="flex flex-wrap items-center gap-2"><NumberInput ariaLabel="导出宽度" value={settings.width} min={16} max={7680} step={2} widthClassName="w-24" onChange={width => patch({ width })} /><span>×</span><NumberInput ariaLabel="导出高度" value={settings.height} min={16} max={7680} step={2} widthClassName="w-24" onChange={height => patch({ height })} /></div></UiFormRow>}
+          <UiFormRow label="帧率"><div className="flex flex-wrap items-center gap-2"><UiCheckbox checked={settings.fps === null} onCheckedChange={checked => patch({ fps: checked ? null : 30 })} aria-label="保持序列帧率" /><span>保持序列</span>{settings.fps !== null && <NumberInput ariaLabel="导出帧率" value={settings.fps} min={1} max={120} step={1} widthClassName="w-24" onChange={fps => patch({ fps })} />}</div></UiFormRow>
           <UiFormRow label="视频码率 Mbps" inline><NumberInput ariaLabel="视频码率 Mbps" value={settings.videoBitrateMbps} min={.1} max={200} step={1} precision={1} widthClassName="w-24" onChange={videoBitrateMbps => patch({ videoBitrateMbps })} /></UiFormRow>
         </>}
         {settings.format !== 'wav' && <UiFormRow label="音频码率 kbps" inline><NumberInput ariaLabel="音频码率 kbps" value={settings.audioBitrateKbps} min={32} max={512} step={32} widthClassName="w-24" onChange={audioBitrateKbps => patch({ audioBitrateKbps })} /></UiFormRow>}
         <UiFormRow label="入点（帧）" inline><NumberInput ariaLabel="导出入点" value={range.startFrame} min={0} widthClassName="w-24" onChange={startFrame => setRange(value => ({ ...value, startFrame }))} /></UiFormRow>
-        <UiFormRow label="出点（帧，不含）" inline><NumberInput ariaLabel="导出出点" value={range.endFrame} min={1} widthClassName="w-24" onChange={endFrame => setRange(value => ({ ...value, endFrame }))} /></UiFormRow>
+        <UiFormRow label="出点（帧）" info="导出到此帧之前，不包含此帧。" inline><NumberInput ariaLabel="导出出点" value={range.endFrame} min={1} widthClassName="w-24" onChange={endFrame => setRange(value => ({ ...value, endFrame }))} /></UiFormRow>
         <UiFormRow label="响度标准化" info="仅调整这次导出的整片声音，不改变时间线或预览音量。" inline><UiCheckbox checked={Boolean(settings.loudness)} onCheckedChange={enabled => patch({ loudness: enabled ? { targetLufs: -14, truePeakDbtp: -1 } : null })} /></UiFormRow>
         {settings.loudness && <><VideoEditLoudnessFields target={settings.loudness.targetLufs} onTarget={targetLufs => patch({ loudness: { targetLufs, truePeakDbtp: settings.loudness!.truePeakDbtp } })} /><UiFormRow label="真峰值上限 dBTP" inline><NumberInput ariaLabel="真峰值上限 dBTP" value={settings.loudness.truePeakDbtp} min={-8} max={0} step={.1} precision={1} widthClassName="w-24" onChange={truePeakDbtp => patch({ loudness: { targetLufs: settings.loudness!.targetLufs, truePeakDbtp } })} /></UiFormRow></>}
-        <UiFormRow label="保存为自定义预设" inline><div className="flex gap-2"><UiInput aria-label="自定义预设名称" value={name} onChange={event => setName(event.target.value)} /><UiButton disabled={!name.trim()} onClick={savePreset}>保存</UiButton></div></UiFormRow>
+        <UiFormRow label="保存为自定义预设"><div className="flex min-w-0 flex-wrap gap-2"><UiInput aria-label="自定义预设名称" value={name} onChange={event => setName(event.target.value)} /><UiButton disabled={!name.trim()} onClick={savePreset}>保存</UiButton></div></UiFormRow>
       </UiGroup>}
       {notice && <p role="status" className="text-xs text-text2">{notice}</p>}
+      {busy && <UiLoading size="xs" message="正在处理导出…" />}
       {error && <UiError message={error} />}
     </UiGroup>
     <VideoEditExportQueueList />

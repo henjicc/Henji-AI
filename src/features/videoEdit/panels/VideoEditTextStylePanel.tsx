@@ -33,9 +33,9 @@ export function VideoEditTextStylePanel({ projectId, sequenceId, clip, height, o
       <UiFormRow label="字号" density="compact">{numeric('fontSize', '文字字号', 1, 512)}</UiFormRow>
       <UiFormRow label="颜色" density="compact">{color('color', '文字颜色')}</UiFormRow>
       <UiFormRow label="对齐" density="compact"><Dropdown<VideoEditTextStyle['align']> ariaLabel="文字对齐" size="sm" value={style.align} options={[{ value: 'left', label: '左对齐' }, { value: 'center', label: '居中' }, { value: 'right', label: '右对齐' }]} onSelect={align => write({ align })} /></UiFormRow>
-      <UiFormRow label="描边" density="compact"><div className="flex items-center gap-2">{numeric('strokeWidth', '文字描边宽度', 0, 20)}{color('strokeColor', '文字描边颜色')}</div></UiFormRow>
+      <UiFormRow label="描边" density="compact"><div className="flex flex-wrap items-center gap-2">{numeric('strokeWidth', '文字描边宽度', 0, 20)}{color('strokeColor', '文字描边颜色')}</div></UiFormRow>
       <UiFormRow label="阴影" density="compact"><UiSwitch aria-label="文字阴影" checked={style.shadow} onCheckedChange={shadow => write({ shadow })} /></UiFormRow>
-      {style.shadow && <UiFormRow label="阴影柔化" density="compact"><div className="flex items-center gap-2">{numeric('shadowBlur', '文字阴影柔化', 0, 50)}{color('shadowColor', '文字阴影颜色')}</div></UiFormRow>}
+      {style.shadow && <UiFormRow label="阴影柔化" density="compact"><div className="flex flex-wrap items-center gap-2">{numeric('shadowBlur', '文字阴影柔化', 0, 50)}{color('shadowColor', '文字阴影颜色')}</div></UiFormRow>}
       <UiFormRow label="背景框" density="compact"><div className="flex items-center gap-2"><UiSwitch aria-label="文字背景框" checked={style.background} onCheckedChange={background => write({ background })} />{style.background && color('backgroundColor', '文字背景颜色')}</div></UiFormRow>
     </div>
   </VideoEditEffectSection>

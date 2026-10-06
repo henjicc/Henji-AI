@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso'
-import { Dropdown, PanelTrigger, UiButton, UiEmpty, UiError, UiLoading, UiOptionButton, UiOverflowRow, UiTextToken, UI_TEXT_META_CLASS, type UiOverflowRowItem } from '@/components/ui'
+import { Dropdown, PanelTrigger, UiButton, UiCheckbox, UiEmpty, UiError, UiLoading, UiOverflowRow, UiTextToken, UI_TEXT_META_CLASS, type UiOverflowRowItem } from '@/components/ui'
 import { Z_LAYERS } from '@/core/theme/zLayers'
 import { audioEditFillerBlockIds, DEFAULT_AUDIO_EDIT_SETTINGS } from '@/core/audioEdit/edits'
 import { findTranscriptBlockForPlayback } from '@/core/audioEdit/timeline'
@@ -73,11 +73,11 @@ export function VideoEditTextPanel({ instance, sequence, onError }: { instance: 
   const silences = useMemo(() => resolveVideoEditTextRanges(composition, { kind: 'silence' }), [composition])
   const items: UiOverflowRowItem[] = [
     { id: 'scope', priority: 10, pinned: true, node: <Dropdown ariaLabel="转录稿范围" size="sm" value={scope} onSelect={value => { setScope(value); setSelection(undefined); setPause(false) }} options={[{ value: 'sequence', label: '整个序列' }, { value: 'selection', label: '选中片段' }]} /> },
-    { id: 'delete', priority: 10, pinned: true, node: <UiButton size="sm" disabled={disabled || !selector} onClick={() => operation('delete')}>删除</UiButton> },
+    { id: 'delete', priority: 10, pinned: true, node: <UiButton variant="danger" size="sm" disabled={disabled || !selector} onClick={() => operation('delete')}>删除</UiButton> },
     { id: 'extract', priority: 2, node: <UiButton size="sm" disabled={disabled || !selector || pause} onClick={() => operation('extract')}>提取到新序列</UiButton> },
     { id: 'insert', priority: 1, node: <UiButton size="sm" disabled={disabled || !selector || pause} onClick={() => operation('insert')}>插入到播放头</UiButton> },
-    { id: 'fillers', priority: 0, node: <UiButton size="sm" disabled={disabled || !visible.length} onClick={cleanFillers}>删除口头禅</UiButton> },
-    { id: 'silence', priority: 0, node: <UiOptionButton size="sm" active={pause} disabled={disabled || !silences.length || scope !== 'sequence'} onClick={() => { setPause(value => !value); setSelection(undefined) }}>选择全序列静音段</UiOptionButton> },
+    { id: 'fillers', priority: 0, node: <UiButton variant="danger" size="sm" disabled={disabled || !visible.length} onClick={cleanFillers}>删除口头禅</UiButton> },
+    { id: 'silence', priority: 0, node: <label className="flex items-center gap-2 text-xs text-text2"><UiCheckbox aria-label="选择全序列静音段" checked={pause} disabled={disabled || !silences.length || scope !== 'sequence'} onCheckedChange={value => { setPause(value); setSelection(undefined) }} />选择全序列静音段</label> },
     { id: 'transcribe', priority: 3, node: <UiButton size="sm" disabled={disabled} onClick={() => prepare()}>{sequence.textTranscription ? '恢复识别稿' : '转录 / 读取已有稿'}</UiButton> },
     { id: 'sound', priority: 0, node: <Dropdown ariaLabel="文本识别声音" size="sm" value={trackId} onSelect={setTrackId} disabled={disabled} options={[{ value: '', label: '可听混音' }, ...sequence.tracks.map(track => ({ value: track.id, label: track.name }))]} /> },
     { id: 'detect', priority: 0, node: <UiButton size="sm" disabled={disabled || !sequence.textTranscription} onClick={() => prepare(true)}>检测静音</UiButton> },
@@ -90,7 +90,7 @@ export function VideoEditTextPanel({ instance, sequence, onError }: { instance: 
     <UiOverflowRow className="shrink-0 gap-1" items={items} renderOverflow={hidden => <PanelTrigger panelWidth={220} zIndex={Z_LAYERS.dropdown} closeOnPanelClick renderPanel={() => <div className="flex flex-col items-start gap-1">{hidden.map(id => <div key={id}>{items.find(item => item.id === id)?.node}</div>)}</div>}>{({ togglePanel, open }) => <UiButton size="sm" aria-label="更多文本剪辑操作" aria-expanded={open} data-panel-trigger-button onClick={togglePanel}>更多</UiButton>}</PanelTrigger>} />
     {error && <UiError message={error} size="xs" />}
     {disabled && <div className="flex items-center gap-1"><UiLoading size="sm" message={recognizing ? '正在转录' : '正在整理'} /><UiButton size="sm" onClick={() => { pending.current?.abort(); pending.current = undefined; setBusy(false); cancelSubtitleJob(instance, sequence.id) }}>取消</UiButton></div>}
-    {visible.some(word => word.granularity === 'segment') && <p className={UI_TEXT_META_CLASS}>此稿只有句级时间；逐字删除需要支持词级时间戳的识别模型。</p>}
+    {visible.some(word => word.granularity === 'segment') && <p className={UI_TEXT_META_CLASS}>此稿只能按整句剪辑；要逐字剪辑，请选择支持逐字定位的语音识别模型重新转录。</p>}
     {pause && <p className={UI_TEXT_META_CLASS}>已选择 {silences.length} 处检测到的静音，删除会保留自然短停顿。</p>}
     {groups.length ? <Virtuoso ref={list} className="min-h-0 flex-1" data={groups} computeItemKey={(_index, group) => group[0].id} itemContent={(_index, group) => <p className="pb-3 text-sm leading-relaxed">
       {group.map(word => <UiTextToken key={word.id} current={word.id === activeWord} aria-current={word.id === activeWord ? 'true' : undefined} selected={word.index >= from && word.index <= to} flagged={word.locked} aria-label={`跳转到：${word.text}`} disabled={disabled} onPointerDown={event => { if (event.button === 0) { drag.current = true; choose(word, event.shiftKey) } }} onPointerEnter={() => { if (drag.current) setSelection(previous => previous?.baseline === sequence ? { ...previous, end: word.id } : previous) }} onClick={event => {

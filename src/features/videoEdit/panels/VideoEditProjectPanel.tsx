@@ -4,10 +4,10 @@ import { VideoEditProxyDialog } from './VideoEditProxyDialog'
 import { forwardRef, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Virtuoso, VirtuosoGrid, type VirtuosoGridHandle, type VirtuosoHandle } from 'react-virtuoso'
-import { ArrowUp, ChevronDown, ChevronRight, ChevronUp, FolderInput, FolderOpen, FolderPlus, Import, List, Grid2X2, Plus, Pencil, Trash2, RefreshCw, Play, Settings2, Code2, AudioLines, Tag, Film } from 'lucide-react'
-import { ICON_WORKSPACE_VIDEO_EDIT as SequenceIcon, ICON_ASSET_LIBRARY as AssetLibraryIcon, ICON_VIDEO_EDIT_GRAPHIC as GraphicIcon } from '@/core/theme/icons'
+import { ArrowUp, ChevronDown, ChevronRight, ChevronUp, FolderInput, FolderOpen, FolderPlus, Import, List, Grid2X2, Plus, Pencil, Trash2, RefreshCw, Play, Settings2, Code2, AudioLines, Tag } from 'lucide-react'
+import { ICON_WORKSPACE_VIDEO_EDIT as SequenceIcon, ICON_ASSET_LIBRARY as AssetLibraryIcon, ICON_VIDEO_EDIT_GRAPHIC as GraphicIcon, ICON_VIDEO_EDIT_PROXY as ProxyIcon } from '@/core/theme/icons'
 import ContextMenu from '@/components/ContextMenu'
-import { PanelTrigger, UiButton, UiEmpty, UiIconButton, UiSearchInput, UiOptionButton, UiToast } from '@/components/ui'
+import { PanelTrigger, UiButton, UiEmpty, UiFormRow, UiIconButton, UiSearchInput, UiOptionButton, UiSwitch, UiToast } from '@/components/ui'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { matchVideoEditShortcut } from '@/core/videoEdit/commands'
 import { chooseVideoEditFolders } from '../application/videoEditFolderImport'
@@ -200,7 +200,7 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
     const audioTarget: VideoEditAudioChannelsTarget | undefined = sounding.length === items.length && sounding[0] && (items.length === 1 || sounding.every(value => value!.audioStreams && JSON.stringify(value!.audioStreams) === JSON.stringify(sounding[0]!.audioStreams))) ? { kind: 'items', itemIds: items.map(value => value.id), mediaId: sounding[0].id, ...(items[0].audioChannels ? { layout: items[0].audioChannels } : {}) } : undefined
     return [
       { id: 'create_multicam', label: '创建多机位源序列…', icon: <SequenceIcon size={16} />, disabled: items.length < 2 || items.length > 9 || items.some(item => item.kind !== 'video'), onClick: () => setMulticamItemIds(ids) },
-      { id: 'create_proxy', label: '创建代理…', icon: <Film size={16} />, disabled: !proxyIds.length || proxyIds.some(id => readVideoEditProxyState(projectId, id).status === 'generating'), onClick: () => setProxyMediaIds(proxyIds) },
+      { id: 'create_proxy', label: '创建代理…', icon: <ProxyIcon size={16} />, disabled: !proxyIds.length || proxyIds.some(id => readVideoEditProxyState(projectId, id).status === 'generating'), onClick: () => setProxyMediaIds(proxyIds) },
       { id: 'cancel_proxy', label: '取消创建代理', icon: <RefreshCw size={16} />, disabled: !proxyIds.some(id => readVideoEditProxyState(projectId, id).status === 'generating'), onClick: () => proxyIds.forEach(id => cancelVideoEditProxy(projectId, id)) },
       { id: 'preview', label: '打开源素材', icon: <Play size={16} />, disabled: !item.mediaId, onClick: () => run(() => updateVideoEditSource(projectId, { itemId: item.id })) },
       { id: 'append', label: `添加${ids.length > 1 ? ` ${ids.length} 项` : ''}到当前序列`, icon: <Plus size={16} />, onClick: () => run(() => appendVideoEditItems(projectId, ids, instance.activeSequenceId)) },
@@ -364,10 +364,10 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
       </div>}>
         {({ open, togglePanel }) => <UiIconButton aria-label="新建素材项" title="新建素材箱、序列、代码素材、图形与调整图层" aria-expanded={open} data-panel-trigger-button onClick={togglePanel}><Plus size={16} /></UiIconButton>}
       </PanelTrigger>
-      <PanelTrigger panelWidth={168} zIndex={Z_LAYERS.dropdown} closeOnPanelClick panelPadding="menu" renderPanel={() => <div className="flex flex-col gap-1">
+      <PanelTrigger panelWidth={240} zIndex={Z_LAYERS.dropdown} closeOnPanelClick panelPadding="menu" renderPanel={() => <div className="flex flex-col gap-1">
         <UiOptionButton variant="menu" size="sm" className="gap-2" onClick={choose}><Import size={14} />导入文件</UiOptionButton>
         <UiOptionButton variant="menu" size="sm" className="gap-2" onClick={chooseFolders}><FolderInput size={14} />导入文件夹</UiOptionButton>
-        <UiOptionButton variant="menu" size="sm" active={getVideoEditProxyPreference(projectId).autoCreate} onClick={() => setVideoEditProxyPreference(projectId, { autoCreate: !getVideoEditProxyPreference(projectId).autoCreate })}>导入高于 1080p 素材时自动创建代理</UiOptionButton>
+        <UiFormRow label="自动创建代理" info="导入高于 1080p 的视频时，自动创建用于流畅预览的代理。" inline density="compact"><UiSwitch checked={getVideoEditProxyPreference(projectId).autoCreate} onCheckedChange={autoCreate => setVideoEditProxyPreference(projectId, { autoCreate })} /></UiFormRow>
       </div>}>
         {({ open, togglePanel }) => <UiIconButton aria-label="导入" title="导入文件或文件夹" aria-expanded={open} data-panel-trigger-button onClick={togglePanel}><Import size={15} /></UiIconButton>}
       </PanelTrigger>

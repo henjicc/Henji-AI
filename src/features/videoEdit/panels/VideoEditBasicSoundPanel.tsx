@@ -40,8 +40,8 @@ export function VideoEditBasicSoundPanel({ instance, onError }: { instance: Vide
       <UiFormRow label="降低量（dB）" inline density="compact"><NumberInput size="sm" ariaLabel="回避降低量" value={settings.reductionDb} min={0} max={60} step={1} widthClassName="w-24" disabled={busy} onChange={reductionDb => setSettings(value => ({ ...value, reductionDb }))} /></UiFormRow>
       <UiFormRow label="敏感度" inline density="compact"><NumberInput size="sm" ariaLabel="回避敏感度" value={settings.sensitivity} min={0} max={100} step={1} widthClassName="w-24" disabled={busy} onChange={sensitivity => setSettings(value => ({ ...value, sensitivity }))} /></UiFormRow>
       <UiFormRow label="淡化（秒）" inline density="compact"><NumberInput size="sm" ariaLabel="回避淡化时长" value={settings.fadeSeconds} min={0.01} max={5} step={0.05} precision={2} widthClassName="w-24" disabled={busy} onChange={fadeSeconds => setSettings(value => ({ ...value, fadeSeconds }))} /></UiFormRow>
-      <div className="flex items-center gap-2"><UiButton size="sm" variant="secondary" disabled={busy} onClick={() => void run()}>{music.some(clip => clip.curves?.volume?.some(isVideoEditDuckingKeyframe)) ? '重新生成回避' : '生成回避'}</UiButton>{busy && <UiButton size="sm" onClick={() => controller.current?.abort()}>取消</UiButton>}</div>
-      {busy && <UiLoading size="sm" message="正在分析目标声音…" />}
+      <div className="flex flex-wrap items-center gap-2"><UiButton size="sm" variant="secondary" disabled={busy} onClick={() => void run()}>{music.some(clip => clip.curves?.volume?.some(isVideoEditDuckingKeyframe)) ? '重新生成回避' : '生成回避'}</UiButton>{busy && <UiButton size="sm" onClick={() => controller.current?.abort()}>取消</UiButton>}</div>
+      {busy && <UiLoading size="xs" message="正在分析目标声音…" />}
     </UiGroup>}
   </UiGroup>
 }

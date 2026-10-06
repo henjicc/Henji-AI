@@ -4,7 +4,7 @@ import { VideoEditTextPanel } from './VideoEditTextPanel'
 import { splitVideoEditSubtitle, mergeVideoEditSubtitles } from '../application/videoEditAutoSubtitles'
 import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso'
 import { FileInput, FileOutput, MoreHorizontal, Plus } from 'lucide-react'
-import { Dropdown, PanelTrigger, UiButton, UiChipButton, UiEmpty, UiError, UiFormRow, UiGroup, UiIconButton, UiSearchInput, UiOptionButton, UiTextAreaField } from '@/components/ui'
+import { Dropdown, PanelTrigger, UiButton, UiChipButton, UiEmpty, UiError, UiFormRow, UiGroup, UiIconButton, UiLoading, UiOverflowRow, UiSearchInput, UiOptionButton, UiTextAreaField, type UiOverflowRowItem } from '@/components/ui'
 import { Z_LAYERS } from '@/core/theme/zLayers'
 import NumberInput from '@/components/ui/NumberInput'
 import { UI_TEXT_META_CLASS } from '@/components/ui/styleTokens'
@@ -26,9 +26,9 @@ function ContentAnchor({ clips, value, disabled, onChange }: { clips: VideoEditC
   const [search, setSearch] = useState('')
   const choices = useMemo(() => clips.filter(clip => clip.name.toLocaleLowerCase().includes(search.toLocaleLowerCase())), [clips, search])
   const selected = clips.find(clip => clip.id === value)
-  return <Dropdown key={value} ariaLabel="内容锚定" size="sm" className="w-full" display={value ? selected?.name ?? '所属片段已移除' : '序列时钟'} disabled={disabled} renderPanel={() => <div className="flex h-64 min-w-48 flex-col gap-2 p-2">
+  return <Dropdown key={value} ariaLabel="内容锚定" size="sm" className="w-full" display={value ? selected?.name ?? '所属片段已移除' : '序列时间'} disabled={disabled} renderPanel={() => <div className="flex h-64 min-w-48 flex-col gap-2 p-2">
     <UiSearchInput aria-label="搜索锚定片段" placeholder="搜索片段" value={search} onChange={event => setSearch(event.target.value)} />
-    <UiOptionButton variant="menu" active={!value} className="w-full" onClick={() => onChange('')}>序列时钟</UiOptionButton>
+    <UiOptionButton variant="menu" active={!value} className="w-full" onClick={() => onChange('')}>序列时间</UiOptionButton>
     <Virtuoso className="min-h-0 flex-1" data={choices} fixedItemHeight={30} computeItemKey={(_index, clip) => clip.id} itemContent={(_index, clip) => <div className="pb-0.5"><UiOptionButton variant="menu" active={value === clip.id} size="sm" className="w-full min-w-0" aria-label={`锚定片段：${clip.name}`} onClick={() => onChange(clip.id)}><span className="truncate">{clip.name}</span></UiOptionButton></div>} />
   </div>} />
 }
@@ -129,27 +129,29 @@ function ContentWorkspace({ instance, sequence, onError }: { instance: VideoEdit
   }
   const selected = entries.find(entry => entry.value.id === selectedId)
   const count = kind === 'caption' ? sequence.captions?.length ?? 0 : sequence.markers?.length ?? 0
-  return <div className="flex h-full min-h-0 flex-col overflow-hidden" aria-label="字幕与标记" data-video-edit-timed-content-sequence={sequence.id} onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); cancel() } }}>
-    {/* 面板头（界面重设计 5.5 第三批）：第一行“字幕 / 标记”面板标签 + 新增 + 更多（导入、导出），第二行搜索；
-        标签用面板标签外观，动作是图标按钮，二者不再长得一样，窄面板下也不换行。 */}
-    <div className="flex shrink-0 items-center gap-1 px-2 pt-1">
-      <div role="tablist" aria-label="字幕或标记" className="flex min-w-0 items-center">
+  const headerItems: UiOverflowRowItem[] = [
+    { id: 'tabs', pinned: true, priority: 10, node: <div role="tablist" aria-label="字幕或标记" className="flex min-w-0 items-center">
         {(['caption', 'marker'] as const).map(value => <UiChipButton key={value} role="tab" selectionRole="navigation" selectionAppearance="subtle" active={!showText && kind === value} aria-selected={!showText && kind === value} disabled={busy}
           onClick={() => { setShowText(false); setKind(value); setDraft(null); setSelectedId(''); setError('') }}>{value === 'caption' ? '字幕' : '标记'}</UiChipButton>)}
         <UiChipButton role="tab" selectionRole="navigation" selectionAppearance="subtle" active={showText} aria-selected={showText} disabled={busy} onClick={() => { setShowText(true); setDraft(null) }}>文本</UiChipButton>
-      </div>
-      {!showText && <div className="ml-auto flex shrink-0 items-center gap-0.5">
-        {kind === 'caption' && <VideoEditSubtitleActions instance={instance} sequence={sequence} selectedCaptionId={selectedCaptionId} onError={report} />}
-        <UiIconButton aria-label={kind === 'caption' ? '新增字幕' : '新增标记'} title={kind === 'caption' ? '新增字幕' : '新增标记'} disabled={busy || count >= 500} onClick={() => { setDraft(freshDraft(kind)); setError('') }}><Plus size={16} /></UiIconButton>
-        {kind === 'caption' && <PanelTrigger panelWidth={176} zIndex={Z_LAYERS.dropdown} closeOnPanelClick panelPadding="menu" disabled={busy} renderPanel={() => <div role="menu" aria-label="字幕文件" className="flex flex-col gap-0.5">
+      </div> },
+    ...(!showText ? [{ id: 'add', priority: 5, node: <UiIconButton size="sm" aria-label={kind === 'caption' ? '新增字幕' : '新增标记'} title={kind === 'caption' ? '新增字幕' : '新增标记'} disabled={busy || count >= 500} onClick={() => { setDraft(freshDraft(kind)); setError('') }}><Plus size={16} /></UiIconButton> }] : []),
+    ...(!showText && kind === 'caption' ? [
+      { id: 'subtitle', priority: 2, node: <VideoEditSubtitleActions instance={instance} sequence={sequence} selectedCaptionId={selectedCaptionId} onError={report} /> },
+      { id: 'files', priority: 1, node: <PanelTrigger panelWidth={220} zIndex={Z_LAYERS.dropdown} closeOnPanelClick panelPadding="menu" disabled={busy} renderPanel={() => <div role="menu" aria-label="字幕文件" className="flex flex-col gap-0.5">
           <UiOptionButton role="menuitem" variant="menu" size="sm" className="w-full gap-2" disabled={count >= 500} onClick={() => { setDraft(freshDraft('import')); setError('') }}><FileInput size={14} />导入字幕…</UiOptionButton>
           <UiOptionButton role="menuitem" variant="menu" size="sm" className="w-full gap-2" disabled={!sequence.captions?.length} onClick={() => asyncFile(signal => exportVideoEditSubtitles(projectId, 'srt', sequence.id, signal, 'sequence'))}><FileOutput size={14} />导出 SRT（序列时间）</UiOptionButton>
           <UiOptionButton role="menuitem" variant="menu" size="sm" className="w-full gap-2" disabled={!sequence.captions?.length} onClick={() => asyncFile(signal => exportVideoEditSubtitles(projectId, 'vtt', sequence.id, signal))}><FileOutput size={14} />导出 WebVTT</UiOptionButton>
         </div>}>
-          {({ open, togglePanel }) => <UiIconButton aria-label="导入或导出字幕" title="导入或导出字幕" on={open} aria-haspopup="menu" aria-expanded={open} disabled={busy} data-panel-trigger-button onClick={togglePanel}><MoreHorizontal size={16} /></UiIconButton>}
-        </PanelTrigger>}
-      </div>}
-    </div>
+          {({ open, togglePanel }) => <UiIconButton size="sm" aria-label="导入或导出字幕" title="导入或导出字幕" on={open} aria-haspopup="menu" aria-expanded={open} disabled={busy} data-panel-trigger-button onClick={togglePanel}><MoreHorizontal size={16} /></UiIconButton>}
+        </PanelTrigger> },
+    ] : []),
+  ]
+  return <div className="flex h-full min-h-0 flex-col overflow-hidden" aria-label="字幕与标记" data-video-edit-timed-content-sequence={sequence.id} onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); cancel() } }}>
+    {/* 导航和动作共用一条带；窄面板把次要动作收进浮层，下面只有搜索从属带。 */}
+    <UiOverflowRow className="shrink-0 gap-1 px-2 pt-1" items={headerItems} renderOverflow={hidden => <PanelTrigger panelWidth={240} zIndex={Z_LAYERS.dropdown} panelPadding="content" renderPanel={() => <div className="flex flex-wrap items-center gap-2">{hidden.map(id => <div key={id}>{headerItems.find(item => item.id === id)?.node}</div>)}</div>}>
+      {({ open, togglePanel }) => <UiIconButton size="sm" aria-label="更多字幕与标记操作" aria-expanded={open} aria-haspopup="dialog" on={open} data-panel-trigger-button onClick={togglePanel}><MoreHorizontal size={16} /></UiIconButton>}
+    </PanelTrigger>} />
     {showText ? <VideoEditTextPanel instance={instance} sequence={sequence} onError={report} /> : <>
     <div className="shrink-0 px-2 py-1.5">
       <UiSearchInput aria-label="搜索字幕或标记" placeholder="搜索文字或片段" size="sm" className="w-full" value={keyword} onChange={event => setKeyword(event.target.value)} />
@@ -158,16 +160,15 @@ function ContentWorkspace({ instance, sequence, onError }: { instance: VideoEdit
       {entries.length ? <Virtuoso ref={list} className="h-full" data={entries} fixedItemHeight={56} increaseViewportBy={96} initialTopMostItemIndex={Math.max(0, entries.findIndex(entry => entry.value.id === selectedCaptionId))} computeItemKey={(_index, entry) => entry.value.id} itemContent={(_index, entry) => <UiOptionButton variant="menu" active={(kind === 'caption' ? selectedCaptionId ?? selectedId : selectedId) === entry.value.id} aria-pressed={(kind === 'caption' ? selectedCaptionId ?? selectedId : selectedId) === entry.value.id} disabled={busy} className="w-full min-w-0 flex-col !items-start" aria-label={`${entry.kind === 'caption' ? '字幕' : '标记'}：${entryText(entry)}`} data-video-edit-timed-entry={entry.value.id} data-entry-kind={entry.kind}
         onClick={() => { openEntry(entry); locate(entry) }} onDoubleClick={() => locate(entry)}>
         <span className="block w-full truncate text-13" data-observation-sensitive>{entryText(entry)}</span>
-        <span className={`${UI_TEXT_META_CLASS} block w-full truncate`}>第 {atFrame(entry)} 帧{entry.kind === 'caption' ? ` · ${entry.value.duration} 帧` : ''} · {clips.get(entry.value.clipId ?? '')?.name ?? '序列时钟'}</span>
+        <span className={`${UI_TEXT_META_CLASS} block w-full truncate`}>第 {atFrame(entry)} 帧{entry.kind === 'caption' ? ` · ${entry.value.duration} 帧` : ''} · {clips.get(entry.value.clipId ?? '')?.name ?? '序列时间'}</span>
       </UiOptionButton>} /> : <UiEmpty title={keyword ? '没有匹配内容' : kind === 'caption' ? '尚无字幕' : '尚无时间标记'} description={keyword ? undefined : kind === 'caption' ? '新增文字，或导入 SRT / WebVTT 字幕。' : '在需要定位的时刻新增标记。'} size="sm" />}
     </div>
     {error && <UiError size="xs" align="start" className="px-2" title={error} message="" />}
     {draft && <UiGroup divided titleTone="compact" className="max-h-[65%] shrink-0 overflow-auto px-2 pb-2" title={draft.kind === 'import' ? '导入字幕' : `${draft.id ? '编辑' : '新增'}${draft.kind === 'caption' ? '字幕' : '标记'}`}>
       <div className="flex flex-col gap-2">
-        <UiFormRow label="跟随" info="选“序列时钟”时按节目时间定位；选某个片段时随该片段一起移动，并限制在片段范围内。" density="compact"><ContentAnchor clips={sequence.clips} value={draft.clipId} disabled={busy} onChange={changeAnchor} /></UiFormRow>
+        <UiFormRow label="跟随" info="选“序列时间”时按节目时间定位；选某个片段时随该片段一起移动，并限制在片段范围内。" density="compact"><ContentAnchor clips={sequence.clips} value={draft.clipId} disabled={busy} onChange={changeAnchor} /></UiFormRow>
         {draft.kind === 'import' ? <>
-          <UiFormRow label="节目偏移（帧）" density="compact"><NumberInput ariaLabel="节目偏移（帧）" size="sm" value={draft.start} step={1} precision={0} min={-maxFrame} max={maxFrame - 1} widthClassName="w-full" disabled={busy} commitOnChange onChange={start => setDraft({ ...draft, start: Math.round(start) })} /></UiFormRow>
-          <p className={UI_TEXT_META_CLASS}>字幕时间按节目时钟加上偏移；锚定片段时，字幕须落在该片段范围内。</p>
+          <UiFormRow label="节目偏移（帧）" info="字幕时间加上此偏移；跟随片段时，字幕须落在该片段范围内。" density="compact"><NumberInput ariaLabel="节目偏移（帧）" size="sm" value={draft.start} step={1} precision={0} min={-maxFrame} max={maxFrame - 1} widthClassName="w-full" disabled={busy} commitOnChange onChange={start => setDraft({ ...draft, start: Math.round(start) })} /></UiFormRow>
         </> : <>
           <UiFormRow label={draft.kind === 'caption' ? '字幕文字' : '标记名称'} density="compact"><UiTextAreaField aria-label={draft.kind === 'caption' ? '字幕文字' : '标记名称'} value={draft.text} rows={draft.kind === 'caption' ? 3 : 1} maxLength={draft.kind === 'caption' ? 2000 : 200} disabled={busy} onChange={event => setDraft({ ...draft, text: event.target.value })} /></UiFormRow>
           {draft.kind === 'caption' && <UiFormRow label="第二语言" density="compact"><UiTextAreaField aria-label="第二语言字幕" value={draft.translation ?? ''} rows={1} maxLength={2000} disabled={busy} onChange={event => setDraft({ ...draft, translation: event.target.value })} /></UiFormRow>}
@@ -189,6 +190,7 @@ function ContentWorkspace({ instance, sequence, onError }: { instance: VideoEdit
         </div>
       </div>
     </UiGroup>}
+    {busy && <UiLoading size="xs" message="正在处理字幕文件…" />}
     {busy && !draft && <UiButton className="mx-2 mb-2" onClick={cancel}>取消文件操作</UiButton>}
     </>}
   </div>

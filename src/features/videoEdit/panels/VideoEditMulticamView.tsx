@@ -64,9 +64,9 @@ export function VideoEditMulticamView({ instance, onError }: { instance: VideoEd
     event.preventDefault(); event.stopPropagation(); choose(Number(event.key) - 1)
   }}>
     <div className={`grid min-h-0 flex-1 gap-2 ${target.source.multicam!.cameras.length > 4 ? 'grid-cols-3' : 'grid-cols-2'}`}>
-      {target.source.multicam!.cameras.map((camera, index) => <UiOptionButton key={camera.id} variant="tile" active={(target.clip.multicamCameraId ?? target.source.multicam!.cameras[0].id) === camera.id} className="min-w-0 flex-col gap-1" onClick={() => choose(index)} aria-label={`切换到机位${index + 1} ${camera.name}`}>
-        <canvas ref={canvas => { if (canvas) canvases.current.set(camera.id, canvas); else canvases.current.delete(camera.id) }} className="aspect-video w-full object-contain" />
-        <span className="truncate text-xs">{index + 1} · {camera.name}{camera.speaker ? ` · ${camera.speaker}` : ''}</span>
+      {target.source.multicam!.cameras.map((camera, index) => <UiOptionButton key={camera.id} variant="menu" active={(target.clip.multicamCameraId ?? target.source.multicam!.cameras[0].id) === camera.id} className="min-w-0 flex-col gap-1" onClick={() => choose(index)} aria-label={`切换到机位${index + 1} ${camera.name}`}>
+        <canvas ref={canvas => { if (canvas) canvases.current.set(camera.id, canvas); else canvases.current.delete(camera.id) }} className="aspect-video w-full bg-media object-contain" />
+        <span className="w-full truncate text-xs" title={`${camera.name}${camera.speaker ? ` · ${camera.speaker}` : ''}`}>{index + 1} · {camera.name}{camera.speaker ? ` · ${camera.speaker}` : ''}</span>
       </UiOptionButton>)}
     </div>
     {failure && <UiError message={failure} onRetry={() => setRetry(value => value + 1)} />}

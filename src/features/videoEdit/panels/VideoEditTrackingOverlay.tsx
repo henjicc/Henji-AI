@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useSyncExternalStore, type PointerEvent } from 'react'
-import { UiButton, UiOptionButton } from '@/components/ui'
+import { UiButton, UiLoading, UiOptionButton } from '@/components/ui'
 import { videoEditClipPictureSize, videoEditClipToFrame, videoEditFrameToClip } from '@/core/videoEdit/clipGeometry'
 import { VIDEO_EDIT_TRACK_METHOD_LABELS, type VideoEditTrackBox, type VideoEditTrackPrompt } from '@/core/videoEdit/tracking'
 import { createLogger } from '@/core/logging'
@@ -123,10 +123,12 @@ function VideoEditSubjectTrackingOverlay({ instance, onError }: { instance: Vide
       {candidates && <foreignObject width="1000" height="1000" transform={transform}><canvas ref={candidateCanvas} className="h-full w-full text-accent-text" /></foreignObject>}
       {shown && <polygon points={polygon} fill="transparent" stroke="currentColor" strokeWidth="2" vectorEffect="non-scaling-stroke" className="pointer-events-auto cursor-move" />}
     </svg>
-    {(candidates || pending) && <div className="pointer-events-auto absolute bottom-2 left-2 flex items-center gap-1 ui-glass p-2">
-      {pending ? <span className="text-xs text-text2" role="status">正在寻找物体…</span> : candidates && <>
-        {candidates.result.candidates.map((_, index) => <UiOptionButton key={index} variant="segment" size="sm" active={candidates.preview === index} onClick={() => setVideoEditTrackingEditing({ ...editing, candidates: { ...candidates, preview: index } })}>候选 {index + 1}</UiOptionButton>)}
-        <UiButton size="sm" variant="secondary" onClick={() => { try { commit({ ...candidates.prompt, candidate: candidates.preview + 1 }) } catch (error) { onError(error) } }}>使用候选</UiButton>
+    {(candidates || pending) && <div className="pointer-events-auto absolute bottom-2 left-2 right-2 flex flex-wrap items-center gap-1 ui-glass p-2">
+      {pending ? <UiLoading size="xs" message="正在寻找物体…" /> : candidates && <>
+        <div className="flex flex-wrap items-center gap-1" role="radiogroup" aria-label="跟踪候选">
+        {candidates.result.candidates.map((_, index) => <UiOptionButton key={index} variant="menu" size="sm" role="radio" aria-checked={candidates.preview === index} active={candidates.preview === index} onClick={() => setVideoEditTrackingEditing({ ...editing, candidates: { ...candidates, preview: index } })}>候选 {index + 1}</UiOptionButton>)}
+        </div>
+        <UiButton size="sm" variant="primary" onClick={() => { try { commit({ ...candidates.prompt, candidate: candidates.preview + 1 }) } catch (error) { onError(error) } }}>使用候选</UiButton>
       </>}
     </div>}
   </div>

@@ -142,16 +142,16 @@ export function VideoEditInPlaceDialog({ projectId, sequenceId, intent, initial,
       {'error' in planned ? <UiError message={planned.error} /> : <>
         <p className={UI_TEXT_META_CLASS}>{describe(projectId, plan!)}</p>
         <PromptEditor value={prompt} onChange={setPrompt} preset="plain" layout="fill-scroll" ariaLabel={`${title}提示词`} placeholder={PLACEHOLDERS[intent.action]} autoFocus editorClassName="min-h-24 max-h-60" />
-        {intent.action === 'extend_shot' && <UiFormRow label="放置方式" inline>
+        {intent.action === 'extend_shot' && <UiFormRow label="放置方式" info="插入会让后面的片段后移；覆盖会替换后面的画面。" inline>
           <div className={UI_SEGMENTED_TRACK_CLASS} role="radiogroup" aria-label="放置方式">
-            {([['insert', '插入（后面的片段后移）'], ['overwrite', '覆盖']] as const).map(([value, label]) => <UiOptionButton key={value} variant="segment" size="sm" active={mode === value} role="radio" aria-checked={mode === value} onClick={() => setMode(value)}>{label}</UiOptionButton>)}
+            {([['insert', '插入'], ['overwrite', '覆盖']] as const).map(([value, label]) => <UiOptionButton key={value} variant="segment" size="sm" active={mode === value} role="radio" aria-checked={mode === value} onClick={() => setMode(value)}>{label}</UiOptionButton>)}
           </div>
         </UiFormRow>}
         {plan?.mediaType === 'video' && <UiFormRow label="参考画面" hint={modelId && referenceLimit < wanted.length ? referenceLimit === 0 ? '所选模型不使用参考画面，将只按提示词生成。' : `所选模型只用前 ${referenceLimit} 张参考画面。` : undefined}>
           <div className="flex flex-col gap-1.5">
             {references.map(reference => <label key={reference.role} className="flex items-center gap-2 text-xs text-text2">
               <UiCheckbox checked={roles === null || roles.includes(reference.role)} onCheckedChange={on => toggleRole(reference.role, on)} aria-label={videoEditReferenceLabel(reference)} />
-              <span className="truncate">{videoEditReferenceLabel(reference)}</span>
+              <span className="min-w-0 break-words">{videoEditReferenceLabel(reference)}</span>
             </label>)}
             <label className="flex items-center gap-2 text-xs text-text2">
               <UiCheckbox checked={useSpecifiedFrame} onCheckedChange={setUseSpecifiedFrame} aria-label="指定时间帧" />
