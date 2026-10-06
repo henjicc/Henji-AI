@@ -98,15 +98,17 @@ Object.assign(labels, { alignment: '过渡对齐（center 中心切点、start �
 Object.assign(labels, { group: '分组', description: '作用与适用场景', params: '参数（键、类型、范围、单位、默认值与取值含义）' })
 /** 个别属性的说明比通用模板更具体（助手据此取值）。 */
 const descriptions: Record<string, string> = {
-  'video_edit.effect.definition_id': '效果来源，创建后不可改：内置效果写 effect:<ID>（如 effect:gaussian_blur；全部内置效果及参数语义见 video_edit.builtin_effect），代码滤镜写滤镜源码定义 ID。',
+  'video_edit.effect.definition_id': '效果来源，创建后不可改：内置效果写 effect:<ID>（画面效果如 effect:gaussian_blur 只能加到画面片段；音频效果如 effect:noise_reduction、effect:parametric_eq 只能加到声音片段；全部内置效果、适用片段及参数语义见 video_edit.builtin_effect），代码滤镜写滤镜源码定义 ID（只用于画面片段）。',
   'video_edit.effect.parameters': '效果参数。内置效果：键与范围见 video_edit.builtin_effect 的 params（强度多为 0–100，空间量按画面高度比例，与分辨率无关）；写入是整体替换：只存写入的键，没写的键按默认值（只改一项时先读出再整体写回）；越界或未知键会报错并列出可用范围。代码滤镜：按固定源码版本声明校验。',
-  'video_edit.effect.amount': '效果与原画面的混合比例 0–1：1 完全应用，0.5 一半强度；停用效果请写 enabled。',
+  'video_edit.effect.amount': '效果与原画面（音频效果为原声）的混合比例 0–1：1 完全应用，0.5 一半强度；停用效果请写 enabled。',
   'video_edit.effect.version_id': '代码滤镜的固定源码版本；内置效果为空字符串且不可写。',
   'video_edit.effect.curves': '代码滤镜的参数关键帧；内置效果暂不支持关键帧（保持空对象）。',
-  'video_edit.transition.kind': '过渡种类，可改成同一媒介的其他种类（改种类时没写的参数回到新种类的默认值）。视频：cross_dissolve 交叉溶解、dip_to_black 黑场、dip_to_white 白场、wipe 擦除、push 推动、slide 滑动、cross_zoom 缩放过渡、blur_dissolve 模糊过渡、flash 闪光、iris_round 圆形划像；音频：constant_power 恒定功率、constant_gain 恒定增益。每种的用途与参数见 video_edit.builtin_effect 里的 transition:<种类>。',
+  'video_edit.transition.kind': '过渡种类，可改成同一媒介的其他种类（改种类时没写的参数回到新种类的默认值）。视频：cross_dissolve 交叉溶解、dip_to_black 黑场、dip_to_white 白场、wipe 擦除、push 推动、slide 滑动、cross_zoom 缩放过渡、blur_dissolve 模糊过渡、flash 闪光、iris_round 圆形划像；音频：constant_power 恒定功率、constant_gain 恒定增益、exponential_fade 指数淡化。每种的用途与参数见 video_edit.builtin_effect 里的 transition:<种类>。',
   'video_edit.transition.parameters': '带参数过渡（wipe、push、slide、cross_zoom、blur_dissolve、flash、iris_round）的参数，键与范围见 video_edit.builtin_effect 的 transition:<种类> 的 params（方向用选项值，羽化、边框等按画面高度比例，与分辨率无关）。写入是整体替换：只存写入的键，没写的键按默认值（只改一项时先读出再整体写回）；空对象表示全部默认；越界或未知键会报错并列出可用范围。其余种类没有参数，保持空对象。',
   'video_edit.document.playback_resolution': '节目监视器的回放分辨率（只影响看片时的流畅度与清晰度，不改剪辑内容，不进剪辑历史）。resolution：full 完整、half 1/2、quarter 1/4、eighth 1/8（按序列宽高各缩小到该比例渲染，素材多、效果重、播放卡顿时调低）。fullWhenPaused：true 暂停时自动回到完整分辨率（默认，便于看清细节），false 暂停时也用所选分辨率。导出、选帧加入资产库、设为项目封面始终按完整分辨率，与此无关。按剪辑记住。',
-  'video_edit.clip.effect_ids': `效果执行顺序（从上到下依次处理画面），一个片段最多 ${VIDEO_EDIT_MAX_EFFECTS} 项。`,
+  'video_edit.clip.effect_ids': `效果执行顺序（从上到下依次处理画面；声音片段上是音频效果，依次处理声音），一个片段最多 ${VIDEO_EDIT_MAX_EFFECTS} 项。`,
+  'video_edit.transition.left_clip_id': '过渡左侧（前一段）的片段 ID，创建后不可改。两个片段在同一轨道首尾相接时两端都写；只写 left_clip_id 是挂在该片段出点的单侧过渡（后面是空白，淡出）。视频过渡挂画面片段，音频过渡挂声音片段。',
+  'video_edit.transition.right_clip_id': '过渡右侧（后一段）的片段 ID，创建后不可改。只写 right_clip_id 是挂在该片段入点的单侧过渡（前面是空白，淡入）。两端都不写会被拒绝；写错时错误信息会列出该序列可放这种过渡的编辑点。',
 }
 const codeKeys: Record<string, string> = { codeParameters: 'parameters', codeCurves: 'curves', codeVersionId: 'versionId' }
 /** 剪辑名就是剪辑文件的文件名（3.1）：改名走通用文档属性。 */

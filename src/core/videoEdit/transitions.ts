@@ -8,7 +8,7 @@ import type { VideoEditBuiltinParams } from './builtinEffects'
 /**
  * 过渡预设（PR“效果”面板的视频过渡／音频过渡）：只列引擎能真实渲染的种类。
  * 视频：交叉溶解、黑场过渡、白场过渡，以及走内置效果着色器、带参数的擦除、推动、滑动、缩放过渡、模糊过渡、闪光、圆形划像
- * （参数登记在 `transitionParams.ts`）；音频：恒定功率、恒定增益（交叉淡化）。
+ * （参数登记在 `transitionParams.ts`）；音频：恒定功率、恒定增益、指数淡化（交叉淡化，单侧时为淡入或淡出）。
  */
 export const VIDEO_EDIT_TRANSITION_PRESETS = [
   { kind: 'cross_dissolve', medium: 'video', name: '交叉溶解', tooltip: '前一段画面逐渐溶入后一段', description: '交叉溶解：两段画面按时长线性互溶，最常用的柔和转场。' },
@@ -23,6 +23,7 @@ export const VIDEO_EDIT_TRANSITION_PRESETS = [
   { kind: 'iris_round', medium: 'video', name: '圆形划像', tooltip: '后一段从一个圆里展开（或前一段收进圆里）', description: '圆形划像：后一段画面从圆形里由小到大展开；方式选 close 时前一段收缩成圆消失。适合聚焦某处、复古片尾、卡通感。参数：mode 展开或收拢，center_x / center_y 圆心，feather 羽化，border 边框宽度，border_color 边框颜色。' },
   { kind: 'constant_power', medium: 'audio', name: '恒定功率', tooltip: '两段声音交叉淡化，中间音量不塌陷', description: '恒定功率交叉淡化：两段声音按正弦／余弦曲线交叉，过渡中段响度保持平稳，是默认音频过渡。' },
   { kind: 'constant_gain', medium: 'audio', name: '恒定增益', tooltip: '两段声音按直线交叉淡化', description: '恒定增益交叉淡化：两段声音按直线交叉，中段会略微变轻，适合需要明显切换感的地方。' },
+  { kind: 'exponential_fade', medium: 'audio', name: '指数淡化', tooltip: '音量按分贝均匀变化，淡出先慢后快地消失，听感更自然', description: '指数淡化：音量按分贝均匀升降（-60 dB 到原音量），淡出时声音在后半段才明显消失、淡入时前半段很轻；交叉时中段比恒定增益更安静，两段声音几乎不重叠，适合音乐结尾淡出、环境声淡入，或不希望两段声音叠在一起的切换。' },
 ] as const
 export type VideoEditTransitionKind = typeof VIDEO_EDIT_TRANSITION_PRESETS[number]['kind']
 export type VideoEditTransitionMedium = 'video' | 'audio'
@@ -157,9 +158,18 @@ export function videoEditTransitionRender(window: Pick<VideoEditTransitionWindow
 export function videoEditTransitionDipColor(kind: VideoEditTransitionKind): [number, number, number, number] | undefined {
   return kind === 'dip_to_black' ? [0, 0, 0, 1] : kind === 'dip_to_white' ? [1, 1, 1, 1] : undefined
 }
-/** 音频过渡两侧的增益（`progress` 为 0 到 1 的连续进度）：恒定功率走余弦／正弦，恒定增益走直线。 */
+/** 指数淡化的最低电平（-60 dB）：曲线在分贝上是直线，从这里升到原音量，端点归一到 0 与 1。 */
+const EXPONENTIAL_FLOOR = 1e-3
+/** 指数淡入曲线：x 为 0 到 1 的进度，增益按分贝线性从 -60 dB 升到 0 dB，并平移缩放使 x=0 时正好静音。 */
+export function videoEditExponentialFadeGain(x: number): number {
+  if (x <= 0) return 0
+  if (x >= 1) return 1
+  return (EXPONENTIAL_FLOOR ** (1 - x) - EXPONENTIAL_FLOOR) / (1 - EXPONENTIAL_FLOOR)
+}
+/** 音频过渡两侧的增益（`progress` 为 0 到 1 的连续进度）：恒定功率走余弦／正弦，恒定增益走直线，指数淡化按分贝线性。 */
 export function videoEditAudioTransitionGains(kind: VideoEditTransitionKind, progress: number): [number, number] {
   const x = Math.max(0, Math.min(1, progress))
+  if (kind === 'exponential_fade') return [videoEditExponentialFadeGain(1 - x), videoEditExponentialFadeGain(x)]
   return kind === 'constant_gain' ? [1 - x, x] : [Math.cos(x * Math.PI / 2), Math.sin(x * Math.PI / 2)]
 }
 /** 音频过渡里某个片段的增益：普通过渡左片段走淡出、右片段走淡入；单侧过渡入点淡入、出点淡出（同一条曲线）。 */

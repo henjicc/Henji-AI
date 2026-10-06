@@ -1,4 +1,5 @@
-import { parseVideoEditBuiltinRefId } from '@/core/videoEdit/builtinEffects'
+import { parseVideoEditBuiltinRefId, videoEditBuiltinEffectMedia } from '@/core/videoEdit/builtinEffects'
+import { videoEditEffectAccepts } from '@/core/videoEdit/compositing'
 import { applyVideoEditBuiltinEffect } from '../application/videoEditCompositing'
 import { elementOfEventTarget } from '@/utils/crossRealmDom'
 import type { VideoEditSequence } from '@/core/videoEdit/document'
@@ -29,11 +30,15 @@ export function subscribeVideoEditEffectDropTarget(listener: () => void): () => 
 export function videoEditEffectDropTarget(): { projectId: string; clipIds: readonly string[] } | null { return dropTarget }
 /** 拖出时间线、松手或取消拖动时清掉高亮。 */
 export function clearVideoEditEffectDropTarget(): void { setDropTarget(null) }
-/** 放下时真正会加上效果的片段：落点在所选片段里时是全部所选，否则只有落点片段；声音片段与锁定轨道上的片段跳过（与松手时同一规则）。 */
-export function videoEditEffectDropClips(sequence: Pick<VideoEditSequence, 'clips' | 'tracks'>, hitClipId: string, selectedClipIds: readonly string[]): string[] {
+/**
+ * 放下时真正会加上效果的片段：落点在所选片段里时是全部所选，否则只有落点片段；画面效果跳过声音片段、音频效果只加声音片段，
+ * 锁定轨道上的片段跳过（与松手时同一规则）。`builtinId` 缺省按画面效果。
+ */
+export function videoEditEffectDropClips(sequence: Pick<VideoEditSequence, 'clips' | 'tracks'>, hitClipId: string, selectedClipIds: readonly string[], builtinId?: string): string[] {
   const candidates = selectedClipIds.includes(hitClipId) ? selectedClipIds : [hitClipId]
   const locked = new Set(sequence.tracks.filter(track => track.locked).map(track => track.index))
-  return sequence.clips.filter(clip => candidates.includes(clip.id) && clip.kind !== 'audio' && !locked.has(clip.track)).map(clip => clip.id)
+  const media = builtinId ? videoEditBuiltinEffectMedia(builtinId) : 'video'
+  return sequence.clips.filter(clip => candidates.includes(clip.id) && videoEditEffectAccepts(media, clip) && !locked.has(clip.track)).map(clip => clip.id)
 }
 export function readVideoEditEffectDrag(dataTransfer: DataTransfer | null, projectId: string): string | undefined {
   if (!dataTransfer || !Array.from(dataTransfer.types).includes(VIDEO_EDIT_EFFECT_DRAG_TYPE)) return undefined
@@ -46,13 +51,14 @@ function clipUnder(event: DropEvent): string | undefined {
 }
 /**
  * 时间线 dragover：拖的是内置效果就接管，返回 true；否则返回 false 交给原有拖放。给了 `target` 时按松手规则算出会加上效果的
- * 片段并高亮（落在声音片段或锁定轨道上显示不可放下）；没给时只看落点下有没有片段。
+ * 片段并高亮（落在媒介不符的片段或锁定轨道上显示不可放下）；没给时只看落点下有没有片段。
  */
 export function handleVideoEditEffectDragOver(event: DropEvent, projectId: string, target?: { sequence: Pick<VideoEditSequence, 'clips' | 'tracks'>; selectedClipIds: readonly string[] }): boolean {
-  if (!readVideoEditEffectDrag(event.dataTransfer, projectId)) return false
+  const builtinId = readVideoEditEffectDrag(event.dataTransfer, projectId)
+  if (!builtinId) return false
   event.preventDefault()
   const hit = clipUnder(event)
-  const clipIds = hit ? target ? videoEditEffectDropClips(target.sequence, hit, target.selectedClipIds) : [hit] : []
+  const clipIds = hit ? target ? videoEditEffectDropClips(target.sequence, hit, target.selectedClipIds, builtinId) : [hit] : []
   if (event.dataTransfer) event.dataTransfer.dropEffect = clipIds.length ? 'copy' : 'none'
   setDropTarget(clipIds.length ? { projectId, clipIds } : null)
   return true

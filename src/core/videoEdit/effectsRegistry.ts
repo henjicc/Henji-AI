@@ -5,7 +5,7 @@ import { VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS, VIDEO_EDIT_BUILTIN_GROUP_NAMES,
 /**
  * 效果登记表（实施方案第六节“一份登记，三方共用”）：效果面板、效果控件与助手都读这里。
  * - 过渡（kind: 'transition'）由 `VIDEO_EDIT_TRANSITION_PRESETS` 生成，拖到时间线编辑点上；
- * - 内置效果（kind: 'effect'）登记在 `VIDEO_EDIT_BUILTIN_EFFECTS`，拖到片段上（4.7 接入 GPU 原生视频效果与音频效果）。
+ * - 内置效果（kind: 'effect'）登记在 `VIDEO_EDIT_BUILTIN_EFFECTS`，拖到片段上（4.7 GPU 原生视频效果；4.7c 音频效果，只加到声音片段）。
  * 面板按 `VIDEO_EDIT_EFFECT_CATEGORIES` 的顺序列文件夹。
  */
 export const VIDEO_EDIT_EFFECT_CATEGORIES = [
@@ -42,7 +42,7 @@ export interface VideoEditEffectsRegistryEntry {
  * 拖到片段上或选中片段后双击即加到片段效果链。
  */
 export const VIDEO_EDIT_BUILTIN_EFFECTS: readonly VideoEditEffectsRegistryEntry[] = VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS.map(definition => ({
-  id: videoEditBuiltinRefId(definition.id), name: definition.name, category: 'video_effect', kind: 'effect', media: 'video',
+  id: videoEditBuiltinRefId(definition.id), name: definition.name, category: definition.media === 'audio' ? 'audio_effect' : 'video_effect', kind: 'effect', media: definition.media ?? 'video',
   description: definition.description, tooltip: definition.tooltip, builtinId: definition.id, params: definition.params, group: VIDEO_EDIT_BUILTIN_GROUP_NAMES[definition.group],
 }))
 /** 登记表全部条目：过渡在前（按预设顺序），内置效果在后。 */

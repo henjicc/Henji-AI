@@ -13,7 +13,7 @@ function blurSigmas(result: VideoEditBuiltinPlan): number[] {
 
 describe('内置效果工序与参数打包', () => {
   it('每个效果按默认参数都能规划：最后一道写输出，入口都在着色器里，参数是 16 个 float、开头是目标与输入尺寸', () => {
-    for (const definition of VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS) {
+    for (const definition of VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS.filter(value => value.media !== 'audio')) {
       const result = plan(definition.id, videoEditBuiltinDefaults(definition))
       expect(result.passes.at(-1)!.target, definition.id).toBe('output')
       for (const pass of result.passes) {

@@ -6,7 +6,7 @@ import NumberInput from '@/components/ui/NumberInput'
 import { ICON_VIDEO_EDIT_TRANSITION } from '@/core/theme/icons'
 import type { VideoEditClip, VideoEditSequence } from '@/core/videoEdit/document'
 import { videoEditFps } from '@/core/videoEdit/time'
-import { videoEditTransitionAlignmentFields, videoEditTransitionAlignmentOf, videoEditTransitionFramesBeforeCut, videoEditTransitionPreset, videoEditTransitionWindow, type VideoEditTransitionAlignment } from '@/core/videoEdit/transitions'
+import { VIDEO_EDIT_TRANSITION_PRESETS, videoEditTransitionAlignmentFields, videoEditTransitionAlignmentOf, videoEditTransitionFramesBeforeCut, videoEditTransitionPreset, videoEditTransitionWindow, type VideoEditTransitionAlignment, type VideoEditTransitionKind } from '@/core/videoEdit/transitions'
 import { deleteVideoEditTransition, updateVideoEditTransition } from '../application/videoEditCompositing'
 import { selectVideoEditTransition, selectedVideoEditTransitionId, subscribeVideoEditTransitionSelection, updateVideoEditTransitionParams, videoEditTransitionSelectionVersion } from '../application/videoEditTransitions'
 import { resolveVideoEditTransitionParams, videoEditTransitionParamDefinitions } from '@/core/videoEdit/transitionParams'
@@ -17,7 +17,8 @@ import { timelineTimecode } from '../timeline/timelineGeometry'
 import { useVideoEditCompositeAction } from './useVideoEditCompositeAction'
 
 /**
- * 效果控件里的过渡属性（PR）：在时间线上点选过渡块后显示——持续时间、对齐（中心切点／起点切点／终点切点／自定义起点）、
+ * 效果控件里的过渡属性（PR）：在时间线上点选过渡块后显示——种类（换成同媒介的其他过渡，参数回到新种类默认值，一步撤销）、
+ * 持续时间、对齐（中心切点／起点切点／终点切点／自定义起点）、
  * 带参数过渡（擦除、推动……4.7）的各项参数（拖动实时预览、松手一步撤销）与删除。
  * 没有选中过渡时不渲染；效果控件始终挂载本组件（`clip` 为当前片段，可空），选中过渡时它自己出现。
  */
@@ -47,6 +48,11 @@ export const VideoEditTransitionPanel = memo(function VideoEditTransitionPanel({
       <span className="min-w-0 flex-1 truncate text-xs text-text1">{preset.name}</span>
       {window && <span className="shrink-0 truncate text-2xs text-text3" data-user-content>{window.side ? `${window.left.name} ${window.side === 'in' ? '开头' : '结尾'}` : `${window.left.name} → ${window.right.name}`}</span>}
     </div>
+    <UiFormRow density="compact" label="种类" info="换成同一媒介的其他过渡；参数回到新种类的默认值。">
+      <Dropdown<VideoEditTransitionKind> ariaLabel="过渡种类" value={transition.kind} disabled={action.busy}
+        options={VIDEO_EDIT_TRANSITION_PRESETS.filter(option => option.medium === preset.medium).map(option => ({ value: option.kind, label: option.name }))}
+        onSelect={kind => { if (kind !== transition.kind) update({ kind }) }} />
+    </UiFormRow>
     <UiFormRow density="compact" label="持续时间（帧）" hint={`${timelineTimecode(transition.durationFrames, fps)}`}>
       <NumberInput ariaLabel="过渡持续时间帧" size="sm" min={2} max={108_000} step={1} precision={0} value={transition.durationFrames} disabled={action.busy}
         onChange={durationFrames => { if (durationFrames !== transition.durationFrames) update(transition.alignment === 'custom' ? { durationFrames, framesBeforeCut: Math.min(durationFrames, before) } : { durationFrames }) }} />

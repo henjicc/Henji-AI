@@ -34,6 +34,8 @@ export const VideoEditEffectChainPanel = memo(function VideoEditEffectChainPanel
   const target = { projectId, sequenceId, clipId }
   const action = useVideoEditCompositeAction(instance, JSON.stringify([projectId, sequenceId, clipId]), onError)
   const effects = clip.effects ?? []
+  /** 声音片段的效果链只放音频内置效果（4.7c），没有代码滤镜。 */
+  const sound = clip.kind === 'audio'
   /** 展开的效果（同一时间只展开一项，参数编辑器只挂一份）；空串表示全部收起。 */
   const [selectedId, setSelectedId] = useState('')
   const [definitionId, setDefinitionId] = useState('')
@@ -49,7 +51,7 @@ export const VideoEditEffectChainPanel = memo(function VideoEditEffectChainPanel
     } catch (error) { return { items: [], options: [], error } }
   }, [document])
   const definition = useMemo(() => definitions.items.find(value => value.id === definitionId) ?? definitions.items[0], [definitions.items, definitionId])
-  const sources = useMemo(() => document.sequences.flatMap(sourceSequence => sourceSequence.clips.filter(sourceClip => sourceClip.kind !== 'audio' && !!sourceClip.effects?.length && (sourceSequence.id !== sequenceId || sourceClip.id !== clipId)).map(sourceClip => ({ value: JSON.stringify([sourceSequence.id, sourceClip.id]), label: `${sourceSequence.name} · ${sourceClip.name}`, sequenceId: sourceSequence.id, clipId: sourceClip.id }))), [document, sequenceId, clipId])
+  const sources = useMemo(() => document.sequences.flatMap(sourceSequence => sourceSequence.clips.filter(sourceClip => (sourceClip.kind === 'audio') === sound && !!sourceClip.effects?.length && (sourceSequence.id !== sequenceId || sourceClip.id !== clipId)).map(sourceClip => ({ value: JSON.stringify([sourceSequence.id, sourceClip.id]), label: `${sourceSequence.name} · ${sourceClip.name}`, sequenceId: sourceSequence.id, clipId: sourceClip.id }))), [document, sequenceId, clipId, sound])
   const source = useMemo(() => sources.find(value => value.value === copySource), [sources, copySource])
   useLayoutEffect(() => { setSelectedId(''); setDefinitionId(''); setCopySource(''); setCreatingFilter(false); setCreatedFilter(false) }, [instance])
   const move = (offset: -1 | 1): void => {
@@ -69,8 +71,8 @@ export const VideoEditEffectChainPanel = memo(function VideoEditEffectChainPanel
   const CodeIcon = ICON_ASSET_CODE
   return <>
     {clip.kind === 'adjustment' && <AdjustmentRange target={target} sequence={sequence} clip={clip} action={action} />}
-    <VideoEditEffectSection id="effects" title="附加效果" info={`从“效果”面板把内置效果拖到片段上，或选中片段后双击效果添加；也可以添加代码滤镜。效果从上到下依次处理画面，一个片段最多 ${VIDEO_EDIT_MAX_EFFECTS} 项。`}
-      actions={<UiIconButton size="xs" aria-label="编写新滤镜源码" title="编写新滤镜源码" disabled={action.busy} onClick={() => setCreatingFilter(true)}><CodeIcon size={13} /></UiIconButton>}>
+    <VideoEditEffectSection id="effects" title={sound ? '音频效果' : '附加效果'} info={sound ? `从“效果”面板把音频效果拖到声音片段上，或选中片段后双击效果添加。效果从上到下依次处理声音（在片段音量之后、淡化与过渡之前），一个片段最多 ${VIDEO_EDIT_MAX_EFFECTS} 项。` : `从“效果”面板把内置效果拖到片段上，或选中片段后双击效果添加；也可以添加代码滤镜。效果从上到下依次处理画面，一个片段最多 ${VIDEO_EDIT_MAX_EFFECTS} 项。`}
+      actions={sound ? undefined : <UiIconButton size="xs" aria-label="编写新滤镜源码" title="编写新滤镜源码" disabled={action.busy} onClick={() => setCreatingFilter(true)}><CodeIcon size={13} /></UiIconButton>}>
       <div className="flex flex-col gap-1 pl-5" data-video-edit-effect-chain={clipId}>
         {effects.length ? effects.map((effect, index) => {
           const open = selected?.id === effect.id
@@ -97,12 +99,12 @@ export const VideoEditEffectChainPanel = memo(function VideoEditEffectChainPanel
             </div>}
           </div>
         }) : <UiEmpty size="xs" title="尚未添加效果" />}
-        <div className="flex items-center gap-1 pt-1">
+        {!sound && <div className="flex items-center gap-1 pt-1">
           <div className="min-w-0 flex-1"><Dropdown ariaLabel="选择剪辑滤镜" value={definition?.id} display={definitions.items.length ? undefined : '暂无滤镜源码'} options={definitions.options} disabled={action.busy || !definitions.items.length} onSelect={setDefinitionId} buttonClassName="w-full" /></div>
           <UiButton variant="secondary" size="sm" className="shrink-0" disabled={action.busy || !definition || effects.length >= VIDEO_EDIT_MAX_EFFECTS} onClick={() => { if (definition) void action.run(signal => createVideoEditEffect(target, { definitionId: definition.id, versionId: definition.versionId }, signal), setSelectedId) }}>添加到片段</UiButton>
-        </div>
+        </div>}
         {createdFilter && <p className="text-2xs text-text3">滤镜源码已创建，选择“添加到片段”检查并应用。</p>}
-        {definitions.error ? <UiError size="xs" message={definitions.error instanceof Error ? definitions.error.message : '剪辑滤镜暂不可用。'} /> : null}
+        {!sound && definitions.error ? <UiError size="xs" message={definitions.error instanceof Error ? definitions.error.message : '剪辑滤镜暂不可用。'} /> : null}
         {sources.length > 0 && <div className="flex items-center gap-1">
           <div className="min-w-0 flex-1"><Dropdown ariaLabel="复制效果的来源片段" value={source?.value} display={source ? undefined : '从其他片段复制效果'} options={sources} disabled={action.busy} onSelect={setCopySource} buttonClassName="w-full" /></div>
           <UiIconButton size="sm" aria-label="复制并替换当前效果链" title="复制来源片段的整条效果链及关键帧，替换当前片段已有的附加效果" disabled={action.busy || !source} onClick={() => { if (source) void action.run(signal => copyVideoEditEffects(target, { sequenceId: source.sequenceId, clipId: source.clipId }, signal), () => setSelectedId('')) }}><Copy size={13} /></UiIconButton>

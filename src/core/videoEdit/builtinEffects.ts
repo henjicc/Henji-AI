@@ -7,29 +7,34 @@
  * 存入片段效果链 `clip.effects` 时只记 `{ id, params }`；缺的参数按默认值，旧文件没有这个字段不受影响。
  */
 import { VIDEO_EDIT_CHROMA_KEY_DEFAULT_HEX } from '../theme/colorTokens'
+import { VIDEO_EDIT_AUDIO_EFFECT_DEFINITIONS } from './audioEffectDefinitions'
 
 export type VideoEditBuiltinParamValue = number | boolean | string
 export type VideoEditBuiltinParams = Record<string, VideoEditBuiltinParamValue>
-/** 数值单位：strength 为 0–100 的无量纲强度，percent 为百分比，degrees 为角度，stops 为曝光档。 */
-export type VideoEditBuiltinUnit = 'strength' | 'percent' | 'degrees' | 'stops'
+/** 数值单位：strength 为 0–100 的无量纲强度，percent 为百分比，degrees 为角度，stops 为曝光档；音频效果另有 dB、Hz 与半音。 */
+export type VideoEditBuiltinUnit = 'strength' | 'percent' | 'degrees' | 'stops' | 'decibels' | 'hertz' | 'semitones'
 interface ParamBase { key: string; name: string; tooltip: string; description: string }
 export type VideoEditBuiltinParam =
   | ParamBase & { type: 'number'; unit: VideoEditBuiltinUnit; min: number; max: number; step: number; default: number }
   | ParamBase & { type: 'color'; default: string }
   | ParamBase & { type: 'enum'; options: ReadonlyArray<{ value: string; label: string }>; default: string }
   | ParamBase & { type: 'boolean'; default: boolean }
-export type VideoEditBuiltinGroup = 'blur' | 'color' | 'stylize' | 'frame' | 'keying'
-export const VIDEO_EDIT_BUILTIN_GROUP_NAMES: Record<VideoEditBuiltinGroup, string> = { blur: '模糊与锐化', color: '颜色', stylize: '风格化', frame: '画面', keying: '抠像' }
+export type VideoEditBuiltinGroup = 'blur' | 'color' | 'stylize' | 'frame' | 'keying' | 'audio_eq' | 'audio_dynamics' | 'audio_repair' | 'audio_space' | 'audio_level'
+export const VIDEO_EDIT_BUILTIN_GROUP_NAMES: Record<VideoEditBuiltinGroup, string> = { blur: '模糊与锐化', color: '颜色', stylize: '风格化', frame: '画面', keying: '抠像', audio_eq: '均衡与滤波', audio_dynamics: '动态', audio_repair: '修复', audio_space: '空间与音调', audio_level: '音量与声道' }
+/** 内置效果作用于画面还是声音：画面效果只加到画面片段，音频效果只加到声音片段。 */
+export type VideoEditBuiltinMedia = 'video' | 'audio'
 export interface VideoEditBuiltinEffectDefinition {
   id: string
   name: string
   group: VideoEditBuiltinGroup
+  /** 缺省为画面效果；音频效果写 `audio`（登记在 `audioEffectDefinitions.ts`）。 */
+  media?: VideoEditBuiltinMedia
   tooltip: string
   /** 给助手的语义说明：作用、适用场景、常用取值。 */
   description: string
   params: readonly VideoEditBuiltinParam[]
 }
-export const VIDEO_EDIT_BUILTIN_UNIT_LABELS: Record<VideoEditBuiltinUnit, string> = { strength: '', percent: '%', degrees: '°', stops: '档' }
+export const VIDEO_EDIT_BUILTIN_UNIT_LABELS: Record<VideoEditBuiltinUnit, string> = { strength: '', percent: '%', degrees: '°', stops: '档', decibels: 'dB', hertz: 'Hz', semitones: '半音' }
 
 const strength = (key: string, name: string, fallback: number, tooltip: string, description: string): VideoEditBuiltinParam => ({ key, name, type: 'number', unit: 'strength', min: 0, max: 100, step: 1, default: fallback, tooltip, description })
 const signed = (key: string, name: string, tooltip: string, description: string, fallback = 0): VideoEditBuiltinParam => ({ key, name, type: 'number', unit: 'strength', min: -100, max: 100, step: 1, default: fallback, tooltip, description })
@@ -39,7 +44,7 @@ const percent = (key: string, name: string, fallback: number, tooltip: string, d
 export { strength as videoEditStrengthParam, percent as videoEditPercentParam }
 const repeatEdges: VideoEditBuiltinParam = { key: 'repeat_edges', name: '重复边缘像素', type: 'boolean', default: true, tooltip: '开启时画面边缘不会变透明', description: 'true 时取画面外的颜色用最近的边缘像素（边缘不发虚、不透出下层）；false 时边缘向外渐隐成透明。' }
 
-export const VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS: readonly VideoEditBuiltinEffectDefinition[] = [
+const VIDEO_EDIT_VIDEO_EFFECT_DEFINITIONS: readonly VideoEditBuiltinEffectDefinition[] = [
   { id: 'gaussian_blur', name: '高斯模糊', group: 'blur', tooltip: '均匀柔化整个画面，可只模糊水平或垂直方向', description: '均匀模糊画面，用于背景虚化、柔化、遮挡细节。模糊半径随画面高度缩放，任意分辨率观感一致。',
     params: [
       strength('strength', '模糊度', 30, '模糊程度，0 不模糊', '0 不模糊；10 ≈ 轻微柔化；30 ≈ 背景虚化；60 ≈ 强烈虚化只剩色块；100 ≈ 几乎看不出轮廓（半径约为画面高度的 6%）。'),
@@ -123,6 +128,8 @@ export const VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS: readonly VideoEditBuiltinEf
       strength('spill', '溢色抑制', 50, '去掉主体边缘反射的背景色', '0 不处理；50 默认；100 强力去除主体上的绿色/蓝色反光。'),
     ] },
 ]
+/** 全部内置效果：画面效果在前，音频效果（4.7c）在后。 */
+export const VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS: readonly VideoEditBuiltinEffectDefinition[] = [...VIDEO_EDIT_VIDEO_EFFECT_DEFINITIONS, ...VIDEO_EDIT_AUDIO_EFFECT_DEFINITIONS]
 
 const definitions = new Map(VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS.map(definition => [definition.id, definition]))
 export function videoEditBuiltinEffect(id: string): VideoEditBuiltinEffectDefinition | undefined { return definitions.get(id) }
@@ -133,6 +140,8 @@ export function requireVideoEditBuiltinEffect(id: string): VideoEditBuiltinEffec
 }
 /** 效果登记表与助手用的稳定 ID：`effect:<内置效果 ID>`。 */
 export const VIDEO_EDIT_BUILTIN_REF_PREFIX = 'effect:'
+/** 内置效果作用于画面还是声音；不认识的效果按画面效果。 */
+export function videoEditBuiltinEffectMedia(id: string): VideoEditBuiltinMedia { return definitions.get(id)?.media ?? 'video' }
 export function videoEditBuiltinRefId(id: string): string { return `${VIDEO_EDIT_BUILTIN_REF_PREFIX}${id}` }
 /** `effect:gaussian_blur` 或 `gaussian_blur` → 内置效果 ID；不是内置效果时返回 undefined。 */
 export function parseVideoEditBuiltinRefId(value: string): string | undefined {
@@ -211,7 +220,9 @@ export function isVideoEditBuiltinParamDefault(param: VideoEditBuiltinParam, val
 /** 给助手的结构化目录：每个效果的作用与参数语义（范围、默认值、单位、取值含义）。 */
 export function describeVideoEditBuiltinEffect(definition: VideoEditBuiltinEffectDefinition): Record<string, string | Array<Record<string, string | number | boolean | string[]>>> {
   return {
-    id: videoEditBuiltinRefId(definition.id), name: definition.name, group: VIDEO_EDIT_BUILTIN_GROUP_NAMES[definition.group], description: definition.description,
+    id: videoEditBuiltinRefId(definition.id), name: definition.name, group: VIDEO_EDIT_BUILTIN_GROUP_NAMES[definition.group],
+    // 适用片段写在说明开头：音频效果只能加到声音片段（kind 为 audio），画面效果只能加到画面片段。
+    description: `${definition.media === 'audio' ? '音频效果，只能加到声音片段（kind 为 audio）。' : '画面效果，只能加到画面片段（声音片段除外）。'}${definition.description}`,
     params: describeVideoEditParams(definition.params),
   }
 }

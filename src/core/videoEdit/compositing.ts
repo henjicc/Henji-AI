@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { codeMaterialInstanceSchema } from './codeMaterialPersistence'
 import type { VideoEditSequence, VideoEditClip } from './document'
 import type { VideoEditTransitionWindow } from './transitions'
-import { videoEditBuiltinEffectIssue } from './builtinEffects'
+import { videoEditBuiltinEffectIssue, videoEditBuiltinEffectMedia, type VideoEditBuiltinMedia } from './builtinEffects'
 
 /** 内置效果实例（4.7a）：内置效果 ID 与参数（键与范围由 `builtinEffects.ts` 登记）。 */
 export const videoEditBuiltinEffectInstanceSchema = z.object({
@@ -37,10 +37,19 @@ export function orderVideoEditEffects(effects: VideoEditEffect[], ids: string[])
   if (ids.length !== effects.length || new Set(ids).size !== effects.length || ids.some(id => !effects.some(effect => effect.id === id))) throw new Error('请使用完整、无重复的效果顺序。')
   return ids.map(id => effects.find(effect => effect.id === id)!)
 }
-/** Disabled effects remain editable/persisted, but consume no render resources. */
+/** 效果处理画面还是声音：代码滤镜与画面内置效果为 video，音频内置效果（4.7c）为 audio。 */
+export function videoEditEffectMedia(effect: Pick<VideoEditEffect, 'builtin'>): VideoEditBuiltinMedia { return effect.builtin ? videoEditBuiltinEffectMedia(effect.builtin.id) : 'video' }
+/** 片段能不能挂这种效果：音频效果只挂声音片段，画面效果只挂画面片段（与过渡的媒介规则一致）。 */
+export function videoEditEffectAccepts(media: VideoEditBuiltinMedia, clip: Pick<VideoEditClip, 'kind'>): boolean { return media === 'audio' ? clip.kind === 'audio' : clip.kind !== 'audio' }
+/** Disabled effects remain editable/persisted, but consume no render resources. 只返回画面效果（音频效果由混音处理）。 */
 export function activeVideoEditEffects(clip: Pick<VideoEditClip, 'effects' | 'kind' | 'opacity'>): VideoEditEffect[] {
   if (clip.kind === 'adjustment' && clip.opacity <= 0) return []
-  return (clip.effects ?? []).filter(effect => effect.enabled && effect.amount > 0)
+  return (clip.effects ?? []).filter(effect => effect.enabled && effect.amount > 0 && videoEditEffectMedia(effect) === 'video')
+}
+/** 声音片段上生效的音频效果（按效果链顺序处理声音）。 */
+export function activeVideoEditAudioEffects(clip: Pick<VideoEditClip, 'effects' | 'kind'>): VideoEditBuiltinEffect[] {
+  if (clip.kind !== 'audio') return []
+  return (clip.effects ?? []).filter((effect): effect is VideoEditBuiltinEffect => effect.enabled && effect.amount > 0 && isVideoEditBuiltinEffect(effect) && videoEditEffectMedia(effect) === 'audio')
 }
 export type VideoEditCompositeNode = { fromTrack: number; toTrack: number } & (
   | { kind: 'clip'; clip: VideoEditClip }

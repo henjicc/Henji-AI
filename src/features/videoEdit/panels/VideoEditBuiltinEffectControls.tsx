@@ -24,7 +24,7 @@ function ScrubNumber({ label, value, min, max, step, precision, unit, gesture, o
     <NumberInput ariaLabel={label} increaseLabel={`增加${label}`} decreaseLabel={`减少${label}`} size="sm" value={value} min={min} max={max} step={step} precision={precision} widthClassName="w-20" align="right"
       onScrubStart={gesture.begin} onScrubEnd={cancelled => { if (cancelled) gesture.cancel(); else gesture.finish() }}
       onChange={next => { if (gesture.active() || Math.round(next * factor) !== Math.round(value * factor)) onChange(next) }} />
-    <span className="w-3 text-2xs text-text3" aria-hidden={!unit}>{unit}</span>
+    <span className="w-6 text-2xs text-text3" aria-hidden={!unit}>{unit}</span>
   </span>
 }
 
@@ -63,7 +63,7 @@ export function VideoEditBuiltinEffectControls({ target, effect, onError }: { ta
   try { definition = requireVideoEditBuiltinEffect(effect.builtin.id) } catch { return <span className="text-2xs text-text3">此版本不认识这个效果，保留原样不渲染修改。</span> }
   const values = resolveVideoEditBuiltinParams(effect.builtin)
   return <div className="flex flex-col" data-video-edit-builtin-effect={effect.builtin.id}>
-    <Row label="效果强度" tooltip="与原画面混合的比例，100% 为完全应用" resetLabel="重置效果强度" resetDisabled={effect.amount === 1} onReset={() => gesture.commit({ amount: 1 })} param="amount">
+    <Row label="效果强度" tooltip={definition.media === 'audio' ? '与原声混合的比例，100% 为完全应用' : '与原画面混合的比例，100% 为完全应用'} resetLabel="重置效果强度" resetDisabled={effect.amount === 1} onReset={() => gesture.commit({ amount: 1 })} param="amount">
       <ScrubNumber label="效果强度" value={effect.amount * 100} min={0} max={100} step={1} precision={0} unit="%" gesture={gesture} onChange={next => gesture.commit({ amount: next / 100 })} />
     </Row>
     <VideoEditBuiltinParamRows params={definition.params} values={values} gesture={gesture} />

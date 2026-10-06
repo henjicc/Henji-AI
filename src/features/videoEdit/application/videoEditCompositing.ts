@@ -1,6 +1,6 @@
 import { videoEditDocumentSchema, type VideoEditClip, type VideoEditSequence, type VideoEditDocument } from '@/core/videoEdit/document'
-import { videoEditEffectSchema, orderVideoEditEffects, VIDEO_EDIT_MAX_EFFECTS, type VideoEditEffect } from '@/core/videoEdit/compositing'
-import { normalizeVideoEditBuiltinParams, requireVideoEditBuiltinEffect, validateVideoEditBuiltinParams, videoEditBuiltinDefaults } from '@/core/videoEdit/builtinEffects'
+import { videoEditEffectAccepts, videoEditEffectSchema, orderVideoEditEffects, VIDEO_EDIT_MAX_EFFECTS, type VideoEditEffect } from '@/core/videoEdit/compositing'
+import { normalizeVideoEditBuiltinParams, requireVideoEditBuiltinEffect, validateVideoEditBuiltinParams, videoEditBuiltinDefaults, videoEditBuiltinEffectMedia } from '@/core/videoEdit/builtinEffects'
 import type { CodeMaterialMetadataReader } from '@/core/videoEdit/codeMaterialDocument'
 import { videoEditTransitionClipIds, videoEditTransitionSchema, videoEditTransitionsAt, type VideoEditTransition } from '@/core/videoEdit/transitions'
 import { assertVideoEditLockedTracks } from '@/core/videoEdit/lockedTracks'
@@ -15,6 +15,12 @@ export type { VideoEditCompositeTarget }
 function requireClip(sequence: VideoEditSequence, clipId: string): VideoEditClip {
   const clip = sequence.clips.find(clip => clip.id === clipId)
   if (!clip || clip.kind === 'audio') throw new Error('请选择可处理画面的片段。')
+  return clip
+}
+/** 效果链所在的片段：画面片段挂画面效果，声音片段挂音频效果（4.7c），媒介是否匹配由文档校验把关。 */
+function requireEffectClip(sequence: VideoEditSequence, clipId: string): VideoEditClip {
+  const clip = sequence.clips.find(clip => clip.id === clipId)
+  if (!clip) throw new Error('原片段已移除。')
   return clip
 }
 /** All structural effect/range/transition edits prove the exact draft before one
@@ -62,7 +68,7 @@ export async function updateVideoEditEffect(target: VideoEditCompositeTarget, ef
   const allowed = ['name', 'enabled', 'amount', 'versionId', 'parameters', 'curves']
   if (Object.keys(changes).some(key => !allowed.includes(key))) throw new Error('效果修改仅接受名称、开关、强度和固定源码参数。')
   await editComposite(target.projectId, target.sequenceId, [target.clipId], sequence => {
-    const clip = requireClip(sequence, target.clipId); const effect = clip.effects?.find(effect => effect.id === effectId)
+    const clip = requireEffectClip(sequence, target.clipId); const effect = clip.effects?.find(effect => effect.id === effectId)
     if (!effect) throw new Error('原效果已移除。')
     const { versionId, parameters, curves, ...presentation } = changes
     Object.assign(effect, presentation)
@@ -74,7 +80,7 @@ export async function updateVideoEditEffect(target: VideoEditCompositeTarget, ef
 }
 export async function resetVideoEditEffect(target: VideoEditCompositeTarget, effectId: string, signal?: AbortSignal): Promise<void> {
   const owner = requireVideoEditInstance(target.projectId); const sequence = owner.document.sequences.find(sequence => sequence.id === target.sequenceId)
-  const effect = sequence && requireClip(sequence, target.clipId).effects?.find(effect => effect.id === effectId)
+  const effect = sequence && requireEffectClip(sequence, target.clipId).effects?.find(effect => effect.id === effectId)
   if (!effect) throw new Error('原效果已移除。')
   if (effect.builtin) { updateVideoEditBuiltinEffect(target, effectId, { enabled: true, amount: 1, params: videoEditBuiltinDefaults(requireVideoEditBuiltinEffect(effect.builtin.id)) }); return }
   const metadata = readVideoEditCodeMetadata(owner, owner.document)(effect.code!)
@@ -90,7 +96,7 @@ function editBuiltin(target: VideoEditCompositeTarget, change: (clip: VideoEditC
   const update = (document: VideoEditDocument): VideoEditDocument => {
     const sequence = document.sequences.find(sequence => sequence.id === target.sequenceId)
     if (!sequence) throw new Error('原序列已移除。')
-    const original = requireClip(sequence, target.clipId)
+    const original = requireEffectClip(sequence, target.clipId)
     if (sequence.tracks.find(track => track.index === original.track)?.locked) throw new Error('所属轨道已锁定，请先解锁。')
     const clip: VideoEditClip = { ...original, ...(original.effects ? { effects: original.effects.map(effect => ({ ...effect })) } : {}) }
     change(clip)
@@ -110,8 +116,8 @@ export function addVideoEditBuiltinEffect(target: VideoEditCompositeTarget, buil
   return applyVideoEditBuiltinEffect(target.projectId, target.sequenceId, [target.clipId], builtinId, params)[0]
 }
 /**
- * 把同一个内置效果加到多个片段（PR：选中多个片段后双击效果），整体一步撤销。声音片段与锁定轨道上的片段跳过；
- * 一个都加不上时报错并说明原因。返回新效果 ID（与加上的片段一一对应）。
+ * 把同一个内置效果加到多个片段（PR：选中多个片段后双击效果），整体一步撤销。画面效果跳过声音片段、音频效果只加声音片段，
+ * 锁定轨道上的片段跳过；一个都加不上时报错并说明原因。返回新效果 ID（与加上的片段一一对应）。
  */
 export function applyVideoEditBuiltinEffect(projectId: string, sequenceId: string, clipIds: readonly string[], builtinId: string, params?: Readonly<Record<string, unknown>>): string[] {
   const template = makeVideoEditBuiltinEffect(builtinId, params)
@@ -121,8 +127,9 @@ export function applyVideoEditBuiltinEffect(projectId: string, sequenceId: strin
     const sequence = document.sequences.find(sequence => sequence.id === sequenceId)
     if (!sequence) throw new Error('原序列已移除。')
     const locked = new Set(sequence.tracks.filter(track => track.locked).map(track => track.index))
-    const targets = new Set(sequence.clips.filter(clip => clipIds.includes(clip.id) && clip.kind !== 'audio' && !locked.has(clip.track)).map(clip => clip.id))
-    if (!targets.size) throw new Error('请选择画面片段：声音片段和锁定轨道上的片段不能加画面效果。')
+    const media = videoEditBuiltinEffectMedia(builtinId)
+    const targets = new Set(sequence.clips.filter(clip => clipIds.includes(clip.id) && videoEditEffectAccepts(media, clip) && !locked.has(clip.track)).map(clip => clip.id))
+    if (!targets.size) throw new Error(media === 'audio' ? '请选择声音片段：音频效果只能加到声音片段，锁定轨道上的片段不能修改。' : '请选择画面片段：声音片段和锁定轨道上的片段不能加画面效果。')
     const clips = sequence.clips.map(clip => {
       if (!targets.has(clip.id)) return clip
       if ((clip.effects?.length ?? 0) >= VIDEO_EDIT_MAX_EFFECTS) throw new Error(`片段“${clip.name}”已有${VIDEO_EDIT_MAX_EFFECTS}项效果，请先删除不用的效果。`)
@@ -150,13 +157,13 @@ export function updateVideoEditBuiltinEffect(target: VideoEditCompositeTarget, e
 }
 export async function reorderVideoEditEffects(target: VideoEditCompositeTarget, ids: string[], signal?: AbortSignal): Promise<void> {
   await editComposite(target.projectId, target.sequenceId, [target.clipId], sequence => {
-    const clip = requireClip(sequence, target.clipId)
+    const clip = requireEffectClip(sequence, target.clipId)
     clip.effects = orderVideoEditEffects(clip.effects ?? [], ids)
   }, signal)
 }
 export async function deleteVideoEditEffects(target: VideoEditCompositeTarget, ids: string[], signal?: AbortSignal): Promise<void> {
   await editComposite(target.projectId, target.sequenceId, [target.clipId], sequence => {
-    const clip = requireClip(sequence, target.clipId)
+    const clip = requireEffectClip(sequence, target.clipId)
     if (!ids.length || ids.some(id => !clip.effects?.some(effect => effect.id === id))) throw new Error('原效果已移除。')
     clip.effects = clip.effects!.filter(effect => !ids.includes(effect.id))
   }, signal)
@@ -164,9 +171,9 @@ export async function deleteVideoEditEffects(target: VideoEditCompositeTarget, i
 export async function copyVideoEditEffects(target: VideoEditCompositeTarget, source: Pick<VideoEditCompositeTarget, 'sequenceId' | 'clipId'>, signal?: AbortSignal): Promise<void> {
   const sequence = requireVideoEditInstance(target.projectId).document.sequences.find(sequence => sequence.id === source.sequenceId)
   if (!sequence) throw new Error('原效果来源序列已移除。')
-  const effects: VideoEditEffect[] = structuredClone(requireClip(sequence, source.clipId).effects ?? []).map(effect => ({ ...effect, id: crypto.randomUUID() }))
+  const effects: VideoEditEffect[] = structuredClone(requireEffectClip(sequence, source.clipId).effects ?? []).map(effect => ({ ...effect, id: crypto.randomUUID() }))
   if (!effects.length) throw new Error('来源片段没有效果可复制。')
-  await editComposite(target.projectId, target.sequenceId, [target.clipId], sequence => { requireClip(sequence, target.clipId).effects = effects }, signal)
+  await editComposite(target.projectId, target.sequenceId, [target.clipId], sequence => { requireEffectClip(sequence, target.clipId).effects = effects }, signal)
 }
 export async function updateVideoEditAdjustmentRange(target: VideoEditCompositeTarget, fromTrack: number, signal?: AbortSignal): Promise<void> {
   await editComposite(target.projectId, target.sequenceId, [target.clipId], sequence => {

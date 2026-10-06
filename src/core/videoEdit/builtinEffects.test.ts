@@ -19,7 +19,7 @@ describe('内置效果登记', () => {
   it('效果面板登记表列出全部内置效果，带参数与分组', () => {
     const entries = videoEditEffectsRegistry().filter(entry => entry.builtinId)
     expect(entries.map(entry => entry.builtinId)).toEqual(VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS.map(definition => definition.id))
-    expect(entries.every(entry => entry.category === 'video_effect' && entry.id === `effect:${entry.builtinId}` && entry.group && entry.params)).toBe(true)
+    expect(entries.every(entry => entry.category === (entry.media === 'audio' ? 'audio_effect' : 'video_effect') && entry.id === `effect:${entry.builtinId}` && entry.group && entry.params)).toBe(true)
     expect(parseVideoEditBuiltinRefId('effect:gaussian_blur')).toBe('gaussian_blur'); expect(parseVideoEditBuiltinRefId('gaussian_blur')).toBe('gaussian_blur'); expect(parseVideoEditBuiltinRefId('effect:nope')).toBeUndefined()
   })
   it('严格校验越界、错类型与未知参数并列出可用范围；界面写入时夹进范围', () => {

@@ -3,6 +3,7 @@ import { videoEditPictureSeconds, videoEditSourceSeconds } from '@/core/videoEdi
 import { videoEditCaptionClips } from '@/core/videoEdit/timedContent'
 import { VideoEditGpuCompositor } from './videoEditGpuCompositor'
 import { VideoEditFrameCache } from './videoEditFrameCache'
+import { planVideoEditAudioEffectBlock, VideoEditAudioEffectChain } from './videoEditAudioEffects'
 import { VideoEditGpuFrame, videoEditGpuFrameUsesChroma } from './videoEditGpuFrame'
 import { VideoEditCodeSources } from './videoEditCodeSources'
 import { codeMaterialImageIds } from '@/core/videoEdit/codeMaterialResources'
@@ -11,7 +12,7 @@ import { VideoEditBrowserFrames } from './videoEditBrowserFrames'
 import { videoEditSourceReadError } from './videoEditSourceErrors'
 import { videoEditAudioTransitionClipGain, videoEditHandleFrame, videoEditTransitionMedium, videoEditTransitionWindow, videoEditTransitionsAt, type VideoEditTransitionWindow } from '@/core/videoEdit/transitions'
 import { videoEditClipFades, videoEditFadeGain, videoEditFadeOpacity } from '@/core/videoEdit/fades'
-import { activeVideoEditEffects, buildVideoEditCompositePlan } from '@/core/videoEdit/compositing'
+import { activeVideoEditAudioEffects, activeVideoEditEffects, buildVideoEditCompositePlan } from '@/core/videoEdit/compositing'
 import { renderVideoEditCompositeScene, videoEditCompositeSurfaceKeys } from './videoEditCompositeScene'
 import { videoEditAudioMixReads, videoEditDefaultAudioGains } from '@/core/videoEdit/audioChannels'
 import { readVideoEditExportPicture } from './videoEditExportPictures'
@@ -437,6 +438,8 @@ export class VideoEditRenderer {
     for (const [path, seeker] of this.seekers) if (!activePaths.has(path)) { this.seekers.delete(path); await seeker.dispose() }
     return { canvas: this.canvas, sourceTimestamps: timestamps, blankPictures, singleFrameReads, cacheHits, cacheBytes: this.frameCache.bytes, presented, decodeMs, gpuMs, completion }
   }
+  /** 声音片段的音频效果链（4.7c），按片段 ID；状态跨混音块延续，本块没用到的片段释放。 */
+  private readonly audioChains = new Map<string, VideoEditAudioEffectChain>()
   /** Bounded one-second mix. Source timestamp alignment also handles VFR video audio. */
   async mixAudio(startSeconds: number, durationSeconds: number): Promise<Float32Array[]> {
     const rate = this.document.sampleRate
@@ -446,6 +449,7 @@ export class VideoEditRenderer {
     const result = Array.from({ length: this.document.channels }, () => new Float32Array(length))
     const finish = startSeconds + durationSeconds
     const activeAudio = new Set<string>()
+    const activeChains = new Set<string>()
     const fps = this.document.fps
     // 音频过渡（PR 恒定功率／恒定增益）：左片段越过出点、右片段提前入点，在窗口里按曲线交叉淡化。
     const audioWindows = (this.document.transitions ?? []).filter(transition => videoEditTransitionMedium(transition.kind) === 'audio').flatMap((transition): VideoEditTransitionWindow[] => { try { return [videoEditTransitionWindow(this.document, transition)] } catch { return [] } })
@@ -461,8 +465,6 @@ export class VideoEditRenderer {
       if (from >= to) continue
       const media = videoEditClipMedia(this.document, clip)
       if (!media) continue
-      const sourceStart = videoEditSourceSeconds(clip) + from - clipStart
-      const sourceEnd = sourceStart + to - from
       // 淡化手柄与音频过渡的增益包络（按输出采样）；没有时整段就是片段音量。
       const enveloped = videoEditClipFades(clip) || outgoing.length > 0 || incoming.length > 0
       const envelope = enveloped ? Float32Array.from({ length }, (_, sample) => {
@@ -474,6 +476,12 @@ export class VideoEditRenderer {
         }
         return gain
       }) : undefined
+      // 把片段声音（各声道映射后）按 gainAt 增益加到 targets：targets 的第 0 个样本是序列样本 base，只写 [from, to) 秒内的样本。
+      const readSound = async (from: number, to: number, base: number, targets: Float32Array[], gainAt: (sample: number) => number): Promise<void> => {
+      const length = targets[0].length
+      const sampleStartSeconds = base / rate
+      const sourceStart = videoEditSourceSeconds(clip) + from - clipStart
+      const sourceEnd = sourceStart + to - from
       // A clip with a channel mapping (task 2.6) reads every sound stream it names, each with its own reader; a clip
       // without one reads the file's first stream with its own channels.
       for (const read of clip.audioMapping ? videoEditAudioMixReads(clip.audioMapping, this.document.channels) : [undefined]) {
@@ -506,26 +514,55 @@ export class VideoEditRenderer {
             const values = plane(inputChannel)
             for (let sample = 0; sample < data.length; sample++) data[sample] += values[sample] * gain
           }
-          const output = result[channel]
+          const output = targets[channel]
           for (let sample = outputStart; sample < outputEnd; sample++) {
             const sourceTime = sampleStartSeconds + sample / rate - from + sourceStart - wrapped.timestamp
             const position = sourceTime * wrapped.sampleRate
             if (aligned) {
               const nearest = Math.floor(position + NEAREST_SAMPLE_EDGE)
-              if (nearest >= 0 && nearest < data.length) output[sample] += data[nearest] * (envelope ? envelope[sample] : clip.volume)
+              if (nearest >= 0 && nearest < data.length) output[sample] += data[nearest] * gainAt(sample)
               continue
             }
             const left = Math.floor(position); const alpha = position - left
-            if (left >= 0 && left < data.length) output[sample] += (data[left] * (1 - alpha) + data[Math.min(left + 1, data.length - 1)] * alpha) * (envelope ? envelope[sample] : clip.volume)
+            if (left >= 0 && left < data.length) output[sample] += (data[left] * (1 - alpha) + data[Math.min(left + 1, data.length - 1)] * alpha) * gainAt(sample)
           }
         }
         } finally { wrapped.close() }
       }
       }
+      }
+      const effects = activeVideoEditAudioEffects(clip)
+      if (!effects.length) { await readSound(from, to, firstSample, result, sample => envelope ? envelope[sample] : clip.volume); continue }
+      // 音频效果（4.7c）：片段音量在效果之前（限幅器的上限不被音量推高），淡化与过渡在效果之后；效果链有延迟时多读后面的素材抵消，
+      // 块不连续时从前面预读一段让状态稳定。预览与导出都走这里，连续播放时与分块方式无关、逐样本一致。
+      let chain = this.audioChains.get(clip.id)
+      if (!chain || chain.rate !== rate || chain.channels !== this.document.channels) { chain?.dispose(); chain = new VideoEditAudioEffectChain(rate, this.document.channels); this.audioChains.set(clip.id, chain) }
+      activeChains.add(clip.id)
+      const rebuilt = await chain.sync(effects)
+      const plan = planVideoEditAudioEffectBlock(chain, firstSample, length)
+      if (!plan.contiguous && !rebuilt) await chain.reset(effects)
+      const input = Array.from({ length: this.document.channels }, () => new Float32Array(plan.inputLength))
+      const readFrom = Math.max(plan.inputStart / rate, playStart, clipStart - videoEditSourceSeconds(clip)); const readTo = Math.min((plan.inputStart + plan.inputLength) / rate, playEnd)
+      if (readFrom < readTo) await readSound(readFrom, readTo, plan.inputStart, input, () => clip.volume)
+      chain.process(input, plan.inputLength); chain.nextSample = firstSample + length
+      const outputStart = Math.max(0, Math.ceil((from - sampleStartSeconds) * rate - 1e-7)); const outputEnd = Math.min(length, Math.ceil((to - sampleStartSeconds) * rate - 1e-7))
+      for (let sample = outputStart; sample < outputEnd; sample++) {
+        let shape = 1
+        if (enveloped) {
+          const seconds = sampleStartSeconds + sample / rate
+          if (seconds >= clipStart && seconds < (clip.start + clip.duration) / fps) shape = videoEditFadeGain(clip, seconds, fps)
+          for (const window of [...outgoing, ...incoming]) {
+            const begin = window.start / fps; const end = window.end / fps
+            if (seconds >= begin && seconds < end) shape *= videoEditAudioTransitionClipGain(window, clip.id, (seconds - begin) / (end - begin))
+          }
+        }
+        for (let channel = 0; channel < result.length; channel++) result[channel][sample] += input[channel][plan.discard + sample] * shape
+      }
     }
     for (const [key, pending] of this.sources) if (key.startsWith('audio:') && !activeAudio.has(key)) {
       this.sources.delete(key); this.release(await pending)
     }
+    for (const [id, chain] of this.audioChains) if (!activeChains.has(id)) { chain.dispose(); this.audioChains.delete(id) }
     return result
   }
   async dispose(): Promise<void> {
@@ -536,5 +573,7 @@ export class VideoEditRenderer {
     await Promise.allSettled([...this.sources.values()].map(async pending => { const source = await pending; source.current?.close(); await source.iterator?.return(); this.release(source) }))
     for (const key of this.images.keys()) this.releaseImage(key)
     this.sources.clear(); this.images.clear(); await this.compositor?.dispose(); this.canvas.width = 1; this.canvas.height = 1
+    for (const chain of this.audioChains.values()) chain.dispose()
+    this.audioChains.clear()
   }
 }

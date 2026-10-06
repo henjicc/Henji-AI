@@ -4,7 +4,7 @@ import { codeMaterialDefinitionsSchema, codeMaterialInstanceSchema } from './cod
 import type { CodeMaterialMetadataReader } from './codeMaterialDocument'
 import { videoEditMarkerSchema, videoEditCaptionSchema, retimeVideoEditContent } from './timedContent'
 import { videoEditGraphicSchema } from './graphics'
-import { videoEditAdjustmentSchema, videoEditEffectSchema, validateVideoEditAdjustmentRanges, videoEditEffectCodes, VIDEO_EDIT_MAX_EFFECTS } from './compositing'
+import { videoEditAdjustmentSchema, videoEditEffectSchema, validateVideoEditAdjustmentRanges, videoEditEffectAccepts, videoEditEffectCodes, videoEditEffectMedia, VIDEO_EDIT_MAX_EFFECTS } from './compositing'
 import { videoEditTransitionSchema, validateVideoEditTransitions } from './transitions'
 import { videoEditCreativeSourceSchema } from './creativeResult'
 import { videoEditLabelSchema } from './labels'
@@ -110,7 +110,10 @@ export const videoEditDocumentSchema = z.object({
       } else if (clip.code) issue('普通片段不能附带代码生成实例。')
       if (clip.kind === 'graphic' ? !clip.graphic : Boolean(clip.graphic)) issue('只有图形片段可以且必须保存结构化图形。')
       if (clip.kind === 'adjustment' ? !clip.adjustment : Boolean(clip.adjustment)) issue('只有调整图层可以且必须保存作用范围。')
-      if (clip.kind === 'audio' && clip.effects?.length) issue('画面效果不能附加到声音片段。')
+      for (const effect of clip.effects ?? []) {
+        const media = videoEditEffectMedia(effect)
+        if (!videoEditEffectAccepts(media, clip)) { issue(media === 'audio' ? '音频效果只能加到声音片段。' : '画面效果不能附加到声音片段。'); break }
+      }
       for (const code of videoEditEffectCodes(clip.effects)) if (!document.codeMaterials?.find(definition => definition.id === code.definitionId)?.versions.some(version => version.id === code.versionId)) issue('附加效果的固定源码版本不存在。')
       if (!track || track.kind !== (clip.kind === 'audio' ? 'audio' : 'video')) issue(`片段 ${clip.name} 的轨道类型不匹配。`)
       if (clip.start + clip.duration > Math.floor(fps * 1800)) issue('序列最长为 30 分钟。')

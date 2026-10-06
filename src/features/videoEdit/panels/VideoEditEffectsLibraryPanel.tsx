@@ -4,7 +4,7 @@ import ContextMenu from '@/components/ContextMenu'
 import { UiOptionButton, UiSearchInput } from '@/components/ui'
 import Tooltip from '@/components/ui/Tooltip'
 import { useContextMenu } from '@/hooks/useContextMenu'
-import { ICON_VIDEO_EDIT_TRANSITION } from '@/core/theme/icons'
+import { ICON_MEDIA_AUDIO, ICON_VIDEO_EDIT_TRANSITION } from '@/core/theme/icons'
 import { VIDEO_EDIT_EFFECT_CATEGORIES, videoEditEffectsRegistry, type VideoEditEffectCategory, type VideoEditEffectsRegistryEntry } from '@/core/videoEdit/effectsRegistry'
 import { videoEditDefaultTransitionKind, videoEditTransitionMedium } from '@/core/videoEdit/transitions'
 import { useSettingsStore } from '@/stores/settingsStore'
@@ -32,7 +32,8 @@ export function VideoEditEffectsLibraryPanel({ instance, onError }: { instance: 
   const isDefault = (entry: VideoEditEffectsRegistryEntry): boolean => Boolean(entry.transitionKind && videoEditDefaultTransitionKind(defaults, videoEditTransitionMedium(entry.transitionKind)) === entry.transitionKind)
   const toggle = (id: VideoEditEffectCategory): void => setCollapsed(previous => { const next = new Set(previous); if (next.has(id)) next.delete(id); else next.add(id); return next })
   const TransitionIcon = ICON_VIDEO_EDIT_TRANSITION
-  // PR：选中片段后双击效果，加到所有选中的画面片段（一步撤销）。
+  const AudioIcon = ICON_MEDIA_AUDIO
+  // PR：选中片段后双击效果，加到所有选中的同媒介片段（画面效果加画面片段、音频效果加声音片段；一步撤销）。
   const applyToSelection = (builtinId: string): void => {
     try {
       if (!instance.selectedClipIds.length) throw new Error('先在时间线上选中片段，再双击效果；也可以把效果直接拖到片段上。')
@@ -59,7 +60,7 @@ export function VideoEditEffectsLibraryPanel({ instance, onError }: { instance: 
                 onDragEnd={() => { endVideoEditTransitionDrag(); endVideoEditEffectDrag() }}
                 onDoubleClick={() => { if (entry.builtinId) applyToSelection(entry.builtinId); else if (entry.transitionKind) void applyVideoEditTransitionToSelection(instance.document.id, entry.transitionKind).catch(onError) }}
                 onContextMenu={event => { const kind = entry.transitionKind; if (kind) menu.showMenu(event, [{ id: 'default', label: '设为默认过渡', icon: <Star size={14} />, disabled: isDefault(entry), onClick: () => setDefault(videoEditTransitionMedium(kind), kind) }]) }}>
-                {entry.kind === 'transition' ? <TransitionIcon size={14} aria-hidden="true" className="shrink-0 text-text3" /> : <Sparkles size={14} aria-hidden="true" className="shrink-0 text-text3" />}
+                {entry.kind === 'transition' ? <TransitionIcon size={14} aria-hidden="true" className="shrink-0 text-text3" /> : entry.media === 'audio' ? <AudioIcon size={14} aria-hidden="true" className="shrink-0 text-text3" /> : <Sparkles size={14} aria-hidden="true" className="shrink-0 text-text3" />}
                 <span className="min-w-0 flex-1 truncate text-left">{entry.name}</span>
                 {isDefault(entry) && <span className="shrink-0 text-2xs text-text3">默认</span>}
               </UiOptionButton>

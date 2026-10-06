@@ -1,13 +1,14 @@
 import type { JsonValue } from '@/core/application-control'
 import { videoEditClipSchema, type VideoEditDocument, type VideoEditClip } from '@/core/videoEdit/document'
 import { createVideoEditGraphic, orderVideoEditGraphicObjects } from '@/core/videoEdit/graphics'
-import { orderVideoEditEffects, videoEditEffectSchema, videoEditAdjustmentSchema } from '@/core/videoEdit/compositing'
-import { videoEditTransitionClipIds, videoEditTransitionMedium, videoEditTransitionPreset, videoEditTransitionSchema, VIDEO_EDIT_TRANSITION_PRESETS, type VideoEditTransitionKind } from '@/core/videoEdit/transitions'
+import { orderVideoEditEffects, videoEditEffectAccepts, videoEditEffectSchema, videoEditAdjustmentSchema } from '@/core/videoEdit/compositing'
+import { videoEditTransitionClipIds, videoEditTransitionEditPoints, videoEditTransitionMedium, videoEditTransitionPreset, videoEditTransitionSchema, videoEditTransitionWindow, VIDEO_EDIT_TRANSITION_PRESETS, type VideoEditTransitionKind } from '@/core/videoEdit/transitions'
+import type { VideoEditSequence } from '@/core/videoEdit/document'
 import { validateVideoEditTransitionParams } from '@/core/videoEdit/transitionParams'
 import { codeMaterialInstanceSchema } from '@/core/videoEdit/codeMaterialPersistence'
 import type { CodeMaterialMetadataReader } from '@/core/videoEdit/codeMaterialDocument'
 import { makeVideoEditBuiltinEffect, makeVideoEditEffect } from './videoEditCompositing'
-import { parseVideoEditBuiltinRefId, validateVideoEditBuiltinParams, videoEditBuiltinRefId } from '@/core/videoEdit/builtinEffects'
+import { parseVideoEditBuiltinRefId, validateVideoEditBuiltinParams, videoEditBuiltinEffectMedia, videoEditBuiltinRefId } from '@/core/videoEdit/builtinEffects'
 
 export const VIDEO_EDIT_COMPOSITE_TYPES = ['video_edit.graphic_object', 'video_edit.effect', 'video_edit.transition'] as const
 export type VideoEditCompositeEntityType = typeof VIDEO_EDIT_COMPOSITE_TYPES[number]
@@ -106,8 +107,12 @@ export function createVideoEditCompositeEntity(document: VideoEditDocument, type
   if (type === 'video_edit.transition') {
     const sequence = document.sequences.find(sequence => sequence.id === parentId)
     if (!sequence) throw new Error('NOT_FOUND：所属序列已移除。')
-    const transition = videoEditTransitionSchema.parse({ id: crypto.randomUUID(), kind: 'cross_dissolve', ...values })
+    // 两端可只写一端（单侧过渡，与时间线上拖到片段一端的行为一致）；空字符串视为没写。
+    const endpoints = { ...values }
+    for (const key of ['leftClipId', 'rightClipId']) if (endpoints[key] === '' || endpoints[key] === null) delete endpoints[key]
+    const transition = videoEditTransitionSchema.parse({ id: crypto.randomUUID(), kind: 'cross_dissolve', ...endpoints })
     if (transition.parameters && !Object.keys(transition.parameters).length) delete transition.parameters
+    assertTransitionEndpoints(sequence, transition)
     ;(sequence.transitions ??= []).push(transition); return transition.id
   }
   const { clip } = clipOwner(document, parentId)
@@ -120,9 +125,10 @@ export function createVideoEditCompositeEntity(document: VideoEditDocument, type
     if (values.curves !== undefined) object.curves = codeMaterialInstanceSchema.shape.curves.parse(values.curves)
     clip.graphic.objects.push(object); return videoEditGraphicObjectId(clip.id, object.id)
   }
-  if (clip.kind === 'audio') throw new Error('音频片段不能添加画面效果。')
-  if (values.definitionId === undefined || typeof values.definitionId !== 'string') throw new Error('请提供 definition_id：内置效果写 effect:<ID>（如 effect:gaussian_blur，完整目录见 video_edit.builtin_effect），代码滤镜写滤镜源码定义 ID。')
+  if (values.definitionId === undefined || typeof values.definitionId !== 'string') throw new Error('请提供 definition_id：内置效果写 effect:<ID>（如画面 effect:gaussian_blur、声音 effect:noise_reduction，完整目录见 video_edit.builtin_effect），代码滤镜写滤镜源码定义 ID。')
   const builtinId = parseVideoEditBuiltinRefId(values.definitionId)
+  const media = builtinId ? videoEditBuiltinEffectMedia(builtinId) : 'video'
+  if (!videoEditEffectAccepts(media, clip)) throw new Error(media === 'audio' ? `音频效果只能加到声音片段，片段“${clip.name}”不是声音片段。` : `片段“${clip.name}”是声音片段，只能加音频效果（video_edit.builtin_effect 里说明以“音频效果”开头的 effect:<ID>，如 effect:noise_reduction）。`)
   if (builtinId) {
     if (values.versionId) throw new Error('内置效果没有源码版本，请不要提供 version_id。')
     if (values.curves && typeof values.curves === 'object' && Object.keys(values.curves).length) throw new Error('内置效果暂不支持关键帧。')
@@ -157,7 +163,6 @@ export function updateVideoEditClipStructure(clip: VideoEditClip, data: Data, ke
     clip.graphic.objects = orderVideoEditGraphicObjects(clip.graphic.objects, data.graphicObjectIds as string[])
   }
   if (keys.includes('effectIds')) {
-    if (clip.kind === 'audio') throw new Error('音频片段不能添加画面效果。')
     clip.effects = orderVideoEditEffects(clip.effects ?? [], data.effectIds as string[])
   }
   if (keys.includes('adjustmentFromTrack')) {
@@ -167,4 +172,18 @@ export function updateVideoEditClipStructure(clip: VideoEditClip, data: Data, ke
   const plain = Object.fromEntries(Object.entries(data).filter(([key]) => !['graphicObjectIds', 'effectIds', 'adjustmentFromTrack'].includes(key)))
   // `data` is the full readback copy; a cleared optional reference (link/group/source component) is absent here and must stay absent.
   return videoEditClipSchema.parse({ ...plain, graphic: clip.graphic, effects: clip.effects, adjustment: clip.adjustment })
+}
+/**
+ * 助手创建过渡时校验端点：至少写一端，片段存在、媒介匹配、放得下。不成立时列出这个序列能放这种过渡的编辑点，
+ * 让调用方直接改用（与时间线拖放、Shift+D 同一套编辑点规则）。
+ */
+function assertTransitionEndpoints(sequence: VideoEditSequence, transition: ReturnType<typeof videoEditTransitionSchema.parse>): void {
+  const medium = videoEditTransitionMedium(transition.kind)
+  const available = (): string => {
+    const label = (id: string): string => `${id}（${sequence.clips.find(clip => clip.id === id)?.name ?? ''}）`
+    const points = videoEditTransitionEditPoints(sequence, medium).slice(0, 24).map(point => point.leftClipId && point.rightClipId ? `left_clip_id=${label(point.leftClipId)} + right_clip_id=${label(point.rightClipId)}` : point.leftClipId ? `只写 left_clip_id=${label(point.leftClipId)}（出点淡出）` : `只写 right_clip_id=${label(point.rightClipId!)}（入点淡入）`)
+    return points.length ? `可用的编辑点：${points.join('；')}` : `这个序列没有能放${medium === 'audio' ? '音频' : '视频'}过渡的片段（${medium === 'audio' ? '音频过渡挂声音片段' : '视频过渡挂画面片段'}）`
+  }
+  if (!transition.leftClipId && !transition.rightClipId) throw new Error(`请至少写 left_clip_id 或 right_clip_id 其中一个。${available()}`)
+  try { videoEditTransitionWindow(sequence, transition) } catch (error) { throw new Error(`${error instanceof Error ? error.message : '过渡端点无效。'}${available()}`) }
 }

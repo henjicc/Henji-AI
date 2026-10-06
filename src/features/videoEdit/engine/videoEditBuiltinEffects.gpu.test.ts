@@ -53,7 +53,7 @@ const pixel = (pixels: Uint8Array, x: number, y: number): number[] => [...pixels
 
 describe('剪辑内置效果（真实设备）', () => {
   it('全部效果的着色器在设备上编译，默认参数出画面且不透明区域保持不透明', async () => {
-    for (const definition of VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS) {
+    for (const definition of VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS.filter(value => value.media !== 'audio')) {
       const pixels = await run(definition.id, videoEditBuiltinDefaults(definition))
       if (!['crop', 'chroma_key'].includes(definition.id)) expect(pixel(pixels, W / 2, H / 2)[3], definition.id).toBe(255)
     }
