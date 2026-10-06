@@ -6,17 +6,21 @@ import { getPlatform } from '@/platform/runtime'
 import { appendVideoEditClip, appendVideoEditMedia, appendVideoEditSequence, switchVideoEditSequence, closeVideoEditProject, createVideoEditProject, editVideoSequence, getActiveVideoEditSequence, listVideoEditInstances, setVideoEditView, setVideoEditTimelineView, undoVideoEdit } from './application/videoEditService'
 import { VideoEditPreview } from './VideoEditPreview'
 import { registerVideoEditSourcePresenter, updateVideoEditSource } from './application/videoEditSource'
-const pixel = vi.hoisted(() => ({ requests: [] as Array<{ frame: number; sequential?: boolean; submitted?: () => void; resolve: (value: { sourceTimestamps: number[]; presented?: boolean }) => void; reject: (error: Error) => void }>, sessions: 0, update: vi.fn(), dispose: vi.fn(), mixAudio: vi.fn() }))
+import { resetVideoEditPlaybackResolutionCache, setVideoEditPlaybackResolution } from './application/videoEditPlaybackResolution'
+import { setVideoEditPosterFrame } from './application/videoEditProgramCapture'
+const pixel = vi.hoisted(() => ({ requests: [] as Array<{ frame: number; sequential?: boolean; submitted?: () => void; resolve: (value: { sourceTimestamps: number[]; presented?: boolean }) => void; reject: (error: Error) => void }>, sessions: 0, update: vi.fn(), dispose: vi.fn(), mixAudio: vi.fn(), scale: vi.fn() }))
+vi.mock('./application/videoEditProjectCover', () => ({ saveVideoEditPosterCover: vi.fn(async () => undefined) }))
 vi.mock('./engine/videoEditRenderSession', () => ({ VideoEditRenderSession: class {
   constructor() { pixel.sessions++ }
   updateDocument = pixel.update
   invalidateDocument = vi.fn()
   dispose = pixel.dispose
   mixAudio = pixel.mixAudio
+  setRenderDivisor = pixel.scale
   present(frame: number, sequential?: boolean, _scrubbing?: boolean, _deadline?: number, submitted?: () => void) { return new Promise((resolve, reject) => pixel.requests.push({ frame, sequential, resolve, reject, submitted })) }
 } }))
 beforeEach(() => {
-  vi.useFakeTimers(); installHarnessNativeStorage(); pixel.requests = []; pixel.sessions = 0; pixel.update.mockResolvedValue(undefined); pixel.dispose.mockResolvedValue(undefined)
+  vi.useFakeTimers(); installHarnessNativeStorage(); pixel.requests = []; pixel.sessions = 0; pixel.update.mockResolvedValue(undefined); pixel.dispose.mockResolvedValue(undefined); pixel.scale.mockReset(); pixel.scale.mockResolvedValue(undefined); localStorage.clear(); resetVideoEditPlaybackResolutionCache()
   vi.spyOn(getPlatform().system.dialog, 'save').mockResolvedValue('D:/preview.henji-video')
   vi.spyOn(getPlatform().system.fs, 'writeTextFile').mockResolvedValue(undefined)
   vi.stubGlobal('OffscreenCanvas', class {})
@@ -351,4 +355,47 @@ it('渲染失败后即使序列与播放头都不变也会自行重试（间隔 
   await act(async () => { await vi.advanceTimersByTimeAsync(800) }); expect(pixel.requests).toHaveLength(1)
   await act(async () => { pixel.requests.shift()!.resolve({ sourceTimestamps: [0], presented: true }) })
   expect(view.queryByText(failure)).toBeNull(); view.unmount()
+})
+it('回放分辨率（4.9）：播放时按所选倍数缩小渲染，暂停回到完整；选“暂停时也用此分辨率”后暂停保持；控制条显示当前选择', async () => {
+  const owner = (await createVideoEditProject())!; const id = owner.document.id; appendVideoEditClip(id)
+  const onError = vi.fn(); const view = render(<VideoEditPreview instance={owner} onError={onError} />)
+  await act(async () => {})
+  await act(async () => { pixel.requests[0].resolve({ sourceTimestamps: [] }); await vi.advanceTimersByTimeAsync(5) })
+  act(() => { setVideoEditPlaybackResolution(id, { resolution: 'quarter' }) })
+  await act(async () => { await vi.advanceTimersByTimeAsync(5) })
+  expect(pixel.scale).not.toHaveBeenCalled()
+  expect(view.getByRole('button', { name: '回放分辨率' }).textContent).toContain('1/4')
+  act(() => { setVideoEditView(id, { playing: true }) })
+  await act(async () => { await vi.advanceTimersByTimeAsync(5) })
+  expect(pixel.scale).toHaveBeenLastCalledWith(4)
+  act(() => { setVideoEditView(id, { playing: false }) })
+  for (const request of pixel.requests) await act(async () => { request.resolve({ sourceTimestamps: [] }) })
+  await act(async () => { await vi.advanceTimersByTimeAsync(5) })
+  expect(pixel.scale).toHaveBeenLastCalledWith(1)
+  act(() => { setVideoEditPlaybackResolution(id, { fullWhenPaused: false }) })
+  for (const request of pixel.requests) await act(async () => { request.resolve({ sourceTimestamps: [] }) })
+  await act(async () => { await vi.advanceTimersByTimeAsync(5) })
+  expect(pixel.scale).toHaveBeenLastCalledWith(4)
+  expect(onError).not.toHaveBeenCalled(); view.unmount()
+})
+it('回放分辨率（4.9）：暂停也用 1/8 时，设为封面先按完整分辨率重画这一帧再取图，取完回到所选分辨率', async () => {
+  const owner = (await createVideoEditProject())!; const id = owner.document.id; appendVideoEditClip(id)
+  setVideoEditPlaybackResolution(id, { resolution: 'eighth', fullWhenPaused: false })
+  const toBlob = vi.fn((callback: BlobCallback) => callback(new Blob(['png'], { type: 'image/png' })))
+  HTMLCanvasElement.prototype.toBlob = toBlob as unknown as HTMLCanvasElement['toBlob']
+  const onError = vi.fn(); const view = render(<VideoEditPreview instance={owner} onError={onError} />)
+  await act(async () => {})
+  expect(pixel.scale).toHaveBeenLastCalledWith(8)
+  await act(async () => { pixel.requests[0].resolve({ sourceTimestamps: [] }); await vi.advanceTimersByTimeAsync(5) })
+  let done = false
+  const poster = setVideoEditPosterFrame(id).then(() => { done = true })
+  await act(async () => { await vi.advanceTimersByTimeAsync(10) })
+  expect(pixel.scale).toHaveBeenLastCalledWith(1); expect(toBlob).not.toHaveBeenCalled()
+  await act(async () => { pixel.requests.at(-1)!.resolve({ sourceTimestamps: [] }); await vi.advanceTimersByTimeAsync(20) })
+  await act(async () => { await poster })
+  expect(done).toBe(true); expect(toBlob).toHaveBeenCalledTimes(1)
+  expect((view.getByLabelText('剪辑画面') as HTMLCanvasElement).dataset.renderDivisor).toBe('1')
+  await act(async () => { await vi.advanceTimersByTimeAsync(10) })
+  expect(pixel.scale).toHaveBeenLastCalledWith(8)
+  expect(onError).not.toHaveBeenCalled(); view.unmount()
 })

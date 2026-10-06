@@ -62,6 +62,17 @@ describe('内置效果工序与参数打包', () => {
     expect(plan('film_grain', {}, 1920, 1080, 42).passes[0].uniforms[6]).toBe(videoEditGrainSeed(42))
     expect(videoEditGrainSeed(42)).toBe(videoEditGrainSeed(42)); expect(videoEditGrainSeed(42)).not.toBe(videoEditGrainSeed(43))
   })
+  it('回放分辨率（4.9）：颗粒不能细于一个像素，降低分辨率时幅度按每个像素覆盖的颗粒数减弱；完整分辨率不变', () => {
+    const grain = (height: number, renderScale?: number, size = 30) => planVideoEditBuiltinEffect({ id: 'film_grain', params: { amount: 40, size } }, { width: Math.round(height * 16 / 9), height, frame: 0, renderScale }).passes[0].uniforms
+    const full = grain(1080); const same = grain(1080, 1)
+    expect(same[4]).toBe(full[4])
+    // 1080 下 30 号颗粒约 1.7 像素；1/4 时一个像素盖 4×4 个序列像素，约 2.3×2.3 个颗粒 → 幅度约为 1/2.3
+    const quarter = grain(270, 0.25)
+    expect(quarter[5]).toBeCloseTo(full[5] / 4)
+    expect(quarter[4] / full[4]).toBeCloseTo(0.25 * full[5], 3)
+    // 粗颗粒（一颗大于缩小后的一个像素）在 1/2 下幅度不变
+    expect(grain(540, 0.5, 100)[4]).toBeCloseTo(grain(1080, 1, 100)[4])
+  })
   it('视频过渡（4.7）：每种过渡在任意进度都能规划，入口都在着色器里；羽化按画面高度换算；单侧标记写进参数', () => {
     for (const kind of VIDEO_EDIT_BUILTIN_TRANSITION_KINDS) {
       for (const progress of [0, 0.3, 1]) {

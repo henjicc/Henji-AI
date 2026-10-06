@@ -14,6 +14,8 @@ export interface RenderDecodeOptions extends VideoEditDecodeSettings { localPath
 export type RenderRequest = { id: number } & (
   { kind: 'init'; document: VideoEditComposition; previewWidth?: number; surface?: OffscreenCanvas; cacheBudgetBytes?: number; decode?: RenderDecodeOptions } | { kind: 'update'; document: VideoEditComposition; localPaths?: Record<string, string> }
   | { kind: 'invalidate'; revision: number }
+  /** Preview playback resolution (task 4.9): the next renders draw at 1/divisor of the sequence size. */
+  | { kind: 'scale'; divisor: number }
   | { kind: 'dispose' }
   | { kind: 'render'; frame: number; sequential: boolean; scrubbing?: boolean; deadline?: number }
   | { kind: 'audio'; start: number; duration: number }
@@ -97,6 +99,9 @@ self.onmessage = (event: MessageEvent<RenderRequest | NativeFramesRequest>) => {
           self.postMessage({ id: request.id, phase: 'submitted' } satisfies RenderResponse)
           void finish().catch(error => self.postMessage({ id: request.id, error: String(error) } satisfies RenderResponse))
         } else await finish()
+      } else if (request.kind === 'scale') {
+        if (!renderer) throw new Error('剪辑渲染器尚未就绪。')
+        renderer.setRenderDivisor(request.divisor); self.postMessage({ id: request.id } satisfies RenderResponse)
       } else if (request.kind === 'precision') {
         if (!renderer) throw new Error('剪辑渲染器尚未就绪。')
         const precision = await renderer.precisionDiagnostics(request.row)

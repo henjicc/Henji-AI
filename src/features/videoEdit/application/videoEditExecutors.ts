@@ -7,6 +7,8 @@ import { VIDEO_EDIT_FIELDS, VIDEO_EDIT_CONTROLLED_AGGREGATES, VIDEO_EDIT_CLIP_CO
 import { pauseVideoEditSourceForProgram, restoreVideoEditSourcePause, revertVideoEditSourcePause, matchesVideoEditSourceCommand, videoEditSourceCommandIdentity, type VideoEditSourcePause } from './videoEditSource'
 import { videoEditCaptionSchema, videoEditMarkerSchema, reconcileVideoEditTimedContent } from '@/core/videoEdit/timedContent'
 import { readVideoEditData, splitVideoEditRef } from './videoEditReflection'
+import { getVideoEditPlaybackResolution, setVideoEditPlaybackResolution } from './videoEditPlaybackResolution'
+import type { VideoEditPlaybackResolutionSetting } from '@/core/videoEdit/playbackResolution'
 import { removeVideoEditItems, removeVideoEditBins, makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { createVideoEditCodeMaterials, createVideoEditCodeVersions } from './videoEditCodeService'
 import { readVideoEditCodeMetadata } from './videoEditCodeState'
@@ -18,13 +20,13 @@ import { assertVideoEditLockedTracks } from '@/core/videoEdit/lockedTracks'
 import { removeVideoEditTracks, videoEditEdgeTracks } from '@/core/videoEdit/tracks'
 import { videoEditLabelSchema } from '@/core/videoEdit/labels'
 
-interface ProjectViewSnapshot { view: VideoEditProjectView; activeSequenceId: string; timeline: VideoEditTimelineView; primary: string | null; program: { frame: number; playing: boolean; playbackDirection: 1 | -1 }; programCommand: object }
+interface ProjectViewSnapshot { view: VideoEditProjectView; activeSequenceId: string; timeline: VideoEditTimelineView; primary: string | null; program: { frame: number; playing: boolean; playbackDirection: 1 | -1 }; programCommand: object; playbackResolution: VideoEditPlaybackResolutionSetting }
 function projectViewSnapshot(projectId: string): ProjectViewSnapshot {
   const owner = requireVideoEditInstance(projectId)
-  return { view: getVideoEditProjectView(projectId), activeSequenceId: owner.activeSequenceId, timeline: getVideoEditTimelineView(projectId), primary: owner.selection, program: { frame: owner.frame, playing: owner.playing, playbackDirection: owner.playbackDirection }, programCommand: videoEditProgramCommandIdentity(projectId) }
+  return { view: getVideoEditProjectView(projectId), activeSequenceId: owner.activeSequenceId, timeline: getVideoEditTimelineView(projectId), primary: owner.selection, program: { frame: owner.frame, playing: owner.playing, playbackDirection: owner.playbackDirection }, programCommand: videoEditProgramCommandIdentity(projectId), playbackResolution: getVideoEditPlaybackResolution(projectId) }
 }
 function sameProjectView(current: ProjectViewSnapshot, expected: ProjectViewSnapshot): boolean {
-  const comparable = (value: ProjectViewSnapshot): unknown => ({ view: value.view, activeSequenceId: value.activeSequenceId, timeline: value.timeline, primary: value.primary })
+  const comparable = (value: ProjectViewSnapshot): unknown => ({ view: value.view, activeSequenceId: value.activeSequenceId, timeline: value.timeline, primary: value.primary, playbackResolution: value.playbackResolution })
   return current.programCommand === expected.programCommand && JSON.stringify(comparable(current)) === JSON.stringify(comparable(expected))
 }
 const undo = new Map<string, { owner: object; before: VideoEditDocument; after: VideoEditDocument; refs: ApplicationRef[]; viewBefore?: ProjectViewSnapshot; viewAfter?: ProjectViewSnapshot; sourcePause?: VideoEditSourcePause }>()
@@ -129,6 +131,7 @@ async function restore(token: string): Promise<ApplicationCompletedStepResult> {
   if (record.viewBefore) {
     setVideoEditProjectView(record.before.id, record.viewBefore.view); switchVideoEditSequence(record.before.id, record.viewBefore.activeSequenceId)
     setVideoEditTimelineView(record.before.id, record.viewBefore.timeline, record.viewBefore.primary ?? undefined)
+    setVideoEditPlaybackResolution(record.before.id, record.viewBefore.playbackResolution)
     const restoredCommand = setVideoEditView(record.before.id, record.viewBefore.program)
     restoreVideoEditProgramCommandIdentity(record.before.id, restoredCommand, record.viewBefore.programCommand)
   }
@@ -143,7 +146,7 @@ export class VideoEditMutationExecutor implements ApplicationMutationExecutor {
     const { projectId, childId } = splitVideoEditRef(step.target)
     const owner = requireVideoEditInstance(projectId); const before = owner.document
     const keys = step.mutations.map(mutation => mutation.propertyId)
-    const writesView = this.entityType === 'video_edit.document' && keys.some(key => ['video_edit.document.selected_item_ids', 'video_edit.document.selected_bin_id', 'video_edit.document.open_sequence_ids', 'video_edit.document.timeline_view', 'video_edit.document.program_playback'].includes(key))
+    const writesView = this.entityType === 'video_edit.document' && keys.some(key => ['video_edit.document.selected_item_ids', 'video_edit.document.selected_bin_id', 'video_edit.document.open_sequence_ids', 'video_edit.document.timeline_view', 'video_edit.document.program_playback', 'video_edit.document.playback_resolution'].includes(key))
     const viewBefore = writesView ? projectViewSnapshot(projectId) : undefined
     const data = readVideoEditData(step.target)
     await applyWriterTable(fieldWriterTable(VIDEO_EDIT_FIELDS[this.entityType]), data, step.mutations)
@@ -222,6 +225,7 @@ export class VideoEditMutationExecutor implements ApplicationMutationExecutor {
     const after = editVideoProject(projectId, update)
     if (writesView) setVideoEditProjectView(projectId, { selectedItemIds: data.selectedItemIds as string[], selectedBinId: String(data.selectedBinId), openSequenceIds: data.openSequenceIds as string[] })
     if (this.entityType === 'video_edit.document' && keys.includes('video_edit.document.timeline_view')) setVideoEditTimelineView(projectId, data.timelineView as unknown as VideoEditTimelineView)
+    if (this.entityType === 'video_edit.document' && keys.includes('video_edit.document.playback_resolution')) setVideoEditPlaybackResolution(projectId, data.playbackResolution as unknown as VideoEditPlaybackResolutionSetting)
     if (this.entityType === 'video_edit.document' && keys.includes('video_edit.document.program_playback')) setVideoEditView(projectId, data.programPlayback as ProjectViewSnapshot['program'])
     return completed(before, after, [step.target], viewBefore, sourcePause)
   }

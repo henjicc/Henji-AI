@@ -6,6 +6,7 @@ import { describeVideoEditTransitionKind, parseVideoEditTransitionRefId, videoEd
 import { listVideoEditInstances, requireVideoEditInstance, getVideoEditTimelineView, videoEditDomainRevision as videoEditRevision } from './videoEditService'
 import { VIDEO_EDIT_BUILTIN_CATALOG_READ_ONLY, VIDEO_EDIT_FIELDS, VIDEO_EDIT_TYPES, videoEditSchemaDocuments, videoEditSchemaRef, type VideoEditEntityType, type VideoEditFieldData } from './videoEditFields'
 import { readVideoEditSource } from './videoEditSource'
+import { getVideoEditPlaybackResolution } from './videoEditPlaybackResolution'
 import { VIDEO_EDIT_COMPOSITE_TYPES, videoEditCompositeItems, videoEditCompositeData, videoEditCompositeOwner, type VideoEditCompositeEntityType } from './videoEditCompositeEntities'
 
 export function splitVideoEditRef(ref: ApplicationRef): { projectId: string; childId: string } {
@@ -35,7 +36,7 @@ export function videoEditEntityItems(document: VideoEditDocument, type: VideoEdi
 }
 export function readVideoEditData(ref: ApplicationRef): VideoEditFieldData {
   const { projectId, childId } = splitVideoEditRef(ref); const instance = requireVideoEditInstance(projectId)
-  if (ref.kind === 'video_edit.document') return { name: instance.document.name, frame: instance.frame, selection: instance.selection ?? '', activeSequenceId: instance.activeSequenceId, dirty: instance.dirty, selectedItemIds: [...instance.selectedItemIds], selectedBinId: instance.selectedBinId, openSequenceIds: [...instance.openSequenceIds], timelineView: { ...getVideoEditTimelineView(projectId) }, programPlayback: { frame: instance.frame, playing: instance.playing, playbackDirection: instance.playbackDirection } }
+  if (ref.kind === 'video_edit.document') return { name: instance.document.name, frame: instance.frame, selection: instance.selection ?? '', activeSequenceId: instance.activeSequenceId, dirty: instance.dirty, selectedItemIds: [...instance.selectedItemIds], selectedBinId: instance.selectedBinId, openSequenceIds: [...instance.openSequenceIds], timelineView: { ...getVideoEditTimelineView(projectId) }, programPlayback: { frame: instance.frame, playing: instance.playing, playbackDirection: instance.playbackDirection }, playbackResolution: { ...getVideoEditPlaybackResolution(projectId) } }
   if (ref.kind === 'video_edit.source') { if (childId !== 'source') throw new Error('NOT_FOUND：源预览引用无效。'); return { ...readVideoEditSource(projectId) } }
   if (VIDEO_EDIT_COMPOSITE_TYPES.some(type => type === ref.kind)) return videoEditCompositeData(instance.document, ref.kind as VideoEditCompositeEntityType, childId)
   if (ref.kind === 'video_edit.builtin_effect') {

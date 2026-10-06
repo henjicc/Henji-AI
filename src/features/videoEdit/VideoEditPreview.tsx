@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
-import { PanelTrigger, UiButton, UiEmpty, UiError, UiIconButton, UiInput, UiOptionButton, UiOverflowRow, UiPanel } from '@/components/ui'
-import { ArrowRightFromLine, ArrowRightToLine, ArrowUpFromLine, BookmarkPlus, Camera, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Eraser, FastForward, FoldHorizontal, ImagePlus, ImageUp, MapPin, MoreHorizontal, MousePointer2, Move, Pause, PenLine, Play, Rewind, RotateCcw, SkipBack, SkipForward, Square, SquareDashed, StepBack, StepForward, type LucideIcon } from 'lucide-react'
+import { Dropdown, PanelTrigger, UiButton, UiEmpty, UiError, UiIconButton, UiInput, UiOptionButton, UiOverflowRow, UiPanel } from '@/components/ui'
+import { ArrowRightFromLine, ArrowRightToLine, ArrowUpFromLine, BookmarkPlus, Camera, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Eraser, FastForward, Gauge, FoldHorizontal, ImagePlus, ImageUp, MapPin, MoreHorizontal, MousePointer2, Move, Pause, PenLine, Play, Rewind, RotateCcw, SkipBack, SkipForward, Square, SquareDashed, StepBack, StepForward, type LucideIcon } from 'lucide-react'
+import Tooltip from '@/components/ui/Tooltip'
 import { Z_LAYERS } from '@/core/theme/zLayers'
 import { audibleVideoEditClips, videoEditDuration } from '@/core/videoEdit/document'
 import { VideoEditRenderSession } from './engine/videoEditRenderSession'
@@ -28,10 +29,12 @@ import { useAssetLibraryStore } from '@/features/assets/store/assetLibraryStore'
 import { openAssetLibrary } from '@/stores/navigationStore'
 import { createLogger } from '@/core/logging'
 import type { VideoEditComposition } from '@/core/videoEdit/document'
+import { VIDEO_EDIT_PLAYBACK_RESOLUTIONS, VIDEO_EDIT_PLAYBACK_RESOLUTION_LABELS, videoEditPreviewDivisor, type VideoEditPlaybackResolution, type VideoEditRenderDivisor } from '@/core/videoEdit/playbackResolution'
+import { getVideoEditPlaybackResolution, setVideoEditPlaybackResolution } from './application/videoEditPlaybackResolution'
 
 const logger = createLogger('features.videoEdit.preview')
-/** 节目控制条低于这个宽度时不显示时间码：时间码 112 + 默认按钮 ~360 + 显示比例 ~70 + 更多 28 + 间距 */
-const PROGRAM_TOOLBAR_TIMECODE_MIN_WIDTH = 600
+/** 节目控制条低于这个宽度时不显示时间码：时间码 112 + 默认按钮 ~360 + 显示比例 ~70 + 回放分辨率 ~56 + 更多 28 + 间距 */
+const PROGRAM_TOOLBAR_TIMECODE_MIN_WIDTH = 656
 /** 收进“更多”时的常用显示比例（完整等级在显示比例下拉里）。 */
 const PROGRAM_DISPLAY_OPTIONS = [{ value: 'fit' as const, label: '适合' }, { value: 'actual' as const, label: '100%' }]
 /** 节目监视器的工具模式：选中态开关（不是动作按钮），名称与标注逻辑不变；默认不在按钮栏，不在栏里时从“更多”切换。 */
@@ -45,6 +48,9 @@ const PROGRAM_COMMAND_ICONS: Record<Exclude<typeof PROGRAM_COMMAND_BUTTONS[numbe
 }
 /** 窄面板先收起优先级低的：播放、逐帧、入出点留到最后。 */
 const PROGRAM_BUTTON_PRIORITY: Partial<Record<VideoEditProgramButtonId, number>> = { play_pause: 100, step_back: 90, step_forward: 90, mark_in: 80, mark_out: 80 }
+/** 回放分辨率（PR“回放分辨率”）：控制条上的下拉与“更多”里的同一组选项。 */
+const PLAYBACK_RESOLUTION_OPTIONS = VIDEO_EDIT_PLAYBACK_RESOLUTIONS.map(value => ({ value, label: VIDEO_EDIT_PLAYBACK_RESOLUTION_LABELS[value] }))
+const PLAYBACK_RESOLUTION_TIP = '回放分辨率：播放卡顿时调低，画面变粗但更流畅；暂停时默认回到完整。导出、选帧和封面始终是完整分辨率。'
 
 /**
  * 拖到节目监视器上的落点区（对齐 Premiere）：上 1/5 放在顶层、下 1/5 添加到末尾，中间一行左 1/4 插入、右 1/4 替换、其余覆盖（默认的大区）。
@@ -141,6 +147,9 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
     let wasPlaying = false
     let direction: 1 | -1 = 1
     let activeCommand: object | undefined
+    // 回放分辨率（4.9）：播放用所选分辨率，暂停默认回到完整；选帧、设封面期间强制完整。
+    let appliedDivisor: VideoEditRenderDivisor = 1
+    let captureFull = 0
     const audioScheduler = new VideoEditAudioScheduler()
     const stopAudio = (): void => audioScheduler.stop()
     const meterTimer = setInterval(() => { if (!stopped && meter) setLevels(instance.playing && instance.playbackDirection === 1 ? meter.read() : Array.from({ length: appliedDocument.channels }, () => ({ peak: 0, rms: 0 }))) }, 50)
@@ -159,7 +168,7 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
       surface.dataset.sourceTimestamps = (result.sourceTimestamps ?? []).join(','); surface.dataset.cacheHits = String(result.cacheHits ?? 0); surface.dataset.cacheBytes = String(result.cacheBytes ?? 0)
       surface.dataset.proxyPreparationMs = String(renderer.previewPreparationMs); surface.dataset.proxyBytes = String(renderer.previewBytes)
       surface.dataset.scrubbing = String(scrubbing); surface.dataset.presentedFrame = String(target)
-      surface.dataset.presentedRevision = String(revision)
+      surface.dataset.presentedRevision = String(revision); surface.dataset.renderDivisor = String(appliedDivisor)
       if (failedDocument === undefined) { setRenderFailure(null); failedRetryMs = 2000 }
       return true
     }
@@ -169,16 +178,19 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
         if (stopped || session.current !== renderer || canvas.current !== surface || !surface.isConnected) throw new Error('节目面板已关闭，请重新打开后选帧。')
       }
       const start = performance.now()
-      while (appliedDocument !== request.document || lastFrame !== request.frame || surface.dataset.presentedRevision !== String(request.document.revision) || surface.dataset.scrubbing === 'true') {
+      // 选帧与封面始终是完整分辨率：降低了回放分辨率时，先按完整尺寸重画这一帧再取图。
+      captureFull++
+      try {
+        while (appliedDocument !== request.document || lastFrame !== request.frame || surface.dataset.presentedRevision !== String(request.document.revision) || surface.dataset.scrubbing === 'true' || surface.dataset.renderDivisor !== '1' || surface.width !== request.document.width || surface.height !== request.document.height) {
+          current()
+          if (performance.now() - start > 10000) throw new Error('节目画面尚未就绪，请等待画面更新后重试选帧。')
+          await new Promise(resolve => setTimeout(resolve, 5))
+        }
         current()
-        if (performance.now() - start > 10000) throw new Error('节目画面尚未就绪，请等待画面更新后重试选帧。')
-        await new Promise(resolve => setTimeout(resolve, 5))
-      }
-      current()
-      if (surface.width !== request.document.width || surface.height !== request.document.height) throw new Error('节目画幅尚未就绪，请重新加载预览。')
-      const blob = await new Promise<Blob>((resolve, reject) => surface.toBlob(value => value ? resolve(value) : reject(new Error('节目图片保存失败，请重试。')), 'image/png'))
-      current()
-      return blob
+        const blob = await new Promise<Blob>((resolve, reject) => surface.toBlob(value => value ? resolve(value) : reject(new Error('节目图片保存失败，请重试。')), 'image/png'))
+        current()
+        return blob
+      } finally { captureFull-- }
     })
     const loop = async (): Promise<void> => {
       let scheduled = false
@@ -198,6 +210,12 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
           if (appliedDocument.sampleRate !== document.sampleRate || appliedDocument.channels !== document.channels) { meter?.dispose(); meter = undefined; await audio?.close(); audio = undefined; if (!stopped) setLevels([]) }
           await renderer.updateDocument(document); await audioRenderer?.updateDocument(document); appliedDocument = document; lastFrame = -1; lastRequested = -1
           if (stopped) return
+        }
+        const divisor = captureFull > 0 ? 1 : videoEditPreviewDivisor(getVideoEditPlaybackResolution(instance.document.id), current.playing)
+        if (divisor !== appliedDivisor) {
+          await renderer.setRenderDivisor(divisor)
+          if (stopped) return
+          appliedDivisor = divisor; lastRequested = -1
         }
         if (current.playing && (!wasPlaying || direction !== current.playbackDirection || activeCommand !== command)) {
           stopAudio(); direction = current.playbackDirection
@@ -316,6 +334,8 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
   const shortcuts = useSettingsStore(state => state.videoEditShortcuts)
   const buttonIds = useVideoEditMonitorButtonIds('program')
   const projectId = instance.document.id
+  const playbackResolution = getVideoEditPlaybackResolution(projectId)
+  const changePlaybackResolution = (value: Partial<typeof playbackResolution>): void => { try { setVideoEditPlaybackResolution(projectId, value) } catch (error) { onError(error) } }
   const runCommand = (id: VideoEditCommandId): void => { void executeVideoEditCommand(captureVideoEditCommandContext(projectId, 'program'), id).catch(onError) }
   // 提升／提取的可用判定要试算一次编辑：只在序列、入出点或目标轨道变化时算，不随播放每帧重算。
   const targetTracks = instance.targetTrackIds.join(',')
@@ -412,6 +432,7 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
           ...barButtons.map(spec => ({ id: spec.id, priority: PROGRAM_BUTTON_PRIORITY[spec.id as VideoEditProgramButtonId] ?? 10, node: <VideoEditMonitorButton spec={spec} /> })),
           { id: 'button_editor', priority: 0, pinned: true, node: <VideoEditMonitorButtonEditor kind="program" specs={programButtons} /> },
           { id: 'display', priority: 0, node: <div className="ml-2">{zoom.dropdown}</div> },
+          { id: 'resolution', priority: 0, node: <Tooltip content={PLAYBACK_RESOLUTION_TIP}><div><Dropdown<VideoEditPlaybackResolution> ariaLabel="回放分辨率" appearance="text" size="sm" value={playbackResolution.resolution} options={PLAYBACK_RESOLUTION_OPTIONS} onSelect={resolution => changePlaybackResolution({ resolution })} /></div></Tooltip> },
         ]}
         renderOverflow={hiddenIds => <PanelTrigger panelWidth={200} zIndex={Z_LAYERS.dropdown} closeOnPanelClick panelPadding="menu" renderPanel={() => <div className="flex flex-col gap-1">
         {menuButtons(hiddenIds).length > 0 && <div className="flex flex-col gap-1" role="group" aria-label="收起的按钮">
@@ -423,6 +444,10 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
         {hiddenIds.includes('display') && <div className="flex flex-col gap-1" role="group" aria-label="节目显示比例">
           {PROGRAM_DISPLAY_OPTIONS.map(option => <UiOptionButton key={option.value} variant="menu" size="sm" active={option.value === 'fit' ? display === 'fit' : display === 1} onClick={() => zoom.setDisplay(option.value === 'fit' ? 'fit' : 1)}>显示 {option.label}</UiOptionButton>)}
         </div>}
+        {hiddenIds.includes('resolution') && <div className="flex flex-col gap-1" role="group" aria-label="回放分辨率">
+          {PLAYBACK_RESOLUTION_OPTIONS.map(option => <UiOptionButton key={option.value} variant="menu" size="sm" active={playbackResolution.resolution === option.value} title={PLAYBACK_RESOLUTION_TIP} onClick={() => changePlaybackResolution({ resolution: option.value })}>回放 {option.label}</UiOptionButton>)}
+        </div>}
+        <UiOptionButton variant="menu" size="sm" className="gap-2" active={!playbackResolution.fullWhenPaused} disabled={playbackResolution.resolution === 'full'} title="默认暂停时回到完整分辨率以便看清细节；打开后暂停时也保持所选回放分辨率" onClick={() => changePlaybackResolution({ fullWhenPaused: !playbackResolution.fullWhenPaused })}><Gauge size={14} />暂停时也用此分辨率</UiOptionButton>
         <UiOptionButton variant="menu" size="sm" className="gap-2" disabled={preparing} onClick={() => setRetry(value => value + 1)}><RotateCcw size={14} />重新加载预览</UiOptionButton>
         <UiOptionButton variant="menu" size="sm" className="gap-2" disabled={busy} onClick={captureFrame}><ImagePlus size={14} />选帧加入资产库</UiOptionButton>
         <UiOptionButton variant="menu" size="sm" className="gap-2" disabled={busy} title="把当前画面作为项目列表里的封面" onClick={setPosterFrame}><ImageUp size={14} />设为项目封面</UiOptionButton>

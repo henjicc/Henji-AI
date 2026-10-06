@@ -29,7 +29,13 @@ export function videoEditCompositeSurfaceKeys(nodes: readonly VideoEditComposite
 /** Render-only full-canvas layer; original persisted geometry and clocks stay unchanged. */
 function identity(clip: VideoEditClip): VideoEditClip { return { ...clip, x: 0, y: 0, scale: 1, rotation: 0, brightness: 1, opacity: 1 } }
 
-export async function renderVideoEditCompositeScene(document: VideoEditComposition, nodes: readonly VideoEditCompositeNode[], pictures: ReadonlyMap<string, VideoEditPicture>, effects: ReadonlyMap<string, readonly PreparedVideoEditEffect[]>, compositor: Pick<VideoEditGpuCompositor, 'code' | 'draw'>, frame: number, shouldPresent: () => boolean, deadline?: number): Promise<{ presented: boolean; completion: Promise<void> }> {
+/**
+ * `document` carries the size the frame is drawn at; `logical` is the sequence's own size. They differ only at a reduced
+ * playback resolution (task 4.9): code filters then still read the sequence size (a `1/width` offset stays the same
+ * fraction of the picture) and built-in effects learn the scale for the few amounts that cannot shrink below a pixel.
+ */
+export async function renderVideoEditCompositeScene(document: VideoEditComposition, nodes: readonly VideoEditCompositeNode[], pictures: ReadonlyMap<string, VideoEditPicture>, effects: ReadonlyMap<string, readonly PreparedVideoEditEffect[]>, compositor: Pick<VideoEditGpuCompositor, 'code' | 'draw'>, frame: number, shouldPresent: () => boolean, deadline?: number, logical: Pick<VideoEditComposition, 'width' | 'height'> = document): Promise<{ presented: boolean; completion: Promise<void> }> {
+  const renderScale = document.height / logical.height
   let runtime: VideoEditCodeGpu | undefined
   const submissions: Array<Promise<PromiseSettledResult<void>>> = []
   const watch = (completion: Promise<void>): void => { submissions.push(completion.then(value => ({ status: 'fulfilled', value } as const), reason => ({ status: 'rejected', reason } as const))) }
@@ -53,8 +59,8 @@ export async function renderVideoEditCompositeScene(document: VideoEditCompositi
       current()
       const free = targets.filter(target => target !== key && (!preserve || target !== targets[0]))
       const filtered = plan.builtin
-        ? await runtime.builtin(free[0], plan.builtin, result, frame)
-        : await runtime.filter(free[0], plan.version, plan.program, { ...plan.context, width: document.width, height: document.height }, plan.parameters, result, plan.transitionHandles)
+        ? await runtime.builtin(free[0], plan.builtin, result, frame, renderScale)
+        : await runtime.filter(free[0], plan.version, plan.program, { ...plan.context, width: logical.width, height: logical.height }, plan.parameters, result, plan.transitionHandles)
       current()
       if (plan.effect.amount === 1) { result = filtered; key = free[0] }
       else { result = await runtime.mix(free[1], result, filtered, plan.effect.amount); key = free[1]; current() }

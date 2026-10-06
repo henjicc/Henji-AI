@@ -68,6 +68,48 @@ struct Vertex { @builtin(position) position: vec4f, @location(0) uv: vec2f }
 `
 
 /**
+ * The same three copies at a reduced playback resolution (task 4.9): each output pixel is the box average of the
+ * `step`×`step` decoded pixels it covers (chroma: `2·step`), so every decoded pixel is read once, as in the full-size
+ * copy, and the picture neither aliases nor shifts. Colour is averaged with premultiplied alpha. `step` 1 is never
+ * used here: full resolution keeps `VIDEO_EDIT_COPY_SHADER` and its exact pixels. `source` `texture` reads an ordinary
+ * 2D texture instead of a decoded frame; only the GPU tests use it, to check the averaging on known pixels.
+ */
+export function videoEditDownscaleCopyShader(step: 2 | 4 | 8, source: 'external' | 'texture' = 'external'): string {
+  const external = source === 'external'
+  return `
+struct Vertex { @builtin(position) position: vec4f, @location(0) uv: vec2f }
+@vertex fn vs(@builtin(vertex_index) i: u32) -> Vertex {
+ let uv = array<vec2f, 3>(vec2f(0,0), vec2f(0,2), vec2f(2,0))[i];
+ return Vertex(vec4f(uv.x * 2 - 1, 1 - uv.y * 2, 0, 1), uv);
+}
+@group(0) @binding(0) var t: ${external ? 'texture_external' : 'texture_2d<f32>'};
+const STEP: u32 = ${step}u;
+fn box(origin: vec2u, size: u32) -> vec4f {
+ let edge = textureDimensions(t) - 1u;
+ var sum = vec4f(0);
+ for (var y = 0u; y < size; y++) {
+  for (var x = 0u; x < size; x++) {
+   let c = textureLoad(t, min(origin + vec2u(x, y), edge)${external ? '' : ', 0'});
+   sum += vec4f(c.rgb * c.a, c.a);
+  }
+ }
+ let n = f32(size * size);
+ return vec4f(select(vec3f(0), sum.rgb / max(sum.a, 0.000001), sum.a > 0.0), sum.a / n);
+}
+@fragment fn rgba(v: Vertex) -> @location(0) vec4f { return box(vec2u(v.position.xy) * STEP, STEP); }
+@fragment fn y(v: Vertex) -> @location(0) vec4f {
+ let c = box(vec2u(v.position.xy) * STEP, STEP).rgb;
+ return vec4f(dot(c, vec3f(0.2126, 0.7152, 0.0722)), 0, 0, 1);
+}
+@fragment fn uv(v: Vertex) -> @location(0) vec4f {
+ let c = box(vec2u(v.position.xy) * STEP * 2u, STEP * 2u).rgb;
+ let luma = dot(c, vec3f(0.2126, 0.7152, 0.0722));
+ return vec4f((c.b - luma) / 1.8556 + 0.5, (c.r - luma) / 1.5748 + 0.5, 0, 1);
+}
+`
+}
+
+/**
  * Quantizes the `rgba16float` composition to the 8-bit canvas.
  * - A value within 0.13 of an 8-bit step of a level is that level, written exactly: an 8-bit picture stored as half
  *   floats is off by at most one f16 ulp (0.125 of a step below 1.0; the render target conversion may truncate), so

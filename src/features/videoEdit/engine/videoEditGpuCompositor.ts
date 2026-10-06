@@ -1,6 +1,7 @@
 import { VideoSample } from 'mediabunny'
 import { VIDEO_EDIT_PRECISE_FORMAT, VideoEditGpuFrame, videoEditGpuFrameFormat, videoEditPictureHighPrecision, type VideoEditGpuColorFormat, type VideoEditOwnedFormat } from './videoEditGpuFrame'
-import { VIDEO_EDIT_CACHED_YUV_SHADER, VIDEO_EDIT_COPY_SHADER, VIDEO_EDIT_PRESENT_SHADER, VIDEO_EDIT_READBACK_USAGE, readVideoEditPreciseRow, videoEditLayerShader } from './videoEditGpuShaders'
+import { VIDEO_EDIT_CACHED_YUV_SHADER, VIDEO_EDIT_COPY_SHADER, VIDEO_EDIT_PRESENT_SHADER, VIDEO_EDIT_READBACK_USAGE, readVideoEditPreciseRow, videoEditDownscaleCopyShader, videoEditLayerShader } from './videoEditGpuShaders'
+import type { VideoEditRenderDivisor } from '@/core/videoEdit/playbackResolution'
 import { VideoEditNativePicture } from './videoEditNativePicture'
 import type { VideoEditClip, VideoEditComposition } from '@/core/videoEdit/document'
 import { ImageEditWebGpuDeviceManager } from '@/core/imageEdit/webgpu/deviceManager'
@@ -33,6 +34,10 @@ export class VideoEditGpuCompositor {
   private copyRgba!: GpuRenderPipeline
   private readonly copyDeep = new Map<VideoEditOwnedFormat, GpuRenderPipeline>()
   private cachedVideo!: GpuRenderPipeline
+  /** Reduced playback resolution (task 4.9): decoded pictures enter owned memory at 1/divisor size; export keeps 1. */
+  private pictureDivisor: VideoEditRenderDivisor = 1
+  /** Box-average copies per divisor, compiled on first use: [y, uv, rgba by owned format]. */
+  private readonly downscale = new Map<number, Promise<{ y: GpuRenderPipeline; uv: GpuRenderPipeline; rgba: Map<string, GpuRenderPipeline> }>>()
   private canvasFormat = 'bgra8unorm'
   /** Layer pipelines for owned targets, per target format; compiled on first use. */
   private readonly offscreen = new Map<VideoEditGpuColorFormat, Promise<LayerPipelines>>()
@@ -105,6 +110,21 @@ export class VideoEditGpuCompositor {
     if (!ready) { ready = this.compiled(() => this.layerPipelines(format), '离屏合成管线初始化失败'); this.offscreen.set(format, ready) }
     return ready
   }
+  /** Pictures snapshotted from now on are stored at 1/divisor of their decoded size; the layer shader samples them by UV. */
+  setPictureDivisor(divisor: VideoEditRenderDivisor): void { this.pictureDivisor = divisor }
+  private downscalePipelines(divisor: 2 | 4 | 8): Promise<{ y: GpuRenderPipeline; uv: GpuRenderPipeline; rgba: Map<string, GpuRenderPipeline> }> {
+    let ready = this.downscale.get(divisor)
+    if (!ready) {
+      ready = this.compiled(() => {
+        const module = this.device.createShaderModule({ code: videoEditDownscaleCopyShader(divisor) })
+        const copy = (entryPoint: string, format: string): GpuRenderPipeline => this.device.createRenderPipeline({ layout: 'auto', vertex: { module, entryPoint: 'vs' }, fragment: { module, entryPoint, targets: [{ format }] }, primitive: { topology: 'triangle-list' } })
+        return { y: copy('y', 'r8unorm'), uv: copy('uv', 'rg8unorm'), rgba: new Map((['rgba8unorm', 'rgb10a2unorm', 'rgba16float'] as const).map(format => [format, copy('rgba', format)])) }
+      }, '缩小回放分辨率的复制管线初始化失败')
+      this.downscale.set(divisor, ready)
+      ready.catch(() => { if (this.downscale.get(divisor) === ready) this.downscale.delete(divisor) })
+    }
+    return ready
+  }
   /** Final pass of a high-precision frame: `rgba16float` target to the canvas format, with the fixed dither. */
   private presentPipeline(): Promise<GpuRenderPipeline> {
     return this.presentReady ??= this.compiled(() => {
@@ -134,11 +154,17 @@ export class VideoEditGpuCompositor {
       if (this.lost) throw new Error(`剪辑 GPU 已中断，请重新加载预览：${this.lost}`)
     }
     if (this.disposed) throw new Error('剪辑预览已关闭。')
+    // A reduced playback resolution copies a box-averaged picture of 1/divisor size (task 4.9); the frame keeps its
+    // display size, so placement, fit and effects are unchanged and only the stored pixels shrink.
+    const divisor = this.pictureDivisor
+    const reduced = divisor === 1 ? undefined : await this.downscalePipelines(divisor)
+    if (this.disposed) throw new Error('剪辑预览已关闭。')
     // Copy on the compositor's device; no Skia canvas or cross-context fences.
     const borrowed = sample instanceof VideoEditNativePicture
     const frame = borrowed ? sample.frame : sample.toVideoFrame()
     const closeFrame = (): void => { if (!borrowed) frame.close() }
-    const width = frame.visibleRect?.width ?? sample.codedWidth; const height = frame.visibleRect?.height ?? sample.codedHeight
+    const decodedWidth = frame.visibleRect?.width ?? sample.codedWidth; const decodedHeight = frame.visibleRect?.height ?? sample.codedHeight
+    const width = Math.max(1, Math.ceil(decodedWidth / divisor)); const height = Math.max(1, Math.ceil(decodedHeight / divisor))
     const uvWidth = Math.ceil(width / 2); const uvHeight = Math.ceil(height / 2)
     // A native picture without decoder details is treated as having alpha and more than 10 bits (rgba16float).
     const owned = compact ? undefined : videoEditGpuFrameFormat(sample, borrowed ? sample.sourceDepth ?? { bitDepth: null, hasAlpha: true } : undefined)
@@ -153,7 +179,9 @@ export class VideoEditGpuCompositor {
     try {
       const encoder = this.device.createCommandEncoder()
       const resource = this.device.importExternalTexture({ source: frame })
-      const planes: Array<readonly [GpuTexture, GpuRenderPipeline]> = chroma ? [[texture, this.copyY], [chroma, this.copyUv]] : [[texture, this.copyDeep.get(format as VideoEditOwnedFormat) ?? this.copyRgba]]
+      const planes: Array<readonly [GpuTexture, GpuRenderPipeline]> = reduced
+        ? chroma ? [[texture, reduced.y], [chroma, reduced.uv]] : [[texture, reduced.rgba.get(format)!]]
+        : chroma ? [[texture, this.copyY], [chroma, this.copyUv]] : [[texture, this.copyDeep.get(format as VideoEditOwnedFormat) ?? this.copyRgba]]
       for (const [target, pipeline] of planes) {
         const pass = encoder.beginRenderPass({ colorAttachments: [{ view: target.createView(), loadOp: 'clear', storeOp: 'store', clearValue: { r: 0, g: 0, b: 0, a: 0 } }] })
         pass.setPipeline(pipeline)
@@ -336,7 +364,7 @@ export class VideoEditGpuCompositor {
     this.disposed = true
     this.cancelPresentation()
     await this.ready.catch(() => {})
-    await Promise.allSettled([...this.offscreen.values(), this.presentReady])
+    await Promise.allSettled([...this.offscreen.values(), this.presentReady, ...this.downscale.values()])
     await Promise.allSettled([...this.uploads, ...this.copies])
     await this.codeRuntime?.dispose()
     for (const value of this.textures.values()) value.texture.destroy()

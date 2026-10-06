@@ -65,8 +65,8 @@ export class VideoEditBuiltinEffectsGpu {
     await Promise.all([...new Set(plan.passes.map(pass => pass.entry))].map(entry => this.pipeline(entry, format)))
   }
   /** `input` 与 `output` 尺寸相同；`frame` 只用作胶片颗粒的确定种子。 */
-  async render(instance: VideoEditBuiltinEffectInstance, input: { texture: GpuTexture; width: number; height: number; format: string }, output: GpuTexture, frame: number): Promise<void> {
-    await this.execute(planVideoEditBuiltinEffect(instance, { width: input.width, height: input.height, frame }), input.format, input.texture, output)
+  async render(instance: VideoEditBuiltinEffectInstance, input: { texture: GpuTexture; width: number; height: number; format: string }, output: GpuTexture, frame: number, renderScale = 1): Promise<void> {
+    await this.execute(planVideoEditBuiltinEffect(instance, { width: input.width, height: input.height, frame, renderScale }), input.format, input.texture, output)
   }
   /**
    * 带参数的视频过渡（4.7）：`outgoing` 前一段、`incoming` 后一段（单侧过渡两者可以是同一纹理，空着的一侧由参数标记），

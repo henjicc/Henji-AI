@@ -82,7 +82,11 @@ function hexColor(value: string): [number, number, number] { return [1, 3, 5].ma
 /** 胶片颗粒的种子：只与帧号有关（同一帧预览与导出一致，逐帧变化）。 */
 export function videoEditGrainSeed(frame: number): number { return (Math.max(0, Math.floor(frame)) * 7 + 1) % 65_521 }
 
-export function planVideoEditBuiltinEffect(instance: VideoEditBuiltinEffectInstance, frame: { width: number; height: number; frame: number }): VideoEditBuiltinPlan {
+/**
+ * `renderScale` is the drawn height over the sequence height (below 1 only at a reduced playback resolution, task 4.9).
+ * Spatial amounts already follow the drawn height; it is needed only where a pixel is the smallest unit.
+ */
+export function planVideoEditBuiltinEffect(instance: VideoEditBuiltinEffectInstance, frame: { width: number; height: number; frame: number; renderScale?: number }): VideoEditBuiltinPlan {
   const { width, height } = frame
   if (![width, height].every(value => Number.isInteger(value) && value >= 1)) throw new Error('内置效果需要有效的画面尺寸。')
   const params = resolveVideoEditBuiltinParams(instance)
@@ -145,7 +149,14 @@ export function planVideoEditBuiltinEffect(instance: VideoEditBuiltinEffectInsta
       break
     }
     case 'vignette': plan.pass('vignette', 'input', 'output', [number(params, 'amount') / 100, 0.15 + number(params, 'midpoint') / 100 * 0.8, 0.05 + number(params, 'feather') / 100 * 0.9, width / height]); break
-    case 'film_grain': plan.pass('grain', 'input', 'output', [number(params, 'amount') / 100 * 0.25, (0.0005 + number(params, 'size') / 100 * 0.0035) * H, videoEditGrainSeed(frame.frame), params.monochrome === false ? 0 : 1]); break
+    case 'film_grain': {
+      // Grain cannot be finer than a pixel. At a reduced resolution each drawn pixel stands for several sequence pixels
+      // whose grain would average out, so the amplitude falls with the number of independent grain units it covers
+      // (a unit is one grain cell, at least one sequence pixel). At full resolution the factor is 1.
+      const cell = (0.0005 + number(params, 'size') / 100 * 0.0035) * H; const scale = Math.min(1, Math.max(1e-3, frame.renderScale ?? 1))
+      const visible = Math.min(1, scale * Math.max(1, cell / scale))
+      plan.pass('grain', 'input', 'output', [number(params, 'amount') / 100 * 0.25 * visible, cell, videoEditGrainSeed(frame.frame), params.monochrome === false ? 0 : 1]); break
+    }
     case 'chromatic_aberration': {
       const offset = number(params, 'amount') / 100 * 0.02 * H; const radial = params.mode !== 'directional'
       const angle = number(params, 'direction') * Math.PI / 180

@@ -299,7 +299,9 @@ export class VideoEditCodeGpu {
     // Static authors cannot read time. Curves were evaluated against the real source
     // clock by CodeSources; keep the shader within its existing proved input domain.
     const shaderTime = program.mode === 'static' ? 0 : context.time
-    if (input.owner !== this.device || input.width !== context.width || input.height !== context.height) throw new CodeMaterialError('CONTEXT', '代码滤镜输入必须属于当前设备并匹配尺寸。')
+    // The output has the input's size. `context.width/height` is the sequence size the author's code reads; at a reduced
+    // playback resolution (task 4.9) it is larger than the input, so offsets written as `n / width` keep their look.
+    if (input.owner !== this.device) throw new CodeMaterialError('CONTEXT', '代码滤镜输入必须属于当前设备。')
     for (const name of ['localTime', 'sequenceTime', 'width', 'height', 'frame', 'fps'] as const) { const value = context[name]; if (typeof value !== 'number' || !Number.isFinite(value) || Math.abs(value) > 432000) throw new CodeMaterialError('CONTEXT', `滤镜时间上下文无效：${name}`) }
     if (shaderTime > 1800 || context.sequenceTime < 0 || context.sequenceTime > 1800 || context.localTime < (transitionHandles ? -1800 : 0) || context.localTime > 1800 || !Number.isInteger(context.frame) || context.frame < 0 || context.frame > 432000 || context.fps < 1 || context.fps > 240) throw new CodeMaterialError('CONTEXT', '滤镜时间或帧率超出范围。')
     await this.ready; this.assertLive(); this.assertInput(input.texture)
@@ -307,7 +309,7 @@ export class VideoEditCodeGpu {
     const format = input.textureFormat
     const pipeline = await this.prepareFilter(version, program, transitionHandles, format)
     this.assertLive(); this.assertInput(input.texture)
-    const target = this.surface(key, context.width, context.height, format)
+    const target = this.surface(key, input.width, input.height, format)
     if (target.picture.texture === input.texture) throw new CodeMaterialError('CONTEXT', '滤镜输入输出不能引用同一纹理。')
     target.filterBuffer ??= this.device.createBuffer({ size: 35 * 16, usage: 0x08 | 0x40 })
     const packed = new Float32Array(35 * 4)
@@ -387,13 +389,13 @@ struct Mix { amount:vec4f, color:vec4f }
     return target.picture
   }
   /** 内置效果（4.7b）：输出保持输入的精度；中间纹理计入同一份显存预算。`frame` 只用作胶片颗粒的确定种子。 */
-  async builtin(key: string, instance: VideoEditBuiltinEffectInstance, input: VideoEditCodePicture, frame: number): Promise<VideoEditCodePicture> {
+  async builtin(key: string, instance: VideoEditBuiltinEffectInstance, input: VideoEditCodePicture, frame: number, renderScale = 1): Promise<VideoEditCodePicture> {
     await this.ready; this.assertLive(); this.assertInput(input.texture)
     if (input.owner !== this.device) throw new CodeMaterialError('CONTEXT', '内置效果输入必须属于当前GPU设备。')
     const runtime = this.builtins()
     const target = this.surface(key, input.width, input.height, input.textureFormat)
     if (target.picture.texture === input.texture) throw new CodeMaterialError('CONTEXT', '内置效果输入输出不能引用同一纹理。')
-    await runtime.render(instance, { texture: input.texture, width: input.width, height: input.height, format: input.textureFormat }, target.picture.texture, frame)
+    await runtime.render(instance, { texture: input.texture, width: input.width, height: input.height, format: input.textureFormat }, target.picture.texture, frame, renderScale)
     this.assertLive(); this.pending = this.device.queue.onSubmittedWorkDone(); this.counts.builtinFrames++
     return target.picture
   }

@@ -15,6 +15,7 @@ import { activeVideoEditEffects, buildVideoEditCompositePlan } from '@/core/vide
 import { renderVideoEditCompositeScene, videoEditCompositeSurfaceKeys } from './videoEditCompositeScene'
 import { videoEditAudioMixReads, videoEditDefaultAudioGains } from '@/core/videoEdit/audioChannels'
 import { readVideoEditExportPicture } from './videoEditExportPictures'
+import { isVideoEditRenderDivisor, videoEditRenderSize, type VideoEditRenderDivisor } from '@/core/videoEdit/playbackResolution'
 
 interface PlaybackStream {
   demux: string
@@ -66,6 +67,8 @@ export class VideoEditRenderer {
   private compositor?: VideoEditGpuCompositor
   private codeSources?: VideoEditCodeSources
   private presentationEpoch = 0
+  /** Preview only (task 4.9): the canvas, composition targets and owned pictures are 1/divisor of the sequence size. */
+  private renderDivisor: VideoEditRenderDivisor = 1
   /** High-precision composition counters and, with `row`, that row of the last high-precision frame before 8-bit quantization (task 2.7 acceptance). */
   async precisionDiagnostics(row?: number): Promise<{ counters?: ReturnType<VideoEditGpuCompositor['precisionDiagnostics']>; row?: Uint16Array }> {
     return { counters: this.compositor?.precisionDiagnostics(), row: row === undefined ? undefined : await this.compositor?.readPreciseRow(row) }
@@ -77,6 +80,28 @@ export class VideoEditRenderer {
     this.frameCache = new VideoEditFrameCache(cacheBudgetBytes)
     this.canvas = surface ?? new OffscreenCanvas(document.width, document.height)
     this.canvas.width = document.width; this.canvas.height = document.height
+  }
+  /** The sequence as the GPU draws it: the reduced canvas size, every other field (and so every placement ratio) unchanged. */
+  private drawDocument(document: VideoEditComposition): VideoEditComposition {
+    if (this.renderDivisor === 1) return document
+    return { ...document, ...videoEditRenderSize(document.width, document.height, this.renderDivisor) }
+  }
+  private resizeCanvas(): void {
+    const { width, height } = videoEditRenderSize(this.document.width, this.document.height, this.renderDivisor)
+    if (this.canvas.width !== width || this.canvas.height !== height) { this.canvas.width = width; this.canvas.height = height }
+  }
+  /**
+   * Playback resolution of the preview (task 4.9). Pictures cached at the previous size are dropped, so a paused frame
+   * that returns to full resolution is decoded again instead of showing a reduced picture. Export never calls this.
+   */
+  setRenderDivisor(divisor: number): void {
+    if (!isVideoEditRenderDivisor(divisor)) throw new Error('回放分辨率无效。')
+    if (!this.previewWidth && divisor !== 1) throw new Error('导出始终按完整分辨率渲染。')
+    if (divisor === this.renderDivisor) return
+    this.renderDivisor = divisor
+    this.compositor?.setPictureDivisor(divisor)
+    this.frameCache.clear()
+    this.resizeCanvas()
   }
   /** Drops one user of the shared opened file; a clip's own sound reader closes with its source. */
   private release(source: Pick<VideoSource, 'demux'> & Partial<Pick<VideoSource, 'audio'>>): void { source.audio?.close?.(); this.frames.release(source.demux) }
@@ -159,7 +184,7 @@ export class VideoEditRenderer {
       }
     }
     this.document = document
-    if (this.canvas.width !== document.width || this.canvas.height !== document.height) { this.canvas.width = document.width; this.canvas.height = document.height }
+    this.resizeCanvas()
   }
   cancelPresentation(): void {
     this.presentationEpoch++; this.codeSources?.cancel(); this.compositor?.cancelPresentation()
@@ -276,7 +301,7 @@ export class VideoEditRenderer {
     active.push(...videoEditCaptionClips(document, frame))
     const composite = transitions.length || active.some(clip => clip.kind === 'adjustment' || activeVideoEditEffects(clip).length) ? buildVideoEditCompositePlan(active, transitions) : undefined
     const timestamps: number[] = []
-    this.compositor ??= new VideoEditGpuCompositor(this.canvas)
+    if (!this.compositor) { this.compositor = new VideoEditGpuCompositor(this.canvas); if (this.renderDivisor !== 1) this.compositor.setPictureDivisor(this.renderDivisor) }
     const decodeStart = performance.now()
     if (composite || active.some(clip => ['code', 'graphic'].includes(clip.kind) || activeVideoEditEffects(clip).length)) this.codeSources ??= new VideoEditCodeSources(document, () => this.compositor!.code())
     const imageIds = new Set(active.flatMap(clip => [...codeMaterialImageIds(clip.code), ...activeVideoEditEffects(clip).flatMap(effect => [...codeMaterialImageIds(effect.code)]), ...(clip.kind === 'image' ? [videoEditClipMedia(document, clip)?.id ?? ''] : [])]))
@@ -394,7 +419,8 @@ export class VideoEditRenderer {
     const gpuStart = performance.now()
     let result: { presented: boolean; completion: Promise<void> }
     try {
-      result = composite ? await renderVideoEditCompositeScene(document, composite, new Map(active.map((clip, index) => [clip.id, pictures[index]])), preparedCode[0]?.status === 'fulfilled' ? preparedCode[0].value.effects : new Map(), this.compositor, frame, canPresent, deadline) : await this.compositor.draw(document, active, pictures, canPresent, deadline)
+      const drawn = this.drawDocument(document)
+      result = composite ? await renderVideoEditCompositeScene(drawn, composite, new Map(active.map((clip, index) => [clip.id, pictures[index]])), preparedCode[0]?.status === 'fulfilled' ? preparedCode[0].value.effects : new Map(), this.compositor, frame, canPresent, deadline, document) : await this.compositor.draw(drawn, active, pictures, canPresent, deadline)
     } catch (error) {
       if (canPresent()) throw error
       result = { presented: false, completion: Promise.resolve() }

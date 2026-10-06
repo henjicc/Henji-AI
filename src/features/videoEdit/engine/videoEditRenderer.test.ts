@@ -11,7 +11,7 @@ import { VideoEditNativePicture } from './videoEditNativePicture'
 import type { NativeVideoFrame } from './videoEditNativeFrames'
 import { addLegacyVideoEditTracks } from '@/core/videoEdit/testFixtures'
 
-const boundary = vi.hoisted(() => ({ scheduled: [] as Array<{ path: string; timestamps: number[] }>, disposed: [] as string[], pictures: [] as number[], generatorCalls: 0, compilerCalls: 0, compilerDisposed: 0, failGenerator: false, released: [] as string[][], pendingCode: undefined as Promise<CodeMaterialProgram> | undefined, snapshotCalls: [] as boolean[], normalizedReleased: 0, pendingSnapshot: undefined as Promise<void> | undefined, draws: [] as Array<{ ids: string[]; timestamps: number[]; offscreen: boolean }>, mixes: [] as Array<number | number[]>, opacities: [] as number[] }))
+const boundary = vi.hoisted(() => ({ scheduled: [] as Array<{ path: string; timestamps: number[] }>, disposed: [] as string[], pictures: [] as number[], generatorCalls: 0, compilerCalls: 0, compilerDisposed: 0, failGenerator: false, released: [] as string[][], pendingCode: undefined as Promise<CodeMaterialProgram> | undefined, snapshotCalls: [] as boolean[], normalizedReleased: 0, pendingSnapshot: undefined as Promise<void> | undefined, draws: [] as Array<{ ids: string[]; timestamps: number[]; offscreen: boolean; size?: [number, number] }>, divisors: [] as number[], mixes: [] as Array<number | number[]>, opacities: [] as number[] }))
 /** The start of the 60fps picture showing at `time` (exact grid times stay exact despite floating point). */
 const gridPicture = vi.hoisted(() => (time: number, fps = 60): number => Math.floor(time * fps + 1e-6) / fps)
 /** Source seconds compared at whole microseconds (picture starts computed on the grid vs. expectations summed in seconds). */
@@ -74,7 +74,8 @@ vi.mock('./videoEditGpuCompositor', async () => {
   async prepareImages() { return new Map() }
   imageDiagnostics() { return { textures: 0, bytes: 0, uploads: 0 } }
   codeDiagnostics() { return undefined }
-  async draw(_document: unknown, clips: VideoEditClip[], pictures: Array<{ timestamp?: number }>, _shouldPresent: unknown, _deadline: unknown, destination?: unknown) { boundary.pictures = pictures.map(picture => picture.timestamp!); boundary.opacities = clips.map(clip => clip.opacity); boundary.draws.push({ ids: clips.map(clip => clip.id), timestamps: [...boundary.pictures], offscreen: Boolean(destination) }); return { presented: true, completion: Promise.resolve() } }
+  async draw(document: { width: number; height: number }, clips: VideoEditClip[], pictures: Array<{ timestamp?: number }>, _shouldPresent: unknown, _deadline: unknown, destination?: unknown) { boundary.pictures = pictures.map(picture => picture.timestamp!); boundary.opacities = clips.map(clip => clip.opacity); boundary.draws.push({ ids: clips.map(clip => clip.id), timestamps: [...boundary.pictures], offscreen: Boolean(destination), ...(boundary.divisors.length ? { size: [document.width, document.height] as [number, number] } : {}) }); return { presented: true, completion: Promise.resolve() } }
+  setPictureDivisor(divisor: number): void { boundary.divisors.push(divisor) }
   async dispose(): Promise<void> {}
   cancelPresentation(): void {}
 } } })
@@ -87,7 +88,7 @@ beforeEach(() => {
   boundary.disposed = []; boundary.pictures = []
   boundary.generatorCalls = 0; boundary.compilerCalls = 0; boundary.compilerDisposed = 0; boundary.failGenerator = false; boundary.released = []; boundary.pendingCode = undefined
   boundary.snapshotCalls = []; boundary.normalizedReleased = 0; boundary.pendingSnapshot = undefined
-  boundary.draws = []; boundary.mixes = []
+  boundary.draws = []; boundary.mixes = []; boundary.divisors = []
   vi.stubGlobal('OffscreenCanvas', class { constructor(public width: number, public height: number) {} })
   vi.stubGlobal('VideoDecoder', { isConfigSupported: async () => ({ supported: true }) })
 })
@@ -709,4 +710,27 @@ it('声道映射（2.6）：每个片段按映射读取指定声音流，单声�
     expect(sessions.slice(0, -1).every(entry => entry.closed)).toBe(true)
   } finally { await renderer.dispose() }
   expect(sessions.every(entry => entry.closed)).toBe(true)
+})
+it('回放分辨率（4.9）：预览按 1/N 画布与合成尺寸渲染、换尺寸丢弃旧缓存帧；导出拒绝降低分辨率', async () => {
+  const document = fixture()
+  const renderer = new VideoEditRenderer(document, document.width)
+  try {
+    await (await renderer.render(0)).completion
+    renderer.setRenderDivisor(4)
+    expect([renderer.canvas.width, renderer.canvas.height]).toEqual([Math.round(document.width / 4), Math.round(document.height / 4)])
+    expect(boundary.divisors).toEqual([4])
+    boundary.draws = []
+    await (await renderer.render(1)).completion
+    expect(boundary.draws.at(-1)?.size).toEqual([Math.round(document.width / 4), Math.round(document.height / 4)])
+    // 回到完整：画布、合成尺寸与解码图片尺寸一起恢复
+    renderer.setRenderDivisor(1)
+    expect([renderer.canvas.width, renderer.canvas.height]).toEqual([document.width, document.height])
+    expect(boundary.divisors).toEqual([4, 1])
+    boundary.draws = []
+    await (await renderer.render(1)).completion
+    expect(boundary.draws.at(-1)?.size).toEqual([document.width, document.height])
+    expect(() => renderer.setRenderDivisor(3)).toThrow('回放分辨率无效')
+  } finally { await renderer.dispose() }
+  const exporter = new VideoEditRenderer(document)
+  try { expect(() => exporter.setRenderDivisor(2)).toThrow('完整分辨率') } finally { await exporter.dispose() }
 })
