@@ -17,6 +17,10 @@ import { createApplicationHarness } from '@/tests/applicationHarness'
 
 /** 时间线上的原地生成（4.12）：右键菜单按落点给出生成项，面板说明落点；占位显示在原位置，取消后消失且剪辑不变。不发起真实生成。 */
 let videoModel = ''
+// jsdom 没有布局：提示词编辑器（ProseMirror）聚焦后滚动到选区要量 Range 的矩形，这里给出空矩形
+const emptyRects = (): DOMRectList => Object.assign([], { item: () => null }) as unknown as DOMRectList
+const emptyRect = (): DOMRect => ({ x: 0, y: 0, width: 0, height: 0, top: 0, left: 0, right: 0, bottom: 0, toJSON: () => ({}) }) as DOMRect
+beforeAll(() => { Range.prototype.getClientRects ??= emptyRects; Range.prototype.getBoundingClientRect ??= emptyRect; Element.prototype.getClientRects ??= emptyRects })
 beforeAll(async () => { await loadRealModelsIntoRegistry(); videoModel = registry.listAllModels().find(model => model.meta.type === 'video')!.meta.id })
 const generation = vi.hoisted(() => ({
   resolveModel: vi.fn(async () => ({ modelId: '', providerId: '', selection: 'user_default' })),
