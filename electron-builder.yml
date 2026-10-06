@@ -32,6 +32,8 @@ asarUnpack:
   - node_modules/sharp/**
   - node_modules/@img/**
   - node_modules/@napi-rs/**
+  # 本地模型推理（任务 4.7d）：原生绑定与同目录的 onnxruntime / DirectML 动态库必须在真实目录里才能加载。
+  - node_modules/onnxruntime-node/**
 win:
   icon: resources/icons/icon.ico
   # Windows 全项目只用一份 FFmpeg（BtbN 9.0 GPL 共享构建，重要记录 014）：原生解码服务、其 DLL 与主进程 CLI
@@ -55,6 +57,9 @@ win:
     # pi-coding-agent → chord 的构建期打包入口（chord/node、chord/bundler）引用，运行时不调用，保留本平台一份以防万一。
     - "!**/node_modules/@esbuild/!(win32-x64){,/**/*}"
     - "!**/node_modules/@mariozechner/clipboard-!(win32-x64-msvc){,/**/*}"
+    # onnxruntime-node 一个包里带全部平台的原生库（约 290MB），Windows 只留 win32/x64（含 DirectML）。
+    - "!**/node_modules/onnxruntime-node/bin/napi-v6/{darwin,linux}{,/**/*}"
+    - "!**/node_modules/onnxruntime-node/bin/napi-v6/win32/!(x64){,/**/*}"
   target:
     - target: nsis
       arch:

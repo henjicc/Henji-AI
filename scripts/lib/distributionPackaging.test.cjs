@@ -125,6 +125,7 @@ function windowsLayout() {
   writeFile(path.join(bundled, 'henji-audio-worker.exe'), 'worker')
   writeFile(path.join(appOutDir, 'LICENSES.chromium.html'), '<html>')
   writeFile(path.join(appOutDir, 'resources', 'app.asar'), 'asar')
+  for (const name of ['onnxruntime_binding.node', 'onnxruntime.dll', 'DirectML.dll']) writeFile(path.join(appOutDir, 'resources', 'app.asar.unpacked', 'node_modules', 'onnxruntime-node', 'bin', 'napi-v6', 'win32', 'x64', name), 'native')
   return { dir, appOutDir, bundled, sources }
 }
 
@@ -144,8 +145,11 @@ test('打包核对：完整 Windows 布局通过，各类偏差逐项报出', ()
     writeFile(path.join(layout.bundled, 'licenses', 'third-party-licenses.json'), '{}')
     fs.rmSync(path.join(layout.bundled, 'licenses', 'ffmpeg', 'COPYING.GPLv3.txt'))
     writeFile(path.join(layout.appOutDir, 'resources', 'app.asar.unpacked', 'node_modules', 'ffmpeg-ffprobe-static', 'ffmpeg.exe'), 'old')
+    const onnxBin = path.join(layout.appOutDir, 'resources', 'app.asar.unpacked', 'node_modules', 'onnxruntime-node', 'bin', 'napi-v6')
+    fs.rmSync(path.join(onnxBin, 'win32', 'x64', 'DirectML.dll'))
+    writeFile(path.join(onnxBin, 'linux', 'x64', 'libonnxruntime.so.1'), 'foreign')
     const problems = verify(['\\out\\main\\index.cjs', '\\node_modules\\@esbuild\\linux-x64\\bin\\esbuild', '\\node_modules\\x\\node_modules\\@esbuild\\win32-arm64\\esbuild.exe', '\\node_modules\\@mariozechner\\clipboard-darwin-universal\\c.node','\\node_modules\\ffmpeg-ffprobe-static\\index.js', '\\docs\\ref\\a.mp4', '\\native\\video-decoder\\Cargo.toml']).join('\n')
-    for (const expected of ['henji-audio-worker.exe 动态依赖 VCRUNTIME140.dll', '其他平台的二进制包（在 electron-builder.yml win.files 排除）：@esbuild/linux-x64, @esbuild/win32-arm64, @mariozechner/clipboard-darwin-universal','混入了 files 包含项之外的内容（文件匹配规则退化成整个仓库？）：docs, native', 'henji_video_decoder.pdb', 'avcodec-63.dll 与构建来源不一致', 'BUILD-INFO 未记录随包 avcodec-63.dll', 'third-party-licenses.json', 'COPYING.GPLv3.txt', 'app.asar.unpacked', 'app.asar 中存在']) {
+    for (const expected of ['henji-audio-worker.exe 动态依赖 VCRUNTIME140.dll', '其他平台的二进制包（在 electron-builder.yml win.files 排除）：@esbuild/linux-x64, @esbuild/win32-arm64, @mariozechner/clipboard-darwin-universal','混入了 files 包含项之外的内容（文件匹配规则退化成整个仓库？）：docs, native', 'henji_video_decoder.pdb', 'avcodec-63.dll 与构建来源不一致', 'BUILD-INFO 未记录随包 avcodec-63.dll', 'third-party-licenses.json', 'COPYING.GPLv3.txt', 'app.asar.unpacked', 'app.asar 中存在', 'win32/x64/DirectML.dll', 'onnxruntime-node 混入了其他平台的原生库：linux/x64']) {
       assert.ok(problems.includes(expected), `未报出：${expected}\n${problems}`)
     }
   } finally {

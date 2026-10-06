@@ -16,7 +16,7 @@ export const APP_IDENTIFIER = 'com.henji.ai'
 export const PROGRAM_DATA_DIR_NAME = 'Henji-AI'
 
 /** 程序目录下的内部存储；名称沿用现有目录，保证已有缓存与文档继续可用。 */
-export type ProgramStoreKey = 'logs' | 'thumbnails' | 'imageEditor' | 'audioEdit' | 'documentStore' | 'debug' | 'downloads'
+export type ProgramStoreKey = 'logs' | 'thumbnails' | 'imageEditor' | 'audioEdit' | 'documentStore' | 'debug' | 'downloads' | 'smartRegions'
 
 export const PROGRAM_STORE_NAMES: Readonly<Record<ProgramStoreKey, string>> = {
   logs: 'logs',
@@ -27,6 +27,8 @@ export const PROGRAM_STORE_NAMES: Readonly<Record<ProgramStoreKey, string>> = {
   documentStore: 'DocumentStore',
   debug: 'debug',
   downloads: 'Downloads',
+  /** 剪辑智能区域的分析结果（任务 4.7d，按素材内容寻址的缓存，可随时清理）。 */
+  smartRegions: 'SmartRegions',
 }
 
 export function getAppBaseDir(): string {

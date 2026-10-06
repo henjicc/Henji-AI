@@ -23,6 +23,7 @@ import type { VideoDecoderPlatform } from './videoDecoder'
 import type { DocumentsPlatform } from './documents'
 import type { WorkRootPlatform } from './workRoot'
 import type { LocalModelsPlatform } from './localModels'
+import type { SmartRegionsPlatform } from './smartRegions'
 
 export interface PlatformRuntime {
   embeddedAgent: EmbeddedAgentPlatform
@@ -53,6 +54,7 @@ export interface PlatformRuntime {
   documents: DocumentsPlatform
   workRoot: WorkRootPlatform
   localModels: LocalModelsPlatform
+  smartRegions: SmartRegionsPlatform
 }
 
 export type {
@@ -101,3 +103,4 @@ export * from './audioEdit'
 export * from './documents'
 export * from './workRoot'
 export * from './localModels'
+export * from './smartRegions'

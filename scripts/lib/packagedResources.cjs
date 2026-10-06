@@ -27,6 +27,8 @@ const ASAR_TOP_LEVEL = new Set(['out', 'package.json', 'node_modules'])
 /** 其他平台的可选二进制包（如 @esbuild/linux-x64、@mariozechner/clipboard-darwin-arm64、@esbuild/win32-arm64）。 */
 const FOREIGN_PLATFORM_PACKAGE = /node_modules\/((?:@[^/]+\/)?(?:[^/]*-)?(?:darwin|linux|android|freebsd|openbsd|netbsd|sunos|aix|openharmony|win32-(?:arm64|ia32))(?:-[^/]*)?)\//
 const EXCLUDED_WINDOWS_PACKAGE = 'ffmpeg-ffprobe-static'
+/** onnxruntime-node 在 Windows 上加载所需的原生文件（绑定、运行库、DirectML）。 */
+const ONNX_RUNTIME_WINDOWS_FILES = ['onnxruntime_binding.node', 'onnxruntime.dll', 'DirectML.dll']
 
 function sha256(file) {
   return crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex')
@@ -118,6 +120,13 @@ function verifyPackagedResources({ appOutDir, platform, productFilename, videoDe
   if (fs.existsSync(unpacked)) problems.push(`Windows 不应打包 ${EXCLUDED_WINDOWS_PACKAGE}（app.asar.unpacked 中存在）`)
   const excluded = new RegExp(`[\\\\/]node_modules[\\\\/]${EXCLUDED_WINDOWS_PACKAGE}([\\\\/]|$)`)
   if (asarEntries.some((entry) => excluded.test(entry))) problems.push(`Windows 不应打包 ${EXCLUDED_WINDOWS_PACKAGE}（app.asar 中存在）`)
+  // 本地模型推理（任务 4.7d）：onnxruntime-node 必须解包，且只带 win32/x64（含 DirectML）。
+  const onnxBin = path.join(resourcesDir, 'app.asar.unpacked', 'node_modules', 'onnxruntime-node', 'bin', 'napi-v6')
+  for (const file of ONNX_RUNTIME_WINDOWS_FILES) {
+    if (!fs.existsSync(path.join(onnxBin, 'win32', 'x64', file))) problems.push(`缺少 onnxruntime-node 原生文件 win32/x64/${file}（应在 app.asar.unpacked 中）`)
+  }
+  const onnxForeign = listFilesRecursive(onnxBin).map((file) => file.split('/').slice(0, 2).join('/')).filter((dir) => dir !== 'win32/x64')
+  if (onnxForeign.length) problems.push(`onnxruntime-node 混入了其他平台的原生库：${[...new Set(onnxForeign)].join(', ')}`)
   const foreign = [...new Set(asarEntries.map((entry) => entry.split('\\').join('/').match(FOREIGN_PLATFORM_PACKAGE)?.[1]).filter(Boolean))]
   if (foreign.length) {
     problems.push(`Windows x64 安装包混入了其他平台的二进制包（在 electron-builder.yml win.files 排除）：${foreign.slice(0, 8).join(', ')}${foreign.length > 8 ? ` 等 ${foreign.length} 个` : ''}`)
