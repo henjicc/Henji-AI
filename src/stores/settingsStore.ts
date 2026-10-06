@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { parseVideoEditShortcutOverrides, sanitizeVideoEditShortcutOverrides, type VideoEditShortcutOverrides } from '@/core/videoEdit/commands';
+import { sanitizeVideoEditMonitorButtons, withVideoEditMonitorButtons, type VideoEditMonitorButtonLayouts, type VideoEditMonitorKind } from '@/core/videoEdit/monitorButtons';
 
 /** 下载预设路径的条数上限：菜单里超过这个数就要滚动，反而比「另存为」更慢 */
 export const DOWNLOAD_PRESET_PATH_LIMIT = 8;
@@ -95,6 +96,8 @@ interface SettingsState {
   assetCardSize: number;
   assetThumbnailFit: AssetThumbnailFit;
   videoEditShortcuts: VideoEditShortcutOverrides;
+  /** 剪辑节目／源监视器按钮栏（按钮编辑器）；只存改过的那一侧。 */
+  videoEditMonitorButtons: VideoEditMonitorButtonLayouts;
   setProviderApiKey: (providerId: string, key: string) => void;
   setProviderKeyStatus: (providerId: string, configured: boolean) => void;
   setProviderKeyStatuses: (status: ProviderKeyStatusMap) => void;
@@ -132,6 +135,8 @@ interface SettingsState {
   setAssetCardSize: (size: number) => void;
   setAssetThumbnailFit: (fit: AssetThumbnailFit) => void;
   setVideoEditShortcuts: (shortcuts: VideoEditShortcutOverrides) => void;
+  /** `null` = 重置为默认按钮。 */
+  setVideoEditMonitorButtons: (kind: VideoEditMonitorKind, ids: readonly string[] | null) => void;
 }
 
 /** 主题文件导入范围：全部 / 仅配色 / 仅圆角。 */
@@ -224,6 +229,7 @@ export const useSettingsStore = create<SettingsState>()(
       assetCardSize: 180,
       assetThumbnailFit: 'cover',
       videoEditShortcuts: {},
+      videoEditMonitorButtons: {},
       setProviderApiKey: (providerId, key) => {
         const normalizedKey = normalizeApiKey(key);
         set((state) => ({
@@ -307,6 +313,7 @@ export const useSettingsStore = create<SettingsState>()(
       setAssetCardSize: (assetCardSize) => set({ assetCardSize: Math.min(280, Math.max(112, assetCardSize)) }),
       setAssetThumbnailFit: (assetThumbnailFit) => set({ assetThumbnailFit }),
       setVideoEditShortcuts: (shortcuts) => set({ videoEditShortcuts: parseVideoEditShortcutOverrides(shortcuts) }),
+      setVideoEditMonitorButtons: (kind, ids) => set((state) => ({ videoEditMonitorButtons: withVideoEditMonitorButtons(state.videoEditMonitorButtons, kind, ids) })),
     }),
     {
       name: 'settings-storage',
@@ -319,7 +326,7 @@ export const useSettingsStore = create<SettingsState>()(
       // 剪辑快捷键：默认键位随版本对齐 PR 时，旧改键里不认识或与新默认冲突的部分在恢复时让出，避免读设置失败。
       merge: (persistedState, currentState) => {
         const persisted = (persistedState ?? {}) as Partial<SettingsState>;
-        return { ...currentState, ...persisted, videoEditShortcuts: sanitizeVideoEditShortcutOverrides(persisted.videoEditShortcuts) };
+        return { ...currentState, ...persisted, videoEditShortcuts: sanitizeVideoEditShortcutOverrides(persisted.videoEditShortcuts), videoEditMonitorButtons: sanitizeVideoEditMonitorButtons(persisted.videoEditMonitorButtons) };
       },
       partialize: (state) => {
         const { logCaptureMode: _logCaptureMode, ...persisted } = state;

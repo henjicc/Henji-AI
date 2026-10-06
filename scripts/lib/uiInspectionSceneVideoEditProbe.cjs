@@ -181,7 +181,7 @@ function createVideoEditProbeScene() {
         assert.equal((await savedProject(page, projectPath, document => document.sequences[0].clips[2].scale === 1, '撤销 MCP 合成保存')).sequences[0].clips[2].scale, 1)
         await button(page, '重做').click(); await page.waitForTimeout(150)
         assert.equal((await savedProject(page, projectPath, document => document.sequences[0].clips[2].scale === 0.35, '重做 MCP 合成保存')).sequences[0].clips[2].scale, 0.35)
-        await seek(page, 30, 30); await page.getByTitle('1920-30.mp4', { exact: true }).first().click(); await button(page, '点标注').click()
+        await seek(page, 30, 30); await page.getByTitle('1920-30.mp4', { exact: true }).first().click(); await button(page, '更多节目操作').click(); await button(page, '点标注').click()
         await page.getByLabel('标注文字', { exact: true }).fill('检查叠加边缘')
         await page.getByLabel('剪辑画面', { exact: true }).click({ position: { x: 100, y: 100 } })
         await page.waitForTimeout(150)

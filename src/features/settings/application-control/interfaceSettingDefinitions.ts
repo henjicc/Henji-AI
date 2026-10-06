@@ -11,6 +11,7 @@ import {
 } from '@/hooks/useLocalStorageSetting'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { videoEditShortcutOverridesSchema, type VideoEditShortcutOverrides } from '@/core/videoEdit/commands'
+import { videoEditMonitorButtonLayoutsSchema } from '@/core/videoEdit/monitorButtons'
 import { z } from 'zod'
 
 import { hexSettingSchema, storageSetting, storeSetting } from './definitionFactories'
@@ -37,6 +38,17 @@ export const INTERFACE_APPLICATION_SETTING_DEFINITIONS: ApplicationSettingDefini
     target: { tab: 'general', sectionId: 'general-view' }, requiresReload: false, requiresRestart: false, sensitive: false,
   }, () => videoEditShortcutOverridesSchema.parse(useSettingsStore.getState().videoEditShortcuts),
   (value) => useSettingsStore.getState().setVideoEditShortcuts(value as VideoEditShortcutOverrides)),
+  storeSetting({
+    id: 'video_edit.monitor_buttons', title: '剪辑监视器按钮', description: '节目监视器（program）与源监视器（source）底部按钮栏显示哪些按钮、按什么顺序；省略某一侧即恢复默认按钮。',
+    aliases: ['监视器按钮', '按钮编辑器', '节目监视器按钮', '源监视器按钮'], schema: videoEditMonitorButtonLayoutsSchema, defaultValue: {},
+    target: { tab: 'general', sectionId: 'general-view' }, requiresReload: false, requiresRestart: false, sensitive: false,
+  }, () => videoEditMonitorButtonLayoutsSchema.parse(useSettingsStore.getState().videoEditMonitorButtons),
+  (value) => {
+    const layouts = videoEditMonitorButtonLayoutsSchema.parse(value)
+    const store = useSettingsStore.getState()
+    store.setVideoEditMonitorButtons('program', layouts.program ?? null)
+    store.setVideoEditMonitorButtons('source', layouts.source ?? null)
+  }),
   storeSetting({
     id: 'interface.scale', title: '界面缩放', description: '调整整个应用界面的显示大小，自动模式会根据窗口可用空间选择合适比例。',
     aliases: ['界面大小', '显示缩放', 'UI 缩放', 'scale', 'zoom'], schema: z.enum(UI_SCALE_MODES), defaultValue: DEFAULT_UI_SCALE_MODE,

@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { Dropdown, PanelTrigger, UiButton, UiEmpty, UiError, UiIconButton, UiInput, UiOptionButton, UiOverflowRow, UiPanel } from '@/components/ui'
-import { ImagePlus, MapPin, MoreHorizontal, MousePointer2, Move, PenLine, RotateCcw, SquareDashed } from 'lucide-react'
+import { ArrowRightFromLine, ArrowRightToLine, ArrowUpFromLine, BookmarkPlus, Camera, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Eraser, FastForward, FoldHorizontal, ImagePlus, MapPin, MoreHorizontal, MousePointer2, Move, Pause, PenLine, Play, Rewind, RotateCcw, SkipBack, SkipForward, Square, SquareDashed, StepBack, StepForward, type LucideIcon } from 'lucide-react'
 import { Z_LAYERS } from '@/core/theme/zLayers'
 import { audibleVideoEditClips, videoEditDuration } from '@/core/videoEdit/document'
 import { VideoEditRenderSession } from './engine/videoEditRenderSession'
@@ -11,7 +11,13 @@ import { createVideoEditAudioMeter, type VideoEditAudioLevel } from './engine/vi
 import { VideoEditAudioScheduler } from './engine/videoEditAudioScheduler'
 import { VideoEditLevelMeter } from './panels/VideoEditLevelMeter'
 import { useVideoEditPictureGesture } from './panels/useVideoEditPictureGesture'
-import { VideoEditTimecode, VideoEditTransportControls } from './timeline/VideoEditTimelineTransport'
+import { VideoEditTimecode } from './timeline/VideoEditTimelineTransport'
+import { timelineCommandPresentation } from './timeline/timelineCommandPresentation'
+import { captureVideoEditCommandContext, executeVideoEditCommand } from './application/videoEditCommands'
+import { VideoEditMonitorButton, VideoEditMonitorButtonEditor, useVideoEditMonitorButtonIds, type VideoEditMonitorButtonSpec } from './panels/VideoEditMonitorButtons'
+import { useSettingsStore } from '@/stores/settingsStore'
+import type { VideoEditCommandId } from '@/core/videoEdit/commands'
+import type { VideoEditProgramButtonId } from '@/core/videoEdit/monitorButtons'
 import { captureVideoEditProgramFrame, registerVideoEditProgramCapture } from './application/videoEditProgramCapture'
 import { collectVideoEditOutput } from './application/videoEditOutputs'
 import { editVideoEditProgramFrame } from './application/videoEditFrameEdit'
@@ -21,11 +27,20 @@ import { createLogger } from '@/core/logging'
 import type { VideoEditComposition } from '@/core/videoEdit/document'
 
 const logger = createLogger('features.videoEdit.preview')
-/** 节目监视器的工具模式：选中态开关（不是动作按钮），名称与标注逻辑不变。 */
-/** 节目控制条低于这个宽度时不显示时间码：时间码 112 + 走带 ~170 + 显示比例 ~70 + 节目工具 ~120 + 更多 28 + 间距 */
-const PROGRAM_TOOLBAR_TIMECODE_MIN_WIDTH = 520
+/** 节目控制条低于这个宽度时不显示时间码：时间码 112 + 默认按钮 ~360 + 显示比例 ~70 + 更多 28 + 间距 */
+const PROGRAM_TOOLBAR_TIMECODE_MIN_WIDTH = 600
 const PROGRAM_DISPLAY_OPTIONS = [{ value: 'fit' as const, label: '适应' }, { value: 'actual' as const, label: '100%' }]
+/** 节目监视器的工具模式：选中态开关（不是动作按钮），名称与标注逻辑不变；默认不在按钮栏，不在栏里时从“更多”切换。 */
 const PROGRAM_MODES = [{ id: 'select', title: '选择', Icon: MousePointer2 }, { id: 'move', title: '移动画面', Icon: Move }, { id: 'point', title: '点标注', Icon: MapPin }, { id: 'region', title: '区域标注', Icon: SquareDashed }] as const
+/** 节目按钮栏里走剪辑命令的按钮（名称、快捷键与启用状态来自正式命令）。 */
+const PROGRAM_COMMAND_BUTTONS = ['add_marker', 'mark_in', 'mark_out', 'clear_in_out', 'go_in', 'go_out', 'go_start', 'step_back_five', 'step_back', 'play_reverse', 'play_stop', 'play_pause', 'play_forward', 'step_forward', 'step_forward_five', 'go_end', 'go_prev_edit', 'go_next_edit', 'lift', 'extract'] as const satisfies readonly (VideoEditProgramButtonId & VideoEditCommandId)[]
+const PROGRAM_COMMAND_ICONS: Record<Exclude<typeof PROGRAM_COMMAND_BUTTONS[number], 'play_pause'>, LucideIcon> = {
+  add_marker: BookmarkPlus, mark_in: ArrowRightFromLine, mark_out: ArrowRightToLine, clear_in_out: Eraser, go_in: ChevronFirst, go_out: ChevronLast,
+  go_start: SkipBack, step_back_five: ChevronsLeft, step_back: ChevronLeft, play_reverse: Rewind, play_stop: Square, play_forward: FastForward,
+  step_forward: ChevronRight, step_forward_five: ChevronsRight, go_end: SkipForward, go_prev_edit: StepBack, go_next_edit: StepForward, lift: ArrowUpFromLine, extract: FoldHorizontal,
+}
+/** 窄面板先收起优先级低的：播放、逐帧、入出点留到最后。 */
+const PROGRAM_BUTTON_PRIORITY: Partial<Record<VideoEditProgramButtonId, number>> = { play_pause: 100, step_back: 90, step_forward: 90, mark_in: 80, mark_out: 80 }
 
 /** The Program GPU surface belongs to the project: a remount (dock ↔ popout window) waits until the previous session actually retired. */
 const programReleases = new WeakMap<VideoEditInstance, Promise<unknown>>()
@@ -267,8 +282,35 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
     setVideoEditView(instance.document.id, { playing: false })
     void editVideoEditProgramFrame(instance.document.id).catch(onError).finally(() => setCollecting(false))
   }
-  // 节目监视器（界面重设计 3.5，设计稿 VideoEdit）：画面区（媒体底 + 右侧纵向电平）+ 唯一一条控制带：
-  // 时间码 ｜ 播放控制 ｜ 适应、工具模式（选中态）、更多（重新加载、选帧加入资产库、编辑当前帧）。
+  const shortcuts = useSettingsStore(state => state.videoEditShortcuts)
+  const buttonIds = useVideoEditMonitorButtonIds('program')
+  const projectId = instance.document.id
+  const runCommand = (id: VideoEditCommandId): void => { void executeVideoEditCommand(captureVideoEditCommandContext(projectId, 'program'), id).catch(onError) }
+  // 提升／提取的可用判定要试算一次编辑：只在序列、入出点或目标轨道变化时算，不随播放每帧重算。
+  const targetTracks = instance.targetTrackIds.join(',')
+  const { document: projectDocument, activeSequenceId, inFrame, outFrame } = instance
+  const rangeEdits = useMemo(() => {
+
+    const context = captureVideoEditCommandContext(projectId, 'program', { includeClipboard: false })
+    return { lift: timelineCommandPresentation(context, 'lift', shortcuts), extract: timelineCommandPresentation(context, 'extract', shortcuts) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 实例是可变对象：按它的序列、入出点与目标轨道重算
+  }, [projectId, projectDocument, activeSequenceId, inFrame, outFrame, targetTracks, shortcuts])
+  const commandContext = captureVideoEditCommandContext(projectId, 'program', { includeClipboard: false })
+  const programButtons: VideoEditMonitorButtonSpec[] = [
+    ...PROGRAM_COMMAND_BUTTONS.map((id): VideoEditMonitorButtonSpec => {
+      const command = id === 'lift' || id === 'extract' ? rangeEdits[id] : timelineCommandPresentation(commandContext, id, shortcuts)
+      if (id === 'play_pause') return { id, title: command.title, tooltip: command.tooltip, Icon: instance.playing ? Pause : Play, size: 'lg', enabled: command.enabled, onClick: () => runCommand(id) }
+      return { id, title: command.title, tooltip: command.tooltip, Icon: PROGRAM_COMMAND_ICONS[id], enabled: command.enabled, onClick: () => runCommand(id) }
+    }),
+    { id: 'export_frame', title: '导出帧', tooltip: '导出帧：把当前画面加入资产库', Icon: Camera, enabled: !busy, onClick: captureFrame },
+    ...PROGRAM_MODES.map(({ id, title, Icon }): VideoEditMonitorButtonSpec => ({ id: `mode_${id}`, title, Icon, on: mode === id, onClick: () => setMode(id) })),
+  ]
+  const programButtonOf = new Map(programButtons.map(spec => [spec.id, spec]))
+  const barButtons = buttonIds.flatMap(id => { const spec = programButtonOf.get(id); return spec ? [spec] : [] })
+  const menuModes = (hiddenIds: readonly string[]) => PROGRAM_MODES.filter(({ id }) => !buttonIds.includes(`mode_${id}`) || hiddenIds.includes(`mode_${id}`))
+  const menuButtons = (hiddenIds: readonly string[]) => barButtons.filter(spec => hiddenIds.includes(spec.id) && !spec.id.startsWith('mode_'))
+  // 节目监视器（界面重设计 3.5，设计稿 VideoEdit；剪辑对齐 PR 2.5）：画面区（媒体底 + 右侧纵向电平）+ 唯一一条控制带：
+  // 时间码 ｜ 自定义按钮栏（默认同 PR 节目监视器）+“+”按钮编辑器、适应 ｜ 更多（放不下的按钮、不在栏里的工具模式、重新加载、选帧加入资产库、编辑当前帧）。
   // 压在画面上的状态与标注输入用玻璃 / 媒体叠层令牌。
   return <div className="flex min-h-0 flex-1 flex-col bg-panel">
     <div className={`relative flex min-h-0 flex-1 bg-media py-3 pl-3 pr-6 ${display === 'fit' ? 'items-center justify-center overflow-hidden' : 'items-start justify-start overflow-auto'}`}
@@ -308,19 +350,20 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
         再把显示比例与节目工具按优先级收进“更多”，不再折成多行 */}
     <div ref={programToolbarRef} className="flex min-h-10 shrink-0 items-center gap-x-1 whitespace-nowrap border-t border-line px-2 py-1" role="toolbar" aria-label="节目监视器控制">
       {compactProgramToolbar ? null : <VideoEditTimecode instance={instance} label="节目时间码" className="w-28 shrink-0 px-1.5 text-13 text-text1" />}
-      <div className="flex min-w-fit flex-1 justify-center"><VideoEditTransportControls instance={instance} onError={onError} /></div>
       <UiOverflowRow
-        className="flex-1 justify-end gap-1"
+        className="flex-1 justify-center gap-0.5"
         alwaysShowOverflow
         items={[
-          { id: 'display', priority: 0, node: <Dropdown<'fit' | 'actual'> ariaLabel="节目显示比例" appearance="text" size="sm" value={display} options={PROGRAM_DISPLAY_OPTIONS} onSelect={setDisplay} /> },
-          { id: 'modes', priority: 1, node: <div className="flex items-center gap-0.5" role="group" aria-label="节目工具">
-            {PROGRAM_MODES.map(({ id, title, Icon }) => <UiIconButton key={id} on={mode === id} aria-label={title} title={title} onClick={() => setMode(id)}><Icon size={15} /></UiIconButton>)}
-          </div> },
+          ...barButtons.map(spec => ({ id: spec.id, priority: PROGRAM_BUTTON_PRIORITY[spec.id as VideoEditProgramButtonId] ?? 10, node: <VideoEditMonitorButton spec={spec} /> })),
+          { id: 'button_editor', priority: 0, pinned: true, node: <VideoEditMonitorButtonEditor kind="program" specs={programButtons} /> },
+          { id: 'display', priority: 0, node: <div className="ml-2"><Dropdown<'fit' | 'actual'> ariaLabel="节目显示比例" appearance="text" size="sm" value={display} options={PROGRAM_DISPLAY_OPTIONS} onSelect={setDisplay} /></div> },
         ]}
-        renderOverflow={hiddenIds => <PanelTrigger panelWidth={188} zIndex={Z_LAYERS.dropdown} closeOnPanelClick panelPadding="menu" renderPanel={() => <div className="flex flex-col gap-1">
-        {hiddenIds.includes('modes') && <div className="flex flex-col gap-1" role="group" aria-label="节目工具">
-          {PROGRAM_MODES.map(({ id, title, Icon }) => <UiOptionButton key={id} variant="menu" size="sm" className="gap-2" active={mode === id} onClick={() => setMode(id)}><Icon size={14} />{title}</UiOptionButton>)}
+        renderOverflow={hiddenIds => <PanelTrigger panelWidth={200} zIndex={Z_LAYERS.dropdown} closeOnPanelClick panelPadding="menu" renderPanel={() => <div className="flex flex-col gap-1">
+        {menuButtons(hiddenIds).length > 0 && <div className="flex flex-col gap-1" role="group" aria-label="收起的按钮">
+          {menuButtons(hiddenIds).map(spec => <UiOptionButton key={spec.id} variant="menu" size="sm" className="gap-2" disabled={spec.enabled === false} title={spec.tooltip} onClick={spec.onClick}><spec.Icon size={14} />{spec.title}</UiOptionButton>)}
+        </div>}
+        {menuModes(hiddenIds).length > 0 && <div className="flex flex-col gap-1" role="group" aria-label="节目工具">
+          {menuModes(hiddenIds).map(({ id, title, Icon }) => <UiOptionButton key={id} variant="menu" size="sm" className="gap-2" active={mode === id} onClick={() => setMode(id)}><Icon size={14} />{title}</UiOptionButton>)}
         </div>}
         {hiddenIds.includes('display') && <div className="flex flex-col gap-1" role="group" aria-label="节目显示比例">
           {PROGRAM_DISPLAY_OPTIONS.map(option => <UiOptionButton key={option.value} variant="menu" size="sm" active={display === option.value} onClick={() => setDisplay(option.value)}>显示 {option.label}</UiOptionButton>)}

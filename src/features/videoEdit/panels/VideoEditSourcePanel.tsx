@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { Dropdown, UiEmpty, UiError, UiIconButton, UiInput, UiRangeInput } from '@/components/ui'
-import { ArrowRightFromLine, ArrowRightToLine, AudioLines, FastForward, Film, Link2, Pause, Play, Rewind, Square, X } from 'lucide-react'
+import { ArrowRightFromLine, ArrowRightToLine, AudioLines, BetweenVerticalStart, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Eraser, FastForward, Film, Link2, Pause, Play, Replace, Rewind, Square, X, type LucideIcon } from 'lucide-react'
 import AudioPlayer from '@/components/AudioPlayer'
 import { resolveImageDisplayUrl } from '@/services/imageSource'
 import type { VideoEditInstance } from '../application/videoEditService'
@@ -15,7 +15,19 @@ import { writeVideoEditSourceDrag } from '../application/videoEditSourceRange'
 import type { VideoEditAudioLevel } from '../engine/videoEditAudioMeter'
 import { VideoEditLevelMeter } from './VideoEditLevelMeter'
 import { WaveformView } from '@/components/waveform/WaveformView'
+import { useSettingsStore } from '@/stores/settingsStore'
+import { timelineCommandPresentation } from '../timeline/timelineCommandPresentation'
+import { VideoEditMonitorButton, VideoEditMonitorButtonEditor, useVideoEditMonitorButtonIds, type VideoEditMonitorButtonSpec } from './VideoEditMonitorButtons'
 import { useWaveformData } from '@/hooks/useWaveformData'
+
+/** 源按钮栏里走剪辑命令的按钮；入出点与 J/K/L 沿用原有名称（自动化场景按名称点击）。 */
+const SOURCE_COMMAND_BUTTONS: Array<{ id: 'mark_in' | 'mark_out' | 'clear_in_out' | 'step_back_five' | 'step_back' | 'play_reverse' | 'play_stop' | 'play_forward' | 'step_forward' | 'step_forward_five' | 'insert' | 'overwrite'; Icon: LucideIcon; title?: string }> = [
+  { id: 'mark_in', Icon: ArrowRightFromLine, title: '设入点' }, { id: 'mark_out', Icon: ArrowRightToLine, title: '设出点' }, { id: 'clear_in_out', Icon: Eraser },
+  { id: 'step_back_five', Icon: ChevronsLeft }, { id: 'step_back', Icon: ChevronLeft }, { id: 'play_reverse', Icon: Rewind, title: '反向（静音）' }, { id: 'play_stop', Icon: Square, title: '停止' },
+  { id: 'play_forward', Icon: FastForward, title: '正向' }, { id: 'step_forward', Icon: ChevronRight }, { id: 'step_forward_five', Icon: ChevronsRight },
+  { id: 'insert', Icon: BetweenVerticalStart }, { id: 'overwrite', Icon: Replace },
+]
+const SOURCE_PLAYBACK_BUTTONS = new Set(['mark_in', 'mark_out', 'clear_in_out', 'step_back_five', 'step_back', 'play_reverse', 'play_stop', 'play_pause', 'play_forward', 'step_forward', 'step_forward_five'])
 
 export function VideoEditSourcePanel({ instance, onError, visible = true }: { instance: VideoEditInstance; onError: (error: unknown) => void; visible?: boolean }): React.ReactElement {
   useSyncExternalStore(subscribeVideoEditSource, videoEditSourceRevision)
@@ -63,9 +75,28 @@ export function VideoEditSourcePanel({ instance, onError, visible = true }: { in
   useEffect(() => { if (state.status === 'closed') presenterRef.current?.release() }, [state.status, state.itemId])
   const meterLevels = levels.length ? levels : [{ peak: 0, rms: 0 }, { peak: 0, rms: 0 }]
   const sounding = media?.kind === 'audio' || media?.hasAudio === true
-  const transport = (id: VideoEditCommandId, label: string, Icon: typeof Play, size: 'md' | 'lg' = 'md'): React.ReactElement => <UiIconButton size={size} aria-label={label} title={label} disabled={!enabled(id)} onClick={() => command(id)}><Icon size={size === 'lg' ? 18 : 15} /></UiIconButton>
-  // 源监视器（界面重设计 3.5）：画面区（媒体底 + 纵向电平）→ 定位区（素材名、定位秒、实际时间码、进度、波形、入出点读数）→
-  // 唯一一条控制带：反向/停止/播放/正向 · 入出点 · 拖入画面/声音/链接音画 ｜ 适应、关闭（窄面板时整组换行，不横向滚动）。压在画面上的状态用媒体叠层令牌。
+  const shortcuts = useSettingsStore(state => state.videoEditShortcuts)
+  const buttonIds = useVideoEditMonitorButtonIds('source')
+  const dragComponents = media?.kind === 'audio' ? ['audio'] as const : media?.hasAudio ? ['video', 'audio', 'linked'] as const : ['video'] as const
+  const sourceButtons: VideoEditMonitorButtonSpec[] = [
+    ...SOURCE_COMMAND_BUTTONS.map(({ id, Icon, title }): VideoEditMonitorButtonSpec => {
+      const presentation = timelineCommandPresentation(availability, id, shortcuts)
+      return { id, title: title ?? presentation.title, tooltip: presentation.tooltip, Icon, enabled: presentation.enabled, hidden: media?.kind === 'image' && SOURCE_PLAYBACK_BUTTONS.has(id), onClick: () => command(id) }
+    }),
+    { id: 'play_pause', title: state.playing ? '暂停源素材' : '播放源素材', tooltip: timelineCommandPresentation(availability, 'play_pause', shortcuts).tooltip, Icon: state.playing ? Pause : Play, size: 'lg', enabled: enabled('play_pause'), hidden: media?.kind !== 'video', onClick: () => command('play_pause') },
+    ...(['video', 'audio', 'linked'] as const).map((component): VideoEditMonitorButtonSpec => {
+      const name = component === 'video' ? '拖入画面' : component === 'audio' ? '拖入声音' : '拖入链接音画'
+      return {
+        id: `drag_${component}`, title: name, tooltip: `${name}：拖入对应时间线轨道，使用当前源入出点`, Icon: component === 'video' ? Film : component === 'audio' ? AudioLines : Link2,
+        enabled: state.status === 'ready', hidden: media?.kind === 'image' || !(dragComponents as readonly string[]).includes(component),
+        onDragStart: event => { try { writeVideoEditSourceDrag(event.dataTransfer, projectId, component); event.dataTransfer.effectAllowed = 'copy' } catch (error) { event.preventDefault(); onError(error) } },
+      }
+    }),
+  ]
+  const sourceButtonOf = new Map(sourceButtons.map(spec => [spec.id, spec]))
+  const barButtons = buttonIds.flatMap(id => { const spec = sourceButtonOf.get(id); return spec && !spec.hidden ? [spec] : [] })
+  // 源监视器（界面重设计 3.5；剪辑对齐 PR 2.5）：画面区（媒体底 + 纵向电平）→ 定位区（素材名、定位秒、实际时间码、进度、波形、入出点读数）→
+  // 唯一一条控制带：自定义按钮栏（默认入出点、逐帧、J/K/L、插入、覆盖、拖入）+“+”按钮编辑器 ｜ 适应、关闭（窄面板时整组换行，不横向滚动）。压在画面上的状态用媒体叠层令牌。
   return <div className="flex h-full min-h-0 flex-col overflow-hidden bg-panel" aria-label="源监视器" data-video-edit-panel="source" data-video-edit-source-status={state.status} tabIndex={0}>
     {/* 媒体底只给画面（视频/图片）；音频源是随主题的迷你播放器，压在固定深色媒体底上纸白下读不清（4.1） */}
     <div className={`relative min-h-0 flex-1 ${state.itemId && media?.kind !== 'audio' ? 'bg-media' : ''}`}><div ref={host} className={display === 'fit' ? 'absolute bottom-3 left-3 right-6 top-3' : 'absolute bottom-3 left-3 right-6 top-3 overflow-auto [&>video]:!h-auto [&>video]:!w-auto [&>img]:!h-auto [&>img]:!w-auto [&>canvas]:!h-auto [&>canvas]:!w-auto'} data-video-edit-source-host data-video-edit-source-display={display} />
@@ -89,24 +120,9 @@ export function VideoEditSourcePanel({ instance, onError, visible = true }: { in
       {media?.kind !== 'image' && <span className="font-mono text-2xs tabular-nums text-text3">入点 {state.inUs === null ? '未设置' : videoEditSourceTimecode(state.inUs)} · 出点 {state.outUs === null ? '未设置' : videoEditSourceTimecode(state.outUs)}</span>}
     </div>}
     {state.itemId && <div className="flex min-h-10 shrink-0 flex-wrap items-center justify-center gap-x-1 gap-y-0.5 border-t border-line px-2 py-1" role="toolbar" aria-label="源监视器控制">
-      <div className="flex min-w-0 flex-1 flex-wrap items-center justify-center gap-0.5">
-        {media?.kind !== 'image' && <div className="flex items-center gap-0.5" role="group" aria-label="源播放控制">
-          {transport('play_reverse', '反向（静音）', Rewind)}
-          {transport('play_stop', '停止', Square)}
-          {media?.kind === 'video' && transport('play_pause', state.playing ? '暂停源素材' : '播放源素材', state.playing ? Pause : Play, 'lg')}
-          {transport('play_forward', '正向', FastForward)}
-        </div>}
-        {media?.kind !== 'image' && <div className="ml-2 flex items-center gap-0.5" role="group" aria-label="源入出点">
-          {transport('mark_in', '设入点', ArrowRightFromLine)}
-          {transport('mark_out', '设出点', ArrowRightToLine)}
-        </div>}
-        {media?.kind !== 'image' && <div className="ml-2 flex items-center gap-0.5" role="group" aria-label="源选区拖放">
-          {(media?.kind === 'audio' ? ['audio'] as const : media?.hasAudio ? ['video', 'audio', 'linked'] as const : ['video'] as const).map(component => {
-            const name = component === 'video' ? '拖入画面' : component === 'audio' ? '拖入声音' : '拖入链接音画'
-            const Icon = component === 'video' ? Film : component === 'audio' ? AudioLines : Link2
-            return <UiIconButton key={component} aria-label={name} draggable={state.status === 'ready'} disabled={state.status !== 'ready'} onDragStart={event => { try { writeVideoEditSourceDrag(event.dataTransfer, projectId, component); event.dataTransfer.effectAllowed = 'copy' } catch (error) { event.preventDefault(); onError(error) } }} title={`${name}：拖入对应时间线轨道，使用当前源入出点`}><Icon size={15} /></UiIconButton>
-          })}
-        </div>}
+      <div className="flex min-w-0 flex-1 flex-wrap items-center justify-center gap-0.5" role="group" aria-label="源监视器按钮">
+        {barButtons.map(spec => <VideoEditMonitorButton key={spec.id} spec={spec} />)}
+        <VideoEditMonitorButtonEditor kind="source" specs={sourceButtons} />
       </div>
       {media?.kind !== 'audio' && <Dropdown<'fit' | 'actual'> ariaLabel="源显示比例" appearance="text" size="sm" value={display} options={[{ value: 'fit', label: '适应' }, { value: 'actual', label: '100%' }]} onSelect={setDisplay} />}
       <UiIconButton aria-label="关闭源素材" title="关闭源素材" onClick={() => run({ itemId: '', timeUs: 0, playing: false })}><X size={15} /></UiIconButton>

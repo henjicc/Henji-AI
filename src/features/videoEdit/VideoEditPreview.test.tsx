@@ -30,7 +30,7 @@ it('画面标注捕获原选区和时间，后续定位及指针取消不标注�
   const canvas = view.getByLabelText('剪辑画面'); const host = canvas.parentElement!
   Object.defineProperty(host, 'setPointerCapture', { value: vi.fn() })
   vi.spyOn(host, 'getBoundingClientRect').mockReturnValue({ x: 0, y: 0, top: 0, left: 0, bottom: 180, right: 320, width: 320, height: 180, toJSON: () => ({}) })
-  fireEvent.click(view.getByRole('button', { name: '点标注' }))
+  fireEvent.click(view.getByRole('button', { name: '更多节目操作' })); fireEvent.click(view.getByRole('button', { name: '点标注' }))
   const down = () => fireEvent(canvas, new MouseEvent('pointerdown', { clientX: 32, clientY: 36, bubbles: true }))
   const up = () => fireEvent(canvas, new MouseEvent('pointerup', { clientX: 64, clientY: 72, bubbles: true }))
   down(); act(() => { setVideoEditView(instance.document.id, { frame: 5 }); setVideoEditView(instance.document.id, { frame: 0 }) }); up()
@@ -210,7 +210,7 @@ it('真实画面移动连续更新只写一次历史，改选区和Escape取消�
   await act(async () => { await Promise.resolve() }); const host = view.getByLabelText('剪辑画面').parentElement!
   Object.defineProperty(host, 'setPointerCapture', { value: vi.fn() })
   vi.spyOn(host, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 320, 180))
-  fireEvent.click(view.getByRole('button', { name: '移动画面' }))
+  fireEvent.click(view.getByRole('button', { name: '更多节目操作' })); fireEvent.click(view.getByRole('button', { name: '移动画面' }))
   const send = (type: string, x: number, y: number) => fireEvent(host, new MouseEvent(type, { clientX: x, clientY: y, button: 0, bubbles: true }))
   const history = owner.past.length
   send('pointerdown', 32, 18); send('pointermove', 64, 36); send('pointermove', 96, 54)
