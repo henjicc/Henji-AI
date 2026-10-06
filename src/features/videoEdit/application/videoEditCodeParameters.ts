@@ -6,7 +6,7 @@ import { videoEditComposition, type VideoEditDocument } from '@/core/videoEdit/d
 import { videoEditGraphicObjectMetadata } from '@/core/videoEdit/graphics'
 import { videoEditTransitionsAt } from '@/core/videoEdit/transitions'
 import type { VideoEditSourceTime } from '@/core/videoEdit/time'
-import { offsetVideoEditSource } from '@/core/videoEdit/time'
+import { videoEditClipSourceTimeAt } from '@/core/videoEdit/clipSpeed'
 import { editVideoProject, requireVideoEditInstance, updateVideoEditGesture } from './videoEditService'
 import type { VideoEditGesture } from './videoEditService'
 import { readVideoEditCodeMetadata } from './videoEditCodeState'
@@ -35,7 +35,7 @@ function currentTime(projectId: string, sequenceId: string, clipId: string) {
   const requested = owner.activeSequenceId === sequenceId ? owner.frame : owner.sequenceViews.get(sequenceId)?.frame ?? clip.start
   const handles = videoEditTransitionsAt(composition, requested).some(window => window.left.id === clipId || window.right.id === clipId)
   const frame = handles ? requested : Math.max(clip.start, Math.min(clip.start + clip.duration - 1, requested))
-  return { frame, sourceTime: offsetVideoEditSource(clip, frame - clip.start, composition.frameRate, handles) }
+  return { frame, sourceTime: videoEditClipSourceTimeAt(clip, frame - clip.start, composition.frameRate, handles) }
 }
 export function readVideoEditCodeEditor(projectId: string, sequenceId: string, clipId: string, effectId?: string) {
   const owner = requireVideoEditInstance(projectId)

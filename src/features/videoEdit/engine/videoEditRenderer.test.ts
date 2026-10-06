@@ -734,3 +734,16 @@ it('回放分辨率（4.9）：预览按 1/N 画布与合成尺寸渲染、换�
   const exporter = new VideoEditRenderer(document)
   try { expect(() => exporter.setRenderDivisor(2)).toThrow('完整分辨率') } finally { await exporter.dispose() }
 })
+it('变速与倒放按片段速度取帧（4.13 帧采样）：正放跳帧，倒放逐帧后退', async () => {
+  const document = { ...fixture(), fps: 60, frameRate: { numerator: 60, denominator: 1 } }
+  const base = document.clips[0]
+  document.clips = [{ ...base, duration: 30, speed: { numerator: 2, denominator: 1 } }]
+  const renderer = new VideoEditRenderer(document)
+  try {
+    await renderer.render(5); expect(us(boundary.pictures)).toEqual(us([10 / 60]))
+    await renderer.updateDocument({ ...document, clips: [{ ...base, duration: 30, sourceInUs: 1_000_000, speed: { numerator: 2, denominator: 1 }, reverse: true }] })
+    // 倒放：开头那一刻是源 1 秒，第 k 帧取 1 - (k+1)·2/60。
+    await renderer.render(0); expect(us(boundary.pictures)).toEqual(us([58 / 60]))
+    await renderer.render(10); expect(us(boundary.pictures)).toEqual(us([38 / 60]))
+  } finally { await renderer.dispose() }
+})

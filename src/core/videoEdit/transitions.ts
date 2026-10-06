@@ -1,7 +1,8 @@
 import { z } from 'zod'
 import type { VideoEditClip, VideoEditDocument, VideoEditSequence } from './document'
 import type { CodeMaterialMetadataReader } from './codeMaterialDocument'
-import { offsetVideoEditSource, videoEditSourceSeconds } from './time'
+import { videoEditSourceSeconds } from './time'
+import { advanceVideoEditClipSource, videoEditClipHeadRoom, videoEditClipTailRoom } from './clipSpeed'
 import { describeVideoEditTransitionParams, isVideoEditBuiltinTransitionKind, resolveVideoEditTransitionParams, videoEditTransitionParamsIssue, type VideoEditBuiltinTransitionKind } from './transitionParams'
 import type { VideoEditBuiltinParams } from './builtinEffects'
 
@@ -183,10 +184,9 @@ export function videoEditAudioTransitionClipGain(window: Pick<VideoEditTransitio
  */
 export function videoEditHandleFrame(clip: VideoEditClip, frame: number, fps: number, mediaDurationSeconds?: number): number {
   if (frame >= clip.start && frame < clip.start + clip.duration) return frame
-  const source = videoEditSourceSeconds(clip)
-  if (frame < clip.start) return Math.max(frame, clip.start - Math.floor(source * fps + 1e-6))
-  if (mediaDurationSeconds === undefined) return frame
-  return Math.min(frame, Math.max(clip.start + clip.duration - 1, clip.start + Math.floor((mediaDurationSeconds - source) * fps + 1e-6) - 1))
+  // 余量按片段速度与倒放换算（clipSpeed.ts）：倒放片段开头之前是素材里更晚的内容。
+  if (frame < clip.start) return Math.max(frame, clip.start - videoEditClipHeadRoom(clip, fps, mediaDurationSeconds))
+  return Math.min(frame, clip.start + clip.duration - 1 + videoEditClipTailRoom(clip, fps, mediaDurationSeconds))
 }
 function assertSourceHandles(document: VideoEditDocument, sequence: VideoEditSequence, window: VideoEditTransitionWindow, read?: CodeMaterialMetadataReader): void {
   for (const [clip, first, exclusiveEnd] of [[window.left, window.start, window.end], [window.right, window.start, window.end]] as const) {
@@ -203,8 +203,7 @@ function assertSourceHandles(document: VideoEditDocument, sequence: VideoEditSeq
     }
     if (!durations.length) continue // The source-authorized metadata stage checks deferred code handles.
     // This exact rational operation rejects a negative first sample. No frame allowance.
-    offsetVideoEditSource(clip, first - clip.start, sequence.frameRate)
-    const end = videoEditSourceSeconds(offsetVideoEditSource(clip, exclusiveEnd - clip.start, sequence.frameRate))
+    const end = Math.max(videoEditSourceSeconds(advanceVideoEditClipSource(clip, first - clip.start, sequence.frameRate)), videoEditSourceSeconds(advanceVideoEditClipSource(clip, exclusiveEnd - clip.start, sequence.frameRate)))
     for (const duration of durations) {
       const tolerance = 4 * Number.EPSILON * Math.max(1, Math.abs(end), duration)
       if (end > duration && end - duration > tolerance) throw new Error('转场需要的真实源余量不足，请裁出更多前后素材或减小时长。')

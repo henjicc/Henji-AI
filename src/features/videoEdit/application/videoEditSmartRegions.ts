@@ -9,6 +9,7 @@ import { normalizeSmartRegionRange, smartRegionRequestKey, type SmartRegionFailu
 import { toFetchableMediaUrl } from '@/services/imageSource'
 import type { VideoEditSmartRegionSegments } from '../engine/videoEditSmartRegionMasks'
 import { listVideoEditInstances, subscribeVideoEditDomain } from './videoEditService'
+import { videoEditClipSourceRange } from '@/core/videoEdit/clipSpeed'
 
 /*
  * 智能区域协调（任务 4.7d，渲染层）：打开着的剪辑里，凡是挂了“作用区域”的内置画面效果，就按片段用到的素材范围
@@ -38,7 +39,9 @@ export function videoEditSmartRegionRequest(document: Pick<VideoEditDocument, 'm
 function requestFor(media: VideoEditMedia, kind: SmartRegionAnalysisKind, clip: VideoEditClip, fps: number): SmartRegionRequest | undefined {
   if (media.kind !== 'video' && media.kind !== 'image') return undefined
   const still = media.kind === 'image'
-  const startUs = clip.sourceInUs; const endUs = clip.sourceInUs + Math.ceil(clip.duration / fps * 1e6)
+  // 片段用到的源范围按速度与倒放换算（4.13 clipSpeed.ts）。
+  const range = videoEditClipSourceRange(clip, fps)
+  const startUs = Math.max(0, Math.floor(range.from * 1e6)); const endUs = Math.ceil(range.to * 1e6)
   return { source: media.path, kind, still, ...normalizeSmartRegionRange(startUs, endUs, still) }
 }
 

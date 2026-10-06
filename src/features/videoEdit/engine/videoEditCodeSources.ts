@@ -5,7 +5,8 @@ import type { CodeMaterialProgram, CodeParameterValues } from '@/core/videoEdit/
 import { evaluateCodeMaterialParameters, prepareCodeMaterialParameters } from '@/core/videoEdit/codeMaterialAnimation'
 import type { PreparedCodeMaterialParameters } from '@/core/videoEdit/codeMaterialAnimation'
 import type { CodeMaterialInstance } from '@/core/videoEdit/codeMaterialPersistence'
-import { offsetVideoEditSource, videoEditSourceSeconds } from '@/core/videoEdit/time'
+import { videoEditSourceSeconds } from '@/core/videoEdit/time'
+import { videoEditClipSourceTimeAt } from '@/core/videoEdit/clipSpeed'
 import { codeMaterialContextForFrame, codeMaterialContextForTransitionFrame } from '@/core/videoEdit/codeMaterialTiming'
 import type { CodeMaterialVersion } from '@/core/videoEdit/codeMaterialPersistence'
 import { videoEditClipMedia, type VideoEditClip, type VideoEditComposition } from '@/core/videoEdit/document'
@@ -127,7 +128,7 @@ export class VideoEditCodeSources {
       if (!animation || animation.program !== program) { animation = { program, prepared: prepareCodeMaterialParameters(program, instance) }; this.parameters.set(instance, animation) }
       const window = transitionByClip.get(clip.id)
       const context = window ? codeMaterialContextForTransitionFrame(clip, frame, document.frameRate, program, window) : codeMaterialContextForFrame(clip, frame, document.frameRate, program)
-      const parameters = evaluateCodeMaterialParameters(animation.prepared, offsetVideoEditSource(clip, frame - clip.start, document.frameRate, Boolean(window) && program.mode === 'static'))
+      const parameters = evaluateCodeMaterialParameters(animation.prepared, videoEditClipSourceTimeAt(clip, frame - clip.start, document.frameRate, Boolean(window) && program.mode === 'static'))
       return { context, parameters, transitionHandles: Boolean(window) }
     }
     try {
@@ -153,7 +154,7 @@ export class VideoEditCodeSources {
           if (!clip.graphic) throw new CodeMaterialError('COMPATIBILITY', '图形片段缺少结构化对象。')
           let prepared = this.graphics.get(clip.graphic)
           if (!prepared) { prepared = prepareVideoEditGraphic(clip.graphic); this.graphics.set(clip.graphic, prepared) }
-          const time = offsetVideoEditSource(clip, frame - clip.start, document.frameRate, transitionByClip.has(clip.id))
+          const time = videoEditClipSourceTimeAt(clip, frame - clip.start, document.frameRate, transitionByClip.has(clip.id))
           const draws = evaluateVideoEditGraphic(prepared, time)
           const target = `graphic:static:${JSON.stringify([prepared.width, prepared.height, draws])}`
           keys.add(target)
@@ -207,7 +208,7 @@ export class VideoEditCodeSources {
   private async regionMask(document: VideoEditComposition, clip: VideoEditClip, mask: NonNullable<VideoEditEffect['mask']>, frame: number): Promise<VideoEditSmartRegionMask | undefined> {
     const media = videoEditClipMedia(document, clip)
     const visual = media && (media.kind === 'video' || media.kind === 'image') ? media : undefined
-    const timeUs = !visual || visual.kind === 'image' ? 0 : Math.round(videoEditSourceSeconds(offsetVideoEditSource(clip, frame - clip.start, document.frameRate, true)) * 1e6)
+    const timeUs = !visual || visual.kind === 'image' ? 0 : Math.round(videoEditSourceSeconds(videoEditClipSourceTimeAt(clip, frame - clip.start, document.frameRate, true)) * 1e6)
     try { return await videoEditEffectMask(mask, { mediaUrl: visual?.path, picture: videoEditClipPictureSize(document, clip), timeUs }) } catch (error) {
       logger.warn('作用区域蒙版读取失败', { event: 'video_edit.smart_region.mask_failed', error, context: { sequenceId: document.id, clipId: clip.id, region: mask.regionId } })
       return undefined

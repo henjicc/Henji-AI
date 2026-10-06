@@ -1,5 +1,6 @@
 import type { VideoEditClip, VideoEditDocument, VideoEditSequence } from './document'
-import { videoEditFps, videoEditSourceSeconds } from './time'
+import { videoEditFps } from './time'
+import { videoEditClipFrameAtSource, videoEditClipSourceRange, videoEditClipSourceSecondsAt } from './clipSpeed'
 
 /**
  * 匹配帧（Premiere F）与反向匹配帧（Shift+R）的落点计算，界面命令与测试共用。
@@ -10,7 +11,7 @@ import { videoEditFps, videoEditSourceSeconds } from './time'
  */
 export interface VideoEditMatchFrameTarget { clipId: string; itemId: string; timeUs: number; inUs: number | null; outUs: number | null }
 export interface VideoEditReverseMatchTarget { clipId: string; frame: number }
-type Clip = Pick<VideoEditClip, 'id' | 'itemId' | 'kind' | 'track' | 'start' | 'duration' | 'sourceInUs' | 'sourceRemainder'>
+type Clip = Pick<VideoEditClip, 'id' | 'itemId' | 'kind' | 'track' | 'start' | 'duration' | 'sourceInUs' | 'sourceRemainder' | 'speed' | 'reverse'>
 type MatchDocument = Pick<VideoEditDocument, 'items' | 'media'>
 type MatchSequence = Pick<VideoEditSequence, 'clips' | 'tracks' | 'frameRate'>
 
@@ -34,11 +35,12 @@ export function videoEditMatchFrameTarget(document: MatchDocument, sequence: Mat
   const fps = videoEditFps(sequence.frameRate)
   const durationUs = Math.round(media.durationSeconds * 1e6)
   if (media.kind === 'image') return { clipId: clip.id, itemId: clip.itemId, timeUs: 0, inUs: null, outUs: null }
-  const start = videoEditSourceSeconds(clip)
+  // 片段用到的源范围与播放头处的源时间按片段速度与倒放换算（clipSpeed.ts）；倒放时入出点仍是素材里较早、较晚的两端。
+  const range = videoEditClipSourceRange(clip, fps)
   // 落在源帧中间，避免停在两帧交界被解码成前一帧（与源监视器逐帧步进同一取法）。
   const half = media.kind === 'video' && clip.kind !== 'audio' ? 0.5 / (media.frameRate ? videoEditFps(media.frameRate) : fps) : 0
-  const timeUs = Math.min(durationUs, Math.round((start + (input.frame - clip.start) / fps + half) * 1e6))
-  const inUs = Math.min(durationUs, Math.round(start * 1e6)); const outUs = Math.min(durationUs, Math.round((start + clip.duration / fps) * 1e6))
+  const timeUs = Math.max(0, Math.min(durationUs, Math.round((videoEditClipSourceSecondsAt(clip, input.frame, fps) + half) * 1e6)))
+  const inUs = Math.max(0, Math.min(durationUs, Math.round(range.from * 1e6))); const outUs = Math.min(durationUs, Math.round(range.to * 1e6))
   return { clipId: clip.id, itemId: clip.itemId, timeUs, ...(outUs > inUs ? { inUs, outUs } : { inUs: null, outUs: null }) }
 }
 
@@ -47,9 +49,9 @@ export function videoEditReverseMatchFrame(sequence: MatchSequence, input: { ite
   const seconds = input.timeUs / 1e6
   const candidates = sequence.clips.flatMap(clip => {
     if (clip.itemId !== input.itemId) return []
-    const offset = seconds - videoEditSourceSeconds(clip)
-    if (offset < -1e-6 || offset >= clip.duration / fps) return []
-    return [{ clip, frame: clip.start + Math.min(clip.duration - 1, Math.max(0, Math.floor(offset * fps + 1e-6))) }]
+    const frame = videoEditClipFrameAtSource(clip, seconds, fps)
+    if (frame === undefined) return []
+    return [{ clip, frame }]
   })
   if (!candidates.length) return { reason: '当前序列没有用到源监视器里的这一帧。' }
   // 目标轨道上的优先，其次离当前播放头最近。

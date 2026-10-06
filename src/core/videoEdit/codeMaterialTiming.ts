@@ -1,9 +1,11 @@
 import { CodeMaterialError } from './codeMaterial/contract'
 import type { CodeMaterialContext, CodeMaterialProgram } from './codeMaterial/contract'
-import { offsetVideoEditSource, videoEditFps, videoEditSourceSeconds } from './time'
+import { videoEditFps, videoEditSourceSeconds } from './time'
 import type { VideoEditRatio, VideoEditSourceTime } from './time'
+import { videoEditClipSourceTimeAt } from './clipSpeed'
 
-export type CodeMaterialTimedClip = VideoEditSourceTime & { start: number; duration: number }
+/** 片段速度与倒放（4.13）按 clipSpeed.ts 换算源时间。 */
+export type CodeMaterialTimedClip = VideoEditSourceTime & { start: number; duration: number; speed?: VideoEditRatio; reverse?: boolean }
 type TimingProgram = Pick<CodeMaterialProgram, 'width' | 'height' | 'durationSeconds' | 'mode'>
 
 function integer(value: number, label: string, min = 0, max = Number.MAX_SAFE_INTEGER): void {
@@ -36,7 +38,7 @@ function contextForFrame(clip: CodeMaterialTimedClip, timelineFrame: number, rat
   integer(program.width, '作者画面宽度', 1, 8192); integer(program.height, '作者画面高度', 1, 8192)
   if (!Number.isFinite(program.durationSeconds) || program.durationSeconds <= 0 || program.durationSeconds > 1800 || (program.mode !== 'static' && program.mode !== 'dynamic')) throw new CodeMaterialError('CONTEXT', '代码素材模式或声明时长无效。')
   const relativeFrame = timelineFrame - clip.start
-  const source = offsetVideoEditSource(clip, relativeFrame, rate, transitionHandles && program.mode === 'static')
+  const source = videoEditClipSourceTimeAt(clip, relativeFrame, rate, transitionHandles && program.mode === 'static')
   integer(source.sourceInUs, '求值连续源入点')
   const time = videoEditSourceSeconds(source)
   const tolerance = 4 * Number.EPSILON * Math.max(1, Math.abs(time), program.durationSeconds)

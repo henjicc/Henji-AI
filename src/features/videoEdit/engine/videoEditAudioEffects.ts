@@ -333,6 +333,8 @@ class PitchShift implements AudioProcessor {
   private readonly synthMagnitude = new Float64Array(PITCH_FRAME / 2 + 1); private readonly synthFrequency = new Float64Array(PITCH_FRAME / 2 + 1)
   constructor(private readonly rate: number, channels: number) { this.lanes = Array.from({ length: channels }, () => new PitchChannel()) }
   update(params: VideoEditBuiltinParams): void { this.ratio = 2 ** ((params.semitones as number) / 12) }
+  /** 直接设音调比例（变速保持音调的补偿，4.13）。 */
+  setRatio(ratio: number): void { this.ratio = ratio }
   process(channels: Float32Array[], length: number): void {
     for (let channel = 0; channel < channels.length; channel++) {
       const lane = this.lanes[channel]; const data = channels[channel]
@@ -465,25 +467,33 @@ export class VideoEditAudioEffectChain {
   get preroll(): number { return Math.round(this.rate * Math.max(0.05, ...this.stages.map(stage => PREROLL_SECONDS[stage.builtinId] ?? 0.05))) }
   /**
    * 对齐到当前效果链：效果的增删、换序或启停（结构变化）时重建并清空状态；只改参数与强度时原地更新，播放中拖动参数不中断。
+   * `pitchCompensation`（4.13 变速保持音调）不为 1 时在最前面加一级音调变换，比例即此值（1/速度），改速度只更新比例。
    * 返回是否重建。
    */
-  async sync(effects: readonly VideoEditBuiltinEffect[]): Promise<boolean> {
-    const signature = effects.map(effect => `${effect.id}:${effect.builtin.id}`).join('|')
+  async sync(effects: readonly VideoEditBuiltinEffect[], pitchCompensation = 1): Promise<boolean> {
+    const compensated = pitchCompensation !== 1
+    const signature = [...(compensated ? ['speed-pitch'] : []), ...effects.map(effect => `${effect.id}:${effect.builtin.id}`)].join('|')
     let rebuilt = false
     if (signature !== this.signature) {
       const denoiser = effects.some(effect => effect.builtin.id === 'noise_reduction') ? await loadRnnoise() : undefined
       this.dispose()
-      this.stages = effects.map(effect => {
-        const processor = createProcessor(effect.builtin.id, this.rate, this.channels, denoiser)
-        return { effectId: effect.id, builtinId: effect.builtin.id, processor, amount: 1, dry: new DelayLine(processor.latency, this.channels) }
-      })
+      const compensation = compensated ? [new PitchShift(this.rate, this.channels)] : []
+      this.stages = [
+        ...compensation.map(processor => ({ effectId: 'speed-pitch', builtinId: 'pitch_shift', processor, amount: 1, dry: new DelayLine(processor.latency, this.channels) })),
+        ...effects.map(effect => {
+          const processor = createProcessor(effect.builtin.id, this.rate, this.channels, denoiser)
+          return { effectId: effect.id, builtinId: effect.builtin.id, processor, amount: 1, dry: new DelayLine(processor.latency, this.channels) }
+        }),
+      ]
       this.signature = signature; this.nextSample = undefined; rebuilt = true
     }
-    effects.forEach((effect, index) => { const stage = this.stages[index]; stage.processor.update(resolveVideoEditBuiltinParams(effect.builtin)); stage.amount = effect.amount })
+    const offset = compensated ? 1 : 0
+    if (compensated) (this.stages[0].processor as PitchShift).setRatio(pitchCompensation)
+    effects.forEach((effect, index) => { const stage = this.stages[index + offset]; stage.processor.update(resolveVideoEditBuiltinParams(effect.builtin)); stage.amount = effect.amount })
     return rebuilt
   }
   /** 清空状态（重建全部处理器，参数保留）。 */
-  async reset(effects: readonly VideoEditBuiltinEffect[]): Promise<void> { this.signature = ''; await this.sync(effects) }
+  async reset(effects: readonly VideoEditBuiltinEffect[], pitchCompensation = 1): Promise<void> { this.signature = ''; await this.sync(effects, pitchCompensation) }
   /** 原地处理；输出比输入晚 `latency` 个样本。 */
   process(channels: Float32Array[], length: number): void {
     const dry = channels.map(() => new Float32Array(length))

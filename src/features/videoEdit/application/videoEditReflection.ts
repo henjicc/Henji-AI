@@ -8,6 +8,7 @@ import { VIDEO_EDIT_BUILTIN_CATALOG_READ_ONLY, VIDEO_EDIT_FIELDS, VIDEO_EDIT_TYP
 import { readVideoEditSource } from './videoEditSource'
 import { getVideoEditPlaybackResolution } from './videoEditPlaybackResolution'
 import { VIDEO_EDIT_COMPOSITE_TYPES, videoEditCompositeItems, videoEditCompositeData, videoEditCompositeOwner, type VideoEditCompositeEntityType } from './videoEditCompositeEntities'
+import { videoEditClipSpeedData } from './videoEditClipSpeed'
 
 export function splitVideoEditRef(ref: ApplicationRef): { projectId: string; childId: string } {
   if (ref.kind === 'video_edit.document') return { projectId: ref.id, childId: '' }
@@ -65,7 +66,7 @@ export function readVideoEditData(ref: ApplicationRef): VideoEditFieldData {
   const data = JSON.parse(JSON.stringify(found)) as VideoEditFieldData
   if (ref.kind === 'video_edit.clip') {
     const clip = instance.document.sequences.flatMap(sequence => sequence.clips).find(clip => clip.id === childId)!
-    Object.assign(data, { graphicObjectIds: clip.graphic?.objects.map(object => object.id) ?? [], effectIds: clip.effects?.map(effect => effect.id) ?? [], adjustmentFromTrack: clip.adjustment?.fromTrack ?? null })
+    Object.assign(data, { graphicObjectIds: clip.graphic?.objects.map(object => object.id) ?? [], effectIds: clip.effects?.map(effect => effect.id) ?? [], adjustmentFromTrack: clip.adjustment?.fromTrack ?? null }, videoEditClipSpeedData(clip))
   }
   if (ref.kind === 'video_edit.item') {
     const item = instance.document.items.find(item => item.id === childId)!

@@ -1,5 +1,7 @@
 import { videoEditClipMedia, activeVideoEditClips, audibleVideoEditClips, clipSourceSeconds, videoEditVisibleTracks, type VideoEditClip, type VideoEditComposition, type VideoEditMedia } from '@/core/videoEdit/document'
-import { videoEditPictureSeconds, videoEditSourceSeconds } from '@/core/videoEdit/time'
+import { videoEditPictureSeconds } from '@/core/videoEdit/time'
+import { videoEditClipHeadRoomSeconds, videoEditClipRetimed, videoEditClipSourceSecondsAtTime, videoEditClipSpeedValue } from '@/core/videoEdit/clipSpeed'
+import { mixVideoEditRetimedSound } from './videoEditRetimedAudio'
 import { videoEditCaptionClips } from '@/core/videoEdit/timedContent'
 import { VideoEditGpuCompositor } from './videoEditGpuCompositor'
 import { VideoEditFrameCache } from './videoEditFrameCache'
@@ -201,7 +203,8 @@ export class VideoEditRenderer {
     const endFrame = frame + Math.ceil(document.fps * PLAYBACK_SCHEDULE_SECONDS)
     const groups = new Map<string, { media: VideoEditMedia; clips: VideoEditClip[] }>()
     for (const clip of document.clips) {
-      if (clip.kind !== 'video' || !visible.has(clip.track) || clip.start + clip.duration <= frame || clip.start >= endFrame) continue
+      // 倒放片段的源时间逐帧后退，不进前向解码排程，走定位路径（GOP 缓存，4.13）。
+      if (clip.kind !== 'video' || clip.reverse || !visible.has(clip.track) || clip.start + clip.duration <= frame || clip.start >= endFrame) continue
       const media = videoEditClipMedia(document, clip)
       if (!media || media.kind !== 'video') continue
       const key = `${media.path}\u0000${media.sourceRevision ?? ''}`
@@ -359,7 +362,9 @@ export class VideoEditRenderer {
       if (scheduled) {
         await source.iterator?.return(); source.iterator = undefined
         source.current?.close(); source.current = scheduled
-      } else if (this.previewWidth && (!sequential || time < source.previousTime)) {
+      } else if ((this.previewWidth || clip.reverse) && (!sequential || time < source.previousTime)) {
+        // 倒放（4.13）：导出也走定位路径——整段 GOP 解码一次、按时间取“开始于该时刻或之前的最后一幅”（与导出的精确画面同一定义），
+        // 不为每一帧重新从关键帧顺序解码。
         await source.iterator?.return(); source.iterator = undefined
         let seeker = this.seekers.get(media.path)
         if (!seeker) { seeker = this.frames.seeker(media, this.frameCache, (sample, compact) => this.compositor!.snapshot(sample, compact)); this.seekers.set(media.path, seeker) }
@@ -460,11 +465,13 @@ export class VideoEditRenderer {
       const playEnd = Math.max(clip.start + clip.duration, ...outgoing.map(window => window.end)) / fps
       let from = Math.max(startSeconds, playStart)
       const to = Math.min(finish, playEnd)
-      // 源素材开头之前没有声音（入点前余量不足的部分静音）。
-      from = Math.max(from, clipStart - videoEditSourceSeconds(clip))
-      if (from >= to) continue
       const media = videoEditClipMedia(this.document, clip)
       if (!media) continue
+      // 源素材开头之前（倒放时为结尾之后）没有声音：入点前余量不足的部分静音，余量按片段速度换算（clipSpeed.ts）。
+      const headRoom = clipStart - videoEditClipHeadRoomSeconds(clip, media.durationSeconds)
+      from = Math.max(from, headRoom)
+      if (from >= to) continue
+      const retimed = videoEditClipRetimed(clip)
       // 淡化手柄与音频过渡的增益包络（按输出采样）；没有时整段就是片段音量。
       const enveloped = videoEditClipFades(clip) || outgoing.length > 0 || incoming.length > 0
       const envelope = enveloped ? Float32Array.from({ length }, (_, sample) => {
@@ -479,8 +486,20 @@ export class VideoEditRenderer {
       // 把片段声音（各声道映射后）按 gainAt 增益加到 targets：targets 的第 0 个样本是序列样本 base，只写 [from, to) 秒内的样本。
       const readSound = async (from: number, to: number, base: number, targets: Float32Array[], gainAt: (sample: number) => number): Promise<void> => {
       const length = targets[0].length
+      if (retimed) {
+        // 变速／倒放（4.13）：按位置重采样，见 videoEditRetimedAudio.ts。
+        const reads = []
+        for (const read of clip.audioMapping ? videoEditAudioMixReads(clip.audioMapping, this.document.channels) : [undefined]) {
+          const key = read ? `audio:${clip.id}${AUDIO_STREAM_KEY}${read.stream}` : `audio:${clip.id}`
+          activeAudio.add(key)
+          const source = await this.source(key, media, read?.stream)
+          if (source.audio) reads.push({ audio: source.audio, ...(read ? { gains: read.gains } : {}) })
+        }
+        await mixVideoEditRetimedSound({ clip, fps, rate, channels: this.document.channels, from, to, base, targets, gainAt, reads })
+        return
+      }
       const sampleStartSeconds = base / rate
-      const sourceStart = videoEditSourceSeconds(clip) + from - clipStart
+      const sourceStart = videoEditClipSourceSecondsAtTime(clip, from, fps)
       const sourceEnd = sourceStart + to - from
       // A clip with a channel mapping (task 2.6) reads every sound stream it names, each with its own reader; a clip
       // without one reads the file's first stream with its own channels.
@@ -532,17 +551,19 @@ export class VideoEditRenderer {
       }
       }
       const effects = activeVideoEditAudioEffects(clip)
-      if (!effects.length) { await readSound(from, to, firstSample, result, sample => envelope ? envelope[sample] : clip.volume); continue }
+      // 变速保持音调（4.13）：重采样让音调随速度升降，效果链最前面按 1/速度 补偿回来。
+      const pitchCompensation = retimed && clip.preservePitch ? 1 / videoEditClipSpeedValue(clip) : 1
+      if (!effects.length && pitchCompensation === 1) { await readSound(from, to, firstSample, result, sample => envelope ? envelope[sample] : clip.volume); continue }
       // 音频效果（4.7c）：片段音量在效果之前（限幅器的上限不被音量推高），淡化与过渡在效果之后；效果链有延迟时多读后面的素材抵消，
       // 块不连续时从前面预读一段让状态稳定。预览与导出都走这里，连续播放时与分块方式无关、逐样本一致。
       let chain = this.audioChains.get(clip.id)
       if (!chain || chain.rate !== rate || chain.channels !== this.document.channels) { chain?.dispose(); chain = new VideoEditAudioEffectChain(rate, this.document.channels); this.audioChains.set(clip.id, chain) }
       activeChains.add(clip.id)
-      const rebuilt = await chain.sync(effects)
+      const rebuilt = await chain.sync(effects, pitchCompensation)
       const plan = planVideoEditAudioEffectBlock(chain, firstSample, length)
-      if (!plan.contiguous && !rebuilt) await chain.reset(effects)
+      if (!plan.contiguous && !rebuilt) await chain.reset(effects, pitchCompensation)
       const input = Array.from({ length: this.document.channels }, () => new Float32Array(plan.inputLength))
-      const readFrom = Math.max(plan.inputStart / rate, playStart, clipStart - videoEditSourceSeconds(clip)); const readTo = Math.min((plan.inputStart + plan.inputLength) / rate, playEnd)
+      const readFrom = Math.max(plan.inputStart / rate, playStart, headRoom); const readTo = Math.min((plan.inputStart + plan.inputLength) / rate, playEnd)
       if (readFrom < readTo) await readSound(readFrom, readTo, plan.inputStart, input, () => clip.volume)
       chain.process(input, plan.inputLength); chain.nextSample = firstSample + length
       const outputStart = Math.max(0, Math.ceil((from - sampleStartSeconds) * rate - 1e-7)); const outputEnd = Math.min(length, Math.ceil((to - sampleStartSeconds) * rate - 1e-7))

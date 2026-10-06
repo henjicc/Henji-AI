@@ -1,7 +1,8 @@
 import { videoEditClipMedia, VIDEO_EDIT_MAX_CLIP_TAKES, type VideoEditClip, type VideoEditCreativeSource, type VideoEditClipTake, type VideoEditDocument, type VideoEditSequence } from './document'
 import { makeVideoEditItemClip } from './projectItems'
 import { applyVideoEditTimelineEditResult } from './timelineEdits'
-import { videoEditFps, videoEditSourceSeconds } from './time'
+import { videoEditFps } from './time'
+import { videoEditClipSourceMidSecondsAt, videoEditClipTailRoom } from './clipSpeed'
 import { videoEditEdgeTracks } from './tracks'
 import type { CodeMaterialMetadataReader } from './codeMaterialDocument'
 
@@ -77,7 +78,7 @@ export function videoEditClipFrameSourceUs(document: Pick<VideoEditDocument, 'it
   if (!media || media.kind === 'image') return 0
   const fps = videoEditFps(sequence.frameRate)
   const end = Math.max(0, Math.round(media.durationSeconds * 1e6) - 1)
-  return Math.max(0, Math.min(end, Math.round((videoEditSourceSeconds(clip) + (Math.max(0, Math.min(clip.duration - 1, offset)) + 0.5) / fps) * 1e6)))
+  return Math.max(0, Math.min(end, Math.round(videoEditClipSourceMidSecondsAt(clip, clip.start + Math.max(0, Math.min(clip.duration - 1, offset)), fps) * 1e6)))
 }
 
 function reference(document: VideoEditDocument, sequence: VideoEditSequence, clip: VideoEditClip, role: VideoEditReferenceRole): VideoEditInPlaceReference {
@@ -159,7 +160,8 @@ export function planVideoEditInPlaceGeneration(document: VideoEditDocument, sequ
 
 function takeOf(clip: VideoEditClip): VideoEditClipTake {
   return { itemId: clip.itemId, name: clip.name, kind: clip.kind === 'audio' ? 'audio' : clip.kind === 'image' ? 'image' : 'video', duration: clip.duration, sourceInUs: clip.sourceInUs, sourceRemainder: { ...clip.sourceRemainder },
-    ...(clip.sourceComponent ? { sourceComponent: clip.sourceComponent } : {}), ...(clip.creativeSource ? { creativeSource: structuredClone(clip.creativeSource) } : {}) }
+    ...(clip.sourceComponent ? { sourceComponent: clip.sourceComponent } : {}), ...(clip.creativeSource ? { creativeSource: structuredClone(clip.creativeSource) } : {}),
+    ...(clip.speed ? { speed: { ...clip.speed } } : {}), ...(clip.reverse ? { reverse: true as const } : {}), ...(clip.preservePitch ? { preservePitch: true as const } : {}) }
 }
 function replaceSequence(document: VideoEditDocument, sequence: VideoEditSequence): VideoEditDocument {
   return { ...document, sequences: document.sequences.map(value => value.id === sequence.id ? sequence : value) }
@@ -193,7 +195,8 @@ export function landVideoEditInPlaceResult(document: VideoEditDocument, plan: Vi
     const clip: VideoEditClip = { ...prior, itemId: made.itemId, name: made.name, kind: made.kind, duration, sourceInUs: made.sourceInUs, sourceRemainder: made.sourceRemainder, takes }
     if (component.sourceComponent) clip.sourceComponent = component.sourceComponent; else delete clip.sourceComponent
     if (origin) clip.creativeSource = structuredClone(origin); else delete clip.creativeSource
-    delete clip.audioMapping
+    // 生成结果按原速放进来（4.13）：原片段的速度随版本保存，切回时恢复。
+    delete clip.audioMapping; delete clip.speed; delete clip.reverse; delete clip.preservePitch
     if (clip.fadeInFrames && clip.fadeInFrames > duration) clip.fadeInFrames = duration
     if (clip.fadeOutFrames && clip.fadeOutFrames > duration) clip.fadeOutFrames = duration
     return { document: replaceSequence(document, { ...sequence, clips: sequence.clips.map(value => value.id === prior.id ? clip : value) }), clipId: clip.id, newTrack: false }
@@ -241,13 +244,16 @@ export function switchVideoEditClipTake(document: VideoEditDocument, sequenceId:
   if (!item) throw new Error('这个版本的素材已从项目中移除，不能切回。')
   const media = document.media.find(value => value.id === item.mediaId)
   const fps = videoEditFps(sequence.frameRate)
-  const available = media && media.kind !== 'image' ? Math.floor((media.durationSeconds - videoEditSourceSeconds(take)) * fps + 1e-6) : Number.MAX_SAFE_INTEGER
+  const available = media && media.kind !== 'image' ? take.duration + videoEditClipTailRoom({ ...take, start: 0 }, fps, media.durationSeconds) : Number.MAX_SAFE_INTEGER
   const duration = Math.max(1, Math.min(take.duration, available, roomAfter(sequence, clip)))
   const takes = [takeOf(clip), ...clip.takes!.filter((_, at) => at !== index)].slice(0, VIDEO_EDIT_MAX_CLIP_TAKES)
   const next: VideoEditClip = { ...clip, itemId: take.itemId, name: take.name, kind: take.kind, duration, sourceInUs: take.sourceInUs, sourceRemainder: { ...take.sourceRemainder }, takes }
   if (take.sourceComponent) next.sourceComponent = take.sourceComponent; else delete next.sourceComponent
   if (take.creativeSource) next.creativeSource = structuredClone(take.creativeSource); else delete next.creativeSource
-  delete next.audioMapping
+  delete next.audioMapping; delete next.speed; delete next.reverse; delete next.preservePitch
+  if (take.speed) next.speed = { ...take.speed }
+  if (take.reverse) next.reverse = true
+  if (take.preservePitch) next.preservePitch = true
   if (next.fadeInFrames && next.fadeInFrames > duration) next.fadeInFrames = duration
   if (next.fadeOutFrames && next.fadeOutFrames > duration) next.fadeOutFrames = duration
   return replaceSequence(document, { ...sequence, clips: sequence.clips.map(value => value.id === clip.id ? next : value) })

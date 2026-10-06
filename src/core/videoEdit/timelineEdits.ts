@@ -2,12 +2,14 @@ import { adjustVideoEditClip, splitVideoEditClip, videoEditClipMedia, videoEditC
 import type { CodeMaterialMetadataReader } from './codeMaterialDocument'
 import { assertVideoEditClipsEditable } from './lockedTracks'
 import { expandVideoEditSelection, type VideoEditRelations } from './timelineSelection'
-import { offsetVideoEditSource, rescaleVideoEditFrame, videoEditSourceSeconds, type VideoEditRatio } from './time'
+import { rescaleVideoEditFrame, type VideoEditRatio, type VideoEditSourceTime } from './time'
+import { advanceVideoEditClipSource, splitVideoEditClipSource, videoEditClipSpeedValue, videoEditClipWithinSource } from './clipSpeed'
 import { videoEditSyncCorrections } from './linkSync'
 import { retimeVideoEditContent, type VideoEditMarker, type VideoEditCaption, type VideoEditContentOrigin } from './timedContent'
 import { validateVideoEditTransitions, videoEditTransitionClipIds, type VideoEditTransition } from './transitions'
 import { validateVideoEditAdjustmentRanges } from './compositing'
 import { applyVideoEditTrim, type VideoEditTrimMode } from './timelineTrims'
+import { applyVideoEditRateStretch, applyVideoEditSpeedChange, type VideoEditSpeedChange } from './clipSpeedEdits'
 
 export interface VideoEditClipboard {
   projectId: string
@@ -48,6 +50,9 @@ export type VideoEditTimelineEdit =
   | { kind: 'place'; clipboard: VideoEditClipboard; frame: number; mode: 'paste' | 'insert' | 'overwrite'; trackMap?: Record<number, number>; targetTracks?: number[]; newTracks?: VideoEditSequence['tracks'] }
   /** Premiere trim tools (ripple B, roll N, slip Y, slide U), see timelineTrims.ts; `delta` is clamped to what the media and neighbours allow. */
   | { kind: 'trim'; mode: VideoEditTrimMode; clipIds: string[]; linked?: VideoEditRelations; edge?: 'in' | 'out'; delta: number }
+  /** Premiere Speed/Duration (Ctrl+R) and the Rate Stretch tool (R), see clipSpeedEdits.ts. */
+  | { kind: 'speed'; clipIds: string[]; linked?: VideoEditRelations; change: VideoEditSpeedChange }
+  | { kind: 'stretch'; clipIds: string[]; linked?: VideoEditRelations; edge: 'in' | 'out'; delta: number }
 
 /** Appends new tracks before an edit (drag beyond the outer tracks, paste needing more audio tracks); indexes and ids must be unused. */
 export function withVideoEditTracks(sequence: VideoEditSequence, added: readonly VideoEditSequence['tracks'][number][] | undefined): VideoEditSequence {
@@ -183,7 +188,9 @@ export function applyVideoEditTimelineEdit(document: VideoEditDocument, sequence
 }
 export function applyVideoEditTimelineEditResult(document: VideoEditDocument, sequenceId: string, edit: VideoEditTimelineEdit, metadata?: CodeMaterialMetadataReader): { sequence: VideoEditSequence; selectedClipIds?: string[] } {
   if (edit.kind === 'adjust' && edit.newTracks?.length) document = { ...document, sequences: document.sequences.map(value => value.id === sequenceId ? withVideoEditTracks(value, edit.newTracks) : value) }
-  const result = edit.kind === 'place' ? placeClips(document, sequenceOf(document, sequenceId), edit) : edit.kind === 'rearrange' ? rearrangeClips(document, sequenceId, edit, metadata) : edit.kind === 'range' ? { sequence: removeRange(sequenceOf(document, sequenceId), edit) } : edit.kind === 'trim' ? { sequence: applyVideoEditTrim(document, sequenceId, { ...edit, clipIds: expandVideoEditSelection(sequenceOf(document, sequenceId), edit.clipIds, edit.linked ?? true) }, metadata).sequence } : { sequence: applyClipEdit(document, sequenceId, edit, metadata) }
+  const result = edit.kind === 'place' ? placeClips(document, sequenceOf(document, sequenceId), edit) : edit.kind === 'rearrange' ? rearrangeClips(document, sequenceId, edit, metadata) : edit.kind === 'range' ? { sequence: removeRange(sequenceOf(document, sequenceId), edit) } : edit.kind === 'trim' ? { sequence: applyVideoEditTrim(document, sequenceId, { ...edit, clipIds: expandVideoEditSelection(sequenceOf(document, sequenceId), edit.clipIds, edit.linked ?? true) }, metadata).sequence }
+    : edit.kind === 'speed' ? { sequence: applyVideoEditSpeedChange(document, sequenceId, expandVideoEditSelection(sequenceOf(document, sequenceId), edit.clipIds, edit.linked ?? true), edit.change, metadata) }
+    : edit.kind === 'stretch' ? { sequence: applyVideoEditRateStretch(document, sequenceId, expandVideoEditSelection(sequenceOf(document, sequenceId), edit.clipIds, edit.linked ?? true), edit.edge, edit.delta).sequence } : { sequence: applyClipEdit(document, sequenceId, edit, metadata) }
   if (result.sequence.clips.length > 500 || result.sequence.annotations.length > 500 || (result.sequence.markers?.length ?? 0) > 500 || (result.sequence.captions?.length ?? 0) > 500 || result.sequence.clips.some(clip => clip.start < 0 || clip.duration < 1 || clip.start + clip.duration > Math.floor(result.sequence.frameRate.numerator / result.sequence.frameRate.denominator * 1800))) throw new Error('编辑结果超出序列片段、标记数量或时间边界。')
   if ((result.sequence.transitions?.length ?? 0) > 500) throw new Error('序列最多500项转场。')
   validateVideoEditAdjustmentRanges(result.sequence)
@@ -326,10 +333,10 @@ function syncClips(document: VideoEditDocument, sequence: VideoEditSequence, ids
       if (start < 0 || start + clip.duration > limit) throw new Error('移入同步会超出序列范围，请改用滑入同步。')
       return { ...clip, start }
     }
-    let source: ReturnType<typeof offsetVideoEditSource>
-    try { source = offsetVideoEditSource(clip, offset, sequence.frameRate) } catch { throw new Error('素材开头之前没有可用内容，无法滑入同步，请改用移入同步。') }
+    let source: VideoEditSourceTime
+    try { source = advanceVideoEditClipSource(clip, offset, sequence.frameRate) } catch { throw new Error('素材开头之前没有可用内容，无法滑入同步，请改用移入同步。') }
     const media = videoEditClipMedia(composition, clip)
-    if (media && videoEditSourceSeconds(source) + clip.duration / composition.fps > media.durationSeconds + 1 / composition.fps) throw new Error('素材结尾之后没有可用内容，无法滑入同步，请改用移入同步。')
+    if (media && !videoEditClipWithinSource({ ...clip, ...source }, composition.fps, media.durationSeconds, Math.max(1, videoEditClipSpeedValue(clip)) / composition.fps)) throw new Error('素材结尾之后没有可用内容，无法滑入同步，请改用移入同步。')
     return { ...clip, ...source }
   })
   assertNewInternalOverlap(before, after)
@@ -375,7 +382,7 @@ function placeClips(document: VideoEditDocument, original: VideoEditSequence, ed
     for (const clip of overlapping) {
       const pieces: VideoEditClip[] = []
       if (clip.start < edit.frame) pieces.push({ ...clip, duration: edit.frame - clip.start })
-      if (clip.start + clip.duration > end) pieces.push({ ...structuredClone(clip), ...(pieces.length && clip.effects ? { effects: clip.effects.map(effect => ({ ...structuredClone(effect), id: crypto.randomUUID() })) } : {}), id: pieces.length ? crypto.randomUUID() : clip.id, start: end, duration: clip.start + clip.duration - end, ...offsetVideoEditSource(clip, end - clip.start, sequence.frameRate) })
+      if (clip.start + clip.duration > end) pieces.push({ ...structuredClone(clip), ...(pieces.length && clip.effects ? { effects: clip.effects.map(effect => ({ ...structuredClone(effect), id: crypto.randomUUID() })) } : {}), id: pieces.length ? crypto.randomUUID() : clip.id, start: end, duration: clip.start + clip.duration - end, ...splitVideoEditClipSource(clip, end - clip.start, sequence.frameRate) })
       fragments.set(clip.id, pieces)
       for (const piece of pieces) origins.set(piece.id, { originalId: clip.id, shift: 0 })
     }

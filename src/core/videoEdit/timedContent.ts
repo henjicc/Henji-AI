@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import type { VideoEditClip, VideoEditSequence, VideoEditDocument } from './document'
-import { videoEditFps, videoEditSourceSeconds, type VideoEditRatio } from './time'
+import { videoEditFps, type VideoEditRatio } from './time'
+import { videoEditClipContentShift } from './clipSpeed'
 import { buildSubtitleText, parseSubtitleText } from '../media/subtitleFormat'
 import { retimeVideoEditTransitions } from './transitions'
 
@@ -21,7 +22,7 @@ export function retimeVideoEditContent(before: VideoEditSequence, after: VideoEd
     const previous = prior.get(origin?.originalId ?? clip.id)
     if (!previous) continue
     const staticInTrim = (clip.kind === 'text' || clip.kind === 'image') && !clip.effects?.length && clip.start !== previous.start && clip.start + clip.duration === previous.start + previous.duration
-    const shift = origin?.shift ?? (staticInTrim ? 0 : clip.start - previous.start - Math.round((videoEditSourceSeconds(clip) - videoEditSourceSeconds(previous)) * videoEditFps(before.frameRate)))
+    const shift = origin?.shift ?? (staticInTrim ? 0 : videoEditClipContentShift(previous, clip, videoEditFps(before.frameRate)))
     const values = descendants.get(previous.id) ?? []; values.push({ clip, shift }); descendants.set(previous.id, values)
   }
   const markers = before.markers?.flatMap(marker => {

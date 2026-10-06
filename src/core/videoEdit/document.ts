@@ -1,5 +1,6 @@
 import { z } from 'zod'
-import { offsetVideoEditSource, rescaleVideoEditFrame, videoEditFps, videoEditRatioSchema, videoEditSourceSeconds, VIDEO_EDIT_FRAME_RATES } from './time'
+import { rescaleVideoEditFrame, videoEditFps, videoEditRatioSchema, VIDEO_EDIT_FRAME_RATES } from './time'
+import { advanceVideoEditClipSource, splitVideoEditClipSource, videoEditClipHeadRoom, videoEditClipSourceSecondsAt, videoEditClipSpeedSchema, videoEditClipSpeedSupported, videoEditClipSpeedValue, videoEditClipTailRoom, videoEditClipWithinSource } from './clipSpeed'
 import { codeMaterialDefinitionsSchema, codeMaterialInstanceSchema } from './codeMaterialPersistence'
 import type { CodeMaterialMetadataReader } from './codeMaterialDocument'
 import { videoEditMarkerSchema, videoEditCaptionSchema, retimeVideoEditContent } from './timedContent'
@@ -33,6 +34,8 @@ export { videoEditCreativeSourceSchema, type VideoEditCreativeSource } from './c
 export const videoEditClipTakeSchema = z.object({
   itemId: identifier, name, kind: z.enum(['video', 'audio', 'image']), duration: frame.min(1), sourceInUs: z.number().int().nonnegative(), sourceRemainder,
   sourceComponent: z.enum(['video', 'audio']).optional(), creativeSource: videoEditCreativeSourceSchema.optional(),
+  /** 被替换时片段的速度（4.13），切回时一并恢复。 */
+  speed: videoEditClipSpeedSchema.optional(), reverse: z.literal(true).optional(), preservePitch: z.literal(true).optional(),
 }).strict()
 export const VIDEO_EDIT_MAX_CLIP_TAKES = 8
 export const videoEditClipSchema = z.object({
@@ -47,6 +50,11 @@ export const videoEditClipSchema = z.object({
   fadeInFrames: z.number().int().min(1).max(108_000).optional(), fadeOutFrames: z.number().int().min(1).max(108_000).optional(),
   /** 可切回的镜头版本（新的在前）。 */
   takes: z.array(videoEditClipTakeSchema).max(VIDEO_EDIT_MAX_CLIP_TAKES).optional(),
+  /**
+   * 片段速度（4.13，PR“速度/持续时间”）：倍率有理数，缺省 1；`reverse` 倒放；`preservePitch` 变速时保持音调。
+   * 源时间与时间线的换算只在 `clipSpeed.ts`。
+   */
+  speed: videoEditClipSpeedSchema.optional(), reverse: z.literal(true).optional(), preservePitch: z.literal(true).optional(),
 }).strict()
 export const videoEditAnnotationSchema = z.object({
   id: identifier, clipId: identifier, frame, space: z.literal('composition-normalized'), kind: z.enum(['point', 'region']),
@@ -128,7 +136,8 @@ export const videoEditDocumentSchema = z.object({
       for (const code of videoEditEffectCodes(clip.effects)) if (!document.codeMaterials?.find(definition => definition.id === code.definitionId)?.versions.some(version => version.id === code.versionId)) issue('附加效果的固定源码版本不存在。')
       if (!track || track.kind !== (clip.kind === 'audio' ? 'audio' : 'video')) issue(`片段 ${clip.name} 的轨道类型不匹配。`)
       if (clip.start + clip.duration > Math.floor(fps * 1800)) issue('序列最长为 30 分钟。')
-      if (media && media.kind !== 'image' && videoEditSourceSeconds(clip) + clip.duration / fps > media.durationSeconds + 1 / fps) issue(`片段 ${clip.name} 超出源素材范围。`)
+      if ((clip.speed || clip.reverse || clip.preservePitch) && !videoEditClipSpeedSupported(clip.kind)) issue(`片段 ${clip.name} 不能改速度或倒放。`)
+      if (media && media.kind !== 'image' && !videoEditClipWithinSource(clip, fps, media.durationSeconds, Math.max(1, videoEditClipSpeedValue(clip)) / fps)) issue(`片段 ${clip.name} 超出源素材范围。`)
     }
     for (const annotation of sequence.annotations) if (!sequence.clips.some(clip => clip.id === annotation.clipId)) issue('标注的片段不属于此序列。')
     for (const marker of sequence.markers ?? []) {
@@ -173,7 +182,8 @@ export function videoEditClipMedia(document: Pick<VideoEditComposition, 'media' 
   return document.media.find(media => media.id === item?.mediaId)
 }
 export function videoEditDuration(document: Pick<VideoEditSequence, 'clips' | 'captions' | 'markers'>): number { return Math.max(1, ...document.clips.map(clip => clip.start + clip.duration), ...(document.captions ?? []).map(caption => caption.start + caption.duration), ...(document.markers ?? []).map(marker => marker.frame + 1)) }
-export function clipSourceSeconds(clip: VideoEditClip, timelineFrame: number, fps: number): number { return videoEditSourceSeconds(clip) + (timelineFrame - clip.start) / fps }
+/** 时间线帧 `timelineFrame` 上片段显示的源时间（秒），按片段速度与倒放换算（`clipSpeed.ts`）。 */
+export function clipSourceSeconds(clip: VideoEditClip, timelineFrame: number, fps: number): number { return videoEditClipSourceSecondsAt(clip, timelineFrame, fps) }
 export function videoEditVisibleTracks(document: Pick<VideoEditSequence, 'tracks'>): Set<number> {
   const solo = document.tracks.some(track => track.kind === 'video' && track.enabled && track.solo)
   return new Set(document.tracks.filter(track => track.enabled && (track.kind === 'audio' || !solo || track.solo)).map(track => track.index))
@@ -203,17 +213,17 @@ export function adjustVideoEditClip(document: VideoEditComposition, clip: VideoE
   if (clip.kind === 'code' && !program) throw new Error('代码片段尚未完成源码检查。')
   const timed = ['video', 'audio', 'code', 'graphic', 'adjustment'].includes(clip.kind) || Boolean(clip.effects?.length)
   if (adjustment.mode === 'out') {
-    const limit = Math.min(Math.floor(document.fps * 1800) - clip.start, program?.mode === 'dynamic' ? Math.floor((program.durationSeconds - videoEditSourceSeconds(clip)) * document.fps + 1e-6) + 1 : timed && media ? Math.floor((media.durationSeconds - videoEditSourceSeconds(clip)) * document.fps + 1e-6) : Infinity)
+    const limit = Math.min(Math.floor(document.fps * 1800) - clip.start, program?.mode === 'dynamic' ? clip.duration + videoEditClipTailRoom(clip, document.fps, program.durationSeconds) + 1 : timed && media ? clip.duration + videoEditClipTailRoom(clip, document.fps, media.durationSeconds) : Infinity)
     return { ...clip, duration: Math.max(1, Math.min(limit, clip.duration + adjustment.delta)) }
   }
-  const shift = Math.max(-clip.start, timed ? -Math.floor(videoEditSourceSeconds(clip) * document.fps + 1e-6) : -clip.start, Math.min(clip.duration - 1, adjustment.delta))
-  return { ...clip, start: clip.start + shift, duration: clip.duration - shift, ...(timed ? offsetVideoEditSource(clip, shift, document.frameRate) : {}) }
+  const shift = Math.max(-clip.start, timed ? -videoEditClipHeadRoom(clip, document.fps, program?.mode === 'dynamic' ? program.durationSeconds : media?.durationSeconds) : -clip.start, Math.min(clip.duration - 1, adjustment.delta))
+  return { ...clip, start: clip.start + shift, duration: clip.duration - shift, ...(timed ? advanceVideoEditClipSource(clip, shift, document.frameRate) : {}) }
 }
 export function splitVideoEditClip(sequence: VideoEditSequence, id: string, at: number): VideoEditSequence {
   const clip = sequence.clips.find(item => item.id === id)
   if (!clip || !Number.isInteger(at) || at <= clip.start || at >= clip.start + clip.duration) throw new Error('请将播放头置于片段内部再拆分。')
   const left = at - clip.start
-  const right = { ...clip, ...(clip.code ? { code: structuredClone(clip.code) } : {}), ...(clip.graphic ? { graphic: structuredClone(clip.graphic) } : {}), ...(clip.effects ? { effects: clip.effects.map(effect => ({ ...structuredClone(effect), id: crypto.randomUUID() })) } : {}), id: crypto.randomUUID(), start: at, duration: clip.duration - left, ...offsetVideoEditSource(clip, left, sequence.frameRate) }
+  const right = { ...clip, ...(clip.code ? { code: structuredClone(clip.code) } : {}), ...(clip.graphic ? { graphic: structuredClone(clip.graphic) } : {}), ...(clip.effects ? { effects: clip.effects.map(effect => ({ ...structuredClone(effect), id: crypto.randomUUID() })) } : {}), id: crypto.randomUUID(), start: at, duration: clip.duration - left, ...splitVideoEditClipSource(clip, left, sequence.frameRate) }
   // 淡入留在左半段开头、淡出留在右半段结尾（PR 拆分后淡化手柄跟着原片段的首尾）。
   delete right.fadeInFrames
   const leftPart = { ...clip, duration: left }; delete leftPart.fadeOutFrames

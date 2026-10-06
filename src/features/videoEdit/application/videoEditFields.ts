@@ -32,7 +32,8 @@ export const VIDEO_EDIT_SOURCE_PROGRAM_CASCADE = { declarationId: 'video_edit.so
 export const VIDEO_EDIT_PROGRAM_SOURCE_CASCADE = { declarationId: 'video_edit.program_foreground_source_pause', effect: 'update' as const, entityType: 'video_edit.source', propertyIds: ['video_edit.source.playing'], revisionScopes: ['video_edit'] }
 const schemas: Record<VideoEditEntityType, Record<string, z.ZodType>> = {
   'video_edit.document': { name: z.string().min(1).max(200), frame: z.number().int().nonnegative(), selection: z.string(), activeSequenceId: z.string(), dirty: z.boolean(), selectedItemIds: z.array(z.string().min(1)).max(500), selectedBinId: z.string().max(100), openSequenceIds: z.array(z.string().min(1)).min(1).max(32) },
-  'video_edit.clip': Object.fromEntries(Object.entries(videoEditClipSchema.shape).filter(([key]) => key !== 'id' && key !== 'sourceRemainder')),
+  // 速度（4.13）以 speed_percent 百分比公开（见下），不公开内部有理数。
+  'video_edit.clip': Object.fromEntries(Object.entries(videoEditClipSchema.shape).filter(([key]) => key !== 'id' && key !== 'sourceRemainder' && key !== 'speed')),
   'video_edit.annotation': Object.fromEntries(Object.entries(videoEditAnnotationSchema.shape).filter(([key]) => key !== 'id' && key !== 'sourceRemainder')),
   'video_edit.sequence': Object.fromEntries(Object.entries(videoEditSequenceSchema.shape).filter(([key]) => !['id', 'clips', 'annotations', 'tracks', 'markers', 'captions'].includes(key))),
   'video_edit.marker': { ...Object.fromEntries(Object.entries(videoEditMarkerSchema.shape).filter(([key]) => key !== 'id')), clipId: z.string().max(100) },
@@ -86,6 +87,10 @@ schemas['video_edit.clip'].audioMapping = videoEditAudioMappingSchema.nullable()
 // 淡化手柄（4.3）：没有淡化时读出 0，写 0 去掉。
 schemas['video_edit.clip'].fadeInFrames = z.number().int().min(0).max(108_000)
 schemas['video_edit.clip'].fadeOutFrames = z.number().int().min(0).max(108_000)
+// 片段速度（4.13）：百分比（100 原速），写入时时长按速度换算；倒放与保持音调为开关。
+schemas['video_edit.clip'].speedPercent = z.number().min(1, '速度须在 1 到 10000（%）之间。').max(10000, '速度须在 1 到 10000（%）之间。')
+schemas['video_edit.clip'].reverse = z.boolean()
+schemas['video_edit.clip'].preservePitch = z.boolean()
 for (const type of ['video_edit.bin', 'video_edit.item', 'video_edit.sequence'] as const) schemas[type][type === 'video_edit.bin' ? 'parentId' : 'binId'] = z.string().max(100)
 export function videoEditSchemaRef(kind: 'entity' | 'property', id: string): ApplicationSchemaRef {
   const hash = [...id].reduce((result, char) => (result * 33 + char.charCodeAt(0)) >>> 0, 5381).toString(16)
@@ -98,9 +103,13 @@ Object.assign(labels, { label: '颜色标签（空为按类型默认）', graphi
 Object.assign(labels, { graphicObjectIds: '图形对象顺序（从下到上）', effectIds: '效果执行顺序', adjustmentFromTrack: '调整起始轨道', graphicKind: '创建图形类型', graphicWidth: '图形宽度', graphicHeight: '图形高度', parameters: '实例参数', curves: '参数关键帧', versionId: '固定源码版本', definitionId: '滤镜源码定义', sequenceId: '所属序列', leftClipId: '左侧片段', rightClipId: '右侧片段', durationFrames: '转场时长帧' })
 Object.assign(labels, { alignment: '过渡对齐（center 中心切点、start 起点切点即整段在切点后、end 终点切点即整段在切点前、custom 自定义起点）', framesBeforeCut: '过渡在切点之前的帧数（对齐为 custom 时生效）', fadeInFrames: '淡入帧数（0 为不淡入；画面从透明渐显，声音按恒定功率渐强）', fadeOutFrames: '淡出帧数（0 为不淡出）' })
 Object.assign(labels, { group: '分组', description: '作用与适用场景', params: '参数（键、类型、范围、单位、默认值与取值含义）', mask: '作用区域', regionStatus: '作用区域分析状态' })
+Object.assign(labels, { speedPercent: '速度百分比', reverse: '倒放', preservePitch: '变速时保持音调' })
 Object.assign(labels, { takes: '可切回的镜头版本（替换镜头后记下的原素材，新的在前；用 restore_video_edit_clip_take 切回）' })
 /** 个别属性的说明比通用模板更具体（助手据此取值）。 */
 const descriptions: Record<string, string> = {
+  'video_edit.clip.speed_percent': '片段速度百分比，1–10000，100 为原速（只有视频、音频与代码素材片段可改）。改速度时开头的内容不动，时长按速度换算（200% 时长减半）；变长时后面有片段则只用到空白为止，要让后面的片段跟着后移，请在同一事务里先改后面片段的 start 再写速度。链接的音画请两段都写。',
+  'video_edit.clip.reverse': '倒放：用到的源内容不变，播放方向反过来（画面与声音都倒放）。',
+  'video_edit.clip.preserve_pitch': '变速时保持音调（时间伸缩，速度不是 100% 时生效）；关闭时声音随速度变高或变低。',
   'video_edit.effect.definition_id': '效果来源，创建后不可改：内置效果写 effect:<ID>（画面效果如 effect:gaussian_blur 只能加到画面片段；音频效果如 effect:noise_reduction、effect:parametric_eq 只能加到声音片段；全部内置效果、适用片段及参数语义见 video_edit.builtin_effect），代码滤镜写滤镜源码定义 ID（只用于画面片段）。',
   'video_edit.effect.parameters': '效果参数。内置效果：键与范围见 video_edit.builtin_effect 的 params（强度多为 0–100，空间量按画面高度比例，与分辨率无关）；写入是整体替换：只存写入的键，没写的键按默认值（只改一项时先读出再整体写回）；越界或未知键会报错并列出可用范围。代码滤镜：按固定源码版本声明校验。',
   'video_edit.effect.amount': '效果与原画面（音频效果为原声）的混合比例 0–1：1 完全应用，0.5 一半强度；停用效果请写 enabled。',
@@ -130,8 +139,8 @@ export const VIDEO_EDIT_FIELDS = Object.fromEntries(VIDEO_EDIT_TYPES.map(entityT
     propertyId: id, descriptor: { id, entityType, version: 1, title: key === 'codeParameters' ? '代码实例参数' : labels[key] ?? key, description: descriptions[id] ?? (key === 'source' ? '受限作者源码；只经AST白名单检查、指定帧试渲染后进入剪辑，不执行JavaScript或宿主脚本。源码版本不可原位改写。' : key === 'codeParameters' ? '按固定源码版本的声明校验参数字典；修改只作用于此片段，不重编译源码，复用剪辑历史和自动保存。' : key === 'programPlayback' ? '节目播放控制命令；回读为当前实际位置，播放观察可随帧推进。执行确认表示会话接受命令，实际画面由节目监视器呈现。' : `${labels[key] ?? key}；时间线使用整数帧，源入点使用微秒，画面位置使用归一化坐标。`), value: { kind: 'json', schemaRef: videoEditSchemaRef('property', id + '.value') }, nullable: key === 'code' || schema.isNullable(), ...((entityType === 'video_edit.source' && ['timeUs', 'playing'].includes(key) || entityType === 'video_edit.document' && key === 'programPlayback') ? { verificationStrategy: 'execution' as const } : {}), dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], requiredPermissions: { read: ['video_edit:read'], write: writable ? ['video_edit:write'] : [] }, revisionScopes: ['video_edit'], schemaRef: videoEditSchemaRef('property', id), ...(!writable ? { readOnlyReason: entityType === 'video_edit.document' && key === 'name' ? VIDEO_EDIT_PROJECT_NAME_READ_ONLY : entityType === 'video_edit.builtin_effect' ? VIDEO_EDIT_BUILTIN_CATALOG_READ_ONLY : key === 'regionStatus' ? '由后台分析维护：写 mask 设置作用区域后自动开始分析，读这里看进度。' : '由剪辑会话、不可变源码或原素材维护。' } : {}) },
     read: source => codeKeys[key] ? source.code && typeof source.code === 'object' && !Array.isArray(source.code) ? source.code[codeKeys[key]] ?? (key === 'codeVersionId' ? '' : {}) : key === 'codeVersionId' ? '' : {} : source[key] ?? (key === 'sourceComponent' ? 'all' : key === 'height' && entityType === 'video_edit.track' ? 32 : key === 'syncLocked' ? true : key === 'code' || schema.isNullable() ? null : ['tags', 'effects', 'transitions'].includes(key) ? [] : ['fadeInFrames', 'fadeOutFrames'].includes(key) ? 0 : key === 'frameRateMode' ? 'unknown' : ''), storeActions: [],
     ...(entityType === 'video_edit.sequence' && key === 'frameRate' ? { cascadeEffects: VIDEO_EDIT_TIME_CASCADES } : {}),
-    ...(entityType === 'video_edit.clip' && ['start', 'duration', 'sourceInUs'].includes(key) ? { cascadeEffects: VIDEO_EDIT_CLIP_CONTENT_CASCADES } : {}),
-    ...((entityType === 'video_edit.clip' || entityType === 'video_edit.sequence' || child) && writable ? { cascadeEffects: [...(entityType === 'video_edit.clip' && ['start', 'duration', 'sourceInUs'].includes(key) ? VIDEO_EDIT_CLIP_CONTENT_CASCADES : []), ...(entityType === 'video_edit.sequence' && key === 'frameRate' ? VIDEO_EDIT_TIME_CASCADES : []), ...VIDEO_EDIT_COMPOSITE_CASCADES] } : {}),
+    ...(entityType === 'video_edit.clip' && ['start', 'duration', 'sourceInUs', 'speedPercent', 'reverse'].includes(key) ? { cascadeEffects: VIDEO_EDIT_CLIP_CONTENT_CASCADES } : {}),
+    ...((entityType === 'video_edit.clip' || entityType === 'video_edit.sequence' || child) && writable ? { cascadeEffects: [...(entityType === 'video_edit.clip' && ['start', 'duration', 'sourceInUs', 'speedPercent', 'reverse'].includes(key) ? VIDEO_EDIT_CLIP_CONTENT_CASCADES : []), ...(entityType === 'video_edit.sequence' && key === 'frameRate' ? VIDEO_EDIT_TIME_CASCADES : []), ...VIDEO_EDIT_COMPOSITE_CASCADES] } : {}),
     ...(entityType === 'video_edit.source' && writable ? { cascadeEffects: [VIDEO_EDIT_SOURCE_PROGRAM_CASCADE] } : {}),
     ...(entityType === 'video_edit.document' && key === 'programPlayback' ? { cascadeEffects: [VIDEO_EDIT_PROGRAM_SOURCE_CASCADE] } : {}),
     ...(writable ? { writer: { write: (draft: VideoEditFieldData, mutation: { value?: JsonValue }) => { const value = schema.parse(mutation.value) as JsonValue; if (codeKeys[key]) { if (!draft.code || typeof draft.code !== 'object' || Array.isArray(draft.code)) throw new Error('此片段没有代码实例。'); draft.code = { ...draft.code, [codeKeys[key]]: value } } else if ((['binId', 'parentId', 'linkId', 'groupId'].includes(key) || ['video_edit.marker', 'video_edit.caption'].includes(entityType) && key === 'clipId') && value === '' || key === 'sourceComponent' && value === 'all' || ['audioChannels', 'audioMapping'].includes(key) && value === null || ['fadeInFrames', 'fadeOutFrames'].includes(key) && value === 0) delete draft[key]; else draft[key] = value } } } : {}),

@@ -14,11 +14,12 @@ import { createVideoEditCodeMaterials, createVideoEditCodeVersions } from './vid
 import { readVideoEditCodeMetadata } from './videoEditCodeState'
 import { trialVideoEditCodeDocument } from './videoEditCodeTrial'
 import { codeMaterialImageIds } from '@/core/videoEdit/codeMaterialResources'
-import { VIDEO_EDIT_COMPOSITE_TYPES, videoEditCompositeItems, videoEditCompositeData, videoEditCompositeOwner, updateVideoEditCompositeEntity, createVideoEditCompositeEntity, removeVideoEditCompositeEntities, updateVideoEditClipStructure, type VideoEditCompositeEntityType } from './videoEditCompositeEntities'
+import { VIDEO_EDIT_COMPOSITE_TYPES, videoEditCompositeItems, videoEditCompositeData, videoEditCompositeOwner, updateVideoEditCompositeEntity, createVideoEditCompositeEntity, removeVideoEditCompositeEntities, type VideoEditCompositeEntityType } from './videoEditCompositeEntities'
 import { makeVideoEditGraphicItem } from './videoEditProjectItems'
 import { assertVideoEditLockedTracks } from '@/core/videoEdit/lockedTracks'
 import { removeVideoEditTracks, videoEditEdgeTracks } from '@/core/videoEdit/tracks'
 import { videoEditLabelSchema } from '@/core/videoEdit/labels'
+import { updateVideoEditClipInSequence } from './videoEditClipSpeed'
 
 interface ProjectViewSnapshot { view: VideoEditProjectView; activeSequenceId: string; timeline: VideoEditTimelineView; primary: string | null; program: { frame: number; playing: boolean; playbackDirection: 1 | -1 }; programCommand: object; playbackResolution: VideoEditPlaybackResolutionSetting }
 function projectViewSnapshot(projectId: string): ProjectViewSnapshot {
@@ -180,7 +181,8 @@ export class VideoEditMutationExecutor implements ApplicationMutationExecutor {
           const next = changeVideoEditSequenceSettings(sequence, { width: Number(data.width), height: Number(data.height), frameRate: data.frameRate as typeof sequence.frameRate, pixelAspectRatio: data.pixelAspectRatio as typeof sequence.pixelAspectRatio, sampleRate: data.sampleRate as typeof sequence.sampleRate, channels: data.channels as typeof sequence.channels })
           return { ...next, name: String(data.name), binId: data.binId ? String(data.binId) : undefined, label: data.label ? videoEditLabelSchema.parse(data.label) : undefined }
         }
-        if (this.entityType === 'video_edit.clip') return { ...sequence, clips: sequence.clips.map(clip => clip.id === childId ? updateVideoEditClipStructure(clip, data, keys.map(key => videoEditDataKey(key.slice(this.entityType.length + 1)))) : clip) }
+        // 速度属性（4.13）与其余属性一起写：速度改动交给速度编辑换算时长与内容。
+        if (this.entityType === 'video_edit.clip') return sequence.clips.some(clip => clip.id === childId) ? updateVideoEditClipInSequence(document, sequence, childId, data, keys.map(key => videoEditDataKey(key.slice(this.entityType.length + 1)))) : sequence
         if (this.entityType === 'video_edit.annotation') return { ...sequence, annotations: sequence.annotations.map(mark => mark.id === childId ? videoEditAnnotationSchema.parse(data) : mark) }
         if (this.entityType === 'video_edit.marker') return { ...sequence, markers: sequence.markers?.map(mark => mark.id === childId ? videoEditMarkerSchema.parse(data) : mark) }
         if (this.entityType === 'video_edit.caption') return { ...sequence, captions: sequence.captions?.map(caption => caption.id === childId ? videoEditCaptionSchema.parse(data) : caption) }

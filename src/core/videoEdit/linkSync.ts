@@ -1,5 +1,6 @@
 import type { VideoEditClip, VideoEditSequence } from './document'
-import { videoEditFps, videoEditSourceSeconds } from './time'
+import { videoEditFps } from './time'
+import { videoEditClipSourceAnchor } from './clipSpeed'
 
 /**
  * Premiere out-of-sync indicators: only linked portions of the same source (picture/sound
@@ -18,7 +19,7 @@ function syncSets(sequence: VideoEditSequence): Portion[][] {
   for (const clip of sequence.clips) {
     if (!clip.linkId || (clip.kind !== 'video' && clip.kind !== 'audio')) continue
     const key = `${clip.linkId}\n${clip.itemId}`
-    sets.set(key, [...(sets.get(key) ?? []), { clip, anchor: clip.start - videoEditSourceSeconds(clip) * fps }])
+    sets.set(key, [...(sets.get(key) ?? []), { clip, anchor: videoEditClipSourceAnchor(clip, fps) }])
   }
   return [...sets.values()].filter(set => set.length > 1)
 }

@@ -1,7 +1,8 @@
-import { adjustVideoEditClip, videoEditComposition, type VideoEditAnnotation, type VideoEditClip, type VideoEditComposition, type VideoEditDocument, type VideoEditSequence } from './document'
+import { adjustVideoEditClip, videoEditClipMedia, videoEditComposition, type VideoEditAnnotation, type VideoEditClip, type VideoEditComposition, type VideoEditDocument, type VideoEditSequence } from './document'
 import type { CodeMaterialMetadataReader } from './codeMaterialDocument'
 import { assertVideoEditClipsEditable } from './lockedTracks'
-import { offsetVideoEditSource, videoEditFps, videoEditSourceSeconds } from './time'
+import { videoEditFps } from './time'
+import { advanceVideoEditClipSource, videoEditClipContentShift, videoEditClipHeadRoom } from './clipSpeed'
 import { retimeVideoEditContent } from './timedContent'
 
 /**
@@ -9,7 +10,8 @@ import { retimeVideoEditContent } from './timedContent'
  * - `ripple` 波纹编辑（B）：拖片段一端改长度，后面的片段（同步锁定的轨道）跟着前移／后移，不留空隙。
  *   `in` 端修剪时片段起点不动，剪掉或补回开头的内容，整段后续内容随之移动。
  * - `roll` 滚动编辑（N）：移动两段相接片段之间的编辑点，左段出点与右段入点一起变，总长不变；一侧是空白时就是普通修剪，不越过空白。
- * - `slip` 外滑（Y）：片段位置与长度不变，只换用素材里更早或更晚的一段（`delta` 为源内容前进的帧数，正数取更晚的内容）。
+ * - `slip` 外滑（Y）：片段位置与长度不变，只换用素材里更早或更晚的一段（`delta` 为源内容沿播放方向前进的帧数，
+  正数取播放顺序上更晚的内容；倒放片段即素材里更早的内容）。
  * - `slide` 内滑（U）：片段内容不变、整体左右移动，前一段的出点与后一段的入点跟着让位，总长不变。
  * `delta` 是请求的帧数，超出素材余量或相邻片段时收紧到能做到的最大值（`delta` 结果见返回值）。
  */
@@ -31,8 +33,12 @@ class TrimContext {
   constructor(readonly composition: VideoEditComposition, readonly sequence: VideoEditSequence, readonly metadata?: CodeMaterialMetadataReader) {
     this.fps = composition.fps; this.limit = Math.floor(composition.fps * 1800)
   }
-  /** 开头还能往前补多少帧（源入点之前的素材）；没有源时间的片段不受限。 */
-  head(clip: VideoEditClip): number { return timed(clip) ? Math.floor(videoEditSourceSeconds(clip) * this.fps + 1e-6) : Infinity }
+  /** 开头还能往前补多少帧（沿播放方向在开头之前的素材，按片段速度换算）；没有源时间的片段不受限。 */
+  head(clip: VideoEditClip): number {
+    if (!timed(clip)) return Infinity
+    const program = clip.code ? this.metadata?.(clip.code) : undefined
+    return videoEditClipHeadRoom(clip, this.fps, program?.mode === 'dynamic' ? program.durationSeconds : videoEditClipMedia(this.composition, clip)?.durationSeconds)
+  }
   /** 结尾还能往后延长多少帧（素材余量与序列上限）。 */
   tail(clip: VideoEditClip): number { return adjustVideoEditClip(this.composition, clip, { mode: 'out', delta: this.limit, track: clip.track }, this.metadata).duration - clip.duration }
   /** 同一轨道上紧贴片段之前／之后的那一段（不在 `excluded` 里）。 */
@@ -46,7 +52,7 @@ class TrimContext {
   }
   /** 入点右移 `frames` 帧（负数左移）：起点、长度与源入点一起变。 */
   moveIn(clip: VideoEditClip, frames: number): VideoEditClip {
-    return { ...clip, start: clip.start + frames, duration: clip.duration - frames, ...(timed(clip) && frames ? offsetVideoEditSource(clip, frames, this.sequence.frameRate) : {}) }
+    return { ...clip, start: clip.start + frames, duration: clip.duration - frames, ...(timed(clip) && frames ? advanceVideoEditClipSource(clip, frames, this.sequence.frameRate) : {}) }
   }
 }
 
@@ -59,12 +65,12 @@ function assertNoTrackOverlap(clips: readonly VideoEditClip[], message: string):
   }
 }
 /** 片段上的标注随片段内容走：按起点与源入点的变化推算位移，落到片段外的去掉。 */
-function retimeAnnotations(before: VideoEditSequence, clips: readonly VideoEditClip[], fps: number): VideoEditAnnotation[] {
+export function retimeVideoEditAnnotations(before: VideoEditSequence, clips: readonly VideoEditClip[], fps: number): VideoEditAnnotation[] {
   const prior = new Map(before.clips.map(clip => [clip.id, clip])); const after = new Map(clips.map(clip => [clip.id, clip]))
   return before.annotations.flatMap(mark => {
     const previous = prior.get(mark.clipId); const current = after.get(mark.clipId)
     if (!previous || !current) return []
-    const shift = current.start - previous.start - Math.round((videoEditSourceSeconds(current) - videoEditSourceSeconds(previous)) * fps)
+    const shift = videoEditClipContentShift(previous, current, fps)
     const frame = mark.frame + shift
     return frame >= current.start && frame < end(current) ? [{ ...mark, frame }] : []
   })
@@ -134,7 +140,7 @@ function slip(context: TrimContext, edited: VideoEditClip[], requested: number):
   for (const clip of sources) narrow(range, -context.head(clip), context.tail(clip))
   const delta = clampDelta(range, requested)
   if (!delta) return { clips: context.sequence.clips, delta }
-  const changed = new Map(sources.map(clip => [clip.id, { ...clip, ...offsetVideoEditSource(clip, delta, context.sequence.frameRate) }]))
+  const changed = new Map(sources.map(clip => [clip.id, { ...clip, ...advanceVideoEditClipSource(clip, delta, context.sequence.frameRate) }]))
   return { clips: context.sequence.clips.map(clip => changed.get(clip.id) ?? clip), delta }
 }
 
@@ -178,5 +184,5 @@ export function applyVideoEditTrim(document: VideoEditDocument, sequenceId: stri
   const result = trim.mode === 'ripple' ? ripple(context, edited, trim.edge!, trim.delta) : trim.mode === 'roll' ? roll(context, edited, trim.edge!, trim.delta) : trim.mode === 'slip' ? slip(context, edited, trim.delta) : slide(context, edited, trim.delta)
   if (!result.delta) return { sequence, delta: 0 }
   const fps = videoEditFps(sequence.frameRate)
-  return { sequence: retimeVideoEditContent(sequence, { ...sequence, clips: result.clips, annotations: retimeAnnotations(sequence, result.clips, fps) }), delta: result.delta }
+  return { sequence: retimeVideoEditContent(sequence, { ...sequence, clips: result.clips, annotations: retimeVideoEditAnnotations(sequence, result.clips, fps) }), delta: result.delta }
 }
