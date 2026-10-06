@@ -6,7 +6,7 @@ import { createVideoEditDocument } from '@/core/videoEdit/document'
 import type { VideoEditInstance } from '../application/videoEditService'
 import { VideoEditDock } from './VideoEditDock'
 import { dockVideoEditPanel, resetVideoEditLayout, saveVideoEditLayout, showVideoEditPanel } from './videoEditDockLayout'
-import { dockVideoEditPopout, listVideoEditPopouts, popOutVideoEditPanel, resetVideoEditWorkspaceLayout } from './popout/videoEditPopouts'
+import { activateVideoEditPopoutPanel, dockVideoEditPopout, dockVideoEditPopoutWindow, floatVideoEditDockSource, listVideoEditPopouts, popOutVideoEditGroup, popOutVideoEditPanel, resetVideoEditWorkspaceLayout } from './popout/videoEditPopouts'
 import { VIDEO_EDIT_POPOUT_LAYOUT_STORAGE_KEY } from './popout/videoEditPopoutLayout'
 import { videoEditKeyboardCommand } from '../application/videoEditKeyboard'
 import { createPopoutTestHost } from './popout/videoEditPopout.testSupport'
@@ -81,7 +81,7 @@ it('DOM 面板浮出到系统窗口后仍由同一 React 树渲染；关闭窗�
   const effects = opened[0].child
   expect(effects.document.body.textContent).toContain('效果控件')
   expect(effects.document.querySelector('[data-video-edit-panel="effects"]')).not.toBeNull()
-  expect(listVideoEditPopouts().map(entry => entry.id)).toEqual(['effects'])
+  expect(listVideoEditPopouts().map(entry => entry.panels)).toEqual([['effects']])
   act(() => { popOutVideoEditPanel(dock, 'effects', host) })
   expect(opened).toHaveLength(1)
   expect(effects.focus).toHaveBeenCalled()
@@ -143,21 +143,21 @@ it('节目面板可浮出（重挂载一次、不并存两份）；浮窗记录�
   expect(opened[0].child.document.body.textContent).toContain('节目画面')
   expect(lifetime).toMatchObject({ created: 2, live: 1, peak: 1, disposed: 1 })
   act(() => { popOutVideoEditPanel(dock, 'timeline') })
-  expect(savedPopouts()).toEqual({ version: 1, panels: [
-    { id: 'program', bounds: { x: 2760, y: 200, width: 480, height: 360 } },
-    { id: 'timeline', bounds: { x: 2760, y: 200, width: 480, height: 360 } },
+  expect(savedPopouts()).toEqual({ version: 2, windows: [
+    { panels: ['program'], active: 'program', bounds: { x: 2760, y: 200, width: 480, height: 360 } },
+    { panels: ['timeline'], active: 'timeline', bounds: { x: 2760, y: 200, width: 480, height: 360 } },
   ] })
 
   // 用户关闭节目浮窗 = 关闭面板并移除记录（PR）。
   act(() => opened[0].child.userClose())
   expect(dock.getPanel('program')).toBeUndefined()
-  expect(savedPopouts()).toEqual({ version: 1, panels: [{ id: 'timeline', bounds: { x: 2760, y: 200, width: 480, height: 360 } }] })
+  expect(savedPopouts()).toEqual({ version: 2, windows: [{ panels: ['timeline'], active: 'timeline', bounds: { x: 2760, y: 200, width: 480, height: 360 } }] })
 
   // 工作区卸载：浮窗关闭、不贴回，但记录与最后位置保留。
   opened[1].child.screenX = 100
   first.unmount()
   expect(opened[1].child.close).toHaveBeenCalledOnce()
-  expect(savedPopouts()).toEqual({ version: 1, panels: [{ id: 'timeline', bounds: { x: 100, y: 200, width: 480, height: 360 } }] })
+  expect(savedPopouts()).toEqual({ version: 2, windows: [{ panels: ['timeline'], active: 'timeline', bounds: { x: 100, y: 200, width: 480, height: 360 } }] })
 
   // 重开同一工作区：Dock 就绪后按记录恢复，位置经 features 交给主进程校正。
   const second = render(<VideoEditDock instance={makeInstance('持久化')} onError={vi.fn()} onApiChange={value => { api = value }} />)
@@ -170,7 +170,7 @@ it('节目面板可浮出（重挂载一次、不并存两份）；浮窗记录�
   // 主窗口退出/重载：pagehide 后主进程销毁浮窗，记录保留。
   act(() => { window.dispatchEvent(new Event('pagehide')) })
   act(() => opened[2].child.userClose())
-  expect(savedPopouts()).toEqual({ version: 1, panels: [{ id: 'timeline', bounds: { x: 2760, y: 200, width: 480, height: 360 } }] })
+  expect(savedPopouts()).toEqual({ version: 2, windows: [{ panels: ['timeline'], active: 'timeline', bounds: { x: 2760, y: 200, width: 480, height: 360 } }] })
   second.unmount()
 
   // 重置布局清除记录；损坏的记录不影响启动。
@@ -222,6 +222,46 @@ it('浮窗焦点从 body 收回到 React 焦点根，Ctrl+Z 沿 React 树到达�
   expect(handled).toEqual(['undo']); expect(typing.defaultPrevented).toBe(false)
   input.remove()
   view.unmount(); frame.remove()
+})
+
+it('一个浮窗容纳多个面板（PR）：拖进已浮出的窗口叠成标签，切换只显示当前标签且都不重挂载；单个贴回只带走一个，整窗贴回回到同一组；浮动面板组一个窗口', () => {
+  const { host, opened } = createPopoutTestHost()
+  vi.spyOn(window, 'open').mockImplementation(host.open as typeof window.open)
+  let api: DockviewApi | null = null
+  const view = render(<VideoEditDock instance={makeInstance('多面板浮窗')} onError={vi.fn()} onApiChange={value => { api = value }} />)
+  const dock = api as unknown as DockviewApi
+  act(() => { dock.layout(1440, 860); popOutVideoEditPanel(dock, 'program', host) })
+  expect(lifetime).toMatchObject({ created: 2, live: 1 })
+  // 把时间线标签拖到节目浮窗上松开（浮窗外框 2760,200 起 480×360）：叠进这个窗口，不另开窗口。
+  act(() => floatVideoEditDockSource(dock, { kind: 'panel', panel: dock.getPanel('timeline')! }, { x: 2900, y: 300 }, host))
+  expect(opened).toHaveLength(1)
+  expect(dock.getPanel('timeline')).toBeUndefined()
+  expect(listVideoEditPopouts().map(entry => [entry.panels, entry.active])).toEqual([[['program', 'timeline'], 'timeline']])
+  const child = opened[0].child.document
+  const shown = (): string[] => Array.from(child.querySelectorAll<HTMLElement>('[data-video-edit-panel]')).filter(panel => !panel.parentElement!.classList.contains('hidden')).map(panel => panel.dataset.videoEditPanel!)
+  expect(shown()).toEqual(['timeline'])
+  expect(Array.from(child.querySelectorAll('[data-video-edit-popout-tab]')).map(tab => tab.textContent)).toEqual(['节目画面', '时间线'])
+  expect(child.title).toBe('痕迹AI · 时间线')
+  act(() => activateVideoEditPopoutPanel('program', 'program'))
+  expect(shown()).toEqual(['program']); expect(child.title).toBe('痕迹AI · 节目画面')
+  expect(lifetime).toMatchObject({ created: 2, live: 1 })
+  expect(savedPopouts()).toEqual({ version: 2, windows: [{ panels: ['program', 'timeline'], active: 'program', bounds: { x: 2760, y: 200, width: 480, height: 360 } }] })
+  // 单个贴回：时间线回 Dock，窗口留着节目画面。
+  act(() => dockVideoEditPopout('timeline'))
+  expect(dock.getPanel('timeline')).toBeDefined()
+  expect(listVideoEditPopouts().map(entry => entry.panels)).toEqual([['program']])
+  // 浮动面板组：组内面板进同一个新窗口。
+  const projectGroup = dock.getPanel('project')!.group
+  act(() => { dock.getPanel('timeline')!.api.moveTo({ group: projectGroup, position: 'center' }) })
+  act(() => { popOutVideoEditGroup(dock, dock.getPanel('timeline')!.group, host) })
+  expect(opened).toHaveLength(2)
+  expect(listVideoEditPopouts().map(entry => entry.panels)).toEqual([['program'], ['project', 'timeline']])
+  // 整窗贴回到落点：两个面板回到同一组。
+  const target = dock.getPanel('effects')!.group
+  act(() => dockVideoEditPopoutWindow(listVideoEditPopouts()[1].key, { kind: 'group', group: target, position: 'right', rect: { left: 0, top: 0, width: 10, height: 10 } }))
+  expect(dock.getPanel('project')!.group).toBe(dock.getPanel('timeline')!.group)
+  expect(listVideoEditPopouts().map(entry => entry.panels)).toEqual([['program']])
+  view.unmount()
 })
 
 it('旧布局里的应用内浮动组恢复后贴回主区域（浮动统一为独立窗口）', () => {

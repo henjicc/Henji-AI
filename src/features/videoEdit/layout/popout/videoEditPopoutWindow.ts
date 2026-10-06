@@ -33,6 +33,8 @@ export interface VideoEditPopoutWindow {
   endMove(): void
   /** 最大化／还原（标题栏双击）。 */
   toggleMaximized(): void
+  /** 当前标签变了：窗口标题跟着换成当前面板名（多面板浮窗）。 */
+  setTitle(title: string): void
   /** 主动关闭；`onClosed` 仍只触发一次。 */
   close(): void
 }
@@ -125,7 +127,8 @@ export function openVideoEditPopoutWindow(panelKey: string, options: OpenVideoEd
   const revealTimer = host.setTimeout(() => { pendingSheets = 0; container.style.visibility = '' }, 2000)
   copyAttributes(source.documentElement, target.documentElement)
   copyAttributes(source.body, target.body)
-  target.title = options.title
+  let title = options.title
+  target.title = title
   target.body.appendChild(container)
   /** 焦点掉到 body/容器（或无焦点）时收回到 React 焦点根；正在编辑的输入框、浮窗内菜单等其他焦点不动。 */
   const reclaimFocus = (): void => {
@@ -165,7 +168,7 @@ export function openVideoEditPopoutWindow(panelKey: string, options: OpenVideoEd
     if (closed) return
     copyAttributes(source.documentElement, target.documentElement)
     copyAttributes(source.body, target.body)
-    target.title = options.title
+    target.title = title
   })
   rootObserver.observe(source.documentElement, { attributes: true })
   rootObserver.observe(source.body, { attributes: true })
@@ -271,6 +274,7 @@ export function openVideoEditPopoutWindow(panelKey: string, options: OpenVideoEd
       restoreBounds = current
       setBounds(area)
     },
+    setTitle: next => { if (closed || next === title) return; title = next; target.title = next },
     isVisible: () => !closed && target.visibilityState === 'visible',
     restoreFocus: reclaimFocus,
     readBounds: () => closed || child.closed ? null : restoreBounds ?? readBounds(),

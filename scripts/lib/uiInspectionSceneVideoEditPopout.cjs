@@ -165,8 +165,9 @@ function createVideoEditPopoutScene() {
         app.off('window', onWindow)
         evidence.windowsAfterRestore = await windows()
         // 记录的是渲染层看到的窗口矩形（无边框窗口含隐形边框），按同一语义比较恢复后的窗口。
-        for (const record of evidence.persistedLayout?.panels ?? []) {
-          const title = { effects: '痕迹AI · 效果控件', timeline: '痕迹AI · 时间线', program: '痕迹AI · 节目画面' }[record.id]
+        // 记录版本 2：一个浮窗一条，可装多个面板（4.6），窗口标题取当前标签。
+        for (const record of evidence.persistedLayout?.windows ?? []) {
+          const title = { effects: '痕迹AI · 效果控件', timeline: '痕迹AI · 时间线', program: '痕迹AI · 节目画面' }[record.active]
           let restored = null
           for (const child of restoredWindows) if (!child.isClosed() && await child.title().catch(() => '') === title) restored = child
           assert.ok(restored, `应恢复 ${title}`)
@@ -176,7 +177,7 @@ function createVideoEditPopoutScene() {
             if (['x', 'y', 'width', 'height'].every(key => Math.abs(view[key] - record.bounds[key]) <= 1)) break
             await page.waitForTimeout(100)
           }
-          for (const key of ['x', 'y', 'width', 'height']) assert.ok(Math.abs(view[key] - record.bounds[key]) <= 1, `浮窗恢复位置/尺寸不得漂移：${record.id}.${key} ${record.bounds[key]}→${view[key]}`)
+          for (const key of ['x', 'y', 'width', 'height']) assert.ok(Math.abs(view[key] - record.bounds[key]) <= 1, `浮窗恢复位置/尺寸不得漂移：${record.active}.${key} ${record.bounds[key]}→${view[key]}`)
         }
         assert.deepEqual(evidence.windowsAfterRestore.map(window => window.title).sort(), ['痕迹AI', '痕迹AI · 效果控件', '痕迹AI · 时间线', '痕迹AI · 节目画面'].sort(), '重开工程后应恢复上次浮出的面板')
         assert.equal(evidence.windowsAfterRestore.find(window => window.title === '痕迹AI · 效果控件').display, displays.primary, '恢复的浮窗应回到上次所在显示器')

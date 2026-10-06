@@ -17,7 +17,7 @@ import { dockviewHostTheme } from '@/components/dockviewHostTheme'
 import { bindDockDragGestures, dockFloatingGroupsBack, DOCKVIEW_HOST_DND_OPTIONS } from '@/components/dockviewDocking'
 import { VideoEditDockHeaderActions, VideoEditDockTab } from './VideoEditDockChrome'
 import { dockVideoEditGroup, restoreVideoEditLayout, saveVideoEditLayout, showVideoEditPanel, VIDEO_EDIT_PANELS, type VideoEditPanelId } from './videoEditDockLayout'
-import { bindVideoEditPopoutDock, canFloatVideoEditDockSource, floatVideoEditDockSource, isVideoEditPanelPoppedOut, listVideoEditPopouts, resetVideoEditWorkspaceLayout, restoreVideoEditPopouts, trackVideoEditDockPanel } from './popout/videoEditPopouts'
+import { bindVideoEditPopoutDock, canFloatVideoEditDockSource, floatVideoEditDockSource, focusVideoEditPopoutPanel, isVideoEditPanelPoppedOut, resetVideoEditWorkspaceLayout, restoreVideoEditPopouts, trackVideoEditDockPanel } from './popout/videoEditPopouts'
 import { VideoEditPopoutPortals } from './popout/VideoEditPopoutPortals'
 
 const logger = createLogger('features.videoEdit.layout')
@@ -58,7 +58,7 @@ export function VideoEditDock({ instance, onError, onApiChange }: DockContext & 
       const current = instance.panelFocusVersion ?? 0
       if (current === previous) return
       previous = current
-      if (isVideoEditPanelPoppedOut(instance.activePanel)) listVideoEditPopouts().find(entry => entry.id === instance.activePanel)?.popout.focus()
+      if (isVideoEditPanelPoppedOut(instance.activePanel)) focusVideoEditPopoutPanel(instance.activePanel)
       else if (apiRef.current) showVideoEditPanel(apiRef.current, instance.activePanel)
     })
   }, [instance])
