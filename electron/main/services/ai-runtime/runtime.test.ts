@@ -103,6 +103,7 @@ function mockCompletedProviderResult(): void {
     return {
       status: 'completed',
       url: 'https://media.example.test/result.png',
+      urls: ['https://media.example.test/result.png'],
       taskId: 'task-1',
       metadata: { status_url: 'https://queue.example.test/task/status' },
     }
@@ -130,6 +131,7 @@ function mockCompletedGenerateResult(): void {
     return {
       status: 'completed',
       url: 'https://media.example.test/result.png',
+      urls: ['https://media.example.test/result.png'],
       metadata: {},
     }
   })
@@ -213,10 +215,10 @@ describe('ai-runtime continuePolling 日志闭环', () => {
     expect(mocks.logger.error).not.toHaveBeenCalled()
   })
 
-  it('SDK 拼接的多个结果地址在宿主边界拆成数组，逐个保存并按输出顺序返回', async () => {
+  it('SDK 给出的多个结果地址逐个保存并按输出顺序返回', async () => {
     mocks.generate.mockImplementation(async (_request: unknown, options: { onRequestBuilt: (info: { providerId: string; route: string; method: string; requestBody: Record<string, unknown> }) => void }) => {
       options.onRequestBuilt({ providerId: 'fal', route: 'https://queue.example.test/generate', method: 'POST', requestBody: {} })
-      return { status: 'completed', url: 'https://media.example.test/a.png|||https://media.example.test/b.png', metadata: {} }
+      return { status: 'completed', url: 'https://media.example.test/a.png|||https://media.example.test/b.png', urls: ['https://media.example.test/a.png', 'https://media.example.test/b.png'], metadata: {} }
     })
     mocks.saveMediaFromUrlTracked.mockImplementation(async (url: string) => ({ filePath: url.endsWith('a.png') ? '/tmp/a.png' : '/tmp/b.png', created: true }))
     const result = await generate({ modelId: request.modelId, params: request.params, requestId: 'multi-output' })

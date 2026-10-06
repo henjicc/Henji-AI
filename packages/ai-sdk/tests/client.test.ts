@@ -105,7 +105,7 @@ describe('createAIClient', () => {
     }))
     const continuePolling = vi.fn<ProviderAdapter['continuePolling']>(async (input) => ({
       status: 'completed',
-      url: 'https://example.com/result.png',
+      url: 'https://example.com/result.png|||https://example.com/result-2.png',
       taskId: input.taskId,
       metadata: { route: input.route },
     }))
@@ -127,6 +127,7 @@ describe('createAIClient', () => {
       })).resolves.toEqual({
         status: 'pending',
         url: '',
+        urls: [],
         taskId: 'provider-task-1',
         metadata: {
           requestBody: {
@@ -145,7 +146,8 @@ describe('createAIClient', () => {
         onRequestBuilt: (info) => requestPhases.push(`${info.method}:${info.route}`),
       })).resolves.toMatchObject({
         status: 'completed',
-        url: 'https://example.com/result.png',
+        // 多个输出：公共结果给出按顺序的地址数组，消费方不再自己拆拼接串
+        urls: ['https://example.com/result.png', 'https://example.com/result-2.png'],
         taskId: 'provider-task-1',
       })
 

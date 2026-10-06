@@ -80,7 +80,10 @@ export interface AiRuntimeTrace {
 
 export interface AiGenerateResponseDto {
   status: GenerateStatus
+  /** 兼容字段：多个输出时用 `|||` 拼接；新代码请读 `urls`。 */
   url: string
+  /** 全部输出地址，按供应商输出顺序（SDK 生成结果总会给出；宿主自建的 DTO 可省略）。 */
+  urls?: string[]
   filePath?: string
   /** 宿主本次响应中新建的受管媒体；消费方完成转移后必须释放。 */
   createdFilePaths?: string[]

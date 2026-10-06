@@ -67,7 +67,10 @@ export interface CreateModularGenerationClientConfig {
 
 export interface GenerationClientResult {
   status: ProviderExecutionResult['status']
+  /** 兼容字段：多个输出时用 `|||` 拼接；新代码请读 `urls`。 */
   url: string
+  /** 全部输出地址，按供应商输出顺序；没有输出时为空数组。 */
+  urls: string[]
   taskId?: string
   metadata: JsonValue
   structuredOutput?: ProviderExecutionResult['structuredOutput']
@@ -359,7 +362,7 @@ async function executeGeneration(
       signal: controller.signal,
       runtime,
     })
-    const result = attachStructuredOutput(providerResult, model, effectiveParams)
+    const result = finalizeResult(providerResult, model, effectiveParams)
     hooks.onCompleted?.({ ...info, result })
     span.end()
     return result
@@ -415,7 +418,7 @@ async function executePolling(
       signal: controller.signal,
       runtime,
     })
-    const result = attachStructuredOutput(providerResult, model, effectiveParams)
+    const result = finalizeResult(providerResult, model, effectiveParams)
     hooks.onCompleted?.({ ...info, result })
     span.end()
     return result
@@ -425,6 +428,21 @@ async function executePolling(
   } finally {
     clearCancelFlag('generation', taskId)
   }
+}
+
+/** 供应商把多个输出地址用 `|||` 拼进 `url`；公共结果在这里统一给出数组。 */
+export const GENERATION_OUTPUT_URL_SEPARATOR = '|||'
+
+export function splitGenerationOutputUrls(url: string | undefined): string[] {
+  return (url ?? '').split(GENERATION_OUTPUT_URL_SEPARATOR).map((item) => item.trim()).filter(Boolean)
+}
+
+function finalizeResult(
+  result: ProviderExecutionResult,
+  model: ModelRuntimeDefinition,
+  params: JsonObject
+): GenerationClientResult {
+  return { ...attachStructuredOutput(result, model, params), urls: splitGenerationOutputUrls(result.url) }
 }
 
 function attachStructuredOutput(
