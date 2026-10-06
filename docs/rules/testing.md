@@ -315,7 +315,7 @@ wc -l src/App.tsx
 
 ## 七、CI 全量兜底
 
-**触发方式（2026-10-06 用户决定）**：推送 `main`、`v*` 标签与 PR 自动运行；只改 `docs/**` 或 `*.md` 的推送跳过。需要安装包时手动触发 `gh workflow run build.yml -f build_installer=true`。Agent 推送代码后在当次会话里跟踪本次运行结果（后台 `gh run watch`），失败时主动排查修复并告知用户；新会话开始时先看 main 最近一次运行，有失败先处理。
+**触发方式（2026-10-06 用户决定）**：推送 `main`、`v*` 标签与 PR 自动运行；只改 `docs/**` 或 `*.md` 的推送跳过。需要安装包时手动触发 `gh workflow run build.yml -f build_installer=true`。推送后不等 CI：由主会话在后台跟踪本次运行（`gh run watch`），当前工作照常继续；子代理推送后直接交付，不在任务里等待 CI。运行失败时由主会话派一个子代理按日志修复（只修失败原因、不打断当前流程），修好后告知用户；新会话开始时先看 main 最近一次运行，有失败先处理。
 
 `.github/workflows/build.yml` 每次运行分五层必跑：代码检查 job 执行生成器、静态规则、渲染层/主进程 lint 与类型检查、`test:suites` 分层完整性门禁及 `test:unit`；WebGPU job 安装官方软件 Vulkan adapter、通过 `vgpu doctor` 真渲染后执行 `test:gpu`（含 HDR probe）；大图导出 job 独占 worker 执行 `test:image-export`；原生 SQLite job 在独立依赖目录中执行 `electron:rebuild`，再用 `test:assistant-persistence` 运行唯一原生清单（历史命令名，现在包含助手与工程持久化）；原生视频解码 job 在 Windows runner 用 `scripts/video-decoder-ffmpeg.cjs` 获取并校验固定 FFmpeg，执行 `test:ffmpeg-cli`（用随包 FFmpeg 9 与 ffmpeg-ffprobe-static 6.1.2 核对全仓 FFmpeg 参数并实跑导出）、cargo test 与 release 构建（无硬件显卡，依赖真实 D3D11 设备的用例按设计跳过，不代表像素与性能验收）。unit、gpu、image-export、原生 SQLite 与 ffmpeg-cli 五个 Vitest 层互斥并覆盖完整清单；`npm test` / `npx vitest run` 保留本地全量入口，但普通 Node 中的 Electron 条件跳过不代表原生验证通过。
 
