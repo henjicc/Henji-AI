@@ -8,6 +8,7 @@ import { CodeParameterPanel } from './CodeParameterPanel'
 import { VideoEditGraphicPanel } from './VideoEditGraphicPanel'
 import { VideoEditEffectChainPanel } from './VideoEditEffectChainPanel'
 import { VideoEditTransitionPanel } from './VideoEditTransitionPanel'
+import { selectedVideoEditTransitionId } from '../application/videoEditTransitions'
 import { VideoEditClipPropertySections } from './VideoEditClipPropertySections'
 import { useVideoEditClipPropertyGesture } from './useVideoEditClipPropertyGesture'
 
@@ -41,7 +42,7 @@ export function VideoEditEffectsPanel({ instance, onError, visible = true }: { i
     {selected ? <div className="flex flex-col">
       <ClipNameHeader key={selected.id} clip={selected} onRename={name => run(() => updateVideoEditClipProperties(projectId, sequence.id, selected.id, { name }))} />
       <VideoEditClipPropertySections clip={selected} frame={sequence} gesture={gesture} />
-    </div> : <UiEmpty size="sm" title="选择片段以编辑" />}
+    </div> : selectedVideoEditTransitionId(instance) ? null : <UiEmpty size="sm" title="选择片段以编辑" />}
     {visible && selected?.kind === 'code' && selected.code && <CodeParameterPanel key={JSON.stringify(['source-code', projectId, sequence.id, selected.id])} projectId={projectId} sequenceId={sequence.id} clipId={selected.id} onError={onError} />}
     {visible && selected?.kind === 'graphic' && selected.graphic && <VideoEditGraphicPanel key={JSON.stringify(['graphic', projectId, sequence.id, selected.id])} projectId={projectId} sequenceId={sequence.id} clipId={selected.id} onError={onError} />}
     {visible && selected && selected.kind !== 'audio' && <VideoEditEffectChainPanel key={JSON.stringify(['effects', projectId, sequence.id, selected.id])} instance={instance} sequence={sequence} clip={selected} onError={reportError} />}

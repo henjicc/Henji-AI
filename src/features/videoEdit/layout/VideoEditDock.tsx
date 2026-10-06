@@ -103,7 +103,7 @@ export function VideoEditDock({ instance, onError, onApiChange }: DockContext & 
         defaultTabComponent={VideoEditDockTab} rightHeaderActionsComponent={VideoEditDockHeaderActions} watermarkComponent={EmptyLayout}
         {...DOCKVIEW_HOST_DND_OPTIONS} defaultRenderer="always" onReady={onReady} />
     </DockviewHost>
-    <VideoEditPopoutPortals onFocusPanel={id => { if (instance.activePanel !== id && listVideoEditInstances().includes(instance)) focusVideoEditPanel(instance.document.id, id) }}
+    <VideoEditPopoutPortals onFocusPanel={id => { if (id !== 'effects_library' && instance.activePanel !== id && listVideoEditInstances().includes(instance)) focusVideoEditPanel(instance.document.id, id) }}
       render={(id, visible) => { const Body = BODIES[id]; return <Body visible={visible} /> }} />
   </Context.Provider>
 }
