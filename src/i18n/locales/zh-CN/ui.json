@@ -1179,7 +1179,8 @@
       "duplicate": "创建副本",
       "reveal": "在文件夹中显示",
       "forget": "从列表移除",
-      "exportPackage": "导出为单个文件…"
+      "exportPackage": "导出为单个文件…",
+      "collect": "收集素材到项目"
     },
     "rename": {
       "title": "重命名",
@@ -1218,9 +1219,17 @@
       "forget": "没能从列表移除：{{message}}",
       "createProject": "没能新建项目：{{message}}",
       "exportPackage": "没能导出：{{message}}",
-      "importPackage": "没能导入：{{message}}"
+      "importPackage": "没能导入：{{message}}",
+      "collect": "没能收集素材：{{message}}",
+      "openFile": "没能打开这个文件：{{message}}"
     },
     "importPackage": "导入单个文件…",
+    "openFile": "打开文件…",
+    "collect": {
+      "done": "已把 {{files}} 个文件、{{documents}} 份别处的文档复制进项目并改写引用。",
+      "none": "用到的素材与文档都已在项目里。",
+      "missing": "有 {{count}} 个原文件找不到，未能收集。"
+    },
     "package": {
       "exporting": "正在导出…",
       "importing": "正在导入…",

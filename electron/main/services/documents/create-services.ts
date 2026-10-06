@@ -8,6 +8,7 @@ import type { DocumentCatalog } from './catalog'
 import { DocumentCoverStore } from './covers'
 import { DocumentIndexScanner } from './index-scanner'
 import { DocumentPackageService } from './package-service'
+import { runDocumentProgramStateCleaners } from './program-state-cleaners'
 import { createPackageAdapterRegistry, type PackageAdapterRegistry } from './package-adapters'
 import { ProjectService } from './projects'
 import { DocumentRepository } from './repository'
@@ -70,9 +71,14 @@ export function createDocumentServices(environment: DocumentEnvironment): Docume
     directory: path.join(environment.storeDirectory, 'session-state'),
     logger: environment.logger('main.documents.session_state'),
   })
-  // 文档离开作品（回收站、删除空草稿、从列表移除）时，程序目录里按文档 ID 存的封面与会话状态一起清掉。
+  // 文档离开作品（回收站、删除空草稿、从列表移除、项目移到回收站）时，程序目录里按文档 ID 存的封面与会话状态一起清掉，
+  // 再交给各工具登记的清理方式（口播缓存、任务回执等，见 program-state-cleaners.ts）；工具清理失败只记日志。
+  const cleanupLogger = environment.logger('main.documents.program_state')
   const removeProgramState = async (docId: string): Promise<void> => {
     await Promise.all([covers.remove(docId), sessionState.remove(docId)])
+    for (const failure of await runDocumentProgramStateCleaners(docId)) {
+      cleanupLogger.warn('文档内部缓存清理失败', { event: 'documents.program_state.cleanup_failed', context: { docId, cleaner: failure.id }, error: failure.error })
+    }
   }
   const refreshProjects = async (): Promise<void> => { await scanner.refresh() }
   const repository = new DocumentRepository({
@@ -108,6 +114,6 @@ export function createDocumentServices(environment: DocumentEnvironment): Docume
     stagingDirectory: path.join(environment.storeDirectory, 'package-staging'),
     hideDirectory: environment.hideDirectory,
   })
-  const service = new DocumentService({ workspace, repository, projects, scanner, covers, sessionState, packages })
+  const service = new DocumentService({ workspace, repository, projects, scanner, covers, sessionState, packages, kinds })
   return { service, workspace, repository, projects, scanner, covers, sessionState, packages }
 }

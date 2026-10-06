@@ -1180,7 +1180,8 @@
       "duplicate": "Duplicate",
       "reveal": "Show in Folder",
       "forget": "Remove from List",
-      "exportPackage": "Export as single file…"
+      "exportPackage": "Export as single file…",
+      "collect": "Collect Media into Project"
     },
     "rename": {
       "title": "Rename",
@@ -1219,9 +1220,17 @@
       "forget": "Couldn't remove from the list: {{message}}",
       "createProject": "Couldn't create the project: {{message}}",
       "exportPackage": "Couldn't export: {{message}}",
-      "importPackage": "Couldn't import: {{message}}"
+      "importPackage": "Couldn't import: {{message}}",
+      "collect": "Couldn't collect media: {{message}}",
+      "openFile": "Couldn't open this file: {{message}}"
     },
     "importPackage": "Import file…",
+    "openFile": "Open File…",
+    "collect": {
+      "done": "Copied {{files}} file(s) and {{documents}} document(s) from elsewhere into the project and updated references.",
+      "none": "Everything it uses is already in the project.",
+      "missing": "{{count}} original file(s) could not be found and were not collected."
+    },
     "package": {
       "exporting": "Exporting…",
       "importing": "Importing…",

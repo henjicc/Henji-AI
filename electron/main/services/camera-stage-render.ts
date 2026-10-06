@@ -7,6 +7,7 @@ import { getDocumentService } from './documents/runtime'
 import type { CameraStageRenderWorkerJob } from '../../../src/platform/contracts/cameraStageRender'
 import { createMainLogger } from './logging/main-logger'
 import { registerWorkRootBusyProbe } from './work-root/busy-probes'
+import { registerDocumentProgramStateCleaner } from './documents/program-state-cleaners'
 import {
   CameraStageRenderTaskRegistry,
   type CameraStageRenderEventDto,
@@ -39,6 +40,11 @@ let workerReadyTimer: NodeJS.Timeout | null = null
 let activeTaskTimer: NodeJS.Timeout | null = null
 // 镜头参考渲染结果写进作品目录，排队或进行中不允许更换作品目录
 registerWorkRootBusyProbe('camera_stage_render', { reason: '镜头参考还有渲染任务在进行', isBusy: () => activeTask !== null || queue.length > 0 })
+// 画布或镜头参考文档离开作品时删掉与它相关、已结束的渲染回执（4.4 收 3.x 遗留）
+registerDocumentProgramStateCleaner('camera_stage_render', (docId) => {
+  const removed = taskRegistry.forgetDocument(docId)
+  if (removed) logger.info('镜头参考渲染回执已清理', { event: 'camera_stage_render.receipts.cleaned', context: { docId, removed } })
+})
 
 const IMAGE_RENDER_INACTIVITY_TIMEOUT_MS = 45_000
 const VIDEO_RENDER_INACTIVITY_TIMEOUT_MS = 120_000

@@ -97,6 +97,8 @@ export interface DocumentsPlatform {
   trashProject(projectId: string): Promise<void>
   /** 打开作品目录之外的项目文件夹并登记为外部位置。 */
   registerExternalProject(folderPath: string): Promise<ProjectSummary>
+  /** 打开别处的文档文件：登记所在项目或文件夹为外部位置并返回列表项（4.4）。 */
+  registerExternalDocument(filePath: string): Promise<DocumentSummary>
   /** 从列表里移除外部位置（不动磁盘上的文件）。 */
   forgetExternalLocation(folderPath: string): Promise<void>
   revealProject(projectId: string): Promise<void>
@@ -139,6 +141,7 @@ export const DOCUMENT_IPC_CHANNELS = {
   setProjectMainDocument: 'documents:projects:setMain',
   trashProject: 'documents:projects:trash',
   registerExternalProject: 'documents:projects:registerExternal',
+  registerExternalDocument: 'documents:registerExternal',
   forgetExternalLocation: 'documents:locations:forget',
   revealProject: 'documents:projects:reveal',
   exportDocumentPackage: 'documents:package:exportDocument',

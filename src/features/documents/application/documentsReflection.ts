@@ -92,7 +92,7 @@ class DocumentsReflectionProvider implements ApplicationEntityProvider {
 const ENTITY_META: Record<DocumentsEntityType, { title: string; description: string }> = {
   [DOCUMENTS_ENTITY_TYPES.document]: {
     title: '文档',
-    description: '剪辑、画布、口播、镜头参考、图片文档等作品文件；名称可改，位置用 move_document、副本用 duplicate_document、删除用 trash_document。',
+    description: '剪辑、画布、口播、镜头参考、图片文档等作品文件；名称可改，位置用 move_document、副本用 duplicate_document、收集素材进项目用 collect_document_media、删除用 trash_document。',
   },
   [DOCUMENTS_ENTITY_TYPES.project]: {
     title: '项目',

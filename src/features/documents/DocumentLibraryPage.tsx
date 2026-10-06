@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Copy, FolderInput, FolderOpen, FolderOutput, ListX, PackageCheck, PackageOpen } from 'lucide-react'
+import { Copy, FileInput, FolderInput, FolderOpen, FolderOutput, ListX, PackageCheck, PackageOpen, PackagePlus } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
 import type { ProjectCardGridExtraAction, ProjectCardGridItem } from '@/components/ProjectCardGrid'
@@ -12,8 +12,10 @@ import {
   type ProjectLibrarySecondaryAction,
 } from '@/components/ProjectLibraryPage'
 import { AlertDialog, UI_TEXT_META_CLASS } from '@/components/ui'
+import { documentKindRegistry } from '@/core/documents/kinds'
 import { MAX_ENTRY_NAME_LENGTH, normalizeEntryName } from '@/core/documents/naming'
 import type { DocumentContainerRef, DocumentKindId, DocumentSummary, NameCheckResult } from '@/core/documents/types'
+import { openDialog } from '@/platform/desktopApi'
 
 import { DocumentDraftRecoveryNotice } from './DocumentDraftRecoveryNotice'
 import { toError } from './documentErrors'
@@ -35,7 +37,8 @@ import {
  * 3.x 各工具切换时只换成 <DocumentLibraryPage kind="…" …/>，不再自己取数、自己写重命名 / 删除。
  *
  * 右键：打开、重命名（实时查重，重名不加后缀）、移到项目…、移出项目、创建副本、在文件夹中显示、
- * 导出为单个文件…（4.1 通用单文件包）、删除（移到回收站）。页头次要动作“导入单个文件…”（导入到作品目录）。
+ * 导出为单个文件…（4.1 通用单文件包）、收集素材到项目（4.4，只对项目里的文档）、删除（移到回收站）。
+ * 页头次要动作“打开文件…”（4.4：打开别处的文档，所在位置登记为外部位置）与“导入单个文件…”（导入到作品目录）。
  * 找不到文件的文档只有“从列表移除”（只改作品索引，不动磁盘）。
  * 移动遇到重名时询问“两个都保留 / 取消”；创建副本与原件在同一文件夹，按“两个都保留”自动加序号，不再询问。
  * 草稿不进网格，放在页头下方的草稿区（DocumentDraftRecoveryNotice）。
@@ -211,9 +214,39 @@ export function DocumentLibraryPage({
           })
         },
       },
+      ...(inProject ? [{
+        id: 'collect-media',
+        label: t('documentLibrary.actions.collect'),
+        icon: <PackagePlus className="h-4 w-4" />,
+        onClick: () => {
+          void run('collect', async () => {
+            const result = await operations.collectDocumentMedia({ id: document.id, path: document.path })
+            const copiedDocuments = result.copiedDocuments ?? 0
+            const parts = [
+              result.copiedFiles || copiedDocuments
+                ? t('documentLibrary.collect.done', { files: result.copiedFiles, documents: copiedDocuments })
+                : t('documentLibrary.collect.none'),
+              result.missingPaths.length ? t('documentLibrary.collect.missing', { count: result.missingPaths.length }) : '',
+            ]
+            setPackageStatus(parts.filter(Boolean).join(' '))
+          })
+        },
+      }] : []),
       ...(documentActions?.(document) ?? []),
     ]
   }, [t, canStandalone, run, moveWithConflictPrompt, operations, documentActions])
+
+  // 打开别处的文档（4.4）：选文件后登记所在项目或文件夹为外部位置，再按本页的打开方式打开
+  const openExternalFile = useCallback((): void => {
+    void run('openFile', async () => {
+      const extension = documentKindRegistry.require(kind).extension.slice(1)
+      const selected = await openDialog({ multiple: false, filters: [{ name: kindName, extensions: [extension] }] })
+      const filePath = typeof selected === 'string' ? selected : Array.isArray(selected) ? selected[0] : null
+      if (!filePath) return
+      const document = await operations.registerExternalDocument(filePath)
+      await (onOpen ? onOpen(document) : operations.openDocument(document))
+    })
+  }, [run, kind, kindName, operations, onOpen])
 
   const importPackage = useCallback((): void => {
     void run('importPackage', async () => {
@@ -293,6 +326,7 @@ export function DocumentLibraryPage({
         create={create}
         secondaryAction={[
           ...(secondaryAction ? [secondaryAction] : []),
+          { label: t('documentLibrary.openFile'), icon: FileInput, onClick: openExternalFile },
           { label: t('documentLibrary.importPackage'), icon: PackageOpen, onClick: importPackage },
         ]}
         onDropFiles={onDropFiles}

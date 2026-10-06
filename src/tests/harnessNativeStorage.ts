@@ -144,7 +144,7 @@ const DOCUMENT_METHODS = [
   'listDocuments', 'readDocument', 'createDocument', 'saveDocument', 'renameDocument', 'finalizeDocument',
   'moveDocument', 'duplicateDocument', 'trashDocument', 'deleteEmptyDraft', 'forgetDocument', 'revealDocument', 'checkName',
   'refreshIndex', 'readSessionState', 'writeSessionState', 'listProjects', 'createProject', 'renameProject', 'finalizeProject', 'trashProject', 'revealProject',
-  'collectDocumentMedia', 'importFile', 'setProjectMainDocument', 'registerExternalProject', 'forgetExternalLocation',
+  'collectDocumentMedia', 'importFile', 'setProjectMainDocument', 'registerExternalProject', 'registerExternalDocument', 'forgetExternalLocation',
   'exportDocumentPackage', 'exportProjectPackage', 'importPackage', 'resolveDocumentLink',
 ] as const
 

@@ -263,7 +263,7 @@ it('公共拆分从磁盘回读核实片段边界', async () => {
   } finally { app.dispose() }
 })
 
-it('公共收集素材（4.3）与剪辑页同一入口：外部文件复制进项目并改写引用，从文件回读核实', async () => {
+it('通用收集素材能力（4.4）与剪辑页同一入口：外部文件复制进项目并改写引用，从文件回读核实', async () => {
   const instance = (await createVideoEditProject())!; const id = instance.document.id
   appendVideoEditMedia(id, { id: 'outside', name: '外部.mp4', path: 'E:/外部/外部.mp4', kind: 'video', durationSeconds: 3, width: 1920, height: 1080 })
   await saveVideoEdit(id)
@@ -274,12 +274,12 @@ it('公共收集素材（4.3）与剪辑页同一入口：外部文件复制进�
   store.collectMapping.set('E:/外部/外部.mp4', copied)
   const app = createApplicationHarness()
   try {
-    const result = await app.requireResult('collect_video_edit_media', { documentRef: { kind: 'video_edit.document', id } }) as { message: string; verification: { verified: boolean } }
+    const result = await app.requireResult('collect_document_media', { documentId: id }) as { message: string; verification: { verified: boolean } }
     expect(result.verification.verified).toBe(true)
     expect(result.message).toContain('1 个文件')
     expect(instance.document.media[0].path).toBe(copied)
     expect(savedVideoEdit(instance).media[0].path).toBe(copied)
-    const again = await app.requireResult('collect_video_edit_media', { documentRef: { kind: 'video_edit.document', id } }) as { message: string }
+    const again = await app.requireResult('collect_document_media', { documentId: id }) as { message: string }
     expect(again.message).toContain('没有需要收集的')
   } finally { app.dispose() }
 })

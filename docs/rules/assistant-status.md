@@ -311,7 +311,7 @@ schema 校验所以看不见，MCP 侧测试又都跑在未授权付费的连接
 | 移动 / 副本 | `move_document`（`projectId: null` 移出项目，`onConflict`）、`duplicate_document`（可给 `projectId`） | 原项目里用到的素材一并复制 |
 | 改名 | `change_application_entities` 写 `documents.document.name` / `documents.project.name` | 各工具内容根的 `name` 只读并点名这里 |
 | 回收站 | `trash_document`、`trash_project`（4.3 新增） | 破坏性，带预览与读取基线；正在编辑的拒绝 |
-| 收集素材 | `collect_video_edit_media`（4.3 新增，剪辑域） | 与剪辑页“收集素材到项目”同一入口；界面只在剪辑提供，所以不做通用文档版 |
+| 收集素材 | `collect_document_media`（4.4 由剪辑专用 `collect_video_edit_media` 并入通用文档能力） | 与项目页文档卡片右键、剪辑页“收集素材到项目”同一服务，所有类型、只对项目里的文档 |
 | 导出 | `export_document_package`（单个文档或整个项目，只回文件名） | — |
 | 回到来源 | `open_video_edit_clip_source`；放入剪辑用 `place_video_edit_creative_result`（来源只有“文档 + 部位”与“生成记录 + 第几个结果”两种） | — |
 
@@ -458,7 +458,7 @@ L-B 已经没有独立 npm 脚本，harness 文件也从 `assistantHarness.*` �
 
 ### 项目体系第二版留下的欠账（2026-10-06）
 
-- **收集素材只在剪辑提供**：`collect_video_edit_media` 对应剪辑页的入口；画布、口播等其他文档没有界面入口，助手也不提供，需要时先加界面再从同一服务投影。
+- **收集素材已通用（4.4）**：`collect_video_edit_media` 并入通用 `collect_document_media`，对应项目页文档卡片右键与剪辑页入口；剪辑导出进行中经底座忙碌检查拒绝。
 - **未做真实付费 / 写入验收**：4.3 的真实模型运行只做了只读与拒绝路径（见顶部 2026-10-06 条）；新建、移动、回收站、收集、导出等写入经正式结果测试与隔离 Reality（4.1 `free-composition`）证明，未在真实资料目录由真实模型执行。
 
 ### 真机验收的数据卫生问题（2026-09-18 重新取数，已大幅缩小）

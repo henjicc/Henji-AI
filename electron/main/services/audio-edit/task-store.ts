@@ -50,6 +50,16 @@ export function assertAudioEditProjectIdle(projectId: string): void {
   if ([...active.values()].some((task) => task.projectId === projectId && !task.readOnly)) throw new Error('口播还有处理任务，请先取消或等待完成。')
 }
 
+/** 这份口播是否还有任何处理任务在进行（含只读任务）。 */
+export function hasActiveAudioEditTask(projectId: string): boolean {
+  return [...active.values()].some((task) => task.projectId === projectId)
+}
+
+/** 删除一份口播的全部任务回执（文档离开作品时调用，回执可重建）。 */
+export function deleteAudioEditTasks(projectId: string): number {
+  return getDb().prepare('DELETE FROM audio_edit_tasks WHERE document_id = ?').run(projectId).changes
+}
+
 export function cancelAudioEditTask(requestId: string): void { active.get(requestId)?.controller.abort() }
 
 export function listAudioEditTasks(projectId: string): AudioEditTask[] {

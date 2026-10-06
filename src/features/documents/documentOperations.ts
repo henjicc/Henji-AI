@@ -64,6 +64,7 @@ export interface DocumentOperationCommands extends DocumentSessionCommands {
   importFile(request: ImportFileRequest): Promise<ImportFileResult>
   setProjectMainDocument(request: SetProjectMainDocumentRequest): Promise<ProjectSummary>
   registerExternalProject(folderPath: string): Promise<ProjectSummary>
+  registerExternalDocument(filePath: string): Promise<DocumentSummary>
   forgetExternalLocation(folderPath: string): Promise<void>
   exportDocumentPackage(request: ExportDocumentPackageRequest): Promise<PackageExportResult>
   exportProjectPackage(request: ExportProjectPackageRequest): Promise<PackageExportResult>
@@ -100,6 +101,12 @@ export interface OpenDocumentWithOptions extends DocumentOpenOptions {
  * 返回 true 表示会话已关闭；返回 false 表示仍在使用，不能释放。
  */
 export type DocumentReleaser = (documentId: string) => Promise<boolean>
+
+/**
+ * 打开着的文档此刻能否被整份改写（收集素材会改写引用并让会话重新载入）：返回给用户看的原因表示暂不可用，
+ * null 表示可以。由各工具登记（如剪辑导出进行中不可用）；没有登记的类型视为随时可以。
+ */
+export type DocumentBusyCheck = (documentId: string) => string | null
 
 /** 正在编辑的文档不能移到回收站。 */
 export class DocumentInUseError extends Error {
@@ -176,6 +183,7 @@ export const defaultDocumentOperationCommands: DocumentOperationCommands = {
   importFile: documentCommands.importFileToContainer,
   setProjectMainDocument: documentCommands.setProjectMainDocument,
   registerExternalProject: documentCommands.registerExternalProject,
+  registerExternalDocument: documentCommands.registerExternalDocument,
   forgetExternalLocation: documentCommands.forgetExternalLocation,
   exportDocumentPackage: documentCommands.exportDocumentPackage,
   exportProjectPackage: documentCommands.exportProjectPackage,
@@ -195,6 +203,7 @@ export class DocumentOperations {
   private readonly logger: Logger
   private readonly openers = new Map<DocumentKindId, DocumentOpener>()
   private readonly releasers = new Map<DocumentKindId, DocumentReleaser>()
+  private readonly busyChecks = new Map<DocumentKindId, DocumentBusyCheck>()
   private readonly creators = new Map<DocumentKindId, DocumentCreator>()
   private readonly embedHosts = new Map<DocumentKindId, (documentId: string) => Promise<EmbeddedHost>>()
   private readonly listeners = new Set<() => void>()
@@ -230,6 +239,14 @@ export class DocumentOperations {
     this.releasers.set(kind, releaser)
     return () => {
       if (this.releasers.get(kind) === releaser) this.releasers.delete(kind)
+    }
+  }
+
+  /** 登记某类文档“此刻能否整份改写”的检查；返回取消登记函数。 */
+  registerBusyCheck(kind: DocumentKindId, check: DocumentBusyCheck): () => void {
+    this.busyChecks.set(kind, check)
+    return () => {
+      if (this.busyChecks.get(kind) === check) this.busyChecks.delete(kind)
     }
   }
 
@@ -496,6 +513,8 @@ export class DocumentOperations {
   async collectDocumentMedia(target: DocumentTarget): Promise<DocumentTransferResult> {
     return await this.write('collect_media', target.id, async () => {
       const session = this.registry().get(target.id)
+      const busy = session ? this.busyChecks.get(session.documentMeta.kind)?.(target.id) ?? null : null
+      if (busy) throw new Error(busy)
       if (session) await session.flush()
       const result = await this.commands.collectDocumentMedia(session?.target ?? target)
       if (session && !session.isEnded) await session.applyTransfer(result)
@@ -511,6 +530,14 @@ export class DocumentOperations {
   /** 设置项目的主剪辑（打开项目时打开它）。 */
   async setProjectMainDocument(projectId: string, documentId: string | null): Promise<ProjectSummary> {
     return await this.write('set_project_main', projectId, async () => await this.commands.setProjectMainDocument({ projectId, documentId }))
+  }
+
+  /**
+   * 打开别处的文档文件（4.4）：登记它所在的项目或文件夹为外部位置（之后照常出现在列表里），返回列表项，
+   * 由调用方交给打开方式。ID 与已有文档重复时主进程已按底座规则换新 ID。
+   */
+  async registerExternalDocument(filePath: string): Promise<DocumentSummary> {
+    return await this.write('register_external_document', filePath, async () => await this.commands.registerExternalDocument(filePath))
   }
 
   /** 打开作品目录之外的项目文件夹并登记为外部位置。 */
@@ -609,6 +636,11 @@ export function registerDocumentOpener(kind: DocumentKindId, opener: DocumentOpe
 /** 登记某类文档的“在容器里新建并打开”方式（4.1，各工具与打开方式一起登记）。 */
 export function registerDocumentCreator(kind: DocumentKindId, creator: DocumentCreator): () => void {
   return getDocumentOperations().registerCreator(kind, creator)
+}
+
+/** 登记某类文档“此刻能否整份改写”的检查（收集素材前调用）。 */
+export function registerDocumentBusyCheck(kind: DocumentKindId, check: DocumentBusyCheck): () => void {
+  return getDocumentOperations().registerBusyCheck(kind, check)
 }
 
 /** 登记某类文档的后台释放方式（工具会为助手后台读写持有会话时调用）。 */

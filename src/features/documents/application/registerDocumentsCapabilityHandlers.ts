@@ -156,6 +156,23 @@ export function registerDocumentsCapabilityHandlers(
     return { resultRef: documentRef(result.meta.id), name: result.meta.name, sourceRef: documentRef(document.id), projectId, verification }
   })
 
+  // 与项目页文档卡片右键、剪辑页“收集素材到项目”同一入口；打开着的文档由通用操作写完再重新载入
+  registrar.registerHandler('collect_document_media', async (raw, context) => {
+    throwIfCapabilityAborted(context.signal)
+    const input = parseCapabilityInput<{ documentId: string }>('collect_document_media', raw)
+    const document = await operations().findDocument(input.documentId)
+    if (document.container.kind !== 'project') throw new Error('INVALID_INPUT:只能收集项目里的文档；先用 move_document 把它放进项目。')
+    const result = await operations().collectDocumentMedia({ id: document.id, path: document.path })
+    const copiedDocuments = result.copiedDocuments ?? 0
+    const missing = result.missingPaths.length ? `；${result.missingPaths.length} 个原文件找不到，未能收集` : ''
+    const message = result.copiedFiles || copiedDocuments
+      ? `已把 ${result.copiedFiles} 个文件、${copiedDocuments} 份别处的文档复制进项目并改写引用${missing}。`
+      : `用到的素材与文档都已在项目里，没有需要收集的${missing}。`
+    const verification = await verifyDocument(operations(), document.id, '收集后的文档已从作品索引回读确认（仍在原项目里）',
+      (collected) => JSON.stringify(collected.container) === JSON.stringify(document.container))
+    return { resultRef: documentRef(document.id), name: document.name, copiedFiles: result.copiedFiles, copiedDocuments, missingFiles: result.missingPaths.length, message, verification }
+  })
+
   registrar.registerHandler('trash_document', async (raw, context) => {
     throwIfCapabilityAborted(context.signal)
     const input = parseCapabilityInput<{ documentId: string }>('trash_document', raw)

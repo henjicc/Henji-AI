@@ -20,7 +20,7 @@ const METHODS: Array<keyof DocumentsPlatform> = [
   'listDocuments', 'readDocument', 'createDocument', 'saveDocument', 'renameDocument', 'finalizeDocument', 'moveDocument',
   'duplicateDocument', 'trashDocument', 'deleteEmptyDraft', 'forgetDocument', 'revealDocument', 'resolveDocumentLink', 'checkName',
   'getDocumentCover', 'saveDocumentCover', 'refreshIndex', 'readSessionState', 'writeSessionState', 'listProjects', 'createProject', 'renameProject', 'finalizeProject',
-  'trashProject', 'registerExternalProject', 'forgetExternalLocation', 'revealProject',
+  'trashProject', 'registerExternalProject', 'registerExternalDocument', 'forgetExternalLocation', 'revealProject',
   'exportDocumentPackage', 'exportProjectPackage', 'importPackage',
 ]
 
@@ -69,6 +69,7 @@ describe('文档底座 IPC 契约（preload 桥 → 主进程校验 → Document
       ['finalizeProject', [{ projectId: 'p1', name: '新', parentFolder: '/elsewhere' }], [{ projectId: 'p1', name: '新', parentFolder: '/elsewhere' }]],
       ['trashProject', ['p1'], ['p1']],
       ['registerExternalProject', ['/elsewhere/p'], ['/elsewhere/p']],
+      ['registerExternalDocument', ['/elsewhere/a.henjiimg'], ['/elsewhere/a.henjiimg']],
       ['forgetExternalLocation', ['/elsewhere/p'], ['/elsewhere/p']],
       ['revealProject', ['p1'], ['p1']],
       ['exportDocumentPackage', [{ target }], [{ target }]],

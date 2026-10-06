@@ -9,7 +9,8 @@ import { loadFfmpegPath, loadFfprobePath } from '../video/ffmpeg-loader'
 import { createMainLogger } from '../logging'
 import { requireAudioEditProject } from './project-store'
 import { runAudioEditProcess } from './process'
-import { assertAudioEditProjectIdle } from './task-store'
+import { assertAudioEditProjectIdle, deleteAudioEditTasks, hasActiveAudioEditTask } from './task-store'
+import { registerDocumentProgramStateCleaner } from '../documents/program-state-cleaners'
 
 const logger = createMainLogger('main.audio_edit')
 interface ProbeStream {
@@ -29,6 +30,15 @@ export function audioEditCacheDirectory(projectId: string): string {
   if (!/^[\w-]+$/.test(projectId)) throw new Error('口播引用无效')
   return path.join(getProgramStoreDir('audioEdit'), projectId, 'cache')
 }
+// 口播文档离开作品（回收站、删除空草稿、从列表移除）时清掉程序目录 AudioEdit/<文档 ID>（解码缓存、处理结果）
+// 与任务回执，都可重建；还有任务在跑时不动（下次离开或手动清理时再说）。别的类型的文档 ID 在这里没有数据，不受影响。
+registerDocumentProgramStateCleaner('audio_edit', async (docId) => {
+  if (!/^[\w-]+$/.test(docId) || hasActiveAudioEditTask(docId)) return
+  const removedTasks = deleteAudioEditTasks(docId)
+  await fs.rm(path.join(getProgramStoreDir('audioEdit'), docId), { recursive: true, force: true })
+  if (removedTasks) logger.info('口播内部缓存已清理', { event: 'audio_edit.program_state.cleaned', context: { docId, removedTasks } })
+})
+
 export async function identifyAudioEditSource(sourcePath: string): Promise<AudioEditSourceIdentity> {
   const before = await fs.stat(sourcePath)
   const digest = crypto.createHash('sha256')

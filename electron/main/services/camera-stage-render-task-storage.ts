@@ -15,4 +15,9 @@ export const cameraStageRenderTaskStorage: CameraStageRenderTaskStorage = {
     const stored = databaseLocations.use((scope) => JSON.stringify(scope.encodeValue(task)))
     getDb().prepare('INSERT OR REPLACE INTO camera_stage_render_tasks VALUES (?, ?)').run(task.requestId, stored)
   },
+  remove(requestIds) {
+    const db = getDb()
+    const statement = db.prepare('DELETE FROM camera_stage_render_tasks WHERE request_id = ?')
+    db.transaction(() => { for (const requestId of requestIds) statement.run(requestId) })()
+  },
 }

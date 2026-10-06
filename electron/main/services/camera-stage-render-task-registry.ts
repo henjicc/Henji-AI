@@ -23,6 +23,8 @@ interface CameraStageRenderTaskRecord extends CameraStageRenderTaskSnapshotDto {
 export interface CameraStageRenderTaskStorage {
   load(): CameraStageRenderTaskSnapshotDto[]
   save(task: CameraStageRenderTaskSnapshotDto): void
+  /** 删除回执（所属画布或镜头参考文档离开作品时）。 */
+  remove?(requestIds: readonly string[]): void
 }
 
 export interface CameraStageRenderTaskRegistration {
@@ -185,6 +187,24 @@ export class CameraStageRenderTaskRegistry {
     // 持久宿主保留身份，内存确认缓存过期也不能重新渲染同一请求。
     if (!this.storage) this.tasks.delete(scope.requestId)
     this.pruneAcknowledged()
+  }
+
+  /**
+   * 画布或镜头参考文档离开作品时删掉与它相关、已经结束的回执（结果已落在画布所在容器，回执只防重复输出，
+   * 文档没了也就不会再提交同一请求）；还在进行的任务不动。返回删除数量。
+   */
+  forgetDocument(docId: string): number {
+    this.restore()
+    const removed = [...this.tasks.values()]
+      .filter((record) => isTerminal(record.status) && (record.canvasProjectId === docId || record.cameraStageDocumentId === docId))
+      .map((record) => record.requestId)
+    if (!removed.length) return 0
+    for (const requestId of removed) {
+      this.tasks.delete(requestId)
+      this.acknowledged.delete(requestId)
+    }
+    this.storage?.remove?.(removed)
+    return removed.length
   }
 
   clear(): void {

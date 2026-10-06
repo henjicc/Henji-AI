@@ -177,6 +177,31 @@ const duplicateDocument = defineApplicationCapability({
   summarize: (output) => `已创建副本“${output.name}”。`,
 })
 
+const collectDocumentMedia = defineApplicationCapability({
+  id: 'collect_document_media', version: 1, title: '收集素材到项目',
+  description: '把项目里一份文档（剪辑、画布、口播、镜头参考、图片文档）引用的外部文件复制进所在项目的“素材”文件夹并改写引用；它引用的别处文档（别的项目或作品目录里的画布、口播、图片文档）一并复制进本项目（成为新文档）并改指向副本。原文件与原文档保留。与项目页文档卡片右键、剪辑页的“收集素材到项目”是同一操作；文档正打开时先写完再按改写后的引用重新载入（剪辑的撤销记录从此刻重新开始，导出进行中不可用）。',
+  domain: DOCUMENTS_DOMAIN,
+  aliases: ['收集素材', '收集剪辑素材', '素材复制进项目', 'collect media'],
+  readOnly: false, risk: 'R1', dataClasses: ['C1'], permission: 'documents:write', idempotent: true, destructive: false,
+  timeoutMs: 600_000, supportsPreview: false, supportsUndo: false, requiredScopes: [],
+  acceptsRefs: [DOCUMENT_ENTITY_TYPE], producesRefs: [DOCUMENT_ENTITY_TYPE],
+  failureRecovery: ['只对项目里的文档可用；不在项目里的文档先用 move_document 放进项目。剪辑导出进行中先等导出结束或取消。'],
+  inputSchema: z.object({ documentId: z.string().min(1).describe('项目里的文档（来自 list_documents）') }).strict(),
+  outputSchema: capabilityOutputSchema({
+    resultRef: documentRefSchema,
+    name: z.string(),
+    copiedFiles: z.number().int().nonnegative(),
+    copiedDocuments: z.number().int().nonnegative(),
+    missingFiles: z.number().int().nonnegative(),
+    message: z.string(),
+  }),
+  concurrencyKey: 'documents_write',
+  resolveConcurrencyKey: (input) => `documents_document:${input.documentId}`,
+  resolveOperationTargets: (input) => [{ kind: DOCUMENT_ENTITY_TYPE, id: input.documentId }],
+  control: capabilityControl('execute', [DOCUMENT_ENTITY_TYPE], { revisionScopes: [DOCUMENTS_DOMAIN] }),
+  summarize: (output) => output.message,
+})
+
 const trashDocument = defineApplicationCapability({
   id: 'trash_document', version: 1, title: '把文档移到回收站',
   description: '把文档文件移到系统回收站（用户可以从回收站找回，应用内不能撤销）。正在编辑的文档会被拒绝。',
@@ -259,5 +284,5 @@ const exportDocumentPackage = defineApplicationCapability({
 })
 
 export const DOCUMENTS_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinition[] = [
-  listDocuments, listProjects, createDocument, openDocument, moveDocument, duplicateDocument, trashDocument, trashProject, createProject, exportDocumentPackage,
+  listDocuments, listProjects, createDocument, openDocument, moveDocument, duplicateDocument, collectDocumentMedia, trashDocument, trashProject, createProject, exportDocumentPackage,
 ]

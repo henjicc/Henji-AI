@@ -31,6 +31,24 @@ describe('CameraStageRenderTaskRegistry', () => {
     expect(restarted.register(request({ requestId: 'in-flight' }), 99)).toMatchObject({ idempotent: true, task: { status: 'failed' } })
     expect(restarted.list('canvas-1', 99).map((task) => task.requestId)).toEqual(['in-flight'])
   })
+  it('文档离开作品时只删与它相关、已结束的回执（4.4）', () => {
+    const rows = new Map<string, CameraStageRenderTaskSnapshotDto>()
+    const storage = {
+      load: () => [...rows.values()],
+      save: (task: CameraStageRenderTaskSnapshotDto) => { rows.set(task.requestId, structuredClone(task)) },
+      remove: (ids: readonly string[]) => { for (const id of ids) rows.delete(id) },
+    }
+    const registry = new CameraStageRenderTaskRegistry(storage)
+    registry.register(request(), 7)
+    registry.applyEvent({ type: 'failed', requestId: 'request-1', nodeId: 'node-1', message: 'stopped' })
+    registry.register(request({ requestId: 'running', nodeId: 'node-2' }), 7)
+    registry.register(request({ requestId: 'other', nodeId: 'node-3', canvasProjectId: 'canvas-2', cameraStageDocumentId: 'stage-2' }), 7)
+    registry.applyEvent({ type: 'cancelled', requestId: 'other', nodeId: 'node-3' })
+    expect(registry.forgetDocument('stage-1')).toBe(1)
+    expect([...rows.keys()].sort()).toEqual(['other', 'running'])
+    expect(registry.forgetDocument('canvas-2')).toBe(1)
+    expect([...rows.keys()]).toEqual(['running'])
+  })
   beforeEach(() => {
     vi.useFakeTimers()
     vi.setSystemTime(100)

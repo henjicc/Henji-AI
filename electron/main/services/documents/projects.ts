@@ -213,6 +213,31 @@ export class ProjectService {
     })
   }
 
+  /**
+   * 打开别处的文档文件（4.4 收 3.5 遗留）：文件在某个项目文件夹里时按项目登记（与“打开项目文件夹…”相同），
+   * 否则把它所在的文件夹登记为外部位置（与另存到别处相同）。认领文件由调用方随后刷新索引完成；
+   * 同 ID 的文档在别处仍然存在时，扫描按底座规则给新发现的这份换新 ID。
+   */
+  async registerExternalDocumentFolder(filePath: string, isDocumentFile: (fileName: string) => boolean): Promise<void> {
+    await this.logged('register_external_document', { filePath }, async () => {
+      this.workspace.assertWritableLocation(filePath)
+      const file = path.resolve(filePath)
+      const stat = await fsp.stat(file).catch(() => null)
+      if (!stat?.isFile()) throw new DocumentLocationError('请选择一个文档文件。')
+      if (!isDocumentFile(path.basename(file))) throw new DocumentLocationError('这不是痕迹AI 能打开的文档文件。')
+      const folder = path.dirname(file)
+      const project = await this.workspace.findProjectRoot(folder)
+      if (project) {
+        if (!this.workspace.catalog.getProjectByPath(project.root)) await this.registerExternal(project.root)
+        return
+      }
+      if (!this.workspace.isScannedDocumentFolder(folder)) {
+        this.workspace.catalog.addExternalLocation(folder, 'folder')
+        this.options.grantMediaRoots([folder])
+      }
+    })
+  }
+
   /** 从列表里移除外部位置（不动磁盘上的文件）。 */
   async forgetExternal(folderPath: string): Promise<void> {
     await this.logged('forget_external', { folderPath }, async () => {

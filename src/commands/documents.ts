@@ -161,6 +161,11 @@ export async function registerExternalProject(folderPath: string): Promise<Proje
   return await documents().registerExternalProject(folderPath)
 }
 
+/** 打开别处的文档文件：登记所在项目或文件夹为外部位置，返回列表项（4.4）。 */
+export async function registerExternalDocument(filePath: string): Promise<DocumentSummary> {
+  return await documents().registerExternalDocument(filePath)
+}
+
 export async function forgetExternalLocation(folderPath: string): Promise<void> {
   await documents().forgetExternalLocation(folderPath)
 }

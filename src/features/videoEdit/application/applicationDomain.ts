@@ -4,11 +4,11 @@ import { createVideoEditRegistrations } from './videoEditReflection'
 import { VideoEditCollectionExecutor, VideoEditMutationExecutor } from './videoEditExecutors'
 import { VIDEO_EDIT_COMPOSITE_TYPES } from './videoEditCompositeEntities'
 import { openVideoEditDocument, releaseVideoEditDocument, requireVideoEditInstance, saveVideoEdit, verifyVideoEditSaved, type VideoEditInstance } from './videoEditService'
-import { getDocumentOperations, registerDocumentOpener, registerDocumentReleaser } from '@/features/documents/documentOperations'
+import { getDocumentOperations, registerDocumentBusyCheck, registerDocumentOpener, registerDocumentReleaser } from '@/features/documents/documentOperations'
 import { openApplicationSurface } from '@/features/navigation/application/surfaceCapabilityService'
 import { startVideoEditImageDocumentLinks } from './videoEditImageLinks'
 import { openVideoEditClipSource, videoEditClipSource, videoEditEmbedHost } from './videoEditComposition'
-import { collectVideoEditMedia, undoVideoEdit } from './videoEditService'
+import { undoVideoEdit, videoEditBusyReason } from './videoEditService'
 import { executeVideoEditTimelineEdit } from './videoEditTimeline'
 import { videoEditPickRelations } from '@/core/videoEdit/timelineSelection'
 import { splitVideoEditRef } from './videoEditReflection'
@@ -42,6 +42,8 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
       openApplicationSurface('workspace.video_edit')
     })
     registerDocumentReleaser('video_edit', releaseVideoEditDocument)
+    // 通用“收集素材到项目”（4.4）：导出进行中或参数调整未完成时不允许整份改写
+    registerDocumentBusyCheck('video_edit', videoEditBusyReason)
     // 图片文档放进剪辑保持链接（4.1）：图片文档写回后，打开着的剪辑里链接它的片段自动重新渲染
     stopImageDocumentLinks ??= startVideoEditImageDocumentLinks()
     // 嵌入模式的宿主（4.1）：从剪辑里打开的文档“返回剪辑 · 项目名”，助手 open_document 的 fromDocumentId 也走这里
@@ -106,7 +108,6 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
         if (requireVideoEditInstance(id) !== owner) throw new Error('原剪辑已关闭，操作回执不会写入重新打开的剪辑。')
         return { resultRef: input.documentRef, verification: { verified: result.verified, target: input.documentRef, condition: result.verified ? '已从所选字幕文件回读并核对序列快照。' : '用户取消文件选择，未写出字幕。' }, message: result.saved ? '字幕已导出并核实。' : '已取消字幕导出。' }
       }
-      let collectedMessage: string | undefined
       switch (definition.id) {
         case 'undo_video_edit': undoVideoEdit(id); await saveVideoEdit(id); break
         case 'redo_video_edit': undoVideoEdit(id, true); await saveVideoEdit(id); break
@@ -141,21 +142,12 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
         }
         case 'export_video_edit': await exportVideoEdit(id, undefined, true, context.signal); break
         case 'cancel_video_edit_export': cancelVideoEditExport(id); break
-        case 'collect_video_edit_media': {
-          // 与剪辑页“收集素材到项目”同一入口；收集后会话按改写后的引用重新载入，下面照常从文件回读核对
-          const collected = await collectVideoEditMedia(id)
-          const missing = collected.missing ? `；${collected.missing} 个原文件找不到，未能收集` : ''
-          collectedMessage = collected.copiedFiles || collected.copiedDocuments
-            ? `已把 ${collected.copiedFiles} 个文件、${collected.copiedDocuments} 份别处的文档复制进项目并改写引用${missing}。`
-            : `用到的素材与文档都已在项目里，没有需要收集的${missing}。`
-          break
-        }
       }
       if (requireVideoEditInstance(id) !== owner) throw new Error('原剪辑已关闭，操作回执不会写入重新打开的剪辑。')
       const task = videoEditExportTask(id)
       const instance = requireVideoEditInstance(id)
       const verified = definition.id.includes('export') ? Boolean(task) : await verifyVideoEditSaved(id, instance.document)
-      return { resultRef: input.documentRef, verification: { verified, target: input.documentRef, condition: definition.id.includes('export') ? '已回读原剪辑的导出任务状态；请求提交不等于视频导出完成。' : '已从剪辑文件回读并核对编辑内容。' }, message: definition.id.includes('export') ? task ? `导出状态：${task.state}。请查询导出状态确认完成。` : '尚无导出任务或已取消文件选择。' : collectedMessage ?? '操作已完成，请回读剪辑核对结果。', ...(task ? { task: { id: task.id, state: task.state, progress: task.progress, revision: task.revision, startFrame: task.startFrame, endFrame: task.endFrame } } : {}) }
+      return { resultRef: input.documentRef, verification: { verified, target: input.documentRef, condition: definition.id.includes('export') ? '已回读原剪辑的导出任务状态；请求提交不等于视频导出完成。' : '已从剪辑文件回读并核对编辑内容。' }, message: definition.id.includes('export') ? task ? `导出状态：${task.state}。请查询导出状态确认完成。` : '尚无导出任务或已取消文件选择。' : '操作已完成，请回读剪辑核对结果。', ...(task ? { task: { id: task.id, state: task.state, progress: task.progress, revision: task.revision, startFrame: task.startFrame, endFrame: task.endFrame } } : {}) }
     })
   },
   resolvePersistenceParticipants(steps) {

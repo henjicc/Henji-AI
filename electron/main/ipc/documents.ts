@@ -71,6 +71,7 @@ export function registerDocumentsIpc(): void {
   registerIpcHandler(c.setProjectMainDocument, parseWith(setProjectMainDocumentRequestSchema), (request) => service().setProjectMainDocument(request))
   registerIpcHandler(c.trashProject, parseWith(projectIdRequestSchema), ({ projectId }) => service().trashProject(projectId))
   registerIpcHandler(c.registerExternalProject, parseWith(pathRequestSchema), ({ path }) => service().registerExternalProject(path))
+  registerIpcHandler(c.registerExternalDocument, parseWith(pathRequestSchema), ({ path }) => service().registerExternalDocument(path))
   registerIpcHandler(c.forgetExternalLocation, parseWith(pathRequestSchema), ({ path }) => service().forgetExternalLocation(path))
   registerIpcHandler(c.revealProject, parseWith(projectIdRequestSchema), ({ projectId }) => service().revealProject(projectId))
   registerIpcHandler(c.exportDocumentPackage, parseWith(exportDocumentPackageRequestSchema), (request) => service().exportDocumentPackage(request))

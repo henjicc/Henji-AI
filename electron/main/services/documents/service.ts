@@ -36,7 +36,11 @@ import type {
   WriteDocumentSessionStateRequest,
 } from '../../../../src/core/documents/types'
 import type { DocumentsPlatform } from '../../../../src/platform/contracts/documents'
+import path from 'node:path'
+
+import type { DocumentKindRegistry } from '../../../../src/core/documents/kinds'
 import { isPathInside } from '../../../../src/core/storage/pathSyntax'
+import { DocumentLocationError } from './errors'
 import type { DocumentCoverStore } from './covers'
 import type { DocumentIndexScanner } from './index-scanner'
 import type { DocumentPackageService } from './package-service'
@@ -58,6 +62,7 @@ export class DocumentService implements DocumentsPlatform {
     covers: DocumentCoverStore
     sessionState: DocumentSessionStateStore
     packages: DocumentPackageService
+    kinds: Pick<DocumentKindRegistry, 'forFileName'>
   }) {}
 
   async listDocuments(query: DocumentListQuery = {}): Promise<DocumentSummary[]> {
@@ -200,6 +205,20 @@ export class DocumentService implements DocumentsPlatform {
 
   registerExternalProject(folderPath: string): Promise<ProjectSummary> {
     return this.parts.projects.registerExternal(folderPath)
+  }
+
+  /**
+   * 打开别处的文档文件（4.4）：登记它所在的项目或文件夹为外部位置，刷新索引认领后返回列表项
+   * （ID 与已有文档重复时扫描已换新 ID）。打开本身由渲染层交给该类型的打开方式。
+   */
+  async registerExternalDocument(filePath: string): Promise<DocumentSummary> {
+    const { workspace, projects, scanner, kinds } = this.parts
+    await projects.registerExternalDocumentFolder(filePath, (fileName) => Boolean(kinds.forFileName(fileName)))
+    await scanner.refresh()
+    const row = workspace.catalog.getDocumentByPath(path.resolve(filePath))
+    const found = row ? (await this.listDocuments({ includeDrafts: true, includeMissing: false })).find((document) => document.id === row.id) : undefined
+    if (!found) throw new DocumentLocationError('没能识别这个文档文件，它可能已损坏或来自更新版本的痕迹AI。')
+    return found
   }
 
   forgetExternalLocation(folderPath: string): Promise<void> {

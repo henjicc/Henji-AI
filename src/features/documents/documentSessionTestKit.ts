@@ -524,6 +524,14 @@ export class FakeDocumentCommands implements DocumentOperationCommands {
     return next
   }
 
+  /** 打开别处的文档的替身：按位置找到已登记的文档（测试先 seed 再调用）。 */
+  async registerExternalDocument(filePath: string): Promise<DocumentSummary> {
+    this.calls.push('registerExternalDocument')
+    const found = (await this.listDocuments()).find((document) => document.path === filePath)
+    if (!found) throw namedError('DocumentLocationError', '没能识别这个文档文件。')
+    return found
+  }
+
   /** 单文件包的替身：导出记录请求、返回包位置；导入按 packages 里登记的内容建文档或项目。 */
   readonly exportedPackages: Array<{ target?: DocumentTarget; projectId?: string; path: string }> = []
   readonly packages = new Map<string, { type: 'document'; kind: DocumentKindId; name: string; content: unknown } | { type: 'project'; name: string }>()

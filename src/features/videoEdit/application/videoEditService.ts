@@ -664,6 +664,15 @@ export async function releaseVideoEditDocument(id: string): Promise<boolean> {
   return true
 }
 
+/** 剪辑此刻能否被整份改写（收集素材会让会话重新载入）：导出进行中或参数调整未完成时给出原因。通用文档操作也登记它。 */
+export function videoEditBusyReason(id: string): string | null {
+  const instance = instances.get(id)
+  if (!instance) return null
+  if (instance.busy) return '请等待导出完成或取消导出。'
+  if (gestures.has(instance)) return '请先完成当前参数调整。'
+  return null
+}
+
 /**
  * 收集素材：把剪辑引用的外部文件复制进所在项目的“素材”并改写引用；片段来源引用的别处文档
  * （别的项目、作品目录里的画布、口播、图片文档）复制进项目（新 ID）并改指向副本（4.1）。
@@ -671,8 +680,8 @@ export async function releaseVideoEditDocument(id: string): Promise<boolean> {
  */
 export async function collectVideoEditMedia(id: string): Promise<{ copiedFiles: number; copiedDocuments: number; missing: number }> {
   const instance = requireVideoEditInstance(id)
-  if (instance.busy) throw new Error('请等待导出完成或取消导出。')
-  if (gestures.has(instance)) throw new Error('请先完成当前参数调整。')
+  const busy = videoEditBusyReason(id)
+  if (busy) throw new Error(busy)
   const result = await documentOperations().collectDocumentMedia(instance.session.target)
   logger.info('剪辑素材已收集', { event: 'video_edit.media.collect.completed', context: { docId: id, copiedFiles: result.copiedFiles, copiedDocuments: result.copiedDocuments ?? 0, missing: result.missingPaths.length } })
   return { copiedFiles: result.copiedFiles, copiedDocuments: result.copiedDocuments ?? 0, missing: result.missingPaths.length }

@@ -41,6 +41,7 @@ vi.mock('@/commands/documents', () => {
     importFileToContainer: call('importFile'),
     setProjectMainDocument: call('setProjectMainDocument'),
     registerExternalProject: call('registerExternalProject'),
+    registerExternalDocument: call('registerExternalDocument'),
     forgetExternalLocation: call('forgetExternalLocation'),
     exportDocumentPackage: call('exportDocumentPackage'),
     exportProjectPackage: call('exportProjectPackage'),
@@ -180,6 +181,25 @@ it('复制进另一个项目与导出为单个文件（4.1）：副本落在目�
     expect(fake.exportedPackages.at(-1)).toMatchObject({ projectId: project.id })
     const both = await app.call('export_document_package', { documentId: meta.id, projectId: project.id })
     expect(JSON.stringify(both)).toContain('只能给一个')
+  } finally {
+    app.dispose()
+  }
+})
+
+it('通用收集素材（4.4）：项目里的文档复制外部文件并改写引用；不在项目里的文档如实拒绝', async () => {
+  const project = fake.seedProject({ name: '短片' })
+  const meta = fake.seed({ kind: 'canvas', name: '画布', content: { src: 'E:/外部/图.png' }, projectId: project.id, folder: project.path })
+  fake.collectMapping.set('E:/外部/图.png', `${project.path}/素材/图.png`)
+  const loose = fake.seed({ name: '散件', content: { src: 'E:/外部/图.png' } })
+  const app = createApplicationHarness()
+  try {
+    const result = await app.requireResult('collect_document_media', { documentId: meta.id }) as { copiedFiles: number; message: string; verification: { verified: boolean } }
+    expect(result.copiedFiles).toBe(1)
+    expect(result.message).toContain('1 个文件')
+    expect(result.verification.verified).toBe(true)
+    expect(fake.stored(meta.id)?.content).toEqual({ src: `${project.path}/素材/图.png` })
+    const rejected = await app.call('collect_document_media', { documentId: loose.id })
+    expect(JSON.stringify(rejected)).toContain('只能收集项目里的文档')
   } finally {
     app.dispose()
   }
