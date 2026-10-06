@@ -5,6 +5,8 @@ import { CODE_MATERIAL_LIMITS, CodeMaterialError } from '@/core/videoEdit/codeMa
 import type { VideoEditGraphicDraw } from '@/core/videoEdit/graphics'
 import type { CodeColor, CodeDrawCommand, CodeMaterialContext, CodeMaterialProgram } from '@/core/videoEdit/codeMaterial/contract'
 import { emitCodeMaterialFilter } from './codeGpuFilter'
+import type { VideoEditBuiltinEffectInstance } from '@/core/videoEdit/compositing'
+import { VideoEditBuiltinEffectsGpu } from './videoEditBuiltinEffectsGpu'
 import { measureVideoEditGlyph } from '../videoEditGlyphMetrics'
 import { videoEditGpuBytesPerPixel, VIDEO_EDIT_PRECISE_FORMAT, type VideoEditGpuColorFormat } from './videoEditGpuFrame'
 
@@ -84,6 +86,8 @@ export class VideoEditCodeGpu {
   /** Keyed by version and output format. */
   private readonly filterCompiles = new Map<string, { version: string; program: CodeMaterialProgram; pending: Promise<GpuRenderPipeline> }>()
   private readonly retiredTextures = new WeakSet<GpuTexture>()
+  private readonly textureBytes = new WeakMap<GpuTexture, number>()
+  private readonly preciseTextures = new WeakSet<GpuTexture>()
   private filterLayout?: unknown
   private shape!: GpuRenderPipeline
   private text!: GpuRenderPipeline
@@ -92,13 +96,14 @@ export class VideoEditCodeGpu {
   private readonly mixPipelines = new Map<VideoEditGpuColorFormat, GpuRenderPipeline>()
   private readonly mixReady = new Map<VideoEditGpuColorFormat, Promise<void>>()
   private sampler: unknown
+  private builtinRuntime?: VideoEditBuiltinEffectsGpu
   private bytes = 0
   /** Part of `bytes` held by `rgba16float` surfaces. */
   private preciseBytes = 0
   private disposed = false
   private readonly ready: Promise<void>
   private pending: Promise<void> = Promise.resolve()
-  private readonly counts = { pipelineCompiles: 0, textureAllocations: 0, externalCopies: 0, generatorFrames: 0, filterFrames: 0, mixFrames: 0 }
+  private readonly counts = { pipelineCompiles: 0, textureAllocations: 0, externalCopies: 0, generatorFrames: 0, filterFrames: 0, mixFrames: 0, builtinFrames: 0 }
   constructor(private readonly device: GpuDevice) { this.ready = this.initialize() }
   private async initialize(): Promise<void> {
     this.device.pushErrorScope('validation')
@@ -189,6 +194,7 @@ export class VideoEditCodeGpu {
     if (precise ? bytes + this.preciseBytes > MAX_PRECISE_RESIDENT_BYTES : bytes + this.bytes - this.preciseBytes > MAX_RESIDENT_BYTES) throw new CodeMaterialError('BUDGET', precise ? '高精度代码素材纹理超出512MiB会话预算。' : '代码素材纹理超出尺寸或256MiB会话预算。')
     const texture = this.device.createTexture({ size: [width, height], format, usage: 0x02 | 0x04 | 0x10 })
     this.bytes += bytes; if (precise) this.preciseBytes += bytes
+    this.textureBytes.set(texture, bytes); if (precise) this.preciseTextures.add(texture)
     this.counts.textureAllocations++
     return texture
   }
@@ -379,7 +385,21 @@ struct Mix { amount:vec4f, color:vec4f }
     pass.draw(3); pass.end(); this.submit(encoder); this.counts.mixFrames++
     return target.picture
   }
-  releaseUnused(keys: ReadonlySet<string>): void { for (const key of this.surfaces.keys()) if (!keys.has(key)) this.releaseSurface(key) }
+  /** 内置效果（4.7b）：输出保持输入的精度；中间纹理计入同一份显存预算。`frame` 只用作胶片颗粒的确定种子。 */
+  async builtin(key: string, instance: VideoEditBuiltinEffectInstance, input: VideoEditCodePicture, frame: number): Promise<VideoEditCodePicture> {
+    await this.ready; this.assertLive(); this.assertInput(input.texture)
+    if (input.owner !== this.device) throw new CodeMaterialError('CONTEXT', '内置效果输入必须属于当前GPU设备。')
+    const runtime = this.builtinRuntime ??= new VideoEditBuiltinEffectsGpu(this.device, this.sampler, {
+      allocate: (width, height, format) => this.texture(width, height, format as VideoEditGpuColorFormat),
+      release: texture => { const bytes = this.textureBytes.get(texture) ?? 0; texture.destroy(); this.bytes -= bytes; if (this.preciseTextures.has(texture)) this.preciseBytes -= bytes },
+    })
+    const target = this.surface(key, input.width, input.height, input.textureFormat)
+    if (target.picture.texture === input.texture) throw new CodeMaterialError('CONTEXT', '内置效果输入输出不能引用同一纹理。')
+    await runtime.render(instance, { texture: input.texture, width: input.width, height: input.height, format: input.textureFormat }, target.picture.texture, frame)
+    this.assertLive(); this.pending = this.device.queue.onSubmittedWorkDone(); this.counts.builtinFrames++
+    return target.picture
+  }
+  releaseUnused(keys: ReadonlySet<string>): void { for (const key of this.surfaces.keys()) if (!keys.has(key)) this.releaseSurface(key); this.builtinRuntime?.releaseIdle() }
   /** CodeSources owns IR identity. Retired IR cannot leave an older pipeline identity behind. */
   retainProgramVersions(versions: ReadonlySet<string>): void {
     for (const version of this.filters.keys()) if (!versions.has(version)) this.filters.delete(version)
@@ -391,11 +411,11 @@ struct Mix { amount:vec4f, color:vec4f }
     surface.picture.texture.destroy(); surface.buffers.forEach(buffer => buffer?.destroy()); surface.filterBuffer?.destroy(); surface.mixBuffer?.destroy(); this.bytes -= surface.bytes; this.surfaces.delete(key)
     if (surface.picture.highPrecision) this.preciseBytes -= surface.bytes
   }
-  diagnostics(): { residentBytes: number; surfaces: number; glyphs: number; pipelines: number; pipelineCompiles: number; textureAllocations: number; externalCopies: number; generatorFrames: number; filterFrames: number; mixFrames: number } { return { ...this.counts, residentBytes: this.bytes, surfaces: this.surfaces.size, glyphs: this.glyphs.size, pipelines: this.disposed ? 0 : [...this.filters.values()].reduce((sum, filter) => sum + filter.pipelines.size, 0) + 2 + Number(!!this.image) + this.mixPipelines.size } }
+  diagnostics(): { residentBytes: number; surfaces: number; glyphs: number; pipelines: number; pipelineCompiles: number; textureAllocations: number; externalCopies: number; generatorFrames: number; filterFrames: number; mixFrames: number; builtinFrames: number } { return { ...this.counts, residentBytes: this.bytes, surfaces: this.surfaces.size, glyphs: this.glyphs.size, pipelines: this.disposed ? 0 : [...this.filters.values()].reduce((sum, filter) => sum + filter.pipelines.size, 0) + 2 + Number(!!this.image) + this.mixPipelines.size } }
   async dispose(): Promise<void> {
     this.disposed = true; await this.ready.catch(() => {}); await this.imageReady?.catch(() => {}); await Promise.allSettled(this.mixReady.values())
     await Promise.allSettled([...this.filterCompiles.values()].map(value => value.pending)); await this.pending.catch(() => {})
-    this.releaseUnused(new Set()); for (const glyph of this.glyphs.values()) { glyph.texture.destroy(); this.bytes -= glyph.bytes }
+    this.releaseUnused(new Set()); this.builtinRuntime?.dispose(); this.builtinRuntime = undefined; for (const glyph of this.glyphs.values()) { glyph.texture.destroy(); this.bytes -= glyph.bytes }
     this.glyphs.clear(); this.filters.clear(); this.filterLayout = undefined; this.image = undefined; this.mixPipelines.clear()
   }
 }

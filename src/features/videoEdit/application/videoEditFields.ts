@@ -7,12 +7,12 @@ import { codeMaterialInstanceSchema, codeMaterialVersionSchema } from '@/core/vi
 import { codeMaterialCurvesSchema } from '@/core/videoEdit/codeMaterialAnimation'
 import { videoEditTimelineViewSchema, videoEditProgramPlaybackSchema } from '@/core/videoEdit/timelineSelection'
 import { videoEditMarkerSchema, videoEditCaptionSchema } from '@/core/videoEdit/timedContent'
-import { videoEditEffectSchema, videoEditAdjustmentSchema } from '@/core/videoEdit/compositing'
+import { videoEditEffectSchema, videoEditAdjustmentSchema, VIDEO_EDIT_MAX_EFFECTS } from '@/core/videoEdit/compositing'
 import { videoEditTransitionSchema } from '@/core/videoEdit/transitions'
 import { VIDEO_EDIT_COMPOSITE_TYPES } from './videoEditCompositeEntities'
 import { videoEditAudioLayoutSchema, videoEditAudioMappingSchema, videoEditAudioStreamsSchema } from '@/core/videoEdit/audioChannels'
 
-export const VIDEO_EDIT_TYPES = ['video_edit.document', 'video_edit.clip', 'video_edit.annotation', 'video_edit.media', 'video_edit.sequence', 'video_edit.bin', 'video_edit.item', 'video_edit.track', 'video_edit.source', 'video_edit.code_material', 'video_edit.code_version', 'video_edit.marker', 'video_edit.caption', ...VIDEO_EDIT_COMPOSITE_TYPES] as const
+export const VIDEO_EDIT_TYPES = ['video_edit.document', 'video_edit.clip', 'video_edit.annotation', 'video_edit.media', 'video_edit.sequence', 'video_edit.bin', 'video_edit.item', 'video_edit.track', 'video_edit.source', 'video_edit.code_material', 'video_edit.code_version', 'video_edit.marker', 'video_edit.caption', ...VIDEO_EDIT_COMPOSITE_TYPES, 'video_edit.builtin_effect'] as const
 export type VideoEditEntityType = typeof VIDEO_EDIT_TYPES[number]
 export type VideoEditFieldData = Record<string, JsonValue>
 export function videoEditPropertyKey(key: string): string { return key.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`) }
@@ -47,6 +47,8 @@ const schemas: Record<VideoEditEntityType, Record<string, z.ZodType>> = {
   'video_edit.graphic_object': { name: z.string().trim().min(1).max(200), kind: z.enum(['rect', 'ellipse', 'text']), clipId: z.string().min(1).max(100), sequenceId: z.string().min(1).max(100), parameters: codeMaterialInstanceSchema.shape.parameters, curves: codeMaterialCurvesSchema },
   'video_edit.effect': { name: videoEditEffectSchema.shape.name, enabled: videoEditEffectSchema.shape.enabled, amount: videoEditEffectSchema.shape.amount, definitionId: codeMaterialInstanceSchema.shape.definitionId, versionId: codeMaterialInstanceSchema.shape.versionId, parameters: codeMaterialInstanceSchema.shape.parameters, curves: codeMaterialCurvesSchema, clipId: z.string().min(1).max(100), sequenceId: z.string().min(1).max(100) },
   'video_edit.transition': { ...Object.fromEntries(Object.entries(videoEditTransitionSchema.shape).filter(([key]) => key !== 'id')), sequenceId: z.string().min(1).max(100) },
+  // 内置效果目录（4.7a，只读）：助手据此选效果、按参数语义取值，再用 video_edit.effect 加到片段上。
+  'video_edit.builtin_effect': { name: text, group: text, description: text, params: z.array(z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.array(z.string())]))).max(16) },
 }
 schemas['video_edit.clip'].codeParameters = codeMaterialInstanceSchema.shape.parameters
 schemas['video_edit.clip'].graphic = videoEditClipSchema.shape.graphic.nullable()
@@ -55,7 +57,7 @@ schemas['video_edit.item'].graphic = videoEditItemSchema.shape.graphic.nullable(
 // 颜色标签：读出 null 表示按类型默认，写 null 恢复默认（3.2）。
 for (const type of ['video_edit.item', 'video_edit.bin', 'video_edit.sequence'] as const) schemas[type].label = videoEditLabelSchema.nullable()
 schemas['video_edit.clip'].graphicObjectIds = z.array(z.string().min(1).max(100)).max(32)
-schemas['video_edit.clip'].effectIds = z.array(z.string().min(1).max(100)).max(4)
+schemas['video_edit.clip'].effectIds = z.array(z.string().min(1).max(100)).max(VIDEO_EDIT_MAX_EFFECTS)
 schemas['video_edit.clip'].adjustmentFromTrack = videoEditAdjustmentSchema.shape.fromTrack.nullable()
 schemas['video_edit.item'].graphicKind = z.enum(['solid', 'rect', 'ellipse', 'text']).nullable()
 schemas['video_edit.item'].graphicWidth = z.number().int().min(16).max(8192).nullable()
@@ -90,17 +92,29 @@ Object.assign(labels, { audioStreams: '源声音流（文件顺序，每条的�
 Object.assign(labels, { label: '颜色标签（空为按类型默认）', graphic: '图形对象结构', effects: '效果链', adjustment: '调整图层范围', transitions: '序列转场' })
 Object.assign(labels, { graphicObjectIds: '图形对象顺序（从下到上）', effectIds: '效果执行顺序', adjustmentFromTrack: '调整起始轨道', graphicKind: '创建图形类型', graphicWidth: '图形宽度', graphicHeight: '图形高度', parameters: '实例参数', curves: '参数关键帧', versionId: '固定源码版本', definitionId: '滤镜源码定义', sequenceId: '所属序列', leftClipId: '左侧片段', rightClipId: '右侧片段', durationFrames: '转场时长帧' })
 Object.assign(labels, { alignment: '过渡对齐（center 中心切点、start 起点切点即整段在切点后、end 终点切点即整段在切点前、custom 自定义起点）', framesBeforeCut: '过渡在切点之前的帧数（对齐为 custom 时生效）', fadeInFrames: '淡入帧数（0 为不淡入；画面从透明渐显，声音按恒定功率渐强）', fadeOutFrames: '淡出帧数（0 为不淡出）' })
+Object.assign(labels, { group: '分组', description: '作用与适用场景', params: '参数（键、类型、范围、单位、默认值与取值含义）' })
+/** 个别属性的说明比通用模板更具体（助手据此取值）。 */
+const descriptions: Record<string, string> = {
+  'video_edit.effect.definition_id': '效果来源，创建后不可改：内置效果写 effect:<ID>（如 effect:gaussian_blur；全部内置效果及参数语义见 video_edit.builtin_effect），代码滤镜写滤镜源码定义 ID。',
+  'video_edit.effect.parameters': '效果参数。内置效果：键与范围见 video_edit.builtin_effect 的 params（强度多为 0–100，空间量按画面高度比例，与分辨率无关）；写入是整体替换：只存写入的键，没写的键按默认值（只改一项时先读出再整体写回）；越界或未知键会报错并列出可用范围。代码滤镜：按固定源码版本声明校验。',
+  'video_edit.effect.amount': '效果与原画面的混合比例 0–1：1 完全应用，0.5 一半强度；停用效果请写 enabled。',
+  'video_edit.effect.version_id': '代码滤镜的固定源码版本；内置效果为空字符串且不可写。',
+  'video_edit.effect.curves': '代码滤镜的参数关键帧；内置效果暂不支持关键帧（保持空对象）。',
+  'video_edit.clip.effect_ids': `效果执行顺序（从上到下依次处理画面），一个片段最多 ${VIDEO_EDIT_MAX_EFFECTS} 项。`,
+}
 const codeKeys: Record<string, string> = { codeParameters: 'parameters', codeCurves: 'curves', codeVersionId: 'versionId' }
 /** 剪辑名就是剪辑文件的文件名（3.1）：改名走通用文档属性。 */
 export const VIDEO_EDIT_PROJECT_NAME_READ_ONLY = '剪辑名就是剪辑文件名，请改 documents.document 的 name（文档 ID 与本剪辑相同）；剪辑内容能力不改名。'
+/** 内置效果目录的只读原因（属性与实体共用）：指向真正能加效果的写入路径。 */
+export const VIDEO_EDIT_BUILTIN_CATALOG_READ_ONLY = '内置效果目录由应用登记、随版本更新，只读；给片段加效果请在片段下创建 video_edit.effect，definition_id 写这里的 ID（effect:<ID>），parameters 按 params 取值。'
 export const VIDEO_EDIT_CONTROLLED_AGGREGATES = ['code', 'graphic', 'effects', 'adjustment', 'transitions', 'creativeSource'] as const
 export const VIDEO_EDIT_FIELDS = Object.fromEntries(VIDEO_EDIT_TYPES.map(entityType => [entityType, Object.entries(schemas[entityType]).map(([key, schema]): ApplicationFieldDefinition<VideoEditFieldData, VideoEditFieldData> => {
   const id = `${entityType}.${videoEditPropertyKey(key)}`
   const controlled = VIDEO_EDIT_CONTROLLED_AGGREGATES.some(value => value === key)
   const child = VIDEO_EDIT_COMPOSITE_TYPES.some(type => type === entityType)
-  const writable = !controlled && !(entityType === 'video_edit.track' && ['index', 'kind'].includes(key)) && !(child && ['kind', 'definitionId', 'clipId', 'sequenceId', 'leftClipId', 'rightClipId'].includes(key)) && entityType !== 'video_edit.media' && entityType !== 'video_edit.code_version' && (entityType !== 'video_edit.code_material' || key === 'name') && (entityType !== 'video_edit.document' || ['selectedItemIds', 'selectedBinId', 'openSequenceIds', 'timelineView', 'programPlayback'].includes(key)) && !(entityType === 'video_edit.item' && ['kind', 'mediaId', 'graphicKind', 'graphicWidth', 'graphicHeight'].includes(key)) && (entityType !== 'video_edit.source' || ['itemId', 'timeUs', 'playing', 'volume', 'inUs', 'outUs', 'playbackDirection'].includes(key))
+  const writable = !controlled && !(entityType === 'video_edit.track' && ['index', 'kind'].includes(key)) && !(child && ['kind', 'definitionId', 'clipId', 'sequenceId', 'leftClipId', 'rightClipId'].includes(key)) && entityType !== 'video_edit.media' && entityType !== 'video_edit.code_version' && entityType !== 'video_edit.builtin_effect' && (entityType !== 'video_edit.code_material' || key === 'name') && (entityType !== 'video_edit.document' || ['selectedItemIds', 'selectedBinId', 'openSequenceIds', 'timelineView', 'programPlayback'].includes(key)) && !(entityType === 'video_edit.item' && ['kind', 'mediaId', 'graphicKind', 'graphicWidth', 'graphicHeight'].includes(key)) && (entityType !== 'video_edit.source' || ['itemId', 'timeUs', 'playing', 'volume', 'inUs', 'outUs', 'playbackDirection'].includes(key))
   return {
-    propertyId: id, descriptor: { id, entityType, version: 1, title: key === 'codeParameters' ? '代码实例参数' : labels[key] ?? key, description: key === 'source' ? '受限作者源码；只经AST白名单检查、指定帧试渲染后进入剪辑，不执行JavaScript或宿主脚本。源码版本不可原位改写。' : key === 'codeParameters' ? '按固定源码版本的声明校验参数字典；修改只作用于此片段，不重编译源码，复用剪辑历史和自动保存。' : key === 'programPlayback' ? '节目播放控制命令；回读为当前实际位置，播放观察可随帧推进。执行确认表示会话接受命令，实际画面由节目监视器呈现。' : `${labels[key] ?? key}；时间线使用整数帧，源入点使用微秒，画面位置使用归一化坐标。`, value: { kind: 'json', schemaRef: videoEditSchemaRef('property', id + '.value') }, nullable: key === 'code' || schema.isNullable(), ...((entityType === 'video_edit.source' && ['timeUs', 'playing'].includes(key) || entityType === 'video_edit.document' && key === 'programPlayback') ? { verificationStrategy: 'execution' as const } : {}), dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], requiredPermissions: { read: ['video_edit:read'], write: writable ? ['video_edit:write'] : [] }, revisionScopes: ['video_edit'], schemaRef: videoEditSchemaRef('property', id), ...(!writable ? { readOnlyReason: entityType === 'video_edit.document' && key === 'name' ? VIDEO_EDIT_PROJECT_NAME_READ_ONLY : '由剪辑会话、不可变源码或原素材维护。' } : {}) },
+    propertyId: id, descriptor: { id, entityType, version: 1, title: key === 'codeParameters' ? '代码实例参数' : labels[key] ?? key, description: descriptions[id] ?? (key === 'source' ? '受限作者源码；只经AST白名单检查、指定帧试渲染后进入剪辑，不执行JavaScript或宿主脚本。源码版本不可原位改写。' : key === 'codeParameters' ? '按固定源码版本的声明校验参数字典；修改只作用于此片段，不重编译源码，复用剪辑历史和自动保存。' : key === 'programPlayback' ? '节目播放控制命令；回读为当前实际位置，播放观察可随帧推进。执行确认表示会话接受命令，实际画面由节目监视器呈现。' : `${labels[key] ?? key}；时间线使用整数帧，源入点使用微秒，画面位置使用归一化坐标。`), value: { kind: 'json', schemaRef: videoEditSchemaRef('property', id + '.value') }, nullable: key === 'code' || schema.isNullable(), ...((entityType === 'video_edit.source' && ['timeUs', 'playing'].includes(key) || entityType === 'video_edit.document' && key === 'programPlayback') ? { verificationStrategy: 'execution' as const } : {}), dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], requiredPermissions: { read: ['video_edit:read'], write: writable ? ['video_edit:write'] : [] }, revisionScopes: ['video_edit'], schemaRef: videoEditSchemaRef('property', id), ...(!writable ? { readOnlyReason: entityType === 'video_edit.document' && key === 'name' ? VIDEO_EDIT_PROJECT_NAME_READ_ONLY : entityType === 'video_edit.builtin_effect' ? VIDEO_EDIT_BUILTIN_CATALOG_READ_ONLY : '由剪辑会话、不可变源码或原素材维护。' } : {}) },
     read: source => codeKeys[key] ? source.code && typeof source.code === 'object' && !Array.isArray(source.code) ? source.code[codeKeys[key]] ?? (key === 'codeVersionId' ? '' : {}) : key === 'codeVersionId' ? '' : {} : source[key] ?? (key === 'sourceComponent' ? 'all' : key === 'height' && entityType === 'video_edit.track' ? 32 : key === 'syncLocked' ? true : key === 'code' || schema.isNullable() ? null : ['tags', 'effects', 'transitions'].includes(key) ? [] : ['fadeInFrames', 'fadeOutFrames'].includes(key) ? 0 : key === 'frameRateMode' ? 'unknown' : ''), storeActions: [],
     ...(entityType === 'video_edit.sequence' && key === 'frameRate' ? { cascadeEffects: VIDEO_EDIT_TIME_CASCADES } : {}),
     ...(entityType === 'video_edit.clip' && ['start', 'duration', 'sourceInUs'].includes(key) ? { cascadeEffects: VIDEO_EDIT_CLIP_CONTENT_CASCADES } : {}),

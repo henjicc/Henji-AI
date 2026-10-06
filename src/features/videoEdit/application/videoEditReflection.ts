@@ -1,8 +1,10 @@
 import { fieldDescriptors, fieldReadValues, unrestrictedCollectionAvailability, type ApplicationEntityProvider, type ApplicationEntityRegistration, type ApplicationRef } from '@/core/application-control'
 import type { VideoEditDocument } from '@/core/videoEdit/document'
+import { VIDEO_EDIT_MAX_EFFECTS } from '@/core/videoEdit/compositing'
+import { VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS, describeVideoEditBuiltinEffect, parseVideoEditBuiltinRefId, requireVideoEditBuiltinEffect, videoEditBuiltinRefId } from '@/core/videoEdit/builtinEffects'
 import { videoEditTransitionClipIds } from '@/core/videoEdit/transitions'
 import { listVideoEditInstances, requireVideoEditInstance, getVideoEditTimelineView, videoEditDomainRevision as videoEditRevision } from './videoEditService'
-import { VIDEO_EDIT_FIELDS, VIDEO_EDIT_TYPES, videoEditSchemaDocuments, videoEditSchemaRef, type VideoEditEntityType, type VideoEditFieldData } from './videoEditFields'
+import { VIDEO_EDIT_BUILTIN_CATALOG_READ_ONLY, VIDEO_EDIT_FIELDS, VIDEO_EDIT_TYPES, videoEditSchemaDocuments, videoEditSchemaRef, type VideoEditEntityType, type VideoEditFieldData } from './videoEditFields'
 import { readVideoEditSource } from './videoEditSource'
 import { VIDEO_EDIT_COMPOSITE_TYPES, videoEditCompositeItems, videoEditCompositeData, videoEditCompositeOwner, type VideoEditCompositeEntityType } from './videoEditCompositeEntities'
 
@@ -27,6 +29,7 @@ export function videoEditEntityItems(document: VideoEditDocument, type: VideoEdi
     case 'video_edit.code_material': return document.codeMaterials ?? []
     case 'video_edit.code_version': return (document.codeMaterials ?? []).flatMap(definition => definition.versions.map(version => ({ ...version, name: definition.name })))
     case 'video_edit.graphic_object': case 'video_edit.effect': case 'video_edit.transition': return videoEditCompositeItems(document, type)
+    case 'video_edit.builtin_effect': return VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS.map(definition => ({ id: videoEditBuiltinRefId(definition.id), name: definition.name }))
   }
 }
 export function readVideoEditData(ref: ApplicationRef): VideoEditFieldData {
@@ -34,6 +37,12 @@ export function readVideoEditData(ref: ApplicationRef): VideoEditFieldData {
   if (ref.kind === 'video_edit.document') return { name: instance.document.name, frame: instance.frame, selection: instance.selection ?? '', activeSequenceId: instance.activeSequenceId, dirty: instance.dirty, selectedItemIds: [...instance.selectedItemIds], selectedBinId: instance.selectedBinId, openSequenceIds: [...instance.openSequenceIds], timelineView: { ...getVideoEditTimelineView(projectId) }, programPlayback: { frame: instance.frame, playing: instance.playing, playbackDirection: instance.playbackDirection } }
   if (ref.kind === 'video_edit.source') { if (childId !== 'source') throw new Error('NOT_FOUND：源预览引用无效。'); return { ...readVideoEditSource(projectId) } }
   if (VIDEO_EDIT_COMPOSITE_TYPES.some(type => type === ref.kind)) return videoEditCompositeData(instance.document, ref.kind as VideoEditCompositeEntityType, childId)
+  if (ref.kind === 'video_edit.builtin_effect') {
+    const id = parseVideoEditBuiltinRefId(childId)
+    if (!id) throw new Error(`NOT_FOUND：没有内置效果 ${childId}，可用：${VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS.map(definition => videoEditBuiltinRefId(definition.id)).join('、')}。`)
+    const { name, group, description, params } = describeVideoEditBuiltinEffect(requireVideoEditBuiltinEffect(id))
+    return JSON.parse(JSON.stringify({ name, group, description, params })) as VideoEditFieldData
+  }
   if (ref.kind === 'video_edit.code_material') {
     const definition = instance.document.codeMaterials?.find(value => value.id === childId)
     if (!definition) throw new Error('NOT_FOUND：代码素材定义不存在。')
@@ -106,14 +115,14 @@ class VideoEditProvider implements ApplicationEntityProvider {
       else if (this.entityType === 'video_edit.graphic_object') {
         if (!clip.graphic) createReason = removeReason = '请选择结构化图形片段。'
         else { if (clip.graphic.objects.length >= 32) createReason = '图形已达到32个对象上限。'; if (!clip.graphic.objects.length) removeReason = '此图形没有可移除的对象。' }
-      } else { if (clip.kind === 'audio') createReason = removeReason = '音频片段不支持画面效果。'; else { if ((clip.effects?.length ?? 0) >= 4) createReason = '片段已达到4项效果上限。'; if (!clip.effects?.length) removeReason = '片段没有可移除的效果。' } }
+      } else { if (clip.kind === 'audio') createReason = removeReason = '音频片段不支持画面效果。'; else { if ((clip.effects?.length ?? 0) >= VIDEO_EDIT_MAX_EFFECTS) createReason = `片段已达到${VIDEO_EDIT_MAX_EFFECTS}项效果上限，请先移除不用的效果。`; if (!clip.effects?.length) removeReason = '片段没有可移除的效果。' } }
     }
     if (createReason) availability.create = { ...availability.create, available: false, reasons: [createReason] }
     if (removeReason) availability.remove = { ...availability.remove, available: false, reasons: [removeReason] }
     return availability
   }
 }
-const titles: Record<VideoEditEntityType, string> = { 'video_edit.document': '剪辑', 'video_edit.sequence': '剪辑序列', 'video_edit.bin': '素材箱', 'video_edit.item': '素材项', 'video_edit.track': '序列轨道', 'video_edit.clip': '剪辑片段', 'video_edit.annotation': '画面标注', 'video_edit.media': '原路径素材', 'video_edit.source': '源素材预览', 'video_edit.code_material': '原生代码素材', 'video_edit.code_version': '固定源码版本', 'video_edit.marker': '时间标记', 'video_edit.caption': '导出字幕', 'video_edit.graphic_object': '片段图形对象', 'video_edit.effect': '片段效果', 'video_edit.transition': '序列转场' }
+const titles: Record<VideoEditEntityType, string> = { 'video_edit.document': '剪辑', 'video_edit.sequence': '剪辑序列', 'video_edit.bin': '素材箱', 'video_edit.item': '素材项', 'video_edit.track': '序列轨道', 'video_edit.clip': '剪辑片段', 'video_edit.annotation': '画面标注', 'video_edit.media': '原路径素材', 'video_edit.source': '源素材预览', 'video_edit.code_material': '原生代码素材', 'video_edit.code_version': '固定源码版本', 'video_edit.marker': '时间标记', 'video_edit.caption': '导出字幕', 'video_edit.graphic_object': '片段图形对象', 'video_edit.effect': '片段效果', 'video_edit.transition': '序列转场', 'video_edit.builtin_effect': '内置效果目录' }
 const sequenceChildren = ['video_edit.clip', 'video_edit.annotation', 'video_edit.track', 'video_edit.marker', 'video_edit.caption', 'video_edit.transition']
 const required: Partial<Record<VideoEditEntityType, string[]>> = {
   'video_edit.sequence': ['video_edit.sequence.name'], 'video_edit.bin': ['video_edit.bin.name'], 'video_edit.item': ['video_edit.item.name', 'video_edit.item.kind'],
@@ -127,8 +136,9 @@ const required: Partial<Record<VideoEditEntityType, string[]>> = {
 }
 export function createVideoEditRegistrations(): ApplicationEntityRegistration[] {
   return VIDEO_EDIT_TYPES.map(entityType => ({
-    entity: { id: entityType, domain: 'video_edit', version: 2, title: titles[entityType], description: entityType === 'video_edit.source' ? '独立源预览会话；定位、播放写入等待真实媒体响应，逐帧观察不改剪辑内容或撤销历史。' : '本地剪辑中的稳定实体，手动与助手共用编辑历史。', refKind: entityType, dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], parentTypes: entityType === 'video_edit.document' ? [] : ['video_edit.graphic_object', 'video_edit.effect'].includes(entityType) ? ['video_edit.clip'] : sequenceChildren.includes(entityType) ? ['video_edit.sequence'] : ['video_edit.document'], revisionScopes: ['video_edit'], queryCapabilityIds: ['read_application_entity'], schemaRef: videoEditSchemaRef('entity', entityType),
+    entity: { id: entityType, domain: 'video_edit', version: 2, title: titles[entityType], description: entityType === 'video_edit.source' ? '独立源预览会话；定位、播放写入等待真实媒体响应，逐帧观察不改剪辑内容或撤销历史。' : entityType === 'video_edit.builtin_effect' ? '剪辑内置的 GPU 视频效果（模糊、调色、马赛克、暗角、裁剪、抠像等）及参数语义；预览与导出一致。用 video_edit.effect 把它加到片段上。' : entityType === 'video_edit.effect' ? '片段效果链里的一项：内置效果（definition_id 为 effect:<ID>）或代码滤镜；从上到下依次处理画面。' : '本地剪辑中的稳定实体，手动与助手共用编辑历史。', refKind: entityType, dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], parentTypes: entityType === 'video_edit.document' ? [] : ['video_edit.graphic_object', 'video_edit.effect'].includes(entityType) ? ['video_edit.clip'] : sequenceChildren.includes(entityType) ? ['video_edit.sequence'] : ['video_edit.document'], revisionScopes: ['video_edit'], queryCapabilityIds: ['read_application_entity'], schemaRef: videoEditSchemaRef('entity', entityType),
       ...(entityType === 'video_edit.media' ? { writeExclusion: { reason: '素材由正式本地导入或素材库引用服务检测；路径选择由用户本地文件对话框授权。' } } : {}),
+      ...(entityType === 'video_edit.builtin_effect' ? { writeExclusion: { reason: VIDEO_EDIT_BUILTIN_CATALOG_READ_ONLY } } : {}),
       ...(required[entityType] ? { collectionWrite: { creatable: true, removable: entityType !== 'video_edit.code_version', requiredPropertyIds: required[entityType]!, maxItemsPerChange: 32 } } : {}),
     }, properties: fieldDescriptors(VIDEO_EDIT_FIELDS[entityType]), provider: new VideoEditProvider(entityType), schemaDocuments: videoEditSchemaDocuments(entityType),
   }))

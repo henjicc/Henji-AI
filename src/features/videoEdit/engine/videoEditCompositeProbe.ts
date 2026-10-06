@@ -93,7 +93,7 @@ export async function runVideoEditCompositeProbe(host: HTMLElement): Promise<Rec
     update([left, right], [{ id: 'cross', kind: 'cross_dissolve', leftClipId: left.id, rightClipId: right.id, durationFrames: 10 }])
     for (const [frame, expected] of [[55, [64, 0, 0, 255]], [60, [28, 0, 53, 255]], [64, [0, 0, 96, 255]]] as const) { await render(frame, true); pixel(`交叉溶解帧${frame}单次预乘混合`, 100, 100, [...expected]) }
     const long = graphic('长源入点', 1, [1, 0, 0, .5], { sourceInUs: 3_600_000_000, effects: [effect('长源滤镜', 'gain')] })
-    long.effects![0].code.curves = { gain: [{ id: 'k0', sourceInUs: 3_600_000_000, sourceRemainder: { numerator: 0, denominator: 1 }, value: 0, interpolation: 'linear' }, { id: 'k1', sourceInUs: 3_601_000_000, sourceRemainder: { numerator: 0, denominator: 1 }, value: 1, interpolation: 'linear' }] }
+    long.effects![0].code!.curves = { gain: [{ id: 'k0', sourceInUs: 3_600_000_000, sourceRemainder: { numerator: 0, denominator: 1 }, value: 0, interpolation: 'linear' }, { id: 'k1', sourceInUs: 3_601_000_000, sourceRemainder: { numerator: 0, denominator: 1 }, value: 1, interpolation: 'linear' }] }
     update([long]); await render(30, true); pixel('一小时源入点参数曲线继续真实求值', 100, 100, [64, 0, 0, 255])
     const unsafe = await compiler.compile(source('return rgba(clamp(1/(ctx.localTime+.5),0,1),0,0,1);', 'dynamic'))
     const safe = await compiler.compile(source('return rgba(clamp(1/(max(ctx.localTime,0)+.5),0,1),0,0,1);', 'dynamic'))
@@ -111,7 +111,7 @@ export async function runVideoEditCompositeProbe(host: HTMLElement): Promise<Rec
     for (let frame = 1; frame <= 180; frame++) { const result = await render(frame); hot.push(result.elapsed); hits += result.cacheHits }
     const after = runtime.diagnostics()
     check(before.textureAllocations === after.textureAllocations && before.pipelineCompiles === after.pipelineCompiles && before.externalCopies === after.externalCopies, '热帧应复用纹理、管线和字形')
-    const changed = { ...hotClip, effects: [{ ...hotClip.effects![0], code: { ...hotClip.effects![0].code, parameters: { gain: .8 } } }] }
+    const changed = { ...hotClip, effects: [{ ...hotClip.effects![0], code: { ...hotClip.effects![0].code!, parameters: { gain: .8 } } }] }
     // Keep the clip alive at frame 180 for the entire declared hot sequence.
     update([{ ...changed, duration: 240 }]); const response = await render(0, true); pixel('只改参数后的实际画面', 100, 100, [102, 26, 13, 255])
     update([shapes]); await render(0, true)

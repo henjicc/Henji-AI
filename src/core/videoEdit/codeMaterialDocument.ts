@@ -6,6 +6,7 @@ import { prepareCodeMaterialParameters } from './codeMaterialAnimation'
 import { codeMaterialImageIds } from './codeMaterialResources'
 import { codeMaterialContextForFrame, codeMaterialContextForTransitionFrame } from './codeMaterialTiming'
 import { validateVideoEditTransitions, videoEditTransitionWindow } from './transitions'
+import { videoEditEffectCodes } from './compositing'
 
 export type CodeMaterialMetadata = Pick<CodeMaterialProgram, 'name' | 'kind' | 'mode' | 'width' | 'height' | 'durationSeconds' | 'seed' | 'parameters'>
 export type CodeMaterialMetadataReader = (instance: CodeMaterialInstance) => CodeMaterialMetadata
@@ -13,7 +14,7 @@ export function videoEditCodeReferences(document: VideoEditDocument): CodeMateri
   return [
     ...(document.codeMaterials ?? []).map(definition => ({ definitionId: definition.id, versionId: definition.defaultVersionId, parameters: {} })),
     ...document.items.flatMap(item => item.code ? [item.code] : []),
-    ...document.sequences.flatMap(sequence => sequence.clips.flatMap(clip => [...(clip.code ? [clip.code] : []), ...(clip.effects ?? []).map(effect => effect.code)])),
+    ...document.sequences.flatMap(sequence => sequence.clips.flatMap(clip => [...(clip.code ? [clip.code] : []), ...videoEditEffectCodes(clip.effects)])),
   ]
 }
 export function codeMaterialSource(document: Pick<VideoEditDocument, 'codeMaterials'>, instance: CodeMaterialInstance): CodeMaterialVersion {
@@ -42,16 +43,16 @@ export function validateCodeMaterialDocument(document: VideoEditDocument, read: 
         validate(clip.code, program)
         codeMaterialContextForFrame(clip, clip.start + clip.duration - 1, sequence.frameRate, program)
       }
-      for (const effect of clip.effects ?? []) {
-        const program = read(effect.code)
+      for (const code of videoEditEffectCodes(clip.effects)) {
+        const program = read(code)
         if (program.kind !== 'filter') throw new CodeMaterialError('TYPE', '附加效果必须使用单输入滤镜源码。')
-        validate(effect.code, program)
+        validate(code, program)
         codeMaterialContextForFrame(clip, clip.start + clip.duration - 1, sequence.frameRate, program)
       }
     }
     for (const transition of sequence.transitions ?? []) {
       const window = videoEditTransitionWindow(sequence, transition)
-      for (const clip of [window.left, window.right]) for (const instance of [...(clip.code ? [clip.code] : []), ...(clip.effects ?? []).map(effect => effect.code)]) {
+      for (const clip of [window.left, window.right]) for (const instance of [...(clip.code ? [clip.code] : []), ...videoEditEffectCodes(clip.effects)]) {
         const program = read(instance)
         codeMaterialContextForTransitionFrame(clip, window.start, sequence.frameRate, program, window)
         codeMaterialContextForTransitionFrame(clip, window.end - 1, sequence.frameRate, program, window)

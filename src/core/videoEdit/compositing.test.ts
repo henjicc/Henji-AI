@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildVideoEditCompositePlan, validateVideoEditAdjustmentRanges, videoEditAdjustmentSchema, videoEditEffectSchema } from './compositing'
+import { buildVideoEditCompositePlan, validateVideoEditAdjustmentRanges, videoEditAdjustmentSchema, videoEditEffectSchema, VIDEO_EDIT_MAX_EFFECTS } from './compositing'
 import type { VideoEditCompositeNode } from './compositing'
 import { videoEditClipSchema } from './document'
 import type { VideoEditClip } from './document'
@@ -118,7 +118,7 @@ describe('调整图层的半开合成范围与唯一转场节点', () => {
 })
 
 describe('附加效果的封闭持久边界', () => {
-  it('只接受有界强度与固定代码实例，并在片段中限制为四项', () => {
+  it('只接受有界强度与固定代码实例，并在片段中限制项数', () => {
     const effect = { id: 'effect', name: '颜色调整', enabled: true, amount: .5, code: { definitionId: 'definition', versionId: 'version', parameters: { gain: .5 } } }
     expect(videoEditEffectSchema.parse(effect)).toEqual(effect)
     for (const amount of [0, 1]) expect(videoEditEffectSchema.safeParse({ ...effect, enabled: false, amount }).success).toBe(true)
@@ -126,8 +126,8 @@ describe('附加效果的封闭持久边界', () => {
       { code: { ...effect.code, versionId: null } }, { code: { ...effect.code, source: '任意源码' } }, { code: { ...effect.code, parameters: { gain: NaN } } }]) {
       expect(videoEditEffectSchema.safeParse({ ...effect, ...patch }).success).toBe(false)
     }
-    const effects = Array.from({ length: 4 }, (_, index) => ({ ...effect, id: `effect-${index}` }))
+    const effects = Array.from({ length: VIDEO_EDIT_MAX_EFFECTS }, (_, index) => ({ ...effect, id: `effect-${index}` }))
     expect(videoEditClipSchema.safeParse(clip('visual', 1, { effects })).success).toBe(true)
-    expect(videoEditClipSchema.safeParse(clip('visual', 1, { effects: [...effects, { ...effect, id: 'fifth' }] })).success).toBe(false)
+    expect(videoEditClipSchema.safeParse(clip('visual', 1, { effects: [...effects, { ...effect, id: 'extra' }] })).success).toBe(false)
   })
 })

@@ -1,4 +1,5 @@
 import { VIDEO_EDIT_TRANSITION_PRESETS, type VideoEditTransitionKind } from './transitions'
+import { VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS, VIDEO_EDIT_BUILTIN_GROUP_NAMES, videoEditBuiltinRefId, type VideoEditBuiltinParam } from './builtinEffects'
 
 /**
  * 效果登记表（实施方案第六节“一份登记，三方共用”）：效果面板、效果控件与助手都读这里。
@@ -28,14 +29,21 @@ export interface VideoEditEffectsRegistryEntry {
   tooltip: string
   /** 过渡条目对应的过渡种类。 */
   transitionKind?: VideoEditTransitionKind
-  // 4.7a：参数 schema（意图量纲、单位、范围与语义）在这里预留，接入内置效果时补上。
+  /** 内置效果条目对应的内置效果 ID（参数 schema 见 `builtinEffects.ts`）。 */
+  builtinId?: string
+  /** 内置效果的参数（意图量纲、单位、范围与语义）。 */
+  params?: readonly VideoEditBuiltinParam[]
+  /** 内置效果在文件夹里的小分组（模糊与锐化、颜色……）。 */
+  group?: string
 }
 /**
- * 内置效果登记处。新增一个内置效果：在这里加一条
- * `{ id: 'effect:<ID>', name, category: 'video_effect' | 'audio_effect' | 'smart', kind: 'effect', media, description, tooltip }`，
- * 效果面板会自动出现在对应文件夹（拖到片段上的应用逻辑随 4.7 接入）。
+ * 内置效果：来自 `VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS`（参数、范围、语义说明与 GPU 实现都在那里登记），
+ * 拖到片段上或选中片段后双击即加到片段效果链。
  */
-export const VIDEO_EDIT_BUILTIN_EFFECTS: readonly VideoEditEffectsRegistryEntry[] = []
+export const VIDEO_EDIT_BUILTIN_EFFECTS: readonly VideoEditEffectsRegistryEntry[] = VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS.map(definition => ({
+  id: videoEditBuiltinRefId(definition.id), name: definition.name, category: 'video_effect', kind: 'effect', media: 'video',
+  description: definition.description, tooltip: definition.tooltip, builtinId: definition.id, params: definition.params, group: VIDEO_EDIT_BUILTIN_GROUP_NAMES[definition.group],
+}))
 /** 登记表全部条目：过渡在前（按预设顺序），内置效果在后。 */
 export function videoEditEffectsRegistry(): VideoEditEffectsRegistryEntry[] {
   return [

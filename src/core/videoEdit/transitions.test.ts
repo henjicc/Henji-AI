@@ -264,10 +264,10 @@ describe('真实转场窗口、源余量和编辑持久契约', () => {
   it('非默认固定滤镜版本进入打开剪辑的源码检查引用集合', () => {
     const { document } = fixture(); const program = addEffect(document)
     document.codeMaterials![0].versions.push({ ...document.codeMaterials![0].versions[0], id: 'held-version' })
-    document.sequences[0].clips[0].effects![0].code.versionId = 'held-version'
+    document.sequences[0].clips[0].effects![0].code!.versionId = 'held-version'
     expect(videoEditCodeReferences(document).map(instance => instance.versionId)).toContain('held-version')
     expect(() => validateCodeMaterialDocument(document, () => program)).not.toThrow()
-    document.sequences[0].clips[0].effects![0].code.parameters.amount = 5
+    document.sequences[0].clips[0].effects![0].code!.parameters.amount = 5
     expect(() => validateCodeMaterialDocument(document, () => program)).toThrow()
   })
 })

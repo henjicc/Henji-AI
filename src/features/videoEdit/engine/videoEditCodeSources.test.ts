@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { compileCodeMaterial } from '@/core/videoEdit/codeMaterial/compiler'
 import type { CodeMaterialProgram } from '@/core/videoEdit/codeMaterial/contract'
 import { createVideoEditDocument, videoEditComposition, type VideoEditClip, type VideoEditComposition } from '@/core/videoEdit/document'
-import { VideoEditCodeSources } from './videoEditCodeSources'
+import { VideoEditCodeSources, type PreparedVideoEditCodeEffect } from './videoEditCodeSources'
 import { VideoEditCodeGpu } from './videoEditCodeGpu'
 import type { VideoEditCodePicture } from './videoEditCodeGpu'
 import type { GpuDevice } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
@@ -114,12 +114,12 @@ describe('可见代码源与固定内容复用', () => {
       const first = await boundary.sources.prepare(document, document.clips, 55, () => true, undefined, { transitions: [window], surfaceKeys: new Set(['composite:transition:transition']) })
       expect(first.effects.get('right')![0]).toMatchObject({ effect: { id: 'effect' }, parameters: { amount: .8 }, transitionHandles: true, context: { localTime: -5 / 30, time: 1 - 5 / 30, frame: 55 } })
       expect(boundary.compiler.compile).toHaveBeenCalledTimes(2)
-      const effects = first.effects.get('right')![0]
+      const effects = first.effects.get('right')![0] as PreparedVideoEditCodeEffect
       expect(Object.isFrozen(effects.program)).toBe(true)
       expect([...boundary.releaseUnused.mock.lastCall![0]]).toContain('composite:transition:transition')
       const second = await boundary.sources.prepare(document, document.clips, 60, () => true, undefined, { transitions: [window] })
-      expect(second.effects.get('right')![0].context.localTime).toBe(0)
-      expect(second.effects.get('right')![0].program).toBe(effects.program)
+      expect((second.effects.get('right')![0] as PreparedVideoEditCodeEffect).context.localTime).toBe(0)
+      expect((second.effects.get('right')![0] as PreparedVideoEditCodeEffect).program).toBe(effects.program)
       expect(boundary.compiler.compile).toHaveBeenCalledTimes(2)
     } finally { await boundary.sources.dispose() }
   })
@@ -217,7 +217,7 @@ describe('失效、身份与资源上限', () => {
     const sources = new VideoEditCodeSources(document, async () => runtime, compiler)
     const prepareFilter = async () => {
       const prepared = await sources.prepare(document, document.clips, 0, () => true, undefined, { surfaceKeys: new Set(['input', 'effect']) })
-      const effect = prepared.effects.get('clip')![0]; const input = await runtime.target('input', 3840, 2160)
+      const effect = prepared.effects.get('clip')![0] as PreparedVideoEditCodeEffect; const input = await runtime.target('input', 3840, 2160)
       await runtime.filter('effect', effect.version, effect.program, effect.context, effect.parameters, input)
       return effect.program
     }

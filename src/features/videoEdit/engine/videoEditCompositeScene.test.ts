@@ -11,7 +11,7 @@ import type { GpuDevice, GpuTexture } from '@/core/imageEdit/worker/webgpuRuntim
 import { renderVideoEditCompositeScene, videoEditCompositeSurfaceKeys } from './videoEditCompositeScene'
 import { VideoEditCodePicture } from './videoEditCodeGpu'
 import type { VideoEditCodeGpu } from './videoEditCodeGpu'
-import type { PreparedVideoEditEffect } from './videoEditCodeSources'
+import type { PreparedVideoEditCodeEffect as PreparedVideoEditEffect } from './videoEditCodeSources'
 import type { VideoEditGpuCompositor, VideoEditPicture } from './videoEditGpuCompositor'
 
 function clip(id: string, track = 1, patch: Partial<VideoEditClip> = {}): VideoEditClip {

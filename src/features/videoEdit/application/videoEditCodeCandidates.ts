@@ -68,8 +68,8 @@ export async function prepareVideoEditCodeCandidate(target: VideoEditCodeTarget,
     const document = videoEditDocumentSchema.parse({ ...baseline, codeMaterials: baseline.codeMaterials!.map(value => value.id === definition.id ? appended.definition : value), sequences: baseline.sequences.map(value => ({ ...value, clips: value.clips.map(clip => {
       if (target.effectId) {
         return { ...clip, effects: clip.effects?.map(effect => {
-          const selected = scope === 'single' ? value.id === target.sequenceId && clip.id === target.clipId && effect.id === target.effectId : effect.code.definitionId === definition.id && effect.code.versionId === target.versionId
-          if (!selected) return effect
+          const selected = scope === 'single' ? value.id === target.sequenceId && clip.id === target.clipId && effect.id === target.effectId : effect.code?.definitionId === definition.id && effect.code.versionId === target.versionId
+          if (!selected || !effect.code) return effect
           const migration = proposeCodeMaterialMigration(read(effect.code), appended.program, effect.code, appended.versionId)
           count++; selectedIds.add(clip.id); impacts.push(...migration.impacts.map(impact => ({ ...impact, sequenceName: value.name, clipName: `${clip.name} · ${effect.name}` })))
           selectedEffects.set(clip.id, [...(selectedEffects.get(clip.id) ?? []), effect.id])

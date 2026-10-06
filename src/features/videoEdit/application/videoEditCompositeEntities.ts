@@ -5,7 +5,8 @@ import { orderVideoEditEffects, videoEditEffectSchema, videoEditAdjustmentSchema
 import { videoEditTransitionClipIds, videoEditTransitionPreset, videoEditTransitionSchema } from '@/core/videoEdit/transitions'
 import { codeMaterialInstanceSchema } from '@/core/videoEdit/codeMaterialPersistence'
 import type { CodeMaterialMetadataReader } from '@/core/videoEdit/codeMaterialDocument'
-import { makeVideoEditEffect } from './videoEditCompositing'
+import { makeVideoEditBuiltinEffect, makeVideoEditEffect } from './videoEditCompositing'
+import { parseVideoEditBuiltinRefId, validateVideoEditBuiltinParams, videoEditBuiltinRefId } from '@/core/videoEdit/builtinEffects'
 
 export const VIDEO_EDIT_COMPOSITE_TYPES = ['video_edit.graphic_object', 'video_edit.effect', 'video_edit.transition'] as const
 export type VideoEditCompositeEntityType = typeof VIDEO_EDIT_COMPOSITE_TYPES[number]
@@ -58,8 +59,10 @@ export function videoEditCompositeData(document: VideoEditDocument, type: VideoE
   const common = { sequenceId: owner.sequence.id, ...(owner.kind !== 'transition' ? { clipId: owner.clip.id } : {}) }
   if (owner.kind === 'graphic') return JSON.parse(JSON.stringify({ ...common, ...owner.object, curves: owner.object.curves ?? {} })) as Data
   if (owner.kind === 'effect') {
-    const { code, ...effect } = owner.effect
-    return JSON.parse(JSON.stringify({ ...common, ...effect, definitionId: code.definitionId, versionId: code.versionId, parameters: code.parameters, curves: code.curves ?? {} })) as Data
+    const { code, builtin, ...effect } = owner.effect
+    // 内置效果：definition_id 读出 `effect:<ID>`，parameters 是存下的意图量纲参数（缺的键按默认值渲染）；没有源码版本与关键帧。
+    if (builtin) return JSON.parse(JSON.stringify({ ...common, ...effect, definitionId: videoEditBuiltinRefId(builtin.id), versionId: '', parameters: builtin.params, curves: {} })) as Data
+    return JSON.parse(JSON.stringify({ ...common, ...effect, definitionId: code!.definitionId, versionId: code!.versionId, parameters: code!.parameters, curves: code!.curves ?? {} })) as Data
   }
   return { ...common, ...owner.transition }
 }
@@ -70,8 +73,17 @@ export function updateVideoEditCompositeEntity(document: VideoEditDocument, type
   if (owner.kind === 'graphic') {
     Object.assign(owner.object, { name: data.name, parameters: data.parameters, curves: data.curves })
   } else if (owner.kind === 'effect') {
-    const next = videoEditEffectSchema.parse({ id: owner.effect.id, name: data.name, enabled: data.enabled, amount: data.amount, code: { definitionId: owner.effect.code.definitionId, versionId: data.versionId, parameters: data.parameters, curves: data.curves } })
-    Object.assign(owner.effect, next)
+    const builtin = owner.effect.builtin
+    if (builtin) {
+      if (data.versionId) throw new Error('内置效果没有源码版本，version_id 保持为空。')
+      if (data.curves && typeof data.curves === 'object' && Object.keys(data.curves).length) throw new Error('内置效果暂不支持关键帧，请直接写 parameters。')
+      // 整体写入：写什么存什么（读回与写入一致），没写的键回到默认值
+      const params = validateVideoEditBuiltinParams(builtin.id, (data.parameters ?? {}) as Record<string, unknown>)
+      Object.assign(owner.effect, videoEditEffectSchema.parse({ id: owner.effect.id, name: data.name, enabled: data.enabled, amount: data.amount, builtin: { id: builtin.id, params } }))
+    } else {
+      const next = videoEditEffectSchema.parse({ id: owner.effect.id, name: data.name, enabled: data.enabled, amount: data.amount, code: { definitionId: owner.effect.code!.definitionId, versionId: data.versionId, parameters: data.parameters, curves: data.curves } })
+      Object.assign(owner.effect, next)
+    }
   } else {
     const next = videoEditTransitionSchema.parse({ ...owner.transition, durationFrames: data.durationFrames, alignment: data.alignment ?? undefined, framesBeforeCut: data.framesBeforeCut ?? undefined })
     if (next.alignment === 'center') delete next.alignment
@@ -98,11 +110,20 @@ export function createVideoEditCompositeEntity(document: VideoEditDocument, type
     clip.graphic.objects.push(object); return videoEditGraphicObjectId(clip.id, object.id)
   }
   if (clip.kind === 'audio') throw new Error('音频片段不能添加画面效果。')
-  if (values.definitionId === undefined || typeof values.definitionId !== 'string') throw new Error('请提供此剪辑的滤镜定义。')
+  if (values.definitionId === undefined || typeof values.definitionId !== 'string') throw new Error('请提供 definition_id：内置效果写 effect:<ID>（如 effect:gaussian_blur，完整目录见 video_edit.builtin_effect），代码滤镜写滤镜源码定义 ID。')
+  const builtinId = parseVideoEditBuiltinRefId(values.definitionId)
+  if (builtinId) {
+    if (values.versionId) throw new Error('内置效果没有源码版本，请不要提供 version_id。')
+    if (values.curves && typeof values.curves === 'object' && Object.keys(values.curves).length) throw new Error('内置效果暂不支持关键帧。')
+    const effect = makeVideoEditBuiltinEffect(builtinId, (values.parameters ?? {}) as Record<string, unknown>, values.name !== undefined ? String(values.name) : undefined, true)
+    if (values.enabled !== undefined) effect.enabled = videoEditEffectSchema.shape.enabled.parse(values.enabled)
+    if (values.amount !== undefined) effect.amount = videoEditEffectSchema.shape.amount.parse(values.amount)
+    ;(clip.effects ??= []).push(effect); return effect.id
+  }
   const effect = makeVideoEditEffect(document, { definitionId: values.definitionId, ...(values.versionId !== undefined ? { versionId: String(values.versionId) } : {}), ...(values.name !== undefined ? { name: String(values.name) } : {}), ...(values.parameters !== undefined ? { parameters: codeMaterialInstanceSchema.shape.parameters.parse(values.parameters) } : {}) }, read)
   if (values.enabled !== undefined) effect.enabled = videoEditEffectSchema.shape.enabled.parse(values.enabled)
   if (values.amount !== undefined) effect.amount = videoEditEffectSchema.shape.amount.parse(values.amount)
-  if (values.curves !== undefined) effect.code.curves = codeMaterialInstanceSchema.shape.curves.parse(values.curves)
+  if (values.curves !== undefined) effect.code!.curves = codeMaterialInstanceSchema.shape.curves.parse(values.curves)
   ;(clip.effects ??= []).push(effect); return effect.id
 }
 export function removeVideoEditCompositeEntities(document: VideoEditDocument, type: VideoEditCompositeEntityType, parentId: string, ids: string[]): void {

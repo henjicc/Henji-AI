@@ -151,7 +151,7 @@ function assertSourceHandles(document: VideoEditDocument, sequence: VideoEditSeq
       if (program?.mode === 'dynamic') durations.push(program.durationSeconds)
     }
     for (const effect of clip.effects ?? []) {
-      const program = read?.(effect.code)
+      const program = effect.code && read?.(effect.code)
       if (program?.mode === 'dynamic') durations.push(program.durationSeconds)
     }
     if (!durations.length) continue // The source-authorized metadata stage checks deferred code handles.

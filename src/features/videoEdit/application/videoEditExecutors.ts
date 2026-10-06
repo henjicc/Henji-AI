@@ -335,7 +335,7 @@ export class VideoEditCollectionExecutor implements ApplicationCollectionExecuto
           case 'video_edit.bin': document.bins = removeVideoEditBins(document, ids).bins; break
           case 'video_edit.item': { const next = removeVideoEditItems(document, ids); document.items = next.items; document.media = next.media; break }
           case 'video_edit.code_material':
-            if (document.items.some(item => item.code && ids.includes(item.code.definitionId)) || document.sequences.some(sequence => sequence.clips.some(clip => clip.code && ids.includes(clip.code.definitionId) || clip.effects?.some(effect => ids.includes(effect.code.definitionId))))) throw new Error('代码素材仍被素材项、片段或效果引用，请先移除引用，再移除源码定义。')
+            if (document.items.some(item => item.code && ids.includes(item.code.definitionId)) || document.sequences.some(sequence => sequence.clips.some(clip => clip.code && ids.includes(clip.code.definitionId) || clip.effects?.some(effect => effect.code && ids.includes(effect.code.definitionId))))) throw new Error('代码素材仍被素材项、片段或效果引用，请先移除引用，再移除源码定义。')
             document.codeMaterials = document.codeMaterials?.filter(definition => !ids.includes(definition.id)); break
           case 'video_edit.clip':
             if (ids.some(id => !sequence!.clips.some(clip => clip.id === id))) throw new Error('片段不属于目标序列。')

@@ -39,6 +39,7 @@ import { ICON_VIDEO_EDIT_TRANSITION } from '@/core/theme/icons'
 import { videoEditTransitionEditPoints, videoEditTransitionFit, videoEditTransitionPairCut, videoEditTransitionMedium, videoEditTransitionPreset, videoEditTransitionWindow, type VideoEditTransitionAlignment, type VideoEditTransitionKind, type VideoEditTransitionPair, type VideoEditTransitionWindow } from '@/core/videoEdit/transitions'
 import { placeVideoEditTransition, selectVideoEditTransition, selectedVideoEditTransitionId, subscribeVideoEditTransitionSelection, videoEditDefaultTransitionFrames, videoEditTransitionSelectionVersion } from '../application/videoEditTransitions'
 import { readVideoEditTransitionDrag } from '../panels/videoEditTransitionDrag'
+import { handleVideoEditEffectDragOver, handleVideoEditEffectDrop } from '../panels/videoEditEffectDrag'
 
 interface Props { instance: VideoEditInstance; sequence: VideoEditSequence; pixels: number; onError: (error: unknown) => void; visible?: boolean }
 /** 片段底色与描边（设计稿素材片段令牌）：画面、声音、文字/代码/图形/调整各一组；选中改强调描边。 */
@@ -368,6 +369,7 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
       }}
       onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); pointer.cancel() } }}
       onDragOver={event => {
+        if (handleVideoEditEffectDragOver(event, projectId)) return
         const transitionKind = readVideoEditTransitionDrag(event.dataTransfer, projectId)
         if (transitionKind) {
           event.preventDefault()
@@ -382,6 +384,7 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
       }}
       onDragLeave={event => { if (!isDomNode(event.relatedTarget) || !event.currentTarget.contains(event.relatedTarget)) { setHint(null); setTransitionHint(null) } }}
       onDrop={event => {
+        if (handleVideoEditEffectDrop(event, projectId, sequence.id, instance.selectedClipIds, onError)) return
         const transitionKind = readVideoEditTransitionDrag(event.dataTransfer, projectId)
         if (transitionKind) {
           event.preventDefault(); event.stopPropagation(); setTransitionHint(null)

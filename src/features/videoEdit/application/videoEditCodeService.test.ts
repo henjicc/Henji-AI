@@ -52,7 +52,7 @@ vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: cla
       for (const clip of this.document.clips) if (visible.has(clip.track) && (frame >= clip.start && frame < clip.start + clip.duration || windows.some(window => [window.left.id, window.right.id].includes(clip.id)))) {
         if (clip.kind === 'adjustment' && clip.opacity === 0) continue
         for (const effect of clip.effects ?? []) if (effect.enabled && effect.amount > 0) {
-          const source = this.document.codeMaterials!.find(definition => definition.id === effect.code.definitionId)!.versions.find(version => version.id === effect.code.versionId)!.source
+          const source = this.document.codeMaterials!.find(definition => definition.id === effect.code!.definitionId)!.versions.find(version => version.id === effect.code!.versionId)!.source
           boundary.filterProofs++; emitCodeMaterialFilter(compileCodeMaterial(source), frame < clip.start || frame >= clip.start + clip.duration)
         }
       }
@@ -248,14 +248,14 @@ it('保存重开检查非默认滤镜固定版本，复制效果独立，滤镜�
   sequence.clips = [clip]
   const owner = await openSeededVideoEdit(document); const id = owner.document.id
   expect(boundary.compileCalls).toBe(2)
-  expect(readVideoEditCodeMetadata(owner, owner.document)(owner.document.sequences[0].clips[0].effects![0].code).parameters[0].default).toBe(.8)
+  expect(readVideoEditCodeMetadata(owner, owner.document)(owner.document.sequences[0].clips[0].effects![0].code!).parameters[0].default).toBe(.8)
   const duplicateId = duplicateVideoEditSequence(id, sequence.id)
   const duplicate = owner.document.sequences.find(value => value.id === duplicateId)!
   expect(duplicate.clips[0].effects![0].id).not.toBe('fixed-effect')
-  editVideoSequence(id, duplicateId, draft => { draft.clips[0].effects![0].code.parameters.amount = .2; return draft })
-  expect(owner.document.sequences[0].clips[0].effects![0].code.parameters.amount).toBe(.6)
+  editVideoSequence(id, duplicateId, draft => { draft.clips[0].effects![0].code!.parameters.amount = .2; return draft })
+  expect(owner.document.sequences[0].clips[0].effects![0].code!.parameters.amount).toBe(.6)
   const before = owner.document; const past = owner.past.length
-  expect(() => editVideoSequence(id, duplicateId, draft => { draft.clips[0].effects![0].code.parameters.amount = 4; return draft })).toThrow()
+  expect(() => editVideoSequence(id, duplicateId, draft => { draft.clips[0].effects![0].code!.parameters.amount = 4; return draft })).toThrow()
   expect(owner.document).toBe(before); expect(owner.past).toHaveLength(past)
   await saveVideoEdit(id); const saved = structuredClone(owner.document)
   const reopened = await reopenVideoEdit(id)
@@ -554,7 +554,7 @@ it('滤镜维持单输入边界，不能声明图片资源或把其它参数当�
     const target = { projectId: id, sequenceId: owner.activeSequenceId, clipId }
     const effectId = await createVideoEditEffect(target, { definitionId })
     const effect = getActiveVideoEditSequence(owner).clips.find(clip => clip.id === clipId)!.effects![0]
-    const imageTarget = { ...target, effectId, versionId: effect.code.versionId }
+    const imageTarget = { ...target, effectId, versionId: effect.code!.versionId }
     appendVideoEditMedia(id, { id: 'fx-image', kind: 'image', path: 'D:/original-fx.png', name: '滤镜图片', width: 3840, height: 2160, durationSeconds: 0 })
     const before = owner.document; const history = owner.past.length
     await expect(bindVideoEditCodeImage(imageTarget, 'gain', { kind: 'media', mediaId: 'fx-image' })).rejects.toThrow('此参数不是图片引用')
@@ -619,7 +619,7 @@ it('代码资产filter强制检查隐藏真实目标并保留参数，不制造�
   boundary.proveFilters = true
   await createVideoEditCodeAssetInstance(id, { ...importPublication(asset), filterTarget }, 'selected-bin-is-not-a-filter-location')
   expect(boundary.filterProofs).toBeGreaterThan(0); expect(owner.past).toHaveLength(before + 1); expect(owner.document.items).toHaveLength(1)
-  const clip = getActiveVideoEditSequence(owner).clips[0]; expect(clip.opacity).toBe(0); expect(clip.effects![0].code.parameters.gain).toBe(.8)
+  const clip = getActiveVideoEditSequence(owner).clips[0]; expect(clip.opacity).toBe(0); expect(clip.effects![0].code!.parameters.gain).toBe(.8)
   const baseline = owner.document
   await expect(createVideoEditCodeAssetInstance(id, { ...importPublication({ ...asset, sourceVersion: { ...asset.sourceVersion, source: filterSource.replace('mode:"static"', 'mode:"dynamic"').replace('durationSeconds:10', 'durationSeconds:1') } }), filterTarget })).rejects.toThrow()
   expect(owner.document).toBe(baseline)

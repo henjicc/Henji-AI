@@ -2,11 +2,37 @@ import { z } from 'zod'
 import { codeMaterialInstanceSchema } from './codeMaterialPersistence'
 import type { VideoEditSequence, VideoEditClip } from './document'
 import type { VideoEditTransitionWindow } from './transitions'
+import { videoEditBuiltinEffectIssue } from './builtinEffects'
 
-export const videoEditEffectSchema = z.object({
-  id: z.string().min(1).max(100), name: z.string().trim().min(1).max(200), enabled: z.boolean(), amount: z.number().finite().min(0).max(1), code: codeMaterialInstanceSchema,
+/** 内置效果实例（4.7a）：内置效果 ID 与参数（键与范围由 `builtinEffects.ts` 登记）。 */
+export const videoEditBuiltinEffectInstanceSchema = z.object({
+  id: z.string().min(1).max(64), params: z.record(z.string().regex(/^[A-Za-z][A-Za-z0-9_]{0,63}$/), z.union([z.number().finite(), z.boolean(), z.string().max(64)])),
 }).strict()
+export type VideoEditBuiltinEffectInstance = z.infer<typeof videoEditBuiltinEffectInstanceSchema>
+/**
+ * 预留：效果只作用在一个智能区域里（实施方案第六节原则 4、任务 4.7d）。区域本身还没有实现，
+ * 写入会被文档校验拒绝；字段先定形，以后接入时旧文件不需要迁移。
+ */
+export const videoEditEffectMaskSchema = z.object({ regionId: z.string().min(1).max(100), invert: z.boolean().optional() }).strict()
+/** 效果链里的一项：代码滤镜（`code`）或内置效果（`builtin`）二选一。 */
+export const videoEditEffectSchema = z.object({
+  id: z.string().min(1).max(100), name: z.string().trim().min(1).max(200), enabled: z.boolean(), amount: z.number().finite().min(0).max(1),
+  code: codeMaterialInstanceSchema.optional(), builtin: videoEditBuiltinEffectInstanceSchema.optional(), mask: videoEditEffectMaskSchema.optional(),
+}).strict().superRefine((effect, ctx) => {
+  if (Boolean(effect.code) === Boolean(effect.builtin)) ctx.addIssue({ code: 'custom', message: '效果必须是代码滤镜或内置效果其中之一。' })
+  const issue = effect.builtin && videoEditBuiltinEffectIssue(effect.builtin)
+  if (issue) ctx.addIssue({ code: 'custom', message: issue })
+  if (effect.mask) ctx.addIssue({ code: 'custom', message: '智能区域还没有开放，效果暂时只能作用于整个画面。' })
+})
 export type VideoEditEffect = z.infer<typeof videoEditEffectSchema>
+export type VideoEditCodeEffect = VideoEditEffect & { code: NonNullable<VideoEditEffect['code']> }
+export type VideoEditBuiltinEffect = VideoEditEffect & { builtin: VideoEditBuiltinEffectInstance }
+export function isVideoEditCodeEffect(effect: VideoEditEffect): effect is VideoEditCodeEffect { return Boolean(effect.code) }
+export function isVideoEditBuiltinEffect(effect: VideoEditEffect): effect is VideoEditBuiltinEffect { return Boolean(effect.builtin) }
+/** 效果链里的代码滤镜源码实例（内置效果没有源码）。 */
+export function videoEditEffectCodes(effects: readonly VideoEditEffect[] | undefined): Array<NonNullable<VideoEditEffect['code']>> { return (effects ?? []).flatMap(effect => effect.code ? [effect.code] : []) }
+/** 一个片段最多挂的效果数。 */
+export const VIDEO_EDIT_MAX_EFFECTS = 8
 export function orderVideoEditEffects(effects: VideoEditEffect[], ids: string[]): VideoEditEffect[] {
   if (ids.length !== effects.length || new Set(ids).size !== effects.length || ids.some(id => !effects.some(effect => effect.id === id))) throw new Error('请使用完整、无重复的效果顺序。')
   return ids.map(id => effects.find(effect => effect.id === id)!)

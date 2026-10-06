@@ -1,11 +1,12 @@
 import { videoEditDocumentSchema, type VideoEditClip, type VideoEditSequence, type VideoEditDocument } from '@/core/videoEdit/document'
-import { videoEditEffectSchema, orderVideoEditEffects, type VideoEditEffect } from '@/core/videoEdit/compositing'
+import { videoEditEffectSchema, orderVideoEditEffects, VIDEO_EDIT_MAX_EFFECTS, type VideoEditEffect } from '@/core/videoEdit/compositing'
+import { normalizeVideoEditBuiltinParams, requireVideoEditBuiltinEffect, validateVideoEditBuiltinParams, videoEditBuiltinDefaults } from '@/core/videoEdit/builtinEffects'
 import type { CodeMaterialMetadataReader } from '@/core/videoEdit/codeMaterialDocument'
 import { videoEditTransitionClipIds, videoEditTransitionSchema, videoEditTransitionsAt, type VideoEditTransition } from '@/core/videoEdit/transitions'
 import { assertVideoEditLockedTracks } from '@/core/videoEdit/lockedTracks'
 import { validateCodeMaterialParameters } from '@/core/videoEdit/codeMaterial/parameters'
 import type { CodeMaterialInstance } from '@/core/videoEdit/codeMaterialPersistence'
-import { editVideoProject, requireVideoEditInstance } from './videoEditService'
+import { editVideoProject, requireVideoEditInstance, updateVideoEditGesture, type VideoEditGesture } from './videoEditService'
 import { readVideoEditCodeMetadata } from './videoEditCodeState'
 import { trialVideoEditCodeDocument } from './videoEditCodeTrial'
 import type { VideoEditGraphicClipTarget as VideoEditCompositeTarget } from './videoEditGraphics'
@@ -65,15 +66,87 @@ export async function updateVideoEditEffect(target: VideoEditCompositeTarget, ef
     if (!effect) throw new Error('原效果已移除。')
     const { versionId, parameters, curves, ...presentation } = changes
     Object.assign(effect, presentation)
-    effect.code = { ...effect.code, ...(versionId !== undefined ? { versionId } : {}), ...(parameters !== undefined ? { parameters } : {}), ...(curves !== undefined ? { curves } : {}) }
+    if (effect.builtin) {
+      if (versionId !== undefined || curves !== undefined) throw new Error('内置效果没有源码版本与关键帧。')
+      if (parameters !== undefined) effect.builtin = { id: effect.builtin.id, params: normalizeVideoEditBuiltinParams(effect.builtin.id, parameters, effect.builtin.params) }
+    } else effect.code = { ...effect.code!, ...(versionId !== undefined ? { versionId } : {}), ...(parameters !== undefined ? { parameters } : {}), ...(curves !== undefined ? { curves } : {}) }
   }, signal)
 }
 export async function resetVideoEditEffect(target: VideoEditCompositeTarget, effectId: string, signal?: AbortSignal): Promise<void> {
   const owner = requireVideoEditInstance(target.projectId); const sequence = owner.document.sequences.find(sequence => sequence.id === target.sequenceId)
   const effect = sequence && requireClip(sequence, target.clipId).effects?.find(effect => effect.id === effectId)
   if (!effect) throw new Error('原效果已移除。')
-  const metadata = readVideoEditCodeMetadata(owner, owner.document)(effect.code)
+  if (effect.builtin) { updateVideoEditBuiltinEffect(target, effectId, { enabled: true, amount: 1, params: videoEditBuiltinDefaults(requireVideoEditBuiltinEffect(effect.builtin.id)) }); return }
+  const metadata = readVideoEditCodeMetadata(owner, owner.document)(effect.code!)
   await updateVideoEditEffect(target, effectId, { enabled: true, amount: 1, parameters: validateCodeMaterialParameters(metadata), curves: {} }, signal)
+}
+/** 新建一项内置效果（参数按登记校验）。默认存完整参数表；`sparse` 时只存给出的键（助手创建，读回与写入一致，缺的键按默认值渲染）。 */
+export function makeVideoEditBuiltinEffect(builtinId: string, params: Readonly<Record<string, unknown>> = {}, name?: string, sparse = false): VideoEditEffect {
+  const definition = requireVideoEditBuiltinEffect(builtinId)
+  return videoEditEffectSchema.parse({ id: crypto.randomUUID(), name: name ?? definition.name, enabled: true, amount: 1, builtin: { id: definition.id, params: sparse ? validateVideoEditBuiltinParams(definition.id, params) : normalizeVideoEditBuiltinParams(definition.id, params) } })
+}
+function editBuiltin(target: VideoEditCompositeTarget, change: (clip: VideoEditClip) => void, gesture?: VideoEditGesture): void {
+  // 拖动参数时每次指针移动都会调用：只复制目标片段的效果链并校验改动的效果，不整份克隆与校验文档。
+  const update = (document: VideoEditDocument): VideoEditDocument => {
+    const sequence = document.sequences.find(sequence => sequence.id === target.sequenceId)
+    if (!sequence) throw new Error('原序列已移除。')
+    const original = requireClip(sequence, target.clipId)
+    if (sequence.tracks.find(track => track.index === original.track)?.locked) throw new Error('所属轨道已锁定，请先解锁。')
+    const clip: VideoEditClip = { ...original, ...(original.effects ? { effects: original.effects.map(effect => ({ ...effect })) } : {}) }
+    change(clip)
+    clip.effects?.forEach(effect => { videoEditEffectSchema.parse(effect) })
+    return { ...document, sequences: document.sequences.map(value => value === sequence ? { ...sequence, clips: sequence.clips.map(item => item === original ? clip : item) } : value) }
+  }
+  if (gesture) {
+    if (gesture.projectId !== target.projectId) throw new Error('原参数调整已结束，请重新编辑。')
+    updateVideoEditGesture(gesture, update)
+  } else editVideoProject(target.projectId, update)
+}
+/**
+ * 把内置效果加到片段效果链末尾（效果面板拖到片段上、双击、助手共用；一步撤销）。内置效果是确定的 GPU 实现，
+ * 不需要像代码滤镜那样先试渲染检查。返回新效果的 ID。
+ */
+export function addVideoEditBuiltinEffect(target: VideoEditCompositeTarget, builtinId: string, params?: Readonly<Record<string, unknown>>): string {
+  return applyVideoEditBuiltinEffect(target.projectId, target.sequenceId, [target.clipId], builtinId, params)[0]
+}
+/**
+ * 把同一个内置效果加到多个片段（PR：选中多个片段后双击效果），整体一步撤销。声音片段与锁定轨道上的片段跳过；
+ * 一个都加不上时报错并说明原因。返回新效果 ID（与加上的片段一一对应）。
+ */
+export function applyVideoEditBuiltinEffect(projectId: string, sequenceId: string, clipIds: readonly string[], builtinId: string, params?: Readonly<Record<string, unknown>>): string[] {
+  const template = makeVideoEditBuiltinEffect(builtinId, params)
+  const created: string[] = []
+  editVideoProject(projectId, document => {
+    created.length = 0
+    const sequence = document.sequences.find(sequence => sequence.id === sequenceId)
+    if (!sequence) throw new Error('原序列已移除。')
+    const locked = new Set(sequence.tracks.filter(track => track.locked).map(track => track.index))
+    const targets = new Set(sequence.clips.filter(clip => clipIds.includes(clip.id) && clip.kind !== 'audio' && !locked.has(clip.track)).map(clip => clip.id))
+    if (!targets.size) throw new Error('请选择画面片段：声音片段和锁定轨道上的片段不能加画面效果。')
+    const clips = sequence.clips.map(clip => {
+      if (!targets.has(clip.id)) return clip
+      if ((clip.effects?.length ?? 0) >= VIDEO_EDIT_MAX_EFFECTS) throw new Error(`片段“${clip.name}”已有${VIDEO_EDIT_MAX_EFFECTS}项效果，请先删除不用的效果。`)
+      const effect = { ...structuredClone(template), id: crypto.randomUUID() }; created.push(effect.id)
+      return { ...clip, effects: [...(clip.effects ?? []), effect] }
+    })
+    return { ...document, sequences: document.sequences.map(value => value === sequence ? { ...sequence, clips } : value) }
+  })
+  return [...created]
+}
+export interface VideoEditBuiltinEffectChanges { name?: string; enabled?: boolean; amount?: number; params?: Readonly<Record<string, unknown>> }
+/**
+ * 改内置效果的参数、强度或开关。带手势时只预览（拖动中实时出画面），由 `finishVideoEditGesture` 提交成一步撤销。
+ * 数值先夹进登记的范围（界面拖动、步进产生不了非法值）；未知参数与错类型仍报错。
+ */
+export function updateVideoEditBuiltinEffect(target: VideoEditCompositeTarget, effectId: string, changes: VideoEditBuiltinEffectChanges, gesture?: VideoEditGesture): void {
+  editBuiltin(target, clip => {
+    const effect = clip.effects?.find(effect => effect.id === effectId)
+    if (!effect?.builtin) throw new Error('原内置效果已移除。')
+    if (changes.name !== undefined) effect.name = changes.name
+    if (changes.enabled !== undefined) effect.enabled = changes.enabled
+    if (changes.amount !== undefined) effect.amount = Math.min(1, Math.max(0, changes.amount))
+    if (changes.params) effect.builtin = { id: effect.builtin.id, params: normalizeVideoEditBuiltinParams(effect.builtin.id, changes.params, effect.builtin.params, true) }
+  }, gesture)
 }
 export async function reorderVideoEditEffects(target: VideoEditCompositeTarget, ids: string[], signal?: AbortSignal): Promise<void> {
   await editComposite(target.projectId, target.sequenceId, [target.clipId], sequence => {

@@ -1,0 +1,176 @@
+import { resolveVideoEditBuiltinParams, type VideoEditBuiltinParams } from '@/core/videoEdit/builtinEffects'
+import type { VideoEditBuiltinEffectInstance } from '@/core/videoEdit/compositing'
+import type { VideoEditBuiltinEffectEntry } from './videoEditBuiltinEffectShaders'
+
+/**
+ * 把一个内置效果实例翻译成 GPU 工序（纯函数，可单测）：每道工序是一个着色器入口、输入、输出和 16 个 float 的参数。
+ * 空间量一律按“输入画面高度”换算成像素，再按需降采样：同一个效果在任何渲染尺寸下看起来一样，大半径模糊的代价也有上限。
+ */
+export type VideoEditBuiltinTexture = 'input' | 'output' | number
+export interface VideoEditBuiltinPass {
+  entry: VideoEditBuiltinEffectEntry
+  source: VideoEditBuiltinTexture
+  /** 第二个输入（`original` 绑定）；没有时绑定效果的原始输入。 */
+  original?: VideoEditBuiltinTexture
+  target: VideoEditBuiltinTexture
+  /** (目标宽, 目标高, 输入宽, 输入高, a.xyzw, b.xyzw, c.xyzw)。 */
+  uniforms: Float32Array
+}
+export interface VideoEditBuiltinPlan { width: number; height: number; scratch: Array<{ width: number; height: number }>; passes: VideoEditBuiltinPass[] }
+type Vec4 = readonly [number, number, number, number]
+const ZERO: Vec4 = [0, 0, 0, 0]
+/** 一维高斯工序里允许的最大 sigma（输入像素）；更大时先降采样。 */
+const MAX_DIRECT_SIGMA = 3
+const MAX_LEVELS = 7
+const LINE_TAPS = 16
+
+class Planner {
+  readonly scratch: Array<{ width: number; height: number }> = []
+  readonly passes: VideoEditBuiltinPass[] = []
+  constructor(readonly width: number, readonly height: number) {}
+  size(texture: VideoEditBuiltinTexture): [number, number] {
+    if (typeof texture === 'number') { const value = this.scratch[texture]; return [value.width, value.height] }
+    return [this.width, this.height]
+  }
+  alloc(width = this.width, height = this.height): number { this.scratch.push({ width, height }); return this.scratch.length - 1 }
+  pass(entry: VideoEditBuiltinEffectEntry, source: VideoEditBuiltinTexture, target: VideoEditBuiltinTexture, a: Vec4 = ZERO, b: Vec4 = ZERO, original?: VideoEditBuiltinTexture): void {
+    const [targetWidth, targetHeight] = this.size(target); const [sourceWidth, sourceHeight] = this.size(source)
+    const uniforms = new Float32Array(16)
+    uniforms.set([targetWidth, targetHeight, sourceWidth, sourceHeight, ...a, ...b])
+    this.passes.push({ entry, source, target, uniforms, ...(original !== undefined ? { original } : {}) })
+  }
+  /**
+   * 可分离高斯（sigma 为全尺寸像素，按轴给）：先按轴把画面对半降采样到 sigma ≤ 3，再横竖两道一维高斯，最后双线性放大回目标。
+   * 降采样与放大本身带来的模糊（方差）从剩余 sigma 里扣掉，整体仍是要求的 sigma。只模糊一个方向时另一方向不降采样。
+   */
+  gaussian(source: VideoEditBuiltinTexture, target: VideoEditBuiltinTexture, sigmaX: number, sigmaY: number, repeatEdges: boolean): void {
+    let current = source; let [width, height] = this.size(source)
+    let factorX = 1; let factorY = 1; let varianceX = 0; let varianceY = 0
+    for (let level = 0; level < MAX_LEVELS; level++) {
+      const halveX = sigmaX / factorX > MAX_DIRECT_SIGMA && width >= 16
+      const halveY = sigmaY / factorY > MAX_DIRECT_SIGMA && height >= 16
+      if (!halveX && !halveY) break
+      if (halveX) { varianceX += factorX ** 2 / 4; factorX *= 2; width = Math.ceil(width / 2) }
+      if (halveY) { varianceY += factorY ** 2 / 4; factorY *= 2; height = Math.ceil(height / 2) }
+      const next = this.alloc(width, height); this.pass('copy', current, next); current = next
+    }
+    const residual = (sigma: number, factor: number, variance: number): number => Math.sqrt(Math.max(0, sigma ** 2 - variance - (factor > 1 ? factor ** 2 / 6 : 0))) / factor
+    const steps: Array<{ axis: 'x' | 'y'; sigma: number }> = [{ axis: 'x' as const, sigma: residual(sigmaX, factorX, varianceX) }, { axis: 'y' as const, sigma: residual(sigmaY, factorY, varianceY) }].filter(step => step.sigma >= 0.3)
+    const upsample = factorX > 1 || factorY > 1
+    if (!steps.length && !upsample) { this.pass('copy', current, target); return }
+    steps.forEach((step, index) => {
+      const last = index === steps.length - 1 && !upsample
+      const next = last ? target : this.alloc(width, height)
+      const radius = Math.min(32, Math.ceil(step.sigma * 3))
+      this.pass('blur', current, next, [step.axis === 'x' ? 1 / width : 0, step.axis === 'y' ? 1 / height : 0, step.sigma, radius], [repeatEdges ? 1 : 0, 0, 0, 0])
+      current = next
+    })
+    if (upsample) this.pass('copy', current, target)
+  }
+  /** 两道等权取样组成的平滑直线模糊：第二道填满第一道取样之间的空隙（等效 16×16 次取样）。 */
+  line(source: VideoEditBuiltinTexture, target: VideoEditBuiltinTexture, dx: number, dy: number): void {
+    const middle = this.alloc()
+    this.pass('line', source, middle, [dx / LINE_TAPS / this.width, dy / LINE_TAPS / this.height, LINE_TAPS, 0])
+    this.pass('line', middle, target, [dx / LINE_TAPS ** 2 / this.width, dy / LINE_TAPS ** 2 / this.height, LINE_TAPS, 0])
+  }
+}
+
+const number = (params: VideoEditBuiltinParams, key: string): number => params[key] as number
+function hexColor(value: string): [number, number, number] { return [1, 3, 5].map(index => parseInt(value.slice(index, index + 2), 16) / 255) as [number, number, number] }
+/** 胶片颗粒的种子：只与帧号有关（同一帧预览与导出一致，逐帧变化）。 */
+export function videoEditGrainSeed(frame: number): number { return (Math.max(0, Math.floor(frame)) * 7 + 1) % 65_521 }
+
+export function planVideoEditBuiltinEffect(instance: VideoEditBuiltinEffectInstance, frame: { width: number; height: number; frame: number }): VideoEditBuiltinPlan {
+  const { width, height } = frame
+  if (![width, height].every(value => Number.isInteger(value) && value >= 1)) throw new Error('内置效果需要有效的画面尺寸。')
+  const params = resolveVideoEditBuiltinParams(instance)
+  const plan = new Planner(width, height)
+  const H = height
+  switch (instance.id) {
+    case 'gaussian_blur': {
+      const sigma = number(params, 'strength') / 100 * 0.06 * H / 2
+      const dimensions = params.dimensions
+      plan.gaussian('input', 'output', dimensions === 'vertical' ? 0 : sigma, dimensions === 'horizontal' ? 0 : sigma, params.repeat_edges !== false)
+      break
+    }
+    case 'directional_blur': {
+      const length = number(params, 'length') / 100 * 0.1 * H
+      if (length < 1) { plan.pass('copy', 'input', 'output'); break }
+      const angle = number(params, 'direction') * Math.PI / 180
+      plan.line('input', 'output', Math.cos(angle) * length, Math.sin(angle) * length)
+      break
+    }
+    case 'zoom_blur': {
+      const range = number(params, 'strength') / 100 * 0.2
+      if (range * H < 1) { plan.pass('copy', 'input', 'output'); break }
+      const center: Vec4 = [number(params, 'center_x') / 100, number(params, 'center_y') / 100, 0, 0]
+      const middle = plan.alloc()
+      plan.pass('zoom', 'input', middle, [center[0], center[1], range / LINE_TAPS, LINE_TAPS])
+      plan.pass('zoom', middle, 'output', [center[0], center[1], range / LINE_TAPS ** 2, LINE_TAPS])
+      break
+    }
+    case 'sharpen': {
+      const blurred = plan.alloc()
+      const sigma = Math.max(0.6, 0.0015 * H)
+      plan.gaussian('input', blurred, sigma, sigma, true)
+      plan.pass('unsharp', blurred, 'output', [number(params, 'amount') / 100 * 3, 0, 0, 0], ZERO, 'input')
+      break
+    }
+    case 'brightness_contrast': {
+      const contrast = number(params, 'contrast') / 100
+      plan.pass('brightness_contrast', 'input', 'output', [number(params, 'brightness') / 100 * 0.5, contrast >= 0 ? 1 + contrast * 2 : 1 + contrast, 0, 0])
+      break
+    }
+    case 'exposure': { const gain = 2 ** number(params, 'exposure'); plan.pass('gain_linear', 'input', 'output', [gain, gain, gain, 0]); break }
+    case 'white_balance': {
+      const temperature = number(params, 'temperature') / 100; const tint = number(params, 'tint') / 100
+      const gains = [1 + 0.3 * temperature, 1 - 0.25 * tint, 1 - 0.3 * temperature]
+      const luma = gains[0] * 0.2126 + gains[1] * 0.7152 + gains[2] * 0.0722
+      plan.pass('gain_linear', 'input', 'output', [gains[0] / luma, gains[1] / luma, gains[2] / luma, 0])
+      break
+    }
+    case 'hue_saturation': {
+      const hue = number(params, 'hue') * Math.PI / 180
+      plan.pass('hue_saturation', 'input', 'output', [Math.cos(hue), Math.sin(hue), 1 + number(params, 'saturation') / 100, number(params, 'lightness') / 100])
+      break
+    }
+    case 'black_white': plan.pass('hue_saturation', 'input', 'output', [1, 0, 0, 0]); break
+    case 'invert': plan.pass('invert', 'input', 'output'); break
+    case 'mosaic': {
+      const block = number(params, 'block_size') / 100 * 0.1 * H
+      if (block < 1) { plan.pass('copy', 'input', 'output'); break }
+      plan.pass('mosaic', 'input', 'output', [block / width, block / height, 0, 0])
+      break
+    }
+    case 'vignette': plan.pass('vignette', 'input', 'output', [number(params, 'amount') / 100, 0.15 + number(params, 'midpoint') / 100 * 0.8, 0.05 + number(params, 'feather') / 100 * 0.9, width / height]); break
+    case 'film_grain': plan.pass('grain', 'input', 'output', [number(params, 'amount') / 100 * 0.25, (0.0005 + number(params, 'size') / 100 * 0.0035) * H, videoEditGrainSeed(frame.frame), params.monochrome === false ? 0 : 1]); break
+    case 'chromatic_aberration': {
+      const offset = number(params, 'amount') / 100 * 0.02 * H; const radial = params.mode !== 'directional'
+      const angle = number(params, 'direction') * Math.PI / 180
+      plan.pass('chromatic', 'input', 'output', radial ? [offset / width, offset / height, 1, 0] : [Math.cos(angle) * offset / width, Math.sin(angle) * offset / height, 0, 0])
+      break
+    }
+    case 'glow': {
+      const bright = plan.alloc(); const blurred = plan.alloc()
+      const threshold = number(params, 'threshold') / 100
+      plan.pass('glow_extract', 'input', bright, [threshold * 0.9, 0.1, 0, 0])
+      const sigma = (0.005 + number(params, 'radius') / 100 * 0.075) * H / 2
+      plan.gaussian(bright, blurred, sigma, sigma, true)
+      plan.pass('glow_add', blurred, 'output', [number(params, 'intensity') / 100 * 2, 0, 0, 0], ZERO, 'input')
+      break
+    }
+    case 'crop': {
+      const feather = Math.max(1, number(params, 'feather') / 100 * 0.05 * H)
+      plan.pass('crop', 'input', 'output', [number(params, 'left') / 100, number(params, 'top') / 100, 1 - number(params, 'right') / 100, 1 - number(params, 'bottom') / 100], [feather / width, feather / height, 0, 0])
+      break
+    }
+    case 'flip': plan.pass('flip', 'input', 'output', [params.axis !== 'vertical' ? 1 : 0, params.axis !== 'horizontal' ? 1 : 0, 0, 0]); break
+    case 'chroma_key': {
+      const [r, g, b] = hexColor(String(params.key_color)); const y = 0.2126 * r + 0.7152 * g + 0.0722 * b
+      plan.pass('chroma_key', 'input', 'output', [(b - y) / 1.8556, (r - y) / 1.5748, 0.02 + number(params, 'tolerance') / 100 * 0.3, 0.002 + number(params, 'softness') / 100 * 0.2], [number(params, 'spill') / 100, 0, 0, 0])
+      break
+    }
+    default: throw new Error(`内置效果“${instance.id}”没有渲染实现。`)
+  }
+  return { width, height, scratch: plan.scratch, passes: plan.passes }
+}

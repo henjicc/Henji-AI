@@ -15,8 +15,8 @@ import type { VideoEditCodeImageInput } from './videoEditCodeGpu'
 import { codeMaterialImageIds } from '@/core/videoEdit/codeMaterialResources'
 import { evaluateVideoEditGraphic, prepareVideoEditGraphic } from '@/core/videoEdit/graphics'
 import type { PreparedVideoEditGraphic, VideoEditGraphic, VideoEditGraphicDraw } from '@/core/videoEdit/graphics'
-import type { VideoEditEffect } from '@/core/videoEdit/compositing'
-import { activeVideoEditEffects } from '@/core/videoEdit/compositing'
+import type { VideoEditBuiltinEffectInstance, VideoEditEffect } from '@/core/videoEdit/compositing'
+import { activeVideoEditEffects, videoEditEffectCodes } from '@/core/videoEdit/compositing'
 import type { VideoEditTransitionWindow } from '@/core/videoEdit/transitions'
 
 const logger = createLogger('features.videoEdit.codeSources')
@@ -27,7 +27,10 @@ type Compiler = Pick<VideoEditCodeCompiler, 'compile' | 'dispose'> & Partial<Pic
 interface KnownVersion { source: string; apiVersion: number; languageVersion: number; bytes: number }
 interface CachedProgram { source: string; program: CodeMaterialProgram; bytes: number }
 interface Plan { clip: VideoEditClip; key: string; static: boolean; program?: CodeMaterialProgram; draws?: VideoEditGraphicDraw[]; parameters: CodeParameterValues; context: ReturnType<typeof codeMaterialContextForFrame>; transitionHandles: boolean }
-export interface PreparedVideoEditEffect { effect: VideoEditEffect; version: string; program: CodeMaterialProgram; parameters: CodeParameterValues; context: ReturnType<typeof codeMaterialContextForFrame>; transitionHandles: boolean }
+export interface PreparedVideoEditCodeEffect { effect: VideoEditEffect; builtin?: undefined; version: string; program: CodeMaterialProgram; parameters: CodeParameterValues; context: ReturnType<typeof codeMaterialContextForFrame>; transitionHandles: boolean }
+/** 内置效果不需要编译源码，直接交给合成器的 GPU 实现（4.7）。 */
+export interface PreparedVideoEditBuiltinEffect { effect: VideoEditEffect; builtin: VideoEditBuiltinEffectInstance }
+export type PreparedVideoEditEffect = PreparedVideoEditCodeEffect | PreparedVideoEditBuiltinEffect
 export interface PreparedCodeSources { pictures: Map<string, VideoEditCodePicture>; effects: Map<string, PreparedVideoEditEffect[]>; sourceTimestamps: number[]; cacheHits: number }
 export interface VideoEditCodePrepareOptions { transitions?: readonly VideoEditTransitionWindow[]; surfaceKeys?: ReadonlySet<string> }
 function identity(definitionId: string, versionId: string): string { return JSON.stringify([definitionId, versionId]) }
@@ -114,7 +117,7 @@ export class VideoEditCodeSources {
     const assertCurrent = (): void => { if (this.disposed || controller.signal.aborted || this.epoch !== epoch || this.document !== document || !shouldPresent()) throw new DOMException('旧代码画面已取消。', 'AbortError') }
     const plans: Plan[] = []; const keys = new Set<string>(options.surfaceKeys)
     const effects = new Map<string, PreparedVideoEditEffect[]>()
-    const pinned = new Set(clips.flatMap(clip => [...(clip.code ? [clip.code] : []), ...activeVideoEditEffects(clip).map(effect => effect.code)].map(instance => identity(instance.definitionId, instance.versionId))))
+    const pinned = new Set(clips.flatMap(clip => [...(clip.code ? [clip.code] : []), ...videoEditEffectCodes(activeVideoEditEffects(clip))].map(instance => identity(instance.definitionId, instance.versionId))))
     const transitionByClip = new Map(options.transitions?.flatMap(window => [[window.left.id, window], [window.right.id, window]] as const))
     const animated = (clip: VideoEditClip, instance: CodeMaterialInstance, program: CodeMaterialProgram): Pick<Plan, 'context' | 'parameters' | 'transitionHandles'> => {
       let animation = this.parameters.get(instance)
@@ -129,6 +132,8 @@ export class VideoEditCodeSources {
         assertCurrent()
         const chain: PreparedVideoEditEffect[] = []
         for (const effect of activeVideoEditEffects(clip)) {
+          if (effect.builtin) { chain.push({ effect, builtin: effect.builtin }); continue }
+          if (!effect.code) continue
           const key = identity(effect.code.definitionId, effect.code.versionId)
           const program = await this.program(key, codeMaterialSource(document, effect.code), controller.signal, pinned); assertCurrent()
           if (program.kind !== 'filter') throw new CodeMaterialError('TYPE', '附加效果必须使用单输入滤镜源码。')

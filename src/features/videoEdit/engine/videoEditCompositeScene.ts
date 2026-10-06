@@ -52,7 +52,10 @@ export async function renderVideoEditCompositeScene(document: VideoEditCompositi
       if (!plan.effect.enabled || plan.effect.amount <= 0) continue
       current()
       const free = targets.filter(target => target !== key && (!preserve || target !== targets[0]))
-      const filtered = await runtime.filter(free[0], plan.version, plan.program, { ...plan.context, width: document.width, height: document.height }, plan.parameters, result, plan.transitionHandles); current()
+      const filtered = plan.builtin
+        ? await runtime.builtin(free[0], plan.builtin, result, frame)
+        : await runtime.filter(free[0], plan.version, plan.program, { ...plan.context, width: document.width, height: document.height }, plan.parameters, result, plan.transitionHandles)
+      current()
       if (plan.effect.amount === 1) { result = filtered; key = free[0] }
       else { result = await runtime.mix(free[1], result, filtered, plan.effect.amount); key = free[1]; current() }
     }
