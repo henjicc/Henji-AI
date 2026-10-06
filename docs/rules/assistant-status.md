@@ -1,5 +1,7 @@
 # 智能助手现状台账
 
+2026-10-06：项目体系第二版的助手契约收口（任务 4.3）。工具内容根实体统一叫 `*.document`、能力字段叫 `documentId` / `documentRef`（引用别的工具的画布叫 `canvasRef`）、宿主上下文当前画布叫 `canvas`，“工程 / 画布项目”等旧叫法从能力说明、Pi 提示、运行时技能与界面文案清掉；补上两个缺口 `trash_project` 与 `collect_video_edit_media`，完整现状见第一节“项目体系与数据目录”。证据：两套 tsc、能力门禁、受影响测试与原生 SQLite、`test:reality --suite integration`，以及 6 个真实 Electron + 真实 MCP 场景（隔离资料、零付费）通过。真实模型（Pi）运行未做：本机资料没有配置任何助手主模型，`assistant:cli` 直接报“请先在设置中配置可用的助手主模型”，需用户配置后补跑。
+
 2026-10-05：关闭 09-14 记下的欠账 `general.max_history_count`：该设置自 2026-01 历史记录改存 SQLite 后已无任何消费者，界面却承诺“超出后自动删除最旧记录”。选择删除而非补齐：按默认 50 条补齐会静默删除存量作品，与当时记下的边界要求冲突。设置页条目、助手可写属性与界面文案一并移除；本地残留的旧键不再读取，不做迁移。
 
 2026-10-03：`create_camera_stage_project` 经现代 MCP（及同一操作协调器）调用时，工程已创建并落盘，但处理器结果没有核实回执，公共操作恒为 `completed/unresolved` 并投影成失败（与 09-20 三维取消回执同类）。现与新建画布项目同一契约：从持久存储回读工程、默认摄像机与 0 秒状态关键帧后返回 `verification`，回读不符如实报未核实。精确测试 2 项及能力相关 4 文件 23 项通过；正式副屏 Electron 场景 `canvas-camera-stage-assistant-render-capability` 改走真实 MCP 后通过（新建→运镜→图片渲染 completed→视频活动取消 cancelled）。未改其他三维能力；Pi 走同一协调器，未单独实跑。
@@ -261,71 +263,72 @@ schema 校验所以看不见，MCP 侧测试又都跑在未授权付费的连接
 
 数字带日期戳。看到日期久远又拿不准时，按「取数方式」重新跑一遍，不要直接引用。
 
-## 一、能力盘（快照：2026-09-18）
+## 一、能力盘（快照：2026-10-06）
 
 | 项 | 数 |
 |---|---|
-| 注册域 | 11 |
-| 实体类型 | 31 |
-| 属性 | 310 |
-| 可写实体 | 21 |
-| 写域 | 9：`assets` `camera_stage` `canvas` `generation` `image_edit` `image_mark` `memory` `models` `settings` |
+| 注册域 | 14 |
+| 实体类型 | 55 |
+| 属性 | 488 |
+| 可写实体 | 41 |
+| 写域 | 12：`assets` `audio_edit` `camera_stage` `canvas` `documents` `generation` `image_edit` `image_mark` `memory` `models` `settings` `video_edit` |
 | 只读域 | 2：`storyboard` `toolbox`（每个都有显式 `writeExclusion.reason`，是**有意只读**不是漏做） |
+| 内置能力定义 | 120 |
 
 取数方式：`getApplicationReflectionRegistry().describe({}, ctx)`。`ctx` 必须照抄
 `propertyCoverage.test.ts` 里 `describeAll()` 的构造——权限来自 `listDeclaredPropertyPermissions()`，
-传空权限集会被 `canReadProperty` 全部滤掉，属性数会假成 0。域清单与可路由性由
-`applicationControlCoverage.test.ts` 穷举守着，跌破会红。
+传空权限集会被 `canReadProperty` 全部滤掉，属性数会假成 0；可写实体 = 有可写属性或声明 `collectionWrite` 的实体，
+能力数取 `BUILTIN_APPLICATION_CAPABILITIES.length`。域清单与可路由性由 `applicationControlCoverage.test.ts` 穷举守着，跌破会红。
 
-与 2026-08-31 快照的差异来自应用能力重构，不是能力退化：`artifacts`、`assistant_runtime`
-两个只读域随旧自研助手运行时一并删除（域 12→11，只读域 4→2），`memory` 成为可写域（写域 8→9）。
+与 2026-09-18 快照（11 域 / 31 实体 / 310 属性 / 9 写域）的差异来自 2026-09-20 起新增的口播、剪辑两个写域
+与项目体系第二版新增的 `documents` 写域，不是统计口径变化。
 
-2026-10-06 增量（存储底座 2.5）：新增写域 `documents`——实体 `documents.document`、`documents.project`
-（名称经 `change_application_entities` 可写，其余只读并在只读理由里点名改道能力），以及 8 个通用能力
-`list_documents` / `list_projects` / `create_document` / `open_document` / `move_document` /
-`duplicate_document` / `trash_document` / `create_project`，与项目页右键共用 `src/features/documents/documentOperations.ts`。
-结果场景见 `resultBehaviorCoverage.test.ts` 的 `documents` 组。各工具旧的项目管理能力（`list_canvas_projects`、
-`*_camera_stage_project` 等）仍在，3.x 各工具接入时删除；`open_document` 在对应工具登记打开方式前会如实拒绝。
-未做真实模型验收。上表是 2026-09-18 快照，未按新增写域重新取数。
+### 项目体系与数据目录（2026-10-06，任务 2.5–4.3 合并后的现状）
 
-2026-10-06 增量（3.2 镜头参考接入文档底座）：镜头参考的 6 个项目管理能力 `list/get/open/create/rename/delete_camera_stage_project`
-删除，改由通用文档能力承担（`open_document` 对 `camera_stage` 已可用，登记了打开方式与后台释放方式）；
-`camera_stage.project` 的 id 即镜头参考文档 ID，实体本身改为只读（`name` 只读，改名写 `documents.document.name`，
-`writeExclusion.reason` 点名改道能力），场景、对象、摄像机、状态关键帧、轨迹、播放等内容能力与属性不变，`projectId` 字段收文档 ID。
-Pi 在三维界面的基础工具由 `get_camera_stage_project` 换成 `observe_camera_stage_scene`。
+**叫法与命名（4.3 统一）。** “项目”只指装文档的总项目（文件夹）；里面的东西叫剪辑、画布、口播、镜头参考、图片文档，
+需要统称时叫“文档”。对外契约一律按这个叫法：
 
-2026-10-06 增量（3.1 剪辑接入文档底座）：剪辑存成项目里的 `.henji-video` 文档，`open_document` 对 `video_edit` 已可用
-（打开到剪辑工作区，登记了后台释放方式）；项目的列出、新建、改名、移到回收站与剪辑的移动、副本由通用文档能力承担。
-`video_edit.project` 的 id 即剪辑文档 ID，剪辑内容能力与属性不变（剪辑没打开时如实提示先用 `open_document` 打开）；
-`video_edit.project.name` 改为只读（剪辑名就是文件名，改名写 `documents.document.name`），`save_video_edit` 改为“立即写完自动保存”。
-其他工具的结果经 `place_video_edit_creative_result` 放进剪辑时先复制进所在项目的“生成结果”再引用。
+| 对象 | 实体 / 引用种类 | 能力字段 |
+|---|---|---|
+| 一份文档（通用） | `documents.document` | `documentId` |
+| 总项目 | `documents.project` | `projectId`（只在通用文档能力里出现，指总项目） |
+| 画布 / 镜头参考 / 口播 / 剪辑的内容根 | `canvas.document` / `camera_stage.document` / `audio_edit.document` / `video_edit.document`（id 都是文档 ID） | 本工具自己的文档：ID 形式叫 `documentId`，引用形式叫 `documentRef`；引用别的工具的画布时叫 `canvasRef`（镜头渲染、多图层节点编辑、图片编辑导出到画布） |
+| 分镜（画布的只读投影） | `storyboard.document` / `storyboard.card` | — |
+| 子实体指回所属文档 | `canvas.node.document_ref`、`canvas.edge.document_ref`、`storyboard.card.document_ref`、`camera_stage.scene.document_ref`、`audio_edit.transcript_block.document_id`、`audio_edit.suggestion.document_id` | — |
 
-2026-10-06 增量（3.3 口播接入文档底座）：口播存成 `.henji-audio` 文档（可独立在“口播/”也可在项目里），`open_document` 对 `audio_edit`
-已可用（打开到口播编辑器；没有素材的空文档会先请用户导入音频或视频，登记了后台释放方式）；列出、新建、改名、移动、副本、
-移到回收站由通用文档能力承担。`audio_edit.project` 的 id 即口播文档 ID（能力输入 `projectRef.id` 带说明），
-`audio_edit.project.name` 改为只读（口播名就是文件名，改名写 `documents.document.name`）；参考稿、剪辑区间、批量设置等内容属性与
-转写、分析、处理、导出等内容能力不变。实体列出只列已保存且已导入素材的口播与已打开的草稿。核实回执改为从文档文件回读。
+宿主上下文里当前画布从 `project` 改叫 `canvas`（`{ id, selectedNodeId, … }`），剪辑块的 `projectRef` 改叫 `documentRef`。
+画布、镜头参考、画布生成的领域服务内部仍用 `projectId` 指同一个文档 ID，只在处理器边界换名（`handlerUtils` 的
+`parseDocumentCapabilityInput` / `withDocumentIdOutput`），不做领域内部大面积改名。不兼容旧字段名（重要记录 008）。
+剪辑编辑器内部 PR 式的“项目面板 / 项目项 / 素材箱”沿用原名，没有跟着改（见第三节）。
 
-2026-10-06 增量（3.5 图片文档）：`.henjiimg` 成为正式文档（类型 `image_document`），列出、新建（经界面）、打开、移动、副本、
-回收站、改名由通用文档能力承担；`open_document` 对 `image_document` 已可用（交给工具箱图片编辑页打开，离开当前文档按草稿规则询问），
-并登记后台释放。`image_edit.*` 实体目录改为“作品索引里的图片文档 + 已载入的实例”，不再遍历程序目录的 V3 工作副本仓库；
-助手读写某份图片文档时先打开它的文档会话（必要时解包到工作副本），修改照常空闲写回文件。`create_document` 对图片文档仍如实拒绝
-（单文件包要从图片新建，经界面）。未做真实模型验收。
+**通用文档能力**（`documents` 域，与项目页右键、剪辑页共用 `src/features/documents/documentOperations.ts`）：
 
-2026-10-06 增量（3.4 画布接入文档底座）：画布存成 `.henji-canvas` 文档（独立在“画布/”或在项目里），`open_document` 对 `canvas`
-已可用（打开到画布工作区，登记了后台释放方式）；列出、新建、改名、移动、副本、移到回收站由通用文档能力承担。
-画布的 6 个项目管理能力 `list/open/create/close/rename/delete_canvas_project` 与工具箱的 `list_storyboard_projects`、
-`get_storyboard_project` 删除。`canvas.project` 的 id 即画布文档 ID，实体改为只读（`name` 只读，改名写 `documents.document.name`，
-改名会推进画布版本、读到旧名的基线随之过期），节点、连线、批事务、生成落图等内容能力与属性不变，`projectId` 字段收文档 ID；
-`retry_canvas_project_save` 权限改为 `canvas:write`。正式 Electron 验收 `canvas-documents` 与外部连接相关脚本已改走通用文档能力，
-未做真实模型验收。
+| 动作 | 助手怎么做 | 说明 |
+|---|---|---|
+| 列出 | `list_documents`（类型、全部 / 不在项目里 / 某个项目、草稿）、`list_projects` | 返回的文档 id 就是各工具内容能力的 `documentId` / `documentRef` |
+| 新建 | `create_document`、`create_project` | 剪辑只能建在项目里；图片文档如实拒绝（要从图片新建，经界面） |
+| 打开 | `open_document`（`fromDocumentId` 时以“返回剪辑”嵌入模式打开） | 五类文档都登记了打开方式与后台释放方式 |
+| 移动 / 副本 | `move_document`（`projectId: null` 移出项目，`onConflict`）、`duplicate_document`（可给 `projectId`） | 原项目里用到的素材一并复制 |
+| 改名 | `change_application_entities` 写 `documents.document.name` / `documents.project.name` | 各工具内容根的 `name` 只读并点名这里 |
+| 回收站 | `trash_document`、`trash_project`（4.3 新增） | 破坏性，带预览与读取基线；正在编辑的拒绝 |
+| 收集素材 | `collect_video_edit_media`（4.3 新增，剪辑域） | 与剪辑页“收集素材到项目”同一入口；界面只在剪辑提供，所以不做通用文档版 |
+| 导出 | `export_document_package`（单个文档或整个项目，只回文件名） | — |
+| 回到来源 | `open_video_edit_clip_source`；放入剪辑用 `place_video_edit_creative_result`（来源只有“文档 + 部位”与“生成记录 + 第几个结果”两种） | — |
 
-2026-10-06 增量（4.1 自由组合）：`place_video_edit_creative_result` 的来源统一为两种——`{ type: 'document', documentRef, nodeRef?, includeProcessing? }`
-（画布节点、口播、镜头参考、图片文档都按“文档 + 部位”给）与 `{ type: 'generation', resultRef, outputIndex }`，旧的五种来源写法删除；
-新增 `open_video_edit_clip_source`（片段回到来源继续编辑：打开来源文档并定位部位，或打开生成记录；来源找不到如实返回）、
-`export_document_package`（把一份文档或整个项目导出为单个 `.henjipack` 文件，只回文件名不回路径）；`open_document` 新增 `fromDocumentId`
-（从剪辑里打开时带返回剪辑的嵌入模式），`duplicate_document` 新增 `projectId`（复制进指定项目）。导入单个文件有意不开放给助手
-（要用户选文件，且会新建项目与文档，经界面）。收集素材会一并复制剪辑引用的别处文档并改写引用。未做真实模型验收。
+**有意不开放**（界面能做、助手不做，理由均与“需要用户在系统界面里选择”或“只改显示”有关）：导入单个文件（`.henjipack`，要用户选文件并新建项目）；
+打开别处的项目文件夹（要用户在系统选择器里选）；在文件夹中显示（调用系统资源管理器）；缺失文档 / 项目的“从列表移除”（只整理索引，
+界面直接可见；`trash_project` 遇到缺失项目会如实指向这一入口）；更换作品目录（`storage.data_path` 只读，要整体移动全部作品并重启，
+说明里给出 `open_application_surface` 到 `files-storage` 的改道）。
+
+**各工具接入后的状态**：镜头参考（3.2）、剪辑（3.1）、口播（3.3）、图片文档（3.5）、画布（3.4）都存成作品目录或项目里的文档文件，
+各工具旧的项目管理能力（`list/get/open/create/rename/delete_camera_stage_project`、`list/open/create/close/rename/delete_canvas_project`、
+`list/get_storyboard_project` 等）已全部删除；内容能力（画布节点 / 批量 / 生成落图、三维场景 / 运镜 / 渲染、口播转写 / 处理 / 导出、
+剪辑编辑 / 导出 / 收录、图片编辑）不变，只把目标换成文档 ID。画布内容读取叫 `get_canvas_document`（输出里画布摘要字段叫 `document`），
+保存恢复叫 `retry_canvas_document_save`。口播实体列出只列已保存且已导入素材的口播与已打开的草稿；镜头参考列出已保存的文档与已打开的草稿。
+`image_edit.document` 的 id 另带 `v3:` 前缀，按实体列出结果取，不能直接拿文档 ID 拼。
+
+**验证**：结果级场景见 `resultBehaviorCoverage.test.ts` 的 `documents` 组与 `documentsReflectionResult.test.ts`（含 4.3 的项目回收站）、
+`videoEditService.test.ts`（4.3 公共收集素材）；`check:assistant-capabilities` 通过。真实模型（Pi）验收见本文件顶部 2026-10-06 条。
 
 ## 二、已经通了的
 
@@ -340,7 +343,7 @@ Pi 在三维界面的基础工具由 `get_camera_stage_project` 换成 `observe_
 - **判据 2（唯一性）**：旧 `HostCommand` / `HostQuery` 执行入口**已删除**，助手与界面共用正式领域服务。
   `AGENTS.md` 明令禁止新增该类工具。双路径一致性由 `check:assistant-capabilities` 守。
 - **判据 3（走得通）**：四大覆盖门禁 `propertyCoverage` / `storeActionCoverage` / `collectionCoverage` /
-  `resultBehaviorCoverage` **零豁免清单**。9 个写域全部有脚本化模型替身驱动正式运行时的读改验回环
+  `resultBehaviorCoverage` **零豁免清单**。12 个写域（2026-10-06）全部有脚本化模型替身驱动正式运行时的读改验回环
   （`applicationHarness.writeLoop.test.ts`，L-B）；它证明给定操作链路可执行，不证明真实模型会选择该路线。
 - **判据 4（可自纠）**：拒绝路径的自我修正由 `applicationHarness.rejection.test.ts` 守。
 
@@ -453,12 +456,19 @@ L-B 已经没有独立 npm 脚本，harness 文件也从 `assistantHarness.*` �
 当前没有挂在 `KNOWN_UNPUBLISHABLE` / `KNOWN_UNREACHABLE` 的“声明可写但实际走不通”结构性欠账；
 2026-08-18 真机验收登记的四条脚本空转问题也已全部注销。
 
+### 项目体系第二版留下的欠账（2026-10-06）
+
+- **剪辑编辑器内部仍叫“项目面板 / 项目项”**：PR 式的素材面板（`video_edit.item` 标题“项目项”、命令“在项目中定位”、面板名）与“项目只指总项目”冲突。
+  它是剪辑里的素材清单，不是总项目；改名牵动剪辑界面、命令、文档校验文案与技能说明，4.3 没有改，待用户决定叫法（如“素材面板 / 素材项”）后统一处理。
+- **收集素材只在剪辑提供**：`collect_video_edit_media` 对应剪辑页的入口；画布、口播等其他文档没有界面入口，助手也不提供，需要时先加界面再从同一服务投影。
+- **未做真实付费 / 写入验收**：4.3 的真实模型运行只做了只读与拒绝路径（见顶部 2026-10-06 条）；新建、移动、回收站、收集、导出等写入经正式结果测试与隔离 Reality（4.1 `free-composition`）证明，未在真实资料目录由真实模型执行。
+
 ### 真机验收的数据卫生问题（2026-09-18 重新取数，已大幅缩小）
 
 登记这条欠账的 `assistant:live:suite` 已经删除，欠账随之改形。现在两个真机入口的数据行为不同：
 `test:reality` 用隔离资料目录，跑完不碰真实库；`assistant:cli` 跑在真实配置上，确实写真实库。
 
-按当前真实库重新取数（`henji.db`）：2026-08 登记的 43 个三维工程、46 个画布工程已不在库中
+按当前真实库重新取数（`henji.db`）：2026-08 登记的 43 个三维工程、46 个画布工程已不在库中（2026-10-06 起三维、画布的工程表已随项目体系第二版退役，画布与镜头参考都是作品目录里的文档文件）
 （现存 28 个三维工程、1 个画布工程，均为人工命名），只剩 4 个 `自动验收-*` 素材库属于那批残留。
 成本量级已经不构成"让人不想跑真机"的理由，**但批量删除入口仍然没有**，这 4 条要用户手工删。
 
@@ -493,6 +503,7 @@ HTTP 与插件两类适配器仍然不做，理由不变。
 
 格式：`日期 · 提交 · 推翻了什么 → 换成了什么 · 为什么旧的不能留`
 
+- **2026-10-06 · 4.3 叫法统一** · 推翻 3.1–3.5 为了少动契约而保留的旧名：实体 `canvas.project` / `camera_stage.project` / `audio_edit.project` / `video_edit.project` / `storyboard.project` → `*.document`；子实体的 `project_ref` / `project_id` → `document_ref` / `document_id`；内容能力字段 `projectId` → `documentId`、`projectRef` → `documentRef`（引用别的工具的画布时 `canvasRef`）；宿主上下文 `project` → `canvas`、剪辑块 `projectRef` → `documentRef`；能力 `get_canvas_project` → `get_canvas_document`（输出 `project` → `document`）、`retry_canvas_project_save` → `retry_canvas_document_save`；描述、提示词、技能与错误里的“工程 / 画布项目 / 剪辑工程”改为剪辑、画布、口播、镜头参考。旧名让模型把一份画布当成“项目”去 `list_projects` 里找，或把所在项目 ID 填进 `projectId`；按重要记录 008 不保留旧名兼容。下面几条 3.x 记录里的旧实体名是当时的写法。
 - **2026-10-06 · 3.3 口播接入** · 推翻经 `audio_edit.project.name` 通用属性改口播工程名、口播工程存在 `audio_edit_projects` 表、主进程保存接口校验素材不可改与锁定 → 换成作品目录或项目里的口播文档（文档会话自动保存、导入即建草稿、离开询问），改名走 `documents.document.name`；素材不可改与锁定保护由口播实例的编辑入口保证，转写与重新定位的结果由实例接收后经会话保存（主进程不再写口播内容）。旧表已退役（迁移账本第 16 项），保留就是第二套文档存储。
 - **2026-10-06 · 3.4 画布接入** · 推翻画布工程存在 `storyboard_projects` / `canvas_projects` 表、经 `list/open/create/close/rename/delete_canvas_project` 与工具箱 `list/get_storyboard_project` 管理、经 `canvas.project.name` 改名 → 换成作品目录或项目里的画布文档（文档会话自动保存、草稿、离开询问），管理走通用文档能力，改名走 `documents.document.name`；撤销记录与视口改存程序目录会话状态，不进文档；多图层节点的内嵌图片文档写成画布所在容器 `.henji/` 里的包。旧表已退役（迁移账本第 17 项），测试专用原始 SQL 通道一并删除；保留就是第二套文档存储与绕过正式接口的写入口。
 - **2026-10-06 · 3.1 剪辑接入** · 推翻 2026-09-30 起剪辑工程的“用户另存为选位置的单个 `.henji-video` 文件、渲染层直接写文件”与经 `video_edit.project.name` 通用属性改工程名 → 换成项目文件夹里的剪辑文档（文档会话自动保存、草稿项目离开询问），改名走 `documents.document.name`。旧做法每个工具各写一套存储与离开流程、素材写死绝对路径，项目拷走就断（项目体系第二版）。
