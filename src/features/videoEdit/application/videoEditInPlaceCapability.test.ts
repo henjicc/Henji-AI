@@ -41,7 +41,7 @@ beforeEach(() => {
 describe('原地生成助手能力', () => {
   it('已登记进剪辑能力目录，输入拒绝未声明字段并点名缺项', () => {
     const ids = VIDEO_EDIT_APPLICATION_CAPABILITIES.map(definition => definition.id)
-    expect(ids).toEqual(expect.arrayContaining(['prepare_video_edit_in_place_generation', 'generate_video_edit_in_place', 'get_video_edit_in_place_generation', 'switch_video_edit_clip_take']))
+    expect(ids).toEqual(expect.arrayContaining(['prepare_video_edit_in_place_generation', 'generate_video_edit_in_place', 'get_video_edit_in_place_generation', 'restore_video_edit_clip_take']))
     const base = { documentRef: { kind: 'video_edit.document', id: 'p' }, prompt: '日落' }
     expect(videoEditInPlaceInputSchema.safeParse({ ...base, target: { action: 'generate_audio' } }).error?.issues[0].message).toContain('startSeconds')
     expect(videoEditInPlaceInputSchema.safeParse({ ...base, target: { action: 'generate_shot', startSeconds: 3 }, script: 'x' }).success).toBe(false)
@@ -62,7 +62,7 @@ describe('原地生成助手能力', () => {
     const document = state.document; const sequenceId = document.sequences[0].id
     state.document = landVideoEditInPlaceResult(document, planVideoEditInPlaceGeneration(document, sequenceId, { action: 'replace_shot', clipId: 'a' }), 'gen-item').document
     expect(state.document.sequences[0].clips[0].itemId).toBe('gen-item')
-    const output = await handleVideoEditInPlaceCapability('switch_video_edit_clip_take', { documentRef: { kind: 'video_edit.document', id: document.id }, clipRef: { kind: 'video_edit.clip', id: `${document.id}:a` } }, context)
+    const output = await handleVideoEditInPlaceCapability('restore_video_edit_clip_take', { documentRef: { kind: 'video_edit.document', id: document.id }, clipRef: { kind: 'video_edit.clip', id: `${document.id}:a` } }, context)
     expect(output).toMatchObject({ verification: { verified: true } })
     expect(state.document.sequences[0].clips[0]).toMatchObject({ itemId: 'item', duration: 60, takes: [expect.objectContaining({ itemId: 'gen-item' })] })
   })

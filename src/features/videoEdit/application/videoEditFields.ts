@@ -75,7 +75,7 @@ schemas['video_edit.clip'].sourceComponent = z.enum(['all', 'video', 'audio'])
 schemas['video_edit.media'].assetId = z.string().max(100).optional()
 schemas['video_edit.media'].hasAudio = z.boolean().nullable()
 schemas['video_edit.clip'].creativeSource = videoEditClipSchema.shape.creativeSource.unwrap().nullable()
-// 可切回的镜头版本（4.12）：由“替换镜头”记下、switch_video_edit_clip_take 切换，只读
+// 可切回的镜头版本（4.12）：由“替换镜头”记下、restore_video_edit_clip_take 切换，只读
 schemas['video_edit.clip'].takes = videoEditClipSchema.shape.takes.unwrap().nullable()
 schemas['video_edit.media'].frameRate = z.object({ numerator: z.number().int().positive(), denominator: z.number().int().positive() }).nullable()
 schemas['video_edit.media'].frameRateMode = z.enum(['sampled-constant', 'variable', 'unknown'])
@@ -98,7 +98,7 @@ Object.assign(labels, { label: '颜色标签（空为按类型默认）', graphi
 Object.assign(labels, { graphicObjectIds: '图形对象顺序（从下到上）', effectIds: '效果执行顺序', adjustmentFromTrack: '调整起始轨道', graphicKind: '创建图形类型', graphicWidth: '图形宽度', graphicHeight: '图形高度', parameters: '实例参数', curves: '参数关键帧', versionId: '固定源码版本', definitionId: '滤镜源码定义', sequenceId: '所属序列', leftClipId: '左侧片段', rightClipId: '右侧片段', durationFrames: '转场时长帧' })
 Object.assign(labels, { alignment: '过渡对齐（center 中心切点、start 起点切点即整段在切点后、end 终点切点即整段在切点前、custom 自定义起点）', framesBeforeCut: '过渡在切点之前的帧数（对齐为 custom 时生效）', fadeInFrames: '淡入帧数（0 为不淡入；画面从透明渐显，声音按恒定功率渐强）', fadeOutFrames: '淡出帧数（0 为不淡出）' })
 Object.assign(labels, { group: '分组', description: '作用与适用场景', params: '参数（键、类型、范围、单位、默认值与取值含义）', mask: '作用区域', regionStatus: '作用区域分析状态' })
-Object.assign(labels, { takes: '可切回的镜头版本（替换镜头后记下的原素材，新的在前；用 switch_video_edit_clip_take 切回）' })
+Object.assign(labels, { takes: '可切回的镜头版本（替换镜头后记下的原素材，新的在前；用 restore_video_edit_clip_take 切回）' })
 /** 个别属性的说明比通用模板更具体（助手据此取值）。 */
 const descriptions: Record<string, string> = {
   'video_edit.effect.definition_id': '效果来源，创建后不可改：内置效果写 effect:<ID>（画面效果如 effect:gaussian_blur 只能加到画面片段；音频效果如 effect:noise_reduction、effect:parametric_eq 只能加到声音片段；全部内置效果、适用片段及参数语义见 video_edit.builtin_effect），代码滤镜写滤镜源码定义 ID（只用于画面片段）。',

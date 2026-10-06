@@ -68,7 +68,7 @@ export const prepareVideoEditInPlaceGenerationCapability = defineApplicationCapa
 const generateOutput = z.object({ documentRef, taskRef, plan: planOutput, status: z.literal('submitted'), message: z.string() }).strict()
 export const generateVideoEditInPlaceCapability = defineApplicationCapability({
   id: 'generate_video_edit_in_place', title: '在剪辑时间线原地生成',
-  description: '缺镜头、要换画面、要配音时在时间线上直接生成并落进当前位置：generate_shot 在指定秒数生成镜头（如“3 秒处生成 4 秒的日落空镜”= startSeconds 3、durationSeconds 4），replace_shot 把片段换成新生成的版本（原镜头保留，可用 switch_video_edit_clip_take 切回），extend_shot 以片段尾帧续接后续镜头，generate_audio 生成配音或配乐。自动带入参考帧并按序列画幅与落点换算模型的时长和比例。提交后时间线上立刻出现占位，用户可以继续剪辑；生成完成后结果复制进项目素材并一步落进时间线（一次撤销），生成期间原落点被占用时改放到新轨道。返回生成任务 taskRef：用 wait_generation_task 等待，再用 get_video_edit_in_place_generation 读取落位结果；cancel_generation_task 取消会一并撤回占位。会产生付费生成。',
+  description: '缺镜头、要换画面、要配音时在时间线上直接生成并落进当前位置：generate_shot 在指定秒数生成镜头（如“3 秒处生成 4 秒的日落空镜”= startSeconds 3、durationSeconds 4），replace_shot 把片段换成新生成的版本（原镜头保留，可用 restore_video_edit_clip_take 切回），extend_shot 以片段尾帧续接后续镜头，generate_audio 生成配音或配乐。自动带入参考帧并按序列画幅与落点换算模型的时长和比例。提交后时间线上立刻出现占位，用户可以继续剪辑；生成完成后结果复制进项目素材并一步落进时间线（一次撤销），生成期间原落点被占用时改放到新轨道。返回生成任务 taskRef：用 wait_generation_task 等待，再用 get_video_edit_in_place_generation 读取落位结果；cancel_generation_task 取消会一并撤回占位。会产生付费生成。',
   version: 1, domain: 'video_edit', aliases: ['原地生成', '补镜头', '生成镜头', '替换镜头', '延长镜头', '配音', '配乐', 'generate shot in timeline'], readOnly: false, risk: 'R2', dataClasses: ['C1'], permission: 'generation:create', idempotent: true, destructive: false, timeoutMs: 180000, supportsPreview: false, supportsUndo: false,
   completionKind: 'submitted',
   requiredScopes: ['video_edit', 'generation'], acceptsRefs: ['video_edit.document', 'video_edit.sequence', 'video_edit.track', 'video_edit.clip', 'generation.model'], producesRefs: ['generation.task'],
@@ -102,7 +102,7 @@ export const getVideoEditInPlaceGenerationCapability = defineApplicationCapabili
 
 const switchOutput = z.object({ resultRef: ref('video_edit.clip'), documentRef, message: z.string(), verification: z.object({ verified: z.boolean(), condition: z.string(), target: ref('video_edit.clip') }) }).strict()
 export const switchVideoEditClipTakeCapability = defineApplicationCapability({
-  id: 'switch_video_edit_clip_take', title: '切回片段的其他镜头版本', description: '片段被替换过（原地生成的替换镜头、配音替换）后，切换到它记着的其他版本：takeIndex 对应片段属性 takes 里的序号（0 为最近替换下来的那个）。位置、变换与效果不动，当前画面变成可切回的版本；一步撤销。',
+  id: 'restore_video_edit_clip_take', title: '切回片段的其他镜头版本', description: '片段被替换过（原地生成的替换镜头、配音替换）后，切换到它记着的其他版本：takeIndex 对应片段属性 takes 里的序号（0 为最近替换下来的那个）。位置、变换与效果不动，当前画面变成可切回的版本；一步撤销。',
   version: 1, domain: 'video_edit', aliases: ['切回原镜头', '换回原来的', '恢复原片段'], readOnly: false, risk: 'R1', dataClasses: ['C1'], permission: 'video_edit:write', idempotent: false, destructive: false, timeoutMs: 30000, supportsPreview: false, supportsUndo: true,
   requiredScopes: ['video_edit'], acceptsRefs: ['video_edit.document', 'video_edit.clip'], producesRefs: ['video_edit.clip'],
   inputSchema: z.object({ documentRef, clipRef: ref('video_edit.clip'), takeIndex: z.number().int().min(0).max(7).optional().describe('takes 里的序号，默认 0。') }).strict(), outputSchema: switchOutput,
