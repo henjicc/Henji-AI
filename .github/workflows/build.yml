@@ -1,11 +1,18 @@
 name: Build Henji-AI
 
-# 平时推送 main 不自动运行（避免每次提交都跑全量、发失败邮件）；只在发版标签与手动触发时运行。
-# 手动触发时机见 docs/rules/testing.md 第七节：SDK 发布前、打版本标签前、大型重构或计划收尾后。
+# 推送 main 自动运行；只改文档（docs/、*.md）的推送跳过，避免计划与记录类提交也跑全量。
 on:
   push:
+    branches:
+      - main
     tags:
       - 'v*'
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
     inputs:
       build_installer:
