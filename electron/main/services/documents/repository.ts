@@ -118,6 +118,36 @@ export interface AdoptDocumentRequest {
   /** 默认 whenTaken：索引里已有同 ID 时换新。 */
   newId?: 'always' | 'whenTaken'
 }
+/** 内容里的跨文档引用：形状恰好是 { docId: 字符串, path: 字符串 } 的对象（与 package-service 改写 ID 的规则一致）。 */
+function findDocumentLinks(content: unknown): DocumentLink[] {
+  const found: DocumentLink[] = []
+  const visit = (value: unknown): void => {
+    if (Array.isArray(value)) { for (const item of value) visit(item); return }
+    if (typeof value !== 'object' || value === null) return
+    const record = value as Record<string, unknown>
+    if (typeof record.docId === 'string' && typeof record.path === 'string') found.push({ docId: record.docId, path: record.path })
+    for (const item of Object.values(record)) visit(item)
+  }
+  visit(content)
+  return found
+}
+
+/** 把内容里指向原文档的 { docId, path } 改成副本的 ID 与位置。 */
+function rewriteDocumentLinks(content: unknown, links: ReadonlyMap<string, DocumentLink>): unknown {
+  if (!links.size) return content
+  const visit = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(visit)
+    if (typeof value !== 'object' || value === null) return value
+    const record = value as Record<string, unknown>
+    const next: Record<string, unknown> = {}
+    for (const [key, item] of Object.entries(record)) next[key] = visit(item)
+    const link = typeof record.docId === 'string' && typeof record.path === 'string' ? links.get(record.docId) : undefined
+    if (link) { next.docId = link.docId; next.path = link.path }
+    return next
+  }
+  return visit(content)
+}
+
 /** 用户可以自行处理的失败（重名、找不到、版本冲突等）记 warn，其余记 error。 */
 const EXPECTED_FAILURES = [
   DocumentNameConflictError, DocumentNameInvalidError, DocumentNotFoundError, DocumentLocationError,
@@ -434,8 +464,10 @@ export class DocumentRepository {
   }
 
   /**
-   * 收集素材：文档引用到的、不在所在容器里的文件复制进容器的“素材”文件夹并改写引用（版本加一）。
-   * 打开中的会话据版本变化重新载入。没有可收集的文件时不写文件、版本不变。
+   * 收集素材：文档引用到的、不在所在容器里的文件复制进容器的“素材”文件夹并改写引用（版本加一）；
+   * 引用到的、在别处（别的项目、作品目录、外部位置）的其他文档复制进容器（新 ID，4.1），
+   * 内容里的 { docId, path } 跨文档引用改指向副本。
+   * 打开中的会话据版本变化重新载入。没有可收集的文件与文档时不写文件、版本不变。
    */
   async collectMedia(target: DocumentTarget): Promise<DocumentTransferResult> {
     return await this.exclusive(target.id, async () => await this.logged('collect_media', { documentId: target.id }, async () => {
@@ -443,6 +475,7 @@ export class DocumentRepository {
       if (!file.envelope) throw new DocumentUnsupportedError('这种文档请在它自己的编辑器里收集素材。')
       const container = await this.workspace.containerForPath(file.path)
       const decoded = await this.decode(file, container)
+      const documents = await this.collectLinkedDocuments(decoded.content, file.header.id, container)
       const collected = await collectContainerMedia({
         style: this.workspace.style,
         references: decoded.report.references,
@@ -450,8 +483,8 @@ export class DocumentRepository {
         to: container,
         isDocumentFile: (candidate) => Boolean(this.options.kinds.forFileName(path.basename(candidate))),
       })
-      if (!collected.mapping.size) return { meta: metaFromFile(file, container), copiedFiles: 0, missingPaths: collected.missingPaths }
-      const content = this.validateContent(file.kind, rewriteContentPaths(decoded.content, collected.mapping, this.workspace.style))
+      if (!collected.mapping.size && !documents.links.size) return { meta: metaFromFile(file, container), copiedFiles: 0, copiedDocuments: 0, missingPaths: collected.missingPaths }
+      const content = this.validateContent(file.kind, rewriteDocumentLinks(rewriteContentPaths(decoded.content, collected.mapping, this.workspace.style), documents.links))
       const encoded = this.encode(container, content)
       const envelope = this.withHeader(file.envelope, {
         name: documentNameOf(file.kind, file.path),
@@ -465,10 +498,31 @@ export class DocumentRepository {
       this.workspace.catalog.upsertDocument(indexedFromFile(saved, container, file.kind.summarize(content)))
       this.logger.info('素材已收集进容器', {
         event: 'documents.collect_media.copied',
-        context: { documentId: file.header.id, collected: collected.mapping.size, copiedFiles: collected.copied, missing: collected.missingPaths.length },
+        context: { documentId: file.header.id, collected: collected.mapping.size, copiedFiles: collected.copied, copiedDocuments: documents.copied, missing: collected.missingPaths.length },
       })
-      return { meta: metaFromFile(saved, container), copiedFiles: collected.copied, missingPaths: collected.missingPaths }
+      return { meta: metaFromFile(saved, container), copiedFiles: collected.copied, copiedDocuments: documents.copied, missingPaths: collected.missingPaths }
     }))
+  }
+
+  /**
+   * 收集被引用的其他文档：内容里每个 { docId, path } 跨文档引用，找到的文档不在本容器里时复制进来（新 ID，
+   * 原容器里它用到的素材一并复制）。同一份文档只复制一次；找不到的、就是自己的、已在容器里的不动。
+   * 返回原文档 ID → 副本位置的映射。
+   */
+  private async collectLinkedDocuments(content: unknown, selfId: string, container: ResolvedContainer): Promise<{ links: Map<string, DocumentLink>; copied: number }> {
+    const links = new Map<string, DocumentLink>()
+    let copied = 0
+    for (const link of findDocumentLinks(content)) {
+      if (link.docId === selfId || links.has(link.docId) || !this.options.kinds.forFileName(path.basename(link.path))) continue
+      const resolved = await this.resolveLink(link)
+      if (resolved.status !== 'found') continue
+      if (sameContainer(resolved.meta.container, container.ref)) continue
+      const source = await loadDocumentFile(resolved.meta.path, this.fileDependencies(), resolved.meta.id)
+      const adopted = await this.adoptFile(source, await this.workspace.containerForPath(source.path), container, { onConflict: 'keepBoth', newId: 'always' })
+      links.set(link.docId, { docId: adopted.meta.id, path: adopted.meta.path })
+      copied += 1
+    }
+    return { links, copied }
   }
 
   /** 把一个文件复制进容器的“生成结果”或“素材”；已在容器里的原样返回。 */

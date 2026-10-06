@@ -96,6 +96,8 @@ export interface DocumentTransferResult {
   meta: DocumentMeta
   /** 从原容器复制进新容器的素材数量。 */
   copiedFiles: number
+  /** 收集素材时复制进容器的、被引用的其他文档数量（4.1：引用别处的文档一并收集，换新 ID）。 */
+  copiedDocuments?: number
   /** 引用到但找不到、因此没能复制的文件。 */
   missingPaths: string[]
 }

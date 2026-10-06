@@ -143,6 +143,10 @@ function getRuntime(): ImageEditorV3Runtime {
       resolveInternalFolder: resolveContainerInternalFolder,
     }),
   }
+  // 图片文档工作副本回收（4.1）：运行时建好后在后台检查一次，不阻塞第一次请求；本次运行用过的文档一律跳过。
+  const startedRuntime = runtime
+  const pruneTimer = setTimeout(() => { void startedRuntime.imageDocuments.pruneWorkingCopies().catch(() => undefined) }, 30_000)
+  pruneTimer.unref?.()
   return runtime
 }
 function trackRendererLifetime(sender: WebContents): void {

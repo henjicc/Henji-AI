@@ -134,6 +134,13 @@ interface LocatedPackage {
 }
 
 const KIND = documentKindRegistry.require('image_document')
+/**
+ * 工作副本回收策略（4.1 定，补 3.5 遗留）：每次启动后在后台检查一次，只回收“与文件一致”（已写回、没有未写回修改）
+ * 且本次运行里没有用过的图片文档工作副本，保留最近用过的这么多份（再次打开免解包），其余删除。
+ * 删除只动图片文档自己的工作副本与记录；画布内嵌的图层文档另有记录（canvas-layer-links），不在这里。
+ * 资源按内容寻址存放，由图片编辑现有的资源回收释放；下次打开按文件重新解包。
+ */
+const KEEP_RECENT_WORKING_COPIES = 8
 const MAX_NAME_ATTEMPTS = 100
 const MAX_COMMIT_ATTEMPTS = 3
 
@@ -160,7 +167,16 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 export class ImageDocumentService {
+  /** 本次运行里打开、新建、写回过的图片文档：回收时一律跳过（可能还开着）。 */
+  private readonly touched = new Set<string>()
+
   constructor(private readonly options: ImageDocumentServiceOptions) {}
+
+  /** 在文档锁里登记“用过”：正在进行的回收先做完，之后的回收都会跳过它。 */
+  private async touch(documentId: string): Promise<void> {
+    if (this.touched.has(documentId) || !isImageDocumentId(documentId)) return
+    await this.exclusive(documentId, async () => { this.touched.add(documentId) })
+  }
 
   private get logger(): MainLogger {
     return this.options.logger
@@ -174,8 +190,10 @@ export class ImageDocumentService {
 
   /** 打开：按需解包到工作副本；有没写回的修改时先返回 recovery，由渲染层询问后带着选择再打开。 */
   async open(target: DocumentTarget, recovery: ImageDocumentRecoveryChoice): Promise<ImageDocumentOpenResult | ImageDocumentRecoveryRequired> {
+    await this.touch(target.id)
     const located = await this.locate(target)
     const id = located.header.id
+    await this.touch(id)
     const link = await this.options.links.read(id)
     const working = await this.loadWorking(id)
     const uncommitted = Boolean(working && link && working.revision > link.committedWorkingRevision)
@@ -204,6 +222,7 @@ export class ImageDocumentService {
 
   /** 位置可能变了（改名、移动、转正后）：只重新定位并描述工作副本，不重新解包。 */
   async describe(target: DocumentTarget): Promise<ImageDocumentOpenResult> {
+    await this.touch(target.id)
     const located = await this.locate(target)
     const working = await this.loadWorking(located.header.id)
     if (!working) {
@@ -221,6 +240,7 @@ export class ImageDocumentService {
   }): Promise<ImageDocumentOpenResult> {
     const id = request.documentId
     if (!isImageDocumentId(id)) throw new DocumentLocationError('图片文档 ID 无效。')
+    await this.touch(id)
     const existing = await this.options.catalog.listDocuments({ kind: KIND.id, includeDrafts: true, includeMissing: true })
     if (existing.some((row) => row.id === id)) throw new DocumentLocationError('图片文档 ID 已被占用。')
     const working = await this.options.documents.load(id)
@@ -279,6 +299,7 @@ export class ImageDocumentService {
     thumbnail?: ImageDocumentThumbnailInput
   }): Promise<ImageDocumentCommitResult> {
     const id = request.target.id
+    await this.touch(id)
     const working = await this.options.documents.load(id)
     this.options.validateDocument(working)
     let located = await this.locate(request.target)
@@ -345,6 +366,35 @@ export class ImageDocumentService {
       return { meta: this.metaOf(committed), unchanged: false }
     }
     throw new DocumentLocationError('图片文档正在被移动或改名，请稍后再试。')
+  }
+
+  /**
+   * 回收工作副本（见 KEEP_RECENT_WORKING_COPIES）：返回删除的数量。逐份在文档锁里复核：
+   * 本次运行用过的、有未写回修改的（意外退出待恢复）、记录与文件对不上的一律保留。
+   */
+  async pruneWorkingCopies(keep = KEEP_RECENT_WORKING_COPIES): Promise<number> {
+    const links = (await this.options.links.list()).sort((left, right) => right.touchedAt - left.touchedAt)
+    let removed = 0
+    for (const { documentId } of links.slice(keep)) {
+      if (this.touched.has(documentId)) continue
+      try {
+        const deleted = await this.exclusive(documentId, async () => {
+          if (this.touched.has(documentId)) return false
+          const link = await this.options.links.read(documentId)
+          const working = await this.loadWorking(documentId)
+          if (!link) return false
+          if (working && working.revision !== link.committedWorkingRevision) return false
+          if (working && !await this.options.documents.deleteIfRevision(documentId, working.revision)) return false
+          await this.options.links.remove(documentId)
+          return true
+        })
+        if (deleted) removed += 1
+      } catch (error) {
+        this.logger.warn('回收图片文档工作副本失败，下次启动再试', { event: 'image_document.working_copy.prune_failed', context: { documentId }, error })
+      }
+    }
+    if (removed) this.logger.info('已回收图片文档工作副本', { event: 'image_document.working_copy.pruned', context: { removed, kept: Math.min(keep, links.length) } })
+    return removed
   }
 
   /** 这份 V3 文档是不是某份图片文档的工作副本（图片文档按作品索引列出，不混进程序目录的文档列表）。 */

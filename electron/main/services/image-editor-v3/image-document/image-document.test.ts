@@ -308,3 +308,40 @@ describe('图片文档写回与恢复', () => {
     expect(refreshes).toBeGreaterThan(0)
   })
 })
+
+describe('工作副本回收（4.1）', () => {
+  it('只回收与文件一致、本次运行没用过的图片文档工作副本；未写回的、画布内嵌的不动，回收后再打开按文件解包', async () => {
+    for (const id of ['doc-a', 'doc-b', 'doc-c']) {
+      await workingCopy(id)
+      await service.create({ documentId: id, container: { kind: 'user' }, emptyUntilRevision: null })
+    }
+    await editWorkingCopy('doc-c')
+    await workingCopy('canvas-embedded')
+    // 新的一次运行：之前的打开记录不算数
+    const restarted = new ImageDocumentService({
+      documents,
+      packages,
+      links: new ImageDocumentWorkingCopyLinks(path.join(programDir, 'document-links')),
+      catalog: { listDocuments, listProjects: async () => [], refreshIndex: async () => undefined, saveDocumentCover: async () => undefined, layout: () => ({ root: workRoot, locale: 'zh' }) },
+      lockDirectory: path.join(root, '程序目录', 'DocumentStore', 'locks'),
+      logger: createMainLogger('test.image_document'),
+      validateDocument: () => undefined,
+      resourceFilePath: (resourceId) => path.join(programDir, 'resources', resourceId),
+      resourceMediaUrl: async () => null,
+    })
+    const docA = (await listDocuments()).find((row) => row.id === 'doc-a')!
+    ready(await restarted.open({ id: 'doc-a', path: docA.path }, 'ask'))
+
+    expect(await restarted.pruneWorkingCopies(0)).toBe(1)
+    await expect(documents.load('doc-b')).rejects.toThrow()
+    expect(await restarted.isWorkingCopy('doc-b')).toBe(false)
+    expect((await documents.load('doc-a')).documentId).toBe('doc-a')
+    expect((await documents.load('doc-c')).revision).toBe(1)
+    expect((await documents.load('canvas-embedded')).documentId).toBe('canvas-embedded')
+
+    const docB = (await listDocuments()).find((row) => row.id === 'doc-b')!
+    const reopened = ready(await restarted.open({ id: 'doc-b', path: docB.path }, 'ask'))
+    expect(reopened.imported).toBe(true)
+    expect(await restarted.pruneWorkingCopies(0)).toBe(0)
+  })
+})

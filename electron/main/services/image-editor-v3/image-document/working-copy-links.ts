@@ -67,4 +67,18 @@ export class ImageDocumentWorkingCopyLinks {
   async remove(documentId: string): Promise<void> {
     await fsp.rm(this.file(documentId), { force: true })
   }
+
+  /** 全部记录的文档 ID 与记录最后一次写入的时间（毫秒）；回收工作副本时按它排先后。 */
+  async list(): Promise<Array<{ documentId: string; touchedAt: number }>> {
+    const entries = await fsp.readdir(this.directory).catch(() => [] as string[])
+    const result: Array<{ documentId: string; touchedAt: number }> = []
+    for (const entry of entries) {
+      if (!entry.endsWith('.json')) continue
+      const documentId = entry.slice(0, -5)
+      if (!isImageDocumentId(documentId)) continue
+      const stat = await fsp.stat(path.join(this.directory, entry)).catch(() => null)
+      if (stat?.isFile()) result.push({ documentId, touchedAt: stat.mtimeMs })
+    }
+    return result
+  }
 }
