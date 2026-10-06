@@ -89,7 +89,9 @@ function validateAssetMedia(media: VideoEditMedia, asset: AssetRecord): void {
   if (media.assetId && media.assetId !== asset.id || media.assetContent && (media.assetContent.sizeBytes !== asset.sizeBytes || media.assetContent.fileModifiedAt !== asset.fileModifiedAt || media.assetContent.contentIdentity && media.assetContent.contentIdentity !== asset.contentIdentity)) throw new Error('此剪辑引用的素材内容已改变，请先重新定位源素材。')
   if (media.kind !== asset.mediaType || asset.width !== null && asset.width !== media.width || asset.height !== null && asset.height !== media.height) throw new Error('素材库与剪辑的源文件信息不一致，请重新定位源素材。')
 }
-export async function importVideoEditSources(projectId: string, sources: VideoEditImportSource[], binId?: string, signal?: AbortSignal, afterImport?: (document: VideoEditDocument, itemIds: string[]) => VideoEditDocument | Promise<VideoEditDocument>, preserveProgramAnchors: readonly string[] = []): Promise<string[]> {
+/** `skipUnreadable`：本地文件读不出或解码不了时跳过并报告（文件夹导入），而不是让整批导入失败。素材库引用始终严格。 */
+export interface VideoEditImportOptions { skipUnreadable?: (path: string, reason: unknown) => void }
+export async function importVideoEditSources(projectId: string, sources: VideoEditImportSource[], binId?: string, signal?: AbortSignal, afterImport?: (document: VideoEditDocument, itemIds: string[]) => VideoEditDocument | Promise<VideoEditDocument>, preserveProgramAnchors: readonly string[] = [], options: VideoEditImportOptions = {}): Promise<string[]> {
   const owner = requireVideoEditInstance(projectId)
   logger.info('导入剪辑素材开始', { event: 'video_edit.media.import.start', context: { projectId, count: sources.length } })
   try {
@@ -131,7 +133,10 @@ export async function importVideoEditSources(projectId: string, sources: VideoEd
     if (source.asset) validateAssetMedia(media, source.asset)
     return { source, media }
   }))
-  const metadataFailure = metadata.find(result => result.status === 'rejected')
+  signal?.throwIfAborted()
+  const skipped = new Set(options.skipUnreadable ? metadata.flatMap((result, index) => result.status === 'rejected' && !resolved[index].asset ? [index] : []) : [])
+  for (const index of skipped) options.skipUnreadable!(resolved[index].path, (metadata[index] as PromiseRejectedResult).reason)
+  const metadataFailure = metadata.find((result, index) => result.status === 'rejected' && !skipped.has(index))
   if (metadataFailure?.status === 'rejected') throw metadataFailure.reason
   const inspected = metadata.flatMap(result => result.status === 'fulfilled' ? [result.value] : [])
   signal?.throwIfAborted()

@@ -8,6 +8,7 @@ import { readVideoEditCodeMetadata } from './videoEditCodeState'
 import { VIDEO_EDIT_SOURCE_DRAG_MIME, videoEditSourceRangeSchema, placeVideoEditSourceRange, type VideoEditSourceRange } from './videoEditSourceRange'
 import { CODE_ASSET_DRAG_MIME, readCodeAssetDrag } from '@/features/assets/drag/assetDragPayload'
 import { importVideoEditCodeAsset } from './videoEditCodeAssets'
+import { importVideoEditPathsAndFolders } from './videoEditFolderImport'
 
 export const VIDEO_EDIT_ITEM_DRAG_MIME = 'application/x-henji-video-edit-items'
 export type VideoEditDropInput = { kind: 'items'; projectId: string; itemIds: string[] } | { kind: 'sources'; sources: VideoEditImportSource[] } | { kind: 'code_asset'; assetId: string } | VideoEditSourceRange
@@ -40,7 +41,7 @@ export function videoEditDropPaths(transfer: DataTransfer): string[] {
   return paths
 }
 /** Placement is captured before metadata I/O; switching projects cannot redirect a drop. */
-export async function dropVideoEditInput(projectId: string, input: VideoEditDropInput, placement?: { frame: number; track?: number }, binId?: string, options: { sequenceId?: string; createSequenceWhenEmpty?: boolean; sequenceSettings?: VideoEditSequenceSettings } = {}): Promise<string[]> {
+export async function dropVideoEditInput(projectId: string, input: VideoEditDropInput, placement?: { frame: number; track?: number }, binId?: string, options: { sequenceId?: string; createSequenceWhenEmpty?: boolean; sequenceSettings?: VideoEditSequenceSettings; onSkipped?: (count: number) => void } = {}): Promise<string[]> {
   const owner = requireVideoEditInstance(projectId)
   const targetTrackIds = owner.targetTrackIds.slice()
   const sequenceId = options.sequenceId ?? owner.activeSequenceId
@@ -71,7 +72,12 @@ export async function dropVideoEditInput(projectId: string, input: VideoEditDrop
   let ids: string[]
   if (input.kind === 'items') ids = input.itemIds
   else if (input.kind === 'code_asset') { const result = await importVideoEditCodeAsset(projectId, input.assetId, { binId, filterTarget, afterImport: apply }); ids = result.itemId ? [result.itemId] : [] }
-  else ids = await importVideoEditSources(projectId, input.sources, binId, undefined, apply)
+  else if (input.sources.every(source => source.path && !source.assetId)) {
+    // 本地路径可能是文件夹（Premiere：拖入文件夹即按层级建素材箱）。
+    const result = await importVideoEditPathsAndFolders(projectId, input.sources.map(source => source.path!), binId, apply)
+    ids = result.itemIds
+    if (result.skipped) options.onSkipped?.(result.skipped)
+  } else ids = await importVideoEditSources(projectId, input.sources, binId, undefined, apply)
   if (input.kind === 'items') editVideoProject(projectId, document => apply(document, ids))
   if (createdId && owner.activeSequenceId === sequenceId) switchVideoEditSequence(projectId, createdId)
   if (selectedClip && owner.activeSequenceId === (createdId ?? sequenceId)) setVideoEditView(projectId, { selection: selectedClip })

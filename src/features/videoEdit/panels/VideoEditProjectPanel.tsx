@@ -1,9 +1,12 @@
-import { forwardRef, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { Virtuoso, VirtuosoGrid } from 'react-virtuoso'
-import { ChevronDown, ChevronRight, Folder, FolderPlus, Import, List, Grid2X2, Plus, Pencil, Trash2, RefreshCw, Play, Settings2, Code2, AudioLines } from 'lucide-react'
+import { forwardRef, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Virtuoso, VirtuosoGrid, type VirtuosoGridHandle, type VirtuosoHandle } from 'react-virtuoso'
+import { ChevronDown, ChevronRight, Folder, FolderInput, FolderPlus, Import, List, Grid2X2, Plus, Pencil, Trash2, RefreshCw, Play, Settings2, Code2, AudioLines } from 'lucide-react'
 import { ICON_WORKSPACE_VIDEO_EDIT as SequenceIcon, ICON_ASSET_LIBRARY as AssetLibraryIcon, ICON_VIDEO_EDIT_GRAPHIC as GraphicIcon } from '@/core/theme/icons'
 import ContextMenu from '@/components/ContextMenu'
-import { PanelTrigger, UiChipButton, UiEmpty, UiIconButton, UiSearchInput, UiOptionButton } from '@/components/ui'
+import { PanelTrigger, UiChipButton, UiEmpty, UiIconButton, UiSearchInput, UiOptionButton, UiToast } from '@/components/ui'
+import { useSettingsStore } from '@/stores/settingsStore'
+import { matchVideoEditShortcut } from '@/core/videoEdit/commands'
+import { chooseVideoEditFolders } from '../application/videoEditFolderImport'
 import { UI_DIVIDER_CLASS } from '@/components/ui/styleTokens'
 import { Z_LAYERS } from '@/core/theme/zLayers'
 import { useContextMenu, type MenuItem } from '@/hooks/useContextMenu'
@@ -72,6 +75,19 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
     onError(error)
   }) }
   const choose = (): void => run(() => chooseVideoEditMedia(projectId, binId || undefined))
+  // 导入结果提示：文件夹导入跳过了不支持或读不出的文件时告诉用户跳过几个（Premiere 同样只导入能用的文件）。
+  const [notice, setNotice] = useState<string | null>(null)
+  useEffect(() => { if (!notice) return; const timer = setTimeout(() => setNotice(null), 4000); return () => clearTimeout(timer) }, [notice])
+  const reportSkipped = (skipped: number): void => { if (skipped) setNotice(`已跳过 ${skipped} 个不支持或无法读取的文件`) }
+  /** 文件夹的素材进了新建的子素材箱：当前素材箱只选中直接放进来的素材项。 */
+  const selectImported = (targetBin: string, ids: string[]): void => setVideoEditProjectView(projectId, { selectedBinId: targetBin, selectedItemIds: ids.filter(id => (instance.document.items.find(item => item.id === id)?.binId ?? '') === targetBin) })
+  const chooseFolders = (): void => run(async () => {
+    const result = await chooseVideoEditFolders(projectId, binId || undefined)
+    if (result.itemIds.length) selectImported(binId, result.itemIds)
+    reportSkipped(result.skipped)
+  })
+  const shortcuts = useSettingsStore(state => state.videoEditShortcuts)
+  const listRef = useRef<VirtuosoHandle>(null); const gridRef = useRef<VirtuosoGridHandle>(null)
   const newSequence = (): void => setSequenceDialog({ kind: 'create', settings: { name: `序列 ${instance.document.sequences.length + 1}`, binId: binId || undefined } })
   const selectCreatedItem = (id: string): void => {
     setKeyword('')
@@ -99,6 +115,7 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
   }
   const blankMenu = (): MenuItem[] => [
     { id: 'import', label: '导入文件', icon: <Import size={16} />, onClick: choose },
+    { id: 'import_folder', label: '导入文件夹', icon: <FolderInput size={16} />, onClick: chooseFolders },
     { id: 'assets', label: '从资产库拖入', icon: <AssetLibraryIcon size={16} />, onClick: () => openAssetLibrary('floating') },
     { id: 'bin', label: '新建素材箱', icon: <FolderPlus size={16} />, onClick: () => setEdit({ kind: 'createBin', parentId: binId }) },
     { id: 'sequence', label: '新建素材项 → 序列', icon: <SequenceIcon size={16} />, onClick: newSequence },
@@ -134,9 +151,11 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
     try {
       const input = readVideoEditDrop(event.dataTransfer)
       run(async () => {
-        const ids = await dropVideoEditInput(projectId, input, undefined, targetBin || undefined)
-        if (input.kind === 'items') updateVideoEditItems(projectId, ids, { binId: targetBin || null })
-        setVideoEditProjectView(projectId, { selectedBinId: targetBin, selectedItemIds: ids })
+        let skipped = 0
+        const ids = await dropVideoEditInput(projectId, input, undefined, targetBin || undefined, { onSkipped: count => { skipped = count } })
+        if (input.kind === 'items') { updateVideoEditItems(projectId, ids, { binId: targetBin || null }); setVideoEditProjectView(projectId, { selectedBinId: targetBin, selectedItemIds: ids }) }
+        else selectImported(targetBin, ids)
+        reportSkipped(skipped)
       })
     } catch (error) { onError(error) }
   }
@@ -168,11 +187,32 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
     { id: 'edit', label: '重命名与移动素材箱', icon: <Pencil size={16} />, onClick: () => setEdit({ kind: 'bin', bin }) },
     { id: 'delete', label: '移除空素材箱', icon: <Trash2 size={16} />, onClick: () => run(() => deleteVideoEditBins(projectId, [bin.id])) },
   ]
-  return <div className="flex h-full min-h-0 flex-col" aria-label="素材面板" tabIndex={0}
+  return <div className="relative flex h-full min-h-0 flex-col" aria-label="素材面板" tabIndex={0}
     onDragOver={event => { if (acceptsVideoEditDrop(event.dataTransfer)) { event.preventDefault(); event.dataTransfer.dropEffect = 'copy' } }} onDrop={event => drop(event)}
     onKeyDown={event => {
       if ((event.target as HTMLElement).closest('input,textarea,select,[contenteditable=true]')) return
-      if (event.key === 'Delete') { event.preventDefault(); event.stopPropagation(); if (selectedItems.length) run(() => deleteVideoEditItems(projectId, instance.selectedItemIds)); else if (selectedSequence) run(() => deleteVideoEditSequence(projectId, selectedSequence)) }
+      // 素材面板自己的视图键（Premiere：Ctrl+PgUp 列表、Ctrl+PgDn 图标、Shift+\ 切换），可在快捷键设置里改。
+      const viewCommand = matchVideoEditShortcut({ code: event.code, key: event.key, ctrlKey: event.ctrlKey, metaKey: event.metaKey, altKey: event.altKey, shiftKey: event.shiftKey, repeat: event.repeat, isComposing: event.nativeEvent.isComposing, defaultPrevented: event.defaultPrevented }, 'project', shortcuts)
+      if (viewCommand === 'project_list_view' || viewCommand === 'project_icon_view' || viewCommand === 'project_toggle_view') { event.preventDefault(); event.stopPropagation(); setView(viewCommand === 'project_list_view' ? 'list' : viewCommand === 'project_icon_view' ? 'grid' : view === 'list' ? 'grid' : 'list'); return }
+      // 方向键与 Home/End 移动选择，Shift 连选（Premiere 素材面板）。
+      const step = ({ ArrowUp: -1, ArrowLeft: -1, ArrowDown: 1, ArrowRight: 1 } as Record<string, number>)[event.key]
+      if ((step || event.key === 'Home' || event.key === 'End') && !event.ctrlKey && !event.metaKey && !event.altKey) {
+        const ids = entries.filter((value): value is Extract<VideoEditProjectEntry, { kind: 'item' }> => value.kind === 'item').map(value => value.value.id)
+        if (!ids.length) return
+        event.preventDefault(); event.stopPropagation()
+        const focus = instance.selectedItemIds.at(-1)
+        const current = focus ? ids.indexOf(focus) : -1
+        const index = event.key === 'Home' ? 0 : event.key === 'End' ? ids.length - 1 : Math.max(0, Math.min(ids.length - 1, current < 0 ? (step > 0 ? 0 : ids.length - 1) : current + step))
+        if (!event.shiftKey || !anchor.current) anchor.current = event.shiftKey ? focus ?? ids[index] : ids[index]
+        const selection = event.shiftKey ? selectVideoEditProjectItems(ids, instance.selectedItemIds, ids[index], anchor.current, { toggle: false, range: true }) : [ids[index]]
+        setSelectedSequence(null)
+        // 当前位置放在选区末尾，下一次方向键从这里继续。
+        run(() => setVideoEditProjectView(projectId, { selectedItemIds: [...selection.filter(id => id !== ids[index]), ids[index]] }))
+        const entryIndex = entries.findIndex(value => value.value.id === ids[index])
+        if (view === 'grid') gridRef.current?.scrollToIndex({ index: entryIndex, align: 'center' }); else listRef.current?.scrollIntoView({ index: entryIndex })
+        return
+      }
+      if (event.key === 'Delete' || event.key === 'Backspace') { event.preventDefault(); event.stopPropagation(); if (selectedItems.length) run(() => deleteVideoEditItems(projectId, instance.selectedItemIds)); else if (selectedSequence) run(() => deleteVideoEditSequence(projectId, selectedSequence)) }
       if (event.key === 'F2' && selectedItems.length) { event.preventDefault(); event.stopPropagation(); setEdit({ kind: 'items', items: selectedItems }) }
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'a') { event.preventDefault(); event.stopPropagation(); run(() => setVideoEditProjectView(projectId, { selectedItemIds: entries.filter(value => value.kind === 'item').map(value => value.value.id) })) }
     }}>
@@ -200,7 +240,12 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
       </div>}>
         {({ open, togglePanel }) => <UiIconButton aria-label="新建素材项" title="新建素材箱、序列、代码素材、图形与调整图层" aria-expanded={open} data-panel-trigger-button onClick={togglePanel}><Plus size={16} /></UiIconButton>}
       </PanelTrigger>
-      <UiIconButton aria-label="导入" title="导入素材" onClick={choose}><Import size={15} /></UiIconButton>
+      <PanelTrigger panelWidth={168} zIndex={Z_LAYERS.dropdown} closeOnPanelClick panelPadding="menu" renderPanel={() => <div className="flex flex-col gap-1">
+        <UiOptionButton variant="menu" size="sm" className="gap-2" onClick={choose}><Import size={14} />导入文件</UiOptionButton>
+        <UiOptionButton variant="menu" size="sm" className="gap-2" onClick={chooseFolders}><FolderInput size={14} />导入文件夹</UiOptionButton>
+      </div>}>
+        {({ open, togglePanel }) => <UiIconButton aria-label="导入" title="导入文件或文件夹" aria-expanded={open} data-panel-trigger-button onClick={togglePanel}><Import size={15} /></UiIconButton>}
+      </PanelTrigger>
       </div>
     </div>
     <div className="flex min-h-0 flex-1">
@@ -212,10 +257,11 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
         </div>} />
       </div>
       <div className="min-h-0 min-w-0 flex-1" aria-label="素材项列表" onDoubleClick={event => { if (!(event.target as HTMLElement).closest('[data-video-edit-project-entry]')) choose() }} onContextMenu={event => menu.showMenu(event, blankMenu())}>
-        {!entries.length ? <UiEmpty className="h-full" title={keyword ? '没有匹配的素材项' : '此素材箱为空'} description={keyword ? '尝试其他名称或标签。' : '双击空白导入文件，或从资产库拖入素材。'} /> : view === 'grid' ? <VirtuosoGrid key={`${binId}:grid`} data={entries} components={gridComponents} computeItemKey={(_index, entry) => entry.value.id} itemContent={renderEntry} /> : <Virtuoso key={`${binId}:list`} data={entries} computeItemKey={(_index, entry) => entry.value.id} itemContent={renderEntry} />}
+        {!entries.length ? <UiEmpty className="h-full" title={keyword ? '没有匹配的素材项' : '此素材箱为空'} description={keyword ? '尝试其他名称或标签。' : '双击空白导入文件，或从资产库拖入素材。'} /> : view === 'grid' ? <VirtuosoGrid ref={gridRef} key={`${binId}:grid`} data={entries} components={gridComponents} computeItemKey={(_index, entry) => entry.value.id} itemContent={renderEntry} /> : <Virtuoso ref={listRef} key={`${binId}:list`} data={entries} computeItemKey={(_index, entry) => entry.value.id} itemContent={renderEntry} />}
       </div>
     </div>
     <ContextMenu items={menu.menuItems} position={menu.menuPosition} visible={menu.menuVisible} onClose={menu.hideMenu} />
+    {notice && <UiToast message={notice} tone="success" placement="container" />}
     {audioChannels && <VideoEditAudioChannelsDialog projectId={projectId} target={audioChannels} onClose={() => setAudioChannels(null)} />}
     {creatingCode && <VideoEditCodeCreateDialog projectId={projectId} binId={binId || undefined} onClose={() => setCreatingCode(false)} onCreated={ids => setVideoEditProjectView(projectId, { selectedItemIds: ids })} />}
     {edit && <VideoEditProjectEditDialog value={edit} bins={instance.document.bins} onClose={() => setEdit(null)} onSubmit={values => {
