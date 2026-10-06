@@ -206,12 +206,6 @@
       "reason": "请求链时间线节点圆点 10 宽，左移 5 让圆点中心压在 1px 竖线上"
     },
     {
-      "file": "src/features/videoEdit/panels/VideoEditProjectPanel.tsx",
-      "category": "arbitraryValue",
-      "values": ["h-[30px]", "w-[52px]"],
-      "reason": "剪辑素材面板列表视图的缩略图 52 × 30（约 16:9），网格视图用标准 h-16"
-    },
-    {
       "file": "src/workspaces/GenerationWorkspace/components/FloatingInputPanel.tsx",
       "category": "arbitraryValue",
       "values": ["max-h-[600px]"],

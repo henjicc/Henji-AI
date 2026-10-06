@@ -10,6 +10,9 @@ const { adoptNewVideoEditProject, leaveVideoEditProject, openVideoEditFile, read
 const button = (page, name) => page.getByRole('button', { name, exact: true })
 const menuItem = (page, name) => page.getByRole('menuitem', { name, exact: true })
 const entry = (page, id) => page.locator(`[data-video-edit-project-entry="${id}"]`)
+// 素材面板没有素材箱侧栏（PR 3.2）：素材箱是列表行，双击进入，“返回上一级素材箱”回到上层。
+const toRoot = async page => { while (await button(page, '返回上一级素材箱').count()) await button(page, '返回上一级素材箱').click() }
+const enterBin = async (page, id) => { await toRoot(page); await entry(page, id).dblclick() }
 async function dialogs(app, openPaths, savePath) {
   await app.evaluate(({ dialog }, values) => {
     dialog.showOpenDialog = async () => ({ canceled: false, filePaths: values.openPaths })
@@ -108,8 +111,8 @@ function createVideoEditProjectSourceScene() {
         await button(page, '新建素材项').click(); await button(page, '新建素材箱').click(); await page.getByLabel('素材项名称', { exact: true }).fill('镜头素材'); await button(page, '保存').click()
         document = await saved(page, file, value => value.bins.length === 1)
         const binId = document.bins[0].id
-        await button(page, '素材根目录').click(); await renameItem(page, videoId, '4K60 原镜头', '片头,压力样本', binId)
-        await page.locator(`[data-video-edit-bin="${binId}"]`).click()
+        await toRoot(page); await renameItem(page, videoId, '4K60 原镜头', '片头,压力样本', binId)
+        await enterBin(page, binId)
         await page.getByLabel('搜索素材', { exact: true }).fill('压力样本'); await entry(page, videoId).waitFor({ state: 'visible' })
         await page.getByLabel('搜索素材', { exact: true }).fill('')
         document = await saved(page, file, value => value.items.find(item => item.id === videoId)?.tags?.includes('压力样本'))
@@ -177,7 +180,7 @@ function createVideoEditProjectSourceScene() {
         assert.ok(Math.abs(mediaElapsed - elapsed) < 0.15, '源播放必须保持真实时长')
         await button(page, '关闭源素材').click(); await page.waitForFunction(() => !document.querySelector('[data-video-edit-source-media]'))
         const beforeReopen = performance.now(); await entry(page, videoId).dblclick(); await ready(page, 'video'); evidence.sourceReopenMs = performance.now() - beforeReopen
-        await button(page, '关闭源素材').click(); await button(page, '素材根目录').click()
+        await button(page, '关闭源素材').click(); await toRoot(page)
         await entry(page, audioId).dblclick(); await ready(page, 'audio'); await sourceSeek(page, 0.75, native)
         // One sound reader either way: the native sound view (no media element) or one controlled audio element.
         assert.deepEqual(await sourceElements(page), native ? { video: 0, audio: 0, canvas: 0, sound: 1 } : { video: 0, audio: 1, canvas: 0, sound: 0 }, '源监视器声音元素与后端不符')
@@ -189,7 +192,7 @@ function createVideoEditProjectSourceScene() {
         assert.equal(JSON.stringify(readVideoEditFile(file)), savedBeforePreview, '源预览不写工程或改变节目会话')
         evidence.previewIsolation = { programmeFrame, projectUnchanged: true, audioDecoders: 1, hiddenSourceReleased: true }
 
-        await page.locator(`[data-video-edit-bin="${binId}"]`).click()
+        await enterBin(page, binId)
         await entry(page, videoId).click({ button: 'right' }); await menuItem(page, '按此素材新建序列').click(); await page.getByLabel('序列名称', { exact: true }).fill('4K60 匹配序列'); await button(page, '确定').click()
         document = await saved(page, file, value => value.sequences.some(sequence => sequence.name === '4K60 匹配序列'))
         const sequence = document.sequences.find(sequence => sequence.name === '4K60 匹配序列')
@@ -209,14 +212,14 @@ function createVideoEditProjectSourceScene() {
         evidence.emptyTimelineDrop = { newSequenceId: dropped.id, originalEmpty: document.sequences[0].clips.length === 0 }
         await button(page, '关闭项目').click(); await waitReleased(page)
         await dialogs(app, [file], file); await openVideoEditFile(page, file)
-        await page.locator(`[data-video-edit-bin="${binId}"]`).click()
+        await enterBin(page, binId)
         await entry(page, sequence.id).dblclick(); await button(page, '序列设置').click()
         assert.equal(await page.getByLabel('音频采样率', { exact: true }).inputValue(), '44100'); assert.equal(await page.getByLabel('声道', { exact: true }).inputValue(), '1')
         await button(page, '取消').click(); evidence.savedReopen = { matchedSequenceId: sequence.id, sampleRate: 44100, channels: 1, tagsPersisted: true }
-        await page.locator(`[data-video-edit-bin="${binId}"]`).click({ button: 'right' }); await menuItem(page, '重命名与移动素材箱').click()
+        await toRoot(page); await entry(page, binId).click({ button: 'right' }); await menuItem(page, '重命名与移动素材箱').click()
         await page.getByLabel('素材项名称', { exact: true }).fill('已重命名镜头箱'); await button(page, '保存').click()
         await saved(page, file, value => value.bins[0].name === '已重命名镜头箱')
-        await button(page, '素材根目录').click(); await entry(page, imageId).click({ button: 'right' }); await menuItem(page, '从素材移除').click()
+        await toRoot(page); await entry(page, imageId).click({ button: 'right' }); await menuItem(page, '从素材移除').click()
         await saved(page, file, value => value.media.length === 2); assert.ok(fs.existsSync(picture), '移除项目引用不能删除源文件')
         await button(page, '撤销').click(); await saved(page, file, value => value.media.length === 3)
         await button(page, '关闭项目').click(); await waitReleased(page)
@@ -229,7 +232,7 @@ function createVideoEditProjectSourceScene() {
         scale.sequences = [scale.sequences[0]]; scale.sequences[0].clips = []; scale.sequences[0].annotations = []
         const scaleFile = path.join(root, 'scale.henji-video'); fs.writeFileSync(scaleFile, JSON.stringify(scale))
         const scaleStarted = performance.now(); await dialogs(app, [scaleFile], scaleFile); await openVideoEditFile(page, scaleFile); await entry(page, 'scale-item-0').waitFor({ state: 'visible' })
-        evidence.scale = { items: 500, bins: 200, firstVisibleMs: performance.now() - scaleStarted, mountedItems: await page.locator('[data-video-edit-project-entry]').count(), mountedBins: await page.locator('[data-video-edit-bin]').count() }
+        evidence.scale = { items: 500, bins: 200, firstVisibleMs: performance.now() - scaleStarted, mountedItems: await page.locator('[data-video-edit-project-entry]').count(), mountedBins: await page.locator('[data-entry-kind="bin"]').count() }
         assert.ok(evidence.scale.mountedItems < 80); assert.ok(evidence.scale.mountedBins < 80)
         await button(page, '视图与排序').click(); await button(page, '缩略图视图').click(); await page.waitForTimeout(500)
         evidence.scale.gridMountedItems = await page.locator('[data-video-edit-project-entry]').count(); assert.ok(evidence.scale.gridMountedItems < 80)

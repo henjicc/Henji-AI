@@ -1,3 +1,4 @@
+import type { VideoEditLabel } from '@/core/videoEdit/labels'
 import { videoEditBinSchema, videoEditItemSchema, type VideoEditItem } from '@/core/videoEdit/document'
 import { placeVideoEditItems, makeVideoEditItemSequence, removeVideoEditBins, removeVideoEditItems, videoEditItemUsage, type VideoEditSequenceSettings } from '@/core/videoEdit/projectItems'
 import { editVideoProject, editVideoSequence, requireVideoEditInstance, setVideoEditView, switchVideoEditSequence } from './videoEditService'
@@ -38,6 +39,15 @@ export function updateVideoEditItems(projectId: string, ids: string[], values: {
     if (ids.some(id => !document.items.some(item => item.id === id))) throw new Error('素材项不存在。')
     if (values.name && ids.length !== 1) throw new Error('请逐个重命名素材项。')
     return { ...document, items: document.items.map(item => ids.includes(item.id) ? videoEditItemSchema.parse({ ...item, ...values, ...(values.binId === null ? { binId: undefined } : {}) }) : item) }
+  })
+}
+/** PR“标签”：给素材项、素材箱与序列设置颜色标签（`null` 恢复按类型默认），一步编辑。 */
+export function setVideoEditLabels(projectId: string, targets: { itemIds?: readonly string[]; binIds?: readonly string[]; sequenceIds?: readonly string[] }, label: VideoEditLabel | null): void {
+  const items = new Set(targets.itemIds ?? []); const bins = new Set(targets.binIds ?? []); const sequences = new Set(targets.sequenceIds ?? [])
+  const apply = <T extends { id: string; label?: VideoEditLabel }>(value: T): T => { const next = { ...value }; if (label) next.label = label; else delete next.label; return next }
+  editVideoProject(projectId, document => {
+    if ([...items].some(id => !document.items.some(item => item.id === id)) || [...bins].some(id => !document.bins.some(bin => bin.id === id)) || [...sequences].some(id => !document.sequences.some(sequence => sequence.id === id))) throw new Error('要设置标签的素材已不存在。')
+    return { ...document, items: document.items.map(item => items.has(item.id) ? apply(item) : item), bins: document.bins.map(bin => bins.has(bin.id) ? apply(bin) : bin), sequences: document.sequences.map(sequence => sequences.has(sequence.id) ? apply(sequence) : sequence) }
   })
 }
 /**

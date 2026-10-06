@@ -7,6 +7,7 @@ import { videoEditGraphicSchema } from './graphics'
 import { videoEditAdjustmentSchema, videoEditEffectSchema, validateVideoEditAdjustmentRanges } from './compositing'
 import { videoEditTransitionSchema, validateVideoEditTransitions } from './transitions'
 import { videoEditCreativeSourceSchema } from './creativeResult'
+import { videoEditLabelSchema } from './labels'
 import { videoEditAudioLayoutSchema, videoEditAudioMappingIssue, videoEditAudioMappingSchema, videoEditAudioStreamsSchema } from './audioChannels'
 
 const frame = z.number().int().min(0).max(108_000)
@@ -21,8 +22,8 @@ export const videoEditMediaSchema = z.object({
   /** Sound streams in file order (task 2.6); absent on media imported before, which plays its first stream. */
   audioStreams: videoEditAudioStreamsSchema.optional(),
 }).strict()
-export const videoEditBinSchema = z.object({ id: identifier, name, parentId: identifier.optional() }).strict()
-export const videoEditItemSchema = z.object({ id: identifier, name, binId: identifier.optional(), tags: z.array(z.string().trim().min(1).max(80)).max(32).optional(), kind: z.enum(['video', 'audio', 'image', 'text', 'code', 'graphic', 'adjustment']), mediaId: identifier.optional(), code: codeMaterialInstanceSchema.optional(), graphic: videoEditGraphicSchema.optional(), audioChannels: videoEditAudioLayoutSchema.optional() }).strict()
+export const videoEditBinSchema = z.object({ id: identifier, name, parentId: identifier.optional(), label: videoEditLabelSchema.optional() }).strict()
+export const videoEditItemSchema = z.object({ id: identifier, name, binId: identifier.optional(), label: videoEditLabelSchema.optional(), tags: z.array(z.string().trim().min(1).max(80)).max(32).optional(), kind: z.enum(['video', 'audio', 'image', 'text', 'code', 'graphic', 'adjustment']), mediaId: identifier.optional(), code: codeMaterialInstanceSchema.optional(), graphic: videoEditGraphicSchema.optional(), audioChannels: videoEditAudioLayoutSchema.optional() }).strict()
 export const videoEditTrackSchema = z.object({ id: identifier, name, index: z.number().int().min(0).max(31), kind: z.enum(['video', 'audio']), locked: z.boolean(), enabled: z.boolean(), muted: z.boolean(), solo: z.boolean(), height: z.number().int().min(24).max(160).optional(), syncLocked: z.boolean().optional() }).strict()
 export { videoEditCreativeSourceSchema, type VideoEditCreativeSource } from './creativeResult'
 export const videoEditClipSchema = z.object({
@@ -39,7 +40,7 @@ export const videoEditAnnotationSchema = z.object({
   x: z.number().min(0).max(1), y: z.number().min(0).max(1), width: z.number().min(0).max(1), height: z.number().min(0).max(1), text: z.string().max(2000),
 }).strict()
 export const videoEditSequenceSchema = z.object({
-  id: identifier, name, binId: identifier.optional(), width: z.number().int().min(16).max(4096), height: z.number().int().min(16).max(4096),
+  id: identifier, name, binId: identifier.optional(), label: videoEditLabelSchema.optional(), width: z.number().int().min(16).max(4096), height: z.number().int().min(16).max(4096),
   frameRate: videoEditRatioSchema.refine(rate => VIDEO_EDIT_FRAME_RATES.some(value => value.numerator * rate.denominator === rate.numerator * value.denominator), '请选择支持的序列帧率。'),
   pixelAspectRatio: videoEditRatioSchema.refine(ratio => ratio.numerator / ratio.denominator >= 0.25 && ratio.numerator / ratio.denominator <= 4, '像素长宽比超出范围。'),
   sampleRate: z.union([z.literal(44100), z.literal(48000)]), channels: z.union([z.literal(1), z.literal(2)]),

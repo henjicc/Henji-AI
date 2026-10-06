@@ -313,3 +313,12 @@ export const LEGACY_THEME_PALETTE_PRESET_HEX = [
     },
   },
 ] as const;
+
+/**
+ * 剪辑素材面板的颜色标签（剪辑对齐 PR 3.2）：沿用 PR 默认标签的 16 种颜色，是用户给素材做记号的内容色，
+ * 不随主题变化；键与 `core/videoEdit/labels.ts` 的标签名一致。
+ */
+export const VIDEO_EDIT_LABEL_COLOR_HEX = {
+  violet: '#A990DD', iris: '#9095F2', caribbean: '#1DC09F', lavender: '#E384E3', cerulean: '#1EA7DC', forest: '#5BA33F', rose: '#E86C8F', mango: '#EDA530',
+  purple: '#9440DB', blue: '#4253D9', teal: '#2D8C8C', magenta: '#C1269A', tan: '#C2A07B', green: '#2B9D3C', brown: '#8C5A32', yellow: '#E6D84A',
+} as const;

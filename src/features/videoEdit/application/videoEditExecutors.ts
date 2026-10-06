@@ -15,6 +15,7 @@ import { VIDEO_EDIT_COMPOSITE_TYPES, videoEditCompositeItems, videoEditComposite
 import { makeVideoEditGraphicItem } from './videoEditProjectItems'
 import { assertVideoEditLockedTracks } from '@/core/videoEdit/lockedTracks'
 import { removeVideoEditTracks, videoEditEdgeTracks } from '@/core/videoEdit/tracks'
+import { videoEditLabelSchema } from '@/core/videoEdit/labels'
 
 interface ProjectViewSnapshot { view: VideoEditProjectView; activeSequenceId: string; timeline: VideoEditTimelineView; primary: string | null; program: { frame: number; playing: boolean; playbackDirection: 1 | -1 }; programCommand: object }
 function projectViewSnapshot(projectId: string): ProjectViewSnapshot {
@@ -148,6 +149,7 @@ export class VideoEditMutationExecutor implements ApplicationMutationExecutor {
     if (requireVideoEditInstance(projectId) !== owner || owner.document !== before || (viewBefore && !sameProjectView(projectViewSnapshot(projectId), viewBefore))) throw new Error('剪辑或浏览会话已有后续修改，请重读当前状态。')
     if (this.entityType === 'video_edit.clip' && step.mutations.some(mutation => mutation.propertyId === 'video_edit.clip.source_in_us')) data.sourceRemainder = { numerator: 0, denominator: 1 }
     if (this.entityType === 'video_edit.item') for (const key of ['graphicKind', 'graphicWidth', 'graphicHeight']) delete data[key]
+    if (data.label === null) delete data.label
     if (this.entityType === 'video_edit.document') {
       // Validate view writes before any persistent rename; a failed transaction cannot leave half an edit.
       const instance = requireVideoEditInstance(projectId)
@@ -172,7 +174,7 @@ export class VideoEditMutationExecutor implements ApplicationMutationExecutor {
       return { ...document, sequences: document.sequences.map(sequence => {
         if (this.entityType === 'video_edit.sequence' && sequence.id === childId) {
           const next = changeVideoEditSequenceSettings(sequence, { width: Number(data.width), height: Number(data.height), frameRate: data.frameRate as typeof sequence.frameRate, pixelAspectRatio: data.pixelAspectRatio as typeof sequence.pixelAspectRatio, sampleRate: data.sampleRate as typeof sequence.sampleRate, channels: data.channels as typeof sequence.channels })
-          return { ...next, name: String(data.name), binId: data.binId ? String(data.binId) : undefined }
+          return { ...next, name: String(data.name), binId: data.binId ? String(data.binId) : undefined, label: data.label ? videoEditLabelSchema.parse(data.label) : undefined }
         }
         if (this.entityType === 'video_edit.clip') return { ...sequence, clips: sequence.clips.map(clip => clip.id === childId ? updateVideoEditClipStructure(clip, data, keys.map(key => videoEditDataKey(key.slice(this.entityType.length + 1)))) : clip) }
         if (this.entityType === 'video_edit.annotation') return { ...sequence, annotations: sequence.annotations.map(mark => mark.id === childId ? videoEditAnnotationSchema.parse(data) : mark) }
@@ -270,6 +272,7 @@ export class VideoEditCollectionExecutor implements ApplicationCollectionExecuto
           const allowed = new Set(VIDEO_EDIT_FIELDS[this.entityType].filter(field => !VIDEO_EDIT_CONTROLLED_AGGREGATES.some(key => videoEditDataKey(field.propertyId.split('.').at(-1)!) === key) && !(VIDEO_EDIT_COMPOSITE_TYPES.some(type => type === this.entityType) && ['sequence_id', 'clip_id'].some(key => field.propertyId.endsWith(`.${key}`)))).map(field => field.propertyId))
           if (Object.keys(item.properties).some(key => !allowed.has(key))) throw new Error('创建仅接受已公开的实体字段；代码实例由正式源码检查或已有素材项维护。')
           const values = videoEditCollectionValues(this.entityType, item.properties)
+          if (values.label === null) delete values.label
           for (const key of ['binId', 'parentId', 'linkId', 'groupId', 'clipId']) if (values[key] === '') delete values[key]
           if (values.sourceComponent === 'all') delete values.sourceComponent
           const id = crypto.randomUUID()
