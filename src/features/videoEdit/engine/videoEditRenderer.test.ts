@@ -11,7 +11,7 @@ import { VideoEditNativePicture } from './videoEditNativePicture'
 import type { NativeVideoFrame } from './videoEditNativeFrames'
 import { addLegacyVideoEditTracks } from '@/core/videoEdit/testFixtures'
 
-const boundary = vi.hoisted(() => ({ scheduled: [] as Array<{ path: string; timestamps: number[] }>, disposed: [] as string[], pictures: [] as number[], generatorCalls: 0, compilerCalls: 0, compilerDisposed: 0, failGenerator: false, released: [] as string[][], pendingCode: undefined as Promise<CodeMaterialProgram> | undefined, snapshotCalls: [] as boolean[], normalizedReleased: 0, pendingSnapshot: undefined as Promise<void> | undefined, draws: [] as Array<{ ids: string[]; timestamps: number[]; offscreen: boolean; size?: [number, number] }>, divisors: [] as number[], mixes: [] as Array<number | number[]>, opacities: [] as number[] }))
+const boundary = vi.hoisted(() => ({ scheduled: [] as Array<{ path: string; timestamps: number[] }>, disposed: [] as string[], pictures: [] as number[], generatorCalls: 0, compilerCalls: 0, compilerDisposed: 0, failGenerator: false, released: [] as string[][], pendingCode: undefined as Promise<CodeMaterialProgram> | undefined, snapshotCalls: [] as boolean[], normalizedReleased: 0, pendingSnapshot: undefined as Promise<void> | undefined, draws: [] as Array<{ ids: string[]; timestamps: number[]; offscreen: boolean; size?: [number, number] }>, divisors: [] as number[], mixes: [] as Array<number | number[]>, opacities: [] as number[], evaluatedClips: [] as VideoEditClip[], builtinParams: [] as Record<string, unknown>[] }))
 /** The start of the 60fps picture showing at `time` (exact grid times stay exact despite floating point). */
 const gridPicture = vi.hoisted(() => (time: number, fps = 60): number => Math.floor(time * fps + 1e-6) / fps)
 /** Source seconds compared at whole microseconds (picture starts computed on the grid vs. expectations summed in seconds). */
@@ -69,12 +69,13 @@ vi.mock('./videoEditGpuCompositor', async () => {
   }
   async code() { return { generator: async (_key: string, _program: CodeMaterialProgram, context: { time: number }) => { boundary.generatorCalls++; if (boundary.failGenerator) throw new Error('代码画面失败'); return { timestamp: context.time } }, releaseUnused: (keys: ReadonlySet<string>) => { boundary.released.push([...keys]) },
     target: async (_key: string, width: number, height: number) => target(width, height),
+    builtin: async (_key: string, instance: { params: Record<string, unknown> }, input: InstanceType<typeof VideoEditCodePicture>) => { boundary.builtinParams.push({ ...instance.params }); return target(input.width, input.height) },
     mix: async (_key: string, left: InstanceType<typeof VideoEditCodePicture>, _right: InstanceType<typeof VideoEditCodePicture>, amount: number, through?: readonly number[]) => { boundary.mixes.push(through ? [amount, ...through] : amount); return target(left.width, left.height) },
   } }
   async prepareImages() { return new Map() }
   imageDiagnostics() { return { textures: 0, bytes: 0, uploads: 0 } }
   codeDiagnostics() { return undefined }
-  async draw(document: { width: number; height: number }, clips: VideoEditClip[], pictures: Array<{ timestamp?: number }>, _shouldPresent: unknown, _deadline: unknown, destination?: unknown) { boundary.pictures = pictures.map(picture => picture.timestamp!); boundary.opacities = clips.map(clip => clip.opacity); boundary.draws.push({ ids: clips.map(clip => clip.id), timestamps: [...boundary.pictures], offscreen: Boolean(destination), ...(boundary.divisors.length ? { size: [document.width, document.height] as [number, number] } : {}) }); return { presented: true, completion: Promise.resolve() } }
+  async draw(document: { width: number; height: number }, clips: VideoEditClip[], pictures: Array<{ timestamp?: number }>, _shouldPresent: unknown, _deadline: unknown, destination?: unknown) { boundary.pictures = pictures.map(picture => picture.timestamp!); boundary.opacities = clips.map(clip => clip.opacity); if (destination) boundary.evaluatedClips = clips; boundary.draws.push({ ids: clips.map(clip => clip.id), timestamps: [...boundary.pictures], offscreen: Boolean(destination), ...(boundary.divisors.length ? { size: [document.width, document.height] as [number, number] } : {}) }); return { presented: true, completion: Promise.resolve() } }
   setPictureDivisor(divisor: number): void { boundary.divisors.push(divisor) }
   async dispose(): Promise<void> {}
   cancelPresentation(): void {}
@@ -88,7 +89,7 @@ beforeEach(() => {
   boundary.disposed = []; boundary.pictures = []
   boundary.generatorCalls = 0; boundary.compilerCalls = 0; boundary.compilerDisposed = 0; boundary.failGenerator = false; boundary.released = []; boundary.pendingCode = undefined
   boundary.snapshotCalls = []; boundary.normalizedReleased = 0; boundary.pendingSnapshot = undefined
-  boundary.draws = []; boundary.mixes = []; boundary.divisors = []
+  boundary.draws = []; boundary.mixes = []; boundary.divisors = []; boundary.evaluatedClips = []; boundary.builtinParams = []
   vi.stubGlobal('OffscreenCanvas', class { constructor(public width: number, public height: number) {} })
   vi.stubGlobal('VideoDecoder', { isConfigSupported: async () => ({ supported: true }) })
 })
@@ -746,4 +747,17 @@ it('变速与倒放按片段速度取帧（4.13 帧采样）：正放跳帧，�
     await renderer.render(0); expect(us(boundary.pictures)).toEqual(us([58 / 60]))
     await renderer.render(10); expect(us(boundary.pictures)).toEqual(us([38 / 60]))
   } finally { await renderer.dispose() }
+})
+
+it('片内运动、不透明度、Lumetri 关键帧在预览与导出同一帧求值一致', async () => {
+  const document = { ...fixture(), fps: 60, frameRate: { numerator: 60, denominator: 1 } }
+  const points = (from: number, to: number) => [{ time: 0, value: from, interpolation: 'ease' as const }, { time: 30, value: to, interpolation: 'linear' as const }]
+  document.clips[0] = { ...document.clips[0], curves: { x: points(0, .4), y: points(0, -.2), scale: points(1, 2), rotation: points(0, 90), anchorX: points(.5, .25), opacity: points(1, .2) }, effects: [{ id: 'animated-color', name: 'Lumetri', enabled: true, amount: 1, builtin: { id: 'lumetri_color', params: {}, curves: { exposure: points(0, 2) } } }] }
+  const preview = new VideoEditRenderer(document, 1920); const exported = new VideoEditRenderer(document)
+  const read = () => ({ x: boundary.evaluatedClips[0].x, y: boundary.evaluatedClips[0].y, scale: boundary.evaluatedClips[0].scale, rotation: boundary.evaluatedClips[0].rotation, anchorX: boundary.evaluatedClips[0].anchorX, opacity: boundary.evaluatedClips[0].opacity, exposure: boundary.builtinParams.at(-1)?.exposure })
+  try {
+    await preview.render(15, true); const shown = read()
+    expect(shown).toEqual({ x: .2, y: -.1, scale: 1.5, rotation: 45, anchorX: .375, opacity: .6, exposure: 1 })
+    await exported.render(15); expect(read()).toEqual(shown)
+  } finally { await preview.dispose(); await exported.dispose() }
 })

@@ -7,12 +7,15 @@ import type { VideoEditBuiltinEffect } from '@/core/videoEdit/compositing'
 import { updateVideoEditBuiltinEffect, type VideoEditCompositeTarget } from '../application/videoEditCompositing'
 import { useVideoEditBuiltinParamGesture, type VideoEditBuiltinParamGesture } from './useVideoEditBuiltinParamGesture'
 import { VideoEditSmartRegionControls } from './VideoEditSmartRegionControls'
+import { evaluateVideoEditEffect } from '@/core/videoEdit/keyframes'
+import { requireVideoEditInstance, setVideoEditView } from '../application/videoEditService'
+import { VideoEditKeyframeControls } from './VideoEditKeyframeControls'
 
 type Gesture = VideoEditBuiltinParamGesture
 
-function Row({ label, tooltip, children, resetLabel, resetDisabled, onReset, param }: { label: string; tooltip: string; children: ReactNode; resetLabel: string; resetDisabled: boolean; onReset: () => void; param?: string }): React.ReactElement {
+function Row({ label, tooltip, children, resetLabel, resetDisabled, onReset, param, animation }: { label: string; tooltip: string; children: ReactNode; resetLabel: string; resetDisabled: boolean; onReset: () => void; param?: string; animation?: ReactNode }): React.ReactElement {
   return <div className="flex min-h-8 items-center gap-1.5" data-video-edit-builtin-param={param}>
-    <span className="min-w-0 flex-1 truncate text-xs text-text2"><UiTooltipText tooltip={tooltip}>{label}</UiTooltipText></span>
+    {animation}<span className="min-w-0 flex-1 truncate text-xs text-text2"><UiTooltipText tooltip={tooltip}>{label}</UiTooltipText></span>
     {children}
     <UiIconButton size="xs" aria-label={resetLabel} title={resetLabel} disabled={resetDisabled} onClick={onReset}><RotateCcw size={12} /></UiIconButton>
   </div>
@@ -62,18 +65,25 @@ export function VideoEditBuiltinEffectControls({ target, effect, onError }: { ta
   const gesture = useVideoEditBuiltinParamGesture(target.projectId, JSON.stringify([target.sequenceId, target.clipId, effect.id]), (changes, handle) => updateVideoEditBuiltinEffect(target, effect.id, changes, handle), onError)
   let definition
   try { definition = requireVideoEditBuiltinEffect(effect.builtin.id) } catch { return <span className="text-2xs text-text3">此版本不认识这个效果，保留原样不渲染修改。</span> }
-  const values = resolveVideoEditBuiltinParams(effect.builtin)
+  const owner = requireVideoEditInstance(target.projectId)
+  const clip = owner.document.sequences.find(sequence => sequence.id === target.sequenceId)!.clips.find(clip => clip.id === target.clipId)!
+  const values = resolveVideoEditBuiltinParams(evaluateVideoEditEffect(effect, owner.frame - clip.start).builtin!)
   return <div className="flex flex-col" data-video-edit-builtin-effect={effect.builtin.id}>
     <Row label="效果强度" tooltip={definition.media === 'audio' ? '与原声混合的比例，100% 为完全应用' : '与原画面混合的比例，100% 为完全应用'} resetLabel="重置效果强度" resetDisabled={effect.amount === 1} onReset={() => gesture.commit({ amount: 1 })} param="amount">
       <ScrubNumber label="效果强度" value={effect.amount * 100} min={0} max={100} step={1} precision={0} unit="%" gesture={gesture} onChange={next => gesture.commit({ amount: next / 100 })} />
     </Row>
-    <VideoEditBuiltinParamRows params={definition.params} values={values} gesture={gesture} />
+    <VideoEditBuiltinParamRows params={definition.params} values={values} gesture={gesture} animation={{ target, effect, start: clip.start, duration: clip.duration, frame: owner.frame }} />
     {definition.media !== 'audio' && <VideoEditSmartRegionControls target={target} effect={effect} gesture={gesture} />}
   </div>
 }
 /** 一组登记参数的各行（名称悬停说明作用，行尾重置为默认值）；内置效果与带参数的过渡共用。 */
-export function VideoEditBuiltinParamRows({ params, values, gesture }: { params: readonly VideoEditBuiltinParam[]; values: Readonly<Record<string, unknown>>; gesture: VideoEditBuiltinParamGesture }): React.ReactElement {
-  return <>{params.map(param => <Row key={param.key} param={param.key} label={param.name} tooltip={param.tooltip} resetLabel={`重置${param.name}`} resetDisabled={values[param.key] === param.default} onReset={() => gesture.commit({ params: { [param.key]: param.default } })}>
+export interface VideoEditBuiltinAnimation { target: VideoEditCompositeTarget; effect: VideoEditBuiltinEffect; start: number; duration: number; frame: number }
+export function VideoEditBuiltinParamRows({ params, values, gesture, animation }: { params: readonly VideoEditBuiltinParam[]; values: Readonly<Record<string, unknown>>; gesture: VideoEditBuiltinParamGesture; animation?: VideoEditBuiltinAnimation }): React.ReactElement {
+  return <>{params.map(param => <Row key={param.key} param={param.key} label={param.name} tooltip={param.tooltip} resetLabel={`重置${param.name}`} resetDisabled={values[param.key] === param.default} onReset={() => gesture.commit({ params: { [param.key]: param.default } })}
+    animation={animation && <VideoEditKeyframeControls label={param.name} value={values[param.key] as number | string | boolean} points={animation.effect.builtin.curves?.[param.key]} time={animation.frame - animation.start} duration={animation.duration} discrete={param.type === 'boolean' || param.type === 'enum'}
+      onChange={points => { const curves = { ...animation.effect.builtin.curves }; if (points.length) curves[param.key] = points; else delete curves[param.key]; gesture.commit({ curves }) }}
+      onSeek={time => setVideoEditView(animation.target.projectId, { frame: animation.start + time, playing: false })}
+      onDisable={() => { gesture.begin(); const curves = { ...animation.effect.builtin.curves }; delete curves[param.key]; gesture.commit({ curves }); gesture.commit({ params: { [param.key]: values[param.key] } }); gesture.finish() }} />}>
     <ParamControl param={param} value={values[param.key]} gesture={gesture} />
   </Row>)}</>
 }

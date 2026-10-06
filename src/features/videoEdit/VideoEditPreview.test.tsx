@@ -29,6 +29,19 @@ beforeEach(() => {
   HTMLCanvasElement.prototype.transferControlToOffscreen = vi.fn(() => ({} as OffscreenCanvas))
 })
 afterEach(async () => { cleanup(); for (const instance of listVideoEditInstances()) await closeVideoEditProject(instance.document.id); vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals(); uninstallHarnessNativeStorage() })
+it('文字工具接管原标注模式，退出文字后节目工具可继续切换', async () => {
+  const instance = await createVideoEditProject(); const view = render(<VideoEditPreview instance={instance} onError={vi.fn()} />)
+  await act(async () => { await Promise.resolve() })
+  const openMenu = (): void => { const button = view.getByRole('button', { name: '更多节目操作' }); if (button.getAttribute('aria-expanded') !== 'true') fireEvent.click(button) }
+  openMenu(); fireEvent.click(view.getByRole('button', { name: '点标注' }))
+  expect(view.getByLabelText('标注文字')).toBeTruthy()
+  act(() => setVideoEditTimelineView(instance.document.id, { tool: 'type' }))
+  expect(view.getByLabelText('节目文字工具')).toBeTruthy(); expect(view.queryByLabelText('标注文字')).toBeNull()
+  openMenu(); fireEvent.click(view.getByRole('button', { name: '移动画面' }))
+  expect(instance.tool).toBe('select'); expect(view.queryByLabelText('节目文字工具')).toBeNull()
+  act(() => setVideoEditTimelineView(instance.document.id, { tool: 'type' }))
+  expect(view.getByLabelText('节目文字工具')).toBeTruthy(); view.unmount()
+})
 it('画面标注捕获原选区和时间，后续定位及指针取消不标注新目标', async () => {
   const instance = (await createVideoEditProject())!; appendVideoEditClip(instance.document.id)
   const onError = vi.fn(); const view = render(<VideoEditPreview instance={instance} onError={onError} />)

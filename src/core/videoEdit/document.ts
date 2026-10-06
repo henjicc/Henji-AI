@@ -12,6 +12,8 @@ import { videoEditLabelSchema } from './labels'
 import { videoEditTrackerSchema, videoEditClipFollowSchema, VIDEO_EDIT_MAX_TRACKERS } from './tracking'
 import { videoEditAudioLayoutSchema, videoEditAudioMappingIssue, videoEditAudioMappingSchema, videoEditAudioStreamsSchema } from './audioChannels'
 import { videoEditInPlaceRecordsSchema } from './inPlacePersistence'
+import { videoEditClipCurvesSchema, assertVideoEditKeyframeTimes, sliceVideoEditClipKeyframes, rescaleVideoEditClipKeyframes, VIDEO_EDIT_ANIMATABLE_KEYS } from './keyframes'
+import { videoEditTextStyleSchema } from './text'
 
 const frame = z.number().int().min(0).max(108_000)
 const identifier = z.string().min(1).max(100)
@@ -43,7 +45,9 @@ const videoEditClipStateSchema = z.object({
   start: frame, duration: frame.min(1), sourceInUs: z.number().int().nonnegative(), sourceRemainder,
   x: z.number().finite().min(-2).max(2), y: z.number().finite().min(-2).max(2),
   scale: z.number().min(0.01).max(4), rotation: z.number().min(-360).max(360),
+  anchorX: z.number().min(0).max(1).optional(), anchorY: z.number().min(0).max(1).optional(), curves: videoEditClipCurvesSchema.optional(),
   opacity: z.number().min(0).max(1), volume: z.number().min(0).max(2), brightness: z.number().min(0).max(2), text: z.string().max(2000),
+  textStyle: videoEditTextStyleSchema.optional(),
   /** PR 淡化手柄：片段开头淡入、结尾淡出的帧数（画面从透明渐显，声音按恒定功率渐强）；没有就是不淡化。 */
   fadeInFrames: z.number().int().min(1).max(108_000).optional(), fadeOutFrames: z.number().int().min(1).max(108_000).optional(),
   /**
@@ -121,6 +125,13 @@ export const videoEditDocumentSchema = z.object({
     if (Math.round(sequence.width * sequence.pixelAspectRatio.numerator / sequence.pixelAspectRatio.denominator) > 8192) issue('等效画面宽度超出导出范围。')
     if (new Set(sequence.tracks.map(track => track.index)).size !== sequence.tracks.length) issue('序列轨道编号重复。')
     for (const clip of sequence.clips) {
+      if (clip.textStyle && clip.kind !== 'text') issue('文字样式只能用于文字片段。')
+      try {
+        assertVideoEditKeyframeTimes(clip.curves, clip.duration, `片段“${clip.name}”`)
+        for (const key of VIDEO_EDIT_ANIMATABLE_KEYS) for (const point of clip.curves?.[key] ?? []) videoEditClipStateSchema.shape[key].parse(point.value)
+        for (const effect of clip.effects ?? []) assertVideoEditKeyframeTimes(effect.builtin?.curves, clip.duration, `效果“${effect.name}”`)
+        if (clip.kind === 'adjustment' && Object.keys(clip.curves ?? {}).some(key => key !== 'opacity')) issue('调整图层只允许不透明度关键帧。')
+      } catch (error) { issue(error instanceof Error ? error.message : '片段关键帧无效。') }
       if (clip.trackers?.length && clip.kind !== 'video' && clip.kind !== 'image') issue('跟踪器只能放在视频或图片片段上。')
       if (new Set(clip.trackers?.map(tracker => tracker.id)).size !== (clip.trackers?.length ?? 0)) issue(`片段“${clip.name}”的跟踪器 ID 重复。`)
       const item = document.items.find(item => item.id === clip.itemId)
@@ -203,7 +214,7 @@ export function activeVideoEditClips(document: VideoEditComposition, at: number)
   return document.clips.filter(clip => at >= clip.start && at < clip.start + clip.duration && visible.has(clip.track)).sort((a, b) => a.track - b.track)
 }
 export function audibleVideoEditClips(document: VideoEditComposition): VideoEditClip[] {
-  const candidates = document.clips.filter(clip => (clip.kind === 'video' || clip.kind === 'audio') && clip.sourceComponent !== 'video' && clip.volume > 0)
+  const candidates = document.clips.filter(clip => (clip.kind === 'video' || clip.kind === 'audio') && clip.sourceComponent !== 'video' && (clip.volume > 0 || clip.curves?.volume?.some(point => typeof point.value === 'number' && point.value > 0)))
   const tracks = new Map(document.tracks.map(track => [track.index, track]))
   const solo = candidates.some(clip => { const track = tracks.get(clip.track); return track?.enabled && track.solo })
   return candidates.filter(clip => { const track = tracks.get(clip.track); return track?.enabled && !track.muted && (!solo || track.solo) })
@@ -224,19 +235,21 @@ export function adjustVideoEditClip(document: VideoEditComposition, clip: VideoE
   const timed = ['video', 'audio', 'code', 'graphic', 'adjustment'].includes(clip.kind) || Boolean(clip.effects?.length)
   if (adjustment.mode === 'out') {
     const limit = Math.min(Math.floor(document.fps * 1800) - clip.start, program?.mode === 'dynamic' ? clip.duration + videoEditClipTailRoom(clip, document.fps, program.durationSeconds) + 1 : timed && media ? clip.duration + videoEditClipTailRoom(clip, document.fps, media.durationSeconds) : Infinity)
-    return { ...clip, duration: Math.max(1, Math.min(limit, clip.duration + adjustment.delta)) }
+    const duration = Math.max(1, Math.min(limit, clip.duration + adjustment.delta))
+    return { ...sliceVideoEditClipKeyframes(clip, 0, duration), duration }
   }
   const shift = Math.max(-clip.start, timed ? -videoEditClipHeadRoom(clip, document.fps, program?.mode === 'dynamic' ? program.durationSeconds : media?.durationSeconds) : -clip.start, Math.min(clip.duration - 1, adjustment.delta))
-  return { ...clip, start: clip.start + shift, duration: clip.duration - shift, ...(timed ? advanceVideoEditClipSource(clip, shift, document.frameRate) : {}) }
+  return { ...sliceVideoEditClipKeyframes(clip, shift, clip.duration - shift), start: clip.start + shift, duration: clip.duration - shift, ...(timed ? advanceVideoEditClipSource(clip, shift, document.frameRate) : {}) }
 }
 export function splitVideoEditClip(sequence: VideoEditSequence, id: string, at: number): VideoEditSequence {
   const clip = sequence.clips.find(item => item.id === id)
   if (!clip || !Number.isInteger(at) || at <= clip.start || at >= clip.start + clip.duration) throw new Error('请将播放头置于片段内部再拆分。')
   const left = at - clip.start
-  const right = { ...clip, ...(clip.code ? { code: structuredClone(clip.code) } : {}), ...(clip.graphic ? { graphic: structuredClone(clip.graphic) } : {}), ...(clip.effects ? { effects: clip.effects.map(effect => ({ ...structuredClone(effect), id: crypto.randomUUID() })) } : {}), id: crypto.randomUUID(), start: at, duration: clip.duration - left, ...splitVideoEditClipSource(clip, left, sequence.frameRate) }
+  const sliced = sliceVideoEditClipKeyframes(clip, left, clip.duration - left)
+  const right = { ...sliced, ...(clip.code ? { code: structuredClone(clip.code) } : {}), ...(clip.graphic ? { graphic: structuredClone(clip.graphic) } : {}), ...(sliced.effects ? { effects: sliced.effects.map(effect => ({ ...structuredClone(effect), id: crypto.randomUUID() })) } : {}), id: crypto.randomUUID(), start: at, duration: clip.duration - left, ...splitVideoEditClipSource(clip, left, sequence.frameRate) }
   // 淡入留在左半段开头、淡出留在右半段结尾（PR 拆分后淡化手柄跟着原片段的首尾）。
   delete right.fadeInFrames
-  const leftPart = { ...clip, duration: left }; delete leftPart.fadeOutFrames
+  const leftPart = { ...sliceVideoEditClipKeyframes(clip, 0, left), duration: left }; delete leftPart.fadeOutFrames
   const next = { ...sequence, clips: sequence.clips.flatMap(item => item.id === id ? [leftPart, right] : [item]), annotations: sequence.annotations.map(item => item.clipId === id && item.frame >= at ? { ...item, clipId: right.id } : item) }
   const origins = new Map([[right.id, { originalId: id, shift: 0 }], [id, { originalId: id, shift: 0 }]])
   return retimeVideoEditContent(sequence, next, origins)
@@ -246,7 +259,7 @@ export function changeVideoEditSequenceSettings(sequence: VideoEditSequence, set
   const convert = (frame: number): number => rescaleVideoEditFrame(frame, sequence.frameRate, rate)
   if (sequence.clips.some(clip => convert(clip.start + clip.duration) <= convert(clip.start))) throw new Error('新帧率会使部分片段短于一帧。请先调整这些片段的长度，再修改帧率。')
   return videoEditSequenceSchema.parse({ ...sequence, ...settings,
-    clips: sequence.clips.map(clip => ({ ...clip, start: convert(clip.start), duration: convert(clip.start + clip.duration) - convert(clip.start), ...(clip.fadeInFrames ? { fadeInFrames: Math.max(1, convert(clip.fadeInFrames)) } : {}), ...(clip.fadeOutFrames ? { fadeOutFrames: Math.max(1, convert(clip.fadeOutFrames)) } : {}) })),
+    clips: sequence.clips.map(clip => ({ ...rescaleVideoEditClipKeyframes(clip, time => convert(clip.start + time) - convert(clip.start), convert(clip.start + clip.duration) - convert(clip.start)), start: convert(clip.start), duration: convert(clip.start + clip.duration) - convert(clip.start), ...(clip.fadeInFrames ? { fadeInFrames: Math.max(1, convert(clip.fadeInFrames)) } : {}), ...(clip.fadeOutFrames ? { fadeOutFrames: Math.max(1, convert(clip.fadeOutFrames)) } : {}) })),
     annotations: sequence.annotations.map(mark => ({ ...mark, frame: convert(mark.frame) })),
     ...(sequence.markers ? { markers: sequence.markers.map(mark => ({ ...mark, frame: convert(mark.frame) })) } : {}),
     ...(sequence.captions ? { captions: sequence.captions.map(caption => ({ ...caption, start: convert(caption.start), duration: convert(caption.start + caption.duration) - convert(caption.start) })) } : {}),

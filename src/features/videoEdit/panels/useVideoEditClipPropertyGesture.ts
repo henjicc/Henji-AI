@@ -1,5 +1,7 @@
 import { useEffect, useRef } from 'react'
-import { updateVideoEditClipProperties, type VideoEditClipPropertyPatch } from '../application/videoEditClipProperties'
+import { updateVideoEditClipProperties, updateVideoEditClipKeyframes, type VideoEditClipPropertyPatch } from '../application/videoEditClipProperties'
+import type { VideoEditAnimatableKey, VideoEditKeyframes } from '@/core/videoEdit/keyframes'
+import { setVideoEditView } from '../application/videoEditService'
 import { beginVideoEditGesture, finishVideoEditGesture, type VideoEditGesture } from '../application/videoEditService'
 
 /**
@@ -33,5 +35,8 @@ export function useVideoEditClipPropertyGesture(projectId: string, sequenceId: s
       errorHandler.current(error)
     }
   }
-  return { begin, commit, finish: () => end(true), cancel: () => end(false), active: () => handle.current !== undefined }
+  const keyframes = (key: VideoEditAnimatableKey, points: VideoEditKeyframes): void => {
+    try { updateVideoEditClipKeyframes(projectId, sequenceId, clipId, key, points, handle.current) } catch (error) { if (handle.current) end(false); errorHandler.current(error) }
+  }
+  return { begin, commit, keyframes, seek: (frame: number) => setVideoEditView(projectId, { frame, playing: false }), finish: () => end(true), cancel: () => end(false), active: () => handle.current !== undefined }
 }

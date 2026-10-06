@@ -8,7 +8,7 @@ import { VideoEditRenderSession } from './engine/videoEditRenderSession'
 import { acceptsVideoEditDrop, dropVideoEditInput, readVideoEditDrop } from './application/videoEditDrop'
 import { findVideoEditReplaceTarget, type VideoEditDropMode } from '@/core/videoEdit/dropPlacement'
 import { isDomNode } from '@/utils/crossRealmDom'
-import { activeVideoEditInstance, editVideoSequence, getActiveVideoEditSequence, requireVideoEditInstance, listVideoEditInstances, setVideoEditView, subscribeVideoEditDomain, subscribeVideoEditView, videoEditViewRevision, videoEditProgramCommandIdentity, type VideoEditInstance } from './application/videoEditService'
+import { activeVideoEditInstance, editVideoSequence, getActiveVideoEditSequence, requireVideoEditInstance, listVideoEditInstances, setVideoEditView, setVideoEditTimelineView, subscribeVideoEditDomain, subscribeVideoEditView, videoEditViewRevision, videoEditProgramCommandIdentity, type VideoEditInstance } from './application/videoEditService'
 import { yieldVideoEditSource } from './application/videoEditSource'
 import { subscribeVideoEditTracking, videoEditTrackResults } from './application/videoEditTracking'
 import { subscribeVideoEditSmartRegions, videoEditSmartRegionSegments } from './application/videoEditSmartRegions'
@@ -17,6 +17,7 @@ import { VideoEditAudioScheduler } from './engine/videoEditAudioScheduler'
 import { VideoEditLevelMeter } from './panels/VideoEditLevelMeter'
 import { VideoEditTrackingOverlay } from './panels/VideoEditTrackingOverlay'
 import { VideoEditMaskOverlay } from './panels/VideoEditMaskOverlay'
+import { VideoEditTextOverlay } from './panels/VideoEditTextOverlay'
 import { useVideoEditPictureGesture } from './panels/useVideoEditPictureGesture'
 import { VideoEditInOutDuration, VideoEditTimecode } from './timeline/VideoEditTimelineTransport'
 import { useMonitorZoom } from './panels/useMonitorZoom'
@@ -97,6 +98,11 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
   const picture = useVideoEditPictureGesture(instance, visible && mode === 'move', onError)
   const [label, setLabel] = useState('')
   const pointer = useRef<{ x: number; y: number; document: VideoEditInstance['document']; sequenceId: string; clipId: string; frame: number; command: object; selection: string[] } | null>(null)
+  useEffect(() => { if (instance.tool === 'type') { pointer.current = null; setMode('select') } }, [instance.tool])
+  const changeMode = (next: typeof mode): void => {
+    if (instance.tool === 'type') setVideoEditTimelineView(instance.document.id, { tool: 'select' })
+    pointer.current = null; setMode(next)
+  }
   const [preparing, setPreparing] = useState(false)
   const [retry, setRetry] = useState(0)
   const [renderFailure, setRenderFailure] = useState<string | null>(null)
@@ -371,7 +377,7 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
       return { id, title: command.title, tooltip: command.tooltip, Icon: PROGRAM_COMMAND_ICONS[id], enabled: command.enabled, onClick: () => runCommand(id) }
     }),
     { id: 'export_frame', title: '导出帧', tooltip: '导出帧：把当前画面加入资产库', Icon: Camera, enabled: !busy, onClick: captureFrame },
-    ...PROGRAM_MODES.map(({ id, title, Icon }): VideoEditMonitorButtonSpec => ({ id: `mode_${id}`, title, Icon, on: mode === id, onClick: () => setMode(id) })),
+    ...PROGRAM_MODES.map(({ id, title, Icon }): VideoEditMonitorButtonSpec => ({ id: `mode_${id}`, title, Icon, on: mode === id, onClick: () => changeMode(id) })),
   ]
   const programButtonOf = new Map(programButtons.map(spec => [spec.id, spec]))
   const barButtons = buttonIds.flatMap(id => { const spec = programButtonOf.get(id); return spec ? [spec] : [] })
@@ -417,6 +423,7 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
         {document.annotations.filter(mark => mark.frame === instance.frame).map(mark => <div key={mark.id} className={`pointer-events-none absolute border border-on-media text-xs text-on-media ${mark.kind === 'point' ? 'h-2 w-2' : ''}`} style={{ left: `${mark.x * 100}%`, top: `${mark.y * 100}%`, ...(mark.kind === 'point' ? {} : { width: `${mark.width * 100}%`, height: `${mark.height * 100}%` }) }}><span className="absolute bottom-full whitespace-nowrap bg-media-scrim px-1">{mark.text}</span></div>)}
         <VideoEditMaskOverlay instance={instance} onError={onError} />
         <VideoEditTrackingOverlay instance={instance} onError={onError} />
+        <VideoEditTextOverlay instance={instance} onError={onError} enabled={visible && mode === 'select'} />
       </div>
       <VideoEditLevelMeter className="absolute bottom-3 right-2 top-3" levels={levels.length ? levels : Array.from({ length: document.channels }, () => ({ peak: 0, rms: 0 }))} title="节目播放电平" />
       {(mode === 'point' || mode === 'region' || preparing || collecting) && <div className="absolute left-2 top-2 flex max-w-full items-center gap-2 rounded-lg bg-media-scrim p-1 text-xs text-on-media">
@@ -458,7 +465,7 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
           {menuButtons(hiddenIds).map(spec => <UiOptionButton key={spec.id} variant="menu" size="sm" className="gap-2" disabled={spec.enabled === false} title={spec.tooltip} onClick={spec.onClick}><spec.Icon size={14} />{spec.title}</UiOptionButton>)}
         </div>}
         {menuModes(hiddenIds).length > 0 && <div className="flex flex-col gap-1" role="group" aria-label="节目工具">
-          {menuModes(hiddenIds).map(({ id, title, Icon }) => <UiOptionButton key={id} variant="menu" size="sm" className="gap-2" active={mode === id} onClick={() => setMode(id)}><Icon size={14} />{title}</UiOptionButton>)}
+          {menuModes(hiddenIds).map(({ id, title, Icon }) => <UiOptionButton key={id} variant="menu" size="sm" className="gap-2" active={mode === id} onClick={() => changeMode(id)}><Icon size={14} />{title}</UiOptionButton>)}
         </div>}
         {hiddenIds.includes('display') && <div className="flex flex-col gap-1" role="group" aria-label="节目显示比例">
           {PROGRAM_DISPLAY_OPTIONS.map(option => <UiOptionButton key={option.value} variant="menu" size="sm" active={option.value === 'fit' ? display === 'fit' : display === 1} onClick={() => zoom.setDisplay(option.value === 'fit' ? 'fit' : 1)}>显示 {option.label}</UiOptionButton>)}

@@ -264,7 +264,7 @@ export async function executeVideoEditCommand(context: VideoEditCommandContext, 
     case 'save': await saveVideoEdit(projectId); return
     case 'undo': case 'redo': undoVideoEdit(projectId, id === 'redo'); return
     case 'export': openVideoEditExportDialog(projectId); return
-    case 'select_tool': case 'track_tool': case 'track_backward_tool': case 'ripple_tool': case 'roll_tool': case 'rate_stretch_tool': case 'razor_tool': case 'slip_tool': case 'slide_tool': case 'hand_tool': case 'zoom_tool': case 'type_tool': setVideoEditTimelineView(projectId, { tool: VIDEO_EDIT_TOOL_COMMANDS[id] }); return
+    case 'select_tool': case 'track_tool': case 'track_backward_tool': case 'ripple_tool': case 'roll_tool': case 'rate_stretch_tool': case 'razor_tool': case 'slip_tool': case 'slide_tool': case 'pen_tool': case 'hand_tool': case 'zoom_tool': case 'type_tool': setVideoEditTimelineView(projectId, { tool: VIDEO_EDIT_TOOL_COMMANDS[id] }); return
     case 'match_frame': await matchVideoEditFrame(projectId, [...context.clipIds], context.frame); return
     case 'reverse_match_frame': reverseMatchVideoEditFrame(projectId); return
     case 'toggle_snapping': setVideoEditTimelineView(projectId, { snapping: !owner!.snapping }); return

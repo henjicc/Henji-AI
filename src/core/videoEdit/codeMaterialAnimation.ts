@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { CodeMaterialError } from './codeMaterial/contract'
-import type { CodeColor, CodeParameterDeclaration, CodeParameterValue, CodeParameterValues } from './codeMaterial/contract'
+import type { CodeParameterDeclaration, CodeParameterValues } from './codeMaterial/contract'
+import { interpolateVideoEditKeyframe } from './keyframeInterpolation'
 import { validateCodeMaterialParameterValue, validateCodeMaterialParameters } from './codeMaterial/parameters'
 import type { CodeMaterialMetadata } from './codeMaterialDocument'
 import type { CodeMaterialInstance } from './codeMaterialPersistence'
@@ -57,11 +58,6 @@ export function prepareCodeMaterialParameters(program: CodeMaterialMetadata, ins
   }
   return { values, curves }
 }
-function interpolate(left: CodeParameterValue, right: CodeParameterValue, amount: number): CodeParameterValue {
-  if (typeof left === 'number' && typeof right === 'number') return left + (right - left) * amount
-  if (Array.isArray(left) && Array.isArray(right)) return left.map((channel, index) => channel + (right[index] - channel) * amount) as CodeColor
-  return left
-}
 export function evaluateCodeMaterialParameters(prepared: PreparedCodeMaterialParameters, time: VideoEditSourceTime): CodeParameterValues {
   rational(time)
   const values = { ...prepared.values }
@@ -72,8 +68,7 @@ export function evaluateCodeMaterialParameters(prepared: PreparedCodeMaterialPar
     while (high - low > 1) { const middle = (low + high) >> 1; if (compareCodeMaterialTime(points[middle], time) <= 0) low = middle; else high = middle }
     const left = points[low]; const right = points[high]
     const fraction = intervalFraction(time, left, right)
-    const amount = left.interpolation === 'ease' ? fraction * fraction * (3 - 2 * fraction) : fraction
-    values[key] = left.interpolation === 'hold' ? structuredClone(left.value) : interpolate(left.value, right.value, amount)
+    values[key] = structuredClone(interpolateVideoEditKeyframe(left.value, right.value, fraction, typeof left.value === 'string' ? 'hold' : left.interpolation))
   }
   return values
 }

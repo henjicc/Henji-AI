@@ -6,8 +6,24 @@ import { VideoEditGpuCompositor } from './videoEditGpuCompositor'
 import type { VideoSample } from 'mediabunny'
 import { VideoEditNativePicture } from './videoEditNativePicture'
 import type { NativeVideoFrame } from './videoEditNativeFrames'
+import { videoEditCornerPinMatrix, type VideoEditTrackQuad } from '@/core/videoEdit/tracking'
 
 const state = vi.hoisted(() => ({ device: undefined as GpuDevice | undefined, format: 'rgba8unorm' }))
+it('预览及离屏导出写同一透视矩阵，普通片段清空矩阵且不受上帧绑定污染',async()=> {
+  const {compositor,device}=copyFixture(async()=>{})
+  const project=createVideoEditDocument('贴屏');project.items.push({id:'image',kind:'image',name:'输入'})
+  const document=videoEditComposition(project,project.sequences[0].id);const clip=makeVideoEditItemClip(project,'image',document.id,{frame:0})
+  const quad:VideoEditTrackQuad=[[.1,.2],[.8,.1],[.9,.8],[.2,.9]];const tracked={...clip,trackingQuad:quad};const h=videoEditCornerPinMatrix(quad)
+  const code=await compositor.code();const input=await code.target('source',100,100);const target=await code.target('export',document.width,document.height)
+  await (await compositor.draw(document,[tracked],[input],()=>true)).completion
+  const preview=new Float32Array(device.queue.writeBuffer.mock.lastCall![2] as Float32Array)
+  await (await compositor.draw(document,[tracked],[input],()=>true,undefined,target)).completion
+  expect(device.queue.writeBuffer.mock.lastCall![2]).toEqual(preview)
+  expect([...preview.slice(12)]).toEqual([h[0],h[1],h[2],0,h[3],h[4],h[5],0,h[6],h[7],h[8],0].map(Math.fround))
+  await (await compositor.draw(document,[clip],[input],()=>true)).completion
+  expect([...(device.queue.writeBuffer.mock.lastCall![2] as Float32Array).slice(12)]).toEqual(new Array<number>(12).fill(0))
+  await compositor.dispose()
+})
 afterEach(() => { vi.unstubAllGlobals(); state.format = 'rgba8unorm' })
 vi.mock('@/core/imageEdit/webgpu/deviceManager', () => ({ ImageEditWebGpuDeviceManager: class {
   onDeviceLost() {}
@@ -165,7 +181,7 @@ it('多源同时等待复制名额时逐次重查，单个完成不能唤醒后�
 })
 describe('合成器共享图片候选生命周期', () => {
   it('代码与普通片段共享一次上传，满文字工作集切换图片先回收，不因旧预算阻塞', async () => {
-    vi.stubGlobal('OffscreenCanvas', class { constructor(public width: number, public height: number) {} getContext() { return { fillText() {} } } })
+    vi.stubGlobal('OffscreenCanvas', class { constructor(public width: number, public height: number) {} getContext() { return { fillText() {}, measureText(text: string) { return { width: text.length * 10 } } } } })
     for (const [width, height, count] of [[3840, 2160, 8], [16, 16, 32]]) {
       const { compositor, device, destroyed } = copyFixture(async () => {})
       compositor.canvas.width = width; compositor.canvas.height = height

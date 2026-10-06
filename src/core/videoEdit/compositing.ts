@@ -4,10 +4,12 @@ import type { VideoEditSequence, VideoEditClip } from './document'
 import type { VideoEditTransitionWindow } from './transitions'
 import { videoEditBuiltinEffectIssue, videoEditBuiltinEffectMedia, type VideoEditBuiltinMedia } from './builtinEffects'
 import { videoEditEffectMaskSchema } from './effectMasks'
+import { videoEditCurvesSchema, assertVideoEditBuiltinCurves } from './keyframes'
 
 /** 内置效果实例（4.7a）：内置效果 ID 与参数（键与范围由 `builtinEffects.ts` 登记）。 */
 export const videoEditBuiltinEffectInstanceSchema = z.object({
   id: z.string().min(1).max(64), params: z.record(z.string().regex(/^[A-Za-z][A-Za-z0-9_]{0,63}$/), z.union([z.number().finite(), z.boolean(), z.string().max(64)])),
+  curves: videoEditCurvesSchema.optional(),
 }).strict()
 export type VideoEditBuiltinEffectInstance = z.infer<typeof videoEditBuiltinEffectInstanceSchema>
 /**
@@ -23,6 +25,7 @@ export const videoEditEffectSchema = z.object({
   if (Boolean(effect.code) === Boolean(effect.builtin)) ctx.addIssue({ code: 'custom', message: '效果必须是代码滤镜或内置效果其中之一。' })
   const issue = effect.builtin && videoEditBuiltinEffectIssue(effect.builtin)
   if (issue) ctx.addIssue({ code: 'custom', message: issue })
+  if (effect.builtin) try { assertVideoEditBuiltinCurves(effect.builtin) } catch (error) { ctx.addIssue({ code: 'custom', message: error instanceof Error ? error.message : '效果关键帧无效。' }) }
   if (effect.mask && (!effect.builtin || videoEditBuiltinEffectMedia(effect.builtin.id) !== 'video')) ctx.addIssue({ code: 'custom', message: '作用区域只能用在内置画面效果上（代码滤镜、音频效果作用于整体）。' })
 })
 export type VideoEditEffect = z.infer<typeof videoEditEffectSchema>

@@ -254,6 +254,7 @@ export function useTimelinePointer(options: Options) {
       // 轨道选择（PR）：默认选全部轨道上点击处之后（向后工具为之前）的片段，按住 Shift 只选这一条轨道；Ctrl 加选。
       if (instance.tool === 'track' || instance.tool === 'track_backward') { if (row) select(selectVideoEditTrackFrom(sequence, row.track.index, Math.max(0, Math.round(at.x / pixels)), !event.shiftKey, linked, instance.tool === 'track' ? 'forward' : 'backward'), false, event.ctrlKey || event.metaKey, linked); return }
       if (instance.tool === 'zoom') { capture({ ...base(event), kind: 'zoom', zoomOut: event.altKey }); return }
+      if (instance.tool === 'pen') return
       if (instance.tool === 'type') {
         if (!row || row.track.kind !== 'video') throw new Error('文字只能放在视频轨道上。')
         addVideoEditTextClipAt(instance.document.id, sequence.id, Math.max(0, Math.round(at.x / pixels)), row.track.index)

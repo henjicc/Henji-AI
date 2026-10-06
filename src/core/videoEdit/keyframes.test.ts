@@ -1,0 +1,81 @@
+import { expect, it } from 'vitest'
+import { createVideoEditDocument, videoEditComposition, videoEditDocumentSchema, splitVideoEditClip, changeVideoEditSequenceSettings, type VideoEditClip } from './document'
+import { evaluateVideoEditClip, evaluateVideoEditKeyframes, sliceVideoEditCurves, videoEditKeyframesSchema, type VideoEditKeyframes } from './keyframes'
+import { videoEditClipCenterPosition, videoEditClipToFrame, videoEditFrameToClip } from './clipGeometry'
+import { applyVideoEditRateStretch } from './clipSpeedEdits'
+
+const curve = (interpolation: 'linear' | 'hold' | 'ease'): VideoEditKeyframes => [{ time: 0, value: 0, interpolation }, { time: 100, value: 1, interpolation }]
+function fixture(): ReturnType<typeof createVideoEditDocument> {
+  const document = createVideoEditDocument('关键帧')
+  document.items.push({ id: 'item', kind: 'text', name: '标题' })
+  document.sequences[0].clips.push({ id: 'clip', itemId: 'item', kind: 'text', name: '标题', start: 0, duration: 101, track: document.sequences[0].tracks.find(track => track.kind === 'video')!.index, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, brightness: 1, volume: 0, text: '标题', curves: { opacity: curve('ease') } })
+  return document
+}
+it('集中插值支持边界、线性、定格、固定三次贝塞尔；拒绝乱序/重复', () => {
+  for (const interpolation of ['linear', 'hold', 'ease'] as const) {
+    expect(evaluateVideoEditKeyframes(curve(interpolation), -5, 5)).toBe(0)
+    expect(evaluateVideoEditKeyframes(curve(interpolation), 100, 5)).toBe(1)
+  }
+  expect(evaluateVideoEditKeyframes(curve('linear'), 25, 0)).toBe(.25)
+  expect(evaluateVideoEditKeyframes(curve('hold'), 99.99, 0)).toBe(0)
+  expect(evaluateVideoEditKeyframes(curve('ease'), 25, 0)).toBe(.15625)
+  expect(evaluateVideoEditKeyframes(undefined, 25, 8)).toBe(8)
+  expect(() => videoEditKeyframesSchema.parse([...curve('linear')].reverse())).toThrow('升序')
+  expect(() => videoEditKeyframesSchema.parse([curve('linear')[0], curve('linear')[0]])).toThrow('重复')
+  const full = Array.from({ length: 256 }, (_, time) => ({ time, value: time / 255, interpolation: 'linear' as const }))
+  expect(videoEditKeyframesSchema.parse(sliceVideoEditCurves({ opacity: full }, -10, 300)!.opacity)).toHaveLength(256)
+})
+it('拆分/修剪保留线性、定格和缓动区间的逐帧值（含再次修剪）', () => {
+  for (const interpolation of ['linear', 'hold', 'ease'] as const) {
+    const points = curve(interpolation)
+    const sliced = sliceVideoEditCurves({ opacity: points }, 25, 50)!.opacity
+    const again = sliceVideoEditCurves({ opacity: sliced }, 10, 25)!.opacity
+    for (let time = 0; time <= 24; time += .25) expect(evaluateVideoEditKeyframes(again, time, 0)).toBeCloseTo(evaluateVideoEditKeyframes(points, time + 35, 0), 12)
+  }
+  const doc = fixture(); const sequence = splitVideoEditClip(doc.sequences[0], 'clip', 40)
+  for (let frame = 0; frame < 101; frame++) {
+    const clip = sequence.clips[frame < 40 ? 0 : 1]
+    expect(evaluateVideoEditClip(clip, frame).opacity).toBeCloseTo(evaluateVideoEditClip(doc.sequences[0].clips[0], frame).opacity, 12)
+  }
+})
+it('旧文件兼容；片内时间、值、内置效果参数与插值受文档验证', () => {
+  const doc = fixture(); expect(videoEditDocumentSchema.parse(doc)).toBeTruthy()
+  const clip = doc.sequences[0].clips[0]
+  clip.curves!.opacity![1].time = 101
+  expect(() => videoEditDocumentSchema.parse(doc)).toThrow('0–100')
+  delete clip.curves
+  expect(videoEditDocumentSchema.parse(doc).sequences[0].clips[0].anchorX).toBeUndefined()
+  clip.effects = [{ id: 'lumetri', name: '调色', enabled: true, amount: 1, builtin: { id: 'lumetri_color', params: {}, curves: { exposure: [{ time: 0, value: 0, interpolation: 'linear' }, { time: 100, value: 2, interpolation: 'ease' }] } } }]
+  const result = evaluateVideoEditClip(clip, 50)
+  expect(result.effects![0].builtin!.params.exposure).toBe(1)
+  expect(clip.effects[0].builtin!.params).toEqual({})
+  clip.effects[0].builtin!.curves!.exposure[1].value = 500
+  expect(() => videoEditDocumentSchema.parse(doc)).toThrow('曝光')
+})
+it('帧率与比率拉伸按新帧网格重定位关键帧，冲突去重不越界', () => {
+  const doc = fixture(); const sequence = doc.sequences[0]
+  const changed = changeVideoEditSequenceSettings(sequence, { frameRate: { numerator: 24, denominator: 1 } })
+  expect(changed.clips[0].curves!.opacity!.at(-1)!.time).toBeLessThan(changed.clips[0].duration)
+  const phase = fixture().sequences[0]
+  phase.clips[0] = { ...phase.clips[0], start: 1, curves: { x: [{ time: 0, value: 0, interpolation: 'linear' }, { time: 2, value: 1, interpolation: 'linear' }] } }
+  expect(changeVideoEditSequenceSettings(phase, { frameRate: { numerator: 24, denominator: 1 } }).clips[0].curves!.x![1].time).toBe(1)
+  doc.media = [{ id: 'media', name: '视频', path: '/video.mp4', kind: 'video', width: 10, height: 10, durationSeconds: 10 }]
+  doc.items[0] = { id: 'item', name: '视频', kind: 'video', mediaId: 'media' }; sequence.clips[0].kind = 'video'
+  const stretched = applyVideoEditRateStretch(doc, sequence.id, ['clip'], 'out', -51).sequence.clips[0]
+  expect(stretched.duration).toBe(50); expect(stretched.curves!.opacity!.at(-1)!.time).toBe(49)
+  expect(videoEditComposition(doc, sequence.id)).toBeTruthy()
+})
+it('锚点参与同一几何；跟随上的关键帧为偏移与缩放乘数', () => {
+  const clip: VideoEditClip = fixture().sequences[0].clips[0]
+  const placement = { ...clip, anchorX: 0, anchorY: 0, rotation: 90 }
+  const size = { width: 100, height: 100 }
+  expect(videoEditClipCenterPosition(placement, size, size).x).toBeCloseTo(-.5)
+  expect(videoEditClipCenterPosition(placement, size, size).y).toBeCloseTo(.5)
+  const at = videoEditClipToFrame(placement, size, size, .2, .3)
+  const back = videoEditFrameToClip(placement, size, size, at.x, at.y)
+  expect(back.u).toBeCloseTo(.2); expect(back.v).toBeCloseTo(.3)
+  clip.follow = { clipId: 'other', trackerId: 'tracker', offsetX: 0, offsetY: 0 }
+  clip.x = .2; clip.scale = 2; clip.curves = { x: [{ time: 0, value: .1, interpolation: 'linear' }], scale: [{ time: 0, value: .5, interpolation: 'linear' }] }
+  expect(evaluateVideoEditClip(clip, 0).x).toBeCloseTo(.3)
+  expect(evaluateVideoEditClip(clip, 0).scale).toBe(1)
+})

@@ -495,7 +495,28 @@ export class VideoEditAudioEffectChain {
   /** 清空状态（重建全部处理器，参数保留）。 */
   async reset(effects: readonly VideoEditBuiltinEffect[], pitchCompensation = 1): Promise<void> { this.signature = ''; await this.sync(effects, pitchCompensation) }
   /** 原地处理；输出比输入晚 `latency` 个样本。 */
-  process(channels: Float32Array[], length: number): void {
+  process(channels: Float32Array[], length: number, automation?: (sample: number) => readonly VideoEditBuiltinEffect[]): void {
+    if (automation) {
+      // Reuse single-sample buffers; state and delay lines persist between samples and blocks.
+      const one = channels.map(() => new Float32Array(1))
+      const dry = channels.map(() => new Float32Array(1))
+      for (let sample = 0; sample < length; sample++) {
+        const effects = automation(sample)
+        for (const stage of this.stages) {
+          const effect = effects.find(effect => effect.id === stage.effectId)
+          if (effect) { stage.processor.update(effect.builtin.params); stage.amount = effect.amount }
+        }
+        one.forEach((data, channel) => { data[0] = channels[channel][sample] })
+        for (const stage of this.stages) {
+          stage.dry.run(one, dry, 1)
+          stage.processor.process(one, 1)
+          const wet = stage.amount * (stage.processor.wet?.() ?? 1)
+          if (wet < 1) for (let channel = 0; channel < one.length; channel++) one[channel][0] = one[channel][0] * wet + dry[channel][0] * (1 - wet)
+        }
+        one.forEach((data, channel) => { channels[channel][sample] = data[0] })
+      }
+      return
+    }
     const dry = channels.map(() => new Float32Array(length))
     for (const stage of this.stages) {
       stage.dry.run(channels, dry, length)

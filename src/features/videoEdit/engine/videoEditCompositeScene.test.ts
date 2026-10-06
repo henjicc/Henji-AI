@@ -117,6 +117,7 @@ describe('正式合成场景的预乘RGBA编排与有界目标', () => {
     const effects = [plan('red', [1, 0, 0, .8], owner, 30, .5), plan('disabled', [0, 1, 0, 1], owner, 30, 1, false),
       plan('zero', [0, 0, 1, 1], owner, 30, 0), plan('yellow', [.5, .5, 0, .4], owner, 30, .25)]
     owner.effects = effects.map(plan => plan.effect)
+    Object.assign(owner,{trackingQuad:[[.1,.1],[.8,.2],[.9,.8],[.2,.9]]})
     const document = composition([owner]); const nodes = buildVideoEditCompositePlan(document.clips); const reserved = videoEditCompositeSurfaceKeys(nodes)
     const boundary = pixels(document, reserved); const original = structuredClone(owner)
     const result = await renderVideoEditCompositeScene(document, nodes, new Map([[owner.id, boundary.picture('raw', [.2, .1, 0, .5], 640, 360)]]), new Map([[owner.id, effects]]), boundary.compositor, 30, () => true, 1234)
@@ -132,6 +133,7 @@ describe('正式合成场景的预乘RGBA编排与有界目标', () => {
       expect(filtered.parameters).toEqual({ gain: .75 }); expect(filtered.transitionHandles).toBe(false)
     }
     expect(boundary.draws[0].clips[0]).toEqual(original)
+    expect(boundary.draws.at(-1)!.clips[0]).not.toHaveProperty('trackingQuad')
     expect(boundary.draws.at(-1)!.clips[0]).toMatchObject({ x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, brightness: 1 })
     expect(boundary.draws[0].deadline).toBeUndefined(); expect(boundary.draws.at(-1)!.deadline).toBe(1234)
     expect(owner).toEqual(original); expect(reserved.size).toBe(3); expect(boundary.targets.size).toBe(3)

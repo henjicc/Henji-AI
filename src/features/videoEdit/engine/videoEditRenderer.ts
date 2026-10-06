@@ -1,3 +1,4 @@
+import { evaluateVideoEditClip, evaluateVideoEditBuiltinParameters, videoEditClipValue } from '@/core/videoEdit/keyframes'
 import { videoEditClipMedia, activeVideoEditClips, audibleVideoEditClips, clipSourceSeconds, videoEditVisibleTracks, type VideoEditClip, type VideoEditComposition, type VideoEditMedia } from '@/core/videoEdit/document'
 import { videoEditPictureSeconds } from '@/core/videoEdit/time'
 import { videoEditClipHeadRoomSeconds, videoEditClipRetimed, videoEditClipSourceSecondsAtTime, videoEditClipSpeedValue } from '@/core/videoEdit/clipSpeed'
@@ -298,11 +299,17 @@ export class VideoEditRenderer {
       if (!this.playback && !(this.lastForwardFrame !== undefined && frame < this.lastForwardFrame)) this.buildPlayback(document, frame, visible)
       this.lastForwardFrame = frame
     } else { this.lastForwardFrame = undefined; if (this.playback) await this.disposePlayback() }
-    const transitions = videoEditTransitionsAt(document, frame).filter(window => visible.has(window.left.track))
+    const rawTransitions = videoEditTransitionsAt(document, frame).filter(window => visible.has(window.left.track))
     // 淡化手柄（PR）：片段首尾按帧乘上淡入淡出的不透明度，合成、效果与导出都用这一份。
-    const active = await applyVideoEditClipFollow(document, activeVideoEditClips(document, frame).map(clip => videoEditClipFades(clip) && clip.kind !== 'audio' ? { ...clip, opacity: clip.opacity * videoEditFadeOpacity(clip, frame) } : clip).filter(clip => clip.kind !== 'audio' && (!['code', 'graphic'].includes(clip.kind) || clip.opacity > 0 || activeVideoEditEffects(clip).length)), frame)
-    const ids = new Set(active.map(clip => clip.id))
-    for (const window of transitions) for (const clip of [window.left, window.right]) if (!ids.has(clip.id)) { active.push(clip); ids.add(clip.id) }
+    const candidates = new Map(activeVideoEditClips(document, frame).filter(clip => clip.kind !== 'audio').map(clip => [clip.id, clip]))
+    const transitionIds = new Set(rawTransitions.flatMap(window => [window.left.id, window.right.id]))
+    for (const window of rawTransitions) for (const clip of [window.left, window.right]) candidates.set(clip.id, clip)
+    const active = (await applyVideoEditClipFollow(document, [...candidates.values()], frame)).map(clip => {
+      const evaluated = evaluateVideoEditClip(clip, frame)
+      return videoEditClipFades(clip) ? { ...evaluated, opacity: evaluated.opacity * videoEditFadeOpacity(clip, frame) } : evaluated
+    }).filter(clip => !['code', 'graphic'].includes(clip.kind) || clip.opacity > 0 || activeVideoEditEffects(clip).length || transitionIds.has(clip.id))
+    const byId = new Map(active.map(clip => [clip.id, clip]))
+    const transitions = rawTransitions.map(window => ({ ...window, left: byId.get(window.left.id)!, right: byId.get(window.right.id)! }))
     active.push(...videoEditCaptionClips(document, frame))
     const composite = transitions.length || active.some(clip => clip.kind === 'adjustment' || activeVideoEditEffects(clip).length) ? buildVideoEditCompositePlan(active, transitions) : undefined
     const timestamps: number[] = []
@@ -474,10 +481,10 @@ export class VideoEditRenderer {
       if (from >= to) continue
       const retimed = videoEditClipRetimed(clip)
       // 淡化手柄与音频过渡的增益包络（按输出采样）；没有时整段就是片段音量。
-      const enveloped = videoEditClipFades(clip) || outgoing.length > 0 || incoming.length > 0
+      const enveloped = videoEditClipFades(clip) || outgoing.length > 0 || incoming.length > 0 || Boolean(clip.curves?.volume?.length)
       const envelope = enveloped ? Float32Array.from({ length }, (_, sample) => {
         const seconds = sampleStartSeconds + sample / rate
-        let gain = clip.volume * (seconds >= clipStart && seconds < (clip.start + clip.duration) / fps ? videoEditFadeGain(clip, seconds, fps) : 1)
+        let gain = videoEditClipValue(clip, 'volume', seconds * fps) * (seconds >= clipStart && seconds < (clip.start + clip.duration) / fps ? videoEditFadeGain(clip, seconds, fps) : 1)
         for (const window of [...outgoing, ...incoming]) {
           const begin = window.start / fps; const end = window.end / fps
           if (seconds >= begin && seconds < end) gain *= videoEditAudioTransitionClipGain(window, clip.id, (seconds - begin) / (end - begin))
@@ -565,8 +572,15 @@ export class VideoEditRenderer {
       if (!plan.contiguous && !rebuilt) await chain.reset(effects, pitchCompensation)
       const input = Array.from({ length: this.document.channels }, () => new Float32Array(plan.inputLength))
       const readFrom = Math.max(plan.inputStart / rate, playStart, headRoom); const readTo = Math.min((plan.inputStart + plan.inputLength) / rate, playEnd)
-      if (readFrom < readTo) await readSound(readFrom, readTo, plan.inputStart, input, () => clip.volume)
-      chain.process(input, plan.inputLength); chain.nextSample = firstSample + length
+      if (readFrom < readTo) await readSound(readFrom, readTo, plan.inputStart, input, sample => videoEditClipValue(clip, 'volume', (plan.inputStart + sample) / rate * fps))
+      const animatedEffects = effects.some(effect => Object.values(effect.builtin.curves ?? {}).some(points => points.length))
+      const automated = animatedEffects ? effects.map(effect => ({ ...effect, builtin: { ...effect.builtin, params: evaluateVideoEditBuiltinParameters(effect.builtin, 0) } })) : undefined
+      chain.process(input, plan.inputLength, automated ? sample => {
+        const time = (plan.inputStart + sample) / rate * fps - clip.start
+        effects.forEach((effect, index) => evaluateVideoEditBuiltinParameters(effect.builtin, time, automated[index].builtin.params))
+        return automated
+      } : undefined)
+      chain.nextSample = firstSample + length
       const outputStart = Math.max(0, Math.ceil((from - sampleStartSeconds) * rate - 1e-7)); const outputEnd = Math.min(length, Math.ceil((to - sampleStartSeconds) * rate - 1e-7))
       for (let sample = outputStart; sample < outputEnd; sample++) {
         let shape = 1

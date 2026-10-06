@@ -4,6 +4,7 @@ import { assertVideoEditClipsEditable } from './lockedTracks'
 import { videoEditFps } from './time'
 import { advanceVideoEditClipSource, videoEditClipContentShift, videoEditClipHeadRoom } from './clipSpeed'
 import { retimeVideoEditContent } from './timedContent'
+import { sliceVideoEditClipKeyframes } from './keyframes'
 
 /**
  * Premiere 的修剪工具（剪辑对齐 PR 4.6），都只改片段的起点、长度与源入点：
@@ -52,7 +53,7 @@ class TrimContext {
   }
   /** 入点右移 `frames` 帧（负数左移）：起点、长度与源入点一起变。 */
   moveIn(clip: VideoEditClip, frames: number): VideoEditClip {
-    return { ...clip, start: clip.start + frames, duration: clip.duration - frames, ...(timed(clip) && frames ? advanceVideoEditClipSource(clip, frames, this.sequence.frameRate) : {}) }
+    return { ...sliceVideoEditClipKeyframes(clip, frames, clip.duration - frames), start: clip.start + frames, duration: clip.duration - frames, ...(timed(clip) && frames ? advanceVideoEditClipSource(clip, frames, this.sequence.frameRate) : {}) }
   }
 }
 
@@ -98,7 +99,7 @@ function ripple(context: TrimContext, edited: VideoEditClip[], edge: 'in' | 'out
   const moved = new Set(moving.map(clip => clip.id))
   const clips = sequence.clips.map(clip => {
     if (ids.has(clip.id)) {
-      if (edge === 'out') return { ...clip, duration: clip.duration + delta }
+      if (edge === 'out') return { ...sliceVideoEditClipKeyframes(clip, 0, clip.duration + delta), duration: clip.duration + delta }
       const trimmed = context.moveIn(clip, delta)
       return { ...trimmed, start: clip.start }
     }
@@ -126,7 +127,7 @@ function roll(context: TrimContext, edited: VideoEditClip[], edge: 'in' | 'out',
   if (!delta) return { clips: context.sequence.clips, delta }
   const changed = new Map<string, VideoEditClip>()
   for (const { left, right } of pairs.values()) {
-    if (left) changed.set(left.id, { ...left, duration: left.duration + delta })
+    if (left) changed.set(left.id, { ...sliceVideoEditClipKeyframes(left, 0, left.duration + delta), duration: left.duration + delta })
     if (right) changed.set(right.id, context.moveIn(right, delta))
   }
   assertVideoEditClipsEditable(context.sequence, [...changed.keys()])
@@ -161,7 +162,7 @@ function slide(context: TrimContext, edited: VideoEditClip[], requested: number)
   const changed = new Map<string, VideoEditClip>()
   for (const { clip, left, right } of neighbours) {
     changed.set(clip.id, { ...clip, start: clip.start + delta })
-    if (left) changed.set(left.id, { ...left, duration: left.duration + delta })
+    if (left) changed.set(left.id, { ...sliceVideoEditClipKeyframes(left, 0, left.duration + delta), duration: left.duration + delta })
     if (right) changed.set(right.id, context.moveIn(right, delta))
   }
   assertVideoEditClipsEditable(context.sequence, [...changed.keys()])

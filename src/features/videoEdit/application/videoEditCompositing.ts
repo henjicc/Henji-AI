@@ -1,3 +1,4 @@
+import { putVideoEditKeyframe, assertVideoEditKeyframeTimes, videoEditCurvesSchema, sliceVideoEditCurves, type VideoEditCurves } from '@/core/videoEdit/keyframes'
 import { videoEditDocumentSchema, type VideoEditClip, type VideoEditSequence, type VideoEditDocument } from '@/core/videoEdit/document'
 import { videoEditEffectAccepts, videoEditEffectSchema, orderVideoEditEffects, VIDEO_EDIT_MAX_EFFECTS, type VideoEditEffect, type VideoEditEffectMask } from '@/core/videoEdit/compositing'
 import { resolveVideoEditLibraryEffects } from './videoEditEffectPresets'
@@ -76,8 +77,8 @@ export async function updateVideoEditEffect(target: VideoEditCompositeTarget, ef
     const { versionId, parameters, curves, ...presentation } = changes
     Object.assign(effect, presentation)
     if (effect.builtin) {
-      if (versionId !== undefined || curves !== undefined) throw new Error('内置效果没有源码版本与关键帧。')
-      if (parameters !== undefined) effect.builtin = { id: effect.builtin.id, params: normalizeVideoEditBuiltinParams(effect.builtin.id, parameters, effect.builtin.params) }
+      if (versionId !== undefined || curves !== undefined) throw new Error('内置效果没有源码版本；关键帧请用 parameters.<参数名>.keyframes 片内帧序列。')
+      if (parameters !== undefined) effect.builtin = { ...effect.builtin, params: normalizeVideoEditBuiltinParams(effect.builtin.id, parameters, effect.builtin.params) }
     } else effect.code = { ...effect.code!, ...(versionId !== undefined ? { versionId } : {}), ...(parameters !== undefined ? { parameters } : {}), ...(curves !== undefined ? { curves } : {}) }
   }, signal)
 }
@@ -85,7 +86,7 @@ export async function resetVideoEditEffect(target: VideoEditCompositeTarget, eff
   const owner = requireVideoEditInstance(target.projectId); const sequence = owner.document.sequences.find(sequence => sequence.id === target.sequenceId)
   const effect = sequence && requireEffectClip(sequence, target.clipId).effects?.find(effect => effect.id === effectId)
   if (!effect) throw new Error('原效果已移除。')
-  if (effect.builtin) { updateVideoEditBuiltinEffect(target, effectId, { enabled: true, amount: 1, params: videoEditBuiltinDefaults(requireVideoEditBuiltinEffect(effect.builtin.id)) }); return }
+  if (effect.builtin) { updateVideoEditBuiltinEffect(target, effectId, { enabled: true, amount: 1, curves: {}, params: videoEditBuiltinDefaults(requireVideoEditBuiltinEffect(effect.builtin.id)) }); return }
   const metadata = readVideoEditCodeMetadata(owner, owner.document)(effect.code!)
   await updateVideoEditEffect(target, effectId, { enabled: true, amount: 1, parameters: validateCodeMaterialParameters(metadata), curves: {} }, signal)
 }
@@ -127,7 +128,7 @@ export function applyVideoEditBuiltinEffect(projectId: string, sequenceId: strin
   const resolved = resolveVideoEditLibraryEffects(templateRef)
   // 不认识的 ID 交给登记表报错（会列出可用的内置效果）。
   if (!resolved) { requireVideoEditBuiltinEffect(templateRef); throw new Error(`没有这个效果：${templateRef}。`) }
-  const templates = resolved.effects.map(effect => params ? { ...effect, builtin: { id: effect.builtin!.id, params: normalizeVideoEditBuiltinParams(effect.builtin!.id, params) } } : effect)
+  const templates = resolved.effects.map(effect => params ? { ...effect, builtin: { ...effect.builtin!, params: normalizeVideoEditBuiltinParams(effect.builtin!.id, params) } } : effect)
   const created: string[] = []
   editVideoProject(projectId, document => {
     created.length = 0
@@ -142,7 +143,7 @@ export function applyVideoEditBuiltinEffect(projectId: string, sequenceId: strin
     const clips = sequence.clips.map(clip => {
       if (!targets.has(clip.id)) return clip
       if ((clip.effects?.length ?? 0) + templates.length > VIDEO_EDIT_MAX_EFFECTS) throw new Error(`片段“${clip.name}”最多只能放${VIDEO_EDIT_MAX_EFFECTS}项效果，请先删除不用的效果。`)
-      const effects = templates.map(template => videoEditEffectSchema.parse({ ...structuredClone(template), id: crypto.randomUUID() }))
+      const effects = templates.map(template => videoEditEffectSchema.parse({ ...structuredClone(template), id: crypto.randomUUID(), ...(template.builtin?.curves ? { builtin: { ...template.builtin, curves: sliceVideoEditCurves(template.builtin.curves, 0, clip.duration) } } : {}) }))
       created.push(...effects.map(effect => effect.id))
       return { ...clip, effects: [...(clip.effects ?? []), ...effects] }
     })
@@ -151,7 +152,7 @@ export function applyVideoEditBuiltinEffect(projectId: string, sequenceId: strin
   return [...created]
 }
 /** `mask`：作用区域（4.7d），null 回到整个画面。 */
-export interface VideoEditBuiltinEffectChanges { name?: string; enabled?: boolean; amount?: number; params?: Readonly<Record<string, unknown>>; mask?: VideoEditEffectMask | null }
+export interface VideoEditBuiltinEffectChanges { name?: string; enabled?: boolean; amount?: number; params?: Readonly<Record<string, unknown>>; curves?: VideoEditCurves; mask?: VideoEditEffectMask | null }
 /**
  * 改内置效果的参数、强度或开关。带手势时只预览（拖动中实时出画面），由 `finishVideoEditGesture` 提交成一步撤销。
  * 数值先夹进登记的范围（界面拖动、步进产生不了非法值）；未知参数与错类型仍报错。
@@ -163,7 +164,21 @@ export function updateVideoEditBuiltinEffect(target: VideoEditCompositeTarget, e
     if (changes.name !== undefined) effect.name = changes.name
     if (changes.enabled !== undefined) effect.enabled = changes.enabled
     if (changes.amount !== undefined) effect.amount = Math.min(1, Math.max(0, changes.amount))
-    if (changes.params) effect.builtin = { id: effect.builtin.id, params: normalizeVideoEditBuiltinParams(effect.builtin.id, changes.params, effect.builtin.params, true) }
+    if (changes.curves !== undefined) effect.builtin = { ...effect.builtin, curves: videoEditCurvesSchema.parse(changes.curves) }
+    if (changes.params) {
+      const builtin = effect.builtin
+      const params = normalizeVideoEditBuiltinParams(builtin.id, changes.params, builtin.params, true)
+      const curves = { ...builtin.curves }
+      for (const key of Object.keys(changes.params)) if (curves[key]?.length) {
+        const time = requireVideoEditInstance(target.projectId).frame - clip.start
+        if (time < 0 || time >= clip.duration) throw new Error(`请将播放头放在片段内（${clip.start}–${clip.start + clip.duration - 1} 帧）再编辑关键帧。`)
+        const definition = requireVideoEditBuiltinEffect(builtin.id).params.find(param => param.key === key)!
+        curves[key] = putVideoEditKeyframe(curves[key], { time, value: params[key], interpolation: curves[key].find(point => point.time === time)?.interpolation ?? (definition.type === 'boolean' || definition.type === 'enum' ? 'hold' : 'linear') })
+        if (builtin.params[key] === undefined) delete params[key]; else params[key] = builtin.params[key]
+      }
+      effect.builtin = { ...builtin, params, ...(Object.keys(curves).length ? { curves } : {}) }
+    }
+    assertVideoEditKeyframeTimes(effect.builtin.curves, clip.duration, effect.name)
     if (changes.mask === null) delete effect.mask
     else if (changes.mask) {
       assertVideoEditMaskTrackers(clip, changes.mask)
@@ -190,7 +205,10 @@ export async function copyVideoEditEffects(target: VideoEditCompositeTarget, sou
   if (!sequence) throw new Error('原效果来源序列已移除。')
   const effects: VideoEditEffect[] = structuredClone(requireEffectClip(sequence, source.clipId).effects ?? []).map(effect => ({ ...effect, id: crypto.randomUUID() }))
   if (!effects.length) throw new Error('来源片段没有效果可复制。')
-  await editComposite(target.projectId, target.sequenceId, [target.clipId], sequence => { requireEffectClip(sequence, target.clipId).effects = effects }, signal)
+  await editComposite(target.projectId, target.sequenceId, [target.clipId], sequence => {
+    const clip = requireEffectClip(sequence, target.clipId)
+    clip.effects = effects.map(effect => effect.builtin?.curves ? { ...effect, builtin: { ...effect.builtin, curves: sliceVideoEditCurves(effect.builtin.curves, 0, clip.duration) } } : effect)
+  }, signal)
 }
 export async function updateVideoEditAdjustmentRange(target: VideoEditCompositeTarget, fromTrack: number, signal?: AbortSignal): Promise<void> {
   await editComposite(target.projectId, target.sequenceId, [target.clipId], sequence => {

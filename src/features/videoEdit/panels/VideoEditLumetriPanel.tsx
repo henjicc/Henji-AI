@@ -1,10 +1,12 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { ChevronDown, ChevronRight, RotateCcw, WandSparkles } from 'lucide-react'
 import { Dropdown, UiButton, UiColorWheel, UiEmpty, UiGroup, UiIconButton, UiToneCurve } from '@/components/ui'
 import { resolveVideoEditBuiltinParams, videoEditBuiltinDefaults } from '@/core/videoEdit/builtinEffects'
 import { LUMETRI_BASIC_PARAMS, LUMETRI_CREATIVE_PARAMS, LUMETRI_CURVE_CHANNELS, LUMETRI_CURVE_PARAMS, LUMETRI_VIGNETTE_PARAMS, LUMETRI_WHEEL_PARAMS, LUMETRI_WHEEL_REGIONS, VIDEO_EDIT_LUMETRI } from '@/core/videoEdit/lumetri'
 import type { VideoEditClip } from '@/core/videoEdit/document'
-import { getActiveVideoEditSequence, type VideoEditInstance } from '../application/videoEditService'
+import { getActiveVideoEditSequence, requireVideoEditInstance, subscribeVideoEditView, videoEditViewRevision, type VideoEditInstance } from '../application/videoEditService'
+import { evaluateVideoEditEffect } from '@/core/videoEdit/keyframes'
+import type { VideoEditBuiltinEffect } from '@/core/videoEdit/compositing'
 import { analyzeVideoEditLumetri, editVideoEditLumetri } from '../application/videoEditLumetri'
 import type { VideoEditCompositeTarget } from '../application/videoEditCompositing'
 import { useVideoEditBuiltinParamGesture } from './useVideoEditBuiltinParamGesture'
@@ -18,8 +20,11 @@ function Section({ title, children }: { title: string; children: ReactNode }): R
 }
 
 function LumetriEditor({ target, clip, selectedId, onError }: { target: VideoEditCompositeTarget; clip: VideoEditClip; selectedId: string; onError: (reason: unknown) => void }): React.ReactElement {
+  useSyncExternalStore(subscribeVideoEditView, videoEditViewRevision)
   const effect = selectedId ? clip.effects?.find(effect => effect.id === selectedId) : clip.effects?.find(effect => effect.builtin?.id === VIDEO_EDIT_LUMETRI.id)
-  const values = effect?.builtin ? resolveVideoEditBuiltinParams(effect.builtin) : videoEditBuiltinDefaults(VIDEO_EDIT_LUMETRI)
+  const frame = requireVideoEditInstance(target.projectId).frame
+  const values = effect?.builtin ? resolveVideoEditBuiltinParams(evaluateVideoEditEffect(effect, frame - clip.start).builtin!) : videoEditBuiltinDefaults(VIDEO_EDIT_LUMETRI)
+  const animation = effect?.builtin ? { target, effect: effect as VideoEditBuiltinEffect, start: clip.start, duration: clip.duration, frame } : undefined
   const gesture = useVideoEditBuiltinParamGesture(target.projectId, `${target.sequenceId}:${target.clipId}:${selectedId}`, (changes, handle) => editVideoEditLumetri(target, changes, handle, selectedId || undefined), onError)
   const request = useRef<AbortController>(); const [busy, setBusy] = useState(false)
   useEffect(() => () => { request.current?.abort() }, [])
@@ -38,22 +43,22 @@ function LumetriEditor({ target, clip, selectedId, onError }: { target: VideoEdi
   return <div className="flex flex-col gap-2">
     <div className="flex items-center justify-end gap-1">
       <UiButton size="sm" disabled={busy} onClick={() => { void automatic() }} title="分析选中片段的白平衡与明暗；播放头不在片段内时取中间帧。艺术偏色或纯色画面请手动调整"><WandSparkles size={14} />{busy ? '分析中…' : '自动'}</UiButton>
-      <UiIconButton size="xs" title="重置 Lumetri 颜色" aria-label="重置 Lumetri 颜色" disabled={busy || !effect} onClick={() => gesture.commit({ params: videoEditBuiltinDefaults(VIDEO_EDIT_LUMETRI) })}><RotateCcw size={14} /></UiIconButton>
+      <UiIconButton size="xs" title="重置 Lumetri 颜色" aria-label="重置 Lumetri 颜色" disabled={busy || !effect} onClick={() => gesture.commit({ curves: {}, params: videoEditBuiltinDefaults(VIDEO_EDIT_LUMETRI) })}><RotateCcw size={14} /></UiIconButton>
     </div>
-    <Section title="基本校正"><VideoEditBuiltinParamRows params={LUMETRI_BASIC_PARAMS} values={values} gesture={gesture} /></Section>
-    <Section title="创意"><VideoEditBuiltinParamRows params={LUMETRI_CREATIVE_PARAMS} values={values} gesture={gesture} /></Section>
+    <Section title="基本校正"><VideoEditBuiltinParamRows params={LUMETRI_BASIC_PARAMS} values={values} gesture={gesture} animation={animation} /></Section>
+    <Section title="创意"><VideoEditBuiltinParamRows params={LUMETRI_CREATIVE_PARAMS} values={values} gesture={gesture} animation={animation} /></Section>
     <Section title="曲线">
       <Dropdown ariaLabel="曲线通道" value={channel} options={LUMETRI_CURVE_CHANNELS.map((value, i) => ({ value, label: ['RGB 主曲线', '红曲线', '绿曲线', '蓝曲线'][i] }))} onSelect={setChannel} />
       <UiToneCurve label="RGB 曲线" values={Array.from({ length: 5 }, (_, i) => values[`curve_${channel}_${i}`] as number)} {...events} onChange={(i, value) => gesture.commit({ params: { [`curve_${channel}_${i}`]: value } })} />
-      <VideoEditBuiltinParamRows params={LUMETRI_CURVE_PARAMS.filter(param => param.key.startsWith(`curve_${channel}_`))} values={values} gesture={gesture} />
+      <VideoEditBuiltinParamRows params={LUMETRI_CURVE_PARAMS.filter(param => param.key.startsWith(`curve_${channel}_`))} values={values} gesture={gesture} animation={animation} />
     </Section>
     <Section title="色轮">
       {LUMETRI_WHEEL_REGIONS.map((region, i) => <UiGroup key={region} title={['阴影', '中间调', '高光'][i]} titleTone="compact" gap="none">
         <div className="mx-auto w-32"><UiColorWheel label={`${['阴影', '中间调', '高光'][i]}色轮`} hue={values[`${region}_hue`] as number} strength={values[`${region}_strength`] as number} {...events} onChange={(hue, strength) => gesture.commit({ params: { [`${region}_hue`]: hue, [`${region}_strength`]: strength } })} /></div>
-        <VideoEditBuiltinParamRows params={LUMETRI_WHEEL_PARAMS.filter(param => param.key.startsWith(`${region}_`))} values={values} gesture={gesture} />
+        <VideoEditBuiltinParamRows params={LUMETRI_WHEEL_PARAMS.filter(param => param.key.startsWith(`${region}_`))} values={values} gesture={gesture} animation={animation} />
       </UiGroup>)}
     </Section>
-    <Section title="晕影"><VideoEditBuiltinParamRows params={LUMETRI_VIGNETTE_PARAMS} values={values} gesture={gesture} /></Section>
+    <Section title="晕影"><VideoEditBuiltinParamRows params={LUMETRI_VIGNETTE_PARAMS} values={values} gesture={gesture} animation={animation} /></Section>
   </div>
 }
 

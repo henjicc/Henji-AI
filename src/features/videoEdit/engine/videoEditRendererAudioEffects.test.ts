@@ -4,6 +4,7 @@ import { normalizeVideoEditBuiltinParams } from '@/core/videoEdit/builtinEffects
 import type { VideoEditEffect } from '@/core/videoEdit/compositing'
 import { videoEditAudioTransitionGains } from '@/core/videoEdit/transitions'
 import { VideoEditRenderer } from './videoEditRenderer'
+import { evaluateVideoEditKeyframes } from '@/core/videoEdit/keyframes'
 import type { VideoEditFrameBackend } from './videoEditFrameSource'
 import { createVideoEditNativeClipAudio, type VideoEditPcmSession } from './videoEditNativeAudio'
 
@@ -11,6 +12,25 @@ vi.mock('@/core/logging', () => ({ createLogger: () => ({ debug: vi.fn(), info: 
 beforeAll(() => { (globalThis as { WorkerGlobalScope?: unknown }).WorkerGlobalScope ??= class {} })
 
 const RATE = 48000
+it('音量与内置增益关键帧按输出样本求值；预览块与导出帧块一致，静音基础值不会吞掉动画', async () => {
+  const volume = [{ time: 0, value: 0, interpolation: 'linear' as const }, { time: 30, value: 1, interpolation: 'ease' as const }, { time: 60, value: .25, interpolation: 'hold' as const }]
+  const composition = sound({ volume: 0, curves: { volume } })
+  const preview = await mix(composition, [.5, .5, .5, .5])
+  const exported = await mix(composition, Array.from({ length: 60 }, () => 1 / 30))
+  expect(exported).toEqual(preview)
+  for (const sample of [RATE / 2, RATE / 2 + 1, RATE / 2 + 37, RATE, RATE + 1, RATE * 1.75]) {
+    const gain = evaluateVideoEditKeyframes(volume, sample / RATE * composition.fps - 15, 0)
+    expect(preview[0][sample]).toBeCloseTo(original(0, sample) * gain, 7)
+  }
+  const effect = builtin('gain_balance')
+  effect.builtin!.curves = { gain: [{ time: 0, value: 0, interpolation: 'linear' }, { time: 30, value: 6, interpolation: 'linear' }] }
+  const animated = sound({ effects: [effect] })
+  const wetPreview = await mix(animated, [.5, .5, .5])
+  const wetExport = await mix(animated, Array.from({ length: 45 }, () => 1 / 30))
+  expect(wetExport).toEqual(wetPreview)
+  const sample = RATE + 13
+  expect(wetPreview[0][sample]).toBeCloseTo(original(0, sample) * 10 ** (6 * (sample / RATE - .5) / 20), 6)
+})
 /** 立体声源：左右声道是不同的确定信号（正弦加伪随机），任何一个样本错位都会改变结果。 */
 const signal = (channel: number, sample: number): number => Math.fround(.3 * Math.sin(2 * Math.PI * (220 + channel * 110) * sample / RATE) + ((sample * 7919 + channel * 104729) % 1000) / 1000 * .05 - .025)
 function backend(): VideoEditFrameBackend {

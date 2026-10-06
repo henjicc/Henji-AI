@@ -1,4 +1,5 @@
 import { VideoSample } from 'mediabunny'
+import { paintVideoEditText } from './videoEditTextSurface'
 import { VIDEO_EDIT_PRECISE_FORMAT, VideoEditGpuFrame, videoEditGpuFrameFormat, videoEditPictureHighPrecision, type VideoEditGpuColorFormat, type VideoEditOwnedFormat } from './videoEditGpuFrame'
 import { VIDEO_EDIT_CACHED_YUV_SHADER, VIDEO_EDIT_COPY_SHADER, VIDEO_EDIT_PRESENT_SHADER, VIDEO_EDIT_READBACK_USAGE, readVideoEditPreciseRow, videoEditDownscaleCopyShader, videoEditLayerShader } from './videoEditGpuShaders'
 import type { VideoEditRenderDivisor } from '@/core/videoEdit/playbackResolution'
@@ -8,6 +9,8 @@ import { ImageEditWebGpuDeviceManager } from '@/core/imageEdit/webgpu/deviceMana
 import { getWebGpuContext, type GpuDevice, type GpuTexture, type GpuBuffer, type GpuRenderPipeline } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 import { VideoEditCodeGpu, VideoEditCodePicture } from './videoEditCodeGpu'
 import type { VideoEditCodeImageInput } from './videoEditCodeGpu'
+import { videoEditClipTrackingQuad } from './videoEditTrackResults'
+import { videoEditCornerPinMatrix } from '@/core/videoEdit/tracking'
 
 interface VideoGpuDevice extends GpuDevice {
   importExternalTexture(descriptor: { source: VideoFrame }): unknown
@@ -317,7 +320,7 @@ export class VideoEditGpuCompositor {
           resource = picture.texture.createView(); width = picture.displayWidth; height = picture.displayHeight
         } else {
           const id = picture ? this.imageKey(picture) : `text:${clip.id}`
-          const key = picture ? id : `${document.width}:${document.height}:${clip.text}`
+          const key = picture ? id : JSON.stringify([document.width, document.height, clip.text, clip.textStyle])
           let cached = this.textures.get(id)
           if (cached?.key !== key) {
             let source: ImageBitmap | OffscreenCanvas
@@ -325,8 +328,7 @@ export class VideoEditGpuCompositor {
             else {
               source = new OffscreenCanvas(document.width, document.height)
               const text = source.getContext('2d')!
-              text.fillStyle = 'white'; text.textAlign = 'center'; text.textBaseline = 'middle'; text.font = `${Math.round(document.height / 15)}px sans-serif`
-              clip.text.split('\n').forEach((line, row) => text.fillText(line, document.width / 2, document.height / 2 + row * document.height / 12))
+              paintVideoEditText(text, clip, document.width, document.height)
             }
             this.texture(id, key, source); cached = this.textures.get(id)!
           }
@@ -334,10 +336,13 @@ export class VideoEditGpuCompositor {
           if (picture) { width = picture.width; height = picture.height }
         }
         let uniform = this.uniforms.get(clip.id)
-        if (!uniform) { uniform = device.createBuffer({ size: 48, usage: 0x08 | 0x40 }); this.uniforms.set(clip.id, uniform) }
+        if (!uniform) { uniform = device.createBuffer({ size: 96, usage: 0x08 | 0x40 }); this.uniforms.set(clip.id, uniform) }
         const fit = Math.min(document.width / width, document.height / height) * clip.scale
         const rotation = clip.rotation * Math.PI / 180
-        device.queue.writeBuffer(uniform, 0, new Float32Array([width * fit / document.width, height * fit / document.height, Math.cos(rotation), Math.sin(rotation), clip.x * 2, clip.y * 2, clip.brightness, clip.opacity, document.height / document.width, document.width / document.height, external || cachedVideo ? picture.rotation : 0, (external || cachedVideo) && picture.flip ? 1 : 0]))
+        const center = videoEditClipCenterPosition(clip, { width, height }, document)
+        const quad=videoEditClipTrackingQuad(clip); const h=quad ? videoEditCornerPinMatrix(quad) : undefined
+        const warp=h ? [h[0],h[1],h[2],0,h[3],h[4],h[5],0,h[6],h[7],h[8],0] : new Array<number>(12).fill(0)
+        device.queue.writeBuffer(uniform, 0, new Float32Array([width * fit / document.width, height * fit / document.height, Math.cos(rotation), Math.sin(rotation), center.x * 2, center.y * 2, clip.brightness, clip.opacity, document.height / document.width, document.width / document.height, external || cachedVideo ? picture.rotation : 0, (external || cachedVideo) && picture.flip ? 1 : 0, ...warp]))
         const pipeline = code ? pipelines?.codeImage ?? this.codeImage : external ? pipelines?.video ?? this.video : cachedVideo && picture.chroma ? pipelines?.cachedVideo ?? this.cachedVideo : pipelines?.image ?? this.image
         pass.setPipeline(pipeline)
         pass.setBindGroup(0, device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries: [{ binding: 0, resource }, { binding: 1, resource: this.sampler }, { binding: 2, resource: { buffer: uniform } }, ...(cachedVideo && picture.chroma ? [{ binding: 3, resource: picture.chroma.createView() }] : [])] }))
@@ -376,3 +381,4 @@ export class VideoEditGpuCompositor {
   }
   cancelPresentation(): void { for (const finish of this.waits) finish() }
 }
+import { videoEditClipCenterPosition } from '@/core/videoEdit/clipGeometry'

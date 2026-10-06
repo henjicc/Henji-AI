@@ -1,3 +1,4 @@
+import { VideoEditTimelineKeyframes } from './VideoEditTimelineKeyframes'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
 import type { VideoEditDropPlacement } from '../application/videoEditDrop'
 import { placeVideoEditDrop, readActiveVideoEditItemDrag } from '../application/videoEditDrop'
@@ -352,7 +353,8 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
           {/* 淡化（PR 淡化手柄）：淡入／淡出区上方压一块三角暗影，斜边就是音量或不透明度的走向 */}
           {fadeIn > 0 && <div aria-hidden="true" data-video-edit-fade-shape="in" className="pointer-events-none absolute left-0 top-0 h-full bg-window/60" style={{ width: Math.min(clipWidth, fadeIn), clipPath: 'polygon(0 0, 100% 0, 0 100%)' }} />}
           {fadeOut > 0 && <div aria-hidden="true" data-video-edit-fade-shape="out" className="pointer-events-none absolute right-0 top-0 h-full bg-window/60" style={{ width: Math.min(clipWidth, fadeOut), clipPath: 'polygon(0 0, 100% 0, 100% 100%)' }} />}
-          {fadable && (['in', 'out'] as const).map(edge => {
+          <VideoEditTimelineKeyframes projectId={projectId} sequenceId={sequence.id} clip={clip} pen={instance.tool === 'pen'} width={clipWidth} height={row.height - 4} pixels={pixels} onError={onError} />
+          {fadable && instance.tool !== 'pen' && (['in', 'out'] as const).map(edge => {
             const length = edge === 'in' ? fadeIn : fadeOut
             const offset = Math.max(1, Math.min(clipWidth - 11, length - 5))
             return <div key={edge} data-video-edit-fade={edge} aria-label={edge === 'in' ? `拖动设置${clip.name}淡入` : `拖动设置${clip.name}淡出`} title={edge === 'in' ? '向右拖动淡入' : '向左拖动淡出'}

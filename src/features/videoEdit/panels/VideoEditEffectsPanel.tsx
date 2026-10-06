@@ -1,11 +1,11 @@
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { Pencil, Trash2 } from 'lucide-react'
 import { UiEmpty, UiGroup, UiIconButton, UiInput } from '@/components/ui'
 import { UI_TEXT_NUMERIC_CLASS, UI_TEXT_SECONDARY_CLASS } from '@/components/ui/styleTokens'
 import type { VideoEditClip } from '@/core/videoEdit/document'
 import { videoEditClipSpeedReadout } from '@/core/videoEdit/clipSpeedDisplay'
 import { updateVideoEditClipProperties } from '../application/videoEditClipProperties'
-import { editVideoSequence, getActiveVideoEditSequence, type VideoEditInstance } from '../application/videoEditService'
+import { editVideoSequence, getActiveVideoEditSequence, subscribeVideoEditView, videoEditViewRevision, type VideoEditInstance } from '../application/videoEditService'
 import { CodeParameterPanel } from './CodeParameterPanel'
 import { VideoEditGraphicPanel } from './VideoEditGraphicPanel'
 import { VideoEditEffectChainPanel } from './VideoEditEffectChainPanel'
@@ -13,6 +13,7 @@ import { VideoEditTransitionPanel } from './VideoEditTransitionPanel'
 import { selectedVideoEditTransitionId } from '../application/videoEditTransitions'
 import { VideoEditClipPropertySections } from './VideoEditClipPropertySections'
 import { useVideoEditClipPropertyGesture } from './useVideoEditClipPropertyGesture'
+import { VideoEditTextStylePanel } from './VideoEditTextStylePanel'
 
 /** 片段名称一行（PR 效果控件顶部的“主要 * 片段名”）：确认是哪个片段，铅笔改名，回车或失焦提交一次。 */
 function ClipNameHeader({ clip, onRename }: { clip: VideoEditClip; onRename: (name: string) => void }): React.ReactElement {
@@ -32,6 +33,7 @@ function ClipNameHeader({ clip, onRename }: { clip: VideoEditClip; onRename: (na
  * 附加效果链 → 过渡 → 标注。时间与轨道读数属于时间线，不在这里重复。
  */
 export function VideoEditEffectsPanel({ instance, onError, visible = true }: { instance: VideoEditInstance; onError: (reason: unknown) => void; visible?: boolean }): React.ReactElement {
+  useSyncExternalStore(subscribeVideoEditView, videoEditViewRevision)
   const errorHandler = useRef(onError); errorHandler.current = onError
   const reportError = useCallback((reason: unknown): void => errorHandler.current(reason), [])
   const sequence = getActiveVideoEditSequence(instance)
@@ -45,7 +47,8 @@ export function VideoEditEffectsPanel({ instance, onError, visible = true }: { i
     {selected ? <div className="flex flex-col">
       <ClipNameHeader key={selected.id} clip={selected} onRename={name => run(() => updateVideoEditClipProperties(projectId, sequence.id, selected.id, { name }))} />
       {speedReadout && <div className={`pb-2 ${UI_TEXT_SECONDARY_CLASS} ${UI_TEXT_NUMERIC_CLASS}`} data-video-edit-effects-clip-speed>{speedReadout}</div>}
-      <VideoEditClipPropertySections clip={selected} frame={sequence} gesture={gesture} />
+      <VideoEditClipPropertySections clip={selected} frame={{ ...sequence, playhead: instance.frame }} gesture={gesture} />
+      {visible && selected.kind === 'text' && <VideoEditTextStylePanel key={selected.id} projectId={projectId} sequenceId={sequence.id} clip={selected} height={sequence.height} onError={reportError} />}
     </div> : selectedVideoEditTransitionId(instance) ? null : <UiEmpty size="sm" title="选择片段以编辑" />}
     {visible && selected?.kind === 'code' && selected.code && <CodeParameterPanel key={JSON.stringify(['source-code', projectId, sequence.id, selected.id])} projectId={projectId} sequenceId={sequence.id} clipId={selected.id} onError={onError} />}
     {visible && selected?.kind === 'graphic' && selected.graphic && <VideoEditGraphicPanel key={JSON.stringify(['graphic', projectId, sequence.id, selected.id])} projectId={projectId} sequenceId={sequence.id} clipId={selected.id} onError={onError} />}

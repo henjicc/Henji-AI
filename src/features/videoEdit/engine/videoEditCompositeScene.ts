@@ -6,6 +6,7 @@ import type { PreparedVideoEditEffect } from './videoEditCodeSources'
 import type { VideoEditCodePicture, VideoEditCodeGpu } from './videoEditCodeGpu'
 import type { VideoEditGpuCompositor, VideoEditPicture } from './videoEditGpuCompositor'
 import { VIDEO_EDIT_PRECISE_FORMAT, videoEditPictureHighPrecision } from './videoEditGpuFrame'
+import type { VideoEditTrackedClip } from './videoEditTrackResults'
 
 interface Layer { clip: VideoEditClip; picture: VideoEditPicture }
 const effective = (clip: VideoEditClip): boolean => activeVideoEditEffects(clip).length > 0
@@ -33,7 +34,7 @@ export function videoEditCompositeSurfaceKeys(nodes: readonly VideoEditComposite
   nodes.forEach(visit); return keys
 }
 /** Render-only full-canvas layer; original persisted geometry and clocks stay unchanged. */
-function identity(clip: VideoEditClip): VideoEditClip { return { ...clip, x: 0, y: 0, scale: 1, rotation: 0, brightness: 1, opacity: 1 } }
+function identity(clip: VideoEditClip): VideoEditClip { const result: VideoEditTrackedClip = { ...clip, x: 0, y: 0, anchorX: 0.5, anchorY: 0.5, scale: 1, rotation: 0, brightness: 1, opacity: 1 }; delete result.trackingQuad; return result }
 
 /**
  * `document` carries the size the frame is drawn at; `logical` is the sequence's own size. They differ only at a reduced

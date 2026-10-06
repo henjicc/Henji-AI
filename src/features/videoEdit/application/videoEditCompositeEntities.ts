@@ -13,6 +13,7 @@ import { videoEditSmartRegionStatusText } from './videoEditSmartRegions'
 import { assertVideoEditMaskTrackers, putVideoEditTracker } from './videoEditTrackingEdits'
 import { videoEditTrackingRequest, videoEditTrackingStatus, videoEditTrackingStatusText } from './videoEditTracking'
 import { isSmartRegionMask, type VideoEditEffectMask } from '@/core/videoEdit/effectMasks'
+import { videoEditCurvesSchema, sliceVideoEditClipKeyframes } from '@/core/videoEdit/keyframes'
 
 export const VIDEO_EDIT_COMPOSITE_TYPES = ['video_edit.graphic_object', 'video_edit.effect', 'video_edit.transition', 'video_edit.tracker'] as const
 export type VideoEditCompositeEntityType = typeof VIDEO_EDIT_COMPOSITE_TYPES[number]
@@ -81,7 +82,7 @@ export function videoEditCompositeData(document: VideoEditDocument, type: VideoE
     // 内置效果：definition_id 读出 `effect:<ID>`，parameters 是存下的意图量纲参数（缺的键按默认值渲染）；没有源码版本与关键帧。
     // 作用区域（4.7d）：mask 为空表示整个画面；region_status 是后台分析的当前状态。
     const region = { mask: owner.effect.mask ?? null, regionStatus: videoEditSmartRegionStatusText(document, owner.sequence.frameRate, owner.clip, owner.effect) }
-    if (builtin) return JSON.parse(JSON.stringify({ ...common, ...effect, ...region, definitionId: videoEditBuiltinRefId(builtin.id), versionId: '', parameters: builtin.params, curves: {} })) as Data
+    if (builtin) return JSON.parse(JSON.stringify({ ...common, ...effect, ...region, definitionId: videoEditBuiltinRefId(builtin.id), versionId: '', parameters: builtin.params, curves: {}, frameCurves: builtin.curves ?? {} })) as Data
     return JSON.parse(JSON.stringify({ ...common, ...effect, ...region, definitionId: code!.definitionId, versionId: code!.versionId, parameters: code!.parameters, curves: code!.curves ?? {} })) as Data
   }
   // 过渡参数：没有存参数时读出空对象（全部按默认值）；种类与参数见 video_edit.builtin_effect 的 transition:<种类>。
@@ -99,15 +100,17 @@ export function updateVideoEditCompositeEntity(document: VideoEditDocument, type
     const builtin = owner.effect.builtin
     if (builtin) {
       if (data.versionId) throw new Error('内置效果没有源码版本，version_id 保持为空。')
-      if (data.curves && typeof data.curves === 'object' && Object.keys(data.curves).length) throw new Error('内置效果暂不支持关键帧，请直接写 parameters。')
+      if (data.curves && typeof data.curves === 'object' && Object.keys(data.curves).length) throw new Error('内置效果请写 parameters.<参数名>.keyframes，time 为片段内帧；curves 只用于代码滤镜源时间曲线。')
       // 整体写入：写什么存什么（读回与写入一致），没写的键回到默认值
       const params = validateVideoEditBuiltinParams(builtin.id, (data.parameters ?? {}) as Record<string, unknown>)
       const mask = data.mask ?? undefined
       // 删除跟踪器后引用可落空；只在实际写入作用区域时校验，改名称等属性仍可进行。
       if (JSON.stringify(mask) !== JSON.stringify(owner.effect.mask)) assertMaskClip(document, owner.clip, mask as VideoEditEffectMask | undefined)
-      const next = videoEditEffectSchema.parse({ id: owner.effect.id, name: data.name, enabled: data.enabled, amount: data.amount, builtin: { id: builtin.id, params }, ...(mask ? { mask } : {}) })
+      const curves = videoEditCurvesSchema.parse(data.frameCurves ?? {})
+      const next = videoEditEffectSchema.parse({ id: owner.effect.id, name: data.name, enabled: data.enabled, amount: data.amount, builtin: { id: builtin.id, params, ...(Object.keys(curves).length ? { curves } : {}) }, ...(mask ? { mask } : {}) })
       delete owner.effect.mask; Object.assign(owner.effect, next)
     } else {
+      if (data.frameCurves && typeof data.frameCurves === 'object' && Object.keys(data.frameCurves).length) throw new Error('代码滤镜请使用 curves 源时间曲线；parameters.<参数>.keyframes 只用于内置效果。')
       const next = videoEditEffectSchema.parse({ id: owner.effect.id, name: data.name, enabled: data.enabled, amount: data.amount, code: { definitionId: owner.effect.code!.definitionId, versionId: data.versionId, parameters: data.parameters, curves: data.curves }, ...(data.mask ? { mask: data.mask } : {}) })
       Object.assign(owner.effect, next)
     }
@@ -159,10 +162,12 @@ export function createVideoEditCompositeEntity(document: VideoEditDocument, type
   if (!videoEditEffectAccepts(media, clip)) throw new Error(media === 'audio' ? `音频效果只能加到声音片段，片段“${clip.name}”不是声音片段。` : `片段“${clip.name}”是声音片段，只能加音频效果（video_edit.builtin_effect 里说明以“音频效果”开头的 effect:<ID>，如 effect:noise_reduction）。`)
   if (builtinId) {
     if (values.versionId) throw new Error('内置效果没有源码版本，请不要提供 version_id。')
-    if (values.curves && typeof values.curves === 'object' && Object.keys(values.curves).length) throw new Error('内置效果暂不支持关键帧。')
+    if (values.curves && typeof values.curves === 'object' && Object.keys(values.curves).length) throw new Error('内置效果请写 parameters.<参数名>.keyframes，time 为片段内帧；curves 只用于代码滤镜源时间曲线。')
     const effect = makeVideoEditBuiltinEffect(builtinId, (values.parameters ?? {}) as Record<string, unknown>, values.name !== undefined ? String(values.name) : undefined, true)
     if (values.enabled !== undefined) effect.enabled = videoEditEffectSchema.shape.enabled.parse(values.enabled)
     if (values.amount !== undefined) effect.amount = videoEditEffectSchema.shape.amount.parse(values.amount)
+    if (values.frameCurves !== undefined) effect.builtin!.curves = videoEditCurvesSchema.parse(values.frameCurves)
+    Object.assign(effect, videoEditEffectSchema.parse(effect))
     if (values.mask) {
       assertMaskClip(document, clip, values.mask as VideoEditEffectMask)
       Object.assign(effect, videoEditEffectSchema.parse({ ...effect, mask: values.mask }))
@@ -211,7 +216,9 @@ export function updateVideoEditClipStructure(clip: VideoEditClip, data: Data, ke
   }
   const plain = Object.fromEntries(Object.entries(data).filter(([key]) => !['graphicObjectIds', 'effectIds', 'adjustmentFromTrack'].includes(key)))
   // `data` is the full readback copy; a cleared optional reference (link/group/source component) is absent here and must stay absent.
-  return videoEditClipSchema.parse({ ...plain, graphic: clip.graphic, effects: clip.effects, adjustment: clip.adjustment })
+  const parsed = videoEditClipSchema.parse({ ...plain, graphic: clip.graphic, effects: clip.effects, adjustment: clip.adjustment })
+  if (parsed.duration !== clip.duration && !keys.some(key => key.endsWith('.keyframes'))) return { ...sliceVideoEditClipKeyframes({ ...parsed, duration: clip.duration }, 0, parsed.duration), duration: parsed.duration }
+  return parsed
 }
 /**
  * 助手创建过渡时校验端点：至少写一端，片段存在、媒介匹配、放得下。不成立时列出这个序列能放这种过渡的编辑点，

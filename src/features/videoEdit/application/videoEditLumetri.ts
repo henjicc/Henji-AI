@@ -9,7 +9,7 @@ import { trialVideoEditCodeFrames } from './videoEditCodeTrial'
 
 const logger = createLogger('features.videoEdit.lumetri')
 /** First edit creates the effect inside the same gesture. Cancelling also removes the newly created effect. */
-export function editVideoEditLumetri(target: VideoEditCompositeTarget, changes: Pick<VideoEditBuiltinEffectChanges, 'params'>, gesture?: VideoEditGesture, effectId?: string): void {
+export function editVideoEditLumetri(target: VideoEditCompositeTarget, changes: Pick<VideoEditBuiltinEffectChanges, 'params' | 'curves'>, gesture?: VideoEditGesture, effectId?: string): void {
   if (gesture && gesture.projectId !== target.projectId) throw new Error('参数手势必须属于目标剪辑。')
   const owner = requireVideoEditInstance(target.projectId)
   const sequence = owner.document.sequences.find(value => value.id === target.sequenceId)
@@ -22,6 +22,7 @@ export function editVideoEditLumetri(target: VideoEditCompositeTarget, changes: 
   if (clip.kind === 'audio') throw new Error('请选择画面片段。')
   if ((clip.effects?.length ?? 0) >= VIDEO_EDIT_MAX_EFFECTS) throw new Error(`片段最多只能放${VIDEO_EDIT_MAX_EFFECTS}项效果，请先删除不用的效果。`)
   const created = makeVideoEditBuiltinEffect(VIDEO_EDIT_LUMETRI.id, changes.params)
+  if (changes.curves) created.builtin!.curves = changes.curves
   const update = (document: typeof owner.document): typeof owner.document => ({ ...document, sequences: document.sequences.map(value => value.id === sequence.id ? { ...value, clips: value.clips.map(value => value.id === clip.id ? { ...value, effects: [...(value.effects ?? []), created] } : value) } : value) })
   if (gesture) updateVideoEditGesture(gesture, update); else editVideoProject(target.projectId, update)
 }

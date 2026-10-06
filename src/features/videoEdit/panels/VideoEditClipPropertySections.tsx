@@ -6,9 +6,11 @@ import type { VideoEditClip, VideoEditComposition } from '@/core/videoEdit/docum
 import { videoEditClipPropertyBounds, videoEditClipPropertyDefault, type VideoEditClipPropertyKey } from '../application/videoEditClipProperties'
 import { VideoEditEffectSection } from './VideoEditEffectSection'
 import type { useVideoEditClipPropertyGesture } from './useVideoEditClipPropertyGesture'
+import { videoEditClipValue } from '@/core/videoEdit/keyframes'
+import { VideoEditKeyframeControls } from './VideoEditKeyframeControls'
 
 type Gesture = ReturnType<typeof useVideoEditClipPropertyGesture>
-type Frame = Pick<VideoEditComposition, 'width' | 'height'>
+type Frame = Pick<VideoEditComposition, 'width' | 'height'> & { playhead: number }
 
 /**
  * 读数按 PR 的单位显示：位置是序列像素（画面中心为宽高的一半），缩放 / 不透明度 / 亮度 / 音量是百分比，旋转是度。
@@ -17,18 +19,20 @@ type Frame = Pick<VideoEditComposition, 'width' | 'height'>
 interface PropertyView { key: VideoEditClipPropertyKey; label: string; tooltip: string; unit?: string; step: number; precision: number; toDisplay: (value: number, frame: Frame) => number; fromDisplay: (value: number, frame: Frame) => number }
 const percent = { toDisplay: (value: number) => value * 100, fromDisplay: (value: number) => value / 100, unit: '%', step: 1, precision: 1 }
 const VIEWS: Record<VideoEditClipPropertyKey, PropertyView> = {
-  x: { key: 'x', label: '水平位置', tooltip: '画面中心的水平像素位置；序列宽度的一半是居中。', step: 1, precision: 1, toDisplay: (value, frame) => frame.width / 2 + value * frame.width, fromDisplay: (value, frame) => (value - frame.width / 2) / frame.width },
-  y: { key: 'y', label: '垂直位置', tooltip: '画面中心的垂直像素位置；序列高度的一半是居中。', step: 1, precision: 1, toDisplay: (value, frame) => frame.height / 2 + value * frame.height, fromDisplay: (value, frame) => (value - frame.height / 2) / frame.height },
+  x: { key: 'x', label: '水平位置', tooltip: '运动锚点的水平像素位置；序列宽度的一半是居中。', step: 1, precision: 1, toDisplay: (value, frame) => frame.width / 2 + value * frame.width, fromDisplay: (value, frame) => (value - frame.width / 2) / frame.width },
+  y: { key: 'y', label: '垂直位置', tooltip: '运动锚点的垂直像素位置；序列高度的一半是居中。', step: 1, precision: 1, toDisplay: (value, frame) => frame.height / 2 + value * frame.height, fromDisplay: (value, frame) => (value - frame.height / 2) / frame.height },
   scale: { key: 'scale', label: '缩放', tooltip: '画面大小，100% 为原始适配大小。', ...percent },
-  rotation: { key: 'rotation', label: '旋转', tooltip: '画面绕中心旋转的角度。', unit: '°', step: 1, precision: 1, toDisplay: value => value, fromDisplay: value => value },
+  rotation: { key: 'rotation', label: '旋转', tooltip: '画面绕运动锚点旋转的角度。', unit: '°', step: 1, precision: 1, toDisplay: value => value, fromDisplay: value => value },
+  anchorX: { key: 'anchorX', label: '锚点水平', tooltip: '旋转和缩放的支点，50% 为画面中心。', ...percent },
+  anchorY: { key: 'anchorY', label: '锚点垂直', tooltip: '旋转和缩放的支点，50% 为画面中心。', ...percent },
   opacity: { key: 'opacity', label: '不透明度', tooltip: '0% 完全透明，100% 完全不透明。', ...percent },
   brightness: { key: 'brightness', label: '亮度', tooltip: '画面明暗，100% 为原样，低于 100% 变暗，最高 200%。', ...percent },
   volume: { key: 'volume', label: '音量', tooltip: '片段音量，100% 为原始音量，0% 静音，最高 200%。', ...percent },
 }
 
-function PropertyRow({ label, tooltip, children, resetLabel, resetDisabled, onReset }: { label: string; tooltip: string; children: ReactNode; resetLabel: string; resetDisabled: boolean; onReset: () => void }): React.ReactElement {
+function PropertyRow({ label, tooltip, children, resetLabel, resetDisabled, onReset, animation }: { label: string; tooltip: string; children: ReactNode; resetLabel: string; resetDisabled: boolean; onReset: () => void; animation?: ReactNode }): React.ReactElement {
   return <div className="flex min-h-8 items-center gap-1.5 pl-5">
-    <span className="min-w-0 flex-1 truncate text-xs text-text2"><UiTooltipText tooltip={tooltip}>{label}</UiTooltipText></span>
+    {animation}<span className="min-w-0 flex-1 truncate text-xs text-text2"><UiTooltipText tooltip={tooltip}>{label}</UiTooltipText></span>
     {children}
     <UiIconButton size="xs" aria-label={resetLabel} title={resetLabel} disabled={resetDisabled} onClick={onReset}><RotateCcw size={12} /></UiIconButton>
   </div>
@@ -36,7 +40,7 @@ function PropertyRow({ label, tooltip, children, resetLabel, resetDisabled, onRe
 
 /** 一个数值读数：拖动期间实时预览，松手只记一步撤销，Esc 回到拖动前；输入与步进各算一步。 */
 function PropertyNumber({ view, clip, frame, gesture }: { view: PropertyView; clip: VideoEditClip; frame: Frame; gesture: Gesture }): React.ReactElement {
-  const value = view.toDisplay(clip[view.key], frame)
+  const value = view.toDisplay(videoEditClipValue(clip, view.key, frame.playhead), frame)
   const bounds = videoEditClipPropertyBounds(view.key)
   const factor = 10 ** view.precision
   return <span className="flex shrink-0 items-center gap-1">
@@ -50,16 +54,18 @@ function PropertyNumber({ view, clip, frame, gesture }: { view: PropertyView; cl
 function resetPatch(clip: VideoEditClip, keys: readonly VideoEditClipPropertyKey[]): Partial<Record<VideoEditClipPropertyKey, number>> {
   return Object.fromEntries(keys.map(key => [key, videoEditClipPropertyDefault(clip, key)]))
 }
-const isDefault = (clip: VideoEditClip, keys: readonly VideoEditClipPropertyKey[]): boolean => keys.every(key => clip[key] === videoEditClipPropertyDefault(clip, key))
+const isDefault = (clip: VideoEditClip, keys: readonly VideoEditClipPropertyKey[]): boolean => keys.every(key => (clip[key] ?? 0.5) === videoEditClipPropertyDefault(clip, key) && !clip.curves?.[key]?.length)
 
 function SingleProperty({ property, clip, frame, gesture }: { property: VideoEditClipPropertyKey; clip: VideoEditClip; frame: Frame; gesture: Gesture }): React.ReactElement {
   const view = VIEWS[property]
-  return <PropertyRow label={view.label} tooltip={view.tooltip} resetLabel={`重置${view.label}`} resetDisabled={isDefault(clip, [property])} onReset={() => gesture.commit(resetPatch(clip, [property]))}>
+  const value = videoEditClipValue(clip, property, frame.playhead)
+  return <PropertyRow label={view.label} tooltip={view.tooltip} resetLabel={`重置${view.label}`} resetDisabled={value === videoEditClipPropertyDefault(clip, property)} onReset={() => gesture.commit(resetPatch(clip, [property]))}
+    animation={<VideoEditKeyframeControls label={view.label} points={clip.curves?.[property]} value={value} time={frame.playhead - clip.start} duration={clip.duration} onChange={points => gesture.keyframes(property, points)} onSeek={time => gesture.seek(clip.start + time)} onDisable={() => { gesture.begin(); gesture.keyframes(property, []); gesture.commit({ [property]: value }); gesture.finish() }} />}>
     <PropertyNumber view={view} clip={clip} frame={frame} gesture={gesture} />
   </PropertyRow>
 }
 
-const MOTION: readonly VideoEditClipPropertyKey[] = ['x', 'y', 'scale', 'rotation']
+const MOTION: readonly VideoEditClipPropertyKey[] = ['x', 'y', 'scale', 'rotation', 'anchorX', 'anchorY']
 
 /** 片段固有效果（PR 的“运动 / 不透明度 / 音量”）：按片段类型只出现能生效的几节。 */
 export function VideoEditClipPropertySections({ clip, frame, gesture }: { clip: VideoEditClip; frame: Frame; gesture: Gesture }): React.ReactElement {

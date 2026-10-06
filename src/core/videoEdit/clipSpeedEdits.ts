@@ -3,6 +3,7 @@ import type { CodeMaterialMetadataReader } from './codeMaterialDocument'
 import { assertVideoEditClipsEditable } from './lockedTracks'
 import type { VideoEditRatio } from './time'
 import { retimeVideoEditContent } from './timedContent'
+import { rescaleVideoEditClipKeyframes } from './keyframes'
 import { retimeVideoEditAnnotations } from './timelineTrims'
 import { changeVideoEditClipSpeed, setVideoEditClipReverse, stretchVideoEditClip, videoEditClipSpeedSupported, videoEditStretchDurationLimits } from './clipSpeed'
 
@@ -63,6 +64,7 @@ export function applyVideoEditSpeedChange(document: VideoEditDocument, sequenceI
     const room = change.ripple ? limit - clip.start : nextStart(sequence, clip, ids, limit) - clip.start
     if (change.duration !== undefined) next = stretchVideoEditClip(next, Math.min(change.duration, room))
     else if (change.speed) next = changeVideoEditClipSpeed(next, change.speed, fps, { sourceDurationSeconds: sourceDuration(document, sequence, clip, metadata), maxDuration: room })
+    next = rescaleVideoEditClipKeyframes(next, time => Math.round(time * next.duration / clip.duration), next.duration)
     changed.set(clip.id, next)
   }
   let clips = sequence.clips.map(clip => changed.get(clip.id) ?? clip)
@@ -101,7 +103,8 @@ export function applyVideoEditRateStretch(document: VideoEditDocument, sequenceI
   if (!delta) return { sequence, delta: 0 }
   const clips = sequence.clips.map(clip => {
     if (!ids.has(clip.id)) return clip
-    const stretched = stretchVideoEditClip(clip, edge === 'out' ? clip.duration + delta : clip.duration - delta)
+    const raw = stretchVideoEditClip(clip, edge === 'out' ? clip.duration + delta : clip.duration - delta)
+    const stretched = rescaleVideoEditClipKeyframes(raw, time => Math.round(time * raw.duration / clip.duration), raw.duration)
     return edge === 'in' ? { ...stretched, start: end(clip) - stretched.duration } : stretched
   })
   return { sequence: finish(sequence, clips, composition.fps), delta }
