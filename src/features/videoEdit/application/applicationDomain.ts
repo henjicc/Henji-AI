@@ -14,7 +14,8 @@ import { undoVideoEdit, videoEditBusyReason } from './videoEditService'
 import { executeVideoEditTimelineEdit } from './videoEditTimeline'
 import { videoEditPickRelations } from '@/core/videoEdit/timelineSelection'
 import { splitVideoEditRef } from './videoEditReflection'
-import { VIDEO_EDIT_APPLICATION_CAPABILITIES, collectVideoEditOutputCapability, collectVideoEditCodeAssetCapability, placeVideoEditCreativeResultCapability, observeVideoEditFrameCapability, openVideoEditClipSourceCapability } from '@/core/application-control/domains/videoEdit/videoEditApplicationCapabilities'
+import { VIDEO_EDIT_APPLICATION_CAPABILITIES, collectVideoEditOutputCapability, collectVideoEditCodeAssetCapability, placeVideoEditCreativeResultCapability, observeVideoEditFrameCapability, openVideoEditClipSourceCapability, trimVideoEditClipCapability } from '@/core/application-control/domains/videoEdit/videoEditApplicationCapabilities'
+import { trimVideoEditClip } from './videoEditTrimCapability'
 import { exportVideoEdit, cancelVideoEditExport, videoEditExportTask } from './videoEditExport'
 import { VideoEditSourceExecutor } from './videoEditSourceExecutor'
 import { importVideoEditSources } from './videoEditMedia'
@@ -64,6 +65,7 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
           message: `已按剪辑版本 ${observed.documentRevision} 渲染${input.target.kind === 'program' ? `序列帧 ${input.target.frame}` : '源素材画面'}（${observed.width}×${observed.height}），用 read_application_media 读取该资产查看画面。`,
           verification: { verified: true, target: resultRef, condition: '已用正式渲染器生成固定版本画面，并通过资产检查核对尺寸。' } }
       }
+      if (definition.id === trimVideoEditClipCapability.id) return await trimVideoEditClip(trimVideoEditClipCapability.inputSchema.parse(raw))
       if (definition.id === placeVideoEditCreativeResultCapability.id) return await placeVideoEditCreativeResultFromCapability(placeVideoEditCreativeResultCapability.inputSchema.parse(raw), context.signal)
       if (definition.id === openVideoEditClipSourceCapability.id) {
         // 回到来源（4.1）：与时间线右键 / 双击同一入口

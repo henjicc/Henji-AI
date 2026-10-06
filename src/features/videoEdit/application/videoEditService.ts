@@ -6,7 +6,7 @@ import { createVideoEditSequence, changeVideoEditSequenceSettings, videoEditComp
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { rescaleVideoEditFrame } from '@/core/videoEdit/time'
 import { assertVideoEditLockedTracks, assertVideoEditClipsEditable } from '@/core/videoEdit/lockedTracks'
-import { expandVideoEditSelection, videoEditPickRelations, type VideoEditTimelineTool } from '@/core/videoEdit/timelineSelection'
+import { expandVideoEditSelection, videoEditPickRelations, VIDEO_EDIT_TIMELINE_TOOLS, type VideoEditTimelineTool } from '@/core/videoEdit/timelineSelection'
 import { validateCodeMaterialDocument } from '@/core/videoEdit/codeMaterialDocument'
 import type { DocumentTarget, ProjectSummary } from '@/core/documents/types'
 import type { VideoEditDocumentContent } from '@/core/documents/kinds/videoEdit'
@@ -354,7 +354,7 @@ export function validateVideoEditTimelineView(id: string, values: Partial<VideoE
   if (typeof next.linkedSelection !== 'boolean') throw new Error('链接选择开关无效。')
   next.targetTrackIds = [...new Set(next.targetTrackIds)]
   if (next.targetTrackIds.some(id => !sequence.tracks.some(track => track.id === id))) throw new Error('目标轨道不属于此序列。')
-  if (!['select', 'razor', 'hand', 'track'].includes(next.tool) || typeof next.snapping !== 'boolean' || !Number.isFinite(next.zoom) || next.zoom < .1 || next.zoom > 20) throw new Error('时间线工具、吸附或缩放无效。')
+  if (!(VIDEO_EDIT_TIMELINE_TOOLS as readonly string[]).includes(next.tool) || typeof next.snapping !== 'boolean' || !Number.isFinite(next.zoom) || next.zoom < .1 || next.zoom > 20) throw new Error('时间线工具、吸附或缩放无效。')
   for (const frame of [next.inFrame, next.outFrame]) if (frame !== null && (!Number.isSafeInteger(frame) || frame < 0 || frame > Math.floor(sequence.fps * 1800))) throw new Error('序列入出点超出范围。')
   if (next.inFrame !== null && next.outFrame !== null && next.outFrame <= next.inFrame) throw new Error('出点必须晚于入点。')
   return next

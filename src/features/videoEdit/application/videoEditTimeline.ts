@@ -4,6 +4,7 @@ import { applyVideoEditTimelineEdit, applyVideoEditTimelineEditResult, copyVideo
 import { expandVideoEditSelection, videoEditPickRelations, type VideoEditRelations } from '@/core/videoEdit/timelineSelection'
 import { clampVideoEditTrackHeight, VIDEO_EDIT_TRACK_HEIGHT_DEFAULT } from '@/core/videoEdit/timelineNavigation'
 import { insertVideoEditTracks, removeVideoEditTracks, type VideoEditTrackKind } from '@/core/videoEdit/tracks'
+import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { readVideoEditCodeMetadata } from './videoEditCodeState'
 import { inspectVideoEditMedia } from './videoEditMedia'
 import { editVideoProject, requireVideoEditInstance, setVideoEditTimelineView, type VideoEditInstance } from './videoEditService'
@@ -99,6 +100,42 @@ export function finishVideoEditTimelineRearrange(handle: VideoEditTimelineDrag, 
   videoEditDocumentSchema.parse({ ...state.baseline, sequences: state.baseline.sequences.map(value => value.id === handle.sequenceId ? sequence : value) })
   drags.delete(handle)
   executeVideoEditTimelineEdit(handle.projectId, handle.sequenceId, { ...rearrange, kind: 'rearrange', clipIds: state.clipIds })
+}
+/** PR 修剪工具（波纹、滚动、外滑、内滑）的拖动：与片段拖动同一把手，预览与松手共用同一份编辑，松手只记一步撤销。 */
+export type VideoEditTimelineTrimDrag = Omit<Extract<VideoEditTimelineEdit, { kind: 'trim' }>, 'kind' | 'clipIds' | 'linked'>
+export function previewVideoEditTimelineTrim(handle: VideoEditTimelineDrag, trim: VideoEditTimelineTrimDrag): VideoEditSequence {
+  const state = requireDrag(handle)
+  // 选区已经按链接选择与 Alt 展开好，修剪恰好作用于它。
+  return applyVideoEditTimelineEdit(state.baseline, handle.sequenceId, { ...trim, kind: 'trim', clipIds: state.clipIds, linked: false }, readVideoEditCodeMetadata(state.owner, state.baseline))
+}
+export function finishVideoEditTimelineTrim(handle: VideoEditTimelineDrag, trim: VideoEditTimelineTrimDrag): void {
+  const state = requireDrag(handle)
+  const sequence = previewVideoEditTimelineTrim(handle, trim)
+  videoEditDocumentSchema.parse({ ...state.baseline, sequences: state.baseline.sequences.map(value => value.id === handle.sequenceId ? sequence : value) })
+  drags.delete(handle)
+  executeVideoEditTimelineEdit(handle.projectId, handle.sequenceId, { ...trim, kind: 'trim', clipIds: state.clipIds, linked: false })
+}
+/**
+ * PR 文字工具（T）：在视频轨道空白处单击，就地放一段文字片段（默认 3 秒，碰到后面的片段就缩短到空白为止），
+ * 选中它供效果控件改字。一步编辑、一步撤销。返回新片段 ID。
+ */
+export function addVideoEditTextClipAt(projectId: string, sequenceId: string, frame: number, track: number): string {
+  const owner = requireVideoEditInstance(projectId)
+  const sequence = owner.document.sequences.find(value => value.id === sequenceId)
+  if (!sequence) throw new Error('目标序列不存在。')
+  const lane = sequence.tracks.find(value => value.index === track)
+  if (!lane || lane.kind !== 'video') throw new Error('文字只能放在视频轨道上。')
+  if (lane.locked) throw new Error(`轨道“${lane.name}”已锁定。`)
+  if (sequence.clips.some(clip => clip.track === track && clip.start <= frame && frame < clip.start + clip.duration)) throw new Error('请在视频轨道的空白处单击添加文字。')
+  const next = Math.min(...sequence.clips.filter(clip => clip.track === track && clip.start > frame).map(clip => clip.start))
+  const item = { id: crypto.randomUUID(), name: '文字', kind: 'text' as const }
+  const candidate = { ...owner.document, items: [...owner.document.items, item] }
+  const fps = sequence.frameRate.numerator / sequence.frameRate.denominator
+  const clip = makeVideoEditItemClip(candidate, item.id, sequenceId, { frame, track, duration: Math.max(1, Math.min(Math.round(fps * 3), next - frame)) }, readVideoEditCodeMetadata(owner, candidate))
+  editVideoProject(projectId, document => ({ ...document, items: [...document.items, item], sequences: document.sequences.map(value => value.id === sequenceId ? { ...value, clips: [...value.clips, clip] } : value) }))
+  logger.info('文字工具添加文字片段', { event: 'video_edit.timeline.text_tool.completed', context: { projectId, sequenceId } })
+  if (owner.activeSequenceId === sequenceId) setVideoEditTimelineView(projectId, { selectedClipIds: [clip.id] }, clip.id)
+  return clip.id
 }
 /**
  * 一次改多条轨道的高度，作为一步编辑；没有高度变化时不写历史。返回是否改变。

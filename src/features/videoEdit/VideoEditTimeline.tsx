@@ -1,20 +1,21 @@
-import { ArrowRight, Hand, Link, Magnet, Minus, MousePointer2, Plus, Scissors, SquareSplitHorizontal, Trash2, Type } from 'lucide-react'
+import { Link, Magnet, Minus, Plus, Scissors, SquareSplitHorizontal, Trash2 } from 'lucide-react'
 import { UiIconButton, UiRangeInput } from '@/components/ui'
 import type { VideoEditCommandId } from '@/core/videoEdit/commands'
-import { appendVideoEditClip, getActiveVideoEditSequence, setVideoEditTimelineView, type VideoEditInstance } from './application/videoEditService'
+import { getActiveVideoEditSequence, setVideoEditTimelineView, type VideoEditInstance } from './application/videoEditService'
 import { captureVideoEditCommandContext, executeVideoEditCommand } from './application/videoEditCommands'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { VideoEditTimelineCanvas } from './timeline/VideoEditTimelineCanvas'
 import { VideoEditTimecode } from './timeline/VideoEditTimelineTransport'
 import { timelineCommandPresentation } from './timeline/timelineCommandPresentation'
 import { VideoEditSequenceTabs } from './panels/VideoEditSequenceTabs'
+import { VideoEditTimelineTools } from './timeline/VideoEditTimelineTools'
 
 const ZOOM_MIN = 0.1
 const ZOOM_MAX = 20
 
 /**
- * 时间线（界面重设计 3.5，设计稿 VideoEdit）：只有一条工具栏——序列标签 ｜ 工具（模式，选中态）· 唯一一条分隔线 ·
- * 链接选择、吸附（开关）与拆分、删除、文字（动作，从命令带移入）｜ 时间码、缩放。播放控制在节目监视器。
+ * 时间线（界面重设计 3.5，设计稿 VideoEdit）：只有一条工具栏——序列标签 ｜ 工具（模式，选中态，按 PR 工具面板分组）· 唯一一条分隔线 ·
+ * 链接选择、吸附（开关）与拆分、删除（动作）｜ 缩放。文字由文字工具（T）在轨道上单击添加。播放控制在节目监视器。
  */
 export function VideoEditTimeline({ instance, onError, visible = true }: { instance: VideoEditInstance; onError: (error: unknown) => void; visible?: boolean }): React.ReactElement {
   const sequence = getActiveVideoEditSequence(instance)
@@ -34,19 +35,13 @@ export function VideoEditTimeline({ instance, onError, visible = true }: { insta
       {/* 时间码放在最左（Premiere 时间线左上角的播放指示器位置），可拖动、单击输入、Ctrl+单击切换帧号 */}
       <VideoEditTimecode instance={instance} label="当前时间码" className="px-1.5 text-13" />
       <VideoEditSequenceTabs instance={instance} onError={onError} />
-      <div className="ml-2 flex items-center gap-0.5" role="group" aria-label="时间线工具">
-        {([{ id: 'select_tool', icon: MousePointer2 }, { id: 'razor_tool', icon: Scissors }, { id: 'hand_tool', icon: Hand }, { id: 'track_tool', icon: ArrowRight }] as const).map(({ id, icon: Icon }) => {
-          const command = presentation(id)
-          return <UiIconButton key={id} on={command.checked} disabled={!command.enabled} aria-label={command.title} title={command.tooltip} onClick={() => execute(id)}><Icon size={15} /></UiIconButton>
-        })}
-      </div>
+      <VideoEditTimelineTools presentation={presentation} execute={execute} />
       <span aria-hidden="true" className="mx-1.5 h-4 w-px shrink-0 bg-line" />
       <UiIconButton on={linkedSelection.checked} disabled={!linkedSelection.enabled} aria-label={linkedSelection.title} title={`${linkedSelection.tooltip}（按住 Alt 临时切换）`} onClick={() => execute('toggle_linked_selection')}><Link size={15} /></UiIconButton>
       <UiIconButton on={snapping.checked} disabled={!snapping.enabled} aria-label={snapping.title} title={snapping.tooltip} onClick={() => execute('toggle_snapping')}><Magnet size={15} /></UiIconButton>
       <div className="ml-2 flex items-center gap-0.5" role="group" aria-label="片段编辑">
         {action('split', SquareSplitHorizontal)}
         {action('delete', Trash2, 'danger')}
-        <UiIconButton aria-label="文字" title="在播放头添加文字片段" onClick={() => run(() => appendVideoEditClip(instance.document.id))}><Type size={15} /></UiIconButton>
       </div>
       <div className="ml-auto flex shrink-0 items-center gap-1 pl-3">
         <UiIconButton size="sm" aria-label="缩小时间线" title={presentation('zoom_out').tooltip} disabled={!presentation('zoom_out').enabled} onClick={() => execute('zoom_out')}><Minus size={13} /></UiIconButton>

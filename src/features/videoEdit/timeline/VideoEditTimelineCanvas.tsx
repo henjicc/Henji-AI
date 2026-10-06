@@ -35,6 +35,8 @@ import { elementOfEventTarget } from '@/utils/crossRealmDom'
 import { TIMELINE_DEFAULT_SPLIT, TIMELINE_HEADER_WIDTH, TIMELINE_RULER_HEIGHT, TIMELINE_TRACK_SECTION_GAP, timelineLayout, timelineNewTrackZone, timelineRegionAt, timelineRulerScale, timelineTimecode, timelineTrackAt, timelineVisibleClips, timelineWheelAction, type TimelineRegion, type TimelineRegionKind, type TimelineViewport } from './timelineGeometry'
 import { videoEditTrackCodes } from '@/core/videoEdit/tracks'
 import { useTrackHeaderMenu } from './useTrackHeaderMenu'
+import { VideoEditTimelineZoomBar } from './VideoEditTimelineZoomBar'
+import { videoEditTimelineViewport } from '../application/videoEditTimelineViewport'
 import { ICON_VIDEO_EDIT_TRANSITION } from '@/core/theme/icons'
 import { videoEditTransitionEditPoints, videoEditTransitionFit, videoEditTransitionPairCut, videoEditTransitionMedium, videoEditTransitionPreset, videoEditTransitionWindow, type VideoEditTransitionAlignment, type VideoEditTransitionKind, type VideoEditTransitionPair, type VideoEditTransitionWindow } from '@/core/videoEdit/transitions'
 import { placeVideoEditTransition, selectVideoEditTransition, selectedVideoEditTransitionId, subscribeVideoEditTransitionSelection, videoEditDefaultTransitionFrames, videoEditTransitionSelectionVersion } from '../application/videoEditTransitions'
@@ -222,6 +224,22 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
       const host = pointer.viewport.current
       if (host) host.scrollLeft = Math.max(0, host.scrollLeft + direction * Math.max(1, host.clientWidth - TIMELINE_HEADER_WIDTH))
     },
+    zoomAt: (frame, factor) => {
+      const host = pointer.viewport.current; const { instance: owner, pixels: scale } = latest.current
+      if (!host) return
+      const zoom = clampVideoEditZoom(owner.zoom * factor)
+      if (zoom === owner.zoom) return
+      zoomAnchor.current = { frame, x: Math.max(0, Math.min(host.clientWidth - TIMELINE_HEADER_WIDTH, frame * scale - host.scrollLeft)) }
+      setVideoEditTimelineView(owner.document.id, { zoom })
+    },
+    showRange: (from, to) => {
+      const host = pointer.viewport.current; const { instance: owner, fps: rate, pixels: scale } = latest.current
+      if (!host) return
+      const zoom = videoEditZoomToFit(Math.max(1, to - from), rate, host.clientWidth - TIMELINE_HEADER_WIDTH)
+      if (zoom === owner.zoom) { host.scrollLeft = Math.max(0, from * scale); return }
+      zoomAnchor.current = { frame: from, x: 0 }
+      setVideoEditTimelineView(owner.document.id, { zoom })
+    },
   }), [projectId, sequence.id, pointer.viewport])
   /** 落点：命中的轨道；或视频区最上轨之上／音频区最下轨之下的空白——在那里放下会新建轨道（PR）。 */
   const placement = (event: React.DragEvent<HTMLDivElement>): VideoEditDropPlacement | undefined => {
@@ -355,7 +373,7 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
     return (rows.find(row => row.track.index === at.track)?.top ?? 0) + 2
   }
   return <>
-    <div ref={pointer.viewport} tabIndex={0} role="region" aria-label="时间线编辑区域" data-video-edit-timeline-viewport className={`relative min-h-0 flex-1 overflow-x-auto overflow-y-hidden outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-accent ${pointer.failure ? 'cursor-not-allowed' : ''}`}
+    <div ref={pointer.viewport} tabIndex={0} role="region" aria-label="时间线编辑区域" data-video-edit-timeline-viewport data-video-edit-tool={instance.tool} className={`video-edit-timeline-viewport relative min-h-0 flex-1 overflow-x-auto overflow-y-hidden outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-accent ${pointer.failure ? 'cursor-not-allowed' : ''}`}
       onScroll={readViewport}
       onPointerDown={pointer.down} onPointerMove={pointer.move} onPointerUp={pointer.up} onPointerCancel={pointer.cancel} onLostPointerCapture={pointer.cancel} onContextMenu={menu.show}
       onDoubleClick={event => {
@@ -461,6 +479,11 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
           style={{ left: view.left + TIMELINE_HEADER_WIDTH + Math.max(0, view.width - TIMELINE_HEADER_WIDTH) / 2, top: TIMELINE_RULER_HEIGHT + 8 }}>{pointer.failure ?? failureText}</div>
       </div>
     </div>
+    {/* PR 缩放滚动条取代原生横向滚动条：拖中间平移，拖两端缩放，滚轮缩放（4.6） */}
+    <VideoEditTimelineZoomBar state={{ totalFrames: (width - TIMELINE_HEADER_WIDTH) / pixels, startFrame: view.left / pixels, visibleFrames: Math.max(1, view.width - TIMELINE_HEADER_WIDTH) / pixels }} width={Math.max(1, view.width - TIMELINE_HEADER_WIDTH - 8)}
+      onScroll={frame => { const host = pointer.viewport.current; if (host) host.scrollLeft = Math.max(0, frame * pixels) }}
+      onRange={(from, to) => videoEditTimelineViewport(projectId, sequence.id)?.showRange(from, to)}
+      onZoom={(frame, factor) => videoEditTimelineViewport(projectId, sequence.id)?.zoomAt(frame, factor)} />
     <ContextMenu items={menu.menuItems} position={menu.menuPosition} visible={menu.menuVisible} onClose={menu.hideMenu} />
     {trackMenu.elements}
     {clipSource.dialog}

@@ -94,6 +94,28 @@ export const observeVideoEditFrameCapability = defineApplicationCapability({
   verificationContract: { kind: 'effect_receipt', requireEffects: true, requireVerifiedEffects: true },
   resolveObservedEffects: (_input, result) => [{ effect: 'observe', entityTypes: ['asset'], propertyIds: [], targetRefs: [result.resultRef], count: 1, verified: result.verification.verified, evidence: result.verification.verified ? [result.verification.condition] : [] }],
 })
+const trimInput = z.object({
+  documentRef, clipRef: applicationRefSchema.extend({ kind: z.literal('video_edit.clip') }).strict(),
+  mode: z.enum(['ripple', 'roll', 'slip', 'slide']), edge: z.enum(['in', 'out']).optional(), frames: z.number().int().min(-108_000).max(108_000).refine(value => value !== 0, '修剪帧数不能为 0。'),
+}).strict().superRefine((value, context) => {
+  if ((value.mode === 'ripple' || value.mode === 'roll') && !value.edge) context.addIssue({ code: 'custom', path: ['edge'], message: '波纹编辑与滚动编辑需要 edge：in 修剪入点，out 修剪出点。' })
+  if ((value.mode === 'slip' || value.mode === 'slide') && value.edge) context.addIssue({ code: 'custom', path: ['edge'], message: '外滑与内滑作用于整个片段，不要传 edge。' })
+})
+/** PR 修剪工具（4.6）：波纹、滚动、外滑、内滑要按素材余量与相邻片段联动计算，不能用单个属性写入表达。 */
+export const trimVideoEditClipCapability = defineApplicationCapability({
+  id: 'trim_video_edit_clip', title: '修剪剪辑片段（波纹、滚动、外滑、内滑）',
+  description: '按 Premiere 修剪工具修剪片段，链接的音画按链接选择一起修剪，一步撤销。mode：ripple 波纹编辑——改片段一端（edge in 入点／out 出点）的长度，后面同步锁定轨道上的片段跟着前移或后移、不留空隙（frames 正数=该端向右：出点变长，入点剪掉开头）；roll 滚动编辑——移动片段与相邻片段之间的编辑点（edge 指这一片段的哪一端），两段一长一短、总长不变；slip 外滑——位置和长度不变，换用素材里更晚（frames 正数）或更早的一段；slide 内滑——内容不变，片段整体右移（正数）或左移，前一段出点与后一段入点跟着让位。超出素材余量或相邻片段时自动收紧到能做到的最大值，回执给出实际帧数。',
+  version: 1, domain: 'video_edit', aliases: ['波纹编辑', '滚动编辑', '外滑', '内滑', 'ripple edit', 'roll edit', 'slip', 'slide', '修剪片段'], readOnly: false, risk: 'R1', dataClasses: ['C1'], permission: 'video_edit:write', idempotent: false, destructive: false, timeoutMs: 60000, supportsPreview: false, supportsUndo: true,
+  requiredScopes: ['video_edit'], acceptsRefs: ['video_edit.document', 'video_edit.clip'], producesRefs: ['video_edit.document'],
+  successEvidence: ['剪辑文件回读与内存一致，回执给出实际修剪的帧数。'],
+  failureRecovery: ['已到素材或相邻片段边界时换方向或换片段；轨道锁定时先解锁；会让其他轨道片段重叠时先关闭那条轨道的同步锁定。'],
+  inputSchema: trimInput, outputSchema: output,
+  concurrencyKey: 'video_edit', resolveConcurrencyKey: parsed => `video_edit:${parsed.documentRef.id}`,
+  resolveOperationTargets: parsed => [parsed.documentRef, parsed.clipRef], resolveOperationWriteTargets: parsed => [parsed.documentRef],
+  control: capabilityControl('execute', ['video_edit.document'], { cancelable: true, revisionScopes: ['video_edit'] }), summarize: result => result.message,
+  verificationContract: { kind: 'effect_receipt', requireEffects: true, requireVerifiedEffects: true },
+  resolveObservedEffects: (_input, result) => [{ effect: 'execute', entityTypes: ['video_edit.document'], propertyIds: [], targetRefs: [result.resultRef], count: 1, verified: result.verification.verified, evidence: result.verification.verified ? [result.verification.condition] : [] }],
+})
 export const VIDEO_EDIT_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinition[] = [...[
   ['save_video_edit', '保存剪辑', '立即把剪辑的当前修改写入它在项目文件夹里的剪辑文件（平时会自动保存）。失败后只重试保存，不重复修改。documentRef 的 id 即剪辑的文档 ID（取自 list_documents）。'],
   ['undo_video_edit', '撤销剪辑修改', '撤销目标剪辑的一步手动或助手修改。'],
@@ -111,4 +133,4 @@ export const VIDEO_EDIT_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinitio
     entityTypes: ['video_edit.document'], propertyIds: [], targetRefs: [result.resultRef], count: 1,
     verified: result.verification.verified, evidence: result.verification.verified ? [result.verification.condition] : [],
   }],
-})), collectVideoEditOutputCapability, collectVideoEditCodeAssetCapability, placeVideoEditCreativeResultCapability, observeVideoEditFrameCapability, openVideoEditClipSourceCapability]
+})), collectVideoEditOutputCapability, collectVideoEditCodeAssetCapability, placeVideoEditCreativeResultCapability, observeVideoEditFrameCapability, openVideoEditClipSourceCapability, trimVideoEditClipCapability]

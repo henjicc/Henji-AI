@@ -10,6 +10,7 @@ import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/te
 import { rememberVideoEditCodeMetadata, readVideoEditCodeMetadata } from '../application/videoEditCodeState'
 import { appendVideoEditSequence, closeVideoEditProject, createVideoEditProject, editVideoProject, getActiveVideoEditSequence, listVideoEditInstances, setVideoEditTimelineView, setVideoEditView, subscribeVideoEdit, switchVideoEditSequence, undoVideoEdit, videoEditRevision, type VideoEditInstance } from '../application/videoEditService'
 import { executeVideoEditTimelineEdit } from '../application/videoEditTimeline'
+import { captureVideoEditCommandContext, executeVideoEditCommand } from '../application/videoEditCommands'
 import { VIDEO_EDIT_ITEM_DRAG_MIME } from '../application/videoEditDrop'
 import { VideoEditTimeline } from '../VideoEditTimeline'
 import { VideoEditInOutDuration } from './VideoEditTimelineTransport'
@@ -250,13 +251,34 @@ it('高度只在释放提交一次，实际32轨道与高度用于纵向命中',
 
 it('手形只滚动，轨道向前选择按命中轨道和位置', () => {
   const view = render(<View />); const host = view.getByRole('region', { name: '时间线编辑区域' })
-  fireEvent.click(view.getByRole('button', { name: '轨道向前选择' })); fireEvent.pointerDown(host, event(header + 90)); expect(owner.selectedClipIds).toEqual([ids[1]])
+  fireEvent.click(view.getByRole('button', { name: '向前选择轨道工具' })); fireEvent.pointerDown(host, event(header + 90)); expect(owner.selectedClipIds).toEqual([ids[1]])
   const baseline = owner.document
   fireEvent.click(view.getByRole('button', { name: '手形工具' })); fireEvent.pointerDown(host, event(500, 200)); fireEvent.pointerMove(host, event(450, 150)); fireEvent.pointerUp(host, event(450, 150))
   expect(host.scrollLeft).toBe(50); expect(owner.document).toBe(baseline)
   // 手形纵向拖动滚动按下处所在的区：视频区往下拖露出上层轨道
   const before = trackTop(1); fireEvent.pointerDown(host, event(500, 100)); fireEvent.pointerMove(host, event(500, 140)); fireEvent.pointerUp(host, event(500, 140))
   expect(trackTop(1)).toBe(before + 40); expect(onError).not.toHaveBeenCalled()
+})
+
+it('PR 工具：波纹拖出点后面片段跟着移且一步撤销，外滑只换源内容，向后选择轨道，文字工具在空白处放文字', async () => {
+  const view = render(<View />); const host = view.getByRole('region', { name: '时间线编辑区域' })
+  const tool = (id: Parameters<typeof executeVideoEditCommand>[1]) => act(() => executeVideoEditCommand(captureVideoEditCommandContext(owner.document.id, 'timeline'), id))
+  // 片段：视频 [0,30)，代码 [60,90)；每帧 2px
+  fireEvent.click(view.getByRole('button', { name: '波纹编辑工具' })); expect(owner.tool).toBe('ripple')
+  const history = owner.past.length
+  fireEvent.pointerDown(view.getByRole('button', { name: '裁剪视频出点' }), event(header + 60)); fireEvent.pointerMove(host, event(header + 80)); fireEvent.pointerUp(host, event(header + 80))
+  expect(current().clips.map(clip => [clip.start, clip.duration])).toEqual([[0, 40], [70, 30]]); expect(owner.past).toHaveLength(history + 1)
+  act(() => undoVideoEdit(owner.document.id)); expect(current().clips.map(clip => [clip.start, clip.duration])).toEqual([[0, 30], [60, 30]])
+  await tool('slip_tool')
+  fireEvent.pointerDown(view.getByRole('button', { name: '选择片段 视频' }), event(header + 40)); fireEvent.pointerMove(host, event(header + 20)); fireEvent.pointerUp(host, event(header + 20))
+  expect(current().clips[0]).toMatchObject({ start: 0, duration: 30 }); expect(current().clips[0].sourceInUs).toBe(Math.round(10 / 30 * 1e6))
+  await tool('track_backward_tool')
+  fireEvent.pointerDown(host, event(header + 150)); expect(new Set(owner.selectedClipIds)).toEqual(new Set(ids))
+  await tool('type_tool')
+  fireEvent.pointerDown(host, event(header + 220)); fireEvent.pointerUp(host, event(header + 220))
+  const text = current().clips.find(clip => clip.kind === 'text')!
+  expect(text).toMatchObject({ start: 110, duration: 90, track: 1 }); expect(owner.selectedClipIds).toEqual([text.id]); expect(owner.activePanel).toBe('effects')
+  expect(onError).not.toHaveBeenCalled()
 })
 
 it('真实入出点拖动、播放头吸附和冲突失败保留基线', () => {

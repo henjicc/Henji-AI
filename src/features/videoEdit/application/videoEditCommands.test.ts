@@ -151,7 +151,7 @@ it('Premiere 时间线视图键：五帧步进、轨道高度一步编辑、缩�
   expect(videoEditCommandState(captureVideoEditCommandContext(id, 'timeline'), 'decrease_audio_tracks')).toMatchObject({ enabled: false })
   expect(videoEditCommandState(captureVideoEditCommandContext(id, 'timeline'), 'zoom_to_sequence')).toMatchObject({ enabled: false })
   const calls: string[] = []
-  const off = registerVideoEditTimelineViewport(id, { sequenceId: sequence.id, zoomToSequence: () => calls.push('fit'), showScreen: direction => calls.push(`screen:${direction}`) })
+  const off = registerVideoEditTimelineViewport(id, { sequenceId: sequence.id, zoomToSequence: () => calls.push('fit'), showScreen: direction => calls.push(`screen:${direction}`), zoomAt: () => calls.push('zoom'), showRange: () => calls.push('range') })
   try {
     for (const command of ['zoom_to_sequence', 'next_screen', 'previous_screen'] as const) await executeVideoEditCommand(captureVideoEditCommandContext(id, 'timeline'), command)
     expect(calls).toEqual(['fit', 'screen:1', 'screen:-1'])

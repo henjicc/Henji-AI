@@ -207,6 +207,25 @@ it('旧剪辑拆音先检测真实音轨，检查期间文档变化/无音轨均
   expect(owner.past.length).toBe(before + 1); expect(getActiveVideoEditSequence(owner).clips).toHaveLength(2); expect(owner.document.media[0].hasAudio).toBe(true)
   copyVideoEditTimeline(id, sequence.id); expect(readVideoEditClipboard(id)?.clips).toHaveLength(2)
 })
+it('助手修剪能力与时间线修剪工具同一份编辑：链接音画一起波纹修剪与外滑，做不到时说明边界不写历史', async () => {
+  const owner = (await createVideoEditProject())!; const id = owner.document.id
+  appendVideoEditMedia(id, { id: 'media', name: '原视频', path: 'D:/original.mp4', kind: 'video', width: 320, height: 180, durationSeconds: 3, hasAudio: true })
+  appendVideoEditClip(id, 'media'); const sequence = getActiveVideoEditSequence(owner)
+  await separateVideoEditAudio(id, sequence.id, [sequence.clips[0].id], 0)
+  const [picture] = getActiveVideoEditSequence(owner).clips.map(clip => clip.id)
+  const app = createApplicationHarness(); const documentRef = { kind: 'video_edit.document', id }; const clipRef = { kind: 'video_edit.clip', id: `${id}:${picture}` }
+  try {
+    // 整段素材都用上了：外滑没有余量
+    const past = owner.past.length
+    expect((await app.call('trim_video_edit_clip', { documentRef, clipRef, mode: 'slip', frames: 10 })).ok).toBe(false); expect(owner.past.length).toBe(past)
+    expect((await app.call('trim_video_edit_clip', { documentRef, clipRef, mode: 'ripple', frames: -30 })).ok).toBe(false)
+    const ripple = await app.requireResult('trim_video_edit_clip', { documentRef, clipRef, mode: 'ripple', edge: 'out', frames: -30 }) as { message: string }
+    expect(ripple.message).toContain('-30'); expect(getActiveVideoEditSequence(owner).clips.map(clip => clip.duration)).toEqual([60, 60])
+    const slip = await app.requireResult('trim_video_edit_clip', { documentRef, clipRef, mode: 'slip', frames: 100 }) as { message: string }
+    expect(slip.message).toContain('请求 100 帧'); expect(getActiveVideoEditSequence(owner).clips.map(clip => clip.sourceInUs)).toEqual([1_000_000, 1_000_000])
+    expect(owner.past.length).toBe(past + 2)
+  } finally { app.dispose() }
+})
 it('助手经时间线视图读写链接选择；拆分能力与剃刀同语义，选区写入按原样保存不再扩展', async () => {
   const owner = (await createVideoEditProject())!; const id = owner.document.id
   appendVideoEditMedia(id, { id: 'media', name: '原视频', path: 'D:/original.mp4', kind: 'video', width: 320, height: 180, durationSeconds: 3, hasAudio: true })

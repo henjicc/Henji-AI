@@ -7,6 +7,7 @@ import { videoEditSyncCorrections } from './linkSync'
 import { retimeVideoEditContent, type VideoEditMarker, type VideoEditCaption, type VideoEditContentOrigin } from './timedContent'
 import { validateVideoEditTransitions, videoEditTransitionClipIds, type VideoEditTransition } from './transitions'
 import { validateVideoEditAdjustmentRanges } from './compositing'
+import { applyVideoEditTrim, type VideoEditTrimMode } from './timelineTrims'
 
 export interface VideoEditClipboard {
   projectId: string
@@ -45,6 +46,8 @@ export type VideoEditTimelineEdit =
   | { kind: 'sync'; clipIds: string[]; mode: 'move' | 'slip' }
   /** `newTracks`: tracks appended before placing (a multi-track item needs more audio tracks than the sequence has, or a drop beyond the outer tracks). */
   | { kind: 'place'; clipboard: VideoEditClipboard; frame: number; mode: 'paste' | 'insert' | 'overwrite'; trackMap?: Record<number, number>; targetTracks?: number[]; newTracks?: VideoEditSequence['tracks'] }
+  /** Premiere trim tools (ripple B, roll N, slip Y, slide U), see timelineTrims.ts; `delta` is clamped to what the media and neighbours allow. */
+  | { kind: 'trim'; mode: VideoEditTrimMode; clipIds: string[]; linked?: VideoEditRelations; edge?: 'in' | 'out'; delta: number }
 
 /** Appends new tracks before an edit (drag beyond the outer tracks, paste needing more audio tracks); indexes and ids must be unused. */
 export function withVideoEditTracks(sequence: VideoEditSequence, added: readonly VideoEditSequence['tracks'][number][] | undefined): VideoEditSequence {
@@ -180,7 +183,7 @@ export function applyVideoEditTimelineEdit(document: VideoEditDocument, sequence
 }
 export function applyVideoEditTimelineEditResult(document: VideoEditDocument, sequenceId: string, edit: VideoEditTimelineEdit, metadata?: CodeMaterialMetadataReader): { sequence: VideoEditSequence; selectedClipIds?: string[] } {
   if (edit.kind === 'adjust' && edit.newTracks?.length) document = { ...document, sequences: document.sequences.map(value => value.id === sequenceId ? withVideoEditTracks(value, edit.newTracks) : value) }
-  const result = edit.kind === 'place' ? placeClips(document, sequenceOf(document, sequenceId), edit) : edit.kind === 'rearrange' ? rearrangeClips(document, sequenceId, edit, metadata) : edit.kind === 'range' ? { sequence: removeRange(sequenceOf(document, sequenceId), edit) } : { sequence: applyClipEdit(document, sequenceId, edit, metadata) }
+  const result = edit.kind === 'place' ? placeClips(document, sequenceOf(document, sequenceId), edit) : edit.kind === 'rearrange' ? rearrangeClips(document, sequenceId, edit, metadata) : edit.kind === 'range' ? { sequence: removeRange(sequenceOf(document, sequenceId), edit) } : edit.kind === 'trim' ? { sequence: applyVideoEditTrim(document, sequenceId, { ...edit, clipIds: expandVideoEditSelection(sequenceOf(document, sequenceId), edit.clipIds, edit.linked ?? true) }, metadata).sequence } : { sequence: applyClipEdit(document, sequenceId, edit, metadata) }
   if (result.sequence.clips.length > 500 || result.sequence.annotations.length > 500 || (result.sequence.markers?.length ?? 0) > 500 || (result.sequence.captions?.length ?? 0) > 500 || result.sequence.clips.some(clip => clip.start < 0 || clip.duration < 1 || clip.start + clip.duration > Math.floor(result.sequence.frameRate.numerator / result.sequence.frameRate.denominator * 1800))) throw new Error('编辑结果超出序列片段、标记数量或时间边界。')
   if ((result.sequence.transitions?.length ?? 0) > 500) throw new Error('序列最多500项转场。')
   validateVideoEditAdjustmentRanges(result.sequence)
@@ -229,7 +232,7 @@ function rearrangeClips(document: VideoEditDocument, sequenceId: string, edit: E
   const shift = intervals(clipboard.clips).reduce((sum, range) => sum + Math.max(0, Math.min(frame, range.to) - range.from), 0)
   return placeClips({ ...document, sequences: document.sequences.map(value => value.id === sequenceId ? extracted : value) }, extracted, { kind: 'place', clipboard, frame: frame - shift, mode: 'insert', ...(edit.trackMap ? { trackMap: edit.trackMap } : {}), targetTracks: tracks })
 }
-function applyClipEdit(document: VideoEditDocument, sequenceId: string, edit: Exclude<VideoEditTimelineEdit, { kind: 'place' | 'range' | 'rearrange' }>, metadata?: CodeMaterialMetadataReader): VideoEditSequence {
+function applyClipEdit(document: VideoEditDocument, sequenceId: string, edit: Exclude<VideoEditTimelineEdit, { kind: 'place' | 'range' | 'rearrange' | 'trim' }>, metadata?: CodeMaterialMetadataReader): VideoEditSequence {
   const sequence = sequenceOf(document, sequenceId)
   const ids = expandVideoEditSelection(sequence, edit.clipIds, edit.kind === 'sync' ? false : edit.linked ?? true); const selected = new Set(ids)
   if (!ids.length) throw new Error('请先选择片段。')

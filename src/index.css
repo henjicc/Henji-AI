@@ -762,6 +762,15 @@ body {
   display: none;
 }
 
+/* 剪辑时间线的横向滚动由底部的 PR 缩放滚动条承担（剪辑对齐 PR 4.6），隐藏原生横向滚动条。 */
+.video-edit-timeline-viewport {
+  scrollbar-width: none;
+}
+
+.video-edit-timeline-viewport::-webkit-scrollbar {
+  display: none;
+}
+
 /* 与全局滚动条同一观感（4px 可见滑块、同色），只把横向滑块改成常驻，避免系统自动隐藏。 */
 .model-provider-scroll-thumb {
   height: 4px;

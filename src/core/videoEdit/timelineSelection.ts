@@ -1,10 +1,15 @@
 import type { VideoEditSequence } from './document'
 import { z } from 'zod'
 
-export type VideoEditTimelineTool = 'select' | 'razor' | 'hand' | 'track'
+/**
+ * 时间线工具（模式），与 Premiere 工具面板一致（剪辑对齐 PR 4.6）：选择、向前／向后选择轨道、波纹编辑、滚动编辑、剃刀、
+ * 外滑、内滑、手形、缩放、文字。比率拉伸与钢笔需要片段速度与关键帧数据，尚未提供。
+ */
+export const VIDEO_EDIT_TIMELINE_TOOLS = ['select', 'track', 'track_backward', 'ripple', 'roll', 'razor', 'slip', 'slide', 'hand', 'zoom', 'type'] as const
+export type VideoEditTimelineTool = typeof VIDEO_EDIT_TIMELINE_TOOLS[number]
 export const videoEditTimelineViewSchema = z.object({
   selectedClipIds: z.array(z.string().min(1).max(100)).max(500), targetTrackIds: z.array(z.string().min(1).max(100)).max(32),
-  tool: z.enum(['select', 'razor', 'hand', 'track']), snapping: z.boolean(), zoom: z.number().finite().min(.1).max(20),
+  tool: z.enum(VIDEO_EDIT_TIMELINE_TOOLS), snapping: z.boolean(), zoom: z.number().finite().min(.1).max(20),
   inFrame: z.number().int().min(0).max(108000).nullable(), outFrame: z.number().int().min(0).max(108000).nullable(),
   /** Premiere-style Linked Selection; omitted by older callers means unchanged/on. */
   linkedSelection: z.boolean().optional(),
@@ -49,6 +54,10 @@ export function selectVideoEditRegion(sequence: VideoEditSequence, region: { fro
   return expandVideoEditSelection(sequence, sequence.clips.filter(clip => tracks.has(clip.track) && clip.start < to && clip.start + clip.duration > from).map(clip => clip.id), relations)
 }
 
-export function selectVideoEditTrackFrom(sequence: VideoEditSequence, track: number, frame: number, allTracks = false, relations: VideoEditRelations = true): string[] {
-  return expandVideoEditSelection(sequence, sequence.clips.filter(clip => (allTracks || clip.track === track) && clip.start + clip.duration > frame).map(clip => clip.id), relations)
+/**
+ * 轨道选择工具：`forward` 选点击处及之后的片段（向前选择轨道 A），`backward` 选点击处及之前的片段（向后选择轨道 Shift+A）；
+ * PR 默认作用于全部轨道，按住 Shift 只选点击的那一条轨道。
+ */
+export function selectVideoEditTrackFrom(sequence: VideoEditSequence, track: number, frame: number, allTracks = false, relations: VideoEditRelations = true, direction: 'forward' | 'backward' = 'forward'): string[] {
+  return expandVideoEditSelection(sequence, sequence.clips.filter(clip => (allTracks || clip.track === track) && (direction === 'forward' ? clip.start + clip.duration > frame : clip.start <= frame)).map(clip => clip.id), relations)
 }

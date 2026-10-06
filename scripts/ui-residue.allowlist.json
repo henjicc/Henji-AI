@@ -304,6 +304,11 @@
       "definedIn": "src/index.css",
       "names": ["model-provider-scrollbar", "model-provider-scroll-thumb", "model-provider-scroll-viewport"],
       "reason": "节点模型选择的供应商横向滚动：隐藏原生横向滚动条（::-webkit-scrollbar）改画细滚动指示"
+    },
+    {
+      "definedIn": "src/index.css",
+      "names": ["video-edit-timeline-viewport"],
+      "reason": "剪辑时间线横向滚动改由 PR 缩放滚动条承担：隐藏原生横向滚动条（::-webkit-scrollbar 伪元素无法用工具类表达）"
     }
   ]
 }

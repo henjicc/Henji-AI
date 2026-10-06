@@ -1,4 +1,4 @@
-import { VIDEO_EDIT_COMMANDS, type VideoEditCommandId, type VideoEditCommandScope } from '@/core/videoEdit/commands'
+import { VIDEO_EDIT_COMMANDS, VIDEO_EDIT_TOOL_COMMANDS, isVideoEditToolCommand, type VideoEditCommandId, type VideoEditCommandScope } from '@/core/videoEdit/commands'
 import { placeVideoEditItems } from '@/core/videoEdit/projectItems'
 import { videoEditDuration, type VideoEditSequence } from '@/core/videoEdit/document'
 import { videoEditTransitionClipIds } from '@/core/videoEdit/transitions'
@@ -19,6 +19,7 @@ import { createVideoEditMarker } from './videoEditTimedContent'
 import { createVideoEditBin } from './videoEditProjectItems'
 import { applyVideoEditDefaultTransitions, selectVideoEditTransition, selectedVideoEditTransitionId, videoEditDefaultTransitionTargets, type VideoEditDefaultTransitionRequest } from './videoEditTransitions'
 import { deleteVideoEditTransition } from './videoEditCompositing'
+import { matchVideoEditFrame, reverseMatchVideoEditFrame, videoEditMatchFrameUnavailable } from './videoEditMatchFrame'
 
 /** Premiere 轨道高度键：每次 8px；展开所有轨道到 96px，最小化到最小高度。 */
 const TRACK_HEIGHT_STEP = 8
@@ -165,8 +166,8 @@ export function videoEditCommandState(context: VideoEditCommandContext, id: Vide
     if (!owner) return { enabled: false, reason: '请先打开剪辑。' }
     const sequence = getActiveVideoEditSequence(owner)
     if (id === 'undo' || id === 'redo') return { enabled: Boolean(id === 'undo' ? owner.past.length : owner.future.length), reason: '没有可恢复的编辑。' }
-    const tools = { select_tool: 'select', razor_tool: 'razor', hand_tool: 'hand', track_tool: 'track' } as const
-    if (id in tools) return { enabled: true, checked: owner.tool === tools[id as keyof typeof tools] }
+    if (isVideoEditToolCommand(id)) return { enabled: true, checked: owner.tool === VIDEO_EDIT_TOOL_COMMANDS[id] }
+    if (id === 'match_frame' || id === 'reverse_match_frame') { const reason = videoEditMatchFrameUnavailable(owner, id, context.clipIds, context.frame, context.scope); return { enabled: !reason, ...(reason ? { reason } : {}) } }
     if (id === 'toggle_snapping') return { enabled: true, checked: owner.snapping }
     if (id === 'toggle_linked_selection') return { enabled: true, checked: owner.linkedSelection !== false }
     if (id === 'export') return { enabled: sequence.clips.length > 0 && !owner.busy, reason: '序列没有可导出的片段或正在导出。' }
@@ -248,7 +249,9 @@ export async function executeVideoEditCommand(context: VideoEditCommandContext, 
     case 'save': await saveVideoEdit(projectId); return
     case 'undo': case 'redo': undoVideoEdit(projectId, id === 'redo'); return
     case 'export': await exportVideoEdit(projectId); return
-    case 'select_tool': case 'razor_tool': case 'hand_tool': case 'track_tool': setVideoEditTimelineView(projectId, { tool: ({ select_tool: 'select', razor_tool: 'razor', hand_tool: 'hand', track_tool: 'track' } as const)[id] }); return
+    case 'select_tool': case 'track_tool': case 'track_backward_tool': case 'ripple_tool': case 'roll_tool': case 'razor_tool': case 'slip_tool': case 'slide_tool': case 'hand_tool': case 'zoom_tool': case 'type_tool': setVideoEditTimelineView(projectId, { tool: VIDEO_EDIT_TOOL_COMMANDS[id] }); return
+    case 'match_frame': await matchVideoEditFrame(projectId, [...context.clipIds], context.frame); return
+    case 'reverse_match_frame': reverseMatchVideoEditFrame(projectId); return
     case 'toggle_snapping': setVideoEditTimelineView(projectId, { snapping: !owner!.snapping }); return
     case 'toggle_linked_selection': setVideoEditTimelineView(projectId, { linkedSelection: owner!.linkedSelection === false }); return
     case 'focus_project': case 'focus_source': case 'focus_timeline': case 'focus_program': case 'focus_effects': focusVideoEditPanel(projectId, FOCUS_PANELS[id]); return
