@@ -1,4 +1,5 @@
 import type { LocalInferenceEvent, LocalInferenceFailureCode, LocalInferenceRequest, SmartRegionAnalysisJob, SmartRegionAnalysisResult } from './protocol'
+import type { TrackingCandidatesJob, TrackingCandidatesResult, TrackingJob, TrackingJobResult } from './tracking/trackingProtocol'
 
 /*
  * 主进程侧的本地推理宿主：按需启动后台进程（utility process），派发分析、转发进度与日志、取消；
@@ -22,7 +23,7 @@ export interface LocalInferenceHostOptions {
   idleMs?: number
 }
 
-interface Pending { resolve(value: SmartRegionAnalysisResult): void; reject(error: Error): void; progress(done: number, total: number): void }
+interface Pending { resolve(value: unknown): void; reject(error: Error): void; progress(done: number, total: number): void }
 
 export class LocalInferenceHost {
   private child?: LocalInferenceChild
@@ -68,12 +69,25 @@ export class LocalInferenceHost {
   }
 
   analyze(job: SmartRegionAnalysisJob, progress: (done: number, total: number) => void = () => undefined): Promise<SmartRegionAnalysisResult> {
+    return this.send<SmartRegionAnalysisResult>({ type: 'analyze', job }, job.id, progress)
+  }
+
+  /** 跟踪（4.10）：与分析同一个后台进程、同一个队列（显卡与解码都是独占负载）。 */
+  track(job: TrackingJob, progress: (done: number, total: number) => void = () => undefined): Promise<TrackingJobResult> {
+    return this.send<TrackingJobResult>({ type: 'track', job }, job.id, progress)
+  }
+
+  candidates(job: TrackingCandidatesJob): Promise<TrackingCandidatesResult> {
+    return this.send<TrackingCandidatesResult>({ type: 'candidates', job }, job.id, () => undefined)
+  }
+
+  private send<T>(request: LocalInferenceRequest, id: string, progress: (done: number, total: number) => void): Promise<T> {
     if (this.disposed) return Promise.reject(new LocalInferenceFailure('cancelled', '本地推理已关闭。'))
     clearTimeout(this.idleTimer)
     const child = this.ensureChild()
-    return new Promise((resolve, reject) => {
-      this.pending.set(job.id, { resolve, reject, progress })
-      child.postMessage({ type: 'analyze', job })
+    return new Promise<T>((resolve, reject) => {
+      this.pending.set(id, { resolve: value => resolve(value as T), reject, progress })
+      child.postMessage(request)
     })
   }
 

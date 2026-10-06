@@ -30,6 +30,7 @@ import type { HenjiDocumentsApi } from './api-documents'
 import type { WorkRootPlatform } from '../../src/platform/contracts/workRoot'
 import type { LocalModelsPlatform } from '../../src/platform/contracts/localModels'
 import type { SmartRegionsPlatform } from '../../src/platform/contracts/smartRegions'
+import type { TrackingPlatform } from '../../src/platform/contracts/tracking'
 import type { HenjiGenerationHistoryApi, HenjiPresetsApi, HenjiSettingsApi } from './api-local-records'
 
 export * from './api-assistant'
@@ -90,6 +91,7 @@ export interface HenjiNativeApi {
   localModels: LocalModelsPlatform
   /** 剪辑智能区域分析（4.7d），接口与 PAL `SmartRegionsPlatform` 相同。 */
   smartRegions: SmartRegionsPlatform
+  tracking: TrackingPlatform
 }
 
 declare global {

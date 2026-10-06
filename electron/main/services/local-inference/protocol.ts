@@ -1,5 +1,7 @@
 import type { SmartRegionAnalysisKind, SmartRegionSummary } from '../../../../src/core/videoEdit/smartRegions'
 import type { LocalExecutionProvider } from './providers'
+import type { OnnxExtraOutput } from './tracking/onnxGraphOutputs'
+import type { TrackingCandidatesJob, TrackingCandidatesResult, TrackingJob, TrackingJobResult } from './tracking/trackingProtocol'
 
 /*
  * 主进程 ↔ 本地推理后台进程（utility process）的消息。主进程负责解析素材、准备模型与缓存位置，
@@ -7,8 +9,14 @@ import type { LocalExecutionProvider } from './providers'
  */
 
 export type LocalInferenceModelName = 'yunet' | 'rvm' | 'selfie' | 'ppocr'
+  | 'etam_image_encoder' | 'etam_mask_decoder' | 'etam_memory_encoder' | 'etam_memory_attention' | 'etam_mask_downsample' | 'vittrack'
 
-export interface LocalInferenceModelFile { name: LocalInferenceModelName; path: string }
+export interface LocalInferenceModelFile {
+  name: LocalInferenceModelName
+  path: string
+  /** 载入时补成图输出的内部张量（不改模型文件；EfficientTAM 解码器的 4 个候选掩码）。 */
+  extraOutputs?: OnnxExtraOutput[]
+}
 
 export interface SmartRegionAnalysisJob {
   id: string
@@ -36,6 +44,8 @@ export type LocalInferenceFailureCode = 'decode' | 'inference' | 'output' | 'can
 
 export type LocalInferenceRequest =
   | { type: 'analyze'; job: SmartRegionAnalysisJob }
+  | { type: 'track'; job: TrackingJob }
+  | { type: 'candidates'; job: TrackingCandidatesJob }
   | { type: 'cancel'; id: string }
 
 export interface SmartRegionAnalysisResult {
@@ -51,6 +61,6 @@ export interface SmartRegionAnalysisResult {
 
 export type LocalInferenceEvent =
   | { type: 'progress'; id: string; done: number; total: number }
-  | { type: 'done'; id: string; result: SmartRegionAnalysisResult }
+  | { type: 'done'; id: string; result: SmartRegionAnalysisResult | TrackingJobResult | TrackingCandidatesResult }
   | { type: 'failed'; id: string; code: LocalInferenceFailureCode; message: string }
   | { type: 'log'; level: 'info' | 'warn'; message: string; event: string; context: Record<string, unknown> }

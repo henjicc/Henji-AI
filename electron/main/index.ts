@@ -17,8 +17,10 @@ import { registerDocumentsIpc } from './ipc/documents'
 import { registerWorkRootIpc } from './ipc/work-root'
 import { registerLocalModelsIpc } from './ipc/local-models'
 import { registerSmartRegionsIpc } from './ipc/smart-regions'
+import { registerTrackingIpc } from './ipc/tracking'
 import { disposeLocalModels } from './services/local-models/runtime'
 import { disposeSmartRegions } from './services/smart-regions/runtime'
+import { disposeTracking } from './services/tracking/runtime'
 import { disposeWorkRootChange } from './services/work-root/runtime'
 import { registerDragIpc } from './ipc/drag'
 import { registerImageIpc } from './ipc/image'
@@ -110,6 +112,7 @@ app.whenReady().then(() => {
   registerWorkRootIpc()
   registerLocalModelsIpc()
   registerSmartRegionsIpc()
+  registerTrackingIpc()
   registerDragIpc()
   registerImageIpc()
   registerImageEditorV3Ipc()
@@ -189,6 +192,6 @@ app.on('window-all-closed', () => {
   }
 })
 
-bindApplicationShutdown(app, [disposeWorkRootChange, disposeSmartRegions, disposeLocalModels, disposeEmbeddedAgent, disposeMcp, disposeImageEditorV3Ipc], (error) => {
+bindApplicationShutdown(app, [disposeWorkRootChange, disposeTracking, disposeSmartRegions, disposeLocalModels, disposeEmbeddedAgent, disposeMcp, disposeImageEditorV3Ipc], (error) => {
   createMainLogger('application.shutdown').error('应用服务退出清理失败', { event: 'application.shutdown.failed', error })
 })

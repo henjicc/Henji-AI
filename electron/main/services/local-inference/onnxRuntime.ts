@@ -2,6 +2,8 @@ import type { InferenceSession } from 'onnxruntime-node'
 import type { LocalModelRunner, LocalTensorInput, LocalTensorOutput } from './analysis'
 import type { LocalInferenceModelFile } from './protocol'
 import { createSessionWithFallback, type LocalExecutionProvider, type LocalInferenceLog } from './providers'
+import { addOnnxGraphOutputs } from './tracking/onnxGraphOutputs'
+import { readFile } from 'node:fs/promises'
 
 type OnnxRuntime = typeof import('onnxruntime-node')
 
@@ -26,8 +28,19 @@ function sessionOptions(provider: LocalExecutionProvider): InferenceSession.Sess
     : { executionProviders: [provider], graphOptimizationLevel: 'all', logSeverityLevel: 3 }
 }
 
+/** 模型来源：普通模型按路径载入；要补图输出的（EfficientTAM 解码器候选）读进内存改好后从缓冲区载入。 */
+type SessionFactory = (provider: LocalExecutionProvider) => Promise<InferenceSession>
+function sessionFactory(runtime: OnnxRuntime, model: LocalInferenceModelFile): SessionFactory {
+  if (!model.extraOutputs?.length) return provider => runtime.InferenceSession.create(model.path, sessionOptions(provider))
+  let bytes: Promise<Uint8Array> | undefined
+  return async provider => {
+    bytes ??= readFile(model.path).then(buffer => addOnnxGraphOutputs(new Uint8Array(buffer), model.extraOutputs!))
+    return runtime.InferenceSession.create(await bytes, sessionOptions(provider))
+  }
+}
+
 class Runner implements LocalModelRunner {
-  constructor(private readonly runtime: OnnxRuntime, private session: InferenceSession, public provider: LocalExecutionProvider, private remaining: LocalExecutionProvider[], private readonly model: LocalInferenceModelFile, private readonly log: LocalInferenceLog) {}
+  constructor(private readonly runtime: OnnxRuntime, private session: InferenceSession, public provider: LocalExecutionProvider, private remaining: LocalExecutionProvider[], private readonly model: LocalInferenceModelFile, private readonly log: LocalInferenceLog, private readonly create: SessionFactory) {}
   async run(feeds: Readonly<Record<string, LocalTensorInput>>): Promise<Record<string, LocalTensorOutput>> {
     const tensors = Object.fromEntries(Object.entries(feeds).map(([name, input]) => [name, new this.runtime.Tensor(input.type, input.data, input.dims)]))
     for (;;) {
@@ -40,7 +53,7 @@ class Runner implements LocalModelRunner {
         if (!next) throw error
         this.log('warn', '本地模型运行失败，改用下一个执行提供者', 'local_inference.provider.fallback', { model: this.model.name, provider: this.provider, next, reason: error instanceof Error ? error.message.slice(0, 300) : String(error) })
         await this.session.release().catch(() => undefined)
-        this.session = await this.runtime.InferenceSession.create(this.model.path, sessionOptions(next))
+        this.session = await this.create(next)
         this.provider = next
       }
     }
@@ -50,17 +63,18 @@ class Runner implements LocalModelRunner {
 
 /**
  * 会话复用：同一模型、同一输入尺寸、同一执行顺序复用一个会话（创建 DirectML 会话约 1 秒）。
- * 最多保留 3 个，超出时释放最久没用的。
+ * 最多保留 8 个（形状跟踪一次用 5 个部件），超出时释放最久没用的。
  */
 export class LocalModelSessions {
   private readonly sessions = new Map<string, Promise<Runner>>()
-  constructor(private readonly runtime: OnnxRuntime, private readonly log: LocalInferenceLog, private readonly limit = 3) {}
+  constructor(private readonly runtime: OnnxRuntime, private readonly log: LocalInferenceLog, private readonly limit = 8) {}
   open(model: LocalInferenceModelFile, providers: readonly LocalExecutionProvider[], shape: string): Promise<LocalModelRunner> {
-    const key = `${model.path}\u0000${shape}\u0000${providers.join(',')}`
+    const key = `${model.path}\u0000${shape}\u0000${providers.join(',')}\u0000${JSON.stringify(model.extraOutputs ?? [])}`
     let pending = this.sessions.get(key)
     if (pending) { this.sessions.delete(key); this.sessions.set(key, pending); return pending }
-    pending = createSessionWithFallback(providers, provider => this.runtime.InferenceSession.create(model.path, sessionOptions(provider)), this.log, model.name)
-      .then(({ session, provider, remaining }) => new Runner(this.runtime, session, provider, remaining, model, this.log))
+    const create = sessionFactory(this.runtime, model)
+    pending = createSessionWithFallback(providers, create, this.log, model.name)
+      .then(({ session, provider, remaining }) => new Runner(this.runtime, session, provider, remaining, model, this.log, create))
     this.sessions.set(key, pending)
     pending.catch(() => { if (this.sessions.get(key) === pending) this.sessions.delete(key) })
     while (this.sessions.size > this.limit) {

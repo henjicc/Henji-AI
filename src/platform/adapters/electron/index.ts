@@ -26,6 +26,7 @@ import { createElectronDocuments } from './documents'
 import { createElectronWorkRoot } from './workRoot'
 import { createElectronLocalModels } from './localModels'
 import { createElectronSmartRegions } from './smartRegions'
+import { createElectronTracking } from './tracking'
 
 export function createElectronPlatform(): PlatformRuntime {
   return {
@@ -58,5 +59,6 @@ export function createElectronPlatform(): PlatformRuntime {
     workRoot: createElectronWorkRoot(),
     localModels: createElectronLocalModels(),
     smartRegions: createElectronSmartRegions(),
+    tracking: createElectronTracking(),
   }
 }

@@ -114,8 +114,9 @@ export interface SmartRegionSummary {
   peak: number
 }
 
-export interface SmartRegionSegmentLayout {
-  header: SmartRegionSegmentHeader
+/** 文件布局；`H` 是头的类型（智能区域或 4.10 跟踪结果，同一种容器格式）。 */
+export interface SmartRegionSegmentLayout<H = SmartRegionSegmentHeader> {
+  header: H
   /** 文件头 + 索引的总字节数；蒙版数据从这里开始。 */
   dataOffset: number
   /** 每帧蒙版在数据区内的偏移与长度（字节）；没有蒙版时为空。 */
@@ -128,7 +129,7 @@ const PREAMBLE_BYTES = 16
  * 写缓存文件：16 字节前导（魔数、版本、头长度、帧索引条数）+ JSON 头 + 帧索引（每帧 8 字节：偏移、长度）+ 压缩后的蒙版。
  * `frames` 是已压缩的每帧蒙版（人物）；人脸、文字的框都在 JSON 头里。
  */
-export function encodeSmartRegionSegment(header: SmartRegionSegmentHeader, frames: readonly Uint8Array[] = []): Uint8Array {
+export function encodeSmartRegionSegment(header: SmartRegionSegmentHeader | { version: number }, frames: readonly Uint8Array[] = []): Uint8Array {
   const json = new TextEncoder().encode(JSON.stringify(header))
   const indexBytes = frames.length * 8
   const dataBytes = frames.reduce((sum, frame) => sum + frame.byteLength, 0)
@@ -156,12 +157,12 @@ export function smartRegionLayoutBytes(preamble: Uint8Array): number {
   return PREAMBLE_BYTES + view.getUint32(8, true) + view.getUint32(12, true) * 8
 }
 
-export function decodeSmartRegionLayout(bytes: Uint8Array): SmartRegionSegmentLayout {
+export function decodeSmartRegionLayout<H extends { version: number } = SmartRegionSegmentHeader>(bytes: Uint8Array): SmartRegionSegmentLayout<H> {
   const total = smartRegionLayoutBytes(bytes)
   if (bytes.byteLength < total) throw new Error('智能区域缓存不完整。')
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
   const jsonBytes = view.getUint32(8, true); const count = view.getUint32(12, true)
-  const header = JSON.parse(new TextDecoder().decode(bytes.subarray(PREAMBLE_BYTES, PREAMBLE_BYTES + jsonBytes))) as SmartRegionSegmentHeader
+  const header = JSON.parse(new TextDecoder().decode(bytes.subarray(PREAMBLE_BYTES, PREAMBLE_BYTES + jsonBytes))) as H
   if (header.version !== SMART_REGION_FORMAT_VERSION) throw new Error('智能区域缓存版本已过期。')
   const frames = Array.from({ length: count }, (_, index) => ({
     offset: view.getUint32(PREAMBLE_BYTES + jsonBytes + index * 8, true),

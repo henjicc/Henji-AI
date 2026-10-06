@@ -19,7 +19,7 @@ import { probeSmartRegionSource } from '../smart-regions/probe'
  */
 const MODELS = process.env.HENJI_LOCAL_INFERENCE_MODELS
 const SAMPLE = process.env.HENJI_LOCAL_INFERENCE_SAMPLE
-const FILES: Record<LocalInferenceModelFile['name'], string> = {
+const FILES: Partial<Record<LocalInferenceModelFile['name'], string>> = {
   yunet: 'face_detection_yunet_2023mar.onnx', rvm: 'rvm_mobilenetv3_fp16.onnx', selfie: 'mediapipe_selfie_segmentation_fp16.onnx', ppocr: 'ch_PP-OCRv4_det_mobile.onnx',
 }
 const KIND_MODELS: Record<SmartRegionAnalysisKind, Array<LocalInferenceModelFile['name']>> = { face: ['yunet'], person: ['rvm', 'selfie'], text: ['ppocr'] }
@@ -37,7 +37,7 @@ describe.skipIf(!MODELS)('本地推理实跑（onnxruntime-node + FFmpeg）', ()
     const probe = await probeSmartRegionSource(await loadFfprobePath(), source)
     await fs.mkdir(temporary, { recursive: true })
     const job: SmartRegionAnalysisJob = {
-      id: `${kind}-${providers.join('-')}`, kind, models: (options.models ?? KIND_MODELS[kind]).map(name => ({ name, path: path.join(MODELS!, FILES[name]) })),
+      id: `${kind}-${providers.join('-')}`, kind, models: (options.models ?? KIND_MODELS[kind]).map(name => ({ name, path: path.join(MODELS!, FILES[name]!) })),
       ffmpegPath: await loadFfmpegPath(), source, seekSeconds: 0, durationSeconds: options.durationSeconds ?? 2, startUs: 0, endUs: (options.durationSeconds ?? 2) * 1e6,
       fps: Math.min(probe.fps || 30, kind === 'text' ? 10 : kind === 'face' ? 30 : 60), display: { width: probe.width, height: probe.height },
       outputPath: path.join(temporary, `${kind}-${providers.join('-')}.hsrg`), providers,

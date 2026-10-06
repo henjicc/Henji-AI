@@ -24,6 +24,7 @@ import type { DocumentsPlatform } from './documents'
 import type { WorkRootPlatform } from './workRoot'
 import type { LocalModelsPlatform } from './localModels'
 import type { SmartRegionsPlatform } from './smartRegions'
+import type { TrackingPlatform } from './tracking'
 
 export interface PlatformRuntime {
   embeddedAgent: EmbeddedAgentPlatform
@@ -55,6 +56,7 @@ export interface PlatformRuntime {
   workRoot: WorkRootPlatform
   localModels: LocalModelsPlatform
   smartRegions: SmartRegionsPlatform
+  tracking: TrackingPlatform
 }
 
 export type {
@@ -104,3 +106,4 @@ export * from './documents'
 export * from './workRoot'
 export * from './localModels'
 export * from './smartRegions'
+export * from './tracking'
