@@ -105,7 +105,7 @@ it.each([
   const base = { version: 1 as const, sourceOutputIndex: 0, url: 'C:/base.png', filePath: 'C:/base.png', zIndex: 0, role: 'base' as const, width: 8, height: 8, format: 'png' as const }
   const generate = vi.spyOn(GenerationService.getInstance(), 'generate').mockImplementation(async () => {
     await gate
-    return { status: 'completed', url: 'C:/base.png', filePath: 'C:/base.png', ...(kind === 'layers' ? { structuredOutput: {
+    return { status: 'completed', urls: ['C:/base.png'], filePaths: ['C:/base.png'], ...(kind === 'layers' ? { structuredOutput: {
       version: 1 as const, kind: 'layer-stack' as const, primary: base, outputs: [base],
       metadata: { colorSpace: 'srgb' as const, alphaMode: 'straight' as const, compositeOperation: 'source-over' as const, order: 'bottom-to-top' as const },
     } } : {}) }

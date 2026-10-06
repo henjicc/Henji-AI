@@ -35,7 +35,7 @@ beforeEach(async () => {
   projectId = await createCanvasTestProject('专用节点 B')
   useSettingsStore.setState({ providerKeyStatus: Object.fromEntries(registry.getModelsByType('image').map(model => [model.meta.provider, true])) })
   vi.spyOn(GenerationService.getInstance(), 'getProgressEstimate').mockResolvedValue(null)
-  vi.spyOn(GenerationService.getInstance(), 'generate').mockResolvedValue({ status: 'pending', url: '', taskId: 'provider-original' })
+  vi.spyOn(GenerationService.getInstance(), 'generate').mockResolvedValue({ status: 'pending', urls: [], filePaths: [], taskId: 'provider-original' })
 })
 afterEach(() => {
   resetCanvasExecutionServiceForTests()
@@ -58,7 +58,7 @@ it.each([CANVAS_NODE_TYPES.multiAngleGen, CANVAS_NODE_TYPES.relightGen, CANVAS_N
     let finish!: () => void
     const poll = vi.spyOn(GenerationService.getInstance(), 'continuePolling').mockImplementation(async () => {
       await new Promise<void>(resolve => { finish = resolve })
-      return { status: 'completed', url: 'C:/result.png', filePath: 'C:/result.png' }
+      return { status: 'completed', urls: ['C:/result.png'], filePaths: ['C:/result.png'] }
     })
     const visibleId = await createCanvasTestProject('用户 A')
     const running = runCanvasNode(nodeId, undefined, projectId)
@@ -91,7 +91,7 @@ it('多角度已取得任务编号后失败，后台重试只续查原请求，�
   const failed = await readPersistedCanvasProjectSnapshot(projectId)
   expect(failed.nodes.find(node => node.id === nodeId)?.data.multiAngleBatch).toMatchObject({ items: [expect.objectContaining({ providerRequestId: 'provider-original' })] })
   await useProjectStore.getState().closeProject()
-  poll.mockResolvedValue({ status: 'completed', url: 'C:/result.png', filePath: 'C:/result.png' })
+  poll.mockResolvedValue({ status: 'completed', urls: ['C:/result.png'], filePaths: ['C:/result.png'] })
   await runCanvasNode(nodeId, undefined, projectId)
   expect(GenerationService.getInstance().generate).toHaveBeenCalledTimes(1)
   expect(poll).toHaveBeenCalledTimes(2)

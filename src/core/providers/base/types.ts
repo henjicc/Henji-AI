@@ -11,10 +11,10 @@ import type { StructuredGenerationOutput } from '@henjicc/ai-sdk'
  * 生成结果接口
  */
 export interface GenerateResult {
-  /** 媒体文件URL（可能是远程URL或本地asset://协议） */
-  url: string
-  /** 本地文件路径（如果已保存到本地） */
-  filePath?: string
+  /** 结果地址，按输出顺序（远程地址或本地显示地址） */
+  urls: string[]
+  /** 已保存到本地的结果文件，按输出顺序；没保存时为空数组 */
+  filePaths: string[]
   /** 本次运行新建的受管媒体，转移到权威结果后由调用方释放。 */
   createdFilePaths?: string[]
   /** 任务ID（用于异步任务跟踪） */

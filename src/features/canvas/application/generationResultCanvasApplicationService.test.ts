@@ -64,8 +64,8 @@ describe('generation result canvas bridge', () => {
 
   it('只凭稳定生成结果引用解析内部媒体，并落成可验证画布节点', async () => {
     mocks.getResult.mockReturnValue({
-      taskId: 'task-1', mediaType: 'image', url: 'henji-media://generation/result-1',
-      filePath: 'C:/managed-generation/result-1.png', prompt: '赛博朋克海报',
+      taskId: 'task-1', mediaType: 'image', urls: ['henji-media://generation/result-1'],
+      filePaths: ['C:/managed-generation/result-1.png'], prompt: '赛博朋克海报',
     })
     mocks.addTrustedMediaCanvasNode.mockResolvedValue({
       projectId: 'canvas-1', nodeId: 'node-1', nodeType: 'uploadNode', undoRef: 'undo-1',
@@ -102,7 +102,7 @@ describe('generation result canvas bridge', () => {
     expect(mocks.addTrustedMediaCanvasNode).not.toHaveBeenCalled()
   })
   it.each(['image', 'video', 'audio'] as const)('长提示词的 %s 结果使用短名称并默认放到当前选中节点旁', async mediaType => {
-    mocks.getResult.mockReturnValue({ mediaType, url: 'C:/result.bin', prompt: '详细描述'.repeat(300) })
+    mocks.getResult.mockReturnValue({ mediaType, urls: ['C:/result.bin'], filePaths: [], prompt: '详细描述'.repeat(300) })
     mocks.addTrustedMediaCanvasNode.mockResolvedValue({ nodeId: 'node-1' })
     await addGenerationResultToCanvas({ projectId: 'canvas-1', resultRef: { kind: 'generation.result', id: 'task-1' } })
     expect(mocks.addTrustedMediaCanvasNode).toHaveBeenCalledWith(expect.objectContaining({
@@ -111,7 +111,7 @@ describe('generation result canvas bridge', () => {
     }), {})
   })
   it('指定其他项目时不误用当前项目的选中节点', async () => {
-    mocks.getResult.mockReturnValue({ mediaType: 'image', url: 'C:/result.png', prompt: '' })
+    mocks.getResult.mockReturnValue({ mediaType: 'image', urls: ['C:/result.png'], filePaths: [], prompt: '' })
     mocks.addTrustedMediaCanvasNode.mockResolvedValue({ nodeId: 'node-1' })
     await addGenerationResultToCanvas({ projectId: 'other-project', resultRef: { kind: 'generation.result', id: 'task-1' } })
     expect(mocks.addTrustedMediaCanvasNode).toHaveBeenCalledWith(expect.objectContaining({

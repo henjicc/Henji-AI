@@ -5,19 +5,16 @@ import { createLogger } from '@/core/logging/index'
 import { databaseService } from '@/services/database/index'
 
 import { getModelDisplayName } from '@/utils/modelHelpers'
+import { readStoredResultUrls } from '@/features/generation/domain/storedResultUrls'
 import { matchesGenerationHistoryFilter, toGenerationHistoryTimestamp, type GenerationHistoryFilterCriteria, type GenerationHistorySubject } from '@/features/generation/domain/generationHistoryFilter'
 
 const logger = createLogger('features.generation.history')
 
 type HistoryRecord = Awaited<ReturnType<typeof databaseService.getHistory>>[number]
 
-function getStoredResultUrl(record: HistoryRecord): string | null {
-  const value = record.params['__resultUrl']
-  return typeof value === 'string' && value.trim() ? value.trim() : null
-}
 
 function publicHistoryRecord(record: Awaited<ReturnType<typeof databaseService.getHistory>>[number]): Record<string, unknown> {
-  const hasResult = Boolean(record.resultPaths.length > 0 || getStoredResultUrl(record))
+  const hasResult = Boolean(record.resultPaths.length > 0 || readStoredResultUrls(record.params).length > 0)
     && (record.status === 'success' || record.status === 'completed')
   return {
     ref: {

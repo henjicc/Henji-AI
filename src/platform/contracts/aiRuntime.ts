@@ -60,8 +60,10 @@ export interface AiRecordProgressSampleRequestDto {
 
 export interface AiGenerateResponseDto {
   status: 'completed' | 'pending' | 'failed'
-  url: string
-  filePath?: string
+  /** 供应商返回的结果地址，按输出顺序。 */
+  urls: string[]
+  /** 已保存到本地的结果文件，按输出顺序；没保存时为空数组。 */
+  filePaths: string[]
   createdFilePaths?: string[]
   taskId?: string
   metadata?: DynamicValueMap
@@ -88,7 +90,7 @@ export interface AiRecordProgressSampleResponseDto {
   estimate: AiProgressEstimateDto
 }
 
-export interface AiSavedResult { status?: string; taskId?: string; url?: string; filePath?: string; createdFilePaths?: string[]; metadata?: unknown; structuredOutput?: unknown }
+export interface AiSavedResult { status?: string; taskId?: string; urls?: string[]; filePaths?: string[]; createdFilePaths?: string[]; metadata?: unknown; structuredOutput?: unknown }
 
 export interface AiRuntimePlatform {
   readSavedResult(requestId: string): Promise<AiSavedResult | null>

@@ -158,7 +158,7 @@ describe('generation application capabilities', () => {
   it('本地副本不可读时使用历史记录保留的远程结果', async () => {
     database.getHistoryById.mockResolvedValue({
       ...successfulImage,
-      params: { __resultUrl: 'https://example.com/generated.png' },
+      params: { __resultUrl: ['https://example.com/generated.png'] },
     })
     readImageInfo
       .mockRejectedValueOnce(new Error('ENOENT'))

@@ -66,7 +66,7 @@ async function stubMain(app, { recycleDir, resultImage }) {
     ipcMain.removeHandler('ai:generate')
     ipcMain.handle('ai:generate', async (_event, request) => {
       globalThis.__canvasGenerationRequests.push(JSON.parse(JSON.stringify(request)))
-      return { ok: true, data: { status: 'completed', url: image, filePath: image } }
+      return { ok: true, data: { status: 'completed', urls: [image], filePaths: [image] } }
     })
   }, { recycle: recycleDir, image: resultImage })
 }

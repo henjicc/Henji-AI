@@ -39,8 +39,8 @@ describe('visible generation task internal result contract', () => {
         mediaType: 'image', resultAvailable: true, errorCode: null, errorMessage: null,
       }),
       getResult: () => ({
-        taskId: 'task-1', mediaType: 'image', url: 'henji-media://result',
-        filePath: 'C:/private/result.png', prompt: '海报',
+        taskId: 'task-1', mediaType: 'image', urls: ['henji-media://result'],
+        filePaths: ['C:/private/result.png'], prompt: '海报',
       }),
       list: () => [],
       cancel: async () => ({ status: 'cancelled' }),
@@ -48,7 +48,7 @@ describe('visible generation task internal result contract', () => {
 
     expect(getVisibleGenerationTask('task-1')).not.toHaveProperty('url')
     expect(getVisibleGenerationTaskResult('task-1')).toMatchObject({
-      taskId: 'task-1', filePath: 'C:/private/result.png',
+      taskId: 'task-1', filePaths: ['C:/private/result.png'],
     })
   })
 

@@ -5,7 +5,6 @@ import {
   type AIClientGenerationRequestInfo,
   type AiContinuePollingRequestDto,
   type AiGenerateRequestDto,
-  type AiGenerateResponseDto,
   type AiGetProgressEstimateRequestDto,
   type AiProgressEstimateDto,
   type AiRecordProgressSampleRequestDto,
@@ -20,6 +19,7 @@ import { releaseSavedMediaFileLease, saveMediaFromUrlTracked, type MediaDownload
 import { getProgressEstimate, recordProgressSample } from './progress'
 import { savePendingResult } from './pending-results'
 import { materializeStructuredOutput } from './structured-output'
+import { toHostGenerateResponse, type HostGenerateResponse } from './host-response'
 import { sdkAIClient } from './sdk-runtime'
 import { buildContinuePollingTrace, buildGenerateTrace } from './trace'
 
@@ -80,7 +80,7 @@ export interface GenerationOutputOptions {
 }
 
 /** 只完成已收到供应商结果的媒体保存，不会再次调用 SDK 生成。 */
-export async function recoverSavedGenerationResult(requestId: string, output: GenerationOutputOptions = {}): Promise<AiGenerateResponseDto | null> {
+export async function recoverSavedGenerationResult(requestId: string, output: GenerationOutputOptions = {}): Promise<HostGenerateResponse | null> {
   const response = readGenerationSubmission(requestId)
   if (!response) return null
   const stage = readGenerationSubmissionStage(requestId)
@@ -89,12 +89,12 @@ export async function recoverSavedGenerationResult(requestId: string, output: Ge
   if (!stage?.modelId) throw new Error('GENERATION_RECOVERY_REQUIRED:旧回执缺少精确保存信息，请核对原任务')
   activeGenerationSubmissions.add(requestId)
   try {
-    const media = response.filePath ? { filePath: response.filePath, createdFilePaths: response.createdFilePaths ?? [] }
-      : response.status === 'completed' ? await saveMediaPaths(response.url, { requestId, modelId: stage.modelId, taskId: response.taskId }, output.outputDirectory)
-      : { filePath: undefined, createdFilePaths: [] }
+    const media = response.filePaths.length > 0 ? { filePaths: response.filePaths, createdFilePaths: response.createdFilePaths ?? [] }
+      : response.status === 'completed' ? await saveMediaPaths(response.urls, { requestId, modelId: stage.modelId, taskId: response.taskId }, output.outputDirectory)
+      : { filePaths: [], createdFilePaths: [] }
     const saved = { ...response, ...media }
     completeGenerationSubmission(requestId, saved, 'media')
-    const completed = { ...saved, structuredOutput: materializeStructuredOutput(saved.structuredOutput, saved.filePath) }
+    const completed = { ...saved, structuredOutput: materializeStructuredOutput(saved.structuredOutput, saved.filePaths) }
     completeGenerationSubmission(requestId, completed)
     return completed
   } finally { activeGenerationSubmissions.delete(requestId) }
@@ -103,7 +103,7 @@ export async function recoverSavedGenerationResult(requestId: string, output: Ge
 export async function generate(
   request: AiGenerateRequestDto,
   output: GenerationOutputOptions = {},
-): Promise<AiGenerateResponseDto> {
+): Promise<HostGenerateResponse> {
   const requestId = resolveRequestId(request)
   const previous = claimGenerationSubmission(requestId, request)
   if (previous) return await recoverSavedGenerationResult(requestId, output) ?? previous
@@ -117,7 +117,7 @@ export async function generate(
 
   try {
     let requestInfo: AIClientGenerationRequestInfo | undefined
-    const providerResult = await networkRequestContext.run({ requestId, modelId: request.modelId }, () => sdkAIClient.generate({ ...request, requestId }, {
+    const sdkResult = await networkRequestContext.run({ requestId, modelId: request.modelId }, () => sdkAIClient.generate({ ...request, requestId }, {
       onRequestBuilt: (info) => {
         requestInfo = info
         logger.info('后端发起生成请求', {
@@ -133,6 +133,7 @@ export async function generate(
         })
       },
     }))
+    const providerResult = toHostGenerateResponse(sdkResult)
     // 先封存供应商真实回执；媒体转换或日志后续失败不抹去已提交结果。
     completeGenerationSubmission(requestId, providerResult, 'provider')
     const info = requireRequestInfo(requestInfo)
@@ -143,15 +144,15 @@ export async function generate(
       info.route,
       info.method,
       info.requestBody,
-      providerResult.metadata
+      sdkResult.metadata
     )
     const persistedMedia = providerResult.status === 'completed'
-      ? await saveMediaPaths(providerResult.url, { requestId, modelId: request.modelId, taskId: providerResult.taskId }, output.outputDirectory)
-      : { filePath: undefined, createdFilePaths: [] }
-    const { filePath, createdFilePaths } = persistedMedia
+      ? await saveMediaPaths(providerResult.urls, { requestId, modelId: request.modelId, taskId: providerResult.taskId }, output.outputDirectory)
+      : { filePaths: [], createdFilePaths: [] }
+    const { filePaths, createdFilePaths } = persistedMedia
     ownedMediaPaths = createdFilePaths
-    completeGenerationSubmission(requestId, { ...providerResult, filePath, createdFilePaths }, 'media')
-    const structuredOutput = materializeStructuredOutput(providerResult.structuredOutput, filePath)
+    completeGenerationSubmission(requestId, { ...providerResult, filePaths, createdFilePaths }, 'media')
+    const structuredOutput = materializeStructuredOutput(providerResult.structuredOutput, filePaths)
 
     logger.info('后端生成响应', {
       event: 'generation.runtime.response_json',
@@ -173,10 +174,10 @@ export async function generate(
       context: { status: providerResult.status, taskId: providerResult.taskId },
     })
 
-    const response = {
+    const response: HostGenerateResponse = {
       status: providerResult.status,
-      url: providerResult.url,
-      filePath,
+      urls: providerResult.urls,
+      filePaths,
       createdFilePaths,
       taskId: providerResult.taskId,
       metadata: providerResult.metadata,
@@ -201,7 +202,7 @@ export async function generate(
 export async function continuePolling(
   request: AiContinuePollingRequestDto,
   output: GenerationOutputOptions = {},
-): Promise<AiGenerateResponseDto> {
+): Promise<HostGenerateResponse> {
   const requestId = request.requestId?.trim() || `continue-${request.modelId}-${Date.now()}`
   const taskId = request.taskId.trim()
   let ownedMediaPaths: string[] = []
@@ -215,7 +216,7 @@ export async function continuePolling(
 
   try {
     let requestInfo: AIClientGenerationRequestInfo | undefined
-    const providerResult = await networkRequestContext.run({ requestId, modelId: request.modelId }, () => sdkAIClient.continuePolling({ ...request, requestId }, {
+    const sdkResult = await networkRequestContext.run({ requestId, modelId: request.modelId }, () => sdkAIClient.continuePolling({ ...request, requestId }, {
       onRequestBuilt: (info) => {
         requestInfo = info
         logger.info('后端发起轮询请求', {
@@ -232,6 +233,7 @@ export async function continuePolling(
         })
       },
     }))
+    const providerResult = toHostGenerateResponse(sdkResult)
     const info = requireRequestInfo(requestInfo)
     const trace = buildContinuePollingTrace(
       request.modelId,
@@ -239,7 +241,7 @@ export async function continuePolling(
       requestId,
       info.route,
       taskId,
-      providerResult.metadata
+      sdkResult.metadata
     )
     logger.info('后端轮询响应', {
       event: 'generation.runtime.response_json',
@@ -254,13 +256,13 @@ export async function continuePolling(
         responseBody: trace.responseBody,
       },
     })
-    const { filePath, createdFilePaths } = await saveMediaPaths(providerResult.url, { requestId, modelId: request.modelId, taskId }, output.outputDirectory)
+    const { filePaths, createdFilePaths } = await saveMediaPaths(providerResult.urls, { requestId, modelId: request.modelId, taskId }, output.outputDirectory)
     ownedMediaPaths = createdFilePaths
-    const structuredOutput = materializeStructuredOutput(providerResult.structuredOutput, filePath)
-    const responseResult = {
+    const structuredOutput = materializeStructuredOutput(providerResult.structuredOutput, filePaths)
+    const responseResult: HostGenerateResponse = {
       status: providerResult.status,
-      url: providerResult.url,
-      filePath,
+      urls: providerResult.urls,
+      filePaths,
       createdFilePaths,
       taskId: providerResult.taskId,
       metadata: providerResult.metadata,
@@ -268,8 +270,8 @@ export async function continuePolling(
       trace,
     }
     savePendingResult(taskId, {
-      url: providerResult.url,
-      filePath,
+      urls: providerResult.urls,
+      filePaths,
       createdFilePaths,
       metadata: providerResult.metadata,
       structuredOutput,
@@ -334,15 +336,14 @@ function requireRequestInfo(
   return info
 }
 
-async function saveMediaPaths(joinedUrls: string, context: MediaDownloadContext, directory?: string): Promise<{
-  filePath?: string
+async function saveMediaPaths(urls: readonly string[], context: MediaDownloadContext, directory?: string): Promise<{
+  filePaths: string[]
   createdFilePaths: string[]
 }> {
   const savedPaths: string[] = []
   const createdFilePaths: string[] = []
   const createdPathSet = new Set<string>()
   try {
-    const urls = joinedUrls.split('|||').map((item) => item.trim()).filter(Boolean)
     for (const [outputIndex, url] of urls.entries()) {
       const saved = await saveMediaFromUrlTracked(url, { ...context, outputIndex }, directory)
       if (saved) {
@@ -360,7 +361,7 @@ async function saveMediaPaths(joinedUrls: string, context: MediaDownloadContext,
     throw error
   }
   return {
-    filePath: savedPaths.length > 0 ? savedPaths.join('|||') : undefined,
+    filePaths: savedPaths,
     createdFilePaths,
   }
 }

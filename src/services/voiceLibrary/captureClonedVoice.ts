@@ -6,7 +6,7 @@ const isObject = (value: unknown): value is Record<string, unknown> => Boolean(v
 export async function captureClonedVoice(
   modelId: string,
   providerId: string,
-  result: { status?: string; taskId?: string; filePath?: string; url?: string; metadata?: unknown },
+  result: { status?: string; taskId?: string; filePaths?: string[]; urls?: string[]; metadata?: unknown },
 ): Promise<void> {
   if (!isObject(result.metadata)) return
   const voice = result.metadata.clonedVoice
@@ -22,6 +22,6 @@ export async function captureClonedVoice(
   await voiceLibraryService.upsertVoice({
     providerId, modelId, voiceId: voice.id, voiceName: voice.name,
     status: voice.status as 'ready' | 'training', taskId: result.taskId,
-    previewPath: result.filePath || result.url || undefined, expiresAt, activated: voice.activated === true,
+    previewPath: result.filePaths?.[0] || result.urls?.[0] || undefined, expiresAt, activated: voice.activated === true,
   })
 }

@@ -85,7 +85,7 @@ function createMcpMediaChainScenes(context) {
           globalThis.__chainRequests.push(JSON.parse(JSON.stringify(request)))
           const isVideo = String(request.modelId ?? '').includes('hailuo')
           const filePath = isVideo ? fixtures.video : fixtures.image
-          return { ok: true, data: { status: 'completed', url: filePath, filePath } }
+          return { ok: true, data: { status: 'completed', urls: [filePath], filePaths: [filePath] } }
         })
       }, { image: stagedImage, video: VIDEO_FIXTURE })
       await page.evaluate(() => window.henjiNative.ai.setProviderApiKey('kie', 'isolated-chain-fixture'))

@@ -134,5 +134,5 @@ export function extractPreviewAudioUrl(result: GenerateResult): string {
     }
   }
 
-  return normalizeString(result.url)
+  return normalizeString(result.urls[0])
 }

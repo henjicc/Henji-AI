@@ -10,12 +10,12 @@ import {
 } from '../services/ai-runtime/runtime'
 import { consumePendingResult } from '../services/ai-runtime/pending-results'
 import type { PendingResultPayload } from '../services/ai-runtime/pending-results'
+import type { HostGenerateResponse } from '../services/ai-runtime/host-response'
 import {
   testProviderConnection,
   listTtsVoices,
   type AiContinuePollingRequestDto,
   type AiGenerateRequestDto,
-  type AiGenerateResponseDto,
   type AiGetProgressEstimateRequestDto,
   type AiProgressEstimateDto,
   type AiRecordProgressSampleRequestDto,
@@ -110,11 +110,11 @@ export function registerAiRuntimeIpc(): void {
     (modelId) => listTtsVoices(modelId, sdkRuntimeContext)
   )
 
-  registerIpcHandler<AiGenerateRequestDto & HostOutput, AiGenerateResponseDto>('ai:generate', parseGenerateRequest, async ({ outputContainer, ...request }) => {
+  registerIpcHandler<AiGenerateRequestDto & HostOutput, HostGenerateResponse>('ai:generate', parseGenerateRequest, async ({ outputContainer, ...request }) => {
     return await generate(request, await resolveOutput(outputContainer, request.requestId))
   })
 
-  registerIpcHandler<AiContinuePollingRequestDto & HostOutput, AiGenerateResponseDto>('ai:continuePolling', parseContinuePollingRequest, async ({ outputContainer, ...request }) => {
+  registerIpcHandler<AiContinuePollingRequestDto & HostOutput, HostGenerateResponse>('ai:continuePolling', parseContinuePollingRequest, async ({ outputContainer, ...request }) => {
     return await continuePolling(request, await resolveOutput(outputContainer, request.requestId))
   })
 

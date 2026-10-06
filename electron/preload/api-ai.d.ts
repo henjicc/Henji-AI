@@ -51,8 +51,8 @@ export interface HenjiAiRecordProgressSampleRequest {
 
 export interface HenjiAiGenerateResponse {
   status: 'completed' | 'pending' | 'failed'
-  url: string
-  filePath?: string
+  urls: string[]
+  filePaths: string[]
   createdFilePaths?: string[]
   taskId?: string
   metadata?: unknown
@@ -115,8 +115,8 @@ export interface HenjiAiApi {
   consumePendingResult(serverTaskId: string): Promise<{
     status?: string
     taskId?: string
-    url?: string
-    filePath?: string
+    urls?: string[]
+    filePaths?: string[]
     createdFilePaths?: string[]
     metadata?: unknown
     structuredOutput?: StructuredGenerationOutput

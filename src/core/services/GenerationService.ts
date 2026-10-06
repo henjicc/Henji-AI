@@ -212,8 +212,8 @@ export class GenerationService {
         return {
           status: response.status,
           taskId: response.taskId,
-          url: response.url,
-          filePath: response.filePath,
+          urls: response.urls,
+          filePaths: response.filePaths,
           createdFilePaths: response.createdFilePaths,
           metadata: response.metadata,
           structuredOutput: response.structuredOutput,
@@ -243,8 +243,8 @@ export class GenerationService {
         modelId,
         providerId: model.meta.provider,
         context: {
-          hasUrl: Boolean(response.url),
-          hasFilePath: Boolean(response.filePath),
+          urlCount: response.urls.length,
+          filePathCount: response.filePaths.length,
           progressTiming: buildProgressTimingContext(estimate, recorded),
         },
       })
@@ -258,8 +258,8 @@ export class GenerationService {
       return {
         status: response.status,
         taskId: response.taskId,
-        url: response.url,
-        filePath: response.filePath,
+        urls: response.urls,
+        filePaths: response.filePaths,
         createdFilePaths: response.createdFilePaths,
         metadata: response.metadata,
         structuredOutput: response.structuredOutput,
@@ -389,8 +389,8 @@ export class GenerationService {
         modelId,
         providerId: model?.meta.provider,
         context: {
-          hasUrl: Boolean(response.url),
-          hasFilePath: Boolean(response.filePath),
+          urlCount: response.urls.length,
+          filePathCount: response.filePaths.length,
           progressTiming: buildProgressTimingContext(
             pendingSample?.estimate ?? estimate,
             recorded
@@ -407,8 +407,8 @@ export class GenerationService {
       return {
         status: response.status,
         taskId: response.taskId,
-        url: response.url,
-        filePath: response.filePath,
+        urls: response.urls,
+        filePaths: response.filePaths,
         createdFilePaths: response.createdFilePaths,
         metadata: response.metadata,
         structuredOutput: response.structuredOutput,

@@ -14,6 +14,14 @@ import { readGenerationResultMedia } from '@/features/generation/application/gen
  * 组合生成与画布两个领域的窄桥梁。模型只传稳定 generation.result 引用；媒体路径由宿主内部
  * 解析并直接交给可信画布导入入口，既不要求先伪装成素材，也不向工具结果泄漏路径。
  */
+/** 页面内存里的生成任务结果：与历史记录同一约定，多个结果取最后一个。 */
+function visibleTaskResultMedia(taskId: string): { mediaType: 'image' | 'video' | 'audio'; url: string; filePath: string | undefined; prompt: string } | null {
+  const task = getVisibleGenerationTaskResult(taskId)
+  const url = task?.urls.at(-1)
+  if (!task || !url) return null
+  return { mediaType: task.mediaType, url, filePath: task.filePaths.at(-1), prompt: task.prompt }
+}
+
 export async function addGenerationResultToCanvas(input: {
   projectId: string
   resultRef: { kind: 'generation.result' | 'image_edit.preview'; id: string }
@@ -23,7 +31,7 @@ export async function addGenerationResultToCanvas(input: {
   const result = input.resultRef.kind === 'image_edit.preview'
     ? { mediaType: 'image' as const, url: await materializeImageEditPreview(input.resultRef.id), filePath: undefined, prompt: '编辑结果' }
     : saved ? { mediaType: saved.mediaType, url: saved.source, filePath: saved.source, prompt: saved.name }
-      : getVisibleGenerationTaskResult(input.resultRef.id)
+      : visibleTaskResultMedia(input.resultRef.id)
   if (!result) throw new Error('GENERATION_RESULT_NOT_AVAILABLE')
 
   const payload: CanvasMediaSourcePayload = {

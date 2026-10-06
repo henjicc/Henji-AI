@@ -26,7 +26,7 @@ beforeEach(() => {
   vi.spyOn(databaseService, 'getHistoryById').mockResolvedValue(null)
   replaceGenerationTaskStatusSnapshots([task])
   dispose = registerVisibleGenerationTaskHandler({ create: async () => null, get: () => task,
-    getResult: () => ({ taskId: task.taskId, mediaType: 'image', url: 'C:/fixture/result.png', prompt: '长提示词不应成为超长文件名。'.repeat(80) }), list: () => [task], cancel })
+    getResult: () => ({ taskId: task.taskId, mediaType: 'image', urls: ['C:/fixture/result.png'], filePaths: [], prompt: '长提示词不应成为超长文件名。'.repeat(80) }), list: () => [task], cancel })
 })
 afterEach(() => { dispose(); replaceGenerationTaskStatusSnapshots([]); uninstallHarnessNativeStorage(); vi.restoreAllMocks(); vi.clearAllMocks() })
 const request = () => ({ requestId: crypto.randomUUID(), signal: new AbortController().signal })

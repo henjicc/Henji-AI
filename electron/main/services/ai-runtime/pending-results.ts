@@ -1,4 +1,5 @@
 import { readGenerationSubmission } from './generation-submissions'
+import { readStringArray } from './host-response'
 import { getDb } from '../db'
 import { databaseLocations } from '../db-locations'
 
@@ -12,8 +13,8 @@ const TTL_MS = 24 * 60 * 60 * 1000
 export interface PendingResultPayload {
   status?: string
   taskId?: string
-  url?: string
-  filePath?: string
+  urls?: string[]
+  filePaths?: string[]
   createdFilePaths?: string[]
   metadata?: unknown
   structuredOutput?: unknown
@@ -50,7 +51,8 @@ export function consumePendingResult(serverTaskId: string): PendingResultPayload
 
   try {
     const parsed = JSON.parse(row.result_json) as unknown
-    return databaseLocations.use((scope) => scope.decodeValue(parsed)) as PendingResultPayload
+    const decoded = databaseLocations.use((scope) => scope.decodeValue(parsed)) as PendingResultPayload
+    return { ...decoded, urls: readStringArray(decoded.urls), filePaths: readStringArray(decoded.filePaths) }
   } catch {
     return null
   }

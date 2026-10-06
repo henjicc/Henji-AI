@@ -46,7 +46,7 @@ beforeEach(async () => {
   records.clear()
   useSettingsStore.setState({ providerKeyStatus: { ...useSettingsStore.getState().providerKeyStatus, fixture: true } })
   vi.spyOn(GenerationService.getInstance(), 'getProgressEstimate').mockResolvedValue(null)
-  vi.spyOn(GenerationService.getInstance(), 'generate').mockResolvedValue({ status: 'completed', url: 'C:/result.png', filePath: 'C:/result.png' })
+  vi.spyOn(GenerationService.getInstance(), 'generate').mockResolvedValue({ status: 'completed', urls: ['C:/result.png'], filePaths: ['C:/result.png'] })
   vi.spyOn(databaseService, 'getHistoryById').mockImplementation(async id => records.get(id) ?? null)
   vi.spyOn(databaseService, 'insertHistory').mockImplementation(async row => { records.set(row.id, { ...row, createdAt: 'now', updatedAt: 'now' }) })
   vi.spyOn(databaseService, 'updateHistory').mockImplementation(async (id, patch) => { Object.assign(records.get(id)!, patch) })
@@ -74,7 +74,7 @@ it('A 页面准备和提交 B 的生成，打开 B 不重复提交，结果保�
   let finish!: () => void
   const generate = vi.mocked(GenerationService.getInstance().generate).mockImplementation(async () => {
     await new Promise<void>(resolve => { finish = resolve })
-    return { status: 'completed', url: 'C:/result.png', filePath: 'C:/result.png' }
+    return { status: 'completed', urls: ['C:/result.png'], filePaths: ['C:/result.png'] }
   })
   const input = { modelId: 'canvas-task-fixture', mediaType: 'image' as const, prompt: '后台 B', options: {} }
   const destination = { mode: 'canvas' as const, projectId: targetId, sourceNodeIds: ['reference'] }
@@ -100,7 +100,7 @@ it('无需挂载节点即可生成，页面中途挂载不会替换任务执行�
   const pending = new Promise<void>(resolve => { release = resolve })
   const generate = vi.mocked(GenerationService.getInstance().generate).mockImplementation(async () => {
     await pending
-    return { status: 'completed', url: 'C:/result.png', filePath: 'C:/result.png' }
+    return { status: 'completed', urls: ['C:/result.png'], filePaths: ['C:/result.png'] }
   })
   const destination = { mode: 'canvas' as const, projectId, sourceNodeIds: ['reference'] }
   const input = { modelId: 'canvas-task-fixture', mediaType: 'image' as const, prompt: '生成三视图', options: {} }
@@ -272,7 +272,7 @@ it('原节点准备后改输入必须重新估价，同节点运行中不重复�
   const pending = new Promise<void>(resolve => { release = resolve })
   vi.mocked(GenerationService.getInstance().generate).mockImplementation(async () => {
     await pending
-    return { status: 'completed', url: 'C:/current.png', filePath: 'C:/current.png' }
+    return { status: 'completed', urls: ['C:/current.png'], filePaths: ['C:/current.png'] }
   })
   const accepted = await execute('submit_canvas_node_generation', updated.data.submitInput as Record<string, unknown>)
   expect(accepted).toMatchObject({ ok: true })
@@ -322,7 +322,7 @@ it.each([false, true])('界面直接执行登记同一份任务，MCP 可查询�
   const waiting = new Promise<void>(resolve => { release = resolve })
   const generate = vi.mocked(GenerationService.getInstance().generate).mockImplementation(async () => {
     await waiting
-    return { status: 'completed', url: 'C:/ui-task.png', filePath: 'C:/ui-task.png' }
+    return { status: 'completed', urls: ['C:/ui-task.png'], filePaths: ['C:/ui-task.png'] }
   })
   const running = runCanvasNode(nodeId)
   const outcome = running.then(() => 'success', () => 'cancelled')
@@ -357,7 +357,7 @@ it.each([false, true])('界面五个请求入队即登记，卸载页面后继�
   const gate = new Promise<void>(resolve => { release = resolve })
   const generate = vi.mocked(GenerationService.getInstance().generate).mockImplementation(async () => {
     await gate
-    return { status: 'completed', url: 'C:/ui-queued.png', filePath: 'C:/ui-queued.png' }
+    return { status: 'completed', urls: ['C:/ui-queued.png'], filePaths: ['C:/ui-queued.png'] }
   })
   const outcomes = nodes.map(nodeId => runCanvasNode(nodeId).then(() => 'success', () => 'cancelled'))
   try {
@@ -393,7 +393,7 @@ it('MCP 取消一个原任务不影响并行请求，迟到输出不冒充成功
   vi.mocked(GenerationService.getInstance().generate).mockImplementation(async (_model, _params, _progress, options) => {
     signals.set(options!.requestId!, options!.signal!)
     await pending
-    return { status: 'completed', url: 'C:/late-output.png', filePath: 'C:/late-output.png' }
+    return { status: 'completed', urls: ['C:/late-output.png'], filePaths: ['C:/late-output.png'] }
   })
   const ids = [crypto.randomUUID(), crypto.randomUUID()]
   for (const id of ids) await submitCanvasGenerationTask({ modelId: 'canvas-task-fixture', mediaType: 'image', prompt: `图-${id}`, options: {} },
@@ -423,7 +423,7 @@ it('取消续查后保存停止状态，不自动恢复；明确恢复仍获取�
   const polling = vi.spyOn(GenerationService.getInstance(), 'continuePolling').mockImplementationOnce(async (_model, _task, _params, _progress, options) => {
     await new Promise<void>((_resolve, reject) => options!.signal!.addEventListener('abort', () => reject(new Error('本地停止')), { once: true }))
     throw new Error('unreachable')
-  }).mockResolvedValue({ status: 'completed', url: 'C:/resumed-after-stop.png', filePath: 'C:/resumed-after-stop.png' })
+  }).mockResolvedValue({ status: 'completed', urls: ['C:/resumed-after-stop.png'], filePaths: ['C:/resumed-after-stop.png'] })
   const execute = taskControlSession()
   const input = (await getCanvasGenerationTask(taskId))!.resumeInput as Record<string, unknown>
   expect(await execute('resume_canvas_generation_task', input)).toMatchObject({ ok: true })
@@ -474,7 +474,7 @@ it('在其他项目中恢复标准任务，只续查原任务并保存原项目�
   const input = (await getCanvasGenerationTask(taskId))!.resumeInput as Record<string, unknown>
   const otherProject = await createCanvasTestProject('恢复时保留的页面')
   const polling = vi.spyOn(GenerationService.getInstance(), 'continuePolling').mockResolvedValue({
-    status: 'completed', url: 'C:/offscreen-resumed.png', filePath: 'C:/offscreen-resumed.png',
+    status: 'completed', urls: ['C:/offscreen-resumed.png'], filePaths: ['C:/offscreen-resumed.png'],
   })
   const execute = taskControlSession()
   expect(await execute('resume_canvas_generation_task', input)).toMatchObject({ ok: true })
@@ -495,7 +495,7 @@ it.each([false, true])('续查失败对账并保留原任务，明确恢复后�
   const polling = vi.spyOn(GenerationService.getInstance(), 'continuePolling').mockImplementationOnce(async () => {
     await pending
     throw new Error('原任务结果下载暂时中断')
-  }).mockResolvedValue({ status: 'completed', url: 'C:/retry-original.png', filePath: 'C:/retry-original.png' })
+  }).mockResolvedValue({ status: 'completed', urls: ['C:/retry-original.png'], filePaths: ['C:/retry-original.png'] })
   const execute = taskControlSession()
   const input = (await getCanvasGenerationTask(taskId))!.resumeInput as Record<string, unknown>
   expect(await execute('resume_canvas_generation_task', input)).toMatchObject({ ok: true })
@@ -525,7 +525,7 @@ it('界面正式恢复入口完成后也清除已对账的旧错误，历史保�
   expect(records.get(taskId)?.status).toBe('pending')
   expect(await getCanvasGenerationTask(taskId)).toMatchObject({ status: 'error', errorMessage: '下载中断' })
   const polling = vi.spyOn(GenerationService.getInstance(), 'continuePolling').mockResolvedValue({
-    status: 'completed', url: 'C:/ui-recovered.png', filePath: 'C:/ui-recovered.png',
+    status: 'completed', urls: ['C:/ui-recovered.png'], filePaths: ['C:/ui-recovered.png'],
   })
   expect(resumeCanvasProjectGeneration(projectId, undefined, { retryFailed: true })).toBe(1)
   await vi.waitFor(async () => expect(await getCanvasGenerationTask(taskId)).toMatchObject({ status: 'success', errorMessage: null, resultAvailable: true }))
@@ -540,7 +540,7 @@ it('MCP 使用原任务返回的恢复参数续查，错误目标不执行，重
   const pending = new Promise<void>(resolve => { release = resolve })
   const polling = vi.spyOn(GenerationService.getInstance(), 'continuePolling').mockImplementation(async () => {
     await pending
-    return { status: 'completed', url: 'C:/mcp-resumed.png', filePath: 'C:/mcp-resumed.png' }
+    return { status: 'completed', urls: ['C:/mcp-resumed.png'], filePaths: ['C:/mcp-resumed.png'] }
   })
   const session = createApplicationCapabilitySession(createApplicationCallerGrant({ callerId: 'resume-original-task',
     capabilityIds: [...APPLICATION_CAPABILITY_IDS], permissions: [...APPLICATION_READ_PERMISSIONS, ...APPLICATION_WRITE_PERMISSIONS],
@@ -657,7 +657,7 @@ it.each(['foreground', 'background', 'cancel-queued'] as const)('五个请求保
   const generate = vi.mocked(GenerationService.getInstance().generate).mockImplementation(async (_model, params) => {
     await waiting
     const path = `C:/result-${String(params.prompt)}.png`
-    return { status: 'completed', url: path, filePath: path }
+    return { status: 'completed', urls: [path], filePaths: [path] }
   })
   try {
     for (let index = 0; index < 5; index++) {
@@ -751,8 +751,8 @@ it('后台占位保存失败时不提交供应商，并保存原节点失败状�
 })
 
 it('供应商任务已保存后切换项目，持续轮询并保存原项目，不影响当前项目', async () => {
-  vi.mocked(GenerationService.getInstance().generate).mockResolvedValue({ status: 'pending', taskId: 'persisted-provider-task', url: '' })
-  let finishOriginal!: (value: { status: 'completed'; url: string; filePath: string }) => void
+  vi.mocked(GenerationService.getInstance().generate).mockResolvedValue({ status: 'pending', taskId: 'persisted-provider-task', urls: [], filePaths: [] })
+  let finishOriginal!: (value: { status: 'completed'; urls: string[]; filePaths: string[] }) => void
   const polling = vi.spyOn(GenerationService.getInstance(), 'continuePolling').mockImplementation(() => new Promise(resolve => { finishOriginal = resolve }))
   const taskId = crypto.randomUUID()
   await submitCanvasGenerationTask({ modelId: 'canvas-task-fixture', mediaType: 'image', prompt: '保留任务', options: {} },
@@ -762,7 +762,7 @@ it('供应商任务已保存后切换项目，持续轮询并保存原项目，�
   const otherProject = await createCanvasTestProject('另一个工作区')
   await openCanvasProject(otherProject, new AbortController().signal)
   const currentCanvas = useCanvasStore.getState()
-  finishOriginal({ status: 'completed', url: 'C:/original.png', filePath: 'C:/original.png' })
+  finishOriginal({ status: 'completed', urls: ['C:/original.png'], filePaths: ['C:/original.png'] })
   await vi.waitFor(() => expect(records.get(taskId)?.status, records.get(taskId)?.errorMessage ?? '').toBe('success'))
   expect(useProjectStore.getState().currentProjectId).toBe(otherProject)
   expect(useCanvasStore.getState()).toBe(currentCanvas)
@@ -779,9 +779,9 @@ it('切走后才收到供应商任务号，仍保存原任务并继续获取结�
   let submitted!: () => void
   vi.mocked(GenerationService.getInstance().generate).mockImplementation(async () => {
     await new Promise<void>(resolve => { submitted = resolve })
-    return { status: 'pending', taskId: 'late-provider-id', url: '' }
+    return { status: 'pending', taskId: 'late-provider-id', urls: [], filePaths: [] }
   })
-  const polling = vi.spyOn(GenerationService.getInstance(), 'continuePolling').mockResolvedValue({ status: 'completed', url: 'C:/late-id.png', filePath: 'C:/late-id.png' })
+  const polling = vi.spyOn(GenerationService.getInstance(), 'continuePolling').mockResolvedValue({ status: 'completed', urls: ['C:/late-id.png'], filePaths: ['C:/late-id.png'] })
   const taskId = crypto.randomUUID()
   await submitCanvasGenerationTask({ modelId: 'canvas-task-fixture', mediaType: 'image', prompt: '迟到任务号', options: {} },
     { mode: 'canvas', projectId, sourceNodeIds: [] }, taskId)
@@ -798,7 +798,7 @@ it('切走后才收到供应商任务号，仍保存原任务并继续获取结�
 })
 
 it('在其他项目中取消原画布任务，停止状态仍保存到原节点', async () => {
-  vi.mocked(GenerationService.getInstance().generate).mockResolvedValue({ status: 'pending', taskId: 'background-cancel', url: '' })
+  vi.mocked(GenerationService.getInstance().generate).mockResolvedValue({ status: 'pending', taskId: 'background-cancel', urls: [], filePaths: [] })
   const polling = vi.spyOn(GenerationService.getInstance(), 'continuePolling').mockImplementation(async (_model, _task, _params, _progress, options) => {
     await new Promise<void>((_resolve, reject) => options!.signal!.addEventListener('abort', () => reject(new Error('停止本地轮询')), { once: true }))
     throw new Error('unreachable')
@@ -826,7 +826,7 @@ it('生成已经派发后修改输入，原结果保存成功不会被缓存发�
   const pending = new Promise<void>(resolve => { release = resolve })
   const generate = vi.mocked(GenerationService.getInstance().generate).mockImplementation(async () => {
     await pending
-    return { status: 'completed', url: 'C:/original-result.png', filePath: 'C:/original-result.png' }
+    return { status: 'completed', urls: ['C:/original-result.png'], filePaths: ['C:/original-result.png'] }
   })
   const taskId = crypto.randomUUID()
   const submitted = await submitCanvasGenerationTask({ modelId: 'canvas-task-fixture', mediaType: 'image', prompt: '原始描述', options: {} },

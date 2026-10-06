@@ -75,8 +75,10 @@ export type VisibleGenerationTaskSummary = GenerationTaskStatusSnapshot
 export interface VisibleGenerationTaskResult {
   taskId: string
   mediaType: MediaType
-  url: string
-  filePath?: string
+  /** 全部结果的显示地址，按输出顺序 */
+  urls: string[]
+  /** 已保存的本地结果文件，按输出顺序 */
+  filePaths: string[]
   prompt: string
 }
 

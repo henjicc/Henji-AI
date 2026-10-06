@@ -12,6 +12,7 @@ import {
 import { normalizeGenerationTaskStatus } from '@/core/application-control/domains/generation/taskStatus'
 import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/application-control/applicationCapabilities'
 import { databaseService, type HistoryRecord } from '@/services/database'
+import { readStoredResultUrls } from '../domain/storedResultUrls'
 
 import { useGenerationDraftStore } from '../store/generationDraftStore'
 import { GENERATION_DRAFT_FIELDS } from './generationDraftFields'
@@ -221,8 +222,7 @@ class GenerationReflectionProvider implements ApplicationEntityProvider {
 }
 
 function historyHasResult(record: HistoryRecord): boolean {
-  const storedResultUrl = record.params['__resultUrl']
-  return Boolean(record.resultPaths.length > 0 || (typeof storedResultUrl === 'string' && storedResultUrl.trim()))
+  return Boolean(record.resultPaths.length > 0 || readStoredResultUrls(record.params).length > 0)
     && (record.status === 'success' || record.status === 'completed')
 }
 

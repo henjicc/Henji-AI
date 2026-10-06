@@ -75,8 +75,8 @@ function installNativePendingResult(): void {
 
 describe('GenerationWorkspace 缓存续查媒体所有权', () => {
   it('voice completion without optional preview remains successful and never reads nonexistent media', async () => {
-    mocks.consumePendingResult.mockResolvedValue({ status: 'completed', url: '', metadata: { clonedVoice: { id: 'voice', name: '我的声音', status: 'ready' } } })
-    mocks.normalizeMediaResultForDesktop.mockResolvedValue({ url: '' })
+    mocks.consumePendingResult.mockResolvedValue({ status: 'completed', urls: [], filePaths: [], metadata: { clonedVoice: { id: 'voice', name: '我的声音', status: 'ready' } } })
+    mocks.normalizeMediaResultForDesktop.mockResolvedValue({ urls: [], filePaths: [] })
     const updateTask = vi.fn()
     await continuePollingTask({ task: createTask(), genericGenerateFailed: '生成失败', notify: vi.fn(), updateTask, updateProgress: vi.fn(), toUserMessage: String })
     expect(updateTask).toHaveBeenLastCalledWith('task-1', expect.objectContaining({ status: 'success', options: { __completionMessage: expect.stringContaining('我的声音') } }))
@@ -90,15 +90,15 @@ describe('GenerationWorkspace 缓存续查媒体所有权', () => {
     mocks.getMediaDurationFormatted.mockResolvedValue(null)
     mocks.releaseManagedGenerationMedia.mockResolvedValue(undefined)
     mocks.normalizeMediaResultForDesktop.mockResolvedValue({
-      url: 'henji-media://result.png',
-      filePath: '/data/Media/result.png',
+      urls: ['henji-media://result.png'],
+      filePaths: ['/data/Media/result.png'],
     })
   })
 
   it('命中 pending 缓存后把新建文件随成功结果转移给任务', async () => {
     mocks.consumePendingResult.mockResolvedValue({
-      url: 'https://media.example.test/result.png',
-      filePath: '/data/Media/result.png',
+      urls: ['https://media.example.test/result.png'],
+      filePaths: ['/data/Media/result.png'],
       createdFilePaths: ['/data/Media/result.png'],
     })
     const updateTask = vi.fn()
@@ -115,14 +115,14 @@ describe('GenerationWorkspace 缓存续查媒体所有权', () => {
     expect(mocks.continuePolling).not.toHaveBeenCalled()
     expect(updateTask).toHaveBeenLastCalledWith('task-1', expect.objectContaining({
       status: 'success',
-      result: expect.objectContaining({ filePath: '/data/Media/result.png' }),
+      result: expect.objectContaining({ filePaths: ['/data/Media/result.png'] }),
     }))
     expect(mocks.releaseManagedGenerationMedia).not.toHaveBeenCalled()
   })
 
   it('pending 缓存已消费但结果提交失败时回收本次新建文件', async () => {
     mocks.consumePendingResult.mockResolvedValue({
-      filePath: '/data/Media/result.png',
+      filePaths: ['/data/Media/result.png'],
       createdFilePaths: ['/data/Media/result.png'],
     })
     mocks.normalizeMediaResultForDesktop.mockRejectedValue(new Error('normalize failed'))
@@ -143,7 +143,7 @@ describe('GenerationWorkspace 缓存续查媒体所有权', () => {
 
   it('pending 缓存没有新建文件所有权时失败也不触发释放', async () => {
     mocks.consumePendingResult.mockResolvedValue({
-      filePath: '/data/Media/existing-result.png',
+      filePaths: ['/data/Media/existing-result.png'],
       createdFilePaths: [],
     })
     mocks.normalizeMediaResultForDesktop.mockRejectedValue(new Error('normalize failed'))

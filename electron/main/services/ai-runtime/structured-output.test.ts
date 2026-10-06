@@ -17,7 +17,7 @@ const output: StructuredGenerationLayerStackV1 = {
 
 describe('ai-runtime structured output', () => {
   it('按 sourceOutputIndex 注入路径并保持 bottom-to-top 输出顺序与 primary', () => {
-    const result = materializeStructuredOutput(output, '/managed/title.png|||/managed/base.jpg')
+    const result = materializeStructuredOutput(output, ['/managed/title.png', '/managed/base.jpg'])
     expect(result?.outputs.map((item) => [item.zIndex, item.filePath])).toEqual([
       [0, '/managed/base.jpg'],
       [1, '/managed/title.png'],
@@ -26,7 +26,7 @@ describe('ai-runtime structured output', () => {
   })
 
   it('未完成落盘的索引不伪造 filePath', () => {
-    const result = materializeStructuredOutput(output, '/managed/title.png')
+    const result = materializeStructuredOutput(output, ['/managed/title.png'])
     expect(result?.outputs[0].filePath).toBeUndefined()
     expect(result?.outputs[1].filePath).toBe('/managed/title.png')
   })

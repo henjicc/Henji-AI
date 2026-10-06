@@ -57,7 +57,7 @@ export interface CanvasResumeRequest {
 }
 
 export interface CanvasGenerationOutput {
-  /** 全部输出（多结果按 '|||' 拆分，优先本地文件路径） */
+  /** 全部输出（按输出顺序，优先本地文件路径） */
   outputs: string[];
   /** 首个输出 */
   primary: string;
@@ -103,19 +103,8 @@ export function resolveCanvasModelId(inputModelId: string, mediaType: CanvasMedi
   return models[0].meta.id;
 }
 
-function splitMultiValue(value: string | undefined): string[] {
-  if (!value) {
-    return [];
-  }
-  return value
-    .split('|||')
-    .map((item) => item.trim())
-    .filter((item) => item.length > 0);
-}
-
 function collectOutputs(result: GenerateResult): string[] {
-  const filePaths = splitMultiValue(result.filePath);
-  const urls = splitMultiValue(result.url);
+  const { filePaths, urls } = result;
   const count = Math.max(filePaths.length, urls.length);
   const outputs: string[] = [];
   for (let index = 0; index < count; index += 1) {

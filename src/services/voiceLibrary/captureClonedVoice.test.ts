@@ -14,7 +14,7 @@ describe('cloned voice persistence', () => {
       clonedVoice: { id, name: id, status: 'training', postpaid: true, createdAt: 1700000000000 },
     } })))
     expect(await voiceLibraryService.listVoices()).toHaveLength(2)
-    await captureClonedVoice('model', 'speech', { status: 'completed', filePath: 'C:/voice.mp3', metadata: {
+    await captureClonedVoice('model', 'speech', { status: 'completed', filePaths: ['C:/voice.mp3'], metadata: {
       clonedVoice: { id: 'a', name: 'a', status: 'ready', postpaid: true, createdAt: 1700000000000 },
     } })
     expect((await voiceLibraryService.listVoices()).find(item => item.voiceId === 'a')).toMatchObject({ status: 'ready', previewPath: 'C:/voice.mp3', taskId: 'a', expiresAt: expect.any(String) })

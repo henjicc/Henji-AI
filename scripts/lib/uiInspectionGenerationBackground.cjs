@@ -16,7 +16,7 @@ async function holdGenerationResults(app, image, count) {
       requests.push(request.taskId)
       await new Promise(resolve => waiting.set(request.taskId, resolve))
       waiting.delete(request.taskId)
-      return { ok: true, data: { status: 'completed', taskId: request.taskId, url: image, filePath: image } }
+      return { ok: true, data: { status: 'completed', taskId: request.taskId, urls: [image], filePaths: [image] } }
     })
     return { snapshot: () => ({ requests: [...requests], waiting: waiting.size }),
       release: () => { for (const resolve of waiting.values()) resolve() },

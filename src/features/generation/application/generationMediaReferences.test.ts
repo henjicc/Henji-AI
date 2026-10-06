@@ -49,7 +49,7 @@ it.each([
   expect(inspect).not.toHaveBeenCalled()
 })
 it('历史图片本地副本失效时复用可读远程结果，不丢掉参考图', async () => {
-  history.mockResolvedValue({ id: 'saved', type: 'image', status: 'completed', resultPaths: ['missing.png'], params: { __resultUrl: 'https://example.com/result.png' } })
+  history.mockResolvedValue({ id: 'saved', type: 'image', status: 'completed', resultPaths: ['missing.png'], params: { __resultUrl: ['https://example.com/result.png'] } })
   imageInfo.mockRejectedValueOnce(new Error('missing'))
   const result = await resolveGenerationMediaReferences({ uploadedImages: [{ kind: 'generation.result', id: 'saved' }] })
   expect(result.uploadedFilePaths).toEqual(['https://example.com/result.png'])

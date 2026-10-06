@@ -30,7 +30,7 @@ afterEach(() => { cleanup(); storage.beforeWrite = undefined; vi.useRealTimers()
 it('后台缩略图按唯一结果路径提交，更新或卸载会取消旧批次', async () => {
   vi.useFakeTimers()
   const a = task()
-  a.result = { id: a.id, type: 'image', prompt: '', createdAt: a.createdAt, url: '/a.png', filePath: '/a.png' }
+  a.result = { id: a.id, type: 'image', prompt: '', createdAt: a.createdAt, urls: ['/a.png'], filePaths: ['/a.png'] }
   const { rerender, unmount } = renderHook(({ tasks }) => useSaveTaskHistory({
     tasks, isTasksLoaded: true, isInitialLoadRef: { current: false },
   }), { initialProps: { tasks: [a, { ...a, id: 'thumbnail-b' }] } })
@@ -73,10 +73,10 @@ it('跨任务延迟和旧防抖快照不覆盖后来的成功状态，数据库�
   })
   act(() => result.current.setTasks([a, b]))
   await started.promise
-  act(() => { vi.advanceTimersByTime(1000); result.current.updateTask(b.id, { status: 'success', result: { id: b.id, type: 'image', prompt: b.prompt, createdAt: new Date(), url: '/result.png', filePath: '/result.png' } }) })
+  act(() => { vi.advanceTimersByTime(1000); result.current.updateTask(b.id, { status: 'success', result: { id: b.id, type: 'image', prompt: b.prompt, createdAt: new Date(), urls: ['/result.png'], filePaths: ['/result.png'] } }) })
   blocked.release()
   await act(async () => { await awaitGenerationTaskPersistence(b.id); vi.advanceTimersByTime(1000) })
-  expect(saved(b.id)).toMatchObject({ status: 'success', resultPaths: ['/result.png'], params: { __resultUrl: '/result.png' } })
+  expect(saved(b.id)).toMatchObject({ status: 'success', resultPaths: ['/result.png'], params: { __resultUrl: ['/result.png'] } })
   expect(databaseService.getHistory).not.toHaveBeenCalled()
 })
 

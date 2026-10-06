@@ -6,7 +6,6 @@ import { loadPresets } from '@/utils/preset'
 import { deleteEditState } from '@/utils/editStatePersistence'
 import { isDesktop, isWithinUploadsDir } from '@/utils/save'
 import type { GenerationTask } from '../types'
-import { splitMulti } from '../utils/multiFile'
 import { checkAssetPaths } from '@/commands/assetLibrary'
 
 const logger = createLogger('workspaces.GenerationWorkspace.hooks.useTaskCleanup')
@@ -43,7 +42,7 @@ async function removeFileSafe(fullPath: string): Promise<void> {
 /**
  * 删除"上传源文件"（图片/视频/音频）专用：saveUploadVideo 等函数现在可能直接复用用户磁盘上
  * 的原始文件路径而不是落到 Uploads 目录的自有副本，删除前必须确认路径确实在托管目录内，
- * 否则会把用户自己的文件删掉。结果文件（result.filePath）始终是本应用生成的产物，不受影响，
+ * 否则会把用户自己的文件删掉。结果文件（result.filePaths）始终是本应用生成的产物，不受影响，
  * 不需要走这个检查。
  */
 async function removeUploadedSourceSafe(fullPath: string): Promise<void> {
@@ -82,9 +81,8 @@ export function useTaskCleanup({ tasks, setTasks, clearTaskProgress }: UseTaskCl
     }
 
     // 1) 删除结果文件及其缓存
-    if (target.result?.filePath) {
-      const paths = splitMulti(target.result.filePath)
-      for (const p of paths) {
+    if (target.result) {
+      for (const p of target.result.filePaths) {
         if (await isAssetLibraryReferenced(p)) continue
         await removeFileSafe(p)
         if (target.result.type === 'image' || target.result.type === 'video') {
@@ -160,12 +158,7 @@ export function useTaskCleanup({ tasks, setTasks, clearTaskProgress }: UseTaskCl
       const editStateFile = typeof t.options?.editStateFile === 'string' ? t.options.editStateFile : undefined
       if (editStateFile) editStateFiles.add(editStateFile)
 
-      if (t.result?.filePath) {
-        const paths = splitMulti(t.result.filePath)
-        for (const p of paths) {
-          resultFiles.add(p)
-        }
-      }
+      t.result?.filePaths.forEach((p) => resultFiles.add(p))
 
       t.uploadedFilePaths?.forEach((p) => uploadedImages.add(p))
       t.uploadedVideoFilePaths?.forEach((p) => uploadedVideos.add(p))
@@ -231,12 +224,7 @@ export function useTaskCleanup({ tasks, setTasks, clearTaskProgress }: UseTaskCl
       const editStateFile = typeof t.options?.editStateFile === 'string' ? t.options.editStateFile : undefined
       if (editStateFile) editStateFiles.add(editStateFile)
 
-      if (t.result?.filePath) {
-        const paths = splitMulti(t.result.filePath)
-        for (const p of paths) {
-          resultFiles.add(p)
-        }
-      }
+      t.result?.filePaths.forEach((p) => resultFiles.add(p))
 
       t.uploadedFilePaths?.forEach((p) => uploadedImages.add(p))
       t.uploadedVideoFilePaths?.forEach((p) => uploadedVideos.add(p))

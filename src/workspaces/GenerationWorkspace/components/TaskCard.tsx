@@ -15,7 +15,6 @@ import {
 import AudioPlayer from "@/components/AudioPlayer"
 import { getModelDisplayName } from "@/utils/modelHelpers"
 import type { GenerationTask, ResultImageDimensions } from "../types"
-import { splitMulti } from "../utils/multiFile"
 import { resolveResultImageDimensions } from "../utils/resultImageDimensions"
 import { formatMediaDuration, formatTaskCreatedAt, joinTaskMeta } from "../utils/taskMeta"
 import { TaskInputPreview } from "./TaskInputPreview"
@@ -72,7 +71,7 @@ const TaskCard = React.memo(function TaskCard({
   // 进度自订阅：只有本任务进度变化时才重渲染这一张卡，不牵动整个工作区
   const progressValue = useGenerationTaskProgressStore((state) => state.progress[task.id])
   const { addMedia, collecting } = useAddToAssetLibrary()
-  const resultFilePaths = React.useMemo(() => task.result?.filePath ? splitMulti(task.result.filePath) : [], [task.result?.filePath])
+  const resultFilePaths = React.useMemo(() => task.result?.filePaths ?? [], [task.result?.filePaths])
   const [collectedPaths, setCollectedPaths] = React.useState<Set<string>>(() => new Set())
   React.useEffect(() => {
     let cancelled = false
@@ -237,8 +236,7 @@ const TaskCard = React.memo(function TaskCard({
     if (task.status !== "success" || !task.result) return null
 
     if (task.result.type === "image") {
-      const urls = splitMulti(task.result.url)
-      const filePaths = task.result.filePath ? splitMulti(task.result.filePath) : []
+      const { urls, filePaths } = task.result
 
       // 图片网格平铺：每格按结果比例占位（未知比例先按方形），不加卡片背景。
       // 网格宽度封顶 896（原记录列宽）：记录列随窗口加宽后，四宫格不跟着放大成整屏大图（任务 5.3）
@@ -318,8 +316,7 @@ const TaskCard = React.memo(function TaskCard({
     }
 
     if (task.result.type === "video") {
-      const urls = splitMulti(task.result.url)
-      const filePaths = task.result.filePath ? splitMulti(task.result.filePath) : []
+      const { urls, filePaths } = task.result
       const filePath = filePaths[0]
       const videoUrl = filePath ? toDisplaySrc(filePath.replace(/\\/g, "/")) : (urls[0] ?? "")
       const durationBadge = videoDurationSeconds !== null ? formatMediaDuration(videoDurationSeconds) : ''
@@ -384,13 +381,14 @@ const TaskCard = React.memo(function TaskCard({
     }
 
     if (task.result.type === "audio") {
-      const filePath = task.result.filePath
+      const filePath = task.result.filePaths[0]
+      const audioUrl = task.result.urls[0] ?? ''
       return (
         <AudioPlayer
           layout="inline"
           surface="plain"
-          src={task.result.url}
-          initialPlaybackState={retention?.getAudio(task.id, task.result.url)}
+          src={audioUrl}
+          initialPlaybackState={retention?.getAudio(task.id, audioUrl)}
           onActivityChange={onAudioActivityChange}
           filePath={filePath}
           onContextMenu={(e) =>

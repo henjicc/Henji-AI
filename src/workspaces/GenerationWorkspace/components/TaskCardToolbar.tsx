@@ -45,7 +45,7 @@ export function TaskCardToolbar({
       >
         <SquarePen className="h-4 w-4" />
       </UiIconButton>
-      {task.result?.filePath && (
+      {task.result && task.result.filePaths.length > 0 && (
         <UiIconButton
           onClick={() => void onDownloadAll()}
           title={t('common:actions.download')}
@@ -53,7 +53,7 @@ export function TaskCardToolbar({
           <DownloadIcon className="h-4 w-4" />
         </UiIconButton>
       )}
-      {task.result?.filePath && (
+      {task.result && task.result.filePaths.length > 0 && (
         <UiIconButton
           onClick={() => void onCollectAll()}
           disabled={collecting}

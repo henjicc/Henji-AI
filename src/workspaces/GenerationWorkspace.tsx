@@ -29,7 +29,6 @@ import { useUpdateCheck } from './GenerationWorkspace/hooks/useUpdateCheck'
 import { useGenerationHistoryFiltering } from './GenerationWorkspace/hooks/useGenerationHistoryFiltering'
 import { useGenerationAutoScroll } from './GenerationWorkspace/hooks/useGenerationAutoScroll'
 import { useGenerationImageViewer } from './GenerationWorkspace/hooks/useGenerationImageViewer'
-import { splitMulti } from './GenerationWorkspace/utils/multiFile'
 import { GENERATION_COLUMN_MAX_WIDTH_CLASS, GENERATION_COLUMN_MAX_WIDTH_PX } from './GenerationWorkspace/generationColumn'
 import { Copy, Download } from 'lucide-react'
 
@@ -189,10 +188,10 @@ const GenerationWorkspace: React.FC = () => {
   }, [resetHistoryFilters])
   const openVideoViewer = (url?: string, filePath?: string, trimRange?: { start: number; end: number }) => {
     const rawUrl = typeof url === 'string' ? url : ''
-    const normalizedFilePath = filePath ? splitMulti(filePath)[0] : undefined
+    const normalizedFilePath = filePath || undefined
     const normalizedUrl = normalizedFilePath
       ? toDisplaySrc(normalizedFilePath.replace(/\\/g, '/'))
-      : (rawUrl ? (splitMulti(rawUrl)[0] ?? '') : '')
+      : rawUrl
     setCurrentVideoUrl(normalizedUrl)
     setCurrentVideoPath(normalizedFilePath)
     setCurrentVideoTrimRange(trimRange)

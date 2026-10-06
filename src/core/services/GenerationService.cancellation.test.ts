@@ -44,7 +44,7 @@ it.each(['dialog', 'signal', 'task'] as const)('克隆等待 %s 取消时不上�
 
 it('确认后只提交当时的参数，每次重试克隆都重新确认，语音合成不弹克隆确认', async () => {
   enableConfirmation()
-  vi.mocked(aiGenerate).mockResolvedValue({ status: 'completed', url: 'C:/result.mp3' })
+  vi.mocked(aiGenerate).mockResolvedValue({ status: 'completed', urls: ['C:/result.mp3'], filePaths: [] })
   const params = { volcIclMode: 'clone', volcCloneAudio: ['original.wav'] }
   const run = service.generate('cancel-fixture', params)
   await vi.waitFor(() => expect(useAlertDialogStore.getState().queue).toHaveLength(1))
@@ -80,7 +80,7 @@ it('媒体准备期间取消不会提交供应商请求', async () => {
 
 it.each(['generate', 'poll'] as const)('%s 只取消实际运行标识，不把信号发送到 IPC', async phase => {
   let release!: () => void
-  const response = { status: 'completed' as const, url: 'C:/result.png', metadata: {} }
+  const response = { status: 'completed' as const, urls: ['C:/result.png'], filePaths: [], metadata: {} }
   const pending = new Promise<typeof response>(resolve => { release = () => resolve(response) })
   vi.mocked(aiGenerate).mockReturnValue(pending)
   vi.mocked(aiContinuePolling).mockReturnValue(pending)
@@ -99,7 +99,7 @@ it.each(['generate', 'poll'] as const)('%s 只取消实际运行标识，不把�
 })
 
 it('正常结束后信号不再取消已完成请求', async () => {
-  vi.mocked(aiGenerate).mockResolvedValue({ status: 'completed', url: 'C:/result.png', metadata: {} })
+  vi.mocked(aiGenerate).mockResolvedValue({ status: 'completed', urls: ['C:/result.png'], filePaths: [], metadata: {} })
   const controller = new AbortController()
   await service.generate('cancel-fixture', { prompt: 'test' }, undefined, { requestId: 'completed', signal: controller.signal })
   controller.abort()

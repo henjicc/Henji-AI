@@ -48,7 +48,7 @@ describe('原生生成提交事实', () => {
     const request: AiGenerateRequestDto = { requestId: 'original', modelId: 'model', params: { prompt: 'test', width: 2 } }
     expect(claimGenerationSubmission('original', request)).toBeNull()
     expect(() => claimGenerationSubmission('original', request)).toThrow('GENERATION_OUTCOME_UNKNOWN')
-    completeGenerationSubmission('original', { status: 'pending', taskId: 'provider-1', url: '' })
+    completeGenerationSubmission('original', { status: 'pending', taskId: 'provider-1', urls: [], filePaths: [] })
     expect(claimGenerationSubmission('original', { modelId: 'model', params: { width: 2, prompt: 'test' } })).toMatchObject({ taskId: 'provider-1' })
     expect(readGenerationSubmission('original')).toMatchObject({ status: 'pending' })
     expect(() => claimGenerationSubmission('original', { ...request, modelId: 'other' })).toThrow('GENERATION_INPUT_CONFLICT')
@@ -57,7 +57,8 @@ describe('原生生成提交事实', () => {
   it('同步结果可反复核对，读取不消费原事实或伪造供应商任务号', () => {
     state.db = openSubmissions()
     claimGenerationSubmission('sync', { modelId: 'model', params: {} })
-    completeGenerationSubmission('sync', { status: 'completed', url: 'https://example.com/result.png', filePath: '/managed/result.png' })
+    completeGenerationSubmission('sync', { status: 'completed', urls: ['https://example.com/result.png'], filePaths: ['/managed/result.png'] })
+    expect(readGenerationSubmission('sync')).toMatchObject({ urls: ['https://example.com/result.png'], filePaths: ['/managed/result.png'] })
     expect(readGenerationSubmission('sync')).toEqual(readGenerationSubmission('sync'))
     expect(readGenerationSubmission('sync')).not.toHaveProperty('taskId')
     expect(readGenerationSubmission('missing')).toBeNull()

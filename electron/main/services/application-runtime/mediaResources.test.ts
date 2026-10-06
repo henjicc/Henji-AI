@@ -3,12 +3,12 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 
-const state = vi.hoisted(() => ({ root: '', rows: new Map<string, { file_path: string }>(), project: null as unknown }))
+const state = vi.hoisted(() => ({ root: '', rows: new Map<string, { file_path: string }>(), results: new Map<string, string[]>(), project: null as unknown }))
 // 资产与生成记录各由自己的仓库返回已换回的绝对路径；多结果按保存顺序成数组。
 vi.mock('../asset-library', () => ({ getAssetFilePath: (id: string) => state.rows.get(`asset:${id}`)?.file_path ?? null }))
 vi.mock('../generation-history/store', () => ({ getGenerationHistoryStore: () => ({ get: (id: string) => {
-  const row = state.rows.get(`generation.result:${id}`)
-  return row ? { resultPaths: row.file_path.split('|||') } : null
+  const resultPaths = state.results.get(id)
+  return resultPaths ? { resultPaths } : null
 } }) }))
 vi.mock('../image/path-utils', () => ({ getDataRootDir: () => state.root }))
 vi.mock('../logging', () => ({ createMainLogger: () => ({ debug: vi.fn(), warn: vi.fn() }) }))
@@ -27,7 +27,7 @@ import { readApplicationMediaResource } from './mediaResources'
 let directory: string
 beforeAll(async () => { directory = await fs.mkdtemp(path.join(os.tmpdir(), 'henji-mcp-media-')); state.root = path.join(directory, 'allowed'); await fs.mkdir(state.root) })
 afterAll(async () => { await fs.rm(directory, { recursive: true, force: true }) })
-beforeEach(() => { state.rows.clear(); state.project = null })
+beforeEach(() => { state.rows.clear(); state.results.clear(); state.project = null })
 
 describe('稳定业务引用的媒体读取', () => {
   it('媒体元信息读取只检查文件，不读取二进制内容', async () => {
@@ -47,7 +47,8 @@ describe('稳定业务引用的媒体读取', () => {
     const filename = path.join(state.root, `${kind}.mp4`)
     await fs.writeFile(filename, Buffer.from([1, 2, 3, 4, 5]))
     const id = kind === 'canvas.node' ? 'project:node' : 'result'
-    state.rows.set(`${kind}:${id}`, { file_path: filename })
+    if (kind === 'generation.result') state.results.set(id, [filename])
+    else state.rows.set(`${kind}:${id}`, { file_path: filename })
     state.project = { nodes: [{ id: 'node', type: 'video', position: { x: 0, y: 0 }, data: { videoUrl: '__img_ref__:0' } }], edges: [], imagePool: [filename] }
     const first = await readApplicationMediaResource({ ref: { kind, id }, length: 3 })
     expect(first).toEqual({ mimeType: 'video/mp4', base64: 'AQID', offset: 0, byteLength: 3, totalBytes: 5, eof: false })
@@ -57,14 +58,14 @@ describe('稳定业务引用的媒体读取', () => {
   })
   it('历史多结果按已保存顺序选择，块长度不超过 256 KiB', async () => {
     const filename = path.join(state.root, 'second.mp3'); await fs.writeFile(filename, Buffer.alloc(300_000, 7))
-    state.rows.set('generation.result:result', { file_path: `missing.png|||${filename}` })
+    state.results.set('result', ['missing.png', filename])
     const result = await readApplicationMediaResource({ ref: { kind: 'generation.result', id: 'result' }, outputIndex: 1 })
     expect(result).toMatchObject({ mimeType: 'audio/mpeg', byteLength: 262144, totalBytes: 300000, eof: false })
   })
   it('当前任务及旧历史均只按完整主键读取保存结果，未保存任务不猜其他历史', async () => {
     const filename = path.join(state.root, 'task.png'); await fs.writeFile(filename, 'task')
     for (const id of ['current-task', 'old-history']) {
-      state.rows.set(`generation.result:${id}`, { file_path: filename })
+      state.results.set(id, [filename])
       expect(await readApplicationMediaResource({ ref: { kind: 'generation.result', id } })).toMatchObject({ base64: 'dGFzaw==' })
     }
     await expect(readApplicationMediaResource({ ref: { kind: 'generation.result', id: 'unsaved-task' } })).rejects.toMatchObject({ code: 'MEDIA_NOT_PERSISTED' })

@@ -308,7 +308,7 @@ function createEmbeddedAgentScenes(context) {
           ipcMain.handle('ai:generate', async (_event, request) => {
             globalThis.__canvasGenerationRequest = request
             await new Promise(resolve => { globalThis.__finishCanvasGeneration = resolve })
-            return { ok: true, data: { status: 'completed', url: resultPath, filePath: resultPath } }
+            return { ok: true, data: { status: 'completed', urls: [resultPath], filePaths: [resultPath] } }
           })
         }, path.resolve('resources/icons/icon.png'))
         await page.evaluate(() => window.henjiNative.ai.setProviderApiKey('kie', 'isolated-generation-fixture'))

@@ -56,7 +56,7 @@ afterEach(() => {
 })
 
 it('不挂载 React 节点也能经同一执行器准备参考图、生成、连线并保存结果', async () => {
-  const generate = vi.spyOn(GenerationService.getInstance(), 'generate').mockResolvedValue({ status: 'completed', url: 'C:/generated.png', filePath: 'C:/generated.png' })
+  const generate = vi.spyOn(GenerationService.getInstance(), 'generate').mockResolvedValue({ status: 'completed', urls: ['C:/generated.png'], filePaths: ['C:/generated.png'] })
   registerCanvasNodeExecutor(nodeId, createGenerationNodeExecutor(() => options))
   // 同一执行器读取最新配置，避免 UI 重渲染造成替换或后台配置过期。
   options = { ...options, resultNodeExtraData: { displayName: '最新输出标题' } }
@@ -84,7 +84,7 @@ it('标准执行器由领域实例提供，页面关闭与反馈解除不会取�
   let finish!: () => void
   const generate = vi.spyOn(GenerationService.getInstance(), 'generate').mockImplementation(async () => {
     await new Promise<void>(resolve => { finish = resolve })
-    return { status: 'completed', url: 'C:/generated.png', filePath: 'C:/generated.png' }
+    return { status: 'completed', urls: ['C:/generated.png'], filePaths: ['C:/generated.png'] }
   })
   const executor = getCanvasDomainExecutor(projectId, nodeId)
   const releaseFeedback = attachCanvasGenerationFeedback(projectId, nodeId, vi.fn())
@@ -107,7 +107,7 @@ it('离开画布不等已提交的生成：结果照常回填原画布并保存�
   let finish!: () => void
   vi.spyOn(GenerationService.getInstance(), 'generate').mockImplementation(async () => {
     await new Promise<void>(resolve => { finish = resolve })
-    return { status: 'completed', url: 'C:/generated.png', filePath: 'C:/generated.png' }
+    return { status: 'completed', urls: ['C:/generated.png'], filePaths: ['C:/generated.png'] }
   })
   const running = runCanvasNode(nodeId)
   await vi.waitFor(() => expect(finish).toBeTypeOf('function'))

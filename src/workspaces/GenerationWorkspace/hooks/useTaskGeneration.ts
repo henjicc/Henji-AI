@@ -9,7 +9,6 @@ import { toAudioDisplayUrl } from '@/utils/audioPreview'
 import { getMediaDimensions, getMediaDurationFormatted } from '@/utils/mediaDimensions'
 import type { ImageEditSessionData } from '@/core/imageEdit'
 import type { MediaType, GenerationTask, GeneratorOptions, ToastNotification } from '../types'
-import { splitMulti } from '../utils/multiFile'
 import { resolveProgressSettleDelayMs } from '../utils/progressAnimation'
 import { isRecord, isStringArray } from '../utils/typeGuards'
 import { extractServerTaskIdFromErrorMessage, extractServerTaskIdFromMetadata } from '@/features/generation/application/taskServerId'
@@ -274,15 +273,12 @@ export function useTaskGeneration({
 
       const normalized = await normalizeMediaResultForDesktop(
         task,
-        {
-          url: typeof resultObj['url'] === 'string' ? resultObj['url'] : undefined,
-          filePath: typeof resultObj['filePath'] === 'string' ? resultObj['filePath'] : undefined,
-        },
+        { urls: isStringArray(resultObj['urls']) ? resultObj['urls'] : [], filePaths: isStringArray(resultObj['filePaths']) ? resultObj['filePaths'] : [] },
         '[Workspace] 本地保存失败，回退在线地址'
       )
-      const { url, filePath } = normalized
+      const { urls, filePaths } = normalized
 
-      if (!url) {
+      if (urls.length === 0) {
         const completion = clonedVoiceCompletion(metadata)
         if (completion) {
           await saveUpdate({ status: 'success', progress: 100, options: { ...options, __completionMessage: completion } })
@@ -292,7 +288,7 @@ export function useTaskGeneration({
         throw new Error(messages.genericGenerateFailed)
       }
 
-      const firstCheck = filePath ? splitMulti(filePath)[0] : splitMulti(url)[0]
+      const firstCheck = filePaths[0] ?? urls[0]
       const [dimensions, duration] = await Promise.all([
         getMediaDimensions(firstCheck, task.type),
         getMediaDurationFormatted(firstCheck, task.type),
@@ -310,8 +306,8 @@ export function useTaskGeneration({
         result: {
           id: taskId,
           type: task.type,
-          url,
-          filePath,
+          urls,
+          filePaths,
           prompt: task.prompt,
           createdAt: new Date(),
         },
@@ -415,8 +411,8 @@ export function useTaskGeneration({
       return {
         taskId: task.id,
         mediaType: task.result.type,
-        url: task.result.url,
-        ...(task.result.filePath ? { filePath: task.result.filePath } : {}),
+        urls: task.result.urls,
+        filePaths: task.result.filePaths,
         prompt: task.result.prompt,
       }
     },

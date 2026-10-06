@@ -1,6 +1,7 @@
 import { readImageInfo } from '@/commands/image'
 import { createLogger } from '@/core/logging'
 import { databaseService } from '@/services/database'
+import { readStoredResultUrls } from '@/features/generation/domain/storedResultUrls'
 const logger = createLogger('features.generation.result_source')
 type HistoryRecord = Awaited<ReturnType<typeof databaseService.getHistory>>[number]
 export interface GenerationResultMediaSelection { outputIndex: number; localOnly?: boolean }
@@ -13,25 +14,15 @@ export async function readGenerationResultMedia(id: string, expectedType?: 'imag
   if (expectedType && record.type !== expectedType) throw new Error(`INVALID_INPUT:媒体类型应为 ${expectedType}，实际为 ${record.type}。`)
   if (selection) {
     if (!Number.isSafeInteger(selection.outputIndex) || selection.outputIndex < 0) throw new Error('INVALID_INPUT:请选择已保存结果的有效序号。')
-    const source = record.resultPaths[selection.outputIndex] ?? (!selection.localOnly ? splitSources(getStoredResultUrl(record))[selection.outputIndex] : undefined)
+    const source = record.resultPaths[selection.outputIndex] ?? (!selection.localOnly ? readStoredResultUrls(record.params)[selection.outputIndex] : undefined)
     if (!source || selection.localOnly && !/^(?:[A-Za-z]:[\\/]|\\\\|\/)/.test(source)) throw new Error('NOT_FOUND:所选结果尚未保存到本地，请先完成原结果保存。')
     return { mediaType: record.type, source, name: record.prompt?.trim() || '生成结果' }
   }
   const source = record.type === 'image'
     ? (await resolveReadableGenerationImage(record)).source
-    : record.resultPaths.at(-1) ?? getLastSource(getStoredResultUrl(record))
+    : record.resultPaths.at(-1) ?? readStoredResultUrls(record.params).at(-1) ?? null
   if (!source) throw new Error('NOT_FOUND:生成记录没有可引用的媒体。')
   return { mediaType: record.type, source, name: record.prompt?.trim() || '生成结果' }
-}
-function getStoredResultUrl(record: HistoryRecord): string | null {
-  const value = record.params['__resultUrl']
-  return typeof value === 'string' && value.trim() ? value.trim() : null
-}
-function getLastSource(sourceList: string | null | undefined): string | null {
-  return splitSources(sourceList).at(-1) ?? null
-}
-function splitSources(sourceList: string | null | undefined): string[] {
-  return sourceList?.split('|||').map(source => source.trim()).filter(Boolean) ?? []
 }
 
 export async function resolveReadableGenerationImage(record: HistoryRecord): Promise<{
@@ -40,7 +31,7 @@ export async function resolveReadableGenerationImage(record: HistoryRecord): Pro
 }> {
   const candidates = [
     record.resultPaths.at(-1) ?? null,
-    getLastSource(getStoredResultUrl(record)),
+    readStoredResultUrls(record.params).at(-1) ?? null,
   ].filter((source, index, sources): source is string => (
     Boolean(source) && sources.indexOf(source) === index
   ))

@@ -8,9 +8,9 @@ import type { HistoryRecord } from '@/services/database/types'
 import { getThumbnailsPath } from '@/utils/dataPath'
 import { isDesktop } from '@/utils/save'
 import type { GenerationTask, GeneratorOptions, TaskStatus } from '../types'
-import { joinMulti, splitMulti } from '../utils/multiFile'
 import { isRecord, isStringArray } from '../utils/typeGuards'
 import { createHistoryMediaResolver } from '../application/historyMediaResolver'
+import { readStoredResultUrls, STORED_RESULT_URLS_KEY } from '@/features/generation/domain/storedResultUrls'
 
 const logger = createLogger('workspaces.GenerationWorkspace.hooks.useTaskHistory')
 
@@ -44,15 +44,15 @@ async function mapHistoryRecordToTask(
   const rawParams: DynamicValue = record.params
   const safeParams: DynamicValueMap = isRecord(rawParams) ? rawParams : {}
   // 只读取原请求回执；同步完成直接恢复结果，绝不伪造供应商任务号。
-  if (!record.taskId && record.resultPaths.length === 0 && !safeParams['__resultUrl'] && ['pending', 'queued', 'generating'].includes(record.status)) {
+  if (!record.taskId && record.resultPaths.length === 0 && readStoredResultUrls(safeParams).length === 0 && ['pending', 'queued', 'generating'].includes(record.status)) {
     const recovered = await aiReadSavedResult(record.id).catch((error: unknown) => {
       logger.warn('原生成结果仍待保存，保留历史状态', { event: 'generation.history.recovery_pending', taskId: record.id, error })
       return null
     })
-    if (recovered?.status === 'completed' && recovered.url && recovered.filePath) {
-      safeParams['__resultUrl'] = recovered.url
+    if (recovered?.status === 'completed' && recovered.urls?.length && recovered.filePaths?.length) {
+      safeParams[STORED_RESULT_URLS_KEY] = recovered.urls
       record = { ...record, status: 'completed', params: safeParams as HistoryRecord['params'],
-        resultPaths: splitMulti(recovered.filePath).map((item) => item.trim()).filter(Boolean),
+        resultPaths: recovered.filePaths,
         taskId: recovered.taskId ?? null }
       await databaseService.updateHistory(record.id, { status: record.status, params: record.params, resultPaths: record.resultPaths, taskId: record.taskId })
     } else if (recovered?.taskId) {
@@ -60,10 +60,10 @@ async function mapHistoryRecordToTask(
       await databaseService.updateHistory(record.id, { taskId: recovered.taskId })
     }
   }
-  const resultUrlFromParams = typeof safeParams['__resultUrl'] === 'string' ? safeParams['__resultUrl'] : undefined
+  const resultUrlsFromParams = readStoredResultUrls(safeParams)
   const dimensionsFromParams = typeof safeParams['__dimensions'] === 'string' ? safeParams['__dimensions'] : undefined
   const paramsForTaskOptions: DynamicValueMap = { ...safeParams }
-  delete paramsForTaskOptions['__resultUrl']
+  delete paramsForTaskOptions[STORED_RESULT_URLS_KEY]
   delete paramsForTaskOptions['__dimensions']
 
   const uploadedFilePathsRaw = safeParams['uploadedFilePaths']
@@ -96,24 +96,23 @@ async function mapHistoryRecordToTask(
   const images = imageResolution?.urls
   const videos = videoResolution?.urls
 
-  const absoluteResultFilePath = record.resultPaths.length > 0 ? joinMulti(record.resultPaths) : null
 
   // Dimensions and duration are no longer pre-computed during initial load.
   // Loading media dimensions requires decoding every image, which blocks
   // the main thread when many high-resolution records exist.
   // They can be lazily computed when the user opens the viewer.
 
-  const resolvedResultUrl = absoluteResultFilePath
-    ? await resolveDisplayUrls(record.resultPaths, record.type)
-      .then(({ urls }) => urls.length > 0 ? joinMulti(urls) : null)
-    : resultUrlFromParams
+  const hasResultFiles = record.resultPaths.length > 0
+  const resolvedResultUrls = hasResultFiles
+    ? (await resolveDisplayUrls(record.resultPaths, record.type)).urls
+    : resultUrlsFromParams
 
-  const result = resolvedResultUrl
+  const result = resolvedResultUrls.length > 0
     ? {
         id: record.id,
         type: record.type,
-        url: resolvedResultUrl,
-        filePath: absoluteResultFilePath ?? undefined,
+        urls: resolvedResultUrls,
+        filePaths: record.resultPaths,
         prompt: record.prompt ?? '',
         createdAt,
       }
@@ -147,7 +146,7 @@ async function mapHistoryRecordToTask(
     uploadedAudioFilePaths: uploadedAudioFilePathsAbs,
     serverTaskId: record.taskId ?? undefined,
     // 成功记录有结果路径却解析不出可显示的文件：文件被移走或删掉了，卡片要给出提示而不是只剩标题
-    ...(normalizedStatus === 'success' && absoluteResultFilePath && !resolvedResultUrl ? { resultFileMissing: true } : {}),
+    ...(normalizedStatus === 'success' && hasResultFiles && resolvedResultUrls.length === 0 ? { resultFileMissing: true } : {}),
     options,
   }
 }
@@ -216,8 +215,8 @@ export function useSaveTaskHistory({ tasks, isTasksLoaded, isInitialLoadRef }: U
     const timer = setTimeout(() => {
       const paths = new Set<string>()
       for (const task of tasks) {
-        if (task.type === 'image' && task.result?.filePath) {
-          for (const path of splitMulti(task.result.filePath)) paths.add(path)
+        if (task.type === 'image' && task.result) {
+          for (const path of task.result.filePaths) paths.add(path)
         }
       }
       if (paths.size === 0) return
@@ -271,9 +270,7 @@ async function writeGenerationTask(task: GenerationTask, createOnly = false): Pr
   ])
 
   // 路径一律传绝对路径；写入数据库时由主进程换成位置写法（存储底座 2.3）。
-  const resultPaths = task.result?.filePath
-    ? splitMulti(task.result.filePath).map((item) => item.trim()).filter(Boolean)
-    : []
+  const resultPaths = task.result?.filePaths.filter((item) => item.trim() !== '') ?? []
 
   if (task.uploadedFilePaths?.length) {
     optionsCopy['uploadedFilePaths'] = task.uploadedFilePaths.filter((item) => item.trim() !== '')
@@ -285,8 +282,9 @@ async function writeGenerationTask(task: GenerationTask, createOnly = false): Pr
     optionsCopy['uploadedAudioFilePaths'] = task.uploadedAudioFilePaths.filter((item) => item.trim() !== '')
   }
   // 本地显示地址可由结果文件重新得出，不重复保存；远程结果地址保留，供本地副本缺失时回退。
-  if (task.result?.url && !(resultPaths.length > 0 && LOCAL_DISPLAY_URL.test(task.result.url))) {
-    optionsCopy['__resultUrl'] = task.result.url
+  const resultUrls = task.result?.urls ?? []
+  if (resultUrls.length > 0 && !(resultPaths.length > 0 && resultUrls.every((url) => LOCAL_DISPLAY_URL.test(url)))) {
+    optionsCopy[STORED_RESULT_URLS_KEY] = resultUrls
   }
   if (task.dimensions) {
     optionsCopy['__dimensions'] = task.dimensions

@@ -1,5 +1,6 @@
 import { operationDigest } from '../application-control/operationDigest'
-import type { AiGenerateRequestDto, AiGenerateResponseDto } from '@henjicc/ai-sdk'
+import type { AiGenerateRequestDto } from '@henjicc/ai-sdk'
+import { readStringArray, type HostGenerateResponse } from './host-response'
 import { getDb } from '../db'
 import { databaseLocations } from '../db-locations'
 
@@ -8,17 +9,18 @@ import { databaseLocations } from '../db-locations'
  * 回执里的文件位置整份按位置写法存储（实施方案 2.5），读出时换回绝对路径。
  */
 
-function encodeResponse(response: AiGenerateResponseDto): string {
+function encodeResponse(response: HostGenerateResponse): string {
   return databaseLocations.use((scope) => JSON.stringify(scope.encodeValue(response)))
 }
 
-function decodeResponse(text: string): AiGenerateResponseDto {
+function decodeResponse(text: string): HostGenerateResponse {
   const parsed = JSON.parse(text) as unknown
-  return databaseLocations.use((scope) => scope.decodeValue(parsed)) as AiGenerateResponseDto
+  const decoded = databaseLocations.use((scope) => scope.decodeValue(parsed)) as HostGenerateResponse
+  return { ...decoded, urls: readStringArray(decoded.urls), filePaths: readStringArray(decoded.filePaths) }
 }
 
 /** 先记录意图，再允许供应商调用；缺回执始终未知，不重新提交。 */
-export function claimGenerationSubmission(requestId: string, request: AiGenerateRequestDto): AiGenerateResponseDto | null {
+export function claimGenerationSubmission(requestId: string, request: AiGenerateRequestDto): HostGenerateResponse | null {
   const db = getDb()
   const { requestId: _requestId, ...businessInput } = request
   const digest = operationDigest(businessInput)
@@ -34,7 +36,7 @@ export function claimGenerationSubmission(requestId: string, request: AiGenerate
   })()
 }
 
-export function completeGenerationSubmission(requestId: string, response: AiGenerateResponseDto, phase: 'provider' | 'media' | 'completed' = 'completed'): void {
+export function completeGenerationSubmission(requestId: string, response: HostGenerateResponse, phase: 'provider' | 'media' | 'completed' = 'completed'): void {
   getDb().prepare('UPDATE generation_submissions SET response_json = ?, phase = ? WHERE request_id = ?').run(encodeResponse(response), phase, requestId)
 }
 
@@ -42,7 +44,7 @@ export function readGenerationSubmissionStage(requestId: string): { phase: strin
   return getDb().prepare('SELECT phase, model_id AS modelId FROM generation_submissions WHERE request_id = ?').get(requestId) as { phase: string; modelId: string | null } | undefined
 }
 
-export function readGenerationSubmission(requestId: string): AiGenerateResponseDto | null {
+export function readGenerationSubmission(requestId: string): HostGenerateResponse | null {
   const row = getDb().prepare('SELECT response_json FROM generation_submissions WHERE request_id = ?').get(requestId) as { response_json: string | null } | undefined
   return row?.response_json ? decodeResponse(row.response_json) : null
 }

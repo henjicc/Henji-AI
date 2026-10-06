@@ -1,8 +1,9 @@
-import { AiRuntimeError, type AiGenerateResponseDto } from '@henjicc/ai-sdk'
-const submissions = vi.hoisted(() => new Map<string, { response: AiGenerateResponseDto; phase: string }>())
+import { AiRuntimeError } from '@henjicc/ai-sdk'
+import type { HostGenerateResponse } from './host-response'
+const submissions = vi.hoisted(() => new Map<string, { response: HostGenerateResponse; phase: string }>())
 vi.mock('./generation-submissions', () => ({
   claimGenerationSubmission: (id: string) => submissions.get(id)?.response ?? null,
-  completeGenerationSubmission: (id: string, response: AiGenerateResponseDto, phase = 'completed') => submissions.set(id, { response, phase }),
+  completeGenerationSubmission: (id: string, response: HostGenerateResponse, phase = 'completed') => submissions.set(id, { response, phase }),
   readGenerationSubmission: (id: string) => submissions.get(id)?.response ?? null,
   readGenerationSubmissionStage: (id: string) => submissions.has(id) ? { phase: submissions.get(id)!.phase, modelId: 'fal-ai-z-image-turbo' } : undefined,
 }))
@@ -164,7 +165,7 @@ describe('ai-runtime continuePolling 日志闭环', () => {
       requestId: request.requestId,
     })).resolves.toMatchObject({
       status: 'completed',
-      filePath: '/tmp/result.png',
+      filePaths: ['/tmp/result.png'],
       createdFilePaths: ['/tmp/result.png'],
     })
   })
@@ -175,7 +176,7 @@ describe('ai-runtime continuePolling 日志闭环', () => {
     const input = { modelId: request.modelId, params: request.params, requestId: request.requestId }
     await expect(generate(input)).rejects.toThrow('media-disk-full')
     expect(submissions.get(request.requestId)?.phase).toBe('provider')
-    await expect(generate(input)).resolves.toMatchObject({ status: 'completed', filePath: '/tmp/result.png' })
+    await expect(generate(input)).resolves.toMatchObject({ status: 'completed', filePaths: ['/tmp/result.png'] })
     expect(submissions.get(request.requestId)?.phase).toBe('completed')
     expect(mocks.generate).toHaveBeenCalledTimes(1)
     await generate(input)
@@ -188,7 +189,7 @@ describe('ai-runtime continuePolling 日志闭环', () => {
     await expect(continuePolling(request)).resolves.toMatchObject({
       status: 'completed',
       taskId: 'task-1',
-      filePath: '/tmp/result.png',
+      filePaths: ['/tmp/result.png'],
       createdFilePaths: ['/tmp/result.png'],
     })
 
@@ -212,6 +213,21 @@ describe('ai-runtime continuePolling 日志闭环', () => {
     expect(mocks.logger.error).not.toHaveBeenCalled()
   })
 
+  it('SDK 拼接的多个结果地址在宿主边界拆成数组，逐个保存并按输出顺序返回', async () => {
+    mocks.generate.mockImplementation(async (_request: unknown, options: { onRequestBuilt: (info: { providerId: string; route: string; method: string; requestBody: Record<string, unknown> }) => void }) => {
+      options.onRequestBuilt({ providerId: 'fal', route: 'https://queue.example.test/generate', method: 'POST', requestBody: {} })
+      return { status: 'completed', url: 'https://media.example.test/a.png|||https://media.example.test/b.png', metadata: {} }
+    })
+    mocks.saveMediaFromUrlTracked.mockImplementation(async (url: string) => ({ filePath: url.endsWith('a.png') ? '/tmp/a.png' : '/tmp/b.png', created: true }))
+    const result = await generate({ modelId: request.modelId, params: request.params, requestId: 'multi-output' })
+    expect(result).toMatchObject({
+      urls: ['https://media.example.test/a.png', 'https://media.example.test/b.png'],
+      filePaths: ['/tmp/a.png', '/tmp/b.png'],
+    })
+    expect(result).not.toHaveProperty('url')
+    expect(result).not.toHaveProperty('filePath')
+  })
+
   it('内容寻址媒体已存在时不把共享文件交给调用方回收', async () => {
     mockCompletedProviderResult()
     mocks.saveMediaFromUrlTracked.mockResolvedValue({
@@ -220,7 +236,7 @@ describe('ai-runtime continuePolling 日志闭环', () => {
     })
 
     await expect(continuePolling(request)).resolves.toMatchObject({
-      filePath: '/tmp/existing-result.png',
+      filePaths: ['/tmp/existing-result.png'],
       createdFilePaths: [],
     })
   })

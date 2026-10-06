@@ -7,7 +7,6 @@ import { registry } from '@/core/ModelRegistry'
 import { GenerationService } from '@/core/services/GenerationService'
 import { getMediaDimensions, getMediaDurationFormatted } from '@/utils/mediaDimensions'
 import type { GenerationTask } from '../types'
-import { splitMulti } from '../utils/multiFile'
 import { resolveProgressSettleDelayMs } from '../utils/progressAnimation'
 import { extractServerTaskIdFromErrorMessage, resolveResumableServerTaskId } from '@/features/generation/application/taskServerId'
 import { normalizeMediaResultForDesktop } from '../utils/mediaResult'
@@ -71,15 +70,15 @@ export async function continuePollingTask({
 
     // 先查缓存结果（主进程轮询完成但渲染层已重载的场景）
     const cached = await aiReadSavedResult(serverTaskId)
-    let resultObj: DynamicValueMap
+    let resultObj: { urls: string[]; filePaths: string[]; metadata?: unknown }
     if (cached) {
       const provider = registry.getModel(task.model)?.meta.provider
       if (provider) await captureClonedVoice(task.model, provider, cached)
       logger.info('[Workspace] 命中缓存轮询结果，跳过重新轮询', { taskId: task.id, serverTaskId })
       createdFilePaths = normalizeCreatedFilePaths(cached.createdFilePaths)
       resultObj = {
-        url: cached.url,
-        filePath: cached.filePath,
+        urls: cached.urls ?? [],
+        filePaths: cached.filePaths ?? [],
         metadata: cached.metadata,
       }
     } else {
@@ -99,24 +98,21 @@ export async function continuePollingTask({
       }, handleProgress)
       createdFilePaths = normalizeCreatedFilePaths(result.createdFilePaths)
       resultObj = {
-        url: result.url,
-        filePath: result.filePath,
+        urls: result.urls,
+        filePaths: result.filePaths,
         metadata: result.metadata,
       }
     }
-    logger.info('[Workspace] 继续轮询响应', { model: task.model, taskId: serverTaskId, metadata: resultObj['metadata'] })
+    logger.info('[Workspace] 继续轮询响应', { model: task.model, taskId: serverTaskId, metadata: resultObj.metadata })
 
     const normalized = await normalizeMediaResultForDesktop(
       task,
-      {
-        url: typeof resultObj['url'] === 'string' ? resultObj['url'] : undefined,
-        filePath: typeof resultObj['filePath'] === 'string' ? resultObj['filePath'] : undefined,
-      },
+      { urls: resultObj.urls, filePaths: resultObj.filePaths },
       '[Workspace] 继续轮询结果本地保存失败，回退在线地址'
     )
-    const { url, filePath } = normalized
+    const { urls, filePaths } = normalized
 
-    if (!url) {
+    if (urls.length === 0) {
       const completion = clonedVoiceCompletion(resultObj.metadata)
       if (completion) {
         await saveUpdate({ status: 'success', progress: 100, options: { ...options, __completionMessage: completion } })
@@ -128,7 +124,7 @@ export async function continuePollingTask({
       throw new Error(genericGenerateFailed)
     }
 
-    const firstCheck = filePath ? splitMulti(filePath)[0] : splitMulti(url)[0]
+    const firstCheck = filePaths[0] ?? urls[0]
     const [dimensions, duration] = await Promise.all([
       getMediaDimensions(firstCheck, task.type),
       getMediaDurationFormatted(firstCheck, task.type),
@@ -146,8 +142,8 @@ export async function continuePollingTask({
       result: {
         id: task.id,
         type: task.type,
-        url,
-        filePath,
+        urls,
+        filePaths,
         prompt: task.prompt,
         createdAt: new Date(),
       },

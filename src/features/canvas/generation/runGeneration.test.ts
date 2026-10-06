@@ -55,7 +55,8 @@ describe('runCanvasGeneration 付费请求门禁', () => {
   it('把局部重绘链路 ID 传给模型生成服务', async () => {
     generate.mockResolvedValue({
       status: 'completed',
-      filePath: '/managed/result.png',
+      urls: [],
+      filePaths: ['/managed/result.png'],
       createdFilePaths: ['/managed/result.png', '/managed/result.png'],
     })
 
@@ -77,14 +78,14 @@ describe('runCanvasGeneration 付费请求门禁', () => {
   })
 
   it('音色已保存但没有试听时说明实际结果，不把它当成未训练成功', async () => {
-    generate.mockResolvedValue({ status: 'completed', metadata: { clonedVoice: { id: 'mine', name: '解说声音', status: 'ready' } } })
+    generate.mockResolvedValue({ status: 'completed', urls: [], filePaths: [], metadata: { clonedVoice: { id: 'mine', name: '解说声音', status: 'ready' } } })
     await expect(runCanvasGeneration({ modelId: 'test-model', params: {} })).rejects.toThrow('已保存到音色库')
     expect(generate).toHaveBeenCalledTimes(1)
   })
 
   it('供应商任务号保存完成后才开始轮询，保存失败不继续轮询', async () => {
     generate.mockResolvedValue({ status: 'pending', taskId: 'task-persist' })
-    continuePolling.mockResolvedValue({ status: 'completed', filePath: '/managed/result.png' })
+    continuePolling.mockResolvedValue({ status: 'completed', urls: [], filePaths: ['/managed/result.png'] })
     let release!: () => void
     const saved = new Promise<void>(resolve => { release = resolve })
     const onTaskId = vi.fn(async () => { await saved })
@@ -104,7 +105,8 @@ describe('runCanvasGeneration 付费请求门禁', () => {
     generate.mockResolvedValue({ status: 'pending', taskId: 'task-1' })
     continuePolling.mockResolvedValue({
       status: 'completed',
-      filePath: '/managed/result.png',
+      urls: [],
+      filePaths: ['/managed/result.png'],
       createdFilePaths: ['/managed/result.png'],
     })
 
