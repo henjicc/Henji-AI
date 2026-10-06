@@ -315,13 +315,15 @@ wc -l src/App.tsx
 
 ## 七、CI 全量兜底
 
-`.github/workflows/build.yml` 每次 push / PR 分五层必跑：代码检查 job 执行生成器、静态规则、渲染层/主进程 lint 与类型检查、`test:suites` 分层完整性门禁及 `test:unit`；WebGPU job 安装官方软件 Vulkan adapter、通过 `vgpu doctor` 真渲染后执行 `test:gpu`（含 HDR probe）；大图导出 job 独占 worker 执行 `test:image-export`；原生 SQLite job 在独立依赖目录中执行 `electron:rebuild`，再用 `test:assistant-persistence` 运行唯一原生清单（历史命令名，现在包含助手与工程持久化）；原生视频解码 job 在 Windows runner 用 `scripts/video-decoder-ffmpeg.cjs` 获取并校验固定 FFmpeg，执行 `test:ffmpeg-cli`（用随包 FFmpeg 9 与 ffmpeg-ffprobe-static 6.1.2 核对全仓 FFmpeg 参数并实跑导出）、cargo test 与 release 构建（无硬件显卡，依赖真实 D3D11 设备的用例按设计跳过，不代表像素与性能验收）。unit、gpu、image-export、原生 SQLite 与 ffmpeg-cli 五个 Vitest 层互斥并覆盖完整清单；`npm test` / `npx vitest run` 保留本地全量入口，但普通 Node 中的 Electron 条件跳过不代表原生验证通过。
+**触发方式（2026-10-06 用户决定）**：推送 `main` 不再自动运行 CI，只在推送 `v*` 标签或手动触发（`gh workflow run build.yml`，需要安装包时加 `-f build_installer=true`）时运行。Agent 在以下时机手动触发并等待结果：SDK 发布前（发布提交必须通过）、打版本标签前、大型重构或一个计划全部完成后、本地无法复现的跨平台问题需要全量兜底时。日常小改动不触发。
+
+`.github/workflows/build.yml` 每次运行分五层必跑：代码检查 job 执行生成器、静态规则、渲染层/主进程 lint 与类型检查、`test:suites` 分层完整性门禁及 `test:unit`；WebGPU job 安装官方软件 Vulkan adapter、通过 `vgpu doctor` 真渲染后执行 `test:gpu`（含 HDR probe）；大图导出 job 独占 worker 执行 `test:image-export`；原生 SQLite job 在独立依赖目录中执行 `electron:rebuild`，再用 `test:assistant-persistence` 运行唯一原生清单（历史命令名，现在包含助手与工程持久化）；原生视频解码 job 在 Windows runner 用 `scripts/video-decoder-ffmpeg.cjs` 获取并校验固定 FFmpeg，执行 `test:ffmpeg-cli`（用随包 FFmpeg 9 与 ffmpeg-ffprobe-static 6.1.2 核对全仓 FFmpeg 参数并实跑导出）、cargo test 与 release 构建（无硬件显卡，依赖真实 D3D11 设备的用例按设计跳过，不代表像素与性能验收）。unit、gpu、image-export、原生 SQLite 与 ffmpeg-cli 五个 Vitest 层互斥并覆盖完整清单；`npm test` / `npx vitest run` 保留本地全量入口，但普通 Node 中的 Electron 条件跳过不代表原生验证通过。
 
 原生清单维护在 `scripts/lib/testSuites.cjs`，新增 Electron 条件测试必须登记；依赖真实 FFmpeg CLI 的测试登记到同文件的 `FFMPEG_CLI_TEST_FILES`。验收器要求所有声明文件实际执行、每文件至少一项、零跳过/待办/失败，并核对报告统计与子进程正常退出；不能只看 `success:true` 或报告文件存在。显式基准开关与平台专属测试不冒充原生清单。缺失设备、ABI 错配或专项失败均不能降级成成功。
 
 稳定的「质量门禁」聚合检查只在五层全部成功时通过，安装包构建依赖该门禁。软件 WebGPU 的像素正确性不代表真实 Electron 的交互流畅度；后者仍由匹配场景的 Reality / 性能专项证明。CI 全量覆盖与本地最小验证分工不同，不应互相替代。
 
-构建 job 只在标签或手动触发时运行 `npm run electron:build` 并打包发布；打包时 afterPack 核对随包原生服务、FFmpeg 与许可文件。
+构建 job 只在标签或手动触发且勾选“同时构建安装包”时运行 `npm run electron:build` 并打包发布；打包时 afterPack 核对随包原生服务、FFmpeg 与许可文件。
 
 ## 八、交付证据不能借用历史结论
 
