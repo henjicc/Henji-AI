@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { VideoEditDropPlacement } from '../application/videoEditDrop'
+import { placeVideoEditDrop, readActiveVideoEditItemDrag } from '../application/videoEditDrop'
+import { readVideoEditCodeMetadata } from '../application/videoEditCodeState'
 import { Diamond } from 'lucide-react'
 import ContextMenu from '@/components/ContextMenu'
 import { UiButton, UiError } from '@/components/ui'
 import { UI_DIVIDER_CLASS } from '@/components/ui/styleTokens'
 import { VideoEditSequenceFrameRateRequired, type VideoEditSequenceSettings } from '@/core/videoEdit/projectItems'
-import { videoEditDuration, videoEditClipMedia, type VideoEditSequence } from '@/core/videoEdit/document'
-import { videoEditFps, videoEditSourceSeconds } from '@/core/videoEdit/time'
+import { snapVideoEditFrame, videoEditDuration, videoEditClipMedia, type VideoEditClip, type VideoEditSequence } from '@/core/videoEdit/document'
+import { rescaleVideoEditFrame, videoEditFps, videoEditSourceSeconds } from '@/core/videoEdit/time'
 import { videoEditSyncOffsets } from '@/core/videoEdit/linkSync'
 import { videoEditPickRelations } from '@/core/videoEdit/timelineSelection'
 import type { WaveformSourceRef } from '@/hooks/useWaveformData'
@@ -50,7 +52,7 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
   const projectId = instance.document.id
   const fps = videoEditFps(sequence.frameRate)
   const [view, setView] = useState<TimelineViewport>({ left: 0, top: 0, width: 900, height: 300 })
-  const [hint, setHint] = useState<VideoEditDropPlacement | null>(null)
+  const [hint, setHint] = useState<(VideoEditDropPlacement & { ghosts?: VideoEditClip[] }) | null>(null)
   const [pendingSequence, setPendingSequence] = useState<{ owner: VideoEditInstance; input: VideoEditDropInput; placement: VideoEditDropPlacement; sequenceId: string; settings: VideoEditSequenceSettings } | null>(null)
   // PR：视频区与音频区各自纵向滚动，中间的分隔条可拖动调整两区比例（只是视图状态，不进文档）。
   const [split, setSplit] = useState(TIMELINE_DEFAULT_SPLIT)
@@ -201,7 +203,11 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
     const x = event.clientX - rect.left + host.scrollLeft - TIMELINE_HEADER_WIDTH
     if (event.clientX < rect.left + TIMELINE_HEADER_WIDTH) return undefined
     const y = event.clientY - rect.top
-    const row = timelineTrackAt(rows, y); const frame = Math.max(0, Math.round(x / pixels))
+    const raw = Math.max(0, Math.round(x / pixels))
+    // 吸附开着时落点吸到片段边缘、序列开头与播放头（8 像素内），拖动中的虚影与松手结果用同一个落点
+    const threshold = 8 / pixels
+    const frame = !instance.snapping ? raw : Math.abs(instance.frame - raw) <= threshold ? instance.frame : snapVideoEditFrame(sequence, raw, '', threshold)
+    const row = timelineTrackAt(rows, y)
     if (row) return { frame, track: row.track.index }
     const zone = timelineNewTrackZone(layout, y)
     return zone && { frame, newTrack: zone }
@@ -244,6 +250,17 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
           {offsetLabel && <span className="pointer-events-none absolute right-2.5 top-0.5 rounded-sm bg-danger-solid px-1 text-2xs font-medium leading-4 tabular-nums text-on-danger" data-video-edit-sync-offset={offset}>{offsetLabel}</span>}
         </div>
   }
+  /** 从素材面板拖来的素材项：按松手时同一套规则预演，得到将要落下的片段（虚影）；预演不了时只显示落点提示。 */
+  const previewGhosts = (at: VideoEditDropPlacement): VideoEditClip[] | undefined => {
+    const drag = readActiveVideoEditItemDrag()
+    if (!drag || drag.projectId !== projectId) return undefined
+    try {
+      const result = placeVideoEditDrop(instance.document, drag.itemIds, sequence.id, at, { targetTrackIds: instance.targetTrackIds, matchEmptySequence: !sequence.clips.length, codeMetadata: readVideoEditCodeMetadata(instance, instance.document) })
+      // 空序列会改成素材的帧率：虚影按当前时间线的帧率换算回来显示，位置与时长看上去和松手后一致
+      const toView = (frame: number): number => rescaleVideoEditFrame(frame, result.frameRate, sequence.frameRate)
+      return result.placedClips.map(clip => ({ ...clip, start: toView(clip.start), duration: Math.max(1, toView(clip.start + clip.duration) - toView(clip.start)) }))
+    } catch { return undefined }
+  }
   /** 落点提示的纵向位置：命中轨道上，或新建轨道的空白里贴着最外侧轨道。 */
   const hintTop = (at: VideoEditDropPlacement): number => {
     const { video, audio } = layout.regions
@@ -266,7 +283,12 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
         if (videoEditCommandState(context, 'locate_source').enabled) { event.preventDefault(); void executeVideoEditCommand(context, 'locate_source').catch(onError) }
       }}
       onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); pointer.cancel() } }}
-      onDragOver={event => { if (!acceptsVideoEditDrop(event.dataTransfer)) return; const at = placement(event); if (!at) { setHint(null); return } event.preventDefault(); event.dataTransfer.dropEffect = 'copy'; setHint(at) }}
+      onDragOver={event => {
+        if (!acceptsVideoEditDrop(event.dataTransfer)) return
+        const at = placement(event); if (!at) { setHint(null); return }
+        event.preventDefault(); event.dataTransfer.dropEffect = 'copy'
+        setHint(current => current && current.frame === at.frame && current.track === at.track && current.newTrack === at.newTrack ? current : { ...at, ghosts: previewGhosts(at) })
+      }}
       onDragLeave={event => { if (!isDomNode(event.relatedTarget) || !event.currentTarget.contains(event.relatedTarget)) setHint(null) }}
       onDrop={event => {
         if (!acceptsVideoEditDrop(event.dataTransfer)) return
@@ -320,7 +342,9 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
         </div>
         {(['video', 'audio'] as const).map(kind => <TimelineRegionScrollbar key={kind} region={layout.regions[kind]} left={view.left + view.width - 8} onScroll={dy => scrollRegion(kind, dy)} />)}
         {pointer.box && <div className="pointer-events-none absolute z-raised border border-accent-ring bg-accent-tint" style={{ left: TIMELINE_HEADER_WIDTH + Math.min(pointer.box.from.x, pointer.box.to.x), top: Math.min(pointer.box.from.y, pointer.box.to.y), width: Math.abs(pointer.box.to.x - pointer.box.from.x), height: Math.abs(pointer.box.to.y - pointer.box.from.y) }} data-video-edit-selection-box />}
-        {hint && (hint.newTrack || rows.some(row => row.track.index === hint.track)) && <div className="pointer-events-none absolute z-raised flex h-6 w-40 items-center border-l-2 border-accent-ring bg-accent-tint px-2 text-2xs text-text1" style={{ top: hintTop(hint), left: TIMELINE_HEADER_WIDTH + hint.frame * pixels }}>{hint.newTrack ? '释放以新建轨道并添加' : '释放以添加素材'}</div>}
+        {hint?.ghosts?.length && hint.ghosts.every(ghost => rows.some(row => row.track.index === ghost.track))
+          ? hint.ghosts.map(ghost => { const row = rows.find(item => item.track.index === ghost.track)!; return <div key={ghost.id} aria-hidden="true" data-video-edit-drop-ghost className="pointer-events-none absolute z-raised overflow-hidden rounded-md border-2 border-accent-ring bg-accent-tint px-1.5 text-2xs leading-4 text-text1" style={{ top: row.top + 2, height: row.height - 4, left: TIMELINE_HEADER_WIDTH + ghost.start * pixels, width: Math.max(3, ghost.duration * pixels) }}><span className="truncate">{ghost.name}</span></div> })
+          : hint && (hint.newTrack || rows.some(row => row.track.index === hint.track)) && <div className="pointer-events-none absolute z-raised flex h-6 w-40 items-center border-l-2 border-accent-ring bg-accent-tint px-2 text-2xs text-text1" style={{ top: hintTop(hint), left: TIMELINE_HEADER_WIDTH + hint.frame * pixels }}>{hint.newTrack ? '释放以新建轨道并添加' : '释放以添加素材'}</div>}
         <VideoEditTimelinePlayhead instance={instance} pixels={pixels} />
       </div>
       {pointer.failure && <div className="sticky bottom-0 left-0 z-raised max-w-lg bg-panel px-2 py-1"><UiError title="当前位置不能编辑" message={pointer.failure} /></div>}

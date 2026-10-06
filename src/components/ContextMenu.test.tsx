@@ -134,3 +134,13 @@ it('收起中的菜单不再可交互、不按角色暴露；收起动画结束�
   expect(document.querySelector('[data-panel-placement]')).toBeNull()
   expect(close).toHaveBeenCalledTimes(1)
 })
+
+it('在 pointerdown 里阻止默认行为的区域（时间线、画布）点外面也能关闭：按 pointerdown 判定，不依赖 mousedown', () => {
+  const close = vi.fn()
+  render(<><div data-testid="timeline" /><ContextMenu visible onClose={close} position={{ x: 10, y: 10 }} items={[{ id: 'a', label: '命令', icon: null, onClick: () => {} }]} /></>)
+  // 时间线在 pointerdown 里 preventDefault 后浏览器不再派发 mousedown：只发 pointerdown
+  vi.useFakeTimers()
+  fireEvent.pointerDown(screen.getByTestId('timeline'))
+  act(() => { vi.advanceTimersByTime(UI_DURATION.base + 50) })
+  expect(close).toHaveBeenCalled()
+})

@@ -268,8 +268,10 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
     // 用捕获阶段确保点击节点内其它空白处也能正常关闭下拉
     // 按触发器所在文档监听，系统浮窗中的下拉在浮窗内关闭；主窗口行为不变。
     const ownerDocument = ownerDocumentOf(ref.current)
+    // 同时听 pointerdown：在 pointerdown 里 preventDefault 的区域（时间线、画布）不会再派发 mousedown
+    ownerDocument.addEventListener('pointerdown', handler, true)
     ownerDocument.addEventListener('mousedown', handler, true)
-    return () => ownerDocument.removeEventListener('mousedown', handler, true)
+    return () => { ownerDocument.removeEventListener('pointerdown', handler, true); ownerDocument.removeEventListener('mousedown', handler, true) }
   }, [open, overlay.id, scheduleClose])
 
   useLayoutEffect(() => {

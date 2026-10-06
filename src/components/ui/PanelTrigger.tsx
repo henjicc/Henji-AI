@@ -378,9 +378,13 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
     }
     // 按触发器所在文档监听：浮窗中的面板在浮窗内打开与关闭，主窗口行为不变。
     const ownerDocument = ownerDocumentOf(ref.current)
+    // 同时听 pointerdown：时间线、画布这类在 pointerdown 里 preventDefault 的区域不会再派发 mousedown，
+    // 只听 mousedown 时点那里关不掉菜单（剪辑时间线右键菜单点空白不关）。
+    ownerDocument.addEventListener('pointerdown', handler, true)
     ownerDocument.addEventListener('mousedown', handler, true)
     ownerDocument.addEventListener('click', clickCaptureHandler, true)
     return () => {
+      ownerDocument.removeEventListener('pointerdown', handler, true)
       ownerDocument.removeEventListener('mousedown', handler, true)
       ownerDocument.removeEventListener('click', clickCaptureHandler, true)
     }

@@ -1,3 +1,4 @@
+import { rescaleVideoEditFrame } from '@/core/videoEdit/time'
 // @vitest-environment jsdom
 import { beforeEach, afterEach, it, expect, vi } from 'vitest'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
@@ -157,13 +158,18 @@ it('缺失源帧率读回明确未知值，删除最后项目引用释放剪辑�
     undoVideoEdit(id); expect(instance.document.media).toHaveLength(2); expect(instance.document.items[1].id).toBe(itemId)
   } finally { app.dispose() }
 })
-it('空时间线按多源创建匹配序列与片段只提交一条历史；未知帧率失败不留半导入', async () => {
+it('拖进空序列：不新建序列，按素材改这条序列的规格并落在松手处，只提交一条历史；未知帧率失败不留半导入', async () => {
   const instance = await fixture(); const id = instance.document.id; const first = instance.activeSequenceId
-  const history = instance.past.length
-  await dropVideoEditInput(id, { kind: 'items', projectId: id, itemIds: [instance.document.items[0].id, instance.document.items[0].id] }, { frame: 12, track: 2 }, undefined, { sequenceId: first, createSequenceWhenEmpty: true })
+  const history = instance.past.length; const sequences = instance.document.sequences.length
+  const originalRate = getActiveVideoEditSequence(instance).frameRate
+  const videoTrack = getActiveVideoEditSequence(instance).tracks.find(track => track.kind === 'video')!.index
+  await dropVideoEditInput(id, { kind: 'items', projectId: id, itemIds: [instance.document.items[0].id, instance.document.items[0].id] }, { frame: 12, track: videoTrack }, undefined, { sequenceId: first, createSequenceWhenEmpty: true })
   expect(instance.past).toHaveLength(history + 1)
-  expect(getActiveVideoEditSequence(instance)).toMatchObject({ width: 3840, height: 2160, frameRate: { numerator: 60000, denominator: 1001 } })
-  expect(getActiveVideoEditSequence(instance).clips.map(clip => clip.start)).toEqual([0, 179])
+  expect(instance.document.sequences).toHaveLength(sequences)
+  expect(instance.activeSequenceId).toBe(first)
+  expect(getActiveVideoEditSequence(instance)).toMatchObject({ id: first, width: 3840, height: 2160, frameRate: { numerator: 60000, denominator: 1001 } })
+  const start = rescaleVideoEditFrame(12, originalRate, { numerator: 60000, denominator: 1001 })
+  expect(getActiveVideoEditSequence(instance).clips.map(clip => clip.start)).toEqual([start, start + 179])
   undoVideoEdit(id)
   appendVideoEditMedia(id, { id: 'vfr-drop', name: 'unknown', path: 'D:/media/unknown.mp4', kind: 'video', width: 1920, height: 1080, durationSeconds: 2, frameRateMode: 'variable' })
   const before = instance.document

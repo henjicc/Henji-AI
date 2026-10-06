@@ -17,7 +17,7 @@ import { VIDEO_EDIT_LABELS, VIDEO_EDIT_LABEL_NAMES, type VideoEditLabel } from '
 import { VIDEO_EDIT_LABEL_COLOR_HEX } from '@/core/theme/colorTokens'
 import { videoEditFps } from '@/core/videoEdit/time'
 import type { FloatingPanelAnchorRect } from '@/components/ui/floatingPanelPosition'
-import { acceptsVideoEditDrop, dropVideoEditInput, readVideoEditDrop, writeVideoEditItemDrag } from '../application/videoEditDrop'
+import { acceptsVideoEditDrop, dropVideoEditInput, endVideoEditItemDrag, readVideoEditDrop, writeVideoEditItemDrag } from '../application/videoEditDrop'
 import { appendVideoEditSequence, deleteVideoEditSequence, setVideoEditProjectView, switchVideoEditSequence, updateVideoEditSequenceSettings, type VideoEditInstance } from '../application/videoEditService'
 import { chooseVideoEditMedia, relinkVideoEditMedia } from '../application/videoEditMedia'
 import { appendVideoEditItems, createVideoEditAdjustmentItem, createVideoEditBin, createVideoEditGraphicItem, createVideoEditSequenceFromItem, deleteVideoEditBins, deleteVideoEditItems, setVideoEditLabels, updateVideoEditBin, updateVideoEditItems, type VideoEditGraphicItemInput } from '../application/videoEditProjectItems'
@@ -31,6 +31,9 @@ import { VideoEditProjectDocumentsButton } from './VideoEditProjectDocuments'
 import { readVideoEditCodeMetadata } from '../application/videoEditCodeState'
 import { selectVideoEditProjectItems, videoEditBinPath, videoEditProjectColumns, videoEditProjectRows, type VideoEditProjectEntry, type VideoEditProjectRow, type VideoEditProjectSort, type VideoEditProjectSortKey } from './videoEditProjectModel'
 import { videoEditKindIcon } from './videoEditKindIcons'
+
+/** 透明的拖拽图（1×1）：替换浏览器默认的拖拽缩略图。 */
+const EMPTY_DRAG_IMAGE: HTMLImageElement = typeof Image === 'undefined' ? ({} as HTMLImageElement) : Object.assign(new Image(1, 1), { src: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7' })
 
 const GridList = forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>((props, ref) => <div {...props} ref={ref} className="grid grid-cols-[repeat(auto-fill,minmax(112px,1fr))] gap-1 px-1.5 pb-1.5" />)
 GridList.displayName = 'VideoEditProjectGridList'
@@ -196,7 +199,9 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
       if (entry.kind === 'item' && !selected) run(() => setVideoEditProjectView(projectId, { selectedItemIds: [entry.value.id] }))
       menu.showMenu(event, itemMenu(entry))
     },
-    onDragStart: (event: React.DragEvent) => { if (entry.kind !== 'item') return; writeVideoEditItemDrag(event.dataTransfer, projectId, selected ? instance.selectedItemIds : [entry.value.id]); event.dataTransfer.effectAllowed = 'copyMove' },
+    // 不显示浏览器自带的拖拽缩略图：它遮住落点、和实际位置对不上；拖到时间线上由时间线画出片段虚影（所见即所得）
+    onDragStart: (event: React.DragEvent) => { if (entry.kind !== 'item') return; writeVideoEditItemDrag(event.dataTransfer, projectId, selected ? instance.selectedItemIds : [entry.value.id]); event.dataTransfer.effectAllowed = 'copyMove'; event.dataTransfer.setDragImage(EMPTY_DRAG_IMAGE, 0, 0) },
+    onDragEnd: () => endVideoEditItemDrag(),
     ...(entry.kind === 'bin' ? { onDragOver: (event: React.DragEvent) => { if (acceptsVideoEditDrop(event.dataTransfer)) { event.preventDefault(); event.dataTransfer.dropEffect = 'move' } }, onDrop: (event: React.DragEvent) => drop(event, entry.value.id) } : {}),
   })
   const isSelected = (entry: VideoEditProjectEntry): boolean => entry.kind === 'item' ? instance.selectedItemIds.includes(entry.value.id) : entry.kind === 'bin' ? selectedBinRow === entry.value.id : selectedSequence === entry.value.id
