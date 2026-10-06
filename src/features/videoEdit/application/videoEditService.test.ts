@@ -387,21 +387,34 @@ it('公共事务修改后台序列设置与片段为一步撤销，前台选区�
 it('正式事务撤销保留实体引用，帧率写入回执包含实际片段级联', async () => {
   const instance = (await createLegacyTrackVideoEditProject()); const id = instance.document.id
   appendVideoEditClip(id); const clipId = getActiveVideoEditSequence(instance).clips[0].id
+  editVideoSequence(id, instance.activeSequenceId, sequence => { sequence.clips[0].curves = { opacity: [{ time: 0, value: 0, interpolation: 'linear' }, { time: 30, value: 1, interpolation: 'linear' }] }; return sequence })
+  const originalCurves = structuredClone(getActiveVideoEditSequence(instance).clips[0].curves)
+  const directCurves = [{ time: 0, value: 1, interpolation: 'hold' }]
   const engine = getApplicationControlExecutionEngine()
   const context: ApplicationExecutionContext = { requestId: crypto.randomUUID(), exposure: 'assistant', permissions: new Set(['video_edit:read', 'video_edit:write']), acceptedDataClasses: new Set(['C1']) }
   for (const [target, propertyId, value] of [
     [{ kind: 'video_edit.clip', id: `${id}:${clipId}` }, 'video_edit.clip.text', '正式撤销'],
     [{ kind: 'video_edit.sequence', id: `${id}:${instance.activeSequenceId}` }, 'video_edit.sequence.frame_rate', { numerator: 60, denominator: 1 }],
+    [{ kind: 'video_edit.clip', id: `${id}:${clipId}` }, 'video_edit.clip.duration', 20],
+    [{ kind: 'video_edit.clip', id: `${id}:${clipId}` }, 'video_edit.clip.opacity.keyframes', directCurves],
   ] as const) {
     const revisions = { video_edit: videoEditDomainRevision() }
     const plan = await engine.plan({ summary: '实体修改与撤销', transactionMode: 'atomic', steps: [{ kind: 'mutation', entityType: target.kind, target, expectedRevisions: revisions, mutations: [{ propertyId, operation: 'set', value }] }] }, context)
     const result = await engine.commit({ planRef: plan.planRef, expectedRevisions: revisions, idempotencyKey: crypto.randomUUID() }, context)
     expect(result.status, JSON.stringify(result)).toBe('completed')
     if (result.status !== 'completed' || !result.undoRef) throw new Error('没有可撤销回执')
-    if (target.kind === 'video_edit.sequence') expect(result.effects).toEqual(expect.arrayContaining([expect.objectContaining({ entityType: 'video_edit.clip', origin: { kind: 'cascade', declarationId: 'video_edit.sequence_clip_time' } })]))
+    const declarationId = propertyId === 'video_edit.sequence.frame_rate' ? 'video_edit.sequence_clip_time' : propertyId === 'video_edit.clip.duration' ? 'video_edit.clip_keyframe_time' : undefined
+    const expectedCascade = declarationId ? expect.objectContaining({ entityType: 'video_edit.clip', propertyIds: expect.arrayContaining(['video_edit.clip.opacity.keyframes']), refs: [{ kind: 'video_edit.clip', id: `${id}:${clipId}` }], origin: { kind: 'cascade', declarationId } }) : undefined
+    if (expectedCascade) {
+      expect(result.effects).toEqual(expect.arrayContaining([expectedCascade]))
+      expect(getActiveVideoEditSequence(instance).clips[0].curves!.opacity!.at(-1)?.time).toBe(propertyId === 'video_edit.sequence.frame_rate' ? 60 : 19)
+    } else expect(result.effects.filter(effect => effect.origin.kind === 'cascade')).toEqual([])
     const undone = await engine.undo({ undoRef: result.undoRef, expectedRevisions: result.resultingRevisions, idempotencyKey: crypto.randomUUID() }, context)
     expect(undone.status, JSON.stringify(undone)).toBe('completed')
+    if (undone.status !== 'completed') throw new Error('撤销没有完成')
+    if (expectedCascade) expect(undone.effects).toEqual(expect.arrayContaining([expectedCascade]))
     expect(getActiveVideoEditSequence(instance).clips[0]).toMatchObject({ duration: 90, text: '输入文字' })
+    expect(getActiveVideoEditSequence(instance).clips[0].curves).toEqual(originalCurves)
   }
 })
 it('移除未使用的素材项后再次添加原媒体，在一次编辑内恢复引用', async () => {

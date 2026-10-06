@@ -22,7 +22,16 @@ export class VideoEditRenderSession {
   readonly canvas: OffscreenCanvas
   get previewPreparationMs(): number { return 0 }
   get previewBytes(): number { return 0 }
-  private mediaDocument(document: VideoEditComposition): VideoEditComposition { return { ...document, media: document.media.map(media => ({ ...media, path: toFetchableMediaUrl(media.path) })) } }
+  private readonly lutRoots = new Set<string>()
+  private async authorizeLuts(document: VideoEditComposition): Promise<void> {
+    for (const asset of document.lumetriLuts ?? []) {
+      if (this.lutRoots.has(asset.path)) continue
+      const platform = getPlatform()
+      await platform.media.allowRoot(await platform.system.paths.dirname(asset.path))
+      this.lutRoots.add(asset.path)
+    }
+  }
+  private mediaDocument(document: VideoEditComposition): VideoEditComposition { return { ...document, media: document.media.map(media => ({ ...media, path: toFetchableMediaUrl(media.path) })), ...(document.lumetriLuts ? { lumetriLuts: document.lumetriLuts.map(asset => ({ ...asset, path: toFetchableMediaUrl(asset.path) })) } : {}) } }
   /** The native decoder reads original local files; the worker only sees fetchable URLs, so it gets this map too. */
   private localPaths(document: VideoEditComposition): Record<string, string> {
     return Object.fromEntries(document.media.filter(media => media.kind !== 'image' && isLikelyLocalImagePath(media.path)).map(media => [toFetchableMediaUrl(media.path), media.path]))
@@ -60,7 +69,7 @@ export class VideoEditRenderSession {
       if (value.error) pending.reject(new Error(value.error)); else pending.resolve(value)
     }
     this.worker.onerror = event => { for (const pending of this.pending.values()) pending.reject(new Error(event.message)); this.pending.clear() }
-    this.ready = Promise.all([this.content.check(document), this.connectNative()]).then(([, decode]) => this.request({ kind: 'init', document: this.mediaDocument(document), previewWidth, surface, cacheBudgetBytes, decode: { ...decode, localPaths: this.localPaths(document) } }, surface ? [surface] : []))
+    this.ready = Promise.all([this.content.check(document), this.connectNative(), this.authorizeLuts(document)]).then(([, decode]) => this.request({ kind: 'init', document: this.mediaDocument(document), previewWidth, surface, cacheBudgetBytes, decode: { ...decode, localPaths: this.localPaths(document) } }, surface ? [surface] : []))
     void this.ready.catch(() => undefined)
   }
   private request(request: RenderRequest extends infer T ? T extends RenderRequest ? Omit<T, 'id'> : never : never, transfer: Transferable[] = [], submitted?: () => void): Promise<RenderResponse> {
@@ -69,7 +78,7 @@ export class VideoEditRenderSession {
     const id = ++this.nextId
     return new Promise((resolve, reject) => { this.pending.set(id, { resolve, reject, submitted }); this.worker.postMessage({ ...request, id }, transfer) })
   }
-  async updateDocument(document: VideoEditComposition): Promise<void> { await this.ready; await this.content.check(document); await this.request({ kind: 'update', document: this.mediaDocument(document), localPaths: this.localPaths(document) }); this.document = document }
+  async updateDocument(document: VideoEditComposition): Promise<void> { await this.ready; await this.content.check(document); await this.authorizeLuts(document); await this.request({ kind: 'update', document: this.mediaDocument(document), localPaths: this.localPaths(document) }); this.document = document }
   /** Preview only (task 4.9): later frames draw at 1/divisor of the sequence size; resolves once the worker applied it. */
   async setRenderDivisor(divisor: number): Promise<void> { await this.ready; await this.request({ kind: 'scale', divisor }) }
   /** 智能区域（4.7d）：已分析好的段落交给 Worker，下一次渲染即使用。 */

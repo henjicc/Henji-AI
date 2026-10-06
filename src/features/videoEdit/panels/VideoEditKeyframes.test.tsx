@@ -13,6 +13,7 @@ import { VideoEditTimelineKeyframes } from '../timeline/VideoEditTimelineKeyfram
 import { captureVideoEditCommandContext, executeVideoEditCommand } from '../application/videoEditCommands'
 import { videoEditClipValue } from '@/core/videoEdit/keyframes'
 import { matchVideoEditShortcut } from '@/core/videoEdit/commands'
+import { requireVideoEditBuiltinEffect } from '@/core/videoEdit/builtinEffects'
 
 vi.mock('@/hooks/useI18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }))
 vi.mock('@/components/ui/textMeasurement', () => ({ measureElementTextWidth: () => 30 }))
@@ -129,7 +130,7 @@ it('助手同一通用事务写运动与 Lumetri 序列、读回；越界拒绝�
   const points = [{ time: 0, value: 0, interpolation: 'ease' }, { time: 30, value: .5, interpolation: 'linear' }]
   try {
     const catalog = await app.read({ kind: 'video_edit.builtin_effect', id: `${id}:effect:lumetri_color` }, ['video_edit.builtin_effect.params']) as { properties: Record<string, unknown> }
-    expect(catalog.properties['video_edit.builtin_effect.params']).toHaveLength(49)
+    expect(catalog.properties['video_edit.builtin_effect.params']).toHaveLength(requireVideoEditBuiltinEffect('lumetri_color').params.length)
     const baseline = await app.read(ref)
     const changed = await app.call('change_application_entities', { summary: '动画与调色', changes: [{ kind: 'set_properties', entityType: ref.kind, target: ref, properties: { 'video_edit.clip.x.keyframes': points } }, { kind: 'set_properties', entityType: effectRef.kind, target: effectRef, properties: { 'video_edit.effect.parameters.exposure.keyframes': points.map(point => ({ ...point, value: point.value * 2 })) } }] }, baseline.revisions as Record<string, number>)
     expect(changed, JSON.stringify(changed)).toMatchObject({ ok: true })

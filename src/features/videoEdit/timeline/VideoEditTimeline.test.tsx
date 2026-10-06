@@ -21,6 +21,10 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { TIMELINE_HEADER_WIDTH as header, TIMELINE_DEFAULT_SPLIT, timelineLayout } from './timelineGeometry'
 import { addLegacyVideoEditTracks } from '@/core/videoEdit/testFixtures'
 import { resetFilmstripFramesForTests } from '@/services/videoFilmstrip/filmstripFrameService'
+import { VirtuosoMockContext } from 'react-virtuoso'
+import { createVideoEditCaption } from '../application/videoEditTimedContent'
+import { selectedVideoEditSubtitleId } from '../application/videoEditSubtitleSelection'
+import { VideoEditTimedContentPanel } from '../panels/VideoEditTimedContentPanel'
 
 vi.mock('@/hooks/useI18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }))
 const source = 'export default {apiVersion:1,name:"代码",kind:"generator",mode:"dynamic",width:64,height:64,durationSeconds:30,seed:1,parameters:{},render(ctx){return [rect({x:0,y:0,width:10,height:10,fill:[1,0,0,1]})];}}'
@@ -201,6 +205,27 @@ it('普通视频与代码多选，连续拖动仅本地预览，释放一次历�
   fireEvent.pointerUp(host, event(header + 40))
   expect(current().clips.map(clip => clip.start)).toEqual([10, 70]); expect(owner.past).toHaveLength(history + 1)
   act(() => undoVideoEdit(owner.document.id)); expect(current().clips.map(clip => clip.start)).toEqual([0, 60]); expect(onError).not.toHaveBeenCalled()
+})
+
+it('字幕时间线点击与面板行双向选中，切换标记页后也能定位字幕，选中不推进撤销', async () => {
+  vi.spyOn(getPlatform().audioEdit, 'listAsrModels').mockResolvedValue([])
+  const first = createVideoEditCaption(owner.document.id, current().id, { start: 0, duration: 30, text: '第一条' })
+  const second = createVideoEditCaption(owner.document.id, current().id, { start: 60, duration: 30, text: '第二条' })
+  const history = owner.past.length
+  const view = render(<><View /><VirtuosoMockContext.Provider value={{ viewportHeight: 280, itemHeight: 56 }}><VideoEditTimedContentPanel instance={owner} onError={onError} /></VirtuosoMockContext.Provider></>)
+  const secondBar = view.getByRole('button', { name: '定位字幕 第二条' })
+  fireEvent.click(secondBar)
+  expect(owner.frame).toBe(60); expect(owner.activePanel).toBe('content')
+  expect(selectedVideoEditSubtitleId(owner)).toBe(second)
+  expect(secondBar.getAttribute('aria-pressed')).toBe('true')
+  expect((await view.findByRole('button', { name: '字幕：第二条' })).getAttribute('aria-pressed')).toBe('true')
+  fireEvent.click(view.getByRole('button', { name: '字幕：第一条' }))
+  expect(selectedVideoEditSubtitleId(owner)).toBe(first)
+  expect(view.getByRole('button', { name: '定位字幕 第一条' }).getAttribute('aria-pressed')).toBe('true')
+  fireEvent.click(view.getByRole('tab', { name: '标记' }))
+  fireEvent.click(view.getByRole('button', { name: '定位字幕 第一条' }))
+  await waitFor(() => expect(view.getByRole('tab', { name: '字幕' }).getAttribute('aria-selected')).toBe('true'))
+  expect(owner.past).toHaveLength(history); expect(onError).not.toHaveBeenCalled()
 })
 
 it('框选与关联选择不误定位播放头；Shift 点击关联集合整体取消', () => {

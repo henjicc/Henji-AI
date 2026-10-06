@@ -8,7 +8,7 @@ import { videoEditCurvesSchema, assertVideoEditBuiltinCurves } from './keyframes
 
 /** 内置效果实例（4.7a）：内置效果 ID 与参数（键与范围由 `builtinEffects.ts` 登记）。 */
 export const videoEditBuiltinEffectInstanceSchema = z.object({
-  id: z.string().min(1).max(64), params: z.record(z.string().regex(/^[A-Za-z][A-Za-z0-9_]{0,63}$/), z.union([z.number().finite(), z.boolean(), z.string().max(64)])),
+  id: z.string().min(1).max(64), params: z.record(z.string().regex(/^[A-Za-z][A-Za-z0-9_]{0,63}$/), z.union([z.number().finite(), z.boolean(), z.string().max(4096)])),
   curves: videoEditCurvesSchema.optional(),
 }).strict()
 export type VideoEditBuiltinEffectInstance = z.infer<typeof videoEditBuiltinEffectInstanceSchema>

@@ -3,7 +3,7 @@ import { applyWriterTable, propertyOperations, writableProperties } from '@/core
 import { videoEditAnnotationSchema, videoEditClipSchema, videoEditDocumentSchema, videoEditBinSchema, videoEditItemSchema, videoEditTrackSchema, createVideoEditSequence, changeVideoEditSequenceSettings, type VideoEditDocument } from '@/core/videoEdit/document'
 import { videoEditTransitionClipIds } from '@/core/videoEdit/transitions'
 import { editVideoProject, restoreVideoEditSnapshot, requireVideoEditInstance, listVideoEditInstances, getVideoEditProjectView, setVideoEditProjectView, switchVideoEditSequence, getVideoEditTimelineView, setVideoEditTimelineView, validateVideoEditTimelineView, validateVideoEditProgramControl, setVideoEditView, videoEditProgramCommandIdentity, restoreVideoEditProgramCommandIdentity, subscribeVideoEditView, subscribeVideoEditDomain, videoEditDomainRevision as videoEditRevision, type VideoEditProjectView, type VideoEditTimelineView } from './videoEditService'
-import { VIDEO_EDIT_FIELDS, VIDEO_EDIT_CONTROLLED_AGGREGATES, VIDEO_EDIT_CLIP_CONTENT_CASCADES, VIDEO_EDIT_COMPOSITE_CASCADES, VIDEO_EDIT_PROGRAM_SOURCE_CASCADE, videoEditCollectionValues, videoEditDataKey, type VideoEditEntityType } from './videoEditFields'
+import { VIDEO_EDIT_FIELDS, VIDEO_EDIT_CONTROLLED_AGGREGATES, VIDEO_EDIT_CLIP_CONTENT_CASCADES, VIDEO_EDIT_CLIP_KEYFRAME_TIME_CASCADE, VIDEO_EDIT_TIME_CASCADES, VIDEO_EDIT_COMPOSITE_CASCADES, VIDEO_EDIT_PROGRAM_SOURCE_CASCADE, videoEditCollectionValues, videoEditDataKey, type VideoEditEntityType } from './videoEditFields'
 import { pauseVideoEditSourceForProgram, restoreVideoEditSourcePause, revertVideoEditSourcePause, matchesVideoEditSourceCommand, videoEditSourceCommandIdentity, type VideoEditSourcePause } from './videoEditSource'
 import { videoEditCaptionSchema, videoEditMarkerSchema, reconcileVideoEditTimedContent } from '@/core/videoEdit/timedContent'
 import { readVideoEditData, splitVideoEditRef } from './videoEditReflection'
@@ -47,20 +47,24 @@ function cascades(before: VideoEditDocument, after: VideoEditDocument): Applicat
   for (const sequence of after.sequences) {
     const previous = before.sequences.find(item => item.id === sequence.id)
     if (!previous || previous.frameRate.numerator * sequence.frameRate.denominator === sequence.frameRate.numerator * previous.frameRate.denominator) continue
-    const clips = sequence.clips.filter(clip => previous.clips.some(item => item.id === clip.id && (clip.start !== item.start || clip.duration !== item.duration)))
+    const clips = sequence.clips.filter(clip => previous.clips.some(item => item.id === clip.id && (clip.start !== item.start || clip.duration !== item.duration || JSON.stringify(clip.curves) !== JSON.stringify(item.curves))))
     const marks = sequence.annotations.filter(mark => previous.annotations.some(item => item.id === mark.id && mark.frame !== item.frame))
     const markers = (sequence.markers ?? []).filter(mark => previous.markers?.some(item => item.id === mark.id && mark.frame !== item.frame))
     const captions = (sequence.captions ?? []).filter(caption => previous.captions?.some(item => item.id === caption.id && (caption.start !== item.start || caption.duration !== item.duration)))
-    for (const [items, entityType, propertyIds, declarationId] of [
-      [clips, 'video_edit.clip', ['video_edit.clip.start', 'video_edit.clip.duration'], 'video_edit.sequence_clip_time'],
-      [marks, 'video_edit.annotation', ['video_edit.annotation.frame'], 'video_edit.sequence_annotation_time'],
-      [markers, 'video_edit.marker', ['video_edit.marker.frame'], 'video_edit.sequence_marker_time'],
-      [captions, 'video_edit.caption', ['video_edit.caption.start', 'video_edit.caption.duration'], 'video_edit.sequence_caption_time'],
-    ] as const) for (let offset = 0; offset < items.length; offset += 256) effects.push({ effect: 'update', entityType, propertyIds: [...propertyIds], refs: items.slice(offset, offset + 256).map(item => ({ kind: entityType, id: `${after.id}:${item.id}` })), origin: { kind: 'cascade', declarationId } })
+    // 回执与静态声明共用属性表，避免新增重映射属性后仍返回旧的时间字段。
+    for (const [items, declaration] of [
+      [clips, VIDEO_EDIT_TIME_CASCADES[0]],
+      [marks, VIDEO_EDIT_TIME_CASCADES[1]],
+      [markers, VIDEO_EDIT_TIME_CASCADES[2]],
+      [captions, VIDEO_EDIT_TIME_CASCADES[3]],
+    ] as const) for (let offset = 0; offset < items.length; offset += 256) effects.push({ effect: declaration.effect, entityType: declaration.entityType, propertyIds: [...declaration.propertyIds], refs: items.slice(offset, offset + 256).map(item => ({ kind: declaration.entityType, id: `${after.id}:${item.id}` })), origin: { kind: 'cascade', declarationId: declaration.declarationId } })
   }
   for (const sequence of after.sequences) {
     const previous = before.sequences.find(value => value.id === sequence.id)
     if (!previous || JSON.stringify(previous.clips) === JSON.stringify(sequence.clips) || previous.frameRate.numerator * sequence.frameRate.denominator !== sequence.frameRate.numerator * previous.frameRate.denominator) continue
+    const retimedClips = sequence.clips.filter(clip => previous.clips.some(item => item.id === clip.id && item.duration !== clip.duration && JSON.stringify(item.curves) !== JSON.stringify(clip.curves)))
+    const keyframeDeclaration = VIDEO_EDIT_CLIP_KEYFRAME_TIME_CASCADE
+    for (let offset = 0; offset < retimedClips.length; offset += 256) effects.push({ effect: keyframeDeclaration.effect, entityType: keyframeDeclaration.entityType, propertyIds: keyframeDeclaration.propertyIds, refs: retimedClips.slice(offset, offset + 256).map(clip => ({ kind: keyframeDeclaration.entityType, id: `${after.id}:${clip.id}` })), origin: { kind: 'cascade', declarationId: keyframeDeclaration.declarationId } })
     for (const kind of ['marker', 'caption'] as const) {
       const from = kind === 'marker' ? previous.markers ?? [] : previous.captions ?? []
       const to = kind === 'marker' ? sequence.markers ?? [] : sequence.captions ?? []

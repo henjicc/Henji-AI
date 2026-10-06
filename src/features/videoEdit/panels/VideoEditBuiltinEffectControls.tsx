@@ -10,6 +10,8 @@ import { VideoEditSmartRegionControls } from './VideoEditSmartRegionControls'
 import { evaluateVideoEditEffect } from '@/core/videoEdit/keyframes'
 import { requireVideoEditInstance, setVideoEditView } from '../application/videoEditService'
 import { VideoEditKeyframeControls } from './VideoEditKeyframeControls'
+import { UiToneCurve } from '@/components/ui'
+import { encodeLumetriCurve, lumetriCurvePoints, parseLumetriCurve } from '@/core/videoEdit/lumetriCurves'
 
 type Gesture = VideoEditBuiltinParamGesture
 
@@ -32,13 +34,15 @@ function ScrubNumber({ label, value, min, max, step, precision, unit, gesture, o
   </span>
 }
 
-function ParamControl({ param, value, gesture }: { param: VideoEditBuiltinParam; value: unknown; gesture: Gesture }): React.ReactElement {
+function ParamControl({ param, value, values, gesture }: { param: VideoEditBuiltinParam; value: unknown; values: Readonly<Record<string, unknown>>; gesture: Gesture }): React.ReactElement {
   const set = (next: unknown): void => gesture.commit({ params: { [param.key]: next } })
   switch (param.type) {
     case 'number': return <ScrubNumber label={param.name} value={value as number} min={param.min} max={param.max} step={param.step} precision={param.step < 1 ? 1 : 0} unit={VIDEO_EDIT_BUILTIN_UNIT_LABELS[param.unit]} gesture={gesture} onChange={set} />
     case 'boolean': return <span className="flex shrink-0 items-center pr-4"><UiSwitch aria-label={param.name} checked={value as boolean} onCheckedChange={set} /></span>
     case 'enum': return <span className="w-32 shrink-0 pr-4"><Dropdown ariaLabel={param.name} value={value as string} options={param.options.map(option => ({ value: option.value, label: option.label }))} onSelect={set} buttonClassName="w-full" /></span>
     case 'color': return <ColorControl label={param.name} value={value as string} gesture={gesture} onChange={set} />
+    case 'curve': return <span className="w-32 shrink-0"><UiToneCurve label={param.name} points={['master', 'red', 'green', 'blue'].includes(param.key.slice(6, -7)) ? lumetriCurvePoints(values, param.key.slice(6, -7)) : parseLumetriCurve(value || '').length ? parseLumetriCurve(value) : [{ x: 0, y: 50 }, { x: 100, y: 50 }]} onPointsChange={points => { if (param.key.startsWith('curve_hue_')) { const before = parseLumetriCurve(value || ''); const y = !before.length || points[0].y !== before[0].y ? points[0].y : points[points.length - 1].y; points = points.map((point, i) => i === 0 ? { x: 0, y } : i === points.length - 1 ? { x: 100, y } : point) } set(encodeLumetriCurve(points)) }} onBegin={gesture.begin} onFinish={gesture.finish} onCancel={gesture.cancel} /></span>
+    case 'lut': return <span className="text-xs text-text3">在 Lumetri 面板选择</span>
   }
 }
 
@@ -80,10 +84,10 @@ export function VideoEditBuiltinEffectControls({ target, effect, onError }: { ta
 export interface VideoEditBuiltinAnimation { target: VideoEditCompositeTarget; effect: VideoEditBuiltinEffect; start: number; duration: number; frame: number }
 export function VideoEditBuiltinParamRows({ params, values, gesture, animation }: { params: readonly VideoEditBuiltinParam[]; values: Readonly<Record<string, unknown>>; gesture: VideoEditBuiltinParamGesture; animation?: VideoEditBuiltinAnimation }): React.ReactElement {
   return <>{params.map(param => <Row key={param.key} param={param.key} label={param.name} tooltip={param.tooltip} resetLabel={`重置${param.name}`} resetDisabled={values[param.key] === param.default} onReset={() => gesture.commit({ params: { [param.key]: param.default } })}
-    animation={animation && <VideoEditKeyframeControls label={param.name} value={values[param.key] as number | string | boolean} points={animation.effect.builtin.curves?.[param.key]} time={animation.frame - animation.start} duration={animation.duration} discrete={param.type === 'boolean' || param.type === 'enum'}
+    animation={animation && <VideoEditKeyframeControls label={param.name} value={values[param.key] as number | string | boolean} points={animation.effect.builtin.curves?.[param.key]} time={animation.frame - animation.start} duration={animation.duration} discrete={param.type === 'boolean' || param.type === 'enum' || param.type === 'curve' || param.type === 'lut'}
       onChange={points => { const curves = { ...animation.effect.builtin.curves }; if (points.length) curves[param.key] = points; else delete curves[param.key]; gesture.commit({ curves }) }}
       onSeek={time => setVideoEditView(animation.target.projectId, { frame: animation.start + time, playing: false })}
       onDisable={() => { gesture.begin(); const curves = { ...animation.effect.builtin.curves }; delete curves[param.key]; gesture.commit({ curves }); gesture.commit({ params: { [param.key]: values[param.key] } }); gesture.finish() }} />}>
-    <ParamControl param={param} value={values[param.key]} gesture={gesture} />
+    <ParamControl param={param} value={values[param.key]} values={values} gesture={gesture} />
   </Row>)}</>
 }

@@ -1,4 +1,5 @@
 import { beforeEach, expect, it, vi } from 'vitest'
+import { resolve, sep } from 'node:path'
 import type { VideoEditComposition } from '@/core/videoEdit/document'
 import type { RenderRequest } from './videoEditWorker'
 
@@ -6,9 +7,11 @@ const platform = vi.hoisted(() => ({
   status: vi.fn(async () => ({ available: true, forcedBackend: null as 'native' | 'browser' | null })),
   connect: vi.fn(async () => ({ route: 'vf-route-1', port: { kind: 'port' } as unknown as MessagePort })),
   disconnect: vi.fn(),
+  allowRoot: vi.fn(async () => undefined),
+  dirname: vi.fn(async (path: string) => path.slice(0, path.lastIndexOf('/'))),
   logs: [] as Array<{ level: string; message: string; meta: unknown }>,
 }))
-vi.mock('@/platform/runtime', () => ({ getPlatform: () => ({ videoDecoder: { status: platform.status }, videoFrames: { connect: platform.connect, disconnect: platform.disconnect } }) }))
+vi.mock('@/platform/runtime', () => ({ getPlatform: () => ({ videoDecoder: { status: platform.status }, videoFrames: { connect: platform.connect, disconnect: platform.disconnect }, media: { allowRoot: platform.allowRoot }, system: { paths: { dirname: platform.dirname } } }) }))
 vi.mock('@/services/imageSource', () => ({ toFetchableMediaUrl: (path: string) => `url:${path}`, isLikelyLocalImagePath: (path: string) => /^[A-Z]:/.test(path) }))
 vi.mock('../videoEditMediaContent', () => ({ VideoEditMediaContentVerifier: class { async check() {} dispose() {} } }))
 vi.mock('@/core/logging', () => ({ createLogger: () => ({ info: (message: string, meta: unknown) => platform.logs.push({ level: 'info', message, meta }), warn: (message: string, meta: unknown) => platform.logs.push({ level: 'warn', message, meta }) }) }))
@@ -45,6 +48,20 @@ beforeEach(() => {
   platform.status.mockReset().mockResolvedValue({ available: true, forcedBackend: null })
   platform.connect.mockReset().mockResolvedValue({ route: 'vf-route-1', port: { kind: 'port' } as unknown as MessagePort })
   platform.disconnect.mockReset()
+  platform.allowRoot.mockClear(); platform.dirname.mockClear()
+})
+
+it('LUT 在预览/导出共用会话边界授权并转换，新引用更新后也转换；项目路径保持原样', async () => {
+  const path = resolve(sep, 'luts', 'look.cube').replace(/\\/g, '/'); const root = resolve(sep, 'luts').replace(/\\/g, '/'); const other = resolve(sep, 'other', 'input.cube').replace(/\\/g, '/')
+  const document = { ...composition(), lumetriLuts: [{ id: 'lut', name: 'Look', path, contentIdentity: 'a'.repeat(64) }] }
+  const session = new VideoEditRenderSession(document); await session.present(0)
+  expect(platform.allowRoot).toHaveBeenCalledWith(root)
+  const init = workers[0].messages.find(value => value.message.kind === 'init')!.message as Extract<RenderRequest, { kind: 'init' }>
+  expect(init.document.lumetriLuts?.[0].path).toBe(`url:${path}`); expect(document.lumetriLuts[0].path).toBe(path)
+  await session.updateDocument({ ...document, lumetriLuts: [...document.lumetriLuts, { ...document.lumetriLuts[0], id: 'new', path: other }] })
+  expect(platform.allowRoot).toHaveBeenCalledTimes(2)
+  expect(workers[0].messages.at(-1)?.message).toMatchObject({ kind: 'update', document: { lumetriLuts: [{ path: `url:${path}` }, { path: `url:${other}` }] } })
+  await session.dispose()
 })
 
 it('跟踪结果带版本原样发送 Worker，关闭后不再发送', async () => {

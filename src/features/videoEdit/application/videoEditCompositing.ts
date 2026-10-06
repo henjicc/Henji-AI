@@ -173,7 +173,7 @@ export function updateVideoEditBuiltinEffect(target: VideoEditCompositeTarget, e
         const time = requireVideoEditInstance(target.projectId).frame - clip.start
         if (time < 0 || time >= clip.duration) throw new Error(`请将播放头放在片段内（${clip.start}–${clip.start + clip.duration - 1} 帧）再编辑关键帧。`)
         const definition = requireVideoEditBuiltinEffect(builtin.id).params.find(param => param.key === key)!
-        curves[key] = putVideoEditKeyframe(curves[key], { time, value: params[key], interpolation: curves[key].find(point => point.time === time)?.interpolation ?? (definition.type === 'boolean' || definition.type === 'enum' ? 'hold' : 'linear') })
+        curves[key] = putVideoEditKeyframe(curves[key], { time, value: params[key], interpolation: curves[key].find(point => point.time === time)?.interpolation ?? (definition.type === 'boolean' || definition.type === 'enum' || definition.type === 'curve' || definition.type === 'lut' ? 'hold' : 'linear') })
         if (builtin.params[key] === undefined) delete params[key]; else params[key] = builtin.params[key]
       }
       effect.builtin = { ...builtin, params, ...(Object.keys(curves).length ? { curves } : {}) }

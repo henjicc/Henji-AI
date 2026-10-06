@@ -66,7 +66,7 @@ export function assertVideoEditBuiltinCurves(builtin: { id: string; curves?: Vid
     if (!param) throw new Error(`参数 ${key}.keyframes 不存在；可用：${definition.params.map(param => param.key).join('、')}。`)
     for (const point of points) {
       validateVideoEditBuiltinParams(builtin.id, { [key]: point.value })
-      if ((param.type === 'boolean' || param.type === 'enum') && point.interpolation !== 'hold') throw new Error(`${param.name}.keyframes 只能用 hold 定格插值。`)
+      if ((param.type === 'boolean' || param.type === 'enum' || param.type === 'curve' || param.type === 'lut') && point.interpolation !== 'hold') throw new Error(`${param.name}.keyframes 只能用 hold 定格插值。`)
     }
   }
 }

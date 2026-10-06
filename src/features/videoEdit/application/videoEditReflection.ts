@@ -10,6 +10,7 @@ import { getVideoEditPlaybackResolution } from './videoEditPlaybackResolution'
 import { VIDEO_EDIT_COMPOSITE_TYPES, videoEditCompositeItems, videoEditCompositeData, videoEditCompositeOwner, type VideoEditCompositeEntityType } from './videoEditCompositeEntities'
 import { videoEditClipSpeedData } from './videoEditClipSpeed'
 import { createVideoEditEffectPresetRegistration } from './videoEditEffectPresetReflection'
+import { createVideoEditSubtitlePresetRegistration } from './videoEditSubtitlePresetReflection'
 
 export function splitVideoEditRef(ref: ApplicationRef): { projectId: string; childId: string } {
   if (ref.kind === 'video_edit.document') return { projectId: ref.id, childId: '' }
@@ -38,7 +39,7 @@ export function videoEditEntityItems(document: VideoEditDocument, type: VideoEdi
 }
 export function readVideoEditData(ref: ApplicationRef): VideoEditFieldData {
   const { projectId, childId } = splitVideoEditRef(ref); const instance = requireVideoEditInstance(projectId)
-  if (ref.kind === 'video_edit.document') return { name: instance.document.name, frame: instance.frame, selection: instance.selection ?? '', activeSequenceId: instance.activeSequenceId, dirty: instance.dirty, selectedItemIds: [...instance.selectedItemIds], selectedBinId: instance.selectedBinId, openSequenceIds: [...instance.openSequenceIds], timelineView: { ...getVideoEditTimelineView(projectId) }, programPlayback: { frame: instance.frame, playing: instance.playing, playbackDirection: instance.playbackDirection }, playbackResolution: { ...getVideoEditPlaybackResolution(projectId) } }
+  if (ref.kind === 'video_edit.document') return { lumetriLuts: (instance.document.lumetriLuts ?? []).map(({ id, name }) => ({ id, name })), name: instance.document.name, frame: instance.frame, selection: instance.selection ?? '', activeSequenceId: instance.activeSequenceId, dirty: instance.dirty, selectedItemIds: [...instance.selectedItemIds], selectedBinId: instance.selectedBinId, openSequenceIds: [...instance.openSequenceIds], timelineView: { ...getVideoEditTimelineView(projectId) }, programPlayback: { frame: instance.frame, playing: instance.playing, playbackDirection: instance.playbackDirection }, playbackResolution: { ...getVideoEditPlaybackResolution(projectId) } }
   if (ref.kind === 'video_edit.source') { if (childId !== 'source') throw new Error('NOT_FOUND：源预览引用无效。'); return { ...readVideoEditSource(projectId) } }
   if (VIDEO_EDIT_COMPOSITE_TYPES.some(type => type === ref.kind)) return videoEditCompositeData(instance.document, ref.kind as VideoEditCompositeEntityType, childId)
   if (ref.kind === 'video_edit.builtin_effect') {
@@ -157,5 +158,5 @@ export function createVideoEditRegistrations(): ApplicationEntityRegistration[] 
       ...(entityType === 'video_edit.builtin_effect' ? { writeExclusion: { reason: VIDEO_EDIT_BUILTIN_CATALOG_READ_ONLY } } : {}),
       ...(required[entityType] ? { collectionWrite: { creatable: true, removable: entityType !== 'video_edit.code_version', requiredPropertyIds: required[entityType]!, maxItemsPerChange: 32 } } : {}),
     }, properties: fieldDescriptors(VIDEO_EDIT_FIELDS[entityType]), provider: new VideoEditProvider(entityType), schemaDocuments: videoEditSchemaDocuments(entityType),
-  })), createVideoEditEffectPresetRegistration()]
+  })), createVideoEditEffectPresetRegistration(), createVideoEditSubtitlePresetRegistration()]
 }

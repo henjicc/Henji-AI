@@ -32,6 +32,8 @@ import { assetApplicationService } from '@/features/assets/application/assetAppl
 import { placeVideoEditCreativeResultFromCapability } from './videoEditResultCapability'
 import { observeVideoEditFrame } from './videoEditFrameObservation'
 import { handleVideoEditInPlaceCapability } from './videoEditInPlaceCapability'
+import { rippleVideoEditClipSpeedCapability } from '@/core/application-control/domains/videoEdit/videoEditSpeedCapability'
+import { rippleVideoEditClipSpeed } from './videoEditSpeedCapability'
 import { measureVideoEditLoudnessCapability, normalizeVideoEditLoudnessCapability } from '@/core/application-control/domains/videoEdit/videoEditLoudnessCapabilities'
 import { executeVideoEditLoudnessCapability } from './videoEditLoudnessCapability'
 import type { VideoEditLoudnessSettings } from '@/core/videoEdit/loudness'
@@ -74,7 +76,9 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
         const input = analyzeVideoEditLumetriCapability.inputSchema.parse(raw)
         const sequence = splitVideoEditRef(input.sequenceRef); const clip = splitVideoEditRef(input.clipRef)
         if (sequence.projectId !== input.documentRef.id || clip.projectId !== input.documentRef.id || !sequence.childId || !clip.childId) throw new Error('序列和片段必须属于目标剪辑。')
-        const result = await analyzeVideoEditLumetri({ projectId: input.documentRef.id, sequenceId: sequence.childId, clipId: clip.childId }, input.frame, context.signal)
+        const reference = input.referenceClipRef ? splitVideoEditRef(input.referenceClipRef) : undefined
+        if (reference && (reference.projectId !== input.documentRef.id || !reference.childId)) throw new Error('参考片段必须属于目标剪辑。')
+        const result = await analyzeVideoEditLumetri({ projectId: input.documentRef.id, sequenceId: sequence.childId, clipId: clip.childId }, input.frame, context.signal, undefined, { sampleCount: input.sampleCount, referenceClipId: reference?.childId, matchMethod: input.matchMethod })
         return { ...result, resultRef: input.clipRef, message: '已分析自动校色建议，可写入 Lumetri 参数后观察并微调。' }
       }
       if (definition.id === measureVideoEditLoudnessCapability.id) return executeVideoEditLoudnessCapability(measureVideoEditLoudnessCapability.inputSchema.parse(raw), false, context.signal)
@@ -82,6 +86,7 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
       const subtitles = await handleVideoEditSubtitleCapability(definition.id, raw, context)
       if (subtitles) return subtitles
       // 原地生成（4.12）：与时间线右键同一个服务
+      if (definition.id === rippleVideoEditClipSpeedCapability.id) return rippleVideoEditClipSpeed(raw, context)
       const inPlace = await handleVideoEditInPlaceCapability(definition.id, raw, context)
       if (inPlace) return inPlace
       if (definition.id === observeVideoEditFrameCapability.id) {

@@ -66,7 +66,7 @@ export async function renderVideoEditCompositeScene(document: VideoEditCompositi
       current()
       const free = targets.filter(target => target !== key && (!preserve || target !== targets[0]))
       const filtered = plan.builtin
-        ? await runtime.builtin(free[0], plan.builtin, result, frame, renderScale)
+        ? await runtime.builtin(free[0], plan.builtin, result, frame, renderScale, document.lumetriLuts)
         : await runtime.filter(free[0], plan.version, plan.program, { ...plan.context, width: logical.width, height: logical.height }, plan.parameters, result, plan.transitionHandles)
       current()
       if (plan.builtin && plan.mask) {
