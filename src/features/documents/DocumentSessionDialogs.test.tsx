@@ -7,11 +7,9 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import i18n from '@/i18n/config'
 import type { NameCheckResult } from '@/core/documents/types'
 
-import { DocumentDraftRecoveryNotice } from './DocumentDraftRecoveryNotice'
 import { DocumentSaveNameDialog } from './DocumentSaveNameDialog'
 import { DocumentSessionDialogs } from './DocumentSessionDialogs'
 import { dialogDocumentSessionPrompter, useDocumentPromptStore } from './documentPromptStore'
-import { createTestRegistry } from './documentSessionTestKit'
 import type { DocumentSaveNamePromptInfo } from './documentSessionTypes'
 
 /*
@@ -127,21 +125,5 @@ describe('提示宿主', () => {
     expect(await screen.findByText('文件已在别处被修改')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: '覆盖' }))
     await expect(choice).resolves.toBe('overwrite')
-  })
-})
-
-describe('遗留草稿区块', () => {
-  it('列出遗留草稿；继续编辑交给页面，移到回收站后消失；没有时不渲染', async () => {
-    const { registry, commands } = createTestRegistry()
-    const leftover = commands.seed({ name: '未命名画布 3', content: { items: ['x'] }, draft: true })
-    const onRecover = vi.fn()
-    const { container } = render(<DocumentDraftRecoveryNotice kind="canvas" registry={registry} onRecover={onRecover} />)
-    expect(await screen.findByText('有 1 份草稿没有保存')).toBeTruthy()
-    expect(screen.getByText('未命名画布 3')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: '继续编辑' }))
-    expect(onRecover).toHaveBeenCalledWith(expect.objectContaining({ id: leftover.id }))
-    fireEvent.click(screen.getByRole('button', { name: '移到回收站' }))
-    await waitFor(() => expect(container.textContent).toBe(''))
-    expect(commands.trashed).toEqual([leftover.id])
   })
 })

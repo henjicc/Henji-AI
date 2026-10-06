@@ -1,5 +1,5 @@
 /** @vitest-environment jsdom */
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import i18n from '@/i18n/config'
 import { DocumentOperations } from '@/features/documents/documentOperations'
@@ -46,22 +46,26 @@ describe('剪辑项目页', () => {
     expect(document.querySelector(`[data-project-id="${plain.id}"] img`)).toBeNull()
   })
 
-  it('列出已保存的项目（不含草稿项目），点开交回项目；草稿项目在恢复区，可继续编辑或整个移到回收站', async () => {
+  it('已保存项目点开交回项目；草稿项目带标记排在最前，可继续编辑或经确认整个移到回收站', async () => {
     const { kit, actions, view } = setup()
     const saved = kit.commands.seedProject({ name: '旅行 Vlog' })
     const draft = kit.commands.seedProject({ name: '未命名项目 1', draft: true })
     view()
-    await screen.findByText('1 个项目')
+    await waitFor(() => expect(document.querySelector(`[data-project-id="${draft.id}"]`)).toBeTruthy())
+    await waitFor(() => expect(document.querySelector(`[data-project-id="${saved.id}"]`)).toBeTruthy())
+    const ids = Array.from(document.querySelectorAll('[data-project-id]')).map((element) => element.getAttribute('data-project-id'))
+    expect(ids).toEqual([draft.id, saved.id])
     fireEvent.click(document.querySelector(`[data-project-id="${saved.id}"]`)!)
     expect(actions.onOpen).toHaveBeenCalledWith(expect.objectContaining({ id: saved.id }))
-    // 草稿项目只出现在恢复区
-    expect(await screen.findByText('有 1 个草稿项目没有保存')).toBeTruthy()
-    expect(document.querySelector(`[data-project-id="${draft.id}"]`)).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: '继续编辑' }))
+    const draftCard = document.querySelector(`[data-project-id="${draft.id}"]`) as HTMLElement
+    expect(draftCard.getAttribute('data-project-draft')).toBe('true')
+    fireEvent.click(draftCard)
     expect(actions.onOpen).toHaveBeenLastCalledWith(expect.objectContaining({ id: draft.id }))
-    fireEvent.click(screen.getByRole('button', { name: '移到回收站' }))
+    fireEvent.contextMenu(draftCard)
+    fireEvent.click(within(document.querySelector('[data-context-menu]') as HTMLElement).getByText('移到回收站'))
+    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: '移到回收站' }))
     await waitFor(() => expect(kit.commands.trashed).toContain(draft.id))
-    await waitFor(() => expect(screen.queryByText('有 1 个草稿项目没有保存')).toBeNull())
+    await waitFor(() => expect(document.querySelector(`[data-project-id="${draft.id}"]`)).toBeNull())
   })
 
   it('右键在文件夹中显示、重命名实时查重、删除整个项目文件夹移到回收站；找不到的外部项目只能从列表移除', async () => {

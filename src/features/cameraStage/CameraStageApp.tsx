@@ -143,7 +143,6 @@ const CameraStageAppInner: React.FC<CameraStageAppProps> = ({ onBackToToolbox })
     <DocumentLibraryPage
       kind="camera_stage"
       title="3D 镜头参考"
-      description="搭建三维场景、摆姿势、调摄像机，截图给 AI 当参考图"
       onBack={onBackToToolbox}
       backLabel="返回工具"
       icon={ICON_TOOL_CAMERA_STAGE}

@@ -1111,16 +1111,7 @@
       "later": "稍后处理"
     },
     "recovery": {
-      "title": "有 {{count}} 份草稿没有保存",
-      "description": "上次退出前留下的草稿，可以继续编辑，或移到回收站。",
-      "meta": "{{time}} 编辑",
-      "metaInProject": "{{time}} 编辑 · {{project}}",
-      "recover": "继续编辑",
-      "discard": "移到回收站",
-      "discardFailed": "没能移到回收站：{{message}}",
-      "projectTitle": "有 {{count}} 个草稿项目没有保存",
-      "projectDescription": "上次退出前留下的草稿项目，可以继续编辑，或把整个项目文件夹移到回收站。",
-      "projectMeta": "{{time}} 创建"
+      "discardFailed": "没能移到回收站：{{message}}"
     }
   },
   "documentLibrary": {
@@ -1144,7 +1135,7 @@
       "created": "创建时间",
       "name": "名称"
     },
-    "filterLabel": "筛选",
+    "filterLabel": "按所属项目",
     "filter": {
       "all": "全部",
       "standalone": "不在项目里"
@@ -1152,6 +1143,24 @@
     "location": {
       "standalone": "不在项目里"
     },
+    "nav": {
+      "all": "全部",
+      "recent": "最近打开",
+      "drafts": "未保存草稿"
+    },
+    "recentEmpty": "还没有在这里打开过",
+    "view": {
+      "grid": "网格视图",
+      "list": "列表视图"
+    },
+    "columns": {
+      "name": "名称",
+      "location": "所属项目",
+      "modified": "修改时间",
+      "created": "创建时间",
+      "size": "大小"
+    },
+    "dropHint": "也可以把文件拖到这里。",
     "status": {
       "missing": "文件不存在",
       "missingFolder": "文件夹不存在"
@@ -1164,7 +1173,12 @@
       "more": "更多",
       "selectMultiple": "多选",
       "selectItem": "选择",
-      "deselectItem": "取消选择"
+      "deselectItem": "取消选择",
+      "draft": {
+        "marker": "草稿",
+        "open": "继续编辑",
+        "discard": "移到回收站"
+      }
     },
     "selection": {
       "selectedCount": "已选择 {{count}} 项",

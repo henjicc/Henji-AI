@@ -60,11 +60,11 @@ describe('通用数据源', () => {
     await waitFor(() => expect(commands.refreshCount).toBe(1))
   })
 
-  it('按“不在项目里 / 某个项目”筛选；筛选下为空时不显示新建提示', async () => {
+  it('左栏“按所属项目”筛选：不在项目里 / 某个项目，全部回到全部', async () => {
     const { standalone, inProject } = setup()
     await waitFor(() => expect(card(inProject.id)).toBeTruthy())
-    fireEvent.click(screen.getByRole('button', { name: '筛选' }))
-    fireEvent.click(await screen.findByRole('option', { name: '不在项目里' }))
+    expect(screen.getByText('按所属项目')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '不在项目里' }))
     await waitFor(() => expect(card(inProject.id)).toBeNull())
     expect(card(standalone.id)).toBeTruthy()
   })
@@ -86,15 +86,26 @@ describe('通用数据源', () => {
     expect(kit.commands.trashed).toEqual([])
   })
 
-  it('草稿不进网格，放在草稿区；继续编辑走同一个打开入口', async () => {
+  it('遗留草稿带标记排在最前，只出现一次；单击走同一个打开入口，菜单移到回收站经确认', async () => {
     const kit = createTestRegistry()
+    const saved = kit.commands.seed({ name: '已保存', content: { items: [] } })
     const draft = kit.commands.seed({ name: '未命名测试 1', content: { items: ['x'] }, draft: true })
     const operations = new DocumentOperations({ commands: kit.commands, registry: kit.registry, kinds: { require: () => testDocumentKind as unknown as DocumentKindDescriptor } })
     const onOpen = vi.fn()
     render(<DocumentLibraryPage kind="canvas" title="画布" operations={operations} registry={kit.registry} onOpen={onOpen} create={{ kind: 'direct', onCreate: vi.fn() }} />)
-    fireEvent.click(await screen.findByRole('button', { name: '继续编辑' }))
+    await waitFor(() => expect(card(draft.id)).toBeTruthy())
+    await waitFor(() => expect(card(saved.id)).toBeTruthy())
+    const ids = Array.from(document.querySelectorAll('[data-project-id]')).map((element) => element.getAttribute('data-project-id'))
+    expect(ids).toEqual([draft.id, saved.id])
+    expect(card(draft.id).getAttribute('data-project-draft')).toBe('true')
+    fireEvent.click(card(draft.id))
     await waitFor(() => expect(onOpen).toHaveBeenCalledWith(expect.objectContaining({ id: draft.id })))
-    expect(card(draft.id)).toBeNull()
+    fireEvent.contextMenu(card(draft.id))
+    fireEvent.click(within(document.querySelector('[data-context-menu]') as HTMLElement).getByText('移到回收站'))
+    const dialog = await screen.findByRole('dialog')
+    fireEvent.click(within(dialog).getByRole('button', { name: '移到回收站' }))
+    await waitFor(() => expect(card(draft.id)).toBeNull())
+    expect(kit.commands.trashed).toEqual([draft.id])
   })
 })
 

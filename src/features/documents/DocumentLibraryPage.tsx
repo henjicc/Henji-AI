@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Copy, FileInput, FolderInput, FolderOpen, FolderOutput, ListX, PackageCheck, PackageOpen, PackagePlus } from 'lucide-react'
+import { Copy, File as FileIcon, FileInput, FolderInput, FolderOpen, FolderOutput, ListX, PackageCheck, PackageOpen, PackagePlus } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
 import type { ProjectCardGridExtraAction, ProjectCardGridItem } from '@/components/ProjectCardGrid'
@@ -17,7 +17,6 @@ import { MAX_ENTRY_NAME_LENGTH, normalizeEntryName } from '@/core/documents/nami
 import type { DocumentContainerRef, DocumentKindId, DocumentSummary, NameCheckResult } from '@/core/documents/types'
 import { openDialog } from '@/platform/desktopApi'
 
-import { DocumentDraftRecoveryNotice } from './DocumentDraftRecoveryNotice'
 import { toError } from './documentErrors'
 import { documentKindPresentation } from './documentKindPresentation'
 import { exportDocumentPackageInteractive, importPackageInteractive, packageFileName } from './documentPackageActions'
@@ -28,9 +27,12 @@ import {
   ALL_DOCUMENTS_FILTER,
   documentLibraryFilterValue,
   parseDocumentLibraryFilter,
+  toDocumentCardItems,
   useDocumentLibrary,
   type DocumentCardItem,
+  type DocumentLibraryFilter,
 } from './useDocumentLibrary'
+import { useLeftoverDocumentDrafts } from './useLeftoverDrafts'
 
 /*
  * 文档类型的项目页（存储底座 2.5，实施方案 2.10）：共用 ProjectLibraryPage 外壳，接上通用数据源与右键操作。
@@ -38,17 +40,18 @@ import {
  *
  * 右键：打开、重命名（实时查重，重名不加后缀）、移到项目…、移出项目、创建副本、在文件夹中显示、
  * 导出为单个文件…（4.1 通用单文件包）、收集素材到项目（4.4，只对项目里的文档）、删除（移到回收站）。
- * 页头次要动作“打开文件…”（4.4：打开别处的文档，所在位置登记为外部位置）与“导入单个文件…”（导入到作品目录）。
+ * “在文件夹中显示”同时是悬停快捷按钮。左栏次要动作“打开文件…”（4.4：打开别处的文档，所在位置登记为外部位置）
+ * 与“导入单个文件…”（导入到作品目录）；位置筛选（不在项目里 / 某个项目）是左栏的“按所属项目”一组导航。
  * 找不到文件的文档只有“从列表移除”（只改作品索引，不动磁盘）。
  * 移动遇到重名时询问“两个都保留 / 取消”；创建副本与原件在同一文件夹，按“两个都保留”自动加序号，不再询问。
- * 草稿不进网格，放在页头下方的草稿区（DocumentDraftRecoveryNotice）。
+ * 遗留草稿（意外退出、没保存）带“草稿”标记排在列表最前：单击继续编辑，菜单里可以移到回收站；按当前位置筛选。
  */
 
 export interface DocumentLibraryPageProps {
   kind: DocumentKindId
   title: ReactNode
   description?: ReactNode
-  /** 打开文档；省略时交给通用打开方式（该类型登记的 opener）。草稿区“继续编辑”也走这里。 */
+  /** 打开文档；省略时交给通用打开方式（该类型登记的 opener）。草稿“继续编辑”也走这里。 */
   onOpen?: (document: DocumentSummary) => void | Promise<void>
   /** 新建方式；文案默认“新建<类型>”。 */
   create: ProjectLibraryCreate
@@ -64,7 +67,7 @@ export interface DocumentLibraryPageProps {
   labels?: Partial<Omit<ProjectLibraryLabels, 'card' | 'selection'>>
   /** 类型专属的卡片右键动作（排在通用动作之后，如画布的“导出工程包”）；找不到文件的文档不显示。 */
   documentActions?: (document: DocumentSummary) => ProjectCardGridExtraAction[]
-  /** 页头下方的类型专属提示（如导出进度、导入失败），排在草稿区之后。 */
+  /** 页头下方的类型专属提示（如导出进度、导入失败）。 */
   banner?: ReactNode
   /** 测试替换；正式运行用应用唯一的服务与会话登记表。 */
   operations?: DocumentOperations
@@ -75,6 +78,12 @@ type PendingConflict = { name: string; retry: () => Promise<void> }
 
 function asDocumentItem(item: ProjectCardGridItem): DocumentCardItem {
   return item as DocumentCardItem
+}
+
+function draftMatchesFilter(draft: DocumentSummary, filter: DocumentLibraryFilter): boolean {
+  if (filter.kind === 'all') return true
+  if (filter.kind === 'standalone') return draft.container.kind === 'user'
+  return draft.container.kind === 'project' && draft.container.projectId === filter.projectId
 }
 
 export function DocumentLibraryPage({
@@ -99,6 +108,12 @@ export function DocumentLibraryPage({
   const { t } = useTranslation('ui')
   const operations = providedOperations ?? getDocumentOperations()
   const library = useDocumentLibrary({ kind, describe, operations })
+  const leftover = useLeftoverDocumentDrafts(kind, registry)
+  // 草稿跟随左栏的位置筛选：选了某个项目就只看这个项目里的草稿
+  const draftItems = useMemo(
+    () => toDocumentCardItems(leftover.drafts.filter((draft) => draftMatchesFilter(draft, library.filter)), { t, describe }),
+    [leftover.drafts, library.filter, t, describe],
+  )
   const presentation = documentKindPresentation(kind)
   const kindName = t(presentation.nameKey)
   const PageIcon = icon ?? presentation.icon
@@ -198,6 +213,7 @@ export function DocumentLibraryPage({
         id: 'reveal',
         label: t('documentLibrary.actions.reveal'),
         icon: <FolderOpen className="h-4 w-4" />,
+        quick: true,
         onClick: () => { void run('reveal', () => operations.revealDocument({ id: document.id, path: document.path })) },
       },
       {
@@ -270,6 +286,21 @@ export function DocumentLibraryPage({
       created: t('documentLibrary.sortOptions.created'),
       name: t('documentLibrary.sortOptions.name'),
     },
+    nav: {
+      all: t('documentLibrary.nav.all'),
+      recent: t('documentLibrary.nav.recent'),
+      drafts: t('documentLibrary.nav.drafts'),
+    },
+    recentEmpty: t('documentLibrary.recentEmpty'),
+    view: { grid: t('documentLibrary.view.grid'), list: t('documentLibrary.view.list') },
+    columns: {
+      name: t('documentLibrary.columns.name'),
+      location: t('documentLibrary.columns.location'),
+      modified: t('documentLibrary.columns.modified'),
+      created: t('documentLibrary.columns.created'),
+      size: t('documentLibrary.columns.size'),
+    },
+    dropHint: t('documentLibrary.dropHint'),
     createDialogTitle: t('documentLibrary.create', { kind: kindName }),
     renameDialogTitle: t('documentLibrary.rename.title'),
     defaultNewName: '',
@@ -288,6 +319,11 @@ export function DocumentLibraryPage({
       selectItem: t('documentLibrary.card.selectItem'),
       deselectItem: t('documentLibrary.card.deselectItem'),
       more: t('documentLibrary.card.more'),
+      draft: {
+        marker: t('documentLibrary.card.draft.marker'),
+        open: t('documentLibrary.card.draft.open'),
+        discard: t('documentLibrary.card.draft.discard'),
+      },
     },
     selection: {
       selectedCount: (count) => t('documentLibrary.selection.selectedCount', { count }),
@@ -301,7 +337,7 @@ export function DocumentLibraryPage({
 
   const filterOptions = useMemo(() => [
     { value: documentLibraryFilterValue(ALL_DOCUMENTS_FILTER), label: t('documentLibrary.filter.all') },
-    ...(canStandalone ? [{ value: 'standalone', label: t('documentLibrary.filter.standalone') }] : []),
+    ...(canStandalone ? [{ value: 'standalone', label: t('documentLibrary.filter.standalone'), icon: FileIcon }] : []),
     ...library.projects.map((project) => ({ value: documentLibraryFilterValue({ kind: 'project', projectId: project.id }), label: project.name })),
   ], [t, canStandalone, library.projects])
 
@@ -316,7 +352,17 @@ export function DocumentLibraryPage({
       <ProjectLibraryPage
         title={title}
         description={description}
+        persistKey={`documents.${kind}`}
         items={library.items}
+        drafts={draftItems}
+        onDiscardDraft={async (item) => {
+          setActionError(null)
+          try {
+            await leftover.discard(asDocumentItem(item).document)
+          } catch (raw) {
+            setActionError(t('documentSession.recovery.discardFailed', { message: toError(raw).message }))
+          }
+        }}
         icon={PageIcon}
         emptyIcon={<PageIcon size={40} strokeWidth={1.5} aria-hidden="true" />}
         loading={library.loading}
@@ -334,15 +380,12 @@ export function DocumentLibraryPage({
         backLabel={backLabel}
         banner={(
           <>
-            <div className="mb-6 empty:hidden">
-              <DocumentDraftRecoveryNotice kind={kind} onRecover={open} {...(registry ? { registry } : {})} />
-            </div>
             {actionError ? <p role="alert" className="mb-4 text-xs text-danger-text">{actionError}</p> : null}
             {packageStatus && !actionError ? <p role="status" className={`mb-4 ${UI_TEXT_META_CLASS}`} data-observation-sensitive>{packageStatus}</p> : null}
             {banner}
           </>
         )}
-        // 只有存在项目时才有筛选可选（否则全部就是不在项目里）
+        // 只有存在项目时才有“按所属项目”可选（否则全部就是不在项目里）
         filter={library.projects.length > 0 ? {
           value: documentLibraryFilterValue(library.filter),
           defaultValue: documentLibraryFilterValue(ALL_DOCUMENTS_FILTER),

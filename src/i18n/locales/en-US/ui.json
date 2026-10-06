@@ -1111,17 +1111,7 @@
       "later": "Decide Later"
     },
     "recovery": {
-      "title_one": "{{count}} unsaved draft",
-      "title_other": "{{count}} unsaved drafts",
-      "description": "Drafts left from the last session. Continue editing them, or move them to the Recycle Bin.",
-      "meta": "Edited {{time}}",
-      "metaInProject": "Edited {{time}} · {{project}}",
-      "recover": "Continue Editing",
-      "discard": "Move to Recycle Bin",
-      "discardFailed": "Couldn't move to the Recycle Bin: {{message}}",
-      "projectTitle": "{{count}} unsaved draft project(s)",
-      "projectDescription": "Draft projects left from the last session. Continue editing, or move the whole project folder to the Recycle Bin.",
-      "projectMeta": "Created {{time}}"
+      "discardFailed": "Couldn't move to the Recycle Bin: {{message}}"
     }
   },
   "documentLibrary": {
@@ -1145,7 +1135,7 @@
       "created": "Date created",
       "name": "Name"
     },
-    "filterLabel": "Filter",
+    "filterLabel": "By Project",
     "filter": {
       "all": "All",
       "standalone": "Not in a project"
@@ -1153,6 +1143,24 @@
     "location": {
       "standalone": "Not in a project"
     },
+    "nav": {
+      "all": "All",
+      "recent": "Recently Opened",
+      "drafts": "Unsaved Drafts"
+    },
+    "recentEmpty": "Nothing opened here yet",
+    "view": {
+      "grid": "Grid View",
+      "list": "List View"
+    },
+    "columns": {
+      "name": "Name",
+      "location": "Project",
+      "modified": "Modified",
+      "created": "Created",
+      "size": "Size"
+    },
+    "dropHint": "You can also drop files here.",
     "status": {
       "missing": "File not found",
       "missingFolder": "Folder not found"
@@ -1165,7 +1173,12 @@
       "more": "More",
       "selectMultiple": "Select multiple",
       "selectItem": "Select",
-      "deselectItem": "Deselect"
+      "deselectItem": "Deselect",
+      "draft": {
+        "marker": "Draft",
+        "open": "Continue Editing",
+        "discard": "Move to Recycle Bin"
+      }
     },
     "selection": {
       "selectedCount": "{{count}} selected",

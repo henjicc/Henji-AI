@@ -344,7 +344,6 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
       <DocumentLibraryPage
         kind="audio_edit"
         title="口播剪辑"
-        description="用文字和波形剪辑，再交给专业剪辑软件"
         onBack={onBack}
         backLabel="返回工具"
         icon={ICON_TOOL_AUDIO_EDIT}

@@ -92,12 +92,6 @@
       "reason": "预设面板：面板最高 500 后滚动；快速保存区的两种状态（保存按钮 / 名称输入）叠放切换，容器固定 60 高避免切换时跳动"
     },
     {
-      "file": "src/components/projectGridLayout.ts",
-      "category": "arbitraryValue",
-      "values": ["max-w-[70rem]"],
-      "reason": "项目网格内容区最宽 1120（设计稿 Home：4 列封面卡 + 间距），三个项目列表共用这一个常量"
-    },
-    {
       "file": "src/components/Settings/sections/ModelSyncDialog.tsx",
       "category": "arbitraryValue",
       "values": ["h-[420px]"],

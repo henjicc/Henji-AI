@@ -14,7 +14,7 @@ import { parentFolderOf } from './documentSessionRegistry'
 /*
  * 项目页的通用数据源（存储底座 2.5，实施方案 2.10、重要记录 011）：
  * - 文档：按类型列出全部同类文档（含项目里的），可按“全部 / 不在项目里 / 某个项目”筛选；
- *   草稿不进网格，交给草稿区（DocumentDraftRecoveryNotice），避免同一草稿出现两次。
+ *   这里只列已保存的文档；遗留草稿由 useLeftoverDocumentDrafts 单独取，项目页把它们带标记排在最前，避免同一草稿出现两次。
  * - 项目：剪辑页用的项目列表。
  * 打开页面时先按持久化索引列出，再 refreshIndex() 扫描后刷新；通用操作（页面或助手）写入后自动刷新。
  */
@@ -77,15 +77,19 @@ export function toDocumentCardItems(documents: readonly DocumentSummary[], optio
   }
   return documents.map((document) => {
     const duplicated = (nameCounts.get(entryNameKey(document.name)) ?? 0) > 1
+    const detail = options.describe?.(document)
     const parts = [
       document.projectName || duplicated ? documentLocationLabel(document, options.t) : null,
-      options.describe?.(document) ?? null,
+      detail ?? null,
       formatTime(document.updatedAt),
     ].filter((part): part is string => Boolean(part))
     return {
       id: document.id,
       name: document.name,
       metaLine: parts.join(' · '),
+      ...(detail ? { detail } : {}),
+      location: documentLocationLabel(document, options.t),
+      ...(document.missing ? {} : { sizeBytes: document.sizeBytes }),
       ...(document.missing ? { status: options.t('documentLibrary.status.missing') } : {}),
       coverPath: document.coverPath,
       updatedAt: document.updatedAt,
@@ -176,15 +180,17 @@ export function toProjectCardItems(projects: readonly ProjectSummary[], t: TFunc
   for (const project of projects) nameCounts.set(entryNameKey(project.name), (nameCounts.get(entryNameKey(project.name)) ?? 0) + 1)
   return projects.map((project) => {
     const duplicated = (nameCounts.get(entryNameKey(project.name)) ?? 0) > 1
+    const detail = t('documentLibrary.projectDocumentCount', { count: project.documentCount })
     const parts = [
       duplicated ? parentFolderOf(project.path) : null,
-      t('documentLibrary.projectDocumentCount', { count: project.documentCount }),
+      detail,
       new Date(project.createdAt).toLocaleDateString(),
     ].filter((part): part is string => Boolean(part))
     return {
       id: project.id,
       name: project.name,
       metaLine: parts.join(' · '),
+      detail,
       ...(project.missing ? { status: t('documentLibrary.status.missingFolder') } : {}),
       createdAt: project.createdAt,
       project,
@@ -199,7 +205,7 @@ export interface ProjectLibraryState {
   reload: () => Promise<void>
 }
 
-/** 项目列表（剪辑页用）：已保存的项目，含找不到文件夹的外部项目；草稿项目交给 3.1 的草稿入口。 */
+/** 项目列表（剪辑页用）：已保存的项目，含找不到文件夹的外部项目；草稿项目由 useLeftoverDraftProjects 单独取。 */
 export function useProjectLibrary(options: { operations?: DocumentOperations } = {}): ProjectLibraryState {
   const { t } = useTranslation('ui')
   const operations = options.operations ?? getDocumentOperations()

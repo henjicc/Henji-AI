@@ -14,7 +14,7 @@ const { readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
  * 第一次启动（石墨）：剪辑页 = 项目列表 → 新建项目（草稿项目 + 同名主剪辑）→ 什么都没做离开直接丢弃；
  *   导入外部素材后离开：取消 / 保存（起名查重，主剪辑随项目改名）/ 保存到别处（更改位置…，登记为外部位置）/ 不保存（整个文件夹进回收站）；
  *   最后留一个有内容的草稿项目不离开，直接退出应用。
- * 第二次启动（纸白）：列表里还在、草稿项目在恢复区（移到回收站）→ 打开项目 → 收集素材（外部文件复制进“素材”、改成相对写法）
+ * 第二次启动（纸白）：列表里还在、草稿项目带标记排在最前（右键移到回收站）→ 打开项目 → 收集素材（外部文件复制进“素材”、改成相对写法）
  *   → 生成页的结果“加入播放头”（复制进项目“生成结果”再引用）→ 把整个项目文件夹拷到别处，用“打开项目文件夹…”打开，素材都在（相对写法生效）。
  *
  * 数据经界面与正式文档接口造，不写 SQL。回收站与“在文件夹中显示”换成主进程里的记录替身（只影响这个隔离实例）。
@@ -292,11 +292,15 @@ async function runVideoEditDocumentsRestart({ launch, userDataDir, outDir }) {
     await openEditPage(second)
     await card(second, evidence.firstRun.travel.projectId).waitFor({ state: 'visible', timeout: 15000 })
     await card(second, external.id).waitFor({ state: 'visible', timeout: 15000 })
-    await second.getByText('有 1 个草稿项目没有保存').waitFor({ state: 'visible', timeout: 15000 })
+    // 草稿项目带“草稿”标记排在列表最前；右键“移到回收站”经确认后整个文件夹移走
+    const leftoverCard = second.locator(`[data-project-id="${leftover.project.id}"][data-project-draft="true"]`)
+    await leftoverCard.waitFor({ state: 'visible', timeout: 15000 })
     await shot('paper-projects-after-restart')
-    await second.getByRole('button', { name: '移到回收站', exact: true }).click()
-    await second.getByText('有 1 个草稿项目没有保存').waitFor({ state: 'detached', timeout: 10000 })
-    assert.ok((await readShell(secondApp)).trashed.some((item) => same(item, leftover.project.path)), '恢复区丢弃草稿项目应整个移到回收站')
+    await leftoverCard.click({ button: 'right' })
+    await second.locator('[data-context-menu]').getByText('移到回收站', { exact: true }).click()
+    await second.getByRole('dialog').getByRole('button', { name: '移到回收站', exact: true }).click()
+    await leftoverCard.waitFor({ state: 'detached', timeout: 10000 })
+    assert.ok((await readShell(secondApp)).trashed.some((item) => same(item, leftover.project.path)), '列表里丢弃草稿项目应整个移到回收站')
 
     // 收集素材：外部文件复制进项目“素材”，剪辑文件里改成相对写法
     await card(second, evidence.firstRun.travel.projectId).click()

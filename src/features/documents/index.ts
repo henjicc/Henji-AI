@@ -26,7 +26,7 @@ export {
 export type * from './documentSessionTypes'
 export { useDocumentSessionState } from './useDocumentSessionState'
 export { DocumentSessionDialogs } from './DocumentSessionDialogs'
-export { DocumentDraftRecoveryNotice, type DocumentDraftRecoveryNoticeProps } from './DocumentDraftRecoveryNotice'
+export { useLeftoverDocumentDrafts, useLeftoverDraftProjects, type LeftoverDrafts } from './useLeftoverDrafts'
 
 // 通用文档操作与项目页通用数据源（存储底座 2.5）
 export {

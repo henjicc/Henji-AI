@@ -11,8 +11,8 @@ import { toError } from '@/features/documents/documentErrors'
 import { getDocumentOperations, type DocumentOperations } from '@/features/documents/documentOperations'
 import { exportProjectPackageInteractive, importPackageInteractive, packageFileName } from '@/features/documents/documentPackageActions'
 import type { DocumentSessionRegistry } from '@/features/documents/documentSessionRegistry'
-import { ProjectDraftRecoveryNotice } from '@/features/documents/ProjectDraftRecoveryNotice'
-import { useProjectLibrary, type ProjectCardItem } from '@/features/documents/useDocumentLibrary'
+import { toProjectCardItems, useProjectLibrary, type ProjectCardItem } from '@/features/documents/useDocumentLibrary'
+import { useLeftoverDraftProjects } from '@/features/documents/useLeftoverDrafts'
 import { createLogger } from '@/core/logging/logger'
 import { useNavigationStore } from '@/stores/navigationStore'
 import { getDocumentCover } from '@/commands/documents'
@@ -21,9 +21,9 @@ import { subscribeVideoEditCoverChanged } from './application/videoEditProjectCo
 /*
  * 剪辑页 = 项目列表（实施方案 2.10，3.1 剪辑接入）：每个项目是一个文件夹，剪辑是它的主文档。
  * 新建项目（草稿，离开时询问保存）、打开项目（打开主剪辑）、打开别处的项目文件夹（登记为外部位置）。
- * 数据来自通用项目列表（作品索引）；右键：打开、重命名、在文件夹中显示、导出为单个文件…（4.1）、删除（整个文件夹移到回收站），
- * 页头次要动作：打开项目文件夹…、导入单个文件…（项目包放进“项目”文件夹，单个文档的包放进作品目录），
- * 找不到文件夹的外部项目只能“从列表移除”。页头下方是意外退出留下的草稿项目。
+ * 数据来自通用项目列表（作品索引）；右键：打开、重命名、在文件夹中显示（也是悬停快捷按钮）、导出为单个文件…（4.1）、
+ * 删除（整个文件夹移到回收站）；左栏次要动作：打开项目文件夹…、导入单个文件…（项目包放进“项目”文件夹，单个文档的包放进作品目录），
+ * 找不到文件夹的外部项目只能“从列表移除”。意外退出留下的草稿项目带“草稿”标记排在最前，可继续编辑或整个移到回收站。
  */
 
 interface VideoEditProjectsPageProps {
@@ -69,6 +69,8 @@ export function VideoEditProjectsPage({ busy = false, onCreate, onOpenFolder, on
   const operations = providedOperations ?? getDocumentOperations()
   const library = useProjectLibrary({ operations })
   const items = useProjectCovers(library.items, readCover)
+  const leftover = useLeftoverDraftProjects(registry)
+  const draftItems = useMemo(() => toProjectCardItems(leftover.drafts, t), [leftover.drafts, t])
   // 工作区切走后页面仍保留（不卸载）：回到剪辑页时重新扫描并重读，资源管理器里的增删、别处新建的项目随之出现
   const active = useNavigationStore(state => state.activeWorkspace === 'videoEdit')
   const wasActive = useRef(active)
@@ -124,6 +126,7 @@ export function VideoEditProjectsPage({ busy = false, onCreate, onOpenFolder, on
       id: 'reveal',
       label: t('documentLibrary.actions.reveal'),
       icon: <FolderOpen className="h-4 w-4" />,
+      quick: true,
       onClick: () => { void run('reveal', () => operations.revealProject(project.id)) },
     }, {
       id: 'export-package',
@@ -163,6 +166,20 @@ export function VideoEditProjectsPage({ busy = false, onCreate, onOpenFolder, on
       created: t('documentLibrary.sortOptions.created'),
       name: t('documentLibrary.sortOptions.name'),
     },
+    nav: {
+      all: t('documentLibrary.nav.all'),
+      recent: t('documentLibrary.nav.recent'),
+      drafts: t('documentLibrary.nav.drafts'),
+    },
+    recentEmpty: t('documentLibrary.recentEmpty'),
+    view: { grid: t('documentLibrary.view.grid'), list: t('documentLibrary.view.list') },
+    columns: {
+      name: t('documentLibrary.columns.name'),
+      location: t('documentLibrary.columns.location'),
+      modified: t('documentLibrary.columns.modified'),
+      created: t('documentLibrary.columns.created'),
+      size: t('documentLibrary.columns.size'),
+    },
     renameDialogTitle: t('projectLibrary.renameTitle'),
     loadingMessage: t('documentLibrary.loading'),
     emptyTitle: t('projectLibrary.emptyTitle'),
@@ -180,6 +197,11 @@ export function VideoEditProjectsPage({ busy = false, onCreate, onOpenFolder, on
       selectItem: t('documentLibrary.card.selectItem'),
       deselectItem: t('documentLibrary.card.deselectItem'),
       more: t('documentLibrary.card.more'),
+      draft: {
+        marker: t('documentLibrary.card.draft.marker'),
+        open: t('documentLibrary.card.draft.open'),
+        discard: t('documentLibrary.card.draft.discard'),
+      },
     },
     selection: {
       selectedCount: (count) => t('documentLibrary.selection.selectedCount', { count }),
@@ -198,7 +220,17 @@ export function VideoEditProjectsPage({ busy = false, onCreate, onOpenFolder, on
     <ProjectLibraryPage
       title={t('projectLibrary.title')}
       description={t('projectLibrary.description')}
+      persistKey="projects.videoEdit"
       items={items}
+      drafts={draftItems}
+      onDiscardDraft={async (item) => {
+        setActionError(null)
+        try {
+          await leftover.discard(asProjectItem(item).project)
+        } catch (raw) {
+          setActionError(t('documentSession.recovery.discardFailed', { message: toError(raw).message }))
+        }
+      }}
       icon={ICON_WORKSPACE_VIDEO_EDIT}
       emptyIcon={<ICON_WORKSPACE_VIDEO_EDIT size={40} strokeWidth={1.5} aria-hidden="true" />}
       loading={library.loading}
@@ -212,9 +244,6 @@ export function VideoEditProjectsPage({ busy = false, onCreate, onOpenFolder, on
       ]}
       banner={(
         <>
-          <div className="mb-6 empty:hidden">
-            <ProjectDraftRecoveryNotice onRecover={onOpen} {...(registry ? { registry } : {})} />
-          </div>
           {actionError ? <p role="alert" className="mb-4 text-xs text-danger-text">{actionError}</p> : null}
           {packageStatus && !actionError ? <p role="status" className={`mb-4 ${UI_TEXT_META_CLASS}`} data-observation-sensitive>{packageStatus}</p> : null}
         </>
