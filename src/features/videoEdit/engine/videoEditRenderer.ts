@@ -9,7 +9,8 @@ import { codeMaterialImageIds } from '@/core/videoEdit/codeMaterialResources'
 import type { VideoEditClipAudio, VideoEditClipFrames, VideoEditDecodedPicture, VideoEditFrameBackend, VideoEditFrameSeeker, VideoEditFrameSource } from './videoEditFrameSource'
 import { VideoEditBrowserFrames } from './videoEditBrowserFrames'
 import { videoEditSourceReadError } from './videoEditSourceErrors'
-import { videoEditTransitionsAt } from '@/core/videoEdit/transitions'
+import { videoEditAudioTransitionGains, videoEditHandleFrame, videoEditTransitionMedium, videoEditTransitionWindow, videoEditTransitionsAt, type VideoEditTransitionWindow } from '@/core/videoEdit/transitions'
+import { videoEditClipFades, videoEditFadeGain, videoEditFadeOpacity } from '@/core/videoEdit/fades'
 import { activeVideoEditEffects, buildVideoEditCompositePlan } from '@/core/videoEdit/compositing'
 import { renderVideoEditCompositeScene, videoEditCompositeSurfaceKeys } from './videoEditCompositeScene'
 import { videoEditAudioMixReads, videoEditDefaultAudioGains } from '@/core/videoEdit/audioChannels'
@@ -268,7 +269,8 @@ export class VideoEditRenderer {
       this.lastForwardFrame = frame
     } else { this.lastForwardFrame = undefined; if (this.playback) await this.disposePlayback() }
     const transitions = videoEditTransitionsAt(document, frame).filter(window => visible.has(window.left.track))
-    const active = activeVideoEditClips(document, frame).filter(clip => clip.kind !== 'audio' && (!['code', 'graphic'].includes(clip.kind) || clip.opacity > 0 || activeVideoEditEffects(clip).length))
+    // 淡化手柄（PR）：片段首尾按帧乘上淡入淡出的不透明度，合成、效果与导出都用这一份。
+    const active = activeVideoEditClips(document, frame).map(clip => videoEditClipFades(clip) && clip.kind !== 'audio' ? { ...clip, opacity: clip.opacity * videoEditFadeOpacity(clip, frame) } : clip).filter(clip => clip.kind !== 'audio' && (!['code', 'graphic'].includes(clip.kind) || clip.opacity > 0 || activeVideoEditEffects(clip).length))
     const ids = new Set(active.map(clip => clip.id))
     for (const window of transitions) for (const clip of [window.left, window.right]) if (!ids.has(clip.id)) { active.push(clip); ids.add(clip.id) }
     active.push(...videoEditCaptionClips(document, frame))
@@ -291,7 +293,7 @@ export class VideoEditRenderer {
     const codeSettled = codeReady ? Promise.allSettled([codeReady]) : Promise.resolve([])
     this.frameCache.setHotFrames(active.flatMap(clip => {
       const media = videoEditClipMedia(document, clip)
-      return clip.kind === 'video' && media ? [{ mediaId: media.path, time: videoEditPictureSeconds(clipSourceSeconds(clip, frame, document.fps)) }] : []
+      return clip.kind === 'video' && media ? [{ mediaId: media.path, time: videoEditPictureSeconds(clipSourceSeconds(clip, videoEditHandleFrame(clip, frame, document.fps, media.durationSeconds), document.fps)) }] : []
     }))
     // A cut opens a new demuxer/decoder; doing that on the boundary frame stalls playback.
     // Open and decode the first picture of clips starting within half a second ahead of time.
@@ -310,7 +312,8 @@ export class VideoEditRenderer {
       }
       if (!media) throw new Error(`找不到素材 ${clip.name}`)
       if (media.kind === 'image') return this.image(media)
-      const originalTime = clipSourceSeconds(clip, frame, document.fps)
+      // 转场让片段越过源素材首尾时重复首尾帧（PR“媒体不足”）。
+      const originalTime = clipSourceSeconds(clip, videoEditHandleFrame(clip, frame, document.fps, media.durationSeconds), document.fps)
       // Every picture lookup (schedule, seek, export read) uses the same picture time: the source time plus the container
       // timestamp rounding tolerance (task 3.2, D3), so a picture a container rounded up still shows at its own frame.
       const time = videoEditPictureSeconds(originalTime)
@@ -417,15 +420,34 @@ export class VideoEditRenderer {
     const result = Array.from({ length: this.document.channels }, () => new Float32Array(length))
     const finish = startSeconds + durationSeconds
     const activeAudio = new Set<string>()
+    const fps = this.document.fps
+    // 音频过渡（PR 恒定功率／恒定增益）：左片段越过出点、右片段提前入点，在窗口里按曲线交叉淡化。
+    const audioWindows = (this.document.transitions ?? []).filter(transition => videoEditTransitionMedium(transition.kind) === 'audio').flatMap((transition): VideoEditTransitionWindow[] => { try { return [videoEditTransitionWindow(this.document, transition)] } catch { return [] } })
     for (const clip of audibleVideoEditClips(this.document)) {
-      const clipStart = clip.start / this.document.fps
-      const from = Math.max(startSeconds, clipStart)
-      const to = Math.min(finish, (clip.start + clip.duration) / this.document.fps)
+      const outgoing = audioWindows.filter(window => window.left.id === clip.id); const incoming = audioWindows.filter(window => window.right.id === clip.id)
+      const clipStart = clip.start / fps
+      const playStart = Math.min(clip.start, ...incoming.map(window => window.start)) / fps
+      const playEnd = Math.max(clip.start + clip.duration, ...outgoing.map(window => window.end)) / fps
+      let from = Math.max(startSeconds, playStart)
+      const to = Math.min(finish, playEnd)
+      // 源素材开头之前没有声音（入点前余量不足的部分静音）。
+      from = Math.max(from, clipStart - videoEditSourceSeconds(clip))
       if (from >= to) continue
       const media = videoEditClipMedia(this.document, clip)
       if (!media) continue
       const sourceStart = videoEditSourceSeconds(clip) + from - clipStart
       const sourceEnd = sourceStart + to - from
+      // 淡化手柄与音频过渡的增益包络（按输出采样）；没有时整段就是片段音量。
+      const enveloped = videoEditClipFades(clip) || outgoing.length > 0 || incoming.length > 0
+      const envelope = enveloped ? Float32Array.from({ length }, (_, sample) => {
+        const seconds = sampleStartSeconds + sample / rate
+        let gain = clip.volume * (seconds >= clipStart && seconds < (clip.start + clip.duration) / fps ? videoEditFadeGain(clip, seconds, fps) : 1)
+        for (const window of [...outgoing, ...incoming]) {
+          const begin = window.start / fps; const end = window.end / fps
+          if (seconds >= begin && seconds < end) gain *= videoEditAudioTransitionGains(window.transition.kind, (seconds - begin) / (end - begin))[window.left.id === clip.id ? 0 : 1]
+        }
+        return gain
+      }) : undefined
       // A clip with a channel mapping (task 2.6) reads every sound stream it names, each with its own reader; a clip
       // without one reads the file's first stream with its own channels.
       for (const read of clip.audioMapping ? videoEditAudioMixReads(clip.audioMapping, this.document.channels) : [undefined]) {
@@ -464,11 +486,11 @@ export class VideoEditRenderer {
             const position = sourceTime * wrapped.sampleRate
             if (aligned) {
               const nearest = Math.floor(position + NEAREST_SAMPLE_EDGE)
-              if (nearest >= 0 && nearest < data.length) output[sample] += data[nearest] * clip.volume
+              if (nearest >= 0 && nearest < data.length) output[sample] += data[nearest] * (envelope ? envelope[sample] : clip.volume)
               continue
             }
             const left = Math.floor(position); const alpha = position - left
-            if (left >= 0 && left < data.length) output[sample] += (data[left] * (1 - alpha) + data[Math.min(left + 1, data.length - 1)] * alpha) * clip.volume
+            if (left >= 0 && left < data.length) output[sample] += (data[left] * (1 - alpha) + data[Math.min(left + 1, data.length - 1)] * alpha) * (envelope ? envelope[sample] : clip.volume)
           }
         }
         } finally { wrapped.close() }

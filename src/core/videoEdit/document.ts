@@ -34,6 +34,8 @@ export const videoEditClipSchema = z.object({
   x: z.number().finite().min(-2).max(2), y: z.number().finite().min(-2).max(2),
   scale: z.number().min(0.01).max(4), rotation: z.number().min(-360).max(360),
   opacity: z.number().min(0).max(1), volume: z.number().min(0).max(2), brightness: z.number().min(0).max(2), text: z.string().max(2000),
+  /** PR 淡化手柄：片段开头淡入、结尾淡出的帧数（画面从透明渐显，声音按恒定功率渐强）；没有就是不淡化。 */
+  fadeInFrames: z.number().int().min(1).max(108_000).optional(), fadeOutFrames: z.number().int().min(1).max(108_000).optional(),
 }).strict()
 export const videoEditAnnotationSchema = z.object({
   id: identifier, clipId: identifier, frame, space: z.literal('composition-normalized'), kind: z.enum(['point', 'region']),
@@ -197,7 +199,10 @@ export function splitVideoEditClip(sequence: VideoEditSequence, id: string, at: 
   if (!clip || !Number.isInteger(at) || at <= clip.start || at >= clip.start + clip.duration) throw new Error('请将播放头置于片段内部再拆分。')
   const left = at - clip.start
   const right = { ...clip, ...(clip.code ? { code: structuredClone(clip.code) } : {}), ...(clip.graphic ? { graphic: structuredClone(clip.graphic) } : {}), ...(clip.effects ? { effects: clip.effects.map(effect => ({ ...structuredClone(effect), id: crypto.randomUUID() })) } : {}), id: crypto.randomUUID(), start: at, duration: clip.duration - left, ...offsetVideoEditSource(clip, left, sequence.frameRate) }
-  const next = { ...sequence, clips: sequence.clips.flatMap(item => item.id === id ? [{ ...clip, duration: left }, right] : [item]), annotations: sequence.annotations.map(item => item.clipId === id && item.frame >= at ? { ...item, clipId: right.id } : item) }
+  // 淡入留在左半段开头、淡出留在右半段结尾（PR 拆分后淡化手柄跟着原片段的首尾）。
+  delete right.fadeInFrames
+  const leftPart = { ...clip, duration: left }; delete leftPart.fadeOutFrames
+  const next = { ...sequence, clips: sequence.clips.flatMap(item => item.id === id ? [leftPart, right] : [item]), annotations: sequence.annotations.map(item => item.clipId === id && item.frame >= at ? { ...item, clipId: right.id } : item) }
   const origins = new Map([[right.id, { originalId: id, shift: 0 }], [id, { originalId: id, shift: 0 }]])
   return retimeVideoEditContent(sequence, next, origins)
 }
@@ -206,10 +211,10 @@ export function changeVideoEditSequenceSettings(sequence: VideoEditSequence, set
   const convert = (frame: number): number => rescaleVideoEditFrame(frame, sequence.frameRate, rate)
   if (sequence.clips.some(clip => convert(clip.start + clip.duration) <= convert(clip.start))) throw new Error('新帧率会使部分片段短于一帧。请先调整这些片段的长度，再修改帧率。')
   return videoEditSequenceSchema.parse({ ...sequence, ...settings,
-    clips: sequence.clips.map(clip => ({ ...clip, start: convert(clip.start), duration: convert(clip.start + clip.duration) - convert(clip.start) })),
+    clips: sequence.clips.map(clip => ({ ...clip, start: convert(clip.start), duration: convert(clip.start + clip.duration) - convert(clip.start), ...(clip.fadeInFrames ? { fadeInFrames: Math.max(1, convert(clip.fadeInFrames)) } : {}), ...(clip.fadeOutFrames ? { fadeOutFrames: Math.max(1, convert(clip.fadeOutFrames)) } : {}) })),
     annotations: sequence.annotations.map(mark => ({ ...mark, frame: convert(mark.frame) })),
     ...(sequence.markers ? { markers: sequence.markers.map(mark => ({ ...mark, frame: convert(mark.frame) })) } : {}),
     ...(sequence.captions ? { captions: sequence.captions.map(caption => ({ ...caption, start: convert(caption.start), duration: convert(caption.start + caption.duration) - convert(caption.start) })) } : {}),
-    ...(sequence.transitions ? { transitions: sequence.transitions.map(transition => ({ ...transition, durationFrames: convert(transition.durationFrames) })) } : {}),
+    ...(sequence.transitions ? { transitions: sequence.transitions.map(transition => ({ ...transition, durationFrames: convert(transition.durationFrames), ...(transition.framesBeforeCut !== undefined ? { framesBeforeCut: Math.min(convert(transition.durationFrames), convert(transition.framesBeforeCut)) } : {}) })) } : {}),
   })
 }

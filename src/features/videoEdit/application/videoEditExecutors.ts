@@ -365,7 +365,9 @@ export class VideoEditCollectionExecutor implements ApplicationCollectionExecuto
     if (['video_edit.effect', 'video_edit.transition'].includes(this.entityType)) {
       const clipIds = this.entityType === 'video_edit.effect' ? [parsed.childId] : [...new Set([...before.sequences, ...next.sequences].filter(sequence => sequence.id === parsed.childId).flatMap(sequence => (sequence.transitions ?? []).filter(transition => refs.some(ref => splitVideoEditRef(ref).childId === transition.id)).flatMap(transition => [transition.leftClipId, transition.rightClipId])))]
       const sequence = next.sequences.find(sequence => this.entityType === 'video_edit.transition' ? sequence.id === parsed.childId : sequence.clips.some(clip => clip.id === parsed.childId))!
-      await trialVideoEditCodeDocument(instance, before, next, sequence.id, sequence.clips.find(clip => clip.id === clipIds[0])!.start, context?.signal, clipIds.map(clipId => ({ sequenceId: sequence.id, clipId })))
+      // 音频过渡两端是声音片段，不做画面试渲染。
+      const pictured = clipIds.filter(clipId => sequence.clips.find(clip => clip.id === clipId)?.kind !== 'audio')
+      if (pictured.length) await trialVideoEditCodeDocument(instance, before, next, sequence.id, sequence.clips.find(clip => clip.id === pictured[0])!.start, context?.signal, pictured.map(clipId => ({ sequenceId: sequence.id, clipId })))
     }
     if (this.entityType === 'video_edit.clip' && step.operation.kind === 'create') {
       const sequence = next.sequences.find(sequence => sequence.id === parsed.childId)!

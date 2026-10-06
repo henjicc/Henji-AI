@@ -1,7 +1,7 @@
 import { videoEditDocumentSchema, type VideoEditClip, type VideoEditSequence, type VideoEditDocument } from '@/core/videoEdit/document'
 import { videoEditEffectSchema, orderVideoEditEffects, type VideoEditEffect } from '@/core/videoEdit/compositing'
 import type { CodeMaterialMetadataReader } from '@/core/videoEdit/codeMaterialDocument'
-import { videoEditTransitionSchema, videoEditTransitionsAt } from '@/core/videoEdit/transitions'
+import { videoEditTransitionSchema, videoEditTransitionsAt, type VideoEditTransition } from '@/core/videoEdit/transitions'
 import { assertVideoEditLockedTracks } from '@/core/videoEdit/lockedTracks'
 import { validateCodeMaterialParameters } from '@/core/videoEdit/codeMaterial/parameters'
 import type { CodeMaterialInstance } from '@/core/videoEdit/codeMaterialPersistence'
@@ -18,14 +18,17 @@ function requireClip(sequence: VideoEditSequence, clipId: string): VideoEditClip
 }
 /** All structural effect/range/transition edits prove the exact draft before one
  * shared history/save publication. Scalars still use the established gestures. */
-async function editComposite(projectId: string, sequenceId: string, clipIds: string[], change: (sequence: VideoEditSequence) => void, signal?: AbortSignal): Promise<void> {
+export async function editComposite(projectId: string, sequenceId: string, endpointIds: string[], change: (sequence: VideoEditSequence) => void, signal?: AbortSignal): Promise<void> {
   signal?.throwIfAborted()
   const owner = requireVideoEditInstance(projectId); const baseline = owner.document
   const draft = structuredClone(baseline); const sequence = draft.sequences.find(sequence => sequence.id === sequenceId)
   if (!sequence) throw new Error('原序列已移除。')
+  // 音频过渡两端是声音片段：不需要画面试渲染，只做结构校验。
+  const clipIds = endpointIds.filter(id => sequence.clips.find(clip => clip.id === id)?.kind !== 'audio')
   clipIds.forEach(id => requireClip(sequence, id)); change(sequence)
   const next = videoEditDocumentSchema.parse(draft)
   assertVideoEditLockedTracks(baseline, next)
+  if (!clipIds.length) { editVideoProject(projectId, () => next); return }
   const requested = owner.activeSequenceId === sequenceId ? owner.frame : owner.sequenceViews.get(sequenceId)?.frame ?? 0
   const active = clipIds.some(id => { const clip = requireClip(sequence, id); return requested >= clip.start && requested < clip.start + clip.duration }) || videoEditTransitionsAt(sequence, requested).some(window => clipIds.includes(window.left.id) || clipIds.includes(window.right.id))
   const frame = active ? requested : requireClip(sequence, clipIds[0]).start
@@ -99,15 +102,23 @@ export async function updateVideoEditAdjustmentRange(target: VideoEditCompositeT
     clip.adjustment = { fromTrack }
   }, signal)
 }
-export async function createVideoEditTransition(projectId: string, sequenceId: string, input: { leftClipId: string; rightClipId: string; durationFrames: number }, signal?: AbortSignal): Promise<string> {
+export async function createVideoEditTransition(projectId: string, sequenceId: string, input: { leftClipId: string; rightClipId: string; durationFrames: number } & Partial<Pick<VideoEditTransition, 'kind' | 'alignment' | 'framesBeforeCut'>>, signal?: AbortSignal): Promise<string> {
   const transition = videoEditTransitionSchema.parse({ id: crypto.randomUUID(), kind: 'cross_dissolve', ...input })
   await editComposite(projectId, sequenceId, [transition.leftClipId, transition.rightClipId], sequence => { (sequence.transitions ??= []).push(transition) }, signal)
   return transition.id
 }
-export async function updateVideoEditTransition(projectId: string, sequenceId: string, transitionId: string, durationFrames: number, signal?: AbortSignal): Promise<void> {
+/** `changes` 为数字时只改时长（旧调用）；对象可同时改种类、时长与对齐（对齐不是自定义起点时去掉切点前帧数）。 */
+export async function updateVideoEditTransition(projectId: string, sequenceId: string, transitionId: string, changes: number | Partial<Pick<VideoEditTransition, 'kind' | 'durationFrames' | 'alignment' | 'framesBeforeCut'>>, signal?: AbortSignal): Promise<void> {
   const transition = requireVideoEditInstance(projectId).document.sequences.find(sequence => sequence.id === sequenceId)?.transitions?.find(transition => transition.id === transitionId)
   if (!transition) throw new Error('原转场已移除。')
-  await editComposite(projectId, sequenceId, [transition.leftClipId, transition.rightClipId], sequence => { sequence.transitions!.find(value => value.id === transitionId)!.durationFrames = durationFrames }, signal)
+  const patch = typeof changes === 'number' ? { durationFrames: changes } : changes
+  await editComposite(projectId, sequenceId, [transition.leftClipId, transition.rightClipId], sequence => {
+    const list = sequence.transitions!; const index = list.findIndex(value => value.id === transitionId)
+    const next = videoEditTransitionSchema.parse({ ...list[index], ...patch })
+    if (next.alignment === 'center') delete next.alignment
+    if (next.alignment !== 'custom') delete next.framesBeforeCut
+    list[index] = next
+  }, signal)
 }
 export async function deleteVideoEditTransition(projectId: string, sequenceId: string, transitionId: string, signal?: AbortSignal): Promise<void> {
   const transition = requireVideoEditInstance(projectId).document.sequences.find(sequence => sequence.id === sequenceId)?.transitions?.find(transition => transition.id === transitionId)

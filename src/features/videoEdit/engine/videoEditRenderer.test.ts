@@ -11,7 +11,7 @@ import { VideoEditNativePicture } from './videoEditNativePicture'
 import type { NativeVideoFrame } from './videoEditNativeFrames'
 import { addLegacyVideoEditTracks } from '@/core/videoEdit/testFixtures'
 
-const boundary = vi.hoisted(() => ({ scheduled: [] as Array<{ path: string; timestamps: number[] }>, disposed: [] as string[], pictures: [] as number[], generatorCalls: 0, compilerCalls: 0, compilerDisposed: 0, failGenerator: false, released: [] as string[][], pendingCode: undefined as Promise<CodeMaterialProgram> | undefined, snapshotCalls: [] as boolean[], normalizedReleased: 0, pendingSnapshot: undefined as Promise<void> | undefined, draws: [] as Array<{ ids: string[]; timestamps: number[]; offscreen: boolean }>, mixes: [] as number[] }))
+const boundary = vi.hoisted(() => ({ scheduled: [] as Array<{ path: string; timestamps: number[] }>, disposed: [] as string[], pictures: [] as number[], generatorCalls: 0, compilerCalls: 0, compilerDisposed: 0, failGenerator: false, released: [] as string[][], pendingCode: undefined as Promise<CodeMaterialProgram> | undefined, snapshotCalls: [] as boolean[], normalizedReleased: 0, pendingSnapshot: undefined as Promise<void> | undefined, draws: [] as Array<{ ids: string[]; timestamps: number[]; offscreen: boolean }>, mixes: [] as Array<number | number[]>, opacities: [] as number[] }))
 /** The start of the 60fps picture showing at `time` (exact grid times stay exact despite floating point). */
 const gridPicture = vi.hoisted(() => (time: number, fps = 60): number => Math.floor(time * fps + 1e-6) / fps)
 /** Source seconds compared at whole microseconds (picture starts computed on the grid vs. expectations summed in seconds). */
@@ -69,12 +69,12 @@ vi.mock('./videoEditGpuCompositor', async () => {
   }
   async code() { return { generator: async (_key: string, _program: CodeMaterialProgram, context: { time: number }) => { boundary.generatorCalls++; if (boundary.failGenerator) throw new Error('代码画面失败'); return { timestamp: context.time } }, releaseUnused: (keys: ReadonlySet<string>) => { boundary.released.push([...keys]) },
     target: async (_key: string, width: number, height: number) => target(width, height),
-    mix: async (_key: string, left: InstanceType<typeof VideoEditCodePicture>, _right: InstanceType<typeof VideoEditCodePicture>, amount: number) => { boundary.mixes.push(amount); return target(left.width, left.height) },
+    mix: async (_key: string, left: InstanceType<typeof VideoEditCodePicture>, _right: InstanceType<typeof VideoEditCodePicture>, amount: number, through?: readonly number[]) => { boundary.mixes.push(through ? [amount, ...through] : amount); return target(left.width, left.height) },
   } }
   async prepareImages() { return new Map() }
   imageDiagnostics() { return { textures: 0, bytes: 0, uploads: 0 } }
   codeDiagnostics() { return undefined }
-  async draw(_document: unknown, clips: VideoEditClip[], pictures: Array<{ timestamp?: number }>, _shouldPresent: unknown, _deadline: unknown, destination?: unknown) { boundary.pictures = pictures.map(picture => picture.timestamp!); boundary.draws.push({ ids: clips.map(clip => clip.id), timestamps: [...boundary.pictures], offscreen: Boolean(destination) }); return { presented: true, completion: Promise.resolve() } }
+  async draw(_document: unknown, clips: VideoEditClip[], pictures: Array<{ timestamp?: number }>, _shouldPresent: unknown, _deadline: unknown, destination?: unknown) { boundary.pictures = pictures.map(picture => picture.timestamp!); boundary.opacities = clips.map(clip => clip.opacity); boundary.draws.push({ ids: clips.map(clip => clip.id), timestamps: [...boundary.pictures], offscreen: Boolean(destination) }); return { presented: true, completion: Promise.resolve() } }
   async dispose(): Promise<void> {}
   cancelPresentation(): void {}
 } } })
@@ -118,6 +118,50 @@ it('真实转场窗口准备两端原视频余量，不改片段时钟，禁用�
     boundary.draws = []; const hidden = await renderer.render(55)
     expect(hidden.sourceTimestamps).toEqual([]); expect(boundary.snapshotCalls).toHaveLength(decodes)
     expect(boundary.draws).toEqual([{ ids: [], timestamps: [], offscreen: false }]); expect(boundary.mixes).toHaveLength(3)
+  } finally { await renderer.dispose() }
+})
+it('媒体不足时转场重复首尾帧（PR），黑场过渡把纯色交给混合（4.3）', async () => {
+  const document = { ...fixture(), fps: 60, frameRate: { numerator: 60, denominator: 1 } }
+  const base = document.clips[0]
+  // 两段都是完整素材，首尾没有余量
+  document.clips = [{ ...base, duration: 120 }, { ...base, id: 'right', itemId: 'item-B', start: 120 }]
+  document.transitions = [{ id: 'dip', kind: 'dip_to_black', leftClipId: base.id, rightClipId: 'right', durationFrames: 10 }]
+  const renderer = new VideoEditRenderer(document)
+  try {
+    const before = await renderer.render(118); await before.completion
+    // 右片段在入点之前停在自己的第一帧（源 0 秒）
+    expect(us(before.sourceTimestamps)).toEqual(expect.arrayContaining(us([118 / 60, 2])))
+    const after = await renderer.render(122); await after.completion
+    // 左片段越过源结尾停在最后一帧
+    expect(us(after.sourceTimestamps)).toEqual(expect.arrayContaining(us([119 / 60, 2 / 60])))
+    expect(boundary.mixes).toEqual([[3 / 9, 0, 0, 0, 1], [7 / 9, 0, 0, 0, 1]])
+  } finally { await renderer.dispose() }
+})
+it('淡化手柄：画面按帧乘不透明度，声音按恒定功率包络混音（4.3）', async () => {
+  const document = fixture()
+  document.clips = [{ ...document.clips[0], duration: 90, fadeInFrames: 30, fadeOutFrames: 15 }]
+  const renderer = new VideoEditRenderer(document)
+  try {
+    await renderer.render(15); expect(boundary.opacities).toEqual([.5])
+    await renderer.render(45); expect(boundary.opacities).toEqual([1])
+    await renderer.render(82); expect(boundary.opacities[0]).toBeCloseTo(7 / 15)
+    expect((await renderer.mixAudio(0, .01))[0][0]).toBe(0)
+    expect((await renderer.mixAudio(.5, .01))[0][0]).toBeCloseTo(.25 * Math.SQRT1_2)
+    expect((await renderer.mixAudio(1.2, .01))[0][0]).toBe(.25)
+  } finally { await renderer.dispose() }
+})
+it('音频过渡：左片段越过出点、右片段提前入点，恒定功率交叉淡化（4.3）', async () => {
+  const document = fixture()
+  const sound = { ...document.clips[0], kind: 'audio' as const, track: 0, sourceComponent: 'audio' as const }
+  document.media = document.media.map(media => ({ ...media, durationSeconds: 4, hasAudio: true }))
+  document.clips = [{ ...sound, id: 'a', sourceInUs: 0 }, { ...sound, id: 'b', itemId: 'item-B', start: 60, sourceInUs: 1_000_000 }]
+  document.transitions = [{ id: 'fade', kind: 'constant_power', leftClipId: 'a', rightClipId: 'b', durationFrames: 30 }]
+  const renderer = new VideoEditRenderer(document)
+  try {
+    // 窗口 45..75 帧（1.5–2.5 秒）；1.75 秒处进度 1/4，左右各乘 cos/sin(π/8)
+    expect((await renderer.mixAudio(1.75, .01))[0][0]).toBeCloseTo(.25 * Math.cos(Math.PI / 8) + .75 * Math.sin(Math.PI / 8))
+    expect((await renderer.mixAudio(1, .01))[0][0]).toBe(.25)
+    expect((await renderer.mixAudio(2.6, .01))[0][0]).toBe(.75)
   } finally { await renderer.dispose() }
 })
 it('顺序播放和导出使用定位同一GPU格式，每个实际解码帧只复制一次', async () => {

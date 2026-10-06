@@ -2,7 +2,7 @@ import type { JsonValue } from '@/core/application-control'
 import { videoEditClipSchema, type VideoEditDocument, type VideoEditClip } from '@/core/videoEdit/document'
 import { createVideoEditGraphic, orderVideoEditGraphicObjects } from '@/core/videoEdit/graphics'
 import { orderVideoEditEffects, videoEditEffectSchema, videoEditAdjustmentSchema } from '@/core/videoEdit/compositing'
-import { videoEditTransitionSchema } from '@/core/videoEdit/transitions'
+import { videoEditTransitionPreset, videoEditTransitionSchema } from '@/core/videoEdit/transitions'
 import { codeMaterialInstanceSchema } from '@/core/videoEdit/codeMaterialPersistence'
 import type { CodeMaterialMetadataReader } from '@/core/videoEdit/codeMaterialDocument'
 import { makeVideoEditEffect } from './videoEditCompositing'
@@ -51,7 +51,7 @@ export function videoEditCompositeOwner(document: VideoEditDocument, type: Video
 export function videoEditCompositeItems(document: VideoEditDocument, type: VideoEditCompositeEntityType): Array<{ id: string; name: string }> {
   if (type === 'video_edit.graphic_object') return document.sequences.flatMap(sequence => sequence.clips.flatMap(clip => (clip.graphic?.objects ?? []).map(object => ({ id: videoEditGraphicObjectId(clip.id, object.id), name: object.name }))))
   if (type === 'video_edit.effect') return document.sequences.flatMap(sequence => sequence.clips.flatMap(clip => (clip.effects ?? []).map(effect => ({ id: effect.id, name: effect.name }))))
-  return document.sequences.flatMap(sequence => (sequence.transitions ?? []).map(transition => ({ id: transition.id, name: '交叉溶解' })))
+  return document.sequences.flatMap(sequence => (sequence.transitions ?? []).map(transition => ({ id: transition.id, name: videoEditTransitionPreset(transition.kind).name })))
 }
 export function videoEditCompositeData(document: VideoEditDocument, type: VideoEditCompositeEntityType, childId: string): Data {
   const owner = videoEditCompositeOwner(document, type, childId)
@@ -72,7 +72,12 @@ export function updateVideoEditCompositeEntity(document: VideoEditDocument, type
   } else if (owner.kind === 'effect') {
     const next = videoEditEffectSchema.parse({ id: owner.effect.id, name: data.name, enabled: data.enabled, amount: data.amount, code: { definitionId: owner.effect.code.definitionId, versionId: data.versionId, parameters: data.parameters, curves: data.curves } })
     Object.assign(owner.effect, next)
-  } else owner.transition.durationFrames = videoEditTransitionSchema.shape.durationFrames.parse(data.durationFrames)
+  } else {
+    const next = videoEditTransitionSchema.parse({ ...owner.transition, durationFrames: data.durationFrames, alignment: data.alignment ?? undefined, framesBeforeCut: data.framesBeforeCut ?? undefined })
+    if (next.alignment === 'center') delete next.alignment
+    if (next.alignment !== 'custom') delete next.framesBeforeCut
+    Object.keys(owner.transition).forEach(key => { delete (owner.transition as Record<string, unknown>)[key] }); Object.assign(owner.transition, next)
+  }
   return document
 }
 export function createVideoEditCompositeEntity(document: VideoEditDocument, type: VideoEditCompositeEntityType, parentId: string, values: Data, read: CodeMaterialMetadataReader): string {

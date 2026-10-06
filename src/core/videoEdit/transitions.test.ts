@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { createVideoEditDocument, changeVideoEditSequenceSettings, videoEditDocumentSchema, type VideoEditDocument } from './document'
 import { makeVideoEditItemClip } from './projectItems'
 import { applyVideoEditTimelineEdit, copyVideoEditClips } from './timelineEdits'
-import { validateVideoEditTransitions, videoEditTransitionWindow, videoEditTransitionsAt, videoEditTransitionAmount } from './transitions'
+import { applyVideoEditTransitionPairs, dragVideoEditTransition, validateVideoEditTransitions, videoEditAudioTransitionGains, videoEditDefaultTransitionPairs, videoEditHandleFrame, videoEditTransitionAlignmentFields, videoEditTransitionDipColor, videoEditTransitionWindow, videoEditTransitionsAt, videoEditTransitionAmount } from './transitions'
 import { reconcileVideoEditTimedContent } from './timedContent'
 import { assertVideoEditLockedTracks } from './lockedTracks'
 import { compileCodeMaterial } from './codeMaterial/compiler'
@@ -45,16 +45,76 @@ describe('真实转场窗口、源余量和编辑持久契约', () => {
     }
     expect(sequence.clips.map(clip => [clip.start, clip.sourceInUs])).toEqual([[30, 1_000_000], [90, 1_000_000]])
   })
-  it('NTSC真实前后余量没有一帧或一微秒容差，前端负源不冻结', () => {
+  it('视频素材余量不足时按 PR 重复首尾帧而不是拒绝（4.3）', () => {
     const { document, sequence } = fixture(); sequence.frameRate = { numerator: 60000, denominator: 1001 }
     document.media[0].durationSeconds = 1 + 75 * 1001 / 60000
-    sequence.clips[1].sourceInUs = 250250
+    sequence.clips[1].sourceInUs = 0
     expect(() => validateVideoEditTransitions(document)).not.toThrow()
-    sequence.clips[1].sourceInUs--
-    expect(() => validateVideoEditTransitions(document)).toThrow('早于素材开始')
-    sequence.clips[1].sourceInUs++
-    document.media[0].durationSeconds -= .000001
-    expect(() => validateVideoEditTransitions(document)).toThrow('余量不足')
+    const fps = 60000 / 1001; const [left, right] = sequence.clips
+    // 右片段从源开头开始：切点前的帧都停在它的第一帧
+    expect(videoEditHandleFrame(right, 75, fps, document.media[0].durationSeconds)).toBe(right.start)
+    expect(videoEditHandleFrame(right, 95, fps, document.media[0].durationSeconds)).toBe(95)
+    // 左片段越过源结尾的部分停在源的最后一帧（至少是自己的最后一帧）
+    const last = videoEditHandleFrame(left, 200, fps, document.media[0].durationSeconds)
+    expect(last).toBeGreaterThanOrEqual(left.start + left.duration - 1)
+    expect(last).toBeLessThan(200)
+  })
+  it('对齐决定窗口：起点切点整段在切点后，终点切点整段在切点前，自定义起点按切点前帧数', () => {
+    const { sequence } = fixture(); const transition = sequence.transitions![0]
+    expect(videoEditTransitionWindow(sequence, { ...transition, alignment: 'start' })).toMatchObject({ start: 90, end: 120 })
+    expect(videoEditTransitionWindow(sequence, { ...transition, alignment: 'end' })).toMatchObject({ start: 60, end: 90 })
+    expect(videoEditTransitionWindow(sequence, { ...transition, alignment: 'custom', framesBeforeCut: 10 })).toMatchObject({ start: 80, end: 110 })
+    expect(videoEditTransitionAlignmentFields(30, 15)).toEqual({})
+    expect(videoEditTransitionAlignmentFields(30, 0)).toEqual({ alignment: 'start' })
+    expect(videoEditTransitionAlignmentFields(30, 30)).toEqual({ alignment: 'end' })
+    expect(videoEditTransitionAlignmentFields(30, 7)).toEqual({ alignment: 'custom', framesBeforeCut: 7 })
+  })
+  it('拖过渡块：左缘改起点、右缘改终点、中间平移，夹在片段内且总跨着切点', () => {
+    const { sequence } = fixture()
+    const left = dragVideoEditTransition(sequence, 'dissolve', 'in', -10)
+    expect(videoEditTransitionWindow(sequence, left)).toMatchObject({ start: 65, end: 105 })
+    expect(left).toMatchObject({ durationFrames: 40, alignment: 'custom', framesBeforeCut: 25 })
+    const right = dragVideoEditTransition(sequence, 'dissolve', 'out', 1000)
+    expect(videoEditTransitionWindow(sequence, right)).toMatchObject({ start: 75, end: 150 })
+    expect(dragVideoEditTransition(sequence, 'dissolve', 'in', 50)).toMatchObject({ durationFrames: 15, alignment: 'start' })
+    const moved = dragVideoEditTransition(sequence, 'dissolve', 'move', -100)
+    expect(moved).toMatchObject({ durationFrames: 30, alignment: 'end' })
+    expect(videoEditTransitionWindow(sequence, moved)).toMatchObject({ start: 60, end: 90 })
+    expect(dragVideoEditTransition(sequence, 'dissolve', 'move', 0)).not.toHaveProperty('alignment')
+  })
+  it('默认过渡：Ctrl+D 取目标轨道离播放头最近的编辑点，Shift+D 取所选片段两端，放不下时缩短并给相邻过渡让位', () => {
+    const { sequence } = fixture(); sequence.transitions = []
+    sequence.clips.push({ ...sequence.clips[1], id: 'third', start: 150, duration: 20 })
+    expect(videoEditDefaultTransitionPairs(sequence, { mode: 'playhead', medium: 'video', frame: 140, tracks: [1] })).toEqual([{ leftClipId: 'right', rightClipId: 'third', medium: 'video' }])
+    expect(videoEditDefaultTransitionPairs(sequence, { mode: 'playhead', medium: 'audio', frame: 140, tracks: [] })).toEqual([])
+    const pairs = videoEditDefaultTransitionPairs(sequence, { mode: 'selection', clipIds: ['right'] })
+    expect(pairs.map(pair => pair.rightClipId)).toEqual(['right', 'third'])
+    const { sequence: applied, transitionIds } = applyVideoEditTransitionPairs(sequence, pairs, { durationFrames: 60 })
+    expect(transitionIds).toHaveLength(2)
+    const windows = applied.transitions!.map(transition => videoEditTransitionWindow(applied, transition))
+    // 第一处 60 帧居中；第二处的右片段只有 20 帧，缩到 40 帧，且不与第一处重叠
+    expect(windows.map(window => [window.start, window.end])).toEqual([[60, 120], [130, 170]])
+    expect(applied.transitions!.every(transition => transition.kind === 'cross_dissolve')).toBe(true)
+    // 再次应用即替换同一编辑点上的过渡
+    const again = applyVideoEditTransitionPairs(applied, [pairs[0]], { durationFrames: 10, kind: () => 'dip_to_black' })
+    expect(again.sequence.transitions).toHaveLength(2)
+    expect(again.sequence.transitions![0]).toMatchObject({ id: transitionIds[0], kind: 'dip_to_black', durationFrames: 10 })
+    expect(() => applyVideoEditTransitionPairs(sequence, [], { durationFrames: 30 })).toThrow('编辑点')
+  })
+  it('音频过渡挂在声音片段上，增益曲线恒定功率与恒定增益；黑场／白场经过纯色', () => {
+    const { document, sequence } = fixture()
+    document.items.push({ id: 'sound', name: '声音', kind: 'audio', mediaId: 'media' })
+    sequence.clips.forEach(clip => { clip.kind = 'audio'; clip.track = 0; clip.itemId = 'sound' })
+    expect(() => videoEditTransitionWindow(sequence, sequence.transitions![0])).toThrow('紧邻')
+    sequence.transitions![0].kind = 'constant_power'
+    expect(videoEditTransitionWindow(sequence, sequence.transitions![0])).toMatchObject({ start: 75, end: 105 })
+    expect(videoEditTransitionsAt(sequence, 90)).toEqual([])
+    expect(videoEditTransitionsAt(sequence, 90, 'audio')).toHaveLength(1)
+    const [outgoing, incoming] = videoEditAudioTransitionGains('constant_power', .5)
+    expect(outgoing ** 2 + incoming ** 2).toBeCloseTo(1)
+    expect(videoEditAudioTransitionGains('constant_gain', .25)).toEqual([.75, .25])
+    expect(videoEditTransitionDipColor('dip_to_white')).toEqual([1, 1, 1, 1])
+    expect(videoEditTransitionDipColor('cross_dissolve')).toBeUndefined()
   })
   it('邻接、第三片段、同轨转场重叠与短片段均明确拒绝', () => {
     const { document, sequence } = fixture()

@@ -107,11 +107,15 @@ describe('代码GPU会话复用与资源边界', () => {
     const left = await runtime.target('left', 3840, 2160); const right = await runtime.target('right', 3840, 2160)
     const mixed = await runtime.mix('mix', left, right, .5)
     const shader = vi.mocked(device.createShaderModule).mock.lastCall?.[0] as { code: string }
-    expect(shader.code).toContain('return mix(textureSample(left,s,v.uv),textureSample(right,s,v.uv),amount.x)')
+    expect(shader.code).toContain('return select(mix(a,b,t),dip,m.amount.y>0.5)')
+    expect(vi.mocked(device.queue.writeBuffer).mock.lastCall?.[2]).toEqual(new Float32Array([.5, 0, 0, 0, 0, 0, 0, 0]))
+    // 黑场／白场过渡：同一管线，uniform 带上经过的纯色
+    await runtime.mix('mix', left, right, .25, [1, 1, 1, 1])
+    expect(vi.mocked(device.queue.writeBuffer).mock.lastCall?.[2]).toEqual(new Float32Array([.25, 1, 0, 0, 1, 1, 1, 1]))
     const pipeline = compiled.mock.lastCall?.[0] as unknown as { fragment: { targets: Array<{ format: string; blend?: unknown }> } }
     expect(pipeline.fragment.targets).toEqual([{ format: 'rgba8unorm' }])
     expect(await runtime.mix('mix', left, right, .75)).toBe(mixed)
-    expect(runtime.diagnostics()).toMatchObject({ surfaces: 3, residentBytes: 3 * 3840 * 2160 * 4, pipelineCompiles: 3, mixFrames: 2 })
+    expect(runtime.diagnostics()).toMatchObject({ surfaces: 3, residentBytes: 3 * 3840 * 2160 * 4, pipelineCompiles: 3, mixFrames: 3 })
     for (const amount of [-.1, 1.1, NaN, Infinity]) await expect(runtime.mix('bad', left, right, amount)).rejects.toThrow('强度')
     await expect(runtime.mix('bad', left, { ...right, owner: gpu().device }, .5)).rejects.toThrow('同设备')
     await expect(runtime.mix('bad', left, { ...right, width: 1920 }, .5)).rejects.toThrow('同尺寸')

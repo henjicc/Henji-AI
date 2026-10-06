@@ -3,41 +3,104 @@ import type { VideoEditClip, VideoEditDocument, VideoEditSequence } from './docu
 import type { CodeMaterialMetadataReader } from './codeMaterialDocument'
 import { offsetVideoEditSource, videoEditSourceSeconds } from './time'
 
+/**
+ * 过渡预设（PR“效果”面板的视频过渡／音频过渡）：只列引擎能真实渲染的种类。
+ * 视频：交叉溶解、黑场过渡、白场过渡；音频：恒定功率、恒定增益（交叉淡化）。
+ */
+export const VIDEO_EDIT_TRANSITION_PRESETS = [
+  { kind: 'cross_dissolve', medium: 'video', name: '交叉溶解', tooltip: '前一段画面逐渐溶入后一段', description: '交叉溶解：两段画面按时长线性互溶，最常用的柔和转场。' },
+  { kind: 'dip_to_black', medium: 'video', name: '黑场过渡', tooltip: '前一段淡出到黑色，再从黑色淡入后一段', description: '黑场过渡：前半段淡出到黑色、后半段从黑色淡入，表示时间流逝或段落结束。' },
+  { kind: 'dip_to_white', medium: 'video', name: '白场过渡', tooltip: '前一段淡出到白色，再从白色淡入后一段', description: '白场过渡：前半段淡到白色、后半段从白色淡入，常用于回忆、闪回或明亮的段落切换。' },
+  { kind: 'constant_power', medium: 'audio', name: '恒定功率', tooltip: '两段声音交叉淡化，中间音量不塌陷', description: '恒定功率交叉淡化：两段声音按正弦／余弦曲线交叉，过渡中段响度保持平稳，是默认音频过渡。' },
+  { kind: 'constant_gain', medium: 'audio', name: '恒定增益', tooltip: '两段声音按直线交叉淡化', description: '恒定增益交叉淡化：两段声音按直线交叉，中段会略微变轻，适合需要明显切换感的地方。' },
+] as const
+export type VideoEditTransitionKind = typeof VIDEO_EDIT_TRANSITION_PRESETS[number]['kind']
+export type VideoEditTransitionMedium = 'video' | 'audio'
+const KINDS = VIDEO_EDIT_TRANSITION_PRESETS.map(preset => preset.kind) as [VideoEditTransitionKind, ...VideoEditTransitionKind[]]
+/** PR 默认过渡：视频交叉溶解、音频恒定功率，时长 1 秒。 */
+export const VIDEO_EDIT_DEFAULT_TRANSITIONS: Record<VideoEditTransitionMedium, VideoEditTransitionKind> = { video: 'cross_dissolve', audio: 'constant_power' }
+/** PR 对齐：中心切点（默认，不写入）、起点切点（整段在切点之后）、终点切点（整段在切点之前）、自定义起点。 */
+export const VIDEO_EDIT_TRANSITION_ALIGNMENTS = ['center', 'start', 'end', 'custom'] as const
+export type VideoEditTransitionAlignment = typeof VIDEO_EDIT_TRANSITION_ALIGNMENTS[number]
 export const videoEditTransitionSchema = z.object({
-  id: z.string().min(1).max(100), kind: z.literal('cross_dissolve'),
+  id: z.string().min(1).max(100), kind: z.enum(KINDS),
   leftClipId: z.string().min(1).max(100), rightClipId: z.string().min(1).max(100),
   durationFrames: z.number().int().min(2).max(108_000),
+  alignment: z.enum(VIDEO_EDIT_TRANSITION_ALIGNMENTS).optional(),
+  /** 只在自定义起点时使用：过渡在切点之前的帧数。 */
+  framesBeforeCut: z.number().int().min(0).max(108_000).optional(),
 }).strict()
 export type VideoEditTransition = z.infer<typeof videoEditTransitionSchema>
 export interface VideoEditTransitionWindow { transition: VideoEditTransition; left: VideoEditClip; right: VideoEditClip; start: number; end: number; cut: number }
 
+export function videoEditTransitionPreset(kind: VideoEditTransitionKind): typeof VIDEO_EDIT_TRANSITION_PRESETS[number] { return VIDEO_EDIT_TRANSITION_PRESETS.find(preset => preset.kind === kind)! }
+export function videoEditTransitionMedium(kind: VideoEditTransitionKind): VideoEditTransitionMedium { return videoEditTransitionPreset(kind).medium }
+/** 片段能不能挂这种媒介的过渡：画面过渡挂画面片段（调整图层除外），音频过渡挂声音片段。 */
+export function videoEditTransitionAccepts(medium: VideoEditTransitionMedium, clip: Pick<VideoEditClip, 'kind'>): boolean {
+  return medium === 'audio' ? clip.kind === 'audio' : clip.kind !== 'audio' && clip.kind !== 'adjustment'
+}
+/** 过渡在切点之前的帧数（由对齐方式决定）。 */
+export function videoEditTransitionFramesBeforeCut(transition: Pick<VideoEditTransition, 'durationFrames' | 'alignment' | 'framesBeforeCut'>): number {
+  const duration = transition.durationFrames
+  if (transition.alignment === 'start') return 0
+  if (transition.alignment === 'end') return duration
+  if (transition.alignment === 'custom') return Math.max(0, Math.min(duration, transition.framesBeforeCut ?? Math.floor(duration / 2)))
+  return Math.floor(duration / 2)
+}
+/** 由时长与切点前帧数得出对齐字段：正好居中、贴切点起或止时用对应的命名对齐，其余为自定义起点。 */
+export function videoEditTransitionAlignmentFields(durationFrames: number, framesBeforeCut: number): Pick<VideoEditTransition, 'alignment' | 'framesBeforeCut'> {
+  if (framesBeforeCut === Math.floor(durationFrames / 2)) return {}
+  if (framesBeforeCut <= 0) return { alignment: 'start' }
+  if (framesBeforeCut >= durationFrames) return { alignment: 'end' }
+  return { alignment: 'custom', framesBeforeCut }
+}
+export function videoEditTransitionAlignmentOf(transition: Pick<VideoEditTransition, 'alignment'>): VideoEditTransitionAlignment { return transition.alignment ?? 'center' }
+
 /** Derive every temporal field from the two original clips; never rewrite their clocks. */
 export function videoEditTransitionWindow(sequence: Pick<VideoEditSequence, 'clips'>, transition: VideoEditTransition): VideoEditTransitionWindow {
   if (!Number.isInteger(transition.durationFrames) || transition.durationFrames < 2 || transition.durationFrames > 108_000) throw new Error('转场时长必须为2到108000的整数帧。')
+  const medium = videoEditTransitionMedium(transition.kind)
   const left = sequence.clips.find(clip => clip.id === transition.leftClipId)
   const right = sequence.clips.find(clip => clip.id === transition.rightClipId)
-  if (!left || !right || left === right || ['audio', 'adjustment'].includes(left.kind) || ['audio', 'adjustment'].includes(right.kind) || left.track !== right.track || left.start + left.duration !== right.start) throw new Error('交叉溶解需要同一画面轨道上紧邻的两个片段。')
-  const cut = right.start; const start = cut - Math.floor(transition.durationFrames / 2); const end = cut + Math.ceil(transition.durationFrames / 2)
+  if (!left || !right || left === right || !videoEditTransitionAccepts(medium, left) || !videoEditTransitionAccepts(medium, right) || left.track !== right.track || left.start + left.duration !== right.start) throw new Error(medium === 'audio' ? '音频过渡需要同一声音轨道上紧邻的两个片段。' : '交叉溶解需要同一画面轨道上紧邻的两个片段。')
+  const cut = right.start; const start = cut - videoEditTransitionFramesBeforeCut(transition); const end = start + transition.durationFrames
   if (start < left.start || end > right.start + right.duration) throw new Error('转场窗口超出两侧片段，请减小转场时长。')
   if (sequence.clips.some(clip => clip.track === left.track && clip.id !== left.id && clip.id !== right.id && clip.start < end && clip.start + clip.duration > start)) throw new Error('转场窗口内还有其他片段，请先调整剪辑位置。')
   return { transition, left, right, start, end, cut }
 }
-export function videoEditTransitionsAt(sequence: Pick<VideoEditSequence, 'clips' | 'transitions'>, frame: number): VideoEditTransitionWindow[] {
-  return (sequence.transitions ?? []).map(transition => videoEditTransitionWindow(sequence, transition)).filter(window => frame >= window.start && frame < window.end)
+/** 指定帧上生效的过渡窗口；`medium` 区分画面过渡（渲染）与音频过渡（混音）。 */
+export function videoEditTransitionsAt(sequence: Pick<VideoEditSequence, 'clips' | 'transitions'>, frame: number, medium: VideoEditTransitionMedium = 'video'): VideoEditTransitionWindow[] {
+  return (sequence.transitions ?? []).filter(transition => videoEditTransitionMedium(transition.kind) === medium).map(transition => videoEditTransitionWindow(sequence, transition)).filter(window => frame >= window.start && frame < window.end)
 }
 export function videoEditTransitionAmount(window: Pick<VideoEditTransitionWindow, 'start' | 'end'>, frame: number): number {
   if (!Number.isInteger(window.start) || !Number.isInteger(window.end) || window.end - window.start < 2 || !Number.isInteger(frame) || frame < window.start || frame >= window.end) throw new Error('请求帧不在转场半开窗口内。')
   return (frame - window.start) / (window.end - window.start - 1)
 }
+/** 黑场／白场过渡经过的纯色（预乘 RGBA）；交叉溶解没有。 */
+export function videoEditTransitionDipColor(kind: VideoEditTransitionKind): [number, number, number, number] | undefined {
+  return kind === 'dip_to_black' ? [0, 0, 0, 1] : kind === 'dip_to_white' ? [1, 1, 1, 1] : undefined
+}
+/** 音频过渡两侧的增益（`progress` 为 0 到 1 的连续进度）：恒定功率走余弦／正弦，恒定增益走直线。 */
+export function videoEditAudioTransitionGains(kind: VideoEditTransitionKind, progress: number): [number, number] {
+  const x = Math.max(0, Math.min(1, progress))
+  return kind === 'constant_gain' ? [1 - x, x] : [Math.cos(x * Math.PI / 2), Math.sin(x * Math.PI / 2)]
+}
+/**
+ * PR“媒体不足时重复帧”：转场让片段画面越过自己的入点或出点时，越过源素材开头或结尾的部分停在最早／最后一帧。
+ * 返回实际取画面的时间线帧；片段范围内、或没有源时长（图片、文字）时原样返回。
+ */
+export function videoEditHandleFrame(clip: VideoEditClip, frame: number, fps: number, mediaDurationSeconds?: number): number {
+  if (frame >= clip.start && frame < clip.start + clip.duration) return frame
+  const source = videoEditSourceSeconds(clip)
+  if (frame < clip.start) return Math.max(frame, clip.start - Math.floor(source * fps + 1e-6))
+  if (mediaDurationSeconds === undefined) return frame
+  return Math.min(frame, Math.max(clip.start + clip.duration - 1, clip.start + Math.floor((mediaDurationSeconds - source) * fps + 1e-6) - 1))
+}
 function assertSourceHandles(document: VideoEditDocument, sequence: VideoEditSequence, window: VideoEditTransitionWindow, read?: CodeMaterialMetadataReader): void {
   for (const [clip, first, exclusiveEnd] of [[window.left, window.start, window.end], [window.right, window.start, window.end]] as const) {
     const durations: number[] = []
-    if (clip.kind === 'video') {
-      const item = document.items.find(item => item.id === clip.itemId)
-      const media = document.media.find(media => media.id === item?.mediaId)
-      if (!media || media.kind !== 'video') throw new Error('转场视频源素材不存在。')
-      durations.push(media.durationSeconds)
-    } else if (clip.kind === 'code') {
+    // 视频与声音素材余量不足时按 PR 重复首尾帧（`videoEditHandleFrame`）或静音，不再拒绝；代码素材仍需真实余量。
+    if (clip.kind === 'code') {
       if (!clip.code) throw new Error('转场代码片段缺少固定源码。')
       const program = read?.(clip.code)
       if (program?.mode === 'dynamic') durations.push(program.durationSeconds)
@@ -87,4 +150,104 @@ export function retimeVideoEditTransitions(before: Pick<VideoEditSequence, 'clip
     const leftClipId = resolve(transition.leftClipId, 'out'); const rightClipId = resolve(transition.rightClipId, 'in')
     return leftClipId && rightClipId ? [{ ...transition, leftClipId, rightClipId }] : []
   }) }
+}
+
+export interface VideoEditTransitionPair { leftClipId: string; rightClipId: string; medium: VideoEditTransitionMedium }
+/** 同一轨道上首尾相接、都能挂这种媒介过渡的片段对（编辑点）。 */
+export function videoEditTransitionEditPoints(sequence: Pick<VideoEditSequence, 'clips'>, medium: VideoEditTransitionMedium, tracks?: ReadonlySet<number>): VideoEditTransitionPair[] {
+  const pairs: VideoEditTransitionPair[] = []
+  for (const left of sequence.clips) {
+    if (!videoEditTransitionAccepts(medium, left) || tracks && !tracks.has(left.track)) continue
+    const right = sequence.clips.find(clip => clip.track === left.track && clip.id !== left.id && clip.start === left.start + left.duration && videoEditTransitionAccepts(medium, clip))
+    if (right) pairs.push({ leftClipId: left.id, rightClipId: right.id, medium })
+  }
+  return pairs
+}
+/**
+ * PR 应用默认过渡的目标编辑点：
+ * - `playhead`（Ctrl+D／Ctrl+Shift+D）：目标轨道（没有目标轨道时用这种媒介的全部轨道）上离播放头最近的那个编辑点；
+ * - `selection`（Shift+D）：所选片段两端与相邻片段相接的编辑点，画面片段用视频过渡，声音片段用音频过渡。
+ */
+export function videoEditDefaultTransitionPairs(sequence: Pick<VideoEditSequence, 'clips'>, request: { mode: 'playhead'; medium: VideoEditTransitionMedium; frame: number; tracks: readonly number[] } | { mode: 'selection'; clipIds: readonly string[] }): VideoEditTransitionPair[] {
+  if (request.mode === 'selection') {
+    const selected = new Set(request.clipIds)
+    return (['video', 'audio'] as const).flatMap(medium => videoEditTransitionEditPoints(sequence, medium).filter(pair => selected.has(pair.leftClipId) || selected.has(pair.rightClipId)))
+  }
+  const targeted = videoEditTransitionEditPoints(sequence, request.medium, request.tracks.length ? new Set(request.tracks) : undefined)
+  const pairs = targeted.length || !request.tracks.length ? targeted : videoEditTransitionEditPoints(sequence, request.medium)
+  const cutOf = (pair: VideoEditTransitionPair): number => sequence.clips.find(clip => clip.id === pair.rightClipId)!.start
+  const nearest = pairs.reduce<number | undefined>((best, pair) => best === undefined || Math.abs(cutOf(pair) - request.frame) < Math.abs(best - request.frame) ? cutOf(pair) : best, undefined)
+  return nearest === undefined ? [] : pairs.filter(pair => cutOf(pair) === nearest)
+}
+/**
+ * 在编辑点上能放下的过渡：给两侧已有的其他过渡让位，返回不超过 `desired` 的最长时长与切点前帧数（按请求的对齐，默认居中）。
+ * 放不下两帧时返回 undefined。
+ */
+export function videoEditTransitionFit(sequence: Pick<VideoEditSequence, 'clips' | 'transitions'>, leftClipId: string, rightClipId: string, desired: number, alignment: VideoEditTransitionAlignment = 'center'): { durationFrames: number; framesBeforeCut: number } | undefined {
+  const left = sequence.clips.find(clip => clip.id === leftClipId); const right = sequence.clips.find(clip => clip.id === rightClipId)
+  if (!left || !right) return undefined
+  const others = (sequence.transitions ?? []).filter(transition => !(transition.leftClipId === leftClipId && transition.rightClipId === rightClipId))
+  const windowOf = (transition: VideoEditTransition): { start: number; end: number } | undefined => { try { return videoEditTransitionWindow(sequence, transition) } catch { return undefined } }
+  const leftRoom = left.duration - Math.max(0, ...others.filter(value => value.rightClipId === left.id).map(value => (windowOf(value)?.end ?? left.start) - left.start))
+  const rightEnd = right.start + right.duration
+  const rightRoom = right.duration - Math.max(0, ...others.filter(value => value.leftClipId === right.id).map(value => rightEnd - (windowOf(value)?.start ?? rightEnd)))
+  const limit = alignment === 'start' ? rightRoom : alignment === 'end' ? leftRoom : Math.min(2 * leftRoom + 1, 2 * rightRoom)
+  const durationFrames = Math.min(108_000, desired, limit)
+  if (durationFrames < 2) return undefined
+  const framesBeforeCut = alignment === 'start' ? 0 : alignment === 'end' ? durationFrames : Math.floor(durationFrames / 2)
+  return { durationFrames, framesBeforeCut }
+}
+/**
+ * 把过渡放到这些编辑点上（一次编辑）：已有过渡的编辑点换成新的种类与时长（PR 再次应用默认过渡即替换）。
+ * 每处按 `videoEditTransitionFit` 缩短以放进片段；一处都放不下时抛出原因。返回新序列与各编辑点的过渡 ID。
+ */
+export function applyVideoEditTransitionPairs(sequence: VideoEditSequence, pairs: readonly VideoEditTransitionPair[], options: { kind?: (medium: VideoEditTransitionMedium) => VideoEditTransitionKind; durationFrames: number; alignment?: VideoEditTransitionAlignment }): { sequence: VideoEditSequence; transitionIds: string[] } {
+  if (!pairs.length) throw new Error('这里没有可以放过渡的编辑点：过渡要放在同一轨道上首尾相接的两个片段之间。')
+  let transitions = [...(sequence.transitions ?? [])]; const ids: string[] = []
+  for (const pair of pairs) {
+    const fit = videoEditTransitionFit({ clips: sequence.clips, transitions }, pair.leftClipId, pair.rightClipId, options.durationFrames, options.alignment)
+    if (!fit) continue
+    const previous = transitions.find(value => value.leftClipId === pair.leftClipId && value.rightClipId === pair.rightClipId)
+    const transition: VideoEditTransition = { id: previous?.id ?? crypto.randomUUID(), kind: options.kind?.(pair.medium) ?? VIDEO_EDIT_DEFAULT_TRANSITIONS[pair.medium], leftClipId: pair.leftClipId, rightClipId: pair.rightClipId, durationFrames: fit.durationFrames, ...videoEditTransitionAlignmentFields(fit.durationFrames, fit.framesBeforeCut) }
+    transitions = previous ? transitions.map(value => value === previous ? transition : value) : [...transitions, transition]
+    ids.push(transition.id)
+  }
+  if (!ids.length) throw new Error('片段太短，放不下过渡：至少需要两帧。')
+  return { sequence: { ...sequence, transitions }, transitionIds: ids }
+}
+/**
+ * 拖动时间线上的过渡块（PR）：拖左缘或右缘改时长（另一缘不动），拖中间沿切点平移（时长不变）。
+ * `delta` 为整数帧；结果夹在两侧片段与相邻过渡之内，至少两帧。
+ */
+export function dragVideoEditTransition(sequence: Pick<VideoEditSequence, 'clips' | 'transitions'>, transitionId: string, mode: 'in' | 'out' | 'move', delta: number): VideoEditTransition {
+  const transition = sequence.transitions?.find(value => value.id === transitionId)
+  if (!transition) throw new Error('原过渡已移除。')
+  const window = videoEditTransitionWindow(sequence, transition)
+  const others = (sequence.transitions ?? []).filter(value => value.id !== transitionId).flatMap(value => { try { return [videoEditTransitionWindow(sequence, value)] } catch { return [] } }).filter(value => value.left.track === window.left.track)
+  const lower = Math.max(window.left.start, ...others.filter(value => value.end <= window.cut).map(value => value.end))
+  const upper = Math.min(window.right.start + window.right.duration, ...others.filter(value => value.start >= window.cut).map(value => value.start))
+  let start = window.start; let end = window.end
+  if (mode === 'in') start = Math.max(lower, Math.min(end - 2, window.cut, window.start + delta))
+  else if (mode === 'out') end = Math.min(upper, Math.max(start + 2, window.cut, window.end + delta))
+  else {
+    const shift = Math.max(lower - window.start, Math.min(upper - window.end, delta))
+    // 平移不能让过渡整段离开切点（PR 的过渡总是跨在或贴着切点上）。
+    const bounded = Math.max(window.cut - window.end, Math.min(window.cut - window.start, shift))
+    start += bounded; end += bounded
+  }
+  const durationFrames = end - start
+  return { id: transition.id, kind: transition.kind, leftClipId: transition.leftClipId, rightClipId: transition.rightClipId, durationFrames, ...videoEditTransitionAlignmentFields(durationFrames, window.cut - start) }
+}
+
+const videoKinds = VIDEO_EDIT_TRANSITION_PRESETS.filter(preset => preset.medium === 'video').map(preset => preset.kind) as [VideoEditTransitionKind, ...VideoEditTransitionKind[]]
+const audioKinds = VIDEO_EDIT_TRANSITION_PRESETS.filter(preset => preset.medium === 'audio').map(preset => preset.kind) as [VideoEditTransitionKind, ...VideoEditTransitionKind[]]
+/** 用户在效果面板“设为默认过渡”选的视频／音频默认过渡；省略即 PR 默认（交叉溶解、恒定功率）。 */
+export const videoEditDefaultTransitionPreferencesSchema = z.object({ video: z.enum(videoKinds).optional(), audio: z.enum(audioKinds).optional() }).strict()
+export type VideoEditDefaultTransitionPreferences = z.infer<typeof videoEditDefaultTransitionPreferencesSchema>
+export function sanitizeVideoEditDefaultTransitions(value: unknown): VideoEditDefaultTransitionPreferences {
+  const parsed = videoEditDefaultTransitionPreferencesSchema.safeParse(value)
+  return parsed.success ? parsed.data : {}
+}
+export function videoEditDefaultTransitionKind(preferences: VideoEditDefaultTransitionPreferences, medium: VideoEditTransitionMedium): VideoEditTransitionKind {
+  return preferences[medium] ?? VIDEO_EDIT_DEFAULT_TRANSITIONS[medium]
 }

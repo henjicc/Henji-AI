@@ -341,9 +341,13 @@ struct Vertex { @builtin(position) position:vec4f, @location(0) uv:vec2f }
 @group(0) @binding(0) var left:texture_2d<f32>;
 @group(0) @binding(1) var right:texture_2d<f32>;
 @group(0) @binding(2) var s:sampler;
-@group(0) @binding(3) var<uniform> amount:vec4f;
+struct Mix { amount:vec4f, color:vec4f }
+@group(0) @binding(3) var<uniform> m:Mix;
 @fragment fn fs(v:Vertex)->@location(0) vec4f {
- return mix(textureSample(left,s,v.uv),textureSample(right,s,v.uv),amount.x);
+ let a=textureSample(left,s,v.uv); let b=textureSample(right,s,v.uv); let t=m.amount.x;
+ // y=1：经过纯色的黑场／白场过渡，前半段淡到纯色，后半段从纯色淡入。
+ let dip=select(mix(m.color,b,t*2.0-1.0),mix(a,m.color,t*2.0),t<0.5);
+ return select(mix(a,b,t),dip,m.amount.y>0.5);
 }` })
         pipeline = this.device.createRenderPipeline({ layout: 'auto', vertex: { module, entryPoint: 'vs' }, fragment: { module, entryPoint: 'fs', targets: [{ format }] }, primitive: { topology: 'triangle-list' } })
       } catch (error) { await this.device.popErrorScope().catch(() => null); throw error }
@@ -354,7 +358,8 @@ struct Vertex { @builtin(position) position:vec4f, @location(0) uv:vec2f }
     this.mixReady.set(format, pending)
     try { await pending } catch (error) { if (this.mixReady.get(format) === pending) this.mixReady.delete(format); throw error }
   }
-  async mix(key: string, left: VideoEditCodePicture, right: VideoEditCodePicture, amount: number): Promise<VideoEditCodePicture> {
+  /** `through`：黑场／白场过渡经过的预乘纯色；不传为直接混合（交叉溶解、效果强度）。 */
+  async mix(key: string, left: VideoEditCodePicture, right: VideoEditCodePicture, amount: number, through?: readonly [number, number, number, number]): Promise<VideoEditCodePicture> {
     if (left.owner !== this.device || right.owner !== this.device || left.width !== right.width || left.height !== right.height || !Number.isFinite(amount) || amount < 0 || amount > 1) throw new CodeMaterialError('CONTEXT', '透明混合需要同设备同尺寸画面和0到1的强度。')
     const old = this.surfaces.get(key)?.picture.texture
     if (old && (old === left.texture || old === right.texture)) throw new CodeMaterialError('CONTEXT', '透明混合输入输出不能引用同一纹理。')
@@ -365,8 +370,8 @@ struct Vertex { @builtin(position) position:vec4f, @location(0) uv:vec2f }
     const pipeline = this.mixPipelines.get(format)!
     const target = this.surface(key, left.width, left.height, format)
     if (target.picture.texture === left.texture || target.picture.texture === right.texture) throw new CodeMaterialError('CONTEXT', '透明混合输入输出不能引用同一纹理。')
-    target.mixBuffer ??= this.device.createBuffer({ size: 16, usage: 0x08 | 0x40 })
-    this.device.queue.writeBuffer(target.mixBuffer, 0, new Float32Array([amount, 0, 0, 0]))
+    target.mixBuffer ??= this.device.createBuffer({ size: 32, usage: 0x08 | 0x40 })
+    this.device.queue.writeBuffer(target.mixBuffer, 0, new Float32Array([amount, through ? 1 : 0, 0, 0, ...(through ?? [0, 0, 0, 0])]))
     const encoder = this.device.createCommandEncoder()
     const pass = encoder.beginRenderPass({ colorAttachments: [{ view: target.picture.texture.createView(), loadOp: 'clear', storeOp: 'store', clearValue: { r: 0, g: 0, b: 0, a: 0 } }] })
     pass.setPipeline(pipeline)
