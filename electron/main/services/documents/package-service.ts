@@ -115,7 +115,14 @@ class EntryNames {
 }
 
 export class DocumentPackageService {
+  /** 正在进行的导出 / 导入数（更换作品目录前的忙碌检查用）。 */
+  private running = 0
+
   constructor(private readonly options: DocumentPackageServiceOptions) {}
+
+  isRunning(): boolean {
+    return this.running > 0
+  }
 
   private get workspace(): DocumentWorkspace {
     return this.options.workspace
@@ -528,6 +535,7 @@ export class DocumentPackageService {
   private async logged<T>(action: string, context: Record<string, unknown>, operation: () => Promise<T>): Promise<T> {
     const logger = this.options.logger
     logger.info('开始处理单文件包', { event: `documents.package.${action}.start`, context })
+    this.running += 1
     try {
       const result = await operation()
       logger.info('单文件包处理完成', { event: `documents.package.${action}.completed`, context })
@@ -536,6 +544,8 @@ export class DocumentPackageService {
       const expected = [DocumentFormatError, DocumentLocationError, ProjectNotFoundError].some((type) => error instanceof type)
       logger[expected ? 'warn' : 'error']('单文件包处理失败', { event: `documents.package.${action}.failed`, context, error })
       throw error
+    } finally {
+      this.running -= 1
     }
   }
 }

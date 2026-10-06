@@ -6,6 +6,7 @@ import { cameraStageRenderTaskStorage } from './camera-stage-render-task-storage
 import { getDocumentService } from './documents/runtime'
 import type { CameraStageRenderWorkerJob } from '../../../src/platform/contracts/cameraStageRender'
 import { createMainLogger } from './logging/main-logger'
+import { registerWorkRootBusyProbe } from './work-root/busy-probes'
 import {
   CameraStageRenderTaskRegistry,
   type CameraStageRenderEventDto,
@@ -36,6 +37,8 @@ let activeTask: QueuedRenderTask | null = null
 let powerSaveBlockerId: number | null = null
 let workerReadyTimer: NodeJS.Timeout | null = null
 let activeTaskTimer: NodeJS.Timeout | null = null
+// 镜头参考渲染结果写进作品目录，排队或进行中不允许更换作品目录
+registerWorkRootBusyProbe('camera_stage_render', { reason: '镜头参考还有渲染任务在进行', isBusy: () => activeTask !== null || queue.length > 0 })
 
 const IMAGE_RENDER_INACTIVITY_TIMEOUT_MS = 45_000
 const VIDEO_RENDER_INACTIVITY_TIMEOUT_MS = 120_000

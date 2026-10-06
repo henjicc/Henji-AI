@@ -162,6 +162,11 @@ export class RasterExportSessionManager {
     this.sweepTimer.unref()
   }
 
+  /** 有导出正在开始或写入（更换作品目录前的忙碌检查用）。 */
+  hasActiveSessions(): boolean {
+    return this.sessions.size > 0 || this.startingTargets.size > 0
+  }
+
   async start(request: StartRasterExportSessionRequest): Promise<RasterExportSessionStartResult> {
     this.validateStartRequest(request)
     throwIfAborted(request.signal)

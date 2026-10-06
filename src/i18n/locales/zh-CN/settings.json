@@ -19,7 +19,7 @@
     "workspace-generation": "生成",
     "workspace-canvas": "画布",
     "workspace-assets": "资产",
-    "files-storage": "数据目录",
+    "files-storage": "作品目录",
     "files-upload": "上传",
     "files-download": "下载",
     "assistant-models": "助手模型",
@@ -257,7 +257,7 @@
       "notDirectory": "所选位置是一个文件，不是文件夹。请另选一个文件夹。",
       "insufficientSpace": "新位置所在磁盘空间不足，作品目录保持不变。",
       "inUse": "作品目录里有文件正被其他程序使用。请关闭相关程序后重试，作品目录保持不变。",
-      "busy": "还有操作正在进行（如生成结果正在保存）。请等待完成后再更换，作品目录保持不变。",
+      "busy": "还有操作正在进行（如生成结果正在保存、视频或图片正在导出）。请等待完成后再更换，作品目录保持不变。",
       "cancelled": "已取消，作品目录保持不变。",
       "failed": "更换没有完成，作品目录保持不变：{{message}}",
       "openFailed": "无法打开作品目录：{{message}}"
@@ -513,11 +513,11 @@
     },
     "largeUpload": {
       "title": "大文件处理",
-      "description": "上传本地视频/音频时，100MB 及以下的文件总是复制到数据目录；超过 100MB 的文件按此策略处理。",
+      "description": "上传本地视频/音频时，100MB 及以下的文件总是复制到作品目录；超过 100MB 的文件按此策略处理。",
       "strategyLabel": "大文件（超过 100MB）",
       "options": {
         "ask": "每次询问",
-        "copy": "复制到数据目录",
+        "copy": "复制到作品目录",
         "reference": "直接引用原文件"
       },
       "hint": "引用原文件不产生副本、上传更快，但移动或删除原文件会导致画布中的媒体失效。"
@@ -595,7 +595,7 @@
     "installing": "正在安装…",
     "installFailed": "安装技能失败",
     "overwriteTitle": "替换同名技能",
-    "overwriteDescription": "数据目录里已经有同名技能了。继续会整个文件夹替换，原来的正文和引用文件不会保留。",
+    "overwriteDescription": "作品目录里已经有同名技能了。继续会整个文件夹替换，原来的正文和引用文件不会保留。",
     "overwriteConfirm": "替换",
     "fileFilter": "技能文件",
     "dropPathFailed": "无法读取拖入文件的路径，请改用“选择文件”。",
@@ -606,7 +606,7 @@
     "disableBuiltinDescription": "这是随应用发布的内置技能。停用后助手在对应场景会失去这部分操作指导，可能给出更笼统的结果。你可以随时重新启用。",
     "disableConfirm": "停用",
     "uninstallTitle": "删除技能「{{name}}」",
-    "uninstallDescription": "会从数据目录里删除这个技能文件夹，包含它的引用文件。此操作不可撤销。",
+    "uninstallDescription": "会从作品目录里删除这个技能文件夹，包含它的引用文件。此操作不可撤销。",
     "uninstallConfirm": "删除",
     "uninstalled": "已删除技能 {{name}}。",
     "uninstallFailed": "删除技能失败",

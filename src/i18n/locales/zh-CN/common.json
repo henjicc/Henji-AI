@@ -2,8 +2,8 @@
   "largeUpload": {
     "title": "大文件处理方式",
     "message": "「{{name}}」约 {{size}} MB，超过 100MB。请选择处理方式：",
-    "copyButton": "复制到数据目录",
-    "copyHint": "更稳妥；会占用数据目录空间，大文件复制较慢。",
+    "copyButton": "复制到作品目录",
+    "copyHint": "更稳妥；会占用作品目录空间，大文件复制较慢。",
     "referenceButton": "直接引用原文件",
     "referenceHint": "不产生副本；移动或删除原文件会导致画布中的媒体失效。",
     "rememberLabel": "记住我的选择，之后不再询问",

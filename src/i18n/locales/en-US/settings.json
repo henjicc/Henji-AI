@@ -19,7 +19,7 @@
     "workspace-generation": "Generate",
     "workspace-canvas": "Canvas",
     "workspace-assets": "Assets",
-    "files-storage": "Data Folder",
+    "files-storage": "Works Folder",
     "files-upload": "Uploads",
     "files-download": "Downloads",
     "assistant-models": "Assistant Models",
@@ -257,7 +257,7 @@
       "notDirectory": "The selected location is a file, not a folder. Choose another folder.",
       "insufficientSpace": "There is not enough disk space at the new location. The works folder was not changed.",
       "inUse": "Some files in the works folder are in use by another program. Close it and try again. The works folder was not changed.",
-      "busy": "Something is still in progress (such as saving generated results). Wait for it to finish and try again. The works folder was not changed.",
+      "busy": "Something is still in progress (such as saving generated results or exporting a video or image). Wait for it to finish and try again. The works folder was not changed.",
       "cancelled": "Cancelled. The works folder was not changed.",
       "failed": "The works folder was not changed: {{message}}",
       "openFailed": "Could not open the works folder: {{message}}"
@@ -513,11 +513,11 @@
     },
     "largeUpload": {
       "title": "Large File Handling",
-      "description": "When uploading local video/audio, files up to 100 MB are always copied into the data folder; larger files follow this strategy.",
+      "description": "When uploading local video/audio, files up to 100 MB are always copied into the works folder; larger files follow this strategy.",
       "strategyLabel": "Large files (over 100 MB)",
       "options": {
         "ask": "Ask every time",
-        "copy": "Copy into data folder",
+        "copy": "Copy into works folder",
         "reference": "Reference the original file"
       },
       "hint": "Referencing skips the copy and is faster, but moving or deleting the original file will break media on the canvas."
@@ -596,7 +596,7 @@
     "installing": "Installing…",
     "installFailed": "Couldn't install the skill",
     "overwriteTitle": "Replace skill with the same name",
-    "overwriteDescription": "A skill with this name already exists in the data folder. Continuing replaces the whole folder; its content and reference files won't be kept.",
+    "overwriteDescription": "A skill with this name already exists in the works folder. Continuing replaces the whole folder; its content and reference files won't be kept.",
     "overwriteConfirm": "Replace",
     "fileFilter": "Skill files",
     "dropPathFailed": "Couldn't read the path of the dropped file. Use “Choose file” instead.",
@@ -607,7 +607,7 @@
     "disableBuiltinDescription": "This skill ships with the app. Without it the assistant loses this guidance in related tasks and may give more generic results. You can re-enable it any time.",
     "disableConfirm": "Disable",
     "uninstallTitle": "Delete skill “{{name}}”",
-    "uninstallDescription": "Deletes this skill folder and its reference files from the data folder. This can't be undone.",
+    "uninstallDescription": "Deletes this skill folder and its reference files from the works folder. This can't be undone.",
     "uninstallConfirm": "Delete",
     "uninstalled": "Deleted skill {{name}}.",
     "uninstallFailed": "Couldn't delete the skill",

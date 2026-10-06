@@ -12,6 +12,7 @@ import {
 import { createMainLogger } from '../logging'
 import { getPreferredEncoder } from './hwaccel'
 import { loadFfmpegPath } from './ffmpeg-loader'
+import { registerWorkRootBusyProbe } from '../work-root/busy-probes'
 import type {
   AppendVideoFrameExportPayloadDto,
   FinishVideoFrameExportPayloadDto,
@@ -39,6 +40,8 @@ interface VideoFrameExportSession {
 }
 
 const sessions = new Map<string, VideoFrameExportSession>()
+// 导出进行中不允许更换作品目录（输出常在作品目录的“导出 / 生成结果”里）
+registerWorkRootBusyProbe('video_frame_export', { reason: '还有视频正在导出', isBusy: () => sessions.size > 0 })
 const logger = createMainLogger('main.video_frame_export')
 const SESSION_IDLE_LIMIT_MS = 30 * 60 * 1000
 const SESSION_SWEEP_INTERVAL_MS = 5 * 60 * 1000

@@ -5,15 +5,18 @@ import { getUserDataLayout, USER_ROOT_FOLDER_NAMES } from '../appPaths'
 import { writeCustomDataRoot } from '../dataRoot'
 import { getDocumentService } from '../documents/runtime'
 import { createMainLogger } from '../logging/main-logger'
+import { findWorkRootBusyReason, registerWorkRootBusyProbe } from './busy-probes'
 import { createWorkRootService, type WorkRootService } from './service'
 
 /*
  * 作品目录更换的正式运行环境：作品目录来自 appPaths，设置写入 settings 表，
- * 完成后刷新作品索引；生成结果还在保存时拒绝开始。
+ * 完成后刷新作品索引；生成结果还在保存、导出等长任务进行中时拒绝开始（各任务在 busy-probes 登记）。
  */
 
 const logger = createMainLogger('main.work_root')
 let service: WorkRootService | null = null
+
+registerWorkRootBusyProbe('generation', { reason: '还有生成结果正在保存', isBusy: hasActiveGenerationWork })
 
 export function getWorkRootService(): WorkRootService {
   service ??= createWorkRootService({
@@ -30,7 +33,7 @@ export function getWorkRootService(): WorkRootService {
     writeCustomRoot: writeCustomDataRoot,
     ensureFolders: () => { getUserDataLayout() },
     refreshIndex: () => getDocumentService().refreshIndex(),
-    isBusy: hasActiveGenerationWork,
+    busyReason: findWorkRootBusyReason,
     logger,
   })
   return service

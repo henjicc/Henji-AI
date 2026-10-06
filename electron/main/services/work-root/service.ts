@@ -28,8 +28,8 @@ export interface WorkRootServiceDeps {
   ensureFolders: () => void
   /** 切换后刷新作品索引（项目在新位置被重新认领）。 */
   refreshIndex: () => Promise<unknown>
-  /** 还有会往作品目录写文件的后台工作（生成结果保存等）时返回 true。 */
-  isBusy: () => boolean
+  /** 还有会往作品目录写文件的后台工作（生成结果保存、导出等）时返回给用户看的原因，空闲时返回 null。 */
+  busyReason: () => string | null
   logger: MainLogger
   style?: 'win32' | 'posix'
   /** 测试注入，透传给 moveWorkRoot。 */
@@ -106,7 +106,8 @@ export function createWorkRootService(deps: WorkRootServiceDeps): WorkRootServic
       if (path.relative(oldRoot, newRoot) === '') {
         return { changed: false, root: oldRoot, mode: 'none', oldRootRemoved: false, requiresRestart: false }
       }
-      if (deps.isBusy()) throw new WorkRootMoveError('busy', '还有生成结果正在保存，请等待完成后再更换作品目录')
+      const busyReason = deps.busyReason()
+      if (busyReason) throw new WorkRootMoveError('busy', `${busyReason}，请等待完成后再更换作品目录`)
       logger.info('开始更换作品目录', { event: 'work_root.move.start', context: { from: oldRoot, to: newRoot, useDefault } })
 
       const result = await moveWorkRoot({

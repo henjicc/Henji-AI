@@ -28,7 +28,7 @@ function createService(overrides: Partial<WorkRootServiceDeps> = {}): { service:
     writeCustomRoot: vi.fn((root: string | null) => { state.custom = root }),
     ensureFolders: vi.fn(),
     refreshIndex: vi.fn(async () => undefined),
-    isBusy: () => false,
+    busyReason: () => null,
     logger,
     ...overrides,
   }
@@ -74,10 +74,11 @@ describe('createWorkRootService', () => {
     expect(await fs.readFile(path.join(base, '文档', '痕迹AI', '项目', '短片', '短片.henji-video'), 'utf8')).toBe('{}')
   })
 
-  it('还有生成结果在保存时拒绝，不动文件也不切换设置', async () => {
-    const { service, deps } = createService({ isBusy: () => true })
+  it('还有长任务（如视频导出）在进行时拒绝并说明原因，不动文件也不切换设置', async () => {
+    const { service, deps } = createService({ busyReason: () => '还有视频正在导出' })
     const error = await service.change({ kind: 'custom', folder: path.join(base, '新位置') }).catch((caught: unknown) => caught)
     expect((error as Error).message).toMatch(/^busy:/)
+    expect((error as Error).message).toContain('还有视频正在导出')
     expect(deps.writeCustomRoot).not.toHaveBeenCalled()
     expect(await fs.access(path.join(base, '新位置')).then(() => true, () => false)).toBe(false)
     expect(service.isRunning()).toBe(false)

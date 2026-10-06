@@ -7,7 +7,7 @@ const path = require('node:path')
  * 两者都不产生付费请求，也不碰用户真实资料目录。
  */
 const SUITES = Object.freeze(['unit', 'integration', 'ui', 'ui-audit', 'restart', 'clients'])
-const RESTART_TARGETS = Object.freeze(['mcp', 'video-edit-layout', 'camera-stage-documents', 'image-documents', 'video-edit-documents', 'audio-edit-documents', 'canvas-documents', 'free-composition'])
+const RESTART_TARGETS = Object.freeze(['mcp', 'video-edit-layout', 'camera-stage-documents', 'image-documents', 'video-edit-documents', 'audio-edit-documents', 'canvas-documents', 'free-composition', 'work-root'])
 
 function readValue(argv, index, option) {
   const value = argv[index + 1]

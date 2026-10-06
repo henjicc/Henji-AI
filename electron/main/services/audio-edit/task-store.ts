@@ -3,9 +3,12 @@ import { databaseLocations } from '../db-locations'
 import crypto from 'node:crypto'
 import type { AudioEditTask } from '../../../../src/core/audioEdit/types'
 import { createMainLogger } from '../logging'
+import { registerWorkRootBusyProbe } from '../work-root/busy-probes'
 
 const logger = createMainLogger('main.audio_edit.tasks')
 const active = new Map<string, { controller: AbortController; projectId: string; progress?: number; readOnly: boolean }>()
+// 口播处理会读写作品目录里的口播与“生成结果”，进行中不允许更换作品目录
+registerWorkRootBusyProbe('audio_edit_task', { reason: '口播还有处理任务在进行', isBusy: () => active.size > 0 })
 
 /*
  * 口播处理任务（转写、停顿分析、声音处理、导出）的回执表 `audio_edit_tasks`（迁移账本第 16 项）。

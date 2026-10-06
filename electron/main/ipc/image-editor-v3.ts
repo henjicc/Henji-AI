@@ -6,6 +6,7 @@ import type {
 import { getMainWindow } from '../window'
 import { isTrustedMainRendererUrl } from '../security/main-renderer-url'
 import { createMainLogger } from '../services/logging'
+import { registerWorkRootBusyProbe } from '../services/work-root/busy-probes'
 import {
   ContentAddressedResourceStore,
   createImageEditSourceFingerprint,
@@ -84,6 +85,8 @@ interface ImageEditorV3Runtime {
   canvasLayers: CanvasLayerPackageService
 }
 let runtime: ImageEditorV3Runtime | undefined
+// 图片导出写到用户选的位置（常在作品目录里），进行中不允许更换作品目录
+registerWorkRootBusyProbe('image_raster_export', { reason: '还有图片正在导出', isBusy: () => runtime?.rasterExports.hasActiveSessions() ?? false })
 const requestAdmission = new ImageEditorV3RequestAdmission()
 const trackedSenders = new WeakMap<WebContents, () => void>()
 function getRuntime(): ImageEditorV3Runtime {

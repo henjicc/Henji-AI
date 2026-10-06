@@ -7,6 +7,7 @@ import { renderCoverImage } from '../covers/cover-render'
 import { readUserDataRootSettings } from '../dataRoot'
 import { getDb } from '../db'
 import { createMainLogger } from '../logging/main-logger'
+import { registerWorkRootBusyProbe } from '../work-root/busy-probes'
 import { createDocumentServices, type DocumentServices } from './create-services'
 import { DocumentIndexStore } from './index-store'
 import { createPackageAdapterRegistry } from './package-adapters'
@@ -23,6 +24,9 @@ import type { WorkspaceLayout } from './workspace'
 const STYLE = process.platform === 'win32' ? 'win32' : 'posix'
 const logger = createMainLogger('main.documents.runtime')
 let services: DocumentServices | null = null
+
+// 单文件包导出导入会读写作品目录，进行中不允许更换作品目录
+registerWorkRootBusyProbe('document_package', { reason: '还有单文件包正在导出或导入', isBusy: () => services?.packages.isRunning() ?? false })
 
 function workspaceLayout(): WorkspaceLayout {
   const layout = getUserDataLayout()
