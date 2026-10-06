@@ -129,7 +129,7 @@ it('效果面板“智能”预设：人脸打码只加到所选的视频片段�
   expect(getActiveVideoEditSequence(owner).clips.find(clip => clip.id === video.id)!.effects ?? []).toEqual([])
 })
 
-it('效果控件的作用区域：选区域后出现羽化 / 扩展 / 反转与分析进度；失败给出说明、重试与去下载模型；文字片段不显示', async () => {
+it('效果控件的作用区域：选区域后出现羽化 / 扩展 / 反转与分析进度；失败给出说明、重试与去下载模型；文字片段只有手绘遮罩', async () => {
   const { owner, id, video, other } = await project()
   const sequenceId = getActiveVideoEditSequence(owner).id
   applyVideoEditBuiltinEffect(id, sequenceId, [video.id], 'smart:background_blur')
@@ -148,6 +148,7 @@ it('效果控件的作用区域：选区域后出现羽化 / 扩展 / 反转与�
   expect(ensure).toHaveBeenLastCalledWith(issued)
   view.unmount()
   const textView = render(<VideoEditSmartRegionControls target={{ ...target, clipId: other.id }} effect={effect()} gesture={gesture} />)
-  expect(textView.container.textContent).toBe('')
+  // 文字片段不能分析画面：只有手绘遮罩（4.10），没有分析进度
+  expect(textView.getByLabelText('创建椭圆遮罩')).toBeTruthy(); expect(textView.queryByRole('status')).toBeNull()
   cleanup()
 })

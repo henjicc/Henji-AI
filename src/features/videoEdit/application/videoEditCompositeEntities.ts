@@ -10,6 +10,7 @@ import type { CodeMaterialMetadataReader } from '@/core/videoEdit/codeMaterialDo
 import { makeVideoEditBuiltinEffect, makeVideoEditEffect } from './videoEditCompositing'
 import { parseVideoEditBuiltinRefId, validateVideoEditBuiltinParams, videoEditBuiltinEffectMedia, videoEditBuiltinRefId } from '@/core/videoEdit/builtinEffects'
 import { videoEditSmartRegionStatusText } from './videoEditSmartRegions'
+import { isSmartRegionMask, type VideoEditEffectMask } from '@/core/videoEdit/effectMasks'
 
 export const VIDEO_EDIT_COMPOSITE_TYPES = ['video_edit.graphic_object', 'video_edit.effect', 'video_edit.transition'] as const
 export type VideoEditCompositeEntityType = typeof VIDEO_EDIT_COMPOSITE_TYPES[number]
@@ -86,7 +87,7 @@ export function updateVideoEditCompositeEntity(document: VideoEditDocument, type
       // 整体写入：写什么存什么（读回与写入一致），没写的键回到默认值
       const params = validateVideoEditBuiltinParams(builtin.id, (data.parameters ?? {}) as Record<string, unknown>)
       const mask = data.mask ?? undefined
-      if (mask) assertSmartRegionClip(document, owner.clip)
+      assertMaskClip(document, owner.clip, mask as VideoEditEffectMask | undefined)
       const next = videoEditEffectSchema.parse({ id: owner.effect.id, name: data.name, enabled: data.enabled, amount: data.amount, builtin: { id: builtin.id, params }, ...(mask ? { mask } : {}) })
       delete owner.effect.mask; Object.assign(owner.effect, next)
     } else {
@@ -142,7 +143,7 @@ export function createVideoEditCompositeEntity(document: VideoEditDocument, type
     if (values.enabled !== undefined) effect.enabled = videoEditEffectSchema.shape.enabled.parse(values.enabled)
     if (values.amount !== undefined) effect.amount = videoEditEffectSchema.shape.amount.parse(values.amount)
     if (values.mask) {
-      assertSmartRegionClip(document, clip)
+      assertMaskClip(document, clip, values.mask as VideoEditEffectMask)
       Object.assign(effect, videoEditEffectSchema.parse({ ...effect, mask: values.mask }))
     }
     (clip.effects ??= []).push(effect); return effect.id
@@ -153,10 +154,11 @@ export function createVideoEditCompositeEntity(document: VideoEditDocument, type
   if (values.curves !== undefined) effect.code!.curves = codeMaterialInstanceSchema.shape.curves.parse(values.curves)
   ;(clip.effects ??= []).push(effect); return effect.id
 }
-/** 作用区域只能用在视频、图片片段上：要逐帧分析素材画面（4.7d）。 */
-function assertSmartRegionClip(document: VideoEditDocument, clip: VideoEditClip): void {
+/** 智能区域只能用在视频、图片片段上：要逐帧分析素材画面（4.7d）；手绘遮罩（4.10）是几何，任何画面片段都能用。 */
+function assertMaskClip(document: VideoEditDocument, clip: VideoEditClip, mask: VideoEditEffectMask | undefined): void {
+  if (!isSmartRegionMask(mask)) return
   const media = videoEditClipMedia(document, clip)
-  if (!media || (media.kind !== 'video' && media.kind !== 'image')) throw new Error(`片段“${clip.name}”不是视频或图片片段，作用区域只能用在视频、图片片段上；文字、图形、代码与调整图层上的效果请作用于整个画面（mask 写 null）。`)
+  if (!media || (media.kind !== 'video' && media.kind !== 'image')) throw new Error(`片段“${clip.name}”不是视频或图片片段，智能区域只能用在视频、图片片段上；文字、图形、代码与调整图层上的效果请作用于整个画面（mask 写 null），或用手绘遮罩（region_id: shapes）。`)
 }
 export function removeVideoEditCompositeEntities(document: VideoEditDocument, type: VideoEditCompositeEntityType, parentId: string, ids: string[]): void {
   for (const id of ids) {

@@ -1,6 +1,7 @@
 import { videoEditDocumentSchema, type VideoEditClip, type VideoEditSequence, type VideoEditDocument } from '@/core/videoEdit/document'
 import { videoEditEffectAccepts, videoEditEffectSchema, orderVideoEditEffects, VIDEO_EDIT_MAX_EFFECTS, type VideoEditEffect, type VideoEditEffectMask } from '@/core/videoEdit/compositing'
 import { resolveVideoEditEffectTemplate } from '@/core/videoEdit/smartRegionPresets'
+import { isSmartRegionMask } from '@/core/videoEdit/effectMasks'
 import { normalizeVideoEditBuiltinParams, requireVideoEditBuiltinEffect, validateVideoEditBuiltinParams, videoEditBuiltinDefaults, videoEditBuiltinEffectMedia } from '@/core/videoEdit/builtinEffects'
 import type { CodeMaterialMetadataReader } from '@/core/videoEdit/codeMaterialDocument'
 import { videoEditTransitionClipIds, videoEditTransitionSchema, videoEditTransitionsAt, type VideoEditTransition } from '@/core/videoEdit/transitions'
@@ -164,7 +165,7 @@ export function updateVideoEditBuiltinEffect(target: VideoEditCompositeTarget, e
     if (changes.params) effect.builtin = { id: effect.builtin.id, params: normalizeVideoEditBuiltinParams(effect.builtin.id, changes.params, effect.builtin.params, true) }
     if (changes.mask === null) delete effect.mask
     else if (changes.mask) {
-      if (clip.kind !== 'video' && clip.kind !== 'image') throw new Error('作用区域只能用在视频、图片片段上。')
+      if (isSmartRegionMask(changes.mask) && clip.kind !== 'video' && clip.kind !== 'image') throw new Error('智能区域只能用在视频、图片片段上。')
       effect.mask = changes.mask
     }
   }, gesture)

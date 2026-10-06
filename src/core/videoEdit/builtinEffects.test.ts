@@ -46,7 +46,7 @@ describe('内置效果登记', () => {
     expect(videoEditEffectSchema.safeParse({ ...base, builtin: { id: 'mosaic', params: {} }, mask: { regionId: 'background', invert: true, feather: 20, expand: -10 } }).success).toBe(true)
     expect(videoEditEffectSchema.safeParse({ ...base, builtin: { id: 'gaussian_blur', params: {} }, mask: { regionId: 'sky' } }).success).toBe(false)
     expect(videoEditEffectSchema.safeParse({ ...base, builtin: { id: 'gaussian_blur', params: {} }, mask: { regionId: 'face', feather: 120 } }).success).toBe(false)
-    expect(videoEditEffectSchema.safeParse({ ...base, code: { definitionId: 'd', versionId: 'v', parameters: {} }, mask: { regionId: 'face' } }).error?.issues[0].message).toContain('智能区域只能用在内置画面效果上')
+    expect(videoEditEffectSchema.safeParse({ ...base, code: { definitionId: 'd', versionId: 'v', parameters: {} }, mask: { regionId: 'face' } }).error?.issues[0].message).toContain('作用区域只能用在内置画面效果上')
     // 旧文件的代码滤镜效果不受影响
     expect(videoEditEffectSchema.safeParse({ ...base, code: { definitionId: 'd', versionId: 'v', parameters: {} } }).success).toBe(true)
   })

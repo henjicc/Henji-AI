@@ -2,6 +2,7 @@ import { createLogger } from '@/core/logging'
 import { videoEditClipMedia, type VideoEditClip, type VideoEditDocument, type VideoEditMedia } from '@/core/videoEdit/document'
 import type { VideoEditEffect } from '@/core/videoEdit/compositing'
 import { smartRegionAnalysisKind, type SmartRegionAnalysisKind } from '@/core/videoEdit/smartRegions'
+import { isSmartRegionMask } from '@/core/videoEdit/effectMasks'
 import { videoEditFps } from '@/core/videoEdit/time'
 import { getPlatform } from '@/platform/runtime'
 import { normalizeSmartRegionRange, smartRegionRequestKey, type SmartRegionFailureReason, type SmartRegionRequest, type SmartRegionStatus } from '@/platform/contracts/smartRegions'
@@ -28,7 +29,8 @@ export function videoEditSmartRegionsRevision(): number { return revision }
 
 /** 片段 + 效果需要的分析请求；片段不是画面素材（文字、图形、调整图层等）时为 undefined。 */
 export function videoEditSmartRegionRequest(document: Pick<VideoEditDocument, 'media' | 'items'>, frameRate: { numerator: number; denominator: number }, clip: VideoEditClip, effect: Pick<VideoEditEffect, 'mask'>): SmartRegionRequest | undefined {
-  if (!effect.mask) return undefined
+  // 只有智能区域要分析素材；手绘遮罩（4.10）是确定的几何，不需要分析。
+  if (!isSmartRegionMask(effect.mask)) return undefined
   const media = videoEditClipMedia(document, clip)
   return media ? requestFor(media, smartRegionAnalysisKind(effect.mask.regionId), clip, videoEditFps(frameRate)) : undefined
 }
@@ -108,6 +110,7 @@ export function videoEditSmartRegionStatus(document: Pick<VideoEditDocument, 'me
 /** 给助手读的状态文字：'' 没有作用区域；ready；analyzing:45%；failed:<给用户的说明>。 */
 export function videoEditSmartRegionStatusText(document: Pick<VideoEditDocument, 'media' | 'items'>, frameRate: { numerator: number; denominator: number }, clip: VideoEditClip, effect: Pick<VideoEditEffect, 'mask'>): string {
   if (!effect.mask) return ''
+  if (!isSmartRegionMask(effect.mask)) return 'ready'
   const status = videoEditSmartRegionStatus(document, frameRate, clip, effect)
   if (!status) return 'failed:片段不是视频或图片，作用区域不会生效。'
   if (status.state === 'ready') return 'ready'

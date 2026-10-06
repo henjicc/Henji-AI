@@ -18,7 +18,9 @@ import type { PreparedVideoEditGraphic, VideoEditGraphic, VideoEditGraphicDraw }
 import type { VideoEditBuiltinEffectInstance, VideoEditEffect } from '@/core/videoEdit/compositing'
 import { activeVideoEditEffects, videoEditEffectCodes } from '@/core/videoEdit/compositing'
 import type { VideoEditTransitionWindow } from '@/core/videoEdit/transitions'
-import { videoEditSmartRegionMask, type VideoEditSmartRegionMask } from './videoEditSmartRegionMasks'
+import type { VideoEditSmartRegionMask } from './videoEditSmartRegionMasks'
+import { videoEditEffectMask } from './videoEditEffectMasks'
+import { videoEditClipPictureSize } from '@/core/videoEdit/clipGeometry'
 
 const logger = createLogger('features.videoEdit.codeSources')
 const MAX_PROGRAMS = 32; const MAX_PROGRAM_BYTES = 16 * 1024 ** 2
@@ -135,7 +137,7 @@ export class VideoEditCodeSources {
         for (const effect of activeVideoEditEffects(clip)) {
           if (effect.builtin) {
             if (!effect.mask) { chain.push({ effect, builtin: effect.builtin }); continue }
-            // 智能区域（4.7d）：区域还没分析好时先不画这个效果；导出前会等分析完成。
+            // 作用区域（4.7d 智能区域、4.10 手绘遮罩）：智能区域还没分析好时先不画这个效果；导出前会等分析完成。
             const mask = await this.regionMask(document, clip, effect.mask, frame); assertCurrent()
             if (mask) chain.push({ effect, builtin: effect.builtin, mask })
             continue
@@ -201,13 +203,13 @@ export class VideoEditCodeSources {
       await work; assertCurrent(); return result
     } finally { if (this.controller === controller) this.controller = undefined }
   }
-  /** 片段在这一帧的素材时间（微秒）对应的区域蒙版；读取失败只记日志，效果按未就绪跳过。 */
+  /** 片段在这一帧的作用区域蒙版（智能区域按素材时间取分析结果，手绘遮罩按几何栅格化）；读取失败只记日志，效果按未就绪跳过。 */
   private async regionMask(document: VideoEditComposition, clip: VideoEditClip, mask: NonNullable<VideoEditEffect['mask']>, frame: number): Promise<VideoEditSmartRegionMask | undefined> {
     const media = videoEditClipMedia(document, clip)
-    if (!media || (media.kind !== 'video' && media.kind !== 'image')) return undefined
-    const timeUs = media.kind === 'image' ? 0 : Math.round(videoEditSourceSeconds(offsetVideoEditSource(clip, frame - clip.start, document.frameRate, true)) * 1e6)
-    try { return await videoEditSmartRegionMask(media.path, mask, timeUs) } catch (error) {
-      logger.warn('智能区域蒙版读取失败', { event: 'video_edit.smart_region.mask_failed', error, context: { sequenceId: document.id, clipId: clip.id, region: mask.regionId } })
+    const visual = media && (media.kind === 'video' || media.kind === 'image') ? media : undefined
+    const timeUs = !visual || visual.kind === 'image' ? 0 : Math.round(videoEditSourceSeconds(offsetVideoEditSource(clip, frame - clip.start, document.frameRate, true)) * 1e6)
+    try { return await videoEditEffectMask(mask, { mediaUrl: visual?.path, picture: videoEditClipPictureSize(document, clip), timeUs }) } catch (error) {
+      logger.warn('作用区域蒙版读取失败', { event: 'video_edit.smart_region.mask_failed', error, context: { sequenceId: document.id, clipId: clip.id, region: mask.regionId } })
       return undefined
     }
   }

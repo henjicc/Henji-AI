@@ -4,6 +4,9 @@ import { Dropdown, UiButton, UiError, UiIconButton, UiSwitch, UiTooltipText } fr
 import NumberInput from '@/components/ui/NumberInput'
 import type { VideoEditBuiltinEffect } from '@/core/videoEdit/compositing'
 import { isVideoEditSmartRegionId, SMART_REGION_EXPAND_RANGE, SMART_REGION_FEATHER_RANGE, SMART_REGIONS, VIDEO_EDIT_SMART_REGION_IDS } from '@/core/videoEdit/smartRegions'
+import { createVideoEditMaskShape, isShapesMask, isSmartRegionMask } from '@/core/videoEdit/effectMasks'
+import { setVideoEditMaskEditing } from '../application/videoEditMaskEditing'
+import { VideoEditMaskCreateButtons, VideoEditMaskShapeControls } from './VideoEditMaskShapeControls'
 import { openSettingsPanel } from '@/stores/uiStore'
 import { requireVideoEditInstance } from '../application/videoEditService'
 import type { VideoEditCompositeTarget } from '../application/videoEditCompositing'
@@ -11,6 +14,7 @@ import { retryVideoEditSmartRegion, subscribeVideoEditSmartRegions, videoEditSma
 import type { VideoEditBuiltinParamGesture } from './useVideoEditBuiltinParamGesture'
 
 const WHOLE = 'whole'
+const SHAPES = 'shapes'
 /** 去掉一项设置（回到区域默认值），不留 undefined 键。 */
 function without<T extends object, K extends keyof T>(value: T, key: K): Omit<T, K> { const { [key]: _removed, ...rest } = value; return rest }
 
@@ -23,17 +27,19 @@ function Row({ label, tooltip, children, reset }: { label: string; tooltip: stri
 }
 
 /**
- * 效果控件里内置画面效果的“作用区域”（4.7d）：整个画面 / 人脸 / 人物 / 背景 / 文字，选了区域再给羽化、扩展、反转。
- * 区域在后台分析，这里显示进度；失败给出用户能处理的说明与重试（模型下载失败可直接去设置下载）。
+ * 效果控件里内置画面效果的“作用区域”：整个画面 / 手绘遮罩（4.10）/ 人脸 / 人物 / 背景 / 文字（4.7d），选了智能区域再给羽化、扩展、反转。
+ * 智能区域在后台分析，这里显示进度；失败给出用户能处理的说明与重试（模型下载失败可直接去设置下载）。
+ * 手绘遮罩任何画面片段都能用；智能区域要分析素材画面，只给视频、图片片段。
  */
 export function VideoEditSmartRegionControls({ target, effect, gesture }: { target: VideoEditCompositeTarget; effect: VideoEditBuiltinEffect; gesture: VideoEditBuiltinParamGesture }): React.ReactElement | null {
   useSyncExternalStore(subscribeVideoEditSmartRegions, videoEditSmartRegionsRevision)
   const document = requireVideoEditInstance(target.projectId).document
   const sequence = document.sequences.find(entry => entry.id === target.sequenceId)
   const clip = sequence?.clips.find(entry => entry.id === target.clipId)
-  // 只有视频、图片片段能分析画面；文字、图形、代码与调整图层上的效果不显示这一组。
-  if (!sequence || !clip || (clip.kind !== 'video' && clip.kind !== 'image')) return null
-  const mask = effect.mask
+  if (!sequence || !clip || clip.kind === 'audio') return null
+  // 只有视频、图片片段能分析画面；文字、图形、代码与调整图层上只有手绘遮罩。
+  const analyzable = clip.kind === 'video' || clip.kind === 'image'
+  const mask = isSmartRegionMask(effect.mask) ? effect.mask : undefined
   const region = mask ? SMART_REGIONS[mask.regionId] : undefined
   const status = mask ? videoEditSmartRegionStatus(document, sequence.frameRate, clip, effect) : undefined
   const request = mask ? videoEditSmartRegionRequest(document, sequence.frameRate, clip, effect) : undefined
@@ -43,12 +49,26 @@ export function VideoEditSmartRegionControls({ target, effect, gesture }: { targ
       onChange={next => { if (gesture.active() || Math.round(next) !== Math.round(value)) apply(Math.round(next)) }} />
     <span className="w-6" aria-hidden="true" />
   </span>
-  return <div className="flex flex-col" data-video-edit-smart-region={mask?.regionId ?? WHOLE}>
-    <Row label="作用区域" tooltip="效果只作用在 AI 找出的区域里：人脸逐帧跟随，人物与背景按抠像，文字找字幕与标牌。第一次使用会在后台分析素材。">
-      <span className="w-32 shrink-0"><Dropdown ariaLabel="作用区域" value={mask?.regionId ?? WHOLE} buttonClassName="w-full"
-        options={[{ value: WHOLE, label: '整个画面' }, ...VIDEO_EDIT_SMART_REGION_IDS.map(id => ({ value: id, label: SMART_REGIONS[id].label }))]}
-        onSelect={value => gesture.commit({ mask: isVideoEditSmartRegionId(value) ? { regionId: value } : null })} /></span>
+  const selectRegion = (value: string): void => {
+    if (value === SHAPES) {
+      if (isShapesMask(effect.mask)) return
+      const shape = createVideoEditMaskShape('ellipse')
+      gesture.commit({ mask: { regionId: 'shapes', shapes: [shape] } })
+      setVideoEditMaskEditing({ ...target, effectId: effect.id, shapeId: shape.id })
+      return
+    }
+    gesture.commit({ mask: isVideoEditSmartRegionId(value) ? { regionId: value } : null })
+  }
+  return <div className="flex flex-col" data-video-edit-smart-region={effect.mask?.regionId ?? WHOLE}>
+    <Row label="作用区域" tooltip={analyzable ? '效果只作用在一部分画面里：手绘遮罩在节目画面上画；人脸逐帧跟随，人物与背景按抠像，文字找字幕与标牌（第一次使用会在后台分析素材）。' : '效果只作用在手绘遮罩里：在节目画面上画矩形、椭圆或钢笔路径。'}>
+      <span className="w-32 shrink-0"><Dropdown ariaLabel="作用区域" value={effect.mask?.regionId ?? WHOLE} buttonClassName="w-full"
+        options={[{ value: WHOLE, label: '整个画面' }, { value: SHAPES, label: '手绘遮罩' }, ...(analyzable ? VIDEO_EDIT_SMART_REGION_IDS.map(id => ({ value: id, label: SMART_REGIONS[id].label })) : [])]}
+        onSelect={selectRegion} /></span>
     </Row>
+    <Row label="遮罩" tooltip="在节目画面上画遮罩，效果只作用在遮罩里（可以有多个，按模式相加、相减、交叉）">
+      <VideoEditMaskCreateButtons target={target} effect={effect} gesture={gesture} />
+    </Row>
+    <VideoEditMaskShapeControls target={target} effect={effect} gesture={gesture} />
     {mask && region && <>
       <Row label="羽化" tooltip="区域边缘的柔和过渡，100 约为画面高度的 10%" reset={{ label: '重置羽化', disabled: mask.feather === undefined, onReset: () => gesture.commit({ mask: without(mask, 'feather') }) }}>
         {scrub('羽化', mask.feather ?? region.defaults.feather, SMART_REGION_FEATHER_RANGE, next => gesture.commit({ mask: { ...mask, feather: next } }))}

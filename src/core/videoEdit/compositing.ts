@@ -3,7 +3,7 @@ import { codeMaterialInstanceSchema } from './codeMaterialPersistence'
 import type { VideoEditSequence, VideoEditClip } from './document'
 import type { VideoEditTransitionWindow } from './transitions'
 import { videoEditBuiltinEffectIssue, videoEditBuiltinEffectMedia, type VideoEditBuiltinMedia } from './builtinEffects'
-import { SMART_REGION_EXPAND_RANGE, SMART_REGION_FEATHER_RANGE, VIDEO_EDIT_SMART_REGION_IDS } from './smartRegions'
+import { videoEditEffectMaskSchema } from './effectMasks'
 
 /** 内置效果实例（4.7a）：内置效果 ID 与参数（键与范围由 `builtinEffects.ts` 登记）。 */
 export const videoEditBuiltinEffectInstanceSchema = z.object({
@@ -11,16 +11,10 @@ export const videoEditBuiltinEffectInstanceSchema = z.object({
 }).strict()
 export type VideoEditBuiltinEffectInstance = z.infer<typeof videoEditBuiltinEffectInstanceSchema>
 /**
- * 效果只作用在一个智能区域里（实施方案第六节原则 4、任务 4.7d）：人脸、人物、背景、文字由本地模型分析一次并缓存，
- * 渲染时按片段的素材时间取蒙版。羽化 0–100、扩展 -100–100 按画面高度比例（与内置效果同一套意图量纲），缺省按区域默认值。
- * 只对内置画面效果开放；以后跟踪器（4.10）的区域也走这个字段。
+ * 效果的作用区域（`mask`）：智能区域（4.7d，人脸、人物、背景、文字，本地模型分析一次并缓存）或手绘遮罩（4.10，矩形、椭圆、钢笔）。
+ * 定义与几何在 `effectMasks.ts`；只对内置画面效果开放。
  */
-export const videoEditEffectMaskSchema = z.object({
-  regionId: z.enum(VIDEO_EDIT_SMART_REGION_IDS), invert: z.boolean().optional(),
-  feather: z.number().finite().min(SMART_REGION_FEATHER_RANGE.min).max(SMART_REGION_FEATHER_RANGE.max).optional(),
-  expand: z.number().finite().min(SMART_REGION_EXPAND_RANGE.min).max(SMART_REGION_EXPAND_RANGE.max).optional(),
-}).strict()
-export type VideoEditEffectMask = z.infer<typeof videoEditEffectMaskSchema>
+export { videoEditEffectMaskSchema, type VideoEditEffectMask } from './effectMasks'
 /** 效果链里的一项：代码滤镜（`code`）或内置效果（`builtin`）二选一。 */
 export const videoEditEffectSchema = z.object({
   id: z.string().min(1).max(100), name: z.string().trim().min(1).max(200), enabled: z.boolean(), amount: z.number().finite().min(0).max(1),
@@ -29,7 +23,7 @@ export const videoEditEffectSchema = z.object({
   if (Boolean(effect.code) === Boolean(effect.builtin)) ctx.addIssue({ code: 'custom', message: '效果必须是代码滤镜或内置效果其中之一。' })
   const issue = effect.builtin && videoEditBuiltinEffectIssue(effect.builtin)
   if (issue) ctx.addIssue({ code: 'custom', message: issue })
-  if (effect.mask && (!effect.builtin || videoEditBuiltinEffectMedia(effect.builtin.id) !== 'video')) ctx.addIssue({ code: 'custom', message: '智能区域只能用在内置画面效果上（代码滤镜、音频效果作用于整体）。' })
+  if (effect.mask && (!effect.builtin || videoEditBuiltinEffectMedia(effect.builtin.id) !== 'video')) ctx.addIssue({ code: 'custom', message: '作用区域只能用在内置画面效果上（代码滤镜、音频效果作用于整体）。' })
 })
 export type VideoEditEffect = z.infer<typeof videoEditEffectSchema>
 export type VideoEditCodeEffect = VideoEditEffect & { code: NonNullable<VideoEditEffect['code']> }

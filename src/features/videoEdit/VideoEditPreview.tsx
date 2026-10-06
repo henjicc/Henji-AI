@@ -14,6 +14,7 @@ import { subscribeVideoEditSmartRegions, videoEditSmartRegionSegments } from './
 import { createVideoEditAudioMeter, type VideoEditAudioLevel } from './engine/videoEditAudioMeter'
 import { VideoEditAudioScheduler } from './engine/videoEditAudioScheduler'
 import { VideoEditLevelMeter } from './panels/VideoEditLevelMeter'
+import { VideoEditMaskOverlay } from './panels/VideoEditMaskOverlay'
 import { useVideoEditPictureGesture } from './panels/useVideoEditPictureGesture'
 import { VideoEditInOutDuration, VideoEditTimecode } from './timeline/VideoEditTimelineTransport'
 import { useMonitorZoom } from './panels/useMonitorZoom'
@@ -408,6 +409,7 @@ export function VideoEditPreview({ instance, onError, visible = true }: { instan
             try { editVideoSequence(instance.document.id, start.sequenceId, draft => ({ ...draft, annotations: [...draft.annotations, { id: crypto.randomUUID(), clipId: start.clipId, frame: start.frame, space: 'composition-normalized', kind: mode === 'region' ? 'region' : 'point', x: Math.min(start.x, x), y: Math.min(start.y, y), width: mode === 'region' ? Math.abs(x - start.x) : 0, height: mode === 'region' ? Math.abs(y - start.y) : 0, text: label }] })) } catch (error) { onError(error) }
           }} />
         {document.annotations.filter(mark => mark.frame === instance.frame).map(mark => <div key={mark.id} className={`pointer-events-none absolute border border-on-media text-xs text-on-media ${mark.kind === 'point' ? 'h-2 w-2' : ''}`} style={{ left: `${mark.x * 100}%`, top: `${mark.y * 100}%`, ...(mark.kind === 'point' ? {} : { width: `${mark.width * 100}%`, height: `${mark.height * 100}%` }) }}><span className="absolute bottom-full whitespace-nowrap bg-media-scrim px-1">{mark.text}</span></div>)}
+        <VideoEditMaskOverlay instance={instance} onError={onError} />
       </div>
       <VideoEditLevelMeter className="absolute bottom-3 right-2 top-3" levels={levels.length ? levels : Array.from({ length: document.channels }, () => ({ peak: 0, rms: 0 }))} title="节目播放电平" />
       {(mode === 'point' || mode === 'region' || preparing || collecting) && <div className="absolute left-2 top-2 flex max-w-full items-center gap-2 rounded-lg bg-media-scrim p-1 text-xs text-on-media">

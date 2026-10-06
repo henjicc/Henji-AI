@@ -45,6 +45,7 @@ const GRAPHIC_EXEMPTIONS = new Map([
   ['src/features/cameraStage/timeline/EasingCurveEditor.tsx', '缓动曲线编辑器，路径由控制点算出'],
   ['src/features/cameraStage/timeline/GraphEditor.tsx', '关键帧曲线图，路径由数据算出'],
   ['src/features/canvas/ui/CanvasOverlays.tsx', '画布连线预览，路径随指针位置实时计算'],
+  ['src/features/videoEdit/panels/VideoEditMaskOverlay.tsx', '剪辑遮罩路径与控制柄，路径由遮罩顶点按片段几何算出'],
 ])
 
 /**
