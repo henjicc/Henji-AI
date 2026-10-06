@@ -12,6 +12,7 @@ import type {
   AudioEditTask,
 } from '@/core/audioEdit/types'
 import type { AudioWaveformPyramidRequest, AudioWaveformPyramidResult, AudioWaveformRangeRequest, AudioWaveformRangeResult } from './audioWaveform'
+import type { AudioLoudnessPlatform } from './audioLoudness'
 
 export interface AudioEditAsrModel {
   id: string
@@ -27,6 +28,7 @@ export interface AudioEditAsrModel {
  * 发起前渲染层先把修改写完；转写与重新定位的结果返回给渲染层实例，由文档会话保存。
  */
 export interface AudioEditPlatform {
+  loudness: AudioLoudnessPlatform
   /** 导入音频或视频：探测素材并计算内容指纹（不建文档）。 */
   probeSource(sourcePath: string): Promise<AudioEditSourceMetadata>
   verifySource(projectId: string): Promise<void>

@@ -2,10 +2,13 @@ import { AudioBufferSource, CanvasSource, Mp4OutputFormat, Output, StreamTarget 
 import { getPlatform } from '@/platform/runtime'
 import { createLogger } from '@/core/logging'
 import { videoEditFrameTimecode } from '@/core/videoEdit/timecode'
+import { videoEditLoudnessSettingsSchema, type VideoEditLoudnessSettings, type VideoEditLoudnessMeasurement } from '@/core/videoEdit/loudness'
+import { spoolVideoEditAudio } from './videoEditLoudness'
 import { VideoEditRenderSession } from '../engine/videoEditRenderSession'
 import { getActiveVideoEditSequence, listVideoEditInstances, videoEditExportRange, publishVideoEdit, requireVideoEditInstance, saveVideoEdit, type VideoEditInstance } from './videoEditService'
 import { publishVideoEditOutput, type VideoEditOutputReceipt } from './videoEditOutputs'
 import { videoEditSmartRegionSegments, waitVideoEditSmartRegions } from './videoEditSmartRegions'
+import { videoEditTrackResults, waitVideoEditTracking } from './videoEditTracking'
 
 const logger = createLogger('features.videoEdit.export')
 /**
@@ -15,12 +18,13 @@ const logger = createLogger('features.videoEdit.export')
 function videoEditExportFrameError(frame: number, fps: number, error: unknown): Error {
   return new Error(`导出在 ${videoEditFrameTimecode(frame, fps)} 处停止。${error instanceof Error ? error.message : String(error)}`, { cause: error })
 }
-export interface VideoEditExportTask { id: string; projectId: string; sequenceId: string; revision: number; startFrame: number; endFrame: number; progress: number; state: 'running' | 'completed' | 'cancelled' | 'failed'; error?: string; controller: AbortController; output?: VideoEditOutputReceipt }
+export interface VideoEditExportTask { id: string; projectId: string; sequenceId: string; revision: number; startFrame: number; endFrame: number; progress: number; state: 'running' | 'completed' | 'cancelled' | 'failed'; error?: string; controller: AbortController; output?: VideoEditOutputReceipt; loudness?: VideoEditLoudnessSettings; loudnessMeasurement?: VideoEditLoudnessMeasurement }
 const tasks = new WeakMap<VideoEditInstance, VideoEditExportTask>()
 export function videoEditExportTask(projectId: string): VideoEditExportTask | undefined { return tasks.get(requireVideoEditInstance(projectId)) }
 export function cancelVideoEditExport(projectId: string): void { videoEditExportTask(projectId)?.controller.abort() }
-export async function exportVideoEdit(projectId: string, requestedPath?: string, background = false, submissionSignal?: AbortSignal): Promise<string | null> {
+export async function exportVideoEdit(projectId: string, requestedPath?: string, background = false, submissionSignal?: AbortSignal, loudnessSettings?: VideoEditLoudnessSettings): Promise<string | null> {
   submissionSignal?.throwIfAborted()
+  const loudness = loudnessSettings === undefined ? undefined : videoEditLoudnessSettingsSchema.parse(loudnessSettings)
   const instance = requireVideoEditInstance(projectId)
   const snapshot = structuredClone(getActiveVideoEditSequence(instance))
   const range = videoEditExportRange(instance)
@@ -39,9 +43,13 @@ export async function exportVideoEdit(projectId: string, requestedPath?: string,
   if (instance.busy) throw new Error('该剪辑已有导出任务。')
   const document = snapshot
   const task: VideoEditExportTask = { id: crypto.randomUUID(), projectId, sequenceId: document.id, revision: document.revision, ...range, state: 'running', progress: 0, controller: new AbortController() }
+  task.loudness = loudness
   tasks.set(instance, task); instance.busy = true; publishVideoEdit()
   const render = async (): Promise<string | null> => {
   let renderer: VideoEditRenderSession | undefined
+  let soundSession: string | undefined
+  const loudnessApi = platform.audioEdit.loudness
+  const cancelSound = (): void => { if (soundSession) void loudnessApi.close(soundSession).catch(() => undefined) }
   let output: Output | undefined
   let created = false
   let published = false
@@ -53,8 +61,17 @@ export async function exportVideoEdit(projectId: string, requestedPath?: string,
   try {
     // 智能区域（4.7d）：导出用到的区域先全部分析完成，导出画面与预览同一份蒙版。
     await waitVideoEditSmartRegions(document, document, task.controller.signal)
+    await waitVideoEditTracking(document, document, task.controller.signal)
     renderer = new VideoEditRenderSession(document)
     renderer.setSmartRegions(videoEditSmartRegionSegments())
+    renderer.setTracks(videoEditTrackResults(document))
+    if (loudness) {
+      soundSession = await spoolVideoEditAudio(document, range, task.controller.signal, renderer)
+      task.controller.signal.addEventListener('abort', cancelSound, { once: true })
+      task.controller.signal.throwIfAborted()
+      task.loudnessMeasurement = await loudnessApi.normalize(soundSession, loudness)
+      task.controller.signal.throwIfAborted()
+    }
     output = new Output({ format: new Mp4OutputFormat(), target: new StreamTarget(new WritableStream({ write: async chunk => { task.controller.signal.throwIfAborted(); await platform.system.fs.writeFile(path, chunk.data, { position: chunk.position }) } }), { chunked: true, chunkSize: 1024 * 1024 }) })
     await platform.system.fs.writeFile(path, new Uint8Array(), { exclusive: true }); created = true
     const video = new CanvasSource(renderer.canvas, { codec: 'avc', bitrate: 8_000_000 })
@@ -71,7 +88,16 @@ export async function exportVideoEdit(projectId: string, requestedPath?: string,
       task.controller.signal.throwIfAborted()
       if (frame === nextAudioFrame) {
         const end = Math.min(endFrame, frame + Math.max(1, Math.round(document.fps)))
-        await audio.add(await exact(frame, renderer.mixAudio(frame / document.fps, (end - frame) / document.fps))); nextAudioFrame = end
+        const mix = async (): Promise<AudioBuffer> => {
+          if (!soundSession) return renderer!.mixAudio(frame / document.fps, (end - frame) / document.fps)
+          const first = Math.ceil(frame / document.fps * document.sampleRate - 1e-7)
+          const last = Math.ceil(end / document.fps * document.sampleRate - 1e-7)
+          const origin = Math.ceil(startFrame / document.fps * document.sampleRate - 1e-7)
+          const channels = await loudnessApi.read(soundSession, first - origin, last - first)
+          const buffer = new AudioBuffer({ numberOfChannels: document.channels, sampleRate: document.sampleRate, length: last - first })
+          channels.forEach((channel, index) => buffer.getChannelData(index).set(channel)); return buffer
+        }
+        await audio.add(await exact(frame, mix())); nextAudioFrame = end
       }
       singleFrameReads += (await exact(frame, renderer.render(frame, true))).singleFrameReads
       await video.add((frame - startFrame) / document.fps, 1 / document.fps)
@@ -96,7 +122,10 @@ export async function exportVideoEdit(projectId: string, requestedPath?: string,
     else logger.error('剪辑导出失败', error, { event: 'video_edit.export.failed', context: { projectId, taskId: task.id, ...(failedFrame !== undefined ? { frame: failedFrame } : {}), singleFrameReads, elapsedMs: Math.round(performance.now() - started) } })
     if (!task.controller.signal.aborted) throw error
     return null
-  } finally { try { await renderer?.dispose() } finally { instance.busy = false; publishVideoEdit() } }
+  } finally {
+    task.controller.signal.removeEventListener('abort', cancelSound)
+    try { if (soundSession) await loudnessApi.close(soundSession) } finally { try { await renderer?.dispose() } finally { instance.busy = false; publishVideoEdit() } }
+  }
   }
   if (background) { void render().catch(() => undefined); return null }
   return render()

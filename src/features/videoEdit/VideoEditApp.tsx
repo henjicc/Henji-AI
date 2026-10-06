@@ -25,6 +25,9 @@ import { openAssetLibrary } from '@/stores/navigationStore'
 import { openDialog } from '@/platform/desktopApi'
 import { getDocumentOperations } from '@/features/documents/documentOperations'
 import { elementOfEventTarget } from '@/utils/crossRealmDom'
+import { closeVideoEditAudioDialog, useVideoEditAudioDialog } from './application/videoEditAudioDialogs'
+import { VideoEditAudioGainDialog } from './panels/VideoEditAudioGainDialog'
+import { VideoEditExportDialog } from './panels/VideoEditExportDialog'
 
 /** Shift+1…5（Premiere 默认）切到的面板；切换后键盘焦点也进入该面板，后续快捷键按它的作用域生效。 */
 const FOCUS_COMMANDS: Partial<Record<VideoEditCommandId, 'project' | 'source' | 'timeline' | 'program' | 'effects'>> = { focus_project: 'project', focus_source: 'source', focus_timeline: 'timeline', focus_program: 'program', focus_effects: 'effects' }
@@ -116,10 +119,11 @@ export default function VideoEditApp(): React.ReactElement {
     if (folder) await openVideoEditProjectFolder(folder)
   }
   const projectId = instance?.document.id
+  const audioDialog = useVideoEditAudioDialog(projectId)
   const sequence = instance ? getActiveVideoEditSequence(instance) : undefined
   const focusPanel = (target: EventTarget | null): void => {
     const panel = target instanceof HTMLElement ? target.closest<HTMLElement>('[data-video-edit-panel]')?.dataset.videoEditPanel : undefined
-    if (projectId && panel && ['timeline', 'program', 'source', 'project', 'effects', 'content'].includes(panel) && panel !== instance?.activePanel) focusVideoEditPanel(projectId, panel as NonNullable<typeof instance>['activePanel'])
+    if (projectId && panel && ['timeline', 'program', 'source', 'project', 'effects', 'content', 'lumetri'].includes(panel) && panel !== instance?.activePanel) focusVideoEditPanel(projectId, panel as NonNullable<typeof instance>['activePanel'])
   }
   const shortcuts = useSettingsStore(state => state.videoEditShortcuts)
   const hovered = useRef<Element | null>(null)
@@ -145,6 +149,8 @@ export default function VideoEditApp(): React.ReactElement {
       />
     </div>}
     {/* 剪辑自身的保存失败要一直提示到重试成功：浮在底部中间，不占面板空间 */}
+    {audioDialog?.kind === 'gain' && <VideoEditAudioGainDialog key={audioDialog.target.sequenceId + audioDialog.target.clipIds.join(':')} target={audioDialog.target} onClose={closeVideoEditAudioDialog} />}
+    {audioDialog?.kind === 'export' && <VideoEditExportDialog key={audioDialog.projectId} projectId={audioDialog.projectId} onClose={closeVideoEditAudioDialog} />}
     {instance?.error && <div className="pointer-events-none absolute bottom-3 left-1/2 z-sticky -translate-x-1/2"><div className="pointer-events-auto max-w-xl rounded-full bg-panel px-4 py-1.5 shadow-panel"><UiError size="xs" align="start" message={instance.error} /></div></div>}
   </div>
 }

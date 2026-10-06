@@ -329,6 +329,7 @@ export interface HenjiAudioExtractSamplesResult {
 }
 
 export interface HenjiAudioApi {
+  loudness: import('../../src/platform/contracts/audioLoudness').AudioLoudnessPlatform
   extractSamples(payload: { source: string; bucketCount: number }): Promise<HenjiAudioExtractSamplesResult>
   extractRangeSamples(payload: AudioWaveformRangeRequest & { requestId: string }): Promise<AudioWaveformRangeResult>
   extractWaveformPyramid(payload: AudioWaveformPyramidRequest & { requestId: string }): Promise<AudioWaveformPyramidResult>

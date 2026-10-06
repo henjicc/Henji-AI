@@ -33,6 +33,14 @@ function cancellable<TRequest extends object, TResult>(call: (payload: TRequest 
 
 export function createElectronAudioEdit(): AudioEditPlatform {
   return {
+    loudness: {
+      start: (...args) => api().loudness.start(...args),
+      append: (...args) => api().loudness.append(...args),
+      measure: (...args) => api().loudness.measure(...args),
+      normalize: (...args) => api().loudness.normalize(...args),
+      read: (...args) => api().loudness.read(...args),
+      close: (...args) => api().loudness.close(...args),
+    },
     probeSource: (sourcePath) => api().probeEditSource(sourcePath),
     verifySource: (projectId) => api().verifyEditSource(projectId),
     relinkSource: (projectId, sourcePath) => api().relinkEditSource(projectId, sourcePath),

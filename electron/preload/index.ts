@@ -1,4 +1,5 @@
 import { createApplicationControlApi } from './application-control-api'
+import { createAudioLoudnessApi } from './audio-loudness-api'
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type {
   HenjiAudioApi,
@@ -368,6 +369,7 @@ const cameraStageRenderApi: HenjiCameraStageRenderApi = {
 }
 
 const audioApi: HenjiAudioApi = {
+  loudness: createAudioLoudnessApi(nativeInvoke),
   extractSamples: (payload) => nativeInvoke('audio:extractSamples', payload),
   extractRangeSamples: (payload) => nativeInvoke('audio:extractSamples', { ...payload, mode: 'range' }),
   extractWaveformPyramid: (payload) => nativeInvoke('audio:extractSamples', { ...payload, mode: 'pyramid' }),
