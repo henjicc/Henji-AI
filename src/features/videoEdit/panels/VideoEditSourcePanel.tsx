@@ -20,6 +20,7 @@ import { timelineCommandPresentation } from '../timeline/timelineCommandPresenta
 import { VideoEditMonitorButton, VideoEditMonitorButtonEditor, useVideoEditMonitorButtonIds, type VideoEditMonitorButtonSpec } from './VideoEditMonitorButtons'
 import { useWaveformData } from '@/hooks/useWaveformData'
 import { useMonitorZoom } from './useMonitorZoom'
+import { VideoEditSourceInOut } from './VideoEditSourceInOut'
 
 /** 源按钮栏里走剪辑命令的按钮；入出点与 J/K/L 沿用原有名称（自动化场景按名称点击）。 */
 const SOURCE_COMMAND_BUTTONS: Array<{ id: 'mark_in' | 'mark_out' | 'clear_in_out' | 'step_back_five' | 'step_back' | 'play_reverse' | 'play_stop' | 'play_forward' | 'step_forward' | 'step_forward_five' | 'insert' | 'overwrite'; Icon: LucideIcon; title?: string }> = [
@@ -118,7 +119,10 @@ export function VideoEditSourcePanel({ instance, onError, visible = true }: { in
         {media?.kind !== 'image' && <div className="w-28 shrink-0"><UiInput aria-label="源素材定位秒" type="number" size="sm" min={0} max={media?.durationSeconds ?? 0} step={0.000001} className="tabular-nums" value={draftTime} onFocus={() => { editingTime.current = true }} onChange={event => setDraftTime(event.target.value)} onBlur={() => { editingTime.current = false; run({ timeUs: Math.round(Number(draftTime) * 1e6), playing: false }) }} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); event.currentTarget.blur() } }} /></div>}
         <span aria-label="源实际时间码" className="shrink-0 px-1 font-mono text-xs tabular-nums text-text3">{videoEditSourceTimecode(media?.kind === 'video' ? state.presentedTimeUs : state.timeUs)}</span>
       </div>
-      {media?.kind === 'video' && <UiRangeInput aria-label="源素材进度" min={0} max={Math.round((media?.durationSeconds ?? 0) * 1e6)} step={1} value={state.timeUs} onChange={event => run({ timeUs: Number(event.target.value), playing: false })} />}
+      {media?.kind === 'video' && <div className="relative pb-1.5" data-video-edit-source-progress>
+        <UiRangeInput aria-label="源素材进度" min={0} max={sourceDurationUs} step={1} value={state.timeUs} onChange={event => run({ timeUs: Number(event.target.value), playing: false })} />
+        <VideoEditSourceInOut inUs={state.inUs} outUs={state.outUs} durationUs={sourceDurationUs} playheadUs={state.timeUs} onChange={run} />
+      </div>}
       {hasWave && waveform.data && <div className="pointer-events-none flex w-full flex-col gap-0.5" data-video-edit-source-waveform>
         <span className="font-mono text-2xs tabular-nums text-text3">{videoEditSourceTimecode(waveStartUs)} — {videoEditSourceTimecode(waveEndUs)}</span>
         <WaveformView waveform={waveform} startSeconds={waveStartUs / 1e6} endSeconds={waveEndUs / 1e6} playedSeconds={state.timeUs / 1e6} height={20 * waveform.data.pyramid.channelCount} />
